@@ -1,18 +1,18 @@
 # 배포 운영 문서
 
-SketchCatch 운영 배포는 Docker를 사용하지만 Docker Compose는 사용하지 않습니다. GitHub Actions가 Docker 이미지를 빌드해 S3에 업로드하고, AWS Systems Manager Run Command로 EC2에 배포 명령을 전달합니다. EC2는 Amazon Linux 서버에서 `docker run`으로 API, Web, Nginx 컨테이너를 실행합니다.
+SketchCatch 운영 배포는 Docker를 사용하지만 Docker Compose는 사용하지 않습니다. GitHub Actions가 Docker 이미지를 빌드하고 S3에 release artifact를 업로드한 뒤, AWS Systems Manager Run Command로 EC2에 배포 명령을 전달합니다. EC2 Amazon Linux 서버에서는 `docker run`으로 API, Web, Nginx 컨테이너를 실행합니다.
 
 ## 운영 구조
 
 ```text
 GitHub Actions
-→ pnpm lint/typecheck/build
-→ Docker 이미지 빌드
-→ docker save 이미지 아티팩트 생성
-→ S3 업로드
-→ SSM Run Command로 EC2 배포 명령 실행
-→ docker load
-→ docker run으로 api/web/nginx 컨테이너 재시작
+-> pnpm lint/typecheck/build
+-> Docker image build
+-> docker save release artifact 생성
+-> S3 업로드
+-> SSM Run Command로 EC2 배포 명령 실행
+-> EC2에서 docker load
+-> api/web/nginx 컨테이너 재시작
 ```
 
 ## EC2 정보
@@ -23,7 +23,7 @@ Instance ID: i-02a591d2abee94f02
 OS: Amazon Linux
 ```
 
-운영 배포는 SSH를 사용하지 않습니다. EC2에는 SSM Agent가 동작해야 하며, EC2 Instance Profile에는 다음 AWS managed policy가 필요합니다.
+운영 배포는 SSH 대신 SSM을 사용합니다. EC2에는 SSM Agent가 실행되어야 하고, EC2 Instance Profile에는 다음 AWS managed policy가 필요합니다.
 
 ```text
 AmazonSSMManagedInstanceCore
@@ -31,11 +31,11 @@ AmazonSSMManagedInstanceCore
 
 ## GitHub Variables
 
-GitHub repository 또는 `production` environment variables에 다음 값을 설정합니다.
+GitHub repository의 `production` environment variables에는 다음 값을 설정합니다.
 
 ```text
 AWS_REGION=ap-northeast-2
-AWS_ROLE_TO_ASSUME=<이미 만든 GitHub Actions OIDC Role ARN>
+AWS_ROLE_TO_ASSUME=<GitHub Actions OIDC Role ARN>
 DEPLOY_ARTIFACT_BUCKET=sketchcatch-555980271919-ap-northeast-2-an
 S3_BUCKET_NAME=sketchcatch-555980271919-ap-northeast-2-an
 EC2_INSTANCE_ID=i-02a591d2abee94f02
@@ -51,51 +51,27 @@ CLOUDWATCH_LOG_GROUP_PREFIX=/sketchcatch/production
 DATABASE_URL=<RDS PostgreSQL connection string>
 ```
 
-실제 DB 비밀번호와 AWS Access Key는 저장소에 커밋하지 않습니다.
+실제 DB 비밀번호, AWS Access Key, SSH private key는 저장소에 커밋하지 않습니다.
 
 ## IAM 권한
 
-GitHub Actions OIDC Role에는 S3 아티팩트 업로드와 SSM 명령 실행 권한이 필요합니다.
+정책 템플릿은 `infra/aws/iam/` 아래에 있습니다.
 
-```json
-{
-  "Effect": "Allow",
-  "Action": [
-    "s3:PutObject",
-    "s3:GetObject",
-    "s3:DeleteObject",
-    "s3:ListBucket",
-    "ssm:SendCommand",
-    "ssm:GetCommandInvocation",
-    "ec2:DescribeInstances"
-  ],
-  "Resource": "*"
-}
-```
+- `github-actions-deploy-policy.json`: `GitHubActionsDeployRole`에 연결할 배포 권한
+- `ec2-runtime-policy.json`: `SketchCatch-EC2-Role`에 연결할 런타임 권한
 
-운영 환경에서는 위 정책을 실제 버킷 ARN, EC2 인스턴스 ARN, SSM 문서 ARN으로 좁혀야 합니다.
-
-Repository policy templates are stored under `infra/aws/iam/`:
-
-- `github-actions-deploy-policy.json`: least-privilege policy for `GitHubActionsDeployRole`
-- `ec2-runtime-policy.json`: runtime S3 artifact and CloudWatch Logs policy for `SketchCatch-EC2-Role`
-
-`SketchCatch-EC2-Role` must also keep the AWS managed policy:
-
-```text
-AmazonSSMManagedInstanceCore
-```
+`SketchCatch-EC2-Role`에는 AWS managed policy `AmazonSSMManagedInstanceCore`도 유지해야 합니다.
 
 ## CloudWatch Logs
 
-Docker container logs can be sent to CloudWatch Logs through the Docker `awslogs` log driver.
+Docker container log는 Docker `awslogs` log driver로 CloudWatch Logs에 보낼 수 있습니다.
 
-1. Attach `infra/aws/iam/ec2-runtime-policy.json` to `SketchCatch-EC2-Role`.
-2. Set GitHub variable `CLOUDWATCH_LOGS_ENABLED=true`.
-3. Keep `CLOUDWATCH_LOG_GROUP_PREFIX=/sketchcatch/production`.
-4. Re-run `Deploy Production`.
+1. `infra/aws/iam/ec2-runtime-policy.json`을 `SketchCatch-EC2-Role`에 연결합니다.
+2. GitHub variable `CLOUDWATCH_LOGS_ENABLED=true`로 설정합니다.
+3. `CLOUDWATCH_LOG_GROUP_PREFIX=/sketchcatch/production`을 유지합니다.
+4. `Deploy Production` workflow를 다시 실행합니다.
 
-Log groups:
+예상 log group:
 
 ```text
 /sketchcatch/production/api
@@ -103,29 +79,29 @@ Log groups:
 /sketchcatch/production/nginx
 ```
 
-Alarm setup examples are in `infra/aws/cloudwatch-alarms.md`.
+알람 설정 예시는 `infra/aws/cloudwatch-alarms.md`에 있습니다.
 
 ## HTTPS
 
-Production HTTPS for `sketchcatch.net` is provisioned with:
+`sketchcatch.net` 운영 HTTPS는 다음 조합으로 구성합니다.
 
 - Route 53 hosted zone
-- ACM DNS-validated certificate
+- ACM DNS validated certificate
 - Public Application Load Balancer
 - HTTP to HTTPS redirect
-- ALB target group forwarding to EC2 Nginx on port 80
+- ALB target group에서 EC2 Nginx port 80으로 forwarding
 
-Run the `Provision HTTPS` GitHub Actions workflow with:
+GitHub Actions의 `Provision HTTPS` workflow를 다음 입력으로 실행합니다.
 
 ```text
 domain_name=sketchcatch.net
 ```
 
-The workflow deploys `infra/aws/cloudformation/alb-https.yml`.
+이 workflow는 `infra/aws/cloudformation/alb-https.yml`을 배포합니다.
 
-Before running it, attach the updated `infra/aws/iam/github-actions-deploy-policy.json` permissions to `GitHubActionsDeployRole`.
+실행 전에 `infra/aws/iam/github-actions-deploy-policy.json`의 권한을 `GitHubActionsDeployRole`에 반영해야 합니다.
 
-After it succeeds, verify:
+성공 후 확인:
 
 ```bash
 curl -I https://sketchcatch.net
@@ -133,31 +109,32 @@ curl https://sketchcatch.net/health
 curl https://sketchcatch.net/health/db
 ```
 
-Keep the EC2 security group open on port 80 from the ALB security group. Public port 80 directly to EC2 can be removed after ALB verification.
+ALB 확인 후 EC2 security group은 port 80을 ALB security group에서만 받도록 제한합니다. EC2에 직접 public `0.0.0.0/0:80`을 열어둘 필요는 없습니다.
 
 ## Monitoring
 
-Run the `Provision Monitoring` GitHub Actions workflow with:
+GitHub Actions의 `Provision Monitoring` workflow를 실행합니다.
 
 ```text
-alarm_email=sl990084@gmail.com
+alarm_email=<notification email>
 ```
 
-AWS sends a subscription confirmation email. The alarms do not notify until that email subscription is confirmed.
+AWS가 구독 확인 이메일을 보냅니다. 이메일 구독을 승인해야 알람이 실제로 전송됩니다.
 
 ## RDS와 S3 저장 기준
 
 RDS에 저장하는 데이터:
 
-- 익명 워크스페이스
+- 익명 workspace
 - 프로젝트 정보
 - 아키텍처 JSON
 - S3 파일 메타데이터
+- 향후 배포 이력과 비용 정보
 
 S3에 저장하는 데이터:
 
 - 다이어그램 PNG/SVG
-- Terraform 파일
+- Terraform 또는 CloudFormation 파일
 - 프로젝트 export zip
 - 프로젝트 썸네일
 
@@ -167,7 +144,7 @@ AI 결과물 캐싱은 MVP 범위에 포함하지 않습니다.
 
 마이그레이션은 배포 중 자동 실행하지 않습니다. GitHub Actions의 `Run Database Migrations` workflow를 수동 실행합니다.
 
-마이그레이션은 SSM Run Command로 EC2에 명령을 보내 실행합니다. EC2에 배포된 현재 API Docker 이미지에서 1회성 컨테이너를 실행하며 `/etc/sketchcatch/api.env`의 `DATABASE_URL`을 사용합니다.
+마이그레이션 workflow는 SSM Run Command로 EC2에 명령을 보내고, EC2에서 현재 배포된 API Docker image의 1회성 컨테이너를 실행합니다. 이때 `/etc/sketchcatch/api.env`의 `DATABASE_URL`을 사용합니다.
 
 ## 배포 확인
 
@@ -200,7 +177,7 @@ curl -X POST http://13.125.49.82/api/projects \
   }'
 ```
 
-S3 presigned 업로드 URL 발급:
+S3 presigned upload URL 발급:
 
 ```bash
 curl -X POST http://13.125.49.82/api/projects/<project-id>/assets/presigned-upload \
@@ -215,7 +192,7 @@ curl -X POST http://13.125.49.82/api/projects/<project-id>/assets/presigned-uplo
 
 ## 롤백
 
-이전 Docker 이미지 태그로 컨테이너를 다시 실행합니다.
+이전 Docker image artifact로 컨테이너를 다시 실행합니다.
 
 ```bash
 sudo env RELEASE_ID=<previous-sha> RELEASE_URL=<previous-image-archive-presigned-url> \
