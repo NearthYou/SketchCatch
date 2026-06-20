@@ -5,6 +5,9 @@ release_id="${RELEASE_ID:?RELEASE_ID is required}"
 release_url="${RELEASE_URL:?RELEASE_URL is required}"
 app_root="/opt/sketchcatch"
 image_archive="${app_root}/images/sketchcatch-${release_id}.tar.gz"
+cloudwatch_logs_enabled="${CLOUDWATCH_LOGS_ENABLED:-false}"
+cloudwatch_log_group_prefix="${CLOUDWATCH_LOG_GROUP_PREFIX:-/sketchcatch/production}"
+aws_region="${AWS_REGION:-ap-northeast-2}"
 
 if [ "$(id -u)" -ne 0 ]; then
   echo "Run as root" >&2
@@ -29,10 +32,38 @@ docker network create sketchcatch >/dev/null 2>&1 || true
 
 docker rm -f sketchcatch-nginx sketchcatch-web sketchcatch-api >/dev/null 2>&1 || true
 
+api_log_options=()
+web_log_options=()
+nginx_log_options=()
+if [ "${cloudwatch_logs_enabled}" = "true" ]; then
+  api_log_options=(
+    --log-driver awslogs
+    --log-opt "awslogs-region=${aws_region}"
+    --log-opt awslogs-create-group=true
+    --log-opt "awslogs-group=${cloudwatch_log_group_prefix}/api"
+    --log-opt "awslogs-stream=${release_id}/api"
+  )
+  web_log_options=(
+    --log-driver awslogs
+    --log-opt "awslogs-region=${aws_region}"
+    --log-opt awslogs-create-group=true
+    --log-opt "awslogs-group=${cloudwatch_log_group_prefix}/web"
+    --log-opt "awslogs-stream=${release_id}/web"
+  )
+  nginx_log_options=(
+    --log-driver awslogs
+    --log-opt "awslogs-region=${aws_region}"
+    --log-opt awslogs-create-group=true
+    --log-opt "awslogs-group=${cloudwatch_log_group_prefix}/nginx"
+    --log-opt "awslogs-stream=${release_id}/nginx"
+  )
+fi
+
 docker run -d \
   --name sketchcatch-api \
   --network sketchcatch \
   --env-file /etc/sketchcatch/api.env \
+  "${api_log_options[@]}" \
   --restart unless-stopped \
   "sketchcatch-api:${release_id}"
 
@@ -40,6 +71,7 @@ docker run -d \
   --name sketchcatch-web \
   --network sketchcatch \
   --env-file /etc/sketchcatch/web.env \
+  "${web_log_options[@]}" \
   --restart unless-stopped \
   "sketchcatch-web:${release_id}"
 
@@ -47,6 +79,7 @@ docker run -d \
   --name sketchcatch-nginx \
   --network sketchcatch \
   -p 80:80 \
+  "${nginx_log_options[@]}" \
   --restart unless-stopped \
   "sketchcatch-nginx:${release_id}"
 

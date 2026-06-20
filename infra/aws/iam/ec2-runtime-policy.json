@@ -1,0 +1,26 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AllowSketchCatchAppArtifacts",
+      "Effect": "Allow",
+      "Action": ["s3:PutObject", "s3:GetObject", "s3:DeleteObject"],
+      "Resource": "arn:aws:s3:::sketchcatch-555980271919-ap-northeast-2-an/projects/*"
+    },
+    {
+      "Sid": "AllowSketchCatchCloudWatchContainerLogs",
+      "Effect": "Allow",
+      "Action": [
+        "logs:CreateLogGroup",
+        "logs:CreateLogStream",
+        "logs:DescribeLogGroups",
+        "logs:DescribeLogStreams",
+        "logs:PutLogEvents"
+      ],
+      "Resource": [
+        "arn:aws:logs:ap-northeast-2:555980271919:log-group:/sketchcatch/production/*",
+        "arn:aws:logs:ap-northeast-2:555980271919:log-group:/sketchcatch/production/*:log-stream:*"
+      ]
+    }
+  ]
+}

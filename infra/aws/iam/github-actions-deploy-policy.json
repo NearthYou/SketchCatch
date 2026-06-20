@@ -1,0 +1,37 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AllowSketchCatchDeployArtifactBucketAccess",
+      "Effect": "Allow",
+      "Action": ["s3:PutObject", "s3:GetObject", "s3:DeleteObject"],
+      "Resource": "arn:aws:s3:::sketchcatch-555980271919-ap-northeast-2-an/sketchcatch/*"
+    },
+    {
+      "Sid": "AllowSketchCatchDeployArtifactBucketList",
+      "Effect": "Allow",
+      "Action": "s3:ListBucket",
+      "Resource": "arn:aws:s3:::sketchcatch-555980271919-ap-northeast-2-an",
+      "Condition": {
+        "StringLike": {
+          "s3:prefix": ["sketchcatch/*"]
+        }
+      }
+    },
+    {
+      "Sid": "AllowSendCommandToSketchCatchEc2",
+      "Effect": "Allow",
+      "Action": "ssm:SendCommand",
+      "Resource": [
+        "arn:aws:ec2:ap-northeast-2:555980271919:instance/i-02a591d2abee94f02",
+        "arn:aws:ssm:ap-northeast-2::document/AWS-RunShellScript"
+      ]
+    },
+    {
+      "Sid": "AllowReadSsmCommandResults",
+      "Effect": "Allow",
+      "Action": "ssm:GetCommandInvocation",
+      "Resource": "*"
+    }
+  ]
+}

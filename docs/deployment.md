@@ -40,7 +40,9 @@ DEPLOY_ARTIFACT_BUCKET=sketchcatch-555980271919-ap-northeast-2-an
 S3_BUCKET_NAME=sketchcatch-555980271919-ap-northeast-2-an
 EC2_INSTANCE_ID=i-02a591d2abee94f02
 RDS_ENDPOINT=<RDS endpoint>
-DATABASE_SSL=false
+DATABASE_SSL=true
+CLOUDWATCH_LOGS_ENABLED=false
+CLOUDWATCH_LOG_GROUP_PREFIX=/sketchcatch/production
 ```
 
 ## GitHub Secrets
@@ -72,6 +74,47 @@ GitHub Actions OIDC Role에는 S3 아티팩트 업로드와 SSM 명령 실행 �
 ```
 
 운영 환경에서는 위 정책을 실제 버킷 ARN, EC2 인스턴스 ARN, SSM 문서 ARN으로 좁혀야 합니다.
+
+Repository policy templates are stored under `infra/aws/iam/`:
+
+- `github-actions-deploy-policy.json`: least-privilege policy for `GitHubActionsDeployRole`
+- `ec2-runtime-policy.json`: runtime S3 artifact and CloudWatch Logs policy for `SketchCatch-EC2-Role`
+
+`SketchCatch-EC2-Role` must also keep the AWS managed policy:
+
+```text
+AmazonSSMManagedInstanceCore
+```
+
+## CloudWatch Logs
+
+Docker container logs can be sent to CloudWatch Logs through the Docker `awslogs` log driver.
+
+1. Attach `infra/aws/iam/ec2-runtime-policy.json` to `SketchCatch-EC2-Role`.
+2. Set GitHub variable `CLOUDWATCH_LOGS_ENABLED=true`.
+3. Keep `CLOUDWATCH_LOG_GROUP_PREFIX=/sketchcatch/production`.
+4. Re-run `Deploy Production`.
+
+Log groups:
+
+```text
+/sketchcatch/production/api
+/sketchcatch/production/web
+/sketchcatch/production/nginx
+```
+
+Alarm setup examples are in `infra/aws/cloudwatch-alarms.md`.
+
+## HTTPS
+
+The current deployment serves HTTP on the EC2 public IP. Production HTTPS requires a domain.
+
+Recommended options:
+
+- AWS standard: Route 53 + ACM certificate + ALB in front of EC2.
+- Lower-cost single-instance setup: domain DNS A record to EC2 + Nginx + Let's Encrypt certbot.
+
+Do not use a self-signed certificate for public production traffic.
 
 ## RDS와 S3 저장 기준
 

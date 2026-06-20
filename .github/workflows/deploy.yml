@@ -154,6 +154,9 @@ jobs:
             --arg api_env_url "${api_env_url}" \
             --arg release_url "${release_url}" \
             --arg release_id "${GITHUB_SHA}" \
+            --arg aws_region "${AWS_REGION}" \
+            --arg cloudwatch_logs_enabled "${CLOUDWATCH_LOGS_ENABLED}" \
+            --arg cloudwatch_log_group_prefix "${CLOUDWATCH_LOG_GROUP_PREFIX}" \
             '{
               commands: [
                 "set -euo pipefail",
@@ -165,7 +168,7 @@ jobs:
                 "sudo install -d -m 0755 /etc/sketchcatch",
                 "sudo install -m 0600 /tmp/sketchcatch-web.env /etc/sketchcatch/web.env",
                 "sudo install -m 0600 /tmp/sketchcatch-api.env /etc/sketchcatch/api.env",
-                "sudo env RELEASE_ID=" + ($release_id | @sh) + " RELEASE_URL=" + ($release_url | @sh) + " bash /tmp/sketchcatch-deploy.sh"
+                "sudo env AWS_REGION=" + ($aws_region | @sh) + " CLOUDWATCH_LOGS_ENABLED=" + ($cloudwatch_logs_enabled | @sh) + " CLOUDWATCH_LOG_GROUP_PREFIX=" + ($cloudwatch_log_group_prefix | @sh) + " RELEASE_ID=" + ($release_id | @sh) + " RELEASE_URL=" + ($release_url | @sh) + " bash /tmp/sketchcatch-deploy.sh"
               ],
               executionTimeout: ["1800"]
             }' > .release/ssm-deploy-parameters.json
@@ -208,6 +211,8 @@ jobs:
           test "${command_status}" = "Success"
         env:
           AWS_REGION: ${{ vars.AWS_REGION }}
+          CLOUDWATCH_LOGS_ENABLED: ${{ vars.CLOUDWATCH_LOGS_ENABLED || 'false' }}
+          CLOUDWATCH_LOG_GROUP_PREFIX: ${{ vars.CLOUDWATCH_LOG_GROUP_PREFIX || '/sketchcatch/production' }}
           DATABASE_SSL: ${{ vars.DATABASE_SSL }}
           DEPLOY_ARTIFACT_BUCKET: ${{ vars.DEPLOY_ARTIFACT_BUCKET }}
           EC2_INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID || 'i-02a591d2abee94f02' }}
