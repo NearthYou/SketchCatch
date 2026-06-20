@@ -1,28 +1,28 @@
 # AGENTS.md
 
-이 저장소는 SketchCatch입니다. SketchCatch는 AWS 입문자가 안전하게 AWS 실습 아키텍처를 시각적으로 설계하고, 리소스 관계와 비용/위험을 이해하도록 돕는 웹 서비스입니다.
+This repository is SketchCatch.
 
-Gemini Code Assist 관련 설정은 `.gemini/config.yaml`과 `.gemini/styleguide.md`에 둡니다.
+SketchCatch is a web service for safe AWS learning. It helps AWS beginners visually design practice architectures, understand resource relationships, estimate cost and risk, and eventually deploy only approved practice environments with automatic cleanup.
 
-## 에이전트 작업 규칙
+## Agent Rules
 
-1. 명시적으로 요청받기 전까지 실제 AWS 배포를 구현하지 않습니다.
-2. Secret, 실제 클라우드 자격 증명, `.env` 파일을 커밋하지 않습니다.
-3. 프론트엔드 코드는 `apps/web`에 둡니다.
-4. 백엔드 코드는 `apps/api`에 둡니다.
-5. 공유 타입은 `packages/types`에 둡니다.
-6. 공유 UI는 `packages/ui`에 둡니다.
-7. 향후 Terraform 로직을 UI 컴포넌트에 섞지 않습니다.
-8. 향후 AWS SDK 로직을 프론트엔드 컴포넌트에서 직접 호출하지 않습니다.
-9. AWS 초보자를 위한 안전한 학습 흐름과 비용 사고 방지를 우선합니다.
-10. 명령이 실패하면 통과한 척하지 말고 실패 내용을 명확히 보고합니다.
-11. 운영 배포에는 Docker를 사용하지만 Docker Compose는 사용하지 않습니다.
-12. 운영 배포는 EC2, S3 Docker 이미지 아티팩트, RDS, GitHub Actions, `docker run`, Nginx 컨테이너 흐름을 따릅니다.
-13. RDS에는 프로젝트 정보와 아키텍처 JSON을 저장하고, S3에는 다이어그램/Terraform/export 파일 아티팩트를 저장합니다.
+1. Do not implement real AWS deployment unless the user explicitly asks for it.
+2. Do not commit secrets, `.env` files, private keys, real AWS credentials, or real DB passwords.
+3. Keep frontend code in `apps/web`.
+4. Keep backend code in `apps/api`.
+5. Keep shared types in `packages/types`.
+6. Keep shared UI in `packages/ui`.
+7. Do not mix future Terraform or CloudFormation generation logic into UI components.
+8. Do not call future AWS SDK logic directly from frontend components.
+9. Prefer safe AWS learning workflows and cost-accident prevention for beginners.
+10. If a command fails, report the failure clearly instead of pretending it passed.
+11. Production deployment uses Docker, but does not use Docker Compose.
+12. Production deployment is based on EC2, S3 release artifacts, RDS, GitHub Actions, SSM Run Command, `docker run`, and Nginx.
+13. Store project data and architecture JSON in RDS. Store diagram images, IaC files, and export artifacts in S3.
 
-## 마무리 전 필수 확인
+## Required Checks Before Finishing
 
-작업을 마치기 전에 다음 명령을 실행합니다.
+Run these before finishing code or infrastructure changes:
 
 ```bash
 pnpm lint
@@ -30,17 +30,24 @@ pnpm typecheck
 pnpm build
 ```
 
-## Git 컨벤션
+If local `pnpm` is not available, use the repository package manager version through Corepack or npm:
+
+```bash
+corepack pnpm lint
+npm exec --package=pnpm@11.8.0 -- pnpm lint
+```
+
+## Git Convention
 
 ### Commit Convention
 
-커밋 메시지는 다음 형식을 사용합니다.
+Use this format:
 
 ```text
 Type: 작업 내용
 ```
 
-허용되는 커밋 타입은 다음과 같습니다.
+Allowed commit types:
 
 - `Feat`: 새로운 기능 추가
 - `Fix`: 버그 수정
@@ -51,7 +58,7 @@ Type: 작업 내용
 - `Remove`: 파일 삭제
 - `Init`: 프로젝트 초기 설정
 
-예시:
+Examples:
 
 ```text
 Feat: 로그인 기능 구현
@@ -63,13 +70,13 @@ Init: 프로젝트 초기 환경 설정
 
 ### Branch Convention
 
-브랜치는 이슈 단위로 생성합니다.
+Branches are created per issue.
 
 ```text
 {type}/{name}/{issue-number}-{task-name}
 ```
 
-예시:
+Examples:
 
 ```text
 feature/sw/12-login
@@ -79,7 +86,7 @@ docs/ys/35-readme
 chore/jh/40-eslint-config
 ```
 
-브랜치 타입은 다음과 같습니다.
+Branch types:
 
 - `feature`: 기능 개발
 - `fix`: 버그 수정
@@ -90,151 +97,91 @@ chore/jh/40-eslint-config
 
 ### Git Flow
 
-기본 브랜치 흐름은 다음과 같습니다.
+Default branch flow:
 
 ```text
 main
 └─ dev
-   ├─ feature/12-login
-   └─ fix/21-token-error
+   ├─ feature/{name}/{issue}-{task}
+   ├─ fix/{name}/{issue}-{task}
+   ├─ docs/{name}/{issue}-{task}
+   └─ chore/{name}/{issue}-{task}
 ```
 
-규칙:
+Rules:
 
-1. `main`, `dev`에는 직접 push하지 않습니다.
-2. 모든 작업은 이슈 생성 후 브랜치를 생성합니다.
-3. 작업 브랜치는 `dev`에서 분기합니다.
-4. 작업 완료 후 `dev`로 PR을 생성합니다.
-5. 배포 시 `dev`에서 `main`으로 PR을 생성합니다.
+1. Do not push directly to `main`.
+2. Do not push directly to `dev` except for one-time repository administration or explicit user approval.
+3. Start all normal work from `dev`.
+4. Open feature/fix/docs/chore PRs into `dev`.
+5. Promote `dev` to `main` through a PR for releases.
+6. Keep PRs small enough to review.
+7. Run lint, typecheck, and build before asking for review.
 
-작업 시작 예시:
+Start work:
 
 ```bash
 git checkout dev
 git pull origin dev
-git checkout -b feature/12-login
+git checkout -b feature/sw/12-login
 ```
 
-작업 업로드 예시:
+Upload work:
 
 ```bash
 git add .
 git commit -m "Feat: 로그인 기능 구현"
-git push origin feature/12-login
+git push origin feature/sw/12-login
 ```
 
 ### PR Convention
 
-PR 제목 형식:
+PR title format:
 
 ```text
 [Feat] #12 로그인 기능 구현
 [Fix] #21 토큰 만료 오류 수정
+[Docs] #35 README 수정
 ```
 
-PR 본문 형식:
+PRs must include:
 
-```markdown
-## 작업 내용
-
-- 로그인 기능 구현
-
-## 변경 사항
-
-- Auth API 추가
-- Login 페이지 추가
-
-## 테스트
-
-- [x] 로컬 테스트 완료
-- [x] API 테스트 완료
-
-## 참고 사항
-
-- 없음
-```
+- 작업 내용
+- 변경 사항
+- 테스트 결과
+- 참고 사항
 
 ### Issue Convention
 
-이슈 제목 형식:
+Issue title format:
 
 ```text
 Feat: 로그인 기능 구현
 Fix: 토큰 만료 오류 수정
+Docs: README 수정
 ```
 
-기능 이슈 본문:
+Create an issue before starting normal development work.
 
-```markdown
-## 작업 내용
+## Code Convention
 
-- 로그인 기능을 구현한다.
+### Common
 
-## 완료 조건
-
-- [ ] 로그인 API 연동
-- [ ] 로그인 성공 시 토큰 저장
-- [ ] 로그인 실패 시 에러 메시지 출력
-
-## 참고 사항
-
-- 없음
-```
-
-버그 이슈 본문:
-
-```markdown
-## 문제
-
-로그인 시 토큰이 저장되지 않음
-
-## 원인
-
-토큰 저장 로직 누락
-
-## 해결 방향
-
-로그인 성공 후 localStorage에 토큰 저장
-
-## 영향 범위
-
-- 로그인
-- 인증 처리
-```
-
-## 코드 컨벤션
-
-### 공통
-
-1. 변수명과 함수명은 의미가 드러나게 작성합니다.
-2. 불필요한 주석을 작성하지 않습니다.
-3. 중복 코드는 함수로 분리합니다.
-4. 사용하지 않는 코드는 삭제합니다.
-5. ESLint와 Prettier를 적용합니다.
+1. Use meaningful variable and function names.
+2. Avoid unnecessary comments.
+3. Extract duplicated code into functions or modules.
+4. Remove unused code.
+5. Apply ESLint and Prettier.
 
 ### Frontend
 
-- 컴포넌트명은 `PascalCase`를 사용합니다.
-- 변수명과 함수명은 `camelCase`를 사용합니다.
-- 파일명은 `PascalCase` 또는 `kebab-case` 중 하나로 통일합니다.
+- Component names use `PascalCase`.
+- Variables and functions use `camelCase`.
+- Keep frontend code in `apps/web`.
 
 ### Backend
 
-- API, Service, Repository 역할을 분리합니다.
-- 에러 응답 형식을 통일합니다.
-- 환경변수는 `.env`를 사용합니다.
-- Secret Key는 코드에 직접 작성하지 않습니다.
-
-## 최종 운영 규칙
-
-```text
-Issue 생성
-→ Branch 생성
-→ 작업
-→ Commit
-→ Push
-→ PR 생성
-→ Review
-→ dev Merge
-→ main Merge
-```
+- Separate API, service, and repository responsibilities when the module grows.
+- Keep error response formats consistent.
+- Use environment variables for runtime configuration.
+- Never hardcode secret keys.

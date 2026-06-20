@@ -31,6 +31,8 @@ Secrets must never be committed. If a secret is accidentally added to the reposi
 - Do not push directly to `main` or `dev` for normal feature work.
 - Open PRs from feature branches into `dev`.
 - Promote `dev` to `main` through a PR when deploying a release.
+- Use the pull request and issue templates under `.github/`.
+- See `docs/git-flow.md` for the full workflow and branch protection setup.
 
 Branch names follow the team convention:
 
@@ -42,3 +44,12 @@ docs/{name}/{issue-number}-{task-name}
 chore/{name}/{issue-number}-{task-name}
 hotfix/{name}/{issue-number}-{task-name}
 ```
+
+Recommended GitHub branch protection:
+
+- Protect `main` and `dev`.
+- Require PR before merge.
+- Require at least one approval.
+- Require CI status check `checks`.
+- Block force pushes.
+- Restrict branch deletion.
