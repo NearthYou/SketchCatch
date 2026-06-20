@@ -54,7 +54,7 @@ docker compose -f infra/local/docker-compose.yml up -d
 
 ## Production Deployment
 
-Production uses EC2, RDS, S3, GitHub Actions, Docker, and an Nginx container. Docker Compose is not used for production deployment.
+Production uses EC2, RDS, S3, GitHub Actions, AWS Systems Manager, Docker, and an Nginx container. Docker Compose is not used for production deployment.
 
 See [docs/deployment.md](docs/deployment.md).
 
