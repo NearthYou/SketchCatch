@@ -1,0 +1,36 @@
+name: Run Database Migrations
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Run migrations on EC2
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "${EC2_SSH_PRIVATE_KEY}" > ~/.ssh/sketchcatch.pem
+          chmod 600 ~/.ssh/sketchcatch.pem
+          ssh-keyscan -H "${EC2_HOST}" >> ~/.ssh/known_hosts
+
+          ssh -i ~/.ssh/sketchcatch.pem "${EC2_USER}@${EC2_HOST}" bash -s <<'EOF'
+          set -euo pipefail
+
+          image_tag="$(cat /opt/sketchcatch/current-image)"
+
+          docker run --rm \
+            --network sketchcatch \
+            --env-file /etc/sketchcatch/api.env \
+            "sketchcatch-api:${image_tag}" \
+            node dist/db/migrate.cjs
+          EOF
+        env:
+          EC2_HOST: ${{ vars.EC2_HOST }}
+          EC2_USER: ${{ vars.EC2_USER }}
+          EC2_SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}

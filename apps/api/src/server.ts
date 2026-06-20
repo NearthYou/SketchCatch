@@ -1,22 +1,20 @@
-import { createServer } from "node:http";
+import { buildApp } from "./app.js";
 
 const port = Number(process.env.PORT ?? 4000);
+const host = process.env.HOST ?? "0.0.0.0";
 
-const server = createServer((request, response) => {
-  if (request.method === "GET" && request.url === "/health") {
-    response.writeHead(200, { "Content-Type": "application/json" });
-    response.end(JSON.stringify({ status: "ok" }));
-    return;
-  }
-
-  response.writeHead(404, { "Content-Type": "application/json" });
-  response.end(JSON.stringify({ error: "not_found" }));
-});
+const app = buildApp();
 
 if (process.env.NODE_ENV !== "test") {
-  server.listen(port, () => {
-    console.log(`SketchCatch API listening on port ${port}`);
-  });
+  app
+    .listen({ host, port })
+    .then(() => {
+      app.log.info(`SketchCatch API listening on ${host}:${port}`);
+    })
+    .catch((error) => {
+      app.log.error(error);
+      process.exit(1);
+    });
 }
 
-export { server };
+export { app };

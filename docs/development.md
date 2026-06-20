@@ -49,3 +49,20 @@ This starts a local PostgreSQL container with safe local defaults.
 - `pnpm typecheck`: type-check all apps and packages
 - `pnpm test`: run placeholder test commands
 - `pnpm format`: format files with Prettier
+- `pnpm docker:build`: build production Docker images locally without Docker Compose
+
+## API Persistence
+
+The API uses PostgreSQL through Drizzle ORM. Set `DATABASE_URL` before running database-backed endpoints.
+
+```bash
+pnpm --filter @sketchcatch/api db:generate
+pnpm --filter @sketchcatch/api db:migrate
+```
+
+S3 presigned uploads require:
+
+```text
+AWS_REGION=ap-northeast-2
+S3_BUCKET_NAME=sketchcatch-555980271919-ap-northeast-2-an
+```

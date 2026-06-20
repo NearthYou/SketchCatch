@@ -9,7 +9,8 @@
     "lint": "turbo lint",
     "typecheck": "turbo typecheck",
     "test": "turbo test",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "docker:build": "docker build -f docker/api.Dockerfile -t sketchcatch-api:local . && docker build -f docker/web.Dockerfile -t sketchcatch-web:local . && docker build -f docker/nginx.Dockerfile -t sketchcatch-nginx:local ."
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

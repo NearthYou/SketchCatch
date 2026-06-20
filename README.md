@@ -2,7 +2,7 @@
 
 SketchCatch is a web service for AWS beginners to visually design AWS practice architectures, understand resource relationships, check estimated cost and risk, and eventually deploy approved practice environments with automatic cleanup.
 
-This repository is currently in the pre-development setup stage. Real AWS deployment, Terraform execution, AI generation, authentication, and database persistence are not implemented yet.
+This repository is currently in the early infrastructure setup stage. Terraform execution, AI generation, authentication, and production feature workflows are not implemented yet.
 
 ## Tech Stack
 
@@ -52,6 +52,12 @@ Start local PostgreSQL:
 docker compose -f infra/local/docker-compose.yml up -d
 ```
 
+## Production Deployment
+
+Production uses EC2, RDS, S3, GitHub Actions, Docker, and an Nginx container. Docker Compose is not used for production deployment.
+
+See [docs/deployment.md](docs/deployment.md).
+
 ## Root Scripts
 
 - `pnpm dev`: run development servers through Turborepo
@@ -60,3 +66,4 @@ docker compose -f infra/local/docker-compose.yml up -d
 - `pnpm typecheck`: type-check all apps and packages
 - `pnpm test`: run placeholder test commands
 - `pnpm format`: format the repository with Prettier
+- `pnpm docker:build`: build production Docker images locally without Docker Compose

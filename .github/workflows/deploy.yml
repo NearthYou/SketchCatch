@@ -1,0 +1,131 @@
+name: Deploy Production
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.8.0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Build
+        run: pnpm build
+
+      - name: Build Docker images
+        run: |
+          docker build -f docker/api.Dockerfile -t "sketchcatch-api:${GITHUB_SHA}" .
+          docker build -f docker/web.Dockerfile -t "sketchcatch-web:${GITHUB_SHA}" .
+          docker build -f docker/nginx.Dockerfile -t "sketchcatch-nginx:${GITHUB_SHA}" .
+
+      - name: Package Docker images
+        run: |
+          mkdir -p .release
+          docker save \
+            "sketchcatch-api:${GITHUB_SHA}" \
+            "sketchcatch-web:${GITHUB_SHA}" \
+            "sketchcatch-nginx:${GITHUB_SHA}" \
+            | gzip > ".release/sketchcatch-docker-${GITHUB_SHA}.tar.gz"
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Upload Docker image artifact to S3
+        run: |
+          aws s3 cp \
+            ".release/sketchcatch-docker-${GITHUB_SHA}.tar.gz" \
+            "s3://${DEPLOY_ARTIFACT_BUCKET}/sketchcatch/docker/${GITHUB_SHA}.tar.gz" \
+            --region "${AWS_REGION}"
+        env:
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          DEPLOY_ARTIFACT_BUCKET: ${{ vars.DEPLOY_ARTIFACT_BUCKET }}
+
+      - name: Deploy Docker release to EC2 over SSH
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "${EC2_SSH_PRIVATE_KEY}" > ~/.ssh/sketchcatch.pem
+          chmod 600 ~/.ssh/sketchcatch.pem
+          ssh-keyscan -H "${EC2_HOST}" >> ~/.ssh/known_hosts
+
+          release_url="$(aws s3 presign \
+            "s3://${DEPLOY_ARTIFACT_BUCKET}/sketchcatch/docker/${GITHUB_SHA}.tar.gz" \
+            --expires-in 900 \
+            --region "${AWS_REGION}")"
+
+          scp -i ~/.ssh/sketchcatch.pem deploy/ec2/bootstrap-amazon-linux.sh "${EC2_USER}@${EC2_HOST}:/tmp/sketchcatch-bootstrap.sh"
+          scp -i ~/.ssh/sketchcatch.pem deploy/ec2/deploy-docker-release.sh "${EC2_USER}@${EC2_HOST}:/tmp/sketchcatch-deploy.sh"
+
+          ssh -i ~/.ssh/sketchcatch.pem "${EC2_USER}@${EC2_HOST}" bash -s <<EOF
+          set -euo pipefail
+
+          sudo bash /tmp/sketchcatch-bootstrap.sh
+          sudo install -d -m 0755 /etc/sketchcatch
+
+          cat > /tmp/sketchcatch-web.env <<'ENV'
+          NODE_ENV=production
+          PORT=3000
+          HOSTNAME=0.0.0.0
+          NEXT_PUBLIC_API_BASE_URL=/api
+          ENV
+          sudo install -m 0600 /tmp/sketchcatch-web.env /etc/sketchcatch/web.env
+
+          cat > /tmp/sketchcatch-api.env <<'ENV'
+          NODE_ENV=production
+          PORT=4000
+          DATABASE_URL=${DATABASE_URL}
+          DATABASE_SSL=${DATABASE_SSL:-false}
+          RDS_ENDPOINT=${RDS_ENDPOINT}
+          AWS_REGION=${AWS_REGION}
+          S3_BUCKET_NAME=${S3_BUCKET_NAME}
+          ENV
+          sudo install -m 0600 /tmp/sketchcatch-api.env /etc/sketchcatch/api.env
+
+          sudo env RELEASE_ID="${GITHUB_SHA}" RELEASE_URL="${release_url}" bash /tmp/sketchcatch-deploy.sh
+          EOF
+        env:
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          DATABASE_SSL: ${{ vars.DATABASE_SSL }}
+          DEPLOY_ARTIFACT_BUCKET: ${{ vars.DEPLOY_ARTIFACT_BUCKET }}
+          EC2_HOST: ${{ vars.EC2_HOST }}
+          EC2_USER: ${{ vars.EC2_USER }}
+          EC2_SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          RDS_ENDPOINT: ${{ vars.RDS_ENDPOINT }}
+          S3_BUCKET_NAME: ${{ vars.S3_BUCKET_NAME }}

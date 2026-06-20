@@ -15,7 +15,7 @@ SketchCatch starts as a pnpm and Turborepo monorepo.
 
 ## Current Boundaries
 
-Real AWS, Terraform, AI, and cost integrations are future work. This setup does not include AWS SDK calls, Terraform execution, AI generation, Cost Explorer, Budgets, authentication, or database migrations.
+Terraform execution, AI generation, Cost Explorer, Budgets, and authentication are future work. The MVP infrastructure foundation includes PostgreSQL RDS persistence for project and architecture data, plus S3 presigned upload support for generated file artifacts.
 
 ## Future Module Boundaries
 

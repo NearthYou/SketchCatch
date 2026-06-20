@@ -16,6 +16,9 @@ Gemini Code Assist 관련 설정은 `.gemini/config.yaml`과 `.gemini/styleguide
 8. 향후 AWS SDK 로직을 프론트엔드 컴포넌트에서 직접 호출하지 않습니다.
 9. AWS 초보자를 위한 안전한 학습 흐름과 비용 사고 방지를 우선합니다.
 10. 명령이 실패하면 통과한 척하지 말고 실패 내용을 명확히 보고합니다.
+11. 운영 배포에는 Docker를 사용하지만 Docker Compose는 사용하지 않습니다.
+12. 운영 배포는 EC2, S3 Docker 이미지 아티팩트, RDS, GitHub Actions, `docker run`, Nginx 컨테이너 흐름을 따릅니다.
+13. RDS에는 프로젝트 정보와 아키텍처 JSON을 저장하고, S3에는 다이어그램/Terraform/export 파일 아티팩트를 저장합니다.
 
 ## 마무리 전 필수 확인
 

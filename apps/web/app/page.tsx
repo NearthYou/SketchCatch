@@ -6,8 +6,8 @@ export default function HomePage() {
     <main className="pageShell">
       <section className="hero">
         <p className="eyebrow">SketchCatch</p>
-        <h1>SketchCatch</h1>
-        <p>Visual AWS practice architecture platform</p>
+        <h1>Hello World</h1>
+        <p>SketchCatch deployment is ready.</p>
         <div className="heroActions">
           <Link className="workspaceLink" href="/workspace">
             Open workspace placeholder
