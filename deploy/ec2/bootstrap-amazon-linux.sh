@@ -9,7 +9,10 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 if command -v dnf >/dev/null 2>&1; then
-  dnf install -y docker gzip curl shadow-utils
+  dnf install -y docker gzip shadow-utils
+  if ! command -v curl >/dev/null 2>&1; then
+    dnf install -y curl --allowerasing
+  fi
 elif command -v yum >/dev/null 2>&1; then
   if command -v amazon-linux-extras >/dev/null 2>&1; then
     amazon-linux-extras install -y docker || yum install -y docker
@@ -17,7 +20,10 @@ elif command -v yum >/dev/null 2>&1; then
     yum install -y docker
   fi
 
-  yum install -y gzip curl shadow-utils || yum install -y gzip curl
+  yum install -y gzip shadow-utils || yum install -y gzip
+  if ! command -v curl >/dev/null 2>&1; then
+    yum install -y curl
+  fi
 else
   echo "Amazon Linux with dnf or yum is required." >&2
   exit 1
