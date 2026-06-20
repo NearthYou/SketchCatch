@@ -2,6 +2,8 @@
 
 이 저장소는 SketchCatch입니다. SketchCatch는 AWS 입문자가 안전하게 AWS 실습 아키텍처를 시각적으로 설계하고, 리소스 관계와 비용/위험을 이해하도록 돕는 웹 서비스입니다.
 
+Gemini Code Assist 관련 설정은 `.gemini/config.yaml`과 `.gemini/styleguide.md`에 둡니다.
+
 ## 에이전트 작업 규칙
 
 1. 명시적으로 요청받기 전까지 실제 AWS 배포를 구현하지 않습니다.

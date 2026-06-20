@@ -1,0 +1,32 @@
+version: 1
+
+project:
+  name: SketchCatch
+  repository: sketchcatch
+  default_language: ko
+
+instruction_files:
+  - ../AGENTS.md
+  - ./styleguide.md
+
+response:
+  language: ko
+  korean_only: true
+
+styleguide:
+  path: ./styleguide.md
+  enforce_code_convention: true
+  enforce_git_convention: true
+
+commands:
+  format: pnpm format
+  lint: pnpm lint
+  typecheck: pnpm typecheck
+  build: pnpm build
+
+guardrails:
+  forbid_committing_env_files: true
+  forbid_real_cloud_credentials: true
+  forbid_frontend_aws_sdk_calls: true
+  require_explicit_request_for_aws_deployment: true
+  require_explicit_request_for_terraform_execution: true
