@@ -1,0 +1,17 @@
+{
+  "name": "@sketchcatch/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc -p tsconfig.json",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "node -e \"console.log('No tests configured yet')\""
+  },
+  "devDependencies": {
+    "@types/node": "26.0.0",
+    "tsx": "4.22.4"
+  }
+}
