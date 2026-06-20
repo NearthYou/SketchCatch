@@ -107,14 +107,43 @@ Alarm setup examples are in `infra/aws/cloudwatch-alarms.md`.
 
 ## HTTPS
 
-The current deployment serves HTTP on the EC2 public IP. Production HTTPS requires a domain.
+Production HTTPS for `sketchcatch.net` is provisioned with:
 
-Recommended options:
+- Route 53 hosted zone
+- ACM DNS-validated certificate
+- Public Application Load Balancer
+- HTTP to HTTPS redirect
+- ALB target group forwarding to EC2 Nginx on port 80
 
-- AWS standard: Route 53 + ACM certificate + ALB in front of EC2.
-- Lower-cost single-instance setup: domain DNS A record to EC2 + Nginx + Let's Encrypt certbot.
+Run the `Provision HTTPS` GitHub Actions workflow with:
 
-Do not use a self-signed certificate for public production traffic.
+```text
+domain_name=sketchcatch.net
+```
+
+The workflow deploys `infra/aws/cloudformation/alb-https.yml`.
+
+Before running it, attach the updated `infra/aws/iam/github-actions-deploy-policy.json` permissions to `GitHubActionsDeployRole`.
+
+After it succeeds, verify:
+
+```bash
+curl -I https://sketchcatch.net
+curl https://sketchcatch.net/health
+curl https://sketchcatch.net/health/db
+```
+
+Keep the EC2 security group open on port 80 from the ALB security group. Public port 80 directly to EC2 can be removed after ALB verification.
+
+## Monitoring
+
+Run the `Provision Monitoring` GitHub Actions workflow with:
+
+```text
+alarm_email=sl990084@gmail.com
+```
+
+AWS sends a subscription confirmation email. The alarms do not notify until that email subscription is confirmed.
 
 ## RDS와 S3 저장 기준
 

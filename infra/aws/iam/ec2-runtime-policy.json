@@ -21,6 +21,12 @@
         "arn:aws:logs:ap-northeast-2:555980271919:log-group:/sketchcatch/production/*",
         "arn:aws:logs:ap-northeast-2:555980271919:log-group:/sketchcatch/production/*:log-stream:*"
       ]
+    },
+    {
+      "Sid": "AllowDockerAwslogsDriverMetadata",
+      "Effect": "Allow",
+      "Action": "logs:DescribeLogGroups",
+      "Resource": "*"
     }
   ]
 }

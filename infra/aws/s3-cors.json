@@ -3,7 +3,7 @@
     {
       "AllowedHeaders": ["*"],
       "AllowedMethods": ["PUT", "GET", "HEAD"],
-      "AllowedOrigins": ["http://13.125.49.82", "http://localhost:3000"],
+      "AllowedOrigins": ["https://sketchcatch.net", "http://13.125.49.82", "http://localhost:3000"],
       "ExposeHeaders": ["ETag", "x-amz-request-id"],
       "MaxAgeSeconds": 3000
     }
