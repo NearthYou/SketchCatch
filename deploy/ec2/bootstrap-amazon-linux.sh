@@ -8,15 +8,28 @@ if [ "$(id -u)" -ne 0 ]; then
   exit 1
 fi
 
-if ! command -v dnf >/dev/null 2>&1; then
-  echo "Amazon Linux with dnf is required." >&2
+if command -v dnf >/dev/null 2>&1; then
+  dnf install -y docker gzip curl shadow-utils
+elif command -v yum >/dev/null 2>&1; then
+  if command -v amazon-linux-extras >/dev/null 2>&1; then
+    amazon-linux-extras install -y docker || yum install -y docker
+  else
+    yum install -y docker
+  fi
+
+  yum install -y gzip curl shadow-utils || yum install -y gzip curl
+else
+  echo "Amazon Linux with dnf or yum is required." >&2
   exit 1
 fi
 
-dnf install -y docker gzip curl shadow-utils
+nologin_shell="/usr/sbin/nologin"
+if [ ! -x "${nologin_shell}" ]; then
+  nologin_shell="/sbin/nologin"
+fi
 
 if ! id sketchcatch >/dev/null 2>&1; then
-  useradd --system --home-dir "${app_root}" --shell /usr/sbin/nologin sketchcatch
+  useradd --system --home-dir "${app_root}" --shell "${nologin_shell}" sketchcatch
 fi
 
 install -d -m 0755 "${app_root}/images"
