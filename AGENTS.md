@@ -2,23 +2,86 @@
 
 This repository is SketchCatch.
 
-SketchCatch is a web service for safe AWS learning. It helps AWS beginners visually design practice architectures, understand resource relationships, estimate cost and risk, and eventually deploy only approved practice environments with automatic cleanup.
+SketchCatch is a Terraform-first IaC platform for safe AWS learning. It helps beginners design infrastructure visually, understand resource relationships, validate cost and security risks, manage IaC versions, and eventually deploy only explicitly approved practice environments with automatic cleanup.
 
-## Agent Rules
+## Product Direction
 
-1. Do not implement real AWS deployment unless the user explicitly asks for it.
-2. Do not commit secrets, `.env` files, private keys, real AWS credentials, or real DB passwords.
-3. Keep frontend code in `apps/web`.
-4. Keep backend code in `apps/api`.
-5. Keep shared types in `packages/types`.
-6. Keep shared UI in `packages/ui`.
-7. Do not mix future Terraform or CloudFormation generation logic into UI components.
-8. Do not call future AWS SDK logic directly from frontend components.
-9. Prefer safe AWS learning workflows and cost-accident prevention for beginners.
-10. If a command fails, report the failure clearly instead of pretending it passed.
-11. Production deployment uses Docker, but does not use Docker Compose.
-12. Production deployment is based on EC2, S3 release artifacts, RDS, GitHub Actions, SSM Run Command, `docker run`, and Nginx.
-13. Store project data and architecture JSON in RDS. Store diagram images, IaC files, and export artifacts in S3.
+1. Treat SketchCatch as an IaC-based infrastructure creation, validation, deployment, versioning, and safety platform, not just a visual cloud diagram tool.
+2. Terraform is the primary IaC target for product planning and implementation.
+3. CloudFormation may be used as an AWS learning reference or future compatibility target, but it is not the default MVP direction.
+4. Prefer beginner-safe AWS workflows, cost-accident prevention, explicit review, and time-limited practice environments.
+5. Do not implement real AWS apply, deploy, update, delete, or destroy behavior unless the user explicitly asks for it in the current task.
+
+## Required Reading
+
+Before making changes, always read the nearest `AGENTS.md` and this root file. Read additional docs only when they are relevant:
+
+- Read `docs/README.md` when working on documentation or when you need the document map.
+- Read `docs/product.md` when changing product scope, MVP behavior, AI/IaC workflows, or safety policy.
+- Read `docs/architecture.md` when changing stack, storage, API scope, deployment architecture, or ADR-level decisions.
+- Read `docs/data-models.md` when changing DB models, API DTOs, shared types, or frontend state.
+- Read `docs/development.md` when working with Git flow, code conventions, or required checks.
+- Read `docs/deployment.md` when touching deployment, infrastructure, RDS, S3, or operations.
+
+## Language Rules
+
+1. Write `AGENTS.md` files in English.
+2. Write regular project docs and user-facing explanations in Korean unless the user asks otherwise.
+3. Keep code identifiers, commands, API paths, environment variable names, package names, and AWS service names in their original form.
+
+## Repository Boundaries
+
+1. Keep frontend code in `apps/web`.
+2. Keep backend code in `apps/api`.
+3. Keep shared domain types in `packages/types`.
+4. Keep shared presentational UI in `packages/ui`.
+5. Keep project data, architecture JSON, deployment records, and metadata in RDS.
+6. Keep diagram images, IaC files, generated exports, thumbnails, and release artifacts in S3.
+7. Do not mix Terraform generation, AWS SDK calls, deployment execution, or infrastructure mutation logic into UI components.
+8. Future Terraform execution belongs in backend or worker code behind explicit safety gates.
+
+## Safety Rules
+
+1. Never commit secrets, `.env` files, private keys, AWS credentials, DB passwords, or real access tokens.
+2. Never print secrets in logs, docs, tests, screenshots, or terminal output.
+3. Use environment variables for runtime configuration.
+4. Do not hardcode account-specific secrets or private infrastructure credentials.
+5. If a command fails, report the failure clearly instead of pretending it passed.
+6. Production deployment uses Docker, EC2, S3 release artifacts, RDS, GitHub Actions, SSM Run Command, `docker run`, and Nginx.
+7. Production deployment does not use Docker Compose.
+
+## Dependency And Lockfile Rules
+
+1. Do not run install commands that rewrite `pnpm-lock.yaml` unless dependency metadata changed or the user asked for it.
+2. If `package.json` changes, update and review `pnpm-lock.yaml`.
+3. If `pnpm-lock.yaml` changes by more than the expected workspace/dependency entry, inspect the diff and report why.
+4. Do not add runtime dependencies when a small local helper or existing package is enough.
+5. Prefer the package manager version declared by the repository.
+
+## Feature Work Flow
+
+When adding or changing behavior, proceed in this order:
+
+1. Check or update shared types in `packages/types`.
+2. Check API DTO and Zod validation in `apps/api`.
+3. Check the RDS/S3 storage boundary.
+4. Connect frontend state and UI in `apps/web`.
+5. Run relevant checks and report any failures.
+
+For model, API, or state changes, `docs/data-models.md` is the naming source of truth.
+
+## Code Quality
+
+1. Prefer readable, human-editable code over clever code.
+2. Apply SOLID as practical responsibility separation, not as over-engineering.
+3. Keep functions, components, services, and modules small enough to understand quickly.
+4. Use clear names that reveal intent.
+5. Follow existing local patterns before introducing new abstractions.
+6. Extract meaningful duplication into helpers, hooks, services, or modules after the pattern is real.
+7. Keep route handlers and UI components thin when logic starts to grow.
+8. Prefer testable structure: pure helpers, explicit inputs, and isolated side effects.
+9. Avoid unnecessary comments; add comments only when they explain non-obvious intent or constraints.
+10. Remove unused code instead of leaving dead branches.
 
 ## Required Checks Before Finishing
 
@@ -30,158 +93,20 @@ pnpm typecheck
 pnpm build
 ```
 
-If local `pnpm` is not available, use the repository package manager version through Corepack or npm:
+If local `pnpm` is not available, use Corepack or npm:
 
 ```bash
 corepack pnpm lint
 npm exec --package=pnpm@11.8.0 -- pnpm lint
 ```
 
-## Git Convention
+For documentation-only changes, full build checks are optional unless package files, source code, or generated artifacts changed.
 
-### Commit Convention
+## Git And Review
 
-Use this format:
-
-```text
-Type: 작업 내용
-```
-
-Allowed commit types:
-
-- `Feat`: 새로운 기능 추가
-- `Fix`: 버그 수정
-- `Refactor`: 코드 리팩토링
-- `Style`: 코드 스타일 수정
-- `Docs`: 문서 수정
-- `Chore`: 기타 작업
-- `Remove`: 파일 삭제
-- `Init`: 프로젝트 초기 설정
-
-Examples:
-
-```text
-Feat: 로그인 기능 구현
-Fix: 토큰 만료 오류 수정
-Refactor: UserService 구조 개선
-Docs: README 수정
-Init: 프로젝트 초기 환경 설정
-```
-
-### Branch Convention
-
-Branches are created per issue.
-
-```text
-{type}/{name}/{issue-number}-{task-name}
-```
-
-Examples:
-
-```text
-feature/sw/12-login
-fix/jh/21-token-error
-refactor/ck/30-user-service
-docs/ys/35-readme
-chore/jh/40-eslint-config
-```
-
-Branch types:
-
-- `feature`: 기능 개발
-- `fix`: 버그 수정
-- `refactor`: 리팩토링
-- `docs`: 문서 수정
-- `chore`: 기타 작업
-- `hotfix`: main 긴급 수정
-
-### Git Flow
-
-Default branch flow:
-
-```text
-main
-└─ dev
-   ├─ feature/{name}/{issue}-{task}
-   ├─ fix/{name}/{issue}-{task}
-   ├─ docs/{name}/{issue}-{task}
-   └─ chore/{name}/{issue}-{task}
-```
-
-Rules:
-
-1. Do not push directly to `main`.
-2. Do not push directly to `dev` except for one-time repository administration or explicit user approval.
-3. Start all normal work from `dev`.
-4. Open feature/fix/docs/chore PRs into `dev`.
-5. Promote `dev` to `main` through a PR for releases.
-6. Keep PRs small enough to review.
-7. Run lint, typecheck, and build before asking for review.
-
-Start work:
-
-```bash
-git checkout dev
-git pull origin dev
-git checkout -b feature/sw/12-login
-```
-
-Upload work:
-
-```bash
-git add .
-git commit -m "Feat: 로그인 기능 구현"
-git push origin feature/sw/12-login
-```
-
-### PR Convention
-
-PR title format:
-
-```text
-[Feat] #12 로그인 기능 구현
-[Fix] #21 토큰 만료 오류 수정
-[Docs] #35 README 수정
-```
-
-PRs must include:
-
-- 작업 내용
-- 변경 사항
-- 테스트 결과
-- 참고 사항
-
-### Issue Convention
-
-Issue title format:
-
-```text
-Feat: 로그인 기능 구현
-Fix: 토큰 만료 오류 수정
-Docs: README 수정
-```
-
-Create an issue before starting normal development work.
-
-## Code Convention
-
-### Common
-
-1. Use meaningful variable and function names.
-2. Avoid unnecessary comments.
-3. Extract duplicated code into functions or modules.
-4. Remove unused code.
-5. Apply ESLint and Prettier.
-
-### Frontend
-
-- Component names use `PascalCase`.
-- Variables and functions use `camelCase`.
-- Keep frontend code in `apps/web`.
-
-### Backend
-
-- Separate API, service, and repository responsibilities when the module grows.
-- Keep error response formats consistent.
-- Use environment variables for runtime configuration.
-- Never hardcode secret keys.
+1. Start normal work from `dev`.
+2. Do not push directly to `main`.
+3. Do not push directly to `dev` except for one-time repository administration or explicit user approval.
+4. Use focused branches and PRs small enough to review.
+5. Follow the Git and PR conventions in `docs/development.md`.
+6. Before asking for review, summarize changed files, checks run, and any checks that could not be run.

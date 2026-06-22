@@ -4,6 +4,7 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { and, desc, eq, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import type { ArchitectureJson } from "@sketchcatch/types";
 import { requireS3BucketName } from "../config/env.js";
 import { getDatabaseClient } from "../db/client.js";
 import {
@@ -27,11 +28,32 @@ const routeParamsSchema = z.object({
   id: z.string().uuid()
 });
 
+const resourceNodeSchema = z.object({
+  id: z.string().min(1),
+  type: z.enum(["VPC", "EC2", "RDS", "S3", "LAMBDA", "UNKNOWN"]),
+  label: z.string().min(1).optional(),
+  positionX: z.number(),
+  positionY: z.number(),
+  config: z.record(z.string(), z.unknown()).default({})
+});
+
+const resourceEdgeSchema = z.object({
+  id: z.string().min(1),
+  sourceId: z.string().min(1),
+  targetId: z.string().min(1),
+  label: z.string().min(1).optional()
+});
+
+const architectureJsonSchema: z.ZodType<ArchitectureJson> = z.object({
+  nodes: z.array(resourceNodeSchema),
+  edges: z.array(resourceEdgeSchema)
+});
+
 const createArchitectureBodySchema = z.object({
   clientGeneratedWorkspaceId: workspaceIdSchema,
   version: z.number().int().positive().optional(),
   source: z.string().min(1).max(64).default("manual"),
-  architectureJson: z.unknown()
+  architectureJson: architectureJsonSchema
 });
 
 const assetTypeSchema = z.enum([
