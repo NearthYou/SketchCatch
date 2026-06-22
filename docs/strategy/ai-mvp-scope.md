@@ -43,6 +43,25 @@ LLM이 직접 하지 않는 것:
 - AWS 권한 생성 또는 확장
 - Pre-Deployment Check의 deploy-blocking 판정
 
+LLM provider와 fallback:
+
+- MVP 기본 provider는 OpenAI API로 한다.
+- 프론트엔드는 LLM provider를 직접 호출하지 않는다. 모든 AI 요청은 backend API를 경유한다.
+- OpenAI API key는 서버 환경변수로만 관리하고, 프론트 번들에 포함하지 않는다.
+- provider timeout, API key 누락, rate limit, 비용 제한 초과, JSON 검증 실패가 발생하면 deterministic mock response 또는 Template 기반 결과로 fallback한다.
+- 발표 데모는 외부 LLM provider가 실패해도 자연어 의도 분류, Architecture Draft 생성, 설명 표시가 최소 동작해야 한다.
+
+호출 흐름:
+
+```text
+frontend
+→ backend AI service
+→ OpenAI API
+→ schema validation
+→ fallback if needed
+→ frontend
+```
+
 ## 1. 자연어 → Architecture Draft
 
 사용자가 "포트폴리오 웹사이트를 AWS에 올리고 싶어"처럼 입력하면 Practice Architecture 초안을 만든다.
@@ -208,7 +227,3 @@ MVP 깊이:
 5. Pre-Deployment Check가 비용과 보안 위험을 설명한다.
 6. Plan 결과와 체크리스트를 확인한다.
 7. Apply 결과 또는 실패 오류를 AI가 초보자 언어로 설명한다.
-
-## 아직 결정해야 할 질문
-
-- 실제 LLM provider, 비용 제한, 장애 시 fallback 정책은 무엇인가?
