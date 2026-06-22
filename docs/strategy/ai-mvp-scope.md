@@ -46,7 +46,8 @@ LLM provider와 fallback:
 - 프론트엔드는 LLM provider를 직접 호출하지 않는다. 모든 AI 요청은 backend API를 경유한다.
 - OpenAI API key는 서버 환경변수로만 관리하고, 프론트 번들에 포함하지 않는다.
 - provider timeout, API key 누락, rate limit, 비용 제한 초과, JSON 검증 실패가 발생하면 deterministic mock response 또는 Template 기반 결과로 fallback한다.
-- 발표 데모는 외부 LLM provider가 실패해도 GitHub 링크 기반 초안 생성, 비용/위험 분석, 오류 설명 표시가 최소 동작해야 한다.
+- 발표나 QA에서 외부 LLM provider가 실패해도 GitHub 링크 기반 초안 생성, 비용/위험 분석, 오류 설명이 deterministic fallback으로 최소 동작해야 한다.
+- 팀 전체 발표 메인 흐름은 팀 공통 결정이며, 이 문서는 경근 AI 파트가 제공할 fallback과 검증 범위만 정의한다.
 
 호출 흐름:
 
@@ -334,13 +335,22 @@ type AiTerraformErrorExplanationResult = {
 2. Week 2: GitHub 링크 기반 초안 생성과 Template fallback 구현
 3. Week 3: 비용 추정, 리소스별 비용 분석, 위험도/보안 검증 rule engine 구현
 4. Week 4: Terraform 코드 작성 보조, Terraform 오류 설명, Plan/Apply 입력 연동
-5. Week 5: 발표용 fallback, 체크리스트, 비용/위험/오류 설명 시나리오 고정
+5. Week 5: 발표/QA용 fallback fixture, 체크리스트, 비용/위험/오류 설명 샘플 고정
 
-## 발표 시나리오
+## 발표/QA 지원 범위
 
-1. 사용자가 GitHub 링크를 입력한다.
-2. AI가 Source Repository 단서를 분석해 Architecture Draft를 만든다.
-3. 정현의 Architecture Board에서 Resource를 확인하고 수정한다.
-4. 시원의 Terraform 변환 결과를 확인하고 AI가 코드 작성 보조와 위험 지점 설명을 제공한다.
-5. 채강의 Plan 실행 전 AI가 비용 추정, 리소스별 비용 분석, 보안 위험, 체크리스트를 보여준다.
-6. Apply 실패 또는 Terraform 오류가 발생하면 AI가 원인과 다음 행동을 초보자 언어로 설명한다.
+팀 전체 발표 시나리오는 팀 공통 결정이다. 경근 파트 문서는 전체 발표 순서나 실제 Plan/Apply 노출 여부를 확정하지 않고, AI 파트가 제공할 수 있는 관찰 가능한 데모 단위와 fallback fixture만 정의한다.
+
+AI 파트가 제공할 수 있는 데모 단위:
+
+1. Source Repository 단서를 분석해 Architecture Draft를 제안한다.
+2. 생성된 Resource와 추론 근거를 초보자 언어로 설명한다.
+3. Pre-Deployment Check 결과로 비용 추정, 리소스별 비용 분석, 보안 위험, 체크리스트를 보여준다.
+4. IaC Preview나 Terraform 코드에서 위험 지점과 누락된 설정을 설명한다.
+5. Terraform validate, Plan, Apply 오류가 발생했을 때 원인 후보와 다음 행동을 설명한다.
+
+팀 협의가 필요한 것:
+
+- 위 데모 단위 중 무엇을 메인 발표 흐름에 넣을지
+- 실제 Plan/Apply를 보여줄지, mock 실행이나 기록 화면으로 보여줄지
+- 실패 상황을 메인 발표에 넣을지, QA나 예비 데모로 둘지
