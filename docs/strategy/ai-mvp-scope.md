@@ -329,6 +329,42 @@ type AiTerraformErrorExplanationResult = {
 | 윤서 | 로그인 사용자, 프로젝트 목록, 템플릿/활동/알림 화면 진입점 | 프로젝트/알림 화면에 표시할 AI 분석 요약 |
 | 팀장 | 공통 DB 스키마, 공통 API 응답 형식 | AI 분석 결과 DTO 요구사항과 샘플 응답 |
 
+## 구현 전 팀 호환성 체크
+
+이 섹션은 팀원별 Codex가 서로 다른 타입, 필드명, 책임 범위를 만들어 충돌하지 않도록 구현 전에 맞출 계약이다. 공통 타입의 최종 기준은 [데이터 모델](../data-models.md)이다.
+
+현재 해결된 기준:
+
+- 보드, AI, Terraform 생성기는 모두 `ArchitectureJson.nodes`와 `ArchitectureJson.edges`를 공유한다.
+- AI Architecture Draft는 별도 `resources`, `relationships` 그래프를 만들지 않고 `architectureJson`만 보드 입력으로 제공한다.
+- 비용/위험 분석은 `AiPreDeploymentAnalysisResult` 하나로 반환하되 내부 배열은 `resourceCostEstimates`, `findings`, `checklist`로 나눈다.
+- 노드별 경고는 `CheckFinding.resourceId`와 `ArchitectureJson.nodes[].id`를 연결해서 표시한다.
+- Terraform 오류 설명은 raw output을 숨기지 않고 `AiTerraformErrorExplanationResult.rawMessage`에 보존한다.
+- 실제 Apply, AWS 권한 변경, Terraform 최종본 생성은 AI 파트 책임이 아니다.
+
+구현 전에 반드시 확인해야 하는 호환 지점:
+
+| 지점 | 왜 위험한가 | 경근 Codex가 할 일 | 팀원에게 확인할 것 |
+| --- | --- | --- | --- |
+| `ResourceType` 값 | AI가 만든 node를 보드/API/Terraform이 거부할 수 있음 | docs 브랜치에서 shared type과 API Zod schema는 `SUBNET`, `SECURITY_GROUP`, `CLOUDFRONT`까지 맞춘다 | 정현/시원이 같은 문자열을 사용할 수 있는지 확인 |
+| `ResourceNode.config` key | 같은 리소스를 팀원별로 다른 설정 이름으로 읽을 수 있음 | AI template에서 쓰는 key를 문서와 테스트 fixture에 고정한다 | 시원이 Terraform 생성기에 필요한 필수 key 목록을 알려달라고 요청 |
+| 공통 API 응답 wrapper | AI route만 다른 응답 모양이면 프론트 연결이 깨짐 | wrapper가 코드에 들어오기 전에는 기존 Fastify route 스타일을 따르고 DTO 필드명을 고정한다 | 팀장에게 공통 응답 wrapper 위치와 예시를 확인 |
+| Plan/Apply raw output | 오류 설명 입력 모양이 채강 파트와 다르면 연동이 깨짐 | `stage`, `rawMessage`, 선택 `relatedResourceId`를 최소 입력으로 받게 한다 | 채강에게 Plan/Apply 결과와 로그 line shape를 확인 |
+| `ArchitectureSnapshot.source` | 저장 시 `github`, `template_fallback` 같은 AI provenance가 뒤섞일 수 있음 | AI 응답의 `source`는 분석 provenance로 유지하고, 저장 source는 팀 공통 값을 따른다 | 팀장/정현에게 저장 source enum 확장 여부 확인 |
+| 분석 결과 저장 여부 | DB schema 없이 AI 결과를 저장하려 하면 충돌함 | MVP에서는 stateless 응답으로 시작하고 저장은 별도 합의 전까지 하지 않는다 | 팀장에게 AI 결과 저장 테이블 여부 확인 |
+
+경근이 팀원에게 보내야 할 확인 메시지:
+
+```text
+AI 파트 구현 전에 호환 계약만 확인할게요.
+
+1. 정현: Architecture Board가 ResourceType `VPC`, `SUBNET`, `EC2`, `RDS`, `S3`, `SECURITY_GROUP`, `CLOUDFRONT`, `LAMBDA`, `UNKNOWN`을 받을 수 있게 갈까요? 보드 경고 표시는 `CheckFinding.resourceId === node.id`로 연결해도 될까요?
+2. 시원: Terraform 생성기가 `ArchitectureJson`을 원천 입력으로 쓰는 기준 맞나요? 각 ResourceType별로 Terraform 생성에 꼭 필요한 `config` key 목록을 정해줄 수 있나요?
+3. 채강: Plan/Apply 결과에서 AI가 받을 최소 입력을 `stage`, `rawMessage`, 선택 `relatedResourceId`로 잡아도 될까요? 실시간 로그 line shape가 있으면 알려주세요.
+4. 팀장: 공통 API 응답 wrapper가 코드에 이미 있나요? 없으면 AI route는 일단 현재 Fastify route처럼 `{ result }` 또는 DTO 직접 응답으로 만들고, wrapper 생기면 맞추겠습니다.
+5. 윤서: 프로젝트 목록/최근 작업/알림 쪽에서 AI 요약을 표시해야 한다면 어떤 최소 필드가 필요한지 알려주세요. 원천 데이터는 AI DTO를 그대로 쓰겠습니다.
+```
+
 ## 5주 구현 순서
 
 1. Week 1: 정현의 Diagram JSON과 호환되는 Architecture Draft 계약, AI 분석 DTO 계약 확정

@@ -112,7 +112,16 @@ type ArchitectureJson = {
 ```ts
 type ResourceNode = {
   id: string;
-  type: "VPC" | "EC2" | "RDS" | "S3" | "LAMBDA" | "UNKNOWN";
+  type:
+    | "VPC"
+    | "SUBNET"
+    | "EC2"
+    | "RDS"
+    | "S3"
+    | "SECURITY_GROUP"
+    | "CLOUDFRONT"
+    | "LAMBDA"
+    | "UNKNOWN";
   label?: string;
   positionX: number;
   positionY: number;
@@ -121,6 +130,22 @@ type ResourceNode = {
 ```
 
 `config`는 리소스별 설정을 담는 확장 필드다. 예를 들어 EC2는 `instanceType`, `ami`, RDS는 `engine`, `instanceClass`처럼 서로 다른 값을 가질 수 있다.
+
+MVP에서 보드, AI, Terraform 생성기가 공유해야 하는 `ResourceType` 값은 아래로 고정한다.
+
+| 값 | 의미 | MVP 사용 |
+| --- | --- | --- |
+| `VPC` | 네트워크 경계 | 기본 |
+| `SUBNET` | VPC 내부 subnet | 기본 |
+| `EC2` | 서버 인스턴스 | 기본 |
+| `RDS` | 관계형 DB | 기본 |
+| `S3` | 객체 저장소/정적 웹 origin | 기본 |
+| `SECURITY_GROUP` | 접근 제어 규칙 | 기본 |
+| `CLOUDFRONT` | 정적 웹 배포 CDN | 정적 웹사이트 유형 |
+| `LAMBDA` | 서버리스 함수 | 후순위 또는 기존 타입 호환 |
+| `UNKNOWN` | 지원하지 않는 리소스 fallback | fallback |
+
+Codex 작업자는 `Security Group`, `security-group`, `cloudfront`처럼 다른 문자열을 새로 만들지 않는다. 새 리소스가 필요하면 먼저 이 문서와 `packages/types/src/index.ts`, API Zod schema를 같은 PR에서 맞춘다.
 
 ### ResourceEdge
 
@@ -257,6 +282,90 @@ type DeploymentLog = {
 };
 ```
 
+### AI 결과 DTO
+
+AI 결과는 DB 영구 저장 모델이 아니라 API/프론트/보드/IaC 화면이 공유하는 응답 계약이다. 구현 전 `packages/types/src/index.ts`에 아래 타입을 추가하고, API Zod schema와 프론트 상태가 같은 필드명을 쓰도록 맞춘다.
+
+```ts
+type AiArchitectureDraftResult = {
+  architectureJson: ArchitectureJson;
+  title: string;
+  source: "github" | "template_fallback" | "llm_fallback";
+  confidence: "low" | "medium" | "high";
+  assumptions: string[];
+  explanations: string[];
+};
+```
+
+`AiArchitectureDraftResult.architectureJson`만 Architecture Board의 입력이 된다. `assumptions`, `explanations`, `confidence`, `source`는 AI 근거 표시용 metadata이며 별도 그래프 구조가 아니다.
+
+```ts
+type MoneyEstimate = {
+  amount: number;
+  currency: "USD" | "KRW";
+};
+
+type ResourceCostEstimate = {
+  resourceId: string;
+  resourceType: ResourceType;
+  name: string;
+  monthlyEstimate: MoneyEstimate;
+  costDrivers: string[];
+  explanation: string;
+};
+
+type CheckFinding = {
+  id: string;
+  category: "cost" | "security" | "configuration" | "permission";
+  severity: "low" | "medium" | "high";
+  resourceId?: string;
+  title: string;
+  description: string;
+  recommendation: string;
+};
+
+type ChecklistItem = {
+  id: string;
+  label: string;
+  status: "pass" | "warning" | "fail";
+  relatedFindingIds: string[];
+};
+
+type AiPreDeploymentAnalysisResult = {
+  summary: string;
+  totalMonthlyEstimate: MoneyEstimate & {
+    pricingAssumption: string;
+  };
+  resourceCostEstimates: ResourceCostEstimate[];
+  findings: CheckFinding[];
+  checklist: ChecklistItem[];
+};
+```
+
+`CheckFinding.resourceId`는 있으면 반드시 같은 `ArchitectureJson.nodes[].id`를 가리킨다. 보드 경고 표시, Plan 전 화면, 프로젝트 요약은 이 값을 기준으로 연결한다.
+
+```ts
+type AiTerraformErrorExplanationResult = {
+  stage: "validate" | "plan" | "apply";
+  category:
+    | "permission"
+    | "credential"
+    | "region_or_resource"
+    | "quota"
+    | "syntax"
+    | "dependency"
+    | "unknown";
+  severity: "low" | "medium" | "high";
+  rawMessage: string;
+  summary: string;
+  likelyCause: string;
+  nextActions: string[];
+  relatedResourceId?: string;
+};
+```
+
+`rawMessage`는 숨기지 않는다. `nextActions`는 1-3개로 제한한다. `relatedResourceId`는 오류가 특정 리소스와 연결될 때만 사용한다.
+
 ### Activity
 
 알림, 감사 로그, 최근 활동 UI가 필요해질 때 추가한다.
@@ -301,3 +410,11 @@ type Activity = {
 - `sourceId`
 - `targetId`
 - `objectKey`
+
+AI/보드/IaC/배포를 나눠 구현할 때 아래 규칙을 추가로 지킨다.
+
+- 정현 보드는 `ArchitectureJson`만으로 열릴 수 있어야 한다. AI 전용 metadata를 보드 필수 입력으로 만들지 않는다.
+- 시원 Terraform 생성기는 `ArchitectureJson`과 `ResourceNode.config`를 입력으로 삼고, AI 응답 자체를 원천 진실로 삼지 않는다.
+- 채강 Plan/Apply 화면은 `AiPreDeploymentAnalysisResult`, `AiTerraformErrorExplanationResult`, raw Terraform/AWS output을 분리해서 다룬다.
+- 윤서 플랫폼 화면은 프로젝트 목록이나 알림에서 AI 요약을 보여줄 수 있지만, 원천 데이터는 프로젝트/아키텍처/분석 DTO를 참조한다.
+- 팀장 공통 API 응답 wrapper가 도입되면 AI 라우트도 같은 wrapper를 따른다. wrapper가 아직 코드에 없으면 기존 Fastify route 스타일을 유지하되, DTO 필드명은 이 문서를 따른다.
