@@ -16,6 +16,33 @@
 → Deployment History
 ```
 
+## LLM 적용 범위
+
+MVP에서 LLM은 설명 생성, 자연어 의도 분류, Architecture Draft 직접 생성을 모두 맡는다. 다만 LLM 응답은 항상 검증 대상이며, 검증을 통과한 구조화 결과만 제품 흐름에 반영한다.
+
+우선순위:
+
+1. LLM 설명 생성
+   - Resource 설명
+   - Source Repository 추론 근거 설명
+   - Check Finding 설명
+   - Plan/Apply 오류 설명
+   - 배포 전 체크리스트 문장화
+2. LLM 자연어 의도 분류
+   - 정적 웹사이트, 단일 EC2 웹 서버, API 서버 + DB 중 하나로 분류
+   - 3개 대표 의도에 속하지 않으면 Template 선택 또는 수동 편집으로 유도
+3. LLM Architecture Draft 직접 생성
+   - 결과는 반드시 Architecture Draft JSON이어야 한다.
+   - JSON schema 검증, 지원 Resource 검증, 위험 기본값 보정을 통과해야 한다.
+   - 검증 실패 시 LLM 결과를 버리고 Template 기반 Architecture Draft로 fallback한다.
+
+LLM이 직접 하지 않는 것:
+
+- IaC Preview 최종본 생성
+- Terraform Apply 여부 판단
+- AWS 권한 생성 또는 확장
+- Pre-Deployment Check의 deploy-blocking 판정
+
 ## 1. 자연어 → Architecture Draft
 
 사용자가 "포트폴리오 웹사이트를 AWS에 올리고 싶어"처럼 입력하면 Practice Architecture 초안을 만든다.
@@ -24,6 +51,7 @@ MVP 깊이:
 
 - 대표 의도는 정적 웹사이트, 단일 EC2 웹 서버, API 서버 + DB 3개로 제한한다.
 - 생성 결과는 자유 텍스트가 아니라 Architecture Draft JSON이다.
+- LLM이 Architecture Draft를 직접 생성할 수 있지만, 검증 실패 시 Template 기반 결과로 대체한다.
 - VPC, Subnet, EC2, RDS, S3, Security Group 정도의 제한된 Resource만 생성한다.
 - 알 수 없는 요청은 무리해서 생성하지 않고 Template 선택을 유도한다.
 
@@ -159,9 +187,9 @@ MVP 깊이:
 ## 5주 구현 순서
 
 1. Week 1: Practice Architecture JSON과 Architecture Draft JSON 계약 확정
-2. Week 2: 3개 대표 의도에서 Template 기반 Architecture Draft 생성
-3. Week 3: Cost Risk / Security Risk rule engine과 AI 설명 연결
-4. Week 4: IaC Preview 설명과 Source Repository 기반 초안 생성 최소 구현
+2. Week 2: 3개 대표 의도에서 Template 기반 Architecture Draft와 LLM 의도 분류 구현
+3. Week 3: LLM Architecture Draft 직접 생성, schema 검증, Template fallback 구현
+4. Week 4: Cost Risk / Security Risk rule engine, AI 설명, IaC Preview 설명, Source Repository 기반 초안 생성 최소 구현
 5. Week 5: Plan/Apply 오류 설명, 체크리스트, 발표 시나리오 고정
 
 ## 발표 시나리오
@@ -176,5 +204,5 @@ MVP 깊이:
 
 ## 아직 결정해야 할 질문
 
-- AI provider 없이 mock으로 갈 수 있는 범위와 실제 LLM을 붙일 범위는 어디까지인가?
+- 실제 LLM provider, 비용 제한, 장애 시 fallback 정책은 무엇인가?
 - 비용 설명은 윤서 파트의 숫자 결과를 받아 설명할 것인가, 경근 파트가 자체 위험 등급만 만들 것인가?
