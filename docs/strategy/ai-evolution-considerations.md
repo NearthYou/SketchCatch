@@ -51,6 +51,27 @@ MVP 결정:
 - 사용자가 실제 프로젝트 repository를 연결하려 할 때
 - multi-service 구조를 지원해야 할 때
 
+## 자연어 기반 초안 생성
+
+MVP 결정:
+
+- 새 역할표 기준으로 경근 MVP의 메인 초안 생성 경로는 GitHub 링크 기반이다.
+- 자유 자연어 요청만으로 모든 Architecture Draft를 만드는 기능은 MVP 핵심 경로에서 내린다.
+- "간단한 쇼핑몰 서버" 같은 자연어 표현은 필요할 때 API 서버 + DB 대표 유형의 별칭으로만 처리한다.
+
+고도화 방향:
+
+- 자유 자연어 요청을 정적 웹사이트, 단일 EC2 웹 서버, API 서버 + DB 같은 대표 유형으로 분류한다.
+- 사용자의 제약 조건을 함께 받는다. 예를 들어 예산, region, DB 필요 여부, 공개 접근 허용 여부, 실습 시간이다.
+- GitHub 링크 분석 결과와 자연어 요구사항을 함께 사용해 Architecture Draft를 만든다.
+- 사용자가 초안을 대화로 수정할 수 있게 한다. 예를 들어 "RDS 말고 S3만 쓰게 바꿔줘" 같은 후속 요청이다.
+
+재검토 조건:
+
+- GitHub 링크 없이도 발표나 사용자 테스트에서 초안 생성 가치가 필요할 때
+- Template 선택만으로는 사용자의 의도를 충분히 표현하지 못할 때
+- Architecture Draft validation과 fallback이 안정화되어 LLM 자유 입력을 받아도 보드가 깨지지 않을 때
+
 ## LLM provider와 품질 관리
 
 MVP 결정:
@@ -71,6 +92,25 @@ MVP 결정:
 - LLM 비용이 팀 예산에 영향을 줄 때
 - provider 장애가 반복될 때
 - AI 결과 품질을 수치로 비교해야 할 때
+
+## 대화형 AI 보조
+
+MVP 결정:
+
+- AI 챗봇 화면을 별도 제품 축으로 만들지 않는다.
+- MVP의 AI는 GitHub 링크 기반 초안 생성, 비용/위험 분석, Terraform 오류 설명처럼 구체적인 작업 흐름 안에서만 동작한다.
+
+고도화 방향:
+
+- 사용자가 Architecture Board, Terraform Preview, Plan 결과를 보면서 질문할 수 있는 context-aware assistant를 제공한다.
+- 대화형 응답이 실제 구조 변경을 제안할 때는 즉시 반영하지 않고 patch preview나 Draft 변경 제안으로 보여준다.
+- 대화 기록을 프로젝트 활동 내역과 연결할지 여부를 검토한다.
+
+재검토 조건:
+
+- 사용자가 보드나 Plan 결과를 이해하지 못해 반복 질문이 생길 때
+- 오류 설명과 비용/위험 설명을 한 화면에서 대화형으로 묶을 필요가 있을 때
+- 구조 변경 제안에 대한 승인 UX가 마련될 때
 
 ## Terraform 코드 작성 보조
 
@@ -112,6 +152,26 @@ MVP 결정:
 - 실제 AWS 배포가 열릴 때
 - Security Group, S3 public access, IAM policy 같은 보안 finding이 늘어날 때
 - 팀이 보안 기준을 발표 평가 포인트로 삼을 때
+
+## 지원 Resource 확장
+
+MVP 결정:
+
+- MVP Architecture Draft와 비용/위험 분석은 제한된 Resource set에서 시작한다.
+- 기본 지원 Resource는 VPC, Subnet, EC2, RDS, S3, Security Group, CloudFront 수준으로 제한한다.
+- 알 수 없는 Resource는 억지로 추정하지 않고 `UNKNOWN` 또는 Template 선택 fallback으로 처리한다.
+
+고도화 방향:
+
+- ALB, NAT Gateway, IAM, Lambda, DynamoDB, ECR, ECS 같은 Resource를 단계적으로 추가한다.
+- Resource별 required config, cost driver, security rule, Terraform mapping을 한 세트로 관리한다.
+- Resource support matrix를 만들어 "보드 표시 가능", "Terraform 생성 가능", "비용 추정 가능", "위험 분석 가능"을 구분한다.
+
+재검토 조건:
+
+- 팀 발표 시나리오가 EC2/RDS/S3 범위를 넘어설 때
+- 사용자가 GitHub 링크 기반 초안에서 자주 `UNKNOWN` Resource를 보게 될 때
+- Terraform 생성기와 비용/위험 룰이 Resource별로 안정화될 때
 
 ## 오류 설명
 
