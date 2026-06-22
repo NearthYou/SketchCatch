@@ -1,5 +1,7 @@
 # 시원 Codex용 Terraform 변환 선택지
 
+> 상태: 경근 AI 파트와의 호환성 확인을 위한 검토용 선택지다. 추천안은 확정이 아니라 제안이다.
+
 너는 SketchCatch 시원 파트 Codex다. 구현 전에 경근 AI 파트와 Terraform 변환/IaC Preview가 같은 계약으로 연결될 수 있는지 확인하고 선택지를 골라라.
 
 ## 먼저 읽을 문서

@@ -21,10 +21,12 @@ SketchCatch 문서는 평소 아래 6개만 읽으면 된다.
 - 배포 세부 절차는 길어도 운영 중 바로 써야 하므로 [배포 운영 문서](./deployment.md)에 따로 둔다.
 - 한 번만 쓰는 예제 문서나 오래된 작업 로그는 유지하지 않는다.
 
-## 선택 문서
+## 검토 중 선택 문서
 
-| 문서 | 언제 읽는가 |
-| --- | --- |
-| [AI MVP 범위](./strategy/ai-mvp-scope.md) | 경근 AI 파트의 MVP 책임, DTO, 팀 의존성을 확인할 때 |
-| [AI 고도화 고려사항](./strategy/ai-evolution-considerations.md) | MVP 이후 비용 추정, GitHub 분석, LLM provider, Terraform 보조, 위험 검증 고도화 방향을 볼 때 |
-| [팀원 Codex 호환성 선택 문서](./team-codex/README.md) | 팀원별 Codex가 구현 전 호환성 선택지를 고르고 답을 가져와야 할 때 |
+아래 문서는 담당 파트 구현 전에 계약을 맞추기 위한 PR 검토용 초안이다. 팀 합의나 담당자 선택 결과가 반영되기 전까지 확정된 공통 계약으로 보지 않는다.
+
+| 문서 | 상태 | 언제 읽는가 |
+| --- | --- | --- |
+| [AI MVP 범위 초안](./strategy/ai-mvp-scope.md) | 검토 중 | 경근 AI 파트의 MVP 책임, DTO, 팀 의존성을 리뷰할 때 |
+| [AI 고도화 고려사항 초안](./strategy/ai-evolution-considerations.md) | 검토 중 | MVP 이후 비용 추정, Source Repository 분석, LLM provider, Terraform 보조, 위험 검증 고도화 방향을 볼 때 |
+| [팀원 Codex 호환성 선택 문서](./team-codex/README.md) | 선택 결과 회수 전 | 팀원별 Codex가 구현 전 호환성 선택지를 고르고 답을 가져와야 할 때 |

@@ -1,8 +1,10 @@
-# 경근 AI 파트 MVP 범위
+# 경근 AI 파트 MVP 범위 초안
+
+> 상태: PR 검토용 초안이다. 팀장과 각 담당자의 선택 결과가 반영되기 전까지 팀 전체의 확정 계약으로 보지 않는다.
 
 ## 결론
 
-경근 파트는 AI 분석 역할표의 비용 추정, 리소스별 비용 분석, 위험도 분석, 보안 설정 검증, Terraform 오류 설명, Terraform 코드 작성 보조, GitHub 링크 기반 초안 생성을 맡는다. MVP의 기준은 "AI가 분석하고 설명하고 보조한다"이지, "AI가 검증되지 않은 AWS 배포 코드를 마음대로 만든다"가 아니다.
+경근 파트는 AI 분석 역할표의 비용 추정, 리소스별 비용 분석, 위험도 분석, 보안 설정 검증, Terraform 오류 설명, Terraform 코드 작성 보조, Source Repository 기반 초안 생성을 맡는 방향으로 제안한다. MVP의 기준은 "AI가 분석하고 설명하고 보조한다"이지, "AI가 검증되지 않은 AWS 배포 코드를 마음대로 만든다"가 아니다.
 
 핵심 흐름은 다음과 같다.
 
@@ -335,7 +337,7 @@ type AiTerraformErrorExplanationResult = {
 
 팀원별 Codex에게는 [팀원 Codex 호환성 선택 문서](../team-codex/README.md)를 읽히고, 담당 문서의 선택 결과를 받아온다.
 
-현재 해결된 기준:
+현재 제안 기준:
 
 - 보드, AI, Terraform 생성기는 모두 `ArchitectureJson.nodes`와 `ArchitectureJson.edges`를 공유한다.
 - AI Architecture Draft는 별도 `resources`, `relationships` 그래프를 만들지 않고 `architectureJson`만 보드 입력으로 제공한다.
