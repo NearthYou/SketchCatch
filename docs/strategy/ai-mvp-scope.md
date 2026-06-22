@@ -77,6 +77,24 @@ MVP 깊이:
 - Architecture Board에서 바로 열 수 있다.
 - 생성된 Resource마다 초보자용 설명을 붙인다.
 
+AI Architecture Draft 응답 DTO:
+
+```ts
+type AiArchitectureDraftResult = {
+  architectureJson: ArchitectureJson;
+  title: string;
+  source: "github" | "template_fallback" | "llm_fallback";
+  confidence: "low" | "medium" | "high";
+  assumptions: string[];
+  explanations: string[];
+};
+```
+
+- `architectureJson`은 기존 공통 타입을 그대로 사용한다.
+- 정현의 Architecture Board는 `architectureJson`만 받아도 열릴 수 있어야 한다.
+- AI 전용 근거와 설명은 `assumptions`, `explanations`, `confidence`, `source`에만 담는다.
+- AI 전용 `resources`, `relationships` 같은 별도 그래프 구조를 만들지 않는다.
+
 MVP에서 하지 않는 것:
 
 - 모든 AWS 서비스를 지원하지 않는다.
