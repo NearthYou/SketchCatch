@@ -201,6 +201,57 @@ MVP 깊이:
 - 비용 금액이 표시되는 경우에는 어떤 Resource와 가정 때문에 그 금액이 나왔는지 설명한다.
 - 비용 추정값이 실제 AWS 청구액과 다를 수 있음을 사용자에게 표시한다.
 
+AI Pre-Deployment Analysis 응답 DTO:
+
+```ts
+type MoneyEstimate = {
+  amount: number;
+  currency: "USD" | "KRW";
+};
+
+type ResourceCostEstimate = {
+  resourceId: string;
+  resourceType: ResourceType;
+  name: string;
+  monthlyEstimate: MoneyEstimate;
+  costDrivers: string[];
+  explanation: string;
+};
+
+type CheckFinding = {
+  id: string;
+  category: "cost" | "security" | "configuration" | "permission";
+  severity: "low" | "medium" | "high";
+  resourceId?: string;
+  title: string;
+  description: string;
+  recommendation: string;
+};
+
+type ChecklistItem = {
+  id: string;
+  label: string;
+  status: "pass" | "warning" | "fail";
+  relatedFindingIds: string[];
+};
+
+type AiPreDeploymentAnalysisResult = {
+  summary: string;
+  totalMonthlyEstimate: MoneyEstimate & {
+    pricingAssumption: string;
+  };
+  resourceCostEstimates: ResourceCostEstimate[];
+  findings: CheckFinding[];
+  checklist: ChecklistItem[];
+};
+```
+
+- 응답은 하나로 합치되, 내부 필드는 비용, 위험, 체크리스트 배열로 분리한다.
+- `resourceId`는 `ArchitectureJson.nodes[].id`와 연결되어야 한다.
+- 채강의 Plan 전 화면은 이 DTO 하나로 비용/위험/체크리스트를 구성한다.
+- 정현의 Architecture Board는 `findings[].resourceId`로 노드별 경고 표시를 할 수 있다.
+- 이 DTO는 Apply 가능 여부의 최종 판정자가 아니라 배포 전 판단 근거를 제공하는 결과다.
+
 ## 5. 오류 설명 / 체크리스트 생성
 
 Plan 또는 Apply에서 나온 오류와 배포 전 확인 항목을 초보자 언어로 바꾼다.
