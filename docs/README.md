@@ -20,3 +20,10 @@ SketchCatch 문서는 평소 아래 6개만 읽으면 된다.
 - 컨벤션, Git 흐름, 필수 체크는 [개발 가이드](./development.md)에 모은다.
 - 배포 세부 절차는 길어도 운영 중 바로 써야 하므로 [배포 운영 문서](./deployment.md)에 따로 둔다.
 - 한 번만 쓰는 예제 문서나 오래된 작업 로그는 유지하지 않는다.
+
+## 선택 문서
+
+| 문서 | 언제 읽는가 |
+| --- | --- |
+| [AI MVP 범위](./strategy/ai-mvp-scope.md) | 경근 AI 파트의 MVP 책임, DTO, 팀 의존성을 확인할 때 |
+| [AI 고도화 고려사항](./strategy/ai-evolution-considerations.md) | MVP 이후 비용 추정, GitHub 분석, LLM provider, Terraform 보조, 위험 검증 고도화 방향을 볼 때 |

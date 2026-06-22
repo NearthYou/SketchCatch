@@ -177,7 +177,9 @@ Pre-Deployment Check에서 Check Finding을 만들고, AI가 초보자에게 이
 비용 책임 경계:
 
 - 경근 파트는 비용 추정, 리소스별 비용 분석, 월 예상 비용 설명을 책임진다.
-- MVP 비용 추정은 실제 청구액 보장이 아니라 Resource type, instance class, 사용 시간 가정, static price table 또는 rule engine에 기반한 학습용 추정값이다.
+- MVP 비용 추정은 실제 청구액 보장이 아니라 Resource type, instance class, 사용 시간 가정, static price table에 기반한 학습용 추정값이다.
+- 비용 추정기는 static price table을 우선 사용하되, 나중에 AWS Pricing API로 교체할 수 있도록 cost estimator 경계를 둔다.
+- 가격표에 없는 Resource나 설정은 금액을 억지로 만들지 않고 `low`, `medium`, `high` Cost Risk 등급으로 fallback한다.
 - 공통 DB 스키마와 API 응답 형식은 팀장 기준을 따른다. 경근 파트는 비용 분석 결과를 그 공통 형식에 맞춰 제공한다.
 
 MVP 깊이:
@@ -186,6 +188,7 @@ MVP 깊이:
 - 위험도는 `low`, `medium`, `high`로 제한한다.
 - 룰 엔진이 먼저 비용/위험 finding을 만들고, AI는 finding과 비용 추정 근거를 설명한다.
 - 비용은 total estimate와 resource-level estimate를 모두 제공한다.
+- 기본 계산 가정은 `ap-northeast-2`, 월 `730`시간, MVP 기본 instance/storage 값을 사용한다.
 
 예시 finding:
 
