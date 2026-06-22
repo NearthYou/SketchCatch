@@ -1,22 +1,22 @@
 # SketchCatch
 
-SketchCatch is a web service for AWS beginners to visually design AWS practice architectures, understand resource relationships, check estimated cost and risk, and eventually deploy approved practice environments with automatic cleanup.
+SketchCatch는 AWS 입문자가 실습용 아키텍처를 시각적으로 설계하고, 리소스 관계를 이해하고, 예상 비용과 위험을 확인한 뒤, 승인된 실습 환경만 안전하게 다룰 수 있도록 돕는 웹 서비스입니다.
 
-This repository is currently in the early infrastructure setup stage. Terraform execution, AI generation, authentication, and production feature workflows are not implemented yet.
+현재 저장소는 초기 인프라와 개발 기반을 잡는 단계입니다. Terraform 실행, AI 생성, 인증, 운영 기능 워크플로는 아직 실제 제품 기능으로 구현하지 않았습니다.
 
-## Tech Stack
+## 기술 스택
 
 - pnpm workspace
 - Turborepo
 - TypeScript
-- Next.js, React, and TypeScript for `apps/web`
-- Node.js and TypeScript for `apps/api`
-- Shared packages under `packages/*`
-- Docker Compose for local PostgreSQL
-- ESLint and Prettier
+- `apps/web`: Next.js, React, TypeScript
+- `apps/api`: Node.js, TypeScript
+- `packages/*`: 공유 패키지
+- 로컬 PostgreSQL용 Docker Compose
+- ESLint, Prettier
 - GitHub Actions CI
 
-## Repository Structure
+## 저장소 구조
 
 ```text
 sketchcatch/
@@ -35,35 +35,3 @@ sketchcatch/
 └── .github/
     └── workflows/
 ```
-
-## Getting Started
-
-```bash
-pnpm install
-pnpm dev
-pnpm lint
-pnpm typecheck
-pnpm build
-```
-
-Start local PostgreSQL:
-
-```bash
-docker compose -f infra/local/docker-compose.yml up -d
-```
-
-## Production Deployment
-
-Production uses EC2, RDS, S3, GitHub Actions, AWS Systems Manager, Docker, and an Nginx container. Docker Compose is not used for production deployment.
-
-See [docs/deployment.md](docs/deployment.md).
-
-## Root Scripts
-
-- `pnpm dev`: run development servers through Turborepo
-- `pnpm build`: build all apps and packages
-- `pnpm lint`: lint all apps and packages
-- `pnpm typecheck`: type-check all apps and packages
-- `pnpm test`: run placeholder test commands
-- `pnpm format`: format the repository with Prettier
-- `pnpm docker:build`: build production Docker images locally without Docker Compose
