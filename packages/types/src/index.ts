@@ -1,16 +1,132 @@
-export type AwsResourceType = "ec2" | "s3" | "rds" | "lambda" | "vpc" | "unknown";
+export type IsoDateTimeString = string;
 
-export type ArchitectureNode = {
+export type ResourceType = "VPC" | "EC2" | "RDS" | "S3" | "LAMBDA" | "UNKNOWN";
+
+export type ResourceConfig = Record<string, unknown>;
+
+export type ResourceNode = {
   id: string;
-  label: string;
-  resourceType: AwsResourceType;
+  type: ResourceType;
+  label?: string | undefined;
+  positionX: number;
+  positionY: number;
+  config: ResourceConfig;
 };
 
-export type ArchitectureEdge = {
+export type ResourceEdge = {
   id: string;
-  source: string;
-  target: string;
-  label?: string;
+  sourceId: string;
+  targetId: string;
+  label?: string | undefined;
+};
+
+export type ArchitectureJson = {
+  nodes: ResourceNode[];
+  edges: ResourceEdge[];
+};
+
+export type AnonymousWorkspace = {
+  id: string;
+  createdAt: IsoDateTimeString;
+  updatedAt: IsoDateTimeString;
+};
+
+export type User = {
+  id: string;
+  email: string;
+  nickname: string;
+  createdAt: IsoDateTimeString;
+};
+
+export type Project = {
+  id: string;
+  workspaceId: string;
+  userId?: string | undefined;
+  name: string;
+  description: string | null;
+  createdAt: IsoDateTimeString;
+  updatedAt: IsoDateTimeString;
+};
+
+export type ArchitectureSource = "manual" | "prompt_mock" | "imported";
+
+export type ArchitectureSnapshot = {
+  id: string;
+  projectId: string;
+  version: number;
+  source: ArchitectureSource | string;
+  architectureJson: ArchitectureJson;
+  createdAt: IsoDateTimeString;
+};
+
+export type ProjectAssetType =
+  | "diagram_png"
+  | "diagram_svg"
+  | "terraform_file"
+  | "project_export_zip"
+  | "thumbnail";
+
+export type ProjectAsset = {
+  id: string;
+  projectId: string;
+  architectureId: string | null;
+  assetType: ProjectAssetType;
+  objectKey: string;
+  fileName: string;
+  contentType: string;
+  byteSize: number | null;
+  createdAt: IsoDateTimeString;
+};
+
+export type TerraformArtifact = ProjectAsset & {
+  assetType: "terraform_file";
+  architectureId: string;
+};
+
+export type DeploymentStatus = "PENDING" | "RUNNING" | "SUCCESS" | "FAILED" | "CANCELLED";
+
+export type Deployment = {
+  id: string;
+  projectId: string;
+  architectureId: string;
+  status: DeploymentStatus;
+  startedAt: IsoDateTimeString;
+  finishedAt: IsoDateTimeString | null;
+};
+
+export type Template = {
+  id: string;
+  ownerId: string;
+  title: string;
+  description: string;
+  architectureJson: ArchitectureJson;
+  likeCount: number;
+  createdAt: IsoDateTimeString;
+};
+
+export type AwsCredential = {
+  id: string;
+  userId: string;
+  accountId: string;
+  roleArn: string;
+  createdAt: IsoDateTimeString;
+};
+
+export type DeploymentLogLevel = "INFO" | "WARN" | "ERROR";
+
+export type DeploymentLog = {
+  id: string;
+  deploymentId: string;
+  level: DeploymentLogLevel;
+  message: string;
+  createdAt: IsoDateTimeString;
+};
+
+export type Activity = {
+  id: string;
+  userId: string;
+  action: string;
+  createdAt: IsoDateTimeString;
 };
 
 export type BudgetLimit = {
@@ -23,5 +139,9 @@ export type RiskLevel = "low" | "medium" | "high";
 export type PracticeSession = {
   id: string;
   name: string;
-  expiresAt: string;
+  expiresAt: IsoDateTimeString;
 };
+
+export type AwsResourceType = ResourceType;
+export type ArchitectureNode = ResourceNode;
+export type ArchitectureEdge = ResourceEdge;
