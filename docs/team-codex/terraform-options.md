@@ -1,0 +1,118 @@
+# 시원 Codex용 Terraform 변환 선택지
+
+너는 SketchCatch 시원 파트 Codex다. 구현 전에 경근 AI 파트와 Terraform 변환/IaC Preview가 같은 계약으로 연결될 수 있는지 확인하고 선택지를 골라라.
+
+## 먼저 읽을 문서
+
+- [데이터 모델](../data-models.md)
+- [AI MVP 범위](../strategy/ai-mvp-scope.md)
+- [아키텍처](../architecture.md)
+- `packages/types/src/index.ts`
+
+## 선택할 것
+
+### 1. Terraform 생성의 원천 입력
+
+**A. `ArchitectureJson`을 원천 입력으로 둔다. (추천)**
+
+- 장점: 보드 저장, AI 초안, Terraform 생성이 같은 구조를 공유한다.
+- 경근 AI 파트 영향: AI는 `ArchitectureJson`만 생성하고 Terraform 최종본은 만들지 않는다.
+
+**B. Terraform HCL을 원천 입력으로 둔다.**
+
+- 장점: IaC 중심 구현에는 자연스럽다.
+- 위험: 보드와 AI 초안이 HCL을 따라가야 해서 MVP 복잡도가 올라간다.
+
+**C. AI 응답 DTO를 원천 입력으로 둔다.**
+
+- 장점: AI 기능 구현은 빠르다.
+- 위험: AI 출력이 Terraform 생성의 원천 진실이 되어 안전 경계가 깨진다.
+
+### 2. `ResourceNode.config` key 관리
+
+**A. ResourceType별 required config matrix를 시원 파트가 정의하고, 경근 AI가 그 matrix를 따른다. (추천)**
+
+- 장점: Terraform 생성기가 필요한 값을 명확히 요구할 수 있다.
+- 경근 AI 파트 영향: AI template과 fallback fixture가 같은 key를 넣는다.
+
+**B. 경근 AI가 config key를 먼저 정하고 Terraform 생성기가 맞춘다.**
+
+- 장점: AI 초안 생성이 빠르다.
+- 위험: Terraform 생성에 필요한 실제 key가 빠질 수 있다.
+
+**C. config는 자유 JSON으로 두고 생성 시점에 best-effort로 해석한다.**
+
+- 장점: 초기 구현이 쉽다.
+- 위험: 생성 실패가 늦게 발견되고 Codex마다 다른 key를 만든다.
+
+### 3. IaC Preview와 AI 설명 연결
+
+**A. Terraform 생성 결과에 `resourceId` 또는 node id mapping을 둔다. (추천)**
+
+- 장점: AI가 "이 코드가 어떤 Resource를 만드는지" 리소스 단위로 설명할 수 있다.
+- 경근 AI 파트 영향: 설명 DTO나 rule engine이 `resourceId` 기준으로 묶인다.
+
+**B. Terraform file 전체를 AI에게 넘기고 문장 설명만 받는다.**
+
+- 장점: 구현이 빠르다.
+- 위험: Resource 단위 설명과 보드 경고 연결이 약해진다.
+
+**C. IaC Preview 설명은 후순위로 둔다.**
+
+- 장점: Terraform 생성에 집중할 수 있다.
+- 위험: 경근 AI 파트의 Terraform 코드 작성 보조 가치가 약해진다.
+
+### 4. 코드 수정 시 다이어그램 반영과 AI의 관계
+
+**A. 코드 ↔ 다이어그램 동기화는 시원 파트가 소유하고 AI는 차이 설명만 한다. (추천)**
+
+- 장점: 원천 진실이 명확하다.
+- 경근 AI 파트 영향: AI는 동기화 결과나 diff를 설명만 한다.
+
+**B. AI가 코드 수정 제안을 만들고 바로 다이어그램에 반영한다.**
+
+- 장점: 체감 기능은 강하다.
+- 위험: 검증되지 않은 AI 수정이 보드 상태를 바꾼다.
+
+**C. MVP에서는 코드 수정 반영을 제외한다.**
+
+- 장점: 안전하다.
+- 위험: 역할표의 코드 ↔ 다이어그램 동기화 기대와 어긋날 수 있다.
+
+## 응답 형식
+
+```text
+시원 Codex 선택 결과
+
+1. Terraform 생성 원천 입력: A/B/C
+   이유:
+
+2. ResourceNode.config key 관리: A/B/C
+   이유:
+
+3. IaC Preview와 AI 설명 연결: A/B/C
+   이유:
+
+4. 코드 수정 시 다이어그램 반영과 AI의 관계: A/B/C
+   이유:
+
+ResourceType별 required config 초안:
+- VPC:
+- SUBNET:
+- EC2:
+- RDS:
+- S3:
+- SECURITY_GROUP:
+- CLOUDFRONT:
+- LAMBDA:
+- UNKNOWN:
+
+경근 AI 파트가 맞춰야 할 것:
+-
+
+시원 파트가 맞출 것:
+-
+
+수정이 필요한 파일/타입:
+-
+```

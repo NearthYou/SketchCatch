@@ -333,6 +333,8 @@ type AiTerraformErrorExplanationResult = {
 
 이 섹션은 팀원별 Codex가 서로 다른 타입, 필드명, 책임 범위를 만들어 충돌하지 않도록 구현 전에 맞출 계약이다. 공통 타입의 최종 기준은 [데이터 모델](../data-models.md)이다.
 
+팀원별 Codex에게는 [팀원 Codex 호환성 선택 문서](../team-codex/README.md)를 읽히고, 담당 문서의 선택 결과를 받아온다.
+
 현재 해결된 기준:
 
 - 보드, AI, Terraform 생성기는 모두 `ArchitectureJson.nodes`와 `ArchitectureJson.edges`를 공유한다.
@@ -353,17 +355,7 @@ type AiTerraformErrorExplanationResult = {
 | `ArchitectureSnapshot.source` | 저장 시 `github`, `template_fallback` 같은 AI provenance가 뒤섞일 수 있음 | AI 응답의 `source`는 분석 provenance로 유지하고, 저장 source는 팀 공통 값을 따른다 | 팀장/정현에게 저장 source enum 확장 여부 확인 |
 | 분석 결과 저장 여부 | DB schema 없이 AI 결과를 저장하려 하면 충돌함 | MVP에서는 stateless 응답으로 시작하고 저장은 별도 합의 전까지 하지 않는다 | 팀장에게 AI 결과 저장 테이블 여부 확인 |
 
-경근이 팀원에게 보내야 할 확인 메시지:
-
-```text
-AI 파트 구현 전에 호환 계약만 확인할게요.
-
-1. 정현: Architecture Board가 ResourceType `VPC`, `SUBNET`, `EC2`, `RDS`, `S3`, `SECURITY_GROUP`, `CLOUDFRONT`, `LAMBDA`, `UNKNOWN`을 받을 수 있게 갈까요? 보드 경고 표시는 `CheckFinding.resourceId === node.id`로 연결해도 될까요?
-2. 시원: Terraform 생성기가 `ArchitectureJson`을 원천 입력으로 쓰는 기준 맞나요? 각 ResourceType별로 Terraform 생성에 꼭 필요한 `config` key 목록을 정해줄 수 있나요?
-3. 채강: Plan/Apply 결과에서 AI가 받을 최소 입력을 `stage`, `rawMessage`, 선택 `relatedResourceId`로 잡아도 될까요? 실시간 로그 line shape가 있으면 알려주세요.
-4. 팀장: 공통 API 응답 wrapper가 코드에 이미 있나요? 없으면 AI route는 일단 현재 Fastify route처럼 `{ result }` 또는 DTO 직접 응답으로 만들고, wrapper 생기면 맞추겠습니다.
-5. 윤서: 프로젝트 목록/최근 작업/알림 쪽에서 AI 요약을 표시해야 한다면 어떤 최소 필드가 필요한지 알려주세요. 원천 데이터는 AI DTO를 그대로 쓰겠습니다.
-```
+경근은 선택 결과가 돌아오면 `ResourceNode.config` key, 공통 API 응답 wrapper, Plan/Apply output shape, AI 결과 저장 여부를 구현 계획에 반영한다.
 
 ## 5주 구현 순서
 

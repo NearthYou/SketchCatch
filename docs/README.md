@@ -27,3 +27,4 @@ SketchCatch 문서는 평소 아래 6개만 읽으면 된다.
 | --- | --- |
 | [AI MVP 범위](./strategy/ai-mvp-scope.md) | 경근 AI 파트의 MVP 책임, DTO, 팀 의존성을 확인할 때 |
 | [AI 고도화 고려사항](./strategy/ai-evolution-considerations.md) | MVP 이후 비용 추정, GitHub 분석, LLM provider, Terraform 보조, 위험 검증 고도화 방향을 볼 때 |
+| [팀원 Codex 호환성 선택 문서](./team-codex/README.md) | 팀원별 Codex가 구현 전 호환성 선택지를 고르고 답을 가져와야 할 때 |
