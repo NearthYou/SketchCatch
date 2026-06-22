@@ -55,22 +55,36 @@ MVP에서 하지 않는 것:
 
 MVP 깊이:
 
-- public repository만 대상으로 한다.
-- README, package metadata, Dockerfile, compose file, framework 흔적 정도만 본다.
+- public GitHub repository URL 입력을 기본 경로로 한다.
+- MVP 구현은 GitHub OAuth나 private repository API 연동이 아니라 public URL에서 후보 파일을 서버가 가져오는 방식으로 시작한다.
+- GitHub URL 분석이 실패하면 README, package metadata, Dockerfile, compose file 텍스트를 직접 붙여넣는 fallback을 제공한다.
+- 서버는 README, package metadata, Dockerfile, compose file, framework 흔적 정도만 본다.
 - private repository, 대형 monorepo, 복잡한 마이크로서비스 추론은 제외한다.
 - 실패하면 "링크 기반 추론 불가"를 명확히 보여주고 자연어 입력으로 대체한다.
+
+분석 대상 파일:
+
+| 파일 | 보는 이유 |
+| --- | --- |
+| README | 앱 목적, 실행 방식, 배포 힌트 |
+| package metadata | Next.js, Node API, build script, dependency 단서 |
+| Dockerfile | 런타임, 포트, 단일 서비스 여부 |
+| docker-compose.yml | DB 필요 여부, 서비스 관계 |
+| framework config | 정적 사이트인지 서버 앱인지 구분 |
 
 완료 기준:
 
 - Next.js 단일 앱, Node API, DB가 필요한 앱 정도를 구분한다.
 - 앱 유형에 맞는 최소 Architecture Draft를 만든다.
 - 추론 근거를 사용자에게 설명한다.
+- GitHub URL fetch 실패, rate limit, 지원하지 않는 repository 구조를 사용자가 이해할 수 있는 실패 상태로 보여준다.
 
 MVP에서 하지 않는 것:
 
 - 전체 코드를 정밀 분석하지 않는다.
 - Terraform을 repository 구조에서 자동 완성하지 않는다.
 - secret, environment value, 실제 AWS 계정 정보를 읽지 않는다.
+- private repository OAuth 연동은 하지 않는다.
 
 ## 3. IaC Preview / Terraform 코드 생성 보조
 
@@ -162,6 +176,5 @@ MVP 깊이:
 
 ## 아직 결정해야 할 질문
 
-- Source Repository 분석은 GitHub API를 쓸 것인가, URL 입력 후 서버 fetch만 할 것인가?
 - AI provider 없이 mock으로 갈 수 있는 범위와 실제 LLM을 붙일 범위는 어디까지인가?
 - 비용 설명은 윤서 파트의 숫자 결과를 받아 설명할 것인가, 경근 파트가 자체 위험 등급만 만들 것인가?
