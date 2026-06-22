@@ -1,5 +1,6 @@
 import { relations, sql } from "drizzle-orm";
 import { integer, jsonb, pgEnum, pgTable, text, timestamp, varchar } from "drizzle-orm/pg-core";
+import type { ArchitectureJson } from "@sketchcatch/types";
 
 export const assetTypeEnum = pgEnum("asset_type", [
   "diagram_png",
@@ -33,7 +34,7 @@ export const architectures = pgTable("architectures", {
     .references(() => projects.id, { onDelete: "cascade" }),
   version: integer("version").notNull(),
   source: varchar("source", { length: 64 }).notNull().default("manual"),
-  architectureJson: jsonb("architecture_json").notNull(),
+  architectureJson: jsonb("architecture_json").$type<ArchitectureJson>().notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
 });
 
