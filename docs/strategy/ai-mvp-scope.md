@@ -18,11 +18,11 @@
 
 ## 1. 자연어 → Architecture Draft
 
-사용자가 "간단한 쇼핑몰 서버 만들어줘"처럼 입력하면 Practice Architecture 초안을 만든다.
+사용자가 "포트폴리오 웹사이트를 AWS에 올리고 싶어"처럼 입력하면 Practice Architecture 초안을 만든다.
 
 MVP 깊이:
 
-- 3-5개의 대표 의도를 지원한다.
+- 대표 의도는 정적 웹사이트, 단일 EC2 웹 서버, API 서버 + DB 3개로 제한한다.
 - 생성 결과는 자유 텍스트가 아니라 Architecture Draft JSON이다.
 - VPC, Subnet, EC2, RDS, S3, Security Group 정도의 제한된 Resource만 생성한다.
 - 알 수 없는 요청은 무리해서 생성하지 않고 Template 선택을 유도한다.
@@ -38,6 +38,16 @@ MVP에서 하지 않는 것:
 - 모든 AWS 서비스를 자연어로 지원하지 않는다.
 - AI가 임의로 IAM 권한이나 공개 네트워크를 강하게 열지 않는다.
 - 생성 직후 바로 Apply하지 않는다.
+
+지원할 대표 의도:
+
+| 대표 의도 | 자연어 입력 예시 | 주요 Resource | 주요 Check Finding |
+| --- | --- | --- | --- |
+| 정적 웹사이트 | 포트폴리오 웹사이트를 AWS에 올리고 싶어 | S3, CloudFront | S3 public access, CloudFront 비용 |
+| 단일 EC2 웹 서버 | 간단한 Node.js 웹 서버를 만들고 싶어 | VPC, Subnet, EC2, Security Group | SSH `0.0.0.0/0`, instance type 비용 |
+| API 서버 + DB | 백엔드 API 서버랑 데이터베이스를 같이 만들고 싶어 | VPC, Subnet, EC2, RDS, Security Group | RDS 비용, DB public access, 삭제 계획 누락 |
+
+"간단한 쇼핑몰 서버"는 별도 대표 의도로 두지 않고 API 서버 + DB의 자연어 별칭으로 처리한다.
 
 ## 2. Source Repository → Architecture Draft
 
@@ -135,14 +145,14 @@ MVP 깊이:
 ## 5주 구현 순서
 
 1. Week 1: Practice Architecture JSON과 Architecture Draft JSON 계약 확정
-2. Week 2: 자연어 입력에서 Template 기반 Architecture Draft 생성
+2. Week 2: 3개 대표 의도에서 Template 기반 Architecture Draft 생성
 3. Week 3: Cost Risk / Security Risk rule engine과 AI 설명 연결
 4. Week 4: IaC Preview 설명과 Source Repository 기반 초안 생성 최소 구현
 5. Week 5: Plan/Apply 오류 설명, 체크리스트, 발표 시나리오 고정
 
 ## 발표 시나리오
 
-1. 사용자가 자연어로 "간단한 쇼핑몰 서버 만들어줘"를 입력한다.
+1. 사용자가 자연어로 "백엔드 API 서버랑 데이터베이스를 같이 만들고 싶어"를 입력한다.
 2. AI가 Architecture Draft를 만든다.
 3. 사용자가 Architecture Board에서 Resource를 확인하고 일부 수정한다.
 4. IaC Preview가 생성된다.
@@ -152,7 +162,6 @@ MVP 깊이:
 
 ## 아직 결정해야 할 질문
 
-- 자연어 생성에서 지원할 대표 의도 3-5개는 무엇인가?
 - Source Repository 분석은 GitHub API를 쓸 것인가, URL 입력 후 서버 fetch만 할 것인가?
 - AI provider 없이 mock으로 갈 수 있는 범위와 실제 LLM을 붙일 범위는 어디까지인가?
 - 비용 설명은 윤서 파트의 숫자 결과를 받아 설명할 것인가, 경근 파트가 자체 위험 등급만 만들 것인가?
