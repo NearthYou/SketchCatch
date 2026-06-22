@@ -259,15 +259,62 @@ type AiPreDeploymentAnalysisResult = {
 
 Plan 또는 Apply에서 나온 오류와 배포 전 확인 항목을 초보자 언어로 바꾼다.
 
+MVP 결정:
+
+- 오류 판정은 룰 기반 분류기가 먼저 수행한다.
+- LLM은 분류된 오류와 원문, 실행 단계, 관련 Resource 맥락을 받아 초보자용 설명과 다음 행동을 만든다.
+- LLM 응답은 원인 확정이 아니라 "가능성이 높은 원인"과 "확인할 것"으로 표현한다.
+- 분류되지 않은 오류는 `unknown`으로 처리하고, 원문을 유지한 채 팀원 확인이나 로그 공유를 안내한다.
+
 MVP 깊이:
 
 - Plan 전 체크리스트를 생성한다.
-- Terraform/AWS 오류 메시지를 카테고리화한다.
+- Terraform/AWS 오류 메시지를 룰 기반으로 카테고리화한다.
 - 사용자가 다음에 해야 할 행동을 1-3개로 줄여 보여준다.
+- 오류 설명은 자동 재시도, 자동 Apply, AWS 권한 변경, Terraform 코드 자동 수정까지 수행하지 않는다.
+
+MVP 오류 카테고리:
+
+| 카테고리 | 대표 단서 | 사용자에게 설명할 핵심 |
+| --- | --- | --- |
+| `permission` | `AccessDenied`, `UnauthorizedOperation`, `not authorized` | 현재 AWS 권한으로 해당 작업을 할 수 없음 |
+| `credential` | `NoCredentialProviders`, `InvalidClientTokenId`, `ExpiredToken` | AWS 인증 정보가 없거나 만료됨 |
+| `region_or_resource` | `InvalidAMIID.NotFound`, `InvalidSubnetID.NotFound`, `not found` | region 또는 참조 Resource가 맞지 않음 |
+| `quota` | `VcpuLimitExceeded`, `LimitExceeded`, `quota` | 계정 한도 때문에 Resource를 만들 수 없음 |
+| `syntax` | `terraform validate` 실패, `Unsupported argument`, `Missing required argument` | IaC Preview에 문법 또는 필수 값 문제가 있음 |
+| `dependency` | dependency cycle, subnet/VPC/security group 연결 오류 | Resource 간 연결 관계가 잘못되었을 가능성이 있음 |
+| `unknown` | 위 규칙에 매칭되지 않음 | 자동 판단하지 않고 원문과 확인 지점을 보여줌 |
+
+AI Terraform 오류 설명 응답 DTO:
+
+```ts
+type AiTerraformErrorExplanationResult = {
+  stage: "validate" | "plan" | "apply";
+  category:
+    | "permission"
+    | "credential"
+    | "region_or_resource"
+    | "quota"
+    | "syntax"
+    | "dependency"
+    | "unknown";
+  severity: "low" | "medium" | "high";
+  rawMessage: string;
+  summary: string;
+  likelyCause: string;
+  nextActions: string[];
+  relatedResourceId?: string;
+};
+```
+
+- `rawMessage`는 숨기지 않는다.
+- `nextActions`는 1-3개로 제한한다.
+- `relatedResourceId`는 오류가 특정 Resource와 연결될 때만 사용한다.
+- 채강의 Deployment History에는 원문, 실행 단계, 성공/실패 상태가 남고, 경근 파트는 그 내용을 사용자 설명으로 바꾼다.
 
 완료 기준:
 
-- 권한 부족, region 문제, quota 문제, 잘못된 Resource 연결을 구분한다.
+- 권한 부족, 인증 문제, region 문제, quota 문제, 문법 문제, 잘못된 Resource 연결을 구분한다.
 - 오류 원문을 숨기지 않고, 쉬운 설명을 함께 보여준다.
 - 실패한 Apply 결과가 Deployment History에 남는다.
 
