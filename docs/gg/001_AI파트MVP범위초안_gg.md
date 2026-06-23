@@ -1,6 +1,6 @@
 # gg AI 파트 MVP 범위 초안
 
-> 상태: PR 검토용 초안이다. 팀장과 각 담당자의 선택 결과가 반영되기 전까지 팀 전체의 확정 계약으로 보지 않는다.
+> 상태: 팀장과 각 담당자의 선택 결과를 반영한 PR 검토용 초안이다. 실제 구현 전 shared type과 API schema에 한 번 더 맞춘다.
 
 ## 결론
 
@@ -86,16 +86,18 @@ AI Architecture Draft 응답 DTO:
 type AiArchitectureDraftResult = {
   architectureJson: ArchitectureJson;
   title: string;
-  source: "github" | "template_fallback" | "llm_fallback";
-  confidence: "low" | "medium" | "high";
-  assumptions: string[];
-  explanations: string[];
+  metadata: {
+    source: "github" | "template_fallback" | "llm_fallback";
+    confidence: "low" | "medium" | "high";
+    assumptions: string[];
+    explanations: string[];
+  };
 };
 ```
 
 - `architectureJson`은 기존 공통 타입을 그대로 사용한다.
 - jh의 Architecture Board는 `architectureJson`만 받아도 열릴 수 있어야 한다.
-- AI 전용 근거와 설명은 `assumptions`, `explanations`, `confidence`, `source`에만 담는다.
+- AI 전용 근거와 설명은 `metadata.source`, `metadata.assumptions`, `metadata.explanations`, `metadata.confidence`에만 담는다.
 - AI 전용 `resources`, `relationships` 같은 별도 그래프 구조를 만들지 않는다.
 
 MVP에서 하지 않는 것:
@@ -351,8 +353,8 @@ type AiTerraformErrorExplanationResult = {
 - jh는 모든 항목 A를 선택했다. gg는 `architectureJson` 단독 입력, 공통 `ResourceType`, `CheckFinding.resourceId` 노드 연결을 기준으로 Architecture Draft와 Finding을 만든다.
 - ck는 모든 항목 A를 선택했다. gg 오류 설명 입력은 `{ stage, rawMessage, relatedResourceId? }`로 제한하고, `stage`는 `validate`, `plan`, `apply`만 우선 지원한다.
 - ys는 A / B / A / C를 선택했다. gg는 프로젝트 목록에 AI 요약을 필수 요구하지 않고, 중요한 AI 이벤트만 Activity 후보로 제공하며, 익명 workspace와 로그인 user 흐름을 모두 고려한다.
-- sw 응답은 `CABCA`로 전달되었으나 현재 sw 문서는 4개 문항이다. gg는 앞 4개를 C / A / B / C로 기록하되, Terraform 생성 원천 입력과 IaC Preview 설명 연결은 구현 전에 sw와 한 번 더 맞춘다.
-- 팀장 선택 결과는 아직 받지 않았다. 공통 API response wrapper, AI DTO 위치, AI 결과 저장 여부는 팀장 응답 전까지 현재 제안 기준을 유지한다.
+- sw는 모든 항목 A를 선택했다. gg는 `ArchitectureJson`을 Terraform 생성 원천 입력으로 유지하고, sw가 정의할 required config matrix를 따른다. IaC Preview 설명은 `resourceId` 또는 node id mapping 기준으로 연결하며, 코드 ↔ 다이어그램 동기화는 sw 소유로 둔다.
+- 팀장은 C / A / B / C / A를 선택했다. gg는 공통 wrapper가 전체 route에 먼저 정리되는 흐름을 따르고, AI DTO는 `packages/types`에 둔다. Pre-Deployment Analysis는 저장 가능 대상으로 보고, AI source는 별도 최상위 `source` 필드보다 metadata 안에서 다룬다. `SUBNET`, `SECURITY_GROUP`, `CLOUDFRONT` 확장은 승인된 기준으로 본다.
 
 구현 전에 반드시 확인해야 하는 호환 지점:
 
@@ -360,12 +362,12 @@ type AiTerraformErrorExplanationResult = {
 | --- | --- | --- | --- |
 | `ResourceType` 값 | AI가 만든 node를 보드/API/Terraform이 거부할 수 있음 | docs 브랜치에서 shared type과 API Zod schema는 `SUBNET`, `SECURITY_GROUP`, `CLOUDFRONT`까지 맞춘다 | jh/sw가 같은 문자열을 사용할 수 있는지 확인 |
 | `ResourceNode.config` key | 같은 리소스를 팀원별로 다른 설정 이름으로 읽을 수 있음 | AI template에서 쓰는 key를 문서와 테스트 fixture에 고정한다 | sw가 Terraform 생성기에 필요한 필수 key 목록을 알려달라고 요청 |
-| 공통 API 응답 wrapper | AI route만 다른 응답 모양이면 프론트 연결이 깨짐 | wrapper가 코드에 들어오기 전에는 기존 Fastify route 스타일을 따르고 DTO 필드명을 고정한다 | 팀장에게 공통 응답 wrapper 위치와 예시를 확인 |
+| 공통 API 응답 wrapper | AI route만 다른 응답 모양이면 프론트 연결이 깨짐 | 팀장 선택 C에 따라 AI route만 별도 wrapper를 만들지 않고, 전체 route wrapper 정리 이후 같은 형식을 따른다 | 팀장에게 wrapper 적용 시점과 공통 helper 위치를 확인 |
 | Plan/Apply raw output | 오류 설명 입력 모양이 ck 파트와 다르면 연동이 깨짐 | `stage`, `rawMessage`, 선택 `relatedResourceId`를 최소 입력으로 받게 한다 | ck에게 Plan/Apply 결과와 로그 line shape를 확인 |
-| `ArchitectureSnapshot.source` | 저장 시 `github`, `template_fallback` 같은 AI provenance가 뒤섞일 수 있음 | AI 응답의 `source`는 분석 provenance로 유지하고, 저장 source는 팀 공통 값을 따른다 | 팀장/jh에게 저장 source enum 확장 여부 확인 |
-| 분석 결과 저장 여부 | DB schema 없이 AI 결과를 저장하려 하면 충돌함 | MVP에서는 stateless 응답으로 시작하고 저장은 별도 합의 전까지 하지 않는다 | 팀장에게 AI 결과 저장 테이블 여부 확인 |
+| `ArchitectureSnapshot.source` | 저장 시 `github`, `template_fallback` 같은 AI provenance가 뒤섞일 수 있음 | 팀장 선택 C에 따라 AI 출처는 최상위 `source`보다 metadata 안에서 관리하는 방향으로 맞춘다 | jh/팀장에게 `ArchitectureSnapshot.source` 유지 범위와 metadata 구조 확인 |
+| 분석 결과 저장 여부 | DB schema 없이 AI 결과를 저장하려 하면 충돌함 | 팀장 선택 B에 따라 Pre-Deployment Analysis 저장을 고려하고, Architecture Draft/Error Explanation은 별도 합의 전까지 응답 중심으로 둔다 | 팀장에게 Pre-Deployment Analysis 저장 테이블/컬럼 확인 |
 
-gg는 선택 결과가 돌아오면 `ResourceNode.config` key, 공통 API 응답 wrapper, Plan/Apply output shape, AI 결과 저장 여부를 구현 계획에 반영한다.
+gg는 반영된 선택 결과를 기준으로 `ResourceNode.config` key, 공통 API 응답 wrapper, Plan/Apply output shape, AI 결과 저장 여부를 구현 계획에 반영한다.
 
 ck가 제안한 Plan/Apply output 최소 연결 기준:
 

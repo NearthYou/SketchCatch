@@ -26,10 +26,10 @@
 | 담당 | 선택 결과 | gg 반영 기준 |
 | --- | --- | --- |
 | jh | A / A / A / A | 공통 `ResourceType`, `architectureJson` 단독 입력, `CheckFinding.resourceId` 연결, 보드의 공통 config 표시 기준을 따른다. |
-| sw | C / A / B / C | sw 응답은 `CABCA`로 전달되었고, 현재 문서는 4개 문항이므로 앞 4개만 반영한다. Terraform 생성 입력과 IaC Preview 설명 기준은 sw와 재확인이 필요하다. |
+| sw | A / A / A / A | `ArchitectureJson`을 Terraform 생성 원천 입력으로 두고, sw가 `ResourceType`별 required config matrix를 정의한다. Terraform 생성 결과는 `resourceId` 또는 node id mapping을 제공하고, 코드 ↔ 다이어그램 동기화는 sw가 소유한다. |
 | ck | A / A / A / A | 오류 설명 입력은 `stage`, `rawMessage`, 선택 `relatedResourceId`로 받고, AI 설명은 stateless 응답으로 유지한다. |
 | ys | A / B / A / C | 프로젝트 목록은 가볍게 유지하고, 중요한 AI 이벤트만 Activity로 남기며, 알림은 화면 warning/Toast 중심으로 시작한다. 익명 workspace와 로그인 user를 모두 고려한다. |
-| 팀장 | 미회수 | 공통 API response wrapper, AI DTO 위치, AI 결과 저장 정책은 팀장 선택 결과를 받은 뒤 확정한다. |
+| 팀장 | C / A / B / C / A | 공통 wrapper는 전체 route 정리 이후 적용하고, AI DTO는 `packages/types`에 둔다. Pre-Deployment Analysis만 저장 대상으로 보고, AI source는 metadata로 통합하며, 확장 `ResourceType`은 승인한다. |
 
 ## 공통 기준
 
