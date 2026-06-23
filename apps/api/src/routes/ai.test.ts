@@ -236,6 +236,7 @@ test("POST /api/ai/pre-deployment-check reports cost and missing configuration r
   assert.equal(configurationFinding?.resourceId, "backend-server");
   assert.equal(configurationFinding?.severity, "medium");
   assert.equal(databaseEstimate?.resourceId, "backend-database");
+  assert.equal(body.summary.includes("Security Risk"), false);
   assert.equal(body.checklist.some((item) => item.id === "required-config-check" && item.status === "fail"), true);
 
   await app.close();

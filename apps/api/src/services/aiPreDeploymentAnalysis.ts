@@ -13,10 +13,7 @@ export function analyzePreDeployment(architectureJson: ArchitectureJson): AiPreD
   const resourceCostEstimates = architectureJson.nodes.map(createResourceCostEstimate);
 
   return {
-    summary:
-      findings.length > 0
-        ? "배포 전에 해결해야 할 Security Risk가 있습니다."
-        : "현재 기본 Pre-Deployment Check에서 막는 항목은 없습니다.",
+    summary: createSummary(findings),
     totalMonthlyEstimate: {
       amount: 0,
       currency: "USD",
@@ -26,6 +23,22 @@ export function analyzePreDeployment(architectureJson: ArchitectureJson): AiPreD
     findings,
     checklist: createChecklist(findings)
   };
+}
+
+function createSummary(findings: readonly CheckFinding[]): string {
+  if (findings.length === 0) {
+    return "현재 기본 Pre-Deployment Check에서 막는 항목은 없습니다.";
+  }
+
+  if (findings.some((finding) => finding.category === "security")) {
+    return "배포 전에 해결해야 할 Security Risk가 있습니다.";
+  }
+
+  if (findings.some((finding) => finding.category === "configuration")) {
+    return "배포 전에 빠진 Resource 설정을 확인해야 합니다.";
+  }
+
+  return "배포 전에 Cost Risk를 확인해야 합니다.";
 }
 
 function createFindingsForNode(node: ResourceNode): CheckFinding[] {
