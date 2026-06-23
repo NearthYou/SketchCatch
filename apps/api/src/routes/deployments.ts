@@ -4,7 +4,9 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { getDatabaseClient } from "../db/client.js";
 import { architectures, deployments, projectAssets, projects } from "../db/schema.js";
+import type { Deployment } from "@sketchcatch/types";
 
+type DeploymentRow = typeof deployments.$inferSelect;
 const workspaceIdSchema = z.string().min(1).max(128)
 
 const createDeploymentParamsSchema = z.object({
@@ -20,6 +22,18 @@ const createDeploymentBodySchema = z.object({
 const deploymentParamsSchema = z.object({
     deploymentId: z.uuid()
 });
+
+function toDeployment(row: DeploymentRow): Deployment {
+    return {
+        id: row.id,
+        projectId: row.projectId,
+        architectureId: row.architectureId,
+        terraformArtifactId: row.terraformArtifactId,
+        status: row.status as Deployment["status"],
+        createdAt: row.createdAt.toISOString(),
+        updatedAt: row.updatedAt.toISOString()
+    };
+}
 
 export async function registerDeploymentRoutes(app: FastifyInstance): Promise<void> {
     app.post("/projects/:projectId/deployments", async(request, reply) => {
@@ -79,7 +93,13 @@ export async function registerDeploymentRoutes(app: FastifyInstance): Promise<vo
             status: "PENDING"
         }).returning();
 
-        return { deployment };
+        if (!deployment) {
+            throw new Error("Deployment creation failed");
+        }
+
+        return reply.status(201).send({
+            deployment: toDeployment(deployment)
+        });
     })
 
     app.get("/deployments/:deploymentId", async(request, reply) => {
@@ -97,6 +117,8 @@ export async function registerDeploymentRoutes(app: FastifyInstance): Promise<vo
             });
         }
 
-        return reply.status(201).send({ deployment });
+        return reply.status(200).send({
+            deployment: toDeployment(deployment)
+        });
     });
 }
