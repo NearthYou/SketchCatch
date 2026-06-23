@@ -86,6 +86,49 @@ test("POST /api/ai/architecture-draft returns a board-ready ArchitectureJson for
   await app.close();
 });
 
+test("POST /api/ai/architecture-draft selects API server and database backend templates", async () => {
+  const app = buildApp();
+
+  const apiServerResponse = await app.inject({
+    method: "POST",
+    url: "/api/ai/architecture-draft",
+    payload: {
+      prompt: "외부 요청을 받는 API 서버를 EC2로 만들고 싶어"
+    }
+  });
+
+  assert.equal(apiServerResponse.statusCode, 200);
+
+  const apiServerBody = architectureDraftResponseSchema.parse(apiServerResponse.json());
+  const apiServerNodeTypes = apiServerBody.architectureJson.nodes.map((node) => node.type);
+
+  assert.equal(apiServerBody.title, "API 서버 Practice Architecture");
+  assert.ok(apiServerNodeTypes.includes("VPC"));
+  assert.ok(apiServerNodeTypes.includes("SUBNET"));
+  assert.ok(apiServerNodeTypes.includes("EC2"));
+  assert.ok(apiServerNodeTypes.includes("SECURITY_GROUP"));
+
+  const databaseBackendResponse = await app.inject({
+    method: "POST",
+    url: "/api/ai/architecture-draft",
+    payload: {
+      prompt: "DB가 포함된 백엔드 서버를 만들고 싶어"
+    }
+  });
+
+  assert.equal(databaseBackendResponse.statusCode, 200);
+
+  const databaseBackendBody = architectureDraftResponseSchema.parse(databaseBackendResponse.json());
+  const databaseBackendNodeTypes = databaseBackendBody.architectureJson.nodes.map((node) => node.type);
+
+  assert.equal(databaseBackendBody.title, "DB 포함 백엔드 Practice Architecture");
+  assert.ok(databaseBackendNodeTypes.includes("EC2"));
+  assert.ok(databaseBackendNodeTypes.includes("RDS"));
+  assert.ok(databaseBackendNodeTypes.includes("SECURITY_GROUP"));
+
+  await app.close();
+});
+
 test("POST /api/ai/architecture-draft rejects an empty prompt", async () => {
   const app = buildApp();
 
