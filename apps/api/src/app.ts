@@ -1,6 +1,7 @@
 import Fastify, { type FastifyInstance } from "fastify";
 import { registerHealthRoutes } from "./routes/health.js";
 import { registerProjectRoutes } from "./routes/projects.js";
+import { registerDeploymentRoutes } from "./routes/deployments.js";
 
 export function buildApp(): FastifyInstance {
   const app = Fastify({
@@ -23,6 +24,7 @@ export function buildApp(): FastifyInstance {
 
   app.register(registerHealthRoutes);
   app.register(registerProjectRoutes, { prefix: "/api" });
+  app.register(registerDeploymentRoutes, { prefix: "/api" });
 
   return app;
 }
