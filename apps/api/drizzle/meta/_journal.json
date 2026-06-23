@@ -15,6 +15,13 @@
       "when": 1782200041676,
       "tag": "0001_add_deployments",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1782234115402,
+      "tag": "0002_edit_deployments.sql",
+      "breakpoints": true
     }
   ]
 }

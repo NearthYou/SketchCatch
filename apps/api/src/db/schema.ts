@@ -10,6 +10,14 @@ export const assetTypeEnum = pgEnum("asset_type", [
   "thumbnail"
 ]);
 
+export const deploymentStatusEnum = pgEnum("status", [
+  "PENDING",
+  "RUNNING",
+  "SUCCESS",
+  "FAILED",
+  "CANCELLED"
+]);
+
 export const anonymousWorkspaces = pgTable("anonymous_workspaces", {
   id: varchar("id", { length: 128 }).primaryKey(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -61,11 +69,11 @@ export const deployments = pgTable("deployments", {
     .references(() => projects.id, { onDelete: "cascade" }),
   architectureId: varchar("architecture_id", { length: 36 })
     .notNull()
-    .references(() => architectures.id, { onDelete: "restrict"}),
+    .references(() => architectures.id, { onDelete: "restrict" }),
   terraformArtifactId: varchar("terraform_artifact_id", { length: 36 })
     .notNull()
     .references(() => projectAssets.id, { onDelete: "restrict" }),
-  status: varchar("status", { length: 32 }).notNull().default("PENDING"),
+  status: deploymentStatusEnum("status").notNull().default("PENDING"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
 });
@@ -80,7 +88,8 @@ export const projectsRelations = relations(projects, ({ many, one }) => ({
     references: [anonymousWorkspaces.id]
   }),
   architectures: many(architectures),
-  assets: many(projectAssets)
+  assets: many(projectAssets),
+  deployments: many(deployments)
 }));
 
 export const architecturesRelations = relations(architectures, ({ many, one }) => ({
@@ -99,6 +108,21 @@ export const projectAssetsRelations = relations(projectAssets, ({ one }) => ({
   architecture: one(architectures, {
     fields: [projectAssets.architectureId],
     references: [architectures.id]
+  })
+}));
+
+export const deploymentsRelations = relations(deployments, ({ one }) => ({
+  project: one(projects, {
+    fields: [deployments.projectId],
+    references: [projects.id]
+  }),
+  architecture: one(architectures, {
+    fields: [deployments.architectureId],
+    references: [architectures.id]
+  }),
+  terraformArtifact: one(projectAssets, {
+    fields: [deployments.terraformArtifactId],
+    references: [projectAssets.id]
   })
 }));
 

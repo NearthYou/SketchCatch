@@ -98,9 +98,10 @@ export type Deployment = {
   id: string;
   projectId: string;
   architectureId: string;
+  terraformArtifactId: string;
   status: DeploymentStatus;
-  startedAt: IsoDateTimeString;
-  finishedAt: IsoDateTimeString | null;
+  createdAt: IsoDateTimeString;
+  updatedAt: IsoDateTimeString;
 };
 
 export type Template = {
