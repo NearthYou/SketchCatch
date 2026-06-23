@@ -30,7 +30,17 @@ const routeParamsSchema = z.object({
 
 const resourceNodeSchema = z.object({
   id: z.string().min(1),
-  type: z.enum(["VPC", "EC2", "RDS", "S3", "LAMBDA", "UNKNOWN"]),
+  type: z.enum([
+    "VPC",
+    "SUBNET",
+    "EC2",
+    "RDS",
+    "S3",
+    "SECURITY_GROUP",
+    "CLOUDFRONT",
+    "LAMBDA",
+    "UNKNOWN"
+  ]),
   label: z.string().min(1).optional(),
   positionX: z.number(),
   positionY: z.number(),

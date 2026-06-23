@@ -1,6 +1,15 @@
 export type IsoDateTimeString = string;
 
-export type ResourceType = "VPC" | "EC2" | "RDS" | "S3" | "LAMBDA" | "UNKNOWN";
+export type ResourceType =
+  | "VPC"
+  | "SUBNET"
+  | "EC2"
+  | "RDS"
+  | "S3"
+  | "SECURITY_GROUP"
+  | "CLOUDFRONT"
+  | "LAMBDA"
+  | "UNKNOWN";
 
 export type ResourceConfig = Record<string, unknown>;
 

@@ -112,7 +112,16 @@ type ArchitectureJson = {
 ```ts
 type ResourceNode = {
   id: string;
-  type: "VPC" | "EC2" | "RDS" | "S3" | "LAMBDA" | "UNKNOWN";
+  type:
+    | "VPC"
+    | "SUBNET"
+    | "EC2"
+    | "RDS"
+    | "S3"
+    | "SECURITY_GROUP"
+    | "CLOUDFRONT"
+    | "LAMBDA"
+    | "UNKNOWN";
   label?: string;
   positionX: number;
   positionY: number;
@@ -121,6 +130,22 @@ type ResourceNode = {
 ```
 
 `config`는 리소스별 설정을 담는 확장 필드다. 예를 들어 EC2는 `instanceType`, `ami`, RDS는 `engine`, `instanceClass`처럼 서로 다른 값을 가질 수 있다.
+
+MVP에서 보드, AI, Terraform 생성기가 공유해야 하는 `ResourceType` 값은 아래로 고정한다.
+
+| 값 | 의미 | MVP 사용 |
+| --- | --- | --- |
+| `VPC` | 네트워크 경계 | 기본 |
+| `SUBNET` | VPC 내부 subnet | 기본 |
+| `EC2` | 서버 인스턴스 | 기본 |
+| `RDS` | 관계형 DB | 기본 |
+| `S3` | 객체 저장소/정적 웹 origin | 기본 |
+| `SECURITY_GROUP` | 접근 제어 규칙 | 기본 |
+| `CLOUDFRONT` | 정적 웹 배포 CDN | 정적 웹사이트 유형 |
+| `LAMBDA` | 서버리스 함수 | 후순위 또는 기존 타입 호환 |
+| `UNKNOWN` | 지원하지 않는 리소스 fallback | fallback |
+
+Codex 작업자는 `Security Group`, `security-group`, `cloudfront`처럼 다른 문자열을 새로 만들지 않는다. 새 리소스가 필요하면 먼저 이 문서와 `packages/types/src/index.ts`, API Zod schema를 같은 PR에서 맞춘다.
 
 ### ResourceEdge
 
@@ -257,6 +282,107 @@ type DeploymentLog = {
 };
 ```
 
+### AI 결과 DTO
+
+AI 결과 DTO는 API/프론트/보드/IaC 화면이 공유하는 응답 계약이다. 팀장 선택 결과에 따라 Pre-Deployment Analysis는 저장 대상이 될 수 있지만, 이 섹션은 우선 구현 전 `packages/types/src/index.ts`에 고정할 응답 필드명을 정의한다.
+
+```ts
+type AiResultMetadata = {
+  source: "github" | "template_fallback" | "llm_fallback";
+  confidence: "low" | "medium" | "high";
+  assumptions: string[];
+  explanations: string[];
+};
+
+type AiArchitectureDraftResult = {
+  architectureJson: ArchitectureJson;
+  title: string;
+  metadata: AiResultMetadata;
+};
+```
+
+`AiArchitectureDraftResult.architectureJson`만 Architecture Board의 입력이 된다. `metadata`는 AI 근거 표시용이며 별도 그래프 구조가 아니다. AI 생성 출처는 최상위 `source` 필드로 두지 않고 `metadata.source`로 관리한다.
+
+```ts
+type MoneyEstimate = {
+  amount: number;
+  currency: "USD" | "KRW";
+};
+
+type ResourceCostEstimate = {
+  resourceId: string;
+  resourceType: ResourceType;
+  name: string;
+  monthlyEstimate: MoneyEstimate;
+  costDrivers: string[];
+  explanation: string;
+};
+
+type CheckFinding = {
+  id: string;
+  category: "cost" | "security" | "configuration" | "permission";
+  severity: "low" | "medium" | "high";
+  resourceId?: string;
+  title: string;
+  description: string;
+  recommendation: string;
+};
+
+type ChecklistItem = {
+  id: string;
+  label: string;
+  status: "pass" | "warning" | "fail";
+  relatedFindingIds: string[];
+};
+
+type AiAnalysisSummary = {
+  status: "not_analyzed" | "completed" | "warning" | "failed";
+  highestSeverity: "low" | "medium" | "high" | null;
+  findingCount: number;
+  estimatedMonthlyCost?: MoneyEstimate;
+  summary: string;
+  updatedAt: IsoDateTimeString;
+};
+
+type AiPreDeploymentAnalysisResult = {
+  summary: string;
+  totalMonthlyEstimate: MoneyEstimate & {
+    pricingAssumption: string;
+  };
+  resourceCostEstimates: ResourceCostEstimate[];
+  findings: CheckFinding[];
+  checklist: ChecklistItem[];
+};
+```
+
+`CheckFinding.resourceId`는 있으면 반드시 같은 `ArchitectureJson.nodes[].id`를 가리킨다. 보드 경고 표시, Plan 전 화면, 프로젝트 요약은 이 값을 기준으로 연결한다.
+
+`AiAnalysisSummary`는 ys 선택 결과에 따라 프로젝트 목록 필수 필드가 아니다. 프로젝트 상세, 프로젝트 확인 보드, high severity Toast 같은 화면에서 선택적으로 소비한다.
+
+`AiPreDeploymentAnalysisResult`는 팀장 선택 결과에 따라 저장 가능한 AI 결과다. 저장 schema와 stale data 정책은 팀장 공통 DB 기준을 따르고, Architecture Draft와 Error Explanation은 별도 합의 전까지 응답 DTO 중심으로 다룬다.
+
+```ts
+type AiTerraformErrorExplanationResult = {
+  stage: "validate" | "plan" | "apply";
+  category:
+    | "permission"
+    | "credential"
+    | "region_or_resource"
+    | "quota"
+    | "syntax"
+    | "dependency"
+    | "unknown";
+  severity: "low" | "medium" | "high";
+  rawMessage: string;
+  summary: string;
+  likelyCause: string;
+  nextActions: string[];
+  relatedResourceId?: string;
+};
+```
+
+`rawMessage`는 숨기지 않는다. `nextActions`는 1-3개로 제한한다. `relatedResourceId`는 오류가 특정 리소스와 연결될 때만 사용한다.
+
 ### Activity
 
 알림, 감사 로그, 최근 활동 UI가 필요해질 때 추가한다.
@@ -301,3 +427,11 @@ type Activity = {
 - `sourceId`
 - `targetId`
 - `objectKey`
+
+AI/보드/IaC/배포를 나눠 구현할 때 아래 규칙을 추가로 지킨다.
+
+- jh 보드는 `ArchitectureJson`만으로 열릴 수 있어야 한다. AI 전용 metadata를 보드 필수 입력으로 만들지 않는다.
+- sw Terraform 생성기는 `ArchitectureJson`과 `ResourceNode.config`를 입력으로 삼고, AI 응답 자체를 원천 진실로 삼지 않는다.
+- ck Plan/Apply 화면은 `AiPreDeploymentAnalysisResult`, `AiTerraformErrorExplanationResult`, raw Terraform/AWS output을 분리해서 다룬다.
+- ys 플랫폼 화면은 프로젝트 목록이나 알림에서 AI 요약을 보여줄 수 있지만, 원천 데이터는 프로젝트/아키텍처/분석 DTO를 참조한다.
+- 팀장 선택 C에 따라 공통 API 응답 wrapper는 AI 라우트만 먼저 만들지 않고 전체 route 정리 이후 같은 wrapper를 따른다. wrapper 적용 전에도 DTO 필드명은 이 문서를 따른다.

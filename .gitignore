@@ -31,3 +31,12 @@ Thumbs.db
 .vscode/
 *.swp
 *.swo
+
+# Local-only notes and private planning docs
+docs/private/
+docs/local/
+*.local.md
+*.private.md
+*.scratch.md
+CONTEXT.local.md
+AGENTS.local.md
