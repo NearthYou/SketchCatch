@@ -27,6 +27,6 @@ SketchCatch 문서는 평소 아래 6개만 읽으면 된다.
 
 | 문서 | 상태 | 언제 읽는가 |
 | --- | --- | --- |
-| [AI MVP 범위 초안](./strategy/001_AI파트MVP범위초안_gg.md) | 검토 중 | gg AI 파트의 MVP 책임, DTO, 팀 의존성을 리뷰할 때 |
-| [AI 고도화 고려사항 초안](./strategy/002_AI고도화고려사항초안_gg.md) | 검토 중 | MVP 이후 비용 추정, Source Repository 분석, LLM provider, Terraform 보조, 위험 검증 고도화 방향을 볼 때 |
+| [AI MVP 범위 초안](./gg/001_AI파트MVP범위초안_gg.md) | gg 전용 | gg AI 파트의 MVP 책임, DTO, 팀 의존성을 리뷰할 때 |
+| [AI 고도화 고려사항 초안](./gg/002_AI고도화고려사항초안_gg.md) | gg 전용 | MVP 이후 비용 추정, Source Repository 분석, LLM provider, Terraform 보조, 위험 검증 고도화 방향을 볼 때 |
 | [팀원 Codex 호환성 선택 문서](./team-codex/000_팀원Codex호환성선택문서.md) | 선택 결과 회수 전 | 팀원별 Codex가 구현 전 호환성 선택지를 고르고 답을 가져와야 할 때 |
