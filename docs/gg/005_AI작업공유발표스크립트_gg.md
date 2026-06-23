@@ -4,9 +4,9 @@
 
 이 문서는 gg AI 브랜치에서 현재 만들어진 구현물을 팀원에게 설명하기 위한 공유용 스크립트다.
 
-별도 장표를 쓰지 않고, 실제 `/workspace` 화면과 API 흐름을 보면서 설명하는 것을 기준으로 한다.
+실제 `/workspace` 화면과 API 흐름을 보면서 설명하는 것을 기준으로 한다.
 
-## 발표 전 준비
+## 공유 전 준비
 
 로컬 서버를 켜고 아래 화면을 연다.
 
@@ -20,7 +20,7 @@ npm exec --package=pnpm@11.8.0 -- pnpm --dir apps/web exec next dev --port 3000
 - Web: `http://localhost:3000/workspace`
 - API health: `http://127.0.0.1:4000/health`
 
-발표 전에 버튼 세 개를 직접 눌러본다.
+공유 전에 버튼 세 개를 직접 눌러본다.
 
 1. `자연어 초안 생성`
 2. `배포 전 점검`
