@@ -14,6 +14,26 @@ export function createArchitectureDraft(prompt: string): AiArchitectureDraftResu
   return createStaticWebsiteDraft();
 }
 
+export function createArchitectureDraftFromRepositoryEvidence(
+  repositoryUrl: string,
+  evidence: readonly string[]
+): AiArchitectureDraftResult {
+  const evidenceText = evidence.join("\n").toLowerCase();
+  const draft = createArchitectureDraft(evidenceText || repositoryUrl);
+
+  return {
+    ...draft,
+    metadata: {
+      ...draft.metadata,
+      source: "github",
+      assumptions: [
+        ...draft.metadata.assumptions,
+        "Source Repository의 README와 package metadata만 근거로 Architecture Draft를 추론했습니다."
+      ]
+    }
+  };
+}
+
 function createStaticWebsiteDraft(): AiArchitectureDraftResult {
   const architectureJson: ArchitectureJson = {
     nodes: [

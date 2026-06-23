@@ -6,7 +6,10 @@ import type {
   AiTerraformErrorExplanationResult,
   ArchitectureJson
 } from "@sketchcatch/types";
-import { createArchitectureDraft } from "../services/aiArchitectureDrafts.js";
+import {
+  createArchitectureDraft,
+  createArchitectureDraftFromRepositoryEvidence
+} from "../services/aiArchitectureDrafts.js";
 import { analyzePreDeployment } from "../services/aiPreDeploymentAnalysis.js";
 import { explainTerraformError } from "../services/aiTerraformErrorExplanation.js";
 
@@ -47,6 +50,15 @@ const architectureDraftBodySchema = z.object({
   prompt: z.string().trim().min(1)
 });
 
+const githubArchitectureDraftBodySchema = z.object({
+  repositoryUrl: z
+    .string()
+    .url()
+    .refine((repositoryUrl) => isGitHubRepositoryUrl(repositoryUrl), {
+      message: "Public GitHub repository URL is required"
+    })
+});
+
 const preDeploymentCheckBodySchema = z.object({
   architectureJson: architectureJsonSchema
 });
@@ -64,6 +76,14 @@ export async function registerAiRoutes(app: FastifyInstance): Promise<void> {
     return createArchitectureDraft(body.prompt);
   });
 
+  app.post("/ai/github-architecture-draft", async (request): Promise<AiArchitectureDraftResult> => {
+    const body = githubArchitectureDraftBodySchema.parse(request.body);
+    const repository = parseGitHubRepositoryUrl(body.repositoryUrl);
+    const evidence = await fetchRepositoryEvidence(repository);
+
+    return createArchitectureDraftFromRepositoryEvidence(body.repositoryUrl, evidence);
+  });
+
   app.post("/ai/pre-deployment-check", async (request): Promise<AiPreDeploymentAnalysisResult> => {
     const body = preDeploymentCheckBodySchema.parse(request.body);
 
@@ -78,4 +98,45 @@ export async function registerAiRoutes(app: FastifyInstance): Promise<void> {
       return explainTerraformError(body);
     }
   );
+}
+
+type GitHubRepository = {
+  readonly owner: string;
+  readonly repo: string;
+};
+
+const GITHUB_EVIDENCE_PATHS = ["README.md", "package.json", "Dockerfile", "docker-compose.yml"] as const;
+
+function parseGitHubRepositoryUrl(repositoryUrl: string): GitHubRepository {
+  const url = new URL(repositoryUrl);
+  const [owner, repo] = url.pathname.split("/").filter((segment) => segment.length > 0);
+
+  return {
+    owner: owner ?? "",
+    repo: repo ?? ""
+  };
+}
+
+async function fetchRepositoryEvidence(repository: GitHubRepository): Promise<string[]> {
+  const evidence = await Promise.all(
+    GITHUB_EVIDENCE_PATHS.map(async (path) => {
+      const url = `https://raw.githubusercontent.com/${repository.owner}/${repository.repo}/main/${path}`;
+      const response = await fetch(url);
+
+      if (!response.ok) {
+        return "";
+      }
+
+      return response.text();
+    })
+  );
+
+  return evidence.filter((content) => content.trim().length > 0);
+}
+
+function isGitHubRepositoryUrl(repositoryUrl: string): boolean {
+  const url = new URL(repositoryUrl);
+  const [owner, repo] = url.pathname.split("/").filter((segment) => segment.length > 0);
+
+  return url.hostname === "github.com" && owner !== undefined && repo !== undefined;
 }

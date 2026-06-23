@@ -145,6 +145,64 @@ test("POST /api/ai/architecture-draft rejects an empty prompt", async () => {
   await app.close();
 });
 
+test("POST /api/ai/github-architecture-draft returns an Architecture Draft from public repository evidence", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input) => {
+    const url = String(input);
+
+    if (url.endsWith("/README.md")) {
+      return new Response("Express API server with PostgreSQL database", { status: 200 });
+    }
+
+    if (url.endsWith("/package.json")) {
+      return new Response('{"dependencies":{"express":"latest","pg":"latest"}}', { status: 200 });
+    }
+
+    return new Response("", { status: 404 });
+  };
+
+  const app = buildApp();
+
+  try {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/ai/github-architecture-draft",
+      payload: {
+        repositoryUrl: "https://github.com/example/backend-api"
+      }
+    });
+
+    assert.equal(response.statusCode, 200);
+
+    const body = architectureDraftResponseSchema.parse(response.json());
+    const nodeTypes = body.architectureJson.nodes.map((node) => node.type);
+
+    assert.equal(body.title, "DB 포함 백엔드 Practice Architecture");
+    assert.equal(body.metadata.source, "github");
+    assert.ok(nodeTypes.includes("EC2"));
+    assert.ok(nodeTypes.includes("RDS"));
+  } finally {
+    globalThis.fetch = originalFetch;
+    await app.close();
+  }
+});
+
+test("POST /api/ai/github-architecture-draft rejects non-GitHub repository URLs", async () => {
+  const app = buildApp();
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/ai/github-architecture-draft",
+    payload: {
+      repositoryUrl: "https://example.com/not-a-github-repo"
+    }
+  });
+
+  assert.equal(response.statusCode, 400);
+
+  await app.close();
+});
+
 test("POST /api/ai/pre-deployment-check reports open SSH as a high Security Risk", async () => {
   const app = buildApp();
 
