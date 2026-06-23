@@ -62,6 +62,31 @@ const terraformErrorExplanationResponseSchema = z.object({
   relatedResourceId: z.string().optional()
 });
 
+const terraformPreviewExplanationResponseSchema = z.object({
+  summary: z.string(),
+  detectedResources: z.array(
+    z.object({
+      terraformType: z.string(),
+      label: z.string(),
+      explanation: z.string()
+    })
+  ),
+  findings: z.array(
+    z.object({
+      category: z.string(),
+      severity: z.string(),
+      title: z.string()
+    })
+  ),
+  checklist: z.array(
+    z.object({
+      id: z.string(),
+      label: z.string(),
+      status: z.string()
+    })
+  )
+});
+
 test("POST /api/ai/architecture-draft returns a board-ready ArchitectureJson for a static website request", async () => {
   const app = buildApp();
 
@@ -372,6 +397,47 @@ test("POST /api/ai/terraform-error-explanation classifies common Terraform error
     assert.ok(body.likelyCause.length > 0);
     assert.ok(body.nextActions.length > 0);
   }
+
+  await app.close();
+});
+
+test("POST /api/ai/terraform-preview-explanation explains IaC Preview resources and safety findings", async () => {
+  const app = buildApp();
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/ai/terraform-preview-explanation",
+    payload: {
+      terraformCode: `
+resource "aws_security_group_rule" "ssh" {
+  type = "ingress"
+  from_port = 22
+  to_port = 22
+  cidr_blocks = ["0.0.0.0/0"]
+}
+
+resource "aws_instance" "web" {
+  instance_type = "t3.micro"
+}
+
+resource "aws_db_instance" "main" {
+  instance_class = "db.t4g.micro"
+}
+`
+    }
+  });
+
+  assert.equal(response.statusCode, 200);
+
+  const body = terraformPreviewExplanationResponseSchema.parse(response.json());
+  const detectedTypes = body.detectedResources.map((resource) => resource.terraformType);
+
+  assert.ok(body.summary.includes("IaC Preview"));
+  assert.ok(detectedTypes.includes("aws_instance"));
+  assert.ok(detectedTypes.includes("aws_db_instance"));
+  assert.equal(body.findings.some((finding) => finding.category === "security"), true);
+  assert.equal(body.findings.some((finding) => finding.category === "cost"), true);
+  assert.equal(body.checklist.some((item) => item.id === "terraform-review-check"), true);
 
   await app.close();
 });

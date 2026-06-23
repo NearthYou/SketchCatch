@@ -229,6 +229,19 @@ export type AiTerraformErrorExplanationResult = {
   relatedResourceId?: string | undefined;
 };
 
+export type AiTerraformDetectedResource = {
+  terraformType: string;
+  label: string;
+  explanation: string;
+};
+
+export type AiTerraformPreviewExplanationResult = {
+  summary: string;
+  detectedResources: AiTerraformDetectedResource[];
+  findings: CheckFinding[];
+  checklist: ChecklistItem[];
+};
+
 export type PracticeSession = {
   id: string;
   name: string;

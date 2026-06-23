@@ -4,6 +4,7 @@ import type {
   AiArchitectureDraftResult,
   AiPreDeploymentAnalysisResult,
   AiTerraformErrorExplanationResult,
+  AiTerraformPreviewExplanationResult,
   ArchitectureJson
 } from "@sketchcatch/types";
 import {
@@ -12,6 +13,7 @@ import {
 } from "../services/aiArchitectureDrafts.js";
 import { analyzePreDeployment } from "../services/aiPreDeploymentAnalysis.js";
 import { explainTerraformError } from "../services/aiTerraformErrorExplanation.js";
+import { explainTerraformPreview } from "../services/aiTerraformPreviewExplanation.js";
 
 const resourceTypeSchema = z.enum([
   "VPC",
@@ -69,6 +71,10 @@ const terraformErrorExplanationBodySchema = z.object({
   relatedResourceId: z.string().min(1).optional()
 });
 
+const terraformPreviewExplanationBodySchema = z.object({
+  terraformCode: z.string().trim().min(1)
+});
+
 export async function registerAiRoutes(app: FastifyInstance): Promise<void> {
   app.post("/ai/architecture-draft", async (request): Promise<AiArchitectureDraftResult> => {
     const body = architectureDraftBodySchema.parse(request.body);
@@ -96,6 +102,15 @@ export async function registerAiRoutes(app: FastifyInstance): Promise<void> {
       const body = terraformErrorExplanationBodySchema.parse(request.body);
 
       return explainTerraformError(body);
+    }
+  );
+
+  app.post(
+    "/ai/terraform-preview-explanation",
+    async (request): Promise<AiTerraformPreviewExplanationResult> => {
+      const body = terraformPreviewExplanationBodySchema.parse(request.body);
+
+      return explainTerraformPreview(body.terraformCode);
     }
   );
 }
