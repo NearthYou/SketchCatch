@@ -188,6 +188,59 @@ test("POST /api/ai/pre-deployment-check reports open SSH as a high Security Risk
   await app.close();
 });
 
+test("POST /api/ai/pre-deployment-check reports cost and missing configuration risks", async () => {
+  const app = buildApp();
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/ai/pre-deployment-check",
+    payload: {
+      architectureJson: {
+        nodes: [
+          {
+            id: "backend-server",
+            type: "EC2",
+            label: "Backend Server",
+            positionX: 120,
+            positionY: 180,
+            config: {
+              subnetId: "app-subnet"
+            }
+          },
+          {
+            id: "backend-database",
+            type: "RDS",
+            label: "Backend Database",
+            positionX: 360,
+            positionY: 180,
+            config: {
+              engine: "postgres",
+              instanceClass: "db.t4g.micro"
+            }
+          }
+        ],
+        edges: []
+      }
+    }
+  });
+
+  assert.equal(response.statusCode, 200);
+
+  const body = preDeploymentAnalysisResponseSchema.parse(response.json());
+  const costFinding = body.findings.find((item) => item.category === "cost");
+  const configurationFinding = body.findings.find((item) => item.category === "configuration");
+  const databaseEstimate = body.resourceCostEstimates.find((item) => item.resourceId === "backend-database");
+
+  assert.equal(costFinding?.resourceId, "backend-database");
+  assert.equal(costFinding?.severity, "medium");
+  assert.equal(configurationFinding?.resourceId, "backend-server");
+  assert.equal(configurationFinding?.severity, "medium");
+  assert.equal(databaseEstimate?.resourceId, "backend-database");
+  assert.equal(body.checklist.some((item) => item.id === "required-config-check" && item.status === "fail"), true);
+
+  await app.close();
+});
+
 test("POST /api/ai/terraform-error-explanation explains AccessDenied as a permission issue", async () => {
   const app = buildApp();
 
