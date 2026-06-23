@@ -2,191 +2,594 @@
 
 ## 목적
 
-이 스크립트는 gg AI 브랜치에서 무엇을 만들었는지 모르는 팀원에게 설명하기 위한 발표용 문서다.
+이 문서는 gg AI 브랜치에서 현재 만들어진 구현물을 팀원에게 설명하기 위한 공유용 스크립트다.
 
-장표 파일:
-
-- `docs/gg/004_AI작업공유장표_gg.html`
-
-발표 목표:
-
-- gg AI 파트가 “무엇을 대신 구현했는지”가 아니라 “어떤 연결 지점을 만들었는지”를 설명한다.
-- 팀원이 자기 파트에서 무엇을 맞추면 되는지 이해하게 한다.
-- AI가 실제 배포 판단을 대신하지 않는다는 안전 원칙을 공유한다.
+별도 장표를 쓰지 않고, 실제 `/workspace` 화면과 API 흐름을 보면서 설명하는 것을 기준으로 한다.
 
 ## 발표 전 준비
 
-1. 브라우저에서 `docs/gg/004_AI작업공유장표_gg.html`을 연다.
-2. 방향키로 장표 이동이 되는지 확인한다.
-3. `발표자 노트` 버튼을 켜면 각 장표의 핵심 멘트가 나온다.
-4. 발표 중에는 API 이름보다 “누가 무엇을 소비하는지”에 집중한다.
+로컬 서버를 켜고 아래 화면을 연다.
 
-## 1장. 한 줄 요약
+```bash
+npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api dev
+npm exec --package=pnpm@11.8.0 -- pnpm --dir apps/web exec next dev --port 3000
+```
 
-말할 내용:
+확인할 주소:
 
-이번 브랜치의 핵심은 “AI 기능이 실제로 눌러볼 수 있는 형태가 됐다”는 것이다.
+- Web: `http://localhost:3000/workspace`
+- API health: `http://127.0.0.1:4000/health`
 
-자연어 요청, Source Repository URL, ArchitectureJson, Pre-Deployment Check, IaC Preview 설명이 하나의 흐름으로 연결됐다.
+발표 전에 버튼 세 개를 직접 눌러본다.
 
-아직 “AI가 실제 AWS에 배포한다”는 뜻은 아니다. LLM provider가 없어도 deterministic fallback으로 동작하고, 팀원들이 API와 `/workspace` 화면에서 확인할 수 있게 만든 상태다.
+1. `자연어 초안 생성`
+2. `배포 전 점검`
+3. `코드 설명 생성`
 
-강조할 점:
+## 전체 공유 시나리오
 
-- API는 5개가 생겼다.
-- 테스트는 10개가 있다.
-- `/workspace`에서 직접 눌러볼 수 있다.
-
-## 2장. 왜 만들었나
-
-말할 내용:
-
-처음에는 “AI가 알아서 Terraform도 만들고, 설명도 하고, 위험도 보고, 초안도 만들면 되지 않나?”처럼 보일 수 있다.
-
-하지만 이 프로젝트는 초보자가 AWS를 배우는 서비스다. 그래서 AI가 검증되지 않은 Terraform 최종본을 만들거나, 배포 판단을 직접 하면 위험하다.
-
-이번 브랜치의 원칙은 명확하다.
-
-- 위험 판단의 근거는 rule engine이나 deterministic code가 먼저 만든다.
-- AI는 그 결과를 초보자가 이해할 수 있는 말로 설명한다.
-- 실제 배포나 Apply 판단은 AI가 하지 않는다.
-
-이렇게 해야 비용 사고, 보안 사고, 팀원 간 계약 충돌을 줄일 수 있다.
-
-## 3장. 전체 흐름
+### 1. 오프닝
 
 말할 내용:
 
-전체 흐름은 네 단계로 보면 된다.
+이번 브랜치에서 내가 만든 것은 “AI가 모든 걸 알아서 하는 기능”이 아니다.
 
-첫 번째는 입력이다. 사용자가 자연어로 “DB 포함 백엔드 서버를 만들고 싶다”고 말하거나, Source Repository URL을 넣는다.
+현재 만든 것은 팀원 기능과 연결할 수 있는 AI 보조 API와 확인용 `/workspace` 화면이다.
 
-두 번째는 Architecture Draft다. AI는 말을 직접 화면에 뿌리는 게 아니라, Architecture Board가 열 수 있는 `ArchitectureJson`을 만든다.
+핵심 원칙은 하나다.
 
-세 번째는 Pre-Deployment Check다. 이 `ArchitectureJson`을 기준으로 비용, 보안, 설정 누락을 확인한다.
+AI는 실제 배포 판단이나 Terraform 최종 생성을 마음대로 하지 않는다. 코드가 만든 구조와 룰 기반 점검 결과를 초보자가 이해할 수 있게 설명하는 역할을 한다.
 
-네 번째는 설명이다. finding, checklist, Terraform 오류, IaC Preview를 초보자 언어로 바꿔준다.
+### 2. `/workspace` 화면 보여주기
 
-중요한 점은 모든 흐름의 중심이 `ArchitectureJson`이라는 것이다.
+화면에서 보여줄 것:
 
-## 4장. API 지도
-
-말할 내용:
-
-이번 브랜치에서 만든 API는 5개다.
-
-`/api/ai/architecture-draft`는 자연어 prompt를 받아 Architecture Draft를 만든다.
-
-`/api/ai/github-architecture-draft`는 Source Repository URL을 받아 초안을 만든다. 이때 전체 코드를 다 분석하지 않는다. MVP에서는 README, package metadata, Dockerfile, docker-compose file 정도만 본다.
-
-`/api/ai/pre-deployment-check`는 ArchitectureJson을 받아 비용, 보안, 설정 finding과 checklist를 만든다.
-
-`/api/ai/terraform-error-explanation`은 validate, plan, apply 오류 메시지를 쉬운 설명으로 바꾼다.
-
-`/api/ai/terraform-preview-explanation`은 IaC Preview 또는 Terraform 코드가 어떤 Resource를 만드는지 설명한다.
-
-여기서 중요한 것은 “AI API가 많다”가 아니라 “각 API가 팀원 파트와 만나는 위치가 다르다”는 것이다.
-
-## 5장. 팀별 영향
+- 왼쪽 위 `Architecture Draft`
+- 오른쪽 위 `Draft 결과`
+- 왼쪽 아래 `비용/보안 점검`
+- 오른쪽 아래 `Terraform Preview 설명`
 
 말할 내용:
 
-jh는 Architecture Board 담당이다. jh 쪽에서는 AI 결과를 전부 알 필요가 없다. `ArchitectureJson`만 보드에서 열 수 있으면 된다. finding은 `resourceId`로 노드와 연결된다.
+이 화면은 최종 서비스 화면이라기보다, gg AI 파트가 어떤 데이터를 만들고 어떤 응답을 주는지 확인하기 위한 작업대다.
 
-sw는 Terraform 변환 담당이다. Terraform 생성의 원천은 AI 응답이 아니라 `ArchitectureJson`이어야 한다. AI는 Terraform 최종본을 마음대로 만드는 게 아니라, IaC Preview가 무엇을 만드는지 설명하는 보조 역할이다.
+여기서 중요한 것은 UI 디자인이 아니라 데이터 흐름이다.
 
-ck는 배포 실행 담당이다. Plan/Apply 오류 설명을 위해 AI에 넘길 payload는 최소화했다. `{ stage, rawMessage, relatedResourceId? }` 정도면 된다.
+자연어가 들어오면 Architecture Draft가 나오고, 그 결과를 가지고 배포 전 점검을 실행할 수 있다.
 
-ys는 플랫폼 담당이다. 프로젝트 목록은 가볍게 유지하고, AI 요약은 프로젝트 상세나 작업 화면에서 보여주는 방향이다.
+Terraform 코드도 넣으면 어떤 Resource를 만드는지, 위험한 설정이 있는지 설명을 받을 수 있다.
 
-정리하면 팀원들은 전체 AI 구조를 몰라도 된다. 자기 파트가 주고받을 데이터 모양만 맞추면 된다.
+### 3. 자연어 → Architecture Draft 데모
 
-## 6장. 데이터 계약
+실행:
 
-말할 내용:
+`자연어 요청`에 아래 문장을 넣고 `자연어 초안 생성`을 누른다.
 
-이번 작업에서 공통 타입은 `packages/types`에 추가했다.
-
-가장 중요한 타입은 네 개다.
-
-`AiArchitectureDraftResult`는 초안 생성 결과다. 여기에는 `architectureJson`, `title`, `metadata`가 들어간다.
-
-`AiPreDeploymentAnalysisResult`는 배포 전 점검 결과다. 여기에는 summary, 비용 추정, resource별 비용, findings, checklist가 들어간다.
-
-`AiTerraformErrorExplanationResult`는 Terraform 오류 설명 결과다. stage, category, severity, likelyCause, nextActions가 핵심이다.
-
-`AiTerraformPreviewExplanationResult`는 IaC Preview 설명 결과다. 어떤 Terraform Resource가 감지됐고, 어떤 위험이 있는지 보여준다.
-
-팀원이 필드명을 새로 만들기 전에 이 타입을 먼저 봐야 한다.
-
-## 7장. 검증 결과
+```text
+DB가 포함된 백엔드 API 서버를 AWS에 배포하고 싶어.
+```
 
 말할 내용:
 
-검증은 네 가지를 했다.
+이 버튼은 `/api/ai/architecture-draft`를 호출한다.
 
-첫째, API 테스트를 돌렸다. 총 10개 테스트가 통과했다.
+응답은 긴 설명문이 아니라 `ArchitectureJson` 중심이다.
 
-둘째, 전체 typecheck를 통과했다. shared type, API, web 소비 형태가 맞다는 뜻이다.
+`ArchitectureJson`은 Architecture Board가 열 수 있는 설계도 JSON이다. 여기에는 `nodes`와 `edges`가 있다.
 
-셋째, 전체 lint와 build를 통과했다.
+현재 예시에서는 VPC, Subnet, EC2, RDS, Security Group 같은 Resource 노드가 만들어진다.
 
-넷째, 로컬에서 API `/health`와 web `/workspace`가 응답하는 것을 확인했다.
+여기서 jh 보드 파트가 봐야 할 핵심은 “AI가 만든 결과를 보드에서 열 수 있느냐”다.
 
-다만 브라우저 클릭 기반 시각 QA는 별도 브라우저 제어 도구가 없어서 완전하게 하지는 못했다. 대신 dev server와 HTTP 응답 기준으로 동작 surface는 확인했다.
+### 4. 배포 전 점검 데모
 
-## 8장. 직접 눌러보기
+실행:
 
-말할 내용:
-
-이 장표의 미니 시뮬레이터는 실제 API 호출이 아니라 설명용이다.
-
-실제 동작을 보고 싶으면 `/workspace` 화면에서 자연어 초안 생성, GitHub 초안 생성, 배포 전 점검, Terraform Preview 설명 버튼을 누르면 된다.
-
-이 장표에서는 각 흐름이 어떤 결과 형태로 이어지는지만 빠르게 보여준다.
-
-설명 중에 버튼을 눌러가며 “자연어는 ArchitectureJson으로”, “Source Repository는 제한된 evidence로”, “Pre-Deployment Check는 finding과 checklist로”, “IaC Preview는 resource 설명으로” 이어진다고 말하면 된다.
-
-## 9장. 이제 팀원이 할 일
+Draft 결과가 나온 상태에서 `배포 전 점검`을 누른다.
 
 말할 내용:
 
-이제 중요한 것은 “AI 기능이 있으니 끝”이 아니다. 팀원 파트와 연결해야 한다.
+이 버튼은 `/api/ai/pre-deployment-check`를 호출한다.
 
-jh는 보드가 `ArchitectureJson`을 열 수 있는지 확인해야 한다.
+입력은 방금 만든 `ArchitectureJson`이다.
 
-sw는 Terraform 변환 결과를 AI 설명 API에 넘길 형태를 맞춰야 한다.
+응답은 `summary`, `totalMonthlyEstimate`, `resourceCostEstimates`, `findings`, `checklist`로 온다.
 
-ck는 오류 설명 payload를 최소 형태로 넘겨야 한다.
+여기서 중요한 것은 `findings`다.
 
-ys는 프로젝트 상세나 대시보드에서 AI 요약을 보여줄 위치를 정해야 한다.
+예를 들어 RDS가 있으면 월 비용이 생길 수 있고, Security Group에 SSH가 `0.0.0.0/0`으로 열려 있으면 보안 위험으로 잡을 수 있다.
 
-회의 중 체크박스를 하나씩 눌러가며 각 담당자에게 “이 부분만 맞춰주면 된다”고 설명하면 된다.
+AI가 위험을 마음대로 상상하는 게 아니라, 룰 기반 점검 결과를 만들고 그걸 사람이 이해하기 쉽게 보여주는 흐름이다.
 
-## 10장. 퀴즈와 마무리
+### 5. Terraform Preview 설명 데모
+
+실행:
+
+오른쪽 아래 Terraform 코드 영역에서 `코드 설명 생성`을 누른다.
 
 말할 내용:
 
-마지막으로 확인할 질문은 하나다.
+이 버튼은 `/api/ai/terraform-preview-explanation`을 호출한다.
 
-AI가 Terraform 최종본을 마음대로 만들고 바로 Apply까지 하게 둬도 되는가?
+여기서 AI는 Terraform 최종본을 생성해서 배포하는 게 아니다.
 
-정답은 안 된다.
+이미 있는 IaC Preview 또는 Terraform 코드가 무엇을 만들고, 위험한 설정이 있는지를 설명한다.
 
-우리 서비스에서 AI는 안전한 보조 계층이다. 결정론적 생성과 검증은 코드가 맡고, AI는 그 결과를 사람이 이해하기 쉽게 설명한다.
+예를 들어 `aws_instance`가 있으면 EC2 Instance를 만든다고 설명하고, `aws_security_group_rule`에서 SSH가 전체 공개로 열려 있으면 보안 finding을 붙인다.
 
-이 브랜치의 결과는 “AI가 다 하는 서비스”가 아니라 “팀원 기능과 연결 가능한 AI 보조 API와 화면”이다.
+이 부분은 sw Terraform 변환 파트와 연결된다.
 
-## 짧은 발표 버전
+sw가 만든 IaC Preview를 gg AI API에 넘기면, 사용자가 이해할 수 있는 설명을 붙일 수 있다.
 
-시간이 부족하면 아래만 말한다.
+### 6. Terraform 오류 설명은 화면에는 아직 없다고 말하기
 
-이번 브랜치에서 gg AI 파트는 다섯 가지 API와 `/workspace` 연결 화면을 만들었다.
+말할 내용:
 
-핵심은 AI가 실제 배포 판단을 대신하지 않는다는 것이다. AI는 자연어와 Source Repository로 Architecture Draft를 제안하고, Pre-Deployment Check finding과 Terraform 오류를 초보자 언어로 설명한다.
+현재 `/workspace` 화면에는 Terraform 오류 설명 버튼은 아직 따로 없다.
 
-공통 데이터 중심은 `ArchitectureJson`이다. jh는 보드에서 이 JSON을 열고, sw는 이 JSON을 Terraform 생성의 원천으로 쓰고, ck는 Plan/Apply 오류 payload를 넘기고, ys는 프로젝트 상세 화면에서 AI 요약을 보여주면 된다.
+하지만 API는 만들어져 있다.
 
-현재 fallback만으로도 동작하며, API 테스트 10개, 전체 typecheck, lint, build, test를 통과했다.
+endpoint는 `/api/ai/terraform-error-explanation`이다.
 
-다음 단계는 이 AI 결과를 각 팀원 파트의 실제 화면과 데이터 흐름에 연결하는 것이다.
+ck 배포 파트에서 Plan이나 Apply 실패가 나면 아래처럼 넘기면 된다.
+
+```ts
+{
+  stage: "plan",
+  rawMessage: "AccessDenied: ...",
+  relatedResourceId: "backend-server"
+}
+```
+
+그러면 AI는 권한 문제인지, region 문제인지, quota 문제인지, 문법 문제인지 분류해서 초보자용 설명과 다음 행동을 반환한다.
+
+### 7. GitHub 링크 기반 초안은 어떻게 설명할지
+
+말할 내용:
+
+GitHub 링크 기반 초안도 API와 화면 입력은 준비돼 있다.
+
+endpoint는 `/api/ai/github-architecture-draft`다.
+
+MVP에서는 전체 코드를 분석하지 않는다.
+
+대상은 public Source Repository이고, README, package metadata, Dockerfile, docker-compose file 정도만 evidence로 사용한다.
+
+이유는 속도와 안정성 때문이다.
+
+전체 코드를 LLM에게 다 던지면 비용도 커지고, 틀릴 가능성도 커지고, 민감한 코드 처리 문제가 생긴다.
+
+그래서 지금은 “초안 생성용 힌트” 정도로만 쓴다.
+
+## 팀원별 연결 설명 시나리오
+
+### jh에게 설명할 시나리오: Architecture Board 연결
+
+jh에게 말할 핵심:
+
+jh 파트는 AI 전체를 몰라도 된다.
+
+보드가 받아야 하는 핵심 입력은 `ArchitectureJson`이다.
+
+```ts
+type ArchitectureJson = {
+  nodes: ResourceNode[];
+  edges: ResourceEdge[];
+};
+```
+
+`ResourceNode`는 이렇게 생겼다.
+
+```ts
+type ResourceNode = {
+  id: string;
+  type: ResourceType;
+  label?: string;
+  positionX: number;
+  positionY: number;
+  config: Record<string, unknown>;
+};
+```
+
+`ResourceEdge`는 이렇게 생겼다.
+
+```ts
+type ResourceEdge = {
+  id: string;
+  sourceId: string;
+  targetId: string;
+  label?: string;
+};
+```
+
+jh가 확인해야 할 것:
+
+- `nodes[].id`를 보드 노드의 고유 id로 쓴다.
+- `edges[].sourceId`, `edges[].targetId`가 `nodes[].id`를 가리킨다.
+- `ResourceType` 문자열은 공통 타입을 따른다.
+- AI finding이 특정 Resource에 붙을 때는 `CheckFinding.resourceId`가 `ResourceNode.id`와 같아야 한다.
+
+말할 예시:
+
+“AI가 EC2에 대한 보안 경고를 만들면, 그 finding에는 `resourceId: "backend-server"`가 들어가. 보드는 그 id를 가진 노드에 경고 뱃지나 표시를 붙이면 돼.”
+
+### sw에게 설명할 시나리오: Terraform 변환 연결
+
+sw에게 말할 핵심:
+
+Terraform 생성의 원천은 AI 응답 문자열이 아니라 `ArchitectureJson`이어야 한다.
+
+AI가 Terraform 최종본을 자유롭게 생성하면 위험하다.
+
+sw 파트는 `ArchitectureJson -> Terraform 코드`를 deterministic하게 만들고, gg AI는 그 결과를 설명하는 쪽을 맡는다.
+
+연결 API:
+
+```text
+POST /api/ai/terraform-preview-explanation
+```
+
+입력:
+
+```ts
+{
+  terraformCode: string;
+}
+```
+
+응답:
+
+```ts
+type AiTerraformPreviewExplanationResult = {
+  summary: string;
+  detectedResources: AiTerraformDetectedResource[];
+  findings: CheckFinding[];
+  checklist: ChecklistItem[];
+};
+```
+
+sw가 확인해야 할 것:
+
+- IaC Preview 문자열을 API에 넘길 수 있어야 한다.
+- 가능하면 Terraform Resource와 ArchitectureJson node id 매핑을 유지해야 한다.
+- AI 설명은 deployable Terraform의 원천이 아니다.
+- AI finding은 사용자가 검토할 보조 정보다.
+
+말할 예시:
+
+“sw가 만든 Terraform Preview를 내가 만든 API에 넘기면, 사용자는 이 코드가 EC2를 만들고, RDS 비용이 생기고, SSH가 열려 있으면 위험하다는 설명을 볼 수 있어.”
+
+### ck에게 설명할 시나리오: Plan/Apply 오류 설명 연결
+
+ck에게 말할 핵심:
+
+배포 실행 파트에서 Plan이나 Apply 실패가 나면, 전체 로그를 AI에게 다 보내지 않아도 된다.
+
+MVP에서는 최소 입력만 넘긴다.
+
+연결 API:
+
+```text
+POST /api/ai/terraform-error-explanation
+```
+
+입력:
+
+```ts
+type AiTerraformStage = "validate" | "plan" | "apply";
+
+{
+  stage: AiTerraformStage;
+  rawMessage: string;
+  relatedResourceId?: string;
+}
+```
+
+응답:
+
+```ts
+type AiTerraformErrorExplanationResult = {
+  stage: AiTerraformStage;
+  category: AiTerraformErrorCategory;
+  severity: RiskLevel;
+  rawMessage: string;
+  summary: string;
+  likelyCause: string;
+  nextActions: string[];
+  relatedResourceId?: string;
+};
+```
+
+ck가 확인해야 할 것:
+
+- AI에 넘기기 전에 secret이나 credential은 마스킹해야 한다.
+- `stage`는 우선 `validate`, `plan`, `apply`만 쓴다.
+- 전체 deployment history 저장은 ck 파트가 맡고, AI 설명은 stateless response로 받는다.
+- `relatedResourceId`가 있으면 보드나 결과 화면에서 해당 Resource와 연결할 수 있다.
+
+말할 예시:
+
+“Apply 실패 로그를 통째로 저장하고 AI에게 다 던지는 게 아니라, 사용자가 이해해야 하는 핵심 오류 메시지만 넘기면 돼. 그러면 AI가 ‘권한 부족입니다. IAM 권한을 확인하세요’처럼 바꿔준다.”
+
+### ys에게 설명할 시나리오: 프로젝트/플랫폼 연결
+
+ys에게 말할 핵심:
+
+프로젝트 목록은 가볍게 유지하는 게 좋다.
+
+AI 분석 결과는 프로젝트 목록보다 프로젝트 상세, 작업 화면, 프로젝트 확인 보드 쪽에 보여주는 게 맞다.
+
+ys가 볼 수 있는 요약 타입 방향:
+
+```ts
+type AiAnalysisSummary = {
+  status: "not_analyzed" | "completed" | "warning" | "failed";
+  highestSeverity: RiskLevel | null;
+  findingCount: number;
+  estimatedMonthlyCost: MoneyEstimate | null;
+  summary: string;
+  updatedAt: IsoDateTimeString;
+};
+```
+
+현재 코드에 직접 추가된 핵심 타입은 아래다.
+
+```ts
+type CheckFinding = {
+  id: string;
+  category: "cost" | "security" | "configuration" | "permission";
+  severity: "low" | "medium" | "high";
+  resourceId?: string;
+  title: string;
+  description: string;
+  recommendation: string;
+};
+```
+
+ys가 확인해야 할 것:
+
+- 프로젝트 목록 API에 AI 상세 결과를 억지로 넣지 않는다.
+- 프로젝트 상세나 dashboard API에서 AI 요약을 optional로 보여주는 쪽이 좋다.
+- 활동 내역에는 모든 AI 요청을 남기지 말고 중요한 이벤트만 남긴다.
+- 예: Architecture Draft 생성, Pre-Deployment Check 완료, Pre-Deployment Check 실패.
+
+말할 예시:
+
+“프로젝트 목록에 AI 결과를 다 붙이면 목록 API가 무거워져. 대신 프로젝트 상세에 들어갔을 때 ‘위험 high 1개, 예상 비용 얼마, 체크리스트 몇 개’처럼 보여주면 된다.”
+
+### 팀장 또는 공통 계약 담당에게 설명할 시나리오
+
+말할 핵심:
+
+현재 gg AI API는 공통 타입을 `packages/types`에 뒀다.
+
+다만 공통 API wrapper 형식이 팀 전체에 확정되어 있지 않으면, AI API만 독자 wrapper를 만들지 않는 게 좋다.
+
+확인해야 할 것:
+
+- API 응답 wrapper를 팀장이 정하면 AI route도 맞춘다.
+- `ResourceType` 확장 목록을 팀 공통으로 인정해야 한다.
+- `ArchitectureJson`은 보드와 Terraform 변환의 공통 기준으로 유지해야 한다.
+- AI 결과 저장 여부는 MVP에서는 stateless response가 기본이다.
+
+말할 예시:
+
+“AI 분석 결과를 DB에 무조건 저장하면 prompt/output 보안, 버전 관리, 오래된 분석 결과 처리 문제가 생겨. 지금은 요청하면 바로 응답하는 stateless 구조로 두고, 저장은 팀 공통 정책이 정해지면 붙이는 게 안전하다.”
+
+## 꼭 설명해야 할 데이터 타입 요약
+
+### ArchitectureJson
+
+가장 중요한 공통 계약이다.
+
+사용처:
+
+- jh: Architecture Board 표시
+- sw: Terraform 생성 원천
+- gg: Architecture Draft 생성과 Pre-Deployment Check 입력
+- ys: 프로젝트 상세나 저장된 Architecture Snapshot 표시
+
+핵심:
+
+```ts
+type ArchitectureJson = {
+  nodes: ResourceNode[];
+  edges: ResourceEdge[];
+};
+```
+
+### ResourceType
+
+Resource 종류 문자열이다.
+
+현재 포함:
+
+```ts
+"VPC" | "SUBNET" | "EC2" | "RDS" | "S3" | "SECURITY_GROUP" | "CLOUDFRONT" | "LAMBDA" | "UNKNOWN"
+```
+
+주의:
+
+팀원마다 `SecurityGroup`, `security_group`, `SECURITY_GROUP`처럼 다르게 쓰면 연결이 깨진다.
+
+### AiArchitectureDraftResult
+
+자연어 또는 Source Repository 초안 생성 결과다.
+
+사용처:
+
+- gg API 응답
+- web `/workspace` Draft 결과 표시
+- jh 보드 연결 후보
+
+핵심:
+
+```ts
+type AiArchitectureDraftResult = {
+  architectureJson: ArchitectureJson;
+  title: string;
+  metadata: AiResultMetadata;
+};
+```
+
+### AiPreDeploymentAnalysisResult
+
+배포 전 비용/보안/설정 점검 결과다.
+
+사용처:
+
+- gg Pre-Deployment Check API 응답
+- ys 프로젝트 상세 요약 후보
+- jh 보드 finding 표시 후보
+- ck Apply 승인 전 차단 기준 후보
+
+핵심:
+
+```ts
+type AiPreDeploymentAnalysisResult = {
+  summary: string;
+  totalMonthlyEstimate: MoneyEstimate & {
+    pricingAssumption: string;
+  };
+  resourceCostEstimates: ResourceCostEstimate[];
+  findings: CheckFinding[];
+  checklist: ChecklistItem[];
+};
+```
+
+### CheckFinding
+
+비용, 보안, 설정, 권한 문제 하나를 표현하는 타입이다.
+
+사용처:
+
+- 보드 노드 경고
+- 프로젝트 상세 위험 요약
+- Apply 전 승인 차단
+- 초보자 설명 문구
+
+핵심:
+
+```ts
+type CheckFinding = {
+  id: string;
+  category: "cost" | "security" | "configuration" | "permission";
+  severity: "low" | "medium" | "high";
+  resourceId?: string;
+  title: string;
+  description: string;
+  recommendation: string;
+};
+```
+
+주의:
+
+`resourceId`가 있으면 `ArchitectureJson.nodes[].id`와 연결해야 한다.
+
+### ChecklistItem
+
+배포 전 확인할 항목이다.
+
+사용처:
+
+- Pre-Deployment Check 결과 화면
+- Apply 전 사용자 확인 화면
+
+핵심:
+
+```ts
+type ChecklistItem = {
+  id: string;
+  label: string;
+  status: "pass" | "warning" | "fail";
+  relatedFindingIds: string[];
+};
+```
+
+### AiTerraformErrorExplanationResult
+
+Terraform validate, plan, apply 오류 설명 결과다.
+
+사용처:
+
+- ck 배포 실패 화면
+- 사용자용 오류 설명
+- 다음 행동 안내
+
+핵심:
+
+```ts
+type AiTerraformErrorExplanationResult = {
+  stage: "validate" | "plan" | "apply";
+  category: AiTerraformErrorCategory;
+  severity: RiskLevel;
+  rawMessage: string;
+  summary: string;
+  likelyCause: string;
+  nextActions: string[];
+  relatedResourceId?: string;
+};
+```
+
+주의:
+
+`rawMessage`는 AI 호출 전에 secret masking이 끝난 값이어야 한다.
+
+### AiTerraformPreviewExplanationResult
+
+IaC Preview가 무엇을 만드는지 설명하는 결과다.
+
+사용처:
+
+- sw Terraform Preview 화면
+- gg AI 설명 패널
+- 사용자가 배포 전 Terraform 코드를 이해하는 흐름
+
+핵심:
+
+```ts
+type AiTerraformPreviewExplanationResult = {
+  summary: string;
+  detectedResources: AiTerraformDetectedResource[];
+  findings: CheckFinding[];
+  checklist: ChecklistItem[];
+};
+```
+
+## 회의에서 그대로 말할 짧은 버전
+
+이번 브랜치에서 gg AI 파트는 실제로 눌러볼 수 있는 API와 `/workspace` 확인 화면을 만들었다.
+
+자연어 또는 Source Repository URL을 넣으면 Architecture Draft가 나오고, 그 결과는 `ArchitectureJson`으로 온다.
+
+이 `ArchitectureJson`은 jh 보드, sw Terraform 변환, gg Pre-Deployment Check가 같이 보는 중심 데이터다.
+
+배포 전 점검은 비용, 보안, 설정 문제를 `CheckFinding`과 `ChecklistItem`으로 반환한다.
+
+Terraform Preview 설명은 sw가 만든 IaC Preview를 사용자가 이해할 수 있게 바꿔준다.
+
+Terraform 오류 설명은 ck가 Plan/Apply 실패 메시지를 넘기면 원인과 다음 행동을 쉬운 말로 반환한다.
+
+ys는 프로젝트 목록에 AI 결과를 다 넣기보다는 프로젝트 상세나 작업 화면에서 AI 요약을 보여주는 방향이 좋다.
+
+중요한 원칙은 AI가 실제 배포 판단을 하지 않는다는 것이다.
+
+AI는 안전한 보조 계층이고, 생성과 검증의 기준은 공통 타입과 deterministic code에 둔다.
+
+## 팀원에게 마지막으로 요청할 것
+
+jh:
+
+`ArchitectureJson.nodes`, `ArchitectureJson.edges`, `CheckFinding.resourceId` 연결이 보드에서 가능한지 확인해달라.
+
+sw:
+
+Terraform 생성 원천을 `ArchitectureJson`으로 두고, 생성된 IaC Preview 문자열을 AI 설명 API에 넘길 수 있는지 확인해달라.
+
+ck:
+
+Plan/Apply 오류 설명 API에 넘길 payload를 `{ stage, rawMessage, relatedResourceId? }`로 맞출 수 있는지 확인해달라.
+
+ys:
+
+AI 요약을 프로젝트 목록이 아니라 프로젝트 상세나 작업 화면에 optional로 붙이는 흐름이 가능한지 확인해달라.
