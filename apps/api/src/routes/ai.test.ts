@@ -267,3 +267,52 @@ test("POST /api/ai/terraform-error-explanation explains AccessDenied as a permis
 
   await app.close();
 });
+
+test("POST /api/ai/terraform-error-explanation classifies common Terraform error categories", async () => {
+  const app = buildApp();
+
+  const cases = [
+    {
+      rawMessage: "Error: NoCredentialProviders: no valid credential sources for Terraform AWS provider",
+      expectedCategory: "credential"
+    },
+    {
+      rawMessage: "Error: InvalidAMIID.NotFound: The image id does not exist in this region",
+      expectedCategory: "region_or_resource"
+    },
+    {
+      rawMessage: "Error: VcpuLimitExceeded: You have requested more vCPU capacity than your current limit",
+      expectedCategory: "quota"
+    },
+    {
+      rawMessage: "Error: Invalid expression on main.tf line 12",
+      expectedCategory: "syntax"
+    },
+    {
+      rawMessage: "Error: DependencyViolation: resource has a dependent object",
+      expectedCategory: "dependency"
+    }
+  ];
+
+  for (const item of cases) {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/ai/terraform-error-explanation",
+      payload: {
+        stage: "validate",
+        rawMessage: item.rawMessage
+      }
+    });
+
+    assert.equal(response.statusCode, 200);
+
+    const body = terraformErrorExplanationResponseSchema.parse(response.json());
+
+    assert.equal(body.category, item.expectedCategory);
+    assert.ok(body.summary.length > 0);
+    assert.ok(body.likelyCause.length > 0);
+    assert.ok(body.nextActions.length > 0);
+  }
+
+  await app.close();
+});
