@@ -15,15 +15,15 @@
 
 | 담당 | 문서 | 목적 |
 | --- | --- | --- |
-| jh | [Architecture Board 선택지](./architecture-board-options.md) | `ArchitectureJson`, `ResourceType`, 보드 경고 표시 호환성 확인 |
-| sw | [Terraform 변환 선택지](./terraform-options.md) | Terraform 생성 입력, `ResourceNode.config`, IaC Preview 호환성 확인 |
-| ck | [Plan/Apply 선택지](./deployment-options.md) | Plan/Apply output, 오류 설명 입력, Deployment History 연결 확인 |
-| ys | [플랫폼 선택지](./platform-options.md) | 프로젝트 목록, 최근 작업, 알림에서 AI 요약 소비 방식 확인 |
-| 팀장 | [공통 계약 선택지](./common-contract-options.md) | 공통 API 응답 wrapper, shared DTO, 저장 정책 확인 |
+| jh | [Architecture Board 선택지](./001_아키텍처보드선택지_jh.md) | `ArchitectureJson`, `ResourceType`, 보드 경고 표시 호환성 확인 |
+| sw | [Terraform 변환 선택지](./002_테라폼변환선택지_sw.md) | Terraform 생성 입력, `ResourceNode.config`, IaC Preview 호환성 확인 |
+| ck | [Plan/Apply 선택지](./003_배포실행선택지_ck.md) | Plan/Apply output, 오류 설명 입력, Deployment History 연결 확인 |
+| ys | [플랫폼 선택지](./004_플랫폼선택지_ys.md) | 프로젝트 목록, 최근 작업, 알림에서 AI 요약 소비 방식 확인 |
+| 팀장 | [공통 계약 선택지](./005_공통계약선택지.md) | 공통 API 응답 wrapper, shared DTO, 저장 정책 확인 |
 
 ## 공통 기준
 
 - 공통 타입 기준은 [데이터 모델](../data-models.md)이다.
-- gg AI 범위 기준은 [AI MVP 범위](../strategy/ai-mvp-scope.md)이다.
+- gg AI 범위 기준은 [AI MVP 범위](../strategy/001_AI파트MVP범위초안_gg.md)이다.
 - Codex 작업 절차 기준은 [개발 가이드](../development.md)의 `Codex 협업 호환 절차`다.
 - 실제 AWS apply, Terraform 실행, AWS 권한 변경은 이 문서 묶음에서 결정하지 않는다.
