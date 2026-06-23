@@ -11,6 +11,8 @@
 - MVP 초반은 로그인 사용자가 아니라 `AnonymousWorkspace` 기반이다. `User`는 인증 도입 시 추가한다.
 - `Diagram`은 DB에 이미 `architectures` 테이블로 들어가 있다. 공통 타입 이름은 `ArchitectureSnapshot`으로 두고, 화면에서는 다이어그램 또는 보드라고 불러도 된다.
 - 저장되는 아키텍처 JSON은 `nodes`와 `edges`를 가진 `ArchitectureJson`으로 고정한다.
+- 자연어 요구사항에서 추출한 예산, 트래픽, 런타임, DB, 가용성, 보안 우선순위는 후속 `RequirementConstraint` 모델로 분리할 수 있다.
+- 비용·성능 시뮬레이션 결과는 MVP 코드 타입을 바로 확정하지 않고 후속 `DesignSimulationResult` 모델로 분리한다.
 - Terraform 원문은 RDS `content` 컬럼에 저장하지 않는다. IaC 파일은 S3에 두고, RDS/API에는 `ProjectAsset` 또는 `TerraformArtifact` 메타데이터와 `objectKey`를 저장한다.
 - 실제 AWS 배포 실행은 후순위다. 3주 안에 구현할 `Deployment`는 통제된 배포/연습 세션 상태 기록 또는 모의 실행 이력으로 제한하고, 프론트에서 AWS SDK를 직접 호출하지 않는다.
 
@@ -86,7 +88,7 @@ type ArchitectureSnapshot = {
   id: string;
   projectId: string;
   version: number;
-  source: "manual" | "prompt_mock" | "imported" | string;
+  source: "manual" | "prompt" | "template" | "imported" | string;
   architectureJson: ArchitectureJson;
   createdAt: IsoDateTimeString;
 };
@@ -303,6 +305,8 @@ type AiArchitectureDraftResult = {
 
 `AiArchitectureDraftResult.architectureJson`만 Architecture Board의 입력이 된다. `metadata`는 AI 근거 표시용이며 별도 그래프 구조가 아니다. AI 생성 출처는 최상위 `source` 필드로 두지 않고 `metadata.source`로 관리한다.
 
+코치 피드백 반영 이후 새 Architecture Draft의 주 입력은 Source Repository가 아니라 자연어 요구사항이다. 현재 코드의 `AiResultMetadata.source`는 #12 구현 범위에 맞춰 `github`, `template_fallback`, `llm_fallback`으로 남아 있지만, 후속 이슈에서 `prompt` 또는 `requirement_prompt` 값을 추가할 수 있다.
+
 ```ts
 type MoneyEstimate = {
   amount: number;
@@ -360,6 +364,18 @@ type AiPreDeploymentAnalysisResult = {
 `AiAnalysisSummary`는 ys 선택 결과에 따라 프로젝트 목록 필수 필드가 아니다. 프로젝트 상세, 프로젝트 확인 보드, high severity Toast 같은 화면에서 선택적으로 소비한다.
 
 `AiPreDeploymentAnalysisResult`는 팀장 선택 결과에 따라 저장 가능한 AI 결과다. 저장 schema와 stale data 정책은 팀장 공통 DB 기준을 따르고, Architecture Draft와 Error Explanation은 별도 합의 전까지 응답 DTO 중심으로 다룬다.
+
+후속 비용·성능 시뮬레이션은 아래처럼 별도 결과 타입으로 분리하는 방향을 검토한다. MVP 문서에는 방향만 남기고, 실제 필드와 저장 여부는 시뮬레이션 구현 이슈에서 확정한다.
+
+```ts
+type DesignSimulationResult = {
+  summary: string;
+  assumptions: string[];
+  bottleneckResourceIds: string[];
+  estimatedMonthlyCost?: MoneyEstimate;
+  findings: CheckFinding[];
+};
+```
 
 ```ts
 type AiTerraformErrorExplanationResult = {

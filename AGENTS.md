@@ -2,14 +2,14 @@
 
 This repository is SketchCatch.
 
-SketchCatch is a Terraform-first IaC platform for safe AWS learning. It helps beginners design infrastructure visually, understand resource relationships, validate cost and security risks, manage IaC versions, and eventually deploy only explicitly approved practice environments with automatic cleanup.
+SketchCatch is a Terraform-first AI infrastructure design and simulation platform. It helps developers turn natural-language requirements into infrastructure graphs, edit them visually, generate Terraform previews, compare design versions, and analyze cost, performance, and security risks before any approved deployment path.
 
 ## Product Direction
 
-1. Treat SketchCatch as an IaC-based infrastructure creation, validation, deployment, versioning, and safety platform, not just a visual cloud diagram tool.
+1. Treat SketchCatch as an AI-assisted infrastructure design, simulation, IaC generation, versioning, and safety platform, not just a visual cloud diagram tool.
 2. Terraform is the primary IaC target for product planning and implementation.
-3. CloudFormation may be used as an AWS learning reference or future compatibility target, but it is not the default MVP direction.
-4. Prefer beginner-safe AWS workflows, cost-accident prevention, explicit review, and time-limited practice environments.
+3. CloudFormation may be used as an AWS reference or future compatibility target, but it is not the default MVP direction.
+4. Prefer explicit review, cost-accident prevention, realistic design constraints, and time-limited practice environments for any deployment-adjacent workflow.
 5. Do not implement real AWS apply, deploy, update, delete, or destroy behavior unless the user explicitly asks for it in the current task.
 
 ## Required Reading
