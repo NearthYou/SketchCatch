@@ -54,6 +54,22 @@ export const projectAssets = pgTable("project_assets", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
 });
 
+export const deployments = pgTable("deployments", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  projectId: varchar("project_id", { length: 36 })
+    .notNull()
+    .references(() => projects.id, { onDelete: "cascade" }),
+  architectureId: varchar("architecture_id", { length: 36 })
+    .notNull()
+    .references(() => architectures.id, { onDelete: "restrict"}),
+  terraformArtifactId: varchar("terraform_artifact_id", { length: 36 })
+    .notNull()
+    .references(() => projectAssets.id, { onDelete: "restrict" }),
+  status: varchar("status", { length: 32 }).notNull().default("PENDING"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+});
+
 export const anonymousWorkspacesRelations = relations(anonymousWorkspaces, ({ many }) => ({
   projects: many(projects)
 }));
