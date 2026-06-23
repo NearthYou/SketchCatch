@@ -170,6 +170,27 @@ test("POST /api/ai/architecture-draft rejects an empty prompt", async () => {
   await app.close();
 });
 
+test("OPTIONS /api/ai/architecture-draft responds to browser CORS preflight", async () => {
+  const app = buildApp();
+
+  const response = await app.inject({
+    headers: {
+      "access-control-request-headers": "content-type",
+      "access-control-request-method": "POST",
+      origin: "http://localhost:3000"
+    },
+    method: "OPTIONS",
+    url: "/api/ai/architecture-draft"
+  });
+
+  assert.equal(response.statusCode, 204);
+  assert.equal(response.headers["access-control-allow-origin"], "http://localhost:3000");
+  assert.match(String(response.headers["access-control-allow-methods"]), /POST/);
+  assert.match(String(response.headers["access-control-allow-headers"]), /content-type/);
+
+  await app.close();
+});
+
 test("POST /api/ai/github-architecture-draft returns an Architecture Draft from public repository evidence", async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (input) => {
