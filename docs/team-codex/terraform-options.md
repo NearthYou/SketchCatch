@@ -1,8 +1,8 @@
-# 시원 Codex용 Terraform 변환 선택지
+# sw Codex용 Terraform 변환 선택지
 
-> 상태: 경근 AI 파트와의 호환성 확인을 위한 검토용 선택지다. 추천안은 확정이 아니라 제안이다.
+> 상태: gg AI 파트와의 호환성 확인을 위한 검토용 선택지다. 추천안은 확정이 아니라 제안이다.
 
-너는 SketchCatch 시원 파트 Codex다. 구현 전에 경근 AI 파트와 Terraform 변환/IaC Preview가 같은 계약으로 연결될 수 있는지 확인하고 선택지를 골라라.
+너는 SketchCatch sw 파트 Codex다. 구현 전에 gg AI 파트와 Terraform 변환/IaC Preview가 같은 계약으로 연결될 수 있는지 확인하고 선택지를 골라라.
 
 ## 먼저 읽을 문서
 
@@ -18,7 +18,7 @@
 **A. `ArchitectureJson`을 원천 입력으로 둔다. (추천)**
 
 - 장점: 보드 저장, AI 초안, Terraform 생성이 같은 구조를 공유한다.
-- 경근 AI 파트 영향: AI는 `ArchitectureJson`만 생성하고 Terraform 최종본은 만들지 않는다.
+- gg AI 파트 영향: AI는 `ArchitectureJson`만 생성하고 Terraform 최종본은 만들지 않는다.
 
 **B. Terraform HCL을 원천 입력으로 둔다.**
 
@@ -32,12 +32,12 @@
 
 ### 2. `ResourceNode.config` key 관리
 
-**A. ResourceType별 required config matrix를 시원 파트가 정의하고, 경근 AI가 그 matrix를 따른다. (추천)**
+**A. ResourceType별 required config matrix를 sw 파트가 정의하고, gg AI가 그 matrix를 따른다. (추천)**
 
 - 장점: Terraform 생성기가 필요한 값을 명확히 요구할 수 있다.
-- 경근 AI 파트 영향: AI template과 fallback fixture가 같은 key를 넣는다.
+- gg AI 파트 영향: AI template과 fallback fixture가 같은 key를 넣는다.
 
-**B. 경근 AI가 config key를 먼저 정하고 Terraform 생성기가 맞춘다.**
+**B. gg AI가 config key를 먼저 정하고 Terraform 생성기가 맞춘다.**
 
 - 장점: AI 초안 생성이 빠르다.
 - 위험: Terraform 생성에 필요한 실제 key가 빠질 수 있다.
@@ -52,7 +52,7 @@
 **A. Terraform 생성 결과에 `resourceId` 또는 node id mapping을 둔다. (추천)**
 
 - 장점: AI가 "이 코드가 어떤 Resource를 만드는지" 리소스 단위로 설명할 수 있다.
-- 경근 AI 파트 영향: 설명 DTO나 rule engine이 `resourceId` 기준으로 묶인다.
+- gg AI 파트 영향: 설명 DTO나 rule engine이 `resourceId` 기준으로 묶인다.
 
 **B. Terraform file 전체를 AI에게 넘기고 문장 설명만 받는다.**
 
@@ -62,14 +62,14 @@
 **C. IaC Preview 설명은 후순위로 둔다.**
 
 - 장점: Terraform 생성에 집중할 수 있다.
-- 위험: 경근 AI 파트의 Terraform 코드 작성 보조 가치가 약해진다.
+- 위험: gg AI 파트의 Terraform 코드 작성 보조 가치가 약해진다.
 
 ### 4. 코드 수정 시 다이어그램 반영과 AI의 관계
 
-**A. 코드 ↔ 다이어그램 동기화는 시원 파트가 소유하고 AI는 차이 설명만 한다. (추천)**
+**A. 코드 ↔ 다이어그램 동기화는 sw 파트가 소유하고 AI는 차이 설명만 한다. (추천)**
 
 - 장점: 원천 진실이 명확하다.
-- 경근 AI 파트 영향: AI는 동기화 결과나 diff를 설명만 한다.
+- gg AI 파트 영향: AI는 동기화 결과나 diff를 설명만 한다.
 
 **B. AI가 코드 수정 제안을 만들고 바로 다이어그램에 반영한다.**
 
@@ -84,7 +84,7 @@
 ## 응답 형식
 
 ```text
-시원 Codex 선택 결과
+sw Codex 선택 결과
 
 1. Terraform 생성 원천 입력: A/B/C
    이유:
@@ -109,10 +109,10 @@ ResourceType별 required config 초안:
 - LAMBDA:
 - UNKNOWN:
 
-경근 AI 파트가 맞춰야 할 것:
+gg AI 파트가 맞춰야 할 것:
 -
 
-시원 파트가 맞출 것:
+sw 파트가 맞출 것:
 -
 
 수정이 필요한 파일/타입:

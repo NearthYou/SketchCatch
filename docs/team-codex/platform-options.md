@@ -1,8 +1,8 @@
-# 윤서 Codex용 플랫폼 선택지
+# ys Codex용 플랫폼 선택지
 
-> 상태: 경근 AI 파트와의 호환성 확인을 위한 검토용 선택지다. 추천안은 확정이 아니라 제안이다.
+> 상태: gg AI 파트와의 호환성 확인을 위한 검토용 선택지다. 추천안은 확정이 아니라 제안이다.
 
-너는 SketchCatch 윤서 파트 Codex다. 구현 전에 경근 AI 파트의 분석 결과가 로그인, 프로젝트 목록, 최근 작업, 알림, 플랫폼 화면에서 어떻게 소비될지 확인하고 선택지를 골라라.
+너는 SketchCatch ys 파트 Codex다. 구현 전에 gg AI 파트의 분석 결과가 로그인, 프로젝트 목록, 최근 작업, 알림, 플랫폼 화면에서 어떻게 소비될지 확인하고 선택지를 골라라.
 
 ## 먼저 읽을 문서
 
@@ -18,7 +18,7 @@
 **A. MVP에서는 프로젝트 상세/작업 화면에서만 AI 요약을 보여주고 목록은 후순위로 둔다. (추천)**
 
 - 장점: 목록 API와 AI 분석 저장 정책이 얽히지 않는다.
-- 경근 AI 파트 영향: 우선 stateless 분석 응답에 집중한다.
+- gg AI 파트 영향: 우선 stateless 분석 응답에 집중한다.
 
 **B. 프로젝트 목록에 최소 AI summary를 표시한다.**
 
@@ -36,7 +36,7 @@
 **A. AI 분석 실행 자체는 최근 작업에 남기지 않는다. (추천)**
 
 - 장점: Activity 모델이 안정되기 전까지 노이즈를 줄인다.
-- 경근 AI 파트 영향: AI endpoint는 activity 생성 책임을 지지 않는다.
+- gg AI 파트 영향: AI endpoint는 activity 생성 책임을 지지 않는다.
 
 **B. Architecture Draft 생성과 Pre-Deployment Check만 최근 작업에 남긴다.**
 
@@ -53,7 +53,7 @@
 **A. MVP에서는 알림을 직접 만들지 않고 화면 내 warning으로 표시한다. (추천)**
 
 - 장점: 알림 시스템과 AI 분석 저장 정책을 분리한다.
-- 경근 AI 파트 영향: `findings`와 `checklist`만 제공한다.
+- gg AI 파트 영향: `findings`와 `checklist`만 제공한다.
 
 **B. high severity finding만 알림으로 만든다.**
 
@@ -70,7 +70,7 @@
 **A. MVP에서는 `AnonymousWorkspace` 기준으로 AI 결과를 연결한다. (추천)**
 
 - 장점: 현재 데이터 모델과 맞는다.
-- 경근 AI 파트 영향: request payload에 user secret이나 AWS credential을 요구하지 않는다.
+- gg AI 파트 영향: request payload에 user secret이나 AWS credential을 요구하지 않는다.
 
 **B. 로그인 사용자 기준으로만 AI 기능을 연다.**
 
@@ -85,7 +85,7 @@
 ## 응답 형식
 
 ```text
-윤서 Codex 선택 결과
+ys Codex 선택 결과
 
 1. 프로젝트 목록에서 AI 요약 표시: A/B/C
    이유:
@@ -102,10 +102,10 @@
 필요한 최소 AI 요약 필드:
 -
 
-경근 AI 파트가 맞춰야 할 것:
+gg AI 파트가 맞춰야 할 것:
 -
 
-윤서 파트가 맞출 것:
+ys 파트가 맞출 것:
 -
 
 수정이 필요한 파일/타입:

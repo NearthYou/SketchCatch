@@ -1,8 +1,8 @@
-# 채강 Codex용 Plan/Apply 선택지
+# ck Codex용 Plan/Apply 선택지
 
-> 상태: 경근 AI 파트와의 호환성 확인을 위한 검토용 선택지다. 추천안은 확정이 아니라 제안이다.
+> 상태: gg AI 파트와의 호환성 확인을 위한 검토용 선택지다. 추천안은 확정이 아니라 제안이다.
 
-너는 SketchCatch 채강 파트 Codex다. 구현 전에 경근 AI 파트와 Plan/Apply, 배포 로그, Deployment History가 같은 계약으로 연결될 수 있는지 확인하고 선택지를 골라라.
+너는 SketchCatch ck 파트 Codex다. 구현 전에 gg AI 파트와 Plan/Apply, 배포 로그, Deployment History가 같은 계약으로 연결될 수 있는지 확인하고 선택지를 골라라.
 
 ## 먼저 읽을 문서
 
@@ -20,7 +20,7 @@
 - `stage`: `validate` | `plan` | `apply`
 - `rawMessage`: Terraform/AWS 원문 오류
 - `relatedResourceId`: 특정 리소스와 연결될 때만 사용
-- 장점: 채강 파트 구현이 바뀌어도 AI 오류 설명이 독립적으로 동작한다.
+- 장점: ck 파트 구현이 바뀌어도 AI 오류 설명이 독립적으로 동작한다.
 
 **B. Deployment id와 log id를 필수로 받는다.**
 
@@ -37,24 +37,24 @@
 **A. `validate`, `plan`, `apply` 세 값으로 시작한다. (추천)**
 
 - 장점: Terraform 흐름과 AI 오류 카테고리가 단순하게 맞는다.
-- 경근 AI 파트 영향: `AiTerraformErrorExplanationResult.stage`와 동일하게 쓴다.
+- gg AI 파트 영향: `AiTerraformErrorExplanationResult.stage`와 동일하게 쓴다.
 
 **B. `connection_test`, `validate`, `plan`, `apply`, `cleanup`까지 포함한다.**
 
 - 장점: AWS 연결/정리 실패까지 설명할 수 있다.
-- 위험: 경근 AI 범위가 채강 배포 흐름 전체로 넓어진다.
+- 위험: gg AI 범위가 ck 배포 흐름 전체로 넓어진다.
 
 **C. 문자열 자유 입력으로 둔다.**
 
-- 장점: 채강 파트가 자유롭게 확장한다.
+- 장점: ck 파트가 자유롭게 확장한다.
 - 위험: AI 분류와 프론트 표시가 불안정해진다.
 
 ### 3. Deployment History와 AI 설명 저장
 
-**A. MVP에서는 raw log/history는 채강 파트가 저장하고 AI 설명은 stateless 응답으로 둔다. (추천)**
+**A. MVP에서는 raw log/history는 ck 파트가 저장하고 AI 설명은 stateless 응답으로 둔다. (추천)**
 
 - 장점: DB schema 충돌 없이 빠르게 연동된다.
-- 경근 AI 파트 영향: 오류 설명 endpoint는 원문을 받아 설명을 반환한다.
+- gg AI 파트 영향: 오류 설명 endpoint는 원문을 받아 설명을 반환한다.
 
 **B. AI 설명 결과도 Deployment History에 저장한다.**
 
@@ -71,7 +71,7 @@
 **A. Plan 실행 전 화면에서 `AiPreDeploymentAnalysisResult`를 그대로 소비한다. (추천)**
 
 - 장점: 비용/위험/체크리스트를 배포 전 안전장치로 보여줄 수 있다.
-- 경근 AI 파트 영향: Plan 전 분석 API가 필요하다.
+- gg AI 파트 영향: Plan 전 분석 API가 필요하다.
 
 **B. Plan 결과 이후에만 AI 분석을 보여준다.**
 
@@ -86,7 +86,7 @@
 ## 응답 형식
 
 ```text
-채강 Codex 선택 결과
+ck Codex 선택 결과
 
 1. AI 오류 설명 입력 payload: A/B/C
    이유:
@@ -106,10 +106,10 @@ Plan/Apply output shape 초안:
 실시간 로그 line shape 초안:
 -
 
-경근 AI 파트가 맞춰야 할 것:
+gg AI 파트가 맞춰야 할 것:
 -
 
-채강 파트가 맞출 것:
+ck 파트가 맞출 것:
 -
 
 수정이 필요한 파일/타입:

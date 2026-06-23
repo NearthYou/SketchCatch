@@ -413,8 +413,8 @@ type Activity = {
 
 AI/보드/IaC/배포를 나눠 구현할 때 아래 규칙을 추가로 지킨다.
 
-- 정현 보드는 `ArchitectureJson`만으로 열릴 수 있어야 한다. AI 전용 metadata를 보드 필수 입력으로 만들지 않는다.
-- 시원 Terraform 생성기는 `ArchitectureJson`과 `ResourceNode.config`를 입력으로 삼고, AI 응답 자체를 원천 진실로 삼지 않는다.
-- 채강 Plan/Apply 화면은 `AiPreDeploymentAnalysisResult`, `AiTerraformErrorExplanationResult`, raw Terraform/AWS output을 분리해서 다룬다.
-- 윤서 플랫폼 화면은 프로젝트 목록이나 알림에서 AI 요약을 보여줄 수 있지만, 원천 데이터는 프로젝트/아키텍처/분석 DTO를 참조한다.
+- jh 보드는 `ArchitectureJson`만으로 열릴 수 있어야 한다. AI 전용 metadata를 보드 필수 입력으로 만들지 않는다.
+- sw Terraform 생성기는 `ArchitectureJson`과 `ResourceNode.config`를 입력으로 삼고, AI 응답 자체를 원천 진실로 삼지 않는다.
+- ck Plan/Apply 화면은 `AiPreDeploymentAnalysisResult`, `AiTerraformErrorExplanationResult`, raw Terraform/AWS output을 분리해서 다룬다.
+- ys 플랫폼 화면은 프로젝트 목록이나 알림에서 AI 요약을 보여줄 수 있지만, 원천 데이터는 프로젝트/아키텍처/분석 DTO를 참조한다.
 - 팀장 공통 API 응답 wrapper가 도입되면 AI 라우트도 같은 wrapper를 따른다. wrapper가 아직 코드에 없으면 기존 Fastify route 스타일을 유지하되, DTO 필드명은 이 문서를 따른다.

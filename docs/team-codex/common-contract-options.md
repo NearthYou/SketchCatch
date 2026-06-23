@@ -1,8 +1,8 @@
 # 팀장 Codex용 공통 계약 선택지
 
-> 상태: 경근 AI 파트와의 호환성 확인을 위한 검토용 선택지다. 추천안은 확정이 아니라 제안이다.
+> 상태: gg AI 파트와의 호환성 확인을 위한 검토용 선택지다. 추천안은 확정이 아니라 제안이다.
 
-너는 SketchCatch 팀장/공통 계약 담당 Codex다. 구현 전에 경근 AI 파트의 DTO, API 응답, 저장 정책이 팀 공통 기준과 맞는지 확인하고 선택지를 골라라.
+너는 SketchCatch 팀장/공통 계약 담당 Codex다. 구현 전에 gg AI 파트의 DTO, API 응답, 저장 정책이 팀 공통 기준과 맞는지 확인하고 선택지를 골라라.
 
 ## 먼저 읽을 문서
 
@@ -20,7 +20,7 @@
 **A. 아직 공통 wrapper가 코드에 없으면 기존 Fastify route 스타일을 유지하고, wrapper 도입 시 일괄 변경한다. (추천)**
 
 - 장점: 현재 코드와 맞고 구현을 막지 않는다.
-- 경근 AI 파트 영향: AI route는 DTO를 명확히 반환하되 wrapper에 강하게 묶이지 않는다.
+- gg AI 파트 영향: AI route는 DTO를 명확히 반환하되 wrapper에 강하게 묶이지 않는다.
 
 **B. 지금 AI route부터 `{ data, error }` wrapper를 새로 도입한다.**
 
@@ -30,14 +30,14 @@
 **C. 모든 route를 먼저 wrapper로 바꾸고 AI를 붙인다.**
 
 - 장점: 가장 일관적이다.
-- 위험: 경근 AI 작업 전에 팀장 범위 리팩터링이 필요하다.
+- 위험: gg AI 작업 전에 팀장 범위 리팩터링이 필요하다.
 
 ### 2. AI DTO 위치
 
 **A. API/프론트가 공유하는 AI DTO는 `packages/types/src/index.ts`에 둔다. (추천)**
 
 - 장점: 타입 출처가 명확하고 팀원 Codex가 같은 타입을 import한다.
-- 경근 AI 파트 영향: 구현 전에 shared type을 먼저 추가한다.
+- gg AI 파트 영향: 구현 전에 shared type을 먼저 추가한다.
 
 **B. AI DTO는 `apps/api` 내부에만 둔다.**
 
@@ -54,7 +54,7 @@
 **A. MVP에서는 AI 결과를 stateless response로 두고 저장하지 않는다. (추천)**
 
 - 장점: DB schema 충돌 없이 시작한다.
-- 경근 AI 파트 영향: 분석 결과 저장 table을 만들지 않는다.
+- gg AI 파트 영향: 분석 결과 저장 table을 만들지 않는다.
 
 **B. Pre-Deployment Analysis 결과만 저장한다.**
 
@@ -122,7 +122,7 @@
 팀 공통 기준으로 확정할 것:
 -
 
-경근 AI 파트가 맞춰야 할 것:
+gg AI 파트가 맞춰야 할 것:
 -
 
 팀장 파트가 맞출 것:

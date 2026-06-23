@@ -1,10 +1,10 @@
-# 경근 AI 파트 MVP 범위 초안
+# gg AI 파트 MVP 범위 초안
 
 > 상태: PR 검토용 초안이다. 팀장과 각 담당자의 선택 결과가 반영되기 전까지 팀 전체의 확정 계약으로 보지 않는다.
 
 ## 결론
 
-경근 파트는 AI 분석 역할표의 비용 추정, 리소스별 비용 분석, 위험도 분석, 보안 설정 검증, Terraform 오류 설명, Terraform 코드 작성 보조, Source Repository 기반 초안 생성을 맡는 방향으로 제안한다. MVP의 기준은 "AI가 분석하고 설명하고 보조한다"이지, "AI가 검증되지 않은 AWS 배포 코드를 마음대로 만든다"가 아니다.
+gg 파트는 AI 분석 역할표의 비용 추정, 리소스별 비용 분석, 위험도 분석, 보안 설정 검증, Terraform 오류 설명, Terraform 코드 작성 보조, Source Repository 기반 초안 생성을 맡는 방향으로 제안한다. MVP의 기준은 "AI가 분석하고 설명하고 보조한다"이지, "AI가 검증되지 않은 AWS 배포 코드를 마음대로 만든다"가 아니다.
 
 핵심 흐름은 다음과 같다.
 
@@ -31,7 +31,7 @@ MVP에서 LLM은 설명 생성, Source Repository 단서 분류, Architecture Dr
    - GitHub 링크에서 얻은 README, package metadata, Dockerfile, compose file 단서를 정적 웹사이트, 단일 EC2 웹 서버, API 서버 + DB 중 하나로 분류
    - 3개 대표 유형에 속하지 않으면 Template 선택 또는 수동 편집으로 유도
 3. LLM Architecture Draft 직접 생성
-   - 결과는 정현 파트의 ArchitectureJson 구조와 호환되어야 한다.
+   - 결과는 jh 파트의 ArchitectureJson 구조와 호환되어야 한다.
    - JSON schema 검증, 지원 Resource 검증, 위험 기본값 보정을 통과해야 한다.
    - 검증 실패 시 LLM 결과를 버리고 Template 기반 Architecture Draft로 fallback한다.
 
@@ -49,7 +49,7 @@ LLM provider와 fallback:
 - OpenAI API key는 서버 환경변수로만 관리하고, 프론트 번들에 포함하지 않는다.
 - provider timeout, API key 누락, rate limit, 비용 제한 초과, JSON 검증 실패가 발생하면 deterministic mock response 또는 Template 기반 결과로 fallback한다.
 - 발표나 QA에서 외부 LLM provider가 실패해도 GitHub 링크 기반 초안 생성, 비용/위험 분석, 오류 설명이 deterministic fallback으로 최소 동작해야 한다.
-- 팀 전체 발표 메인 흐름은 팀 공통 결정이며, 이 문서는 경근 AI 파트가 제공할 fallback과 검증 범위만 정의한다.
+- 팀 전체 발표 메인 흐름은 팀 공통 결정이며, 이 문서는 gg AI 파트가 제공할 fallback과 검증 범위만 정의한다.
 
 호출 흐름:
 
@@ -69,7 +69,7 @@ GitHub 링크 기반 초안 생성이나 fallback Template에서 Architecture Bo
 MVP 깊이:
 
 - 대표 의도는 정적 웹사이트, 단일 EC2 웹 서버, API 서버 + DB 3개로 제한한다.
-- 생성 결과는 자유 텍스트가 아니라 정현 파트의 Diagram JSON 데이터 구조와 호환되는 Architecture Draft JSON이다.
+- 생성 결과는 자유 텍스트가 아니라 jh 파트의 Diagram JSON 데이터 구조와 호환되는 Architecture Draft JSON이다.
 - LLM이 Architecture Draft를 직접 생성할 수 있지만, 검증 실패 시 Template 기반 결과로 대체한다.
 - VPC, Subnet, EC2, RDS, S3, Security Group 정도의 제한된 Resource만 생성한다.
 - 알 수 없는 Source Repository나 유형은 무리해서 생성하지 않고 Template 선택을 유도한다.
@@ -94,7 +94,7 @@ type AiArchitectureDraftResult = {
 ```
 
 - `architectureJson`은 기존 공통 타입을 그대로 사용한다.
-- 정현의 Architecture Board는 `architectureJson`만 받아도 열릴 수 있어야 한다.
+- jh의 Architecture Board는 `architectureJson`만 받아도 열릴 수 있어야 한다.
 - AI 전용 근거와 설명은 `assumptions`, `explanations`, `confidence`, `source`에만 담는다.
 - AI 전용 `resources`, `relationships` 같은 별도 그래프 구조를 만들지 않는다.
 
@@ -179,11 +179,11 @@ Pre-Deployment Check에서 Check Finding을 만들고, AI가 초보자에게 이
 
 비용 책임 경계:
 
-- 경근 파트는 비용 추정, 리소스별 비용 분석, 월 예상 비용 설명을 책임진다.
+- gg 파트는 비용 추정, 리소스별 비용 분석, 월 예상 비용 설명을 책임진다.
 - MVP 비용 추정은 실제 청구액 보장이 아니라 Resource type, instance class, 사용 시간 가정, static price table에 기반한 학습용 추정값이다.
 - 비용 추정기는 static price table을 우선 사용하되, 나중에 AWS Pricing API로 교체할 수 있도록 cost estimator 경계를 둔다.
 - 가격표에 없는 Resource나 설정은 금액을 억지로 만들지 않고 `low`, `medium`, `high` Cost Risk 등급으로 fallback한다.
-- 공통 DB 스키마와 API 응답 형식은 팀장 기준을 따른다. 경근 파트는 비용 분석 결과를 그 공통 형식에 맞춰 제공한다.
+- 공통 DB 스키마와 API 응답 형식은 팀장 기준을 따른다. gg 파트는 비용 분석 결과를 그 공통 형식에 맞춰 제공한다.
 
 MVP 깊이:
 
@@ -254,8 +254,8 @@ type AiPreDeploymentAnalysisResult = {
 
 - 응답은 하나로 합치되, 내부 필드는 비용, 위험, 체크리스트 배열로 분리한다.
 - `resourceId`는 `ArchitectureJson.nodes[].id`와 연결되어야 한다.
-- 채강의 Plan 전 화면은 이 DTO 하나로 비용/위험/체크리스트를 구성한다.
-- 정현의 Architecture Board는 `findings[].resourceId`로 노드별 경고 표시를 할 수 있다.
+- ck의 Plan 전 화면은 이 DTO 하나로 비용/위험/체크리스트를 구성한다.
+- jh의 Architecture Board는 `findings[].resourceId`로 노드별 경고 표시를 할 수 있다.
 - 이 DTO는 Apply 가능 여부의 최종 판정자가 아니라 배포 전 판단 근거를 제공하는 결과다.
 
 ## 5. 오류 설명 / 체크리스트 생성
@@ -313,7 +313,7 @@ type AiTerraformErrorExplanationResult = {
 - `rawMessage`는 숨기지 않는다.
 - `nextActions`는 1-3개로 제한한다.
 - `relatedResourceId`는 오류가 특정 Resource와 연결될 때만 사용한다.
-- 채강의 Deployment History에는 원문, 실행 단계, 성공/실패 상태가 남고, 경근 파트는 그 내용을 사용자 설명으로 바꾼다.
+- ck의 Deployment History에는 원문, 실행 단계, 성공/실패 상태가 남고, gg 파트는 그 내용을 사용자 설명으로 바꾼다.
 
 완료 기준:
 
@@ -323,12 +323,12 @@ type AiTerraformErrorExplanationResult = {
 
 ## 팀 의존성
 
-| 대상 | 경근 파트가 필요한 것 | 경근 파트가 제공하는 것 |
+| 대상 | gg 파트가 필요한 것 | gg 파트가 제공하는 것 |
 | --- | --- | --- |
-| 정현 | Diagram JSON 데이터 구조, Architecture Board 상태 | GitHub 링크 기반 Architecture Draft, Resource 설명 |
-| 시원 | Terraform 코드, 코드 검증 결과, 코드 ↔ 다이어그램 동기화 기준, Terraform State 저장 기준 | Terraform 코드 작성 보조, 코드 위험 지점 설명 |
-| 채강 | AWS 연결 상태, Plan/Apply 결과, 실시간 배포 로그, Terraform/AWS 오류 원문 | 배포 전 비용/위험 분석, Terraform 오류 설명, 체크리스트 |
-| 윤서 | 로그인 사용자, 프로젝트 목록, 템플릿/활동/알림 화면 진입점 | 프로젝트/알림 화면에 표시할 AI 분석 요약 |
+| jh | Diagram JSON 데이터 구조, Architecture Board 상태 | GitHub 링크 기반 Architecture Draft, Resource 설명 |
+| sw | Terraform 코드, 코드 검증 결과, 코드 ↔ 다이어그램 동기화 기준, Terraform State 저장 기준 | Terraform 코드 작성 보조, 코드 위험 지점 설명 |
+| ck | AWS 연결 상태, Plan/Apply 결과, 실시간 배포 로그, Terraform/AWS 오류 원문 | 배포 전 비용/위험 분석, Terraform 오류 설명, 체크리스트 |
+| ys | 로그인 사용자, 프로젝트 목록, 템플릿/활동/알림 화면 진입점 | 프로젝트/알림 화면에 표시할 AI 분석 요약 |
 | 팀장 | 공통 DB 스키마, 공통 API 응답 형식 | AI 분석 결과 DTO 요구사항과 샘플 응답 |
 
 ## 구현 전 팀 호환성 체크
@@ -348,20 +348,20 @@ type AiTerraformErrorExplanationResult = {
 
 구현 전에 반드시 확인해야 하는 호환 지점:
 
-| 지점 | 왜 위험한가 | 경근 Codex가 할 일 | 팀원에게 확인할 것 |
+| 지점 | 왜 위험한가 | gg Codex가 할 일 | 팀원에게 확인할 것 |
 | --- | --- | --- | --- |
-| `ResourceType` 값 | AI가 만든 node를 보드/API/Terraform이 거부할 수 있음 | docs 브랜치에서 shared type과 API Zod schema는 `SUBNET`, `SECURITY_GROUP`, `CLOUDFRONT`까지 맞춘다 | 정현/시원이 같은 문자열을 사용할 수 있는지 확인 |
-| `ResourceNode.config` key | 같은 리소스를 팀원별로 다른 설정 이름으로 읽을 수 있음 | AI template에서 쓰는 key를 문서와 테스트 fixture에 고정한다 | 시원이 Terraform 생성기에 필요한 필수 key 목록을 알려달라고 요청 |
+| `ResourceType` 값 | AI가 만든 node를 보드/API/Terraform이 거부할 수 있음 | docs 브랜치에서 shared type과 API Zod schema는 `SUBNET`, `SECURITY_GROUP`, `CLOUDFRONT`까지 맞춘다 | jh/sw가 같은 문자열을 사용할 수 있는지 확인 |
+| `ResourceNode.config` key | 같은 리소스를 팀원별로 다른 설정 이름으로 읽을 수 있음 | AI template에서 쓰는 key를 문서와 테스트 fixture에 고정한다 | sw가 Terraform 생성기에 필요한 필수 key 목록을 알려달라고 요청 |
 | 공통 API 응답 wrapper | AI route만 다른 응답 모양이면 프론트 연결이 깨짐 | wrapper가 코드에 들어오기 전에는 기존 Fastify route 스타일을 따르고 DTO 필드명을 고정한다 | 팀장에게 공통 응답 wrapper 위치와 예시를 확인 |
-| Plan/Apply raw output | 오류 설명 입력 모양이 채강 파트와 다르면 연동이 깨짐 | `stage`, `rawMessage`, 선택 `relatedResourceId`를 최소 입력으로 받게 한다 | 채강에게 Plan/Apply 결과와 로그 line shape를 확인 |
-| `ArchitectureSnapshot.source` | 저장 시 `github`, `template_fallback` 같은 AI provenance가 뒤섞일 수 있음 | AI 응답의 `source`는 분석 provenance로 유지하고, 저장 source는 팀 공통 값을 따른다 | 팀장/정현에게 저장 source enum 확장 여부 확인 |
+| Plan/Apply raw output | 오류 설명 입력 모양이 ck 파트와 다르면 연동이 깨짐 | `stage`, `rawMessage`, 선택 `relatedResourceId`를 최소 입력으로 받게 한다 | ck에게 Plan/Apply 결과와 로그 line shape를 확인 |
+| `ArchitectureSnapshot.source` | 저장 시 `github`, `template_fallback` 같은 AI provenance가 뒤섞일 수 있음 | AI 응답의 `source`는 분석 provenance로 유지하고, 저장 source는 팀 공통 값을 따른다 | 팀장/jh에게 저장 source enum 확장 여부 확인 |
 | 분석 결과 저장 여부 | DB schema 없이 AI 결과를 저장하려 하면 충돌함 | MVP에서는 stateless 응답으로 시작하고 저장은 별도 합의 전까지 하지 않는다 | 팀장에게 AI 결과 저장 테이블 여부 확인 |
 
-경근은 선택 결과가 돌아오면 `ResourceNode.config` key, 공통 API 응답 wrapper, Plan/Apply output shape, AI 결과 저장 여부를 구현 계획에 반영한다.
+gg는 선택 결과가 돌아오면 `ResourceNode.config` key, 공통 API 응답 wrapper, Plan/Apply output shape, AI 결과 저장 여부를 구현 계획에 반영한다.
 
 ## 5주 구현 순서
 
-1. Week 1: 정현의 Diagram JSON과 호환되는 Architecture Draft 계약, AI 분석 DTO 계약 확정
+1. Week 1: jh의 Diagram JSON과 호환되는 Architecture Draft 계약, AI 분석 DTO 계약 확정
 2. Week 2: GitHub 링크 기반 초안 생성과 Template fallback 구현
 3. Week 3: 비용 추정, 리소스별 비용 분석, 위험도/보안 검증 rule engine 구현
 4. Week 4: Terraform 코드 작성 보조, Terraform 오류 설명, Plan/Apply 입력 연동
@@ -369,7 +369,7 @@ type AiTerraformErrorExplanationResult = {
 
 ## 발표/QA 지원 범위
 
-팀 전체 발표 시나리오는 팀 공통 결정이다. 경근 파트 문서는 전체 발표 순서나 실제 Plan/Apply 노출 여부를 확정하지 않고, AI 파트가 제공할 수 있는 관찰 가능한 데모 단위와 fallback fixture만 정의한다.
+팀 전체 발표 시나리오는 팀 공통 결정이다. gg 파트 문서는 전체 발표 순서나 실제 Plan/Apply 노출 여부를 확정하지 않고, AI 파트가 제공할 수 있는 관찰 가능한 데모 단위와 fallback fixture만 정의한다.
 
 AI 파트가 제공할 수 있는 데모 단위:
 

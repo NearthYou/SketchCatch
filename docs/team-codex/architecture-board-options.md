@@ -1,8 +1,8 @@
-# 정현 Codex용 Architecture Board 선택지
+# jh Codex용 Architecture Board 선택지
 
-> 상태: 경근 AI 파트와의 호환성 확인을 위한 검토용 선택지다. 추천안은 확정이 아니라 제안이다.
+> 상태: gg AI 파트와의 호환성 확인을 위한 검토용 선택지다. 추천안은 확정이 아니라 제안이다.
 
-너는 SketchCatch 정현 파트 Codex다. 구현 전에 경근 AI 파트와 Architecture Board가 같은 계약으로 연결될 수 있는지 확인하고 선택지를 골라라.
+너는 SketchCatch jh 파트 Codex다. 구현 전에 gg AI 파트와 Architecture Board가 같은 계약으로 연결될 수 있는지 확인하고 선택지를 골라라.
 
 ## 먼저 읽을 문서
 
@@ -19,7 +19,7 @@
 
 - 값: `VPC`, `SUBNET`, `EC2`, `RDS`, `S3`, `SECURITY_GROUP`, `CLOUDFRONT`, `LAMBDA`, `UNKNOWN`
 - 장점: AI, 보드, Terraform 생성기, API validation이 같은 문자열을 쓴다.
-- 경근 AI 파트 영향: AI Architecture Draft가 이 값만 생성하면 된다.
+- gg AI 파트 영향: AI Architecture Draft가 이 값만 생성하면 된다.
 
 **B. 보드 내부에서 별도 label/type alias를 둔다.**
 
@@ -54,12 +54,12 @@
 **A. `CheckFinding.resourceId === ArchitectureJson.nodes[].id`로 연결한다. (추천)**
 
 - 장점: AI 분석, 보드 경고, Plan 전 화면이 같은 id를 쓴다.
-- 경근 AI 파트 영향: finding 생성 시 가능하면 `resourceId`를 넣는다.
+- gg AI 파트 영향: finding 생성 시 가능하면 `resourceId`를 넣는다.
 
 **B. node뿐 아니라 edge 경고도 필요하다.**
 
 - 장점: 연결선 문제를 직접 표시할 수 있다.
-- 경근 AI 파트 영향: 별도 `edgeId` 또는 `targetType`이 필요할 수 있다.
+- gg AI 파트 영향: 별도 `edgeId` 또는 `targetType`이 필요할 수 있다.
 
 **C. 경고는 보드 전체 summary로만 표시한다.**
 
@@ -71,12 +71,12 @@
 **A. 보드는 공통 key를 표시하고, 리소스별 상세 검증은 담당 파트가 문서로 맞춘다. (추천)**
 
 - 장점: 보드가 모든 AWS 설정을 알 필요가 없다.
-- 경근 AI 파트 영향: AI template이 쓰는 key를 테스트 fixture에 고정한다.
+- gg AI 파트 영향: AI template이 쓰는 key를 테스트 fixture에 고정한다.
 
 **B. 보드가 리소스별 필수 config를 모두 검증한다.**
 
 - 장점: 사용자가 보드에서 바로 오류를 본다.
-- 위험: 정현 파트가 시원/경근/채강의 검증 책임까지 떠안을 수 있다.
+- 위험: jh 파트가 sw/gg/ck의 검증 책임까지 떠안을 수 있다.
 
 **C. `config`는 자유 JSON으로 두고 검증하지 않는다.**
 
@@ -86,7 +86,7 @@
 ## 응답 형식
 
 ```text
-정현 Codex 선택 결과
+jh Codex 선택 결과
 
 1. ResourceType 호환 방식: A/B/C
    이유:
@@ -100,10 +100,10 @@
 4. ResourceNode.config 편집 책임: A/B/C
    이유:
 
-경근 AI 파트가 맞춰야 할 것:
+gg AI 파트가 맞춰야 할 것:
 -
 
-정현 파트가 맞출 것:
+jh 파트가 맞출 것:
 -
 
 수정이 필요한 파일/타입:
