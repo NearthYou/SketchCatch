@@ -346,6 +346,14 @@ type AiTerraformErrorExplanationResult = {
 - Terraform 오류 설명은 raw output을 숨기지 않고 `AiTerraformErrorExplanationResult.rawMessage`에 보존한다.
 - 실제 Apply, AWS 권한 변경, Terraform 최종본 생성은 AI 파트 책임이 아니다.
 
+팀원 선택 결과 반영:
+
+- jh는 모든 항목 A를 선택했다. gg는 `architectureJson` 단독 입력, 공통 `ResourceType`, `CheckFinding.resourceId` 노드 연결을 기준으로 Architecture Draft와 Finding을 만든다.
+- ck는 모든 항목 A를 선택했다. gg 오류 설명 입력은 `{ stage, rawMessage, relatedResourceId? }`로 제한하고, `stage`는 `validate`, `plan`, `apply`만 우선 지원한다.
+- ys는 A / B / A / C를 선택했다. gg는 프로젝트 목록에 AI 요약을 필수 요구하지 않고, 중요한 AI 이벤트만 Activity 후보로 제공하며, 익명 workspace와 로그인 user 흐름을 모두 고려한다.
+- sw 응답은 `CABCA`로 전달되었으나 현재 sw 문서는 4개 문항이다. gg는 앞 4개를 C / A / B / C로 기록하되, Terraform 생성 원천 입력과 IaC Preview 설명 연결은 구현 전에 sw와 한 번 더 맞춘다.
+- 팀장 선택 결과는 아직 받지 않았다. 공통 API response wrapper, AI DTO 위치, AI 결과 저장 여부는 팀장 응답 전까지 현재 제안 기준을 유지한다.
+
 구현 전에 반드시 확인해야 하는 호환 지점:
 
 | 지점 | 왜 위험한가 | gg Codex가 할 일 | 팀원에게 확인할 것 |
@@ -358,6 +366,24 @@ type AiTerraformErrorExplanationResult = {
 | 분석 결과 저장 여부 | DB schema 없이 AI 결과를 저장하려 하면 충돌함 | MVP에서는 stateless 응답으로 시작하고 저장은 별도 합의 전까지 하지 않는다 | 팀장에게 AI 결과 저장 테이블 여부 확인 |
 
 gg는 선택 결과가 돌아오면 `ResourceNode.config` key, 공통 API 응답 wrapper, Plan/Apply output shape, AI 결과 저장 여부를 구현 계획에 반영한다.
+
+ck가 제안한 Plan/Apply output 최소 연결 기준:
+
+```ts
+type DeploymentStage = "validate" | "plan" | "apply";
+
+type AiTerraformErrorExplanationInput = {
+  stage: DeploymentStage;
+  rawMessage: string;
+  relatedResourceId?: string;
+};
+```
+
+ys가 제안한 중요 AI activity event:
+
+- `ai.architecture_draft_created`
+- `ai.pre_deployment_check_completed`
+- `ai.pre_deployment_check_failed`
 
 ## 5주 구현 순서
 

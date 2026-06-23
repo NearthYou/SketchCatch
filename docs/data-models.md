@@ -331,6 +331,15 @@ type ChecklistItem = {
   relatedFindingIds: string[];
 };
 
+type AiAnalysisSummary = {
+  status: "not_analyzed" | "completed" | "warning" | "failed";
+  highestSeverity: "low" | "medium" | "high" | null;
+  findingCount: number;
+  estimatedMonthlyCost?: MoneyEstimate;
+  summary: string;
+  updatedAt: IsoDateTimeString;
+};
+
 type AiPreDeploymentAnalysisResult = {
   summary: string;
   totalMonthlyEstimate: MoneyEstimate & {
@@ -343,6 +352,8 @@ type AiPreDeploymentAnalysisResult = {
 ```
 
 `CheckFinding.resourceId`는 있으면 반드시 같은 `ArchitectureJson.nodes[].id`를 가리킨다. 보드 경고 표시, Plan 전 화면, 프로젝트 요약은 이 값을 기준으로 연결한다.
+
+`AiAnalysisSummary`는 ys 선택 결과에 따라 프로젝트 목록 필수 필드가 아니다. 프로젝트 상세, 프로젝트 확인 보드, high severity Toast 같은 화면에서 선택적으로 소비한다.
 
 ```ts
 type AiTerraformErrorExplanationResult = {
