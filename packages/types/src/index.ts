@@ -57,7 +57,7 @@ export type Project = {
   updatedAt: IsoDateTimeString;
 };
 
-export type ArchitectureSource = "manual" | "prompt_mock" | "imported";
+export type ArchitectureSource = "manual" | "prompt" | "imported";
 
 export type ArchitectureSnapshot = {
   id: string;
@@ -144,6 +144,110 @@ export type BudgetLimit = {
 };
 
 export type RiskLevel = "low" | "medium" | "high";
+
+export type AiResultSource = "prompt" | "github" | "template_fallback" | "llm_fallback";
+
+export type AiConfidence = "low" | "medium" | "high";
+
+export type AiResultMetadata = {
+  source: AiResultSource;
+  confidence: AiConfidence;
+  assumptions: string[];
+  explanations: string[];
+};
+
+export type AiArchitectureDraftResult = {
+  architectureJson: ArchitectureJson;
+  title: string;
+  metadata: AiResultMetadata;
+};
+
+export type MoneyEstimate = {
+  amount: number;
+  currency: "USD" | "KRW";
+};
+
+export type ResourceCostEstimate = {
+  resourceId: string;
+  resourceType: ResourceType;
+  name: string;
+  monthlyEstimate: MoneyEstimate;
+  costDrivers: string[];
+  explanation: string;
+};
+
+export type CheckFindingCategory =
+  | "cost"
+  | "security"
+  | "configuration"
+  | "permission"
+  | "network"
+  | "performance"
+  | "availability";
+
+export type CheckFinding = {
+  id: string;
+  category: CheckFindingCategory;
+  severity: RiskLevel;
+  resourceId?: string | undefined;
+  title: string;
+  description: string;
+  recommendation: string;
+};
+
+export type ChecklistItemStatus = "pass" | "warning" | "fail";
+
+export type ChecklistItem = {
+  id: string;
+  label: string;
+  status: ChecklistItemStatus;
+  relatedFindingIds: string[];
+};
+
+export type AiPreDeploymentAnalysisResult = {
+  summary: string;
+  totalMonthlyEstimate: MoneyEstimate & {
+    pricingAssumption: string;
+  };
+  resourceCostEstimates: ResourceCostEstimate[];
+  findings: CheckFinding[];
+  checklist: ChecklistItem[];
+};
+
+export type AiTerraformStage = "validate" | "export" | "plan" | "apply";
+
+export type AiTerraformErrorCategory =
+  | "permission"
+  | "credential"
+  | "region_or_resource"
+  | "quota"
+  | "syntax"
+  | "dependency"
+  | "unknown";
+
+export type AiTerraformErrorExplanationResult = {
+  stage: AiTerraformStage;
+  category: AiTerraformErrorCategory;
+  severity: RiskLevel;
+  rawMessage: string;
+  summary: string;
+  likelyCause: string;
+  nextActions: string[];
+  relatedResourceId?: string | undefined;
+};
+
+export type AiTerraformDetectedResource = {
+  terraformType: string;
+  label: string;
+  explanation: string;
+};
+
+export type AiTerraformPreviewExplanationResult = {
+  summary: string;
+  detectedResources: AiTerraformDetectedResource[];
+  findings: CheckFinding[];
+  checklist: ChecklistItem[];
+};
 
 export type PracticeSession = {
   id: string;

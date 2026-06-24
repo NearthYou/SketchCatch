@@ -1,6 +1,29 @@
 :root {
-  color: #1d2433;
-  background: #f7f9fc;
+  --surface-primary: #f7f9fc;
+  --surface-secondary: #ffffff;
+  --surface-elevated: #eef4fb;
+  --text-primary: #1d2433;
+  --text-secondary: #5a667a;
+  --text-tertiary: #7b8798;
+  --border-default: #d8e0ea;
+  --border-subtle: #e8edf4;
+  --accent-primary: #1f6feb;
+  --accent-hover: #1858c9;
+  --status-success: #16803c;
+  --status-warning: #b26a00;
+  --status-error: #c2412d;
+  --status-info: #2c6fbb;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  color: var(--text-primary);
+  background: var(--surface-primary);
   font-family:
     Inter,
     ui-sans-serif,
@@ -27,7 +50,7 @@ a {
 .pageShell,
 .workspaceShell {
   min-height: 100vh;
-  padding: 48px;
+  padding: var(--space-12);
 }
 
 .hero {
@@ -35,17 +58,17 @@ a {
 }
 
 .eyebrow {
-  color: #2c6fbb;
+  color: var(--status-info);
   font-size: 0.875rem;
   font-weight: 700;
-  margin: 0 0 12px;
+  margin: 0 0 var(--space-3);
   text-transform: uppercase;
 }
 
 h1 {
   font-size: 3rem;
   line-height: 1.1;
-  margin: 0 0 16px;
+  margin: 0 0 var(--space-4);
 }
 
 p {
@@ -57,16 +80,16 @@ p {
   align-items: center;
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
-  margin-top: 24px;
+  gap: var(--space-3);
+  margin-top: var(--space-6);
 }
 
 .heroActions button,
 .workspaceLink {
-  background: #1f6feb;
-  border: 1px solid #1f6feb;
+  background: var(--accent-primary);
+  border: 1px solid var(--accent-primary);
   border-radius: 6px;
-  color: #ffffff;
+  color: var(--surface-secondary);
   cursor: pointer;
   display: inline-flex;
   font: inherit;
@@ -75,26 +98,226 @@ p {
 }
 
 .heroActions button {
-  background: #ffffff;
-  color: #1d2433;
+  background: var(--surface-secondary);
+  color: var(--text-primary);
+}
+
+.workspaceHeader {
+  max-width: 880px;
 }
 
 .workspaceGrid {
   display: grid;
-  gap: 16px;
+  gap: var(--space-4);
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  margin-top: 24px;
+  margin-top: var(--space-6);
+}
+
+.workspaceGridWide {
+  align-items: start;
+  grid-template-columns: minmax(280px, 0.9fr) minmax(320px, 1.1fr);
+  max-width: 1440px;
 }
 
 .workspacePanel {
-  background: #ffffff;
-  border: 1px solid #d8e0ea;
+  background: var(--surface-secondary);
+  border: 1px solid var(--border-default);
   border-radius: 8px;
   min-height: 180px;
-  padding: 20px;
+  padding: var(--space-5);
 }
 
 .workspacePanel h2 {
   font-size: 1rem;
+  margin: 0 0 var(--space-4);
+}
+
+.toolPanel,
+.resultPanel,
+.resultStack,
+.resultList {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.fieldLabel {
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.textArea,
+.codeArea,
+.textInput {
+  background: var(--surface-primary);
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font: inherit;
+  line-height: 1.5;
+  padding: var(--space-3);
+  transition:
+    border-color 120ms ease-out,
+    background 120ms ease-out;
+  width: 100%;
+}
+
+.codeArea {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.875rem;
+}
+
+.textArea:focus,
+.codeArea:focus,
+.textInput:focus {
+  background: var(--surface-secondary);
+  border-color: var(--accent-primary);
+  outline: 2px solid var(--surface-elevated);
+}
+
+.primaryButton,
+.secondaryButton {
+  align-items: center;
+  border-radius: 6px;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-weight: 700;
+  justify-content: center;
+  min-height: 44px;
+  padding: var(--space-3) var(--space-4);
+  transition:
+    background 120ms ease-out,
+    border-color 120ms ease-out,
+    color 120ms ease-out;
+}
+
+.primaryButton {
+  background: var(--accent-primary);
+  border: 1px solid var(--accent-primary);
+  color: var(--surface-secondary);
+}
+
+.primaryButton:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.secondaryButton {
+  background: var(--surface-secondary);
+  border: 1px solid var(--border-default);
+  color: var(--text-primary);
+}
+
+.secondaryButton:hover:not(:disabled) {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+
+.primaryButton:disabled,
+.secondaryButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.primaryButton:focus-visible,
+.secondaryButton:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+.emptyState,
+.mutedText {
+  color: var(--text-secondary);
+  font-size: 0.875rem;
   margin: 0;
+}
+
+.resultTitle {
+  font-size: 1rem;
+  font-weight: 700;
+  margin: 0;
+}
+
+.chipRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.resourceChip {
+  background: var(--surface-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: var(--space-2) var(--space-3);
+}
+
+.resultList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.resultList li {
+  border-top: 1px solid var(--border-subtle);
+  display: grid;
+  gap: var(--space-1);
+  padding-top: var(--space-3);
+}
+
+.resultList strong {
+  color: var(--text-primary);
+  font-size: 0.875rem;
+}
+
+.resultList span {
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.errorBanner,
+.loadingBanner {
+  border-radius: 6px;
+  font-size: 0.875rem;
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+}
+
+.errorBanner {
+  background: var(--surface-secondary);
+  border: 1px solid var(--status-error);
+  color: var(--status-error);
+}
+
+.loadingBanner {
+  background: var(--surface-elevated);
+  border: 1px solid var(--border-default);
+  color: var(--text-secondary);
+}
+
+@media (max-width: 860px) {
+  .pageShell,
+  .workspaceShell {
+    padding: var(--space-6);
+  }
+
+  .workspaceGridWide {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 520px) {
+  .pageShell,
+  .workspaceShell {
+    padding: var(--space-4);
+  }
+
+  h1 {
+    font-size: 2.25rem;
+  }
 }
