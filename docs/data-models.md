@@ -8,7 +8,7 @@
 
 다만 현재 SketchCatch의 실제 구현과 제품 전략을 기준으로 아래처럼 수정한다.
 
-- MVP 초반은 로그인 사용자가 아니라 `AnonymousWorkspace` 기반이다. `User`는 인증 도입 시 추가한다.
+- 익명 로그인과 `AnonymousWorkspace`는 도입하지 않는다. 프로젝트 소유자는 인증된 `User`이고, API는 `Authorization: Bearer <accessToken>` 기준으로 권한을 확인한다.
 - `Diagram`은 DB에 이미 `architectures` 테이블로 들어가 있다. 공통 타입 이름은 `ArchitectureSnapshot`으로 두고, 화면에서는 다이어그램 또는 보드라고 불러도 된다.
 - 저장되는 아키텍처 JSON은 `nodes`와 `edges`를 가진 `ArchitectureJson`으로 고정한다.
 - Terraform 원문은 RDS `content` 컬럼에 저장하지 않는다. IaC 파일은 S3에 두고, RDS/API에는 `ProjectAsset` 또는 `TerraformArtifact` 메타데이터와 `objectKey`를 저장한다.
@@ -27,35 +27,55 @@
 | DB 컬럼 | API / 프론트 필드 |
 | --- | --- |
 | `project_id` | `projectId` |
-| `workspace_id` | `workspaceId` |
+| `user_id` | `userId` |
 | `created_at` | `createdAt` |
 | `architecture_json` | `architectureJson` |
 
 ## MVP 모델
 
-3주 안에 구현을 끝내는 일정에서는 아래 모델을 모두 3주차 종료 전까지 코드 기준으로 맞춘다. 다만 `User`, `AwsCredential`, 실제 AWS apply 실행은 인증/권한/비용 사고 방지 설계가 필요하므로 별도 명시가 있을 때만 포함한다.
+3주 안에 구현을 끝내는 일정에서는 아래 모델을 모두 3주차 종료 전까지 코드 기준으로 맞춘다. 다만 `AwsCredential`, 실제 AWS apply 실행은 인증/권한/비용 사고 방지 설계가 필요하므로 별도 명시가 있을 때만 포함한다.
 
 권장 순서:
 
 | 주차 | 구현 모델 | 목적 |
 | --- | --- | --- |
-| 1주차 | `AnonymousWorkspace`, `Project`, `ArchitectureSnapshot`, `ArchitectureJson`, `ResourceNode`, `ResourceEdge` | 프로젝트 생성과 보드 저장 기준 확정 |
+| 1주차 | `User`, `AuthSession`, `Project`, `ArchitectureSnapshot`, `ArchitectureJson`, `ResourceNode`, `ResourceEdge` | 로그인 기반 프로젝트 생성과 보드 저장 기준 확정 |
 | 2주차 | `ProjectAsset`, `TerraformArtifact` | 다이어그램 이미지, Terraform 파일, export 산출물 저장 |
 | 3주차 | `Deployment`, `Template` | 모의/통제된 실행 이력과 템플릿 공유 기준 확정 |
 
-### AnonymousWorkspace
+### User
 
-현재 인증이 없으므로 프로젝트 소유자는 `User`가 아니라 익명 워크스페이스다.
+로그인/회원가입 기능의 사용자 모델이다. 공유 타입의 `User`에는 `passwordHash`를 넣지 않는다.
 
 ```ts
-type AnonymousWorkspace = {
+type User = {
   id: string;
+  username: string;
+  email: string;
+  nickname: string;
   createdAt: IsoDateTimeString;
-  updatedAt: IsoDateTimeString;
 };
 ```
 
-DB 기준: `anonymous_workspaces`
+DB 기준: `users`
+
+DB 내부 테이블에는 `password_hash`, `updated_at`, `deleted_at`이 있을 수 있지만, API DTO와 프론트 상태 객체로는 노출하지 않는다.
+
+### AuthSession
+
+로그인, 회원가입, token refresh 응답에서 사용하는 session DTO다.
+
+```ts
+type AuthSession = {
+  accessToken: string;
+  refreshToken: string;
+  expiresInSeconds: number;
+};
+```
+
+DB 기준: `refresh_tokens`
+
+DB에는 refresh token 원문을 저장하지 않고 hash만 저장한다. access token은 짧은 만료 시간을 가진 서명 token으로 다루며, `projects` 조회와 생성은 access token에서 확인한 `userId`를 사용한다.
 
 ### Project
 
@@ -64,8 +84,7 @@ DB 기준: `anonymous_workspaces`
 ```ts
 type Project = {
   id: string;
-  workspaceId: string;
-  userId?: string;
+  userId: string;
   name: string;
   description: string | null;
   createdAt: IsoDateTimeString;
@@ -75,7 +94,7 @@ type Project = {
 
 DB 기준: `projects`
 
-`userId`는 인증 도입 후 마이그레이션할 수 있도록 선택값으로 둔다. 현재 MVP에서는 `workspaceId`가 필수 소유자 키다.
+`userId`는 필수 소유자 키다. `clientGeneratedWorkspaceId`, `anonymousWorkspaces`, `workspaceId`는 로그인 기반 정책과 맞지 않으므로 사용하지 않는다.
 
 ### ArchitectureSnapshot
 
@@ -237,21 +256,6 @@ type Template = {
 
 아래 모델은 3주 안에 모든 기능을 끝내더라도 기본 구현 범위에서 분리한다. 이유는 CRUD 난이도보다 보안/권한/운영 정책 결정이 더 중요하기 때문이다.
 
-### User
-
-인증 도입 후 추가한다. 공유 타입의 `User`에는 `passwordHash`를 넣지 않는다.
-
-```ts
-type User = {
-  id: string;
-  email: string;
-  nickname: string;
-  createdAt: IsoDateTimeString;
-};
-```
-
-DB 내부 테이블에는 `password_hash`가 있을 수 있지만, API DTO와 프론트 상태 객체로 노출하지 않는다.
-
 ### AwsCredential
 
 실제 AWS 연결이 필요해질 때 추가한다. 초반 MVP에는 넣지 않는다.
@@ -400,8 +404,9 @@ type Activity = {
 
 | 공통 모델 | 현재 DB/API 구현 | 상태 |
 | --- | --- | --- |
-| `AnonymousWorkspace` | `anonymous_workspaces` | 구현됨 |
-| `Project` | `projects` | 구현됨 |
+| `User` | `users`, `/api/auth/*` | 구현됨 |
+| `AuthSession` | `refresh_tokens`, access token DTO | 구현됨 |
+| `Project` | `projects.user_id` | 구현됨 |
 | `ArchitectureSnapshot` | `architectures` | 구현됨 |
 | `ArchitectureJson` | `architectures.architecture_json` | 공유 패키지에 타입 정의됨 |
 | `ResourceNode` | `architectureJson.nodes` 내부 객체 | 공유 패키지에 타입 정의됨 |
@@ -410,7 +415,6 @@ type Activity = {
 | `TerraformArtifact` | `project_assets.asset_type = "terraform_file"` | 저장 모델 구현됨 |
 | `Deployment` | 향후 table/API | 3주차 구현 대상 |
 | `Template` | 향후 table/API | 3주차 구현 대상 |
-| `User` | 향후 auth table/API | 후순위 |
 
 ## 팀 작업 규칙
 
@@ -419,7 +423,7 @@ type Activity = {
 특히 아래 이름은 바꾸지 않는다.
 
 - `projectId`
-- `workspaceId`
+- `userId`
 - `architectureId`
 - `architectureJson`
 - `nodes`

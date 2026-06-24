@@ -5,21 +5,13 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type { ArchitectureJson } from "@sketchcatch/types";
+import { requireCurrentUserId } from "../auth/current-user.js";
 import { requireS3BucketName } from "../config/env.js";
 import { getDatabaseClient } from "../db/client.js";
-import {
-  anonymousWorkspaces,
-  architectures,
-  projectAssets,
-  projects,
-  touchUpdatedAt
-} from "../db/schema.js";
+import { architectures, projectAssets, projects, touchUpdatedAt } from "../db/schema.js";
 import { getS3Client } from "../s3/client.js";
 
-const workspaceIdSchema = z.string().min(1).max(128);
-
 const createProjectBodySchema = z.object({
-  clientGeneratedWorkspaceId: workspaceIdSchema,
   name: z.string().min(1).max(120),
   description: z.string().max(2000).optional()
 });
@@ -60,7 +52,6 @@ const architectureJsonSchema: z.ZodType<ArchitectureJson> = z.object({
 });
 
 const createArchitectureBodySchema = z.object({
-  clientGeneratedWorkspaceId: workspaceIdSchema,
   version: z.number().int().positive().optional(),
   source: z.string().min(1).max(64).default("manual"),
   architectureJson: architectureJsonSchema
@@ -75,7 +66,6 @@ const assetTypeSchema = z.enum([
 ]);
 
 const presignedUploadBodySchema = z.object({
-  clientGeneratedWorkspaceId: workspaceIdSchema,
   architectureId: z.string().uuid().optional(),
   assetType: assetTypeSchema,
   fileName: z.string().min(1).max(255),
@@ -84,28 +74,33 @@ const presignedUploadBodySchema = z.object({
 });
 
 export async function registerProjectRoutes(app: FastifyInstance): Promise<void> {
+  app.get("/projects", async (request) => {
+    const currentUserId = requireCurrentUserId(request);
+    const { db } = getDatabaseClient();
+
+    const userProjects = await db
+      .select()
+      .from(projects)
+      .where(eq(projects.userId, currentUserId))
+      .orderBy(desc(projects.updatedAt));
+
+    return {
+      projects: userProjects
+    };
+  });
+
   app.post("/projects", async (request, reply) => {
+    const currentUserId = requireCurrentUserId(request);
     const body = createProjectBodySchema.parse(request.body);
     const { db } = getDatabaseClient();
-    const projectId = randomUUID();
-
-    await db
-      .insert(anonymousWorkspaces)
-      .values({
-        id: body.clientGeneratedWorkspaceId
-      })
-      .onConflictDoUpdate({
-        target: anonymousWorkspaces.id,
-        set: touchUpdatedAt
-      });
 
     const [project] = await db
       .insert(projects)
       .values({
-        id: projectId,
-        workspaceId: body.clientGeneratedWorkspaceId,
+        id: randomUUID(),
+        userId: currentUserId,
         name: body.name,
-        description: body.description
+        description: body.description ?? null
       })
       .returning();
 
@@ -115,10 +110,14 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
   });
 
   app.get("/projects/:id", async (request, reply) => {
+    const currentUserId = requireCurrentUserId(request);
     const params = routeParamsSchema.parse(request.params);
     const { db } = getDatabaseClient();
 
-    const [project] = await db.select().from(projects).where(eq(projects.id, params.id));
+    const [project] = await db
+      .select()
+      .from(projects)
+      .where(and(eq(projects.id, params.id), eq(projects.userId, currentUserId)));
 
     if (!project) {
       return reply.status(404).send({
@@ -148,6 +147,7 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
   });
 
   app.post("/projects/:id/architectures", async (request, reply) => {
+    const currentUserId = requireCurrentUserId(request);
     const params = routeParamsSchema.parse(request.params);
     const body = createArchitectureBodySchema.parse(request.body);
     const { db } = getDatabaseClient();
@@ -155,14 +155,12 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
     const [project] = await db
       .select()
       .from(projects)
-      .where(
-        and(eq(projects.id, params.id), eq(projects.workspaceId, body.clientGeneratedWorkspaceId))
-      );
+      .where(and(eq(projects.id, params.id), eq(projects.userId, currentUserId)));
 
     if (!project) {
       return reply.status(404).send({
         error: "not_found",
-        message: "Project not found for workspace"
+        message: "Project not found"
       });
     }
 
@@ -196,6 +194,7 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
   });
 
   app.post("/projects/:id/assets/presigned-upload", async (request, reply) => {
+    const currentUserId = requireCurrentUserId(request);
     const params = routeParamsSchema.parse(request.params);
     const body = presignedUploadBodySchema.parse(request.body);
     const { db } = getDatabaseClient();
@@ -205,14 +204,12 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
     const [project] = await db
       .select()
       .from(projects)
-      .where(
-        and(eq(projects.id, params.id), eq(projects.workspaceId, body.clientGeneratedWorkspaceId))
-      );
+      .where(and(eq(projects.id, params.id), eq(projects.userId, currentUserId)));
 
     if (!project) {
       return reply.status(404).send({
         error: "not_found",
-        message: "Project not found for workspace"
+        message: "Project not found"
       });
     }
 

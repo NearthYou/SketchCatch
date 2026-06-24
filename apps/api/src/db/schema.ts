@@ -1,5 +1,5 @@
 import { relations, sql } from "drizzle-orm";
-import { integer, jsonb, pgEnum, pgTable, text, timestamp, varchar } from "drizzle-orm/pg-core";
+import { boolean, index, integer, jsonb, pgEnum, pgTable, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/pg-core";
 import type { ArchitectureJson } from "@sketchcatch/types";
 
 export const assetTypeEnum = pgEnum("asset_type", [
@@ -10,22 +10,86 @@ export const assetTypeEnum = pgEnum("asset_type", [
   "thumbnail"
 ]);
 
-export const anonymousWorkspaces = pgTable("anonymous_workspaces", {
-  id: varchar("id", { length: 128 }).primaryKey(),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
-});
+export const users = pgTable(
+  "users",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    username: varchar("username", { length: 30 }).notNull(),
+    email: varchar("email", { length: 255 }).notNull(),
+    nickname: varchar("nickname", { length: 40 }).notNull(),
+    passwordHash: text("password_hash").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    deletedAt: timestamp("deleted_at", { withTimezone: true })
+  },
+  (table) => [
+    uniqueIndex("users_username_unique").on(table.username),
+    uniqueIndex("users_email_unique").on(table.email),
+    index("users_deleted_at_idx").on(table.deletedAt)
+  ]
+);
 
-export const projects = pgTable("projects", {
-  id: varchar("id", { length: 36 }).primaryKey(),
-  workspaceId: varchar("workspace_id", { length: 128 })
-    .notNull()
-    .references(() => anonymousWorkspaces.id, { onDelete: "cascade" }),
-  name: varchar("name", { length: 120 }).notNull(),
-  description: text("description"),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
-});
+export const refreshTokens = pgTable(
+  "refresh_tokens",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    userId: varchar("user_id", { length: 36 })
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    userAgent: text("user_agent"),
+    ipAddress: varchar("ip_address", { length: 64 }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [
+    uniqueIndex("refresh_tokens_token_hash_unique").on(table.tokenHash),
+    index("refresh_tokens_user_id_idx").on(table.userId),
+    index("refresh_tokens_expires_at_idx").on(table.expiresAt),
+    index("refresh_tokens_revoked_at_idx").on(table.revokedAt)
+  ]
+);
+
+export const loginAttempts = pgTable(
+  "login_attempts",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    userId: varchar("user_id", { length: 36 }).references(() => users.id, {
+      onDelete: "set null"
+    }),
+    username: varchar("username", { length: 30 }),
+    ipAddress: varchar("ip_address", { length: 64 }),
+    success: boolean("success").notNull().default(false),
+    failureReason: varchar("failure_reason", { length: 80 }),
+    lockedUntil: timestamp("locked_until", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [
+    index("login_attempts_user_id_idx").on(table.userId),
+    index("login_attempts_username_idx").on(table.username),
+    index("login_attempts_ip_address_idx").on(table.ipAddress),
+    index("login_attempts_locked_until_idx").on(table.lockedUntil)
+  ]
+);
+
+export const projects = pgTable(
+  "projects",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    userId: varchar("user_id", { length: 36 })
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    name: varchar("name", { length: 120 }).notNull(),
+    description: text("description"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [
+    index("projects_user_id_idx").on(table.userId),
+    index("projects_updated_at_idx").on(table.updatedAt)
+  ]
+);
 
 export const architectures = pgTable("architectures", {
   id: varchar("id", { length: 36 }).primaryKey(),
@@ -54,14 +118,30 @@ export const projectAssets = pgTable("project_assets", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
 });
 
-export const anonymousWorkspacesRelations = relations(anonymousWorkspaces, ({ many }) => ({
-  projects: many(projects)
+export const usersRelations = relations(users, ({ many }) => ({
+  projects: many(projects),
+  refreshTokens: many(refreshTokens),
+  loginAttempts: many(loginAttempts)
+}));
+
+export const refreshTokensRelations = relations(refreshTokens, ({ one }) => ({
+  user: one(users, {
+    fields: [refreshTokens.userId],
+    references: [users.id]
+  })
+}));
+
+export const loginAttemptsRelations = relations(loginAttempts, ({ one }) => ({
+  user: one(users, {
+    fields: [loginAttempts.userId],
+    references: [users.id]
+  })
 }));
 
 export const projectsRelations = relations(projects, ({ many, one }) => ({
-  workspace: one(anonymousWorkspaces, {
-    fields: [projects.workspaceId],
-    references: [anonymousWorkspaces.id]
+  owner: one(users, {
+    fields: [projects.userId],
+    references: [users.id]
   }),
   architectures: many(architectures),
   assets: many(projectAssets)

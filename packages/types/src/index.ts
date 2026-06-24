@@ -34,23 +34,52 @@ export type ArchitectureJson = {
   edges: ResourceEdge[];
 };
 
-export type AnonymousWorkspace = {
-  id: string;
-  createdAt: IsoDateTimeString;
-  updatedAt: IsoDateTimeString;
-};
-
 export type User = {
   id: string;
+  username: string;
   email: string;
   nickname: string;
   createdAt: IsoDateTimeString;
 };
 
+export type AuthSession = {
+  accessToken: string;
+  refreshToken: string;
+  expiresInSeconds: number;
+};
+
+export type SignupRequest = {
+  username: string;
+  email: string;
+  nickname: string;
+  password: string;
+};
+
+export type LoginRequest = {
+  username: string;
+  password: string;
+};
+
+export type RefreshTokenRequest = {
+  refreshToken: string;
+};
+
+export type LogoutRequest = {
+  refreshToken: string;
+};
+
+export type AuthResponse = {
+  user: User;
+  session: AuthSession;
+};
+
+export type CurrentUserResponse = {
+  user: User;
+};
+
 export type Project = {
   id: string;
-  workspaceId: string;
-  userId?: string | undefined;
+  userId: string;
   name: string;
   description: string | null;
   createdAt: IsoDateTimeString;
