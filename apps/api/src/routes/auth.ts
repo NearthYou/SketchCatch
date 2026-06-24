@@ -1,9 +1,15 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, gt, isNull } from "drizzle-orm";
+import { and, count, desc, eq, gt, gte, isNull } from "drizzle-orm";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import type { AuthResponse, AuthSession, CurrentUserResponse, User } from "@sketchcatch/types";
 import { requireCurrentUserId } from "../auth/current-user.js";
+import {
+  getLoginAttemptWindowStart,
+  getLoginLockExpiresAt,
+  isLoginLocked,
+  shouldLockLogin
+} from "../auth/login-attempt-policy.js";
 import { hashPassword, verifyPassword } from "../auth/password.js";
 import {
   ACCESS_TOKEN_TTL_SECONDS,
@@ -112,14 +118,23 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
     const body = loginBodySchema.parse(request.body);
     const { db } = getDatabaseClient();
 
+    const activeLock = await getActiveLoginLock(db, body.username);
+
+    if (activeLock) {
+      return sendLoginLocked(reply, activeLock);
+    }
+
     const [user] = await db.select().from(users).where(eq(users.username, body.username));
 
     if (!user || user.deletedAt) {
-      await recordLoginAttempt(db, request, {
+      const lockedUntil = await recordFailedLoginAttempt(db, request, {
         username: body.username,
-        success: false,
         failureReason: "invalid_credentials"
       });
+
+      if (lockedUntil) {
+        return sendLoginLocked(reply, lockedUntil);
+      }
 
       return sendUnauthorized(reply, "Username or password is incorrect");
     }
@@ -127,12 +142,15 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
     const passwordMatched = await verifyPassword(body.password, user.passwordHash);
 
     if (!passwordMatched) {
-      await recordLoginAttempt(db, request, {
+      const lockedUntil = await recordFailedLoginAttempt(db, request, {
         userId: user.id,
         username: user.username,
-        success: false,
         failureReason: "invalid_credentials"
       });
+
+      if (lockedUntil) {
+        return sendLoginLocked(reply, lockedUntil);
+      }
 
       return sendUnauthorized(reply, "Username or password is incorrect");
     }
@@ -228,6 +246,58 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
   });
 }
 
+async function getActiveLoginLock(db: Database, username: string): Promise<Date | null> {
+  const [lockedAttempt] = await db
+    .select({
+      lockedUntil: loginAttempts.lockedUntil
+    })
+    .from(loginAttempts)
+    .where(and(eq(loginAttempts.username, username), gt(loginAttempts.lockedUntil, new Date())))
+    .orderBy(desc(loginAttempts.lockedUntil));
+
+  const lockedUntil = lockedAttempt?.lockedUntil ?? null;
+
+  if (!isLoginLocked(lockedUntil)) {
+    return null;
+  }
+
+  return lockedUntil;
+}
+
+async function recordFailedLoginAttempt(
+  db: Database,
+  request: FastifyRequest,
+  attempt: {
+    userId?: string;
+    username: string;
+    failureReason: string;
+  }
+): Promise<Date | null> {
+  const now = new Date();
+  const [result] = await db
+    .select({
+      failedAttemptCount: count()
+    })
+    .from(loginAttempts)
+    .where(
+      and(
+        eq(loginAttempts.username, attempt.username),
+        eq(loginAttempts.success, false),
+        gte(loginAttempts.createdAt, getLoginAttemptWindowStart(now))
+      )
+    );
+  const failedAttemptCount = Number(result?.failedAttemptCount ?? 0) + 1;
+  const lockedUntil = shouldLockLogin(failedAttemptCount) ? getLoginLockExpiresAt(now) : null;
+
+  await recordLoginAttempt(db, request, {
+    ...attempt,
+    success: false,
+    lockedUntil
+  });
+
+  return lockedUntil;
+}
+
 async function createAuthSession(
   db: Database,
   userId: string,
@@ -259,15 +329,17 @@ async function recordLoginAttempt(
     username: string;
     success: boolean;
     failureReason?: string;
+    lockedUntil?: Date | null;
   }
 ): Promise<void> {
   await db.insert(loginAttempts).values({
     id: randomUUID(),
-    userId: attempt.userId,
+    userId: attempt.userId ?? null,
     username: attempt.username,
     ipAddress: request.ip,
     success: attempt.success,
-    failureReason: attempt.failureReason
+    failureReason: attempt.failureReason ?? null,
+    lockedUntil: attempt.lockedUntil ?? null
   });
 }
 
@@ -295,5 +367,13 @@ function sendUnauthorized(reply: FastifyReply, message: string): FastifyReply {
   return reply.status(401).send({
     error: "unauthorized",
     message
+  });
+}
+
+function sendLoginLocked(reply: FastifyReply, lockedUntil: Date): FastifyReply {
+  return reply.status(429).send({
+    error: "too_many_requests",
+    message: "Too many failed login attempts. Try again later.",
+    lockedUntil: lockedUntil.toISOString()
   });
 }
