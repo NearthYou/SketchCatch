@@ -5,7 +5,7 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type { ArchitectureJson } from "@sketchcatch/types";
-import { requireCurrentUserId } from "../auth/current-user.js";
+import { requireActiveUserId } from "../auth/current-user.js";
 import { requireS3BucketName } from "../config/env.js";
 import { getDatabaseClient } from "../db/client.js";
 import { architectures, projectAssets, projects, touchUpdatedAt } from "../db/schema.js";
@@ -75,7 +75,7 @@ const presignedUploadBodySchema = z.object({
 
 export async function registerProjectRoutes(app: FastifyInstance): Promise<void> {
   app.get("/projects", async (request) => {
-    const currentUserId = requireCurrentUserId(request);
+    const currentUserId = await requireActiveUserId(request);
     const { db } = getDatabaseClient();
 
     const userProjects = await db
@@ -90,7 +90,7 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
   });
 
   app.post("/projects", async (request, reply) => {
-    const currentUserId = requireCurrentUserId(request);
+    const currentUserId = await requireActiveUserId(request);
     const body = createProjectBodySchema.parse(request.body);
     const { db } = getDatabaseClient();
 
@@ -110,7 +110,7 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
   });
 
   app.get("/projects/:id", async (request, reply) => {
-    const currentUserId = requireCurrentUserId(request);
+    const currentUserId = await requireActiveUserId(request);
     const params = routeParamsSchema.parse(request.params);
     const { db } = getDatabaseClient();
 
@@ -147,7 +147,7 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
   });
 
   app.post("/projects/:id/architectures", async (request, reply) => {
-    const currentUserId = requireCurrentUserId(request);
+    const currentUserId = await requireActiveUserId(request);
     const params = routeParamsSchema.parse(request.params);
     const body = createArchitectureBodySchema.parse(request.body);
     const { db } = getDatabaseClient();
@@ -194,7 +194,7 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
   });
 
   app.post("/projects/:id/assets/presigned-upload", async (request, reply) => {
-    const currentUserId = requireCurrentUserId(request);
+    const currentUserId = await requireActiveUserId(request);
     const params = routeParamsSchema.parse(request.params);
     const body = presignedUploadBodySchema.parse(request.body);
     const { db } = getDatabaseClient();

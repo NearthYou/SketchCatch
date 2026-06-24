@@ -4,7 +4,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import type { AuthResponse, AuthSession, CurrentUserResponse, User } from "@sketchcatch/types";
 import { deleteStaleRefreshTokens } from "../auth/cleanup.js";
-import { requireCurrentUserId } from "../auth/current-user.js";
+import { requireActiveUserId } from "../auth/current-user.js";
 import {
   getLoginAttemptWindowStart,
   getLoginLockExpiresAt,
@@ -239,7 +239,7 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.post("/auth/logout-all", async (request) => {
-    const currentUserId = requireCurrentUserId(request);
+    const currentUserId = await requireActiveUserId(request);
     const { db } = getDatabaseClient();
 
     await deleteStaleRefreshTokens(db);
@@ -257,7 +257,7 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.get("/auth/me", async (request, reply) => {
-    const currentUserId = requireCurrentUserId(request);
+    const currentUserId = await requireActiveUserId(request);
     const { db } = getDatabaseClient();
 
     const [user] = await db.select().from(users).where(eq(users.id, currentUserId));
@@ -271,6 +271,31 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
     };
 
     return response;
+  });
+
+  app.delete("/auth/me", async (request) => {
+    const currentUserId = await requireActiveUserId(request);
+    const { db } = getDatabaseClient();
+    const deletedAt = new Date();
+
+    await db
+      .update(users)
+      .set({
+        deletedAt,
+        updatedAt: deletedAt
+      })
+      .where(eq(users.id, currentUserId));
+
+    await db
+      .update(refreshTokens)
+      .set({
+        revokedAt: deletedAt
+      })
+      .where(and(eq(refreshTokens.userId, currentUserId), isNull(refreshTokens.revokedAt)));
+
+    return {
+      ok: true
+    };
   });
 }
 
