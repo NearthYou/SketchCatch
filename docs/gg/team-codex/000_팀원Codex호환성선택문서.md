@@ -34,6 +34,6 @@
 ## 공통 기준
 
 - 공통 타입 기준은 [데이터 모델](../data-models.md)이다.
-- gg AI 범위 기준은 [AI 1차 제공 범위](../gg/001_AI파트1차제공범위초안_gg.md)이다.
+- gg AI 범위 기준은 [AI 1차 제공 범위](../001_AI파트1차제공범위초안_gg.md)이다.
 - Codex 작업 절차 기준은 [개발 가이드](../development.md)의 `Codex 협업 호환 절차`다.
 - 실제 AWS apply, Terraform 실행, AWS 권한 변경은 이 문서 묶음에서 결정하지 않는다.
