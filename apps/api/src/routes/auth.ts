@@ -19,7 +19,7 @@ import {
   getRefreshTokenExpiresAt,
   hashToken
 } from "../auth/tokens.js";
-import { type Database, getDatabaseClient } from "../db/client.js";
+import { type Database, type DatabaseClient, getDatabaseClient } from "../db/client.js";
 import { loginAttempts, refreshTokens, users } from "../db/schema.js";
 
 const usernameSchema = z
@@ -56,10 +56,19 @@ type PublicUserRow = Pick<
   "id" | "username" | "email" | "nickname" | "createdAt"
 >;
 
-export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
+type AuthRouteOptions = {
+  getDatabaseClient?: () => DatabaseClient;
+};
+
+export async function registerAuthRoutes(
+  app: FastifyInstance,
+  options: AuthRouteOptions = {}
+): Promise<void> {
+  const getAuthDatabaseClient = options.getDatabaseClient ?? getDatabaseClient;
+
   app.post("/auth/signup", async (request, reply) => {
     const body = signupBodySchema.parse(request.body);
-    const { db } = getDatabaseClient();
+    const { db } = getAuthDatabaseClient();
 
     await deleteStaleRefreshTokens(db);
 
@@ -119,7 +128,7 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
 
   app.post("/auth/login", async (request, reply) => {
     const body = loginBodySchema.parse(request.body);
-    const { db } = getDatabaseClient();
+    const { db } = getAuthDatabaseClient();
 
     await deleteStaleRefreshTokens(db);
 
@@ -177,7 +186,7 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
 
   app.post("/auth/refresh", async (request, reply) => {
     const body = refreshTokenBodySchema.parse(request.body);
-    const { db } = getDatabaseClient();
+    const { db } = getAuthDatabaseClient();
 
     await deleteStaleRefreshTokens(db);
 
@@ -222,7 +231,7 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
 
   app.post("/auth/logout", async (request) => {
     const body = refreshTokenBodySchema.parse(request.body);
-    const { db } = getDatabaseClient();
+    const { db } = getAuthDatabaseClient();
 
     await deleteStaleRefreshTokens(db);
 
@@ -239,8 +248,8 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.post("/auth/logout-all", async (request) => {
-    const currentUserId = await requireActiveUserId(request);
-    const { db } = getDatabaseClient();
+    const currentUserId = await requireActiveUserId(request, getAuthDatabaseClient);
+    const { db } = getAuthDatabaseClient();
 
     await deleteStaleRefreshTokens(db);
 
@@ -257,8 +266,8 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.get("/auth/me", async (request, reply) => {
-    const currentUserId = await requireActiveUserId(request);
-    const { db } = getDatabaseClient();
+    const currentUserId = await requireActiveUserId(request, getAuthDatabaseClient);
+    const { db } = getAuthDatabaseClient();
 
     const [user] = await db.select().from(users).where(eq(users.id, currentUserId));
 
@@ -274,8 +283,8 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.delete("/auth/me", async (request) => {
-    const currentUserId = await requireActiveUserId(request);
-    const { db } = getDatabaseClient();
+    const currentUserId = await requireActiveUserId(request, getAuthDatabaseClient);
+    const { db } = getAuthDatabaseClient();
     const deletedAt = new Date();
 
     await db
