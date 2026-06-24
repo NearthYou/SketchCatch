@@ -77,6 +77,43 @@ DB 기준: `refresh_tokens`
 
 DB에는 refresh token 원문을 저장하지 않고 hash만 저장한다. access token은 짧은 만료 시간을 가진 서명 token으로 다루며, `projects` 조회와 생성은 access token에서 확인한 `userId`를 사용한다.
 
+### API Error Response
+
+프론트가 공통으로 처리하는 API 에러 DTO다. 성공 응답은 각 API DTO를 그대로 반환하고, 실패 응답은 아래 형태로 고정한다.
+
+```ts
+type ApiErrorCode =
+  | "bad_request"
+  | "unauthorized"
+  | "not_found"
+  | "conflict"
+  | "too_many_requests"
+  | "internal_server_error";
+
+type ApiErrorResponse = {
+  error: ApiErrorCode;
+  message: string;
+};
+```
+
+로그인 실패 횟수 제한에 걸린 `429` 응답만 `lockedUntil`을 추가로 포함한다.
+
+```ts
+type LoginLockedErrorResponse = ApiErrorResponse & {
+  error: "too_many_requests";
+  lockedUntil: IsoDateTimeString;
+};
+```
+
+프론트 기준 상태 코드는 아래처럼 처리한다.
+
+| HTTP status | `error` | 의미 |
+| --- | --- | --- |
+| `401` | `unauthorized` | access token 없음, 만료, 삭제된 사용자, 잘못된 로그인 정보 |
+| `404` | `not_found` | 존재하지 않거나 현재 사용자가 접근할 수 없는 리소스 |
+| `409` | `conflict` | 이미 사용 중인 username/email 같은 중복 입력 |
+| `429` | `too_many_requests` | 로그인 실패 횟수 초과, `lockedUntil`까지 재시도 차단 |
+
 ### Project
 
 사용자가 만드는 인프라 설계 프로젝트다.

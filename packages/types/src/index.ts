@@ -1,5 +1,23 @@
 export type IsoDateTimeString = string;
 
+export type ApiErrorCode =
+  | "bad_request"
+  | "unauthorized"
+  | "not_found"
+  | "conflict"
+  | "too_many_requests"
+  | "internal_server_error";
+
+export type ApiErrorResponse = {
+  error: ApiErrorCode;
+  message: string;
+};
+
+export type LoginLockedErrorResponse = ApiErrorResponse & {
+  error: "too_many_requests";
+  lockedUntil: IsoDateTimeString;
+};
+
 export type ResourceType =
   | "VPC"
   | "SUBNET"

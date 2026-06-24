@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import type { ApiErrorResponse, AuthResponse, LoginLockedErrorResponse } from "@sketchcatch/types";
 import { buildApp } from "../app.js";
 import { createAccessToken } from "../auth/tokens.js";
 import { hashPassword } from "../auth/password.js";
@@ -31,10 +32,10 @@ test("POST /api/auth/signup creates a user and session", async () => {
   });
 
   assert.equal(response.statusCode, 201);
-  assert.equal(response.json().user.username, "demo");
-  assert.equal(response.json().user.email, "demo@example.com");
-  assert.equal(typeof response.json().session.accessToken, "string");
-  assert.equal(typeof response.json().session.refreshToken, "string");
+  const body = response.json() as AuthResponse;
+  assertAuthResponse(body);
+  assert.equal(body.user.username, "demo");
+  assert.equal(body.user.email, "demo@example.com");
   assert.equal(fakeDb.userRows.length, 1);
   assert.equal(fakeDb.refreshTokenRows.length, 1);
 
@@ -56,7 +57,7 @@ test("POST /api/auth/signup returns 409 for duplicate username", async () => {
   });
 
   assert.equal(response.statusCode, 409);
-  assert.equal(response.json().error, "conflict");
+  assertErrorResponse(response.json() as ApiErrorResponse, "conflict");
   assert.equal(fakeDb.userRows.length, 0);
 
   await app.close();
@@ -77,7 +78,7 @@ test("POST /api/auth/signup returns 409 for duplicate email", async () => {
   });
 
   assert.equal(response.statusCode, 409);
-  assert.equal(response.json().error, "conflict");
+  assertErrorResponse(response.json() as ApiErrorResponse, "conflict");
   assert.equal(fakeDb.userRows.length, 0);
 
   await app.close();
@@ -102,9 +103,9 @@ test("POST /api/auth/login returns a session for valid credentials", async () =>
   });
 
   assert.equal(response.statusCode, 200);
-  assert.equal(response.json().user.id, USER_ID);
-  assert.equal(typeof response.json().session.accessToken, "string");
-  assert.equal(typeof response.json().session.refreshToken, "string");
+  const body = response.json() as AuthResponse;
+  assertAuthResponse(body);
+  assert.equal(body.user.id, USER_ID);
   assert.equal(fakeDb.loginAttemptRows.at(-1)?.success, true);
   assert.equal(fakeDb.refreshTokenRows.length, 1);
 
@@ -130,7 +131,7 @@ test("POST /api/auth/login returns 401 for wrong password", async () => {
   });
 
   assert.equal(response.statusCode, 401);
-  assert.equal(response.json().error, "unauthorized");
+  assertErrorResponse(response.json() as ApiErrorResponse, "unauthorized");
   assert.equal(fakeDb.loginAttemptRows.at(-1)?.success, false);
   assert.equal(fakeDb.refreshTokenRows.length, 0);
 
@@ -156,8 +157,8 @@ test("POST /api/auth/login returns 429 after five failed attempts", async () => 
   });
 
   assert.equal(response.statusCode, 429);
-  assert.equal(response.json().error, "too_many_requests");
-  assert.equal(typeof response.json().lockedUntil, "string");
+  const body = response.json() as LoginLockedErrorResponse;
+  assertLoginLockedErrorResponse(body);
   assert.ok(fakeDb.loginAttemptRows.at(-1)?.lockedUntil);
 
   await app.close();
@@ -200,7 +201,7 @@ test("GET /api/auth/me returns 401 for a deleted user", async () => {
   });
 
   assert.equal(response.statusCode, 401);
-  assert.equal(response.json().error, "unauthorized");
+  assertErrorResponse(response.json() as ApiErrorResponse, "unauthorized");
 
   await app.close();
 });
@@ -220,7 +221,7 @@ test("GET /api/projects returns 401 for a deleted user", async () => {
   });
 
   assert.equal(response.statusCode, 401);
-  assert.equal(response.json().error, "unauthorized");
+  assertErrorResponse(response.json() as ApiErrorResponse, "unauthorized");
 
   await app.close();
 });
@@ -238,6 +239,41 @@ function authHeaders(userId: string): Record<string, string> {
   return {
     authorization: `Bearer ${createAccessToken(userId)}`
   };
+}
+
+function assertAuthResponse(body: AuthResponse): void {
+  assert.deepEqual(Object.keys(body).sort(), ["session", "user"]);
+  assert.deepEqual(Object.keys(body.user).sort(), [
+    "createdAt",
+    "email",
+    "id",
+    "nickname",
+    "username"
+  ]);
+  assert.deepEqual(Object.keys(body.session).sort(), [
+    "accessToken",
+    "expiresInSeconds",
+    "refreshToken"
+  ]);
+  assert.equal(typeof body.session.accessToken, "string");
+  assert.equal(typeof body.session.refreshToken, "string");
+  assert.equal(typeof body.session.expiresInSeconds, "number");
+}
+
+function assertErrorResponse(
+  body: ApiErrorResponse,
+  expectedError: ApiErrorResponse["error"]
+): void {
+  assert.deepEqual(Object.keys(body).sort(), ["error", "message"]);
+  assert.equal(body.error, expectedError);
+  assert.equal(typeof body.message, "string");
+}
+
+function assertLoginLockedErrorResponse(body: LoginLockedErrorResponse): void {
+  assert.deepEqual(Object.keys(body).sort(), ["error", "lockedUntil", "message"]);
+  assert.equal(body.error, "too_many_requests");
+  assert.equal(typeof body.message, "string");
+  assert.equal(typeof body.lockedUntil, "string");
 }
 
 async function makeUserWithPassword(password: string): Promise<UserRow> {

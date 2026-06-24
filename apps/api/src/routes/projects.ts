@@ -2,9 +2,9 @@ import { randomUUID } from "node:crypto";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { and, desc, eq, sql } from "drizzle-orm";
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
-import type { ArchitectureJson } from "@sketchcatch/types";
+import type { ApiErrorResponse, ArchitectureJson } from "@sketchcatch/types";
 import { requireActiveUserId } from "../auth/current-user.js";
 import { requireS3BucketName } from "../config/env.js";
 import { getDatabaseClient, type DatabaseClient } from "../db/client.js";
@@ -129,10 +129,7 @@ export async function registerProjectRoutes(
       .where(and(eq(projects.id, params.id), eq(projects.userId, currentUserId)));
 
     if (!project) {
-      return reply.status(404).send({
-        error: "not_found",
-        message: "Project not found"
-      });
+      return sendNotFound(reply, "Project not found");
     }
 
     const [projectArchitectures, assets] = await Promise.all([
@@ -167,10 +164,7 @@ export async function registerProjectRoutes(
       .where(and(eq(projects.id, params.id), eq(projects.userId, currentUserId)));
 
     if (!project) {
-      return reply.status(404).send({
-        error: "not_found",
-        message: "Project not found"
-      });
+      return sendNotFound(reply, "Project not found");
     }
 
     const version =
@@ -218,10 +212,7 @@ export async function registerProjectRoutes(
       .where(and(eq(projects.id, params.id), eq(projects.userId, currentUserId)));
 
     if (!project) {
-      return reply.status(404).send({
-        error: "not_found",
-        message: "Project not found"
-      });
+      return sendNotFound(reply, "Project not found");
     }
 
     if (body.architectureId) {
@@ -233,10 +224,7 @@ export async function registerProjectRoutes(
         );
 
       if (!architecture) {
-        return reply.status(404).send({
-          error: "not_found",
-          message: "Architecture not found for project"
-        });
+        return sendNotFound(reply, "Architecture not found for project");
       }
     }
 
@@ -279,6 +267,15 @@ export async function registerProjectRoutes(
       }
     });
   });
+}
+
+function sendNotFound(reply: FastifyReply, message: string): FastifyReply {
+  const response: ApiErrorResponse = {
+    error: "not_found",
+    message
+  };
+
+  return reply.status(404).send(response);
 }
 
 function buildObjectKey(

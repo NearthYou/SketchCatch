@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import type { ApiErrorResponse } from "@sketchcatch/types";
 import { buildApp } from "../app.js";
 import { createAccessToken } from "../auth/tokens.js";
 import type { Database, DatabaseClient } from "../db/client.js";
@@ -34,7 +35,7 @@ test("GET /api/projects returns 401 for a deleted user", async () => {
   });
 
   assert.equal(response.statusCode, 401);
-  assert.equal(response.json().error, "unauthorized");
+  assertErrorResponse(response.json() as ApiErrorResponse, "unauthorized");
 
   await app.close();
 });
@@ -111,7 +112,7 @@ test("GET /api/projects/:id returns 404 for another user's project", async () =>
   });
 
   assert.equal(response.statusCode, 404);
-  assert.equal(response.json().error, "not_found");
+  assertErrorResponse(response.json() as ApiErrorResponse, "not_found");
 
   await app.close();
 });
@@ -140,7 +141,7 @@ test("POST /api/projects/:id/architectures returns 404 for another user's projec
   });
 
   assert.equal(response.statusCode, 404);
-  assert.equal(response.json().error, "not_found");
+  assertErrorResponse(response.json() as ApiErrorResponse, "not_found");
 
   await app.close();
 });
@@ -168,10 +169,19 @@ test("POST /api/projects/:id/assets/presigned-upload returns 404 for another use
   });
 
   assert.equal(response.statusCode, 404);
-  assert.equal(response.json().error, "not_found");
+  assertErrorResponse(response.json() as ApiErrorResponse, "not_found");
 
   await app.close();
 });
+
+function assertErrorResponse(
+  body: ApiErrorResponse,
+  expectedError: ApiErrorResponse["error"]
+): void {
+  assert.deepEqual(Object.keys(body).sort(), ["error", "message"]);
+  assert.equal(body.error, expectedError);
+  assert.equal(typeof body.message, "string");
+}
 
 function authHeaders(userId: string): Record<string, string> {
   return {

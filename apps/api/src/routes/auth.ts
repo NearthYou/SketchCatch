@@ -2,7 +2,14 @@ import { randomUUID } from "node:crypto";
 import { and, count, desc, eq, gt, gte, isNull } from "drizzle-orm";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
-import type { AuthResponse, AuthSession, CurrentUserResponse, User } from "@sketchcatch/types";
+import type {
+  ApiErrorResponse,
+  AuthResponse,
+  AuthSession,
+  CurrentUserResponse,
+  LoginLockedErrorResponse,
+  User
+} from "@sketchcatch/types";
 import { deleteStaleRefreshTokens } from "../auth/cleanup.js";
 import { requireActiveUserId } from "../auth/current-user.js";
 import {
@@ -78,10 +85,12 @@ export async function registerAuthRoutes(
       .where(eq(users.username, body.username));
 
     if (existingUsername) {
-      return reply.status(409).send({
+      const response: ApiErrorResponse = {
         error: "conflict",
         message: "Username already exists"
-      });
+      };
+
+      return reply.status(409).send(response);
     }
 
     const [existingEmail] = await db
@@ -90,10 +99,12 @@ export async function registerAuthRoutes(
       .where(eq(users.email, body.email));
 
     if (existingEmail) {
-      return reply.status(409).send({
+      const response: ApiErrorResponse = {
         error: "conflict",
         message: "Email already exists"
-      });
+      };
+
+      return reply.status(409).send(response);
     }
 
     const [createdUser] = await db
@@ -426,16 +437,20 @@ function getUserAgent(request: FastifyRequest): string | undefined {
 }
 
 function sendUnauthorized(reply: FastifyReply, message: string): FastifyReply {
-  return reply.status(401).send({
+  const response: ApiErrorResponse = {
     error: "unauthorized",
     message
-  });
+  };
+
+  return reply.status(401).send(response);
 }
 
 function sendLoginLocked(reply: FastifyReply, lockedUntil: Date): FastifyReply {
-  return reply.status(429).send({
+  const response: LoginLockedErrorResponse = {
     error: "too_many_requests",
     message: "Too many failed login attempts. Try again later.",
     lockedUntil: lockedUntil.toISOString()
-  });
+  };
+
+  return reply.status(429).send(response);
 }

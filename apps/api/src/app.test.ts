@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import type { ApiErrorResponse } from "@sketchcatch/types";
 import { buildApp } from "./app.js";
 
 process.env.NODE_ENV = "test";
@@ -28,7 +29,7 @@ test("GET /api/projects requires authentication", async () => {
   });
 
   assert.equal(response.statusCode, 401);
-  assert.equal(response.json().error, "unauthorized");
+  assertErrorResponse(response.json() as ApiErrorResponse, "unauthorized");
 
   await app.close();
 });
@@ -42,7 +43,7 @@ test("POST /api/auth/logout-all requires authentication", async () => {
   });
 
   assert.equal(response.statusCode, 401);
-  assert.equal(response.json().error, "unauthorized");
+  assertErrorResponse(response.json() as ApiErrorResponse, "unauthorized");
 
   await app.close();
 });
@@ -56,7 +57,30 @@ test("DELETE /api/auth/me requires authentication", async () => {
   });
 
   assert.equal(response.statusCode, 401);
-  assert.equal(response.json().error, "unauthorized");
+  assertErrorResponse(response.json() as ApiErrorResponse, "unauthorized");
 
   await app.close();
 });
+
+test("unknown routes return the standard 404 error response", async () => {
+  const app = buildApp();
+
+  const response = await app.inject({
+    method: "GET",
+    url: "/api/unknown"
+  });
+
+  assert.equal(response.statusCode, 404);
+  assertErrorResponse(response.json() as ApiErrorResponse, "not_found");
+
+  await app.close();
+});
+
+function assertErrorResponse(
+  body: ApiErrorResponse,
+  expectedError: ApiErrorResponse["error"]
+): void {
+  assert.deepEqual(Object.keys(body).sort(), ["error", "message"]);
+  assert.equal(body.error, expectedError);
+  assert.equal(typeof body.message, "string");
+}
