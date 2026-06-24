@@ -228,6 +228,22 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
     };
   });
 
+  app.post("/auth/logout-all", async (request) => {
+    const currentUserId = requireCurrentUserId(request);
+    const { db } = getDatabaseClient();
+
+    await db
+      .update(refreshTokens)
+      .set({
+        revokedAt: new Date()
+      })
+      .where(and(eq(refreshTokens.userId, currentUserId), isNull(refreshTokens.revokedAt)));
+
+    return {
+      ok: true
+    };
+  });
+
   app.get("/auth/me", async (request, reply) => {
     const currentUserId = requireCurrentUserId(request);
     const { db } = getDatabaseClient();

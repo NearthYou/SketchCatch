@@ -32,3 +32,17 @@ test("GET /api/projects requires authentication", async () => {
 
   await app.close();
 });
+
+test("POST /api/auth/logout-all requires authentication", async () => {
+  const app = buildApp();
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/auth/logout-all"
+  });
+
+  assert.equal(response.statusCode, 401);
+  assert.equal(response.json().error, "unauthorized");
+
+  await app.close();
+});
