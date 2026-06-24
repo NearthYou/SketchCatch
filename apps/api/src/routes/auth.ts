@@ -3,6 +3,7 @@ import { and, count, desc, eq, gt, gte, isNull } from "drizzle-orm";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import type { AuthResponse, AuthSession, CurrentUserResponse, User } from "@sketchcatch/types";
+import { deleteStaleRefreshTokens } from "../auth/cleanup.js";
 import { requireCurrentUserId } from "../auth/current-user.js";
 import {
   getLoginAttemptWindowStart,
@@ -59,6 +60,8 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
   app.post("/auth/signup", async (request, reply) => {
     const body = signupBodySchema.parse(request.body);
     const { db } = getDatabaseClient();
+
+    await deleteStaleRefreshTokens(db);
 
     const [existingUsername] = await db
       .select({ id: users.id })
@@ -118,6 +121,8 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
     const body = loginBodySchema.parse(request.body);
     const { db } = getDatabaseClient();
 
+    await deleteStaleRefreshTokens(db);
+
     const activeLock = await getActiveLoginLock(db, body.username);
 
     if (activeLock) {
@@ -173,6 +178,9 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
   app.post("/auth/refresh", async (request, reply) => {
     const body = refreshTokenBodySchema.parse(request.body);
     const { db } = getDatabaseClient();
+
+    await deleteStaleRefreshTokens(db);
+
     const tokenHash = hashToken(body.refreshToken);
 
     const [storedToken] = await db
@@ -216,6 +224,8 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
     const body = refreshTokenBodySchema.parse(request.body);
     const { db } = getDatabaseClient();
 
+    await deleteStaleRefreshTokens(db);
+
     await db
       .update(refreshTokens)
       .set({
@@ -231,6 +241,8 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
   app.post("/auth/logout-all", async (request) => {
     const currentUserId = requireCurrentUserId(request);
     const { db } = getDatabaseClient();
+
+    await deleteStaleRefreshTokens(db);
 
     await db
       .update(refreshTokens)
