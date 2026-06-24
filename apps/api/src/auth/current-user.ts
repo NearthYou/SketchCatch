@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import type { FastifyRequest } from "fastify";
-import { getDatabaseClient } from "../db/client.js";
+import { getDatabaseClient, type DatabaseClient } from "../db/client.js";
 import { users } from "../db/schema.js";
 import { verifyAccessToken } from "./tokens.js";
 
@@ -37,9 +37,12 @@ export function requireCurrentUserId(request: FastifyRequest): string {
   return currentUserId;
 }
 
-export async function requireActiveUserId(request: FastifyRequest): Promise<string> {
+export async function requireActiveUserId(
+  request: FastifyRequest,
+  getAuthDatabaseClient: () => DatabaseClient = getDatabaseClient
+): Promise<string> {
   const currentUserId = requireCurrentUserId(request);
-  const { db } = getDatabaseClient();
+  const { db } = getAuthDatabaseClient();
   const [user] = await db
     .select({
       id: users.id,

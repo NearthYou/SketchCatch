@@ -1,10 +1,15 @@
 import Fastify, { type FastifyInstance } from "fastify";
 import { ZodError } from "zod";
+import type { DatabaseClient } from "./db/client.js";
 import { registerHealthRoutes } from "./routes/health.js";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { registerProjectRoutes } from "./routes/projects.js";
 
-export function buildApp(): FastifyInstance {
+export type BuildAppOptions = {
+  getDatabaseClient?: () => DatabaseClient;
+};
+
+export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   const app = Fastify({
     logger: process.env.NODE_ENV !== "test"
   });
@@ -34,7 +39,10 @@ export function buildApp(): FastifyInstance {
 
   app.register(registerHealthRoutes);
   app.register(registerAuthRoutes, { prefix: "/api" });
-  app.register(registerProjectRoutes, { prefix: "/api" });
+  app.register(registerProjectRoutes, {
+    prefix: "/api",
+    getDatabaseClient: options.getDatabaseClient
+  });
 
   return app;
 }

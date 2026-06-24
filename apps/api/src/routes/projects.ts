@@ -7,7 +7,7 @@ import { z } from "zod";
 import type { ArchitectureJson } from "@sketchcatch/types";
 import { requireActiveUserId } from "../auth/current-user.js";
 import { requireS3BucketName } from "../config/env.js";
-import { getDatabaseClient } from "../db/client.js";
+import { getDatabaseClient, type DatabaseClient } from "../db/client.js";
 import { architectures, projectAssets, projects, touchUpdatedAt } from "../db/schema.js";
 import { getS3Client } from "../s3/client.js";
 
@@ -73,10 +73,19 @@ const presignedUploadBodySchema = z.object({
   byteSize: z.number().int().positive().optional()
 });
 
-export async function registerProjectRoutes(app: FastifyInstance): Promise<void> {
+type ProjectRouteOptions = {
+  getDatabaseClient?: () => DatabaseClient;
+};
+
+export async function registerProjectRoutes(
+  app: FastifyInstance,
+  options: ProjectRouteOptions = {}
+): Promise<void> {
+  const getProjectDatabaseClient = options.getDatabaseClient ?? getDatabaseClient;
+
   app.get("/projects", async (request) => {
-    const currentUserId = await requireActiveUserId(request);
-    const { db } = getDatabaseClient();
+    const currentUserId = await requireActiveUserId(request, getProjectDatabaseClient);
+    const { db } = getProjectDatabaseClient();
 
     const userProjects = await db
       .select()
@@ -90,9 +99,9 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
   });
 
   app.post("/projects", async (request, reply) => {
-    const currentUserId = await requireActiveUserId(request);
+    const currentUserId = await requireActiveUserId(request, getProjectDatabaseClient);
     const body = createProjectBodySchema.parse(request.body);
-    const { db } = getDatabaseClient();
+    const { db } = getProjectDatabaseClient();
 
     const [project] = await db
       .insert(projects)
@@ -110,9 +119,9 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
   });
 
   app.get("/projects/:id", async (request, reply) => {
-    const currentUserId = await requireActiveUserId(request);
+    const currentUserId = await requireActiveUserId(request, getProjectDatabaseClient);
     const params = routeParamsSchema.parse(request.params);
-    const { db } = getDatabaseClient();
+    const { db } = getProjectDatabaseClient();
 
     const [project] = await db
       .select()
@@ -147,10 +156,10 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
   });
 
   app.post("/projects/:id/architectures", async (request, reply) => {
-    const currentUserId = await requireActiveUserId(request);
+    const currentUserId = await requireActiveUserId(request, getProjectDatabaseClient);
     const params = routeParamsSchema.parse(request.params);
     const body = createArchitectureBodySchema.parse(request.body);
-    const { db } = getDatabaseClient();
+    const { db } = getProjectDatabaseClient();
 
     const [project] = await db
       .select()
@@ -186,7 +195,10 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
       })
       .returning();
 
-    await db.update(projects).set(touchUpdatedAt).where(eq(projects.id, params.id));
+    await db
+      .update(projects)
+      .set(touchUpdatedAt)
+      .where(and(eq(projects.id, params.id), eq(projects.userId, currentUserId)));
 
     return reply.status(201).send({
       architecture
@@ -194,11 +206,10 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
   });
 
   app.post("/projects/:id/assets/presigned-upload", async (request, reply) => {
-    const currentUserId = await requireActiveUserId(request);
+    const currentUserId = await requireActiveUserId(request, getProjectDatabaseClient);
     const params = routeParamsSchema.parse(request.params);
     const body = presignedUploadBodySchema.parse(request.body);
-    const { db } = getDatabaseClient();
-    const bucketName = requireS3BucketName();
+    const { db } = getProjectDatabaseClient();
     const assetId = randomUUID();
 
     const [project] = await db
@@ -229,6 +240,7 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
       }
     }
 
+    const bucketName = requireS3BucketName();
     const objectKey = buildObjectKey(params.id, body.assetType, assetId, body.fileName);
 
     const [asset] = await db
