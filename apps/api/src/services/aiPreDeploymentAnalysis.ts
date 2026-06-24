@@ -18,7 +18,7 @@ export function analyzePreDeployment(architectureJson: ArchitectureJson): AiPreD
     totalMonthlyEstimate: {
       amount: 0,
       currency: "USD",
-      pricingAssumption: "MVP fallback은 실제 AWS 가격 API 없이 위험 분석 중심으로 0 USD를 반환합니다."
+      pricingAssumption: "1차 제공 fallback은 실제 AWS 가격 API 없이 위험 분석 중심으로 0 USD를 반환합니다."
     },
     resourceCostEstimates,
     findings,

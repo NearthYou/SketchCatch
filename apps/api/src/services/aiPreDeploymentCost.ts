@@ -43,7 +43,7 @@ export function createResourceCostEstimate(node: ResourceNode): ResourceCostEsti
         currency: "USD"
       },
       costDrivers: ["DB instance runtime", "allocated storage"],
-      explanation: "MVP fallback은 작은 RDS 인스턴스 기준의 보수적 월 예상 비용을 제공합니다."
+      explanation: "1차 제공 fallback은 작은 RDS 인스턴스 기준의 보수적 월 예상 비용을 제공합니다."
     };
   }
 

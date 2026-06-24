@@ -1,7 +1,7 @@
 # AI 개발 마일스톤 PRD
 
-> 대상: gg AI 파트 구현 브랜치 `feat/gg/12-ai-analyze`
-> 연결 이슈: #12 `Feat: gg AI 분석 MVP 구현`
+> 대상: gg AI 파트 1차 제공 구현
+> 연결 이슈: #21 `Feat: 자연어 요구사항 기반 인프라 그래프 생성`은 Milestone 2 범위에 해당
 
 ## 문제 정의
 
@@ -13,16 +13,18 @@
 
 팀 관점에서도 gg AI 파트가 먼저 안정적인 응답 계약을 제공하지 않으면 Architecture Board, Terraform 변환, Deployment 실행, 플랫폼 화면이 서로 다른 JSON 모양을 기대하게 된다. 그러면 연결 단계에서 `ResourceType`, `resourceId`, `ArchitectureJson`, 오류 설명 payload가 어긋난다.
 
-또한 외부 LLM provider에 바로 의존하면 발표나 QA에서 API key 누락, timeout, rate limit, JSON 검증 실패 때문에 핵심 흐름이 흔들릴 수 있다. 따라서 MVP에서는 LLM이 모든 것을 자유롭게 생성하는 구조보다, deterministic fallback과 rule engine을 먼저 만들고 LLM은 자연어 해석과 설명 역할로 붙일 수 있는 구조가 필요하다.
+또한 외부 LLM provider에 바로 의존하면 발표나 QA에서 API key 누락, timeout, rate limit, JSON 검증 실패 때문에 핵심 흐름이 흔들릴 수 있다. 따라서 1차 제공에서는 LLM이 모든 것을 자유롭게 생성하는 구조보다, deterministic fallback과 rule engine을 먼저 만들고 LLM은 자연어 해석과 설명 역할로 붙일 수 있는 구조가 필요하다.
 
 ## 해결 방향
 
-gg AI 파트는 실제 AWS Apply를 수행하지 않는다. 대신 Practice Architecture를 기준으로 다음 네 가지를 안전하고 반복 가능한 API 응답으로 제공한다.
+gg AI 파트는 실제 AWS Apply를 수행하지 않는다. 대신 Practice Architecture를 기준으로 다음 여섯 가지를 안전하고 반복 가능한 API 응답으로 제공한다.
 
 1. 자연어 요구사항 기반 Architecture Draft
 2. Pre-Deployment Check
-3. Terraform 오류 설명
-4. Terraform Preview 설명
+3. AI 수정 제안
+4. 기본 Design Simulation
+5. Terraform validate/export 오류 설명
+6. Terraform Preview 설명
 
 구현 순서는 shared type, API DTO/Zod validation, deterministic fallback, rule engine, 오류 설명, optional LLM adapter 순서로 둔다. 이렇게 해야 외부 LLM이 없어도 발표와 QA에서 최소 흐름이 동작하고, 이후 LLM provider를 붙여도 제품 흐름이 깨지지 않는다.
 
@@ -59,7 +61,7 @@ gg AI 파트는 실제 AWS Apply를 수행하지 않는다. 대신 Practice Arch
 - 결과는 Architecture Board가 열 수 있는 `ArchitectureJson`을 포함한다.
 - 알 수 없는 입력은 억지로 생성하지 않고 Template fallback 또는 수동 편집 안내로 처리한다.
 
-MVP 대표 유형:
+1차 대표 유형:
 
 | 유형 | 입력 단서 | 반환할 주요 Resource |
 | --- | --- | --- |
@@ -74,7 +76,7 @@ MVP 대표 유형:
 - `architectureJson.nodes`와 `architectureJson.edges`가 보드에서 열릴 수 있는 구조다.
 - AI 전용 `resources`, `relationships` 같은 별도 그래프 구조를 만들지 않는다.
 - `metadata`에는 source, confidence, assumptions, explanations를 담는다.
-- GitHub 링크는 보조 evidence일 뿐, MVP 핵심 입력으로 주장하지 않는다.
+- GitHub 링크는 보조 evidence일 뿐, 1차 핵심 입력으로 주장하지 않는다.
 
 ### Milestone 3: Pre-Deployment Check rule engine
 
@@ -91,7 +93,7 @@ MVP 대표 유형:
 | SSH `0.0.0.0/0` 허용 | security | high | 누구나 SSH 접근을 시도할 수 있으므로 위험하다. |
 | RDS 포함 | cost | medium | DB는 비용이 커질 수 있다. |
 | 필수 설정 누락 | configuration | medium | Resource 생성이나 설명에 필요한 값이 빠져 있다. |
-| 삭제 계획 누락 | cost | medium | Practice Session 종료 후 비용이 남을 수 있다. |
+| 정리 계획 누락 | cost | medium | 배포 후 Destroy 또는 정리 계획이 없으면 비용이 남을 수 있다. |
 | 예상 트래픽 대비 작은 instance | configuration | medium | 단일 작은 instance가 병목 후보가 될 수 있다. |
 
 완료 기준:
@@ -101,13 +103,49 @@ MVP 대표 유형:
 - 비용 추정은 실제 청구액 보장이 아니라 설계 검토용 추정값임을 설명한다.
 - rule engine 결과는 외부 LLM 없이 재현 가능하다.
 
-### Milestone 4: Terraform 오류 설명
+### Milestone 4: AI 수정 제안과 기본 Design Simulation
 
 목표:
 
-- Terraform validate, plan, apply 단계의 오류 원문을 받아 설명을 반환한다.
+- Check Finding이나 자연어 수정 요청을 바탕으로 적용 가능한 수정 제안을 만든다.
+- 예상 비용, 성능, 보안 영향과 변경 요약을 함께 반환한다.
+- 목표 RPS, 동시 사용자, 월간 트래픽, 예산 같은 입력을 바탕으로 기본 시뮬레이션 결과를 만든다.
+- 사용자가 적용 전 diff를 확인할 수 있도록 변경 요약을 제공한다.
+
+초기 수정 제안:
+
+| 입력 | 제안 방향 |
+| --- | --- |
+| SSH 전체 오픈 | 접근 IP 제한 또는 Bastion 후보 안내 |
+| RDS public 접근 | Private Subnet 이동 제안 |
+| NAT Gateway 비용 위험 | VPC Endpoint 또는 더 단순한 구조 후보 안내 |
+| 단일 EC2 병목 | ALB + Auto Scaling 또는 instance 조정 후보 안내 |
+| 비용 줄여줘 | 고비용 Resource와 대체안을 우선 표시 |
+
+초기 시뮬레이션:
+
+| 입력 | 출력 |
+| --- | --- |
+| 목표 RPS | 병목 후보 Resource |
+| 동시 사용자 | 단일 Resource 집중 위험 |
+| 월간 트래픽 | 예상 비용과 비용 위험 |
+| 예산 | 예산 초과 여부 |
+
+완료 기준:
+
+- 수정 제안은 자동 적용되지 않는다.
+- proposal은 영향 Resource, 비용/성능/보안 영향, 적용 전 변경 요약을 포함한다.
+- 시뮬레이션은 실제 부하 테스트나 실제 청구액 보장이 아니라 설계 검토용 assumption을 명시한다.
+- 수정 제안 적용 후 Pre-Deployment Check를 다시 실행할 수 있는 흐름을 유지한다.
+
+### Milestone 5: Terraform validate/export 오류 설명
+
+목표:
+
+- Terraform validate 또는 export 단계의 오류 원문을 받아 설명을 반환한다.
 - 사용자가 다음에 확인할 행동을 1-3개로 제한해 반환한다.
 - 원문 로그는 보존하되, secret을 다시 노출하지 않는 방향을 유지한다.
+- Terraform Plan/Apply 오류 설명은 같은 DTO로 확장 가능하게 두되, 실제 배포 로그 연동은 2차 제공 범위로 분리한다.
 
 분류할 오류 카테고리:
 
@@ -124,11 +162,11 @@ MVP 대표 유형:
 완료 기준:
 
 - 입력 payload는 `{ stage, rawMessage, relatedResourceId? }` 형태를 따른다.
-- `stage`는 `validate`, `plan`, `apply`만 우선 지원한다.
+- `stage`는 1차 제공에서 `validate`, `export`를 우선 지원하고, 2차 제공에서 `plan`, `apply`로 확장한다.
 - `nextActions`는 1-3개로 제한한다.
 - 분류 확신이 낮으면 억지로 원인을 단정하지 않고 `unknown`으로 둔다.
 
-### Milestone 5: LLM adapter와 fallback 강화
+### Milestone 6: LLM adapter와 fallback 강화
 
 목표:
 
@@ -144,7 +182,7 @@ MVP 대표 유형:
 - 테스트는 실제 LLM provider를 호출하지 않는다.
 - LLM은 Architecture Draft 전체 자유 생성보다 요구사항 의도 분류와 설명 생성을 우선 담당한다.
 
-### Milestone 6: 팀원 연동과 QA 고정
+### Milestone 7: 팀원 연동과 QA 고정
 
 목표:
 
@@ -159,7 +197,9 @@ MVP 대표 유형:
 - 대표 Requirement Prompt fixture가 있다.
 - 대표 Architecture Draft fixture가 있다.
 - 대표 Pre-Deployment Check fixture가 있다.
-- 대표 Terraform 오류 설명 fixture가 있다.
+- 대표 AI 수정 제안 fixture가 있다.
+- 대표 Design Simulation fixture가 있다.
+- 대표 Terraform validate/export 오류 설명 fixture가 있다.
 - 팀원 파트가 필요한 JSON 필드를 문서와 코드에서 같은 이름으로 볼 수 있다.
 
 ## 사용자 이야기
@@ -172,10 +212,10 @@ MVP 대표 유형:
 6. 개발자로서, 배포 전 Security Risk를 보고 싶다. 그래야 open SSH, public database access, public storage 같은 위험을 알아챌 수 있다.
 7. 개발자로서, 예상 트래픽에서 병목 후보를 보고 싶다. 그래야 설계 변경 필요성을 판단할 수 있다.
 8. 개발자로서, 설정 누락 경고를 보고 싶다. 그래야 진행 전에 빠진 Resource 설정을 고칠 수 있다.
-9. 개발자로서, Terraform 오류를 설명받고 싶다. 그래야 무엇이 실패했고 다음에 무엇을 해야 하는지 알 수 있다.
+9. 개발자로서, Terraform validate/export 오류를 설명받고 싶다. 그래야 무엇이 실패했고 다음에 무엇을 해야 하는지 알 수 있다.
 10. Architecture Board 개발자로서, AI Architecture Draft가 `ArchitectureJson`을 사용하길 원한다. 그래야 별도 변환 없이 보드에 그릴 수 있다.
 11. Terraform 변환 개발자로서, AI가 `ArchitectureJson`을 원천 진실로 다루길 원한다. 그래야 Terraform 생성이 deterministic하게 유지된다.
-12. Deployment 실행 개발자로서, Terraform 오류 설명 입력이 최소 payload이길 원한다. 그래야 로그를 masking한 뒤 안전하게 AI layer로 보낼 수 있다.
+12. 2차 Deployment 실행 개발자로서, Terraform Plan/Apply 오류 설명 입력이 최소 payload이길 원한다. 그래야 로그를 masking한 뒤 안전하게 AI layer로 보낼 수 있다.
 13. 플랫폼 개발자로서, AI 요약이 optional이길 원한다. 그래야 프로젝트 목록 API가 AI 저장 정책에 묶이지 않고 가볍게 유지된다.
 14. 백엔드 개발자로서, AI route에 Zod validation이 있길 원한다. 그래야 잘못된 JSON이 analyzer 로직에 들어오기 전에 거절된다.
 15. 발표자로서, 외부 provider 실패 없이도 AI 흐름이 동작하길 원한다. 그래야 데모가 안정적으로 진행된다.
@@ -188,11 +228,13 @@ MVP 대표 유형:
 - AI route는 현재 Fastify route 등록 방식과 error handler 방식을 따른다.
 - 기존 API route가 요청 경계에서 Zod를 사용하므로, AI API 요청 검증도 Zod를 사용한다.
 - shared AI 응답 계약은 API와 프론트가 소비하기 전에 `packages/types`에 먼저 추가한다.
-- 첫 route group은 Architecture Draft, Pre-Deployment Check, Terraform Error Explanation, Terraform Preview Explanation을 포함한다.
+- 첫 route group은 Architecture Draft, Pre-Deployment Check, Terraform validate/export Error Explanation, Terraform Preview Explanation을 포함한다.
 - Architecture Draft fallback은 정적 웹사이트, 단일 EC2 웹 서버, API 서버 + DB, 저비용 스타트업 API 대표 시나리오를 지원한다.
 - Pre-Deployment Check는 LLM 판단만으로 만들지 않고 rule-based finding부터 만든다.
 - 비용 추정은 설계 검토용 추정값이며 실제 청구액 보장이 아니다.
-- Terraform 오류 설명은 알려진 오류 패턴을 먼저 분류하고, 확신이 낮으면 `unknown`으로 fallback한다.
+- AI 수정 제안은 자동 적용하지 않고, 적용 전 diff 확인과 사용자 승인을 전제로 한다.
+- 기본 Design Simulation은 실제 운영 성능 보장이 아니라 설계 검토용 assumption을 포함한다.
+- Terraform validate/export 오류 설명은 알려진 오류 패턴을 먼저 분류하고, 확신이 낮으면 `unknown`으로 fallback한다.
 - LLM 연동은 optional로 두고 timeout, schema validation, fallback behavior 뒤에 둔다.
 - AI layer는 Apply 가능 여부를 결정하지 않는다. 설명, finding, checklist 근거만 제공한다.
 
@@ -202,7 +244,7 @@ MVP 대표 유형:
 - Fastify app instance를 만들고 AI endpoint를 호출한 뒤 status code와 response shape을 검증한다.
 - 기존 API test가 app injection 방식을 사용하므로, AI API test도 별도 서버를 띄우지 않고 같은 방식을 따른다.
 - rule engine은 `ArchitectureJson`을 넣었을 때 기대한 Check Finding과 checklist가 나오는지 외부 결과 기준으로 테스트한다.
-- Terraform 오류 설명은 permission, credential, region_or_resource, quota, syntax, dependency, unknown 대표 raw message로 테스트한다.
+- Terraform validate/export 오류 설명은 syntax, dependency, configuration, unknown 대표 raw message를 우선 테스트한다. permission, credential, region_or_resource, quota는 2차 Plan/Apply 연동 시 확장한다.
 - 테스트는 private helper 이름이나 내부 분기보다 사용자에게 보이는 동작과 계약 모양을 검증한다.
 - LLM 연동이 같은 마일스톤에 포함되더라도 테스트는 실제 provider를 호출하지 않는다.
 
@@ -217,6 +259,7 @@ MVP 대표 유형:
 - 실제 청구 수준의 AWS Pricing API 정확도.
 - 실제 부하 테스트 수준의 성능 보장.
 - deterministic validation 없이 바로 apply 가능한 AI-generated Terraform final code.
+- 사용자 승인 없는 AI 수정안 자동 적용.
 - 모든 AI 설명의 Deployment History 저장.
 - Rollback engine, Auto Cleanup worker, GitOps, CI/CD 배포 자동화, community template 기능, chatbot UI.
 

@@ -57,7 +57,7 @@ export type Project = {
   updatedAt: IsoDateTimeString;
 };
 
-export type ArchitectureSource = "manual" | "prompt_mock" | "imported";
+export type ArchitectureSource = "manual" | "prompt" | "imported";
 
 export type ArchitectureSnapshot = {
   id: string;
@@ -145,7 +145,7 @@ export type BudgetLimit = {
 
 export type RiskLevel = "low" | "medium" | "high";
 
-export type AiResultSource = "github" | "template_fallback" | "llm_fallback";
+export type AiResultSource = "prompt" | "github" | "template_fallback" | "llm_fallback";
 
 export type AiConfidence = "low" | "medium" | "high";
 
@@ -176,7 +176,14 @@ export type ResourceCostEstimate = {
   explanation: string;
 };
 
-export type CheckFindingCategory = "cost" | "security" | "configuration" | "permission";
+export type CheckFindingCategory =
+  | "cost"
+  | "security"
+  | "configuration"
+  | "permission"
+  | "network"
+  | "performance"
+  | "availability";
 
 export type CheckFinding = {
   id: string;
@@ -207,7 +214,7 @@ export type AiPreDeploymentAnalysisResult = {
   checklist: ChecklistItem[];
 };
 
-export type AiTerraformStage = "validate" | "plan" | "apply";
+export type AiTerraformStage = "validate" | "export" | "plan" | "apply";
 
 export type AiTerraformErrorCategory =
   | "permission"

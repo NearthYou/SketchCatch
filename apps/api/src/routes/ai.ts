@@ -66,7 +66,7 @@ const preDeploymentCheckBodySchema = z.object({
 });
 
 const terraformErrorExplanationBodySchema = z.object({
-  stage: z.enum(["validate", "plan", "apply"]),
+  stage: z.enum(["validate", "export", "plan", "apply"]),
   rawMessage: z.string().trim().min(1),
   relatedResourceId: z.string().min(1).optional()
 });

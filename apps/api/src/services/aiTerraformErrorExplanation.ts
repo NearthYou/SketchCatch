@@ -117,7 +117,7 @@ const UNKNOWN_TERRAFORM_ERROR_TEMPLATE: TerraformErrorExplanationTemplate = {
   severity: "medium",
   keywords: [],
   summary: "Terraform 오류를 기본 fallback 설명으로 분류했습니다.",
-  likelyCause: "아직 MVP fallback 규칙에 등록되지 않은 오류입니다.",
+  likelyCause: "아직 1차 제공 fallback 규칙에 등록되지 않은 오류입니다.",
   nextActions: ["원본 오류 메시지를 확인하고 권한, region, quota, 문법 문제를 차례대로 점검하세요."]
 };
 

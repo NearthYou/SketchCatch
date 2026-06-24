@@ -1,21 +1,31 @@
 # AI 고도화 고려사항 초안
 
-> 상태: 코치 피드백을 반영한 PR 검토용 초안이다. MVP에서 제외한 항목을 잊지 않기 위한 참고 문서이며, 팀 전체 로드맵 확정 문서가 아니다.
+> 상태: SketchCatch 서비스 상세 기획서 기준으로 1차 제공에서 제외하거나 후순위로 둔 항목을 잊지 않기 위한 참고 문서이며, 팀 전체 로드맵 확정 문서가 아니다.
 
-이 문서는 gg AI 파트 범위를 정리하면서 MVP 결정에서 끝내지 않고, 이후 고도화 경로와 재검토 조건을 함께 남기기 위한 문서다. MVP 문서에는 지금 구현할 범위를 적고, 이 문서에는 나중에 확장할 때 다시 볼 판단 근거를 적는다.
+이 문서는 gg AI 파트 범위를 정리하면서 1차 제공 결정에서 끝내지 않고, 이후 고도화 경로와 재검토 조건을 함께 남기기 위한 문서다. 1차 범위 문서에는 지금 구현할 범위를 적고, 이 문서에는 나중에 확장할 때 다시 볼 판단 근거를 적는다.
 
 ## 기록 원칙
 
-- MVP 결정은 [AI MVP 범위](./001_AI파트MVP범위초안_gg.md)에 남긴다.
+- 1차 제공 결정은 [AI 1차 제공 범위](./001_AI파트1차제공범위초안_gg.md)에 남긴다.
 - 고도화 방향은 이 문서에 남긴다.
-- 범위 논의 중 MVP에서 제외하거나 후순위로 미룬 선택지는 삭제하지 않고 이 문서에 남긴다.
-- "포기"는 영구 폐기가 아니라 MVP 안전성과 일정 때문에 내린 보류 결정으로 기록한다.
+- 범위 논의 중 1차 제공에서 제외하거나 후순위로 미룬 선택지는 삭제하지 않고 이 문서에 남긴다.
+- "포기"는 영구 폐기가 아니라 1차 제공 안정성과 일정 때문에 내린 보류 결정으로 기록한다.
 - 실제 AWS 비용, 보안, 배포와 연결되는 항목은 안전장치와 실패 fallback을 같이 검토한다.
 - 발표의 기술적 챌린지는 "우리가 처음 해봐서 어려운 기능"이 아니라 "객관적으로 설계 고민이 필요한 기능"을 중심으로 잡는다.
 
+## 상세 기획서 기준 제공 단계
+
+| 단계 | gg AI 관점에서 기억할 것 |
+| --- | --- |
+| 1차 제공 | 자연어 설계, 배포 전 검증, AI 수정 제안, 기본 시뮬레이션, Terraform Preview 설명을 제공한다. 실제 AWS 배포는 열지 않는다. |
+| 1.5차 제공 | Design Version, diff, rollback preview, GitHub 저장과 AI 분석 summary 연결을 검토한다. |
+| 2차 제공 | AWS 계정 연결, 권한 확인, Plan/Apply/Destroy 오류 설명과 배포 전 차단 정책을 연결한다. |
+| 2.5차 제공 | Drift Detection, 모니터링, 비용 변동 알림에 AI 설명을 붙인다. |
+| 3차 이후 | 조직 정책, 승인 플로우, 팀 Template, Template marketplace, 멀티클라우드/Kubernetes 확장을 검토한다. |
+
 ## 자연어 요구사항 기반 인프라 생성
 
-MVP 결정:
+1차 제공 결정:
 
 - 자연어 요구사항 기반 Architecture Draft를 gg AI 파트의 핵심 경로로 올린다.
 - 입력에서 예산, 예상 트래픽, 런타임, DB, 가용성 우선순위, 보안 우선순위를 추출한다.
@@ -37,18 +47,21 @@ MVP 결정:
 
 ## AI 기반 인프라 수정
 
-MVP 결정:
+1차 제공 결정:
 
-- MVP에서는 "초안 생성"과 "위험/비용 설명"을 먼저 구현한다.
-- 기존 Architecture Graph를 AI가 직접 수정하는 기능은 고도화로 둔다.
+- 1차 제공에서는 검증 결과 기반 수정 제안과 대표 자연어 수정 요청을 proposal로 제공한다.
+- AI 수정안은 자동 적용하지 않고, 사용자가 변경 diff를 확인한 뒤 적용한다.
+- 적용 후에는 Pre-Deployment Check를 다시 실행한다.
+- 기존 Architecture Graph를 자유롭게 대규모 수정하는 기능은 고도화로 둔다.
 
 고도화 방향:
 
-- 사용자가 "비용을 줄여줘", "트래픽이 늘어났을 때 버틸 수 있게 바꿔줘", "보안을 강화해줘" 같은 요청을 입력하면 현재 `ArchitectureJson`을 분석한다.
+- 사용자가 "비용을 줄여줘", "트래픽이 늘어났을 때 버틸 수 있게 바꿔줘", "보안을 강화해줘" 같은 요청을 입력하면 현재 `ArchitectureJson`과 직전 Pre-Deployment Check를 함께 분석한다.
 - AI는 즉시 반영하지 않고 변경 proposal을 만든다.
 - 변경 proposal은 추가/수정/삭제될 Resource와 Edge를 명시한다.
 - proposal은 schema validation과 rule engine 검증을 통과해야 적용할 수 있다.
 - 적용 전후 비용, 성능, 보안 차이를 보여준다.
+- 여러 proposal을 비용 우선안, 보안 우선안, 성능 우선안으로 비교한다.
 
 재검토 조건:
 
@@ -58,7 +71,7 @@ MVP 결정:
 
 ## 비용 및 트래픽 시뮬레이션
 
-MVP 결정:
+1차 제공 결정:
 
 - 비용 추정은 static price table과 Resource별 cost driver로 시작한다.
 - 트래픽 시뮬레이션은 실제 부하 테스트가 아니라 그래프 기반 assumption 모델로 시작한다.
@@ -80,10 +93,10 @@ MVP 결정:
 
 ## 인프라 버전 관리
 
-MVP 결정:
+1차 제공 결정:
 
 - 프로젝트 저장과 Architecture Snapshot은 기본으로 둔다.
-- Git처럼 풍부한 branch/merge 모델은 MVP 범위를 넘긴다.
+- Git처럼 풍부한 branch/merge 모델은 1차 제공 범위를 넘긴다.
 
 고도화 방향:
 
@@ -100,7 +113,7 @@ MVP 결정:
 
 ## GitHub 링크 기반 초안 생성
 
-MVP 결정:
+1차 제공 결정:
 
 - GitHub 링크 기반 초안 생성은 핵심 기술적 챌린지에서 내린다.
 - Source Repository는 자연어 요구사항을 보강하는 보조 evidence로만 사용한다.
@@ -127,7 +140,7 @@ MVP 결정:
 
 ## LLM provider와 품질 관리
 
-MVP 결정:
+1차 제공 결정:
 
 - OpenAI API를 기본 provider로 사용한다.
 - 모든 호출은 backend API를 경유한다.
@@ -150,10 +163,10 @@ MVP 결정:
 
 ## 대화형 AI 보조
 
-MVP 결정:
+1차 제공 결정:
 
 - AI 챗봇 화면을 별도 제품 축으로 만들지 않는다.
-- MVP의 AI는 자연어 요구사항 기반 초안 생성, 비용/위험 분석, Terraform 오류 설명처럼 구체적인 작업 흐름 안에서만 동작한다.
+- 1차 제공의 AI는 자연어 요구사항 기반 초안 생성, 비용/위험 분석, Terraform validate/export 오류 설명처럼 구체적인 작업 흐름 안에서만 동작한다.
 
 고도화 방향:
 
@@ -169,7 +182,7 @@ MVP 결정:
 
 ## Terraform 코드 작성 보조
 
-MVP 결정:
+1차 제공 결정:
 
 - AI는 Terraform 최종본을 직접 Apply하지 않는다.
 - sw 파트의 Terraform 생성 결과를 설명하고 위험 지점을 보조한다.
@@ -190,7 +203,7 @@ MVP 결정:
 
 ## 위험도와 보안 검증
 
-MVP 결정:
+1차 제공 결정:
 
 - Cost Risk, Security Risk, configuration, permission finding을 `low`, `medium`, `high`로 분류한다.
 - 룰 엔진이 finding을 만들고 AI는 이유와 수정 가이드를 설명한다.
@@ -210,9 +223,9 @@ MVP 결정:
 
 ## 지원 Resource 확장
 
-MVP 결정:
+1차 제공 결정:
 
-- MVP Architecture Draft와 비용/위험 분석은 제한된 Resource set에서 시작한다.
+- 1차 Architecture Draft와 비용/위험 분석은 제한된 Resource set에서 시작한다.
 - 기본 지원 Resource는 VPC, Subnet, EC2, RDS, S3, Security Group, CloudFront 수준으로 제한한다.
 - 알 수 없는 Resource는 억지로 추정하지 않고 `UNKNOWN` 또는 Template 선택 fallback으로 처리한다.
 
@@ -230,18 +243,18 @@ MVP 결정:
 
 ## 오류 설명
 
-MVP 결정:
+1차 제공 결정:
 
-- 룰 기반 분류기가 Terraform/AWS 오류를 먼저 분류한다.
+- 룰 기반 분류기가 Terraform validate/export 오류를 먼저 분류한다.
 - LLM은 분류 결과, 오류 원문, 실행 단계, 관련 Resource 맥락을 받아 설명과 다음 행동을 만든다.
-- 권한 부족, 인증 문제, region 문제, quota 문제, syntax 문제, Resource 연결 문제부터 처리한다.
+- 1차 제공에서는 syntax, configuration, Resource 연결 문제부터 처리하고, 권한 부족, 인증 문제, region 문제, quota 문제는 Plan/Apply 연동 시 확장한다.
 
-MVP에서 미룬 선택지:
+1차 제공에서 미룬 선택지:
 
 - 카테고리만 붙이고 설명을 거의 만들지 않는 최소형은 사용자 가치가 약해서 선택하지 않았다.
 - 발표 오류 2-3개만 하드코딩하는 데모형은 빠르지만 실제 기능처럼 보기 어려워 선택하지 않았다.
 - 실패한 Apply나 Terraform 오류를 gg 파트 문서에서 메인 발표 흐름으로 확정하는 것은 팀 공통 결정 범위를 침범하므로 하지 않는다.
-- Plan/Apply 로그 전체를 깊게 분석하고 Deployment History와 원인 추적을 완전히 연결하는 방식은 MVP 범위를 넘어서 고도화로 미룬다.
+- Plan/Apply 로그 전체를 깊게 분석하고 Deployment History와 원인 추적을 완전히 연결하는 방식은 2차 제공 이후의 고도화로 미룬다.
 
 고도화 방향:
 

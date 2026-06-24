@@ -373,6 +373,28 @@ test("POST /api/ai/terraform-error-explanation explains AccessDenied as a permis
   await app.close();
 });
 
+test("POST /api/ai/terraform-error-explanation accepts export stage errors", async () => {
+  const app = buildApp();
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/ai/terraform-error-explanation",
+    payload: {
+      stage: "export",
+      rawMessage: "Error: Missing required argument on generated variables.tf"
+    }
+  });
+
+  assert.equal(response.statusCode, 200);
+
+  const body = terraformErrorExplanationResponseSchema.parse(response.json());
+
+  assert.equal(body.stage, "export");
+  assert.equal(body.category, "syntax");
+
+  await app.close();
+});
+
 test("POST /api/ai/terraform-error-explanation classifies common Terraform error categories", async () => {
   const app = buildApp();
 
