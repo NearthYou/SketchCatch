@@ -1,6 +1,6 @@
 import { relations, sql } from "drizzle-orm";
-import { integer, jsonb, pgEnum, pgTable, text, timestamp, varchar, boolean } from "drizzle-orm/pg-core";
-import type { ArchitectureJson, DeploymentPlanSummary  } from "@sketchcatch/types";
+import { boolean, integer, jsonb, pgEnum, pgTable, text, timestamp, varchar } from "drizzle-orm/pg-core";
+import type { ArchitectureJson, DeploymentPlanSummary } from "@sketchcatch/types";
 
 export const assetTypeEnum = pgEnum("asset_type", [
   "diagram_png",
@@ -106,11 +106,9 @@ export const deployments = pgTable("deployments", {
   failureStage: deploymentFailureStageEnum("failure_stage"),
   errorSummary: text("error_summary"),
   approvedAt: timestamp("approved_at", { withTimezone: true }),
-  approvedBy: varchar("approved_by", { length: 128 }),
-    approvedTerraformArtifactId: varchar("approved_terraform_artifact_id", { length: 36 }).references(
-    () => projectAssets.id,
-    { onDelete: "set null" }
-  ),
+  approvedBy: varchar("approved_by", { length: 128 }), 
+    approvedTerraformArtifactId: varchar("approved_terraform_artifact_id", { length: 36 })
+    .references(() => projectAssets.id,{ onDelete: "set null" }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
 });
