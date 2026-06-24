@@ -124,7 +124,7 @@ export const deploymentLogs = pgTable("deployment_logs", {
   message: text("message").notNull(),
   relatedResourceId: varchar("related_resource_id", { length: 128 }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
-})
+});
 
 export const anonymousWorkspacesRelations = relations(anonymousWorkspaces, ({ many }) => ({
   projects: many(projects)

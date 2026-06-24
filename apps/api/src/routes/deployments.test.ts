@@ -4,6 +4,7 @@ import Fastify from "fastify";
 import type { DatabaseClient } from "../db/client.js";
 import type {
   CreateDeploymentRecordInput,
+  DeploymentLogRecord,
   DeploymentRecord,
   DeploymentRepository
 } from "../deployments/deployment-service.js";
@@ -21,6 +22,14 @@ type DeploymentResponse = {
     createdAt: string;
     updatedAt: string;
   };
+};
+
+type DeploymentListResponse = {
+  deployments: DeploymentResponse["deployment"][];
+};
+
+type DeploymentLogsResponse = {
+  logs: DeploymentLogRecord[];
 };
 
 type RepositoryCall =
@@ -47,6 +56,14 @@ type RepositoryCall =
   | {
       name: "findDeploymentById";
       deploymentId: string;
+    }
+  | {
+      name: "listDeploymentsByProject";
+      projectId: string;
+    }
+  | {
+      name: "listDeploymentLogs";
+      deploymentId: string;
     };
 
 const projectId = "11111111-1111-4111-8111-111111111111";
@@ -67,6 +84,8 @@ class FakeDeploymentRepository implements DeploymentRepository {
     assetType: "terraform_file"
   };
   deployment: DeploymentRecord | undefined = createDeploymentRecord(deploymentId);
+  deployments: DeploymentRecord[] = [createDeploymentRecord(deploymentId)];
+  logs: DeploymentLogRecord[] = [];
 
   async findProjectByWorkspace(candidateProjectId: string, candidateWorkspaceId: string) {
     this.calls.push({
@@ -121,6 +140,24 @@ class FakeDeploymentRepository implements DeploymentRepository {
     });
 
     return this.deployment;
+  }
+
+  async listDeploymentsByProject(candidateProjectId: string) {
+    this.calls.push({
+      name: "listDeploymentsByProject",
+      projectId: candidateProjectId
+    });
+
+    return this.deployments;
+  }
+
+  async listDeploymentLogs(candidateDeploymentId: string) {
+    this.calls.push({
+      name: "listDeploymentLogs",
+      deploymentId: candidateDeploymentId
+    });
+
+    return this.logs;
   }
 }
 
@@ -289,6 +326,115 @@ test("GET /api/deployments/:deploymentId maps missing deployments to not_found",
   const response = await app.inject({
     method: "GET",
     url: `/api/deployments/${deploymentId}`
+  });
+
+  assert.equal(response.statusCode, 404);
+  assert.deepEqual(response.json(), {
+    error: "not_found",
+    message: "Deployment not found"
+  });
+  assert.deepEqual(repository.calls, [
+    {
+      name: "findDeploymentById",
+      deploymentId
+    }
+  ]);
+
+  await app.close();
+});
+
+test("GET /api/projects/:projectId/deployments returns project deployments", async () => {
+  const repository = new FakeDeploymentRepository();
+  const app = await buildDeploymentTestApp(repository);
+
+  const response = await app.inject({
+    method: "GET",
+    url: `/api/projects/${projectId}/deployments?clientGeneratedWorkspaceId=${workspaceId}`
+  });
+
+  assert.equal(response.statusCode, 200);
+
+  const body = response.json() as DeploymentListResponse;
+  assert.equal(body.deployments.length, 1);
+  assert.equal(body.deployments[0]?.id, deploymentId);
+  assert.equal(body.deployments[0]?.createdAt, fixedNow.toISOString());
+  assert.equal(body.deployments[0]?.updatedAt, fixedNow.toISOString());
+  assert.deepEqual(repository.calls, [
+    {
+      name: "findProjectByWorkspace",
+      projectId,
+      workspaceId
+    },
+    {
+      name: "listDeploymentsByProject",
+      projectId
+    }
+  ]);
+
+  await app.close();
+});
+
+test("GET /api/projects/:projectId/deployments maps missing project ownership to not_found", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.project = undefined;
+  const app = await buildDeploymentTestApp(repository);
+
+  const response = await app.inject({
+    method: "GET",
+    url: `/api/projects/${projectId}/deployments?clientGeneratedWorkspaceId=${workspaceId}`
+  });
+
+  assert.equal(response.statusCode, 404);
+  assert.deepEqual(response.json(), {
+    error: "not_found",
+    message: "Project not found for workspace"
+  });
+  assert.deepEqual(repository.calls, [
+    {
+      name: "findProjectByWorkspace",
+      projectId,
+      workspaceId
+    }
+  ]);
+
+  await app.close();
+});
+
+test("GET /api/deployments/:deploymentId/logs returns an empty log list", async () => {
+  const repository = new FakeDeploymentRepository();
+  const app = await buildDeploymentTestApp(repository);
+
+  const response = await app.inject({
+    method: "GET",
+    url: `/api/deployments/${deploymentId}/logs`
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(response.json() as DeploymentLogsResponse, {
+    logs: []
+  });
+  assert.deepEqual(repository.calls, [
+    {
+      name: "findDeploymentById",
+      deploymentId
+    },
+    {
+      name: "listDeploymentLogs",
+      deploymentId
+    }
+  ]);
+
+  await app.close();
+});
+
+test("GET /api/deployments/:deploymentId/logs maps missing deployments to not_found", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.deployment = undefined;
+  const app = await buildDeploymentTestApp(repository);
+
+  const response = await app.inject({
+    method: "GET",
+    url: `/api/deployments/${deploymentId}/logs`
   });
 
   assert.equal(response.statusCode, 404);

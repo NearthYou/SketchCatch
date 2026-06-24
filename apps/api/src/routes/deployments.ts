@@ -1,12 +1,21 @@
-import { randomUUID } from "node:crypto";
-import { and, eq } from "drizzle-orm";
-import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { getDatabaseClient } from "../db/client.js";
-import { architectures, deployments, projectAssets, projects } from "../db/schema.js";
-import type { Deployment } from "@sketchcatch/types";
+import type { Deployment, DeploymentLog } from "@sketchcatch/types";
+import type { FastifyReply, FastifyInstance } from "fastify";
+import type { DatabaseClient } from "../db/client.js";
+import {
+  createDeployment,
+  createPostgresDeploymentRepository,
+  DeploymentNotFoundError,
+  getDeployment,
+  listProjectDeployments,
+  listDeploymentLogs,
+  type DeploymentRecord,
+  type DeploymentRepository,
+  type DeploymentLogRecord
+} from "../deployments/deployment-service.js";
 
-type DeploymentRow = typeof deployments.$inferSelect;
+type DeploymentRow = DeploymentRecord;
 const workspaceIdSchema = z.string().min(1).max(128)
 
 const createDeploymentParamsSchema = z.object({
@@ -22,6 +31,36 @@ const createDeploymentBodySchema = z.object({
 const deploymentParamsSchema = z.object({
     deploymentId: z.uuid()
 });
+
+const listDeploymentsParamsSchema = z.object({
+  projectId: z.uuid()
+});
+
+const listDeploymentsQuerySchema = z.object({
+  clientGeneratedWorkspaceId: workspaceIdSchema
+});
+
+type DeploymentRouteOptions = {
+  getDatabaseClient?: () => DatabaseClient;
+  createDeploymentRepository?: (db: DatabaseClient["db"]) => DeploymentRepository;
+};
+
+function getRepository(options: DeploymentRouteOptions | undefined): DeploymentRepository {
+  const client = (options?.getDatabaseClient ?? getDatabaseClient)();
+
+  return options?.createDeploymentRepository?.(client.db) ?? createPostgresDeploymentRepository(client.db);
+}
+
+function handleDeploymentError(error: unknown, reply: FastifyReply) {
+  if (error instanceof DeploymentNotFoundError) {
+    return reply.status(404).send({
+      error: "not_found",
+      message: error instanceof Error ? error.message : "Deployment not found"
+    });
+  }
+
+  throw error;
+}
 
 function toDeployment(row: DeploymentRow): Deployment {
     return {
@@ -44,90 +83,97 @@ function toDeployment(row: DeploymentRow): Deployment {
     };
 }
 
-export async function registerDeploymentRoutes(app: FastifyInstance): Promise<void> {
+function toDeploymentLog(row: DeploymentLogRecord): DeploymentLog {
+  return {
+    id: row.id,
+    deploymentId: row.deploymentId,
+    sequence: row.sequence,
+    stage: row.stage,
+    level: row.level,
+    message: row.message,
+    relatedResourceId: row.relatedResourceId,
+    createdAt: row.createdAt.toISOString()
+  };
+}
+
+export async function registerDeploymentRoutes(
+    app: FastifyInstance,
+    options?: DeploymentRouteOptions
+    ): Promise<void> {
     app.post("/projects/:projectId/deployments", async(request, reply) => {
         const params = createDeploymentParamsSchema.parse(request.params);
         const body = createDeploymentBodySchema.parse(request.body);
-        const { db } = getDatabaseClient();
+        const repository = getRepository(options);
 
-        const [project] = await db.select().from(projects).where(
-            and(
-                eq(projects.id, params.projectId),
-                eq(projects.workspaceId, body.clientGeneratedWorkspaceId)
-            )
-        );
+        try {
+            const deployment = await createDeployment(
+                {
+                    projectId: params.projectId,
+                    clientGeneratedWorkspaceId: body.clientGeneratedWorkspaceId,
+                    architectureId: body.architectureId,
+                    terraformArtifactId: body.terraformArtifactId
+                }, repository
+            );
 
-        if (!project) {
-            return reply.status(404).send({
-                error: "not_found",
-                message: "Project not found for workspace"
+            return reply.status(201).send({
+                deployment: toDeployment(deployment)
             });
         }
+        catch (error) {
+            return handleDeploymentError(error, reply);
+        }
+    });
 
-        const [architecture] = await db.select().from(architectures).where(
-            and(
-                eq(architectures.id, body.architectureId),
-                eq(architectures.projectId, params.projectId)
-            )
-        );
+    app.get("/projects/:projectId/deployments", async(request, reply) => {
+        const params = listDeploymentsParamsSchema.parse(request.params);
+        const query = listDeploymentsQuerySchema.parse(request.query);
+        const repository = getRepository(options);
 
-        if (!architecture) {
-            return reply.status(404).send({
-                error: "not_found",
-                message: "Architecture not found for workspace"
+        try {
+            const deployments = await listProjectDeployments(
+                {
+                    projectId: params.projectId,
+                    clientGeneratedWorkspaceId: query.clientGeneratedWorkspaceId
+                }, repository
+            );
+
+            return reply.status(200).send({
+                deployments: deployments.map(toDeployment)
             });
         }
-
-        const [terraformArtifact] = await db.select().from(projectAssets).where(
-            and(
-                eq(projectAssets.id, body.terraformArtifactId),
-                eq(projectAssets.projectId, params.projectId),
-                eq(projectAssets.architectureId, body.architectureId),
-                eq(projectAssets.assetType, "terraform_file")
-            )
-        );
-
-        if (!terraformArtifact) {
-            return reply.status(404).send({
-                error:"not_found",
-                message: "Terraform Artifact not found for workspace"
-            });
+        catch (error) {
+            return handleDeploymentError(error, reply);
         }
-
-        const [deployment] = await db.insert(deployments).values({
-            id: randomUUID(),
-            projectId: params.projectId,
-            architectureId: body.architectureId,
-            terraformArtifactId: body.terraformArtifactId,
-            status: "PENDING"
-        }).returning();
-
-        if (!deployment) {
-            throw new Error("Deployment creation failed");
-        }
-
-        return reply.status(201).send({
-            deployment: toDeployment(deployment)
-        });
-    })
+    });
 
     app.get("/deployments/:deploymentId", async(request, reply) => {
         const params = deploymentParamsSchema.parse(request.params);
-        const { db } = getDatabaseClient();
+        const repository = getRepository(options);
 
-        const [deployment] = await db.select().from(deployments).where(
-            eq(deployments.id, params.deploymentId)
-        );
+        try {
+            const deployment = await getDeployment(params.deploymentId, repository);
 
-        if (!deployment) {
-            return reply.status(404).send({
-                error: "not_found",
-                message: "Deployment not found"
+            return reply.status(200).send({
+                deployment: toDeployment(deployment)
             });
         }
+        catch (error) {
+            return handleDeploymentError(error, reply);
+        }
+    });
+
+    app.get("/deployments/:deploymentId/logs", async (request, reply) => {
+    const params = deploymentParamsSchema.parse(request.params);
+    const repository = getRepository(options);
+
+    try {
+        const logs = await listDeploymentLogs(params.deploymentId, repository);
 
         return reply.status(200).send({
-            deployment: toDeployment(deployment)
+        logs: logs.map(toDeploymentLog)
         });
+    } catch (error) {
+        return handleDeploymentError(error, reply);
+    }
     });
 }

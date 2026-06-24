@@ -94,7 +94,7 @@ export type TerraformArtifact = ProjectAsset & {
 
 export type DeploymentStatus = "PENDING" | "RUNNING" | "SUCCESS" | "FAILED" | "CANCELLED";
 
-export type Deployment = DeploymentBlock  & {
+export type Deployment = DeploymentBlock & {
   id: string;
   projectId: string;
   architectureId: string;
