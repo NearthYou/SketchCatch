@@ -30,6 +30,15 @@ function toDeployment(row: DeploymentRow): Deployment {
         architectureId: row.architectureId,
         terraformArtifactId: row.terraformArtifactId,
         status: row.status as Deployment["status"],
+        planSummary: row.planSummary,
+        isBlocked: row.isBlocked,
+        blockedBy: row.blockedBy,
+        blockedReason: row.blockedReason,
+        failureStage: row.failureStage,
+        errorSummary: row.errorSummary,
+        approvedAt: row.approvedAt?.toISOString() ?? null,
+        approvedBy: row.approvedBy,
+        approvedTerraformArtifactId: row.approvedTerraformArtifactId,
         createdAt: row.createdAt.toISOString(),
         updatedAt: row.updatedAt.toISOString()
     };

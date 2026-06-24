@@ -20,7 +20,14 @@
       "idx": 2,
       "version": "7",
       "when": 1782234115402,
-      "tag": "0002_edit_deployments.sql",
+      "tag": "0002_edit_deployments",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1782238994626,
+      "tag": "0003_add_deployment_logs_and_plan_fields",
       "breakpoints": true
     }
   ]
