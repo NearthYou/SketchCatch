@@ -531,6 +531,32 @@ input {
   width: 100%;
 }
 
+.authSubmit:disabled,
+.authForm input:disabled {
+  cursor: not-allowed;
+  opacity: 0.68;
+}
+
+.authSubmit:disabled:hover {
+  box-shadow: none;
+  transform: none;
+}
+
+.authMessage {
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 800;
+  line-height: 1.5;
+  margin: 0;
+  padding: 12px 14px;
+}
+
+.authMessageError {
+  background: rgba(248, 113, 113, 0.14);
+  border: 1px solid rgba(248, 113, 113, 0.32);
+  color: #fecaca;
+}
+
 .authSwitch {
   color: rgba(247, 248, 251, 0.66);
   margin: 22px 0 0;
@@ -553,6 +579,64 @@ input {
   font-size: 3rem;
   line-height: 1.1;
   margin: 0 0 16px;
+}
+
+.workspaceTopBar {
+  align-items: center;
+  display: flex;
+  gap: 24px;
+  justify-content: space-between;
+}
+
+.workspaceEyebrow {
+  color: #546179;
+  font-size: 0.78rem;
+  font-weight: 900;
+  letter-spacing: 0;
+  margin: 0 0 8px;
+  text-transform: uppercase;
+}
+
+.workspaceUserPanel {
+  align-items: center;
+  color: #3d495f;
+  display: flex;
+  font-size: 0.95rem;
+  font-weight: 800;
+  gap: 12px;
+}
+
+.workspaceLogout {
+  background: #111827;
+  border: 0;
+  border-radius: 8px;
+  color: #ffffff;
+  cursor: pointer;
+  font-weight: 900;
+  min-height: 40px;
+  padding: 0 14px;
+}
+
+.workspaceMessage {
+  background: #fff1f2;
+  border: 1px solid #fecdd3;
+  border-radius: 8px;
+  color: #9f1239;
+  font-weight: 800;
+  margin: 18px 0 0;
+  padding: 12px 14px;
+}
+
+.workspaceStateShell {
+  align-items: center;
+  display: flex;
+  justify-content: center;
+}
+
+.workspaceStateText {
+  color: #3d495f;
+  font-size: 1rem;
+  font-weight: 900;
 }
 
 .workspaceGrid {
@@ -691,6 +775,12 @@ input {
 
   .authFormGrid {
     grid-template-columns: 1fr;
+  }
+
+  .workspaceTopBar,
+  .workspaceUserPanel {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
 

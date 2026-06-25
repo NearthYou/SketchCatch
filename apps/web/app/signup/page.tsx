@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SignupForm } from "./signup-form";
 
 export default function SignupPage() {
   return (
@@ -13,41 +14,7 @@ export default function SignupPage() {
           <p>AWS 인프라 설계 연습을 프로젝트로 저장하고 안전하게 이어갑니다.</p>
         </div>
 
-        <form className="authForm authFormGrid">
-          <label>
-            아이디
-            <input autoComplete="username" name="username" placeholder="yoonseo" type="text" />
-          </label>
-          <label>
-            닉네임
-            <input autoComplete="nickname" name="nickname" placeholder="ys" type="text" />
-          </label>
-          <label className="fullField">
-            이메일
-            <input autoComplete="email" name="email" placeholder="user@example.com" type="email" />
-          </label>
-          <label>
-            비밀번호
-            <input
-              autoComplete="new-password"
-              name="password"
-              placeholder="Password"
-              type="password"
-            />
-          </label>
-          <label>
-            비밀번호 확인
-            <input
-              autoComplete="new-password"
-              name="passwordConfirm"
-              placeholder="Password"
-              type="password"
-            />
-          </label>
-          <button className="authSubmit fullField" type="submit">
-            회원가입
-          </button>
-        </form>
+        <SignupForm />
 
         <p className="authSwitch">
           이미 계정이 있나요? <Link href="/login">로그인</Link>
