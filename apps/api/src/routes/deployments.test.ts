@@ -151,6 +151,54 @@ class FakeDeploymentRepository implements DeploymentRepository {
     return this.deployments;
   }
 
+  updateDeploymentStatus: DeploymentRepository["updateDeploymentStatus"] = async (_deploymentId, status) => {
+    if (!this.deployment) {
+      return undefined;
+    }
+
+    this.deployment = { ...this.deployment, status };
+
+    return this.deployment;
+  };
+
+  updateDeploymentPlan: DeploymentRepository["updateDeploymentPlan"] = async (_deploymentId, input) => {
+    if (!this.deployment) {
+      return undefined;
+    }
+
+    this.deployment = { ...this.deployment, ...input };
+
+    return this.deployment;
+  };
+
+  approveDeployment: DeploymentRepository["approveDeployment"] = async (_deploymentId, input) => {
+    if (!this.deployment) {
+      return undefined;
+    }
+
+    this.deployment = { ...this.deployment, ...input };
+
+    return this.deployment;
+  };
+
+  failDeployment: DeploymentRepository["failDeployment"] = async (_deploymentId, input) => {
+    if (!this.deployment) {
+      return undefined;
+    }
+
+    this.deployment = { ...this.deployment, status: "FAILED", ...input };
+
+    return this.deployment;
+  };
+
+  createDeploymentLog: DeploymentRepository["createDeploymentLog"] = async (input) => {
+    const deploymentLog = { ...input, createdAt: fixedNow };
+
+    this.logs.push(deploymentLog);
+
+    return deploymentLog;
+  };
+
   async listDeploymentLogs(candidateDeploymentId: string) {
     this.calls.push({
       name: "listDeploymentLogs",

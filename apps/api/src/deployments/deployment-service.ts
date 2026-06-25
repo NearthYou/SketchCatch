@@ -40,9 +40,9 @@ export type DeploymentRepository = {
   createDeployment(input: CreateDeploymentRecordInput): Promise<DeploymentRecord>;
   findDeploymentById(deploymentId: string): Promise<DeploymentRecord | undefined>;
 
-  listDeploymentsByProject?(projectId: string): Promise<DeploymentRecord[]>;
-  updateDeploymentStatus?(deploymentId: string, status: DeploymentStatus): Promise<DeploymentRecord | undefined>;
-  updateDeploymentPlan?(
+  listDeploymentsByProject(projectId: string): Promise<DeploymentRecord[]>;
+  updateDeploymentStatus(deploymentId: string, status: DeploymentStatus): Promise<DeploymentRecord | undefined>;
+  updateDeploymentPlan(
     deploymentId: string,
     input: {
       planSummary: DeploymentPlanSummary | null;
@@ -51,7 +51,7 @@ export type DeploymentRepository = {
       blockedReason: string | null;
     }
   ): Promise<DeploymentRecord | undefined>;
-  approveDeployment?(
+  approveDeployment(
     deploymentId: string,
     input: {
       approvedBy: string;
@@ -59,14 +59,14 @@ export type DeploymentRepository = {
       approvedAt: Date;
     }
   ): Promise<DeploymentRecord | undefined>;
-  failDeployment?(
+  failDeployment(
     deploymentId: string,
     input: {
       failureStage: DeploymentFailureStage;
       errorSummary: string;
     }
   ): Promise<DeploymentRecord | undefined>;
-  createDeploymentLog?(input: {
+  createDeploymentLog(input: {
     id: string;
     deploymentId: string;
     sequence: number;
@@ -75,7 +75,7 @@ export type DeploymentRepository = {
     message: string;
     relatedResourceId: string | null;
   }): Promise<DeploymentLogRecord>;
-  listDeploymentLogs?(deploymentId: string): Promise<DeploymentLogRecord[]>;
+  listDeploymentLogs(deploymentId: string): Promise<DeploymentLogRecord[]>;
 };
 
 export class DeploymentNotFoundError extends Error {
@@ -264,10 +264,6 @@ export async function listProjectDeployments(
     throw new DeploymentNotFoundError("Project not found for workspace");
   }
 
-  if (!repository.listDeploymentsByProject) {
-    throw new Error("Deployment repository does not support project deployment listing");
-  }
-
   return repository.listDeploymentsByProject(input.projectId);
 }
 
@@ -276,10 +272,6 @@ export async function listDeploymentLogs(
   repository: DeploymentRepository
 ): Promise<DeploymentLogRecord[]> {
   await getDeployment(deploymentId, repository);
-
-  if (!repository.listDeploymentLogs) {
-    throw new Error("Deployment repository does not support deployment log listing");
-  }
 
   return repository.listDeploymentLogs(deploymentId);
 }

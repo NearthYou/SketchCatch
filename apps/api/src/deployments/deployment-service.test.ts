@@ -5,6 +5,7 @@ import {
   DeploymentNotFoundError,
   getDeployment,
   type CreateDeploymentInput,
+  type DeploymentLogRecord,
   type DeploymentRecord,
   type DeploymentRepository
 } from "./deployment-service.js";
@@ -77,6 +78,8 @@ class FakeDeploymentRepository implements DeploymentRepository {
     assetType: "terraform_file"
   };
   deployment: DeploymentRecord | undefined;
+  deployments: DeploymentRecord[] = [];
+  logs: DeploymentLogRecord[] = [];
 
   async findProjectByWorkspace(candidateProjectId: string, candidateWorkspaceId: string) {
     this.calls.push({
@@ -161,6 +164,62 @@ class FakeDeploymentRepository implements DeploymentRepository {
     }
 
     return this.deployment;
+  }
+
+  async listDeploymentsByProject() {
+    return this.deployments;
+  }
+
+  updateDeploymentStatus: DeploymentRepository["updateDeploymentStatus"] = async (candidateDeploymentId, status) => {
+    if (this.deployment?.id !== candidateDeploymentId) {
+      return undefined;
+    }
+
+    this.deployment = { ...this.deployment, status };
+
+    return this.deployment;
+  };
+
+  updateDeploymentPlan: DeploymentRepository["updateDeploymentPlan"] = async (candidateDeploymentId, input) => {
+    if (this.deployment?.id !== candidateDeploymentId) {
+      return undefined;
+    }
+
+    this.deployment = { ...this.deployment, ...input };
+
+    return this.deployment;
+  };
+
+  approveDeployment: DeploymentRepository["approveDeployment"] = async (candidateDeploymentId, input) => {
+    if (this.deployment?.id !== candidateDeploymentId) {
+      return undefined;
+    }
+
+    this.deployment = { ...this.deployment, ...input };
+
+    return this.deployment;
+  };
+
+  failDeployment: DeploymentRepository["failDeployment"] = async (candidateDeploymentId, input) => {
+    if (this.deployment?.id !== candidateDeploymentId) {
+      return undefined;
+    }
+
+    this.deployment = { ...this.deployment, status: "FAILED", ...input };
+
+    return this.deployment;
+  };
+
+  createDeploymentLog: DeploymentRepository["createDeploymentLog"] = async (input) => {
+    const deploymentLog = { ...input, createdAt: fixedNow };
+
+    this.logs.push(deploymentLog);
+
+    return deploymentLog;
+  };
+
+  async listDeploymentLogs() {
+    return this.logs;
   }
 }
 
