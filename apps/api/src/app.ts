@@ -1,11 +1,14 @@
-import Fastify, { type FastifyInstance } from "fastify";
+import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 import { ZodError } from "zod";
-import type { ApiErrorCode, ApiErrorResponse } from "@sketchcatch/types";
-import { startRefreshTokenCleanupJob } from "./auth/cleanup.js";
-import { type DatabaseClient, getDatabaseClient } from "./db/client.js";
+import { registerAiRoutes } from "./routes/ai.js";
 import { registerHealthRoutes } from "./routes/health.js";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { registerProjectRoutes } from "./routes/projects.js";
+import { registerDeploymentRoutes } from "./routes/deployments.js";
+
+const allowedCorsOrigins = new Set(["http://localhost:3000", "http://127.0.0.1:3000"]);
+const corsAllowedMethods = "GET,POST,OPTIONS";
+const fallbackCorsAllowedHeaders = "content-type";
 
 type HttpError = Error & {
   statusCode?: number;
@@ -36,90 +39,87 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   });
 
   app.setErrorHandler((error, _request, reply) => {
-    const typedError = error as HttpError;
-    const statusCode = error instanceof ZodError ? 400 : (typedError.statusCode ?? 500);
-    const response: ApiErrorResponse = {
-      error: getErrorCode(statusCode, typedError.errorCode),
-      message: getErrorMessage(error, statusCode, typedError.message)
-    };
-
-    if (statusCode >= 500) {
-      app.log.error(error);
+    if (error instanceof ZodError) {
+      reply.status(400).send({
+        error: "bad_request",
+        message: error.message
+      });
+      return;
     }
 
-    reply.status(statusCode).send(response);
+    const statusCode = getErrorStatusCode(error);
+
+    if (statusCode >= 500) {
+      app.log.error(error instanceof Error ? error : getErrorMessage(error));
+    }
+
+    reply.status(statusCode).send({
+      error: statusCode >= 500 ? "internal_server_error" : "bad_request",
+      message: getErrorMessage(error)
+    });
   });
 
-  app.setNotFoundHandler((_request, reply) => {
-    const response: ApiErrorResponse = {
-      error: "not_found",
-      message: "요청한 API 경로를 찾을 수 없습니다."
-    };
+  app.addHook("onRequest", async (request, reply) => {
+    setCorsHeaders(request, reply);
 
-    return reply.status(404).send(response);
+    if (request.method === "OPTIONS") {
+      return reply.status(204).send();
+    }
   });
 
   app.register(registerHealthRoutes);
-  app.register(registerAuthRoutes, {
-    prefix: "/api",
-    getDatabaseClient: getAppDatabaseClient
-  });
-  app.register(registerProjectRoutes, {
-    prefix: "/api",
-    getDatabaseClient: getAppDatabaseClient
-  });
+  app.register(registerAiRoutes, { prefix: "/api" });
+  app.register(registerProjectRoutes, { prefix: "/api" });
+  app.register(registerDeploymentRoutes, { prefix: "/api" });
 
   return app;
 }
 
-function getErrorCode(statusCode: number, explicitErrorCode?: ApiErrorCode): ApiErrorCode {
-  if (explicitErrorCode) {
-    return explicitErrorCode;
+function setCorsHeaders(request: FastifyRequest, reply: FastifyReply): void {
+  const origin = firstHeaderValue(request.headers.origin);
+
+  if (origin === undefined || !allowedCorsOrigins.has(origin)) {
+    return;
   }
 
-  if (statusCode >= 500) {
-    return "internal_server_error";
+  const requestedHeaders =
+    firstHeaderValue(request.headers["access-control-request-headers"]) ?? fallbackCorsAllowedHeaders;
+
+  reply.header("Access-Control-Allow-Origin", origin);
+  reply.header("Access-Control-Allow-Methods", corsAllowedMethods);
+  reply.header("Access-Control-Allow-Headers", requestedHeaders);
+  reply.header("Vary", "Origin");
+}
+
+function firstHeaderValue(value: string | string[] | undefined): string | undefined {
+  if (Array.isArray(value)) {
+    return value[0];
   }
 
+  return value;
+}
+
+function getErrorStatusCode(error: unknown): number {
+  if (hasStatusCode(error)) {
+    return error.statusCode;
+  }
+
+  return 500;
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return "Unexpected error";
+}
+
+function hasStatusCode(error: unknown): error is { readonly statusCode: number } {
   return (
-    {
-      400: "bad_request",
-      401: "unauthorized",
-      404: "not_found",
-      409: "conflict",
-      429: "too_many_requests"
-    } satisfies Partial<Record<number, ApiErrorCode>>
-  )[statusCode] ?? "bad_request";
-}
-
-function getErrorMessage(error: unknown, statusCode: number, message?: string): string {
-  if (error instanceof ZodError) {
-    return "입력값 형식을 확인해주세요.";
-  }
-
-  if (statusCode >= 500) {
-    return "서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.";
-  }
-
-  if (message && containsKorean(message)) {
-    return message;
-  }
-
-  return getDefaultErrorMessage(statusCode);
-}
-
-function getDefaultErrorMessage(statusCode: number): string {
-  return (
-    {
-      400: "요청 형식이 올바르지 않습니다.",
-      401: "인증이 필요합니다.",
-      404: "요청한 정보를 찾을 수 없습니다.",
-      409: "이미 존재하는 값입니다.",
-      429: "요청이 너무 많습니다. 잠시 후 다시 시도해주세요."
-    } satisfies Partial<Record<number, string>>
-  )[statusCode] ?? "요청 처리 중 오류가 발생했습니다.";
-}
-
-function containsKorean(value: string): boolean {
-  return /[ㄱ-ㅎㅏ-ㅣ가-힣]/.test(value);
+    typeof error === "object" &&
+    error !== null &&
+    "statusCode" in error &&
+    typeof error.statusCode === "number"
+  );
 }
