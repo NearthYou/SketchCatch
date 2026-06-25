@@ -10,24 +10,6 @@ export const assetTypeEnum = pgEnum("asset_type", [
   "thumbnail"
 ]);
 
-export const users = pgTable(
-  "users",
-  {
-    id: varchar("id", { length: 36 }).primaryKey(),
-    username: varchar("username", { length: 30 }).notNull(),
-    email: varchar("email", { length: 255 }).notNull(),
-    nickname: varchar("nickname", { length: 40 }).notNull(),
-    passwordHash: text("password_hash").notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-    deletedAt: timestamp("deleted_at", { withTimezone: true })
-  },
-  (table) => [
-    uniqueIndex("users_username_unique").on(table.username),
-    uniqueIndex("users_email_unique").on(table.email),
-    index("users_deleted_at_idx").on(table.deletedAt)
-  ]
-);
 export const deploymentStatusEnum = pgEnum("status", [
   "PENDING",
   "RUNNING",
@@ -61,11 +43,24 @@ export const deploymentLogLevelEnum = pgEnum("deployment_log_level", [
   "ERROR"
 ]);
 
-export const anonymousWorkspaces = pgTable("anonymous_workspaces", {
-  id: varchar("id", { length: 128 }).primaryKey(),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
-});
+export const users = pgTable(
+  "users",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    username: varchar("username", { length: 30 }).notNull(),
+    email: varchar("email", { length: 255 }).notNull(),
+    nickname: varchar("nickname", { length: 40 }).notNull(),
+    passwordHash: text("password_hash").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    deletedAt: timestamp("deleted_at", { withTimezone: true })
+  },
+  (table) => [
+    uniqueIndex("users_username_unique").on(table.username),
+    uniqueIndex("users_email_unique").on(table.email),
+    index("users_deleted_at_idx").on(table.deletedAt)
+  ]
+);
 
 export const refreshTokens = pgTable(
   "refresh_tokens",
@@ -156,26 +151,6 @@ export const projectAssets = pgTable("project_assets", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
 });
 
-export const usersRelations = relations(users, ({ many }) => ({
-  projects: many(projects),
-  refreshTokens: many(refreshTokens),
-  loginAttempts: many(loginAttempts)
-}));
-
-export const refreshTokensRelations = relations(refreshTokens, ({ one }) => ({
-  user: one(users, {
-    fields: [refreshTokens.userId],
-    references: [users.id]
-  })
-}));
-
-export const loginAttemptsRelations = relations(loginAttempts, ({ one }) => ({
-  user: one(users, {
-    fields: [loginAttempts.userId],
-    references: [users.id]
-  })
-}));
-    
 export const deployments = pgTable("deployments", {
   id: varchar("id", { length: 36 }).primaryKey(),
   projectId: varchar("project_id", { length: 36 })
@@ -207,7 +182,7 @@ export const deployments = pgTable("deployments", {
 export const deploymentLogs = pgTable("deployment_logs", {
   id: varchar("id", { length: 36 }).primaryKey(),
   deploymentId: varchar("deployment_id", { length: 36 })
-  .notNull()
+    .notNull()
     .references(() => deployments.id, { onDelete: "cascade" }),
   sequence: integer("sequence").notNull(),
   stage: deploymentStageEnum("stage").notNull(),
@@ -217,8 +192,24 @@ export const deploymentLogs = pgTable("deployment_logs", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
 });
 
-export const anonymousWorkspacesRelations = relations(anonymousWorkspaces, ({ many }) => ({
-  projects: many(projects)
+export const usersRelations = relations(users, ({ many }) => ({
+  projects: many(projects),
+  refreshTokens: many(refreshTokens),
+  loginAttempts: many(loginAttempts)
+}));
+
+export const refreshTokensRelations = relations(refreshTokens, ({ one }) => ({
+  user: one(users, {
+    fields: [refreshTokens.userId],
+    references: [users.id]
+  })
+}));
+
+export const loginAttemptsRelations = relations(loginAttempts, ({ one }) => ({
+  user: one(users, {
+    fields: [loginAttempts.userId],
+    references: [users.id]
+  })
 }));
 
 export const projectsRelations = relations(projects, ({ many, one }) => ({

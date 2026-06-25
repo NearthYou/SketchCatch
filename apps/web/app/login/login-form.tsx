@@ -14,7 +14,7 @@ export function LoginForm() {
 
   useEffect(() => {
     if (status === "authenticated") {
-      router.replace("/workspace");
+      router.replace("/mypage");
     }
   }, [router, status]);
 
@@ -37,7 +37,7 @@ export function LoginForm() {
 
     try {
       await login(payload);
-      router.replace("/workspace");
+      router.replace("/mypage");
     } catch (error) {
       setErrorMessage(getApiErrorMessage(error, "로그인에 실패했습니다."));
     } finally {

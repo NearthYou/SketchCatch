@@ -1,6 +1,29 @@
 :root {
-  background: #07080d;
-  color: #f7f8fb;
+  --surface-primary: #f7f9fc;
+  --surface-secondary: #ffffff;
+  --surface-elevated: #eef4fb;
+  --text-primary: #1d2433;
+  --text-secondary: #5a667a;
+  --text-tertiary: #7b8798;
+  --border-default: #d8e0ea;
+  --border-subtle: #e8edf4;
+  --accent-primary: #1f6feb;
+  --accent-hover: #1858c9;
+  --status-success: #16803c;
+  --status-warning: #b26a00;
+  --status-error: #c2412d;
+  --status-info: #2c6fbb;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  color: var(--text-primary);
+  background: var(--surface-primary);
   font-family:
     Inter,
     ui-sans-serif,
@@ -572,10 +595,22 @@ input {
   background: #f7f9fc;
   color: #1d2433;
   min-height: 100vh;
-  padding: 48px;
+  padding: var(--space-12);
 }
 
-.workspaceShell h1 {
+.hero {
+  max-width: 720px;
+}
+
+.eyebrow {
+  color: var(--status-info);
+  font-size: 0.875rem;
+  font-weight: 700;
+  margin: 0 0 var(--space-3);
+  text-transform: uppercase;
+}
+
+h1 {
   font-size: 3rem;
   line-height: 1.1;
   margin: 0 0 var(--space-4);
@@ -584,59 +619,30 @@ input {
 .workspaceTopBar {
   align-items: center;
   display: flex;
-  gap: 24px;
-  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-top: var(--space-6);
 }
 
-.workspaceEyebrow {
-  color: #546179;
-  font-size: 0.78rem;
-  font-weight: 900;
-  letter-spacing: 0;
-  margin: 0 0 8px;
-  text-transform: uppercase;
-}
-
-.workspaceUserPanel {
-  align-items: center;
-  color: #3d495f;
-  display: flex;
-  font-size: 0.95rem;
-  font-weight: 800;
-  gap: 12px;
-}
-
-.workspaceLogout {
-  background: #111827;
-  border: 0;
-  border-radius: 8px;
-  color: #ffffff;
+.heroActions button,
+.workspaceLink {
+  background: var(--accent-primary);
+  border: 1px solid var(--accent-primary);
+  border-radius: 6px;
+  color: var(--surface-secondary);
   cursor: pointer;
   font-weight: 900;
   min-height: 40px;
   padding: 0 14px;
 }
 
-.workspaceMessage {
-  background: #fff1f2;
-  border: 1px solid #fecdd3;
-  border-radius: 8px;
-  color: #9f1239;
-  font-weight: 800;
-  margin: 18px 0 0;
-  padding: 12px 14px;
+.heroActions button {
+  background: var(--surface-secondary);
+  color: var(--text-primary);
 }
 
-.workspaceStateShell {
-  align-items: center;
-  display: flex;
-  justify-content: center;
-}
-
-.workspaceStateText {
-  color: #3d495f;
-  font-size: 1rem;
-  font-weight: 900;
+.workspaceHeader {
+  max-width: 880px;
 }
 
 .workspaceGrid {
@@ -772,156 +778,85 @@ input {
   margin: 0;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  .floatingNote,
-  .providerTile,
-  .commentBubble,
-  .selectionFrame {
-    animation: floatSoft 7s ease-in-out infinite;
-  }
-
-  .selectionFrame {
-    animation-delay: 900ms;
-  }
-
-  .providerTile {
-    animation-delay: 1300ms;
-  }
+.chipRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
 }
 
-@keyframes floatSoft {
-  0%,
-  100% {
-    translate: 0 0;
-  }
-
-  50% {
-    translate: 0 -12px;
-  }
+.resourceChip {
+  background: var(--surface-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: var(--space-2) var(--space-3);
 }
 
-@media (max-width: 1024px) {
-  .siteHeader {
-    padding: 20px 28px;
-  }
-
-  .siteNav {
-    display: none;
-  }
-
-  .landingHero h1 {
-    font-size: 5.4rem;
-  }
-
-  .selectionFrame {
-    right: 6%;
-    width: 300px;
-  }
+.resultList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
 }
 
-@media (max-width: 760px) {
-  .siteHeader {
-    gap: 14px;
-    grid-template-columns: 1fr;
-    padding: 18px;
-    position: absolute;
+.resultList li {
+  border-top: 1px solid var(--border-subtle);
+  display: grid;
+  gap: var(--space-1);
+  padding-top: var(--space-3);
+}
+
+.resultList strong {
+  color: var(--text-primary);
+  font-size: 0.875rem;
+}
+
+.resultList span {
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.errorBanner,
+.loadingBanner {
+  border-radius: 6px;
+  font-size: 0.875rem;
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+}
+
+.errorBanner {
+  background: var(--surface-secondary);
+  border: 1px solid var(--status-error);
+  color: var(--status-error);
+}
+
+.loadingBanner {
+  background: var(--surface-elevated);
+  border: 1px solid var(--border-default);
+  color: var(--text-secondary);
+}
+
+@media (max-width: 860px) {
+  .pageShell,
+  .workspaceShell {
+    padding: var(--space-6);
   }
 
-  .brandLockup {
-    justify-content: center;
-  }
-
-  .headerActions {
-    justify-content: center;
-  }
-
-  .navButton {
-    min-width: 112px;
-  }
-
-  .landingHero {
-    min-height: 82vh;
-    padding: 178px 18px 58px;
-  }
-
-  .landingHero h1 {
-    font-size: 4rem;
-  }
-
-  .heroLead {
-    font-size: 1.05rem;
-  }
-
-  .noteTerraform,
-  .commentReviewer {
-    display: none;
-  }
-
-  .selectionFrame {
-    height: 150px;
-    left: 50%;
-    right: auto;
-    top: 21%;
-    transform: translateX(-50%);
-    width: 260px;
-  }
-
-  .noteVpc {
-    bottom: 13%;
-    left: 7%;
-  }
-
-  .providerAws {
-    bottom: 16%;
-    right: 6%;
-  }
-
-  .providerCost,
-  .commentBuilder {
-    display: none;
-  }
-
-  .landingHighlights {
-    grid-template-columns: 1fr;
-    padding: 0 18px 32px;
-  }
-
-  .authFormGrid {
+  .workspaceGridWide {
     grid-template-columns: 1fr;
   }
-
-  .workspaceTopBar,
-  .workspaceUserPanel {
-    align-items: flex-start;
-    flex-direction: column;
-  }
 }
 
-@media (max-width: 460px) {
-  .headerActions {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    width: 100%;
+@media (max-width: 520px) {
+  .pageShell,
+  .workspaceShell {
+    padding: var(--space-4);
   }
 
-  .navButton {
-    min-width: 0;
-    padding: 0 12px;
-  }
-
-  .landingHero h1 {
-    font-size: 3.25rem;
-  }
-
-  .heroLead {
-    font-size: 1rem;
-  }
-
-  .authPage {
-    padding: 18px;
-  }
-
-  .authPanel {
-    padding: 24px;
+  h1 {
+    font-size: 2.25rem;
   }
 }

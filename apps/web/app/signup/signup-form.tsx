@@ -14,7 +14,7 @@ export function SignupForm() {
 
   useEffect(() => {
     if (status === "authenticated") {
-      router.replace("/workspace");
+      router.replace("/mypage");
     }
   }, [router, status]);
 
@@ -46,7 +46,7 @@ export function SignupForm() {
 
     try {
       await signup(payload);
-      router.replace("/workspace");
+      router.replace("/mypage");
     } catch (error) {
       setErrorMessage(getApiErrorMessage(error, "회원가입에 실패했습니다."));
     } finally {
