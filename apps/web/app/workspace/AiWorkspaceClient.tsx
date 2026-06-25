@@ -9,6 +9,7 @@ import type {
   ArchitectureDraftScenarioHint,
   ArchitectureDraftSecurityPriority,
   ArchitectureDraftTrafficLevel,
+  ArchitectureScenario,
   ArchitectureJson
 } from "@sketchcatch/types";
 import { getResourceTypeLabel } from "./resource-type-labels";
@@ -258,6 +259,7 @@ export function AiWorkspaceClient() {
               ))}
             </div>
             <p className="mutedText">연결선 {draft.architectureJson.edges.length}개</p>
+            <DraftMetadataPanel metadata={draft.metadata} />
           </div>
         )}
         <button
@@ -323,6 +325,76 @@ type ResultItem = {
   readonly label: string;
   readonly text: string;
 };
+
+type DraftMetadata = AiArchitectureDraftResult["metadata"];
+
+function DraftMetadataPanel({ metadata }: { readonly metadata: DraftMetadata }) {
+  const selectedScenarioLabel =
+    metadata.selectedScenario === undefined ? "선택 결과 없음" : getScenarioLabel(metadata.selectedScenario);
+  const scenarioScores = metadata.scenarioScores ?? [];
+  const guardrailWarnings = metadata.guardrailWarnings ?? [];
+
+  return (
+    <div className="metadataBlock">
+      <div className="metadataGrid">
+        <p className="metadataKicker">선택된 용도</p>
+        <p className="mutedText">{selectedScenarioLabel}</p>
+      </div>
+
+      {scenarioScores.length > 0 ? (
+        <div className="metadataGrid">
+          <p className="metadataKicker">auto 점수</p>
+          <ul className="metadataList">
+            {scenarioScores.map((score) => (
+              <li key={score.scenario}>
+                <strong>{getScenarioLabel(score.scenario)}</strong>
+                <span>
+                  {score.score}점 · {score.reasons.length > 0 ? score.reasons.join(", ") : "단서 없음"}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      {guardrailWarnings.length > 0 ? (
+        <div className="metadataGrid">
+          <p className="metadataKicker">warning</p>
+          <ul className="warningList">
+            {guardrailWarnings.map((warning) => (
+              <li className="warningItem" key={warning.code}>
+                <strong>{warning.code}</strong>
+                <span>{warning.message}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      {metadata.assumptions.length > 0 ? (
+        <div className="metadataGrid">
+          <p className="metadataKicker">assumptions</p>
+          <ul className="metadataList">
+            {metadata.assumptions.map((assumption) => (
+              <li key={assumption}>{assumption}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function getScenarioLabel(scenario: ArchitectureScenario): string {
+  switch (scenario) {
+    case "static_site":
+      return "정적 웹사이트";
+    case "api_server":
+      return "API 서버";
+    case "backend_with_db":
+      return "DB 포함 백엔드";
+  }
+}
 
 function ResultList({ items, summary }: { readonly items: readonly ResultItem[]; readonly summary: string }) {
   return (

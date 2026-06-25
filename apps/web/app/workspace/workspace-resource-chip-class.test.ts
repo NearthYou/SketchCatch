@@ -17,3 +17,15 @@ test("workspace resource chips use a class that does not inherit landing chip po
 	assert.match(globalsCssSource, /\.workspaceResourceChip\s*{/);
 	assert.doesNotMatch(workspaceChipCss, /position\s*:\s*absolute/);
 });
+
+test("workspace draft result exposes guardrail metadata sections", () => {
+	const workspaceClientSource = readFileSync(workspaceClientPath, "utf8");
+	const globalsCssSource = readFileSync(globalsCssPath, "utf8");
+
+	assert.match(workspaceClientSource, /DraftMetadataPanel/);
+	assert.match(workspaceClientSource, /selectedScenario/);
+	assert.match(workspaceClientSource, /scenarioScores/);
+	assert.match(workspaceClientSource, /guardrailWarnings/);
+	assert.match(globalsCssSource, /\.metadataBlock\s*{/);
+	assert.match(globalsCssSource, /\.warningList\s*{/);
+});
