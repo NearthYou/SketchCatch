@@ -42,8 +42,8 @@
 
 | 테이블 | 용도 | 처리 |
 | --- | --- | --- |
-| `anonymous_workspaces` | 로그인 전 익명 작업 공간 | 유지 |
-| `projects` | 프로젝트 기본 정보 | `user_id` nullable 추가 |
+| `anonymous_workspaces` | 로그인 전 익명 작업 공간 | 제거 |
+| `projects` | 프로젝트 기본 정보 | `workspace_id` 제거, `user_id` not null 전환 |
 | `architectures` | 아키텍처 snapshot | 유지 |
 | `project_assets` | S3 asset metadata | 유지 |
 
@@ -241,30 +241,29 @@ JWT refresh session 테이블이다.
 
 ## 7. projects 변경
 
-기존 `projects` 테이블에 `user_id`를 추가한다.
+기존 `projects` 테이블에서 익명 작업 공간 기준을 제거하고 `user_id`를 필수 소유자 키로 사용한다.
 
-추가 컬럼:
+변경 컬럼:
 
 | 컬럼 | 타입 | 제약 | 설명 |
 | --- | --- | --- | --- |
-| `user_id` | `varchar(36)` | FK users.id, nullable | 로그인 사용자 소유자 |
+| `user_id` | `varchar(36)` | FK users.id, not null | 프로젝트 소유자 |
 
-기존 `workspace_id` 정책:
+제거 컬럼:
 
-- 익명 프로젝트는 `workspace_id`로 소유자를 확인한다.
-- 로그인 후 가져온 프로젝트는 `user_id`를 채운다.
-- 초기에는 `workspace_id`를 유지해 익명 프로젝트와 호환한다.
+| 컬럼 | 제거 이유 |
+| --- | --- |
+| `workspace_id` | 익명 작업 공간을 도입하지 않기로 결정했으므로 프로젝트 소유권은 `user_id` 하나로 고정한다. |
 
 인덱스:
 
 - index: `projects.user_id`
-- index: `projects.workspace_id`
 - index: `projects.updated_at`
 
 조회 기준:
 
 - 로그인 사용자는 `user_id = currentUser.id`
-- 익명 사용자는 `workspace_id = X-Workspace-Id`
+- `Authorization`이 없는 프로젝트 요청은 `401 unauthorized`로 처리한다.
 
 ## 8. templates
 
@@ -386,8 +385,7 @@ JWT refresh session 테이블이다.
 | 컬럼 | 타입 | 제약 | 설명 |
 | --- | --- | --- | --- |
 | `id` | `varchar(36)` | PK | activity id |
-| `user_id` | `varchar(36)` | FK users.id, nullable | 로그인 사용자 |
-| `workspace_id` | `varchar(128)` | FK anonymous_workspaces.id, nullable | 익명 사용자 |
+| `user_id` | `varchar(36)` | FK users.id, not null | 로그인 사용자 |
 | `project_id` | `varchar(36)` | FK projects.id, nullable | 관련 프로젝트 |
 | `template_id` | `varchar(36)` | FK templates.id, nullable | 관련 템플릿 |
 | `event_name` | `varchar(80)` | not null | 이벤트 이름 |
@@ -398,7 +396,6 @@ JWT refresh session 테이블이다.
 인덱스:
 
 - index: `(user_id, created_at)`
-- index: `(workspace_id, created_at)`
 - index: `activities.project_id`
 - index: `activities.template_id`
 - index: `activities.event_name`
@@ -440,7 +437,6 @@ users 1 - N projects
 users 1 - N templates
 users 1 - N template_favorites
 
-anonymous_workspaces 1 - N projects
 projects 1 - N architectures
 projects 1 - N project_assets
 projects 1 - N activities
@@ -456,7 +452,6 @@ templates 1 - N activities
 | DB 컬럼 | API 필드 |
 | --- | --- |
 | `user_id` | `userId` |
-| `workspace_id` | `workspaceId` |
 | `project_id` | `projectId` |
 | `template_id` | `templateId` |
 | `architecture_json` | `architectureJson` |
@@ -469,7 +464,7 @@ templates 1 - N activities
 
 1. `users`, `oauth_accounts`, `email_verifications` 추가
 2. `refresh_tokens`, `password_reset_tokens`, `login_attempts` 추가
-3. `projects.user_id` nullable 추가
+3. `projects.workspace_id` 제거와 `projects.user_id` not null 전환
 4. `templates`, `template_versions` 추가
 5. `template_favorites`, `template_share_links` 추가
 6. `activities` 추가
@@ -478,9 +473,9 @@ templates 1 - N activities
 
 ## 16. 검증 기준
 
-- `projects.user_id`가 nullable이라 익명 프로젝트가 깨지지 않는다.
+- `anonymous_workspaces`를 사용하지 않는다.
+- `projects.user_id`는 not null이다.
 - 로그인 사용자는 `user_id` 기준으로만 프로젝트를 조회한다.
-- 익명 사용자는 `workspace_id` 기준으로만 프로젝트를 조회한다.
 - refresh token 원문이 DB에 저장되지 않는다.
 - 이메일 인증번호 원문이 DB에 저장되지 않는다.
 - reset token 원문이 DB에 저장되지 않는다.
