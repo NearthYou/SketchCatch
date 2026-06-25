@@ -1,10 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { DiagramJson } from "@sketchcatch/types";
-import {
-  projectDraftQuerySchema,
-  saveProjectDraftBodySchema
-} from "./project-draft-schemas.js";
+import { projectDraftQuerySchema, saveProjectDraftBodySchema } from "./project-draft-schemas.js";
 
 const validDiagram: DiagramJson = {
   nodes: [
@@ -53,17 +50,12 @@ const validDiagram: DiagramJson = {
   }
 };
 
-test("project draft query accepts an optional workspace id", () => {
+test("project draft query accepts no required parameters", () => {
   assert.equal(projectDraftQuerySchema.safeParse({}).success, true);
-  assert.equal(
-    projectDraftQuerySchema.safeParse({ clientGeneratedWorkspaceId: "local-browser-1" }).success,
-    true
-  );
 });
 
 test("save project draft body accepts full DiagramJson", () => {
   const parsed = saveProjectDraftBodySchema.parse({
-    clientGeneratedWorkspaceId: "local-browser-1",
     diagramJson: validDiagram
   });
 
@@ -73,7 +65,6 @@ test("save project draft body accepts full DiagramJson", () => {
 
 test("save project draft body rejects architecture-only json without viewport", () => {
   const result = saveProjectDraftBodySchema.safeParse({
-    clientGeneratedWorkspaceId: "local-browser-1",
     diagramJson: {
       nodes: [],
       edges: []

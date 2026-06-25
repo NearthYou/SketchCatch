@@ -19,34 +19,23 @@ export async function createProject(input: CreateProjectRequest): Promise<Projec
   return response.project;
 }
 
-export async function listProjects(clientGeneratedWorkspaceId?: string | undefined): Promise<Project[]> {
-  const query = createWorkspaceQuery(clientGeneratedWorkspaceId);
-  const response = await apiFetch<ProjectListResponse>(`/projects${query}`);
+export async function listProjects(): Promise<Project[]> {
+  const response = await apiFetch<ProjectListResponse>("/projects");
 
   return response.projects;
 }
 
-export async function getProject(
-  projectId: string,
-  clientGeneratedWorkspaceId?: string | undefined
-): Promise<Project> {
-  const query = createWorkspaceQuery(clientGeneratedWorkspaceId);
-  const response = await apiFetch<ProjectDetailsResponse>(`/projects/${encodeURIComponent(projectId)}${query}`);
+export async function getProject(projectId: string): Promise<Project> {
+  const response = await apiFetch<ProjectDetailsResponse>(`/projects/${encodeURIComponent(projectId)}`);
   return response.project;
 }
 
-export async function getProjectDraft(
-  projectId: string,
-  clientGeneratedWorkspaceId?: string | undefined
-): Promise<ProjectDraftResponse> {
-  const query = createWorkspaceQuery(clientGeneratedWorkspaceId);
-
-  return apiFetch<ProjectDraftResponse>(`/projects/${encodeURIComponent(projectId)}/draft${query}`);
+export async function getProjectDraft(projectId: string): Promise<ProjectDraftResponse> {
+  return apiFetch<ProjectDraftResponse>(`/projects/${encodeURIComponent(projectId)}/draft`);
 }
 
 export async function saveProjectDraft({
   projectId,
-  clientGeneratedWorkspaceId,
   diagramJson
 }: {
   projectId: string;
@@ -54,7 +43,6 @@ export async function saveProjectDraft({
   return apiFetch<ProjectDraftResponse>(`/projects/${encodeURIComponent(projectId)}/draft`, {
     method: "PUT",
     body: JSON.stringify({
-      clientGeneratedWorkspaceId,
       diagramJson
     })
   });
@@ -104,12 +92,4 @@ async function readApiErrorMessage(response: Response): Promise<string | null> {
 
 function getApiBaseUrl(): string {
   return process.env.NEXT_PUBLIC_API_BASE_URL ?? DEFAULT_API_BASE_URL;
-}
-
-function createWorkspaceQuery(clientGeneratedWorkspaceId?: string | undefined): string {
-  if (!clientGeneratedWorkspaceId) {
-    return "";
-  }
-
-  return `?${new URLSearchParams({ clientGeneratedWorkspaceId }).toString()}`;
 }

@@ -1,1 +1,0 @@
-ALTER TABLE "projects" ADD COLUMN "user_id" varchar(36);

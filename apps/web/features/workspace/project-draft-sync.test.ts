@@ -84,8 +84,8 @@ test("loadProjectDiagramDraft loads server draft for a project before local fall
       workspaceId: "workspace-1"
     },
     {
-      getProjectDraft: async (projectId, workspaceId): Promise<ProjectDraftResponse> => {
-        calls.push(`server:${projectId}:${workspaceId}`);
+      getProjectDraft: async (projectId: string): Promise<ProjectDraftResponse> => {
+        calls.push(`server:${projectId}`);
         return { draft: serverDraft };
       },
       readLocalProjectDraft: async (workspaceId, projectId) => {
@@ -97,7 +97,7 @@ test("loadProjectDiagramDraft loads server draft for a project before local fall
 
   assert.deepEqual(calls, [
     `local:workspace-1:${serverDraft.projectId}`,
-    `server:${serverDraft.projectId}:workspace-1`
+    `server:${serverDraft.projectId}`
   ]);
   assert.equal(result.source, "server");
   assert.deepEqual(result.diagramJson, serverDiagram);
@@ -114,8 +114,8 @@ test("loadProjectDiagramDraft can use authenticated server ownership without a w
       projectId: serverDraft.projectId
     },
     {
-      getProjectDraft: async (projectId, workspaceId): Promise<ProjectDraftResponse> => {
-        calls.push(`server:${projectId}:${workspaceId ?? "session"}`);
+      getProjectDraft: async (projectId: string): Promise<ProjectDraftResponse> => {
+        calls.push(`server:${projectId}:session`);
         return { draft: serverDraft };
       },
       readLocalProjectDraft: async (workspaceId, projectId) => {
@@ -135,7 +135,7 @@ test("loadProjectDiagramDraft can use authenticated server ownership without a w
 
 test("saveProjectDiagramDraft can use authenticated server ownership without a workspace query", async () => {
   const localWrites: LocalProjectDraft[] = [];
-  const saveCalls: Array<{ workspaceId: string | undefined }> = [];
+  let saveCallCount = 0;
   const result = await saveProjectDiagramDraft(
     {
       diagramJson: serverDiagram,
@@ -144,8 +144,8 @@ test("saveProjectDiagramDraft can use authenticated server ownership without a w
     },
     {
       now: () => "2026-06-24T03:00:00.000Z",
-      saveProjectDraft: async ({ clientGeneratedWorkspaceId }) => {
-        saveCalls.push({ workspaceId: clientGeneratedWorkspaceId });
+      saveProjectDraft: async () => {
+        saveCallCount += 1;
         return { draft: serverDraft };
       },
       writeLocalProjectDraft: async (draft) => {
@@ -154,7 +154,7 @@ test("saveProjectDiagramDraft can use authenticated server ownership without a w
     }
   );
 
-  assert.deepEqual(saveCalls, [{ workspaceId: undefined }]);
+  assert.equal(saveCallCount, 1);
   assert.equal(localWrites[0]?.workspaceId, "user-cache-1");
   assert.equal(result.localDraft.dirty, false);
 });
@@ -163,7 +163,6 @@ test("saveProjectDiagramDraft writes local cache and server draft for the same p
   const writes: LocalProjectDraft[] = [];
   const saveCalls: Array<{
     projectId: string;
-    workspaceId: string | undefined;
     diagramJson: DiagramJson;
   }> = [];
   const result = await saveProjectDiagramDraft(
@@ -175,10 +174,9 @@ test("saveProjectDiagramDraft writes local cache and server draft for the same p
     },
     {
       now: () => "2026-06-24T03:00:00.000Z",
-      saveProjectDraft: async ({ projectId, clientGeneratedWorkspaceId, diagramJson }) => {
+      saveProjectDraft: async ({ projectId, diagramJson }) => {
         saveCalls.push({
           projectId,
-          workspaceId: clientGeneratedWorkspaceId,
           diagramJson
         });
         return {
@@ -200,7 +198,6 @@ test("saveProjectDiagramDraft writes local cache and server draft for the same p
   assert.deepEqual(saveCalls, [
     {
       projectId: serverDraft.projectId,
-      workspaceId: "workspace-1",
       diagramJson: serverDiagram
     }
   ]);

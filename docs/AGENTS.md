@@ -17,6 +17,16 @@ This folder contains product, architecture, data model, development, and deploym
 5. Keep product direction aligned with Terraform-first IaC platform positioning.
 6. Keep safety boundaries explicit: no real AWS apply unless requested, no secrets, and no frontend AWS SDK calls.
 
+## Document Filename Rules
+
+1. When creating a new project document, use this filename format: `000_한글제목_대상이니셜.md`.
+2. Before choosing a name, inspect the target folder and use the next unused three-digit numeric prefix, such as `001`, `002`, or `010`.
+3. Write the title part in clear Korean so the purpose is understandable from the filename alone.
+4. If specific people must read the document, append their initials at the end, such as `001_배포점검가이드_KM.md`.
+5. If multiple people must read it, join initials with hyphens, such as `001_배포점검가이드_KM-JH.md`.
+6. If there is no specific required reader, omit the initials and the trailing underscore, such as `002_테라폼검증흐름.md`.
+7. Keep existing canonical documents listed under Update Targets at their current names unless the user explicitly asks to rename them.
+
 ## Update Targets
 
 1. Product strategy, roadmap, risks, and deferred work belong in `docs/product.md`.

@@ -49,6 +49,7 @@ CLOUDWATCH_LOG_GROUP_PREFIX=/sketchcatch/production
 
 ```text
 DATABASE_URL=<RDS PostgreSQL 연결 문자열>
+AUTH_TOKEN_SECRET=<32자 이상 인증 token 서명 secret>
 ```
 
 실제 DB 비밀번호, AWS Access Key, SSH private key는 저장소에 커밋하지 않습니다.
@@ -125,7 +126,8 @@ AWS가 구독 확인 이메일을 보냅니다. 이메일 구독을 승인해야
 
 RDS에 저장하는 데이터:
 
-- 익명 workspace
+- 사용자 계정
+- refresh token hash와 로그인 시도 이력
 - 프로젝트 정보
 - 아키텍처 JSON
 - S3 파일 메타데이터
@@ -165,13 +167,28 @@ docker logs sketchcatch-nginx
 
 ## API 확인 예시
 
+회원가입 또는 로그인:
+
+```bash
+curl -X POST http://13.125.49.82/api/auth/signup \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "demo-user",
+    "email": "demo@example.com",
+    "nickname": "데모 사용자",
+    "password": "demo-password-123"
+  }'
+```
+
+응답의 `session.accessToken`을 `ACCESS_TOKEN`에 넣은 뒤 프로젝트 API를 확인합니다.
+
 프로젝트 생성:
 
 ```bash
 curl -X POST http://13.125.49.82/api/projects \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
   -d '{
-    "clientGeneratedWorkspaceId": "local-browser-1",
     "name": "첫 아키텍처",
     "description": "배포 확인용 프로젝트"
   }'
@@ -182,8 +199,8 @@ S3 presigned upload URL 발급:
 ```bash
 curl -X POST http://13.125.49.82/api/projects/<project-id>/assets/presigned-upload \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
   -d '{
-    "clientGeneratedWorkspaceId": "local-browser-1",
     "assetType": "diagram_png",
     "fileName": "diagram.png",
     "contentType": "image/png"

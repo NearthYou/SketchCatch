@@ -1,8 +1,6 @@
 import { z } from "zod";
 import type { DiagramJson } from "@sketchcatch/types";
 
-const workspaceIdSchema = z.string().min(1).max(128);
-
 const diagramPositionSchema = z.object({
   x: z.number().finite(),
   y: z.number().finite()
@@ -69,10 +67,9 @@ export const diagramJsonSchema: z.ZodType<DiagramJson> = z.object({
 });
 
 export const projectDraftQuerySchema = z.object({
-  clientGeneratedWorkspaceId: workspaceIdSchema.optional()
+  // Reserved for future draft listing/filtering parameters.
 });
 
 export const saveProjectDraftBodySchema = z.object({
-  clientGeneratedWorkspaceId: workspaceIdSchema.optional(),
   diagramJson: diagramJsonSchema
 });

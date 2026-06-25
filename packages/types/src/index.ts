@@ -1,6 +1,33 @@
 export type IsoDateTimeString = string;
 
-export type ResourceType = "VPC" | "EC2" | "RDS" | "S3" | "LAMBDA" | "UNKNOWN";
+export type ApiErrorCode =
+  | "bad_request"
+  | "unauthorized"
+  | "not_found"
+  | "conflict"
+  | "too_many_requests"
+  | "internal_server_error";
+
+export type ApiErrorResponse = {
+  error: ApiErrorCode;
+  message: string;
+};
+
+export type LoginLockedErrorResponse = ApiErrorResponse & {
+  error: "too_many_requests";
+  lockedUntil: IsoDateTimeString;
+};
+
+export type ResourceType =
+  | "VPC"
+  | "SUBNET"
+  | "EC2"
+  | "RDS"
+  | "S3"
+  | "SECURITY_GROUP"
+  | "CLOUDFRONT"
+  | "LAMBDA"
+  | "UNKNOWN";
 
 export type ResourceConfig = Record<string, unknown>;
 
@@ -25,23 +52,52 @@ export type ArchitectureJson = {
   edges: ResourceEdge[];
 };
 
-export type AnonymousWorkspace = {
-  id: string;
-  createdAt: IsoDateTimeString;
-  updatedAt: IsoDateTimeString;
-};
-
 export type User = {
   id: string;
+  username: string;
   email: string;
   nickname: string;
   createdAt: IsoDateTimeString;
 };
 
+export type AuthSession = {
+  accessToken: string;
+  refreshToken: string;
+  expiresInSeconds: number;
+};
+
+export type SignupRequest = {
+  username: string;
+  email: string;
+  nickname: string;
+  password: string;
+};
+
+export type LoginRequest = {
+  username: string;
+  password: string;
+};
+
+export type RefreshTokenRequest = {
+  refreshToken: string;
+};
+
+export type LogoutRequest = {
+  refreshToken: string;
+};
+
+export type AuthResponse = {
+  user: User;
+  session: AuthSession;
+};
+
+export type CurrentUserResponse = {
+  user: User;
+};
+
 export type Project = {
   id: string;
-  workspaceId: string;
-  userId?: string | undefined;
+  userId: string;
   name: string;
   description: string | null;
   createdAt: IsoDateTimeString;
@@ -57,12 +113,11 @@ export type ProjectResponse = {
 };
 
 export type CreateProjectRequest = {
-  clientGeneratedWorkspaceId?: string | undefined;
   name: string;
   description?: string | undefined;
 };
 
-export type ArchitectureSource = "manual" | "prompt_mock" | "imported";
+export type ArchitectureSource = "manual" | "prompt" | "imported";
 
 export type ArchitectureSnapshot = {
   id: string;
@@ -99,14 +154,12 @@ export type ProjectDetailsResponse = {
 };
 
 export type CreateArchitectureSnapshotRequest = {
-  clientGeneratedWorkspaceId?: string | undefined;
   version?: number | undefined;
   source?: string | undefined;
   architectureJson: ArchitectureJson;
 };
 
 export type CreateProjectAssetUploadRequest = {
-  clientGeneratedWorkspaceId?: string | undefined;
   architectureId?: string | undefined;
   assetType: ProjectAssetType;
   fileName: string;
@@ -133,14 +186,48 @@ export type TerraformArtifact = ProjectAsset & {
 
 export type DeploymentStatus = "PENDING" | "RUNNING" | "SUCCESS" | "FAILED" | "CANCELLED";
 
-export type Deployment = {
+export type Deployment = DeploymentBlock & {
   id: string;
   projectId: string;
   architectureId: string;
+  terraformArtifactId: string;
   status: DeploymentStatus;
-  startedAt: IsoDateTimeString;
-  finishedAt: IsoDateTimeString | null;
+  planSummary: DeploymentPlanSummary | null;
+  failureStage: DeploymentFailureStage | null;
+  errorSummary: string | null;
+  approvedAt: IsoDateTimeString | null;
+  approvedBy: string | null;
+  approvedTerraformArtifactId: string | null;
+  createdAt: IsoDateTimeString;
+  updatedAt: IsoDateTimeString;
 };
+
+export type DeploymentBlock = {
+  isBlocked: boolean;
+  blockedBy: DeploymentBlockedBy | null;
+  blockedReason: string | null;
+};
+
+export type DeploymentWarningLevel = "low" | "medium" | "high";
+export type DeploymentBlockedBy = "risk_analysis" | "cost_analysis" | "missing_approval";
+export type DeploymentFailureStage = "validation" | "plan" | "approval" | "mock_run";
+
+export type DeploymentPlanWarning = {
+  level: DeploymentWarningLevel;
+  message: string;
+  relatedResourceId?: string;
+};
+
+export type DeploymentPlanSummary = {
+  createCount: number;
+  updateCount: number;
+  deleteCount: number;
+  replaceCount: number;
+  blocked: boolean;
+  warnings: DeploymentPlanWarning[];
+};
+
+export type DeploymentStage = "validate" | "plan" | "apply";
 
 export type Template = {
   id: string;
@@ -165,8 +252,11 @@ export type DeploymentLogLevel = "INFO" | "WARN" | "ERROR";
 export type DeploymentLog = {
   id: string;
   deploymentId: string;
+  sequence: number;
+  stage: DeploymentStage;
   level: DeploymentLogLevel;
   message: string;
+  relatedResourceId: string | null;
   createdAt: IsoDateTimeString;
 };
 
@@ -183,6 +273,110 @@ export type BudgetLimit = {
 };
 
 export type RiskLevel = "low" | "medium" | "high";
+
+export type AiResultSource = "prompt" | "github" | "template_fallback" | "llm_fallback";
+
+export type AiConfidence = "low" | "medium" | "high";
+
+export type AiResultMetadata = {
+  source: AiResultSource;
+  confidence: AiConfidence;
+  assumptions: string[];
+  explanations: string[];
+};
+
+export type AiArchitectureDraftResult = {
+  architectureJson: ArchitectureJson;
+  title: string;
+  metadata: AiResultMetadata;
+};
+
+export type MoneyEstimate = {
+  amount: number;
+  currency: "USD" | "KRW";
+};
+
+export type ResourceCostEstimate = {
+  resourceId: string;
+  resourceType: ResourceType;
+  name: string;
+  monthlyEstimate: MoneyEstimate;
+  costDrivers: string[];
+  explanation: string;
+};
+
+export type CheckFindingCategory =
+  | "cost"
+  | "security"
+  | "configuration"
+  | "permission"
+  | "network"
+  | "performance"
+  | "availability";
+
+export type CheckFinding = {
+  id: string;
+  category: CheckFindingCategory;
+  severity: RiskLevel;
+  resourceId?: string | undefined;
+  title: string;
+  description: string;
+  recommendation: string;
+};
+
+export type ChecklistItemStatus = "pass" | "warning" | "fail";
+
+export type ChecklistItem = {
+  id: string;
+  label: string;
+  status: ChecklistItemStatus;
+  relatedFindingIds: string[];
+};
+
+export type AiPreDeploymentAnalysisResult = {
+  summary: string;
+  totalMonthlyEstimate: MoneyEstimate & {
+    pricingAssumption: string;
+  };
+  resourceCostEstimates: ResourceCostEstimate[];
+  findings: CheckFinding[];
+  checklist: ChecklistItem[];
+};
+
+export type AiTerraformStage = "validate" | "export" | "plan" | "apply";
+
+export type AiTerraformErrorCategory =
+  | "permission"
+  | "credential"
+  | "region_or_resource"
+  | "quota"
+  | "syntax"
+  | "dependency"
+  | "unknown";
+
+export type AiTerraformErrorExplanationResult = {
+  stage: AiTerraformStage;
+  category: AiTerraformErrorCategory;
+  severity: RiskLevel;
+  rawMessage: string;
+  summary: string;
+  likelyCause: string;
+  nextActions: string[];
+  relatedResourceId?: string | undefined;
+};
+
+export type AiTerraformDetectedResource = {
+  terraformType: string;
+  label: string;
+  explanation: string;
+};
+
+export type AiTerraformPreviewExplanationResult = {
+  summary: string;
+  detectedResources: AiTerraformDetectedResource[];
+  findings: CheckFinding[];
+  checklist: ChecklistItem[];
+};
 
 export type PracticeSession = {
   id: string;
@@ -265,7 +459,6 @@ export type ProjectDraft = {
 };
 
 export type SaveProjectDraftRequest = {
-  clientGeneratedWorkspaceId?: string | undefined;
   diagramJson: DiagramJson;
 };
 

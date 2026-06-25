@@ -54,7 +54,7 @@ export async function loadProjectDiagramDraft(
   const localCacheWorkspaceId = getLocalCacheWorkspaceId(input);
   const [localDraft, serverResponse] = await Promise.all([
     readLocal(localCacheWorkspaceId, input.projectId),
-    readServer(input.projectId, input.workspaceId)
+    readServer(input.projectId)
   ]);
   const choice = chooseInitialDiagram({
     fallbackDiagram: input.fallbackDiagram,
@@ -89,7 +89,6 @@ export async function saveProjectDiagramDraft(
 
   const serverResponse = await saveServer({
     projectId: input.projectId,
-    clientGeneratedWorkspaceId: input.workspaceId,
     diagramJson: input.diagramJson
   });
 
