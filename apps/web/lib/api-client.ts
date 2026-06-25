@@ -177,13 +177,16 @@ async function refreshStoredSession(): Promise<AuthSession | null> {
       method: "POST"
     });
   } catch {
+    throw createConnectionError();
+  }
+
+  if (response.status === 400 || response.status === 401) {
     clearStoredAuthSession();
     return null;
   }
 
   if (!response.ok) {
-    clearStoredAuthSession();
-    return null;
+    throw await toApiClientError(response);
   }
 
   const authResponse = (await readJson(response)) as AuthResponse;
