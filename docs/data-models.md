@@ -8,7 +8,7 @@
 
 다만 현재 SketchCatch의 실제 구현과 제품 전략을 기준으로 아래처럼 수정한다.
 
-- 1차 제공 초반은 로그인 사용자가 아니라 `AnonymousWorkspace` 기반이다. `User`는 인증 도입 시 추가한다.
+- 익명 로그인과 `AnonymousWorkspace`는 도입하지 않는다. 프로젝트 소유자는 인증된 `User`이고, API는 `Authorization: Bearer <accessToken>` 기준으로 권한을 확인한다.
 - `Diagram`은 DB에 이미 `architectures` 테이블로 들어가 있다. 공통 타입 이름은 `ArchitectureSnapshot`으로 두고, 화면에서는 다이어그램 또는 보드라고 불러도 된다.
 - 저장되는 아키텍처 JSON은 `nodes`와 `edges`를 가진 `ArchitectureJson`으로 고정한다.
 - 자연어 요구사항에서 추출한 예산, 트래픽, 런타임, DB, 가용성, 보안 우선순위는 후속 `RequirementConstraint` 모델로 분리할 수 있다.
@@ -36,7 +36,7 @@
 
 ## 1차 제공 모델
 
-1차 제공에서는 아래 모델을 코드 기준으로 맞춘다. 다만 `User`, `AwsCredential`, 실제 AWS apply 실행은 인증/권한/비용 사고 방지 설계가 필요하므로 별도 명시가 있을 때만 포함한다.
+3주 안에 구현을 끝내는 일정에서는 아래 모델을 모두 3주차 종료 전까지 코드 기준으로 맞춘다. 다만 `AwsCredential`, 실제 AWS apply 실행은 인증/권한/비용 사고 방지 설계가 필요하므로 별도 명시가 있을 때만 포함한다.
 
 권장 순서:
 
@@ -134,7 +134,7 @@ type Project = {
 
 DB 기준: `projects`
 
-`userId`는 인증 도입 후 마이그레이션할 수 있도록 선택값으로 둔다. 현재 1차 제공에서는 `workspaceId`가 필수 소유자 키다.
+`userId`는 필수 소유자 키다. `clientGeneratedWorkspaceId`, `anonymousWorkspaces`, `workspaceId`는 로그인 기반 정책과 맞지 않으므로 사용하지 않는다.
 
 ### ArchitectureSnapshot
 
