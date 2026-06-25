@@ -9,58 +9,13 @@ import type {
   ArchitectureDraftScenarioHint,
   ArchitectureDraftSecurityPriority,
   ArchitectureDraftTrafficLevel,
-  ArchitectureScenario,
   ArchitectureJson
 } from "@sketchcatch/types";
+import { DraftMetadataPanel } from "./DraftMetadataPanel";
+import { ResultList } from "./ResultList";
 import { getResourceTypeLabel } from "./resource-type-labels";
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:4000/api";
-
-const samplePrompt = "DB가 포함된 백엔드 API 서버를 AWS에 배포하고 싶어.";
-const sampleTerraform = `resource "aws_instance" "web" {
-  ami           = "ami-12345678"
-  instance_type = "t3.micro"
-}
-
-resource "aws_security_group_rule" "ssh" {
-  type        = "ingress"
-  from_port   = 22
-  to_port     = 22
-  cidr_blocks = ["0.0.0.0/0"]
-}
-
-resource "aws_db_instance" "main" {
-  instance_class = "db.t3.micro"
-}`;
-
-type RequestStatus = "idle" | "loading" | "error";
-
-type ChoiceOption<Value extends string> = {
-  readonly label: string;
-  readonly value: Value;
-};
-
-const scenarioOptions: readonly ChoiceOption<ArchitectureDraftScenarioHint>[] = [
-  { label: "정적 웹사이트", value: "static_site" },
-  { label: "API 서버", value: "api_server" },
-  { label: "DB 포함 백엔드", value: "backend_with_db" },
-  { label: "잘 모르겠음", value: "auto" }
-];
-
-const budgetOptions: readonly ChoiceOption<ArchitectureDraftBudgetLevel>[] = [
-  { label: "낮게", value: "low" },
-  { label: "보통", value: "normal" }
-];
-
-const trafficOptions: readonly ChoiceOption<ArchitectureDraftTrafficLevel>[] = [
-  { label: "작음", value: "small" },
-  { label: "보통", value: "normal" }
-];
-
-const securityOptions: readonly ChoiceOption<ArchitectureDraftSecurityPriority>[] = [
-  { label: "기본", value: "basic" },
-  { label: "높음", value: "high" }
-];
+import { postJson } from "./workspace-api-client";
+import { budgetOptions, samplePrompt, sampleTerraform, scenarioOptions, securityOptions, trafficOptions } from "./workspace-options";
 
 // gg AI API를 팀에 보여주기 위한 임시 작업 화면입니다. 최종 보드 UI가 붙으면 대체될 수 있습니다.
 export function AiWorkspaceClient() {
@@ -75,7 +30,7 @@ export function AiWorkspaceClient() {
   const [analysis, setAnalysis] = useState<AiPreDeploymentAnalysisResult | null>(null);
   const [terraformPreview, setTerraformPreview] =
     useState<AiTerraformPreviewExplanationResult | null>(null);
-  const [status, setStatus] = useState<RequestStatus>("idle");
+  const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState("");
 
   const architectureJson = useMemo<ArchitectureJson | null>(() => draft?.architectureJson ?? null, [draft]);
@@ -318,116 +273,4 @@ export function AiWorkspaceClient() {
       {status === "loading" ? <p className="loadingBanner">AI fallback 응답을 생성하는 중입니다.</p> : null}
     </div>
   );
-}
-
-type ResultItem = {
-  readonly id: string;
-  readonly label: string;
-  readonly text: string;
-};
-
-type DraftMetadata = AiArchitectureDraftResult["metadata"];
-
-function DraftMetadataPanel({ metadata }: { readonly metadata: DraftMetadata }) {
-  const selectedScenarioLabel =
-    metadata.selectedScenario === undefined ? "선택 결과 없음" : getScenarioLabel(metadata.selectedScenario);
-  const scenarioScores = metadata.scenarioScores ?? [];
-  const guardrailWarnings = metadata.guardrailWarnings ?? [];
-
-  return (
-    <div className="metadataBlock">
-      <div className="metadataGrid">
-        <p className="metadataKicker">선택된 용도</p>
-        <p className="mutedText">{selectedScenarioLabel}</p>
-      </div>
-
-      {scenarioScores.length > 0 ? (
-        <div className="metadataGrid">
-          <p className="metadataKicker">auto 점수</p>
-          <ul className="metadataList">
-            {scenarioScores.map((score) => (
-              <li key={score.scenario}>
-                <strong>{getScenarioLabel(score.scenario)}</strong>
-                <span>
-                  {score.score}점 · {score.reasons.length > 0 ? score.reasons.join(", ") : "단서 없음"}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
-
-      {guardrailWarnings.length > 0 ? (
-        <div className="metadataGrid">
-          <p className="metadataKicker">warning</p>
-          <ul className="warningList">
-            {guardrailWarnings.map((warning) => (
-              <li className="warningItem" key={warning.code}>
-                <strong>{warning.code}</strong>
-                <span>{warning.message}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
-
-      {metadata.assumptions.length > 0 ? (
-        <div className="metadataGrid">
-          <p className="metadataKicker">assumptions</p>
-          <ul className="metadataList">
-            {metadata.assumptions.map((assumption) => (
-              <li key={assumption}>{assumption}</li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function getScenarioLabel(scenario: ArchitectureScenario): string {
-  switch (scenario) {
-    case "static_site":
-      return "정적 웹사이트";
-    case "api_server":
-      return "API 서버";
-    case "backend_with_db":
-      return "DB 포함 백엔드";
-  }
-}
-
-function ResultList({ items, summary }: { readonly items: readonly ResultItem[]; readonly summary: string }) {
-  return (
-    <div className="resultStack">
-      <p className="resultTitle">{summary}</p>
-      <ul className="resultList">
-        {items.map((item) => (
-          <li key={item.id}>
-            <strong>{item.label}</strong>
-            <span>{item.text}</span>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-// workspace 화면에서 API 서버로 JSON POST 요청을 보낼 때 쓰는 공통 함수입니다.
-async function postJson<ResponseBody>(
-  path: string,
-  body: Record<string, unknown>
-): Promise<ResponseBody> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    body: JSON.stringify(body),
-    headers: {
-      "Content-Type": "application/json"
-    },
-    method: "POST"
-  });
-
-  if (!response.ok) {
-    throw new Error(`API 요청 실패: ${response.status}`);
-  }
-
-  return response.json();
 }
