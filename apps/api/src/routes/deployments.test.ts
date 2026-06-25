@@ -1,7 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import Fastify from "fastify";
+import { createAccessToken } from "../auth/tokens.js";
 import type { DatabaseClient } from "../db/client.js";
+import { users } from "../db/schema.js";
 import type {
   ArchitectureRecord,
   CreateDeploymentRecordInput,
@@ -10,11 +12,13 @@ import type {
   DeploymentRepository,
   ProjectAssetRecord,
   ProjectRecord,
+  ProjectAccessContext,
   TerraformArtifactRecord
 } from "../deployments/deployment-service.js";
 import { registerDeploymentRoutes } from "./deployments.js";
 
 process.env.NODE_ENV = "test";
+process.env.AUTH_TOKEN_SECRET = "test-auth-token-secret-with-at-least-32-characters";
 
 type DeploymentResponse = {
   deployment: {
@@ -36,11 +40,13 @@ type DeploymentLogsResponse = {
   logs: DeploymentLogRecord[];
 };
 
+type UserRecord = typeof users.$inferSelect;
+
 type RepositoryCall =
   | {
-      name: "findProjectByWorkspace";
+      name: "findAccessibleProject";
       projectId: string;
-      workspaceId: string;
+      accessContext: ProjectAccessContext;
     }
   | {
       name: "findArchitectureInProject";
@@ -74,7 +80,7 @@ const projectId = "11111111-1111-4111-8111-111111111111";
 const architectureId = "22222222-2222-4222-8222-222222222222";
 const terraformArtifactId = "33333333-3333-4333-8333-333333333333";
 const deploymentId = "44444444-4444-4444-8444-444444444444";
-const workspaceId = "workspace-test";
+const userId = "55555555-5555-4555-8555-555555555555";
 const fixedNow = new Date("2026-01-01T00:00:00.000Z");
 
 class FakeDeploymentRepository implements DeploymentRepository {
@@ -86,11 +92,11 @@ class FakeDeploymentRepository implements DeploymentRepository {
   deployments: DeploymentRecord[] = [createDeploymentRecord(deploymentId)];
   logs: DeploymentLogRecord[] = [];
 
-  async findProjectByWorkspace(candidateProjectId: string, candidateWorkspaceId: string) {
+  async findAccessibleProject(candidateProjectId: string, accessContext: ProjectAccessContext) {
     this.calls.push({
-      name: "findProjectByWorkspace",
+      name: "findAccessibleProject",
       projectId: candidateProjectId,
-      workspaceId: candidateWorkspaceId
+      accessContext
     });
 
     return this.project;
@@ -163,7 +169,10 @@ class FakeDeploymentRepository implements DeploymentRepository {
     return this.deployments;
   }
 
-  updateDeploymentStatus: DeploymentRepository["updateDeploymentStatus"] = async (_deploymentId, status) => {
+  updateDeploymentStatus: DeploymentRepository["updateDeploymentStatus"] = async (
+    _deploymentId,
+    status
+  ) => {
     if (!this.deployment) {
       return undefined;
     }
@@ -173,7 +182,10 @@ class FakeDeploymentRepository implements DeploymentRepository {
     return this.deployment;
   };
 
-  updateDeploymentPlan: DeploymentRepository["updateDeploymentPlan"] = async (_deploymentId, input) => {
+  updateDeploymentPlan: DeploymentRepository["updateDeploymentPlan"] = async (
+    _deploymentId,
+    input
+  ) => {
     if (!this.deployment) {
       return undefined;
     }
@@ -221,16 +233,16 @@ class FakeDeploymentRepository implements DeploymentRepository {
   }
 }
 
-async function buildDeploymentTestApp(repository: DeploymentRepository) {
+async function buildDeploymentTestApp(
+  repository: DeploymentRepository,
+  userRows: UserRecord[] = [createUserRecord()]
+) {
   const app = Fastify({ logger: false });
+  const fakeAuthDb = new DeploymentRouteFakeAuthDb(userRows);
 
   await app.register(registerDeploymentRoutes, {
     prefix: "/api",
-    getDatabaseClient: () =>
-      ({
-        db: {} as DatabaseClient["db"],
-        pool: { end: async () => undefined } as DatabaseClient["pool"]
-      }) satisfies DatabaseClient,
+    getDatabaseClient: () => fakeAuthDb.client,
     createDeploymentRepository: () => repository
   });
 
@@ -265,7 +277,7 @@ function createDeploymentRecord(
 function createProjectRecord(overrides: Partial<ProjectRecord> = {}): ProjectRecord {
   return {
     id: projectId,
-    workspaceId,
+    userId,
     name: "Test Project",
     description: null,
     createdAt: fixedNow,
@@ -306,10 +318,65 @@ function createProjectAssetRecord(overrides: Partial<ProjectAssetRecord> = {}): 
 
 function createDeploymentBody() {
   return {
-    clientGeneratedWorkspaceId: workspaceId,
     architectureId,
     terraformArtifactId
   };
+}
+
+function createUserRecord(overrides: Partial<UserRecord> = {}): UserRecord {
+  return {
+    id: userId,
+    username: "deployment-user",
+    email: "deployment@example.com",
+    nickname: "Deployment User",
+    passwordHash: "unused",
+    createdAt: fixedNow,
+    updatedAt: fixedNow,
+    deletedAt: null,
+    ...overrides
+  };
+}
+
+function authHeaders(activeUserId = userId): Record<string, string> {
+  return {
+    authorization: `Bearer ${createAccessToken(activeUserId)}`
+  };
+}
+
+class DeploymentRouteFakeAuthDb {
+  client: DatabaseClient;
+
+  constructor(private readonly userRows: UserRecord[]) {
+    this.client = {
+      db: this.createDb() as DatabaseClient["db"],
+      pool: {
+        end: async () => undefined
+      } as DatabaseClient["pool"]
+    };
+  }
+
+  private createDb(): unknown {
+    return {
+      select: () => ({
+        from: (table: unknown) => new SelectQuery(() => (table === users ? this.userRows : []))
+      })
+    };
+  }
+}
+
+class SelectQuery {
+  constructor(private readonly resolveRows: () => unknown[]) {}
+
+  where(): this {
+    return this;
+  }
+
+  then<TResult1 = unknown[], TResult2 = never>(
+    onfulfilled?: ((value: unknown[]) => TResult1 | PromiseLike<TResult1>) | null,
+    onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null
+  ): Promise<TResult1 | TResult2> {
+    return Promise.resolve(this.resolveRows()).then(onfulfilled, onrejected);
+  }
 }
 
 test("POST /api/projects/:projectId/deployments returns a created deployment", async () => {
@@ -319,6 +386,7 @@ test("POST /api/projects/:projectId/deployments returns a created deployment", a
   const response = await app.inject({
     method: "POST",
     url: `/api/projects/${projectId}/deployments`,
+    headers: authHeaders(),
     payload: createDeploymentBody()
   });
 
@@ -331,9 +399,12 @@ test("POST /api/projects/:projectId/deployments returns a created deployment", a
   assert.equal(body.deployment.status, "PENDING");
   assert.deepEqual(repository.calls, [
     {
-      name: "findProjectByWorkspace",
+      name: "findAccessibleProject",
       projectId,
-      workspaceId
+      accessContext: {
+        kind: "user",
+        userId
+      }
     },
     {
       name: "findArchitectureInProject",
@@ -369,19 +440,23 @@ test("POST /api/projects/:projectId/deployments maps ownership validation failur
   const response = await app.inject({
     method: "POST",
     url: `/api/projects/${projectId}/deployments`,
+    headers: authHeaders(),
     payload: createDeploymentBody()
   });
 
   assert.equal(response.statusCode, 404);
   assert.deepEqual(response.json(), {
     error: "not_found",
-    message: "Terraform Artifact not found for workspace"
+    message: "Terraform artifact not found for project architecture"
   });
   assert.deepEqual(repository.calls, [
     {
-      name: "findProjectByWorkspace",
+      name: "findAccessibleProject",
       projectId,
-      workspaceId
+      accessContext: {
+        kind: "user",
+        userId
+      }
     },
     {
       name: "findArchitectureInProject",
@@ -405,7 +480,8 @@ test("GET /api/deployments/:deploymentId returns a deployment", async () => {
 
   const response = await app.inject({
     method: "GET",
-    url: `/api/deployments/${deploymentId}`
+    url: `/api/deployments/${deploymentId}`,
+    headers: authHeaders()
   });
 
   assert.equal(response.statusCode, 200);
@@ -414,6 +490,14 @@ test("GET /api/deployments/:deploymentId returns a deployment", async () => {
     {
       name: "findDeploymentById",
       deploymentId
+    },
+    {
+      name: "findAccessibleProject",
+      projectId,
+      accessContext: {
+        kind: "user",
+        userId
+      }
     }
   ]);
 
@@ -427,7 +511,8 @@ test("GET /api/deployments/:deploymentId maps missing deployments to not_found",
 
   const response = await app.inject({
     method: "GET",
-    url: `/api/deployments/${deploymentId}`
+    url: `/api/deployments/${deploymentId}`,
+    headers: authHeaders()
   });
 
   assert.equal(response.statusCode, 404);
@@ -451,7 +536,8 @@ test("GET /api/projects/:projectId/deployments returns project deployments", asy
 
   const response = await app.inject({
     method: "GET",
-    url: `/api/projects/${projectId}/deployments?clientGeneratedWorkspaceId=${workspaceId}`
+    url: `/api/projects/${projectId}/deployments`,
+    headers: authHeaders()
   });
 
   assert.equal(response.statusCode, 200);
@@ -463,9 +549,12 @@ test("GET /api/projects/:projectId/deployments returns project deployments", asy
   assert.equal(body.deployments[0]?.updatedAt, fixedNow.toISOString());
   assert.deepEqual(repository.calls, [
     {
-      name: "findProjectByWorkspace",
+      name: "findAccessibleProject",
       projectId,
-      workspaceId
+      accessContext: {
+        kind: "user",
+        userId
+      }
     },
     {
       name: "listDeploymentsByProject",
@@ -483,19 +572,23 @@ test("GET /api/projects/:projectId/deployments maps missing project ownership to
 
   const response = await app.inject({
     method: "GET",
-    url: `/api/projects/${projectId}/deployments?clientGeneratedWorkspaceId=${workspaceId}`
+    url: `/api/projects/${projectId}/deployments`,
+    headers: authHeaders()
   });
 
   assert.equal(response.statusCode, 404);
   assert.deepEqual(response.json(), {
     error: "not_found",
-    message: "Project not found for workspace"
+    message: "Project not found"
   });
   assert.deepEqual(repository.calls, [
     {
-      name: "findProjectByWorkspace",
+      name: "findAccessibleProject",
       projectId,
-      workspaceId
+      accessContext: {
+        kind: "user",
+        userId
+      }
     }
   ]);
 
@@ -508,7 +601,8 @@ test("GET /api/deployments/:deploymentId/logs returns an empty log list", async 
 
   const response = await app.inject({
     method: "GET",
-    url: `/api/deployments/${deploymentId}/logs`
+    url: `/api/deployments/${deploymentId}/logs`,
+    headers: authHeaders()
   });
 
   assert.equal(response.statusCode, 200);
@@ -519,6 +613,14 @@ test("GET /api/deployments/:deploymentId/logs returns an empty log list", async 
     {
       name: "findDeploymentById",
       deploymentId
+    },
+    {
+      name: "findAccessibleProject",
+      projectId,
+      accessContext: {
+        kind: "user",
+        userId
+      }
     },
     {
       name: "listDeploymentLogs",
@@ -536,7 +638,8 @@ test("GET /api/deployments/:deploymentId/logs maps missing deployments to not_fo
 
   const response = await app.inject({
     method: "GET",
-    url: `/api/deployments/${deploymentId}/logs`
+    url: `/api/deployments/${deploymentId}/logs`,
+    headers: authHeaders()
   });
 
   assert.equal(response.statusCode, 404);
