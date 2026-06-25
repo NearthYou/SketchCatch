@@ -1,5 +1,8 @@
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 import { ZodError } from "zod";
+import type { ApiErrorCode } from "@sketchcatch/types";
+import { startRefreshTokenCleanupJob } from "./auth/cleanup.js";
+import { type DatabaseClient, getDatabaseClient } from "./db/client.js";
 import { registerAiRoutes } from "./routes/ai.js";
 import { registerHealthRoutes } from "./routes/health.js";
 import { registerAuthRoutes } from "./routes/auth.js";
@@ -7,13 +10,8 @@ import { registerProjectRoutes } from "./routes/projects.js";
 import { registerDeploymentRoutes } from "./routes/deployments.js";
 
 const allowedCorsOrigins = new Set(["http://localhost:3000", "http://127.0.0.1:3000"]);
-const corsAllowedMethods = "GET,POST,OPTIONS";
-const fallbackCorsAllowedHeaders = "content-type";
-
-type HttpError = Error & {
-  statusCode?: number;
-  errorCode?: ApiErrorCode;
-};
+const corsAllowedMethods = "GET,POST,DELETE,OPTIONS";
+const fallbackCorsAllowedHeaders = "content-type,authorization";
 
 export type BuildAppOptions = {
   getDatabaseClient?: () => DatabaseClient;
@@ -54,7 +52,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     }
 
     reply.status(statusCode).send({
-      error: statusCode >= 500 ? "internal_server_error" : "bad_request",
+      error: getErrorCode(statusCode, error),
       message: getErrorMessage(error)
     });
   });
@@ -69,8 +67,18 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
 
   app.register(registerHealthRoutes);
   app.register(registerAiRoutes, { prefix: "/api" });
-  app.register(registerProjectRoutes, { prefix: "/api" });
-  app.register(registerDeploymentRoutes, { prefix: "/api" });
+  app.register(registerAuthRoutes, {
+    prefix: "/api",
+    getDatabaseClient: getAppDatabaseClient
+  });
+  app.register(registerProjectRoutes, {
+    prefix: "/api",
+    getDatabaseClient: getAppDatabaseClient
+  });
+  app.register(registerDeploymentRoutes, {
+    prefix: "/api",
+    getDatabaseClient: getAppDatabaseClient
+  });
 
   return app;
 }
@@ -107,6 +115,14 @@ function getErrorStatusCode(error: unknown): number {
   return 500;
 }
 
+function getErrorCode(statusCode: number, error: unknown): ApiErrorCode {
+  if (hasErrorCode(error)) {
+    return error.errorCode;
+  }
+
+  return statusCode >= 500 ? "internal_server_error" : "bad_request";
+}
+
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error) {
     return error.message;
@@ -121,5 +137,14 @@ function hasStatusCode(error: unknown): error is { readonly statusCode: number }
     error !== null &&
     "statusCode" in error &&
     typeof error.statusCode === "number"
+  );
+}
+
+function hasErrorCode(error: unknown): error is { readonly errorCode: ApiErrorCode } {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "errorCode" in error &&
+    typeof error.errorCode === "string"
   );
 }
