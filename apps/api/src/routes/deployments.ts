@@ -2,10 +2,11 @@ import { z } from "zod";
 import { requireActiveUserId } from "../auth/current-user.js";
 import { getDatabaseClient } from "../db/client.js";
 import type { Deployment, DeploymentLog } from "@sketchcatch/types";
-import type { FastifyReply, FastifyInstance } from "fastify";
+import type { FastifyReply, FastifyInstance, FastifyRequest } from "fastify";
 import type { DatabaseClient } from "../db/client.js";
 import {
   runDeploymentInit as defaultRunDeploymentInit,
+  type RunDeploymentInitInput,
   type RunDeploymentInitResult
 } from "../deployments/deployment-init-service.js";
 import {
@@ -44,16 +45,30 @@ type DeploymentRouteOptions = {
   getDatabaseClient?: () => DatabaseClient;
   createDeploymentRepository?: (db: DatabaseClient["db"]) => DeploymentRepository;
   runDeploymentInit?: (
-    input: { deploymentId: string; accessContext: ProjectAccessContext },
+    input: RunDeploymentInitInput,
     repository: DeploymentRepository
   ) => Promise<RunDeploymentInitResult>;
 };
 
-function getRepository(
+type DeploymentRequestContext = {
+  accessContext: ProjectAccessContext;
+  repository: DeploymentRepository;
+};
+
+async function getDeploymentRequestContext(
+  request: FastifyRequest,
   options: DeploymentRouteOptions | undefined,
-  db: DatabaseClient["db"]
-): DeploymentRepository {
-  return options?.createDeploymentRepository?.(db) ?? createPostgresDeploymentRepository(db);
+  getDeploymentDatabaseClient: () => DatabaseClient
+): Promise<DeploymentRequestContext> {
+  const client = getDeploymentDatabaseClient();
+  const currentUserId = await requireActiveUserId(request, () => client);
+
+  return {
+    accessContext: createUserProjectAccessContext(currentUserId),
+    repository:
+      options?.createDeploymentRepository?.(client.db) ??
+      createPostgresDeploymentRepository(client.db)
+  };
 }
 
 function handleDeploymentError(error: unknown, reply: FastifyReply) {
@@ -110,10 +125,11 @@ export async function registerDeploymentRoutes(
   app.post("/projects/:projectId/deployments", async (request, reply) => {
     const params = createDeploymentParamsSchema.parse(request.params);
     const body = createDeploymentBodySchema.parse(request.body);
-    const client = getDeploymentDatabaseClient();
-    const currentUserId = await requireActiveUserId(request, () => client);
-    const accessContext = createUserProjectAccessContext(currentUserId);
-    const repository = getRepository(options, client.db);
+    const { accessContext, repository } = await getDeploymentRequestContext(
+      request,
+      options,
+      getDeploymentDatabaseClient
+    );
 
     try {
       const deployment = await createDeployment(
@@ -136,10 +152,11 @@ export async function registerDeploymentRoutes(
 
   app.get("/projects/:projectId/deployments", async (request, reply) => {
     const params = listDeploymentsParamsSchema.parse(request.params);
-    const client = getDeploymentDatabaseClient();
-    const currentUserId = await requireActiveUserId(request, () => client);
-    const accessContext = createUserProjectAccessContext(currentUserId);
-    const repository = getRepository(options, client.db);
+    const { accessContext, repository } = await getDeploymentRequestContext(
+      request,
+      options,
+      getDeploymentDatabaseClient
+    );
 
     try {
       const deployments = await listProjectDeployments(
@@ -160,10 +177,11 @@ export async function registerDeploymentRoutes(
 
   app.get("/deployments/:deploymentId", async (request, reply) => {
     const params = deploymentParamsSchema.parse(request.params);
-    const client = getDeploymentDatabaseClient();
-    const currentUserId = await requireActiveUserId(request, () => client);
-    const accessContext = createUserProjectAccessContext(currentUserId);
-    const repository = getRepository(options, client.db);
+    const { accessContext, repository } = await getDeploymentRequestContext(
+      request,
+      options,
+      getDeploymentDatabaseClient
+    );
 
     try {
       const deployment = await getDeployment(
@@ -184,10 +202,11 @@ export async function registerDeploymentRoutes(
 
   app.post("/deployments/:deploymentId/init", async (request, reply) => {
     const params = deploymentParamsSchema.parse(request.params);
-    const client = getDeploymentDatabaseClient();
-    const currentUserId = await requireActiveUserId(request, () => client);
-    const accessContext = createUserProjectAccessContext(currentUserId);
-    const repository = getRepository(options, client.db);
+    const { accessContext, repository } = await getDeploymentRequestContext(
+      request,
+      options,
+      getDeploymentDatabaseClient
+    );
     const runDeploymentInit = options?.runDeploymentInit ?? defaultRunDeploymentInit;
 
     try {
@@ -209,10 +228,11 @@ export async function registerDeploymentRoutes(
 
   app.get("/deployments/:deploymentId/logs", async (request, reply) => {
     const params = deploymentParamsSchema.parse(request.params);
-    const client = getDeploymentDatabaseClient();
-    const currentUserId = await requireActiveUserId(request, () => client);
-    const accessContext = createUserProjectAccessContext(currentUserId);
-    const repository = getRepository(options, client.db);
+    const { accessContext, repository } = await getDeploymentRequestContext(
+      request,
+      options,
+      getDeploymentDatabaseClient
+    );
 
     try {
       const logs = await listDeploymentLogs(

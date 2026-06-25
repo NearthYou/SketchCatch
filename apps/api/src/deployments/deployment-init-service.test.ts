@@ -18,6 +18,7 @@ const architectureId = "22222222-2222-4222-8222-222222222222";
 const terraformArtifactId = "33333333-3333-4333-8333-333333333333";
 const deploymentId = "44444444-4444-4444-8444-444444444444";
 const userId = "55555555-5555-4555-8555-555555555555";
+const otherUserId = "66666666-6666-4666-8666-666666666666";
 const fixedNow = new Date("2026-01-01T00:00:00.000Z");
 
 type RepositoryCall =
@@ -371,6 +372,14 @@ test("runDeploymentInit restores the artifact, runs Terraform init, logs output,
     ]
   );
   assert(repository.calls.some((call) => call.name === "findDeploymentById"));
+  assert(
+    repository.calls.some(
+      (call) =>
+        call.name === "findAccessibleProject" &&
+        call.projectId === projectId &&
+        call.accessContext.userId === userId
+    )
+  );
   assert(repository.calls.some((call) => call.name === "findTerraformArtifactById"));
   assert(repository.calls.some((call) => call.name === "markDeploymentInitSucceeded"));
 });
@@ -461,6 +470,46 @@ test("runDeploymentInit rejects an unknown deployment", async () => {
       ),
     new DeploymentNotFoundError("Deployment not found")
   );
+});
+
+test("runDeploymentInit rejects a deployment from a project that is not accessible to the user", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.project = createProjectRecord({ userId: otherUserId });
+
+  await assert.rejects(
+    () =>
+      runDeploymentInit(
+        {
+          deploymentId,
+          accessContext: createAccessContext()
+        },
+        repository,
+        {
+          prepareTerraformWorkspace: async () => {
+            throw new Error("workspace should not be prepared");
+          },
+          runTerraformInit: async () => {
+            throw new Error("terraform should not run");
+          }
+        }
+      ),
+    new DeploymentNotFoundError("Deployment not found")
+  );
+
+  assert.deepEqual(repository.calls, [
+    {
+      name: "findDeploymentById",
+      deploymentId
+    },
+    {
+      name: "findAccessibleProject",
+      projectId,
+      accessContext: {
+        kind: "user",
+        userId
+      }
+    }
+  ]);
 });
 
 test("runDeploymentInit rejects a missing Terraform artifact", async () => {

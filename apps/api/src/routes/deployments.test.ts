@@ -3,7 +3,10 @@ import assert from "node:assert/strict";
 import Fastify from "fastify";
 import { createAccessToken } from "../auth/tokens.js";
 import type { DatabaseClient } from "../db/client.js";
-import type { RunDeploymentInitResult } from "../deployments/deployment-init-service.js";
+import type {
+  RunDeploymentInitInput,
+  RunDeploymentInitResult
+} from "../deployments/deployment-init-service.js";
 import { users } from "../db/schema.js";
 import {
   DeploymentNotFoundError,
@@ -305,7 +308,7 @@ class FakeDeploymentRepository implements DeploymentRepository {
 
 type DeploymentRouteTestOptions = {
   runDeploymentInit?: (
-    input: { deploymentId: string; accessContext: ProjectAccessContext },
+    input: RunDeploymentInitInput,
     repository: DeploymentRepository
   ) => Promise<RunDeploymentInitResult>;
   userRows?: UserRecord[];
