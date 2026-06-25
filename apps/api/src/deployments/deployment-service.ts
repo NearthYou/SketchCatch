@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, sql } from "drizzle-orm";
 import type {
   DeploymentBlockedBy,
   DeploymentFailureStage,
@@ -121,6 +121,7 @@ export type DeploymentRepository = {
     message: string;
     relatedResourceId: string | null;
   }): Promise<DeploymentLogRecord>;
+  getNextDeploymentLogSequence(deploymentId: string): Promise<number>;
   listDeploymentLogs(deploymentId: string): Promise<DeploymentLogRecord[]>;
 };
 
@@ -293,6 +294,17 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
       }
 
       return deploymentLog;
+    },
+
+    async getNextDeploymentLogSequence(deploymentId) {
+      const [row] = await db
+        .select({
+          nextSequence: sql<number>`coalesce(max(${deploymentLogs.sequence}), 0) + 1`
+        })
+        .from(deploymentLogs)
+        .where(eq(deploymentLogs.deploymentId, deploymentId));
+
+      return Number(row?.nextSequence ?? 1);
     },
 
     async listDeploymentLogs(deploymentId) {

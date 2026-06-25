@@ -140,10 +140,7 @@ async function getNextLogSequence(
   deploymentId: string,
   repository: DeploymentRepository
 ): Promise<number> {
-  const logs = await repository.listDeploymentLogs(deploymentId);
-  const maxSequence = logs.reduce((max, log) => Math.max(max, log.sequence), 0);
-
-  return maxSequence + 1;
+  return repository.getNextDeploymentLogSequence(deploymentId);
 }
 
 async function appendOutputLines(input: {

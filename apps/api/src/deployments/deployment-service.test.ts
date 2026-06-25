@@ -267,6 +267,14 @@ class FakeDeploymentRepository implements DeploymentRepository {
     return deploymentLog;
   };
 
+  async getNextDeploymentLogSequence(candidateDeploymentId: string) {
+    const maxSequence = this.logs
+      .filter((log) => log.deploymentId === candidateDeploymentId)
+      .reduce((max, log) => Math.max(max, log.sequence), 0);
+
+    return maxSequence + 1;
+  }
+
   async listDeploymentLogs() {
     return this.logs;
   }
