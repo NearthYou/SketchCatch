@@ -79,6 +79,33 @@ JSON은 데이터를 주고받는 모양이다.
 
 그래서 인터넷이 안 되거나 OpenAI API Key가 없어도 기본 기능을 볼 수 있다.
 
+### Guardrail
+
+`guardrail`은 AI가 너무 마음대로 움직이지 못하게 막아주는 울타리다.
+
+이번에 구현한 guardrail은 어려운 기능이 아니다.
+
+사용자가 자연어만 쓰는 게 아니라, 버튼으로 몇 가지 조건을 같이 고르게 만든 것이다.
+
+예를 들면 이런 조건이다.
+
+- 어떤 종류를 만들지
+- 예산은 낮게 볼지, 보통으로 볼지
+- 트래픽은 작게 볼지, 보통으로 볼지
+- 보안을 기본으로 볼지, 높게 볼지
+
+이렇게 하면 AI가 문장을 이상하게 추측하는 일을 줄일 수 있다.
+
+쉽게 말하면 이거다.
+
+```text
+자연어만 받기
+=> AI가 추측을 많이 해야 함
+
+자연어 + 선택지 같이 받기
+=> AI가 정해진 선택지 안에서만 움직임
+```
+
 ## 전체 구조
 
 현재 AI 코드는 크게 세 군데에 있다.
@@ -122,11 +149,61 @@ POST /api/ai/architecture-draft
 
 ```json
 {
-  "prompt": "DB가 포함된 백엔드 API 서버를 만들고 싶어"
+  "prompt": "DB가 포함된 백엔드 API 서버를 만들고 싶어",
+  "scenarioHint": "backend_with_db",
+  "budgetLevel": "low",
+  "trafficLevel": "small",
+  "securityPriority": "basic"
 }
 ```
 
-서버는 문장 안에 들어간 단어를 보고 셋 중 하나를 고른다.
+예전에는 `prompt`만 보냈다.
+
+이제는 `prompt`와 선택지를 같이 보낸다.
+
+각 값은 이런 뜻이다.
+
+```text
+scenarioHint
+=> 어떤 종류의 설계를 원하는지
+
+budgetLevel
+=> 비용을 얼마나 낮게 봐야 하는지
+
+trafficLevel
+=> 트래픽을 얼마나 크게 봐야 하는지
+
+securityPriority
+=> 보안을 얼마나 중요하게 봐야 하는지
+```
+
+`scenarioHint`는 네 가지 중 하나다.
+
+```text
+auto
+=> 잘 모르겠음. 서버가 prompt를 보고 고름.
+
+static_site
+=> 정적 웹사이트
+
+api_server
+=> API 서버
+
+backend_with_db
+=> DB 포함 백엔드
+```
+
+중요한 규칙은 이것이다.
+
+**사용자가 직접 고른 선택지는 자연어보다 우선한다.**
+
+예를 들어 사용자가 문장에는 “DB 포함 백엔드”라고 썼는데, 선택지는 “정적 웹사이트”를 골랐다고 하자.
+
+그러면 서버는 정적 웹사이트 초안을 만든다.
+
+왜냐하면 버튼 선택이 더 명확한 의도라고 보기 때문이다.
+
+`scenarioHint`가 `auto`일 때만 서버가 문장을 보고 셋 중 하나를 고른다.
 
 ```text
 db / database / 데이터베이스 / rds / 백엔드
@@ -139,15 +216,33 @@ api / 서버 / ec2
 => 정적 웹사이트
 ```
 
+잘못된 선택지 값이 오면 서버는 400으로 막는다.
+
+예를 들어 `scenarioHint: "serverless_app"` 같은 값은 아직 지원하지 않으므로 받지 않는다.
+
 코드는 여기서 볼 수 있다.
 
 ```text
+packages/types/src/index.ts
+apps/api/src/routes/ai.ts
 apps/api/src/services/aiArchitectureDrafts.ts
 ```
 
 중요한 함수는 `createArchitectureDraft`다.
 
 이 함수는 자연어 문장을 받아서 `ArchitectureJson`을 돌려준다.
+
+지금은 정확히 말하면 자연어 문장만 받는 게 아니라, 이런 요청 전체를 받는다.
+
+```text
+CreateArchitectureDraftRequest
+```
+
+이 타입은 `packages/types/src/index.ts`에 있다.
+
+API에서 요청값을 확인하는 부분은 `apps/api/src/routes/ai.ts`에 있다.
+
+실제로 어떤 초안을 고를지 정하는 부분은 `apps/api/src/services/aiArchitectureDrafts.ts`에 있다.
 
 ### 2. GitHub 링크로 설계도 초안 만들기
 
@@ -367,11 +462,39 @@ apps/web/app/workspace/AiWorkspaceClient.tsx
 흐름은 이렇다.
 
 ```text
-사용자 입력
+사용자 자연어 입력
+=> 용도/예산/트래픽/보안 선택
 => /api/ai/architecture-draft 요청
 => ArchitectureJson 응답
 => 화면에 리소스 목록과 연결선 개수 표시
 ```
+
+화면에서는 지금 이런 입력을 받는다.
+
+```text
+무엇을 만들고 싶나요?
+[ DB가 포함된 백엔드 API 서버를 AWS에 배포하고 싶어. ]
+
+용도 선택
+[ 정적 웹사이트 ] [ API 서버 ] [ DB 포함 백엔드 ] [ 잘 모르겠음 ]
+
+예산
+[ 낮게 ] [ 보통 ]
+
+트래픽
+[ 작음 ] [ 보통 ]
+
+보안 우선순위
+[ 기본 ] [ 높음 ]
+```
+
+이 화면은 `apps/web/app/workspace/AiWorkspaceClient.tsx`에 있다.
+
+버튼 스타일은 `apps/web/app/globals.css`에 있다.
+
+중요한 점은 이 화면이 최종 보드 화면은 아니라는 것이다.
+
+지금은 gg AI API가 실제로 어떻게 동작하는지 보여주는 임시 작업 화면이다.
 
 ### GitHub 초안 생성 버튼
 
@@ -434,6 +557,14 @@ edges[].targetId
 그리고 finding의 `resourceId`는 `nodes[].id`와 맞아야 한다.
 
 그래야 보드에서 특정 리소스에 경고 표시를 붙일 수 있다.
+
+이번 guardrail 구현에서 jh가 추가로 알아야 하는 것은 이것이다.
+
+`scenarioHint`가 무엇이든 최종 결과는 여전히 `ArchitectureJson`이다.
+
+즉, 보드가 받는 설계도 모양은 바뀌지 않았다.
+
+바뀐 것은 “초안을 고르는 입력 방식”이다.
 
 ### sw Terraform 파트와 연결되는 부분
 
@@ -532,6 +663,8 @@ apps/api/src/routes/ai.test.ts
 
 - 자연어 요청이 ArchitectureJson을 돌려주는지
 - 빈 prompt를 막는지
+- 선택지가 자연어 키워드보다 먼저 적용되는지
+- 잘못된 선택지 값을 400으로 막는지
 - GitHub가 아닌 URL을 막는지
 - SSH 전체 공개를 위험으로 잡는지
 - RDS 비용 finding이 나오는지
@@ -570,3 +703,41 @@ node_modules/.bin/tsc --noEmit -p apps/api/tsconfig.json
 핵심은 하나다.
 
 **gg AI 파트는 지금 “위험한 자동 실행 AI”가 아니라, 팀 기능을 연결하기 위한 안전한 설명/점검 API다.**
+
+## 이번 guardrail 구현에서 꼭 기억할 것
+
+이번에 만든 기능의 핵심은 아주 단순하다.
+
+**자연어만 믿지 말고, 사용자가 고른 선택지를 같이 믿자.**
+
+서버 입장에서 보면 흐름은 이렇다.
+
+```text
+1. 요청이 /api/ai/architecture-draft 로 들어온다.
+2. apps/api/src/routes/ai.ts 에서 요청값을 검사한다.
+3. scenarioHint, budgetLevel, trafficLevel, securityPriority 값이 맞는지 확인한다.
+4. apps/api/src/services/aiArchitectureDrafts.ts 로 넘긴다.
+5. scenarioHint가 auto가 아니면 그 선택지를 먼저 따른다.
+6. scenarioHint가 auto면 prompt 안의 키워드를 보고 고른다.
+7. 예산/트래픽/보안 선택지는 metadata.assumptions에 설명으로 붙인다.
+8. 최종 결과로 ArchitectureJson을 반환한다.
+```
+
+프론트 입장에서 보면 흐름은 이렇다.
+
+```text
+1. 사용자가 자연어를 쓴다.
+2. 사용자가 용도/예산/트래픽/보안을 버튼으로 고른다.
+3. 자연어 초안 생성 버튼을 누른다.
+4. 프론트가 선택지까지 같이 API에 보낸다.
+5. 서버가 ArchitectureJson을 돌려준다.
+6. 화면이 결과를 보여준다.
+```
+
+그래서 이번 구현은 “AI가 더 똑똑해진 것”이 아니다.
+
+오히려 반대다.
+
+**AI가 덜 마음대로 움직이게 만든 것**이다.
+
+MVP에서는 이게 더 안전하다.
