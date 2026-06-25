@@ -1,7 +1,8 @@
 import Fastify, { type FastifyInstance } from "fastify";
 import { ZodError } from "zod";
 import type { ApiErrorCode, ApiErrorResponse } from "@sketchcatch/types";
-import type { DatabaseClient } from "./db/client.js";
+import { startRefreshTokenCleanupJob } from "./auth/cleanup.js";
+import { type DatabaseClient, getDatabaseClient } from "./db/client.js";
 import { registerHealthRoutes } from "./routes/health.js";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { registerProjectRoutes } from "./routes/projects.js";
@@ -16,9 +17,22 @@ export type BuildAppOptions = {
 };
 
 export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
+  const getAppDatabaseClient = options.getDatabaseClient ?? getDatabaseClient;
   const app = Fastify({
     logger: process.env.NODE_ENV !== "test",
     trustProxy: true
+  });
+  const stopRefreshTokenCleanupJob =
+    process.env.NODE_ENV === "test"
+      ? undefined
+      : startRefreshTokenCleanupJob(getAppDatabaseClient, {
+          onError: (error) => {
+            app.log.error({ error }, "Failed to clean stale refresh tokens");
+          }
+        });
+
+  app.addHook("onClose", async () => {
+    stopRefreshTokenCleanupJob?.();
   });
 
   app.setErrorHandler((error, _request, reply) => {
@@ -48,11 +62,11 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   app.register(registerHealthRoutes);
   app.register(registerAuthRoutes, {
     prefix: "/api",
-    getDatabaseClient: options.getDatabaseClient
+    getDatabaseClient: getAppDatabaseClient
   });
   app.register(registerProjectRoutes, {
     prefix: "/api",
-    getDatabaseClient: options.getDatabaseClient
+    getDatabaseClient: getAppDatabaseClient
   });
 
   return app;

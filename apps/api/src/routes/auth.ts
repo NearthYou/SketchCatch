@@ -10,7 +10,6 @@ import type {
   LoginLockedErrorResponse,
   User
 } from "@sketchcatch/types";
-import { deleteStaleRefreshTokens } from "../auth/cleanup.js";
 import { requireActiveUserId } from "../auth/current-user.js";
 import {
   getLoginAttemptWindowStart,
@@ -77,8 +76,6 @@ export async function registerAuthRoutes(
     const body = signupBodySchema.parse(request.body);
     const { db } = getAuthDatabaseClient();
 
-    await deleteStaleRefreshTokens(db);
-
     const [existingUsername] = await db
       .select({ id: users.id })
       .from(users)
@@ -141,8 +138,6 @@ export async function registerAuthRoutes(
     const body = loginBodySchema.parse(request.body);
     const { db } = getAuthDatabaseClient();
 
-    await deleteStaleRefreshTokens(db);
-
     const activeLock = await getActiveLoginLock(db, body.username, request.ip);
 
     if (activeLock) {
@@ -199,8 +194,6 @@ export async function registerAuthRoutes(
     const body = refreshTokenBodySchema.parse(request.body);
     const { db } = getAuthDatabaseClient();
 
-    await deleteStaleRefreshTokens(db);
-
     const tokenHash = hashToken(body.refreshToken);
 
     const [storedToken] = await db
@@ -244,8 +237,6 @@ export async function registerAuthRoutes(
     const body = refreshTokenBodySchema.parse(request.body);
     const { db } = getAuthDatabaseClient();
 
-    await deleteStaleRefreshTokens(db);
-
     await db
       .update(refreshTokens)
       .set({
@@ -261,8 +252,6 @@ export async function registerAuthRoutes(
   app.post("/auth/logout-all", async (request) => {
     const currentUserId = await requireActiveUserId(request, getAuthDatabaseClient);
     const { db } = getAuthDatabaseClient();
-
-    await deleteStaleRefreshTokens(db);
 
     await db
       .update(refreshTokens)
