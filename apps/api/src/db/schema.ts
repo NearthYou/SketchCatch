@@ -107,8 +107,10 @@ export const deployments = pgTable("deployments", {
   errorSummary: text("error_summary"),
   approvedAt: timestamp("approved_at", { withTimezone: true }),
   approvedBy: varchar("approved_by", { length: 128 }), 
-    approvedTerraformArtifactId: varchar("approved_terraform_artifact_id", { length: 36 })
-    .references(() => projectAssets.id,{ onDelete: "set null" }),
+  approvedTerraformArtifactId: varchar("approved_terraform_artifact_id", { length: 36 }).references(
+    () => projectAssets.id,
+    { onDelete: "set null" }
+  ),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
 });
@@ -117,7 +119,7 @@ export const deploymentLogs = pgTable("deployment_logs", {
   id: varchar("id", { length: 36 }).primaryKey(),
   deploymentId: varchar("deployment_id", { length: 36 })
   .notNull()
-  .references(() => deployments.id, { onDelete: "cascade"}),
+    .references(() => deployments.id, { onDelete: "cascade" }),
   sequence: integer("sequence").notNull(),
   stage: deploymentStageEnum("stage").notNull(),
   level: deploymentLogLevelEnum("level").notNull(),

@@ -16,7 +16,7 @@ import {
 } from "../deployments/deployment-service.js";
 
 type DeploymentRow = DeploymentRecord;
-const workspaceIdSchema = z.string().min(1).max(128)
+const workspaceIdSchema = z.string().min(1).max(128);
 
 const createDeploymentParamsSchema = z.object({
     projectId: z.uuid()
