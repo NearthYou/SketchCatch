@@ -248,6 +248,7 @@ export type ArchitectureDraftTrafficLevel = "small" | "normal";
 
 export type ArchitectureDraftSecurityPriority = "basic" | "high";
 
+// Architecture Draft를 만들 때 AI가 자유롭게 해석하지 않도록 입력 선택지를 좁힌 계약입니다.
 export type CreateArchitectureDraftRequest = {
   prompt: string;
   scenarioHint: ArchitectureDraftScenarioHint;

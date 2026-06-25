@@ -39,6 +39,7 @@ function normalizeArchitectureDraftRequest(input: string | CreateArchitectureDra
     return input;
   }
 
+  // GitHub 초안 생성처럼 문자열만 넘기는 기존 흐름도 같은 기본 선택값을 쓰게 맞춥니다.
   return {
     prompt: input,
     scenarioHint: "auto",
@@ -51,6 +52,7 @@ function normalizeArchitectureDraftRequest(input: string | CreateArchitectureDra
 function createDraftByScenarioHint(request: CreateArchitectureDraftRequest): AiArchitectureDraftResult {
   const scenarioHint = resolveScenarioHint(request);
 
+  // 여기서는 어떤 기본 구조를 쓸지만 고릅니다. 예산/트래픽/보안으로 구조를 바꾸는 일은 후순위입니다.
   switch (scenarioHint) {
     case "static_site":
       return createStaticWebsiteDraft();
@@ -64,6 +66,7 @@ function createDraftByScenarioHint(request: CreateArchitectureDraftRequest): AiA
 }
 
 function resolveScenarioHint(request: CreateArchitectureDraftRequest): ArchitectureDraftScenarioHint {
+  // 사용자가 직접 고른 용도는 자연어 문장보다 우선합니다.
   if (request.scenarioHint !== "auto") {
     return request.scenarioHint;
   }
@@ -97,6 +100,7 @@ function applyGuardrailAssumptions(
 function createGuardrailAssumptions(request: CreateArchitectureDraftRequest): string[] {
   const assumptions: string[] = [];
 
+  // 지금 운영 조건은 설명 문장으로만 남깁니다. 실제 리소스 개수/연결 변경은 다음 작업 범위입니다.
   if (request.budgetLevel === "low") {
     assumptions.push("낮은 예산을 우선해 작은 Practice Resource 기준으로 초안을 만들었습니다.");
   }
