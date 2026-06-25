@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-label="SketchCatch">
+  <rect width="64" height="64" rx="12" fill="#1f6feb"/>
+  <path d="M17 42h30M20 22h24M24 30h16M24 36h16" fill="none" stroke="#ffffff" stroke-linecap="round" stroke-width="4"/>
+  <circle cx="18" cy="22" r="4" fill="#a7f3d0"/>
+  <circle cx="46" cy="42" r="4" fill="#fde68a"/>
+</svg>

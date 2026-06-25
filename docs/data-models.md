@@ -11,6 +11,7 @@
 - 익명 로그인과 `AnonymousWorkspace`는 도입하지 않는다. 프로젝트 소유자는 인증된 `User`이고, API는 `Authorization: Bearer <accessToken>` 기준으로 권한을 확인한다.
 - `Diagram`은 DB에 이미 `architectures` 테이블로 들어가 있다. 공통 타입 이름은 `ArchitectureSnapshot`으로 두고, 화면에서는 다이어그램 또는 보드라고 불러도 된다.
 - 저장되는 아키텍처 JSON은 `nodes`와 `edges`를 가진 `ArchitectureJson`으로 고정한다.
+- 편집 중인 최신 보드 draft는 `ProjectDraft`로 분리하고, 화면 복구용 `DiagramJson`을 저장한다.
 - 자연어 요구사항에서 추출한 예산, 트래픽, 런타임, DB, 가용성, 보안 우선순위는 후속 `RequirementConstraint` 모델로 분리할 수 있다.
 - 비용·성능 시뮬레이션 결과는 1차 제공에서 최소 DTO로 시작하고, 후속 `DesignSimulationResult` 모델로 분리한다.
 - AI 수정 제안은 자동 적용 결과가 아니라 사용자가 diff를 보고 승인해야 하는 `AiChangeProposal` 후보 모델로 다룬다.
@@ -220,6 +221,27 @@ type ResourceEdge = {
 ```
 
 `sourceId`와 `targetId`는 반드시 같은 `ArchitectureJson.nodes` 안의 `ResourceNode.id`를 가리켜야 한다.
+
+### ProjectDraft
+
+편집 중인 프로젝트의 최신 draft다. `ArchitectureSnapshot`이 버전 기록이라면, `ProjectDraft`는 새로고침과 탭 종료 후 작업 복구를 위한 최신 편집본이다.
+
+```ts
+type ProjectDraft = {
+  projectId: string;
+  diagramJson: DiagramJson;
+  revision: number;
+  serverSavedAt: IsoDateTimeString;
+  createdAt: IsoDateTimeString;
+  updatedAt: IsoDateTimeString;
+};
+```
+
+DB 기준: `project_drafts`
+
+`diagramJson`은 화면 복구를 위해 노드 크기, 스타일, viewport, Terraform 파라미터 입력값을 포함한다. DB에는 AWS 리소스별 파라미터를 컬럼으로 쪼개지 않고 `project_drafts.diagram_json` JSONB 컬럼에 `DiagramJson` 전체를 저장한다.
+
+로그인 기반 프로젝트 편집 화면은 `GET /api/projects/:id/draft`로 최신 draft를 불러오고, `PUT /api/projects/:id/draft`로 같은 `DiagramJson`을 저장한다. 권한 검증은 `Authorization: Bearer <accessToken>`에서 확인한 현재 사용자와 `projects.user_id`를 비교해 수행한다.
 
 ### ProjectAsset
 
@@ -496,6 +518,7 @@ type Activity = {
 | `ArchitectureJson` | `architectures.architecture_json` | 공유 패키지에 타입 정의됨 |
 | `ResourceNode` | `architectureJson.nodes` 내부 객체 | 공유 패키지에 타입 정의됨 |
 | `ResourceEdge` | `architectureJson.edges` 내부 객체 | 공유 패키지에 타입 정의됨 |
+| `ProjectDraft` | `project_drafts.diagram_json` | 구현됨 |
 | `ProjectAsset` | `project_assets` | 구현됨 |
 | `TerraformArtifact` | `project_assets.asset_type = "terraform_file"` | 저장 모델 구현됨 |
 | `Deployment` | 향후 table/API | 1차 후반 또는 2차 제공 대상 |

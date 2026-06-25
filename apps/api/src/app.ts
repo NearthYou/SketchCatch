@@ -10,7 +10,7 @@ import { registerProjectRoutes } from "./routes/projects.js";
 import { registerDeploymentRoutes } from "./routes/deployments.js";
 
 const allowedCorsOrigins = new Set(["http://localhost:3000", "http://127.0.0.1:3000"]);
-const corsAllowedMethods = "GET,POST,DELETE,OPTIONS";
+const corsAllowedMethods = "GET,POST,PUT,DELETE,OPTIONS";
 const fallbackCorsAllowedHeaders = "content-type,authorization";
 
 export type BuildAppOptions = {
@@ -54,6 +54,13 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     reply.status(statusCode).send({
       error: getErrorCode(statusCode, error),
       message: getErrorMessage(error)
+    });
+  });
+
+  app.setNotFoundHandler((_request, reply) => {
+    reply.status(404).send({
+      error: "not_found",
+      message: "Route not found"
     });
   });
 
