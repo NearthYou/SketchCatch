@@ -11,6 +11,7 @@ import type {
   ArchitectureDraftTrafficLevel,
   ArchitectureJson
 } from "@sketchcatch/types";
+import { getResourceTypeLabel } from "./resource-type-labels.js";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:4000/api";
 
@@ -252,7 +253,7 @@ export function AiWorkspaceClient() {
             <div className="chipRow">
               {draft.architectureJson.nodes.map((node) => (
                 <span className="resourceChip" key={node.id}>
-                  {node.type} · {node.label ?? node.id}
+                  {getResourceTypeLabel(node.type)} · {node.label ?? node.id}
                 </span>
               ))}
             </div>
