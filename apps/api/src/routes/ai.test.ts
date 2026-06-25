@@ -352,6 +352,54 @@ test("POST /api/ai/architecture-draft uses readable resource ids in nodes, edges
   await app.close();
 });
 
+test("POST /api/ai/architecture-draft applies operating choices inside supported MVP config", async () => {
+  const app = buildApp();
+
+  const databaseBackendResponse = await app.inject({
+    method: "POST",
+    url: "/api/ai/architecture-draft",
+    payload: {
+      prompt: "DB 포함 백엔드 API 서버를 만들고 싶어",
+      scenarioHint: "backend_with_db",
+      budgetLevel: "low",
+      trafficLevel: "normal",
+      securityPriority: "high"
+    }
+  });
+
+  assert.equal(databaseBackendResponse.statusCode, 200);
+
+  const databaseBackendBody = architectureDraftResponseSchema.parse(databaseBackendResponse.json());
+  const databaseNode = databaseBackendBody.architectureJson.nodes.find((node) => node.id === "rds-primary");
+  const databaseSecurityGroupNode = databaseBackendBody.architectureJson.nodes.find((node) => node.id === "sg-db");
+
+  assert.equal(databaseNode?.config.publiclyAccessible, false);
+  assert.deepEqual(databaseSecurityGroupNode?.config.ingress, []);
+  assert.ok(
+    databaseBackendBody.metadata.guardrailWarnings?.some((warning) => warning.code === "low_budget_rds_cost")
+  );
+  assert.ok(databaseBackendBody.metadata.explanations.some((explanation) => explanation.includes("ALB")));
+
+  const staticSiteResponse = await app.inject({
+    method: "POST",
+    url: "/api/ai/architecture-draft",
+    payload: {
+      prompt: "정적 웹사이트를 만들고 싶어",
+      scenarioHint: "static_site",
+      securityPriority: "high"
+    }
+  });
+
+  assert.equal(staticSiteResponse.statusCode, 200);
+
+  const staticSiteBody = architectureDraftResponseSchema.parse(staticSiteResponse.json());
+  const bucketNode = staticSiteBody.architectureJson.nodes.find((node) => node.id === "s3-site");
+
+  assert.equal(bucketNode?.config.publicAccessBlock, true);
+
+  await app.close();
+});
+
 test("POST /api/ai/architecture-draft rejects invalid guardrail choices", async () => {
 	const app = buildApp();
 

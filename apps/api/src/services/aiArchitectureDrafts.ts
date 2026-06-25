@@ -12,8 +12,9 @@ export function createArchitectureDraft(input: string | CreateArchitectureDraftR
   const request = normalizeArchitectureDraftRequest(input);
   const resolution = resolveScenario(request);
   const draft = createDraftByScenario(resolution.selectedScenario);
+  const configuredDraft = applyOperatingConditionConfig(draft, request);
 
-  return applyGuardrailMetadata(draft, request, resolution);
+  return applyGuardrailMetadata(configuredDraft, request, resolution);
 }
 
 // GitHub 링크 요청도 결국 가벼운 텍스트 근거를 모아 자연어 초안 생성 흐름을 재사용합니다.
@@ -212,17 +213,89 @@ function applyGuardrailMetadata(
   request: CreateArchitectureDraftRequest,
   resolution: ScenarioResolution
 ): AiArchitectureDraftResult {
+  const guardrailWarnings = [
+    ...resolution.guardrailWarnings,
+    ...createOperatingConditionWarnings(request, resolution.selectedScenario)
+  ];
+
   return {
     ...draft,
     metadata: {
       ...draft.metadata,
       selectedScenario: resolution.selectedScenario,
       scenarioScores: resolution.scenarioScores,
-      guardrailWarnings: resolution.guardrailWarnings,
+      guardrailWarnings,
       assumptions: [...draft.metadata.assumptions, ...createGuardrailAssumptions(request)],
-      explanations: [...draft.metadata.explanations, ...createGuardrailExplanations(resolution)]
+      explanations: [...draft.metadata.explanations, ...createGuardrailExplanations(request, resolution, guardrailWarnings)]
     }
   };
+}
+
+function applyOperatingConditionConfig(
+  draft: AiArchitectureDraftResult,
+  request: CreateArchitectureDraftRequest
+): AiArchitectureDraftResult {
+  if (request.securityPriority !== "high") {
+    return draft;
+  }
+
+  return {
+    ...draft,
+    architectureJson: {
+      ...draft.architectureJson,
+      nodes: draft.architectureJson.nodes.map(applyHighSecurityConfig)
+    }
+  };
+}
+
+function applyHighSecurityConfig(node: ArchitectureJson["nodes"][number]): ArchitectureJson["nodes"][number] {
+  if (node.type === "S3") {
+    return {
+      ...node,
+      config: {
+        ...node.config,
+        publicAccessBlock: true
+      }
+    };
+  }
+
+  if (node.type === "RDS") {
+    return {
+      ...node,
+      config: {
+        ...node.config,
+        publiclyAccessible: false
+      }
+    };
+  }
+
+  if (node.type === "SECURITY_GROUP") {
+    return {
+      ...node,
+      config: {
+        ...node.config,
+        ingress: []
+      }
+    };
+  }
+
+  return node;
+}
+
+function createOperatingConditionWarnings(
+  request: CreateArchitectureDraftRequest,
+  selectedScenario: ArchitectureScenario
+): ArchitectureGuardrailWarning[] {
+  if (request.budgetLevel === "low" && selectedScenario === "backend_with_db") {
+    return [
+      {
+        code: "low_budget_rds_cost",
+        message: "낮은 예산을 선택했지만 RDS는 월 비용이 생길 수 있습니다. 배포 전 비용 점검을 꼭 확인해야 합니다."
+      }
+    ];
+  }
+
+  return [];
 }
 
 function createGuardrailAssumptions(request: CreateArchitectureDraftRequest): string[] {
@@ -244,11 +317,22 @@ function createGuardrailAssumptions(request: CreateArchitectureDraftRequest): st
   return assumptions;
 }
 
-function createGuardrailExplanations(resolution: ScenarioResolution): string[] {
-  return [
-    `최종 선택된 용도는 ${getScenarioLabel(resolution.selectedScenario)}입니다.`,
-    ...resolution.guardrailWarnings.map((warning) => warning.message)
-  ];
+function createGuardrailExplanations(
+  request: CreateArchitectureDraftRequest,
+  resolution: ScenarioResolution,
+  guardrailWarnings: readonly ArchitectureGuardrailWarning[]
+): string[] {
+  const explanations = [`최종 선택된 용도는 ${getScenarioLabel(resolution.selectedScenario)}입니다.`];
+
+  if (request.trafficLevel === "normal") {
+    explanations.push("트래픽이 보통이면 ALB나 Auto Scaling을 검토할 수 있지만, 이번 MVP에서는 자동 추가하지 않습니다.");
+  }
+
+  if (request.securityPriority === "high") {
+    explanations.push("보안 우선순위가 높아 공개 접근을 줄이는 기본 config만 반영했습니다. 실제 보안 적합성은 보장하지 않습니다.");
+  }
+
+  return [...explanations, ...guardrailWarnings.map((warning) => warning.message)];
 }
 
 function getScenarioLabel(scenario: ArchitectureScenario): string {

@@ -251,7 +251,10 @@ export type ArchitectureScenarioScore = {
   reasons: string[];
 };
 
-export type ArchitectureGuardrailWarningCode = "scenario_conflict" | "unsupported_requirement";
+export type ArchitectureGuardrailWarningCode =
+  | "scenario_conflict"
+  | "unsupported_requirement"
+  | "low_budget_rds_cost";
 
 export type ArchitectureGuardrailWarning = {
   code: ArchitectureGuardrailWarningCode;
