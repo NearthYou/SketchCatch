@@ -1,16 +1,19 @@
 import type {
   AiArchitectureDraftResult,
-  ArchitectureDraftScenarioHint,
+  ArchitectureGuardrailWarning,
   ArchitectureJson,
+  ArchitectureScenario,
+  ArchitectureScenarioScore,
   CreateArchitectureDraftRequest
 } from "@sketchcatch/types";
 
 // 자연어 요청을 보드가 열 수 있는 ArchitectureJson 초안으로 바꾸는 1차 진입점입니다.
 export function createArchitectureDraft(input: string | CreateArchitectureDraftRequest): AiArchitectureDraftResult {
   const request = normalizeArchitectureDraftRequest(input);
-  const draft = createDraftByScenarioHint(request);
+  const resolution = resolveScenario(request);
+  const draft = createDraftByScenario(resolution.selectedScenario);
 
-  return applyGuardrailAssumptions(draft, request);
+  return applyGuardrailMetadata(draft, request, resolution);
 }
 
 // GitHub 링크 요청도 결국 가벼운 텍스트 근거를 모아 자연어 초안 생성 흐름을 재사용합니다.
@@ -49,50 +52,175 @@ function normalizeArchitectureDraftRequest(input: string | CreateArchitectureDra
   };
 }
 
-function createDraftByScenarioHint(request: CreateArchitectureDraftRequest): AiArchitectureDraftResult {
-  const scenarioHint = resolveScenarioHint(request);
+type ScenarioResolution = {
+  readonly selectedScenario: ArchitectureScenario;
+  readonly scenarioScores: ArchitectureScenarioScore[];
+  readonly guardrailWarnings: ArchitectureGuardrailWarning[];
+};
 
-  // 여기서는 어떤 기본 구조를 쓸지만 고릅니다. 예산/트래픽/보안으로 구조를 바꾸는 일은 후순위입니다.
-  switch (scenarioHint) {
+type ScenarioKeywordRule = {
+  readonly scenario: ArchitectureScenario;
+  readonly keywords: readonly string[];
+  readonly reason: string;
+};
+
+const SCENARIO_KEYWORD_RULES: readonly ScenarioKeywordRule[] = [
+  {
+    scenario: "backend_with_db",
+    keywords: ["db", "database", "데이터베이스", "rds", "postgres", "mysql", "백엔드"],
+    reason: "DB가 필요한 백엔드 단서"
+  },
+  {
+    scenario: "api_server",
+    keywords: ["api", "서버", "server", "ec2", "express", "spring"],
+    reason: "API 서버 단서"
+  },
+  {
+    scenario: "static_site",
+    keywords: ["정적", "static", "웹사이트", "프론트", "frontend", "react", "next"],
+    reason: "정적 웹사이트 단서"
+  }
+];
+
+const SCENARIO_PRIORITY: readonly ArchitectureScenario[] = ["backend_with_db", "api_server", "static_site"];
+
+const UNSUPPORTED_REQUIREMENT_KEYWORDS = [
+  "멀티 리전",
+  "multi region",
+  "multi-region",
+  "eks",
+  "kubernetes",
+  "쿠버네티스",
+  "금융권",
+  "의료",
+  "대규모",
+  "ci/cd",
+  "cicd",
+  "실제 비용",
+  "비용 정확",
+  "실제 보안",
+  "보안 적합",
+  "회사 내부 시스템"
+] as const;
+
+function createDraftByScenario(scenario: ArchitectureScenario): AiArchitectureDraftResult {
+  switch (scenario) {
     case "static_site":
       return createStaticWebsiteDraft();
     case "api_server":
       return createApiServerDraft();
     case "backend_with_db":
       return createDatabaseBackendDraft();
-    case "auto":
-      return createStaticWebsiteDraft();
   }
 }
 
-function resolveScenarioHint(request: CreateArchitectureDraftRequest): ArchitectureDraftScenarioHint {
-  // 사용자가 직접 고른 용도는 자연어 문장보다 우선합니다.
+function resolveScenario(request: CreateArchitectureDraftRequest): ScenarioResolution {
+  const scenarioScores = scorePromptScenarios(request.prompt);
+  const guardrailWarnings = createUnsupportedRequirementWarnings(request.prompt, scenarioScores);
+
   if (request.scenarioHint !== "auto") {
-    return request.scenarioHint;
+    const promptScenario = selectScenarioFromScores(scenarioScores);
+
+    // 사용자가 버튼으로 고른 값은 자연어보다 강한 입력입니다.
+    if (hasPromptScenarioSignal(scenarioScores) && promptScenario !== request.scenarioHint) {
+      guardrailWarnings.push({
+        code: "scenario_conflict",
+        message: "입력 문장과 선택한 용도가 다릅니다. 선택한 용도를 우선해서 초안을 만들었습니다."
+      });
+    }
+
+    return {
+      selectedScenario: request.scenarioHint,
+      scenarioScores,
+      guardrailWarnings
+    };
   }
 
-  const normalizedPrompt = request.prompt.toLowerCase();
+  return {
+    selectedScenario: selectScenarioFromScores(scenarioScores),
+    scenarioScores,
+    guardrailWarnings
+  };
+}
 
-  if (containsAny(normalizedPrompt, ["db", "database", "데이터베이스", "rds", "백엔드"])) {
+// LLM이 마음대로 추론하지 않게, MVP에서는 정해진 단어 점수로만 용도를 고릅니다.
+function scorePromptScenarios(prompt: string): ArchitectureScenarioScore[] {
+  const normalizedPrompt = prompt.toLowerCase();
+
+  return SCENARIO_KEYWORD_RULES.map((rule) => {
+    const matchedKeywords = rule.keywords.filter((keyword) => normalizedPrompt.includes(keyword));
+
+    return {
+      scenario: rule.scenario,
+      score: matchedKeywords.length,
+      reasons: matchedKeywords.map((keyword) => `${rule.reason}: "${keyword}"`)
+    };
+  });
+}
+
+function selectScenarioFromScores(scenarioScores: readonly ArchitectureScenarioScore[]): ArchitectureScenario {
+  const backendScore = findScenarioScore(scenarioScores, "backend_with_db");
+  const apiScore = findScenarioScore(scenarioScores, "api_server");
+
+  if (backendScore > 0 && apiScore > 0) {
     return "backend_with_db";
   }
 
-  if (containsAny(normalizedPrompt, ["api", "서버", "ec2"])) {
-    return "api_server";
+  const highestScore = Math.max(...scenarioScores.map((scenarioScore) => scenarioScore.score));
+
+  if (highestScore === 0) {
+    return "static_site";
   }
 
-  return "static_site";
+  return SCENARIO_PRIORITY.find((scenario) => findScenarioScore(scenarioScores, scenario) === highestScore) ?? "static_site";
 }
 
-function applyGuardrailAssumptions(
+function findScenarioScore(
+  scenarioScores: readonly ArchitectureScenarioScore[],
+  scenario: ArchitectureScenario
+): number {
+  return scenarioScores.find((scenarioScore) => scenarioScore.scenario === scenario)?.score ?? 0;
+}
+
+function hasPromptScenarioSignal(scenarioScores: readonly ArchitectureScenarioScore[]): boolean {
+  return scenarioScores.some((scenarioScore) => scenarioScore.score > 0);
+}
+
+function createUnsupportedRequirementWarnings(
+  prompt: string,
+  scenarioScores: readonly ArchitectureScenarioScore[]
+): ArchitectureGuardrailWarning[] {
+  const normalizedPrompt = prompt.toLowerCase();
+  const hasUnsupportedKeyword = UNSUPPORTED_REQUIREMENT_KEYWORDS.some((keyword) => normalizedPrompt.includes(keyword));
+
+  // 데모 흐름은 끊지 않되, 지원하지 않는 요구사항을 지원한다고 말하지 않기 위한 warning입니다.
+  if (hasUnsupportedKeyword || !hasPromptScenarioSignal(scenarioScores)) {
+    return [
+      {
+        code: "unsupported_requirement",
+        message:
+          "입력에 MVP 자동 초안 범위를 벗어난 요구사항이 있습니다. 이번 초안은 기본 Practice Architecture로 시작하며, 자세한 부분은 보드에서 직접 수정해야 합니다."
+      }
+    ];
+  }
+
+  return [];
+}
+
+function applyGuardrailMetadata(
   draft: AiArchitectureDraftResult,
-  request: CreateArchitectureDraftRequest
+  request: CreateArchitectureDraftRequest,
+  resolution: ScenarioResolution
 ): AiArchitectureDraftResult {
   return {
     ...draft,
     metadata: {
       ...draft.metadata,
-      assumptions: [...draft.metadata.assumptions, ...createGuardrailAssumptions(request)]
+      selectedScenario: resolution.selectedScenario,
+      scenarioScores: resolution.scenarioScores,
+      guardrailWarnings: resolution.guardrailWarnings,
+      assumptions: [...draft.metadata.assumptions, ...createGuardrailAssumptions(request)],
+      explanations: [...draft.metadata.explanations, ...createGuardrailExplanations(resolution)]
     }
   };
 }
@@ -114,6 +242,24 @@ function createGuardrailAssumptions(request: CreateArchitectureDraftRequest): st
   }
 
   return assumptions;
+}
+
+function createGuardrailExplanations(resolution: ScenarioResolution): string[] {
+  return [
+    `최종 선택된 용도는 ${getScenarioLabel(resolution.selectedScenario)}입니다.`,
+    ...resolution.guardrailWarnings.map((warning) => warning.message)
+  ];
+}
+
+function getScenarioLabel(scenario: ArchitectureScenario): string {
+  switch (scenario) {
+    case "static_site":
+      return "정적 웹사이트";
+    case "api_server":
+      return "API 서버";
+    case "backend_with_db":
+      return "DB 포함 백엔드";
+  }
 }
 
 // 애매한 요청은 정적 웹사이트 기본 구조로 떨어지게 만든 fallback 초안입니다.
@@ -316,8 +462,4 @@ function createEdge(
     targetId,
     label
   };
-}
-
-function containsAny(value: string, candidates: readonly string[]): boolean {
-  return candidates.some((candidate) => value.includes(candidate));
 }

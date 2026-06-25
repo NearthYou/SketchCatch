@@ -20,7 +20,25 @@ const architectureDraftResponseSchema = z.object({
     source: z.string(),
     confidence: z.string(),
     assumptions: z.array(z.string()),
-    explanations: z.array(z.string())
+    explanations: z.array(z.string()),
+    selectedScenario: z.string().optional(),
+    scenarioScores: z
+      .array(
+        z.object({
+          scenario: z.string(),
+          score: z.number(),
+          reasons: z.array(z.string())
+        })
+      )
+      .optional(),
+    guardrailWarnings: z
+      .array(
+        z.object({
+          code: z.string(),
+          message: z.string()
+        })
+      )
+      .optional()
   })
 });
 
@@ -177,11 +195,60 @@ test("POST /api/ai/architecture-draft uses guardrail choices before prompt keywo
 	assert.equal(body.title, "정적 웹사이트 Practice Architecture");
 	assert.ok(nodeTypes.includes("S3"));
 	assert.equal(nodeTypes.includes("RDS"), false);
+  assert.equal(body.metadata.selectedScenario, "static_site");
+  assert.ok(body.metadata.guardrailWarnings?.some((warning) => warning.code === "scenario_conflict"));
 	assert.ok(body.metadata.assumptions.some((item) => item.includes("낮은 예산")));
 	assert.ok(body.metadata.assumptions.some((item) => item.includes("작은 트래픽")));
 	assert.ok(body.metadata.assumptions.some((item) => item.includes("보안 우선순위")));
 
 	await app.close();
+});
+
+test("POST /api/ai/architecture-draft returns auto scenario scores and fallback warning metadata", async () => {
+  const app = buildApp();
+
+  const scoredResponse = await app.inject({
+    method: "POST",
+    url: "/api/ai/architecture-draft",
+    payload: {
+      prompt: "Next 프론트엔드 정적 웹사이트를 만들고 싶어",
+      scenarioHint: "auto",
+      budgetLevel: "normal",
+      trafficLevel: "normal",
+      securityPriority: "basic"
+    }
+  });
+
+  assert.equal(scoredResponse.statusCode, 200);
+
+  const scoredBody = architectureDraftResponseSchema.parse(scoredResponse.json());
+  const staticSiteScore = scoredBody.metadata.scenarioScores?.find((score) => score.scenario === "static_site");
+
+  assert.equal(scoredBody.metadata.selectedScenario, "static_site");
+  assert.ok(staticSiteScore !== undefined);
+  assert.ok(staticSiteScore.score > 0);
+  assert.ok(staticSiteScore.reasons.length > 0);
+
+  const unsupportedResponse = await app.inject({
+    method: "POST",
+    url: "/api/ai/architecture-draft",
+    payload: {
+      prompt: "멀티 리전 EKS 기반 금융권 서비스를 자동 설계하고 싶어",
+      scenarioHint: "auto",
+      budgetLevel: "normal",
+      trafficLevel: "normal",
+      securityPriority: "basic"
+    }
+  });
+
+  assert.equal(unsupportedResponse.statusCode, 200);
+
+  const unsupportedBody = architectureDraftResponseSchema.parse(unsupportedResponse.json());
+
+  assert.equal(unsupportedBody.metadata.selectedScenario, "static_site");
+  assert.ok(unsupportedBody.metadata.guardrailWarnings?.some((warning) => warning.code === "unsupported_requirement"));
+
+  await app.close();
 });
 
 test("POST /api/ai/architecture-draft rejects invalid guardrail choices", async () => {

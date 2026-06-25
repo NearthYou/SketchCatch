@@ -238,9 +238,27 @@ export type AiResultMetadata = {
   confidence: AiConfidence;
   assumptions: string[];
   explanations: string[];
+  selectedScenario?: ArchitectureScenario;
+  scenarioScores?: ArchitectureScenarioScore[];
+  guardrailWarnings?: ArchitectureGuardrailWarning[];
 };
 
-export type ArchitectureDraftScenarioHint = "auto" | "static_site" | "api_server" | "backend_with_db";
+export type ArchitectureScenario = "static_site" | "api_server" | "backend_with_db";
+
+export type ArchitectureScenarioScore = {
+  scenario: ArchitectureScenario;
+  score: number;
+  reasons: string[];
+};
+
+export type ArchitectureGuardrailWarningCode = "scenario_conflict" | "unsupported_requirement";
+
+export type ArchitectureGuardrailWarning = {
+  code: ArchitectureGuardrailWarningCode;
+  message: string;
+};
+
+export type ArchitectureDraftScenarioHint = "auto" | ArchitectureScenario;
 
 export type ArchitectureDraftBudgetLevel = "low" | "normal";
 
