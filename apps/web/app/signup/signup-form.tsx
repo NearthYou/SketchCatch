@@ -63,18 +63,17 @@ export function SignupForm() {
           disabled={isSubmitting}
           minLength={3}
           name="username"
-          placeholder="yoonseo"
+          placeholder="아이디를 입력하세요."
           required
           type="text"
         />
       </label>
       <label>
-        닉네임
+        이름
         <input
           autoComplete="nickname"
           disabled={isSubmitting}
           name="nickname"
-          placeholder="ys"
           required
           type="text"
         />

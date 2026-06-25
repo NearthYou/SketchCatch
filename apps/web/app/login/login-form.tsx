@@ -53,7 +53,7 @@ export function LoginForm() {
           autoComplete="username"
           disabled={isSubmitting}
           name="username"
-          placeholder="yoonseo"
+          placeholder="ID"
           required
           type="text"
         />
