@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { ApiErrorResponse, AuthResponse, LoginLockedErrorResponse } from "@sketchcatch/types";
 import { buildApp } from "../app.js";
-import { createAccessToken } from "../auth/tokens.js";
+import { createAccessToken, hashToken } from "../auth/tokens.js";
 import { hashPassword } from "../auth/password.js";
 import type { Database, DatabaseClient } from "../db/client.js";
 import { loginAttempts, refreshTokens, users } from "../db/schema.js";
@@ -16,6 +16,10 @@ const PASSWORD = "demo-password-123";
 type UserRow = typeof users.$inferSelect;
 type LoginAttemptRow = typeof loginAttempts.$inferSelect;
 type RefreshTokenRow = typeof refreshTokens.$inferSelect;
+type UpdateCall = {
+  table: unknown;
+  values: Partial<UserRow & LoginAttemptRow & RefreshTokenRow>;
+};
 
 test("POST /api/auth/signup creates a user and session", async () => {
   const fakeDb = new AuthScenarioFakeDb({
@@ -191,6 +195,40 @@ test("POST /api/auth/login returns 429 after five failed attempts", async () => 
   await app.close();
 });
 
+test("POST /api/auth/refresh revokes active sessions when a revoked token is reused", async () => {
+  const reusedRefreshToken = "reused-refresh-token";
+  const fakeDb = new AuthScenarioFakeDb({
+    selectResults: [
+      [
+        makeRefreshToken({
+          tokenHash: hashToken(reusedRefreshToken),
+          revokedAt: new Date("2026-06-24T00:00:00.000Z")
+        })
+      ]
+    ]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/auth/refresh",
+    payload: {
+      refreshToken: reusedRefreshToken
+    }
+  });
+
+  assert.equal(response.statusCode, 401);
+  assertErrorResponse(response.json() as ApiErrorResponse, "unauthorized");
+  assert.equal(fakeDb.refreshTokenRows.length, 0);
+  assert.equal(fakeDb.updateCalls.length, 1);
+  assert.equal(fakeDb.updateCalls[0]?.table, refreshTokens);
+  assert.ok(fakeDb.updateCalls[0]?.values.revokedAt instanceof Date);
+
+  await app.close();
+});
+
 test("GET /api/auth/me returns the active user", async () => {
   const user = makeUser();
   const fakeDb = new AuthScenarioFakeDb({
@@ -323,11 +361,26 @@ function makeUser(overrides: Partial<UserRow> = {}): UserRow {
   };
 }
 
+function makeRefreshToken(overrides: Partial<RefreshTokenRow> = {}): RefreshTokenRow {
+  return {
+    id: "22222222-2222-4222-8222-222222222222",
+    userId: USER_ID,
+    tokenHash: hashToken("refresh-token"),
+    expiresAt: new Date("2026-07-24T00:00:00.000Z"),
+    revokedAt: null,
+    userAgent: null,
+    ipAddress: null,
+    createdAt: new Date("2026-06-24T00:00:00.000Z"),
+    ...overrides
+  };
+}
+
 class AuthScenarioFakeDb {
   selectResults: unknown[][];
   userRows: UserRow[] = [];
   loginAttemptRows: LoginAttemptRow[] = [];
   refreshTokenRows: RefreshTokenRow[] = [];
+  updateCalls: UpdateCall[] = [];
   client: DatabaseClient;
 
   constructor(data: { selectResults: unknown[][] }) {
@@ -357,10 +410,14 @@ class AuthScenarioFakeDb {
           };
         }
       }),
-      update: () => ({
-        set: () => ({
-          where: async () => []
-        })
+      update: (table: unknown) => ({
+        set: (values: Partial<UserRow & LoginAttemptRow & RefreshTokenRow>) => {
+          this.updateCalls.push({ table, values });
+
+          return {
+            where: async () => []
+          };
+        }
       })
     };
   }

@@ -195,19 +195,31 @@ export async function registerAuthRoutes(
     const { db } = getAuthDatabaseClient();
 
     const tokenHash = hashToken(body.refreshToken);
+    const now = new Date();
 
     const [storedToken] = await db
       .select()
       .from(refreshTokens)
-      .where(
-        and(
-          eq(refreshTokens.tokenHash, tokenHash),
-          isNull(refreshTokens.revokedAt),
-          gt(refreshTokens.expiresAt, new Date())
-        )
-      );
+      .where(eq(refreshTokens.tokenHash, tokenHash));
 
     if (!storedToken) {
+      return sendUnauthorized(reply, "로그인 세션이 만료되었습니다. 다시 로그인해주세요.");
+    }
+
+    if (storedToken.revokedAt) {
+      await revokeActiveRefreshTokensForUser(db, storedToken.userId, now);
+      request.log.warn(
+        {
+          refreshTokenId: storedToken.id,
+          userId: storedToken.userId
+        },
+        "Detected refresh token reuse and revoked active sessions"
+      );
+
+      return sendUnauthorized(reply, "로그인 세션이 만료되었습니다. 다시 로그인해주세요.");
+    }
+
+    if (storedToken.expiresAt.getTime() <= now.getTime()) {
       return sendUnauthorized(reply, "로그인 세션이 만료되었습니다. 다시 로그인해주세요.");
     }
 
@@ -217,12 +229,7 @@ export async function registerAuthRoutes(
       return sendUnauthorized(reply, "로그인 세션이 만료되었습니다. 다시 로그인해주세요.");
     }
 
-    await db
-      .update(refreshTokens)
-      .set({
-        revokedAt: new Date()
-      })
-      .where(eq(refreshTokens.id, storedToken.id));
+    await revokeRefreshToken(db, storedToken.id, now);
 
     const session = await createAuthSession(db, storedToken.userId, request);
     const response: AuthResponse = {
@@ -306,6 +313,32 @@ export async function registerAuthRoutes(
       ok: true
     };
   });
+}
+
+async function revokeRefreshToken(
+  db: Database,
+  refreshTokenId: string,
+  revokedAt: Date
+): Promise<void> {
+  await db
+    .update(refreshTokens)
+    .set({
+      revokedAt
+    })
+    .where(eq(refreshTokens.id, refreshTokenId));
+}
+
+async function revokeActiveRefreshTokensForUser(
+  db: Database,
+  userId: string,
+  revokedAt: Date
+): Promise<void> {
+  await db
+    .update(refreshTokens)
+    .set({
+      revokedAt
+    })
+    .where(and(eq(refreshTokens.userId, userId), isNull(refreshTokens.revokedAt)));
 }
 
 async function getActiveLoginLock(
