@@ -174,6 +174,8 @@ export const loginAttemptsRelations = relations(loginAttempts, ({ one }) => ({
     fields: [loginAttempts.userId],
     references: [users.id]
   })
+}));
+    
 export const deployments = pgTable("deployments", {
   id: varchar("id", { length: 36 }).primaryKey(),
   projectId: varchar("project_id", { length: 36 })
