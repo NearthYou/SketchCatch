@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { DiagramJson, TerraformGenerateResponse } from "@sketchcatch/types";
 import { requireActiveUserId } from "../auth/current-user.js";
 import { getDatabaseClient, type DatabaseClient } from "../db/client.js";
-import { generateTerraformFromDiagramJson } from "../services/terraform/diagramToTerraform.js";
+import { generateTerraformFromDiagramJson } from "../services/terraform/diagram-to-terraform.js";
 
 const terraformBlockTypeSchema = z.enum(["resource", "data"]);
 

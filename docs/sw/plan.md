@@ -39,8 +39,8 @@
 
 수정 파일:
 
-- `apps/api/src/services/terraform/diagramToTerraform.ts`
-- `apps/api/src/services/terraform/diagramToTerraform.test.ts`
+- `apps/api/src/services/terraform/diagram-to-terraform.ts`
+- `apps/api/src/services/terraform/diagram-to-terraform.test.ts`
 
 구현 디테일:
 

@@ -6,8 +6,9 @@ import type {
 
 const DEFAULT_TERRAFORM_BLOCK_TYPE: TerraformBlockType = "resource";
 const INDENT_UNIT = "  ";
+const HCL_IDENTIFIER_PATTERN = /^[a-zA-Z_][a-zA-Z0-9_-]*$/;
 const TERRAFORM_REFERENCE_PATTERN =
-  /^[a-zA-Z_][a-zA-Z0-9_]*\.[a-zA-Z_][a-zA-Z0-9_]*\.[a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*$/;
+  /^(?:var|local|each|count|path|terraform)\.[a-zA-Z_][a-zA-Z0-9_]*$|^module\.[a-zA-Z0-9_]+\.[a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)*$|^aws_[a-zA-Z0-9_]+\.[a-zA-Z0-9_]+\.[a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)*$|^data\.aws_[a-zA-Z0-9_]+\.[a-zA-Z0-9_]+\.[a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)*$/;
 
 // DiagramJson 전체를 Terraform 코드 문자열 하나로 변환하는 공개 순수 함수다.
 export function generateTerraformFromDiagramJson(diagramJson: DiagramJson): string {
@@ -95,10 +96,14 @@ function renderObject(value: Record<string, unknown>, indentLevel: number): stri
     "{",
     ...entries.map(
       ([key, nestedValue]) =>
-        `${indent(indentLevel + 1)}${key} = ${renderValue(nestedValue, indentLevel + 1)}`
+        `${indent(indentLevel + 1)}${renderObjectKey(key)} = ${renderValue(nestedValue, indentLevel + 1)}`
     ),
     `${indent(indentLevel)}}`
   ].join("\n");
+}
+
+function renderObjectKey(key: string): string {
+  return HCL_IDENTIFIER_PATTERN.test(key) ? key : JSON.stringify(key);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

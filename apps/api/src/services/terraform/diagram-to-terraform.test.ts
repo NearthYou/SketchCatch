@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { DiagramJson, DiagramNode } from "@sketchcatch/types";
-import { generateTerraformFromDiagramJson } from "./diagramToTerraform.js";
+import { generateTerraformFromDiagramJson } from "./diagram-to-terraform.js";
 
 test("generates Terraform code from resource nodes", () => {
   const diagramJson: DiagramJson = {
@@ -42,7 +42,8 @@ test("generates Terraform code from resource nodes", () => {
             availabilityZone: "ap-northeast-2a",
             mapPublicIpOnLaunch: true,
             tags: {
-              Name: "public-subnet"
+              Name: "public-subnet",
+              "kubernetes.io/cluster/main": "owned"
             }
           }
         }
@@ -80,6 +81,7 @@ resource "aws_subnet" "public" {
   map_public_ip_on_launch = true
   tags = {
     Name = "public-subnet"
+    "kubernetes.io/cluster/main" = "owned"
   }
 }`
   );
@@ -213,7 +215,11 @@ test("renders arrays, numbers, booleans, null, and references", () => {
           resourceName: "ssh",
           fileName: "main",
           values: {
+            vpcId: "var.vpc_id",
+            subnetId: "module.vpc.subnet_id",
+            amiId: "data.aws_ami.ubuntu.id",
             securityGroupId: "aws_security_group.web.id",
+            endpoint: "api.example.com",
             type: "ingress",
             fromPort: 22,
             toPort: 22,
@@ -236,7 +242,11 @@ test("renders arrays, numbers, booleans, null, and references", () => {
   assert.equal(
     generateTerraformFromDiagramJson(diagramJson),
     `resource "aws_security_group_rule" "ssh" {
+  vpc_id = var.vpc_id
+  subnet_id = module.vpc.subnet_id
+  ami_id = data.aws_ami.ubuntu.id
   security_group_id = aws_security_group.web.id
+  endpoint = "api.example.com"
   type = "ingress"
   from_port = 22
   to_port = 22
