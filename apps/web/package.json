@@ -12,6 +12,7 @@
     "test": "node -e \"console.log('No tests configured yet')\""
   },
   "dependencies": {
+    "@sketchcatch/types": "workspace:*",
     "@sketchcatch/ui": "workspace:*",
     "next": "16.2.9",
     "react": "19.2.7",
