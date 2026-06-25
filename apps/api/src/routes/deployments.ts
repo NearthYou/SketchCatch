@@ -4,6 +4,10 @@ import type { Deployment, DeploymentLog } from "@sketchcatch/types";
 import type { FastifyReply, FastifyInstance } from "fastify";
 import type { DatabaseClient } from "../db/client.js";
 import {
+  runDeploymentInit as defaultRunDeploymentInit,
+  type RunDeploymentInitResult
+} from "../deployments/deployment-init-service.js";
+import {
   createDeployment,
   createPostgresDeploymentRepository,
   DeploymentNotFoundError,
@@ -43,6 +47,10 @@ const listDeploymentsQuerySchema = z.object({
 type DeploymentRouteOptions = {
   getDatabaseClient?: () => DatabaseClient;
   createDeploymentRepository?: (db: DatabaseClient["db"]) => DeploymentRepository;
+  runDeploymentInit?: (
+    input: { deploymentId: string },
+    repository: DeploymentRepository
+  ) => Promise<RunDeploymentInitResult>;
 };
 
 function getRepository(options: DeploymentRouteOptions | undefined): DeploymentRepository {
@@ -152,6 +160,28 @@ export async function registerDeploymentRoutes(
 
         try {
             const deployment = await getDeployment(params.deploymentId, repository);
+
+            return reply.status(200).send({
+                deployment: toDeployment(deployment)
+            });
+        }
+        catch (error) {
+            return handleDeploymentError(error, reply);
+        }
+    });
+
+    app.post("/deployments/:deploymentId/init", async (request, reply) => {
+        const params = deploymentParamsSchema.parse(request.params);
+        const repository = getRepository(options);
+        const runDeploymentInit = options?.runDeploymentInit ?? defaultRunDeploymentInit;
+
+        try {
+            const { deployment } = await runDeploymentInit(
+                {
+                    deploymentId: params.deploymentId
+                },
+                repository
+            );
 
             return reply.status(200).send({
                 deployment: toDeployment(deployment)

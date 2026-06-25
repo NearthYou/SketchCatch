@@ -231,6 +231,23 @@ class FakeDeploymentRepository implements DeploymentRepository {
     return this.deployment;
   };
 
+  markDeploymentInitSucceeded: DeploymentRepository["markDeploymentInitSucceeded"] = async (
+    candidateDeploymentId
+  ) => {
+    if (this.deployment?.id !== candidateDeploymentId) {
+      return undefined;
+    }
+
+    this.deployment = {
+      ...this.deployment,
+      status: "PENDING",
+      failureStage: null,
+      errorSummary: null
+    };
+
+    return this.deployment;
+  };
+
   createDeploymentLog: DeploymentRepository["createDeploymentLog"] = async (input) => {
     const deploymentLog = { ...input, createdAt: fixedNow };
 

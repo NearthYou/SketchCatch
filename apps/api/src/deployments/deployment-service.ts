@@ -10,6 +10,7 @@ import type {
 } from "@sketchcatch/types";
 import type { Database } from "../db/client.js";
 import { architectures, deploymentLogs, deployments, projectAssets, projects, touchUpdatedAt } from "../db/schema.js";
+import { maskDeploymentMessage } from "./log-masking.js";
 
 export type DeploymentRecord = typeof deployments.$inferSelect;
 export type DeploymentLogRecord = typeof deploymentLogs.$inferSelect;
@@ -28,6 +29,15 @@ export type CreateDeploymentRecordInput = {
   terraformArtifactId: string;
   status: "PENDING";
 };
+
+export type AppendDeploymentLogInput = {
+  deploymentId: string;
+  sequence: number;
+  stage: DeploymentStage;
+  level: DeploymentLogLevel;
+  message: string;
+  relatedResourceId?: string | null;
+}
 
 export type ProjectRecord = typeof projects.$inferSelect;
 export type ArchitectureRecord = typeof architectures.$inferSelect;
@@ -53,6 +63,7 @@ export type DeploymentRepository = {
 
   listDeploymentsByProject(projectId: string): Promise<DeploymentRecord[]>;
   updateDeploymentStatus(deploymentId: string, status: DeploymentStatus): Promise<DeploymentRecord | undefined>;
+  markDeploymentInitSucceeded(deploymentId: string): Promise<DeploymentRecord | undefined>;
   updateDeploymentPlan(
     deploymentId: string,
     input: {
@@ -201,6 +212,21 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
       return deployment;
     },
 
+    async markDeploymentInitSucceeded(deploymentId) {
+      const [deployment] = await db
+        .update(deployments)
+        .set({
+          status: "PENDING",
+          failureStage: null,
+          errorSummary: null,
+          ...touchUpdatedAt
+        })
+        .where(eq(deployments.id, deploymentId))
+        .returning();
+
+      return deployment;
+    },
+
     async updateDeploymentPlan(deploymentId, input) {
       const [deployment] = await db
         .update(deployments)
@@ -320,4 +346,22 @@ export async function listDeploymentLogs(
   await getDeployment(deploymentId, repository);
 
   return repository.listDeploymentLogs(deploymentId);
+}
+
+export async function appendDeploymentLog(
+  input: AppendDeploymentLogInput,
+  repository: DeploymentRepository,
+  generateId: () => string = randomUUID
+): Promise<DeploymentLogRecord> {
+  await getDeployment(input.deploymentId, repository);
+
+  return repository.createDeploymentLog({
+    id: generateId(),
+    deploymentId: input.deploymentId,
+    sequence: input.sequence,
+    stage: input.stage,
+    level: input.level,
+    message: maskDeploymentMessage(input.message),
+    relatedResourceId: input.relatedResourceId ?? null
+  });
 }
