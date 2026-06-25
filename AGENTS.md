@@ -16,7 +16,7 @@ SketchCatch is a Terraform-first AI infrastructure design and simulation platfor
 
 Before making changes, always read the nearest `AGENTS.md` and this root file. Read additional docs only when they are relevant:
 
-- Read `AGENTS.gg.md` when working with gg or on the gg AI part.
+- If a local `AGENTS.gg.md` exists, read it when working with gg or on the gg AI part.
 - Read `docs/README.md` when working on documentation or when you need the document map.
 - Read `docs/product.md` when changing product scope, MVP behavior, AI/IaC workflows, or safety policy.
 - Read `docs/architecture.md` when changing stack, storage, API scope, deployment architecture, or ADR-level decisions.
