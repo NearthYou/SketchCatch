@@ -5,8 +5,11 @@ import type {
   AiArchitectureDraftResult,
   AiPreDeploymentAnalysisResult,
   AiTerraformPreviewExplanationResult,
-  ArchitectureJson
+  ArchitectureJson,
+  DiagramJson,
+  TerraformGenerateResponse
 } from "@sketchcatch/types";
+import { apiFetch, getApiErrorMessage } from "../../lib/api-client";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:4000/api";
 
@@ -26,6 +29,64 @@ resource "aws_security_group_rule" "ssh" {
 resource "aws_db_instance" "main" {
   instance_class = "db.t3.micro"
 }`;
+
+const sampleDiagramJson: DiagramJson = {
+  nodes: [
+    {
+      id: "node-1",
+      type: "aws_vpc",
+      kind: "resource",
+      label: "main_vpc",
+      parameters: {
+        terraformBlockType: "resource",
+        resourceType: "aws_vpc",
+        resourceName: "main",
+        fileName: "main",
+        values: {
+          cidrBlock: "10.0.0.0/16",
+          enableDnsSupport: true,
+          enableDnsHostnames: true,
+          tags: {
+            Name: "main-vpc"
+          }
+        }
+      }
+    },
+    {
+      id: "node-2",
+      type: "aws_subnet",
+      kind: "resource",
+      label: "public_subnet",
+      parameters: {
+        terraformBlockType: "resource",
+        resourceType: "aws_subnet",
+        resourceName: "public",
+        fileName: "main",
+        values: {
+          vpcId: "aws_vpc.main.id",
+          cidrBlock: "10.0.1.0/24",
+          availabilityZone: "ap-northeast-2a",
+          mapPublicIpOnLaunch: true,
+          tags: {
+            Name: "public-subnet"
+          }
+        }
+      }
+    }
+  ],
+  edges: [
+    {
+      id: "edge-1",
+      sourceNodeId: "node-1",
+      targetNodeId: "node-2"
+    }
+  ],
+  viewport: {
+    x: 0,
+    y: 0,
+    zoom: 1
+  }
+};
 
 type RequestStatus = "idle" | "loading" | "error";
 
@@ -85,6 +146,21 @@ export function AiWorkspaceClient() {
     });
   }
 
+  async function runDiagramToTerraform(): Promise<void> {
+    await runRequest(async () => {
+      const result = await apiFetch<TerraformGenerateResponse>("/terraform/generate", {
+        method: "POST",
+        auth: true,
+        body: {
+          diagramJson: sampleDiagramJson
+        }
+      });
+
+      setTerraformCode(result.terraformCode);
+      setTerraformPreview(null);
+    });
+  }
+
   async function runRequest(request: () => Promise<void>): Promise<void> {
     setStatus("loading");
     setErrorMessage("");
@@ -94,7 +170,7 @@ export function AiWorkspaceClient() {
       setStatus("idle");
     } catch (error) {
       setStatus("error");
-      setErrorMessage(error instanceof Error ? error.message : "요청 처리 중 오류가 발생했습니다.");
+      setErrorMessage(getApiErrorMessage(error, "요청 처리 중 오류가 발생했습니다."));
     }
   }
 
@@ -193,6 +269,13 @@ export function AiWorkspaceClient() {
           rows={11}
           value={terraformCode}
         />
+        <button
+          className="secondaryButton"
+          disabled={status === "loading"}
+          onClick={runDiagramToTerraform}
+        >
+          샘플 다이어그램 변환
+        </button>
         <button className="primaryButton" disabled={status === "loading"} onClick={runTerraformPreview}>
           코드 설명 생성
         </button>

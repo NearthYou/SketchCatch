@@ -342,3 +342,47 @@ export type PracticeSession = {
 export type AwsResourceType = ResourceType;
 export type ArchitectureNode = ResourceNode;
 export type ArchitectureEdge = ResourceEdge;
+
+export type TerraformBlockType = "resource" | "data";
+
+export type DiagramJson = {
+  nodes: DiagramNode[];
+  edges: DiagramEdge[];
+  viewport: {
+    x: number;
+    y: number;
+    zoom: number;
+  };
+};
+
+export type DiagramNode = {
+  id: string;
+  type: string;
+  kind: "resource" | "design";
+  label: string;
+  parameters?: DiagramNodeParameters | undefined;
+};
+
+export type DiagramNodeParameters = {
+  terraformBlockType?: TerraformBlockType | undefined;
+  resourceType: string;
+  resourceName: string;
+  fileName: string;
+  values: Record<string, unknown>;
+  invalid?: boolean | undefined;
+};
+
+export type DiagramEdge = {
+  id: string;
+  sourceNodeId: string;
+  targetNodeId: string;
+  label?: string | undefined;
+};
+
+export type TerraformGenerateRequest = {
+  diagramJson: DiagramJson;
+};
+
+export type TerraformGenerateResponse = {
+  terraformCode: string;
+};
