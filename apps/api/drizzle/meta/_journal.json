@@ -29,6 +29,13 @@
       "when": 1782238994626,
       "tag": "0003_add_deployment_logs_and_plan_fields",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1782317917544,
+      "tag": "0005_add_deployment_init_stage",
+      "breakpoints": true
     }
   ]
 }

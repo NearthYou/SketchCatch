@@ -118,7 +118,6 @@ export type DeploymentBlock = {
 
 export type DeploymentWarningLevel = "low" | "medium" | "high";
 export type DeploymentBlockedBy = "risk_analysis" | "cost_analysis" | "missing_approval";
-export type DeploymentFailureStage = "validation" | "plan" | "approval" | "mock_run";
 
 export type DeploymentPlanWarning = {
   level: DeploymentWarningLevel;
@@ -135,7 +134,7 @@ export type DeploymentPlanSummary = {
   warnings: DeploymentPlanWarning[];
 };
 
-export type DeploymentStage = "validate" | "plan" | "apply";
+export type DeploymentStage = "init" | "validate" | "plan" | "apply";
 
 export type Template = {
   id: string;
@@ -167,6 +166,8 @@ export type DeploymentLog = {
   relatedResourceId: string | null;
   createdAt: IsoDateTimeString;
 };
+
+export type DeploymentFailureStage = "init" | "validation" | "plan" | "approval" | "mock_run";
 
 export type Activity = {
   id: string;

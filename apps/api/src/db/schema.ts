@@ -25,6 +25,7 @@ export const deploymentBlockedEnum = pgEnum("deployment_blocked_by", [
 ]);
 
 export const deploymentFailureStageEnum = pgEnum("deployment_failure_stage", [
+  "init",
   "validation",
   "plan",
   "approval",
@@ -32,6 +33,7 @@ export const deploymentFailureStageEnum = pgEnum("deployment_failure_stage", [
 ]);
 
 export const deploymentStageEnum = pgEnum("deployment_stage", [
+  "init",
   "validate",
   "plan",
   "apply"
@@ -106,7 +108,7 @@ export const deployments = pgTable("deployments", {
   failureStage: deploymentFailureStageEnum("failure_stage"),
   errorSummary: text("error_summary"),
   approvedAt: timestamp("approved_at", { withTimezone: true }),
-  approvedBy: varchar("approved_by", { length: 128 }), 
+  approvedBy: varchar("approved_by", { length: 128 }),
   approvedTerraformArtifactId: varchar("approved_terraform_artifact_id", { length: 36 }).references(
     () => projectAssets.id,
     { onDelete: "set null" }
@@ -118,7 +120,7 @@ export const deployments = pgTable("deployments", {
 export const deploymentLogs = pgTable("deployment_logs", {
   id: varchar("id", { length: 36 }).primaryKey(),
   deploymentId: varchar("deployment_id", { length: 36 })
-  .notNull()
+    .notNull()
     .references(() => deployments.id, { onDelete: "cascade" }),
   sequence: integer("sequence").notNull(),
   stage: deploymentStageEnum("stage").notNull(),
