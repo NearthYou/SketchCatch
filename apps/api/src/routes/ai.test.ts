@@ -10,10 +10,17 @@ const architectureDraftResponseSchema = z.object({
     nodes: z.array(
       z.object({
         id: z.string(),
-        type: z.string()
+        type: z.string(),
+        config: z.record(z.string(), z.unknown())
       })
     ),
-    edges: z.array(z.object({ id: z.string() }))
+    edges: z.array(
+      z.object({
+        id: z.string(),
+        sourceId: z.string(),
+        targetId: z.string()
+      })
+    )
   }),
   title: z.string(),
   metadata: z.object({
@@ -251,6 +258,100 @@ test("POST /api/ai/architecture-draft returns auto scenario scores and fallback 
   await app.close();
 });
 
+test("POST /api/ai/architecture-draft uses readable resource ids in nodes, edges, and config references", async () => {
+  const app = buildApp();
+
+  const staticSiteResponse = await app.inject({
+    method: "POST",
+    url: "/api/ai/architecture-draft",
+    payload: {
+      prompt: "정적 웹사이트를 만들고 싶어",
+      scenarioHint: "static_site"
+    }
+  });
+
+  assert.equal(staticSiteResponse.statusCode, 200);
+
+  const staticSiteBody = architectureDraftResponseSchema.parse(staticSiteResponse.json());
+  const staticSiteNodeIds = staticSiteBody.architectureJson.nodes.map((node) => node.id);
+  const cloudfrontNode = staticSiteBody.architectureJson.nodes.find((node) => node.id === "cloudfront-site");
+
+  assert.deepEqual(staticSiteNodeIds, ["s3-site", "cloudfront-site"]);
+  assert.equal(cloudfrontNode?.config.originResourceId, "s3-site");
+  assert.deepEqual(staticSiteBody.architectureJson.edges[0], {
+    id: "cloudfront-to-s3",
+    sourceId: "cloudfront-site",
+    targetId: "s3-site"
+  });
+
+  const apiServerResponse = await app.inject({
+    method: "POST",
+    url: "/api/ai/architecture-draft",
+    payload: {
+      prompt: "API 서버를 만들고 싶어",
+      scenarioHint: "api_server"
+    }
+  });
+
+  assert.equal(apiServerResponse.statusCode, 200);
+
+  const apiServerBody = architectureDraftResponseSchema.parse(apiServerResponse.json());
+  const apiServerNodeIds = apiServerBody.architectureJson.nodes.map((node) => node.id);
+  const apiServerEdgeIds = apiServerBody.architectureJson.edges.map((edge) => edge.id);
+  const apiServerNode = apiServerBody.architectureJson.nodes.find((node) => node.id === "ec2-api");
+
+  assert.deepEqual(apiServerNodeIds, ["vpc-main", "subnet-public", "sg-api", "ec2-api"]);
+  assert.deepEqual(apiServerEdgeIds, ["vpc-to-subnet-public", "subnet-public-to-ec2-api", "sg-api-to-ec2-api"]);
+  assert.equal(apiServerNode?.config.subnetId, "subnet-public");
+  assert.deepEqual(apiServerNode?.config.securityGroupIds, ["sg-api"]);
+
+  const databaseBackendResponse = await app.inject({
+    method: "POST",
+    url: "/api/ai/architecture-draft",
+    payload: {
+      prompt: "DB 포함 백엔드 API 서버를 만들고 싶어",
+      scenarioHint: "backend_with_db"
+    }
+  });
+
+  assert.equal(databaseBackendResponse.statusCode, 200);
+
+  const databaseBackendBody = architectureDraftResponseSchema.parse(databaseBackendResponse.json());
+  const databaseBackendNodeIds = databaseBackendBody.architectureJson.nodes.map((node) => node.id);
+  const databaseBackendEdgeIds = databaseBackendBody.architectureJson.edges.map((edge) => edge.id);
+  const backendNode = databaseBackendBody.architectureJson.nodes.find((node) => node.id === "ec2-backend");
+  const databaseNode = databaseBackendBody.architectureJson.nodes.find((node) => node.id === "rds-primary");
+  const databaseEdge = databaseBackendBody.architectureJson.edges.find((edge) => edge.id === "backend-to-database");
+
+  assert.deepEqual(databaseBackendNodeIds, [
+    "vpc-main",
+    "subnet-app",
+    "subnet-db",
+    "sg-app",
+    "sg-db",
+    "ec2-backend",
+    "rds-primary"
+  ]);
+  assert.deepEqual(databaseBackendEdgeIds, [
+    "vpc-to-subnet-app",
+    "vpc-to-subnet-db",
+    "subnet-app-to-ec2-backend",
+    "subnet-db-to-rds-primary",
+    "backend-to-database"
+  ]);
+  assert.equal(backendNode?.config.subnetId, "subnet-app");
+  assert.deepEqual(backendNode?.config.securityGroupIds, ["sg-app"]);
+  assert.equal(databaseNode?.config.subnetId, "subnet-db");
+  assert.deepEqual(databaseNode?.config.securityGroupIds, ["sg-db"]);
+  assert.deepEqual(databaseEdge, {
+    id: "backend-to-database",
+    sourceId: "ec2-backend",
+    targetId: "rds-primary"
+  });
+
+  await app.close();
+});
+
 test("POST /api/ai/architecture-draft rejects invalid guardrail choices", async () => {
 	const app = buildApp();
 
@@ -419,17 +520,17 @@ test("POST /api/ai/pre-deployment-check reports cost and missing configuration r
       architectureJson: {
         nodes: [
           {
-            id: "backend-server",
+            id: "ec2-backend",
             type: "EC2",
             label: "Backend Server",
             positionX: 120,
             positionY: 180,
             config: {
-              subnetId: "app-subnet"
+              subnetId: "subnet-app"
             }
           },
           {
-            id: "backend-database",
+            id: "rds-primary",
             type: "RDS",
             label: "Backend Database",
             positionX: 360,
@@ -450,13 +551,13 @@ test("POST /api/ai/pre-deployment-check reports cost and missing configuration r
   const body = preDeploymentAnalysisResponseSchema.parse(response.json());
   const costFinding = body.findings.find((item) => item.category === "cost");
   const configurationFinding = body.findings.find((item) => item.category === "configuration");
-  const databaseEstimate = body.resourceCostEstimates.find((item) => item.resourceId === "backend-database");
+  const databaseEstimate = body.resourceCostEstimates.find((item) => item.resourceId === "rds-primary");
 
-  assert.equal(costFinding?.resourceId, "backend-database");
+  assert.equal(costFinding?.resourceId, "rds-primary");
   assert.equal(costFinding?.severity, "medium");
-  assert.equal(configurationFinding?.resourceId, "backend-server");
+  assert.equal(configurationFinding?.resourceId, "ec2-backend");
   assert.equal(configurationFinding?.severity, "medium");
-  assert.equal(databaseEstimate?.resourceId, "backend-database");
+  assert.equal(databaseEstimate?.resourceId, "rds-primary");
   assert.equal(body.summary.includes("Security Risk"), false);
   assert.equal(body.checklist.some((item) => item.id === "required-config-check" && item.status === "fail"), true);
 

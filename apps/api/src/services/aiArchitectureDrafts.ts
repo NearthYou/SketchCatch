@@ -267,7 +267,7 @@ function createStaticWebsiteDraft(): AiArchitectureDraftResult {
   const architectureJson: ArchitectureJson = {
     nodes: [
       {
-        id: "s3-static-site",
+        id: "s3-site",
         type: "S3",
         label: "Static Website Bucket",
         positionX: 160,
@@ -277,21 +277,21 @@ function createStaticWebsiteDraft(): AiArchitectureDraftResult {
         }
       },
       {
-        id: "cloudfront-cdn",
+        id: "cloudfront-site",
         type: "CLOUDFRONT",
         label: "CloudFront CDN",
         positionX: 420,
         positionY: 220,
         config: {
-          originResourceId: "s3-static-site"
+          originResourceId: "s3-site"
         }
       }
     ],
     edges: [
       {
         id: "cloudfront-to-s3",
-        sourceId: "cloudfront-cdn",
-        targetId: "s3-static-site",
+        sourceId: "cloudfront-site",
+        targetId: "s3-site",
         label: "origin"
       }
     ]
@@ -316,25 +316,25 @@ function createApiServerDraft(): AiArchitectureDraftResult {
     architectureJson: {
       nodes: [
         createVpcNode(),
-        createSubnetNode("public-subnet", "Public Subnet", 280, 140),
-        createSecurityGroupNode("api-security-group", "API Security Group", 280, 300),
+        createSubnetNode("subnet-public", "Public Subnet", 280, 140),
+        createSecurityGroupNode("sg-api", "API Security Group", 280, 300),
         {
-          id: "api-server",
+          id: "ec2-api",
           type: "EC2",
           label: "API Server",
           positionX: 500,
           positionY: 220,
           config: {
             instanceType: "t3.micro",
-            subnetId: "public-subnet",
-            securityGroupIds: ["api-security-group"]
+            subnetId: "subnet-public",
+            securityGroupIds: ["sg-api"]
           }
         }
       ],
       edges: [
-        createEdge("vpc-to-public-subnet", "main-vpc", "public-subnet", "contains"),
-        createEdge("public-subnet-to-api-server", "public-subnet", "api-server", "hosts"),
-        createEdge("api-security-group-to-api-server", "api-security-group", "api-server", "allows traffic")
+        createEdge("vpc-to-subnet-public", "vpc-main", "subnet-public", "contains"),
+        createEdge("subnet-public-to-ec2-api", "subnet-public", "ec2-api", "hosts"),
+        createEdge("sg-api-to-ec2-api", "sg-api", "ec2-api", "allows traffic")
       ]
     },
     metadata: {
@@ -353,24 +353,24 @@ function createDatabaseBackendDraft(): AiArchitectureDraftResult {
     architectureJson: {
       nodes: [
         createVpcNode(),
-        createSubnetNode("app-subnet", "App Subnet", 280, 140),
-        createSubnetNode("db-subnet", "DB Subnet", 280, 340),
-        createSecurityGroupNode("app-security-group", "App Security Group", 500, 140),
-        createSecurityGroupNode("db-security-group", "DB Security Group", 500, 340),
+        createSubnetNode("subnet-app", "App Subnet", 280, 140),
+        createSubnetNode("subnet-db", "DB Subnet", 280, 340),
+        createSecurityGroupNode("sg-app", "App Security Group", 500, 140),
+        createSecurityGroupNode("sg-db", "DB Security Group", 500, 340),
         {
-          id: "backend-server",
+          id: "ec2-backend",
           type: "EC2",
           label: "Backend Server",
           positionX: 720,
           positionY: 140,
           config: {
             instanceType: "t3.micro",
-            subnetId: "app-subnet",
-            securityGroupIds: ["app-security-group"]
+            subnetId: "subnet-app",
+            securityGroupIds: ["sg-app"]
           }
         },
         {
-          id: "backend-database",
+          id: "rds-primary",
           type: "RDS",
           label: "Backend Database",
           positionX: 720,
@@ -378,17 +378,17 @@ function createDatabaseBackendDraft(): AiArchitectureDraftResult {
           config: {
             engine: "postgres",
             instanceClass: "db.t4g.micro",
-            subnetId: "db-subnet",
-            securityGroupIds: ["db-security-group"]
+            subnetId: "subnet-db",
+            securityGroupIds: ["sg-db"]
           }
         }
       ],
       edges: [
-        createEdge("vpc-to-app-subnet", "main-vpc", "app-subnet", "contains"),
-        createEdge("vpc-to-db-subnet", "main-vpc", "db-subnet", "contains"),
-        createEdge("app-subnet-to-backend-server", "app-subnet", "backend-server", "hosts"),
-        createEdge("db-subnet-to-backend-database", "db-subnet", "backend-database", "hosts"),
-        createEdge("backend-server-to-backend-database", "backend-server", "backend-database", "reads/writes")
+        createEdge("vpc-to-subnet-app", "vpc-main", "subnet-app", "contains"),
+        createEdge("vpc-to-subnet-db", "vpc-main", "subnet-db", "contains"),
+        createEdge("subnet-app-to-ec2-backend", "subnet-app", "ec2-backend", "hosts"),
+        createEdge("subnet-db-to-rds-primary", "subnet-db", "rds-primary", "hosts"),
+        createEdge("backend-to-database", "ec2-backend", "rds-primary", "reads/writes")
       ]
     },
     metadata: {
@@ -402,7 +402,7 @@ function createDatabaseBackendDraft(): AiArchitectureDraftResult {
 
 function createVpcNode(): ArchitectureJson["nodes"][number] {
   return {
-    id: "main-vpc",
+    id: "vpc-main",
     type: "VPC",
     label: "Main VPC",
     positionX: 80,
@@ -427,7 +427,7 @@ function createSubnetNode(
     positionY,
     config: {
       cidrBlock: "10.0.1.0/24",
-      vpcId: "main-vpc"
+      vpcId: "vpc-main"
     }
   };
 }
@@ -445,7 +445,7 @@ function createSecurityGroupNode(
     positionX,
     positionY,
     config: {
-      vpcId: "main-vpc"
+      vpcId: "vpc-main"
     }
   };
 }
