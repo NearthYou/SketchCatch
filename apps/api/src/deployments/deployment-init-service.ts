@@ -14,6 +14,7 @@ import {
   runTerraformInit as defaultRunTerraformInit,
   type TerraformRunResult
 } from "./terraform-runner.js";
+import { maskDeploymentMessage } from "./log-masking.js";
 
 export type RunDeploymentInitInput = {
   deploymentId: string;
@@ -40,6 +41,7 @@ export async function runDeploymentInit(
   const runTerraformInit = options.runTerraformInit ?? defaultRunTerraformInit;
 
   let workspace: PreparedTerraformWorkspace | undefined;
+  let deploymentId: string | undefined;
 
   try {
     const deployment = await getDeployment(
@@ -49,6 +51,7 @@ export async function runDeploymentInit(
       },
       repository
     );
+    deploymentId = deployment.id;
 
     const artifact = await repository.findTerraformArtifactById(deployment.terraformArtifactId);
 
@@ -117,6 +120,17 @@ export async function runDeploymentInit(
       deployment: failedDeployment,
       terraform
     };
+  } catch (error) {
+    if (deploymentId) {
+      await repository
+        .failDeployment(deploymentId, {
+          failureStage: "init",
+          errorSummary: summarizeUnexpectedInitFailure(error)
+        })
+        .catch(() => undefined);
+    }
+
+    throw error;
   } finally {
     await workspace?.cleanup();
   }
@@ -177,4 +191,10 @@ function summarizeTerraformFailure(result: TerraformRunResult): string {
   return (
     splitOutputLines(result.stderr)[0] ?? `Terraform init failed with exit code ${result.exitCode}`
   );
+}
+
+function summarizeUnexpectedInitFailure(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+
+  return maskDeploymentMessage(message);
 }

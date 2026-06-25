@@ -536,3 +536,43 @@ test("runDeploymentInit rejects a missing Terraform artifact", async () => {
     new DeploymentNotFoundError("Terraform artifact not found for deployment")
   );
 });
+
+test("runDeploymentInit marks the deployment failed when workspace preparation throws", async () => {
+  const repository = new FakeDeploymentRepository();
+  let terraformRan = false;
+
+  await assert.rejects(
+    () =>
+      runDeploymentInit(
+        {
+          deploymentId,
+          accessContext: createAccessContext()
+        },
+        repository,
+        {
+          prepareTerraformWorkspace: async () => {
+            throw new Error("S3 download failed: token = not-real");
+          },
+          runTerraformInit: async () => {
+            terraformRan = true;
+            throw new Error("terraform should not run");
+          }
+        }
+      ),
+    /S3 download failed/
+  );
+
+  assert.equal(terraformRan, false);
+  assert.equal(repository.deployment?.status, "FAILED");
+  assert.equal(repository.deployment?.failureStage, "init");
+  assert.equal(repository.deployment?.errorSummary, "S3 download failed: [REDACTED]");
+  assert(
+    repository.calls.some(
+      (call) =>
+        call.name === "failDeployment" &&
+        call.deploymentId === deploymentId &&
+        call.failureStage === "init" &&
+        call.errorSummary === "S3 download failed: [REDACTED]"
+    )
+  );
+});
