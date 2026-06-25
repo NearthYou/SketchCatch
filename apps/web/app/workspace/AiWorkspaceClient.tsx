@@ -7,6 +7,7 @@ import type {
   AiTerraformPreviewExplanationResult,
   ArchitectureJson,
   DiagramJson,
+  DiagramNode,
   TerraformGenerateResponse
 } from "@sketchcatch/types";
 import { apiFetch, getApiErrorMessage } from "../../lib/api-client";
@@ -32,7 +33,7 @@ resource "aws_db_instance" "main" {
 
 const sampleDiagramJson: DiagramJson = {
   nodes: [
-    {
+    makeSampleNode({
       id: "node-1",
       type: "aws_vpc",
       kind: "resource",
@@ -51,8 +52,8 @@ const sampleDiagramJson: DiagramJson = {
           }
         }
       }
-    },
-    {
+    }),
+    makeSampleNode({
       id: "node-2",
       type: "aws_subnet",
       kind: "resource",
@@ -72,7 +73,7 @@ const sampleDiagramJson: DiagramJson = {
           }
         }
       }
-    }
+    })
   ],
   edges: [
     {
@@ -87,6 +88,25 @@ const sampleDiagramJson: DiagramJson = {
     zoom: 1
   }
 };
+
+function makeSampleNode(
+  node: Omit<DiagramNode, "position" | "size" | "locked" | "zIndex"> &
+    Partial<Pick<DiagramNode, "position" | "size" | "locked" | "zIndex">>
+): DiagramNode {
+  return {
+    position: {
+      x: 0,
+      y: 0
+    },
+    size: {
+      width: 160,
+      height: 96
+    },
+    locked: false,
+    zIndex: 0,
+    ...node
+  };
+}
 
 type RequestStatus = "idle" | "loading" | "error";
 

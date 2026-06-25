@@ -1,12 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import type { DiagramJson } from "@sketchcatch/types";
+import type { DiagramJson, DiagramNode } from "@sketchcatch/types";
 import { generateTerraformFromDiagramJson } from "./diagramToTerraform.js";
 
 test("generates Terraform code from resource nodes", () => {
   const diagramJson: DiagramJson = {
     nodes: [
-      {
+      makeNode({
         id: "node-1",
         type: "aws_vpc",
         kind: "resource",
@@ -25,8 +25,8 @@ test("generates Terraform code from resource nodes", () => {
             }
           }
         }
-      },
-      {
+      }),
+      makeNode({
         id: "node-2",
         type: "aws_subnet",
         kind: "resource",
@@ -46,7 +46,7 @@ test("generates Terraform code from resource nodes", () => {
             }
           }
         }
-      }
+      })
     ],
     edges: [
       {
@@ -88,19 +88,19 @@ resource "aws_subnet" "public" {
 test("skips non-resource, missing parameters, and invalid nodes", () => {
   const diagramJson: DiagramJson = {
     nodes: [
-      {
+      makeNode({
         id: "design-1",
         type: "memo",
         kind: "design",
         label: "memo"
-      },
-      {
+      }),
+      makeNode({
         id: "missing-parameters",
         type: "aws_vpc",
         kind: "resource",
         label: "missing"
-      },
-      {
+      }),
+      makeNode({
         id: "invalid-resource",
         type: "aws_vpc",
         kind: "resource",
@@ -114,7 +114,7 @@ test("skips non-resource, missing parameters, and invalid nodes", () => {
           },
           invalid: true
         }
-      }
+      })
     ],
     edges: [],
     viewport: {
@@ -130,7 +130,7 @@ test("skips non-resource, missing parameters, and invalid nodes", () => {
 test("defaults missing terraformBlockType to resource", () => {
   const diagramJson: DiagramJson = {
     nodes: [
-      {
+      makeNode({
         id: "node-1",
         type: "aws_s3_bucket",
         kind: "resource",
@@ -143,7 +143,7 @@ test("defaults missing terraformBlockType to resource", () => {
             bucket: "sketchcatch-logs"
           }
         }
-      }
+      })
     ],
     edges: [],
     viewport: {
@@ -164,7 +164,7 @@ test("defaults missing terraformBlockType to resource", () => {
 test("renders data blocks", () => {
   const diagramJson: DiagramJson = {
     nodes: [
-      {
+      makeNode({
         id: "data-1",
         type: "aws_ami",
         kind: "resource",
@@ -179,7 +179,7 @@ test("renders data blocks", () => {
             owners: ["099720109477"]
           }
         }
-      }
+      })
     ],
     edges: [],
     viewport: {
@@ -203,7 +203,7 @@ test("renders data blocks", () => {
 test("renders arrays, numbers, booleans, null, and references", () => {
   const diagramJson: DiagramJson = {
     nodes: [
-      {
+      makeNode({
         id: "sg-rule-1",
         type: "aws_security_group_rule",
         kind: "resource",
@@ -223,7 +223,7 @@ test("renders arrays, numbers, booleans, null, and references", () => {
             self: false
           }
         }
-      }
+      })
     ],
     edges: [],
     viewport: {
@@ -249,3 +249,22 @@ test("renders arrays, numbers, booleans, null, and references", () => {
 }`
   );
 });
+
+function makeNode(
+  node: Omit<DiagramNode, "position" | "size" | "locked" | "zIndex"> &
+    Partial<Pick<DiagramNode, "position" | "size" | "locked" | "zIndex">>
+): DiagramNode {
+  return {
+    position: {
+      x: 0,
+      y: 0
+    },
+    size: {
+      width: 160,
+      height: 96
+    },
+    locked: false,
+    zIndex: 0,
+    ...node
+  };
+}
