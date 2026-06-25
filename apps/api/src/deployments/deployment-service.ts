@@ -52,6 +52,27 @@ export type AppendDeploymentLogInput = {
   relatedResourceId?: string | null;
 };
 
+export type AppendDeploymentLogLineInput = Omit<
+  AppendDeploymentLogInput,
+  "deploymentId" | "accessContext"
+>;
+
+export type AppendDeploymentLogsInput = {
+  deploymentId: string;
+  accessContext: ProjectAccessContext;
+  logs: AppendDeploymentLogLineInput[];
+};
+
+export type CreateDeploymentLogRecordInput = {
+  id: string;
+  deploymentId: string;
+  sequence: number;
+  stage: DeploymentStage;
+  level: DeploymentLogLevel;
+  message: string;
+  relatedResourceId: string | null;
+};
+
 export type ProjectRecord = typeof projects.$inferSelect;
 export type ArchitectureRecord = typeof architectures.$inferSelect;
 export type ProjectAssetRecord = typeof projectAssets.$inferSelect;
@@ -112,15 +133,8 @@ export type DeploymentRepository = {
       errorSummary: string;
     }
   ): Promise<DeploymentRecord | undefined>;
-  createDeploymentLog(input: {
-    id: string;
-    deploymentId: string;
-    sequence: number;
-    stage: DeploymentStage;
-    level: DeploymentLogLevel;
-    message: string;
-    relatedResourceId: string | null;
-  }): Promise<DeploymentLogRecord>;
+  createDeploymentLog(input: CreateDeploymentLogRecordInput): Promise<DeploymentLogRecord>;
+  createDeploymentLogs(input: CreateDeploymentLogRecordInput[]): Promise<DeploymentLogRecord[]>;
   getNextDeploymentLogSequence(deploymentId: string): Promise<number>;
   listDeploymentLogs(deploymentId: string): Promise<DeploymentLogRecord[]>;
 };
@@ -296,6 +310,14 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
       return deploymentLog;
     },
 
+    async createDeploymentLogs(input) {
+      if (input.length === 0) {
+        return [];
+      }
+
+      return db.insert(deploymentLogs).values(input).returning();
+    },
+
     async getNextDeploymentLogSequence(deploymentId) {
       const [row] = await db
         .select({
@@ -405,6 +427,36 @@ export async function appendDeploymentLog(
   repository: DeploymentRepository,
   generateId: () => string = randomUUID
 ): Promise<DeploymentLogRecord> {
+  const [deploymentLog] = await appendDeploymentLogs(
+    {
+      deploymentId: input.deploymentId,
+      accessContext: input.accessContext,
+      logs: [
+        {
+          sequence: input.sequence,
+          stage: input.stage,
+          level: input.level,
+          message: input.message,
+          relatedResourceId: input.relatedResourceId ?? null
+        }
+      ]
+    },
+    repository,
+    generateId
+  );
+
+  if (!deploymentLog) {
+    throw new Error("Deployment log creation failed");
+  }
+
+  return deploymentLog;
+}
+
+export async function appendDeploymentLogs(
+  input: AppendDeploymentLogsInput,
+  repository: DeploymentRepository,
+  generateId: () => string = randomUUID
+): Promise<DeploymentLogRecord[]> {
   await getDeployment(
     {
       deploymentId: input.deploymentId,
@@ -413,15 +465,21 @@ export async function appendDeploymentLog(
     repository
   );
 
-  return repository.createDeploymentLog({
-    id: generateId(),
-    deploymentId: input.deploymentId,
-    sequence: input.sequence,
-    stage: input.stage,
-    level: input.level,
-    message: maskDeploymentMessage(input.message),
-    relatedResourceId: input.relatedResourceId ?? null
-  });
+  if (input.logs.length === 0) {
+    return [];
+  }
+
+  return repository.createDeploymentLogs(
+    input.logs.map((log) => ({
+      id: generateId(),
+      deploymentId: input.deploymentId,
+      sequence: log.sequence,
+      stage: log.stage,
+      level: log.level,
+      message: maskDeploymentMessage(log.message),
+      relatedResourceId: log.relatedResourceId ?? null
+    }))
+  );
 }
 
 async function requireAccessibleProject(

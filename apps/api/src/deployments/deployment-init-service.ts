@@ -1,5 +1,5 @@
 import {
-  appendDeploymentLog,
+  appendDeploymentLogs,
   DeploymentNotFoundError,
   getDeployment,
   type DeploymentRecord,
@@ -151,26 +151,24 @@ async function appendOutputLines(input: {
   level: "INFO" | "WARN" | "ERROR";
   repository: DeploymentRepository;
 }): Promise<number> {
-  let sequence = input.sequence;
+  const lines = splitOutputLines(input.output);
 
-  for (const line of splitOutputLines(input.output)) {
-    await appendDeploymentLog(
-      {
-        deploymentId: input.deploymentId,
-        accessContext: input.accessContext,
-        sequence,
+  await appendDeploymentLogs(
+    {
+      deploymentId: input.deploymentId,
+      accessContext: input.accessContext,
+      logs: lines.map((line, index) => ({
+        sequence: input.sequence + index,
         stage: "init",
         level: input.level,
         message: line,
         relatedResourceId: null
-      },
-      input.repository
-    );
+      }))
+    },
+    input.repository
+  );
 
-    sequence += 1;
-  }
-
-  return sequence;
+  return input.sequence + lines.length;
 }
 
 function splitOutputLines(output: string): string[] {

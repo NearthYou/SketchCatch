@@ -49,6 +49,10 @@ type RepositoryCall =
       input: Omit<DeploymentLogRecord, "createdAt">;
     }
   | {
+      name: "createDeploymentLogs";
+      input: Array<Omit<DeploymentLogRecord, "createdAt">>;
+    }
+  | {
       name: "getNextDeploymentLogSequence";
       deploymentId: string;
     }
@@ -235,6 +239,18 @@ class FakeDeploymentRepository implements DeploymentRepository {
     return deploymentLog;
   };
 
+  createDeploymentLogs: DeploymentRepository["createDeploymentLogs"] = async (input) => {
+    this.calls.push({
+      name: "createDeploymentLogs",
+      input
+    });
+
+    const deploymentLogs = input.map((log) => ({ ...log, createdAt: fixedNow }));
+    this.logs.push(...deploymentLogs);
+
+    return deploymentLogs;
+  };
+
   async getNextDeploymentLogSequence(candidateDeploymentId: string) {
     this.calls.push({
       name: "getNextDeploymentLogSequence",
@@ -403,6 +419,11 @@ test("runDeploymentInit restores the artifact, runs Terraform init, logs output,
       (call) => call.name === "getNextDeploymentLogSequence" && call.deploymentId === deploymentId
     )
   );
+  assert.equal(
+    repository.calls.filter((call) => call.name === "createDeploymentLogs").length,
+    1
+  );
+  assert(!repository.calls.some((call) => call.name === "createDeploymentLog"));
   assert(!repository.calls.some((call) => call.name === "listDeploymentLogs"));
   assert(repository.calls.some((call) => call.name === "markDeploymentInitSucceeded"));
 });

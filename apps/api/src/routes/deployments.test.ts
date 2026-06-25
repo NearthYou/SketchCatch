@@ -296,6 +296,14 @@ class FakeDeploymentRepository implements DeploymentRepository {
     return deploymentLog;
   };
 
+  createDeploymentLogs: DeploymentRepository["createDeploymentLogs"] = async (input) => {
+    const deploymentLogs = input.map((log) => ({ ...log, createdAt: fixedNow }));
+
+    this.logs.push(...deploymentLogs);
+
+    return deploymentLogs;
+  };
+
   async getNextDeploymentLogSequence(candidateDeploymentId: string) {
     const maxSequence = this.logs
       .filter((log) => log.deploymentId === candidateDeploymentId)
