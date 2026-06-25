@@ -31,3 +31,6 @@ SketchCatch 문서는 평소 아래 6개만 읽으면 된다.
 | [AI 고도화 고려사항 초안](./gg/002_AI고도화고려사항초안_gg.md) | gg 전용 | 1차 제공 이후 자연어 요구사항 분석, 비용·성능 시뮬레이션, LLM provider, Terraform 보조, 위험 검증 고도화 방향을 볼 때 |
 | [AI 개발 마일스톤 PRD](./gg/003_AI개발마일스톤PRD_gg.md) | gg 전용 | gg AI 1차 제공 구현을 마일스톤별로 쪼개 작업할 때 |
 | [팀원 Codex 호환성 선택 문서](./team-codex/000_팀원Codex호환성선택문서.md) | 선택 결과 회수 전 | 팀원별 Codex가 구현 전 호환성 선택지를 고르고 답을 가져와야 할 때 |
+| [SW Terraform 변환 스펙](./sw/spec.md) | sw 전용 | DiagramJson 기반 Terraform 변환 이슈 범위와 입력 계약을 확인할 때 |
+| [SW Terraform 구현 계획](./sw/plan.md) | sw 전용 | Terraform 변환 스펙을 실제 구현 마일스톤으로 진행할 때 |
+| [SW Terraform 클론 코딩 가이드](./sw/001_테라폼변환구현가이드_sw.md) | sw 전용 | Terraform 변환 기능을 파일 생성 순서대로 따라 구현할 때 |

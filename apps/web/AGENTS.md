@@ -13,6 +13,8 @@ The web app provides the visual workspace for Terraform-first AWS practice archi
 3. Treat API responses and frontend state as contracts based on `packages/types` and `docs/data-models.md`.
 4. Keep future Terraform execution, deployment approval, and AWS account access behind backend or worker APIs.
 5. Store only UI state in components; persistent project state belongs in the API and database.
+6. For SW Terraform conversion, call backend APIs and render results; do not run Terraform CLI, AWS SDK, S3 upload, or RDS persistence directly from the browser.
+7. Keep DiagramJson editor state aligned with `docs/sw/spec.md` and shared types.
 
 ## UI Architecture
 
