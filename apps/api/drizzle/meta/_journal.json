@@ -14,6 +14,22 @@
       "version": "7",
       "when": 1782288688719,
       "tag": "0004_auth_user_ownership",
+      "when": 1782200041676,
+      "tag": "0001_add_deployments",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1782234115402,
+      "tag": "0002_edit_deployments",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1782238994626,
+      "tag": "0003_add_deployment_logs_and_plan_fields",
       "breakpoints": true
     }
   ]

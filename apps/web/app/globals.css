@@ -578,7 +578,7 @@ input {
 .workspaceShell h1 {
   font-size: 3rem;
   line-height: 1.1;
-  margin: 0 0 16px;
+  margin: 0 0 var(--space-4);
 }
 
 .workspaceTopBar {
@@ -641,21 +641,134 @@ input {
 
 .workspaceGrid {
   display: grid;
-  gap: 16px;
+  gap: var(--space-4);
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  margin-top: 24px;
+  margin-top: var(--space-6);
+}
+
+.workspaceGridWide {
+  align-items: start;
+  grid-template-columns: minmax(280px, 0.9fr) minmax(320px, 1.1fr);
+  max-width: 1440px;
 }
 
 .workspacePanel {
-  background: #ffffff;
-  border: 1px solid #d8e0ea;
+  background: var(--surface-secondary);
+  border: 1px solid var(--border-default);
   border-radius: 8px;
   min-height: 180px;
-  padding: 20px;
+  padding: var(--space-5);
 }
 
 .workspacePanel h2 {
   font-size: 1rem;
+  margin: 0 0 var(--space-4);
+}
+
+.toolPanel,
+.resultPanel,
+.resultStack,
+.resultList {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.fieldLabel {
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.textArea,
+.codeArea,
+.textInput {
+  background: var(--surface-primary);
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font: inherit;
+  line-height: 1.5;
+  padding: var(--space-3);
+  transition:
+    border-color 120ms ease-out,
+    background 120ms ease-out;
+  width: 100%;
+}
+
+.codeArea {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.875rem;
+}
+
+.textArea:focus,
+.codeArea:focus,
+.textInput:focus {
+  background: var(--surface-secondary);
+  border-color: var(--accent-primary);
+  outline: 2px solid var(--surface-elevated);
+}
+
+.primaryButton,
+.secondaryButton {
+  align-items: center;
+  border-radius: 6px;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-weight: 700;
+  justify-content: center;
+  min-height: 44px;
+  padding: var(--space-3) var(--space-4);
+  transition:
+    background 120ms ease-out,
+    border-color 120ms ease-out,
+    color 120ms ease-out;
+}
+
+.primaryButton {
+  background: var(--accent-primary);
+  border: 1px solid var(--accent-primary);
+  color: var(--surface-secondary);
+}
+
+.primaryButton:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.secondaryButton {
+  background: var(--surface-secondary);
+  border: 1px solid var(--border-default);
+  color: var(--text-primary);
+}
+
+.secondaryButton:hover:not(:disabled) {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+
+.primaryButton:disabled,
+.secondaryButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.primaryButton:focus-visible,
+.secondaryButton:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+.emptyState,
+.mutedText {
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  margin: 0;
+}
+
+.resultTitle {
+  font-size: 1rem;
+  font-weight: 700;
   margin: 0;
 }
 

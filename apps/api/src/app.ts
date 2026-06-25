@@ -1,11 +1,17 @@
-import Fastify, { type FastifyInstance } from "fastify";
-import { ZodError } from "zod";
 import type { ApiErrorCode, ApiErrorResponse } from "@sketchcatch/types";
 import { startRefreshTokenCleanupJob } from "./auth/cleanup.js";
 import { type DatabaseClient, getDatabaseClient } from "./db/client.js";
+import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
+import { ZodError } from "zod";
+import { registerAiRoutes } from "./routes/ai.js";
 import { registerHealthRoutes } from "./routes/health.js";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { registerProjectRoutes } from "./routes/projects.js";
+import { registerDeploymentRoutes } from "./routes/deployments.js";
+
+const allowedCorsOrigins = new Set(["http://localhost:3000", "http://127.0.0.1:3000"]);
+const corsAllowedMethods = "GET,POST,OPTIONS";
+const fallbackCorsAllowedHeaders = "content-type";
 
 type HttpError = Error & {
   statusCode?: number;
@@ -44,30 +50,27 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     };
 
     if (statusCode >= 500) {
-      app.log.error(error);
+      app.log.error(error instanceof Error ? error : getErrorMessage(error));
     }
 
-    reply.status(statusCode).send(response);
+    reply.status(statusCode).send({
+      error: statusCode >= 500 ? "internal_server_error" : "bad_request",
+      message: getErrorMessage(error)
+    });
   });
 
-  app.setNotFoundHandler((_request, reply) => {
-    const response: ApiErrorResponse = {
-      error: "not_found",
-      message: "요청한 API 경로를 찾을 수 없습니다."
-    };
+  app.addHook("onRequest", async (request, reply) => {
+    setCorsHeaders(request, reply);
 
-    return reply.status(404).send(response);
+    if (request.method === "OPTIONS") {
+      return reply.status(204).send();
+    }
   });
 
   app.register(registerHealthRoutes);
-  app.register(registerAuthRoutes, {
-    prefix: "/api",
-    getDatabaseClient: getAppDatabaseClient
-  });
-  app.register(registerProjectRoutes, {
-    prefix: "/api",
-    getDatabaseClient: getAppDatabaseClient
-  });
+  app.register(registerAiRoutes, { prefix: "/api" });
+  app.register(registerProjectRoutes, { prefix: "/api" });
+  app.register(registerDeploymentRoutes, { prefix: "/api" });
 
   return app;
 }
