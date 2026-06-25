@@ -5,9 +5,12 @@ import {
   DeploymentNotFoundError,
   getDeployment,
   type CreateDeploymentInput,
+  type ArchitectureRecord,
   type DeploymentLogRecord,
   type DeploymentRecord,
-  type DeploymentRepository
+  type DeploymentRepository,
+  type ProjectAssetRecord,
+  type ProjectRecord
 } from "./deployment-service.js";
 
 const projectId = "11111111-1111-4111-8111-111111111111";
@@ -50,33 +53,11 @@ type RepositoryCall =
       deploymentId: string;
     };
 
-type ProjectReference = {
-  id: string;
-  workspaceId: string;
-};
-
-type ArchitectureReference = {
-  id: string;
-  projectId: string;
-};
-
-type TerraformArtifactReference = {
-  id: string;
-  projectId: string;
-  architectureId: string;
-  assetType: string;
-};
-
 class FakeDeploymentRepository implements DeploymentRepository {
   readonly calls: RepositoryCall[] = [];
-  project: ProjectReference | undefined = { id: projectId, workspaceId };
-  architecture: ArchitectureReference | undefined = { id: architectureId, projectId };
-  terraformArtifact: TerraformArtifactReference | undefined = {
-    id: terraformArtifactId,
-    projectId,
-    architectureId,
-    assetType: "terraform_file"
-  };
+  project: ProjectRecord | undefined = createProjectRecord();
+  architecture: ArchitectureRecord | undefined = createArchitectureRecord();
+  terraformArtifact: ProjectAssetRecord | undefined = createProjectAssetRecord();
   deployment: DeploymentRecord | undefined;
   deployments: DeploymentRecord[] = [];
   logs: DeploymentLogRecord[] = [];
@@ -139,7 +120,10 @@ class FakeDeploymentRepository implements DeploymentRepository {
       return undefined;
     }
 
-    return this.terraformArtifact;
+    return {
+      ...this.terraformArtifact,
+      assetType: "terraform_file"
+    };
   }
 
   async createDeployment(input: Extract<RepositoryCall, { name: "createDeployment" }>["input"]) {
@@ -248,6 +232,48 @@ function createDeploymentRecord(
   };
 }
 
+function createProjectRecord(overrides: Partial<ProjectRecord> = {}): ProjectRecord {
+  return {
+    id: projectId,
+    workspaceId,
+    name: "Test Project",
+    description: null,
+    createdAt: fixedNow,
+    updatedAt: fixedNow,
+    ...overrides
+  };
+}
+
+function createArchitectureRecord(overrides: Partial<ArchitectureRecord> = {}): ArchitectureRecord {
+  return {
+    id: architectureId,
+    projectId,
+    version: 1,
+    source: "manual",
+    architectureJson: {
+      nodes: [],
+      edges: []
+    },
+    createdAt: fixedNow,
+    ...overrides
+  };
+}
+
+function createProjectAssetRecord(overrides: Partial<ProjectAssetRecord> = {}): ProjectAssetRecord {
+  return {
+    id: terraformArtifactId,
+    projectId,
+    architectureId,
+    assetType: "terraform_file",
+    objectKey: "projects/project-id/terraform/main.tf",
+    fileName: "main.tf",
+    contentType: "application/x-terraform",
+    byteSize: null,
+    createdAt: fixedNow,
+    ...overrides
+  };
+}
+
 function createInput(overrides: Partial<CreateDeploymentInput> = {}): CreateDeploymentInput {
   return {
     projectId,
@@ -319,7 +345,7 @@ test("createDeployment rejects a project that does not belong to the workspace",
 
 test("createDeployment rejects an architecture from another project", async () => {
   const repository = new FakeDeploymentRepository();
-  repository.architecture = { id: architectureId, projectId: otherProjectId };
+  repository.architecture = createArchitectureRecord({ projectId: otherProjectId });
 
   await assert.rejects(
     () => createDeployment(createInput(), repository, () => deploymentId),
@@ -342,12 +368,10 @@ test("createDeployment rejects an architecture from another project", async () =
 
 test("createDeployment rejects an artifact that is not a terraform file for the requested project architecture", async () => {
   const repository = new FakeDeploymentRepository();
-  repository.terraformArtifact = {
-    id: terraformArtifactId,
+  repository.terraformArtifact = createProjectAssetRecord({
     projectId: otherProjectId,
-    architectureId,
     assetType: "diagram_png"
-  };
+  });
 
   await assert.rejects(
     () => createDeployment(createInput(), repository, () => deploymentId),

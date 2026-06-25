@@ -3,10 +3,13 @@ import assert from "node:assert/strict";
 import Fastify from "fastify";
 import type { DatabaseClient } from "../db/client.js";
 import type {
+  ArchitectureRecord,
   CreateDeploymentRecordInput,
   DeploymentLogRecord,
   DeploymentRecord,
-  DeploymentRepository
+  DeploymentRepository,
+  ProjectAssetRecord,
+  ProjectRecord
 } from "../deployments/deployment-service.js";
 import { registerDeploymentRoutes } from "./deployments.js";
 
@@ -75,14 +78,9 @@ const fixedNow = new Date("2026-01-01T00:00:00.000Z");
 
 class FakeDeploymentRepository implements DeploymentRepository {
   readonly calls: RepositoryCall[] = [];
-  project: unknown | undefined = { id: projectId, workspaceId };
-  architecture: unknown | undefined = { id: architectureId, projectId };
-  terraformArtifact: unknown | undefined = {
-    id: terraformArtifactId,
-    projectId,
-    architectureId,
-    assetType: "terraform_file"
-  };
+  project: ProjectRecord | undefined = createProjectRecord();
+  architecture: ArchitectureRecord | undefined = createArchitectureRecord();
+  terraformArtifact: ProjectAssetRecord | undefined = createProjectAssetRecord();
   deployment: DeploymentRecord | undefined = createDeploymentRecord(deploymentId);
   deployments: DeploymentRecord[] = [createDeploymentRecord(deploymentId)];
   logs: DeploymentLogRecord[] = [];
@@ -119,7 +117,20 @@ class FakeDeploymentRepository implements DeploymentRepository {
       architectureId: candidateArchitectureId
     });
 
-    return this.terraformArtifact;
+    if (
+      !this.terraformArtifact ||
+      this.terraformArtifact.id !== candidateTerraformArtifactId ||
+      this.terraformArtifact.projectId !== candidateProjectId ||
+      this.terraformArtifact.architectureId !== candidateArchitectureId ||
+      this.terraformArtifact.assetType !== "terraform_file"
+    ) {
+      return undefined;
+    }
+
+    return {
+      ...this.terraformArtifact,
+      assetType: "terraform_file"
+    };
   }
 
   async createDeployment(input: CreateDeploymentRecordInput): Promise<DeploymentRecord> {
@@ -246,6 +257,48 @@ function createDeploymentRecord(
     approvedTerraformArtifactId: null,
     createdAt: fixedNow,
     updatedAt: fixedNow,
+    ...overrides
+  };
+}
+
+function createProjectRecord(overrides: Partial<ProjectRecord> = {}): ProjectRecord {
+  return {
+    id: projectId,
+    workspaceId,
+    name: "Test Project",
+    description: null,
+    createdAt: fixedNow,
+    updatedAt: fixedNow,
+    ...overrides
+  };
+}
+
+function createArchitectureRecord(overrides: Partial<ArchitectureRecord> = {}): ArchitectureRecord {
+  return {
+    id: architectureId,
+    projectId,
+    version: 1,
+    source: "manual",
+    architectureJson: {
+      nodes: [],
+      edges: []
+    },
+    createdAt: fixedNow,
+    ...overrides
+  };
+}
+
+function createProjectAssetRecord(overrides: Partial<ProjectAssetRecord> = {}): ProjectAssetRecord {
+  return {
+    id: terraformArtifactId,
+    projectId,
+    architectureId,
+    assetType: "terraform_file",
+    objectKey: "projects/project-id/terraform/main.tf",
+    fileName: "main.tf",
+    contentType: "application/x-terraform",
+    byteSize: null,
+    createdAt: fixedNow,
     ...overrides
   };
 }

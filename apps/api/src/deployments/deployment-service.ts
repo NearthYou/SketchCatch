@@ -29,14 +29,24 @@ export type CreateDeploymentRecordInput = {
   status: "PENDING";
 };
 
+export type ProjectRecord = typeof projects.$inferSelect;
+export type ArchitectureRecord = typeof architectures.$inferSelect;
+export type ProjectAssetRecord = typeof projectAssets.$inferSelect;
+export type TerraformArtifactRecord = Pick<
+  ProjectAssetRecord,
+  "id" | "projectId" | "architectureId" | "objectKey" | "fileName" | "contentType"
+> & {
+  assetType: "terraform_file";
+};
+
 export type DeploymentRepository = {
-  findProjectByWorkspace(projectId: string, workspaceId: string): Promise<unknown | undefined>;
-  findArchitectureInProject(architectureId: string, projectId: string): Promise<unknown | undefined>;
+  findProjectByWorkspace(projectId: string, workspaceId: string): Promise<ProjectRecord | undefined>;
+  findArchitectureInProject(architectureId: string, projectId: string): Promise<ArchitectureRecord | undefined>;
   findTerraformArtifactForArchitecture(
     terraformArtifactId: string,
     projectId: string,
     architectureId: string
-  ): Promise<unknown | undefined>;
+  ): Promise<TerraformArtifactRecord | undefined>;
   createDeployment(input: CreateDeploymentRecordInput): Promise<DeploymentRecord>;
   findDeploymentById(deploymentId: string): Promise<DeploymentRecord | undefined>;
 
@@ -118,7 +128,14 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
           )
         );
 
-      return terraformArtifact;
+      if (!terraformArtifact) {
+        return undefined;
+      }
+
+      return {
+        ...terraformArtifact,
+        assetType: "terraform_file"
+      };
     },
 
     async createDeployment(input) {
