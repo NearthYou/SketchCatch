@@ -47,6 +47,7 @@ export type DeploymentRepository = {
     projectId: string,
     architectureId: string
   ): Promise<TerraformArtifactRecord | undefined>;
+  findTerraformArtifactById(terraformArtifactId: string): Promise<TerraformArtifactRecord | undefined>;
   createDeployment(input: CreateDeploymentRecordInput): Promise<DeploymentRecord>;
   findDeploymentById(deploymentId: string): Promise<DeploymentRecord | undefined>;
 
@@ -124,6 +125,34 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
             eq(projectAssets.id, terraformArtifactId),
             eq(projectAssets.projectId, projectId),
             eq(projectAssets.architectureId, architectureId),
+            eq(projectAssets.assetType, "terraform_file")
+          )
+        );
+
+      if (!terraformArtifact) {
+        return undefined;
+      }
+
+      return {
+        ...terraformArtifact,
+        assetType: "terraform_file"
+      };
+    },
+
+    async findTerraformArtifactById(terraformArtifactId) {
+        const [terraformArtifact] = await db.select({
+          id: projectAssets.id,
+          projectId: projectAssets.projectId,
+          architectureId: projectAssets.architectureId,
+          assetType: projectAssets.assetType,
+          objectKey: projectAssets.objectKey,
+          fileName: projectAssets.fileName,
+          contentType: projectAssets.contentType
+        })
+        .from(projectAssets)
+        .where(
+          and(
+            eq(projectAssets.id, terraformArtifactId),
             eq(projectAssets.assetType, "terraform_file")
           )
         );

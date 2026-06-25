@@ -54,6 +54,10 @@ type RepositoryCall =
       architectureId: string;
     }
   | {
+      name: "findTerraformArtifactById";
+      terraformArtifactId: string;
+    }
+  | {
       name: "createDeployment";
       input: CreateDeploymentRecordInput;
     }
@@ -77,11 +81,30 @@ const deploymentId = "44444444-4444-4444-8444-444444444444";
 const workspaceId = "workspace-test";
 const fixedNow = new Date("2026-01-01T00:00:00.000Z");
 
+type TerraformArtifactRecordReference = {
+  id: string;
+  projectId: string;
+  architectureId: string | null;
+  assetType: "terraform_file";
+  objectKey: string;
+  fileName: string;
+  contentType: string;
+};
+
 class FakeDeploymentRepository implements DeploymentRepository {
   readonly calls: RepositoryCall[] = [];
   project: ProjectRecord | undefined = createProjectRecord();
   architecture: ArchitectureRecord | undefined = createArchitectureRecord();
   terraformArtifact: ProjectAssetRecord | undefined = createProjectAssetRecord();
+  terraformArtifactById: TerraformArtifactRecordReference | undefined = {
+    id: terraformArtifactId,
+    projectId,
+    architectureId,
+    assetType: "terraform_file",
+    objectKey: "projects/project-id/terraform/main.tf",
+    fileName: "main.tf",
+    contentType: "application/x-terraform"
+  };
   deployment: DeploymentRecord | undefined = createDeploymentRecord(deploymentId);
   deployments: DeploymentRecord[] = [createDeploymentRecord(deploymentId)];
   logs: DeploymentLogRecord[] = [];
@@ -132,6 +155,19 @@ class FakeDeploymentRepository implements DeploymentRepository {
       ...this.terraformArtifact,
       assetType: "terraform_file"
     };
+  }
+
+  async findTerraformArtifactById(candidateTerraformArtifactId: string) {
+    this.calls.push({
+      name: "findTerraformArtifactById",
+      terraformArtifactId: candidateTerraformArtifactId
+    });
+
+    if (!this.terraformArtifactById || this.terraformArtifactById.id !== candidateTerraformArtifactId) {
+      return undefined;
+    }
+
+    return this.terraformArtifactById;
   }
 
   async createDeployment(input: CreateDeploymentRecordInput): Promise<DeploymentRecord> {
