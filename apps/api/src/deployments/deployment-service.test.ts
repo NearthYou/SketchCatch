@@ -11,6 +11,7 @@ import {
   type DeploymentRepository,
   type ProjectAssetRecord,
   type ProjectRecord,
+  type ProjectAccessContext,
   type TerraformArtifactRecord
 } from "./deployment-service.js";
 
@@ -19,14 +20,15 @@ const otherProjectId = "99999999-9999-4999-8999-999999999999";
 const architectureId = "22222222-2222-4222-8222-222222222222";
 const terraformArtifactId = "33333333-3333-4333-8333-333333333333";
 const deploymentId = "44444444-4444-4444-8444-444444444444";
-const workspaceId = "workspace-test";
+const userId = "55555555-5555-4555-8555-555555555555";
+const otherUserId = "66666666-6666-4666-8666-666666666666";
 const fixedNow = new Date("2026-01-01T00:00:00.000Z");
 
 type RepositoryCall =
   | {
-      name: "findProjectByWorkspace";
+      name: "findAccessibleProject";
       projectId: string;
-      workspaceId: string;
+      accessContext: ProjectAccessContext;
     }
   | {
       name: "findArchitectureInProject";
@@ -86,17 +88,17 @@ class FakeDeploymentRepository implements DeploymentRepository {
   deployments: DeploymentRecord[] = [];
   logs: DeploymentLogRecord[] = [];
 
-  async findProjectByWorkspace(candidateProjectId: string, candidateWorkspaceId: string) {
+  async findAccessibleProject(candidateProjectId: string, accessContext: ProjectAccessContext) {
     this.calls.push({
-      name: "findProjectByWorkspace",
+      name: "findAccessibleProject",
       projectId: candidateProjectId,
-      workspaceId: candidateWorkspaceId
+      accessContext
     });
 
     if (
       !this.project ||
       this.project.id !== candidateProjectId ||
-      this.project.workspaceId !== candidateWorkspaceId
+      this.project.userId !== accessContext.userId
     ) {
       return undefined;
     }
@@ -191,7 +193,10 @@ class FakeDeploymentRepository implements DeploymentRepository {
     return this.deployments;
   }
 
-  updateDeploymentStatus: DeploymentRepository["updateDeploymentStatus"] = async (candidateDeploymentId, status) => {
+  updateDeploymentStatus: DeploymentRepository["updateDeploymentStatus"] = async (
+    candidateDeploymentId,
+    status
+  ) => {
     if (this.deployment?.id !== candidateDeploymentId) {
       return undefined;
     }
@@ -201,7 +206,10 @@ class FakeDeploymentRepository implements DeploymentRepository {
     return this.deployment;
   };
 
-  updateDeploymentPlan: DeploymentRepository["updateDeploymentPlan"] = async (candidateDeploymentId, input) => {
+  updateDeploymentPlan: DeploymentRepository["updateDeploymentPlan"] = async (
+    candidateDeploymentId,
+    input
+  ) => {
     if (this.deployment?.id !== candidateDeploymentId) {
       return undefined;
     }
@@ -211,7 +219,10 @@ class FakeDeploymentRepository implements DeploymentRepository {
     return this.deployment;
   };
 
-  approveDeployment: DeploymentRepository["approveDeployment"] = async (candidateDeploymentId, input) => {
+  approveDeployment: DeploymentRepository["approveDeployment"] = async (
+    candidateDeploymentId,
+    input
+  ) => {
     if (this.deployment?.id !== candidateDeploymentId) {
       return undefined;
     }
@@ -289,7 +300,7 @@ function createDeploymentRecord(
 function createProjectRecord(overrides: Partial<ProjectRecord> = {}): ProjectRecord {
   return {
     id: projectId,
-    workspaceId,
+    userId,
     name: "Test Project",
     description: null,
     createdAt: fixedNow,
@@ -331,7 +342,10 @@ function createProjectAssetRecord(overrides: Partial<ProjectAssetRecord> = {}): 
 function createInput(overrides: Partial<CreateDeploymentInput> = {}): CreateDeploymentInput {
   return {
     projectId,
-    clientGeneratedWorkspaceId: workspaceId,
+    accessContext: {
+      kind: "user",
+      userId
+    },
     architectureId,
     terraformArtifactId,
     ...overrides
@@ -347,9 +361,12 @@ test("createDeployment verifies project, architecture, and terraform artifact ow
   assert.equal(deployment.status, "PENDING");
   assert.deepEqual(repository.calls, [
     {
-      name: "findProjectByWorkspace",
+      name: "findAccessibleProject",
       projectId,
-      workspaceId
+      accessContext: {
+        kind: "user",
+        userId
+      }
     },
     {
       name: "findArchitectureInProject",
@@ -375,24 +392,32 @@ test("createDeployment verifies project, architecture, and terraform artifact ow
   ]);
 });
 
-test("createDeployment rejects a project that does not belong to the workspace", async () => {
+test("createDeployment rejects a project that is not accessible to the user", async () => {
   const repository = new FakeDeploymentRepository();
 
   await assert.rejects(
     () =>
       createDeployment(
-        createInput({ clientGeneratedWorkspaceId: "wrong-workspace" }),
+        createInput({
+          accessContext: {
+            kind: "user",
+            userId: otherUserId
+          }
+        }),
         repository,
         () => deploymentId
       ),
-    new DeploymentNotFoundError("Project not found for workspace")
+    new DeploymentNotFoundError("Project not found")
   );
 
   assert.deepEqual(repository.calls, [
     {
-      name: "findProjectByWorkspace",
+      name: "findAccessibleProject",
       projectId,
-      workspaceId: "wrong-workspace"
+      accessContext: {
+        kind: "user",
+        userId: otherUserId
+      }
     }
   ]);
 });
@@ -403,14 +428,17 @@ test("createDeployment rejects an architecture from another project", async () =
 
   await assert.rejects(
     () => createDeployment(createInput(), repository, () => deploymentId),
-    new DeploymentNotFoundError("Architecture not found for workspace")
+    new DeploymentNotFoundError("Architecture not found for project")
   );
 
   assert.deepEqual(repository.calls, [
     {
-      name: "findProjectByWorkspace",
+      name: "findAccessibleProject",
       projectId,
-      workspaceId
+      accessContext: {
+        kind: "user",
+        userId
+      }
     },
     {
       name: "findArchitectureInProject",
@@ -429,14 +457,17 @@ test("createDeployment rejects an artifact that is not a terraform file for the 
 
   await assert.rejects(
     () => createDeployment(createInput(), repository, () => deploymentId),
-    new DeploymentNotFoundError("Terraform Artifact not found for workspace")
+    new DeploymentNotFoundError("Terraform artifact not found for project architecture")
   );
 
   assert.deepEqual(repository.calls, [
     {
-      name: "findProjectByWorkspace",
+      name: "findAccessibleProject",
       projectId,
-      workspaceId
+      accessContext: {
+        kind: "user",
+        userId
+      }
     },
     {
       name: "findArchitectureInProject",
@@ -456,13 +487,66 @@ test("getDeployment returns a deployment by id", async () => {
   const repository = new FakeDeploymentRepository();
   repository.deployment = createDeploymentRecord(deploymentId);
 
-  const deployment = await getDeployment(deploymentId, repository);
+  const deployment = await getDeployment(
+    {
+      deploymentId,
+      accessContext: {
+        kind: "user",
+        userId
+      }
+    },
+    repository
+  );
 
   assert.equal(deployment.id, deploymentId);
   assert.deepEqual(repository.calls, [
     {
       name: "findDeploymentById",
       deploymentId
+    },
+    {
+      name: "findAccessibleProject",
+      projectId,
+      accessContext: {
+        kind: "user",
+        userId
+      }
+    }
+  ]);
+});
+
+test("getDeployment rejects a deployment from a project that is not accessible to the user", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.deployment = createDeploymentRecord(deploymentId);
+  repository.project = createProjectRecord({ userId: otherUserId });
+
+  await assert.rejects(
+    () =>
+      getDeployment(
+        {
+          deploymentId,
+          accessContext: {
+            kind: "user",
+            userId
+          }
+        },
+        repository
+      ),
+    new DeploymentNotFoundError("Deployment not found")
+  );
+
+  assert.deepEqual(repository.calls, [
+    {
+      name: "findDeploymentById",
+      deploymentId
+    },
+    {
+      name: "findAccessibleProject",
+      projectId,
+      accessContext: {
+        kind: "user",
+        userId
+      }
     }
   ]);
 });
@@ -471,7 +555,17 @@ test("getDeployment rejects an unknown deployment id", async () => {
   const repository = new FakeDeploymentRepository();
 
   await assert.rejects(
-    () => getDeployment(deploymentId, repository),
+    () =>
+      getDeployment(
+        {
+          deploymentId,
+          accessContext: {
+            kind: "user",
+            userId
+          }
+        },
+        repository
+      ),
     new DeploymentNotFoundError("Deployment not found")
   );
   assert.deepEqual(repository.calls, [

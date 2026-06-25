@@ -2,24 +2,16 @@ import { randomUUID } from "node:crypto";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { and, desc, eq, sql } from "drizzle-orm";
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
-import type { ArchitectureJson } from "@sketchcatch/types";
+import type { ApiErrorResponse, ArchitectureJson } from "@sketchcatch/types";
+import { requireActiveUserId } from "../auth/current-user.js";
 import { requireS3BucketName } from "../config/env.js";
-import { getDatabaseClient } from "../db/client.js";
-import {
-  anonymousWorkspaces,
-  architectures,
-  projectAssets,
-  projects,
-  touchUpdatedAt
-} from "../db/schema.js";
+import { getDatabaseClient, type DatabaseClient } from "../db/client.js";
+import { architectures, projectAssets, projects, touchUpdatedAt } from "../db/schema.js";
 import { getS3Client } from "../s3/client.js";
 
-const workspaceIdSchema = z.string().min(1).max(128);
-
 const createProjectBodySchema = z.object({
-  clientGeneratedWorkspaceId: workspaceIdSchema,
   name: z.string().min(1).max(120),
   description: z.string().max(2000).optional()
 });
@@ -60,7 +52,6 @@ const architectureJsonSchema: z.ZodType<ArchitectureJson> = z.object({
 });
 
 const createArchitectureBodySchema = z.object({
-  clientGeneratedWorkspaceId: workspaceIdSchema,
   version: z.number().int().positive().optional(),
   source: z.string().min(1).max(64).default("manual"),
   architectureJson: architectureJsonSchema
@@ -75,7 +66,6 @@ const assetTypeSchema = z.enum([
 ]);
 
 const presignedUploadBodySchema = z.object({
-  clientGeneratedWorkspaceId: workspaceIdSchema,
   architectureId: z.string().uuid().optional(),
   assetType: assetTypeSchema,
   fileName: z.string().min(1).max(255),
@@ -83,29 +73,43 @@ const presignedUploadBodySchema = z.object({
   byteSize: z.number().int().positive().optional()
 });
 
-export async function registerProjectRoutes(app: FastifyInstance): Promise<void> {
-  app.post("/projects", async (request, reply) => {
-    const body = createProjectBodySchema.parse(request.body);
-    const { db } = getDatabaseClient();
-    const projectId = randomUUID();
+type ProjectRouteOptions = {
+  getDatabaseClient?: () => DatabaseClient;
+};
 
-    await db
-      .insert(anonymousWorkspaces)
-      .values({
-        id: body.clientGeneratedWorkspaceId
-      })
-      .onConflictDoUpdate({
-        target: anonymousWorkspaces.id,
-        set: touchUpdatedAt
-      });
+export async function registerProjectRoutes(
+  app: FastifyInstance,
+  options: ProjectRouteOptions = {}
+): Promise<void> {
+  const getProjectDatabaseClient = options.getDatabaseClient ?? getDatabaseClient;
+
+  app.get("/projects", async (request) => {
+    const currentUserId = await requireActiveUserId(request, getProjectDatabaseClient);
+    const { db } = getProjectDatabaseClient();
+
+    const userProjects = await db
+      .select()
+      .from(projects)
+      .where(eq(projects.userId, currentUserId))
+      .orderBy(desc(projects.updatedAt));
+
+    return {
+      projects: userProjects
+    };
+  });
+
+  app.post("/projects", async (request, reply) => {
+    const currentUserId = await requireActiveUserId(request, getProjectDatabaseClient);
+    const body = createProjectBodySchema.parse(request.body);
+    const { db } = getProjectDatabaseClient();
 
     const [project] = await db
       .insert(projects)
       .values({
-        id: projectId,
-        workspaceId: body.clientGeneratedWorkspaceId,
+        id: randomUUID(),
+        userId: currentUserId,
         name: body.name,
-        description: body.description
+        description: body.description ?? null
       })
       .returning();
 
@@ -115,16 +119,17 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
   });
 
   app.get("/projects/:id", async (request, reply) => {
+    const currentUserId = await requireActiveUserId(request, getProjectDatabaseClient);
     const params = routeParamsSchema.parse(request.params);
-    const { db } = getDatabaseClient();
+    const { db } = getProjectDatabaseClient();
 
-    const [project] = await db.select().from(projects).where(eq(projects.id, params.id));
+    const [project] = await db
+      .select()
+      .from(projects)
+      .where(and(eq(projects.id, params.id), eq(projects.userId, currentUserId)));
 
     if (!project) {
-      return reply.status(404).send({
-        error: "not_found",
-        message: "Project not found"
-      });
+      return sendNotFound(reply, "프로젝트를 찾을 수 없습니다.");
     }
 
     const [projectArchitectures, assets] = await Promise.all([
@@ -148,22 +153,18 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
   });
 
   app.post("/projects/:id/architectures", async (request, reply) => {
+    const currentUserId = await requireActiveUserId(request, getProjectDatabaseClient);
     const params = routeParamsSchema.parse(request.params);
     const body = createArchitectureBodySchema.parse(request.body);
-    const { db } = getDatabaseClient();
+    const { db } = getProjectDatabaseClient();
 
     const [project] = await db
       .select()
       .from(projects)
-      .where(
-        and(eq(projects.id, params.id), eq(projects.workspaceId, body.clientGeneratedWorkspaceId))
-      );
+      .where(and(eq(projects.id, params.id), eq(projects.userId, currentUserId)));
 
     if (!project) {
-      return reply.status(404).send({
-        error: "not_found",
-        message: "Project not found for workspace"
-      });
+      return sendNotFound(reply, "프로젝트를 찾을 수 없습니다.");
     }
 
     const version =
@@ -188,7 +189,10 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
       })
       .returning();
 
-    await db.update(projects).set(touchUpdatedAt).where(eq(projects.id, params.id));
+    await db
+      .update(projects)
+      .set(touchUpdatedAt)
+      .where(and(eq(projects.id, params.id), eq(projects.userId, currentUserId)));
 
     return reply.status(201).send({
       architecture
@@ -196,24 +200,19 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
   });
 
   app.post("/projects/:id/assets/presigned-upload", async (request, reply) => {
+    const currentUserId = await requireActiveUserId(request, getProjectDatabaseClient);
     const params = routeParamsSchema.parse(request.params);
     const body = presignedUploadBodySchema.parse(request.body);
-    const { db } = getDatabaseClient();
-    const bucketName = requireS3BucketName();
+    const { db } = getProjectDatabaseClient();
     const assetId = randomUUID();
 
     const [project] = await db
       .select()
       .from(projects)
-      .where(
-        and(eq(projects.id, params.id), eq(projects.workspaceId, body.clientGeneratedWorkspaceId))
-      );
+      .where(and(eq(projects.id, params.id), eq(projects.userId, currentUserId)));
 
     if (!project) {
-      return reply.status(404).send({
-        error: "not_found",
-        message: "Project not found for workspace"
-      });
+      return sendNotFound(reply, "프로젝트를 찾을 수 없습니다.");
     }
 
     if (body.architectureId) {
@@ -225,13 +224,11 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
         );
 
       if (!architecture) {
-        return reply.status(404).send({
-          error: "not_found",
-          message: "Architecture not found for project"
-        });
+        return sendNotFound(reply, "프로젝트에 연결된 아키텍처를 찾을 수 없습니다.");
       }
     }
 
+    const bucketName = requireS3BucketName();
     const objectKey = buildObjectKey(params.id, body.assetType, assetId, body.fileName);
 
     const [asset] = await db
@@ -270,6 +267,15 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
       }
     });
   });
+}
+
+function sendNotFound(reply: FastifyReply, message: string): FastifyReply {
+  const response: ApiErrorResponse = {
+    error: "not_found",
+    message
+  };
+
+  return reply.status(404).send(response);
 }
 
 function buildObjectKey(

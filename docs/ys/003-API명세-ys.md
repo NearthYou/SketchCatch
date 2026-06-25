@@ -31,24 +31,16 @@
 
 ## 인증 방식
 
-로그인 사용자:
-
 ```http
 Authorization: Bearer <accessToken>
 ```
 
-익명 사용자:
-
-```http
-X-Workspace-Id: <clientGeneratedWorkspaceId>
-```
-
 판별 기준:
 
-- `Authorization`이 있으면 `userId` 기준으로 조회한다.
-- `Authorization`이 없으면 `X-Workspace-Id` 기준으로 조회한다.
-- 두 값이 모두 없으면 `401 unauthorized`를 반환한다.
-- 로그인 사용자가 익명 프로젝트를 가져올 때만 `workspaceId`를 함께 사용한다.
+- 프로젝트, 아키텍처, asset, 템플릿 수정, 활동 내역 API는 로그인 사용자를 기준으로 동작한다.
+- `Authorization`이 없거나 token이 만료되면 `401 unauthorized`를 반환한다.
+- 프로젝트 권한은 항상 `project.user_id = currentUser.id` 조건으로 확인한다.
+- `X-Workspace-Id`, `clientGeneratedWorkspaceId`, 익명 프로젝트 가져오기 API는 사용하지 않는다.
 
 ## 공통 에러 응답
 
@@ -76,7 +68,7 @@ X-Workspace-Id: <clientGeneratedWorkspaceId>
 ## 1.1 아이디 중복 확인
 
 ```http
-GET /api/auth/check-username?username=yoonseo
+GET /api/auth/check-username?username=user
 ```
 
 응답:
@@ -157,7 +149,7 @@ POST /api/auth/signup
 
 ```json
 {
-  "username": "yoonseo",
+  "username": "user",
   "password": "Password!123",
   "email": "user@example.com",
   "emailVerificationToken": "short_lived_token",
@@ -174,7 +166,7 @@ POST /api/auth/signup
 {
   "user": {
     "id": "user_id",
-    "username": "yoonseo",
+    "username": "user",
     "email": "user@example.com",
     "nickname": "ys",
     "role": "USER",
@@ -206,7 +198,7 @@ POST /api/auth/login
 
 ```json
 {
-  "username": "yoonseo",
+  "username": "user",
   "password": "Password!123"
 }
 ```
@@ -217,7 +209,7 @@ POST /api/auth/login
 {
   "user": {
     "id": "user_id",
-    "username": "yoonseo",
+    "username": "user",
     "email": "user@example.com",
     "nickname": "ys",
     "role": "USER"
@@ -264,7 +256,7 @@ GET /api/auth/oauth/naver/callback?code=...
 {
   "user": {
     "id": "user_id",
-    "username": "yoonseo",
+    "username": "user",
     "email": "user@example.com",
     "nickname": "ys",
     "role": "USER"
@@ -364,7 +356,7 @@ Authorization: Bearer <accessToken>
 {
   "user": {
     "id": "user_id",
-    "username": "yoonseo",
+    "username": "user",
     "email": "user@example.com",
     "nickname": "ys",
     "role": "USER",
@@ -383,7 +375,7 @@ POST /api/auth/password-reset/request
 
 ```json
 {
-  "username": "yoonseo",
+  "username": "user",
   "email": "user@example.com"
 }
 ```
@@ -461,13 +453,6 @@ GET /api/projects
 Authorization: Bearer <accessToken>
 ```
 
-또는
-
-```http
-GET /api/projects
-X-Workspace-Id: <clientGeneratedWorkspaceId>
-```
-
 응답:
 
 ```json
@@ -507,13 +492,6 @@ POST /api/projects
 Authorization: Bearer <accessToken>
 ```
 
-또는
-
-```http
-POST /api/projects
-X-Workspace-Id: <clientGeneratedWorkspaceId>
-```
-
 요청:
 
 ```json
@@ -529,7 +507,6 @@ X-Workspace-Id: <clientGeneratedWorkspaceId>
 {
   "project": {
     "id": "project_id",
-    "workspaceId": "workspace_id",
     "userId": "user_id",
     "name": "AWS VPC 실습",
     "description": "VPC, EC2, RDS를 연결한 기본 구조",
@@ -544,13 +521,6 @@ X-Workspace-Id: <clientGeneratedWorkspaceId>
 ```http
 GET /api/projects/:projectId/summary
 Authorization: Bearer <accessToken>
-```
-
-또는
-
-```http
-GET /api/projects/:projectId/summary
-X-Workspace-Id: <clientGeneratedWorkspaceId>
 ```
 
 응답:
@@ -593,13 +563,6 @@ X-Workspace-Id: <clientGeneratedWorkspaceId>
 ```http
 GET /api/projects/:projectId/dashboard
 Authorization: Bearer <accessToken>
-```
-
-또는
-
-```http
-GET /api/projects/:projectId/dashboard
-X-Workspace-Id: <clientGeneratedWorkspaceId>
 ```
 
 응답:
@@ -657,33 +620,15 @@ X-Workspace-Id: <clientGeneratedWorkspaceId>
 - gg AI 파트가 아직 결과를 제공하지 않으면 `aiAnalysis: null`, `findings: []`, `checklist: []`로 내려준다.
 - AI 결과는 dashboard에서만 보여준다.
 
-## 2.5 로그인 전 프로젝트 가져오기
+## 2.5 익명 프로젝트 가져오기 API 제외
 
-```http
-POST /api/projects/import-anonymous
-Authorization: Bearer <accessToken>
-```
-
-요청:
-
-```json
-{
-  "workspaceId": "client_workspace_id"
-}
-```
-
-응답:
-
-```json
-{
-  "importedProjectCount": 2
-}
-```
+익명 작업 공간을 도입하지 않기로 결정했으므로 `POST /api/projects/import-anonymous` API는 만들지 않는다.
 
 기준:
 
-- `workspaceId`에 연결된 프로젝트의 `user_id`를 현재 로그인 사용자로 연결한다.
-- 이미 다른 사용자에게 연결된 프로젝트는 가져오지 않는다.
+- 로그인 전 프로젝트 저장 흐름은 제공하지 않는다.
+- 프로젝트 생성은 로그인 후에만 가능하다.
+- 기존 프로젝트는 `user_id` not null 기준으로만 소유자를 가진다.
 
 ## 3. 아키텍처 저장 API
 
@@ -692,13 +637,6 @@ Authorization: Bearer <accessToken>
 ```http
 POST /api/projects/:projectId/architectures
 Authorization: Bearer <accessToken>
-```
-
-또는
-
-```http
-POST /api/projects/:projectId/architectures
-X-Workspace-Id: <clientGeneratedWorkspaceId>
 ```
 
 요청:
@@ -747,13 +685,6 @@ X-Workspace-Id: <clientGeneratedWorkspaceId>
 ```http
 POST /api/projects/:projectId/assets/presigned-upload
 Authorization: Bearer <accessToken>
-```
-
-또는
-
-```http
-POST /api/projects/:projectId/assets/presigned-upload
-X-Workspace-Id: <clientGeneratedWorkspaceId>
 ```
 
 요청:

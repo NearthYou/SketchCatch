@@ -9,15 +9,27 @@ import type {
   DeploymentStatus
 } from "@sketchcatch/types";
 import type { Database } from "../db/client.js";
-import { architectures, deploymentLogs, deployments, projectAssets, projects, touchUpdatedAt } from "../db/schema.js";
+import {
+  architectures,
+  deploymentLogs,
+  deployments,
+  projectAssets,
+  projects,
+  touchUpdatedAt
+} from "../db/schema.js";
 import { maskDeploymentMessage } from "./log-masking.js";
 
 export type DeploymentRecord = typeof deployments.$inferSelect;
 export type DeploymentLogRecord = typeof deploymentLogs.$inferSelect;
 
+export type ProjectAccessContext = {
+  kind: "user";
+  userId: string;
+};
+
 export type CreateDeploymentInput = {
   projectId: string;
-  clientGeneratedWorkspaceId: string;
+  accessContext: ProjectAccessContext;
   architectureId: string;
   terraformArtifactId: string;
 };
@@ -32,12 +44,13 @@ export type CreateDeploymentRecordInput = {
 
 export type AppendDeploymentLogInput = {
   deploymentId: string;
+  accessContext: ProjectAccessContext;
   sequence: number;
   stage: DeploymentStage;
   level: DeploymentLogLevel;
   message: string;
   relatedResourceId?: string | null;
-}
+};
 
 export type ProjectRecord = typeof projects.$inferSelect;
 export type ArchitectureRecord = typeof architectures.$inferSelect;
@@ -50,19 +63,30 @@ export type TerraformArtifactRecord = Pick<
 };
 
 export type DeploymentRepository = {
-  findProjectByWorkspace(projectId: string, workspaceId: string): Promise<ProjectRecord | undefined>;
-  findArchitectureInProject(architectureId: string, projectId: string): Promise<ArchitectureRecord | undefined>;
+  findAccessibleProject(
+    projectId: string,
+    accessContext: ProjectAccessContext
+  ): Promise<ProjectRecord | undefined>;
+  findArchitectureInProject(
+    architectureId: string,
+    projectId: string
+  ): Promise<ArchitectureRecord | undefined>;
   findTerraformArtifactForArchitecture(
     terraformArtifactId: string,
     projectId: string,
     architectureId: string
   ): Promise<TerraformArtifactRecord | undefined>;
-  findTerraformArtifactById(terraformArtifactId: string): Promise<TerraformArtifactRecord | undefined>;
+  findTerraformArtifactById(
+    terraformArtifactId: string
+  ): Promise<TerraformArtifactRecord | undefined>;
   createDeployment(input: CreateDeploymentRecordInput): Promise<DeploymentRecord>;
   findDeploymentById(deploymentId: string): Promise<DeploymentRecord | undefined>;
 
   listDeploymentsByProject(projectId: string): Promise<DeploymentRecord[]>;
-  updateDeploymentStatus(deploymentId: string, status: DeploymentStatus): Promise<DeploymentRecord | undefined>;
+  updateDeploymentStatus(
+    deploymentId: string,
+    status: DeploymentStatus
+  ): Promise<DeploymentRecord | undefined>;
   markDeploymentInitSucceeded(deploymentId: string): Promise<DeploymentRecord | undefined>;
   updateDeploymentPlan(
     deploymentId: string,
@@ -109,11 +133,11 @@ export class DeploymentNotFoundError extends Error {
 
 export function createPostgresDeploymentRepository(db: Database): DeploymentRepository {
   return {
-    async findProjectByWorkspace(projectId, workspaceId) {
+    async findAccessibleProject(projectId, accessContext) {
       const [project] = await db
         .select()
         .from(projects)
-        .where(and(eq(projects.id, projectId), eq(projects.workspaceId, workspaceId)));
+        .where(and(eq(projects.id, projectId), eq(projects.userId, accessContext.userId)));
 
       return project;
     },
@@ -151,7 +175,8 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
     },
 
     async findTerraformArtifactById(terraformArtifactId) {
-        const [terraformArtifact] = await db.select({
+      const [terraformArtifact] = await db
+        .select({
           id: projectAssets.id,
           projectId: projectAssets.projectId,
           architectureId: projectAssets.architectureId,
@@ -189,7 +214,10 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
     },
 
     async findDeploymentById(deploymentId) {
-      const [deployment] = await db.select().from(deployments).where(eq(deployments.id, deploymentId));
+      const [deployment] = await db
+        .select()
+        .from(deployments)
+        .where(eq(deployments.id, deploymentId));
 
       return deployment;
     },
@@ -282,16 +310,20 @@ export async function createDeployment(
   repository: DeploymentRepository,
   generateId: () => string = randomUUID
 ): Promise<DeploymentRecord> {
-  const project = await repository.findProjectByWorkspace(input.projectId, input.clientGeneratedWorkspaceId);
+  await requireAccessibleProject(
+    input.projectId,
+    input.accessContext,
+    repository,
+    "Project not found"
+  );
 
-  if (!project) {
-    throw new DeploymentNotFoundError("Project not found for workspace");
-  }
-
-  const architecture = await repository.findArchitectureInProject(input.architectureId, input.projectId);
+  const architecture = await repository.findArchitectureInProject(
+    input.architectureId,
+    input.projectId
+  );
 
   if (!architecture) {
-    throw new DeploymentNotFoundError("Architecture not found for workspace");
+    throw new DeploymentNotFoundError("Architecture not found for project");
   }
 
   const terraformArtifact = await repository.findTerraformArtifactForArchitecture(
@@ -301,7 +333,7 @@ export async function createDeployment(
   );
 
   if (!terraformArtifact) {
-    throw new DeploymentNotFoundError("Terraform Artifact not found for workspace");
+    throw new DeploymentNotFoundError("Terraform artifact not found for project architecture");
   }
 
   return repository.createDeployment({
@@ -314,38 +346,46 @@ export async function createDeployment(
 }
 
 export async function getDeployment(
-  deploymentId: string,
+  input: { deploymentId: string; accessContext: ProjectAccessContext },
   repository: DeploymentRepository
 ): Promise<DeploymentRecord> {
-  const deployment = await repository.findDeploymentById(deploymentId);
+  const deployment = await repository.findDeploymentById(input.deploymentId);
 
   if (!deployment) {
     throw new DeploymentNotFoundError("Deployment not found");
   }
 
+  await requireAccessibleProject(
+    deployment.projectId,
+    input.accessContext,
+    repository,
+    "Deployment not found"
+  );
+
   return deployment;
 }
 
 export async function listProjectDeployments(
-  input: { projectId: string; clientGeneratedWorkspaceId: string },
+  input: { projectId: string; accessContext: ProjectAccessContext },
   repository: DeploymentRepository
 ): Promise<DeploymentRecord[]> {
-  const project = await repository.findProjectByWorkspace(input.projectId, input.clientGeneratedWorkspaceId);
-
-  if (!project) {
-    throw new DeploymentNotFoundError("Project not found for workspace");
-  }
+  await requireAccessibleProject(
+    input.projectId,
+    input.accessContext,
+    repository,
+    "Project not found"
+  );
 
   return repository.listDeploymentsByProject(input.projectId);
 }
 
 export async function listDeploymentLogs(
-  deploymentId: string,
+  input: { deploymentId: string; accessContext: ProjectAccessContext },
   repository: DeploymentRepository
 ): Promise<DeploymentLogRecord[]> {
-  await getDeployment(deploymentId, repository);
+  await getDeployment(input, repository);
 
-  return repository.listDeploymentLogs(deploymentId);
+  return repository.listDeploymentLogs(input.deploymentId);
 }
 
 export async function appendDeploymentLog(
@@ -353,7 +393,13 @@ export async function appendDeploymentLog(
   repository: DeploymentRepository,
   generateId: () => string = randomUUID
 ): Promise<DeploymentLogRecord> {
-  await getDeployment(input.deploymentId, repository);
+  await getDeployment(
+    {
+      deploymentId: input.deploymentId,
+      accessContext: input.accessContext
+    },
+    repository
+  );
 
   return repository.createDeploymentLog({
     id: generateId(),
@@ -364,4 +410,19 @@ export async function appendDeploymentLog(
     message: maskDeploymentMessage(input.message),
     relatedResourceId: input.relatedResourceId ?? null
   });
+}
+
+async function requireAccessibleProject(
+  projectId: string,
+  accessContext: ProjectAccessContext,
+  repository: DeploymentRepository,
+  message: string
+): Promise<ProjectRecord> {
+  const project = await repository.findAccessibleProject(projectId, accessContext);
+
+  if (!project) {
+    throw new DeploymentNotFoundError(message);
+  }
+
+  return project;
 }

@@ -7,6 +7,7 @@ import {
   type DeploymentLogRecord,
   type DeploymentRecord,
   type DeploymentRepository,
+  type ProjectAccessContext,
   type ProjectRecord,
   type TerraformArtifactRecord
 } from "./deployment-service.js";
@@ -16,9 +17,15 @@ const projectId = "11111111-1111-4111-8111-111111111111";
 const architectureId = "22222222-2222-4222-8222-222222222222";
 const terraformArtifactId = "33333333-3333-4333-8333-333333333333";
 const deploymentId = "44444444-4444-4444-8444-444444444444";
+const userId = "55555555-5555-4555-8555-555555555555";
 const fixedNow = new Date("2026-01-01T00:00:00.000Z");
 
 type RepositoryCall =
+  | {
+      name: "findAccessibleProject";
+      projectId: string;
+      accessContext: ProjectAccessContext;
+    }
   | {
       name: "findDeploymentById";
       deploymentId: string;
@@ -53,12 +60,27 @@ type RepositoryCall =
 
 class FakeDeploymentRepository implements DeploymentRepository {
   readonly calls: RepositoryCall[] = [];
+  project: ProjectRecord | undefined = createProjectRecord();
   deployment: DeploymentRecord | undefined = createDeploymentRecord();
   terraformArtifact: TerraformArtifactRecord | undefined = createTerraformArtifactRecord();
   logs: DeploymentLogRecord[] = [];
 
-  async findProjectByWorkspace(): Promise<ProjectRecord | undefined> {
-    return undefined;
+  async findAccessibleProject(candidateProjectId: string, accessContext: ProjectAccessContext) {
+    this.calls.push({
+      name: "findAccessibleProject",
+      projectId: candidateProjectId,
+      accessContext
+    });
+
+    if (
+      !this.project ||
+      this.project.id !== candidateProjectId ||
+      this.project.userId !== accessContext.userId
+    ) {
+      return undefined;
+    }
+
+    return this.project;
   }
 
   async findArchitectureInProject(): Promise<ArchitectureRecord | undefined> {
@@ -243,6 +265,18 @@ function createDeploymentRecord(
   };
 }
 
+function createProjectRecord(overrides: Partial<ProjectRecord> = {}): ProjectRecord {
+  return {
+    id: projectId,
+    userId,
+    name: "Test Project",
+    description: null,
+    createdAt: fixedNow,
+    updatedAt: fixedNow,
+    ...overrides
+  };
+}
+
 function createTerraformArtifactRecord(
   overrides: Partial<TerraformArtifactRecord> = {}
 ): TerraformArtifactRecord {
@@ -258,6 +292,13 @@ function createTerraformArtifactRecord(
   };
 }
 
+function createAccessContext(): ProjectAccessContext {
+  return {
+    kind: "user",
+    userId
+  };
+}
+
 test("runDeploymentInit restores the artifact, runs Terraform init, logs output, and returns status to PENDING", async () => {
   const repository = new FakeDeploymentRepository();
   const workspaceInputs: Array<{ objectKey: string; fileName?: string | null }> = [];
@@ -266,7 +307,8 @@ test("runDeploymentInit restores the artifact, runs Terraform init, logs output,
 
   const result = await runDeploymentInit(
     {
-      deploymentId
+      deploymentId,
+      accessContext: createAccessContext()
     },
     repository,
     {
@@ -339,7 +381,8 @@ test("runDeploymentInit records failed init output, marks the deployment failed,
 
   const result = await runDeploymentInit(
     {
-      deploymentId
+      deploymentId,
+      accessContext: createAccessContext()
     },
     repository,
     {
@@ -403,7 +446,8 @@ test("runDeploymentInit rejects an unknown deployment", async () => {
     () =>
       runDeploymentInit(
         {
-          deploymentId
+          deploymentId,
+          accessContext: createAccessContext()
         },
         repository,
         {
@@ -427,7 +471,8 @@ test("runDeploymentInit rejects a missing Terraform artifact", async () => {
     () =>
       runDeploymentInit(
         {
-          deploymentId
+          deploymentId,
+          accessContext: createAccessContext()
         },
         repository,
         {

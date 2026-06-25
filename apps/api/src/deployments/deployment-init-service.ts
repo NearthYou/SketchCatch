@@ -3,7 +3,8 @@ import {
   DeploymentNotFoundError,
   getDeployment,
   type DeploymentRecord,
-  type DeploymentRepository
+  type DeploymentRepository,
+  type ProjectAccessContext
 } from "./deployment-service.js";
 import {
   prepareTerraformWorkspace as defaultPrepareTerraformWorkspace,
@@ -16,6 +17,7 @@ import {
 
 export type RunDeploymentInitInput = {
   deploymentId: string;
+  accessContext: ProjectAccessContext;
 };
 
 export type RunDeploymentInitOptions = {
@@ -40,7 +42,13 @@ export async function runDeploymentInit(
   let workspace: PreparedTerraformWorkspace | undefined;
 
   try {
-    const deployment = await getDeployment(input.deploymentId, repository);
+    const deployment = await getDeployment(
+      {
+        deploymentId: input.deploymentId,
+        accessContext: input.accessContext
+      },
+      repository
+    );
 
     const artifact = await repository.findTerraformArtifactById(deployment.terraformArtifactId);
 
@@ -67,6 +75,7 @@ export async function runDeploymentInit(
 
     sequence = await appendOutputLines({
       deploymentId: deployment.id,
+      accessContext: input.accessContext,
       sequence,
       output: terraform.stdout,
       level: "INFO",
@@ -75,6 +84,7 @@ export async function runDeploymentInit(
 
     await appendOutputLines({
       deploymentId: deployment.id,
+      accessContext: input.accessContext,
       sequence,
       output: terraform.stderr,
       level: terraform.exitCode === 0 ? "WARN" : "ERROR",
@@ -112,7 +122,10 @@ export async function runDeploymentInit(
   }
 }
 
-async function getNextLogSequence(deploymentId: string, repository: DeploymentRepository): Promise<number> {
+async function getNextLogSequence(
+  deploymentId: string,
+  repository: DeploymentRepository
+): Promise<number> {
   const logs = await repository.listDeploymentLogs(deploymentId);
   const maxSequence = logs.reduce((max, log) => Math.max(max, log.sequence), 0);
 
@@ -121,6 +134,7 @@ async function getNextLogSequence(deploymentId: string, repository: DeploymentRe
 
 async function appendOutputLines(input: {
   deploymentId: string;
+  accessContext: ProjectAccessContext;
   sequence: number;
   output: string;
   level: "INFO" | "WARN" | "ERROR";
@@ -132,6 +146,7 @@ async function appendOutputLines(input: {
     await appendDeploymentLog(
       {
         deploymentId: input.deploymentId,
+        accessContext: input.accessContext,
         sequence,
         stage: "init",
         level: input.level,
@@ -159,5 +174,7 @@ function summarizeTerraformFailure(result: TerraformRunResult): string {
     return "Terraform init timed out";
   }
 
-  return splitOutputLines(result.stderr)[0] ?? `Terraform init failed with exit code ${result.exitCode}`;
+  return (
+    splitOutputLines(result.stderr)[0] ?? `Terraform init failed with exit code ${result.exitCode}`
+  );
 }
