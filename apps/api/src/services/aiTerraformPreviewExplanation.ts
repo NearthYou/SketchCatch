@@ -72,6 +72,7 @@ function createTerraformPreviewFindings(normalizedCode: string): CheckFinding[] 
   ];
 }
 
+// Terraform 코드에 "SSH 22번 포트 전체 공개" 조합이 있으면 보안 finding을 만듭니다.
 function createOpenSshFindings(normalizedCode: string): CheckFinding[] {
   if (
     !normalizedCode.includes("0.0.0.0/0") ||

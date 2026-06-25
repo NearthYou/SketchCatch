@@ -42,6 +42,7 @@ function getRequiredConfigKeys(node: ResourceNode): readonly string[] {
   }
 }
 
+// 빈 문자열이나 빈 배열은 "입력 안 됨"으로 봅니다.
 function hasConfigValue(config: ResourceConfig, key: string): boolean {
   const value = config[key];
 
