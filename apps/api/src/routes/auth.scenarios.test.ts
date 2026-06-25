@@ -119,7 +119,7 @@ test("POST /api/auth/login returns a session for valid credentials", async () =>
 test("POST /api/auth/login returns 401 for wrong password", async () => {
   const user = await makeUserWithPassword(PASSWORD);
   const fakeDb = new AuthScenarioFakeDb({
-    selectResults: [[], [user], [{ failedAttemptCount: 0 }]]
+    selectResults: [[], [user], [], [{ failedAttemptCount: 0 }]]
   });
   const app = buildApp({
     getDatabaseClient: () => fakeDb.client
@@ -145,7 +145,7 @@ test("POST /api/auth/login returns 401 for wrong password", async () => {
 test("POST /api/auth/login records the forwarded client IP behind proxies", async () => {
   const user = await makeUserWithPassword(PASSWORD);
   const fakeDb = new AuthScenarioFakeDb({
-    selectResults: [[], [user], [{ failedAttemptCount: 0 }]]
+    selectResults: [[], [user], [], [{ failedAttemptCount: 0 }]]
   });
   const app = buildApp({
     getDatabaseClient: () => fakeDb.client
@@ -172,7 +172,7 @@ test("POST /api/auth/login records the forwarded client IP behind proxies", asyn
 test("POST /api/auth/login returns 429 after five failed attempts", async () => {
   const user = await makeUserWithPassword(PASSWORD);
   const fakeDb = new AuthScenarioFakeDb({
-    selectResults: [[], [user], [{ failedAttemptCount: 4 }]]
+    selectResults: [[], [user], [], [{ failedAttemptCount: 4 }]]
   });
   const app = buildApp({
     getDatabaseClient: () => fakeDb.client
@@ -191,6 +191,37 @@ test("POST /api/auth/login returns 429 after five failed attempts", async () => 
   const body = response.json() as LoginLockedErrorResponse;
   assertLoginLockedErrorResponse(body);
   assert.ok(fakeDb.loginAttemptRows.at(-1)?.lockedUntil);
+
+  await app.close();
+});
+
+test("POST /api/auth/login only counts failures after the latest successful login", async () => {
+  const user = await makeUserWithPassword(PASSWORD);
+  const fakeDb = new AuthScenarioFakeDb({
+    selectResults: [
+      [],
+      [user],
+      [{ createdAt: new Date("2026-06-24T00:05:00.000Z") }],
+      [{ failedAttemptCount: 0 }]
+    ]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/auth/login",
+    payload: {
+      username: "demo",
+      password: "wrong-password"
+    }
+  });
+
+  assert.equal(response.statusCode, 401);
+  assertErrorResponse(response.json() as ApiErrorResponse, "unauthorized");
+  assert.equal(fakeDb.loginAttemptRows.at(-1)?.success, false);
+  assert.equal(fakeDb.loginAttemptRows.at(-1)?.lockedUntil, null);
 
   await app.close();
 });

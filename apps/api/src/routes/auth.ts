@@ -379,6 +379,26 @@ async function recordFailedLoginAttempt(
   }
 ): Promise<Date | null> {
   const now = new Date();
+  const attemptWindowStart = getLoginAttemptWindowStart(now);
+  const [lastSuccessfulAttempt] = await db
+    .select({
+      createdAt: loginAttempts.createdAt
+    })
+    .from(loginAttempts)
+    .where(
+      and(
+        eq(loginAttempts.username, attempt.username),
+        eq(loginAttempts.ipAddress, request.ip),
+        eq(loginAttempts.success, true),
+        gte(loginAttempts.createdAt, attemptWindowStart)
+      )
+    )
+    .orderBy(desc(loginAttempts.createdAt));
+  const failedAttemptWindowStart =
+    lastSuccessfulAttempt?.createdAt &&
+    lastSuccessfulAttempt.createdAt.getTime() > attemptWindowStart.getTime()
+      ? lastSuccessfulAttempt.createdAt
+      : attemptWindowStart;
   const [result] = await db
     .select({
       failedAttemptCount: count()
@@ -389,7 +409,7 @@ async function recordFailedLoginAttempt(
         eq(loginAttempts.username, attempt.username),
         eq(loginAttempts.ipAddress, request.ip),
         eq(loginAttempts.success, false),
-        gte(loginAttempts.createdAt, getLoginAttemptWindowStart(now))
+        gte(loginAttempts.createdAt, failedAttemptWindowStart)
       )
     );
   const failedAttemptCount = Number(result?.failedAttemptCount ?? 0) + 1;
