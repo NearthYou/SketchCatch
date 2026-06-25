@@ -31,7 +31,7 @@ test("GET /api/projects returns 401 for a deleted user", async () => {
   const response = await app.inject({
     method: "GET",
     url: "/api/projects",
-    headers: authHeaders(ACTIVE_USER_ID)
+    headers: await authHeaders(ACTIVE_USER_ID)
   });
 
   assert.equal(response.statusCode, 401);
@@ -56,7 +56,7 @@ test("GET /api/projects only returns projects owned by the active user", async (
   const response = await app.inject({
     method: "GET",
     url: "/api/projects",
-    headers: authHeaders(ACTIVE_USER_ID)
+    headers: await authHeaders(ACTIVE_USER_ID)
   });
 
   assert.equal(response.statusCode, 200);
@@ -80,7 +80,7 @@ test("POST /api/projects creates a project for the active user", async () => {
   const response = await app.inject({
     method: "POST",
     url: "/api/projects",
-    headers: authHeaders(ACTIVE_USER_ID),
+    headers: await authHeaders(ACTIVE_USER_ID),
     payload: {
       name: "Owner project",
       description: "Created by active user"
@@ -108,7 +108,7 @@ test("GET /api/projects/:id returns 404 for another user's project", async () =>
   const response = await app.inject({
     method: "GET",
     url: `/api/projects/${OTHER_PROJECT_ID}`,
-    headers: authHeaders(ACTIVE_USER_ID)
+    headers: await authHeaders(ACTIVE_USER_ID)
   });
 
   assert.equal(response.statusCode, 404);
@@ -131,7 +131,7 @@ test("POST /api/projects/:id/architectures returns 404 for another user's projec
   const response = await app.inject({
     method: "POST",
     url: `/api/projects/${OTHER_PROJECT_ID}/architectures`,
-    headers: authHeaders(ACTIVE_USER_ID),
+    headers: await authHeaders(ACTIVE_USER_ID),
     payload: {
       architectureJson: {
         nodes: [],
@@ -160,7 +160,7 @@ test("POST /api/projects/:id/assets/presigned-upload returns 404 for another use
   const response = await app.inject({
     method: "POST",
     url: `/api/projects/${OTHER_PROJECT_ID}/assets/presigned-upload`,
-    headers: authHeaders(ACTIVE_USER_ID),
+    headers: await authHeaders(ACTIVE_USER_ID),
     payload: {
       assetType: "diagram_png",
       fileName: "diagram.png",
@@ -183,9 +183,9 @@ function assertErrorResponse(
   assert.equal(typeof body.message, "string");
 }
 
-function authHeaders(userId: string): Record<string, string> {
+async function authHeaders(userId: string): Promise<Record<string, string>> {
   return {
-    authorization: `Bearer ${createAccessToken(userId)}`
+    authorization: `Bearer ${await createAccessToken(userId)}`
   };
 }
 

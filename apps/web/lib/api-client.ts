@@ -84,6 +84,7 @@ export async function apiFetch<T>(path: string, options: ApiRequestOptions = {})
 
   const request: RequestInit = {
     ...requestInit,
+    credentials: requestInit.credentials ?? "include",
     headers: requestHeaders
   };
 
@@ -169,10 +170,9 @@ async function refreshStoredSession(): Promise<AuthSession | null> {
 
   try {
     response = await fetch(buildApiUrl("/auth/refresh"), {
-      body: JSON.stringify({ refreshToken: currentSession.refreshToken }),
+      credentials: "include",
       headers: {
-        Accept: JSON_CONTENT_TYPE,
-        "Content-Type": JSON_CONTENT_TYPE
+        Accept: JSON_CONTENT_TYPE
       },
       method: "POST"
     });

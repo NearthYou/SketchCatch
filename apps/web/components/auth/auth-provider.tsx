@@ -79,12 +79,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
-    const storedSession = readStoredAuthSession();
-
     try {
-      if (storedSession) {
-        await requestLogout(storedSession.refreshToken);
-      }
+      await requestLogout();
     } finally {
       clearStoredAuthSession();
       setUser(null);

@@ -2,7 +2,6 @@ import type {
   AuthResponse,
   CurrentUserResponse,
   LoginRequest,
-  LogoutRequest,
   SignupRequest
 } from "@sketchcatch/types";
 import { apiFetch } from "./api-client";
@@ -28,11 +27,8 @@ export function requestCurrentUser(): Promise<CurrentUserResponse> {
   });
 }
 
-export async function requestLogout(refreshToken: string): Promise<void> {
-  const payload: LogoutRequest = { refreshToken };
-
+export async function requestLogout(): Promise<void> {
   await apiFetch<{ ok: true }>("/auth/logout", {
-    body: payload,
     method: "POST"
   });
 }

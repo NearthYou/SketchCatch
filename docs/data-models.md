@@ -71,14 +71,13 @@ DB 내부 테이블에는 `password_hash`, `updated_at`, `deleted_at`이 있을 
 ```ts
 type AuthSession = {
   accessToken: string;
-  refreshToken: string;
   expiresInSeconds: number;
 };
 ```
 
 DB 기준: `refresh_tokens`
 
-DB에는 refresh token 원문을 저장하지 않고 hash만 저장한다. access token은 짧은 만료 시간을 가진 서명 token으로 다루며, `projects` 조회와 생성은 access token에서 확인한 `userId`를 사용한다.
+DB에는 refresh token 원문을 저장하지 않고 hash만 저장한다. API 응답 DTO와 프론트 상태에는 refresh token 원문을 넣지 않고, 서버가 `HttpOnly`, `SameSite=Lax` 쿠키로 내려보낸다. access token은 짧은 만료 시간을 가진 표준 JWT로 다루며, `projects` 조회와 생성은 access token에서 확인한 `userId`를 사용한다.
 
 ### API Error Response
 

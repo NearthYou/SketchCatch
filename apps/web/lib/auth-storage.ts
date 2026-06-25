@@ -18,7 +18,6 @@ export function readStoredAuthSession(): AuthSession | null {
 
     if (
       typeof parsedSession.accessToken !== "string" ||
-      typeof parsedSession.refreshToken !== "string" ||
       typeof parsedSession.expiresInSeconds !== "number"
     ) {
       clearStoredAuthSession();
@@ -27,7 +26,6 @@ export function readStoredAuthSession(): AuthSession | null {
 
     return {
       accessToken: parsedSession.accessToken,
-      refreshToken: parsedSession.refreshToken,
       expiresInSeconds: parsedSession.expiresInSeconds
     };
   } catch {
