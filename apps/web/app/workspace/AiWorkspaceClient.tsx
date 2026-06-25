@@ -257,14 +257,6 @@ export function AiWorkspaceClient() {
                 </span>
               ))}
             </div>
-            <div className="assumptionBox">
-              <p className="fieldLabel">운영 조건 반영</p>
-              <ul className="assumptionList">
-                {draft.metadata.assumptions.map((assumption) => (
-                  <li key={assumption}>{assumption}</li>
-                ))}
-              </ul>
-            </div>
             <p className="mutedText">연결선 {draft.architectureJson.edges.length}개</p>
           </div>
         )}
