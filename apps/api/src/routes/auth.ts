@@ -143,7 +143,7 @@ export async function registerAuthRoutes(
 
     await deleteStaleRefreshTokens(db);
 
-    const activeLock = await getActiveLoginLock(db, body.username);
+    const activeLock = await getActiveLoginLock(db, body.username, request.ip);
 
     if (activeLock) {
       return sendLoginLocked(reply, activeLock);
@@ -319,13 +319,23 @@ export async function registerAuthRoutes(
   });
 }
 
-async function getActiveLoginLock(db: Database, username: string): Promise<Date | null> {
+async function getActiveLoginLock(
+  db: Database,
+  username: string,
+  ipAddress: string
+): Promise<Date | null> {
   const [lockedAttempt] = await db
     .select({
       lockedUntil: loginAttempts.lockedUntil
     })
     .from(loginAttempts)
-    .where(and(eq(loginAttempts.username, username), gt(loginAttempts.lockedUntil, new Date())))
+    .where(
+      and(
+        eq(loginAttempts.username, username),
+        eq(loginAttempts.ipAddress, ipAddress),
+        gt(loginAttempts.lockedUntil, new Date())
+      )
+    )
     .orderBy(desc(loginAttempts.lockedUntil));
 
   const lockedUntil = lockedAttempt?.lockedUntil ?? null;
@@ -355,6 +365,7 @@ async function recordFailedLoginAttempt(
     .where(
       and(
         eq(loginAttempts.username, attempt.username),
+        eq(loginAttempts.ipAddress, request.ip),
         eq(loginAttempts.success, false),
         gte(loginAttempts.createdAt, getLoginAttemptWindowStart(now))
       )
