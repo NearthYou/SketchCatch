@@ -5,6 +5,10 @@ import type {
   AiArchitectureDraftResult,
   AiPreDeploymentAnalysisResult,
   AiTerraformPreviewExplanationResult,
+  ArchitectureDraftBudgetLevel,
+  ArchitectureDraftScenarioHint,
+  ArchitectureDraftSecurityPriority,
+  ArchitectureDraftTrafficLevel,
   ArchitectureJson
 } from "@sketchcatch/types";
 
@@ -29,9 +33,40 @@ resource "aws_db_instance" "main" {
 
 type RequestStatus = "idle" | "loading" | "error";
 
+type ChoiceOption<Value extends string> = {
+  readonly label: string;
+  readonly value: Value;
+};
+
+const scenarioOptions: readonly ChoiceOption<ArchitectureDraftScenarioHint>[] = [
+  { label: "정적 웹사이트", value: "static_site" },
+  { label: "API 서버", value: "api_server" },
+  { label: "DB 포함 백엔드", value: "backend_with_db" },
+  { label: "잘 모르겠음", value: "auto" }
+];
+
+const budgetOptions: readonly ChoiceOption<ArchitectureDraftBudgetLevel>[] = [
+  { label: "낮게", value: "low" },
+  { label: "보통", value: "normal" }
+];
+
+const trafficOptions: readonly ChoiceOption<ArchitectureDraftTrafficLevel>[] = [
+  { label: "작음", value: "small" },
+  { label: "보통", value: "normal" }
+];
+
+const securityOptions: readonly ChoiceOption<ArchitectureDraftSecurityPriority>[] = [
+  { label: "기본", value: "basic" },
+  { label: "높음", value: "high" }
+];
+
 // gg AI API를 팀에 보여주기 위한 임시 작업 화면입니다. 최종 보드 UI가 붙으면 대체될 수 있습니다.
 export function AiWorkspaceClient() {
   const [prompt, setPrompt] = useState(samplePrompt);
+  const [scenarioHint, setScenarioHint] = useState<ArchitectureDraftScenarioHint>("backend_with_db");
+  const [budgetLevel, setBudgetLevel] = useState<ArchitectureDraftBudgetLevel>("low");
+  const [trafficLevel, setTrafficLevel] = useState<ArchitectureDraftTrafficLevel>("small");
+  const [securityPriority, setSecurityPriority] = useState<ArchitectureDraftSecurityPriority>("basic");
   const [repositoryUrl, setRepositoryUrl] = useState("");
   const [terraformCode, setTerraformCode] = useState(sampleTerraform);
   const [draft, setDraft] = useState<AiArchitectureDraftResult | null>(null);
@@ -46,7 +81,13 @@ export function AiWorkspaceClient() {
   // 자연어 입력을 AI Architecture Draft API로 보내고 결과 설계도를 화면에 저장합니다.
   async function runPromptDraft(): Promise<void> {
     await runRequest(async () => {
-      const result = await postJson<AiArchitectureDraftResult>("/ai/architecture-draft", { prompt });
+      const result = await postJson<AiArchitectureDraftResult>("/ai/architecture-draft", {
+        budgetLevel,
+        prompt,
+        scenarioHint,
+        securityPriority,
+        trafficLevel
+      });
       setDraft(result);
       setAnalysis(null);
     });
@@ -118,6 +159,62 @@ export function AiWorkspaceClient() {
           rows={5}
           value={prompt}
         />
+
+        <span className="fieldLabel">용도 선택</span>
+        <div className="choiceGrid">
+          {scenarioOptions.map((option) => (
+            <button
+              className={option.value === scenarioHint ? "choiceButton choiceButtonActive" : "choiceButton"}
+              key={option.value}
+              onClick={() => setScenarioHint(option.value)}
+              type="button"
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+
+        <span className="fieldLabel">예산</span>
+        <div className="choiceGrid choiceGridCompact">
+          {budgetOptions.map((option) => (
+            <button
+              className={option.value === budgetLevel ? "choiceButton choiceButtonActive" : "choiceButton"}
+              key={option.value}
+              onClick={() => setBudgetLevel(option.value)}
+              type="button"
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+
+        <span className="fieldLabel">트래픽</span>
+        <div className="choiceGrid choiceGridCompact">
+          {trafficOptions.map((option) => (
+            <button
+              className={option.value === trafficLevel ? "choiceButton choiceButtonActive" : "choiceButton"}
+              key={option.value}
+              onClick={() => setTrafficLevel(option.value)}
+              type="button"
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+
+        <span className="fieldLabel">보안 우선순위</span>
+        <div className="choiceGrid choiceGridCompact">
+          {securityOptions.map((option) => (
+            <button
+              className={option.value === securityPriority ? "choiceButton choiceButtonActive" : "choiceButton"}
+              key={option.value}
+              onClick={() => setSecurityPriority(option.value)}
+              type="button"
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
         <button className="primaryButton" disabled={status === "loading"} onClick={runPromptDraft}>
           자연어 초안 생성
         </button>
