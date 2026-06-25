@@ -13,6 +13,8 @@ import {
 
 const DEFAULT_API_BASE_URL = "/api";
 const JSON_CONTENT_TYPE = "application/json";
+const CSRF_TOKEN_COOKIE_NAME = "sketchcatch_csrf_token";
+const CSRF_TOKEN_HEADER_NAME = "X-CSRF-Token";
 const API_CONNECTION_ERROR_MESSAGE =
   "API 서버에 연결할 수 없습니다. Docker DB와 API 서버가 켜져 있는지 확인해주세요.";
 const DEFAULT_API_ERROR_MESSAGES = {
@@ -72,6 +74,8 @@ export async function apiFetch<T>(path: string, options: ApiRequestOptions = {})
   if (body !== undefined && !requestHeaders.has("Content-Type")) {
     requestHeaders.set("Content-Type", JSON_CONTENT_TYPE);
   }
+
+  setCsrfHeader(requestHeaders, requestInit.method);
 
   if (auth) {
     const session = readStoredAuthSession();
@@ -151,6 +155,10 @@ export function getApiErrorMessage(error: unknown, fallbackMessage: string): str
   return getKoreanApiMessage(error, fallbackMessage);
 }
 
+export async function refreshAuthSession(): Promise<AuthSession | null> {
+  return refreshStoredSessionOnce();
+}
+
 async function refreshStoredSessionOnce(): Promise<AuthSession | null> {
   refreshSessionPromise ??= refreshStoredSession().finally(() => {
     refreshSessionPromise = null;
@@ -160,19 +168,14 @@ async function refreshStoredSessionOnce(): Promise<AuthSession | null> {
 }
 
 async function refreshStoredSession(): Promise<AuthSession | null> {
-  const currentSession = readStoredAuthSession();
-
-  if (!currentSession) {
-    return null;
-  }
-
   let response: Response;
 
   try {
     response = await fetch(buildApiUrl("/auth/refresh"), {
       credentials: "include",
       headers: {
-        Accept: JSON_CONTENT_TYPE
+        Accept: JSON_CONTENT_TYPE,
+        ...getCsrfHeader()
       },
       method: "POST"
     });
@@ -255,6 +258,50 @@ function getKoreanApiMessage(error: ApiClientError, fallbackMessage: string): st
 
 function containsKorean(value: string): boolean {
   return /[ㄱ-ㅎㅏ-ㅣ가-힣]/.test(value);
+}
+
+function setCsrfHeader(headers: Headers, method: string | undefined): void {
+  const normalizedMethod = (method ?? "GET").toUpperCase();
+
+  if (normalizedMethod === "GET" || normalizedMethod === "HEAD" || headers.has(CSRF_TOKEN_HEADER_NAME)) {
+    return;
+  }
+
+  const csrfToken = readCookie(CSRF_TOKEN_COOKIE_NAME);
+
+  if (csrfToken) {
+    headers.set(CSRF_TOKEN_HEADER_NAME, csrfToken);
+  }
+}
+
+function getCsrfHeader(): Record<string, string> {
+  const csrfToken = readCookie(CSRF_TOKEN_COOKIE_NAME);
+
+  return csrfToken ? { [CSRF_TOKEN_HEADER_NAME]: csrfToken } : {};
+}
+
+function readCookie(name: string): string | null {
+  if (typeof document === "undefined") {
+    return null;
+  }
+
+  const cookies = document.cookie ? document.cookie.split(";") : [];
+
+  for (const cookie of cookies) {
+    const [rawName, ...rawValueParts] = cookie.trim().split("=");
+
+    if (rawName === name) {
+      const rawValue = rawValueParts.join("=");
+
+      try {
+        return rawValue ? decodeURIComponent(rawValue) : null;
+      } catch {
+        return null;
+      }
+    }
+  }
+
+  return null;
 }
 
 function buildApiUrl(path: string): string {

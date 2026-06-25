@@ -4,7 +4,7 @@ import type {
   LoginRequest,
   SignupRequest
 } from "@sketchcatch/types";
-import { apiFetch } from "./api-client";
+import { apiFetch, refreshAuthSession } from "./api-client";
 
 export function requestLogin(payload: LoginRequest): Promise<AuthResponse> {
   return apiFetch<AuthResponse>("/auth/login", {
@@ -26,6 +26,8 @@ export function requestCurrentUser(): Promise<CurrentUserResponse> {
     method: "GET"
   });
 }
+
+export const requestRefreshSession = refreshAuthSession;
 
 export async function requestLogout(): Promise<void> {
   await apiFetch<{ ok: true }>("/auth/logout", {

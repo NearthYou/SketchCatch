@@ -10,7 +10,13 @@ import {
   useState
 } from "react";
 import type { AuthResponse, LoginRequest, SignupRequest, User } from "@sketchcatch/types";
-import { requestCurrentUser, requestLogin, requestLogout, requestSignup } from "../../lib/auth-api";
+import {
+  requestCurrentUser,
+  requestLogin,
+  requestLogout,
+  requestRefreshSession,
+  requestSignup
+} from "../../lib/auth-api";
 import {
   clearStoredAuthSession,
   readStoredAuthSession,
@@ -35,17 +41,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
 
   const reloadUser = useCallback(async () => {
-    const storedSession = readStoredAuthSession();
-
-    if (!storedSession) {
-      setUser(null);
-      setStatus("unauthenticated");
-      return;
-    }
-
     setStatus("loading");
 
     try {
+      const session = readStoredAuthSession() ?? (await requestRefreshSession());
+
+      if (!session) {
+        setUser(null);
+        setStatus("unauthenticated");
+        return;
+      }
+
       const response = await requestCurrentUser();
       setUser(response.user);
       setStatus("authenticated");

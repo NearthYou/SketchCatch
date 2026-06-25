@@ -13,6 +13,9 @@ process.env.AUTH_TOKEN_SECRET = "test-auth-token-secret-with-at-least-32-charact
 const USER_ID = "11111111-1111-4111-8111-111111111111";
 const PASSWORD = "demo-password-123";
 const REFRESH_TOKEN_COOKIE_NAME = "sketchcatch_refresh_token";
+const CSRF_TOKEN_COOKIE_NAME = "sketchcatch_csrf_token";
+const CSRF_TOKEN_HEADER_NAME = "x-csrf-token";
+const CSRF_TOKEN = "csrf-token";
 
 type UserRow = typeof users.$inferSelect;
 type LoginAttemptRow = typeof loginAttempts.$inferSelect;
@@ -246,9 +249,7 @@ test("POST /api/auth/refresh revokes active sessions when a revoked token is reu
   const response = await app.inject({
     method: "POST",
     url: "/api/auth/refresh",
-    headers: {
-      cookie: `${REFRESH_TOKEN_COOKIE_NAME}=${reusedRefreshToken}`
-    }
+    headers: authCookieHeaders(reusedRefreshToken)
   });
 
   assert.equal(response.statusCode, 401);
@@ -258,6 +259,31 @@ test("POST /api/auth/refresh revokes active sessions when a revoked token is reu
   assert.equal(fakeDb.updateCalls.length, 1);
   assert.equal(fakeDb.updateCalls[0]?.table, refreshTokens);
   assert.ok(fakeDb.updateCalls[0]?.values.revokedAt instanceof Date);
+
+  await app.close();
+});
+
+test("POST /api/auth/refresh rejects requests without the CSRF header", async () => {
+  const refreshToken = "csrf-refresh-token";
+  const fakeDb = new AuthScenarioFakeDb({
+    selectResults: []
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/auth/refresh",
+    headers: {
+      cookie: `${REFRESH_TOKEN_COOKIE_NAME}=${refreshToken}; ${CSRF_TOKEN_COOKIE_NAME}=${CSRF_TOKEN}`
+    }
+  });
+
+  assert.equal(response.statusCode, 401);
+  assertErrorResponse(response.json() as ApiErrorResponse, "unauthorized");
+  assertClearedRefreshTokenCookie(response.headers["set-cookie"]);
+  assert.equal(fakeDb.updateCalls.length, 0);
 
   await app.close();
 });
@@ -274,9 +300,7 @@ test("POST /api/auth/logout revokes the cookie refresh token and clears the cook
   const response = await app.inject({
     method: "POST",
     url: "/api/auth/logout",
-    headers: {
-      cookie: `${REFRESH_TOKEN_COOKIE_NAME}=${refreshToken}`
-    }
+    headers: authCookieHeaders(refreshToken)
   });
 
   assert.equal(response.statusCode, 200);
@@ -365,6 +389,13 @@ async function authHeaders(userId: string): Promise<Record<string, string>> {
   };
 }
 
+function authCookieHeaders(refreshToken: string): Record<string, string> {
+  return {
+    cookie: `${REFRESH_TOKEN_COOKIE_NAME}=${refreshToken}; ${CSRF_TOKEN_COOKIE_NAME}=${CSRF_TOKEN}`,
+    [CSRF_TOKEN_HEADER_NAME]: CSRF_TOKEN
+  };
+}
+
 function assertAuthResponse(body: AuthResponse, setCookieHeader: string | string[] | undefined): void {
   assert.deepEqual(Object.keys(body).sort(), ["session", "user"]);
   assert.deepEqual(Object.keys(body.user).sort(), [
@@ -397,26 +428,49 @@ function assertLoginLockedErrorResponse(body: LoginLockedErrorResponse): void {
 }
 
 function assertRefreshTokenCookie(setCookieHeader: string | string[] | undefined): void {
-  const cookie = getSingleSetCookieHeader(setCookieHeader);
+  const cookies = getSetCookieHeaders(setCookieHeader);
+  const cookie = getCookieHeader(cookies, REFRESH_TOKEN_COOKIE_NAME);
+  const csrfCookie = getCookieHeader(cookies, CSRF_TOKEN_COOKIE_NAME);
 
   assert.match(cookie, new RegExp(`^${REFRESH_TOKEN_COOKIE_NAME}=`));
   assert.match(cookie, /HttpOnly/);
   assert.match(cookie, /SameSite=Lax/);
   assert.match(cookie, /Path=\/api\/auth/);
+  assert.match(csrfCookie, new RegExp(`^${CSRF_TOKEN_COOKIE_NAME}=`));
+  assert.doesNotMatch(csrfCookie, /HttpOnly/);
+  assert.match(csrfCookie, /SameSite=Lax/);
 }
 
 function assertClearedRefreshTokenCookie(setCookieHeader: string | string[] | undefined): void {
-  const cookie = getSingleSetCookieHeader(setCookieHeader);
+  const cookies = getSetCookieHeaders(setCookieHeader);
+  const cookie = getCookieHeader(cookies, REFRESH_TOKEN_COOKIE_NAME);
+  const csrfCookie = getCookieHeader(cookies, CSRF_TOKEN_COOKIE_NAME);
 
   assert.match(cookie, new RegExp(`^${REFRESH_TOKEN_COOKIE_NAME}=`));
   assert.match(cookie, /Max-Age=0/);
+  assert.match(csrfCookie, new RegExp(`^${CSRF_TOKEN_COOKIE_NAME}=`));
+  assert.match(csrfCookie, /Max-Age=0/);
 }
 
-function getSingleSetCookieHeader(setCookieHeader: string | string[] | undefined): string {
-  const cookie = Array.isArray(setCookieHeader) ? setCookieHeader[0] : setCookieHeader;
+function getSetCookieHeaders(setCookieHeader: string | string[] | undefined): string[] {
+  const cookies = Array.isArray(setCookieHeader)
+    ? setCookieHeader
+    : setCookieHeader
+      ? [setCookieHeader]
+      : [];
 
-  if (typeof cookie !== "string") {
+  if (cookies.length === 0) {
     assert.fail("Expected Set-Cookie header");
+  }
+
+  return cookies;
+}
+
+function getCookieHeader(cookies: string[], cookieName: string): string {
+  const cookie = cookies.find((candidate) => candidate.startsWith(`${cookieName}=`));
+
+  if (!cookie) {
+    assert.fail(`Expected ${cookieName} Set-Cookie header`);
   }
 
   return cookie;
