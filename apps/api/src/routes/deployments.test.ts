@@ -9,7 +9,6 @@ import type {
 } from "../deployments/deployment-init-service.js";
 import { users } from "../db/schema.js";
 import {
-  DeploymentNotFoundError,
   type ArchitectureRecord,
   type CreateDeploymentRecordInput,
   type DeploymentLogRecord,
@@ -628,7 +627,7 @@ test("GET /api/deployments/:deploymentId maps missing deployments to not_found",
   await app.close();
 });
 
-test("POST /api/deployments/:deploymentId/init runs Terraform init and returns the deployment", async () => {
+test("POST /api/deployments/:deploymentId/init starts Terraform init in the background", async () => {
   const repository = new FakeDeploymentRepository();
   const initCalls: Array<{ deploymentId: string; accessContext: ProjectAccessContext }> = [];
   const app = await buildDeploymentTestApp(repository, {
@@ -659,10 +658,10 @@ test("POST /api/deployments/:deploymentId/init runs Terraform init and returns t
     headers: authHeaders()
   });
 
-  assert.equal(response.statusCode, 200);
+  assert.equal(response.statusCode, 202);
   const body = response.json() as DeploymentResponse;
   assert.equal(body.deployment.id, deploymentId);
-  assert.equal(body.deployment.status, "PENDING");
+  assert.equal(body.deployment.status, "RUNNING");
   assert.deepEqual(initCalls, [
     {
       deploymentId,
@@ -678,9 +677,10 @@ test("POST /api/deployments/:deploymentId/init runs Terraform init and returns t
 
 test("POST /api/deployments/:deploymentId/init maps missing deployments to not_found", async () => {
   const repository = new FakeDeploymentRepository();
+  repository.deployment = undefined;
   const app = await buildDeploymentTestApp(repository, {
     runDeploymentInit: async () => {
-      throw new DeploymentNotFoundError("Deployment not found");
+      throw new Error("background init should not start");
     }
   });
 
@@ -699,23 +699,28 @@ test("POST /api/deployments/:deploymentId/init maps missing deployments to not_f
   await app.close();
 });
 
-test("POST /api/deployments/:deploymentId/init returns a failed deployment when Terraform init fails", async () => {
+test("POST /api/deployments/:deploymentId/init returns accepted when background Terraform init fails", async () => {
   const repository = new FakeDeploymentRepository();
+  const initCalls: string[] = [];
   const app = await buildDeploymentTestApp(repository, {
-    runDeploymentInit: async (input) => ({
-      deployment: createDeploymentRecord(input.deploymentId, {
-        status: "FAILED",
-        failureStage: "init",
-        errorSummary: "Error: provider install failed"
-      }),
-      terraform: {
-        command: ["terraform", "init", "-backend=false", "-input=false", "-no-color"],
-        exitCode: 1,
-        stdout: "Initializing the backend...",
-        stderr: "Error: provider install failed",
-        timedOut: false
-      }
-    })
+    runDeploymentInit: async (input) => {
+      initCalls.push(input.deploymentId);
+
+      return {
+        deployment: createDeploymentRecord(input.deploymentId, {
+          status: "FAILED",
+          failureStage: "init",
+          errorSummary: "Error: provider install failed"
+        }),
+        terraform: {
+          command: ["terraform", "init", "-backend=false", "-input=false", "-no-color"],
+          exitCode: 1,
+          stdout: "Initializing the backend...",
+          stderr: "Error: provider install failed",
+          timedOut: false
+        }
+      };
+    }
   });
 
   const response = await app.inject({
@@ -724,21 +729,21 @@ test("POST /api/deployments/:deploymentId/init returns a failed deployment when 
     headers: authHeaders()
   });
 
-  assert.equal(response.statusCode, 200);
+  assert.equal(response.statusCode, 202);
   const body = response.json() as DeploymentResponse;
   assert.equal(body.deployment.id, deploymentId);
-  assert.equal(body.deployment.status, "FAILED");
-  assert.equal(body.deployment.failureStage, "init");
-  assert.equal(body.deployment.errorSummary, "Error: provider install failed");
+  assert.equal(body.deployment.status, "RUNNING");
+  assert.deepEqual(initCalls, [deploymentId]);
 
   await app.close();
 });
 
 test("POST /api/deployments/:deploymentId/init maps missing Terraform artifacts to not_found", async () => {
   const repository = new FakeDeploymentRepository();
+  repository.terraformArtifactById = undefined;
   const app = await buildDeploymentTestApp(repository, {
     runDeploymentInit: async () => {
-      throw new DeploymentNotFoundError("Terraform artifact not found for deployment");
+      throw new Error("background init should not start");
     }
   });
 

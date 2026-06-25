@@ -210,16 +210,33 @@ export async function registerDeploymentRoutes(
     const runDeploymentInit = options?.runDeploymentInit ?? defaultRunDeploymentInit;
 
     try {
-      const { deployment } = await runDeploymentInit(
+      const deployment = await getDeployment(
         {
           deploymentId: params.deploymentId,
           accessContext
         },
         repository
       );
+      await requireDeploymentInitArtifact(deployment, repository);
 
-      return reply.status(200).send({
-        deployment: toDeployment(deployment)
+      const runningDeployment = await repository.updateDeploymentStatus(deployment.id, "RUNNING");
+
+      if (!runningDeployment) {
+        throw new DeploymentNotFoundError("Deployment not found");
+      }
+
+      startDeploymentInitJob(
+        {
+          deploymentId: params.deploymentId,
+          accessContext
+        },
+        repository,
+        runDeploymentInit,
+        request.log
+      );
+
+      return reply.status(202).send({
+        deployment: toDeployment(runningDeployment)
       });
     } catch (error) {
       return handleDeploymentError(error, reply);
@@ -257,4 +274,36 @@ function createUserProjectAccessContext(userId: string): ProjectAccessContext {
     kind: "user",
     userId
   };
+}
+
+async function requireDeploymentInitArtifact(
+  deployment: DeploymentRecord,
+  repository: DeploymentRepository
+): Promise<void> {
+  const artifact = await repository.findTerraformArtifactById(deployment.terraformArtifactId);
+
+  if (!artifact || artifact.id !== deployment.terraformArtifactId) {
+    throw new DeploymentNotFoundError("Terraform artifact not found for deployment");
+  }
+
+  if (
+    artifact.projectId !== deployment.projectId ||
+    artifact.architectureId !== deployment.architectureId
+  ) {
+    throw new DeploymentNotFoundError("Terraform artifact does not match deployment");
+  }
+}
+
+function startDeploymentInitJob(
+  input: RunDeploymentInitInput,
+  repository: DeploymentRepository,
+  runDeploymentInit: (
+    input: RunDeploymentInitInput,
+    repository: DeploymentRepository
+  ) => Promise<RunDeploymentInitResult>,
+  log: FastifyRequest["log"]
+): void {
+  void runDeploymentInit(input, repository).catch(() => {
+    log.error({ deploymentId: input.deploymentId }, "Deployment init background job failed");
+  });
 }
