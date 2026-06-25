@@ -1,39 +1,64 @@
-# 팀원 Codex 호환성 선택 문서
+# 팀원 Codex 선택 문서 안내
 
-> 상태: 담당자 선택 결과를 받기 위한 검토용 문서다. 각 문서의 추천안은 gg AI 파트와의 호환성을 기준으로 한 제안이며, 담당자 Codex의 응답을 받은 뒤 확정한다.
+이 폴더는 팀원에게 보내는 "선택지 문서"다.
 
-이 폴더는 팀원별 Codex가 구현 전에 호환성 선택지를 고르고, 그 결과를 gg AI 파트로 되돌려주기 위한 문서 묶음이다.
+쉽게 말하면:
+
+> 각 파트 Codex가 구현 전에 A/B/C 중 하나를 고르게 해서, 나중에 데이터 모양이 안 맞는 문제를 줄이기 위한 문서다.
+
+## 왜 필요해?
+
+팀원이 각자 Codex로 만들면 이런 일이 생길 수 있다.
+
+```text
+gg AI: EC2 id를 ec2-api라고 부름
+jh 보드: EC2 id를 api-server라고 기대함
+sw Terraform: EC2 id를 ec2-1이라고 기대함
+```
+
+그러면 연결할 때 깨진다.
+
+그래서 미리 묻는다.
+
+```text
+너희 파트는 어떤 데이터 모양을 쓸 거야?
+```
 
 ## 사용 방법
 
-1. 각 팀원은 자기 담당 문서를 담당 Codex에게 읽힌다.
-2. Codex는 문서의 선택지에서 하나를 고른다.
-3. Codex는 문서 하단의 "응답 형식"대로 답한다.
-4. gg는 받은 답을 기준으로 AI API, DTO, mock, rule engine 구현 계획을 구체화한다.
+1. 팀원에게 자기 파트 문서를 보낸다.
+2. 팀원은 자기 Codex에게 문서를 읽힌다.
+3. Codex가 A/B/C 중 하나를 고른다.
+4. gg는 그 답을 보고 AI 쪽 타입과 응답을 맞춘다.
 
-## 담당 문서
+## 문서 목록
 
-| 담당 | 문서 | 목적 |
+| 대상 | 문서 | 물어보는 것 |
 | --- | --- | --- |
-| jh | [Architecture Board 선택지](./001_아키텍처보드선택지_jh.md) | `ArchitectureJson`, `ResourceType`, 보드 경고 표시 호환성 확인 |
-| sw | [Terraform 변환 선택지](./002_테라폼변환선택지_sw.md) | Terraform 생성 입력, `ResourceNode.config`, IaC Preview 호환성 확인 |
-| ck | [Plan/Apply 선택지](./003_배포실행선택지_ck.md) | Plan/Apply output, 오류 설명 입력, Deployment History 연결 확인 |
-| ys | [플랫폼 선택지](./004_플랫폼선택지_ys.md) | 프로젝트 목록, 최근 작업, 알림에서 AI 요약 소비 방식 확인 |
-| 팀장 | [공통 계약 선택지](./005_공통계약선택지.md) | 공통 API 응답 wrapper, shared DTO, 저장 정책 확인 |
+| jh | `001_아키텍처보드선택지_jh.md` | AI 초안을 보드가 어떻게 받을지 |
+| sw | `002_테라폼변환선택지_sw.md` | Terraform 생성기가 어떤 입력을 기준으로 할지 |
+| ck | `003_배포실행선택지_ck.md` | Plan/Apply 오류를 AI가 어떤 모양으로 받을지 |
+| ys | `004_플랫폼선택지_ys.md` | AI 결과를 프로젝트/활동/알림에 어디까지 붙일지 |
+| 팀장 | `005_공통계약선택지.md` | shared type, API 응답, 저장 정책을 어떻게 할지 |
 
-## 선택 결과
+## 중요한 점
 
-| 담당 | 선택 결과 | gg 반영 기준 |
+- 이 문서는 구현 문서가 아니다.
+- 이 문서는 "선택지를 주고 답을 받는 문서"다.
+- 추천안이 있어도 무조건 강제는 아니다.
+- 팀원 파트 사정이 있으면 다른 선택을 해도 된다.
+- 대신 선택 결과를 gg가 알아야 한다.
+
+## 지금까지 받은 답
+
+| 대상 | 선택 결과 | gg가 맞출 것 |
 | --- | --- | --- |
-| jh | A / A / A / A | 공통 `ResourceType`, `architectureJson` 단독 입력, `CheckFinding.resourceId` 연결, 보드의 공통 config 표시 기준을 따른다. |
-| sw | A / A / A / A | `ArchitectureJson`을 Terraform 생성 원천 입력으로 두고, sw가 `ResourceType`별 required config matrix를 정의한다. Terraform 생성 결과는 `resourceId` 또는 node id mapping을 제공하고, 코드 ↔ 다이어그램 동기화는 sw가 소유한다. |
-| ck | A / A / A / A | 오류 설명 입력은 `stage`, `rawMessage`, 선택 `relatedResourceId`로 받고, AI 설명은 stateless 응답으로 유지한다. |
-| ys | A / B / A / C | 프로젝트 목록은 가볍게 유지하고, 중요한 AI 이벤트만 Activity로 남기며, 알림은 화면 warning/Toast 중심으로 시작한다. 익명 workspace와 로그인 user를 모두 고려한다. |
-| 팀장 | C / A / B / C / A | 공통 wrapper는 전체 route 정리 이후 적용하고, AI DTO는 `packages/types`에 둔다. Pre-Deployment Analysis만 저장 대상으로 보고, AI source는 metadata로 통합하며, 확장 `ResourceType`은 승인한다. |
+| jh | 모두 A | `ArchitectureJson`만으로 보드가 열리게 만들기 |
+| sw | 모두 A | Terraform 생성 기준을 `ArchitectureJson`으로 유지 |
+| ck | 모두 A | 오류 설명 입력을 최소 payload로 받기 |
+| ys | A / B / A / C | AI 결과를 목록에 강제하지 않고, 중요한 이벤트만 활동에 남기기 |
+| 팀장 | C / A / B / C / A | shared type은 `packages/types`, Pre-Deployment Analysis는 저장 가능성 고려 |
 
-## 공통 기준
+## 한 줄 요약
 
-- 공통 타입 기준은 [데이터 모델](../data-models.md)이다.
-- gg AI 범위 기준은 [AI 1차 제공 범위](../001_AI파트1차제공범위초안_gg.md)이다.
-- Codex 작업 절차 기준은 [개발 가이드](../development.md)의 `Codex 협업 호환 절차`다.
-- 실제 AWS apply, Terraform 실행, AWS 권한 변경은 이 문서 묶음에서 결정하지 않는다.
+이 폴더는 "각 팀원 Codex에게 물어볼 질문지"다.
