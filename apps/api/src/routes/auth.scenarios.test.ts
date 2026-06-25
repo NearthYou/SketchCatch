@@ -138,6 +138,33 @@ test("POST /api/auth/login returns 401 for wrong password", async () => {
   await app.close();
 });
 
+test("POST /api/auth/login records the forwarded client IP behind proxies", async () => {
+  const user = await makeUserWithPassword(PASSWORD);
+  const fakeDb = new AuthScenarioFakeDb({
+    selectResults: [[], [user], [{ failedAttemptCount: 0 }]]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/auth/login",
+    headers: {
+      "x-forwarded-for": "203.0.113.10, 10.0.0.5"
+    },
+    payload: {
+      username: "demo",
+      password: "wrong-password"
+    }
+  });
+
+  assert.equal(response.statusCode, 401);
+  assert.equal(fakeDb.loginAttemptRows.at(-1)?.ipAddress, "203.0.113.10");
+
+  await app.close();
+});
+
 test("POST /api/auth/login returns 429 after five failed attempts", async () => {
   const user = await makeUserWithPassword(PASSWORD);
   const fakeDb = new AuthScenarioFakeDb({

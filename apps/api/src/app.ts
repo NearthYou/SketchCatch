@@ -17,7 +17,8 @@ export type BuildAppOptions = {
 
 export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   const app = Fastify({
-    logger: process.env.NODE_ENV !== "test"
+    logger: process.env.NODE_ENV !== "test",
+    trustProxy: true
   });
 
   app.setErrorHandler((error, _request, reply) => {
