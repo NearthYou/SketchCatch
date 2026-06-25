@@ -68,7 +68,7 @@ Authorization: Bearer <accessToken>
 ## 1.1 아이디 중복 확인
 
 ```http
-GET /api/auth/check-username?username=yoonseo
+GET /api/auth/check-username?username=user
 ```
 
 응답:
@@ -149,7 +149,7 @@ POST /api/auth/signup
 
 ```json
 {
-  "username": "yoonseo",
+  "username": "user",
   "password": "Password!123",
   "email": "user@example.com",
   "emailVerificationToken": "short_lived_token",
@@ -166,7 +166,7 @@ POST /api/auth/signup
 {
   "user": {
     "id": "user_id",
-    "username": "yoonseo",
+    "username": "user",
     "email": "user@example.com",
     "nickname": "ys",
     "role": "USER",
@@ -198,7 +198,7 @@ POST /api/auth/login
 
 ```json
 {
-  "username": "yoonseo",
+  "username": "user",
   "password": "Password!123"
 }
 ```
@@ -209,7 +209,7 @@ POST /api/auth/login
 {
   "user": {
     "id": "user_id",
-    "username": "yoonseo",
+    "username": "user",
     "email": "user@example.com",
     "nickname": "ys",
     "role": "USER"
@@ -256,7 +256,7 @@ GET /api/auth/oauth/naver/callback?code=...
 {
   "user": {
     "id": "user_id",
-    "username": "yoonseo",
+    "username": "user",
     "email": "user@example.com",
     "nickname": "ys",
     "role": "USER"
@@ -356,7 +356,7 @@ Authorization: Bearer <accessToken>
 {
   "user": {
     "id": "user_id",
-    "username": "yoonseo",
+    "username": "user",
     "email": "user@example.com",
     "nickname": "ys",
     "role": "USER",
@@ -375,7 +375,7 @@ POST /api/auth/password-reset/request
 
 ```json
 {
-  "username": "yoonseo",
+  "username": "user",
   "email": "user@example.com"
 }
 ```
