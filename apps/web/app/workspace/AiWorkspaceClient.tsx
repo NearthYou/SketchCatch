@@ -252,7 +252,7 @@ export function AiWorkspaceClient() {
             </p>
             <div className="chipRow">
               {draft.architectureJson.nodes.map((node) => (
-                <span className="resourceChip" key={node.id}>
+                <span className="workspaceResourceChip" key={node.id}>
                   {getResourceTypeLabel(node.type)} · {node.label ?? node.id}
                 </span>
               ))}
