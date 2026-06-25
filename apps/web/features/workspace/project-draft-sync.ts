@@ -54,7 +54,7 @@ export async function loadProjectDiagramDraft(
   const localCacheWorkspaceId = getLocalCacheWorkspaceId(input);
   const [localDraft, serverResponse] = await Promise.all([
     readLocal(localCacheWorkspaceId, input.projectId),
-    readServer(input.projectId)
+    readServer(input.projectId).catch((): ProjectDraftResponse => ({ draft: null }))
   ]);
   const choice = chooseInitialDiagram({
     fallbackDiagram: input.fallbackDiagram,
@@ -87,10 +87,19 @@ export async function saveProjectDiagramDraft(
 
   await writeLocal(localDraft);
 
-  const serverResponse = await saveServer({
-    projectId: input.projectId,
-    diagramJson: input.diagramJson
-  });
+  let serverResponse: ProjectDraftResponse;
+
+  try {
+    serverResponse = await saveServer({
+      projectId: input.projectId,
+      diagramJson: input.diagramJson
+    });
+  } catch {
+    return {
+      localDraft,
+      serverDraft: null
+    };
+  }
 
   if (!serverResponse.draft) {
     return {

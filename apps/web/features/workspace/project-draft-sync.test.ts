@@ -133,6 +133,48 @@ test("loadProjectDiagramDraft can use authenticated server ownership without a w
   assert.deepEqual(result.diagramJson, serverDiagram);
 });
 
+test("loadProjectDiagramDraft falls back to local draft when server draft load fails", async () => {
+  const result = await loadProjectDiagramDraft(
+    {
+      fallbackDiagram: emptyDiagram,
+      projectId: serverDraft.projectId,
+      workspaceId: "workspace-1"
+    },
+    {
+      getProjectDraft: async () => {
+        throw new Error("server unavailable");
+      },
+      readLocalProjectDraft: async () => localDraft
+    }
+  );
+
+  assert.equal(result.source, "local");
+  assert.deepEqual(result.diagramJson, localDiagram);
+  assert.deepEqual(result.localDraft, localDraft);
+  assert.equal(result.serverDraft, null);
+});
+
+test("loadProjectDiagramDraft falls back to empty diagram when server draft load fails without local draft", async () => {
+  const result = await loadProjectDiagramDraft(
+    {
+      fallbackDiagram: emptyDiagram,
+      projectId: serverDraft.projectId,
+      workspaceId: "workspace-1"
+    },
+    {
+      getProjectDraft: async () => {
+        throw new Error("server unavailable");
+      },
+      readLocalProjectDraft: async () => null
+    }
+  );
+
+  assert.equal(result.source, "empty");
+  assert.deepEqual(result.diagramJson, emptyDiagram);
+  assert.equal(result.localDraft, null);
+  assert.equal(result.serverDraft, null);
+});
+
 test("saveProjectDiagramDraft can use authenticated server ownership without a workspace query", async () => {
   const localWrites: LocalProjectDraft[] = [];
   let saveCallCount = 0;
@@ -206,4 +248,30 @@ test("saveProjectDiagramDraft writes local cache and server draft for the same p
   assert.equal(writes[1]?.dirty, false);
   assert.equal(result.localDraft.dirty, false);
   assert.equal(result.serverDraft?.revision, 8);
+});
+
+test("saveProjectDiagramDraft returns local draft when server save fails", async () => {
+  const writes: LocalProjectDraft[] = [];
+  const result = await saveProjectDiagramDraft(
+    {
+      diagramJson: serverDiagram,
+      previousLocalDraft: localDraft,
+      projectId: serverDraft.projectId,
+      workspaceId: "workspace-1"
+    },
+    {
+      now: () => "2026-06-24T03:00:00.000Z",
+      saveProjectDraft: async () => {
+        throw new Error("server unavailable");
+      },
+      writeLocalProjectDraft: async (draft) => {
+        writes.push(draft);
+      }
+    }
+  );
+
+  assert.equal(writes.length, 1);
+  assert.equal(result.localDraft.dirty, true);
+  assert.equal(result.localDraft.revision, 4);
+  assert.equal(result.serverDraft, null);
 });
