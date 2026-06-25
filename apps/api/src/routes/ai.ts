@@ -5,7 +5,8 @@ import type {
   AiPreDeploymentAnalysisResult,
   AiTerraformErrorExplanationResult,
   AiTerraformPreviewExplanationResult,
-  ArchitectureJson
+  ArchitectureJson,
+  CreateArchitectureDraftRequest
 } from "@sketchcatch/types";
 import {
   createArchitectureDraft,
@@ -48,8 +49,12 @@ const architectureJsonSchema: z.ZodType<ArchitectureJson> = z.object({
   edges: z.array(resourceEdgeSchema)
 });
 
-const architectureDraftBodySchema = z.object({
-  prompt: z.string().trim().min(1)
+const architectureDraftBodySchema: z.ZodType<CreateArchitectureDraftRequest> = z.object({
+  prompt: z.string().trim().min(1),
+  scenarioHint: z.enum(["auto", "static_site", "api_server", "backend_with_db"]).default("auto"),
+  budgetLevel: z.enum(["low", "normal"]).default("normal"),
+  trafficLevel: z.enum(["small", "normal"]).default("normal"),
+  securityPriority: z.enum(["basic", "high"]).default("basic")
 });
 
 const githubArchitectureDraftBodySchema = z.object({
@@ -80,7 +85,7 @@ export async function registerAiRoutes(app: FastifyInstance): Promise<void> {
   app.post("/ai/architecture-draft", async (request): Promise<AiArchitectureDraftResult> => {
     const body = architectureDraftBodySchema.parse(request.body);
 
-    return createArchitectureDraft(body.prompt);
+    return createArchitectureDraft(body);
   });
 
   app.post("/ai/github-architecture-draft", async (request): Promise<AiArchitectureDraftResult> => {

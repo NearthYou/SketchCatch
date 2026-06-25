@@ -151,7 +151,57 @@ test("POST /api/ai/architecture-draft selects API server and database backend te
   assert.ok(databaseBackendNodeTypes.includes("RDS"));
   assert.ok(databaseBackendNodeTypes.includes("SECURITY_GROUP"));
 
-  await app.close();
+	await app.close();
+});
+
+test("POST /api/ai/architecture-draft uses guardrail choices before prompt keywords", async () => {
+	const app = buildApp();
+
+	const response = await app.inject({
+		method: "POST",
+		url: "/api/ai/architecture-draft",
+		payload: {
+			prompt: "DB가 포함된 백엔드 서버를 만들고 싶어",
+			scenarioHint: "static_site",
+			budgetLevel: "low",
+			trafficLevel: "small",
+			securityPriority: "high"
+		}
+	});
+
+	assert.equal(response.statusCode, 200);
+
+	const body = architectureDraftResponseSchema.parse(response.json());
+	const nodeTypes = body.architectureJson.nodes.map((node) => node.type);
+
+	assert.equal(body.title, "정적 웹사이트 Practice Architecture");
+	assert.ok(nodeTypes.includes("S3"));
+	assert.equal(nodeTypes.includes("RDS"), false);
+	assert.ok(body.metadata.assumptions.some((item) => item.includes("낮은 예산")));
+	assert.ok(body.metadata.assumptions.some((item) => item.includes("작은 트래픽")));
+	assert.ok(body.metadata.assumptions.some((item) => item.includes("보안 우선순위")));
+
+	await app.close();
+});
+
+test("POST /api/ai/architecture-draft rejects invalid guardrail choices", async () => {
+	const app = buildApp();
+
+	const response = await app.inject({
+		method: "POST",
+		url: "/api/ai/architecture-draft",
+		payload: {
+			prompt: "API 서버를 만들고 싶어",
+			scenarioHint: "serverless_app",
+			budgetLevel: "low",
+			trafficLevel: "small",
+			securityPriority: "basic"
+		}
+	});
+
+	assert.equal(response.statusCode, 400);
+
+	await app.close();
 });
 
 test("POST /api/ai/architecture-draft rejects an empty prompt", async () => {

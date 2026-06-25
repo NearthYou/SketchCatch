@@ -1,18 +1,16 @@
-import type { AiArchitectureDraftResult, ArchitectureJson } from "@sketchcatch/types";
+import type {
+  AiArchitectureDraftResult,
+  ArchitectureDraftScenarioHint,
+  ArchitectureJson,
+  CreateArchitectureDraftRequest
+} from "@sketchcatch/types";
 
 // 자연어 요청을 보드가 열 수 있는 ArchitectureJson 초안으로 바꾸는 1차 진입점입니다.
-export function createArchitectureDraft(prompt: string): AiArchitectureDraftResult {
-  const normalizedPrompt = prompt.toLowerCase();
+export function createArchitectureDraft(input: string | CreateArchitectureDraftRequest): AiArchitectureDraftResult {
+  const request = normalizeArchitectureDraftRequest(input);
+  const draft = createDraftByScenarioHint(request);
 
-  if (containsAny(normalizedPrompt, ["db", "database", "데이터베이스", "rds", "백엔드"])) {
-    return createDatabaseBackendDraft();
-  }
-
-  if (containsAny(normalizedPrompt, ["api", "서버", "ec2"])) {
-    return createApiServerDraft();
-  }
-
-  return createStaticWebsiteDraft();
+  return applyGuardrailAssumptions(draft, request);
 }
 
 // GitHub 링크 요청도 결국 가벼운 텍스트 근거를 모아 자연어 초안 생성 흐름을 재사용합니다.
@@ -34,6 +32,84 @@ export function createArchitectureDraftFromRepositoryEvidence(
       ]
     }
   };
+}
+
+function normalizeArchitectureDraftRequest(input: string | CreateArchitectureDraftRequest): CreateArchitectureDraftRequest {
+  if (typeof input !== "string") {
+    return input;
+  }
+
+  return {
+    prompt: input,
+    scenarioHint: "auto",
+    budgetLevel: "normal",
+    trafficLevel: "normal",
+    securityPriority: "basic"
+  };
+}
+
+function createDraftByScenarioHint(request: CreateArchitectureDraftRequest): AiArchitectureDraftResult {
+  const scenarioHint = resolveScenarioHint(request);
+
+  switch (scenarioHint) {
+    case "static_site":
+      return createStaticWebsiteDraft();
+    case "api_server":
+      return createApiServerDraft();
+    case "backend_with_db":
+      return createDatabaseBackendDraft();
+    case "auto":
+      return createStaticWebsiteDraft();
+  }
+}
+
+function resolveScenarioHint(request: CreateArchitectureDraftRequest): ArchitectureDraftScenarioHint {
+  if (request.scenarioHint !== "auto") {
+    return request.scenarioHint;
+  }
+
+  const normalizedPrompt = request.prompt.toLowerCase();
+
+  if (containsAny(normalizedPrompt, ["db", "database", "데이터베이스", "rds", "백엔드"])) {
+    return "backend_with_db";
+  }
+
+  if (containsAny(normalizedPrompt, ["api", "서버", "ec2"])) {
+    return "api_server";
+  }
+
+  return "static_site";
+}
+
+function applyGuardrailAssumptions(
+  draft: AiArchitectureDraftResult,
+  request: CreateArchitectureDraftRequest
+): AiArchitectureDraftResult {
+  return {
+    ...draft,
+    metadata: {
+      ...draft.metadata,
+      assumptions: [...draft.metadata.assumptions, ...createGuardrailAssumptions(request)]
+    }
+  };
+}
+
+function createGuardrailAssumptions(request: CreateArchitectureDraftRequest): string[] {
+  const assumptions: string[] = [];
+
+  if (request.budgetLevel === "low") {
+    assumptions.push("낮은 예산을 우선해 작은 Practice Resource 기준으로 초안을 만들었습니다.");
+  }
+
+  if (request.trafficLevel === "small") {
+    assumptions.push("작은 트래픽을 기준으로 단순한 구조부터 시작합니다.");
+  }
+
+  if (request.securityPriority === "high") {
+    assumptions.push("보안 우선순위가 높으므로 배포 전 Security Finding을 반드시 확인해야 합니다.");
+  }
+
+  return assumptions;
 }
 
 // 애매한 요청은 정적 웹사이트 기본 구조로 떨어지게 만든 fallback 초안입니다.

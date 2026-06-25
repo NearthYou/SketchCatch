@@ -240,6 +240,22 @@ export type AiResultMetadata = {
   explanations: string[];
 };
 
+export type ArchitectureDraftScenarioHint = "auto" | "static_site" | "api_server" | "backend_with_db";
+
+export type ArchitectureDraftBudgetLevel = "low" | "normal";
+
+export type ArchitectureDraftTrafficLevel = "small" | "normal";
+
+export type ArchitectureDraftSecurityPriority = "basic" | "high";
+
+export type CreateArchitectureDraftRequest = {
+  prompt: string;
+  scenarioHint: ArchitectureDraftScenarioHint;
+  budgetLevel: ArchitectureDraftBudgetLevel;
+  trafficLevel: ArchitectureDraftTrafficLevel;
+  securityPriority: ArchitectureDraftSecurityPriority;
+};
+
 export type AiArchitectureDraftResult = {
   architectureJson: ArchitectureJson;
   title: string;
