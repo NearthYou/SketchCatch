@@ -1,6 +1,6 @@
 import { relations, sql } from "drizzle-orm";
 import { integer, jsonb, pgEnum, pgTable, text, timestamp, varchar } from "drizzle-orm/pg-core";
-import type { ArchitectureJson } from "@sketchcatch/types";
+import type { ArchitectureJson, DiagramJson } from "@sketchcatch/types";
 
 export const assetTypeEnum = pgEnum("asset_type", [
   "diagram_png",
@@ -21,6 +21,7 @@ export const projects = pgTable("projects", {
   workspaceId: varchar("workspace_id", { length: 128 })
     .notNull()
     .references(() => anonymousWorkspaces.id, { onDelete: "cascade" }),
+  userId: varchar("user_id", { length: 36 }),
   name: varchar("name", { length: 120 }).notNull(),
   description: text("description"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -36,6 +37,17 @@ export const architectures = pgTable("architectures", {
   source: varchar("source", { length: 64 }).notNull().default("manual"),
   architectureJson: jsonb("architecture_json").$type<ArchitectureJson>().notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
+});
+
+export const projectDrafts = pgTable("project_drafts", {
+  projectId: varchar("project_id", { length: 36 })
+    .primaryKey()
+    .references(() => projects.id, { onDelete: "cascade" }),
+  diagramJson: jsonb("diagram_json").$type<DiagramJson>().notNull(),
+  revision: integer("revision").notNull().default(1),
+  serverSavedAt: timestamp("server_saved_at", { withTimezone: true }).notNull().defaultNow(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
 });
 
 export const projectAssets = pgTable("project_assets", {
@@ -63,6 +75,7 @@ export const projectsRelations = relations(projects, ({ many, one }) => ({
     fields: [projects.workspaceId],
     references: [anonymousWorkspaces.id]
   }),
+  draft: one(projectDrafts),
   architectures: many(architectures),
   assets: many(projectAssets)
 }));
@@ -73,6 +86,13 @@ export const architecturesRelations = relations(architectures, ({ many, one }) =
     references: [projects.id]
   }),
   assets: many(projectAssets)
+}));
+
+export const projectDraftsRelations = relations(projectDrafts, ({ one }) => ({
+  project: one(projects, {
+    fields: [projectDrafts.projectId],
+    references: [projects.id]
+  })
 }));
 
 export const projectAssetsRelations = relations(projectAssets, ({ one }) => ({

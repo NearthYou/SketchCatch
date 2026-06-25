@@ -1,8 +1,15 @@
 import Fastify, { type FastifyInstance } from "fastify";
+import type { DatabaseClient } from "./db/client.js";
 import { registerHealthRoutes } from "./routes/health.js";
 import { registerProjectRoutes } from "./routes/projects.js";
+import type { ProjectOwnerResolver } from "./routes/projects.js";
 
-export function buildApp(): FastifyInstance {
+export type AppDependencies = {
+  getDatabaseClient?: (() => DatabaseClient) | undefined;
+  resolveProjectOwner?: ProjectOwnerResolver | undefined;
+};
+
+export function buildApp(dependencies: AppDependencies = {}): FastifyInstance {
   const app = Fastify({
     logger: process.env.NODE_ENV !== "test"
   });
@@ -22,7 +29,7 @@ export function buildApp(): FastifyInstance {
   });
 
   app.register(registerHealthRoutes);
-  app.register(registerProjectRoutes, { prefix: "/api" });
+  app.register(registerProjectRoutes, { ...dependencies, prefix: "/api" });
 
   return app;
 }

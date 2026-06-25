@@ -11,6 +11,7 @@
 - MVP 초반은 로그인 사용자가 아니라 `AnonymousWorkspace` 기반이다. `User`는 인증 도입 시 추가한다.
 - `Diagram`은 DB에 이미 `architectures` 테이블로 들어가 있다. 공통 타입 이름은 `ArchitectureSnapshot`으로 두고, 화면에서는 다이어그램 또는 보드라고 불러도 된다.
 - 저장되는 아키텍처 JSON은 `nodes`와 `edges`를 가진 `ArchitectureJson`으로 고정한다.
+- 편집 중인 최신 보드 draft는 `ProjectDraft`로 분리하고, 화면 복구용 `DiagramJson`을 저장한다.
 - Terraform 원문은 RDS `content` 컬럼에 저장하지 않는다. IaC 파일은 S3에 두고, RDS/API에는 `ProjectAsset` 또는 `TerraformArtifact` 메타데이터와 `objectKey`를 저장한다.
 - 실제 AWS 배포 실행은 후순위다. 3주 안에 구현할 `Deployment`는 통제된 배포/연습 세션 상태 기록 또는 모의 실행 이력으로 제한하고, 프론트에서 AWS SDK를 직접 호출하지 않는다.
 
@@ -77,6 +78,16 @@ DB 기준: `projects`
 
 `userId`는 인증 도입 후 마이그레이션할 수 있도록 선택값으로 둔다. 현재 MVP에서는 `workspaceId`가 필수 소유자 키다.
 
+프로젝트 목록 페이지는 현재 인증 사용자 대신 `clientGeneratedWorkspaceId`를 기준으로 조회한다. 인증이 붙은 화면에서는 API의 `resolveProjectOwner` 연결 지점이 request session에서 `userId`를 제공하고, 서버는 `projects.user_id` 기준으로 프로젝트를 조회한다.
+
+```ts
+type ProjectListResponse = {
+  projects: Project[];
+};
+```
+
+인증이 도입되면 클라이언트가 임의의 `userId`를 보내지 않는다. 인증 담당 코드가 서버 request에서 사용자 정보를 읽어 `resolveProjectOwner`로 `{ userId, workspaceId }`를 넘기고, 프로젝트 생성/목록/상세/draft 저장 API는 이 owner 정보로 소유권을 검증한다. `workspaceId`가 없고 `userId`만 있으면 API는 내부 호환용 workspace id를 `user:<userId>` 형태로 파생한다.
+
 ### ArchitectureSnapshot
 
 다이어그램의 저장 단위다. 사용자가 보드에서 수정할 때마다 새 버전을 만들 수 있으므로 `version`을 가진 스냅샷으로 본다.
@@ -136,6 +147,85 @@ type ResourceEdge = {
 ```
 
 `sourceId`와 `targetId`는 반드시 같은 `ArchitectureJson.nodes` 안의 `ResourceNode.id`를 가리켜야 한다.
+
+### ProjectDraft
+
+편집 중인 프로젝트의 최신 draft다. `ArchitectureSnapshot`이 버전 기록이라면, `ProjectDraft`는 새로고침과 탭 종료 후 작업 복구를 위한 최신 편집본이다.
+
+```ts
+type ProjectDraft = {
+  projectId: string;
+  diagramJson: DiagramJson;
+  revision: number;
+  serverSavedAt: IsoDateTimeString;
+  createdAt: IsoDateTimeString;
+  updatedAt: IsoDateTimeString;
+};
+```
+
+DB 기준: `project_drafts`
+
+`diagramJson`은 화면 복구를 위해 노드 크기, 스타일, viewport, 파라미터 값을 포함한다. 스냅샷 저장이나 IaC 분석처럼 서버 기준 확정 데이터가 필요할 때는 별도 변환 또는 스냅샷 API를 사용한다.
+
+DB-backed 프로젝트 편집 화면은 `projectId`와 `clientGeneratedWorkspaceId`로 `GET /api/projects/:id/draft`를 호출해 최신 draft를 불러오고, 편집 중에는 `PUT /api/projects/:id/draft`로 같은 `DiagramJson`을 저장한다. 인증 API owner resolver가 연결된 경우 `clientGeneratedWorkspaceId` 없이도 같은 endpoint가 session 사용자 기준으로 동작한다. 브라우저 IndexedDB는 네트워크 실패나 새로고침 복구를 위한 보조 캐시이며, 제품 기준 저장 원천은 RDS의 `project_drafts`다.
+
+인증 담당 팀이 붙일 서버 연결 지점:
+
+```ts
+buildApp({
+  resolveProjectOwner: async (request) => {
+    const session = await readSession(request);
+
+    return {
+      userId: session.userId,
+      workspaceId: session.workspaceId
+    };
+  }
+});
+```
+
+세션에 안정적인 `workspaceId`가 아직 없으면 `userId`만 반환해도 된다.
+
+```ts
+buildApp({
+  resolveProjectOwner: async (request) => {
+    const session = await readSession(request);
+
+    return {
+      userId: session.userId
+    };
+  }
+});
+```
+
+프로젝트 페이지 담당 팀이 붙일 프론트 연결 지점:
+
+```tsx
+<ProjectWorkspaceDraftManager
+  projectId={project.id}
+  projectName={project.name}
+/>
+```
+
+인증 session이 없는 익명 workspace 화면에서는 `workspaceId`를 함께 넘긴다.
+
+```tsx
+<ProjectWorkspaceDraftManager
+  projectId={project.id}
+  projectName={project.name}
+  workspaceId={clientGeneratedWorkspaceId}
+/>
+```
+
+### 팀 간 Interface 계약
+
+팀원이 동시에 작업할 때는 구현 파일을 직접 의존하지 말고 아래 Interface를 기준으로 붙인다.
+
+- 리소스 팔레트는 `ResourceCatalogProvider.listResources()`를 통해 `ResourceItem[]`을 제공한다. 새 AWS 리소스 항목을 추가하는 팀은 catalog와 parameter catalog를 맞추고, 캔버스 팀은 `ResourceItem`만 사용한다.
+- 프로젝트 편집 화면은 `ProjectDraftRepository.load/save`를 통해 `DiagramJson` draft를 불러오고 저장한다. IndexedDB 복구와 서버 저장 우선순위는 repository 구현 안에 둔다.
+- API route는 `ProjectRepository`를 통해 `Project`, `ArchitectureSnapshot`, `ProjectDraft`, `ProjectAsset`을 다룬다. route handler는 HTTP validation과 status code 변환만 담당한다.
+
+`DiagramJson`은 화면 draft 복구용 계약이다. 노드 크기, 스타일, viewport, Terraform 파라미터 입력값처럼 편집기 상태를 포함한다. `ArchitectureJson`은 snapshot, IaC 분석, 비용/위험 규칙이 보는 확정 아키텍처 계약이며 `ResourceNode`와 `ResourceEdge` 중심으로 유지한다. 두 타입은 목적이 다르므로 자동으로 같은 의미로 취급하지 않는다.
 
 ### ProjectAsset
 
@@ -280,6 +370,7 @@ type Activity = {
 | `ArchitectureJson` | `architectures.architecture_json` | 공유 패키지에 타입 정의됨 |
 | `ResourceNode` | `architectureJson.nodes` 내부 객체 | 공유 패키지에 타입 정의됨 |
 | `ResourceEdge` | `architectureJson.edges` 내부 객체 | 공유 패키지에 타입 정의됨 |
+| `ProjectDraft` | `project_drafts` | 구현됨 |
 | `ProjectAsset` | `project_assets` | 구현됨 |
 | `TerraformArtifact` | `project_assets.asset_type = "terraform_file"` | 저장 모델 구현됨 |
 | `Deployment` | 향후 table/API | 3주차 구현 대상 |

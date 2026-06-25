@@ -8,6 +8,20 @@
       "when": 1781955083009,
       "tag": "0000_real_impossible_man",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1782232942507,
+      "tag": "0001_oval_blonde_phantom",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1782310789897,
+      "tag": "0002_jazzy_vengeance",
+      "breakpoints": true
     }
   ]
 }

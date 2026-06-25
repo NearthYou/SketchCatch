@@ -59,6 +59,7 @@ RDS와 S3는 역할을 분리한다.
 | 익명 workspace | RDS |
 | 프로젝트 정보 | RDS |
 | 아키텍처 JSON | RDS |
+| 프로젝트 편집 draft | RDS + 브라우저 IndexedDB |
 | S3 파일 메타데이터 | RDS |
 | 향후 배포 이력/비용 정보 | RDS |
 | PNG/SVG 다이어그램 | S3 |
@@ -95,11 +96,16 @@ flowchart LR
 - `GET /health`
 - `GET /health/db`
 - `POST /api/projects`
+- `GET /api/projects?clientGeneratedWorkspaceId=...`
 - `GET /api/projects/:id`
 - `POST /api/projects/:id/architectures`
+- `GET /api/projects/:id/draft`
+- `PUT /api/projects/:id/draft`
 - `POST /api/projects/:id/assets/presigned-upload`
 
-인증, AI 생성, Terraform 실행, 실제 AWS 리소스 생성은 아직 구현하지 않았다.
+프로젝트 API는 현재 `clientGeneratedWorkspaceId` 기반 익명 workspace를 지원한다. 인증이 연결되면 API route의 `resolveProjectOwner`가 session에서 `userId`를 제공하고, 서버는 `projects.user_id` 기준으로 같은 프로젝트 목록/draft endpoint를 재사용한다. 세션에 `workspaceId`가 아직 없으면 API가 `user:<userId>` 형태의 내부 workspace id를 파생한다.
+
+인증 화면, AI 생성, Terraform 실행, 실제 AWS 리소스 생성은 아직 구현하지 않았다.
 
 ## 기술 결정 기록
 
