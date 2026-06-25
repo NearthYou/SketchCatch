@@ -11,6 +11,7 @@ export type TerraformErrorExplanationInput = {
   readonly relatedResourceId?: string | undefined;
 };
 
+// Terraform 원본 오류를 사용자가 이해하기 쉬운 원인과 다음 행동으로 바꿉니다.
 export function explainTerraformError(
   input: TerraformErrorExplanationInput
 ): AiTerraformErrorExplanationResult {
@@ -37,6 +38,7 @@ type TerraformErrorExplanationTemplate = {
   readonly nextActions: readonly string[];
 };
 
+// LLM 없이도 자주 나오는 Terraform 오류를 설명할 수 있게 만든 고정 분류표입니다.
 const TERRAFORM_ERROR_TEMPLATES: readonly TerraformErrorExplanationTemplate[] = [
   {
     category: "permission",
@@ -121,6 +123,7 @@ const UNKNOWN_TERRAFORM_ERROR_TEMPLATE: TerraformErrorExplanationTemplate = {
   nextActions: ["원본 오류 메시지를 확인하고 권한, region, quota, 문법 문제를 차례대로 점검하세요."]
 };
 
+// 원본 오류 문장에 포함된 단어를 보고 가장 가까운 설명 템플릿을 고릅니다.
 function classifyTerraformError(rawMessage: string): TerraformErrorExplanationTemplate {
   const normalizedMessage = rawMessage.toLowerCase();
 

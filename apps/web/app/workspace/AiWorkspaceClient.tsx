@@ -29,6 +29,7 @@ resource "aws_db_instance" "main" {
 
 type RequestStatus = "idle" | "loading" | "error";
 
+// gg AI API를 팀에 보여주기 위한 임시 작업 화면입니다. 최종 보드 UI가 붙으면 대체될 수 있습니다.
 export function AiWorkspaceClient() {
   const [prompt, setPrompt] = useState(samplePrompt);
   const [repositoryUrl, setRepositoryUrl] = useState("");
@@ -42,6 +43,7 @@ export function AiWorkspaceClient() {
 
   const architectureJson = useMemo<ArchitectureJson | null>(() => draft?.architectureJson ?? null, [draft]);
 
+  // 자연어 입력을 AI Architecture Draft API로 보내고 결과 설계도를 화면에 저장합니다.
   async function runPromptDraft(): Promise<void> {
     await runRequest(async () => {
       const result = await postJson<AiArchitectureDraftResult>("/ai/architecture-draft", { prompt });
@@ -50,6 +52,7 @@ export function AiWorkspaceClient() {
     });
   }
 
+  // GitHub URL을 보내 public repo 근거 기반 초안을 요청합니다.
   async function runGitHubDraft(): Promise<void> {
     await runRequest(async () => {
       const result = await postJson<AiArchitectureDraftResult>("/ai/github-architecture-draft", {
@@ -60,6 +63,7 @@ export function AiWorkspaceClient() {
     });
   }
 
+  // 이미 만든 ArchitectureJson을 비용/보안/설정 점검 API로 보냅니다.
   async function runPreDeploymentCheck(): Promise<void> {
     if (architectureJson === null) {
       setErrorMessage("먼저 Architecture Draft를 생성해야 사전 점검을 실행할 수 있습니다.");
@@ -75,6 +79,7 @@ export function AiWorkspaceClient() {
     });
   }
 
+  // Terraform 코드 조각을 보내 Resource 감지와 위험 설명을 요청합니다.
   async function runTerraformPreview(): Promise<void> {
     await runRequest(async () => {
       const result = await postJson<AiTerraformPreviewExplanationResult>(
@@ -85,6 +90,7 @@ export function AiWorkspaceClient() {
     });
   }
 
+  // 모든 버튼 요청이 같은 loading/error 처리를 쓰도록 감싸는 작은 공통 함수입니다.
   async function runRequest(request: () => Promise<void>): Promise<void> {
     setStatus("loading");
     setErrorMessage("");
@@ -236,6 +242,7 @@ function ResultList({ items, summary }: { readonly items: readonly ResultItem[];
   );
 }
 
+// workspace 화면에서 API 서버로 JSON POST 요청을 보낼 때 쓰는 공통 함수입니다.
 async function postJson<ResponseBody>(
   path: string,
   body: Record<string, unknown>

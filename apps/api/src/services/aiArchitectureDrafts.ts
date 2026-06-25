@@ -1,5 +1,6 @@
 import type { AiArchitectureDraftResult, ArchitectureJson } from "@sketchcatch/types";
 
+// 자연어 요청을 보드가 열 수 있는 ArchitectureJson 초안으로 바꾸는 1차 진입점입니다.
 export function createArchitectureDraft(prompt: string): AiArchitectureDraftResult {
   const normalizedPrompt = prompt.toLowerCase();
 
@@ -14,6 +15,7 @@ export function createArchitectureDraft(prompt: string): AiArchitectureDraftResu
   return createStaticWebsiteDraft();
 }
 
+// GitHub 링크 요청도 결국 가벼운 텍스트 근거를 모아 자연어 초안 생성 흐름을 재사용합니다.
 export function createArchitectureDraftFromRepositoryEvidence(
   repositoryUrl: string,
   evidence: readonly string[]
@@ -34,6 +36,7 @@ export function createArchitectureDraftFromRepositoryEvidence(
   };
 }
 
+// 애매한 요청은 정적 웹사이트 기본 구조로 떨어지게 만든 fallback 초안입니다.
 function createStaticWebsiteDraft(): AiArchitectureDraftResult {
   const architectureJson: ArchitectureJson = {
     nodes: [
@@ -80,6 +83,7 @@ function createStaticWebsiteDraft(): AiArchitectureDraftResult {
   };
 }
 
+// API 서버 요청이 들어왔을 때 쓰는 고정 초안입니다. EC2 중심 구조를 만듭니다.
 function createApiServerDraft(): AiArchitectureDraftResult {
   return {
     title: "API 서버 Practice Architecture",
@@ -116,6 +120,7 @@ function createApiServerDraft(): AiArchitectureDraftResult {
   };
 }
 
+// DB 포함 백엔드 요청이 들어왔을 때 쓰는 고정 초안입니다. EC2와 RDS를 같이 둡니다.
 function createDatabaseBackendDraft(): AiArchitectureDraftResult {
   return {
     title: "DB 포함 백엔드 Practice Architecture",

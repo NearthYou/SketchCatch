@@ -4,6 +4,7 @@ import type {
   CheckFinding
 } from "@sketchcatch/types";
 
+// Terraform 코드 조각을 읽고 어떤 Resource와 위험 신호가 있는지 설명합니다.
 export function explainTerraformPreview(terraformCode: string): AiTerraformPreviewExplanationResult {
   const normalizedCode = terraformCode.toLowerCase();
   const detectedResources = detectTerraformResources(normalizedCode);
@@ -24,6 +25,7 @@ export function explainTerraformPreview(terraformCode: string): AiTerraformPrevi
   };
 }
 
+// Terraform resource 블록 이름을 기준으로 현재 코드가 만들 대상을 감지합니다.
 function detectTerraformResources(normalizedCode: string): AiTerraformDetectedResource[] {
   const resources: AiTerraformDetectedResource[] = [];
 
@@ -62,6 +64,7 @@ function detectTerraformResources(normalizedCode: string): AiTerraformDetectedRe
   return resources;
 }
 
+// Terraform 코드에서 보안/비용 경고를 모아 finding 목록으로 만듭니다.
 function createTerraformPreviewFindings(normalizedCode: string): CheckFinding[] {
   return [
     ...createOpenSshFindings(normalizedCode),
