@@ -8,6 +8,27 @@
       "when": 1781955083009,
       "tag": "0000_real_impossible_man",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1782200041676,
+      "tag": "0001_add_deployments",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1782234115402,
+      "tag": "0002_edit_deployments",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1782238994626,
+      "tag": "0003_add_deployment_logs_and_plan_fields",
+      "breakpoints": true
     }
   ]
 }

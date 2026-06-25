@@ -3,6 +3,7 @@ import { ZodError } from "zod";
 import { registerAiRoutes } from "./routes/ai.js";
 import { registerHealthRoutes } from "./routes/health.js";
 import { registerProjectRoutes } from "./routes/projects.js";
+import { registerDeploymentRoutes } from "./routes/deployments.js";
 
 const allowedCorsOrigins = new Set(["http://localhost:3000", "http://127.0.0.1:3000"]);
 const corsAllowedMethods = "GET,POST,OPTIONS";
@@ -45,6 +46,7 @@ export function buildApp(): FastifyInstance {
   app.register(registerHealthRoutes);
   app.register(registerAiRoutes, { prefix: "/api" });
   app.register(registerProjectRoutes, { prefix: "/api" });
+  app.register(registerDeploymentRoutes, { prefix: "/api" });
 
   return app;
 }

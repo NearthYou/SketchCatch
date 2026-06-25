@@ -94,14 +94,48 @@ export type TerraformArtifact = ProjectAsset & {
 
 export type DeploymentStatus = "PENDING" | "RUNNING" | "SUCCESS" | "FAILED" | "CANCELLED";
 
-export type Deployment = {
+export type Deployment = DeploymentBlock & {
   id: string;
   projectId: string;
   architectureId: string;
+  terraformArtifactId: string;
   status: DeploymentStatus;
-  startedAt: IsoDateTimeString;
-  finishedAt: IsoDateTimeString | null;
+  planSummary: DeploymentPlanSummary | null;
+  failureStage: DeploymentFailureStage | null;
+  errorSummary: string | null;
+  approvedAt: IsoDateTimeString | null;
+  approvedBy: string | null;
+  approvedTerraformArtifactId: string | null;
+  createdAt: IsoDateTimeString;
+  updatedAt: IsoDateTimeString;
 };
+
+export type DeploymentBlock = {
+  isBlocked: boolean;
+  blockedBy: DeploymentBlockedBy | null;
+  blockedReason: string | null;
+};
+
+export type DeploymentWarningLevel = "low" | "medium" | "high";
+export type DeploymentBlockedBy = "risk_analysis" | "cost_analysis" | "missing_approval";
+export type DeploymentFailureStage = "validation" | "plan" | "approval" | "mock_run";
+
+export type DeploymentPlanWarning = {
+  level: DeploymentWarningLevel;
+  message: string;
+  relatedResourceId?: string;
+};
+
+export type DeploymentPlanSummary = {
+  createCount: number;
+  updateCount: number;
+  deleteCount: number;
+  replaceCount: number;
+  blocked: boolean;
+  warnings: DeploymentPlanWarning[];
+};
+
+export type DeploymentStage = "validate" | "plan" | "apply";
 
 export type Template = {
   id: string;
@@ -126,8 +160,11 @@ export type DeploymentLogLevel = "INFO" | "WARN" | "ERROR";
 export type DeploymentLog = {
   id: string;
   deploymentId: string;
+  sequence: number;
+  stage: DeploymentStage;
   level: DeploymentLogLevel;
   message: string;
+  relatedResourceId: string | null;
   createdAt: IsoDateTimeString;
 };
 
