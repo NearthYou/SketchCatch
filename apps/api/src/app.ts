@@ -50,13 +50,10 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     };
 
     if (statusCode >= 500) {
-      app.log.error(error instanceof Error ? error : getErrorMessage(error));
+      app.log.error(error);
     }
 
-    reply.status(statusCode).send({
-      error: statusCode >= 500 ? "internal_server_error" : "bad_request",
-      message: getErrorMessage(error)
-    });
+    reply.status(statusCode).send(response);
   });
 
   app.addHook("onRequest", async (request, reply) => {
@@ -68,9 +65,14 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   });
 
   app.register(registerHealthRoutes);
-  app.register(registerAiRoutes, { prefix: "/api" });
-  app.register(registerProjectRoutes, { prefix: "/api" });
-  app.register(registerDeploymentRoutes, { prefix: "/api" });
+  app.register(registerAuthRoutes, {
+    prefix: "/api",
+    getDatabaseClient: getAppDatabaseClient
+  });
+  app.register(registerProjectRoutes, {
+    prefix: "/api",
+    getDatabaseClient: getAppDatabaseClient
+  });
 
   return app;
 }
