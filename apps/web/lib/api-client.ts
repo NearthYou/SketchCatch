@@ -34,6 +34,8 @@ const API_MESSAGE_TRANSLATIONS: Partial<Record<string, string>> = {
   "Username or password is incorrect": "아이디 또는 비밀번호가 올바르지 않습니다."
 };
 
+let refreshSessionPromise: Promise<AuthSession | null> | null = null;
+
 type ApiRequestOptions = Omit<RequestInit, "body" | "headers"> & {
   auth?: boolean;
   body?: unknown;
@@ -61,6 +63,7 @@ export class ApiClientError extends Error {
 export async function apiFetch<T>(path: string, options: ApiRequestOptions = {}): Promise<T> {
   const { auth = false, body, headers, retryOnUnauthorized = true, ...requestInit } = options;
   const requestHeaders = new Headers(headers);
+  let requestAccessToken: string | null = null;
 
   if (!requestHeaders.has("Accept")) {
     requestHeaders.set("Accept", JSON_CONTENT_TYPE);
@@ -74,6 +77,7 @@ export async function apiFetch<T>(path: string, options: ApiRequestOptions = {})
     const session = readStoredAuthSession();
 
     if (session) {
+      requestAccessToken = session.accessToken;
       requestHeaders.set("Authorization", `Bearer ${session.accessToken}`);
     }
   }
@@ -96,7 +100,20 @@ export async function apiFetch<T>(path: string, options: ApiRequestOptions = {})
   }
 
   if (response.status === 401 && auth && retryOnUnauthorized) {
-    const refreshedSession = await refreshStoredSession();
+    const latestSession = readStoredAuthSession();
+
+    if (
+      requestAccessToken &&
+      latestSession &&
+      latestSession.accessToken !== requestAccessToken
+    ) {
+      return apiFetch<T>(path, {
+        ...options,
+        retryOnUnauthorized: false
+      });
+    }
+
+    const refreshedSession = await refreshStoredSessionOnce();
 
     if (refreshedSession) {
       return apiFetch<T>(path, {
@@ -131,6 +148,14 @@ export function getApiErrorMessage(error: unknown, fallbackMessage: string): str
   }
 
   return getKoreanApiMessage(error, fallbackMessage);
+}
+
+async function refreshStoredSessionOnce(): Promise<AuthSession | null> {
+  refreshSessionPromise ??= refreshStoredSession().finally(() => {
+    refreshSessionPromise = null;
+  });
+
+  return refreshSessionPromise;
 }
 
 async function refreshStoredSession(): Promise<AuthSession | null> {
