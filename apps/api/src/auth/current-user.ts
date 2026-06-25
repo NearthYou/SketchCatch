@@ -30,7 +30,7 @@ export function requireCurrentUserId(request: FastifyRequest): string {
   const currentUserId = getCurrentUserId(request);
 
   if (!currentUserId) {
-    const error = new Error("Authentication required") as AuthHttpError;
+    const error = new Error("인증이 필요합니다.") as AuthHttpError;
 
     error.statusCode = 401;
     error.errorCode = "unauthorized";
@@ -55,7 +55,7 @@ export async function requireActiveUserId(
     .where(eq(users.id, currentUserId));
 
   if (!user || user.deletedAt) {
-    const error = new Error("Authentication required") as AuthHttpError;
+    const error = new Error("인증이 필요합니다.") as AuthHttpError;
 
     error.statusCode = 401;
     error.errorCode = "unauthorized";

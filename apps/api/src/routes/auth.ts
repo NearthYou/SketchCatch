@@ -87,7 +87,7 @@ export async function registerAuthRoutes(
     if (existingUsername) {
       const response: ApiErrorResponse = {
         error: "conflict",
-        message: "Username already exists"
+        message: "이미 사용 중인 아이디입니다."
       };
 
       return reply.status(409).send(response);
@@ -101,7 +101,7 @@ export async function registerAuthRoutes(
     if (existingEmail) {
       const response: ApiErrorResponse = {
         error: "conflict",
-        message: "Email already exists"
+        message: "이미 사용 중인 이메일입니다."
       };
 
       return reply.status(409).send(response);
@@ -125,7 +125,7 @@ export async function registerAuthRoutes(
       });
 
     if (!createdUser) {
-      throw new Error("Failed to create user");
+      throw new Error("사용자를 생성하지 못했습니다.");
     }
 
     const session = await createAuthSession(db, createdUser.id, request);
@@ -161,7 +161,7 @@ export async function registerAuthRoutes(
         return sendLoginLocked(reply, lockedUntil);
       }
 
-      return sendUnauthorized(reply, "Username or password is incorrect");
+      return sendUnauthorized(reply, "아이디 또는 비밀번호가 올바르지 않습니다.");
     }
 
     const passwordMatched = await verifyPassword(body.password, user.passwordHash);
@@ -177,7 +177,7 @@ export async function registerAuthRoutes(
         return sendLoginLocked(reply, lockedUntil);
       }
 
-      return sendUnauthorized(reply, "Username or password is incorrect");
+      return sendUnauthorized(reply, "아이디 또는 비밀번호가 올바르지 않습니다.");
     }
 
     await recordLoginAttempt(db, request, {
@@ -215,13 +215,13 @@ export async function registerAuthRoutes(
       );
 
     if (!storedToken) {
-      return sendUnauthorized(reply, "Refresh token is invalid or expired");
+      return sendUnauthorized(reply, "로그인 세션이 만료되었습니다. 다시 로그인해주세요.");
     }
 
     const [user] = await db.select().from(users).where(eq(users.id, storedToken.userId));
 
     if (!user || user.deletedAt) {
-      return sendUnauthorized(reply, "Refresh token is invalid or expired");
+      return sendUnauthorized(reply, "로그인 세션이 만료되었습니다. 다시 로그인해주세요.");
     }
 
     await db
@@ -283,7 +283,7 @@ export async function registerAuthRoutes(
     const [user] = await db.select().from(users).where(eq(users.id, currentUserId));
 
     if (!user || user.deletedAt) {
-      return sendUnauthorized(reply, "Authentication required");
+      return sendUnauthorized(reply, "인증이 필요합니다.");
     }
 
     const response: CurrentUserResponse = {
@@ -448,7 +448,7 @@ function sendUnauthorized(reply: FastifyReply, message: string): FastifyReply {
 function sendLoginLocked(reply: FastifyReply, lockedUntil: Date): FastifyReply {
   const response: LoginLockedErrorResponse = {
     error: "too_many_requests",
-    message: "Too many failed login attempts. Try again later.",
+    message: "로그인 시도가 잠시 차단되었습니다. 잠시 후 다시 시도해주세요.",
     lockedUntil: lockedUntil.toISOString()
   };
 

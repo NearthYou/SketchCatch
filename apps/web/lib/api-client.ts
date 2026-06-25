@@ -13,6 +13,26 @@ import {
 
 const DEFAULT_API_BASE_URL = "/api";
 const JSON_CONTENT_TYPE = "application/json";
+const API_CONNECTION_ERROR_MESSAGE =
+  "API 서버에 연결할 수 없습니다. Docker DB와 API 서버가 켜져 있는지 확인해주세요.";
+const DEFAULT_API_ERROR_MESSAGES = {
+  bad_request: "입력값 형식을 확인해주세요.",
+  conflict: "이미 사용 중인 정보입니다.",
+  internal_server_error: "서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.",
+  not_found: "요청한 정보를 찾을 수 없습니다.",
+  too_many_requests: "요청이 너무 많습니다. 잠시 후 다시 시도해주세요.",
+  unauthorized: "인증이 필요합니다."
+} satisfies Record<ApiErrorCode, string>;
+const API_MESSAGE_TRANSLATIONS: Partial<Record<string, string>> = {
+  "API request failed": "요청 처리 중 오류가 발생했습니다.",
+  "Authentication required": "인증이 필요합니다.",
+  "Email already exists": "이미 사용 중인 이메일입니다.",
+  "Refresh token is invalid or expired": "로그인 세션이 만료되었습니다. 다시 로그인해주세요.",
+  "Route not found": "요청한 API 경로를 찾을 수 없습니다.",
+  "Too many failed login attempts. Try again later.": "로그인 시도가 잠시 차단되었습니다. 잠시 후 다시 시도해주세요.",
+  "Username already exists": "이미 사용 중인 아이디입니다.",
+  "Username or password is incorrect": "아이디 또는 비밀번호가 올바르지 않습니다."
+};
 
 type ApiRequestOptions = Omit<RequestInit, "body" | "headers"> & {
   auth?: boolean;
@@ -67,7 +87,13 @@ export async function apiFetch<T>(path: string, options: ApiRequestOptions = {})
     request.body = JSON.stringify(body);
   }
 
-  const response = await fetch(buildApiUrl(path), request);
+  let response: Response;
+
+  try {
+    response = await fetch(buildApiUrl(path), request);
+  } catch {
+    throw createConnectionError();
+  }
 
   if (response.status === 401 && auth && retryOnUnauthorized) {
     const refreshedSession = await refreshStoredSession();
@@ -96,23 +122,15 @@ export function getApiErrorMessage(error: unknown, fallbackMessage: string): str
     return fallbackMessage;
   }
 
+  if (error.status === 0) {
+    return error.message || fallbackMessage;
+  }
+
   if (error.code === "too_many_requests" && error.lockedUntil) {
     return `로그인 시도가 잠시 차단되었습니다. ${formatLockedUntil(error.lockedUntil)} 이후 다시 시도해주세요.`;
   }
 
-  if (error.code === "unauthorized") {
-    return "아이디 또는 비밀번호를 확인해주세요.";
-  }
-
-  if (error.code === "conflict") {
-    return error.message;
-  }
-
-  if (error.code === "not_found") {
-    return "요청한 정보를 찾을 수 없습니다.";
-  }
-
-  return error.message || fallbackMessage;
+  return getKoreanApiMessage(error, fallbackMessage);
 }
 
 async function refreshStoredSession(): Promise<AuthSession | null> {
@@ -122,14 +140,21 @@ async function refreshStoredSession(): Promise<AuthSession | null> {
     return null;
   }
 
-  const response = await fetch(buildApiUrl("/auth/refresh"), {
-    body: JSON.stringify({ refreshToken: currentSession.refreshToken }),
-    headers: {
-      Accept: JSON_CONTENT_TYPE,
-      "Content-Type": JSON_CONTENT_TYPE
-    },
-    method: "POST"
-  });
+  let response: Response;
+
+  try {
+    response = await fetch(buildApiUrl("/auth/refresh"), {
+      body: JSON.stringify({ refreshToken: currentSession.refreshToken }),
+      headers: {
+        Accept: JSON_CONTENT_TYPE,
+        "Content-Type": JSON_CONTENT_TYPE
+      },
+      method: "POST"
+    });
+  } catch {
+    clearStoredAuthSession();
+    return null;
+  }
 
   if (!response.ok) {
     clearStoredAuthSession();
@@ -151,7 +176,7 @@ async function toApiClientError(response: Response): Promise<ApiClientError> {
 
   return new ApiClientError(response.status, {
     error: response.status >= 500 ? "internal_server_error" : "bad_request",
-    message: "API request failed"
+    message: "요청 처리 중 오류가 발생했습니다."
   });
 }
 
@@ -177,6 +202,31 @@ function isApiErrorResponse(value: unknown): value is ApiErrorResponse | LoginLo
   const candidate = value as Partial<ApiErrorResponse & LoginLockedErrorResponse>;
 
   return typeof candidate.error === "string" && typeof candidate.message === "string";
+}
+
+function createConnectionError(): ApiClientError {
+  return new ApiClientError(0, {
+    error: "internal_server_error",
+    message: API_CONNECTION_ERROR_MESSAGE
+  });
+}
+
+function getKoreanApiMessage(error: ApiClientError, fallbackMessage: string): string {
+  const translatedMessage = API_MESSAGE_TRANSLATIONS[error.message];
+
+  if (translatedMessage) {
+    return translatedMessage;
+  }
+
+  if (containsKorean(error.message)) {
+    return error.message;
+  }
+
+  return DEFAULT_API_ERROR_MESSAGES[error.code] ?? fallbackMessage;
+}
+
+function containsKorean(value: string): boolean {
+  return /[ㄱ-ㅎㅏ-ㅣ가-힣]/.test(value);
 }
 
 function buildApiUrl(path: string): string {

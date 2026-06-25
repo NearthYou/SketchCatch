@@ -129,7 +129,7 @@ export async function registerProjectRoutes(
       .where(and(eq(projects.id, params.id), eq(projects.userId, currentUserId)));
 
     if (!project) {
-      return sendNotFound(reply, "Project not found");
+      return sendNotFound(reply, "프로젝트를 찾을 수 없습니다.");
     }
 
     const [projectArchitectures, assets] = await Promise.all([
@@ -164,7 +164,7 @@ export async function registerProjectRoutes(
       .where(and(eq(projects.id, params.id), eq(projects.userId, currentUserId)));
 
     if (!project) {
-      return sendNotFound(reply, "Project not found");
+      return sendNotFound(reply, "프로젝트를 찾을 수 없습니다.");
     }
 
     const version =
@@ -212,7 +212,7 @@ export async function registerProjectRoutes(
       .where(and(eq(projects.id, params.id), eq(projects.userId, currentUserId)));
 
     if (!project) {
-      return sendNotFound(reply, "Project not found");
+      return sendNotFound(reply, "프로젝트를 찾을 수 없습니다.");
     }
 
     if (body.architectureId) {
@@ -224,7 +224,7 @@ export async function registerProjectRoutes(
         );
 
       if (!architecture) {
-        return sendNotFound(reply, "Architecture not found for project");
+        return sendNotFound(reply, "프로젝트에 연결된 아키텍처를 찾을 수 없습니다.");
       }
     }
 

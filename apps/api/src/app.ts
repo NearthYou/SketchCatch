@@ -25,7 +25,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     const statusCode = error instanceof ZodError ? 400 : (typedError.statusCode ?? 500);
     const response: ApiErrorResponse = {
       error: getErrorCode(statusCode, typedError.errorCode),
-      message: typedError.message || "Unexpected error"
+      message: getErrorMessage(error, statusCode, typedError.message)
     };
 
     if (statusCode >= 500) {
@@ -38,7 +38,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   app.setNotFoundHandler((_request, reply) => {
     const response: ApiErrorResponse = {
       error: "not_found",
-      message: "Route not found"
+      message: "요청한 API 경로를 찾을 수 없습니다."
     };
 
     return reply.status(404).send(response);
@@ -75,4 +75,36 @@ function getErrorCode(statusCode: number, explicitErrorCode?: ApiErrorCode): Api
       429: "too_many_requests"
     } satisfies Partial<Record<number, ApiErrorCode>>
   )[statusCode] ?? "bad_request";
+}
+
+function getErrorMessage(error: unknown, statusCode: number, message?: string): string {
+  if (error instanceof ZodError) {
+    return "입력값 형식을 확인해주세요.";
+  }
+
+  if (statusCode >= 500) {
+    return "서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.";
+  }
+
+  if (message && containsKorean(message)) {
+    return message;
+  }
+
+  return getDefaultErrorMessage(statusCode);
+}
+
+function getDefaultErrorMessage(statusCode: number): string {
+  return (
+    {
+      400: "요청 형식이 올바르지 않습니다.",
+      401: "인증이 필요합니다.",
+      404: "요청한 정보를 찾을 수 없습니다.",
+      409: "이미 존재하는 값입니다.",
+      429: "요청이 너무 많습니다. 잠시 후 다시 시도해주세요."
+    } satisfies Partial<Record<number, string>>
+  )[statusCode] ?? "요청 처리 중 오류가 발생했습니다.";
+}
+
+function containsKorean(value: string): boolean {
+  return /[ㄱ-ㅎㅏ-ㅣ가-힣]/.test(value);
 }
