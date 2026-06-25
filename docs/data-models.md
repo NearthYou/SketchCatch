@@ -8,7 +8,7 @@
 
 다만 현재 SketchCatch의 실제 구현과 제품 전략을 기준으로 아래처럼 수정한다.
 
-- 1차 제공 초반은 로그인 사용자가 아니라 `AnonymousWorkspace` 기반이다. `User`는 인증 도입 시 추가한다.
+- 익명 로그인과 `AnonymousWorkspace`는 도입하지 않는다. 프로젝트 소유자는 인증된 `User`이고, API는 `Authorization: Bearer <accessToken>` 기준으로 권한을 확인한다.
 - `Diagram`은 DB에 이미 `architectures` 테이블로 들어가 있다. 공통 타입 이름은 `ArchitectureSnapshot`으로 두고, 화면에서는 다이어그램 또는 보드라고 불러도 된다.
 - 저장되는 아키텍처 JSON은 `nodes`와 `edges`를 가진 `ArchitectureJson`으로 고정한다.
 - 자연어 요구사항에서 추출한 예산, 트래픽, 런타임, DB, 가용성, 보안 우선순위는 후속 `RequirementConstraint` 모델로 분리할 수 있다.
@@ -30,13 +30,13 @@
 | DB 컬럼 | API / 프론트 필드 |
 | --- | --- |
 | `project_id` | `projectId` |
-| `workspace_id` | `workspaceId` |
+| `user_id` | `userId` |
 | `created_at` | `createdAt` |
 | `architecture_json` | `architectureJson` |
 
 ## 1차 제공 모델
 
-1차 제공에서는 아래 모델을 코드 기준으로 맞춘다. 다만 `User`, `AwsCredential`, 실제 AWS apply 실행은 인증/권한/비용 사고 방지 설계가 필요하므로 별도 명시가 있을 때만 포함한다.
+3주 안에 구현을 끝내는 일정에서는 아래 모델을 모두 3주차 종료 전까지 코드 기준으로 맞춘다. 다만 `AwsCredential`, 실제 AWS apply 실행은 인증/권한/비용 사고 방지 설계가 필요하므로 별도 명시가 있을 때만 포함한다.
 
 권장 순서:
 
@@ -46,19 +46,76 @@
 | 1차 중반 | `ProjectAsset`, `TerraformArtifact` | 다이어그램 이미지, Terraform 파일, export 산출물 저장 |
 | 1차 후반 | `Deployment`, `Template` | 모의/통제된 실행 이력과 Template 공유 기준 확정 |
 
-### AnonymousWorkspace
+### User
 
-현재 인증이 없으므로 프로젝트 소유자는 `User`가 아니라 익명 워크스페이스다.
+로그인/회원가입 기능의 사용자 모델이다. 공유 타입의 `User`에는 `passwordHash`를 넣지 않는다.
 
 ```ts
-type AnonymousWorkspace = {
+type User = {
   id: string;
+  username: string;
+  email: string;
+  nickname: string;
   createdAt: IsoDateTimeString;
-  updatedAt: IsoDateTimeString;
 };
 ```
 
-DB 기준: `anonymous_workspaces`
+DB 기준: `users`
+
+DB 내부 테이블에는 `password_hash`, `updated_at`, `deleted_at`이 있을 수 있지만, API DTO와 프론트 상태 객체로는 노출하지 않는다.
+
+### AuthSession
+
+로그인, 회원가입, token refresh 응답에서 사용하는 session DTO다.
+
+```ts
+type AuthSession = {
+  accessToken: string;
+  refreshToken: string;
+  expiresInSeconds: number;
+};
+```
+
+DB 기준: `refresh_tokens`
+
+DB에는 refresh token 원문을 저장하지 않고 hash만 저장한다. access token은 짧은 만료 시간을 가진 서명 token으로 다루며, `projects` 조회와 생성은 access token에서 확인한 `userId`를 사용한다.
+
+### API Error Response
+
+프론트가 공통으로 처리하는 API 에러 DTO다. 성공 응답은 각 API DTO를 그대로 반환하고, 실패 응답은 아래 형태로 고정한다.
+
+```ts
+type ApiErrorCode =
+  | "bad_request"
+  | "unauthorized"
+  | "not_found"
+  | "conflict"
+  | "too_many_requests"
+  | "internal_server_error";
+
+type ApiErrorResponse = {
+  error: ApiErrorCode;
+  message: string;
+};
+```
+
+로그인 실패 횟수 제한에 걸린 `429` 응답만 `lockedUntil`을 추가로 포함한다.
+
+```ts
+type LoginLockedErrorResponse = ApiErrorResponse & {
+  error: "too_many_requests";
+  lockedUntil: IsoDateTimeString;
+};
+```
+
+프론트 기준 상태 코드는 아래처럼 처리한다.
+
+| HTTP status | `error` | 의미 |
+| --- | --- | --- |
+| `401` | `unauthorized` | access token 없음, 만료, 삭제된 사용자, 잘못된 로그인 정보 |
+| `404` | `not_found` | 존재하지 않거나 현재 사용자가 접근할 수 없는 리소스 |
+| `409` | `conflict` | 이미 사용 중인 username/email 같은 중복 입력 |
+| `429` | `too_many_requests` | 로그인 실패 횟수 초과, `lockedUntil`까지 재시도 차단 |
 
 ### Project
 
@@ -67,8 +124,7 @@ DB 기준: `anonymous_workspaces`
 ```ts
 type Project = {
   id: string;
-  workspaceId: string;
-  userId?: string;
+  userId: string;
   name: string;
   description: string | null;
   createdAt: IsoDateTimeString;
@@ -78,7 +134,7 @@ type Project = {
 
 DB 기준: `projects`
 
-`userId`는 인증 도입 후 마이그레이션할 수 있도록 선택값으로 둔다. 현재 1차 제공에서는 `workspaceId`가 필수 소유자 키다.
+`userId`는 필수 소유자 키다. `clientGeneratedWorkspaceId`, `anonymousWorkspaces`, `workspaceId`는 로그인 기반 정책과 맞지 않으므로 사용하지 않는다.
 
 ### ArchitectureSnapshot
 
@@ -239,21 +295,6 @@ type Template = {
 ## 후순위 모델
 
 아래 모델은 1차 제공에서 분리한다. 이유는 CRUD 난이도보다 보안/권한/운영 정책 결정이 더 중요하기 때문이다.
-
-### User
-
-인증 도입 후 추가한다. 공유 타입의 `User`에는 `passwordHash`를 넣지 않는다.
-
-```ts
-type User = {
-  id: string;
-  email: string;
-  nickname: string;
-  createdAt: IsoDateTimeString;
-};
-```
-
-DB 내부 테이블에는 `password_hash`가 있을 수 있지만, API DTO와 프론트 상태 객체로 노출하지 않는다.
 
 ### AwsCredential
 
@@ -448,8 +489,9 @@ type Activity = {
 
 | 공통 모델 | 현재 DB/API 구현 | 상태 |
 | --- | --- | --- |
-| `AnonymousWorkspace` | `anonymous_workspaces` | 구현됨 |
-| `Project` | `projects` | 구현됨 |
+| `User` | `users`, `/api/auth/*` | 구현됨 |
+| `AuthSession` | `refresh_tokens`, access token DTO | 구현됨 |
+| `Project` | `projects.user_id` | 구현됨 |
 | `ArchitectureSnapshot` | `architectures` | 구현됨 |
 | `ArchitectureJson` | `architectures.architecture_json` | 공유 패키지에 타입 정의됨 |
 | `ResourceNode` | `architectureJson.nodes` 내부 객체 | 공유 패키지에 타입 정의됨 |
@@ -469,7 +511,7 @@ type Activity = {
 특히 아래 이름은 바꾸지 않는다.
 
 - `projectId`
-- `workspaceId`
+- `userId`
 - `architectureId`
 - `architectureJson`
 - `nodes`

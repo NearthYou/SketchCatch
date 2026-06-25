@@ -1,5 +1,23 @@
 export type IsoDateTimeString = string;
 
+export type ApiErrorCode =
+  | "bad_request"
+  | "unauthorized"
+  | "not_found"
+  | "conflict"
+  | "too_many_requests"
+  | "internal_server_error";
+
+export type ApiErrorResponse = {
+  error: ApiErrorCode;
+  message: string;
+};
+
+export type LoginLockedErrorResponse = ApiErrorResponse & {
+  error: "too_many_requests";
+  lockedUntil: IsoDateTimeString;
+};
+
 export type ResourceType =
   | "VPC"
   | "SUBNET"
@@ -34,23 +52,52 @@ export type ArchitectureJson = {
   edges: ResourceEdge[];
 };
 
-export type AnonymousWorkspace = {
-  id: string;
-  createdAt: IsoDateTimeString;
-  updatedAt: IsoDateTimeString;
-};
-
 export type User = {
   id: string;
+  username: string;
   email: string;
   nickname: string;
   createdAt: IsoDateTimeString;
 };
 
+export type AuthSession = {
+  accessToken: string;
+  refreshToken: string;
+  expiresInSeconds: number;
+};
+
+export type SignupRequest = {
+  username: string;
+  email: string;
+  nickname: string;
+  password: string;
+};
+
+export type LoginRequest = {
+  username: string;
+  password: string;
+};
+
+export type RefreshTokenRequest = {
+  refreshToken: string;
+};
+
+export type LogoutRequest = {
+  refreshToken: string;
+};
+
+export type AuthResponse = {
+  user: User;
+  session: AuthSession;
+};
+
+export type CurrentUserResponse = {
+  user: User;
+};
+
 export type Project = {
   id: string;
-  workspaceId: string;
-  userId?: string | undefined;
+  userId: string;
   name: string;
   description: string | null;
   createdAt: IsoDateTimeString;

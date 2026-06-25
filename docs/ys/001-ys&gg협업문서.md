@@ -65,22 +65,21 @@
 - 장점: 플랫폼 완성도가 높다.
 - 위험: MVP 범위를 넓힌다.
 
-### 4. 인증 전/후 소유자 기준
+### 4. 인증/프로젝트 소유자 기준
 
-**A. MVP에서는 `AnonymousWorkspace` 기준으로 AI 결과를 연결한다. (추천)**
+**A. 로그인 사용자 기준으로만 AI 기능을 연다. (확정)**
 
-- 장점: 현재 데이터 모델과 맞는다.
+- 장점: 프로젝트, AI 결과, 활동 내역의 소유자가 `userId` 하나로 정리된다.
 - gg AI 파트 영향: request payload에 user secret이나 AWS credential을 요구하지 않는다.
+- 기준: `Authorization: Bearer <accessToken>`이 없는 요청은 프로젝트/AI 기능을 사용할 수 없다.
 
-**B. 로그인 사용자 기준으로만 AI 기능을 연다.**
+**B. `AnonymousWorkspace` 기준으로 AI 결과를 연결한다. (제외)**
 
-- 장점: 사용자별 기록과 권한 처리가 명확하다.
-- 위험: 인증 구현과 AI 구현이 강하게 묶인다.
+- 제외 이유: 익명 작업 공간을 도입하지 않기로 결정했으므로 프로젝트 소유권 기준이 분리된다.
 
-**C. 익명/로그인 둘 다 지원한다.**
+**C. 익명/로그인 둘 다 지원한다. (제외)**
 
-- 장점: 확장성은 좋다.
-- 위험: MVP 구현 복잡도가 높아진다.
+- 제외 이유: `workspaceId`와 `userId`를 동시에 지원하면 API 권한 검증과 DB 설계가 불필요하게 복잡해진다.
 
 ## 응답 형식
 
@@ -108,13 +107,13 @@ ys Codex 선택 결과
    우선 AI 분석 결과는 화면 안에서 warning으로 보여주고, 위험도가 높으면 Toast 팝업 정도로만 보여준다.
    시간이 남으면 high severity 결과만 저장형 알림으로 확장한다.
 
-4. 인증 전/후 소유자 기준: C
+4. 인증/프로젝트 소유자 기준: A
    이유:
-   지금 프로젝트 구조는 AnonymousWorkspace 기준으로 이미 만들어져 있다.
-   그런데 ys는 로그인, JWT, 내 프로젝트 목록도 구현해야 한다.
-   그래서 익명 사용자와 로그인 사용자를 둘 다 고려해야 한다.
-   익명 사용자는 workspaceId로 프로젝트를 찾고, 로그인 사용자는 userId로 프로젝트를 찾는다.
-   projects.user_id는 처음에는 nullable로 두는 게 안전하다.
+   익명 작업 공간은 도입하지 않기로 결정했다.
+   그래서 모든 프로젝트와 AI 결과는 로그인 사용자 기준으로만 연결한다.
+   프로젝트 조회, 대시보드 조회, 활동 내역 저장은 모두 userId 기준으로 권한을 확인한다.
+   projects.user_id는 nullable이 아니라 not null이어야 한다.
+   Authorization이 없는 프로젝트/AI 요청은 401 unauthorized로 처리한다.
 
 필요한 최소 AI 요약 필드:
 - status: AI 분석 상태
@@ -146,7 +145,6 @@ ys 파트가 맞출 것:
 - high severity 결과는 우선 Toast나 화면 warning으로 보여준다.
 - 저장형 알림은 1차 구현에서는 AI와 직접 연결하지 않는다.
 - 로그인 사용자는 userId 기준으로 프로젝트를 찾는다.
-- 익명 사용자는 workspaceId 기준으로 프로젝트를 찾는다.
 
 수정이 필요한 파일/타입:
 - packages/types/src/index.ts
@@ -157,13 +155,15 @@ ys 파트가 맞출 것:
   - Activity 이벤트 이름 추가
 
 - apps/api/src/db/schema.ts
-  - projects.user_id 추가
+  - anonymous_workspaces 제거
+  - projects.workspace_id 제거
+  - projects.user_id not null 추가
   - activities 테이블 추가
   - notifications는 후순위
 
 - apps/api/src/routes/projects.ts
   - 프로젝트 목록 API는 AI 요약 없이 가볍게 유지
-  - userId/workspaceId 기준 권한 확인 추가
+  - userId 기준 권한 확인 추가
 
 - apps/api/src/routes/dashboard.ts
   - 프로젝트 확인 보드 API 추가
