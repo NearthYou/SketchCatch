@@ -10,7 +10,8 @@ import {
   type DeploymentRecord,
   type DeploymentRepository,
   type ProjectAssetRecord,
-  type ProjectRecord
+  type ProjectRecord,
+  type TerraformArtifactRecord
 } from "./deployment-service.js";
 
 const projectId = "11111111-1111-4111-8111-111111111111";
@@ -102,7 +103,7 @@ class FakeDeploymentRepository implements DeploymentRepository {
     candidateTerraformArtifactId: string,
     candidateProjectId: string,
     candidateArchitectureId: string
-  ) {
+  ): Promise<TerraformArtifactRecord | undefined> {
     this.calls.push({
       name: "findTerraformArtifactForArchitecture",
       terraformArtifactId: candidateTerraformArtifactId,

@@ -9,7 +9,8 @@ import type {
   DeploymentRecord,
   DeploymentRepository,
   ProjectAssetRecord,
-  ProjectRecord
+  ProjectRecord,
+  TerraformArtifactRecord
 } from "../deployments/deployment-service.js";
 import { registerDeploymentRoutes } from "./deployments.js";
 
@@ -109,7 +110,7 @@ class FakeDeploymentRepository implements DeploymentRepository {
     candidateTerraformArtifactId: string,
     candidateProjectId: string,
     candidateArchitectureId: string
-  ) {
+  ): Promise<TerraformArtifactRecord | undefined> {
     this.calls.push({
       name: "findTerraformArtifactForArchitecture",
       terraformArtifactId: candidateTerraformArtifactId,
