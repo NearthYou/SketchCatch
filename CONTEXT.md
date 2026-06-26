@@ -64,14 +64,14 @@ _Avoid_: Monitoring, load test, benchmark
 A saved version of a Practice Architecture and its IaC Preview that can be compared with another version.
 _Avoid_: Backup, history item, save point
 
-**Practice Session**:
-The time-limited period during which an approved Practice Architecture may exist as real AWS resources.
-_Avoid_: Deployment, lab, runtime
-
 **Auto Cleanup**:
-The automatic teardown of AWS resources at the end of a Practice Session to prevent leftover cost.
+The automatic or user-approved teardown of cloud resources created by a Deployment to prevent leftover cost.
 _Avoid_: Auto delete, shutdown, removal
 
 **Deployment History**:
-The record of approved deployment attempts, results, outputs, and changes for a Practice Architecture.
+The record of Deployment attempts, results, outputs, cleanup status, and changes for a Practice Architecture.
 _Avoid_: Version history, CI/CD history, logs
+
+**Deployment**:
+The approved execution that applies an IaC Preview to real cloud resources and tracks plan, approval, logs, outputs, and cleanup.
+_Avoid_: lab, runtime
