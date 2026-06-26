@@ -10,17 +10,42 @@ const architectureDraftResponseSchema = z.object({
     nodes: z.array(
       z.object({
         id: z.string(),
-        type: z.string()
+        type: z.string(),
+        config: z.record(z.string(), z.unknown())
       })
     ),
-    edges: z.array(z.object({ id: z.string() }))
+    edges: z.array(
+      z.object({
+        id: z.string(),
+        sourceId: z.string(),
+        targetId: z.string()
+      })
+    )
   }),
   title: z.string(),
   metadata: z.object({
     source: z.string(),
     confidence: z.string(),
     assumptions: z.array(z.string()),
-    explanations: z.array(z.string())
+    explanations: z.array(z.string()),
+    selectedScenario: z.string().optional(),
+    scenarioScores: z
+      .array(
+        z.object({
+          scenario: z.string(),
+          score: z.number(),
+          reasons: z.array(z.string())
+        })
+      )
+      .optional(),
+    guardrailWarnings: z
+      .array(
+        z.object({
+          code: z.string(),
+          message: z.string()
+        })
+      )
+      .optional()
   })
 });
 
@@ -151,7 +176,248 @@ test("POST /api/ai/architecture-draft selects API server and database backend te
   assert.ok(databaseBackendNodeTypes.includes("RDS"));
   assert.ok(databaseBackendNodeTypes.includes("SECURITY_GROUP"));
 
+	await app.close();
+});
+
+test("POST /api/ai/architecture-draft uses guardrail choices before prompt keywords", async () => {
+	const app = buildApp();
+
+	const response = await app.inject({
+		method: "POST",
+		url: "/api/ai/architecture-draft",
+		payload: {
+			prompt: "DB가 포함된 백엔드 서버를 만들고 싶어",
+			scenarioHint: "static_site",
+			budgetLevel: "low",
+			trafficLevel: "small",
+			securityPriority: "high"
+		}
+	});
+
+	assert.equal(response.statusCode, 200);
+
+	const body = architectureDraftResponseSchema.parse(response.json());
+	const nodeTypes = body.architectureJson.nodes.map((node) => node.type);
+
+	assert.equal(body.title, "정적 웹사이트 Practice Architecture");
+	assert.ok(nodeTypes.includes("S3"));
+	assert.equal(nodeTypes.includes("RDS"), false);
+  assert.equal(body.metadata.selectedScenario, "static_site");
+  assert.ok(body.metadata.guardrailWarnings?.some((warning) => warning.code === "scenario_conflict"));
+	assert.ok(body.metadata.assumptions.some((item) => item.includes("낮은 예산")));
+	assert.ok(body.metadata.assumptions.some((item) => item.includes("작은 트래픽")));
+	assert.ok(body.metadata.assumptions.some((item) => item.includes("보안 우선순위")));
+
+	await app.close();
+});
+
+test("POST /api/ai/architecture-draft returns auto scenario scores and fallback warning metadata", async () => {
+  const app = buildApp();
+
+  const scoredResponse = await app.inject({
+    method: "POST",
+    url: "/api/ai/architecture-draft",
+    payload: {
+      prompt: "Next 프론트엔드 정적 웹사이트를 만들고 싶어",
+      scenarioHint: "auto",
+      budgetLevel: "normal",
+      trafficLevel: "normal",
+      securityPriority: "basic"
+    }
+  });
+
+  assert.equal(scoredResponse.statusCode, 200);
+
+  const scoredBody = architectureDraftResponseSchema.parse(scoredResponse.json());
+  const staticSiteScore = scoredBody.metadata.scenarioScores?.find((score) => score.scenario === "static_site");
+
+  assert.equal(scoredBody.metadata.selectedScenario, "static_site");
+  assert.ok(staticSiteScore !== undefined);
+  assert.ok(staticSiteScore.score > 0);
+  assert.ok(staticSiteScore.reasons.length > 0);
+
+  const unsupportedResponse = await app.inject({
+    method: "POST",
+    url: "/api/ai/architecture-draft",
+    payload: {
+      prompt: "멀티 리전 EKS 기반 금융권 서비스를 자동 설계하고 싶어",
+      scenarioHint: "auto",
+      budgetLevel: "normal",
+      trafficLevel: "normal",
+      securityPriority: "basic"
+    }
+  });
+
+  assert.equal(unsupportedResponse.statusCode, 200);
+
+  const unsupportedBody = architectureDraftResponseSchema.parse(unsupportedResponse.json());
+
+  assert.equal(unsupportedBody.metadata.selectedScenario, "static_site");
+  assert.ok(unsupportedBody.metadata.guardrailWarnings?.some((warning) => warning.code === "unsupported_requirement"));
+
   await app.close();
+});
+
+test("POST /api/ai/architecture-draft uses readable resource ids in nodes, edges, and config references", async () => {
+  const app = buildApp();
+
+  const staticSiteResponse = await app.inject({
+    method: "POST",
+    url: "/api/ai/architecture-draft",
+    payload: {
+      prompt: "정적 웹사이트를 만들고 싶어",
+      scenarioHint: "static_site"
+    }
+  });
+
+  assert.equal(staticSiteResponse.statusCode, 200);
+
+  const staticSiteBody = architectureDraftResponseSchema.parse(staticSiteResponse.json());
+  const staticSiteNodeIds = staticSiteBody.architectureJson.nodes.map((node) => node.id);
+  const cloudfrontNode = staticSiteBody.architectureJson.nodes.find((node) => node.id === "cloudfront-site");
+
+  assert.deepEqual(staticSiteNodeIds, ["s3-site", "cloudfront-site"]);
+  assert.equal(cloudfrontNode?.config.originResourceId, "s3-site");
+  assert.deepEqual(staticSiteBody.architectureJson.edges[0], {
+    id: "cloudfront-to-s3",
+    sourceId: "cloudfront-site",
+    targetId: "s3-site"
+  });
+
+  const apiServerResponse = await app.inject({
+    method: "POST",
+    url: "/api/ai/architecture-draft",
+    payload: {
+      prompt: "API 서버를 만들고 싶어",
+      scenarioHint: "api_server"
+    }
+  });
+
+  assert.equal(apiServerResponse.statusCode, 200);
+
+  const apiServerBody = architectureDraftResponseSchema.parse(apiServerResponse.json());
+  const apiServerNodeIds = apiServerBody.architectureJson.nodes.map((node) => node.id);
+  const apiServerEdgeIds = apiServerBody.architectureJson.edges.map((edge) => edge.id);
+  const apiServerNode = apiServerBody.architectureJson.nodes.find((node) => node.id === "ec2-api");
+
+  assert.deepEqual(apiServerNodeIds, ["vpc-main", "subnet-public", "sg-api", "ec2-api"]);
+  assert.deepEqual(apiServerEdgeIds, ["vpc-to-subnet-public", "subnet-public-to-ec2-api", "sg-api-to-ec2-api"]);
+  assert.equal(apiServerNode?.config.subnetId, "subnet-public");
+  assert.deepEqual(apiServerNode?.config.securityGroupIds, ["sg-api"]);
+
+  const databaseBackendResponse = await app.inject({
+    method: "POST",
+    url: "/api/ai/architecture-draft",
+    payload: {
+      prompt: "DB 포함 백엔드 API 서버를 만들고 싶어",
+      scenarioHint: "backend_with_db"
+    }
+  });
+
+  assert.equal(databaseBackendResponse.statusCode, 200);
+
+  const databaseBackendBody = architectureDraftResponseSchema.parse(databaseBackendResponse.json());
+  const databaseBackendNodeIds = databaseBackendBody.architectureJson.nodes.map((node) => node.id);
+  const databaseBackendEdgeIds = databaseBackendBody.architectureJson.edges.map((edge) => edge.id);
+  const backendNode = databaseBackendBody.architectureJson.nodes.find((node) => node.id === "ec2-backend");
+  const databaseNode = databaseBackendBody.architectureJson.nodes.find((node) => node.id === "rds-primary");
+  const databaseEdge = databaseBackendBody.architectureJson.edges.find((edge) => edge.id === "backend-to-database");
+
+  assert.deepEqual(databaseBackendNodeIds, [
+    "vpc-main",
+    "subnet-app",
+    "subnet-db",
+    "sg-app",
+    "sg-db",
+    "ec2-backend",
+    "rds-primary"
+  ]);
+  assert.deepEqual(databaseBackendEdgeIds, [
+    "vpc-to-subnet-app",
+    "vpc-to-subnet-db",
+    "subnet-app-to-ec2-backend",
+    "subnet-db-to-rds-primary",
+    "backend-to-database"
+  ]);
+  assert.equal(backendNode?.config.subnetId, "subnet-app");
+  assert.deepEqual(backendNode?.config.securityGroupIds, ["sg-app"]);
+  assert.equal(databaseNode?.config.subnetId, "subnet-db");
+  assert.deepEqual(databaseNode?.config.securityGroupIds, ["sg-db"]);
+  assert.deepEqual(databaseEdge, {
+    id: "backend-to-database",
+    sourceId: "ec2-backend",
+    targetId: "rds-primary"
+  });
+
+  await app.close();
+});
+
+test("POST /api/ai/architecture-draft applies operating choices inside supported MVP config", async () => {
+  const app = buildApp();
+
+  const databaseBackendResponse = await app.inject({
+    method: "POST",
+    url: "/api/ai/architecture-draft",
+    payload: {
+      prompt: "DB 포함 백엔드 API 서버를 만들고 싶어",
+      scenarioHint: "backend_with_db",
+      budgetLevel: "low",
+      trafficLevel: "normal",
+      securityPriority: "high"
+    }
+  });
+
+  assert.equal(databaseBackendResponse.statusCode, 200);
+
+  const databaseBackendBody = architectureDraftResponseSchema.parse(databaseBackendResponse.json());
+  const databaseNode = databaseBackendBody.architectureJson.nodes.find((node) => node.id === "rds-primary");
+  const databaseSecurityGroupNode = databaseBackendBody.architectureJson.nodes.find((node) => node.id === "sg-db");
+
+  assert.equal(databaseNode?.config.publiclyAccessible, false);
+  assert.deepEqual(databaseSecurityGroupNode?.config.ingress, []);
+  assert.ok(
+    databaseBackendBody.metadata.guardrailWarnings?.some((warning) => warning.code === "low_budget_rds_cost")
+  );
+  assert.ok(databaseBackendBody.metadata.explanations.some((explanation) => explanation.includes("ALB")));
+
+  const staticSiteResponse = await app.inject({
+    method: "POST",
+    url: "/api/ai/architecture-draft",
+    payload: {
+      prompt: "정적 웹사이트를 만들고 싶어",
+      scenarioHint: "static_site",
+      securityPriority: "high"
+    }
+  });
+
+  assert.equal(staticSiteResponse.statusCode, 200);
+
+  const staticSiteBody = architectureDraftResponseSchema.parse(staticSiteResponse.json());
+  const bucketNode = staticSiteBody.architectureJson.nodes.find((node) => node.id === "s3-site");
+
+  assert.equal(bucketNode?.config.publicAccessBlock, true);
+
+  await app.close();
+});
+
+test("POST /api/ai/architecture-draft rejects invalid guardrail choices", async () => {
+	const app = buildApp();
+
+	const response = await app.inject({
+		method: "POST",
+		url: "/api/ai/architecture-draft",
+		payload: {
+			prompt: "API 서버를 만들고 싶어",
+			scenarioHint: "serverless_app",
+			budgetLevel: "low",
+			trafficLevel: "small",
+			securityPriority: "basic"
+		}
+	});
+
+	assert.equal(response.statusCode, 400);
+
+	await app.close();
 });
 
 test("POST /api/ai/architecture-draft rejects an empty prompt", async () => {
@@ -302,17 +568,17 @@ test("POST /api/ai/pre-deployment-check reports cost and missing configuration r
       architectureJson: {
         nodes: [
           {
-            id: "backend-server",
+            id: "ec2-backend",
             type: "EC2",
             label: "Backend Server",
             positionX: 120,
             positionY: 180,
             config: {
-              subnetId: "app-subnet"
+              subnetId: "subnet-app"
             }
           },
           {
-            id: "backend-database",
+            id: "rds-primary",
             type: "RDS",
             label: "Backend Database",
             positionX: 360,
@@ -333,13 +599,13 @@ test("POST /api/ai/pre-deployment-check reports cost and missing configuration r
   const body = preDeploymentAnalysisResponseSchema.parse(response.json());
   const costFinding = body.findings.find((item) => item.category === "cost");
   const configurationFinding = body.findings.find((item) => item.category === "configuration");
-  const databaseEstimate = body.resourceCostEstimates.find((item) => item.resourceId === "backend-database");
+  const databaseEstimate = body.resourceCostEstimates.find((item) => item.resourceId === "rds-primary");
 
-  assert.equal(costFinding?.resourceId, "backend-database");
+  assert.equal(costFinding?.resourceId, "rds-primary");
   assert.equal(costFinding?.severity, "medium");
-  assert.equal(configurationFinding?.resourceId, "backend-server");
+  assert.equal(configurationFinding?.resourceId, "ec2-backend");
   assert.equal(configurationFinding?.severity, "medium");
-  assert.equal(databaseEstimate?.resourceId, "backend-database");
+  assert.equal(databaseEstimate?.resourceId, "rds-primary");
   assert.equal(body.summary.includes("Security Risk"), false);
   assert.equal(body.checklist.some((item) => item.id === "required-config-check" && item.status === "fail"), true);
 

@@ -284,6 +284,44 @@ export type AiResultMetadata = {
   confidence: AiConfidence;
   assumptions: string[];
   explanations: string[];
+  selectedScenario?: ArchitectureScenario;
+  scenarioScores?: ArchitectureScenarioScore[];
+  guardrailWarnings?: ArchitectureGuardrailWarning[];
+};
+
+export type ArchitectureScenario = "static_site" | "api_server" | "backend_with_db";
+
+export type ArchitectureScenarioScore = {
+  scenario: ArchitectureScenario;
+  score: number;
+  reasons: string[];
+};
+
+export type ArchitectureGuardrailWarningCode =
+  | "scenario_conflict"
+  | "unsupported_requirement"
+  | "low_budget_rds_cost";
+
+export type ArchitectureGuardrailWarning = {
+  code: ArchitectureGuardrailWarningCode;
+  message: string;
+};
+
+export type ArchitectureDraftScenarioHint = "auto" | ArchitectureScenario;
+
+export type ArchitectureDraftBudgetLevel = "low" | "normal";
+
+export type ArchitectureDraftTrafficLevel = "small" | "normal";
+
+export type ArchitectureDraftSecurityPriority = "basic" | "high";
+
+// Architecture Draft를 만들 때 AI가 자유롭게 해석하지 않도록 입력 선택지를 좁힌 계약입니다.
+export type CreateArchitectureDraftRequest = {
+  prompt: string;
+  scenarioHint: ArchitectureDraftScenarioHint;
+  budgetLevel: ArchitectureDraftBudgetLevel;
+  trafficLevel: ArchitectureDraftTrafficLevel;
+  securityPriority: ArchitectureDraftSecurityPriority;
 };
 
 export type AiArchitectureDraftResult = {

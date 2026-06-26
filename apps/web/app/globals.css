@@ -595,7 +595,9 @@ input {
   background: #f7f9fc;
   color: #1d2433;
   min-height: 100vh;
+  overflow-x: clip;
   padding: var(--space-12);
+  width: 100%;
 }
 
 .hero {
@@ -642,6 +644,7 @@ h1 {
 }
 
 .workspaceHeader {
+  min-width: 0;
   max-width: 880px;
 }
 
@@ -650,18 +653,24 @@ h1 {
   gap: var(--space-4);
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   margin-top: var(--space-6);
+  max-width: 100%;
+  min-width: 0;
+  width: 100%;
 }
 
 .workspaceGridWide {
   align-items: start;
   grid-template-columns: minmax(280px, 0.9fr) minmax(320px, 1.1fr);
   max-width: 1440px;
+  min-width: 0;
 }
 
 .workspacePanel {
   background: var(--surface-secondary);
   border: 1px solid var(--border-default);
   border-radius: 8px;
+  max-width: 100%;
+  min-width: 0;
   min-height: 180px;
   padding: var(--space-5);
 }
@@ -685,6 +694,35 @@ h1 {
   font-weight: 700;
 }
 
+.choiceGrid {
+  display: grid;
+  gap: var(--space-2);
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+}
+
+.choiceGridCompact {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.choiceButton {
+  background: var(--surface-primary);
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 700;
+  min-height: 40px;
+  padding: var(--space-2) var(--space-3);
+}
+
+.choiceButtonActive {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: var(--surface-secondary);
+}
+
 .textArea,
 .codeArea,
 .textInput {
@@ -694,6 +732,9 @@ h1 {
   color: var(--text-primary);
   font: inherit;
   line-height: 1.5;
+  max-width: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
   padding: var(--space-3);
   transition:
     border-color 120ms ease-out,
@@ -704,6 +745,7 @@ h1 {
 .codeArea {
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   font-size: 0.875rem;
+  white-space: pre-wrap;
 }
 
 .textArea:focus,
@@ -770,6 +812,8 @@ h1 {
   color: var(--text-secondary);
   font-size: 0.875rem;
   margin: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .resultTitle {
@@ -782,16 +826,86 @@ h1 {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
+  min-width: 0;
 }
 
-.resourceChip {
+.workspaceResourceChip {
   background: var(--surface-elevated);
   border: 1px solid var(--border-subtle);
   border-radius: 6px;
   color: var(--text-primary);
+  display: inline-flex;
   font-size: 0.75rem;
   font-weight: 700;
+  line-height: 1.35;
+  max-width: 100%;
+  overflow-wrap: anywhere;
   padding: var(--space-2) var(--space-3);
+  white-space: normal;
+}
+
+.metadataBlock {
+  border-top: 1px solid var(--border-subtle);
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+  padding-top: var(--space-3);
+}
+
+.metadataGrid {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.metadataKicker {
+  color: var(--text-tertiary);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.metadataList,
+.warningList {
+  display: grid;
+  gap: var(--space-2);
+  list-style: none;
+  margin: 0;
+  min-width: 0;
+  padding: 0;
+}
+
+.metadataList li,
+.warningItem {
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  display: grid;
+  gap: var(--space-1);
+  line-height: 1.45;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  padding: var(--space-2);
+}
+
+.metadataList li {
+  background: var(--surface-primary);
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+}
+
+.metadataList strong,
+.warningItem strong {
+  color: var(--text-primary);
+  font-size: 0.78rem;
+}
+
+.warningItem {
+  background: color-mix(in srgb, var(--status-warning) 8%, var(--surface-secondary));
+  border-color: color-mix(in srgb, var(--status-warning) 28%, var(--border-subtle));
+  color: var(--text-primary);
+  font-size: 0.78rem;
 }
 
 .resultList {
@@ -846,7 +960,7 @@ h1 {
   }
 
   .workspaceGridWide {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -857,7 +971,31 @@ h1 {
   }
 
   h1 {
-    font-size: 2.25rem;
+    font-size: 2rem;
+    overflow-wrap: normal;
+    word-break: keep-all;
+  }
+
+  .workspacePanel {
+    padding: var(--space-4);
+    width: 100%;
+  }
+
+  .workspaceHeader,
+  .workspaceGridWide {
+    max-width: 320px;
+    width: 100%;
+  }
+
+  .choiceGrid,
+  .choiceGridCompact {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .primaryButton,
+  .secondaryButton,
+  .choiceButton {
+    width: 100%;
   }
 }
 
