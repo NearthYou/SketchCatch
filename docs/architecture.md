@@ -105,12 +105,12 @@ flowchart LR
 - `POST /api/projects/:projectId/aws-connections`
 - `GET /api/projects/:projectId/aws-connections/:connectionId/cloudformation-template`
 - `GET /api/aws/connections/cloudformation-template`
-- `POST /api/aws/connections/test`
+- `POST /api/projects/:projectId/aws-connections/:connectionId/test`
 - `POST /api/projects/:projectId/aws-connections/:connectionId/verify`
 
 프로젝트 API는 현재 `clientGeneratedWorkspaceId` 기반 익명 workspace를 지원한다. 인증이 연결되면 API route의 `resolveProjectOwner`가 session에서 `userId`를 제공하고, 서버는 `projects.user_id` 기준으로 같은 프로젝트 목록/draft endpoint를 재사용한다. 세션에 `workspaceId`가 아직 없으면 API가 `user:<userId>` 형태의 내부 workspace id를 파생한다.
 
-AWS 연결 생성 API는 사용자 AWS 계정의 IAM Role trust policy에 넣을 SketchCatch caller principal ARN과 서버 생성 External ID를 제공하고, 연결 상태를 `pending`으로 저장한다. CloudFormation template API는 사용자가 콘솔에서 trust policy를 직접 조립하지 않아도 되도록 `SketchCatchTerraformExecutionRole` 생성 YAML과 AWS Console launch stack URL을 제공한다. public template URL은 만료되는 서명 token으로 보호되며, CloudFormation이 템플릿을 읽는 용도만 담당한다. AWS 연결 테스트 API는 저장 없이 `AssumeRole`과 `GetCallerIdentity`로 `accountId`, `callerArn`, `region`을 확인하고, 같은 role이 External ID 없이 assume되면 연결을 거부한다. 저장형 verify API는 같은 STS 검증 결과로 `accountId`, `roleArn`, `lastVerifiedAt`, `status` metadata만 저장한다. Deployment init은 project의 최신 verified AWS connection을 조회해 다시 `AssumeRole/GetCallerIdentity`를 수행하고, 임시 credential을 `terraform init` child process env에만 주입한다. 이 단계들은 AWS 리소스를 직접 생성/수정/삭제하지 않고, raw credential을 저장하거나 응답하지 않는다.
+AWS 연결 생성 API는 사용자 AWS 계정의 IAM Role trust policy에 넣을 SketchCatch caller principal ARN과 서버 생성 External ID를 제공하고, 연결 상태를 `pending`으로 저장한다. CloudFormation template API는 사용자가 콘솔에서 trust policy를 직접 조립하지 않아도 되도록 `SketchCatchTerraformExecutionRole` 생성 YAML과 AWS Console launch stack URL을 제공한다. public template URL은 만료되는 별도 서명 secret으로 보호되며, token에 포함된 connection이 DB에 남아 있고 External ID와 region이 일치할 때만 템플릿을 내려준다. AWS 연결 테스트 API는 project/connection 범위 안에서 body의 `roleArn`과 DB의 `externalId`, `region`으로 `AssumeRole`과 `GetCallerIdentity`를 수행한다. 같은 role이 External ID 없이 assume되면 연결을 거부하고, 저장형 verify API는 같은 STS 검증 결과로 `accountId`, `roleArn`, `lastVerifiedAt`, `status` metadata만 저장한다. Deployment는 생성 시 명시한 `awsConnectionId`를 저장하고, init은 해당 verified AWS connection으로 다시 `AssumeRole/GetCallerIdentity`를 수행한 뒤 임시 credential을 `terraform init` child process env에만 주입한다. Terraform child process는 allowlist 기반 환경 변수와 임시 AWS credential만 상속한다. 이 단계들은 AWS 리소스를 직접 생성/수정/삭제하지 않고, raw credential을 저장하거나 응답하지 않는다.
 
 인증 화면, AI 생성, Terraform validate/plan/apply, 실제 AWS 리소스 생성은 아직 구현하지 않았다.
 

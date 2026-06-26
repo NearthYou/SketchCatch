@@ -67,6 +67,7 @@ AWS_REGION=ap-northeast-2
 S3_BUCKET_NAME=<bucket-name>
 SKETCHCATCH_AWS_CALLER_PRINCIPAL_ARN=<SketchCatch backend IAM Role ARN>
 SKETCHCATCH_PUBLIC_BASE_URL=<public SketchCatch API/web base URL>
+CLOUDFORMATION_TEMPLATE_TOKEN_SECRET=<32자 이상 CloudFormation template URL 서명 secret>
 ```
 
 ## 루트 스크립트
