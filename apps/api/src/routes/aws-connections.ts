@@ -2,7 +2,7 @@ import { z } from "zod";
 import { requireActiveUserId } from "../auth/current-user.js";
 import {
   getRuntimeEnv,
-  requireAuthTokenSecret,
+  requireCloudFormationTemplateTokenSecret,
   requireSketchCatchAwsCallerPrincipalArn
 } from "../config/env.js";
 import { getDatabaseClient, type DatabaseClient } from "../db/client.js";
@@ -13,7 +13,10 @@ import {
   createAwsConnection,
   createPostgresAwsConnectionRepository,
   getAwsConnectionCloudFormationTemplate,
+  isRecommendedAwsConnectionRoleArn,
+  recommendedAwsConnectionRoleName,
   renderAwsConnectionCloudFormationTemplateFromToken,
+  testStoredAwsConnection,
   verifyAwsConnection,
   type AwsConnectionRepository
 } from "../aws-connections/aws-connection-service.js";
@@ -24,12 +27,20 @@ import {
 } from "../aws-connections/aws-connection-test-service.js";
 import type { FastifyInstance, FastifyReply } from "fastify";
 import type { ProjectAccessContext } from "../deployments/deployment-service.js";
+import {
+  createInMemoryRateLimiter,
+  type RateLimiter
+} from "../rate-limit/in-memory-rate-limiter.js";
 
 const awsRegionSchema = z.literal("ap-northeast-2");
 const awsRoleArnSchema = z
   .string()
   .trim()
-  .regex(/^arn:aws(?:-[a-z]+)?:iam::\d{12}:role\/[\w+=,.@/-]+$/);
+  .max(2048)
+  .regex(/^arn:aws:iam::\d{12}:role\/[\w+=,.@/-]+$/)
+  .refine(isRecommendedAwsConnectionRoleArn, {
+    message: `AWS Role ARN must use ${recommendedAwsConnectionRoleName}`
+  });
 
 const createAwsConnectionParamsSchema = z.object({
   projectId: z.uuid()
@@ -46,7 +57,7 @@ const cloudFormationTemplateParamsSchema = z.object({
 });
 
 const publicCloudFormationTemplateQuerySchema = z.object({
-  token: z.string().trim().min(1)
+  token: z.string().trim().min(1).max(4096)
 });
 
 const createAwsConnectionBodySchema = z.object({
@@ -54,9 +65,7 @@ const createAwsConnectionBodySchema = z.object({
 });
 
 const testAwsConnectionBodySchema = z.object({
-  roleArn: awsRoleArnSchema,
-  externalId: z.string().trim().min(2).max(1224),
-  region: awsRegionSchema
+  roleArn: awsRoleArnSchema
 });
 
 const verifyAwsConnectionBodySchema = z.object({
@@ -72,10 +81,16 @@ export type AwsConnectionRouteOptions = {
   };
   cloudFormationTemplateTokenSecret?: string;
   awsConnectionTester?: AwsConnectionTester;
+  awsConnectionRateLimiter?: RateLimiter;
   generateAwsConnectionId?: () => string;
   generateAwsExternalId?: () => string;
   now?: () => Date;
 };
+
+const defaultAwsConnectionRateLimiter = createInMemoryRateLimiter({
+  limit: 30,
+  windowMs: 60_000
+});
 
 export async function registerAwsConnectionRoutes(
   app: FastifyInstance,
@@ -125,14 +140,40 @@ export async function registerAwsConnectionRoutes(
     }
   });
 
-  app.post("/aws/connections/test", async (request, reply) => {
+  app.post("/projects/:projectId/aws-connections/:connectionId/test", async (request, reply) => {
+    const params = verifyAwsConnectionParamsSchema.parse(request.params);
     const body = testAwsConnectionBodySchema.parse(request.body);
     const client = getAwsConnectionDatabaseClient();
-    await requireActiveUserId(request, () => client);
+    const currentUserId = await requireActiveUserId(request, () => client);
+    const repository =
+      options?.createAwsConnectionRepository?.(client.db) ??
+      createPostgresAwsConnectionRepository(client.db);
     const tester = options?.awsConnectionTester ?? createAwsConnectionTester();
+    const rateLimitResult = (
+      options?.awsConnectionRateLimiter ?? defaultAwsConnectionRateLimiter
+    ).consume(`aws-connection-test:${currentUserId}`);
+
+    if (!rateLimitResult.allowed) {
+      return reply
+        .status(429)
+        .header("Retry-After", String(rateLimitResult.retryAfterSeconds))
+        .send({
+          error: "too_many_requests",
+          message: "Too many AWS connection attempts"
+        });
+    }
 
     try {
-      const result = await tester.testConnection(body);
+      const result = await testStoredAwsConnection(
+        {
+          projectId: params.projectId,
+          connectionId: params.connectionId,
+          accessContext: createUserProjectAccessContext(currentUserId),
+          roleArn: body.roleArn
+        },
+        repository,
+        tester
+      );
 
       return reply.status(200).send(result);
     } catch (error) {
@@ -140,45 +181,55 @@ export async function registerAwsConnectionRoutes(
     }
   });
 
-  app.post(
-    "/projects/:projectId/aws-connections/:connectionId/verify",
-    async (request, reply) => {
-      const params = verifyAwsConnectionParamsSchema.parse(request.params);
-      const body = verifyAwsConnectionBodySchema.parse(request.body);
-      const client = getAwsConnectionDatabaseClient();
-      const currentUserId = await requireActiveUserId(request, () => client);
-      const repository =
-        options?.createAwsConnectionRepository?.(client.db) ??
-        createPostgresAwsConnectionRepository(client.db);
-      const tester = options?.awsConnectionTester ?? createAwsConnectionTester();
+  app.post("/projects/:projectId/aws-connections/:connectionId/verify", async (request, reply) => {
+    const params = verifyAwsConnectionParamsSchema.parse(request.params);
+    const body = verifyAwsConnectionBodySchema.parse(request.body);
+    const client = getAwsConnectionDatabaseClient();
+    const currentUserId = await requireActiveUserId(request, () => client);
+    const repository =
+      options?.createAwsConnectionRepository?.(client.db) ??
+      createPostgresAwsConnectionRepository(client.db);
+    const tester = options?.awsConnectionTester ?? createAwsConnectionTester();
+    const rateLimitResult = (
+      options?.awsConnectionRateLimiter ?? defaultAwsConnectionRateLimiter
+    ).consume(`aws-connection-verify:${currentUserId}`);
 
-      try {
-        const verifyOptions: {
-          now?: () => Date;
-        } = {};
-
-        if (options?.now) {
-          verifyOptions.now = options.now;
-        }
-
-        const result = await verifyAwsConnection(
-          {
-            projectId: params.projectId,
-            connectionId: params.connectionId,
-            accessContext: createUserProjectAccessContext(currentUserId),
-            roleArn: body.roleArn
-          },
-          repository,
-          tester,
-          verifyOptions
-        );
-
-        return reply.status(200).send(result);
-      } catch (error) {
-        return handleAwsConnectionError(error, reply);
-      }
+    if (!rateLimitResult.allowed) {
+      return reply
+        .status(429)
+        .header("Retry-After", String(rateLimitResult.retryAfterSeconds))
+        .send({
+          error: "too_many_requests",
+          message: "Too many AWS connection attempts"
+        });
     }
-  );
+
+    try {
+      const verifyOptions: {
+        now?: () => Date;
+      } = {};
+
+      if (options?.now) {
+        verifyOptions.now = options.now;
+      }
+
+      const result = await verifyAwsConnection(
+        {
+          projectId: params.projectId,
+          connectionId: params.connectionId,
+          accessContext: createUserProjectAccessContext(currentUserId),
+          roleArn: body.roleArn
+        },
+        repository,
+        tester,
+        verifyOptions
+      );
+
+      return reply.status(200).send(result);
+    } catch (error) {
+      return handleAwsConnectionError(error, reply);
+    }
+  });
 
   app.get(
     "/projects/:projectId/aws-connections/:connectionId/cloudformation-template",
@@ -210,7 +261,9 @@ export async function registerAwsConnectionRoutes(
             publicBaseUrl:
               options?.awsConnectionConfig?.publicBaseUrl ??
               getRuntimeEnv().sketchcatchPublicBaseUrl,
-            tokenSecret: options?.cloudFormationTemplateTokenSecret ?? requireAuthTokenSecret()
+            tokenSecret:
+              options?.cloudFormationTemplateTokenSecret ??
+              requireCloudFormationTemplateTokenSecret()
           },
           repository,
           templateOptions
@@ -225,11 +278,16 @@ export async function registerAwsConnectionRoutes(
 
   app.get("/aws/connections/cloudformation-template", async (request, reply) => {
     const query = publicCloudFormationTemplateQuerySchema.parse(request.query);
+    const client = getAwsConnectionDatabaseClient();
+    const repository =
+      options?.createAwsConnectionRepository?.(client.db) ??
+      createPostgresAwsConnectionRepository(client.db);
 
     try {
-      const templateBody = renderAwsConnectionCloudFormationTemplateFromToken(
+      const templateBody = await renderAwsConnectionCloudFormationTemplateFromToken(
         query.token,
-        options?.cloudFormationTemplateTokenSecret ?? requireAuthTokenSecret(),
+        options?.cloudFormationTemplateTokenSecret ?? requireCloudFormationTemplateTokenSecret(),
+        repository,
         options?.now?.()
       );
 

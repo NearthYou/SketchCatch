@@ -65,6 +65,21 @@ class FakeAwsConnectionStsGateway implements AwsConnectionStsGateway {
   }
 }
 
+class TransientProbeFailureGateway extends FakeAwsConnectionStsGateway {
+  override async assumeRole(input: {
+    roleArn: string;
+    externalId?: string;
+    region: string;
+    roleSessionName: string;
+  }) {
+    if (!input.externalId) {
+      throw new Error("ThrottlingException: retry later");
+    }
+
+    return super.assumeRole(input);
+  }
+}
+
 test("testAwsConnection assumes the target role and returns caller identity without credentials", async () => {
   const gateway = new FakeAwsConnectionStsGateway();
 
@@ -170,6 +185,34 @@ test("testAwsConnection maps STS failures to a sanitized error", async () => {
       assert.equal(error instanceof AwsConnectionTestError, true);
       assert.equal((error as Error).message, "AWS Role connection test failed");
       assert.equal((error as Error).message.includes("temporary-secret-access-key"), false);
+
+      return true;
+    }
+  );
+});
+
+test("testAwsConnection fails closed when externalId requirement probe cannot be verified", async () => {
+  const gateway = new TransientProbeFailureGateway();
+
+  await assert.rejects(
+    () =>
+      testAwsConnection(
+        {
+          roleArn,
+          externalId,
+          region
+        },
+        gateway,
+        {
+          createRoleSessionName: () => "sketchcatch-connection-test"
+        }
+      ),
+    (error) => {
+      assert.equal(error instanceof AwsConnectionTestError, true);
+      assert.equal(
+        (error as Error).message,
+        "AWS Role external ID requirement could not be verified"
+      );
 
       return true;
     }

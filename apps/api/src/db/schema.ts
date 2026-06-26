@@ -1,5 +1,16 @@
 import { relations, sql } from "drizzle-orm";
-import { boolean, index, integer, jsonb, pgEnum, pgTable, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/pg-core";
+import {
+  boolean,
+  index,
+  integer,
+  jsonb,
+  pgEnum,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+  varchar
+} from "drizzle-orm/pg-core";
 import type { ArchitectureJson, DeploymentPlanSummary, DiagramJson } from "@sketchcatch/types";
 
 export const assetTypeEnum = pgEnum("asset_type", [
@@ -39,11 +50,7 @@ export const deploymentStageEnum = pgEnum("deployment_stage", [
   "apply"
 ]);
 
-export const deploymentLogLevelEnum = pgEnum("deployment_log_level", [
-  "INFO",
-  "WARN",
-  "ERROR"
-]);
+export const deploymentLogLevelEnum = pgEnum("deployment_log_level", ["INFO", "WARN", "ERROR"]);
 
 export const awsConnectionStatusEnum = pgEnum("aws_connection_status", [
   "pending",
@@ -175,58 +182,6 @@ export const projectAssets = pgTable("project_assets", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
 });
 
-export const deployments = pgTable("deployments", {
-  id: varchar("id", { length: 36 }).primaryKey(),
-  projectId: varchar("project_id", { length: 36 })
-    .notNull()
-    .references(() => projects.id, { onDelete: "cascade" }),
-  architectureId: varchar("architecture_id", { length: 36 })
-    .notNull()
-    .references(() => architectures.id, { onDelete: "restrict" }),
-  terraformArtifactId: varchar("terraform_artifact_id", { length: 36 })
-    .notNull()
-    .references(() => projectAssets.id, { onDelete: "restrict" }),
-  status: deploymentStatusEnum("status").notNull().default("PENDING"),
-  planSummary: jsonb("plan_summary").$type<DeploymentPlanSummary>(),
-  isBlocked: boolean("is_blocked").notNull().default(false),
-  blockedBy: deploymentBlockedEnum("blocked_by"),
-  blockedReason: text("blocked_reason"),
-  failureStage: deploymentFailureStageEnum("failure_stage"),
-  errorSummary: text("error_summary"),
-  approvedAt: timestamp("approved_at", { withTimezone: true }),
-  approvedByUserId: varchar("approved_by_user_id", { length: 36 }).references(() => users.id, {
-    onDelete: "restrict"
-  }),
-  approvedTerraformArtifactId: varchar("approved_terraform_artifact_id", { length: 36 }).references(
-    () => projectAssets.id,
-    { onDelete: "set null" }
-  ),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
-});
-
-export const deploymentLogs = pgTable(
-  "deployment_logs",
-  {
-    id: varchar("id", { length: 36 }).primaryKey(),
-    deploymentId: varchar("deployment_id", { length: 36 })
-      .notNull()
-      .references(() => deployments.id, { onDelete: "cascade" }),
-    sequence: integer("sequence").notNull(),
-    stage: deploymentStageEnum("stage").notNull(),
-    level: deploymentLogLevelEnum("level").notNull(),
-    message: text("message").notNull(),
-    relatedResourceId: varchar("related_resource_id", { length: 128 }),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
-  },
-  (table) => [
-    uniqueIndex("deployment_logs_deployment_sequence_unique").on(
-      table.deploymentId,
-      table.sequence
-    )
-  ]
-);
-
 export const awsConnections = pgTable(
   "aws_connections",
   {
@@ -250,6 +205,62 @@ export const awsConnections = pgTable(
     index("aws_connections_project_id_idx").on(table.projectId),
     index("aws_connections_user_id_idx").on(table.userId),
     uniqueIndex("aws_connections_external_id_unique").on(table.externalId)
+  ]
+);
+
+export const deployments = pgTable(
+  "deployments",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    projectId: varchar("project_id", { length: 36 })
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    architectureId: varchar("architecture_id", { length: 36 })
+      .notNull()
+      .references(() => architectures.id, { onDelete: "restrict" }),
+    terraformArtifactId: varchar("terraform_artifact_id", { length: 36 })
+      .notNull()
+      .references(() => projectAssets.id, { onDelete: "restrict" }),
+    awsConnectionId: varchar("aws_connection_id", { length: 36 }).references(
+      () => awsConnections.id,
+      { onDelete: "restrict" }
+    ),
+    status: deploymentStatusEnum("status").notNull().default("PENDING"),
+    planSummary: jsonb("plan_summary").$type<DeploymentPlanSummary>(),
+    isBlocked: boolean("is_blocked").notNull().default(false),
+    blockedBy: deploymentBlockedEnum("blocked_by"),
+    blockedReason: text("blocked_reason"),
+    failureStage: deploymentFailureStageEnum("failure_stage"),
+    errorSummary: text("error_summary"),
+    approvedAt: timestamp("approved_at", { withTimezone: true }),
+    approvedByUserId: varchar("approved_by_user_id", { length: 36 }).references(() => users.id, {
+      onDelete: "restrict"
+    }),
+    approvedTerraformArtifactId: varchar("approved_terraform_artifact_id", {
+      length: 36
+    }).references(() => projectAssets.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [index("deployments_aws_connection_id_idx").on(table.awsConnectionId)]
+);
+
+export const deploymentLogs = pgTable(
+  "deployment_logs",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    deploymentId: varchar("deployment_id", { length: 36 })
+      .notNull()
+      .references(() => deployments.id, { onDelete: "cascade" }),
+    sequence: integer("sequence").notNull(),
+    stage: deploymentStageEnum("stage").notNull(),
+    level: deploymentLogLevelEnum("level").notNull(),
+    message: text("message").notNull(),
+    relatedResourceId: varchar("related_resource_id", { length: 128 }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [
+    uniqueIndex("deployment_logs_deployment_sequence_unique").on(table.deploymentId, table.sequence)
   ]
 );
 
@@ -324,6 +335,10 @@ export const deploymentsRelations = relations(deployments, ({ one, many }) => ({
   terraformArtifact: one(projectAssets, {
     fields: [deployments.terraformArtifactId],
     references: [projectAssets.id]
+  }),
+  awsConnection: one(awsConnections, {
+    fields: [deployments.awsConnectionId],
+    references: [awsConnections.id]
   }),
   logs: many(deploymentLogs)
 }));

@@ -1,8 +1,15 @@
 import { randomUUID } from "node:crypto";
 import { AssumeRoleCommand, GetCallerIdentityCommand, STSClient } from "@aws-sdk/client-sts";
-import type { TestAwsConnectionRequest, TestAwsConnectionResponse } from "@sketchcatch/types";
+import type { TestAwsConnectionResponse } from "@sketchcatch/types";
 
 export const supportedAwsConnectionRegion = "ap-northeast-2";
+const assumeRoleDurationSeconds = 900;
+
+export type AwsConnectionTestInput = {
+  roleArn: string;
+  externalId: string;
+  region: string;
+};
 
 export type AwsTemporaryCredentials = {
   accessKeyId: string;
@@ -29,7 +36,7 @@ export type AwsConnectionStsGateway = {
 };
 
 export type AwsConnectionTester = {
-  testConnection(input: TestAwsConnectionRequest): Promise<TestAwsConnectionResponse>;
+  testConnection(input: AwsConnectionTestInput): Promise<TestAwsConnectionResponse>;
 };
 
 export type TestAwsConnectionOptions = {
@@ -54,7 +61,7 @@ export function createAwsConnectionTester(
 }
 
 export async function testAwsConnection(
-  input: TestAwsConnectionRequest,
+  input: AwsConnectionTestInput,
   gateway: AwsConnectionStsGateway,
   options: TestAwsConnectionOptions = {}
 ): Promise<TestAwsConnectionResponse> {
@@ -85,18 +92,14 @@ export async function testAwsConnection(
       throw new AwsConnectionTestError("AWS Role account mismatch");
     }
 
-    if (
-      await canAssumeRoleWithoutExternalId(
-        {
-          roleArn: input.roleArn,
-          region: input.region,
-          roleSessionName
-        },
-        gateway
-      )
-    ) {
-      throw new AwsConnectionTestError("AWS Role trust policy must require external ID");
-    }
+    await assertAwsRoleRequiresExternalId(
+      {
+        roleArn: input.roleArn,
+        region: input.region,
+        roleSessionName
+      },
+      gateway
+    );
 
     return {
       ok: true,
@@ -123,7 +126,8 @@ export function createAwsSdkStsGateway(): AwsConnectionStsGateway {
         new AssumeRoleCommand({
           RoleArn: input.roleArn,
           ExternalId: input.externalId,
-          RoleSessionName: input.roleSessionName
+          RoleSessionName: input.roleSessionName,
+          DurationSeconds: assumeRoleDurationSeconds
         })
       );
       const credentials = result.Credentials;
@@ -173,19 +177,41 @@ export function getAwsAccountIdFromRoleArn(roleArn: string): string {
   return accountId;
 }
 
-export async function canAssumeRoleWithoutExternalId(
+export async function assertAwsRoleRequiresExternalId(
   input: {
     roleArn: string;
     region: string;
     roleSessionName: string;
   },
   gateway: AwsConnectionStsGateway
-): Promise<boolean> {
+): Promise<void> {
   try {
     await gateway.assumeRole(input);
+    throw new AwsConnectionTestError("AWS Role trust policy must require external ID");
+  } catch (error) {
+    if (error instanceof AwsConnectionTestError) {
+      throw error;
+    }
 
-    return true;
-  } catch {
+    if (isExpectedAssumeRoleDeniedError(error)) {
+      return;
+    }
+
+    throw new AwsConnectionTestError("AWS Role external ID requirement could not be verified");
+  }
+}
+
+function isExpectedAssumeRoleDeniedError(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) {
     return false;
   }
+
+  const errorName = "name" in error && typeof error.name === "string" ? error.name : "";
+  const message = "message" in error && typeof error.message === "string" ? error.message : "";
+
+  return (
+    errorName === "AccessDenied" ||
+    errorName === "AccessDeniedException" ||
+    message.toLowerCase().includes("accessdenied")
+  );
 }

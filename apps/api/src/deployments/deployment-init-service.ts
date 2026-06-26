@@ -86,13 +86,18 @@ export async function runDeploymentInit(
       throw new DeploymentNotFoundError("Terraform artifact does not match deployment");
     }
 
-    const awsConnection = await repository.findVerifiedAwsConnectionForProject(
+    if (!deployment.awsConnectionId) {
+      throw new DeploymentNotFoundError("Deployment AWS connection is missing");
+    }
+
+    const awsConnection = await repository.findVerifiedAwsConnectionById(
       deployment.projectId,
+      deployment.awsConnectionId,
       input.accessContext
     );
 
     if (!awsConnection) {
-      throw new DeploymentNotFoundError("Verified AWS connection not found for deployment project");
+      throw new DeploymentNotFoundError("Verified AWS connection not found for deployment");
     }
 
     const awsCredentials = await prepareTerraformAwsCredentialEnv(awsConnection);
@@ -216,9 +221,10 @@ function summarizeTerraformFailure(result: TerraformRunResult): string {
     return "Terraform init timed out";
   }
 
-  return (
-    splitOutputLines(result.stderr)[0] ?? `Terraform init failed with exit code ${result.exitCode}`
-  );
+  const summary =
+    splitOutputLines(result.stderr)[0] ?? `Terraform init failed with exit code ${result.exitCode}`;
+
+  return maskDeploymentMessage(summary);
 }
 
 function summarizeUnexpectedInitFailure(error: unknown): string {

@@ -6,6 +6,7 @@ import type {
   AwsRolePermissionSetup,
   CreateAwsConnectionResponse,
   SketchCatchCallerRoleSetup,
+  TestAwsConnectionResponse,
   VerifyAwsConnectionResponse
 } from "@sketchcatch/types";
 import type { Database } from "../db/client.js";
@@ -19,7 +20,7 @@ import {
   type AwsConnectionTester
 } from "./aws-connection-test-service.js";
 
-const recommendedRoleName = "SketchCatchTerraformExecutionRole";
+export const recommendedAwsConnectionRoleName = "SketchCatchTerraformExecutionRole";
 const callerAssumeRolePolicyName = "SketchCatchAssumeTerraformExecutionRole";
 const cloudFormationTemplateTokenVersion = 1;
 const cloudFormationTemplateTokenSeparator = "~";
@@ -53,10 +54,11 @@ export type AwsConnectionRepository = {
     connectionId: string,
     accessContext: ProjectAccessContext
   ): Promise<AwsConnectionRecord | undefined>;
+  findAwsConnectionById(connectionId: string): Promise<AwsConnectionRecord | undefined>;
   createAwsConnection(input: CreateAwsConnectionRecordInput): Promise<AwsConnectionRecord>;
-  updateAwsConnectionVerification(input: UpdateAwsConnectionVerificationInput): Promise<
-    AwsConnectionRecord | undefined
-  >;
+  updateAwsConnectionVerification(
+    input: UpdateAwsConnectionVerificationInput
+  ): Promise<AwsConnectionRecord | undefined>;
 };
 
 export type CreateAwsConnectionOptions = {
@@ -70,6 +72,8 @@ export type VerifyAwsConnectionInput = {
   accessContext: ProjectAccessContext;
   roleArn: string;
 };
+
+export type TestStoredAwsConnectionInput = VerifyAwsConnectionInput;
 
 export type VerifyAwsConnectionOptions = {
   now?: () => Date;
@@ -90,7 +94,9 @@ export type GetAwsConnectionCloudFormationTemplateOptions = {
 };
 
 export type UpdateAwsConnectionVerificationInput = {
+  projectId: string;
   connectionId: string;
+  userId: string;
   accountId: string | null;
   roleArn: string;
   status: "verified" | "failed";
@@ -144,6 +150,15 @@ export function createPostgresAwsConnectionRepository(db: Database): AwsConnecti
       return awsConnection;
     },
 
+    async findAwsConnectionById(connectionId) {
+      const [awsConnection] = await db
+        .select()
+        .from(awsConnections)
+        .where(eq(awsConnections.id, connectionId));
+
+      return awsConnection;
+    },
+
     async createAwsConnection(input) {
       const [awsConnection] = await db.insert(awsConnections).values(input).returning();
 
@@ -165,7 +180,13 @@ export function createPostgresAwsConnectionRepository(db: Database): AwsConnecti
           lastVerifiedAt: input.lastVerifiedAt,
           updatedAt
         })
-        .where(eq(awsConnections.id, input.connectionId))
+        .where(
+          and(
+            eq(awsConnections.id, input.connectionId),
+            eq(awsConnections.projectId, input.projectId),
+            eq(awsConnections.userId, input.userId)
+          )
+        )
         .returning();
 
       return awsConnection;
@@ -200,14 +221,14 @@ export async function createAwsConnection(
     externalId
   });
   const permissionSetup = createInitialPermissionSetup();
-  const callerRoleSetup = createCallerRoleSetup(recommendedRoleName);
+  const callerRoleSetup = createCallerRoleSetup(recommendedAwsConnectionRoleName);
 
   return {
     awsConnection: toAwsConnection(awsConnection),
     callerPrincipalArn: input.callerPrincipalArn,
-    recommendedRoleName,
+    recommendedRoleName: recommendedAwsConnectionRoleName,
     roleSetup: {
-      roleName: recommendedRoleName,
+      roleName: recommendedAwsConnectionRoleName,
       trustedPrincipalArn: input.callerPrincipalArn,
       externalId,
       trustPolicy: trustPolicyTemplate,
@@ -254,10 +275,14 @@ export async function verifyAwsConnection(
     throw new AwsConnectionNotFoundError("AWS connection not found");
   }
 
+  assertRecommendedAwsConnectionRoleArn(input.roleArn);
+
   const now = options.now ?? (() => new Date());
   const markFailed = async (accountId: string | null) => {
     await repository.updateAwsConnectionVerification({
+      projectId: awsConnection.projectId,
       connectionId: awsConnection.id,
+      userId: awsConnection.userId,
       accountId,
       roleArn: input.roleArn,
       status: "failed",
@@ -302,7 +327,9 @@ export async function verifyAwsConnection(
 
   const verifiedAt = now();
   const updatedConnection = await repository.updateAwsConnectionVerification({
+    projectId: awsConnection.projectId,
     connectionId: awsConnection.id,
+    userId: awsConnection.userId,
     accountId: result.accountId,
     roleArn: input.roleArn,
     status: "verified",
@@ -322,6 +349,55 @@ export async function verifyAwsConnection(
   };
 }
 
+export async function testStoredAwsConnection(
+  input: TestStoredAwsConnectionInput,
+  repository: AwsConnectionRepository,
+  tester: AwsConnectionTester = createAwsConnectionTester()
+): Promise<TestAwsConnectionResponse> {
+  const awsConnection = await repository.findAccessibleAwsConnection(
+    input.projectId,
+    input.connectionId,
+    input.accessContext
+  );
+
+  if (!awsConnection) {
+    throw new AwsConnectionNotFoundError("AWS connection not found");
+  }
+
+  assertRecommendedAwsConnectionRoleArn(input.roleArn);
+
+  if (awsConnection.region !== supportedAwsConnectionRegion) {
+    throw new AwsConnectionVerificationError("AWS connection region must be ap-northeast-2");
+  }
+
+  if (awsConnection.externalId.trim().length === 0) {
+    throw new AwsConnectionVerificationError("AWS connection external ID is missing");
+  }
+
+  let result: TestAwsConnectionResponse;
+
+  try {
+    result = await tester.testConnection({
+      roleArn: input.roleArn,
+      externalId: awsConnection.externalId,
+      region: awsConnection.region
+    });
+  } catch (error) {
+    if (error instanceof AwsConnectionTestError) {
+      throw error;
+    }
+
+    throw new AwsConnectionTestError("AWS Role connection test failed");
+  }
+  const expectedAccountId = getAwsAccountIdFromRoleArn(input.roleArn);
+
+  if (result.accountId !== expectedAccountId) {
+    throw new AwsConnectionVerificationError("AWS Role account mismatch");
+  }
+
+  return result;
+}
+
 export async function getAwsConnectionCloudFormationTemplate(
   input: GetAwsConnectionCloudFormationTemplateInput,
   repository: AwsConnectionRepository,
@@ -339,7 +415,7 @@ export async function getAwsConnectionCloudFormationTemplate(
 
   assertAwsConnectionCanRenderCloudFormationTemplate(awsConnection);
 
-  const roleName = recommendedRoleName;
+  const roleName = recommendedAwsConnectionRoleName;
   const stackName = createAwsConnectionStackName(awsConnection.id);
   const templateBody = createAwsConnectionCloudFormationTemplateBody({
     roleName,
@@ -367,6 +443,7 @@ export async function getAwsConnectionCloudFormationTemplate(
   const token = createAwsConnectionCloudFormationTemplateToken(
     {
       version: cloudFormationTemplateTokenVersion,
+      connectionId: awsConnection.id,
       roleName,
       callerPrincipalArn: input.callerPrincipalArn,
       externalId: awsConnection.externalId,
@@ -392,14 +469,27 @@ export async function getAwsConnectionCloudFormationTemplate(
   };
 }
 
-export function renderAwsConnectionCloudFormationTemplateFromToken(
+export async function renderAwsConnectionCloudFormationTemplateFromToken(
   token: string,
   tokenSecret: string,
+  repository: AwsConnectionRepository,
   now: Date = new Date()
-): string {
+): Promise<string> {
   const payload = parseAwsConnectionCloudFormationTemplateToken(token, tokenSecret);
 
   if (Date.parse(payload.expiresAt) <= now.getTime()) {
+    throw new AwsConnectionCloudFormationTemplateError(
+      "CloudFormation template URL is invalid or expired"
+    );
+  }
+
+  const awsConnection = await repository.findAwsConnectionById(payload.connectionId);
+
+  if (
+    !awsConnection ||
+    awsConnection.externalId !== payload.externalId ||
+    awsConnection.region !== supportedAwsConnectionRegion
+  ) {
     throw new AwsConnectionCloudFormationTemplateError(
       "CloudFormation template URL is invalid or expired"
     );
@@ -476,6 +566,22 @@ function assertAwsConnectionCanRenderCloudFormationTemplate(
   }
 }
 
+export function isRecommendedAwsConnectionRoleArn(roleArn: string): boolean {
+  const expectedRoleSuffix = `:role/${recommendedAwsConnectionRoleName}`;
+
+  return (
+    /^arn:aws:iam::\d{12}:role\/[\w+=,.@/-]+$/.test(roleArn) && roleArn.endsWith(expectedRoleSuffix)
+  );
+}
+
+function assertRecommendedAwsConnectionRoleArn(roleArn: string): void {
+  if (!isRecommendedAwsConnectionRoleArn(roleArn)) {
+    throw new AwsConnectionVerificationError(
+      `AWS Role ARN must use ${recommendedAwsConnectionRoleName}`
+    );
+  }
+}
+
 function createAwsConnectionStackName(connectionId: string): string {
   return `sketchcatch-aws-connection-${connectionId.slice(0, 8)}`;
 }
@@ -524,7 +630,23 @@ function createAwsConnectionCloudFormationTemplateUrl(
   publicBaseUrl: string,
   token: string
 ): string {
-  const templateUrl = new URL("/api/aws/connections/cloudformation-template", publicBaseUrl);
+  let baseUrl: URL;
+
+  try {
+    baseUrl = new URL(publicBaseUrl);
+  } catch {
+    throw new AwsConnectionCloudFormationTemplateError(
+      "SKETCHCATCH_PUBLIC_BASE_URL must be a valid https URL"
+    );
+  }
+
+  if (baseUrl.protocol !== "https:") {
+    throw new AwsConnectionCloudFormationTemplateError(
+      "SKETCHCATCH_PUBLIC_BASE_URL must use https"
+    );
+  }
+
+  const templateUrl = new URL("/api/aws/connections/cloudformation-template", baseUrl);
   templateUrl.searchParams.set("token", token);
 
   return templateUrl.toString();
@@ -545,6 +667,7 @@ function createAwsConnectionLaunchStackUrl(input: {
 
 type AwsConnectionCloudFormationTemplateTokenPayload = {
   version: typeof cloudFormationTemplateTokenVersion;
+  connectionId: string;
   roleName: string;
   callerPrincipalArn: string;
   externalId: string;
@@ -600,7 +723,10 @@ function parseAwsConnectionCloudFormationTemplateToken(
   return payload;
 }
 
-function signCloudFormationTemplateTokenPayload(encodedPayload: string, tokenSecret: string): string {
+function signCloudFormationTemplateTokenPayload(
+  encodedPayload: string,
+  tokenSecret: string
+): string {
   return createHmac("sha256", tokenSecret).update(encodedPayload).digest("base64url");
 }
 
@@ -609,8 +735,7 @@ function timingSafeEqualString(actual: string, expected: string): boolean {
   const expectedBuffer = Buffer.from(expected, "utf8");
 
   return (
-    actualBuffer.length === expectedBuffer.length &&
-    timingSafeEqual(actualBuffer, expectedBuffer)
+    actualBuffer.length === expectedBuffer.length && timingSafeEqual(actualBuffer, expectedBuffer)
   );
 }
 
@@ -625,6 +750,8 @@ function isAwsConnectionCloudFormationTemplateTokenPayload(
 
   return (
     payload.version === cloudFormationTemplateTokenVersion &&
+    typeof payload.connectionId === "string" &&
+    payload.connectionId.trim().length > 0 &&
     typeof payload.roleName === "string" &&
     payload.roleName.trim().length > 0 &&
     typeof payload.callerPrincipalArn === "string" &&

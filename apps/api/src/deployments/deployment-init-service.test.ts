@@ -38,8 +38,9 @@ type RepositoryCall =
       terraformArtifactId: string;
     }
   | {
-      name: "findVerifiedAwsConnectionForProject";
+      name: "findVerifiedAwsConnectionById";
       projectId: string;
+      awsConnectionId: string;
       accessContext: ProjectAccessContext;
     }
   | {
@@ -121,18 +122,21 @@ class FakeDeploymentRepository implements DeploymentRepository {
     return this.terraformArtifact;
   }
 
-  async findVerifiedAwsConnectionForProject(
+  async findVerifiedAwsConnectionById(
     candidateProjectId: string,
+    candidateAwsConnectionId: string,
     accessContext: ProjectAccessContext
   ) {
     this.calls.push({
-      name: "findVerifiedAwsConnectionForProject",
+      name: "findVerifiedAwsConnectionById",
       projectId: candidateProjectId,
+      awsConnectionId: candidateAwsConnectionId,
       accessContext
     });
 
     if (
       !this.awsConnection ||
+      this.awsConnection.id !== candidateAwsConnectionId ||
       this.awsConnection.projectId !== candidateProjectId ||
       this.awsConnection.userId !== accessContext.userId ||
       this.awsConnection.status !== "verified"
@@ -142,6 +146,18 @@ class FakeDeploymentRepository implements DeploymentRepository {
 
     return this.awsConnection;
   }
+
+  markDeploymentInitRunning: DeploymentRepository["markDeploymentInitRunning"] = async (
+    candidateDeploymentId
+  ) => {
+    if (!this.deployment || this.deployment.id !== candidateDeploymentId) {
+      return undefined;
+    }
+
+    this.deployment = { ...this.deployment, status: "RUNNING", updatedAt: fixedNow };
+
+    return this.deployment;
+  };
 
   async createDeployment(input: CreateDeploymentRecordInput): Promise<DeploymentRecord> {
     this.deployment = createDeploymentRecord(input.id, input);
@@ -313,6 +329,7 @@ function createDeploymentRecord(
     projectId,
     architectureId,
     terraformArtifactId,
+    awsConnectionId,
     status: "PENDING",
     planSummary: null,
     isBlocked: false,
@@ -490,8 +507,9 @@ test("runDeploymentInit restores the artifact, runs Terraform init, logs output,
   assert(
     repository.calls.some(
       (call) =>
-        call.name === "findVerifiedAwsConnectionForProject" &&
+        call.name === "findVerifiedAwsConnectionById" &&
         call.projectId === projectId &&
+        call.awsConnectionId === awsConnectionId &&
         call.accessContext.userId === userId
     )
   );
@@ -500,10 +518,7 @@ test("runDeploymentInit restores the artifact, runs Terraform init, logs output,
       (call) => call.name === "getNextDeploymentLogSequence" && call.deploymentId === deploymentId
     )
   );
-  assert.equal(
-    repository.calls.filter((call) => call.name === "createDeploymentLogs").length,
-    1
-  );
+  assert.equal(repository.calls.filter((call) => call.name === "createDeploymentLogs").length, 1);
   assert(!repository.calls.some((call) => call.name === "createDeploymentLog"));
   assert(!repository.calls.some((call) => call.name === "listDeploymentLogs"));
   assert(repository.calls.some((call) => call.name === "markDeploymentInitSucceeded"));
@@ -584,6 +599,47 @@ test("runDeploymentInit records failed init output, marks the deployment failed,
   assert(repository.calls.some((call) => call.name === "failDeployment"));
 });
 
+test("runDeploymentInit masks secret values in terraform failure summaries", async () => {
+  const repository = new FakeDeploymentRepository();
+
+  const result = await runDeploymentInit(
+    {
+      deploymentId,
+      accessContext: createAccessContext()
+    },
+    repository,
+    {
+      prepareTerraformWorkspace: async () => ({
+        workdir: "C:/tmp/sketchcatch-terraform-secret-summary",
+        mainFilePath: "C:/tmp/sketchcatch-terraform-secret-summary/main.tf",
+        cleanup: async () => undefined
+      }),
+      runTerraformInit: async () => ({
+        command: ["terraform", "init", "-backend=false", "-input=false", "-no-color"],
+        exitCode: 1,
+        stdout: "",
+        stderr: "Error: AWS_SECRET_ACCESS_KEY=temporary-secret-access-key\n",
+        timedOut: false
+      }),
+      prepareTerraformAwsCredentialEnv: async () => ({
+        env: {
+          AWS_ACCESS_KEY_ID: "temporary-access-key-id",
+          AWS_SECRET_ACCESS_KEY: "temporary-secret-access-key",
+          AWS_SESSION_TOKEN: "temporary-session-token",
+          AWS_REGION: "ap-northeast-2"
+        },
+        accountId: "123456789012",
+        callerArn:
+          "arn:aws:sts::123456789012:assumed-role/SketchCatchTerraformExecutionRole/sketchcatch-terraform",
+        region: "ap-northeast-2"
+      })
+    }
+  );
+
+  assert.equal(result.deployment.errorSummary, "Error: [REDACTED]");
+  assert.equal(result.deployment.errorSummary.includes("temporary-secret-access-key"), false);
+});
+
 test("runDeploymentInit requires a verified AWS connection before preparing the Terraform workspace", async () => {
   const repository = new FakeDeploymentRepository();
   repository.awsConnection = undefined;
@@ -612,7 +668,7 @@ test("runDeploymentInit requires a verified AWS connection before preparing the 
           }
         }
       ),
-    new DeploymentNotFoundError("Verified AWS connection not found for deployment project")
+    new DeploymentNotFoundError("Verified AWS connection not found for deployment")
   );
 
   assert.equal(workspacePrepared, false);
@@ -621,7 +677,7 @@ test("runDeploymentInit requires a verified AWS connection before preparing the 
   assert.equal(repository.deployment?.failureStage, "init");
   assert.equal(
     repository.deployment?.errorSummary,
-    "Verified AWS connection not found for deployment project"
+    "Verified AWS connection not found for deployment"
   );
 });
 

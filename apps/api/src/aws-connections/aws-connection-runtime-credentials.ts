@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { AwsConnection } from "@sketchcatch/types";
 import {
-  canAssumeRoleWithoutExternalId,
+  assertAwsRoleRequiresExternalId,
   getAwsAccountIdFromRoleArn,
   supportedAwsConnectionRegion,
   type AwsCallerIdentity,
@@ -68,20 +68,14 @@ export async function prepareTerraformAwsCredentialEnv(
     throw new AwsConnectionRuntimeCredentialsError("AWS Role account mismatch");
   }
 
-  if (
-    await canAssumeRoleWithoutExternalId(
-      {
-        roleArn,
-        region: awsConnection.region,
-        roleSessionName
-      },
-      gateway
-    )
-  ) {
-    throw new AwsConnectionRuntimeCredentialsError(
-      "AWS Role trust policy must require external ID"
-    );
-  }
+  await assertRoleRequiresExternalIdForTerraform(
+    {
+      roleArn,
+      region: awsConnection.region,
+      roleSessionName
+    },
+    gateway
+  );
 
   return {
     env: createTerraformAwsCredentialEnv(credentials, awsConnection.region),
@@ -182,6 +176,27 @@ function assertVerifiedAwsConnection(
 
   if (awsConnection.externalId.trim().length === 0) {
     throw new AwsConnectionRuntimeCredentialsError("AWS connection external ID is missing");
+  }
+}
+
+async function assertRoleRequiresExternalIdForTerraform(
+  input: {
+    roleArn: string;
+    region: string;
+    roleSessionName: string;
+  },
+  gateway: AwsConnectionStsGateway
+): Promise<void> {
+  try {
+    await assertAwsRoleRequiresExternalId(input, gateway);
+  } catch (error) {
+    if (error instanceof Error) {
+      throw new AwsConnectionRuntimeCredentialsError(error.message);
+    }
+
+    throw new AwsConnectionRuntimeCredentialsError(
+      "AWS Role external ID requirement could not be verified"
+    );
   }
 }
 

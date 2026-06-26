@@ -54,10 +54,30 @@ test("deployment approvals reference users by approved_by_user_id", () => {
 test("deployment log sequences are unique per deployment", () => {
   const config = getTableConfig(deploymentLogs);
 
-  assert(hasUniqueIndex(config.indexes, "deployment_logs_deployment_sequence_unique", [
-    "deployment_id",
-    "sequence"
-  ]));
+  assert(
+    hasUniqueIndex(config.indexes, "deployment_logs_deployment_sequence_unique", [
+      "deployment_id",
+      "sequence"
+    ])
+  );
+});
+
+test("deployments explicitly reference the AWS connection selected for execution", () => {
+  const config = getTableConfig(deployments);
+
+  assert(findColumn(config.columns, "aws_connection_id"));
+  assert(hasIndex(config.indexes, "deployments_aws_connection_id_idx", ["aws_connection_id"]));
+  assert(
+    config.foreignKeys.some((foreignKey) => {
+      const reference = foreignKey.reference();
+
+      return (
+        reference.columns.some((column) => column.name === "aws_connection_id") &&
+        reference.foreignTable === awsConnections &&
+        reference.foreignColumns.some((column) => column.name === "id")
+      );
+    })
+  );
 });
 
 test("AWS connections store generated external ids without raw credentials", () => {
@@ -75,7 +95,7 @@ test("AWS connections store generated external ids without raw credentials", () 
 
 function findColumn(columns: Array<{ name: string }>, name: string) {
   return columns.find((column) => column.name === name) as
-    | ({ name: string; primary?: boolean })
+    | { name: string; primary?: boolean }
     | undefined;
 }
 
@@ -94,6 +114,23 @@ function hasUniqueIndex(
     (index) =>
       index.config.name === name &&
       index.config.unique === true &&
+      index.config.columns.map(getColumnName).join(",") === columns.join(",")
+  );
+}
+
+function hasIndex(
+  indexes: Array<{
+    config: {
+      name?: string;
+      columns: unknown[];
+    };
+  }>,
+  name: string,
+  columns: string[]
+): boolean {
+  return indexes.some(
+    (index) =>
+      index.config.name === name &&
       index.config.columns.map(getColumnName).join(",") === columns.join(",")
   );
 }

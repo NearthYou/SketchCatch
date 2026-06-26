@@ -48,12 +48,19 @@ type RepositoryCall =
       terraformArtifactId: string;
     }
   | {
+      name: "findVerifiedAwsConnectionById";
+      projectId: string;
+      awsConnectionId: string;
+      accessContext: ProjectAccessContext;
+    }
+  | {
       name: "createDeployment";
       input: {
         id: string;
         projectId: string;
         architectureId: string;
         terraformArtifactId: string;
+        awsConnectionId: string;
         status: "PENDING";
       };
     }
@@ -161,19 +168,31 @@ class FakeDeploymentRepository implements DeploymentRepository {
       terraformArtifactId: candidateTerraformArtifactId
     });
 
-    if (!this.terraformArtifactById || this.terraformArtifactById.id !== candidateTerraformArtifactId) {
+    if (
+      !this.terraformArtifactById ||
+      this.terraformArtifactById.id !== candidateTerraformArtifactId
+    ) {
       return undefined;
     }
 
     return this.terraformArtifactById;
   }
 
-  async findVerifiedAwsConnectionForProject(
+  async findVerifiedAwsConnectionById(
     candidateProjectId: string,
+    candidateAwsConnectionId: string,
     accessContext: ProjectAccessContext
   ) {
+    this.calls.push({
+      name: "findVerifiedAwsConnectionById",
+      projectId: candidateProjectId,
+      awsConnectionId: candidateAwsConnectionId,
+      accessContext
+    });
+
     if (
       !this.awsConnection ||
+      this.awsConnection.id !== candidateAwsConnectionId ||
       this.awsConnection.projectId !== candidateProjectId ||
       this.awsConnection.userId !== accessContext.userId ||
       this.awsConnection.status !== "verified"
@@ -183,6 +202,18 @@ class FakeDeploymentRepository implements DeploymentRepository {
 
     return this.awsConnection;
   }
+
+  markDeploymentInitRunning: DeploymentRepository["markDeploymentInitRunning"] = async (
+    candidateDeploymentId
+  ) => {
+    if (this.deployment?.id !== candidateDeploymentId || this.deployment.status === "RUNNING") {
+      return undefined;
+    }
+
+    this.deployment = { ...this.deployment, status: "RUNNING" };
+
+    return this.deployment;
+  };
 
   async createDeployment(input: Extract<RepositoryCall, { name: "createDeployment" }>["input"]) {
     this.calls.push({
@@ -316,6 +347,7 @@ function createDeploymentRecord(
     projectId,
     architectureId,
     terraformArtifactId,
+    awsConnectionId,
     status: "PENDING",
     planSummary: null,
     isBlocked: false,
@@ -400,6 +432,7 @@ function createInput(overrides: Partial<CreateDeploymentInput> = {}): CreateDepl
     },
     architectureId,
     terraformArtifactId,
+    awsConnectionId,
     ...overrides
   };
 }
@@ -432,12 +465,22 @@ test("createDeployment verifies project, architecture, and terraform artifact ow
       architectureId
     },
     {
+      name: "findVerifiedAwsConnectionById",
+      projectId,
+      awsConnectionId,
+      accessContext: {
+        kind: "user",
+        userId
+      }
+    },
+    {
       name: "createDeployment",
       input: {
         id: deploymentId,
         projectId,
         architectureId,
         terraformArtifactId,
+        awsConnectionId,
         status: "PENDING"
       }
     }
@@ -531,6 +574,47 @@ test("createDeployment rejects an artifact that is not a terraform file for the 
       terraformArtifactId,
       projectId,
       architectureId
+    }
+  ]);
+});
+
+test("createDeployment rejects an AWS connection that is not verified for the project", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.awsConnection = createVerifiedAwsConnection({ status: "pending" });
+
+  await assert.rejects(
+    () => createDeployment(createInput(), repository, () => deploymentId),
+    new DeploymentNotFoundError("Verified AWS connection not found for project")
+  );
+
+  assert.deepEqual(repository.calls, [
+    {
+      name: "findAccessibleProject",
+      projectId,
+      accessContext: {
+        kind: "user",
+        userId
+      }
+    },
+    {
+      name: "findArchitectureInProject",
+      architectureId,
+      projectId
+    },
+    {
+      name: "findTerraformArtifactForArchitecture",
+      terraformArtifactId,
+      projectId,
+      architectureId
+    },
+    {
+      name: "findVerifiedAwsConnectionById",
+      projectId,
+      awsConnectionId,
+      accessContext: {
+        kind: "user",
+        userId
+      }
     }
   ]);
 });

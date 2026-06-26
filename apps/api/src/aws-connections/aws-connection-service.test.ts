@@ -96,8 +96,18 @@ class FakeAwsConnectionRepository implements AwsConnectionRepository {
     return this.awsConnection;
   }
 
+  async findAwsConnectionById(candidateConnectionId: string) {
+    if (!this.awsConnection || this.awsConnection.id !== candidateConnectionId) {
+      return undefined;
+    }
+
+    return this.awsConnection;
+  }
+
   async updateAwsConnectionVerification(input: {
+    projectId: string;
     connectionId: string;
+    userId: string;
     accountId: string | null;
     roleArn: string;
     status: "verified" | "failed";

@@ -33,9 +33,12 @@ export async function listProjects(): Promise<Project[]> {
 }
 
 export async function getProject(projectId: string): Promise<Project> {
-  const response = await apiFetch<ProjectDetailsResponse>(`/projects/${encodeURIComponent(projectId)}`, {
-    auth: true
-  });
+  const response = await apiFetch<ProjectDetailsResponse>(
+    `/projects/${encodeURIComponent(projectId)}`,
+    {
+      auth: true
+    }
+  );
   return response.project;
 }
 
@@ -79,13 +82,23 @@ export async function createAwsConnectionSetup({
 }
 
 export async function testAwsConnection(
-  input: TestAwsConnectionRequest
+  input: {
+    projectId: string;
+    connectionId: string;
+  } & TestAwsConnectionRequest
 ): Promise<TestAwsConnectionResponse> {
-  return apiFetch<TestAwsConnectionResponse>("/aws/connections/test", {
-    auth: true,
-    method: "POST",
-    body: input
-  });
+  return apiFetch<TestAwsConnectionResponse>(
+    `/projects/${encodeURIComponent(input.projectId)}/aws-connections/${encodeURIComponent(
+      input.connectionId
+    )}/test`,
+    {
+      auth: true,
+      method: "POST",
+      body: {
+        roleArn: input.roleArn
+      }
+    }
+  );
 }
 
 export async function verifyAwsConnection({

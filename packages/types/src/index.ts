@@ -191,6 +191,7 @@ export type Deployment = DeploymentBlock & {
   projectId: string;
   architectureId: string;
   terraformArtifactId: string;
+  awsConnectionId: string | null;
   status: DeploymentStatus;
   planSummary: DeploymentPlanSummary | null;
   failureStage: DeploymentFailureStage | null;
@@ -254,6 +255,12 @@ export type AwsConnection = {
   updatedAt: IsoDateTimeString;
 };
 
+export type CreateDeploymentRequest = {
+  architectureId: string;
+  terraformArtifactId: string;
+  awsConnectionId: string;
+};
+
 export type CreateAwsConnectionRequest = {
   region: string;
 };
@@ -289,8 +296,6 @@ export type CreateAwsConnectionResponse = {
 
 export type TestAwsConnectionRequest = {
   roleArn: string;
-  externalId: string;
-  region: string;
 };
 
 export type TestAwsConnectionResponse = {

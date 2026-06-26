@@ -171,8 +171,18 @@ class FakeAwsConnectionRepository implements AwsConnectionRepository {
     return this.awsConnection;
   }
 
+  async findAwsConnectionById(candidateConnectionId: string) {
+    if (!this.awsConnection || this.awsConnection.id !== candidateConnectionId) {
+      return undefined;
+    }
+
+    return this.awsConnection;
+  }
+
   async updateAwsConnectionVerification(input: {
+    projectId: string;
     connectionId: string;
+    userId: string;
     accountId: string | null;
     roleArn: string;
     status: "verified" | "failed";
@@ -303,8 +313,9 @@ test("POST /api/projects/:projectId/aws-connections returns caller principal ARN
   await app.close();
 });
 
-test("POST /api/aws/connections/test returns caller identity without raw credentials", async () => {
+test("POST /api/projects/:projectId/aws-connections/:connectionId/test returns caller identity without raw credentials", async () => {
   const repository = new FakeAwsConnectionRepository();
+  repository.awsConnection = createAwsConnectionRecord();
   const tester = new FakeAwsConnectionTester();
   const app = await buildAwsConnectionTestApp(repository, {
     awsConnectionTester: tester
@@ -312,12 +323,10 @@ test("POST /api/aws/connections/test returns caller identity without raw credent
 
   const response = await app.inject({
     method: "POST",
-    url: "/api/aws/connections/test",
+    url: `/api/projects/${projectId}/aws-connections/${awsConnectionId}/test`,
     headers: authHeaders(),
     payload: {
-      roleArn: testRoleArn,
-      externalId,
-      region: "ap-northeast-2"
+      roleArn: testRoleArn
     }
   });
 
@@ -350,8 +359,9 @@ test("POST /api/aws/connections/test returns caller identity without raw credent
   await app.close();
 });
 
-test("POST /api/aws/connections/test maps STS failures to bad_request", async () => {
+test("POST /api/projects/:projectId/aws-connections/:connectionId/test maps STS failures to bad_request", async () => {
   const repository = new FakeAwsConnectionRepository();
+  repository.awsConnection = createAwsConnectionRecord();
   const tester = new FakeAwsConnectionTester(
     new AwsConnectionTestError("AWS Role connection test failed")
   );
@@ -361,12 +371,10 @@ test("POST /api/aws/connections/test maps STS failures to bad_request", async ()
 
   const response = await app.inject({
     method: "POST",
-    url: "/api/aws/connections/test",
+    url: `/api/projects/${projectId}/aws-connections/${awsConnectionId}/test`,
     headers: authHeaders(),
     payload: {
-      roleArn: testRoleArn,
-      externalId,
-      region: "ap-northeast-2"
+      roleArn: testRoleArn
     }
   });
 
@@ -455,11 +463,20 @@ test("GET /api/projects/:projectId/aws-connections/:connectionId/cloudformation-
   assert.equal(body.region, "ap-northeast-2");
   assert.deepEqual(body.capabilities, ["CAPABILITY_NAMED_IAM"]);
   assert.match(body.templateBody, /Type: AWS::IAM::Role/);
-  assert.match(body.templateBody, new RegExp(callerPrincipalArn.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.match(
+    body.templateBody,
+    new RegExp(callerPrincipalArn.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+  );
   assert.match(body.templateBody, new RegExp(externalId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
-  assert.match(body.templateUrl ?? "", /^https:\/\/api\.sketchcatch\.test\/api\/aws\/connections\/cloudformation-template\?token=/);
+  assert.match(
+    body.templateUrl ?? "",
+    /^https:\/\/api\.sketchcatch\.test\/api\/aws\/connections\/cloudformation-template\?token=/
+  );
   assert.equal(body.templateUrlExpiresAt, "2026-06-26T01:00:00.000Z");
-  assert.match(body.launchStackUrl ?? "", /^https:\/\/console\.aws\.amazon\.com\/cloudformation\/home\?region=ap-northeast-2#/);
+  assert.match(
+    body.launchStackUrl ?? "",
+    /^https:\/\/console\.aws\.amazon\.com\/cloudformation\/home\?region=ap-northeast-2#/
+  );
   assert.match(body.launchStackUrl ?? "", /templateURL=/);
   assert.match(body.launchStackUrl ?? "", /stackName=sketchcatch-aws-connection-33333333/);
 
@@ -494,6 +511,41 @@ test("GET /api/aws/connections/cloudformation-template returns public template y
   assert.equal(response.headers["content-type"], "application/x-yaml");
   assert.equal(response.body, setupBody.templateBody);
   assert.match(response.body, /RoleName: "SketchCatchTerraformExecutionRole"/);
+
+  await app.close();
+});
+
+test("GET /api/aws/connections/cloudformation-template rejects a token after the connection row disappears", async () => {
+  const repository = new FakeAwsConnectionRepository();
+  repository.awsConnection = createAwsConnectionRecord();
+  const app = await buildAwsConnectionTestApp(repository, {
+    awsConnectionConfig: {
+      callerPrincipalArn,
+      publicBaseUrl: "https://api.sketchcatch.test"
+    }
+  });
+
+  const setupResponse = await app.inject({
+    method: "GET",
+    url: `/api/projects/${projectId}/aws-connections/${awsConnectionId}/cloudformation-template`,
+    headers: authHeaders()
+  });
+  const setupBody = setupResponse.json() as AwsConnectionCloudFormationTemplateResponse;
+  const templateUrl = new URL(setupBody.templateUrl ?? "");
+  const templatePath = `${templateUrl.pathname}${templateUrl.search}`;
+
+  repository.awsConnection = undefined;
+
+  const response = await app.inject({
+    method: "GET",
+    url: templatePath
+  });
+
+  assert.equal(response.statusCode, 400);
+  assert.deepEqual(response.json(), {
+    error: "bad_request",
+    message: "CloudFormation template URL is invalid or expired"
+  });
 
   await app.close();
 });

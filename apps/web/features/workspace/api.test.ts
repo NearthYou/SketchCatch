@@ -189,13 +189,27 @@ test("createAwsConnectionSetup requests generated Role setup values", async (con
   assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), {
     region: "ap-northeast-2"
   });
-  assert.equal(response.awsConnection.externalId, "sc_conn_33333333-3333-4333-8333-333333333333_random");
-  assert.equal(response.callerPrincipalArn, "arn:aws:iam::123456789012:role/SketchCatchRuntimeRole");
+  assert.equal(
+    response.awsConnection.externalId,
+    "sc_conn_33333333-3333-4333-8333-333333333333_random"
+  );
+  assert.equal(
+    response.callerPrincipalArn,
+    "arn:aws:iam::123456789012:role/SketchCatchRuntimeRole"
+  );
   assert.equal(response.roleSetup.roleName, "SketchCatchTerraformExecutionRole");
-  assert.equal(response.roleSetup.externalId, "sc_conn_33333333-3333-4333-8333-333333333333_random");
-  assert.deepEqual(response.roleSetup.permissionSetup.verificationActions, ["sts:GetCallerIdentity"]);
+  assert.equal(
+    response.roleSetup.externalId,
+    "sc_conn_33333333-3333-4333-8333-333333333333_random"
+  );
+  assert.deepEqual(response.roleSetup.permissionSetup.verificationActions, [
+    "sts:GetCallerIdentity"
+  ]);
   assert.equal(response.roleSetup.permissionSetup.initialPolicyDocument, null);
-  assert.equal(response.callerRoleSetup.assumableRoleArnPattern, "arn:aws:iam::*:role/SketchCatchTerraformExecutionRole");
+  assert.equal(
+    response.callerRoleSetup.assumableRoleArnPattern,
+    "arn:aws:iam::*:role/SketchCatchTerraformExecutionRole"
+  );
 });
 
 test("testAwsConnection requests STS connection test without exposing credentials", async (context) => {
@@ -231,18 +245,19 @@ test("testAwsConnection requests STS connection test without exposing credential
   };
 
   const response = await testAwsConnection({
-    roleArn: "arn:aws:iam::123456789012:role/SketchCatchTerraformExecutionRole",
-    externalId: "sc_conn_33333333-3333-4333-8333-333333333333_random",
-    region: "ap-northeast-2"
+    projectId: project.id,
+    connectionId: "33333333-3333-4333-8333-333333333333",
+    roleArn: "arn:aws:iam::123456789012:role/SketchCatchTerraformExecutionRole"
   });
 
-  assert.equal(String(requests[0]?.input), "/api/aws/connections/test");
+  assert.equal(
+    String(requests[0]?.input),
+    `/api/projects/${project.id}/aws-connections/33333333-3333-4333-8333-333333333333/test`
+  );
   assert.equal(requests[0]?.init?.method, "POST");
   assert.equal(new Headers(requests[0]?.init?.headers).get("authorization"), "Bearer access-token");
   assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), {
-    roleArn: "arn:aws:iam::123456789012:role/SketchCatchTerraformExecutionRole",
-    externalId: "sc_conn_33333333-3333-4333-8333-333333333333_random",
-    region: "ap-northeast-2"
+    roleArn: "arn:aws:iam::123456789012:role/SketchCatchTerraformExecutionRole"
   });
   assert.deepEqual(response, {
     ok: true,
@@ -346,7 +361,8 @@ test("getAwsConnectionCloudFormationTemplate fetches the launch stack setup", as
         stackName: "sketchcatch-aws-connection-33333333",
         region: "ap-northeast-2",
         capabilities: ["CAPABILITY_NAMED_IAM"],
-        templateBody: "Resources:\n  SketchCatchTerraformExecutionRole:\n    Type: AWS::IAM::Role\n",
+        templateBody:
+          "Resources:\n  SketchCatchTerraformExecutionRole:\n    Type: AWS::IAM::Role\n",
         templateUrl:
           "https://api.sketchcatch.test/api/aws/connections/cloudformation-template?token=signed",
         templateUrlExpiresAt: "2026-06-26T01:00:00.000Z",
