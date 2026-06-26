@@ -93,11 +93,6 @@ export function DashboardShell({ children }: { readonly children: ReactNode }) {
 
         <div className="dashboardSidebarSpacer" />
 
-        <Link className="dashboardSidebarAction" href="/workspace">
-          <DashboardIcon name="plus" />
-          <span>새 설계 시작</span>
-        </Link>
-
         <div className="dashboardSidebarUser">
           <span className="dashboardAvatar" aria-hidden="true">
             {avatarText}
@@ -117,7 +112,7 @@ export function DashboardShell({ children }: { readonly children: ReactNode }) {
             <DashboardIcon name="search" />
             <input aria-label="내 프로젝트 검색" placeholder="내 프로젝트에서 검색" type="search" />
           </label>
-          <Link className="dashboardTopbarAction" href="/workspace">
+          <Link className="dashboardTopbarAction" href="/workspace/new">
             <DashboardIcon name="plus" />
             <span>새로 만들기</span>
           </Link>

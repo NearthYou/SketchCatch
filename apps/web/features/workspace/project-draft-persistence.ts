@@ -6,11 +6,14 @@ const PROJECT_DRAFT_STORE = "projectDrafts";
 const CLIENT_METADATA_STORE = "clientMetadata";
 const WORKSPACE_METADATA_ID = "workspace";
 
+export type WorkspaceCloudPlatform = "aws" | "gcp";
+
 export type WorkspaceClientMetadata = {
   id: typeof WORKSPACE_METADATA_ID;
   workspaceId: string;
   activeProjectId?: string | undefined;
   activeProjectName?: string | undefined;
+  cloudPlatform?: WorkspaceCloudPlatform | undefined;
   updatedAt: string;
 };
 
@@ -32,6 +35,18 @@ export type InitialDiagramChoice = {
 
 export function createDraftStorageKey(workspaceId: string, projectId: string): string {
   return `${workspaceId}:${projectId}`;
+}
+
+export function createWorkspaceId(): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return `workspace-${crypto.randomUUID()}`;
+  }
+
+  return `workspace-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+export function isWorkspaceCloudPlatform(value: unknown): value is WorkspaceCloudPlatform {
+  return value === "aws" || value === "gcp";
 }
 
 export function createLocalProjectDraft({
