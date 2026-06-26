@@ -10,7 +10,9 @@ import type {
   ArchitectureDraftSecurityPriority,
   ArchitectureDraftTrafficLevel,
   ArchitectureJson,
-  TerraformGenerateResponse
+  TerraformDiagnostic,
+  TerraformGenerateResponse,
+  TerraformValidateResponse
 } from "@sketchcatch/types";
 import { apiFetch, getApiErrorMessage } from "../../lib/api-client";
 import { DraftMetadataPanel } from "./DraftMetadataPanel";
@@ -36,6 +38,11 @@ export function AiWorkspaceClient() {
     useState<AiTerraformPreviewExplanationResult | null>(null);
   const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState("");
+  const [terraformDiagnostics, setTerraformDiagnostics] = useState<TerraformDiagnostic[]>([]);
+  const [isValidatingTerraform, setIsValidatingTerraform] = useState(false);
+  const [terraformDiagnosticsError, setTerraformDiagnosticsError] = useState<string | null>(null);
+  const [hasStaleTerraformDiagnostics, setHasStaleTerraformDiagnostics] = useState(false);
+  const [hasValidatedTerraform, setHasValidatedTerraform] = useState(false);
 
   const architectureJson = useMemo<ArchitectureJson | null>(() => draft?.architectureJson ?? null, [draft]);
 
@@ -105,7 +112,46 @@ export function AiWorkspaceClient() {
 
       setTerraformCode(result.terraformCode);
       setTerraformPreview(null);
+      setTerraformDiagnostics([]);
+      setTerraformDiagnosticsError(null);
+      setHasStaleTerraformDiagnostics(false);
+      setHasValidatedTerraform(false);
     });
+  }
+
+  function handleTerraformCodeChange(nextCode: string): void {
+    setTerraformCode(nextCode);
+    setTerraformPreview(null);
+    setTerraformDiagnosticsError(null);
+    setHasStaleTerraformDiagnostics(hasValidatedTerraform);
+  }
+
+  async function runTerraformValidation(): Promise<void> {
+    setIsValidatingTerraform(true);
+    setTerraformDiagnosticsError(null);
+
+    try {
+      const result = await apiFetch<TerraformValidateResponse>("/terraform/validate", {
+        auth: true,
+        body: {
+          terraformCode
+        },
+        method: "POST"
+      });
+
+      setTerraformDiagnostics(result.diagnostics);
+      setHasStaleTerraformDiagnostics(false);
+      setHasValidatedTerraform(true);
+    } catch (error) {
+      setTerraformDiagnosticsError(
+        getApiErrorMessage(
+          error,
+          error instanceof Error ? error.message : "Terraform 문법 점검 중 오류가 발생했습니다."
+        )
+      );
+    } finally {
+      setIsValidatingTerraform(false);
+    }
   }
 
   // 모든 버튼 요청이 같은 loading/error 처리를 쓰도록 감싸는 작은 공통 함수입니다.
@@ -255,10 +301,16 @@ export function AiWorkspaceClient() {
 
       <TerraformPreviewPanel
         isLoading={status === "loading"}
+        isValidatingTerraform={isValidatingTerraform}
+        hasStaleTerraformDiagnostics={hasStaleTerraformDiagnostics}
+        hasValidatedTerraform={hasValidatedTerraform}
         onDiagramToTerraform={runDiagramToTerraform}
-        onTerraformCodeChange={setTerraformCode}
+        onTerraformCodeChange={handleTerraformCodeChange}
         onTerraformPreview={runTerraformPreview}
+        onTerraformValidate={runTerraformValidation}
         terraformCode={terraformCode}
+        terraformDiagnostics={terraformDiagnostics}
+        terraformDiagnosticsError={terraformDiagnosticsError}
         terraformPreview={terraformPreview}
       />
 
