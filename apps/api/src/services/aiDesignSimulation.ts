@@ -97,6 +97,7 @@ function createBottlenecks(
 function createFailureScenarios(nodes: readonly ResourceNode[]): DesignSimulationFailureScenario[] {
   const ec2Nodes = nodes.filter((node) => node.type === "EC2");
   const rdsNodes = nodes.filter((node) => node.type === "RDS");
+  const publicExposureNodes = nodes.filter(hasPublicExposure);
   const scenarios: DesignSimulationFailureScenario[] = [];
 
   if (ec2Nodes.length === 1) {
@@ -127,7 +128,50 @@ function createFailureScenarios(nodes: readonly ResourceNode[]): DesignSimulatio
     }
   }
 
+  for (const node of publicExposureNodes) {
+    scenarios.push({
+      id: `failure-public-exposure-${node.id}`,
+      title: "Public 노출 Resource 접근 시도 증가 가능",
+      affectedResourceIds: [node.id],
+      description: "전체 인터넷에 열린 접근 규칙은 연습 환경에서도 불필요한 접속 시도와 보안 점검 부담을 늘릴 수 있습니다.",
+      mitigation: "접근 대상을 본인 IP나 팀 관리용 CIDR로 줄이는 방안을 먼저 검토하세요."
+    });
+  }
+
   return scenarios;
+}
+
+// 현재 MVP에서 확실히 표현된 public 노출인 SSH 전체 공개 Security Group을 찾습니다.
+function hasPublicExposure(node: ResourceNode): boolean {
+  return node.type === "SECURITY_GROUP" && hasOpenSshRule(node);
+}
+
+// Security Group config의 ingress 배열에서 SSH 전체 공개 조합을 확인합니다.
+function hasOpenSshRule(node: ResourceNode): boolean {
+  const ingress = node.config["ingress"];
+
+  if (!Array.isArray(ingress)) {
+    return false;
+  }
+
+  return ingress.some(isOpenSshRule);
+}
+
+// ingress rule 하나를 unknown에서 좁힌 뒤 22번 포트와 0.0.0.0/0 조합만 잡습니다.
+function isOpenSshRule(value: unknown): boolean {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  const port = value["port"];
+  const cidr = value["cidr"];
+
+  return (port === 22 || port === "22") && cidr === "0.0.0.0/0";
+}
+
+// Resource config 내부의 unknown 값을 안전하게 읽기 위한 작은 타입 guard입니다.
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 // 낮은 예산에서 비용 압박이 생기기 쉬운 Resource를 별도 문장으로 분리합니다.

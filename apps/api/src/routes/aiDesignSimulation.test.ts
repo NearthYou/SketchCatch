@@ -112,3 +112,43 @@ test("POST /api/ai/design-simulation estimates flow, bottlenecks, failures, and 
 
   await app.close();
 });
+
+test("POST /api/ai/design-simulation explains public exposure as a failure scenario", async () => {
+  const app = buildApp();
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/ai/design-simulation",
+    payload: {
+      architectureJson: {
+        nodes: [
+          {
+            id: "sg-public-ssh",
+            type: "SECURITY_GROUP",
+            label: "Public SSH",
+            positionX: 120,
+            positionY: 180,
+            config: {
+              ingress: [
+                {
+                  protocol: "tcp",
+                  port: 22,
+                  cidr: "0.0.0.0/0"
+                }
+              ]
+            }
+          }
+        ],
+        edges: []
+      }
+    }
+  });
+
+  assert.equal(response.statusCode, 200);
+
+  const body = designSimulationResponseSchema.parse(response.json());
+
+  assert.ok(body.failureScenarios.some((item) => item.affectedResourceIds.includes("sg-public-ssh")));
+
+  await app.close();
+});
