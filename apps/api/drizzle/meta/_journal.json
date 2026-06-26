@@ -57,6 +57,13 @@
       "when": 1782442892811,
       "tag": "0007_deployment_schema_contract_cleanup",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1782454926900,
+      "tag": "0008_cloudy_warhawk",
+      "breakpoints": true
     }
   ]
 }

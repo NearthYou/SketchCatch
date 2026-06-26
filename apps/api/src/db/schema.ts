@@ -45,6 +45,12 @@ export const deploymentLogLevelEnum = pgEnum("deployment_log_level", [
   "ERROR"
 ]);
 
+export const awsConnectionStatusEnum = pgEnum("aws_connection_status", [
+  "pending",
+  "verified",
+  "failed"
+]);
+
 export const users = pgTable(
   "users",
   {
@@ -221,10 +227,37 @@ export const deploymentLogs = pgTable(
   ]
 );
 
+export const awsConnections = pgTable(
+  "aws_connections",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    projectId: varchar("project_id", { length: 36 })
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    userId: varchar("user_id", { length: 36 })
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    accountId: varchar("account_id", { length: 12 }),
+    roleArn: text("role_arn"),
+    externalId: varchar("external_id", { length: 256 }).notNull(),
+    region: varchar("region", { length: 32 }).notNull(),
+    status: awsConnectionStatusEnum("status").notNull().default("pending"),
+    lastVerifiedAt: timestamp("last_verified_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [
+    index("aws_connections_project_id_idx").on(table.projectId),
+    index("aws_connections_user_id_idx").on(table.userId),
+    uniqueIndex("aws_connections_external_id_unique").on(table.externalId)
+  ]
+);
+
 export const usersRelations = relations(users, ({ many }) => ({
   projects: many(projects),
   refreshTokens: many(refreshTokens),
-  loginAttempts: many(loginAttempts)
+  loginAttempts: many(loginAttempts),
+  awsConnections: many(awsConnections)
 }));
 
 export const refreshTokensRelations = relations(refreshTokens, ({ one }) => ({
@@ -249,7 +282,8 @@ export const projectsRelations = relations(projects, ({ many, one }) => ({
   draft: one(projectDrafts),
   architectures: many(architectures),
   assets: many(projectAssets),
-  deployments: many(deployments)
+  deployments: many(deployments),
+  awsConnections: many(awsConnections)
 }));
 
 export const architecturesRelations = relations(architectures, ({ many, one }) => ({
@@ -298,6 +332,17 @@ export const deploymentLogsRelations = relations(deploymentLogs, ({ one }) => ({
   deployment: one(deployments, {
     fields: [deploymentLogs.deploymentId],
     references: [deployments.id]
+  })
+}));
+
+export const awsConnectionsRelations = relations(awsConnections, ({ one }) => ({
+  project: one(projects, {
+    fields: [awsConnections.projectId],
+    references: [projects.id]
+  }),
+  user: one(users, {
+    fields: [awsConnections.userId],
+    references: [users.id]
   })
 }));
 

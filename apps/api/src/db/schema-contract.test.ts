@@ -2,6 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { getTableConfig } from "drizzle-orm/pg-core";
 import {
+  awsConnectionStatusEnum,
+  awsConnections,
   deploymentFailureStageEnum,
   deploymentLogs,
   deploymentStatusEnum,
@@ -56,6 +58,19 @@ test("deployment log sequences are unique per deployment", () => {
     "deployment_id",
     "sequence"
   ]));
+});
+
+test("AWS connections store generated external ids without raw credentials", () => {
+  const config = getTableConfig(awsConnections);
+
+  assert.equal(awsConnectionStatusEnum.enumName, "aws_connection_status");
+  assert(findColumn(config.columns, "external_id"));
+  assert(findColumn(config.columns, "role_arn"));
+  assert(findColumn(config.columns, "account_id"));
+  assert.equal(findColumn(config.columns, "access_key_id"), undefined);
+  assert.equal(findColumn(config.columns, "secret_access_key"), undefined);
+  assert.equal(findColumn(config.columns, "session_token"), undefined);
+  assert(hasUniqueIndex(config.indexes, "aws_connections_external_id_unique", ["external_id"]));
 });
 
 function findColumn(columns: Array<{ name: string }>, name: string) {
