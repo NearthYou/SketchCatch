@@ -382,6 +382,10 @@ export type AiPreDeploymentAnalysisResult = {
   checklist: ChecklistItem[];
 };
 
+export type AiPreDeploymentCheckFromDiagramRequest = {
+  diagramJson: DiagramJson;
+};
+
 export type AiTerraformStage = "validate" | "export" | "plan" | "apply";
 
 export type AiTerraformErrorCategory =
