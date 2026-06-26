@@ -56,8 +56,12 @@ _Avoid_: Validation, review, inspection
 A single user-facing observation produced by a Pre-Deployment Check, tied to a cost, security, permission, configuration, performance, or availability concern.
 _Avoid_: AI warning, issue, message
 
+**Architecture Suggestion**:
+A structured, non-applied proposal for changing a Practice Architecture in response to a Check Finding or Design Simulation result.
+_Avoid_: Auto fix, patch, edit command
+
 **Design Simulation**:
-An analysis that estimates request flow, bottlenecks, cost, and capacity from the Infrastructure Graph under stated assumptions.
+An analysis that estimates request flow, bottlenecks, failure exposure, cost pressure, and capacity from the Infrastructure Graph under stated assumptions.
 _Avoid_: Monitoring, load test, benchmark
 
 **Design Version**:
