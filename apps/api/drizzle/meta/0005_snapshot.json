@@ -1,5 +1,5 @@
 {
-  "id": "5fba2f42-f397-418b-be30-66c221eff272",
+  "id": "c488ae4d-7de7-4d2b-9b53-778cb904ed4a",
   "prevId": "4c43e75b-cef0-4d4c-8ac3-1f296d07a40c",
   "version": "7",
   "dialect": "postgresql",
@@ -53,8 +53,12 @@
           "name": "architectures_project_id_projects_id_fk",
           "tableFrom": "architectures",
           "tableTo": "projects",
-          "columnsFrom": ["project_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "project_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -127,8 +131,12 @@
           "name": "deployment_logs_deployment_id_deployments_id_fk",
           "tableFrom": "deployment_logs",
           "tableTo": "deployments",
-          "columnsFrom": ["deployment_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "deployment_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -253,8 +261,12 @@
           "name": "deployments_project_id_projects_id_fk",
           "tableFrom": "deployments",
           "tableTo": "projects",
-          "columnsFrom": ["project_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "project_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -262,8 +274,12 @@
           "name": "deployments_architecture_id_architectures_id_fk",
           "tableFrom": "deployments",
           "tableTo": "architectures",
-          "columnsFrom": ["architecture_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "architecture_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
@@ -271,8 +287,12 @@
           "name": "deployments_terraform_artifact_id_project_assets_id_fk",
           "tableFrom": "deployments",
           "tableTo": "project_assets",
-          "columnsFrom": ["terraform_artifact_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "terraform_artifact_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
@@ -280,8 +300,12 @@
           "name": "deployments_approved_terraform_artifact_id_project_assets_id_fk",
           "tableFrom": "deployments",
           "tableTo": "project_assets",
-          "columnsFrom": ["approved_terraform_artifact_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "approved_terraform_artifact_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -414,8 +438,12 @@
           "name": "login_attempts_user_id_users_id_fk",
           "tableFrom": "login_attempts",
           "tableTo": "users",
-          "columnsFrom": ["user_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -493,8 +521,12 @@
           "name": "project_assets_project_id_projects_id_fk",
           "tableFrom": "project_assets",
           "tableTo": "projects",
-          "columnsFrom": ["project_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "project_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -502,8 +534,12 @@
           "name": "project_assets_architecture_id_architectures_id_fk",
           "tableFrom": "project_assets",
           "tableTo": "architectures",
-          "columnsFrom": ["architecture_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "architecture_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -594,8 +630,12 @@
           "name": "projects_user_id_users_id_fk",
           "tableFrom": "projects",
           "tableTo": "users",
-          "columnsFrom": ["user_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -727,8 +767,12 @@
           "name": "refresh_tokens_user_id_users_id_fk",
           "tableFrom": "refresh_tokens",
           "tableTo": "users",
-          "columnsFrom": ["user_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -847,38 +891,134 @@
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
+    },
+    "public.project_drafts": {
+      "name": "project_drafts",
+      "schema": "",
+      "columns": {
+        "project_id": {
+          "name": "project_id",
+          "type": "varchar(36)",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "diagram_json": {
+          "name": "diagram_json",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "revision": {
+          "name": "revision",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "server_saved_at": {
+          "name": "server_saved_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "project_drafts_project_id_projects_id_fk": {
+          "name": "project_drafts_project_id_projects_id_fk",
+          "tableFrom": "project_drafts",
+          "tableTo": "projects",
+          "columnsFrom": [
+            "project_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
     }
   },
   "enums": {
     "public.asset_type": {
       "name": "asset_type",
       "schema": "public",
-      "values": ["diagram_png", "diagram_svg", "terraform_file", "project_export_zip", "thumbnail"]
+      "values": [
+        "diagram_png",
+        "diagram_svg",
+        "terraform_file",
+        "project_export_zip",
+        "thumbnail"
+      ]
     },
     "public.deployment_blocked_by": {
       "name": "deployment_blocked_by",
       "schema": "public",
-      "values": ["risk_analysis", "cost_analysis", "missing_approval"]
+      "values": [
+        "risk_analysis",
+        "cost_analysis",
+        "missing_approval"
+      ]
     },
     "public.deployment_failure_stage": {
       "name": "deployment_failure_stage",
       "schema": "public",
-      "values": ["init", "validation", "plan", "approval", "mock_run"]
+      "values": [
+        "validation",
+        "plan",
+        "approval",
+        "mock_run"
+      ]
     },
     "public.deployment_log_level": {
       "name": "deployment_log_level",
       "schema": "public",
-      "values": ["INFO", "WARN", "ERROR"]
+      "values": [
+        "INFO",
+        "WARN",
+        "ERROR"
+      ]
     },
     "public.deployment_stage": {
       "name": "deployment_stage",
       "schema": "public",
-      "values": ["init", "validate", "plan", "apply"]
+      "values": [
+        "validate",
+        "plan",
+        "apply"
+      ]
     },
     "public.status": {
       "name": "status",
       "schema": "public",
-      "values": ["PENDING", "RUNNING", "SUCCESS", "FAILED", "CANCELLED"]
+      "values": [
+        "PENDING",
+        "RUNNING",
+        "SUCCESS",
+        "FAILED",
+        "CANCELLED"
+      ]
     }
   },
   "schemas": {},

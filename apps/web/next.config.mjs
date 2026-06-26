@@ -1,7 +1,8 @@
-const apiProxyTarget = (process.env.API_PROXY_TARGET ?? "http://localhost:4000").replace(
-  /\/+$/,
-  ""
-);
+const apiProxyTarget = (
+  process.env.API_PROXY_TARGET ??
+  process.env.SKETCHCATCH_API_PROXY_ORIGIN ??
+  "http://localhost:4000"
+).replace(/\/+$/, "");
 
 /** @type {import("next").NextConfig} */
 const nextConfig = {

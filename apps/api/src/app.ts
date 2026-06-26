@@ -10,7 +10,7 @@ import { registerProjectRoutes } from "./routes/projects.js";
 import { registerDeploymentRoutes } from "./routes/deployments.js";
 
 const allowedCorsOrigins = new Set(["http://localhost:3000", "http://127.0.0.1:3000"]);
-const corsAllowedMethods = "GET,POST,DELETE,OPTIONS";
+const corsAllowedMethods = "GET,POST,PUT,DELETE,OPTIONS";
 const fallbackCorsAllowedHeaders = "content-type,authorization";
 
 export type BuildAppOptions = {
