@@ -1,5 +1,6 @@
 import type { CheckFinding, ResourceConfig, ResourceNode } from "@sketchcatch/types";
 
+// 현재 MVP에서는 Security Group의 SSH 전체 공개 여부를 가장 먼저 잡습니다.
 export function createSecurityFindings(node: ResourceNode): CheckFinding[] {
   if (node.type !== "SECURITY_GROUP" || !hasOpenSshRule(node.config)) {
     return [];
@@ -18,6 +19,7 @@ export function createSecurityFindings(node: ResourceNode): CheckFinding[] {
   ];
 }
 
+// Security Group config 안에 SSH 전체 공개 ingress rule이 있는지 찾습니다.
 function hasOpenSshRule(config: ResourceConfig): boolean {
   const ingress = config["ingress"];
 
@@ -28,6 +30,7 @@ function hasOpenSshRule(config: ResourceConfig): boolean {
   return ingress.some(isOpenSshRule);
 }
 
+// ingress rule 하나가 "22번 포트 + 전체 공개" 조합인지 확인합니다.
 function isOpenSshRule(value: unknown): boolean {
   if (!isRecord(value)) {
     return false;
@@ -39,6 +42,7 @@ function isOpenSshRule(value: unknown): boolean {
   return (port === 22 || port === "22") && cidr === "0.0.0.0/0";
 }
 
+// unknown 값을 index 접근 가능한 객체로 좁히는 작은 타입 guard입니다.
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }

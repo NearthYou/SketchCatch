@@ -1,5 +1,6 @@
 import type { CheckFinding, ResourceConfig, ResourceCostEstimate, ResourceNode } from "@sketchcatch/types";
 
+// 비용이 커질 수 있는 Resource를 찾아 사용자에게 먼저 알려줍니다.
 export function createCostFindings(node: ResourceNode): CheckFinding[] {
   if (node.type === "RDS") {
     return [
@@ -32,6 +33,7 @@ export function createCostFindings(node: ResourceNode): CheckFinding[] {
   return [];
 }
 
+// 실제 AWS 가격 API 없이도 화면이 비용 추정 모양을 확인할 수 있게 fallback 값을 만듭니다.
 export function createResourceCostEstimate(node: ResourceNode): ResourceCostEstimate {
   if (node.type === "RDS") {
     return {
@@ -74,6 +76,7 @@ export function createResourceCostEstimate(node: ResourceNode): ResourceCostEsti
   };
 }
 
+// Resource config에서 문자열 값만 꺼내 비용 규칙이 잘못된 타입을 읽지 않게 합니다.
 function getTextConfig(config: ResourceConfig, key: string): string {
   const value = config[key];
 

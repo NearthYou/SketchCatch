@@ -9,6 +9,7 @@ import { createConfigurationFindings } from "./aiPreDeploymentConfiguration.js";
 import { createCostFindings, createResourceCostEstimate } from "./aiPreDeploymentCost.js";
 import { createSecurityFindings } from "./aiPreDeploymentSecurity.js";
 
+// 보드 설계도 전체를 돌면서 비용, 보안, 설정 문제를 한 번에 모으는 사전 점검 입구입니다.
 export function analyzePreDeployment(architectureJson: ArchitectureJson): AiPreDeploymentAnalysisResult {
   const findings = architectureJson.nodes.flatMap(createFindingsForNode);
   const resourceCostEstimates = architectureJson.nodes.map(createResourceCostEstimate);
@@ -26,6 +27,7 @@ export function analyzePreDeployment(architectureJson: ArchitectureJson): AiPreD
   };
 }
 
+// finding 목록을 사용자가 먼저 볼 한 문장 요약으로 줄입니다.
 function createSummary(findings: readonly CheckFinding[]): string {
   if (findings.length === 0) {
     return "현재 기본 Pre-Deployment Check에서 막는 항목은 없습니다.";
@@ -42,6 +44,7 @@ function createSummary(findings: readonly CheckFinding[]): string {
   return "배포 전에 Cost Risk를 확인해야 합니다.";
 }
 
+// Resource 하나에 대해 보안, 비용, 필수 설정 규칙을 차례대로 적용합니다.
 function createFindingsForNode(node: ResourceNode): CheckFinding[] {
   return [
     ...createSecurityFindings(node),
@@ -50,6 +53,7 @@ function createFindingsForNode(node: ResourceNode): CheckFinding[] {
   ];
 }
 
+// finding을 체크리스트로 바꿔서 배포 전에 무엇을 확인해야 하는지 보여줍니다.
 function createChecklist(findings: readonly CheckFinding[]): ChecklistItem[] {
   const securityFindingIds = getFindingIdsByCategory(findings, "security");
   const costFindingIds = getFindingIdsByCategory(findings, "cost");
@@ -77,6 +81,7 @@ function createChecklist(findings: readonly CheckFinding[]): ChecklistItem[] {
   ];
 }
 
+// 체크리스트 항목이 어떤 finding을 가리키는지 연결하기 위해 category별 id만 모읍니다.
 function getFindingIdsByCategory(
   findings: readonly CheckFinding[],
   category: CheckFinding["category"]

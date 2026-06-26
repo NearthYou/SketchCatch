@@ -1,5 +1,6 @@
 import type { CheckFinding, ResourceConfig, ResourceNode } from "@sketchcatch/types";
 
+// Resource가 Terraform 생성에 필요한 기본 설정값을 가지고 있는지 확인합니다.
 export function createConfigurationFindings(node: ResourceNode): CheckFinding[] {
   const missingKeys = getRequiredConfigKeys(node).filter((key) => !hasConfigValue(node.config, key));
 
@@ -20,6 +21,7 @@ export function createConfigurationFindings(node: ResourceNode): CheckFinding[] 
   ];
 }
 
+// ResourceType별 최소 config 약속입니다. sw Terraform 생성기와 맞춰야 하는 부분입니다.
 function getRequiredConfigKeys(node: ResourceNode): readonly string[] {
   switch (node.type) {
     case "VPC":
@@ -40,6 +42,7 @@ function getRequiredConfigKeys(node: ResourceNode): readonly string[] {
   }
 }
 
+// 빈 문자열이나 빈 배열은 "입력 안 됨"으로 봅니다.
 function hasConfigValue(config: ResourceConfig, key: string): boolean {
   const value = config[key];
 
