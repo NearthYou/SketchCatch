@@ -2,10 +2,9 @@ import type {
   AuthResponse,
   CurrentUserResponse,
   LoginRequest,
-  LogoutRequest,
   SignupRequest
 } from "@sketchcatch/types";
-import { apiFetch } from "./api-client";
+import { apiFetch, refreshAuthSession } from "./api-client";
 
 export function requestLogin(payload: LoginRequest): Promise<AuthResponse> {
   return apiFetch<AuthResponse>("/auth/login", {
@@ -28,11 +27,10 @@ export function requestCurrentUser(): Promise<CurrentUserResponse> {
   });
 }
 
-export async function requestLogout(refreshToken: string): Promise<void> {
-  const payload: LogoutRequest = { refreshToken };
+export const requestRefreshSession = refreshAuthSession;
 
+export async function requestLogout(): Promise<void> {
   await apiFetch<{ ok: true }>("/auth/logout", {
-    body: payload,
     method: "POST"
   });
 }

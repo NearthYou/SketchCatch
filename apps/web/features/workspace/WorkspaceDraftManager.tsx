@@ -5,18 +5,25 @@ import type { DiagramJson } from "../../../../packages/types/src";
 import { DiagramEditor } from "../diagram-editor";
 import { EMPTY_DIAGRAM } from "../diagram-editor/constants";
 import {
+  createWorkspaceId,
   createLocalProjectDraft,
+  isWorkspaceCloudPlatform,
   readLocalProjectDraft,
   readWorkspaceClientMetadata,
   writeLocalProjectDraft,
   writeWorkspaceClientMetadata
 } from "./project-draft-persistence";
-import type { LocalProjectDraft } from "./project-draft-persistence";
+import type { LocalProjectDraft, WorkspaceCloudPlatform } from "./project-draft-persistence";
 import styles from "./workspace.module.css";
 
 const LOCAL_PROJECT_ID = "local-sketchcatch-project";
 const LOCAL_PROJECT_NAME = "Local workspace";
 const LOCAL_SAVE_DEBOUNCE_MS = 800;
+
+const cloudPlatformLabels: Record<WorkspaceCloudPlatform, string> = {
+  aws: "AWS",
+  gcp: "GCP"
+};
 
 type LoadState = "loading" | "ready" | "error";
 type SaveState = "idle" | "local-pending" | "local-saved" | "failed";
@@ -31,6 +38,8 @@ const saveStatusLabels: Record<SaveState, string> = {
 export function WorkspaceDraftManager() {
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
+  const [projectName, setProjectName] = useState(LOCAL_PROJECT_NAME);
+  const [cloudPlatform, setCloudPlatform] = useState<WorkspaceCloudPlatform>("aws");
   const [initialDiagram, setInitialDiagram] = useState<DiagramJson | null>(null);
   const [localDraft, setLocalDraft] = useState<LocalProjectDraft | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("idle");
@@ -89,11 +98,16 @@ export function WorkspaceDraftManager() {
       try {
         const metadata = await readWorkspaceClientMetadata();
         const nextWorkspaceId = metadata?.workspaceId ?? createWorkspaceId();
+        const nextProjectName = normalizeProjectName(metadata?.activeProjectName);
+        const nextCloudPlatform = isWorkspaceCloudPlatform(metadata?.cloudPlatform)
+          ? metadata.cloudPlatform
+          : "aws";
 
         await writeWorkspaceClientMetadata({
           workspaceId: nextWorkspaceId,
           activeProjectId: LOCAL_PROJECT_ID,
-          activeProjectName: LOCAL_PROJECT_NAME,
+          activeProjectName: nextProjectName,
+          cloudPlatform: nextCloudPlatform,
           updatedAt: new Date().toISOString()
         });
 
@@ -107,6 +121,8 @@ export function WorkspaceDraftManager() {
         latestDiagramRef.current = nextDiagram;
         hasUnsavedChangesRef.current = false;
         setWorkspaceId(nextWorkspaceId);
+        setProjectName(nextProjectName);
+        setCloudPlatform(nextCloudPlatform);
         setInitialDiagram(nextDiagram);
         setCurrentLocalDraft(storedLocalDraft);
         setSaveState(storedLocalDraft ? "local-saved" : "idle");
@@ -176,7 +192,7 @@ export function WorkspaceDraftManager() {
       onDiagramChange={handleDiagramChange}
       onSave={() => void saveCurrentDraftLocally()}
       saveDisabled={saveState === "local-pending" && !workspaceId}
-      saveStatus={`${LOCAL_PROJECT_NAME} · ${saveStatusLabels[saveState]}${
+      saveStatus={`${projectName} · ${cloudPlatformLabels[cloudPlatform]} · ${saveStatusLabels[saveState]}${
         localDraft ? ` · r${localDraft.revision}` : ""
       }`}
     />
@@ -194,10 +210,7 @@ function WorkspaceNotice({ title, body }: { title: string; body: string }) {
   );
 }
 
-function createWorkspaceId(): string {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-    return `workspace-${crypto.randomUUID()}`;
-  }
-
-  return `workspace-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+function normalizeProjectName(value: string | undefined): string {
+  const trimmedValue = value?.trim();
+  return trimmedValue ? trimmedValue : LOCAL_PROJECT_NAME;
 }
