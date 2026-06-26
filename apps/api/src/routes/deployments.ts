@@ -96,7 +96,7 @@ function toDeployment(row: DeploymentRow): Deployment {
     failureStage: row.failureStage,
     errorSummary: row.errorSummary,
     approvedAt: row.approvedAt?.toISOString() ?? null,
-    approvedBy: row.approvedBy,
+    approvedByUserId: row.approvedByUserId,
     approvedTerraformArtifactId: row.approvedTerraformArtifactId,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString()

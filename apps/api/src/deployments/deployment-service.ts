@@ -121,7 +121,7 @@ export type DeploymentRepository = {
   approveDeployment(
     deploymentId: string,
     input: {
-      approvedBy: string;
+      approvedByUserId: string;
       approvedTerraformArtifactId: string;
       approvedAt: Date;
     }

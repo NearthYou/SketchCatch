@@ -130,6 +130,7 @@ function makeProject(overrides: Partial<ProjectRow> = {}): ProjectRow {
 
 function makeProjectDraft(overrides: Partial<ProjectDraftRow> = {}): ProjectDraftRow {
   return {
+    id: "44444444-4444-4444-8444-444444444444",
     projectId: ACTIVE_PROJECT_ID,
     diagramJson: draftDiagram,
     revision: 1,

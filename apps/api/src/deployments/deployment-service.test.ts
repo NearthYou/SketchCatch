@@ -305,7 +305,7 @@ function createDeploymentRecord(
     failureStage: null,
     errorSummary: null,
     approvedAt: null,
-    approvedBy: null,
+    approvedByUserId: null,
     approvedTerraformArtifactId: null,
     createdAt: fixedNow,
     updatedAt: fixedNow,

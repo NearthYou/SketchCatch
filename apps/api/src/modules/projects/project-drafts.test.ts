@@ -28,6 +28,7 @@ test("toProjectDraft serializes date fields as ISO strings", () => {
   const serverSavedAt = new Date("2026-06-24T03:04:05.000Z");
 
   const draft = toProjectDraft({
+    id: "draft-1",
     projectId: "project-1",
     diagramJson,
     revision: 3,
@@ -37,6 +38,7 @@ test("toProjectDraft serializes date fields as ISO strings", () => {
   });
 
   assert.deepEqual(draft, {
+    id: "draft-1",
     projectId: "project-1",
     diagramJson,
     revision: 3,
