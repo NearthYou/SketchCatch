@@ -263,6 +263,37 @@ test("POST /api/auth/refresh revokes active sessions when a revoked token is reu
   await app.close();
 });
 
+test("POST /api/auth/refresh rotates the cookie refresh token and returns a new session", async () => {
+  const refreshToken = "valid-refresh-token";
+  const fakeDb = new AuthScenarioFakeDb({
+    selectResults: [
+      [
+        makeRefreshToken({
+          tokenHash: hashToken(refreshToken)
+        })
+      ],
+      [makeUser()]
+    ]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/auth/refresh",
+    headers: authCookieHeaders(refreshToken)
+  });
+
+  assert.equal(response.statusCode, 200);
+  assertAuthResponse(response.json() as AuthResponse, response.headers["set-cookie"]);
+  assert.equal(fakeDb.updateCalls.length, 1);
+  assert.equal(fakeDb.updateCalls[0]?.table, refreshTokens);
+  assert.equal(fakeDb.refreshTokenRows.length, 1);
+
+  await app.close();
+});
+
 test("POST /api/auth/refresh rejects requests without the CSRF header", async () => {
   const refreshToken = "csrf-refresh-token";
   const fakeDb = new AuthScenarioFakeDb({
