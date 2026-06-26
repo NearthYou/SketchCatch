@@ -258,11 +258,24 @@ export type CreateAwsConnectionRequest = {
   region: string;
 };
 
+export type AwsRolePermissionSetup = {
+  verificationActions: string[];
+  initialPolicyDocument: Record<string, unknown> | null;
+  terraformPolicyDocument: Record<string, unknown> | null;
+};
+
 export type AwsRoleSetup = {
   roleName: string;
   trustedPrincipalArn: string;
   externalId: string;
   trustPolicy: Record<string, unknown>;
+  permissionSetup: AwsRolePermissionSetup;
+};
+
+export type SketchCatchCallerRoleSetup = {
+  policyName: string;
+  assumableRoleArnPattern: string;
+  policyDocument: Record<string, unknown>;
 };
 
 export type CreateAwsConnectionResponse = {
@@ -270,6 +283,7 @@ export type CreateAwsConnectionResponse = {
   callerPrincipalArn: string;
   recommendedRoleName: string;
   roleSetup: AwsRoleSetup;
+  callerRoleSetup: SketchCatchCallerRoleSetup;
   trustPolicyTemplate: Record<string, unknown>;
 };
 

@@ -136,6 +136,25 @@ test("createAwsConnectionSetup requests generated Role setup values", async (con
           trustPolicy: {
             Version: "2012-10-17",
             Statement: []
+          },
+          permissionSetup: {
+            verificationActions: ["sts:GetCallerIdentity"],
+            initialPolicyDocument: null,
+            terraformPolicyDocument: null
+          }
+        },
+        callerRoleSetup: {
+          policyName: "SketchCatchAssumeTerraformExecutionRole",
+          assumableRoleArnPattern: "arn:aws:iam::*:role/SketchCatchTerraformExecutionRole",
+          policyDocument: {
+            Version: "2012-10-17",
+            Statement: [
+              {
+                Effect: "Allow",
+                Action: "sts:AssumeRole",
+                Resource: "arn:aws:iam::*:role/SketchCatchTerraformExecutionRole"
+              }
+            ]
           }
         },
         trustPolicyTemplate: {
@@ -167,6 +186,9 @@ test("createAwsConnectionSetup requests generated Role setup values", async (con
   assert.equal(response.callerPrincipalArn, "arn:aws:iam::123456789012:role/SketchCatchRuntimeRole");
   assert.equal(response.roleSetup.roleName, "SketchCatchTerraformExecutionRole");
   assert.equal(response.roleSetup.externalId, "sc_conn_33333333-3333-4333-8333-333333333333_random");
+  assert.deepEqual(response.roleSetup.permissionSetup.verificationActions, ["sts:GetCallerIdentity"]);
+  assert.equal(response.roleSetup.permissionSetup.initialPolicyDocument, null);
+  assert.equal(response.callerRoleSetup.assumableRoleArnPattern, "arn:aws:iam::*:role/SketchCatchTerraformExecutionRole");
 });
 
 function installAuthSession(): void {

@@ -1,11 +1,17 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
-import type { AwsConnection, CreateAwsConnectionResponse } from "@sketchcatch/types";
+import type {
+  AwsConnection,
+  AwsRolePermissionSetup,
+  CreateAwsConnectionResponse,
+  SketchCatchCallerRoleSetup
+} from "@sketchcatch/types";
 import type { Database } from "../db/client.js";
 import { awsConnections, projects } from "../db/schema.js";
 import type { ProjectAccessContext, ProjectRecord } from "../deployments/deployment-service.js";
 
 const recommendedRoleName = "SketchCatchTerraformExecutionRole";
+const callerAssumeRolePolicyName = "SketchCatchAssumeTerraformExecutionRole";
 
 export type AwsConnectionRecord = typeof awsConnections.$inferSelect;
 
@@ -94,6 +100,8 @@ export async function createAwsConnection(
     callerPrincipalArn: input.callerPrincipalArn,
     externalId
   });
+  const permissionSetup = createInitialPermissionSetup();
+  const callerRoleSetup = createCallerRoleSetup(recommendedRoleName);
 
   return {
     awsConnection: toAwsConnection(awsConnection),
@@ -103,8 +111,10 @@ export async function createAwsConnection(
       roleName: recommendedRoleName,
       trustedPrincipalArn: input.callerPrincipalArn,
       externalId,
-      trustPolicy: trustPolicyTemplate
+      trustPolicy: trustPolicyTemplate,
+      permissionSetup
     },
+    callerRoleSetup,
     trustPolicyTemplate
   };
 }
@@ -149,5 +159,32 @@ function createTrustPolicyTemplate(input: {
         }
       }
     ]
+  };
+}
+
+function createInitialPermissionSetup(): AwsRolePermissionSetup {
+  return {
+    verificationActions: ["sts:GetCallerIdentity"],
+    initialPolicyDocument: null,
+    terraformPolicyDocument: null
+  };
+}
+
+function createCallerRoleSetup(roleName: string): SketchCatchCallerRoleSetup {
+  const assumableRoleArnPattern = `arn:aws:iam::*:role/${roleName}`;
+
+  return {
+    policyName: callerAssumeRolePolicyName,
+    assumableRoleArnPattern,
+    policyDocument: {
+      Version: "2012-10-17",
+      Statement: [
+        {
+          Effect: "Allow",
+          Action: "sts:AssumeRole",
+          Resource: assumableRoleArnPattern
+        }
+      ]
+    }
   };
 }

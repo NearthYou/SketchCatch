@@ -117,6 +117,25 @@ test("createAwsConnection creates a pending connection with server-generated ext
           }
         }
       ]
+    },
+    permissionSetup: {
+      verificationActions: ["sts:GetCallerIdentity"],
+      initialPolicyDocument: null,
+      terraformPolicyDocument: null
+    }
+  });
+  assert.deepEqual(result.callerRoleSetup, {
+    policyName: "SketchCatchAssumeTerraformExecutionRole",
+    assumableRoleArnPattern: "arn:aws:iam::*:role/SketchCatchTerraformExecutionRole",
+    policyDocument: {
+      Version: "2012-10-17",
+      Statement: [
+        {
+          Effect: "Allow",
+          Action: "sts:AssumeRole",
+          Resource: "arn:aws:iam::*:role/SketchCatchTerraformExecutionRole"
+        }
+      ]
     }
   });
   assert.deepEqual(result.trustPolicyTemplate, {

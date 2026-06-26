@@ -44,6 +44,16 @@ type AwsConnectionSetupResponse = {
     trustedPrincipalArn: string;
     externalId: string;
     trustPolicy: Record<string, unknown>;
+    permissionSetup: {
+      verificationActions: string[];
+      initialPolicyDocument: Record<string, unknown> | null;
+      terraformPolicyDocument: Record<string, unknown> | null;
+    };
+  };
+  callerRoleSetup: {
+    policyName: string;
+    assumableRoleArnPattern: string;
+    policyDocument: Record<string, unknown>;
   };
   trustPolicyTemplate: Record<string, unknown>;
 };
@@ -139,6 +149,25 @@ test("POST /api/projects/:projectId/aws-connections returns caller principal ARN
               "sts:ExternalId": externalId
             }
           }
+        }
+      ]
+    },
+    permissionSetup: {
+      verificationActions: ["sts:GetCallerIdentity"],
+      initialPolicyDocument: null,
+      terraformPolicyDocument: null
+    }
+  });
+  assert.deepEqual(body.callerRoleSetup, {
+    policyName: "SketchCatchAssumeTerraformExecutionRole",
+    assumableRoleArnPattern: "arn:aws:iam::*:role/SketchCatchTerraformExecutionRole",
+    policyDocument: {
+      Version: "2012-10-17",
+      Statement: [
+        {
+          Effect: "Allow",
+          Action: "sts:AssumeRole",
+          Resource: "arn:aws:iam::*:role/SketchCatchTerraformExecutionRole"
         }
       ]
     }
