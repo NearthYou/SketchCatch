@@ -4,6 +4,7 @@ export type RuntimeEnv = {
   databaseUrl: string | undefined;
   databaseSsl: boolean;
   s3BucketName: string | undefined;
+  sketchcatchAwsCallerPrincipalArn: string | undefined;
 };
 
 export function getRuntimeEnv(): RuntimeEnv {
@@ -12,7 +13,8 @@ export function getRuntimeEnv(): RuntimeEnv {
     authTokenSecret: process.env.AUTH_TOKEN_SECRET,
     databaseUrl: process.env.DATABASE_URL,
     databaseSsl: process.env.DATABASE_SSL === "true",
-    s3BucketName: process.env.S3_BUCKET_NAME
+    s3BucketName: process.env.S3_BUCKET_NAME,
+    sketchcatchAwsCallerPrincipalArn: process.env.SKETCHCATCH_AWS_CALLER_PRINCIPAL_ARN
   };
 }
 
@@ -48,4 +50,14 @@ export function requireS3BucketName(): string {
   }
 
   return bucketName;
+}
+
+export function requireSketchCatchAwsCallerPrincipalArn(): string {
+  const callerPrincipalArn = process.env.SKETCHCATCH_AWS_CALLER_PRINCIPAL_ARN;
+
+  if (!callerPrincipalArn) {
+    throw new Error("SKETCHCATCH_AWS_CALLER_PRINCIPAL_ARN is required");
+  }
+
+  return callerPrincipalArn;
 }

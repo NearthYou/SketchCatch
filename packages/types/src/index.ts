@@ -238,12 +238,39 @@ export type Template = {
   createdAt: IsoDateTimeString;
 };
 
-export type AwsCredential = {
+export type AwsConnectionStatus = "pending" | "verified" | "failed";
+
+export type AwsConnection = {
   id: string;
+  projectId: string;
   userId: string;
-  accountId: string;
-  roleArn: string;
+  accountId: string | null;
+  roleArn: string | null;
+  externalId: string;
+  region: string;
+  status: AwsConnectionStatus;
+  lastVerifiedAt: IsoDateTimeString | null;
   createdAt: IsoDateTimeString;
+  updatedAt: IsoDateTimeString;
+};
+
+export type CreateAwsConnectionRequest = {
+  region: string;
+};
+
+export type AwsRoleSetup = {
+  roleName: string;
+  trustedPrincipalArn: string;
+  externalId: string;
+  trustPolicy: Record<string, unknown>;
+};
+
+export type CreateAwsConnectionResponse = {
+  awsConnection: AwsConnection;
+  callerPrincipalArn: string;
+  recommendedRoleName: string;
+  roleSetup: AwsRoleSetup;
+  trustPolicyTemplate: Record<string, unknown>;
 };
 
 export type DeploymentLogLevel = "INFO" | "WARN" | "ERROR";

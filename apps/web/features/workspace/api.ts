@@ -1,4 +1,6 @@
 import type {
+  CreateAwsConnectionRequest,
+  CreateAwsConnectionResponse,
   CreateProjectRequest,
   Project,
   ProjectDetailsResponse,
@@ -51,4 +53,22 @@ export async function saveProjectDraft({
       diagramJson
     }
   });
+}
+
+export async function createAwsConnectionSetup({
+  projectId,
+  region
+}: {
+  projectId: string;
+} & CreateAwsConnectionRequest): Promise<CreateAwsConnectionResponse> {
+  return apiFetch<CreateAwsConnectionResponse>(
+    `/projects/${encodeURIComponent(projectId)}/aws-connections`,
+    {
+      auth: true,
+      method: "POST",
+      body: {
+        region
+      }
+    }
+  );
 }

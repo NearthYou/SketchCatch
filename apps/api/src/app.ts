@@ -9,6 +9,7 @@ import { registerAuthRoutes } from "./routes/auth.js";
 import { registerProjectRoutes } from "./routes/projects.js";
 import { registerDeploymentRoutes } from "./routes/deployments.js";
 import { registerTerraformRoutes } from "./routes/terraform.js";
+import { registerAwsConnectionRoutes } from "./routes/aws-connections.js";
 
 const allowedCorsOrigins = new Set(["http://localhost:3000", "http://127.0.0.1:3000"]);
 const corsAllowedMethods = "GET,POST,PUT,DELETE,OPTIONS";
@@ -88,6 +89,10 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     getDatabaseClient: getAppDatabaseClient
   });
   app.register(registerTerraformRoutes, {
+    prefix: "/api",
+    getDatabaseClient: getAppDatabaseClient
+  });
+  app.register(registerAwsConnectionRoutes, {
     prefix: "/api",
     getDatabaseClient: getAppDatabaseClient
   });
