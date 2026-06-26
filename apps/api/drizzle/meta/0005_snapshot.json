@@ -69,6 +69,253 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.deployment_logs": {
+      "name": "deployment_logs",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(36)",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "deployment_id": {
+          "name": "deployment_id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "sequence": {
+          "name": "sequence",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "stage": {
+          "name": "stage",
+          "type": "deployment_stage",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "level": {
+          "name": "level",
+          "type": "deployment_log_level",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "message": {
+          "name": "message",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "related_resource_id": {
+          "name": "related_resource_id",
+          "type": "varchar(128)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "deployment_logs_deployment_id_deployments_id_fk": {
+          "name": "deployment_logs_deployment_id_deployments_id_fk",
+          "tableFrom": "deployment_logs",
+          "tableTo": "deployments",
+          "columnsFrom": [
+            "deployment_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.deployments": {
+      "name": "deployments",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(36)",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "project_id": {
+          "name": "project_id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "architecture_id": {
+          "name": "architecture_id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "terraform_artifact_id": {
+          "name": "terraform_artifact_id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'PENDING'"
+        },
+        "plan_summary": {
+          "name": "plan_summary",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "is_blocked": {
+          "name": "is_blocked",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "blocked_by": {
+          "name": "blocked_by",
+          "type": "deployment_blocked_by",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "blocked_reason": {
+          "name": "blocked_reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "failure_stage": {
+          "name": "failure_stage",
+          "type": "deployment_failure_stage",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "error_summary": {
+          "name": "error_summary",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "approved_at": {
+          "name": "approved_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "approved_by": {
+          "name": "approved_by",
+          "type": "varchar(128)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "approved_terraform_artifact_id": {
+          "name": "approved_terraform_artifact_id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "deployments_project_id_projects_id_fk": {
+          "name": "deployments_project_id_projects_id_fk",
+          "tableFrom": "deployments",
+          "tableTo": "projects",
+          "columnsFrom": [
+            "project_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "deployments_architecture_id_architectures_id_fk": {
+          "name": "deployments_architecture_id_architectures_id_fk",
+          "tableFrom": "deployments",
+          "tableTo": "architectures",
+          "columnsFrom": [
+            "architecture_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "deployments_terraform_artifact_id_project_assets_id_fk": {
+          "name": "deployments_terraform_artifact_id_project_assets_id_fk",
+          "tableFrom": "deployments",
+          "tableTo": "project_assets",
+          "columnsFrom": [
+            "terraform_artifact_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "deployments_approved_terraform_artifact_id_project_assets_id_fk": {
+          "name": "deployments_approved_terraform_artifact_id_project_assets_id_fk",
+          "tableFrom": "deployments",
+          "tableTo": "project_assets",
+          "columnsFrom": [
+            "approved_terraform_artifact_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.login_attempts": {
       "name": "login_attempts",
       "schema": "",
@@ -723,6 +970,54 @@
         "terraform_file",
         "project_export_zip",
         "thumbnail"
+      ]
+    },
+    "public.deployment_blocked_by": {
+      "name": "deployment_blocked_by",
+      "schema": "public",
+      "values": [
+        "risk_analysis",
+        "cost_analysis",
+        "missing_approval"
+      ]
+    },
+    "public.deployment_failure_stage": {
+      "name": "deployment_failure_stage",
+      "schema": "public",
+      "values": [
+        "validation",
+        "plan",
+        "approval",
+        "mock_run"
+      ]
+    },
+    "public.deployment_log_level": {
+      "name": "deployment_log_level",
+      "schema": "public",
+      "values": [
+        "INFO",
+        "WARN",
+        "ERROR"
+      ]
+    },
+    "public.deployment_stage": {
+      "name": "deployment_stage",
+      "schema": "public",
+      "values": [
+        "validate",
+        "plan",
+        "apply"
+      ]
+    },
+    "public.status": {
+      "name": "status",
+      "schema": "public",
+      "values": [
+        "PENDING",
+        "RUNNING",
+        "SUCCESS",
+        "FAILED",
+        "CANCELLED"
       ]
     }
   },

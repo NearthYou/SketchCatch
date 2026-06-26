@@ -8,6 +8,7 @@ import { registerHealthRoutes } from "./routes/health.js";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { registerProjectRoutes } from "./routes/projects.js";
 import { registerDeploymentRoutes } from "./routes/deployments.js";
+import { registerTerraformRoutes } from "./routes/terraform.js";
 
 const allowedCorsOrigins = new Set(["http://localhost:3000", "http://127.0.0.1:3000"]);
 const corsAllowedMethods = "GET,POST,PUT,DELETE,OPTIONS";
@@ -86,6 +87,10 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     prefix: "/api",
     getDatabaseClient: getAppDatabaseClient
   });
+  app.register(registerTerraformRoutes, {
+    prefix: "/api",
+    getDatabaseClient: getAppDatabaseClient
+  });
 
   return app;
 }
@@ -98,7 +103,8 @@ function setCorsHeaders(request: FastifyRequest, reply: FastifyReply): void {
   }
 
   const requestedHeaders =
-    firstHeaderValue(request.headers["access-control-request-headers"]) ?? fallbackCorsAllowedHeaders;
+    firstHeaderValue(request.headers["access-control-request-headers"]) ??
+    fallbackCorsAllowedHeaders;
 
   reply.header("Access-Control-Allow-Origin", origin);
   reply.header("Access-Control-Allow-Methods", corsAllowedMethods);

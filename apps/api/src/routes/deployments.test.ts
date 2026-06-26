@@ -3,17 +3,21 @@ import assert from "node:assert/strict";
 import Fastify from "fastify";
 import { createAccessToken } from "../auth/tokens.js";
 import type { DatabaseClient } from "../db/client.js";
-import { users } from "../db/schema.js";
 import type {
-  ArchitectureRecord,
-  CreateDeploymentRecordInput,
-  DeploymentLogRecord,
-  DeploymentRecord,
-  DeploymentRepository,
-  ProjectAssetRecord,
-  ProjectRecord,
-  ProjectAccessContext,
-  TerraformArtifactRecord
+  RunDeploymentInitInput,
+  RunDeploymentInitResult
+} from "../deployments/deployment-init-service.js";
+import { users } from "../db/schema.js";
+import {
+  type ArchitectureRecord,
+  type CreateDeploymentRecordInput,
+  type DeploymentLogRecord,
+  type DeploymentRecord,
+  type DeploymentRepository,
+  type ProjectAccessContext,
+  type ProjectAssetRecord,
+  type ProjectRecord,
+  type TerraformArtifactRecord
 } from "../deployments/deployment-service.js";
 import { registerDeploymentRoutes } from "./deployments.js";
 
@@ -27,6 +31,8 @@ type DeploymentResponse = {
     architectureId: string;
     terraformArtifactId: string;
     status: string;
+    failureStage: string | null;
+    errorSummary: string | null;
     createdAt: string;
     updatedAt: string;
   };
@@ -60,6 +66,10 @@ type RepositoryCall =
       architectureId: string;
     }
   | {
+      name: "findTerraformArtifactById";
+      terraformArtifactId: string;
+    }
+  | {
       name: "createDeployment";
       input: CreateDeploymentRecordInput;
     }
@@ -74,6 +84,10 @@ type RepositoryCall =
   | {
       name: "listDeploymentLogs";
       deploymentId: string;
+    }
+  | {
+      name: "markDeploymentInitSucceeded";
+      deploymentId: string;
     };
 
 const projectId = "11111111-1111-4111-8111-111111111111";
@@ -83,11 +97,30 @@ const deploymentId = "44444444-4444-4444-8444-444444444444";
 const userId = "55555555-5555-4555-8555-555555555555";
 const fixedNow = new Date("2026-01-01T00:00:00.000Z");
 
+type TerraformArtifactRecordReference = {
+  id: string;
+  projectId: string;
+  architectureId: string | null;
+  assetType: "terraform_file";
+  objectKey: string;
+  fileName: string;
+  contentType: string;
+};
+
 class FakeDeploymentRepository implements DeploymentRepository {
   readonly calls: RepositoryCall[] = [];
   project: ProjectRecord | undefined = createProjectRecord();
   architecture: ArchitectureRecord | undefined = createArchitectureRecord();
   terraformArtifact: ProjectAssetRecord | undefined = createProjectAssetRecord();
+  terraformArtifactById: TerraformArtifactRecordReference | undefined = {
+    id: terraformArtifactId,
+    projectId,
+    architectureId,
+    assetType: "terraform_file",
+    objectKey: "projects/project-id/terraform/main.tf",
+    fileName: "main.tf",
+    contentType: "application/x-terraform"
+  };
   deployment: DeploymentRecord | undefined = createDeploymentRecord(deploymentId);
   deployments: DeploymentRecord[] = [createDeploymentRecord(deploymentId)];
   logs: DeploymentLogRecord[] = [];
@@ -138,6 +171,22 @@ class FakeDeploymentRepository implements DeploymentRepository {
       ...this.terraformArtifact,
       assetType: "terraform_file"
     };
+  }
+
+  async findTerraformArtifactById(candidateTerraformArtifactId: string) {
+    this.calls.push({
+      name: "findTerraformArtifactById",
+      terraformArtifactId: candidateTerraformArtifactId
+    });
+
+    if (
+      !this.terraformArtifactById ||
+      this.terraformArtifactById.id !== candidateTerraformArtifactId
+    ) {
+      return undefined;
+    }
+
+    return this.terraformArtifactById;
   }
 
   async createDeployment(input: CreateDeploymentRecordInput): Promise<DeploymentRecord> {
@@ -215,6 +264,29 @@ class FakeDeploymentRepository implements DeploymentRepository {
     return this.deployment;
   };
 
+  markDeploymentInitSucceeded: DeploymentRepository["markDeploymentInitSucceeded"] = async (
+    candidateDeploymentId
+  ) => {
+    this.calls.push({
+      name: "markDeploymentInitSucceeded",
+      deploymentId: candidateDeploymentId
+    });
+
+    if (!this.deployment || this.deployment.id !== candidateDeploymentId) {
+      return undefined;
+    }
+
+    this.deployment = {
+      ...this.deployment,
+      status: "PENDING",
+      failureStage: null,
+      errorSummary: null,
+      updatedAt: fixedNow
+    };
+
+    return this.deployment;
+  };
+
   createDeploymentLog: DeploymentRepository["createDeploymentLog"] = async (input) => {
     const deploymentLog = { ...input, createdAt: fixedNow };
 
@@ -222,6 +294,22 @@ class FakeDeploymentRepository implements DeploymentRepository {
 
     return deploymentLog;
   };
+
+  createDeploymentLogs: DeploymentRepository["createDeploymentLogs"] = async (input) => {
+    const deploymentLogs = input.map((log) => ({ ...log, createdAt: fixedNow }));
+
+    this.logs.push(...deploymentLogs);
+
+    return deploymentLogs;
+  };
+
+  async getNextDeploymentLogSequence(candidateDeploymentId: string) {
+    const maxSequence = this.logs
+      .filter((log) => log.deploymentId === candidateDeploymentId)
+      .reduce((max, log) => Math.max(max, log.sequence), 0);
+
+    return maxSequence + 1;
+  }
 
   async listDeploymentLogs(candidateDeploymentId: string) {
     this.calls.push({
@@ -233,17 +321,26 @@ class FakeDeploymentRepository implements DeploymentRepository {
   }
 }
 
+type DeploymentRouteTestOptions = {
+  runDeploymentInit?: (
+    input: RunDeploymentInitInput,
+    repository: DeploymentRepository
+  ) => Promise<RunDeploymentInitResult>;
+  userRows?: UserRecord[];
+};
+
 async function buildDeploymentTestApp(
   repository: DeploymentRepository,
-  userRows: UserRecord[] = [createUserRecord()]
+  routeOptions: DeploymentRouteTestOptions = {}
 ) {
   const app = Fastify({ logger: false });
-  const fakeAuthDb = new DeploymentRouteFakeAuthDb(userRows);
+  const fakeAuthDb = new DeploymentRouteFakeAuthDb(routeOptions.userRows ?? [createUserRecord()]);
 
   await app.register(registerDeploymentRoutes, {
     prefix: "/api",
     getDatabaseClient: () => fakeAuthDb.client,
-    createDeploymentRepository: () => repository
+    createDeploymentRepository: () => repository,
+    ...(routeOptions.runDeploymentInit ? { runDeploymentInit: routeOptions.runDeploymentInit } : {})
   });
 
   return app;
@@ -526,6 +623,141 @@ test("GET /api/deployments/:deploymentId maps missing deployments to not_found",
       deploymentId
     }
   ]);
+
+  await app.close();
+});
+
+test("POST /api/deployments/:deploymentId/init starts Terraform init in the background", async () => {
+  const repository = new FakeDeploymentRepository();
+  const initCalls: Array<{ deploymentId: string; accessContext: ProjectAccessContext }> = [];
+  const app = await buildDeploymentTestApp(repository, {
+    runDeploymentInit: async (input, candidateRepository) => {
+      assert.equal(candidateRepository, repository);
+      initCalls.push(input);
+
+      return {
+        deployment: createDeploymentRecord(input.deploymentId, {
+          status: "PENDING",
+          failureStage: null,
+          errorSummary: null
+        }),
+        terraform: {
+          command: ["terraform", "init", "-backend=false", "-input=false", "-no-color"],
+          exitCode: 0,
+          stdout: "Terraform has been successfully initialized!",
+          stderr: "",
+          timedOut: false
+        }
+      };
+    }
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/deployments/${deploymentId}/init`,
+    headers: authHeaders()
+  });
+
+  assert.equal(response.statusCode, 202);
+  const body = response.json() as DeploymentResponse;
+  assert.equal(body.deployment.id, deploymentId);
+  assert.equal(body.deployment.status, "RUNNING");
+  assert.deepEqual(initCalls, [
+    {
+      deploymentId,
+      accessContext: {
+        kind: "user",
+        userId
+      }
+    }
+  ]);
+
+  await app.close();
+});
+
+test("POST /api/deployments/:deploymentId/init maps missing deployments to not_found", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.deployment = undefined;
+  const app = await buildDeploymentTestApp(repository, {
+    runDeploymentInit: async () => {
+      throw new Error("background init should not start");
+    }
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/deployments/${deploymentId}/init`,
+    headers: authHeaders()
+  });
+
+  assert.equal(response.statusCode, 404);
+  assert.deepEqual(response.json(), {
+    error: "not_found",
+    message: "Deployment not found"
+  });
+
+  await app.close();
+});
+
+test("POST /api/deployments/:deploymentId/init returns accepted when background Terraform init fails", async () => {
+  const repository = new FakeDeploymentRepository();
+  const initCalls: string[] = [];
+  const app = await buildDeploymentTestApp(repository, {
+    runDeploymentInit: async (input) => {
+      initCalls.push(input.deploymentId);
+
+      return {
+        deployment: createDeploymentRecord(input.deploymentId, {
+          status: "FAILED",
+          failureStage: "init",
+          errorSummary: "Error: provider install failed"
+        }),
+        terraform: {
+          command: ["terraform", "init", "-backend=false", "-input=false", "-no-color"],
+          exitCode: 1,
+          stdout: "Initializing the backend...",
+          stderr: "Error: provider install failed",
+          timedOut: false
+        }
+      };
+    }
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/deployments/${deploymentId}/init`,
+    headers: authHeaders()
+  });
+
+  assert.equal(response.statusCode, 202);
+  const body = response.json() as DeploymentResponse;
+  assert.equal(body.deployment.id, deploymentId);
+  assert.equal(body.deployment.status, "RUNNING");
+  assert.deepEqual(initCalls, [deploymentId]);
+
+  await app.close();
+});
+
+test("POST /api/deployments/:deploymentId/init maps missing Terraform artifacts to not_found", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.terraformArtifactById = undefined;
+  const app = await buildDeploymentTestApp(repository, {
+    runDeploymentInit: async () => {
+      throw new Error("background init should not start");
+    }
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/deployments/${deploymentId}/init`,
+    headers: authHeaders()
+  });
+
+  assert.equal(response.statusCode, 404);
+  assert.deepEqual(response.json(), {
+    error: "not_found",
+    message: "Terraform artifact not found for deployment"
+  });
 
   await app.close();
 });
