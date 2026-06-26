@@ -65,6 +65,7 @@ S3 presigned upload 기능은 다음 환경 변수가 필요하다.
 ```text
 AWS_REGION=ap-northeast-2
 S3_BUCKET_NAME=<bucket-name>
+SKETCHCATCH_AWS_CALLER_PRINCIPAL_ARN=<SketchCatch backend IAM Role ARN>
 ```
 
 ## 루트 스크립트

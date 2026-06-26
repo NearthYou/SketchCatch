@@ -17,6 +17,7 @@
 - AI 수정 제안은 자동 적용 결과가 아니라 사용자가 diff를 보고 승인해야 하는 `AiChangeProposal` 후보 모델로 다룬다.
 - Terraform 원문은 RDS `content` 컬럼에 저장하지 않는다. IaC 파일은 S3에 두고, RDS/API에는 `ProjectAsset` 또는 `TerraformArtifact` 메타데이터와 `objectKey`를 저장한다.
 - 실제 AWS 배포 실행은 2차 제공 범위다. 1차 제공에서 다룰 `Deployment`는 통제된 배포/연습 세션 상태 기록 또는 모의 실행 이력으로 제한하고, 프론트에서 AWS SDK를 직접 호출하지 않는다.
+- 실제 AWS 계정 연결은 `AwsConnection`으로 표현하고, 현재 구현 범위는 Role Assume 설정에 필요한 `callerPrincipalArn`과 서버 생성 `externalId`를 제공하는 pending 연결 생성까지다. Access Key ID, Secret Access Key, session token은 공유 타입, DB, API 응답에 넣지 않는다.
 
 ## 이름 규칙
 
@@ -37,7 +38,7 @@
 
 ## 1차 제공 모델
 
-3주 안에 구현을 끝내는 일정에서는 아래 모델을 모두 3주차 종료 전까지 코드 기준으로 맞춘다. 다만 `AwsCredential`, 실제 AWS apply 실행은 인증/권한/비용 사고 방지 설계가 필요하므로 별도 명시가 있을 때만 포함한다.
+3주 안에 구현을 끝내는 일정에서는 아래 모델을 모두 3주차 종료 전까지 코드 기준으로 맞춘다. 다만 `AwsConnection`, 실제 AWS apply 실행은 인증/권한/비용 사고 방지 설계가 필요하므로 별도 명시가 있을 때만 포함한다.
 
 권장 순서:
 
@@ -335,21 +336,44 @@ type Template = {
 
 아래 모델은 1차 제공에서 분리한다. 이유는 CRUD 난이도보다 보안/권한/운영 정책 결정이 더 중요하기 때문이다.
 
-### AwsCredential
+### AwsConnection
 
-실제 AWS 연결이 필요해질 때 추가한다. 1차 제공에는 넣지 않는다.
+실제 AWS 연결이 필요해질 때 추가한다. 기본 방식은 사용자가 자기 AWS 계정에 IAM Role을 만들고, SketchCatch backend가 나중에 `sts:AssumeRole`로 임시 권한을 받아 쓰는 구조다.
+
+현재 구현 범위는 pending 연결을 만들고 사용자에게 Role trust policy에 넣을 값을 제공하는 단계다. `externalId`는 사용자가 직접 정하는 값이 아니라 SketchCatch가 connection 단위로 생성한다.
 
 ```ts
-type AwsCredential = {
+type AwsConnectionStatus = "pending" | "verified" | "failed";
+
+type AwsConnection = {
   id: string;
+  projectId: string;
   userId: string;
-  accountId: string;
-  roleArn: string;
+  accountId: string | null;
+  roleArn: string | null;
+  externalId: string;
+  region: string;
+  status: AwsConnectionStatus;
+  lastVerifiedAt: IsoDateTimeString | null;
   createdAt: IsoDateTimeString;
+  updatedAt: IsoDateTimeString;
+};
+
+type CreateAwsConnectionRequest = {
+  region: string;
+};
+
+type CreateAwsConnectionResponse = {
+  awsConnection: AwsConnection;
+  callerPrincipalArn: string;
+  recommendedRoleName: string;
+  trustPolicyTemplate: Record<string, unknown>;
 };
 ```
 
-가능하면 access key/secret key 저장보다 role assumption 기반 연결을 우선한다. 불가피하게 key를 저장해야 할 때는 암호화 저장과 접근 권한 분리를 먼저 설계한다.
+pending 상태에서는 아직 사용자 target role이 없으므로 `accountId`와 `roleArn`은 `null`이다. 다음 단계의 연결 검증 API에서 `roleArn`을 받고, 올바른 `externalId`로 `AssumeRole`과 `GetCallerIdentity`가 성공했을 때만 `accountId`, `roleArn`, `lastVerifiedAt`, `status = "verified"`를 저장한다.
+
+DB에는 `aws_connections` 테이블을 사용한다. 저장하는 값은 `projectId`, `userId`, `externalId`, `region`, `status`, 검증 metadata다. Access Key ID, Secret Access Key, session token은 저장하지 않는다.
 
 ### DeploymentLog
 
@@ -546,6 +570,7 @@ type Activity = {
 | `ProjectAsset` | `project_assets` | 구현됨 |
 | `TerraformArtifact` | `project_assets.asset_type = "terraform_file"` | 저장 모델 구현됨 |
 | `Deployment` | 향후 table/API | 1차 후반 또는 2차 제공 대상 |
+| `AwsConnection` | `aws_connections`, `/api/projects/:projectId/aws-connections` | Role Assume 설정값 제공 구현됨 |
 | `Template` | 향후 table/API | 1차 후반 대상 |
 | `DesignSimulationResult` | 향후 AI/API DTO | 1차 최소 구현 후 확정 |
 | `AiChangeProposal` | 향후 AI/API DTO | 1차 수정 제안 UX와 함께 확정 |

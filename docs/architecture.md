@@ -102,8 +102,11 @@ flowchart LR
 - `GET /api/projects/:id/draft`
 - `PUT /api/projects/:id/draft`
 - `POST /api/projects/:id/assets/presigned-upload`
+- `POST /api/projects/:projectId/aws-connections`
 
 프로젝트 API는 현재 `clientGeneratedWorkspaceId` 기반 익명 workspace를 지원한다. 인증이 연결되면 API route의 `resolveProjectOwner`가 session에서 `userId`를 제공하고, 서버는 `projects.user_id` 기준으로 같은 프로젝트 목록/draft endpoint를 재사용한다. 세션에 `workspaceId`가 아직 없으면 API가 `user:<userId>` 형태의 내부 workspace id를 파생한다.
+
+AWS 연결 API는 사용자 AWS 계정의 IAM Role trust policy에 넣을 SketchCatch caller principal ARN과 서버 생성 External ID를 제공하고, 연결 상태를 `pending`으로 저장한다. 이 단계는 AWS 리소스를 생성하거나 Terraform을 실행하지 않는다.
 
 인증 화면, AI 생성, Terraform 실행, 실제 AWS 리소스 생성은 아직 구현하지 않았다.
 
