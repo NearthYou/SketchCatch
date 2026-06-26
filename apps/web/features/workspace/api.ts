@@ -1,4 +1,5 @@
 import type {
+  AwsConnectionCloudFormationTemplateResponse,
   CreateAwsConnectionRequest,
   CreateAwsConnectionResponse,
   CreateProjectRequest,
@@ -103,6 +104,23 @@ export async function verifyAwsConnection({
       body: {
         roleArn
       }
+    }
+  );
+}
+
+export async function getAwsConnectionCloudFormationTemplate({
+  projectId,
+  connectionId
+}: {
+  projectId: string;
+  connectionId: string;
+}): Promise<AwsConnectionCloudFormationTemplateResponse> {
+  return apiFetch<AwsConnectionCloudFormationTemplateResponse>(
+    `/projects/${encodeURIComponent(projectId)}/aws-connections/${encodeURIComponent(
+      connectionId
+    )}/cloudformation-template`,
+    {
+      auth: true
     }
   );
 }

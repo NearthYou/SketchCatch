@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   createAwsConnectionSetup,
+  getAwsConnectionCloudFormationTemplate,
   listProjects,
   saveProjectDraft,
   testAwsConnection,
@@ -322,6 +323,59 @@ test("verifyAwsConnection stores verified AWS connection metadata", async (conte
   assert.equal("accessKeyId" in response, false);
   assert.equal("secretAccessKey" in response, false);
   assert.equal("sessionToken" in response, false);
+});
+
+test("getAwsConnectionCloudFormationTemplate fetches the launch stack setup", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    restoreWindow(originalWindowDescriptor);
+  });
+
+  installAuthSession();
+
+  globalThis.fetch = async (input, init) => {
+    requests.push({ input, init });
+
+    return new Response(
+      JSON.stringify({
+        roleName: "SketchCatchTerraformExecutionRole",
+        stackName: "sketchcatch-aws-connection-33333333",
+        region: "ap-northeast-2",
+        capabilities: ["CAPABILITY_NAMED_IAM"],
+        templateBody: "Resources:\n  SketchCatchTerraformExecutionRole:\n    Type: AWS::IAM::Role\n",
+        templateUrl:
+          "https://api.sketchcatch.test/api/aws/connections/cloudformation-template?token=signed",
+        templateUrlExpiresAt: "2026-06-26T01:00:00.000Z",
+        launchStackUrl:
+          "https://console.aws.amazon.com/cloudformation/home?region=ap-northeast-2#/stacks/quickcreate?templateURL=https%3A%2F%2Fapi.sketchcatch.test%2Fapi%2Faws%2Fconnections%2Fcloudformation-template%3Ftoken%3Dsigned&stackName=sketchcatch-aws-connection-33333333"
+      }),
+      {
+        headers: {
+          "Content-Type": "application/json"
+        },
+        status: 200
+      }
+    );
+  };
+
+  const response = await getAwsConnectionCloudFormationTemplate({
+    projectId: "11111111-1111-4111-8111-111111111111",
+    connectionId: "33333333-3333-4333-8333-333333333333"
+  });
+
+  assert.equal(
+    String(requests[0]?.input),
+    "/api/projects/11111111-1111-4111-8111-111111111111/aws-connections/33333333-3333-4333-8333-333333333333/cloudformation-template"
+  );
+  assert.equal(requests[0]?.init?.method, undefined);
+  assert.equal(new Headers(requests[0]?.init?.headers).get("authorization"), "Bearer access-token");
+  assert.equal(response.roleName, "SketchCatchTerraformExecutionRole");
+  assert.equal(response.capabilities[0], "CAPABILITY_NAMED_IAM");
+  assert.match(response.launchStackUrl ?? "", /cloudformation\/home/);
 });
 
 function installAuthSession(): void {

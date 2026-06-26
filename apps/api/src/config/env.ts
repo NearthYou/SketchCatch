@@ -5,6 +5,7 @@ export type RuntimeEnv = {
   databaseSsl: boolean;
   s3BucketName: string | undefined;
   sketchcatchAwsCallerPrincipalArn: string | undefined;
+  sketchcatchPublicBaseUrl: string | undefined;
 };
 
 export function getRuntimeEnv(): RuntimeEnv {
@@ -14,7 +15,8 @@ export function getRuntimeEnv(): RuntimeEnv {
     databaseUrl: process.env.DATABASE_URL,
     databaseSsl: process.env.DATABASE_SSL === "true",
     s3BucketName: process.env.S3_BUCKET_NAME,
-    sketchcatchAwsCallerPrincipalArn: process.env.SKETCHCATCH_AWS_CALLER_PRINCIPAL_ARN
+    sketchcatchAwsCallerPrincipalArn: process.env.SKETCHCATCH_AWS_CALLER_PRINCIPAL_ARN,
+    sketchcatchPublicBaseUrl: process.env.SKETCHCATCH_PUBLIC_BASE_URL
   };
 }
 

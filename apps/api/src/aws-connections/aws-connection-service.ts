@@ -1,7 +1,8 @@
-import { randomBytes, randomUUID } from "node:crypto";
+import { createHmac, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import type {
   AwsConnection,
+  AwsConnectionCloudFormationTemplateResponse,
   AwsRolePermissionSetup,
   CreateAwsConnectionResponse,
   SketchCatchCallerRoleSetup,
@@ -20,6 +21,9 @@ import {
 
 const recommendedRoleName = "SketchCatchTerraformExecutionRole";
 const callerAssumeRolePolicyName = "SketchCatchAssumeTerraformExecutionRole";
+const cloudFormationTemplateTokenVersion = 1;
+const cloudFormationTemplateTokenSeparator = "~";
+const defaultCloudFormationTemplateTokenTtlMs = 60 * 60 * 1000;
 
 export type AwsConnectionRecord = typeof awsConnections.$inferSelect;
 
@@ -71,6 +75,20 @@ export type VerifyAwsConnectionOptions = {
   now?: () => Date;
 };
 
+export type GetAwsConnectionCloudFormationTemplateInput = {
+  projectId: string;
+  connectionId: string;
+  accessContext: ProjectAccessContext;
+  callerPrincipalArn: string;
+  publicBaseUrl: string | undefined;
+  tokenSecret: string;
+};
+
+export type GetAwsConnectionCloudFormationTemplateOptions = {
+  now?: () => Date;
+  tokenTtlMs?: number;
+};
+
 export type UpdateAwsConnectionVerificationInput = {
   connectionId: string;
   accountId: string | null;
@@ -90,6 +108,13 @@ export class AwsConnectionVerificationError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "AwsConnectionVerificationError";
+  }
+}
+
+export class AwsConnectionCloudFormationTemplateError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "AwsConnectionCloudFormationTemplateError";
   }
 }
 
@@ -297,6 +322,96 @@ export async function verifyAwsConnection(
   };
 }
 
+export async function getAwsConnectionCloudFormationTemplate(
+  input: GetAwsConnectionCloudFormationTemplateInput,
+  repository: AwsConnectionRepository,
+  options: GetAwsConnectionCloudFormationTemplateOptions = {}
+): Promise<AwsConnectionCloudFormationTemplateResponse> {
+  const awsConnection = await repository.findAccessibleAwsConnection(
+    input.projectId,
+    input.connectionId,
+    input.accessContext
+  );
+
+  if (!awsConnection) {
+    throw new AwsConnectionNotFoundError("AWS connection not found");
+  }
+
+  assertAwsConnectionCanRenderCloudFormationTemplate(awsConnection);
+
+  const roleName = recommendedRoleName;
+  const stackName = createAwsConnectionStackName(awsConnection.id);
+  const templateBody = createAwsConnectionCloudFormationTemplateBody({
+    roleName,
+    callerPrincipalArn: input.callerPrincipalArn,
+    externalId: awsConnection.externalId
+  });
+  const publicBaseUrl = input.publicBaseUrl?.trim();
+
+  if (!publicBaseUrl) {
+    return {
+      roleName,
+      stackName,
+      region: awsConnection.region,
+      capabilities: ["CAPABILITY_NAMED_IAM"],
+      templateBody,
+      templateUrl: null,
+      templateUrlExpiresAt: null,
+      launchStackUrl: null
+    };
+  }
+
+  const now = options.now ?? (() => new Date());
+  const tokenTtlMs = options.tokenTtlMs ?? defaultCloudFormationTemplateTokenTtlMs;
+  const templateUrlExpiresAt = new Date(now().getTime() + tokenTtlMs);
+  const token = createAwsConnectionCloudFormationTemplateToken(
+    {
+      version: cloudFormationTemplateTokenVersion,
+      roleName,
+      callerPrincipalArn: input.callerPrincipalArn,
+      externalId: awsConnection.externalId,
+      expiresAt: templateUrlExpiresAt.toISOString()
+    },
+    input.tokenSecret
+  );
+  const templateUrl = createAwsConnectionCloudFormationTemplateUrl(publicBaseUrl, token);
+
+  return {
+    roleName,
+    stackName,
+    region: awsConnection.region,
+    capabilities: ["CAPABILITY_NAMED_IAM"],
+    templateBody,
+    templateUrl,
+    templateUrlExpiresAt: templateUrlExpiresAt.toISOString(),
+    launchStackUrl: createAwsConnectionLaunchStackUrl({
+      region: awsConnection.region,
+      stackName,
+      templateUrl
+    })
+  };
+}
+
+export function renderAwsConnectionCloudFormationTemplateFromToken(
+  token: string,
+  tokenSecret: string,
+  now: Date = new Date()
+): string {
+  const payload = parseAwsConnectionCloudFormationTemplateToken(token, tokenSecret);
+
+  if (Date.parse(payload.expiresAt) <= now.getTime()) {
+    throw new AwsConnectionCloudFormationTemplateError(
+      "CloudFormation template URL is invalid or expired"
+    );
+  }
+
+  return createAwsConnectionCloudFormationTemplateBody({
+    roleName: payload.roleName,
+    callerPrincipalArn: payload.callerPrincipalArn,
+    externalId: payload.externalId
+  });
+}
+
 function createTrustPolicyTemplate(input: {
   callerPrincipalArn: string;
   externalId: string;
@@ -345,4 +460,182 @@ function createCallerRoleSetup(roleName: string): SketchCatchCallerRoleSetup {
       ]
     }
   };
+}
+
+function assertAwsConnectionCanRenderCloudFormationTemplate(
+  awsConnection: AwsConnectionRecord
+): void {
+  if (awsConnection.region !== supportedAwsConnectionRegion) {
+    throw new AwsConnectionCloudFormationTemplateError(
+      "AWS connection region must be ap-northeast-2"
+    );
+  }
+
+  if (awsConnection.externalId.trim().length === 0) {
+    throw new AwsConnectionCloudFormationTemplateError("AWS connection external ID is missing");
+  }
+}
+
+function createAwsConnectionStackName(connectionId: string): string {
+  return `sketchcatch-aws-connection-${connectionId.slice(0, 8)}`;
+}
+
+function createAwsConnectionCloudFormationTemplateBody(input: {
+  roleName: string;
+  callerPrincipalArn: string;
+  externalId: string;
+}): string {
+  const roleName = yamlDoubleQuote(input.roleName);
+  const callerPrincipalArn = yamlDoubleQuote(input.callerPrincipalArn);
+  const externalId = yamlDoubleQuote(input.externalId);
+
+  return [
+    'AWSTemplateFormatVersion: "2010-09-09"',
+    "Description: SketchCatch AWS Role connection. Creates only the IAM Role required for STS AssumeRole verification.",
+    "Resources:",
+    "  SketchCatchTerraformExecutionRole:",
+    "    Type: AWS::IAM::Role",
+    "    Properties:",
+    `      RoleName: ${roleName}`,
+    "      AssumeRolePolicyDocument:",
+    '        Version: "2012-10-17"',
+    "        Statement:",
+    "          - Effect: Allow",
+    "            Principal:",
+    `              AWS: ${callerPrincipalArn}`,
+    "            Action: sts:AssumeRole",
+    "            Condition:",
+    "              StringEquals:",
+    `                sts:ExternalId: ${externalId}`,
+    "      Tags:",
+    "        - Key: ManagedBy",
+    '          Value: "SketchCatch"',
+    "        - Key: SketchCatchConnection",
+    `          Value: ${externalId}`,
+    "Outputs:",
+    "  RoleArn:",
+    "    Description: Copy this ARN back to SketchCatch to verify the AWS connection.",
+    "    Value: !GetAtt SketchCatchTerraformExecutionRole.Arn",
+    ""
+  ].join("\n");
+}
+
+function createAwsConnectionCloudFormationTemplateUrl(
+  publicBaseUrl: string,
+  token: string
+): string {
+  const templateUrl = new URL("/api/aws/connections/cloudformation-template", publicBaseUrl);
+  templateUrl.searchParams.set("token", token);
+
+  return templateUrl.toString();
+}
+
+function createAwsConnectionLaunchStackUrl(input: {
+  region: string;
+  stackName: string;
+  templateUrl: string;
+}): string {
+  const baseUrl = new URL("https://console.aws.amazon.com/cloudformation/home");
+  baseUrl.searchParams.set("region", input.region);
+
+  return `${baseUrl.toString()}#/stacks/quickcreate?templateURL=${encodeURIComponent(
+    input.templateUrl
+  )}&stackName=${encodeURIComponent(input.stackName)}`;
+}
+
+type AwsConnectionCloudFormationTemplateTokenPayload = {
+  version: typeof cloudFormationTemplateTokenVersion;
+  roleName: string;
+  callerPrincipalArn: string;
+  externalId: string;
+  expiresAt: string;
+};
+
+function createAwsConnectionCloudFormationTemplateToken(
+  payload: AwsConnectionCloudFormationTemplateTokenPayload,
+  tokenSecret: string
+): string {
+  const encodedPayload = Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
+  const signature = signCloudFormationTemplateTokenPayload(encodedPayload, tokenSecret);
+
+  return `${encodedPayload}${cloudFormationTemplateTokenSeparator}${signature}`;
+}
+
+function parseAwsConnectionCloudFormationTemplateToken(
+  token: string,
+  tokenSecret: string
+): AwsConnectionCloudFormationTemplateTokenPayload {
+  const [encodedPayload, signature, extra] = token.split(cloudFormationTemplateTokenSeparator);
+
+  if (!encodedPayload || !signature || extra !== undefined) {
+    throw new AwsConnectionCloudFormationTemplateError(
+      "CloudFormation template URL is invalid or expired"
+    );
+  }
+
+  const expectedSignature = signCloudFormationTemplateTokenPayload(encodedPayload, tokenSecret);
+
+  if (!timingSafeEqualString(signature, expectedSignature)) {
+    throw new AwsConnectionCloudFormationTemplateError(
+      "CloudFormation template URL is invalid or expired"
+    );
+  }
+
+  let payload: unknown;
+
+  try {
+    payload = JSON.parse(Buffer.from(encodedPayload, "base64url").toString("utf8"));
+  } catch {
+    throw new AwsConnectionCloudFormationTemplateError(
+      "CloudFormation template URL is invalid or expired"
+    );
+  }
+
+  if (!isAwsConnectionCloudFormationTemplateTokenPayload(payload)) {
+    throw new AwsConnectionCloudFormationTemplateError(
+      "CloudFormation template URL is invalid or expired"
+    );
+  }
+
+  return payload;
+}
+
+function signCloudFormationTemplateTokenPayload(encodedPayload: string, tokenSecret: string): string {
+  return createHmac("sha256", tokenSecret).update(encodedPayload).digest("base64url");
+}
+
+function timingSafeEqualString(actual: string, expected: string): boolean {
+  const actualBuffer = Buffer.from(actual, "utf8");
+  const expectedBuffer = Buffer.from(expected, "utf8");
+
+  return (
+    actualBuffer.length === expectedBuffer.length &&
+    timingSafeEqual(actualBuffer, expectedBuffer)
+  );
+}
+
+function isAwsConnectionCloudFormationTemplateTokenPayload(
+  value: unknown
+): value is AwsConnectionCloudFormationTemplateTokenPayload {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const payload = value as Partial<AwsConnectionCloudFormationTemplateTokenPayload>;
+
+  return (
+    payload.version === cloudFormationTemplateTokenVersion &&
+    typeof payload.roleName === "string" &&
+    payload.roleName.trim().length > 0 &&
+    typeof payload.callerPrincipalArn === "string" &&
+    payload.callerPrincipalArn.trim().length > 0 &&
+    typeof payload.externalId === "string" &&
+    payload.externalId.trim().length > 0 &&
+    typeof payload.expiresAt === "string" &&
+    Number.isFinite(Date.parse(payload.expiresAt))
+  );
+}
+
+function yamlDoubleQuote(value: string): string {
+  return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 }

@@ -83,6 +83,17 @@ type AwsConnectionVerifyResponse = AwsConnectionTestResponse & {
   };
 };
 
+type AwsConnectionCloudFormationTemplateResponse = {
+  roleName: string;
+  stackName: string;
+  region: string;
+  capabilities: ["CAPABILITY_NAMED_IAM"];
+  templateBody: string;
+  templateUrl: string | null;
+  templateUrlExpiresAt: string | null;
+  launchStackUrl: string | null;
+};
+
 class FakeAwsConnectionRepository implements AwsConnectionRepository {
   readonly calls: Array<{ name: string; [key: string]: unknown }> = [];
   project: ProjectRecord | undefined = createProjectRecord();
@@ -421,6 +432,72 @@ test("POST /api/projects/:projectId/aws-connections/:connectionId/verify stores 
   await app.close();
 });
 
+test("GET /api/projects/:projectId/aws-connections/:connectionId/cloudformation-template returns launch stack setup", async () => {
+  const repository = new FakeAwsConnectionRepository();
+  repository.awsConnection = createAwsConnectionRecord();
+  const app = await buildAwsConnectionTestApp(repository, {
+    awsConnectionConfig: {
+      callerPrincipalArn,
+      publicBaseUrl: "https://api.sketchcatch.test"
+    }
+  });
+
+  const response = await app.inject({
+    method: "GET",
+    url: `/api/projects/${projectId}/aws-connections/${awsConnectionId}/cloudformation-template`,
+    headers: authHeaders()
+  });
+
+  assert.equal(response.statusCode, 200);
+  const body = response.json() as AwsConnectionCloudFormationTemplateResponse;
+  assert.equal(body.roleName, "SketchCatchTerraformExecutionRole");
+  assert.equal(body.stackName, "sketchcatch-aws-connection-33333333");
+  assert.equal(body.region, "ap-northeast-2");
+  assert.deepEqual(body.capabilities, ["CAPABILITY_NAMED_IAM"]);
+  assert.match(body.templateBody, /Type: AWS::IAM::Role/);
+  assert.match(body.templateBody, new RegExp(callerPrincipalArn.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.match(body.templateBody, new RegExp(externalId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.match(body.templateUrl ?? "", /^https:\/\/api\.sketchcatch\.test\/api\/aws\/connections\/cloudformation-template\?token=/);
+  assert.equal(body.templateUrlExpiresAt, "2026-06-26T01:00:00.000Z");
+  assert.match(body.launchStackUrl ?? "", /^https:\/\/console\.aws\.amazon\.com\/cloudformation\/home\?region=ap-northeast-2#/);
+  assert.match(body.launchStackUrl ?? "", /templateURL=/);
+  assert.match(body.launchStackUrl ?? "", /stackName=sketchcatch-aws-connection-33333333/);
+
+  await app.close();
+});
+
+test("GET /api/aws/connections/cloudformation-template returns public template yaml", async () => {
+  const repository = new FakeAwsConnectionRepository();
+  repository.awsConnection = createAwsConnectionRecord();
+  const app = await buildAwsConnectionTestApp(repository, {
+    awsConnectionConfig: {
+      callerPrincipalArn,
+      publicBaseUrl: "https://api.sketchcatch.test"
+    }
+  });
+
+  const setupResponse = await app.inject({
+    method: "GET",
+    url: `/api/projects/${projectId}/aws-connections/${awsConnectionId}/cloudformation-template`,
+    headers: authHeaders()
+  });
+  const setupBody = setupResponse.json() as AwsConnectionCloudFormationTemplateResponse;
+  const templateUrl = new URL(setupBody.templateUrl ?? "");
+  const templatePath = `${templateUrl.pathname}${templateUrl.search}`;
+
+  const response = await app.inject({
+    method: "GET",
+    url: templatePath
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.headers["content-type"], "application/x-yaml");
+  assert.equal(response.body, setupBody.templateBody);
+  assert.match(response.body, /RoleName: "SketchCatchTerraformExecutionRole"/);
+
+  await app.close();
+});
+
 test("POST /api/projects/:projectId/aws-connections maps inaccessible projects to not_found", async () => {
   const repository = new FakeAwsConnectionRepository();
   repository.project = undefined;
@@ -460,6 +537,8 @@ async function buildAwsConnectionTestApp(
     },
     generateAwsConnectionId: () => awsConnectionId,
     generateAwsExternalId: () => externalId,
+    cloudFormationTemplateTokenSecret: "test-cloudformation-template-token-secret",
+    now: () => fixedNow,
     ...routeOverrides
   });
 

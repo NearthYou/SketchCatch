@@ -308,6 +308,17 @@ export type VerifyAwsConnectionResponse = TestAwsConnectionResponse & {
   awsConnection: AwsConnection;
 };
 
+export type AwsConnectionCloudFormationTemplateResponse = {
+  roleName: string;
+  stackName: string;
+  region: string;
+  capabilities: ["CAPABILITY_NAMED_IAM"];
+  templateBody: string;
+  templateUrl: string | null;
+  templateUrlExpiresAt: IsoDateTimeString | null;
+  launchStackUrl: string | null;
+};
+
 export type DeploymentLogLevel = "INFO" | "WARN" | "ERROR";
 
 export type DeploymentLog = {
