@@ -43,7 +43,7 @@
 
 | 단계 | 구현 모델 | 목적 |
 | --- | --- | --- |
-| 1차 초반 | `AnonymousWorkspace`, `Project`, `ArchitectureSnapshot`, `ArchitectureJson`, `ResourceNode`, `ResourceEdge` | 프로젝트 생성과 보드 저장 기준 확정 |
+| 1차 초반 | `User`, `Project`, `ArchitectureSnapshot`, `ArchitectureJson`, `ResourceNode`, `ResourceEdge` | 인증된 사용자 기준 프로젝트 생성과 보드 저장 기준 확정 |
 | 1차 중반 | `ProjectAsset`, `TerraformArtifact` | 다이어그램 이미지, Terraform 파일, export 산출물 저장 |
 | 1차 후반 | `Deployment`, `Template` | 모의/통제된 실행 이력과 Template 공유 기준 확정 |
 

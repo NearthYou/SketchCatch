@@ -98,7 +98,8 @@ function setCorsHeaders(request: FastifyRequest, reply: FastifyReply): void {
   }
 
   const requestedHeaders =
-    firstHeaderValue(request.headers["access-control-request-headers"]) ?? fallbackCorsAllowedHeaders;
+    firstHeaderValue(request.headers["access-control-request-headers"]) ??
+    fallbackCorsAllowedHeaders;
 
   reply.header("Access-Control-Allow-Origin", origin);
   reply.header("Access-Control-Allow-Methods", corsAllowedMethods);

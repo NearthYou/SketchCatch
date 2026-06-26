@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, sql } from "drizzle-orm";
 import type {
   DeploymentBlockedBy,
   DeploymentFailureStage,
@@ -17,6 +17,7 @@ import {
   projects,
   touchUpdatedAt
 } from "../db/schema.js";
+import { maskDeploymentMessage } from "./log-masking.js";
 
 export type DeploymentRecord = typeof deployments.$inferSelect;
 export type DeploymentLogRecord = typeof deploymentLogs.$inferSelect;
@@ -39,6 +40,37 @@ export type CreateDeploymentRecordInput = {
   architectureId: string;
   terraformArtifactId: string;
   status: "PENDING";
+};
+
+export type AppendDeploymentLogInput = {
+  deploymentId: string;
+  accessContext: ProjectAccessContext;
+  sequence: number;
+  stage: DeploymentStage;
+  level: DeploymentLogLevel;
+  message: string;
+  relatedResourceId?: string | null;
+};
+
+export type AppendDeploymentLogLineInput = Omit<
+  AppendDeploymentLogInput,
+  "deploymentId" | "accessContext"
+>;
+
+export type AppendDeploymentLogsInput = {
+  deploymentId: string;
+  accessContext: ProjectAccessContext;
+  logs: AppendDeploymentLogLineInput[];
+};
+
+export type CreateDeploymentLogRecordInput = {
+  id: string;
+  deploymentId: string;
+  sequence: number;
+  stage: DeploymentStage;
+  level: DeploymentLogLevel;
+  message: string;
+  relatedResourceId: string | null;
 };
 
 export type ProjectRecord = typeof projects.$inferSelect;
@@ -65,6 +97,9 @@ export type DeploymentRepository = {
     projectId: string,
     architectureId: string
   ): Promise<TerraformArtifactRecord | undefined>;
+  findTerraformArtifactById(
+    terraformArtifactId: string
+  ): Promise<TerraformArtifactRecord | undefined>;
   createDeployment(input: CreateDeploymentRecordInput): Promise<DeploymentRecord>;
   findDeploymentById(deploymentId: string): Promise<DeploymentRecord | undefined>;
 
@@ -73,6 +108,7 @@ export type DeploymentRepository = {
     deploymentId: string,
     status: DeploymentStatus
   ): Promise<DeploymentRecord | undefined>;
+  markDeploymentInitSucceeded(deploymentId: string): Promise<DeploymentRecord | undefined>;
   updateDeploymentPlan(
     deploymentId: string,
     input: {
@@ -97,15 +133,9 @@ export type DeploymentRepository = {
       errorSummary: string;
     }
   ): Promise<DeploymentRecord | undefined>;
-  createDeploymentLog(input: {
-    id: string;
-    deploymentId: string;
-    sequence: number;
-    stage: DeploymentStage;
-    level: DeploymentLogLevel;
-    message: string;
-    relatedResourceId: string | null;
-  }): Promise<DeploymentLogRecord>;
+  createDeploymentLog(input: CreateDeploymentLogRecordInput): Promise<DeploymentLogRecord>;
+  createDeploymentLogs(input: CreateDeploymentLogRecordInput[]): Promise<DeploymentLogRecord[]>;
+  getNextDeploymentLogSequence(deploymentId: string): Promise<number>;
   listDeploymentLogs(deploymentId: string): Promise<DeploymentLogRecord[]>;
 };
 
@@ -159,6 +189,35 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
       };
     },
 
+    async findTerraformArtifactById(terraformArtifactId) {
+      const [terraformArtifact] = await db
+        .select({
+          id: projectAssets.id,
+          projectId: projectAssets.projectId,
+          architectureId: projectAssets.architectureId,
+          assetType: projectAssets.assetType,
+          objectKey: projectAssets.objectKey,
+          fileName: projectAssets.fileName,
+          contentType: projectAssets.contentType
+        })
+        .from(projectAssets)
+        .where(
+          and(
+            eq(projectAssets.id, terraformArtifactId),
+            eq(projectAssets.assetType, "terraform_file")
+          )
+        );
+
+      if (!terraformArtifact) {
+        return undefined;
+      }
+
+      return {
+        ...terraformArtifact,
+        assetType: "terraform_file"
+      };
+    },
+
     async createDeployment(input) {
       const [deployment] = await db.insert(deployments).values(input).returning();
 
@@ -190,6 +249,21 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
       const [deployment] = await db
         .update(deployments)
         .set({ status, ...touchUpdatedAt })
+        .where(eq(deployments.id, deploymentId))
+        .returning();
+
+      return deployment;
+    },
+
+    async markDeploymentInitSucceeded(deploymentId) {
+      const [deployment] = await db
+        .update(deployments)
+        .set({
+          status: "PENDING",
+          failureStage: null,
+          errorSummary: null,
+          ...touchUpdatedAt
+        })
         .where(eq(deployments.id, deploymentId))
         .returning();
 
@@ -234,6 +308,25 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
       }
 
       return deploymentLog;
+    },
+
+    async createDeploymentLogs(input) {
+      if (input.length === 0) {
+        return [];
+      }
+
+      return db.insert(deploymentLogs).values(input).returning();
+    },
+
+    async getNextDeploymentLogSequence(deploymentId) {
+      const [row] = await db
+        .select({
+          nextSequence: sql<number>`coalesce(max(${deploymentLogs.sequence}), 0) + 1`
+        })
+        .from(deploymentLogs)
+        .where(eq(deploymentLogs.deploymentId, deploymentId));
+
+      return Number(row?.nextSequence ?? 1);
     },
 
     async listDeploymentLogs(deploymentId) {
@@ -327,6 +420,66 @@ export async function listDeploymentLogs(
   await getDeployment(input, repository);
 
   return repository.listDeploymentLogs(input.deploymentId);
+}
+
+export async function appendDeploymentLog(
+  input: AppendDeploymentLogInput,
+  repository: DeploymentRepository,
+  generateId: () => string = randomUUID
+): Promise<DeploymentLogRecord> {
+  const [deploymentLog] = await appendDeploymentLogs(
+    {
+      deploymentId: input.deploymentId,
+      accessContext: input.accessContext,
+      logs: [
+        {
+          sequence: input.sequence,
+          stage: input.stage,
+          level: input.level,
+          message: input.message,
+          relatedResourceId: input.relatedResourceId ?? null
+        }
+      ]
+    },
+    repository,
+    generateId
+  );
+
+  if (!deploymentLog) {
+    throw new Error("Deployment log creation failed");
+  }
+
+  return deploymentLog;
+}
+
+export async function appendDeploymentLogs(
+  input: AppendDeploymentLogsInput,
+  repository: DeploymentRepository,
+  generateId: () => string = randomUUID
+): Promise<DeploymentLogRecord[]> {
+  await getDeployment(
+    {
+      deploymentId: input.deploymentId,
+      accessContext: input.accessContext
+    },
+    repository
+  );
+
+  if (input.logs.length === 0) {
+    return [];
+  }
+
+  return repository.createDeploymentLogs(
+    input.logs.map((log) => ({
+      id: generateId(),
+      deploymentId: input.deploymentId,
+      sequence: log.sequence,
+      stage: log.stage,
+      level: log.level,
+      message: maskDeploymentMessage(log.message),
+      relatedResourceId: log.relatedResourceId ?? null
+    }))
+  );
 }
 
 async function requireAccessibleProject(

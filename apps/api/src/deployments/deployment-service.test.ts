@@ -42,6 +42,10 @@ type RepositoryCall =
       architectureId: string;
     }
   | {
+      name: "findTerraformArtifactById";
+      terraformArtifactId: string;
+    }
+  | {
       name: "createDeployment";
       input: {
         id: string;
@@ -56,11 +60,30 @@ type RepositoryCall =
       deploymentId: string;
     };
 
+type TerraformArtifactRecordReference = {
+  id: string;
+  projectId: string;
+  architectureId: string | null;
+  assetType: "terraform_file";
+  objectKey: string;
+  fileName: string;
+  contentType: string;
+};
+
 class FakeDeploymentRepository implements DeploymentRepository {
   readonly calls: RepositoryCall[] = [];
   project: ProjectRecord | undefined = createProjectRecord();
   architecture: ArchitectureRecord | undefined = createArchitectureRecord();
   terraformArtifact: ProjectAssetRecord | undefined = createProjectAssetRecord();
+  terraformArtifactById: TerraformArtifactRecordReference | undefined = {
+    id: terraformArtifactId,
+    projectId,
+    architectureId,
+    assetType: "terraform_file",
+    objectKey: "projects/project-id/terraform/main.tf",
+    fileName: "main.tf",
+    contentType: "application/x-terraform"
+  };
   deployment: DeploymentRecord | undefined;
   deployments: DeploymentRecord[] = [];
   logs: DeploymentLogRecord[] = [];
@@ -127,6 +150,19 @@ class FakeDeploymentRepository implements DeploymentRepository {
       ...this.terraformArtifact,
       assetType: "terraform_file"
     };
+  }
+
+  async findTerraformArtifactById(candidateTerraformArtifactId: string) {
+    this.calls.push({
+      name: "findTerraformArtifactById",
+      terraformArtifactId: candidateTerraformArtifactId
+    });
+
+    if (!this.terraformArtifactById || this.terraformArtifactById.id !== candidateTerraformArtifactId) {
+      return undefined;
+    }
+
+    return this.terraformArtifactById;
   }
 
   async createDeployment(input: Extract<RepositoryCall, { name: "createDeployment" }>["input"]) {
@@ -206,6 +242,23 @@ class FakeDeploymentRepository implements DeploymentRepository {
     return this.deployment;
   };
 
+  markDeploymentInitSucceeded: DeploymentRepository["markDeploymentInitSucceeded"] = async (
+    candidateDeploymentId
+  ) => {
+    if (this.deployment?.id !== candidateDeploymentId) {
+      return undefined;
+    }
+
+    this.deployment = {
+      ...this.deployment,
+      status: "PENDING",
+      failureStage: null,
+      errorSummary: null
+    };
+
+    return this.deployment;
+  };
+
   createDeploymentLog: DeploymentRepository["createDeploymentLog"] = async (input) => {
     const deploymentLog = { ...input, createdAt: fixedNow };
 
@@ -213,6 +266,22 @@ class FakeDeploymentRepository implements DeploymentRepository {
 
     return deploymentLog;
   };
+
+  createDeploymentLogs: DeploymentRepository["createDeploymentLogs"] = async (input) => {
+    const deploymentLogs = input.map((log) => ({ ...log, createdAt: fixedNow }));
+
+    this.logs.push(...deploymentLogs);
+
+    return deploymentLogs;
+  };
+
+  async getNextDeploymentLogSequence(candidateDeploymentId: string) {
+    const maxSequence = this.logs
+      .filter((log) => log.deploymentId === candidateDeploymentId)
+      .reduce((max, log) => Math.max(max, log.sequence), 0);
+
+    return maxSequence + 1;
+  }
 
   async listDeploymentLogs() {
     return this.logs;
