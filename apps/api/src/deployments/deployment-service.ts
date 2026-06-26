@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { and, asc, desc, eq, sql } from "drizzle-orm";
 import type {
+  AwsConnection,
   DeploymentBlockedBy,
   DeploymentFailureStage,
   DeploymentLogLevel,
@@ -11,6 +12,7 @@ import type {
 import type { Database } from "../db/client.js";
 import {
   architectures,
+  awsConnections,
   deploymentLogs,
   deployments,
   projectAssets,
@@ -100,6 +102,10 @@ export type DeploymentRepository = {
   findTerraformArtifactById(
     terraformArtifactId: string
   ): Promise<TerraformArtifactRecord | undefined>;
+  findVerifiedAwsConnectionForProject(
+    projectId: string,
+    accessContext: ProjectAccessContext
+  ): Promise<AwsConnection | undefined>;
   createDeployment(input: CreateDeploymentRecordInput): Promise<DeploymentRecord>;
   findDeploymentById(deploymentId: string): Promise<DeploymentRecord | undefined>;
 
@@ -216,6 +222,23 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
         ...terraformArtifact,
         assetType: "terraform_file"
       };
+    },
+
+    async findVerifiedAwsConnectionForProject(projectId, accessContext) {
+      const [awsConnection] = await db
+        .select()
+        .from(awsConnections)
+        .where(
+          and(
+            eq(awsConnections.projectId, projectId),
+            eq(awsConnections.userId, accessContext.userId),
+            eq(awsConnections.status, "verified")
+          )
+        )
+        .orderBy(desc(awsConnections.lastVerifiedAt), desc(awsConnections.updatedAt))
+        .limit(1);
+
+      return awsConnection ? toAwsConnection(awsConnection) : undefined;
     },
 
     async createDeployment(input) {
@@ -480,6 +503,22 @@ export async function appendDeploymentLogs(
       relatedResourceId: log.relatedResourceId ?? null
     }))
   );
+}
+
+function toAwsConnection(row: typeof awsConnections.$inferSelect): AwsConnection {
+  return {
+    id: row.id,
+    projectId: row.projectId,
+    userId: row.userId,
+    accountId: row.accountId,
+    roleArn: row.roleArn,
+    externalId: row.externalId,
+    region: row.region,
+    status: row.status,
+    lastVerifiedAt: row.lastVerifiedAt?.toISOString() ?? null,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString()
+  };
 }
 
 async function requireAccessibleProject(

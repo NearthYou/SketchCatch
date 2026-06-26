@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import type { AwsConnection } from "@sketchcatch/types";
 import {
   DeploymentNotFoundError,
   type ArchitectureRecord,
@@ -17,6 +18,7 @@ const projectId = "11111111-1111-4111-8111-111111111111";
 const architectureId = "22222222-2222-4222-8222-222222222222";
 const terraformArtifactId = "33333333-3333-4333-8333-333333333333";
 const deploymentId = "44444444-4444-4444-8444-444444444444";
+const awsConnectionId = "77777777-7777-4777-8777-777777777777";
 const userId = "55555555-5555-4555-8555-555555555555";
 const otherUserId = "66666666-6666-4666-8666-666666666666";
 const fixedNow = new Date("2026-01-01T00:00:00.000Z");
@@ -34,6 +36,11 @@ type RepositoryCall =
   | {
       name: "findTerraformArtifactById";
       terraformArtifactId: string;
+    }
+  | {
+      name: "findVerifiedAwsConnectionForProject";
+      projectId: string;
+      accessContext: ProjectAccessContext;
     }
   | {
       name: "updateDeploymentStatus";
@@ -72,6 +79,7 @@ class FakeDeploymentRepository implements DeploymentRepository {
   project: ProjectRecord | undefined = createProjectRecord();
   deployment: DeploymentRecord | undefined = createDeploymentRecord();
   terraformArtifact: TerraformArtifactRecord | undefined = createTerraformArtifactRecord();
+  awsConnection: AwsConnection | undefined = createVerifiedAwsConnection();
   logs: DeploymentLogRecord[] = [];
 
   async findAccessibleProject(candidateProjectId: string, accessContext: ProjectAccessContext) {
@@ -111,6 +119,28 @@ class FakeDeploymentRepository implements DeploymentRepository {
     }
 
     return this.terraformArtifact;
+  }
+
+  async findVerifiedAwsConnectionForProject(
+    candidateProjectId: string,
+    accessContext: ProjectAccessContext
+  ) {
+    this.calls.push({
+      name: "findVerifiedAwsConnectionForProject",
+      projectId: candidateProjectId,
+      accessContext
+    });
+
+    if (
+      !this.awsConnection ||
+      this.awsConnection.projectId !== candidateProjectId ||
+      this.awsConnection.userId !== accessContext.userId ||
+      this.awsConnection.status !== "verified"
+    ) {
+      return undefined;
+    }
+
+    return this.awsConnection;
   }
 
   async createDeployment(input: CreateDeploymentRecordInput): Promise<DeploymentRecord> {
@@ -326,6 +356,23 @@ function createTerraformArtifactRecord(
   };
 }
 
+function createVerifiedAwsConnection(overrides: Partial<AwsConnection> = {}): AwsConnection {
+  return {
+    id: awsConnectionId,
+    projectId,
+    userId,
+    accountId: "123456789012",
+    roleArn: "arn:aws:iam::123456789012:role/SketchCatchTerraformExecutionRole",
+    externalId: "sc_conn_77777777-7777-4777-8777-777777777777_random",
+    region: "ap-northeast-2",
+    status: "verified",
+    lastVerifiedAt: "2026-06-26T00:00:00.000Z",
+    createdAt: "2026-06-26T00:00:00.000Z",
+    updatedAt: "2026-06-26T00:00:00.000Z",
+    ...overrides
+  };
+}
+
 function createAccessContext(): ProjectAccessContext {
   return {
     kind: "user",
@@ -337,6 +384,7 @@ test("runDeploymentInit restores the artifact, runs Terraform init, logs output,
   const repository = new FakeDeploymentRepository();
   const workspaceInputs: Array<{ objectKey: string; fileName?: string | null }> = [];
   const runnerWorkdirs: string[] = [];
+  const runnerEnvs: Array<NodeJS.ProcessEnv | undefined> = [];
   let cleanupCalled = false;
 
   const result = await runDeploymentInit(
@@ -357,8 +405,9 @@ test("runDeploymentInit restores the artifact, runs Terraform init, logs output,
           }
         };
       },
-      runTerraformInit: async (workdir) => {
+      runTerraformInit: async (workdir, options) => {
         runnerWorkdirs.push(workdir);
+        runnerEnvs.push(options?.env);
 
         return {
           command: ["terraform", "init", "-backend=false", "-input=false", "-no-color"],
@@ -366,6 +415,22 @@ test("runDeploymentInit restores the artifact, runs Terraform init, logs output,
           stdout: "Initializing the backend...\nTerraform has been successfully initialized!\n",
           stderr: "",
           timedOut: false
+        };
+      },
+      prepareTerraformAwsCredentialEnv: async (awsConnection) => {
+        assert.equal(awsConnection.id, awsConnectionId);
+
+        return {
+          env: {
+            AWS_ACCESS_KEY_ID: "temporary-access-key-id",
+            AWS_SECRET_ACCESS_KEY: "temporary-secret-access-key",
+            AWS_SESSION_TOKEN: "temporary-session-token",
+            AWS_REGION: "ap-northeast-2"
+          },
+          accountId: "123456789012",
+          callerArn:
+            "arn:aws:sts::123456789012:assumed-role/SketchCatchTerraformExecutionRole/sketchcatch-terraform",
+          region: "ap-northeast-2"
         };
       }
     }
@@ -381,6 +446,14 @@ test("runDeploymentInit restores the artifact, runs Terraform init, logs output,
     }
   ]);
   assert.deepEqual(runnerWorkdirs, ["C:/tmp/sketchcatch-terraform-success"]);
+  assert.deepEqual(runnerEnvs, [
+    {
+      AWS_ACCESS_KEY_ID: "temporary-access-key-id",
+      AWS_SECRET_ACCESS_KEY: "temporary-secret-access-key",
+      AWS_SESSION_TOKEN: "temporary-session-token",
+      AWS_REGION: "ap-northeast-2"
+    }
+  ]);
   assert.equal(cleanupCalled, true);
   assert.deepEqual(
     repository.logs.map((log) => ({
@@ -414,6 +487,14 @@ test("runDeploymentInit restores the artifact, runs Terraform init, logs output,
     )
   );
   assert(repository.calls.some((call) => call.name === "findTerraformArtifactById"));
+  assert(
+    repository.calls.some(
+      (call) =>
+        call.name === "findVerifiedAwsConnectionForProject" &&
+        call.projectId === projectId &&
+        call.accessContext.userId === userId
+    )
+  );
   assert(
     repository.calls.some(
       (call) => call.name === "getNextDeploymentLogSequence" && call.deploymentId === deploymentId
@@ -452,6 +533,18 @@ test("runDeploymentInit records failed init output, marks the deployment failed,
         stdout: "Initializing the backend...\n",
         stderr: "Error: provider install failed\naws_secret_access_key = super-secret\n",
         timedOut: false
+      }),
+      prepareTerraformAwsCredentialEnv: async () => ({
+        env: {
+          AWS_ACCESS_KEY_ID: "temporary-access-key-id",
+          AWS_SECRET_ACCESS_KEY: "temporary-secret-access-key",
+          AWS_SESSION_TOKEN: "temporary-session-token",
+          AWS_REGION: "ap-northeast-2"
+        },
+        accountId: "123456789012",
+        callerArn:
+          "arn:aws:sts::123456789012:assumed-role/SketchCatchTerraformExecutionRole/sketchcatch-terraform",
+        region: "ap-northeast-2"
       })
     }
   );
@@ -489,6 +582,47 @@ test("runDeploymentInit records failed init output, marks the deployment failed,
     ]
   );
   assert(repository.calls.some((call) => call.name === "failDeployment"));
+});
+
+test("runDeploymentInit requires a verified AWS connection before preparing the Terraform workspace", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.awsConnection = undefined;
+  let workspacePrepared = false;
+  let terraformRan = false;
+
+  await assert.rejects(
+    () =>
+      runDeploymentInit(
+        {
+          deploymentId,
+          accessContext: createAccessContext()
+        },
+        repository,
+        {
+          prepareTerraformWorkspace: async () => {
+            workspacePrepared = true;
+            throw new Error("workspace should not be prepared");
+          },
+          runTerraformInit: async () => {
+            terraformRan = true;
+            throw new Error("terraform should not run");
+          },
+          prepareTerraformAwsCredentialEnv: async () => {
+            throw new Error("AWS credential env should not be prepared");
+          }
+        }
+      ),
+    new DeploymentNotFoundError("Verified AWS connection not found for deployment project")
+  );
+
+  assert.equal(workspacePrepared, false);
+  assert.equal(terraformRan, false);
+  assert.equal(repository.deployment?.status, "FAILED");
+  assert.equal(repository.deployment?.failureStage, "init");
+  assert.equal(
+    repository.deployment?.errorSummary,
+    "Verified AWS connection not found for deployment project"
+  );
 });
 
 test("runDeploymentInit rejects an unknown deployment", async () => {
@@ -600,7 +734,19 @@ test("runDeploymentInit marks the deployment failed when workspace preparation t
           runTerraformInit: async () => {
             terraformRan = true;
             throw new Error("terraform should not run");
-          }
+          },
+          prepareTerraformAwsCredentialEnv: async () => ({
+            env: {
+              AWS_ACCESS_KEY_ID: "temporary-access-key-id",
+              AWS_SECRET_ACCESS_KEY: "temporary-secret-access-key",
+              AWS_SESSION_TOKEN: "temporary-session-token",
+              AWS_REGION: "ap-northeast-2"
+            },
+            accountId: "123456789012",
+            callerArn:
+              "arn:aws:sts::123456789012:assumed-role/SketchCatchTerraformExecutionRole/sketchcatch-terraform",
+            region: "ap-northeast-2"
+          })
         }
       ),
     /S3 download failed/

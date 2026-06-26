@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import Fastify from "fastify";
+import type { AwsConnection } from "@sketchcatch/types";
 import { createAccessToken } from "../auth/tokens.js";
 import type { DatabaseClient } from "../db/client.js";
 import type {
@@ -95,6 +96,7 @@ const projectId = "11111111-1111-4111-8111-111111111111";
 const architectureId = "22222222-2222-4222-8222-222222222222";
 const terraformArtifactId = "33333333-3333-4333-8333-333333333333";
 const deploymentId = "44444444-4444-4444-8444-444444444444";
+const awsConnectionId = "77777777-7777-4777-8777-777777777777";
 const userId = "55555555-5555-4555-8555-555555555555";
 const fixedNow = new Date("2026-01-01T00:00:00.000Z");
 
@@ -122,6 +124,7 @@ class FakeDeploymentRepository implements DeploymentRepository {
     fileName: "main.tf",
     contentType: "application/x-terraform"
   };
+  awsConnection: AwsConnection | undefined = createVerifiedAwsConnection();
   deployment: DeploymentRecord | undefined = createDeploymentRecord(deploymentId);
   deployments: DeploymentRecord[] = [createDeploymentRecord(deploymentId)];
   logs: DeploymentLogRecord[] = [];
@@ -188,6 +191,22 @@ class FakeDeploymentRepository implements DeploymentRepository {
     }
 
     return this.terraformArtifactById;
+  }
+
+  async findVerifiedAwsConnectionForProject(
+    candidateProjectId: string,
+    accessContext: ProjectAccessContext
+  ) {
+    if (
+      !this.awsConnection ||
+      this.awsConnection.projectId !== candidateProjectId ||
+      this.awsConnection.userId !== accessContext.userId ||
+      this.awsConnection.status !== "verified"
+    ) {
+      return undefined;
+    }
+
+    return this.awsConnection;
   }
 
   async createDeployment(input: CreateDeploymentRecordInput): Promise<DeploymentRecord> {
@@ -410,6 +429,23 @@ function createProjectAssetRecord(overrides: Partial<ProjectAssetRecord> = {}): 
     contentType: "application/x-terraform",
     byteSize: null,
     createdAt: fixedNow,
+    ...overrides
+  };
+}
+
+function createVerifiedAwsConnection(overrides: Partial<AwsConnection> = {}): AwsConnection {
+  return {
+    id: awsConnectionId,
+    projectId,
+    userId,
+    accountId: "123456789012",
+    roleArn: "arn:aws:iam::123456789012:role/SketchCatchTerraformExecutionRole",
+    externalId: "sc_conn_77777777-7777-4777-8777-777777777777_random",
+    region: "ap-northeast-2",
+    status: "verified",
+    lastVerifiedAt: "2026-06-26T00:00:00.000Z",
+    createdAt: "2026-06-26T00:00:00.000Z",
+    updatedAt: "2026-06-26T00:00:00.000Z",
     ...overrides
   };
 }
