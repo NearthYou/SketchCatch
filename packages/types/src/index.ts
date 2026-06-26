@@ -467,6 +467,14 @@ export type ProjectDraftResponse = {
   draft: ProjectDraft | null;
 };
 
+export type TerraformGenerateRequest = {
+  diagramJson: DiagramJson;
+};
+
+export type TerraformGenerateResponse = {
+  terraformCode: string;
+};
+
 export type CloudProvider = "aws";
 
 export type ResourceArea =
