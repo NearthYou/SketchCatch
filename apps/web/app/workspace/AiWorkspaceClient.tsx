@@ -12,15 +12,13 @@ import type {
   ArchitectureDraftSecurityPriority,
   ArchitectureDraftTrafficLevel,
   ArchitectureJson,
-  DesignSimulationResult,
-  TerraformGenerateResponse
+  DesignSimulationResult
 } from "@sketchcatch/types";
-import { apiFetch, getApiErrorMessage } from "../../lib/api-client";
+import { getApiErrorMessage } from "../../lib/api-client";
 import { ArchitectureDraftPanel } from "./ArchitectureDraftPanel";
 import { DesignSimulationPanel } from "./DesignSimulationPanel";
 import { DraftMetadataPanel } from "./DraftMetadataPanel";
 import { PreDeploymentAnalysisPanel } from "./PreDeploymentAnalysisPanel";
-import { sampleDiagramJson } from "./sample-diagram-json";
 import { TerraformErrorExplanationPanel } from "./TerraformErrorExplanationPanel";
 import { TerraformPreviewPanel } from "./TerraformPreviewPanel";
 import { getResourceTypeLabel } from "./resource-type-labels";
@@ -29,7 +27,7 @@ import {
   requestDesignSimulation,
   requestTerraformErrorExplanation
 } from "./workspace-api-client";
-import { samplePrompt, sampleTerraform } from "./workspace-options";
+import { sampleDiagramTerraform, samplePrompt, sampleTerraform } from "./workspace-options";
 
 // gg AI API를 팀에 보여주기 위한 임시 작업 화면입니다. 최종 보드 UI가 붙으면 대체될 수 있습니다.
 export function AiWorkspaceClient() {
@@ -130,20 +128,12 @@ export function AiWorkspaceClient() {
     });
   }
 
-  // SW 변환 API를 직접 실행하지 않고 백엔드에 샘플 DiagramJson만 보내 Terraform 미리보기를 채웁니다.
-  async function runDiagramToTerraform(): Promise<void> {
-    await runRequest(async () => {
-      const result = await apiFetch<TerraformGenerateResponse>("/terraform/generate", {
-        auth: true,
-        body: {
-          diagramJson: sampleDiagramJson
-        },
-        method: "POST"
-      });
-
-      setTerraformCode(result.terraformCode);
-      setTerraformPreview(null);
-    });
+  // 샘플 변환은 실제 프로젝트 Terraform API 인증/저장 흐름을 건드리지 않습니다.
+  function runDiagramToTerraform(): void {
+    setStatus("idle");
+    setErrorMessage("");
+    setTerraformCode(sampleDiagramTerraform);
+    setTerraformPreview(null);
   }
 
   // 사용자가 붙여 넣은 Terraform 오류 메시지를 Preview 설명과 분리해 해석합니다.
