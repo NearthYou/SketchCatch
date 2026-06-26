@@ -51,7 +51,7 @@ export function convertDiagramJsonToArchitectureJson(diagramJson: DiagramJson): 
 function isConvertibleResourceNode(
   node: DiagramNode
 ): node is DiagramNode & { parameters: DiagramNodeParameters } {
-  return node.kind === "resource" && node.parameters !== undefined && node.parameters.invalid !== true;
+  return node.kind === "resource" && node.parameters != null && node.parameters.invalid !== true;
 }
 
 function mapTerraformResourceType(terraformResourceType: string): ResourceType {
@@ -59,8 +59,9 @@ function mapTerraformResourceType(terraformResourceType: string): ResourceType {
 }
 
 function createArchitectureConfig(parameters: DiagramNodeParameters): ResourceConfig {
+  const values = isRecord(parameters.values) ? parameters.values : {};
   const baseConfig: ResourceConfig = {
-    ...parameters.values,
+    ...values,
     terraformResourceName: parameters.resourceName,
     terraformResourceType: parameters.resourceType
   };
@@ -69,7 +70,7 @@ function createArchitectureConfig(parameters: DiagramNodeParameters): ResourceCo
     return baseConfig;
   }
 
-  const ingress = normalizeSecurityGroupRuleIngress(parameters.values);
+  const ingress = normalizeSecurityGroupRuleIngress(values);
 
   return ingress.length > 0
     ? {
@@ -79,12 +80,13 @@ function createArchitectureConfig(parameters: DiagramNodeParameters): ResourceCo
     : baseConfig;
 }
 
-function normalizeSecurityGroupRuleIngress(values: Record<string, unknown>): ResourceConfig[] {
-  if (values["type"] !== "ingress") {
+function normalizeSecurityGroupRuleIngress(values: ResourceConfig | null | undefined): ResourceConfig[] {
+  if (values == null || values["type"] !== "ingress") {
     return [];
   }
 
-  const port = values["fromPort"] ?? values["from_port"] ?? values["toPort"] ?? values["to_port"];
+  const rawPort = values["fromPort"] ?? values["from_port"] ?? values["toPort"] ?? values["to_port"];
+  const port = normalizePort(rawPort);
   const cidrBlocks = values["cidrBlocks"] ?? values["cidr_blocks"];
 
   if (!Array.isArray(cidrBlocks)) {
@@ -95,6 +97,24 @@ function normalizeSecurityGroupRuleIngress(values: Record<string, unknown>): Res
     cidr,
     port
   }));
+}
+
+function normalizePort(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value !== "string" || value.trim() === "") {
+    return undefined;
+  }
+
+  const port = Number(value);
+
+  return Number.isInteger(port) ? port : undefined;
+}
+
+function isRecord(value: unknown): value is ResourceConfig {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function isString(value: unknown): value is string {
