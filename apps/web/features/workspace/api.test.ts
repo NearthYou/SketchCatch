@@ -1,9 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { listProjects, saveProjectDraft } from "./api";
+import { clearStoredAuthSession, writeStoredAuthSession } from "../../lib/auth-storage";
 import type { Project } from "../../../../packages/types/src";
-
-const AUTH_SESSION_STORAGE_KEY = "sketchcatch.auth.session";
 
 const project: Project = {
   id: "11111111-1111-4111-8111-111111111111",
@@ -21,6 +20,7 @@ test("listProjects fetches projects for the authenticated user", async (context)
 
   context.after(() => {
     globalThis.fetch = originalFetch;
+    clearStoredAuthSession();
     restoreWindow(originalWindowDescriptor);
   });
 
@@ -52,6 +52,7 @@ test("saveProjectDraft sends authenticated PUT request with diagram json", async
 
   context.after(() => {
     globalThis.fetch = originalFetch;
+    clearStoredAuthSession();
     restoreWindow(originalWindowDescriptor);
   });
 
@@ -100,30 +101,13 @@ test("saveProjectDraft sends authenticated PUT request with diagram json", async
 function installAuthSession(): void {
   Object.defineProperty(globalThis, "window", {
     configurable: true,
-    value: {
-      localStorage: createMemoryStorage({
-        [AUTH_SESSION_STORAGE_KEY]: JSON.stringify({
-          accessToken: "access-token",
-          refreshToken: "refresh-token",
-          expiresInSeconds: 3600
-        })
-      })
-    }
+    value: {}
   });
-}
 
-function createMemoryStorage(initialValues: Record<string, string>) {
-  const values = new Map(Object.entries(initialValues));
-
-  return {
-    getItem: (key: string) => values.get(key) ?? null,
-    removeItem: (key: string) => {
-      values.delete(key);
-    },
-    setItem: (key: string, value: string) => {
-      values.set(key, value);
-    }
-  };
+  writeStoredAuthSession({
+    accessToken: "access-token",
+    expiresInSeconds: 3600
+  });
 }
 
 function restoreWindow(descriptor: PropertyDescriptor | undefined): void {
