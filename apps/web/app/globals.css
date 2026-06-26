@@ -3365,6 +3365,12 @@ nextjs-portal {
   box-shadow: 0 0 0 3px rgba(15, 123, 255, 0.12);
 }
 
+.settingsField input:disabled {
+  background: #eef2f7;
+  color: #697386;
+  cursor: not-allowed;
+}
+
 .templateForm fieldset {
   border: 1px solid #d6dce5;
   border-radius: 6px;

@@ -100,6 +100,12 @@ export function TemplatesClient() {
     setMessage(null);
   }
 
+  function cancelEditing(): void {
+    setEditingTemplateId(null);
+    setFormState(emptyForm);
+    setMessage(null);
+  }
+
   function deleteTemplate(templateId: string): void {
     setMyTemplates((current) => current.filter((template) => template.id !== templateId));
 
@@ -268,10 +274,18 @@ export function TemplatesClient() {
                 ))}
               </div>
             </fieldset>
-            <button className="dashboardTopbarAction" type="submit">
-              <DashboardIcon name={editingTemplateId ? "edit" : "plus"} />
-              <span>{editingTemplateId ? "수정 완료" : "등록"}</span>
-            </button>
+            <div className="templateRowActions">
+              <button className="dashboardTopbarAction" type="submit">
+                <DashboardIcon name={editingTemplateId ? "edit" : "plus"} />
+                <span>{editingTemplateId ? "수정 완료" : "등록"}</span>
+              </button>
+              {editingTemplateId ? (
+                <button className="dashboardSecondaryButton" onClick={cancelEditing} type="button">
+                  <DashboardIcon name="close" />
+                  <span>취소</span>
+                </button>
+              ) : null}
+            </div>
           </form>
         </section>
       </div>

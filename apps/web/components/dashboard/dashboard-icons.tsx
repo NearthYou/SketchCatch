@@ -6,6 +6,7 @@ export type DashboardIconName =
   | "chart"
   | "check"
   | "clock"
+  | "close"
   | "cloud"
   | "edit"
   | "folder"
@@ -63,6 +64,14 @@ export function DashboardIcon({ name }: { readonly name: DashboardIconName }) {
         <>
           <circle cx="12" cy="12" r="9" />
           <path d="M12 7v5l3 2" />
+        </>
+      );
+      break;
+    case "close":
+      content = (
+        <>
+          <path d="M6 6l12 12" />
+          <path d="M18 6 6 18" />
         </>
       );
       break;

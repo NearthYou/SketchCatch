@@ -57,6 +57,7 @@ export function SettingsClient() {
           <label className="settingsField">
             AWS Role ARN
             <input
+              disabled={isAwsConnected}
               onChange={(event) => setRoleArn(event.target.value)}
               placeholder="arn:aws:iam::123456789012:role/SketchCatchDeployRole"
               value={roleArn}
