@@ -586,3 +586,22 @@ export type TerraformResourceParameterCatalog = {
 };
 
 export type ResourceNodeParameters = DiagramNodeParameters;
+
+export type TerraformDiagnosticSeverity = "info" | "warning" | "error";
+
+export type TerraformDiagnostic = {
+  severity: TerraformDiagnosticSeverity;
+  message: string;
+  code?: string | undefined;
+  line?: number | undefined;
+  resourceAddress?: string | undefined;
+  nodeId?: string | undefined;
+};
+
+export type TerraformValidateRequest = {
+  terraformCode: string;
+};
+
+export type TerraformValidateResponse = {
+  diagnostics: TerraformDiagnostic[];
+};

@@ -1,9 +1,18 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import type { DiagramJson, TerraformGenerateResponse } from "@sketchcatch/types";
+import type {
+  DiagramJson,
+  TerraformGenerateResponse,
+  TerraformValidateResponse
+} from "@sketchcatch/types";
 import { requireActiveUserId } from "../auth/current-user.js";
 import { getDatabaseClient, type DatabaseClient } from "../db/client.js";
 import { generateTerraformFromDiagramJson } from "../services/terraform/diagram-to-terraform.js";
+import { createTerraformDiagnostics } from "../services/terraform/terraform-diagnostics.js";
+
+const terraformValidateBodySchema = z.object({
+  terraformCode: z.string()
+});
 
 const terraformBlockTypeSchema = z.enum(["resource", "data"]);
 
@@ -93,6 +102,16 @@ export async function registerTerraformRoutes(
 
     return {
       terraformCode: generateTerraformFromDiagramJson(body.diagramJson)
+    };
+  });
+
+  app.post("/terraform/validate", async (request): Promise<TerraformValidateResponse> => {
+    await requireActiveUserId(request, getTerraformDatabaseClient);
+
+    const body = terraformValidateBodySchema.parse(request.body);
+
+    return {
+      diagnostics: createTerraformDiagnostics(body.terraformCode)
     };
   });
 }
