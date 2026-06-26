@@ -4,22 +4,32 @@ import { useMemo, useState } from "react";
 import type {
   AiArchitectureDraftResult,
   AiPreDeploymentAnalysisResult,
+  AiTerraformErrorExplanationResult,
+  AiTerraformStage,
   AiTerraformPreviewExplanationResult,
   ArchitectureDraftBudgetLevel,
   ArchitectureDraftScenarioHint,
   ArchitectureDraftSecurityPriority,
   ArchitectureDraftTrafficLevel,
   ArchitectureJson,
+  DesignSimulationResult,
   TerraformGenerateResponse
 } from "@sketchcatch/types";
 import { apiFetch, getApiErrorMessage } from "../../lib/api-client";
+import { ArchitectureDraftPanel } from "./ArchitectureDraftPanel";
+import { DesignSimulationPanel } from "./DesignSimulationPanel";
 import { DraftMetadataPanel } from "./DraftMetadataPanel";
 import { PreDeploymentAnalysisPanel } from "./PreDeploymentAnalysisPanel";
 import { sampleDiagramJson } from "./sample-diagram-json";
+import { TerraformErrorExplanationPanel } from "./TerraformErrorExplanationPanel";
 import { TerraformPreviewPanel } from "./TerraformPreviewPanel";
 import { getResourceTypeLabel } from "./resource-type-labels";
-import { postJson } from "./workspace-api-client";
-import { budgetOptions, samplePrompt, sampleTerraform, scenarioOptions, securityOptions, trafficOptions } from "./workspace-options";
+import {
+  postJson,
+  requestDesignSimulation,
+  requestTerraformErrorExplanation
+} from "./workspace-api-client";
+import { samplePrompt, sampleTerraform } from "./workspace-options";
 
 // gg AI API를 팀에 보여주기 위한 임시 작업 화면입니다. 최종 보드 UI가 붙으면 대체될 수 있습니다.
 export function AiWorkspaceClient() {
@@ -32,8 +42,16 @@ export function AiWorkspaceClient() {
   const [terraformCode, setTerraformCode] = useState(sampleTerraform);
   const [draft, setDraft] = useState<AiArchitectureDraftResult | null>(null);
   const [analysis, setAnalysis] = useState<AiPreDeploymentAnalysisResult | null>(null);
+  const [designSimulation, setDesignSimulation] = useState<DesignSimulationResult | null>(null);
   const [terraformPreview, setTerraformPreview] =
     useState<AiTerraformPreviewExplanationResult | null>(null);
+  const [terraformErrorStage, setTerraformErrorStage] = useState<AiTerraformStage>("export");
+  const [terraformErrorMessage, setTerraformErrorMessage] = useState(
+    "Error: Missing required argument on generated variables.tf"
+  );
+  const [terraformErrorResourceId, setTerraformErrorResourceId] = useState("");
+  const [terraformErrorExplanation, setTerraformErrorExplanation] =
+    useState<AiTerraformErrorExplanationResult | null>(null);
   const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState("");
 
@@ -51,6 +69,7 @@ export function AiWorkspaceClient() {
       });
       setDraft(result);
       setAnalysis(null);
+      setDesignSimulation(null);
     });
   }
 
@@ -62,6 +81,7 @@ export function AiWorkspaceClient() {
       });
       setDraft(result);
       setAnalysis(null);
+      setDesignSimulation(null);
     });
   }
 
@@ -78,6 +98,24 @@ export function AiWorkspaceClient() {
         architectureJson
       });
       setAnalysis(result);
+    });
+  }
+
+  // ArchitectureJson을 실제 부하 테스트 없이 Design Simulation API로 보내 추정 결과를 받습니다.
+  async function runDesignSimulation(): Promise<void> {
+    if (architectureJson === null) {
+      setErrorMessage("먼저 Architecture Draft를 생성해야 Design Simulation을 실행할 수 있습니다.");
+      setStatus("error");
+      return;
+    }
+
+    await runRequest(async () => {
+      const result = await requestDesignSimulation({
+        architectureJson,
+        budgetLevel,
+        trafficLevel
+      });
+      setDesignSimulation(result);
     });
   }
 
@@ -108,6 +146,28 @@ export function AiWorkspaceClient() {
     });
   }
 
+  // 사용자가 붙여 넣은 Terraform 오류 메시지를 Preview 설명과 분리해 해석합니다.
+  async function runTerraformErrorExplanation(): Promise<void> {
+    const rawMessage = terraformErrorMessage.trim();
+
+    if (rawMessage.length === 0) {
+      setErrorMessage("Terraform 오류 메시지를 먼저 입력해야 합니다.");
+      setStatus("error");
+      return;
+    }
+
+    const relatedResourceId = terraformErrorResourceId.trim();
+
+    await runRequest(async () => {
+      const result = await requestTerraformErrorExplanation({
+        rawMessage,
+        ...(relatedResourceId.length > 0 ? { relatedResourceId } : {}),
+        stage: terraformErrorStage
+      });
+      setTerraformErrorExplanation(result);
+    });
+  }
+
   // 모든 버튼 요청이 같은 loading/error 처리를 쓰도록 감싸는 작은 공통 함수입니다.
   async function runRequest(request: () => Promise<void>): Promise<void> {
     setStatus("loading");
@@ -129,97 +189,23 @@ export function AiWorkspaceClient() {
 
   return (
     <div className="workspaceGrid workspaceGridWide">
-      <section className="workspacePanel toolPanel">
-        <h2>Architecture Draft</h2>
-        <label className="fieldLabel" htmlFor="prompt-input">
-          자연어 요청
-        </label>
-        <textarea
-          className="textArea"
-          id="prompt-input"
-          onChange={(event) => setPrompt(event.target.value)}
-          rows={5}
-          value={prompt}
-        />
-
-        <span className="fieldLabel">용도 선택</span>
-        <div className="choiceGrid">
-          {scenarioOptions.map((option) => (
-            <button
-              className={option.value === scenarioHint ? "choiceButton choiceButtonActive" : "choiceButton"}
-              key={option.value}
-              onClick={() => setScenarioHint(option.value)}
-              type="button"
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
-
-        <span className="fieldLabel">예산</span>
-        <div className="choiceGrid choiceGridCompact">
-          {budgetOptions.map((option) => (
-            <button
-              className={option.value === budgetLevel ? "choiceButton choiceButtonActive" : "choiceButton"}
-              key={option.value}
-              onClick={() => setBudgetLevel(option.value)}
-              type="button"
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
-
-        <span className="fieldLabel">트래픽</span>
-        <div className="choiceGrid choiceGridCompact">
-          {trafficOptions.map((option) => (
-            <button
-              className={option.value === trafficLevel ? "choiceButton choiceButtonActive" : "choiceButton"}
-              key={option.value}
-              onClick={() => setTrafficLevel(option.value)}
-              type="button"
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
-
-        <span className="fieldLabel">보안 우선순위</span>
-        <div className="choiceGrid choiceGridCompact">
-          {securityOptions.map((option) => (
-            <button
-              className={option.value === securityPriority ? "choiceButton choiceButtonActive" : "choiceButton"}
-              key={option.value}
-              onClick={() => setSecurityPriority(option.value)}
-              type="button"
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
-        <button className="primaryButton" disabled={status === "loading"} onClick={runPromptDraft}>
-          자연어 초안 생성
-        </button>
-
-        <label className="fieldLabel" htmlFor="github-url-input">
-          GitHub public repository URL
-        </label>
-        <input
-          className="textInput"
-          id="github-url-input"
-          onChange={(event) => setRepositoryUrl(event.target.value)}
-          placeholder="https://github.com/owner/repo"
-          type="url"
-          value={repositoryUrl}
-        />
-        <button
-          className="secondaryButton"
-          disabled={status === "loading" || repositoryUrl.trim().length === 0}
-          onClick={runGitHubDraft}
-        >
-          GitHub 초안 생성
-        </button>
-      </section>
+      <ArchitectureDraftPanel
+        budgetLevel={budgetLevel}
+        isLoading={status === "loading"}
+        onBudgetLevelChange={setBudgetLevel}
+        onGitHubDraft={runGitHubDraft}
+        onPromptChange={setPrompt}
+        onPromptDraft={runPromptDraft}
+        onRepositoryUrlChange={setRepositoryUrl}
+        onScenarioHintChange={setScenarioHint}
+        onSecurityPriorityChange={setSecurityPriority}
+        onTrafficLevelChange={setTrafficLevel}
+        prompt={prompt}
+        repositoryUrl={repositoryUrl}
+        scenarioHint={scenarioHint}
+        securityPriority={securityPriority}
+        trafficLevel={trafficLevel}
+      />
 
       <section className="workspacePanel resultPanel">
         <h2>Draft 결과</h2>
@@ -253,6 +239,12 @@ export function AiWorkspaceClient() {
 
       <PreDeploymentAnalysisPanel analysis={analysis} />
 
+      <DesignSimulationPanel
+        designSimulation={designSimulation}
+        isDisabled={status === "loading" || architectureJson === null}
+        onDesignSimulation={runDesignSimulation}
+      />
+
       <TerraformPreviewPanel
         isLoading={status === "loading"}
         onDiagramToTerraform={runDiagramToTerraform}
@@ -260,6 +252,18 @@ export function AiWorkspaceClient() {
         onTerraformPreview={runTerraformPreview}
         terraformCode={terraformCode}
         terraformPreview={terraformPreview}
+      />
+
+      <TerraformErrorExplanationPanel
+        explanation={terraformErrorExplanation}
+        isLoading={status === "loading"}
+        onRawMessageChange={setTerraformErrorMessage}
+        onRelatedResourceIdChange={setTerraformErrorResourceId}
+        onStageChange={setTerraformErrorStage}
+        onTerraformErrorExplanation={runTerraformErrorExplanation}
+        rawMessage={terraformErrorMessage}
+        relatedResourceId={terraformErrorResourceId}
+        stage={terraformErrorStage}
       />
 
       {status === "error" ? <p className="errorBanner">{errorMessage}</p> : null}

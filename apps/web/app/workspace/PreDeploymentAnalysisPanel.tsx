@@ -13,14 +13,24 @@ export function PreDeploymentAnalysisPanel({ analysis }: PreDeploymentAnalysisPa
       {analysis === null ? (
         <p className="emptyState">Architecture Draft 생성 후 사전 점검을 실행하면 finding과 checklist가 나옵니다.</p>
       ) : (
-        <ResultList
-          items={analysis.findings.map((finding) => ({
-            id: finding.id,
-            label: `${finding.severity.toUpperCase()} · ${finding.title}`,
-            text: finding.description
-          }))}
-          summary={analysis.summary}
-        />
+        <div className="resultStack">
+          <ResultList
+            items={analysis.findings.map((finding) => ({
+              id: finding.id,
+              label: `${finding.severity.toUpperCase()} · ${finding.title}`,
+              text: finding.description
+            }))}
+            summary={analysis.summary}
+          />
+          <ResultList
+            items={analysis.suggestions.map((suggestion) => ({
+              id: suggestion.id,
+              label: `${suggestion.action} · ${suggestion.title}`,
+              text: suggestion.explanation
+            }))}
+            summary="수정 제안"
+          />
+        </div>
       )}
     </section>
   );
