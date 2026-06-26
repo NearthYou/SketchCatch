@@ -1,6 +1,4 @@
-import { loadEnvFiles } from "./load-env.js";
-
-loadEnvFiles();
+import "./load-env.js";
 
 export type RuntimeEnv = {
   awsRegion: string;
