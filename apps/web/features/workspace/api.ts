@@ -7,7 +7,11 @@ import type {
   ProjectDraftResponse,
   ProjectListResponse,
   ProjectResponse,
-  SaveProjectDraftRequest
+  SaveProjectDraftRequest,
+  TestAwsConnectionRequest,
+  TestAwsConnectionResponse,
+  VerifyAwsConnectionRequest,
+  VerifyAwsConnectionResponse
 } from "../../../../packages/types/src";
 import { apiFetch } from "../../lib/api-client";
 
@@ -68,6 +72,36 @@ export async function createAwsConnectionSetup({
       method: "POST",
       body: {
         region
+      }
+    }
+  );
+}
+
+export async function testAwsConnection(
+  input: TestAwsConnectionRequest
+): Promise<TestAwsConnectionResponse> {
+  return apiFetch<TestAwsConnectionResponse>("/aws/connections/test", {
+    auth: true,
+    method: "POST",
+    body: input
+  });
+}
+
+export async function verifyAwsConnection({
+  projectId,
+  connectionId,
+  roleArn
+}: {
+  projectId: string;
+  connectionId: string;
+} & VerifyAwsConnectionRequest): Promise<VerifyAwsConnectionResponse> {
+  return apiFetch<VerifyAwsConnectionResponse>(
+    `/projects/${encodeURIComponent(projectId)}/aws-connections/${encodeURIComponent(connectionId)}/verify`,
+    {
+      auth: true,
+      method: "POST",
+      body: {
+        roleArn
       }
     }
   );

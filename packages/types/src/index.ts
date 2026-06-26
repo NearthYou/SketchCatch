@@ -287,6 +287,27 @@ export type CreateAwsConnectionResponse = {
   trustPolicyTemplate: Record<string, unknown>;
 };
 
+export type TestAwsConnectionRequest = {
+  roleArn: string;
+  externalId: string;
+  region: string;
+};
+
+export type TestAwsConnectionResponse = {
+  ok: true;
+  accountId: string;
+  callerArn: string;
+  region: string;
+};
+
+export type VerifyAwsConnectionRequest = {
+  roleArn: string;
+};
+
+export type VerifyAwsConnectionResponse = TestAwsConnectionResponse & {
+  awsConnection: AwsConnection;
+};
+
 export type DeploymentLogLevel = "INFO" | "WARN" | "ERROR";
 
 export type DeploymentLog = {

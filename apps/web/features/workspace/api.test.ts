@@ -1,6 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createAwsConnectionSetup, listProjects, saveProjectDraft } from "./api";
+import {
+  createAwsConnectionSetup,
+  listProjects,
+  saveProjectDraft,
+  testAwsConnection,
+  verifyAwsConnection
+} from "./api";
 import type { Project } from "../../../../packages/types/src";
 
 const AUTH_SESSION_STORAGE_KEY = "sketchcatch.auth.session";
@@ -189,6 +195,133 @@ test("createAwsConnectionSetup requests generated Role setup values", async (con
   assert.deepEqual(response.roleSetup.permissionSetup.verificationActions, ["sts:GetCallerIdentity"]);
   assert.equal(response.roleSetup.permissionSetup.initialPolicyDocument, null);
   assert.equal(response.callerRoleSetup.assumableRoleArnPattern, "arn:aws:iam::*:role/SketchCatchTerraformExecutionRole");
+});
+
+test("testAwsConnection requests STS connection test without exposing credentials", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    restoreWindow(originalWindowDescriptor);
+  });
+
+  installAuthSession();
+
+  globalThis.fetch = async (input, init) => {
+    requests.push({ input, init });
+
+    return new Response(
+      JSON.stringify({
+        ok: true,
+        accountId: "123456789012",
+        callerArn:
+          "arn:aws:sts::123456789012:assumed-role/SketchCatchTerraformExecutionRole/sketchcatch-connection-test",
+        region: "ap-northeast-2"
+      }),
+      {
+        headers: {
+          "Content-Type": "application/json"
+        },
+        status: 200
+      }
+    );
+  };
+
+  const response = await testAwsConnection({
+    roleArn: "arn:aws:iam::123456789012:role/SketchCatchTerraformExecutionRole",
+    externalId: "sc_conn_33333333-3333-4333-8333-333333333333_random",
+    region: "ap-northeast-2"
+  });
+
+  assert.equal(String(requests[0]?.input), "/api/aws/connections/test");
+  assert.equal(requests[0]?.init?.method, "POST");
+  assert.equal(new Headers(requests[0]?.init?.headers).get("authorization"), "Bearer access-token");
+  assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), {
+    roleArn: "arn:aws:iam::123456789012:role/SketchCatchTerraformExecutionRole",
+    externalId: "sc_conn_33333333-3333-4333-8333-333333333333_random",
+    region: "ap-northeast-2"
+  });
+  assert.deepEqual(response, {
+    ok: true,
+    accountId: "123456789012",
+    callerArn:
+      "arn:aws:sts::123456789012:assumed-role/SketchCatchTerraformExecutionRole/sketchcatch-connection-test",
+    region: "ap-northeast-2"
+  });
+  assert.equal("credentials" in response, false);
+  assert.equal("accessKeyId" in response, false);
+  assert.equal("secretAccessKey" in response, false);
+  assert.equal("sessionToken" in response, false);
+});
+
+test("verifyAwsConnection stores verified AWS connection metadata", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    restoreWindow(originalWindowDescriptor);
+  });
+
+  installAuthSession();
+
+  globalThis.fetch = async (input, init) => {
+    requests.push({ input, init });
+
+    return new Response(
+      JSON.stringify({
+        ok: true,
+        accountId: "123456789012",
+        callerArn:
+          "arn:aws:sts::123456789012:assumed-role/SketchCatchTerraformExecutionRole/sketchcatch-connection-test",
+        region: "ap-northeast-2",
+        awsConnection: {
+          id: "33333333-3333-4333-8333-333333333333",
+          projectId: "11111111-1111-4111-8111-111111111111",
+          userId: "22222222-2222-4222-8222-222222222222",
+          accountId: "123456789012",
+          roleArn: "arn:aws:iam::123456789012:role/SketchCatchTerraformExecutionRole",
+          externalId: "sc_conn_33333333-3333-4333-8333-333333333333_random",
+          region: "ap-northeast-2",
+          status: "verified",
+          lastVerifiedAt: "2026-06-26T00:00:00.000Z",
+          createdAt: "2026-06-26T00:00:00.000Z",
+          updatedAt: "2026-06-26T00:00:00.000Z"
+        }
+      }),
+      {
+        headers: {
+          "Content-Type": "application/json"
+        },
+        status: 200
+      }
+    );
+  };
+
+  const response = await verifyAwsConnection({
+    projectId: "11111111-1111-4111-8111-111111111111",
+    connectionId: "33333333-3333-4333-8333-333333333333",
+    roleArn: "arn:aws:iam::123456789012:role/SketchCatchTerraformExecutionRole"
+  });
+
+  assert.equal(
+    String(requests[0]?.input),
+    "/api/projects/11111111-1111-4111-8111-111111111111/aws-connections/33333333-3333-4333-8333-333333333333/verify"
+  );
+  assert.equal(requests[0]?.init?.method, "POST");
+  assert.equal(new Headers(requests[0]?.init?.headers).get("authorization"), "Bearer access-token");
+  assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), {
+    roleArn: "arn:aws:iam::123456789012:role/SketchCatchTerraformExecutionRole"
+  });
+  assert.equal(response.awsConnection.status, "verified");
+  assert.equal(response.awsConnection.accountId, "123456789012");
+  assert.equal("credentials" in response, false);
+  assert.equal("accessKeyId" in response, false);
+  assert.equal("secretAccessKey" in response, false);
+  assert.equal("sessionToken" in response, false);
 });
 
 function installAuthSession(): void {

@@ -8,8 +8,9 @@ import type {
   AwsConnectionRecord,
   AwsConnectionRepository
 } from "../aws-connections/aws-connection-service.js";
+import { AwsConnectionTestError } from "../aws-connections/aws-connection-test-service.js";
 import type { ProjectAccessContext, ProjectRecord } from "../deployments/deployment-service.js";
-import { registerAwsConnectionRoutes } from "./aws-connections.js";
+import { registerAwsConnectionRoutes, type AwsConnectionRouteOptions } from "./aws-connections.js";
 
 process.env.NODE_ENV = "test";
 process.env.AUTH_TOKEN_SECRET = "test-auth-token-secret-with-at-least-32-characters";
@@ -18,6 +19,7 @@ const projectId = "11111111-1111-4111-8111-111111111111";
 const userId = "22222222-2222-4222-8222-222222222222";
 const awsConnectionId = "33333333-3333-4333-8333-333333333333";
 const callerPrincipalArn = "arn:aws:iam::123456789012:role/SketchCatchRuntimeRole";
+const testRoleArn = "arn:aws:iam::123456789012:role/SketchCatchTerraformExecutionRole";
 const externalId = "sc_conn_33333333-3333-4333-8333-333333333333_random";
 const fixedNow = new Date("2026-06-26T00:00:00.000Z");
 
@@ -56,6 +58,29 @@ type AwsConnectionSetupResponse = {
     policyDocument: Record<string, unknown>;
   };
   trustPolicyTemplate: Record<string, unknown>;
+};
+
+type AwsConnectionTestResponse = {
+  ok: true;
+  accountId: string;
+  callerArn: string;
+  region: string;
+};
+
+type AwsConnectionVerifyResponse = AwsConnectionTestResponse & {
+  awsConnection: {
+    id: string;
+    projectId: string;
+    userId: string;
+    accountId: string | null;
+    roleArn: string | null;
+    externalId: string;
+    region: string;
+    status: "pending" | "verified" | "failed";
+    lastVerifiedAt: string | null;
+    createdAt: string;
+    updatedAt: string;
+  };
 };
 
 class FakeAwsConnectionRepository implements AwsConnectionRepository {
@@ -109,6 +134,80 @@ class FakeAwsConnectionRepository implements AwsConnectionRepository {
     };
 
     return this.awsConnection;
+  }
+
+  async findAccessibleAwsConnection(
+    candidateProjectId: string,
+    candidateConnectionId: string,
+    accessContext: ProjectAccessContext
+  ) {
+    this.calls.push({
+      name: "findAccessibleAwsConnection",
+      projectId: candidateProjectId,
+      connectionId: candidateConnectionId,
+      accessContext
+    });
+
+    if (
+      !this.awsConnection ||
+      this.awsConnection.id !== candidateConnectionId ||
+      this.awsConnection.projectId !== candidateProjectId ||
+      this.awsConnection.userId !== accessContext.userId
+    ) {
+      return undefined;
+    }
+
+    return this.awsConnection;
+  }
+
+  async updateAwsConnectionVerification(input: {
+    connectionId: string;
+    accountId: string | null;
+    roleArn: string;
+    status: "verified" | "failed";
+    lastVerifiedAt: Date | null;
+  }) {
+    this.calls.push({
+      name: "updateAwsConnectionVerification",
+      input
+    });
+
+    if (!this.awsConnection || this.awsConnection.id !== input.connectionId) {
+      return undefined;
+    }
+
+    this.awsConnection = {
+      ...this.awsConnection,
+      accountId: input.accountId,
+      roleArn: input.roleArn,
+      status: input.status,
+      lastVerifiedAt: input.lastVerifiedAt,
+      updatedAt: input.lastVerifiedAt ?? this.awsConnection.updatedAt
+    };
+
+    return this.awsConnection;
+  }
+}
+
+class FakeAwsConnectionTester {
+  readonly calls: Array<{ roleArn: string; externalId: string; region: string }> = [];
+
+  constructor(private readonly error?: Error) {}
+
+  async testConnection(input: { roleArn: string; externalId: string; region: string }) {
+    this.calls.push(input);
+
+    if (this.error) {
+      throw this.error;
+    }
+
+    return {
+      ok: true as const,
+      accountId: "123456789012",
+      callerArn:
+        "arn:aws:sts::123456789012:assumed-role/SketchCatchTerraformExecutionRole/sketchcatch-connection-test",
+      region: input.region
+    };
   }
 }
 
@@ -193,6 +292,135 @@ test("POST /api/projects/:projectId/aws-connections returns caller principal ARN
   await app.close();
 });
 
+test("POST /api/aws/connections/test returns caller identity without raw credentials", async () => {
+  const repository = new FakeAwsConnectionRepository();
+  const tester = new FakeAwsConnectionTester();
+  const app = await buildAwsConnectionTestApp(repository, {
+    awsConnectionTester: tester
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/aws/connections/test",
+    headers: authHeaders(),
+    payload: {
+      roleArn: testRoleArn,
+      externalId,
+      region: "ap-northeast-2"
+    }
+  });
+
+  assert.equal(response.statusCode, 200);
+  const body = response.json() as AwsConnectionTestResponse & {
+    credentials?: unknown;
+    accessKeyId?: unknown;
+    secretAccessKey?: unknown;
+    sessionToken?: unknown;
+  };
+  assert.deepEqual(body, {
+    ok: true,
+    accountId: "123456789012",
+    callerArn:
+      "arn:aws:sts::123456789012:assumed-role/SketchCatchTerraformExecutionRole/sketchcatch-connection-test",
+    region: "ap-northeast-2"
+  });
+  assert.equal(body.credentials, undefined);
+  assert.equal(body.accessKeyId, undefined);
+  assert.equal(body.secretAccessKey, undefined);
+  assert.equal(body.sessionToken, undefined);
+  assert.deepEqual(tester.calls, [
+    {
+      roleArn: testRoleArn,
+      externalId,
+      region: "ap-northeast-2"
+    }
+  ]);
+
+  await app.close();
+});
+
+test("POST /api/aws/connections/test maps STS failures to bad_request", async () => {
+  const repository = new FakeAwsConnectionRepository();
+  const tester = new FakeAwsConnectionTester(
+    new AwsConnectionTestError("AWS Role connection test failed")
+  );
+  const app = await buildAwsConnectionTestApp(repository, {
+    awsConnectionTester: tester
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/aws/connections/test",
+    headers: authHeaders(),
+    payload: {
+      roleArn: testRoleArn,
+      externalId,
+      region: "ap-northeast-2"
+    }
+  });
+
+  assert.equal(response.statusCode, 400);
+  assert.deepEqual(response.json(), {
+    error: "bad_request",
+    message: "AWS Role connection test failed"
+  });
+  assert.deepEqual(tester.calls, [
+    {
+      roleArn: testRoleArn,
+      externalId,
+      region: "ap-northeast-2"
+    }
+  ]);
+
+  await app.close();
+});
+
+test("POST /api/projects/:projectId/aws-connections/:connectionId/verify stores verified metadata", async () => {
+  const repository = new FakeAwsConnectionRepository();
+  repository.awsConnection = createAwsConnectionRecord();
+  const tester = new FakeAwsConnectionTester();
+  const app = await buildAwsConnectionTestApp(repository, {
+    awsConnectionTester: tester,
+    now: () => fixedNow
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/projects/${projectId}/aws-connections/${awsConnectionId}/verify`,
+    headers: authHeaders(),
+    payload: {
+      roleArn: testRoleArn
+    }
+  });
+
+  assert.equal(response.statusCode, 200);
+  const body = response.json() as AwsConnectionVerifyResponse & {
+    credentials?: unknown;
+    accessKeyId?: unknown;
+    secretAccessKey?: unknown;
+    sessionToken?: unknown;
+  };
+  assert.equal(body.ok, true);
+  assert.equal(body.accountId, "123456789012");
+  assert.equal(body.awsConnection.status, "verified");
+  assert.equal(body.awsConnection.accountId, "123456789012");
+  assert.equal(body.awsConnection.roleArn, testRoleArn);
+  assert.equal(body.awsConnection.lastVerifiedAt, fixedNow.toISOString());
+  assert.equal(body.credentials, undefined);
+  assert.equal(body.accessKeyId, undefined);
+  assert.equal(body.secretAccessKey, undefined);
+  assert.equal(body.sessionToken, undefined);
+  assert.deepEqual(tester.calls, [
+    {
+      roleArn: testRoleArn,
+      externalId,
+      region: "ap-northeast-2"
+    }
+  ]);
+
+  await app.close();
+});
+
 test("POST /api/projects/:projectId/aws-connections maps inaccessible projects to not_found", async () => {
   const repository = new FakeAwsConnectionRepository();
   repository.project = undefined;
@@ -216,7 +444,10 @@ test("POST /api/projects/:projectId/aws-connections maps inaccessible projects t
   await app.close();
 });
 
-async function buildAwsConnectionTestApp(repository: AwsConnectionRepository) {
+async function buildAwsConnectionTestApp(
+  repository: AwsConnectionRepository,
+  routeOverrides: Partial<AwsConnectionRouteOptions> = {}
+) {
   const app = Fastify({ logger: false });
   const fakeAuthDb = new AwsConnectionRouteFakeAuthDb([createUserRecord()]);
 
@@ -228,7 +459,8 @@ async function buildAwsConnectionTestApp(repository: AwsConnectionRepository) {
       callerPrincipalArn
     },
     generateAwsConnectionId: () => awsConnectionId,
-    generateAwsExternalId: () => externalId
+    generateAwsExternalId: () => externalId,
+    ...routeOverrides
   });
 
   return app;
@@ -240,6 +472,25 @@ function createProjectRecord(overrides: Partial<ProjectRecord> = {}): ProjectRec
     userId,
     name: "AWS setup project",
     description: null,
+    createdAt: fixedNow,
+    updatedAt: fixedNow,
+    ...overrides
+  };
+}
+
+function createAwsConnectionRecord(
+  overrides: Partial<AwsConnectionRecord> = {}
+): AwsConnectionRecord {
+  return {
+    id: awsConnectionId,
+    projectId,
+    userId,
+    accountId: null,
+    roleArn: null,
+    externalId,
+    region: "ap-northeast-2",
+    status: "pending",
+    lastVerifiedAt: null,
     createdAt: fixedNow,
     updatedAt: fixedNow,
     ...overrides

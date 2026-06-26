@@ -4,11 +4,19 @@ import type {
   AwsConnection,
   AwsRolePermissionSetup,
   CreateAwsConnectionResponse,
-  SketchCatchCallerRoleSetup
+  SketchCatchCallerRoleSetup,
+  VerifyAwsConnectionResponse
 } from "@sketchcatch/types";
 import type { Database } from "../db/client.js";
 import { awsConnections, projects } from "../db/schema.js";
 import type { ProjectAccessContext, ProjectRecord } from "../deployments/deployment-service.js";
+import {
+  AwsConnectionTestError,
+  createAwsConnectionTester,
+  getAwsAccountIdFromRoleArn,
+  supportedAwsConnectionRegion,
+  type AwsConnectionTester
+} from "./aws-connection-test-service.js";
 
 const recommendedRoleName = "SketchCatchTerraformExecutionRole";
 const callerAssumeRolePolicyName = "SketchCatchAssumeTerraformExecutionRole";
@@ -36,7 +44,15 @@ export type AwsConnectionRepository = {
     projectId: string,
     accessContext: ProjectAccessContext
   ): Promise<ProjectRecord | undefined>;
+  findAccessibleAwsConnection(
+    projectId: string,
+    connectionId: string,
+    accessContext: ProjectAccessContext
+  ): Promise<AwsConnectionRecord | undefined>;
   createAwsConnection(input: CreateAwsConnectionRecordInput): Promise<AwsConnectionRecord>;
+  updateAwsConnectionVerification(input: UpdateAwsConnectionVerificationInput): Promise<
+    AwsConnectionRecord | undefined
+  >;
 };
 
 export type CreateAwsConnectionOptions = {
@@ -44,10 +60,36 @@ export type CreateAwsConnectionOptions = {
   generateExternalId?: () => string;
 };
 
+export type VerifyAwsConnectionInput = {
+  projectId: string;
+  connectionId: string;
+  accessContext: ProjectAccessContext;
+  roleArn: string;
+};
+
+export type VerifyAwsConnectionOptions = {
+  now?: () => Date;
+};
+
+export type UpdateAwsConnectionVerificationInput = {
+  connectionId: string;
+  accountId: string | null;
+  roleArn: string;
+  status: "verified" | "failed";
+  lastVerifiedAt: Date | null;
+};
+
 export class AwsConnectionNotFoundError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "AwsConnectionNotFoundError";
+  }
+}
+
+export class AwsConnectionVerificationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "AwsConnectionVerificationError";
   }
 }
 
@@ -62,12 +104,44 @@ export function createPostgresAwsConnectionRepository(db: Database): AwsConnecti
       return project;
     },
 
+    async findAccessibleAwsConnection(projectId, connectionId, accessContext) {
+      const [awsConnection] = await db
+        .select()
+        .from(awsConnections)
+        .where(
+          and(
+            eq(awsConnections.id, connectionId),
+            eq(awsConnections.projectId, projectId),
+            eq(awsConnections.userId, accessContext.userId)
+          )
+        );
+
+      return awsConnection;
+    },
+
     async createAwsConnection(input) {
       const [awsConnection] = await db.insert(awsConnections).values(input).returning();
 
       if (!awsConnection) {
         throw new Error("AWS connection creation failed");
       }
+
+      return awsConnection;
+    },
+
+    async updateAwsConnectionVerification(input) {
+      const updatedAt = input.lastVerifiedAt ?? new Date();
+      const [awsConnection] = await db
+        .update(awsConnections)
+        .set({
+          accountId: input.accountId,
+          roleArn: input.roleArn,
+          status: input.status,
+          lastVerifiedAt: input.lastVerifiedAt,
+          updatedAt
+        })
+        .where(eq(awsConnections.id, input.connectionId))
+        .returning();
 
       return awsConnection;
     }
@@ -136,6 +210,90 @@ export function toAwsConnection(row: AwsConnectionRecord): AwsConnection {
     lastVerifiedAt: row.lastVerifiedAt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString()
+  };
+}
+
+export async function verifyAwsConnection(
+  input: VerifyAwsConnectionInput,
+  repository: AwsConnectionRepository,
+  tester: AwsConnectionTester = createAwsConnectionTester(),
+  options: VerifyAwsConnectionOptions = {}
+): Promise<VerifyAwsConnectionResponse> {
+  const awsConnection = await repository.findAccessibleAwsConnection(
+    input.projectId,
+    input.connectionId,
+    input.accessContext
+  );
+
+  if (!awsConnection) {
+    throw new AwsConnectionNotFoundError("AWS connection not found");
+  }
+
+  const now = options.now ?? (() => new Date());
+  const markFailed = async (accountId: string | null) => {
+    await repository.updateAwsConnectionVerification({
+      connectionId: awsConnection.id,
+      accountId,
+      roleArn: input.roleArn,
+      status: "failed",
+      lastVerifiedAt: null
+    });
+  };
+
+  if (awsConnection.region !== supportedAwsConnectionRegion) {
+    await markFailed(null);
+    throw new AwsConnectionVerificationError("AWS connection region must be ap-northeast-2");
+  }
+
+  if (awsConnection.externalId.trim().length === 0) {
+    await markFailed(null);
+    throw new AwsConnectionVerificationError("AWS connection external ID is missing");
+  }
+
+  let result: Awaited<ReturnType<AwsConnectionTester["testConnection"]>>;
+
+  try {
+    result = await tester.testConnection({
+      roleArn: input.roleArn,
+      externalId: awsConnection.externalId,
+      region: awsConnection.region
+    });
+  } catch (error) {
+    await markFailed(null);
+
+    if (error instanceof AwsConnectionTestError) {
+      throw error;
+    }
+
+    throw new AwsConnectionTestError("AWS Role connection test failed");
+  }
+
+  const expectedAccountId = getAwsAccountIdFromRoleArn(input.roleArn);
+
+  if (result.accountId !== expectedAccountId) {
+    await markFailed(result.accountId);
+    throw new AwsConnectionVerificationError("AWS Role account mismatch");
+  }
+
+  const verifiedAt = now();
+  const updatedConnection = await repository.updateAwsConnectionVerification({
+    connectionId: awsConnection.id,
+    accountId: result.accountId,
+    roleArn: input.roleArn,
+    status: "verified",
+    lastVerifiedAt: verifiedAt
+  });
+
+  if (!updatedConnection) {
+    throw new AwsConnectionNotFoundError("AWS connection not found");
+  }
+
+  return {
+    ok: true,
+    accountId: result.accountId,
+    callerArn: result.callerArn,
+    region: result.region,
+    awsConnection: toAwsConnection(updatedConnection)
   };
 }
 
