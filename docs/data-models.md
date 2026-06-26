@@ -17,7 +17,7 @@
 - AI 수정 제안은 자동 적용 결과가 아니라 사용자가 diff를 보고 승인해야 하는 `AiChangeProposal` 후보 모델로 다룬다.
 - Terraform 원문은 RDS `content` 컬럼에 저장하지 않는다. IaC 파일은 S3에 두고, RDS/API에는 `ProjectAsset` 또는 `TerraformArtifact` 메타데이터와 `objectKey`를 저장한다.
 - 실제 AWS 배포 실행은 2차 제공 범위다. 1차 제공에서 다룰 `Deployment`는 통제된 배포/연습 세션 상태 기록 또는 모의 실행 이력으로 제한하고, 프론트에서 AWS SDK를 직접 호출하지 않는다.
-- 실제 AWS 계정 연결은 `AwsConnection`으로 표현하고, 현재 구현 범위는 Role Assume 설정에 필요한 `callerPrincipalArn`과 서버 생성 `externalId`를 제공하는 pending 연결 생성까지다. Access Key ID, Secret Access Key, session token은 공유 타입, DB, API 응답에 넣지 않는다.
+- 실제 AWS 계정 연결은 `AwsConnection`으로 표현한다. 현재 구현 범위는 Role Assume 설정에 필요한 `callerPrincipalArn`과 서버 생성 `externalId`를 제공하는 pending 연결 생성, 저장 없는 STS 연결 테스트, 저장형 verify metadata 업데이트, Terraform 실행 전 임시 credential env 준비 계약까지다. Access Key ID, Secret Access Key, session token은 공유 타입, DB, API 응답에 넣지 않는다.
 
 ## 이름 규칙
 
@@ -340,7 +340,7 @@ type Template = {
 
 실제 AWS 연결이 필요해질 때 추가한다. 기본 방식은 사용자가 자기 AWS 계정에 IAM Role을 만들고, SketchCatch backend가 나중에 `sts:AssumeRole`로 임시 권한을 받아 쓰는 구조다.
 
-현재 구현 범위는 pending 연결을 만들고 사용자에게 Role trust policy에 넣을 값을 제공하는 단계다. `externalId`는 사용자가 직접 정하는 값이 아니라 SketchCatch가 connection 단위로 생성한다.
+현재 구현 범위는 pending 연결을 만들고 사용자에게 Role trust policy에 넣을 값을 제공한 뒤, STS 연결 테스트와 저장형 verify API로 연결 metadata를 검증/저장하는 단계다. `externalId`는 사용자가 직접 정하는 값이 아니라 SketchCatch가 connection 단위로 생성한다.
 
 ```ts
 type AwsConnectionStatus = "pending" | "verified" | "failed";
@@ -363,17 +363,72 @@ type CreateAwsConnectionRequest = {
   region: string;
 };
 
+type AwsRolePermissionSetup = {
+  verificationActions: string[];
+  initialPolicyDocument: Record<string, unknown> | null;
+  terraformPolicyDocument: Record<string, unknown> | null;
+};
+
+type AwsRoleSetup = {
+  roleName: string;
+  trustedPrincipalArn: string;
+  externalId: string;
+  trustPolicy: Record<string, unknown>;
+  permissionSetup: AwsRolePermissionSetup;
+};
+
+type SketchCatchCallerRoleSetup = {
+  policyName: string;
+  assumableRoleArnPattern: string;
+  policyDocument: Record<string, unknown>;
+};
+
 type CreateAwsConnectionResponse = {
   awsConnection: AwsConnection;
   callerPrincipalArn: string;
   recommendedRoleName: string;
+  roleSetup: AwsRoleSetup;
+  callerRoleSetup: SketchCatchCallerRoleSetup;
   trustPolicyTemplate: Record<string, unknown>;
+};
+
+type TestAwsConnectionRequest = {
+  roleArn: string;
+  externalId: string;
+  region: string;
+};
+
+type TestAwsConnectionResponse = {
+  ok: true;
+  accountId: string;
+  callerArn: string;
+  region: string;
+};
+
+type VerifyAwsConnectionRequest = {
+  roleArn: string;
+};
+
+type VerifyAwsConnectionResponse = TestAwsConnectionResponse & {
+  awsConnection: AwsConnection;
 };
 ```
 
-pending 상태에서는 아직 사용자 target role이 없으므로 `accountId`와 `roleArn`은 `null`이다. 다음 단계의 연결 검증 API에서 `roleArn`을 받고, 올바른 `externalId`로 `AssumeRole`과 `GetCallerIdentity`가 성공했을 때만 `accountId`, `roleArn`, `lastVerifiedAt`, `status = "verified"`를 저장한다.
+`roleSetup`은 사용자가 자기 AWS 계정에서 IAM Role을 만들 때 UI가 그대로 보여줄 묶음이다. `roleName`은 추천 Role 이름이고, `trustedPrincipalArn`은 trust policy의 `Principal.AWS`, `externalId`는 `Condition.StringEquals["sts:ExternalId"]`, `trustPolicy`는 AWS 콘솔에 붙여 넣을 JSON template이다.
+
+`roleSetup.permissionSetup`은 사용자 AWS 계정의 target role에 처음부터 큰 권한을 붙이지 않기 위한 안내 계약이다. 연결 검증 단계에서는 `AssumeRole` 성공 후 임시 credential로 `sts:GetCallerIdentity`만 확인하므로 `initialPolicyDocument`는 `null`이다. Terraform `plan/apply`까지 갈 때 필요한 권한은 설계된 리소스 범위가 확정된 뒤 `terraformPolicyDocument` 쪽에서 별도로 제안하거나 검증한다.
+
+`callerRoleSetup`은 SketchCatch backend가 실행되는 caller role에 운영자가 붙여야 하는 최소 policy template이다. 현재는 추천 role 이름을 `SketchCatchTerraformExecutionRole`로 고정하고 `arn:aws:iam::*:role/SketchCatchTerraformExecutionRole`에 대해서만 `sts:AssumeRole`을 허용한다. 운영에서는 verify API에서 확인된 role ARN 목록만 허용하도록 더 좁힌다.
+
+pending 상태에서는 아직 사용자 target role이 저장되지 않았으므로 `accountId`와 `roleArn`은 `null`이다. verified 상태가 되면 `accountId`, `roleArn`, `lastVerifiedAt`, `status = "verified"`가 저장된다. 실패하면 `status = "failed"`로 저장하되 raw AWS credential은 저장하지 않는다.
+
+`POST /api/aws/connections/test`는 저장 없이 연결 테스트만 수행한다. 요청으로 받은 `roleArn`, `externalId`, `region`을 사용해 STS `AssumeRole`을 호출하고, 반환된 임시 credential로 STS `GetCallerIdentity`를 호출한다. 그 뒤 같은 role을 `externalId` 없이 다시 assume해 보고, 성공하면 trust policy가 잘못 열린 것으로 보고 거부한다. 응답에는 `ok`, `accountId`, `callerArn`, `region`만 포함한다. 임시 credential의 `accessKeyId`, `secretAccessKey`, `sessionToken`은 DB, API 응답, 프론트 상태에 넣지 않는다.
+
+`POST /api/projects/:projectId/aws-connections/:connectionId/verify`는 DB에 저장된 `externalId`와 사용자가 보낸 `roleArn`으로 STS 검증을 수행한 뒤 검증 metadata를 저장한다. `roleArn`의 account id와 `GetCallerIdentity`의 account id가 다르거나, 저장된 region이 `ap-northeast-2`가 아니거나, `externalId`가 비어 있거나, externalId 없이도 role이 assume되면 verified 저장을 거부한다.
 
 DB에는 `aws_connections` 테이블을 사용한다. 저장하는 값은 `projectId`, `userId`, `externalId`, `region`, `status`, 검증 metadata다. Access Key ID, Secret Access Key, session token은 저장하지 않는다.
+
+Terraform plan/apply가 실제로 연결되면 매번 verified `roleArn`과 `externalId`로 다시 `AssumeRole`하고, externalId 없이도 role이 assume되는지 다시 확인한다. 받은 임시 credential은 Terraform child process env로만 전달한다. apply 전에는 승인 당시 `accountId`, `region`, `tfplanHash`와 실행 시점 값을 다시 비교해 drift가 있으면 차단한다.
 
 ### DeploymentLog
 
@@ -570,7 +625,7 @@ type Activity = {
 | `ProjectAsset` | `project_assets` | 구현됨 |
 | `TerraformArtifact` | `project_assets.asset_type = "terraform_file"` | 저장 모델 구현됨 |
 | `Deployment` | 향후 table/API | 1차 후반 또는 2차 제공 대상 |
-| `AwsConnection` | `aws_connections`, `/api/projects/:projectId/aws-connections` | Role Assume 설정값 제공 구현됨 |
+| `AwsConnection` | `aws_connections`, `/api/projects/:projectId/aws-connections`, `/api/aws/connections/test`, `/api/projects/:projectId/aws-connections/:connectionId/verify` | Role Assume 설정값 제공, STS 연결 테스트, 저장형 verify 구현됨 |
 | `Template` | 향후 table/API | 1차 후반 대상 |
 | `DesignSimulationResult` | 향후 AI/API DTO | 1차 최소 구현 후 확정 |
 | `AiChangeProposal` | 향후 AI/API DTO | 1차 수정 제안 UX와 함께 확정 |
