@@ -11,8 +11,11 @@ import type {
   ArchitectureDraftTrafficLevel,
   ArchitectureJson
 } from "@sketchcatch/types";
+import { apiFetch, getApiErrorMessage } from "../../lib/api-client";
 import { DraftMetadataPanel } from "./DraftMetadataPanel";
-import { ResultList } from "./ResultList";
+import { PreDeploymentAnalysisPanel } from "./PreDeploymentAnalysisPanel";
+import { sampleDiagramJson, type TerraformGenerateResponseBody } from "./sample-diagram-json";
+import { TerraformPreviewPanel } from "./TerraformPreviewPanel";
 import { getResourceTypeLabel } from "./resource-type-labels";
 import { postJson } from "./workspace-api-client";
 import { budgetOptions, samplePrompt, sampleTerraform, scenarioOptions, securityOptions, trafficOptions } from "./workspace-options";
@@ -88,6 +91,22 @@ export function AiWorkspaceClient() {
     });
   }
 
+  // SW 변환 API를 직접 실행하지 않고 백엔드에 샘플 DiagramJson만 보내 Terraform 미리보기를 채웁니다.
+  async function runDiagramToTerraform(): Promise<void> {
+    await runRequest(async () => {
+      const result = await apiFetch<TerraformGenerateResponseBody>("/terraform/generate", {
+        auth: true,
+        body: {
+          diagramJson: sampleDiagramJson
+        },
+        method: "POST"
+      });
+
+      setTerraformCode(result.terraformCode);
+      setTerraformPreview(null);
+    });
+  }
+
   // 모든 버튼 요청이 같은 loading/error 처리를 쓰도록 감싸는 작은 공통 함수입니다.
   async function runRequest(request: () => Promise<void>): Promise<void> {
     setStatus("loading");
@@ -98,7 +117,12 @@ export function AiWorkspaceClient() {
       setStatus("idle");
     } catch (error) {
       setStatus("error");
-      setErrorMessage(error instanceof Error ? error.message : "요청 처리 중 오류가 발생했습니다.");
+      setErrorMessage(
+        getApiErrorMessage(
+          error,
+          error instanceof Error ? error.message : "요청 처리 중 오류가 발생했습니다."
+        )
+      );
     }
   }
 
@@ -226,48 +250,16 @@ export function AiWorkspaceClient() {
         </button>
       </section>
 
-      <section className="workspacePanel resultPanel">
-        <h2>비용/보안 점검</h2>
-        {analysis === null ? (
-          <p className="emptyState">Architecture Draft 생성 후 사전 점검을 실행하면 finding과 checklist가 나옵니다.</p>
-        ) : (
-          <ResultList
-            items={analysis.findings.map((finding) => ({
-              id: finding.id,
-              label: `${finding.severity.toUpperCase()} · ${finding.title}`,
-              text: finding.description
-            }))}
-            summary={analysis.summary}
-          />
-        )}
-      </section>
+      <PreDeploymentAnalysisPanel analysis={analysis} />
 
-      <section className="workspacePanel toolPanel">
-        <h2>Terraform Preview 설명</h2>
-        <label className="fieldLabel" htmlFor="terraform-input">
-          Terraform 코드
-        </label>
-        <textarea
-          className="codeArea"
-          id="terraform-input"
-          onChange={(event) => setTerraformCode(event.target.value)}
-          rows={11}
-          value={terraformCode}
-        />
-        <button className="primaryButton" disabled={status === "loading"} onClick={runTerraformPreview}>
-          코드 설명 생성
-        </button>
-        {terraformPreview === null ? null : (
-          <ResultList
-            items={terraformPreview.detectedResources.map((resource) => ({
-              id: `${resource.terraformType}-${resource.label}`,
-              label: resource.label,
-              text: resource.explanation
-            }))}
-            summary={terraformPreview.summary}
-          />
-        )}
-      </section>
+      <TerraformPreviewPanel
+        isLoading={status === "loading"}
+        onDiagramToTerraform={runDiagramToTerraform}
+        onTerraformCodeChange={setTerraformCode}
+        onTerraformPreview={runTerraformPreview}
+        terraformCode={terraformCode}
+        terraformPreview={terraformPreview}
+      />
 
       {status === "error" ? <p className="errorBanner">{errorMessage}</p> : null}
       {status === "loading" ? <p className="loadingBanner">AI fallback 응답을 생성하는 중입니다.</p> : null}
