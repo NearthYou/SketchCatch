@@ -93,6 +93,12 @@ test("skips design nodes, missing parameters, invalid nodes, and dangling edges"
         label: "missing"
       }),
       makeNode({
+        id: "null-parameters",
+        type: "aws_instance",
+        label: "null parameters",
+        parameters: null
+      } as unknown as DiagramNode),
+      makeNode({
         id: "invalid-resource",
         type: "aws_s3_bucket",
         label: "invalid",
@@ -112,6 +118,11 @@ test("skips design nodes, missing parameters, invalid nodes, and dangling edges"
         id: "dangling-edge",
         sourceNodeId: "vpc-1",
         targetNodeId: "missing-parameters"
+      },
+      {
+        id: "null-parameters-edge",
+        sourceNodeId: "vpc-1",
+        targetNodeId: "null-parameters"
       }
     ],
     viewport: { x: 0, y: 0, zoom: 1 }
@@ -157,6 +168,32 @@ test("normalizes open SSH security group rules for pre-deployment analysis", () 
     }
   ]);
   assert.equal(architectureJson.nodes[0]?.type, "SECURITY_GROUP");
+});
+
+test("normalizes string ports in security group rules", () => {
+  const architectureJson = convertDiagramJsonToArchitectureJson({
+    nodes: [
+      makeNode({
+        id: "sg-rule-ssh",
+        type: "aws_security_group_rule",
+        label: "ssh",
+        parameters: makeParameters("aws_security_group_rule", "ssh", {
+          type: "ingress",
+          fromPort: "22",
+          cidrBlocks: ["0.0.0.0/0"]
+        })
+      })
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  });
+
+  assert.deepEqual(architectureJson.nodes[0]?.config.ingress, [
+    {
+      cidr: "0.0.0.0/0",
+      port: 22
+    }
+  ]);
 });
 
 function makeParameters(
