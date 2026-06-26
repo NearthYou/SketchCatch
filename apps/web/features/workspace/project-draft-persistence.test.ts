@@ -5,6 +5,7 @@ import {
   chooseInitialDiagram,
   createDraftStorageKey,
   createLocalProjectDraft,
+  isWorkspaceCloudPlatform,
   markDraftServerSaved
 } from "./project-draft-persistence";
 
@@ -41,6 +42,12 @@ const editedDiagram: DiagramJson = {
 
 test("createDraftStorageKey scopes drafts by workspace and project", () => {
   assert.equal(createDraftStorageKey("workspace-1", "project-1"), "workspace-1:project-1");
+});
+
+test("isWorkspaceCloudPlatform accepts supported start form choices", () => {
+  assert.equal(isWorkspaceCloudPlatform("aws"), true);
+  assert.equal(isWorkspaceCloudPlatform("gcp"), true);
+  assert.equal(isWorkspaceCloudPlatform("azure"), false);
 });
 
 test("createLocalProjectDraft marks edits dirty and increments local revision", () => {

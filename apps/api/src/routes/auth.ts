@@ -23,7 +23,8 @@ import {
   createAccessToken,
   createRefreshToken,
   getRefreshTokenExpiresAt,
-  hashToken
+  hashToken,
+  REFRESH_TOKEN_TTL_DAYS
 } from "../auth/tokens.js";
 import { type Database, type DatabaseClient, getDatabaseClient } from "../db/client.js";
 import { loginAttempts, refreshTokens, users } from "../db/schema.js";
@@ -53,9 +54,12 @@ const loginBodySchema = z.object({
   password: z.string().min(1).max(128)
 });
 
-const refreshTokenBodySchema = z.object({
-  refreshToken: z.string().min(1)
-});
+const REFRESH_TOKEN_COOKIE_NAME = "sketchcatch_refresh_token";
+const CSRF_TOKEN_COOKIE_NAME = "sketchcatch_csrf_token";
+const CSRF_TOKEN_HEADER_NAME = "x-csrf-token";
+const REFRESH_TOKEN_COOKIE_PATH = "/api/auth";
+const CSRF_TOKEN_COOKIE_PATH = "/";
+const REFRESH_TOKEN_COOKIE_MAX_AGE_SECONDS = REFRESH_TOKEN_TTL_DAYS * 24 * 60 * 60;
 
 type PublicUserRow = Pick<
   typeof users.$inferSelect,
@@ -125,7 +129,7 @@ export async function registerAuthRoutes(
       throw new Error("사용자를 생성하지 못했습니다.");
     }
 
-    const session = await createAuthSession(db, createdUser.id, request);
+    const session = await createAuthSession(db, createdUser.id, request, reply);
     const response: AuthResponse = {
       user: toPublicUser(createdUser),
       session
@@ -181,7 +185,7 @@ export async function registerAuthRoutes(
       success: true
     });
 
-    const session = await createAuthSession(db, user.id, request);
+    const session = await createAuthSession(db, user.id, request, reply);
     const response: AuthResponse = {
       user: toPublicUser(user),
       session
@@ -191,10 +195,23 @@ export async function registerAuthRoutes(
   });
 
   app.post("/auth/refresh", async (request, reply) => {
-    const body = refreshTokenBodySchema.parse(request.body);
+    const refreshToken = getRefreshTokenCookie(request);
+
+    if (!refreshToken) {
+      clearRefreshTokenCookie(reply);
+
+      return sendUnauthorized(reply, "로그인 세션이 만료되었습니다. 다시 로그인해주세요.");
+    }
+
+    if (!hasValidCsrfToken(request)) {
+      clearRefreshTokenCookie(reply);
+
+      return sendUnauthorized(reply, "인증 요청이 올바르지 않습니다.");
+    }
+
     const { db } = getAuthDatabaseClient();
 
-    const tokenHash = hashToken(body.refreshToken);
+    const tokenHash = hashToken(refreshToken);
     const now = new Date();
 
     const [storedToken] = await db
@@ -203,10 +220,13 @@ export async function registerAuthRoutes(
       .where(eq(refreshTokens.tokenHash, tokenHash));
 
     if (!storedToken) {
+      clearRefreshTokenCookie(reply);
+
       return sendUnauthorized(reply, "로그인 세션이 만료되었습니다. 다시 로그인해주세요.");
     }
 
     if (storedToken.revokedAt) {
+      clearRefreshTokenCookie(reply);
       await revokeActiveRefreshTokensForUser(db, storedToken.userId, now);
       request.log.warn(
         {
@@ -220,18 +240,22 @@ export async function registerAuthRoutes(
     }
 
     if (storedToken.expiresAt.getTime() <= now.getTime()) {
+      clearRefreshTokenCookie(reply);
+
       return sendUnauthorized(reply, "로그인 세션이 만료되었습니다. 다시 로그인해주세요.");
     }
 
     const [user] = await db.select().from(users).where(eq(users.id, storedToken.userId));
 
     if (!user || user.deletedAt) {
+      clearRefreshTokenCookie(reply);
+
       return sendUnauthorized(reply, "로그인 세션이 만료되었습니다. 다시 로그인해주세요.");
     }
 
     await revokeRefreshToken(db, storedToken.id, now);
 
-    const session = await createAuthSession(db, storedToken.userId, request);
+    const session = await createAuthSession(db, storedToken.userId, request, reply);
     const response: AuthResponse = {
       user: toPublicUser(user),
       session
@@ -240,23 +264,31 @@ export async function registerAuthRoutes(
     return response;
   });
 
-  app.post("/auth/logout", async (request) => {
-    const body = refreshTokenBodySchema.parse(request.body);
+  app.post("/auth/logout", async (request, reply) => {
+    const refreshToken = getRefreshTokenCookie(request);
     const { db } = getAuthDatabaseClient();
 
-    await db
-      .update(refreshTokens)
-      .set({
-        revokedAt: new Date()
-      })
-      .where(eq(refreshTokens.tokenHash, hashToken(body.refreshToken)));
+    if (refreshToken) {
+      if (!hasValidCsrfToken(request)) {
+        return sendUnauthorized(reply, "인증 요청이 올바르지 않습니다.");
+      }
+
+      await db
+        .update(refreshTokens)
+        .set({
+          revokedAt: new Date()
+        })
+        .where(eq(refreshTokens.tokenHash, hashToken(refreshToken)));
+    }
+
+    clearRefreshTokenCookie(reply);
 
     return {
       ok: true
     };
   });
 
-  app.post("/auth/logout-all", async (request) => {
+  app.post("/auth/logout-all", async (request, reply) => {
     const currentUserId = await requireActiveUserId(request, getAuthDatabaseClient);
     const { db } = getAuthDatabaseClient();
 
@@ -266,6 +298,8 @@ export async function registerAuthRoutes(
         revokedAt: new Date()
       })
       .where(and(eq(refreshTokens.userId, currentUserId), isNull(refreshTokens.revokedAt)));
+
+    clearRefreshTokenCookie(reply);
 
     return {
       ok: true
@@ -289,7 +323,7 @@ export async function registerAuthRoutes(
     return response;
   });
 
-  app.delete("/auth/me", async (request) => {
+  app.delete("/auth/me", async (request, reply) => {
     const currentUserId = await requireActiveUserId(request, getAuthDatabaseClient);
     const { db } = getAuthDatabaseClient();
     const deletedAt = new Date();
@@ -308,6 +342,8 @@ export async function registerAuthRoutes(
         revokedAt: deletedAt
       })
       .where(and(eq(refreshTokens.userId, currentUserId), isNull(refreshTokens.revokedAt)));
+
+    clearRefreshTokenCookie(reply);
 
     return {
       ok: true
@@ -427,7 +463,8 @@ async function recordFailedLoginAttempt(
 async function createAuthSession(
   db: Database,
   userId: string,
-  request: FastifyRequest
+  request: FastifyRequest,
+  reply: FastifyReply
 ): Promise<AuthSession> {
   const refreshToken = createRefreshToken();
 
@@ -440,9 +477,10 @@ async function createAuthSession(
     ipAddress: request.ip
   });
 
+  setRefreshTokenCookie(reply, refreshToken);
+
   return {
-    accessToken: createAccessToken(userId),
-    refreshToken,
+    accessToken: await createAccessToken(userId),
     expiresInSeconds: ACCESS_TOKEN_TTL_SECONDS
   };
 }
@@ -487,6 +525,123 @@ function getUserAgent(request: FastifyRequest): string | undefined {
   }
 
   return userAgent;
+}
+
+function getRefreshTokenCookie(request: FastifyRequest): string | null {
+  return getCookie(request, REFRESH_TOKEN_COOKIE_NAME);
+}
+
+function getCookie(request: FastifyRequest, cookieName: string): string | null {
+  const cookieHeader = request.headers.cookie;
+
+  if (!cookieHeader) {
+    return null;
+  }
+
+  const cookies = Array.isArray(cookieHeader) ? cookieHeader.join("; ") : cookieHeader;
+
+  for (const cookie of cookies.split(";")) {
+    const [rawName, ...rawValueParts] = cookie.trim().split("=");
+
+    if (rawName === cookieName) {
+      const rawValue = rawValueParts.join("=");
+
+      try {
+        return rawValue ? decodeURIComponent(rawValue) : null;
+      } catch {
+        return null;
+      }
+    }
+  }
+
+  return null;
+}
+
+function hasValidCsrfToken(request: FastifyRequest): boolean {
+  const cookieToken = getCookie(request, CSRF_TOKEN_COOKIE_NAME);
+  const headerToken = getHeaderValue(request, CSRF_TOKEN_HEADER_NAME);
+
+  return Boolean(cookieToken && headerToken && cookieToken === headerToken);
+}
+
+function getHeaderValue(request: FastifyRequest, headerName: string): string | null {
+  const value = request.headers[headerName];
+
+  if (!value) {
+    return null;
+  }
+
+  return Array.isArray(value) ? (value[0] ?? null) : value;
+}
+
+function setRefreshTokenCookie(reply: FastifyReply, refreshToken: string): void {
+  const csrfToken = createRefreshToken();
+
+  reply.header(
+    "set-cookie",
+    [
+      serializeAuthCookie(REFRESH_TOKEN_COOKIE_NAME, encodeURIComponent(refreshToken), {
+        httpOnly: true,
+        maxAge: REFRESH_TOKEN_COOKIE_MAX_AGE_SECONDS,
+        path: REFRESH_TOKEN_COOKIE_PATH
+      }),
+      serializeAuthCookie(CSRF_TOKEN_COOKIE_NAME, encodeURIComponent(csrfToken), {
+        maxAge: REFRESH_TOKEN_COOKIE_MAX_AGE_SECONDS,
+        path: CSRF_TOKEN_COOKIE_PATH
+      })
+    ]
+  );
+}
+
+function clearRefreshTokenCookie(reply: FastifyReply): void {
+  reply.header(
+    "set-cookie",
+    [
+      serializeAuthCookie(REFRESH_TOKEN_COOKIE_NAME, "", {
+        expires: new Date(0),
+        httpOnly: true,
+        maxAge: 0,
+        path: REFRESH_TOKEN_COOKIE_PATH
+      }),
+      serializeAuthCookie(CSRF_TOKEN_COOKIE_NAME, "", {
+        expires: new Date(0),
+        maxAge: 0,
+        path: CSRF_TOKEN_COOKIE_PATH
+      })
+    ]
+  );
+}
+
+function serializeAuthCookie(
+  name: string,
+  value: string,
+  options: {
+    expires?: Date;
+    httpOnly?: boolean;
+    maxAge: number;
+    path: string;
+  }
+): string {
+  const attributes = [
+    `${name}=${value}`,
+    "SameSite=Lax",
+    `Path=${options.path}`,
+    `Max-Age=${options.maxAge}`
+  ];
+
+  if (options.httpOnly) {
+    attributes.push("HttpOnly");
+  }
+
+  if (options.expires) {
+    attributes.push(`Expires=${options.expires.toUTCString()}`);
+  }
+
+  if (process.env.NODE_ENV === "production") {
+    attributes.push("Secure");
+  }
+
+  return attributes.join("; ");
 }
 
 function sendUnauthorized(reply: FastifyReply, message: string): FastifyReply {

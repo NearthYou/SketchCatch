@@ -9,6 +9,7 @@ import {
   defaultProjectDraftRepository,
   type ProjectDraftRepository
 } from "./project-draft-repository";
+import type { WorkspaceCloudPlatform } from "./project-draft-persistence";
 import styles from "./workspace.module.css";
 
 const SERVER_SAVE_DEBOUNCE_MS = 800;
@@ -30,7 +31,13 @@ const sourceSaveState = {
   server: "server-saved"
 } satisfies Record<"empty" | "local" | "server", SaveState>;
 
+const cloudPlatformLabels: Record<WorkspaceCloudPlatform, string> = {
+  aws: "AWS",
+  gcp: "GCP"
+};
+
 export type ProjectWorkspaceDraftManagerProps = {
+  cloudPlatform?: WorkspaceCloudPlatform | undefined;
   localCacheWorkspaceId?: string | undefined;
   projectId: string;
   projectName?: string | undefined;
@@ -39,6 +46,7 @@ export type ProjectWorkspaceDraftManagerProps = {
 };
 
 export function ProjectWorkspaceDraftManager({
+  cloudPlatform,
   localCacheWorkspaceId,
   projectId,
   projectName = "Project workspace",
@@ -175,7 +183,9 @@ export function ProjectWorkspaceDraftManager({
       onDiagramChange={handleDiagramChange}
       onSave={() => void saveCurrentDraft()}
       saveDisabled={false}
-      saveStatus={`${projectName} · ${saveStatusLabels[saveState]}${
+      saveStatus={`${projectName}${cloudPlatform ? ` · ${cloudPlatformLabels[cloudPlatform]}` : ""} · ${
+        saveStatusLabels[saveState]
+      }${
         localDraft ? ` · r${localDraft.revision}` : ""
       }`}
     />

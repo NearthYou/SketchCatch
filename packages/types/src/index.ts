@@ -62,7 +62,6 @@ export type User = {
 
 export type AuthSession = {
   accessToken: string;
-  refreshToken: string;
   expiresInSeconds: number;
 };
 
@@ -78,13 +77,9 @@ export type LoginRequest = {
   password: string;
 };
 
-export type RefreshTokenRequest = {
-  refreshToken: string;
-};
+export type RefreshTokenRequest = Record<string, never>;
 
-export type LogoutRequest = {
-  refreshToken: string;
-};
+export type LogoutRequest = Record<string, never>;
 
 export type AuthResponse = {
   user: User;

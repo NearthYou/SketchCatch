@@ -10,7 +10,7 @@ type AuthHttpError = Error & {
   errorCode?: ApiErrorCode;
 };
 
-export function getCurrentUserId(request: FastifyRequest): string | null {
+export async function getCurrentUserId(request: FastifyRequest): Promise<string | null> {
   const authorization = request.headers.authorization;
 
   if (!authorization) {
@@ -23,11 +23,11 @@ export function getCurrentUserId(request: FastifyRequest): string | null {
     return null;
   }
 
-  return verifyAccessToken(token)?.userId ?? null;
+  return (await verifyAccessToken(token))?.userId ?? null;
 }
 
-export function requireCurrentUserId(request: FastifyRequest): string {
-  const currentUserId = getCurrentUserId(request);
+export async function requireCurrentUserId(request: FastifyRequest): Promise<string> {
+  const currentUserId = await getCurrentUserId(request);
 
   if (!currentUserId) {
     const error = new Error("인증이 필요합니다.") as AuthHttpError;
@@ -44,7 +44,7 @@ export async function requireActiveUserId(
   request: FastifyRequest,
   getAuthDatabaseClient: () => DatabaseClient = getDatabaseClient
 ): Promise<string> {
-  const currentUserId = requireCurrentUserId(request);
+  const currentUserId = await requireCurrentUserId(request);
   const { db } = getAuthDatabaseClient();
   const [user] = await db
     .select({
