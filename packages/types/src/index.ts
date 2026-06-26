@@ -372,6 +372,32 @@ export type ChecklistItem = {
   relatedFindingIds: string[];
 };
 
+export type ArchitectureSuggestionAction =
+  | "modify_resource"
+  | "add_resource"
+  | "remove_resource"
+  | "manual_review";
+
+export type ArchitectureSuggestionCostImpact = "decrease" | "increase" | "neutral" | "unknown";
+
+export type ArchitectureSuggestionQualityImpact = "improve" | "weaken" | "neutral" | "unknown";
+
+export type ArchitectureSuggestionExpectedImpact = {
+  cost: ArchitectureSuggestionCostImpact;
+  security: ArchitectureSuggestionQualityImpact;
+  reliability: ArchitectureSuggestionQualityImpact;
+};
+
+export type ArchitectureSuggestion = {
+  id: string;
+  findingId?: string | undefined;
+  title: string;
+  targetResourceId?: string | undefined;
+  action: ArchitectureSuggestionAction;
+  expectedImpact: ArchitectureSuggestionExpectedImpact;
+  explanation: string;
+};
+
 export type AiPreDeploymentAnalysisResult = {
   summary: string;
   totalMonthlyEstimate: MoneyEstimate & {
@@ -380,6 +406,7 @@ export type AiPreDeploymentAnalysisResult = {
   resourceCostEstimates: ResourceCostEstimate[];
   findings: CheckFinding[];
   checklist: ChecklistItem[];
+  suggestions: ArchitectureSuggestion[];
 };
 
 export type AiTerraformStage = "validate" | "export" | "plan" | "apply";
