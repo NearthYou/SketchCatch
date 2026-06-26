@@ -30,7 +30,7 @@ test("POST /api/terraform/generate returns Terraform code for an active user", a
   const response = await app.inject({
     method: "POST",
     url: "/api/terraform/generate",
-    headers: authHeaders(ACTIVE_USER_ID),
+    headers: await authHeaders(ACTIVE_USER_ID),
     payload: {
       diagramJson: {
         nodes: [
@@ -113,7 +113,7 @@ test("POST /api/terraform/generate returns 400 for an invalid body", async () =>
   const response = await app.inject({
     method: "POST",
     url: "/api/terraform/generate",
-    headers: authHeaders(ACTIVE_USER_ID),
+    headers: await authHeaders(ACTIVE_USER_ID),
     payload: {
       diagramJson: {
         nodes: []
@@ -127,9 +127,9 @@ test("POST /api/terraform/generate returns 400 for an invalid body", async () =>
   await app.close();
 });
 
-function authHeaders(userId: string): Record<string, string> {
+async function authHeaders(userId: string): Promise<Record<string, string>> {
   return {
-    authorization: `Bearer ${createAccessToken(userId)}`
+    authorization: `Bearer ${await createAccessToken(userId)}`
   };
 }
 
@@ -187,7 +187,7 @@ test("POST /api/terraform/validate returns diagnostics for an active user", asyn
   const response = await app.inject({
     method: "POST",
     url: "/api/terraform/validate",
-    headers: authHeaders(ACTIVE_USER_ID),
+    headers: await authHeaders(ACTIVE_USER_ID),
     payload: {
       terraformCode: `resource "aws_subnet" "public" {
   vpc_id = "aws_vpc.main.id"
@@ -240,7 +240,7 @@ test("POST /api/terraform/validate returns 400 for an invalid body", async () =>
   const response = await app.inject({
     method: "POST",
     url: "/api/terraform/validate",
-    headers: authHeaders(ACTIVE_USER_ID),
+    headers: await authHeaders(ACTIVE_USER_ID),
     payload: {
       terraformCode: 123
     }

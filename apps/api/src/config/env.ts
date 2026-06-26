@@ -1,3 +1,5 @@
+import "./load-env.js";
+
 export type RuntimeEnv = {
   awsRegion: string;
   authTokenSecret: string | undefined;
