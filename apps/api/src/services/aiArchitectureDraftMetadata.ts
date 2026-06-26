@@ -6,6 +6,7 @@ import type {
 } from "@sketchcatch/types";
 import type { ScenarioResolution } from "./aiArchitectureScenarioResolution.js";
 
+// 용도 결정 결과와 guardrail 경고를 최종 Architecture Draft metadata에 붙입니다.
 export function applyGuardrailMetadata(
   draft: AiArchitectureDraftResult,
   request: CreateArchitectureDraftRequest,
@@ -29,6 +30,7 @@ export function applyGuardrailMetadata(
   };
 }
 
+// 운영 조건이 현재 MVP 초안과 충돌할 때 사용자에게 먼저 보여줄 경고를 만듭니다.
 function createOperatingConditionWarnings(
   request: CreateArchitectureDraftRequest,
   selectedScenario: ArchitectureScenario
@@ -45,6 +47,7 @@ function createOperatingConditionWarnings(
   return [];
 }
 
+// 사용자가 고른 예산/트래픽/보안 조건을 초안의 가정 문장으로 남깁니다.
 function createGuardrailAssumptions(request: CreateArchitectureDraftRequest): string[] {
   const assumptions: string[] = [];
 
@@ -63,6 +66,7 @@ function createGuardrailAssumptions(request: CreateArchitectureDraftRequest): st
   return assumptions;
 }
 
+// 선택된 용도와 guardrail 경고를 사용자가 읽을 설명 문장으로 바꿉니다.
 function createGuardrailExplanations(
   request: CreateArchitectureDraftRequest,
   resolution: ScenarioResolution,
@@ -81,6 +85,7 @@ function createGuardrailExplanations(
   return [...explanations, ...guardrailWarnings.map((warning) => warning.message)];
 }
 
+// 내부 scenario 값을 화면에 보여줄 한국어 용도 이름으로 바꿉니다.
 function getScenarioLabel(scenario: ArchitectureScenario): string {
   switch (scenario) {
     case "static_site":

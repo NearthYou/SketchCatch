@@ -81,6 +81,7 @@ function createChecklist(findings: readonly CheckFinding[]): ChecklistItem[] {
   ];
 }
 
+// 체크리스트 항목이 어떤 finding을 가리키는지 연결하기 위해 category별 id만 모읍니다.
 function getFindingIdsByCategory(
   findings: readonly CheckFinding[],
   category: CheckFinding["category"]

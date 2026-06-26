@@ -94,6 +94,7 @@ function createOpenSshFindings(normalizedCode: string): CheckFinding[] {
   ];
 }
 
+// Terraform 코드에 RDS Resource가 있으면 비용 확인 finding을 만듭니다.
 function createDatabaseCostFindings(normalizedCode: string): CheckFinding[] {
   if (!normalizedCode.includes('resource "aws_db_instance"')) {
     return [];

@@ -19,6 +19,7 @@ export function createSecurityFindings(node: ResourceNode): CheckFinding[] {
   ];
 }
 
+// Security Group config 안에 SSH 전체 공개 ingress rule이 있는지 찾습니다.
 function hasOpenSshRule(config: ResourceConfig): boolean {
   const ingress = config["ingress"];
 
@@ -41,6 +42,7 @@ function isOpenSshRule(value: unknown): boolean {
   return (port === 22 || port === "22") && cidr === "0.0.0.0/0";
 }
 
+// unknown 값을 index 접근 가능한 객체로 좁히는 작은 타입 guard입니다.
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }

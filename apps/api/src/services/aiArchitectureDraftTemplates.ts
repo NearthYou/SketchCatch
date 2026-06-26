@@ -1,5 +1,6 @@
 import type { AiArchitectureDraftResult, ArchitectureJson, ArchitectureScenario } from "@sketchcatch/types";
 
+// 최종 선택된 용도에 맞는 고정 Architecture Draft 템플릿을 고릅니다.
 export function createDraftByScenario(scenario: ArchitectureScenario): AiArchitectureDraftResult {
   switch (scenario) {
     case "static_site":
@@ -11,6 +12,7 @@ export function createDraftByScenario(scenario: ArchitectureScenario): AiArchite
   }
 }
 
+// 정적 웹사이트 연습에 필요한 S3와 CloudFront 기본 초안을 만듭니다.
 function createStaticWebsiteDraft(): AiArchitectureDraftResult {
   const architectureJson: ArchitectureJson = {
     nodes: [
@@ -57,6 +59,7 @@ function createStaticWebsiteDraft(): AiArchitectureDraftResult {
   };
 }
 
+// API 서버 연습에 필요한 VPC, Subnet, Security Group, EC2 기본 초안을 만듭니다.
 function createApiServerDraft(): AiArchitectureDraftResult {
   return {
     title: "API 서버 Practice Architecture",
@@ -93,6 +96,7 @@ function createApiServerDraft(): AiArchitectureDraftResult {
   };
 }
 
+// DB 포함 백엔드 연습에 필요한 App/DB 분리 구조의 기본 초안을 만듭니다.
 function createDatabaseBackendDraft(): AiArchitectureDraftResult {
   return {
     title: "DB 포함 백엔드 Practice Architecture",
@@ -146,6 +150,7 @@ function createDatabaseBackendDraft(): AiArchitectureDraftResult {
   };
 }
 
+// 여러 템플릿에서 공통으로 쓰는 기본 VPC 노드를 만듭니다.
 function createVpcNode(): ArchitectureJson["nodes"][number] {
   return {
     id: "vpc-main",
@@ -159,6 +164,7 @@ function createVpcNode(): ArchitectureJson["nodes"][number] {
   };
 }
 
+// 템플릿 안에서 위치와 이름만 바꿔 재사용할 Subnet 노드를 만듭니다.
 function createSubnetNode(
   id: string,
   label: string,
@@ -178,6 +184,7 @@ function createSubnetNode(
   };
 }
 
+// EC2나 RDS에 연결할 기본 Security Group 노드를 만듭니다.
 function createSecurityGroupNode(
   id: string,
   label: string,
@@ -196,6 +203,7 @@ function createSecurityGroupNode(
   };
 }
 
+// 보드가 Resource 사이 관계를 그릴 수 있게 edge 객체를 만듭니다.
 function createEdge(
   id: string,
   sourceId: string,

@@ -35,6 +35,7 @@ export function createArchitectureDraftFromRepositoryEvidence(
   };
 }
 
+// 문자열 입력과 선택지 입력을 같은 요청 형태로 맞춰 draft 생성 흐름을 단순하게 만듭니다.
 function normalizeArchitectureDraftRequest(input: string | CreateArchitectureDraftRequest): CreateArchitectureDraftRequest {
   if (typeof input !== "string") {
     return input;

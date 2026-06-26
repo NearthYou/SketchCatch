@@ -76,6 +76,7 @@ export function createResourceCostEstimate(node: ResourceNode): ResourceCostEsti
   };
 }
 
+// Resource config에서 문자열 값만 꺼내 비용 규칙이 잘못된 타입을 읽지 않게 합니다.
 function getTextConfig(config: ResourceConfig, key: string): string {
   const value = config[key];
 

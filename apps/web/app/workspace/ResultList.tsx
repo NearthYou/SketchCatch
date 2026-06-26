@@ -9,6 +9,7 @@ type ResultListProps = {
   readonly summary: string;
 };
 
+// finding이나 Terraform 감지 결과처럼 요약과 항목 목록이 있는 응답을 같은 모양으로 보여줍니다.
 export function ResultList({ items, summary }: ResultListProps) {
   return (
     <div className="resultStack">

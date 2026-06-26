@@ -1,5 +1,6 @@
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:4000/api";
 
+// workspace 데모 화면에서 gg AI API로 JSON 요청을 보내는 최소 client입니다.
 export async function postJson<ResponseBody>(
   path: string,
   body: Record<string, unknown>

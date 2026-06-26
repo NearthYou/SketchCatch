@@ -6,6 +6,7 @@ type DraftMetadataPanelProps = {
   readonly metadata: DraftMetadata;
 };
 
+// Architecture Draft metadata를 팀 발표용 화면에서 읽기 쉬운 블록으로 보여줍니다.
 export function DraftMetadataPanel({ metadata }: DraftMetadataPanelProps) {
   const selectedScenarioLabel =
     metadata.selectedScenario === undefined ? "선택 결과 없음" : getScenarioLabel(metadata.selectedScenario);
@@ -63,6 +64,7 @@ export function DraftMetadataPanel({ metadata }: DraftMetadataPanelProps) {
   );
 }
 
+// metadata의 scenario 값을 사용자가 이해할 한국어 용도 이름으로 바꿉니다.
 function getScenarioLabel(scenario: ArchitectureScenario): string {
   switch (scenario) {
     case "static_site":

@@ -56,6 +56,7 @@ const UNSUPPORTED_REQUIREMENT_KEYWORDS = [
   "회사 내부 시스템"
 ] as const;
 
+// 버튼 선택과 자연어 점수를 합쳐 최종 Architecture Draft 용도를 결정합니다.
 export function resolveScenario(request: CreateArchitectureDraftRequest): ScenarioResolution {
   const scenarioScores = scorePromptScenarios(request.prompt);
   const unsupportedWarnings = createUnsupportedRequirementWarnings(request.prompt, scenarioScores);
@@ -93,6 +94,7 @@ function scorePromptScenarios(prompt: string): ArchitectureScenarioScore[] {
   });
 }
 
+// 점수표에서 최종 용도를 고르되, DB와 API 단서가 같이 있으면 DB 포함 백엔드를 우선합니다.
 function selectScenarioFromScores(scenarioScores: readonly ArchitectureScenarioScore[]): ArchitectureScenario {
   const backendScore = findScenarioScore(scenarioScores, "backend_with_db");
   const apiScore = findScenarioScore(scenarioScores, "api_server");
@@ -110,6 +112,7 @@ function selectScenarioFromScores(scenarioScores: readonly ArchitectureScenarioS
   return SCENARIO_PRIORITY.find((scenario) => findScenarioScore(scenarioScores, scenario) === highestScore) ?? "static_site";
 }
 
+// 특정 scenario의 점수를 안전하게 꺼내고, 없으면 0점으로 취급합니다.
 function findScenarioScore(
   scenarioScores: readonly ArchitectureScenarioScore[],
   scenario: ArchitectureScenario
@@ -117,10 +120,12 @@ function findScenarioScore(
   return scenarioScores.find((scenarioScore) => scenarioScore.scenario === scenario)?.score ?? 0;
 }
 
+// 자연어 문장 안에 우리가 아는 용도 단서가 하나라도 있는지 확인합니다.
 function hasPromptScenarioSignal(scenarioScores: readonly ArchitectureScenarioScore[]): boolean {
   return scenarioScores.some((scenarioScore) => scenarioScore.score > 0);
 }
 
+// 문장으로 판단한 용도와 사용자가 누른 버튼이 다르면 설명용 경고를 만듭니다.
 function createScenarioConflictWarnings(
   selectedScenario: ArchitectureScenario,
   promptScenario: ArchitectureScenario,
@@ -139,6 +144,7 @@ function createScenarioConflictWarnings(
   ];
 }
 
+// 현재 MVP가 자동 설계하지 않는 요구사항이면 기본 초안과 함께 경고를 돌려줍니다.
 function createUnsupportedRequirementWarnings(
   prompt: string,
   scenarioScores: readonly ArchitectureScenarioScore[]

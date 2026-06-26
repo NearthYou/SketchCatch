@@ -1,5 +1,6 @@
 import type { AiArchitectureDraftResult, ArchitectureJson, CreateArchitectureDraftRequest } from "@sketchcatch/types";
 
+// 운영 조건 중 보안 우선순위가 높을 때만 지원 가능한 config를 초안에 덧붙입니다.
 export function applyOperatingConditionConfig(
   draft: AiArchitectureDraftResult,
   request: CreateArchitectureDraftRequest
@@ -17,6 +18,7 @@ export function applyOperatingConditionConfig(
   };
 }
 
+// MVP에서 안전하게 표현할 수 있는 보안 설정만 Resource config에 반영합니다.
 function applyHighSecurityConfig(node: ArchitectureJson["nodes"][number]): ArchitectureJson["nodes"][number] {
   if (node.type === "S3") {
     return {
