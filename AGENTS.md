@@ -30,6 +30,7 @@ Before making changes, always read the nearest `AGENTS.md` and this root file. R
 1. Write `AGENTS.md` files in English.
 2. Write regular project docs and user-facing explanations in Korean unless the user asks otherwise.
 3. Keep code identifiers, commands, API paths, environment variable names, package names, and AWS service names in their original form.
+4. Write Pull Request titles and bodies in Korean unless the user explicitly asks for another language.
 
 ## Repository Boundaries
 
@@ -110,5 +111,6 @@ For documentation-only changes, full build checks are optional unless package fi
 2. Do not push directly to `main`.
 3. Do not push directly to `dev` except for one-time repository administration or explicit user approval.
 4. Use focused branches and PRs small enough to review.
-5. Follow the Git and PR conventions in `docs/development.md`.
-6. Before asking for review, summarize changed files, checks run, and any checks that could not be run.
+5. Write Pull Request titles and bodies in Korean unless the user explicitly asks for another language.
+6. Follow the Git and PR conventions in `docs/development.md`.
+7. Before asking for review, summarize changed files, checks run, and any checks that could not be run.
