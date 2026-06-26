@@ -409,6 +409,44 @@ export type AiPreDeploymentAnalysisResult = {
   suggestions: ArchitectureSuggestion[];
 };
 
+export type CreateDesignSimulationRequest = {
+  architectureJson: ArchitectureJson;
+  trafficLevel: ArchitectureDraftTrafficLevel;
+  budgetLevel: ArchitectureDraftBudgetLevel;
+};
+
+export type DesignSimulationRequestFlowStep = {
+  fromResourceId: string;
+  toResourceId: string;
+  description: string;
+};
+
+export type DesignSimulationBottleneck = {
+  id: string;
+  resourceId: string;
+  severity: RiskLevel;
+  title: string;
+  description: string;
+};
+
+export type DesignSimulationFailureScenario = {
+  id: string;
+  title: string;
+  affectedResourceIds: string[];
+  description: string;
+  mitigation: string;
+};
+
+export type DesignSimulationResult = {
+  summary: string;
+  assumptions: string[];
+  requestFlow: DesignSimulationRequestFlowStep[];
+  bottlenecks: DesignSimulationBottleneck[];
+  failureScenarios: DesignSimulationFailureScenario[];
+  costPressure: string[];
+  recommendations: string[];
+};
+
 export type AiTerraformStage = "validate" | "export" | "plan" | "apply";
 
 export type AiTerraformErrorCategory =

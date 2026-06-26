@@ -6,12 +6,15 @@ import type {
   AiTerraformErrorExplanationResult,
   AiTerraformPreviewExplanationResult,
   ArchitectureJson,
-  CreateArchitectureDraftRequest
+  CreateArchitectureDraftRequest,
+  CreateDesignSimulationRequest,
+  DesignSimulationResult
 } from "@sketchcatch/types";
 import {
   createArchitectureDraft,
   createArchitectureDraftFromRepositoryEvidence
 } from "../services/aiArchitectureDrafts.js";
+import { simulateDesign } from "../services/aiDesignSimulation.js";
 import { analyzePreDeployment } from "../services/aiPreDeploymentAnalysis.js";
 import { explainTerraformError } from "../services/aiTerraformErrorExplanation.js";
 import { explainTerraformPreview } from "../services/aiTerraformPreviewExplanation.js";
@@ -71,6 +74,12 @@ const preDeploymentCheckBodySchema = z.object({
   architectureJson: architectureJsonSchema
 });
 
+const designSimulationBodySchema: z.ZodType<CreateDesignSimulationRequest> = z.object({
+  architectureJson: architectureJsonSchema,
+  trafficLevel: z.enum(["small", "normal"]).default("normal"),
+  budgetLevel: z.enum(["low", "normal"]).default("normal")
+});
+
 const terraformErrorExplanationBodySchema = z.object({
   stage: z.enum(["validate", "export", "plan", "apply"]),
   rawMessage: z.string().trim().min(1),
@@ -101,6 +110,12 @@ export async function registerAiRoutes(app: FastifyInstance): Promise<void> {
     const body = preDeploymentCheckBodySchema.parse(request.body);
 
     return analyzePreDeployment(body.architectureJson);
+  });
+
+  app.post("/ai/design-simulation", async (request): Promise<DesignSimulationResult> => {
+    const body = designSimulationBodySchema.parse(request.body);
+
+    return simulateDesign(body);
   });
 
   app.post(
