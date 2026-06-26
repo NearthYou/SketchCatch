@@ -2,6 +2,79 @@
 
 SketchCatch 운영 배포는 Docker를 사용하지만 Docker Compose는 사용하지 않습니다. GitHub Actions가 Docker 이미지를 빌드하고 S3에 release artifact를 업로드한 뒤, AWS Systems Manager Run Command로 EC2에 배포 명령을 전달합니다. EC2 Amazon Linux 서버에서는 `docker run`으로 API, 웹, Nginx 컨테이너를 실행합니다.
 
+이 문서는 두 종류의 배포를 구분합니다.
+
+| 구분 | 의미 | 기준 |
+| --- | --- | --- |
+| 운영 배포 | SketchCatch 서비스 자체를 EC2에 배포 | Docker, S3 release artifact, SSM, Nginx |
+| 사용자 Deployment | 사용자가 승인한 IaC Preview를 실제 AWS 리소스에 반영 | Terraform Plan/Apply/Destroy, approval, logs, cleanup |
+
+## AWS E2E 데모 기준
+
+1차 MVP의 최우선 데모는 아래 흐름입니다.
+
+```text
+Requirement Prompt
+→ Architecture Draft
+→ Architecture Board
+→ IaC Preview
+→ Pre-Deployment Check
+→ Terraform Plan
+→ 사용자 승인
+→ Terraform Apply
+→ Outputs 확인
+→ Deployment History 확인
+→ Destroy/Cleanup
+```
+
+4일 데모의 실제 live apply 리소스는 안정성을 위해 아래로 제한합니다.
+
+- VPC
+- Public Subnet
+- Internet Gateway
+- Route Table
+- Security Group
+- EC2
+- S3 Bucket
+
+RDS는 생성/삭제 시간과 비용 리스크가 크므로 기본 live apply 경로에서 제외합니다.
+
+## 사용자 Deployment 안전 정책
+
+- 프론트엔드는 AWS SDK나 Terraform CLI를 직접 실행하지 않습니다.
+- 실제 Terraform 실행은 API 서버 또는 future worker에서만 수행합니다.
+- `terraform plan` 없이 `terraform apply`를 실행하지 않습니다.
+- 사용자가 승인한 `tfplan`만 `apply`합니다.
+- `destroy`는 apply와 별도 승인 흐름을 둡니다.
+- AWS credential, token, DB password, Terraform sensitive output은 응답과 로그에 남기지 않습니다.
+- 배포 로그는 단계, sequence, level, message를 유지합니다.
+- 데모 후 생성 리소스 cleanup을 반드시 확인합니다.
+
+## 사용자 Deployment 실행 순서
+
+```text
+1. AWS 연결 확인
+2. Terraform artifact 복원
+3. terraform init
+4. terraform validate
+5. terraform plan -out=tfplan
+6. terraform show -json tfplan
+7. Plan summary와 Pre-Deployment Check 표시
+8. 사용자 승인
+9. terraform apply tfplan
+10. terraform output -json
+11. Deployment History 저장
+12. destroy/cleanup
+```
+
+완료 기준:
+
+- Plan 실패 시 Apply 단계로 넘어가지 않습니다.
+- 승인 전 계정, region, 생성/수정/삭제 리소스, 비용/위험 요약을 표시합니다.
+- Apply 성공 후 사용자가 확인할 수 있는 output을 표시합니다.
+- Destroy 실패를 성공으로 표시하지 않습니다.
+- 남은 리소스가 있으면 사용자에게 명확히 보여줍니다.
+
 ## 운영 구조
 
 ```text

@@ -612,6 +612,80 @@ test("POST /api/ai/pre-deployment-check reports cost and missing configuration r
   await app.close();
 });
 
+test("POST /api/ai/pre-deployment-check-from-diagram analyzes DiagramJson through the adapter", async () => {
+  const app = buildApp();
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/ai/pre-deployment-check-from-diagram",
+    payload: {
+      diagramJson: {
+        nodes: [
+          {
+            id: "sg-rule-ssh",
+            type: "aws_security_group_rule",
+            kind: "resource",
+            position: { x: 120, y: 180 },
+            size: { width: 160, height: 96 },
+            label: "Public SSH",
+            locked: false,
+            zIndex: 0,
+            parameters: {
+              terraformBlockType: "resource",
+              resourceType: "aws_security_group_rule",
+              resourceName: "ssh",
+              fileName: "main",
+              values: {
+                type: "ingress",
+                fromPort: 22,
+                toPort: 22,
+                protocol: "tcp",
+                cidrBlocks: ["0.0.0.0/0"]
+              }
+            }
+          },
+          {
+            id: "rds-primary",
+            type: "aws_db_instance",
+            kind: "resource",
+            position: { x: 360, y: 180 },
+            size: { width: 160, height: 96 },
+            label: "Backend Database",
+            locked: false,
+            zIndex: 1,
+            parameters: {
+              terraformBlockType: "resource",
+              resourceType: "aws_db_instance",
+              resourceName: "primary",
+              fileName: "main",
+              values: {
+                engine: "postgres",
+                instanceClass: "db.t4g.micro"
+              }
+            }
+          }
+        ],
+        edges: [],
+        viewport: { x: 0, y: 0, zoom: 1 }
+      }
+    }
+  });
+
+  assert.equal(response.statusCode, 200);
+
+  const body = preDeploymentAnalysisResponseSchema.parse(response.json());
+  const securityFinding = body.findings.find((item) => item.resourceId === "sg-rule-ssh");
+  const costFinding = body.findings.find((item) => item.resourceId === "rds-primary");
+
+  assert.equal(securityFinding?.category, "security");
+  assert.equal(securityFinding?.severity, "high");
+  assert.equal(costFinding?.category, "cost");
+  assert.equal(costFinding?.severity, "medium");
+  assert.equal(body.checklist.some((item) => item.status === "fail"), true);
+
+  await app.close();
+});
+
 test("POST /api/ai/terraform-error-explanation explains AccessDenied as a permission issue", async () => {
   const app = buildApp();
 
