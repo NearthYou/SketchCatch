@@ -2,15 +2,16 @@
 
 This repository is SketchCatch.
 
-SketchCatch is a Terraform-first AI infrastructure design and simulation platform. It helps developers turn natural-language requirements into infrastructure graphs, edit them visually, generate Terraform previews, compare design versions, and analyze cost, performance, and security risks before any approved deployment path.
+SketchCatch is a Terraform-first, multi-cloud-ready AI infrastructure design, validation, and deployment platform. The MVP uses AWS and Terraform to prove the end-to-end path from natural-language requirements to a working cloud Deployment.
 
 ## Product Direction
 
-1. Treat SketchCatch as an AI-assisted infrastructure design, simulation, IaC generation, versioning, and safety platform, not just a visual cloud diagram tool.
-2. Terraform is the primary IaC target for product planning and implementation.
-3. CloudFormation may be used as an AWS reference or future compatibility target, but it is not the default MVP direction.
-4. Prefer explicit review, cost-accident prevention, realistic design constraints, and time-limited practice environments for any deployment-adjacent workflow.
-5. Do not implement real AWS apply, deploy, update, delete, or destroy behavior unless the user explicitly asks for it in the current task.
+1. Treat SketchCatch as an AI-assisted IaC platform, not just a visual cloud diagram tool.
+2. Terraform is the primary IaC target for the MVP and the extension point for future cloud providers.
+3. AWS is the MVP provider. Do not describe SketchCatch as AWS-only.
+4. The first MVP goal is an end-to-end demo where AI-recommended infrastructure is actually deployed to AWS and verified.
+5. CloudFormation may be used as an AWS reference or future compatibility target, but it is not the default MVP direction.
+6. Real AWS apply, deploy, update, delete, or destroy behavior is allowed only for explicit Deployment work with plan, approval, logging, secret masking, and cleanup safeguards.
 
 ## Required Reading
 
@@ -18,11 +19,11 @@ Before making changes, always read the nearest `AGENTS.md` and this root file. R
 
 - If a local `AGENTS.gg.md` exists, read it when working with gg or on the gg AI part.
 - Read `docs/README.md` when working on documentation or when you need the document map.
-- Read `docs/product.md` when changing product scope, MVP behavior, AI/IaC workflows, or safety policy.
-- Read `docs/architecture.md` when changing stack, storage, API scope, deployment architecture, or ADR-level decisions.
-- Read `docs/data-models.md` when changing DB models, API DTOs, shared types, or frontend state.
-- Read `docs/development.md` when working with Git flow, code conventions, or required checks.
-- Read `docs/deployment.md` when touching deployment, infrastructure, RDS, S3, or operations.
+- Read `docs/product.md` when changing product scope, MVP behavior, AI/IaC workflows, roadmap, or safety policy.
+- Read `docs/data-models.md` when changing DB models, API DTOs, shared types, frontend state, AI results, Terraform artifacts, or Deployment contracts.
+- Read `docs/architecture.md` when changing stack, storage, API scope, execution boundaries, deployment architecture, or ADR-level decisions.
+- Read `docs/development.md` when working with Git flow, code conventions, team AI collaboration, PR checks, or required checks.
+- Read `docs/deployment.md` when touching operational deployment, Terraform Plan/Apply/Destroy, AWS credentials, RDS, S3, logs, outputs, or cleanup.
 
 ## Language Rules
 
@@ -39,7 +40,7 @@ Before making changes, always read the nearest `AGENTS.md` and this root file. R
 5. Keep project data, architecture JSON, deployment records, and metadata in RDS.
 6. Keep diagram images, IaC files, generated exports, thumbnails, and release artifacts in S3.
 7. Do not mix Terraform generation, AWS SDK calls, deployment execution, or infrastructure mutation logic into UI components.
-8. Future Terraform execution belongs in backend or worker code behind explicit safety gates.
+8. Terraform execution belongs in backend or worker code behind explicit safety gates.
 
 ## Safety Rules
 
