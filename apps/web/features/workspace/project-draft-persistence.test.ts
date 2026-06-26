@@ -76,6 +76,7 @@ test("markDraftServerSaved clears dirty state and mirrors server revision", () =
     savedAt: "2026-06-24T01:00:00.000Z"
   });
   const serverDraft: ProjectDraft = {
+    id: "draft-1",
     projectId: "project-1",
     diagramJson: editedDiagram,
     revision: 9,
@@ -93,6 +94,7 @@ test("markDraftServerSaved clears dirty state and mirrors server revision", () =
 
 test("chooseInitialDiagram prefers server draft over local draft", () => {
   const serverDraft: ProjectDraft = {
+    id: "draft-2",
     projectId: "project-1",
     diagramJson: emptyDiagram,
     revision: 2,

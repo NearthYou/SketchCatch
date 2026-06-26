@@ -256,6 +256,7 @@ export async function registerProjectRoutes(
     const [draft] = await db
       .insert(projectDrafts)
       .values({
+        id: randomUUID(),
         projectId: params.id,
         diagramJson: body.diagramJson,
         revision,

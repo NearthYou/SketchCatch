@@ -1,6 +1,7 @@
 import type { ProjectDraft, DiagramJson } from "@sketchcatch/types";
 
 export type ProjectDraftRow = {
+  id: string;
   projectId: string;
   diagramJson: DiagramJson;
   revision: number;
@@ -15,6 +16,7 @@ export function getNextDraftRevision(currentRevision: number | null | undefined)
 
 export function toProjectDraft(row: ProjectDraftRow): ProjectDraft {
   return {
+    id: row.id,
     projectId: row.projectId,
     diagramJson: row.diagramJson,
     revision: row.revision,

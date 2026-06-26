@@ -196,7 +196,7 @@ export type Deployment = DeploymentBlock & {
   failureStage: DeploymentFailureStage | null;
   errorSummary: string | null;
   approvedAt: IsoDateTimeString | null;
-  approvedBy: string | null;
+  approvedByUserId: string | null;
   approvedTerraformArtifactId: string | null;
   createdAt: IsoDateTimeString;
   updatedAt: IsoDateTimeString;
@@ -259,7 +259,7 @@ export type DeploymentLog = {
   createdAt: IsoDateTimeString;
 };
 
-export type DeploymentFailureStage = "init" | "validation" | "plan" | "approval" | "mock_run";
+export type DeploymentFailureStage = "init" | "validate" | "plan" | "approval" | "mock_run";
 
 export type Activity = {
   id: string;
@@ -451,6 +451,7 @@ export type DiagramJson = {
 };
 
 export type ProjectDraft = {
+  id: string;
   projectId: string;
   diagramJson: DiagramJson;
   revision: number;

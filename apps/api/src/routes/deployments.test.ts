@@ -33,6 +33,7 @@ type DeploymentResponse = {
     status: string;
     failureStage: string | null;
     errorSummary: string | null;
+    approvedByUserId: string | null;
     createdAt: string;
     updatedAt: string;
   };
@@ -363,7 +364,7 @@ function createDeploymentRecord(
     failureStage: null,
     errorSummary: null,
     approvedAt: null,
-    approvedBy: null,
+    approvedByUserId: null,
     approvedTerraformArtifactId: null,
     createdAt: fixedNow,
     updatedAt: fixedNow,
@@ -573,6 +574,9 @@ test("POST /api/projects/:projectId/deployments maps ownership validation failur
 
 test("GET /api/deployments/:deploymentId returns a deployment", async () => {
   const repository = new FakeDeploymentRepository();
+  repository.deployment = createDeploymentRecord(deploymentId, {
+    approvedByUserId: userId
+  });
   const app = await buildDeploymentTestApp(repository);
 
   const response = await app.inject({
@@ -582,7 +586,9 @@ test("GET /api/deployments/:deploymentId returns a deployment", async () => {
   });
 
   assert.equal(response.statusCode, 200);
-  assert.equal((response.json() as DeploymentResponse).deployment.id, deploymentId);
+  const body = response.json() as DeploymentResponse;
+  assert.equal(body.deployment.id, deploymentId);
+  assert.equal(body.deployment.approvedByUserId, userId);
   assert.deepEqual(repository.calls, [
     {
       name: "findDeploymentById",
