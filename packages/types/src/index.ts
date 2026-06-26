@@ -104,6 +104,19 @@ export type Project = {
   updatedAt: IsoDateTimeString;
 };
 
+export type ProjectListResponse = {
+  projects: Project[];
+};
+
+export type ProjectResponse = {
+  project: Project;
+};
+
+export type CreateProjectRequest = {
+  name: string;
+  description?: string | undefined;
+};
+
 export type ArchitectureSource = "manual" | "prompt" | "imported";
 
 export type ArchitectureSnapshot = {
@@ -132,6 +145,38 @@ export type ProjectAsset = {
   contentType: string;
   byteSize: number | null;
   createdAt: IsoDateTimeString;
+};
+
+export type ProjectDetailsResponse = {
+  project: Project;
+  architectures: ArchitectureSnapshot[];
+  assets: ProjectAsset[];
+};
+
+export type CreateArchitectureSnapshotRequest = {
+  version?: number | undefined;
+  source?: string | undefined;
+  architectureJson: ArchitectureJson;
+};
+
+export type CreateProjectAssetUploadRequest = {
+  architectureId?: string | undefined;
+  assetType: ProjectAssetType;
+  fileName: string;
+  contentType: string;
+  byteSize?: number | undefined;
+};
+
+export type ProjectAssetUploadResponse = {
+  asset: ProjectAsset;
+  upload: {
+    method: "PUT";
+    url: string;
+    headers: {
+      "Content-Type": string;
+    };
+    expiresInSeconds: number;
+  };
 };
 
 export type TerraformArtifact = ProjectAsset & {
@@ -165,7 +210,6 @@ export type DeploymentBlock = {
 
 export type DeploymentWarningLevel = "low" | "medium" | "high";
 export type DeploymentBlockedBy = "risk_analysis" | "cost_analysis" | "missing_approval";
-export type DeploymentFailureStage = "validation" | "plan" | "approval" | "mock_run";
 
 export type DeploymentPlanWarning = {
   level: DeploymentWarningLevel;
@@ -182,7 +226,7 @@ export type DeploymentPlanSummary = {
   warnings: DeploymentPlanWarning[];
 };
 
-export type DeploymentStage = "validate" | "plan" | "apply";
+export type DeploymentStage = "init" | "validate" | "plan" | "apply";
 
 export type Template = {
   id: string;
@@ -214,6 +258,8 @@ export type DeploymentLog = {
   relatedResourceId: string | null;
   createdAt: IsoDateTimeString;
 };
+
+export type DeploymentFailureStage = "init" | "validation" | "plan" | "approval" | "mock_run";
 
 export type Activity = {
   id: string;
@@ -380,3 +426,162 @@ export type PracticeSession = {
 export type AwsResourceType = ResourceType;
 export type ArchitectureNode = ResourceNode;
 export type ArchitectureEdge = ResourceEdge;
+
+export type DiagramNodeKind = "resource" | "design";
+
+export type TerraformBlockType = "resource" | "data";
+
+export type DiagramNodeStyle = {
+  textColor?: string | undefined;
+  borderColor?: string | undefined;
+};
+
+export type DiagramNodeParameters = {
+  terraformBlockType?: TerraformBlockType | undefined;
+  resourceType: string;
+  resourceName: string;
+  fileName: string;
+  values: Record<string, unknown>;
+  invalid?: boolean | undefined;
+};
+
+export type DiagramNode = {
+  id: string;
+  type: string;
+  kind: DiagramNodeKind;
+  position: { x: number; y: number };
+  size: { width: number; height: number };
+  label: string;
+  iconUrl?: string | undefined;
+  locked: boolean;
+  zIndex: number;
+  style?: DiagramNodeStyle | undefined;
+  parameters?: DiagramNodeParameters | undefined;
+};
+
+export type DiagramEdgeStyle = {
+  color?: string | undefined;
+  width?: "thin" | "medium" | "thick" | undefined;
+  animated?: boolean | undefined;
+};
+
+export type DiagramEdge = {
+  id: string;
+  sourceNodeId: string;
+  targetNodeId: string;
+  sourceHandleId?: string | undefined;
+  targetHandleId?: string | undefined;
+  label?: string | undefined;
+  type?: string | undefined;
+  style?: DiagramEdgeStyle | undefined;
+};
+
+export type DiagramViewport = {
+  x: number;
+  y: number;
+  zoom: number;
+};
+
+export type DiagramJson = {
+  nodes: DiagramNode[];
+  edges: DiagramEdge[];
+  viewport: DiagramViewport;
+};
+
+export type ProjectDraft = {
+  projectId: string;
+  diagramJson: DiagramJson;
+  revision: number;
+  serverSavedAt: IsoDateTimeString;
+  createdAt: IsoDateTimeString;
+  updatedAt: IsoDateTimeString;
+};
+
+export type SaveProjectDraftRequest = {
+  diagramJson: DiagramJson;
+};
+
+export type ProjectDraftResponse = {
+  draft: ProjectDraft | null;
+};
+
+export type TerraformGenerateRequest = {
+  diagramJson: DiagramJson;
+};
+
+export type TerraformGenerateResponse = {
+  terraformCode: string;
+};
+
+export type CloudProvider = "aws";
+
+export type ResourceArea =
+  | "containers"
+  | "compute"
+  | "network"
+  | "storage"
+  | "database"
+  | "security-identity"
+  | "tools"
+  | "ai"
+  | "application"
+  | "other";
+
+export type ResourceItem = {
+  id: string;
+  name: string;
+  cloudProvider: CloudProvider;
+  area: ResourceArea;
+  category?: string | undefined;
+  iconUrl: string;
+  enabled: boolean;
+  nodeDefaults: {
+    terraformBlockType?: TerraformBlockType | undefined;
+    type: string;
+    label: string;
+    size: {
+      width: number;
+      height: number;
+    };
+  };
+};
+
+export type ResourceDragPayload = {
+  source: "resource-settings-panel";
+  item: ResourceItem;
+};
+
+export type ParameterInputKind =
+  | "text"
+  | "number"
+  | "checkbox"
+  | "select"
+  | "multi-select"
+  | "key-value"
+  | "reference-picker"
+  | "nested-block";
+
+export type ResourceParameterDefinition = {
+  name: string;
+  terraformName: string;
+  label: string;
+  type: "string" | "number" | "boolean" | "list" | "set" | "map" | "object";
+  required: boolean;
+  optional: boolean;
+  computed: boolean;
+  sensitive: boolean;
+  description?: string | undefined;
+  inputKind: ParameterInputKind;
+  options?: string[] | undefined;
+  referenceTargetTypes?: string[] | undefined;
+  referenceAttribute?: string | undefined;
+};
+
+export type TerraformResourceParameterCatalog = {
+  provider: CloudProvider;
+  generatedAt: IsoDateTimeString;
+  source: string;
+  resources: Record<string, ResourceParameterDefinition[]>;
+};
+
+export type ResourceNodeParameters = DiagramNodeParameters;

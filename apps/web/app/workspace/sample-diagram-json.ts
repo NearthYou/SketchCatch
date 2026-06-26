@@ -1,46 +1,6 @@
-type SampleDiagramNode = {
-  readonly id: string;
-  readonly type: string;
-  readonly kind: "resource";
-  readonly position: {
-    readonly x: number;
-    readonly y: number;
-  };
-  readonly size: {
-    readonly width: number;
-    readonly height: number;
-  };
-  readonly label: string;
-  readonly locked: boolean;
-  readonly zIndex: number;
-  readonly parameters: {
-    readonly terraformBlockType: "resource";
-    readonly resourceType: string;
-    readonly resourceName: string;
-    readonly fileName: string;
-    readonly values: Record<string, unknown>;
-  };
-};
+import type { DiagramJson, DiagramNode } from "@sketchcatch/types";
 
-type SampleDiagramJson = {
-  readonly nodes: readonly SampleDiagramNode[];
-  readonly edges: readonly {
-    readonly id: string;
-    readonly sourceNodeId: string;
-    readonly targetNodeId: string;
-  }[];
-  readonly viewport: {
-    readonly x: number;
-    readonly y: number;
-    readonly zoom: number;
-  };
-};
-
-export type TerraformGenerateResponseBody = {
-  readonly terraformCode: string;
-};
-
-export const sampleDiagramJson: SampleDiagramJson = {
+export const sampleDiagramJson: DiagramJson = {
   nodes: [
     makeSampleNode({
       id: "node-1",
@@ -100,9 +60,9 @@ export const sampleDiagramJson: SampleDiagramJson = {
 
 // 샘플 DiagramJson이 실제 보드 저장 책임을 가져오지 않도록 데모용 기본 좌표만 채웁니다.
 function makeSampleNode(
-  node: Omit<SampleDiagramNode, "position" | "size" | "locked" | "zIndex"> &
-    Partial<Pick<SampleDiagramNode, "position" | "size" | "locked" | "zIndex">>
-): SampleDiagramNode {
+  node: Omit<DiagramNode, "position" | "size" | "locked" | "zIndex"> &
+    Partial<Pick<DiagramNode, "position" | "size" | "locked" | "zIndex">>
+): DiagramNode {
   return {
     position: {
       x: 0,

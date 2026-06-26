@@ -76,6 +76,27 @@ test("unknown routes return the standard 404 error response", async () => {
   await app.close();
 });
 
+test("OPTIONS preflight allows project draft PUT requests", async () => {
+  const app = buildApp();
+
+  const response = await app.inject({
+    headers: {
+      "access-control-request-headers": "content-type,authorization",
+      "access-control-request-method": "PUT",
+      origin: "http://localhost:3000"
+    },
+    method: "OPTIONS",
+    url: "/api/projects/11111111-1111-4111-8111-111111111111/draft"
+  });
+
+  assert.equal(response.statusCode, 204);
+  assert.equal(response.headers["access-control-allow-origin"], "http://localhost:3000");
+  assert.match(String(response.headers["access-control-allow-methods"]), /PUT/);
+  assert.match(String(response.headers["access-control-allow-headers"]), /authorization/);
+
+  await app.close();
+});
+
 function assertErrorResponse(
   body: ApiErrorResponse,
   expectedError: ApiErrorResponse["error"]

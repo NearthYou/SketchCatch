@@ -998,3 +998,903 @@ h1 {
     width: 100%;
   }
 }
+
+/* Diagram editor workspace */
+.diagramEditor {
+  background: #f4f6fb;
+  color: #171c2f;
+  display: grid;
+  grid-template-columns: 280px minmax(420px, 1fr) 340px;
+  min-height: 100vh;
+  outline: none;
+}
+
+.resourcePanel,
+.parameterPanel {
+  background: #ffffff;
+  border-right: 1px solid #dde5f2;
+  min-height: 100vh;
+  overflow: auto;
+  padding: 16px;
+}
+
+.parameterPanel {
+  border-left: 1px solid #dde5f2;
+  border-right: 0;
+}
+
+.panelHeader,
+.diagramTopbar {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.panelHeader h2,
+.diagramTopbar h1 {
+  color: #171c2f;
+  font-size: 1.05rem;
+  line-height: 1.2;
+  margin: 0;
+}
+
+.panelEyebrow,
+.sectionCaption {
+  color: #7b8498;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  margin: 0 0 4px;
+  text-transform: uppercase;
+}
+
+.providerButton,
+.topbarActions button,
+.edgeToolbar button,
+.nodeToolbar button {
+  align-items: center;
+  background: #f4f1ff;
+  border: 1px solid #ddd4ff;
+  border-radius: 6px;
+  color: #5f3de8;
+  display: inline-flex;
+  gap: 6px;
+  min-height: 32px;
+  padding: 6px 8px;
+}
+
+.searchBox {
+  align-items: center;
+  background: #f8f9fd;
+  border: 1px solid #dfe7f4;
+  border-radius: 6px;
+  display: flex;
+  gap: 8px;
+  margin: 18px 0;
+  padding: 8px 10px;
+}
+
+.searchBox input,
+.parameterSection input,
+.parameterSection select,
+.parameterSection textarea,
+.edgeToolbar select {
+  background: #ffffff;
+  border: 1px solid #dfe7f4;
+  border-radius: 6px;
+  color: #171c2f;
+  min-height: 34px;
+  padding: 7px 9px;
+  width: 100%;
+}
+
+.searchBox input {
+  background: transparent;
+  border: 0;
+  min-height: 24px;
+  outline: 0;
+  padding: 0;
+}
+
+.resourceAreas {
+  display: block;
+}
+
+.resourceAreaGroup {
+  background: #ffffff;
+  border: 1px solid #e1e8f4;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.resourceArea {
+  border-bottom: 1px solid #e6ecf6;
+}
+
+.resourceArea:last-child {
+  border-bottom: 0;
+}
+
+.resourceAreaHeader {
+  align-items: center;
+  background: #f8f9fd;
+  border: 0;
+  color: #252c42;
+  display: flex;
+  gap: 8px;
+  justify-content: flex-start;
+  padding: 10px;
+  width: 100%;
+}
+
+.resourceAreaHeader:hover,
+.resourceAreaHeader:focus-visible {
+  background: #f2f0ff;
+  color: #5f3de8;
+  outline: none;
+}
+
+.resourceCategories {
+  display: grid;
+  gap: 10px;
+  padding: 0 10px 10px 34px;
+}
+
+.resourceCategoryTabs {
+  display: flex;
+  gap: 9px;
+  overflow-x: auto;
+  padding: 1px 1px 6px;
+  scrollbar-width: thin;
+}
+
+.resourceCategoryButton {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #e0e7f2;
+  border-radius: 8px;
+  color: #5d667a;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 auto;
+  gap: 5px;
+  height: 76px;
+  justify-content: center;
+  padding: 7px 5px;
+  width: 86px;
+}
+
+.resourceCategoryButton:hover,
+.resourceCategoryButton:focus-visible {
+  background: #f4f1ff;
+  border-color: #8b71ff;
+  box-shadow: 0 0 0 2px rgba(111, 76, 246, 0.12);
+  outline: none;
+}
+
+.resourceCategoryButton .resourceIcon,
+.resourceCategoryButton .resourceIconFallback {
+  height: 30px;
+  width: 30px;
+}
+
+.resourceCategoryLabel {
+  color: #3d465a;
+  display: -webkit-box;
+  font-size: 0.66rem;
+  font-weight: 750;
+  line-height: 1.12;
+  max-width: 100%;
+  min-height: 1.12em;
+  overflow: hidden;
+  overflow-wrap: normal;
+  text-align: center;
+  word-break: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.resourceCategoryView {
+  background: #ffffff;
+  border: 1px solid #e1e8f4;
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  padding: 10px;
+}
+
+.resourceCategoryViewHeader {
+  align-items: center;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 34px minmax(0, 1fr);
+}
+
+.resourceCategoryViewHeader h3 {
+  color: #171c2f;
+  font-size: 0.98rem;
+  line-height: 1.2;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.resourceBackButton {
+  align-items: center;
+  background: #f8f9fd;
+  border: 1px solid #dfe7f4;
+  border-radius: 7px;
+  color: #252c42;
+  display: inline-flex;
+  height: 34px;
+  justify-content: center;
+  padding: 0;
+  width: 34px;
+}
+
+.resourceBackButton:hover,
+.resourceBackButton:focus-visible {
+  background: #f4f1ff;
+  border-color: #8b71ff;
+  color: #5f3de8;
+  outline: none;
+}
+
+.resourceGrid {
+  display: grid;
+  gap: 7px;
+}
+
+.resourceTile {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #e0e7f2;
+  border-radius: 8px;
+  color: #252c42;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 36px 1fr;
+  min-height: 52px;
+  padding: 8px;
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease,
+    transform 120ms ease;
+}
+
+.resourceTile:not(.resourceTileDisabled):hover {
+  border-color: #8b71ff;
+  box-shadow: 0 10px 22px rgba(43, 51, 84, 0.08);
+  transform: translateY(-1px);
+}
+
+.resourceTileDisabled {
+  opacity: 0.46;
+}
+
+.resourceIcon,
+.resourceIconFallback {
+  align-items: center;
+  border-radius: 7px;
+  display: inline-flex;
+  font-size: 0.68rem;
+  font-weight: 800;
+  height: 36px;
+  justify-content: center;
+  width: 36px;
+}
+
+.resourceIcon {
+  background: transparent;
+  border: 0;
+  object-fit: contain;
+}
+
+.resourceIconFallback {
+  background: #f1edff;
+  border: 1px solid #d6cbff;
+  color: #5f3de8;
+}
+
+mark {
+  background: #fff3ba;
+  border-radius: 3px;
+  color: inherit;
+}
+
+[data-nextjs-dev-overlay],
+nextjs-portal {
+  display: none !important;
+}
+
+.resourcePanel {
+  background: #ffffff;
+  border-right: 1px solid #dbe3ef;
+  color: #151b29;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  overflow: visible;
+  padding: 0;
+}
+
+.resourceTabs {
+  align-items: center;
+  border-bottom: 1px solid #dde5f1;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  min-height: 84px;
+  padding: 18px 18px;
+}
+
+.resourceTabGroup {
+  align-items: center;
+  display: inline-flex;
+  gap: 8px;
+}
+
+.resourceTab,
+.resourceTabActive {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  color: #151b29;
+  display: inline-flex;
+  font-size: 1.34rem;
+  font-weight: 500;
+  height: 48px;
+  justify-content: center;
+  letter-spacing: 0;
+  padding: 0 16px;
+}
+
+.resourceTabActive {
+  background: #eef2f7;
+}
+
+.resourcePanelCollapse {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: #111827;
+  display: inline-flex;
+  height: 36px;
+  justify-content: center;
+  padding: 0;
+  width: 36px;
+}
+
+.resourceControlBar {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  padding: 20px 16px 16px;
+}
+
+.providerControls {
+  display: inline-flex;
+  gap: 8px;
+}
+
+.providerSelect {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #d8e1ee;
+  border-radius: 10px;
+  color: #151b29;
+  display: inline-flex;
+  gap: 11px;
+  height: 62px;
+  justify-content: center;
+  min-width: 88px;
+  padding: 0 12px;
+}
+
+.providerVersionSelect {
+  font-size: 1.08rem;
+  min-width: 104px;
+}
+
+.awsLogo {
+  align-items: center;
+  color: #151b29;
+  display: inline-flex;
+  flex-direction: column;
+  font-size: 1.06rem;
+  font-weight: 500;
+  line-height: 1;
+  margin-top: 4px;
+  width: 34px;
+}
+
+.awsLogo svg {
+  fill: none;
+  height: 12px;
+  margin-top: -1px;
+  stroke: #ff9900;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+  width: 34px;
+}
+
+.resourceViewToggles {
+  align-items: center;
+  display: inline-flex;
+  gap: 8px;
+}
+
+.resourceViewToggle,
+.resourceViewToggleActive {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 10px;
+  color: #111827;
+  display: inline-flex;
+  height: 56px;
+  justify-content: center;
+  padding: 0;
+  width: 56px;
+}
+
+.resourceViewToggleActive {
+  background: #f0edff;
+  color: #111827;
+}
+
+.resourcePanel .searchBox {
+  background: #ffffff;
+  border: 1px solid #d8e1ee;
+  border-radius: 8px;
+  color: #66758d;
+  gap: 10px;
+  height: 64px;
+  margin: 0 18px 16px;
+  padding: 0 16px;
+}
+
+.resourcePanel .searchBox input {
+  color: #151b29;
+  font-size: 1.22rem;
+  font-weight: 400;
+  min-height: 48px;
+}
+
+.resourcePanel .searchBox input::placeholder {
+  color: #93a0b6;
+  opacity: 1;
+}
+
+.resourceAreas {
+  border-top: 1px solid #dbe3ef;
+  display: block;
+}
+
+.resourceArea {
+  border-bottom: 1px solid #dbe3ef;
+}
+
+.resourceArea:last-child {
+  border-bottom: 1px solid #dbe3ef;
+}
+
+.resourceAreaHeader {
+  align-items: center;
+  background: #ffffff;
+  border: 0;
+  color: #151b29;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: 42px minmax(0, 1fr) 24px;
+  min-height: 70px;
+  padding: 0 18px;
+  text-align: left;
+  width: 100%;
+}
+
+.resourceAreaHeader:hover,
+.resourceAreaHeader:focus-visible {
+  background: #fafbfe;
+  color: #151b29;
+  outline: none;
+}
+
+.resourceAreaIcon {
+  align-items: center;
+  color: #0b0d12;
+  display: inline-flex;
+  height: 42px;
+  justify-content: center;
+  width: 42px;
+}
+
+.resourceAreaLabel {
+  color: #1d2433;
+  font-size: 1.24rem;
+  font-weight: 580;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.modulesEmptyState {
+  background: #ffffff;
+  padding: 33px 20px 36px;
+}
+
+.modulesEmptyState h3 {
+  color: #151b29;
+  font-size: 1.18rem;
+  font-weight: 520;
+  line-height: 1.25;
+  margin: 0 0 10px;
+}
+
+.modulesEmptyState p {
+  color: #78869c;
+  font-size: 1.08rem;
+  font-weight: 400;
+  line-height: 1.35;
+  margin: 0;
+}
+
+.modulesActions {
+  display: flex;
+  gap: 24px;
+  justify-content: center;
+  margin-top: 36px;
+}
+
+.modulesImportButton,
+.modulesCatalogButton {
+  align-items: center;
+  border: 0;
+  border-radius: 8px;
+  display: inline-flex;
+  font-size: 1.03rem;
+  font-weight: 520;
+  gap: 8px;
+  height: 48px;
+  justify-content: center;
+  min-width: 128px;
+  padding: 0 16px;
+}
+
+.modulesImportButton {
+  background: #f0eaff;
+  color: #7b50ff;
+}
+
+.modulesCatalogButton {
+  background: #764cff;
+  color: #ffffff;
+}
+
+.resourceSectionBody {
+  background: #ffffff;
+  padding: 18px 18px 28px;
+}
+
+.resourcePanel .resourceGrid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.resourceSearchResults {
+  border-top: 1px solid #dbe3ef;
+  padding: 18px;
+}
+
+.resourceSearchResults .sectionCaption {
+  color: #69778d;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  margin: 0 0 12px;
+  text-transform: uppercase;
+}
+
+.resourceTile {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #d8e1ee;
+  border-radius: 10px;
+  color: #1d2433;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  height: 124px;
+  justify-content: center;
+  min-height: 124px;
+  padding: 12px 10px;
+  text-align: center;
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease,
+    transform 120ms ease;
+}
+
+.resourceTile:not(.resourceTileDisabled):hover {
+  border-color: #8b71ff;
+  box-shadow: 0 10px 22px rgba(43, 51, 84, 0.08);
+  transform: translateY(-1px);
+}
+
+.resourceTile > span:last-child {
+  color: #2b3242;
+  display: -webkit-box;
+  font-size: 0.82rem;
+  font-weight: 520;
+  line-height: 1.15;
+  max-width: 100%;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.resourceIcon,
+.resourceIconFallback {
+  align-items: center;
+  border-radius: 7px;
+  display: inline-flex;
+  font-size: 0.68rem;
+  font-weight: 800;
+  height: 48px;
+  justify-content: center;
+  width: 48px;
+}
+
+.resourceIcon {
+  background: transparent;
+  border: 0;
+  object-fit: contain;
+}
+
+.resourceIconFallback {
+  background: #f1edff;
+  border: 1px solid #d6cbff;
+  color: #5f3de8;
+}
+
+.brainboardTile {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #d8e1ee;
+  border-radius: 10px;
+  color: #1d2433;
+  display: inline-flex;
+  flex-direction: column;
+  gap: 14px;
+  height: 124px;
+  justify-content: center;
+  padding: 12px;
+  width: 124px;
+}
+
+.brainboardTile img {
+  height: 46px;
+  width: 46px;
+}
+
+.brainboardTile span {
+  font-size: 1.03rem;
+  line-height: 1.15;
+}
+
+.emptyPanelState {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: #7c8aa2;
+  display: flex;
+  font-size: 0.95rem;
+  justify-content: center;
+  min-height: 90px;
+  padding: 16px;
+  text-align: center;
+}
+
+.diagramCanvasShell {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  min-height: 100vh;
+  min-width: 0;
+  padding: 16px;
+}
+
+.diagramTopbar {
+  margin-bottom: 12px;
+}
+
+.topbarActions {
+  display: flex;
+  gap: 8px;
+}
+
+.diagramCanvas {
+  border: 1px solid #dfe7f4;
+  border-radius: 8px;
+  min-height: 640px;
+  overflow: hidden;
+}
+
+.sketchNode {
+  align-items: center;
+  background: #ffffff;
+  border: 2px solid #6f4cf6;
+  border-radius: 8px;
+  box-shadow: 0 6px 18px rgba(29, 36, 51, 0.12);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  justify-content: center;
+  padding: 10px;
+  position: relative;
+  text-align: center;
+}
+
+.sketchNodeDimmed {
+  opacity: 0.32;
+}
+
+.sketchNodeLocked {
+  background: #f8fafc;
+}
+
+.nodeIcon {
+  background: #f1edff;
+  border-radius: 5px;
+  color: #5f3de8;
+  font-size: 0.68rem;
+  font-weight: 800;
+  padding: 3px 6px;
+}
+
+.sketchNode strong {
+  font-size: 0.9rem;
+  line-height: 1.2;
+}
+
+.sketchNode span {
+  color: #66758a;
+  font-size: 0.72rem;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.nodeToolbar,
+.edgeToolbar {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #dfe7f4;
+  border-radius: 8px;
+  box-shadow: 0 6px 18px rgba(29, 36, 51, 0.14);
+  display: flex;
+  gap: 5px;
+  padding: 5px;
+}
+
+.nodeToolbar {
+  left: 50%;
+  position: absolute;
+  top: -44px;
+  transform: translateX(-50%);
+  z-index: 4;
+}
+
+.nodeToolbar input[type="color"],
+.edgeToolbar input[type="color"] {
+  border: 0;
+  height: 28px;
+  padding: 0;
+  width: 28px;
+}
+
+.edgeToolbar {
+  justify-self: center;
+  margin-bottom: 8px;
+}
+
+.parameterSection {
+  border-top: 1px solid #e3e9f2;
+  display: grid;
+  gap: 9px;
+  margin-top: 16px;
+  padding-top: 16px;
+}
+
+.parameterSection h3 {
+  font-size: 0.95rem;
+  margin: 0;
+}
+
+.fieldLabel {
+  align-items: center;
+  color: #334155;
+  display: flex;
+  font-size: 0.86rem;
+  font-weight: 700;
+  gap: 6px;
+  justify-content: space-between;
+}
+
+.fieldLabel strong {
+  color: #7c3aed;
+  font-size: 0.7rem;
+  margin-left: 4px;
+  text-transform: uppercase;
+}
+
+.fieldHelp {
+  align-items: center;
+  display: flex;
+  font-size: 0.78rem;
+  gap: 5px;
+  margin: 0;
+}
+
+.fieldError,
+.parameterSection .fieldError {
+  border-color: #dc2626;
+}
+
+.fieldErrorText {
+  color: #dc2626;
+}
+
+.parameterField {
+  display: grid;
+  gap: 6px;
+}
+
+.toggleField {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.resourceTypeBadge {
+  background: #f1edff;
+  border-radius: 999px;
+  color: #5f3de8;
+  font-size: 0.75rem;
+  font-weight: 800;
+  padding: 6px 8px;
+}
+
+.emptyPanelState {
+  align-items: center;
+  background: #f8f9fd;
+  border: 1px dashed #c9d3e3;
+  border-radius: 8px;
+  color: #66758a;
+  display: flex;
+  justify-content: center;
+  min-height: 90px;
+  padding: 16px;
+  text-align: center;
+}
+
+@media (max-width: 980px) {
+  .diagramEditor {
+    grid-template-columns: 1fr;
+  }
+
+  .resourcePanel,
+  .parameterPanel {
+    min-height: auto;
+  }
+
+  .diagramCanvasShell {
+    min-height: 70vh;
+  }
+}

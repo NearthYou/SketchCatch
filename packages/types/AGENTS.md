@@ -18,6 +18,13 @@ This folder contains shared TypeScript types used by the API, frontend, and futu
 4. Prefer narrow union types for known statuses, levels, and resource kinds.
 5. Use `Record<string, unknown>` for resource-specific config until a resource schema is intentionally designed.
 
+## DiagramJson And Terraform Conversion
+
+1. Keep `DiagramJson`, `DiagramNode`, and `DiagramEdge` field names aligned with `docs/sw/spec.md`.
+2. Do not rename `sourceNodeId`, `targetNodeId`, `terraformBlockType`, `resourceType`, `resourceName`, or `values` without updating SW docs, API validation, and web consumers together.
+3. Treat `DiagramJson` as a conversion input contract, not a replacement for persisted `ArchitectureJson` unless the data model is intentionally changed.
+4. Keep `DiagramNode.parameters.values` as `Record<string, unknown>` until resource-specific schemas are deliberately designed.
+
 ## Change Checklist
 
 Before finishing a type change, check:

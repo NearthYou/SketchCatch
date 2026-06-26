@@ -1,6 +1,6 @@
 import { relations, sql } from "drizzle-orm";
 import { boolean, index, integer, jsonb, pgEnum, pgTable, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/pg-core";
-import type { ArchitectureJson, DeploymentPlanSummary } from "@sketchcatch/types";
+import type { ArchitectureJson, DeploymentPlanSummary, DiagramJson } from "@sketchcatch/types";
 
 export const assetTypeEnum = pgEnum("asset_type", [
   "diagram_png",
@@ -25,6 +25,7 @@ export const deploymentBlockedEnum = pgEnum("deployment_blocked_by", [
 ]);
 
 export const deploymentFailureStageEnum = pgEnum("deployment_failure_stage", [
+  "init",
   "validation",
   "plan",
   "approval",
@@ -32,6 +33,7 @@ export const deploymentFailureStageEnum = pgEnum("deployment_failure_stage", [
 ]);
 
 export const deploymentStageEnum = pgEnum("deployment_stage", [
+  "init",
   "validate",
   "plan",
   "apply"
@@ -135,6 +137,17 @@ export const architectures = pgTable("architectures", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
 });
 
+export const projectDrafts = pgTable("project_drafts", {
+  projectId: varchar("project_id", { length: 36 })
+    .primaryKey()
+    .references(() => projects.id, { onDelete: "cascade" }),
+  diagramJson: jsonb("diagram_json").$type<DiagramJson>().notNull(),
+  revision: integer("revision").notNull().default(1),
+  serverSavedAt: timestamp("server_saved_at", { withTimezone: true }).notNull().defaultNow(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+});
+
 export const projectAssets = pgTable("project_assets", {
   id: varchar("id", { length: 36 }).primaryKey(),
   projectId: varchar("project_id", { length: 36 })
@@ -170,7 +183,7 @@ export const deployments = pgTable("deployments", {
   failureStage: deploymentFailureStageEnum("failure_stage"),
   errorSummary: text("error_summary"),
   approvedAt: timestamp("approved_at", { withTimezone: true }),
-  approvedBy: varchar("approved_by", { length: 128 }), 
+  approvedBy: varchar("approved_by", { length: 128 }),
   approvedTerraformArtifactId: varchar("approved_terraform_artifact_id", { length: 36 }).references(
     () => projectAssets.id,
     { onDelete: "set null" }
@@ -217,6 +230,7 @@ export const projectsRelations = relations(projects, ({ many, one }) => ({
     fields: [projects.userId],
     references: [users.id]
   }),
+  draft: one(projectDrafts),
   architectures: many(architectures),
   assets: many(projectAssets),
   deployments: many(deployments)
@@ -228,6 +242,13 @@ export const architecturesRelations = relations(architectures, ({ many, one }) =
     references: [projects.id]
   }),
   assets: many(projectAssets)
+}));
+
+export const projectDraftsRelations = relations(projectDrafts, ({ one }) => ({
+  project: one(projects, {
+    fields: [projectDrafts.projectId],
+    references: [projects.id]
+  })
 }));
 
 export const projectAssetsRelations = relations(projectAssets, ({ one }) => ({

@@ -9,12 +9,13 @@ import type {
   ArchitectureDraftScenarioHint,
   ArchitectureDraftSecurityPriority,
   ArchitectureDraftTrafficLevel,
-  ArchitectureJson
+  ArchitectureJson,
+  TerraformGenerateResponse
 } from "@sketchcatch/types";
 import { apiFetch, getApiErrorMessage } from "../../lib/api-client";
 import { DraftMetadataPanel } from "./DraftMetadataPanel";
 import { PreDeploymentAnalysisPanel } from "./PreDeploymentAnalysisPanel";
-import { sampleDiagramJson, type TerraformGenerateResponseBody } from "./sample-diagram-json";
+import { sampleDiagramJson } from "./sample-diagram-json";
 import { TerraformPreviewPanel } from "./TerraformPreviewPanel";
 import { getResourceTypeLabel } from "./resource-type-labels";
 import { postJson } from "./workspace-api-client";
@@ -94,7 +95,7 @@ export function AiWorkspaceClient() {
   // SW 변환 API를 직접 실행하지 않고 백엔드에 샘플 DiagramJson만 보내 Terraform 미리보기를 채웁니다.
   async function runDiagramToTerraform(): Promise<void> {
     await runRequest(async () => {
-      const result = await apiFetch<TerraformGenerateResponseBody>("/terraform/generate", {
+      const result = await apiFetch<TerraformGenerateResponse>("/terraform/generate", {
         auth: true,
         body: {
           diagramJson: sampleDiagramJson
