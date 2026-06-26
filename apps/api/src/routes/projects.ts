@@ -8,8 +8,16 @@ import type { ApiErrorResponse, ArchitectureJson } from "@sketchcatch/types";
 import { requireActiveUserId } from "../auth/current-user.js";
 import { requireS3BucketName } from "../config/env.js";
 import { getDatabaseClient, type DatabaseClient } from "../db/client.js";
-import { architectures, projectAssets, projects, touchUpdatedAt } from "../db/schema.js";
+import {
+  architectures,
+  projectAssets,
+  projectDrafts,
+  projects,
+  touchUpdatedAt
+} from "../db/schema.js";
+import { getNextDraftRevision, toProjectDraft } from "../modules/projects/project-drafts.js";
 import { getS3Client } from "../s3/client.js";
+import { saveProjectDraftBodySchema } from "./project-draft-schemas.js";
 
 const createProjectBodySchema = z.object({
   name: z.string().min(1).max(120),
@@ -197,6 +205,86 @@ export async function registerProjectRoutes(
     return reply.status(201).send({
       architecture
     });
+  });
+
+  app.get("/projects/:id/draft", async (request, reply) => {
+    const currentUserId = await requireActiveUserId(request, getProjectDatabaseClient);
+    const params = routeParamsSchema.parse(request.params);
+    const { db } = getProjectDatabaseClient();
+
+    const [project] = await db
+      .select()
+      .from(projects)
+      .where(and(eq(projects.id, params.id), eq(projects.userId, currentUserId)));
+
+    if (!project) {
+      return sendNotFound(reply, "프로젝트를 찾을 수 없습니다.");
+    }
+
+    const [draft] = await db
+      .select()
+      .from(projectDrafts)
+      .where(eq(projectDrafts.projectId, params.id));
+
+    return {
+      draft: draft ? toProjectDraft(draft) : null
+    };
+  });
+
+  app.put("/projects/:id/draft", async (request, reply) => {
+    const currentUserId = await requireActiveUserId(request, getProjectDatabaseClient);
+    const params = routeParamsSchema.parse(request.params);
+    const body = saveProjectDraftBodySchema.parse(request.body);
+    const { db } = getProjectDatabaseClient();
+
+    const [project] = await db
+      .select()
+      .from(projects)
+      .where(and(eq(projects.id, params.id), eq(projects.userId, currentUserId)));
+
+    if (!project) {
+      return sendNotFound(reply, "프로젝트를 찾을 수 없습니다.");
+    }
+
+    const [existingDraft] = await db
+      .select({ revision: projectDrafts.revision })
+      .from(projectDrafts)
+      .where(eq(projectDrafts.projectId, params.id));
+    const now = new Date();
+    const revision = getNextDraftRevision(existingDraft?.revision);
+
+    const [draft] = await db
+      .insert(projectDrafts)
+      .values({
+        projectId: params.id,
+        diagramJson: body.diagramJson,
+        revision,
+        serverSavedAt: now,
+        updatedAt: now
+      })
+      .onConflictDoUpdate({
+        target: projectDrafts.projectId,
+        set: {
+          diagramJson: body.diagramJson,
+          revision,
+          serverSavedAt: now,
+          updatedAt: now
+        }
+      })
+      .returning();
+
+    if (!draft) {
+      throw new Error("Failed to save project draft");
+    }
+
+    await db
+      .update(projects)
+      .set(touchUpdatedAt)
+      .where(and(eq(projects.id, params.id), eq(projects.userId, currentUserId)));
+
+    return {
+      draft: toProjectDraft(draft)
+    };
   });
 
   app.post("/projects/:id/assets/presigned-upload", async (request, reply) => {
