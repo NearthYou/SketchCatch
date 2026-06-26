@@ -1,0 +1,98 @@
+"use client";
+
+import { useRouter } from "next/navigation";
+import { useState, type FormEvent } from "react";
+import { createProject } from "../../../features/workspace/api";
+import type { WorkspaceCloudPlatform } from "../../../features/workspace/project-draft-persistence";
+
+const cloudPlatformOptions: ReadonlyArray<{
+  readonly label: string;
+  readonly value: WorkspaceCloudPlatform;
+}> = [
+  { label: "AWS", value: "aws" },
+  { label: "GCP", value: "gcp" }
+];
+
+export function WorkspaceStartClient() {
+  const router = useRouter();
+  const [title, setTitle] = useState("");
+  const [cloudPlatform, setCloudPlatform] = useState<WorkspaceCloudPlatform>("aws");
+  const [errorMessage, setErrorMessage] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+
+    const trimmedTitle = title.trim();
+    if (!trimmedTitle) {
+      setErrorMessage("설계 제목을 입력해 주세요.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    setErrorMessage("");
+
+    try {
+      const project = await createProject({
+        name: trimmedTitle
+      });
+      const params = new URLSearchParams({
+        cloudPlatform,
+        projectId: project.id,
+        projectName: project.name
+      });
+
+      router.push(`/workspace?${params.toString()}`);
+    } catch {
+      setIsSubmitting(false);
+      setErrorMessage("워크스페이스를 생성하지 못했습니다.");
+    }
+  }
+
+  return (
+    <form className="workspaceStartForm" onSubmit={handleSubmit}>
+      <label className="workspaceStartField" htmlFor="workspace-title-input">
+        <span className="fieldLabel">설계 제목</span>
+        <input
+          className="textInput"
+          id="workspace-title-input"
+          maxLength={80}
+          onChange={(event) => setTitle(event.target.value)}
+          placeholder="예: 팀 프로젝트 API 서버"
+          type="text"
+          value={title}
+        />
+      </label>
+
+      <div className="workspaceStartField">
+        <span className="fieldLabel">클라우드 플랫폼</span>
+        <div className="choiceGrid workspaceStartProviderGrid" role="radiogroup" aria-label="클라우드 플랫폼">
+          {cloudPlatformOptions.map((option) => (
+            <button
+              aria-checked={cloudPlatform === option.value}
+              className={cloudPlatform === option.value ? "choiceButton choiceButtonActive" : "choiceButton"}
+              key={option.value}
+              onClick={() => setCloudPlatform(option.value)}
+              role="radio"
+              type="button"
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {errorMessage ? (
+        <p className="workspaceStartError" role="alert">
+          {errorMessage}
+        </p>
+      ) : null}
+
+      <div className="workspaceStartActions">
+        <button className="primaryButton" disabled={isSubmitting} type="submit">
+          워크스페이스 생성
+        </button>
+      </div>
+    </form>
+  );
+}

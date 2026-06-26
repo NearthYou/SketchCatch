@@ -1,154 +1,141 @@
 # 아키텍처
 
-SketchCatch는 pnpm workspace와 Turborepo 기반 모노레포다. 프론트엔드, 백엔드, 공유 타입, 공유 UI, 설정 패키지를 분리해 팀원이 동시에 작업해도 충돌을 줄이는 구조를 목표로 한다.
+SketchCatch는 pnpm workspace와 Turborepo 기반 모노레포다. MVP는 AWS + Terraform 기준으로 구현하지만, 구조는 Terraform Provider 확장을 통한 멀티 클라우드 지원을 전제로 한다.
 
 ## 저장소 구조
 
 ```mermaid
 flowchart TB
-  subgraph Repo["sketchcatch 모노레포"]
+  subgraph Repo["SketchCatch monorepo"]
     Web["apps/web\nNext.js + React"]
     Api["apps/api\nFastify + TypeScript"]
     UI["packages/ui\n공유 UI"]
     Types["packages/types\n공유 타입"]
-    Config["packages/config\n공유 설정"]
     Infra["infra / deploy / .github\n운영 설정"]
-    Docs["docs\n제품/개발 문서"]
+    Docs["docs\nSSOT 문서"]
   end
 
   Web --> Types
   Web --> UI
-  Api --> Types
   Web --> Api
-  Infra --> Web
-  Infra --> Api
+  Api --> Types
+  Api --> RDS["RDS PostgreSQL"]
+  Api --> S3["S3 artifacts"]
 ```
 
 주요 디렉터리:
 
-- `apps/web`: Next.js 프론트엔드
-- `apps/api`: Fastify API 서버
+- `apps/web`: Architecture Board, IaC Preview, Pre-Deployment Check, Deployment 화면
+- `apps/api`: 인증, 프로젝트, draft, Terraform 생성/검증, Deployment API
 - `packages/types`: API와 프론트가 공유하는 도메인 타입
-- `packages/ui`: 공유 UI
-- `packages/config`: 공유 설정
-- `infra`, `deploy`, `.github`: 운영/배포 설정
-- `docs`: 제품/개발/배포 문서
+- `packages/ui`: 공유 presentational UI
+- `infra`, `deploy`, `.github`: 운영 배포와 AWS 운영 설정
+- `docs`: 제품/데이터/아키텍처/개발/배포 SSOT
 
 ## 기술 스택
 
-| 영역 | 선택한 기술 | 이유 |
+| 영역 | 선택한 기술 | 기준 |
 | --- | --- | --- |
-| 패키지 관리 | pnpm workspace | 빠른 설치, 모노레포 패키지 연결, 디스크 효율 |
-| 빌드 오케스트레이션 | Turborepo | 앱/패키지 빌드 순서와 캐시 관리 |
-| 프론트엔드 | Next.js, React, TypeScript | 라우팅, React 생태계, 타입 안정성 |
-| API 서버 | Fastify, TypeScript | 빠른 Node API 서버, 스키마 검증과 플러그인 구조 |
-| DB | RDS PostgreSQL | 프로젝트/아키텍처 JSON/배포 이력 같은 관계형 데이터에 적합 |
-| ORM | Drizzle ORM, drizzle-kit | SQL에 가까운 타입 안전 ORM, 마이그레이션 관리 |
-| 파일 저장 | S3 presigned upload | 이미지, IaC 파일, export zip 저장에 적합 |
-| 배포 | Docker, EC2, SSM, Nginx | Docker 단위 배포, SSH 없는 운영 배포 |
-| HTTPS | ALB, ACM, Route 53 | AWS 표준 HTTPS 진입 구조 |
-| CI/CD | GitHub Actions, OIDC | 장기 AWS Access Key 없이 배포 권한 위임 |
-| 코드 품질 | ESLint, Prettier, TypeScript | 팀 코드 스타일 통일, 타입 오류 조기 발견 |
+| 패키지 관리 | pnpm workspace | 모노레포 패키지 연결 |
+| 빌드 | Turborepo | 앱/패키지 빌드 순서 관리 |
+| 프론트엔드 | Next.js, React, TypeScript | 작업 화면과 API 연동 |
+| API 서버 | Fastify, TypeScript | 명확한 route/service 분리 |
+| DB | RDS PostgreSQL | 프로젝트, 설계, 배포 이력 저장 |
+| ORM | Drizzle ORM | 타입 안전 DB schema와 migration |
+| 파일 저장 | S3 | Terraform, export, image, tfplan, state/output artifact |
+| IaC | Terraform | MVP 기준 IaC, 멀티 클라우드 확장 기반 |
+| 운영 배포 | Docker, EC2, SSM, Nginx | SSH 없는 운영 배포 |
+| CI/CD | GitHub Actions, OIDC | 장기 AWS key 없는 운영 배포 |
+
+## 실행 경계
+
+| 책임 | 위치 | 금지 |
+| --- | --- | --- |
+| UI 표시와 사용자 승인 | `apps/web` | AWS SDK 직접 호출, Terraform CLI 실행 |
+| Terraform 생성/검증 API | `apps/api` | 프론트에 실행 책임 위임 |
+| Terraform Plan/Apply/Destroy | `apps/api` 또는 future worker | 승인 없는 apply/destroy |
+| AWS 연결 확인 | `apps/api` 또는 future worker | credential 응답/로그 노출 |
+| 파일 artifact 저장 | S3 + RDS metadata | Terraform 원문 RDS 영구 저장 |
+
+프론트엔드는 버튼과 상태를 보여줄 뿐 실제 클라우드 변경을 직접 수행하지 않는다. 실제 리소스 변경은 backend/worker에서 승인 게이트, 로그 마스킹, cleanup 경로를 갖춘 뒤 실행한다.
 
 ## 데이터 저장 기준
 
-RDS와 S3는 역할을 분리한다.
-
 | 데이터 | 저장 위치 |
 | --- | --- |
-| 익명 workspace | RDS |
+| 사용자, refresh token hash | RDS |
 | 프로젝트 정보 | RDS |
-| 아키텍처 JSON | RDS |
-| 프로젝트 편집 draft | RDS + 브라우저 IndexedDB |
-| S3 파일 메타데이터 | RDS |
-| 향후 배포 이력/비용 정보 | RDS |
-| PNG/SVG 다이어그램 | S3 |
-| Terraform 파일과 향후 호환 IaC 파일 | S3 |
-| 프로젝트 export zip | S3 |
-| 썸네일 이미지 | S3 |
+| `ArchitectureJson` snapshot | RDS |
+| `ProjectDraft.diagramJson` | RDS + 브라우저 복구 상태 |
+| Deployment, Plan summary, 로그 metadata | RDS |
+| S3 파일 metadata | RDS |
+| Terraform 파일 | S3 |
+| `tfplan`, state, output artifact | S3 |
+| 다이어그램 이미지, export zip, thumbnail | S3 |
 
-공유 도메인 모델은 [데이터 모델](./data-models.md)에 정리한다. TypeScript/API/프론트 필드는 `camelCase`, PostgreSQL 컬럼은 `snake_case`를 사용하고, 아키텍처 보드 상태는 버전이 있는 `ArchitectureSnapshot`의 `ArchitectureJson`으로 저장한다.
+RDS는 원천 데이터와 metadata를 저장한다. S3는 파일성 산출물을 저장한다.
 
-## 운영 배포 구조
-
-운영 배포는 Docker Compose가 아니라 Docker image + EC2 + SSM + Nginx + GitHub Actions 방식이다. HTTPS는 ALB, ACM, Route 53 조합을 기준으로 준비되어 있다.
+## MVP E2E 흐름
 
 ```mermaid
 flowchart LR
-  User["사용자 브라우저"] --> Route53["Route 53\nsketchcatch.net"]
-  Route53 --> ALB["Application Load Balancer\nHTTP redirect + HTTPS"]
-  ALB --> Nginx["EC2 Nginx 컨테이너\nreverse proxy"]
-  Nginx --> Web["웹 컨테이너\nNext.js"]
-  Nginx --> Api["API 컨테이너\nFastify"]
-  Api --> RDS["RDS PostgreSQL\nprojects / architectures"]
-  Api --> S3["S3\nimages / terraform files / exports"]
-
-  GitHub["GitHub Actions"] --> Artifact["S3 release artifact"]
-  GitHub --> SSM["SSM Run Command"]
-  SSM --> EC2["Amazon Linux EC2"]
-  Artifact --> EC2
+  Prompt["Requirement Prompt"] --> Draft["Architecture Draft"]
+  Draft --> Board["Architecture Board\nDiagramJson"]
+  Board --> IaC["IaC Preview\nTerraform"]
+  IaC --> Check["Pre-Deployment Check"]
+  IaC --> Artifact["TerraformArtifact\nS3 object"]
+  Artifact --> Plan["Terraform Plan"]
+  Check --> Approval["User Approval"]
+  Plan --> Approval
+  Approval --> Apply["Terraform Apply"]
+  Apply --> History["Deployment History\nlogs + outputs + cleanup"]
 ```
 
-운영 절차 상세는 [배포 운영 문서](./deployment.md)에 둔다.
+4일 데모에서는 EC2 + S3 + VPC 계열 Golden Path를 우선한다.
 
-## 현재 구현된 API
+## API 범위
 
-- `GET /health`
-- `GET /health/db`
-- `POST /api/projects`
-- `GET /api/projects?clientGeneratedWorkspaceId=...`
-- `GET /api/projects/:id`
-- `POST /api/projects/:id/architectures`
-- `GET /api/projects/:id/draft`
-- `PUT /api/projects/:id/draft`
-- `POST /api/projects/:id/assets/presigned-upload`
-- `POST /api/projects/:projectId/aws-connections`
-- `GET /api/projects/:projectId/aws-connections/:connectionId/cloudformation-template`
-- `GET /api/aws/connections/cloudformation-template`
-- `POST /api/projects/:projectId/aws-connections/:connectionId/test`
-- `POST /api/projects/:projectId/aws-connections/:connectionId/verify`
+현재 API 범위는 구현 상태에 따라 바뀔 수 있지만, 공통 원칙은 아래와 같다.
 
-프로젝트 API는 현재 `clientGeneratedWorkspaceId` 기반 익명 workspace를 지원한다. 인증이 연결되면 API route의 `resolveProjectOwner`가 session에서 `userId`를 제공하고, 서버는 `projects.user_id` 기준으로 같은 프로젝트 목록/draft endpoint를 재사용한다. 세션에 `workspaceId`가 아직 없으면 API가 `user:<userId>` 형태의 내부 workspace id를 파생한다.
+- 인증된 사용자는 프로젝트를 생성하고 조회한다.
+- 프로젝트는 `ArchitectureSnapshot`과 `ProjectDraft`를 가진다.
+- Terraform 생성 API는 `DiagramJson`을 입력으로 받는다.
+- Pre-Deployment Check는 비용/보안/설정 위험을 반환한다.
+- Deployment API는 생성, init, plan, approval, apply, logs, destroy 흐름으로 확장한다.
+- 실제 AWS credential과 Terraform 실행 세부는 프론트에 노출하지 않는다.
 
-AWS 연결 생성 API는 사용자 AWS 계정의 IAM Role trust policy에 넣을 SketchCatch caller principal ARN과 서버 생성 External ID를 제공하고, 연결 상태를 `pending`으로 저장한다. CloudFormation template API는 사용자가 콘솔에서 trust policy를 직접 조립하지 않아도 되도록 `SketchCatchTerraformExecutionRole` 생성 YAML과 AWS Console launch stack URL을 제공한다. public template URL은 만료되는 별도 서명 secret으로 보호되며, token에 포함된 connection이 DB에 남아 있고 External ID와 region이 일치할 때만 템플릿을 내려준다. AWS 연결 테스트 API는 project/connection 범위 안에서 body의 `roleArn`과 DB의 `externalId`, `region`으로 `AssumeRole`과 `GetCallerIdentity`를 수행한다. 같은 role이 External ID 없이 assume되면 연결을 거부하고, 저장형 verify API는 같은 STS 검증 결과로 `accountId`, `roleArn`, `lastVerifiedAt`, `status` metadata만 저장한다. Deployment는 생성 시 명시한 `awsConnectionId`를 저장하고, init은 해당 verified AWS connection으로 다시 `AssumeRole/GetCallerIdentity`를 수행한 뒤 임시 credential을 `terraform init` child process env에만 주입한다. Terraform child process는 allowlist 기반 환경 변수와 임시 AWS credential만 상속한다. 이 단계들은 AWS 리소스를 직접 생성/수정/삭제하지 않고, raw credential을 저장하거나 응답하지 않는다.
+API DTO와 모델명은 [데이터 모델](./data-models.md)을 따른다.
 
-인증 화면, AI 생성, Terraform validate/plan/apply, 실제 AWS 리소스 생성은 아직 구현하지 않았다.
+## 멀티 클라우드 확장 방향
+
+MVP는 AWS Provider 기준이다. 장기적으로는 아래처럼 확장한다.
+
+| 단계 | 범위 |
+| --- | --- |
+| MVP | AWS + Terraform |
+| 이후 | AzureRM Provider, Google Provider |
+| 장기 | 클라우드별 비용 비교, 클라우드별 아키텍처 리뷰 |
+
+문서와 코드에서 SketchCatch를 AWS 전용 서비스로 표현하지 않는다. 단, MVP 구현과 4일 데모는 AWS 기준으로 고정한다.
 
 ## 기술 결정 기록
 
 ### ADR-001: pnpm workspace와 Turborepo를 사용한다
 
-`apps/web`, `apps/api`, `packages/types`, `packages/ui`가 같은 도메인 타입을 공유하므로 모노레포로 시작한다. Turborepo는 패키지 간 `build`, `lint`, `typecheck` 순서를 관리한다.
+`apps/web`, `apps/api`, `packages/types`, `packages/ui`가 같은 도메인 타입을 공유하므로 모노레포로 시작한다.
 
 ### ADR-002: API 서버는 Fastify로 시작한다
 
-Fastify는 스키마/플러그인 구조가 명확하고, MVP API, health check, DB check, presigned URL 발급에 충분하다. NestJS는 초기 보일러플레이트가 크고, Express는 장기 모듈 경계가 흐려지기 쉽다.
+Fastify는 route/service 분리가 쉽고, MVP API와 Zod 검증에 충분하다.
 
 ### ADR-003: RDS에는 원천 데이터, S3에는 파일 아티팩트를 저장한다
 
-프로젝트와 아키텍처 JSON은 조회와 관계가 중요하므로 RDS에 저장한다. 다이어그램 이미지, IaC 파일, export zip은 파일 객체이므로 S3에 저장한다.
+프로젝트와 설계 JSON은 RDS에 저장하고, Terraform 파일, tfplan, export zip은 S3에 저장한다.
 
-### ADR-004: 배포는 Docker + EC2 + SSM으로 한다
+### ADR-004: 운영 배포는 Docker + EC2 + SSM으로 한다
 
-Docker image 단위 배포라 로컬/CI/운영 실행 단위가 명확하다. SSM을 쓰면 GitHub Actions에서 EC2 SSH 접속을 직접 열지 않아도 된다.
+Docker image 단위 배포와 SSM Run Command를 사용해 SSH 없는 운영 배포를 유지한다.
 
-### ADR-005: 마이그레이션은 자동 배포에서 분리한다
+### ADR-005: MVP는 Terraform 우선으로 간다
 
-DB migration은 배포 워크플로에서 자동 실행하지 않고, 수동 GitHub Actions 워크플로로 실행한다. 스키마 변경은 배포보다 위험도가 높기 때문이다.
-
-### ADR-006: HTTPS는 ALB + ACM + Route 53으로 간다
-
-AWS에서 표준적인 HTTPS 진입 구조이고, 인증서 자동 갱신과 security group 제한이 쉽다.
-
-### ADR-007: MVP는 Terraform 우선으로 간다
-
-Terraform은 실무 IaC 학습, 버전 관리, diff, rollback, GitHub 연동, 멀티 클라우드 확장성 측면에서 제품 방향과 가장 잘 맞는다. CloudFormation은 AWS 학습 참고나 향후 호환 대상으로 검토하되, MVP 기본 구현은 Terraform을 우선한다.
-
-## 앞으로 검토할 것
-
-- CloudWatch Logs와 알람 운영 기준 정리
-- ALB target health, API latency, DB connection 알람 추가
-- RDS 백업, 스냅샷, 접근 제한 정리
-- S3 lifecycle policy로 임시 실습 파일 자동 만료
-- dev/staging/prod 환경 분리
-- Terraform 또는 CDK로 인프라 전체를 코드화
+Terraform은 diff, plan, apply, state, provider 확장 측면에서 제품 방향과 맞는다. CloudFormation은 AWS 참고 또는 향후 호환 대상으로만 둔다.

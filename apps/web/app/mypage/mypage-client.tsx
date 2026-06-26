@@ -1,84 +1,168 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
-import { useAuth } from "../../components/auth/auth-provider";
+import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
+import type { Project } from "@sketchcatch/types";
+import { ApiProjectCard } from "../../components/dashboard/api-project-card";
+import { DashboardIcon } from "../../components/dashboard/dashboard-icons";
+import { listProjects } from "../../features/workspace/api";
 import { getApiErrorMessage } from "../../lib/api-client";
 
-const sections = [
-  "Prompt input area placeholder",
-  "Architecture board placeholder",
-  "Cost and risk panel placeholder",
-  "Deployment session panel placeholder"
-];
+type MyPageLoadState = "loading" | "ready" | "error";
 
 export function MyPageClient() {
-  const router = useRouter();
-  const { logout, status, user } = useAuth();
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const isCheckingSession = status === "loading";
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [loadState, setLoadState] = useState<MyPageLoadState>("loading");
+  const [errorMessage, setErrorMessage] = useState("");
 
   useEffect(() => {
-    if (status === "unauthenticated") {
-      router.replace("/login");
+    let cancelled = false;
+
+    async function loadProjects(): Promise<void> {
+      setLoadState("loading");
+      setErrorMessage("");
+
+      try {
+        const nextProjects = await listProjects();
+
+        if (cancelled) {
+          return;
+        }
+
+        setProjects(nextProjects);
+        setLoadState("ready");
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+
+        setErrorMessage(getApiErrorMessage(error, "홈 화면 프로젝트를 불러오지 못했습니다."));
+        setLoadState("error");
+      }
     }
-  }, [router, status]);
 
-  async function handleLogout(): Promise<void> {
-    setErrorMessage(null);
+    void loadProjects();
 
-    try {
-      await logout();
-      router.replace("/login");
-    } catch (error) {
-      setErrorMessage(getApiErrorMessage(error, "Logout failed."));
-    }
-  }
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
-  if (isCheckingSession) {
+  const recentCreatedProjects = useMemo(
+    () => [...projects].sort(compareProjectCreatedAtDesc).slice(0, 3),
+    [projects]
+  );
+  const visibleProjects = useMemo(
+    () => [...projects].sort(compareProjectUpdatedAtDesc).slice(0, 6),
+    [projects]
+  );
+
+  if (loadState === "loading") {
     return (
-      <main className="workspaceShell workspaceStateShell">
-        <p className="workspaceStateText">Checking session</p>
-      </main>
+      <section className="dashboardPanel" aria-label="홈 화면 프로젝트 로딩">
+        <p className="workspaceStateText">프로젝트 정보를 불러오는 중입니다.</p>
+      </section>
     );
   }
 
-  if (status === "unauthenticated") {
+  if (loadState === "error") {
     return (
-      <main className="workspaceShell workspaceStateShell">
-        <p className="workspaceStateText">Redirecting to login</p>
-      </main>
+      <section className="dashboardPanel" aria-label="홈 화면 프로젝트 오류">
+        <p className="dashboardMessage" role="alert">
+          {errorMessage}
+        </p>
+      </section>
     );
   }
 
   return (
-    <main className="workspaceShell">
-      <header className="workspaceTopBar">
-        <div>
-          <p className="workspaceEyebrow">SketchCatch my page</p>
-          <h1>My Page</h1>
-        </div>
-        <div className="workspaceUserPanel">
-          <span>{user?.nickname ?? user?.username}</span>
-          <button className="workspaceLogout" onClick={handleLogout} type="button">
-            Logout
-          </button>
-        </div>
-      </header>
-
-      {errorMessage ? (
-        <p className="workspaceMessage" role="alert">
-          {errorMessage}
-        </p>
-      ) : null}
-
-      <div className="workspaceGrid">
-        {sections.map((section) => (
-          <section className="workspacePanel" key={section}>
-            <h2>{section}</h2>
-          </section>
-        ))}
+    <>
+      <div className="dashboardStatGrid dashboardStatGridCompact" aria-label="홈 요약">
+        <article>
+          <DashboardIcon name="folder" />
+          <span>전체 프로젝트</span>
+          <strong>{projects.length}</strong>
+        </article>
+        <article>
+          <DashboardIcon name="clock" />
+          <span>최근 생성</span>
+          <strong>{recentCreatedProjects.length}</strong>
+        </article>
+        <article>
+          <DashboardIcon name="check" />
+          <span>DB 저장</span>
+          <strong>ON</strong>
+        </article>
       </div>
-    </main>
+
+      <section className="dashboardPanel" aria-labelledby="recent-created-title">
+        <div className="dashboardPanelHeader">
+          <div>
+            <p className="dashboardPanelKicker">Recent created</p>
+            <h2 id="recent-created-title">최근 생성된 항목</h2>
+          </div>
+          <span className="dashboardCountBadge">최대 3개</span>
+        </div>
+        {recentCreatedProjects.length === 0 ? (
+          <ProjectEmptyState />
+        ) : (
+          <div className="dashboardCardGrid dashboardCardGridThree">
+            {recentCreatedProjects.map((project) => (
+              <ApiProjectCard
+                key={project.id}
+                project={project}
+                timestampLabel="생성"
+                timestampValue={project.createdAt}
+                variant="compact"
+              />
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="dashboardPanel" aria-labelledby="my-projects-title">
+        <div className="dashboardPanelHeader">
+          <div>
+            <p className="dashboardPanelKicker">My projects</p>
+            <h2 id="my-projects-title">내 프로젝트</h2>
+          </div>
+          <span className="dashboardCountBadge">{projects.length}개</span>
+        </div>
+        {visibleProjects.length === 0 ? (
+          <ProjectEmptyState />
+        ) : (
+          <div className="dashboardCardGrid">
+            {visibleProjects.map((project) => (
+              <ApiProjectCard
+                key={project.id}
+                project={project}
+                timestampLabel="수정"
+                timestampValue={project.updatedAt}
+              />
+            ))}
+          </div>
+        )}
+      </section>
+    </>
   );
+}
+
+function ProjectEmptyState() {
+  return (
+    <div className="projectListEmpty">
+      <p>아직 생성한 프로젝트가 없습니다.</p>
+      <Link className="dashboardTopbarAction" href="/workspace/new">
+        <DashboardIcon name="plus" />
+        <span>새 설계 시작</span>
+      </Link>
+    </div>
+  );
+}
+
+function compareProjectCreatedAtDesc(left: Project, right: Project): number {
+  return new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
+}
+
+function compareProjectUpdatedAtDesc(left: Project, right: Project): number {
+  return new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime();
 }

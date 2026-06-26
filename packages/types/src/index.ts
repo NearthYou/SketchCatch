@@ -62,7 +62,6 @@ export type User = {
 
 export type AuthSession = {
   accessToken: string;
-  refreshToken: string;
   expiresInSeconds: number;
 };
 
@@ -78,13 +77,9 @@ export type LoginRequest = {
   password: string;
 };
 
-export type RefreshTokenRequest = {
-  refreshToken: string;
-};
+export type RefreshTokenRequest = Record<string, never>;
 
-export type LogoutRequest = {
-  refreshToken: string;
-};
+export type LogoutRequest = Record<string, never>;
 
 export type AuthResponse = {
   user: User;
@@ -460,6 +455,10 @@ export type AiPreDeploymentAnalysisResult = {
   checklist: ChecklistItem[];
 };
 
+export type AiPreDeploymentCheckFromDiagramRequest = {
+  diagramJson: DiagramJson;
+};
+
 export type AiTerraformStage = "validate" | "export" | "plan" | "apply";
 
 export type AiTerraformErrorCategory =
@@ -664,3 +663,22 @@ export type TerraformResourceParameterCatalog = {
 };
 
 export type ResourceNodeParameters = DiagramNodeParameters;
+
+export type TerraformDiagnosticSeverity = "info" | "warning" | "error";
+
+export type TerraformDiagnostic = {
+  severity: TerraformDiagnosticSeverity;
+  message: string;
+  code?: string | undefined;
+  line?: number | undefined;
+  resourceAddress?: string | undefined;
+  nodeId?: string | undefined;
+};
+
+export type TerraformValidateRequest = {
+  terraformCode: string;
+};
+
+export type TerraformValidateResponse = {
+  diagnostics: TerraformDiagnostic[];
+};

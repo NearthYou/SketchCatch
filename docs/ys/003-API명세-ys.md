@@ -172,9 +172,8 @@ POST /api/auth/signup
     "role": "USER",
     "createdAt": "2026-06-23T00:00:00.000Z"
   },
-  "tokens": {
+  "session": {
     "accessToken": "access_token",
-    "refreshToken": "refresh_token",
     "expiresInSeconds": 900
   }
 }
@@ -187,6 +186,7 @@ POST /api/auth/signup
 - `password`는 서버에서 최종 검증
 - `termsAgreed`, `privacyAgreed`는 반드시 `true`
 - `marketingAgreed`는 선택
+- refresh token 원문은 응답 body에 포함하지 않고 `HttpOnly`, `SameSite=Lax` cookie로 내려보낸다.
 
 ## 1.5 로그인
 
@@ -214,9 +214,8 @@ POST /api/auth/login
     "nickname": "ys",
     "role": "USER"
   },
-  "tokens": {
+  "session": {
     "accessToken": "access_token",
-    "refreshToken": "refresh_token",
     "expiresInSeconds": 900
   }
 }
@@ -227,6 +226,7 @@ POST /api/auth/login
 - 아이디/비밀번호 오류는 과한 계정 존재 여부를 노출하지 않는다.
 - 5회 실패 시 아이디/비밀번호 찾기 안내를 표시할 수 있는 code를 내려준다.
 - 과도한 시도는 `429 too_many_requests`로 제한한다.
+- refresh token 원문은 응답 body에 포함하지 않고 `HttpOnly`, `SameSite=Lax` cookie로 내려보낸다.
 
 ## 1.6 OAuth 로그인 시작
 
@@ -261,9 +261,8 @@ GET /api/auth/oauth/naver/callback?code=...
     "nickname": "ys",
     "role": "USER"
   },
-  "tokens": {
+  "session": {
     "accessToken": "access_token",
-    "refreshToken": "refresh_token",
     "expiresInSeconds": 900
   },
   "accountLinkRequired": false
@@ -284,19 +283,25 @@ POST /api/auth/refresh
 
 요청:
 
-```json
-{
-  "refreshToken": "refresh_token"
-}
+```http
+Cookie: sketchcatch_refresh_token=<refresh_token>
+X-CSRF-Token: <csrf_token>
 ```
 
 응답:
 
 ```json
 {
-  "accessToken": "new_access_token",
-  "refreshToken": "new_refresh_token",
-  "expiresInSeconds": 900
+  "user": {
+    "id": "user_id",
+    "username": "user",
+    "email": "user@example.com",
+    "nickname": "ys"
+  },
+  "session": {
+    "accessToken": "new_access_token",
+    "expiresInSeconds": 900
+  }
 }
 ```
 
@@ -305,6 +310,8 @@ POST /api/auth/refresh
 - refresh token rotation을 적용한다.
 - 기존 refresh token은 재발급 후 폐기한다.
 - DB에는 refresh token hash만 저장한다.
+- 새 refresh token 원문은 응답 body가 아니라 `Set-Cookie`의 `HttpOnly` cookie로 내려보낸다.
+- cookie 기반 요청이므로 CSRF cookie 값과 `X-CSRF-Token` header 값이 일치해야 한다.
 
 ## 1.9 로그아웃
 
@@ -314,10 +321,9 @@ POST /api/auth/logout
 
 요청:
 
-```json
-{
-  "refreshToken": "refresh_token"
-}
+```http
+Cookie: sketchcatch_refresh_token=<refresh_token>
+X-CSRF-Token: <csrf_token>
 ```
 
 응답:
