@@ -6,6 +6,7 @@ const apiProxyTarget = (
 
 /** @type {import("next").NextConfig} */
 const nextConfig = {
+  allowedDevOrigins: ["127.0.0.1"],
   output: "standalone",
   transpilePackages: ["@sketchcatch/ui"],
   async rewrites() {
