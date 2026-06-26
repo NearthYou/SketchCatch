@@ -227,6 +227,7 @@ type ResourceEdge = {
 
 ```ts
 type ProjectDraft = {
+  id: string;
   projectId: string;
   diagramJson: DiagramJson;
   revision: number;
@@ -237,6 +238,8 @@ type ProjectDraft = {
 ```
 
 DB 기준: `project_drafts`
+
+DB에서는 `id`를 PK로 두고, `projectId`는 `projects.id`를 참조하는 FK이자 UNIQUE 값으로 둔다. 이렇게 하면 프로젝트당 최신 draft 1개를 유지하면서도 다른 테이블이 draft 자체를 참조할 수 있는 안정적인 키를 가진다.
 
 `diagramJson`은 화면 복구를 위해 노드 크기, 스타일, viewport, Terraform 파라미터 입력값을 포함한다. DB에는 AWS 리소스별 파라미터를 컬럼으로 쪼개지 않고 `project_drafts.diagram_json` JSONB 컬럼에 `DiagramJson` 전체를 저장한다.
 
@@ -289,11 +292,25 @@ type Deployment = {
   id: string;
   projectId: string;
   architectureId: string;
+  terraformArtifactId: string;
   status: "PENDING" | "RUNNING" | "SUCCESS" | "FAILED" | "CANCELLED";
-  startedAt: IsoDateTimeString;
-  finishedAt: IsoDateTimeString | null;
+  planSummary: DeploymentPlanSummary | null;
+  isBlocked: boolean;
+  blockedBy: "risk_analysis" | "cost_analysis" | "missing_approval" | null;
+  blockedReason: string | null;
+  failureStage: "init" | "validate" | "plan" | "approval" | "mock_run" | null;
+  errorSummary: string | null;
+  approvedAt: IsoDateTimeString | null;
+  approvedByUserId: string | null;
+  approvedTerraformArtifactId: string | null;
+  createdAt: IsoDateTimeString;
+  updatedAt: IsoDateTimeString;
 };
 ```
+
+DB 기준: `deployments`
+
+DB enum 이름은 범용 `status`가 아니라 `deployment_status`를 사용한다. Terraform 검증 단계 이름은 로그와 실패 기록 모두 `validate`로 통일한다. `approvedByUserId`는 `users.id`를 참조하는 FK이며, 사용자 기반 승인 이력을 문자열 이름이 아니라 회원 id로 관리한다.
 
 ### Template
 
@@ -341,11 +358,18 @@ type AwsCredential = {
 type DeploymentLog = {
   id: string;
   deploymentId: string;
+  sequence: number;
+  stage: "init" | "validate" | "plan" | "apply";
   level: "INFO" | "WARN" | "ERROR";
   message: string;
+  relatedResourceId: string | null;
   createdAt: IsoDateTimeString;
 };
 ```
+
+DB 기준: `deployment_logs`
+
+`deploymentId`와 `sequence` 조합은 UNIQUE 제약으로 보호한다. 같은 배포 안에서 같은 순번의 로그가 중복 저장되지 않아야 화면과 감사 이력이 같은 순서를 재현할 수 있다.
 
 ### AI 결과 DTO
 

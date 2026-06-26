@@ -1,0 +1,90 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { getTableConfig } from "drizzle-orm/pg-core";
+import {
+  deploymentFailureStageEnum,
+  deploymentLogs,
+  deploymentStatusEnum,
+  deployments,
+  projectDrafts,
+  users
+} from "./schema.js";
+
+test("deployment status enum uses a domain-specific database name", () => {
+  assert.equal(deploymentStatusEnum.enumName, "deployment_status");
+});
+
+test("deployment failure stages use validate consistently with deployment log stages", () => {
+  const values: readonly string[] = deploymentFailureStageEnum.enumValues;
+
+  assert(values.includes("validate"));
+  assert.equal(values.includes("validation"), false);
+});
+
+test("project drafts have a stable id primary key and one current draft per project", () => {
+  const config = getTableConfig(projectDrafts);
+  const id = findColumn(config.columns, "id");
+  const projectId = findColumn(config.columns, "project_id");
+
+  assert.equal(id?.primary, true);
+  assert.equal(projectId?.primary, false);
+  assert(hasUniqueIndex(config.indexes, "project_drafts_project_id_unique", ["project_id"]));
+});
+
+test("deployment approvals reference users by approved_by_user_id", () => {
+  const config = getTableConfig(deployments);
+
+  assert(findColumn(config.columns, "approved_by_user_id"));
+  assert.equal(findColumn(config.columns, "approved_by"), undefined);
+  assert(
+    config.foreignKeys.some((foreignKey) => {
+      const reference = foreignKey.reference();
+
+      return (
+        reference.columns.some((column) => column.name === "approved_by_user_id") &&
+        reference.foreignTable === users &&
+        reference.foreignColumns.some((column) => column.name === "id")
+      );
+    })
+  );
+});
+
+test("deployment log sequences are unique per deployment", () => {
+  const config = getTableConfig(deploymentLogs);
+
+  assert(hasUniqueIndex(config.indexes, "deployment_logs_deployment_sequence_unique", [
+    "deployment_id",
+    "sequence"
+  ]));
+});
+
+function findColumn(columns: Array<{ name: string }>, name: string) {
+  return columns.find((column) => column.name === name) as
+    | ({ name: string; primary?: boolean })
+    | undefined;
+}
+
+function hasUniqueIndex(
+  indexes: Array<{
+    config: {
+      name?: string;
+      unique?: boolean;
+      columns: unknown[];
+    };
+  }>,
+  name: string,
+  columns: string[]
+): boolean {
+  return indexes.some(
+    (index) =>
+      index.config.name === name &&
+      index.config.unique === true &&
+      index.config.columns.map(getColumnName).join(",") === columns.join(",")
+  );
+}
+
+function getColumnName(column: unknown): string | undefined {
+  return typeof column === "object" && column !== null && "name" in column
+    ? String(column.name)
+    : undefined;
+}
