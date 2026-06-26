@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type {
   AiArchitectureDraftResult,
   AiPreDeploymentAnalysisResult,
@@ -43,6 +43,8 @@ export function AiWorkspaceClient() {
   const [terraformDiagnosticsError, setTerraformDiagnosticsError] = useState<string | null>(null);
   const [hasStaleTerraformDiagnostics, setHasStaleTerraformDiagnostics] = useState(false);
   const [hasValidatedTerraform, setHasValidatedTerraform] = useState(false);
+  const latestTerraformCode = useRef(sampleTerraform);
+  const latestTerraformValidationRequestId = useRef(0);
 
   const architectureJson = useMemo<ArchitectureJson | null>(() => draft?.architectureJson ?? null, [draft]);
 
@@ -111,6 +113,7 @@ export function AiWorkspaceClient() {
       });
 
       setTerraformCode(result.terraformCode);
+      latestTerraformCode.current = result.terraformCode;
       setTerraformPreview(null);
       setTerraformDiagnostics([]);
       setTerraformDiagnosticsError(null);
@@ -121,12 +124,17 @@ export function AiWorkspaceClient() {
 
   function handleTerraformCodeChange(nextCode: string): void {
     setTerraformCode(nextCode);
+    latestTerraformCode.current = nextCode;
     setTerraformPreview(null);
     setTerraformDiagnosticsError(null);
     setHasStaleTerraformDiagnostics(hasValidatedTerraform);
   }
 
   async function runTerraformValidation(): Promise<void> {
+    const codeToValidate = terraformCode;
+    const requestId = latestTerraformValidationRequestId.current + 1;
+
+    latestTerraformValidationRequestId.current = requestId;
     setIsValidatingTerraform(true);
     setTerraformDiagnosticsError(null);
 
@@ -134,15 +142,25 @@ export function AiWorkspaceClient() {
       const result = await apiFetch<TerraformValidateResponse>("/terraform/validate", {
         auth: true,
         body: {
-          terraformCode
+          terraformCode: codeToValidate
         },
         method: "POST"
       });
+
+      if (latestTerraformCode.current !== codeToValidate) {
+        setHasStaleTerraformDiagnostics(hasValidatedTerraform);
+        return;
+      }
 
       setTerraformDiagnostics(result.diagnostics);
       setHasStaleTerraformDiagnostics(false);
       setHasValidatedTerraform(true);
     } catch (error) {
+      if (latestTerraformCode.current !== codeToValidate) {
+        setHasStaleTerraformDiagnostics(hasValidatedTerraform);
+        return;
+      }
+
       setTerraformDiagnosticsError(
         getApiErrorMessage(
           error,
@@ -150,7 +168,9 @@ export function AiWorkspaceClient() {
         )
       );
     } finally {
-      setIsValidatingTerraform(false);
+      if (latestTerraformValidationRequestId.current === requestId) {
+        setIsValidatingTerraform(false);
+      }
     }
   }
 

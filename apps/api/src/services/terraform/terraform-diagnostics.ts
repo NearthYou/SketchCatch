@@ -32,7 +32,9 @@ function checkBalancedTokens(terraformCode: string): TerraformDiagnostic[] {
   let escaped = false;
 
   terraformCode.split("\n").forEach((lineText, lineIndex) => {
-    for (const char of lineText) {
+    for (let index = 0; index < lineText.length; index += 1) {
+      const char = lineText[index];
+
       if (escaped) {
         escaped = false;
         continue;
@@ -50,6 +52,10 @@ function checkBalancedTokens(terraformCode: string): TerraformDiagnostic[] {
 
       if (inString) {
         continue;
+      }
+
+      if (isLineCommentStart(lineText, index)) {
+        break;
       }
 
       if (char === "{" || char === "[") {
@@ -99,13 +105,14 @@ function checkBlocks(terraformCode: string): TerraformDiagnostic[] {
   const lines = terraformCode.split("\n");
 
   lines.forEach((lineText, index) => {
-    const trimmedLine = lineText.trim();
+    const codeLine = stripLineComment(lineText);
+    const trimmedLine = codeLine.trim();
 
     if (!trimmedLine.startsWith("resource") && !trimmedLine.startsWith("data")) {
       return;
     }
 
-    const match = BLOCK_HEADER_PATTERN.exec(lineText);
+    const match = BLOCK_HEADER_PATTERN.exec(codeLine);
 
     if (!match) {
       diagnostics.push({
@@ -148,7 +155,13 @@ function checkBlocks(terraformCode: string): TerraformDiagnostic[] {
 
 function isEmptyBlock(lines: string[], headerIndex: number): boolean {
   for (let index = headerIndex + 1; index < lines.length; index += 1) {
-    const trimmedLine = lines[index]?.trim();
+    const lineText = lines[index];
+
+    if (lineText === undefined) {
+      continue;
+    }
+
+    const trimmedLine = stripLineComment(lineText).trim();
 
     if (!trimmedLine) {
       continue;
@@ -165,7 +178,9 @@ function checkQuotedReferences(terraformCode: string): TerraformDiagnostic[] {
   const lines = terraformCode.split("\n");
 
   lines.forEach((lineText, index) => {
-    for (const match of lineText.matchAll(QUOTED_REFERENCE_PATTERN)) {
+    const codeLine = stripLineComment(lineText);
+
+    for (const match of codeLine.matchAll(QUOTED_REFERENCE_PATTERN)) {
       diagnostics.push({
         severity: "warning",
         code: "terraform.quoted_reference",
@@ -177,4 +192,38 @@ function checkQuotedReferences(terraformCode: string): TerraformDiagnostic[] {
   });
 
   return diagnostics;
+}
+
+function stripLineComment(lineText: string): string {
+  let inString = false;
+  let escaped = false;
+
+  for (let index = 0; index < lineText.length; index += 1) {
+    const char = lineText[index];
+
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+
+    if (char === "\\") {
+      escaped = true;
+      continue;
+    }
+
+    if (char === "\"") {
+      inString = !inString;
+      continue;
+    }
+
+    if (!inString && isLineCommentStart(lineText, index)) {
+      return lineText.slice(0, index);
+    }
+  }
+
+  return lineText;
+}
+
+function isLineCommentStart(lineText: string, index: number): boolean {
+  return lineText[index] === "#" || (lineText[index] === "/" && lineText[index + 1] === "/");
 }

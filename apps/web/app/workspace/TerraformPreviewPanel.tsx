@@ -99,27 +99,28 @@ function TerraformDiagnosticsPanel({
     return <p className="errorBanner">{errorMessage}</p>;
   }
 
-  if (hasStaleDiagnostics) {
-    return <p className="mutedText">Terraform 코드가 수정되었습니다. 다시 문법 점검을 실행하세요.</p>;
-  }
-
   if (!hasValidated) {
     return <p className="emptyState">문법 점검을 실행하면 정적 diagnostics가 여기에 표시됩니다.</p>;
   }
 
-  if (diagnostics.length === 0) {
-    return <p className="emptyState">정적 diagnostics에서 발견된 문제가 없습니다.</p>;
-  }
-
   return (
-    <ul className="resultList">
-      {diagnostics.map((diagnostic, index) => (
-        <li key={`${diagnostic.code ?? "diagnostic"}-${diagnostic.line ?? "unknown"}-${index}`}>
-          <strong>{formatDiagnosticTitle(diagnostic)}</strong>
-          <span>{diagnostic.message}</span>
-        </li>
-      ))}
-    </ul>
+    <>
+      {hasStaleDiagnostics ? (
+        <p className="mutedText">Terraform 코드가 수정되었습니다. 다시 문법 점검을 실행하세요.</p>
+      ) : null}
+      {diagnostics.length === 0 ? (
+        <p className="emptyState">정적 diagnostics에서 발견된 문제가 없습니다.</p>
+      ) : (
+        <ul className="resultList">
+          {diagnostics.map((diagnostic, index) => (
+            <li key={`${diagnostic.code ?? "diagnostic"}-${diagnostic.line ?? "unknown"}-${index}`}>
+              <strong>{formatDiagnosticTitle(diagnostic)}</strong>
+              <span>{diagnostic.message}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </>
   );
 }
 

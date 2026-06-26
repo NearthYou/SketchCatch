@@ -59,3 +59,39 @@ test("detects quoted Terraform references", () => {
   assert.equal(diagnostics[0]?.code, "terraform.quoted_reference");
   assert.equal(diagnostics[0]?.severity, "warning");
 });
+
+test("ignores braces in line comments when checking balance", () => {
+  const diagnostics = createTerraformDiagnostics(`resource "aws_vpc" "main" {
+  cidr_block = "10.0.0.0/16" # ignored {
+  tags = {
+    Name = "main"
+  }
+}`);
+
+  assert.equal(diagnostics.some((diagnostic) => diagnostic.code === "terraform.unbalanced"), false);
+});
+
+test("accepts block headers with trailing comments", () => {
+  const diagnostics = createTerraformDiagnostics(`resource "aws_vpc" "main" { // network boundary
+  cidr_block = "10.0.0.0/16"
+}`);
+
+  assert.equal(diagnostics.some((diagnostic) => diagnostic.code === "terraform.block_header"), false);
+});
+
+test("treats comment-only block bodies as empty", () => {
+  const diagnostics = createTerraformDiagnostics(`resource "aws_vpc" "main" {
+  # cidr_block will be filled later
+} # end`);
+
+  assert.equal(diagnostics[0]?.code, "terraform.empty_block");
+});
+
+test("ignores quoted Terraform references inside comments", () => {
+  const diagnostics = createTerraformDiagnostics(`resource "aws_subnet" "public" {
+  vpc_id = aws_vpc.main.id
+  # "aws_vpc.main.id" is documented here
+}`);
+
+  assert.equal(diagnostics.some((diagnostic) => diagnostic.code === "terraform.quoted_reference"), false);
+});
