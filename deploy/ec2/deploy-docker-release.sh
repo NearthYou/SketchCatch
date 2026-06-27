@@ -5,6 +5,7 @@ release_id="${RELEASE_ID:?RELEASE_ID is required}"
 release_url="${RELEASE_URL:?RELEASE_URL is required}"
 app_root="/opt/sketchcatch"
 image_archive="${app_root}/images/sketchcatch-${release_id}.tar.gz"
+terraform_plugin_cache_dir="${TF_PLUGIN_CACHE_DIR:-/var/cache/sketchcatch/terraform-plugin-cache}"
 cloudwatch_logs_enabled="${CLOUDWATCH_LOGS_ENABLED:-false}"
 cloudwatch_log_group_prefix="${CLOUDWATCH_LOG_GROUP_PREFIX:-/sketchcatch/production}"
 aws_region="${AWS_REGION:-ap-northeast-2}"
@@ -25,6 +26,7 @@ if [ ! -f /etc/sketchcatch/api.env ]; then
 fi
 
 install -d -m 0755 "${app_root}/images"
+install -d -m 0755 "${terraform_plugin_cache_dir}"
 curl --fail --location "${release_url}" --output "${image_archive}"
 gzip -dc "${image_archive}" | docker load
 
@@ -63,6 +65,7 @@ docker run -d \
   --name sketchcatch-api \
   --network sketchcatch \
   --env-file /etc/sketchcatch/api.env \
+  -v "${terraform_plugin_cache_dir}:${terraform_plugin_cache_dir}" \
   "${api_log_options[@]}" \
   --restart unless-stopped \
   "sketchcatch-api:${release_id}"
