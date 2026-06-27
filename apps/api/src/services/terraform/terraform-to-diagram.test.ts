@@ -137,6 +137,54 @@ test("keeps the input diagram when an unsupported expression is found", () => {
   assert.equal(result.diagnostics[0]?.code, "terraform.sync.unsupported_expression");
 });
 
+test("keeps the input diagram when an invalid attribute value is found", () => {
+  const diagramJson = makeSingleVpcDiagramJson();
+
+  const result = syncTerraformToDiagramJson(
+    diagramJson,
+    `resource "aws_vpc" "main" {
+  cidr_block = @
+}`
+  );
+
+  assert.equal(result.diagramJson, diagramJson);
+  assert.equal(result.diagnostics[0]?.code, "terraform.sync.unsupported_expression");
+});
+
+test("keeps the input diagram when an indexing expression is found", () => {
+  const diagramJson: DiagramJson = {
+    nodes: [
+      makeNode({
+        id: "node-1",
+        type: "aws_subnet",
+        kind: "resource",
+        label: "public",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_subnet",
+          resourceName: "public",
+          fileName: "main",
+          values: {
+            vpcId: "aws_vpc.main.id"
+          }
+        }
+      })
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+
+  const result = syncTerraformToDiagramJson(
+    diagramJson,
+    `resource "aws_subnet" "public" {
+  vpc_id = var.subnet_ids[0]
+}`
+  );
+
+  assert.equal(result.diagramJson, diagramJson);
+  assert.equal(result.diagnostics[0]?.code, "terraform.sync.unsupported_expression");
+});
+
 test("rejects trailing tokens after a parsed attribute value", () => {
   const diagramJson = makeSingleVpcDiagramJson();
 

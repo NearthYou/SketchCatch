@@ -376,7 +376,7 @@ function parseAttributeValue(
     return {
       diagnostic: {
         severity: "error",
-        code: "terraform.sync.block_header",
+        code: "terraform.sync.unsupported_expression",
         line,
         resourceAddress,
         message: "Terraform attribute 값을 해석할 수 없습니다."
@@ -607,7 +607,7 @@ class HclValueParser {
       return { status: "ok", value: literal };
     }
 
-    if (/[()${}?]/.test(literal) || literal.includes("for")) {
+    if (/[()[\]${}?]/.test(literal) || literal.includes("for")) {
       return { status: "unsupported" };
     }
 
