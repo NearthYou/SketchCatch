@@ -1,8 +1,10 @@
 .editorShell {
+  --side-panel-width: clamp(300px, 24vw, 330px);
+
   background: #f4f6fb;
   color: #171c2f;
   display: grid;
-  grid-template-columns: 0 minmax(0, 1fr) clamp(440px, 34vw, 560px);
+  grid-template-columns: 0 minmax(0, 1fr) var(--side-panel-width);
   height: 100vh;
   min-height: 640px;
   outline: none;
@@ -27,12 +29,12 @@
   border: 1px solid #dfe7f4;
   border-radius: 8px;
   box-shadow: 0 18px 42px rgba(20, 30, 50, 0.13);
-  height: min(760px, calc(100vh - 118px));
+  height: min(720px, calc(100vh - 118px));
   left: 14px;
   overflow: hidden;
   position: fixed;
   top: 96px;
-  width: min(360px, calc(100vw - 32px));
+  width: min(var(--side-panel-width), calc(100vw - 32px));
   z-index: 21;
 }
 
@@ -790,10 +792,10 @@
   }
 
   .leftRail {
-    height: min(680px, calc(100vh - 96px));
+    height: min(640px, calc(100vh - 96px));
     left: 10px;
     top: 84px;
-    width: min(330px, calc(100vw - 20px));
+    width: min(300px, calc(100vw - 20px));
   }
 
   .rightRail {
