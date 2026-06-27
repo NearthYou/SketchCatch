@@ -21,6 +21,7 @@
 | `TerraformArtifact` | S3에 저장된 Terraform 파일 메타데이터 |
 | `AwsConnection` | 사용자가 한 번 연결해 여러 프로젝트에서 재사용하는 AWS Role 연결 metadata |
 | `Deployment` | 승인된 Terraform 실행 단위 |
+| `DeploymentPlanArtifact` | S3에 저장된 `tfplan` 파일의 Deployment별 metadata |
 | `DeploymentLog` | Deployment 단계별 실행 로그 |
 | `CheckFinding` | Pre-Deployment Check의 단일 경고/검증 결과 |
 
@@ -284,12 +285,13 @@ type Deployment = {
   architectureId: string;
   terraformArtifactId: string;
   awsConnectionId: string | null;
+  currentPlanArtifactId: string | null;
   status: "PENDING" | "RUNNING" | "SUCCESS" | "FAILED" | "CANCELLED";
   planSummary: DeploymentPlanSummary | null;
   isBlocked: boolean;
   blockedBy: "risk_analysis" | "cost_analysis" | "missing_approval" | null;
   blockedReason: string | null;
-  failureStage: "init" | "validate" | "plan" | "approval" | "apply" | "destroy" | "cleanup" | null;
+  failureStage: "init" | "validate" | "plan" | "approval" | "mock_run" | null;
   errorSummary: string | null;
   approvedAt: IsoDateTimeString | null;
   approvedByUserId: string | null;
@@ -300,6 +302,27 @@ type Deployment = {
 ```
 
 `Deployment`는 제품/문서/화면/코드에서 실제 실행 단위로 통일한다.
+
+## DeploymentPlanArtifact
+
+`DeploymentPlanArtifact`는 사용자가 승인할 수 있는 특정 Terraform Plan 파일의 metadata다. `tfplan` 바이너리는 S3에 저장하고, RDS에는 object key와 hash, 실행 계정/region만 저장한다. `terraform show -json tfplan`의 raw JSON 전체는 저장하지 않는다.
+
+DB 기준: `deployment_plan_artifacts`
+
+```ts
+type DeploymentPlanArtifact = {
+  id: string;
+  deploymentId: string;
+  terraformArtifactId: string;
+  objectKey: string;
+  sha256: string;
+  accountId: string;
+  region: string;
+  createdAt: IsoDateTimeString;
+};
+```
+
+`deployment_plan_artifacts.deployment_id`는 `deployments.id`를 FK로 참조한다. `deployments.current_plan_artifact_id`는 현재 승인 대상 Plan을 가리키는 nullable pointer이며, 같은 Deployment의 artifact인지 여부는 Deployment service에서 검증한다.
 
 ## DeploymentPlanSummary
 

@@ -224,6 +224,7 @@ export const deployments = pgTable(
       () => awsConnections.id,
       { onDelete: "restrict" }
     ),
+    currentPlanArtifactId: varchar("current_plan_artifact_id", { length: 36 }),
     status: deploymentStatusEnum("status").notNull().default("PENDING"),
     planSummary: jsonb("plan_summary").$type<DeploymentPlanSummary>(),
     isBlocked: boolean("is_blocked").notNull().default(false),
@@ -241,7 +242,32 @@ export const deployments = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
   },
-  (table) => [index("deployments_aws_connection_id_idx").on(table.awsConnectionId)]
+  (table) => [
+    index("deployments_aws_connection_id_idx").on(table.awsConnectionId),
+    index("deployments_current_plan_artifact_id_idx").on(table.currentPlanArtifactId)
+  ]
+);
+
+export const deploymentPlanArtifacts = pgTable(
+  "deployment_plan_artifacts",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    deploymentId: varchar("deployment_id", { length: 36 })
+      .notNull()
+      .references(() => deployments.id, { onDelete: "cascade" }),
+    terraformArtifactId: varchar("terraform_artifact_id", { length: 36 })
+      .notNull()
+      .references(() => projectAssets.id, { onDelete: "restrict" }),
+    objectKey: text("object_key").notNull(),
+    sha256: varchar("sha256", { length: 64 }).notNull(),
+    accountId: varchar("account_id", { length: 12 }).notNull(),
+    region: varchar("region", { length: 32 }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [
+    index("deployment_plan_artifacts_deployment_id_idx").on(table.deploymentId),
+    uniqueIndex("deployment_plan_artifacts_object_key_unique").on(table.objectKey)
+  ]
 );
 
 export const deploymentLogs = pgTable(
@@ -338,13 +364,25 @@ export const deploymentsRelations = relations(deployments, ({ one, many }) => ({
     fields: [deployments.awsConnectionId],
     references: [awsConnections.id]
   }),
-  logs: many(deploymentLogs)
+  logs: many(deploymentLogs),
+  planArtifacts: many(deploymentPlanArtifacts)
 }));
 
 export const deploymentLogsRelations = relations(deploymentLogs, ({ one }) => ({
   deployment: one(deployments, {
     fields: [deploymentLogs.deploymentId],
     references: [deployments.id]
+  })
+}));
+
+export const deploymentPlanArtifactsRelations = relations(deploymentPlanArtifacts, ({ one }) => ({
+  deployment: one(deployments, {
+    fields: [deploymentPlanArtifacts.deploymentId],
+    references: [deployments.id]
+  }),
+  terraformArtifact: one(projectAssets, {
+    fields: [deploymentPlanArtifacts.terraformArtifactId],
+    references: [projectAssets.id]
   })
 }));
 
