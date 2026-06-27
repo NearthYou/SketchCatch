@@ -177,6 +177,64 @@ test("POST /api/ai/design-simulation returns fallback llmEnhancement when API ke
   }
 });
 
+test("POST /api/ai/design-simulation returns fake LLM enhancement when provider succeeds", async () => {
+  const originalApiKey = process.env.OPENAI_API_KEY;
+  process.env.OPENAI_API_KEY = "test-openai-api-key";
+
+  const app = buildApp({
+    createLlmEnhancement: async () => ({
+      target: "design_simulation",
+      summary: "LLM이 요청 흐름과 병목 후보를 쉬운 말로 정리했습니다.",
+      highlights: ["단일 EC2가 요청을 혼자 받을 수 있습니다."],
+      nextActions: ["트래픽이 늘 경우 Load Balancer를 검토하세요."],
+      fallbackUsed: false
+    })
+  });
+
+  try {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/ai/design-simulation",
+      payload: {
+        trafficLevel: "normal",
+        budgetLevel: "low",
+        architectureJson: {
+          nodes: [
+            {
+              id: "ec2-backend",
+              type: "EC2",
+              label: "Backend API",
+              positionX: 240,
+              positionY: 120,
+              config: {
+                instanceType: "t3.micro"
+              }
+            }
+          ],
+          edges: []
+        }
+      }
+    });
+
+    assert.equal(response.statusCode, 200);
+
+    const body = llmEnhancedDesignSimulationResponseSchema.parse(response.json());
+
+    assert.equal(body.llmEnhancement.fallbackUsed, false);
+    assert.equal(body.llmEnhancement.summary, "LLM이 요청 흐름과 병목 후보를 쉬운 말로 정리했습니다.");
+    assert.deepEqual(body.llmEnhancement.highlights, ["단일 EC2가 요청을 혼자 받을 수 있습니다."]);
+    assert.deepEqual(body.llmEnhancement.nextActions, ["트래픽이 늘 경우 Load Balancer를 검토하세요."]);
+  } finally {
+    if (originalApiKey === undefined) {
+      delete process.env.OPENAI_API_KEY;
+    } else {
+      process.env.OPENAI_API_KEY = originalApiKey;
+    }
+
+    await app.close();
+  }
+});
+
 test("POST /api/ai/design-simulation explains public exposure as a failure scenario", async () => {
   const app = buildApp();
 

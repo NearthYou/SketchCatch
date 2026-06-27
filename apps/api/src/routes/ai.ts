@@ -16,7 +16,10 @@ import {
   createArchitectureDraftFromRepositoryEvidence
 } from "../services/aiArchitectureDrafts.js";
 import { simulateDesign } from "../services/aiDesignSimulation.js";
-import { createDesignSimulationFallbackEnhancement } from "../services/aiLlmEnhancementFallbacks.js";
+import {
+  createFallbackOnlyLlmEnhancement,
+  type CreateLlmEnhancement
+} from "../services/aiLlmEnhancement.js";
 import { analyzePreDeployment } from "../services/aiPreDeploymentAnalysis.js";
 import { explainTerraformError } from "../services/aiTerraformErrorExplanation.js";
 import { explainTerraformPreview } from "../services/aiTerraformPreviewExplanation.js";
@@ -98,8 +101,14 @@ const terraformPreviewExplanationBodySchema = z.object({
   terraformCode: z.string().trim().min(1)
 });
 
+export type AiRouteOptions = {
+  readonly createLlmEnhancement?: CreateLlmEnhancement;
+};
+
 // AI MVP API의 입구입니다. 요청 모양은 여기서 확인하고, 실제 판단은 service 함수에 맡깁니다.
-export async function registerAiRoutes(app: FastifyInstance): Promise<void> {
+export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOptions = {}): Promise<void> {
+  const createLlmEnhancement = options.createLlmEnhancement ?? createFallbackOnlyLlmEnhancement;
+
   app.post("/ai/architecture-draft", async (request): Promise<AiArchitectureDraftResult> => {
     const body = architectureDraftBodySchema.parse(request.body);
 
@@ -126,7 +135,10 @@ export async function registerAiRoutes(app: FastifyInstance): Promise<void> {
 
     return {
       ...result,
-      llmEnhancement: createDesignSimulationFallbackEnhancement(result, "missing_api_key")
+      llmEnhancement: await createLlmEnhancement({
+        target: "design_simulation",
+        result
+      })
     };
   });
 

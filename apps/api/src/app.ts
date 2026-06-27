@@ -4,6 +4,7 @@ import type { ApiErrorCode } from "@sketchcatch/types";
 import { startRefreshTokenCleanupJob } from "./auth/cleanup.js";
 import { type DatabaseClient, getDatabaseClient } from "./db/client.js";
 import { registerAiRoutes } from "./routes/ai.js";
+import type { CreateLlmEnhancement } from "./services/aiLlmEnhancement.js";
 import { registerHealthRoutes } from "./routes/health.js";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { registerProjectRoutes } from "./routes/projects.js";
@@ -17,8 +18,10 @@ const fallbackCorsAllowedHeaders = "content-type,authorization";
 
 export type BuildAppOptions = {
   getDatabaseClient?: () => DatabaseClient;
+  createLlmEnhancement?: CreateLlmEnhancement;
 };
 
+// 테스트와 서버가 같은 앱을 쓰되, LLM 호출 계층은 옵션으로만 주입합니다.
 export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   const getAppDatabaseClient = options.getDatabaseClient ?? getDatabaseClient;
   const app = Fastify({
@@ -75,7 +78,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   });
 
   app.register(registerHealthRoutes);
-  app.register(registerAiRoutes, { prefix: "/api" });
+  app.register(registerAiRoutes, createAiRouteOptions(options));
   app.register(registerAuthRoutes, {
     prefix: "/api",
     getDatabaseClient: getAppDatabaseClient
@@ -98,6 +101,18 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   });
 
   return app;
+}
+
+// AI route 옵션은 undefined 필드를 넘기지 않게 분리해 exact optional 타입을 지킵니다.
+function createAiRouteOptions(options: BuildAppOptions): { readonly prefix: "/api"; readonly createLlmEnhancement?: CreateLlmEnhancement } {
+  if (options.createLlmEnhancement === undefined) {
+    return { prefix: "/api" };
+  }
+
+  return {
+    prefix: "/api",
+    createLlmEnhancement: options.createLlmEnhancement
+  };
 }
 
 function setCorsHeaders(request: FastifyRequest, reply: FastifyReply): void {
