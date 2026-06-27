@@ -165,3 +165,33 @@ test("createOpenAiEnhancement maps known OpenAI errors to safe fallback reasons"
     assert.doesNotMatch(JSON.stringify(result), /raw provider message/);
   }
 });
+
+test("createOpenAiEnhancement keeps valid fields and replaces invalid fields with fallback", async () => {
+  const createLlmEnhancement = createOpenAiEnhancement({
+    apiKey: "test-openai-api-key",
+    client: {
+      responses: {
+        parse: async () => ({
+          output_parsed: {
+            target: "design_simulation",
+            summary: "OpenAI가 만든 정상 요약입니다.",
+            highlights: ["", "단일 EC2 병목 가능성이 있습니다.", "x".repeat(121)],
+            nextActions: ["트래픽 증가 전 확장 구조를 검토하세요."],
+            fallbackUsed: false
+          }
+        })
+      }
+    }
+  });
+
+  const result = await createLlmEnhancement({
+    target: "design_simulation",
+    result: designSimulationResult
+  });
+
+  assert.equal(result.fallbackUsed, true);
+  assert.equal(result.fallbackReason, "invalid_response");
+  assert.equal(result.summary, "OpenAI가 만든 정상 요약입니다.");
+  assert.deepEqual(result.highlights, ["단일 EC2 병목 가능성이 있습니다."]);
+  assert.deepEqual(result.nextActions, ["트래픽 증가 전 확장 구조를 검토하세요."]);
+});

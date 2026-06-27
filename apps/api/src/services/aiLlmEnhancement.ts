@@ -7,6 +7,10 @@ import { createDesignSimulationFallbackEnhancement } from "./aiLlmEnhancementFal
 const DEFAULT_OPENAI_MODEL = "gpt-5.5";
 const OPENAI_TIMEOUT_MS = 10_000;
 const OPENAI_MAX_RETRIES = 0;
+const SUMMARY_MAX_LENGTH = 300;
+const ITEM_MAX_LENGTH = 120;
+const ITEM_MAX_COUNT = 5;
+const BLOCKED_GUARANTEE_PHRASES = ["배포 가능 보장", "비용 없음", "보안 안전"] as const;
 const llmEnhancementSchema: z.ZodType<LlmEnhancement> = z.object({
   target: z.literal("design_simulation"),
   summary: z.string(),
@@ -60,6 +64,11 @@ export type CreateConfiguredOpenAiEnhancementOptions = {
   readonly createClient?: ((options: OpenAiClientOptions) => OpenAiResponsesClient) | undefined;
 };
 
+type ValidationResult<T> = {
+  readonly value: T;
+  readonly fallbackUsed: boolean;
+};
+
 // 서버 환경변수를 읽어 실제 OpenAI SDK client를 만들고, API key가 없으면 호출 전 fallback합니다.
 export function createConfiguredOpenAiEnhancement(options: CreateConfiguredOpenAiEnhancementOptions = {}): CreateLlmEnhancement {
   const apiKey = options.apiKey ?? process.env.OPENAI_API_KEY;
@@ -99,7 +108,7 @@ export function createOpenAiEnhancement(options: CreateOpenAiEnhancementOptions)
         }
       });
 
-      return response.output_parsed ?? createFallbackEnhancement(input, "invalid_response");
+      return validateLlmEnhancement(input, response.output_parsed);
     } catch (error) {
       return createFallbackEnhancement(input, classifyOpenAiError(error));
     }
@@ -142,6 +151,76 @@ function createDefaultOpenAiResponsesClient(options: OpenAiClientOptions): OpenA
 // target별 fallback builder를 한곳에서 고르게 해서 provider 실패 경로를 단순하게 유지합니다.
 function createFallbackEnhancement(input: LlmEnhancementInput, fallbackReason: LlmEnhancementFallbackReason): LlmEnhancement {
   return createDesignSimulationFallbackEnhancement(input.result, fallbackReason);
+}
+
+// OpenAI 응답은 field별로 다시 확인해 깨진 부분만 rule 기반 fallback으로 바꿉니다.
+function validateLlmEnhancement(input: LlmEnhancementInput, value: LlmEnhancement | null): LlmEnhancement {
+  const fallback = createFallbackEnhancement(input, "invalid_response");
+  const parsed = llmEnhancementSchema.safeParse(value);
+
+  if (!parsed.success) {
+    return fallback;
+  }
+
+  const summary = validateSummary(parsed.data.summary, fallback.summary);
+  const highlights = validateTextItems(parsed.data.highlights, fallback.highlights);
+  const nextActions = validateTextItems(parsed.data.nextActions, fallback.nextActions);
+  const fallbackUsed = summary.fallbackUsed || highlights.fallbackUsed || nextActions.fallbackUsed;
+
+  if (!fallbackUsed) {
+    return parsed.data;
+  }
+
+  return {
+    target: parsed.data.target,
+    summary: summary.value,
+    highlights: highlights.value,
+    nextActions: nextActions.value,
+    fallbackUsed: true,
+    fallbackReason: "invalid_response"
+  };
+}
+
+// summary는 짧고 보장 문장이 없을 때만 OpenAI 값을 그대로 사용합니다.
+function validateSummary(value: string, fallbackValue: string): ValidationResult<string> {
+  const normalized = value.trim();
+
+  if (normalized.length === 0 || normalized.length > SUMMARY_MAX_LENGTH || containsBlockedGuarantee(normalized)) {
+    return {
+      value: fallbackValue,
+      fallbackUsed: true
+    };
+  }
+
+  return {
+    value: normalized,
+    fallbackUsed: normalized !== value
+  };
+}
+
+// list 필드는 빈 항목과 긴 항목을 제거하고, 전부 사라질 때만 field fallback을 사용합니다.
+function validateTextItems(values: readonly string[], fallbackValues: string[]): ValidationResult<string[]> {
+  const normalized = values
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0 && value.length <= ITEM_MAX_LENGTH && !containsBlockedGuarantee(value))
+    .slice(0, ITEM_MAX_COUNT);
+
+  if (normalized.length === 0) {
+    return {
+      value: fallbackValues,
+      fallbackUsed: true
+    };
+  }
+
+  return {
+    value: normalized,
+    fallbackUsed: normalized.length !== values.length || normalized.some((value, index) => value !== values[index])
+  };
+}
+
+// LLM이 비용, 보안, 배포 가능성을 보장하는 문장은 MVP에서 그대로 노출하지 않습니다.
+function containsBlockedGuarantee(value: string): boolean {
+  return BLOCKED_GUARANTEE_PHRASES.some((phrase) => value.includes(phrase));
 }
 
 // provider 원문 에러는 숨기고 API 응답에는 안전한 fallbackReason만 남깁니다.
