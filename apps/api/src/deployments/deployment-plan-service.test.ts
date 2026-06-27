@@ -124,6 +124,10 @@ class FakeDeploymentRepository implements DeploymentRepository {
     return createDeploymentPlanArtifactRecord({ id: candidatePlanArtifactId });
   }
 
+  async findRunningDeploymentInProject(): Promise<DeploymentRecord | undefined> {
+    return this.deployment?.status === "RUNNING" ? this.deployment : undefined;
+  }
+
   async listDeploymentsByProject(): Promise<DeploymentRecord[]> {
     return this.deployment ? [this.deployment] : [];
   }
@@ -157,6 +161,22 @@ class FakeDeploymentRepository implements DeploymentRepository {
       ...this.deployment,
       status: "RUNNING",
       ...clearDeploymentApprovalSnapshot(),
+      updatedAt: fixedNow
+    };
+
+    return this.deployment;
+  };
+
+  markDeploymentApplyRunning: DeploymentRepository["markDeploymentApplyRunning"] = async (
+    candidateDeploymentId
+  ) => {
+    if (!this.deployment || this.deployment.id !== candidateDeploymentId) {
+      return undefined;
+    }
+
+    this.deployment = {
+      ...this.deployment,
+      status: "RUNNING",
       updatedAt: fixedNow
     };
 
@@ -209,6 +229,27 @@ class FakeDeploymentRepository implements DeploymentRepository {
 
   approveDeployment: DeploymentRepository["approveDeployment"] = async () => this.deployment;
 
+  completeDeploymentApply: DeploymentRepository["completeDeploymentApply"] = async (
+    candidateDeploymentId,
+    input
+  ) => {
+    if (!this.deployment || this.deployment.id !== candidateDeploymentId) {
+      return undefined;
+    }
+
+    this.deployment = {
+      ...this.deployment,
+      status: "SUCCESS",
+      stateObjectKey: input.stateObjectKey,
+      resultWarningSummary: input.resultWarningSummary,
+      failureStage: null,
+      errorSummary: null,
+      updatedAt: fixedNow
+    };
+
+    return this.deployment;
+  };
+
   failDeployment: DeploymentRepository["failDeployment"] = async (candidateDeploymentId, input) => {
     this.failedDeployments.push({
       deploymentId: candidateDeploymentId,
@@ -258,6 +299,14 @@ class FakeDeploymentRepository implements DeploymentRepository {
   async listDeploymentLogs(candidateDeploymentId: string) {
     return this.logs.filter((log) => log.deploymentId === candidateDeploymentId);
   }
+
+  async listDeployedResources() {
+    return [];
+  }
+
+  async listTerraformOutputs() {
+    return [];
+  }
 }
 
 class FakePlanArtifactStorage implements DeploymentPlanArtifactStorage {
@@ -291,6 +340,8 @@ function createDeploymentRecord(
     terraformArtifactId,
     awsConnectionId,
     currentPlanArtifactId: null,
+    stateObjectKey: null,
+    resultWarningSummary: null,
     status: "PENDING",
     planSummary: null,
     isBlocked: false,

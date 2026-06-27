@@ -76,6 +76,33 @@ export async function runTerraformShowJson(
   return runTerraformCommand(workdir, ["show", "-json", planFileName], options);
 }
 
+export async function runTerraformApply(
+  workdir: string,
+  options: RunTerraformCommandOptions & { planFileName?: string } = {}
+): Promise<TerraformRunResult> {
+  const planFileName = options.planFileName ?? defaultTerraformPlanFileName;
+
+  return runTerraformCommand(
+    workdir,
+    ["apply", "-input=false", "-no-color", planFileName],
+    options
+  );
+}
+
+export async function runTerraformOutputJson(
+  workdir: string,
+  options: RunTerraformCommandOptions = {}
+): Promise<TerraformRunResult> {
+  return runTerraformCommand(workdir, ["output", "-json"], options);
+}
+
+export async function runTerraformShowStateJson(
+  workdir: string,
+  options: RunTerraformCommandOptions = {}
+): Promise<TerraformRunResult> {
+  return runTerraformCommand(workdir, ["show", "-json"], options);
+}
+
 async function runTerraformCommand(
   workdir: string,
   args: string[],

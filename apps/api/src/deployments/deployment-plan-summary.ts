@@ -6,10 +6,24 @@ type TerraformShowJson = {
 
 type TerraformResourceChange = {
   address?: unknown;
+  mode?: unknown;
+  type?: unknown;
   change?: {
     actions?: unknown;
   };
 };
+
+const liveApplySupportedResourceTypes = new Set([
+  "aws_vpc",
+  "aws_subnet",
+  "aws_internet_gateway",
+  "aws_route_table",
+  "aws_route_table_association",
+  "aws_security_group",
+  "aws_security_group_rule",
+  "aws_instance",
+  "aws_s3_bucket"
+]);
 
 export class DeploymentPlanSummaryParseError extends Error {
   constructor(message: string) {
@@ -74,6 +88,42 @@ export function createDeploymentPlanSummaryFromTerraformShowJson(
   }
 
   return summary;
+}
+
+export function findUnsupportedLiveApplyResourceTypesFromTerraformShowJson(
+  terraformShowJson: string
+): string[] {
+  const parsed = parseTerraformShowJson(terraformShowJson);
+  const resourceChanges = Array.isArray(parsed.resource_changes) ? parsed.resource_changes : [];
+  const unsupportedTypes = new Set<string>();
+
+  for (const resourceChange of resourceChanges) {
+    if (!isTerraformResourceChange(resourceChange) || resourceChange.mode === "data") {
+      continue;
+    }
+
+    const resourceType = resourceChange.type;
+
+    if (typeof resourceType !== "string" || resourceType.trim().length === 0) {
+      continue;
+    }
+
+    const actions = resourceChange.change?.actions;
+
+    if (
+      Array.isArray(actions) &&
+      actions.every((action) => typeof action === "string") &&
+      (isSameActions(actions, ["no-op"]) || isSameActions(actions, ["read"]))
+    ) {
+      continue;
+    }
+
+    if (!liveApplySupportedResourceTypes.has(resourceType)) {
+      unsupportedTypes.add(resourceType);
+    }
+  }
+
+  return [...unsupportedTypes].sort((left, right) => left.localeCompare(right));
 }
 
 function isTerraformResourceChange(value: unknown): value is TerraformResourceChange {

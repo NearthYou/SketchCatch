@@ -109,6 +109,10 @@ class FakeDeploymentRepository implements DeploymentRepository {
     return this.planArtifact;
   }
 
+  async findRunningDeploymentInProject(): Promise<DeploymentRecord | undefined> {
+    return this.deployment?.status === "RUNNING" ? this.deployment : undefined;
+  }
+
   async listDeploymentsByProject(): Promise<DeploymentRecord[]> {
     return this.deployment ? [this.deployment] : [];
   }
@@ -127,6 +131,9 @@ class FakeDeploymentRepository implements DeploymentRepository {
   };
 
   markDeploymentInitRunning: DeploymentRepository["markDeploymentInitRunning"] = async () =>
+    this.deployment;
+
+  markDeploymentApplyRunning: DeploymentRepository["markDeploymentApplyRunning"] = async () =>
     this.deployment;
 
   markDeploymentInitSucceeded: DeploymentRepository["markDeploymentInitSucceeded"] = async () =>
@@ -189,6 +196,27 @@ class FakeDeploymentRepository implements DeploymentRepository {
     return this.deployment;
   };
 
+  completeDeploymentApply: DeploymentRepository["completeDeploymentApply"] = async (
+    candidateDeploymentId,
+    input
+  ) => {
+    if (!this.deployment || this.deployment.id !== candidateDeploymentId) {
+      return undefined;
+    }
+
+    this.deployment = {
+      ...this.deployment,
+      status: "SUCCESS",
+      stateObjectKey: input.stateObjectKey,
+      resultWarningSummary: input.resultWarningSummary,
+      failureStage: null,
+      errorSummary: null,
+      updatedAt: fixedNow
+    };
+
+    return this.deployment;
+  };
+
   failDeployment: DeploymentRepository["failDeployment"] = async (candidateDeploymentId, input) => {
     if (!this.deployment || this.deployment.id !== candidateDeploymentId) {
       return undefined;
@@ -212,6 +240,14 @@ class FakeDeploymentRepository implements DeploymentRepository {
   }
 
   async listDeploymentLogs(): Promise<DeploymentLogRecord[]> {
+    return [];
+  }
+
+  async listDeployedResources() {
+    return [];
+  }
+
+  async listTerraformOutputs() {
     return [];
   }
 }
@@ -426,6 +462,8 @@ function createDeploymentRecord(
     terraformArtifactId,
     awsConnectionId,
     currentPlanArtifactId: planArtifactId,
+    stateObjectKey: null,
+    resultWarningSummary: null,
     status: "PENDING",
     planSummary: createPlanSummary(),
     isBlocked: true,

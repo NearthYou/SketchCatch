@@ -23,7 +23,8 @@ import { analyzePreDeployment as defaultAnalyzePreDeployment } from "../services
 import { maskDeploymentMessage } from "./log-masking.js";
 import {
   createDeploymentPlanSummaryFromTerraformShowJson,
-  DeploymentPlanSummaryParseError
+  DeploymentPlanSummaryParseError,
+  findUnsupportedLiveApplyResourceTypesFromTerraformShowJson
 } from "./deployment-plan-summary.js";
 import {
   createS3DeploymentPlanArtifactStorage,
@@ -239,11 +240,15 @@ export async function runDeploymentPlan(
       });
     }
 
+    const unsupportedResourceTypes = findUnsupportedLiveApplyResourceTypesFromTerraformShowJson(
+      terraform.showJson.stdout
+    );
     const planSummary = createBlockedPlanSummary(
       createDeploymentPlanSummaryFromTerraformShowJson(terraform.showJson.stdout),
-      preDeploymentAnalysis.findings
+      preDeploymentAnalysis.findings,
+      unsupportedResourceTypes
     );
-    const block = createDeploymentPlanBlock(planSummary);
+    const block = createDeploymentPlanBlock(planSummary, unsupportedResourceTypes);
     const planArtifactId = generatePlanArtifactId();
     let uploadedPlanArtifact: Awaited<
       ReturnType<DeploymentPlanArtifactStorage["uploadDeploymentPlanArtifact"]>
@@ -460,12 +465,17 @@ async function failDeployment(
 
 function createBlockedPlanSummary(
   summary: DeploymentPlanSummary,
-  findings: readonly CheckFinding[]
+  findings: readonly CheckFinding[],
+  unsupportedResourceTypes: readonly string[] = []
 ): DeploymentPlanSummary {
   const highRiskWarnings = findings
     .filter((finding) => finding.severity === "high")
     .map(toPlanWarning);
-  const warnings = [...summary.warnings, ...highRiskWarnings];
+  const unsupportedResourceWarnings = unsupportedResourceTypes.map((resourceType) => ({
+    level: "high" as const,
+    message: `MVP live apply does not support Terraform resource type ${resourceType}`
+  }));
+  const warnings = [...summary.warnings, ...highRiskWarnings, ...unsupportedResourceWarnings];
 
   return {
     ...summary,
@@ -474,13 +484,24 @@ function createBlockedPlanSummary(
   };
 }
 
-function createDeploymentPlanBlock(summary: DeploymentPlanSummary): {
+function createDeploymentPlanBlock(
+  summary: DeploymentPlanSummary,
+  unsupportedResourceTypes: readonly string[] = []
+): {
   isBlocked: boolean;
   blockedBy: DeploymentBlockedBy;
   blockedReason: string;
 } {
   const hasRiskFinding = summary.warnings.some((warning) => warning.level === "high");
   const hasDestructiveChange = summary.deleteCount > 0 || summary.replaceCount > 0;
+
+  if (unsupportedResourceTypes.length > 0) {
+    return {
+      isBlocked: true,
+      blockedBy: "risk_analysis",
+      blockedReason: `Unsupported Terraform resource types for MVP live apply: ${unsupportedResourceTypes.join(", ")}`
+    };
+  }
 
   if (hasRiskFinding && hasDestructiveChange) {
     return {
