@@ -291,11 +291,20 @@ type Deployment = {
   stateObjectKey: string | null;
   resultWarningSummary: string | null;
   status: "PENDING" | "RUNNING" | "SUCCESS" | "FAILED" | "CANCELLED";
+  activeStage: "init" | "validate" | "plan" | "apply" | null;
   planSummary: DeploymentPlanSummary | null;
   isBlocked: boolean;
   blockedBy: "risk_analysis" | "cost_analysis" | "missing_approval" | null;
   blockedReason: string | null;
-  failureStage: "init" | "validate" | "plan" | "approval" | "mock_run" | "apply" | null;
+  failureStage:
+    | "init"
+    | "validate"
+    | "plan"
+    | "approval"
+    | "aws_connection"
+    | "mock_run"
+    | "apply"
+    | null;
   errorSummary: string | null;
   approvedAt: IsoDateTimeString | null;
   approvedByUserId: string | null;
@@ -305,6 +314,11 @@ type Deployment = {
   approvedTfplanHash: string | null;
   approvedAwsAccountId: string | null;
   approvedAwsRegion: string | null;
+  startedAt: IsoDateTimeString | null;
+  completedAt: IsoDateTimeString | null;
+  failedAt: IsoDateTimeString | null;
+  cancelRequestedAt: IsoDateTimeString | null;
+  cancelledAt: IsoDateTimeString | null;
   createdAt: IsoDateTimeString;
   updatedAt: IsoDateTimeString;
 };
@@ -321,6 +335,13 @@ Apply가 성공하면 `stateObjectKey`에는 S3에 업로드한 `terraform.tfsta
 `terraform output -json`, `terraform show -json`, state 업로드 같은 후처리 중 일부가 실패해도
 실제 AWS Apply가 성공했다면 Deployment는 `SUCCESS`로 유지하고, 사용자가 확인할 수 있도록
 `resultWarningSummary`와 apply stage 로그에 경고를 남긴다.
+
+실행 중인 Deployment는 `activeStage`와 `startedAt`을 가진다. 실행이 끝나면 `activeStage`는
+`null`로 돌아가고 `completedAt`을 저장한다. 실패는 `failedAt`, 사용자가 취소를 요청한 시점은
+`cancelRequestedAt`, 실제 취소 완료 시점은 `cancelledAt`에 저장한다.
+
+한 프로젝트에는 동시에 하나의 `RUNNING` Deployment만 허용한다. 이 제약은 애플리케이션 체크와
+`deployments_project_running_unique` partial unique index를 함께 사용해 보장한다.
 
 ## DeploymentPlanArtifact
 

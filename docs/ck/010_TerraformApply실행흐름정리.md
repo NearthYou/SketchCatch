@@ -2,12 +2,13 @@
 
 이 문서는 `Terraform Apply 실행`을 처음 보는 사람이 코드 흐름과 구현 범위를 따라갈 수 있게 정리한 문서다.
 
-목표는 네 가지다.
+목표는 다섯 가지다.
 
 1. 사용자가 Apply 버튼을 누른 뒤 어떤 함수가 순서대로 호출되는지 알 수 있게 한다.
 2. 실제 AWS 리소스 생성이 어디에서 일어나는지 분명히 한다.
 3. Plan 승인, hash 검증, 로그 마스킹, 결과 저장의 경계를 설명한다.
 4. 이번 구현에서 제외한 Destroy와 cleanup 책임을 명확히 한다.
+5. 취소, 재시작 복구, SSE 로그, S3 artifact 보호처럼 Apply 운영 안전장치를 설명한다.
 
 ## 1. 이번 구현 범위
 
@@ -45,10 +46,10 @@ Apply 실행은 5개 경계로 나뉜다.
 
 | 층 | 위치 | 책임 |
 | --- | --- | --- |
-| Frontend | [apps/web/features/workspace](../../apps/web/features/workspace) | Apply 확인 UI, API 호출, 결과 표시 |
-| API route | [apps/api/src/routes/deployments.ts](../../apps/api/src/routes/deployments.ts) | 인증, 실행 가능 여부 검증, project lock, background job 시작 |
+| Frontend | [apps/web/features/workspace](../../apps/web/features/workspace) | Apply 확인 UI, API 호출, 결과 표시, 실행 취소 요청, SSE 로그 수신 |
+| API route | [apps/api/src/routes/deployments.ts](../../apps/api/src/routes/deployments.ts) | 인증, 실행 가능 여부 검증, project lock, background job 시작, cancel/SSE endpoint |
 | Backend service | [apps/api/src/deployments/deployment-apply-service.ts](../../apps/api/src/deployments/deployment-apply-service.ts) | 승인 snapshot 검증, Terraform CLI 실행, 결과 수집 |
-| Storage | RDS, S3 | state object key, DeployedResource, TerraformOutput, logs 저장 |
+| Storage | RDS, S3 | 실행 stage/time, state object key, DeployedResource, TerraformOutput, logs, 보호된 artifact 저장 |
 | Terraform CLI | `terraform init/apply/output/show` | 실제 AWS 리소스 생성과 결과 조회 |
 
 같은 이름의 함수가 있으니 먼저 구분해야 한다.
@@ -59,6 +60,8 @@ Apply 실행은 5개 경계로 나뉜다.
 | `runDeploymentApply` | [deployment-apply-service.ts](../../apps/api/src/deployments/deployment-apply-service.ts) | 실제 Terraform CLI를 실행하는 backend service |
 | `markDeploymentApplyRunning` | [deployment-service.ts](../../apps/api/src/deployments/deployment-service.ts) | Apply background job 시작 전에 Deployment를 `RUNNING`으로 바꾼다. |
 | `completeDeploymentApply` | [deployment-service.ts](../../apps/api/src/deployments/deployment-service.ts) | Apply 성공 후 state key, 리소스, outputs를 저장하고 `SUCCESS`로 바꾼다. |
+| `requestDeploymentCancellation` | [deployment-service.ts](../../apps/api/src/deployments/deployment-service.ts) | 실행 중 Deployment에 취소 요청 시각을 저장한다. |
+| `startTrackedDeploymentRun` | [deployment-run-registry.ts](../../apps/api/src/deployments/deployment-run-registry.ts) | background job의 `AbortController`를 process memory에 등록한다. |
 | `approvedPlanArtifactId` | `deployments` row | 사용자가 승인한 `tfplan` artifact id |
 | `stateObjectKey` | `deployments` row | Apply 후 S3에 저장한 `terraform.tfstate` object key |
 
@@ -115,11 +118,14 @@ Apply 버튼은 Plan 승인 이후에만 의미가 있다.
 | --- | --- |
 | `isPlanApproved` | `approvedAt`과 `approvedPlanArtifactId`가 있으면 true다. |
 | `canApply` | 승인된 Deployment이고, `RUNNING`/`SUCCESS`가 아니고, block 상태가 아니면 true다. |
+| `canCancelDeployment` | Deployment가 `RUNNING`이고 아직 `cancelRequestedAt`이 없으면 true다. |
 | `showApplyConfirmation` | 사용자가 Apply 버튼을 누른 뒤 확인 영역을 보여줄지 결정한다. |
 | `deploymentResources` | Apply 후 state에서 추출한 실제 리소스 목록이다. |
 | `terraformOutputs` | Apply 후 Terraform output 목록이다. |
 
 확인 영역에서는 AWS account, region, Plan 변경 수를 보여주고, 이번 MVP Apply 범위와 비용 발생 가능성을 안내한다.
+실행 중인 Deployment를 선택하면 프론트는 `fetch` streaming으로 `/logs/stream`에 연결한다. `EventSource`는
+`Authorization` header를 직접 넣기 어려우므로 사용하지 않는다.
 
 ### 4.3 화면 결과 표시
 
@@ -127,7 +133,7 @@ Apply 후 화면은 세 가지 결과를 보여준다.
 
 | 영역 | 내용 |
 | --- | --- |
-| Deployment details | `stateObjectKey`, `resultWarningSummary`, error summary |
+| Deployment details | `activeStage`, 실행/완료/실패/취소 시각, `stateObjectKey`, `resultWarningSummary`, error summary |
 | Apply results | Terraform address, resource type, resource id |
 | Terraform outputs | output name, sensitive 여부, output value |
 
@@ -156,16 +162,30 @@ POST /api/deployments/:deploymentId/apply
 7. `runDeploymentApply`를 background job으로 시작한다.
 8. 응답은 `202 Accepted`와 `RUNNING` Deployment를 반환한다.
 
-중요한 점은 API 응답이 Apply 완료를 의미하지 않는다는 것이다. `/apply` 응답은 background job을 시작했다는 뜻이고, 사용자는 이후 새로고침으로 상태와 로그를 다시 확인한다.
+중요한 점은 API 응답이 Apply 완료를 의미하지 않는다는 것이다. `/apply` 응답은 background job을 시작했다는 뜻이고, 사용자는 이후 상태와 로그를 다시 확인한다.
+프로젝트 단위 실행 lock은 라우트 체크와 `deployments_project_running_unique` partial unique index를 함께 사용한다.
+같은 Deployment에 중복 요청이 거의 동시에 들어와도 `PENDING`/`FAILED`에서 `RUNNING`으로 바뀌는 첫 전이만 성공하도록 한다.
+
+취소 요청 API는 아래다.
+
+```http
+POST /api/deployments/:deploymentId/cancel
+```
+
+취소 요청은 `cancelRequestedAt`을 저장하고, 현재 API process memory에 등록된 Terraform background job의
+`AbortController`를 abort한다. 이미 process가 사라져 active job을 찾을 수 없으면 stale `RUNNING`으로 보고
+`FAILED` 처리하며, AWS 리소스 확인이 필요하다는 summary를 남긴다.
 
 결과 조회 API는 아래다.
 
 ```http
 GET /api/deployments/:deploymentId/resources
 GET /api/deployments/:deploymentId/outputs
+GET /api/deployments/:deploymentId/logs/stream
 ```
 
 `/outputs`는 sensitive output의 `value`를 `null`로 내려준다.
+`/logs/stream`은 SSE 응답에 `Cache-Control: no-store`와 `X-Accel-Buffering: no`를 붙여 중간 캐시와 proxy buffering을 피한다.
 
 ## 6. Backend Apply 서비스 흐름
 
@@ -183,12 +203,13 @@ Deployment 조회
 -> Terraform artifact 조회
 -> current Plan artifact 조회
 -> verified AWS connection 조회
--> 승인된 tfplan S3 다운로드
+-> 승인된 tfplan object key 검증 후 S3 다운로드
 -> Terraform artifact workspace 복원
 -> Terraform artifact hash 계산
 -> tfplan hash 계산
 -> 승인 snapshot 검증
 -> AWS temporary credential env 준비
+-> activeStage = apply 확인
 -> workspace에 tfplan 파일 쓰기
 -> terraform init
 -> terraform apply tfplan
@@ -235,6 +256,8 @@ terraform apply -input=false -no-color tfplan
 ```
 
 여기서 `tfplan`은 Plan 단계에서 S3에 저장했고, 사용자가 승인한 plan hash와 다시 대조한 파일이다.
+`terraform init/apply/output/show` 호출에는 `AbortSignal`이 전달된다. Apply가 시작되기 전 취소되면 `CANCELLED`로
+끝낼 수 있지만, `terraform apply` 도중 취소되면 AWS 리소스가 일부 생성됐을 수 있으므로 `FAILED`와 확인 필요 summary를 남긴다.
 
 ### 6.3 결과 수집
 
@@ -255,6 +278,9 @@ Apply 전 실패와 Apply 후 후처리 실패는 다르게 다룬다.
 | 상황 | 처리 |
 | --- | --- |
 | 승인 snapshot 불일치 | Apply 실행 전 중단, `FAILED`, `failureStage: "apply"` |
+| AWS 연결 또는 STS credential 준비 실패 | `FAILED`, `failureStage: "aws_connection"` |
+| Apply 시작 전 init 중 취소 | `CANCELLED`, AWS 리소스 변경 없음 |
+| `terraform apply` 중 취소 | `FAILED`, AWS 리소스 일부 변경 가능성 summary 저장 |
 | `terraform init` 실패 | `FAILED`, `failureStage: "apply"` |
 | `terraform apply` 실패 | `FAILED`, `failureStage: "apply"` |
 | `terraform output -json` 실패 | Apply 자체는 성공했으므로 `SUCCESS` 유지, warning 저장 |
@@ -271,6 +297,9 @@ Apply 전 실패와 Apply 후 후처리 실패는 다르게 다룬다.
 | --- | --- | --- |
 | `deployments` | `state_object_key` | S3에 저장한 `terraform.tfstate` object key |
 | `deployments` | `result_warning_summary` | Apply 성공 후 후처리 경고 요약 |
+| `deployments` | `active_stage` | 현재 실행 중인 Terraform stage |
+| `deployments` | `started_at`, `completed_at`, `failed_at` | 실행 lifecycle timestamp |
+| `deployments` | `cancel_requested_at`, `cancelled_at` | 취소 요청과 취소 완료 timestamp |
 | `deployed_resources` | table | Apply 후 state에서 추출한 실제 resource 목록 |
 | `terraform_outputs` | table | Apply 후 Terraform output 목록 |
 
@@ -279,9 +308,23 @@ Apply 전 실패와 Apply 후 후처리 실패는 다르게 다룬다.
 ```text
 apps/api/drizzle/0016_apply_results.sql
 apps/api/drizzle/meta/0016_snapshot.json
+apps/api/drizzle/0017_cynical_thunderbolt.sql
+apps/api/drizzle/meta/0017_snapshot.json
 ```
 
-`0015`는 사용하지 않고, 사용자 요청대로 `0016`부터 Apply 결과 저장 마이그레이션을 둔다.
+`0016`은 Apply 결과 저장 모델이고, `0017`은 실행 stage/time/cancel 필드와 project 단위 `RUNNING` partial unique index를 추가한다.
+
+### 8.1 S3 artifact 보호
+
+Plan artifact와 Terraform state는 Deployment scope에 맞는 정확한 object key만 허용한다.
+
+| artifact | 허용 object key |
+| --- | --- |
+| `tfplan` | `deployments/{deploymentId}/plans/{planArtifactId}.tfplan` |
+| state | `deployments/{deploymentId}/state/terraform.tfstate` |
+
+업로드 시에는 `ServerSideEncryption: "AES256"`, artifact metadata, lifecycle용 tag,
+`ChecksumSHA256`을 함께 보낸다. `..`, 역슬래시, leading slash가 들어간 key는 저장/다운로드 전에 거부한다.
 
 ## 9. AWS 권한
 
@@ -308,6 +351,7 @@ AWS 연결 생성 안내와 CloudFormation template에는 MVP Apply에 필요한
 7. AWS 연결 안내와 CloudFormation template에 MVP Apply용 Terraform 권한을 추가했다.
 8. 테스트 fake repository와 route/service 테스트 계약을 Apply 결과 모델에 맞춰 갱신했다.
 9. `docs/data-models.md`, `docs/deployment.md`, 이 문서에 Apply 계약과 운영 흐름을 정리했다.
+10. `cancel`, 서버 재시작 후 `RUNNING` recovery, SSE 로그 스트림, S3 artifact 보호, project lock을 추가했다.
 
 ## 11. 완료 조건
 
@@ -319,4 +363,11 @@ AWS 연결 생성 안내와 CloudFormation template에는 MVP Apply에 필요한
 4. Apply 실행은 backend에서만 수행되고, 프론트엔드는 확인 UI와 API 호출만 담당한다.
 5. `terraform apply tfplan` 성공 후 S3 state, DeployedResource, TerraformOutput이 조회 가능한 형태로 저장된다.
 6. Apply 전/중 실패는 `FAILED`와 `failureStage: "apply"`로 남고, Apply 성공 후 후처리 실패는 warning으로 남는다.
-7. AWS credential과 Terraform sensitive output은 로그, 응답, 화면에 실제 값이 노출되지 않는다.
+7. AWS credential과 Terraform sensitive output은 로그, 응답, 화면에 실제 값이 노출되지 않고, `tfplan`/state S3 object는 deployment scope와 checksum으로 보호된다.
+
+추가 안전 조건:
+
+- 같은 프로젝트에 동시에 하나의 `RUNNING` Deployment만 존재한다.
+- 실행 중 취소 요청을 보낼 수 있고, Apply 중 취소는 partial AWS 변경 가능성을 `FAILED` summary로 남긴다.
+- 서버 재시작 후 남은 `RUNNING` Deployment는 시작 시 recovery에서 `FAILED`로 정리된다.
+- 실행 로그는 SSE로 볼 수 있으며 응답은 캐시되지 않는다.
