@@ -5,6 +5,8 @@ import { getOAuthProviderStaticConfig, requireOAuthProviderConfig } from "./oaut
 
 export const OAUTH_TOKEN_EXCHANGE_FAILED = "token_exchange_failed";
 
+const OAUTH_TOKEN_USER_AGENT = "SketchCatch-OAuth/1.0";
+
 const oauthTokenResponseSchema = z
   .object({
     access_token: z.string().min(1)
@@ -80,7 +82,8 @@ async function requestToken(
       body,
       headers: {
         accept: "application/json",
-        "content-type": "application/x-www-form-urlencoded"
+        "content-type": "application/x-www-form-urlencoded",
+        "user-agent": OAUTH_TOKEN_USER_AGENT
       },
       method: "POST"
     });

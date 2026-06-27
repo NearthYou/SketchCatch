@@ -31,10 +31,7 @@ test("exchangeOAuthCodeForAccessToken exchanges a Naver code for an access token
   assert.equal(requests.length, 1);
   assert.equal(String(requests[0]?.input), "https://nid.naver.com/oauth2.0/token");
   assert.equal(requests[0]?.init?.method, "POST");
-  assert.deepEqual(requests[0]?.init?.headers, {
-    accept: "application/json",
-    "content-type": "application/x-www-form-urlencoded"
-  });
+  assert.deepEqual(requests[0]?.init?.headers, expectedTokenRequestHeaders());
 
   const body = new URLSearchParams(String(requests[0]?.init?.body));
 
@@ -69,6 +66,7 @@ test("exchangeOAuthCodeForAccessToken exchanges a Kakao code without client secr
     accessToken: "provider-access-token"
   });
   assert.equal(String(requests[0]?.input), "https://kauth.kakao.com/oauth/token");
+  assert.deepEqual(requests[0]?.init?.headers, expectedTokenRequestHeaders());
 
   const body = new URLSearchParams(String(requests[0]?.init?.body));
 
@@ -101,6 +99,7 @@ test("exchangeOAuthCodeForAccessToken exchanges a GitHub code for an access toke
     accessToken: "provider-access-token"
   });
   assert.equal(String(requests[0]?.input), "https://github.com/login/oauth/access_token");
+  assert.deepEqual(requests[0]?.init?.headers, expectedTokenRequestHeaders());
 
   const body = new URLSearchParams(String(requests[0]?.init?.body));
 
@@ -200,6 +199,14 @@ function jsonResponse(body: unknown, status = 200): Response {
     },
     status
   });
+}
+
+function expectedTokenRequestHeaders(): Record<string, string> {
+  return {
+    accept: "application/json",
+    "content-type": "application/x-www-form-urlencoded",
+    "user-agent": "SketchCatch-OAuth/1.0"
+  };
 }
 
 async function assertTokenExchangeError(run: () => Promise<unknown>): Promise<void> {

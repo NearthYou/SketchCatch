@@ -4,6 +4,8 @@ import { getOAuthProviderStaticConfig } from "./oauth-providers.js";
 
 export const OAUTH_PROFILE_FETCH_FAILED = "profile_fetch_failed";
 
+const OAUTH_PROFILE_USER_AGENT = "SketchCatch-OAuth/1.0";
+
 const nullableTrimmedStringSchema = z
   .preprocess((value) => {
     if (typeof value !== "string") {
@@ -240,7 +242,8 @@ async function requestProfile(
     response = await fetcher(profileUrl, {
       headers: {
         accept: "application/json",
-        authorization: `Bearer ${accessToken}`
+        authorization: `Bearer ${accessToken}`,
+        "user-agent": OAUTH_PROFILE_USER_AGENT
       },
       method: "GET"
     });

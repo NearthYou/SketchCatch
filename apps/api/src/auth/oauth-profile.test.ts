@@ -200,10 +200,7 @@ test("fetchOAuthProfile fetches and normalizes a Naver profile", async () => {
   assert.equal(requests.length, 1);
   assert.equal(String(requests[0]?.input), "https://openapi.naver.com/v1/nid/me");
   assert.equal(requests[0]?.init?.method, "GET");
-  assert.deepEqual(requests[0]?.init?.headers, {
-    accept: "application/json",
-    authorization: "Bearer provider-access-token"
-  });
+  assert.deepEqual(requests[0]?.init?.headers, expectedProfileRequestHeaders());
   assert.equal(profile.providerUserId, "naver-user-id");
   assert.equal(profile.email, "user@example.com");
 });
@@ -231,6 +228,7 @@ test("fetchOAuthProfile fetches and normalizes a Kakao profile", async () => {
 
   assert.equal(requests.length, 1);
   assert.equal(String(requests[0]?.input), "https://kapi.kakao.com/v2/user/me");
+  assert.deepEqual(requests[0]?.init?.headers, expectedProfileRequestHeaders());
   assert.equal(profile.provider, "kakao");
   assert.equal(profile.providerUserId, "123456789");
   assert.equal(profile.email, "user@example.com");
@@ -265,6 +263,8 @@ test("fetchOAuthProfile fetches GitHub profile and verified email list", async (
   assert.equal(requests.length, 2);
   assert.equal(String(requests[0]?.input), "https://api.github.com/user");
   assert.equal(String(requests[1]?.input), "https://api.github.com/user/emails");
+  assert.deepEqual(requests[0]?.init?.headers, expectedProfileRequestHeaders());
+  assert.deepEqual(requests[1]?.init?.headers, expectedProfileRequestHeaders());
   assert.equal(profile.provider, "github");
   assert.equal(profile.providerUserId, "987654321");
   assert.equal(profile.email, "primary@example.com");
@@ -338,6 +338,14 @@ function jsonResponse(body: unknown, status = 200): Response {
     },
     status
   });
+}
+
+function expectedProfileRequestHeaders(): Record<string, string> {
+  return {
+    accept: "application/json",
+    authorization: "Bearer provider-access-token",
+    "user-agent": "SketchCatch-OAuth/1.0"
+  };
 }
 
 async function assertProfileFetchError(run: () => Promise<unknown>): Promise<void> {

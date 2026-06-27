@@ -216,6 +216,7 @@ test("GET /api/auth/oauth/naver/callback completes login and redirects to mypage
     const tokenRequestBody = new URLSearchParams(String(requests[0]?.init?.body));
 
     assert.equal(String(requests[0]?.input), "https://nid.naver.com/oauth2.0/token");
+    assert.deepEqual(requests[0]?.init?.headers, expectedTokenRequestHeaders());
     assert.equal(tokenRequestBody.get("code"), "authorization-code");
     assert.equal(tokenRequestBody.get("state"), "state-token");
     assert.equal(
@@ -223,10 +224,7 @@ test("GET /api/auth/oauth/naver/callback completes login and redirects to mypage
       "http://localhost:3000/api/auth/oauth/naver/callback"
     );
     assert.equal(String(requests[1]?.input), "https://openapi.naver.com/v1/nid/me");
-    assert.deepEqual(requests[1]?.init?.headers, {
-      accept: "application/json",
-      authorization: "Bearer provider-access-token"
-    });
+    assert.deepEqual(requests[1]?.init?.headers, expectedProfileRequestHeaders());
 
     assert.equal(fakeDb.userRows.length, 1);
     assert.equal(fakeDb.oauthAccountRows.length, 1);
@@ -430,6 +428,9 @@ test("GET /api/auth/oauth/github/callback completes login with verified email fa
     assert.equal(String(requests[0]?.input), "https://github.com/login/oauth/access_token");
     assert.equal(String(requests[1]?.input), "https://api.github.com/user");
     assert.equal(String(requests[2]?.input), "https://api.github.com/user/emails");
+    assert.deepEqual(requests[0]?.init?.headers, expectedTokenRequestHeaders());
+    assert.deepEqual(requests[1]?.init?.headers, expectedProfileRequestHeaders());
+    assert.deepEqual(requests[2]?.init?.headers, expectedProfileRequestHeaders());
     assert.equal(fakeDb.userRows[0]?.email, "github@example.com");
     assert.equal(fakeDb.oauthAccountRows[0]?.provider, "github");
     assert.equal(fakeDb.oauthAccountRows[0]?.providerUserId, "987654321");
@@ -797,6 +798,22 @@ function createBlockingRateLimiter() {
       allowed: false as const,
       retryAfterSeconds: 60
     })
+  };
+}
+
+function expectedTokenRequestHeaders(): Record<string, string> {
+  return {
+    accept: "application/json",
+    "content-type": "application/x-www-form-urlencoded",
+    "user-agent": "SketchCatch-OAuth/1.0"
+  };
+}
+
+function expectedProfileRequestHeaders(): Record<string, string> {
+  return {
+    accept: "application/json",
+    authorization: "Bearer provider-access-token",
+    "user-agent": "SketchCatch-OAuth/1.0"
   };
 }
 
