@@ -3,15 +3,15 @@ import { test } from "node:test";
 import type {
   AiPreDeploymentAnalysisResult,
   DesignSimulationResult,
-  LlmEnhancement,
-  LlmEnhancementFallbackReason
+  LlmExplanation,
+  LlmExplanationFallbackReason
 } from "@sketchcatch/types";
 import {
-  createConfiguredOpenAiEnhancement,
-  createOpenAiEnhancement,
+  createConfiguredOpenAiExplanation,
+  createOpenAiExplanation,
   type OpenAiClientOptions,
   type OpenAiResponsesClient
-} from "./aiLlmEnhancement.js";
+} from "./aiLlmExplanation.js";
 
 process.env.NODE_ENV = "test";
 
@@ -77,8 +77,8 @@ const preDeploymentCheckResult: AiPreDeploymentAnalysisResult = {
   ]
 };
 
-test("createOpenAiEnhancement returns parsed LLM enhancement when OpenAI succeeds", async () => {
-  const parsedEnhancement: LlmEnhancement = {
+test("createOpenAiExplanation returns parsed LLM explanation when OpenAI succeeds", async () => {
+  const parsedExplanation: LlmExplanation = {
     target: "design_simulation",
     summary: "OpenAI가 Design Simulation 결과를 쉬운 말로 정리했습니다.",
     highlights: ["단일 EC2 병목 가능성이 있습니다."],
@@ -91,29 +91,29 @@ test("createOpenAiEnhancement returns parsed LLM enhancement when OpenAI succeed
       parse: async (request) => {
         parseRequests.push(request);
 
-        return { output_parsed: parsedEnhancement };
+        return { output_parsed: parsedExplanation };
       }
     }
   };
-  const createLlmEnhancement = createOpenAiEnhancement({
+  const createLlmExplanation = createOpenAiExplanation({
     client,
     apiKey: "test-openai-api-key",
     model: "test-model"
   });
 
-  const result = await createLlmEnhancement({
+  const result = await createLlmExplanation({
     target: "design_simulation",
     result: designSimulationResult
   });
 
-  assert.deepEqual(result, parsedEnhancement);
+  assert.deepEqual(result, parsedExplanation);
   assert.equal(parseRequests.length, 1);
   assert.match(JSON.stringify(parseRequests[0]), /test-model/);
   assert.match(JSON.stringify(parseRequests[0]), /단일 EC2 처리 용량 주의/);
 });
 
-test("createConfiguredOpenAiEnhancement creates OpenAI client with timeout, no retry, and configured model", async () => {
-  const parsedEnhancement: LlmEnhancement = {
+test("createConfiguredOpenAiExplanation creates OpenAI client with timeout, no retry, and configured model", async () => {
+  const parsedExplanation: LlmExplanation = {
     target: "design_simulation",
     summary: "OpenAI SDK client가 설정된 모델로 응답했습니다.",
     highlights: ["timeout은 10초로 제한됩니다."],
@@ -122,7 +122,7 @@ test("createConfiguredOpenAiEnhancement creates OpenAI client with timeout, no r
   };
   const clientOptions: OpenAiClientOptions[] = [];
   const parseRequests: unknown[] = [];
-  const createLlmEnhancement = createConfiguredOpenAiEnhancement({
+  const createLlmExplanation = createConfiguredOpenAiExplanation({
     apiKey: "test-openai-api-key",
     model: "custom-model",
     createClient: (options) => {
@@ -133,19 +133,19 @@ test("createConfiguredOpenAiEnhancement creates OpenAI client with timeout, no r
           parse: async (request) => {
             parseRequests.push(request);
 
-            return { output_parsed: parsedEnhancement };
+            return { output_parsed: parsedExplanation };
           }
         }
       };
     }
   });
 
-  const result = await createLlmEnhancement({
+  const result = await createLlmExplanation({
     target: "design_simulation",
     result: designSimulationResult
   });
 
-  assert.deepEqual(result, parsedEnhancement);
+  assert.deepEqual(result, parsedExplanation);
   assert.deepEqual(clientOptions, [
     {
       apiKey: "test-openai-api-key",
@@ -156,8 +156,8 @@ test("createConfiguredOpenAiEnhancement creates OpenAI client with timeout, no r
   assert.match(JSON.stringify(parseRequests[0]), /custom-model/);
 });
 
-test("createOpenAiEnhancement returns provider fallback when OpenAI throws", async () => {
-  const createLlmEnhancement = createOpenAiEnhancement({
+test("createOpenAiExplanation returns provider fallback when OpenAI throws", async () => {
+  const createLlmExplanation = createOpenAiExplanation({
     apiKey: "test-openai-api-key",
     client: {
       responses: {
@@ -168,7 +168,7 @@ test("createOpenAiEnhancement returns provider fallback when OpenAI throws", asy
     }
   });
 
-  const result = await createLlmEnhancement({
+  const result = await createLlmExplanation({
     target: "design_simulation",
     result: designSimulationResult
   });
@@ -179,10 +179,10 @@ test("createOpenAiEnhancement returns provider fallback when OpenAI throws", asy
   assert.doesNotMatch(JSON.stringify(result), /raw provider message/);
 });
 
-test("createOpenAiEnhancement maps known OpenAI errors to safe fallback reasons", async () => {
+test("createOpenAiExplanation maps known OpenAI errors to safe fallback reasons", async () => {
   const cases: readonly {
     readonly errorName: string;
-    readonly fallbackReason: LlmEnhancementFallbackReason;
+    readonly fallbackReason: LlmExplanationFallbackReason;
   }[] = [
     { errorName: "APIConnectionTimeoutError", fallbackReason: "timeout" },
     { errorName: "RateLimitError", fallbackReason: "rate_limited" },
@@ -193,7 +193,7 @@ test("createOpenAiEnhancement maps known OpenAI errors to safe fallback reasons"
   for (const item of cases) {
     const providerError = new Error("raw provider message must not be exposed");
     providerError.name = item.errorName;
-    const createLlmEnhancement = createOpenAiEnhancement({
+    const createLlmExplanation = createOpenAiExplanation({
       apiKey: "test-openai-api-key",
       client: {
         responses: {
@@ -204,7 +204,7 @@ test("createOpenAiEnhancement maps known OpenAI errors to safe fallback reasons"
       }
     });
 
-    const result = await createLlmEnhancement({
+    const result = await createLlmExplanation({
       target: "design_simulation",
       result: designSimulationResult
     });
@@ -215,8 +215,8 @@ test("createOpenAiEnhancement maps known OpenAI errors to safe fallback reasons"
   }
 });
 
-test("createOpenAiEnhancement keeps valid fields and replaces invalid fields with fallback", async () => {
-  const createLlmEnhancement = createOpenAiEnhancement({
+test("createOpenAiExplanation keeps valid fields and replaces invalid fields with fallback", async () => {
+  const createLlmExplanation = createOpenAiExplanation({
     apiKey: "test-openai-api-key",
     client: {
       responses: {
@@ -233,7 +233,7 @@ test("createOpenAiEnhancement keeps valid fields and replaces invalid fields wit
     }
   });
 
-  const result = await createLlmEnhancement({
+  const result = await createLlmExplanation({
     target: "design_simulation",
     result: designSimulationResult
   });
@@ -245,8 +245,8 @@ test("createOpenAiEnhancement keeps valid fields and replaces invalid fields wit
   assert.deepEqual(result.nextActions, ["트래픽 증가 전 확장 구조를 검토하세요."]);
 });
 
-test("createOpenAiEnhancement uses fallback when parsed target does not match request target", async () => {
-  const createLlmEnhancement = createOpenAiEnhancement({
+test("createOpenAiExplanation uses fallback when parsed target does not match request target", async () => {
+  const createLlmExplanation = createOpenAiExplanation({
     apiKey: "test-openai-api-key",
     client: {
       responses: {
@@ -263,7 +263,7 @@ test("createOpenAiEnhancement uses fallback when parsed target does not match re
     }
   });
 
-  const result = await createLlmEnhancement({
+  const result = await createLlmExplanation({
     target: "pre_deployment_check",
     result: preDeploymentCheckResult
   });

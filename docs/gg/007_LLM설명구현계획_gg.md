@@ -1,4 +1,4 @@
-# LLM 보강 구현 계획
+# LLM 설명 구현 계획
 
 이 문서는 `004_마일스톤.md`의 Milestone 6 결정을 실제 구현 순서로 바꾼 계획이다.
 
@@ -16,7 +16,7 @@
 
 목표:
 
-- 모든 AI API가 같은 `llmEnhancement` 응답 구조를 쓸 수 있게 한다.
+- 모든 AI API가 같은 `llmExplanation` 응답 구조를 쓸 수 있게 한다.
 - OpenAI SDK를 API 서버 runtime dependency로 추가한다.
 - 모델명과 API key는 환경변수로 관리한다.
 
@@ -29,15 +29,15 @@
 
 구현 내용:
 
-- `LlmEnhancementTarget` 타입 추가
-- `LlmEnhancement` 타입 추가
+- `LlmExplanationTarget` 타입 추가
+- `LlmExplanation` 타입 추가
 - `fallbackReason` enum 추가
 - `OPENAI_API_KEY` 없을 때 provider 호출 생략
 - `OPENAI_MODEL` 없을 때 코드 기본 모델 사용
 
 완료 기준:
 
-- 모든 AI 응답이 `llmEnhancement`를 담을 수 있다.
+- 모든 AI 응답이 `llmExplanation`를 담을 수 있다.
 - API key가 없어도 기존 rule 결과와 fallback 설명이 반환된다.
 - OpenAI SDK가 API 서버 dependency에 추가된다.
 
@@ -56,9 +56,9 @@
 
 수정 후보:
 
-- `apps/api/src/services/aiLlmEnhancement.ts`
-- `apps/api/src/services/aiLlmEnhancementFallbacks.ts`
-- `apps/api/src/services/aiLlmEnhancementPayloads.ts`
+- `apps/api/src/services/aiLlmExplanation.ts`
+- `apps/api/src/services/aiLlmExplanationFallbacks.ts`
+- `apps/api/src/services/aiLlmExplanationPayloads.ts`
 - `apps/api/src/services/aiTerraformErrorExplanation.ts`
 - `apps/api/src/services/aiPreDeploymentAnalysis.ts`
 - `apps/api/src/services/aiDesignSimulation.ts`
@@ -97,12 +97,12 @@
 수정 후보:
 
 - `apps/api/src/services/openAiClient.ts`
-- `apps/api/src/services/aiLlmEnhancement.ts`
+- `apps/api/src/services/aiLlmExplanation.ts`
 - `apps/api/src/routes/ai.test.ts`
 
 구현 내용:
 
-- `createOpenAiEnhancement` 추가
+- `createOpenAiExplanation` 추가
 - target별 prompt builder 연결
 - OpenAI timeout 10초
 - OpenAI 실패 시 재시도 없이 fallback
@@ -112,7 +112,7 @@
 
 완료 기준:
 
-- OpenAI 성공 시 검증된 `llmEnhancement`가 반환된다.
+- OpenAI 성공 시 검증된 `llmExplanation`가 반환된다.
 - timeout, rate limit, auth error, invalid request, provider error가 safe enum으로 변환된다.
 - OpenAI 실패 로그는 `target`, `fallbackReason`, 짧은 safe message만 남긴다.
 - OpenAI 실패 시 재시도하지 않는다.
@@ -134,13 +134,13 @@
 
 수정 후보:
 
-- `apps/api/src/services/aiLlmEnhancementValidation.ts`
-- `apps/api/src/services/aiLlmEnhancementFallbacks.ts`
+- `apps/api/src/services/aiLlmExplanationValidation.ts`
+- `apps/api/src/services/aiLlmExplanationFallbacks.ts`
 - `apps/api/src/routes/ai.test.ts`
 
 구현 내용:
 
-- 공통 `llmEnhancement` schema 검증
+- 공통 `llmExplanation` schema 검증
 - `summary` 1~300자 검증
 - `highlights` 최대 5개, 각 120자 이하 검증
 - `nextActions` 최대 5개, 각 120자 이하 검증
@@ -162,12 +162,12 @@
 - 일부 필드 invalid response 테스트
 - 금지 문장 필드 fallback 테스트
 
-## Milestone 6-5. AI API route에 LLM 보강 연결
+## Milestone 6-5. AI API route에 LLM 설명 연결
 
 목표:
 
-- rule 분석이 끝난 뒤 같은 API 요청 안에서 LLM 보강을 실행한다.
-- 최종 응답은 rule 결과와 `llmEnhancement`를 함께 반환한다.
+- rule 분석이 끝난 뒤 같은 API 요청 안에서 LLM 설명을 실행한다.
+- 최종 응답은 rule 결과와 `llmExplanation`를 함께 반환한다.
 - 프론트가 rule API와 LLM API를 따로 호출하지 않게 한다.
 
 수정 후보:
@@ -185,7 +185,7 @@
 
 완료 기준:
 
-- 각 route가 rule 결과와 `llmEnhancement`를 함께 반환한다.
+- 각 route가 rule 결과와 `llmExplanation`를 함께 반환한다.
 - LLM 실패는 HTTP 성공 응답과 `fallbackUsed: true`로 표현된다.
 - rule 분석 자체 실패만 API 실패로 처리된다.
 
@@ -219,7 +219,7 @@
 
 완료 기준:
 
-- `/workspace/ai`에서 LLM 보강 설명을 볼 수 있다.
+- `/workspace/ai`에서 LLM 설명을 볼 수 있다.
 - 실제 `/workspace`에서도 관련 결과 근처에 `AI 설명`이 보인다.
 - LLM 전용 loading state가 없다.
 - 프론트가 빈 값을 임시 문구로 채우지 않는다.

@@ -282,7 +282,7 @@ export function AiWorkspaceClient() {
               ))}
             </div>
             <p className="mutedText">연결선 {draft.architectureJson.edges.length}개</p>
-            <DraftMetadataPanel llmEnhancement={draft.llmEnhancement} metadata={draft.metadata} />
+            <DraftMetadataPanel llmExplanation={draft.llmExplanation} metadata={draft.metadata} />
           </div>
         )}
         <button

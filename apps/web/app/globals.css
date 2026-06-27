@@ -947,7 +947,7 @@ h1 {
   padding-top: var(--space-3);
 }
 
-.llmEnhancementBlock {
+.llmExplanationBlock {
   background: var(--surface-elevated);
   border: 1px solid var(--border-subtle);
   border-radius: 6px;
@@ -957,7 +957,7 @@ h1 {
   padding: var(--space-3);
 }
 
-.llmEnhancementHeader {
+.llmExplanationHeader {
   align-items: center;
   display: flex;
   gap: var(--space-2);
@@ -965,7 +965,7 @@ h1 {
   min-width: 0;
 }
 
-.llmEnhancementBadge {
+.llmExplanationBadge {
   border: 1px solid color-mix(in srgb, var(--status-info) 28%, var(--border-subtle));
   border-radius: 999px;
   color: var(--status-info);
@@ -978,18 +978,18 @@ h1 {
   padding: var(--space-1) var(--space-2);
 }
 
-.llmEnhancementBadgeFallback {
+.llmExplanationBadgeFallback {
   border-color: color-mix(in srgb, var(--status-warning) 28%, var(--border-subtle));
   color: var(--status-warning);
 }
 
-.llmEnhancementSections {
+.llmExplanationSections {
   display: grid;
   gap: var(--space-4);
   min-width: 0;
 }
 
-.llmEnhancementSection {
+.llmExplanationSection {
   border-top: 1px solid var(--border-subtle);
   display: grid;
   gap: var(--space-2);
@@ -997,14 +997,14 @@ h1 {
   padding-top: var(--space-3);
 }
 
-.llmEnhancementSection h3 {
+.llmExplanationSection h3 {
   color: var(--text-primary);
   font-size: 0.875rem;
   line-height: 1.4;
   margin: 0;
 }
 
-.llmEnhancementList {
+.llmExplanationList {
   color: var(--text-secondary);
   display: grid;
   font-size: 0.875rem;
@@ -1015,7 +1015,7 @@ h1 {
   padding-left: var(--space-4);
 }
 
-.llmEnhancementList li {
+.llmExplanationList li {
   overflow-wrap: anywhere;
 }
 

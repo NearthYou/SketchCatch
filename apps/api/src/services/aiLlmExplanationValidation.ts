@@ -1,12 +1,12 @@
 import { zodTextFormat } from "openai/helpers/zod";
 import { z } from "zod";
-import type { LlmEnhancement } from "@sketchcatch/types";
+import type { LlmExplanation } from "@sketchcatch/types";
 
 const SUMMARY_MAX_LENGTH = 300;
 const ITEM_MAX_LENGTH = 120;
 const ITEM_MAX_COUNT = 5;
 const BLOCKED_GUARANTEE_PHRASES = ["배포 가능 보장", "비용 없음", "보안 안전"] as const;
-const llmEnhancementSchema: z.ZodType<LlmEnhancement> = z.object({
+const llmExplanationSchema: z.ZodType<LlmExplanation> = z.object({
   target: z.enum(["architecture_draft", "design_simulation", "pre_deployment_check", "terraform_error_explanation"]),
   summary: z.string(),
   highlights: z.array(z.string()),
@@ -14,7 +14,7 @@ const llmEnhancementSchema: z.ZodType<LlmEnhancement> = z.object({
   fallbackUsed: z.literal(false)
 });
 
-export const llmEnhancementTextFormat = zodTextFormat(llmEnhancementSchema, "llm_enhancement");
+export const llmExplanationTextFormat = zodTextFormat(llmExplanationSchema, "llm_explanation");
 
 type ValidationResult<T> = {
   readonly value: T;
@@ -22,8 +22,8 @@ type ValidationResult<T> = {
 };
 
 // OpenAI 응답은 field별로 다시 확인해 깨진 부분만 rule 기반 fallback으로 바꿉니다.
-export function validateLlmEnhancement(value: LlmEnhancement | null, fallback: LlmEnhancement): LlmEnhancement {
-  const parsed = llmEnhancementSchema.safeParse(value);
+export function validateLlmExplanation(value: LlmExplanation | null, fallback: LlmExplanation): LlmExplanation {
+  const parsed = llmExplanationSchema.safeParse(value);
 
   if (!parsed.success) {
     return fallback;

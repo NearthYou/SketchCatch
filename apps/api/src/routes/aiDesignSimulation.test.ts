@@ -37,7 +37,7 @@ const designSimulationResponseSchema = z.object({
   recommendations: z.array(z.string())
 });
 
-const llmEnhancementSchema = z.object({
+const llmExplanationSchema = z.object({
   target: z.literal("design_simulation"),
   summary: z.string(),
   highlights: z.array(z.string()),
@@ -47,7 +47,7 @@ const llmEnhancementSchema = z.object({
 });
 
 const llmEnhancedDesignSimulationResponseSchema = designSimulationResponseSchema.extend({
-  llmEnhancement: llmEnhancementSchema
+  llmExplanation: llmExplanationSchema
 });
 
 test("POST /api/ai/design-simulation estimates flow, bottlenecks, failures, and cost pressure from ArchitectureJson", async () => {
@@ -126,7 +126,7 @@ test("POST /api/ai/design-simulation estimates flow, bottlenecks, failures, and 
   await app.close();
 });
 
-test("POST /api/ai/design-simulation returns fallback llmEnhancement when API key is missing", async () => {
+test("POST /api/ai/design-simulation returns fallback llmExplanation when API key is missing", async () => {
   const originalApiKey = process.env.OPENAI_API_KEY;
   delete process.env.OPENAI_API_KEY;
 
@@ -161,11 +161,11 @@ test("POST /api/ai/design-simulation returns fallback llmEnhancement when API ke
 
     const body = llmEnhancedDesignSimulationResponseSchema.parse(response.json());
 
-    assert.equal(body.llmEnhancement.fallbackUsed, true);
-    assert.equal(body.llmEnhancement.fallbackReason, "missing_api_key");
-    assert.ok(body.llmEnhancement.summary.length > 0);
-    assert.ok(body.llmEnhancement.highlights.length > 0);
-    assert.ok(body.llmEnhancement.nextActions.length > 0);
+    assert.equal(body.llmExplanation.fallbackUsed, true);
+    assert.equal(body.llmExplanation.fallbackReason, "missing_api_key");
+    assert.ok(body.llmExplanation.summary.length > 0);
+    assert.ok(body.llmExplanation.highlights.length > 0);
+    assert.ok(body.llmExplanation.nextActions.length > 0);
   } finally {
     if (originalApiKey === undefined) {
       delete process.env.OPENAI_API_KEY;
@@ -177,12 +177,12 @@ test("POST /api/ai/design-simulation returns fallback llmEnhancement when API ke
   }
 });
 
-test("POST /api/ai/design-simulation returns fake LLM enhancement when provider succeeds", async () => {
+test("POST /api/ai/design-simulation returns fake LLM explanation when provider succeeds", async () => {
   const originalApiKey = process.env.OPENAI_API_KEY;
   process.env.OPENAI_API_KEY = "test-openai-api-key";
 
   const app = buildApp({
-    createLlmEnhancement: async () => ({
+    createLlmExplanation: async () => ({
       target: "design_simulation",
       summary: "LLM이 요청 흐름과 병목 후보를 쉬운 말로 정리했습니다.",
       highlights: ["단일 EC2가 요청을 혼자 받을 수 있습니다."],
@@ -220,10 +220,10 @@ test("POST /api/ai/design-simulation returns fake LLM enhancement when provider 
 
     const body = llmEnhancedDesignSimulationResponseSchema.parse(response.json());
 
-    assert.equal(body.llmEnhancement.fallbackUsed, false);
-    assert.equal(body.llmEnhancement.summary, "LLM이 요청 흐름과 병목 후보를 쉬운 말로 정리했습니다.");
-    assert.deepEqual(body.llmEnhancement.highlights, ["단일 EC2가 요청을 혼자 받을 수 있습니다."]);
-    assert.deepEqual(body.llmEnhancement.nextActions, ["트래픽이 늘 경우 Load Balancer를 검토하세요."]);
+    assert.equal(body.llmExplanation.fallbackUsed, false);
+    assert.equal(body.llmExplanation.summary, "LLM이 요청 흐름과 병목 후보를 쉬운 말로 정리했습니다.");
+    assert.deepEqual(body.llmExplanation.highlights, ["단일 EC2가 요청을 혼자 받을 수 있습니다."]);
+    assert.deepEqual(body.llmExplanation.nextActions, ["트래픽이 늘 경우 Load Balancer를 검토하세요."]);
   } finally {
     if (originalApiKey === undefined) {
       delete process.env.OPENAI_API_KEY;

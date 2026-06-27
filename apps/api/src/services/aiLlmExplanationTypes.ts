@@ -3,10 +3,10 @@ import type {
   AiPreDeploymentAnalysisResult,
   AiTerraformErrorExplanationResult,
   DesignSimulationResult,
-  LlmEnhancement
+  LlmExplanation
 } from "@sketchcatch/types";
 
-export type LlmEnhancementInput =
+export type LlmExplanationInput =
   | {
       readonly target: "architecture_draft";
       readonly result: AiArchitectureDraftResult;
@@ -24,4 +24,4 @@ export type LlmEnhancementInput =
       readonly result: AiTerraformErrorExplanationResult;
     };
 
-export type CreateLlmEnhancement = (input: LlmEnhancementInput) => Promise<LlmEnhancement>;
+export type CreateLlmExplanation = (input: LlmExplanationInput) => Promise<LlmExplanation>;

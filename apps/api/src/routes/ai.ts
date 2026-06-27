@@ -17,9 +17,9 @@ import {
 } from "../services/aiArchitectureDrafts.js";
 import { simulateDesign } from "../services/aiDesignSimulation.js";
 import {
-  createConfiguredOpenAiEnhancement,
-  type CreateLlmEnhancement
-} from "../services/aiLlmEnhancement.js";
+  createConfiguredOpenAiExplanation,
+  type CreateLlmExplanation
+} from "../services/aiLlmExplanation.js";
 import { analyzePreDeployment } from "../services/aiPreDeploymentAnalysis.js";
 import { explainTerraformError } from "../services/aiTerraformErrorExplanation.js";
 import { explainTerraformPreview } from "../services/aiTerraformPreviewExplanation.js";
@@ -102,18 +102,18 @@ const terraformPreviewExplanationBodySchema = z.object({
 });
 
 export type AiRouteOptions = {
-  readonly createLlmEnhancement?: CreateLlmEnhancement;
+  readonly createLlmExplanation?: CreateLlmExplanation;
 };
 
 // AI MVP API의 입구입니다. 요청 모양은 여기서 확인하고, 실제 판단은 service 함수에 맡깁니다.
 export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOptions = {}): Promise<void> {
-  const createLlmEnhancement = options.createLlmEnhancement ?? createConfiguredOpenAiEnhancement();
+  const createLlmExplanation = options.createLlmExplanation ?? createConfiguredOpenAiExplanation();
 
   app.post("/ai/architecture-draft", async (request): Promise<AiArchitectureDraftResult> => {
     const body = architectureDraftBodySchema.parse(request.body);
     const result = createArchitectureDraft(body);
 
-    return addArchitectureDraftLlmEnhancement(result, createLlmEnhancement);
+    return addArchitectureDraftLlmExplanation(result, createLlmExplanation);
   });
 
   app.post("/ai/github-architecture-draft", async (request): Promise<AiArchitectureDraftResult> => {
@@ -122,7 +122,7 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
     const evidence = await fetchRepositoryEvidence(repository);
     const result = createArchitectureDraftFromRepositoryEvidence(body.repositoryUrl, evidence);
 
-    return addArchitectureDraftLlmEnhancement(result, createLlmEnhancement);
+    return addArchitectureDraftLlmExplanation(result, createLlmExplanation);
   });
 
   app.post("/ai/pre-deployment-check", async (request): Promise<AiPreDeploymentAnalysisResult> => {
@@ -131,7 +131,7 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
 
     return {
       ...result,
-      llmEnhancement: await createLlmEnhancement({
+      llmExplanation: await createLlmExplanation({
         target: "pre_deployment_check",
         result
       })
@@ -144,7 +144,7 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
 
     return {
       ...result,
-      llmEnhancement: await createLlmEnhancement({
+      llmExplanation: await createLlmExplanation({
         target: "design_simulation",
         result
       })
@@ -166,7 +166,7 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
 
       return {
         ...result,
-        llmEnhancement: await createLlmEnhancement({
+        llmExplanation: await createLlmExplanation({
           target: "terraform_error_explanation",
           result
         })
@@ -184,14 +184,14 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
   );
 }
 
-// Architecture Draft 계열 route가 같은 LLM 보강 계약을 쓰도록 한곳에서 붙입니다.
-async function addArchitectureDraftLlmEnhancement(
+// Architecture Draft 계열 route가 같은 LLM 설명 계약을 쓰도록 한곳에서 붙입니다.
+async function addArchitectureDraftLlmExplanation(
   result: AiArchitectureDraftResult,
-  createLlmEnhancement: CreateLlmEnhancement
+  createLlmExplanation: CreateLlmExplanation
 ): Promise<AiArchitectureDraftResult> {
   return {
     ...result,
-    llmEnhancement: await createLlmEnhancement({
+    llmExplanation: await createLlmExplanation({
       target: "architecture_draft",
       result
     })

@@ -3,15 +3,15 @@ import type {
   AiPreDeploymentAnalysisResult,
   AiTerraformErrorExplanationResult,
   DesignSimulationResult,
-  LlmEnhancement,
-  LlmEnhancementFallbackReason
+  LlmExplanation,
+  LlmExplanationFallbackReason
 } from "@sketchcatch/types";
 
 // LLM이 없어도 Architecture Draft를 왜 만들었는지 metadata 기반 설명을 보여줍니다.
-export function createArchitectureDraftFallbackEnhancement(
+export function createArchitectureDraftFallbackExplanation(
   result: AiArchitectureDraftResult,
-  fallbackReason: LlmEnhancementFallbackReason
-): LlmEnhancement {
+  fallbackReason: LlmExplanationFallbackReason
+): LlmExplanation {
   return {
     target: "architecture_draft",
     summary: `${result.title} Architecture Draft를 만들었습니다.`,
@@ -23,10 +23,10 @@ export function createArchitectureDraftFallbackEnhancement(
 }
 
 // LLM을 부를 수 없을 때도 Design Simulation의 rule 결과만으로 사용자 설명을 유지합니다.
-export function createDesignSimulationFallbackEnhancement(
+export function createDesignSimulationFallbackExplanation(
   result: DesignSimulationResult,
-  fallbackReason: LlmEnhancementFallbackReason
-): LlmEnhancement {
+  fallbackReason: LlmExplanationFallbackReason
+): LlmExplanation {
   return {
     target: "design_simulation",
     summary: result.summary,
@@ -38,10 +38,10 @@ export function createDesignSimulationFallbackEnhancement(
 }
 
 // LLM 없이도 Pre-Deployment Check의 finding과 checklist를 쉬운 요약으로 보여줍니다.
-export function createPreDeploymentCheckFallbackEnhancement(
+export function createPreDeploymentCheckFallbackExplanation(
   result: AiPreDeploymentAnalysisResult,
-  fallbackReason: LlmEnhancementFallbackReason
-): LlmEnhancement {
+  fallbackReason: LlmExplanationFallbackReason
+): LlmExplanation {
   return {
     target: "pre_deployment_check",
     summary: result.summary,
@@ -53,10 +53,10 @@ export function createPreDeploymentCheckFallbackEnhancement(
 }
 
 // Terraform 오류 설명은 rule이 찾은 원인과 다음 행동을 그대로 LLM fallback 설명으로 씁니다.
-export function createTerraformErrorExplanationFallbackEnhancement(
+export function createTerraformErrorExplanationFallbackExplanation(
   result: AiTerraformErrorExplanationResult,
-  fallbackReason: LlmEnhancementFallbackReason
-): LlmEnhancement {
+  fallbackReason: LlmExplanationFallbackReason
+): LlmExplanation {
   return {
     target: "terraform_error_explanation",
     summary: result.summary,

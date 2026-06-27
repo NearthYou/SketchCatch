@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { z } from "zod";
-import type { AiPreDeploymentAnalysisResult, LlmEnhancement } from "@sketchcatch/types";
-import { createOpenAiEnhancement, type OpenAiParseRequest, type OpenAiResponsesClient } from "./aiLlmEnhancement.js";
+import type { AiPreDeploymentAnalysisResult, LlmExplanation } from "@sketchcatch/types";
+import { createOpenAiExplanation, type OpenAiParseRequest, type OpenAiResponsesClient } from "./aiLlmExplanation.js";
 
 process.env.NODE_ENV = "test";
 
@@ -42,8 +42,8 @@ const payloadSchema = z.object({
   checklist: z.array(z.string())
 });
 
-test("createOpenAiEnhancement sends Pre-Deployment Check evidence with generic AI instructions", async () => {
-  const parsedEnhancement: LlmEnhancement = {
+test("createOpenAiExplanation sends Pre-Deployment Check evidence with generic AI instructions", async () => {
+  const parsedExplanation: LlmExplanation = {
     target: "pre_deployment_check",
     summary: "OpenAI가 배포 전 검사 결과를 쉬운 말로 정리했습니다.",
     highlights: ["SSH가 전체 인터넷에 열려 있습니다."],
@@ -56,21 +56,21 @@ test("createOpenAiEnhancement sends Pre-Deployment Check evidence with generic A
       parse: async (request) => {
         parseRequests.push(request);
 
-        return { output_parsed: parsedEnhancement };
+        return { output_parsed: parsedExplanation };
       }
     }
   };
-  const createLlmEnhancement = createOpenAiEnhancement({
+  const createLlmExplanation = createOpenAiExplanation({
     client,
     apiKey: "test-openai-api-key"
   });
 
-  const result = await createLlmEnhancement({
+  const result = await createLlmExplanation({
     target: "pre_deployment_check",
     result: preDeploymentCheckResult
   });
 
-  assert.deepEqual(result, parsedEnhancement);
+  assert.deepEqual(result, parsedExplanation);
   assert.equal(parseRequests.length, 1);
 
   const [request] = parseRequests;

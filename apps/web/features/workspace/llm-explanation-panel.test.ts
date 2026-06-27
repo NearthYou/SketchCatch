@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { LlmEnhancement } from "../../../../packages/types/src";
+import type { LlmExplanation } from "../../../../packages/types/src";
 import {
-  createLlmEnhancementSections,
-  getLlmEnhancementSourceLabel
-} from "../../app/workspace/LlmEnhancementPanel";
+  createLlmExplanationSections,
+  getLlmExplanationSourceLabel
+} from "../../app/workspace/LlmExplanationPanel";
 
-const fallbackEnhancement: LlmEnhancement = {
+const fallbackExplanation: LlmExplanation = {
   target: "design_simulation",
   summary: "요청 흐름과 병목 후보를 쉬운 말로 정리했습니다.",
   highlights: ["ALB에서 EC2로 요청이 흐릅니다."],
@@ -15,8 +15,8 @@ const fallbackEnhancement: LlmEnhancement = {
   fallbackReason: "missing_api_key"
 };
 
-test("createLlmEnhancementSections groups highlights and next actions under one title each", () => {
-  assert.deepEqual(createLlmEnhancementSections(fallbackEnhancement), [
+test("createLlmExplanationSections groups highlights and next actions under one title each", () => {
+  assert.deepEqual(createLlmExplanationSections(fallbackExplanation), [
     {
       id: "highlights",
       title: "핵심",
@@ -30,6 +30,6 @@ test("createLlmEnhancementSections groups highlights and next actions under one 
   ]);
 });
 
-test("getLlmEnhancementSourceLabel shows fallback reason when fallback is used", () => {
-  assert.equal(getLlmEnhancementSourceLabel(fallbackEnhancement), "기본 설명 · API key 없음");
+test("getLlmExplanationSourceLabel shows fallback reason when fallback is used", () => {
+  assert.equal(getLlmExplanationSourceLabel(fallbackExplanation), "기본 설명 · API key 없음");
 });

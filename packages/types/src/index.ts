@@ -469,7 +469,7 @@ export type AiArchitectureDraftResult = {
   architectureJson: ArchitectureJson;
   title: string;
   metadata: AiResultMetadata;
-  llmEnhancement?: LlmEnhancement | undefined;
+  llmExplanation?: LlmExplanation | undefined;
 };
 
 export type MoneyEstimate = {
@@ -540,13 +540,13 @@ export type ArchitectureSuggestion = {
   explanation: string;
 };
 
-export type LlmEnhancementTarget =
+export type LlmExplanationTarget =
   | "architecture_draft"
   | "design_simulation"
   | "pre_deployment_check"
   | "terraform_error_explanation";
 
-export type LlmEnhancementFallbackReason =
+export type LlmExplanationFallbackReason =
   | "missing_api_key"
   | "timeout"
   | "rate_limited"
@@ -555,13 +555,13 @@ export type LlmEnhancementFallbackReason =
   | "provider_error"
   | "invalid_response";
 
-export type LlmEnhancement = {
-  target: LlmEnhancementTarget;
+export type LlmExplanation = {
+  target: LlmExplanationTarget;
   summary: string;
   highlights: string[];
   nextActions: string[];
   fallbackUsed: boolean;
-  fallbackReason?: LlmEnhancementFallbackReason | undefined;
+  fallbackReason?: LlmExplanationFallbackReason | undefined;
 };
 
 export type AiPreDeploymentAnalysisResult = {
@@ -573,7 +573,7 @@ export type AiPreDeploymentAnalysisResult = {
   findings: CheckFinding[];
   checklist: ChecklistItem[];
   suggestions: ArchitectureSuggestion[];
-  llmEnhancement?: LlmEnhancement | undefined;
+  llmExplanation?: LlmExplanation | undefined;
 };
 
 export type CreateDesignSimulationRequest = {
@@ -612,7 +612,7 @@ export type DesignSimulationResult = {
   failureScenarios: DesignSimulationFailureScenario[];
   costPressure: string[];
   recommendations: string[];
-  llmEnhancement?: LlmEnhancement | undefined;
+  llmExplanation?: LlmExplanation | undefined;
 };
 
 export type AiPreDeploymentCheckFromDiagramRequest = {
@@ -639,7 +639,7 @@ export type AiTerraformErrorExplanationResult = {
   likelyCause: string;
   nextActions: string[];
   relatedResourceId?: string | undefined;
-  llmEnhancement?: LlmEnhancement | undefined;
+  llmExplanation?: LlmExplanation | undefined;
 };
 
 export type AiTerraformDetectedResource = {

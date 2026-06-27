@@ -4,7 +4,7 @@ import type {
   AiTerraformErrorExplanationResult,
   DesignSimulationResult
 } from "@sketchcatch/types";
-import type { LlmEnhancementInput } from "./aiLlmEnhancementTypes.js";
+import type { LlmExplanationInput } from "./aiLlmExplanationTypes.js";
 
 type DesignSimulationSummaryPayload = {
   readonly target: "design_simulation";
@@ -60,7 +60,7 @@ export function createSystemInstructions(): string {
 
 // target별 rule 결과에서 OpenAI에 넘길 최소 summary payload만 만듭니다.
 export function createSummaryPayload(
-  input: LlmEnhancementInput
+  input: LlmExplanationInput
 ):
   | ArchitectureDraftSummaryPayload
   | PreDeploymentCheckSummaryPayload
@@ -94,7 +94,7 @@ function createArchitectureDraftSummaryPayload(result: AiArchitectureDraftResult
   };
 }
 
-// LLM 보강에 필요한 Resource 흐름과 위험 요약만 남겨 payload를 작게 유지합니다.
+// LLM 설명에 필요한 Resource 흐름과 위험 요약만 남겨 payload를 작게 유지합니다.
 function createDesignSimulationSummaryPayload(result: DesignSimulationResult): DesignSimulationSummaryPayload {
   return {
     target: "design_simulation",

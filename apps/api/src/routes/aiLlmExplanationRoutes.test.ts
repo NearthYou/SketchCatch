@@ -5,7 +5,7 @@ import { buildApp } from "../app.js";
 
 process.env.NODE_ENV = "test";
 
-const llmEnhancementSchema = z.object({
+const llmExplanationSchema = z.object({
   target: z.enum(["pre_deployment_check", "terraform_error_explanation", "architecture_draft"]),
   summary: z.string(),
   highlights: z.array(z.string()),
@@ -14,7 +14,7 @@ const llmEnhancementSchema = z.object({
   fallbackReason: z.string().optional()
 });
 
-test("POST /api/ai/pre-deployment-check returns fallback llmEnhancement when API key is missing", async () => {
+test("POST /api/ai/pre-deployment-check returns fallback llmExplanation when API key is missing", async () => {
   const originalApiKey = process.env.OPENAI_API_KEY;
   delete process.env.OPENAI_API_KEY;
   const app = buildApp();
@@ -54,17 +54,17 @@ test("POST /api/ai/pre-deployment-check returns fallback llmEnhancement when API
       .object({
         summary: z.string(),
         findings: z.array(z.object({ id: z.string() })),
-        llmEnhancement: llmEnhancementSchema
+        llmExplanation: llmExplanationSchema
       })
       .parse(response.json());
 
     assert.ok(body.findings.length > 0);
-    assert.equal(body.llmEnhancement.target, "pre_deployment_check");
-    assert.equal(body.llmEnhancement.fallbackUsed, true);
-    assert.equal(body.llmEnhancement.fallbackReason, "missing_api_key");
-    assert.ok(body.llmEnhancement.summary.length > 0);
-    assert.ok(body.llmEnhancement.highlights.length > 0);
-    assert.ok(body.llmEnhancement.nextActions.length > 0);
+    assert.equal(body.llmExplanation.target, "pre_deployment_check");
+    assert.equal(body.llmExplanation.fallbackUsed, true);
+    assert.equal(body.llmExplanation.fallbackReason, "missing_api_key");
+    assert.ok(body.llmExplanation.summary.length > 0);
+    assert.ok(body.llmExplanation.highlights.length > 0);
+    assert.ok(body.llmExplanation.nextActions.length > 0);
   } finally {
     if (originalApiKey === undefined) {
       delete process.env.OPENAI_API_KEY;
@@ -76,7 +76,7 @@ test("POST /api/ai/pre-deployment-check returns fallback llmEnhancement when API
   }
 });
 
-test("POST /api/ai/terraform-error-explanation returns fallback llmEnhancement when API key is missing", async () => {
+test("POST /api/ai/terraform-error-explanation returns fallback llmExplanation when API key is missing", async () => {
   const originalApiKey = process.env.OPENAI_API_KEY;
   delete process.env.OPENAI_API_KEY;
   const app = buildApp();
@@ -99,16 +99,16 @@ test("POST /api/ai/terraform-error-explanation returns fallback llmEnhancement w
         stage: z.literal("plan"),
         category: z.literal("permission"),
         summary: z.string(),
-        llmEnhancement: llmEnhancementSchema
+        llmExplanation: llmExplanationSchema
       })
       .parse(response.json());
 
-    assert.equal(body.llmEnhancement.target, "terraform_error_explanation");
-    assert.equal(body.llmEnhancement.fallbackUsed, true);
-    assert.equal(body.llmEnhancement.fallbackReason, "missing_api_key");
-    assert.ok(body.llmEnhancement.summary.length > 0);
-    assert.ok(body.llmEnhancement.highlights.length > 0);
-    assert.ok(body.llmEnhancement.nextActions.length > 0);
+    assert.equal(body.llmExplanation.target, "terraform_error_explanation");
+    assert.equal(body.llmExplanation.fallbackUsed, true);
+    assert.equal(body.llmExplanation.fallbackReason, "missing_api_key");
+    assert.ok(body.llmExplanation.summary.length > 0);
+    assert.ok(body.llmExplanation.highlights.length > 0);
+    assert.ok(body.llmExplanation.nextActions.length > 0);
   } finally {
     if (originalApiKey === undefined) {
       delete process.env.OPENAI_API_KEY;
@@ -120,7 +120,7 @@ test("POST /api/ai/terraform-error-explanation returns fallback llmEnhancement w
   }
 });
 
-test("POST /api/ai/architecture-draft returns fallback llmEnhancement when API key is missing", async () => {
+test("POST /api/ai/architecture-draft returns fallback llmExplanation when API key is missing", async () => {
   const originalApiKey = process.env.OPENAI_API_KEY;
   delete process.env.OPENAI_API_KEY;
   const app = buildApp();
@@ -147,16 +147,16 @@ test("POST /api/ai/architecture-draft returns fallback llmEnhancement when API k
           assumptions: z.array(z.string()),
           explanations: z.array(z.string())
         }),
-        llmEnhancement: llmEnhancementSchema
+        llmExplanation: llmExplanationSchema
       })
       .parse(response.json());
 
-    assert.equal(body.llmEnhancement.target, "architecture_draft");
-    assert.equal(body.llmEnhancement.fallbackUsed, true);
-    assert.equal(body.llmEnhancement.fallbackReason, "missing_api_key");
-    assert.ok(body.llmEnhancement.summary.includes(body.title));
-    assert.ok(body.llmEnhancement.highlights.length > 0);
-    assert.ok(body.llmEnhancement.nextActions.length > 0);
+    assert.equal(body.llmExplanation.target, "architecture_draft");
+    assert.equal(body.llmExplanation.fallbackUsed, true);
+    assert.equal(body.llmExplanation.fallbackReason, "missing_api_key");
+    assert.ok(body.llmExplanation.summary.includes(body.title));
+    assert.ok(body.llmExplanation.highlights.length > 0);
+    assert.ok(body.llmExplanation.nextActions.length > 0);
   } finally {
     if (originalApiKey === undefined) {
       delete process.env.OPENAI_API_KEY;
