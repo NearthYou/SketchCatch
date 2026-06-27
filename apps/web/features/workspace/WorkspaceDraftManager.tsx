@@ -13,35 +13,28 @@ import {
   writeLocalProjectDraft,
   writeWorkspaceClientMetadata
 } from "./project-draft-persistence";
-import type { LocalProjectDraft, WorkspaceCloudPlatform } from "./project-draft-persistence";
+import type { LocalProjectDraft } from "./project-draft-persistence";
 import styles from "./workspace.module.css";
 
 const LOCAL_PROJECT_ID = "local-sketchcatch-project";
 const LOCAL_PROJECT_NAME = "Local workspace";
 const LOCAL_SAVE_DEBOUNCE_MS = 800;
 
-const cloudPlatformLabels: Record<WorkspaceCloudPlatform, string> = {
-  aws: "AWS",
-  gcp: "GCP"
-};
-
 type LoadState = "loading" | "ready" | "error";
 type SaveState = "idle" | "local-pending" | "local-saved" | "failed";
 
 const saveStatusLabels: Record<SaveState, string> = {
-  idle: "로컬 편집 중",
-  "local-pending": "로컬 저장 대기",
-  "local-saved": "로컬 저장됨",
-  failed: "로컬 저장 실패"
+  idle: "편집 중",
+  "local-pending": "저장 중",
+  "local-saved": "저장됨",
+  failed: "저장 실패"
 };
 
 export function WorkspaceDraftManager() {
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [projectName, setProjectName] = useState(LOCAL_PROJECT_NAME);
-  const [cloudPlatform, setCloudPlatform] = useState<WorkspaceCloudPlatform>("aws");
   const [initialDiagram, setInitialDiagram] = useState<DiagramJson | null>(null);
-  const [localDraft, setLocalDraft] = useState<LocalProjectDraft | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const latestDiagramRef = useRef<DiagramJson>(EMPTY_DIAGRAM);
@@ -51,7 +44,6 @@ export function WorkspaceDraftManager() {
 
   const setCurrentLocalDraft = useCallback((draft: LocalProjectDraft | null) => {
     localDraftRef.current = draft;
-    setLocalDraft(draft);
   }, []);
 
   const clearLocalSaveTimer = useCallback(() => {
@@ -122,7 +114,6 @@ export function WorkspaceDraftManager() {
         hasUnsavedChangesRef.current = false;
         setWorkspaceId(nextWorkspaceId);
         setProjectName(nextProjectName);
-        setCloudPlatform(nextCloudPlatform);
         setInitialDiagram(nextDiagram);
         setCurrentLocalDraft(storedLocalDraft);
         setSaveState(storedLocalDraft ? "local-saved" : "idle");
@@ -192,9 +183,7 @@ export function WorkspaceDraftManager() {
       onDiagramChange={handleDiagramChange}
       onSave={() => void saveCurrentDraftLocally()}
       saveDisabled={saveState === "local-pending" && !workspaceId}
-      saveStatus={`${projectName} · ${cloudPlatformLabels[cloudPlatform]} · ${saveStatusLabels[saveState]}${
-        localDraft ? ` · r${localDraft.revision}` : ""
-      }`}
+      saveStatus={`${projectName} · ${saveStatusLabels[saveState]}`}
     />
   );
 }

@@ -34,32 +34,11 @@ type LocalDraftPersistResult = {
   localDraft: LocalProjectDraft;
 };
 
-const localSaveStatusLabels: Record<LocalSaveState, string> = {
-  idle: "로컬 대기",
-  "local-pending": "로컬 저장 대기",
-  "local-saved": "로컬 저장됨",
-  "local-failed": "로컬 저장 실패"
-};
-
-const serverSaveStatusLabels: Record<ServerSaveState, string> = {
-  "server-idle": "서버 대기",
-  "server-dirty": "서버 미저장 변경 있음",
-  "server-saving": "서버 저장 중",
-  "server-checkpoint-pending": "서버 체크포인트 저장 중",
-  "server-saved": "서버 저장됨",
-  "server-failed": "서버 저장 실패"
-};
-
 const sourceServerSaveState = {
   empty: "server-idle",
   local: "server-dirty",
   server: "server-saved"
 } satisfies Record<"empty" | "local" | "server", ServerSaveState>;
-
-const cloudPlatformLabels: Record<WorkspaceCloudPlatform, string> = {
-  aws: "AWS",
-  gcp: "GCP"
-};
 
 export type FlushDraftToServerResult = SavedServerProjectDiagramDraft;
 
@@ -76,12 +55,10 @@ export type ProjectWorkspaceDraftManagerProps = {
   projectName?: string | undefined;
   repository?: ProjectDraftRepository | undefined;
   serverCheckpointIntervalMs?: number | undefined;
-  showDraftDebugStatus?: boolean | undefined;
   workspaceId?: string | undefined;
 };
 
 export function ProjectWorkspaceDraftManager({
-  cloudPlatform,
   localCacheWorkspaceId,
   localSaveDebounceMs = LOCAL_SAVE_DEBOUNCE_MS,
   onDraftPersistenceReady,
@@ -89,16 +66,12 @@ export function ProjectWorkspaceDraftManager({
   projectName = "Project workspace",
   repository = defaultProjectDraftRepository,
   serverCheckpointIntervalMs = SERVER_CHECKPOINT_INTERVAL_MS,
-  showDraftDebugStatus = process.env.NODE_ENV !== "production",
   workspaceId
 }: ProjectWorkspaceDraftManagerProps) {
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [initialDiagram, setInitialDiagram] = useState<DiagramJson | null>(null);
-  const [localDraft, setLocalDraft] = useState<LocalProjectDraft | null>(null);
   const [localSaveState, setLocalSaveState] = useState<LocalSaveState>("idle");
   const [serverSaveState, setServerSaveState] = useState<ServerSaveState>("server-idle");
-  const [lastLocalSavedAt, setLastLocalSavedAt] = useState<string | null>(null);
-  const [lastServerSavedAt, setLastServerSavedAt] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const latestDiagramRef = useRef<DiagramJson>(EMPTY_DIAGRAM);
   const localDraftRef = useRef<LocalProjectDraft | null>(null);
@@ -114,7 +87,6 @@ export function ProjectWorkspaceDraftManager({
 
   const setCurrentLocalDraft = useCallback((draft: LocalProjectDraft | null) => {
     localDraftRef.current = draft;
-    setLocalDraft(draft);
   }, []);
 
   const clearLocalSaveTimer = useCallback(() => {
@@ -138,7 +110,6 @@ export function ProjectWorkspaceDraftManager({
     if (current) {
       setCurrentLocalDraft(result.localDraft);
       hasPendingLocalChangesRef.current = false;
-      setLastLocalSavedAt(result.localDraft.draftSavedAt);
       setLocalSaveState("local-saved");
     }
 
@@ -230,8 +201,6 @@ export function ProjectWorkspaceDraftManager({
               if (draftChangeVersionRef.current === serverSaveVersion) {
                 setCurrentLocalDraft(result.localDraft);
                 serverDirtyRef.current = false;
-                setLastLocalSavedAt(result.localDraft.draftSavedAt);
-                setLastServerSavedAt(result.serverDraft.serverSavedAt);
                 setLocalSaveState("local-saved");
                 setServerSaveState("server-saved");
                 return result;
@@ -306,8 +275,6 @@ export function ProjectWorkspaceDraftManager({
         setCurrentLocalDraft(loadedDraft.localDraft);
         setLocalSaveState(loadedDraft.localDraft ? "local-saved" : "idle");
         setServerSaveState(sourceServerSaveState[loadedDraft.source]);
-        setLastLocalSavedAt(loadedDraft.localDraft?.draftSavedAt ?? null);
-        setLastServerSavedAt(loadedDraft.serverDraft?.serverSavedAt ?? loadedDraft.localDraft?.serverSavedAt ?? null);
         draftReadyRef.current = true;
         setLoadState("ready");
       } catch {
@@ -397,19 +364,8 @@ export function ProjectWorkspaceDraftManager({
     );
   }
 
-  const draftStatusPanel = showDraftDebugStatus ? (
-    <DraftPersistenceStatusPanel
-      lastLocalSavedAt={lastLocalSavedAt}
-      lastServerSavedAt={lastServerSavedAt}
-      localRevision={localDraft?.revision ?? null}
-      localSaveState={localSaveState}
-      serverSaveState={serverSaveState}
-    />
-  ) : null;
-
   return (
     <DiagramEditor
-      draftStatusPanel={draftStatusPanel}
       initialDiagram={initialDiagram}
       onDiagramChange={handleDiagramChange}
       rightPanel={(context) => (
@@ -417,61 +373,33 @@ export function ProjectWorkspaceDraftManager({
       )}
       onSave={() => void flushDraftToServer("manual")}
       saveDisabled={serverSaveState === "server-saving" || serverSaveState === "server-checkpoint-pending"}
-      saveStatus={`${projectName}${cloudPlatform ? ` · ${cloudPlatformLabels[cloudPlatform]}` : ""} · ${
-        localSaveStatusLabels[localSaveState]
-      } · ${
-        serverSaveStatusLabels[serverSaveState]
-      }${
-        localDraft ? ` · r${localDraft.revision}` : ""
-      }`}
+      saveStatus={`${projectName} · ${getProjectSaveStatus(localSaveState, serverSaveState)}`}
     />
   );
 }
 
-function DraftPersistenceStatusPanel({
-  lastLocalSavedAt,
-  lastServerSavedAt,
-  localRevision,
-  localSaveState,
-  serverSaveState
-}: {
-  lastLocalSavedAt: string | null;
-  lastServerSavedAt: string | null;
-  localRevision: number | null;
-  localSaveState: LocalSaveState;
-  serverSaveState: ServerSaveState;
-}) {
-  return (
-    <div className={styles.draftStatusPanel} role="status" aria-live="polite">
-      <span className={styles.draftStatusLabel}>Dev draft status</span>
-      <span className={styles.draftStatusItem} data-state={localSaveState}>
-        IndexedDB · {localSaveStatusLabels[localSaveState]} · {formatSavedAt(lastLocalSavedAt)}
-      </span>
-      <span className={styles.draftStatusItem} data-state={serverSaveState}>
-        PostgreSQL · {serverSaveStatusLabels[serverSaveState]} · {formatSavedAt(lastServerSavedAt)}
-      </span>
-      {localRevision ? <span className={styles.draftStatusItem}>r{localRevision}</span> : null}
-    </div>
-  );
-}
-
-function formatSavedAt(savedAt: string | null): string {
-  if (!savedAt) {
-    return "마지막 저장 없음";
+function getProjectSaveStatus(localSaveState: LocalSaveState, serverSaveState: ServerSaveState): string {
+  if (localSaveState === "local-failed" || serverSaveState === "server-failed") {
+    return "저장 실패";
   }
 
-  const date = new Date(savedAt);
-
-  if (Number.isNaN(date.getTime())) {
-    return "저장 시간 확인 불가";
+  if (
+    localSaveState === "local-pending" ||
+    serverSaveState === "server-saving" ||
+    serverSaveState === "server-checkpoint-pending"
+  ) {
+    return "저장 중";
   }
 
-  return `마지막 저장 ${new Intl.DateTimeFormat("ko-KR", {
-    hour: "2-digit",
-    hour12: false,
-    minute: "2-digit",
-    second: "2-digit"
-  }).format(date)}`;
+  if (serverSaveState === "server-dirty") {
+    return "저장 필요";
+  }
+
+  if (localSaveState === "local-saved" || serverSaveState === "server-saved") {
+    return "저장됨";
+  }
+
+  return "편집 중";
 }
 
 function WorkspaceNotice({ title, body }: { title: string; body: string }) {
