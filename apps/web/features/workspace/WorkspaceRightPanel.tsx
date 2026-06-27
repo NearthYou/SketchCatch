@@ -119,16 +119,29 @@ function DeploymentPanel({
     selectedTerraformArtifactId.length > 0 &&
     selectedAwsConnectionId.length > 0 &&
     requestState !== "loading";
+  const hasCurrentPlan = Boolean(selectedDeployment?.currentPlanArtifactId);
+  const isPlanApproved = Boolean(
+    selectedDeployment?.approvedAt && selectedDeployment.approvedPlanArtifactId
+  );
   const canRunPlan =
     Boolean(selectedDeployment) &&
     selectedDeployment?.status !== "RUNNING" &&
+    !isPlanApproved &&
     requestState !== "loading";
   const canApprovePlan =
-    Boolean(selectedDeployment?.currentPlanArtifactId) &&
+    hasCurrentPlan &&
+    !isPlanApproved &&
     selectedDeployment?.status !== "RUNNING" &&
     selectedDeployment?.isBlocked === true &&
     selectedDeployment.blockedBy === "missing_approval" &&
     requestState !== "loading";
+  const shouldShowPlanButton = Boolean(selectedDeployment) && !isPlanApproved;
+  const shouldShowApprovePlanButton =
+    Boolean(selectedDeployment) && hasCurrentPlan && !isPlanApproved;
+  const shouldShowApplyButton = Boolean(selectedDeployment) && isPlanApproved;
+  const deploymentActionHint = selectedDeployment
+    ? getDeploymentActionHint(selectedDeployment)
+    : "";
 
   useEffect(() => {
     let cancelled = false;
@@ -445,24 +458,39 @@ function DeploymentPanel({
           </div>
         ) : null}
 
-        <button
-          className={styles.deploymentPrimaryButton}
-          disabled={!canRunPlan}
-          onClick={startTerraformPlan}
-          type="button"
-        >
-          <DashboardIcon name="server" />
-          Terraform Plan 실행
-        </button>
+        {shouldShowPlanButton ? (
+          <button
+            className={styles.deploymentPrimaryButton}
+            disabled={!canRunPlan}
+            onClick={startTerraformPlan}
+            type="button"
+          >
+            <DashboardIcon name="server" />
+            {hasCurrentPlan ? "Terraform Plan 다시 실행" : "Terraform Plan 실행"}
+          </button>
+        ) : null}
 
-        <button
-          className={styles.deploymentSecondaryButton}
-          disabled={!canApprovePlan}
-          onClick={approveCurrentPlan}
-          type="button"
-        >
-          Plan 승인
-        </button>
+        {shouldShowApprovePlanButton ? (
+          <button
+            className={styles.deploymentSecondaryButton}
+            disabled={!canApprovePlan}
+            onClick={approveCurrentPlan}
+            type="button"
+          >
+            Plan 승인
+          </button>
+        ) : null}
+
+        {shouldShowApplyButton ? (
+          <button className={styles.deploymentPrimaryButton} disabled type="button">
+            <DashboardIcon name="rocket" />
+            Apply 실행
+          </button>
+        ) : null}
+
+        {deploymentActionHint ? (
+          <p className={styles.deploymentHint}>{deploymentActionHint}</p>
+        ) : null}
       </section>
 
       <section className={styles.deploymentSection}>
@@ -470,14 +498,9 @@ function DeploymentPanel({
         {deploymentLogs.length === 0 ? (
           <p className={styles.deploymentHint}>아직 표시할 로그가 없습니다.</p>
         ) : (
-          <ol className={styles.deploymentLogList}>
-            {deploymentLogs.map((log) => (
-              <li key={log.id}>
-                <span>{log.level}</span>
-                <p>{log.message}</p>
-              </li>
-            ))}
-          </ol>
+          <pre aria-label="Deployment logs" className={styles.deploymentLogConsole}>
+            {deploymentLogs.map(formatDeploymentLogLine).join("\n")}
+          </pre>
         )}
       </section>
 
@@ -548,6 +571,38 @@ function formatApprovalState(deployment: Deployment): string {
   }
 
   return "승인 필요 없음";
+}
+
+function getDeploymentActionHint(deployment: Deployment): string {
+  if (deployment.status === "RUNNING") {
+    return "Terraform 작업이 진행 중입니다. 새로고침으로 상태를 확인해주세요.";
+  }
+
+  if (deployment.approvedAt) {
+    return "승인된 Plan이 준비되었습니다. 실제 Apply 실행 단계는 아직 연결 전입니다.";
+  }
+
+  if (!deployment.currentPlanArtifactId) {
+    return "Terraform Plan을 먼저 실행하면 승인 버튼이 표시됩니다.";
+  }
+
+  if (deployment.isBlocked && deployment.blockedBy === "missing_approval") {
+    return "Plan 내용을 확인한 뒤 승인할 수 있습니다.";
+  }
+
+  if (deployment.isBlocked) {
+    return "현재 Plan은 승인 전에 차단 사유를 해결해야 합니다.";
+  }
+
+  return "";
+}
+
+function formatDeploymentLogLine(log: DeploymentLog): string {
+  const sequence = String(log.sequence).padStart(3, "0");
+  const stage = log.stage.toUpperCase().padEnd(8, " ");
+  const level = log.level.padEnd(5, " ");
+
+  return `${sequence}  ${stage}  ${level}  ${log.message}`;
 }
 
 function formatShortHash(value: string | null): string {
