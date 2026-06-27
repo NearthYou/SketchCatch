@@ -6,11 +6,24 @@ import type {
   AwsConnection,
   Deployment,
   DeploymentLog,
+  DiagramNode,
   ProjectDetailsResponse,
   TerraformArtifact,
   TerraformDiagnostic
 } from "@sketchcatch/types";
-import { AlertCircle, Code2, FileCode2, GitBranch, ListTree, Rocket } from "lucide-react";
+import {
+  AlertCircle,
+  ArrowLeft,
+  ClipboardCheck,
+  Code2,
+  FileCode2,
+  GitBranch,
+  ListTree,
+  Play,
+  Rocket,
+  Trash2,
+  X
+} from "lucide-react";
 import { DashboardIcon } from "../../components/dashboard/dashboard-icons";
 import { getApiErrorMessage } from "../../lib/api-client";
 import { ParameterInputPanel } from "../parameter-input";
@@ -84,6 +97,12 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
     setActiveView(pendingView ?? "resource");
     setPendingView(null);
   }
+
+  useEffect(() => {
+    if (context.inspectedNodeId) {
+      setActiveView("terraform");
+    }
+  }, [context.inspectedNodeId]);
 
   return (
     <aside className={styles.rightPanelShell}>
@@ -169,14 +188,34 @@ function TerraformCodePanel({
   const latestDiagramFingerprintRef = useRef("");
   const latestExternalSaveRequestIdRef = useRef(externalSaveRequestId);
   const lineNumberRef = useRef<HTMLOListElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   const hasTerraformCode = terraformCode.trim().length > 0;
   const hasErrorDiagnostics = diagnostics.some((diagnostic) => diagnostic.severity === "error");
   const firstErrorDiagnostic = diagnostics.find((diagnostic) => diagnostic.severity === "error") ?? null;
   const currentDiagramFingerprint = useMemo(() => toDiagramFingerprint(context.diagram), [context.diagram]);
+  const terraformBlocks = useMemo(() => parseTerraformBlocks(terraformCode), [terraformCode]);
+  const selectedNode = useMemo(
+    () => context.nodes.find((node) => node.id === context.selectedNodeId) ?? null,
+    [context.nodes, context.selectedNodeId]
+  );
+  const inspectedNode = useMemo(
+    () => context.nodes.find((node) => node.id === context.inspectedNodeId) ?? null,
+    [context.inspectedNodeId, context.nodes]
+  );
+  const selectedBlock = useMemo(
+    () => findTerraformBlockForNode(terraformBlocks, selectedNode),
+    [selectedNode, terraformBlocks]
+  );
+  const inspectedBlock = useMemo(
+    () => findTerraformBlockForNode(terraformBlocks, inspectedNode),
+    [inspectedNode, terraformBlocks]
+  );
+  const isResourceCodeMode = Boolean(inspectedNode);
+  const displayedTerraformCode = inspectedBlock?.code ?? terraformCode;
   const lineNumbers = useMemo(
-    () => Array.from({ length: Math.max(1, terraformCode.split(/\r\n|\r|\n/).length) }, (_, index) => index + 1),
-    [terraformCode]
+    () => Array.from({ length: Math.max(1, displayedTerraformCode.split(/\r\n|\r|\n/).length) }, (_, index) => index + 1),
+    [displayedTerraformCode]
   );
 
   const runRequest = useCallback(async (request: () => Promise<void>, fallbackMessage: string) => {
@@ -313,6 +352,22 @@ function TerraformCodePanel({
     onDirtyChange(hasLocalEdits);
   }, [hasLocalEdits, onDirtyChange]);
 
+  useEffect(() => {
+    if (isResourceCodeMode || !selectedBlock || !textareaRef.current) {
+      return;
+    }
+
+    const textarea = textareaRef.current;
+    const lineHeight = Number.parseFloat(window.getComputedStyle(textarea).lineHeight) || 20;
+    textarea.scrollTop = Math.max(0, (selectedBlock.startLine - 2) * lineHeight);
+    textarea.setSelectionRange(selectedBlock.startOffset, selectedBlock.endOffset);
+    textarea.focus({ preventScroll: true });
+
+    if (lineNumberRef.current) {
+      lineNumberRef.current.scrollTop = textarea.scrollTop;
+    }
+  }, [isResourceCodeMode, selectedBlock]);
+
   function handleCodeScroll(event: UIEvent<HTMLTextAreaElement>): void {
     if (lineNumberRef.current) {
       lineNumberRef.current.scrollTop = event.currentTarget.scrollTop;
@@ -320,7 +375,16 @@ function TerraformCodePanel({
   }
 
   function handleCodeChange(nextCode: string): void {
-    setTerraformCode(nextCode);
+    if (inspectedBlock) {
+      setTerraformCode(
+        `${terraformCode.slice(0, inspectedBlock.startOffset)}${nextCode}${terraformCode.slice(
+          inspectedBlock.endOffset
+        )}`
+      );
+    } else {
+      setTerraformCode(nextCode);
+    }
+
     setHasLocalEdits(true);
     setSaveBanner({ kind: "dirty" });
     setStatusMessage("수정 중");
@@ -337,21 +401,83 @@ function TerraformCodePanel({
     document.getElementById("terraform-issues")?.scrollIntoView({ block: "nearest" });
   }
 
+  async function validateDisplayedCode(): Promise<void> {
+    if (!displayedTerraformCode.trim() || requestState === "loading") {
+      return;
+    }
+
+    await runRequest(async () => {
+      const validationResult = await validateTerraformCode(displayedTerraformCode);
+      setDiagnostics(validationResult.diagnostics);
+      setStatusMessage(validationResult.diagnostics.length === 0 ? "검증 완료" : "진단 확인 필요");
+    }, "Terraform 코드를 검증하지 못했습니다.");
+  }
+
   return (
     <div className={styles.terraformPanel}>
-      <header className={styles.terraformTopBar}>
-        <div className={styles.terraformFileChip}>
-          <FileCode2 size={16} aria-hidden="true" />
-          <span>main.tf</span>
+      {isResourceCodeMode ? (
+        <header className={styles.resourceCodeHeader}>
+          <div className={styles.resourceCodeTitle}>
+            <button
+              aria-label="전체 Terraform 코드로 돌아가기"
+              className={styles.resourceCodeBackButton}
+              onClick={context.closeInspectedNode}
+              type="button"
+            >
+              <ArrowLeft size={18} aria-hidden="true" />
+            </button>
+            <span>{inspectedNode?.label ?? inspectedNode?.parameters?.resourceName ?? "Resource"}</span>
+          </div>
+          <button
+            aria-label="리소스 코드 닫기"
+            className={styles.resourceCodeCloseButton}
+            onClick={context.closeInspectedNode}
+            type="button"
+          >
+            <X size={18} aria-hidden="true" />
+          </button>
+        </header>
+      ) : (
+        <header className={styles.terraformTopBar}>
+          <div className={styles.terraformFileChip}>
+            <FileCode2 size={16} aria-hidden="true" />
+            <span>main.tf</span>
+          </div>
+          <span className={styles.terraformShortcut}>Ctrl+S</span>
+        </header>
+      )}
+
+      {isResourceCodeMode ? (
+        <div className={styles.resourceActionBar}>
+          <button className={styles.resourceActionPrimary} disabled type="button" title="리소스 단위 plan API 연결 예정">
+            <Play size={16} aria-hidden="true" />
+            Plan
+          </button>
+          <button
+            className={styles.resourceActionSecondary}
+            disabled={requestState === "loading" || !displayedTerraformCode.trim()}
+            onClick={validateDisplayedCode}
+            type="button"
+          >
+            <ClipboardCheck size={16} aria-hidden="true" />
+            Validate
+          </button>
+          <button className={styles.resourceActionSecondary} disabled type="button" title="리소스 단위 apply API 연결 예정">
+            <Rocket size={16} aria-hidden="true" />
+            Apply
+          </button>
+          <button className={styles.resourceActionDanger} disabled type="button" title="리소스 단위 destroy API 연결 예정">
+            <Trash2 size={16} aria-hidden="true" />
+            Destroy
+          </button>
         </div>
-        <span className={styles.terraformShortcut}>Ctrl+S</span>
-      </header>
+      ) : null}
 
       <div className={styles.terraformStatusBar}>
         <span className={hasLocalEdits ? styles.terraformStatusEdited : styles.terraformStatusSynced}>
           {statusMessage}
         </span>
-        <span>{context.nodes.length} nodes</span>
+        <span>{isResourceCodeMode ? "resource code" : `${context.nodes.length} nodes`}</span>
       </div>
 
       {saveBanner ? (
@@ -374,6 +500,7 @@ function TerraformCodePanel({
           ))}
         </ol>
         <textarea
+          ref={textareaRef}
           aria-label="Terraform 코드"
           className={styles.terraformTextarea}
           onChange={(event) => handleCodeChange(event.target.value)}
@@ -383,7 +510,7 @@ function TerraformCodePanel({
   cidr_block = "10.0.0.0/16"
 }`}
           spellCheck={false}
-          value={terraformCode}
+          value={displayedTerraformCode}
         />
       </div>
 
@@ -825,6 +952,132 @@ function DeploymentPanel({
 
 function toDiagramFingerprint(value: unknown): string {
   return JSON.stringify(value);
+}
+
+type TerraformBlockLocation = {
+  readonly address: string;
+  readonly blockType: "resource" | "data";
+  readonly code: string;
+  readonly endLine: number;
+  readonly endOffset: number;
+  readonly name: string;
+  readonly startLine: number;
+  readonly startOffset: number;
+  readonly terraformType: string;
+};
+
+function findTerraformBlockForNode(
+  blocks: readonly TerraformBlockLocation[],
+  node: DiagramNode | null
+): TerraformBlockLocation | null {
+  const address = toNodeTerraformAddress(node);
+
+  if (!address) {
+    return null;
+  }
+
+  return blocks.find((block) => block.address === address) ?? null;
+}
+
+function toNodeTerraformAddress(node: DiagramNode | null): string | null {
+  const parameters = node?.parameters;
+  const resourceType = parameters?.resourceType?.trim();
+  const resourceName = parameters?.resourceName?.trim();
+
+  if (!resourceType || !resourceName) {
+    return null;
+  }
+
+  return `${resourceType}.${resourceName}`;
+}
+
+function parseTerraformBlocks(terraformCode: string): TerraformBlockLocation[] {
+  const blocks: TerraformBlockLocation[] = [];
+  const lines = terraformCode.split(/\r\n|\r|\n/);
+  const lineOffsets: number[] = [];
+  let offset = 0;
+
+  for (let index = 0; index < lines.length; index += 1) {
+    lineOffsets.push(offset);
+    offset += (lines[index] ?? "").length + 1;
+  }
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index] ?? "";
+    const headerMatch = line.match(/^\s*(resource|data)\s+"([^"]+)"\s+"([^"]+)"\s*\{/);
+
+    if (!headerMatch) {
+      continue;
+    }
+
+    const startLine = index + 1;
+    const startOffset = lineOffsets[index] ?? 0;
+    let depth = countBraceDelta(line);
+    let endIndex = index;
+    let endOffset = startOffset + line.length;
+
+    for (let scanIndex = index + 1; scanIndex < lines.length && depth > 0; scanIndex += 1) {
+      const scanLine = lines[scanIndex] ?? "";
+      depth += countBraceDelta(scanLine);
+      endIndex = scanIndex;
+      endOffset = (lineOffsets[scanIndex] ?? 0) + scanLine.length;
+    }
+
+    const blockType = headerMatch[1] as "resource" | "data";
+    const terraformType = headerMatch[2] ?? "";
+    const name = headerMatch[3] ?? "";
+
+    blocks.push({
+      address: `${terraformType}.${name}`,
+      blockType,
+      code: terraformCode.slice(startOffset, endOffset),
+      endLine: endIndex + 1,
+      endOffset,
+      name,
+      startLine,
+      startOffset,
+      terraformType
+    });
+
+    index = endIndex;
+  }
+
+  return blocks;
+}
+
+function countBraceDelta(line: string): number {
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (const character of line) {
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+
+    if (character === "\\") {
+      escaped = true;
+      continue;
+    }
+
+    if (character === "\"") {
+      inString = !inString;
+      continue;
+    }
+
+    if (inString) {
+      continue;
+    }
+
+    if (character === "{") {
+      depth += 1;
+    } else if (character === "}") {
+      depth -= 1;
+    }
+  }
+
+  return depth;
 }
 
 function formatTerraformDiagnosticTitle(diagnostic: TerraformDiagnostic): string {

@@ -220,6 +220,130 @@
   padding: 5px 8px;
 }
 
+.resourceCodeHeader {
+  align-items: center;
+  background: #ffffff;
+  border-bottom: 1px solid #dce3ee;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  min-height: 58px;
+  padding: 10px 12px;
+}
+
+.resourceCodeTitle {
+  align-items: center;
+  color: #172033;
+  display: inline-flex;
+  font-size: 17px;
+  font-weight: 900;
+  gap: 10px;
+  min-width: 0;
+}
+
+.resourceCodeTitle span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.resourceCodeBackButton,
+.resourceCodeCloseButton {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: #243044;
+  cursor: pointer;
+  display: inline-flex;
+  height: 34px;
+  justify-content: center;
+  padding: 0;
+  width: 34px;
+}
+
+.resourceCodeBackButton:hover,
+.resourceCodeBackButton:focus-visible,
+.resourceCodeCloseButton:hover,
+.resourceCodeCloseButton:focus-visible {
+  background: #f6f3ff;
+  border-color: #d8ceff;
+  color: #5f3de8;
+  outline: none;
+}
+
+.resourceActionBar {
+  align-items: center;
+  background: #ffffff;
+  border-bottom: 1px solid #dce3ee;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+  min-height: 58px;
+  padding: 10px 12px;
+}
+
+.resourceActionPrimary,
+.resourceActionSecondary,
+.resourceActionDanger {
+  align-items: center;
+  border-radius: 7px;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 850;
+  gap: 7px;
+  min-height: 38px;
+  padding: 0 14px;
+}
+
+.resourceActionPrimary {
+  background: #6f4cf6;
+  border: 1px solid #6f4cf6;
+  color: #ffffff;
+}
+
+.resourceActionSecondary {
+  background: #ffffff;
+  border: 1px solid #7c5cff;
+  color: #6f4cf6;
+}
+
+.resourceActionDanger {
+  background: #ef4444;
+  border: 1px solid #ef4444;
+  color: #ffffff;
+}
+
+.resourceActionPrimary:disabled,
+.resourceActionSecondary:disabled,
+.resourceActionDanger:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.resourceActionPrimary:not(:disabled):hover,
+.resourceActionPrimary:not(:disabled):focus-visible {
+  background: #5f3de8;
+  border-color: #5f3de8;
+  outline: none;
+}
+
+.resourceActionSecondary:not(:disabled):hover,
+.resourceActionSecondary:not(:disabled):focus-visible {
+  background: #f6f3ff;
+  outline: none;
+}
+
+.resourceActionDanger:not(:disabled):hover,
+.resourceActionDanger:not(:disabled):focus-visible {
+  background: #dc2626;
+  border-color: #dc2626;
+  outline: none;
+}
+
 .terraformActions {
   align-items: center;
   display: inline-flex;
