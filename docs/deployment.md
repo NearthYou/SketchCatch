@@ -123,6 +123,7 @@ CLOUDWATCH_LOG_GROUP_PREFIX=/sketchcatch/production
 ```text
 DATABASE_URL=<RDS PostgreSQL 연결 문자열>
 AUTH_TOKEN_SECRET=<32자 이상 인증 token 서명 secret>
+CLOUDFORMATION_TEMPLATE_TOKEN_SECRET=<32자 이상 CloudFormation template URL 서명 secret>
 ```
 
 실제 DB 비밀번호, AWS Access Key, SSH private key는 저장소에 커밋하지 않습니다.

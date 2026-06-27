@@ -19,6 +19,7 @@
 | `DiagramJson` | Architecture Board 편집 상태와 Terraform 변환 입력 |
 | `ProjectDraft` | 프로젝트별 최신 편집 draft |
 | `TerraformArtifact` | S3에 저장된 Terraform 파일 메타데이터 |
+| `AwsConnection` | 사용자가 한 번 연결해 여러 프로젝트에서 재사용하는 AWS Role 연결 metadata |
 | `Deployment` | 승인된 Terraform 실행 단위 |
 | `DeploymentLog` | Deployment 단계별 실행 로그 |
 | `CheckFinding` | Pre-Deployment Check의 단일 경고/검증 결과 |
@@ -234,6 +235,44 @@ type TerraformValidateResponse = {
 
 정적 diagnostics는 Deployment의 `init`, `validate`, `plan`, `apply` stage와 섞지 않는다. 실제 Terraform CLI 기반 검증은 Deployment 실행 흐름에서 다룬다.
 
+## AwsConnection
+
+`AwsConnection`은 프로젝트별 설정이 아니라 사용자 계정 단위의 AWS Role 연결이다. 사용자는 환경설정에서 AWS 계정을 한 번 연결하고, 각 프로젝트의 Deployment 흐름에서는 검증된 연결을 선택해 재사용한다.
+
+같은 사용자가 같은 AWS `accountId`를 `verified` 상태로 중복 연결할 수 없도록 `userId + accountId` partial unique index를 둔다. `pending` 연결은 아직 accountId를 모르기 때문에 생성될 수 있지만, verify 시점에 이미 연결된 AWS account면 실패 처리한다.
+
+DB 기준: `aws_connections`
+
+저장하는 값은 연결 metadata뿐이다. Access Key ID, Secret Access Key, Session Token, `AssumeRole` 결과 credential은 저장하지 않는다.
+
+```ts
+type AwsConnection = {
+  id: string;
+  userId: string;
+  accountId: string | null;
+  roleArn: string | null;
+  externalId: string;
+  region: "ap-northeast-2";
+  status: "pending" | "verified" | "failed";
+  lastVerifiedAt: IsoDateTimeString | null;
+  createdAt: IsoDateTimeString;
+  updatedAt: IsoDateTimeString;
+};
+```
+
+API 경로:
+
+- `GET /api/aws/connections`
+- `POST /api/aws/connections`
+- `POST /api/aws/connections/:connectionId/test`
+- `POST /api/aws/connections/:connectionId/verify`
+- `DELETE /api/aws/connections/:connectionId`
+- `GET /api/aws/connections/:connectionId/cloudformation-template`
+
+`DELETE /api/aws/connections/:connectionId`는 SketchCatch의 연결 metadata만 삭제한다. 사용자 AWS 계정에 생성된 IAM Role이나 CloudFormation Stack은 자동으로 삭제하지 않는다. `Deployment`가 참조 중인 연결은 삭제할 수 없고 `409 conflict`를 반환한다.
+
+`Deployment`는 이 연결을 `awsConnectionId`로 참조한다.
+
 ## Deployment
 
 `Deployment`는 사용자가 승인한 IaC Preview를 실제 클라우드 리소스에 반영하는 실행 단위다.
@@ -244,6 +283,7 @@ type Deployment = {
   projectId: string;
   architectureId: string;
   terraformArtifactId: string;
+  awsConnectionId: string | null;
   status: "PENDING" | "RUNNING" | "SUCCESS" | "FAILED" | "CANCELLED";
   planSummary: DeploymentPlanSummary | null;
   isBlocked: boolean;
