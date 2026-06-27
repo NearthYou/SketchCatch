@@ -18,7 +18,7 @@ import {
   listAwsConnections,
   listDeploymentLogs,
   listDeployments,
-  runDeploymentInit
+  runDeploymentPlan
 } from "./api";
 import styles from "./workspace.module.css";
 
@@ -118,7 +118,7 @@ function DeploymentPanel({
     selectedTerraformArtifactId.length > 0 &&
     selectedAwsConnectionId.length > 0 &&
     requestState !== "loading";
-  const canRunInit =
+  const canRunPlan =
     Boolean(selectedDeployment) &&
     selectedDeployment?.status !== "RUNNING" &&
     requestState !== "loading";
@@ -235,13 +235,13 @@ function DeploymentPanel({
     }, "Deployment를 생성하지 못했습니다.");
   }
 
-  async function startTerraformInit(): Promise<void> {
-    if (!selectedDeployment || !canRunInit) {
+  async function startTerraformPlan(): Promise<void> {
+    if (!selectedDeployment || !canRunPlan) {
       return;
     }
 
     await runRequest(async () => {
-      const deployment = await runDeploymentInit(selectedDeployment.id);
+      const deployment = await runDeploymentPlan(selectedDeployment.id);
       setDeployments((currentDeployments) =>
         currentDeployments.map((currentDeployment) =>
           currentDeployment.id === deployment.id ? deployment : currentDeployment
@@ -249,7 +249,7 @@ function DeploymentPanel({
       );
       setSelectedDeploymentId(deployment.id);
       setDeploymentLogs(await listDeploymentLogs(deployment.id));
-    }, "Terraform init을 시작하지 못했습니다.");
+    }, "Terraform Plan을 시작하지 못했습니다.");
   }
 
   async function refreshDeploymentPanel(): Promise<void> {
@@ -340,7 +340,7 @@ function DeploymentPanel({
         </button>
 
         {!selectedArchitectureId ? <p className={styles.deploymentHint}>먼저 architecture snapshot이 필요합니다.</p> : null}
-        {!selectedTerraformArtifactId ? <p className={styles.deploymentHint}>Terraform artifact가 있어야 init을 실행할 수 있습니다.</p> : null}
+        {!selectedTerraformArtifactId ? <p className={styles.deploymentHint}>Terraform artifact가 있어야 Plan을 실행할 수 있습니다.</p> : null}
         {!selectedAwsConnectionId ? (
           <p className={styles.deploymentHint}>환경설정에서 AWS 계정을 한 번 연결하고 검증해주세요.</p>
         ) : null}
@@ -381,19 +381,28 @@ function DeploymentPanel({
         {selectedDeployment ? (
           <div className={styles.deploymentSummary}>
             <InfoRow label="Status" value={selectedDeployment.status} />
+            <InfoRow
+              label="Current plan"
+              value={selectedDeployment.currentPlanArtifactId ?? "없음"}
+            />
             <InfoRow label="Blocked" value={selectedDeployment.isBlocked ? "yes" : "no"} />
+            <InfoRow label="Blocked by" value={selectedDeployment.blockedBy ?? "없음"} />
+            <InfoRow label="Reason" value={selectedDeployment.blockedReason ?? "없음"} />
+            {selectedDeployment.planSummary ? (
+              <PlanSummaryRows deployment={selectedDeployment} />
+            ) : null}
             <InfoRow label="Error" value={selectedDeployment.errorSummary ?? "없음"} />
           </div>
         ) : null}
 
         <button
           className={styles.deploymentPrimaryButton}
-          disabled={!canRunInit}
-          onClick={startTerraformInit}
+          disabled={!canRunPlan}
+          onClick={startTerraformPlan}
           type="button"
         >
           <DashboardIcon name="server" />
-          Terraform init 실행
+          Terraform Plan 실행
         </button>
       </section>
 
@@ -429,6 +438,36 @@ function InfoRow({ label, value }: { readonly label: string; readonly value: str
       <span>{label}</span>
       <strong>{value}</strong>
     </div>
+  );
+}
+
+function PlanSummaryRows({ deployment }: { readonly deployment: Deployment }) {
+  const summary = deployment.planSummary;
+
+  if (!summary) {
+    return null;
+  }
+
+  return (
+    <>
+      <InfoRow
+        label="Plan changes"
+        value={`+${summary.createCount} ~${summary.updateCount} -${summary.deleteCount} +/-${summary.replaceCount}`}
+      />
+      {summary.warnings.length > 0 ? (
+        <div className={styles.deploymentWarnings}>
+          <span>Warnings</span>
+          <ul>
+            {summary.warnings.map((warning, index) => (
+              <li key={`${warning.level}-${index}`}>
+                <strong>{warning.level}</strong>
+                <p>{warning.message}</p>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </>
   );
 }
 

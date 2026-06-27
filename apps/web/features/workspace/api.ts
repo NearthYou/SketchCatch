@@ -197,6 +197,18 @@ export async function runDeploymentInit(deploymentId: string): Promise<Deploymen
   return response.deployment;
 }
 
+export async function runDeploymentPlan(deploymentId: string): Promise<Deployment> {
+  const response = await apiFetch<DeploymentResponse>(
+    `/deployments/${encodeURIComponent(deploymentId)}/plan`,
+    {
+      auth: true,
+      method: "POST"
+    }
+  );
+
+  return response.deployment;
+}
+
 export async function listDeploymentLogs(deploymentId: string): Promise<DeploymentLog[]> {
   const response = await apiFetch<DeploymentLogListResponse>(
     `/deployments/${encodeURIComponent(deploymentId)}/logs`,

@@ -279,6 +279,32 @@
   overflow-wrap: anywhere;
 }
 
+.deploymentWarnings {
+  border-top: 1px solid #dce3ee;
+  padding-top: 8px;
+}
+
+.deploymentWarnings ul {
+  display: grid;
+  gap: 6px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.deploymentWarnings li {
+  display: grid;
+  gap: 3px;
+}
+
+.deploymentWarnings p {
+  color: #334155;
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
 .deploymentLogList {
   display: grid;
   gap: 8px;
