@@ -586,6 +586,10 @@ async function appendOutputLines(input: {
 }): Promise<number> {
   const lines = splitOutputLines(input.output);
 
+  if (lines.length === 0) {
+    return input.sequence;
+  }
+
   await appendDeploymentLogs(
     {
       deploymentId: input.deploymentId,
