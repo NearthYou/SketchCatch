@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { DesignSimulationResult, LlmEnhancement } from "@sketchcatch/types";
-import { createOpenAiEnhancement, type OpenAiResponsesClient } from "./aiLlmEnhancement.js";
+import {
+  createConfiguredOpenAiEnhancement,
+  createOpenAiEnhancement,
+  type OpenAiClientOptions,
+  type OpenAiResponsesClient
+} from "./aiLlmEnhancement.js";
 
 process.env.NODE_ENV = "test";
 
@@ -56,4 +61,48 @@ test("createOpenAiEnhancement returns parsed LLM enhancement when OpenAI succeed
   assert.equal(parseRequests.length, 1);
   assert.match(JSON.stringify(parseRequests[0]), /test-model/);
   assert.match(JSON.stringify(parseRequests[0]), /단일 EC2 처리 용량 주의/);
+});
+
+test("createConfiguredOpenAiEnhancement creates OpenAI client with timeout, no retry, and configured model", async () => {
+  const parsedEnhancement: LlmEnhancement = {
+    target: "design_simulation",
+    summary: "OpenAI SDK client가 설정된 모델로 응답했습니다.",
+    highlights: ["timeout은 10초로 제한됩니다."],
+    nextActions: ["실패하면 재시도 없이 fallback을 사용하세요."],
+    fallbackUsed: false
+  };
+  const clientOptions: OpenAiClientOptions[] = [];
+  const parseRequests: unknown[] = [];
+  const createLlmEnhancement = createConfiguredOpenAiEnhancement({
+    apiKey: "test-openai-api-key",
+    model: "custom-model",
+    createClient: (options) => {
+      clientOptions.push(options);
+
+      return {
+        responses: {
+          parse: async (request) => {
+            parseRequests.push(request);
+
+            return { output_parsed: parsedEnhancement };
+          }
+        }
+      };
+    }
+  });
+
+  const result = await createLlmEnhancement({
+    target: "design_simulation",
+    result: designSimulationResult
+  });
+
+  assert.deepEqual(result, parsedEnhancement);
+  assert.deepEqual(clientOptions, [
+    {
+      apiKey: "test-openai-api-key",
+      timeout: 10_000,
+      maxRetries: 0
+    }
+  ]);
+  assert.match(JSON.stringify(parseRequests[0]), /custom-model/);
 });

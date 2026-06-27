@@ -17,7 +17,7 @@ import {
 } from "../services/aiArchitectureDrafts.js";
 import { simulateDesign } from "../services/aiDesignSimulation.js";
 import {
-  createFallbackOnlyLlmEnhancement,
+  createConfiguredOpenAiEnhancement,
   type CreateLlmEnhancement
 } from "../services/aiLlmEnhancement.js";
 import { analyzePreDeployment } from "../services/aiPreDeploymentAnalysis.js";
@@ -107,7 +107,7 @@ export type AiRouteOptions = {
 
 // AI MVP API의 입구입니다. 요청 모양은 여기서 확인하고, 실제 판단은 service 함수에 맡깁니다.
 export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOptions = {}): Promise<void> {
-  const createLlmEnhancement = options.createLlmEnhancement ?? createFallbackOnlyLlmEnhancement;
+  const createLlmEnhancement = options.createLlmEnhancement ?? createConfiguredOpenAiEnhancement();
 
   app.post("/ai/architecture-draft", async (request): Promise<AiArchitectureDraftResult> => {
     const body = architectureDraftBodySchema.parse(request.body);
