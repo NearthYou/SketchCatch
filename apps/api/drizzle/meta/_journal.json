@@ -58,6 +58,34 @@
       "tag": "0007_deployment_schema_contract_cleanup",
       "breakpoints": true
     },
+    { 
+      "idx": 8,
+      "version": "7",
+      "when": 1782454926900,
+      "tag": "0008_cloudy_warhawk",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1782478744491,
+      "tag": "0009_sturdy_toad_men",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1782498104775,
+      "tag": "0010_nostalgic_adam_warlock",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1782499118532,
+      "tag": "0011_silly_jasper_sitwell",
+      "breakpoints": true
+    },
     {
       "idx": 12,
       "version": "7",

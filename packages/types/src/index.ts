@@ -188,6 +188,7 @@ export type Deployment = DeploymentBlock & {
   projectId: string;
   architectureId: string;
   terraformArtifactId: string;
+  awsConnectionId: string | null;
   status: DeploymentStatus;
   planSummary: DeploymentPlanSummary | null;
   failureStage: DeploymentFailureStage | null;
@@ -235,12 +236,104 @@ export type Template = {
   createdAt: IsoDateTimeString;
 };
 
-export type AwsCredential = {
+export type AwsConnectionStatus = "pending" | "verified" | "failed";
+
+export type AwsConnection = {
   id: string;
   userId: string;
-  accountId: string;
-  roleArn: string;
+  accountId: string | null;
+  roleArn: string | null;
+  externalId: string;
+  region: string;
+  status: AwsConnectionStatus;
+  lastVerifiedAt: IsoDateTimeString | null;
   createdAt: IsoDateTimeString;
+  updatedAt: IsoDateTimeString;
+};
+
+export type AwsConnectionListResponse = {
+  awsConnections: AwsConnection[];
+};
+
+export type CreateDeploymentRequest = {
+  architectureId: string;
+  terraformArtifactId: string;
+  awsConnectionId: string;
+};
+
+export type DeploymentResponse = {
+  deployment: Deployment;
+};
+
+export type DeploymentListResponse = {
+  deployments: Deployment[];
+};
+
+export type DeploymentLogListResponse = {
+  logs: DeploymentLog[];
+};
+
+export type CreateAwsConnectionRequest = {
+  region: string;
+};
+
+export type AwsRolePermissionSetup = {
+  verificationActions: string[];
+  initialPolicyDocument: Record<string, unknown> | null;
+  terraformPolicyDocument: Record<string, unknown> | null;
+};
+
+export type AwsRoleSetup = {
+  roleName: string;
+  trustedPrincipalArn: string;
+  externalId: string;
+  trustPolicy: Record<string, unknown>;
+  permissionSetup: AwsRolePermissionSetup;
+};
+
+export type SketchCatchCallerRoleSetup = {
+  policyName: string;
+  assumableRoleArnPattern: string;
+  policyDocument: Record<string, unknown>;
+};
+
+export type CreateAwsConnectionResponse = {
+  awsConnection: AwsConnection;
+  callerPrincipalArn: string;
+  recommendedRoleName: string;
+  roleSetup: AwsRoleSetup;
+  callerRoleSetup: SketchCatchCallerRoleSetup;
+  trustPolicyTemplate: Record<string, unknown>;
+};
+
+export type TestAwsConnectionRequest = {
+  roleArn: string;
+};
+
+export type TestAwsConnectionResponse = {
+  ok: true;
+  accountId: string;
+  callerArn: string;
+  region: string;
+};
+
+export type VerifyAwsConnectionRequest = {
+  roleArn: string;
+};
+
+export type VerifyAwsConnectionResponse = TestAwsConnectionResponse & {
+  awsConnection: AwsConnection;
+};
+
+export type AwsConnectionCloudFormationTemplateResponse = {
+  roleName: string;
+  stackName: string;
+  region: string;
+  capabilities: ["CAPABILITY_NAMED_IAM"];
+  templateBody: string;
+  templateUrl: string | null;
+  templateUrlExpiresAt: IsoDateTimeString | null;
+  launchStackUrl: string | null;
 };
 
 export type DeploymentLogLevel = "INFO" | "WARN" | "ERROR";

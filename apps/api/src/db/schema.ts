@@ -1,5 +1,16 @@
 import { relations, sql } from "drizzle-orm";
-import { boolean, index, integer, jsonb, pgEnum, pgTable, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/pg-core";
+import {
+  boolean,
+  index,
+  integer,
+  jsonb,
+  pgEnum,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+  varchar
+} from "drizzle-orm/pg-core";
 import type { ArchitectureJson, DeploymentPlanSummary, DiagramJson } from "@sketchcatch/types";
 
 export const assetTypeEnum = pgEnum("asset_type", [
@@ -39,10 +50,12 @@ export const deploymentStageEnum = pgEnum("deployment_stage", [
   "apply"
 ]);
 
-export const deploymentLogLevelEnum = pgEnum("deployment_log_level", [
-  "INFO",
-  "WARN",
-  "ERROR"
+export const deploymentLogLevelEnum = pgEnum("deployment_log_level", ["INFO", "WARN", "ERROR"]);
+
+export const awsConnectionStatusEnum = pgEnum("aws_connection_status", [
+  "pending",
+  "verified",
+  "failed"
 ]);
 
 export const oauthProviderEnum = pgEnum("oauth_provider", [
@@ -197,35 +210,67 @@ export const projectAssets = pgTable("project_assets", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
 });
 
-export const deployments = pgTable("deployments", {
-  id: varchar("id", { length: 36 }).primaryKey(),
-  projectId: varchar("project_id", { length: 36 })
-    .notNull()
-    .references(() => projects.id, { onDelete: "cascade" }),
-  architectureId: varchar("architecture_id", { length: 36 })
-    .notNull()
-    .references(() => architectures.id, { onDelete: "restrict" }),
-  terraformArtifactId: varchar("terraform_artifact_id", { length: 36 })
-    .notNull()
-    .references(() => projectAssets.id, { onDelete: "restrict" }),
-  status: deploymentStatusEnum("status").notNull().default("PENDING"),
-  planSummary: jsonb("plan_summary").$type<DeploymentPlanSummary>(),
-  isBlocked: boolean("is_blocked").notNull().default(false),
-  blockedBy: deploymentBlockedEnum("blocked_by"),
-  blockedReason: text("blocked_reason"),
-  failureStage: deploymentFailureStageEnum("failure_stage"),
-  errorSummary: text("error_summary"),
-  approvedAt: timestamp("approved_at", { withTimezone: true }),
-  approvedByUserId: varchar("approved_by_user_id", { length: 36 }).references(() => users.id, {
-    onDelete: "restrict"
-  }),
-  approvedTerraformArtifactId: varchar("approved_terraform_artifact_id", { length: 36 }).references(
-    () => projectAssets.id,
-    { onDelete: "set null" }
-  ),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
-});
+export const awsConnections = pgTable(
+  "aws_connections",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    userId: varchar("user_id", { length: 36 })
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    accountId: varchar("account_id", { length: 12 }),
+    roleArn: text("role_arn"),
+    externalId: varchar("external_id", { length: 256 }).notNull(),
+    region: varchar("region", { length: 32 }).notNull(),
+    status: awsConnectionStatusEnum("status").notNull().default("pending"),
+    lastVerifiedAt: timestamp("last_verified_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [
+    index("aws_connections_user_id_idx").on(table.userId),
+    uniqueIndex("aws_connections_user_verified_account_unique")
+      .on(table.userId, table.accountId)
+      .where(sql`${table.status} = 'verified' AND ${table.accountId} IS NOT NULL`),
+    uniqueIndex("aws_connections_external_id_unique").on(table.externalId)
+  ]
+);
+
+export const deployments = pgTable(
+  "deployments",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    projectId: varchar("project_id", { length: 36 })
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    architectureId: varchar("architecture_id", { length: 36 })
+      .notNull()
+      .references(() => architectures.id, { onDelete: "restrict" }),
+    terraformArtifactId: varchar("terraform_artifact_id", { length: 36 })
+      .notNull()
+      .references(() => projectAssets.id, { onDelete: "restrict" }),
+    awsConnectionId: varchar("aws_connection_id", { length: 36 }).references(
+      () => awsConnections.id,
+      { onDelete: "restrict" }
+    ),
+    status: deploymentStatusEnum("status").notNull().default("PENDING"),
+    planSummary: jsonb("plan_summary").$type<DeploymentPlanSummary>(),
+    isBlocked: boolean("is_blocked").notNull().default(false),
+    blockedBy: deploymentBlockedEnum("blocked_by"),
+    blockedReason: text("blocked_reason"),
+    failureStage: deploymentFailureStageEnum("failure_stage"),
+    errorSummary: text("error_summary"),
+    approvedAt: timestamp("approved_at", { withTimezone: true }),
+    approvedByUserId: varchar("approved_by_user_id", { length: 36 }).references(() => users.id, {
+      onDelete: "restrict"
+    }),
+    approvedTerraformArtifactId: varchar("approved_terraform_artifact_id", {
+      length: 36
+    }).references(() => projectAssets.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [index("deployments_aws_connection_id_idx").on(table.awsConnectionId)]
+);
 
 export const deploymentLogs = pgTable(
   "deployment_logs",
@@ -242,10 +287,7 @@ export const deploymentLogs = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
   },
   (table) => [
-    uniqueIndex("deployment_logs_deployment_sequence_unique").on(
-      table.deploymentId,
-      table.sequence
-    )
+    uniqueIndex("deployment_logs_deployment_sequence_unique").on(table.deploymentId, table.sequence)
   ]
 );
 
@@ -253,7 +295,8 @@ export const usersRelations = relations(users, ({ many }) => ({
   projects: many(projects),
   refreshTokens: many(refreshTokens),
   loginAttempts: many(loginAttempts),
-  oauthAccounts: many(oauthAccounts)
+  oauthAccounts: many(oauthAccounts),
+  awsConnections: many(awsConnections)
 }));
 
 export const refreshTokensRelations = relations(refreshTokens, ({ one }) => ({
@@ -327,6 +370,10 @@ export const deploymentsRelations = relations(deployments, ({ one, many }) => ({
     fields: [deployments.terraformArtifactId],
     references: [projectAssets.id]
   }),
+  awsConnection: one(awsConnections, {
+    fields: [deployments.awsConnectionId],
+    references: [awsConnections.id]
+  }),
   logs: many(deploymentLogs)
 }));
 
@@ -334,6 +381,13 @@ export const deploymentLogsRelations = relations(deploymentLogs, ({ one }) => ({
   deployment: one(deployments, {
     fields: [deploymentLogs.deploymentId],
     references: [deployments.id]
+  })
+}));
+
+export const awsConnectionsRelations = relations(awsConnections, ({ one }) => ({
+  user: one(users, {
+    fields: [awsConnections.userId],
+    references: [users.id]
   })
 }));
 

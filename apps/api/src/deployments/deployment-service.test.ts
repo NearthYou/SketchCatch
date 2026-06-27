@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import type { AwsConnection } from "@sketchcatch/types";
 import {
   createDeployment,
   DeploymentNotFoundError,
@@ -20,6 +21,7 @@ const otherProjectId = "99999999-9999-4999-8999-999999999999";
 const architectureId = "22222222-2222-4222-8222-222222222222";
 const terraformArtifactId = "33333333-3333-4333-8333-333333333333";
 const deploymentId = "44444444-4444-4444-8444-444444444444";
+const awsConnectionId = "77777777-7777-4777-8777-777777777777";
 const userId = "55555555-5555-4555-8555-555555555555";
 const otherUserId = "66666666-6666-4666-8666-666666666666";
 const fixedNow = new Date("2026-01-01T00:00:00.000Z");
@@ -46,12 +48,18 @@ type RepositoryCall =
       terraformArtifactId: string;
     }
   | {
+      name: "findVerifiedAwsConnectionById";
+      awsConnectionId: string;
+      accessContext: ProjectAccessContext;
+    }
+  | {
       name: "createDeployment";
       input: {
         id: string;
         projectId: string;
         architectureId: string;
         terraformArtifactId: string;
+        awsConnectionId: string;
         status: "PENDING";
       };
     }
@@ -84,6 +92,7 @@ class FakeDeploymentRepository implements DeploymentRepository {
     fileName: "main.tf",
     contentType: "application/x-terraform"
   };
+  awsConnection: AwsConnection | undefined = createVerifiedAwsConnection();
   deployment: DeploymentRecord | undefined;
   deployments: DeploymentRecord[] = [];
   logs: DeploymentLogRecord[] = [];
@@ -158,12 +167,49 @@ class FakeDeploymentRepository implements DeploymentRepository {
       terraformArtifactId: candidateTerraformArtifactId
     });
 
-    if (!this.terraformArtifactById || this.terraformArtifactById.id !== candidateTerraformArtifactId) {
+    if (
+      !this.terraformArtifactById ||
+      this.terraformArtifactById.id !== candidateTerraformArtifactId
+    ) {
       return undefined;
     }
 
     return this.terraformArtifactById;
   }
+
+  async findVerifiedAwsConnectionById(
+    candidateAwsConnectionId: string,
+    accessContext: ProjectAccessContext
+  ) {
+    this.calls.push({
+      name: "findVerifiedAwsConnectionById",
+      awsConnectionId: candidateAwsConnectionId,
+      accessContext
+    });
+
+    if (
+      !this.awsConnection ||
+      this.awsConnection.id !== candidateAwsConnectionId ||
+      this.awsConnection.userId !== accessContext.userId ||
+      this.awsConnection.status !== "verified"
+    ) {
+      return undefined;
+    }
+
+    return this.awsConnection;
+  }
+
+  markDeploymentInitRunning: DeploymentRepository["markDeploymentInitRunning"] = async (
+    candidateDeploymentId
+  ) => {
+    if (this.deployment?.id !== candidateDeploymentId || this.deployment.status === "RUNNING") {
+      return undefined;
+    }
+
+    this.deployment = { ...this.deployment, status: "RUNNING" };
+
+    return this.deployment;
+  };
 
   async createDeployment(input: Extract<RepositoryCall, { name: "createDeployment" }>["input"]) {
     this.calls.push({
@@ -297,6 +343,7 @@ function createDeploymentRecord(
     projectId,
     architectureId,
     terraformArtifactId,
+    awsConnectionId,
     status: "PENDING",
     planSummary: null,
     isBlocked: false,
@@ -355,6 +402,22 @@ function createProjectAssetRecord(overrides: Partial<ProjectAssetRecord> = {}): 
   };
 }
 
+function createVerifiedAwsConnection(overrides: Partial<AwsConnection> = {}): AwsConnection {
+  return {
+    id: awsConnectionId,
+    userId,
+    accountId: "123456789012",
+    roleArn: "arn:aws:iam::123456789012:role/SketchCatchTerraformExecutionRole",
+    externalId: "sc_conn_77777777-7777-4777-8777-777777777777_random",
+    region: "ap-northeast-2",
+    status: "verified",
+    lastVerifiedAt: "2026-06-26T00:00:00.000Z",
+    createdAt: "2026-06-26T00:00:00.000Z",
+    updatedAt: "2026-06-26T00:00:00.000Z",
+    ...overrides
+  };
+}
+
 function createInput(overrides: Partial<CreateDeploymentInput> = {}): CreateDeploymentInput {
   return {
     projectId,
@@ -364,6 +427,7 @@ function createInput(overrides: Partial<CreateDeploymentInput> = {}): CreateDepl
     },
     architectureId,
     terraformArtifactId,
+    awsConnectionId,
     ...overrides
   };
 }
@@ -396,12 +460,21 @@ test("createDeployment verifies project, architecture, and terraform artifact ow
       architectureId
     },
     {
+      name: "findVerifiedAwsConnectionById",
+      awsConnectionId,
+      accessContext: {
+        kind: "user",
+        userId
+      }
+    },
+    {
       name: "createDeployment",
       input: {
         id: deploymentId,
         projectId,
         architectureId,
         terraformArtifactId,
+        awsConnectionId,
         status: "PENDING"
       }
     }
@@ -495,6 +568,46 @@ test("createDeployment rejects an artifact that is not a terraform file for the 
       terraformArtifactId,
       projectId,
       architectureId
+    }
+  ]);
+});
+
+test("createDeployment rejects an AWS connection that is not verified for the user", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.awsConnection = createVerifiedAwsConnection({ status: "pending" });
+
+  await assert.rejects(
+    () => createDeployment(createInput(), repository, () => deploymentId),
+    new DeploymentNotFoundError("Verified AWS connection not found")
+  );
+
+  assert.deepEqual(repository.calls, [
+    {
+      name: "findAccessibleProject",
+      projectId,
+      accessContext: {
+        kind: "user",
+        userId
+      }
+    },
+    {
+      name: "findArchitectureInProject",
+      architectureId,
+      projectId
+    },
+    {
+      name: "findTerraformArtifactForArchitecture",
+      terraformArtifactId,
+      projectId,
+      architectureId
+    },
+    {
+      name: "findVerifiedAwsConnectionById",
+      awsConnectionId,
+      accessContext: {
+        kind: "user",
+        userId
+      }
     }
   ]);
 });

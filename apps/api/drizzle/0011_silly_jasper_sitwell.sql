@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "aws_connections_user_verified_account_unique" ON "aws_connections" USING btree ("user_id","account_id") WHERE "aws_connections"."status" = 'verified' AND "aws_connections"."account_id" IS NOT NULL;

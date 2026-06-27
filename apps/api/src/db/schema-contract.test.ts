@@ -2,6 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { getTableConfig } from "drizzle-orm/pg-core";
 import {
+  awsConnectionStatusEnum,
+  awsConnections,
   deploymentFailureStageEnum,
   deploymentLogs,
   deploymentStatusEnum,
@@ -52,15 +54,57 @@ test("deployment approvals reference users by approved_by_user_id", () => {
 test("deployment log sequences are unique per deployment", () => {
   const config = getTableConfig(deploymentLogs);
 
-  assert(hasUniqueIndex(config.indexes, "deployment_logs_deployment_sequence_unique", [
-    "deployment_id",
-    "sequence"
-  ]));
+  assert(
+    hasUniqueIndex(config.indexes, "deployment_logs_deployment_sequence_unique", [
+      "deployment_id",
+      "sequence"
+    ])
+  );
+});
+
+test("deployments explicitly reference the AWS connection selected for execution", () => {
+  const config = getTableConfig(deployments);
+
+  assert(findColumn(config.columns, "aws_connection_id"));
+  assert(hasIndex(config.indexes, "deployments_aws_connection_id_idx", ["aws_connection_id"]));
+  assert(
+    config.foreignKeys.some((foreignKey) => {
+      const reference = foreignKey.reference();
+
+      return (
+        reference.columns.some((column) => column.name === "aws_connection_id") &&
+        reference.foreignTable === awsConnections &&
+        reference.foreignColumns.some((column) => column.name === "id")
+      );
+    })
+  );
+});
+
+test("AWS connections store generated external ids without raw credentials", () => {
+  const config = getTableConfig(awsConnections);
+
+  assert.equal(awsConnectionStatusEnum.enumName, "aws_connection_status");
+  assert.equal(findColumn(config.columns, "project_id"), undefined);
+  assert(findColumn(config.columns, "user_id"));
+  assert(findColumn(config.columns, "external_id"));
+  assert(findColumn(config.columns, "role_arn"));
+  assert(findColumn(config.columns, "account_id"));
+  assert.equal(findColumn(config.columns, "access_key_id"), undefined);
+  assert.equal(findColumn(config.columns, "secret_access_key"), undefined);
+  assert.equal(findColumn(config.columns, "session_token"), undefined);
+  assert(hasIndex(config.indexes, "aws_connections_user_id_idx", ["user_id"]));
+  assert(
+    hasUniqueIndex(config.indexes, "aws_connections_user_verified_account_unique", [
+      "user_id",
+      "account_id"
+    ])
+  );
+  assert(hasUniqueIndex(config.indexes, "aws_connections_external_id_unique", ["external_id"]));
 });
 
 function findColumn(columns: Array<{ name: string }>, name: string) {
   return columns.find((column) => column.name === name) as
-    | ({ name: string; primary?: boolean })
+    | { name: string; primary?: boolean }
     | undefined;
 }
 
@@ -79,6 +123,23 @@ function hasUniqueIndex(
     (index) =>
       index.config.name === name &&
       index.config.unique === true &&
+      index.config.columns.map(getColumnName).join(",") === columns.join(",")
+  );
+}
+
+function hasIndex(
+  indexes: Array<{
+    config: {
+      name?: string;
+      columns: unknown[];
+    };
+  }>,
+  name: string,
+  columns: string[]
+): boolean {
+  return indexes.some(
+    (index) =>
+      index.config.name === name &&
       index.config.columns.map(getColumnName).join(",") === columns.join(",")
   );
 }

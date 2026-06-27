@@ -7,6 +7,15 @@ import {
   type ProjectAccessContext
 } from "./deployment-service.js";
 import {
+  prepareTerraformAwsCredentialEnv as defaultPrepareTerraformAwsCredentialEnv,
+  type PreparedTerraformAwsCredentialEnv
+} from "../aws-connections/aws-connection-runtime-credentials.js";
+import {
+  createAwsSdkStsGateway,
+  type AwsConnectionStsGateway
+} from "../aws-connections/aws-connection-test-service.js";
+import type { AwsConnection } from "@sketchcatch/types";
+import {
   prepareTerraformWorkspace as defaultPrepareTerraformWorkspace,
   type PreparedTerraformWorkspace
 } from "./terraform-workspace.js";
@@ -24,6 +33,10 @@ export type RunDeploymentInitInput = {
 export type RunDeploymentInitOptions = {
   prepareTerraformWorkspace?: typeof defaultPrepareTerraformWorkspace;
   runTerraformInit?: typeof defaultRunTerraformInit;
+  prepareTerraformAwsCredentialEnv?: (
+    awsConnection: AwsConnection
+  ) => Promise<PreparedTerraformAwsCredentialEnv>;
+  awsStsGateway?: AwsConnectionStsGateway;
 };
 
 export type RunDeploymentInitResult = {
@@ -39,6 +52,13 @@ export async function runDeploymentInit(
   const prepareTerraformWorkspace =
     options.prepareTerraformWorkspace ?? defaultPrepareTerraformWorkspace;
   const runTerraformInit = options.runTerraformInit ?? defaultRunTerraformInit;
+  const prepareTerraformAwsCredentialEnv =
+    options.prepareTerraformAwsCredentialEnv ??
+    ((awsConnection: AwsConnection) =>
+      defaultPrepareTerraformAwsCredentialEnv(
+        awsConnection,
+        options.awsStsGateway ?? createAwsSdkStsGateway()
+      ));
 
   let workspace: PreparedTerraformWorkspace | undefined;
   let deploymentId: string | undefined;
@@ -66,6 +86,21 @@ export async function runDeploymentInit(
       throw new DeploymentNotFoundError("Terraform artifact does not match deployment");
     }
 
+    if (!deployment.awsConnectionId) {
+      throw new DeploymentNotFoundError("Deployment AWS connection is missing");
+    }
+
+    const awsConnection = await repository.findVerifiedAwsConnectionById(
+      deployment.awsConnectionId,
+      input.accessContext
+    );
+
+    if (!awsConnection) {
+      throw new DeploymentNotFoundError("Verified AWS connection not found for deployment");
+    }
+
+    const awsCredentials = await prepareTerraformAwsCredentialEnv(awsConnection);
+
     workspace = await prepareTerraformWorkspace({
       objectKey: artifact.objectKey,
       fileName: artifact.fileName
@@ -73,7 +108,9 @@ export async function runDeploymentInit(
 
     await repository.updateDeploymentStatus(deployment.id, "RUNNING");
 
-    const terraform = await runTerraformInit(workspace.workdir);
+    const terraform = await runTerraformInit(workspace.workdir, {
+      env: awsCredentials.env
+    });
     let sequence = await getNextLogSequence(deployment.id, repository);
 
     sequence = await appendOutputLines({
@@ -183,9 +220,10 @@ function summarizeTerraformFailure(result: TerraformRunResult): string {
     return "Terraform init timed out";
   }
 
-  return (
-    splitOutputLines(result.stderr)[0] ?? `Terraform init failed with exit code ${result.exitCode}`
-  );
+  const summary =
+    splitOutputLines(result.stderr)[0] ?? `Terraform init failed with exit code ${result.exitCode}`;
+
+  return maskDeploymentMessage(summary);
 }
 
 function summarizeUnexpectedInitFailure(error: unknown): string {

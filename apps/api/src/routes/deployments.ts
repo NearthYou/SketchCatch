@@ -12,6 +12,7 @@ import {
 import {
   createDeployment,
   createPostgresDeploymentRepository,
+  DeploymentConflictError,
   DeploymentNotFoundError,
   getDeployment,
   listProjectDeployments,
@@ -30,7 +31,8 @@ const createDeploymentParamsSchema = z.object({
 
 const createDeploymentBodySchema = z.object({
   architectureId: z.uuid(),
-  terraformArtifactId: z.uuid()
+  terraformArtifactId: z.uuid(),
+  awsConnectionId: z.uuid()
 });
 
 const deploymentParamsSchema = z.object({
@@ -79,6 +81,13 @@ function handleDeploymentError(error: unknown, reply: FastifyReply) {
     });
   }
 
+  if (error instanceof DeploymentConflictError) {
+    return reply.status(409).send({
+      error: "conflict",
+      message: error.message
+    });
+  }
+
   throw error;
 }
 
@@ -88,6 +97,7 @@ function toDeployment(row: DeploymentRow): Deployment {
     projectId: row.projectId,
     architectureId: row.architectureId,
     terraformArtifactId: row.terraformArtifactId,
+    awsConnectionId: row.awsConnectionId,
     status: row.status as Deployment["status"],
     planSummary: row.planSummary,
     isBlocked: row.isBlocked,
@@ -137,7 +147,8 @@ export async function registerDeploymentRoutes(
           projectId: params.projectId,
           accessContext,
           architectureId: body.architectureId,
-          terraformArtifactId: body.terraformArtifactId
+          terraformArtifactId: body.terraformArtifactId,
+          awsConnectionId: body.awsConnectionId
         },
         repository
       );
@@ -219,10 +230,14 @@ export async function registerDeploymentRoutes(
       );
       await requireDeploymentInitArtifact(deployment, repository);
 
-      const runningDeployment = await repository.updateDeploymentStatus(deployment.id, "RUNNING");
+      if (deployment.status === "RUNNING") {
+        throw new DeploymentConflictError("Deployment init is already running");
+      }
+
+      const runningDeployment = await repository.markDeploymentInitRunning(deployment.id);
 
       if (!runningDeployment) {
-        throw new DeploymentNotFoundError("Deployment not found");
+        throw new DeploymentConflictError("Deployment init could not be started");
       }
 
       startDeploymentInitJob(
