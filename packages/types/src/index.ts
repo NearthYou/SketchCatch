@@ -1,3 +1,4 @@
+// allow: SIZE_OK - shared package root contract; splitting needs a separate repo-wide migration.
 export type IsoDateTimeString = string;
 
 export type ApiErrorCode =
@@ -519,6 +520,7 @@ export type AiPreDeploymentAnalysisResult = {
   findings: CheckFinding[];
   checklist: ChecklistItem[];
   suggestions: ArchitectureSuggestion[];
+  llmEnhancement?: LlmEnhancement | undefined;
 };
 
 export type CreateDesignSimulationRequest = {

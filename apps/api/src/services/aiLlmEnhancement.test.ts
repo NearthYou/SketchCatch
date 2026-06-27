@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { DesignSimulationResult, LlmEnhancement, LlmEnhancementFallbackReason } from "@sketchcatch/types";
+import type {
+  AiPreDeploymentAnalysisResult,
+  DesignSimulationResult,
+  LlmEnhancement,
+  LlmEnhancementFallbackReason
+} from "@sketchcatch/types";
 import {
   createConfiguredOpenAiEnhancement,
   createOpenAiEnhancement,
@@ -26,6 +31,50 @@ const designSimulationResult: DesignSimulationResult = {
   failureScenarios: [],
   costPressure: [],
   recommendations: ["EC2가 하나뿐이면 트래픽 증가 시 확장 구조를 검토하세요."]
+};
+
+const preDeploymentCheckResult: AiPreDeploymentAnalysisResult = {
+  summary: "배포 전 확인할 보안 항목이 있습니다.",
+  totalMonthlyEstimate: {
+    amount: 0,
+    currency: "USD",
+    pricingAssumption: "rule 기반 추정"
+  },
+  resourceCostEstimates: [],
+  findings: [
+    {
+      id: "finding-public-ssh",
+      category: "security",
+      severity: "high",
+      resourceId: "sg-public-ssh",
+      title: "SSH가 전체 인터넷에 열려 있습니다.",
+      description: "0.0.0.0/0 SSH 접근은 실습 환경에서도 위험합니다.",
+      recommendation: "허용 CIDR을 제한하세요."
+    }
+  ],
+  checklist: [
+    {
+      id: "check-public-ssh",
+      label: "SSH 접근 범위 제한",
+      status: "fail",
+      relatedFindingIds: ["finding-public-ssh"]
+    }
+  ],
+  suggestions: [
+    {
+      id: "suggest-public-ssh",
+      findingId: "finding-public-ssh",
+      title: "SSH CIDR 제한",
+      targetResourceId: "sg-public-ssh",
+      action: "modify_resource",
+      expectedImpact: {
+        cost: "neutral",
+        security: "improve",
+        reliability: "neutral"
+      },
+      explanation: "SSH 허용 대상을 개인 IP로 제한하세요."
+    }
+  ]
 };
 
 test("createOpenAiEnhancement returns parsed LLM enhancement when OpenAI succeeds", async () => {
@@ -194,4 +243,33 @@ test("createOpenAiEnhancement keeps valid fields and replaces invalid fields wit
   assert.equal(result.summary, "OpenAI가 만든 정상 요약입니다.");
   assert.deepEqual(result.highlights, ["단일 EC2 병목 가능성이 있습니다."]);
   assert.deepEqual(result.nextActions, ["트래픽 증가 전 확장 구조를 검토하세요."]);
+});
+
+test("createOpenAiEnhancement uses fallback when parsed target does not match request target", async () => {
+  const createLlmEnhancement = createOpenAiEnhancement({
+    apiKey: "test-openai-api-key",
+    client: {
+      responses: {
+        parse: async () => ({
+          output_parsed: {
+            target: "design_simulation",
+            summary: "OpenAI가 다른 target으로 응답했습니다.",
+            highlights: ["요청 target과 다른 설명입니다."],
+            nextActions: ["이 값은 그대로 쓰면 안 됩니다."],
+            fallbackUsed: false
+          }
+        })
+      }
+    }
+  });
+
+  const result = await createLlmEnhancement({
+    target: "pre_deployment_check",
+    result: preDeploymentCheckResult
+  });
+
+  assert.equal(result.target, "pre_deployment_check");
+  assert.equal(result.fallbackUsed, true);
+  assert.equal(result.fallbackReason, "invalid_response");
+  assert.equal(result.summary, preDeploymentCheckResult.summary);
 });

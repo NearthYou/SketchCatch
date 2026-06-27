@@ -125,8 +125,15 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
 
   app.post("/ai/pre-deployment-check", async (request): Promise<AiPreDeploymentAnalysisResult> => {
     const body = preDeploymentCheckBodySchema.parse(request.body);
+    const result = analyzePreDeployment(body.architectureJson);
 
-    return analyzePreDeployment(body.architectureJson);
+    return {
+      ...result,
+      llmEnhancement: await createLlmEnhancement({
+        target: "pre_deployment_check",
+        result
+      })
+    };
   });
 
   app.post("/ai/design-simulation", async (request): Promise<DesignSimulationResult> => {

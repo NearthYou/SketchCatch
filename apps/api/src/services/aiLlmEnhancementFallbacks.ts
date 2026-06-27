@@ -1,4 +1,9 @@
-import type { DesignSimulationResult, LlmEnhancement, LlmEnhancementFallbackReason } from "@sketchcatch/types";
+import type {
+  AiPreDeploymentAnalysisResult,
+  DesignSimulationResult,
+  LlmEnhancement,
+  LlmEnhancementFallbackReason
+} from "@sketchcatch/types";
 
 // LLM을 부를 수 없을 때도 Design Simulation의 rule 결과만으로 사용자 설명을 유지합니다.
 export function createDesignSimulationFallbackEnhancement(
@@ -10,6 +15,21 @@ export function createDesignSimulationFallbackEnhancement(
     summary: result.summary,
     highlights: createDesignSimulationHighlights(result),
     nextActions: createDesignSimulationNextActions(result),
+    fallbackUsed: true,
+    fallbackReason
+  };
+}
+
+// LLM 없이도 Pre-Deployment Check의 finding과 checklist를 쉬운 요약으로 보여줍니다.
+export function createPreDeploymentCheckFallbackEnhancement(
+  result: AiPreDeploymentAnalysisResult,
+  fallbackReason: LlmEnhancementFallbackReason
+): LlmEnhancement {
+  return {
+    target: "pre_deployment_check",
+    summary: result.summary,
+    highlights: createPreDeploymentCheckHighlights(result),
+    nextActions: createPreDeploymentCheckNextActions(result),
     fallbackUsed: true,
     fallbackReason
   };
@@ -40,4 +60,35 @@ function createDesignSimulationNextActions(result: DesignSimulationResult): stri
 
 function isNonEmptyString(value: string | undefined): value is string {
   return typeof value === "string" && value.trim().length > 0;
+}
+
+// finding과 checklist 중 사용자가 먼저 볼 항목만 추려 fallback highlight로 만듭니다.
+function createPreDeploymentCheckHighlights(result: AiPreDeploymentAnalysisResult): string[] {
+  const checklistIssues = result.checklist
+    .filter((item) => item.status !== "pass")
+    .map((item) => item.label);
+  const highlights = [
+    ...result.findings.map((finding) => finding.title),
+    ...checklistIssues
+  ].filter(isNonEmptyString);
+
+  if (highlights.length === 0) {
+    return ["현재 rule 기반 Pre-Deployment Check에서 막는 항목은 없습니다."];
+  }
+
+  return highlights.slice(0, 5);
+}
+
+// ArchitectureSuggestion이 있으면 그 설명을 다음 행동으로 쓰고, 없으면 재점검 행동을 제안합니다.
+function createPreDeploymentCheckNextActions(result: AiPreDeploymentAnalysisResult): string[] {
+  const nextActions = result.suggestions
+    .map((suggestion) => suggestion.explanation)
+    .filter(isNonEmptyString)
+    .slice(0, 5);
+
+  if (nextActions.length > 0) {
+    return nextActions;
+  }
+
+  return ["Architecture Board 설정을 확인한 뒤 Pre-Deployment Check를 다시 실행하세요."];
 }
