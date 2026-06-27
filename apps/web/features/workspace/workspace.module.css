@@ -103,43 +103,79 @@
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   min-height: 100%;
+  position: relative;
 }
 
-.rightPanelTabs {
+.rightPanelToolbar {
+  align-items: center;
   background: #ffffff;
   border-bottom: 1px solid #dde5f2;
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  padding: 10px;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  min-height: 58px;
+  padding: 10px 12px;
   position: sticky;
   top: 0;
-  z-index: 2;
+  z-index: 4;
 }
 
-.rightPanelTab,
-.rightPanelTabActive {
+.panelModeToggle {
+  align-items: center;
+  background: #eef0f4;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  display: inline-flex;
+  gap: 3px;
+  padding: 4px;
+}
+
+.panelModeButton,
+.panelModeButtonActive,
+.panelIconButton,
+.panelIconButtonActive {
+  align-items: center;
   background: transparent;
   border: 1px solid transparent;
   border-radius: 6px;
   color: #58677d;
   cursor: pointer;
-  font: inherit;
-  font-size: 13px;
-  font-weight: 800;
-  min-height: 34px;
+  display: inline-flex;
+  height: 34px;
+  justify-content: center;
+  padding: 0;
+  width: 34px;
 }
 
-.rightPanelTabActive {
-  background: #eef4ff;
-  border-color: #c9d9ff;
-  color: #1f5eff;
+.panelModeButtonActive,
+.panelIconButtonActive {
+  background: #ffffff;
+  border-color: #d8ceff;
+  box-shadow: 0 1px 4px rgba(23, 32, 51, 0.12);
+  color: #6f4cf6;
+}
+
+.panelIconButton,
+.panelIconButtonActive {
+  background: #ffffff;
+  border-color: #cbd5e1;
+}
+
+.panelModeButton:hover,
+.panelModeButton:focus-visible,
+.panelIconButton:hover,
+.panelIconButton:focus-visible {
+  background: #f6f3ff;
+  border-color: #d8ceff;
+  color: #5f3de8;
+  outline: none;
 }
 
 .terraformPanel {
   background: #f7f9fd;
   color: #172033;
   display: grid;
-  grid-template-rows: auto auto minmax(320px, 1fr) auto;
+  grid-template-rows: auto auto auto minmax(320px, 1fr) auto;
   min-height: 100%;
 }
 
@@ -172,6 +208,16 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.terraformShortcut {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 900;
+  padding: 5px 8px;
 }
 
 .terraformActions {
@@ -284,6 +330,47 @@
   box-shadow: inset 0 0 0 2px rgba(111, 76, 246, 0.62);
 }
 
+.terraformSaveBanner,
+.terraformSaveBannerError {
+  align-items: center;
+  display: flex;
+  font-size: 13px;
+  font-weight: 750;
+  gap: 10px;
+  justify-content: space-between;
+  min-height: 34px;
+  padding: 7px 10px;
+}
+
+.terraformSaveBanner {
+  background: #2c2c2c;
+  color: #b7bec8;
+}
+
+.terraformSaveBannerError {
+  background: #f1434a;
+  color: #ffffff;
+}
+
+.terraformSaveBanner button,
+.terraformSaveBannerError button {
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 900;
+  padding: 0;
+  text-decoration: underline;
+}
+
+.terraformSaveBanner button:focus-visible,
+.terraformSaveBannerError button:focus-visible {
+  border-radius: 4px;
+  outline: 2px solid currentColor;
+  outline-offset: 3px;
+}
+
 .terraformDiagnostics {
   background: #ffffff;
   border-top: 1px solid #dce3ee;
@@ -389,6 +476,101 @@
   color: #475569;
   font-size: 12px;
   line-height: 1.45;
+}
+
+.terraformDialogBackdrop {
+  align-items: center;
+  backdrop-filter: blur(5px);
+  background: rgba(15, 23, 42, 0.38);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 24px;
+  position: absolute;
+  z-index: 10;
+}
+
+.terraformDialog {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  box-shadow: 0 22px 64px rgba(15, 23, 42, 0.28);
+  color: #111827;
+  display: grid;
+  gap: 14px;
+  max-width: 520px;
+  padding: 28px 34px;
+  width: min(100%, 520px);
+}
+
+.terraformDialog h2 {
+  font-size: 18px;
+  line-height: 1.25;
+  margin: 0;
+}
+
+.terraformDialog p {
+  color: #1f2937;
+  font-size: 15px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.terraformDialogActions {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 8px;
+}
+
+.terraformDialogDangerButton,
+.terraformDialogSecondaryButton,
+.terraformDialogPrimaryButton {
+  border-radius: 7px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 850;
+  min-height: 38px;
+  padding: 0 12px;
+}
+
+.terraformDialogDangerButton {
+  background: #ef4444;
+  border: 1px solid #ef4444;
+  color: #ffffff;
+}
+
+.terraformDialogSecondaryButton {
+  background: #ffffff;
+  border: 1px solid #7c5cff;
+  color: #6f4cf6;
+}
+
+.terraformDialogPrimaryButton {
+  background: #6f4cf6;
+  border: 1px solid #6f4cf6;
+  color: #ffffff;
+}
+
+.terraformDialogDangerButton:hover,
+.terraformDialogDangerButton:focus-visible {
+  background: #dc2626;
+  border-color: #dc2626;
+  outline: none;
+}
+
+.terraformDialogSecondaryButton:hover,
+.terraformDialogSecondaryButton:focus-visible {
+  background: #f6f3ff;
+  outline: none;
+}
+
+.terraformDialogPrimaryButton:hover,
+.terraformDialogPrimaryButton:focus-visible {
+  background: #5f3de8;
+  border-color: #5f3de8;
+  outline: none;
 }
 
 .deploymentPanel {

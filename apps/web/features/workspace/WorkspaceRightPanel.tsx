@@ -1,16 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { UIEvent } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent, UIEvent } from "react";
 import type {
   AwsConnection,
   Deployment,
   DeploymentLog,
   ProjectDetailsResponse,
-  TerraformDiagnostic,
-  TerraformArtifact
+  TerraformArtifact,
+  TerraformDiagnostic
 } from "@sketchcatch/types";
-import { Code2, GitBranch, Play, RefreshCw, ShieldCheck } from "lucide-react";
+import { AlertCircle, Code2, FileCode2, GitBranch, ListTree, Rocket } from "lucide-react";
 import { DashboardIcon } from "../../components/dashboard/dashboard-icons";
 import { getApiErrorMessage } from "../../lib/api-client";
 import { ParameterInputPanel } from "../parameter-input";
@@ -28,7 +28,7 @@ import {
 } from "./api";
 import styles from "./workspace.module.css";
 
-type WorkspaceRightPanelTab = "resource" | "terraform" | "deployment";
+type WorkspaceRightPanelView = "resource" | "terraform" | "deployment";
 type RequestState = "idle" | "loading" | "error";
 
 export type WorkspaceRightPanelProps = {
@@ -38,44 +38,96 @@ export type WorkspaceRightPanelProps = {
 };
 
 export function WorkspaceRightPanel({ context, projectId, projectName }: WorkspaceRightPanelProps) {
-  const [activeTab, setActiveTab] = useState<WorkspaceRightPanelTab>("resource");
+  const [activeView, setActiveView] = useState<WorkspaceRightPanelView>("resource");
+  const [pendingView, setPendingView] = useState<WorkspaceRightPanelView | null>(null);
+  const [hasUnsavedTerraformChanges, setHasUnsavedTerraformChanges] = useState(false);
+  const [showTerraformLeaveDialog, setShowTerraformLeaveDialog] = useState(false);
+  const [terraformSaveRequestId, setTerraformSaveRequestId] = useState(0);
+
+  function requestView(nextView: WorkspaceRightPanelView): void {
+    if (nextView === activeView) {
+      return;
+    }
+
+    if (activeView === "terraform" && hasUnsavedTerraformChanges) {
+      setPendingView(nextView);
+      setShowTerraformLeaveDialog(true);
+      return;
+    }
+
+    setActiveView(nextView);
+  }
+
+  function continueTerraformEditing(): void {
+    setPendingView(null);
+    setShowTerraformLeaveDialog(false);
+  }
+
+  function discardTerraformChanges(): void {
+    setHasUnsavedTerraformChanges(false);
+    setShowTerraformLeaveDialog(false);
+    setActiveView(pendingView ?? "resource");
+    setPendingView(null);
+  }
+
+  function saveTerraformBeforeLeaving(): void {
+    setTerraformSaveRequestId((requestId) => requestId + 1);
+  }
+
+  function handleTerraformExternalSaveComplete(saved: boolean): void {
+    if (!saved || !showTerraformLeaveDialog) {
+      return;
+    }
+
+    setHasUnsavedTerraformChanges(false);
+    setShowTerraformLeaveDialog(false);
+    setActiveView(pendingView ?? "resource");
+    setPendingView(null);
+  }
 
   return (
     <aside className={styles.rightPanelShell}>
-      <div className={styles.rightPanelTabs} role="tablist" aria-label="보드 오른쪽 패널">
+      <div className={styles.rightPanelToolbar}>
+        <div className={styles.panelModeToggle} role="group" aria-label="패널 모드">
+          <button
+            aria-pressed={activeView === "resource"}
+            className={activeView === "resource" ? styles.panelModeButtonActive : styles.panelModeButton}
+            onClick={() => requestView("resource")}
+            title="리소스 모드"
+            type="button"
+          >
+            <ListTree size={18} aria-hidden="true" />
+          </button>
+          <button
+            aria-pressed={activeView === "terraform"}
+            className={activeView === "terraform" ? styles.panelModeButtonActive : styles.panelModeButton}
+            onClick={() => requestView("terraform")}
+            title="Terraform 모드"
+            type="button"
+          >
+            <Code2 size={18} aria-hidden="true" />
+          </button>
+        </div>
         <button
-          aria-selected={activeTab === "resource"}
-          className={activeTab === "resource" ? styles.rightPanelTabActive : styles.rightPanelTab}
-          onClick={() => setActiveTab("resource")}
-          role="tab"
+          aria-pressed={activeView === "deployment"}
+          className={activeView === "deployment" ? styles.panelIconButtonActive : styles.panelIconButton}
+          onClick={() => requestView("deployment")}
+          title="배포"
           type="button"
         >
-          리소스
-        </button>
-        <button
-          aria-selected={activeTab === "terraform"}
-          className={activeTab === "terraform" ? styles.rightPanelTabActive : styles.rightPanelTab}
-          onClick={() => setActiveTab("terraform")}
-          role="tab"
-          type="button"
-        >
-          Terraform
-        </button>
-        <button
-          aria-selected={activeTab === "deployment"}
-          className={activeTab === "deployment" ? styles.rightPanelTabActive : styles.rightPanelTab}
-          onClick={() => setActiveTab("deployment")}
-          role="tab"
-          type="button"
-        >
-          배포
+          <Rocket size={18} aria-hidden="true" />
         </button>
       </div>
 
-      {activeTab === "resource" ? (
+      {activeView === "resource" ? (
         <ParameterInputPanel {...context} />
-      ) : activeTab === "terraform" ? (
-        <TerraformCodePanel context={context} />
+      ) : activeView === "terraform" ? (
+        <TerraformCodePanel
+          context={context}
+          externalSaveRequestId={terraformSaveRequestId}
+          onDirtyChange={setHasUnsavedTerraformChanges}
+          onExternalSaveComplete={handleTerraformExternalSaveComplete}
+        />
       ) : (
         <DeploymentPanel
           currentNodeCount={context.nodes.length}
@@ -83,22 +135,45 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
           projectName={projectName}
         />
       )}
+
+      {showTerraformLeaveDialog ? (
+        <TerraformLeaveDialog
+          onContinue={continueTerraformEditing}
+          onDiscard={discardTerraformChanges}
+          onSave={saveTerraformBeforeLeaving}
+        />
+      ) : null}
     </aside>
   );
 }
 
-function TerraformCodePanel({ context }: { readonly context: DiagramEditorPanelContext }) {
+function TerraformCodePanel({
+  context,
+  externalSaveRequestId,
+  onDirtyChange,
+  onExternalSaveComplete
+}: {
+  readonly context: DiagramEditorPanelContext;
+  readonly externalSaveRequestId: number;
+  readonly onDirtyChange: (isDirty: boolean) => void;
+  readonly onExternalSaveComplete: (saved: boolean) => void;
+}) {
   const [terraformCode, setTerraformCode] = useState("");
   const [diagnostics, setDiagnostics] = useState<TerraformDiagnostic[]>([]);
   const [requestState, setRequestState] = useState<RequestState>("idle");
   const [errorMessage, setErrorMessage] = useState("");
   const [statusMessage, setStatusMessage] = useState("main.tf");
   const [hasLocalEdits, setHasLocalEdits] = useState(false);
-  const hasLoadedInitialCodeRef = useRef(false);
+  const [saveBanner, setSaveBanner] = useState<TerraformSaveBanner | null>(null);
+  const codeRequestIdRef = useRef(0);
+  const latestDiagramFingerprintRef = useRef("");
+  const latestExternalSaveRequestIdRef = useRef(externalSaveRequestId);
   const lineNumberRef = useRef<HTMLOListElement | null>(null);
 
   const hasTerraformCode = terraformCode.trim().length > 0;
   const hasErrorDiagnostics = diagnostics.some((diagnostic) => diagnostic.severity === "error");
+  const firstErrorDiagnostic = diagnostics.find((diagnostic) => diagnostic.severity === "error") ?? null;
+  const currentDiagramFingerprint = useMemo(() => toDiagramFingerprint(context.diagram), [context.diagram]);
   const lineNumbers = useMemo(
     () => Array.from({ length: Math.max(1, terraformCode.split(/\r\n|\r|\n/).length) }, (_, index) => index + 1),
     [terraformCode]
@@ -117,24 +192,126 @@ function TerraformCodePanel({ context }: { readonly context: DiagramEditorPanelC
     }
   }, []);
 
-  const refreshTerraformCode = useCallback(async () => {
+  const refreshTerraformCode = useCallback(
+    async (diagramFingerprint: string) => {
+      const requestId = codeRequestIdRef.current + 1;
+      codeRequestIdRef.current = requestId;
+
+      await runRequest(async () => {
+        const generatedCode = await generateTerraformCode(context.diagram);
+
+        if (requestId !== codeRequestIdRef.current) {
+          return;
+        }
+
+        setTerraformCode(generatedCode);
+        setDiagnostics([]);
+        setHasLocalEdits(false);
+        setSaveBanner(null);
+        setStatusMessage("그래프 기준으로 동기화됨");
+        latestDiagramFingerprintRef.current = diagramFingerprint;
+        onDirtyChange(false);
+      }, "Terraform 코드를 생성하지 못했습니다.");
+    },
+    [context.diagram, onDirtyChange, runRequest]
+  );
+
+  const saveCodeToDiagram = useCallback(async (): Promise<boolean> => {
+    if (!hasTerraformCode || requestState === "loading") {
+      return false;
+    }
+
+    let saved = false;
+
     await runRequest(async () => {
-      const generatedCode = await generateTerraformCode(context.diagram);
-      setTerraformCode(generatedCode);
-      setDiagnostics([]);
+      const validationResult = await validateTerraformCode(terraformCode);
+      setDiagnostics(validationResult.diagnostics);
+
+      const validationError = validationResult.diagnostics.find(
+        (diagnostic) => diagnostic.severity === "error"
+      );
+
+      if (validationError) {
+        setSaveBanner({
+          kind: "error",
+          line: validationError.line,
+          message: validationError.message
+        });
+        setStatusMessage("저장 실패");
+        return;
+      }
+
+      const syncResult = await syncTerraformToDiagram({
+        diagramJson: context.diagram,
+        terraformCode
+      });
+      setDiagnostics(syncResult.diagnostics);
+
+      const syncError = syncResult.diagnostics.find((diagnostic) => diagnostic.severity === "error");
+
+      if (syncError) {
+        setSaveBanner({
+          kind: "error",
+          line: syncError.line,
+          message: syncError.message
+        });
+        setStatusMessage("저장 실패");
+        return;
+      }
+
+      context.applyDiagramJson(syncResult.diagramJson);
+      latestDiagramFingerprintRef.current = toDiagramFingerprint(syncResult.diagramJson);
       setHasLocalEdits(false);
-      setStatusMessage("그래프 기준으로 생성됨");
-    }, "Terraform 코드를 생성하지 못했습니다.");
-  }, [context.diagram, runRequest]);
+      setSaveBanner(null);
+      setStatusMessage("저장됨");
+      onDirtyChange(false);
+      saved = true;
+    }, "Terraform 코드를 저장하지 못했습니다.");
+
+    return saved;
+  }, [
+    context,
+    hasTerraformCode,
+    onDirtyChange,
+    requestState,
+    runRequest,
+    terraformCode
+  ]);
 
   useEffect(() => {
-    if (hasLoadedInitialCodeRef.current || context.nodes.length === 0) {
+    if (latestExternalSaveRequestIdRef.current === externalSaveRequestId) {
       return;
     }
 
-    hasLoadedInitialCodeRef.current = true;
-    void refreshTerraformCode();
-  }, [context.nodes.length, refreshTerraformCode]);
+    latestExternalSaveRequestIdRef.current = externalSaveRequestId;
+    void saveCodeToDiagram().then(onExternalSaveComplete);
+  }, [externalSaveRequestId, onExternalSaveComplete, saveCodeToDiagram]);
+
+  useEffect(() => {
+    if (context.nodes.length === 0 || hasLocalEdits) {
+      return;
+    }
+
+    if (latestDiagramFingerprintRef.current === currentDiagramFingerprint && terraformCode.length > 0) {
+      return;
+    }
+
+    const timerId = setTimeout(() => {
+      void refreshTerraformCode(currentDiagramFingerprint);
+    }, 250);
+
+    return () => clearTimeout(timerId);
+  }, [
+    context.nodes.length,
+    currentDiagramFingerprint,
+    hasLocalEdits,
+    refreshTerraformCode,
+    terraformCode.length
+  ]);
+
+  useEffect(() => {
+    onDirtyChange(hasLocalEdits);
+  }, [hasLocalEdits, onDirtyChange]);
 
   function handleCodeScroll(event: UIEvent<HTMLTextAreaElement>): void {
     if (lineNumberRef.current) {
@@ -145,81 +322,29 @@ function TerraformCodePanel({ context }: { readonly context: DiagramEditorPanelC
   function handleCodeChange(nextCode: string): void {
     setTerraformCode(nextCode);
     setHasLocalEdits(true);
-    setStatusMessage("수정됨");
+    setSaveBanner({ kind: "dirty" });
+    setStatusMessage("수정 중");
   }
 
-  async function validateCode(): Promise<void> {
-    if (!hasTerraformCode) {
-      return;
+  function handleCodeKeyDown(event: ReactKeyboardEvent<HTMLTextAreaElement>): void {
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
+      event.preventDefault();
+      void saveCodeToDiagram();
     }
-
-    await runRequest(async () => {
-      const result = await validateTerraformCode(terraformCode);
-      setDiagnostics(result.diagnostics);
-      setStatusMessage(result.diagnostics.length === 0 ? "문법 문제 없음" : "진단 확인 필요");
-    }, "Terraform 문법을 점검하지 못했습니다.");
   }
 
-  async function applyCodeToDiagram(): Promise<void> {
-    if (!hasTerraformCode) {
-      return;
-    }
-
-    await runRequest(async () => {
-      const result = await syncTerraformToDiagram({
-        diagramJson: context.diagram,
-        terraformCode
-      });
-
-      setDiagnostics(result.diagnostics);
-
-      if (result.diagnostics.some((diagnostic) => diagnostic.severity === "error")) {
-        setStatusMessage("적용 차단됨");
-        return;
-      }
-
-      context.applyDiagramJson(result.diagramJson);
-      setHasLocalEdits(false);
-      setStatusMessage("다이어그램에 적용됨");
-    }, "Terraform 코드를 다이어그램에 적용하지 못했습니다.");
+  function handleSeeMore(): void {
+    document.getElementById("terraform-issues")?.scrollIntoView({ block: "nearest" });
   }
 
   return (
     <div className={styles.terraformPanel}>
       <header className={styles.terraformTopBar}>
         <div className={styles.terraformFileChip}>
-          <Code2 size={16} aria-hidden="true" />
+          <FileCode2 size={16} aria-hidden="true" />
           <span>main.tf</span>
         </div>
-        <div className={styles.terraformActions}>
-          <button
-            aria-label="그래프에서 Terraform 코드 생성"
-            disabled={requestState === "loading"}
-            onClick={refreshTerraformCode}
-            title="그래프에서 Terraform 코드 생성"
-            type="button"
-          >
-            <RefreshCw size={16} aria-hidden="true" />
-          </button>
-          <button
-            aria-label="Terraform 문법 점검"
-            disabled={requestState === "loading" || !hasTerraformCode}
-            onClick={validateCode}
-            title="Terraform 문법 점검"
-            type="button"
-          >
-            <ShieldCheck size={16} aria-hidden="true" />
-          </button>
-          <button
-            aria-label="Terraform 코드를 다이어그램에 적용"
-            disabled={requestState === "loading" || !hasTerraformCode}
-            onClick={applyCodeToDiagram}
-            title="Terraform 코드를 다이어그램에 적용"
-            type="button"
-          >
-            <Play size={16} aria-hidden="true" />
-          </button>
-        </div>
+        <span className={styles.terraformShortcut}>Ctrl+S</span>
       </header>
 
       <div className={styles.terraformStatusBar}>
@@ -228,6 +353,19 @@ function TerraformCodePanel({ context }: { readonly context: DiagramEditorPanelC
         </span>
         <span>{context.nodes.length} nodes</span>
       </div>
+
+      {saveBanner ? (
+        <div className={saveBanner.kind === "error" ? styles.terraformSaveBannerError : styles.terraformSaveBanner}>
+          <span>
+            {saveBanner.kind === "error"
+              ? `Unable to save. There is an issue${saveBanner.line ? ` on line ${saveBanner.line}` : ""}.`
+              : "You have unsaved changes. Press CTRL+S to save"}
+          </span>
+          <button onClick={handleSeeMore} type="button">
+            See more
+          </button>
+        </div>
+      ) : null}
 
       <div className={styles.terraformEditorFrame}>
         <ol ref={lineNumberRef} className={styles.terraformLineNumbers} aria-hidden="true">
@@ -239,6 +377,7 @@ function TerraformCodePanel({ context }: { readonly context: DiagramEditorPanelC
           aria-label="Terraform 코드"
           className={styles.terraformTextarea}
           onChange={(event) => handleCodeChange(event.target.value)}
+          onKeyDown={handleCodeKeyDown}
           onScroll={handleCodeScroll}
           placeholder={`resource "aws_vpc" "main" {
   cidr_block = "10.0.0.0/16"
@@ -248,16 +387,20 @@ function TerraformCodePanel({ context }: { readonly context: DiagramEditorPanelC
         />
       </div>
 
-      <section className={styles.terraformDiagnostics} aria-live="polite">
+      <section className={styles.terraformDiagnostics} aria-live="polite" id="terraform-issues">
         <div className={styles.terraformDiagnosticsHeader}>
-          <GitBranch size={15} aria-hidden="true" />
+          {firstErrorDiagnostic ? (
+            <AlertCircle size={15} aria-hidden="true" />
+          ) : (
+            <GitBranch size={15} aria-hidden="true" />
+          )}
           <h3>Issues</h3>
           <span className={hasErrorDiagnostics ? styles.terraformIssueCountError : styles.terraformIssueCount}>
             {diagnostics.length}
           </span>
         </div>
 
-        {requestState === "loading" ? <p className={styles.terraformNotice}>요청을 처리하는 중입니다.</p> : null}
+        {requestState === "loading" ? <p className={styles.terraformNotice}>저장 중입니다.</p> : null}
         {requestState === "error" ? (
           <p className={styles.terraformError} role="alert">
             {errorMessage}
@@ -276,6 +419,52 @@ function TerraformCodePanel({ context }: { readonly context: DiagramEditorPanelC
             ))}
           </ol>
         ) : null}
+      </section>
+    </div>
+  );
+}
+
+type TerraformSaveBanner =
+  | {
+      readonly kind: "dirty";
+    }
+  | {
+      readonly kind: "error";
+      readonly line?: number | undefined;
+      readonly message: string;
+    };
+
+function TerraformLeaveDialog({
+  onContinue,
+  onDiscard,
+  onSave
+}: {
+  readonly onContinue: () => void;
+  readonly onDiscard: () => void;
+  readonly onSave: () => void;
+}) {
+  return (
+    <div className={styles.terraformDialogBackdrop} role="presentation">
+      <section
+        aria-labelledby="terraform-leave-title"
+        aria-modal="true"
+        className={styles.terraformDialog}
+        role="dialog"
+      >
+        <h2 id="terraform-leave-title">Save changes before leaving?</h2>
+        <p>You have unsaved Terraform changes that will be lost if you leave without saving.</p>
+        <p>Do you want to save your changes?</p>
+        <div className={styles.terraformDialogActions}>
+          <button className={styles.terraformDialogDangerButton} onClick={onDiscard} type="button">
+            Discard Changes
+          </button>
+          <button className={styles.terraformDialogSecondaryButton} onClick={onContinue} type="button">
+            Continue editing
+          </button>
+          <button className={styles.terraformDialogPrimaryButton} onClick={onSave} type="button">
+            Save Changes
+          </button>
+        </div>
       </section>
     </div>
   );
@@ -553,7 +742,7 @@ function DeploymentPanel({
         {!selectedArchitectureId ? <p className={styles.deploymentHint}>먼저 architecture snapshot이 필요합니다.</p> : null}
         {!selectedTerraformArtifactId ? <p className={styles.deploymentHint}>Terraform artifact가 있어야 init을 실행할 수 있습니다.</p> : null}
         {!selectedAwsConnectionId ? (
-          <p className={styles.deploymentHint}>환경설정에서 AWS 계정을 한 번 연결하고 검증해주세요.</p>
+          <p className={styles.deploymentHint}>환경설정에서 AWS 계정을 연결하고 검증해주세요.</p>
         ) : null}
       </section>
 
@@ -632,6 +821,10 @@ function DeploymentPanel({
       ) : null}
     </div>
   );
+}
+
+function toDiagramFingerprint(value: unknown): string {
+  return JSON.stringify(value);
 }
 
 function formatTerraformDiagnosticTitle(diagnostic: TerraformDiagnostic): string {
