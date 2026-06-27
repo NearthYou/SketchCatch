@@ -1,6 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import type { ApiErrorResponse, TerraformGenerateResponse } from "@sketchcatch/types";
+import type {
+  ApiErrorResponse,
+  TerraformGenerateResponse,
+  TerraformValidateResponse
+} from "@sketchcatch/types";
 import { buildApp } from "../app.js";
 import { createAccessToken } from "../auth/tokens.js";
 import type { DatabaseClient } from "../db/client.js";
@@ -26,7 +30,7 @@ test("POST /api/terraform/generate returns Terraform code for an active user", a
   const response = await app.inject({
     method: "POST",
     url: "/api/terraform/generate",
-    headers: authHeaders(ACTIVE_USER_ID),
+    headers: await authHeaders(ACTIVE_USER_ID),
     payload: {
       diagramJson: {
         nodes: [
@@ -109,7 +113,7 @@ test("POST /api/terraform/generate returns 400 for an invalid body", async () =>
   const response = await app.inject({
     method: "POST",
     url: "/api/terraform/generate",
-    headers: authHeaders(ACTIVE_USER_ID),
+    headers: await authHeaders(ACTIVE_USER_ID),
     payload: {
       diagramJson: {
         nodes: []
@@ -123,9 +127,9 @@ test("POST /api/terraform/generate returns 400 for an invalid body", async () =>
   await app.close();
 });
 
-function authHeaders(userId: string): Record<string, string> {
+async function authHeaders(userId: string): Promise<Record<string, string>> {
   return {
-    authorization: `Bearer ${createAccessToken(userId)}`
+    authorization: `Bearer ${await createAccessToken(userId)}`
   };
 }
 
@@ -166,3 +170,84 @@ class AuthOnlyFakeDb {
     };
   }
 }
+
+test("POST /api/terraform/validate returns diagnostics for an active user", async () => {
+  const fakeDb = new AuthOnlyFakeDb({
+    users: [
+      {
+        id: ACTIVE_USER_ID,
+        deletedAt: null
+      }
+    ]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/terraform/validate",
+    headers: await authHeaders(ACTIVE_USER_ID),
+    payload: {
+      terraformCode: `resource "aws_subnet" "public" {
+  vpc_id = "aws_vpc.main.id"
+}`
+    }
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(
+    (response.json() as TerraformValidateResponse).diagnostics[0]?.code,
+    "terraform.quoted_reference"
+  );
+
+  await app.close();
+});
+
+test("POST /api/terraform/validate returns 401 without auth", async () => {
+  const fakeDb = new AuthOnlyFakeDb({ users: [] });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/terraform/validate",
+    payload: {
+      terraformCode: ""
+    }
+  });
+
+  assert.equal(response.statusCode, 401);
+  assertErrorResponse(response.json() as ApiErrorResponse, "unauthorized");
+
+  await app.close();
+});
+
+test("POST /api/terraform/validate returns 400 for an invalid body", async () => {
+  const fakeDb = new AuthOnlyFakeDb({
+    users: [
+      {
+        id: ACTIVE_USER_ID,
+        deletedAt: null
+      }
+    ]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/terraform/validate",
+    headers: await authHeaders(ACTIVE_USER_ID),
+    payload: {
+      terraformCode: 123
+    }
+  });
+
+  assert.equal(response.statusCode, 400);
+  assertErrorResponse(response.json() as ApiErrorResponse, "bad_request");
+
+  await app.close();
+});

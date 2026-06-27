@@ -33,6 +33,7 @@ type DeploymentResponse = {
     status: string;
     failureStage: string | null;
     errorSummary: string | null;
+    approvedByUserId: string | null;
     createdAt: string;
     updatedAt: string;
   };
@@ -363,7 +364,7 @@ function createDeploymentRecord(
     failureStage: null,
     errorSummary: null,
     approvedAt: null,
-    approvedBy: null,
+    approvedByUserId: null,
     approvedTerraformArtifactId: null,
     createdAt: fixedNow,
     updatedAt: fixedNow,
@@ -434,9 +435,9 @@ function createUserRecord(overrides: Partial<UserRecord> = {}): UserRecord {
   };
 }
 
-function authHeaders(activeUserId = userId): Record<string, string> {
+async function authHeaders(activeUserId = userId): Promise<Record<string, string>> {
   return {
-    authorization: `Bearer ${createAccessToken(activeUserId)}`
+    authorization: `Bearer ${await createAccessToken(activeUserId)}`
   };
 }
 
@@ -483,7 +484,7 @@ test("POST /api/projects/:projectId/deployments returns a created deployment", a
   const response = await app.inject({
     method: "POST",
     url: `/api/projects/${projectId}/deployments`,
-    headers: authHeaders(),
+    headers: await authHeaders(),
     payload: createDeploymentBody()
   });
 
@@ -537,7 +538,7 @@ test("POST /api/projects/:projectId/deployments maps ownership validation failur
   const response = await app.inject({
     method: "POST",
     url: `/api/projects/${projectId}/deployments`,
-    headers: authHeaders(),
+    headers: await authHeaders(),
     payload: createDeploymentBody()
   });
 
@@ -573,16 +574,21 @@ test("POST /api/projects/:projectId/deployments maps ownership validation failur
 
 test("GET /api/deployments/:deploymentId returns a deployment", async () => {
   const repository = new FakeDeploymentRepository();
+  repository.deployment = createDeploymentRecord(deploymentId, {
+    approvedByUserId: userId
+  });
   const app = await buildDeploymentTestApp(repository);
 
   const response = await app.inject({
     method: "GET",
     url: `/api/deployments/${deploymentId}`,
-    headers: authHeaders()
+    headers: await authHeaders()
   });
 
   assert.equal(response.statusCode, 200);
-  assert.equal((response.json() as DeploymentResponse).deployment.id, deploymentId);
+  const body = response.json() as DeploymentResponse;
+  assert.equal(body.deployment.id, deploymentId);
+  assert.equal(body.deployment.approvedByUserId, userId);
   assert.deepEqual(repository.calls, [
     {
       name: "findDeploymentById",
@@ -609,7 +615,7 @@ test("GET /api/deployments/:deploymentId maps missing deployments to not_found",
   const response = await app.inject({
     method: "GET",
     url: `/api/deployments/${deploymentId}`,
-    headers: authHeaders()
+    headers: await authHeaders()
   });
 
   assert.equal(response.statusCode, 404);
@@ -655,7 +661,7 @@ test("POST /api/deployments/:deploymentId/init starts Terraform init in the back
   const response = await app.inject({
     method: "POST",
     url: `/api/deployments/${deploymentId}/init`,
-    headers: authHeaders()
+    headers: await authHeaders()
   });
 
   assert.equal(response.statusCode, 202);
@@ -687,7 +693,7 @@ test("POST /api/deployments/:deploymentId/init maps missing deployments to not_f
   const response = await app.inject({
     method: "POST",
     url: `/api/deployments/${deploymentId}/init`,
-    headers: authHeaders()
+    headers: await authHeaders()
   });
 
   assert.equal(response.statusCode, 404);
@@ -726,7 +732,7 @@ test("POST /api/deployments/:deploymentId/init returns accepted when background 
   const response = await app.inject({
     method: "POST",
     url: `/api/deployments/${deploymentId}/init`,
-    headers: authHeaders()
+    headers: await authHeaders()
   });
 
   assert.equal(response.statusCode, 202);
@@ -750,7 +756,7 @@ test("POST /api/deployments/:deploymentId/init maps missing Terraform artifacts 
   const response = await app.inject({
     method: "POST",
     url: `/api/deployments/${deploymentId}/init`,
-    headers: authHeaders()
+    headers: await authHeaders()
   });
 
   assert.equal(response.statusCode, 404);
@@ -769,7 +775,7 @@ test("GET /api/projects/:projectId/deployments returns project deployments", asy
   const response = await app.inject({
     method: "GET",
     url: `/api/projects/${projectId}/deployments`,
-    headers: authHeaders()
+    headers: await authHeaders()
   });
 
   assert.equal(response.statusCode, 200);
@@ -805,7 +811,7 @@ test("GET /api/projects/:projectId/deployments maps missing project ownership to
   const response = await app.inject({
     method: "GET",
     url: `/api/projects/${projectId}/deployments`,
-    headers: authHeaders()
+    headers: await authHeaders()
   });
 
   assert.equal(response.statusCode, 404);
@@ -834,7 +840,7 @@ test("GET /api/deployments/:deploymentId/logs returns an empty log list", async 
   const response = await app.inject({
     method: "GET",
     url: `/api/deployments/${deploymentId}/logs`,
-    headers: authHeaders()
+    headers: await authHeaders()
   });
 
   assert.equal(response.statusCode, 200);
@@ -871,7 +877,7 @@ test("GET /api/deployments/:deploymentId/logs maps missing deployments to not_fo
   const response = await app.inject({
     method: "GET",
     url: `/api/deployments/${deploymentId}/logs`,
-    headers: authHeaders()
+    headers: await authHeaders()
   });
 
   assert.equal(response.statusCode, 404);

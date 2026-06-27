@@ -1,3 +1,5 @@
+import "./load-env.js";
+
 export type RuntimeEnv = {
   awsRegion: string;
   authTokenSecret: string | undefined;
@@ -5,6 +7,8 @@ export type RuntimeEnv = {
   databaseSsl: boolean;
   s3BucketName: string | undefined;
 };
+
+const AUTH_TOKEN_SECRET_PLACEHOLDER = "replace-with-a-local-secret-of-at-least-32-characters";
 
 export function getRuntimeEnv(): RuntimeEnv {
   return {
@@ -25,6 +29,10 @@ export function requireAuthTokenSecret(): string {
 
   if (authTokenSecret.length < 32) {
     throw new Error("AUTH_TOKEN_SECRET must be at least 32 characters");
+  }
+
+  if (authTokenSecret === AUTH_TOKEN_SECRET_PLACEHOLDER) {
+    throw new Error("AUTH_TOKEN_SECRET must be changed from the example placeholder");
   }
 
   return authTokenSecret;

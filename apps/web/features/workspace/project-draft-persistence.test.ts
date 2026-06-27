@@ -5,6 +5,7 @@ import {
   chooseInitialDiagram,
   createDraftStorageKey,
   createLocalProjectDraft,
+  isWorkspaceCloudPlatform,
   markDraftServerSaved
 } from "./project-draft-persistence";
 
@@ -43,6 +44,12 @@ test("createDraftStorageKey scopes drafts by workspace and project", () => {
   assert.equal(createDraftStorageKey("workspace-1", "project-1"), "workspace-1:project-1");
 });
 
+test("isWorkspaceCloudPlatform accepts supported start form choices", () => {
+  assert.equal(isWorkspaceCloudPlatform("aws"), true);
+  assert.equal(isWorkspaceCloudPlatform("gcp"), true);
+  assert.equal(isWorkspaceCloudPlatform("azure"), false);
+});
+
 test("createLocalProjectDraft marks edits dirty and increments local revision", () => {
   const draft = createLocalProjectDraft({
     workspaceId: "workspace-1",
@@ -76,6 +83,7 @@ test("markDraftServerSaved clears dirty state and mirrors server revision", () =
     savedAt: "2026-06-24T01:00:00.000Z"
   });
   const serverDraft: ProjectDraft = {
+    id: "draft-1",
     projectId: "project-1",
     diagramJson: editedDiagram,
     revision: 9,
@@ -93,6 +101,7 @@ test("markDraftServerSaved clears dirty state and mirrors server revision", () =
 
 test("chooseInitialDiagram prefers server draft over local draft", () => {
   const serverDraft: ProjectDraft = {
+    id: "draft-2",
     projectId: "project-1",
     diagramJson: emptyDiagram,
     revision: 2,

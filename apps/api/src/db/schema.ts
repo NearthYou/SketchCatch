@@ -10,7 +10,7 @@ export const assetTypeEnum = pgEnum("asset_type", [
   "thumbnail"
 ]);
 
-export const deploymentStatusEnum = pgEnum("status", [
+export const deploymentStatusEnum = pgEnum("deployment_status", [
   "PENDING",
   "RUNNING",
   "SUCCESS",
@@ -26,7 +26,7 @@ export const deploymentBlockedEnum = pgEnum("deployment_blocked_by", [
 
 export const deploymentFailureStageEnum = pgEnum("deployment_failure_stage", [
   "init",
-  "validation",
+  "validate",
   "plan",
   "approval",
   "mock_run"
@@ -137,16 +137,21 @@ export const architectures = pgTable("architectures", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
 });
 
-export const projectDrafts = pgTable("project_drafts", {
-  projectId: varchar("project_id", { length: 36 })
-    .primaryKey()
-    .references(() => projects.id, { onDelete: "cascade" }),
-  diagramJson: jsonb("diagram_json").$type<DiagramJson>().notNull(),
-  revision: integer("revision").notNull().default(1),
-  serverSavedAt: timestamp("server_saved_at", { withTimezone: true }).notNull().defaultNow(),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
-});
+export const projectDrafts = pgTable(
+  "project_drafts",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    projectId: varchar("project_id", { length: 36 })
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    diagramJson: jsonb("diagram_json").$type<DiagramJson>().notNull(),
+    revision: integer("revision").notNull().default(1),
+    serverSavedAt: timestamp("server_saved_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [uniqueIndex("project_drafts_project_id_unique").on(table.projectId)]
+);
 
 export const projectAssets = pgTable("project_assets", {
   id: varchar("id", { length: 36 }).primaryKey(),
@@ -183,7 +188,9 @@ export const deployments = pgTable("deployments", {
   failureStage: deploymentFailureStageEnum("failure_stage"),
   errorSummary: text("error_summary"),
   approvedAt: timestamp("approved_at", { withTimezone: true }),
-  approvedBy: varchar("approved_by", { length: 128 }),
+  approvedByUserId: varchar("approved_by_user_id", { length: 36 }).references(() => users.id, {
+    onDelete: "restrict"
+  }),
   approvedTerraformArtifactId: varchar("approved_terraform_artifact_id", { length: 36 }).references(
     () => projectAssets.id,
     { onDelete: "set null" }
@@ -192,18 +199,27 @@ export const deployments = pgTable("deployments", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
 });
 
-export const deploymentLogs = pgTable("deployment_logs", {
-  id: varchar("id", { length: 36 }).primaryKey(),
-  deploymentId: varchar("deployment_id", { length: 36 })
-    .notNull()
-    .references(() => deployments.id, { onDelete: "cascade" }),
-  sequence: integer("sequence").notNull(),
-  stage: deploymentStageEnum("stage").notNull(),
-  level: deploymentLogLevelEnum("level").notNull(),
-  message: text("message").notNull(),
-  relatedResourceId: varchar("related_resource_id", { length: 128 }),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
-});
+export const deploymentLogs = pgTable(
+  "deployment_logs",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    deploymentId: varchar("deployment_id", { length: 36 })
+      .notNull()
+      .references(() => deployments.id, { onDelete: "cascade" }),
+    sequence: integer("sequence").notNull(),
+    stage: deploymentStageEnum("stage").notNull(),
+    level: deploymentLogLevelEnum("level").notNull(),
+    message: text("message").notNull(),
+    relatedResourceId: varchar("related_resource_id", { length: 128 }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [
+    uniqueIndex("deployment_logs_deployment_sequence_unique").on(
+      table.deploymentId,
+      table.sequence
+    )
+  ]
+);
 
 export const usersRelations = relations(users, ({ many }) => ({
   projects: many(projects),

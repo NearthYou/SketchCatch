@@ -1,36 +1,45 @@
 # 문서 안내
 
-SketchCatch 문서는 평소 아래 6개만 읽으면 된다.
+SketchCatch 문서는 **SSOT(Single Source of Truth)** 기준으로 관리한다. 팀원이 AI를 활용해 분업할 때도 아래 문서의 책임 경계를 먼저 확인하고, 같은 이름과 같은 계약을 사용한다.
 
 ## 필수 문서
 
-| 문서 | 언제 읽는가 |
-| --- | --- |
-| [제품 방향](./product.md) | 무엇을 만들고, 1차 제공 범위가 어디까지인지 확인할 때 |
-| [아키텍처](./architecture.md) | 기술 스택, 저장 기준, API 범위, 주요 기술 결정을 확인할 때 |
-| [데이터 모델](./data-models.md) | DB/API/프론트 상태 객체의 공통 필드명을 맞출 때 |
-| [개발 가이드](./development.md) | 로컬 실행, 컨벤션, Git 흐름, 필수 체크를 확인할 때 |
-| [배포 운영 문서](./deployment.md) | 운영 배포, HTTPS, RDS/S3, 마이그레이션, 롤백을 확인할 때 |
-| [루트 README](../README.md) | 저장소 전체 구조와 빠른 시작 명령을 확인할 때 |
+| 문서 | 책임 | 언제 읽는가 |
+| --- | --- | --- |
+| [제품 방향](./product.md) | 제품 정의, MVP 목표, 기능 우선순위, 3주 로드맵 | 무엇을 만들지, 이번 작업이 MVP에 포함되는지 판단할 때 |
+| [데이터 모델](./data-models.md) | DB/API/프론트/AI/배포 공통 타입과 필드명 | DTO, DB schema, Zod schema, 프론트 상태를 바꿀 때 |
+| [아키텍처](./architecture.md) | 모노레포 구조, 앱 경계, 저장소 경계, Terraform/AWS 실행 위치 | API, storage, worker, 인프라 실행 경계를 정할 때 |
+| [개발 가이드](./development.md) | 로컬 실행, Git flow, 팀 AI 협업 규칙, PR 체크 | 구현 전후 작업 절차와 검증 기준을 확인할 때 |
+| [배포 운영 문서](./deployment.md) | 운영 배포와 실제 AWS E2E 데모 실행/cleanup 절차 | Terraform Plan/Apply/Destroy, AWS 연결, 운영 배포를 다룰 때 |
+| [루트 README](../README.md) | 저장소 빠른 시작 | 처음 저장소를 실행할 때 |
+
+## SSOT 우선순위
+
+문서가 서로 충돌하면 아래 순서로 판단한다.
+
+1. 루트 `AGENTS.md`와 가장 가까운 하위 `AGENTS.md`
+2. 이 문서에 명시된 canonical 문서
+3. `packages/types/src/index.ts`와 API Zod schema
+4. 담당자별 참고 문서
+5. 오래된 작업 로그나 개인 메모
+
+담당자별 문서는 구현 아이디어와 맥락을 담는 참고 자료다. 공통 계약으로 확정하려면 반드시 canonical 문서와 shared type에 반영한다.
 
 ## 문서 정리 기준
 
-- 제품 전략, 로드맵, 리스크, 후순위 구현은 [제품 방향](./product.md)에 모은다.
-- 기술 스택, 현재 API, 저장 구조, ADR은 [아키텍처](./architecture.md)에 모은다.
-- 컨벤션, Git 흐름, 필수 체크는 [개발 가이드](./development.md)에 모은다.
-- 배포 세부 절차는 길어도 운영 중 바로 써야 하므로 [배포 운영 문서](./deployment.md)에 따로 둔다.
-- 한 번만 쓰는 예제 문서나 오래된 작업 로그는 유지하지 않는다.
+- 제품 전략, 상세 기획서, 마일스톤, 리스크는 [제품 방향](./product.md)에 모은다.
+- 공통 타입, API DTO, DB 모델, 프론트 상태 이름은 [데이터 모델](./data-models.md)에 모은다.
+- 기술 스택, 저장 기준, 실행 경계, ADR 수준 결정은 [아키텍처](./architecture.md)에 모은다.
+- Git 흐름, 팀 AI 작업 순서, PR 체크리스트는 [개발 가이드](./development.md)에 모은다.
+- 운영 배포와 실제 AWS E2E 데모 절차는 [배포 운영 문서](./deployment.md)에 모은다.
+- 같은 내용을 새 문서로 복제하지 않는다. 먼저 canonical 문서를 갱신한다.
+- 오래된 범위 문구는 남겨두지 않는다. MVP 목표가 바뀌면 canonical 문서에서 즉시 갱신한다.
 
-## 검토 중 선택 문서
+## 담당자별 참고 문서
 
-아래 문서는 담당 파트 구현 전에 계약을 맞추기 위한 PR 검토용 초안이다. 팀 합의나 담당자 선택 결과가 반영되기 전까지 확정된 공통 계약으로 보지 않는다.
-
-| 문서 | 상태 | 언제 읽는가 |
+| 폴더 | 성격 | 규칙 |
 | --- | --- | --- |
-| [AI 1차 제공 범위 초안](./gg/001_AI파트1차제공범위초안_gg.md) | gg 전용 | gg AI 파트의 1차 제공 책임, DTO, 팀 의존성을 리뷰할 때 |
-| [AI 고도화 고려사항 초안](./gg/002_AI고도화고려사항초안_gg.md) | gg 전용 | 1차 제공 이후 자연어 요구사항 분석, 비용·성능 시뮬레이션, LLM provider, Terraform 보조, 위험 검증 고도화 방향을 볼 때 |
-| [AI 개발 마일스톤 PRD](./gg/003_AI개발마일스톤PRD_gg.md) | gg 전용 | gg AI 1차 제공 구현을 마일스톤별로 쪼개 작업할 때 |
-| [팀원 Codex 호환성 선택 문서](./team-codex/000_팀원Codex호환성선택문서.md) | 선택 결과 회수 전 | 팀원별 Codex가 구현 전 호환성 선택지를 고르고 답을 가져와야 할 때 |
-| [SW Terraform 변환 스펙](./sw/spec.md) | sw 전용 | DiagramJson 기반 Terraform 변환 이슈 범위와 입력 계약을 확인할 때 |
-| [SW Terraform 구현 계획](./sw/plan.md) | sw 전용 | Terraform 변환 스펙을 실제 구현 마일스톤으로 진행할 때 |
-| [SW Terraform 클론 코딩 가이드](./sw/001_테라폼변환구현가이드_sw.md) | sw 전용 | Terraform 변환 기능을 파일 생성 순서대로 따라 구현할 때 |
+| `docs/gg` | AI 분석/추천 참고 문서 | 확정 DTO와 범위는 `data-models.md`, `product.md`를 따른다. |
+| `docs/ck` | 배포 실행 참고 문서 | 실제 실행 정책은 `deployment.md`와 API/DB 계약을 따른다. |
+| `docs/ys` | 플랫폼/인증/프로젝트 참고 문서 | 사용자, 프로젝트, 인증 계약은 `data-models.md`를 따른다. |
+| `docs/adr` | 되돌리기 어렵고 맥락이 필요한 결정 | 결정이 굳어진 경우에만 추가한다. |

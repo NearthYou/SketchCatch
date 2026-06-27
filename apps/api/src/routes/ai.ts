@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type {
   AiArchitectureDraftResult,
+  AiPreDeploymentCheckFromDiagramRequest,
   AiPreDeploymentAnalysisResult,
   AiTerraformErrorExplanationResult,
   AiTerraformPreviewExplanationResult,
@@ -18,6 +19,8 @@ import { simulateDesign } from "../services/aiDesignSimulation.js";
 import { analyzePreDeployment } from "../services/aiPreDeploymentAnalysis.js";
 import { explainTerraformError } from "../services/aiTerraformErrorExplanation.js";
 import { explainTerraformPreview } from "../services/aiTerraformPreviewExplanation.js";
+import { convertDiagramJsonToArchitectureJson } from "../services/diagram-to-architecture.js";
+import { diagramJsonSchema } from "./project-draft-schemas.js";
 
 const resourceTypeSchema = z.enum([
   "VPC",
@@ -80,6 +83,10 @@ const designSimulationBodySchema: z.ZodType<CreateDesignSimulationRequest> = z.o
   budgetLevel: z.enum(["low", "normal"]).default("normal")
 });
 
+const preDeploymentCheckFromDiagramBodySchema: z.ZodType<AiPreDeploymentCheckFromDiagramRequest> = z.object({
+  diagramJson: diagramJsonSchema
+});
+
 const terraformErrorExplanationBodySchema = z.object({
   stage: z.enum(["validate", "export", "plan", "apply"]),
   rawMessage: z.string().trim().min(1),
@@ -116,6 +123,13 @@ export async function registerAiRoutes(app: FastifyInstance): Promise<void> {
     const body = designSimulationBodySchema.parse(request.body);
 
     return simulateDesign(body);
+  });
+
+  app.post("/ai/pre-deployment-check-from-diagram", async (request): Promise<AiPreDeploymentAnalysisResult> => {
+    const body = preDeploymentCheckFromDiagramBodySchema.parse(request.body);
+    const architectureJson = convertDiagramJsonToArchitectureJson(body.diagramJson);
+
+    return analyzePreDeployment(architectureJson);
   });
 
   app.post(

@@ -62,7 +62,6 @@ export type User = {
 
 export type AuthSession = {
   accessToken: string;
-  refreshToken: string;
   expiresInSeconds: number;
 };
 
@@ -78,13 +77,9 @@ export type LoginRequest = {
   password: string;
 };
 
-export type RefreshTokenRequest = {
-  refreshToken: string;
-};
+export type RefreshTokenRequest = Record<string, never>;
 
-export type LogoutRequest = {
-  refreshToken: string;
-};
+export type LogoutRequest = Record<string, never>;
 
 export type AuthResponse = {
   user: User;
@@ -196,7 +191,7 @@ export type Deployment = DeploymentBlock & {
   failureStage: DeploymentFailureStage | null;
   errorSummary: string | null;
   approvedAt: IsoDateTimeString | null;
-  approvedBy: string | null;
+  approvedByUserId: string | null;
   approvedTerraformArtifactId: string | null;
   createdAt: IsoDateTimeString;
   updatedAt: IsoDateTimeString;
@@ -259,7 +254,7 @@ export type DeploymentLog = {
   createdAt: IsoDateTimeString;
 };
 
-export type DeploymentFailureStage = "init" | "validation" | "plan" | "approval" | "mock_run";
+export type DeploymentFailureStage = "init" | "validate" | "plan" | "approval" | "mock_run";
 
 export type Activity = {
   id: string;
@@ -447,6 +442,10 @@ export type DesignSimulationResult = {
   recommendations: string[];
 };
 
+export type AiPreDeploymentCheckFromDiagramRequest = {
+  diagramJson: DiagramJson;
+};
+
 export type AiTerraformStage = "validate" | "export" | "plan" | "apply";
 
 export type AiTerraformErrorCategory =
@@ -554,6 +553,7 @@ export type DiagramJson = {
 };
 
 export type ProjectDraft = {
+  id: string;
   projectId: string;
   diagramJson: DiagramJson;
   revision: number;
@@ -650,3 +650,22 @@ export type TerraformResourceParameterCatalog = {
 };
 
 export type ResourceNodeParameters = DiagramNodeParameters;
+
+export type TerraformDiagnosticSeverity = "info" | "warning" | "error";
+
+export type TerraformDiagnostic = {
+  severity: TerraformDiagnosticSeverity;
+  message: string;
+  code?: string | undefined;
+  line?: number | undefined;
+  resourceAddress?: string | undefined;
+  nodeId?: string | undefined;
+};
+
+export type TerraformValidateRequest = {
+  terraformCode: string;
+};
+
+export type TerraformValidateResponse = {
+  diagnostics: TerraformDiagnostic[];
+};

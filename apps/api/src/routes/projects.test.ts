@@ -59,7 +59,7 @@ test("GET /api/projects/:id/draft restores the active user's diagramJson", async
   const response = await app.inject({
     method: "GET",
     url: `/api/projects/${ACTIVE_PROJECT_ID}/draft`,
-    headers: authHeaders(ACTIVE_USER_ID)
+    headers: await authHeaders(ACTIVE_USER_ID)
   });
 
   assert.equal(response.statusCode, 200);
@@ -82,7 +82,7 @@ test("PUT /api/projects/:id/draft upserts the active user's latest diagramJson",
   const response = await app.inject({
     method: "PUT",
     url: `/api/projects/${ACTIVE_PROJECT_ID}/draft`,
-    headers: authHeaders(ACTIVE_USER_ID),
+    headers: await authHeaders(ACTIVE_USER_ID),
     payload: {
       diagramJson: draftDiagram
     }
@@ -96,9 +96,9 @@ test("PUT /api/projects/:id/draft upserts the active user's latest diagramJson",
   await app.close();
 });
 
-function authHeaders(userId: string): Record<string, string> {
+async function authHeaders(userId: string): Promise<Record<string, string>> {
   return {
-    authorization: `Bearer ${createAccessToken(userId)}`
+    authorization: `Bearer ${await createAccessToken(userId)}`
   };
 }
 
@@ -130,6 +130,7 @@ function makeProject(overrides: Partial<ProjectRow> = {}): ProjectRow {
 
 function makeProjectDraft(overrides: Partial<ProjectDraftRow> = {}): ProjectDraftRow {
   return {
+    id: "44444444-4444-4444-8444-444444444444",
     projectId: ACTIVE_PROJECT_ID,
     diagramJson: draftDiagram,
     revision: 1,

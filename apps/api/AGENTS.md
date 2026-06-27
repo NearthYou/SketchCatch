@@ -4,11 +4,11 @@ This folder contains the Fastify backend API.
 
 ## Product Role
 
-The API owns project persistence, architecture snapshots, asset metadata, validation, and future controlled Terraform/AWS workflows. Keep real infrastructure mutation behind explicit safety gates and user approval.
+The API owns project persistence, architecture snapshots, asset metadata, validation, and controlled Terraform/AWS Deployment workflows. Keep real infrastructure mutation behind explicit safety gates and user approval.
 
 ## Boundaries
 
-1. Do not implement real AWS apply, deploy, update, delete, or destroy behavior unless the user explicitly asks for it in the current task.
+1. Real AWS apply, deploy, update, delete, or destroy behavior is allowed only for explicit Deployment work with plan, approval, logging, masking, and cleanup safeguards.
 2. Do not expose AWS credentials, DB credentials, or secret values in responses or logs.
 3. Keep frontend clients away from AWS SDK and Terraform execution details.
 4. Store project records and architecture JSON in RDS.
@@ -34,13 +34,13 @@ The API owns project persistence, architecture snapshots, asset metadata, valida
 ## Terraform And AWS Safety
 
 1. Terraform generation should be deterministic and testable.
-2. Terraform execution, when later allowed, must run only on backend or worker infrastructure.
+2. Terraform execution must run only on backend or worker infrastructure.
 3. Require explicit approval gates before any real resource mutation.
 4. Prefer dry-run, plan, validation, and mock execution before apply.
 5. Capture deployment logs and failure reasons without leaking secrets.
 6. Keep the first DiagramJson-to-Terraform converter as a pure service with no DB, S3, filesystem, Terraform CLI, or AWS SDK side effects.
 7. Terraform CLI validation may be added later only in backend or worker code when the issue covers temp directories, state, credentials, provider setup, and log masking.
-8. Never add `apply` or `destroy` behavior unless the current task explicitly requests it.
+8. Never add `apply` or `destroy` behavior outside explicit Deployment work.
 
 ## AI Assistance Rules
 

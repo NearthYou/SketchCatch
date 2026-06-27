@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type {
   AiArchitectureDraftResult,
   AiPreDeploymentAnalysisResult,
@@ -12,9 +12,11 @@ import type {
   ArchitectureDraftSecurityPriority,
   ArchitectureDraftTrafficLevel,
   ArchitectureJson,
-  DesignSimulationResult
+  DesignSimulationResult,
+  TerraformDiagnostic,
+  TerraformValidateResponse
 } from "@sketchcatch/types";
-import { getApiErrorMessage } from "../../lib/api-client";
+import { apiFetch, getApiErrorMessage } from "../../lib/api-client";
 import { ArchitectureDraftPanel } from "./ArchitectureDraftPanel";
 import { DesignSimulationPanel } from "./DesignSimulationPanel";
 import { DraftMetadataPanel } from "./DraftMetadataPanel";
@@ -52,6 +54,13 @@ export function AiWorkspaceClient() {
     useState<AiTerraformErrorExplanationResult | null>(null);
   const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState("");
+  const [terraformDiagnostics, setTerraformDiagnostics] = useState<TerraformDiagnostic[]>([]);
+  const [isValidatingTerraform, setIsValidatingTerraform] = useState(false);
+  const [terraformDiagnosticsError, setTerraformDiagnosticsError] = useState<string | null>(null);
+  const [hasStaleTerraformDiagnostics, setHasStaleTerraformDiagnostics] = useState(false);
+  const [hasValidatedTerraform, setHasValidatedTerraform] = useState(false);
+  const latestTerraformCode = useRef(sampleTerraform);
+  const latestTerraformValidationRequestId = useRef(0);
 
   const architectureJson = useMemo<ArchitectureJson | null>(() => draft?.architectureJson ?? null, [draft]);
 
@@ -133,7 +142,12 @@ export function AiWorkspaceClient() {
     setStatus("idle");
     setErrorMessage("");
     setTerraformCode(sampleDiagramTerraform);
+    latestTerraformCode.current = sampleDiagramTerraform;
     setTerraformPreview(null);
+    setTerraformDiagnostics([]);
+    setTerraformDiagnosticsError(null);
+    setHasStaleTerraformDiagnostics(false);
+    setHasValidatedTerraform(false);
   }
 
   // 사용자가 붙여 넣은 Terraform 오류 메시지를 Preview 설명과 분리해 해석합니다.
@@ -156,6 +170,58 @@ export function AiWorkspaceClient() {
       });
       setTerraformErrorExplanation(result);
     });
+  }
+
+  function handleTerraformCodeChange(nextCode: string): void {
+    setTerraformCode(nextCode);
+    latestTerraformCode.current = nextCode;
+    setTerraformPreview(null);
+    setTerraformDiagnosticsError(null);
+    setHasStaleTerraformDiagnostics(hasValidatedTerraform);
+  }
+
+  async function runTerraformValidation(): Promise<void> {
+    const codeToValidate = terraformCode;
+    const requestId = latestTerraformValidationRequestId.current + 1;
+
+    latestTerraformValidationRequestId.current = requestId;
+    setIsValidatingTerraform(true);
+    setTerraformDiagnosticsError(null);
+
+    try {
+      const result = await apiFetch<TerraformValidateResponse>("/terraform/validate", {
+        auth: true,
+        body: {
+          terraformCode: codeToValidate
+        },
+        method: "POST"
+      });
+
+      if (latestTerraformCode.current !== codeToValidate) {
+        setHasStaleTerraformDiagnostics(hasValidatedTerraform);
+        return;
+      }
+
+      setTerraformDiagnostics(result.diagnostics);
+      setHasStaleTerraformDiagnostics(false);
+      setHasValidatedTerraform(true);
+    } catch (error) {
+      if (latestTerraformCode.current !== codeToValidate) {
+        setHasStaleTerraformDiagnostics(hasValidatedTerraform);
+        return;
+      }
+
+      setTerraformDiagnosticsError(
+        getApiErrorMessage(
+          error,
+          error instanceof Error ? error.message : "Terraform 문법 점검 중 오류가 발생했습니다."
+        )
+      );
+    } finally {
+      if (latestTerraformValidationRequestId.current === requestId) {
+        setIsValidatingTerraform(false);
+      }
+    }
   }
 
   // 모든 버튼 요청이 같은 loading/error 처리를 쓰도록 감싸는 작은 공통 함수입니다.
@@ -237,10 +303,16 @@ export function AiWorkspaceClient() {
 
       <TerraformPreviewPanel
         isLoading={status === "loading"}
+        isValidatingTerraform={isValidatingTerraform}
+        hasStaleTerraformDiagnostics={hasStaleTerraformDiagnostics}
+        hasValidatedTerraform={hasValidatedTerraform}
         onDiagramToTerraform={runDiagramToTerraform}
-        onTerraformCodeChange={setTerraformCode}
+        onTerraformCodeChange={handleTerraformCodeChange}
         onTerraformPreview={runTerraformPreview}
+        onTerraformValidate={runTerraformValidation}
         terraformCode={terraformCode}
+        terraformDiagnostics={terraformDiagnostics}
+        terraformDiagnosticsError={terraformDiagnosticsError}
         terraformPreview={terraformPreview}
       />
 
