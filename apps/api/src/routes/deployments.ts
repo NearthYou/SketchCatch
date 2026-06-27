@@ -10,6 +10,11 @@ import {
   type RunDeploymentInitResult
 } from "../deployments/deployment-init-service.js";
 import {
+  runDeploymentPlan as defaultRunDeploymentPlan,
+  type RunDeploymentPlanInput,
+  type RunDeploymentPlanResult
+} from "../deployments/deployment-plan-service.js";
+import {
   createDeployment,
   createPostgresDeploymentRepository,
   DeploymentConflictError,
@@ -50,6 +55,10 @@ type DeploymentRouteOptions = {
     input: RunDeploymentInitInput,
     repository: DeploymentRepository
   ) => Promise<RunDeploymentInitResult>;
+  runDeploymentPlan?: (
+    input: RunDeploymentPlanInput,
+    repository: DeploymentRepository
+  ) => Promise<RunDeploymentPlanResult>;
 };
 
 type DeploymentRequestContext = {
@@ -98,6 +107,7 @@ function toDeployment(row: DeploymentRow): Deployment {
     architectureId: row.architectureId,
     terraformArtifactId: row.terraformArtifactId,
     awsConnectionId: row.awsConnectionId,
+    currentPlanArtifactId: row.currentPlanArtifactId,
     status: row.status as Deployment["status"],
     planSummary: row.planSummary,
     isBlocked: row.isBlocked,
@@ -258,6 +268,53 @@ export async function registerDeploymentRoutes(
     }
   });
 
+  app.post("/deployments/:deploymentId/plan", async (request, reply) => {
+    const params = deploymentParamsSchema.parse(request.params);
+    const { accessContext, repository } = await getDeploymentRequestContext(
+      request,
+      options,
+      getDeploymentDatabaseClient
+    );
+    const runDeploymentPlan = options?.runDeploymentPlan ?? defaultRunDeploymentPlan;
+
+    try {
+      const deployment = await getDeployment(
+        {
+          deploymentId: params.deploymentId,
+          accessContext
+        },
+        repository
+      );
+      await requireDeploymentInitArtifact(deployment, repository);
+
+      if (deployment.status === "RUNNING") {
+        throw new DeploymentConflictError("Deployment plan is already running");
+      }
+
+      const runningDeployment = await repository.markDeploymentInitRunning(deployment.id);
+
+      if (!runningDeployment) {
+        throw new DeploymentConflictError("Deployment plan could not be started");
+      }
+
+      startDeploymentPlanJob(
+        {
+          deploymentId: params.deploymentId,
+          accessContext
+        },
+        repository,
+        runDeploymentPlan,
+        request.log
+      );
+
+      return reply.status(202).send({
+        deployment: toDeployment(runningDeployment)
+      });
+    } catch (error) {
+      return handleDeploymentError(error, reply);
+    }
+  });
+
   app.get("/deployments/:deploymentId/logs", async (request, reply) => {
     const params = deploymentParamsSchema.parse(request.params);
     const { accessContext, repository } = await getDeploymentRequestContext(
@@ -320,5 +377,19 @@ function startDeploymentInitJob(
 ): void {
   void runDeploymentInit(input, repository).catch(() => {
     log.error({ deploymentId: input.deploymentId }, "Deployment init background job failed");
+  });
+}
+
+function startDeploymentPlanJob(
+  input: RunDeploymentPlanInput,
+  repository: DeploymentRepository,
+  runDeploymentPlan: (
+    input: RunDeploymentPlanInput,
+    repository: DeploymentRepository
+  ) => Promise<RunDeploymentPlanResult>,
+  log: FastifyRequest["log"]
+): void {
+  void runDeploymentPlan(input, repository).catch(() => {
+    log.error({ deploymentId: input.deploymentId }, "Deployment plan background job failed");
   });
 }

@@ -10,6 +10,7 @@ import {
   type DeploymentRepository,
   type ProjectAccessContext,
   type ProjectRecord,
+  type SaveDeploymentPlanInput,
   type TerraformArtifactRecord
 } from "./deployment-service.js";
 import { runDeploymentInit } from "./deployment-init-service.js";
@@ -66,6 +67,10 @@ type RepositoryCall =
   | {
       name: "markDeploymentInitSucceeded";
       deploymentId: string;
+    }
+  | {
+      name: "saveDeploymentPlan";
+      input: SaveDeploymentPlanInput;
     }
   | {
       name: "failDeployment";
@@ -233,6 +238,32 @@ class FakeDeploymentRepository implements DeploymentRepository {
     return this.deployment;
   };
 
+  saveDeploymentPlan: DeploymentRepository["saveDeploymentPlan"] = async (input) => {
+    this.calls.push({
+      name: "saveDeploymentPlan",
+      input
+    });
+
+    if (!this.deployment || this.deployment.id !== input.deploymentId) {
+      return undefined;
+    }
+
+    this.deployment = {
+      ...this.deployment,
+      currentPlanArtifactId: input.planArtifact.id,
+      status: "PENDING",
+      planSummary: input.planSummary,
+      isBlocked: input.isBlocked,
+      blockedBy: input.blockedBy,
+      blockedReason: input.blockedReason,
+      failureStage: null,
+      errorSummary: null,
+      updatedAt: fixedNow
+    };
+
+    return this.deployment;
+  };
+
   approveDeployment: DeploymentRepository["approveDeployment"] = async (
     candidateDeploymentId,
     input
@@ -326,6 +357,7 @@ function createDeploymentRecord(
     architectureId,
     terraformArtifactId,
     awsConnectionId,
+    currentPlanArtifactId: null,
     status: "PENDING",
     planSummary: null,
     isBlocked: false,

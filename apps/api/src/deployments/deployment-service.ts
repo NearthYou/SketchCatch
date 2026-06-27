@@ -14,6 +14,7 @@ import {
   architectures,
   awsConnections,
   deploymentLogs,
+  deploymentPlanArtifacts,
   deployments,
   projectAssets,
   projects,
@@ -23,6 +24,7 @@ import { maskDeploymentMessage } from "./log-masking.js";
 
 export type DeploymentRecord = typeof deployments.$inferSelect;
 export type DeploymentLogRecord = typeof deploymentLogs.$inferSelect;
+export type DeploymentPlanArtifactRecord = typeof deploymentPlanArtifacts.$inferSelect;
 
 export type ProjectAccessContext = {
   kind: "user";
@@ -77,6 +79,25 @@ export type CreateDeploymentLogRecordInput = {
   relatedResourceId: string | null;
 };
 
+export type CreateDeploymentPlanArtifactRecordInput = {
+  id: string;
+  deploymentId: string;
+  terraformArtifactId: string;
+  objectKey: string;
+  sha256: string;
+  accountId: string;
+  region: string;
+};
+
+export type SaveDeploymentPlanInput = {
+  deploymentId: string;
+  planArtifact: CreateDeploymentPlanArtifactRecordInput;
+  planSummary: DeploymentPlanSummary;
+  isBlocked: boolean;
+  blockedBy: DeploymentBlockedBy | null;
+  blockedReason: string | null;
+};
+
 export type ProjectRecord = typeof projects.$inferSelect;
 export type ArchitectureRecord = typeof architectures.$inferSelect;
 export type ProjectAssetRecord = typeof projectAssets.$inferSelect;
@@ -127,6 +148,7 @@ export type DeploymentRepository = {
       blockedReason: string | null;
     }
   ): Promise<DeploymentRecord | undefined>;
+  saveDeploymentPlan(input: SaveDeploymentPlanInput): Promise<DeploymentRecord | undefined>;
   approveDeployment(
     deploymentId: string,
     input: {
@@ -322,6 +344,34 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
         .returning();
 
       return deployment;
+    },
+
+    async saveDeploymentPlan(input) {
+      return db.transaction(async (tx) => {
+        await tx.insert(deploymentPlanArtifacts).values(input.planArtifact);
+
+        const [deployment] = await tx
+          .update(deployments)
+          .set({
+            currentPlanArtifactId: input.planArtifact.id,
+            status: "PENDING",
+            planSummary: input.planSummary,
+            isBlocked: input.isBlocked,
+            blockedBy: input.blockedBy,
+            blockedReason: input.blockedReason,
+            failureStage: null,
+            errorSummary: null,
+            ...touchUpdatedAt
+          })
+          .where(eq(deployments.id, input.deploymentId))
+          .returning();
+
+        if (!deployment) {
+          throw new Error("Deployment plan could not be saved");
+        }
+
+        return deployment;
+      });
     },
 
     async approveDeployment(deploymentId, input) {

@@ -1,6 +1,8 @@
 import { spawn } from "node:child_process";
 
 const terraformInitArgs = ["init", "-backend=false", "-input=false", "-no-color"] as const;
+const terraformValidateArgs = ["validate", "-no-color"] as const;
+const defaultTerraformPlanFileName = "tfplan";
 
 export type TerraformRunResult = {
   command: string[];
@@ -15,6 +17,8 @@ export type RunTerraformInitOptions = {
   timeoutMs?: number;
   env?: NodeJS.ProcessEnv;
 };
+
+export type RunTerraformCommandOptions = RunTerraformInitOptions;
 
 const inheritedTerraformEnvKeys = [
   "PATH",
@@ -37,6 +41,35 @@ export async function runTerraformInit(
   options: RunTerraformInitOptions = {}
 ): Promise<TerraformRunResult> {
   return runTerraformCommand(workdir, [...terraformInitArgs], options);
+}
+
+export async function runTerraformValidate(
+  workdir: string,
+  options: RunTerraformCommandOptions = {}
+): Promise<TerraformRunResult> {
+  return runTerraformCommand(workdir, [...terraformValidateArgs], options);
+}
+
+export async function runTerraformPlan(
+  workdir: string,
+  options: RunTerraformCommandOptions & { planFileName?: string } = {}
+): Promise<TerraformRunResult> {
+  const planFileName = options.planFileName ?? defaultTerraformPlanFileName;
+
+  return runTerraformCommand(
+    workdir,
+    ["plan", "-input=false", "-no-color", `-out=${planFileName}`],
+    options
+  );
+}
+
+export async function runTerraformShowJson(
+  workdir: string,
+  options: RunTerraformCommandOptions & { planFileName?: string } = {}
+): Promise<TerraformRunResult> {
+  const planFileName = options.planFileName ?? defaultTerraformPlanFileName;
+
+  return runTerraformCommand(workdir, ["show", "-json", planFileName], options);
 }
 
 async function runTerraformCommand(

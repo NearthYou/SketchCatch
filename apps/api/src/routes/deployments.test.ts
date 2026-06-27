@@ -8,10 +8,15 @@ import type {
   RunDeploymentInitInput,
   RunDeploymentInitResult
 } from "../deployments/deployment-init-service.js";
+import type {
+  RunDeploymentPlanInput,
+  RunDeploymentPlanResult
+} from "../deployments/deployment-plan-service.js";
 import { users } from "../db/schema.js";
 import {
   type ArchitectureRecord,
   type CreateDeploymentRecordInput,
+  type SaveDeploymentPlanInput,
   type DeploymentLogRecord,
   type DeploymentRecord,
   type DeploymentRepository,
@@ -32,7 +37,12 @@ type DeploymentResponse = {
     architectureId: string;
     terraformArtifactId: string;
     awsConnectionId: string | null;
+    currentPlanArtifactId: string | null;
     status: string;
+    planSummary: unknown;
+    isBlocked: boolean;
+    blockedBy: string | null;
+    blockedReason: string | null;
     failureStage: string | null;
     errorSummary: string | null;
     approvedByUserId: string | null;
@@ -100,6 +110,10 @@ type RepositoryCall =
   | {
       name: "markDeploymentInitRunning";
       deploymentId: string;
+    }
+  | {
+      name: "saveDeploymentPlan";
+      input: SaveDeploymentPlanInput;
     };
 
 const projectId = "11111111-1111-4111-8111-111111111111";
@@ -301,6 +315,32 @@ class FakeDeploymentRepository implements DeploymentRepository {
     return this.deployment;
   };
 
+  saveDeploymentPlan: DeploymentRepository["saveDeploymentPlan"] = async (input) => {
+    this.calls.push({
+      name: "saveDeploymentPlan",
+      input
+    });
+
+    if (!this.deployment || this.deployment.id !== input.deploymentId) {
+      return undefined;
+    }
+
+    this.deployment = {
+      ...this.deployment,
+      currentPlanArtifactId: input.planArtifact.id,
+      status: "PENDING",
+      planSummary: input.planSummary,
+      isBlocked: input.isBlocked,
+      blockedBy: input.blockedBy,
+      blockedReason: input.blockedReason,
+      failureStage: null,
+      errorSummary: null,
+      updatedAt: fixedNow
+    };
+
+    return this.deployment;
+  };
+
   approveDeployment: DeploymentRepository["approveDeployment"] = async (_deploymentId, input) => {
     if (!this.deployment) {
       return undefined;
@@ -383,6 +423,10 @@ type DeploymentRouteTestOptions = {
     input: RunDeploymentInitInput,
     repository: DeploymentRepository
   ) => Promise<RunDeploymentInitResult>;
+  runDeploymentPlan?: (
+    input: RunDeploymentPlanInput,
+    repository: DeploymentRepository
+  ) => Promise<RunDeploymentPlanResult>;
   userRows?: UserRecord[];
 };
 
@@ -397,7 +441,8 @@ async function buildDeploymentTestApp(
     prefix: "/api",
     getDatabaseClient: () => fakeAuthDb.client,
     createDeploymentRepository: () => repository,
-    ...(routeOptions.runDeploymentInit ? { runDeploymentInit: routeOptions.runDeploymentInit } : {})
+    ...(routeOptions.runDeploymentInit ? { runDeploymentInit: routeOptions.runDeploymentInit } : {}),
+    ...(routeOptions.runDeploymentPlan ? { runDeploymentPlan: routeOptions.runDeploymentPlan } : {})
   });
 
   return app;
@@ -413,6 +458,7 @@ function createDeploymentRecord(
     architectureId,
     terraformArtifactId,
     awsConnectionId,
+    currentPlanArtifactId: null,
     status: "PENDING",
     planSummary: null,
     isBlocked: false,
@@ -878,6 +924,93 @@ test("POST /api/deployments/:deploymentId/init maps missing Terraform artifacts 
     error: "not_found",
     message: "Terraform artifact not found for deployment"
   });
+
+  await app.close();
+});
+
+test("POST /api/deployments/:deploymentId/plan starts Terraform plan in the background", async () => {
+  const repository = new FakeDeploymentRepository();
+  const planCalls: Array<{ deploymentId: string; accessContext: ProjectAccessContext }> = [];
+  const app = await buildDeploymentTestApp(repository, {
+    runDeploymentPlan: async (input, candidateRepository) => {
+      assert.equal(candidateRepository, repository);
+      planCalls.push(input);
+
+      return {
+        deployment: createDeploymentRecord(input.deploymentId, {
+          status: "PENDING",
+          currentPlanArtifactId: "99999999-9999-4999-8999-999999999999",
+          planSummary: {
+            createCount: 1,
+            updateCount: 0,
+            deleteCount: 0,
+            replaceCount: 0,
+            blocked: true,
+            warnings: []
+          },
+          isBlocked: true,
+          blockedBy: "missing_approval",
+          blockedReason: "Terraform Plan requires user approval before apply"
+        }),
+        terraform: {
+          init: null,
+          validate: null,
+          plan: null,
+          showJson: null
+        }
+      };
+    }
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/deployments/${deploymentId}/plan`,
+    headers: await authHeaders()
+  });
+
+  assert.equal(response.statusCode, 202);
+  const body = response.json() as DeploymentResponse;
+  assert.equal(body.deployment.id, deploymentId);
+  assert.equal(body.deployment.status, "RUNNING");
+  assert.deepEqual(planCalls, [
+    {
+      deploymentId,
+      accessContext: {
+        kind: "user",
+        userId
+      }
+    }
+  ]);
+
+  await app.close();
+});
+
+test("POST /api/deployments/:deploymentId/plan rejects a deployment that is already running", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.deployment = createDeploymentRecord(deploymentId, {
+    status: "RUNNING"
+  });
+  let planStarted = false;
+  const app = await buildDeploymentTestApp(repository, {
+    runDeploymentPlan: async () => {
+      planStarted = true;
+      throw new Error("background plan should not start");
+    }
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/deployments/${deploymentId}/plan`,
+    headers: await authHeaders()
+  });
+
+  assert.equal(response.statusCode, 409);
+  assert.deepEqual(response.json(), {
+    error: "conflict",
+    message: "Deployment plan is already running"
+  });
+  assert.equal(planStarted, false);
+  assert.equal(repository.deployment.status, "RUNNING");
 
   await app.close();
 });
