@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import type {
   AiPreDeploymentAnalysisResult,
   ArchitectureJson,
@@ -33,6 +34,8 @@ const awsConnectionId = "77777777-7777-4777-8777-777777777777";
 const userId = "55555555-5555-4555-8555-555555555555";
 const planArtifactId = "99999999-9999-4999-8999-999999999999";
 const fixedNow = new Date("2026-01-01T00:00:00.000Z");
+const terraformArtifactContent = "terraform { required_version = \">= 1.6.0\" }\n";
+const terraformArtifactSha256 = createSha256(terraformArtifactContent);
 
 class FakeDeploymentRepository implements DeploymentRepository {
   readonly savedPlans: SaveDeploymentPlanInput[] = [];
@@ -133,7 +136,12 @@ class FakeDeploymentRepository implements DeploymentRepository {
       return undefined;
     }
 
-    this.deployment = { ...this.deployment, status, updatedAt: fixedNow };
+    this.deployment = {
+      ...this.deployment,
+      status,
+      ...(status === "RUNNING" ? clearDeploymentApprovalSnapshot() : {}),
+      updatedAt: fixedNow
+    };
 
     return this.deployment;
   };
@@ -145,7 +153,12 @@ class FakeDeploymentRepository implements DeploymentRepository {
       return undefined;
     }
 
-    this.deployment = { ...this.deployment, status: "RUNNING", updatedAt: fixedNow };
+    this.deployment = {
+      ...this.deployment,
+      status: "RUNNING",
+      ...clearDeploymentApprovalSnapshot(),
+      updatedAt: fixedNow
+    };
 
     return this.deployment;
   };
@@ -187,6 +200,7 @@ class FakeDeploymentRepository implements DeploymentRepository {
       blockedReason: input.blockedReason,
       failureStage: null,
       errorSummary: null,
+      ...clearDeploymentApprovalSnapshot(),
       updatedAt: fixedNow
     };
 
@@ -305,12 +319,36 @@ function createDeploymentPlanArtifactRecord(
     id: planArtifactId,
     deploymentId,
     terraformArtifactId,
+    terraformArtifactSha256,
     objectKey: `deployments/${deploymentId}/plans/${planArtifactId}.tfplan`,
     sha256: "0".repeat(64),
     accountId: "123456789012",
     region: "ap-northeast-2",
     createdAt: fixedNow,
     ...overrides
+  };
+}
+
+function clearDeploymentApprovalSnapshot(): Pick<
+  DeploymentRecord,
+  | "approvedAt"
+  | "approvedByUserId"
+  | "approvedTerraformArtifactId"
+  | "approvedPlanArtifactId"
+  | "approvedTerraformArtifactHash"
+  | "approvedTfplanHash"
+  | "approvedAwsAccountId"
+  | "approvedAwsRegion"
+> {
+  return {
+    approvedAt: null,
+    approvedByUserId: null,
+    approvedTerraformArtifactId: null,
+    approvedPlanArtifactId: null,
+    approvedTerraformArtifactHash: null,
+    approvedTfplanHash: null,
+    approvedAwsAccountId: null,
+    approvedAwsRegion: null
   };
 }
 
@@ -370,6 +408,10 @@ function createVerifiedAwsConnection(overrides: Partial<AwsConnection> = {}): Aw
     updatedAt: "2026-06-26T00:00:00.000Z",
     ...overrides
   };
+}
+
+function createSha256(value: string): string {
+  return createHash("sha256").update(value).digest("hex");
 }
 
 function createAccessContext(): ProjectAccessContext {
@@ -435,6 +477,16 @@ function createPlanJson(resourceChanges: unknown[]): string {
 
 test("runDeploymentPlan saves a tfplan artifact, summary, block, logs, and current pointer", async () => {
   const repository = new FakeDeploymentRepository();
+  repository.deployment = createDeploymentRecord(deploymentId, {
+    approvedAt: fixedNow,
+    approvedByUserId: userId,
+    approvedTerraformArtifactId: terraformArtifactId,
+    approvedPlanArtifactId: "88888888-8888-4888-8888-888888888888",
+    approvedTerraformArtifactHash: "a".repeat(64),
+    approvedTfplanHash: "b".repeat(64),
+    approvedAwsAccountId: "123456789012",
+    approvedAwsRegion: "ap-northeast-2"
+  });
   const planArtifactStorage = new FakePlanArtifactStorage();
   const runnerStages: string[] = [];
   let cleanupCalled = false;
@@ -448,6 +500,7 @@ test("runDeploymentPlan saves a tfplan artifact, summary, block, logs, and curre
     {
       generatePlanArtifactId: () => planArtifactId,
       planArtifactStorage,
+      readTerraformArtifactFile: async () => terraformArtifactContent,
       analyzePreDeployment: () => createAnalysis(),
       prepareTerraformWorkspace: async (input) => {
         assert.deepEqual(input, {
@@ -509,10 +562,19 @@ test("runDeploymentPlan saves a tfplan artifact, summary, block, logs, and curre
   });
   assert.equal(result.deployment.isBlocked, true);
   assert.equal(result.deployment.blockedBy, "missing_approval");
+  assert.equal(result.deployment.approvedAt, null);
+  assert.equal(result.deployment.approvedByUserId, null);
+  assert.equal(result.deployment.approvedTerraformArtifactId, null);
+  assert.equal(result.deployment.approvedPlanArtifactId, null);
+  assert.equal(result.deployment.approvedTerraformArtifactHash, null);
+  assert.equal(result.deployment.approvedTfplanHash, null);
+  assert.equal(result.deployment.approvedAwsAccountId, null);
+  assert.equal(result.deployment.approvedAwsRegion, null);
   assert.deepEqual(repository.savedPlans[0]?.planArtifact, {
     id: planArtifactId,
     deploymentId,
     terraformArtifactId,
+    terraformArtifactSha256,
     objectKey: `deployments/${deploymentId}/plans/${planArtifactId}.tfplan`,
     sha256: "0".repeat(64),
     accountId: "123456789012",
@@ -554,6 +616,7 @@ test("runDeploymentPlan blocks destructive or high-risk plans with risk_analysis
     {
       generatePlanArtifactId: () => planArtifactId,
       planArtifactStorage,
+      readTerraformArtifactFile: async () => terraformArtifactContent,
       analyzePreDeployment: () =>
         createAnalysis([
           {
@@ -620,6 +683,7 @@ test("runDeploymentPlan marks validate failures failed and masks secret output",
     repository,
     {
       planArtifactStorage,
+      readTerraformArtifactFile: async () => terraformArtifactContent,
       analyzePreDeployment: () => createAnalysis(),
       prepareTerraformWorkspace: async () => ({
         workdir: "C:/tmp/sketchcatch-terraform-validate-fail",
@@ -653,6 +717,16 @@ test("runDeploymentPlan stops at init failures before validate or plan", async (
   const planArtifactStorage = new FakePlanArtifactStorage();
   let validateRan = false;
   let planRan = false;
+  repository.deployment = createDeploymentRecord(deploymentId, {
+    approvedAt: fixedNow,
+    approvedByUserId: userId,
+    approvedTerraformArtifactId: terraformArtifactId,
+    approvedPlanArtifactId: planArtifactId,
+    approvedTerraformArtifactHash: terraformArtifactSha256,
+    approvedTfplanHash: "0".repeat(64),
+    approvedAwsAccountId: "123456789012",
+    approvedAwsRegion: "ap-northeast-2"
+  });
 
   const result = await runDeploymentPlan(
     {
@@ -662,6 +736,7 @@ test("runDeploymentPlan stops at init failures before validate or plan", async (
     repository,
     {
       planArtifactStorage,
+      readTerraformArtifactFile: async () => terraformArtifactContent,
       analyzePreDeployment: () => createAnalysis(),
       prepareTerraformWorkspace: async () => ({
         workdir: "C:/tmp/sketchcatch-terraform-init-fail",
@@ -688,6 +763,14 @@ test("runDeploymentPlan stops at init failures before validate or plan", async (
   assert.equal(result.deployment.status, "FAILED");
   assert.equal(result.deployment.failureStage, "init");
   assert.equal(result.deployment.errorSummary, "Error: provider install failed");
+  assert.equal(result.deployment.approvedAt, null);
+  assert.equal(result.deployment.approvedByUserId, null);
+  assert.equal(result.deployment.approvedTerraformArtifactId, null);
+  assert.equal(result.deployment.approvedPlanArtifactId, null);
+  assert.equal(result.deployment.approvedTerraformArtifactHash, null);
+  assert.equal(result.deployment.approvedTfplanHash, null);
+  assert.equal(result.deployment.approvedAwsAccountId, null);
+  assert.equal(result.deployment.approvedAwsRegion, null);
   assert.equal(validateRan, false);
   assert.equal(planRan, false);
   assert.equal(planArtifactStorage.uploads.length, 0);
@@ -706,6 +789,7 @@ test("runDeploymentPlan stops at plan failures before show-json or artifact uplo
     repository,
     {
       planArtifactStorage,
+      readTerraformArtifactFile: async () => terraformArtifactContent,
       analyzePreDeployment: () => createAnalysis(),
       prepareTerraformWorkspace: async () => ({
         workdir: "C:/tmp/sketchcatch-terraform-plan-fail",
@@ -752,6 +836,7 @@ test("runDeploymentPlan deletes uploaded tfplan and preserves the old pointer wh
     {
       generatePlanArtifactId: () => planArtifactId,
       planArtifactStorage,
+      readTerraformArtifactFile: async () => terraformArtifactContent,
       analyzePreDeployment: () => createAnalysis(),
       prepareTerraformWorkspace: async () => ({
         workdir: "C:/tmp/sketchcatch-terraform-save-fail",

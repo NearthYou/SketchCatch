@@ -1,4 +1,5 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type {
   AiPreDeploymentAnalysisResult,
@@ -67,6 +68,7 @@ export type RunDeploymentPlanOptions = {
   analyzePreDeployment?: (architectureJson: ArchitectureJson) => AiPreDeploymentAnalysisResult;
   planArtifactStorage?: DeploymentPlanArtifactStorage;
   generatePlanArtifactId?: () => string;
+  readTerraformArtifactFile?: (filePath: string) => Promise<Buffer | Uint8Array | string>;
 };
 
 export type RunDeploymentPlanResult = {
@@ -101,6 +103,7 @@ export async function runDeploymentPlan(
   const planArtifactStorage =
     options.planArtifactStorage ?? createS3DeploymentPlanArtifactStorage();
   const generatePlanArtifactId = options.generatePlanArtifactId ?? randomUUID;
+  const readTerraformArtifactFile = options.readTerraformArtifactFile ?? readFile;
 
   let workspace: PreparedTerraformWorkspace | undefined;
   let deploymentId: string | undefined;
@@ -143,6 +146,9 @@ export async function runDeploymentPlan(
       objectKey: artifact.objectKey,
       fileName: artifact.fileName
     });
+    const terraformArtifactSha256 = createSha256(
+      await readTerraformArtifactFile(workspace.mainFilePath)
+    );
 
     await repository.updateDeploymentStatus(deployment.id, "RUNNING");
 
@@ -264,6 +270,7 @@ export async function runDeploymentPlan(
           id: planArtifactId,
           deploymentId: deployment.id,
           terraformArtifactId: artifact.id,
+          terraformArtifactSha256,
           objectKey: uploadedPlanArtifact.objectKey,
           sha256: uploadedPlanArtifact.sha256,
           accountId: awsCredentials.accountId,
@@ -602,4 +609,8 @@ function summarizeUnexpectedPlanFailure(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
 
   return maskDeploymentMessage(message);
+}
+
+function createSha256(value: Buffer | Uint8Array | string): string {
+  return createHash("sha256").update(Buffer.from(value)).digest("hex");
 }

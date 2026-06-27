@@ -264,6 +264,7 @@ export const deploymentPlanArtifacts = pgTable(
     terraformArtifactId: varchar("terraform_artifact_id", { length: 36 })
       .notNull()
       .references(() => projectAssets.id, { onDelete: "restrict" }),
+    terraformArtifactSha256: varchar("terraform_artifact_sha256", { length: 64 }),
     objectKey: text("object_key").notNull(),
     sha256: varchar("sha256", { length: 64 }).notNull(),
     accountId: varchar("account_id", { length: 12 }).notNull(),

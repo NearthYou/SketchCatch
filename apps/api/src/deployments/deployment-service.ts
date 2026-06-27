@@ -83,6 +83,7 @@ export type CreateDeploymentPlanArtifactRecordInput = {
   id: string;
   deploymentId: string;
   terraformArtifactId: string;
+  terraformArtifactSha256: string;
   objectKey: string;
   sha256: string;
   accountId: string;
@@ -194,6 +195,17 @@ export class DeploymentConflictError extends Error {
     this.name = "DeploymentConflictError";
   }
 }
+
+const clearDeploymentApprovalFields = {
+  approvedAt: null,
+  approvedByUserId: null,
+  approvedTerraformArtifactId: null,
+  approvedPlanArtifactId: null,
+  approvedTerraformArtifactHash: null,
+  approvedTfplanHash: null,
+  approvedAwsAccountId: null,
+  approvedAwsRegion: null
+};
 
 export function createPostgresDeploymentRepository(db: Database): DeploymentRepository {
   return {
@@ -320,9 +332,13 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
     },
 
     async updateDeploymentStatus(deploymentId, status) {
+      const nextValues =
+        status === "RUNNING"
+          ? { status, ...clearDeploymentApprovalFields, ...touchUpdatedAt }
+          : { status, ...touchUpdatedAt };
       const [deployment] = await db
         .update(deployments)
-        .set({ status, ...touchUpdatedAt })
+        .set(nextValues)
         .where(eq(deployments.id, deploymentId))
         .returning();
 
@@ -332,7 +348,7 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
     async markDeploymentInitRunning(deploymentId) {
       const [deployment] = await db
         .update(deployments)
-        .set({ status: "RUNNING", ...touchUpdatedAt })
+        .set({ status: "RUNNING", ...clearDeploymentApprovalFields, ...touchUpdatedAt })
         .where(
           and(eq(deployments.id, deploymentId), inArray(deployments.status, ["PENDING", "FAILED"]))
         )
@@ -381,6 +397,7 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
             blockedReason: input.blockedReason,
             failureStage: null,
             errorSummary: null,
+            ...clearDeploymentApprovalFields,
             ...touchUpdatedAt
           })
           .where(eq(deployments.id, input.deploymentId))
@@ -415,7 +432,15 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
           status: "PENDING",
           ...touchUpdatedAt
         })
-        .where(eq(deployments.id, deploymentId))
+        .where(
+          and(
+            eq(deployments.id, deploymentId),
+            eq(deployments.currentPlanArtifactId, input.approvedPlanArtifactId),
+            eq(deployments.status, "PENDING"),
+            eq(deployments.isBlocked, true),
+            eq(deployments.blockedBy, "missing_approval")
+          )
+        )
         .returning();
 
       return deployment;

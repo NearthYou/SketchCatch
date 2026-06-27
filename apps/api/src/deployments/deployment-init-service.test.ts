@@ -400,6 +400,7 @@ function createDeploymentPlanArtifactRecord(
     id: "99999999-9999-4999-8999-999999999999",
     deploymentId,
     terraformArtifactId,
+    terraformArtifactSha256: "c".repeat(64),
     objectKey: "deployments/deployment-id/plans/plan-id.tfplan",
     sha256: "a".repeat(64),
     accountId: "123456789012",

@@ -48,6 +48,7 @@ type DeploymentResponse = {
     blockedReason: string | null;
     failureStage: string | null;
     errorSummary: string | null;
+    approvedAt: string | null;
     approvedByUserId: string | null;
     approvedTerraformArtifactId: string | null;
     approvedPlanArtifactId: string | null;
@@ -309,7 +310,11 @@ class FakeDeploymentRepository implements DeploymentRepository {
       return undefined;
     }
 
-    this.deployment = { ...this.deployment, status };
+    this.deployment = {
+      ...this.deployment,
+      status,
+      ...(status === "RUNNING" ? clearDeploymentApprovalSnapshot() : {})
+    };
 
     return this.deployment;
   };
@@ -330,7 +335,11 @@ class FakeDeploymentRepository implements DeploymentRepository {
       return undefined;
     }
 
-    this.deployment = { ...this.deployment, status: "RUNNING" };
+    this.deployment = {
+      ...this.deployment,
+      status: "RUNNING",
+      ...clearDeploymentApprovalSnapshot()
+    };
 
     return this.deployment;
   };
@@ -536,6 +545,29 @@ function createDeploymentRecord(
   };
 }
 
+function clearDeploymentApprovalSnapshot(): Pick<
+  DeploymentRecord,
+  | "approvedAt"
+  | "approvedByUserId"
+  | "approvedTerraformArtifactId"
+  | "approvedPlanArtifactId"
+  | "approvedTerraformArtifactHash"
+  | "approvedTfplanHash"
+  | "approvedAwsAccountId"
+  | "approvedAwsRegion"
+> {
+  return {
+    approvedAt: null,
+    approvedByUserId: null,
+    approvedTerraformArtifactId: null,
+    approvedPlanArtifactId: null,
+    approvedTerraformArtifactHash: null,
+    approvedTfplanHash: null,
+    approvedAwsAccountId: null,
+    approvedAwsRegion: null
+  };
+}
+
 function createDeploymentPlanArtifactRecord(
   overrides: Partial<DeploymentPlanArtifactRecord> = {}
 ): DeploymentPlanArtifactRecord {
@@ -543,6 +575,7 @@ function createDeploymentPlanArtifactRecord(
     id: planArtifactId,
     deploymentId,
     terraformArtifactId,
+    terraformArtifactSha256: "c".repeat(64),
     objectKey: `deployments/${deploymentId}/plans/${planArtifactId}.tfplan`,
     sha256: "a".repeat(64),
     accountId: "123456789012",
@@ -1008,6 +1041,16 @@ test("POST /api/deployments/:deploymentId/init maps missing Terraform artifacts 
 test("POST /api/deployments/:deploymentId/plan starts Terraform plan in the background", async () => {
   const repository = new FakeDeploymentRepository();
   const planCalls: Array<{ deploymentId: string; accessContext: ProjectAccessContext }> = [];
+  repository.deployment = createDeploymentRecord(deploymentId, {
+    approvedAt: fixedNow,
+    approvedByUserId: userId,
+    approvedTerraformArtifactId: terraformArtifactId,
+    approvedPlanArtifactId: planArtifactId,
+    approvedTerraformArtifactHash: "c".repeat(64),
+    approvedTfplanHash: "a".repeat(64),
+    approvedAwsAccountId: "123456789012",
+    approvedAwsRegion: "ap-northeast-2"
+  });
   const app = await buildDeploymentTestApp(repository, {
     runDeploymentPlan: async (input, candidateRepository) => {
       assert.equal(candidateRepository, repository);
@@ -1049,6 +1092,14 @@ test("POST /api/deployments/:deploymentId/plan starts Terraform plan in the back
   const body = response.json() as DeploymentResponse;
   assert.equal(body.deployment.id, deploymentId);
   assert.equal(body.deployment.status, "RUNNING");
+  assert.equal(body.deployment.approvedAt, null);
+  assert.equal(body.deployment.approvedByUserId, null);
+  assert.equal(body.deployment.approvedTerraformArtifactId, null);
+  assert.equal(body.deployment.approvedPlanArtifactId, null);
+  assert.equal(body.deployment.approvedTerraformArtifactHash, null);
+  assert.equal(body.deployment.approvedTfplanHash, null);
+  assert.equal(body.deployment.approvedAwsAccountId, null);
+  assert.equal(body.deployment.approvedAwsRegion, null);
   assert.deepEqual(planCalls, [
     {
       deploymentId,

@@ -29,6 +29,7 @@ export type AssertDeploymentApplyPreconditionsInput = {
   deployment: DeploymentRecord;
   currentPlanArtifact: DeploymentPlanArtifactRecord;
   currentTerraformArtifactHash: string;
+  currentTfplanHash: string;
   currentAwsConnection: AwsConnection;
 };
 
@@ -84,12 +85,22 @@ export async function approveDeploymentPlan(
   const terraformArtifactHash = createSha256(
     await downloadTerraformArtifact(terraformArtifact.objectKey)
   );
+  const plannedTerraformArtifactSha256 = currentPlanArtifact.terraformArtifactSha256;
+
+  if (!plannedTerraformArtifactSha256) {
+    throw new DeploymentConflictError("Terraform Plan must be regenerated before approval");
+  }
+
+  if (terraformArtifactHash !== plannedTerraformArtifactSha256) {
+    throw new DeploymentConflictError("Terraform artifact changed after plan");
+  }
+
   const approvedDeployment = await repository.approveDeployment(deployment.id, {
     approvedByUserId: input.accessContext.userId,
     approvedAt: now(),
     approvedTerraformArtifactId: deployment.terraformArtifactId,
     approvedPlanArtifactId: currentPlanArtifact.id,
-    approvedTerraformArtifactHash: terraformArtifactHash,
+    approvedTerraformArtifactHash: plannedTerraformArtifactSha256,
     approvedTfplanHash: currentPlanArtifact.sha256,
     approvedAwsAccountId: currentPlanArtifact.accountId,
     approvedAwsRegion: currentPlanArtifact.region,
@@ -100,7 +111,7 @@ export async function approveDeploymentPlan(
   });
 
   if (!approvedDeployment) {
-    throw new DeploymentNotFoundError("Deployment not found");
+    throw new DeploymentConflictError("Deployment approval state changed");
   }
 
   return approvedDeployment;
@@ -140,7 +151,7 @@ export function assertDeploymentApplyPreconditions(
       approvedRegion: deployment.approvedAwsRegion,
       currentRegion: input.currentAwsConnection.region,
       approvedTfplanHash: deployment.approvedTfplanHash,
-      currentTfplanHash: input.currentPlanArtifact.sha256
+      currentTfplanHash: input.currentTfplanHash
     });
   } catch (error) {
     if (error instanceof AwsConnectionRuntimeCredentialsError) {

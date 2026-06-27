@@ -289,6 +289,61 @@ test("approveDeploymentPlan rejects risk blocked deployments", async () => {
   assert.equal(repository.approvals.length, 0);
 });
 
+test("approveDeploymentPlan rejects Terraform artifact drift after plan", async () => {
+  const repository = new FakeDeploymentRepository();
+
+  await assert.rejects(
+    () =>
+      approveDeploymentPlan(
+        {
+          deploymentId,
+          accessContext: createAccessContext()
+        },
+        repository,
+        {
+          downloadTerraformArtifact: async () => "changed terraform content",
+          now: () => fixedNow
+        }
+      ),
+    (error) => {
+      assert.equal(error instanceof DeploymentConflictError, true);
+      assert.equal((error as Error).message, "Terraform artifact changed after plan");
+
+      return true;
+    }
+  );
+  assert.equal(repository.approvals.length, 0);
+});
+
+test("approveDeploymentPlan rejects plan artifacts without Terraform artifact hash", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.planArtifact = createPlanArtifactRecord({
+    terraformArtifactSha256: null
+  });
+
+  await assert.rejects(
+    () =>
+      approveDeploymentPlan(
+        {
+          deploymentId,
+          accessContext: createAccessContext()
+        },
+        repository,
+        {
+          downloadTerraformArtifact: async () => artifactContent,
+          now: () => fixedNow
+        }
+      ),
+    (error) => {
+      assert.equal(error instanceof DeploymentConflictError, true);
+      assert.equal((error as Error).message, "Terraform Plan must be regenerated before approval");
+
+      return true;
+    }
+  );
+  assert.equal(repository.approvals.length, 0);
+});
+
 test("assertDeploymentApplyPreconditions blocks artifact plan and AWS drift", () => {
   const approvedDeployment = createApprovedDeploymentRecord();
   const currentPlanArtifact = createPlanArtifactRecord();
@@ -299,6 +354,7 @@ test("assertDeploymentApplyPreconditions blocks artifact plan and AWS drift", ()
       deployment: approvedDeployment,
       currentPlanArtifact,
       currentTerraformArtifactHash: artifactHash,
+      currentTfplanHash: tfplanHash,
       currentAwsConnection
     })
   );
@@ -309,6 +365,7 @@ test("assertDeploymentApplyPreconditions blocks artifact plan and AWS drift", ()
         deployment: { ...approvedDeployment, terraformArtifactId: "changed-artifact-id" },
         currentPlanArtifact,
         currentTerraformArtifactHash: artifactHash,
+        currentTfplanHash: tfplanHash,
         currentAwsConnection
       }),
     /Terraform artifact changed after approval/
@@ -318,8 +375,9 @@ test("assertDeploymentApplyPreconditions blocks artifact plan and AWS drift", ()
     () =>
       assertDeploymentApplyPreconditions({
         deployment: approvedDeployment,
-        currentPlanArtifact: { ...currentPlanArtifact, sha256: "b".repeat(64) },
+        currentPlanArtifact,
         currentTerraformArtifactHash: artifactHash,
+        currentTfplanHash: "b".repeat(64),
         currentAwsConnection
       }),
     /Terraform plan changed before apply/
@@ -331,6 +389,7 @@ test("assertDeploymentApplyPreconditions blocks artifact plan and AWS drift", ()
         deployment: approvedDeployment,
         currentPlanArtifact,
         currentTerraformArtifactHash: "changed-artifact-hash",
+        currentTfplanHash: tfplanHash,
         currentAwsConnection
       }),
     /Terraform artifact content changed after approval/
@@ -342,6 +401,7 @@ test("assertDeploymentApplyPreconditions blocks artifact plan and AWS drift", ()
         deployment: approvedDeployment,
         currentPlanArtifact,
         currentTerraformArtifactHash: artifactHash,
+        currentTfplanHash: tfplanHash,
         currentAwsConnection: createVerifiedAwsConnection({ accountId: "999999999999" })
       }),
     /AWS account changed before apply/
@@ -455,6 +515,7 @@ function createPlanArtifactRecord(
     id: planArtifactId,
     deploymentId,
     terraformArtifactId,
+    terraformArtifactSha256: artifactHash,
     objectKey: `deployments/${deploymentId}/plans/${planArtifactId}.tfplan`,
     sha256: tfplanHash,
     accountId: "123456789012",

@@ -259,6 +259,7 @@ export type DeploymentPlanArtifact = {
   id: string;
   deploymentId: string;
   terraformArtifactId: string;
+  terraformArtifactSha256: string | null;
   objectKey: string;
   sha256: string;
   accountId: string;
