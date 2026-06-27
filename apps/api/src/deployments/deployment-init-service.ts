@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import {
   appendDeploymentLogs,
   DeploymentConflictError,
@@ -25,6 +26,7 @@ import {
   type TerraformRunResult
 } from "./terraform-runner.js";
 import { maskDeploymentMessage } from "./log-masking.js";
+import { assertTerraformArtifactIsSafe } from "./terraform-artifact-safety.js";
 
 export type RunDeploymentInitInput = {
   deploymentId: string;
@@ -36,6 +38,7 @@ export type RunDeploymentInitInput = {
 export type RunDeploymentInitOptions = {
   prepareTerraformWorkspace?: typeof defaultPrepareTerraformWorkspace;
   runTerraformInit?: typeof defaultRunTerraformInit;
+  readTerraformArtifactFile?: (filePath: string) => Promise<Buffer | Uint8Array | string>;
   prepareTerraformAwsCredentialEnv?: (
     awsConnection: AwsConnection
   ) => Promise<PreparedTerraformAwsCredentialEnv>;
@@ -55,6 +58,7 @@ export async function runDeploymentInit(
   const prepareTerraformWorkspace =
     options.prepareTerraformWorkspace ?? defaultPrepareTerraformWorkspace;
   const runTerraformInit = options.runTerraformInit ?? defaultRunTerraformInit;
+  const readTerraformArtifactFile = options.readTerraformArtifactFile ?? readFile;
   const prepareTerraformAwsCredentialEnv =
     options.prepareTerraformAwsCredentialEnv ??
     ((awsConnection: AwsConnection) =>
@@ -103,6 +107,12 @@ export async function runDeploymentInit(
       throw new DeploymentNotFoundError("Verified AWS connection not found for deployment");
     }
 
+    workspace = await prepareTerraformWorkspace({
+      objectKey: artifact.objectKey,
+      fileName: artifact.fileName
+    });
+    assertTerraformArtifactIsSafe(await readTerraformArtifactFile(workspace.mainFilePath));
+
     const awsCredentials = await prepareAwsCredentialsForInit({
       deploymentId: deployment.id,
       awsConnection,
@@ -111,11 +121,6 @@ export async function runDeploymentInit(
       markFailureRecorded: () => {
         failureRecorded = true;
       }
-    });
-
-    workspace = await prepareTerraformWorkspace({
-      objectKey: artifact.objectKey,
-      fileName: artifact.fileName
     });
 
     const wasPreMarkedRunning =

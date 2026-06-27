@@ -486,6 +486,60 @@ test("runDeploymentApply applies the approved tfplan and stores state resources 
   );
 });
 
+test("runDeploymentApply rejects unsafe Terraform before preparing AWS credentials", async () => {
+  const repository = new FakeDeploymentRepository();
+  let cleanupCalled = false;
+  let credentialsPrepared = false;
+  let terraformRan = false;
+  let planWritten = false;
+
+  await assert.rejects(
+    () =>
+      runDeploymentApply(
+        {
+          deploymentId,
+          accessContext: createAccessContext()
+        },
+        repository,
+        {
+          applyArtifactStorage: new FakeApplyArtifactStorage(),
+          readTerraformArtifactFile: async () => `
+            data "aws_ami" "ubuntu" {
+              most_recent = true
+            }
+          `,
+          writePlanFile: async () => {
+            planWritten = true;
+          },
+          prepareTerraformWorkspace: async () => ({
+            workdir: "C:/tmp/sketchcatch-terraform-unsafe-apply",
+            mainFilePath: "C:/tmp/sketchcatch-terraform-unsafe-apply/main.tf",
+            cleanup: async () => {
+              cleanupCalled = true;
+            }
+          }),
+          prepareTerraformAwsCredentialEnv: async () => {
+            credentialsPrepared = true;
+            throw new Error("AWS credentials should not be prepared");
+          },
+          runTerraformInit: async () => {
+            terraformRan = true;
+            throw new Error("Terraform init should not run");
+          }
+        }
+      ),
+    /top-level block "data" is not allowed/
+  );
+
+  assert.equal(cleanupCalled, true);
+  assert.equal(credentialsPrepared, false);
+  assert.equal(terraformRan, false);
+  assert.equal(planWritten, false);
+  assert.equal(repository.deployment?.status, "FAILED");
+  assert.equal(repository.failedInput?.failureStage, "apply");
+  assert.match(repository.failedInput?.errorSummary ?? "", /top-level block "data" is not allowed/);
+});
+
 test("runDeploymentApply marks apply failures failed and masks secret output", async () => {
   const repository = new FakeDeploymentRepository();
 

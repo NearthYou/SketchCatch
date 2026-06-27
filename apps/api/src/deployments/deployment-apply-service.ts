@@ -36,6 +36,7 @@ import {
   runTerraformShowStateJson as defaultRunTerraformShowStateJson,
   type TerraformRunResult
 } from "./terraform-runner.js";
+import { assertTerraformArtifactIsSafe } from "./terraform-artifact-safety.js";
 import {
   prepareTerraformWorkspace as defaultPrepareTerraformWorkspace,
   type PreparedTerraformWorkspace
@@ -145,9 +146,9 @@ export async function runDeploymentApply(
       fileName: terraformArtifact.fileName
     });
 
-    const currentTerraformArtifactHash = createSha256(
-      await readTerraformArtifactFile(workspace.mainFilePath)
-    );
+    const currentTerraformArtifactContent = await readTerraformArtifactFile(workspace.mainFilePath);
+    assertTerraformArtifactIsSafe(currentTerraformArtifactContent);
+    const currentTerraformArtifactHash = createSha256(currentTerraformArtifactContent);
     const currentTfplanHash = createSha256(planBuffer);
 
     assertDeploymentApplyPreconditions({

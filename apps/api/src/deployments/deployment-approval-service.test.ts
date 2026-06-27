@@ -337,6 +337,32 @@ test("approveDeploymentPlan rejects risk blocked deployments", async () => {
   assert.equal(repository.approvals.length, 0);
 });
 
+test("approveDeploymentPlan rejects unsafe Terraform artifacts before approval", async () => {
+  const repository = new FakeDeploymentRepository();
+
+  await assert.rejects(
+    () =>
+      approveDeploymentPlan(
+        {
+          deploymentId,
+          accessContext: createAccessContext()
+        },
+        repository,
+        {
+          downloadTerraformArtifact: async () => `
+            data "aws_ami" "ubuntu" {
+              most_recent = true
+            }
+          `,
+          now: () => fixedNow
+        }
+      ),
+    /top-level block "data" is not allowed/
+  );
+
+  assert.equal(repository.approvals.length, 0);
+});
+
 test("approveDeploymentPlan rejects Terraform artifact drift after plan", async () => {
   const repository = new FakeDeploymentRepository();
 

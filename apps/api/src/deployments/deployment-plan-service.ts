@@ -49,6 +49,7 @@ import {
   runTerraformShowJson as defaultRunTerraformShowJson,
   type TerraformRunResult
 } from "./terraform-runner.js";
+import { assertTerraformArtifactIsSafe } from "./terraform-artifact-safety.js";
 
 const defaultPlanFileName = "tfplan";
 
@@ -159,6 +160,14 @@ export async function runDeploymentPlan(
     }
 
     const preDeploymentAnalysis = analyzePreDeployment(architecture.architectureJson);
+    workspace = await prepareTerraformWorkspace({
+      objectKey: artifact.objectKey,
+      fileName: artifact.fileName
+    });
+    const terraformArtifactContent = await readTerraformArtifactFile(workspace.mainFilePath);
+    assertTerraformArtifactIsSafe(terraformArtifactContent);
+    const terraformArtifactSha256 = createSha256(terraformArtifactContent);
+
     const awsCredentials = await prepareAwsCredentialsForPlan({
       deploymentId: deployment.id,
       awsConnection,
@@ -168,14 +177,6 @@ export async function runDeploymentPlan(
         failureRecorded = true;
       }
     });
-
-    workspace = await prepareTerraformWorkspace({
-      objectKey: artifact.objectKey,
-      fileName: artifact.fileName
-    });
-    const terraformArtifactSha256 = createSha256(
-      await readTerraformArtifactFile(workspace.mainFilePath)
-    );
 
     const wasPreMarkedRunning =
       deployment.status === "RUNNING" && input.startedFromStatus !== undefined;

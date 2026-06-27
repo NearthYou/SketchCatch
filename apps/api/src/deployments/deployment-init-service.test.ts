@@ -24,6 +24,7 @@ const awsConnectionId = "77777777-7777-4777-8777-777777777777";
 const userId = "55555555-5555-4555-8555-555555555555";
 const otherUserId = "66666666-6666-4666-8666-666666666666";
 const fixedNow = new Date("2026-01-01T00:00:00.000Z");
+const terraformArtifactContent = "terraform { required_version = \">= 1.6.0\" }\n";
 
 type RepositoryCall =
   | {
@@ -591,6 +592,7 @@ test("runDeploymentInit restores the artifact, runs Terraform init, logs output,
           }
         };
       },
+      readTerraformArtifactFile: async () => terraformArtifactContent,
       runTerraformInit: async (workdir, options) => {
         runnerWorkdirs.push(workdir);
         runnerEnvs.push(options?.env);
@@ -692,6 +694,54 @@ test("runDeploymentInit restores the artifact, runs Terraform init, logs output,
   assert(repository.calls.some((call) => call.name === "markDeploymentInitSucceeded"));
 });
 
+test("runDeploymentInit rejects unsafe Terraform before preparing AWS credentials", async () => {
+  const repository = new FakeDeploymentRepository();
+  let cleanupCalled = false;
+  let credentialsPrepared = false;
+  let terraformRan = false;
+
+  await assert.rejects(
+    () =>
+      runDeploymentInit(
+        {
+          deploymentId,
+          accessContext: createAccessContext()
+        },
+        repository,
+        {
+          prepareTerraformWorkspace: async () => ({
+            workdir: "C:/tmp/sketchcatch-terraform-unsafe-init",
+            mainFilePath: "C:/tmp/sketchcatch-terraform-unsafe-init/main.tf",
+            cleanup: async () => {
+              cleanupCalled = true;
+            }
+          }),
+          readTerraformArtifactFile: async () => `
+            data "aws_ami" "ubuntu" {
+              most_recent = true
+            }
+          `,
+          prepareTerraformAwsCredentialEnv: async () => {
+            credentialsPrepared = true;
+            throw new Error("AWS credentials should not be prepared");
+          },
+          runTerraformInit: async () => {
+            terraformRan = true;
+            throw new Error("Terraform init should not run");
+          }
+        }
+      ),
+    /top-level block "data" is not allowed/
+  );
+
+  assert.equal(cleanupCalled, true);
+  assert.equal(credentialsPrepared, false);
+  assert.equal(terraformRan, false);
+  assert.equal(repository.deployment?.status, "FAILED");
+  assert.equal(repository.deployment?.failureStage, "init");
+  assert.match(repository.deployment?.errorSummary ?? "", /top-level block "data" is not allowed/);
+});
+
 test("runDeploymentInit records failed init output, marks the deployment failed, and masks secret logs", async () => {
   const repository = new FakeDeploymentRepository();
   let cleanupCalled = false;
@@ -710,6 +760,7 @@ test("runDeploymentInit records failed init output, marks the deployment failed,
           cleanupCalled = true;
         }
       }),
+      readTerraformArtifactFile: async () => terraformArtifactContent,
       runTerraformInit: async () => ({
         command: ["terraform", "init", "-backend=false", "-input=false", "-no-color"],
         exitCode: 1,
@@ -782,6 +833,7 @@ test("runDeploymentInit masks secret values in terraform failure summaries", asy
         mainFilePath: "C:/tmp/sketchcatch-terraform-secret-summary/main.tf",
         cleanup: async () => undefined
       }),
+      readTerraformArtifactFile: async () => terraformArtifactContent,
       runTerraformInit: async () => ({
         command: ["terraform", "init", "-backend=false", "-input=false", "-no-color"],
         exitCode: 1,

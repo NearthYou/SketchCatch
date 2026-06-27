@@ -712,6 +712,58 @@ test("runDeploymentPlan saves a tfplan artifact, summary, block, logs, and curre
   assert.equal(repository.logs.some((log) => log.message.includes("resource_changes")), false);
 });
 
+test("runDeploymentPlan rejects unsafe Terraform before preparing AWS credentials", async () => {
+  const repository = new FakeDeploymentRepository();
+  const planArtifactStorage = new FakePlanArtifactStorage();
+  let cleanupCalled = false;
+  let credentialsPrepared = false;
+  let terraformRan = false;
+
+  await assert.rejects(
+    () =>
+      runDeploymentPlan(
+        {
+          deploymentId,
+          accessContext: createAccessContext()
+        },
+        repository,
+        {
+          planArtifactStorage,
+          readTerraformArtifactFile: async () => `
+            data "aws_ami" "ubuntu" {
+              most_recent = true
+            }
+          `,
+          analyzePreDeployment: () => createAnalysis(),
+          prepareTerraformWorkspace: async () => ({
+            workdir: "C:/tmp/sketchcatch-terraform-unsafe-plan",
+            mainFilePath: "C:/tmp/sketchcatch-terraform-unsafe-plan/main.tf",
+            cleanup: async () => {
+              cleanupCalled = true;
+            }
+          }),
+          prepareTerraformAwsCredentialEnv: async () => {
+            credentialsPrepared = true;
+            throw new Error("AWS credentials should not be prepared");
+          },
+          runTerraformInit: async () => {
+            terraformRan = true;
+            throw new Error("Terraform init should not run");
+          }
+        }
+      ),
+    /top-level block "data" is not allowed/
+  );
+
+  assert.equal(cleanupCalled, true);
+  assert.equal(credentialsPrepared, false);
+  assert.equal(terraformRan, false);
+  assert.equal(repository.deployment?.status, "FAILED");
+  assert.equal(repository.deployment?.failureStage, "plan");
+  assert.match(repository.deployment?.errorSummary ?? "", /top-level block "data" is not allowed/);
+  assert.equal(planArtifactStorage.uploads.length, 0);
+});
+
 test("runDeploymentPlan reuses an unchanged pending plan artifact without rerunning Terraform", async () => {
   const repository = new FakeDeploymentRepository();
   const planSummary = {
