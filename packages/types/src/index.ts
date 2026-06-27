@@ -92,6 +92,8 @@ export type User = {
   createdAt: IsoDateTimeString;
 };
 
+export type OAuthProvider = "naver" | "kakao" | "github";
+
 export type AuthSession = {
   accessToken: string;
   expiresInSeconds: number;
