@@ -54,7 +54,8 @@ a {
 }
 
 button,
-input {
+input,
+select {
   font: inherit;
 }
 
@@ -791,6 +792,7 @@ h1 {
 
 .textArea,
 .codeArea,
+.selectInput,
 .textInput {
   background: var(--surface-primary);
   border: 1px solid var(--border-default);
@@ -816,6 +818,7 @@ h1 {
 
 .textArea:focus,
 .codeArea:focus,
+.selectInput:focus,
 .textInput:focus {
   background: var(--surface-secondary);
   border-color: var(--accent-primary);
