@@ -8,6 +8,10 @@ import {
   setOAuthStateCookie
 } from "./oauth-state.js";
 
+process.env.AUTH_TOKEN_SECRET = "test-auth-token-secret-with-at-least-32-characters";
+
+const OAUTH_STATE_COOKIE_NAME = "sketchcatch_oauth_state";
+
 test("createOAuthState returns unique URL-safe random values", () => {
   const firstState = createOAuthState();
   const secondState = createOAuthState();
@@ -64,6 +68,35 @@ test("readOAuthStateCookie returns null for invalid state cookie values", () => 
     null
   );
   assert.equal(readOAuthStateCookie(createRequestWithCookie("other=value")), null);
+});
+
+test("readOAuthStateCookie returns null for tampered signed state cookies", () => {
+  const reply = createFakeReply();
+
+  setOAuthStateCookie(reply, {
+    provider: "naver",
+    state: "state-token"
+  });
+
+  const cookieValue = getCookieValue(reply.getSetCookieHeader());
+  const [payload, signature] = cookieValue.split(".");
+  const tamperedPayload = Buffer.from(
+    JSON.stringify({
+      provider: "github",
+      state: "state-token"
+    })
+  ).toString("base64url");
+
+  assert.equal(
+    readOAuthStateCookie(
+      createRequestWithCookie(`${OAUTH_STATE_COOKIE_NAME}=${tamperedPayload}.${signature}`)
+    ),
+    null
+  );
+  assert.equal(
+    readOAuthStateCookie(createRequestWithCookie(`${OAUTH_STATE_COOKIE_NAME}=${payload}.tampered`)),
+    null
+  );
 });
 
 test("clearOAuthStateCookie expires the state cookie", () => {
@@ -139,4 +172,15 @@ function createRequestWithCookie(setCookieHeader: string): FastifyRequest {
       cookie: setCookieHeader.split(";")[0] ?? ""
     }
   } as FastifyRequest;
+}
+
+function getCookieValue(cookie: string): string {
+  const [cookiePair] = cookie.split(";");
+  const [, value] = cookiePair?.split("=") ?? [];
+
+  if (!value) {
+    assert.fail("Expected cookie value");
+  }
+
+  return value;
 }

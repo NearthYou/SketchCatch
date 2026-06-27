@@ -15,6 +15,7 @@ import { exchangeOAuthCodeForAccessToken, OAuthTokenExchangeError } from "../aut
 import { findOrCreateOAuthUser, OAuthUserConnectionError } from "../auth/oauth-users.js";
 import { createAuthSession } from "../auth/session.js";
 import { type DatabaseClient, getDatabaseClient } from "../db/client.js";
+import type { RateLimiter } from "../rate-limit/in-memory-rate-limiter.js";
 
 const oauthStartParamsSchema = z.object({
   provider: z.enum(["naver", "kakao", "github"])
@@ -32,9 +33,12 @@ const OAUTH_PROVIDER_ERROR = "provider_error";
 const OAUTH_INVALID_CALLBACK = "invalid_callback";
 const OAUTH_STATE_MISMATCH = "state_mismatch";
 const OAUTH_SESSION_FAILED = "session_failed";
+const OAUTH_RATE_LIMITED = "rate_limited";
 
 type OAuthRouteOptions = {
+  callbackRateLimiter?: RateLimiter;
   getDatabaseClient?: () => DatabaseClient;
+  startRateLimiter?: RateLimiter;
 };
 
 export async function registerOAuthRoutes(
@@ -45,6 +49,19 @@ export async function registerOAuthRoutes(
 
   app.get("/auth/oauth/:provider/start", async (request, reply) => {
     const { provider } = oauthStartParamsSchema.parse(request.params);
+
+    if (options.startRateLimiter) {
+      const rateLimitReply = consumeOAuthRateLimit(
+        reply,
+        options.startRateLimiter,
+        createOAuthRateLimitKey("start", provider, request.ip)
+      );
+
+      if (rateLimitReply) {
+        return rateLimitReply;
+      }
+    }
+
     const providerConfig = getOAuthProviderStaticConfig(provider);
     const runtimeConfig = requireOAuthProviderConfig(provider);
     const state = createOAuthState();
@@ -70,6 +87,19 @@ export async function registerOAuthRoutes(
 
   app.get("/auth/oauth/:provider/callback", async (request, reply) => {
     const { provider } = oauthStartParamsSchema.parse(request.params);
+
+    if (options.callbackRateLimiter) {
+      const rateLimitReply = consumeOAuthRateLimit(
+        reply,
+        options.callbackRateLimiter,
+        createOAuthRateLimitKey("callback", provider, request.ip)
+      );
+
+      if (rateLimitReply) {
+        return rateLimitReply;
+      }
+    }
+
     const query = oauthCallbackQuerySchema.parse(request.query);
 
     if (!query.state) {
@@ -111,6 +141,30 @@ export async function registerOAuthRoutes(
       return redirectToLoginWithOAuthError(reply, getOAuthCallbackError(error));
     }
   });
+}
+
+function consumeOAuthRateLimit(
+  reply: FastifyReply,
+  rateLimiter: RateLimiter,
+  key: string
+): FastifyReply | null {
+  const result = rateLimiter.consume(key);
+
+  if (result.allowed) {
+    return null;
+  }
+
+  reply.header("Retry-After", String(result.retryAfterSeconds));
+
+  return redirectToLoginWithOAuthError(reply, OAUTH_RATE_LIMITED);
+}
+
+function createOAuthRateLimitKey(
+  type: "start" | "callback",
+  provider: string,
+  ipAddress: string
+): string {
+  return `oauth:${type}:${provider}:${ipAddress}`;
 }
 
 function redirectToLoginWithOAuthError(reply: FastifyReply, oauthError: string): FastifyReply {

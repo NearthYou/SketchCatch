@@ -1,7 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import type { LightMyRequestResponse } from "fastify";
+import type { FastifyReply, FastifyRequest, LightMyRequestResponse } from "fastify";
+import type { OAuthProvider } from "@sketchcatch/types";
 import { buildApp } from "../app.js";
+import { readOAuthStateCookie, setOAuthStateCookie } from "../auth/oauth-state.js";
 import type { Database, DatabaseClient } from "../db/client.js";
 import { oauthAccounts, refreshTokens, users } from "../db/schema.js";
 
@@ -46,13 +48,11 @@ test("GET /api/auth/oauth/naver/start redirects to Naver authorize URL with a st
     assert.ok(state);
 
     const cookie = getSetCookieHeader(response, OAUTH_STATE_COOKIE_NAME);
-    const cookieValue = getCookieValue(cookie);
-
     assert.match(cookie, /HttpOnly/);
     assert.match(cookie, /SameSite=Lax/);
     assert.match(cookie, /Path=\/api\/auth\/oauth/);
     assert.match(cookie, /Max-Age=300/);
-    assert.deepEqual(JSON.parse(decodeURIComponent(cookieValue)), {
+    assert.deepEqual(readOAuthStateFromSetCookie(cookie), {
       provider: "naver",
       state
     });
@@ -91,9 +91,7 @@ test("GET /api/auth/oauth/kakao/start redirects to Kakao authorize URL with a st
     assert.ok(state);
 
     const cookie = getSetCookieHeader(response, OAUTH_STATE_COOKIE_NAME);
-    const cookieValue = getCookieValue(cookie);
-
-    assert.deepEqual(JSON.parse(decodeURIComponent(cookieValue)), {
+    assert.deepEqual(readOAuthStateFromSetCookie(cookie), {
       provider: "kakao",
       state
     });
@@ -132,12 +130,30 @@ test("GET /api/auth/oauth/github/start redirects to GitHub authorize URL with a 
     assert.ok(state);
 
     const cookie = getSetCookieHeader(response, OAUTH_STATE_COOKIE_NAME);
-    const cookieValue = getCookieValue(cookie);
-
-    assert.deepEqual(JSON.parse(decodeURIComponent(cookieValue)), {
+    assert.deepEqual(readOAuthStateFromSetCookie(cookie), {
       provider: "github",
       state
     });
+  } finally {
+    restoreEnv();
+    await app.close();
+  }
+});
+
+test("GET /api/auth/oauth/naver/start rate limits repeated OAuth starts", async () => {
+  const restoreEnv = setOAuthEnv();
+  const app = buildApp({
+    oauthStartRateLimiter: createBlockingRateLimiter()
+  });
+
+  try {
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/auth/oauth/naver/start"
+    });
+
+    assertOAuthErrorRedirect(response, "rate_limited");
+    assert.equal(response.headers["retry-after"], "60");
   } finally {
     restoreEnv();
     await app.close();
@@ -283,6 +299,87 @@ test("GET /api/auth/oauth/kakao/callback completes login without an email scope"
     assert.equal(fakeDb.oauthAccountRows[0]?.providerUserId, "123456789");
     assert.equal(fakeDb.refreshTokenRows[0]?.userId, fakeDb.userRows[0]?.id);
     assertRefreshTokenCookie(response.headers["set-cookie"]);
+    assertClearedOAuthStateCookie(response.headers["set-cookie"]);
+  } finally {
+    restoreFetch();
+    restoreEnv();
+    await app.close();
+  }
+});
+
+test("GET /api/auth/oauth/naver/callback rejects email collisions instead of auto-linking", async () => {
+  const restoreEnv = setOAuthEnv();
+  const existingUser = makeUser({
+    email: "demo@example.com",
+    id: "existing-password-user-id",
+    passwordHash: "hashed-password",
+    username: "password_user"
+  });
+  const fakeDb = new OAuthRouteFakeDb({
+    selectResults: [[], [existingUser]]
+  });
+  const { requests, restoreFetch } = installOAuthFetch([
+    jsonResponse({
+      access_token: "provider-access-token"
+    }),
+    jsonResponse({
+      response: {
+        email: "demo@example.com",
+        id: "naver-user-id",
+        nickname: "Naver Demo"
+      }
+    })
+  ]);
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  try {
+    const response = await app.inject({
+      headers: {
+        cookie: oauthStateCookie("state-token")
+      },
+      method: "GET",
+      url: "/api/auth/oauth/naver/callback?code=authorization-code&state=state-token"
+    });
+
+    assertOAuthErrorRedirect(response, "email_already_registered");
+    assert.equal(requests.length, 2);
+    assert.equal(fakeDb.userRows.length, 0);
+    assert.equal(fakeDb.oauthAccountRows.length, 0);
+    assert.equal(fakeDb.refreshTokenRows.length, 0);
+    assertClearedOAuthStateCookie(response.headers["set-cookie"]);
+  } finally {
+    restoreFetch();
+    restoreEnv();
+    await app.close();
+  }
+});
+
+test("GET /api/auth/oauth/naver/callback rate limits repeated OAuth callbacks", async () => {
+  const restoreEnv = setOAuthEnv();
+  const fakeDb = new OAuthRouteFakeDb();
+  const { requests, restoreFetch } = installOAuthFetch([]);
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client,
+    oauthCallbackRateLimiter: createBlockingRateLimiter()
+  });
+
+  try {
+    const response = await app.inject({
+      headers: {
+        cookie: oauthStateCookie("state-token")
+      },
+      method: "GET",
+      url: "/api/auth/oauth/naver/callback?code=authorization-code&state=state-token"
+    });
+
+    assertOAuthErrorRedirect(response, "rate_limited");
+    assert.equal(response.headers["retry-after"], "60");
+    assert.equal(requests.length, 0);
+    assert.equal(fakeDb.userRows.length, 0);
+    assert.equal(fakeDb.oauthAccountRows.length, 0);
+    assert.equal(fakeDb.refreshTokenRows.length, 0);
     assertClearedOAuthStateCookie(response.headers["set-cookie"]);
   } finally {
     restoreFetch();
@@ -608,17 +705,6 @@ function getSetCookieHeader(response: LightMyRequestResponse, cookieName: string
   return cookie;
 }
 
-function getCookieValue(cookie: string): string {
-  const [cookiePair] = cookie.split(";");
-  const [, value] = cookiePair?.split("=") ?? [];
-
-  if (!value) {
-    assert.fail("Expected cookie value");
-  }
-
-  return value;
-}
-
 function assertOAuthErrorRedirect(response: LightMyRequestResponse, oauthError: string): void {
   assert.equal(response.statusCode, 302);
   assert.equal(getHeaderValue(response, "location"), `/login?oauthError=${oauthError}`);
@@ -671,13 +757,47 @@ function getCookieHeader(cookies: string[], cookieName: string): string {
   return cookie;
 }
 
-function oauthStateCookie(state: string, provider = "naver"): string {
-  return `${OAUTH_STATE_COOKIE_NAME}=${encodeURIComponent(
-    JSON.stringify({
-      provider,
-      state
+function oauthStateCookie(state: string, provider: OAuthProvider = "naver"): string {
+  let setCookieHeader: string | undefined;
+  const reply = {
+    getHeader: () => undefined,
+    header: (_name: string, value: string | string[]) => {
+      setCookieHeader = Array.isArray(value) ? value.at(-1) : value;
+      return undefined;
+    }
+  } as unknown as FastifyReply;
+
+  setOAuthStateCookie(reply, {
+    provider,
+    state
+  });
+
+  if (!setCookieHeader) {
+    assert.fail("Expected signed OAuth state cookie");
+  }
+
+  return setCookieHeader.split(";")[0] ?? "";
+}
+
+function readOAuthStateFromSetCookie(setCookieHeader: string) {
+  const stateCookie = readOAuthStateCookie({
+    headers: {
+      cookie: setCookieHeader.split(";")[0] ?? ""
+    }
+  } as FastifyRequest);
+
+  assert.ok(stateCookie);
+
+  return stateCookie;
+}
+
+function createBlockingRateLimiter() {
+  return {
+    consume: () => ({
+      allowed: false as const,
+      retryAfterSeconds: 60
     })
-  )}`;
+  };
 }
 
 type CapturedFetchRequest = {

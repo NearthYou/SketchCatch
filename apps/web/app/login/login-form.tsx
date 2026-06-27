@@ -116,8 +116,12 @@ function getOAuthErrorMessage(oauthError: string): string {
   switch (oauthError) {
     case "email_required":
       return "소셜 계정에서 이메일 제공에 동의해야 로그인할 수 있습니다.";
+    case "email_already_registered":
+      return "이미 가입된 이메일입니다. 기존 계정으로 로그인한 뒤 계정 연결이 필요합니다.";
     case "invalid_callback":
       return "소셜 로그인 요청 정보가 올바르지 않습니다. 다시 시도해주세요.";
+    case "rate_limited":
+      return "소셜 로그인 요청이 너무 많습니다. 잠시 후 다시 시도해주세요.";
     case "profile_fetch_failed":
       return "소셜 계정 프로필 정보를 불러오지 못했습니다. 다시 시도해주세요.";
     case "provider_error":

@@ -6,6 +6,7 @@ import type { NormalizedOAuthProfile } from "./oauth-profile.js";
 import {
   createSocialUsername,
   findOrCreateOAuthUser,
+  OAUTH_EMAIL_ALREADY_REGISTERED,
   OAUTH_EMAIL_REQUIRED,
   OAUTH_USER_DELETED,
   OAUTH_USER_LINK_FAILED,
@@ -40,13 +41,20 @@ test("findOrCreateOAuthUser returns the already linked active user", async () =>
 
 test("findOrCreateOAuthUser links an existing active user by verified email", async () => {
   const existingUser = makeUser({
-    email: "demo@example.com",
+    email: "github@example.com",
     id: "password-user-id",
     username: "password_user"
   });
   const fakeDb = new FakeOAuthDb([[], [existingUser]]);
 
-  const result = await findOrCreateOAuthUser(fakeDb.db, makeProfile());
+  const result = await findOrCreateOAuthUser(
+    fakeDb.db,
+    makeProfile({
+      email: "github@example.com",
+      provider: "github",
+      providerUserId: "github-user-id"
+    })
+  );
 
   assert.equal(result.id, existingUser.id);
   assert.equal(fakeDb.insertedUsers.length, 0);
@@ -56,11 +64,28 @@ test("findOrCreateOAuthUser links an existing active user by verified email", as
 
   assert.match(String(insertedAccount.id), UUID_PATTERN);
   assert.equal(insertedAccount.userId, existingUser.id);
-  assert.equal(insertedAccount.provider, "naver");
-  assert.equal(insertedAccount.providerUserId, "naver-user-id");
-  assert.equal(insertedAccount.email, "demo@example.com");
+  assert.equal(insertedAccount.provider, "github");
+  assert.equal(insertedAccount.providerUserId, "github-user-id");
+  assert.equal(insertedAccount.email, "github@example.com");
   assert.equal(insertedAccount.displayName, "Demo User");
   assert.equal(insertedAccount.profileImageUrl, "https://example.com/avatar.png");
+});
+
+test("findOrCreateOAuthUser rejects Naver email collisions instead of auto-linking", async () => {
+  const existingUser = makeUser({
+    email: "demo@example.com",
+    id: "password-user-id",
+    username: "password_user"
+  });
+  const fakeDb = new FakeOAuthDb([[], [existingUser]]);
+
+  await assertOAuthUserConnectionError(
+    () => findOrCreateOAuthUser(fakeDb.db, makeProfile()),
+    OAUTH_EMAIL_ALREADY_REGISTERED
+  );
+
+  assert.equal(fakeDb.insertedUsers.length, 0);
+  assert.equal(fakeDb.insertedOAuthAccounts.length, 0);
 });
 
 test("findOrCreateOAuthUser creates a new user and OAuth account when no match exists", async () => {
@@ -200,8 +225,16 @@ test("findOrCreateOAuthUser rejects a deleted user matched by email", async () =
   const fakeDb = new FakeOAuthDb([[], [deletedUser]]);
 
   await assertOAuthUserConnectionError(
-    () => findOrCreateOAuthUser(fakeDb.db, makeProfile()),
-    OAUTH_USER_DELETED
+    () =>
+      findOrCreateOAuthUser(
+        fakeDb.db,
+        makeProfile({
+          provider: "github",
+          providerUserId: "github-deleted-user-id"
+        })
+      ),
+    OAUTH_USER_DELETED,
+    "github"
   );
 
   assert.equal(fakeDb.insertedUsers.length, 0);

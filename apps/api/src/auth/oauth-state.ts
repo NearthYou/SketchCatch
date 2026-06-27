@@ -1,6 +1,7 @@
-import { randomBytes } from "node:crypto";
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import type { OAuthProvider } from "@sketchcatch/types";
+import { requireAuthTokenSecret } from "../config/env.js";
 
 const OAUTH_STATE_COOKIE_NAME = "sketchcatch_oauth_state";
 const OAUTH_STATE_COOKIE_PATH = "/api/auth/oauth";
@@ -18,7 +19,7 @@ export function createOAuthState(): string {
 export function setOAuthStateCookie(reply: FastifyReply, value: OAuthStateCookie): void {
   appendSetCookieHeader(
     reply,
-    serializeOAuthCookie(OAUTH_STATE_COOKIE_NAME, encodeURIComponent(JSON.stringify(value)), {
+    serializeOAuthCookie(OAUTH_STATE_COOKIE_NAME, signOAuthStateCookieValue(value), {
       httpOnly: true,
       maxAge: OAUTH_STATE_COOKIE_MAX_AGE_SECONDS,
       path: OAUTH_STATE_COOKIE_PATH
@@ -34,7 +35,7 @@ export function readOAuthStateCookie(request: FastifyRequest): OAuthStateCookie 
   }
 
   try {
-    const parsedValue = JSON.parse(rawValue) as Partial<OAuthStateCookie>;
+    const parsedValue = verifyOAuthStateCookieValue(rawValue);
 
     if (!isOAuthProvider(parsedValue.provider) || typeof parsedValue.state !== "string") {
       return null;
@@ -85,6 +86,39 @@ function getCookie(request: FastifyRequest, cookieName: string): string | null {
   }
 
   return null;
+}
+
+function signOAuthStateCookieValue(value: OAuthStateCookie): string {
+  const payload = Buffer.from(JSON.stringify(value)).toString("base64url");
+  const signature = createHmac("sha256", requireAuthTokenSecret())
+    .update(payload)
+    .digest("base64url");
+
+  return `${payload}.${signature}`;
+}
+
+function verifyOAuthStateCookieValue(rawValue: string): Partial<OAuthStateCookie> {
+  const [payload, signature] = rawValue.split(".");
+
+  if (!payload || !signature || !isValidOAuthStateSignature(payload, signature)) {
+    return {};
+  }
+
+  return JSON.parse(
+    Buffer.from(payload, "base64url").toString("utf8")
+  ) as Partial<OAuthStateCookie>;
+}
+
+function isValidOAuthStateSignature(payload: string, signature: string): boolean {
+  const expectedSignature = createHmac("sha256", requireAuthTokenSecret())
+    .update(payload)
+    .digest("base64url");
+  const actualBuffer = Buffer.from(signature);
+  const expectedBuffer = Buffer.from(expectedSignature);
+
+  return (
+    actualBuffer.length === expectedBuffer.length && timingSafeEqual(actualBuffer, expectedBuffer)
+  );
 }
 
 function appendSetCookieHeader(reply: FastifyReply, cookie: string): void {
