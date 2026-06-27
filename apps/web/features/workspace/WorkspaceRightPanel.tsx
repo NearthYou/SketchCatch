@@ -498,7 +498,9 @@ function TerraformCodePanel({
   const [statusMessage, setStatusMessage] = useState("main.tf");
   const [hasLocalEdits, setHasLocalEdits] = useState(false);
   const [saveBanner, setSaveBanner] = useState<TerraformSaveBanner | null>(null);
+  const [diagnosticToast, setDiagnosticToast] = useState<TerraformDiagnostic | null>(null);
   const codeRequestIdRef = useRef(0);
+  const diagnosticToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latestDiagramFingerprintRef = useRef("");
   const latestExternalSaveRequestIdRef = useRef(externalSaveRequestId);
   const lineNumberRef = useRef<HTMLOListElement | null>(null);
@@ -563,6 +565,18 @@ function TerraformCodePanel({
     }
   }, []);
 
+  const showDiagnosticToast = useCallback((diagnostic: TerraformDiagnostic) => {
+    if (diagnosticToastTimerRef.current) {
+      clearTimeout(diagnosticToastTimerRef.current);
+    }
+
+    setDiagnosticToast(diagnostic);
+    diagnosticToastTimerRef.current = setTimeout(() => {
+      setDiagnosticToast(null);
+      diagnosticToastTimerRef.current = null;
+    }, 3800);
+  }, []);
+
   const refreshTerraformCode = useCallback(
     async (diagramFingerprint: string) => {
       const requestId = codeRequestIdRef.current + 1;
@@ -584,6 +598,7 @@ function TerraformCodePanel({
         onDiagnosticsChange([]);
         setHasLocalEdits(false);
         setSaveBanner(null);
+        setDiagnosticToast(null);
         setStatusMessage("그래프 기준으로 동기화됨");
         latestDiagramFingerprintRef.current = diagramFingerprint;
         onDirtyChange(false);
@@ -609,11 +624,8 @@ function TerraformCodePanel({
       );
 
       if (validationError) {
-        setSaveBanner({
-          kind: "error",
-          line: validationError.line,
-          message: validationError.message
-        });
+        setSaveBanner(null);
+        showDiagnosticToast(validationError);
         setStatusMessage("저장 실패");
         return;
       }
@@ -628,11 +640,8 @@ function TerraformCodePanel({
       const syncError = syncResult.diagnostics.find((diagnostic) => diagnostic.severity === "error");
 
       if (syncError) {
-        setSaveBanner({
-          kind: "error",
-          line: syncError.line,
-          message: syncError.message
-        });
+        setSaveBanner(null);
+        showDiagnosticToast(syncError);
         setStatusMessage("저장 실패");
         return;
       }
@@ -641,6 +650,7 @@ function TerraformCodePanel({
       latestDiagramFingerprintRef.current = toDiagramFingerprint(syncResult.diagramJson);
       setHasLocalEdits(false);
       setSaveBanner(null);
+      setDiagnosticToast(null);
       setStatusMessage("저장됨");
       onDirtyChange(false);
       saved = true;
@@ -654,7 +664,8 @@ function TerraformCodePanel({
     onDiagnosticsChange,
     onDirtyChange,
     requestState,
-    runRequest
+    runRequest,
+    showDiagnosticToast
   ]);
 
   useEffect(() => {
@@ -690,6 +701,14 @@ function TerraformCodePanel({
   useEffect(() => {
     onDirtyChange(hasLocalEdits);
   }, [hasLocalEdits, onDirtyChange]);
+
+  useEffect(() => {
+    return () => {
+      if (diagnosticToastTimerRef.current) {
+        clearTimeout(diagnosticToastTimerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (isResourceCodeMode || !selectedBlock || !textareaRef.current) {
@@ -768,6 +787,7 @@ function TerraformCodePanel({
 
     setHasLocalEdits(true);
     setSaveBanner({ kind: "dirty" });
+    setDiagnosticToast(null);
     setStatusMessage("수정 중");
   }
 
@@ -791,6 +811,13 @@ function TerraformCodePanel({
       const validationResult = await validateTerraformCode(displayedTerraformCode);
       setDiagnostics(validationResult.diagnostics);
       onDiagnosticsChange(validationResult.diagnostics);
+      const firstDiagnostic = validationResult.diagnostics[0] ?? null;
+
+      if (firstDiagnostic) {
+        showDiagnosticToast(firstDiagnostic);
+      } else {
+        setDiagnosticToast(null);
+      }
       setStatusMessage(validationResult.diagnostics.length === 0 ? "검증 완료" : "진단 확인 필요");
     }, "Terraform 코드를 검증하지 못했습니다.");
   }
@@ -966,6 +993,13 @@ function TerraformCodePanel({
           wrap="off"
         />
       </div>
+
+      {diagnosticToast ? (
+        <div className={styles.terraformDiagnosticToast} role="status" aria-live="polite">
+          <strong>{formatTerraformDiagnosticTitle(diagnosticToast)}</strong>
+          <span>{diagnosticToast.message}</span>
+        </div>
+      ) : null}
 
       <section className={styles.terraformDiagnosticsHidden} aria-live="polite" id="terraform-issues">
         <div className={styles.terraformDiagnosticsHeader}>
