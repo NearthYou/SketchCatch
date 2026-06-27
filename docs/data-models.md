@@ -331,6 +331,7 @@ API 경로:
 - `POST /api/aws/connections`
 - `POST /api/aws/connections/:connectionId/test`
 - `POST /api/aws/connections/:connectionId/verify`
+- `POST /api/aws/connections/:connectionId/verify-created-role`
 - `DELETE /api/aws/connections/:connectionId`
 - `GET /api/aws/connections/:connectionId/cloudformation-template`
 

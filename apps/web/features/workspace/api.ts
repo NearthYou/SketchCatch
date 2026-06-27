@@ -27,6 +27,7 @@ import type {
   TerraformGenerateResponse,
   TerraformSyncToDiagramResponse,
   TerraformValidateResponse,
+  VerifyAwsConnectionCreatedRoleRequest,
   VerifyAwsConnectionRequest,
   VerifyAwsConnectionResponse
 } from "../../../../packages/types/src";
@@ -173,6 +174,24 @@ export async function verifyAwsConnection({
       method: "POST",
       body: {
         roleArn
+      }
+    }
+  );
+}
+
+export async function verifyAwsConnectionCreatedRole({
+  connectionId,
+  accountId
+}: {
+  connectionId: string;
+} & VerifyAwsConnectionCreatedRoleRequest): Promise<VerifyAwsConnectionResponse> {
+  return apiFetch<VerifyAwsConnectionResponse>(
+    `/aws/connections/${encodeURIComponent(connectionId)}/verify-created-role`,
+    {
+      auth: true,
+      method: "POST",
+      body: {
+        accountId
       }
     }
   );

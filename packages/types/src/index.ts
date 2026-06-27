@@ -407,6 +407,10 @@ export type VerifyAwsConnectionRequest = {
   roleArn: string;
 };
 
+export type VerifyAwsConnectionCreatedRoleRequest = {
+  accountId: string;
+};
+
 export type VerifyAwsConnectionResponse = TestAwsConnectionResponse & {
   awsConnection: AwsConnection;
 };

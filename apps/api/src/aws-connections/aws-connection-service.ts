@@ -75,6 +75,12 @@ export type VerifyAwsConnectionInput = {
   roleArn: string;
 };
 
+export type VerifyAwsConnectionCreatedRoleInput = {
+  connectionId: string;
+  accessContext: ProjectAccessContext;
+  accountId: string;
+};
+
 export type TestStoredAwsConnectionInput = VerifyAwsConnectionInput;
 
 export type DeleteAwsConnectionInput = {
@@ -440,6 +446,24 @@ export async function verifyAwsConnection(
   };
 }
 
+export async function verifyAwsConnectionCreatedRole(
+  input: VerifyAwsConnectionCreatedRoleInput,
+  repository: AwsConnectionRepository,
+  tester: AwsConnectionTester = createAwsConnectionTester(),
+  options: VerifyAwsConnectionOptions = {}
+): Promise<VerifyAwsConnectionResponse> {
+  return verifyAwsConnection(
+    {
+      connectionId: input.connectionId,
+      accessContext: input.accessContext,
+      roleArn: createRecommendedAwsConnectionRoleArn(input.accountId)
+    },
+    repository,
+    tester,
+    options
+  );
+}
+
 export async function testStoredAwsConnection(
   input: TestStoredAwsConnectionInput,
   repository: AwsConnectionRepository,
@@ -628,47 +652,12 @@ function createTerraformApplyPolicyDocument(): Record<string, unknown> {
     Statement: [
       {
         Effect: "Allow",
-        Action: [
-          "ec2:Describe*",
-          "ec2:CreateVpc",
-          "ec2:DeleteVpc",
-          "ec2:ModifyVpcAttribute",
-          "ec2:CreateSubnet",
-          "ec2:DeleteSubnet",
-          "ec2:ModifySubnetAttribute",
-          "ec2:CreateInternetGateway",
-          "ec2:DeleteInternetGateway",
-          "ec2:AttachInternetGateway",
-          "ec2:DetachInternetGateway",
-          "ec2:CreateRouteTable",
-          "ec2:DeleteRouteTable",
-          "ec2:CreateRoute",
-          "ec2:DeleteRoute",
-          "ec2:AssociateRouteTable",
-          "ec2:DisassociateRouteTable",
-          "ec2:CreateSecurityGroup",
-          "ec2:DeleteSecurityGroup",
-          "ec2:AuthorizeSecurityGroupIngress",
-          "ec2:AuthorizeSecurityGroupEgress",
-          "ec2:RevokeSecurityGroupIngress",
-          "ec2:RevokeSecurityGroupEgress",
-          "ec2:RunInstances",
-          "ec2:TerminateInstances",
-          "ec2:CreateTags",
-          "ec2:DeleteTags"
-        ],
+        Action: "ec2:*",
         Resource: "*"
       },
       {
         Effect: "Allow",
-        Action: [
-          "s3:CreateBucket",
-          "s3:DeleteBucket",
-          "s3:GetBucketLocation",
-          "s3:GetBucketTagging",
-          "s3:ListBucket",
-          "s3:PutBucketTagging"
-        ],
+        Action: "s3:*",
         Resource: "*"
       }
     ]
@@ -716,6 +705,16 @@ export function isRecommendedAwsConnectionRoleArn(roleArn: string): boolean {
   );
 }
 
+export function createRecommendedAwsConnectionRoleArn(accountId: string): string {
+  const trimmedAccountId = accountId.trim();
+
+  if (!/^\d{12}$/.test(trimmedAccountId)) {
+    throw new AwsConnectionVerificationError("AWS account ID must be 12 digits");
+  }
+
+  return `arn:aws:iam::${trimmedAccountId}:role/${recommendedAwsConnectionRoleName}`;
+}
+
 function assertRecommendedAwsConnectionRoleArn(roleArn: string): void {
   if (!isRecommendedAwsConnectionRoleArn(roleArn)) {
     throw new AwsConnectionVerificationError(
@@ -739,7 +738,7 @@ function createAwsConnectionCloudFormationTemplateBody(input: {
 
   return [
     'AWSTemplateFormatVersion: "2010-09-09"',
-    "Description: SketchCatch AWS Role connection. Creates only the IAM Role required for STS AssumeRole verification.",
+    "Description: SketchCatch AWS Role connection. Creates the IAM Role required for Terraform Plan and Apply.",
     "Resources:",
     "  SketchCatchTerraformExecutionRole:",
     "    Type: AWS::IAM::Role",
@@ -766,47 +765,14 @@ function createAwsConnectionCloudFormationTemplateBody(input: {
     '            Version: "2012-10-17"',
     "            Statement:",
     "              - Effect: Allow",
-    "                Action:",
-    "                  - ec2:Describe*",
-    "                  - ec2:CreateVpc",
-    "                  - ec2:DeleteVpc",
-    "                  - ec2:ModifyVpcAttribute",
-    "                  - ec2:CreateSubnet",
-    "                  - ec2:DeleteSubnet",
-    "                  - ec2:ModifySubnetAttribute",
-    "                  - ec2:CreateInternetGateway",
-    "                  - ec2:DeleteInternetGateway",
-    "                  - ec2:AttachInternetGateway",
-    "                  - ec2:DetachInternetGateway",
-    "                  - ec2:CreateRouteTable",
-    "                  - ec2:DeleteRouteTable",
-    "                  - ec2:CreateRoute",
-    "                  - ec2:DeleteRoute",
-    "                  - ec2:AssociateRouteTable",
-    "                  - ec2:DisassociateRouteTable",
-    "                  - ec2:CreateSecurityGroup",
-    "                  - ec2:DeleteSecurityGroup",
-    "                  - ec2:AuthorizeSecurityGroupIngress",
-    "                  - ec2:AuthorizeSecurityGroupEgress",
-    "                  - ec2:RevokeSecurityGroupIngress",
-    "                  - ec2:RevokeSecurityGroupEgress",
-    "                  - ec2:RunInstances",
-    "                  - ec2:TerminateInstances",
-    "                  - ec2:CreateTags",
-    "                  - ec2:DeleteTags",
+    "                Action: ec2:*",
     '                Resource: "*"',
     "              - Effect: Allow",
-    "                Action:",
-    "                  - s3:CreateBucket",
-    "                  - s3:DeleteBucket",
-    "                  - s3:GetBucketLocation",
-    "                  - s3:GetBucketTagging",
-    "                  - s3:ListBucket",
-    "                  - s3:PutBucketTagging",
+    "                Action: s3:*",
     '                Resource: "*"',
     "Outputs:",
     "  RoleArn:",
-    "    Description: Copy this ARN back to SketchCatch to verify the AWS connection.",
+    "    Description: Created role ARN for SketchCatch verification.",
     "    Value: !GetAtt SketchCatchTerraformExecutionRole.Arn",
     ""
   ].join("\n");
@@ -845,10 +811,13 @@ function createAwsConnectionLaunchStackUrl(input: {
 }): string {
   const baseUrl = new URL("https://console.aws.amazon.com/cloudformation/home");
   baseUrl.searchParams.set("region", input.region);
+  const quickCreateParams = new URLSearchParams({
+    templateURL: input.templateUrl,
+    stackName: input.stackName,
+    capabilities: "CAPABILITY_NAMED_IAM"
+  });
 
-  return `${baseUrl.toString()}#/stacks/quickcreate?templateURL=${encodeURIComponent(
-    input.templateUrl
-  )}&stackName=${encodeURIComponent(input.stackName)}`;
+  return `${baseUrl.toString()}#/stacks/quickcreate?${quickCreateParams.toString()}`;
 }
 
 type AwsConnectionCloudFormationTemplateTokenPayload = {

@@ -3,10 +3,12 @@ import assert from "node:assert/strict";
 import {
   AwsConnectionDeleteConflictError,
   AwsConnectionVerificationError,
+  createRecommendedAwsConnectionRoleArn,
   createAwsConnection,
   deleteAwsConnection,
   listAwsConnections,
   verifyAwsConnection,
+  verifyAwsConnectionCreatedRole,
   type AwsConnectionRecord,
   type AwsConnectionRepository
 } from "./aws-connection-service.js";
@@ -258,6 +260,21 @@ test("createAwsConnection creates a pending connection with server-generated ext
     }
   });
   assert.notEqual(result.roleSetup.permissionSetup.terraformPolicyDocument, null);
+  assert.deepEqual(result.roleSetup.permissionSetup.terraformPolicyDocument, {
+    Version: "2012-10-17",
+    Statement: [
+      {
+        Effect: "Allow",
+        Action: "ec2:*",
+        Resource: "*"
+      },
+      {
+        Effect: "Allow",
+        Action: "s3:*",
+        Resource: "*"
+      }
+    ]
+  });
   assert.deepEqual(result.callerRoleSetup, {
     policyName: "SketchCatchAssumeTerraformExecutionRole",
     assumableRoleArnPattern: "arn:aws:iam::*:role/SketchCatchTerraformExecutionRole",
@@ -422,6 +439,49 @@ test("verifyAwsConnection stores only verified role metadata after STS caller id
       region: "ap-northeast-2"
     }
   ]);
+});
+
+test("verifyAwsConnectionCreatedRole verifies the fixed CloudFormation role from account id", async () => {
+  const repository = new FakeAwsConnectionRepository();
+  repository.awsConnection = createAwsConnectionRecord();
+  const tester = new FakeAwsConnectionTester();
+
+  const result = await verifyAwsConnectionCreatedRole(
+    {
+      connectionId: awsConnectionId,
+      accessContext: {
+        kind: "user",
+        userId
+      },
+      accountId: "123456789012"
+    },
+    repository,
+    tester,
+    {
+      now: () => verifiedAt
+    }
+  );
+
+  assert.equal(result.ok, true);
+  assert.equal(result.awsConnection.roleArn, roleArn);
+  assert.deepEqual(tester.calls, [
+    {
+      roleArn,
+      externalId,
+      region: "ap-northeast-2"
+    }
+  ]);
+});
+
+test("createRecommendedAwsConnectionRoleArn rejects malformed account ids", () => {
+  assert.equal(
+    createRecommendedAwsConnectionRoleArn("123456789012"),
+    "arn:aws:iam::123456789012:role/SketchCatchTerraformExecutionRole"
+  );
+  assert.throws(
+    () => createRecommendedAwsConnectionRoleArn("1234"),
+    /AWS account ID must be 12 digits/
+  );
 });
 
 test("verifyAwsConnection rejects storing verified metadata when role ARN account and caller account differ", async () => {
