@@ -60,6 +60,8 @@ export const awsConnectionStatusEnum = pgEnum("aws_connection_status", [
   "failed"
 ]);
 
+export const oauthProviderEnum = pgEnum("oauth_provider", ["naver", "kakao", "github"]);
+
 export const users = pgTable(
   "users",
   {
@@ -67,7 +69,7 @@ export const users = pgTable(
     username: varchar("username", { length: 30 }).notNull(),
     email: varchar("email", { length: 255 }).notNull(),
     nickname: varchar("nickname", { length: 40 }).notNull(),
-    passwordHash: text("password_hash").notNull(),
+    passwordHash: text("password_hash"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     deletedAt: timestamp("deleted_at", { withTimezone: true })
@@ -120,6 +122,27 @@ export const loginAttempts = pgTable(
     index("login_attempts_username_idx").on(table.username),
     index("login_attempts_ip_address_idx").on(table.ipAddress),
     index("login_attempts_locked_until_idx").on(table.lockedUntil)
+  ]
+);
+
+export const oauthAccounts = pgTable(
+  "oauth_accounts",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    userId: varchar("user_id", { length: 36 })
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    provider: oauthProviderEnum("provider").notNull(),
+    providerUserId: varchar("provider_user_id", { length: 255 }).notNull(),
+    email: varchar("email", { length: 255 }),
+    displayName: varchar("display_name", { length: 120 }),
+    profileImageUrl: text("profile_image_url"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [
+    uniqueIndex("oauth_accounts_provider_user_unique").on(table.provider, table.providerUserId),
+    index("oauth_accounts_user_id_idx").on(table.userId)
   ]
 );
 
@@ -354,6 +377,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   projects: many(projects),
   refreshTokens: many(refreshTokens),
   loginAttempts: many(loginAttempts),
+  oauthAccounts: many(oauthAccounts),
   awsConnections: many(awsConnections)
 }));
 
@@ -367,6 +391,13 @@ export const refreshTokensRelations = relations(refreshTokens, ({ one }) => ({
 export const loginAttemptsRelations = relations(loginAttempts, ({ one }) => ({
   user: one(users, {
     fields: [loginAttempts.userId],
+    references: [users.id]
+  })
+}));
+
+export const oauthAccountsRelations = relations(oauthAccounts, ({ one }) => ({
+  user: one(users, {
+    fields: [oauthAccounts.userId],
     references: [users.id]
   })
 }));

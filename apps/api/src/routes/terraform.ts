@@ -3,12 +3,14 @@ import { z } from "zod";
 import type {
   DiagramJson,
   TerraformGenerateResponse,
+  TerraformSyncToDiagramResponse,
   TerraformValidateResponse
 } from "@sketchcatch/types";
 import { requireActiveUserId } from "../auth/current-user.js";
 import { getDatabaseClient, type DatabaseClient } from "../db/client.js";
 import { generateTerraformFromDiagramJson } from "../services/terraform/diagram-to-terraform.js";
 import { createTerraformDiagnostics } from "../services/terraform/terraform-diagnostics.js";
+import { syncTerraformToDiagramJson } from "../services/terraform/terraform-to-diagram.js";
 
 const terraformValidateBodySchema = z.object({
   terraformCode: z.string()
@@ -85,6 +87,11 @@ const terraformGenerateBodySchema = z.object({
   diagramJson: diagramJsonSchema
 });
 
+const terraformSyncToDiagramBodySchema = z.object({
+  diagramJson: diagramJsonSchema,
+  terraformCode: z.string()
+});
+
 type TerraformRouteOptions = {
   getDatabaseClient?: () => DatabaseClient;
 };
@@ -114,4 +121,15 @@ export async function registerTerraformRoutes(
       diagnostics: createTerraformDiagnostics(body.terraformCode)
     };
   });
+
+  app.post(
+    "/terraform/sync-to-diagram",
+    async (request): Promise<TerraformSyncToDiagramResponse> => {
+      await requireActiveUserId(request, getTerraformDatabaseClient);
+
+      const body = terraformSyncToDiagramBodySchema.parse(request.body);
+
+      return syncTerraformToDiagramJson(body.diagramJson, body.terraformCode);
+    }
+  );
 }

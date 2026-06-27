@@ -13,6 +13,7 @@ import type {
   DeploymentLogListResponse,
   DeploymentResourceListResponse,
   DeploymentResponse,
+  DiagramJson,
   Project,
   ProjectDetailsResponse,
   ProjectDraftResponse,
@@ -23,6 +24,9 @@ import type {
   TerraformOutputListResponse,
   TestAwsConnectionRequest,
   TestAwsConnectionResponse,
+  TerraformGenerateResponse,
+  TerraformSyncToDiagramResponse,
+  TerraformValidateResponse,
   VerifyAwsConnectionRequest,
   VerifyAwsConnectionResponse
 } from "../../../../packages/types/src";
@@ -76,6 +80,45 @@ export async function saveProjectDraft({
     method: "PUT",
     body: {
       diagramJson
+    }
+  });
+}
+
+export async function generateTerraformCode(diagramJson: DiagramJson): Promise<string> {
+  const response = await apiFetch<TerraformGenerateResponse>("/terraform/generate", {
+    auth: true,
+    method: "POST",
+    body: {
+      diagramJson
+    }
+  });
+
+  return response.terraformCode;
+}
+
+export async function validateTerraformCode(terraformCode: string): Promise<TerraformValidateResponse> {
+  return apiFetch<TerraformValidateResponse>("/terraform/validate", {
+    auth: true,
+    method: "POST",
+    body: {
+      terraformCode
+    }
+  });
+}
+
+export async function syncTerraformToDiagram({
+  diagramJson,
+  terraformCode
+}: {
+  diagramJson: DiagramJson;
+  terraformCode: string;
+}): Promise<TerraformSyncToDiagramResponse> {
+  return apiFetch<TerraformSyncToDiagramResponse>("/terraform/sync-to-diagram", {
+    auth: true,
+    method: "POST",
+    body: {
+      diagramJson,
+      terraformCode
     }
   });
 }

@@ -100,6 +100,7 @@ function DiagramEditorInner({
   const [diagram, setDiagram] = useState<DiagramJson>(() => cloneDiagram(initialDiagram ?? EMPTY_DIAGRAM));
   const diagramRef = useRef(diagram);
   const [history, setHistory] = useState<DiagramHistoryState>({ past: [], future: [] });
+  const [inspectedNodeId, setInspectedNodeId] = useState<string | null>(null);
   const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
   const [selectedEdgeIds, setSelectedEdgeIds] = useState<string[]>([]);
   const [interactionMode, setInteractionMode] = useState<"select" | "pan">("select");
@@ -132,6 +133,7 @@ function DiagramEditorInner({
     const nextDiagram = cloneDiagram(initialDiagram ?? EMPTY_DIAGRAM);
     replaceDiagram(nextDiagram, false);
     setHistory({ past: [], future: [] });
+    setInspectedNodeId(null);
     setSelectedNodeIds([]);
     setSelectedEdgeIds([]);
   }, [initialDiagram, replaceDiagram]);
@@ -184,6 +186,7 @@ function DiagramEditorInner({
 
       const currentDiagram = diagramRef.current;
       replaceDiagram(cloneDiagram(previous));
+      setInspectedNodeId(null);
       setSelectedNodeIds([]);
       setSelectedEdgeIds([]);
 
@@ -204,6 +207,7 @@ function DiagramEditorInner({
 
       const currentDiagram = diagramRef.current;
       replaceDiagram(cloneDiagram(next));
+      setInspectedNodeId(null);
       setSelectedNodeIds([]);
       setSelectedEdgeIds([]);
 
@@ -248,15 +252,29 @@ function DiagramEditorInner({
     [commitDiagramUpdate]
   );
 
+  const applyDiagramJson = useCallback<DiagramEditorPanelContext["applyDiagramJson"]>(
+    (nextDiagram) => {
+      commitDiagramUpdate(() => cloneDiagram(nextDiagram));
+      setInspectedNodeId(null);
+      setSelectedNodeIds([]);
+      setSelectedEdgeIds([]);
+    },
+    [commitDiagramUpdate]
+  );
+
   const panelContext = useMemo<DiagramEditorPanelContext>(
     () => ({
+      diagram,
+      inspectedNodeId,
       selectedNodeId,
       nodes: diagram.nodes,
       edges: diagram.edges,
+      applyDiagramJson,
+      closeInspectedNode: () => setInspectedNodeId(null),
       updateNodeParameters,
       updateNodeMetadata
     }),
-    [diagram.edges, diagram.nodes, selectedNodeId, updateNodeMetadata, updateNodeParameters]
+    [applyDiagramJson, diagram, inspectedNodeId, selectedNodeId, updateNodeMetadata, updateNodeParameters]
   );
 
   const handleBringForward = useCallback(
@@ -713,6 +731,7 @@ function DiagramEditorInner({
 
   function handleShellKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
     if (event.key === "Escape") {
+      setInspectedNodeId(null);
       setSelectedNodeIds([]);
       setSelectedEdgeIds([]);
     }
@@ -848,6 +867,12 @@ function DiagramEditorInner({
             onInit={handleInit}
             onMoveEnd={handleMoveEnd}
             onNodeClick={() => focusEditorShell()}
+            onNodeDoubleClick={(_event, node) => {
+              setSelectedNodeIds([node.id]);
+              setSelectedEdgeIds([]);
+              setInspectedNodeId(node.id);
+              focusEditorShell();
+            }}
             onNodeDragStart={handleNodeDragStart}
             onNodeDragStop={handleNodeDragStop}
             onNodesChange={handleNodesChange}
