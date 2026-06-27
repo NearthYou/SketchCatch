@@ -17,7 +17,7 @@ import { createAuthSession } from "../auth/session.js";
 import { type DatabaseClient, getDatabaseClient } from "../db/client.js";
 
 const oauthStartParamsSchema = z.object({
-  provider: z.literal("naver")
+  provider: z.enum(["naver", "kakao", "github"])
 });
 
 const oauthCallbackQuerySchema = z
@@ -78,11 +78,7 @@ export async function registerOAuthRoutes(
 
     const storedState = readOAuthStateCookie(request);
 
-    if (
-      !storedState ||
-      storedState.provider !== provider ||
-      storedState.state !== query.state
-    ) {
+    if (!storedState || storedState.provider !== provider || storedState.state !== query.state) {
       return redirectToLoginWithOAuthError(reply, OAUTH_STATE_MISMATCH);
     }
 

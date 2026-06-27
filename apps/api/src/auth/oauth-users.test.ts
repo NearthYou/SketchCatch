@@ -95,6 +95,66 @@ test("findOrCreateOAuthUser creates a new user and OAuth account when no match e
   assert.equal(insertedAccount.email, "demo@example.com");
 });
 
+test("findOrCreateOAuthUser creates a Kakao user with a placeholder email when email is unavailable", async () => {
+  const fakeDb = new FakeOAuthDb([[], []]);
+
+  const result = await findOrCreateOAuthUser(
+    fakeDb.db,
+    makeProfile({
+      displayName: "Kakao Demo",
+      email: null,
+      emailVerified: false,
+      provider: "kakao",
+      providerUserId: "123456789"
+    })
+  );
+
+  assert.equal(fakeDb.insertedUsers.length, 1);
+  assert.equal(fakeDb.insertedOAuthAccounts.length, 1);
+
+  const insertedUser = getOnlyRow(fakeDb.insertedUsers);
+  const insertedAccount = getOnlyRow(fakeDb.insertedOAuthAccounts);
+
+  assert.equal(insertedUser.email, "kakao_123456789@oauth.local");
+  assert.equal(insertedUser.username, "kakao_123456789");
+  assert.equal(insertedUser.nickname, "Kakao Demo");
+  assert.equal(insertedUser.passwordHash, null);
+  assert.equal(insertedAccount.email, "kakao_123456789@oauth.local");
+  assert.equal(insertedAccount.provider, "kakao");
+  assert.equal(insertedAccount.providerUserId, "123456789");
+  assert.equal(result.email, "kakao_123456789@oauth.local");
+});
+
+test("findOrCreateOAuthUser returns an already linked Kakao user without requiring email", async () => {
+  const linkedUser = makeUser({
+    email: "kakao_123456789@oauth.local",
+    id: "linked-kakao-user-id",
+    nickname: "Kakao Demo",
+    username: "kakao_123456789"
+  });
+  const fakeDb = new FakeOAuthDb([[{ userId: linkedUser.id }], [linkedUser]]);
+
+  const result = await findOrCreateOAuthUser(
+    fakeDb.db,
+    makeProfile({
+      email: null,
+      emailVerified: false,
+      provider: "kakao",
+      providerUserId: "123456789"
+    })
+  );
+
+  assert.deepEqual(result, {
+    createdAt: linkedUser.createdAt,
+    email: "kakao_123456789@oauth.local",
+    id: linkedUser.id,
+    nickname: "Kakao Demo",
+    username: "kakao_123456789"
+  });
+  assert.equal(fakeDb.insertedUsers.length, 0);
+  assert.equal(fakeDb.insertedOAuthAccounts.length, 0);
+});
+
 test("findOrCreateOAuthUser rejects profiles without a trusted email", async () => {
   const fakeDb = new FakeOAuthDb();
 
@@ -110,7 +170,7 @@ test("findOrCreateOAuthUser rejects profiles without a trusted email", async () 
     OAUTH_EMAIL_REQUIRED
   );
 
-  assert.equal(fakeDb.selectCalls, 0);
+  assert.equal(fakeDb.selectCalls, 1);
   assert.equal(fakeDb.insertedUsers.length, 0);
   assert.equal(fakeDb.insertedOAuthAccounts.length, 0);
 });
@@ -218,13 +278,14 @@ class FakeOAuthDb {
 
 async function assertOAuthUserConnectionError(
   run: () => Promise<unknown>,
-  expectedOAuthError: string
+  expectedOAuthError: string,
+  expectedProvider = "naver"
 ): Promise<void> {
   try {
     await run();
   } catch (error) {
     assert.ok(error instanceof OAuthUserConnectionError);
-    assert.equal(error.provider, "naver");
+    assert.equal(error.provider, expectedProvider);
     assert.equal(error.oauthError, expectedOAuthError);
     assert.equal(error.message, "OAuth user connection failed");
     assert.doesNotMatch(error.message, /duplicate|secret|access.token/i);

@@ -43,10 +43,70 @@ test("exchangeOAuthCodeForAccessToken exchanges a Naver code for an access token
   assert.equal(body.get("client_secret"), "naver-client-secret");
   assert.equal(body.get("code"), "authorization-code");
   assert.equal(body.get("state"), "state-token");
-  assert.equal(
-    body.get("redirect_uri"),
-    "http://localhost:3000/api/auth/oauth/naver/callback"
+  assert.equal(body.get("redirect_uri"), "http://localhost:3000/api/auth/oauth/naver/callback");
+});
+
+test("exchangeOAuthCodeForAccessToken exchanges a Kakao code without client secret", async () => {
+  const { fetcher, requests } = createFetch(async () =>
+    jsonResponse({
+      access_token: "provider-access-token",
+      token_type: "bearer"
+    })
   );
+
+  const token = await exchangeOAuthCodeForAccessToken({
+    code: "authorization-code",
+    env: makeRuntimeEnv({
+      kakaoOauthClientId: "kakao-client-id",
+      kakaoOauthClientSecret: ""
+    }),
+    fetcher,
+    provider: "kakao",
+    state: "state-token"
+  });
+
+  assert.deepEqual(token, {
+    accessToken: "provider-access-token"
+  });
+  assert.equal(String(requests[0]?.input), "https://kauth.kakao.com/oauth/token");
+
+  const body = new URLSearchParams(String(requests[0]?.init?.body));
+
+  assert.equal(body.get("client_id"), "kakao-client-id");
+  assert.equal(body.get("client_secret"), null);
+  assert.equal(body.get("redirect_uri"), "http://localhost:3000/api/auth/oauth/kakao/callback");
+});
+
+test("exchangeOAuthCodeForAccessToken exchanges a GitHub code for an access token", async () => {
+  const { fetcher, requests } = createFetch(async () =>
+    jsonResponse({
+      access_token: "provider-access-token",
+      scope: "read:user,user:email",
+      token_type: "bearer"
+    })
+  );
+
+  const token = await exchangeOAuthCodeForAccessToken({
+    code: "authorization-code",
+    env: makeRuntimeEnv({
+      githubOauthClientId: "github-client-id",
+      githubOauthClientSecret: "github-client-secret"
+    }),
+    fetcher,
+    provider: "github",
+    state: "state-token"
+  });
+
+  assert.deepEqual(token, {
+    accessToken: "provider-access-token"
+  });
+  assert.equal(String(requests[0]?.input), "https://github.com/login/oauth/access_token");
+
+  const body = new URLSearchParams(String(requests[0]?.init?.body));
+
+  assert.equal(body.get("client_id"), "github-client-id");
+  assert.equal(body.get("client_secret"), "github-client-secret");
+  assert.equal(body.get("redirect_uri"), "http://localhost:3000/api/auth/oauth/github/callback");
 });
 
 test("exchangeOAuthCodeForAccessToken maps provider HTTP failures to OAuth errors", async () => {

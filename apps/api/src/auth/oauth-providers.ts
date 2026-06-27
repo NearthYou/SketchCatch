@@ -3,6 +3,7 @@ import { getRuntimeEnv, type RuntimeEnv } from "../config/env.js";
 
 export type OAuthProviderStaticConfig = {
   authorizationUrl: string;
+  emailUrl?: string;
   tokenUrl: string;
   profileUrl: string;
   scopes: string[];
@@ -10,7 +11,7 @@ export type OAuthProviderStaticConfig = {
 
 export type OAuthProviderRuntimeConfig = {
   clientId: string;
-  clientSecret: string;
+  clientSecret: string | null;
   redirectBaseUrl: string;
 };
 
@@ -20,12 +21,23 @@ export const oauthProviderConfigs: Partial<Record<OAuthProvider, OAuthProviderSt
     tokenUrl: "https://nid.naver.com/oauth2.0/token",
     profileUrl: "https://openapi.naver.com/v1/nid/me",
     scopes: []
+  },
+  kakao: {
+    authorizationUrl: "https://kauth.kakao.com/oauth/authorize",
+    tokenUrl: "https://kauth.kakao.com/oauth/token",
+    profileUrl: "https://kapi.kakao.com/v2/user/me",
+    scopes: ["profile_nickname"]
+  },
+  github: {
+    authorizationUrl: "https://github.com/login/oauth/authorize",
+    emailUrl: "https://api.github.com/user/emails",
+    tokenUrl: "https://github.com/login/oauth/access_token",
+    profileUrl: "https://api.github.com/user",
+    scopes: ["read:user", "user:email"]
   }
 };
 
-export function getOAuthProviderStaticConfig(
-  provider: OAuthProvider
-): OAuthProviderStaticConfig {
+export function getOAuthProviderStaticConfig(provider: OAuthProvider): OAuthProviderStaticConfig {
   const config = oauthProviderConfigs[provider];
 
   if (!config) {
@@ -71,7 +83,7 @@ function getOAuthProviderCredentials(
     case "kakao":
       return {
         clientId: requireEnvValue("KAKAO_OAUTH_CLIENT_ID", env.kakaoOauthClientId),
-        clientSecret: requireEnvValue("KAKAO_OAUTH_CLIENT_SECRET", env.kakaoOauthClientSecret)
+        clientSecret: optionalEnvValue(env.kakaoOauthClientSecret)
       };
     case "github":
       return {
@@ -89,4 +101,10 @@ function requireEnvValue(name: string, value: string | undefined): string {
   }
 
   return normalizedValue;
+}
+
+function optionalEnvValue(value: string | undefined): string | null {
+  const normalizedValue = value?.trim();
+
+  return normalizedValue && normalizedValue.length > 0 ? normalizedValue : null;
 }

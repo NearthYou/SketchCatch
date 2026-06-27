@@ -2,6 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   fetchOAuthProfile,
+  normalizeGitHubOAuthProfile,
+  normalizeKakaoOAuthProfile,
   normalizeNaverOAuthProfile,
   OAUTH_PROFILE_FETCH_FAILED,
   OAuthProfileFetchError
@@ -63,6 +65,120 @@ test("normalizeNaverOAuthProfile rejects malformed Naver profile responses", asy
   );
 });
 
+test("normalizeKakaoOAuthProfile maps a Kakao response to a normalized profile", () => {
+  const profile = normalizeKakaoOAuthProfile({
+    id: 123456789,
+    kakao_account: {
+      email: " User@Example.COM ",
+      is_email_valid: true,
+      is_email_verified: true,
+      profile: {
+        nickname: " Kakao Demo ",
+        profile_image_url: " https://example.com/kakao.png ",
+        thumbnail_image_url: " https://example.com/kakao-thumb.png "
+      }
+    }
+  });
+
+  assert.deepEqual(profile, {
+    provider: "kakao",
+    providerUserId: "123456789",
+    email: "user@example.com",
+    emailVerified: true,
+    displayName: "Kakao Demo",
+    profileImageUrl: "https://example.com/kakao.png"
+  });
+});
+
+test("normalizeKakaoOAuthProfile rejects unverified Kakao emails", () => {
+  const profile = normalizeKakaoOAuthProfile({
+    id: "kakao-user-id",
+    kakao_account: {
+      email: "user@example.com",
+      is_email_valid: true,
+      is_email_verified: false,
+      profile: {
+        nickname: ""
+      }
+    }
+  });
+
+  assert.deepEqual(profile, {
+    provider: "kakao",
+    providerUserId: "kakao-user-id",
+    email: "user@example.com",
+    emailVerified: false,
+    displayName: "Kakao User",
+    profileImageUrl: null
+  });
+});
+
+test("normalizeGitHubOAuthProfile maps a GitHub response and primary verified email", () => {
+  const profile = normalizeGitHubOAuthProfile(
+    {
+      avatar_url: " https://example.com/github.png ",
+      email: null,
+      id: 987654321,
+      login: "github-demo",
+      name: " GitHub Demo "
+    },
+    [
+      {
+        email: "secondary@example.com",
+        primary: false,
+        verified: true
+      },
+      {
+        email: "Primary@Example.COM",
+        primary: true,
+        verified: true
+      }
+    ]
+  );
+
+  assert.deepEqual(profile, {
+    provider: "github",
+    providerUserId: "987654321",
+    email: "primary@example.com",
+    emailVerified: true,
+    displayName: "GitHub Demo",
+    profileImageUrl: "https://example.com/github.png"
+  });
+});
+
+test("normalizeGitHubOAuthProfile falls back to any verified GitHub email", () => {
+  const profile = normalizeGitHubOAuthProfile(
+    {
+      avatar_url: "",
+      email: null,
+      id: "github-user-id",
+      login: "github-demo",
+      name: ""
+    },
+    [
+      {
+        email: "unverified@example.com",
+        primary: true,
+        verified: false
+      },
+      {
+        email: "verified@example.com",
+        primary: false,
+        verified: true
+      }
+    ]
+  );
+
+  assert.deepEqual(profile, {
+    provider: "github",
+    providerUserId: "github-user-id",
+    email: "verified@example.com",
+    emailVerified: true,
+    displayName: "github-demo",
+    profileImageUrl: null
+  });
+});
+
 test("fetchOAuthProfile fetches and normalizes a Naver profile", async () => {
   const { fetcher, requests } = createFetch(async () =>
     jsonResponse({
@@ -90,6 +206,68 @@ test("fetchOAuthProfile fetches and normalizes a Naver profile", async () => {
   });
   assert.equal(profile.providerUserId, "naver-user-id");
   assert.equal(profile.email, "user@example.com");
+});
+
+test("fetchOAuthProfile fetches and normalizes a Kakao profile", async () => {
+  const { fetcher, requests } = createFetch(async () =>
+    jsonResponse({
+      id: 123456789,
+      kakao_account: {
+        email: "user@example.com",
+        is_email_valid: true,
+        is_email_verified: true,
+        profile: {
+          nickname: "Kakao Demo"
+        }
+      }
+    })
+  );
+
+  const profile = await fetchOAuthProfile({
+    accessToken: "provider-access-token",
+    fetcher,
+    provider: "kakao"
+  });
+
+  assert.equal(requests.length, 1);
+  assert.equal(String(requests[0]?.input), "https://kapi.kakao.com/v2/user/me");
+  assert.equal(profile.provider, "kakao");
+  assert.equal(profile.providerUserId, "123456789");
+  assert.equal(profile.email, "user@example.com");
+});
+
+test("fetchOAuthProfile fetches GitHub profile and verified email list", async () => {
+  const { fetcher, requests } = createFetch(async (input) => {
+    if (String(input) === "https://api.github.com/user") {
+      return jsonResponse({
+        avatar_url: "https://example.com/github.png",
+        id: 987654321,
+        login: "github-demo",
+        name: "GitHub Demo"
+      });
+    }
+
+    return jsonResponse([
+      {
+        email: "primary@example.com",
+        primary: true,
+        verified: true
+      }
+    ]);
+  });
+
+  const profile = await fetchOAuthProfile({
+    accessToken: "provider-access-token",
+    fetcher,
+    provider: "github"
+  });
+
+  assert.equal(requests.length, 2);
+  assert.equal(String(requests[0]?.input), "https://api.github.com/user");
+  assert.equal(String(requests[1]?.input), "https://api.github.com/user/emails");
+  assert.equal(profile.provider, "github");
+  assert.equal(profile.providerUserId, "987654321");
+  assert.equal(profile.email, "primary@example.com");
 });
 
 test("fetchOAuthProfile maps provider HTTP failures to OAuth errors", async () => {

@@ -45,8 +45,6 @@ export async function findOrCreateOAuthUser(
   db: Database,
   profile: NormalizedOAuthProfile
 ): Promise<PublicUserRow> {
-  const email = getVerifiedEmail(profile);
-
   try {
     const linkedUser = await findUserByOAuthAccount(db, profile);
 
@@ -54,20 +52,24 @@ export async function findOrCreateOAuthUser(
       return ensureActivePublicUser(linkedUser, profile.provider);
     }
 
+    const emailResolution = resolveOAuthEmail(profile);
+
     return await db.transaction(async (tx) => {
-      const existingEmailUser = await findUserByEmail(tx, email);
+      const existingEmailUser = emailResolution.canLinkByEmail
+        ? await findUserByEmail(tx, emailResolution.email)
+        : null;
 
       if (existingEmailUser) {
         const publicUser = ensureActivePublicUser(existingEmailUser, profile.provider);
 
-        await createOAuthAccount(tx, publicUser.id, profile, email);
+        await createOAuthAccount(tx, publicUser.id, profile, emailResolution.email);
 
         return publicUser;
       }
 
-      const createdUser = await createOAuthUser(tx, profile, email);
+      const createdUser = await createOAuthUser(tx, profile, emailResolution.email);
 
-      await createOAuthAccount(tx, createdUser.id, profile, email);
+      await createOAuthAccount(tx, createdUser.id, profile, emailResolution.email);
 
       return createdUser;
     });
@@ -87,12 +89,41 @@ export function createSocialUsername(provider: OAuthProvider, providerUserId: st
   return `${provider}_${usernameSuffix}`.slice(0, 30).toLowerCase();
 }
 
-function getVerifiedEmail(profile: NormalizedOAuthProfile): string {
+type OAuthEmailResolution = {
+  canLinkByEmail: boolean;
+  email: string;
+};
+
+function resolveOAuthEmail(profile: NormalizedOAuthProfile): OAuthEmailResolution {
+  if (profile.email && profile.emailVerified) {
+    return {
+      canLinkByEmail: true,
+      email: profile.email
+    };
+  }
+
+  if (profile.provider === "kakao") {
+    return {
+      canLinkByEmail: false,
+      email: createKakaoPlaceholderEmail(profile.providerUserId)
+    };
+  }
+
   if (!profile.email || !profile.emailVerified) {
     throw new OAuthUserConnectionError(profile.provider, OAUTH_EMAIL_REQUIRED);
   }
 
-  return profile.email;
+  return {
+    canLinkByEmail: true,
+    email: profile.email
+  };
+}
+
+function createKakaoPlaceholderEmail(providerUserId: string): string {
+  const safeId = providerUserId.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 50);
+  const suffix = safeId.length > 0 ? safeId : "user";
+
+  return `kakao_${suffix.toLowerCase()}@oauth.local`;
 }
 
 async function findUserByOAuthAccount(
@@ -183,10 +214,7 @@ function createSocialNickname(profile: NormalizedOAuthProfile): string {
   return nickname.slice(0, 40);
 }
 
-function ensureActivePublicUser(
-  user: UserForOAuthRow,
-  provider: OAuthProvider
-): PublicUserRow {
+function ensureActivePublicUser(user: UserForOAuthRow, provider: OAuthProvider): PublicUserRow {
   if (user.deletedAt) {
     throw new OAuthUserConnectionError(provider, OAUTH_USER_DELETED);
   }

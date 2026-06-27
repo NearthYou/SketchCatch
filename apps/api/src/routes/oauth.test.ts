@@ -62,6 +62,88 @@ test("GET /api/auth/oauth/naver/start redirects to Naver authorize URL with a st
   }
 });
 
+test("GET /api/auth/oauth/kakao/start redirects to Kakao authorize URL with a state cookie", async () => {
+  const restoreEnv = setOAuthEnv();
+  const app = buildApp();
+
+  try {
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/auth/oauth/kakao/start"
+    });
+
+    assert.equal(response.statusCode, 302);
+
+    const location = getHeaderValue(response, "location");
+    const redirectUrl = new URL(location);
+    const state = redirectUrl.searchParams.get("state");
+
+    assert.equal(
+      `${redirectUrl.origin}${redirectUrl.pathname}`,
+      "https://kauth.kakao.com/oauth/authorize"
+    );
+    assert.equal(redirectUrl.searchParams.get("client_id"), "kakao-client-id");
+    assert.equal(
+      redirectUrl.searchParams.get("redirect_uri"),
+      "http://localhost:3000/api/auth/oauth/kakao/callback"
+    );
+    assert.equal(redirectUrl.searchParams.get("scope"), "profile_nickname");
+    assert.ok(state);
+
+    const cookie = getSetCookieHeader(response, OAUTH_STATE_COOKIE_NAME);
+    const cookieValue = getCookieValue(cookie);
+
+    assert.deepEqual(JSON.parse(decodeURIComponent(cookieValue)), {
+      provider: "kakao",
+      state
+    });
+  } finally {
+    restoreEnv();
+    await app.close();
+  }
+});
+
+test("GET /api/auth/oauth/github/start redirects to GitHub authorize URL with a state cookie", async () => {
+  const restoreEnv = setOAuthEnv();
+  const app = buildApp();
+
+  try {
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/auth/oauth/github/start"
+    });
+
+    assert.equal(response.statusCode, 302);
+
+    const location = getHeaderValue(response, "location");
+    const redirectUrl = new URL(location);
+    const state = redirectUrl.searchParams.get("state");
+
+    assert.equal(
+      `${redirectUrl.origin}${redirectUrl.pathname}`,
+      "https://github.com/login/oauth/authorize"
+    );
+    assert.equal(redirectUrl.searchParams.get("client_id"), "github-client-id");
+    assert.equal(
+      redirectUrl.searchParams.get("redirect_uri"),
+      "http://localhost:3000/api/auth/oauth/github/callback"
+    );
+    assert.equal(redirectUrl.searchParams.get("scope"), "read:user user:email");
+    assert.ok(state);
+
+    const cookie = getSetCookieHeader(response, OAUTH_STATE_COOKIE_NAME);
+    const cookieValue = getCookieValue(cookie);
+
+    assert.deepEqual(JSON.parse(decodeURIComponent(cookieValue)), {
+      provider: "github",
+      state
+    });
+  } finally {
+    restoreEnv();
+    await app.close();
+  }
+});
+
 test("GET /api/auth/oauth/google/start rejects providers that are not enabled yet", async () => {
   const restoreEnv = setOAuthEnv();
   const app = buildApp();
@@ -148,6 +230,113 @@ test("GET /api/auth/oauth/naver/callback completes login and redirects to mypage
 
     assert.doesNotMatch(getHeaderValue(response, "location"), /provider-access-token/);
     assert.doesNotMatch(serializedRows, /provider-access-token/);
+    assertRefreshTokenCookie(response.headers["set-cookie"]);
+    assertClearedOAuthStateCookie(response.headers["set-cookie"]);
+  } finally {
+    restoreFetch();
+    restoreEnv();
+    await app.close();
+  }
+});
+
+test("GET /api/auth/oauth/kakao/callback completes login without an email scope", async () => {
+  const restoreEnv = setOAuthEnv();
+  const fakeDb = new OAuthRouteFakeDb({
+    selectResults: [[], []]
+  });
+  const { requests, restoreFetch } = installOAuthFetch([
+    jsonResponse({
+      access_token: "provider-access-token"
+    }),
+    jsonResponse({
+      id: 123456789,
+      kakao_account: {
+        profile: {
+          nickname: "Kakao Demo"
+        }
+      }
+    })
+  ]);
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  try {
+    const response = await app.inject({
+      headers: {
+        cookie: oauthStateCookie("state-token", "kakao")
+      },
+      method: "GET",
+      url: "/api/auth/oauth/kakao/callback?code=authorization-code&state=state-token"
+    });
+
+    assert.equal(response.statusCode, 302);
+    assert.equal(getHeaderValue(response, "location"), "/mypage");
+    assert.equal(requests.length, 2);
+    assert.equal(String(requests[0]?.input), "https://kauth.kakao.com/oauth/token");
+    assert.equal(String(requests[1]?.input), "https://kapi.kakao.com/v2/user/me");
+    assert.equal(fakeDb.userRows[0]?.email, "kakao_123456789@oauth.local");
+    assert.equal(fakeDb.userRows[0]?.username, "kakao_123456789");
+    assert.equal(fakeDb.userRows[0]?.nickname, "Kakao Demo");
+    assert.equal(fakeDb.oauthAccountRows[0]?.email, "kakao_123456789@oauth.local");
+    assert.equal(fakeDb.oauthAccountRows[0]?.provider, "kakao");
+    assert.equal(fakeDb.oauthAccountRows[0]?.providerUserId, "123456789");
+    assert.equal(fakeDb.refreshTokenRows[0]?.userId, fakeDb.userRows[0]?.id);
+    assertRefreshTokenCookie(response.headers["set-cookie"]);
+    assertClearedOAuthStateCookie(response.headers["set-cookie"]);
+  } finally {
+    restoreFetch();
+    restoreEnv();
+    await app.close();
+  }
+});
+
+test("GET /api/auth/oauth/github/callback completes login with verified email fallback", async () => {
+  const restoreEnv = setOAuthEnv();
+  const fakeDb = new OAuthRouteFakeDb({
+    selectResults: [[], []]
+  });
+  const { requests, restoreFetch } = installOAuthFetch([
+    jsonResponse({
+      access_token: "provider-access-token"
+    }),
+    jsonResponse({
+      avatar_url: "https://example.com/github.png",
+      id: 987654321,
+      login: "github-demo",
+      name: "GitHub Demo"
+    }),
+    jsonResponse([
+      {
+        email: "github@example.com",
+        primary: true,
+        verified: true
+      }
+    ])
+  ]);
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  try {
+    const response = await app.inject({
+      headers: {
+        cookie: oauthStateCookie("state-token", "github")
+      },
+      method: "GET",
+      url: "/api/auth/oauth/github/callback?code=authorization-code&state=state-token"
+    });
+
+    assert.equal(response.statusCode, 302);
+    assert.equal(getHeaderValue(response, "location"), "/mypage");
+    assert.equal(requests.length, 3);
+    assert.equal(String(requests[0]?.input), "https://github.com/login/oauth/access_token");
+    assert.equal(String(requests[1]?.input), "https://api.github.com/user");
+    assert.equal(String(requests[2]?.input), "https://api.github.com/user/emails");
+    assert.equal(fakeDb.userRows[0]?.email, "github@example.com");
+    assert.equal(fakeDb.oauthAccountRows[0]?.provider, "github");
+    assert.equal(fakeDb.oauthAccountRows[0]?.providerUserId, "987654321");
+    assert.equal(fakeDb.refreshTokenRows[0]?.userId, fakeDb.userRows[0]?.id);
     assertRefreshTokenCookie(response.headers["set-cookie"]);
     assertClearedOAuthStateCookie(response.headers["set-cookie"]);
   } finally {
@@ -352,16 +541,28 @@ test("GET /api/auth/oauth/naver/callback rejects callbacks without state", async
 
 function setOAuthEnv(): () => void {
   const previousEnv = {
+    githubOauthClientId: process.env.GITHUB_OAUTH_CLIENT_ID,
+    githubOauthClientSecret: process.env.GITHUB_OAUTH_CLIENT_SECRET,
+    kakaoOauthClientId: process.env.KAKAO_OAUTH_CLIENT_ID,
+    kakaoOauthClientSecret: process.env.KAKAO_OAUTH_CLIENT_SECRET,
     naverOauthClientId: process.env.NAVER_OAUTH_CLIENT_ID,
     naverOauthClientSecret: process.env.NAVER_OAUTH_CLIENT_SECRET,
     oauthRedirectBaseUrl: process.env.OAUTH_REDIRECT_BASE_URL
   };
 
+  process.env.GITHUB_OAUTH_CLIENT_ID = "github-client-id";
+  process.env.GITHUB_OAUTH_CLIENT_SECRET = "github-client-secret";
+  process.env.KAKAO_OAUTH_CLIENT_ID = "kakao-client-id";
+  process.env.KAKAO_OAUTH_CLIENT_SECRET = "";
   process.env.NAVER_OAUTH_CLIENT_ID = "naver-client-id";
   process.env.NAVER_OAUTH_CLIENT_SECRET = "naver-client-secret";
   process.env.OAUTH_REDIRECT_BASE_URL = "http://localhost:3000";
 
   return () => {
+    restoreEnvValue("GITHUB_OAUTH_CLIENT_ID", previousEnv.githubOauthClientId);
+    restoreEnvValue("GITHUB_OAUTH_CLIENT_SECRET", previousEnv.githubOauthClientSecret);
+    restoreEnvValue("KAKAO_OAUTH_CLIENT_ID", previousEnv.kakaoOauthClientId);
+    restoreEnvValue("KAKAO_OAUTH_CLIENT_SECRET", previousEnv.kakaoOauthClientSecret);
     restoreEnvValue("NAVER_OAUTH_CLIENT_ID", previousEnv.naverOauthClientId);
     restoreEnvValue("NAVER_OAUTH_CLIENT_SECRET", previousEnv.naverOauthClientSecret);
     restoreEnvValue("OAUTH_REDIRECT_BASE_URL", previousEnv.oauthRedirectBaseUrl);
@@ -470,10 +671,10 @@ function getCookieHeader(cookies: string[], cookieName: string): string {
   return cookie;
 }
 
-function oauthStateCookie(state: string): string {
+function oauthStateCookie(state: string, provider = "naver"): string {
   return `${OAUTH_STATE_COOKIE_NAME}=${encodeURIComponent(
     JSON.stringify({
-      provider: "naver",
+      provider,
       state
     })
   )}`;
@@ -541,9 +742,7 @@ class OAuthRouteFakeDb {
   private createDb(): unknown {
     const db = {
       insert: (table: unknown) => ({
-        values: (
-          values: Partial<UserRow & OAuthAccountRow & RefreshTokenRow>
-        ) => {
+        values: (values: Partial<UserRow & OAuthAccountRow & RefreshTokenRow>) => {
           const insertedRow = this.insertRow(table, values);
 
           return {

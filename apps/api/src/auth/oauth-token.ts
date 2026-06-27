@@ -1,10 +1,7 @@
 import type { OAuthProvider } from "@sketchcatch/types";
 import { z } from "zod";
 import type { RuntimeEnv } from "../config/env.js";
-import {
-  getOAuthProviderStaticConfig,
-  requireOAuthProviderConfig
-} from "./oauth-providers.js";
+import { getOAuthProviderStaticConfig, requireOAuthProviderConfig } from "./oauth-providers.js";
 
 export const OAUTH_TOKEN_EXCHANGE_FAILED = "token_exchange_failed";
 
@@ -43,12 +40,16 @@ export async function exchangeOAuthCodeForAccessToken(
   const redirectUri = `${runtimeConfig.redirectBaseUrl}/api/auth/oauth/${options.provider}/callback`;
   const body = new URLSearchParams({
     client_id: runtimeConfig.clientId,
-    client_secret: runtimeConfig.clientSecret,
     code: options.code,
     grant_type: "authorization_code",
     redirect_uri: redirectUri,
     state: options.state
   });
+
+  if (runtimeConfig.clientSecret) {
+    body.set("client_secret", runtimeConfig.clientSecret);
+  }
+
   const tokenResponse = await requestToken(
     options.fetcher ?? fetch,
     options.provider,
