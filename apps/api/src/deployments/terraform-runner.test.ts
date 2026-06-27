@@ -15,12 +15,14 @@ test("createTerraformProcessEnv passes only required runtime env and explicit Te
       DATABASE_URL: "postgresql://sketchcatch:secret@db/sketchcatch",
       AUTH_TOKEN_SECRET: "server-auth-token-secret",
       AWS_PROFILE: "sketchcatch-caller",
-      AWS_SHARED_CREDENTIALS_FILE: "C:\\Users\\me\\.aws\\credentials"
+      AWS_SHARED_CREDENTIALS_FILE: "C:\\Users\\me\\.aws\\credentials",
+      TF_PLUGIN_CACHE_DIR: "C:\\terraform-plugin-cache"
     }
   );
 
   assert.equal(env.Path, "C:\\Windows\\System32");
   assert.equal(env.TF_IN_AUTOMATION, "1");
+  assert.equal(env.TF_PLUGIN_CACHE_DIR, "C:\\terraform-plugin-cache");
   assert.equal(env.AWS_ACCESS_KEY_ID, "temporary-access-key-id");
   assert.equal(env.AWS_SECRET_ACCESS_KEY, "temporary-secret-access-key");
   assert.equal(env.AWS_SESSION_TOKEN, "temporary-session-token");
@@ -29,4 +31,11 @@ test("createTerraformProcessEnv passes only required runtime env and explicit Te
   assert.equal(env.AUTH_TOKEN_SECRET, undefined);
   assert.equal(env.AWS_PROFILE, undefined);
   assert.equal(env.AWS_SHARED_CREDENTIALS_FILE, undefined);
+});
+
+test("createTerraformProcessEnv sets a default Terraform plugin cache directory", () => {
+  const env = createTerraformProcessEnv({}, {});
+
+  assert.equal(env.TF_IN_AUTOMATION, "1");
+  assert.match(String(env.TF_PLUGIN_CACHE_DIR), /sketchcatch-terraform-plugin-cache$/);
 });
