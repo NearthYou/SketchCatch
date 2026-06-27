@@ -99,6 +99,52 @@
   margin: 0;
 }
 
+.draftStatusPanel {
+  align-items: center;
+  background: #ffffff;
+  color: #39465c;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-height: 38px;
+  padding: 8px 14px;
+}
+
+.draftStatusLabel {
+  color: #65758d;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.draftStatusItem {
+  background: #f4f7fb;
+  border: 1px solid #dfe7f4;
+  border-radius: 6px;
+  color: #2d3a50;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.2;
+  padding: 5px 8px;
+}
+
+.draftStatusItem[data-state="local-failed"],
+.draftStatusItem[data-state="server-failed"] {
+  background: #fff1f0;
+  border-color: #ffd1cc;
+  color: #9f2a1d;
+}
+
+.draftStatusItem[data-state="server-dirty"],
+.draftStatusItem[data-state="server-checkpoint-pending"],
+.draftStatusItem[data-state="server-saving"],
+.draftStatusItem[data-state="local-pending"] {
+  background: #fff8e6;
+  border-color: #f6dda4;
+  color: #7a4d00;
+}
+
 .rightPanelShell {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);

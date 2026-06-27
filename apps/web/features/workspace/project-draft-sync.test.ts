@@ -2,7 +2,12 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { DiagramJson, ProjectDraft, ProjectDraftResponse } from "../../../../packages/types/src";
 import type { LocalProjectDraft } from "./project-draft-persistence";
-import { loadProjectDiagramDraft, saveProjectDiagramDraft } from "./project-draft-sync";
+import {
+  loadProjectDiagramDraft,
+  saveLocalProjectDiagramDraft,
+  saveProjectDiagramDraft,
+  saveServerProjectDiagramDraft
+} from "./project-draft-sync";
 
 const emptyDiagram: DiagramJson = {
   nodes: [],
@@ -200,6 +205,136 @@ test("saveProjectDiagramDraft can use authenticated server ownership without a w
   assert.equal(saveCallCount, 1);
   assert.equal(localWrites[0]?.workspaceId, "user-cache-1");
   assert.equal(result.localDraft.dirty, false);
+});
+
+test("saveLocalProjectDiagramDraft writes IndexedDB draft without calling server save", async () => {
+  const writes: LocalProjectDraft[] = [];
+  const result = await saveLocalProjectDiagramDraft(
+    {
+      diagramJson: serverDiagram,
+      previousLocalDraft: localDraft,
+      projectId: serverDraft.projectId,
+      workspaceId: "workspace-1"
+    },
+    {
+      now: () => "2026-06-24T03:00:00.000Z",
+      writeLocalProjectDraft: async (draft) => {
+        writes.push(draft);
+      }
+    }
+  );
+
+  assert.equal(writes.length, 1);
+  assert.equal(result.localDraft.dirty, true);
+  assert.equal(result.localDraft.revision, 4);
+  assert.deepEqual(result.localDraft.diagramJson, serverDiagram);
+});
+
+test("saveServerProjectDiagramDraft saves PostgreSQL draft and syncs the local cache", async () => {
+  const writes: LocalProjectDraft[] = [];
+  const saveCalls: Array<{
+    projectId: string;
+    diagramJson: DiagramJson;
+  }> = [];
+  const result = await saveServerProjectDiagramDraft(
+    {
+      diagramJson: serverDiagram,
+      previousLocalDraft: localDraft,
+      projectId: serverDraft.projectId,
+      workspaceId: "workspace-1"
+    },
+    {
+      saveProjectDraft: async ({ projectId, diagramJson }) => {
+        saveCalls.push({
+          projectId,
+          diagramJson
+        });
+        return {
+          draft: {
+            ...serverDraft,
+            diagramJson,
+            revision: 8,
+            serverSavedAt: "2026-06-24T03:00:01.000Z",
+            updatedAt: "2026-06-24T03:00:01.000Z"
+          }
+        };
+      },
+      writeLocalProjectDraft: async (draft) => {
+        writes.push(draft);
+      }
+    }
+  );
+
+  assert.deepEqual(saveCalls, [
+    {
+      projectId: serverDraft.projectId,
+      diagramJson: serverDiagram
+    }
+  ]);
+  if (!result.ok) {
+    assert.fail("server draft save should succeed");
+  }
+
+  assert.equal(result.localDraft.dirty, false);
+  assert.equal(result.localDraft.revision, 8);
+  assert.equal(result.serverDraft.revision, 8);
+  assert.equal(writes.length, 1);
+  assert.equal(writes[0]?.dirty, false);
+});
+
+test("saveServerProjectDiagramDraft returns failure without discarding local recovery draft", async () => {
+  const writes: LocalProjectDraft[] = [];
+  const result = await saveServerProjectDiagramDraft(
+    {
+      diagramJson: serverDiagram,
+      previousLocalDraft: localDraft,
+      projectId: serverDraft.projectId,
+      workspaceId: "workspace-1"
+    },
+    {
+      saveProjectDraft: async () => {
+        throw new Error("server unavailable");
+      },
+      writeLocalProjectDraft: async (draft) => {
+        writes.push(draft);
+      }
+    }
+  );
+
+  if (result.ok) {
+    assert.fail("server draft save should fail");
+  }
+
+  assert.equal(result.localDraft, localDraft);
+  assert.equal(result.serverDraft, null);
+  assert.equal(writes.length, 0);
+});
+
+test("saveServerProjectDiagramDraft can skip local sync when the caller detects a stale save", async () => {
+  const writes: LocalProjectDraft[] = [];
+  const result = await saveServerProjectDiagramDraft(
+    {
+      diagramJson: serverDiagram,
+      previousLocalDraft: localDraft,
+      projectId: serverDraft.projectId,
+      shouldSyncLocalDraft: () => false,
+      workspaceId: "workspace-1"
+    },
+    {
+      saveProjectDraft: async () => ({ draft: serverDraft }),
+      writeLocalProjectDraft: async (draft) => {
+        writes.push(draft);
+      }
+    }
+  );
+
+  if (!result.ok) {
+    assert.fail("server draft save should succeed");
+  }
+
+  assert.equal(result.localDraft.dirty, false);
+  assert.equal(result.serverDraft, serverDraft);
+  assert.equal(writes.length, 0);
 });
 
 test("saveProjectDiagramDraft writes local cache and server draft for the same project", async () => {
