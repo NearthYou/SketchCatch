@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { LlmEnhancement } from "../../../../packages/types/src";
 import {
-  createLlmEnhancementItems,
+  createLlmEnhancementSections,
   getLlmEnhancementSourceLabel
 } from "../../app/workspace/LlmEnhancementPanel";
 
@@ -15,17 +15,17 @@ const fallbackEnhancement: LlmEnhancement = {
   fallbackReason: "missing_api_key"
 };
 
-test("createLlmEnhancementItems keeps highlights and next actions visible", () => {
-  assert.deepEqual(createLlmEnhancementItems(fallbackEnhancement), [
+test("createLlmEnhancementSections groups highlights and next actions under one title each", () => {
+  assert.deepEqual(createLlmEnhancementSections(fallbackEnhancement), [
     {
-      id: "highlight-ALB에서 EC2로 요청이 흐릅니다.",
-      label: "핵심",
-      text: "ALB에서 EC2로 요청이 흐릅니다."
+      id: "highlights",
+      title: "핵심",
+      items: ["ALB에서 EC2로 요청이 흐릅니다."]
     },
     {
-      id: "next-action-단일 EC2 병목을 확인하세요.",
-      label: "다음 행동",
-      text: "단일 EC2 병목을 확인하세요."
+      id: "next-actions",
+      title: "다음 행동",
+      items: ["단일 EC2 병목을 확인하세요."]
     }
   ]);
 });

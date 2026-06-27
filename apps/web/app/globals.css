@@ -891,6 +891,42 @@ h1 {
   color: var(--status-warning);
 }
 
+.llmEnhancementSections {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.llmEnhancementSection {
+  border-top: 1px solid var(--border-subtle);
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+  padding-top: var(--space-3);
+}
+
+.llmEnhancementSection h3 {
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.llmEnhancementList {
+  color: var(--text-secondary);
+  display: grid;
+  font-size: 0.875rem;
+  gap: var(--space-2);
+  line-height: 1.5;
+  margin: 0;
+  min-width: 0;
+  padding-left: var(--space-4);
+}
+
+.llmEnhancementList li {
+  overflow-wrap: anywhere;
+}
+
 .metadataGrid {
   display: grid;
   gap: var(--space-2);

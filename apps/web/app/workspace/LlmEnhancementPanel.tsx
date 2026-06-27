@@ -1,14 +1,13 @@
 import type { LlmEnhancement, LlmEnhancementFallbackReason } from "@sketchcatch/types";
-import { ResultList } from "./ResultList";
 
 type LlmEnhancementPanelProps = {
   readonly enhancement: LlmEnhancement | undefined;
 };
 
-type LlmEnhancementItem = {
+type LlmEnhancementSection = {
   readonly id: string;
-  readonly label: string;
-  readonly text: string;
+  readonly title: string;
+  readonly items: readonly string[];
 };
 
 // LLM 보강 설명이 없으면 기존 rule 결과 화면을 그대로 유지합니다.
@@ -25,25 +24,39 @@ export function LlmEnhancementPanel({ enhancement }: LlmEnhancementPanelProps) {
           {getLlmEnhancementSourceLabel(enhancement)}
         </span>
       </div>
-      <ResultList items={createLlmEnhancementItems(enhancement)} summary={enhancement.summary} />
+      <div className="resultStack">
+        <p className="resultTitle">{enhancement.summary}</p>
+        <div className="llmEnhancementSections">
+          {createLlmEnhancementSections(enhancement).map((section) => (
+            <section aria-labelledby={`llm-enhancement-${section.id}`} className="llmEnhancementSection" key={section.id}>
+              <h3 id={`llm-enhancement-${section.id}`}>{section.title}</h3>
+              <ul className="llmEnhancementList">
+                {section.items.map((item, index) => (
+                  <li key={`${section.id}-${index}-${item}`}>{item}</li>
+                ))}
+              </ul>
+            </section>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
 
-// highlights와 nextActions를 같은 ResultList 모양으로 바꿔 모든 AI 패널에서 재사용합니다.
-export function createLlmEnhancementItems(enhancement: LlmEnhancement): LlmEnhancementItem[] {
+// AI 설명 전용 섹션으로 묶어 같은 제목이 항목마다 반복되지 않게 합니다.
+export function createLlmEnhancementSections(enhancement: LlmEnhancement): LlmEnhancementSection[] {
   return [
-    ...enhancement.highlights.map((item) => ({
-      id: `highlight-${item}`,
-      label: "핵심",
-      text: item
-    })),
-    ...enhancement.nextActions.map((item) => ({
-      id: `next-action-${item}`,
-      label: "다음 행동",
-      text: item
-    }))
-  ];
+    {
+      id: "highlights",
+      title: "핵심",
+      items: enhancement.highlights
+    },
+    {
+      id: "next-actions",
+      title: "다음 행동",
+      items: enhancement.nextActions
+    }
+  ].filter((section) => section.items.length > 0);
 }
 
 // fallbackReason을 화면에서 읽기 쉬운 짧은 상태 문구로 바꿉니다.
