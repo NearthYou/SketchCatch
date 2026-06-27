@@ -6,6 +6,13 @@ export type RuntimeEnv = {
   cloudFormationTemplateTokenSecret: string | undefined;
   databaseUrl: string | undefined;
   databaseSsl: boolean;
+  githubOauthClientId: string | undefined;
+  githubOauthClientSecret: string | undefined;
+  kakaoOauthClientId: string | undefined;
+  kakaoOauthClientSecret: string | undefined;
+  naverOauthClientId: string | undefined;
+  naverOauthClientSecret: string | undefined;
+  oauthRedirectBaseUrl: string | undefined;
   s3BucketName: string | undefined;
   sketchcatchAwsCallerPrincipalArn: string | undefined;
   sketchcatchPublicBaseUrl: string | undefined;
@@ -20,6 +27,13 @@ export function getRuntimeEnv(): RuntimeEnv {
     cloudFormationTemplateTokenSecret: process.env.CLOUDFORMATION_TEMPLATE_TOKEN_SECRET,
     databaseUrl: process.env.DATABASE_URL,
     databaseSsl: process.env.DATABASE_SSL === "true",
+    githubOauthClientId: process.env.GITHUB_OAUTH_CLIENT_ID,
+    githubOauthClientSecret: process.env.GITHUB_OAUTH_CLIENT_SECRET,
+    kakaoOauthClientId: process.env.KAKAO_OAUTH_CLIENT_ID,
+    kakaoOauthClientSecret: process.env.KAKAO_OAUTH_CLIENT_SECRET,
+    naverOauthClientId: process.env.NAVER_OAUTH_CLIENT_ID,
+    naverOauthClientSecret: process.env.NAVER_OAUTH_CLIENT_SECRET,
+    oauthRedirectBaseUrl: process.env.OAUTH_REDIRECT_BASE_URL,
     s3BucketName: process.env.S3_BUCKET_NAME,
     sketchcatchAwsCallerPrincipalArn: process.env.SKETCHCATCH_AWS_CALLER_PRINCIPAL_ARN,
     sketchcatchPublicBaseUrl: process.env.SKETCHCATCH_PUBLIC_BASE_URL

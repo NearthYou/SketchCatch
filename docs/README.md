@@ -40,6 +40,7 @@ SketchCatch 문서는 **SSOT(Single Source of Truth)** 기준으로 관리한다
 | 폴더 | 성격 | 규칙 |
 | --- | --- | --- |
 | `docs/gg` | AI 분석/추천 참고 문서 | 확정 DTO와 범위는 `data-models.md`, `product.md`를 따른다. |
+| `docs/sw` | Terraform 변환/동기화 참고 문서 | 확정 DTO와 Terraform 실행 경계는 `data-models.md`, `architecture.md`를 따른다. |
 | `docs/ck` | 배포 실행 참고 문서 | 실제 실행 정책은 `deployment.md`와 API/DB 계약을 따른다. |
 | `docs/ys` | 플랫폼/인증/프로젝트 참고 문서 | 사용자, 프로젝트, 인증 계약은 `data-models.md`를 따른다. |
 | `docs/adr` | 되돌리기 어렵고 맥락이 필요한 결정 | 결정이 굳어진 경우에만 추가한다. |

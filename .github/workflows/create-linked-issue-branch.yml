@@ -1,0 +1,67 @@
+name: Create Linked Issue Branch
+
+on:
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: "Issue number to link with the new branch"
+        required: true
+        type: string
+      branch_name:
+        description: "Branch name. Leave empty to derive one from the issue title."
+        required: false
+        type: string
+      base_branch:
+        description: "Remote base branch"
+        required: false
+        default: dev
+        type: string
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  create-linked-branch:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Create branch through issue development link
+        env:
+          GH_TOKEN: ${{ secrets.PROJECT_AUTOMATION_TOKEN }}
+          REPO: ${{ github.repository }}
+          ISSUE_NUMBER: ${{ inputs.issue_number }}
+          INPUT_BRANCH_NAME: ${{ inputs.branch_name }}
+          BASE_BRANCH: ${{ inputs.base_branch }}
+        run: |
+          set -euo pipefail
+
+          title="$(gh issue view "$ISSUE_NUMBER" --repo "$REPO" --json title --jq '.title')"
+
+          branch_name="$INPUT_BRANCH_NAME"
+          if [ -z "$branch_name" ]; then
+            slug="$(printf '%s' "$title" \
+              | tr '[:upper:]' '[:lower:]' \
+              | sed -E 's/[^a-z0-9]+/-/g' \
+              | sed -E 's/^-+|-+$//g' \
+              | cut -c1-48)"
+
+            if [ -z "$slug" ]; then
+              slug="issue"
+            fi
+
+            branch_name="feature/sw/${ISSUE_NUMBER}-${slug}"
+          fi
+
+          gh issue develop "$ISSUE_NUMBER" \
+            --repo "$REPO" \
+            --name "$branch_name" \
+            --base "$BASE_BRANCH"
+
+          {
+            echo "### Linked branch created"
+            echo ""
+            echo "- Issue: #$ISSUE_NUMBER"
+            echo "- Branch: \`$branch_name\`"
+            echo "- Base: \`$BASE_BRANCH\`"
+          } >> "$GITHUB_STEP_SUMMARY"

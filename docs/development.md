@@ -188,17 +188,31 @@ flowchart TB
 
 작업 시작:
 
+이슈 작업을 시작할 때는 GitHub issue의 `Development`에 브랜치가 연결되도록 `gh issue develop`을 사용한다. 팀원이 Codex에게 브랜치 생성을 맡길 때도 반드시 아래 흐름으로 요청한다.
+
+```text
+이슈 #번호 시작할 거야. gh issue develop으로 dev 기준 linked branch 만들어줘.
+```
+
 ```bash
-git checkout dev
-git pull origin dev
-git checkout -b feature/sw/12-login
+gh issue develop 12 \
+  --repo NearthYou/SketchCatch \
+  --name feature/sw/12-login \
+  --base dev \
+  --checkout
 ```
 
 이슈 번호가 없으면 먼저 GitHub 이슈를 만든다. 예외적으로 초기 설정 작업처럼 이슈가 없는 경우에는 팀 합의 후 `0`을 사용할 수 있다.
 
 ```bash
+git checkout dev
+git pull origin dev
 git checkout -b chore/sw/0-project-setup
 ```
+
+GitHub Actions에서 만들 수도 있다. `Actions > Create Linked Issue Branch > Run workflow`를 실행하고 `issue_number`, 필요한 경우 `branch_name`, `base_branch`를 입력한다. 이 workflow도 내부에서 `gh issue develop`을 사용하므로 브랜치가 issue의 `Development`에 연결된다.
+
+그냥 `git checkout -b`로 issue 브랜치를 만들면 Project 상태 자동화는 브랜치명에서 이슈 번호를 읽어 일부 동작할 수 있지만, GitHub `Development` 연결은 보장되지 않는다.
 
 브랜치 이름:
 

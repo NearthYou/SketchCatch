@@ -58,6 +58,8 @@ export const awsConnectionStatusEnum = pgEnum("aws_connection_status", [
   "failed"
 ]);
 
+export const oauthProviderEnum = pgEnum("oauth_provider", ["naver", "kakao", "github"]);
+
 export const users = pgTable(
   "users",
   {
@@ -65,7 +67,7 @@ export const users = pgTable(
     username: varchar("username", { length: 30 }).notNull(),
     email: varchar("email", { length: 255 }).notNull(),
     nickname: varchar("nickname", { length: 40 }).notNull(),
-    passwordHash: text("password_hash").notNull(),
+    passwordHash: text("password_hash"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     deletedAt: timestamp("deleted_at", { withTimezone: true })
@@ -118,6 +120,27 @@ export const loginAttempts = pgTable(
     index("login_attempts_username_idx").on(table.username),
     index("login_attempts_ip_address_idx").on(table.ipAddress),
     index("login_attempts_locked_until_idx").on(table.lockedUntil)
+  ]
+);
+
+export const oauthAccounts = pgTable(
+  "oauth_accounts",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    userId: varchar("user_id", { length: 36 })
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    provider: oauthProviderEnum("provider").notNull(),
+    providerUserId: varchar("provider_user_id", { length: 255 }).notNull(),
+    email: varchar("email", { length: 255 }),
+    displayName: varchar("display_name", { length: 120 }),
+    profileImageUrl: text("profile_image_url"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [
+    uniqueIndex("oauth_accounts_provider_user_unique").on(table.provider, table.providerUserId),
+    index("oauth_accounts_user_id_idx").on(table.userId)
   ]
 );
 
@@ -224,6 +247,7 @@ export const deployments = pgTable(
       () => awsConnections.id,
       { onDelete: "restrict" }
     ),
+    currentPlanArtifactId: varchar("current_plan_artifact_id", { length: 36 }),
     status: deploymentStatusEnum("status").notNull().default("PENDING"),
     planSummary: jsonb("plan_summary").$type<DeploymentPlanSummary>(),
     isBlocked: boolean("is_blocked").notNull().default(false),
@@ -238,10 +262,42 @@ export const deployments = pgTable(
     approvedTerraformArtifactId: varchar("approved_terraform_artifact_id", {
       length: 36
     }).references(() => projectAssets.id, { onDelete: "set null" }),
+    approvedPlanArtifactId: varchar("approved_plan_artifact_id", { length: 36 }),
+    approvedTerraformArtifactHash: varchar("approved_terraform_artifact_hash", { length: 64 }),
+    approvedTfplanHash: varchar("approved_tfplan_hash", { length: 64 }),
+    approvedAwsAccountId: varchar("approved_aws_account_id", { length: 12 }),
+    approvedAwsRegion: varchar("approved_aws_region", { length: 32 }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
   },
-  (table) => [index("deployments_aws_connection_id_idx").on(table.awsConnectionId)]
+  (table) => [
+    index("deployments_aws_connection_id_idx").on(table.awsConnectionId),
+    index("deployments_current_plan_artifact_id_idx").on(table.currentPlanArtifactId),
+    index("deployments_approved_plan_artifact_id_idx").on(table.approvedPlanArtifactId)
+  ]
+);
+
+export const deploymentPlanArtifacts = pgTable(
+  "deployment_plan_artifacts",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    deploymentId: varchar("deployment_id", { length: 36 })
+      .notNull()
+      .references(() => deployments.id, { onDelete: "cascade" }),
+    terraformArtifactId: varchar("terraform_artifact_id", { length: 36 })
+      .notNull()
+      .references(() => projectAssets.id, { onDelete: "restrict" }),
+    terraformArtifactSha256: varchar("terraform_artifact_sha256", { length: 64 }),
+    objectKey: text("object_key").notNull(),
+    sha256: varchar("sha256", { length: 64 }).notNull(),
+    accountId: varchar("account_id", { length: 12 }).notNull(),
+    region: varchar("region", { length: 32 }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [
+    index("deployment_plan_artifacts_deployment_id_idx").on(table.deploymentId),
+    uniqueIndex("deployment_plan_artifacts_object_key_unique").on(table.objectKey)
+  ]
 );
 
 export const deploymentLogs = pgTable(
@@ -267,6 +323,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   projects: many(projects),
   refreshTokens: many(refreshTokens),
   loginAttempts: many(loginAttempts),
+  oauthAccounts: many(oauthAccounts),
   awsConnections: many(awsConnections)
 }));
 
@@ -280,6 +337,13 @@ export const refreshTokensRelations = relations(refreshTokens, ({ one }) => ({
 export const loginAttemptsRelations = relations(loginAttempts, ({ one }) => ({
   user: one(users, {
     fields: [loginAttempts.userId],
+    references: [users.id]
+  })
+}));
+
+export const oauthAccountsRelations = relations(oauthAccounts, ({ one }) => ({
+  user: one(users, {
+    fields: [oauthAccounts.userId],
     references: [users.id]
   })
 }));
@@ -338,13 +402,25 @@ export const deploymentsRelations = relations(deployments, ({ one, many }) => ({
     fields: [deployments.awsConnectionId],
     references: [awsConnections.id]
   }),
-  logs: many(deploymentLogs)
+  logs: many(deploymentLogs),
+  planArtifacts: many(deploymentPlanArtifacts)
 }));
 
 export const deploymentLogsRelations = relations(deploymentLogs, ({ one }) => ({
   deployment: one(deployments, {
     fields: [deploymentLogs.deploymentId],
     references: [deployments.id]
+  })
+}));
+
+export const deploymentPlanArtifactsRelations = relations(deploymentPlanArtifacts, ({ one }) => ({
+  deployment: one(deployments, {
+    fields: [deploymentPlanArtifacts.deploymentId],
+    references: [deployments.id]
+  }),
+  terraformArtifact: one(projectAssets, {
+    fields: [deploymentPlanArtifacts.terraformArtifactId],
+    references: [projectAssets.id]
   })
 }));
 

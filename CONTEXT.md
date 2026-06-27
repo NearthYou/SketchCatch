@@ -33,7 +33,7 @@ A natural-language description of desired infrastructure constraints, such as bu
 _Avoid_: User question, chat input, AI prompt
 
 **Infrastructure Graph**:
-The normalized graph of Resources and relationships that connects natural-language requirements, Architecture Board nodes, IaC Preview, simulation, and version comparison.
+The normalized graph of Resources and relationships that syncs Architecture Board state and IaC Preview state without treating either surface as the only source of truth. It carries stable resource identity, IaC identity, configuration, and relationships.
 _Avoid_: AI JSON, canvas state, diagram data
 
 **IaC Preview**:

@@ -1,0 +1,1 @@
+ALTER TABLE "deployment_plan_artifacts" ADD COLUMN "terraform_artifact_sha256" varchar(64);

@@ -7,10 +7,15 @@ import { registerAiRoutes } from "./routes/ai.js";
 import type { CreateLlmEnhancement } from "./services/aiLlmEnhancement.js";
 import { registerHealthRoutes } from "./routes/health.js";
 import { registerAuthRoutes } from "./routes/auth.js";
+import { registerOAuthRoutes } from "./routes/oauth.js";
 import { registerProjectRoutes } from "./routes/projects.js";
 import { registerDeploymentRoutes } from "./routes/deployments.js";
 import { registerTerraformRoutes } from "./routes/terraform.js";
 import { registerAwsConnectionRoutes } from "./routes/aws-connections.js";
+import {
+  createInMemoryRateLimiter,
+  type RateLimiter
+} from "./rate-limit/in-memory-rate-limiter.js";
 
 const allowedCorsOrigins = new Set(["http://localhost:3000", "http://127.0.0.1:3000"]);
 const corsAllowedMethods = "GET,POST,PUT,DELETE,OPTIONS";
@@ -19,11 +24,25 @@ const fallbackCorsAllowedHeaders = "content-type,authorization";
 export type BuildAppOptions = {
   getDatabaseClient?: () => DatabaseClient;
   createLlmEnhancement?: CreateLlmEnhancement;
+  oauthCallbackRateLimiter?: RateLimiter;
+  oauthStartRateLimiter?: RateLimiter;
 };
 
 // 테스트와 서버가 같은 앱을 쓰되, LLM 호출 계층은 옵션으로만 주입합니다.
 export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   const getAppDatabaseClient = options.getDatabaseClient ?? getDatabaseClient;
+  const oauthStartRateLimiter =
+    options.oauthStartRateLimiter ??
+    createInMemoryRateLimiter({
+      limit: 30,
+      windowMs: 5 * 60 * 1000
+    });
+  const oauthCallbackRateLimiter =
+    options.oauthCallbackRateLimiter ??
+    createInMemoryRateLimiter({
+      limit: 60,
+      windowMs: 5 * 60 * 1000
+    });
   const app = Fastify({
     logger: process.env.NODE_ENV !== "test",
     trustProxy: true
@@ -82,6 +101,12 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   app.register(registerAuthRoutes, {
     prefix: "/api",
     getDatabaseClient: getAppDatabaseClient
+  });
+  app.register(registerOAuthRoutes, {
+    callbackRateLimiter: oauthCallbackRateLimiter,
+    prefix: "/api",
+    getDatabaseClient: getAppDatabaseClient,
+    startRateLimiter: oauthStartRateLimiter
   });
   app.register(registerProjectRoutes, {
     prefix: "/api",
