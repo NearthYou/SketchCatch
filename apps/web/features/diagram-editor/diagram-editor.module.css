@@ -29,6 +29,7 @@
   border: 1px solid #dfe7f4;
   border-radius: 8px;
   box-shadow: 0 18px 42px rgba(20, 30, 50, 0.13);
+  grid-column: 1;
   height: min(720px, calc(100vh - 118px));
   left: 14px;
   overflow: hidden;
@@ -40,6 +41,7 @@
 
 .rightRail {
   border-width: 0 0 0 1px;
+  grid-column: 3;
   overflow: hidden;
   width: 100%;
 }
@@ -54,6 +56,7 @@
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.68), rgba(244, 247, 252, 0.86)),
     #f6f8fc;
+  grid-column: 2;
   min-width: 0;
   overflow: hidden;
   position: relative;
