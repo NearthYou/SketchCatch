@@ -39,7 +39,6 @@ type RepositoryCall =
     }
   | {
       name: "findVerifiedAwsConnectionById";
-      projectId: string;
       awsConnectionId: string;
       accessContext: ProjectAccessContext;
     }
@@ -123,13 +122,11 @@ class FakeDeploymentRepository implements DeploymentRepository {
   }
 
   async findVerifiedAwsConnectionById(
-    candidateProjectId: string,
     candidateAwsConnectionId: string,
     accessContext: ProjectAccessContext
   ) {
     this.calls.push({
       name: "findVerifiedAwsConnectionById",
-      projectId: candidateProjectId,
       awsConnectionId: candidateAwsConnectionId,
       accessContext
     });
@@ -137,7 +134,6 @@ class FakeDeploymentRepository implements DeploymentRepository {
     if (
       !this.awsConnection ||
       this.awsConnection.id !== candidateAwsConnectionId ||
-      this.awsConnection.projectId !== candidateProjectId ||
       this.awsConnection.userId !== accessContext.userId ||
       this.awsConnection.status !== "verified"
     ) {
@@ -376,7 +372,6 @@ function createTerraformArtifactRecord(
 function createVerifiedAwsConnection(overrides: Partial<AwsConnection> = {}): AwsConnection {
   return {
     id: awsConnectionId,
-    projectId,
     userId,
     accountId: "123456789012",
     roleArn: "arn:aws:iam::123456789012:role/SketchCatchTerraformExecutionRole",
@@ -508,7 +503,6 @@ test("runDeploymentInit restores the artifact, runs Terraform init, logs output,
     repository.calls.some(
       (call) =>
         call.name === "findVerifiedAwsConnectionById" &&
-        call.projectId === projectId &&
         call.awsConnectionId === awsConnectionId &&
         call.accessContext.userId === userId
     )

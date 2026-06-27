@@ -105,7 +105,6 @@ export type DeploymentRepository = {
     terraformArtifactId: string
   ): Promise<TerraformArtifactRecord | undefined>;
   findVerifiedAwsConnectionById(
-    projectId: string,
     awsConnectionId: string,
     accessContext: ProjectAccessContext
   ): Promise<AwsConnection | undefined>;
@@ -235,14 +234,13 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
       };
     },
 
-    async findVerifiedAwsConnectionById(projectId, awsConnectionId, accessContext) {
+    async findVerifiedAwsConnectionById(awsConnectionId, accessContext) {
       const [awsConnection] = await db
         .select()
         .from(awsConnections)
         .where(
           and(
             eq(awsConnections.id, awsConnectionId),
-            eq(awsConnections.projectId, projectId),
             eq(awsConnections.userId, accessContext.userId),
             eq(awsConnections.status, "verified")
           )
@@ -417,13 +415,12 @@ export async function createDeployment(
   }
 
   const awsConnection = await repository.findVerifiedAwsConnectionById(
-    input.projectId,
     input.awsConnectionId,
     input.accessContext
   );
 
   if (!awsConnection) {
-    throw new DeploymentNotFoundError("Verified AWS connection not found for project");
+    throw new DeploymentNotFoundError("Verified AWS connection not found");
   }
 
   return repository.createDeployment({
@@ -542,7 +539,6 @@ export async function appendDeploymentLogs(
 function toAwsConnection(row: typeof awsConnections.$inferSelect): AwsConnection {
   return {
     id: row.id,
-    projectId: row.projectId,
     userId: row.userId,
     accountId: row.accountId,
     roleArn: row.roleArn,

@@ -49,7 +49,6 @@ type RepositoryCall =
     }
   | {
       name: "findVerifiedAwsConnectionById";
-      projectId: string;
       awsConnectionId: string;
       accessContext: ProjectAccessContext;
     }
@@ -179,13 +178,11 @@ class FakeDeploymentRepository implements DeploymentRepository {
   }
 
   async findVerifiedAwsConnectionById(
-    candidateProjectId: string,
     candidateAwsConnectionId: string,
     accessContext: ProjectAccessContext
   ) {
     this.calls.push({
       name: "findVerifiedAwsConnectionById",
-      projectId: candidateProjectId,
       awsConnectionId: candidateAwsConnectionId,
       accessContext
     });
@@ -193,7 +190,6 @@ class FakeDeploymentRepository implements DeploymentRepository {
     if (
       !this.awsConnection ||
       this.awsConnection.id !== candidateAwsConnectionId ||
-      this.awsConnection.projectId !== candidateProjectId ||
       this.awsConnection.userId !== accessContext.userId ||
       this.awsConnection.status !== "verified"
     ) {
@@ -409,7 +405,6 @@ function createProjectAssetRecord(overrides: Partial<ProjectAssetRecord> = {}): 
 function createVerifiedAwsConnection(overrides: Partial<AwsConnection> = {}): AwsConnection {
   return {
     id: awsConnectionId,
-    projectId,
     userId,
     accountId: "123456789012",
     roleArn: "arn:aws:iam::123456789012:role/SketchCatchTerraformExecutionRole",
@@ -466,7 +461,6 @@ test("createDeployment verifies project, architecture, and terraform artifact ow
     },
     {
       name: "findVerifiedAwsConnectionById",
-      projectId,
       awsConnectionId,
       accessContext: {
         kind: "user",
@@ -578,13 +572,13 @@ test("createDeployment rejects an artifact that is not a terraform file for the 
   ]);
 });
 
-test("createDeployment rejects an AWS connection that is not verified for the project", async () => {
+test("createDeployment rejects an AWS connection that is not verified for the user", async () => {
   const repository = new FakeDeploymentRepository();
   repository.awsConnection = createVerifiedAwsConnection({ status: "pending" });
 
   await assert.rejects(
     () => createDeployment(createInput(), repository, () => deploymentId),
-    new DeploymentNotFoundError("Verified AWS connection not found for project")
+    new DeploymentNotFoundError("Verified AWS connection not found")
   );
 
   assert.deepEqual(repository.calls, [
@@ -609,7 +603,6 @@ test("createDeployment rejects an AWS connection that is not verified for the pr
     },
     {
       name: "findVerifiedAwsConnectionById",
-      projectId,
       awsConnectionId,
       accessContext: {
         kind: "user",

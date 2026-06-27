@@ -91,7 +91,6 @@ export async function runDeploymentInit(
     }
 
     const awsConnection = await repository.findVerifiedAwsConnectionById(
-      deployment.projectId,
       deployment.awsConnectionId,
       input.accessContext
     );
