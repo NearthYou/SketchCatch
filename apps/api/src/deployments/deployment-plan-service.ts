@@ -32,6 +32,7 @@ import {
 } from "./deployment-plan-artifact-storage.js";
 import {
   appendDeploymentLogs,
+  DeploymentConflictError,
   DeploymentNotFoundError,
   getDeployment,
   type DeploymentRecord,
@@ -55,6 +56,7 @@ export type RunDeploymentPlanInput = {
   deploymentId: string;
   accessContext: ProjectAccessContext;
   startedFromStatus?: DeploymentStatus;
+  abortSignal?: AbortSignal;
 };
 
 export type RunDeploymentPlanOptions = {
@@ -107,6 +109,7 @@ export async function runDeploymentPlan(
 
   let workspace: PreparedTerraformWorkspace | undefined;
   let deploymentId: string | undefined;
+  let failureRecorded = false;
   const terraform: RunDeploymentPlanResult["terraform"] = {
     init: null,
     validate: null,
@@ -156,7 +159,15 @@ export async function runDeploymentPlan(
     }
 
     const preDeploymentAnalysis = analyzePreDeployment(architecture.architectureJson);
-    const awsCredentials = await prepareTerraformAwsCredentialEnv(awsConnection);
+    const awsCredentials = await prepareAwsCredentialsForPlan({
+      deploymentId: deployment.id,
+      awsConnection,
+      prepareTerraformAwsCredentialEnv,
+      repository,
+      markFailureRecorded: () => {
+        failureRecorded = true;
+      }
+    });
 
     workspace = await prepareTerraformWorkspace({
       objectKey: artifact.objectKey,
@@ -166,12 +177,22 @@ export async function runDeploymentPlan(
       await readTerraformArtifactFile(workspace.mainFilePath)
     );
 
-    await repository.updateDeploymentStatus(deployment.id, "RUNNING");
+    const wasPreMarkedRunning =
+      deployment.status === "RUNNING" && input.startedFromStatus !== undefined;
+
+    if (!wasPreMarkedRunning) {
+      const runningDeployment = await repository.markDeploymentPlanRunning(deployment.id);
+
+      if (!runningDeployment) {
+        throw new DeploymentConflictError("Deployment plan could not be started");
+      }
+    }
 
     let sequence = await repository.getNextDeploymentLogSequence(deployment.id);
 
     terraform.init = await runTerraformInit(workspace.workdir, {
-      env: awsCredentials.env
+      env: awsCredentials.env,
+      signal: input.abortSignal
     });
     sequence = await appendTerraformOutput({
       deploymentId: deployment.id,
@@ -181,6 +202,15 @@ export async function runDeploymentPlan(
       result: terraform.init,
       repository
     });
+
+    if (terraform.init.cancelled) {
+      return cancelDeploymentPlanRun({
+        deployment,
+        repository,
+        terraform,
+        errorSummary: "Terraform plan was cancelled during init before AWS resources were changed"
+      });
+    }
 
     if (terraform.init.exitCode !== 0) {
       return failDeploymentPlanRun({
@@ -195,7 +225,8 @@ export async function runDeploymentPlan(
 
     terraform.plan = await runTerraformPlan(workspace.workdir, {
       env: awsCredentials.env,
-      planFileName: defaultPlanFileName
+      planFileName: defaultPlanFileName,
+      signal: input.abortSignal
     });
     sequence = await appendTerraformOutput({
       deploymentId: deployment.id,
@@ -205,6 +236,15 @@ export async function runDeploymentPlan(
       result: terraform.plan,
       repository
     });
+
+    if (terraform.plan.cancelled) {
+      return cancelDeploymentPlanRun({
+        deployment,
+        repository,
+        terraform,
+        errorSummary: "Terraform plan was cancelled before apply"
+      });
+    }
 
     if (terraform.plan.exitCode !== 0) {
       return failDeploymentPlanRun({
@@ -219,7 +259,8 @@ export async function runDeploymentPlan(
 
     terraform.showJson = await runTerraformShowJson(workspace.workdir, {
       env: awsCredentials.env,
-      planFileName: defaultPlanFileName
+      planFileName: defaultPlanFileName,
+      signal: input.abortSignal
     });
     await appendTerraformErrorOutput({
       deploymentId: deployment.id,
@@ -228,6 +269,15 @@ export async function runDeploymentPlan(
       result: terraform.showJson,
       repository
     });
+
+    if (terraform.showJson.cancelled) {
+      return cancelDeploymentPlanRun({
+        deployment,
+        repository,
+        terraform,
+        errorSummary: "Terraform plan inspection was cancelled before apply"
+      });
+    }
 
     if (terraform.showJson.exitCode !== 0) {
       return failDeploymentPlanRun({
@@ -299,6 +349,7 @@ export async function runDeploymentPlan(
       }
 
       const failedDeployment = await failDeployment(deployment.id, "plan", error, repository);
+      failureRecorded = true;
 
       return {
         deployment: failedDeployment,
@@ -306,7 +357,7 @@ export async function runDeploymentPlan(
       };
     }
   } catch (error) {
-    if (deploymentId) {
+    if (deploymentId && !failureRecorded) {
       await repository
         .failDeployment(deploymentId, {
           failureStage: "plan",
@@ -420,6 +471,50 @@ async function requireDeploymentAwsConnection(
   }
 
   return awsConnection;
+}
+
+async function prepareAwsCredentialsForPlan(input: {
+  deploymentId: string;
+  awsConnection: AwsConnection;
+  prepareTerraformAwsCredentialEnv: (
+    awsConnection: AwsConnection
+  ) => Promise<PreparedTerraformAwsCredentialEnv>;
+  repository: DeploymentRepository;
+  markFailureRecorded: () => void;
+}): Promise<PreparedTerraformAwsCredentialEnv> {
+  try {
+    return await input.prepareTerraformAwsCredentialEnv(input.awsConnection);
+  } catch (error) {
+    await input.repository
+      .failDeployment(input.deploymentId, {
+        failureStage: "aws_connection",
+        errorSummary: summarizeUnexpectedPlanFailure(error)
+      })
+      .catch(() => undefined);
+    input.markFailureRecorded();
+
+    throw error;
+  }
+}
+
+async function cancelDeploymentPlanRun(input: {
+  deployment: DeploymentRecord;
+  repository: DeploymentRepository;
+  terraform: RunDeploymentPlanResult["terraform"];
+  errorSummary: string;
+}): Promise<RunDeploymentPlanResult> {
+  const cancelledDeployment = await input.repository.cancelDeployment(input.deployment.id, {
+    errorSummary: input.errorSummary
+  });
+
+  if (!cancelledDeployment) {
+    throw new DeploymentNotFoundError("Deployment not found");
+  }
+
+  return {
+    deployment: cancelledDeployment,
+    terraform: input.terraform
+  };
 }
 
 async function failDeploymentPlanRun(input: {

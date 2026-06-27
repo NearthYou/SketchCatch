@@ -191,6 +191,7 @@ export type Deployment = DeploymentBlock & {
   stateObjectKey: string | null;
   resultWarningSummary: string | null;
   status: DeploymentStatus;
+  activeStage: DeploymentStage | null;
   planSummary: DeploymentPlanSummary | null;
   failureStage: DeploymentFailureStage | null;
   errorSummary: string | null;
@@ -202,6 +203,11 @@ export type Deployment = DeploymentBlock & {
   approvedTfplanHash: string | null;
   approvedAwsAccountId: string | null;
   approvedAwsRegion: string | null;
+  startedAt: IsoDateTimeString | null;
+  completedAt: IsoDateTimeString | null;
+  failedAt: IsoDateTimeString | null;
+  cancelRequestedAt: IsoDateTimeString | null;
+  cancelledAt: IsoDateTimeString | null;
   createdAt: IsoDateTimeString;
   updatedAt: IsoDateTimeString;
 };
@@ -400,6 +406,7 @@ export type DeploymentFailureStage =
   | "validate"
   | "plan"
   | "approval"
+  | "aws_connection"
   | "mock_run"
   | "apply";
 

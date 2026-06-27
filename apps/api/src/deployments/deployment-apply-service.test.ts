@@ -144,6 +144,9 @@ class FakeDeploymentRepository implements DeploymentRepository {
   markDeploymentInitRunning: DeploymentRepository["markDeploymentInitRunning"] = async () =>
     this.deployment;
 
+  markDeploymentPlanRunning: DeploymentRepository["markDeploymentPlanRunning"] = async () =>
+    this.deployment;
+
   markDeploymentApplyRunning: DeploymentRepository["markDeploymentApplyRunning"] = async () =>
     this.deployment;
 
@@ -229,6 +232,42 @@ class FakeDeploymentRepository implements DeploymentRepository {
     return this.deployment;
   };
 
+  requestDeploymentCancellation: DeploymentRepository["requestDeploymentCancellation"] = async (
+    candidateDeploymentId
+  ) => {
+    if (!this.deployment || this.deployment.id !== candidateDeploymentId) {
+      return undefined;
+    }
+
+    this.deployment = { ...this.deployment, cancelRequestedAt: fixedNow, updatedAt: fixedNow };
+
+    return this.deployment;
+  };
+
+  cancelDeployment: DeploymentRepository["cancelDeployment"] = async (
+    candidateDeploymentId,
+    input
+  ) => {
+    if (!this.deployment || this.deployment.id !== candidateDeploymentId) {
+      return undefined;
+    }
+
+    this.deployment = {
+      ...this.deployment,
+      status: "CANCELLED",
+      activeStage: null,
+      errorSummary: input.errorSummary,
+      cancelledAt: fixedNow,
+      updatedAt: fixedNow
+    };
+
+    return this.deployment;
+  };
+
+  async recoverInterruptedDeployments(): Promise<DeploymentRecord[]> {
+    return [];
+  }
+
   createDeploymentLog: DeploymentRepository["createDeploymentLog"] = async (input) => {
     const deploymentLog = createLogRecord(input);
 
@@ -270,8 +309,16 @@ class FakeApplyArtifactStorage implements DeploymentApplyArtifactStorage {
   readonly uploadedStates: UploadDeploymentStateInput[] = [];
   stateObjectKey = `deployments/${deploymentId}/state/terraform.tfstate`;
 
-  async downloadDeploymentArtifact(objectKey: string): Promise<Buffer> {
-    assert.equal(objectKey, `deployments/${deploymentId}/plans/${planArtifactId}.tfplan`);
+  async downloadDeploymentArtifact(input: {
+    deploymentId: string;
+    planArtifactId: string;
+    objectKey: string;
+  }): Promise<Buffer> {
+    assert.deepEqual(input, {
+      deploymentId,
+      planArtifactId,
+      objectKey: `deployments/${deploymentId}/plans/${planArtifactId}.tfplan`
+    });
 
     return planBuffer;
   }
@@ -549,6 +596,7 @@ function createApprovedDeploymentRecord(
     stateObjectKey: null,
     resultWarningSummary: null,
     status: "RUNNING",
+    activeStage: "apply",
     planSummary: {
       createCount: 1,
       updateCount: 0,
@@ -570,6 +618,11 @@ function createApprovedDeploymentRecord(
     approvedTfplanHash: tfplanSha256,
     approvedAwsAccountId: "123456789012",
     approvedAwsRegion: "ap-northeast-2",
+    startedAt: fixedNow,
+    completedAt: null,
+    failedAt: null,
+    cancelRequestedAt: null,
+    cancelledAt: null,
     createdAt: fixedNow,
     updatedAt: fixedNow,
     ...overrides

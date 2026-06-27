@@ -186,6 +186,7 @@ export type DeploymentRepository = {
     status: DeploymentStatus
   ): Promise<DeploymentRecord | undefined>;
   markDeploymentInitRunning(deploymentId: string): Promise<DeploymentRecord | undefined>;
+  markDeploymentPlanRunning(deploymentId: string): Promise<DeploymentRecord | undefined>;
   markDeploymentApplyRunning(deploymentId: string): Promise<DeploymentRecord | undefined>;
   markDeploymentInitSucceeded(deploymentId: string): Promise<DeploymentRecord | undefined>;
   updateDeploymentPlan(
@@ -213,6 +214,14 @@ export type DeploymentRepository = {
       errorSummary: string;
     }
   ): Promise<DeploymentRecord | undefined>;
+  requestDeploymentCancellation(deploymentId: string): Promise<DeploymentRecord | undefined>;
+  cancelDeployment(
+    deploymentId: string,
+    input: {
+      errorSummary: string;
+    }
+  ): Promise<DeploymentRecord | undefined>;
+  recoverInterruptedDeployments(): Promise<DeploymentRecord[]>;
   createDeploymentLog(input: CreateDeploymentLogRecordInput): Promise<DeploymentLogRecord>;
   createDeploymentLogs(input: CreateDeploymentLogRecordInput[]): Promise<DeploymentLogRecord[]>;
   getNextDeploymentLogSequence(deploymentId: string): Promise<number>;
@@ -245,6 +254,30 @@ const clearDeploymentApprovalFields = {
   approvedAwsAccountId: null,
   approvedAwsRegion: null
 };
+
+function createRunningDeploymentValues(activeStage: DeploymentStage) {
+  return {
+    status: "RUNNING" as const,
+    activeStage,
+    startedAt: sql`now()`,
+    completedAt: null,
+    failedAt: null,
+    cancelRequestedAt: null,
+    cancelledAt: null,
+    failureStage: null,
+    errorSummary: null,
+    ...touchUpdatedAt
+  };
+}
+
+function createTerminalDeploymentValues(status: "PENDING" | "SUCCESS" | "FAILED" | "CANCELLED") {
+  return {
+    status,
+    activeStage: null,
+    completedAt: sql`now()`,
+    ...touchUpdatedAt
+  };
+}
 
 export function createPostgresDeploymentRepository(db: Database): DeploymentRepository {
   return {
@@ -383,8 +416,11 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
     async updateDeploymentStatus(deploymentId, status) {
       const nextValues =
         status === "RUNNING"
-          ? { status, ...clearDeploymentApprovalFields, ...touchUpdatedAt }
-          : { status, ...touchUpdatedAt };
+          ? {
+              ...createRunningDeploymentValues("init"),
+              ...clearDeploymentApprovalFields
+            }
+          : { status, activeStage: null, ...touchUpdatedAt };
       const [deployment] = await db
         .update(deployments)
         .set(nextValues)
@@ -395,25 +431,59 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
     },
 
     async markDeploymentInitRunning(deploymentId) {
-      const [deployment] = await db
-        .update(deployments)
-        .set({ status: "RUNNING", ...clearDeploymentApprovalFields, ...touchUpdatedAt })
-        .where(
-          and(eq(deployments.id, deploymentId), inArray(deployments.status, ["PENDING", "FAILED"]))
-        )
-        .returning();
+      try {
+        const [deployment] = await db
+          .update(deployments)
+          .set({
+            ...createRunningDeploymentValues("init"),
+            ...clearDeploymentApprovalFields
+          })
+          .where(
+            and(eq(deployments.id, deploymentId), inArray(deployments.status, ["PENDING", "FAILED"]))
+          )
+          .returning();
 
-      return deployment;
+        return deployment;
+      } catch (error) {
+        if (isDeploymentProjectRunningUniqueViolation(error)) {
+          return undefined;
+        }
+
+        throw error;
+      }
+    },
+
+    async markDeploymentPlanRunning(deploymentId) {
+      try {
+        const [deployment] = await db
+          .update(deployments)
+          .set({
+            ...createRunningDeploymentValues("plan"),
+            resultWarningSummary: null,
+            ...clearDeploymentApprovalFields
+          })
+          .where(
+            and(eq(deployments.id, deploymentId), inArray(deployments.status, ["PENDING", "FAILED"]))
+          )
+          .returning();
+
+        return deployment;
+      } catch (error) {
+        if (isDeploymentProjectRunningUniqueViolation(error)) {
+          return undefined;
+        }
+
+        throw error;
+      }
     },
 
     async markDeploymentInitSucceeded(deploymentId) {
       const [deployment] = await db
         .update(deployments)
         .set({
-          status: "PENDING",
+          ...createTerminalDeploymentValues("PENDING"),
           failureStage: null,
-          errorSummary: null,
-          ...touchUpdatedAt
+          errorSummary: null
         })
         .where(eq(deployments.id, deploymentId))
         .returning();
@@ -432,21 +502,26 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
     },
 
     async markDeploymentApplyRunning(deploymentId) {
-      const [deployment] = await db
-        .update(deployments)
-        .set({
-          status: "RUNNING",
-          failureStage: null,
-          errorSummary: null,
-          resultWarningSummary: null,
-          ...touchUpdatedAt
-        })
-        .where(
-          and(eq(deployments.id, deploymentId), inArray(deployments.status, ["PENDING", "FAILED"]))
-        )
-        .returning();
+      try {
+        const [deployment] = await db
+          .update(deployments)
+          .set({
+            ...createRunningDeploymentValues("apply"),
+            resultWarningSummary: null
+          })
+          .where(
+            and(eq(deployments.id, deploymentId), inArray(deployments.status, ["PENDING", "FAILED"]))
+          )
+          .returning();
 
-      return deployment;
+        return deployment;
+      } catch (error) {
+        if (isDeploymentProjectRunningUniqueViolation(error)) {
+          return undefined;
+        }
+
+        throw error;
+      }
     },
 
     async saveDeploymentPlan(input) {
@@ -457,15 +532,14 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
           .update(deployments)
           .set({
             currentPlanArtifactId: input.planArtifact.id,
-            status: "PENDING",
+            ...createTerminalDeploymentValues("PENDING"),
             planSummary: input.planSummary,
             isBlocked: input.isBlocked,
             blockedBy: input.blockedBy,
             blockedReason: input.blockedReason,
             failureStage: null,
             errorSummary: null,
-            ...clearDeploymentApprovalFields,
-            ...touchUpdatedAt
+            ...clearDeploymentApprovalFields
           })
           .where(eq(deployments.id, input.deploymentId))
           .returning();
@@ -497,6 +571,7 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
           failureStage: null,
           errorSummary: null,
           status: "PENDING",
+          activeStage: null,
           ...touchUpdatedAt
         })
         .where(
@@ -529,12 +604,11 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
         const [deployment] = await tx
           .update(deployments)
           .set({
-            status: "SUCCESS",
+            ...createTerminalDeploymentValues("SUCCESS"),
             stateObjectKey: input.stateObjectKey,
             resultWarningSummary: input.resultWarningSummary,
             failureStage: null,
-            errorSummary: null,
-            ...touchUpdatedAt
+            errorSummary: null
           })
           .where(eq(deployments.id, deploymentId))
           .returning();
@@ -550,11 +624,72 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
     async failDeployment(deploymentId, input) {
       const [deployment] = await db
         .update(deployments)
-        .set({ status: "FAILED", ...input, ...touchUpdatedAt })
+        .set({
+          ...createTerminalDeploymentValues("FAILED"),
+          failedAt: sql`now()`,
+          ...input
+        })
         .where(eq(deployments.id, deploymentId))
         .returning();
 
       return deployment;
+    },
+
+    async requestDeploymentCancellation(deploymentId) {
+      const [deployment] = await db
+        .update(deployments)
+        .set({
+          cancelRequestedAt: sql`now()`,
+          ...touchUpdatedAt
+        })
+        .where(and(eq(deployments.id, deploymentId), eq(deployments.status, "RUNNING")))
+        .returning();
+
+      return deployment;
+    },
+
+    async cancelDeployment(deploymentId, input) {
+      const [deployment] = await db
+        .update(deployments)
+        .set({
+          ...createTerminalDeploymentValues("CANCELLED"),
+          cancelledAt: sql`now()`,
+          failureStage: null,
+          errorSummary: input.errorSummary
+        })
+        .where(eq(deployments.id, deploymentId))
+        .returning();
+
+      return deployment;
+    },
+
+    async recoverInterruptedDeployments() {
+      const runningDeployments = await db
+        .select()
+        .from(deployments)
+        .where(eq(deployments.status, "RUNNING"));
+
+      const recoveredDeployments: DeploymentRecord[] = [];
+
+      for (const deployment of runningDeployments) {
+        const failureStage = deployment.activeStage ?? "apply";
+        const [recoveredDeployment] = await db
+          .update(deployments)
+          .set({
+            ...createTerminalDeploymentValues("FAILED"),
+            failedAt: sql`now()`,
+            failureStage,
+            errorSummary: createInterruptedDeploymentSummary(failureStage)
+          })
+          .where(eq(deployments.id, deployment.id))
+          .returning();
+
+        if (recoveredDeployment) {
+          recoveredDeployments.push(recoveredDeployment);
+        }
+      }
+
+      return recoveredDeployments;
     },
 
     async createDeploymentLog(input) {
@@ -743,6 +878,31 @@ export async function listTerraformOutputs(
   );
 }
 
+export async function requestDeploymentCancellation(
+  input: { deploymentId: string; accessContext: ProjectAccessContext },
+  repository: DeploymentRepository
+): Promise<DeploymentRecord> {
+  const deployment = await getDeployment(input, repository);
+
+  if (deployment.status !== "RUNNING") {
+    throw new DeploymentConflictError("Only running deployments can be cancelled");
+  }
+
+  const updatedDeployment = await repository.requestDeploymentCancellation(deployment.id);
+
+  if (!updatedDeployment) {
+    throw new DeploymentConflictError("Deployment cancellation could not be requested");
+  }
+
+  return updatedDeployment;
+}
+
+export async function recoverInterruptedDeployments(
+  repository: DeploymentRepository
+): Promise<DeploymentRecord[]> {
+  return repository.recoverInterruptedDeployments();
+}
+
 export async function appendDeploymentLog(
   input: AppendDeploymentLogInput,
   repository: DeploymentRepository,
@@ -816,6 +976,41 @@ function toAwsConnection(row: typeof awsConnections.$inferSelect): AwsConnection
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString()
   };
+}
+
+function createInterruptedDeploymentSummary(stage: DeploymentStage): string {
+  if (stage === "apply") {
+    return "Deployment was interrupted while Terraform apply was running. AWS resources may have been partially changed; verify resources before retry.";
+  }
+
+  return `Deployment was interrupted while Terraform ${stage} was running and was marked failed before retry.`;
+}
+
+function isDeploymentProjectRunningUniqueViolation(error: unknown): boolean {
+  let current: unknown = error;
+
+  for (let depth = 0; depth < 4; depth += 1) {
+    if (!current || typeof current !== "object") {
+      return false;
+    }
+
+    const candidate = current as {
+      code?: unknown;
+      constraint?: unknown;
+      cause?: unknown;
+    };
+
+    if (
+      candidate.code === "23505" &&
+      candidate.constraint === "deployments_project_running_unique"
+    ) {
+      return true;
+    }
+
+    current = candidate.cause;
+  }
+
+  return false;
 }
 
 async function requireAccessibleProject(

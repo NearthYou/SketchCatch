@@ -40,6 +40,7 @@ export const deploymentFailureStageEnum = pgEnum("deployment_failure_stage", [
   "validate",
   "plan",
   "approval",
+  "aws_connection",
   "mock_run",
   "apply"
 ]);
@@ -229,6 +230,7 @@ export const deployments = pgTable(
     stateObjectKey: text("state_object_key"),
     resultWarningSummary: text("result_warning_summary"),
     status: deploymentStatusEnum("status").notNull().default("PENDING"),
+    activeStage: deploymentStageEnum("active_stage"),
     planSummary: jsonb("plan_summary").$type<DeploymentPlanSummary>(),
     isBlocked: boolean("is_blocked").notNull().default(false),
     blockedBy: deploymentBlockedEnum("blocked_by"),
@@ -247,13 +249,21 @@ export const deployments = pgTable(
     approvedTfplanHash: varchar("approved_tfplan_hash", { length: 64 }),
     approvedAwsAccountId: varchar("approved_aws_account_id", { length: 12 }),
     approvedAwsRegion: varchar("approved_aws_region", { length: 32 }),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    failedAt: timestamp("failed_at", { withTimezone: true }),
+    cancelRequestedAt: timestamp("cancel_requested_at", { withTimezone: true }),
+    cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
   },
   (table) => [
     index("deployments_aws_connection_id_idx").on(table.awsConnectionId),
     index("deployments_current_plan_artifact_id_idx").on(table.currentPlanArtifactId),
-    index("deployments_approved_plan_artifact_id_idx").on(table.approvedPlanArtifactId)
+    index("deployments_approved_plan_artifact_id_idx").on(table.approvedPlanArtifactId),
+    uniqueIndex("deployments_project_running_unique")
+      .on(table.projectId)
+      .where(sql`${table.status} = 'RUNNING'`)
   ]
 );
 

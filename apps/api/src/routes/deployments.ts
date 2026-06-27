@@ -33,11 +33,16 @@ import {
   listProjectDeployments,
   listDeploymentLogs,
   listTerraformOutputs,
+  requestDeploymentCancellation,
   type DeploymentRecord,
   type DeploymentRepository,
   type DeploymentLogRecord,
   type ProjectAccessContext
 } from "../deployments/deployment-service.js";
+import {
+  cancelTrackedDeploymentRun,
+  startTrackedDeploymentRun
+} from "../deployments/deployment-run-registry.js";
 
 type DeploymentRow = DeploymentRecord;
 
@@ -53,6 +58,11 @@ const createDeploymentBodySchema = z.object({
 
 const deploymentParamsSchema = z.object({
   deploymentId: z.uuid()
+});
+
+const deploymentLogStreamQuerySchema = z.object({
+  sinceSequence: z.coerce.number().int().min(0).default(0),
+  once: z.enum(["true", "false"]).optional()
 });
 
 const listDeploymentsParamsSchema = z.object({
@@ -130,6 +140,7 @@ function toDeployment(row: DeploymentRow): Deployment {
     stateObjectKey: row.stateObjectKey,
     resultWarningSummary: row.resultWarningSummary,
     status: row.status as Deployment["status"],
+    activeStage: row.activeStage,
     planSummary: row.planSummary,
     isBlocked: row.isBlocked,
     blockedBy: row.blockedBy,
@@ -144,6 +155,11 @@ function toDeployment(row: DeploymentRow): Deployment {
     approvedTfplanHash: row.approvedTfplanHash,
     approvedAwsAccountId: row.approvedAwsAccountId,
     approvedAwsRegion: row.approvedAwsRegion,
+    startedAt: row.startedAt?.toISOString() ?? null,
+    completedAt: row.completedAt?.toISOString() ?? null,
+    failedAt: row.failedAt?.toISOString() ?? null,
+    cancelRequestedAt: row.cancelRequestedAt?.toISOString() ?? null,
+    cancelledAt: row.cancelledAt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString()
   };
@@ -287,7 +303,8 @@ export async function registerDeploymentRoutes(
       startDeploymentInitJob(
         {
           deploymentId: params.deploymentId,
-          accessContext
+          accessContext,
+          startedFromStatus: deployment.status
         },
         repository,
         runDeploymentInit,
@@ -327,7 +344,7 @@ export async function registerDeploymentRoutes(
 
       await requireNoRunningDeploymentInProject(deployment, repository);
 
-      const runningDeployment = await repository.markDeploymentInitRunning(deployment.id);
+      const runningDeployment = await repository.markDeploymentPlanRunning(deployment.id);
 
       if (!runningDeployment) {
         throw new DeploymentConflictError("Deployment plan could not be started");
@@ -427,6 +444,49 @@ export async function registerDeploymentRoutes(
     }
   });
 
+  app.post("/deployments/:deploymentId/cancel", async (request, reply) => {
+    const params = deploymentParamsSchema.parse(request.params);
+    z.object({}).parse(request.body ?? {});
+    const { accessContext, repository } = await getDeploymentRequestContext(
+      request,
+      options,
+      getDeploymentDatabaseClient
+    );
+
+    try {
+      const cancellationRequestedDeployment = await requestDeploymentCancellation(
+        {
+          deploymentId: params.deploymentId,
+          accessContext
+        },
+        repository
+      );
+      const cancelledInMemory = cancelTrackedDeploymentRun(params.deploymentId);
+
+      if (!cancelledInMemory) {
+        const failedDeployment = await repository.failDeployment(params.deploymentId, {
+          failureStage: cancellationRequestedDeployment.activeStage ?? "apply",
+          errorSummary:
+            "Cancellation was requested, but no active Terraform process was found on this server. The deployment was marked failed; verify AWS resources before retry."
+        });
+
+        if (!failedDeployment) {
+          throw new DeploymentNotFoundError("Deployment not found");
+        }
+
+        return reply.status(202).send({
+          deployment: toDeployment(failedDeployment)
+        });
+      }
+
+      return reply.status(202).send({
+        deployment: toDeployment(cancellationRequestedDeployment)
+      });
+    } catch (error) {
+      return handleDeploymentError(error, reply);
+    }
+  });
+
   app.get("/deployments/:deploymentId/logs", async (request, reply) => {
     const params = deploymentParamsSchema.parse(request.params);
     const { accessContext, repository } = await getDeploymentRequestContext(
@@ -446,6 +506,37 @@ export async function registerDeploymentRoutes(
 
       return reply.status(200).send({
         logs: logs.map(toDeploymentLog)
+      });
+    } catch (error) {
+      return handleDeploymentError(error, reply);
+    }
+  });
+
+  app.get("/deployments/:deploymentId/logs/stream", async (request, reply) => {
+    const params = deploymentParamsSchema.parse(request.params);
+    const query = deploymentLogStreamQuerySchema.parse(request.query);
+    const { accessContext, repository } = await getDeploymentRequestContext(
+      request,
+      options,
+      getDeploymentDatabaseClient
+    );
+
+    try {
+      await getDeployment(
+        {
+          deploymentId: params.deploymentId,
+          accessContext
+        },
+        repository
+      );
+
+      return streamDeploymentLogs({
+        deploymentId: params.deploymentId,
+        sinceSequence: query.sinceSequence,
+        once: query.once === "true",
+        repository,
+        reply,
+        request
       });
     } catch (error) {
       return handleDeploymentError(error, reply);
@@ -510,6 +601,54 @@ function createUserProjectAccessContext(userId: string): ProjectAccessContext {
   };
 }
 
+async function streamDeploymentLogs(input: {
+  deploymentId: string;
+  sinceSequence: number;
+  once: boolean;
+  repository: DeploymentRepository;
+  reply: FastifyReply;
+  request: FastifyRequest;
+}): Promise<void> {
+  let lastSequence = input.sinceSequence;
+
+  input.reply.raw.writeHead(200, {
+    "Content-Type": "text/event-stream; charset=utf-8",
+    "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+    Connection: "keep-alive",
+    "X-Accel-Buffering": "no",
+    Vary: "Cookie"
+  });
+  input.reply.hijack();
+
+  const writeNewLogs = async () => {
+    const logs = await input.repository.listDeploymentLogs(input.deploymentId);
+    const nextLogs = logs.filter((log) => log.sequence > lastSequence);
+
+    for (const log of nextLogs) {
+      lastSequence = Math.max(lastSequence, log.sequence);
+      input.reply.raw.write(`event: log\ndata: ${JSON.stringify(toDeploymentLog(log))}\n\n`);
+    }
+  };
+
+  await writeNewLogs();
+
+  if (input.once) {
+    input.reply.raw.end();
+    return;
+  }
+
+  const interval = setInterval(() => {
+    input.reply.raw.write(": keep-alive\n\n");
+    void writeNewLogs().catch((error) => {
+      input.request.log.warn({ error, deploymentId: input.deploymentId }, "Deployment log stream failed");
+    });
+  }, 2_000);
+
+  input.request.raw.on("close", () => {
+    clearInterval(interval);
+  });
+}
+
 async function requireDeploymentInitArtifact(
   deployment: DeploymentRecord,
   repository: DeploymentRepository
@@ -566,8 +705,10 @@ function startDeploymentInitJob(
   ) => Promise<RunDeploymentInitResult>,
   log: FastifyRequest["log"]
 ): void {
-  void runDeploymentInit(input, repository).catch(() => {
-    log.error({ deploymentId: input.deploymentId }, "Deployment init background job failed");
+  startTrackedDeploymentRun(input.deploymentId, async (abortSignal) => {
+    await runDeploymentInit({ ...input, abortSignal }, repository).catch(() => {
+      log.error({ deploymentId: input.deploymentId }, "Deployment init background job failed");
+    });
   });
 }
 
@@ -580,8 +721,10 @@ function startDeploymentPlanJob(
   ) => Promise<RunDeploymentPlanResult>,
   log: FastifyRequest["log"]
 ): void {
-  void runDeploymentPlan(input, repository).catch(() => {
-    log.error({ deploymentId: input.deploymentId }, "Deployment plan background job failed");
+  startTrackedDeploymentRun(input.deploymentId, async (abortSignal) => {
+    await runDeploymentPlan({ ...input, abortSignal }, repository).catch(() => {
+      log.error({ deploymentId: input.deploymentId }, "Deployment plan background job failed");
+    });
   });
 }
 
@@ -594,7 +737,9 @@ function startDeploymentApplyJob(
   ) => Promise<RunDeploymentApplyResult>,
   log: FastifyRequest["log"]
 ): void {
-  void runDeploymentApply(input, repository).catch(() => {
-    log.error({ deploymentId: input.deploymentId }, "Deployment apply background job failed");
+  startTrackedDeploymentRun(input.deploymentId, async (abortSignal) => {
+    await runDeploymentApply({ ...input, abortSignal }, repository).catch(() => {
+      log.error({ deploymentId: input.deploymentId }, "Deployment apply background job failed");
+    });
   });
 }

@@ -133,6 +133,9 @@ class FakeDeploymentRepository implements DeploymentRepository {
   markDeploymentInitRunning: DeploymentRepository["markDeploymentInitRunning"] = async () =>
     this.deployment;
 
+  markDeploymentPlanRunning: DeploymentRepository["markDeploymentPlanRunning"] = async () =>
+    this.deployment;
+
   markDeploymentApplyRunning: DeploymentRepository["markDeploymentApplyRunning"] = async () =>
     this.deployment;
 
@@ -226,6 +229,15 @@ class FakeDeploymentRepository implements DeploymentRepository {
 
     return this.deployment;
   };
+
+  requestDeploymentCancellation: DeploymentRepository["requestDeploymentCancellation"] = async () =>
+    this.deployment;
+
+  cancelDeployment: DeploymentRepository["cancelDeployment"] = async () => this.deployment;
+
+  async recoverInterruptedDeployments(): Promise<DeploymentRecord[]> {
+    return [];
+  }
 
   createDeploymentLog: DeploymentRepository["createDeploymentLog"] = async (input) => ({
     ...input,
@@ -465,6 +477,7 @@ function createDeploymentRecord(
     stateObjectKey: null,
     resultWarningSummary: null,
     status: "PENDING",
+    activeStage: null,
     planSummary: createPlanSummary(),
     isBlocked: true,
     blockedBy: "missing_approval",
@@ -479,6 +492,11 @@ function createDeploymentRecord(
     approvedTfplanHash: null,
     approvedAwsAccountId: null,
     approvedAwsRegion: null,
+    startedAt: null,
+    completedAt: null,
+    failedAt: null,
+    cancelRequestedAt: null,
+    cancelledAt: null,
     createdAt: fixedNow,
     updatedAt: fixedNow,
     ...overrides

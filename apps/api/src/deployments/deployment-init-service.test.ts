@@ -256,6 +256,23 @@ class FakeDeploymentRepository implements DeploymentRepository {
     return this.deployment;
   };
 
+  markDeploymentPlanRunning: DeploymentRepository["markDeploymentPlanRunning"] = async (
+    candidateDeploymentId
+  ) => {
+    if (!this.deployment || this.deployment.id !== candidateDeploymentId) {
+      return undefined;
+    }
+
+    this.deployment = {
+      ...this.deployment,
+      status: "RUNNING",
+      activeStage: "plan",
+      updatedAt: fixedNow
+    };
+
+    return this.deployment;
+  };
+
   markDeploymentApplyRunning: DeploymentRepository["markDeploymentApplyRunning"] = async (
     candidateDeploymentId
   ) => {
@@ -351,6 +368,42 @@ class FakeDeploymentRepository implements DeploymentRepository {
     return this.deployment;
   };
 
+  requestDeploymentCancellation: DeploymentRepository["requestDeploymentCancellation"] = async (
+    candidateDeploymentId
+  ) => {
+    if (!this.deployment || this.deployment.id !== candidateDeploymentId) {
+      return undefined;
+    }
+
+    this.deployment = { ...this.deployment, cancelRequestedAt: fixedNow, updatedAt: fixedNow };
+
+    return this.deployment;
+  };
+
+  cancelDeployment: DeploymentRepository["cancelDeployment"] = async (
+    candidateDeploymentId,
+    input
+  ) => {
+    if (!this.deployment || this.deployment.id !== candidateDeploymentId) {
+      return undefined;
+    }
+
+    this.deployment = {
+      ...this.deployment,
+      status: "CANCELLED",
+      activeStage: null,
+      errorSummary: input.errorSummary,
+      cancelledAt: fixedNow,
+      updatedAt: fixedNow
+    };
+
+    return this.deployment;
+  };
+
+  async recoverInterruptedDeployments(): Promise<DeploymentRecord[]> {
+    return [];
+  }
+
   createDeploymentLog: DeploymentRepository["createDeploymentLog"] = async (input) => {
     this.calls.push({
       name: "createDeploymentLog",
@@ -420,6 +473,7 @@ function createDeploymentRecord(
     stateObjectKey: null,
     resultWarningSummary: null,
     status: "PENDING",
+    activeStage: null,
     planSummary: null,
     isBlocked: false,
     blockedBy: null,
@@ -434,6 +488,11 @@ function createDeploymentRecord(
     approvedTfplanHash: null,
     approvedAwsAccountId: null,
     approvedAwsRegion: null,
+    startedAt: null,
+    completedAt: null,
+    failedAt: null,
+    cancelRequestedAt: null,
+    cancelledAt: null,
     createdAt: fixedNow,
     updatedAt: fixedNow,
     ...overrides

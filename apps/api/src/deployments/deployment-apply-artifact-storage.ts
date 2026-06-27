@@ -2,6 +2,13 @@ import { readFile } from "node:fs/promises";
 import { PutObjectCommand, type S3Client } from "@aws-sdk/client-s3";
 import { requireS3BucketName } from "../config/env.js";
 import { getS3Client } from "../s3/client.js";
+import {
+  assertDeploymentPlanArtifactObjectKey,
+  assertDeploymentStateObjectKey,
+  createDeploymentArtifactMetadata,
+  createDeploymentArtifactTagging,
+  createS3ChecksumSha256
+} from "./deployment-artifact-security.js";
 import { downloadTerraformArtifactFromS3 } from "./terraform-workspace.js";
 
 export type UploadDeploymentStateInput = {
@@ -14,7 +21,11 @@ export type UploadedDeploymentState = {
 };
 
 export type DeploymentApplyArtifactStorage = {
-  downloadDeploymentArtifact(objectKey: string): Promise<Buffer>;
+  downloadDeploymentArtifact(input: {
+    deploymentId: string;
+    planArtifactId: string;
+    objectKey: string;
+  }): Promise<Buffer>;
   uploadDeploymentState(input: UploadDeploymentStateInput): Promise<UploadedDeploymentState>;
 };
 
@@ -30,13 +41,20 @@ export function createS3DeploymentApplyArtifactStorage(
   const s3Client = options.s3Client ?? getS3Client();
 
   return {
-    async downloadDeploymentArtifact(objectKey) {
-      return downloadTerraformArtifactFromS3(objectKey);
+    async downloadDeploymentArtifact(input) {
+      assertDeploymentPlanArtifactObjectKey(input);
+
+      return downloadTerraformArtifactFromS3(input.objectKey);
     },
 
     async uploadDeploymentState(input) {
       const body = await readFile(input.stateFilePath);
       const objectKey = buildDeploymentStateObjectKey(input);
+
+      assertDeploymentStateObjectKey({
+        deploymentId: input.deploymentId,
+        objectKey
+      });
 
       await s3Client.send(
         new PutObjectCommand({
@@ -44,7 +62,13 @@ export function createS3DeploymentApplyArtifactStorage(
           Key: objectKey,
           Body: body,
           ContentType: "application/json",
-          ServerSideEncryption: "AES256"
+          ServerSideEncryption: "AES256",
+          Metadata: createDeploymentArtifactMetadata({
+            deploymentId: input.deploymentId,
+            kind: "terraform-state"
+          }),
+          Tagging: createDeploymentArtifactTagging("terraform-state"),
+          ChecksumSHA256: createS3ChecksumSha256(body)
         })
       );
 

@@ -14,12 +14,14 @@ export type TerraformRunResult = {
   stdout: string;
   stderr: string;
   timedOut: boolean;
+  cancelled?: boolean;
 };
 
 export type RunTerraformInitOptions = {
   terraformBinary?: string;
   timeoutMs?: number;
   env?: NodeJS.ProcessEnv;
+  signal?: AbortSignal | undefined;
 };
 
 export type RunTerraformCommandOptions = RunTerraformInitOptions;
@@ -114,10 +116,22 @@ async function runTerraformCommand(
 
   await ensureTerraformPluginCacheDir(env.TF_PLUGIN_CACHE_DIR);
 
+  if (options.signal?.aborted) {
+    return {
+      command: [terraformBinary, ...args],
+      exitCode: 130,
+      stdout: "",
+      stderr: "Terraform command cancelled",
+      timedOut: false,
+      cancelled: true
+    };
+  }
+
   return new Promise((resolve) => {
     let stdout = "";
     let stderr = "";
     let timedOut = false;
+    let cancelled = false;
     let settled = false;
 
     const child = spawn(terraformBinary, args, {
@@ -133,6 +147,18 @@ async function runTerraformCommand(
       child.kill("SIGTERM");
     }, timeoutMs);
 
+    const abortHandler = () => {
+      cancelled = true;
+      child.kill("SIGTERM");
+    };
+
+    options.signal?.addEventListener("abort", abortHandler, { once: true });
+
+    function clearProcessListeners(): void {
+      clearTimeout(timer);
+      options.signal?.removeEventListener("abort", abortHandler);
+    }
+
     child.stdout?.on("data", (chunk: Buffer | string) => {
       stdout += chunk.toString();
     });
@@ -147,14 +173,15 @@ async function runTerraformCommand(
       }
 
       settled = true;
-      clearTimeout(timer);
+      clearProcessListeners();
 
       resolve({
         command: [terraformBinary, ...args],
         exitCode: 127,
         stdout,
         stderr: stderr || error.message,
-        timedOut
+        timedOut,
+        cancelled
       });
     });
 
@@ -164,14 +191,15 @@ async function runTerraformCommand(
       }
 
       settled = true;
-      clearTimeout(timer);
+      clearProcessListeners();
 
       resolve({
         command: [terraformBinary, ...args],
         exitCode: code ?? 1,
         stdout,
         stderr,
-        timedOut
+        timedOut,
+        cancelled
       });
     });
   });
