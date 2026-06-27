@@ -1,0 +1,446 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import type {
+  AwsConnection,
+  Deployment,
+  DeploymentLog,
+  ProjectDetailsResponse,
+  TerraformArtifact
+} from "@sketchcatch/types";
+import { DashboardIcon } from "../../components/dashboard/dashboard-icons";
+import { getApiErrorMessage } from "../../lib/api-client";
+import { ParameterInputPanel } from "../parameter-input";
+import type { DiagramEditorPanelContext } from "../diagram-editor";
+import {
+  createDeployment,
+  getProjectDetails,
+  listAwsConnections,
+  listDeploymentLogs,
+  listDeployments,
+  runDeploymentInit
+} from "./api";
+import styles from "./workspace.module.css";
+
+type WorkspaceRightPanelTab = "resource" | "deployment";
+type RequestState = "idle" | "loading" | "error";
+
+export type WorkspaceRightPanelProps = {
+  readonly context: DiagramEditorPanelContext;
+  readonly projectId: string;
+  readonly projectName: string;
+};
+
+export function WorkspaceRightPanel({ context, projectId, projectName }: WorkspaceRightPanelProps) {
+  const [activeTab, setActiveTab] = useState<WorkspaceRightPanelTab>("resource");
+
+  return (
+    <aside className={styles.rightPanelShell}>
+      <div className={styles.rightPanelTabs} role="tablist" aria-label="보드 오른쪽 패널">
+        <button
+          aria-selected={activeTab === "resource"}
+          className={activeTab === "resource" ? styles.rightPanelTabActive : styles.rightPanelTab}
+          onClick={() => setActiveTab("resource")}
+          role="tab"
+          type="button"
+        >
+          리소스
+        </button>
+        <button
+          aria-selected={activeTab === "deployment"}
+          className={activeTab === "deployment" ? styles.rightPanelTabActive : styles.rightPanelTab}
+          onClick={() => setActiveTab("deployment")}
+          role="tab"
+          type="button"
+        >
+          배포
+        </button>
+      </div>
+
+      {activeTab === "resource" ? (
+        <ParameterInputPanel {...context} />
+      ) : (
+        <DeploymentPanel
+          currentNodeCount={context.nodes.length}
+          projectId={projectId}
+          projectName={projectName}
+        />
+      )}
+    </aside>
+  );
+}
+
+function DeploymentPanel({
+  currentNodeCount,
+  projectId,
+  projectName
+}: {
+  readonly currentNodeCount: number;
+  readonly projectId: string;
+  readonly projectName: string;
+}) {
+  const [projectDetails, setProjectDetails] = useState<ProjectDetailsResponse | null>(null);
+  const [awsConnections, setAwsConnections] = useState<AwsConnection[]>([]);
+  const [deployments, setDeployments] = useState<Deployment[]>([]);
+  const [deploymentLogs, setDeploymentLogs] = useState<DeploymentLog[]>([]);
+  const [selectedArchitectureId, setSelectedArchitectureId] = useState("");
+  const [selectedTerraformArtifactId, setSelectedTerraformArtifactId] = useState("");
+  const [selectedAwsConnectionId, setSelectedAwsConnectionId] = useState("");
+  const [selectedDeploymentId, setSelectedDeploymentId] = useState("");
+  const [requestState, setRequestState] = useState<RequestState>("idle");
+  const [errorMessage, setErrorMessage] = useState("");
+
+  const verifiedAwsConnections = useMemo(
+    () => awsConnections.filter((connection) => connection.status === "verified"),
+    [awsConnections]
+  );
+  const terraformArtifacts = useMemo(
+    () =>
+      (projectDetails?.assets ?? []).filter(
+        (asset): asset is TerraformArtifact =>
+          asset.assetType === "terraform_file" && typeof asset.architectureId === "string"
+      ),
+    [projectDetails]
+  );
+  const architectureTerraformArtifacts = useMemo(
+    () =>
+      selectedArchitectureId
+        ? terraformArtifacts.filter((artifact) => artifact.architectureId === selectedArchitectureId)
+        : terraformArtifacts,
+    [selectedArchitectureId, terraformArtifacts]
+  );
+  const selectedDeployment = useMemo(
+    () => deployments.find((deployment) => deployment.id === selectedDeploymentId) ?? null,
+    [deployments, selectedDeploymentId]
+  );
+  const canCreateDeployment =
+    selectedArchitectureId.length > 0 &&
+    selectedTerraformArtifactId.length > 0 &&
+    selectedAwsConnectionId.length > 0 &&
+    requestState !== "loading";
+  const canRunInit =
+    Boolean(selectedDeployment) &&
+    selectedDeployment?.status !== "RUNNING" &&
+    requestState !== "loading";
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadDeploymentData(): Promise<void> {
+      await runRequest(async () => {
+        const [nextProjectDetails, nextConnections, nextDeployments] = await Promise.all([
+          getProjectDetails(projectId),
+          listAwsConnections(),
+          listDeployments(projectId)
+        ]);
+
+        if (cancelled) {
+          return;
+        }
+
+        setProjectDetails(nextProjectDetails);
+        setAwsConnections(nextConnections);
+        setDeployments(nextDeployments);
+
+        const latestArchitecture = nextProjectDetails.architectures[0];
+        const latestTerraformArtifact = nextProjectDetails.assets.find(
+          (asset): asset is TerraformArtifact =>
+            asset.assetType === "terraform_file" &&
+            asset.architectureId === latestArchitecture?.id
+        );
+        const latestVerifiedConnection = nextConnections.find(
+          (connection) => connection.status === "verified"
+        );
+        const latestDeployment = nextDeployments[0];
+
+        setSelectedArchitectureId((currentId) => currentId || latestArchitecture?.id || "");
+        setSelectedTerraformArtifactId((currentId) => currentId || latestTerraformArtifact?.id || "");
+        setSelectedAwsConnectionId((currentId) => currentId || latestVerifiedConnection?.id || "");
+        setSelectedDeploymentId((currentId) => currentId || latestDeployment?.id || "");
+      }, "배포 정보를 불러오지 못했습니다.");
+    }
+
+    void loadDeploymentData();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId]);
+
+  useEffect(() => {
+    if (!selectedDeploymentId) {
+      setDeploymentLogs([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadLogs(): Promise<void> {
+      await runRequest(async () => {
+        const logs = await listDeploymentLogs(selectedDeploymentId);
+
+        if (!cancelled) {
+          setDeploymentLogs(logs);
+        }
+      }, "배포 로그를 불러오지 못했습니다.");
+    }
+
+    void loadLogs();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedDeploymentId]);
+
+  useEffect(() => {
+    if (
+      selectedTerraformArtifactId &&
+      architectureTerraformArtifacts.some((artifact) => artifact.id === selectedTerraformArtifactId)
+    ) {
+      return;
+    }
+
+    setSelectedTerraformArtifactId(architectureTerraformArtifacts[0]?.id ?? "");
+  }, [architectureTerraformArtifacts, selectedTerraformArtifactId]);
+
+  async function runRequest(request: () => Promise<void>, fallbackMessage: string): Promise<void> {
+    setRequestState("loading");
+    setErrorMessage("");
+
+    try {
+      await request();
+      setRequestState("idle");
+    } catch (error) {
+      setRequestState("error");
+      setErrorMessage(getApiErrorMessage(error, fallbackMessage));
+    }
+  }
+
+  async function createProjectDeployment(): Promise<void> {
+    if (!canCreateDeployment) {
+      return;
+    }
+
+    await runRequest(async () => {
+      const deployment = await createDeployment({
+        projectId,
+        architectureId: selectedArchitectureId,
+        terraformArtifactId: selectedTerraformArtifactId,
+        awsConnectionId: selectedAwsConnectionId
+      });
+
+      setDeployments((currentDeployments) => [deployment, ...currentDeployments]);
+      setSelectedDeploymentId(deployment.id);
+      setDeploymentLogs([]);
+    }, "Deployment를 생성하지 못했습니다.");
+  }
+
+  async function startTerraformInit(): Promise<void> {
+    if (!selectedDeployment || !canRunInit) {
+      return;
+    }
+
+    await runRequest(async () => {
+      const deployment = await runDeploymentInit(selectedDeployment.id);
+      setDeployments((currentDeployments) =>
+        currentDeployments.map((currentDeployment) =>
+          currentDeployment.id === deployment.id ? deployment : currentDeployment
+        )
+      );
+      setSelectedDeploymentId(deployment.id);
+      setDeploymentLogs(await listDeploymentLogs(deployment.id));
+    }, "Terraform init을 시작하지 못했습니다.");
+  }
+
+  async function refreshDeploymentPanel(): Promise<void> {
+    await runRequest(async () => {
+      const [nextDeployments, nextLogs] = await Promise.all([
+        listDeployments(projectId),
+        selectedDeploymentId ? listDeploymentLogs(selectedDeploymentId) : Promise.resolve([])
+      ]);
+
+      setDeployments(nextDeployments);
+      setDeploymentLogs(nextLogs);
+    }, "배포 상태를 새로고침하지 못했습니다.");
+  }
+
+  return (
+    <div className={styles.deploymentPanel}>
+      <header className={styles.deploymentHeader}>
+        <p className={styles.projectEyebrow}>Deployment</p>
+        <h2>{projectName}</h2>
+        <span>{currentNodeCount} board nodes</span>
+      </header>
+
+      <section className={styles.deploymentSection}>
+        <label className={styles.deploymentField}>
+          Architecture snapshot
+          <select
+            onChange={(event) => setSelectedArchitectureId(event.target.value)}
+            value={selectedArchitectureId}
+          >
+            {(projectDetails?.architectures ?? []).length === 0 ? (
+              <option value="">저장된 snapshot 없음</option>
+            ) : (
+              projectDetails?.architectures.map((architecture) => (
+                <option key={architecture.id} value={architecture.id}>
+                  v{architecture.version} | {architecture.source} | {formatDate(architecture.createdAt)}
+                </option>
+              ))
+            )}
+          </select>
+        </label>
+
+        <label className={styles.deploymentField}>
+          Terraform artifact
+          <select
+            disabled={architectureTerraformArtifacts.length === 0}
+            onChange={(event) => setSelectedTerraformArtifactId(event.target.value)}
+            value={selectedTerraformArtifactId}
+          >
+            {architectureTerraformArtifacts.length === 0 ? (
+              <option value="">Terraform artifact 없음</option>
+            ) : (
+              architectureTerraformArtifacts.map((artifact) => (
+                <option key={artifact.id} value={artifact.id}>
+                  {artifact.fileName} | {formatDate(artifact.createdAt)}
+                </option>
+              ))
+            )}
+          </select>
+        </label>
+
+        <label className={styles.deploymentField}>
+          AWS connection
+          <select
+            disabled={verifiedAwsConnections.length === 0}
+            onChange={(event) => setSelectedAwsConnectionId(event.target.value)}
+            value={selectedAwsConnectionId}
+          >
+            {verifiedAwsConnections.length === 0 ? (
+              <option value="">검증된 AWS 연결 없음</option>
+            ) : (
+              verifiedAwsConnections.map((connection) => (
+                <option key={connection.id} value={connection.id}>
+                  {connection.accountId} | {connection.region}
+                </option>
+              ))
+            )}
+          </select>
+        </label>
+
+        <button
+          className={styles.deploymentPrimaryButton}
+          disabled={!canCreateDeployment}
+          onClick={createProjectDeployment}
+          type="button"
+        >
+          <DashboardIcon name="rocket" />
+          Deployment 생성
+        </button>
+
+        {!selectedArchitectureId ? <p className={styles.deploymentHint}>먼저 architecture snapshot이 필요합니다.</p> : null}
+        {!selectedTerraformArtifactId ? <p className={styles.deploymentHint}>Terraform artifact가 있어야 init을 실행할 수 있습니다.</p> : null}
+        {!selectedAwsConnectionId ? (
+          <p className={styles.deploymentHint}>환경설정에서 AWS 계정을 한 번 연결하고 검증해주세요.</p>
+        ) : null}
+      </section>
+
+      <section className={styles.deploymentSection}>
+        <div className={styles.deploymentSectionHeader}>
+          <h3>Deployment records</h3>
+          <button
+            className={styles.deploymentSecondaryButton}
+            disabled={requestState === "loading"}
+            onClick={refreshDeploymentPanel}
+            type="button"
+          >
+            새로고침
+          </button>
+        </div>
+
+        <label className={styles.deploymentField}>
+          실행 기록
+          <select
+            disabled={deployments.length === 0}
+            onChange={(event) => setSelectedDeploymentId(event.target.value)}
+            value={selectedDeploymentId}
+          >
+            {deployments.length === 0 ? (
+              <option value="">Deployment 없음</option>
+            ) : (
+              deployments.map((deployment) => (
+                <option key={deployment.id} value={deployment.id}>
+                  {deployment.status} | {formatDate(deployment.createdAt)}
+                </option>
+              ))
+            )}
+          </select>
+        </label>
+
+        {selectedDeployment ? (
+          <div className={styles.deploymentSummary}>
+            <InfoRow label="Status" value={selectedDeployment.status} />
+            <InfoRow label="Blocked" value={selectedDeployment.isBlocked ? "yes" : "no"} />
+            <InfoRow label="Error" value={selectedDeployment.errorSummary ?? "없음"} />
+          </div>
+        ) : null}
+
+        <button
+          className={styles.deploymentPrimaryButton}
+          disabled={!canRunInit}
+          onClick={startTerraformInit}
+          type="button"
+        >
+          <DashboardIcon name="server" />
+          Terraform init 실행
+        </button>
+      </section>
+
+      <section className={styles.deploymentSection}>
+        <h3>Logs</h3>
+        {deploymentLogs.length === 0 ? (
+          <p className={styles.deploymentHint}>아직 표시할 로그가 없습니다.</p>
+        ) : (
+          <ol className={styles.deploymentLogList}>
+            {deploymentLogs.map((log) => (
+              <li key={log.id}>
+                <span>{log.level}</span>
+                <p>{log.message}</p>
+              </li>
+            ))}
+          </ol>
+        )}
+      </section>
+
+      {requestState === "loading" ? <p className={styles.deploymentNotice}>요청을 처리하는 중입니다.</p> : null}
+      {requestState === "error" ? (
+        <p className={styles.deploymentError} role="alert">
+          {errorMessage}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function InfoRow({ label, value }: { readonly label: string; readonly value: string }) {
+  return (
+    <div>
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function formatDate(value: string): string {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return date.toLocaleString("ko-KR", {
+    dateStyle: "short",
+    timeStyle: "short"
+  });
+}
