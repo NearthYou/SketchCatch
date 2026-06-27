@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { DiagramJson } from "../../../../packages/types/src";
 import { DiagramEditor } from "../diagram-editor";
 import { EMPTY_DIAGRAM } from "../diagram-editor/constants";
+import { WorkspaceRightPanel } from "./WorkspaceRightPanel";
 import type { LocalProjectDraft } from "./project-draft-persistence";
 import {
   defaultProjectDraftRepository,
@@ -181,6 +182,9 @@ export function ProjectWorkspaceDraftManager({
     <DiagramEditor
       initialDiagram={initialDiagram}
       onDiagramChange={handleDiagramChange}
+      rightPanel={(context) => (
+        <WorkspaceRightPanel context={context} projectId={projectId} projectName={projectName} />
+      )}
       onSave={() => void saveCurrentDraft()}
       saveDisabled={false}
       saveStatus={`${projectName}${cloudPlatform ? ` · ${cloudPlatformLabels[cloudPlatform]}` : ""} · ${
