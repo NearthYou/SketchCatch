@@ -586,6 +586,7 @@ export type AiTerraformErrorExplanationResult = {
   likelyCause: string;
   nextActions: string[];
   relatedResourceId?: string | undefined;
+  llmEnhancement?: LlmEnhancement | undefined;
 };
 
 export type AiTerraformDetectedResource = {

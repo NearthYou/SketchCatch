@@ -1,4 +1,8 @@
-import type { AiPreDeploymentAnalysisResult, DesignSimulationResult } from "@sketchcatch/types";
+import type {
+  AiPreDeploymentAnalysisResult,
+  AiTerraformErrorExplanationResult,
+  DesignSimulationResult
+} from "@sketchcatch/types";
 import type { LlmEnhancementInput } from "./aiLlmEnhancementTypes.js";
 
 type DesignSimulationSummaryPayload = {
@@ -19,6 +23,17 @@ type PreDeploymentCheckSummaryPayload = {
   readonly suggestions: readonly string[];
 };
 
+type TerraformErrorExplanationSummaryPayload = {
+  readonly target: "terraform_error_explanation";
+  readonly stage: string;
+  readonly category: string;
+  readonly severity: string;
+  readonly summary: string;
+  readonly likelyCause: string;
+  readonly nextActions: readonly string[];
+  readonly relatedResourceId: string | null;
+};
+
 // schema는 Structured Outputs에 맡기고, prompt에는 설명 기준과 금지 기준만 남깁니다.
 export function createSystemInstructions(): string {
   return [
@@ -30,12 +45,16 @@ export function createSystemInstructions(): string {
 }
 
 // target별 rule 결과에서 OpenAI에 넘길 최소 summary payload만 만듭니다.
-export function createSummaryPayload(input: LlmEnhancementInput): PreDeploymentCheckSummaryPayload | DesignSimulationSummaryPayload {
+export function createSummaryPayload(
+  input: LlmEnhancementInput
+): PreDeploymentCheckSummaryPayload | DesignSimulationSummaryPayload | TerraformErrorExplanationSummaryPayload {
   switch (input.target) {
     case "design_simulation":
       return createDesignSimulationSummaryPayload(input.result);
     case "pre_deployment_check":
       return createPreDeploymentCheckSummaryPayload(input.result);
+    case "terraform_error_explanation":
+      return createTerraformErrorExplanationSummaryPayload(input.result);
   }
 }
 
@@ -60,5 +79,21 @@ function createPreDeploymentCheckSummaryPayload(result: AiPreDeploymentAnalysisR
     findings: result.findings.map((finding) => `${finding.severity} ${finding.category}: ${finding.title}`),
     checklist: result.checklist.map((item) => `${item.status}: ${item.label}`),
     suggestions: result.suggestions.map((suggestion) => `${suggestion.title}: ${suggestion.explanation}`)
+  };
+}
+
+// Terraform 오류 설명은 원본 전체 대신 rule이 정리한 stage, 원인, 다음 행동만 전달합니다.
+function createTerraformErrorExplanationSummaryPayload(
+  result: AiTerraformErrorExplanationResult
+): TerraformErrorExplanationSummaryPayload {
+  return {
+    target: "terraform_error_explanation",
+    stage: result.stage,
+    category: result.category,
+    severity: result.severity,
+    summary: result.summary,
+    likelyCause: result.likelyCause,
+    nextActions: result.nextActions,
+    relatedResourceId: result.relatedResourceId ?? null
   };
 }

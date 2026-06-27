@@ -1,4 +1,9 @@
-import type { AiPreDeploymentAnalysisResult, DesignSimulationResult, LlmEnhancement } from "@sketchcatch/types";
+import type {
+  AiPreDeploymentAnalysisResult,
+  AiTerraformErrorExplanationResult,
+  DesignSimulationResult,
+  LlmEnhancement
+} from "@sketchcatch/types";
 
 export type LlmEnhancementInput =
   | {
@@ -8,6 +13,10 @@ export type LlmEnhancementInput =
   | {
       readonly target: "pre_deployment_check";
       readonly result: AiPreDeploymentAnalysisResult;
+    }
+  | {
+      readonly target: "terraform_error_explanation";
+      readonly result: AiTerraformErrorExplanationResult;
     };
 
 export type CreateLlmEnhancement = (input: LlmEnhancementInput) => Promise<LlmEnhancement>;

@@ -1,5 +1,6 @@
 import type {
   AiPreDeploymentAnalysisResult,
+  AiTerraformErrorExplanationResult,
   DesignSimulationResult,
   LlmEnhancement,
   LlmEnhancementFallbackReason
@@ -30,6 +31,21 @@ export function createPreDeploymentCheckFallbackEnhancement(
     summary: result.summary,
     highlights: createPreDeploymentCheckHighlights(result),
     nextActions: createPreDeploymentCheckNextActions(result),
+    fallbackUsed: true,
+    fallbackReason
+  };
+}
+
+// Terraform 오류 설명은 rule이 찾은 원인과 다음 행동을 그대로 LLM fallback 설명으로 씁니다.
+export function createTerraformErrorExplanationFallbackEnhancement(
+  result: AiTerraformErrorExplanationResult,
+  fallbackReason: LlmEnhancementFallbackReason
+): LlmEnhancement {
+  return {
+    target: "terraform_error_explanation",
+    summary: result.summary,
+    highlights: createTerraformErrorExplanationHighlights(result),
+    nextActions: result.nextActions.slice(0, 5),
     fallbackUsed: true,
     fallbackReason
   };
@@ -91,4 +107,15 @@ function createPreDeploymentCheckNextActions(result: AiPreDeploymentAnalysisResu
   }
 
   return ["Architecture Board 설정을 확인한 뒤 Pre-Deployment Check를 다시 실행하세요."];
+}
+
+// stage, category, 원인, 관련 Resource만 남겨 원본 오류보다 짧은 highlight를 만듭니다.
+function createTerraformErrorExplanationHighlights(result: AiTerraformErrorExplanationResult): string[] {
+  const highlights = [
+    `${result.stage} 단계의 ${result.category} 오류입니다.`,
+    result.likelyCause,
+    result.relatedResourceId === undefined ? undefined : `관련 Resource: ${result.relatedResourceId}`
+  ].filter(isNonEmptyString);
+
+  return highlights.slice(0, 5);
 }

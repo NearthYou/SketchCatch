@@ -160,8 +160,15 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
     "/ai/terraform-error-explanation",
     async (request): Promise<AiTerraformErrorExplanationResult> => {
       const body = terraformErrorExplanationBodySchema.parse(request.body);
+      const result = explainTerraformError(body);
 
-      return explainTerraformError(body);
+      return {
+        ...result,
+        llmEnhancement: await createLlmEnhancement({
+          target: "terraform_error_explanation",
+          result
+        })
+      };
     }
   );
 

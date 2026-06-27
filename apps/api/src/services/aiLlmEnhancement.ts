@@ -2,7 +2,8 @@ import OpenAI from "openai";
 import type { LlmEnhancement, LlmEnhancementFallbackReason } from "@sketchcatch/types";
 import {
   createDesignSimulationFallbackEnhancement,
-  createPreDeploymentCheckFallbackEnhancement
+  createPreDeploymentCheckFallbackEnhancement,
+  createTerraformErrorExplanationFallbackEnhancement
 } from "./aiLlmEnhancementFallbacks.js";
 import { createSummaryPayload, createSystemInstructions } from "./aiLlmEnhancementPayloads.js";
 import type { CreateLlmEnhancement, LlmEnhancementInput } from "./aiLlmEnhancementTypes.js";
@@ -137,6 +138,8 @@ function createFallbackEnhancement(input: LlmEnhancementInput, fallbackReason: L
       return createDesignSimulationFallbackEnhancement(input.result, fallbackReason);
     case "pre_deployment_check":
       return createPreDeploymentCheckFallbackEnhancement(input.result, fallbackReason);
+    case "terraform_error_explanation":
+      return createTerraformErrorExplanationFallbackEnhancement(input.result, fallbackReason);
   }
 }
 
