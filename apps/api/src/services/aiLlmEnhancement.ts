@@ -1,7 +1,7 @@
 import OpenAI from "openai";
 import { zodTextFormat } from "openai/helpers/zod";
 import { z } from "zod";
-import type { DesignSimulationResult, LlmEnhancement } from "@sketchcatch/types";
+import type { DesignSimulationResult, LlmEnhancement, LlmEnhancementFallbackReason } from "@sketchcatch/types";
 import { createDesignSimulationFallbackEnhancement } from "./aiLlmEnhancementFallbacks.js";
 
 const DEFAULT_OPENAI_MODEL = "gpt-5.5";
@@ -89,16 +89,20 @@ export function createOpenAiEnhancement(options: CreateOpenAiEnhancementOptions)
       return createFallbackEnhancement(input, "missing_api_key");
     }
 
-    const response = await options.client.responses.parse({
-      model: options.model ?? DEFAULT_OPENAI_MODEL,
-      instructions: createSystemInstructions(),
-      input: JSON.stringify(createDesignSimulationSummaryPayload(input.result)),
-      text: {
-        format: llmEnhancementTextFormat
-      }
-    });
+    try {
+      const response = await options.client.responses.parse({
+        model: options.model ?? DEFAULT_OPENAI_MODEL,
+        instructions: createSystemInstructions(),
+        input: JSON.stringify(createDesignSimulationSummaryPayload(input.result)),
+        text: {
+          format: llmEnhancementTextFormat
+        }
+      });
 
-    return response.output_parsed ?? createFallbackEnhancement(input, "invalid_response");
+      return response.output_parsed ?? createFallbackEnhancement(input, "invalid_response");
+    } catch (error) {
+      return createFallbackEnhancement(input, classifyOpenAiError(error));
+    }
   };
 }
 
@@ -136,8 +140,29 @@ function createDefaultOpenAiResponsesClient(options: OpenAiClientOptions): OpenA
 }
 
 // target별 fallback builder를 한곳에서 고르게 해서 provider 실패 경로를 단순하게 유지합니다.
-function createFallbackEnhancement(input: LlmEnhancementInput, fallbackReason: "missing_api_key" | "invalid_response"): LlmEnhancement {
+function createFallbackEnhancement(input: LlmEnhancementInput, fallbackReason: LlmEnhancementFallbackReason): LlmEnhancement {
   return createDesignSimulationFallbackEnhancement(input.result, fallbackReason);
+}
+
+// provider 원문 에러는 숨기고 API 응답에는 안전한 fallbackReason만 남깁니다.
+function classifyOpenAiError(error: unknown): LlmEnhancementFallbackReason {
+  if (error instanceof Error && error.name === "APIConnectionTimeoutError") {
+    return "timeout";
+  }
+
+  if (error instanceof Error && error.name === "RateLimitError") {
+    return "rate_limited";
+  }
+
+  if (error instanceof Error && error.name === "BadRequestError") {
+    return "invalid_request";
+  }
+
+  if (error instanceof Error && error.name === "AuthenticationError") {
+    return "auth_error";
+  }
+
+  return "provider_error";
 }
 
 // schema는 Structured Outputs에 맡기고, prompt에는 설명 기준과 금지 기준만 남깁니다.

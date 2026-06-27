@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { DesignSimulationResult, LlmEnhancement } from "@sketchcatch/types";
+import type { DesignSimulationResult, LlmEnhancement, LlmEnhancementFallbackReason } from "@sketchcatch/types";
 import {
   createConfiguredOpenAiEnhancement,
   createOpenAiEnhancement,
@@ -105,4 +105,63 @@ test("createConfiguredOpenAiEnhancement creates OpenAI client with timeout, no r
     }
   ]);
   assert.match(JSON.stringify(parseRequests[0]), /custom-model/);
+});
+
+test("createOpenAiEnhancement returns provider fallback when OpenAI throws", async () => {
+  const createLlmEnhancement = createOpenAiEnhancement({
+    apiKey: "test-openai-api-key",
+    client: {
+      responses: {
+        parse: async () => {
+          throw new Error("raw provider message must not be exposed");
+        }
+      }
+    }
+  });
+
+  const result = await createLlmEnhancement({
+    target: "design_simulation",
+    result: designSimulationResult
+  });
+
+  assert.equal(result.fallbackUsed, true);
+  assert.equal(result.fallbackReason, "provider_error");
+  assert.equal(result.summary, designSimulationResult.summary);
+  assert.doesNotMatch(JSON.stringify(result), /raw provider message/);
+});
+
+test("createOpenAiEnhancement maps known OpenAI errors to safe fallback reasons", async () => {
+  const cases: readonly {
+    readonly errorName: string;
+    readonly fallbackReason: LlmEnhancementFallbackReason;
+  }[] = [
+    { errorName: "APIConnectionTimeoutError", fallbackReason: "timeout" },
+    { errorName: "RateLimitError", fallbackReason: "rate_limited" },
+    { errorName: "BadRequestError", fallbackReason: "invalid_request" },
+    { errorName: "AuthenticationError", fallbackReason: "auth_error" }
+  ];
+
+  for (const item of cases) {
+    const providerError = new Error("raw provider message must not be exposed");
+    providerError.name = item.errorName;
+    const createLlmEnhancement = createOpenAiEnhancement({
+      apiKey: "test-openai-api-key",
+      client: {
+        responses: {
+          parse: async () => {
+            throw providerError;
+          }
+        }
+      }
+    });
+
+    const result = await createLlmEnhancement({
+      target: "design_simulation",
+      result: designSimulationResult
+    });
+
+    assert.equal(result.fallbackUsed, true);
+    assert.equal(result.fallbackReason, item.fallbackReason);
+    assert.doesNotMatch(JSON.stringify(result), /raw provider message/);
+  }
 });
