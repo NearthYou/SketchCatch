@@ -157,16 +157,22 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
               {terraformDiagnostics.length}
             </span>
           </button>
+          <button
+            aria-label="배포 패널"
+            aria-pressed={activeView === "deployment"}
+            className={
+              activeView === "deployment"
+                ? styles.panelDeploymentButtonActive
+                : styles.panelDeploymentButton
+            }
+            onClick={() => requestView("deployment")}
+            title="배포"
+            type="button"
+          >
+            <Rocket size={18} aria-hidden="true" />
+            <span className={styles.panelDeploymentLabel}>배포</span>
+          </button>
         </div>
-        <button
-          aria-pressed={activeView === "deployment"}
-          className={activeView === "deployment" ? styles.panelIconButtonActive : styles.panelIconButton}
-          onClick={() => requestView("deployment")}
-          title="배포"
-          type="button"
-        >
-          <Rocket size={18} aria-hidden="true" />
-        </button>
       </div>
 
       {activeView === "resource" ? (
