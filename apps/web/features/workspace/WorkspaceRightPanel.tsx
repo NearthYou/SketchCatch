@@ -1,28 +1,34 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { UIEvent } from "react";
 import type {
   AwsConnection,
   Deployment,
   DeploymentLog,
   ProjectDetailsResponse,
+  TerraformDiagnostic,
   TerraformArtifact
 } from "@sketchcatch/types";
+import { Code2, GitBranch, Play, RefreshCw, ShieldCheck } from "lucide-react";
 import { DashboardIcon } from "../../components/dashboard/dashboard-icons";
 import { getApiErrorMessage } from "../../lib/api-client";
 import { ParameterInputPanel } from "../parameter-input";
 import type { DiagramEditorPanelContext } from "../diagram-editor";
 import {
   createDeployment,
+  generateTerraformCode,
   getProjectDetails,
   listAwsConnections,
   listDeploymentLogs,
   listDeployments,
-  runDeploymentInit
+  runDeploymentInit,
+  syncTerraformToDiagram,
+  validateTerraformCode
 } from "./api";
 import styles from "./workspace.module.css";
 
-type WorkspaceRightPanelTab = "resource" | "deployment";
+type WorkspaceRightPanelTab = "resource" | "terraform" | "deployment";
 type RequestState = "idle" | "loading" | "error";
 
 export type WorkspaceRightPanelProps = {
@@ -47,6 +53,15 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
           리소스
         </button>
         <button
+          aria-selected={activeTab === "terraform"}
+          className={activeTab === "terraform" ? styles.rightPanelTabActive : styles.rightPanelTab}
+          onClick={() => setActiveTab("terraform")}
+          role="tab"
+          type="button"
+        >
+          Terraform
+        </button>
+        <button
           aria-selected={activeTab === "deployment"}
           className={activeTab === "deployment" ? styles.rightPanelTabActive : styles.rightPanelTab}
           onClick={() => setActiveTab("deployment")}
@@ -59,6 +74,8 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
 
       {activeTab === "resource" ? (
         <ParameterInputPanel {...context} />
+      ) : activeTab === "terraform" ? (
+        <TerraformCodePanel context={context} />
       ) : (
         <DeploymentPanel
           currentNodeCount={context.nodes.length}
@@ -67,6 +84,200 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
         />
       )}
     </aside>
+  );
+}
+
+function TerraformCodePanel({ context }: { readonly context: DiagramEditorPanelContext }) {
+  const [terraformCode, setTerraformCode] = useState("");
+  const [diagnostics, setDiagnostics] = useState<TerraformDiagnostic[]>([]);
+  const [requestState, setRequestState] = useState<RequestState>("idle");
+  const [errorMessage, setErrorMessage] = useState("");
+  const [statusMessage, setStatusMessage] = useState("main.tf");
+  const [hasLocalEdits, setHasLocalEdits] = useState(false);
+  const hasLoadedInitialCodeRef = useRef(false);
+  const lineNumberRef = useRef<HTMLOListElement | null>(null);
+
+  const hasTerraformCode = terraformCode.trim().length > 0;
+  const hasErrorDiagnostics = diagnostics.some((diagnostic) => diagnostic.severity === "error");
+  const lineNumbers = useMemo(
+    () => Array.from({ length: Math.max(1, terraformCode.split(/\r\n|\r|\n/).length) }, (_, index) => index + 1),
+    [terraformCode]
+  );
+
+  const runRequest = useCallback(async (request: () => Promise<void>, fallbackMessage: string) => {
+    setRequestState("loading");
+    setErrorMessage("");
+
+    try {
+      await request();
+      setRequestState("idle");
+    } catch (error) {
+      setRequestState("error");
+      setErrorMessage(getApiErrorMessage(error, fallbackMessage));
+    }
+  }, []);
+
+  const refreshTerraformCode = useCallback(async () => {
+    await runRequest(async () => {
+      const generatedCode = await generateTerraformCode(context.diagram);
+      setTerraformCode(generatedCode);
+      setDiagnostics([]);
+      setHasLocalEdits(false);
+      setStatusMessage("그래프 기준으로 생성됨");
+    }, "Terraform 코드를 생성하지 못했습니다.");
+  }, [context.diagram, runRequest]);
+
+  useEffect(() => {
+    if (hasLoadedInitialCodeRef.current || context.nodes.length === 0) {
+      return;
+    }
+
+    hasLoadedInitialCodeRef.current = true;
+    void refreshTerraformCode();
+  }, [context.nodes.length, refreshTerraformCode]);
+
+  function handleCodeScroll(event: UIEvent<HTMLTextAreaElement>): void {
+    if (lineNumberRef.current) {
+      lineNumberRef.current.scrollTop = event.currentTarget.scrollTop;
+    }
+  }
+
+  function handleCodeChange(nextCode: string): void {
+    setTerraformCode(nextCode);
+    setHasLocalEdits(true);
+    setStatusMessage("수정됨");
+  }
+
+  async function validateCode(): Promise<void> {
+    if (!hasTerraformCode) {
+      return;
+    }
+
+    await runRequest(async () => {
+      const result = await validateTerraformCode(terraformCode);
+      setDiagnostics(result.diagnostics);
+      setStatusMessage(result.diagnostics.length === 0 ? "문법 문제 없음" : "진단 확인 필요");
+    }, "Terraform 문법을 점검하지 못했습니다.");
+  }
+
+  async function applyCodeToDiagram(): Promise<void> {
+    if (!hasTerraformCode) {
+      return;
+    }
+
+    await runRequest(async () => {
+      const result = await syncTerraformToDiagram({
+        diagramJson: context.diagram,
+        terraformCode
+      });
+
+      setDiagnostics(result.diagnostics);
+
+      if (result.diagnostics.some((diagnostic) => diagnostic.severity === "error")) {
+        setStatusMessage("적용 차단됨");
+        return;
+      }
+
+      context.applyDiagramJson(result.diagramJson);
+      setHasLocalEdits(false);
+      setStatusMessage("다이어그램에 적용됨");
+    }, "Terraform 코드를 다이어그램에 적용하지 못했습니다.");
+  }
+
+  return (
+    <div className={styles.terraformPanel}>
+      <header className={styles.terraformTopBar}>
+        <div className={styles.terraformFileChip}>
+          <Code2 size={16} aria-hidden="true" />
+          <span>main.tf</span>
+        </div>
+        <div className={styles.terraformActions}>
+          <button
+            aria-label="그래프에서 Terraform 코드 생성"
+            disabled={requestState === "loading"}
+            onClick={refreshTerraformCode}
+            title="그래프에서 Terraform 코드 생성"
+            type="button"
+          >
+            <RefreshCw size={16} aria-hidden="true" />
+          </button>
+          <button
+            aria-label="Terraform 문법 점검"
+            disabled={requestState === "loading" || !hasTerraformCode}
+            onClick={validateCode}
+            title="Terraform 문법 점검"
+            type="button"
+          >
+            <ShieldCheck size={16} aria-hidden="true" />
+          </button>
+          <button
+            aria-label="Terraform 코드를 다이어그램에 적용"
+            disabled={requestState === "loading" || !hasTerraformCode}
+            onClick={applyCodeToDiagram}
+            title="Terraform 코드를 다이어그램에 적용"
+            type="button"
+          >
+            <Play size={16} aria-hidden="true" />
+          </button>
+        </div>
+      </header>
+
+      <div className={styles.terraformStatusBar}>
+        <span className={hasLocalEdits ? styles.terraformStatusEdited : styles.terraformStatusSynced}>
+          {statusMessage}
+        </span>
+        <span>{context.nodes.length} nodes</span>
+      </div>
+
+      <div className={styles.terraformEditorFrame}>
+        <ol ref={lineNumberRef} className={styles.terraformLineNumbers} aria-hidden="true">
+          {lineNumbers.map((lineNumber) => (
+            <li key={lineNumber}>{lineNumber}</li>
+          ))}
+        </ol>
+        <textarea
+          aria-label="Terraform 코드"
+          className={styles.terraformTextarea}
+          onChange={(event) => handleCodeChange(event.target.value)}
+          onScroll={handleCodeScroll}
+          placeholder={`resource "aws_vpc" "main" {
+  cidr_block = "10.0.0.0/16"
+}`}
+          spellCheck={false}
+          value={terraformCode}
+        />
+      </div>
+
+      <section className={styles.terraformDiagnostics} aria-live="polite">
+        <div className={styles.terraformDiagnosticsHeader}>
+          <GitBranch size={15} aria-hidden="true" />
+          <h3>Issues</h3>
+          <span className={hasErrorDiagnostics ? styles.terraformIssueCountError : styles.terraformIssueCount}>
+            {diagnostics.length}
+          </span>
+        </div>
+
+        {requestState === "loading" ? <p className={styles.terraformNotice}>요청을 처리하는 중입니다.</p> : null}
+        {requestState === "error" ? (
+          <p className={styles.terraformError} role="alert">
+            {errorMessage}
+          </p>
+        ) : null}
+        {diagnostics.length === 0 && requestState !== "loading" && requestState !== "error" ? (
+          <p className={styles.terraformEmpty}>표시할 진단이 없습니다.</p>
+        ) : null}
+        {diagnostics.length > 0 ? (
+          <ol className={styles.terraformDiagnosticList}>
+            {diagnostics.map((diagnostic, index) => (
+              <li key={`${diagnostic.code ?? diagnostic.message}-${index}`} data-severity={diagnostic.severity}>
+                <strong>{formatTerraformDiagnosticTitle(diagnostic)}</strong>
+                <span>{diagnostic.message}</span>
+              </li>
+            ))}
+          </ol>
+        ) : null}
+      </section>
+    </div>
   );
 }
 
@@ -421,6 +632,12 @@ function DeploymentPanel({
       ) : null}
     </div>
   );
+}
+
+function formatTerraformDiagnosticTitle(diagnostic: TerraformDiagnostic): string {
+  const location = diagnostic.line ? `line ${diagnostic.line}` : "Terraform";
+  const resource = diagnostic.resourceAddress ? ` | ${diagnostic.resourceAddress}` : "";
+  return `${diagnostic.severity.toUpperCase()} | ${location}${resource}`;
 }
 
 function InfoRow({ label, value }: { readonly label: string; readonly value: string }) {

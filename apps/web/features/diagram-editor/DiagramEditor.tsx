@@ -247,15 +247,26 @@ function DiagramEditorInner({
     [commitDiagramUpdate]
   );
 
+  const applyDiagramJson = useCallback<DiagramEditorPanelContext["applyDiagramJson"]>(
+    (nextDiagram) => {
+      commitDiagramUpdate(() => cloneDiagram(nextDiagram));
+      setSelectedNodeIds([]);
+      setSelectedEdgeIds([]);
+    },
+    [commitDiagramUpdate]
+  );
+
   const panelContext = useMemo<DiagramEditorPanelContext>(
     () => ({
+      diagram,
       selectedNodeId,
       nodes: diagram.nodes,
       edges: diagram.edges,
+      applyDiagramJson,
       updateNodeParameters,
       updateNodeMetadata
     }),
-    [diagram.edges, diagram.nodes, selectedNodeId, updateNodeMetadata, updateNodeParameters]
+    [applyDiagramJson, diagram, selectedNodeId, updateNodeMetadata, updateNodeParameters]
   );
 
   const handleBringForward = useCallback(
