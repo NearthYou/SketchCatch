@@ -290,7 +290,7 @@ export async function runDeploymentPlan(
           objectKey: uploadedPlanArtifact.objectKey,
           planArtifactStorage,
           repository
-        });
+        }).catch(() => undefined);
       }
 
       const failedDeployment = await failDeployment(deployment.id, "plan", error, repository);
