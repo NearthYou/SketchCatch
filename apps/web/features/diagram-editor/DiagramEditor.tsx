@@ -101,6 +101,7 @@ function DiagramEditorInner({
   const diagramRef = useRef(diagram);
   const [history, setHistory] = useState<DiagramHistoryState>({ past: [], future: [] });
   const [inspectedNodeId, setInspectedNodeId] = useState<string | null>(null);
+  const [isRightPanelOpen, setRightPanelOpen] = useState(true);
   const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
   const [selectedEdgeIds, setSelectedEdgeIds] = useState<string[]>([]);
   const [interactionMode, setInteractionMode] = useState<"select" | "pan">("select");
@@ -266,15 +267,25 @@ function DiagramEditorInner({
     () => ({
       diagram,
       inspectedNodeId,
+      isRightPanelOpen,
       selectedNodeId,
       nodes: diagram.nodes,
       edges: diagram.edges,
       applyDiagramJson,
       closeInspectedNode: () => setInspectedNodeId(null),
+      setRightPanelOpen,
       updateNodeParameters,
       updateNodeMetadata
     }),
-    [applyDiagramJson, diagram, inspectedNodeId, selectedNodeId, updateNodeMetadata, updateNodeParameters]
+    [
+      applyDiagramJson,
+      diagram,
+      inspectedNodeId,
+      isRightPanelOpen,
+      selectedNodeId,
+      updateNodeMetadata,
+      updateNodeParameters
+    ]
   );
 
   const handleBringForward = useCallback(
@@ -739,7 +750,7 @@ function DiagramEditorInner({
 
   return (
     <section
-      className={styles.editorShell}
+      className={`${styles.editorShell} ${isRightPanelOpen ? "" : styles.editorShellRightCollapsed}`}
       onKeyDown={handleShellKeyDown}
       ref={editorShellRef}
       tabIndex={0}

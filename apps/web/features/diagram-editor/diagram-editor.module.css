@@ -2,12 +2,16 @@
   background: #f4f6fb;
   color: #171c2f;
   display: grid;
-  grid-template-columns: minmax(320px, 340px) minmax(0, 1fr) auto;
+  grid-template-columns: minmax(320px, 340px) minmax(0, 1fr) clamp(520px, 42vw, 680px);
   height: 100vh;
   min-height: 640px;
   outline: none;
   overflow: hidden;
   width: 100%;
+}
+
+.editorShellRightCollapsed {
+  grid-template-columns: minmax(320px, 340px) minmax(0, 1fr) 64px;
 }
 
 .leftRail,
@@ -25,7 +29,7 @@
 
 .rightRail {
   border-width: 0 0 0 1px;
-  width: min(360px, 32vw);
+  width: 100%;
 }
 
 .workspace {

@@ -152,13 +152,24 @@
   position: relative;
 }
 
+.collapsedRightPanel {
+  align-items: center;
+  background: #ffffff;
+  border-left: 1px solid #dde5f2;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  height: 100%;
+  padding: 10px 8px;
+}
+
 .rightPanelToolbar {
   align-items: center;
   background: #ffffff;
   border-bottom: 1px solid #dde5f2;
   display: flex;
   gap: 12px;
-  justify-content: space-between;
+  justify-content: flex-start;
   min-height: 58px;
   padding: 10px 12px;
   position: sticky;
@@ -189,23 +200,27 @@
 .panelModeButton,
 .panelModeButtonActive,
 .panelIconButton,
-.panelIconButtonActive {
+.panelIconButtonActive,
+.panelCollapseButton,
+.collapsedPanelButton,
+.collapsedPanelButtonActive {
   align-items: center;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: 7px;
   color: #58677d;
   cursor: pointer;
   display: inline-flex;
-  height: 34px;
+  height: 38px;
   justify-content: center;
   padding: 0;
-  width: 34px;
+  width: 38px;
   position: relative;
 }
 
 .panelModeButtonActive,
-.panelIconButtonActive {
+.panelIconButtonActive,
+.collapsedPanelButtonActive {
   background: #ffffff;
   border-color: #d8ceff;
   box-shadow: 0 1px 4px rgba(23, 32, 51, 0.12);
@@ -218,10 +233,27 @@
   border-color: #cbd5e1;
 }
 
+.panelCollapseButton {
+  background: #f8fafc;
+  border-color: #d7dee9;
+  color: #243044;
+  flex: 0 0 auto;
+}
+
+.collapsedPanelButton,
+.collapsedPanelButtonActive {
+  background: #ffffff;
+  border-color: transparent;
+}
+
 .panelModeButton:hover,
 .panelModeButton:focus-visible,
 .panelIconButton:hover,
-.panelIconButton:focus-visible {
+.panelIconButton:focus-visible,
+.panelCollapseButton:hover,
+.panelCollapseButton:focus-visible,
+.collapsedPanelButton:hover,
+.collapsedPanelButton:focus-visible {
   background: #f6f3ff;
   border-color: #d8ceff;
   color: #5f3de8;
@@ -252,6 +284,322 @@
 .panelIssueBadgeError {
   background: #fef2f2;
   color: #b42318;
+}
+
+.resourceWorkspacePanel {
+  background: #fafbfe;
+  color: #172033;
+  display: grid;
+  font-size: 14px;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
+}
+
+.resourceSectionToolbar {
+  align-items: center;
+  background: #ffffff;
+  border-bottom: 1px solid #dce3ee;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  min-height: 58px;
+  padding: 10px 12px;
+}
+
+.resourceSectionTabs,
+.resourceToolbarActions {
+  align-items: center;
+  display: inline-flex;
+  gap: 8px;
+  min-width: 0;
+}
+
+.resourceSectionButton,
+.resourceSectionButtonActive,
+.resourceToolButton,
+.resourceToolButtonPrimary {
+  align-items: center;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  cursor: pointer;
+  display: inline-flex;
+  height: 36px;
+  justify-content: center;
+  padding: 0;
+  width: 36px;
+}
+
+.resourceSectionButton {
+  background: #ffffff;
+  color: #243044;
+}
+
+.resourceSectionButtonActive {
+  background: #eef0f4;
+  border-color: #e2e8f0;
+  color: #6f4cf6;
+}
+
+.resourceToolButton {
+  background: transparent;
+  color: #243044;
+}
+
+.resourceToolButtonPrimary {
+  background: #ffffff;
+  border-color: #cfc4ff;
+  color: #6f4cf6;
+}
+
+.resourceSectionButton:hover,
+.resourceSectionButton:focus-visible,
+.resourceToolButton:hover,
+.resourceToolButton:focus-visible,
+.resourceToolButtonPrimary:hover,
+.resourceToolButtonPrimary:focus-visible {
+  background: #f6f3ff;
+  border-color: #d8ceff;
+  color: #5f3de8;
+  outline: none;
+}
+
+.resourceCardList,
+.variableCardList {
+  align-content: start;
+  display: grid;
+  gap: 12px;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px;
+}
+
+.resourceSummaryCard,
+.variableCard {
+  background: #ffffff;
+  border: 1px solid #dce3ee;
+  border-radius: 6px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.resourceSummaryCard {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+}
+
+.resourceSummaryHeader {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+}
+
+.resourceSummaryHeader strong {
+  color: #64748b;
+  font-size: 14px;
+  font-weight: 900;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.resourceCardTypeIcon,
+.resourceCardIcon {
+  align-items: center;
+  border-radius: 5px;
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 30px;
+  justify-content: center;
+  width: 30px;
+}
+
+.resourceCardTypeIcon {
+  background: #f1f5f9;
+  color: #243044;
+}
+
+.resourceCardIcon {
+  background: #f3f0ff;
+  object-fit: contain;
+  padding: 5px;
+}
+
+.resourceCardMenuButton {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: #243044;
+  cursor: pointer;
+  display: inline-flex;
+  height: 30px;
+  justify-content: center;
+  margin-left: auto;
+  padding: 0;
+  width: 30px;
+}
+
+.resourceCardMenuButton:hover,
+.resourceCardMenuButton:focus-visible {
+  background: #f1f5f9;
+  outline: none;
+}
+
+.resourceSummaryValues {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.resourceSummaryValues div {
+  align-items: start;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(120px, 0.85fr) minmax(0, 1fr);
+}
+
+.resourceSummaryValues dt {
+  color: #1f2937;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.resourceSummaryValues dd {
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.35;
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.resourceWarningRow {
+  align-items: center;
+  background: #fff8e1;
+  border-radius: 5px;
+  color: #4b3b16;
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 13px;
+  gap: 10px;
+  line-height: 1.4;
+  padding: 11px 12px;
+}
+
+.resourceWarningRow svg {
+  color: #f59e0b;
+  flex: 0 0 auto;
+}
+
+.resourceWarningRow button {
+  background: transparent;
+  border: 0;
+  color: #2f2a1f;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 850;
+  padding: 0;
+  text-decoration: underline;
+}
+
+.variableCard {
+  align-items: start;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 14px;
+}
+
+.variableCard div {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.variableCard strong {
+  color: #111827;
+  font-size: 14px;
+  line-height: 1.25;
+}
+
+.variableCard span {
+  color: #64748b;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 13px;
+  line-height: 1.35;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.variableCard em {
+  background: #f3f0ff;
+  border: 1px solid #d8ceff;
+  border-radius: 5px;
+  color: #6f4cf6;
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 750;
+  line-height: 1;
+  padding: 5px 7px;
+}
+
+.resourceEmptyState {
+  align-self: center;
+  color: #526179;
+  display: grid;
+  gap: 14px;
+  justify-items: center;
+  justify-self: center;
+  max-width: 340px;
+  padding: 32px 24px;
+  text-align: center;
+}
+
+.resourceEmptyIcon {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #d8ceff;
+  border-radius: 10px;
+  box-shadow: 0 16px 28px rgba(15, 23, 42, 0.12);
+  color: #6f4cf6;
+  display: inline-flex;
+  height: 70px;
+  justify-content: center;
+  width: 70px;
+}
+
+.resourceEmptyState h2 {
+  color: #111827;
+  font-size: 17px;
+  line-height: 1.25;
+  margin: 0;
+}
+
+.resourceEmptyState p {
+  color: #526179;
+  font-size: 14px;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.resourceEmptyState button {
+  background: #6f4cf6;
+  border: 1px solid #6f4cf6;
+  border-radius: 6px;
+  color: #ffffff;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 850;
+  min-height: 36px;
+  padding: 0 14px;
 }
 
 .terraformPanel {
@@ -470,7 +818,7 @@
   border-bottom: 1px solid #dce3ee;
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 7px;
   justify-content: flex-end;
   min-height: 58px;
   padding: 10px 12px;
@@ -484,11 +832,12 @@
   cursor: pointer;
   display: inline-flex;
   font: inherit;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 850;
-  gap: 7px;
-  min-height: 38px;
-  padding: 0 14px;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 12px;
+  white-space: nowrap;
 }
 
 .resourceActionPrimary {
@@ -550,10 +899,10 @@
   color: #243044;
   cursor: pointer;
   display: inline-flex;
-  height: 34px;
+  height: 36px;
   justify-content: center;
   padding: 0;
-  width: 34px;
+  width: 36px;
 }
 
 .terraformActions button:hover,
@@ -608,6 +957,7 @@
   grid-template-columns: 58px minmax(0, 1fr);
   min-height: clamp(520px, calc(100vh - 230px), 900px);
   overflow: hidden;
+  position: relative;
 }
 
 .terraformLineNumbers {
@@ -635,8 +985,41 @@
   outline: none;
   padding: 12px 16px;
   resize: none;
+  scrollbar-gutter: stable;
   tab-size: 2;
   white-space: pre;
+}
+
+.terraformScrollControls {
+  align-items: center;
+  display: grid;
+  gap: 6px;
+  position: absolute;
+  right: 8px;
+  top: 10px;
+  z-index: 2;
+}
+
+.terraformScrollControls button {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(203, 213, 225, 0.9);
+  border-radius: 6px;
+  color: #475569;
+  cursor: pointer;
+  display: inline-flex;
+  height: 28px;
+  justify-content: center;
+  padding: 0;
+  width: 28px;
+}
+
+.terraformScrollControls button:hover,
+.terraformScrollControls button:focus-visible {
+  background: #f6f3ff;
+  border-color: #cfc4ff;
+  color: #5f3de8;
+  outline: none;
 }
 
 .terraformTextarea::placeholder {
@@ -815,14 +1198,14 @@
 
 .terraformDialogBackdrop {
   align-items: center;
-  backdrop-filter: blur(5px);
+  backdrop-filter: blur(6px);
   background: rgba(15, 23, 42, 0.38);
   display: flex;
   inset: 0;
   justify-content: center;
   padding: 24px;
-  position: absolute;
-  z-index: 10;
+  position: fixed;
+  z-index: 40;
 }
 
 .terraformDialog {

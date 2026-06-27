@@ -12,11 +12,13 @@ export type DiagramNodeMetadataUpdate = Partial<Omit<DiagramNode, "id" | "parame
 export type DiagramEditorPanelContext = {
   diagram: DiagramJson;
   inspectedNodeId: string | null;
+  isRightPanelOpen: boolean;
   selectedNodeId: string | null;
   nodes: readonly DiagramNode[];
   edges: readonly DiagramEdge[];
   applyDiagramJson: (diagram: DiagramJson) => void;
   closeInspectedNode: () => void;
+  setRightPanelOpen: (isOpen: boolean) => void;
   updateNodeParameters: (
     nodeId: string,
     update:

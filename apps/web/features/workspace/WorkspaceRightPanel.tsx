@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { KeyboardEvent as ReactKeyboardEvent, UIEvent } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent, ReactNode, UIEvent } from "react";
 import type {
   AwsConnection,
   Deployment,
@@ -14,20 +14,31 @@ import type {
 import {
   AlertCircle,
   ArrowLeft,
+  Box,
+  Braces,
   ChevronDown,
+  ChevronUp,
   ClipboardCheck,
   Code2,
   FileCode2,
+  FileText,
   GitBranch,
   ListTree,
+  ListFilter,
+  MoreHorizontal,
+  PanelRightClose,
+  PanelRightOpen,
   Play,
+  Plus,
   Rocket,
+  Search,
+  Settings,
+  SlidersHorizontal,
   Trash2,
   X
 } from "lucide-react";
 import { DashboardIcon } from "../../components/dashboard/dashboard-icons";
 import { getApiErrorMessage } from "../../lib/api-client";
-import { ParameterInputPanel } from "../parameter-input";
 import type { DiagramEditorPanelContext } from "../diagram-editor";
 import {
   approveDeploymentPlan,
@@ -113,9 +124,72 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
     }
   }, [context.inspectedNodeId]);
 
+  function openCollapsedView(nextView: WorkspaceRightPanelView): void {
+    context.setRightPanelOpen(true);
+    requestView(nextView);
+  }
+
+  if (!context.isRightPanelOpen) {
+    return (
+      <aside className={styles.collapsedRightPanel} aria-label="오른쪽 패널 바로가기">
+        <button
+          className={styles.collapsedPanelButtonActive}
+          onClick={() => context.setRightPanelOpen(true)}
+          title="오른쪽 패널 열기"
+          type="button"
+        >
+          <PanelRightOpen size={18} aria-hidden="true" />
+        </button>
+        <button
+          className={activeView === "resource" ? styles.collapsedPanelButtonActive : styles.collapsedPanelButton}
+          onClick={() => openCollapsedView("resource")}
+          title="Resources"
+          type="button"
+        >
+          <ListTree size={18} aria-hidden="true" />
+        </button>
+        <button
+          className={activeView === "terraform" ? styles.collapsedPanelButtonActive : styles.collapsedPanelButton}
+          onClick={() => openCollapsedView("terraform")}
+          title="Terraform"
+          type="button"
+        >
+          <Code2 size={18} aria-hidden="true" />
+        </button>
+        <button
+          className={activeView === "issues" ? styles.collapsedPanelButtonActive : styles.collapsedPanelButton}
+          onClick={() => openCollapsedView("issues")}
+          title="Issues"
+          type="button"
+        >
+          <AlertCircle size={18} aria-hidden="true" />
+          <span className={hasTerraformIssueErrors ? styles.panelIssueBadgeError : styles.panelIssueBadge}>
+            {terraformDiagnostics.length}
+          </span>
+        </button>
+        <button
+          className={activeView === "deployment" ? styles.collapsedPanelButtonActive : styles.collapsedPanelButton}
+          onClick={() => openCollapsedView("deployment")}
+          title="Deploy"
+          type="button"
+        >
+          <Rocket size={18} aria-hidden="true" />
+        </button>
+      </aside>
+    );
+  }
+
   return (
     <aside className={styles.rightPanelShell}>
       <div className={styles.rightPanelToolbar}>
+        <button
+          className={styles.panelCollapseButton}
+          onClick={() => context.setRightPanelOpen(false)}
+          title="오른쪽 패널 닫기"
+          type="button"
+        >
+          <PanelRightClose size={18} aria-hidden="true" />
+        </button>
         <div className={styles.panelModeToggle} role="group" aria-label="패널 모드">
           <button
             aria-pressed={activeView === "resource"}
@@ -163,7 +237,7 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
       </div>
 
       {activeView === "resource" ? (
-        <ParameterInputPanel {...context} />
+        <ResourceWorkspacePanel context={context} />
       ) : activeView === "terraform" || activeView === "issues" ? (
         <>
           <div className={styles.rightPanelView} hidden={activeView !== "terraform"}>
@@ -196,6 +270,204 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
         />
       ) : null}
     </aside>
+  );
+}
+
+type ResourcePanelSection = "resources" | "variables" | "outputs" | "locals";
+
+function ResourceWorkspacePanel({ context }: { readonly context: DiagramEditorPanelContext }) {
+  const [activeSection, setActiveSection] = useState<ResourcePanelSection>("resources");
+  const resourceNodes = useMemo(
+    () => context.nodes.filter((node) => node.kind === "resource"),
+    [context.nodes]
+  );
+  const variableRows = useMemo(() => buildVariableRows(resourceNodes), [resourceNodes]);
+
+  return (
+    <div className={styles.resourceWorkspacePanel}>
+      <div className={styles.resourceSectionToolbar}>
+        <div className={styles.resourceSectionTabs} role="group" aria-label="Resource sections">
+          <ResourceSectionButton
+            active={activeSection === "resources"}
+            icon={<Box size={18} aria-hidden="true" />}
+            label="Resources"
+            onClick={() => setActiveSection("resources")}
+          />
+          <ResourceSectionButton
+            active={activeSection === "variables"}
+            icon={<ListFilter size={18} aria-hidden="true" />}
+            label="Variables"
+            onClick={() => setActiveSection("variables")}
+          />
+          <ResourceSectionButton
+            active={activeSection === "outputs"}
+            icon={<FileText size={18} aria-hidden="true" />}
+            label="Outputs"
+            onClick={() => setActiveSection("outputs")}
+          />
+          <ResourceSectionButton
+            active={activeSection === "locals"}
+            icon={<Braces size={18} aria-hidden="true" />}
+            label="Locals"
+            onClick={() => setActiveSection("locals")}
+          />
+        </div>
+        <div className={styles.resourceToolbarActions} aria-label="Resource tools">
+          <button className={styles.resourceToolButtonPrimary} type="button" title="Create">
+            <Plus size={17} aria-hidden="true" />
+          </button>
+          <button className={styles.resourceToolButton} type="button" title="Search">
+            <Search size={18} aria-hidden="true" />
+          </button>
+          <button className={styles.resourceToolButton} type="button" title="Filter">
+            <SlidersHorizontal size={18} aria-hidden="true" />
+          </button>
+          <button className={styles.resourceToolButton} type="button" title="Settings">
+            <Settings size={18} aria-hidden="true" />
+          </button>
+        </div>
+      </div>
+
+      {activeSection === "resources" ? (
+        <ResourceCards nodes={resourceNodes} />
+      ) : activeSection === "variables" ? (
+        <VariableCards rows={variableRows} />
+      ) : activeSection === "outputs" ? (
+        <ResourceEmptyState
+          actionLabel="Create output"
+          description="You do not have any outputs yet."
+          icon={<FileText size={26} aria-hidden="true" />}
+          title="No outputs defined"
+        />
+      ) : (
+        <ResourceEmptyState
+          actionLabel="Create local"
+          description="You do not have any locals yet."
+          icon={<Braces size={26} aria-hidden="true" />}
+          title="No locals defined"
+        />
+      )}
+    </div>
+  );
+}
+
+function ResourceSectionButton({
+  active,
+  icon,
+  label,
+  onClick
+}: {
+  readonly active: boolean;
+  readonly icon: ReactNode;
+  readonly label: string;
+  readonly onClick: () => void;
+}) {
+  return (
+    <button
+      aria-pressed={active}
+      className={active ? styles.resourceSectionButtonActive : styles.resourceSectionButton}
+      onClick={onClick}
+      title={label}
+      type="button"
+    >
+      {icon}
+    </button>
+  );
+}
+
+function ResourceCards({ nodes }: { readonly nodes: readonly DiagramNode[] }) {
+  if (nodes.length === 0) {
+    return (
+      <ResourceEmptyState
+        actionLabel="Add resource"
+        description="다이어그램에 리소스를 추가하면 여기에서 구성을 한눈에 볼 수 있습니다."
+        icon={<Box size={26} aria-hidden="true" />}
+        title="No resources yet"
+      />
+    );
+  }
+
+  return (
+    <div className={styles.resourceCardList}>
+      {nodes.map((node) => (
+        <article className={styles.resourceSummaryCard} key={node.id}>
+          <header className={styles.resourceSummaryHeader}>
+            <span className={styles.resourceCardTypeIcon}>
+              <Box size={18} aria-hidden="true" />
+            </span>
+            {node.iconUrl ? <img alt="" className={styles.resourceCardIcon} src={node.iconUrl} /> : null}
+            <strong>{node.label || node.parameters?.resourceName || node.type}</strong>
+            <button className={styles.resourceCardMenuButton} type="button" title="More">
+              <MoreHorizontal size={18} aria-hidden="true" />
+            </button>
+          </header>
+          {node.parameters?.invalid ? (
+            <div className={styles.resourceWarningRow}>
+              <AlertCircle size={15} aria-hidden="true" />
+              <span>This resource is not configured yet.</span>
+              <button type="button">Go to configuration</button>
+            </div>
+          ) : (
+            <dl className={styles.resourceSummaryValues}>
+              {getResourceSummaryRows(node).map((row) => (
+                <div key={row.label}>
+                  <dt>{row.label}</dt>
+                  <dd>{row.value}</dd>
+                </div>
+              ))}
+            </dl>
+          )}
+        </article>
+      ))}
+    </div>
+  );
+}
+
+function VariableCards({ rows }: { readonly rows: readonly ResourceVariableRow[] }) {
+  if (rows.length === 0) {
+    return (
+      <ResourceEmptyState
+        actionLabel="Create variable"
+        description="아키텍처 값으로부터 추출할 수 있는 변수가 아직 없습니다."
+        icon={<ListFilter size={26} aria-hidden="true" />}
+        title="No variables defined"
+      />
+    );
+  }
+
+  return (
+    <div className={styles.variableCardList}>
+      {rows.map((row) => (
+        <article className={styles.variableCard} key={row.name}>
+          <div>
+            <strong>{row.name}</strong>
+            <span>{row.value}</span>
+          </div>
+          <em>architecture</em>
+        </article>
+      ))}
+    </div>
+  );
+}
+
+function ResourceEmptyState({
+  actionLabel,
+  description,
+  icon,
+  title
+}: {
+  readonly actionLabel: string;
+  readonly description: string;
+  readonly icon: ReactNode;
+  readonly title: string;
+}) {
+  return (
+    <div className={styles.resourceEmptyState}>
+      <div className={styles.resourceEmptyIcon}>{icon}</div>
+      <h2>{title}</h2>
+      <p>{description}</p>
+      <button type="button">{actionLabel}</button>
+    </div>
   );
 }
 
@@ -454,6 +726,23 @@ function TerraformCodePanel({
     }
   }
 
+  function scrollCodeEditor(direction: "up" | "down"): void {
+    const textarea = textareaRef.current;
+
+    if (!textarea) {
+      return;
+    }
+
+    textarea.scrollBy({
+      top: direction === "up" ? -220 : 220,
+      behavior: "smooth"
+    });
+
+    if (lineNumberRef.current) {
+      lineNumberRef.current.scrollTop = textarea.scrollTop;
+    }
+  }
+
   function handleCodeChange(nextCode: string): void {
     setTerraformFiles((currentFiles) =>
       currentFiles.map((file) => {
@@ -651,6 +940,14 @@ function TerraformCodePanel({
             <li key={lineNumber}>{lineNumber}</li>
           ))}
         </ol>
+        <div className={styles.terraformScrollControls} aria-label="Terraform editor scroll controls">
+          <button onClick={() => scrollCodeEditor("up")} title="Scroll up" type="button">
+            <ChevronUp size={16} aria-hidden="true" />
+          </button>
+          <button onClick={() => scrollCodeEditor("down")} title="Scroll down" type="button">
+            <ChevronDown size={16} aria-hidden="true" />
+          </button>
+        </div>
         <textarea
           ref={textareaRef}
           aria-label="Terraform 코드"
@@ -1617,4 +1914,109 @@ function formatDate(value: string): string {
     dateStyle: "short",
     timeStyle: "short"
   });
+}
+
+type ResourceSummaryRow = {
+  readonly label: string;
+  readonly value: string;
+};
+
+type ResourceVariableRow = {
+  readonly name: string;
+  readonly value: string;
+};
+
+function getResourceSummaryRows(node: DiagramNode): ResourceSummaryRow[] {
+  const values = node.parameters?.values ?? {};
+  const rows = Object.entries(values)
+    .filter(([, value]) => !isEmptyDisplayValue(value))
+    .slice(0, 6)
+    .map(([key, value]) => ({
+      label: formatResourceFieldName(key),
+      value: formatResourceValue(value)
+    }));
+
+  if (rows.length > 0) {
+    return rows;
+  }
+
+  return [
+    {
+      label: "Resource type",
+      value: node.parameters?.resourceType ?? node.type
+    }
+  ];
+}
+
+function buildVariableRows(nodes: readonly DiagramNode[]): ResourceVariableRow[] {
+  const rows = new Map<string, ResourceVariableRow>();
+
+  for (const node of nodes) {
+    const values = node.parameters?.values ?? {};
+
+    for (const [key, value] of Object.entries(values)) {
+      if (isEmptyDisplayValue(value) || rows.has(key)) {
+        continue;
+      }
+
+      rows.set(key, {
+        name: toVariableName(key),
+        value: formatResourceValue(value)
+      });
+    }
+  }
+
+  return Array.from(rows.values()).slice(0, 24);
+}
+
+function isEmptyDisplayValue(value: unknown): boolean {
+  if (value === null || value === undefined || value === "") {
+    return true;
+  }
+
+  if (Array.isArray(value)) {
+    return value.length === 0;
+  }
+
+  if (typeof value === "object") {
+    return Object.keys(value).length === 0;
+  }
+
+  return false;
+}
+
+function formatResourceFieldName(value: string): string {
+  return value
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+function toVariableName(value: string): string {
+  return value
+    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .replace(/[^a-zA-Z0-9_]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .toLowerCase();
+}
+
+function formatResourceValue(value: unknown): string {
+  if (Array.isArray(value)) {
+    return value.map(formatResourceValue).join(", ");
+  }
+
+  if (typeof value === "object" && value !== null) {
+    const entries = Object.entries(value);
+
+    if (entries.length === 0) {
+      return "{}";
+    }
+
+    return entries
+      .slice(0, 3)
+      .map(([key, nestedValue]) => `${key}: ${formatResourceValue(nestedValue)}`)
+      .join(", ");
+  }
+
+  return String(value);
 }
