@@ -17,3 +17,19 @@ test("maskDeploymentMessage does not mask partial key matches", () => {
 
   assert.equal(maskedMessage, "non_secret = harmless [REDACTED]");
 });
+
+test("maskDeploymentMessage masks common runtime secret env keys and AWS key ids", () => {
+  const message = [
+    "AWS_SESSION_TOKEN=temporary-session-token",
+    "AUTH_TOKEN_SECRET=server-secret",
+    "DATABASE_URL=postgresql://user:password@db/sketchcatch",
+    "export AWS_ACCESS_KEY_ID=ASIAABCDEFGHIJKLMNOP"
+  ].join("\n");
+
+  const maskedMessage = maskDeploymentMessage(message);
+
+  assert.equal(maskedMessage.includes("temporary-session-token"), false);
+  assert.equal(maskedMessage.includes("server-secret"), false);
+  assert.equal(maskedMessage.includes("postgresql://user:password@db/sketchcatch"), false);
+  assert.equal(maskedMessage.includes("ASIAABCDEFGHIJKLMNOP"), false);
+});

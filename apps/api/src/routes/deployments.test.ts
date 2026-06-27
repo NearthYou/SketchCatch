@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import Fastify from "fastify";
+import type { AwsConnection } from "@sketchcatch/types";
 import { createAccessToken } from "../auth/tokens.js";
 import type { DatabaseClient } from "../db/client.js";
 import type {
@@ -30,6 +31,7 @@ type DeploymentResponse = {
     projectId: string;
     architectureId: string;
     terraformArtifactId: string;
+    awsConnectionId: string | null;
     status: string;
     failureStage: string | null;
     errorSummary: string | null;
@@ -71,6 +73,11 @@ type RepositoryCall =
       terraformArtifactId: string;
     }
   | {
+      name: "findVerifiedAwsConnectionById";
+      awsConnectionId: string;
+      accessContext: ProjectAccessContext;
+    }
+  | {
       name: "createDeployment";
       input: CreateDeploymentRecordInput;
     }
@@ -89,12 +96,17 @@ type RepositoryCall =
   | {
       name: "markDeploymentInitSucceeded";
       deploymentId: string;
+    }
+  | {
+      name: "markDeploymentInitRunning";
+      deploymentId: string;
     };
 
 const projectId = "11111111-1111-4111-8111-111111111111";
 const architectureId = "22222222-2222-4222-8222-222222222222";
 const terraformArtifactId = "33333333-3333-4333-8333-333333333333";
 const deploymentId = "44444444-4444-4444-8444-444444444444";
+const awsConnectionId = "77777777-7777-4777-8777-777777777777";
 const userId = "55555555-5555-4555-8555-555555555555";
 const fixedNow = new Date("2026-01-01T00:00:00.000Z");
 
@@ -122,6 +134,7 @@ class FakeDeploymentRepository implements DeploymentRepository {
     fileName: "main.tf",
     contentType: "application/x-terraform"
   };
+  awsConnection: AwsConnection | undefined = createVerifiedAwsConnection();
   deployment: DeploymentRecord | undefined = createDeploymentRecord(deploymentId);
   deployments: DeploymentRecord[] = [createDeploymentRecord(deploymentId)];
   logs: DeploymentLogRecord[] = [];
@@ -190,6 +203,28 @@ class FakeDeploymentRepository implements DeploymentRepository {
     return this.terraformArtifactById;
   }
 
+  async findVerifiedAwsConnectionById(
+    candidateAwsConnectionId: string,
+    accessContext: ProjectAccessContext
+  ) {
+    this.calls.push({
+      name: "findVerifiedAwsConnectionById",
+      awsConnectionId: candidateAwsConnectionId,
+      accessContext
+    });
+
+    if (
+      !this.awsConnection ||
+      this.awsConnection.id !== candidateAwsConnectionId ||
+      this.awsConnection.userId !== accessContext.userId ||
+      this.awsConnection.status !== "verified"
+    ) {
+      return undefined;
+    }
+
+    return this.awsConnection;
+  }
+
   async createDeployment(input: CreateDeploymentRecordInput): Promise<DeploymentRecord> {
     this.calls.push({
       name: "createDeployment",
@@ -228,6 +263,27 @@ class FakeDeploymentRepository implements DeploymentRepository {
     }
 
     this.deployment = { ...this.deployment, status };
+
+    return this.deployment;
+  };
+
+  markDeploymentInitRunning: DeploymentRepository["markDeploymentInitRunning"] = async (
+    candidateDeploymentId
+  ) => {
+    this.calls.push({
+      name: "markDeploymentInitRunning",
+      deploymentId: candidateDeploymentId
+    });
+
+    if (
+      !this.deployment ||
+      this.deployment.id !== candidateDeploymentId ||
+      this.deployment.status === "RUNNING"
+    ) {
+      return undefined;
+    }
+
+    this.deployment = { ...this.deployment, status: "RUNNING" };
 
     return this.deployment;
   };
@@ -356,6 +412,7 @@ function createDeploymentRecord(
     projectId,
     architectureId,
     terraformArtifactId,
+    awsConnectionId,
     status: "PENDING",
     planSummary: null,
     isBlocked: false,
@@ -414,10 +471,27 @@ function createProjectAssetRecord(overrides: Partial<ProjectAssetRecord> = {}): 
   };
 }
 
+function createVerifiedAwsConnection(overrides: Partial<AwsConnection> = {}): AwsConnection {
+  return {
+    id: awsConnectionId,
+    userId,
+    accountId: "123456789012",
+    roleArn: "arn:aws:iam::123456789012:role/SketchCatchTerraformExecutionRole",
+    externalId: "sc_conn_77777777-7777-4777-8777-777777777777_random",
+    region: "ap-northeast-2",
+    status: "verified",
+    lastVerifiedAt: "2026-06-26T00:00:00.000Z",
+    createdAt: "2026-06-26T00:00:00.000Z",
+    updatedAt: "2026-06-26T00:00:00.000Z",
+    ...overrides
+  };
+}
+
 function createDeploymentBody() {
   return {
     architectureId,
-    terraformArtifactId
+    terraformArtifactId,
+    awsConnectionId
   };
 }
 
@@ -494,6 +568,7 @@ test("POST /api/projects/:projectId/deployments returns a created deployment", a
   assert.equal(body.deployment.projectId, projectId);
   assert.equal(body.deployment.architectureId, architectureId);
   assert.equal(body.deployment.terraformArtifactId, terraformArtifactId);
+  assert.equal(body.deployment.awsConnectionId, awsConnectionId);
   assert.equal(body.deployment.status, "PENDING");
   assert.deepEqual(repository.calls, [
     {
@@ -516,12 +591,21 @@ test("POST /api/projects/:projectId/deployments returns a created deployment", a
       architectureId
     },
     {
+      name: "findVerifiedAwsConnectionById",
+      awsConnectionId,
+      accessContext: {
+        kind: "user",
+        userId
+      }
+    },
+    {
       name: "createDeployment",
       input: {
         id: body.deployment.id,
         projectId,
         architectureId,
         terraformArtifactId,
+        awsConnectionId,
         status: "PENDING"
       }
     }
@@ -740,6 +824,36 @@ test("POST /api/deployments/:deploymentId/init returns accepted when background 
   assert.equal(body.deployment.id, deploymentId);
   assert.equal(body.deployment.status, "RUNNING");
   assert.deepEqual(initCalls, [deploymentId]);
+
+  await app.close();
+});
+
+test("POST /api/deployments/:deploymentId/init rejects a deployment that is already running", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.deployment = createDeploymentRecord(deploymentId, {
+    status: "RUNNING"
+  });
+  let initStarted = false;
+  const app = await buildDeploymentTestApp(repository, {
+    runDeploymentInit: async () => {
+      initStarted = true;
+      throw new Error("background init should not start");
+    }
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/deployments/${deploymentId}/init`,
+    headers: await authHeaders()
+  });
+
+  assert.equal(response.statusCode, 409);
+  assert.deepEqual(response.json(), {
+    error: "conflict",
+    message: "Deployment init is already running"
+  });
+  assert.equal(initStarted, false);
+  assert.equal(repository.deployment.status, "RUNNING");
 
   await app.close();
 });

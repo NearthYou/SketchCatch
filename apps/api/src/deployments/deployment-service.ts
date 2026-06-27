@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { and, asc, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import type {
+  AwsConnection,
   DeploymentBlockedBy,
   DeploymentFailureStage,
   DeploymentLogLevel,
@@ -11,6 +12,7 @@ import type {
 import type { Database } from "../db/client.js";
 import {
   architectures,
+  awsConnections,
   deploymentLogs,
   deployments,
   projectAssets,
@@ -32,6 +34,7 @@ export type CreateDeploymentInput = {
   accessContext: ProjectAccessContext;
   architectureId: string;
   terraformArtifactId: string;
+  awsConnectionId: string;
 };
 
 export type CreateDeploymentRecordInput = {
@@ -39,6 +42,7 @@ export type CreateDeploymentRecordInput = {
   projectId: string;
   architectureId: string;
   terraformArtifactId: string;
+  awsConnectionId: string;
   status: "PENDING";
 };
 
@@ -100,6 +104,10 @@ export type DeploymentRepository = {
   findTerraformArtifactById(
     terraformArtifactId: string
   ): Promise<TerraformArtifactRecord | undefined>;
+  findVerifiedAwsConnectionById(
+    awsConnectionId: string,
+    accessContext: ProjectAccessContext
+  ): Promise<AwsConnection | undefined>;
   createDeployment(input: CreateDeploymentRecordInput): Promise<DeploymentRecord>;
   findDeploymentById(deploymentId: string): Promise<DeploymentRecord | undefined>;
 
@@ -108,6 +116,7 @@ export type DeploymentRepository = {
     deploymentId: string,
     status: DeploymentStatus
   ): Promise<DeploymentRecord | undefined>;
+  markDeploymentInitRunning(deploymentId: string): Promise<DeploymentRecord | undefined>;
   markDeploymentInitSucceeded(deploymentId: string): Promise<DeploymentRecord | undefined>;
   updateDeploymentPlan(
     deploymentId: string,
@@ -143,6 +152,13 @@ export class DeploymentNotFoundError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "DeploymentNotFoundError";
+  }
+}
+
+export class DeploymentConflictError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "DeploymentConflictError";
   }
 }
 
@@ -218,6 +234,22 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
       };
     },
 
+    async findVerifiedAwsConnectionById(awsConnectionId, accessContext) {
+      const [awsConnection] = await db
+        .select()
+        .from(awsConnections)
+        .where(
+          and(
+            eq(awsConnections.id, awsConnectionId),
+            eq(awsConnections.userId, accessContext.userId),
+            eq(awsConnections.status, "verified")
+          )
+        )
+        .limit(1);
+
+      return awsConnection ? toAwsConnection(awsConnection) : undefined;
+    },
+
     async createDeployment(input) {
       const [deployment] = await db.insert(deployments).values(input).returning();
 
@@ -250,6 +282,18 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
         .update(deployments)
         .set({ status, ...touchUpdatedAt })
         .where(eq(deployments.id, deploymentId))
+        .returning();
+
+      return deployment;
+    },
+
+    async markDeploymentInitRunning(deploymentId) {
+      const [deployment] = await db
+        .update(deployments)
+        .set({ status: "RUNNING", ...touchUpdatedAt })
+        .where(
+          and(eq(deployments.id, deploymentId), inArray(deployments.status, ["PENDING", "FAILED"]))
+        )
         .returning();
 
       return deployment;
@@ -370,11 +414,21 @@ export async function createDeployment(
     throw new DeploymentNotFoundError("Terraform artifact not found for project architecture");
   }
 
+  const awsConnection = await repository.findVerifiedAwsConnectionById(
+    input.awsConnectionId,
+    input.accessContext
+  );
+
+  if (!awsConnection) {
+    throw new DeploymentNotFoundError("Verified AWS connection not found");
+  }
+
   return repository.createDeployment({
     id: generateId(),
     projectId: input.projectId,
     architectureId: input.architectureId,
     terraformArtifactId: input.terraformArtifactId,
+    awsConnectionId: awsConnection.id,
     status: "PENDING"
   });
 }
@@ -480,6 +534,21 @@ export async function appendDeploymentLogs(
       relatedResourceId: log.relatedResourceId ?? null
     }))
   );
+}
+
+function toAwsConnection(row: typeof awsConnections.$inferSelect): AwsConnection {
+  return {
+    id: row.id,
+    userId: row.userId,
+    accountId: row.accountId,
+    roleArn: row.roleArn,
+    externalId: row.externalId,
+    region: row.region,
+    status: row.status,
+    lastVerifiedAt: row.lastVerifiedAt?.toISOString() ?? null,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString()
+  };
 }
 
 async function requireAccessibleProject(

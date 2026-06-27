@@ -1,0 +1,3 @@
+ALTER TABLE "deployments" ADD COLUMN "aws_connection_id" varchar(36);--> statement-breakpoint
+ALTER TABLE "deployments" ADD CONSTRAINT "deployments_aws_connection_id_aws_connections_id_fk" FOREIGN KEY ("aws_connection_id") REFERENCES "public"."aws_connections"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX "deployments_aws_connection_id_idx" ON "deployments" USING btree ("aws_connection_id");
