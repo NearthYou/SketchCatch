@@ -150,6 +150,10 @@ type RepositoryCall =
   | {
       name: "listDeploymentLogs";
       deploymentId: string;
+      options?: {
+        afterSequence?: number;
+        limit?: number;
+      };
     }
   | {
       name: "listDeployedResources";
@@ -658,13 +662,26 @@ class FakeDeploymentRepository implements DeploymentRepository {
     return maxSequence + 1;
   }
 
-  async listDeploymentLogs(candidateDeploymentId: string) {
+  async listDeploymentLogs(
+    candidateDeploymentId: string,
+    options?: {
+      afterSequence?: number;
+      limit?: number;
+    }
+  ) {
     this.calls.push({
       name: "listDeploymentLogs",
-      deploymentId: candidateDeploymentId
+      deploymentId: candidateDeploymentId,
+      ...(options ? { options } : {})
     });
 
-    return this.logs;
+    const logs = this.logs.filter(
+      (log) =>
+        log.deploymentId === candidateDeploymentId &&
+        (options?.afterSequence === undefined || log.sequence > options.afterSequence)
+    );
+
+    return options?.limit === undefined ? logs : logs.slice(0, options.limit);
   }
 
   async listDeployedResources(candidateDeploymentId: string) {
@@ -1572,6 +1589,58 @@ test("POST /api/deployments/:deploymentId/apply rejects deployments without appr
   assert.deepEqual(response.json(), {
     error: "conflict",
     message: "Deployment approval is required before apply"
+  });
+  assert.equal(applyStarted, false);
+
+  await app.close();
+});
+
+test("POST /api/deployments/:deploymentId/apply rejects failed deployments until replanned", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.deployment = createDeploymentRecord(deploymentId, {
+    status: "FAILED",
+    currentPlanArtifactId: planArtifactId,
+    planSummary: {
+      createCount: 1,
+      updateCount: 0,
+      deleteCount: 0,
+      replaceCount: 0,
+      blocked: false,
+      warnings: []
+    },
+    isBlocked: false,
+    blockedBy: null,
+    blockedReason: null,
+    approvedAt: fixedNow,
+    approvedByUserId: userId,
+    approvedTerraformArtifactId: terraformArtifactId,
+    approvedPlanArtifactId: planArtifactId,
+    approvedTerraformArtifactHash: "c".repeat(64),
+    approvedTfplanHash: "a".repeat(64),
+    approvedAwsAccountId: "123456789012",
+    approvedAwsRegion: "ap-northeast-2",
+    failureStage: "apply",
+    errorSummary: "previous apply failed"
+  });
+  let applyStarted = false;
+  const app = await buildDeploymentTestApp(repository, {
+    runDeploymentApply: async () => {
+      applyStarted = true;
+      throw new Error("background apply should not start");
+    }
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/deployments/${deploymentId}/apply`,
+    headers: await authHeaders(),
+    payload: {}
+  });
+
+  assert.equal(response.statusCode, 409);
+  assert.deepEqual(response.json(), {
+    error: "conflict",
+    message: "Deployment must be replanned and approved before apply"
   });
   assert.equal(applyStarted, false);
 

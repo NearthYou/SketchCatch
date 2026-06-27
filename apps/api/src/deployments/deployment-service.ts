@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, sql } from "drizzle-orm";
 import type {
   AwsConnection,
   DeployedResource,
@@ -225,7 +225,13 @@ export type DeploymentRepository = {
   createDeploymentLog(input: CreateDeploymentLogRecordInput): Promise<DeploymentLogRecord>;
   createDeploymentLogs(input: CreateDeploymentLogRecordInput[]): Promise<DeploymentLogRecord[]>;
   getNextDeploymentLogSequence(deploymentId: string): Promise<number>;
-  listDeploymentLogs(deploymentId: string): Promise<DeploymentLogRecord[]>;
+  listDeploymentLogs(
+    deploymentId: string,
+    options?: {
+      afterSequence?: number;
+      limit?: number;
+    }
+  ): Promise<DeploymentLogRecord[]>;
   listDeployedResources(deploymentId: string): Promise<DeployedResourceRecord[]>;
   listTerraformOutputs(deploymentId: string): Promise<TerraformOutputRecord[]>;
 };
@@ -509,9 +515,7 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
             ...createRunningDeploymentValues("apply"),
             resultWarningSummary: null
           })
-          .where(
-            and(eq(deployments.id, deploymentId), inArray(deployments.status, ["PENDING", "FAILED"]))
-          )
+          .where(and(eq(deployments.id, deploymentId), eq(deployments.status, "PENDING")))
           .returning();
 
         return deployment;
@@ -627,7 +631,8 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
         .set({
           ...createTerminalDeploymentValues("FAILED"),
           failedAt: sql`now()`,
-          ...input
+          ...input,
+          ...clearDeploymentApprovalFields
         })
         .where(eq(deployments.id, deploymentId))
         .returning();
@@ -655,7 +660,8 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
           ...createTerminalDeploymentValues("CANCELLED"),
           cancelledAt: sql`now()`,
           failureStage: null,
-          errorSummary: input.errorSummary
+          errorSummary: input.errorSummary,
+          ...clearDeploymentApprovalFields
         })
         .where(eq(deployments.id, deploymentId))
         .returning();
@@ -679,7 +685,8 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
             ...createTerminalDeploymentValues("FAILED"),
             failedAt: sql`now()`,
             failureStage,
-            errorSummary: createInterruptedDeploymentSummary(failureStage)
+            errorSummary: createInterruptedDeploymentSummary(failureStage),
+            ...clearDeploymentApprovalFields
           })
           .where(eq(deployments.id, deployment.id))
           .returning();
@@ -721,12 +728,20 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
       return Number(row?.nextSequence ?? 1);
     },
 
-    async listDeploymentLogs(deploymentId) {
-      return db
+    async listDeploymentLogs(deploymentId, options = {}) {
+      const conditions = [eq(deploymentLogs.deploymentId, deploymentId)];
+
+      if (options.afterSequence !== undefined) {
+        conditions.push(gt(deploymentLogs.sequence, options.afterSequence));
+      }
+
+      const query = db
         .select()
         .from(deploymentLogs)
-        .where(eq(deploymentLogs.deploymentId, deploymentId))
+        .where(and(...conditions))
         .orderBy(asc(deploymentLogs.sequence));
+
+      return options.limit === undefined ? query : query.limit(options.limit);
     },
 
     async listDeployedResources(deploymentId) {

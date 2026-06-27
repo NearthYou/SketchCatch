@@ -64,6 +64,10 @@ const deploymentLogStreamQuerySchema = z.object({
   sinceSequence: z.coerce.number().int().min(0).default(0),
   once: z.enum(["true", "false"]).optional()
 });
+const maxActiveDeploymentLogStreams = 50;
+const maxDeploymentLogStreamDurationMs = 5 * 60 * 1000;
+const maxDeploymentLogStreamBatchSize = 200;
+let activeDeploymentLogStreamCount = 0;
 
 const listDeploymentsParamsSchema = z.object({
   projectId: z.uuid()
@@ -610,6 +614,20 @@ async function streamDeploymentLogs(input: {
   request: FastifyRequest;
 }): Promise<void> {
   let lastSequence = input.sinceSequence;
+  let polling = false;
+  let closed = false;
+
+  if (!input.once && activeDeploymentLogStreamCount >= maxActiveDeploymentLogStreams) {
+    input.reply.status(429).send({
+      error: "too_many_requests",
+      message: "Too many deployment log streams are open"
+    });
+    return;
+  }
+
+  if (!input.once) {
+    activeDeploymentLogStreamCount += 1;
+  }
 
   input.reply.raw.writeHead(200, {
     "Content-Type": "text/event-stream; charset=utf-8",
@@ -620,32 +638,88 @@ async function streamDeploymentLogs(input: {
   });
   input.reply.hijack();
 
-  const writeNewLogs = async () => {
-    const logs = await input.repository.listDeploymentLogs(input.deploymentId);
-    const nextLogs = logs.filter((log) => log.sequence > lastSequence);
+  const timers: {
+    interval?: NodeJS.Timeout;
+    streamTimeout?: NodeJS.Timeout;
+  } = {};
+  const closeStream = () => {
+    if (closed) {
+      return;
+    }
 
-    for (const log of nextLogs) {
-      lastSequence = Math.max(lastSequence, log.sequence);
-      input.reply.raw.write(`event: log\ndata: ${JSON.stringify(toDeploymentLog(log))}\n\n`);
+    closed = true;
+
+    if (timers.interval) {
+      clearInterval(timers.interval);
+    }
+
+    if (timers.streamTimeout) {
+      clearTimeout(timers.streamTimeout);
+    }
+
+    if (!input.once) {
+      activeDeploymentLogStreamCount = Math.max(0, activeDeploymentLogStreamCount - 1);
+    }
+
+    if (!input.reply.raw.writableEnded) {
+      input.reply.raw.end();
     }
   };
 
-  await writeNewLogs();
+  const writeNewLogs = async () => {
+    if (polling || closed) {
+      return;
+    }
 
-  if (input.once) {
-    input.reply.raw.end();
+    polling = true;
+
+    try {
+      const nextLogs = await input.repository.listDeploymentLogs(input.deploymentId, {
+        afterSequence: lastSequence,
+        limit: maxDeploymentLogStreamBatchSize
+      });
+
+      for (const log of nextLogs) {
+        lastSequence = Math.max(lastSequence, log.sequence);
+        input.reply.raw.write(`event: log\ndata: ${JSON.stringify(toDeploymentLog(log))}\n\n`);
+      }
+    } finally {
+      polling = false;
+    }
+  };
+
+  await writeNewLogs().catch((error) => {
+    input.request.log.warn(
+      { error, deploymentId: input.deploymentId },
+      "Deployment log stream failed"
+    );
+    closeStream();
+  });
+
+  if (closed) {
     return;
   }
 
-  const interval = setInterval(() => {
+  if (input.once) {
+    closeStream();
+    return;
+  }
+
+  timers.interval = setInterval(() => {
     input.reply.raw.write(": keep-alive\n\n");
     void writeNewLogs().catch((error) => {
-      input.request.log.warn({ error, deploymentId: input.deploymentId }, "Deployment log stream failed");
+      input.request.log.warn(
+        { error, deploymentId: input.deploymentId },
+        "Deployment log stream failed"
+      );
     });
   }, 2_000);
+  timers.streamTimeout = setTimeout(() => {
+    closeStream();
+  }, maxDeploymentLogStreamDurationMs);
 
   input.request.raw.on("close", () => {
-    clearInterval(interval);
+    closeStream();
   });
 }
 
@@ -685,6 +759,10 @@ function requireDeploymentCanStartApply(deployment: DeploymentRecord): void {
 
   if (deployment.status === "SUCCESS") {
     throw new DeploymentConflictError("Deployment apply has already completed");
+  }
+
+  if (deployment.status === "FAILED" || deployment.status === "CANCELLED") {
+    throw new DeploymentConflictError("Deployment must be replanned and approved before apply");
   }
 
   if (!deployment.approvedAt || !deployment.approvedPlanArtifactId) {
