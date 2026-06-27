@@ -1,0 +1,201 @@
+import { randomUUID } from "node:crypto";
+import { and, eq } from "drizzle-orm";
+import type { OAuthProvider } from "@sketchcatch/types";
+import type { Database } from "../db/client.js";
+import { oauthAccounts, users } from "../db/schema.js";
+import type { NormalizedOAuthProfile } from "./oauth-profile.js";
+import type { PublicUserRow } from "./session.js";
+
+export const OAUTH_EMAIL_REQUIRED = "email_required";
+export const OAUTH_USER_DELETED = "user_deleted";
+export const OAUTH_USER_LINK_FAILED = "user_link_failed";
+
+const userForOAuthColumns = {
+  createdAt: users.createdAt,
+  deletedAt: users.deletedAt,
+  email: users.email,
+  id: users.id,
+  nickname: users.nickname,
+  username: users.username
+};
+
+type OAuthUserConnectionErrorCode =
+  | typeof OAUTH_EMAIL_REQUIRED
+  | typeof OAUTH_USER_DELETED
+  | typeof OAUTH_USER_LINK_FAILED;
+
+type UserForOAuthRow = PublicUserRow & {
+  deletedAt: Date | null;
+};
+
+type OAuthUserLookupDb = Pick<Database, "select">;
+type OAuthUserWriteDb = Pick<Database, "insert" | "select">;
+
+export class OAuthUserConnectionError extends Error {
+  constructor(
+    readonly provider: OAuthProvider,
+    readonly oauthError: OAuthUserConnectionErrorCode
+  ) {
+    super("OAuth user connection failed");
+    this.name = "OAuthUserConnectionError";
+  }
+}
+
+export async function findOrCreateOAuthUser(
+  db: Database,
+  profile: NormalizedOAuthProfile
+): Promise<PublicUserRow> {
+  const email = getVerifiedEmail(profile);
+
+  try {
+    const linkedUser = await findUserByOAuthAccount(db, profile);
+
+    if (linkedUser) {
+      return ensureActivePublicUser(linkedUser, profile.provider);
+    }
+
+    return await db.transaction(async (tx) => {
+      const existingEmailUser = await findUserByEmail(tx, email);
+
+      if (existingEmailUser) {
+        const publicUser = ensureActivePublicUser(existingEmailUser, profile.provider);
+
+        await createOAuthAccount(tx, publicUser.id, profile, email);
+
+        return publicUser;
+      }
+
+      const createdUser = await createOAuthUser(tx, profile, email);
+
+      await createOAuthAccount(tx, createdUser.id, profile, email);
+
+      return createdUser;
+    });
+  } catch (error) {
+    if (error instanceof OAuthUserConnectionError) {
+      throw error;
+    }
+
+    throw new OAuthUserConnectionError(profile.provider, OAUTH_USER_LINK_FAILED);
+  }
+}
+
+export function createSocialUsername(provider: OAuthProvider, providerUserId: string): string {
+  const safeId = providerUserId.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 20);
+  const usernameSuffix = safeId.length > 0 ? safeId : "user";
+
+  return `${provider}_${usernameSuffix}`.slice(0, 30).toLowerCase();
+}
+
+function getVerifiedEmail(profile: NormalizedOAuthProfile): string {
+  if (!profile.email || !profile.emailVerified) {
+    throw new OAuthUserConnectionError(profile.provider, OAUTH_EMAIL_REQUIRED);
+  }
+
+  return profile.email;
+}
+
+async function findUserByOAuthAccount(
+  db: OAuthUserLookupDb,
+  profile: NormalizedOAuthProfile
+): Promise<UserForOAuthRow | null> {
+  const [oauthAccount] = await db
+    .select({
+      userId: oauthAccounts.userId
+    })
+    .from(oauthAccounts)
+    .where(
+      and(
+        eq(oauthAccounts.provider, profile.provider),
+        eq(oauthAccounts.providerUserId, profile.providerUserId)
+      )
+    );
+
+  if (!oauthAccount) {
+    return null;
+  }
+
+  const [user] = await db
+    .select(userForOAuthColumns)
+    .from(users)
+    .where(eq(users.id, oauthAccount.userId));
+
+  if (!user) {
+    throw new OAuthUserConnectionError(profile.provider, OAUTH_USER_LINK_FAILED);
+  }
+
+  return user;
+}
+
+async function findUserByEmail(
+  db: OAuthUserLookupDb,
+  email: string
+): Promise<UserForOAuthRow | null> {
+  const [user] = await db.select(userForOAuthColumns).from(users).where(eq(users.email, email));
+
+  return user ?? null;
+}
+
+async function createOAuthUser(
+  db: OAuthUserWriteDb,
+  profile: NormalizedOAuthProfile,
+  email: string
+): Promise<PublicUserRow> {
+  const [createdUser] = await db
+    .insert(users)
+    .values({
+      email,
+      id: randomUUID(),
+      nickname: createSocialNickname(profile),
+      passwordHash: null,
+      username: createSocialUsername(profile.provider, profile.providerUserId)
+    })
+    .returning(userForOAuthColumns);
+
+  if (!createdUser) {
+    throw new OAuthUserConnectionError(profile.provider, OAUTH_USER_LINK_FAILED);
+  }
+
+  return ensureActivePublicUser(createdUser, profile.provider);
+}
+
+async function createOAuthAccount(
+  db: OAuthUserWriteDb,
+  userId: string,
+  profile: NormalizedOAuthProfile,
+  email: string
+): Promise<void> {
+  await db.insert(oauthAccounts).values({
+    displayName: profile.displayName,
+    email,
+    id: randomUUID(),
+    profileImageUrl: profile.profileImageUrl,
+    provider: profile.provider,
+    providerUserId: profile.providerUserId,
+    userId
+  });
+}
+
+function createSocialNickname(profile: NormalizedOAuthProfile): string {
+  const displayName = profile.displayName.trim();
+  const nickname = displayName.length > 0 ? displayName : `${profile.provider} user`;
+
+  return nickname.slice(0, 40);
+}
+
+function ensureActivePublicUser(
+  user: UserForOAuthRow,
+  provider: OAuthProvider
+): PublicUserRow {
+  if (user.deletedAt) {
+    throw new OAuthUserConnectionError(provider, OAUTH_USER_DELETED);
+  }
+
+  return {
+    createdAt: user.createdAt,
+    email: user.email,
+    id: user.id,
+    nickname: user.nickname,
+    username: user.username
+  };
+}
