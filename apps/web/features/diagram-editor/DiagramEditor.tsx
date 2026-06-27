@@ -761,7 +761,6 @@ function DiagramEditorInner({
         <header className={styles.canvasToolbar}>
           <div className={styles.toolbarBrand}>
             <span className={styles.toolbarTitle}>Architecture board</span>
-            <span className={styles.toolbarMeta}>Terraform draft</span>
           </div>
 
           <div className={styles.toolbarGroup} aria-label="편집 도구">
@@ -829,11 +828,8 @@ function DiagramEditorInner({
           </div>
 
           <div className={styles.toolbarStatus}>
-            <span>{diagram.nodes.length} nodes</span>
-            <span>{diagram.edges.length} edges</span>
             <span>{saveStatus}</span>
           </div>
-          
         </header>
 
         {draftStatusPanel ? (

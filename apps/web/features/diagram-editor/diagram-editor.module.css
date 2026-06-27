@@ -67,34 +67,28 @@
   box-shadow: 0 12px 30px rgba(31, 41, 55, 0.1);
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 7px;
   left: 12px;
-  min-height: 52px;
-  padding: 8px 12px;
+  max-width: calc(100% - 24px);
+  min-height: 44px;
+  padding: 6px 10px;
   position: absolute;
-  right: 12px;
   top: 12px;
+  width: fit-content;
   z-index: 12;
 }
 
 .toolbarBrand {
-  display: grid;
-  gap: 2px;
-  margin-right: 6px;
-  min-width: 154px;
+  align-items: center;
+  display: inline-flex;
+  margin-right: 4px;
+  min-width: 0;
 }
 
 .toolbarTitle {
   color: #161b2e;
-  font-size: 0.92rem;
+  font-size: 0.86rem;
   font-weight: 850;
-  line-height: 1.15;
-}
-
-.toolbarMeta {
-  color: #7b8498;
-  font-size: 0.7rem;
-  font-weight: 750;
   line-height: 1.15;
 }
 
@@ -112,9 +106,8 @@
   align-items: center;
   color: #6f778c;
   display: inline-flex;
-  font-size: 0.78rem;
-  gap: 6px;
-  margin-left: auto;
+  font-size: 0.72rem;
+  gap: 4px;
   min-width: 0;
   white-space: nowrap;
 }
@@ -123,14 +116,14 @@
   background: #f1f4fa;
   border: 1px solid #e1e7f3;
   border-radius: 999px;
-  max-width: 220px;
+  max-width: 180px;
   overflow: hidden;
-  padding: 5px 8px;
+  padding: 4px 7px;
   text-overflow: ellipsis;
 }
 
 .toolbarStatus span:last-child {
-  max-width: 260px;
+  max-width: 180px;
 }
 
 .draftStatusPanelSlot {
