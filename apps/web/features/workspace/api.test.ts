@@ -2,15 +2,22 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   createAwsConnectionSetup,
+  createDeployment,
+  deleteAwsConnection,
   getAwsConnectionCloudFormationTemplate,
+  listAwsConnections,
+  listDeployments,
   listProjects,
+  runDeploymentInit,
   saveProjectDraft,
   testAwsConnection,
   verifyAwsConnection
 } from "./api";
 import type { Project } from "../../../../packages/types/src";
-
-const AUTH_SESSION_STORAGE_KEY = "sketchcatch.auth.session";
+import {
+  clearStoredAuthSession,
+  writeStoredAuthSession
+} from "../../lib/auth-storage";
 
 const project: Project = {
   id: "11111111-1111-4111-8111-111111111111",
@@ -123,7 +130,6 @@ test("createAwsConnectionSetup requests generated Role setup values", async (con
       JSON.stringify({
         awsConnection: {
           id: "33333333-3333-4333-8333-333333333333",
-          projectId: project.id,
           userId: project.userId,
           accountId: null,
           roleArn: null,
@@ -179,11 +185,10 @@ test("createAwsConnectionSetup requests generated Role setup values", async (con
   };
 
   const response = await createAwsConnectionSetup({
-    projectId: project.id,
     region: "ap-northeast-2"
   });
 
-  assert.equal(String(requests[0]?.input), `/api/projects/${project.id}/aws-connections`);
+  assert.equal(String(requests[0]?.input), "/api/aws/connections");
   assert.equal(requests[0]?.init?.method, "POST");
   assert.equal(new Headers(requests[0]?.init?.headers).get("authorization"), "Bearer access-token");
   assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), {
@@ -210,6 +215,55 @@ test("createAwsConnectionSetup requests generated Role setup values", async (con
     response.callerRoleSetup.assumableRoleArnPattern,
     "arn:aws:iam::*:role/SketchCatchTerraformExecutionRole"
   );
+});
+
+test("listAwsConnections fetches user AWS connection metadata", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    restoreWindow(originalWindowDescriptor);
+  });
+
+  installAuthSession();
+
+  globalThis.fetch = async (input, init) => {
+    requests.push({ input, init });
+
+    return new Response(
+      JSON.stringify({
+        awsConnections: [
+          {
+            id: "33333333-3333-4333-8333-333333333333",
+            userId: project.userId,
+            accountId: "123456789012",
+            roleArn: "arn:aws:iam::123456789012:role/SketchCatchTerraformExecutionRole",
+            externalId: "sc_conn_33333333-3333-4333-8333-333333333333_random",
+            region: "ap-northeast-2",
+            status: "verified",
+            lastVerifiedAt: "2026-06-26T00:00:00.000Z",
+            createdAt: "2026-06-26T00:00:00.000Z",
+            updatedAt: "2026-06-26T00:00:00.000Z"
+          }
+        ]
+      }),
+      {
+        headers: {
+          "Content-Type": "application/json"
+        },
+        status: 200
+      }
+    );
+  };
+
+  const connections = await listAwsConnections();
+
+  assert.equal(String(requests[0]?.input), "/api/aws/connections");
+  assert.equal(new Headers(requests[0]?.init?.headers).get("authorization"), "Bearer access-token");
+  assert.equal(connections[0]?.status, "verified");
+  assert.equal(connections[0]?.accountId, "123456789012");
 });
 
 test("testAwsConnection requests STS connection test without exposing credentials", async (context) => {
@@ -245,14 +299,13 @@ test("testAwsConnection requests STS connection test without exposing credential
   };
 
   const response = await testAwsConnection({
-    projectId: project.id,
     connectionId: "33333333-3333-4333-8333-333333333333",
     roleArn: "arn:aws:iam::123456789012:role/SketchCatchTerraformExecutionRole"
   });
 
   assert.equal(
     String(requests[0]?.input),
-    `/api/projects/${project.id}/aws-connections/33333333-3333-4333-8333-333333333333/test`
+    "/api/aws/connections/33333333-3333-4333-8333-333333333333/test"
   );
   assert.equal(requests[0]?.init?.method, "POST");
   assert.equal(new Headers(requests[0]?.init?.headers).get("authorization"), "Bearer access-token");
@@ -296,7 +349,6 @@ test("verifyAwsConnection stores verified AWS connection metadata", async (conte
         region: "ap-northeast-2",
         awsConnection: {
           id: "33333333-3333-4333-8333-333333333333",
-          projectId: "11111111-1111-4111-8111-111111111111",
           userId: "22222222-2222-4222-8222-222222222222",
           accountId: "123456789012",
           roleArn: "arn:aws:iam::123456789012:role/SketchCatchTerraformExecutionRole",
@@ -318,14 +370,13 @@ test("verifyAwsConnection stores verified AWS connection metadata", async (conte
   };
 
   const response = await verifyAwsConnection({
-    projectId: "11111111-1111-4111-8111-111111111111",
     connectionId: "33333333-3333-4333-8333-333333333333",
     roleArn: "arn:aws:iam::123456789012:role/SketchCatchTerraformExecutionRole"
   });
 
   assert.equal(
     String(requests[0]?.input),
-    "/api/projects/11111111-1111-4111-8111-111111111111/aws-connections/33333333-3333-4333-8333-333333333333/verify"
+    "/api/aws/connections/33333333-3333-4333-8333-333333333333/verify"
   );
   assert.equal(requests[0]?.init?.method, "POST");
   assert.equal(new Headers(requests[0]?.init?.headers).get("authorization"), "Bearer access-token");
@@ -338,6 +389,36 @@ test("verifyAwsConnection stores verified AWS connection metadata", async (conte
   assert.equal("accessKeyId" in response, false);
   assert.equal("secretAccessKey" in response, false);
   assert.equal("sessionToken" in response, false);
+});
+
+test("deleteAwsConnection sends an authenticated DELETE request", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    restoreWindow(originalWindowDescriptor);
+  });
+
+  installAuthSession();
+
+  globalThis.fetch = async (input, init) => {
+    requests.push({ input, init });
+
+    return new Response(null, {
+      status: 204
+    });
+  };
+
+  await deleteAwsConnection("33333333-3333-4333-8333-333333333333");
+
+  assert.equal(
+    String(requests[0]?.input),
+    "/api/aws/connections/33333333-3333-4333-8333-333333333333"
+  );
+  assert.equal(requests[0]?.init?.method, "DELETE");
+  assert.equal(new Headers(requests[0]?.init?.headers).get("authorization"), "Bearer access-token");
 });
 
 test("getAwsConnectionCloudFormationTemplate fetches the launch stack setup", async (context) => {
@@ -379,13 +460,12 @@ test("getAwsConnectionCloudFormationTemplate fetches the launch stack setup", as
   };
 
   const response = await getAwsConnectionCloudFormationTemplate({
-    projectId: "11111111-1111-4111-8111-111111111111",
     connectionId: "33333333-3333-4333-8333-333333333333"
   });
 
   assert.equal(
     String(requests[0]?.input),
-    "/api/projects/11111111-1111-4111-8111-111111111111/aws-connections/33333333-3333-4333-8333-333333333333/cloudformation-template"
+    "/api/aws/connections/33333333-3333-4333-8333-333333333333/cloudformation-template"
   );
   assert.equal(requests[0]?.init?.method, undefined);
   assert.equal(new Headers(requests[0]?.init?.headers).get("authorization"), "Bearer access-token");
@@ -394,36 +474,160 @@ test("getAwsConnectionCloudFormationTemplate fetches the launch stack setup", as
   assert.match(response.launchStackUrl ?? "", /cloudformation\/home/);
 });
 
-function installAuthSession(): void {
-  Object.defineProperty(globalThis, "window", {
-    configurable: true,
-    value: {
-      localStorage: createMemoryStorage({
-        [AUTH_SESSION_STORAGE_KEY]: JSON.stringify({
-          accessToken: "access-token",
-          refreshToken: "refresh-token",
-          expiresInSeconds: 3600
-        })
-      })
-    }
+test("createDeployment posts selected artifact and verified AWS connection", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    restoreWindow(originalWindowDescriptor);
   });
-}
 
-function createMemoryStorage(initialValues: Record<string, string>) {
-  const values = new Map(Object.entries(initialValues));
+  installAuthSession();
 
-  return {
-    getItem: (key: string) => values.get(key) ?? null,
-    removeItem: (key: string) => {
-      values.delete(key);
-    },
-    setItem: (key: string, value: string) => {
-      values.set(key, value);
+  globalThis.fetch = async (input, init) => {
+    requests.push({ input, init });
+
+    return new Response(
+      JSON.stringify({
+        deployment: createDeploymentPayload({
+          id: "44444444-4444-4444-8444-444444444444",
+          projectId: project.id
+        })
+      }),
+      {
+        headers: {
+          "Content-Type": "application/json"
+        },
+        status: 201
+      }
+    );
+  };
+
+  const deployment = await createDeployment({
+    projectId: project.id,
+    architectureId: "55555555-5555-4555-8555-555555555555",
+    terraformArtifactId: "66666666-6666-4666-8666-666666666666",
+    awsConnectionId: "33333333-3333-4333-8333-333333333333"
+  });
+
+  assert.equal(String(requests[0]?.input), `/api/projects/${project.id}/deployments`);
+  assert.equal(requests[0]?.init?.method, "POST");
+  assert.equal(new Headers(requests[0]?.init?.headers).get("authorization"), "Bearer access-token");
+  assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), {
+    architectureId: "55555555-5555-4555-8555-555555555555",
+    terraformArtifactId: "66666666-6666-4666-8666-666666666666",
+    awsConnectionId: "33333333-3333-4333-8333-333333333333"
+  });
+  assert.equal(deployment.status, "PENDING");
+});
+
+test("deployment helpers list records and start init", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    restoreWindow(originalWindowDescriptor);
+  });
+
+  installAuthSession();
+
+  globalThis.fetch = async (input, init) => {
+    requests.push({ input, init });
+
+    if (String(input).endsWith("/init")) {
+      return new Response(
+        JSON.stringify({
+          deployment: createDeploymentPayload({
+            id: "44444444-4444-4444-8444-444444444444",
+            projectId: project.id,
+            status: "RUNNING"
+          })
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json"
+          },
+          status: 202
+        }
+      );
     }
+
+    return new Response(
+      JSON.stringify({
+        deployments: [
+          createDeploymentPayload({
+            id: "44444444-4444-4444-8444-444444444444",
+            projectId: project.id
+          })
+        ]
+      }),
+      {
+        headers: {
+          "Content-Type": "application/json"
+        },
+        status: 200
+      }
+    );
+  };
+
+  const deployments = await listDeployments(project.id);
+  const runningDeployment = await runDeploymentInit("44444444-4444-4444-8444-444444444444");
+
+  assert.equal(String(requests[0]?.input), `/api/projects/${project.id}/deployments`);
+  assert.equal(
+    String(requests[1]?.input),
+    "/api/deployments/44444444-4444-4444-8444-444444444444/init"
+  );
+  assert.equal(requests[1]?.init?.method, "POST");
+  assert.equal(deployments[0]?.status, "PENDING");
+  assert.equal(runningDeployment.status, "RUNNING");
+});
+
+function createDeploymentPayload(input: {
+  id: string;
+  projectId: string;
+  status?: "PENDING" | "RUNNING";
+}) {
+  return {
+    id: input.id,
+    projectId: input.projectId,
+    architectureId: "55555555-5555-4555-8555-555555555555",
+    terraformArtifactId: "66666666-6666-4666-8666-666666666666",
+    awsConnectionId: "33333333-3333-4333-8333-333333333333",
+    status: input.status ?? "PENDING",
+    planSummary: null,
+    isBlocked: false,
+    blockedBy: null,
+    blockedReason: null,
+    failureStage: null,
+    errorSummary: null,
+    approvedAt: null,
+    approvedByUserId: null,
+    approvedTerraformArtifactId: null,
+    createdAt: "2026-06-26T00:00:00.000Z",
+    updatedAt: "2026-06-26T00:00:00.000Z"
   };
 }
 
+function installAuthSession(): void {
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    value: {}
+  });
+
+  writeStoredAuthSession({
+    accessToken: "access-token",
+    expiresInSeconds: 3600
+  });
+}
+
 function restoreWindow(descriptor: PropertyDescriptor | undefined): void {
+  clearStoredAuthSession();
+
   if (descriptor) {
     Object.defineProperty(globalThis, "window", descriptor);
     return;

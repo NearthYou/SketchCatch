@@ -1,8 +1,16 @@
 import type {
   AwsConnectionCloudFormationTemplateResponse,
+  AwsConnection,
+  AwsConnectionListResponse,
   CreateAwsConnectionRequest,
   CreateAwsConnectionResponse,
+  CreateDeploymentRequest,
   CreateProjectRequest,
+  Deployment,
+  DeploymentListResponse,
+  DeploymentLog,
+  DeploymentLogListResponse,
+  DeploymentResponse,
   Project,
   ProjectDetailsResponse,
   ProjectDraftResponse,
@@ -33,13 +41,17 @@ export async function listProjects(): Promise<Project[]> {
 }
 
 export async function getProject(projectId: string): Promise<Project> {
-  const response = await apiFetch<ProjectDetailsResponse>(
+  const response = await getProjectDetails(projectId);
+  return response.project;
+}
+
+export async function getProjectDetails(projectId: string): Promise<ProjectDetailsResponse> {
+  return apiFetch<ProjectDetailsResponse>(
     `/projects/${encodeURIComponent(projectId)}`,
     {
       auth: true
     }
   );
-  return response.project;
 }
 
 export async function getProjectDraft(projectId: string): Promise<ProjectDraftResponse> {
@@ -64,33 +76,32 @@ export async function saveProjectDraft({
 }
 
 export async function createAwsConnectionSetup({
-  projectId,
   region
-}: {
-  projectId: string;
-} & CreateAwsConnectionRequest): Promise<CreateAwsConnectionResponse> {
-  return apiFetch<CreateAwsConnectionResponse>(
-    `/projects/${encodeURIComponent(projectId)}/aws-connections`,
-    {
-      auth: true,
-      method: "POST",
-      body: {
-        region
-      }
+}: CreateAwsConnectionRequest): Promise<CreateAwsConnectionResponse> {
+  return apiFetch<CreateAwsConnectionResponse>("/aws/connections", {
+    auth: true,
+    method: "POST",
+    body: {
+      region
     }
-  );
+  });
+}
+
+export async function listAwsConnections(): Promise<AwsConnection[]> {
+  const response = await apiFetch<AwsConnectionListResponse>("/aws/connections", {
+    auth: true
+  });
+
+  return response.awsConnections;
 }
 
 export async function testAwsConnection(
   input: {
-    projectId: string;
     connectionId: string;
   } & TestAwsConnectionRequest
 ): Promise<TestAwsConnectionResponse> {
   return apiFetch<TestAwsConnectionResponse>(
-    `/projects/${encodeURIComponent(input.projectId)}/aws-connections/${encodeURIComponent(
-      input.connectionId
-    )}/test`,
+    `/aws/connections/${encodeURIComponent(input.connectionId)}/test`,
     {
       auth: true,
       method: "POST",
@@ -102,15 +113,13 @@ export async function testAwsConnection(
 }
 
 export async function verifyAwsConnection({
-  projectId,
   connectionId,
   roleArn
 }: {
-  projectId: string;
   connectionId: string;
 } & VerifyAwsConnectionRequest): Promise<VerifyAwsConnectionResponse> {
   return apiFetch<VerifyAwsConnectionResponse>(
-    `/projects/${encodeURIComponent(projectId)}/aws-connections/${encodeURIComponent(connectionId)}/verify`,
+    `/aws/connections/${encodeURIComponent(connectionId)}/verify`,
     {
       auth: true,
       method: "POST",
@@ -121,19 +130,80 @@ export async function verifyAwsConnection({
   );
 }
 
+export async function deleteAwsConnection(connectionId: string): Promise<void> {
+  await apiFetch<void>(`/aws/connections/${encodeURIComponent(connectionId)}`, {
+    auth: true,
+    method: "DELETE"
+  });
+}
+
 export async function getAwsConnectionCloudFormationTemplate({
-  projectId,
   connectionId
 }: {
-  projectId: string;
   connectionId: string;
 }): Promise<AwsConnectionCloudFormationTemplateResponse> {
   return apiFetch<AwsConnectionCloudFormationTemplateResponse>(
-    `/projects/${encodeURIComponent(projectId)}/aws-connections/${encodeURIComponent(
-      connectionId
-    )}/cloudformation-template`,
+    `/aws/connections/${encodeURIComponent(connectionId)}/cloudformation-template`,
     {
       auth: true
     }
   );
+}
+
+export async function createDeployment({
+  projectId,
+  architectureId,
+  terraformArtifactId,
+  awsConnectionId
+}: {
+  projectId: string;
+} & CreateDeploymentRequest): Promise<Deployment> {
+  const response = await apiFetch<DeploymentResponse>(
+    `/projects/${encodeURIComponent(projectId)}/deployments`,
+    {
+      auth: true,
+      method: "POST",
+      body: {
+        architectureId,
+        terraformArtifactId,
+        awsConnectionId
+      }
+    }
+  );
+
+  return response.deployment;
+}
+
+export async function listDeployments(projectId: string): Promise<Deployment[]> {
+  const response = await apiFetch<DeploymentListResponse>(
+    `/projects/${encodeURIComponent(projectId)}/deployments`,
+    {
+      auth: true
+    }
+  );
+
+  return response.deployments;
+}
+
+export async function runDeploymentInit(deploymentId: string): Promise<Deployment> {
+  const response = await apiFetch<DeploymentResponse>(
+    `/deployments/${encodeURIComponent(deploymentId)}/init`,
+    {
+      auth: true,
+      method: "POST"
+    }
+  );
+
+  return response.deployment;
+}
+
+export async function listDeploymentLogs(deploymentId: string): Promise<DeploymentLog[]> {
+  const response = await apiFetch<DeploymentLogListResponse>(
+    `/deployments/${encodeURIComponent(deploymentId)}/logs`,
+    {
+      auth: true
+    }
+  );
+
+  return response.logs;
 }
