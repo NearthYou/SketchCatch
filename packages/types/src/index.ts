@@ -29,6 +29,10 @@ export type ResourceType =
   | "LAMBDA"
   | "UNKNOWN";
 
+export type CloudProvider = "aws";
+
+export type TerraformBlockType = "resource" | "data";
+
 export type ResourceConfig = Record<string, unknown>;
 
 export type ResourceNode = {
@@ -50,6 +54,34 @@ export type ResourceEdge = {
 export type ArchitectureJson = {
   nodes: ResourceNode[];
   edges: ResourceEdge[];
+};
+
+export type InfrastructureGraphNodeIaC = {
+  provider: CloudProvider;
+  terraformBlockType: TerraformBlockType;
+  resourceType: string;
+  resourceName: string;
+  fileName?: string | undefined;
+};
+
+export type InfrastructureGraphNode = {
+  id: string;
+  type: ResourceType;
+  label?: string | undefined;
+  iac: InfrastructureGraphNodeIaC;
+  config: ResourceConfig;
+};
+
+export type InfrastructureGraphEdge = {
+  id: string;
+  sourceId: string;
+  targetId: string;
+  label?: string | undefined;
+};
+
+export type InfrastructureGraph = {
+  nodes: InfrastructureGraphNode[];
+  edges: InfrastructureGraphEdge[];
 };
 
 export type User = {
@@ -604,8 +636,6 @@ export type ArchitectureEdge = ResourceEdge;
 
 export type DiagramNodeKind = "resource" | "design";
 
-export type TerraformBlockType = "resource" | "data";
-
 export type DiagramNodeStyle = {
   textColor?: string | undefined;
   borderColor?: string | undefined;
@@ -688,8 +718,6 @@ export type TerraformGenerateRequest = {
 export type TerraformGenerateResponse = {
   terraformCode: string;
 };
-
-export type CloudProvider = "aws";
 
 export type ResourceArea =
   | "containers"
@@ -778,5 +806,15 @@ export type TerraformValidateRequest = {
 };
 
 export type TerraformValidateResponse = {
+  diagnostics: TerraformDiagnostic[];
+};
+
+export type TerraformSyncToDiagramRequest = {
+  diagramJson: DiagramJson;
+  terraformCode: string;
+};
+
+export type TerraformSyncToDiagramResponse = {
+  diagramJson: DiagramJson;
   diagnostics: TerraformDiagnostic[];
 };
