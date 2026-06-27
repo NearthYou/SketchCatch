@@ -81,7 +81,10 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     prefix: "/api",
     getDatabaseClient: getAppDatabaseClient
   });
-  app.register(registerOAuthRoutes, { prefix: "/api" });
+  app.register(registerOAuthRoutes, {
+    prefix: "/api",
+    getDatabaseClient: getAppDatabaseClient
+  });
   app.register(registerProjectRoutes, {
     prefix: "/api",
     getDatabaseClient: getAppDatabaseClient
