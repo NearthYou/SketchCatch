@@ -9,6 +9,7 @@ import type {
 import {
   type ArchitectureRecord,
   type CreateDeploymentRecordInput,
+  type DeploymentPlanArtifactRecord,
   type DeploymentLogRecord,
   type DeploymentRecord,
   type DeploymentRepository,
@@ -112,6 +113,12 @@ class FakeDeploymentRepository implements DeploymentRepository {
     }
 
     return this.deployment;
+  }
+
+  async findDeploymentPlanArtifactById(
+    candidatePlanArtifactId: string
+  ): Promise<DeploymentPlanArtifactRecord | undefined> {
+    return createDeploymentPlanArtifactRecord({ id: candidatePlanArtifactId });
   }
 
   async listDeploymentsByProject(): Promise<DeploymentRecord[]> {
@@ -280,8 +287,29 @@ function createDeploymentRecord(
     approvedAt: null,
     approvedByUserId: null,
     approvedTerraformArtifactId: null,
+    approvedPlanArtifactId: null,
+    approvedTerraformArtifactHash: null,
+    approvedTfplanHash: null,
+    approvedAwsAccountId: null,
+    approvedAwsRegion: null,
     createdAt: fixedNow,
     updatedAt: fixedNow,
+    ...overrides
+  };
+}
+
+function createDeploymentPlanArtifactRecord(
+  overrides: Partial<DeploymentPlanArtifactRecord> = {}
+): DeploymentPlanArtifactRecord {
+  return {
+    id: planArtifactId,
+    deploymentId,
+    terraformArtifactId,
+    objectKey: `deployments/${deploymentId}/plans/${planArtifactId}.tfplan`,
+    sha256: "0".repeat(64),
+    accountId: "123456789012",
+    region: "ap-northeast-2",
+    createdAt: fixedNow,
     ...overrides
   };
 }

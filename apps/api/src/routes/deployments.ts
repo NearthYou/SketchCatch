@@ -15,6 +15,10 @@ import {
   type RunDeploymentPlanResult
 } from "../deployments/deployment-plan-service.js";
 import {
+  approveDeploymentPlan as defaultApproveDeploymentPlan,
+  type ApproveDeploymentPlanInput
+} from "../deployments/deployment-approval-service.js";
+import {
   createDeployment,
   createPostgresDeploymentRepository,
   DeploymentConflictError,
@@ -59,6 +63,10 @@ type DeploymentRouteOptions = {
     input: RunDeploymentPlanInput,
     repository: DeploymentRepository
   ) => Promise<RunDeploymentPlanResult>;
+  approveDeploymentPlan?: (
+    input: ApproveDeploymentPlanInput,
+    repository: DeploymentRepository
+  ) => Promise<DeploymentRecord>;
 };
 
 type DeploymentRequestContext = {
@@ -118,6 +126,11 @@ function toDeployment(row: DeploymentRow): Deployment {
     approvedAt: row.approvedAt?.toISOString() ?? null,
     approvedByUserId: row.approvedByUserId,
     approvedTerraformArtifactId: row.approvedTerraformArtifactId,
+    approvedPlanArtifactId: row.approvedPlanArtifactId,
+    approvedTerraformArtifactHash: row.approvedTerraformArtifactHash,
+    approvedTfplanHash: row.approvedTfplanHash,
+    approvedAwsAccountId: row.approvedAwsAccountId,
+    approvedAwsRegion: row.approvedAwsRegion,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString()
   };
@@ -309,6 +322,34 @@ export async function registerDeploymentRoutes(
 
       return reply.status(202).send({
         deployment: toDeployment(runningDeployment)
+      });
+    } catch (error) {
+      return handleDeploymentError(error, reply);
+    }
+  });
+
+  app.post("/deployments/:deploymentId/approve", async (request, reply) => {
+    const params = deploymentParamsSchema.parse(request.params);
+    z.object({}).parse(request.body ?? {});
+    const { accessContext, repository } = await getDeploymentRequestContext(
+      request,
+      options,
+      getDeploymentDatabaseClient
+    );
+    const approveDeploymentPlan =
+      options?.approveDeploymentPlan ?? defaultApproveDeploymentPlan;
+
+    try {
+      const deployment = await approveDeploymentPlan(
+        {
+          deploymentId: params.deploymentId,
+          accessContext
+        },
+        repository
+      );
+
+      return reply.status(200).send({
+        deployment: toDeployment(deployment)
       });
     } catch (error) {
       return handleDeploymentError(error, reply);

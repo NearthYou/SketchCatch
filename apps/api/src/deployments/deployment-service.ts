@@ -98,6 +98,18 @@ export type SaveDeploymentPlanInput = {
   blockedReason: string | null;
 };
 
+export type ApproveDeploymentInput = {
+  approvedByUserId: string;
+  approvedAt: Date;
+  approvedTerraformArtifactId: string;
+  approvedPlanArtifactId: string;
+  approvedTerraformArtifactHash: string;
+  approvedTfplanHash: string;
+  approvedAwsAccountId: string;
+  approvedAwsRegion: string;
+  planSummary: DeploymentPlanSummary;
+};
+
 export type ProjectRecord = typeof projects.$inferSelect;
 export type ArchitectureRecord = typeof architectures.$inferSelect;
 export type ProjectAssetRecord = typeof projectAssets.$inferSelect;
@@ -131,6 +143,9 @@ export type DeploymentRepository = {
   ): Promise<AwsConnection | undefined>;
   createDeployment(input: CreateDeploymentRecordInput): Promise<DeploymentRecord>;
   findDeploymentById(deploymentId: string): Promise<DeploymentRecord | undefined>;
+  findDeploymentPlanArtifactById(
+    planArtifactId: string
+  ): Promise<DeploymentPlanArtifactRecord | undefined>;
 
   listDeploymentsByProject(projectId: string): Promise<DeploymentRecord[]>;
   updateDeploymentStatus(
@@ -151,11 +166,7 @@ export type DeploymentRepository = {
   saveDeploymentPlan(input: SaveDeploymentPlanInput): Promise<DeploymentRecord | undefined>;
   approveDeployment(
     deploymentId: string,
-    input: {
-      approvedByUserId: string;
-      approvedTerraformArtifactId: string;
-      approvedAt: Date;
-    }
+    input: ApproveDeploymentInput
   ): Promise<DeploymentRecord | undefined>;
   failDeployment(
     deploymentId: string,
@@ -291,6 +302,15 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
       return deployment;
     },
 
+    async findDeploymentPlanArtifactById(planArtifactId) {
+      const [planArtifact] = await db
+        .select()
+        .from(deploymentPlanArtifacts)
+        .where(eq(deploymentPlanArtifacts.id, planArtifactId));
+
+      return planArtifact;
+    },
+
     async listDeploymentsByProject(projectId) {
       return db
         .select()
@@ -377,7 +397,24 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
     async approveDeployment(deploymentId, input) {
       const [deployment] = await db
         .update(deployments)
-        .set({ ...input, ...touchUpdatedAt })
+        .set({
+          approvedByUserId: input.approvedByUserId,
+          approvedAt: input.approvedAt,
+          approvedTerraformArtifactId: input.approvedTerraformArtifactId,
+          approvedPlanArtifactId: input.approvedPlanArtifactId,
+          approvedTerraformArtifactHash: input.approvedTerraformArtifactHash,
+          approvedTfplanHash: input.approvedTfplanHash,
+          approvedAwsAccountId: input.approvedAwsAccountId,
+          approvedAwsRegion: input.approvedAwsRegion,
+          planSummary: input.planSummary,
+          isBlocked: false,
+          blockedBy: null,
+          blockedReason: null,
+          failureStage: null,
+          errorSummary: null,
+          status: "PENDING",
+          ...touchUpdatedAt
+        })
         .where(eq(deployments.id, deploymentId))
         .returning();
 

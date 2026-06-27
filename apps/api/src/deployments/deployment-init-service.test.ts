@@ -5,6 +5,7 @@ import {
   DeploymentNotFoundError,
   type ArchitectureRecord,
   type CreateDeploymentRecordInput,
+  type DeploymentPlanArtifactRecord,
   type DeploymentLogRecord,
   type DeploymentRecord,
   type DeploymentRepository,
@@ -33,6 +34,10 @@ type RepositoryCall =
   | {
       name: "findDeploymentById";
       deploymentId: string;
+    }
+  | {
+      name: "findDeploymentPlanArtifactById";
+      planArtifactId: string;
     }
   | {
       name: "findTerraformArtifactById";
@@ -177,6 +182,15 @@ class FakeDeploymentRepository implements DeploymentRepository {
     }
 
     return this.deployment;
+  }
+
+  async findDeploymentPlanArtifactById(candidatePlanArtifactId: string) {
+    this.calls.push({
+      name: "findDeploymentPlanArtifactById",
+      planArtifactId: candidatePlanArtifactId
+    });
+
+    return createDeploymentPlanArtifactRecord({ id: candidatePlanArtifactId });
   }
 
   async listDeploymentsByProject(): Promise<DeploymentRecord[]> {
@@ -368,8 +382,29 @@ function createDeploymentRecord(
     approvedAt: null,
     approvedByUserId: null,
     approvedTerraformArtifactId: null,
+    approvedPlanArtifactId: null,
+    approvedTerraformArtifactHash: null,
+    approvedTfplanHash: null,
+    approvedAwsAccountId: null,
+    approvedAwsRegion: null,
     createdAt: fixedNow,
     updatedAt: fixedNow,
+    ...overrides
+  };
+}
+
+function createDeploymentPlanArtifactRecord(
+  overrides: Partial<DeploymentPlanArtifactRecord> = {}
+): DeploymentPlanArtifactRecord {
+  return {
+    id: "99999999-9999-4999-8999-999999999999",
+    deploymentId,
+    terraformArtifactId,
+    objectKey: "deployments/deployment-id/plans/plan-id.tfplan",
+    sha256: "a".repeat(64),
+    accountId: "123456789012",
+    region: "ap-northeast-2",
+    createdAt: fixedNow,
     ...overrides
   };
 }

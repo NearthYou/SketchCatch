@@ -12,11 +12,14 @@ import type {
   RunDeploymentPlanInput,
   RunDeploymentPlanResult
 } from "../deployments/deployment-plan-service.js";
+import type { ApproveDeploymentPlanInput } from "../deployments/deployment-approval-service.js";
 import { users } from "../db/schema.js";
 import {
+  type ApproveDeploymentInput,
   type ArchitectureRecord,
   type CreateDeploymentRecordInput,
   type SaveDeploymentPlanInput,
+  type DeploymentPlanArtifactRecord,
   type DeploymentLogRecord,
   type DeploymentRecord,
   type DeploymentRepository,
@@ -46,6 +49,12 @@ type DeploymentResponse = {
     failureStage: string | null;
     errorSummary: string | null;
     approvedByUserId: string | null;
+    approvedTerraformArtifactId: string | null;
+    approvedPlanArtifactId: string | null;
+    approvedTerraformArtifactHash: string | null;
+    approvedTfplanHash: string | null;
+    approvedAwsAccountId: string | null;
+    approvedAwsRegion: string | null;
     createdAt: string;
     updatedAt: string;
   };
@@ -114,6 +123,15 @@ type RepositoryCall =
   | {
       name: "saveDeploymentPlan";
       input: SaveDeploymentPlanInput;
+    }
+  | {
+      name: "findDeploymentPlanArtifactById";
+      planArtifactId: string;
+    }
+  | {
+      name: "approveDeployment";
+      deploymentId: string;
+      input: ApproveDeploymentInput;
     };
 
 const projectId = "11111111-1111-4111-8111-111111111111";
@@ -121,6 +139,7 @@ const architectureId = "22222222-2222-4222-8222-222222222222";
 const terraformArtifactId = "33333333-3333-4333-8333-333333333333";
 const deploymentId = "44444444-4444-4444-8444-444444444444";
 const awsConnectionId = "77777777-7777-4777-8777-777777777777";
+const planArtifactId = "99999999-9999-4999-8999-999999999999";
 const userId = "55555555-5555-4555-8555-555555555555";
 const fixedNow = new Date("2026-01-01T00:00:00.000Z");
 
@@ -150,6 +169,7 @@ class FakeDeploymentRepository implements DeploymentRepository {
   };
   awsConnection: AwsConnection | undefined = createVerifiedAwsConnection();
   deployment: DeploymentRecord | undefined = createDeploymentRecord(deploymentId);
+  planArtifact: DeploymentPlanArtifactRecord | undefined = createDeploymentPlanArtifactRecord();
   deployments: DeploymentRecord[] = [createDeploymentRecord(deploymentId)];
   logs: DeploymentLogRecord[] = [];
 
@@ -259,6 +279,19 @@ class FakeDeploymentRepository implements DeploymentRepository {
     return this.deployment;
   }
 
+  async findDeploymentPlanArtifactById(candidatePlanArtifactId: string) {
+    this.calls.push({
+      name: "findDeploymentPlanArtifactById",
+      planArtifactId: candidatePlanArtifactId
+    });
+
+    if (!this.planArtifact || this.planArtifact.id !== candidatePlanArtifactId) {
+      return undefined;
+    }
+
+    return this.planArtifact;
+  }
+
   async listDeploymentsByProject(candidateProjectId: string) {
     this.calls.push({
       name: "listDeploymentsByProject",
@@ -341,12 +374,28 @@ class FakeDeploymentRepository implements DeploymentRepository {
     return this.deployment;
   };
 
-  approveDeployment: DeploymentRepository["approveDeployment"] = async (_deploymentId, input) => {
-    if (!this.deployment) {
+  approveDeployment: DeploymentRepository["approveDeployment"] = async (candidateDeploymentId, input) => {
+    this.calls.push({
+      name: "approveDeployment",
+      deploymentId: candidateDeploymentId,
+      input
+    });
+
+    if (!this.deployment || this.deployment.id !== candidateDeploymentId) {
       return undefined;
     }
 
-    this.deployment = { ...this.deployment, ...input };
+    this.deployment = {
+      ...this.deployment,
+      ...input,
+      status: "PENDING",
+      isBlocked: false,
+      blockedBy: null,
+      blockedReason: null,
+      failureStage: null,
+      errorSummary: null,
+      updatedAt: fixedNow
+    };
 
     return this.deployment;
   };
@@ -427,6 +476,10 @@ type DeploymentRouteTestOptions = {
     input: RunDeploymentPlanInput,
     repository: DeploymentRepository
   ) => Promise<RunDeploymentPlanResult>;
+  approveDeploymentPlan?: (
+    input: ApproveDeploymentPlanInput,
+    repository: DeploymentRepository
+  ) => Promise<DeploymentRecord>;
   userRows?: UserRecord[];
 };
 
@@ -442,7 +495,10 @@ async function buildDeploymentTestApp(
     getDatabaseClient: () => fakeAuthDb.client,
     createDeploymentRepository: () => repository,
     ...(routeOptions.runDeploymentInit ? { runDeploymentInit: routeOptions.runDeploymentInit } : {}),
-    ...(routeOptions.runDeploymentPlan ? { runDeploymentPlan: routeOptions.runDeploymentPlan } : {})
+    ...(routeOptions.runDeploymentPlan ? { runDeploymentPlan: routeOptions.runDeploymentPlan } : {}),
+    ...(routeOptions.approveDeploymentPlan
+      ? { approveDeploymentPlan: routeOptions.approveDeploymentPlan }
+      : {})
   });
 
   return app;
@@ -469,8 +525,29 @@ function createDeploymentRecord(
     approvedAt: null,
     approvedByUserId: null,
     approvedTerraformArtifactId: null,
+    approvedPlanArtifactId: null,
+    approvedTerraformArtifactHash: null,
+    approvedTfplanHash: null,
+    approvedAwsAccountId: null,
+    approvedAwsRegion: null,
     createdAt: fixedNow,
     updatedAt: fixedNow,
+    ...overrides
+  };
+}
+
+function createDeploymentPlanArtifactRecord(
+  overrides: Partial<DeploymentPlanArtifactRecord> = {}
+): DeploymentPlanArtifactRecord {
+  return {
+    id: planArtifactId,
+    deploymentId,
+    terraformArtifactId,
+    objectKey: `deployments/${deploymentId}/plans/${planArtifactId}.tfplan`,
+    sha256: "a".repeat(64),
+    accountId: "123456789012",
+    region: "ap-northeast-2",
+    createdAt: fixedNow,
     ...overrides
   };
 }
@@ -1011,6 +1088,84 @@ test("POST /api/deployments/:deploymentId/plan rejects a deployment that is alre
   });
   assert.equal(planStarted, false);
   assert.equal(repository.deployment.status, "RUNNING");
+
+  await app.close();
+});
+
+test("POST /api/deployments/:deploymentId/approve approves the current plan", async () => {
+  const repository = new FakeDeploymentRepository();
+  const approveCalls: Array<{ deploymentId: string; accessContext: ProjectAccessContext }> = [];
+  repository.deployment = createDeploymentRecord(deploymentId, {
+    currentPlanArtifactId: planArtifactId,
+    planSummary: {
+      createCount: 1,
+      updateCount: 0,
+      deleteCount: 0,
+      replaceCount: 0,
+      blocked: true,
+      warnings: []
+    },
+    isBlocked: true,
+    blockedBy: "missing_approval",
+    blockedReason: "Terraform Plan requires user approval before apply"
+  });
+  const app = await buildDeploymentTestApp(repository, {
+    approveDeploymentPlan: async (input, candidateRepository) => {
+      assert.equal(candidateRepository, repository);
+      approveCalls.push(input);
+
+      return createDeploymentRecord(input.deploymentId, {
+        currentPlanArtifactId: planArtifactId,
+        planSummary: {
+          createCount: 1,
+          updateCount: 0,
+          deleteCount: 0,
+          replaceCount: 0,
+          blocked: false,
+          warnings: []
+        },
+        isBlocked: false,
+        blockedBy: null,
+        blockedReason: null,
+        approvedAt: fixedNow,
+        approvedByUserId: userId,
+        approvedTerraformArtifactId: terraformArtifactId,
+        approvedPlanArtifactId: planArtifactId,
+        approvedTerraformArtifactHash: "a".repeat(64),
+        approvedTfplanHash: "b".repeat(64),
+        approvedAwsAccountId: "123456789012",
+        approvedAwsRegion: "ap-northeast-2"
+      });
+    }
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/deployments/${deploymentId}/approve`,
+    headers: await authHeaders(),
+    payload: {}
+  });
+
+  assert.equal(response.statusCode, 200);
+  const body = response.json() as DeploymentResponse;
+  assert.equal(body.deployment.id, deploymentId);
+  assert.equal(body.deployment.isBlocked, false);
+  assert.equal(body.deployment.approvedByUserId, userId);
+  assert.equal(body.deployment.approvedTerraformArtifactId, terraformArtifactId);
+  assert.equal(body.deployment.approvedPlanArtifactId, planArtifactId);
+  assert.equal(body.deployment.approvedTerraformArtifactHash, "a".repeat(64));
+  assert.equal(body.deployment.approvedTfplanHash, "b".repeat(64));
+  assert.equal(body.deployment.approvedAwsAccountId, "123456789012");
+  assert.equal(body.deployment.approvedAwsRegion, "ap-northeast-2");
+  assert.deepEqual(approveCalls, [
+    {
+      deploymentId,
+      accessContext: {
+        kind: "user",
+        userId
+      }
+    }
+  ]);
 
   await app.close();
 });
