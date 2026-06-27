@@ -133,7 +133,7 @@ function DeploymentPanel({
     !isPlanApproved &&
     selectedDeployment?.status !== "RUNNING" &&
     selectedDeployment?.isBlocked === true &&
-    selectedDeployment.blockedBy === "missing_approval" &&
+    selectedDeployment?.blockedBy === "missing_approval" &&
     requestState !== "loading";
   const shouldShowPlanButton = Boolean(selectedDeployment) && !isPlanApproved;
   const shouldShowApprovePlanButton =
