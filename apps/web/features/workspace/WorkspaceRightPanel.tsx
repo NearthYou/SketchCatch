@@ -13,12 +13,13 @@ import { getApiErrorMessage } from "../../lib/api-client";
 import { ParameterInputPanel } from "../parameter-input";
 import type { DiagramEditorPanelContext } from "../diagram-editor";
 import {
+  approveDeploymentPlan,
   createDeployment,
   getProjectDetails,
   listAwsConnections,
   listDeploymentLogs,
   listDeployments,
-  runDeploymentInit
+  runDeploymentPlan
 } from "./api";
 import styles from "./workspace.module.css";
 
@@ -118,10 +119,29 @@ function DeploymentPanel({
     selectedTerraformArtifactId.length > 0 &&
     selectedAwsConnectionId.length > 0 &&
     requestState !== "loading";
-  const canRunInit =
+  const hasCurrentPlan = Boolean(selectedDeployment?.currentPlanArtifactId);
+  const isPlanApproved = Boolean(
+    selectedDeployment?.approvedAt && selectedDeployment.approvedPlanArtifactId
+  );
+  const canRunPlan =
     Boolean(selectedDeployment) &&
     selectedDeployment?.status !== "RUNNING" &&
+    !isPlanApproved &&
     requestState !== "loading";
+  const canApprovePlan =
+    hasCurrentPlan &&
+    !isPlanApproved &&
+    selectedDeployment?.status !== "RUNNING" &&
+    selectedDeployment?.isBlocked === true &&
+    selectedDeployment?.blockedBy === "missing_approval" &&
+    requestState !== "loading";
+  const shouldShowPlanButton = Boolean(selectedDeployment) && !isPlanApproved;
+  const shouldShowApprovePlanButton =
+    Boolean(selectedDeployment) && hasCurrentPlan && !isPlanApproved;
+  const shouldShowApplyButton = Boolean(selectedDeployment) && isPlanApproved;
+  const deploymentActionHint = selectedDeployment
+    ? getDeploymentActionHint(selectedDeployment)
+    : "";
 
   useEffect(() => {
     let cancelled = false;
@@ -235,13 +255,13 @@ function DeploymentPanel({
     }, "Deployment를 생성하지 못했습니다.");
   }
 
-  async function startTerraformInit(): Promise<void> {
-    if (!selectedDeployment || !canRunInit) {
+  async function startTerraformPlan(): Promise<void> {
+    if (!selectedDeployment || !canRunPlan) {
       return;
     }
 
     await runRequest(async () => {
-      const deployment = await runDeploymentInit(selectedDeployment.id);
+      const deployment = await runDeploymentPlan(selectedDeployment.id);
       setDeployments((currentDeployments) =>
         currentDeployments.map((currentDeployment) =>
           currentDeployment.id === deployment.id ? deployment : currentDeployment
@@ -249,18 +269,53 @@ function DeploymentPanel({
       );
       setSelectedDeploymentId(deployment.id);
       setDeploymentLogs(await listDeploymentLogs(deployment.id));
-    }, "Terraform init을 시작하지 못했습니다.");
+    }, "Terraform Plan을 시작하지 못했습니다.");
+  }
+
+  async function approveCurrentPlan(): Promise<void> {
+    if (!selectedDeployment || !canApprovePlan) {
+      return;
+    }
+
+    await runRequest(async () => {
+      const deployment = await approveDeploymentPlan(selectedDeployment.id);
+      setDeployments((currentDeployments) =>
+        currentDeployments.map((currentDeployment) =>
+          currentDeployment.id === deployment.id ? deployment : currentDeployment
+        )
+      );
+      setSelectedDeploymentId(deployment.id);
+      setDeploymentLogs(await listDeploymentLogs(deployment.id));
+    }, "Terraform Plan을 승인하지 못했습니다.");
   }
 
   async function refreshDeploymentPanel(): Promise<void> {
     await runRequest(async () => {
-      const [nextDeployments, nextLogs] = await Promise.all([
+      const [nextProjectDetails, nextConnections, nextDeployments, nextLogs] = await Promise.all([
+        getProjectDetails(projectId),
+        listAwsConnections(),
         listDeployments(projectId),
         selectedDeploymentId ? listDeploymentLogs(selectedDeploymentId) : Promise.resolve([])
       ]);
+      const latestArchitecture = nextProjectDetails.architectures[0];
+      const latestVerifiedConnection = nextConnections.find(
+        (connection) => connection.status === "verified"
+      );
 
+      setProjectDetails(nextProjectDetails);
+      setAwsConnections(nextConnections);
       setDeployments(nextDeployments);
       setDeploymentLogs(nextLogs);
+      setSelectedArchitectureId((currentId) =>
+        nextProjectDetails.architectures.some((architecture) => architecture.id === currentId)
+          ? currentId
+          : latestArchitecture?.id ?? ""
+      );
+      setSelectedAwsConnectionId((currentId) =>
+        nextConnections.some((connection) => connection.id === currentId)
+          ? currentId
+          : latestVerifiedConnection?.id ?? ""
+      );
     }, "배포 상태를 새로고침하지 못했습니다.");
   }
 
@@ -340,7 +395,7 @@ function DeploymentPanel({
         </button>
 
         {!selectedArchitectureId ? <p className={styles.deploymentHint}>먼저 architecture snapshot이 필요합니다.</p> : null}
-        {!selectedTerraformArtifactId ? <p className={styles.deploymentHint}>Terraform artifact가 있어야 init을 실행할 수 있습니다.</p> : null}
+        {!selectedTerraformArtifactId ? <p className={styles.deploymentHint}>Terraform artifact가 있어야 Plan을 실행할 수 있습니다.</p> : null}
         {!selectedAwsConnectionId ? (
           <p className={styles.deploymentHint}>환경설정에서 AWS 계정을 한 번 연결하고 검증해주세요.</p>
         ) : null}
@@ -381,20 +436,79 @@ function DeploymentPanel({
         {selectedDeployment ? (
           <div className={styles.deploymentSummary}>
             <InfoRow label="Status" value={selectedDeployment.status} />
+            <InfoRow
+              label="Current plan"
+              value={selectedDeployment.currentPlanArtifactId ?? "없음"}
+            />
             <InfoRow label="Blocked" value={selectedDeployment.isBlocked ? "yes" : "no"} />
+            <InfoRow label="Blocked by" value={selectedDeployment.blockedBy ?? "없음"} />
+            <InfoRow label="Reason" value={selectedDeployment.blockedReason ?? "없음"} />
+            <InfoRow label="Approval" value={formatApprovalState(selectedDeployment)} />
+            {selectedDeployment.planSummary ? (
+              <PlanSummaryRows deployment={selectedDeployment} />
+            ) : null}
+            {selectedDeployment.approvedAt ? (
+              <>
+                <InfoRow label="Approved at" value={formatDate(selectedDeployment.approvedAt)} />
+                <InfoRow
+                  label="Approved plan"
+                  value={selectedDeployment.approvedPlanArtifactId ?? "없음"}
+                />
+                <InfoRow
+                  label="tfplan hash"
+                  value={formatShortHash(selectedDeployment.approvedTfplanHash)}
+                />
+                <InfoRow
+                  label="Artifact hash"
+                  value={formatShortHash(selectedDeployment.approvedTerraformArtifactHash)}
+                />
+                <InfoRow
+                  label="AWS account"
+                  value={selectedDeployment.approvedAwsAccountId ?? "없음"}
+                />
+                <InfoRow
+                  label="AWS region"
+                  value={selectedDeployment.approvedAwsRegion ?? "없음"}
+                />
+              </>
+            ) : null}
             <InfoRow label="Error" value={selectedDeployment.errorSummary ?? "없음"} />
           </div>
         ) : null}
 
-        <button
-          className={styles.deploymentPrimaryButton}
-          disabled={!canRunInit}
-          onClick={startTerraformInit}
-          type="button"
-        >
-          <DashboardIcon name="server" />
-          Terraform init 실행
-        </button>
+        {shouldShowPlanButton ? (
+          <button
+            className={styles.deploymentPrimaryButton}
+            disabled={!canRunPlan}
+            onClick={startTerraformPlan}
+            type="button"
+          >
+            <DashboardIcon name="server" />
+            {hasCurrentPlan ? "Terraform Plan 다시 실행" : "Terraform Plan 실행"}
+          </button>
+        ) : null}
+
+        {shouldShowApprovePlanButton ? (
+          <button
+            className={styles.deploymentSecondaryButton}
+            disabled={!canApprovePlan}
+            onClick={approveCurrentPlan}
+            type="button"
+          >
+            Plan 승인
+          </button>
+        ) : null}
+
+        {shouldShowApplyButton ? (
+          <button className={styles.deploymentPrimaryButton} disabled type="button">
+            <DashboardIcon name="rocket" />
+            Apply 실행
+          </button>
+        ) : null}
+
+        {deploymentActionHint ? (
+          <p className={styles.deploymentHint}>{deploymentActionHint}</p>
+        ) : null}
       </section>
 
       <section className={styles.deploymentSection}>
@@ -402,14 +516,9 @@ function DeploymentPanel({
         {deploymentLogs.length === 0 ? (
           <p className={styles.deploymentHint}>아직 표시할 로그가 없습니다.</p>
         ) : (
-          <ol className={styles.deploymentLogList}>
-            {deploymentLogs.map((log) => (
-              <li key={log.id}>
-                <span>{log.level}</span>
-                <p>{log.message}</p>
-              </li>
-            ))}
-          </ol>
+          <pre aria-label="Deployment logs" className={styles.deploymentLogConsole}>
+            {deploymentLogs.map(formatDeploymentLogLine).join("\n")}
+          </pre>
         )}
       </section>
 
@@ -430,6 +539,100 @@ function InfoRow({ label, value }: { readonly label: string; readonly value: str
       <strong>{value}</strong>
     </div>
   );
+}
+
+function PlanSummaryRows({ deployment }: { readonly deployment: Deployment }) {
+  const summary = deployment.planSummary;
+
+  if (!summary) {
+    return null;
+  }
+
+  return (
+    <>
+      <InfoRow
+        label="Plan changes"
+        value={`+${summary.createCount} ~${summary.updateCount} -${summary.deleteCount} +/-${summary.replaceCount}`}
+      />
+      {summary.warnings.length > 0 ? (
+        <div className={styles.deploymentWarnings}>
+          <span>Warnings</span>
+          <ul>
+            {summary.warnings.map((warning, index) => (
+              <li key={`${warning.level}-${index}`}>
+                <strong>{warning.level}</strong>
+                <p>{warning.message}</p>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+function formatApprovalState(deployment: Deployment): string {
+  if (deployment.approvedAt) {
+    return "승인됨";
+  }
+
+  if (!deployment.currentPlanArtifactId) {
+    return "Plan 필요";
+  }
+
+  if (deployment.isBlocked && deployment.blockedBy === "missing_approval") {
+    return "승인 가능";
+  }
+
+  if (deployment.isBlocked) {
+    return "승인 불가";
+  }
+
+  return "승인 필요 없음";
+}
+
+function getDeploymentActionHint(deployment: Deployment): string {
+  if (deployment.status === "RUNNING") {
+    return "Terraform 작업이 진행 중입니다. 새로고침으로 상태를 확인해주세요.";
+  }
+
+  if (deployment.approvedAt) {
+    return "승인된 Plan이 준비되었습니다. 실제 Apply 실행 단계는 아직 연결 전입니다.";
+  }
+
+  if (!deployment.currentPlanArtifactId) {
+    return "Terraform Plan을 먼저 실행하면 승인 버튼이 표시됩니다.";
+  }
+
+  if (deployment.isBlocked && deployment.blockedBy === "missing_approval") {
+    return "Plan 내용을 확인한 뒤 승인할 수 있습니다.";
+  }
+
+  if (deployment.isBlocked) {
+    return "현재 Plan은 승인 전에 차단 사유를 해결해야 합니다.";
+  }
+
+  return "";
+}
+
+function formatDeploymentLogLine(log: DeploymentLog): string {
+  const sequence = String(log.sequence).padStart(3, "0");
+  const stage = log.stage.toUpperCase().padEnd(8, " ");
+  const level = log.level.padEnd(5, " ");
+
+  return `${sequence}  ${stage}  ${level}  ${log.message}`;
+}
+
+function formatShortHash(value: string | null): string {
+  if (!value) {
+    return "없음";
+  }
+
+  if (value.length <= 16) {
+    return value;
+  }
+
+  return `${value.slice(0, 12)}...${value.slice(-4)}`;
 }
 
 function formatDate(value: string): string {

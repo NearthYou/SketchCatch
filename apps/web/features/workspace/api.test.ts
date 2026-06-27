@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  approveDeploymentPlan,
   createAwsConnectionSetup,
   createDeployment,
   deleteAwsConnection,
@@ -8,7 +9,7 @@ import {
   listAwsConnections,
   listDeployments,
   listProjects,
-  runDeploymentInit,
+  runDeploymentPlan,
   saveProjectDraft,
   testAwsConnection,
   verifyAwsConnection
@@ -523,7 +524,7 @@ test("createDeployment posts selected artifact and verified AWS connection", asy
   assert.equal(deployment.status, "PENDING");
 });
 
-test("deployment helpers list records and start init", async (context) => {
+test("deployment helpers list records, start plan, and approve plan", async (context) => {
   const originalFetch = globalThis.fetch;
   const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
   const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
@@ -538,7 +539,7 @@ test("deployment helpers list records and start init", async (context) => {
   globalThis.fetch = async (input, init) => {
     requests.push({ input, init });
 
-    if (String(input).endsWith("/init")) {
+    if (String(input).endsWith("/plan")) {
       return new Response(
         JSON.stringify({
           deployment: createDeploymentPayload({
@@ -552,6 +553,24 @@ test("deployment helpers list records and start init", async (context) => {
             "Content-Type": "application/json"
           },
           status: 202
+        }
+      );
+    }
+
+    if (String(input).endsWith("/approve")) {
+      return new Response(
+        JSON.stringify({
+          deployment: createDeploymentPayload({
+            id: "44444444-4444-4444-8444-444444444444",
+            projectId: project.id,
+            approved: true
+          })
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json"
+          },
+          status: 200
         }
       );
     }
@@ -575,22 +594,31 @@ test("deployment helpers list records and start init", async (context) => {
   };
 
   const deployments = await listDeployments(project.id);
-  const runningDeployment = await runDeploymentInit("44444444-4444-4444-8444-444444444444");
+  const runningDeployment = await runDeploymentPlan("44444444-4444-4444-8444-444444444444");
+  const approvedDeployment = await approveDeploymentPlan("44444444-4444-4444-8444-444444444444");
 
   assert.equal(String(requests[0]?.input), `/api/projects/${project.id}/deployments`);
   assert.equal(
     String(requests[1]?.input),
-    "/api/deployments/44444444-4444-4444-8444-444444444444/init"
+    "/api/deployments/44444444-4444-4444-8444-444444444444/plan"
   );
   assert.equal(requests[1]?.init?.method, "POST");
+  assert.equal(
+    String(requests[2]?.input),
+    "/api/deployments/44444444-4444-4444-8444-444444444444/approve"
+  );
+  assert.equal(requests[2]?.init?.method, "POST");
+  assert.deepEqual(JSON.parse(String(requests[2]?.init?.body)), {});
   assert.equal(deployments[0]?.status, "PENDING");
   assert.equal(runningDeployment.status, "RUNNING");
+  assert.equal(approvedDeployment.approvedPlanArtifactId, "99999999-9999-4999-8999-999999999999");
 });
 
 function createDeploymentPayload(input: {
   id: string;
   projectId: string;
   status?: "PENDING" | "RUNNING";
+  approved?: boolean;
 }) {
   return {
     id: input.id,
@@ -598,6 +626,7 @@ function createDeploymentPayload(input: {
     architectureId: "55555555-5555-4555-8555-555555555555",
     terraformArtifactId: "66666666-6666-4666-8666-666666666666",
     awsConnectionId: "33333333-3333-4333-8333-333333333333",
+    currentPlanArtifactId: null,
     status: input.status ?? "PENDING",
     planSummary: null,
     isBlocked: false,
@@ -608,6 +637,11 @@ function createDeploymentPayload(input: {
     approvedAt: null,
     approvedByUserId: null,
     approvedTerraformArtifactId: null,
+    approvedPlanArtifactId: input.approved ? "99999999-9999-4999-8999-999999999999" : null,
+    approvedTerraformArtifactHash: input.approved ? "a".repeat(64) : null,
+    approvedTfplanHash: input.approved ? "b".repeat(64) : null,
+    approvedAwsAccountId: input.approved ? "123456789012" : null,
+    approvedAwsRegion: input.approved ? "ap-northeast-2" : null,
     createdAt: "2026-06-26T00:00:00.000Z",
     updatedAt: "2026-06-26T00:00:00.000Z"
   };
