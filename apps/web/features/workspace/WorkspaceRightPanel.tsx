@@ -227,7 +227,7 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
         </div>
         <button
           aria-pressed={activeView === "deployment"}
-          className={activeView === "deployment" ? styles.panelIconButtonActive : styles.panelIconButton}
+          className={`${activeView === "deployment" ? styles.panelIconButtonActive : styles.panelIconButton} ${styles.panelDeployButton}`}
           onClick={() => requestView("deployment")}
           title="배포"
           type="button"

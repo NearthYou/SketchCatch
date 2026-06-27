@@ -250,6 +250,10 @@
   flex: 0 0 auto;
 }
 
+.panelDeployButton {
+  margin-left: auto;
+}
+
 .collapsedPanelButton,
 .collapsedPanelButtonActive {
   background: #ffffff;
