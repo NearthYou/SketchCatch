@@ -101,13 +101,18 @@
 
 .draftStatusPanel {
   align-items: center;
-  background: #ffffff;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid #dfe7f4;
+  border-radius: 8px;
+  box-shadow: 0 10px 24px rgba(31, 41, 55, 0.08);
   color: #39465c;
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  min-height: 38px;
-  padding: 8px 14px;
+  min-height: 34px;
+  padding: 6px 10px;
+  width: max-content;
+  max-width: 100%;
 }
 
 .draftStatusLabel {
@@ -147,6 +152,7 @@
 
 .rightPanelShell {
   display: grid;
+  font-size: 12px;
   grid-template-rows: auto minmax(0, 1fr);
   min-height: 100%;
   position: relative;
@@ -158,6 +164,7 @@
   border-left: 1px solid #dde5f2;
   display: flex;
   flex-direction: column;
+  font-size: 13px;
   gap: 8px;
   height: 100%;
   padding: 10px 8px;
@@ -170,8 +177,8 @@
   display: flex;
   gap: 12px;
   justify-content: flex-start;
-  min-height: 58px;
-  padding: 10px 12px;
+  min-height: 52px;
+  padding: 7px 9px;
   position: sticky;
   top: 0;
   z-index: 4;
@@ -211,10 +218,10 @@
   color: #58677d;
   cursor: pointer;
   display: inline-flex;
-  height: 38px;
+  height: 34px;
   justify-content: center;
   padding: 0;
-  width: 38px;
+  width: 34px;
   position: relative;
 }
 
@@ -290,7 +297,7 @@
   background: #fafbfe;
   color: #172033;
   display: grid;
-  font-size: 14px;
+  font-size: 12px;
   grid-template-rows: auto minmax(0, 1fr);
   min-height: 0;
 }
@@ -302,8 +309,8 @@
   display: flex;
   gap: 12px;
   justify-content: space-between;
-  min-height: 58px;
-  padding: 10px 12px;
+  min-height: 50px;
+  padding: 8px 10px;
 }
 
 .resourceSectionTabs,
@@ -323,10 +330,10 @@
   border-radius: 7px;
   cursor: pointer;
   display: inline-flex;
-  height: 36px;
+  height: 32px;
   justify-content: center;
   padding: 0;
-  width: 36px;
+  width: 32px;
 }
 
 .resourceSectionButton {
@@ -396,7 +403,7 @@
 
 .resourceSummaryHeader strong {
   color: #64748b;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 900;
   min-width: 0;
   overflow: hidden;
@@ -462,13 +469,13 @@
 
 .resourceSummaryValues dt {
   color: #1f2937;
-  font-size: 13px;
+  font-size: 12px;
   line-height: 1.35;
 }
 
 .resourceSummaryValues dd {
   color: #64748b;
-  font-size: 13px;
+  font-size: 12px;
   line-height: 1.35;
   margin: 0;
   min-width: 0;
@@ -484,7 +491,7 @@
   color: #4b3b16;
   display: flex;
   flex-wrap: wrap;
-  font-size: 13px;
+  font-size: 12px;
   gap: 10px;
   line-height: 1.4;
   padding: 11px 12px;
@@ -522,14 +529,14 @@
 
 .variableCard strong {
   color: #111827;
-  font-size: 14px;
+  font-size: 13px;
   line-height: 1.25;
 }
 
 .variableCard span {
   color: #64748b;
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-  font-size: 13px;
+  font-size: 12px;
   line-height: 1.35;
   min-width: 0;
   overflow: hidden;
@@ -577,14 +584,14 @@
 
 .resourceEmptyState h2 {
   color: #111827;
-  font-size: 17px;
+  font-size: 15px;
   line-height: 1.25;
   margin: 0;
 }
 
 .resourceEmptyState p {
   color: #526179;
-  font-size: 14px;
+  font-size: 13px;
   line-height: 1.45;
   margin: 0;
 }
@@ -618,8 +625,8 @@
   display: flex;
   gap: 10px;
   justify-content: space-between;
-  min-height: 52px;
-  padding: 10px 12px;
+  min-height: 48px;
+  padding: 8px 10px;
 }
 
 .terraformFileChip {
@@ -629,11 +636,11 @@
   border-radius: 6px;
   color: #172033;
   display: inline-flex;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 850;
   gap: 7px;
   min-width: 0;
-  padding: 8px 10px;
+  padding: 7px 9px;
 }
 
 .terraformFileChip span {
@@ -656,12 +663,12 @@
   cursor: pointer;
   display: inline-flex;
   font: inherit;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 850;
   gap: 7px;
-  height: 36px;
-  max-width: 180px;
-  min-width: 112px;
+  height: 34px;
+  max-width: 170px;
+  min-width: 104px;
   padding: 0 9px;
 }
 
@@ -699,9 +706,10 @@
   border-radius: 5px;
   color: #172033;
   font: inherit;
-  min-height: 38px;
+  font-size: 12px;
+  min-height: 34px;
   min-width: 0;
-  padding: 8px 10px;
+  padding: 7px 9px;
 }
 
 .terraformFileSearch:focus {
@@ -724,9 +732,9 @@
   color: #111827;
   cursor: pointer;
   font: inherit;
-  font-size: 14px;
-  min-height: 36px;
-  padding: 7px 12px;
+  font-size: 12px;
+  min-height: 32px;
+  padding: 6px 10px;
   text-align: left;
 }
 
@@ -746,7 +754,7 @@
 
 .terraformFileEmpty {
   color: #64748b;
-  font-size: 13px;
+  font-size: 12px;
   padding: 8px 12px;
 }
 
@@ -767,15 +775,15 @@
   display: flex;
   gap: 12px;
   justify-content: space-between;
-  min-height: 58px;
-  padding: 10px 12px;
+  min-height: 50px;
+  padding: 8px 10px;
 }
 
 .resourceCodeTitle {
   align-items: center;
   color: #172033;
   display: inline-flex;
-  font-size: 17px;
+  font-size: 15px;
   font-weight: 900;
   gap: 10px;
   min-width: 0;
@@ -796,10 +804,10 @@
   color: #243044;
   cursor: pointer;
   display: inline-flex;
-  height: 34px;
+  height: 32px;
   justify-content: center;
   padding: 0;
-  width: 34px;
+  width: 32px;
 }
 
 .resourceCodeBackButton:hover,
@@ -820,8 +828,8 @@
   flex-wrap: wrap;
   gap: 7px;
   justify-content: flex-end;
-  min-height: 58px;
-  padding: 10px 12px;
+  min-height: 50px;
+  padding: 8px 10px;
 }
 
 .resourceActionPrimary,
@@ -899,10 +907,10 @@
   color: #243044;
   cursor: pointer;
   display: inline-flex;
-  height: 36px;
+  height: 32px;
   justify-content: center;
   padding: 0;
-  width: 36px;
+  width: 32px;
 }
 
 .terraformActions button:hover,
@@ -925,12 +933,12 @@
   border-bottom: 1px solid #dce3ee;
   color: #64748b;
   display: flex;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 800;
   gap: 10px;
   justify-content: space-between;
-  min-height: 34px;
-  padding: 7px 12px;
+  min-height: 30px;
+  padding: 6px 10px;
 }
 
 .terraformStatusEdited,
@@ -966,7 +974,7 @@
   box-sizing: border-box;
   color: #9aa4b2;
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-  font-size: 13px;
+  font-size: 12px;
   height: 100%;
   line-height: 1.6;
   list-style: none;
@@ -983,7 +991,7 @@
   box-sizing: border-box;
   color: #d7e4f7;
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-  font-size: 13px;
+  font-size: 12px;
   height: 100%;
   line-height: 1.6;
   max-height: 100%;
@@ -1044,12 +1052,12 @@
 .terraformSaveBannerError {
   align-items: center;
   display: flex;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 750;
   gap: 10px;
   justify-content: space-between;
-  min-height: 34px;
-  padding: 7px 10px;
+  min-height: 30px;
+  padding: 6px 10px;
 }
 
 .terraformSaveBanner {
@@ -1104,7 +1112,7 @@
   align-content: start;
   border-top: 0;
   min-height: 100%;
-  padding: 16px;
+  padding: 14px;
 }
 
 .terraformDiagnosticsHeader {
@@ -1115,7 +1123,7 @@
 }
 
 .terraformDiagnosticsHeader h3 {
-  font-size: 14px;
+  font-size: 13px;
   margin: 0;
 }
 
@@ -1257,9 +1265,9 @@
   border-radius: 7px;
   cursor: pointer;
   font: inherit;
-  font-size: 13px;
   font-weight: 850;
-  min-height: 38px;
+  font-size: 12px;
+  min-height: 34px;
   padding: 0 12px;
 }
 

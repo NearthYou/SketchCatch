@@ -2,7 +2,7 @@
   background: #f4f6fb;
   color: #171c2f;
   display: grid;
-  grid-template-columns: minmax(320px, 340px) minmax(0, 1fr) clamp(520px, 42vw, 680px);
+  grid-template-columns: minmax(320px, 340px) minmax(0, 1fr) clamp(440px, 34vw, 560px);
   height: 100vh;
   min-height: 640px;
   outline: none;
@@ -36,23 +36,27 @@
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.68), rgba(244, 247, 252, 0.86)),
     #f6f8fc;
-  display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
   min-width: 0;
+  overflow: hidden;
+  position: relative;
 }
 
 .canvasToolbar {
   align-items: center;
   background: rgba(255, 255, 255, 0.92);
-  border-bottom: 1px solid #dfe7f4;
-  box-shadow: 0 1px 0 rgba(92, 108, 142, 0.06);
+  border: 1px solid #dfe7f4;
+  border-radius: 8px;
+  box-shadow: 0 12px 30px rgba(31, 41, 55, 0.1);
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  min-height: 58px;
-  padding: 10px 14px;
-  position: relative;
-  z-index: 4;
+  left: 12px;
+  min-height: 52px;
+  padding: 8px 12px;
+  position: absolute;
+  right: 12px;
+  top: 12px;
+  z-index: 12;
 }
 
 .toolbarBrand {
@@ -104,15 +108,16 @@
 }
 
 .draftStatusPanelSlot {
-  border-bottom: 1px solid #dfe7f4;
-  grid-row: 2;
-  position: relative;
-  z-index: 3;
+  left: 12px;
+  position: absolute;
+  right: 12px;
+  top: 76px;
+  z-index: 11;
 }
 
 .canvasPanel {
   background: #f8faff;
-  grid-row: 3;
+  height: 100%;
   min-height: 0;
   position: relative;
 }
