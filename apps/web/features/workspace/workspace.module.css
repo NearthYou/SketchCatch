@@ -121,6 +121,8 @@
 }
 
 .rightPanelView {
+  display: grid;
+  height: 100%;
   min-height: 0;
 }
 
@@ -209,9 +211,10 @@
 .terraformPanel {
   background: #f7f9fd;
   color: #172033;
-  display: grid;
-  grid-template-rows: auto auto auto minmax(320px, 1fr) auto;
-  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
 }
 
 .terraformTopBar {
@@ -555,8 +558,9 @@
   background: #1c1c1c;
   border-bottom: 1px solid #101214;
   display: grid;
+  flex: 1 1 auto;
   grid-template-columns: 58px minmax(0, 1fr);
-  min-height: 0;
+  min-height: clamp(520px, calc(100vh - 230px), 900px);
   overflow: hidden;
 }
 
