@@ -37,7 +37,7 @@ import {
   listAwsConnections,
   listDeploymentLogs,
   listDeployments,
-  runDeploymentInit,
+  runDeploymentPlan,
   syncTerraformToDiagram,
   validateTerraformCode
 } from "./api";
