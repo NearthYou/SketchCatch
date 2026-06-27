@@ -74,7 +74,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
 
     reply.status(statusCode).send({
       error: getErrorCode(statusCode, error),
-      message: getErrorMessage(error)
+      message: getResponseErrorMessage(statusCode, error)
     });
   });
 
@@ -172,6 +172,14 @@ function getErrorMessage(error: unknown): string {
   }
 
   return "Unexpected error";
+}
+
+function getResponseErrorMessage(statusCode: number, error: unknown): string {
+  if (statusCode >= 500 && process.env.NODE_ENV === "production") {
+    return "Internal server error";
+  }
+
+  return getErrorMessage(error);
 }
 
 function hasStatusCode(error: unknown): error is { readonly statusCode: number } {
