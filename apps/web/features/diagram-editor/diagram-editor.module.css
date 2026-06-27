@@ -2,16 +2,17 @@
   background: #f4f6fb;
   color: #171c2f;
   display: grid;
-  grid-template-columns: minmax(320px, 340px) minmax(0, 1fr) clamp(440px, 34vw, 560px);
+  grid-template-columns: 0 minmax(0, 1fr) clamp(440px, 34vw, 560px);
   height: 100vh;
   min-height: 640px;
   outline: none;
   overflow: hidden;
+  position: relative;
   width: 100%;
 }
 
 .editorShellRightCollapsed {
-  grid-template-columns: minmax(320px, 340px) minmax(0, 1fr) 0;
+  grid-template-columns: 0 minmax(0, 1fr) 0;
 }
 
 .leftRail,
@@ -23,8 +24,16 @@
 }
 
 .leftRail {
-  border-width: 0 1px 0 0;
-  overflow: auto;
+  border: 1px solid #dfe7f4;
+  border-radius: 8px;
+  box-shadow: 0 18px 42px rgba(20, 30, 50, 0.13);
+  height: min(760px, calc(100vh - 118px));
+  left: 14px;
+  overflow: hidden;
+  position: fixed;
+  top: 96px;
+  width: min(360px, calc(100vw - 32px));
+  z-index: 21;
 }
 
 .rightRail {
@@ -776,8 +785,15 @@
 
 @media (max-width: 900px) {
   .editorShell {
-    grid-template-columns: 220px minmax(520px, 1fr);
+    grid-template-columns: 0 minmax(520px, 1fr);
     overflow: auto;
+  }
+
+  .leftRail {
+    height: min(680px, calc(100vh - 96px));
+    left: 10px;
+    top: 84px;
+    width: min(330px, calc(100vw - 20px));
   }
 
   .rightRail {

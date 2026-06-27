@@ -136,7 +136,7 @@ export function ResourceSettingsPanel({
           </button>
         </div>
         <button aria-label="Collapse resource panel" className="resourcePanelCollapse" type="button">
-          <PanelLeftClose aria-hidden="true" size={22} />
+          <PanelLeftClose aria-hidden="true" size={18} />
         </button>
       </div>
 
@@ -153,16 +153,16 @@ export function ResourceSettingsPanel({
         </div>
         <div className="resourceViewToggles" aria-label="Resource view mode">
           <button aria-pressed="true" className="resourceViewToggleActive" type="button" title="Resources">
-            <Box aria-hidden="true" size={27} />
+            <Box aria-hidden="true" size={20} />
           </button>
           <button aria-pressed="false" className="resourceViewToggle" type="button" title="Modules">
-            <Boxes aria-hidden="true" size={27} />
+            <Boxes aria-hidden="true" size={20} />
           </button>
         </div>
       </div>
 
       <label className="searchBox">
-        <Search size={23} aria-hidden="true" />
+        <Search size={18} aria-hidden="true" />
         <input
           value={search}
           onChange={(event) => setSearch(event.target.value)}
@@ -223,10 +223,10 @@ function ResourceSection({
         type="button"
       >
         <span className="resourceAreaIcon" aria-hidden="true">
-          <SectionIcon size={30} strokeWidth={2.2} />
+          <SectionIcon size={22} strokeWidth={2.1} />
         </span>
         <span className="resourceAreaLabel">{section.label}</span>
-        {isOpen ? <ChevronUp aria-hidden="true" size={22} /> : <ChevronDown aria-hidden="true" size={22} />}
+        {isOpen ? <ChevronUp aria-hidden="true" size={18} /> : <ChevronDown aria-hidden="true" size={18} />}
       </button>
 
       {isOpen && section.kind === "modules" ? <ModulesEmptyState /> : null}
@@ -264,11 +264,11 @@ function ModulesEmptyState() {
       <p>Import your modules or pick from our catalog</p>
       <div className="modulesActions">
         <button className="modulesImportButton" type="button">
-          <Download aria-hidden="true" size={20} />
+          <Download aria-hidden="true" size={16} />
           <span>Import</span>
         </button>
         <button className="modulesCatalogButton" type="button">
-          <LayoutGrid aria-hidden="true" size={20} />
+          <LayoutGrid aria-hidden="true" size={16} />
           <span>Catalog</span>
         </button>
       </div>
