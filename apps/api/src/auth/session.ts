@@ -148,7 +148,7 @@ function setRefreshTokenCookie(reply: FastifyReply, refreshToken: string): void 
   ]);
 }
 
-function serializeAuthCookie(
+export function serializeAuthCookie(
   name: string,
   value: string,
   options: {

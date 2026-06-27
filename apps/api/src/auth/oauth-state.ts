@@ -2,6 +2,7 @@ import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import type { OAuthProvider } from "@sketchcatch/types";
 import { requireAuthTokenSecret } from "../config/env.js";
+import { serializeAuthCookie } from "./session.js";
 
 const OAUTH_STATE_COOKIE_NAME = "sketchcatch_oauth_state";
 const OAUTH_STATE_COOKIE_PATH = "/api/auth/oauth";
@@ -19,7 +20,7 @@ export function createOAuthState(): string {
 export function setOAuthStateCookie(reply: FastifyReply, value: OAuthStateCookie): void {
   appendSetCookieHeader(
     reply,
-    serializeOAuthCookie(OAUTH_STATE_COOKIE_NAME, signOAuthStateCookieValue(value), {
+    serializeAuthCookie(OAUTH_STATE_COOKIE_NAME, signOAuthStateCookieValue(value), {
       httpOnly: true,
       maxAge: OAUTH_STATE_COOKIE_MAX_AGE_SECONDS,
       path: OAUTH_STATE_COOKIE_PATH
@@ -53,7 +54,7 @@ export function readOAuthStateCookie(request: FastifyRequest): OAuthStateCookie 
 export function clearOAuthStateCookie(reply: FastifyReply): void {
   appendSetCookieHeader(
     reply,
-    serializeOAuthCookie(OAUTH_STATE_COOKIE_NAME, "", {
+    serializeAuthCookie(OAUTH_STATE_COOKIE_NAME, "", {
       expires: new Date(0),
       httpOnly: true,
       maxAge: 0,
@@ -138,36 +139,4 @@ function appendSetCookieHeader(reply: FastifyReply, cookie: string): void {
 
 function isOAuthProvider(value: unknown): value is OAuthProvider {
   return value === "naver" || value === "kakao" || value === "github";
-}
-
-function serializeOAuthCookie(
-  name: string,
-  value: string,
-  options: {
-    expires?: Date;
-    httpOnly?: boolean;
-    maxAge: number;
-    path: string;
-  }
-): string {
-  const attributes = [
-    `${name}=${value}`,
-    "SameSite=Lax",
-    `Path=${options.path}`,
-    `Max-Age=${options.maxAge}`
-  ];
-
-  if (options.httpOnly) {
-    attributes.push("HttpOnly");
-  }
-
-  if (options.expires) {
-    attributes.push(`Expires=${options.expires.toUTCString()}`);
-  }
-
-  if (process.env.NODE_ENV === "production") {
-    attributes.push("Secure");
-  }
-
-  return attributes.join("; ");
 }
