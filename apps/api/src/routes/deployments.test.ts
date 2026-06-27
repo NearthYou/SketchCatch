@@ -1040,7 +1040,7 @@ test("POST /api/deployments/:deploymentId/init maps missing Terraform artifacts 
 
 test("POST /api/deployments/:deploymentId/plan starts Terraform plan in the background", async () => {
   const repository = new FakeDeploymentRepository();
-  const planCalls: Array<{ deploymentId: string; accessContext: ProjectAccessContext }> = [];
+  const planCalls: RunDeploymentPlanInput[] = [];
   repository.deployment = createDeploymentRecord(deploymentId, {
     approvedAt: fixedNow,
     approvedByUserId: userId,
@@ -1103,6 +1103,7 @@ test("POST /api/deployments/:deploymentId/plan starts Terraform plan in the back
   assert.deepEqual(planCalls, [
     {
       deploymentId,
+      startedFromStatus: "PENDING",
       accessContext: {
         kind: "user",
         userId

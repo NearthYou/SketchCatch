@@ -313,7 +313,8 @@ export async function registerDeploymentRoutes(
       startDeploymentPlanJob(
         {
           deploymentId: params.deploymentId,
-          accessContext
+          accessContext,
+          startedFromStatus: deployment.status
         },
         repository,
         runDeploymentPlan,

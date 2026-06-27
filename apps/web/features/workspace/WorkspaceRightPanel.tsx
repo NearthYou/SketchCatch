@@ -291,13 +291,31 @@ function DeploymentPanel({
 
   async function refreshDeploymentPanel(): Promise<void> {
     await runRequest(async () => {
-      const [nextDeployments, nextLogs] = await Promise.all([
+      const [nextProjectDetails, nextConnections, nextDeployments, nextLogs] = await Promise.all([
+        getProjectDetails(projectId),
+        listAwsConnections(),
         listDeployments(projectId),
         selectedDeploymentId ? listDeploymentLogs(selectedDeploymentId) : Promise.resolve([])
       ]);
+      const latestArchitecture = nextProjectDetails.architectures[0];
+      const latestVerifiedConnection = nextConnections.find(
+        (connection) => connection.status === "verified"
+      );
 
+      setProjectDetails(nextProjectDetails);
+      setAwsConnections(nextConnections);
       setDeployments(nextDeployments);
       setDeploymentLogs(nextLogs);
+      setSelectedArchitectureId((currentId) =>
+        nextProjectDetails.architectures.some((architecture) => architecture.id === currentId)
+          ? currentId
+          : latestArchitecture?.id ?? ""
+      );
+      setSelectedAwsConnectionId((currentId) =>
+        nextConnections.some((connection) => connection.id === currentId)
+          ? currentId
+          : latestVerifiedConnection?.id ?? ""
+      );
     }, "배포 상태를 새로고침하지 못했습니다.");
   }
 

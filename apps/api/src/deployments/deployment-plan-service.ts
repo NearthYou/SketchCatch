@@ -7,6 +7,7 @@ import type {
   AwsConnection,
   CheckFinding,
   DeploymentBlockedBy,
+  DeploymentStatus,
   DeploymentPlanSummary,
   DeploymentPlanWarning
 } from "@sketchcatch/types";
@@ -44,7 +45,6 @@ import {
   runTerraformInit as defaultRunTerraformInit,
   runTerraformPlan as defaultRunTerraformPlan,
   runTerraformShowJson as defaultRunTerraformShowJson,
-  runTerraformValidate as defaultRunTerraformValidate,
   type TerraformRunResult
 } from "./terraform-runner.js";
 
@@ -53,12 +53,12 @@ const defaultPlanFileName = "tfplan";
 export type RunDeploymentPlanInput = {
   deploymentId: string;
   accessContext: ProjectAccessContext;
+  startedFromStatus?: DeploymentStatus;
 };
 
 export type RunDeploymentPlanOptions = {
   prepareTerraformWorkspace?: typeof defaultPrepareTerraformWorkspace;
   runTerraformInit?: typeof defaultRunTerraformInit;
-  runTerraformValidate?: typeof defaultRunTerraformValidate;
   runTerraformPlan?: typeof defaultRunTerraformPlan;
   runTerraformShowJson?: typeof defaultRunTerraformShowJson;
   prepareTerraformAwsCredentialEnv?: (
@@ -89,7 +89,6 @@ export async function runDeploymentPlan(
   const prepareTerraformWorkspace =
     options.prepareTerraformWorkspace ?? defaultPrepareTerraformWorkspace;
   const runTerraformInit = options.runTerraformInit ?? defaultRunTerraformInit;
-  const runTerraformValidate = options.runTerraformValidate ?? defaultRunTerraformValidate;
   const runTerraformPlan = options.runTerraformPlan ?? defaultRunTerraformPlan;
   const runTerraformShowJson = options.runTerraformShowJson ?? defaultRunTerraformShowJson;
   const prepareTerraformAwsCredentialEnv =
@@ -130,6 +129,22 @@ export async function runDeploymentPlan(
       input.accessContext,
       repository
     );
+    const canReusePlanArtifact = await canReuseDeploymentPlanArtifact({
+      deployment,
+      startedFromStatus: input.startedFromStatus,
+      terraformArtifactId: artifact.id,
+      accountId: awsConnection.accountId,
+      region: awsConnection.region,
+      repository
+    });
+
+    if (canReusePlanArtifact) {
+      return {
+        deployment: await restorePendingDeploymentStatus(deployment, repository),
+        terraform
+      };
+    }
+
     const architecture = await repository.findArchitectureInProject(
       deployment.architectureId,
       deployment.projectId
@@ -174,29 +189,6 @@ export async function runDeploymentPlan(
         terraform,
         failureStage: "init",
         errorSummary: summarizeTerraformFailure("Terraform init", terraform.init)
-      });
-    }
-
-    terraform.validate = await runTerraformValidate(workspace.workdir, {
-      env: awsCredentials.env
-    });
-    sequence = await appendTerraformOutput({
-      deploymentId: deployment.id,
-      accessContext: input.accessContext,
-      sequence,
-      stage: "validate",
-      result: terraform.validate,
-      repository
-    });
-
-    if (terraform.validate.exitCode !== 0) {
-      return failDeploymentPlanRun({
-        deployment,
-        accessContext: input.accessContext,
-        repository,
-        terraform,
-        failureStage: "validate",
-        errorSummary: summarizeTerraformFailure("Terraform validate", terraform.validate)
       });
     }
 
@@ -322,6 +314,66 @@ export async function runDeploymentPlan(
   } finally {
     await workspace?.cleanup();
   }
+}
+
+async function canReuseDeploymentPlanArtifact(input: {
+  deployment: DeploymentRecord;
+  startedFromStatus: DeploymentStatus | undefined;
+  terraformArtifactId: string;
+  accountId: string | null;
+  region: string;
+  repository: DeploymentRepository;
+}): Promise<boolean> {
+  const startedFromStatus = input.startedFromStatus ?? input.deployment.status;
+
+  if (startedFromStatus !== "PENDING") {
+    return false;
+  }
+
+  if (
+    !input.deployment.currentPlanArtifactId ||
+    !input.deployment.planSummary ||
+    !input.deployment.isBlocked
+  ) {
+    return false;
+  }
+
+  const currentPlanArtifact = await input.repository.findDeploymentPlanArtifactById(
+    input.deployment.currentPlanArtifactId
+  );
+
+  if (!currentPlanArtifact || currentPlanArtifact.deploymentId !== input.deployment.id) {
+    return false;
+  }
+
+  if (
+    currentPlanArtifact.terraformArtifactId !== input.terraformArtifactId ||
+    !currentPlanArtifact.terraformArtifactSha256 ||
+    !input.accountId ||
+    currentPlanArtifact.accountId !== input.accountId ||
+    currentPlanArtifact.region !== input.region
+  ) {
+    return false;
+  }
+
+  return true;
+}
+
+async function restorePendingDeploymentStatus(
+  deployment: DeploymentRecord,
+  repository: DeploymentRepository
+): Promise<DeploymentRecord> {
+  if (deployment.status === "PENDING") {
+    return deployment;
+  }
+
+  const updatedDeployment = await repository.updateDeploymentStatus(deployment.id, "PENDING");
+
+  if (!updatedDeployment) {
+    throw new DeploymentNotFoundError("Deployment not found");
+  }
+
+  return updatedDeployment;
 }
 
 async function requireDeploymentTerraformArtifact(

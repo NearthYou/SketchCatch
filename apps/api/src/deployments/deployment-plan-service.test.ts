@@ -521,10 +521,6 @@ test("runDeploymentPlan saves a tfplan artifact, summary, block, logs, and curre
         runnerStages.push("init");
         return createRunnerResult("init");
       },
-      runTerraformValidate: async () => {
-        runnerStages.push("validate");
-        return createRunnerResult("validate");
-      },
       runTerraformPlan: async () => {
         runnerStages.push("plan");
         return createRunnerResult("plan", {
@@ -548,7 +544,7 @@ test("runDeploymentPlan saves a tfplan artifact, summary, block, logs, and curre
     }
   );
 
-  assert.deepEqual(runnerStages, ["init", "validate", "plan", "show-json"]);
+  assert.deepEqual(runnerStages, ["init", "plan", "show-json"]);
   assert.equal(cleanupCalled, true);
   assert.equal(result.deployment.status, "PENDING");
   assert.equal(result.deployment.currentPlanArtifactId, planArtifactId);
@@ -590,17 +586,144 @@ test("runDeploymentPlan saves a tfplan artifact, summary, block, logs, and curre
     })),
     [
       { sequence: 1, stage: "init", level: "INFO", message: "init ok" },
-      { sequence: 2, stage: "validate", level: "INFO", message: "validate ok" },
       {
-        sequence: 3,
+        sequence: 2,
         stage: "plan",
         level: "INFO",
         message: "Plan: 1 to add, 0 to change, 0 to destroy."
       },
-      { sequence: 4, stage: "plan", level: "WARN", message: "show warning only" }
+      { sequence: 3, stage: "plan", level: "WARN", message: "show warning only" }
     ]
   );
   assert.equal(repository.logs.some((log) => log.message.includes("resource_changes")), false);
+});
+
+test("runDeploymentPlan reuses an unchanged pending plan artifact without rerunning Terraform", async () => {
+  const repository = new FakeDeploymentRepository();
+  const planSummary = {
+    createCount: 1,
+    updateCount: 0,
+    deleteCount: 0,
+    replaceCount: 0,
+    blocked: true,
+    warnings: []
+  };
+  repository.deployment = createDeploymentRecord(deploymentId, {
+    status: "RUNNING",
+    currentPlanArtifactId: planArtifactId,
+    planSummary,
+    isBlocked: true,
+    blockedBy: "missing_approval",
+    blockedReason: "Terraform Plan requires user approval before apply"
+  });
+  const planArtifactStorage = new FakePlanArtifactStorage();
+  const runnerStages: string[] = [];
+
+  const result = await runDeploymentPlan(
+    {
+      deploymentId,
+      accessContext: createAccessContext(),
+      startedFromStatus: "PENDING"
+    },
+    repository,
+    {
+      generatePlanArtifactId: () => "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      planArtifactStorage,
+      readTerraformArtifactFile: async () => {
+        throw new Error("Terraform artifact should not be read for a reusable plan");
+      },
+      analyzePreDeployment: () => {
+        throw new Error("Pre-deployment analysis should not rerun for a reusable plan");
+      },
+      prepareTerraformWorkspace: async () => {
+        throw new Error("Terraform workspace should not be restored for a reusable plan");
+      },
+      prepareTerraformAwsCredentialEnv: async () => {
+        throw new Error("AWS credentials should not be prepared for a reusable plan");
+      },
+      runTerraformInit: async () => {
+        runnerStages.push("init");
+        return createRunnerResult("init");
+      },
+      runTerraformPlan: async () => {
+        runnerStages.push("plan");
+        return createRunnerResult("plan");
+      },
+      runTerraformShowJson: async () => {
+        runnerStages.push("show-json");
+        return createRunnerResult("show");
+      }
+    }
+  );
+
+  assert.deepEqual(runnerStages, []);
+  assert.equal(result.deployment.status, "PENDING");
+  assert.equal(result.deployment.currentPlanArtifactId, planArtifactId);
+  assert.deepEqual(result.deployment.planSummary, planSummary);
+  assert.equal(repository.savedPlans.length, 0);
+  assert.equal(planArtifactStorage.uploads.length, 0);
+  assert.equal(repository.logs.length, 0);
+});
+
+test("runDeploymentPlan does not reuse an existing plan after a completed deployment", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.deployment = createDeploymentRecord(deploymentId, {
+    status: "RUNNING",
+    currentPlanArtifactId: planArtifactId,
+    planSummary: {
+      createCount: 1,
+      updateCount: 0,
+      deleteCount: 0,
+      replaceCount: 0,
+      blocked: true,
+      warnings: []
+    },
+    isBlocked: true,
+    blockedBy: "missing_approval",
+    blockedReason: "Terraform Plan requires user approval before apply"
+  });
+  const planArtifactStorage = new FakePlanArtifactStorage();
+  const runnerStages: string[] = [];
+
+  const result = await runDeploymentPlan(
+    {
+      deploymentId,
+      accessContext: createAccessContext(),
+      startedFromStatus: "SUCCESS"
+    },
+    repository,
+    {
+      generatePlanArtifactId: () => "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      planArtifactStorage,
+      readTerraformArtifactFile: async () => terraformArtifactContent,
+      analyzePreDeployment: () => createAnalysis(),
+      prepareTerraformWorkspace: async () => ({
+        workdir: "C:/tmp/sketchcatch-terraform-rerun-after-success",
+        mainFilePath: "C:/tmp/sketchcatch-terraform-rerun-after-success/main.tf",
+        cleanup: async () => undefined
+      }),
+      prepareTerraformAwsCredentialEnv: async () => createPreparedCredentials(),
+      runTerraformInit: async () => {
+        runnerStages.push("init");
+        return createRunnerResult("init");
+      },
+      runTerraformPlan: async () => {
+        runnerStages.push("plan");
+        return createRunnerResult("plan");
+      },
+      runTerraformShowJson: async () => {
+        runnerStages.push("show-json");
+        return createRunnerResult("show", {
+          stdout: createPlanJson([])
+        });
+      }
+    }
+  );
+
+  assert.deepEqual(runnerStages, ["init", "plan", "show-json"]);
+  assert.equal(result.deployment.currentPlanArtifactId, "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
+  assert.equal(repository.savedPlans.length, 1);
+  assert.equal(planArtifactStorage.uploads.length, 1);
 });
 
 test("runDeploymentPlan blocks destructive or high-risk plans with risk_analysis", async () => {
@@ -636,7 +759,6 @@ test("runDeploymentPlan blocks destructive or high-risk plans with risk_analysis
       }),
       prepareTerraformAwsCredentialEnv: async () => createPreparedCredentials(),
       runTerraformInit: async () => createRunnerResult("init"),
-      runTerraformValidate: async () => createRunnerResult("validate"),
       runTerraformPlan: async () => createRunnerResult("plan"),
       runTerraformShowJson: async () =>
         createRunnerResult("show", {
@@ -670,10 +792,10 @@ test("runDeploymentPlan blocks destructive or high-risk plans with risk_analysis
   ]);
 });
 
-test("runDeploymentPlan marks validate failures failed and masks secret output", async () => {
+test("runDeploymentPlan marks plan validation failures failed and masks secret output", async () => {
   const repository = new FakeDeploymentRepository();
   const planArtifactStorage = new FakePlanArtifactStorage();
-  let planRan = false;
+  let showJsonRan = false;
 
   const result = await runDeploymentPlan(
     {
@@ -692,30 +814,29 @@ test("runDeploymentPlan marks validate failures failed and masks secret output",
       }),
       prepareTerraformAwsCredentialEnv: async () => createPreparedCredentials(),
       runTerraformInit: async () => createRunnerResult("init"),
-      runTerraformValidate: async () =>
-        createRunnerResult("validate", {
+      runTerraformPlan: async () =>
+        createRunnerResult("plan", {
           exitCode: 1,
           stderr: "Error: aws_secret_access_key = super-secret\n"
         }),
-      runTerraformPlan: async () => {
-        planRan = true;
-        return createRunnerResult("plan");
+      runTerraformShowJson: async () => {
+        showJsonRan = true;
+        return createRunnerResult("show");
       }
     }
   );
 
   assert.equal(result.deployment.status, "FAILED");
-  assert.equal(result.deployment.failureStage, "validate");
+  assert.equal(result.deployment.failureStage, "plan");
   assert.equal(result.deployment.errorSummary, "Error: [REDACTED]");
-  assert.equal(planRan, false);
+  assert.equal(showJsonRan, false);
   assert.equal(planArtifactStorage.uploads.length, 0);
   assert.equal(repository.logs.some((log) => log.message.includes("super-secret")), false);
 });
 
-test("runDeploymentPlan stops at init failures before validate or plan", async () => {
+test("runDeploymentPlan stops at init failures before plan", async () => {
   const repository = new FakeDeploymentRepository();
   const planArtifactStorage = new FakePlanArtifactStorage();
-  let validateRan = false;
   let planRan = false;
   repository.deployment = createDeploymentRecord(deploymentId, {
     approvedAt: fixedNow,
@@ -749,10 +870,6 @@ test("runDeploymentPlan stops at init failures before validate or plan", async (
           exitCode: 1,
           stderr: "Error: provider install failed\n"
         }),
-      runTerraformValidate: async () => {
-        validateRan = true;
-        return createRunnerResult("validate");
-      },
       runTerraformPlan: async () => {
         planRan = true;
         return createRunnerResult("plan");
@@ -771,7 +888,6 @@ test("runDeploymentPlan stops at init failures before validate or plan", async (
   assert.equal(result.deployment.approvedTfplanHash, null);
   assert.equal(result.deployment.approvedAwsAccountId, null);
   assert.equal(result.deployment.approvedAwsRegion, null);
-  assert.equal(validateRan, false);
   assert.equal(planRan, false);
   assert.equal(planArtifactStorage.uploads.length, 0);
 });
@@ -798,7 +914,6 @@ test("runDeploymentPlan stops at plan failures before show-json or artifact uplo
       }),
       prepareTerraformAwsCredentialEnv: async () => createPreparedCredentials(),
       runTerraformInit: async () => createRunnerResult("init"),
-      runTerraformValidate: async () => createRunnerResult("validate"),
       runTerraformPlan: async () =>
         createRunnerResult("plan", {
           exitCode: 1,
@@ -845,7 +960,6 @@ test("runDeploymentPlan deletes uploaded tfplan and preserves the old pointer wh
       }),
       prepareTerraformAwsCredentialEnv: async () => createPreparedCredentials(),
       runTerraformInit: async () => createRunnerResult("init"),
-      runTerraformValidate: async () => createRunnerResult("validate"),
       runTerraformPlan: async () => createRunnerResult("plan"),
       runTerraformShowJson: async () =>
         createRunnerResult("show", {
