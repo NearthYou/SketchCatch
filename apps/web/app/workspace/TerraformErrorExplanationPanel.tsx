@@ -13,6 +13,12 @@ type TerraformErrorExplanationPanelProps = {
   readonly stage: AiTerraformStage;
 };
 
+type TerraformErrorExplanationResultItem = {
+  readonly id: string;
+  readonly label: string;
+  readonly text: string;
+};
+
 const stageOptions: readonly AiTerraformStage[] = ["validate", "export", "plan", "apply"];
 
 // Terraform Preview 설명과 실제 오류 메시지 설명을 UI에서 분리해 혼동을 막습니다.
@@ -78,23 +84,29 @@ export function TerraformErrorExplanationPanel({
 
       {explanation === null ? null : (
         <ResultList
-          items={[
-            {
-              id: "likely-cause",
-              label: `${explanation.severity.toUpperCase()} · ${explanation.category}`,
-              text: explanation.likelyCause
-            },
-            ...explanation.nextActions.map((action) => ({
-              id: action,
-              label: "다음 행동",
-              text: action
-            }))
-          ]}
+          items={createTerraformErrorExplanationItems(explanation)}
           summary={explanation.summary}
         />
       )}
     </section>
   );
+}
+
+export function createTerraformErrorExplanationItems(
+  explanation: AiTerraformErrorExplanationResult
+): TerraformErrorExplanationResultItem[] {
+  return [
+    {
+      id: "likely-cause",
+      label: `${explanation.severity.toUpperCase()} · ${explanation.category}`,
+      text: explanation.likelyCause
+    },
+    ...explanation.nextActions.map((action, index) => ({
+      id: `next-action-${index}`,
+      label: "다음 행동",
+      text: action
+    }))
+  ];
 }
 
 // select 값은 DOM에서 string으로 나오므로 허용된 stage만 다시 좁힙니다.
