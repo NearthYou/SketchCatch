@@ -42,7 +42,7 @@ import {
 } from "./api";
 import styles from "./workspace.module.css";
 
-type WorkspaceRightPanelView = "resource" | "terraform" | "deployment";
+type WorkspaceRightPanelView = "resource" | "terraform" | "issues" | "deployment";
 type RequestState = "idle" | "loading" | "error";
 
 export type WorkspaceRightPanelProps = {
@@ -57,13 +57,20 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
   const [hasUnsavedTerraformChanges, setHasUnsavedTerraformChanges] = useState(false);
   const [showTerraformLeaveDialog, setShowTerraformLeaveDialog] = useState(false);
   const [terraformSaveRequestId, setTerraformSaveRequestId] = useState(0);
+  const [terraformDiagnostics, setTerraformDiagnostics] = useState<TerraformDiagnostic[]>([]);
+  const hasTerraformIssueErrors = terraformDiagnostics.some((diagnostic) => diagnostic.severity === "error");
 
   function requestView(nextView: WorkspaceRightPanelView): void {
     if (nextView === activeView) {
       return;
     }
 
-    if (activeView === "terraform" && hasUnsavedTerraformChanges) {
+    if (
+      (activeView === "terraform" || activeView === "issues") &&
+      nextView !== "terraform" &&
+      nextView !== "issues" &&
+      hasUnsavedTerraformChanges
+    ) {
       setPendingView(nextView);
       setShowTerraformLeaveDialog(true);
       return;
@@ -127,6 +134,21 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
           >
             <Code2 size={18} aria-hidden="true" />
           </button>
+          <button
+            aria-pressed={activeView === "issues"}
+            className={activeView === "issues" ? styles.panelModeButtonActive : styles.panelModeButton}
+            onClick={() => requestView("issues")}
+            title="Issues"
+            type="button"
+          >
+            <AlertCircle size={18} aria-hidden="true" />
+            <span
+              className={hasTerraformIssueErrors ? styles.panelIssueBadgeError : styles.panelIssueBadge}
+              aria-label={`${terraformDiagnostics.length} issues`}
+            >
+              {terraformDiagnostics.length}
+            </span>
+          </button>
         </div>
         <button
           aria-pressed={activeView === "deployment"}
@@ -141,13 +163,22 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
 
       {activeView === "resource" ? (
         <ParameterInputPanel {...context} />
-      ) : activeView === "terraform" ? (
-        <TerraformCodePanel
-          context={context}
-          externalSaveRequestId={terraformSaveRequestId}
-          onDirtyChange={setHasUnsavedTerraformChanges}
-          onExternalSaveComplete={handleTerraformExternalSaveComplete}
-        />
+      ) : activeView === "terraform" || activeView === "issues" ? (
+        <>
+          <div className={styles.rightPanelView} hidden={activeView !== "terraform"}>
+            <TerraformCodePanel
+              context={context}
+              externalSaveRequestId={terraformSaveRequestId}
+              onDiagnosticsChange={setTerraformDiagnostics}
+              onDirtyChange={setHasUnsavedTerraformChanges}
+              onExternalSaveComplete={handleTerraformExternalSaveComplete}
+              onOpenIssues={() => requestView("issues")}
+            />
+          </div>
+          <div className={styles.rightPanelView} hidden={activeView !== "issues"}>
+            <TerraformIssuesPanel diagnostics={terraformDiagnostics} />
+          </div>
+        </>
       ) : (
         <DeploymentPanel
           currentNodeCount={context.nodes.length}
@@ -170,13 +201,17 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
 function TerraformCodePanel({
   context,
   externalSaveRequestId,
+  onDiagnosticsChange,
   onDirtyChange,
-  onExternalSaveComplete
+  onExternalSaveComplete,
+  onOpenIssues
 }: {
   readonly context: DiagramEditorPanelContext;
   readonly externalSaveRequestId: number;
+  readonly onDiagnosticsChange: (diagnostics: TerraformDiagnostic[]) => void;
   readonly onDirtyChange: (isDirty: boolean) => void;
   readonly onExternalSaveComplete: (saved: boolean) => void;
+  readonly onOpenIssues: () => void;
 }) {
   const [terraformFiles, setTerraformFiles] = useState<TerraformVirtualFile[]>(() =>
     createTerraformFilesFromGeneratedCode(context.diagram, "")
@@ -273,6 +308,7 @@ function TerraformCodePanel({
           nextFiles.some((file) => file.fileName === currentFileName) ? currentFileName : "main.tf"
         );
         setDiagnostics([]);
+        onDiagnosticsChange([]);
         setHasLocalEdits(false);
         setSaveBanner(null);
         setStatusMessage("그래프 기준으로 동기화됨");
@@ -280,7 +316,7 @@ function TerraformCodePanel({
         onDirtyChange(false);
       }, "Terraform 코드를 생성하지 못했습니다.");
     },
-    [context.diagram, onDirtyChange, runRequest]
+    [context.diagram, onDiagnosticsChange, onDirtyChange, runRequest]
   );
 
   const saveCodeToDiagram = useCallback(async (): Promise<boolean> => {
@@ -293,6 +329,7 @@ function TerraformCodePanel({
     await runRequest(async () => {
       const validationResult = await validateTerraformCode(combinedTerraformCode);
       setDiagnostics(validationResult.diagnostics);
+      onDiagnosticsChange(validationResult.diagnostics);
 
       const validationError = validationResult.diagnostics.find(
         (diagnostic) => diagnostic.severity === "error"
@@ -313,6 +350,7 @@ function TerraformCodePanel({
         terraformCode: combinedTerraformCode
       });
       setDiagnostics(syncResult.diagnostics);
+      onDiagnosticsChange(syncResult.diagnostics);
 
       const syncError = syncResult.diagnostics.find((diagnostic) => diagnostic.severity === "error");
 
@@ -340,6 +378,7 @@ function TerraformCodePanel({
     combinedTerraformCode,
     context,
     hasTerraformCode,
+    onDiagnosticsChange,
     onDirtyChange,
     requestState,
     runRequest
@@ -450,7 +489,7 @@ function TerraformCodePanel({
   }
 
   function handleSeeMore(): void {
-    document.getElementById("terraform-issues")?.scrollIntoView({ block: "nearest" });
+    onOpenIssues();
   }
 
   async function validateDisplayedCode(): Promise<void> {
@@ -461,6 +500,7 @@ function TerraformCodePanel({
     await runRequest(async () => {
       const validationResult = await validateTerraformCode(displayedTerraformCode);
       setDiagnostics(validationResult.diagnostics);
+      onDiagnosticsChange(validationResult.diagnostics);
       setStatusMessage(validationResult.diagnostics.length === 0 ? "검증 완료" : "진단 확인 필요");
     }, "Terraform 코드를 검증하지 못했습니다.");
   }
@@ -625,7 +665,7 @@ function TerraformCodePanel({
         />
       </div>
 
-      <section className={styles.terraformDiagnostics} aria-live="polite" id="terraform-issues">
+      <section className={styles.terraformDiagnosticsHidden} aria-live="polite" id="terraform-issues">
         <div className={styles.terraformDiagnosticsHeader}>
           {firstErrorDiagnostic ? (
             <AlertCircle size={15} aria-hidden="true" />
@@ -657,6 +697,42 @@ function TerraformCodePanel({
             ))}
           </ol>
         ) : null}
+      </section>
+    </div>
+  );
+}
+
+function TerraformIssuesPanel({ diagnostics }: { readonly diagnostics: TerraformDiagnostic[] }) {
+  const hasErrorDiagnostics = diagnostics.some((diagnostic) => diagnostic.severity === "error");
+  const firstErrorDiagnostic = diagnostics.find((diagnostic) => diagnostic.severity === "error") ?? null;
+
+  return (
+    <div className={styles.issuesPanel}>
+      <section className={styles.terraformDiagnostics} aria-live="polite">
+        <div className={styles.terraformDiagnosticsHeader}>
+          {firstErrorDiagnostic ? (
+            <AlertCircle size={15} aria-hidden="true" />
+          ) : (
+            <GitBranch size={15} aria-hidden="true" />
+          )}
+          <h3>Issues</h3>
+          <span className={hasErrorDiagnostics ? styles.terraformIssueCountError : styles.terraformIssueCount}>
+            {diagnostics.length}
+          </span>
+        </div>
+
+        {diagnostics.length === 0 ? (
+          <p className={styles.terraformEmpty}>표시할 진단이 없습니다.</p>
+        ) : (
+          <ol className={styles.terraformDiagnosticList}>
+            {diagnostics.map((diagnostic, index) => (
+              <li key={`${diagnostic.code ?? diagnostic.message}-${index}`} data-severity={diagnostic.severity}>
+                <strong>{formatTerraformDiagnosticTitle(diagnostic)}</strong>
+                <span>{diagnostic.message}</span>
+              </li>
+            ))}
+          </ol>
+        )}
       </section>
     </div>
   );
