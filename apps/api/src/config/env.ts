@@ -1,3 +1,6 @@
+import { existsSync } from "node:fs";
+import { dirname, join, parse, resolve } from "node:path";
+
 export type RuntimeEnv = {
   awsRegion: string;
   authTokenSecret: string | undefined;
@@ -9,9 +12,27 @@ export type RuntimeEnv = {
   sketchcatchPublicBaseUrl: string | undefined;
 };
 
+const LOCAL_ENV_FILE_NAME = ".env";
 const AUTH_TOKEN_SECRET_PLACEHOLDER = "replace-with-a-local-secret-of-at-least-32-characters";
 
+let localEnvLoaded = false;
+
+export function loadLocalEnvFile(startDir = process.cwd()): void {
+  if (localEnvLoaded || process.env.NODE_ENV === "production" || process.env.NODE_ENV === "test") {
+    return;
+  }
+
+  localEnvLoaded = true;
+  const envFilePath = findNearestLocalEnvFile(startDir);
+
+  if (envFilePath) {
+    process.loadEnvFile(envFilePath);
+  }
+}
+
 export function getRuntimeEnv(): RuntimeEnv {
+  loadLocalEnvFile();
+
   return {
     awsRegion: process.env.AWS_REGION ?? "ap-northeast-2",
     authTokenSecret: process.env.AUTH_TOKEN_SECRET,
@@ -25,6 +46,7 @@ export function getRuntimeEnv(): RuntimeEnv {
 }
 
 export function requireAuthTokenSecret(): string {
+  loadLocalEnvFile();
   const authTokenSecret = process.env.AUTH_TOKEN_SECRET;
 
   if (!authTokenSecret) {
@@ -43,6 +65,7 @@ export function requireAuthTokenSecret(): string {
 }
 
 export function requireDatabaseUrl(): string {
+  loadLocalEnvFile();
   const databaseUrl = process.env.DATABASE_URL;
 
   if (!databaseUrl) {
@@ -53,6 +76,7 @@ export function requireDatabaseUrl(): string {
 }
 
 export function requireS3BucketName(): string {
+  loadLocalEnvFile();
   const bucketName = process.env.S3_BUCKET_NAME;
 
   if (!bucketName) {
@@ -63,6 +87,7 @@ export function requireS3BucketName(): string {
 }
 
 export function requireCloudFormationTemplateTokenSecret(): string {
+  loadLocalEnvFile();
   const cloudFormationTemplateTokenSecret = process.env.CLOUDFORMATION_TEMPLATE_TOKEN_SECRET;
 
   if (!cloudFormationTemplateTokenSecret) {
@@ -77,6 +102,7 @@ export function requireCloudFormationTemplateTokenSecret(): string {
 }
 
 export function requireSketchCatchAwsCallerPrincipalArn(): string {
+  loadLocalEnvFile();
   const callerPrincipalArn = process.env.SKETCHCATCH_AWS_CALLER_PRINCIPAL_ARN?.trim();
 
   if (!callerPrincipalArn) {
@@ -88,4 +114,23 @@ export function requireSketchCatchAwsCallerPrincipalArn(): string {
   }
 
   return callerPrincipalArn;
+}
+
+function findNearestLocalEnvFile(startDir: string): string | null {
+  let currentDir = resolve(startDir);
+  const rootDir = parse(currentDir).root;
+
+  while (true) {
+    const candidatePath = join(currentDir, LOCAL_ENV_FILE_NAME);
+
+    if (existsSync(candidatePath)) {
+      return candidatePath;
+    }
+
+    if (currentDir === rootDir) {
+      return null;
+    }
+
+    currentDir = dirname(currentDir);
+  }
 }

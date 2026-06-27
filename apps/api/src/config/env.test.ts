@@ -2,6 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { requireSketchCatchAwsCallerPrincipalArn } from "./env.js";
 
+process.env.NODE_ENV = "test";
+
 test("requireSketchCatchAwsCallerPrincipalArn returns a trimmed IAM Role ARN", () => {
   const originalValue = process.env.SKETCHCATCH_AWS_CALLER_PRINCIPAL_ARN;
   process.env.SKETCHCATCH_AWS_CALLER_PRINCIPAL_ARN =
