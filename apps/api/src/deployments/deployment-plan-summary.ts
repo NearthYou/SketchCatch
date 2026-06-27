@@ -13,7 +13,7 @@ type TerraformResourceChange = {
   };
 };
 
-const liveApplySupportedResourceTypes = new Set([
+export const liveApplySupportedResourceTypes = new Set([
   "aws_vpc",
   "aws_subnet",
   "aws_internet_gateway",
