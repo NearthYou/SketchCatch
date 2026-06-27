@@ -254,9 +254,10 @@ test("createAwsConnection creates a pending connection with server-generated ext
     permissionSetup: {
       verificationActions: ["sts:GetCallerIdentity"],
       initialPolicyDocument: null,
-      terraformPolicyDocument: null
+      terraformPolicyDocument: result.roleSetup.permissionSetup.terraformPolicyDocument
     }
   });
+  assert.notEqual(result.roleSetup.permissionSetup.terraformPolicyDocument, null);
   assert.deepEqual(result.callerRoleSetup, {
     policyName: "SketchCatchAssumeTerraformExecutionRole",
     assumableRoleArnPattern: "arn:aws:iam::*:role/SketchCatchTerraformExecutionRole",

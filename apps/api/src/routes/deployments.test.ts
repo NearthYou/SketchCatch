@@ -12,6 +12,10 @@ import type {
   RunDeploymentPlanInput,
   RunDeploymentPlanResult
 } from "../deployments/deployment-plan-service.js";
+import type {
+  RunDeploymentApplyInput,
+  RunDeploymentApplyResult
+} from "../deployments/deployment-apply-service.js";
 import type { ApproveDeploymentPlanInput } from "../deployments/deployment-approval-service.js";
 import { users } from "../db/schema.js";
 import {
@@ -19,6 +23,7 @@ import {
   type ArchitectureRecord,
   type CreateDeploymentRecordInput,
   type SaveDeploymentPlanInput,
+  type DeployedResourceRecord,
   type DeploymentPlanArtifactRecord,
   type DeploymentLogRecord,
   type DeploymentRecord,
@@ -26,6 +31,7 @@ import {
   type ProjectAccessContext,
   type ProjectAssetRecord,
   type ProjectRecord,
+  type TerraformOutputRecord,
   type TerraformArtifactRecord
 } from "../deployments/deployment-service.js";
 import { registerDeploymentRoutes } from "./deployments.js";
@@ -41,6 +47,8 @@ type DeploymentResponse = {
     terraformArtifactId: string;
     awsConnectionId: string | null;
     currentPlanArtifactId: string | null;
+    stateObjectKey: string | null;
+    resultWarningSummary: string | null;
     status: string;
     planSummary: unknown;
     isBlocked: boolean;
@@ -67,6 +75,30 @@ type DeploymentListResponse = {
 
 type DeploymentLogsResponse = {
   logs: DeploymentLogRecord[];
+};
+
+type DeploymentResourcesResponse = {
+  resources: Array<{
+    id: string;
+    deploymentId: string;
+    terraformAddress: string;
+    terraformType: string;
+    providerName: string | null;
+    resourceId: string | null;
+    region: string;
+    createdAt: string;
+  }>;
+};
+
+type TerraformOutputsResponse = {
+  outputs: Array<{
+    id: string;
+    deploymentId: string;
+    name: string;
+    value: unknown | null;
+    sensitive: boolean;
+    createdAt: string;
+  }>;
 };
 
 type UserRecord = typeof users.$inferSelect;
@@ -114,11 +146,27 @@ type RepositoryCall =
       deploymentId: string;
     }
   | {
+      name: "listDeployedResources";
+      deploymentId: string;
+    }
+  | {
+      name: "listTerraformOutputs";
+      deploymentId: string;
+    }
+  | {
+      name: "findRunningDeploymentInProject";
+      projectId: string;
+    }
+  | {
       name: "markDeploymentInitSucceeded";
       deploymentId: string;
     }
   | {
       name: "markDeploymentInitRunning";
+      deploymentId: string;
+    }
+  | {
+      name: "markDeploymentApplyRunning";
       deploymentId: string;
     }
   | {
@@ -173,6 +221,8 @@ class FakeDeploymentRepository implements DeploymentRepository {
   planArtifact: DeploymentPlanArtifactRecord | undefined = createDeploymentPlanArtifactRecord();
   deployments: DeploymentRecord[] = [createDeploymentRecord(deploymentId)];
   logs: DeploymentLogRecord[] = [];
+  resources: DeployedResourceRecord[] = [];
+  outputs: TerraformOutputRecord[] = [];
 
   async findAccessibleProject(candidateProjectId: string, accessContext: ProjectAccessContext) {
     this.calls.push({
@@ -293,6 +343,17 @@ class FakeDeploymentRepository implements DeploymentRepository {
     return this.planArtifact;
   }
 
+  async findRunningDeploymentInProject(candidateProjectId: string) {
+    this.calls.push({
+      name: "findRunningDeploymentInProject",
+      projectId: candidateProjectId
+    });
+
+    return this.deployments.find(
+      (deployment) => deployment.projectId === candidateProjectId && deployment.status === "RUNNING"
+    );
+  }
+
   async listDeploymentsByProject(candidateProjectId: string) {
     this.calls.push({
       name: "listDeploymentsByProject",
@@ -357,6 +418,34 @@ class FakeDeploymentRepository implements DeploymentRepository {
     return this.deployment;
   };
 
+  markDeploymentApplyRunning: DeploymentRepository["markDeploymentApplyRunning"] = async (
+    candidateDeploymentId
+  ) => {
+    this.calls.push({
+      name: "markDeploymentApplyRunning",
+      deploymentId: candidateDeploymentId
+    });
+
+    if (
+      !this.deployment ||
+      this.deployment.id !== candidateDeploymentId ||
+      this.deployment.status === "RUNNING"
+    ) {
+      return undefined;
+    }
+
+    this.deployment = {
+      ...this.deployment,
+      status: "RUNNING",
+      failureStage: null,
+      errorSummary: null,
+      resultWarningSummary: null,
+      updatedAt: fixedNow
+    };
+
+    return this.deployment;
+  };
+
   saveDeploymentPlan: DeploymentRepository["saveDeploymentPlan"] = async (input) => {
     this.calls.push({
       name: "saveDeploymentPlan",
@@ -401,6 +490,29 @@ class FakeDeploymentRepository implements DeploymentRepository {
       isBlocked: false,
       blockedBy: null,
       blockedReason: null,
+      failureStage: null,
+      errorSummary: null,
+      updatedAt: fixedNow
+    };
+
+    return this.deployment;
+  };
+
+  completeDeploymentApply: DeploymentRepository["completeDeploymentApply"] = async (
+    candidateDeploymentId,
+    input
+  ) => {
+    if (!this.deployment || this.deployment.id !== candidateDeploymentId) {
+      return undefined;
+    }
+
+    this.resources = input.resources.map((resource) => ({ ...resource, createdAt: fixedNow }));
+    this.outputs = input.outputs.map((output) => ({ ...output, createdAt: fixedNow }));
+    this.deployment = {
+      ...this.deployment,
+      status: "SUCCESS",
+      stateObjectKey: input.stateObjectKey,
+      resultWarningSummary: input.resultWarningSummary,
       failureStage: null,
       errorSummary: null,
       updatedAt: fixedNow
@@ -474,6 +586,24 @@ class FakeDeploymentRepository implements DeploymentRepository {
 
     return this.logs;
   }
+
+  async listDeployedResources(candidateDeploymentId: string) {
+    this.calls.push({
+      name: "listDeployedResources",
+      deploymentId: candidateDeploymentId
+    });
+
+    return this.resources.filter((resource) => resource.deploymentId === candidateDeploymentId);
+  }
+
+  async listTerraformOutputs(candidateDeploymentId: string) {
+    this.calls.push({
+      name: "listTerraformOutputs",
+      deploymentId: candidateDeploymentId
+    });
+
+    return this.outputs.filter((output) => output.deploymentId === candidateDeploymentId);
+  }
 }
 
 type DeploymentRouteTestOptions = {
@@ -489,6 +619,10 @@ type DeploymentRouteTestOptions = {
     input: ApproveDeploymentPlanInput,
     repository: DeploymentRepository
   ) => Promise<DeploymentRecord>;
+  runDeploymentApply?: (
+    input: RunDeploymentApplyInput,
+    repository: DeploymentRepository
+  ) => Promise<RunDeploymentApplyResult>;
   userRows?: UserRecord[];
 };
 
@@ -507,7 +641,8 @@ async function buildDeploymentTestApp(
     ...(routeOptions.runDeploymentPlan ? { runDeploymentPlan: routeOptions.runDeploymentPlan } : {}),
     ...(routeOptions.approveDeploymentPlan
       ? { approveDeploymentPlan: routeOptions.approveDeploymentPlan }
-      : {})
+      : {}),
+    ...(routeOptions.runDeploymentApply ? { runDeploymentApply: routeOptions.runDeploymentApply } : {})
   });
 
   return app;
@@ -524,6 +659,8 @@ function createDeploymentRecord(
     terraformArtifactId,
     awsConnectionId,
     currentPlanArtifactId: null,
+    stateObjectKey: null,
+    resultWarningSummary: null,
     status: "PENDING",
     planSummary: null,
     isBlocked: false,
@@ -580,6 +717,36 @@ function createDeploymentPlanArtifactRecord(
     sha256: "a".repeat(64),
     accountId: "123456789012",
     region: "ap-northeast-2",
+    createdAt: fixedNow,
+    ...overrides
+  };
+}
+
+function createDeployedResourceRecord(
+  overrides: Partial<DeployedResourceRecord> = {}
+): DeployedResourceRecord {
+  return {
+    id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    deploymentId,
+    terraformAddress: "aws_vpc.main",
+    terraformType: "aws_vpc",
+    providerName: "registry.terraform.io/hashicorp/aws",
+    resourceId: "vpc-0123456789abcdef0",
+    region: "ap-northeast-2",
+    createdAt: fixedNow,
+    ...overrides
+  };
+}
+
+function createTerraformOutputRecord(
+  overrides: Partial<TerraformOutputRecord> = {}
+): TerraformOutputRecord {
+  return {
+    id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    deploymentId,
+    name: "vpc_id",
+    value: "vpc-0123456789abcdef0",
+    sensitive: false,
     createdAt: fixedNow,
     ...overrides
   };
@@ -1222,6 +1389,105 @@ test("POST /api/deployments/:deploymentId/approve approves the current plan", as
   await app.close();
 });
 
+test("POST /api/deployments/:deploymentId/apply starts Terraform apply in the background", async () => {
+  const repository = new FakeDeploymentRepository();
+  const applyCalls: RunDeploymentApplyInput[] = [];
+  repository.deployment = createDeploymentRecord(deploymentId, {
+    currentPlanArtifactId: planArtifactId,
+    planSummary: {
+      createCount: 1,
+      updateCount: 0,
+      deleteCount: 0,
+      replaceCount: 0,
+      blocked: false,
+      warnings: []
+    },
+    isBlocked: false,
+    blockedBy: null,
+    blockedReason: null,
+    approvedAt: fixedNow,
+    approvedByUserId: userId,
+    approvedTerraformArtifactId: terraformArtifactId,
+    approvedPlanArtifactId: planArtifactId,
+    approvedTerraformArtifactHash: "c".repeat(64),
+    approvedTfplanHash: "a".repeat(64),
+    approvedAwsAccountId: "123456789012",
+    approvedAwsRegion: "ap-northeast-2"
+  });
+  repository.deployments = [repository.deployment];
+  const app = await buildDeploymentTestApp(repository, {
+    runDeploymentApply: async (input, candidateRepository) => {
+      assert.equal(candidateRepository, repository);
+      applyCalls.push(input);
+
+      return {
+        deployment: createDeploymentRecord(input.deploymentId, {
+          status: "SUCCESS",
+          stateObjectKey: `deployments/${input.deploymentId}/state/terraform.tfstate`
+        }),
+        terraform: {
+          init: null,
+          apply: null,
+          outputJson: null,
+          showStateJson: null
+        }
+      };
+    }
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/deployments/${deploymentId}/apply`,
+    headers: await authHeaders(),
+    payload: {}
+  });
+
+  assert.equal(response.statusCode, 202);
+  const body = response.json() as DeploymentResponse;
+  assert.equal(body.deployment.id, deploymentId);
+  assert.equal(body.deployment.status, "RUNNING");
+  assert.equal(body.deployment.approvedPlanArtifactId, planArtifactId);
+  assert.deepEqual(applyCalls, [
+    {
+      deploymentId,
+      startedFromStatus: "PENDING",
+      accessContext: {
+        kind: "user",
+        userId
+      }
+    }
+  ]);
+
+  await app.close();
+});
+
+test("POST /api/deployments/:deploymentId/apply rejects deployments without approval", async () => {
+  const repository = new FakeDeploymentRepository();
+  let applyStarted = false;
+  const app = await buildDeploymentTestApp(repository, {
+    runDeploymentApply: async () => {
+      applyStarted = true;
+      throw new Error("background apply should not start");
+    }
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/deployments/${deploymentId}/apply`,
+    headers: await authHeaders(),
+    payload: {}
+  });
+
+  assert.equal(response.statusCode, 409);
+  assert.deepEqual(response.json(), {
+    error: "conflict",
+    message: "Deployment approval is required before apply"
+  });
+  assert.equal(applyStarted, false);
+
+  await app.close();
+});
+
 test("GET /api/projects/:projectId/deployments returns project deployments", async () => {
   const repository = new FakeDeploymentRepository();
   const app = await buildDeploymentTestApp(repository);
@@ -1343,6 +1609,80 @@ test("GET /api/deployments/:deploymentId/logs maps missing deployments to not_fo
     {
       name: "findDeploymentById",
       deploymentId
+    }
+  ]);
+
+  await app.close();
+});
+
+test("GET /api/deployments/:deploymentId/resources and outputs return apply results", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.resources = [
+    createDeployedResourceRecord({
+      id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      terraformAddress: "aws_instance.web",
+      terraformType: "aws_instance",
+      resourceId: "i-0123456789abcdef0"
+    })
+  ];
+  repository.outputs = [
+    createTerraformOutputRecord({
+      id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      name: "instance_id",
+      value: "i-0123456789abcdef0",
+      sensitive: false
+    }),
+    createTerraformOutputRecord({
+      id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+      name: "private_value",
+      value: "do-not-return",
+      sensitive: true
+    })
+  ];
+  const app = await buildDeploymentTestApp(repository);
+
+  const resourcesResponse = await app.inject({
+    method: "GET",
+    url: `/api/deployments/${deploymentId}/resources`,
+    headers: await authHeaders()
+  });
+  const outputsResponse = await app.inject({
+    method: "GET",
+    url: `/api/deployments/${deploymentId}/outputs`,
+    headers: await authHeaders()
+  });
+
+  assert.equal(resourcesResponse.statusCode, 200);
+  assert.deepEqual((resourcesResponse.json() as DeploymentResourcesResponse).resources, [
+    {
+      id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      deploymentId,
+      terraformAddress: "aws_instance.web",
+      terraformType: "aws_instance",
+      providerName: "registry.terraform.io/hashicorp/aws",
+      resourceId: "i-0123456789abcdef0",
+      region: "ap-northeast-2",
+      createdAt: fixedNow.toISOString()
+    }
+  ]);
+
+  assert.equal(outputsResponse.statusCode, 200);
+  assert.deepEqual((outputsResponse.json() as TerraformOutputsResponse).outputs, [
+    {
+      id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      deploymentId,
+      name: "instance_id",
+      value: "i-0123456789abcdef0",
+      sensitive: false,
+      createdAt: fixedNow.toISOString()
+    },
+    {
+      id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+      deploymentId,
+      name: "private_value",
+      value: null,
+      sensitive: true,
+      createdAt: fixedNow.toISOString()
     }
   ]);
 

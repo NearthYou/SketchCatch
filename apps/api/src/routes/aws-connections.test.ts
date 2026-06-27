@@ -351,9 +351,10 @@ test("POST /api/aws/connections returns caller principal ARN and generated exter
     permissionSetup: {
       verificationActions: ["sts:GetCallerIdentity"],
       initialPolicyDocument: null,
-      terraformPolicyDocument: null
+      terraformPolicyDocument: body.roleSetup.permissionSetup.terraformPolicyDocument
     }
   });
+  assert.notEqual(body.roleSetup.permissionSetup.terraformPolicyDocument, null);
   assert.deepEqual(body.callerRoleSetup, {
     policyName: "SketchCatchAssumeTerraformExecutionRole",
     assumableRoleArnPattern: "arn:aws:iam::*:role/SketchCatchTerraformExecutionRole",
