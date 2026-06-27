@@ -1,6 +1,12 @@
 import { spawn } from "node:child_process";
+import { mkdir } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 const terraformInitArgs = ["init", "-backend=false", "-input=false", "-no-color"] as const;
+const terraformValidateArgs = ["validate", "-no-color"] as const;
+const defaultTerraformPlanFileName = "tfplan";
+const defaultTerraformPluginCacheDir = join(tmpdir(), "sketchcatch-terraform-plugin-cache");
 
 export type TerraformRunResult = {
   command: string[];
@@ -15,6 +21,8 @@ export type RunTerraformInitOptions = {
   timeoutMs?: number;
   env?: NodeJS.ProcessEnv;
 };
+
+export type RunTerraformCommandOptions = RunTerraformInitOptions;
 
 const inheritedTerraformEnvKeys = [
   "PATH",
@@ -39,6 +47,35 @@ export async function runTerraformInit(
   return runTerraformCommand(workdir, [...terraformInitArgs], options);
 }
 
+export async function runTerraformValidate(
+  workdir: string,
+  options: RunTerraformCommandOptions = {}
+): Promise<TerraformRunResult> {
+  return runTerraformCommand(workdir, [...terraformValidateArgs], options);
+}
+
+export async function runTerraformPlan(
+  workdir: string,
+  options: RunTerraformCommandOptions & { planFileName?: string } = {}
+): Promise<TerraformRunResult> {
+  const planFileName = options.planFileName ?? defaultTerraformPlanFileName;
+
+  return runTerraformCommand(
+    workdir,
+    ["plan", "-input=false", "-no-color", `-out=${planFileName}`],
+    options
+  );
+}
+
+export async function runTerraformShowJson(
+  workdir: string,
+  options: RunTerraformCommandOptions & { planFileName?: string } = {}
+): Promise<TerraformRunResult> {
+  const planFileName = options.planFileName ?? defaultTerraformPlanFileName;
+
+  return runTerraformCommand(workdir, ["show", "-json", planFileName], options);
+}
+
 async function runTerraformCommand(
   workdir: string,
   args: string[],
@@ -46,6 +83,9 @@ async function runTerraformCommand(
 ): Promise<TerraformRunResult> {
   const terraformBinary = options.terraformBinary ?? "terraform";
   const timeoutMs = options.timeoutMs ?? 60_000;
+  const env = createTerraformProcessEnv(options.env);
+
+  await ensureTerraformPluginCacheDir(env.TF_PLUGIN_CACHE_DIR);
 
   return new Promise((resolve) => {
     let stdout = "";
@@ -58,7 +98,7 @@ async function runTerraformCommand(
       shell: false,
       windowsHide: true,
       stdio: ["ignore", "pipe", "pipe"],
-      env: createTerraformProcessEnv(options.env)
+      env
     });
 
     const timer = setTimeout(() => {
@@ -125,6 +165,22 @@ export function createTerraformProcessEnv(
   return {
     ...env,
     TF_IN_AUTOMATION: "1",
+    TF_PLUGIN_CACHE_DIR: getTerraformPluginCacheDir(terraformEnv, baseEnv),
     ...terraformEnv
   };
+}
+
+function getTerraformPluginCacheDir(
+  terraformEnv: NodeJS.ProcessEnv,
+  baseEnv: NodeJS.ProcessEnv
+): string {
+  return terraformEnv.TF_PLUGIN_CACHE_DIR ?? baseEnv.TF_PLUGIN_CACHE_DIR ?? defaultTerraformPluginCacheDir;
+}
+
+async function ensureTerraformPluginCacheDir(cacheDir: string | undefined): Promise<void> {
+  if (!cacheDir) {
+    return;
+  }
+
+  await mkdir(cacheDir, { recursive: true });
 }

@@ -187,6 +187,7 @@ export type Deployment = DeploymentBlock & {
   architectureId: string;
   terraformArtifactId: string;
   awsConnectionId: string | null;
+  currentPlanArtifactId: string | null;
   status: DeploymentStatus;
   planSummary: DeploymentPlanSummary | null;
   failureStage: DeploymentFailureStage | null;
@@ -194,6 +195,11 @@ export type Deployment = DeploymentBlock & {
   approvedAt: IsoDateTimeString | null;
   approvedByUserId: string | null;
   approvedTerraformArtifactId: string | null;
+  approvedPlanArtifactId: string | null;
+  approvedTerraformArtifactHash: string | null;
+  approvedTfplanHash: string | null;
+  approvedAwsAccountId: string | null;
+  approvedAwsRegion: string | null;
   createdAt: IsoDateTimeString;
   updatedAt: IsoDateTimeString;
 };
@@ -247,6 +253,18 @@ export type AwsConnection = {
   lastVerifiedAt: IsoDateTimeString | null;
   createdAt: IsoDateTimeString;
   updatedAt: IsoDateTimeString;
+};
+
+export type DeploymentPlanArtifact = {
+  id: string;
+  deploymentId: string;
+  terraformArtifactId: string;
+  terraformArtifactSha256: string | null;
+  objectKey: string;
+  sha256: string;
+  accountId: string;
+  region: string;
+  createdAt: IsoDateTimeString;
 };
 
 export type AwsConnectionListResponse = {
