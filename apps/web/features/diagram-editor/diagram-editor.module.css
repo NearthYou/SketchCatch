@@ -11,7 +11,7 @@
 }
 
 .editorShellRightCollapsed {
-  grid-template-columns: minmax(320px, 340px) minmax(0, 1fr) 64px;
+  grid-template-columns: minmax(320px, 340px) minmax(0, 1fr) 0;
 }
 
 .leftRail,
@@ -31,6 +31,12 @@
   border-width: 0 0 0 1px;
   overflow: hidden;
   width: 100%;
+}
+
+.editorShellRightCollapsed .rightRail {
+  border-width: 0;
+  overflow: visible;
+  pointer-events: none;
 }
 
 .workspace {
