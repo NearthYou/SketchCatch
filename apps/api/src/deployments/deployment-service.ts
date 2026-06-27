@@ -2,12 +2,14 @@ import { randomUUID } from "node:crypto";
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import type {
   AwsConnection,
+  DeployedResource,
   DeploymentBlockedBy,
   DeploymentFailureStage,
   DeploymentLogLevel,
   DeploymentPlanSummary,
   DeploymentStage,
-  DeploymentStatus
+  DeploymentStatus,
+  TerraformOutput
 } from "@sketchcatch/types";
 import type { Database } from "../db/client.js";
 import {
@@ -15,9 +17,11 @@ import {
   awsConnections,
   deploymentLogs,
   deploymentPlanArtifacts,
+  deployedResources,
   deployments,
   projectAssets,
   projects,
+  terraformOutputs,
   touchUpdatedAt
 } from "../db/schema.js";
 import { maskDeploymentMessage } from "./log-masking.js";
@@ -25,6 +29,8 @@ import { maskDeploymentMessage } from "./log-masking.js";
 export type DeploymentRecord = typeof deployments.$inferSelect;
 export type DeploymentLogRecord = typeof deploymentLogs.$inferSelect;
 export type DeploymentPlanArtifactRecord = typeof deploymentPlanArtifacts.$inferSelect;
+export type DeployedResourceRecord = typeof deployedResources.$inferSelect;
+export type TerraformOutputRecord = typeof terraformOutputs.$inferSelect;
 
 export type ProjectAccessContext = {
   kind: "user";
@@ -111,6 +117,31 @@ export type ApproveDeploymentInput = {
   planSummary: DeploymentPlanSummary;
 };
 
+export type CreateDeployedResourceRecordInput = {
+  id: string;
+  deploymentId: string;
+  terraformAddress: string;
+  terraformType: string;
+  providerName: string | null;
+  resourceId: string | null;
+  region: string;
+};
+
+export type CreateTerraformOutputRecordInput = {
+  id: string;
+  deploymentId: string;
+  name: string;
+  value: unknown | null;
+  sensitive: boolean;
+};
+
+export type CompleteDeploymentApplyInput = {
+  stateObjectKey: string | null;
+  resultWarningSummary: string | null;
+  resources: CreateDeployedResourceRecordInput[];
+  outputs: CreateTerraformOutputRecordInput[];
+};
+
 export type ProjectRecord = typeof projects.$inferSelect;
 export type ArchitectureRecord = typeof architectures.$inferSelect;
 export type ProjectAssetRecord = typeof projectAssets.$inferSelect;
@@ -147,6 +178,7 @@ export type DeploymentRepository = {
   findDeploymentPlanArtifactById(
     planArtifactId: string
   ): Promise<DeploymentPlanArtifactRecord | undefined>;
+  findRunningDeploymentInProject(projectId: string): Promise<DeploymentRecord | undefined>;
 
   listDeploymentsByProject(projectId: string): Promise<DeploymentRecord[]>;
   updateDeploymentStatus(
@@ -154,6 +186,7 @@ export type DeploymentRepository = {
     status: DeploymentStatus
   ): Promise<DeploymentRecord | undefined>;
   markDeploymentInitRunning(deploymentId: string): Promise<DeploymentRecord | undefined>;
+  markDeploymentApplyRunning(deploymentId: string): Promise<DeploymentRecord | undefined>;
   markDeploymentInitSucceeded(deploymentId: string): Promise<DeploymentRecord | undefined>;
   updateDeploymentPlan(
     deploymentId: string,
@@ -169,6 +202,10 @@ export type DeploymentRepository = {
     deploymentId: string,
     input: ApproveDeploymentInput
   ): Promise<DeploymentRecord | undefined>;
+  completeDeploymentApply(
+    deploymentId: string,
+    input: CompleteDeploymentApplyInput
+  ): Promise<DeploymentRecord | undefined>;
   failDeployment(
     deploymentId: string,
     input: {
@@ -180,6 +217,8 @@ export type DeploymentRepository = {
   createDeploymentLogs(input: CreateDeploymentLogRecordInput[]): Promise<DeploymentLogRecord[]>;
   getNextDeploymentLogSequence(deploymentId: string): Promise<number>;
   listDeploymentLogs(deploymentId: string): Promise<DeploymentLogRecord[]>;
+  listDeployedResources(deploymentId: string): Promise<DeployedResourceRecord[]>;
+  listTerraformOutputs(deploymentId: string): Promise<TerraformOutputRecord[]>;
 };
 
 export class DeploymentNotFoundError extends Error {
@@ -323,6 +362,16 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
       return planArtifact;
     },
 
+    async findRunningDeploymentInProject(projectId) {
+      const [deployment] = await db
+        .select()
+        .from(deployments)
+        .where(and(eq(deployments.projectId, projectId), eq(deployments.status, "RUNNING")))
+        .limit(1);
+
+      return deployment;
+    },
+
     async listDeploymentsByProject(projectId) {
       return db
         .select()
@@ -377,6 +426,24 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
         .update(deployments)
         .set({ ...input, ...touchUpdatedAt })
         .where(eq(deployments.id, deploymentId))
+        .returning();
+
+      return deployment;
+    },
+
+    async markDeploymentApplyRunning(deploymentId) {
+      const [deployment] = await db
+        .update(deployments)
+        .set({
+          status: "RUNNING",
+          failureStage: null,
+          errorSummary: null,
+          resultWarningSummary: null,
+          ...touchUpdatedAt
+        })
+        .where(
+          and(eq(deployments.id, deploymentId), inArray(deployments.status, ["PENDING", "FAILED"]))
+        )
         .returning();
 
       return deployment;
@@ -446,6 +513,40 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
       return deployment;
     },
 
+    async completeDeploymentApply(deploymentId, input) {
+      return db.transaction(async (tx) => {
+        await tx.delete(deployedResources).where(eq(deployedResources.deploymentId, deploymentId));
+        await tx.delete(terraformOutputs).where(eq(terraformOutputs.deploymentId, deploymentId));
+
+        if (input.resources.length > 0) {
+          await tx.insert(deployedResources).values(input.resources);
+        }
+
+        if (input.outputs.length > 0) {
+          await tx.insert(terraformOutputs).values(input.outputs);
+        }
+
+        const [deployment] = await tx
+          .update(deployments)
+          .set({
+            status: "SUCCESS",
+            stateObjectKey: input.stateObjectKey,
+            resultWarningSummary: input.resultWarningSummary,
+            failureStage: null,
+            errorSummary: null,
+            ...touchUpdatedAt
+          })
+          .where(eq(deployments.id, deploymentId))
+          .returning();
+
+        if (!deployment) {
+          throw new Error("Deployment apply could not be completed");
+        }
+
+        return deployment;
+      });
+    },
+
     async failDeployment(deploymentId, input) {
       const [deployment] = await db
         .update(deployments)
@@ -491,6 +592,22 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
         .from(deploymentLogs)
         .where(eq(deploymentLogs.deploymentId, deploymentId))
         .orderBy(asc(deploymentLogs.sequence));
+    },
+
+    async listDeployedResources(deploymentId) {
+      return db
+        .select()
+        .from(deployedResources)
+        .where(eq(deployedResources.deploymentId, deploymentId))
+        .orderBy(asc(deployedResources.terraformAddress));
+    },
+
+    async listTerraformOutputs(deploymentId) {
+      return db
+        .select()
+        .from(terraformOutputs)
+        .where(eq(terraformOutputs.deploymentId, deploymentId))
+        .orderBy(asc(terraformOutputs.name));
     }
   };
 }
@@ -586,6 +703,44 @@ export async function listDeploymentLogs(
   await getDeployment(input, repository);
 
   return repository.listDeploymentLogs(input.deploymentId);
+}
+
+export async function listDeployedResources(
+  input: { deploymentId: string; accessContext: ProjectAccessContext },
+  repository: DeploymentRepository
+): Promise<DeployedResource[]> {
+  await getDeployment(input, repository);
+
+  return repository.listDeployedResources(input.deploymentId).then((resources) =>
+    resources.map((resource) => ({
+      id: resource.id,
+      deploymentId: resource.deploymentId,
+      terraformAddress: resource.terraformAddress,
+      terraformType: resource.terraformType,
+      providerName: resource.providerName,
+      resourceId: resource.resourceId,
+      region: resource.region,
+      createdAt: resource.createdAt.toISOString()
+    }))
+  );
+}
+
+export async function listTerraformOutputs(
+  input: { deploymentId: string; accessContext: ProjectAccessContext },
+  repository: DeploymentRepository
+): Promise<TerraformOutput[]> {
+  await getDeployment(input, repository);
+
+  return repository.listTerraformOutputs(input.deploymentId).then((outputs) =>
+    outputs.map((output) => ({
+      id: output.id,
+      deploymentId: output.deploymentId,
+      name: output.name,
+      value: output.sensitive ? null : output.value,
+      sensitive: output.sensitive,
+      createdAt: output.createdAt.toISOString()
+    }))
+  );
 }
 
 export async function appendDeploymentLog(

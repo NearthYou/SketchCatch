@@ -188,6 +188,8 @@ export type Deployment = DeploymentBlock & {
   terraformArtifactId: string;
   awsConnectionId: string | null;
   currentPlanArtifactId: string | null;
+  stateObjectKey: string | null;
+  resultWarningSummary: string | null;
   status: DeploymentStatus;
   planSummary: DeploymentPlanSummary | null;
   failureStage: DeploymentFailureStage | null;
@@ -289,6 +291,34 @@ export type DeploymentLogListResponse = {
   logs: DeploymentLog[];
 };
 
+export type DeployedResource = {
+  id: string;
+  deploymentId: string;
+  terraformAddress: string;
+  terraformType: string;
+  providerName: string | null;
+  resourceId: string | null;
+  region: string;
+  createdAt: IsoDateTimeString;
+};
+
+export type TerraformOutput = {
+  id: string;
+  deploymentId: string;
+  name: string;
+  value: unknown | null;
+  sensitive: boolean;
+  createdAt: IsoDateTimeString;
+};
+
+export type DeploymentResourceListResponse = {
+  resources: DeployedResource[];
+};
+
+export type TerraformOutputListResponse = {
+  outputs: TerraformOutput[];
+};
+
 export type CreateAwsConnectionRequest = {
   region: string;
 };
@@ -365,7 +395,13 @@ export type DeploymentLog = {
   createdAt: IsoDateTimeString;
 };
 
-export type DeploymentFailureStage = "init" | "validate" | "plan" | "approval" | "mock_run";
+export type DeploymentFailureStage =
+  | "init"
+  | "validate"
+  | "plan"
+  | "approval"
+  | "mock_run"
+  | "apply";
 
 export type Activity = {
   id: string;

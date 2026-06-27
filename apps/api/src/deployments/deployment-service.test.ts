@@ -254,6 +254,10 @@ class FakeDeploymentRepository implements DeploymentRepository {
     return createDeploymentPlanArtifactRecord({ id: candidatePlanArtifactId });
   }
 
+  async findRunningDeploymentInProject(): Promise<DeploymentRecord | undefined> {
+    return this.deployments.find((deployment) => deployment.status === "RUNNING");
+  }
+
   async listDeploymentsByProject() {
     return this.deployments;
   }
@@ -280,6 +284,18 @@ class FakeDeploymentRepository implements DeploymentRepository {
     }
 
     this.deployment = { ...this.deployment, ...input };
+
+    return this.deployment;
+  };
+
+  markDeploymentApplyRunning: DeploymentRepository["markDeploymentApplyRunning"] = async (
+    candidateDeploymentId
+  ) => {
+    if (this.deployment?.id !== candidateDeploymentId || this.deployment.status === "RUNNING") {
+      return undefined;
+    }
+
+    this.deployment = { ...this.deployment, status: "RUNNING" };
 
     return this.deployment;
   };
@@ -318,6 +334,26 @@ class FakeDeploymentRepository implements DeploymentRepository {
     }
 
     this.deployment = { ...this.deployment, ...input };
+
+    return this.deployment;
+  };
+
+  completeDeploymentApply: DeploymentRepository["completeDeploymentApply"] = async (
+    candidateDeploymentId,
+    input
+  ) => {
+    if (this.deployment?.id !== candidateDeploymentId) {
+      return undefined;
+    }
+
+    this.deployment = {
+      ...this.deployment,
+      status: "SUCCESS",
+      stateObjectKey: input.stateObjectKey,
+      resultWarningSummary: input.resultWarningSummary,
+      failureStage: null,
+      errorSummary: null
+    };
 
     return this.deployment;
   };
@@ -376,6 +412,14 @@ class FakeDeploymentRepository implements DeploymentRepository {
   async listDeploymentLogs() {
     return this.logs;
   }
+
+  async listDeployedResources() {
+    return [];
+  }
+
+  async listTerraformOutputs() {
+    return [];
+  }
 }
 
 function createDeploymentRecord(
@@ -389,6 +433,8 @@ function createDeploymentRecord(
     terraformArtifactId,
     awsConnectionId,
     currentPlanArtifactId: null,
+    stateObjectKey: null,
+    resultWarningSummary: null,
     status: "PENDING",
     planSummary: null,
     isBlocked: false,
