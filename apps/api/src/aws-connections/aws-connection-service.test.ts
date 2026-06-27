@@ -1,16 +1,18 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  AwsConnectionDeleteConflictError,
   AwsConnectionVerificationError,
   createAwsConnection,
+  deleteAwsConnection,
+  listAwsConnections,
   verifyAwsConnection,
   type AwsConnectionRecord,
   type AwsConnectionRepository
 } from "./aws-connection-service.js";
 import type { AwsConnectionTester } from "./aws-connection-test-service.js";
-import type { ProjectAccessContext, ProjectRecord } from "../deployments/deployment-service.js";
+import type { ProjectAccessContext } from "../deployments/deployment-service.js";
 
-const projectId = "11111111-1111-4111-8111-111111111111";
 const userId = "22222222-2222-4222-8222-222222222222";
 const awsConnectionId = "33333333-3333-4333-8333-333333333333";
 const callerPrincipalArn = "arn:aws:iam::123456789012:role/SketchCatchRuntimeRole";
@@ -21,30 +23,12 @@ const roleArn = "arn:aws:iam::123456789012:role/SketchCatchTerraformExecutionRol
 
 class FakeAwsConnectionRepository implements AwsConnectionRepository {
   readonly calls: Array<{ name: string; [key: string]: unknown }> = [];
-  project: ProjectRecord | undefined = createProjectRecord();
   awsConnection: AwsConnectionRecord | undefined;
-
-  async findAccessibleProject(candidateProjectId: string, accessContext: ProjectAccessContext) {
-    this.calls.push({
-      name: "findAccessibleProject",
-      projectId: candidateProjectId,
-      accessContext
-    });
-
-    if (
-      !this.project ||
-      this.project.id !== candidateProjectId ||
-      this.project.userId !== accessContext.userId
-    ) {
-      return undefined;
-    }
-
-    return this.project;
-  }
+  duplicateAwsConnection: AwsConnectionRecord | undefined;
+  deploymentUsesConnection = false;
 
   async createAwsConnection(input: {
     id: string;
-    projectId: string;
     userId: string;
     externalId: string;
     region: string;
@@ -57,7 +41,6 @@ class FakeAwsConnectionRepository implements AwsConnectionRepository {
 
     this.awsConnection = {
       id: input.id,
-      projectId: input.projectId,
       userId: input.userId,
       accountId: null,
       roleArn: null,
@@ -73,13 +56,11 @@ class FakeAwsConnectionRepository implements AwsConnectionRepository {
   }
 
   async findAccessibleAwsConnection(
-    candidateProjectId: string,
     candidateConnectionId: string,
     accessContext: ProjectAccessContext
   ) {
     this.calls.push({
       name: "findAccessibleAwsConnection",
-      projectId: candidateProjectId,
       connectionId: candidateConnectionId,
       accessContext
     });
@@ -87,13 +68,43 @@ class FakeAwsConnectionRepository implements AwsConnectionRepository {
     if (
       !this.awsConnection ||
       this.awsConnection.id !== candidateConnectionId ||
-      this.awsConnection.projectId !== candidateProjectId ||
       this.awsConnection.userId !== accessContext.userId
     ) {
       return undefined;
     }
 
     return this.awsConnection;
+  }
+
+  async listAccessibleAwsConnections(accessContext: ProjectAccessContext) {
+    this.calls.push({
+      name: "listAccessibleAwsConnections",
+      accessContext
+    });
+
+    if (!this.awsConnection || this.awsConnection.userId !== accessContext.userId) {
+      return [];
+    }
+
+    return [this.awsConnection];
+  }
+
+  async findVerifiedAwsConnectionByAccountId(
+    accountId: string,
+    accessContext: ProjectAccessContext
+  ) {
+    this.calls.push({
+      name: "findVerifiedAwsConnectionByAccountId",
+      accountId,
+      accessContext
+    });
+
+    return [this.awsConnection, this.duplicateAwsConnection].find(
+      (awsConnection) =>
+        awsConnection?.userId === accessContext.userId &&
+        awsConnection.accountId === accountId &&
+        awsConnection.status === "verified"
+    );
   }
 
   async findAwsConnectionById(candidateConnectionId: string) {
@@ -104,8 +115,40 @@ class FakeAwsConnectionRepository implements AwsConnectionRepository {
     return this.awsConnection;
   }
 
+  async hasDeploymentUsingAwsConnection(candidateConnectionId: string) {
+    this.calls.push({
+      name: "hasDeploymentUsingAwsConnection",
+      connectionId: candidateConnectionId
+    });
+
+    return this.deploymentUsesConnection && candidateConnectionId === this.awsConnection?.id;
+  }
+
+  async deleteAccessibleAwsConnection(
+    candidateConnectionId: string,
+    accessContext: ProjectAccessContext
+  ) {
+    this.calls.push({
+      name: "deleteAccessibleAwsConnection",
+      connectionId: candidateConnectionId,
+      accessContext
+    });
+
+    if (
+      !this.awsConnection ||
+      this.awsConnection.id !== candidateConnectionId ||
+      this.awsConnection.userId !== accessContext.userId
+    ) {
+      return undefined;
+    }
+
+    const deletedConnection = this.awsConnection;
+    this.awsConnection = undefined;
+
+    return deletedConnection;
+  }
+
   async updateAwsConnectionVerification(input: {
-    projectId: string;
     connectionId: string;
     userId: string;
     accountId: string | null;
@@ -165,7 +208,6 @@ test("createAwsConnection creates a pending connection with server-generated ext
 
   const result = await createAwsConnection(
     {
-      projectId,
       accessContext: {
         kind: "user",
         userId
@@ -181,7 +223,6 @@ test("createAwsConnection creates a pending connection with server-generated ext
   );
 
   assert.equal(result.awsConnection.id, awsConnectionId);
-  assert.equal(result.awsConnection.projectId, projectId);
   assert.equal(result.awsConnection.userId, userId);
   assert.equal(result.awsConnection.externalId, externalId);
   assert.equal(result.awsConnection.status, "pending");
@@ -249,18 +290,9 @@ test("createAwsConnection creates a pending connection with server-generated ext
   });
   assert.deepEqual(repository.calls, [
     {
-      name: "findAccessibleProject",
-      projectId,
-      accessContext: {
-        kind: "user",
-        userId
-      }
-    },
-    {
       name: "createAwsConnection",
       input: {
         id: awsConnectionId,
-        projectId,
         userId,
         externalId,
         region: "ap-northeast-2",
@@ -270,6 +302,88 @@ test("createAwsConnection creates a pending connection with server-generated ext
   ]);
 });
 
+test("listAwsConnections returns user-owned connection metadata", async () => {
+  const repository = new FakeAwsConnectionRepository();
+  repository.awsConnection = createAwsConnectionRecord({
+    accountId: "123456789012",
+    roleArn,
+    status: "verified",
+    lastVerifiedAt: verifiedAt
+  });
+
+  const result = await listAwsConnections(
+    {
+      accessContext: {
+        kind: "user",
+        userId
+      }
+    },
+    repository
+  );
+
+  assert.equal(result.length, 1);
+  assert.equal(result[0]?.id, awsConnectionId);
+  assert.equal(result[0]?.status, "verified");
+  assert.equal(result[0]?.roleArn, roleArn);
+  assert.equal(result[0]?.lastVerifiedAt, verifiedAt.toISOString());
+});
+
+test("deleteAwsConnection removes an accessible connection that is not used by deployments", async () => {
+  const repository = new FakeAwsConnectionRepository();
+  repository.awsConnection = createAwsConnectionRecord({
+    accountId: "123456789012",
+    roleArn,
+    status: "verified",
+    lastVerifiedAt: verifiedAt
+  });
+
+  await deleteAwsConnection(
+    {
+      connectionId: awsConnectionId,
+      accessContext: {
+        kind: "user",
+        userId
+      }
+    },
+    repository
+  );
+
+  assert.equal(repository.awsConnection, undefined);
+});
+
+test("deleteAwsConnection rejects deleting a connection that is used by a deployment", async () => {
+  const repository = new FakeAwsConnectionRepository();
+  repository.awsConnection = createAwsConnectionRecord({
+    accountId: "123456789012",
+    roleArn,
+    status: "verified",
+    lastVerifiedAt: verifiedAt
+  });
+  repository.deploymentUsesConnection = true;
+
+  await assert.rejects(
+    () =>
+      deleteAwsConnection(
+        {
+          connectionId: awsConnectionId,
+          accessContext: {
+            kind: "user",
+            userId
+          }
+        },
+        repository
+      ),
+    (error) => {
+      assert.equal(error instanceof AwsConnectionDeleteConflictError, true);
+      assert.equal((error as Error).message, "AWS connection is used by a deployment");
+
+      return true;
+    }
+  );
+
+  assert.equal(repository.awsConnection?.id, awsConnectionId);
+});
+
 test("verifyAwsConnection stores only verified role metadata after STS caller identity succeeds", async () => {
   const repository = new FakeAwsConnectionRepository();
   repository.awsConnection = createAwsConnectionRecord();
@@ -277,7 +391,6 @@ test("verifyAwsConnection stores only verified role metadata after STS caller id
 
   const result = await verifyAwsConnection(
     {
-      projectId,
       connectionId: awsConnectionId,
       accessContext: {
         kind: "user",
@@ -319,7 +432,6 @@ test("verifyAwsConnection rejects storing verified metadata when role ARN accoun
     () =>
       verifyAwsConnection(
         {
-          projectId,
           connectionId: awsConnectionId,
           accessContext: {
             kind: "user",
@@ -346,6 +458,48 @@ test("verifyAwsConnection rejects storing verified metadata when role ARN accoun
   assert.equal(repository.awsConnection.roleArn, roleArn);
 });
 
+test("verifyAwsConnection rejects duplicate verified AWS account for the same user", async () => {
+  const repository = new FakeAwsConnectionRepository();
+  repository.awsConnection = createAwsConnectionRecord();
+  repository.duplicateAwsConnection = createAwsConnectionRecord({
+    id: "44444444-4444-4444-8444-444444444444",
+    accountId: "123456789012",
+    roleArn,
+    status: "verified",
+    lastVerifiedAt: verifiedAt
+  });
+  const tester = new FakeAwsConnectionTester();
+
+  await assert.rejects(
+    () =>
+      verifyAwsConnection(
+        {
+          connectionId: awsConnectionId,
+          accessContext: {
+            kind: "user",
+            userId
+          },
+          roleArn
+        },
+        repository,
+        tester,
+        {
+          now: () => verifiedAt
+        }
+      ),
+    (error) => {
+      assert.equal(error instanceof AwsConnectionVerificationError, true);
+      assert.equal((error as Error).message, "AWS account is already connected");
+
+      return true;
+    }
+  );
+
+  assert.equal(repository.awsConnection.status, "failed");
+  assert.equal(repository.awsConnection.accountId, "123456789012");
+  assert.equal(repository.awsConnection.roleArn, roleArn);
+});
+
 test("verifyAwsConnection rejects verification when the stored region is not ap-northeast-2", async () => {
   const repository = new FakeAwsConnectionRepository();
   repository.awsConnection = createAwsConnectionRecord({
@@ -357,7 +511,6 @@ test("verifyAwsConnection rejects verification when the stored region is not ap-
     () =>
       verifyAwsConnection(
         {
-          projectId,
           connectionId: awsConnectionId,
           accessContext: {
             kind: "user",
@@ -394,7 +547,6 @@ test("verifyAwsConnection refuses to verify when the stored externalId is missin
     () =>
       verifyAwsConnection(
         {
-          projectId,
           connectionId: awsConnectionId,
           accessContext: {
             kind: "user",
@@ -432,7 +584,6 @@ test("verifyAwsConnection masks raw STS failures and stores failed metadata", as
     () =>
       verifyAwsConnection(
         {
-          projectId,
           connectionId: awsConnectionId,
           accessContext: {
             kind: "user",
@@ -459,24 +610,11 @@ test("verifyAwsConnection masks raw STS failures and stores failed metadata", as
   assert.equal(repository.awsConnection.roleArn, roleArn);
 });
 
-function createProjectRecord(overrides: Partial<ProjectRecord> = {}): ProjectRecord {
-  return {
-    id: projectId,
-    userId,
-    name: "AWS setup project",
-    description: null,
-    createdAt: fixedNow,
-    updatedAt: fixedNow,
-    ...overrides
-  };
-}
-
 function createAwsConnectionRecord(
   overrides: Partial<AwsConnectionRecord> = {}
 ): AwsConnectionRecord {
   return {
     id: awsConnectionId,
-    projectId,
     userId,
     accountId: null,
     roleArn: null,

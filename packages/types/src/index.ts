@@ -238,7 +238,6 @@ export type AwsConnectionStatus = "pending" | "verified" | "failed";
 
 export type AwsConnection = {
   id: string;
-  projectId: string;
   userId: string;
   accountId: string | null;
   roleArn: string | null;
@@ -250,10 +249,26 @@ export type AwsConnection = {
   updatedAt: IsoDateTimeString;
 };
 
+export type AwsConnectionListResponse = {
+  awsConnections: AwsConnection[];
+};
+
 export type CreateDeploymentRequest = {
   architectureId: string;
   terraformArtifactId: string;
   awsConnectionId: string;
+};
+
+export type DeploymentResponse = {
+  deployment: Deployment;
+};
+
+export type DeploymentListResponse = {
+  deployments: Deployment[];
+};
+
+export type DeploymentLogListResponse = {
+  logs: DeploymentLog[];
 };
 
 export type CreateAwsConnectionRequest = {

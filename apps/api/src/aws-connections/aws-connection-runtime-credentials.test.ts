@@ -204,7 +204,6 @@ test("assertAwsApplyPreconditions blocks account region and tfplan hash drift be
 function createVerifiedAwsConnection(overrides: Partial<AwsConnection> = {}): AwsConnection {
   return {
     id: "33333333-3333-4333-8333-333333333333",
-    projectId: "11111111-1111-4111-8111-111111111111",
     userId: "22222222-2222-4222-8222-222222222222",
     accountId: "123456789012",
     roleArn,

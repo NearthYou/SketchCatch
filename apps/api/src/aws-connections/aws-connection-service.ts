@@ -1,5 +1,5 @@
 import { createHmac, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import type {
   AwsConnection,
   AwsConnectionCloudFormationTemplateResponse,
@@ -10,8 +10,8 @@ import type {
   VerifyAwsConnectionResponse
 } from "@sketchcatch/types";
 import type { Database } from "../db/client.js";
-import { awsConnections, projects } from "../db/schema.js";
-import type { ProjectAccessContext, ProjectRecord } from "../deployments/deployment-service.js";
+import { awsConnections, deployments } from "../db/schema.js";
+import type { ProjectAccessContext } from "../deployments/deployment-service.js";
 import {
   AwsConnectionTestError,
   createAwsConnectionTester,
@@ -29,7 +29,6 @@ const defaultCloudFormationTemplateTokenTtlMs = 60 * 60 * 1000;
 export type AwsConnectionRecord = typeof awsConnections.$inferSelect;
 
 export type CreateAwsConnectionInput = {
-  projectId: string;
   accessContext: ProjectAccessContext;
   region: string;
   callerPrincipalArn: string;
@@ -37,7 +36,6 @@ export type CreateAwsConnectionInput = {
 
 export type CreateAwsConnectionRecordInput = {
   id: string;
-  projectId: string;
   userId: string;
   externalId: string;
   region: string;
@@ -45,17 +43,22 @@ export type CreateAwsConnectionRecordInput = {
 };
 
 export type AwsConnectionRepository = {
-  findAccessibleProject(
-    projectId: string,
-    accessContext: ProjectAccessContext
-  ): Promise<ProjectRecord | undefined>;
   findAccessibleAwsConnection(
-    projectId: string,
     connectionId: string,
     accessContext: ProjectAccessContext
   ): Promise<AwsConnectionRecord | undefined>;
+  listAccessibleAwsConnections(accessContext: ProjectAccessContext): Promise<AwsConnectionRecord[]>;
+  findVerifiedAwsConnectionByAccountId(
+    accountId: string,
+    accessContext: ProjectAccessContext
+  ): Promise<AwsConnectionRecord | undefined>;
   findAwsConnectionById(connectionId: string): Promise<AwsConnectionRecord | undefined>;
+  hasDeploymentUsingAwsConnection(connectionId: string): Promise<boolean>;
   createAwsConnection(input: CreateAwsConnectionRecordInput): Promise<AwsConnectionRecord>;
+  deleteAccessibleAwsConnection(
+    connectionId: string,
+    accessContext: ProjectAccessContext
+  ): Promise<AwsConnectionRecord | undefined>;
   updateAwsConnectionVerification(
     input: UpdateAwsConnectionVerificationInput
   ): Promise<AwsConnectionRecord | undefined>;
@@ -67,7 +70,6 @@ export type CreateAwsConnectionOptions = {
 };
 
 export type VerifyAwsConnectionInput = {
-  projectId: string;
   connectionId: string;
   accessContext: ProjectAccessContext;
   roleArn: string;
@@ -75,12 +77,16 @@ export type VerifyAwsConnectionInput = {
 
 export type TestStoredAwsConnectionInput = VerifyAwsConnectionInput;
 
+export type DeleteAwsConnectionInput = {
+  connectionId: string;
+  accessContext: ProjectAccessContext;
+};
+
 export type VerifyAwsConnectionOptions = {
   now?: () => Date;
 };
 
 export type GetAwsConnectionCloudFormationTemplateInput = {
-  projectId: string;
   connectionId: string;
   accessContext: ProjectAccessContext;
   callerPrincipalArn: string;
@@ -94,7 +100,6 @@ export type GetAwsConnectionCloudFormationTemplateOptions = {
 };
 
 export type UpdateAwsConnectionVerificationInput = {
-  projectId: string;
   connectionId: string;
   userId: string;
   accountId: string | null;
@@ -117,6 +122,13 @@ export class AwsConnectionVerificationError extends Error {
   }
 }
 
+export class AwsConnectionDeleteConflictError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "AwsConnectionDeleteConflictError";
+  }
+}
+
 export class AwsConnectionCloudFormationTemplateError extends Error {
   constructor(message: string) {
     super(message);
@@ -126,24 +138,37 @@ export class AwsConnectionCloudFormationTemplateError extends Error {
 
 export function createPostgresAwsConnectionRepository(db: Database): AwsConnectionRepository {
   return {
-    async findAccessibleProject(projectId, accessContext) {
-      const [project] = await db
-        .select()
-        .from(projects)
-        .where(and(eq(projects.id, projectId), eq(projects.userId, accessContext.userId)));
-
-      return project;
-    },
-
-    async findAccessibleAwsConnection(projectId, connectionId, accessContext) {
+    async findAccessibleAwsConnection(connectionId, accessContext) {
       const [awsConnection] = await db
         .select()
         .from(awsConnections)
         .where(
           and(
             eq(awsConnections.id, connectionId),
-            eq(awsConnections.projectId, projectId),
             eq(awsConnections.userId, accessContext.userId)
+          )
+        );
+
+      return awsConnection;
+    },
+
+    async listAccessibleAwsConnections(accessContext) {
+      return db
+        .select()
+        .from(awsConnections)
+        .where(eq(awsConnections.userId, accessContext.userId))
+        .orderBy(desc(awsConnections.updatedAt), desc(awsConnections.createdAt));
+    },
+
+    async findVerifiedAwsConnectionByAccountId(accountId, accessContext) {
+      const [awsConnection] = await db
+        .select()
+        .from(awsConnections)
+        .where(
+          and(
+            eq(awsConnections.userId, accessContext.userId),
+            eq(awsConnections.accountId, accountId),
+            eq(awsConnections.status, "verified")
           )
         );
 
@@ -159,12 +184,36 @@ export function createPostgresAwsConnectionRepository(db: Database): AwsConnecti
       return awsConnection;
     },
 
+    async hasDeploymentUsingAwsConnection(connectionId) {
+      const [deployment] = await db
+        .select({ id: deployments.id })
+        .from(deployments)
+        .where(eq(deployments.awsConnectionId, connectionId))
+        .limit(1);
+
+      return Boolean(deployment);
+    },
+
     async createAwsConnection(input) {
       const [awsConnection] = await db.insert(awsConnections).values(input).returning();
 
       if (!awsConnection) {
         throw new Error("AWS connection creation failed");
       }
+
+      return awsConnection;
+    },
+
+    async deleteAccessibleAwsConnection(connectionId, accessContext) {
+      const [awsConnection] = await db
+        .delete(awsConnections)
+        .where(
+          and(
+            eq(awsConnections.id, connectionId),
+            eq(awsConnections.userId, accessContext.userId)
+          )
+        )
+        .returning();
 
       return awsConnection;
     },
@@ -183,7 +232,6 @@ export function createPostgresAwsConnectionRepository(db: Database): AwsConnecti
         .where(
           and(
             eq(awsConnections.id, input.connectionId),
-            eq(awsConnections.projectId, input.projectId),
             eq(awsConnections.userId, input.userId)
           )
         )
@@ -194,23 +242,27 @@ export function createPostgresAwsConnectionRepository(db: Database): AwsConnecti
   };
 }
 
+export async function listAwsConnections(
+  input: {
+    accessContext: ProjectAccessContext;
+  },
+  repository: AwsConnectionRepository
+): Promise<AwsConnection[]> {
+  const awsConnectionRows = await repository.listAccessibleAwsConnections(input.accessContext);
+
+  return awsConnectionRows.map(toAwsConnection);
+}
+
 export async function createAwsConnection(
   input: CreateAwsConnectionInput,
   repository: AwsConnectionRepository,
   options: CreateAwsConnectionOptions = {}
 ): Promise<CreateAwsConnectionResponse> {
-  const project = await repository.findAccessibleProject(input.projectId, input.accessContext);
-
-  if (!project) {
-    throw new AwsConnectionNotFoundError("Project not found");
-  }
-
   const generateId = options.generateId ?? randomUUID;
   const id = generateId();
   const externalId = options.generateExternalId?.() ?? createAwsExternalId(id);
   const awsConnection = await repository.createAwsConnection({
     id,
-    projectId: input.projectId,
     userId: input.accessContext.userId,
     externalId,
     region: input.region,
@@ -239,6 +291,35 @@ export async function createAwsConnection(
   };
 }
 
+export async function deleteAwsConnection(
+  input: DeleteAwsConnectionInput,
+  repository: AwsConnectionRepository
+): Promise<void> {
+  const awsConnection = await repository.findAccessibleAwsConnection(
+    input.connectionId,
+    input.accessContext
+  );
+
+  if (!awsConnection) {
+    throw new AwsConnectionNotFoundError("AWS connection not found");
+  }
+
+  const isUsedByDeployment = await repository.hasDeploymentUsingAwsConnection(awsConnection.id);
+
+  if (isUsedByDeployment) {
+    throw new AwsConnectionDeleteConflictError("AWS connection is used by a deployment");
+  }
+
+  const deletedConnection = await repository.deleteAccessibleAwsConnection(
+    awsConnection.id,
+    input.accessContext
+  );
+
+  if (!deletedConnection) {
+    throw new AwsConnectionNotFoundError("AWS connection not found");
+  }
+}
+
 export function createAwsExternalId(connectionId: string): string {
   return `sc_conn_${connectionId}_${randomBytes(24).toString("base64url")}`;
 }
@@ -246,7 +327,6 @@ export function createAwsExternalId(connectionId: string): string {
 export function toAwsConnection(row: AwsConnectionRecord): AwsConnection {
   return {
     id: row.id,
-    projectId: row.projectId,
     userId: row.userId,
     accountId: row.accountId,
     roleArn: row.roleArn,
@@ -266,7 +346,6 @@ export async function verifyAwsConnection(
   options: VerifyAwsConnectionOptions = {}
 ): Promise<VerifyAwsConnectionResponse> {
   const awsConnection = await repository.findAccessibleAwsConnection(
-    input.projectId,
     input.connectionId,
     input.accessContext
   );
@@ -280,7 +359,6 @@ export async function verifyAwsConnection(
   const now = options.now ?? (() => new Date());
   const markFailed = async (accountId: string | null) => {
     await repository.updateAwsConnectionVerification({
-      projectId: awsConnection.projectId,
       connectionId: awsConnection.id,
       userId: awsConnection.userId,
       accountId,
@@ -325,9 +403,22 @@ export async function verifyAwsConnection(
     throw new AwsConnectionVerificationError("AWS Role account mismatch");
   }
 
+  const existingVerifiedAccountConnection =
+    await repository.findVerifiedAwsConnectionByAccountId(
+      result.accountId,
+      input.accessContext
+    );
+
+  if (
+    existingVerifiedAccountConnection &&
+    existingVerifiedAccountConnection.id !== awsConnection.id
+  ) {
+    await markFailed(result.accountId);
+    throw new AwsConnectionVerificationError("AWS account is already connected");
+  }
+
   const verifiedAt = now();
   const updatedConnection = await repository.updateAwsConnectionVerification({
-    projectId: awsConnection.projectId,
     connectionId: awsConnection.id,
     userId: awsConnection.userId,
     accountId: result.accountId,
@@ -355,7 +446,6 @@ export async function testStoredAwsConnection(
   tester: AwsConnectionTester = createAwsConnectionTester()
 ): Promise<TestAwsConnectionResponse> {
   const awsConnection = await repository.findAccessibleAwsConnection(
-    input.projectId,
     input.connectionId,
     input.accessContext
   );
@@ -404,7 +494,6 @@ export async function getAwsConnectionCloudFormationTemplate(
   options: GetAwsConnectionCloudFormationTemplateOptions = {}
 ): Promise<AwsConnectionCloudFormationTemplateResponse> {
   const awsConnection = await repository.findAccessibleAwsConnection(
-    input.projectId,
     input.connectionId,
     input.accessContext
   );

@@ -9,13 +9,12 @@ import type {
   AwsConnectionRepository
 } from "../aws-connections/aws-connection-service.js";
 import { AwsConnectionTestError } from "../aws-connections/aws-connection-test-service.js";
-import type { ProjectAccessContext, ProjectRecord } from "../deployments/deployment-service.js";
+import type { ProjectAccessContext } from "../deployments/deployment-service.js";
 import { registerAwsConnectionRoutes, type AwsConnectionRouteOptions } from "./aws-connections.js";
 
 process.env.NODE_ENV = "test";
 process.env.AUTH_TOKEN_SECRET = "test-auth-token-secret-with-at-least-32-characters";
 
-const projectId = "11111111-1111-4111-8111-111111111111";
 const userId = "22222222-2222-4222-8222-222222222222";
 const awsConnectionId = "33333333-3333-4333-8333-333333333333";
 const callerPrincipalArn = "arn:aws:iam::123456789012:role/SketchCatchRuntimeRole";
@@ -28,7 +27,6 @@ type UserRecord = typeof users.$inferSelect;
 type AwsConnectionSetupResponse = {
   awsConnection: {
     id: string;
-    projectId: string;
     userId: string;
     accountId: string | null;
     roleArn: string | null;
@@ -70,7 +68,6 @@ type AwsConnectionTestResponse = {
 type AwsConnectionVerifyResponse = AwsConnectionTestResponse & {
   awsConnection: {
     id: string;
-    projectId: string;
     userId: string;
     accountId: string | null;
     roleArn: string | null;
@@ -96,30 +93,11 @@ type AwsConnectionCloudFormationTemplateResponse = {
 
 class FakeAwsConnectionRepository implements AwsConnectionRepository {
   readonly calls: Array<{ name: string; [key: string]: unknown }> = [];
-  project: ProjectRecord | undefined = createProjectRecord();
   awsConnection: AwsConnectionRecord | undefined;
-
-  async findAccessibleProject(candidateProjectId: string, accessContext: ProjectAccessContext) {
-    this.calls.push({
-      name: "findAccessibleProject",
-      projectId: candidateProjectId,
-      accessContext
-    });
-
-    if (
-      !this.project ||
-      this.project.id !== candidateProjectId ||
-      this.project.userId !== accessContext.userId
-    ) {
-      return undefined;
-    }
-
-    return this.project;
-  }
+  deploymentUsesConnection = false;
 
   async createAwsConnection(input: {
     id: string;
-    projectId: string;
     userId: string;
     externalId: string;
     region: string;
@@ -132,7 +110,6 @@ class FakeAwsConnectionRepository implements AwsConnectionRepository {
 
     this.awsConnection = {
       id: input.id,
-      projectId: input.projectId,
       userId: input.userId,
       accountId: null,
       roleArn: null,
@@ -148,13 +125,11 @@ class FakeAwsConnectionRepository implements AwsConnectionRepository {
   }
 
   async findAccessibleAwsConnection(
-    candidateProjectId: string,
     candidateConnectionId: string,
     accessContext: ProjectAccessContext
   ) {
     this.calls.push({
       name: "findAccessibleAwsConnection",
-      projectId: candidateProjectId,
       connectionId: candidateConnectionId,
       accessContext
     });
@@ -162,8 +137,42 @@ class FakeAwsConnectionRepository implements AwsConnectionRepository {
     if (
       !this.awsConnection ||
       this.awsConnection.id !== candidateConnectionId ||
-      this.awsConnection.projectId !== candidateProjectId ||
       this.awsConnection.userId !== accessContext.userId
+    ) {
+      return undefined;
+    }
+
+    return this.awsConnection;
+  }
+
+  async listAccessibleAwsConnections(accessContext: ProjectAccessContext) {
+    this.calls.push({
+      name: "listAccessibleAwsConnections",
+      accessContext
+    });
+
+    if (!this.awsConnection || this.awsConnection.userId !== accessContext.userId) {
+      return [];
+    }
+
+    return [this.awsConnection];
+  }
+
+  async findVerifiedAwsConnectionByAccountId(
+    accountId: string,
+    accessContext: ProjectAccessContext
+  ) {
+    this.calls.push({
+      name: "findVerifiedAwsConnectionByAccountId",
+      accountId,
+      accessContext
+    });
+
+    if (
+      !this.awsConnection ||
+      this.awsConnection.userId !== accessContext.userId ||
+      this.awsConnection.accountId !== accountId ||
+      this.awsConnection.status !== "verified"
     ) {
       return undefined;
     }
@@ -179,8 +188,40 @@ class FakeAwsConnectionRepository implements AwsConnectionRepository {
     return this.awsConnection;
   }
 
+  async hasDeploymentUsingAwsConnection(candidateConnectionId: string) {
+    this.calls.push({
+      name: "hasDeploymentUsingAwsConnection",
+      connectionId: candidateConnectionId
+    });
+
+    return this.deploymentUsesConnection && candidateConnectionId === this.awsConnection?.id;
+  }
+
+  async deleteAccessibleAwsConnection(
+    candidateConnectionId: string,
+    accessContext: ProjectAccessContext
+  ) {
+    this.calls.push({
+      name: "deleteAccessibleAwsConnection",
+      connectionId: candidateConnectionId,
+      accessContext
+    });
+
+    if (
+      !this.awsConnection ||
+      this.awsConnection.id !== candidateConnectionId ||
+      this.awsConnection.userId !== accessContext.userId
+    ) {
+      return undefined;
+    }
+
+    const deletedConnection = this.awsConnection;
+    this.awsConnection = undefined;
+
+    return deletedConnection;
+  }
+
   async updateAwsConnectionVerification(input: {
-    projectId: string;
     connectionId: string;
     userId: string;
     accountId: string | null;
@@ -232,14 +273,49 @@ class FakeAwsConnectionTester {
   }
 }
 
-test("POST /api/projects/:projectId/aws-connections returns caller principal ARN and generated externalId", async () => {
+test("GET /api/aws/connections returns user connection metadata", async () => {
+  const repository = new FakeAwsConnectionRepository();
+  repository.awsConnection = createAwsConnectionRecord({
+    accountId: "123456789012",
+    roleArn: testRoleArn,
+    status: "verified",
+    lastVerifiedAt: fixedNow
+  });
+  const app = await buildAwsConnectionTestApp(repository);
+
+  const response = await app.inject({
+    method: "GET",
+    url: "/api/aws/connections",
+    headers: await authHeaders()
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(response.json().awsConnections, [
+    {
+      id: awsConnectionId,
+      userId,
+      accountId: "123456789012",
+      roleArn: testRoleArn,
+      externalId,
+      region: "ap-northeast-2",
+      status: "verified",
+      lastVerifiedAt: fixedNow.toISOString(),
+      createdAt: fixedNow.toISOString(),
+      updatedAt: fixedNow.toISOString()
+    }
+  ]);
+
+  await app.close();
+});
+
+test("POST /api/aws/connections returns caller principal ARN and generated externalId", async () => {
   const repository = new FakeAwsConnectionRepository();
   const app = await buildAwsConnectionTestApp(repository);
 
   const response = await app.inject({
     method: "POST",
-    url: `/api/projects/${projectId}/aws-connections`,
-    headers: authHeaders(),
+    url: "/api/aws/connections",
+    headers: await authHeaders(),
     payload: {
       region: "ap-northeast-2"
     }
@@ -313,7 +389,7 @@ test("POST /api/projects/:projectId/aws-connections returns caller principal ARN
   await app.close();
 });
 
-test("POST /api/projects/:projectId/aws-connections/:connectionId/test returns caller identity without raw credentials", async () => {
+test("POST /api/aws/connections/:connectionId/test returns caller identity without raw credentials", async () => {
   const repository = new FakeAwsConnectionRepository();
   repository.awsConnection = createAwsConnectionRecord();
   const tester = new FakeAwsConnectionTester();
@@ -323,8 +399,8 @@ test("POST /api/projects/:projectId/aws-connections/:connectionId/test returns c
 
   const response = await app.inject({
     method: "POST",
-    url: `/api/projects/${projectId}/aws-connections/${awsConnectionId}/test`,
-    headers: authHeaders(),
+    url: `/api/aws/connections/${awsConnectionId}/test`,
+    headers: await authHeaders(),
     payload: {
       roleArn: testRoleArn
     }
@@ -359,7 +435,7 @@ test("POST /api/projects/:projectId/aws-connections/:connectionId/test returns c
   await app.close();
 });
 
-test("POST /api/projects/:projectId/aws-connections/:connectionId/test maps STS failures to bad_request", async () => {
+test("POST /api/aws/connections/:connectionId/test maps STS failures to bad_request", async () => {
   const repository = new FakeAwsConnectionRepository();
   repository.awsConnection = createAwsConnectionRecord();
   const tester = new FakeAwsConnectionTester(
@@ -371,8 +447,8 @@ test("POST /api/projects/:projectId/aws-connections/:connectionId/test maps STS 
 
   const response = await app.inject({
     method: "POST",
-    url: `/api/projects/${projectId}/aws-connections/${awsConnectionId}/test`,
-    headers: authHeaders(),
+    url: `/api/aws/connections/${awsConnectionId}/test`,
+    headers: await authHeaders(),
     payload: {
       roleArn: testRoleArn
     }
@@ -394,7 +470,7 @@ test("POST /api/projects/:projectId/aws-connections/:connectionId/test maps STS 
   await app.close();
 });
 
-test("POST /api/projects/:projectId/aws-connections/:connectionId/verify stores verified metadata", async () => {
+test("POST /api/aws/connections/:connectionId/verify stores verified metadata", async () => {
   const repository = new FakeAwsConnectionRepository();
   repository.awsConnection = createAwsConnectionRecord();
   const tester = new FakeAwsConnectionTester();
@@ -405,8 +481,8 @@ test("POST /api/projects/:projectId/aws-connections/:connectionId/verify stores 
 
   const response = await app.inject({
     method: "POST",
-    url: `/api/projects/${projectId}/aws-connections/${awsConnectionId}/verify`,
-    headers: authHeaders(),
+    url: `/api/aws/connections/${awsConnectionId}/verify`,
+    headers: await authHeaders(),
     payload: {
       roleArn: testRoleArn
     }
@@ -440,7 +516,57 @@ test("POST /api/projects/:projectId/aws-connections/:connectionId/verify stores 
   await app.close();
 });
 
-test("GET /api/projects/:projectId/aws-connections/:connectionId/cloudformation-template returns launch stack setup", async () => {
+test("DELETE /api/aws/connections/:connectionId deletes user connection metadata", async () => {
+  const repository = new FakeAwsConnectionRepository();
+  repository.awsConnection = createAwsConnectionRecord({
+    accountId: "123456789012",
+    roleArn: testRoleArn,
+    status: "verified",
+    lastVerifiedAt: fixedNow
+  });
+  const app = await buildAwsConnectionTestApp(repository);
+
+  const response = await app.inject({
+    method: "DELETE",
+    url: `/api/aws/connections/${awsConnectionId}`,
+    headers: await authHeaders()
+  });
+
+  assert.equal(response.statusCode, 204);
+  assert.equal(response.body, "");
+  assert.equal(repository.awsConnection, undefined);
+
+  await app.close();
+});
+
+test("DELETE /api/aws/connections/:connectionId returns conflict when a deployment uses it", async () => {
+  const repository = new FakeAwsConnectionRepository();
+  repository.awsConnection = createAwsConnectionRecord({
+    accountId: "123456789012",
+    roleArn: testRoleArn,
+    status: "verified",
+    lastVerifiedAt: fixedNow
+  });
+  repository.deploymentUsesConnection = true;
+  const app = await buildAwsConnectionTestApp(repository);
+
+  const response = await app.inject({
+    method: "DELETE",
+    url: `/api/aws/connections/${awsConnectionId}`,
+    headers: await authHeaders()
+  });
+
+  assert.equal(response.statusCode, 409);
+  assert.deepEqual(response.json(), {
+    error: "conflict",
+    message: "AWS connection is used by a deployment"
+  });
+  assert.equal(repository.awsConnection?.id, awsConnectionId);
+
+  await app.close();
+});
+
+test("GET /api/aws/connections/:connectionId/cloudformation-template returns launch stack setup", async () => {
   const repository = new FakeAwsConnectionRepository();
   repository.awsConnection = createAwsConnectionRecord();
   const app = await buildAwsConnectionTestApp(repository, {
@@ -452,8 +578,8 @@ test("GET /api/projects/:projectId/aws-connections/:connectionId/cloudformation-
 
   const response = await app.inject({
     method: "GET",
-    url: `/api/projects/${projectId}/aws-connections/${awsConnectionId}/cloudformation-template`,
-    headers: authHeaders()
+    url: `/api/aws/connections/${awsConnectionId}/cloudformation-template`,
+    headers: await authHeaders()
   });
 
   assert.equal(response.statusCode, 200);
@@ -495,8 +621,8 @@ test("GET /api/aws/connections/cloudformation-template returns public template y
 
   const setupResponse = await app.inject({
     method: "GET",
-    url: `/api/projects/${projectId}/aws-connections/${awsConnectionId}/cloudformation-template`,
-    headers: authHeaders()
+    url: `/api/aws/connections/${awsConnectionId}/cloudformation-template`,
+    headers: await authHeaders()
   });
   const setupBody = setupResponse.json() as AwsConnectionCloudFormationTemplateResponse;
   const templateUrl = new URL(setupBody.templateUrl ?? "");
@@ -527,8 +653,8 @@ test("GET /api/aws/connections/cloudformation-template rejects a token after the
 
   const setupResponse = await app.inject({
     method: "GET",
-    url: `/api/projects/${projectId}/aws-connections/${awsConnectionId}/cloudformation-template`,
-    headers: authHeaders()
+    url: `/api/aws/connections/${awsConnectionId}/cloudformation-template`,
+    headers: await authHeaders()
   });
   const setupBody = setupResponse.json() as AwsConnectionCloudFormationTemplateResponse;
   const templateUrl = new URL(setupBody.templateUrl ?? "");
@@ -545,29 +671,6 @@ test("GET /api/aws/connections/cloudformation-template rejects a token after the
   assert.deepEqual(response.json(), {
     error: "bad_request",
     message: "CloudFormation template URL is invalid or expired"
-  });
-
-  await app.close();
-});
-
-test("POST /api/projects/:projectId/aws-connections maps inaccessible projects to not_found", async () => {
-  const repository = new FakeAwsConnectionRepository();
-  repository.project = undefined;
-  const app = await buildAwsConnectionTestApp(repository);
-
-  const response = await app.inject({
-    method: "POST",
-    url: `/api/projects/${projectId}/aws-connections`,
-    headers: authHeaders(),
-    payload: {
-      region: "ap-northeast-2"
-    }
-  });
-
-  assert.equal(response.statusCode, 404);
-  assert.deepEqual(response.json(), {
-    error: "not_found",
-    message: "Project not found"
   });
 
   await app.close();
@@ -597,24 +700,11 @@ async function buildAwsConnectionTestApp(
   return app;
 }
 
-function createProjectRecord(overrides: Partial<ProjectRecord> = {}): ProjectRecord {
-  return {
-    id: projectId,
-    userId,
-    name: "AWS setup project",
-    description: null,
-    createdAt: fixedNow,
-    updatedAt: fixedNow,
-    ...overrides
-  };
-}
-
 function createAwsConnectionRecord(
   overrides: Partial<AwsConnectionRecord> = {}
 ): AwsConnectionRecord {
   return {
     id: awsConnectionId,
-    projectId,
     userId,
     accountId: null,
     roleArn: null,
@@ -642,9 +732,9 @@ function createUserRecord(overrides: Partial<UserRecord> = {}): UserRecord {
   };
 }
 
-function authHeaders(activeUserId = userId): Record<string, string> {
+async function authHeaders(activeUserId = userId): Promise<Record<string, string>> {
   return {
-    authorization: `Bearer ${createAccessToken(activeUserId)}`
+    authorization: `Bearer ${await createAccessToken(activeUserId)}`
   };
 }
 

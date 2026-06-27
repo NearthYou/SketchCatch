@@ -7,13 +7,16 @@ import {
 } from "../config/env.js";
 import { getDatabaseClient, type DatabaseClient } from "../db/client.js";
 import {
+  AwsConnectionDeleteConflictError,
   AwsConnectionCloudFormationTemplateError,
   AwsConnectionNotFoundError,
   AwsConnectionVerificationError,
   createAwsConnection,
   createPostgresAwsConnectionRepository,
+  deleteAwsConnection,
   getAwsConnectionCloudFormationTemplate,
   isRecommendedAwsConnectionRoleArn,
+  listAwsConnections,
   recommendedAwsConnectionRoleName,
   renderAwsConnectionCloudFormationTemplateFromToken,
   testStoredAwsConnection,
@@ -42,19 +45,11 @@ const awsRoleArnSchema = z
     message: `AWS Role ARN must use ${recommendedAwsConnectionRoleName}`
   });
 
-const createAwsConnectionParamsSchema = z.object({
-  projectId: z.uuid()
-});
-
-const verifyAwsConnectionParamsSchema = z.object({
-  projectId: z.uuid(),
+const awsConnectionParamsSchema = z.object({
   connectionId: z.uuid()
 });
 
-const cloudFormationTemplateParamsSchema = z.object({
-  projectId: z.uuid(),
-  connectionId: z.uuid()
-});
+const cloudFormationTemplateParamsSchema = awsConnectionParamsSchema;
 
 const publicCloudFormationTemplateQuerySchema = z.object({
   token: z.string().trim().min(1).max(4096)
@@ -98,8 +93,30 @@ export async function registerAwsConnectionRoutes(
 ): Promise<void> {
   const getAwsConnectionDatabaseClient = options?.getDatabaseClient ?? getDatabaseClient;
 
-  app.post("/projects/:projectId/aws-connections", async (request, reply) => {
-    const params = createAwsConnectionParamsSchema.parse(request.params);
+  app.get("/aws/connections", async (request, reply) => {
+    const client = getAwsConnectionDatabaseClient();
+    const currentUserId = await requireActiveUserId(request, () => client);
+    const repository =
+      options?.createAwsConnectionRepository?.(client.db) ??
+      createPostgresAwsConnectionRepository(client.db);
+
+    try {
+      const awsConnections = await listAwsConnections(
+        {
+          accessContext: createUserProjectAccessContext(currentUserId)
+        },
+        repository
+      );
+
+      return reply.status(200).send({
+        awsConnections
+      });
+    } catch (error) {
+      return handleAwsConnectionError(error, reply);
+    }
+  });
+
+  app.post("/aws/connections", async (request, reply) => {
     const body = createAwsConnectionBodySchema.parse(request.body);
     const client = getAwsConnectionDatabaseClient();
     const currentUserId = await requireActiveUserId(request, () => client);
@@ -123,7 +140,6 @@ export async function registerAwsConnectionRoutes(
 
       const result = await createAwsConnection(
         {
-          projectId: params.projectId,
           accessContext: createUserProjectAccessContext(currentUserId),
           region: body.region,
           callerPrincipalArn:
@@ -140,8 +156,8 @@ export async function registerAwsConnectionRoutes(
     }
   });
 
-  app.post("/projects/:projectId/aws-connections/:connectionId/test", async (request, reply) => {
-    const params = verifyAwsConnectionParamsSchema.parse(request.params);
+  app.post("/aws/connections/:connectionId/test", async (request, reply) => {
+    const params = awsConnectionParamsSchema.parse(request.params);
     const body = testAwsConnectionBodySchema.parse(request.body);
     const client = getAwsConnectionDatabaseClient();
     const currentUserId = await requireActiveUserId(request, () => client);
@@ -166,7 +182,6 @@ export async function registerAwsConnectionRoutes(
     try {
       const result = await testStoredAwsConnection(
         {
-          projectId: params.projectId,
           connectionId: params.connectionId,
           accessContext: createUserProjectAccessContext(currentUserId),
           roleArn: body.roleArn
@@ -181,8 +196,8 @@ export async function registerAwsConnectionRoutes(
     }
   });
 
-  app.post("/projects/:projectId/aws-connections/:connectionId/verify", async (request, reply) => {
-    const params = verifyAwsConnectionParamsSchema.parse(request.params);
+  app.post("/aws/connections/:connectionId/verify", async (request, reply) => {
+    const params = awsConnectionParamsSchema.parse(request.params);
     const body = verifyAwsConnectionBodySchema.parse(request.body);
     const client = getAwsConnectionDatabaseClient();
     const currentUserId = await requireActiveUserId(request, () => client);
@@ -215,7 +230,6 @@ export async function registerAwsConnectionRoutes(
 
       const result = await verifyAwsConnection(
         {
-          projectId: params.projectId,
           connectionId: params.connectionId,
           accessContext: createUserProjectAccessContext(currentUserId),
           roleArn: body.roleArn
@@ -231,8 +245,31 @@ export async function registerAwsConnectionRoutes(
     }
   });
 
+  app.delete("/aws/connections/:connectionId", async (request, reply) => {
+    const params = awsConnectionParamsSchema.parse(request.params);
+    const client = getAwsConnectionDatabaseClient();
+    const currentUserId = await requireActiveUserId(request, () => client);
+    const repository =
+      options?.createAwsConnectionRepository?.(client.db) ??
+      createPostgresAwsConnectionRepository(client.db);
+
+    try {
+      await deleteAwsConnection(
+        {
+          connectionId: params.connectionId,
+          accessContext: createUserProjectAccessContext(currentUserId)
+        },
+        repository
+      );
+
+      return reply.status(204).send();
+    } catch (error) {
+      return handleAwsConnectionError(error, reply);
+    }
+  });
+
   app.get(
-    "/projects/:projectId/aws-connections/:connectionId/cloudformation-template",
+    "/aws/connections/:connectionId/cloudformation-template",
     async (request, reply) => {
       const params = cloudFormationTemplateParamsSchema.parse(request.params);
       const client = getAwsConnectionDatabaseClient();
@@ -252,7 +289,6 @@ export async function registerAwsConnectionRoutes(
 
         const result = await getAwsConnectionCloudFormationTemplate(
           {
-            projectId: params.projectId,
             connectionId: params.connectionId,
             accessContext: createUserProjectAccessContext(currentUserId),
             callerPrincipalArn:
@@ -302,6 +338,13 @@ function handleAwsConnectionError(error: unknown, reply: FastifyReply) {
   if (error instanceof AwsConnectionNotFoundError) {
     return reply.status(404).send({
       error: "not_found",
+      message: error.message
+    });
+  }
+
+  if (error instanceof AwsConnectionDeleteConflictError) {
+    return reply.status(409).send({
+      error: "conflict",
       message: error.message
     });
   }

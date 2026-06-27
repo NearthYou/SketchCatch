@@ -84,12 +84,21 @@ test("AWS connections store generated external ids without raw credentials", () 
   const config = getTableConfig(awsConnections);
 
   assert.equal(awsConnectionStatusEnum.enumName, "aws_connection_status");
+  assert.equal(findColumn(config.columns, "project_id"), undefined);
+  assert(findColumn(config.columns, "user_id"));
   assert(findColumn(config.columns, "external_id"));
   assert(findColumn(config.columns, "role_arn"));
   assert(findColumn(config.columns, "account_id"));
   assert.equal(findColumn(config.columns, "access_key_id"), undefined);
   assert.equal(findColumn(config.columns, "secret_access_key"), undefined);
   assert.equal(findColumn(config.columns, "session_token"), undefined);
+  assert(hasIndex(config.indexes, "aws_connections_user_id_idx", ["user_id"]));
+  assert(
+    hasUniqueIndex(config.indexes, "aws_connections_user_verified_account_unique", [
+      "user_id",
+      "account_id"
+    ])
+  );
   assert(hasUniqueIndex(config.indexes, "aws_connections_external_id_unique", ["external_id"]));
 });
 

@@ -186,9 +186,6 @@ export const awsConnections = pgTable(
   "aws_connections",
   {
     id: varchar("id", { length: 36 }).primaryKey(),
-    projectId: varchar("project_id", { length: 36 })
-      .notNull()
-      .references(() => projects.id, { onDelete: "cascade" }),
     userId: varchar("user_id", { length: 36 })
       .notNull()
       .references(() => users.id, { onDelete: "restrict" }),
@@ -202,8 +199,10 @@ export const awsConnections = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
   },
   (table) => [
-    index("aws_connections_project_id_idx").on(table.projectId),
     index("aws_connections_user_id_idx").on(table.userId),
+    uniqueIndex("aws_connections_user_verified_account_unique")
+      .on(table.userId, table.accountId)
+      .where(sql`${table.status} = 'verified' AND ${table.accountId} IS NOT NULL`),
     uniqueIndex("aws_connections_external_id_unique").on(table.externalId)
   ]
 );
@@ -293,8 +292,7 @@ export const projectsRelations = relations(projects, ({ many, one }) => ({
   draft: one(projectDrafts),
   architectures: many(architectures),
   assets: many(projectAssets),
-  deployments: many(deployments),
-  awsConnections: many(awsConnections)
+  deployments: many(deployments)
 }));
 
 export const architecturesRelations = relations(architectures, ({ many, one }) => ({
@@ -351,10 +349,6 @@ export const deploymentLogsRelations = relations(deploymentLogs, ({ one }) => ({
 }));
 
 export const awsConnectionsRelations = relations(awsConnections, ({ one }) => ({
-  project: one(projects, {
-    fields: [awsConnections.projectId],
-    references: [projects.id]
-  }),
   user: one(users, {
     fields: [awsConnections.userId],
     references: [users.id]
