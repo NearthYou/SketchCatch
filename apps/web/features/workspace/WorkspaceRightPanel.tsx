@@ -16,6 +16,7 @@ import { ParameterInputPanel } from "../parameter-input";
 import type { DiagramEditorPanelContext } from "../diagram-editor";
 import {
   approveDeploymentPlan,
+  cancelDeployment as cancelDeploymentRun,
   createDeployment,
   getProjectDetails,
   listAwsConnections,
@@ -24,7 +25,8 @@ import {
   listDeployments,
   listTerraformOutputs,
   runDeploymentApply,
-  runDeploymentPlan
+  runDeploymentPlan,
+  streamDeploymentLogs
 } from "./api";
 import styles from "./workspace.module.css";
 
@@ -150,6 +152,10 @@ function DeploymentPanel({
     selectedDeployment?.status !== "SUCCESS" &&
     selectedDeployment?.isBlocked === false &&
     requestState !== "loading";
+  const canCancelDeployment =
+    selectedDeployment?.status === "RUNNING" &&
+    !selectedDeployment.cancelRequestedAt &&
+    requestState !== "loading";
   const shouldShowPlanButton = Boolean(selectedDeployment) && !isPlanApproved;
   const shouldShowApprovePlanButton =
     Boolean(selectedDeployment) && hasCurrentPlan && !isPlanApproved;
@@ -247,6 +253,31 @@ function DeploymentPanel({
 
     setSelectedTerraformArtifactId(architectureTerraformArtifacts[0]?.id ?? "");
   }, [architectureTerraformArtifacts, selectedTerraformArtifactId]);
+
+  useEffect(() => {
+    if (!selectedDeploymentId || selectedDeployment?.status !== "RUNNING") {
+      return;
+    }
+
+    const controller = new AbortController();
+
+    void streamDeploymentLogs({
+      deploymentId: selectedDeploymentId,
+      sinceSequence: 0,
+      signal: controller.signal,
+      onLog: (log) => {
+        setDeploymentLogs((currentLogs) => mergeDeploymentLog(currentLogs, log));
+      }
+    }).catch((error) => {
+      if (!controller.signal.aborted) {
+        setErrorMessage(getApiErrorMessage(error, "Deployment 로그 스트림 연결에 실패했습니다."));
+      }
+    });
+
+    return () => {
+      controller.abort();
+    };
+  }, [selectedDeploymentId, selectedDeployment?.status]);
 
   async function runRequest(request: () => Promise<void>, fallbackMessage: string): Promise<void> {
     setRequestState("loading");
@@ -354,6 +385,24 @@ function DeploymentPanel({
       setDeploymentResources(resources);
       setTerraformOutputs(outputs);
     }, "Terraform Apply를 시작하지 못했습니다.");
+  }
+
+  async function cancelSelectedDeployment(): Promise<void> {
+    if (!selectedDeployment || !canCancelDeployment) {
+      return;
+    }
+
+    await runRequest(async () => {
+      const deployment = await cancelDeploymentRun(selectedDeployment.id);
+      setDeployments((currentDeployments) =>
+        currentDeployments.map((currentDeployment) =>
+          currentDeployment.id === deployment.id ? deployment : currentDeployment
+        )
+      );
+      setSelectedDeploymentId(deployment.id);
+      const logs = await listDeploymentLogs(deployment.id);
+      setDeploymentLogs(logs);
+    }, "Deployment 실행 취소를 요청하지 못했습니다.");
   }
 
   async function refreshDeploymentPanel(): Promise<void> {
@@ -514,6 +563,21 @@ function DeploymentPanel({
         {selectedDeployment ? (
           <div className={styles.deploymentSummary}>
             <InfoRow label="Status" value={selectedDeployment.status} />
+            <InfoRow label="Active stage" value={selectedDeployment.activeStage ?? "없음"} />
+            <InfoRow label="Started at" value={formatOptionalDate(selectedDeployment.startedAt)} />
+            <InfoRow
+              label="Completed at"
+              value={formatOptionalDate(selectedDeployment.completedAt)}
+            />
+            <InfoRow label="Failed at" value={formatOptionalDate(selectedDeployment.failedAt)} />
+            <InfoRow
+              label="Cancel requested"
+              value={formatOptionalDate(selectedDeployment.cancelRequestedAt)}
+            />
+            <InfoRow
+              label="Cancelled at"
+              value={formatOptionalDate(selectedDeployment.cancelledAt)}
+            />
             <InfoRow
               label="Current plan"
               value={selectedDeployment.currentPlanArtifactId ?? "없음"}
@@ -591,6 +655,17 @@ function DeploymentPanel({
           >
             <DashboardIcon name="rocket" />
             Terraform Apply 실행
+          </button>
+        ) : null}
+
+        {selectedDeployment?.status === "RUNNING" ? (
+          <button
+            className={styles.deploymentSecondaryButton}
+            disabled={!canCancelDeployment}
+            onClick={cancelSelectedDeployment}
+            type="button"
+          >
+            실행 취소 요청
           </button>
         ) : null}
 
@@ -752,6 +827,10 @@ function formatApprovalState(deployment: Deployment): string {
 
 function getDeploymentActionHint(deployment: Deployment): string {
   if (deployment.status === "RUNNING") {
+    if (deployment.cancelRequestedAt) {
+      return "취소 요청을 보냈습니다. Terraform 프로세스가 멈추면 상태가 갱신됩니다.";
+    }
+
     return "Terraform 작업이 진행 중입니다. 새로고침으로 상태를 확인해주세요.";
   }
 
@@ -776,6 +855,18 @@ function getDeploymentActionHint(deployment: Deployment): string {
   }
 
   return "";
+}
+
+function mergeDeploymentLog(logs: DeploymentLog[], log: DeploymentLog): DeploymentLog[] {
+  if (
+    logs.some(
+      (currentLog) => currentLog.id === log.id || currentLog.sequence === log.sequence
+    )
+  ) {
+    return logs;
+  }
+
+  return [...logs, log].sort((left, right) => left.sequence - right.sequence);
 }
 
 function formatDeploymentLogLine(log: DeploymentLog): string {
@@ -812,6 +903,10 @@ function formatOutputValue(output: TerraformOutput): string {
   }
 
   return JSON.stringify(output.value);
+}
+
+function formatOptionalDate(value: string | null): string {
+  return value ? formatDate(value) : "없음";
 }
 
 function formatDate(value: string): string {
