@@ -6,10 +6,12 @@ import type {
   CreateAwsConnectionResponse,
   CreateDeploymentRequest,
   CreateProjectRequest,
+  DeployedResource,
   Deployment,
   DeploymentListResponse,
   DeploymentLog,
   DeploymentLogListResponse,
+  DeploymentResourceListResponse,
   DeploymentResponse,
   Project,
   ProjectDetailsResponse,
@@ -17,6 +19,8 @@ import type {
   ProjectListResponse,
   ProjectResponse,
   SaveProjectDraftRequest,
+  TerraformOutput,
+  TerraformOutputListResponse,
   TestAwsConnectionRequest,
   TestAwsConnectionResponse,
   VerifyAwsConnectionRequest,
@@ -222,6 +226,19 @@ export async function approveDeploymentPlan(deploymentId: string): Promise<Deplo
   return response.deployment;
 }
 
+export async function runDeploymentApply(deploymentId: string): Promise<Deployment> {
+  const response = await apiFetch<DeploymentResponse>(
+    `/deployments/${encodeURIComponent(deploymentId)}/apply`,
+    {
+      auth: true,
+      method: "POST",
+      body: {}
+    }
+  );
+
+  return response.deployment;
+}
+
 export async function listDeploymentLogs(deploymentId: string): Promise<DeploymentLog[]> {
   const response = await apiFetch<DeploymentLogListResponse>(
     `/deployments/${encodeURIComponent(deploymentId)}/logs`,
@@ -231,4 +248,26 @@ export async function listDeploymentLogs(deploymentId: string): Promise<Deployme
   );
 
   return response.logs;
+}
+
+export async function listDeploymentResources(deploymentId: string): Promise<DeployedResource[]> {
+  const response = await apiFetch<DeploymentResourceListResponse>(
+    `/deployments/${encodeURIComponent(deploymentId)}/resources`,
+    {
+      auth: true
+    }
+  );
+
+  return response.resources;
+}
+
+export async function listTerraformOutputs(deploymentId: string): Promise<TerraformOutput[]> {
+  const response = await apiFetch<TerraformOutputListResponse>(
+    `/deployments/${encodeURIComponent(deploymentId)}/outputs`,
+    {
+      auth: true
+    }
+  );
+
+  return response.outputs;
 }

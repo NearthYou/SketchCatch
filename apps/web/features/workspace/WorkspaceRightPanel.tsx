@@ -3,10 +3,12 @@
 import { useEffect, useMemo, useState } from "react";
 import type {
   AwsConnection,
+  DeployedResource,
   Deployment,
   DeploymentLog,
   ProjectDetailsResponse,
-  TerraformArtifact
+  TerraformArtifact,
+  TerraformOutput
 } from "@sketchcatch/types";
 import { DashboardIcon } from "../../components/dashboard/dashboard-icons";
 import { getApiErrorMessage } from "../../lib/api-client";
@@ -17,8 +19,11 @@ import {
   createDeployment,
   getProjectDetails,
   listAwsConnections,
+  listDeploymentResources,
   listDeploymentLogs,
   listDeployments,
+  listTerraformOutputs,
+  runDeploymentApply,
   runDeploymentPlan
 } from "./api";
 import styles from "./workspace.module.css";
@@ -84,10 +89,13 @@ function DeploymentPanel({
   const [awsConnections, setAwsConnections] = useState<AwsConnection[]>([]);
   const [deployments, setDeployments] = useState<Deployment[]>([]);
   const [deploymentLogs, setDeploymentLogs] = useState<DeploymentLog[]>([]);
+  const [deploymentResources, setDeploymentResources] = useState<DeployedResource[]>([]);
+  const [terraformOutputs, setTerraformOutputs] = useState<TerraformOutput[]>([]);
   const [selectedArchitectureId, setSelectedArchitectureId] = useState("");
   const [selectedTerraformArtifactId, setSelectedTerraformArtifactId] = useState("");
   const [selectedAwsConnectionId, setSelectedAwsConnectionId] = useState("");
   const [selectedDeploymentId, setSelectedDeploymentId] = useState("");
+  const [showApplyConfirmation, setShowApplyConfirmation] = useState(false);
   const [requestState, setRequestState] = useState<RequestState>("idle");
   const [errorMessage, setErrorMessage] = useState("");
 
@@ -134,6 +142,13 @@ function DeploymentPanel({
     selectedDeployment?.status !== "RUNNING" &&
     selectedDeployment?.isBlocked === true &&
     selectedDeployment?.blockedBy === "missing_approval" &&
+    requestState !== "loading";
+  const canApply =
+    Boolean(selectedDeployment) &&
+    isPlanApproved &&
+    selectedDeployment?.status !== "RUNNING" &&
+    selectedDeployment?.status !== "SUCCESS" &&
+    selectedDeployment?.isBlocked === false &&
     requestState !== "loading";
   const shouldShowPlanButton = Boolean(selectedDeployment) && !isPlanApproved;
   const shouldShowApprovePlanButton =
@@ -190,22 +205,32 @@ function DeploymentPanel({
   useEffect(() => {
     if (!selectedDeploymentId) {
       setDeploymentLogs([]);
+      setDeploymentResources([]);
+      setTerraformOutputs([]);
+      setShowApplyConfirmation(false);
       return;
     }
 
     let cancelled = false;
 
-    async function loadLogs(): Promise<void> {
+    async function loadApplyDetails(): Promise<void> {
       await runRequest(async () => {
-        const logs = await listDeploymentLogs(selectedDeploymentId);
+        const [logs, resources, outputs] = await Promise.all([
+          listDeploymentLogs(selectedDeploymentId),
+          listDeploymentResources(selectedDeploymentId),
+          listTerraformOutputs(selectedDeploymentId)
+        ]);
 
         if (!cancelled) {
           setDeploymentLogs(logs);
+          setDeploymentResources(resources);
+          setTerraformOutputs(outputs);
+          setShowApplyConfirmation(false);
         }
       }, "배포 로그를 불러오지 못했습니다.");
     }
 
-    void loadLogs();
+    void loadApplyDetails();
 
     return () => {
       cancelled = true;
@@ -252,6 +277,9 @@ function DeploymentPanel({
       setDeployments((currentDeployments) => [deployment, ...currentDeployments]);
       setSelectedDeploymentId(deployment.id);
       setDeploymentLogs([]);
+      setDeploymentResources([]);
+      setTerraformOutputs([]);
+      setShowApplyConfirmation(false);
     }, "Deployment를 생성하지 못했습니다.");
   }
 
@@ -268,7 +296,14 @@ function DeploymentPanel({
         )
       );
       setSelectedDeploymentId(deployment.id);
-      setDeploymentLogs(await listDeploymentLogs(deployment.id));
+      const [logs, resources, outputs] = await Promise.all([
+        listDeploymentLogs(deployment.id),
+        listDeploymentResources(deployment.id),
+        listTerraformOutputs(deployment.id)
+      ]);
+      setDeploymentLogs(logs);
+      setDeploymentResources(resources);
+      setTerraformOutputs(outputs);
     }, "Terraform Plan을 시작하지 못했습니다.");
   }
 
@@ -285,17 +320,58 @@ function DeploymentPanel({
         )
       );
       setSelectedDeploymentId(deployment.id);
-      setDeploymentLogs(await listDeploymentLogs(deployment.id));
+      const [logs, resources, outputs] = await Promise.all([
+        listDeploymentLogs(deployment.id),
+        listDeploymentResources(deployment.id),
+        listTerraformOutputs(deployment.id)
+      ]);
+      setDeploymentLogs(logs);
+      setDeploymentResources(resources);
+      setTerraformOutputs(outputs);
     }, "Terraform Plan을 승인하지 못했습니다.");
+  }
+
+  async function startTerraformApply(): Promise<void> {
+    if (!selectedDeployment || !canApply) {
+      return;
+    }
+
+    await runRequest(async () => {
+      const deployment = await runDeploymentApply(selectedDeployment.id);
+      setDeployments((currentDeployments) =>
+        currentDeployments.map((currentDeployment) =>
+          currentDeployment.id === deployment.id ? deployment : currentDeployment
+        )
+      );
+      setSelectedDeploymentId(deployment.id);
+      setShowApplyConfirmation(false);
+      const [logs, resources, outputs] = await Promise.all([
+        listDeploymentLogs(deployment.id),
+        listDeploymentResources(deployment.id),
+        listTerraformOutputs(deployment.id)
+      ]);
+      setDeploymentLogs(logs);
+      setDeploymentResources(resources);
+      setTerraformOutputs(outputs);
+    }, "Terraform Apply를 시작하지 못했습니다.");
   }
 
   async function refreshDeploymentPanel(): Promise<void> {
     await runRequest(async () => {
-      const [nextProjectDetails, nextConnections, nextDeployments, nextLogs] = await Promise.all([
+      const [
+        nextProjectDetails,
+        nextConnections,
+        nextDeployments,
+        nextLogs,
+        nextResources,
+        nextOutputs
+      ] = await Promise.all([
         getProjectDetails(projectId),
         listAwsConnections(),
         listDeployments(projectId),
-        selectedDeploymentId ? listDeploymentLogs(selectedDeploymentId) : Promise.resolve([])
+        selectedDeploymentId ? listDeploymentLogs(selectedDeploymentId) : Promise.resolve([]),
+        selectedDeploymentId ? listDeploymentResources(selectedDeploymentId) : Promise.resolve([]),
+        selectedDeploymentId ? listTerraformOutputs(selectedDeploymentId) : Promise.resolve([])
       ]);
       const latestArchitecture = nextProjectDetails.architectures[0];
       const latestVerifiedConnection = nextConnections.find(
@@ -306,6 +382,8 @@ function DeploymentPanel({
       setAwsConnections(nextConnections);
       setDeployments(nextDeployments);
       setDeploymentLogs(nextLogs);
+      setDeploymentResources(nextResources);
+      setTerraformOutputs(nextOutputs);
       setSelectedArchitectureId((currentId) =>
         nextProjectDetails.architectures.some((architecture) => architecture.id === currentId)
           ? currentId
@@ -472,6 +550,11 @@ function DeploymentPanel({
                 />
               </>
             ) : null}
+            <InfoRow label="State object" value={selectedDeployment.stateObjectKey ?? "없음"} />
+            <InfoRow
+              label="Result warning"
+              value={selectedDeployment.resultWarningSummary ?? "없음"}
+            />
             <InfoRow label="Error" value={selectedDeployment.errorSummary ?? "없음"} />
           </div>
         ) : null}
@@ -500,15 +583,91 @@ function DeploymentPanel({
         ) : null}
 
         {shouldShowApplyButton ? (
-          <button className={styles.deploymentPrimaryButton} disabled type="button">
+          <button
+            className={styles.deploymentPrimaryButton}
+            disabled={!canApply}
+            onClick={() => setShowApplyConfirmation(true)}
+            type="button"
+          >
             <DashboardIcon name="rocket" />
-            Apply 실행
+            Terraform Apply 실행
           </button>
+        ) : null}
+
+        {selectedDeployment && showApplyConfirmation ? (
+          <div className={styles.deploymentApplyConfirm}>
+            <h3>Apply 확인</h3>
+            <InfoRow
+              label="AWS account"
+              value={selectedDeployment.approvedAwsAccountId ?? "없음"}
+            />
+            <InfoRow label="AWS region" value={selectedDeployment.approvedAwsRegion ?? "없음"} />
+            {selectedDeployment.planSummary ? (
+              <InfoRow
+                label="Plan changes"
+                value={`+${selectedDeployment.planSummary.createCount} ~${selectedDeployment.planSummary.updateCount} -${selectedDeployment.planSummary.deleteCount} +/-${selectedDeployment.planSummary.replaceCount}`}
+              />
+            ) : null}
+            <p>
+              이번 MVP Apply는 VPC, Public Subnet, Internet Gateway, Route Table, Security Group,
+              EC2, S3 Bucket 범위만 실행합니다. 실행 후 AWS 비용이 발생할 수 있으니 실습 완료
+              후 콘솔에서 리소스를 직접 확인하고 정리하세요.
+            </p>
+            <div className={styles.deploymentApplyActions}>
+              <button
+                className={styles.deploymentSecondaryButton}
+                disabled={requestState === "loading"}
+                onClick={() => setShowApplyConfirmation(false)}
+                type="button"
+              >
+                취소
+              </button>
+              <button
+                className={styles.deploymentPrimaryButton}
+                disabled={!canApply}
+                onClick={startTerraformApply}
+                type="button"
+              >
+                <DashboardIcon name="rocket" />
+                실제 AWS 리소스 생성
+              </button>
+            </div>
+          </div>
         ) : null}
 
         {deploymentActionHint ? (
           <p className={styles.deploymentHint}>{deploymentActionHint}</p>
         ) : null}
+      </section>
+
+      <section className={styles.deploymentSection}>
+        <h3>Apply results</h3>
+        {deploymentResources.length === 0 ? (
+          <p className={styles.deploymentHint}>아직 기록된 AWS 리소스가 없습니다.</p>
+        ) : (
+          <div className={styles.deploymentResultList}>
+            {deploymentResources.map((resource) => (
+              <div key={resource.id}>
+                <strong>{resource.terraformAddress}</strong>
+                <span>{resource.terraformType}</span>
+                <span>{resource.resourceId ?? "resource id 없음"}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        {terraformOutputs.length === 0 ? (
+          <p className={styles.deploymentHint}>Terraform output이 없습니다.</p>
+        ) : (
+          <div className={styles.deploymentResultList}>
+            {terraformOutputs.map((output) => (
+              <div key={output.id}>
+                <strong>{output.name}</strong>
+                <span>{output.sensitive ? "sensitive" : "plain"}</span>
+                <span>{formatOutputValue(output)}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </section>
 
       <section className={styles.deploymentSection}>
@@ -597,7 +756,11 @@ function getDeploymentActionHint(deployment: Deployment): string {
   }
 
   if (deployment.approvedAt) {
-    return "승인된 Plan이 준비되었습니다. 실제 Apply 실행 단계는 아직 연결 전입니다.";
+    if (deployment.status === "SUCCESS") {
+      return "Apply가 완료되었습니다. 생성된 리소스와 Terraform output을 아래에서 확인할 수 있습니다.";
+    }
+
+    return "승인된 Plan이 준비되었습니다. Apply 실행 전 AWS 계정과 변경 내용을 다시 확인하세요.";
   }
 
   if (!deployment.currentPlanArtifactId) {
@@ -633,6 +796,22 @@ function formatShortHash(value: string | null): string {
   }
 
   return `${value.slice(0, 12)}...${value.slice(-4)}`;
+}
+
+function formatOutputValue(output: TerraformOutput): string {
+  if (output.sensitive) {
+    return "[sensitive]";
+  }
+
+  if (output.value === null || output.value === undefined) {
+    return "없음";
+  }
+
+  if (typeof output.value === "string") {
+    return output.value;
+  }
+
+  return JSON.stringify(output.value);
 }
 
 function formatDate(value: string): string {
