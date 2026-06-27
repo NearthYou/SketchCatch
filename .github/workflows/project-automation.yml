@@ -1,0 +1,374 @@
+name: Project Automation
+
+on:
+  issues:
+    types:
+      - opened
+  create:
+  push:
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - ready_for_review
+      - synchronize
+      - closed
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  sync-project:
+    if: github.event_name != 'create' || github.event.ref_type == 'branch'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Sync issue and PR state to project
+        uses: actions/github-script@v7
+        env:
+          PROJECT_ID: PVT_kwHOBcXw0M4BbCmA
+          STATUS_FIELD_ID: PVTSSF_lAHOBcXw0M4BbCmAzhV17MA
+          STATUS_BACKLOG: f75ad846
+          STATUS_READY: 61e4505c
+          STATUS_IN_PROGRESS: 47fc9ee4
+          STATUS_IN_REVIEW: df73e18b
+          STATUS_DONE: 98236657
+          EXCLUDED_REVIEWER_PATTERN: gemini
+        with:
+          github-token: ${{ secrets.PROJECT_AUTOMATION_TOKEN }}
+          script: |
+            const projectId = process.env.PROJECT_ID;
+            const statusFieldId = process.env.STATUS_FIELD_ID;
+            const statusOptions = {
+              backlog: process.env.STATUS_BACKLOG,
+              ready: process.env.STATUS_READY,
+              inProgress: process.env.STATUS_IN_PROGRESS,
+              inReview: process.env.STATUS_IN_REVIEW,
+              done: process.env.STATUS_DONE
+            };
+            const excludedReviewerPattern = process.env.EXCLUDED_REVIEWER_PATTERN.toLowerCase();
+            const { owner, repo } = context.repo;
+            const actor = context.actor;
+
+            function isAutomationActor(login) {
+              const normalized = login.toLowerCase();
+              return normalized.includes(excludedReviewerPattern) || normalized.endsWith("[bot]");
+            }
+
+            function parseIssueNumber(value) {
+              if (!value) {
+                return null;
+              }
+
+              const patterns = [
+                /(?:^|[/#\s_-])(\d+)(?=[/\s_-]|$)/,
+                /(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+#(\d+)/i,
+                /#(\d+)/
+              ];
+
+              for (const pattern of patterns) {
+                const match = pattern.exec(value);
+
+                if (match?.[1]) {
+                  return Number(match[1]);
+                }
+              }
+
+              return null;
+            }
+
+            function parseIssueNumberFromPullRequest(pullRequest) {
+              return (
+                parseIssueNumber(pullRequest.head?.ref) ??
+                parseIssueNumber(pullRequest.title) ??
+                parseIssueNumber(pullRequest.body)
+              );
+            }
+
+            async function getIssue(issueNumber) {
+              const { data: issue } = await github.rest.issues.get({
+                owner,
+                repo,
+                issue_number: issueNumber
+              });
+
+              return issue;
+            }
+
+            async function findProjectItem(contentId) {
+              let after = null;
+
+              do {
+                const response = await github.graphql(
+                  `query($projectId: ID!, $after: String) {
+                    node(id: $projectId) {
+                      ... on ProjectV2 {
+                        items(first: 100, after: $after) {
+                          nodes {
+                            id
+                            content {
+                              ... on Issue {
+                                id
+                              }
+                              ... on PullRequest {
+                                id
+                              }
+                            }
+                          }
+                          pageInfo {
+                            hasNextPage
+                            endCursor
+                          }
+                        }
+                      }
+                    }
+                  }`,
+                  {
+                    projectId,
+                    after
+                  }
+                );
+
+                const items = response.node.items.nodes;
+                const existing = items.find((item) => item.content?.id === contentId);
+
+                if (existing) {
+                  return existing.id;
+                }
+
+                if (!response.node.items.pageInfo.hasNextPage) {
+                  return null;
+                }
+
+                after = response.node.items.pageInfo.endCursor;
+              } while (after);
+
+              return null;
+            }
+
+            async function ensureProjectItem(contentId) {
+              const existingItemId = await findProjectItem(contentId);
+
+              if (existingItemId) {
+                return existingItemId;
+              }
+
+              const response = await github.graphql(
+                `mutation($projectId: ID!, $contentId: ID!) {
+                  addProjectV2ItemById(input: { projectId: $projectId, contentId: $contentId }) {
+                    item {
+                      id
+                    }
+                  }
+                }`,
+                {
+                  projectId,
+                  contentId
+                }
+              );
+
+              return response.addProjectV2ItemById.item.id;
+            }
+
+            async function setProjectStatus(itemId, optionId) {
+              await github.graphql(
+                `mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
+                  updateProjectV2ItemFieldValue(
+                    input: {
+                      projectId: $projectId
+                      itemId: $itemId
+                      fieldId: $fieldId
+                      value: { singleSelectOptionId: $optionId }
+                    }
+                  ) {
+                    projectV2Item {
+                      id
+                    }
+                  }
+                }`,
+                {
+                  projectId,
+                  itemId,
+                  fieldId: statusFieldId,
+                  optionId
+                }
+              );
+            }
+
+            async function syncContentToStatus(contentNodeId, optionId) {
+              const itemId = await ensureProjectItem(contentNodeId);
+              await setProjectStatus(itemId, optionId);
+            }
+
+            async function assignIssueToActor(issueNumber) {
+              if (isAutomationActor(actor)) {
+                return;
+              }
+
+              try {
+                await github.rest.issues.addAssignees({
+                  owner,
+                  repo,
+                  issue_number: issueNumber,
+                  assignees: [actor]
+                });
+              } catch (error) {
+                core.warning(`Could not assign #${issueNumber} to ${actor}: ${error.message}`);
+              }
+            }
+
+            async function findOpenPullRequestForBranch(branchName) {
+              const { data: pullRequests } = await github.rest.pulls.list({
+                owner,
+                repo,
+                head: `${owner}:${branchName}`,
+                state: "open",
+                per_page: 1
+              });
+
+              return pullRequests[0] ?? null;
+            }
+
+            async function ensurePullRequestClosesIssue(pullRequest, issueNumber) {
+              const body = pullRequest.body ?? "";
+              const alreadyLinked = new RegExp(
+                `(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\\s+#${issueNumber}\\b`,
+                "i"
+              ).test(body);
+
+              if (alreadyLinked) {
+                return;
+              }
+
+              const nextBody = `${body.trim()}\n\nCloses #${issueNumber}`.trim();
+
+              await github.rest.pulls.update({
+                owner,
+                repo,
+                pull_number: pullRequest.number,
+                body: nextBody
+              });
+            }
+
+            async function listReviewersForPullRequest(pullRequest) {
+              const [contributorsResponse, collaboratorsResponse] = await Promise.all([
+                github.rest.repos.listContributors({
+                  owner,
+                  repo,
+                  per_page: 100
+                }),
+                github.rest.repos.listCollaborators({
+                  owner,
+                  repo,
+                  affiliation: "all",
+                  per_page: 100
+                })
+              ]);
+
+              const collaboratorLogins = new Set(
+                collaboratorsResponse.data.map((collaborator) => collaborator.login)
+              );
+              const requestedLogins = new Set(
+                (pullRequest.requested_reviewers ?? []).map((reviewer) => reviewer.login)
+              );
+
+              return contributorsResponse.data
+                .map((contributor) => contributor.login)
+                .filter((login) => collaboratorLogins.has(login))
+                .filter((login) => login !== pullRequest.user.login)
+                .filter((login) => !requestedLogins.has(login))
+                .filter((login) => !isAutomationActor(login))
+                .slice(0, 15);
+            }
+
+            async function requestContributorReviewers(pullRequest) {
+              const reviewers = await listReviewersForPullRequest(pullRequest);
+
+              if (reviewers.length === 0) {
+                return;
+              }
+
+              try {
+                await github.rest.pulls.requestReviewers({
+                  owner,
+                  repo,
+                  pull_number: pullRequest.number,
+                  reviewers
+                });
+              } catch (error) {
+                core.warning(`Could not request reviewers for PR #${pullRequest.number}: ${error.message}`);
+              }
+            }
+
+            async function handleIssueOpened() {
+              const issue = context.payload.issue;
+              await syncContentToStatus(issue.node_id, statusOptions.backlog);
+              await assignIssueToActor(issue.number);
+            }
+
+            async function handleBranchCreated() {
+              const branchName = context.payload.ref;
+              const issueNumber = parseIssueNumber(branchName);
+
+              if (!issueNumber) {
+                return;
+              }
+
+              const issue = await getIssue(issueNumber);
+              await syncContentToStatus(issue.node_id, statusOptions.ready);
+              await assignIssueToActor(issueNumber);
+            }
+
+            async function handlePush() {
+              const branchName = context.ref.replace("refs/heads/", "");
+              const issueNumber = parseIssueNumber(branchName);
+
+              if (!issueNumber) {
+                return;
+              }
+
+              const issue = await getIssue(issueNumber);
+              const openPullRequest = await findOpenPullRequestForBranch(branchName);
+              await syncContentToStatus(
+                issue.node_id,
+                openPullRequest ? statusOptions.inReview : statusOptions.inProgress
+              );
+              await assignIssueToActor(issueNumber);
+            }
+
+            async function handlePullRequest() {
+              const pullRequest = context.payload.pull_request;
+              const issueNumber = parseIssueNumberFromPullRequest(pullRequest);
+
+              if (!issueNumber) {
+                await syncContentToStatus(pullRequest.node_id, statusOptions.inReview);
+                await assignIssueToActor(pullRequest.number);
+                await requestContributorReviewers(pullRequest);
+                return;
+              }
+
+              const issue = await getIssue(issueNumber);
+              const nextStatus = pullRequest.merged ? statusOptions.done : statusOptions.inReview;
+
+              await syncContentToStatus(issue.node_id, nextStatus);
+              await syncContentToStatus(pullRequest.node_id, nextStatus);
+              await assignIssueToActor(issueNumber);
+              await assignIssueToActor(pullRequest.number);
+
+              if (!pullRequest.merged) {
+                await ensurePullRequestClosesIssue(pullRequest, issueNumber);
+                await requestContributorReviewers(pullRequest);
+              }
+            }
+
+            if (context.eventName === "issues") {
+              await handleIssueOpened();
+            } else if (context.eventName === "create") {
+              await handleBranchCreated();
+            } else if (context.eventName === "push") {
+              await handlePush();
+            } else if (context.eventName === "pull_request") {
+              await handlePullRequest();
+            }
