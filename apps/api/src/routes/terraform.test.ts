@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import type {
   ApiErrorResponse,
   TerraformGenerateResponse,
+  TerraformSyncToDiagramResponse,
   TerraformValidateResponse
 } from "@sketchcatch/types";
 import { buildApp } from "../app.js";
@@ -248,6 +249,138 @@ test("POST /api/terraform/validate returns 400 for an invalid body", async () =>
 
   assert.equal(response.statusCode, 400);
   assertErrorResponse(response.json() as ApiErrorResponse, "bad_request");
+
+  await app.close();
+});
+
+test("POST /api/terraform/sync-to-diagram updates matching DiagramJson values", async () => {
+  const fakeDb = new AuthOnlyFakeDb({
+    users: [
+      {
+        id: ACTIVE_USER_ID,
+        deletedAt: null
+      }
+    ]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/terraform/sync-to-diagram",
+    headers: await authHeaders(ACTIVE_USER_ID),
+    payload: {
+      diagramJson: {
+        nodes: [
+          {
+            id: "node-1",
+            type: "aws_vpc",
+            kind: "resource",
+            label: "main_vpc",
+            parameters: {
+              resourceType: "aws_vpc",
+              resourceName: "main",
+              fileName: "main",
+              values: {
+                cidrBlock: "10.0.0.0/16"
+              }
+            }
+          }
+        ],
+        edges: [
+          {
+            id: "edge-1",
+            sourceNodeId: "node-1",
+            targetNodeId: "node-2"
+          }
+        ],
+        viewport: {
+          x: 0,
+          y: 0,
+          zoom: 1
+        }
+      },
+      terraformCode: `resource "aws_vpc" "main" {
+  cidr_block = "10.1.0.0/16"
+}`
+    }
+  });
+
+  const body = response.json() as TerraformSyncToDiagramResponse;
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(body.diagnostics, []);
+  assert.deepEqual(body.diagramJson.nodes[0]?.parameters?.values, {
+    cidrBlock: "10.1.0.0/16"
+  });
+  assert.deepEqual(body.diagramJson.edges, [
+    {
+      id: "edge-1",
+      sourceNodeId: "node-1",
+      targetNodeId: "node-2"
+    }
+  ]);
+
+  await app.close();
+});
+
+test("POST /api/terraform/sync-to-diagram returns diagnostics without mutating on unsupported input", async () => {
+  const fakeDb = new AuthOnlyFakeDb({
+    users: [
+      {
+        id: ACTIVE_USER_ID,
+        deletedAt: null
+      }
+    ]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+  const diagramJson = {
+    nodes: [
+      {
+        id: "node-1",
+        type: "aws_vpc",
+        kind: "resource",
+        label: "main_vpc",
+        parameters: {
+          resourceType: "aws_vpc",
+          resourceName: "main",
+          fileName: "main",
+          values: {
+            cidrBlock: "10.0.0.0/16"
+          }
+        }
+      }
+    ],
+    edges: [],
+    viewport: {
+      x: 0,
+      y: 0,
+      zoom: 1
+    }
+  };
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/terraform/sync-to-diagram",
+    headers: await authHeaders(ACTIVE_USER_ID),
+    payload: {
+      diagramJson,
+      terraformCode: `resource "aws_vpc" "main" {
+  cidr_block = "10.1.0.0/16"abc
+}`
+    }
+  });
+
+  const body = response.json() as TerraformSyncToDiagramResponse;
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(body.diagnostics[0]?.code, "terraform.sync.trailing_tokens");
+  assert.deepEqual(body.diagramJson.nodes[0]?.parameters?.values, {
+    cidrBlock: "10.0.0.0/16"
+  });
 
   await app.close();
 });

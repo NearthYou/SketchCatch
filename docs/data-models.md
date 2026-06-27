@@ -255,6 +255,20 @@ type TerraformGenerateResponse = {
 };
 ```
 
+Terraform 역동기화는 사용자가 편집 중인 Terraform 문자열을 기존 `DiagramJson`에 반영한다. 지원 범위 밖 HCL, 매칭할 수 없는 block, 불확실한 파싱이 있으면 기존 `DiagramJson`을 변경하지 않고 diagnostics를 반환한다.
+
+```ts
+type TerraformSyncToDiagramRequest = {
+  diagramJson: DiagramJson;
+  terraformCode: string;
+};
+
+type TerraformSyncToDiagramResponse = {
+  diagramJson: DiagramJson;
+  diagnostics: TerraformDiagnostic[];
+};
+```
+
 정적 검증은 실제 Terraform CLI를 실행하지 않고 사용자가 편집 중인 Terraform 문자열만 점검한다.
 
 ```ts

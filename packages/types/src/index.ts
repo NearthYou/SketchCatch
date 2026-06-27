@@ -725,3 +725,13 @@ export type TerraformValidateRequest = {
 export type TerraformValidateResponse = {
   diagnostics: TerraformDiagnostic[];
 };
+
+export type TerraformSyncToDiagramRequest = {
+  diagramJson: DiagramJson;
+  terraformCode: string;
+};
+
+export type TerraformSyncToDiagramResponse = {
+  diagramJson: DiagramJson;
+  diagnostics: TerraformDiagnostic[];
+};
