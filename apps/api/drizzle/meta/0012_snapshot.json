@@ -1205,7 +1205,6 @@
       "schema": "public",
       "values": [
         "naver",
-        "google",
         "kakao",
         "github"
       ]

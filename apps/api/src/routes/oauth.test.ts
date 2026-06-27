@@ -160,14 +160,14 @@ test("GET /api/auth/oauth/naver/start rate limits repeated OAuth starts", async 
   }
 });
 
-test("GET /api/auth/oauth/google/start rejects providers that are not enabled yet", async () => {
+test("GET /api/auth/oauth/unsupported/start rejects unknown providers", async () => {
   const restoreEnv = setOAuthEnv();
   const app = buildApp();
 
   try {
     const response = await app.inject({
       method: "GET",
-      url: "/api/auth/oauth/google/start"
+      url: "/api/auth/oauth/unsupported/start"
     });
 
     assert.equal(response.statusCode, 400);

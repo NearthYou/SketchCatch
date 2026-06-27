@@ -75,11 +75,6 @@ function getOAuthProviderCredentials(
         clientId: requireEnvValue("NAVER_OAUTH_CLIENT_ID", env.naverOauthClientId),
         clientSecret: requireEnvValue("NAVER_OAUTH_CLIENT_SECRET", env.naverOauthClientSecret)
       };
-    case "google":
-      return {
-        clientId: requireEnvValue("GOOGLE_OAUTH_CLIENT_ID", env.googleOauthClientId),
-        clientSecret: requireEnvValue("GOOGLE_OAUTH_CLIENT_SECRET", env.googleOauthClientSecret)
-      };
     case "kakao":
       return {
         clientId: requireEnvValue("KAKAO_OAUTH_CLIENT_ID", env.kakaoOauthClientId),

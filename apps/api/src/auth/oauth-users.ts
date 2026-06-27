@@ -130,7 +130,7 @@ function resolveOAuthEmail(profile: NormalizedOAuthProfile): OAuthEmailResolutio
 }
 
 function canLinkExistingUserByEmail(provider: OAuthProvider): boolean {
-  return provider === "github" || provider === "google";
+  return provider === "github";
 }
 
 function createKakaoPlaceholderEmail(providerUserId: string): string {

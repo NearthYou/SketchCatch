@@ -137,7 +137,7 @@ function appendSetCookieHeader(reply: FastifyReply, cookie: string): void {
 }
 
 function isOAuthProvider(value: unknown): value is OAuthProvider {
-  return value === "naver" || value === "google" || value === "kakao" || value === "github";
+  return value === "naver" || value === "kakao" || value === "github";
 }
 
 function serializeOAuthCookie(

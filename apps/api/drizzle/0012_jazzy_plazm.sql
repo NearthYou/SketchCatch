@@ -1,4 +1,4 @@
-CREATE TYPE "public"."oauth_provider" AS ENUM('naver', 'google', 'kakao', 'github');--> statement-breakpoint
+CREATE TYPE "public"."oauth_provider" AS ENUM('naver', 'kakao', 'github');--> statement-breakpoint
 CREATE TABLE "oauth_accounts" (
 	"id" varchar(36) PRIMARY KEY NOT NULL,
 	"user_id" varchar(36) NOT NULL,

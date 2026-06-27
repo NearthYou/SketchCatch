@@ -60,7 +60,7 @@ export type User = {
   createdAt: IsoDateTimeString;
 };
 
-export type OAuthProvider = "naver" | "google" | "kakao" | "github";
+export type OAuthProvider = "naver" | "kakao" | "github";
 
 export type AuthSession = {
   accessToken: string;

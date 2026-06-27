@@ -58,12 +58,7 @@ export const awsConnectionStatusEnum = pgEnum("aws_connection_status", [
   "failed"
 ]);
 
-export const oauthProviderEnum = pgEnum("oauth_provider", [
-  "naver",
-  "google",
-  "kakao",
-  "github"
-]);
+export const oauthProviderEnum = pgEnum("oauth_provider", ["naver", "kakao", "github"]);
 
 export const users = pgTable(
   "users",

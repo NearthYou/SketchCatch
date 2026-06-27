@@ -8,8 +8,6 @@ export type RuntimeEnv = {
   databaseSsl: boolean;
   githubOauthClientId: string | undefined;
   githubOauthClientSecret: string | undefined;
-  googleOauthClientId: string | undefined;
-  googleOauthClientSecret: string | undefined;
   kakaoOauthClientId: string | undefined;
   kakaoOauthClientSecret: string | undefined;
   naverOauthClientId: string | undefined;
@@ -31,8 +29,6 @@ export function getRuntimeEnv(): RuntimeEnv {
     databaseSsl: process.env.DATABASE_SSL === "true",
     githubOauthClientId: process.env.GITHUB_OAUTH_CLIENT_ID,
     githubOauthClientSecret: process.env.GITHUB_OAUTH_CLIENT_SECRET,
-    googleOauthClientId: process.env.GOOGLE_OAUTH_CLIENT_ID,
-    googleOauthClientSecret: process.env.GOOGLE_OAUTH_CLIENT_SECRET,
     kakaoOauthClientId: process.env.KAKAO_OAUTH_CLIENT_ID,
     kakaoOauthClientSecret: process.env.KAKAO_OAUTH_CLIENT_SECRET,
     naverOauthClientId: process.env.NAVER_OAUTH_CLIENT_ID,

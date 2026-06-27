@@ -233,8 +233,6 @@ function makeRuntimeEnv(overrides: Partial<RuntimeEnv> = {}): RuntimeEnv {
     databaseSsl: false,
     githubOauthClientId: undefined,
     githubOauthClientSecret: undefined,
-    googleOauthClientId: undefined,
-    googleOauthClientSecret: undefined,
     kakaoOauthClientId: undefined,
     kakaoOauthClientSecret: undefined,
     naverOauthClientId: "naver-client-id",

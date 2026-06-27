@@ -113,13 +113,6 @@ test("requireOAuthProviderConfig reports missing GitHub env values", () => {
   );
 });
 
-test("requireOAuthProviderConfig rejects providers without static config", () => {
-  assert.throws(
-    () => requireOAuthProviderConfig("google", makeRuntimeEnv()),
-    /google OAuth provider is not configured yet/
-  );
-});
-
 function makeRuntimeEnv(overrides: Partial<RuntimeEnv> = {}): RuntimeEnv {
   return {
     awsRegion: "ap-northeast-2",
@@ -129,8 +122,6 @@ function makeRuntimeEnv(overrides: Partial<RuntimeEnv> = {}): RuntimeEnv {
     databaseSsl: false,
     githubOauthClientId: undefined,
     githubOauthClientSecret: undefined,
-    googleOauthClientId: undefined,
-    googleOauthClientSecret: undefined,
     kakaoOauthClientId: undefined,
     kakaoOauthClientSecret: undefined,
     naverOauthClientId: " naver-client-id ",
