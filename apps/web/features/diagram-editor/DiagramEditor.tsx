@@ -87,6 +87,7 @@ export function DiagramEditor(props: DiagramEditorProps) {
 }
 
 function DiagramEditorInner({
+  draftStatusPanel,
   initialDiagram,
   leftPanel,
   onDiagramChange,
@@ -821,19 +822,12 @@ function DiagramEditorInner({
             <span>{diagram.edges.length} edges</span>
             <span>{saveStatus}</span>
           </div>
-          {onSave ? (
-            <button
-              aria-label="저장"
-              className={styles.iconButton}
-              disabled={saveDisabled}
-              onClick={onSave}
-              title="저장"
-              type="button"
-            >
-              <Save aria-hidden="true" size={16} />
-            </button>
-          ) : null}
+          
         </header>
+
+        {draftStatusPanel ? (
+          <div className={styles.draftStatusPanelSlot}>{draftStatusPanel}</div>
+        ) : null}
 
         <div className={styles.canvasPanel} ref={canvasPanelRef}>
           {selectedEdge ? (

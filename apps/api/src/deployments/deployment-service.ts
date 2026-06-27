@@ -14,6 +14,7 @@ import {
   architectures,
   awsConnections,
   deploymentLogs,
+  deploymentPlanArtifacts,
   deployments,
   projectAssets,
   projects,
@@ -23,6 +24,7 @@ import { maskDeploymentMessage } from "./log-masking.js";
 
 export type DeploymentRecord = typeof deployments.$inferSelect;
 export type DeploymentLogRecord = typeof deploymentLogs.$inferSelect;
+export type DeploymentPlanArtifactRecord = typeof deploymentPlanArtifacts.$inferSelect;
 
 export type ProjectAccessContext = {
   kind: "user";
@@ -77,6 +79,38 @@ export type CreateDeploymentLogRecordInput = {
   relatedResourceId: string | null;
 };
 
+export type CreateDeploymentPlanArtifactRecordInput = {
+  id: string;
+  deploymentId: string;
+  terraformArtifactId: string;
+  terraformArtifactSha256: string;
+  objectKey: string;
+  sha256: string;
+  accountId: string;
+  region: string;
+};
+
+export type SaveDeploymentPlanInput = {
+  deploymentId: string;
+  planArtifact: CreateDeploymentPlanArtifactRecordInput;
+  planSummary: DeploymentPlanSummary;
+  isBlocked: boolean;
+  blockedBy: DeploymentBlockedBy | null;
+  blockedReason: string | null;
+};
+
+export type ApproveDeploymentInput = {
+  approvedByUserId: string;
+  approvedAt: Date;
+  approvedTerraformArtifactId: string;
+  approvedPlanArtifactId: string;
+  approvedTerraformArtifactHash: string;
+  approvedTfplanHash: string;
+  approvedAwsAccountId: string;
+  approvedAwsRegion: string;
+  planSummary: DeploymentPlanSummary;
+};
+
 export type ProjectRecord = typeof projects.$inferSelect;
 export type ArchitectureRecord = typeof architectures.$inferSelect;
 export type ProjectAssetRecord = typeof projectAssets.$inferSelect;
@@ -110,6 +144,9 @@ export type DeploymentRepository = {
   ): Promise<AwsConnection | undefined>;
   createDeployment(input: CreateDeploymentRecordInput): Promise<DeploymentRecord>;
   findDeploymentById(deploymentId: string): Promise<DeploymentRecord | undefined>;
+  findDeploymentPlanArtifactById(
+    planArtifactId: string
+  ): Promise<DeploymentPlanArtifactRecord | undefined>;
 
   listDeploymentsByProject(projectId: string): Promise<DeploymentRecord[]>;
   updateDeploymentStatus(
@@ -127,13 +164,10 @@ export type DeploymentRepository = {
       blockedReason: string | null;
     }
   ): Promise<DeploymentRecord | undefined>;
+  saveDeploymentPlan(input: SaveDeploymentPlanInput): Promise<DeploymentRecord | undefined>;
   approveDeployment(
     deploymentId: string,
-    input: {
-      approvedByUserId: string;
-      approvedTerraformArtifactId: string;
-      approvedAt: Date;
-    }
+    input: ApproveDeploymentInput
   ): Promise<DeploymentRecord | undefined>;
   failDeployment(
     deploymentId: string,
@@ -161,6 +195,17 @@ export class DeploymentConflictError extends Error {
     this.name = "DeploymentConflictError";
   }
 }
+
+const clearDeploymentApprovalFields = {
+  approvedAt: null,
+  approvedByUserId: null,
+  approvedTerraformArtifactId: null,
+  approvedPlanArtifactId: null,
+  approvedTerraformArtifactHash: null,
+  approvedTfplanHash: null,
+  approvedAwsAccountId: null,
+  approvedAwsRegion: null
+};
 
 export function createPostgresDeploymentRepository(db: Database): DeploymentRepository {
   return {
@@ -269,6 +314,15 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
       return deployment;
     },
 
+    async findDeploymentPlanArtifactById(planArtifactId) {
+      const [planArtifact] = await db
+        .select()
+        .from(deploymentPlanArtifacts)
+        .where(eq(deploymentPlanArtifacts.id, planArtifactId));
+
+      return planArtifact;
+    },
+
     async listDeploymentsByProject(projectId) {
       return db
         .select()
@@ -278,9 +332,13 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
     },
 
     async updateDeploymentStatus(deploymentId, status) {
+      const nextValues =
+        status === "RUNNING"
+          ? { status, ...clearDeploymentApprovalFields, ...touchUpdatedAt }
+          : { status, ...touchUpdatedAt };
       const [deployment] = await db
         .update(deployments)
-        .set({ status, ...touchUpdatedAt })
+        .set(nextValues)
         .where(eq(deployments.id, deploymentId))
         .returning();
 
@@ -290,7 +348,7 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
     async markDeploymentInitRunning(deploymentId) {
       const [deployment] = await db
         .update(deployments)
-        .set({ status: "RUNNING", ...touchUpdatedAt })
+        .set({ status: "RUNNING", ...clearDeploymentApprovalFields, ...touchUpdatedAt })
         .where(
           and(eq(deployments.id, deploymentId), inArray(deployments.status, ["PENDING", "FAILED"]))
         )
@@ -324,11 +382,65 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
       return deployment;
     },
 
+    async saveDeploymentPlan(input) {
+      return db.transaction(async (tx) => {
+        await tx.insert(deploymentPlanArtifacts).values(input.planArtifact);
+
+        const [deployment] = await tx
+          .update(deployments)
+          .set({
+            currentPlanArtifactId: input.planArtifact.id,
+            status: "PENDING",
+            planSummary: input.planSummary,
+            isBlocked: input.isBlocked,
+            blockedBy: input.blockedBy,
+            blockedReason: input.blockedReason,
+            failureStage: null,
+            errorSummary: null,
+            ...clearDeploymentApprovalFields,
+            ...touchUpdatedAt
+          })
+          .where(eq(deployments.id, input.deploymentId))
+          .returning();
+
+        if (!deployment) {
+          throw new Error("Deployment plan could not be saved");
+        }
+
+        return deployment;
+      });
+    },
+
     async approveDeployment(deploymentId, input) {
       const [deployment] = await db
         .update(deployments)
-        .set({ ...input, ...touchUpdatedAt })
-        .where(eq(deployments.id, deploymentId))
+        .set({
+          approvedByUserId: input.approvedByUserId,
+          approvedAt: input.approvedAt,
+          approvedTerraformArtifactId: input.approvedTerraformArtifactId,
+          approvedPlanArtifactId: input.approvedPlanArtifactId,
+          approvedTerraformArtifactHash: input.approvedTerraformArtifactHash,
+          approvedTfplanHash: input.approvedTfplanHash,
+          approvedAwsAccountId: input.approvedAwsAccountId,
+          approvedAwsRegion: input.approvedAwsRegion,
+          planSummary: input.planSummary,
+          isBlocked: false,
+          blockedBy: null,
+          blockedReason: null,
+          failureStage: null,
+          errorSummary: null,
+          status: "PENDING",
+          ...touchUpdatedAt
+        })
+        .where(
+          and(
+            eq(deployments.id, deploymentId),
+            eq(deployments.currentPlanArtifactId, input.approvedPlanArtifactId),
+            eq(deployments.status, "PENDING"),
+            eq(deployments.isBlocked, true),
+            eq(deployments.blockedBy, "missing_approval")
+          )
+        )
         .returning();
 
       return deployment;

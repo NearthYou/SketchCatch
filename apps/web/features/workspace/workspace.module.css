@@ -99,6 +99,52 @@
   margin: 0;
 }
 
+.draftStatusPanel {
+  align-items: center;
+  background: #ffffff;
+  color: #39465c;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-height: 38px;
+  padding: 8px 14px;
+}
+
+.draftStatusLabel {
+  color: #65758d;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.draftStatusItem {
+  background: #f4f7fb;
+  border: 1px solid #dfe7f4;
+  border-radius: 6px;
+  color: #2d3a50;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.2;
+  padding: 5px 8px;
+}
+
+.draftStatusItem[data-state="local-failed"],
+.draftStatusItem[data-state="server-failed"] {
+  background: #fff1f0;
+  border-color: #ffd1cc;
+  color: #9f2a1d;
+}
+
+.draftStatusItem[data-state="server-dirty"],
+.draftStatusItem[data-state="server-checkpoint-pending"],
+.draftStatusItem[data-state="server-saving"],
+.draftStatusItem[data-state="local-pending"] {
+  background: #fff8e6;
+  border-color: #f6dda4;
+  color: #7a4d00;
+}
+
 .rightPanelShell {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
@@ -1006,35 +1052,47 @@
   overflow-wrap: anywhere;
 }
 
-.deploymentLogList {
+.deploymentWarnings {
+  border-top: 1px solid #dce3ee;
+  padding-top: 8px;
+}
+
+.deploymentWarnings ul {
   display: grid;
-  gap: 8px;
+  gap: 6px;
   list-style: none;
   margin: 0;
   padding: 0;
 }
 
-.deploymentLogList li {
-  border: 1px solid #dce3ee;
-  border-radius: 6px;
+.deploymentWarnings li {
   display: grid;
-  gap: 5px;
-  padding: 9px;
+  gap: 3px;
 }
 
-.deploymentLogList span {
-  color: #1f5eff;
-  font-size: 11px;
-  font-weight: 900;
-}
-
-.deploymentLogList p {
+.deploymentWarnings p {
   color: #334155;
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   font-size: 12px;
   line-height: 1.45;
   margin: 0;
   overflow-wrap: anywhere;
+}
+
+.deploymentLogConsole {
+  background: #111827;
+  border: 1px solid #243247;
+  border-radius: 6px;
+  color: #d9e4f5;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  margin: 0;
+  max-height: 360px;
+  min-height: 220px;
+  overflow: auto;
+  padding: 12px;
+  tab-size: 2;
+  white-space: pre;
 }
 
 .deploymentNotice,
