@@ -154,7 +154,9 @@
   display: grid;
   font-size: 12px;
   grid-template-rows: auto minmax(0, 1fr);
-  min-height: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
   position: relative;
 }
 
@@ -188,6 +190,7 @@
   display: grid;
   height: 100%;
   min-height: 0;
+  overflow: hidden;
 }
 
 .rightPanelView[hidden] {
@@ -616,6 +619,7 @@
   flex-direction: column;
   height: 100%;
   min-height: 0;
+  overflow: hidden;
   position: relative;
 }
 
@@ -962,9 +966,10 @@
   background: #1c1c1c;
   border-bottom: 1px solid #101214;
   display: grid;
-  flex: 1 1 auto;
+  flex: 1 1 0;
   grid-template-columns: 58px minmax(0, 1fr);
-  min-height: clamp(520px, calc(100vh - 230px), 900px);
+  height: 100%;
+  min-height: 0;
   overflow: hidden;
   position: relative;
 }
