@@ -437,17 +437,20 @@ function createPreparedCredentials() {
 }
 
 function createAnalysis(findings: CheckFinding[] = []): AiPreDeploymentAnalysisResult {
-  return {
+  const analysis = {
     summary: "ok",
     totalMonthlyEstimate: {
       amount: 0,
-      currency: "USD",
+      currency: "USD" as const,
       pricingAssumption: "test"
     },
     resourceCostEstimates: [],
     findings,
-    checklist: []
+    checklist: [],
+    suggestions: []
   };
+
+  return analysis;
 }
 
 function createRunnerResult(
