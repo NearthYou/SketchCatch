@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  approveDeploymentPlan,
   createAwsConnectionSetup,
   createDeployment,
   deleteAwsConnection,
@@ -523,7 +524,7 @@ test("createDeployment posts selected artifact and verified AWS connection", asy
   assert.equal(deployment.status, "PENDING");
 });
 
-test("deployment helpers list records and start plan", async (context) => {
+test("deployment helpers list records, start plan, and approve plan", async (context) => {
   const originalFetch = globalThis.fetch;
   const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
   const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
@@ -556,6 +557,24 @@ test("deployment helpers list records and start plan", async (context) => {
       );
     }
 
+    if (String(input).endsWith("/approve")) {
+      return new Response(
+        JSON.stringify({
+          deployment: createDeploymentPayload({
+            id: "44444444-4444-4444-8444-444444444444",
+            projectId: project.id,
+            approved: true
+          })
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json"
+          },
+          status: 200
+        }
+      );
+    }
+
     return new Response(
       JSON.stringify({
         deployments: [
@@ -576,6 +595,7 @@ test("deployment helpers list records and start plan", async (context) => {
 
   const deployments = await listDeployments(project.id);
   const runningDeployment = await runDeploymentPlan("44444444-4444-4444-8444-444444444444");
+  const approvedDeployment = await approveDeploymentPlan("44444444-4444-4444-8444-444444444444");
 
   assert.equal(String(requests[0]?.input), `/api/projects/${project.id}/deployments`);
   assert.equal(
@@ -583,14 +603,22 @@ test("deployment helpers list records and start plan", async (context) => {
     "/api/deployments/44444444-4444-4444-8444-444444444444/plan"
   );
   assert.equal(requests[1]?.init?.method, "POST");
+  assert.equal(
+    String(requests[2]?.input),
+    "/api/deployments/44444444-4444-4444-8444-444444444444/approve"
+  );
+  assert.equal(requests[2]?.init?.method, "POST");
+  assert.deepEqual(JSON.parse(String(requests[2]?.init?.body)), {});
   assert.equal(deployments[0]?.status, "PENDING");
   assert.equal(runningDeployment.status, "RUNNING");
+  assert.equal(approvedDeployment.approvedPlanArtifactId, "99999999-9999-4999-8999-999999999999");
 });
 
 function createDeploymentPayload(input: {
   id: string;
   projectId: string;
   status?: "PENDING" | "RUNNING";
+  approved?: boolean;
 }) {
   return {
     id: input.id,
@@ -609,6 +637,11 @@ function createDeploymentPayload(input: {
     approvedAt: null,
     approvedByUserId: null,
     approvedTerraformArtifactId: null,
+    approvedPlanArtifactId: input.approved ? "99999999-9999-4999-8999-999999999999" : null,
+    approvedTerraformArtifactHash: input.approved ? "a".repeat(64) : null,
+    approvedTfplanHash: input.approved ? "b".repeat(64) : null,
+    approvedAwsAccountId: input.approved ? "123456789012" : null,
+    approvedAwsRegion: input.approved ? "ap-northeast-2" : null,
     createdAt: "2026-06-26T00:00:00.000Z",
     updatedAt: "2026-06-26T00:00:00.000Z"
   };

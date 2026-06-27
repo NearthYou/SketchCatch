@@ -13,6 +13,7 @@ import { getApiErrorMessage } from "../../lib/api-client";
 import { ParameterInputPanel } from "../parameter-input";
 import type { DiagramEditorPanelContext } from "../diagram-editor";
 import {
+  approveDeploymentPlan,
   createDeployment,
   getProjectDetails,
   listAwsConnections,
@@ -121,6 +122,12 @@ function DeploymentPanel({
   const canRunPlan =
     Boolean(selectedDeployment) &&
     selectedDeployment?.status !== "RUNNING" &&
+    requestState !== "loading";
+  const canApprovePlan =
+    Boolean(selectedDeployment?.currentPlanArtifactId) &&
+    selectedDeployment?.status !== "RUNNING" &&
+    selectedDeployment?.isBlocked === true &&
+    selectedDeployment.blockedBy === "missing_approval" &&
     requestState !== "loading";
 
   useEffect(() => {
@@ -250,6 +257,23 @@ function DeploymentPanel({
       setSelectedDeploymentId(deployment.id);
       setDeploymentLogs(await listDeploymentLogs(deployment.id));
     }, "Terraform Plan을 시작하지 못했습니다.");
+  }
+
+  async function approveCurrentPlan(): Promise<void> {
+    if (!selectedDeployment || !canApprovePlan) {
+      return;
+    }
+
+    await runRequest(async () => {
+      const deployment = await approveDeploymentPlan(selectedDeployment.id);
+      setDeployments((currentDeployments) =>
+        currentDeployments.map((currentDeployment) =>
+          currentDeployment.id === deployment.id ? deployment : currentDeployment
+        )
+      );
+      setSelectedDeploymentId(deployment.id);
+      setDeploymentLogs(await listDeploymentLogs(deployment.id));
+    }, "Terraform Plan을 승인하지 못했습니다.");
   }
 
   async function refreshDeploymentPanel(): Promise<void> {
@@ -388,8 +412,34 @@ function DeploymentPanel({
             <InfoRow label="Blocked" value={selectedDeployment.isBlocked ? "yes" : "no"} />
             <InfoRow label="Blocked by" value={selectedDeployment.blockedBy ?? "없음"} />
             <InfoRow label="Reason" value={selectedDeployment.blockedReason ?? "없음"} />
+            <InfoRow label="Approval" value={formatApprovalState(selectedDeployment)} />
             {selectedDeployment.planSummary ? (
               <PlanSummaryRows deployment={selectedDeployment} />
+            ) : null}
+            {selectedDeployment.approvedAt ? (
+              <>
+                <InfoRow label="Approved at" value={formatDate(selectedDeployment.approvedAt)} />
+                <InfoRow
+                  label="Approved plan"
+                  value={selectedDeployment.approvedPlanArtifactId ?? "없음"}
+                />
+                <InfoRow
+                  label="tfplan hash"
+                  value={formatShortHash(selectedDeployment.approvedTfplanHash)}
+                />
+                <InfoRow
+                  label="Artifact hash"
+                  value={formatShortHash(selectedDeployment.approvedTerraformArtifactHash)}
+                />
+                <InfoRow
+                  label="AWS account"
+                  value={selectedDeployment.approvedAwsAccountId ?? "없음"}
+                />
+                <InfoRow
+                  label="AWS region"
+                  value={selectedDeployment.approvedAwsRegion ?? "없음"}
+                />
+              </>
             ) : null}
             <InfoRow label="Error" value={selectedDeployment.errorSummary ?? "없음"} />
           </div>
@@ -403,6 +453,15 @@ function DeploymentPanel({
         >
           <DashboardIcon name="server" />
           Terraform Plan 실행
+        </button>
+
+        <button
+          className={styles.deploymentSecondaryButton}
+          disabled={!canApprovePlan}
+          onClick={approveCurrentPlan}
+          type="button"
+        >
+          Plan 승인
         </button>
       </section>
 
@@ -469,6 +528,38 @@ function PlanSummaryRows({ deployment }: { readonly deployment: Deployment }) {
       ) : null}
     </>
   );
+}
+
+function formatApprovalState(deployment: Deployment): string {
+  if (deployment.approvedAt) {
+    return "승인됨";
+  }
+
+  if (!deployment.currentPlanArtifactId) {
+    return "Plan 필요";
+  }
+
+  if (deployment.isBlocked && deployment.blockedBy === "missing_approval") {
+    return "승인 가능";
+  }
+
+  if (deployment.isBlocked) {
+    return "승인 불가";
+  }
+
+  return "승인 필요 없음";
+}
+
+function formatShortHash(value: string | null): string {
+  if (!value) {
+    return "없음";
+  }
+
+  if (value.length <= 16) {
+    return value;
+  }
+
+  return `${value.slice(0, 12)}...${value.slice(-4)}`;
 }
 
 function formatDate(value: string): string {
