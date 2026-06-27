@@ -6,6 +6,7 @@ import { type DatabaseClient, getDatabaseClient } from "./db/client.js";
 import { registerAiRoutes } from "./routes/ai.js";
 import { registerHealthRoutes } from "./routes/health.js";
 import { registerAuthRoutes } from "./routes/auth.js";
+import { registerOAuthRoutes } from "./routes/oauth.js";
 import { registerProjectRoutes } from "./routes/projects.js";
 import { registerDeploymentRoutes } from "./routes/deployments.js";
 import { registerTerraformRoutes } from "./routes/terraform.js";
@@ -80,6 +81,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     prefix: "/api",
     getDatabaseClient: getAppDatabaseClient
   });
+  app.register(registerOAuthRoutes, { prefix: "/api" });
   app.register(registerProjectRoutes, {
     prefix: "/api",
     getDatabaseClient: getAppDatabaseClient

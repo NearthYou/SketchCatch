@@ -49,6 +49,7 @@ function makeRuntimeEnv(overrides: Partial<RuntimeEnv> = {}): RuntimeEnv {
   return {
     awsRegion: "ap-northeast-2",
     authTokenSecret: "test-auth-token-secret-with-at-least-32-characters",
+    cloudFormationTemplateTokenSecret: undefined,
     databaseUrl: "postgresql://example",
     databaseSsl: false,
     githubOauthClientId: undefined,
@@ -61,6 +62,8 @@ function makeRuntimeEnv(overrides: Partial<RuntimeEnv> = {}): RuntimeEnv {
     naverOauthClientSecret: " naver-client-secret ",
     oauthRedirectBaseUrl: "http://localhost:3000/",
     s3BucketName: "test-bucket",
+    sketchcatchAwsCallerPrincipalArn: undefined,
+    sketchcatchPublicBaseUrl: undefined,
     ...overrides
   };
 }
