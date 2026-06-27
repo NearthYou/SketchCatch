@@ -963,12 +963,15 @@
 .terraformLineNumbers {
   background: #191919;
   border-right: 1px solid #3a3a3a;
+  box-sizing: border-box;
   color: #9aa4b2;
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   font-size: 13px;
+  height: 100%;
   line-height: 1.6;
   list-style: none;
   margin: 0;
+  max-height: 100%;
   overflow: hidden;
   padding: 12px 12px 12px 0;
   text-align: right;
@@ -977,16 +980,23 @@
 .terraformTextarea {
   background: #1c1c1c;
   border: 0;
+  box-sizing: border-box;
   color: #d7e4f7;
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   font-size: 13px;
+  height: 100%;
   line-height: 1.6;
-  min-height: 100%;
+  max-height: 100%;
+  min-height: 0;
+  min-width: 0;
   outline: none;
+  overflow: auto;
+  overflow-wrap: normal;
   padding: 12px 16px;
   resize: none;
   scrollbar-gutter: stable;
   tab-size: 2;
+  word-break: normal;
   white-space: pre;
 }
 

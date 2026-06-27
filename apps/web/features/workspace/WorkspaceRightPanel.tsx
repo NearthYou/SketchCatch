@@ -950,6 +950,9 @@ function TerraformCodePanel({
         </div>
         <textarea
           ref={textareaRef}
+          autoCapitalize="off"
+          autoComplete="off"
+          autoCorrect="off"
           aria-label="Terraform 코드"
           className={styles.terraformTextarea}
           onChange={(event) => handleCodeChange(event.target.value)}
@@ -960,6 +963,7 @@ function TerraformCodePanel({
 }`}
           spellCheck={false}
           value={displayedTerraformCode}
+          wrap="off"
         />
       </div>
 
