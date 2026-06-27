@@ -95,6 +95,27 @@ test("createDeploymentPlanSummaryFromTerraformShowJson records unsupported actio
   );
 });
 
+test("createDeploymentPlanSummaryFromTerraformShowJson skips malformed resource changes", () => {
+  const summary = createDeploymentPlanSummaryFromTerraformShowJson(
+    JSON.stringify({
+      resource_changes: [
+        null,
+        "not-a-resource-change",
+        ["not-a-resource-change"],
+        {
+          address: "aws_instance.web",
+          change: {
+            actions: ["create"]
+          }
+        }
+      ]
+    })
+  );
+
+  assert.equal(summary.createCount, 1);
+  assert.equal(summary.warnings.length, 0);
+});
+
 test("createDeploymentPlanSummaryFromTerraformShowJson rejects invalid JSON", () => {
   assert.throws(
     () => createDeploymentPlanSummaryFromTerraformShowJson("{not-json"),

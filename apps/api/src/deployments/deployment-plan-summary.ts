@@ -1,12 +1,14 @@
 import type { DeploymentPlanSummary, DeploymentPlanWarning } from "@sketchcatch/types";
 
 type TerraformShowJson = {
-  resource_changes?: Array<{
-    address?: unknown;
-    change?: {
-      actions?: unknown;
-    };
-  }>;
+  resource_changes?: unknown;
+};
+
+type TerraformResourceChange = {
+  address?: unknown;
+  change?: {
+    actions?: unknown;
+  };
 };
 
 export class DeploymentPlanSummaryParseError extends Error {
@@ -30,7 +32,13 @@ export function createDeploymentPlanSummaryFromTerraformShowJson(
     warnings
   };
 
-  for (const resourceChange of parsed.resource_changes ?? []) {
+  const resourceChanges = Array.isArray(parsed.resource_changes) ? parsed.resource_changes : [];
+
+  for (const resourceChange of resourceChanges) {
+    if (!isTerraformResourceChange(resourceChange)) {
+      continue;
+    }
+
     const actions = resourceChange.change?.actions;
 
     if (!Array.isArray(actions) || !actions.every((action) => typeof action === "string")) {
@@ -66,6 +74,10 @@ export function createDeploymentPlanSummaryFromTerraformShowJson(
   }
 
   return summary;
+}
+
+function isTerraformResourceChange(value: unknown): value is TerraformResourceChange {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function parseTerraformShowJson(terraformShowJson: string): TerraformShowJson {
