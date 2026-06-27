@@ -146,6 +146,31 @@ test("POST /api/auth/login returns 401 for wrong password", async () => {
   await app.close();
 });
 
+test("POST /api/auth/login returns 401 for users without password credentials", async () => {
+  const fakeDb = new AuthScenarioFakeDb({
+    selectResults: [[], [makeUser({ passwordHash: null })], [], [{ failedAttemptCount: 0 }]]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/auth/login",
+    payload: {
+      username: "demo",
+      password: PASSWORD
+    }
+  });
+
+  assert.equal(response.statusCode, 401);
+  assertErrorResponse(response.json() as ApiErrorResponse, "unauthorized");
+  assert.equal(fakeDb.loginAttemptRows.at(-1)?.success, false);
+  assert.equal(fakeDb.refreshTokenRows.length, 0);
+
+  await app.close();
+});
+
 test("POST /api/auth/login records the forwarded client IP behind proxies", async () => {
   const user = await makeUserWithPassword(PASSWORD);
   const fakeDb = new AuthScenarioFakeDb({

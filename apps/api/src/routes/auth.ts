@@ -163,6 +163,20 @@ export async function registerAuthRoutes(
       return sendUnauthorized(reply, "아이디 또는 비밀번호가 올바르지 않습니다.");
     }
 
+    if (!user.passwordHash) {
+      const lockedUntil = await recordFailedLoginAttempt(db, request, {
+        userId: user.id,
+        username: user.username,
+        failureReason: "invalid_credentials"
+      });
+
+      if (lockedUntil) {
+        return sendLoginLocked(reply, lockedUntil);
+      }
+
+      return sendUnauthorized(reply, "아이디 또는 비밀번호가 올바르지 않습니다.");
+    }
+
     const passwordMatched = await verifyPassword(body.password, user.passwordHash);
 
     if (!passwordMatched) {

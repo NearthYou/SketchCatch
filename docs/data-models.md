@@ -87,6 +87,8 @@ type AuthSession = {
 };
 ```
 
+소셜 로그인 provider 계정은 `oauth_accounts`에 저장한다. `oauth_accounts.provider + provider_user_id`는 외부 provider 계정의 고유 연결 키이며, 실제 provider access token은 저장하지 않는다. 소셜 전용 사용자는 `users.password_hash`가 `null`일 수 있고, 일반 비밀번호 로그인에서는 password hash가 없는 사용자를 로그인 실패로 처리한다.
+
 4일 AWS E2E 데모에서는 `DiagramJson -> Terraform` 흐름을 우선 사용한다. AI 분석이나 비용/위험 분석이 `ArchitectureJson`을 요구하면 `DiagramJson -> ArchitectureJson` 어댑터를 둔다.
 
 `ArchitectureJson`과 `DiagramJson`은 서로 대체 관계가 아니다.

@@ -57,6 +57,13 @@
       "when": 1782442892811,
       "tag": "0007_deployment_schema_contract_cleanup",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1782524969482,
+      "tag": "0012_jazzy_plazm",
+      "breakpoints": true
     }
   ]
 }
