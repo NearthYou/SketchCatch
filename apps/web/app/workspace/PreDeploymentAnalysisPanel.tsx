@@ -49,10 +49,9 @@ export function createPreDeploymentFindingItems(
   return findings.map((finding) => ({
     id: finding.id,
     label: `${finding.severity.toUpperCase()} · ${finding.title}`,
-    text:
-      finding.resourceId === undefined
-        ? finding.description
-        : `${finding.description} 연결 Resource: ${finding.resourceId}`
+    text: finding.resourceId
+      ? `${finding.description} 연결 Resource: ${finding.resourceId}`
+      : finding.description
   }));
 }
 
@@ -76,8 +75,8 @@ export function createPreDeploymentSuggestionItems(
 ): PreDeploymentResultItem[] {
   return suggestions.map((suggestion) => {
     const reviewLinks = [
-      suggestion.targetResourceId === undefined ? undefined : `대상 Resource: ${suggestion.targetResourceId}`,
-      suggestion.findingId === undefined ? undefined : `연결 finding: ${suggestion.findingId}`
+      suggestion.targetResourceId ? `대상 Resource: ${suggestion.targetResourceId}` : undefined,
+      suggestion.findingId ? `연결 finding: ${suggestion.findingId}` : undefined
     ].filter((item): item is string => item !== undefined);
 
     return {

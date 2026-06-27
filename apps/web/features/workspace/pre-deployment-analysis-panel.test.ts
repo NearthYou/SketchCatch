@@ -54,6 +54,22 @@ test("createPreDeploymentFindingItems keeps linked resource ids visible", () => 
   });
 });
 
+test("createPreDeploymentFindingItems hides empty linked resource ids", () => {
+  const [item] = createPreDeploymentFindingItems([
+    {
+      id: "security-open-ssh-sg-public-ssh",
+      category: "security",
+      severity: "high",
+      resourceId: "",
+      title: "SSH가 전체 인터넷에 열려 있습니다",
+      description: "22번 포트가 0.0.0.0/0으로 열려 있습니다.",
+      recommendation: "관리용 CIDR만 남기세요."
+    }
+  ]);
+
+  assert.equal(item?.text, "22번 포트가 0.0.0.0/0으로 열려 있습니다.");
+});
+
 test("createPreDeploymentChecklistItems keeps checklist status and linked finding ids visible", () => {
   const [item] = createPreDeploymentChecklistItems(checklist);
 
@@ -62,6 +78,26 @@ test("createPreDeploymentChecklistItems keeps checklist status and linked findin
     label: "FAIL · SSH 전체 공개 여부 확인",
     text: "연결 finding: security-open-ssh-sg-public-ssh"
   });
+});
+
+test("createPreDeploymentSuggestionItems hides empty target resource and source finding ids", () => {
+  const [item] = createPreDeploymentSuggestionItems([
+    {
+      id: "suggestion-security-open-ssh-sg-public-ssh",
+      findingId: "",
+      title: "SSH 접근 범위 제한",
+      targetResourceId: "",
+      action: "modify_resource",
+      expectedImpact: {
+        cost: "neutral",
+        security: "improve",
+        reliability: "neutral"
+      },
+      explanation: "Security Group ingress를 줄이세요."
+    }
+  ]);
+
+  assert.equal(item?.text, "Security Group ingress를 줄이세요.");
 });
 
 test("createPreDeploymentSuggestionItems keeps target resource and source finding visible", () => {

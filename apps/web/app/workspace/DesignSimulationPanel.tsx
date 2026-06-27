@@ -1,4 +1,4 @@
-import type { DesignSimulationResult } from "@sketchcatch/types";
+import type { DesignSimulationRequestFlowStep, DesignSimulationResult } from "@sketchcatch/types";
 import { LlmEnhancementPanel } from "./LlmEnhancementPanel";
 import { ResultList } from "./ResultList";
 
@@ -6,6 +6,17 @@ type DesignSimulationPanelProps = {
   readonly designSimulation: DesignSimulationResult | null;
   readonly isDisabled: boolean;
   readonly onDesignSimulation: () => void;
+};
+
+type DesignSimulationResultItem = {
+  readonly id: string;
+  readonly label: string;
+  readonly text: string;
+};
+
+type CostReviewInput = {
+  readonly costPressure: readonly string[];
+  readonly recommendations: readonly string[];
 };
 
 // Design Simulation 결과를 Pre-Deployment Check와 섞지 않고 별도 패널로 보여줍니다.
@@ -24,11 +35,7 @@ export function DesignSimulationPanel({
           <p className="resultTitle">{designSimulation.summary}</p>
           <LlmEnhancementPanel enhancement={designSimulation.llmEnhancement} />
           <ResultList
-            items={designSimulation.requestFlow.map((step) => ({
-              id: `${step.fromResourceId}-${step.toResourceId}`,
-              label: `${step.fromResourceId} -> ${step.toResourceId}`,
-              text: step.description
-            }))}
+            items={createRequestFlowItems(designSimulation.requestFlow)}
             summary="요청 흐름"
           />
           <ResultList
@@ -48,18 +55,7 @@ export function DesignSimulationPanel({
             summary="장애 시나리오"
           />
           <ResultList
-            items={[
-              ...designSimulation.costPressure.map((item) => ({
-                id: `cost-${item}`,
-                label: "비용 압박",
-                text: item
-              })),
-              ...designSimulation.recommendations.map((item) => ({
-                id: `recommendation-${item}`,
-                label: "추천 검토",
-                text: item
-              }))
-            ]}
+            items={createCostReviewItems(designSimulation)}
             summary="비용과 다음 검토"
           />
         </div>
@@ -69,4 +65,29 @@ export function DesignSimulationPanel({
       </button>
     </section>
   );
+}
+
+export function createRequestFlowItems(
+  requestFlow: readonly DesignSimulationRequestFlowStep[]
+): DesignSimulationResultItem[] {
+  return requestFlow.map((step, index) => ({
+    id: `${step.fromResourceId}-${step.toResourceId}-${index}`,
+    label: `${step.fromResourceId} -> ${step.toResourceId}`,
+    text: step.description
+  }));
+}
+
+export function createCostReviewItems(input: CostReviewInput): DesignSimulationResultItem[] {
+  return [
+    ...input.costPressure.map((item, index) => ({
+      id: `cost-${index}`,
+      label: "비용 압박",
+      text: item
+    })),
+    ...input.recommendations.map((item, index) => ({
+      id: `recommendation-${index}`,
+      label: "추천 검토",
+      text: item
+    }))
+  ];
 }
