@@ -16,6 +16,7 @@ import {
   createArchitectureDraftFromRepositoryEvidence
 } from "../services/aiArchitectureDrafts.js";
 import { simulateDesign } from "../services/aiDesignSimulation.js";
+import { createDesignSimulationFallbackEnhancement } from "../services/aiLlmEnhancementFallbacks.js";
 import { analyzePreDeployment } from "../services/aiPreDeploymentAnalysis.js";
 import { explainTerraformError } from "../services/aiTerraformErrorExplanation.js";
 import { explainTerraformPreview } from "../services/aiTerraformPreviewExplanation.js";
@@ -121,8 +122,12 @@ export async function registerAiRoutes(app: FastifyInstance): Promise<void> {
 
   app.post("/ai/design-simulation", async (request): Promise<DesignSimulationResult> => {
     const body = designSimulationBodySchema.parse(request.body);
+    const result = simulateDesign(body);
 
-    return simulateDesign(body);
+    return {
+      ...result,
+      llmEnhancement: createDesignSimulationFallbackEnhancement(result, "missing_api_key")
+    };
   });
 
   app.post("/ai/pre-deployment-check-from-diagram", async (request): Promise<AiPreDeploymentAnalysisResult> => {

@@ -486,6 +486,30 @@ export type ArchitectureSuggestion = {
   explanation: string;
 };
 
+export type LlmEnhancementTarget =
+  | "architecture_draft"
+  | "design_simulation"
+  | "pre_deployment_check"
+  | "terraform_error_explanation";
+
+export type LlmEnhancementFallbackReason =
+  | "missing_api_key"
+  | "timeout"
+  | "rate_limited"
+  | "invalid_request"
+  | "auth_error"
+  | "provider_error"
+  | "invalid_response";
+
+export type LlmEnhancement = {
+  target: LlmEnhancementTarget;
+  summary: string;
+  highlights: string[];
+  nextActions: string[];
+  fallbackUsed: boolean;
+  fallbackReason?: LlmEnhancementFallbackReason | undefined;
+};
+
 export type AiPreDeploymentAnalysisResult = {
   summary: string;
   totalMonthlyEstimate: MoneyEstimate & {
@@ -533,6 +557,7 @@ export type DesignSimulationResult = {
   failureScenarios: DesignSimulationFailureScenario[];
   costPressure: string[];
   recommendations: string[];
+  llmEnhancement?: LlmEnhancement | undefined;
 };
 
 export type AiPreDeploymentCheckFromDiagramRequest = {

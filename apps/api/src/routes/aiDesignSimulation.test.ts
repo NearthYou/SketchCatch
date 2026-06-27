@@ -37,6 +37,19 @@ const designSimulationResponseSchema = z.object({
   recommendations: z.array(z.string())
 });
 
+const llmEnhancementSchema = z.object({
+  target: z.literal("design_simulation"),
+  summary: z.string(),
+  highlights: z.array(z.string()),
+  nextActions: z.array(z.string()),
+  fallbackUsed: z.boolean(),
+  fallbackReason: z.string().optional()
+});
+
+const llmEnhancedDesignSimulationResponseSchema = designSimulationResponseSchema.extend({
+  llmEnhancement: llmEnhancementSchema
+});
+
 test("POST /api/ai/design-simulation estimates flow, bottlenecks, failures, and cost pressure from ArchitectureJson", async () => {
   const app = buildApp();
 
@@ -111,6 +124,57 @@ test("POST /api/ai/design-simulation estimates flow, bottlenecks, failures, and 
   assert.ok(body.recommendations.some((item) => item.includes("EC2")));
 
   await app.close();
+});
+
+test("POST /api/ai/design-simulation returns fallback llmEnhancement when API key is missing", async () => {
+  const originalApiKey = process.env.OPENAI_API_KEY;
+  delete process.env.OPENAI_API_KEY;
+
+  const app = buildApp();
+
+  try {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/ai/design-simulation",
+      payload: {
+        trafficLevel: "normal",
+        budgetLevel: "low",
+        architectureJson: {
+          nodes: [
+            {
+              id: "ec2-backend",
+              type: "EC2",
+              label: "Backend API",
+              positionX: 240,
+              positionY: 120,
+              config: {
+                instanceType: "t3.micro"
+              }
+            }
+          ],
+          edges: []
+        }
+      }
+    });
+
+    assert.equal(response.statusCode, 200);
+
+    const body = llmEnhancedDesignSimulationResponseSchema.parse(response.json());
+
+    assert.equal(body.llmEnhancement.fallbackUsed, true);
+    assert.equal(body.llmEnhancement.fallbackReason, "missing_api_key");
+    assert.ok(body.llmEnhancement.summary.length > 0);
+    assert.ok(body.llmEnhancement.highlights.length > 0);
+    assert.ok(body.llmEnhancement.nextActions.length > 0);
+  } finally {
+    if (originalApiKey === undefined) {
+      delete process.env.OPENAI_API_KEY;
+    } else {
+      process.env.OPENAI_API_KEY = originalApiKey;
+    }
+
+    await app.close();
+  }
 });
 
 test("POST /api/ai/design-simulation explains public exposure as a failure scenario", async () => {
