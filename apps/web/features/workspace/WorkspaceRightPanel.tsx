@@ -72,7 +72,7 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
   const [terraformDiagnostics, setTerraformDiagnostics] = useState<TerraformDiagnostic[]>([]);
   const hasTerraformIssueErrors = terraformDiagnostics.some((diagnostic) => diagnostic.severity === "error");
 
-  function requestView(nextView: WorkspaceRightPanelView): void {
+  const requestView = useCallback((nextView: WorkspaceRightPanelView): void => {
     if (nextView === activeView) {
       return;
     }
@@ -89,7 +89,7 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
     }
 
     setActiveView(nextView);
-  }
+  }, [activeView, hasUnsavedTerraformChanges]);
 
   function continueTerraformEditing(): void {
     setPendingView(null);
@@ -120,9 +120,15 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
 
   useEffect(() => {
     if (context.inspectedNodeId) {
-      setActiveView("terraform");
+      requestView("terraform");
     }
-  }, [context.inspectedNodeId]);
+  }, [context.inspectedNodeId, requestView]);
+
+  useEffect(() => {
+    if (context.resourcePanelFocusRequestId > 0) {
+      requestView("resource");
+    }
+  }, [context.resourcePanelFocusRequestId, requestView]);
 
   function openCollapsedView(nextView: WorkspaceRightPanelView): void {
     context.setRightPanelOpen(true);
