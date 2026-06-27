@@ -855,6 +855,42 @@ h1 {
   padding-top: var(--space-3);
 }
 
+.llmEnhancementBlock {
+  background: var(--surface-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+  padding: var(--space-3);
+}
+
+.llmEnhancementHeader {
+  align-items: center;
+  display: flex;
+  gap: var(--space-2);
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.llmEnhancementBadge {
+  border: 1px solid color-mix(in srgb, var(--status-info) 28%, var(--border-subtle));
+  border-radius: 999px;
+  color: var(--status-info);
+  flex: 0 1 auto;
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1.2;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  padding: var(--space-1) var(--space-2);
+}
+
+.llmEnhancementBadgeFallback {
+  border-color: color-mix(in srgb, var(--status-warning) 28%, var(--border-subtle));
+  color: var(--status-warning);
+}
+
 .metadataGrid {
   display: grid;
   gap: var(--space-2);

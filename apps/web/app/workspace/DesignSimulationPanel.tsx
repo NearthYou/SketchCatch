@@ -1,4 +1,5 @@
 import type { DesignSimulationResult } from "@sketchcatch/types";
+import { LlmEnhancementPanel } from "./LlmEnhancementPanel";
 import { ResultList } from "./ResultList";
 
 type DesignSimulationPanelProps = {
@@ -21,6 +22,7 @@ export function DesignSimulationPanel({
       ) : (
         <div className="resultStack">
           <p className="resultTitle">{designSimulation.summary}</p>
+          <LlmEnhancementPanel enhancement={designSimulation.llmEnhancement} />
           <ResultList
             items={designSimulation.requestFlow.map((step) => ({
               id: `${step.fromResourceId}-${step.toResourceId}`,

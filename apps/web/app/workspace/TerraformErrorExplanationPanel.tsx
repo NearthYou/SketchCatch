@@ -1,4 +1,5 @@
 import type { AiTerraformErrorExplanationResult, AiTerraformStage } from "@sketchcatch/types";
+import { LlmEnhancementPanel } from "./LlmEnhancementPanel";
 import { ResultList } from "./ResultList";
 
 type TerraformErrorExplanationPanelProps = {
@@ -77,21 +78,24 @@ export function TerraformErrorExplanationPanel({
       </button>
 
       {explanation === null ? null : (
-        <ResultList
-          items={[
-            {
-              id: "likely-cause",
-              label: `${explanation.severity.toUpperCase()} · ${explanation.category}`,
-              text: explanation.likelyCause
-            },
-            ...explanation.nextActions.map((action) => ({
-              id: action,
-              label: "다음 행동",
-              text: action
-            }))
-          ]}
-          summary={explanation.summary}
-        />
+        <div className="resultStack">
+          <LlmEnhancementPanel enhancement={explanation.llmEnhancement} />
+          <ResultList
+            items={[
+              {
+                id: "likely-cause",
+                label: `${explanation.severity.toUpperCase()} · ${explanation.category}`,
+                text: explanation.likelyCause
+              },
+              ...explanation.nextActions.map((action) => ({
+                id: action,
+                label: "다음 행동",
+                text: action
+              }))
+            ]}
+            summary={explanation.summary}
+          />
+        </div>
       )}
     </section>
   );
