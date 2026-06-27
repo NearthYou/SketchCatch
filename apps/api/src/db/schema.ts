@@ -239,12 +239,18 @@ export const deployments = pgTable(
     approvedTerraformArtifactId: varchar("approved_terraform_artifact_id", {
       length: 36
     }).references(() => projectAssets.id, { onDelete: "set null" }),
+    approvedPlanArtifactId: varchar("approved_plan_artifact_id", { length: 36 }),
+    approvedTerraformArtifactHash: varchar("approved_terraform_artifact_hash", { length: 64 }),
+    approvedTfplanHash: varchar("approved_tfplan_hash", { length: 64 }),
+    approvedAwsAccountId: varchar("approved_aws_account_id", { length: 12 }),
+    approvedAwsRegion: varchar("approved_aws_region", { length: 32 }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
   },
   (table) => [
     index("deployments_aws_connection_id_idx").on(table.awsConnectionId),
-    index("deployments_current_plan_artifact_id_idx").on(table.currentPlanArtifactId)
+    index("deployments_current_plan_artifact_id_idx").on(table.currentPlanArtifactId),
+    index("deployments_approved_plan_artifact_id_idx").on(table.approvedPlanArtifactId)
   ]
 );
 

@@ -296,12 +296,22 @@ type Deployment = {
   approvedAt: IsoDateTimeString | null;
   approvedByUserId: string | null;
   approvedTerraformArtifactId: string | null;
+  approvedPlanArtifactId: string | null;
+  approvedTerraformArtifactHash: string | null;
+  approvedTfplanHash: string | null;
+  approvedAwsAccountId: string | null;
+  approvedAwsRegion: string | null;
   createdAt: IsoDateTimeString;
   updatedAt: IsoDateTimeString;
 };
 ```
 
 `Deployment`는 제품/문서/화면/코드에서 실제 실행 단위로 통일한다.
+
+승인 시점에는 사용자가 확인한 Plan을 이후 Apply 대상과 비교할 수 있도록
+`approvedTerraformArtifactId`, `approvedPlanArtifactId`, `approvedTerraformArtifactHash`,
+`approvedTfplanHash`, `approvedAwsAccountId`, `approvedAwsRegion`을 함께 고정한다. 이후
+Apply 단계는 이 snapshot과 현재 artifact, `tfplan`, AWS account/region이 다르면 실행하지 않는다.
 
 ## DeploymentPlanArtifact
 
