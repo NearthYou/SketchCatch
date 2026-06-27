@@ -205,12 +205,14 @@ RDS에 저장하는 데이터:
 - 프로젝트 정보
 - 아키텍처 JSON
 - S3 파일 메타데이터
+- Deployment Plan artifact 메타데이터(object key, hash, account, region)
 - 향후 배포 이력과 비용 정보
 
 S3에 저장하는 데이터:
 
 - 다이어그램 PNG/SVG
 - Terraform 또는 CloudFormation 파일
+- Terraform Plan `tfplan` 바이너리
 - 프로젝트 export zip
 - 프로젝트 썸네일
 
