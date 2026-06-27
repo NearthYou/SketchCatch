@@ -1,10 +1,26 @@
 import type {
+  AiArchitectureDraftResult,
   AiPreDeploymentAnalysisResult,
   AiTerraformErrorExplanationResult,
   DesignSimulationResult,
   LlmEnhancement,
   LlmEnhancementFallbackReason
 } from "@sketchcatch/types";
+
+// LLM이 없어도 Architecture Draft를 왜 만들었는지 metadata 기반 설명을 보여줍니다.
+export function createArchitectureDraftFallbackEnhancement(
+  result: AiArchitectureDraftResult,
+  fallbackReason: LlmEnhancementFallbackReason
+): LlmEnhancement {
+  return {
+    target: "architecture_draft",
+    summary: `${result.title} Architecture Draft를 만들었습니다.`,
+    highlights: createArchitectureDraftHighlights(result),
+    nextActions: createArchitectureDraftNextActions(result),
+    fallbackUsed: true,
+    fallbackReason
+  };
+}
 
 // LLM을 부를 수 없을 때도 Design Simulation의 rule 결과만으로 사용자 설명을 유지합니다.
 export function createDesignSimulationFallbackEnhancement(
@@ -76,6 +92,35 @@ function createDesignSimulationNextActions(result: DesignSimulationResult): stri
 
 function isNonEmptyString(value: string | undefined): value is string {
   return typeof value === "string" && value.trim().length > 0;
+}
+
+// 초안 metadata에서 선택 이유와 guardrail warning을 먼저 보여줄 highlight로 바꿉니다.
+function createArchitectureDraftHighlights(result: AiArchitectureDraftResult): string[] {
+  const guardrailWarnings = result.metadata.guardrailWarnings?.map((warning) => warning.message) ?? [];
+  const highlights = [
+    ...result.metadata.explanations,
+    ...guardrailWarnings,
+    ...result.metadata.assumptions
+  ].filter(isNonEmptyString);
+
+  if (highlights.length === 0) {
+    return ["Architecture Board에서 열 수 있는 초안이 준비됐습니다."];
+  }
+
+  return highlights.slice(0, 5);
+}
+
+// 초안은 자동 적용하지 않고 사용자가 Board에서 확인할 행동만 제안합니다.
+function createArchitectureDraftNextActions(result: AiArchitectureDraftResult): string[] {
+  const actions = [
+    "Architecture Board에서 Resource와 연결을 확인하세요.",
+    result.metadata.guardrailWarnings !== undefined && result.metadata.guardrailWarnings.length > 0
+      ? "warning 항목을 먼저 읽고 운영 조건과 맞는지 확인하세요."
+      : undefined,
+    "IaC Preview와 Pre-Deployment Check를 이어서 실행하세요."
+  ].filter(isNonEmptyString);
+
+  return actions.slice(0, 5);
 }
 
 // finding과 checklist 중 사용자가 먼저 볼 항목만 추려 fallback highlight로 만듭니다.

@@ -111,16 +111,18 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
 
   app.post("/ai/architecture-draft", async (request): Promise<AiArchitectureDraftResult> => {
     const body = architectureDraftBodySchema.parse(request.body);
+    const result = createArchitectureDraft(body);
 
-    return createArchitectureDraft(body);
+    return addArchitectureDraftLlmEnhancement(result, createLlmEnhancement);
   });
 
   app.post("/ai/github-architecture-draft", async (request): Promise<AiArchitectureDraftResult> => {
     const body = githubArchitectureDraftBodySchema.parse(request.body);
     const repository = parseGitHubRepositoryUrl(body.repositoryUrl);
     const evidence = await fetchRepositoryEvidence(repository);
+    const result = createArchitectureDraftFromRepositoryEvidence(body.repositoryUrl, evidence);
 
-    return createArchitectureDraftFromRepositoryEvidence(body.repositoryUrl, evidence);
+    return addArchitectureDraftLlmEnhancement(result, createLlmEnhancement);
   });
 
   app.post("/ai/pre-deployment-check", async (request): Promise<AiPreDeploymentAnalysisResult> => {
@@ -180,6 +182,20 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
       return explainTerraformPreview(body.terraformCode);
     }
   );
+}
+
+// Architecture Draft 계열 route가 같은 LLM 보강 계약을 쓰도록 한곳에서 붙입니다.
+async function addArchitectureDraftLlmEnhancement(
+  result: AiArchitectureDraftResult,
+  createLlmEnhancement: CreateLlmEnhancement
+): Promise<AiArchitectureDraftResult> {
+  return {
+    ...result,
+    llmEnhancement: await createLlmEnhancement({
+      target: "architecture_draft",
+      result
+    })
+  };
 }
 
 type GitHubRepository = {

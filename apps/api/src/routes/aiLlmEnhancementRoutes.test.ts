@@ -119,3 +119,51 @@ test("POST /api/ai/terraform-error-explanation returns fallback llmEnhancement w
     await app.close();
   }
 });
+
+test("POST /api/ai/architecture-draft returns fallback llmEnhancement when API key is missing", async () => {
+  const originalApiKey = process.env.OPENAI_API_KEY;
+  delete process.env.OPENAI_API_KEY;
+  const app = buildApp();
+
+  try {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/ai/architecture-draft",
+      payload: {
+        prompt: "Node API 서버와 Postgres 데이터베이스가 필요합니다.",
+        scenarioHint: "auto",
+        budgetLevel: "normal",
+        trafficLevel: "small",
+        securityPriority: "high"
+      }
+    });
+
+    assert.equal(response.statusCode, 200);
+
+    const body = z
+      .object({
+        title: z.string(),
+        metadata: z.object({
+          assumptions: z.array(z.string()),
+          explanations: z.array(z.string())
+        }),
+        llmEnhancement: llmEnhancementSchema
+      })
+      .parse(response.json());
+
+    assert.equal(body.llmEnhancement.target, "architecture_draft");
+    assert.equal(body.llmEnhancement.fallbackUsed, true);
+    assert.equal(body.llmEnhancement.fallbackReason, "missing_api_key");
+    assert.ok(body.llmEnhancement.summary.includes(body.title));
+    assert.ok(body.llmEnhancement.highlights.length > 0);
+    assert.ok(body.llmEnhancement.nextActions.length > 0);
+  } finally {
+    if (originalApiKey === undefined) {
+      delete process.env.OPENAI_API_KEY;
+    } else {
+      process.env.OPENAI_API_KEY = originalApiKey;
+    }
+
+    await app.close();
+  }
+});

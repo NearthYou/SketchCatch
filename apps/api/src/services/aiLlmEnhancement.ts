@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 import type { LlmEnhancement, LlmEnhancementFallbackReason } from "@sketchcatch/types";
 import {
+  createArchitectureDraftFallbackEnhancement,
   createDesignSimulationFallbackEnhancement,
   createPreDeploymentCheckFallbackEnhancement,
   createTerraformErrorExplanationFallbackEnhancement
@@ -134,6 +135,8 @@ function createDefaultOpenAiResponsesClient(options: OpenAiClientOptions): OpenA
 // target별 fallback builder를 한곳에서 고르게 해서 provider 실패 경로를 단순하게 유지합니다.
 function createFallbackEnhancement(input: LlmEnhancementInput, fallbackReason: LlmEnhancementFallbackReason): LlmEnhancement {
   switch (input.target) {
+    case "architecture_draft":
+      return createArchitectureDraftFallbackEnhancement(input.result, fallbackReason);
     case "design_simulation":
       return createDesignSimulationFallbackEnhancement(input.result, fallbackReason);
     case "pre_deployment_check":

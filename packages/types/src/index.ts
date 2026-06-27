@@ -417,6 +417,7 @@ export type AiArchitectureDraftResult = {
   architectureJson: ArchitectureJson;
   title: string;
   metadata: AiResultMetadata;
+  llmEnhancement?: LlmEnhancement | undefined;
 };
 
 export type MoneyEstimate = {

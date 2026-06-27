@@ -1,4 +1,5 @@
 import type {
+  AiArchitectureDraftResult,
   AiPreDeploymentAnalysisResult,
   AiTerraformErrorExplanationResult,
   DesignSimulationResult
@@ -13,6 +14,19 @@ type DesignSimulationSummaryPayload = {
   readonly failureScenarios: readonly string[];
   readonly costPressure: readonly string[];
   readonly recommendations: readonly string[];
+};
+
+type ArchitectureDraftSummaryPayload = {
+  readonly target: "architecture_draft";
+  readonly title: string;
+  readonly source: string;
+  readonly confidence: string;
+  readonly selectedScenario: string | null;
+  readonly nodeTypes: readonly string[];
+  readonly edgeCount: number;
+  readonly assumptions: readonly string[];
+  readonly explanations: readonly string[];
+  readonly guardrailWarnings: readonly string[];
 };
 
 type PreDeploymentCheckSummaryPayload = {
@@ -47,8 +61,14 @@ export function createSystemInstructions(): string {
 // target별 rule 결과에서 OpenAI에 넘길 최소 summary payload만 만듭니다.
 export function createSummaryPayload(
   input: LlmEnhancementInput
-): PreDeploymentCheckSummaryPayload | DesignSimulationSummaryPayload | TerraformErrorExplanationSummaryPayload {
+):
+  | ArchitectureDraftSummaryPayload
+  | PreDeploymentCheckSummaryPayload
+  | DesignSimulationSummaryPayload
+  | TerraformErrorExplanationSummaryPayload {
   switch (input.target) {
+    case "architecture_draft":
+      return createArchitectureDraftSummaryPayload(input.result);
     case "design_simulation":
       return createDesignSimulationSummaryPayload(input.result);
     case "pre_deployment_check":
@@ -56,6 +76,22 @@ export function createSummaryPayload(
     case "terraform_error_explanation":
       return createTerraformErrorExplanationSummaryPayload(input.result);
   }
+}
+
+// Architecture Draft는 초안 구조와 metadata만 넘기고 Board 전체 상태는 보내지 않습니다.
+function createArchitectureDraftSummaryPayload(result: AiArchitectureDraftResult): ArchitectureDraftSummaryPayload {
+  return {
+    target: "architecture_draft",
+    title: result.title,
+    source: result.metadata.source,
+    confidence: result.metadata.confidence,
+    selectedScenario: result.metadata.selectedScenario ?? null,
+    nodeTypes: result.architectureJson.nodes.map((node) => node.type),
+    edgeCount: result.architectureJson.edges.length,
+    assumptions: result.metadata.assumptions,
+    explanations: result.metadata.explanations,
+    guardrailWarnings: result.metadata.guardrailWarnings?.map((warning) => warning.message) ?? []
+  };
 }
 
 // LLM 보강에 필요한 Resource 흐름과 위험 요약만 남겨 payload를 작게 유지합니다.

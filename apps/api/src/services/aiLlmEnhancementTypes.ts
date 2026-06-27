@@ -1,4 +1,5 @@
 import type {
+  AiArchitectureDraftResult,
   AiPreDeploymentAnalysisResult,
   AiTerraformErrorExplanationResult,
   DesignSimulationResult,
@@ -6,6 +7,10 @@ import type {
 } from "@sketchcatch/types";
 
 export type LlmEnhancementInput =
+  | {
+      readonly target: "architecture_draft";
+      readonly result: AiArchitectureDraftResult;
+    }
   | {
       readonly target: "design_simulation";
       readonly result: DesignSimulationResult;
