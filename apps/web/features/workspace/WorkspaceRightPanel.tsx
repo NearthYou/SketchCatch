@@ -14,6 +14,7 @@ import type {
 import {
   AlertCircle,
   ArrowLeft,
+  ChevronDown,
   ClipboardCheck,
   Code2,
   FileCode2,
@@ -177,7 +178,12 @@ function TerraformCodePanel({
   readonly onDirtyChange: (isDirty: boolean) => void;
   readonly onExternalSaveComplete: (saved: boolean) => void;
 }) {
-  const [terraformCode, setTerraformCode] = useState("");
+  const [terraformFiles, setTerraformFiles] = useState<TerraformVirtualFile[]>(() =>
+    createTerraformFilesFromGeneratedCode(context.diagram, "")
+  );
+  const [activeFileName, setActiveFileName] = useState("main.tf");
+  const [isFileMenuOpen, setIsFileMenuOpen] = useState(false);
+  const [fileSearchQuery, setFileSearchQuery] = useState("");
   const [diagnostics, setDiagnostics] = useState<TerraformDiagnostic[]>([]);
   const [requestState, setRequestState] = useState<RequestState>("idle");
   const [errorMessage, setErrorMessage] = useState("");
@@ -190,11 +196,16 @@ function TerraformCodePanel({
   const lineNumberRef = useRef<HTMLOListElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
-  const hasTerraformCode = terraformCode.trim().length > 0;
+  const combinedTerraformCode = useMemo(() => combineTerraformFiles(terraformFiles), [terraformFiles]);
+  const activeFileCode = useMemo(
+    () => getTerraformFileCode(terraformFiles, activeFileName),
+    [activeFileName, terraformFiles]
+  );
+  const hasTerraformCode = combinedTerraformCode.trim().length > 0;
   const hasErrorDiagnostics = diagnostics.some((diagnostic) => diagnostic.severity === "error");
   const firstErrorDiagnostic = diagnostics.find((diagnostic) => diagnostic.severity === "error") ?? null;
   const currentDiagramFingerprint = useMemo(() => toDiagramFingerprint(context.diagram), [context.diagram]);
-  const terraformBlocks = useMemo(() => parseTerraformBlocks(terraformCode), [terraformCode]);
+  const terraformBlocks = useMemo(() => parseTerraformFiles(terraformFiles), [terraformFiles]);
   const selectedNode = useMemo(
     () => context.nodes.find((node) => node.id === context.selectedNodeId) ?? null,
     [context.nodes, context.selectedNodeId]
@@ -211,8 +222,21 @@ function TerraformCodePanel({
     () => findTerraformBlockForNode(terraformBlocks, inspectedNode),
     [inspectedNode, terraformBlocks]
   );
+  const terraformFileOptions = useMemo(
+    () => getTerraformFileOptions(context.diagram, terraformFiles),
+    [context.diagram, terraformFiles]
+  );
+  const filteredTerraformFileOptions = useMemo(() => {
+    const query = fileSearchQuery.trim().toLowerCase();
+
+    if (!query) {
+      return terraformFileOptions;
+    }
+
+    return terraformFileOptions.filter((fileName) => fileName.toLowerCase().includes(query));
+  }, [fileSearchQuery, terraformFileOptions]);
   const isResourceCodeMode = Boolean(inspectedNode);
-  const displayedTerraformCode = inspectedBlock?.code ?? terraformCode;
+  const displayedTerraformCode = inspectedBlock?.code ?? activeFileCode;
   const lineNumbers = useMemo(
     () => Array.from({ length: Math.max(1, displayedTerraformCode.split(/\r\n|\r|\n/).length) }, (_, index) => index + 1),
     [displayedTerraformCode]
@@ -243,7 +267,11 @@ function TerraformCodePanel({
           return;
         }
 
-        setTerraformCode(generatedCode);
+        const nextFiles = createTerraformFilesFromGeneratedCode(context.diagram, generatedCode);
+        setTerraformFiles(nextFiles);
+        setActiveFileName((currentFileName) =>
+          nextFiles.some((file) => file.fileName === currentFileName) ? currentFileName : "main.tf"
+        );
         setDiagnostics([]);
         setHasLocalEdits(false);
         setSaveBanner(null);
@@ -263,7 +291,7 @@ function TerraformCodePanel({
     let saved = false;
 
     await runRequest(async () => {
-      const validationResult = await validateTerraformCode(terraformCode);
+      const validationResult = await validateTerraformCode(combinedTerraformCode);
       setDiagnostics(validationResult.diagnostics);
 
       const validationError = validationResult.diagnostics.find(
@@ -282,7 +310,7 @@ function TerraformCodePanel({
 
       const syncResult = await syncTerraformToDiagram({
         diagramJson: context.diagram,
-        terraformCode
+        terraformCode: combinedTerraformCode
       });
       setDiagnostics(syncResult.diagnostics);
 
@@ -309,12 +337,12 @@ function TerraformCodePanel({
 
     return saved;
   }, [
+    combinedTerraformCode,
     context,
     hasTerraformCode,
     onDirtyChange,
     requestState,
-    runRequest,
-    terraformCode
+    runRequest
   ]);
 
   useEffect(() => {
@@ -331,7 +359,7 @@ function TerraformCodePanel({
       return;
     }
 
-    if (latestDiagramFingerprintRef.current === currentDiagramFingerprint && terraformCode.length > 0) {
+    if (latestDiagramFingerprintRef.current === currentDiagramFingerprint) {
       return;
     }
 
@@ -344,8 +372,7 @@ function TerraformCodePanel({
     context.nodes.length,
     currentDiagramFingerprint,
     hasLocalEdits,
-    refreshTerraformCode,
-    terraformCode.length
+    refreshTerraformCode
   ]);
 
   useEffect(() => {
@@ -354,6 +381,11 @@ function TerraformCodePanel({
 
   useEffect(() => {
     if (isResourceCodeMode || !selectedBlock || !textareaRef.current) {
+      return;
+    }
+
+    if (selectedBlock.fileName !== activeFileName) {
+      setActiveFileName(selectedBlock.fileName);
       return;
     }
 
@@ -366,7 +398,15 @@ function TerraformCodePanel({
     if (lineNumberRef.current) {
       lineNumberRef.current.scrollTop = textarea.scrollTop;
     }
-  }, [isResourceCodeMode, selectedBlock]);
+  }, [activeFileName, isResourceCodeMode, selectedBlock]);
+
+  useEffect(() => {
+    if (!inspectedBlock) {
+      return;
+    }
+
+    setActiveFileName(inspectedBlock.fileName);
+  }, [inspectedBlock]);
 
   function handleCodeScroll(event: UIEvent<HTMLTextAreaElement>): void {
     if (lineNumberRef.current) {
@@ -375,15 +415,27 @@ function TerraformCodePanel({
   }
 
   function handleCodeChange(nextCode: string): void {
-    if (inspectedBlock) {
-      setTerraformCode(
-        `${terraformCode.slice(0, inspectedBlock.startOffset)}${nextCode}${terraformCode.slice(
-          inspectedBlock.endOffset
-        )}`
-      );
-    } else {
-      setTerraformCode(nextCode);
-    }
+    setTerraformFiles((currentFiles) =>
+      currentFiles.map((file) => {
+        if (inspectedBlock && file.fileName === inspectedBlock.fileName) {
+          return {
+            fileName: file.fileName,
+            code: `${file.code.slice(0, inspectedBlock.startOffset)}${nextCode}${file.code.slice(
+              inspectedBlock.endOffset
+            )}`
+          };
+        }
+
+        if (!inspectedBlock && file.fileName === activeFileName) {
+          return {
+            fileName: file.fileName,
+            code: nextCode
+          };
+        }
+
+        return file;
+      })
+    );
 
     setHasLocalEdits(true);
     setSaveBanner({ kind: "dirty" });
@@ -413,6 +465,20 @@ function TerraformCodePanel({
     }, "Terraform 코드를 검증하지 못했습니다.");
   }
 
+  function selectTerraformFile(fileName: string): void {
+    setTerraformFiles((currentFiles) =>
+      currentFiles.some((file) => file.fileName === fileName)
+        ? currentFiles
+        : [...currentFiles, { code: "", fileName }].sort((left, right) =>
+            compareTerraformFileNames(left.fileName, right.fileName)
+          )
+    );
+    setActiveFileName(fileName);
+    setIsFileMenuOpen(false);
+    setFileSearchQuery("");
+    context.closeInspectedNode();
+  }
+
   return (
     <div className={styles.terraformPanel}>
       {isResourceCodeMode ? (
@@ -439,9 +505,50 @@ function TerraformCodePanel({
         </header>
       ) : (
         <header className={styles.terraformTopBar}>
-          <div className={styles.terraformFileChip}>
-            <FileCode2 size={16} aria-hidden="true" />
-            <span>main.tf</span>
+          <div className={styles.terraformFilePicker}>
+            <button
+              aria-expanded={isFileMenuOpen}
+              aria-haspopup="listbox"
+              className={styles.terraformFileButton}
+              onClick={() => setIsFileMenuOpen((isOpen) => !isOpen)}
+              type="button"
+            >
+              <FileCode2 size={16} aria-hidden="true" />
+              <span>{activeFileName}</span>
+              <ChevronDown size={15} aria-hidden="true" />
+            </button>
+            {isFileMenuOpen ? (
+              <div className={styles.terraformFileMenu}>
+                <input
+                  aria-label="Terraform 파일 검색"
+                  className={styles.terraformFileSearch}
+                  onChange={(event) => setFileSearchQuery(event.target.value)}
+                  placeholder="Search file"
+                  value={fileSearchQuery}
+                />
+                <div className={styles.terraformFileList} role="listbox">
+                  {filteredTerraformFileOptions.map((fileName) => (
+                    <button
+                      aria-selected={fileName === activeFileName}
+                      className={
+                        fileName === activeFileName
+                          ? styles.terraformFileOptionActive
+                          : styles.terraformFileOption
+                      }
+                      key={fileName}
+                      onClick={() => selectTerraformFile(fileName)}
+                      role="option"
+                      type="button"
+                    >
+                      {fileName}
+                    </button>
+                  ))}
+                  {filteredTerraformFileOptions.length === 0 ? (
+                    <span className={styles.terraformFileEmpty}>No files</span>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
           </div>
           <span className={styles.terraformShortcut}>Ctrl+S</span>
         </header>
@@ -477,7 +584,11 @@ function TerraformCodePanel({
         <span className={hasLocalEdits ? styles.terraformStatusEdited : styles.terraformStatusSynced}>
           {statusMessage}
         </span>
-        <span>{isResourceCodeMode ? "resource code" : `${context.nodes.length} nodes`}</span>
+        <span>
+          {isResourceCodeMode
+            ? `${inspectedBlock?.fileName ?? activeFileName} resource code`
+            : `${terraformFileOptions.length} files | ${context.nodes.length} nodes`}
+        </span>
       </div>
 
       {saveBanner ? (
@@ -560,6 +671,21 @@ type TerraformSaveBanner =
       readonly line?: number | undefined;
       readonly message: string;
     };
+
+type TerraformVirtualFile = {
+  readonly code: string;
+  readonly fileName: string;
+};
+
+const TERRAFORM_STANDARD_FILE_NAMES = [
+  "backend.tf",
+  "locals.tf",
+  "main.tf",
+  "outputs.tf",
+  "providers.tf",
+  "terraform.tfvars",
+  "variables.tf"
+] as const;
 
 function TerraformLeaveDialog({
   onContinue,
@@ -954,12 +1080,117 @@ function toDiagramFingerprint(value: unknown): string {
   return JSON.stringify(value);
 }
 
+function createTerraformFilesFromGeneratedCode(
+  diagramJson: DiagramEditorPanelContext["diagram"],
+  generatedCode: string
+): TerraformVirtualFile[] {
+  const fileNames = getTerraformFileOptions(diagramJson, []);
+  const codeByFileName = new Map(fileNames.map((fileName) => [fileName, ""]));
+  const nodeFileByAddress = new Map(
+    diagramJson.nodes
+      .map((node) => [toNodeTerraformAddress(node), normalizeTerraformFileName(node.parameters?.fileName)] as const)
+      .filter((entry): entry is readonly [string, string] => Boolean(entry[0]))
+  );
+  const generatedBlocks = parseTerraformBlocks("main.tf", generatedCode);
+
+  for (const block of generatedBlocks) {
+    const fileName = nodeFileByAddress.get(block.address) ?? "main.tf";
+    const currentCode = codeByFileName.get(fileName) ?? "";
+    codeByFileName.set(fileName, appendTerraformBlock(currentCode, block.code));
+  }
+
+  if (generatedBlocks.length === 0 && generatedCode.trim()) {
+    codeByFileName.set("main.tf", generatedCode.trim());
+  }
+
+  return Array.from(codeByFileName.entries()).map(([fileName, code]) => ({
+    code,
+    fileName
+  }));
+}
+
+function getTerraformFileOptions(
+  diagramJson: DiagramEditorPanelContext["diagram"],
+  files: readonly TerraformVirtualFile[]
+): string[] {
+  const fileNames = new Set<string>(TERRAFORM_STANDARD_FILE_NAMES);
+
+  for (const node of diagramJson.nodes) {
+    fileNames.add(normalizeTerraformFileName(node.parameters?.fileName));
+  }
+
+  for (const file of files) {
+    fileNames.add(normalizeTerraformFileName(file.fileName));
+  }
+
+  return Array.from(fileNames).sort(compareTerraformFileNames);
+}
+
+function compareTerraformFileNames(left: string, right: string): number {
+  const leftStandardIndex = TERRAFORM_STANDARD_FILE_NAMES.indexOf(left as (typeof TERRAFORM_STANDARD_FILE_NAMES)[number]);
+  const rightStandardIndex = TERRAFORM_STANDARD_FILE_NAMES.indexOf(right as (typeof TERRAFORM_STANDARD_FILE_NAMES)[number]);
+
+  if (leftStandardIndex !== -1 || rightStandardIndex !== -1) {
+    if (leftStandardIndex === -1) {
+      return 1;
+    }
+
+    if (rightStandardIndex === -1) {
+      return -1;
+    }
+
+    return leftStandardIndex - rightStandardIndex;
+  }
+
+  return left.localeCompare(right);
+}
+
+function normalizeTerraformFileName(fileName: string | undefined): string {
+  const trimmedFileName = fileName?.trim();
+
+  if (!trimmedFileName) {
+    return "main.tf";
+  }
+
+  if (trimmedFileName.endsWith(".tf") || trimmedFileName.endsWith(".tfvars")) {
+    return trimmedFileName;
+  }
+
+  return `${trimmedFileName}.tf`;
+}
+
+function appendTerraformBlock(currentCode: string, blockCode: string): string {
+  const trimmedBlock = blockCode.trim();
+
+  if (!currentCode.trim()) {
+    return trimmedBlock;
+  }
+
+  return `${currentCode.trimEnd()}\n\n${trimmedBlock}`;
+}
+
+function getTerraformFileCode(files: readonly TerraformVirtualFile[], fileName: string): string {
+  return files.find((file) => file.fileName === fileName)?.code ?? "";
+}
+
+function combineTerraformFiles(files: readonly TerraformVirtualFile[]): string {
+  return files
+    .map((file) => file.code.trim())
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+function parseTerraformFiles(files: readonly TerraformVirtualFile[]): TerraformBlockLocation[] {
+  return files.flatMap((file) => parseTerraformBlocks(file.fileName, file.code));
+}
+
 type TerraformBlockLocation = {
   readonly address: string;
   readonly blockType: "resource" | "data";
   readonly code: string;
   readonly endLine: number;
   readonly endOffset: number;
+  readonly fileName: string;
   readonly name: string;
   readonly startLine: number;
   readonly startOffset: number;
@@ -991,7 +1222,7 @@ function toNodeTerraformAddress(node: DiagramNode | null): string | null {
   return `${resourceType}.${resourceName}`;
 }
 
-function parseTerraformBlocks(terraformCode: string): TerraformBlockLocation[] {
+function parseTerraformBlocks(fileName: string, terraformCode: string): TerraformBlockLocation[] {
   const blocks: TerraformBlockLocation[] = [];
   const lines = terraformCode.split(/\r\n|\r|\n/);
   const lineOffsets: number[] = [];
@@ -1033,6 +1264,7 @@ function parseTerraformBlocks(terraformCode: string): TerraformBlockLocation[] {
       code: terraformCode.slice(startOffset, endOffset),
       endLine: endIndex + 1,
       endOffset,
+      fileName,
       name,
       startLine,
       startOffset,

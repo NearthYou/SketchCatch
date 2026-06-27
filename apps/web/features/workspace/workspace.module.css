@@ -210,6 +210,114 @@
   white-space: nowrap;
 }
 
+.terraformFilePicker {
+  min-width: 0;
+  position: relative;
+}
+
+.terraformFileButton {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  color: #172033;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 850;
+  gap: 7px;
+  height: 36px;
+  max-width: 180px;
+  min-width: 112px;
+  padding: 0 9px;
+}
+
+.terraformFileButton span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.terraformFileButton:hover,
+.terraformFileButton:focus-visible {
+  background: #f8fafc;
+  border-color: #9fb2cc;
+  outline: none;
+}
+
+.terraformFileMenu {
+  background: #ffffff;
+  border: 1px solid #d7dee9;
+  border-radius: 6px;
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.18);
+  display: grid;
+  gap: 8px;
+  left: 0;
+  min-width: 280px;
+  padding: 10px;
+  position: absolute;
+  top: calc(100% + 8px);
+  z-index: 8;
+}
+
+.terraformFileSearch {
+  background: #ffffff;
+  border: 1px solid #d3dce8;
+  border-radius: 5px;
+  color: #172033;
+  font: inherit;
+  min-height: 38px;
+  min-width: 0;
+  padding: 8px 10px;
+}
+
+.terraformFileSearch:focus {
+  border-color: #6f4cf6;
+  box-shadow: 0 0 0 3px rgba(111, 76, 246, 0.14);
+  outline: none;
+}
+
+.terraformFileList {
+  display: grid;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.terraformFileOption,
+.terraformFileOptionActive {
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  color: #111827;
+  cursor: pointer;
+  font: inherit;
+  font-size: 14px;
+  min-height: 36px;
+  padding: 7px 12px;
+  text-align: left;
+}
+
+.terraformFileOptionActive {
+  background: #f0edff;
+  color: #5f3de8;
+  font-weight: 850;
+}
+
+.terraformFileOption:hover,
+.terraformFileOption:focus-visible,
+.terraformFileOptionActive:hover,
+.terraformFileOptionActive:focus-visible {
+  background: #f6f3ff;
+  outline: none;
+}
+
+.terraformFileEmpty {
+  color: #64748b;
+  font-size: 13px;
+  padding: 8px 12px;
+}
+
 .terraformShortcut {
   background: #f8fafc;
   border: 1px solid #e2e8f0;
