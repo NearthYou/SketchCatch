@@ -274,7 +274,7 @@
 }
 
 .panelDeployButton {
-  margin-left: auto;
+  margin-left: 0;
 }
 
 .collapsedPanelButton,
@@ -1054,12 +1054,21 @@
 .terraformSaveBannerError {
   align-items: center;
   display: flex;
-  font-size: 12px;
+  font-size: 10.5px;
   font-weight: 750;
-  gap: 10px;
+  gap: 6px;
   justify-content: space-between;
-  min-height: 30px;
-  padding: 6px 10px;
+  line-height: 1.2;
+  min-height: 26px;
+  padding: 5px 8px;
+}
+
+.terraformSaveBanner span,
+.terraformSaveBannerError span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .terraformSaveBanner {
@@ -1080,8 +1089,10 @@
   cursor: pointer;
   font: inherit;
   font-weight: 900;
+  flex: 0 0 auto;
   padding: 0;
   text-decoration: underline;
+  white-space: nowrap;
 }
 
 .terraformSaveBanner button:focus-visible,

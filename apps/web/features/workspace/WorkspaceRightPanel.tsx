@@ -138,7 +138,7 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
     return (
       <aside className={styles.collapsedRightPanel} aria-label="오른쪽 패널 바로가기">
         <button
-          className={styles.collapsedPanelButtonActive}
+          className={styles.collapsedPanelButton}
           onClick={() => context.setRightPanelOpen(true)}
           title="오른쪽 패널 열기"
           type="button"
@@ -146,7 +146,7 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
           <PanelRightOpen size={18} aria-hidden="true" />
         </button>
         <button
-          className={activeView === "resource" ? styles.collapsedPanelButtonActive : styles.collapsedPanelButton}
+          className={styles.collapsedPanelButton}
           onClick={() => openCollapsedView("resource")}
           title="Resources"
           type="button"
@@ -154,7 +154,7 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
           <ListTree size={18} aria-hidden="true" />
         </button>
         <button
-          className={activeView === "terraform" ? styles.collapsedPanelButtonActive : styles.collapsedPanelButton}
+          className={styles.collapsedPanelButton}
           onClick={() => openCollapsedView("terraform")}
           title="Terraform"
           type="button"
@@ -162,7 +162,7 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
           <Code2 size={18} aria-hidden="true" />
         </button>
         <button
-          className={activeView === "issues" ? styles.collapsedPanelButtonActive : styles.collapsedPanelButton}
+          className={styles.collapsedPanelButton}
           onClick={() => openCollapsedView("issues")}
           title="Issues"
           type="button"
@@ -173,7 +173,7 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
           </span>
         </button>
         <button
-          className={activeView === "deployment" ? styles.collapsedPanelButtonActive : styles.collapsedPanelButton}
+          className={styles.collapsedPanelButton}
           onClick={() => openCollapsedView("deployment")}
           title="Deploy"
           type="button"
