@@ -1,11 +1,17 @@
 import type {
+  AiArchitectureDraftResult,
+  AiPreDeploymentAnalysisResult,
+  ArchitectureJson,
   AwsConnectionCloudFormationTemplateResponse,
   AwsConnection,
   AwsConnectionListResponse,
+  CreateArchitectureDraftRequest,
   CreateAwsConnectionRequest,
   CreateAwsConnectionResponse,
   CreateDeploymentRequest,
+  CreateDesignSimulationRequest,
   CreateProjectRequest,
+  DesignSimulationResult,
   Deployment,
   DeploymentListResponse,
   DeploymentLog,
@@ -115,6 +121,38 @@ export async function syncTerraformToDiagram({
       diagramJson,
       terraformCode
     }
+  });
+}
+
+// 실제 Workspace AI 패널에서 Requirement Prompt 기반 Architecture Draft를 요청합니다.
+export async function createAiArchitectureDraft(
+  input: CreateArchitectureDraftRequest
+): Promise<AiArchitectureDraftResult> {
+  return apiFetch<AiArchitectureDraftResult>("/ai/architecture-draft", {
+    body: input,
+    method: "POST"
+  });
+}
+
+// 현재 Architecture Board를 기준으로 Pre-Deployment Check를 실행합니다.
+export async function runAiPreDeploymentCheck(
+  architectureJson: ArchitectureJson
+): Promise<AiPreDeploymentAnalysisResult> {
+  return apiFetch<AiPreDeploymentAnalysisResult>("/ai/pre-deployment-check", {
+    body: {
+      architectureJson
+    },
+    method: "POST"
+  });
+}
+
+// 현재 Architecture Board와 운영 조건을 기준으로 Design Simulation을 실행합니다.
+export async function runAiDesignSimulation(
+  input: CreateDesignSimulationRequest
+): Promise<DesignSimulationResult> {
+  return apiFetch<DesignSimulationResult>("/ai/design-simulation", {
+    body: input,
+    method: "POST"
   });
 }
 

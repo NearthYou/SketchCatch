@@ -1306,6 +1306,260 @@
   }
 }
 
+.aiPanel {
+  align-content: start;
+  background: #ffffff;
+  color: #172033;
+  display: grid;
+  gap: 14px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px;
+}
+
+.aiPanelHeader {
+  border-bottom: 1px solid #e3e9f2;
+  display: grid;
+  gap: 4px;
+  padding-bottom: 14px;
+}
+
+.aiPanelHeader span {
+  color: #6f4cf6;
+  font-size: 11px;
+  font-weight: 950;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.aiPanelHeader h2 {
+  color: #172033;
+  font-size: 18px;
+  line-height: 1.2;
+  margin: 0;
+}
+
+.aiSection,
+.aiResultCard,
+.aiExplanation,
+.aiResultStack {
+  display: grid;
+  gap: 10px;
+}
+
+.aiSection {
+  border-top: 1px solid #e3e9f2;
+  padding-top: 14px;
+}
+
+.aiSection:first-of-type {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.aiField {
+  color: #334155;
+  display: grid;
+  font-size: 12px;
+  font-weight: 850;
+  gap: 6px;
+}
+
+.aiField textarea,
+.aiField select {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  color: #172033;
+  font: inherit;
+  min-width: 0;
+  padding: 8px 10px;
+  width: 100%;
+}
+
+.aiField textarea {
+  line-height: 1.45;
+  resize: vertical;
+}
+
+.aiField textarea:focus,
+.aiField select:focus {
+  border-color: #2f6db3;
+  box-shadow: 0 0 0 3px rgb(47 109 179 / 16%);
+  outline: none;
+}
+
+.aiInlineFields {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.aiPrimaryButton,
+.aiSecondaryButton {
+  align-items: center;
+  border-radius: 6px;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 850;
+  justify-content: center;
+  min-height: 34px;
+  padding: 0 10px;
+}
+
+.aiPrimaryButton {
+  background: #6f4cf6;
+  border: 1px solid #6f4cf6;
+  color: #ffffff;
+}
+
+.aiSecondaryButton {
+  background: #ffffff;
+  border: 1px solid #7c5cff;
+  color: #6f4cf6;
+}
+
+.aiPrimaryButton:disabled,
+.aiSecondaryButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.aiPrimaryButton:not(:disabled):hover,
+.aiPrimaryButton:not(:disabled):focus-visible {
+  background: #5f3de8;
+  border-color: #5f3de8;
+  outline: none;
+}
+
+.aiSecondaryButton:not(:disabled):hover,
+.aiSecondaryButton:not(:disabled):focus-visible {
+  background: #f6f3ff;
+  outline: none;
+}
+
+.aiResultCard {
+  background: #f8fafc;
+  border: 1px solid #dce3ee;
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.aiResultHeader,
+.aiActionHeader,
+.aiExplanationHeader {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.aiResultHeader h3,
+.aiActionHeader h3 {
+  color: #172033;
+  font-size: 13px;
+  line-height: 1.25;
+  margin: 0;
+}
+
+.aiResultHeader span,
+.aiExplanationHeader span {
+  background: #eef2ff;
+  border-radius: 999px;
+  color: #3730a3;
+  font-size: 10.5px;
+  font-weight: 900;
+  padding: 4px 7px;
+  white-space: nowrap;
+}
+
+.aiExplanation {
+  background: #f4f7fb;
+  border: 1px solid #dfe7f4;
+  border-radius: 7px;
+  padding: 10px;
+}
+
+.aiExplanationHeader strong,
+.aiListBlock strong {
+  color: #172033;
+  font-size: 11.5px;
+  font-weight: 950;
+}
+
+.aiExplanation p,
+.aiResultSummary,
+.aiHint,
+.aiNotice,
+.aiError,
+.aiStaleNotice {
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.aiExplanation p,
+.aiResultSummary {
+  color: #334155;
+}
+
+.aiHint {
+  color: #64748b;
+}
+
+.aiNotice,
+.aiStaleNotice {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 6px;
+  color: #1d4ed8;
+  font-weight: 800;
+  padding: 9px 10px;
+}
+
+.aiStaleNotice {
+  background: #fff7ed;
+  border-color: #fed7aa;
+  color: #9a3412;
+}
+
+.aiError {
+  background: #fff1f0;
+  border: 1px solid #ffd1cc;
+  border-radius: 6px;
+  color: #9f2a1d;
+  font-weight: 800;
+  padding: 9px 10px;
+}
+
+.aiListBlock {
+  display: grid;
+  gap: 5px;
+}
+
+.aiListBlock ul {
+  display: grid;
+  gap: 5px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.aiListBlock li {
+  border-top: 1px solid #dce3ee;
+  color: #475569;
+  font-size: 11.5px;
+  line-height: 1.45;
+  padding-top: 5px;
+}
+
+.aiListBlock li:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
 .deploymentPanel {
   display: grid;
   gap: 16px;
