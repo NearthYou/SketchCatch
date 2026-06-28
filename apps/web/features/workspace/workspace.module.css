@@ -350,10 +350,12 @@
   min-width: 0;
 }
 
+.resourceSectionButton,
 .resourceSectionButtonActive {
   align-items: center;
   border: 1px solid transparent;
   border-radius: 7px;
+  cursor: pointer;
   display: inline-flex;
   height: 32px;
   justify-content: center;
@@ -361,10 +363,113 @@
   width: 32px;
 }
 
+.resourceSectionButton {
+  background: transparent;
+  color: #243044;
+}
+
+.resourceSectionButton:hover,
+.resourceSectionButton:focus-visible {
+  background: #f3f0ff;
+  border-color: #ded6ff;
+  color: #6f4cf6;
+  outline: none;
+}
+
 .resourceSectionButtonActive {
   background: #eef0f4;
   border-color: #e2e8f0;
   color: #6f4cf6;
+}
+
+.resourceListPanel {
+  align-content: start;
+  display: grid;
+  gap: 8px;
+  min-height: 0;
+  overflow: auto;
+  padding: 10px;
+}
+
+.resourceListItem,
+.resourceListItemActive {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #dce3ee;
+  border-radius: 7px;
+  color: #172033;
+  cursor: pointer;
+  display: grid;
+  gap: 9px;
+  grid-template-columns: 34px minmax(0, 1fr);
+  min-height: 56px;
+  padding: 8px 10px;
+  text-align: left;
+}
+
+.resourceListItem:hover,
+.resourceListItem:focus-visible {
+  border-color: #b9a9ff;
+  box-shadow: 0 8px 20px rgba(111, 76, 246, 0.12);
+  outline: none;
+}
+
+.resourceListItemActive {
+  border-color: #8b6cff;
+  box-shadow: inset 3px 0 0 #6f4cf6;
+}
+
+.resourceListIcon {
+  align-items: center;
+  background: #eef2f7;
+  border-radius: 6px;
+  color: #243044;
+  display: inline-flex;
+  height: 34px;
+  justify-content: center;
+  width: 34px;
+}
+
+.resourceListText {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.resourceListText strong,
+.resourceListText span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.resourceListText strong {
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.resourceListText span {
+  color: #64748b;
+  font-size: 10.5px;
+}
+
+.resourceListEmpty {
+  align-content: center;
+  color: #64748b;
+  display: grid;
+  gap: 5px;
+  min-height: 180px;
+  padding: 18px;
+  text-align: center;
+}
+
+.resourceListEmpty strong {
+  color: #172033;
+  font-size: 12px;
+}
+
+.resourceListEmpty span {
+  font-size: 11px;
 }
 
 .terraformPanel {
@@ -778,6 +883,44 @@
   box-shadow: inset 0 0 0 2px rgba(111, 76, 246, 0.62);
 }
 
+.terraformBlockHighlightBox {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.44);
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1px rgba(111, 76, 246, 0.22);
+  left: 50px;
+  pointer-events: none;
+  position: absolute;
+  right: 10px;
+  z-index: 4;
+}
+
+.terraformBlockSettingsButton {
+  align-items: center;
+  background: #242424;
+  border: 1px solid #6b7280;
+  border-radius: 5px;
+  color: #d7e4f7;
+  cursor: pointer;
+  display: inline-flex;
+  height: 24px;
+  justify-content: center;
+  left: -38px;
+  padding: 0;
+  pointer-events: auto;
+  position: absolute;
+  top: 3px;
+  width: 24px;
+}
+
+.terraformBlockSettingsButton:hover,
+.terraformBlockSettingsButton:focus-visible {
+  background: #f3f0ff;
+  border-color: #b9a9ff;
+  color: #6f4cf6;
+  outline: none;
+}
+
 .terraformSaveBanner,
 .terraformSaveBannerError {
   align-items: center;
@@ -830,7 +973,6 @@
   outline-offset: 3px;
 }
 
-.terraformBlockHighlightToast,
 .terraformDiagnosticToast {
   animation: terraformToastIn 180ms ease-out;
   background: #ffffff;
@@ -850,23 +992,16 @@
   z-index: 6;
 }
 
-.terraformBlockHighlightToast {
-  background: #f5f0ff;
-  border-left: 4px solid #6f4cf6;
-}
-
 .terraformDiagnosticToast {
   border-left: 4px solid #dc2626;
 }
 
-.terraformBlockHighlightToast strong,
 .terraformDiagnosticToast strong {
   color: #111827;
   font-size: 11px;
   font-weight: 900;
 }
 
-.terraformBlockHighlightToast span,
 .terraformDiagnosticToast span {
   color: #475569;
   font-size: 12px;

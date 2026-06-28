@@ -274,6 +274,50 @@ function DiagramEditorInner({
     [commitDiagramUpdate]
   );
 
+  const focusResourceNode = useCallback<DiagramEditorPanelContext["focusResourceNode"]>(
+    (nodeId) => {
+      const targetNode = diagramRef.current.nodes.find((node) => node.id === nodeId);
+
+      if (!targetNode) {
+        return;
+      }
+
+      setSelectedNodeIds([nodeId]);
+      setSelectedEdgeIds([]);
+      setInspectedNodeId(nodeId);
+      setRightPanelOpen(true);
+
+      const canvasBounds = canvasPanelRef.current?.getBoundingClientRect();
+      const editorBounds = editorShellRef.current?.getBoundingClientRect();
+
+      if (!canvasBounds || canvasBounds.width <= 0 || canvasBounds.height <= 0) {
+        void reactFlow.fitView({
+          duration: 180,
+          maxZoom: 1.5,
+          minZoom: 0.35,
+          nodes: [{ id: nodeId }],
+          padding: 0.6
+        });
+        return;
+      }
+
+      const fitViewWidth = editorBounds && editorBounds.width > 0 ? editorBounds.width : canvasBounds.width;
+      const viewport = getViewportForBounds(
+        getDiagramBounds([targetNode]),
+        fitViewWidth,
+        canvasBounds.height,
+        0.35,
+        1.5,
+        0.6
+      );
+
+      void reactFlow.setViewport(viewport, { duration: 180 });
+      applyLiveDiagramUpdate((currentDiagram) => updateDiagramViewport(currentDiagram, viewport));
+      focusEditorShell();
+    },
+    [applyLiveDiagramUpdate, focusEditorShell, reactFlow]
+  );
+
   const panelContext = useMemo<DiagramEditorPanelContext>(
     () => ({
       diagram,
@@ -284,6 +328,7 @@ function DiagramEditorInner({
       edges: diagram.edges,
       applyDiagramJson,
       closeInspectedNode: () => setInspectedNodeId(null),
+      focusResourceNode,
       setRightPanelOpen,
       updateNodeParameters,
       updateNodeMetadata
@@ -291,6 +336,7 @@ function DiagramEditorInner({
     [
       applyDiagramJson,
       diagram,
+      focusResourceNode,
       inspectedNodeId,
       isRightPanelOpen,
       selectedNodeId,

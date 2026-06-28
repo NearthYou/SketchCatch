@@ -25,6 +25,7 @@ import {
   PanelRightOpen,
   Play,
   Rocket,
+  Settings,
   Trash2,
   X
 } from "lucide-react";
@@ -47,7 +48,11 @@ import {
 import styles from "./workspace.module.css";
 
 type WorkspaceRightPanelView = "resource" | "terraform" | "issues" | "deployment";
+type ResourceWorkspaceView = "settings" | "list";
 type RequestState = "idle" | "loading" | "error";
+
+const TERRAFORM_EDITOR_LINE_HEIGHT = 19.2;
+const TERRAFORM_EDITOR_VERTICAL_PADDING = 12;
 
 export type WorkspaceRightPanelProps = {
   readonly context: DiagramEditorPanelContext;
@@ -57,6 +62,7 @@ export type WorkspaceRightPanelProps = {
 
 export function WorkspaceRightPanel({ context, projectId, projectName }: WorkspaceRightPanelProps) {
   const [activeView, setActiveView] = useState<WorkspaceRightPanelView>("resource");
+  const [resourceWorkspaceView, setResourceWorkspaceView] = useState<ResourceWorkspaceView>("settings");
   const [pendingView, setPendingView] = useState<WorkspaceRightPanelView | null>(null);
   const [hasUnsavedTerraformChanges, setHasUnsavedTerraformChanges] = useState(false);
   const [showTerraformLeaveDialog, setShowTerraformLeaveDialog] = useState(false);
@@ -223,7 +229,11 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
       </div>
 
       <div className={styles.rightPanelView} hidden={activeView !== "resource"}>
-        <ResourceWorkspacePanel context={context} />
+        <ResourceWorkspacePanel
+          context={context}
+          onViewChange={setResourceWorkspaceView}
+          view={resourceWorkspaceView}
+        />
       </div>
       <div className={styles.rightPanelView} hidden={activeView !== "terraform"}>
         <TerraformCodePanel
@@ -234,6 +244,10 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
           onDirtyChange={setHasUnsavedTerraformChanges}
           onExternalSaveComplete={handleTerraformExternalSaveComplete}
           onOpenIssues={() => requestView("issues")}
+          onOpenResourceSettings={() => {
+            setResourceWorkspaceView("settings");
+            requestView("resource");
+          }}
         />
       </div>
       <div className={styles.rightPanelView} hidden={activeView !== "issues"}>
@@ -259,20 +273,118 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
   );
 }
 
-function ResourceWorkspacePanel({ context }: { readonly context: DiagramEditorPanelContext }) {
+function ResourceWorkspacePanel({
+  context,
+  onViewChange,
+  view
+}: {
+  readonly context: DiagramEditorPanelContext;
+  readonly onViewChange: (view: ResourceWorkspaceView) => void;
+  readonly view: ResourceWorkspaceView;
+}) {
+  const resourceNodes = useMemo(
+    () => context.nodes.filter((node) => node.kind === "resource" || node.parameters?.resourceType),
+    [context.nodes]
+  );
+
   return (
     <div className={styles.resourceWorkspacePanel}>
       <div className={styles.resourceSectionToolbar}>
         <div className={styles.resourceSectionTabs} aria-label="Resource sections">
-          <span className={styles.resourceSectionButtonActive} title="Resources">
+          <button
+            aria-pressed={view === "settings"}
+            className={
+              view === "settings"
+                ? styles.resourceSectionButtonActive
+                : styles.resourceSectionButton
+            }
+            onClick={() => onViewChange("settings")}
+            title="Resource settings"
+            type="button"
+          >
             <Box size={18} aria-hidden="true" />
-          </span>
+          </button>
+          <button
+            aria-pressed={view === "list"}
+            className={
+              view === "list"
+                ? styles.resourceSectionButtonActive
+                : styles.resourceSectionButton
+            }
+            onClick={() => onViewChange("list")}
+            title="Resource list"
+            type="button"
+          >
+            <ListTree size={18} aria-hidden="true" />
+          </button>
         </div>
       </div>
 
-      <ParameterInputPanel {...context} />
+      {view === "settings" ? (
+        <ParameterInputPanel {...context} />
+      ) : (
+        <ResourceListPanel context={context} nodes={resourceNodes} />
+      )}
     </div>
   );
+}
+
+function ResourceListPanel({
+  context,
+  nodes
+}: {
+  readonly context: DiagramEditorPanelContext;
+  readonly nodes: readonly DiagramNode[];
+}) {
+  if (nodes.length === 0) {
+    return (
+      <div className={styles.resourceListEmpty}>
+        <strong>No resources on canvas</strong>
+        <span>Drag resources onto the board to see them here.</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className={styles.resourceListPanel}>
+      {nodes.map((node) => (
+        <button
+          className={
+            node.id === context.selectedNodeId
+              ? styles.resourceListItemActive
+              : styles.resourceListItem
+          }
+          key={node.id}
+          onClick={() => context.focusResourceNode(node.id)}
+          type="button"
+        >
+          <span className={styles.resourceListIcon}>
+            <Box size={17} aria-hidden="true" />
+          </span>
+          <span className={styles.resourceListText}>
+            <strong>{getNodeDisplayName(node)}</strong>
+            <span>{getNodeTerraformAddress(node)}</span>
+          </span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function getNodeDisplayName(node: DiagramNode): string {
+  return node.label || node.parameters?.resourceName || node.parameters?.resourceType || node.type;
+}
+
+function getNodeTerraformAddress(node: DiagramNode): string {
+  const blockType = node.parameters?.terraformBlockType === "data" ? "data" : "resource";
+  const resourceType = node.parameters?.resourceType;
+  const resourceName = node.parameters?.resourceName;
+
+  if (!resourceType || !resourceName) {
+    return node.type;
+  }
+
+  return `${blockType}.${resourceType}.${resourceName}`;
 }
 
 function TerraformCodePanel({
@@ -282,7 +394,8 @@ function TerraformCodePanel({
   onDiagnosticsChange,
   onDirtyChange,
   onExternalSaveComplete,
-  onOpenIssues
+  onOpenIssues,
+  onOpenResourceSettings
 }: {
   readonly context: DiagramEditorPanelContext;
   readonly externalSaveRequestId: number;
@@ -291,6 +404,7 @@ function TerraformCodePanel({
   readonly onDirtyChange: (isDirty: boolean) => void;
   readonly onExternalSaveComplete: (saved: boolean) => void;
   readonly onOpenIssues: () => void;
+  readonly onOpenResourceSettings: () => void;
 }) {
   const [terraformFiles, setTerraformFiles] = useState<TerraformVirtualFile[]>(() =>
     createTerraformFilesFromGeneratedCode(context.diagram, "")
@@ -305,10 +419,9 @@ function TerraformCodePanel({
   const [hasLocalEdits, setHasLocalEdits] = useState(false);
   const [saveBanner, setSaveBanner] = useState<TerraformSaveBanner | null>(null);
   const [diagnosticToast, setDiagnosticToast] = useState<TerraformDiagnostic | null>(null);
-  const [blockHighlightToast, setBlockHighlightToast] = useState<TerraformBlockHighlightToast | null>(null);
+  const [codeScrollTop, setCodeScrollTop] = useState(0);
   const codeRequestIdRef = useRef(0);
   const diagnosticToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const blockHighlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latestDiagramFingerprintRef = useRef("");
   const latestExternalSaveRequestIdRef = useRef(externalSaveRequestId);
   const lineNumberRef = useRef<HTMLOListElement | null>(null);
@@ -355,10 +468,18 @@ function TerraformCodePanel({
   }, [fileSearchQuery, terraformFileOptions]);
   const isResourceCodeMode = Boolean(inspectedNode && inspectedBlock);
   const displayedTerraformCode = inspectedBlock?.code ?? activeFileCode;
+  const highlightedBlock =
+    !isResourceCodeMode && selectedBlock?.fileName === activeFileName ? selectedBlock : null;
   const lineNumbers = useMemo(
     () => Array.from({ length: Math.max(1, displayedTerraformCode.split(/\r\n|\r|\n/).length) }, (_, index) => index + 1),
     [displayedTerraformCode]
   );
+  const highlightedBlockStyle = highlightedBlock
+    ? {
+        height: `${Math.max(1, highlightedBlock.endLine - highlightedBlock.startLine + 1) * TERRAFORM_EDITOR_LINE_HEIGHT}px`,
+        top: `${TERRAFORM_EDITOR_VERTICAL_PADDING + (highlightedBlock.startLine - 1) * TERRAFORM_EDITOR_LINE_HEIGHT - codeScrollTop}px`
+      }
+    : null;
 
   const runRequest = useCallback(async (request: () => Promise<void>, fallbackMessage: string) => {
     setRequestState("loading");
@@ -407,7 +528,6 @@ function TerraformCodePanel({
         setHasLocalEdits(false);
         setSaveBanner(null);
         setDiagnosticToast(null);
-        setBlockHighlightToast(null);
         setStatusMessage("그래프 기준으로 동기화됨");
         latestDiagramFingerprintRef.current = diagramFingerprint;
         onDirtyChange(false);
@@ -517,9 +637,6 @@ function TerraformCodePanel({
         clearTimeout(diagnosticToastTimerRef.current);
       }
 
-      if (blockHighlightTimerRef.current) {
-        clearTimeout(blockHighlightTimerRef.current);
-      }
     };
   }, []);
 
@@ -536,34 +653,13 @@ function TerraformCodePanel({
     const textarea = textareaRef.current;
     const lineHeight = Number.parseFloat(window.getComputedStyle(textarea).lineHeight) || 20;
     textarea.scrollTop = Math.max(0, (selectedBlock.startLine - 2) * lineHeight);
+    setCodeScrollTop(textarea.scrollTop);
 
     if (lineNumberRef.current) {
       lineNumberRef.current.scrollTop = textarea.scrollTop;
     }
 
-    if (blockHighlightTimerRef.current) {
-      clearTimeout(blockHighlightTimerRef.current);
-    }
-
-    setBlockHighlightToast({
-      address: selectedBlock.address,
-      fileName: selectedBlock.fileName,
-      startLine: selectedBlock.startLine,
-      endLine: selectedBlock.endLine
-    });
-    blockHighlightTimerRef.current = setTimeout(() => {
-      setBlockHighlightToast(null);
-      blockHighlightTimerRef.current = null;
-    }, 2600);
   }, [activeFileName, isResourceCodeMode, isVisible, selectedBlock]);
-
-  useEffect(() => {
-    if (!isVisible || isResourceCodeMode || selectedBlock || context.selectedNodeId) {
-      return;
-    }
-
-    setBlockHighlightToast(null);
-  }, [context.selectedNodeId, isResourceCodeMode, isVisible, selectedBlock]);
 
   useEffect(() => {
     if (!inspectedBlock) {
@@ -574,6 +670,8 @@ function TerraformCodePanel({
   }, [inspectedBlock]);
 
   function handleCodeScroll(event: UIEvent<HTMLTextAreaElement>): void {
+    setCodeScrollTop(event.currentTarget.scrollTop);
+
     if (lineNumberRef.current) {
       lineNumberRef.current.scrollTop = event.currentTarget.scrollTop;
     }
@@ -801,19 +899,24 @@ function TerraformCodePanel({
           value={displayedTerraformCode}
           wrap="off"
         />
+        {highlightedBlock && highlightedBlockStyle ? (
+          <div
+            aria-label={`${highlightedBlock.address} code block`}
+            className={styles.terraformBlockHighlightBox}
+            style={highlightedBlockStyle}
+          >
+            <button
+              aria-label="Open resource settings"
+              className={styles.terraformBlockSettingsButton}
+              onClick={onOpenResourceSettings}
+              title="Resource settings"
+              type="button"
+            >
+              <Settings size={15} aria-hidden="true" />
+            </button>
+          </div>
+        ) : null}
       </div>
-
-      {blockHighlightToast && !diagnosticToast ? (
-        <div className={styles.terraformBlockHighlightToast} role="status" aria-live="polite">
-          <strong>{blockHighlightToast.address}</strong>
-          <span>
-            {blockHighlightToast.fileName} line {blockHighlightToast.startLine}
-            {blockHighlightToast.endLine === blockHighlightToast.startLine
-              ? ""
-              : `-${blockHighlightToast.endLine}`}
-          </span>
-        </div>
-      ) : null}
 
       {diagnosticToast ? (
         <div className={styles.terraformDiagnosticToast} role="status" aria-live="polite">
@@ -904,13 +1007,6 @@ type TerraformSaveBanner =
       readonly line?: number | undefined;
       readonly message: string;
     };
-
-type TerraformBlockHighlightToast = {
-  readonly address: string;
-  readonly endLine: number;
-  readonly fileName: string;
-  readonly startLine: number;
-};
 
 type TerraformVirtualFile = {
   readonly code: string;
