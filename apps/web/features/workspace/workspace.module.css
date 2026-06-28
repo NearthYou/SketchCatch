@@ -330,6 +330,7 @@
   font-size: 12px;
   grid-template-rows: auto minmax(0, 1fr);
   min-height: 0;
+  padding-top: 4px;
 }
 
 .resourceSectionToolbar {
@@ -339,14 +340,14 @@
   display: flex;
   gap: 12px;
   justify-content: space-between;
-  min-height: 50px;
-  padding: 8px 10px;
+  min-height: 44px;
+  padding: 7px 12px;
 }
 
 .resourceSectionTabs {
   align-items: center;
   display: inline-flex;
-  gap: 8px;
+  gap: 7px;
   min-width: 0;
 }
 
@@ -357,10 +358,10 @@
   border-radius: 7px;
   cursor: pointer;
   display: inline-flex;
-  height: 32px;
+  height: 30px;
   justify-content: center;
   padding: 0;
-  width: 32px;
+  width: 30px;
 }
 
 .resourceSectionButton {
@@ -385,15 +386,14 @@
 .resourceListPanel {
   align-content: start;
   display: grid;
-  gap: 8px;
+  gap: 10px;
   min-height: 0;
   overflow: auto;
-  padding: 10px;
+  padding: 10px 8px 12px;
 }
 
 .resourceListItem,
 .resourceListItemActive {
-  align-items: center;
   background: #ffffff;
   border: 1px solid #dce3ee;
   border-radius: 7px;
@@ -401,10 +401,10 @@
   cursor: pointer;
   display: grid;
   gap: 9px;
-  grid-template-columns: 34px minmax(0, 1fr);
-  min-height: 56px;
-  padding: 8px 10px;
+  min-height: 132px;
+  padding: 12px 13px 13px;
   text-align: left;
+  width: 100%;
 }
 
 .resourceListItem:hover,
@@ -416,41 +416,107 @@
 
 .resourceListItemActive {
   border-color: #8b6cff;
-  box-shadow: inset 3px 0 0 #6f4cf6;
+  box-shadow: 0 0 0 1px rgba(139, 108, 255, 0.78);
 }
 
-.resourceListIcon {
-  align-items: center;
-  background: #eef2f7;
-  border-radius: 6px;
-  color: #243044;
-  display: inline-flex;
-  height: 34px;
-  justify-content: center;
-  width: 34px;
-}
-
-.resourceListText {
-  display: grid;
-  gap: 3px;
+.resourceListHeader {
+  align-items: flex-start;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
   min-width: 0;
 }
 
-.resourceListText strong,
-.resourceListText span {
+.resourceListIdentity {
+  align-items: center;
+  background: #eef0f2;
+  border-radius: 5px;
+  color: #5d6b80;
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 850;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.resourceListIdentity strong {
+  overflow: hidden;
+  padding: 0 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.resourceListCubeIcon {
+  align-items: center;
+  background: #f3f5f8;
+  border-radius: 5px 0 0 5px;
+  color: #243044;
+  display: inline-flex;
+  height: 28px;
+  justify-content: center;
+  width: 30px;
+}
+
+.resourceListServiceIcon {
+  align-items: center;
+  border-left: 1px solid #d7dde7;
+  color: #6f4cf6;
+  display: inline-flex;
+  height: 22px;
+  justify-content: center;
+  width: 28px;
+}
+
+.resourceListServiceIcon img {
+  display: block;
+  height: 18px;
+  object-fit: contain;
+  width: 18px;
+}
+
+.resourceListAddress {
+  color: #64748b;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 10.5px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.resourceListText strong {
-  font-size: 12px;
-  font-weight: 850;
+.resourceListValues {
+  display: grid;
+  gap: 7px;
 }
 
-.resourceListText span {
+.resourceListValueRow {
+  align-items: start;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) minmax(110px, 1fr);
+}
+
+.resourceListValueRow span {
+  color: #243044;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.resourceListValueRow strong {
+  color: #516178;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.resourceListNoValues {
+  background: #f8fafc;
+  border-radius: 6px;
   color: #64748b;
-  font-size: 10.5px;
+  font-size: 11px;
+  padding: 9px 10px;
 }
 
 .resourceListEmpty {

@@ -21,6 +21,7 @@ import {
   FileCode2,
   GitBranch,
   ListTree,
+  MoreHorizontal,
   PanelRightClose,
   PanelRightOpen,
   Play,
@@ -347,26 +348,52 @@ function ResourceListPanel({
 
   return (
     <div className={styles.resourceListPanel}>
-      {nodes.map((node) => (
-        <button
-          className={
-            node.id === context.selectedNodeId
-              ? styles.resourceListItemActive
-              : styles.resourceListItem
-          }
-          key={node.id}
-          onClick={() => context.focusResourceNode(node.id)}
-          type="button"
-        >
-          <span className={styles.resourceListIcon}>
-            <Box size={17} aria-hidden="true" />
-          </span>
-          <span className={styles.resourceListText}>
-            <strong>{getNodeDisplayName(node)}</strong>
-            <span>{getNodeTerraformAddress(node)}</span>
-          </span>
-        </button>
-      ))}
+      {nodes.map((node) => {
+        const summaryRows = getResourceSummaryRows(node);
+
+        return (
+          <button
+            className={
+              node.id === context.selectedNodeId
+                ? styles.resourceListItemActive
+                : styles.resourceListItem
+            }
+            key={node.id}
+            onClick={() => context.focusResourceNode(node.id)}
+            type="button"
+          >
+            <span className={styles.resourceListHeader}>
+              <span className={styles.resourceListIdentity}>
+                <span className={styles.resourceListCubeIcon}>
+                  <Box size={16} aria-hidden="true" />
+                </span>
+                <span className={styles.resourceListServiceIcon}>
+                  {node.iconUrl ? (
+                    <img alt="" draggable={false} src={node.iconUrl} />
+                  ) : (
+                    <Box size={15} aria-hidden="true" />
+                  )}
+                </span>
+                <strong>{getNodeDisplayName(node)}</strong>
+              </span>
+              <MoreHorizontal size={18} aria-hidden="true" />
+            </span>
+            <span className={styles.resourceListAddress}>{getNodeTerraformAddress(node)}</span>
+            {summaryRows.length > 0 ? (
+              <span className={styles.resourceListValues}>
+                {summaryRows.map((row) => (
+                  <span className={styles.resourceListValueRow} key={row.label}>
+                    <span>{row.label}</span>
+                    <strong>{row.value}</strong>
+                  </span>
+                ))}
+              </span>
+            ) : (
+              <span className={styles.resourceListNoValues}>No configured parameters</span>
+            )}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -385,6 +412,63 @@ function getNodeTerraformAddress(node: DiagramNode): string {
   }
 
   return `${blockType}.${resourceType}.${resourceName}`;
+}
+
+function getResourceSummaryRows(node: DiagramNode): Array<{ label: string; value: string }> {
+  const values = node.parameters?.values ?? {};
+
+  return Object.entries(values)
+    .filter(([, value]) => !isEmptyResourceValue(value))
+    .slice(0, 4)
+    .map(([key, value]) => ({
+      label: toResourceSummaryLabel(key),
+      value: formatResourceSummaryValue(value)
+    }));
+}
+
+function isEmptyResourceValue(value: unknown): boolean {
+  if (value === null || value === undefined || value === "") {
+    return true;
+  }
+
+  if (Array.isArray(value)) {
+    return value.length === 0 || value.every(isEmptyResourceValue);
+  }
+
+  if (typeof value === "object") {
+    return Object.keys(value).length === 0;
+  }
+
+  return false;
+}
+
+function toResourceSummaryLabel(key: string): string {
+  return key
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/_/g, " ")
+    .replace(/^./, (firstLetter) => firstLetter.toUpperCase());
+}
+
+function formatResourceSummaryValue(value: unknown): string {
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+
+  if (Array.isArray(value)) {
+    return value
+      .filter((item) => !isEmptyResourceValue(item))
+      .map(formatResourceSummaryValue)
+      .join(", ");
+  }
+
+  if (typeof value === "object" && value !== null) {
+    return Object.values(value)
+      .filter((item) => !isEmptyResourceValue(item))
+      .map(formatResourceSummaryValue)
+      .join(", ");
+  }
+
+  return "";
 }
 
 function TerraformCodePanel({
