@@ -930,7 +930,9 @@ function DiagramEditorInner({
             onEdgesChange={handleEdgesChange}
             onInit={handleInit}
             onMoveEnd={handleMoveEnd}
-            onNodeClick={() => {
+            onNodeClick={(_event, node) => {
+              setSelectedNodeIds([node.id]);
+              setSelectedEdgeIds([]);
               setInspectedNodeId(null);
               focusEditorShell();
             }}

@@ -305,8 +305,10 @@ function TerraformCodePanel({
   const [hasLocalEdits, setHasLocalEdits] = useState(false);
   const [saveBanner, setSaveBanner] = useState<TerraformSaveBanner | null>(null);
   const [diagnosticToast, setDiagnosticToast] = useState<TerraformDiagnostic | null>(null);
+  const [blockHighlightToast, setBlockHighlightToast] = useState<TerraformBlockHighlightToast | null>(null);
   const codeRequestIdRef = useRef(0);
   const diagnosticToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const blockHighlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latestDiagramFingerprintRef = useRef("");
   const latestExternalSaveRequestIdRef = useRef(externalSaveRequestId);
   const lineNumberRef = useRef<HTMLOListElement | null>(null);
@@ -405,6 +407,7 @@ function TerraformCodePanel({
         setHasLocalEdits(false);
         setSaveBanner(null);
         setDiagnosticToast(null);
+        setBlockHighlightToast(null);
         setStatusMessage("그래프 기준으로 동기화됨");
         latestDiagramFingerprintRef.current = diagramFingerprint;
         onDirtyChange(false);
@@ -513,6 +516,10 @@ function TerraformCodePanel({
       if (diagnosticToastTimerRef.current) {
         clearTimeout(diagnosticToastTimerRef.current);
       }
+
+      if (blockHighlightTimerRef.current) {
+        clearTimeout(blockHighlightTimerRef.current);
+      }
     };
   }, []);
 
@@ -529,20 +536,33 @@ function TerraformCodePanel({
     const textarea = textareaRef.current;
     const lineHeight = Number.parseFloat(window.getComputedStyle(textarea).lineHeight) || 20;
     textarea.scrollTop = Math.max(0, (selectedBlock.startLine - 2) * lineHeight);
-    textarea.setSelectionRange(selectedBlock.startOffset, selectedBlock.endOffset);
-    textarea.focus({ preventScroll: true });
 
     if (lineNumberRef.current) {
       lineNumberRef.current.scrollTop = textarea.scrollTop;
     }
+
+    if (blockHighlightTimerRef.current) {
+      clearTimeout(blockHighlightTimerRef.current);
+    }
+
+    setBlockHighlightToast({
+      address: selectedBlock.address,
+      fileName: selectedBlock.fileName,
+      startLine: selectedBlock.startLine,
+      endLine: selectedBlock.endLine
+    });
+    blockHighlightTimerRef.current = setTimeout(() => {
+      setBlockHighlightToast(null);
+      blockHighlightTimerRef.current = null;
+    }, 2600);
   }, [activeFileName, isResourceCodeMode, isVisible, selectedBlock]);
 
   useEffect(() => {
-    if (!isVisible || isResourceCodeMode || selectedBlock || context.selectedNodeId || !textareaRef.current) {
+    if (!isVisible || isResourceCodeMode || selectedBlock || context.selectedNodeId) {
       return;
     }
 
-    textareaRef.current.setSelectionRange(0, 0);
+    setBlockHighlightToast(null);
   }, [context.selectedNodeId, isResourceCodeMode, isVisible, selectedBlock]);
 
   useEffect(() => {
@@ -783,6 +803,18 @@ function TerraformCodePanel({
         />
       </div>
 
+      {blockHighlightToast && !diagnosticToast ? (
+        <div className={styles.terraformBlockHighlightToast} role="status" aria-live="polite">
+          <strong>{blockHighlightToast.address}</strong>
+          <span>
+            {blockHighlightToast.fileName} line {blockHighlightToast.startLine}
+            {blockHighlightToast.endLine === blockHighlightToast.startLine
+              ? ""
+              : `-${blockHighlightToast.endLine}`}
+          </span>
+        </div>
+      ) : null}
+
       {diagnosticToast ? (
         <div className={styles.terraformDiagnosticToast} role="status" aria-live="polite">
           <strong>{formatTerraformDiagnosticTitle(diagnosticToast)}</strong>
@@ -872,6 +904,13 @@ type TerraformSaveBanner =
       readonly line?: number | undefined;
       readonly message: string;
     };
+
+type TerraformBlockHighlightToast = {
+  readonly address: string;
+  readonly endLine: number;
+  readonly fileName: string;
+  readonly startLine: number;
+};
 
 type TerraformVirtualFile = {
   readonly code: string;
