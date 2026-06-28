@@ -116,12 +116,6 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
     }
   }, [context.inspectedNodeId, requestView]);
 
-  useEffect(() => {
-    if (context.resourcePanelFocusRequestId > 0) {
-      requestView("resource");
-    }
-  }, [context.resourcePanelFocusRequestId, requestView]);
-
   function openCollapsedView(nextView: WorkspaceRightPanelView): void {
     context.setRightPanelOpen(true);
     requestView(nextView);

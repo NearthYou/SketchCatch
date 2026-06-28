@@ -108,7 +108,6 @@ function DiagramEditorInner({
   const [inspectedNodeId, setInspectedNodeId] = useState<string | null>(null);
   const [isLeftPanelOpen, setLeftPanelOpen] = useState(true);
   const [isRightPanelOpen, setRightPanelOpen] = useState(true);
-  const [resourcePanelFocusRequestId, setResourcePanelFocusRequestId] = useState(0);
   const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
   const [selectedEdgeIds, setSelectedEdgeIds] = useState<string[]>([]);
   const [interactionMode, setInteractionMode] = useState<"select" | "pan">("select");
@@ -275,7 +274,6 @@ function DiagramEditorInner({
       diagram,
       inspectedNodeId,
       isRightPanelOpen,
-      resourcePanelFocusRequestId,
       selectedNodeId,
       nodes: diagram.nodes,
       edges: diagram.edges,
@@ -290,7 +288,6 @@ function DiagramEditorInner({
       diagram,
       inspectedNodeId,
       isRightPanelOpen,
-      resourcePanelFocusRequestId,
       selectedNodeId,
       updateNodeMetadata,
       updateNodeParameters
@@ -918,9 +915,8 @@ function DiagramEditorInner({
             onNodeDoubleClick={(_event, node) => {
               setSelectedNodeIds([node.id]);
               setSelectedEdgeIds([]);
-              setInspectedNodeId(null);
+              setInspectedNodeId(node.id);
               setRightPanelOpen(true);
-              setResourcePanelFocusRequestId((requestId) => requestId + 1);
               focusEditorShell();
             }}
             onNodeDragStart={handleNodeDragStart}

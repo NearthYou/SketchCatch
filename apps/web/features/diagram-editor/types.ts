@@ -13,7 +13,6 @@ export type DiagramEditorPanelContext = {
   diagram: DiagramJson;
   inspectedNodeId: string | null;
   isRightPanelOpen: boolean;
-  resourcePanelFocusRequestId: number;
   selectedNodeId: string | null;
   nodes: readonly DiagramNode[];
   edges: readonly DiagramEdge[];
