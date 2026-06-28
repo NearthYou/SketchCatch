@@ -1407,12 +1407,13 @@ nextjs-portal {
 
 .resourcePanel {
   background: #ffffff;
-  border-right: 1px solid #dbe3ef;
+  border-right: 0;
   color: #151b29;
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
-  overflow: visible;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
   padding: 0;
 }
 
@@ -1420,10 +1421,10 @@ nextjs-portal {
   align-items: center;
   border-bottom: 1px solid #dde5f1;
   display: flex;
-  gap: 12px;
+  gap: 8px;
   justify-content: space-between;
-  min-height: 84px;
-  padding: 18px 18px;
+  min-height: 54px;
+  padding: 10px 12px;
 }
 
 .resourceTabGroup {
@@ -1437,15 +1438,15 @@ nextjs-portal {
   align-items: center;
   background: transparent;
   border: 0;
-  border-radius: 8px;
+  border-radius: 6px;
   color: #151b29;
   display: inline-flex;
-  font-size: 1.34rem;
+  font-size: 0.82rem;
   font-weight: 500;
-  height: 48px;
+  height: 30px;
   justify-content: center;
   letter-spacing: 0;
-  padding: 0 16px;
+  padding: 0 10px;
 }
 
 .resourceTabActive {
@@ -1458,41 +1459,41 @@ nextjs-portal {
   border: 0;
   color: #111827;
   display: inline-flex;
-  height: 36px;
+  height: 30px;
   justify-content: center;
   padding: 0;
-  width: 36px;
+  width: 30px;
 }
 
 .resourceControlBar {
   align-items: center;
   display: flex;
   justify-content: space-between;
-  padding: 20px 16px 16px;
+  padding: 12px 12px 10px;
 }
 
 .providerControls {
   display: inline-flex;
-  gap: 8px;
+  gap: 6px;
 }
 
 .providerSelect {
   align-items: center;
   background: #ffffff;
   border: 1px solid #d8e1ee;
-  border-radius: 10px;
+  border-radius: 7px;
   color: #151b29;
   display: inline-flex;
-  gap: 11px;
-  height: 62px;
+  gap: 6px;
+  height: 38px;
   justify-content: center;
-  min-width: 88px;
-  padding: 0 12px;
+  min-width: 56px;
+  padding: 0 8px;
 }
 
 .providerVersionSelect {
-  font-size: 1.08rem;
-  min-width: 104px;
+  font-size: 0.78rem;
+  min-width: 78px;
 }
 
 .awsLogo {
@@ -1500,28 +1501,28 @@ nextjs-portal {
   color: #151b29;
   display: inline-flex;
   flex-direction: column;
-  font-size: 1.06rem;
+  font-size: 0.72rem;
   font-weight: 500;
   line-height: 1;
   margin-top: 4px;
-  width: 34px;
+  width: 26px;
 }
 
 .awsLogo svg {
   fill: none;
-  height: 12px;
+  height: 9px;
   margin-top: -1px;
   stroke: #ff9900;
   stroke-linecap: round;
   stroke-linejoin: round;
   stroke-width: 2;
-  width: 34px;
+  width: 26px;
 }
 
 .resourceViewToggles {
   align-items: center;
   display: inline-flex;
-  gap: 8px;
+  gap: 4px;
 }
 
 .resourceViewToggle,
@@ -1529,13 +1530,13 @@ nextjs-portal {
   align-items: center;
   background: transparent;
   border: 0;
-  border-radius: 10px;
+  border-radius: 8px;
   color: #111827;
   display: inline-flex;
-  height: 56px;
+  height: 38px;
   justify-content: center;
   padding: 0;
-  width: 56px;
+  width: 38px;
 }
 
 .resourceViewToggleActive {
@@ -1546,19 +1547,19 @@ nextjs-portal {
 .resourcePanel .searchBox {
   background: #ffffff;
   border: 1px solid #d8e1ee;
-  border-radius: 8px;
+  border-radius: 7px;
   color: #66758d;
-  gap: 10px;
-  height: 64px;
-  margin: 0 18px 16px;
-  padding: 0 16px;
+  gap: 8px;
+  height: 42px;
+  margin: 0 12px 10px;
+  padding: 0 10px;
 }
 
 .resourcePanel .searchBox input {
   color: #151b29;
-  font-size: 1.22rem;
+  font-size: 0.88rem;
   font-weight: 400;
-  min-height: 48px;
+  min-height: 30px;
 }
 
 .resourcePanel .searchBox input::placeholder {
@@ -1569,6 +1570,10 @@ nextjs-portal {
 .resourceAreas {
   border-top: 1px solid #dbe3ef;
   display: block;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  scrollbar-width: thin;
 }
 
 .resourceArea {
@@ -1585,10 +1590,10 @@ nextjs-portal {
   border: 0;
   color: #151b29;
   display: grid;
-  gap: 16px;
-  grid-template-columns: 42px minmax(0, 1fr) 24px;
-  min-height: 70px;
-  padding: 0 18px;
+  gap: 10px;
+  grid-template-columns: 28px minmax(0, 1fr) 20px;
+  min-height: 48px;
+  padding: 0 12px;
   text-align: left;
   width: 100%;
 }
@@ -1604,14 +1609,14 @@ nextjs-portal {
   align-items: center;
   color: #0b0d12;
   display: inline-flex;
-  height: 42px;
+  height: 28px;
   justify-content: center;
-  width: 42px;
+  width: 28px;
 }
 
 .resourceAreaLabel {
   color: #1d2433;
-  font-size: 1.24rem;
+  font-size: 0.92rem;
   font-weight: 580;
   line-height: 1.2;
   overflow: hidden;
@@ -2172,20 +2177,20 @@ nextjs-portal {
 
 .modulesEmptyState {
   background: #ffffff;
-  padding: 33px 20px 36px;
+  padding: 20px 16px 22px;
 }
 
 .modulesEmptyState h3 {
   color: #151b29;
-  font-size: 1.18rem;
+  font-size: 0.9rem;
   font-weight: 520;
   line-height: 1.25;
-  margin: 0 0 10px;
+  margin: 0 0 7px;
 }
 
 .modulesEmptyState p {
   color: #78869c;
-  font-size: 1.08rem;
+  font-size: 0.82rem;
   font-weight: 400;
   line-height: 1.35;
   margin: 0;
@@ -2193,24 +2198,24 @@ nextjs-portal {
 
 .modulesActions {
   display: flex;
-  gap: 24px;
+  gap: 10px;
   justify-content: center;
-  margin-top: 36px;
+  margin-top: 18px;
 }
 
 .modulesImportButton,
 .modulesCatalogButton {
   align-items: center;
   border: 0;
-  border-radius: 8px;
+  border-radius: 7px;
   display: inline-flex;
-  font-size: 1.03rem;
+  font-size: 0.78rem;
   font-weight: 520;
-  gap: 8px;
-  height: 48px;
+  gap: 6px;
+  height: 34px;
   justify-content: center;
-  min-width: 128px;
-  padding: 0 16px;
+  min-width: 92px;
+  padding: 0 11px;
 }
 
 .modulesImportButton {
@@ -2225,26 +2230,30 @@ nextjs-portal {
 
 .resourceSectionBody {
   background: #ffffff;
-  padding: 18px 18px 28px;
+  padding: 12px 12px 16px;
 }
 
 .resourcePanel .resourceGrid {
   display: grid;
-  gap: 12px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .resourceSearchResults {
   border-top: 1px solid #dbe3ef;
-  padding: 18px;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px;
+  scrollbar-width: thin;
 }
 
 .resourceSearchResults .sectionCaption {
   color: #69778d;
-  font-size: 0.75rem;
+  font-size: 0.68rem;
   font-weight: 700;
   letter-spacing: 0;
-  margin: 0 0 12px;
+  margin: 0 0 9px;
   text-transform: uppercase;
 }
 
@@ -2252,15 +2261,15 @@ nextjs-portal {
   align-items: center;
   background: #ffffff;
   border: 1px solid #d8e1ee;
-  border-radius: 10px;
+  border-radius: 7px;
   color: #1d2433;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  height: 124px;
+  gap: 7px;
+  height: 86px;
   justify-content: center;
-  min-height: 124px;
-  padding: 12px 10px;
+  min-height: 86px;
+  padding: 8px 6px;
   text-align: center;
   transition:
     border-color 120ms ease,
@@ -2277,7 +2286,7 @@ nextjs-portal {
 .resourceTile > span:last-child {
   color: #2b3242;
   display: -webkit-box;
-  font-size: 0.82rem;
+  font-size: 0.68rem;
   font-weight: 520;
   line-height: 1.15;
   max-width: 100%;
@@ -2292,11 +2301,11 @@ nextjs-portal {
   align-items: center;
   border-radius: 7px;
   display: inline-flex;
-  font-size: 0.68rem;
+  font-size: 0.58rem;
   font-weight: 800;
-  height: 48px;
+  height: 34px;
   justify-content: center;
-  width: 48px;
+  width: 34px;
 }
 
 .resourceIcon {
@@ -2315,20 +2324,20 @@ nextjs-portal {
   align-items: center;
   background: #ffffff;
   border: 1px solid #d8e1ee;
-  border-radius: 10px;
+  border-radius: 7px;
   color: #1d2433;
   display: inline-flex;
   flex-direction: column;
-  gap: 14px;
-  height: 124px;
+  gap: 8px;
+  height: 86px;
   justify-content: center;
-  padding: 12px;
-  width: 124px;
+  padding: 8px;
+  width: 86px;
 }
 
 .brainboardTile img {
-  height: 46px;
-  width: 46px;
+  height: 34px;
+  width: 34px;
 }
 
 .brainboardTile span {

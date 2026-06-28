@@ -293,6 +293,18 @@ test("parses references as string values", () => {
   assert.equal(result.diagramJson.nodes[0]?.parameters?.values.vpcId, "aws_vpc.main.id");
 });
 
+test("reports the block header line when a block is not closed", () => {
+  const result = syncTerraformToDiagramJson(
+    makeSingleVpcDiagramJson(),
+    `resource "aws_vpc" "main" {
+  cidr_block = "10.0.0.0/16"`
+  );
+
+  assert.equal(result.diagnostics[0]?.code, "terraform.sync.block_header");
+  assert.equal(result.diagnostics[0]?.line, 1);
+  assert.equal(result.diagnostics[0]?.resourceAddress, "resource.aws_vpc.main");
+});
+
 function makeSingleVpcDiagramJson(): DiagramJson {
   return {
     nodes: [

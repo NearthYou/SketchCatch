@@ -14,21 +14,27 @@ import type {
 import {
   AlertCircle,
   ArrowLeft,
+  Box,
   ChevronDown,
   ClipboardCheck,
   Code2,
   FileCode2,
+  GalleryVerticalEnd,
   GitBranch,
   ListTree,
+  MoreHorizontal,
+  PanelRightClose,
+  PanelRightOpen,
   Play,
   Rocket,
+  Settings,
   Trash2,
   X
 } from "lucide-react";
 import { DashboardIcon } from "../../components/dashboard/dashboard-icons";
 import { getApiErrorMessage } from "../../lib/api-client";
-import { ParameterInputPanel } from "../parameter-input";
 import type { DiagramEditorPanelContext } from "../diagram-editor";
+import { ParameterInputPanel } from "../parameter-input";
 import {
   approveDeploymentPlan,
   createDeployment,
@@ -44,7 +50,11 @@ import {
 import styles from "./workspace.module.css";
 
 type WorkspaceRightPanelView = "resource" | "terraform" | "issues" | "deployment";
+type ResourceWorkspaceView = "settings" | "list";
 type RequestState = "idle" | "loading" | "error";
+
+const TERRAFORM_EDITOR_LINE_HEIGHT = 19.2;
+const TERRAFORM_EDITOR_VERTICAL_PADDING = 12;
 
 export type WorkspaceRightPanelProps = {
   readonly context: DiagramEditorPanelContext;
@@ -54,6 +64,7 @@ export type WorkspaceRightPanelProps = {
 
 export function WorkspaceRightPanel({ context, projectId, projectName }: WorkspaceRightPanelProps) {
   const [activeView, setActiveView] = useState<WorkspaceRightPanelView>("resource");
+  const [resourceWorkspaceView, setResourceWorkspaceView] = useState<ResourceWorkspaceView>("settings");
   const [pendingView, setPendingView] = useState<WorkspaceRightPanelView | null>(null);
   const [hasUnsavedTerraformChanges, setHasUnsavedTerraformChanges] = useState(false);
   const [showTerraformLeaveDialog, setShowTerraformLeaveDialog] = useState(false);
@@ -61,7 +72,7 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
   const [terraformDiagnostics, setTerraformDiagnostics] = useState<TerraformDiagnostic[]>([]);
   const hasTerraformIssueErrors = terraformDiagnostics.some((diagnostic) => diagnostic.severity === "error");
 
-  function requestView(nextView: WorkspaceRightPanelView): void {
+  const requestView = useCallback((nextView: WorkspaceRightPanelView): void => {
     if (nextView === activeView) {
       return;
     }
@@ -78,7 +89,7 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
     }
 
     setActiveView(nextView);
-  }
+  }, [activeView, hasUnsavedTerraformChanges]);
 
   function continueTerraformEditing(): void {
     setPendingView(null);
@@ -107,15 +118,72 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
     setPendingView(null);
   }
 
-  useEffect(() => {
-    if (context.inspectedNodeId) {
-      setActiveView("terraform");
-    }
-  }, [context.inspectedNodeId]);
+  function openCollapsedView(nextView: WorkspaceRightPanelView): void {
+    context.setRightPanelOpen(true);
+    requestView(nextView);
+  }
+
+  if (!context.isRightPanelOpen) {
+    return (
+      <aside className={styles.collapsedRightPanel} aria-label="오른쪽 패널 바로가기">
+        <button
+          className={styles.collapsedPanelButton}
+          onClick={() => context.setRightPanelOpen(true)}
+          title="오른쪽 패널 열기"
+          type="button"
+        >
+          <PanelRightOpen size={18} aria-hidden="true" />
+        </button>
+        <button
+          className={styles.collapsedPanelButton}
+          onClick={() => openCollapsedView("resource")}
+          title="Resources"
+          type="button"
+        >
+          <ListTree size={18} aria-hidden="true" />
+        </button>
+        <button
+          className={styles.collapsedPanelButton}
+          onClick={() => openCollapsedView("terraform")}
+          title="Terraform"
+          type="button"
+        >
+          <Code2 size={18} aria-hidden="true" />
+        </button>
+        <button
+          className={styles.collapsedPanelButton}
+          onClick={() => openCollapsedView("issues")}
+          title="Issues"
+          type="button"
+        >
+          <AlertCircle size={18} aria-hidden="true" />
+          <span className={hasTerraformIssueErrors ? styles.panelIssueBadgeError : styles.panelIssueBadge}>
+            {terraformDiagnostics.length}
+          </span>
+        </button>
+        <button
+          className={styles.collapsedPanelButton}
+          onClick={() => openCollapsedView("deployment")}
+          title="Deploy"
+          type="button"
+        >
+          <Rocket size={18} aria-hidden="true" />
+        </button>
+      </aside>
+    );
+  }
 
   return (
     <aside className={styles.rightPanelShell}>
       <div className={styles.rightPanelToolbar}>
+        <button
+          className={styles.panelCollapseButton}
+          onClick={() => context.setRightPanelOpen(false)}
+          title="오른쪽 패널 닫기"
+          type="button"
+        >
+          <PanelRightClose size={18} aria-hidden="true" />
+        </button>
         <div className={styles.panelModeToggle} role="group" aria-label="패널 모드">
           <button
             aria-pressed={activeView === "resource"}
@@ -124,7 +192,7 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
             title="리소스 모드"
             type="button"
           >
-            <ListTree size={18} aria-hidden="true" />
+            <GalleryVerticalEnd size={18} aria-hidden="true" />
           </button>
           <button
             aria-pressed={activeView === "terraform"}
@@ -153,7 +221,7 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
         </div>
         <button
           aria-pressed={activeView === "deployment"}
-          className={activeView === "deployment" ? styles.panelIconButtonActive : styles.panelIconButton}
+          className={`${activeView === "deployment" ? styles.panelIconButtonActive : styles.panelIconButton} ${styles.panelDeployButton}`}
           onClick={() => requestView("deployment")}
           title="배포"
           type="button"
@@ -162,31 +230,39 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
         </button>
       </div>
 
-      {activeView === "resource" ? (
-        <ParameterInputPanel {...context} />
-      ) : activeView === "terraform" || activeView === "issues" ? (
-        <>
-          <div className={styles.rightPanelView} hidden={activeView !== "terraform"}>
-            <TerraformCodePanel
-              context={context}
-              externalSaveRequestId={terraformSaveRequestId}
-              onDiagnosticsChange={setTerraformDiagnostics}
-              onDirtyChange={setHasUnsavedTerraformChanges}
-              onExternalSaveComplete={handleTerraformExternalSaveComplete}
-              onOpenIssues={() => requestView("issues")}
-            />
-          </div>
-          <div className={styles.rightPanelView} hidden={activeView !== "issues"}>
-            <TerraformIssuesPanel diagnostics={terraformDiagnostics} />
-          </div>
-        </>
-      ) : (
+      <div className={styles.rightPanelView} hidden={activeView !== "resource"}>
+        <ResourceWorkspacePanel
+          context={context}
+          onViewChange={setResourceWorkspaceView}
+          view={resourceWorkspaceView}
+        />
+      </div>
+      <div className={styles.rightPanelView} hidden={activeView !== "terraform"}>
+        <TerraformCodePanel
+          context={context}
+          externalSaveRequestId={terraformSaveRequestId}
+          isVisible={activeView === "terraform"}
+          onDiagnosticsChange={setTerraformDiagnostics}
+          onDirtyChange={setHasUnsavedTerraformChanges}
+          onExternalSaveComplete={handleTerraformExternalSaveComplete}
+          onOpenIssues={() => requestView("issues")}
+          onOpenResourceSettings={() => {
+            setResourceWorkspaceView("settings");
+            requestView("resource");
+          }}
+        />
+      </div>
+      <div className={styles.rightPanelView} hidden={activeView !== "issues"}>
+        <TerraformIssuesPanel diagnostics={terraformDiagnostics} />
+      </div>
+
+      {activeView === "deployment" ? (
         <DeploymentPanel
           currentNodeCount={context.nodes.length}
           projectId={projectId}
           projectName={projectName}
         />
-      )}
+      ) : null}
 
       {showTerraformLeaveDialog ? (
         <TerraformLeaveDialog
@@ -199,20 +275,221 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
   );
 }
 
+function ResourceWorkspacePanel({
+  context,
+  onViewChange,
+  view
+}: {
+  readonly context: DiagramEditorPanelContext;
+  readonly onViewChange: (view: ResourceWorkspaceView) => void;
+  readonly view: ResourceWorkspaceView;
+}) {
+  const resourceNodes = useMemo(
+    () => context.nodes.filter((node) => node.kind === "resource" || node.parameters?.resourceType),
+    [context.nodes]
+  );
+
+  return (
+    <div className={styles.resourceWorkspacePanel}>
+      <div className={styles.resourceSectionToolbar}>
+        <div className={styles.resourceSectionTabs} aria-label="Resource sections">
+          <button
+            aria-pressed={view === "settings"}
+            className={
+              view === "settings"
+                ? styles.resourceSectionButtonActive
+                : styles.resourceSectionButton
+            }
+            onClick={() => onViewChange("settings")}
+            title="Resource settings"
+            type="button"
+          >
+            <Box size={18} aria-hidden="true" />
+          </button>
+          <button
+            aria-pressed={view === "list"}
+            className={
+              view === "list"
+                ? styles.resourceSectionButtonActive
+                : styles.resourceSectionButton
+            }
+            onClick={() => onViewChange("list")}
+            title="Resource list"
+            type="button"
+          >
+            <ListTree size={18} aria-hidden="true" />
+          </button>
+        </div>
+      </div>
+
+      {view === "settings" ? (
+        <ParameterInputPanel {...context} />
+      ) : (
+        <ResourceListPanel context={context} nodes={resourceNodes} />
+      )}
+    </div>
+  );
+}
+
+function ResourceListPanel({
+  context,
+  nodes
+}: {
+  readonly context: DiagramEditorPanelContext;
+  readonly nodes: readonly DiagramNode[];
+}) {
+  if (nodes.length === 0) {
+    return (
+      <div className={styles.resourceListEmpty}>
+        <strong>No resources on canvas</strong>
+        <span>Drag resources onto the board to see them here.</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className={styles.resourceListPanel}>
+      {nodes.map((node) => {
+        const summaryRows = getResourceSummaryRows(node);
+
+        return (
+          <button
+            className={
+              node.id === context.selectedNodeId
+                ? styles.resourceListItemActive
+                : styles.resourceListItem
+            }
+            key={node.id}
+            onClick={() => context.focusResourceNode(node.id)}
+            type="button"
+          >
+            <span className={styles.resourceListHeader}>
+              <span className={styles.resourceListIdentity}>
+                <span className={styles.resourceListCubeIcon}>
+                  <Box size={16} aria-hidden="true" />
+                </span>
+                <span className={styles.resourceListServiceIcon}>
+                  {node.iconUrl ? (
+                    <img alt="" draggable={false} src={node.iconUrl} />
+                  ) : (
+                    <Box size={15} aria-hidden="true" />
+                  )}
+                </span>
+                <strong>{getNodeDisplayName(node)}</strong>
+              </span>
+              <MoreHorizontal size={18} aria-hidden="true" />
+            </span>
+            <span className={styles.resourceListAddress}>{getNodeTerraformAddress(node)}</span>
+            {summaryRows.length > 0 ? (
+              <span className={styles.resourceListValues}>
+                {summaryRows.map((row) => (
+                  <span className={styles.resourceListValueRow} key={row.label}>
+                    <span>{row.label}</span>
+                    <strong>{row.value}</strong>
+                  </span>
+                ))}
+              </span>
+            ) : (
+              <span className={styles.resourceListNoValues}>No configured parameters</span>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function getNodeDisplayName(node: DiagramNode): string {
+  return node.label || node.parameters?.resourceName || node.parameters?.resourceType || node.type;
+}
+
+function getNodeTerraformAddress(node: DiagramNode): string {
+  const blockType = node.parameters?.terraformBlockType === "data" ? "data" : "resource";
+  const resourceType = node.parameters?.resourceType;
+  const resourceName = node.parameters?.resourceName;
+
+  if (!resourceType || !resourceName) {
+    return node.type;
+  }
+
+  return `${blockType}.${resourceType}.${resourceName}`;
+}
+
+function getResourceSummaryRows(node: DiagramNode): Array<{ label: string; value: string }> {
+  const values = node.parameters?.values ?? {};
+
+  return Object.entries(values)
+    .filter(([, value]) => !isEmptyResourceValue(value))
+    .slice(0, 4)
+    .map(([key, value]) => ({
+      label: toResourceSummaryLabel(key),
+      value: formatResourceSummaryValue(value)
+    }));
+}
+
+function isEmptyResourceValue(value: unknown): boolean {
+  if (value === null || value === undefined || value === "") {
+    return true;
+  }
+
+  if (Array.isArray(value)) {
+    return value.length === 0 || value.every(isEmptyResourceValue);
+  }
+
+  if (typeof value === "object") {
+    return Object.keys(value).length === 0;
+  }
+
+  return false;
+}
+
+function toResourceSummaryLabel(key: string): string {
+  return key
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/_/g, " ")
+    .replace(/^./, (firstLetter) => firstLetter.toUpperCase());
+}
+
+function formatResourceSummaryValue(value: unknown): string {
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+
+  if (Array.isArray(value)) {
+    return value
+      .filter((item) => !isEmptyResourceValue(item))
+      .map(formatResourceSummaryValue)
+      .join(", ");
+  }
+
+  if (typeof value === "object" && value !== null) {
+    return Object.values(value)
+      .filter((item) => !isEmptyResourceValue(item))
+      .map(formatResourceSummaryValue)
+      .join(", ");
+  }
+
+  return "";
+}
+
 function TerraformCodePanel({
   context,
   externalSaveRequestId,
+  isVisible,
   onDiagnosticsChange,
   onDirtyChange,
   onExternalSaveComplete,
-  onOpenIssues
+  onOpenIssues,
+  onOpenResourceSettings
 }: {
   readonly context: DiagramEditorPanelContext;
   readonly externalSaveRequestId: number;
+  readonly isVisible: boolean;
   readonly onDiagnosticsChange: (diagnostics: TerraformDiagnostic[]) => void;
   readonly onDirtyChange: (isDirty: boolean) => void;
   readonly onExternalSaveComplete: (saved: boolean) => void;
   readonly onOpenIssues: () => void;
+  readonly onOpenResourceSettings: () => void;
 }) {
   const [terraformFiles, setTerraformFiles] = useState<TerraformVirtualFile[]>(() =>
     createTerraformFilesFromGeneratedCode(context.diagram, "")
@@ -226,7 +503,10 @@ function TerraformCodePanel({
   const [statusMessage, setStatusMessage] = useState("main.tf");
   const [hasLocalEdits, setHasLocalEdits] = useState(false);
   const [saveBanner, setSaveBanner] = useState<TerraformSaveBanner | null>(null);
+  const [diagnosticToast, setDiagnosticToast] = useState<TerraformDiagnostic | null>(null);
+  const [codeScrollTop, setCodeScrollTop] = useState(0);
   const codeRequestIdRef = useRef(0);
+  const diagnosticToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latestDiagramFingerprintRef = useRef("");
   const latestExternalSaveRequestIdRef = useRef(externalSaveRequestId);
   const lineNumberRef = useRef<HTMLOListElement | null>(null);
@@ -271,12 +551,20 @@ function TerraformCodePanel({
 
     return terraformFileOptions.filter((fileName) => fileName.toLowerCase().includes(query));
   }, [fileSearchQuery, terraformFileOptions]);
-  const isResourceCodeMode = Boolean(inspectedNode);
+  const isResourceCodeMode = Boolean(inspectedNode && inspectedBlock);
   const displayedTerraformCode = inspectedBlock?.code ?? activeFileCode;
+  const highlightedBlock =
+    !isResourceCodeMode && selectedBlock?.fileName === activeFileName ? selectedBlock : null;
   const lineNumbers = useMemo(
     () => Array.from({ length: Math.max(1, displayedTerraformCode.split(/\r\n|\r|\n/).length) }, (_, index) => index + 1),
     [displayedTerraformCode]
   );
+  const highlightedBlockStyle = highlightedBlock
+    ? {
+        height: `${Math.max(1, highlightedBlock.endLine - highlightedBlock.startLine + 1) * TERRAFORM_EDITOR_LINE_HEIGHT}px`,
+        top: `${TERRAFORM_EDITOR_VERTICAL_PADDING + (highlightedBlock.startLine - 1) * TERRAFORM_EDITOR_LINE_HEIGHT - codeScrollTop}px`
+      }
+    : null;
 
   const runRequest = useCallback(async (request: () => Promise<void>, fallbackMessage: string) => {
     setRequestState("loading");
@@ -289,6 +577,18 @@ function TerraformCodePanel({
       setRequestState("error");
       setErrorMessage(getApiErrorMessage(error, fallbackMessage));
     }
+  }, []);
+
+  const showDiagnosticToast = useCallback((diagnostic: TerraformDiagnostic) => {
+    if (diagnosticToastTimerRef.current) {
+      clearTimeout(diagnosticToastTimerRef.current);
+    }
+
+    setDiagnosticToast(diagnostic);
+    diagnosticToastTimerRef.current = setTimeout(() => {
+      setDiagnosticToast(null);
+      diagnosticToastTimerRef.current = null;
+    }, 3800);
   }, []);
 
   const refreshTerraformCode = useCallback(
@@ -312,6 +612,7 @@ function TerraformCodePanel({
         onDiagnosticsChange([]);
         setHasLocalEdits(false);
         setSaveBanner(null);
+        setDiagnosticToast(null);
         setStatusMessage("그래프 기준으로 동기화됨");
         latestDiagramFingerprintRef.current = diagramFingerprint;
         onDirtyChange(false);
@@ -337,11 +638,8 @@ function TerraformCodePanel({
       );
 
       if (validationError) {
-        setSaveBanner({
-          kind: "error",
-          line: validationError.line,
-          message: validationError.message
-        });
+        setSaveBanner(null);
+        showDiagnosticToast(validationError);
         setStatusMessage("저장 실패");
         return;
       }
@@ -356,11 +654,8 @@ function TerraformCodePanel({
       const syncError = syncResult.diagnostics.find((diagnostic) => diagnostic.severity === "error");
 
       if (syncError) {
-        setSaveBanner({
-          kind: "error",
-          line: syncError.line,
-          message: syncError.message
-        });
+        setSaveBanner(null);
+        showDiagnosticToast(syncError);
         setStatusMessage("저장 실패");
         return;
       }
@@ -369,6 +664,7 @@ function TerraformCodePanel({
       latestDiagramFingerprintRef.current = toDiagramFingerprint(syncResult.diagramJson);
       setHasLocalEdits(false);
       setSaveBanner(null);
+      setDiagnosticToast(null);
       setStatusMessage("저장됨");
       onDirtyChange(false);
       saved = true;
@@ -382,7 +678,8 @@ function TerraformCodePanel({
     onDiagnosticsChange,
     onDirtyChange,
     requestState,
-    runRequest
+    runRequest,
+    showDiagnosticToast
   ]);
 
   useEffect(() => {
@@ -420,7 +717,16 @@ function TerraformCodePanel({
   }, [hasLocalEdits, onDirtyChange]);
 
   useEffect(() => {
-    if (isResourceCodeMode || !selectedBlock || !textareaRef.current) {
+    return () => {
+      if (diagnosticToastTimerRef.current) {
+        clearTimeout(diagnosticToastTimerRef.current);
+      }
+
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isVisible || isResourceCodeMode || !selectedBlock || !textareaRef.current) {
       return;
     }
 
@@ -432,13 +738,13 @@ function TerraformCodePanel({
     const textarea = textareaRef.current;
     const lineHeight = Number.parseFloat(window.getComputedStyle(textarea).lineHeight) || 20;
     textarea.scrollTop = Math.max(0, (selectedBlock.startLine - 2) * lineHeight);
-    textarea.setSelectionRange(selectedBlock.startOffset, selectedBlock.endOffset);
-    textarea.focus({ preventScroll: true });
+    setCodeScrollTop(textarea.scrollTop);
 
     if (lineNumberRef.current) {
       lineNumberRef.current.scrollTop = textarea.scrollTop;
     }
-  }, [activeFileName, isResourceCodeMode, selectedBlock]);
+
+  }, [activeFileName, isResourceCodeMode, isVisible, selectedBlock]);
 
   useEffect(() => {
     if (!inspectedBlock) {
@@ -449,6 +755,8 @@ function TerraformCodePanel({
   }, [inspectedBlock]);
 
   function handleCodeScroll(event: UIEvent<HTMLTextAreaElement>): void {
+    setCodeScrollTop(event.currentTarget.scrollTop);
+
     if (lineNumberRef.current) {
       lineNumberRef.current.scrollTop = event.currentTarget.scrollTop;
     }
@@ -479,6 +787,7 @@ function TerraformCodePanel({
 
     setHasLocalEdits(true);
     setSaveBanner({ kind: "dirty" });
+    setDiagnosticToast(null);
     setStatusMessage("수정 중");
   }
 
@@ -502,6 +811,13 @@ function TerraformCodePanel({
       const validationResult = await validateTerraformCode(displayedTerraformCode);
       setDiagnostics(validationResult.diagnostics);
       onDiagnosticsChange(validationResult.diagnostics);
+      const firstDiagnostic = validationResult.diagnostics[0] ?? null;
+
+      if (firstDiagnostic) {
+        showDiagnosticToast(firstDiagnostic);
+      } else {
+        setDiagnosticToast(null);
+      }
       setStatusMessage(validationResult.diagnostics.length === 0 ? "검증 완료" : "진단 확인 필요");
     }, "Terraform 코드를 검증하지 못했습니다.");
   }
@@ -653,6 +969,9 @@ function TerraformCodePanel({
         </ol>
         <textarea
           ref={textareaRef}
+          autoCapitalize="off"
+          autoComplete="off"
+          autoCorrect="off"
           aria-label="Terraform 코드"
           className={styles.terraformTextarea}
           onChange={(event) => handleCodeChange(event.target.value)}
@@ -663,8 +982,33 @@ function TerraformCodePanel({
 }`}
           spellCheck={false}
           value={displayedTerraformCode}
+          wrap="off"
         />
+        {highlightedBlock && highlightedBlockStyle ? (
+          <div
+            aria-label={`${highlightedBlock.address} code block`}
+            className={styles.terraformBlockHighlightBox}
+            style={highlightedBlockStyle}
+          >
+            <button
+              aria-label="Open resource settings"
+              className={styles.terraformBlockSettingsButton}
+              onClick={onOpenResourceSettings}
+              title="Resource settings"
+              type="button"
+            >
+              <Settings size={15} aria-hidden="true" />
+            </button>
+          </div>
+        ) : null}
       </div>
+
+      {diagnosticToast ? (
+        <div className={styles.terraformDiagnosticToast} role="status" aria-live="polite">
+          <strong>{formatTerraformDiagnosticTitle(diagnosticToast)}</strong>
+          <span>{diagnosticToast.message}</span>
+        </div>
+      ) : null}
 
       <section className={styles.terraformDiagnosticsHidden} aria-live="polite" id="terraform-issues">
         <div className={styles.terraformDiagnosticsHeader}>
@@ -754,15 +1098,7 @@ type TerraformVirtualFile = {
   readonly fileName: string;
 };
 
-const TERRAFORM_STANDARD_FILE_NAMES = [
-  "backend.tf",
-  "locals.tf",
-  "main.tf",
-  "outputs.tf",
-  "providers.tf",
-  "terraform.tfvars",
-  "variables.tf"
-] as const;
+const TERRAFORM_STANDARD_FILE_NAMES = ["main.tf"] as const;
 
 function TerraformLeaveDialog({
   onContinue,

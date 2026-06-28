@@ -27,17 +27,24 @@ import type {
   Viewport
 } from "@xyflow/react";
 import {
+  Box,
+  LayoutGrid,
   Maximize2,
   MousePointer2,
   Move,
   Redo2,
   Save,
   Undo2,
+  UserRound,
   ZoomIn,
   ZoomOut
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { DragEvent, KeyboardEvent as ReactKeyboardEvent } from "react";
+import type {
+  DragEvent,
+  KeyboardEvent as ReactKeyboardEvent,
+  MouseEvent as ReactMouseEvent
+} from "react";
 import type { DiagramEdge, DiagramJson, DiagramNode } from "../../../../packages/types/src";
 
 import { ParameterInputPanel } from "../parameter-input";
@@ -92,6 +99,8 @@ function DiagramEditorInner({
   leftPanel,
   onDiagramChange,
   onSave,
+  myPageHref = "/mypage",
+  projectName = "Project workspace",
   rightPanel,
   saveDisabled = false,
   saveStatus = "로컬 편집 중"
@@ -101,9 +110,12 @@ function DiagramEditorInner({
   const diagramRef = useRef(diagram);
   const [history, setHistory] = useState<DiagramHistoryState>({ past: [], future: [] });
   const [inspectedNodeId, setInspectedNodeId] = useState<string | null>(null);
+  const [isLeftPanelOpen, setLeftPanelOpen] = useState(true);
+  const [isRightPanelOpen, setRightPanelOpen] = useState(true);
   const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
   const [selectedEdgeIds, setSelectedEdgeIds] = useState<string[]>([]);
   const [interactionMode, setInteractionMode] = useState<"select" | "pan">("select");
+  const temporaryPanPreviousModeRef = useRef<"select" | "pan" | null>(null);
   const clipboardRef = useRef<DiagramNode[]>([]);
   const canvasPanelRef = useRef<HTMLDivElement | null>(null);
   const dragSnapshotRef = useRef<DiagramJson | null>(null);
@@ -262,19 +274,75 @@ function DiagramEditorInner({
     [commitDiagramUpdate]
   );
 
+  const focusResourceNode = useCallback<DiagramEditorPanelContext["focusResourceNode"]>(
+    (nodeId) => {
+      const targetNode = diagramRef.current.nodes.find((node) => node.id === nodeId);
+
+      if (!targetNode) {
+        return;
+      }
+
+      setSelectedNodeIds([nodeId]);
+      setSelectedEdgeIds([]);
+      setInspectedNodeId(nodeId);
+      setRightPanelOpen(true);
+
+      const canvasBounds = canvasPanelRef.current?.getBoundingClientRect();
+      const editorBounds = editorShellRef.current?.getBoundingClientRect();
+
+      if (!canvasBounds || canvasBounds.width <= 0 || canvasBounds.height <= 0) {
+        void reactFlow.fitView({
+          duration: 180,
+          maxZoom: 1.5,
+          minZoom: 0.35,
+          nodes: [{ id: nodeId }],
+          padding: 0.6
+        });
+        return;
+      }
+
+      const fitViewWidth = editorBounds && editorBounds.width > 0 ? editorBounds.width : canvasBounds.width;
+      const viewport = getViewportForBounds(
+        getDiagramBounds([targetNode]),
+        fitViewWidth,
+        canvasBounds.height,
+        0.35,
+        1.5,
+        0.6
+      );
+
+      void reactFlow.setViewport(viewport, { duration: 180 });
+      applyLiveDiagramUpdate((currentDiagram) => updateDiagramViewport(currentDiagram, viewport));
+      focusEditorShell();
+    },
+    [applyLiveDiagramUpdate, focusEditorShell, reactFlow]
+  );
+
   const panelContext = useMemo<DiagramEditorPanelContext>(
     () => ({
       diagram,
       inspectedNodeId,
+      isRightPanelOpen,
       selectedNodeId,
       nodes: diagram.nodes,
       edges: diagram.edges,
       applyDiagramJson,
       closeInspectedNode: () => setInspectedNodeId(null),
+      focusResourceNode,
+      setRightPanelOpen,
       updateNodeParameters,
       updateNodeMetadata
     }),
-    [applyDiagramJson, diagram, inspectedNodeId, selectedNodeId, updateNodeMetadata, updateNodeParameters]
+    [
+      applyDiagramJson,
+      diagram,
+      focusResourceNode,
+      inspectedNodeId,
+      isRightPanelOpen,
+      selectedNodeId,
+      updateNodeMetadata,
+      updateNodeParameters
+    ]
   );
 
   const handleBringForward = useCallback(
@@ -459,6 +527,28 @@ function DiagramEditorInner({
     },
     [focusEditorShell]
   );
+
+  const handleCanvasMouseDown = useCallback(
+    (event: ReactMouseEvent<HTMLDivElement>) => {
+      if (event.button !== 1) {
+        return;
+      }
+
+      event.preventDefault();
+      if (interactionMode !== "pan" && temporaryPanPreviousModeRef.current === null) {
+        temporaryPanPreviousModeRef.current = interactionMode;
+      }
+      setInteractionMode("pan");
+      focusEditorShell();
+    },
+    [focusEditorShell, interactionMode]
+  );
+
+  const handleCanvasAuxClick = useCallback((event: ReactMouseEvent<HTMLDivElement>) => {
+    if (event.button === 1) {
+      event.preventDefault();
+    }
+  }, []);
 
   const handleNodeDragStart = useCallback(() => {
     dragSnapshotRef.current = cloneDiagram(diagramRef.current);
@@ -657,6 +747,7 @@ function DiagramEditorInner({
     }
 
     const canvasBounds = canvasPanelRef.current?.getBoundingClientRect();
+    const editorBounds = editorShellRef.current?.getBoundingClientRect();
 
     if (!canvasBounds || canvasBounds.width <= 0 || canvasBounds.height <= 0) {
       void reactFlow.fitView({
@@ -669,9 +760,10 @@ function DiagramEditorInner({
       return;
     }
 
+    const fitViewWidth = editorBounds && editorBounds.width > 0 ? editorBounds.width : canvasBounds.width;
     const viewport = getViewportForBounds(
       getDiagramBounds(currentNodes),
-      canvasBounds.width,
+      fitViewWidth,
       canvasBounds.height,
       0.25,
       1.35,
@@ -729,6 +821,25 @@ function DiagramEditorInner({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleKeyDown]);
 
+  useEffect(() => {
+    function handleWindowMouseUp(event: MouseEvent): void {
+      if (event.button !== 1) {
+        return;
+      }
+
+      const previousMode = temporaryPanPreviousModeRef.current;
+      temporaryPanPreviousModeRef.current = null;
+
+      if (previousMode) {
+        setInteractionMode(previousMode);
+      }
+    }
+
+    window.addEventListener("mouseup", handleWindowMouseUp);
+
+    return () => window.removeEventListener("mouseup", handleWindowMouseUp);
+  }, []);
+
   function handleShellKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
     if (event.key === "Escape") {
       setInspectedNodeId(null);
@@ -739,18 +850,49 @@ function DiagramEditorInner({
 
   return (
     <section
-      className={styles.editorShell}
+      className={`${styles.editorShell} ${isRightPanelOpen ? "" : styles.editorShellRightCollapsed}`}
       onKeyDown={handleShellKeyDown}
       ref={editorShellRef}
       tabIndex={0}
     >
-      <div className={styles.leftRail}>{leftPanel === undefined ? <ResourceSettingsPanel /> : leftPanel}</div>
+      {isLeftPanelOpen ? (
+        <div className={styles.leftRail}>
+          {leftPanel === undefined ? (
+            <ResourceSettingsPanel onCollapse={() => setLeftPanelOpen(false)} />
+          ) : (
+            leftPanel
+          )}
+        </div>
+      ) : (
+        <div className={styles.collapsedLeftPanel} aria-label="Left panel shortcuts">
+          <button
+            aria-label="Open resources panel"
+            className={styles.collapsedLeftPanelButton}
+            onClick={() => setLeftPanelOpen(true)}
+            title="Open resources"
+            type="button"
+          >
+            <Box aria-hidden="true" size={18} />
+          </button>
+          <button
+            aria-label="Open templates panel"
+            className={styles.collapsedLeftPanelButton}
+            onClick={() => setLeftPanelOpen(true)}
+            title="Open templates"
+            type="button"
+          >
+            <LayoutGrid aria-hidden="true" size={18} />
+          </button>
+        </div>
+      )}
 
       <div className={styles.workspace}>
         <header className={styles.canvasToolbar}>
           <div className={styles.toolbarBrand}>
-            <span className={styles.toolbarTitle}>Architecture board</span>
-            <span className={styles.toolbarMeta}>Terraform draft</span>
+            <a aria-label="마이페이지로 돌아가기" className={styles.toolbarHomeLink} href={myPageHref} title="마이페이지">
+              <UserRound aria-hidden="true" size={16} />
+            </a>
+            <span className={styles.toolbarTitle}>{projectName}</span>
           </div>
 
           <div className={styles.toolbarGroup} aria-label="편집 도구">
@@ -818,18 +960,20 @@ function DiagramEditorInner({
           </div>
 
           <div className={styles.toolbarStatus}>
-            <span>{diagram.nodes.length} nodes</span>
-            <span>{diagram.edges.length} edges</span>
             <span>{saveStatus}</span>
           </div>
-          
         </header>
 
         {draftStatusPanel ? (
           <div className={styles.draftStatusPanelSlot}>{draftStatusPanel}</div>
         ) : null}
 
-        <div className={styles.canvasPanel} ref={canvasPanelRef}>
+        <div
+          className={styles.canvasPanel}
+          onAuxClickCapture={handleCanvasAuxClick}
+          onMouseDownCapture={handleCanvasMouseDown}
+          ref={canvasPanelRef}
+        >
           {selectedEdge ? (
             <DiagramEdgeToolbar
               edge={selectedEdge}
@@ -866,17 +1010,26 @@ function DiagramEditorInner({
             onEdgesChange={handleEdgesChange}
             onInit={handleInit}
             onMoveEnd={handleMoveEnd}
-            onNodeClick={() => focusEditorShell()}
+            onNodeClick={(_event, node) => {
+              setSelectedNodeIds([node.id]);
+              setSelectedEdgeIds([]);
+              setInspectedNodeId(null);
+              focusEditorShell();
+            }}
             onNodeDoubleClick={(_event, node) => {
               setSelectedNodeIds([node.id]);
               setSelectedEdgeIds([]);
               setInspectedNodeId(node.id);
+              setRightPanelOpen(true);
               focusEditorShell();
             }}
             onNodeDragStart={handleNodeDragStart}
             onNodeDragStop={handleNodeDragStop}
             onNodesChange={handleNodesChange}
-            onPaneClick={focusEditorShell}
+            onPaneClick={() => {
+              setInspectedNodeId(null);
+              focusEditorShell();
+            }}
             onSelectionChange={handleSelectionChange}
             panOnDrag={interactionMode === "pan"}
             selectionKeyCode={["Shift", "Meta", "Control"]}
