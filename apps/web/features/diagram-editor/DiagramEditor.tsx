@@ -115,6 +115,7 @@ function DiagramEditorInner({
   const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
   const [selectedEdgeIds, setSelectedEdgeIds] = useState<string[]>([]);
   const [interactionMode, setInteractionMode] = useState<"select" | "pan">("select");
+  const temporaryPanPreviousModeRef = useRef<"select" | "pan" | null>(null);
   const clipboardRef = useRef<DiagramNode[]>([]);
   const canvasPanelRef = useRef<HTMLDivElement | null>(null);
   const dragSnapshotRef = useRef<DiagramJson | null>(null);
@@ -488,11 +489,20 @@ function DiagramEditorInner({
       }
 
       event.preventDefault();
+      if (interactionMode !== "pan" && temporaryPanPreviousModeRef.current === null) {
+        temporaryPanPreviousModeRef.current = interactionMode;
+      }
       setInteractionMode("pan");
       focusEditorShell();
     },
-    [focusEditorShell]
+    [focusEditorShell, interactionMode]
   );
+
+  const handleCanvasAuxClick = useCallback((event: ReactMouseEvent<HTMLDivElement>) => {
+    if (event.button === 1) {
+      event.preventDefault();
+    }
+  }, []);
 
   const handleNodeDragStart = useCallback(() => {
     dragSnapshotRef.current = cloneDiagram(diagramRef.current);
@@ -765,6 +775,25 @@ function DiagramEditorInner({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleKeyDown]);
 
+  useEffect(() => {
+    function handleWindowMouseUp(event: MouseEvent): void {
+      if (event.button !== 1) {
+        return;
+      }
+
+      const previousMode = temporaryPanPreviousModeRef.current;
+      temporaryPanPreviousModeRef.current = null;
+
+      if (previousMode) {
+        setInteractionMode(previousMode);
+      }
+    }
+
+    window.addEventListener("mouseup", handleWindowMouseUp);
+
+    return () => window.removeEventListener("mouseup", handleWindowMouseUp);
+  }, []);
+
   function handleShellKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
     if (event.key === "Escape") {
       setInspectedNodeId(null);
@@ -893,7 +922,12 @@ function DiagramEditorInner({
           <div className={styles.draftStatusPanelSlot}>{draftStatusPanel}</div>
         ) : null}
 
-        <div className={styles.canvasPanel} onMouseDownCapture={handleCanvasMouseDown} ref={canvasPanelRef}>
+        <div
+          className={styles.canvasPanel}
+          onAuxClickCapture={handleCanvasAuxClick}
+          onMouseDownCapture={handleCanvasMouseDown}
+          ref={canvasPanelRef}
+        >
           {selectedEdge ? (
             <DiagramEdgeToolbar
               edge={selectedEdge}
