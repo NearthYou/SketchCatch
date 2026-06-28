@@ -110,12 +110,6 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
     setPendingView(null);
   }
 
-  useEffect(() => {
-    if (context.inspectedNodeId) {
-      requestView("terraform");
-    }
-  }, [context.inspectedNodeId, requestView]);
-
   function openCollapsedView(nextView: WorkspaceRightPanelView): void {
     context.setRightPanelOpen(true);
     requestView(nextView);
@@ -228,31 +222,31 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
         </button>
       </div>
 
-      {activeView === "resource" ? (
+      <div className={styles.rightPanelView} hidden={activeView !== "resource"}>
         <ResourceWorkspacePanel context={context} />
-      ) : activeView === "terraform" || activeView === "issues" ? (
-        <>
-          <div className={styles.rightPanelView} hidden={activeView !== "terraform"}>
-            <TerraformCodePanel
-              context={context}
-              externalSaveRequestId={terraformSaveRequestId}
-              onDiagnosticsChange={setTerraformDiagnostics}
-              onDirtyChange={setHasUnsavedTerraformChanges}
-              onExternalSaveComplete={handleTerraformExternalSaveComplete}
-              onOpenIssues={() => requestView("issues")}
-            />
-          </div>
-          <div className={styles.rightPanelView} hidden={activeView !== "issues"}>
-            <TerraformIssuesPanel diagnostics={terraformDiagnostics} />
-          </div>
-        </>
-      ) : (
+      </div>
+      <div className={styles.rightPanelView} hidden={activeView !== "terraform"}>
+        <TerraformCodePanel
+          context={context}
+          externalSaveRequestId={terraformSaveRequestId}
+          isVisible={activeView === "terraform"}
+          onDiagnosticsChange={setTerraformDiagnostics}
+          onDirtyChange={setHasUnsavedTerraformChanges}
+          onExternalSaveComplete={handleTerraformExternalSaveComplete}
+          onOpenIssues={() => requestView("issues")}
+        />
+      </div>
+      <div className={styles.rightPanelView} hidden={activeView !== "issues"}>
+        <TerraformIssuesPanel diagnostics={terraformDiagnostics} />
+      </div>
+
+      {activeView === "deployment" ? (
         <DeploymentPanel
           currentNodeCount={context.nodes.length}
           projectId={projectId}
           projectName={projectName}
         />
-      )}
+      ) : null}
 
       {showTerraformLeaveDialog ? (
         <TerraformLeaveDialog
@@ -284,6 +278,7 @@ function ResourceWorkspacePanel({ context }: { readonly context: DiagramEditorPa
 function TerraformCodePanel({
   context,
   externalSaveRequestId,
+  isVisible,
   onDiagnosticsChange,
   onDirtyChange,
   onExternalSaveComplete,
@@ -291,6 +286,7 @@ function TerraformCodePanel({
 }: {
   readonly context: DiagramEditorPanelContext;
   readonly externalSaveRequestId: number;
+  readonly isVisible: boolean;
   readonly onDiagnosticsChange: (diagnostics: TerraformDiagnostic[]) => void;
   readonly onDirtyChange: (isDirty: boolean) => void;
   readonly onExternalSaveComplete: (saved: boolean) => void;
@@ -355,7 +351,7 @@ function TerraformCodePanel({
 
     return terraformFileOptions.filter((fileName) => fileName.toLowerCase().includes(query));
   }, [fileSearchQuery, terraformFileOptions]);
-  const isResourceCodeMode = Boolean(inspectedNode);
+  const isResourceCodeMode = Boolean(inspectedNode && inspectedBlock);
   const displayedTerraformCode = inspectedBlock?.code ?? activeFileCode;
   const lineNumbers = useMemo(
     () => Array.from({ length: Math.max(1, displayedTerraformCode.split(/\r\n|\r|\n/).length) }, (_, index) => index + 1),
@@ -521,7 +517,7 @@ function TerraformCodePanel({
   }, []);
 
   useEffect(() => {
-    if (isResourceCodeMode || !selectedBlock || !textareaRef.current) {
+    if (!isVisible || isResourceCodeMode || !selectedBlock || !textareaRef.current) {
       return;
     }
 
@@ -539,7 +535,15 @@ function TerraformCodePanel({
     if (lineNumberRef.current) {
       lineNumberRef.current.scrollTop = textarea.scrollTop;
     }
-  }, [activeFileName, isResourceCodeMode, selectedBlock]);
+  }, [activeFileName, isResourceCodeMode, isVisible, selectedBlock]);
+
+  useEffect(() => {
+    if (!isVisible || isResourceCodeMode || selectedBlock || context.selectedNodeId || !textareaRef.current) {
+      return;
+    }
+
+    textareaRef.current.setSelectionRange(0, 0);
+  }, [context.selectedNodeId, isResourceCodeMode, isVisible, selectedBlock]);
 
   useEffect(() => {
     if (!inspectedBlock) {

@@ -40,7 +40,11 @@ import {
   ZoomOut
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { DragEvent, KeyboardEvent as ReactKeyboardEvent } from "react";
+import type {
+  DragEvent,
+  KeyboardEvent as ReactKeyboardEvent,
+  MouseEvent as ReactMouseEvent
+} from "react";
 import type { DiagramEdge, DiagramJson, DiagramNode } from "../../../../packages/types/src";
 
 import { ParameterInputPanel } from "../parameter-input";
@@ -477,6 +481,19 @@ function DiagramEditorInner({
     [focusEditorShell]
   );
 
+  const handleCanvasMouseDown = useCallback(
+    (event: ReactMouseEvent<HTMLDivElement>) => {
+      if (event.button !== 1) {
+        return;
+      }
+
+      event.preventDefault();
+      setInteractionMode("pan");
+      focusEditorShell();
+    },
+    [focusEditorShell]
+  );
+
   const handleNodeDragStart = useCallback(() => {
     dragSnapshotRef.current = cloneDiagram(diagramRef.current);
   }, []);
@@ -874,7 +891,7 @@ function DiagramEditorInner({
           <div className={styles.draftStatusPanelSlot}>{draftStatusPanel}</div>
         ) : null}
 
-        <div className={styles.canvasPanel} ref={canvasPanelRef}>
+        <div className={styles.canvasPanel} onMouseDownCapture={handleCanvasMouseDown} ref={canvasPanelRef}>
           {selectedEdge ? (
             <DiagramEdgeToolbar
               edge={selectedEdge}
@@ -911,7 +928,10 @@ function DiagramEditorInner({
             onEdgesChange={handleEdgesChange}
             onInit={handleInit}
             onMoveEnd={handleMoveEnd}
-            onNodeClick={() => focusEditorShell()}
+            onNodeClick={() => {
+              setInspectedNodeId(null);
+              focusEditorShell();
+            }}
             onNodeDoubleClick={(_event, node) => {
               setSelectedNodeIds([node.id]);
               setSelectedEdgeIds([]);
@@ -922,7 +942,10 @@ function DiagramEditorInner({
             onNodeDragStart={handleNodeDragStart}
             onNodeDragStop={handleNodeDragStop}
             onNodesChange={handleNodesChange}
-            onPaneClick={focusEditorShell}
+            onPaneClick={() => {
+              setInspectedNodeId(null);
+              focusEditorShell();
+            }}
             onSelectionChange={handleSelectionChange}
             panOnDrag={interactionMode === "pan"}
             selectionKeyCode={["Shift", "Meta", "Control"]}
