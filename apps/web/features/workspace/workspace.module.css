@@ -995,7 +995,7 @@
   border-bottom: 1px solid #101214;
   display: grid;
   flex: 1 1 0;
-  grid-template-columns: 58px minmax(0, 1fr);
+  grid-template-columns: 42px minmax(0, 1fr);
   height: 100%;
   min-height: 0;
   overflow: hidden;
@@ -1015,7 +1015,7 @@
   margin: 0;
   max-height: 100%;
   overflow: hidden;
-  padding: 12px 12px 12px 0;
+  padding: 12px 8px 12px 0;
   text-align: right;
 }
 
@@ -1034,7 +1034,7 @@
   outline: none;
   overflow: auto;
   overflow-wrap: normal;
-  padding: 12px 16px;
+  padding: 12px 10px;
   resize: none;
   scrollbar-gutter: stable;
   tab-size: 2;
