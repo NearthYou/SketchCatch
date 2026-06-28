@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { KeyboardEvent as ReactKeyboardEvent, ReactNode, UIEvent } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent, UIEvent } from "react";
 import type {
   AwsConnection,
   Deployment,
@@ -31,6 +31,7 @@ import {
 import { DashboardIcon } from "../../components/dashboard/dashboard-icons";
 import { getApiErrorMessage } from "../../lib/api-client";
 import type { DiagramEditorPanelContext } from "../diagram-editor";
+import { ParameterInputPanel } from "../parameter-input";
 import {
   approveDeploymentPlan,
   createDeployment,
@@ -271,11 +272,6 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
 }
 
 function ResourceWorkspacePanel({ context }: { readonly context: DiagramEditorPanelContext }) {
-  const resourceNodes = useMemo(
-    () => context.nodes.filter((node) => node.kind === "resource"),
-    [context.nodes]
-  );
-
   return (
     <div className={styles.resourceWorkspacePanel}>
       <div className={styles.resourceSectionToolbar}>
@@ -286,68 +282,7 @@ function ResourceWorkspacePanel({ context }: { readonly context: DiagramEditorPa
         </div>
       </div>
 
-      <ResourceCards nodes={resourceNodes} />
-    </div>
-  );
-}
-
-function ResourceCards({ nodes }: { readonly nodes: readonly DiagramNode[] }) {
-  if (nodes.length === 0) {
-    return (
-      <ResourceEmptyState
-        description="다이어그램에 리소스를 추가하면 여기에서 구성을 한눈에 볼 수 있습니다."
-        icon={<Box size={26} aria-hidden="true" />}
-        title="No resources yet"
-      />
-    );
-  }
-
-  return (
-    <div className={styles.resourceCardList}>
-      {nodes.map((node) => (
-        <article className={styles.resourceSummaryCard} key={node.id}>
-          <header className={styles.resourceSummaryHeader}>
-            <span className={styles.resourceCardTypeIcon}>
-              <Box size={18} aria-hidden="true" />
-            </span>
-            {node.iconUrl ? <img alt="" className={styles.resourceCardIcon} src={node.iconUrl} /> : null}
-            <strong>{node.label || node.parameters?.resourceName || node.type}</strong>
-          </header>
-          {node.parameters?.invalid ? (
-            <div className={styles.resourceWarningRow}>
-              <AlertCircle size={15} aria-hidden="true" />
-              <span>This resource is not configured yet.</span>
-            </div>
-          ) : (
-            <dl className={styles.resourceSummaryValues}>
-              {getResourceSummaryRows(node).map((row) => (
-                <div key={row.label}>
-                  <dt>{row.label}</dt>
-                  <dd>{row.value}</dd>
-                </div>
-              ))}
-            </dl>
-          )}
-        </article>
-      ))}
-    </div>
-  );
-}
-
-function ResourceEmptyState({
-  description,
-  icon,
-  title
-}: {
-  readonly description: string;
-  readonly icon: ReactNode;
-  readonly title: string;
-}) {
-  return (
-    <div className={styles.resourceEmptyState}>
-      <div className={styles.resourceEmptyIcon}>{icon}</div>
-      <h2>{title}</h2>
-      <p>{description}</p>
+      <ParameterInputPanel {...context} />
     </div>
   );
 }
@@ -1800,75 +1735,4 @@ function formatDate(value: string): string {
     dateStyle: "short",
     timeStyle: "short"
   });
-}
-
-type ResourceSummaryRow = {
-  readonly label: string;
-  readonly value: string;
-};
-
-function getResourceSummaryRows(node: DiagramNode): ResourceSummaryRow[] {
-  const values = node.parameters?.values ?? {};
-  const rows = Object.entries(values)
-    .filter(([, value]) => !isEmptyDisplayValue(value))
-    .slice(0, 6)
-    .map(([key, value]) => ({
-      label: formatResourceFieldName(key),
-      value: formatResourceValue(value)
-    }));
-
-  if (rows.length > 0) {
-    return rows;
-  }
-
-  return [
-    {
-      label: "Resource type",
-      value: node.parameters?.resourceType ?? node.type
-    }
-  ];
-}
-
-function isEmptyDisplayValue(value: unknown): boolean {
-  if (value === null || value === undefined || value === "") {
-    return true;
-  }
-
-  if (Array.isArray(value)) {
-    return value.length === 0;
-  }
-
-  if (typeof value === "object") {
-    return Object.keys(value).length === 0;
-  }
-
-  return false;
-}
-
-function formatResourceFieldName(value: string): string {
-  return value
-    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
-    .replace(/[_-]+/g, " ")
-    .replace(/\b\w/g, (character) => character.toUpperCase());
-}
-
-function formatResourceValue(value: unknown): string {
-  if (Array.isArray(value)) {
-    return value.map(formatResourceValue).join(", ");
-  }
-
-  if (typeof value === "object" && value !== null) {
-    const entries = Object.entries(value);
-
-    if (entries.length === 0) {
-      return "{}";
-    }
-
-    return entries
-      .slice(0, 3)
-      .map(([key, nestedValue]) => `${key}: ${formatResourceValue(nestedValue)}`)
-      .join(", ");
-  }
-
-  return String(value);
 }

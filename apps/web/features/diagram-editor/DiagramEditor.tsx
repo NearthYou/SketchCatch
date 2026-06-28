@@ -35,6 +35,7 @@ import {
   Redo2,
   Save,
   Undo2,
+  UserRound,
   ZoomIn,
   ZoomOut
 } from "lucide-react";
@@ -94,6 +95,8 @@ function DiagramEditorInner({
   leftPanel,
   onDiagramChange,
   onSave,
+  myPageHref = "/mypage",
+  projectName = "Project workspace",
   rightPanel,
   saveDisabled = false,
   saveStatus = "로컬 편집 중"
@@ -795,7 +798,10 @@ function DiagramEditorInner({
       <div className={styles.workspace}>
         <header className={styles.canvasToolbar}>
           <div className={styles.toolbarBrand}>
-            <span className={styles.toolbarTitle}>Architecture board</span>
+            <a aria-label="마이페이지로 돌아가기" className={styles.toolbarHomeLink} href={myPageHref} title="마이페이지">
+              <UserRound aria-hidden="true" size={16} />
+            </a>
+            <span className={styles.toolbarTitle}>{projectName}</span>
           </div>
 
           <div className={styles.toolbarGroup} aria-label="편집 도구">

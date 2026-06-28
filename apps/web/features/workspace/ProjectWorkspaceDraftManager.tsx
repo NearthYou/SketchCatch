@@ -368,12 +368,13 @@ export function ProjectWorkspaceDraftManager({
     <DiagramEditor
       initialDiagram={initialDiagram}
       onDiagramChange={handleDiagramChange}
+      projectName={projectName}
       rightPanel={(context) => (
         <WorkspaceRightPanel context={context} projectId={projectId} projectName={projectName} />
       )}
       onSave={() => void flushDraftToServer("manual")}
       saveDisabled={serverSaveState === "server-saving" || serverSaveState === "server-checkpoint-pending"}
-      saveStatus={`${projectName} · ${getProjectSaveStatus(localSaveState, serverSaveState)}`}
+      saveStatus={getProjectSaveStatus(localSaveState, serverSaveState)}
     />
   );
 }

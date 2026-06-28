@@ -121,8 +121,30 @@
 .toolbarBrand {
   align-items: center;
   display: inline-flex;
+  gap: 8px;
   margin-right: 4px;
   min-width: 0;
+}
+
+.toolbarHomeLink {
+  align-items: center;
+  background: #f8f9fd;
+  border: 1px solid #e1e7f3;
+  border-radius: 6px;
+  color: #5f3de8;
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 30px;
+  justify-content: center;
+  text-decoration: none;
+  width: 30px;
+}
+
+.toolbarHomeLink:hover,
+.toolbarHomeLink:focus-visible {
+  background: #f0edff;
+  border-color: #d8ceff;
+  outline: none;
 }
 
 .toolbarTitle {
@@ -130,6 +152,10 @@
   font-size: 0.86rem;
   font-weight: 850;
   line-height: 1.15;
+  max-width: 210px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .toolbarGroup {
@@ -175,14 +201,14 @@
   background: #f1f4fa;
   border: 1px solid #e1e7f3;
   border-radius: 999px;
-  max-width: 180px;
+  max-width: 96px;
   overflow: hidden;
   padding: 4px 7px;
   text-overflow: ellipsis;
 }
 
 .toolbarStatus span:last-child {
-  max-width: 180px;
+  max-width: 96px;
 }
 
 .draftStatusPanelSlot {
