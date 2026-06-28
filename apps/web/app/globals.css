@@ -947,6 +947,78 @@ h1 {
   padding-top: var(--space-3);
 }
 
+.llmExplanationBlock {
+  background: var(--surface-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+  padding: var(--space-3);
+}
+
+.llmExplanationHeader {
+  align-items: center;
+  display: flex;
+  gap: var(--space-2);
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.llmExplanationBadge {
+  border: 1px solid color-mix(in srgb, var(--status-info) 28%, var(--border-subtle));
+  border-radius: 999px;
+  color: var(--status-info);
+  flex: 0 1 auto;
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1.2;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  padding: var(--space-1) var(--space-2);
+}
+
+.llmExplanationBadgeFallback {
+  border-color: color-mix(in srgb, var(--status-warning) 28%, var(--border-subtle));
+  color: var(--status-warning);
+}
+
+.llmExplanationSections {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.llmExplanationSection {
+  border-top: 1px solid var(--border-subtle);
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+  padding-top: var(--space-3);
+}
+
+.llmExplanationSection h3 {
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.llmExplanationList {
+  color: var(--text-secondary);
+  display: grid;
+  font-size: 0.875rem;
+  gap: var(--space-2);
+  line-height: 1.5;
+  margin: 0;
+  min-width: 0;
+  padding-left: var(--space-4);
+}
+
+.llmExplanationList li {
+  overflow-wrap: anywhere;
+}
+
 .metadataGrid {
   display: grid;
   gap: var(--space-2);
@@ -1009,22 +1081,37 @@ h1 {
   padding: 0;
 }
 
-.resultList li {
+.resultList > li {
   border-top: 1px solid var(--border-subtle);
   display: grid;
   gap: var(--space-1);
   padding-top: var(--space-3);
 }
 
-.resultList strong {
+.resultList > li > strong {
   color: var(--text-primary);
   font-size: 0.875rem;
 }
 
-.resultList span {
+.resultList > li > span {
   color: var(--text-secondary);
   font-size: 0.875rem;
   line-height: 1.5;
+}
+
+.resultListItems {
+  color: var(--text-secondary);
+  display: grid;
+  font-size: 0.875rem;
+  gap: var(--space-2);
+  line-height: 1.5;
+  margin: 0;
+  min-width: 0;
+  padding-left: var(--space-4);
+}
+
+.resultListItems li {
+  overflow-wrap: anywhere;
 }
 
 .errorBanner,

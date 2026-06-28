@@ -1,4 +1,5 @@
 import type { AiTerraformErrorExplanationResult, AiTerraformStage } from "@sketchcatch/types";
+import { LlmExplanationPanel } from "./LlmExplanationPanel";
 import { ResultList } from "./ResultList";
 
 type TerraformErrorExplanationPanelProps = {
@@ -83,10 +84,13 @@ export function TerraformErrorExplanationPanel({
       </button>
 
       {explanation === null ? null : (
-        <ResultList
-          items={createTerraformErrorExplanationItems(explanation)}
-          summary={explanation.summary}
-        />
+        <div className="resultStack">
+          <LlmExplanationPanel explanation={explanation.llmExplanation} />
+          <ResultList
+            items={createTerraformErrorExplanationItems(explanation)}
+            summary={explanation.summary}
+          />
+        </div>
       )}
     </section>
   );
