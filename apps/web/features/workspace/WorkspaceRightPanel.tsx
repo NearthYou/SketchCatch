@@ -19,6 +19,7 @@ import {
   ClipboardCheck,
   Code2,
   FileCode2,
+  GalleryVerticalEnd,
   GitBranch,
   ListTree,
   MoreHorizontal,
@@ -191,7 +192,7 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
             title="리소스 모드"
             type="button"
           >
-            <ListTree size={18} aria-hidden="true" />
+            <GalleryVerticalEnd size={18} aria-hidden="true" />
           </button>
           <button
             aria-pressed={activeView === "terraform"}
