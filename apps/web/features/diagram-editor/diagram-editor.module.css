@@ -39,6 +39,43 @@
   z-index: 21;
 }
 
+.collapsedLeftPanel {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #dfe7f4;
+  border-radius: 8px;
+  box-shadow: 0 14px 30px rgba(20, 30, 50, 0.14);
+  display: grid;
+  gap: 6px;
+  left: 14px;
+  padding: 6px;
+  position: fixed;
+  top: 96px;
+  z-index: 22;
+}
+
+.collapsedLeftPanelButton {
+  align-items: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: #1f2937;
+  cursor: pointer;
+  display: inline-flex;
+  height: 32px;
+  justify-content: center;
+  padding: 0;
+  width: 32px;
+}
+
+.collapsedLeftPanelButton:hover,
+.collapsedLeftPanelButton:focus-visible {
+  background: #f0edff;
+  border-color: #d8ceff;
+  color: #6f4cf6;
+  outline: none;
+}
+
 .rightRail {
   border-width: 0 0 0 1px;
   grid-column: 3;
@@ -811,6 +848,11 @@
     left: 10px;
     top: 84px;
     width: min(300px, calc(100vw - 20px));
+  }
+
+  .collapsedLeftPanel {
+    left: 10px;
+    top: 84px;
   }
 
   .rightRail {

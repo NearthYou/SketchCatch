@@ -27,6 +27,8 @@ import type {
   Viewport
 } from "@xyflow/react";
 import {
+  Box,
+  LayoutGrid,
   Maximize2,
   MousePointer2,
   Move,
@@ -101,6 +103,7 @@ function DiagramEditorInner({
   const diagramRef = useRef(diagram);
   const [history, setHistory] = useState<DiagramHistoryState>({ past: [], future: [] });
   const [inspectedNodeId, setInspectedNodeId] = useState<string | null>(null);
+  const [isLeftPanelOpen, setLeftPanelOpen] = useState(true);
   const [isRightPanelOpen, setRightPanelOpen] = useState(true);
   const [resourcePanelFocusRequestId, setResourcePanelFocusRequestId] = useState(0);
   const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
@@ -758,7 +761,36 @@ function DiagramEditorInner({
       ref={editorShellRef}
       tabIndex={0}
     >
-      <div className={styles.leftRail}>{leftPanel === undefined ? <ResourceSettingsPanel /> : leftPanel}</div>
+      {isLeftPanelOpen ? (
+        <div className={styles.leftRail}>
+          {leftPanel === undefined ? (
+            <ResourceSettingsPanel onCollapse={() => setLeftPanelOpen(false)} />
+          ) : (
+            leftPanel
+          )}
+        </div>
+      ) : (
+        <div className={styles.collapsedLeftPanel} aria-label="Left panel shortcuts">
+          <button
+            aria-label="Open resources panel"
+            className={styles.collapsedLeftPanelButton}
+            onClick={() => setLeftPanelOpen(true)}
+            title="Open resources"
+            type="button"
+          >
+            <Box aria-hidden="true" size={18} />
+          </button>
+          <button
+            aria-label="Open templates panel"
+            className={styles.collapsedLeftPanelButton}
+            onClick={() => setLeftPanelOpen(true)}
+            title="Open templates"
+            type="button"
+          >
+            <LayoutGrid aria-hidden="true" size={18} />
+          </button>
+        </div>
+      )}
 
       <div className={styles.workspace}>
         <header className={styles.canvasToolbar}>

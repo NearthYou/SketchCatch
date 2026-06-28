@@ -94,10 +94,12 @@ const resourceSections: ResourcePanelSection[] = [
 
 export type ResourceSettingsPanelProps = {
   catalogProvider?: ResourceCatalogProvider | undefined;
+  onCollapse?: (() => void) | undefined;
 };
 
 export function ResourceSettingsPanel({
-  catalogProvider = defaultResourceCatalogProvider
+  catalogProvider = defaultResourceCatalogProvider,
+  onCollapse
 }: ResourceSettingsPanelProps = {}) {
   const [search, setSearch] = useState("");
   const [openSections, setOpenSections] = useState<Record<string, boolean>>(
@@ -135,7 +137,13 @@ export function ResourceSettingsPanel({
             Templates
           </button>
         </div>
-        <button aria-label="Collapse resource panel" className="resourcePanelCollapse" type="button">
+        <button
+          aria-label="Collapse resource panel"
+          className="resourcePanelCollapse"
+          onClick={onCollapse}
+          title="Collapse resource panel"
+          type="button"
+        >
           <PanelLeftClose aria-hidden="true" size={18} />
         </button>
       </div>
