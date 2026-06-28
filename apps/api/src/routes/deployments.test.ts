@@ -34,7 +34,7 @@ import {
   type TerraformOutputRecord,
   type TerraformArtifactRecord
 } from "../deployments/deployment-service.js";
-import { registerDeploymentRoutes } from "./deployments.js";
+import { registerDeploymentRoutes, writeDeploymentLogStreamChunk } from "./deployments.js";
 
 process.env.NODE_ENV = "test";
 process.env.AUTH_TOKEN_SECRET = "test-auth-token-secret-with-at-least-32-characters";
@@ -1814,6 +1814,57 @@ test("GET /api/deployments/:deploymentId/logs/stream returns uncached SSE log ev
   assert.doesNotMatch(response.body, /"sequence":1/);
 
   await app.close();
+});
+
+test("writeDeploymentLogStreamChunk skips closed streams and reports write failures", () => {
+  const chunks: string[] = [];
+  const writableStream = {
+    writableEnded: false,
+    destroyed: false,
+    write(chunk: string) {
+      chunks.push(chunk);
+      return true;
+    }
+  };
+
+  assert.deepEqual(
+    writeDeploymentLogStreamChunk({
+      raw: writableStream,
+      chunk: ": keep-alive\n\n"
+    }),
+    { ok: true }
+  );
+  assert.deepEqual(chunks, [": keep-alive\n\n"]);
+
+  assert.deepEqual(
+    writeDeploymentLogStreamChunk({
+      raw: {
+        writableEnded: true,
+        destroyed: false,
+        write() {
+          throw new Error("should not write");
+        }
+      },
+      chunk: ": keep-alive\n\n"
+    }),
+    { ok: false }
+  );
+
+  const writeError = new Error("EPIPE");
+
+  assert.deepEqual(
+    writeDeploymentLogStreamChunk({
+      raw: {
+        writableEnded: false,
+        destroyed: false,
+        write() {
+          throw writeError;
+        }
+      },
+      chunk: ": keep-alive\n\n"
+    }),
+    { ok: false, error: writeError }
+  );
 });
 
 test("GET /api/deployments/:deploymentId/logs maps missing deployments to not_found", async () => {

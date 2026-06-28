@@ -125,6 +125,27 @@ test("assertTerraformArtifactIsSafe rejects custom provider sources", () => {
   );
 });
 
+test("assertTerraformArtifactIsSafe rejects custom provider sources split after equals", () => {
+  assert.throws(
+    () =>
+      assertTerraformArtifactIsSafe(`
+        terraform {
+          required_providers {
+            aws = {
+              source =
+                "example.com/custom/aws"
+            }
+          }
+        }
+
+        resource "aws_vpc" "main" {
+          cidr_block = "10.0.0.0/16"
+        }
+      `),
+    /provider source "example.com\/custom\/aws" is not allowed/
+  );
+});
+
 test("assertTerraformArtifactIsSafe rejects AWS provider region drift", () => {
   assert.throws(
     () =>

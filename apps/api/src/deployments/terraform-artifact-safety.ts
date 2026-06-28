@@ -249,21 +249,26 @@ function validateProviderRegionAssignment(
 }
 
 function validateProviderSourceAttributes(tokens: HclToken[]): void {
-  for (let index = 0; index < tokens.length - 2; index += 1) {
+  for (let index = 0; index < tokens.length - 1; index += 1) {
     const key = tokens[index]!;
     const equals = tokens[index + 1]!;
-    const value = tokens[index + 2]!;
 
     if (
       key.kind === "identifier" &&
       key.value === "source" &&
-      equals.kind === "equals" &&
-      value.kind === "string" &&
-      !allowedProviderSources.has(value.value)
+      equals.kind === "equals"
     ) {
-      throw new TerraformArtifactSafetyError(
-        `Terraform provider source "${value.value}" is not allowed before live deployment at line ${value.line}`
-      );
+      const value = findNextValueToken(tokens, index + 2);
+
+      if (
+        value &&
+        value.kind === "string" &&
+        !allowedProviderSources.has(value.value)
+      ) {
+        throw new TerraformArtifactSafetyError(
+          `Terraform provider source "${value.value}" is not allowed before live deployment at line ${value.line}`
+        );
+      }
     }
   }
 }

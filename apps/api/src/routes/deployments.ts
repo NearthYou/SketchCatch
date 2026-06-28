@@ -99,6 +99,37 @@ type DeploymentRequestContext = {
   repository: DeploymentRepository;
 };
 
+export type DeploymentLogStreamWritable = {
+  readonly writableEnded: boolean;
+  readonly destroyed: boolean;
+  write(chunk: string): boolean;
+};
+
+export type DeploymentLogStreamWriteResult =
+  | {
+      ok: true;
+    }
+  | {
+      ok: false;
+      error?: unknown;
+    };
+
+export function writeDeploymentLogStreamChunk(input: {
+  raw: DeploymentLogStreamWritable;
+  chunk: string;
+}): DeploymentLogStreamWriteResult {
+  if (input.raw.writableEnded || input.raw.destroyed) {
+    return { ok: false };
+  }
+
+  try {
+    input.raw.write(input.chunk);
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error };
+  }
+}
+
 async function getDeploymentRequestContext(
   request: FastifyRequest,
   options: DeploymentRouteOptions | undefined,
@@ -661,7 +692,7 @@ async function streamDeploymentLogs(input: {
       activeDeploymentLogStreamCount = Math.max(0, activeDeploymentLogStreamCount - 1);
     }
 
-    if (!input.reply.raw.writableEnded) {
+    if (!input.reply.raw.writableEnded && !input.reply.raw.destroyed) {
       input.reply.raw.end();
     }
   };
@@ -681,7 +712,22 @@ async function streamDeploymentLogs(input: {
 
       for (const log of nextLogs) {
         lastSequence = Math.max(lastSequence, log.sequence);
-        input.reply.raw.write(`event: log\ndata: ${JSON.stringify(toDeploymentLog(log))}\n\n`);
+        const writeResult = writeDeploymentLogStreamChunk({
+          raw: input.reply.raw,
+          chunk: `event: log\ndata: ${JSON.stringify(toDeploymentLog(log))}\n\n`
+        });
+
+        if (!writeResult.ok) {
+          if (writeResult.error) {
+            input.request.log.warn(
+              { error: writeResult.error, deploymentId: input.deploymentId },
+              "Deployment log stream write failed"
+            );
+          }
+
+          closeStream();
+          return;
+        }
       }
     } finally {
       polling = false;
@@ -706,12 +752,33 @@ async function streamDeploymentLogs(input: {
   }
 
   timers.interval = setInterval(() => {
-    input.reply.raw.write(": keep-alive\n\n");
+    if (closed) {
+      return;
+    }
+
+    const writeResult = writeDeploymentLogStreamChunk({
+      raw: input.reply.raw,
+      chunk: ": keep-alive\n\n"
+    });
+
+    if (!writeResult.ok) {
+      if (writeResult.error) {
+        input.request.log.warn(
+          { error: writeResult.error, deploymentId: input.deploymentId },
+          "Deployment log stream keep-alive failed"
+        );
+      }
+
+      closeStream();
+      return;
+    }
+
     void writeNewLogs().catch((error) => {
       input.request.log.warn(
         { error, deploymentId: input.deploymentId },
         "Deployment log stream failed"
       );
+      closeStream();
     });
   }, 2_000);
   timers.streamTimeout = setTimeout(() => {
