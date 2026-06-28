@@ -203,7 +203,7 @@
   gap: 8px;
   justify-content: flex-start;
   min-height: 46px;
-  padding: 6px 8px;
+  padding: 6px 12px 6px 8px;
   position: sticky;
   top: 0;
   z-index: 4;
@@ -274,7 +274,7 @@
 }
 
 .panelDeployButton {
-  margin-left: 0;
+  margin-left: auto;
 }
 
 .collapsedPanelButton,
