@@ -17,7 +17,6 @@ import {
   Box,
   Braces,
   ChevronDown,
-  ChevronUp,
   ClipboardCheck,
   Code2,
   FileCode2,
@@ -751,23 +750,6 @@ function TerraformCodePanel({
     }
   }
 
-  function scrollCodeEditor(direction: "up" | "down"): void {
-    const textarea = textareaRef.current;
-
-    if (!textarea) {
-      return;
-    }
-
-    textarea.scrollBy({
-      top: direction === "up" ? -220 : 220,
-      behavior: "smooth"
-    });
-
-    if (lineNumberRef.current) {
-      lineNumberRef.current.scrollTop = textarea.scrollTop;
-    }
-  }
-
   function handleCodeChange(nextCode: string): void {
     setTerraformFiles((currentFiles) =>
       currentFiles.map((file) => {
@@ -973,14 +955,6 @@ function TerraformCodePanel({
             <li key={lineNumber}>{lineNumber}</li>
           ))}
         </ol>
-        <div className={styles.terraformScrollControls} aria-label="Terraform editor scroll controls">
-          <button onClick={() => scrollCodeEditor("up")} title="Scroll up" type="button">
-            <ChevronUp size={16} aria-hidden="true" />
-          </button>
-          <button onClick={() => scrollCodeEditor("down")} title="Scroll down" type="button">
-            <ChevronDown size={16} aria-hidden="true" />
-          </button>
-        </div>
         <textarea
           ref={textareaRef}
           autoCapitalize="off"
