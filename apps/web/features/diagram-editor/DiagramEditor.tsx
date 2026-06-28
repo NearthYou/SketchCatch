@@ -691,6 +691,7 @@ function DiagramEditorInner({
     }
 
     const canvasBounds = canvasPanelRef.current?.getBoundingClientRect();
+    const editorBounds = editorShellRef.current?.getBoundingClientRect();
 
     if (!canvasBounds || canvasBounds.width <= 0 || canvasBounds.height <= 0) {
       void reactFlow.fitView({
@@ -703,9 +704,10 @@ function DiagramEditorInner({
       return;
     }
 
+    const fitViewWidth = editorBounds && editorBounds.width > 0 ? editorBounds.width : canvasBounds.width;
     const viewport = getViewportForBounds(
       getDiagramBounds(currentNodes),
-      canvasBounds.width,
+      fitViewWidth,
       canvasBounds.height,
       0.25,
       1.35,
