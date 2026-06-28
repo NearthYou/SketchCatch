@@ -15,24 +15,16 @@ import {
   AlertCircle,
   ArrowLeft,
   Box,
-  Braces,
   ChevronDown,
   ClipboardCheck,
   Code2,
   FileCode2,
-  FileText,
   GitBranch,
   ListTree,
-  ListFilter,
-  MoreHorizontal,
   PanelRightClose,
   PanelRightOpen,
   Play,
-  Plus,
   Rocket,
-  Search,
-  Settings,
-  SlidersHorizontal,
   Trash2,
   X
 } from "lucide-react";
@@ -278,105 +270,24 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
   );
 }
 
-type ResourcePanelSection = "resources" | "variables" | "outputs" | "locals";
-
 function ResourceWorkspacePanel({ context }: { readonly context: DiagramEditorPanelContext }) {
-  const [activeSection, setActiveSection] = useState<ResourcePanelSection>("resources");
   const resourceNodes = useMemo(
     () => context.nodes.filter((node) => node.kind === "resource"),
     [context.nodes]
   );
-  const variableRows = useMemo(() => buildVariableRows(resourceNodes), [resourceNodes]);
 
   return (
     <div className={styles.resourceWorkspacePanel}>
       <div className={styles.resourceSectionToolbar}>
-        <div className={styles.resourceSectionTabs} role="group" aria-label="Resource sections">
-          <ResourceSectionButton
-            active={activeSection === "resources"}
-            icon={<Box size={18} aria-hidden="true" />}
-            label="Resources"
-            onClick={() => setActiveSection("resources")}
-          />
-          <ResourceSectionButton
-            active={activeSection === "variables"}
-            icon={<ListFilter size={18} aria-hidden="true" />}
-            label="Variables"
-            onClick={() => setActiveSection("variables")}
-          />
-          <ResourceSectionButton
-            active={activeSection === "outputs"}
-            icon={<FileText size={18} aria-hidden="true" />}
-            label="Outputs"
-            onClick={() => setActiveSection("outputs")}
-          />
-          <ResourceSectionButton
-            active={activeSection === "locals"}
-            icon={<Braces size={18} aria-hidden="true" />}
-            label="Locals"
-            onClick={() => setActiveSection("locals")}
-          />
-        </div>
-        <div className={styles.resourceToolbarActions} aria-label="Resource tools">
-          <button className={styles.resourceToolButtonPrimary} type="button" title="Create">
-            <Plus size={17} aria-hidden="true" />
-          </button>
-          <button className={styles.resourceToolButton} type="button" title="Search">
-            <Search size={18} aria-hidden="true" />
-          </button>
-          <button className={styles.resourceToolButton} type="button" title="Filter">
-            <SlidersHorizontal size={18} aria-hidden="true" />
-          </button>
-          <button className={styles.resourceToolButton} type="button" title="Settings">
-            <Settings size={18} aria-hidden="true" />
-          </button>
+        <div className={styles.resourceSectionTabs} aria-label="Resource sections">
+          <span className={styles.resourceSectionButtonActive} title="Resources">
+            <Box size={18} aria-hidden="true" />
+          </span>
         </div>
       </div>
 
-      {activeSection === "resources" ? (
-        <ResourceCards nodes={resourceNodes} />
-      ) : activeSection === "variables" ? (
-        <VariableCards rows={variableRows} />
-      ) : activeSection === "outputs" ? (
-        <ResourceEmptyState
-          actionLabel="Create output"
-          description="You do not have any outputs yet."
-          icon={<FileText size={26} aria-hidden="true" />}
-          title="No outputs defined"
-        />
-      ) : (
-        <ResourceEmptyState
-          actionLabel="Create local"
-          description="You do not have any locals yet."
-          icon={<Braces size={26} aria-hidden="true" />}
-          title="No locals defined"
-        />
-      )}
+      <ResourceCards nodes={resourceNodes} />
     </div>
-  );
-}
-
-function ResourceSectionButton({
-  active,
-  icon,
-  label,
-  onClick
-}: {
-  readonly active: boolean;
-  readonly icon: ReactNode;
-  readonly label: string;
-  readonly onClick: () => void;
-}) {
-  return (
-    <button
-      aria-pressed={active}
-      className={active ? styles.resourceSectionButtonActive : styles.resourceSectionButton}
-      onClick={onClick}
-      title={label}
-      type="button"
-    >
-      {icon}
-    </button>
   );
 }
 
@@ -384,7 +295,6 @@ function ResourceCards({ nodes }: { readonly nodes: readonly DiagramNode[] }) {
   if (nodes.length === 0) {
     return (
       <ResourceEmptyState
-        actionLabel="Add resource"
         description="다이어그램에 리소스를 추가하면 여기에서 구성을 한눈에 볼 수 있습니다."
         icon={<Box size={26} aria-hidden="true" />}
         title="No resources yet"
@@ -402,15 +312,11 @@ function ResourceCards({ nodes }: { readonly nodes: readonly DiagramNode[] }) {
             </span>
             {node.iconUrl ? <img alt="" className={styles.resourceCardIcon} src={node.iconUrl} /> : null}
             <strong>{node.label || node.parameters?.resourceName || node.type}</strong>
-            <button className={styles.resourceCardMenuButton} type="button" title="More">
-              <MoreHorizontal size={18} aria-hidden="true" />
-            </button>
           </header>
           {node.parameters?.invalid ? (
             <div className={styles.resourceWarningRow}>
               <AlertCircle size={15} aria-hidden="true" />
               <span>This resource is not configured yet.</span>
-              <button type="button">Go to configuration</button>
             </div>
           ) : (
             <dl className={styles.resourceSummaryValues}>
@@ -428,40 +334,11 @@ function ResourceCards({ nodes }: { readonly nodes: readonly DiagramNode[] }) {
   );
 }
 
-function VariableCards({ rows }: { readonly rows: readonly ResourceVariableRow[] }) {
-  if (rows.length === 0) {
-    return (
-      <ResourceEmptyState
-        actionLabel="Create variable"
-        description="아키텍처 값으로부터 추출할 수 있는 변수가 아직 없습니다."
-        icon={<ListFilter size={26} aria-hidden="true" />}
-        title="No variables defined"
-      />
-    );
-  }
-
-  return (
-    <div className={styles.variableCardList}>
-      {rows.map((row) => (
-        <article className={styles.variableCard} key={row.name}>
-          <div>
-            <strong>{row.name}</strong>
-            <span>{row.value}</span>
-          </div>
-          <em>architecture</em>
-        </article>
-      ))}
-    </div>
-  );
-}
-
 function ResourceEmptyState({
-  actionLabel,
   description,
   icon,
   title
 }: {
-  readonly actionLabel: string;
   readonly description: string;
   readonly icon: ReactNode;
   readonly title: string;
@@ -471,7 +348,6 @@ function ResourceEmptyState({
       <div className={styles.resourceEmptyIcon}>{icon}</div>
       <h2>{title}</h2>
       <p>{description}</p>
-      <button type="button">{actionLabel}</button>
     </div>
   );
 }
@@ -1069,15 +945,7 @@ type TerraformVirtualFile = {
   readonly fileName: string;
 };
 
-const TERRAFORM_STANDARD_FILE_NAMES = [
-  "backend.tf",
-  "locals.tf",
-  "main.tf",
-  "outputs.tf",
-  "providers.tf",
-  "terraform.tfvars",
-  "variables.tf"
-] as const;
+const TERRAFORM_STANDARD_FILE_NAMES = ["main.tf"] as const;
 
 function TerraformLeaveDialog({
   onContinue,
@@ -1939,11 +1807,6 @@ type ResourceSummaryRow = {
   readonly value: string;
 };
 
-type ResourceVariableRow = {
-  readonly name: string;
-  readonly value: string;
-};
-
 function getResourceSummaryRows(node: DiagramNode): ResourceSummaryRow[] {
   const values = node.parameters?.values ?? {};
   const rows = Object.entries(values)
@@ -1964,27 +1827,6 @@ function getResourceSummaryRows(node: DiagramNode): ResourceSummaryRow[] {
       value: node.parameters?.resourceType ?? node.type
     }
   ];
-}
-
-function buildVariableRows(nodes: readonly DiagramNode[]): ResourceVariableRow[] {
-  const rows = new Map<string, ResourceVariableRow>();
-
-  for (const node of nodes) {
-    const values = node.parameters?.values ?? {};
-
-    for (const [key, value] of Object.entries(values)) {
-      if (isEmptyDisplayValue(value) || rows.has(key)) {
-        continue;
-      }
-
-      rows.set(key, {
-        name: toVariableName(key),
-        value: formatResourceValue(value)
-      });
-    }
-  }
-
-  return Array.from(rows.values()).slice(0, 24);
 }
 
 function isEmptyDisplayValue(value: unknown): boolean {
@@ -2008,14 +1850,6 @@ function formatResourceFieldName(value: string): string {
     .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
     .replace(/[_-]+/g, " ")
     .replace(/\b\w/g, (character) => character.toUpperCase());
-}
-
-function toVariableName(value: string): string {
-  return value
-    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
-    .replace(/[^a-zA-Z0-9_]+/g, "_")
-    .replace(/^_+|_+$/g, "")
-    .toLowerCase();
 }
 
 function formatResourceValue(value: unknown): string {

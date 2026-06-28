@@ -343,32 +343,22 @@
   padding: 8px 10px;
 }
 
-.resourceSectionTabs,
-.resourceToolbarActions {
+.resourceSectionTabs {
   align-items: center;
   display: inline-flex;
   gap: 8px;
   min-width: 0;
 }
 
-.resourceSectionButton,
-.resourceSectionButtonActive,
-.resourceToolButton,
-.resourceToolButtonPrimary {
+.resourceSectionButtonActive {
   align-items: center;
   border: 1px solid transparent;
   border-radius: 7px;
-  cursor: pointer;
   display: inline-flex;
   height: 32px;
   justify-content: center;
   padding: 0;
   width: 32px;
-}
-
-.resourceSectionButton {
-  background: #ffffff;
-  color: #243044;
 }
 
 .resourceSectionButtonActive {
@@ -377,31 +367,7 @@
   color: #6f4cf6;
 }
 
-.resourceToolButton {
-  background: transparent;
-  color: #243044;
-}
-
-.resourceToolButtonPrimary {
-  background: #ffffff;
-  border-color: #cfc4ff;
-  color: #6f4cf6;
-}
-
-.resourceSectionButton:hover,
-.resourceSectionButton:focus-visible,
-.resourceToolButton:hover,
-.resourceToolButton:focus-visible,
-.resourceToolButtonPrimary:hover,
-.resourceToolButtonPrimary:focus-visible {
-  background: #f6f3ff;
-  border-color: #d8ceff;
-  color: #5f3de8;
-  outline: none;
-}
-
-.resourceCardList,
-.variableCardList {
+.resourceCardList {
   align-content: start;
   display: grid;
   gap: 12px;
@@ -410,8 +376,7 @@
   padding: 12px;
 }
 
-.resourceSummaryCard,
-.variableCard {
+.resourceSummaryCard {
   background: #ffffff;
   border: 1px solid #dce3ee;
   border-radius: 6px;
@@ -463,27 +428,6 @@
   padding: 5px;
 }
 
-.resourceCardMenuButton {
-  align-items: center;
-  background: transparent;
-  border: 0;
-  border-radius: 6px;
-  color: #243044;
-  cursor: pointer;
-  display: inline-flex;
-  height: 30px;
-  justify-content: center;
-  margin-left: auto;
-  padding: 0;
-  width: 30px;
-}
-
-.resourceCardMenuButton:hover,
-.resourceCardMenuButton:focus-visible {
-  background: #f1f5f9;
-  outline: none;
-}
-
 .resourceSummaryValues {
   display: grid;
   gap: 8px;
@@ -530,61 +474,6 @@
 .resourceWarningRow svg {
   color: #f59e0b;
   flex: 0 0 auto;
-}
-
-.resourceWarningRow button {
-  background: transparent;
-  border: 0;
-  color: #2f2a1f;
-  cursor: pointer;
-  font: inherit;
-  font-weight: 850;
-  padding: 0;
-  text-decoration: underline;
-}
-
-.variableCard {
-  align-items: start;
-  display: flex;
-  gap: 12px;
-  justify-content: space-between;
-  padding: 14px;
-}
-
-.variableCard div {
-  display: grid;
-  gap: 8px;
-  min-width: 0;
-}
-
-.variableCard strong {
-  color: #111827;
-  font-size: 13px;
-  line-height: 1.25;
-}
-
-.variableCard span {
-  color: #64748b;
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-  font-size: 12px;
-  line-height: 1.35;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.variableCard em {
-  background: #f3f0ff;
-  border: 1px solid #d8ceff;
-  border-radius: 5px;
-  color: #6f4cf6;
-  flex: 0 0 auto;
-  font-size: 12px;
-  font-style: normal;
-  font-weight: 750;
-  line-height: 1;
-  padding: 5px 7px;
 }
 
 .resourceEmptyState {
