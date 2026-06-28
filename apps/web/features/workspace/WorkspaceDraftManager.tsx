@@ -14,6 +14,7 @@ import {
   writeWorkspaceClientMetadata
 } from "./project-draft-persistence";
 import type { LocalProjectDraft } from "./project-draft-persistence";
+import { WorkspaceRightPanel } from "./WorkspaceRightPanel";
 import styles from "./workspace.module.css";
 
 const LOCAL_PROJECT_ID = "local-sketchcatch-project";
@@ -183,6 +184,9 @@ export function WorkspaceDraftManager() {
       onDiagramChange={handleDiagramChange}
       projectName={projectName}
       onSave={() => void saveCurrentDraftLocally()}
+      rightPanel={(context) => (
+        <WorkspaceRightPanel context={context} projectId={LOCAL_PROJECT_ID} projectName={projectName} />
+      )}
       saveDisabled={saveState === "local-pending" && !workspaceId}
       saveStatus={saveStatusLabels[saveState]}
     />

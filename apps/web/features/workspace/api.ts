@@ -34,6 +34,8 @@ import type {
 } from "../../../../packages/types/src";
 import { apiFetch } from "../../lib/api-client";
 
+const AI_API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:4000/api").replace(/\/+$/, "");
+
 export async function createProject(input: CreateProjectRequest): Promise<Project> {
   const response = await apiFetch<ProjectResponse>("/projects", {
     auth: true,
@@ -128,21 +130,15 @@ export async function syncTerraformToDiagram({
 export async function createAiArchitectureDraft(
   input: CreateArchitectureDraftRequest
 ): Promise<AiArchitectureDraftResult> {
-  return apiFetch<AiArchitectureDraftResult>("/ai/architecture-draft", {
-    body: input,
-    method: "POST"
-  });
+  return postPublicAiJson<AiArchitectureDraftResult>("/ai/architecture-draft", input);
 }
 
 // 현재 Architecture Board를 기준으로 Pre-Deployment Check를 실행합니다.
 export async function runAiPreDeploymentCheck(
   architectureJson: ArchitectureJson
 ): Promise<AiPreDeploymentAnalysisResult> {
-  return apiFetch<AiPreDeploymentAnalysisResult>("/ai/pre-deployment-check", {
-    body: {
-      architectureJson
-    },
-    method: "POST"
+  return postPublicAiJson<AiPreDeploymentAnalysisResult>("/ai/pre-deployment-check", {
+    architectureJson
   });
 }
 
@@ -150,10 +146,48 @@ export async function runAiPreDeploymentCheck(
 export async function runAiDesignSimulation(
   input: CreateDesignSimulationRequest
 ): Promise<DesignSimulationResult> {
-  return apiFetch<DesignSimulationResult>("/ai/design-simulation", {
-    body: input,
+  return postPublicAiJson<DesignSimulationResult>("/ai/design-simulation", input);
+}
+
+// 인증 없는 gg AI endpoint는 Next rewrite 실패와 분리해 API 서버로 직접 요청합니다.
+async function postPublicAiJson<ResponseBody>(
+  path: string,
+  body: Record<string, unknown>
+): Promise<ResponseBody> {
+  const response = await fetch(`${AI_API_BASE_URL}${path}`, {
+    body: JSON.stringify(body),
+    headers: {
+      "Content-Type": "application/json"
+    },
     method: "POST"
   });
+
+  if (!response.ok) {
+    throw new Error(await readPublicAiErrorMessage(response));
+  }
+
+  return response.json() as Promise<ResponseBody>;
+}
+
+// API 서버의 JSON 오류를 사람이 읽을 수 있는 message로 낮춥니다.
+async function readPublicAiErrorMessage(response: Response): Promise<string> {
+  try {
+    const body: unknown = await response.json();
+
+    return isPublicAiErrorBody(body) ? body.message : `API 요청 실패: ${response.status}`;
+  } catch {
+    return `API 요청 실패: ${response.status}`;
+  }
+}
+
+// API 오류 응답에서 message 필드가 있는 경우에만 사용자 메시지로 사용합니다.
+function isPublicAiErrorBody(value: unknown): value is { readonly message: string } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "message" in value &&
+    typeof value.message === "string"
+  );
 }
 
 export async function createAwsConnectionSetup({
