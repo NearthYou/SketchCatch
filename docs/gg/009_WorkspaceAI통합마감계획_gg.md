@@ -4,7 +4,7 @@
 
 ## 1. 목표
 
-실제 `/workspace`에서 사용자가 자연어로 Architecture Draft를 만들고, 확인 후 Architecture Board에 반영하고, 같은 화면에서 Pre-Deployment Check와 Design Simulation, LLM 설명까지 확인할 수 있게 한다.
+실제 `/workspace`에서 사용자가 자연어로 Architecture Draft를 만들고, 확인 후 Architecture Board에 반영하고, 같은 화면에서 Pre-Deployment Check, Design Simulation, Terraform Preview 설명, Terraform 오류 설명, LLM 설명까지 확인할 수 있게 한다.
 
 `/workspace/ai`는 데모 화면으로 남길 수 있지만, gg AI 파트의 완료 기준은 실제 `/workspace` 통합이다.
 
@@ -15,6 +15,8 @@
 - 사용자가 확인한 뒤 Architecture Board에 반영
 - 현재 보드 기준 Pre-Deployment Check 실행
 - 현재 보드 기준 Design Simulation 실행
+- Terraform 코드 기준 Preview 설명 실행
+- Terraform 오류 메시지 기준 오류 설명 실행
 - 각 결과 근처에 `AI 설명` 표시
 - API key 없음 fallback 확인
 - OpenAI key 사용 시 실제 설명 확인
@@ -334,6 +336,8 @@ UI 기준:
 → 보드에 반영
 → 검사 실행
 → 시뮬레이션 실행
+→ Terraform Preview 설명 실행
+→ Terraform 오류 설명 실행
 → 각 결과 아래 AI 설명 확인
 ```
 
@@ -345,7 +349,9 @@ UI 기준:
 - 빈 보드 또는 변환 실패 시 안내 메시지가 나온다.
 - 현재 Architecture Board 기준으로 Pre-Deployment Check를 실행할 수 있다.
 - 현재 Architecture Board 기준으로 Design Simulation을 실행할 수 있다.
-- Draft, Check, Simulation 결과 아래에 각각 `AI 설명`이 보인다.
+- Terraform 코드를 붙여 넣어 Preview 설명을 실행할 수 있다.
+- Terraform 오류 메시지를 붙여 넣어 오류 설명을 실행할 수 있다.
+- Draft, Check, Simulation, Terraform 오류 설명 결과 아래에 각각 `AI 설명`이 보인다.
 - OpenAI API key가 없어도 fallback 설명으로 흐름이 깨지지 않는다.
 - 보드 변경 후 기존 분석 결과에 `다시 실행 필요` 상태가 보인다.
 - `/workspace/ai`는 유지되지만 완료 기준은 `/workspace` 기준으로 판단한다.
@@ -377,3 +383,19 @@ UI 기준:
 - 작은 개선은 `/workspace` 완료 흐름을 더 안정적으로 만들 때만 한다.
 - 기능 경계가 커지면 `003_고도화.md`에 남기고 이번 브랜치에서는 하지 않는다.
 - 구현 중 작은 개선을 하더라도 완료 기준은 이 문서의 `## 5. 완료 기준`으로 판단한다.
+
+### 6.1 Architecture Draft 보드 반영 Resource 기준
+
+선택: Architecture Draft를 Architecture Board에 반영할 때 jh가 만든 Resource catalog와 보드 노드 생성 경계를 사용한다.
+
+이유:
+
+- AI가 임의 노드 모양을 만들면 수동으로 끌어온 Resource와 아이콘, 크기, 기본 스타일이 달라진다.
+- 같은 `DiagramJson`이라도 Resource catalog를 거쳐야 기존 Resource 패널, Terraform 설정, 보드 상호작용과 맞는다.
+- gg AI는 Architecture Draft를 만들고 반영하지만, Architecture Board의 Resource 표현 기준은 jh 쪽 구현을 따라야 한다.
+
+기준:
+
+- `ArchitectureJson -> DiagramJson` 변환은 Resource catalog의 `nodeDefaults`, `iconUrl`, `size`를 사용한다.
+- catalog에 없는 Resource만 fallback 노드로 낮춘다.
+- 변환 후 Pre-Deployment Check와 Design Simulation은 같은 보드 Resource 기준으로 실행한다.

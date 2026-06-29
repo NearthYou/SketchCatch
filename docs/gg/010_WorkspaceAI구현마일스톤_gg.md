@@ -16,6 +16,8 @@
 → 보드에 반영
 → 검사 실행
 → 시뮬레이션 실행
+→ Terraform Preview 설명 실행
+→ Terraform 오류 설명 실행
 → 각 결과 아래 AI 설명 확인
 ```
 
@@ -25,6 +27,7 @@
 
 - `ArchitectureJson`을 현재 Architecture Board가 쓰는 `DiagramJson`으로 바꾸는 변환 경계를 만든다.
 - 현재 Architecture Board 상태를 API 입력용 `ArchitectureJson`으로 바꾸는 변환 경계를 만든다.
+- 보드 반영 노드는 jh Resource catalog의 `nodeDefaults`, `iconUrl`, `size`를 사용한다.
 
 TDD 기준:
 
@@ -78,6 +81,7 @@ TDD 기준:
 - 보드 변경 후 기존 분석 결과에 `다시 실행 필요` 상태를 표시한다.
 - Draft, Check, Simulation 결과 아래에 각각 `AI 설명`을 표시한다.
 - `fallbackUsed: true`일 때 작은 `기본 설명 사용` 표시만 붙인다.
+- Terraform Preview 설명과 Terraform 오류 설명을 실제 `/workspace` AI 패널에서 실행할 수 있게 한다.
 
 TDD 기준:
 

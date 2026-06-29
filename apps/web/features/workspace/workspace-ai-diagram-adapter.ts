@@ -5,8 +5,12 @@ import type {
   DiagramNode,
   DiagramNodeParameters,
   ResourceConfig,
+  ResourceDragPayload,
+  ResourceItem,
   ResourceType
 } from "@sketchcatch/types";
+import { createDiagramNodeFromPayload } from "../diagram-editor/diagram-utils";
+import { resourceCatalog } from "../resource-settings/catalog";
 
 const DEFAULT_VIEWPORT: DiagramJson["viewport"] = { x: 0, y: 0, zoom: 1 };
 const DEFAULT_NODE_SIZE: DiagramNode["size"] = { width: 180, height: 96 };
@@ -37,6 +41,9 @@ const TERRAFORM_RESOURCE_TYPE_TO_RESOURCE: Record<string, ResourceType> = {
   aws_subnet: "SUBNET",
   aws_vpc: "VPC"
 };
+const RESOURCE_ITEMS_BY_TERRAFORM_TYPE = new Map<string, ResourceItem>(
+  resourceCatalog.map((item) => [item.nodeDefaults.type, item])
+);
 
 // AI Draft를 실제 Architecture Board가 받을 수 있는 DiagramJson으로 바꾸는 gg 경계입니다.
 export function convertArchitectureJsonToDiagramJson(architectureJson: ArchitectureJson): DiagramJson {
@@ -82,30 +89,87 @@ export function convertDiagramJsonToArchitectureJson(diagramJson: DiagramJson): 
 
 function convertArchitectureNodeToDiagramNode(node: ArchitectureJson["nodes"][number], index: number): DiagramNode {
   const terraformResourceType = mapResourceTypeToTerraform(node.type);
+  const position = {
+    x: node.positionX,
+    y: node.positionY
+  };
+  const zIndex = index + 1;
+  const baseNode = createResourceCatalogDiagramNode(terraformResourceType, position, zIndex);
 
   return {
+    ...baseNode,
     id: node.id,
+    label: node.label ?? baseNode.label,
+    locked: false,
+    parameters: createDiagramNodeParameters(node, terraformResourceType, baseNode.parameters),
+    position,
+    type: terraformResourceType,
+    zIndex
+  };
+}
+
+// jh Resource catalog를 거쳐 수동 drag/drop 노드와 같은 iconUrl, size, 기본 style을 사용합니다.
+function createResourceCatalogDiagramNode(
+  terraformResourceType: string,
+  position: DiagramNode["position"],
+  zIndex: number
+): DiagramNode {
+  const resourceItem = RESOURCE_ITEMS_BY_TERRAFORM_TYPE.get(terraformResourceType);
+
+  if (!resourceItem) {
+    return createFallbackDiagramNode(terraformResourceType, position, zIndex);
+  }
+
+  const payload: ResourceDragPayload = {
+    source: "resource-settings-panel",
+    item: resourceItem
+  };
+
+  return createDiagramNodeFromPayload(payload, position, zIndex);
+}
+
+function createFallbackDiagramNode(
+  terraformResourceType: string,
+  position: DiagramNode["position"],
+  zIndex: number
+): DiagramNode {
+  return {
+    id: "",
     kind: "resource",
-    label: node.label ?? node.id,
+    label: terraformResourceType,
     locked: false,
     parameters: {
       fileName: "main",
-      resourceName: getArchitectureResourceName(node),
+      resourceName: "resource",
       resourceType: terraformResourceType,
       terraformBlockType: "resource",
-      values: { ...node.config }
+      values: {}
     },
-    position: {
-      x: node.positionX,
-      y: node.positionY
-    },
+    position,
     size: { ...DEFAULT_NODE_SIZE },
     style: {
       borderColor: "#2f6db3",
       textColor: "#172033"
     },
     type: terraformResourceType,
-    zIndex: index + 1
+    zIndex
+  };
+}
+
+function createDiagramNodeParameters(
+  node: ArchitectureJson["nodes"][number],
+  terraformResourceType: string,
+  baseParameters: DiagramNodeParameters | undefined
+): DiagramNodeParameters {
+  return {
+    fileName: baseParameters?.fileName ?? "main",
+    resourceName: getArchitectureResourceName(node),
+    resourceType: terraformResourceType,
+    terraformBlockType: baseParameters?.terraformBlockType ?? "resource",
+    values: {
+      ...(baseParameters?.values ?? {}),
+      ...node.config
+    }
   };
 }
 

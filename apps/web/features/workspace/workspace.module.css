@@ -1366,6 +1366,7 @@
 }
 
 .aiField textarea,
+.aiField input,
 .aiField select {
   background: #ffffff;
   border: 1px solid #cbd5e1;
@@ -1383,6 +1384,7 @@
 }
 
 .aiField textarea:focus,
+.aiField input:focus,
 .aiField select:focus {
   border-color: #2f6db3;
   box-shadow: 0 0 0 3px rgb(47 109 179 / 16%);

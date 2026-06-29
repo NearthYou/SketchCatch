@@ -30,6 +30,7 @@ import {
   WorkspaceAiRequestMessage,
   WorkspaceAiSelect
 } from "./WorkspaceAiPanelPieces";
+import { WorkspaceAiTerraformPanel } from "./WorkspaceAiTerraformPanel";
 import type { AiRequestState } from "./WorkspaceAiPanelPieces";
 import {
   budgetOptions,
@@ -254,6 +255,8 @@ export function WorkspaceAiPanel({ context }: WorkspaceAiPanelProps) {
           <p className={styles.aiHint}>현재 보드 기준으로 요청 흐름, 병목, 장애, 비용 압박을 추정합니다.</p>
         )}
       </section>
+
+      <WorkspaceAiTerraformPanel />
     </div>
   );
 }

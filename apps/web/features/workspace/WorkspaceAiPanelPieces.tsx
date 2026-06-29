@@ -1,5 +1,7 @@
 import type {
   AiPreDeploymentAnalysisResult,
+  AiTerraformErrorExplanationResult,
+  AiTerraformPreviewExplanationResult,
   CheckFinding,
   DesignSimulationResult,
   LlmExplanation
@@ -161,8 +163,59 @@ export function WorkspaceAiDesignSimulationResult({
   );
 }
 
+// Terraform Preview 설명은 코드에서 감지한 Resource와 점검 결과를 실제 실행 없이 보여줍니다.
+export function WorkspaceAiTerraformPreviewResult({
+  preview
+}: {
+  readonly preview: AiTerraformPreviewExplanationResult;
+}) {
+  return (
+    <div className={styles.aiResultStack}>
+      <p className={styles.aiResultSummary}>{preview.summary}</p>
+      <WorkspaceAiTextList
+        title="감지된 Resource"
+        items={preview.detectedResources.map(
+          (resource) => `${resource.terraformType} · ${resource.label}: ${resource.explanation}`
+        )}
+      />
+      <WorkspaceAiFindingList findings={preview.findings} />
+      <WorkspaceAiTextList
+        title="체크리스트"
+        items={preview.checklist.map((item) => `${item.status.toUpperCase()} · ${item.label}`)}
+      />
+    </div>
+  );
+}
+
+// Terraform 오류 설명은 stage, 원인, 다음 행동을 한 번씩만 묶어 보여줍니다.
+export function WorkspaceAiTerraformErrorResult({
+  explanation
+}: {
+  readonly explanation: AiTerraformErrorExplanationResult;
+}) {
+  return (
+    <div className={styles.aiResultStack}>
+      <p className={styles.aiResultSummary}>{explanation.summary}</p>
+      <WorkspaceAiExplanation explanation={explanation.llmExplanation} />
+      <WorkspaceAiTextList
+        title="원인"
+        items={[
+          `${explanation.stage} · ${explanation.severity.toUpperCase()} · ${explanation.category}: ${
+            explanation.likelyCause
+          }`
+        ]}
+      />
+      <WorkspaceAiTextList title="다음 행동" items={explanation.nextActions} />
+    </div>
+  );
+}
+
 // 짧은 텍스트 목록을 AI 설명과 분석 결과에서 같은 마크업으로 사용합니다.
 function WorkspaceAiTextList({ items, title }: { readonly items: readonly string[]; readonly title: string }) {
+  if (items.length === 0) {
+    return null;
+  }
+
   return (
     <div className={styles.aiListBlock}>
       <strong>{title}</strong>

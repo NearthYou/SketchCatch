@@ -1,6 +1,9 @@
 import type {
   AiArchitectureDraftResult,
   AiPreDeploymentAnalysisResult,
+  AiTerraformErrorExplanationResult,
+  AiTerraformPreviewExplanationResult,
+  AiTerraformStage,
   ArchitectureJson,
   AwsConnectionCloudFormationTemplateResponse,
   AwsConnection,
@@ -35,6 +38,12 @@ import type {
 import { apiFetch } from "../../lib/api-client";
 
 const AI_API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:4000/api").replace(/\/+$/, "");
+
+type AiTerraformErrorExplanationRequest = {
+  readonly stage: AiTerraformStage;
+  readonly rawMessage: string;
+  readonly relatedResourceId?: string | undefined;
+};
 
 export async function createProject(input: CreateProjectRequest): Promise<Project> {
   const response = await apiFetch<ProjectResponse>("/projects", {
@@ -147,6 +156,26 @@ export async function runAiDesignSimulation(
   input: CreateDesignSimulationRequest
 ): Promise<DesignSimulationResult> {
   return postPublicAiJson<DesignSimulationResult>("/ai/design-simulation", input);
+}
+
+// Terraform Preview 설명은 실제 Terraform 실행 없이 코드 텍스트만 분석합니다.
+export async function runAiTerraformPreviewExplanation(
+  terraformCode: string
+): Promise<AiTerraformPreviewExplanationResult> {
+  return postPublicAiJson<AiTerraformPreviewExplanationResult>("/ai/terraform-preview-explanation", {
+    terraformCode
+  });
+}
+
+// Terraform 오류 설명은 Preview 분석과 다른 endpoint로 보내 stage와 원인을 분리합니다.
+export async function runAiTerraformErrorExplanation(
+  input: AiTerraformErrorExplanationRequest
+): Promise<AiTerraformErrorExplanationResult> {
+  return postPublicAiJson<AiTerraformErrorExplanationResult>("/ai/terraform-error-explanation", {
+    rawMessage: input.rawMessage,
+    relatedResourceId: input.relatedResourceId,
+    stage: input.stage
+  });
 }
 
 // 인증 없는 gg AI endpoint는 Next rewrite 실패와 분리해 API 서버로 직접 요청합니다.

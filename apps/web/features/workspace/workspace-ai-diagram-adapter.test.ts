@@ -45,15 +45,20 @@ test("convertArchitectureJsonToDiagramJson creates board nodes and edges from an
 
   assert.deepEqual(
     diagramJson.nodes.map((node) => ({
+      iconUrl: node.iconUrl,
       id: node.id,
       kind: node.kind,
       label: node.label,
       parameters: node.parameters,
       position: node.position,
+      size: node.size,
+      style: node.style,
       type: node.type
     })),
     [
       {
+        iconUrl:
+          "/Architecture-Service-Icons_07312025/Arch_Networking-Content-Delivery/64/Arch_Amazon-Virtual-Private-Cloud_64.svg",
         id: "vpc-main",
         kind: "resource",
         label: "Main VPC",
@@ -68,9 +73,15 @@ test("convertArchitectureJsonToDiagramJson creates board nodes and edges from an
           }
         },
         position: { x: 120, y: 80 },
+        size: { width: 112, height: 108 },
+        style: {
+          borderColor: "#2f6db3",
+          textColor: "#172033"
+        },
         type: "aws_vpc"
       },
       {
+        iconUrl: "/Architecture-Service-Icons_07312025/Arch_Compute/64/Arch_Amazon-EC2_64.svg",
         id: "ec2-backend",
         kind: "resource",
         label: "Backend Server",
@@ -84,6 +95,11 @@ test("convertArchitectureJsonToDiagramJson creates board nodes and edges from an
           }
         },
         position: { x: 360, y: 220 },
+        size: { width: 112, height: 108 },
+        style: {
+          borderColor: "#2f6db3",
+          textColor: "#172033"
+        },
         type: "aws_instance"
       }
     ]
