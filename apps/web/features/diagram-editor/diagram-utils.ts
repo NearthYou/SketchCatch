@@ -13,6 +13,8 @@ import type {
 import { DEFAULT_DIAGRAM_VIEWPORT, RESOURCE_DRAG_MIME_TYPE } from "./constants";
 import type { DiagramEdgeKind, DiagramNodeMetadataUpdate } from "./types";
 
+let activeResourceDragPayload: ResourceDragPayload | null = null;
+
 export function cloneDiagram(diagram: DiagramJson): DiagramJson {
   return {
     nodes: diagram.nodes.map((node) => cloneNode(node)),
@@ -50,12 +52,21 @@ export function writeResourceDragPayload(dataTransfer: DataTransfer, item: Resou
   };
   const serializedPayload = JSON.stringify(payload);
 
+  activeResourceDragPayload = payload;
   dataTransfer.effectAllowed = "copy";
   dataTransfer.setData(RESOURCE_DRAG_MIME_TYPE, serializedPayload);
   dataTransfer.setData("application/json", serializedPayload);
   dataTransfer.setData("text/plain", serializedPayload);
 
   return payload;
+}
+
+export function getActiveResourceDragPayload(dataTransfer: DataTransfer): ResourceDragPayload | null {
+  return parseResourceDragPayload(dataTransfer) ?? activeResourceDragPayload;
+}
+
+export function clearActiveResourceDragPayload(): void {
+  activeResourceDragPayload = null;
 }
 
 export function createDiagramNodeFromPayload(

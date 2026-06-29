@@ -15,6 +15,20 @@ type ReferenceDropTargetCandidate = ReferenceDropTarget & {
   area: number;
 };
 
+type DropTargetCandidate = {
+  area: number;
+  node: DiagramNode;
+};
+
+const visualDesignDropTargetTypes = new Set([
+  "design_region",
+  "design_az",
+  "design_group",
+  "sketchcatch_region",
+  "sketchcatch_az",
+  "sketchcatch_group"
+]);
+
 export function findInnermostReferenceDropTarget(
   childNode: DiagramNode,
   nodes: readonly DiagramNode[],
@@ -55,7 +69,37 @@ export function findInnermostReferenceDropTarget(
     });
   }
 
-  return candidates.sort(compareReferenceDropTargetCandidates)[0] ?? null;
+  return candidates.sort(compareDropTargetCandidates)[0] ?? null;
+}
+
+export function findInnermostVisualDropTarget(
+  childNode: DiagramNode,
+  nodes: readonly DiagramNode[],
+  catalog: ParameterCatalog
+): DiagramNode | null {
+  const childCenter = getNodeCenter(childNode);
+  const candidates: DropTargetCandidate[] = [];
+  const referenceTarget = findInnermostReferenceDropTarget(childNode, nodes, catalog);
+
+  if (referenceTarget) {
+    candidates.push({
+      node: referenceTarget.node,
+      area: getNodeArea(referenceTarget.node)
+    });
+  }
+
+  for (const node of nodes) {
+    if (node.id === childNode.id || !isVisualDesignDropTarget(node) || !containsPoint(node, childCenter)) {
+      continue;
+    }
+
+    candidates.push({
+      node,
+      area: getNodeArea(node)
+    });
+  }
+
+  return candidates.sort(compareDropTargetCandidates)[0]?.node ?? null;
 }
 
 export function applyReferenceDropTarget(
@@ -124,10 +168,7 @@ function createReferenceParameterValue(definition: ParameterCatalogDefinition, r
   return reference;
 }
 
-function compareReferenceDropTargetCandidates(
-  left: ReferenceDropTargetCandidate,
-  right: ReferenceDropTargetCandidate
-) {
+function compareDropTargetCandidates(left: DropTargetCandidate, right: DropTargetCandidate) {
   const areaDifference = left.area - right.area;
 
   if (areaDifference !== 0) {
@@ -135,6 +176,10 @@ function compareReferenceDropTargetCandidates(
   }
 
   return right.node.zIndex - left.node.zIndex;
+}
+
+function isVisualDesignDropTarget(node: DiagramNode): boolean {
+  return node.kind === "design" && visualDesignDropTargetTypes.has(node.type);
 }
 
 function containsPoint(

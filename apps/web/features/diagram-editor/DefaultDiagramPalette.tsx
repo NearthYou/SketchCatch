@@ -5,7 +5,7 @@ import type { DragEvent } from "react";
 import type { ResourceItem } from "../../../../packages/types/src";
 
 import { DEFAULT_PALETTE_ITEMS } from "./constants";
-import { writeResourceDragPayload } from "./diagram-utils";
+import { clearActiveResourceDragPayload, writeResourceDragPayload } from "./diagram-utils";
 import styles from "./diagram-editor.module.css";
 
 export type DefaultDiagramPaletteProps = {
@@ -49,6 +49,7 @@ function PaletteSection({ icon, items, title }: PaletteSectionProps) {
             className={styles.paletteItem}
             draggable={item.enabled}
             key={item.id}
+            onDragEnd={clearActiveResourceDragPayload}
             onDragStart={(event) => handlePaletteDragStart(event, item)}
             type="button"
           >
