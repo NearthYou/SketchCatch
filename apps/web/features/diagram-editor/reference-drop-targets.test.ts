@@ -371,6 +371,19 @@ test("DiagramEditor applies reference targets after palette drop and node drag s
   );
 });
 
+test("DiagramEditor avoids zIndex scans while computing dragover preview targets", () => {
+  const source = readFileSync(diagramEditorPath, "utf8");
+
+  assert.match(
+    source,
+    /const previewNode = createDiagramNodeFromPayload\(\s*payload,\s*position,\s*0\s*\);/
+  );
+  assert.doesNotMatch(
+    source,
+    /const previewNode = createDiagramNodeFromPayload\(\s*payload,\s*position,\s*getNextZIndex\(diagramRef\.current\.nodes\)\s*\);/
+  );
+});
+
 test("DiagramEditor tracks and renders the active reference drop target highlight", () => {
   const editorSource = readFileSync(diagramEditorPath, "utf8");
   const nodeViewSource = readFileSync(diagramNodeViewPath, "utf8");

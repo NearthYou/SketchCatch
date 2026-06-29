@@ -717,7 +717,7 @@ function DiagramEditorInner({
         x: event.clientX,
         y: event.clientY
       });
-      const previewNode = createDiagramNodeFromPayload(payload, position, getNextZIndex(diagramRef.current.nodes));
+      const previewNode = createDiagramNodeFromPayload(payload, position, 0);
       const nodesWithPreviewNode = [...diagramRef.current.nodes, previewNode];
 
       updateActiveReferenceDropTargetNodeId(getVisualDropTargetNodeId(previewNode, nodesWithPreviewNode));
