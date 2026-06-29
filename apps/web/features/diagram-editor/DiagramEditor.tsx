@@ -590,7 +590,19 @@ function DiagramEditorInner({
     (_event: MouseEvent | TouchEvent, _node: DiagramFlowNode, nodes: DiagramFlowNode[]) => {
       const before = dragSnapshotRef.current;
       const positionByNodeId = new Map(nodes.map((node) => [node.id, node.position]));
-      const movedNodeIds = new Set(positionByNodeId.keys());
+      const previousPositionByNodeId = new Map(
+        (before?.nodes ?? diagramRef.current.nodes).map((node) => [node.id, node.position])
+      );
+      const movedNodeIds = new Set<string>();
+
+      for (const [nodeId, position] of positionByNodeId) {
+        const previousPosition = previousPositionByNodeId.get(nodeId);
+
+        if (previousPosition && (previousPosition.x !== position.x || previousPosition.y !== position.y)) {
+          movedNodeIds.add(nodeId);
+        }
+      }
+
       const positionedNodes = diagramRef.current.nodes.map((node) => {
         const position = positionByNodeId.get(node.id);
 
