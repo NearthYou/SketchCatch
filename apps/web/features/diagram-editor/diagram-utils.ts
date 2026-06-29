@@ -230,7 +230,7 @@ export function createPastedNodes(
   const resourceNamesByType = getResourceNamesByType(currentNodes);
 
   return sourceNodes.map((node, index) => {
-    const pastedNode = {
+    const pastedNode = clearParentAreaNodeId({
       ...cloneNode(node),
       id: createDiagramId("node"),
       position: {
@@ -238,7 +238,7 @@ export function createPastedNodes(
         y: node.position.y + 32 + index * 12
       },
       zIndex: maxZIndex + index + 1
-    };
+    });
 
     if (!pastedNode.parameters) {
       return pastedNode;
@@ -279,6 +279,19 @@ function cloneNode(node: DiagramNode): DiagramNode {
     ...(style ? { style } : {}),
     ...(metadata ? { metadata } : {}),
     ...(parameters ? { parameters } : {})
+  };
+}
+
+function clearParentAreaNodeId(node: DiagramNode): DiagramNode {
+  if (!node.metadata?.parentAreaNodeId) {
+    return node;
+  }
+
+  const { parentAreaNodeId: _parentAreaNodeId, ...nextMetadata } = node.metadata;
+
+  return {
+    ...node,
+    ...(Object.keys(nextMetadata).length > 0 ? { metadata: nextMetadata } : { metadata: undefined })
   };
 }
 

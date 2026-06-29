@@ -941,10 +941,17 @@ function DiagramEditorInner({
 
     const pastedNodes = createPastedNodes(clipboardRef.current, diagramRef.current.nodes);
 
-    commitDiagramUpdate((currentDiagram) => ({
-      ...currentDiagram,
-      nodes: [...currentDiagram.nodes, ...pastedNodes]
-    }));
+    commitDiagramUpdate((currentDiagram) => {
+      const nodesWithPastedNodes = [...currentDiagram.nodes, ...pastedNodes];
+
+      return {
+        ...currentDiagram,
+        nodes: applyAreaNodeParentAssignments(
+          nodesWithPastedNodes,
+          new Set(pastedNodes.map((node) => node.id))
+        )
+      };
+    });
     setSelectedNodeIds(pastedNodes.map((node) => node.id));
     setSelectedEdgeIds([]);
   }, [commitDiagramUpdate]);
