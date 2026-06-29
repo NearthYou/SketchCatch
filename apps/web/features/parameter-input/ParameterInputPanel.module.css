@@ -65,6 +65,20 @@ div.resourceIcon,
   padding-top: 16px;
 }
 
+.sectionHeader {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.sectionHeader h3 {
+  color: #171c2f;
+  font-size: 0.9rem;
+  line-height: 1.35;
+  margin: 0;
+}
+
 .fieldGroup {
   display: flex;
   flex-direction: column;
@@ -91,6 +105,10 @@ div.resourceIcon,
   font-size: 0.85rem;
   font-weight: 800;
   line-height: 1.35;
+}
+
+.fieldActionButton {
+  margin-left: auto;
 }
 
 .requiredMark {
@@ -249,6 +267,70 @@ div.resourceIcon,
 
 .optionPill span {
   min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.advancedPicker,
+.advancedOptionList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.advancedSearch {
+  align-items: center;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 18px minmax(0, 1fr);
+}
+
+.advancedSearch svg {
+  color: #738096;
+}
+
+.advancedOptionButton {
+  align-items: start;
+  background: #ffffff;
+  border: 1px solid #e0e7f2;
+  border-radius: 6px;
+  color: #3c4559;
+  cursor: pointer;
+  display: grid;
+  font: inherit;
+  font-size: 0.82rem;
+  gap: 8px;
+  grid-template-columns: 14px minmax(0, 1fr);
+  min-height: 44px;
+  padding: 7px 9px;
+  text-align: left;
+}
+
+.advancedOptionButton:hover,
+.advancedOptionButton:focus-visible {
+  border-color: #8b71ff;
+  box-shadow: 0 0 0 3px rgba(111, 76, 246, 0.1);
+  outline: none;
+}
+
+.advancedOptionText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.advancedOptionLabel {
+  color: #252c42;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.advancedOptionMeta,
+.advancedOptionDescription {
+  color: #687388;
+  font-size: 0.75rem;
+  line-height: 1.35;
   overflow-wrap: anywhere;
 }
 
