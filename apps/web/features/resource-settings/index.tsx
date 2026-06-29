@@ -27,18 +27,12 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useMemo, useState, type DragEvent } from "react";
-import type { ResourceArea, ResourceDragPayload, ResourceItem } from "../../../../packages/types/src/index";
+import type { ResourceArea, ResourceItem } from "../../../../packages/types/src/index";
+import { clearActiveResourceDragPayload, writeResourceDragPayload } from "../diagram-editor/diagram-utils";
 import {
   defaultResourceCatalogProvider,
   type ResourceCatalogProvider
 } from "./catalog-provider";
-
-const resourceDragMimeTypes = [
-  "application/vnd.sketchcatch.resource-settings+json",
-  "application/x-sketchcatch-resource",
-  "application/json",
-  "text/plain"
-] as const;
 
 const areaLabels: Record<ResourceArea, string> = {
   containers: "Containers",
@@ -291,22 +285,14 @@ function ResourceTile({ item, search }: { item: ResourceItem; search: string }) 
       return;
     }
 
-    const payload: ResourceDragPayload = {
-      source: "resource-settings-panel",
-      item
-    };
-    const serializedPayload = JSON.stringify(payload);
-
-    for (const mimeType of resourceDragMimeTypes) {
-      event.dataTransfer.setData(mimeType, serializedPayload);
-    }
-    event.dataTransfer.effectAllowed = "copy";
+    writeResourceDragPayload(event.dataTransfer, item);
   };
 
   return (
     <div
       className={`resourceTile ${item.enabled ? "" : "resourceTileDisabled"}`}
       draggable={item.enabled}
+      onDragEnd={clearActiveResourceDragPayload}
       onDragStart={onDragStart}
       aria-disabled={!item.enabled}
       title={item.enabled ? `Drag ${item.name}` : `${item.name} is not available yet`}
