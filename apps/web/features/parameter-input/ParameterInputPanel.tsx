@@ -126,6 +126,11 @@ export function ParameterInputPanel({
     advancedDefinitions,
     advancedParameterQuery
   );
+  const advancedPickerEmptyMessage = getAdvancedPickerEmptyMessage(
+    optionalDefinitions,
+    advancedDefinitions,
+    advancedParameterQuery
+  );
   const validationDefinitions = getValidationDefinitions(catalogDefinitions, parameters.values);
   const validation = validateParameters(
     parameters,
@@ -304,7 +309,7 @@ export function ParameterInputPanel({
               ))}
             </div>
           ) : (
-            <p className={styles.inlineEmpty}>추가할 optional 파라미터가 없습니다.</p>
+            <p className={styles.inlineEmpty}>{advancedPickerEmptyMessage}</p>
           )}
         </div>
       </section>
@@ -338,6 +343,26 @@ function filterAdvancedDefinitions(
       !advancedDefinitionNames.has(definition.name) &&
       matchesAdvancedDefinitionQuery(definition, normalizedQuery)
   );
+}
+
+function getAdvancedPickerEmptyMessage(
+  optionalDefinitions: readonly ParameterCatalogDefinition[],
+  advancedDefinitions: readonly ParameterCatalogDefinition[],
+  query: string
+) {
+  if (optionalDefinitions.length === 0) {
+    return "이 리소스 타입에는 optional 파라미터가 없습니다.";
+  }
+
+  if (query.trim().length > 0) {
+    return "검색 결과가 없습니다.";
+  }
+
+  if (advancedDefinitions.length >= optionalDefinitions.length) {
+    return "모든 optional 파라미터가 추가되었습니다.";
+  }
+
+  return "추가할 optional 파라미터가 없습니다.";
 }
 
 function matchesAdvancedDefinitionQuery(definition: ParameterCatalogDefinition, normalizedQuery: string) {
