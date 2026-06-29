@@ -140,7 +140,11 @@ function isLocalDraftNewerThanServerDraft(
   return localSavedAt !== null && (serverSavedAt === null || localSavedAt > serverSavedAt);
 }
 
-function parseIsoDateTime(value: string): number | null {
+export function parseIsoDateTime(value: string | null | undefined): number | null {
+  if (!value) {
+    return null;
+  }
+
   const timestamp = Date.parse(value);
 
   return Number.isFinite(timestamp) ? timestamp : null;

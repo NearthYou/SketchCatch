@@ -7,7 +7,8 @@ import {
   createDraftStorageKey,
   createLocalProjectDraft,
   isWorkspaceCloudPlatform,
-  markDraftServerSaved
+  markDraftServerSaved,
+  parseIsoDateTime
 } from "./project-draft-persistence";
 
 const emptyDiagram: DiagramJson = {
@@ -195,6 +196,12 @@ test("chooseInitialDiagram treats a newer empty local board as a valid draft", (
       source: "local"
     }
   );
+});
+
+test("parseIsoDateTime returns null for missing runtime timestamp values", () => {
+  assert.equal(parseIsoDateTime(null), null);
+  assert.equal(parseIsoDateTime(undefined), null);
+  assert.equal(parseIsoDateTime(""), null);
 });
 
 function makeProjectDraft(overrides: Partial<ProjectDraft> = {}): ProjectDraft {
