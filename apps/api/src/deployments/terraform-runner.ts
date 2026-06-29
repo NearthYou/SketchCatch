@@ -10,6 +10,7 @@ const defaultTerraformPlanFileName = "tfplan";
 const defaultTerraformPluginCacheDir = join(tmpdir(), "sketchcatch-terraform-plugin-cache");
 const defaultTerraformOutputMaxBytes = 512 * 1024;
 const terraformForceKillGraceMs = 2_000;
+export const terraformMutationTimeoutMs = 15 * 60 * 1_000;
 
 export type TerraformRunResult = {
   command: string[];

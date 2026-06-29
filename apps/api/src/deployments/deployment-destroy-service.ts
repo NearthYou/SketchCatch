@@ -37,6 +37,7 @@ import {
 import {
   runTerraformApply as defaultRunTerraformApply,
   runTerraformInit as defaultRunTerraformInit,
+  terraformMutationTimeoutMs,
   type TerraformRunResult
 } from "./terraform-runner.js";
 import {
@@ -242,6 +243,7 @@ export async function runDeploymentDestroy(
     terraform.destroy = await runTerraformApply(workspace.workdir, {
       env: awsCredentials.env,
       planFileName: defaultPlanFileName,
+      timeoutMs: terraformMutationTimeoutMs,
       signal: input.abortSignal
     });
     sequence = await appendTerraformDestroyOutput({

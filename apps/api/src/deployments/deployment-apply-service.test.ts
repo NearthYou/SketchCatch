@@ -37,6 +37,7 @@ const terraformArtifactContent = "terraform { required_version = \">= 1.6.0\" }\
 const terraformArtifactSha256 = createSha256(terraformArtifactContent);
 const planBuffer = Buffer.from("approved binary tfplan");
 const tfplanSha256 = createSha256(planBuffer);
+const expectedTerraformMutationTimeoutMs = 15 * 60 * 1_000;
 
 class FakeDeploymentRepository implements DeploymentRepository {
   project: ProjectRecord | undefined = createProjectRecord();
@@ -401,7 +402,9 @@ test("runDeploymentApply applies the approved tfplan and stores state resources 
         runnerStages.push("init");
         return createRunnerResult("init");
       },
-      runTerraformApply: async () => {
+      runTerraformApply: async (_workdir, options) => {
+        assert.ok(options);
+        assert.equal(options.timeoutMs, expectedTerraformMutationTimeoutMs);
         runnerStages.push("apply");
         return createRunnerResult("apply", {
           stdout: "aws_vpc.main: Creation complete\n"

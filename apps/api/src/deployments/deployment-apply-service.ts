@@ -38,6 +38,7 @@ import {
   runTerraformInit as defaultRunTerraformInit,
   runTerraformOutputJson as defaultRunTerraformOutputJson,
   runTerraformShowStateJson as defaultRunTerraformShowStateJson,
+  terraformMutationTimeoutMs,
   type TerraformRunResult
 } from "./terraform-runner.js";
 import { assertTerraformArtifactIsSafe } from "./terraform-artifact-safety.js";
@@ -247,6 +248,7 @@ export async function runDeploymentApply(
     terraform.apply = await runTerraformApply(workspace.workdir, {
       env: awsCredentials.env,
       planFileName: defaultPlanFileName,
+      timeoutMs: terraformMutationTimeoutMs,
       signal: input.abortSignal
     });
     sequence = await appendTerraformApplyOutput({

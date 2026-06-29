@@ -38,6 +38,7 @@ const terraformArtifactSha256 = createSha256(terraformArtifactContent);
 const planBuffer = Buffer.from("approved binary destroy tfplan");
 const tfplanSha256 = createSha256(planBuffer);
 const stateObjectKey = `deployments/${deploymentId}/state/terraform.tfstate`;
+const expectedTerraformMutationTimeoutMs = 15 * 60 * 1_000;
 
 class FakeDeploymentRepository implements DeploymentRepository {
   project: ProjectRecord | undefined = createProjectRecord();
@@ -318,7 +319,9 @@ test("runDeploymentDestroy applies the approved destroy plan and clears deployme
         runnerStages.push("init");
         return createRunnerResult("init");
       },
-      runTerraformApply: async () => {
+      runTerraformApply: async (_workdir, options) => {
+        assert.ok(options);
+        assert.equal(options.timeoutMs, expectedTerraformMutationTimeoutMs);
         runnerStages.push("destroy");
         return createRunnerResult("apply", {
           stdout: "aws_instance.web: Destruction complete\n"
@@ -358,6 +361,52 @@ test("runDeploymentDestroy applies the approved destroy plan and clears deployme
   assert(
     repository.logs.some((log) =>
       log.message.startsWith("[duration] deployment destroy result save completed in ")
+    )
+  );
+});
+
+test("runDeploymentDestroy reports Terraform apply timeouts without marking duration as completed", async () => {
+  const repository = new FakeDeploymentRepository();
+
+  const result = await runDeploymentDestroy(
+    {
+      deploymentId,
+      accessContext: createAccessContext()
+    },
+    repository,
+    {
+      applyArtifactStorage: new FakeApplyArtifactStorage(),
+      readTerraformArtifactFile: async () => terraformArtifactContent,
+      writeTerraformStateFile: async () => undefined,
+      writePlanFile: async () => undefined,
+      prepareTerraformWorkspace: async () => ({
+        workdir: "C:/tmp/sketchcatch-terraform-destroy",
+        mainFilePath: "C:/tmp/sketchcatch-terraform-destroy/main.tf",
+        cleanup: async () => undefined
+      }),
+      prepareTerraformAwsCredentialEnv: async () => createPreparedCredentials(),
+      runTerraformInit: async () => createRunnerResult("init"),
+      runTerraformApply: async (_workdir, options) => {
+        assert.ok(options);
+        assert.equal(options.timeoutMs, expectedTerraformMutationTimeoutMs);
+
+        return createRunnerResult("apply", {
+          exitCode: 143,
+          stdout:
+            "aws_instance.web: Still destroying... [id=i-1234567890abcdef0, 00m50s elapsed]\n",
+          timedOut: true,
+          durationMs: 60_000
+        });
+      }
+    }
+  );
+
+  assert.equal(result.deployment.status, "FAILED");
+  assert.equal(result.deployment.failureStage, "destroy");
+  assert.equal(result.deployment.errorSummary, "Terraform destroy timed out");
+  assert(
+    repository.logs.some(
+      (log) => log.message === "[duration] terraform apply tfplan timed out after 60.0s"
     )
   );
 });

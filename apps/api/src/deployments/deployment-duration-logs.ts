@@ -12,6 +12,8 @@ export type DeploymentDurationResult<T> = {
   durationMs: number;
 };
 
+type DeploymentDurationStatus = "completed" | "cancelled" | "timed_out";
+
 export async function measureDeploymentDuration<T>(
   operation: () => Promise<T>
 ): Promise<DeploymentDurationResult<T>> {
@@ -31,6 +33,7 @@ export async function appendDeploymentDurationLog(input: {
   stage: DeploymentStage;
   label: string;
   durationMs: number;
+  status?: DeploymentDurationStatus;
   repository: DeploymentRepository;
 }): Promise<number> {
   await appendDeploymentLogs(
@@ -42,7 +45,11 @@ export async function appendDeploymentDurationLog(input: {
           sequence: input.sequence,
           stage: input.stage,
           level: "INFO",
-          message: `[duration] ${input.label} completed in ${formatDuration(input.durationMs)}`,
+          message: formatDurationLogMessage(
+            input.label,
+            input.durationMs,
+            input.status ?? "completed"
+          ),
           relatedResourceId: null
         }
       ]
@@ -100,8 +107,39 @@ export async function appendTerraformDurationLog(input: {
     stage: input.stage,
     label: input.label,
     durationMs: input.result.durationMs,
+    status: getTerraformDurationStatus(input.result),
     repository: input.repository
   });
+}
+
+function getTerraformDurationStatus(result: TerraformRunResult): DeploymentDurationStatus {
+  if (result.timedOut) {
+    return "timed_out";
+  }
+
+  if (result.cancelled) {
+    return "cancelled";
+  }
+
+  return "completed";
+}
+
+function formatDurationLogMessage(
+  label: string,
+  durationMs: number,
+  status: DeploymentDurationStatus
+): string {
+  const duration = formatDuration(durationMs);
+
+  if (status === "timed_out") {
+    return `[duration] ${label} timed out after ${duration}`;
+  }
+
+  if (status === "cancelled") {
+    return `[duration] ${label} cancelled after ${duration}`;
+  }
+
+  return `[duration] ${label} completed in ${duration}`;
 }
 
 export function formatDuration(durationMs: number): string {
