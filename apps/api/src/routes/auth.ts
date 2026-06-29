@@ -6,7 +6,9 @@ import type {
   ApiErrorResponse,
   AuthResponse,
   CurrentUserResponse,
-  LoginLockedErrorResponse
+  LoginLockedErrorResponse,
+  PasswordResetConfirmResponse,
+  PasswordResetRequestResponse
 } from "@sketchcatch/types";
 import { requireActiveUserId } from "../auth/current-user.js";
 import {
@@ -17,6 +19,12 @@ import {
 } from "../auth/login-attempt-policy.js";
 import { hashPassword, verifyPassword } from "../auth/password.js";
 import {
+  buildPasswordResetDebugUrl,
+  createPasswordResetToken,
+  getPasswordResetTokenExpiresAt,
+  shouldExposePasswordResetDebugToken
+} from "../auth/password-reset.js";
+import {
   clearRefreshTokenCookie,
   createAuthSession,
   getRefreshTokenCookie,
@@ -26,7 +34,7 @@ import {
 } from "../auth/session.js";
 import { hashToken } from "../auth/tokens.js";
 import { type Database, type DatabaseClient, getDatabaseClient } from "../db/client.js";
-import { loginAttempts, refreshTokens, users } from "../db/schema.js";
+import { loginAttempts, passwordResetTokens, refreshTokens, users } from "../db/schema.js";
 
 const usernameSchema = z
   .string()
@@ -52,6 +60,20 @@ const loginBodySchema = z.object({
   username: usernameSchema,
   password: z.string().min(1).max(128),
   rememberMe: z.boolean().optional().default(false)
+});
+
+const passwordResetRequestBodySchema = z.object({
+  email: z
+    .string()
+    .trim()
+    .email()
+    .max(255)
+    .transform((value) => value.toLowerCase())
+});
+
+const passwordResetConfirmBodySchema = z.object({
+  resetToken: z.string().trim().min(20).max(512),
+  newPassword: z.string().min(8).max(128)
 });
 
 type AuthRouteOptions = {
@@ -267,6 +289,88 @@ export async function registerAuthRoutes(
     const response: AuthResponse = {
       user: toPublicUser(user),
       session
+    };
+
+    return response;
+  });
+
+  app.post("/auth/password-reset/request", async (request) => {
+    const body = passwordResetRequestBodySchema.parse(request.body);
+    const { db } = getAuthDatabaseClient();
+    const response: PasswordResetRequestResponse = {
+      ok: true
+    };
+
+    const [user] = await db.select().from(users).where(eq(users.email, body.email));
+
+    if (!user || user.deletedAt || !user.passwordHash) {
+      return response;
+    }
+
+    const resetToken = createPasswordResetToken();
+
+    await db.insert(passwordResetTokens).values({
+      id: randomUUID(),
+      userId: user.id,
+      tokenHash: hashToken(resetToken),
+      expiresAt: getPasswordResetTokenExpiresAt(),
+      userAgent: getRequestUserAgent(request),
+      ipAddress: request.ip
+    });
+
+    if (!shouldExposePasswordResetDebugToken()) {
+      return response;
+    }
+
+    return {
+      ...response,
+      debugResetToken: resetToken,
+      debugResetUrl: buildPasswordResetDebugUrl(resetToken)
+    };
+  });
+
+  app.post("/auth/password-reset/confirm", async (request, reply) => {
+    const body = passwordResetConfirmBodySchema.parse(request.body);
+    const { db } = getAuthDatabaseClient();
+    const now = new Date();
+    const [storedToken] = await db
+      .select()
+      .from(passwordResetTokens)
+      .where(eq(passwordResetTokens.tokenHash, hashToken(body.resetToken)));
+
+    if (
+      !storedToken ||
+      storedToken.usedAt ||
+      storedToken.expiresAt.getTime() <= now.getTime()
+    ) {
+      return sendUnauthorized(reply, "비밀번호 재설정 링크가 만료되었거나 이미 사용되었습니다.");
+    }
+
+    const [user] = await db.select().from(users).where(eq(users.id, storedToken.userId));
+
+    if (!user || user.deletedAt) {
+      return sendUnauthorized(reply, "비밀번호 재설정 링크가 만료되었거나 이미 사용되었습니다.");
+    }
+
+    await db
+      .update(users)
+      .set({
+        passwordHash: await hashPassword(body.newPassword),
+        updatedAt: now
+      })
+      .where(eq(users.id, storedToken.userId));
+
+    await db
+      .update(passwordResetTokens)
+      .set({
+        usedAt: now
+      })
+      .where(eq(passwordResetTokens.id, storedToken.id));
+
+    await revokeActiveRefreshTokensForUser(db, storedToken.userId, now);
+
+    const response: PasswordResetConfirmResponse = {
+      ok: true
     };
 
     return response;
@@ -488,6 +592,16 @@ async function recordLoginAttempt(
     failureReason: attempt.failureReason ?? null,
     lockedUntil: attempt.lockedUntil ?? null
   });
+}
+
+function getRequestUserAgent(request: FastifyRequest): string | undefined {
+  const userAgent = request.headers["user-agent"];
+
+  if (Array.isArray(userAgent)) {
+    return userAgent.join(",");
+  }
+
+  return userAgent;
 }
 
 function sendUnauthorized(reply: FastifyReply, message: string): FastifyReply {

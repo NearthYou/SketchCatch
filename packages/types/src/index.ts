@@ -118,6 +118,8 @@ export type PasswordResetRequest = {
 };
 
 export type PasswordResetRequestResponse = {
+  debugResetToken?: string | undefined;
+  debugResetUrl?: string | undefined;
   ok: true;
 };
 

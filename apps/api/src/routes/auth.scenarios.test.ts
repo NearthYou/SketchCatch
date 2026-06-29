@@ -1,11 +1,17 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import type { ApiErrorResponse, AuthResponse, LoginLockedErrorResponse } from "@sketchcatch/types";
+import type {
+  ApiErrorResponse,
+  AuthResponse,
+  LoginLockedErrorResponse,
+  PasswordResetConfirmResponse,
+  PasswordResetRequestResponse
+} from "@sketchcatch/types";
 import { buildApp } from "../app.js";
 import { createAccessToken, hashToken } from "../auth/tokens.js";
 import { hashPassword } from "../auth/password.js";
 import type { Database, DatabaseClient } from "../db/client.js";
-import { loginAttempts, refreshTokens, users } from "../db/schema.js";
+import { loginAttempts, passwordResetTokens, refreshTokens, users } from "../db/schema.js";
 
 process.env.NODE_ENV = "test";
 process.env.AUTH_TOKEN_SECRET = "test-auth-token-secret-with-at-least-32-characters";
@@ -20,9 +26,10 @@ const CSRF_TOKEN = "csrf-token";
 type UserRow = typeof users.$inferSelect;
 type LoginAttemptRow = typeof loginAttempts.$inferSelect;
 type RefreshTokenRow = typeof refreshTokens.$inferSelect;
+type PasswordResetTokenRow = typeof passwordResetTokens.$inferSelect;
 type UpdateCall = {
   table: unknown;
-  values: Partial<UserRow & LoginAttemptRow & RefreshTokenRow>;
+  values: Partial<UserRow & LoginAttemptRow & RefreshTokenRow & PasswordResetTokenRow>;
 };
 
 test("POST /api/auth/signup creates a user and session", async () => {
@@ -279,6 +286,128 @@ test("POST /api/auth/login only counts failures after the latest successful logi
   assertErrorResponse(response.json() as ApiErrorResponse, "unauthorized");
   assert.equal(fakeDb.loginAttemptRows.at(-1)?.success, false);
   assert.equal(fakeDb.loginAttemptRows.at(-1)?.lockedUntil, null);
+
+  await app.close();
+});
+
+test("POST /api/auth/password-reset/request stores a hashed reset token", async () => {
+  const fakeDb = new AuthScenarioFakeDb({
+    selectResults: [[await makeUserWithPassword(PASSWORD)]]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/auth/password-reset/request",
+    payload: {
+      email: "demo@example.com"
+    }
+  });
+
+  assert.equal(response.statusCode, 200);
+  const body = response.json() as PasswordResetRequestResponse;
+  assert.equal(body.ok, true);
+  assert.equal(typeof body.debugResetToken, "string");
+  assert.match(body.debugResetUrl ?? "", /^http:\/\/localhost:3000\/password-reset\/confirm\?/);
+  assert.equal(fakeDb.passwordResetTokenRows.length, 1);
+  assert.equal(fakeDb.passwordResetTokenRows[0]?.tokenHash, hashToken(body.debugResetToken ?? ""));
+  assert.notEqual(fakeDb.passwordResetTokenRows[0]?.tokenHash, body.debugResetToken);
+
+  await app.close();
+});
+
+test("POST /api/auth/password-reset/request does not reveal unknown email addresses", async () => {
+  const fakeDb = new AuthScenarioFakeDb({
+    selectResults: [[]]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/auth/password-reset/request",
+    payload: {
+      email: "unknown@example.com"
+    }
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(response.json() as PasswordResetRequestResponse, { ok: true });
+  assert.equal(fakeDb.passwordResetTokenRows.length, 0);
+
+  await app.close();
+});
+
+test("POST /api/auth/password-reset/confirm changes the password and revokes sessions", async () => {
+  const resetToken = "valid-password-reset-token";
+  const fakeDb = new AuthScenarioFakeDb({
+    selectResults: [
+      [
+        makePasswordResetToken({
+          tokenHash: hashToken(resetToken)
+        })
+      ],
+      [await makeUserWithPassword(PASSWORD)]
+    ]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/auth/password-reset/confirm",
+    payload: {
+      resetToken,
+      newPassword: "new-demo-password-123"
+    }
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(response.json() as PasswordResetConfirmResponse, { ok: true });
+  assert.equal(fakeDb.updateCalls.length, 3);
+  assert.equal(fakeDb.updateCalls[0]?.table, users);
+  assert.equal(typeof fakeDb.updateCalls[0]?.values.passwordHash, "string");
+  assert.notEqual(fakeDb.updateCalls[0]?.values.passwordHash, PASSWORD);
+  assert.equal(fakeDb.updateCalls[1]?.table, passwordResetTokens);
+  assert.ok(fakeDb.updateCalls[1]?.values.usedAt instanceof Date);
+  assert.equal(fakeDb.updateCalls[2]?.table, refreshTokens);
+  assert.ok(fakeDb.updateCalls[2]?.values.revokedAt instanceof Date);
+
+  await app.close();
+});
+
+test("POST /api/auth/password-reset/confirm rejects expired reset tokens", async () => {
+  const resetToken = "expired-password-reset-token";
+  const fakeDb = new AuthScenarioFakeDb({
+    selectResults: [
+      [
+        makePasswordResetToken({
+          expiresAt: new Date("2000-01-01T00:00:00.000Z"),
+          tokenHash: hashToken(resetToken)
+        })
+      ]
+    ]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/auth/password-reset/confirm",
+    payload: {
+      resetToken,
+      newPassword: "new-demo-password-123"
+    }
+  });
+
+  assert.equal(response.statusCode, 401);
+  assertErrorResponse(response.json() as ApiErrorResponse, "unauthorized");
+  assert.equal(fakeDb.updateCalls.length, 0);
 
   await app.close();
 });
@@ -647,11 +776,28 @@ function makeRefreshToken(overrides: Partial<RefreshTokenRow> = {}): RefreshToke
   };
 }
 
+function makePasswordResetToken(
+  overrides: Partial<PasswordResetTokenRow> = {}
+): PasswordResetTokenRow {
+  return {
+    id: "33333333-3333-4333-8333-333333333333",
+    userId: USER_ID,
+    tokenHash: hashToken("password-reset-token"),
+    expiresAt: new Date("2099-01-01T00:00:00.000Z"),
+    usedAt: null,
+    userAgent: null,
+    ipAddress: null,
+    createdAt: new Date("2026-06-24T00:00:00.000Z"),
+    ...overrides
+  };
+}
+
 class AuthScenarioFakeDb {
   selectResults: unknown[][];
   userRows: UserRow[] = [];
   loginAttemptRows: LoginAttemptRow[] = [];
   refreshTokenRows: RefreshTokenRow[] = [];
+  passwordResetTokenRows: PasswordResetTokenRow[] = [];
   updateCalls: UpdateCall[] = [];
   client: DatabaseClient;
 
@@ -674,7 +820,9 @@ class AuthScenarioFakeDb {
         from: () => new SelectQuery(() => this.selectResults.shift() ?? [])
       }),
       insert: (table: unknown) => ({
-        values: (values: Partial<UserRow & LoginAttemptRow & RefreshTokenRow>) => {
+        values: (
+          values: Partial<UserRow & LoginAttemptRow & RefreshTokenRow & PasswordResetTokenRow>
+        ) => {
           const insertedRow = this.insertRow(table, values);
 
           return {
@@ -683,7 +831,9 @@ class AuthScenarioFakeDb {
         }
       }),
       update: (table: unknown) => ({
-        set: (values: Partial<UserRow & LoginAttemptRow & RefreshTokenRow>) => {
+        set: (
+          values: Partial<UserRow & LoginAttemptRow & RefreshTokenRow & PasswordResetTokenRow>
+        ) => {
           this.updateCalls.push({ table, values });
 
           return {
@@ -696,7 +846,7 @@ class AuthScenarioFakeDb {
 
   private insertRow(
     table: unknown,
-    values: Partial<UserRow & LoginAttemptRow & RefreshTokenRow>
+    values: Partial<UserRow & LoginAttemptRow & RefreshTokenRow & PasswordResetTokenRow>
   ): unknown {
     if (table === users) {
       const row = makeUser(values as Partial<UserRow>);
@@ -715,6 +865,13 @@ class AuthScenarioFakeDb {
     if (table === refreshTokens) {
       const row = values as RefreshTokenRow;
       this.refreshTokenRows.push(row);
+
+      return row;
+    }
+
+    if (table === passwordResetTokens) {
+      const row = values as PasswordResetTokenRow;
+      this.passwordResetTokenRows.push(row);
 
       return row;
     }
