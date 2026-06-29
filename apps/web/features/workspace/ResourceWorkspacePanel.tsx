@@ -1,4 +1,4 @@
-﻿import { type KeyboardEvent, useMemo, useState } from "react";
+import { type KeyboardEvent, useEffect, useMemo, useState } from "react";
 import type { DiagramNode } from "@sketchcatch/types";
 import {
   Box,
@@ -170,6 +170,7 @@ function ResourceListPanel({
                   <div className={styles.resourceListValueRow} key={row.key}>
                     <span>{row.label}</span>
                     <InlineResourceValueInput
+                      key={`${row.key}-${formatResourceSummaryValue(row.rawValue)}`}
                       context={context}
                       node={node}
                       parameterKey={row.key}
@@ -336,6 +337,12 @@ function InlineResourceValueInput({
   readonly parameterKey: string;
   readonly value: unknown;
 }) {
+  const [localValue, setLocalValue] = useState(() => String(value ?? ""));
+
+  useEffect(() => {
+    setLocalValue(String(value ?? ""));
+  }, [value]);
+
   if (!node.parameters || !isInlineEditableResourceValue(value)) {
     return <strong title={formatResourceSummaryValue(value)}>{formatResourceSummaryValue(value)}</strong>;
   }
@@ -356,16 +363,31 @@ function InlineResourceValueInput({
     );
   }
 
+  const handleBlur = () => {
+    if (localValue === String(value)) {
+      return;
+    }
+
+    updateInlineParameterValue(context, node, parameterKey, parseInlineResourceValue(localValue, value));
+  };
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    event.stopPropagation();
+
+    if (event.key === "Enter") {
+      event.currentTarget.blur();
+    }
+  };
+
   return (
     <input
       className={styles.resourceListInlineInput}
       onClick={(event) => event.stopPropagation()}
-      onChange={(event) =>
-        updateInlineParameterValue(context, node, parameterKey, parseInlineResourceValue(event.target.value, value))
-      }
+      onBlur={handleBlur}
+      onChange={(event) => setLocalValue(event.target.value)}
       onDoubleClick={(event) => event.stopPropagation()}
-      onKeyDown={(event) => event.stopPropagation()}
-      value={String(value)}
+      onKeyDown={handleKeyDown}
+      value={localValue}
     />
   );
 }
@@ -414,10 +436,10 @@ function duplicateResourceNode(context: DiagramEditorPanelContext, node: Diagram
     zIndex: getNextResourceZIndex(context.nodes),
     parameters: node.parameters
       ? {
-          ...node.parameters,
+          ...structuredClone(node.parameters),
           resourceName: nextResourceName ?? node.parameters.resourceName
         }
-      : node.parameters
+      : undefined
   };
 
   context.applyDiagramJson({
@@ -453,7 +475,7 @@ function createResourceNodeId(baseId: string): string {
     return `${baseId}-copy-${crypto.randomUUID()}`;
   }
 
-  return `${baseId}-copy-${Date.now()}`;
+  return `${baseId}-copy-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
 function getNextResourceZIndex(nodes: readonly DiagramNode[]): number {

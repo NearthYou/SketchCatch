@@ -217,7 +217,7 @@ function parseTerraformBlocks(terraformCode: string): ParseResult {
 }
 
 function splitTerraformLines(terraformCode: string): string[] {
-  return terraformCode.split("\n").map((line) => line.replace(/\r$/, ""));
+  return terraformCode.split(/\r?\n/);
 }
 
 function collectBlockBody(

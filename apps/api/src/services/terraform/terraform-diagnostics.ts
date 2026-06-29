@@ -195,7 +195,7 @@ function checkQuotedReferences(terraformCode: string): TerraformDiagnostic[] {
 }
 
 function splitTerraformLines(terraformCode: string): string[] {
-  return terraformCode.split("\n").map((line) => line.replace(/\r$/, ""));
+  return terraformCode.split(/\r?\n/);
 }
 
 function stripLineComment(lineText: string): string {

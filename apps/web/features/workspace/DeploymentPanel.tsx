@@ -817,6 +817,15 @@ function getDeploymentActionHint(deployment: Deployment): string {
 }
 
 function mergeDeploymentLog(logs: DeploymentLog[], log: DeploymentLog): DeploymentLog[] {
+  if (logs.length === 0) {
+    return [log];
+  }
+
+  const lastLog = logs[logs.length - 1];
+  if (lastLog && log.sequence > lastLog.sequence) {
+    return [...logs, log];
+  }
+
   if (
     logs.some(
       (currentLog) => currentLog.id === log.id || currentLog.sequence === log.sequence

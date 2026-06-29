@@ -43,7 +43,6 @@ type ThumbnailEdge = {
 const THUMBNAIL_WIDTH = 520;
 const THUMBNAIL_HEIGHT = 296;
 const THUMBNAIL_PADDING = 24;
-const draftThumbnailCache = new Map<string, Promise<DraftThumbnailResult>>();
 
 export function ProjectArchitectureThumbnail({
   projectId,
@@ -173,13 +172,7 @@ export function ProjectArchitectureThumbnail({
 }
 
 async function loadDraftThumbnail(projectId: string): Promise<DraftThumbnailResult> {
-  const cached = draftThumbnailCache.get(projectId);
-
-  if (cached) {
-    return cached;
-  }
-
-  const request = getProjectDraft(projectId)
+  return getProjectDraft(projectId)
     .then((response) => ({
       diagram: response.draft?.diagramJson ?? null,
       state: response.draft?.diagramJson.nodes.length ? "ready" : "empty"
@@ -188,9 +181,6 @@ async function loadDraftThumbnail(projectId: string): Promise<DraftThumbnailResu
       diagram: null,
       state: "error"
     }) satisfies DraftThumbnailResult);
-
-  draftThumbnailCache.set(projectId, request);
-  return request;
 }
 
 function buildThumbnailModel(diagram: DiagramJson) {

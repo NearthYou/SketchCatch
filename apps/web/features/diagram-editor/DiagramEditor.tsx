@@ -1183,23 +1183,23 @@ function DiagramEditorInner({
             <span className={styles.toolbarTitle}>{projectName}</span>
           </div>
 
-          <div className={styles.toolbarGroup} aria-label="?몄쭛 ?꾧뎄">
+          <div className={styles.toolbarGroup} aria-label="편집 도구">
             <button
-              aria-label="?좏깮 紐⑤뱶"
+              aria-label="선택 모드"
               aria-pressed={interactionMode === "select"}
               className={interactionMode === "select" ? styles.iconButtonSelected : styles.iconButton}
               onClick={() => setInteractionMode("select")}
-              title="?좏깮 紐⑤뱶"
+              title="선택 모드"
               type="button"
             >
               <MousePointer2 aria-hidden="true" size={16} />
             </button>
             <button
-              aria-label="罹붾쾭???대룞"
+              aria-label="캔버스 이동"
               aria-pressed={interactionMode === "pan"}
               className={interactionMode === "pan" ? styles.iconButtonSelected : styles.iconButton}
               onClick={() => setInteractionMode("pan")}
-              title="罹붾쾭???대룞"
+              title="캔버스 이동"
               type="button"
             >
               <Move aria-hidden="true" size={16} />
