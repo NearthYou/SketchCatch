@@ -33,7 +33,6 @@ import {
   MousePointer2,
   Move,
   Redo2,
-  Save,
   Undo2,
   UserRound,
   ZoomIn,
@@ -98,11 +97,9 @@ function DiagramEditorInner({
   initialDiagram,
   leftPanel,
   onDiagramChange,
-  onSave,
   myPageHref = "/mypage",
   projectName = "Project workspace",
   rightPanel,
-  saveDisabled = false,
   saveStatus = "로컬 편집 중"
 }: DiagramEditorProps) {
   const reactFlow = useReactFlow<DiagramFlowNode, DiagramFlowEdge>();

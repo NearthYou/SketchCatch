@@ -672,6 +672,19 @@ export type DiagramNodeStyle = {
   borderColor?: string | undefined;
 };
 
+export type AwsRegionCode =
+  | "ap-northeast-2"
+  | "ap-northeast-1"
+  | "ap-southeast-1"
+  | "us-east-1"
+  | "us-west-2"
+  | "eu-west-1"
+  | "eu-central-1";
+
+export type DiagramNodeMetadata = {
+  awsRegion?: AwsRegionCode | undefined;
+};
+
 export type DiagramNodeParameters = {
   terraformBlockType?: TerraformBlockType | undefined;
   resourceType: string;
@@ -692,6 +705,7 @@ export type DiagramNode = {
   locked: boolean;
   zIndex: number;
   style?: DiagramNodeStyle | undefined;
+  metadata?: DiagramNodeMetadata | undefined;
   parameters?: DiagramNodeParameters | undefined;
 };
 
