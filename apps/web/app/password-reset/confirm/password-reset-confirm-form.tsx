@@ -3,7 +3,13 @@
 import { Eye, EyeOff } from "lucide-react";
 import Link from "next/link";
 import { type FormEvent, useState } from "react";
-import type { PasswordResetConfirmRequest } from "@sketchcatch/types";
+import {
+  getPasswordPolicyErrorMessage,
+  PASSWORD_MAX_LENGTH,
+  PASSWORD_MIN_LENGTH,
+  PASSWORD_POLICY_HELP_TEXT,
+  type PasswordResetConfirmRequest
+} from "@sketchcatch/types";
 import { confirmPasswordReset } from "../../../lib/auth-api";
 import { getApiErrorMessage } from "../../../lib/api-client";
 
@@ -37,8 +43,10 @@ export function PasswordResetConfirmForm({ initialToken }: PasswordResetConfirmF
       return;
     }
 
-    if (password.length < 8) {
-      setErrorMessage("비밀번호는 8자 이상 입력해주세요.");
+    const passwordPolicyError = getPasswordPolicyErrorMessage(password);
+
+    if (passwordPolicyError) {
+      setErrorMessage(passwordPolicyError);
       return;
     }
 
@@ -81,7 +89,8 @@ export function PasswordResetConfirmForm({ initialToken }: PasswordResetConfirmF
             autoComplete="new-password"
             disabled={isSubmitting || Boolean(successMessage)}
             id="password-reset-new-password"
-            minLength={8}
+            maxLength={PASSWORD_MAX_LENGTH}
+            minLength={PASSWORD_MIN_LENGTH}
             name="newPassword"
             placeholder="Password"
             required
@@ -104,7 +113,7 @@ export function PasswordResetConfirmForm({ initialToken }: PasswordResetConfirmF
           </button>
         </div>
         <span className="authHelpText" id="password-reset-new-password-help">
-          8자 이상 입력해주세요.
+          {PASSWORD_POLICY_HELP_TEXT}
         </span>
       </div>
       <div className="authField">
@@ -114,7 +123,8 @@ export function PasswordResetConfirmForm({ initialToken }: PasswordResetConfirmF
             autoComplete="new-password"
             disabled={isSubmitting || Boolean(successMessage)}
             id="password-reset-confirm-password"
-            minLength={8}
+            maxLength={PASSWORD_MAX_LENGTH}
+            minLength={PASSWORD_MIN_LENGTH}
             name="passwordConfirm"
             placeholder="Password"
             required

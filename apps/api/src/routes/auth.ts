@@ -2,13 +2,16 @@ import { randomUUID } from "node:crypto";
 import { and, count, desc, eq, gt, gte, isNull } from "drizzle-orm";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
-import type {
-  ApiErrorResponse,
-  AuthResponse,
-  CurrentUserResponse,
-  LoginLockedErrorResponse,
-  PasswordResetConfirmResponse,
-  PasswordResetRequestResponse
+import {
+  isPasswordPolicySatisfied,
+  PASSWORD_MAX_LENGTH,
+  PASSWORD_POLICY_ERROR_MESSAGE,
+  type ApiErrorResponse,
+  type AuthResponse,
+  type CurrentUserResponse,
+  type LoginLockedErrorResponse,
+  type PasswordResetConfirmResponse,
+  type PasswordResetRequestResponse
 } from "@sketchcatch/types";
 import { requireActiveUserId } from "../auth/current-user.js";
 import {
@@ -44,6 +47,13 @@ const usernameSchema = z
   .regex(/^[A-Za-z0-9_-]+$/)
   .transform((value) => value.toLowerCase());
 
+const passwordPolicySchema = z
+  .string()
+  .max(PASSWORD_MAX_LENGTH, PASSWORD_POLICY_ERROR_MESSAGE)
+  .refine(isPasswordPolicySatisfied, {
+    message: PASSWORD_POLICY_ERROR_MESSAGE
+  });
+
 const signupBodySchema = z.object({
   username: usernameSchema,
   email: z
@@ -53,12 +63,12 @@ const signupBodySchema = z.object({
     .max(255)
     .transform((value) => value.toLowerCase()),
   nickname: z.string().trim().min(1).max(40),
-  password: z.string().min(8).max(128)
+  password: passwordPolicySchema
 });
 
 const loginBodySchema = z.object({
   username: usernameSchema,
-  password: z.string().min(1).max(128),
+  password: z.string().min(1).max(PASSWORD_MAX_LENGTH),
   rememberMe: z.boolean().optional().default(false)
 });
 
@@ -73,7 +83,7 @@ const passwordResetRequestBodySchema = z.object({
 
 const passwordResetConfirmBodySchema = z.object({
   resetToken: z.string().trim().min(20).max(512),
-  newPassword: z.string().min(8).max(128)
+  newPassword: passwordPolicySchema
 });
 
 type AuthRouteOptions = {

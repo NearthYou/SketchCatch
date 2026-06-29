@@ -3,7 +3,13 @@
 import { Eye, EyeOff } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useEffect, useState } from "react";
-import type { SignupRequest } from "@sketchcatch/types";
+import {
+  getPasswordPolicyErrorMessage,
+  PASSWORD_MAX_LENGTH,
+  PASSWORD_MIN_LENGTH,
+  PASSWORD_POLICY_HELP_TEXT,
+  type SignupRequest
+} from "@sketchcatch/types";
 import { useAuth } from "../../components/auth/auth-provider";
 import { getApiErrorMessage } from "../../lib/api-client";
 
@@ -37,6 +43,13 @@ export function SignupForm() {
 
     if (!payload.username || !payload.nickname || !payload.email || !payload.password) {
       setErrorMessage("회원가입 정보를 모두 입력해주세요.");
+      return;
+    }
+
+    const passwordPolicyError = getPasswordPolicyErrorMessage(password);
+
+    if (passwordPolicyError) {
+      setErrorMessage(passwordPolicyError);
       return;
     }
 
@@ -100,7 +113,8 @@ export function SignupForm() {
             autoComplete="new-password"
             disabled={isSubmitting}
             id="signup-password"
-            minLength={8}
+            maxLength={PASSWORD_MAX_LENGTH}
+            minLength={PASSWORD_MIN_LENGTH}
             name="password"
             placeholder="Password"
             required
@@ -123,7 +137,7 @@ export function SignupForm() {
           </button>
         </div>
         <span className="authHelpText" id="signup-password-help">
-          8자 이상 입력해주세요.
+          {PASSWORD_POLICY_HELP_TEXT}
         </span>
       </div>
       <div className="authField">
@@ -133,7 +147,8 @@ export function SignupForm() {
             autoComplete="new-password"
             disabled={isSubmitting}
             id="signup-password-confirm"
-            minLength={8}
+            maxLength={PASSWORD_MAX_LENGTH}
+            minLength={PASSWORD_MIN_LENGTH}
             name="passwordConfirm"
             placeholder="Password"
             required

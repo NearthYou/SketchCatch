@@ -99,6 +99,30 @@ test("POST /api/auth/signup returns 409 for duplicate email", async () => {
   await app.close();
 });
 
+test("POST /api/auth/signup rejects passwords without three character categories", async () => {
+  const fakeDb = new AuthScenarioFakeDb({
+    selectResults: [[], []]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/auth/signup",
+    payload: {
+      ...signupPayload(),
+      password: "password123"
+    }
+  });
+
+  assert.equal(response.statusCode, 400);
+  assert.equal(fakeDb.userRows.length, 0);
+  assert.equal(fakeDb.refreshTokenRows.length, 0);
+
+  await app.close();
+});
+
 test("POST /api/auth/login returns a browser-session cookie for valid credentials by default", async () => {
   const user = await makeUserWithPassword(PASSWORD);
   const fakeDb = new AuthScenarioFakeDb({
@@ -376,6 +400,37 @@ test("POST /api/auth/password-reset/confirm changes the password and revokes ses
   assert.ok(fakeDb.updateCalls[1]?.values.usedAt instanceof Date);
   assert.equal(fakeDb.updateCalls[2]?.table, refreshTokens);
   assert.ok(fakeDb.updateCalls[2]?.values.revokedAt instanceof Date);
+
+  await app.close();
+});
+
+test("POST /api/auth/password-reset/confirm rejects passwords without three character categories", async () => {
+  const resetToken = "valid-password-reset-token";
+  const fakeDb = new AuthScenarioFakeDb({
+    selectResults: [
+      [
+        makePasswordResetToken({
+          tokenHash: hashToken(resetToken)
+        })
+      ],
+      [await makeUserWithPassword(PASSWORD)]
+    ]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/auth/password-reset/confirm",
+    payload: {
+      resetToken,
+      newPassword: "password123"
+    }
+  });
+
+  assert.equal(response.statusCode, 400);
+  assert.equal(fakeDb.updateCalls.length, 0);
 
   await app.close();
 });
