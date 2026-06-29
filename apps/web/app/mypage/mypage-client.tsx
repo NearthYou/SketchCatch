@@ -162,7 +162,7 @@ export function MyPageClient() {
         {visibleProjects.length === 0 ? (
           <ProjectEmptyState />
         ) : (
-          <div className="dashboardCardGrid">
+          <div className="dashboardCardGrid dashboardCardGridThree">
             {visibleProjects.map((project) => (
               <ApiProjectCard
                 isDeleting={deletingProjectId === project.id}
