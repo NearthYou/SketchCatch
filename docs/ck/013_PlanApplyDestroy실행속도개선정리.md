@@ -399,6 +399,8 @@ Destroy Apply에서 duration log를 붙인 곳:
 | 사용자/운영자 가시성 | Deployment log에 `[duration] ... completed in ...` 저장 |
 | 준비 구간 병렬화 | 독립 DB/S3/workspace 작업을 `Promise.all`로 병렬 실행 |
 | 불필요한 메모리 복사 제거 | `Buffer.from(planBuffer)` 제거 |
+| Terraform lock 파일 재사용 | init이 만든 `.terraform.lock.hcl`을 S3에 저장하고 다음 plan/apply/destroy workspace에 복원 |
+| Provider warmup 버전 정렬 | warmup Terraform도 `hashicorp/aws` `~> 5.0`을 사용해 실제 artifact와 같은 provider major version을 cache |
 
 ## 6. 수치 개선 요약
 
@@ -457,6 +459,64 @@ Destroy Apply: init, apply tfplan
 ```
 
 하지만 Terraform apply가 실제 AWS 리소스를 만드는 데 20초 걸린다면, 전체 체감 개선은 20초 중 일부 준비 시간만 줄어드는 수준이다.
+
+### 6.3 Terraform init 반복 비용 개선
+
+추가로 실제 실행 로그에서 `terraform init` 병목이 분명하게 확인됐다.
+
+수정 전 로그에서는 모든 단계가 새 작업공간에서 provider version을 다시 결정하고 AWS provider를 다시 설치했다.
+
+```text
+Finding hashicorp/aws versions matching "~> 5.0"...
+Installing hashicorp/aws v5.100.0...
+Terraform has created a lock file .terraform.lock.hcl
+```
+
+첨부 로그 기준 수정 전 `terraform init` 시간은 아래와 같았다.
+
+| 흐름 | 수정 전 init 시간 |
+| --- | ---: |
+| Plan | 18.0s |
+| Apply | 17.3s |
+| Destroy Plan | 18.8s |
+| Destroy Apply | 20.1s |
+
+원인은 두 가지였다.
+
+1. API가 Deployment마다 임시 workspace를 새로 만들고 cleanup하므로 `.terraform.lock.hcl`이 다음 단계로 이어지지 않았다.
+2. Provider cache warmup Terraform 파일에는 `hashicorp/aws` source만 있고 `~> 5.0` version 제약이 없어, 실제 생성 Terraform과 같은 provider 선택 경로를 보장하지 못했다.
+
+그래서 이번 수정에서는 `terraform init` 성공 직후 workspace의 `.terraform.lock.hcl`을 S3에 저장하고, 다음 plan/apply/destroy 실행 전에 같은 Deployment scope의 lock 파일을 workspace에 복원한다.
+
+S3 object key는 아래처럼 Deployment 단위로 고정한다.
+
+```text
+deployments/{deploymentId}/terraform/.terraform.lock.hcl
+```
+
+그리고 `provider-warmup.tf`에도 실제 Terraform artifact와 같은 AWS provider version 제약을 넣었다.
+
+```hcl
+terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+  }
+}
+```
+
+이 수정 후 확인할 기준은 아래 구간이 매 단계 반복되지 않는 것이다.
+
+```text
+Installing hashicorp/aws v5.100.0...
+Terraform has created a lock file .terraform.lock.hcl
+```
+
+위 구간이 매 단계 반복되지 않고, provider cache와 lock file을 사용해 init 시간이 줄어드는지 확인한다.
+
+다만 이 문서 작성 시점에는 같은 AWS 환경에서 수정 후 재실측을 아직 하지 않았으므로, 실제 개선 수치는 다음 live Deployment 실행의 `[duration] terraform init completed in ...` 로그로 확정해야 한다.
 
 ## 7. 검증 결과
 
@@ -558,6 +618,23 @@ terraform apply 성공
 ```
 
 이 순서를 무리하게 섞으면 속도는 빨라질 수 있어도 안전성이 깨진다.
+
+### 8.6 Terraform lock/cache 최적화는 첫 실행과 AWS 작업 시간을 줄이지 못한다
+
+`.terraform.lock.hcl` 저장/복원과 `TF_PLUGIN_CACHE_DIR` provider cache는 반복 `terraform init` 비용을 줄이기 위한 최적화다.
+
+따라서 아래 시간은 줄이지 못한다.
+
+```text
+첫 Deployment에서 provider를 처음 내려받는 시간
+terraform plan의 AWS refresh/API 조회 시간
+terraform apply tfplan의 실제 리소스 생성/삭제 시간
+terraform show -json의 state parsing 시간
+```
+
+또한 서버의 `TF_PLUGIN_CACHE_DIR`가 컨테이너 재시작 뒤에도 유지되는 volume으로 mount되어 있지 않거나, API 프로세스가 cache directory에 쓸 권한이 없으면 효과가 작아진다.
+
+Provider version 제약을 바꾸거나 Terraform artifact의 provider 구성이 바뀌는 경우에도 lock/cache 재사용 효과는 줄어든다.
 
 ## 9. 앞으로 실제 수치를 쌓는 방법
 
