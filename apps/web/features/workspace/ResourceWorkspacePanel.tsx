@@ -1,17 +1,23 @@
-import { type KeyboardEvent, useEffect, useMemo, useState } from "react";
+import { type KeyboardEvent, useMemo, useState } from "react";
 import type { DiagramNode } from "@sketchcatch/types";
 import {
+  ArrowLeft,
   Box,
   CopyPlus,
   Edit3,
-  ListTree,
   Maximize2,
   MoreHorizontal,
   Minimize2,
   Trash2
 } from "lucide-react";
 import type { DiagramEditorPanelContext } from "../diagram-editor";
-import { ParameterInputPanel } from "../parameter-input";
+import { ParameterInputPanel, terraformParameterCatalog } from "../parameter-input";
+import { getResourceCardKeyboardActivation } from "./resource-card-interaction";
+import { buildResourceListItems } from "./resource-list-summary";
+import {
+  getResourceWorkspaceToolbarState,
+  getVisibleResourceWorkspaceView
+} from "./resource-workspace-view";
 import type { ResourceWorkspaceView } from "./workspace-right-panel.types";
 import styles from "./workspace.module.css";
 
@@ -26,48 +32,46 @@ export function ResourceWorkspacePanel({
   readonly onViewChange: (view: ResourceWorkspaceView) => void;
   readonly view: ResourceWorkspaceView;
 }) {
-  const resourceNodes = useMemo(
-    () => context.nodes.filter((node) => node.kind === "resource" || node.parameters?.resourceType),
+  const resourceListItems = useMemo(
+    () => buildResourceListItems(context.nodes, terraformParameterCatalog),
     [context.nodes]
   );
+  const visibleView = getVisibleResourceWorkspaceView(view, context.selectedNodeId);
+  const toolbarState = getResourceWorkspaceToolbarState(visibleView);
 
   return (
     <div className={styles.resourceWorkspacePanel}>
       <div className={styles.resourceSectionToolbar}>
-        <div className={styles.resourceSectionTabs} aria-label="Resource sections">
-          <button
-            aria-pressed={view === "settings"}
-            className={
-              view === "settings"
-                ? styles.resourceSectionButtonActive
-                : styles.resourceSectionButton
-            }
-            onClick={() => onViewChange("settings")}
-            title="Resource settings"
-            type="button"
-          >
-            <Box size={18} aria-hidden="true" />
-          </button>
-          <button
-            aria-pressed={view === "list"}
-            className={
-              view === "list"
-                ? styles.resourceSectionButtonActive
-                : styles.resourceSectionButton
-            }
-            onClick={() => onViewChange("list")}
-            title="Resource list"
-            type="button"
-          >
-            <ListTree size={18} aria-hidden="true" />
-          </button>
+        <div className={styles.resourceSectionTabs} aria-label="Resource navigation">
+          {toolbarState.action === "back-to-list" ? (
+            <button
+              aria-label="Back to resource list"
+              className={styles.resourceSectionButton}
+              onClick={() => onViewChange("list")}
+              title="Back to resource list"
+              type="button"
+            >
+              <ArrowLeft size={18} aria-hidden="true" />
+            </button>
+          ) : (
+            <button
+              aria-label="Resource list"
+              aria-pressed={true}
+              className={styles.resourceSectionButtonActive}
+              onClick={() => onViewChange("list")}
+              title="Resource list"
+              type="button"
+            >
+              <Box size={18} aria-hidden="true" />
+            </button>
+          )}
         </div>
       </div>
 
-      {view === "settings" ? (
+      {visibleView === "settings" ? (
         <ParameterInputPanel {...context} />
       ) : (
-        <ResourceListPanel context={context} nodes={resourceNodes} onViewChange={onViewChange} />
+        <ResourceListPanel context={context} items={resourceListItems} onViewChange={onViewChange} />
       )}
     </div>
   );
@@ -75,17 +79,17 @@ export function ResourceWorkspacePanel({
 
 function ResourceListPanel({
   context,
-  nodes,
+  items,
   onViewChange
 }: {
   readonly context: DiagramEditorPanelContext;
-  readonly nodes: readonly DiagramNode[];
+  readonly items: ReturnType<typeof buildResourceListItems>;
   readonly onViewChange: (view: ResourceWorkspaceView) => void;
 }) {
   const [expandedNodeIds, setExpandedNodeIds] = useState<ReadonlySet<string>>(() => new Set());
   const [openMenuNodeId, setOpenMenuNodeId] = useState<string | null>(null);
 
-  if (nodes.length === 0) {
+  if (items.length === 0) {
     return (
       <div className={styles.resourceListEmpty}>
         <strong>No resources on canvas</strong>
@@ -96,10 +100,11 @@ function ResourceListPanel({
 
   return (
     <div className={styles.resourceListPanel}>
-      {nodes.map((node) => {
-        const summaryRows = getResourceSummaryRows(node);
-        const isActive = node.id === context.selectedNodeId;
-        const isExpanded = expandedNodeIds.has(node.id);
+      {items.map((item) => {
+        const { node } = item;
+        const summaryRows = item.rows;
+        const isActive = item.nodeId === context.selectedNodeId;
+        const isExpanded = expandedNodeIds.has(item.nodeId);
         const visibleSummaryRows = isExpanded
           ? summaryRows
           : summaryRows.slice(0, RESOURCE_SUMMARY_COLLAPSED_LIMIT);
@@ -108,10 +113,10 @@ function ResourceListPanel({
         return (
           <article
             className={isActive ? styles.resourceListItemActive : styles.resourceListItem}
-            key={node.id}
-            onClick={() => focusNode(context, node.id)}
-            onDoubleClick={() => openResourceConfig(context, node.id, onViewChange)}
-            onKeyDown={(event) => handleResourceCardKeyDown(event, context, node.id)}
+            key={item.nodeId}
+            onClick={() => selectNode(context, item.nodeId)}
+            onDoubleClick={() => openResourceConfig(context, item.nodeId, onViewChange)}
+            onKeyDown={(event) => handleResourceCardKeyDown(event, context, item.nodeId, onViewChange)}
             tabIndex={0}
           >
             <div className={styles.resourceListHeader}>
@@ -120,42 +125,46 @@ function ResourceListPanel({
                   <Box size={16} aria-hidden="true" />
                 </span>
                 <span className={styles.resourceListServiceIcon}>
-                  {node.iconUrl ? (
-                    <img alt="" draggable={false} src={node.iconUrl} />
+                  {item.iconUrl ? (
+                    <img alt="" draggable={false} src={item.iconUrl} />
                   ) : (
                     <Box size={15} aria-hidden="true" />
                   )}
                 </span>
-                <strong>{getNodeDisplayName(node)}</strong>
+                <strong>{item.displayName}</strong>
               </span>
               <button
-                aria-expanded={openMenuNodeId === node.id}
+                aria-expanded={openMenuNodeId === item.nodeId}
                 aria-haspopup="menu"
-                aria-label={`${getNodeDisplayName(node)} actions`}
+                aria-label={`${item.displayName} actions`}
                 className={styles.resourceListMoreButton}
                 onClick={(event) => {
                   event.stopPropagation();
-                  focusNode(context, node.id);
-                  setOpenMenuNodeId((currentNodeId) => (currentNodeId === node.id ? null : node.id));
+                  selectNode(context, item.nodeId);
+                  setOpenMenuNodeId((currentNodeId) =>
+                    currentNodeId === item.nodeId ? null : item.nodeId
+                  );
                 }}
                 onDoubleClick={(event) => event.stopPropagation()}
                 type="button"
               >
                 <MoreHorizontal size={18} aria-hidden="true" />
               </button>
-              {openMenuNodeId === node.id ? (
+              {openMenuNodeId === item.nodeId ? (
                 <ResourceCardMenu
                   context={context}
                   isExpanded={isExpanded}
                   node={node}
                   onClose={() => setOpenMenuNodeId(null)}
                   onEditConfig={() => {
-                    openResourceConfig(context, node.id, onViewChange);
+                    openResourceConfig(context, item.nodeId, onViewChange);
                     setOpenMenuNodeId(null);
                   }}
                   onToggleSize={() => {
                     setExpandedNodeIds((currentNodeIds) =>
-                      isExpanded ? removeSetValue(currentNodeIds, node.id) : addSetValue(currentNodeIds, node.id)
+                      isExpanded
+                        ? removeSetValue(currentNodeIds, item.nodeId)
+                        : addSetValue(currentNodeIds, item.nodeId)
                     );
                     setOpenMenuNodeId(null);
                   }}
@@ -163,19 +172,15 @@ function ResourceListPanel({
                 />
               ) : null}
             </div>
-            <div className={styles.resourceListAddress}>{getNodeTerraformAddress(node)}</div>
+            <div className={styles.resourceListAddress}>
+              {item.terraformAddress ?? item.typeLabel}
+            </div>
             {summaryRows.length > 0 ? (
               <div className={styles.resourceListValues}>
                 {visibleSummaryRows.map((row) => (
                   <div className={styles.resourceListValueRow} key={row.key}>
                     <span>{row.label}</span>
-                    <InlineResourceValueInput
-                      key={`${row.key}-${formatResourceSummaryValue(row.rawValue)}`}
-                      context={context}
-                      node={node}
-                      parameterKey={row.key}
-                      value={row.rawValue}
-                    />
+                    <strong title={row.value}>{row.value}</strong>
                   </div>
                 ))}
                 {hasHiddenSummaryRows ? (
@@ -184,19 +189,21 @@ function ResourceListPanel({
                     onClick={(event) => {
                       event.stopPropagation();
                       setExpandedNodeIds((currentNodeIds) =>
-                        isExpanded ? removeSetValue(currentNodeIds, node.id) : addSetValue(currentNodeIds, node.id)
+                        isExpanded
+                          ? removeSetValue(currentNodeIds, item.nodeId)
+                          : addSetValue(currentNodeIds, item.nodeId)
                       );
                     }}
                     onDoubleClick={(event) => event.stopPropagation()}
                     type="button"
                   >
                     <span aria-hidden="true">{isExpanded ? "-" : "+"}</span>
-                    {isExpanded ? "Minimize configuration" : "Show full configuration"}
+                    {isExpanded ? "Minimize details" : "Show all details"}
                   </button>
                 ) : null}
               </div>
             ) : (
-              <div className={styles.resourceListNoValues}>No configured parameters</div>
+              <div className={styles.resourceListNoValues}>No key parameters</div>
             )}
           </article>
         );
@@ -208,14 +215,23 @@ function ResourceListPanel({
 function handleResourceCardKeyDown(
   event: KeyboardEvent<HTMLElement>,
   context: DiagramEditorPanelContext,
-  nodeId: string
+  nodeId: string,
+  onViewChange: (view: ResourceWorkspaceView) => void
 ): void {
-  if (event.key !== "Enter" && event.key !== " ") {
+  const activation = getResourceCardKeyboardActivation(event.key);
+
+  if (activation === "ignore") {
     return;
   }
 
   event.preventDefault();
-  focusNode(context, nodeId);
+
+  if (activation === "open-settings") {
+    openResourceConfig(context, nodeId, onViewChange);
+    return;
+  }
+
+  selectNode(context, nodeId);
 }
 
 function ResourceCardMenu({
@@ -249,7 +265,6 @@ function ResourceCardMenu({
       <button
         className={styles.resourceCardMenuItem}
         onClick={() => {
-          focusNode(context, node.id);
           onEditConfig();
         }}
         role="menuitem"
@@ -312,9 +327,8 @@ function ResourceCardMenu({
   );
 }
 
-function focusNode(context: DiagramEditorPanelContext, nodeId: string): void {
-  context.focusResourceNode(nodeId);
-  context.setRightPanelOpen(true);
+function selectNode(context: DiagramEditorPanelContext, nodeId: string): void {
+  context.selectResourceNode(nodeId);
 }
 
 function openResourceConfig(
@@ -322,93 +336,8 @@ function openResourceConfig(
   nodeId: string,
   onViewChange: (view: ResourceWorkspaceView) => void
 ): void {
-  focusNode(context, nodeId);
+  selectNode(context, nodeId);
   onViewChange("settings");
-}
-
-function InlineResourceValueInput({
-  context,
-  node,
-  parameterKey,
-  value
-}: {
-  readonly context: DiagramEditorPanelContext;
-  readonly node: DiagramNode;
-  readonly parameterKey: string;
-  readonly value: unknown;
-}) {
-  const [localValue, setLocalValue] = useState(() => String(value ?? ""));
-
-  useEffect(() => {
-    setLocalValue(String(value ?? ""));
-  }, [value]);
-
-  if (!node.parameters || !isInlineEditableResourceValue(value)) {
-    return <strong title={formatResourceSummaryValue(value)}>{formatResourceSummaryValue(value)}</strong>;
-  }
-
-  if (typeof value === "boolean") {
-    return (
-      <select
-        className={styles.resourceListInlineSelect}
-        onClick={(event) => event.stopPropagation()}
-        onChange={(event) => updateInlineParameterValue(context, node, parameterKey, event.target.value === "true")}
-        onDoubleClick={(event) => event.stopPropagation()}
-        onKeyDown={(event) => event.stopPropagation()}
-        value={String(value)}
-      >
-        <option value="true">true</option>
-        <option value="false">false</option>
-      </select>
-    );
-  }
-
-  const handleBlur = () => {
-    if (localValue === String(value)) {
-      return;
-    }
-
-    updateInlineParameterValue(context, node, parameterKey, parseInlineResourceValue(localValue, value));
-  };
-
-  const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    event.stopPropagation();
-
-    if (event.key === "Enter") {
-      event.currentTarget.blur();
-    }
-  };
-
-  return (
-    <input
-      className={styles.resourceListInlineInput}
-      onClick={(event) => event.stopPropagation()}
-      onBlur={handleBlur}
-      onChange={(event) => setLocalValue(event.target.value)}
-      onDoubleClick={(event) => event.stopPropagation()}
-      onKeyDown={handleKeyDown}
-      value={localValue}
-    />
-  );
-}
-
-function updateInlineParameterValue(
-  context: DiagramEditorPanelContext,
-  node: DiagramNode,
-  parameterKey: string,
-  value: string | number | boolean
-): void {
-  if (!node.parameters) {
-    return;
-  }
-
-  context.updateNodeParameters(node.id, {
-    ...node.parameters,
-    values: {
-      ...node.parameters.values,
-      [parameterKey]: value
-    }
-  });
 }
 
 function switchTerraformBlockType(context: DiagramEditorPanelContext, node: DiagramNode): void {
@@ -484,86 +413,4 @@ function getNextResourceZIndex(nodes: readonly DiagramNode[]): number {
 
 function getNodeDisplayName(node: DiagramNode): string {
   return node.label || node.parameters?.resourceName || node.parameters?.resourceType || node.type;
-}
-
-function getNodeTerraformAddress(node: DiagramNode): string {
-  const blockType = node.parameters?.terraformBlockType === "data" ? "data" : "resource";
-  const resourceType = node.parameters?.resourceType;
-  const resourceName = node.parameters?.resourceName;
-
-  if (!resourceType || !resourceName) {
-    return node.type;
-  }
-
-  return `${blockType}.${resourceType}.${resourceName}`;
-}
-
-function getResourceSummaryRows(node: DiagramNode): Array<{ key: string; label: string; rawValue: unknown }> {
-  const values = node.parameters?.values ?? {};
-
-  return Object.entries(values)
-    .filter(([, value]) => !isEmptyResourceValue(value))
-    .map(([key, value]) => ({
-      key,
-      label: toResourceSummaryLabel(key),
-      rawValue: value
-    }));
-}
-
-function isEmptyResourceValue(value: unknown): boolean {
-  if (value === null || value === undefined || value === "") {
-    return true;
-  }
-
-  if (Array.isArray(value)) {
-    return value.length === 0 || value.every(isEmptyResourceValue);
-  }
-
-  if (typeof value === "object") {
-    return Object.keys(value).length === 0;
-  }
-
-  return false;
-}
-
-function toResourceSummaryLabel(key: string): string {
-  return key
-    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
-    .replace(/_/g, " ")
-    .replace(/^./, (firstLetter) => firstLetter.toUpperCase());
-}
-
-function formatResourceSummaryValue(value: unknown): string {
-  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
-    return String(value);
-  }
-
-  if (Array.isArray(value)) {
-    return value
-      .filter((item) => !isEmptyResourceValue(item))
-      .map(formatResourceSummaryValue)
-      .join(", ");
-  }
-
-  if (typeof value === "object" && value !== null) {
-    return Object.values(value)
-      .filter((item) => !isEmptyResourceValue(item))
-      .map(formatResourceSummaryValue)
-      .join(", ");
-  }
-
-  return "";
-}
-
-function isInlineEditableResourceValue(value: unknown): value is string | number | boolean {
-  return typeof value === "string" || typeof value === "number" || typeof value === "boolean";
-}
-
-function parseInlineResourceValue(value: string, previousValue: string | number | boolean): string | number {
-  if (typeof previousValue !== "number") {
-    return value;
-  }
-
-  const nextNumber = Number(value);
-  return Number.isFinite(nextNumber) ? nextNumber : previousValue;
 }

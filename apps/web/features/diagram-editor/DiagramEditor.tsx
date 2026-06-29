@@ -467,6 +467,19 @@ function DiagramEditorInner({
     [applyLiveDiagramUpdate, focusEditorShell, reactFlow]
   );
 
+  const selectResourceNode = useCallback<DiagramEditorPanelContext["selectResourceNode"]>((nodeId) => {
+    const targetNode = diagramRef.current.nodes.find((node) => node.id === nodeId);
+
+    if (!targetNode) {
+      return;
+    }
+
+    setSelectedNodeIds([nodeId]);
+    setSelectedEdgeIds([]);
+    setInspectedNodeId(nodeId);
+    setRightPanelOpen(true);
+  }, []);
+
   const panelContext = useMemo<DiagramEditorPanelContext>(
     () => ({
       diagram,
@@ -478,6 +491,7 @@ function DiagramEditorInner({
       applyDiagramJson,
       closeInspectedNode: () => setInspectedNodeId(null),
       focusResourceNode,
+      selectResourceNode,
       setRightPanelOpen,
       updateNodeParameters,
       updateNodeMetadata
@@ -488,6 +502,7 @@ function DiagramEditorInner({
       focusResourceNode,
       inspectedNodeId,
       isRightPanelOpen,
+      selectResourceNode,
       selectedNodeId,
       updateNodeMetadata,
       updateNodeParameters

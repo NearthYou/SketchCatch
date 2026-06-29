@@ -549,30 +549,6 @@
   white-space: normal;
 }
 
-.resourceListInlineInput,
-.resourceListInlineSelect {
-  background: #f8fafc;
-  border: 1px solid #d8e1ee;
-  border-radius: 6px;
-  color: #516178;
-  font: inherit;
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 1.35;
-  min-height: 30px;
-  min-width: 0;
-  padding: 5px 8px;
-  width: 100%;
-}
-
-.resourceListInlineInput:focus,
-.resourceListInlineSelect:focus {
-  background: #ffffff;
-  border-color: #8b6cff;
-  box-shadow: 0 0 0 3px rgba(139, 108, 255, 0.14);
-  outline: none;
-}
-
 .resourceListConfigToggle {
   align-items: center;
   background: transparent;

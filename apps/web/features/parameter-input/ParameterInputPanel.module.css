@@ -128,6 +128,19 @@ div.resourceIcon,
   width: 100%;
 }
 
+.readonlyValue {
+  background: #f6f8fc;
+  border: 1px solid #dfe7f4;
+  border-radius: 6px;
+  color: #475166;
+  font-size: 0.88rem;
+  line-height: 1.4;
+  min-height: 36px;
+  overflow-wrap: anywhere;
+  padding: 8px 10px;
+  width: 100%;
+}
+
 .input:focus {
   border-color: #8b71ff;
   box-shadow: 0 0 0 3px rgba(111, 76, 246, 0.14);
