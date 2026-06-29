@@ -97,6 +97,32 @@ test("OPTIONS preflight allows project draft PUT requests", async () => {
   await app.close();
 });
 
+test("production 500 responses do not expose internal error messages", async () => {
+  const previousNodeEnv = process.env.NODE_ENV;
+  process.env.NODE_ENV = "production";
+  const app = buildApp();
+
+  app.get("/boom", async () => {
+    throw new Error("internal diagnostic detail should stay server-side");
+  });
+
+  try {
+    const response = await app.inject({
+      method: "GET",
+      url: "/boom"
+    });
+
+    assert.equal(response.statusCode, 500);
+    assert.deepEqual(response.json(), {
+      error: "internal_server_error",
+      message: "Internal server error"
+    });
+  } finally {
+    process.env.NODE_ENV = previousNodeEnv;
+    await app.close();
+  }
+});
+
 function assertErrorResponse(
   body: ApiErrorResponse,
   expectedError: ApiErrorResponse["error"]

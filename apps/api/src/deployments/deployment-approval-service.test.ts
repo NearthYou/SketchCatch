@@ -109,6 +109,10 @@ class FakeDeploymentRepository implements DeploymentRepository {
     return this.planArtifact;
   }
 
+  async findRunningDeploymentInProject(): Promise<DeploymentRecord | undefined> {
+    return this.deployment?.status === "RUNNING" ? this.deployment : undefined;
+  }
+
   async listDeploymentsByProject(): Promise<DeploymentRecord[]> {
     return this.deployment ? [this.deployment] : [];
   }
@@ -127,6 +131,12 @@ class FakeDeploymentRepository implements DeploymentRepository {
   };
 
   markDeploymentInitRunning: DeploymentRepository["markDeploymentInitRunning"] = async () =>
+    this.deployment;
+
+  markDeploymentPlanRunning: DeploymentRepository["markDeploymentPlanRunning"] = async () =>
+    this.deployment;
+
+  markDeploymentApplyRunning: DeploymentRepository["markDeploymentApplyRunning"] = async () =>
     this.deployment;
 
   markDeploymentInitSucceeded: DeploymentRepository["markDeploymentInitSucceeded"] = async () =>
@@ -189,6 +199,27 @@ class FakeDeploymentRepository implements DeploymentRepository {
     return this.deployment;
   };
 
+  completeDeploymentApply: DeploymentRepository["completeDeploymentApply"] = async (
+    candidateDeploymentId,
+    input
+  ) => {
+    if (!this.deployment || this.deployment.id !== candidateDeploymentId) {
+      return undefined;
+    }
+
+    this.deployment = {
+      ...this.deployment,
+      status: "SUCCESS",
+      stateObjectKey: input.stateObjectKey,
+      resultWarningSummary: input.resultWarningSummary,
+      failureStage: null,
+      errorSummary: null,
+      updatedAt: fixedNow
+    };
+
+    return this.deployment;
+  };
+
   failDeployment: DeploymentRepository["failDeployment"] = async (candidateDeploymentId, input) => {
     if (!this.deployment || this.deployment.id !== candidateDeploymentId) {
       return undefined;
@@ -198,6 +229,15 @@ class FakeDeploymentRepository implements DeploymentRepository {
 
     return this.deployment;
   };
+
+  requestDeploymentCancellation: DeploymentRepository["requestDeploymentCancellation"] = async () =>
+    this.deployment;
+
+  cancelDeployment: DeploymentRepository["cancelDeployment"] = async () => this.deployment;
+
+  async recoverInterruptedDeployments(): Promise<DeploymentRecord[]> {
+    return [];
+  }
 
   createDeploymentLog: DeploymentRepository["createDeploymentLog"] = async (input) => ({
     ...input,
@@ -212,6 +252,14 @@ class FakeDeploymentRepository implements DeploymentRepository {
   }
 
   async listDeploymentLogs(): Promise<DeploymentLogRecord[]> {
+    return [];
+  }
+
+  async listDeployedResources() {
+    return [];
+  }
+
+  async listTerraformOutputs() {
     return [];
   }
 }
@@ -286,6 +334,31 @@ test("approveDeploymentPlan rejects risk blocked deployments", async () => {
       return true;
     }
   );
+  assert.equal(repository.approvals.length, 0);
+});
+
+test("approveDeploymentPlan rejects unsafe Terraform artifacts before approval", async () => {
+  const repository = new FakeDeploymentRepository();
+
+  await assert.rejects(
+    () =>
+      approveDeploymentPlan(
+        {
+          deploymentId,
+          accessContext: createAccessContext()
+        },
+        repository,
+        {
+          downloadTerraformArtifact: async () => `
+            data "aws_caller_identity" "current" {
+            }
+          `,
+          now: () => fixedNow
+        }
+      ),
+    /data source "aws_caller_identity" is not allowed/
+  );
+
   assert.equal(repository.approvals.length, 0);
 });
 
@@ -426,7 +499,10 @@ function createDeploymentRecord(
     terraformArtifactId,
     awsConnectionId,
     currentPlanArtifactId: planArtifactId,
+    stateObjectKey: null,
+    resultWarningSummary: null,
     status: "PENDING",
+    activeStage: null,
     planSummary: createPlanSummary(),
     isBlocked: true,
     blockedBy: "missing_approval",
@@ -441,6 +517,11 @@ function createDeploymentRecord(
     approvedTfplanHash: null,
     approvedAwsAccountId: null,
     approvedAwsRegion: null,
+    startedAt: null,
+    completedAt: null,
+    failedAt: null,
+    cancelRequestedAt: null,
+    cancelledAt: null,
     createdAt: fixedNow,
     updatedAt: fixedNow,
     ...overrides

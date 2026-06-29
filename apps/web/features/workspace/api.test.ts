@@ -6,10 +6,13 @@ import {
   createDeployment,
   deleteAwsConnection,
   getAwsConnectionCloudFormationTemplate,
+  listDeploymentResources,
   listAwsConnections,
   listDeployments,
+  listTerraformOutputs,
   listProjects,
   runDeploymentPlan,
+  runDeploymentApply,
   saveProjectDraft,
   testAwsConnection,
   verifyAwsConnection
@@ -524,7 +527,7 @@ test("createDeployment posts selected artifact and verified AWS connection", asy
   assert.equal(deployment.status, "PENDING");
 });
 
-test("deployment helpers list records, start plan, and approve plan", async (context) => {
+test("deployment helpers list records, start plan, approve plan, apply, and read results", async (context) => {
   const originalFetch = globalThis.fetch;
   const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
   const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
@@ -575,6 +578,73 @@ test("deployment helpers list records, start plan, and approve plan", async (con
       );
     }
 
+    if (String(input).endsWith("/apply")) {
+      return new Response(
+        JSON.stringify({
+          deployment: createDeploymentPayload({
+            id: "44444444-4444-4444-8444-444444444444",
+            projectId: project.id,
+            status: "RUNNING",
+            approved: true
+          })
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json"
+          },
+          status: 202
+        }
+      );
+    }
+
+    if (String(input).endsWith("/resources")) {
+      return new Response(
+        JSON.stringify({
+          resources: [
+            {
+              id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+              deploymentId: "44444444-4444-4444-8444-444444444444",
+              terraformAddress: "aws_instance.web",
+              terraformType: "aws_instance",
+              providerName: "registry.terraform.io/hashicorp/aws",
+              resourceId: "i-0123456789abcdef0",
+              region: "ap-northeast-2",
+              createdAt: "2026-06-26T00:00:00.000Z"
+            }
+          ]
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json"
+          },
+          status: 200
+        }
+      );
+    }
+
+    if (String(input).endsWith("/outputs")) {
+      return new Response(
+        JSON.stringify({
+          outputs: [
+            {
+              id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+              deploymentId: "44444444-4444-4444-8444-444444444444",
+              name: "instance_id",
+              value: "i-0123456789abcdef0",
+              sensitive: false,
+              createdAt: "2026-06-26T00:00:00.000Z"
+            }
+          ]
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json"
+          },
+          status: 200
+        }
+      );
+    }
+
     return new Response(
       JSON.stringify({
         deployments: [
@@ -596,6 +666,9 @@ test("deployment helpers list records, start plan, and approve plan", async (con
   const deployments = await listDeployments(project.id);
   const runningDeployment = await runDeploymentPlan("44444444-4444-4444-8444-444444444444");
   const approvedDeployment = await approveDeploymentPlan("44444444-4444-4444-8444-444444444444");
+  const applyingDeployment = await runDeploymentApply("44444444-4444-4444-8444-444444444444");
+  const resources = await listDeploymentResources("44444444-4444-4444-8444-444444444444");
+  const outputs = await listTerraformOutputs("44444444-4444-4444-8444-444444444444");
 
   assert.equal(String(requests[0]?.input), `/api/projects/${project.id}/deployments`);
   assert.equal(
@@ -609,9 +682,26 @@ test("deployment helpers list records, start plan, and approve plan", async (con
   );
   assert.equal(requests[2]?.init?.method, "POST");
   assert.deepEqual(JSON.parse(String(requests[2]?.init?.body)), {});
+  assert.equal(
+    String(requests[3]?.input),
+    "/api/deployments/44444444-4444-4444-8444-444444444444/apply"
+  );
+  assert.equal(requests[3]?.init?.method, "POST");
+  assert.deepEqual(JSON.parse(String(requests[3]?.init?.body)), {});
+  assert.equal(
+    String(requests[4]?.input),
+    "/api/deployments/44444444-4444-4444-8444-444444444444/resources"
+  );
+  assert.equal(
+    String(requests[5]?.input),
+    "/api/deployments/44444444-4444-4444-8444-444444444444/outputs"
+  );
   assert.equal(deployments[0]?.status, "PENDING");
   assert.equal(runningDeployment.status, "RUNNING");
   assert.equal(approvedDeployment.approvedPlanArtifactId, "99999999-9999-4999-8999-999999999999");
+  assert.equal(applyingDeployment.status, "RUNNING");
+  assert.equal(resources[0]?.resourceId, "i-0123456789abcdef0");
+  assert.equal(outputs[0]?.name, "instance_id");
 });
 
 function createDeploymentPayload(input: {
@@ -627,6 +717,8 @@ function createDeploymentPayload(input: {
     terraformArtifactId: "66666666-6666-4666-8666-666666666666",
     awsConnectionId: "33333333-3333-4333-8333-333333333333",
     currentPlanArtifactId: null,
+    stateObjectKey: null,
+    resultWarningSummary: null,
     status: input.status ?? "PENDING",
     planSummary: null,
     isBlocked: false,

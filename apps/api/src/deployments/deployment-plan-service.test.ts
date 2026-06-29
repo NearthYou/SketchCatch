@@ -124,6 +124,10 @@ class FakeDeploymentRepository implements DeploymentRepository {
     return createDeploymentPlanArtifactRecord({ id: candidatePlanArtifactId });
   }
 
+  async findRunningDeploymentInProject(): Promise<DeploymentRecord | undefined> {
+    return this.deployment?.status === "RUNNING" ? this.deployment : undefined;
+  }
+
   async listDeploymentsByProject(): Promise<DeploymentRecord[]> {
     return this.deployment ? [this.deployment] : [];
   }
@@ -157,6 +161,40 @@ class FakeDeploymentRepository implements DeploymentRepository {
       ...this.deployment,
       status: "RUNNING",
       ...clearDeploymentApprovalSnapshot(),
+      updatedAt: fixedNow
+    };
+
+    return this.deployment;
+  };
+
+  markDeploymentPlanRunning: DeploymentRepository["markDeploymentPlanRunning"] = async (
+    candidateDeploymentId
+  ) => {
+    if (!this.deployment || this.deployment.id !== candidateDeploymentId) {
+      return undefined;
+    }
+
+    this.deployment = {
+      ...this.deployment,
+      status: "RUNNING",
+      activeStage: "plan",
+      ...clearDeploymentApprovalSnapshot(),
+      updatedAt: fixedNow
+    };
+
+    return this.deployment;
+  };
+
+  markDeploymentApplyRunning: DeploymentRepository["markDeploymentApplyRunning"] = async (
+    candidateDeploymentId
+  ) => {
+    if (!this.deployment || this.deployment.id !== candidateDeploymentId) {
+      return undefined;
+    }
+
+    this.deployment = {
+      ...this.deployment,
+      status: "RUNNING",
       updatedAt: fixedNow
     };
 
@@ -209,6 +247,27 @@ class FakeDeploymentRepository implements DeploymentRepository {
 
   approveDeployment: DeploymentRepository["approveDeployment"] = async () => this.deployment;
 
+  completeDeploymentApply: DeploymentRepository["completeDeploymentApply"] = async (
+    candidateDeploymentId,
+    input
+  ) => {
+    if (!this.deployment || this.deployment.id !== candidateDeploymentId) {
+      return undefined;
+    }
+
+    this.deployment = {
+      ...this.deployment,
+      status: "SUCCESS",
+      stateObjectKey: input.stateObjectKey,
+      resultWarningSummary: input.resultWarningSummary,
+      failureStage: null,
+      errorSummary: null,
+      updatedAt: fixedNow
+    };
+
+    return this.deployment;
+  };
+
   failDeployment: DeploymentRepository["failDeployment"] = async (candidateDeploymentId, input) => {
     this.failedDeployments.push({
       deploymentId: candidateDeploymentId,
@@ -230,6 +289,42 @@ class FakeDeploymentRepository implements DeploymentRepository {
 
     return this.deployment;
   };
+
+  requestDeploymentCancellation: DeploymentRepository["requestDeploymentCancellation"] = async (
+    candidateDeploymentId
+  ) => {
+    if (!this.deployment || this.deployment.id !== candidateDeploymentId) {
+      return undefined;
+    }
+
+    this.deployment = { ...this.deployment, cancelRequestedAt: fixedNow, updatedAt: fixedNow };
+
+    return this.deployment;
+  };
+
+  cancelDeployment: DeploymentRepository["cancelDeployment"] = async (
+    candidateDeploymentId,
+    input
+  ) => {
+    if (!this.deployment || this.deployment.id !== candidateDeploymentId) {
+      return undefined;
+    }
+
+    this.deployment = {
+      ...this.deployment,
+      status: "CANCELLED",
+      activeStage: null,
+      errorSummary: input.errorSummary,
+      cancelledAt: fixedNow,
+      updatedAt: fixedNow
+    };
+
+    return this.deployment;
+  };
+
+  async recoverInterruptedDeployments(): Promise<DeploymentRecord[]> {
+    return [];
+  }
 
   createDeploymentLog: DeploymentRepository["createDeploymentLog"] = async (input) => {
     const deploymentLog = { ...input, createdAt: fixedNow };
@@ -257,6 +352,14 @@ class FakeDeploymentRepository implements DeploymentRepository {
 
   async listDeploymentLogs(candidateDeploymentId: string) {
     return this.logs.filter((log) => log.deploymentId === candidateDeploymentId);
+  }
+
+  async listDeployedResources() {
+    return [];
+  }
+
+  async listTerraformOutputs() {
+    return [];
   }
 }
 
@@ -291,7 +394,10 @@ function createDeploymentRecord(
     terraformArtifactId,
     awsConnectionId,
     currentPlanArtifactId: null,
+    stateObjectKey: null,
+    resultWarningSummary: null,
     status: "PENDING",
+    activeStage: null,
     planSummary: null,
     isBlocked: false,
     blockedBy: null,
@@ -306,6 +412,11 @@ function createDeploymentRecord(
     approvedTfplanHash: null,
     approvedAwsAccountId: null,
     approvedAwsRegion: null,
+    startedAt: null,
+    completedAt: null,
+    failedAt: null,
+    cancelRequestedAt: null,
+    cancelledAt: null,
     createdAt: fixedNow,
     updatedAt: fixedNow,
     ...overrides
@@ -599,6 +710,57 @@ test("runDeploymentPlan saves a tfplan artifact, summary, block, logs, and curre
     ]
   );
   assert.equal(repository.logs.some((log) => log.message.includes("resource_changes")), false);
+});
+
+test("runDeploymentPlan rejects unsafe Terraform before preparing AWS credentials", async () => {
+  const repository = new FakeDeploymentRepository();
+  const planArtifactStorage = new FakePlanArtifactStorage();
+  let cleanupCalled = false;
+  let credentialsPrepared = false;
+  let terraformRan = false;
+
+  await assert.rejects(
+    () =>
+      runDeploymentPlan(
+        {
+          deploymentId,
+          accessContext: createAccessContext()
+        },
+        repository,
+        {
+          planArtifactStorage,
+          readTerraformArtifactFile: async () => `
+            data "aws_caller_identity" "current" {
+            }
+          `,
+          analyzePreDeployment: () => createAnalysis(),
+          prepareTerraformWorkspace: async () => ({
+            workdir: "C:/tmp/sketchcatch-terraform-unsafe-plan",
+            mainFilePath: "C:/tmp/sketchcatch-terraform-unsafe-plan/main.tf",
+            cleanup: async () => {
+              cleanupCalled = true;
+            }
+          }),
+          prepareTerraformAwsCredentialEnv: async () => {
+            credentialsPrepared = true;
+            throw new Error("AWS credentials should not be prepared");
+          },
+          runTerraformInit: async () => {
+            terraformRan = true;
+            throw new Error("Terraform init should not run");
+          }
+        }
+      ),
+    /data source "aws_caller_identity" is not allowed/
+  );
+
+  assert.equal(cleanupCalled, true);
+  assert.equal(credentialsPrepared, false);
+  assert.equal(terraformRan, false);
+  assert.equal(repository.deployment?.status, "FAILED");
+  assert.equal(repository.deployment?.failureStage, "plan");
+  assert.match(repository.deployment?.errorSummary ?? "", /data source "aws_caller_identity" is not allowed/);
+  assert.equal(planArtifactStorage.uploads.length, 0);
 });
 
 test("runDeploymentPlan reuses an unchanged pending plan artifact without rerunning Terraform", async () => {

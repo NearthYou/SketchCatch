@@ -351,9 +351,10 @@ test("POST /api/aws/connections returns caller principal ARN and generated exter
     permissionSetup: {
       verificationActions: ["sts:GetCallerIdentity"],
       initialPolicyDocument: null,
-      terraformPolicyDocument: null
+      terraformPolicyDocument: body.roleSetup.permissionSetup.terraformPolicyDocument
     }
   });
+  assert.notEqual(body.roleSetup.permissionSetup.terraformPolicyDocument, null);
   assert.deepEqual(body.callerRoleSetup, {
     policyName: "SketchCatchAssumeTerraformExecutionRole",
     assumableRoleArnPattern: "arn:aws:iam::*:role/SketchCatchTerraformExecutionRole",
@@ -516,6 +517,40 @@ test("POST /api/aws/connections/:connectionId/verify stores verified metadata", 
   await app.close();
 });
 
+test("POST /api/aws/connections/:connectionId/verify-created-role verifies the CloudFormation role from account id", async () => {
+  const repository = new FakeAwsConnectionRepository();
+  repository.awsConnection = createAwsConnectionRecord();
+  const tester = new FakeAwsConnectionTester();
+  const app = await buildAwsConnectionTestApp(repository, {
+    awsConnectionTester: tester,
+    now: () => fixedNow
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/aws/connections/${awsConnectionId}/verify-created-role`,
+    headers: await authHeaders(),
+    payload: {
+      accountId: "123456789012"
+    }
+  });
+
+  assert.equal(response.statusCode, 200);
+  const body = response.json() as AwsConnectionVerifyResponse;
+  assert.equal(body.ok, true);
+  assert.equal(body.awsConnection.status, "verified");
+  assert.equal(body.awsConnection.roleArn, testRoleArn);
+  assert.deepEqual(tester.calls, [
+    {
+      roleArn: testRoleArn,
+      externalId,
+      region: "ap-northeast-2"
+    }
+  ]);
+
+  await app.close();
+});
+
 test("DELETE /api/aws/connections/:connectionId deletes user connection metadata", async () => {
   const repository = new FakeAwsConnectionRepository();
   repository.awsConnection = createAwsConnectionRecord({
@@ -589,6 +624,8 @@ test("GET /api/aws/connections/:connectionId/cloudformation-template returns lau
   assert.equal(body.region, "ap-northeast-2");
   assert.deepEqual(body.capabilities, ["CAPABILITY_NAMED_IAM"]);
   assert.match(body.templateBody, /Type: AWS::IAM::Role/);
+  assert.match(body.templateBody, /Action: ec2:\*/);
+  assert.match(body.templateBody, /Action: s3:\*/);
   assert.match(
     body.templateBody,
     new RegExp(callerPrincipalArn.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
@@ -605,6 +642,7 @@ test("GET /api/aws/connections/:connectionId/cloudformation-template returns lau
   );
   assert.match(body.launchStackUrl ?? "", /templateURL=/);
   assert.match(body.launchStackUrl ?? "", /stackName=sketchcatch-aws-connection-33333333/);
+  assert.match(body.launchStackUrl ?? "", /capabilities=CAPABILITY_NAMED_IAM/);
 
   await app.close();
 });

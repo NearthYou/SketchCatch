@@ -1,5 +1,7 @@
+import { readFile } from "node:fs/promises";
 import {
   appendDeploymentLogs,
+  DeploymentConflictError,
   DeploymentNotFoundError,
   getDeployment,
   type DeploymentRecord,
@@ -14,7 +16,7 @@ import {
   createAwsSdkStsGateway,
   type AwsConnectionStsGateway
 } from "../aws-connections/aws-connection-test-service.js";
-import type { AwsConnection } from "@sketchcatch/types";
+import type { AwsConnection, DeploymentStatus } from "@sketchcatch/types";
 import {
   prepareTerraformWorkspace as defaultPrepareTerraformWorkspace,
   type PreparedTerraformWorkspace
@@ -24,15 +26,19 @@ import {
   type TerraformRunResult
 } from "./terraform-runner.js";
 import { maskDeploymentMessage } from "./log-masking.js";
+import { assertTerraformArtifactIsSafe } from "./terraform-artifact-safety.js";
 
 export type RunDeploymentInitInput = {
   deploymentId: string;
   accessContext: ProjectAccessContext;
+  startedFromStatus?: DeploymentStatus;
+  abortSignal?: AbortSignal;
 };
 
 export type RunDeploymentInitOptions = {
   prepareTerraformWorkspace?: typeof defaultPrepareTerraformWorkspace;
   runTerraformInit?: typeof defaultRunTerraformInit;
+  readTerraformArtifactFile?: (filePath: string) => Promise<Buffer | Uint8Array | string>;
   prepareTerraformAwsCredentialEnv?: (
     awsConnection: AwsConnection
   ) => Promise<PreparedTerraformAwsCredentialEnv>;
@@ -52,6 +58,7 @@ export async function runDeploymentInit(
   const prepareTerraformWorkspace =
     options.prepareTerraformWorkspace ?? defaultPrepareTerraformWorkspace;
   const runTerraformInit = options.runTerraformInit ?? defaultRunTerraformInit;
+  const readTerraformArtifactFile = options.readTerraformArtifactFile ?? readFile;
   const prepareTerraformAwsCredentialEnv =
     options.prepareTerraformAwsCredentialEnv ??
     ((awsConnection: AwsConnection) =>
@@ -62,6 +69,7 @@ export async function runDeploymentInit(
 
   let workspace: PreparedTerraformWorkspace | undefined;
   let deploymentId: string | undefined;
+  let failureRecorded = false;
 
   try {
     const deployment = await getDeployment(
@@ -99,17 +107,36 @@ export async function runDeploymentInit(
       throw new DeploymentNotFoundError("Verified AWS connection not found for deployment");
     }
 
-    const awsCredentials = await prepareTerraformAwsCredentialEnv(awsConnection);
-
     workspace = await prepareTerraformWorkspace({
       objectKey: artifact.objectKey,
       fileName: artifact.fileName
     });
+    assertTerraformArtifactIsSafe(await readTerraformArtifactFile(workspace.mainFilePath));
 
-    await repository.updateDeploymentStatus(deployment.id, "RUNNING");
+    const awsCredentials = await prepareAwsCredentialsForInit({
+      deploymentId: deployment.id,
+      awsConnection,
+      prepareTerraformAwsCredentialEnv,
+      repository,
+      markFailureRecorded: () => {
+        failureRecorded = true;
+      }
+    });
+
+    const wasPreMarkedRunning =
+      deployment.status === "RUNNING" && input.startedFromStatus !== undefined;
+
+    if (!wasPreMarkedRunning) {
+      const runningDeployment = await repository.markDeploymentInitRunning(deployment.id);
+
+      if (!runningDeployment) {
+        throw new DeploymentConflictError("Deployment init could not be started");
+      }
+    }
 
     const terraform = await runTerraformInit(workspace.workdir, {
-      env: awsCredentials.env
+      env: awsCredentials.env,
+      signal: input.abortSignal
     });
     let sequence = await getNextLogSequence(deployment.id, repository);
 
@@ -130,6 +157,21 @@ export async function runDeploymentInit(
       level: terraform.exitCode === 0 ? "WARN" : "ERROR",
       repository
     });
+
+    if (terraform.cancelled) {
+      const cancelledDeployment = await repository.cancelDeployment(deployment.id, {
+        errorSummary: "Terraform init was cancelled before AWS resources were changed"
+      });
+
+      if (!cancelledDeployment) {
+        throw new DeploymentNotFoundError("Deployment not found");
+      }
+
+      return {
+        deployment: cancelledDeployment,
+        terraform
+      };
+    }
 
     if (terraform.exitCode === 0) {
       const updatedDeployment = await repository.markDeploymentInitSucceeded(deployment.id);
@@ -158,7 +200,7 @@ export async function runDeploymentInit(
       terraform
     };
   } catch (error) {
-    if (deploymentId) {
+    if (deploymentId && !failureRecorded) {
       await repository
         .failDeployment(deploymentId, {
           failureStage: "init",
@@ -206,6 +248,30 @@ async function appendOutputLines(input: {
   );
 
   return input.sequence + lines.length;
+}
+
+async function prepareAwsCredentialsForInit(input: {
+  deploymentId: string;
+  awsConnection: AwsConnection;
+  prepareTerraformAwsCredentialEnv: (
+    awsConnection: AwsConnection
+  ) => Promise<PreparedTerraformAwsCredentialEnv>;
+  repository: DeploymentRepository;
+  markFailureRecorded: () => void;
+}): Promise<PreparedTerraformAwsCredentialEnv> {
+  try {
+    return await input.prepareTerraformAwsCredentialEnv(input.awsConnection);
+  } catch (error) {
+    await input.repository
+      .failDeployment(input.deploymentId, {
+        failureStage: "aws_connection",
+        errorSummary: summarizeUnexpectedInitFailure(error)
+      })
+      .catch(() => undefined);
+    input.markFailureRecorded();
+
+    throw error;
+  }
 }
 
 function splitOutputLines(output: string): string[] {

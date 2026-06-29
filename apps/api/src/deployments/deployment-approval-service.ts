@@ -4,7 +4,11 @@ import {
   assertAwsApplyPreconditions,
   AwsConnectionRuntimeCredentialsError
 } from "../aws-connections/aws-connection-runtime-credentials.js";
-import { downloadTerraformArtifactFromS3 } from "./terraform-workspace.js";
+import {
+  defaultTerraformArtifactMaxBytes,
+  downloadTerraformArtifactFromS3
+} from "./terraform-workspace.js";
+import { assertTerraformArtifactIsSafe } from "./terraform-artifact-safety.js";
 import {
   DeploymentConflictError,
   DeploymentNotFoundError,
@@ -39,7 +43,9 @@ export async function approveDeploymentPlan(
   options: ApproveDeploymentPlanOptions = {}
 ): Promise<DeploymentRecord> {
   const downloadTerraformArtifact =
-    options.downloadTerraformArtifact ?? downloadTerraformArtifactFromS3;
+    options.downloadTerraformArtifact ??
+    ((objectKey: string) =>
+      downloadTerraformArtifactFromS3(objectKey, { maxBytes: defaultTerraformArtifactMaxBytes }));
   const now = options.now ?? (() => new Date());
   const deployment = await getDeployment(input, repository);
 
@@ -82,9 +88,11 @@ export async function approveDeploymentPlan(
     throw new DeploymentConflictError("AWS connection changed after plan");
   }
 
-  const terraformArtifactHash = createSha256(
-    await downloadTerraformArtifact(terraformArtifact.objectKey)
-  );
+  const terraformArtifactContent = await downloadTerraformArtifact(terraformArtifact.objectKey);
+
+  assertTerraformArtifactIsSafe(terraformArtifactContent);
+
+  const terraformArtifactHash = createSha256(terraformArtifactContent);
   const plannedTerraformArtifactSha256 = currentPlanArtifact.terraformArtifactSha256;
 
   if (!plannedTerraformArtifactSha256) {
