@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useEffect, useState } from "react";
 import type { LoginRequest } from "@sketchcatch/types";
@@ -105,6 +106,9 @@ export function LoginForm() {
         <input disabled={isSubmitting} name="rememberMe" type="checkbox" />
         <span>로그인 상태 유지</span>
       </label>
+      <div className="authFormActions">
+        <Link href="/password-reset">비밀번호를 잊으셨나요?</Link>
+      </div>
       {errorMessage ? (
         <p className="authMessage authMessageError" role="alert">
           {errorMessage}
