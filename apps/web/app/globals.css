@@ -3484,7 +3484,8 @@ nextjs-portal {
   color: var(--dashboard-muted);
   display: grid;
   gap: 8px;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  margin: 0;
   min-height: 38px;
   min-width: min(420px, 44vw);
   padding: 0 10px;
@@ -3500,6 +3501,37 @@ nextjs-portal {
 
 .dashboardSearch input::placeholder {
   color: var(--dashboard-subtle);
+}
+
+.dashboardSearchButton {
+  align-items: center;
+  background: rgba(56, 189, 248, 0.1);
+  border: 1px solid rgba(56, 189, 248, 0.22);
+  border-radius: 5px;
+  color: var(--dashboard-muted);
+  cursor: pointer;
+  display: inline-flex;
+  height: 28px;
+  justify-content: center;
+  padding: 0;
+  transition:
+    background 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease;
+  width: 28px;
+}
+
+.dashboardSearchButton .dashboardIcon {
+  height: 16px;
+  width: 16px;
+}
+
+.dashboardSearchButton:hover,
+.dashboardSearchButton:focus-visible {
+  background: rgba(56, 189, 248, 0.16);
+  border-color: rgba(56, 189, 248, 0.5);
+  color: var(--dashboard-text);
+  outline: 0;
 }
 
 .dashboardIconButton {
