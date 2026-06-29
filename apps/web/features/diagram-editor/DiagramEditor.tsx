@@ -50,6 +50,7 @@ import { ParameterInputPanel } from "../parameter-input";
 import { terraformParameterCatalog } from "../parameter-input/catalog";
 import { ResourceSettingsPanel } from "../resource-settings";
 import { DEFAULT_DIAGRAM_VIEWPORT, EMPTY_DIAGRAM } from "./constants";
+import { applyAreaNodeMovement } from "./area-node-movement";
 import { DiagramEdgeToolbar } from "./DiagramEdgeToolbar";
 import { DiagramNodeView } from "./DiagramNodeView";
 import {
@@ -497,24 +498,32 @@ function DiagramEditorInner({
         return;
       }
 
-      applyLiveDiagramUpdate((currentDiagram) => ({
-        ...currentDiagram,
-        nodes: currentDiagram.nodes.map((node) => {
-          const positionChange = positionChanges.find((change) => change.id === node.id);
+      const positionByNodeId = new Map(positionChanges.map((change) => [change.id, change.position]));
+      const directlyMovedNodeIds = new Set(positionChanges.map((change) => change.id));
+
+      applyLiveDiagramUpdate((currentDiagram) => {
+        const snapshotNodes = dragSnapshotRef.current?.nodes ?? currentDiagram.nodes;
+        const positionedNodes = currentDiagram.nodes.map((node) => {
+          const position = positionByNodeId.get(node.id);
 
           return {
             ...node,
-            ...(positionChange
+            ...(position
               ? {
                   position: {
-                    x: positionChange.position.x,
-                    y: positionChange.position.y
+                    x: position.x,
+                    y: position.y
                   }
                 }
               : {})
           };
-        })
-      }));
+        });
+
+        return {
+          ...currentDiagram,
+          nodes: applyAreaNodeMovement(snapshotNodes, positionedNodes, directlyMovedNodeIds)
+        };
+      });
     },
     [applyLiveDiagramUpdate, selectedNodeIds]
   );
@@ -572,11 +581,13 @@ function DiagramEditorInner({
   const handleNodeDrag = useCallback(
     (_event: MouseEvent | TouchEvent, draggedFlowNode: DiagramFlowNode, nodes: DiagramFlowNode[]) => {
       const positionByNodeId = new Map(nodes.map((node) => [node.id, node.position]));
-      const positionedNodes = diagramRef.current.nodes.map((node) => {
+      const snapshotNodes = dragSnapshotRef.current?.nodes ?? diagramRef.current.nodes;
+      const directlyMovedNodeIds = getMovedNodeIdsFromPositionMap(snapshotNodes, positionByNodeId);
+      const positionedNodes = applyAreaNodeMovement(snapshotNodes, diagramRef.current.nodes.map((node) => {
         const position = positionByNodeId.get(node.id);
 
         return position ? { ...node, position: { ...position } } : node;
-      });
+      }), directlyMovedNodeIds);
       const draggedNode = positionedNodes.find((node) => node.id === draggedFlowNode.id);
 
       updateActiveReferenceDropTargetNodeId(
@@ -590,24 +601,14 @@ function DiagramEditorInner({
     (_event: MouseEvent | TouchEvent, _node: DiagramFlowNode, nodes: DiagramFlowNode[]) => {
       const before = dragSnapshotRef.current;
       const positionByNodeId = new Map(nodes.map((node) => [node.id, node.position]));
-      const previousPositionByNodeId = new Map(
-        (before?.nodes ?? diagramRef.current.nodes).map((node) => [node.id, node.position])
-      );
-      const movedNodeIds = new Set<string>();
-
-      for (const [nodeId, position] of positionByNodeId) {
-        const previousPosition = previousPositionByNodeId.get(nodeId);
-
-        if (previousPosition && (previousPosition.x !== position.x || previousPosition.y !== position.y)) {
-          movedNodeIds.add(nodeId);
-        }
-      }
-
-      const positionedNodes = diagramRef.current.nodes.map((node) => {
+      const snapshotNodes = before?.nodes ?? diagramRef.current.nodes;
+      const directlyMovedNodeIds = getMovedNodeIdsFromPositionMap(snapshotNodes, positionByNodeId);
+      const positionedNodes = applyAreaNodeMovement(snapshotNodes, diagramRef.current.nodes.map((node) => {
         const position = positionByNodeId.get(node.id);
 
         return position ? { ...node, position: { ...position } } : node;
-      });
+      }), directlyMovedNodeIds);
+      const movedNodeIds = getMovedNodeIdsFromNodes(snapshotNodes, positionedNodes);
       const after = {
         ...diagramRef.current,
         nodes: positionedNodes.map((node) =>
@@ -1128,13 +1129,17 @@ function DiagramEditorInner({
             snapGrid={[12, 12]}
             snapToGrid
           >
-            <Background color="#d8e0ef" gap={24} size={1} variant={BackgroundVariant.Lines} />
+            <Background color="#d8e0ef" gap={24} size={2} variant={BackgroundVariant.Dots} />
           </ReactFlow>
         </div>
       </div>
 
       <div className={styles.rightRail}>
-        {rightPanel === undefined ? <ParameterInputPanel {...panelContext} /> : rightPanel(panelContext)}
+        {rightPanel === undefined ? (
+          <ParameterInputPanel key={panelContext.selectedNodeId ?? "no-selection"} {...panelContext} />
+        ) : (
+          rightPanel(panelContext)
+        )}
       </div>
     </section>
   );
@@ -1144,6 +1149,46 @@ function isNodePositionChangeWithPosition(
   change: NodeChange<DiagramFlowNode>
 ): change is NodePositionChange & { position: NonNullable<NodePositionChange["position"]> } {
   return change.type === "position" && Boolean(change.position);
+}
+
+function getMovedNodeIdsFromPositionMap(
+  previousNodes: readonly DiagramNode[],
+  positionByNodeId: ReadonlyMap<string, DiagramNode["position"]>
+): Set<string> {
+  const movedNodeIds = new Set<string>();
+  const previousPositionByNodeId = new Map(previousNodes.map((node) => [node.id, node.position]));
+
+  for (const [nodeId, position] of positionByNodeId) {
+    const previousPosition = previousPositionByNodeId.get(nodeId);
+
+    if (previousPosition && isDifferentPosition(previousPosition, position)) {
+      movedNodeIds.add(nodeId);
+    }
+  }
+
+  return movedNodeIds;
+}
+
+function getMovedNodeIdsFromNodes(
+  previousNodes: readonly DiagramNode[],
+  currentNodes: readonly DiagramNode[]
+): Set<string> {
+  const movedNodeIds = new Set<string>();
+  const previousPositionByNodeId = new Map(previousNodes.map((node) => [node.id, node.position]));
+
+  for (const node of currentNodes) {
+    const previousPosition = previousPositionByNodeId.get(node.id);
+
+    if (previousPosition && isDifferentPosition(previousPosition, node.position)) {
+      movedNodeIds.add(node.id);
+    }
+  }
+
+  return movedNodeIds;
+}
+
+function isDifferentPosition(left: DiagramNode["position"], right: DiagramNode["position"]) {
+  return left.x !== right.x || left.y !== right.y;
 }
 
 function applySelectionChanges(

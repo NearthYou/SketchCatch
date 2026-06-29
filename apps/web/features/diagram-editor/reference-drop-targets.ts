@@ -5,6 +5,7 @@ import {
   isEmptyParameterValue,
   mergeNodeParameters
 } from "../parameter-input/validation";
+import { isDesignAreaNode } from "./area-nodes";
 
 export type ReferenceDropTarget = {
   definitions: ParameterCatalogDefinition[];
@@ -19,15 +20,6 @@ type DropTargetCandidate = {
   area: number;
   node: DiagramNode;
 };
-
-const visualDesignDropTargetTypes = new Set([
-  "design_region",
-  "design_az",
-  "design_group",
-  "sketchcatch_region",
-  "sketchcatch_az",
-  "sketchcatch_group"
-]);
 
 export function findInnermostReferenceDropTarget(
   childNode: DiagramNode,
@@ -89,7 +81,7 @@ export function findInnermostVisualDropTarget(
   }
 
   for (const node of nodes) {
-    if (node.id === childNode.id || !isVisualDesignDropTarget(node) || !containsPoint(node, childCenter)) {
+    if (node.id === childNode.id || !isDesignAreaNode(node) || !containsPoint(node, childCenter)) {
       continue;
     }
 
@@ -176,10 +168,6 @@ function compareDropTargetCandidates(left: DropTargetCandidate, right: DropTarge
   }
 
   return getNodeZIndex(right.node) - getNodeZIndex(left.node);
-}
-
-function isVisualDesignDropTarget(node: DiagramNode): boolean {
-  return node.kind === "design" && visualDesignDropTargetTypes.has(node.type);
 }
 
 function getNodeZIndex(node: DiagramNode) {

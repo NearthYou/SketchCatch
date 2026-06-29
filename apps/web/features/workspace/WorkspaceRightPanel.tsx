@@ -8,7 +8,8 @@ import {
   GalleryVerticalEnd,
   PanelRightClose,
   PanelRightOpen,
-  Rocket
+  Rocket,
+  Sparkles
 } from "lucide-react";
 import type { DiagramEditorPanelContext } from "../diagram-editor";
 import { DeploymentPanel } from "./DeploymentPanel";
@@ -16,6 +17,7 @@ import { ResourceWorkspacePanel } from "./ResourceWorkspacePanel";
 import { TerraformCodePanel } from "./TerraformCodePanel";
 import { TerraformIssuesPanel } from "./TerraformIssuesPanel";
 import { TerraformLeaveDialog } from "./TerraformLeaveDialog";
+import { WorkspaceAiPanel } from "./WorkspaceAiPanel";
 import type { ResourceWorkspaceView, WorkspaceRightPanelView } from "./workspace-right-panel.types";
 import styles from "./workspace.module.css";
 
@@ -126,6 +128,14 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
         </button>
         <button
           className={styles.collapsedPanelButton}
+          onClick={() => openCollapsedView("ai")}
+          title="AI"
+          type="button"
+        >
+          <Sparkles size={18} aria-hidden="true" />
+        </button>
+        <button
+          className={styles.collapsedPanelButton}
           onClick={() => openCollapsedView("deployment")}
           title="Deploy"
           type="button"
@@ -181,6 +191,15 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
               {terraformDiagnostics.length}
             </span>
           </button>
+          <button
+            aria-pressed={activeView === "ai"}
+            className={activeView === "ai" ? styles.panelModeButtonActive : styles.panelModeButton}
+            onClick={() => requestView("ai")}
+            title="AI"
+            type="button"
+          >
+            <Sparkles size={18} aria-hidden="true" />
+          </button>
         </div>
         <button
           aria-pressed={activeView === "deployment"}
@@ -218,14 +237,18 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
       <div className={styles.rightPanelView} hidden={activeView !== "issues"}>
         <TerraformIssuesPanel diagnostics={terraformDiagnostics} />
       </div>
-
-      {activeView === "deployment" ? (
-        <DeploymentPanel
-          currentNodeCount={context.nodes.length}
-          projectId={projectId}
-          projectName={projectName}
-        />
-      ) : null}
+      <div className={styles.rightPanelView} hidden={activeView !== "ai"}>
+        <WorkspaceAiPanel context={context} />
+      </div>
+      <div className={styles.rightPanelView} hidden={activeView !== "deployment"}>
+        {activeView === "deployment" ? (
+          <DeploymentPanel
+            currentNodeCount={context.nodes.length}
+            projectId={projectId}
+            projectName={projectName}
+          />
+        ) : null}
+      </div>
 
       {showTerraformLeaveDialog ? (
         <TerraformLeaveDialog
