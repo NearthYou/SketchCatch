@@ -1,6 +1,10 @@
 import type { DiagramNode } from "../../../../packages/types/src";
 import type { ParameterCatalog, ParameterCatalogDefinition } from "../parameter-input/catalog";
-import { mergeNodeParameters } from "../parameter-input/validation";
+import {
+  getReferenceAttribute,
+  isEmptyParameterValue,
+  mergeNodeParameters
+} from "../parameter-input/validation";
 
 export type ReferenceDropTarget = {
   definitions: ParameterCatalogDefinition[];
@@ -54,11 +58,62 @@ export function findInnermostReferenceDropTarget(
   return candidates.sort(compareReferenceDropTargetCandidates)[0] ?? null;
 }
 
+export function applyReferenceDropTarget(
+  childNode: DiagramNode,
+  target: ReferenceDropTarget | null,
+  catalog: ParameterCatalog
+): DiagramNode {
+  if (!target || childNode.kind !== "resource") {
+    return childNode;
+  }
+
+  const childParameters = mergeNodeParameters(childNode, catalog);
+  const parentParameters = mergeNodeParameters(target.node, catalog);
+  let nextValues = childParameters.values;
+
+  for (const definition of target.definitions) {
+    if (
+      !definition.referenceTargetTypes?.includes(parentParameters.resourceType) ||
+      !isEmptyParameterValue(nextValues[definition.name])
+    ) {
+      continue;
+    }
+
+    const referencePrefix = parentParameters.terraformBlockType === "data" ? "data." : "";
+    const reference = `${referencePrefix}${parentParameters.resourceType}.${parentParameters.resourceName}.${getReferenceAttribute(definition)}`;
+
+    nextValues = {
+      ...nextValues,
+      [definition.name]: createReferenceParameterValue(definition, reference)
+    };
+  }
+
+  if (nextValues === childParameters.values) {
+    return childNode;
+  }
+
+  return {
+    ...childNode,
+    parameters: {
+      ...childParameters,
+      values: nextValues
+    }
+  };
+}
+
 function getReferenceDefinitions(definitions: readonly ParameterCatalogDefinition[]) {
   return definitions.filter(
     (definition) =>
       definition.inputKind === "reference-picker" && (definition.referenceTargetTypes?.length ?? 0) > 0
   );
+}
+
+function createReferenceParameterValue(definition: ParameterCatalogDefinition, reference: string) {
+  if (definition.type === "list" || definition.type === "set") {
+    return [reference];
+  }
+
+  return reference;
 }
 
 function compareReferenceDropTargetCandidates(

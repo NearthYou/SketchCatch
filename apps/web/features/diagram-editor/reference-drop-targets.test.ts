@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { DiagramNode } from "../../../../packages/types/src";
 import type { ParameterCatalog, ParameterCatalogDefinition } from "../parameter-input/catalog";
-import { findInnermostReferenceDropTarget } from "./reference-drop-targets";
+import {
+  applyReferenceDropTarget,
+  findInnermostReferenceDropTarget
+} from "./reference-drop-targets";
 
 const catalog: ParameterCatalog = {
   provider: "aws",
@@ -16,11 +19,26 @@ const catalog: ParameterCatalog = {
         referenceTargetTypes: ["aws_subnet"]
       })
     ],
+    aws_lambda_function: [
+      makeReferenceDefinition({
+        name: "role",
+        terraformName: "role",
+        referenceTargetTypes: ["aws_iam_role"]
+      })
+    ],
     aws_internet_gateway: [
       makeReferenceDefinition({
         name: "vpcId",
         terraformName: "vpc_id",
         referenceTargetTypes: ["aws_vpc"]
+      })
+    ],
+    aws_autoscaling_group: [
+      makeReferenceDefinition({
+        name: "vpcZoneIdentifier",
+        terraformName: "vpc_zone_identifier",
+        referenceTargetTypes: ["aws_subnet"],
+        type: "list"
       })
     ],
     aws_subnet: [
@@ -109,13 +127,109 @@ test("findInnermostReferenceDropTarget returns null when the child has no matchi
   assert.equal(findInnermostReferenceDropTarget(bucket, [vpc, bucket], catalog), null);
 });
 
+test("applyReferenceDropTarget sets empty child reference values from the parent resource", () => {
+  const vpc = makeResourceNode({
+    id: "vpc-1",
+    resourceName: "main",
+    resourceType: "aws_vpc",
+    position: { x: 0, y: 0 },
+    size: { width: 500, height: 500 }
+  });
+  const subnet = makeResourceNode({
+    id: "subnet-1",
+    resourceName: "public",
+    resourceType: "aws_subnet",
+    position: { x: 120, y: 120 },
+    size: { width: 220, height: 180 }
+  });
+  const target = findInnermostReferenceDropTarget(subnet, [vpc, subnet], catalog);
+
+  const result = applyReferenceDropTarget(subnet, target, catalog);
+
+  assert.equal(result.parameters?.values.vpcId, "aws_vpc.main.id");
+});
+
+test("applyReferenceDropTarget preserves existing child reference values", () => {
+  const vpc = makeResourceNode({
+    id: "vpc-1",
+    resourceName: "main",
+    resourceType: "aws_vpc",
+    position: { x: 0, y: 0 },
+    size: { width: 500, height: 500 }
+  });
+  const subnet = makeResourceNode({
+    id: "subnet-1",
+    resourceName: "public",
+    resourceType: "aws_subnet",
+    position: { x: 120, y: 120 },
+    size: { width: 220, height: 180 },
+    values: {
+      vpcId: "aws_vpc.existing.id"
+    }
+  });
+  const target = findInnermostReferenceDropTarget(subnet, [vpc, subnet], catalog);
+
+  const result = applyReferenceDropTarget(subnet, target, catalog);
+
+  assert.equal(result.parameters?.values.vpcId, "aws_vpc.existing.id");
+});
+
+test("applyReferenceDropTarget formats list references and derived reference attributes", () => {
+  const subnet = makeResourceNode({
+    id: "subnet-1",
+    resourceName: "public",
+    resourceType: "aws_subnet",
+    position: { x: 0, y: 0 },
+    size: { width: 500, height: 500 }
+  });
+  const autoscalingGroup = makeResourceNode({
+    id: "asg-1",
+    resourceName: "web",
+    resourceType: "aws_autoscaling_group",
+    position: { x: 120, y: 120 },
+    size: { width: 220, height: 180 }
+  });
+  const role = makeResourceNode({
+    id: "role-1",
+    resourceName: "runtime",
+    resourceType: "aws_iam_role",
+    position: { x: 700, y: 0 },
+    size: { width: 500, height: 500 }
+  });
+  const lambda = makeResourceNode({
+    id: "lambda-1",
+    resourceName: "handler",
+    resourceType: "aws_lambda_function",
+    position: { x: 820, y: 120 },
+    size: { width: 220, height: 180 }
+  });
+
+  const autoscalingGroupTarget = findInnermostReferenceDropTarget(
+    autoscalingGroup,
+    [subnet, autoscalingGroup],
+    catalog
+  );
+  const lambdaTarget = findInnermostReferenceDropTarget(lambda, [role, lambda], catalog);
+
+  assert.deepEqual(
+    applyReferenceDropTarget(autoscalingGroup, autoscalingGroupTarget, catalog).parameters?.values
+      .vpcZoneIdentifier,
+    ["aws_subnet.public.id"]
+  );
+  assert.equal(
+    applyReferenceDropTarget(lambda, lambdaTarget, catalog).parameters?.values.role,
+    "aws_iam_role.runtime.arn"
+  );
+});
+
 function makeReferenceDefinition(
-  definition: Pick<ParameterCatalogDefinition, "name" | "referenceTargetTypes" | "terraformName">
+  definition: Pick<ParameterCatalogDefinition, "name" | "referenceTargetTypes" | "terraformName"> &
+    Partial<Pick<ParameterCatalogDefinition, "type">>
 ): ParameterCatalogDefinition {
   return {
     ...definition,
     label: definition.name,
-    type: "string",
+    type: definition.type ?? "string",
     required: true,
     optional: false,
     computed: false,
@@ -127,15 +241,19 @@ function makeReferenceDefinition(
 function makeResourceNode({
   id,
   position,
+  resourceName,
   resourceType,
-  size
+  size,
+  values
 }: {
   id: string;
   position: DiagramNode["position"];
+  resourceName?: string;
   resourceType: string;
   size: DiagramNode["size"];
+  values?: Record<string, unknown>;
 }): DiagramNode {
-  const resourceName = id.replaceAll("-", "_");
+  const terraformResourceName = resourceName ?? id.replaceAll("-", "_");
 
   return {
     id,
@@ -143,15 +261,15 @@ function makeResourceNode({
     kind: "resource",
     position,
     size,
-    label: resourceName,
+    label: terraformResourceName,
     locked: false,
     zIndex: 1,
     parameters: {
       terraformBlockType: "resource",
       resourceType,
-      resourceName,
+      resourceName: terraformResourceName,
       fileName: "main",
-      values: {}
+      values: values ?? {}
     }
   };
 }

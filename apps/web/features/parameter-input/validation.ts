@@ -496,7 +496,7 @@ function hasDuplicateResourceName(
   });
 }
 
-function getReferenceAttribute(definition: ParameterCatalogDefinition) {
+export function getReferenceAttribute(definition: ParameterCatalogDefinition) {
   if (definition.referenceAttribute) {
     return definition.referenceAttribute;
   }
