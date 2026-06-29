@@ -18,6 +18,7 @@ type PasswordResetConfirmFormProps = {
 };
 
 export function PasswordResetConfirmForm({ initialToken }: PasswordResetConfirmFormProps) {
+  const hasInitialToken = initialToken.trim().length > 0;
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isPasswordConfirmVisible, setIsPasswordConfirmVisible] = useState(false);
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
@@ -69,18 +70,22 @@ export function PasswordResetConfirmForm({ initialToken }: PasswordResetConfirmF
 
   return (
     <form className="authForm" onSubmit={handleSubmit}>
-      <label>
-        재설정 토큰
-        <input
-          autoComplete="one-time-code"
-          disabled={isSubmitting || Boolean(successMessage)}
-          name="resetToken"
-          onChange={(event) => setResetToken(event.target.value)}
-          required
-          type="text"
-          value={resetToken}
-        />
-      </label>
+      {hasInitialToken ? (
+        <input name="resetToken" readOnly type="hidden" value={resetToken} />
+      ) : (
+        <label>
+          재설정 토큰
+          <input
+            autoComplete="one-time-code"
+            disabled={isSubmitting || Boolean(successMessage)}
+            name="resetToken"
+            onChange={(event) => setResetToken(event.target.value)}
+            required
+            type="text"
+            value={resetToken}
+          />
+        </label>
+      )}
       <div className="authField">
         <label htmlFor="password-reset-new-password">새 비밀번호</label>
         <div className="authPasswordField">

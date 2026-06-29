@@ -14,6 +14,7 @@ import { createAccessToken, hashToken } from "../auth/tokens.js";
 import { hashPassword } from "../auth/password.js";
 import type { Database, DatabaseClient } from "../db/client.js";
 import { loginAttempts, passwordResetTokens, refreshTokens, users } from "../db/schema.js";
+import type { RateLimitResult, RateLimiter } from "../rate-limit/in-memory-rate-limiter.js";
 
 process.env.NODE_ENV = "test";
 process.env.AUTH_TOKEN_SECRET = "test-auth-token-secret-with-at-least-32-characters";
@@ -372,12 +373,19 @@ test("POST /api/auth/password-reset/request stores a hashed reset token", async 
   const fakeDb = new AuthScenarioFakeDb({
     selectResults: [[await makeUserWithPassword(PASSWORD)]]
   });
+  const emailRateLimiter = new RecordingRateLimiter();
+  const ipRateLimiter = new RecordingRateLimiter();
   const app = buildApp({
-    getDatabaseClient: () => fakeDb.client
+    getDatabaseClient: () => fakeDb.client,
+    passwordResetRequestEmailRateLimiter: emailRateLimiter,
+    passwordResetRequestIpRateLimiter: ipRateLimiter
   });
 
   const response = await app.inject({
     method: "POST",
+    headers: {
+      "x-forwarded-for": "203.0.113.10, 10.0.0.5"
+    },
     url: "/api/auth/password-reset/request",
     payload: {
       email: "demo@example.com"
@@ -392,6 +400,8 @@ test("POST /api/auth/password-reset/request stores a hashed reset token", async 
   assert.equal(fakeDb.passwordResetTokenRows.length, 1);
   assert.equal(fakeDb.passwordResetTokenRows[0]?.tokenHash, hashToken(body.debugResetToken ?? ""));
   assert.notEqual(fakeDb.passwordResetTokenRows[0]?.tokenHash, body.debugResetToken);
+  assert.deepEqual(ipRateLimiter.keys, ["password-reset:request:ip:203.0.113.10"]);
+  assert.deepEqual(emailRateLimiter.keys, ["password-reset:request:email:demo@example.com"]);
 
   await app.close();
 });
@@ -414,6 +424,74 @@ test("POST /api/auth/password-reset/request does not reveal unknown email addres
 
   assert.equal(response.statusCode, 200);
   assert.deepEqual(response.json() as PasswordResetRequestResponse, { ok: true });
+  assert.equal(fakeDb.passwordResetTokenRows.length, 0);
+
+  await app.close();
+});
+
+test("POST /api/auth/password-reset/request returns 429 when IP rate limit is exceeded", async () => {
+  const fakeDb = new AuthScenarioFakeDb({
+    selectResults: [[await makeUserWithPassword(PASSWORD)]]
+  });
+  const emailRateLimiter = new RecordingRateLimiter();
+  const ipRateLimiter = new RecordingRateLimiter({
+    allowed: false,
+    retryAfterSeconds: 37
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client,
+    passwordResetRequestEmailRateLimiter: emailRateLimiter,
+    passwordResetRequestIpRateLimiter: ipRateLimiter
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/auth/password-reset/request",
+    payload: {
+      email: "demo@example.com"
+    }
+  });
+
+  assert.equal(response.statusCode, 429);
+  assert.equal(response.headers["retry-after"], "37");
+  assertErrorResponse(response.json() as ApiErrorResponse, "too_many_requests");
+  assert.deepEqual(ipRateLimiter.keys, ["password-reset:request:ip:127.0.0.1"]);
+  assert.deepEqual(emailRateLimiter.keys, []);
+  assert.equal(fakeDb.selectResults.length, 1);
+  assert.equal(fakeDb.passwordResetTokenRows.length, 0);
+
+  await app.close();
+});
+
+test("POST /api/auth/password-reset/request returns 429 when email rate limit is exceeded", async () => {
+  const fakeDb = new AuthScenarioFakeDb({
+    selectResults: [[await makeUserWithPassword(PASSWORD)]]
+  });
+  const emailRateLimiter = new RecordingRateLimiter({
+    allowed: false,
+    retryAfterSeconds: 61
+  });
+  const ipRateLimiter = new RecordingRateLimiter();
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client,
+    passwordResetRequestEmailRateLimiter: emailRateLimiter,
+    passwordResetRequestIpRateLimiter: ipRateLimiter
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/auth/password-reset/request",
+    payload: {
+      email: "Demo@Example.com"
+    }
+  });
+
+  assert.equal(response.statusCode, 429);
+  assert.equal(response.headers["retry-after"], "61");
+  assertErrorResponse(response.json() as ApiErrorResponse, "too_many_requests");
+  assert.deepEqual(ipRateLimiter.keys, ["password-reset:request:ip:127.0.0.1"]);
+  assert.deepEqual(emailRateLimiter.keys, ["password-reset:request:email:demo@example.com"]);
+  assert.equal(fakeDb.selectResults.length, 1);
   assert.equal(fakeDb.passwordResetTokenRows.length, 0);
 
   await app.close();
@@ -1005,6 +1083,18 @@ class AuthScenarioFakeDb {
     }
 
     return values;
+  }
+}
+
+class RecordingRateLimiter implements RateLimiter {
+  readonly keys: string[] = [];
+
+  constructor(private readonly result: RateLimitResult = { allowed: true }) {}
+
+  consume(key: string): RateLimitResult {
+    this.keys.push(key);
+
+    return this.result;
   }
 }
 

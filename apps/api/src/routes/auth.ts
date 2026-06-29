@@ -39,6 +39,7 @@ import {
 import { hashToken } from "../auth/tokens.js";
 import { type Database, type DatabaseClient, getDatabaseClient } from "../db/client.js";
 import { loginAttempts, passwordResetTokens, refreshTokens, users } from "../db/schema.js";
+import type { RateLimiter } from "../rate-limit/in-memory-rate-limiter.js";
 
 const usernameSchema = z
   .string()
@@ -97,7 +98,12 @@ const passwordResetConfirmBodySchema = z.object({
 
 type AuthRouteOptions = {
   getDatabaseClient?: () => DatabaseClient;
+  passwordResetRequestEmailRateLimiter?: RateLimiter;
+  passwordResetRequestIpRateLimiter?: RateLimiter;
 };
+
+const PASSWORD_RESET_REQUEST_RATE_LIMIT_MESSAGE =
+  "비밀번호 재설정 요청이 너무 많습니다. 잠시 후 다시 시도해주세요.";
 
 export async function registerAuthRoutes(
   app: FastifyInstance,
@@ -339,8 +345,19 @@ export async function registerAuthRoutes(
     return response;
   });
 
-  app.post("/auth/password-reset/request", async (request) => {
+  app.post("/auth/password-reset/request", async (request, reply) => {
     const body = passwordResetRequestBodySchema.parse(request.body);
+    const rateLimitReply = consumePasswordResetRequestRateLimit(
+      reply,
+      request.ip,
+      body.email,
+      options
+    );
+
+    if (rateLimitReply) {
+      return rateLimitReply;
+    }
+
     const { db } = getAuthDatabaseClient();
     const response: PasswordResetRequestResponse = {
       ok: true
@@ -504,6 +521,57 @@ export async function registerAuthRoutes(
       ok: true
     };
   });
+}
+
+function consumePasswordResetRequestRateLimit(
+  reply: FastifyReply,
+  ipAddress: string,
+  email: string,
+  options: Pick<
+    AuthRouteOptions,
+    "passwordResetRequestEmailRateLimiter" | "passwordResetRequestIpRateLimiter"
+  >
+): FastifyReply | null {
+  if (options.passwordResetRequestIpRateLimiter) {
+    const ipResult = options.passwordResetRequestIpRateLimiter.consume(
+      createPasswordResetRequestRateLimitKey("ip", ipAddress)
+    );
+
+    if (!ipResult.allowed) {
+      return sendTooManyPasswordResetRequests(reply, ipResult.retryAfterSeconds);
+    }
+  }
+
+  if (options.passwordResetRequestEmailRateLimiter) {
+    const emailResult = options.passwordResetRequestEmailRateLimiter.consume(
+      createPasswordResetRequestRateLimitKey("email", email)
+    );
+
+    if (!emailResult.allowed) {
+      return sendTooManyPasswordResetRequests(reply, emailResult.retryAfterSeconds);
+    }
+  }
+
+  return null;
+}
+
+function createPasswordResetRequestRateLimitKey(type: "email" | "ip", value: string): string {
+  return `password-reset:request:${type}:${value}`;
+}
+
+function sendTooManyPasswordResetRequests(
+  reply: FastifyReply,
+  retryAfterSeconds: number
+): FastifyReply {
+  const response: ApiErrorResponse = {
+    error: "too_many_requests",
+    message: PASSWORD_RESET_REQUEST_RATE_LIMIT_MESSAGE
+  };
+
+  return reply
+    .status(429)
+    .header("Retry-After", String(retryAfterSeconds))
+    .send(response);
 }
 
 async function revokeRefreshToken(
