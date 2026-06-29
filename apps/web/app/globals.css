@@ -728,6 +728,10 @@ select {
   line-height: 1.35;
 }
 
+.authWarningText {
+  color: #fde68a;
+}
+
 .authSubmit {
   border: 0;
   margin-top: 6px;

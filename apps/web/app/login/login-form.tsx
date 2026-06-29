@@ -2,9 +2,15 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { type FormEvent, useEffect, useState } from "react";
+import {
+  type FormEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+  useEffect,
+  useState
+} from "react";
 import type { LoginRequest } from "@sketchcatch/types";
 import { useAuth } from "../../components/auth/auth-provider";
+import { getCapsLockWarningMessage, isCapsLockActive } from "../../features/auth/caps-lock";
 import { getApiErrorMessage } from "../../lib/api-client";
 
 export function LoginForm() {
@@ -12,7 +18,9 @@ export function LoginForm() {
   const { login, status } = useAuth();
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isPasswordCapsLockOn, setIsPasswordCapsLockOn] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
+  const passwordCapsLockWarning = getCapsLockWarningMessage(isPasswordCapsLockOn);
 
   useEffect(() => {
     const oauthError = new URLSearchParams(window.location.search).get("oauthError");
@@ -54,6 +62,10 @@ export function LoginForm() {
     } finally {
       setIsSubmitting(false);
     }
+  }
+
+  function handlePasswordKeyEvent(event: ReactKeyboardEvent<HTMLInputElement>): void {
+    setIsPasswordCapsLockOn(isCapsLockActive(event));
   }
 
   return (
@@ -104,13 +116,22 @@ export function LoginForm() {
       <label>
         비밀번호
         <input
+          aria-describedby={passwordCapsLockWarning ? "login-password-caps-lock" : undefined}
           autoComplete="current-password"
           disabled={isSubmitting}
           name="password"
+          onBlur={() => setIsPasswordCapsLockOn(false)}
+          onKeyDown={handlePasswordKeyEvent}
+          onKeyUp={handlePasswordKeyEvent}
           placeholder="Password"
           required
           type="password"
         />
+        {passwordCapsLockWarning ? (
+          <span className="authHelpText authWarningText" id="login-password-caps-lock" role="alert">
+            {passwordCapsLockWarning}
+          </span>
+        ) : null}
       </label>
       <label className="authCheckboxLabel">
         <input
