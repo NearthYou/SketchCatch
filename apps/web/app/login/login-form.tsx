@@ -12,6 +12,7 @@ export function LoginForm() {
   const { login, status } = useAuth();
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
 
   useEffect(() => {
     const oauthError = new URLSearchParams(window.location.search).get("oauthError");
@@ -34,7 +35,7 @@ export function LoginForm() {
     const formData = new FormData(event.currentTarget);
     const payload: LoginRequest = {
       password: String(formData.get("password") ?? ""),
-      rememberMe: formData.get("rememberMe") === "on",
+      rememberMe,
       username: String(formData.get("username") ?? "").trim()
     };
 
@@ -58,19 +59,28 @@ export function LoginForm() {
   return (
     <form className="authForm" onSubmit={handleSubmit}>
       <div className="authSocialStack" aria-label="소셜 로그인">
-        <a className="authSocialButton authSocialButtonNaver" href="/api/auth/oauth/naver/start">
+        <a
+          className="authSocialButton authSocialButtonNaver"
+          href={getOAuthStartHref("naver", rememberMe)}
+        >
           <span className="authSocialMark" aria-hidden="true">
             N
           </span>
           <span>Naver로 계속하기</span>
         </a>
-        <a className="authSocialButton authSocialButtonKakao" href="/api/auth/oauth/kakao/start">
+        <a
+          className="authSocialButton authSocialButtonKakao"
+          href={getOAuthStartHref("kakao", rememberMe)}
+        >
           <span className="authSocialMark authSocialMarkKakao" aria-hidden="true">
             K
           </span>
           <span>Kakao로 계속하기</span>
         </a>
-        <a className="authSocialButton authSocialButtonGithub" href="/api/auth/oauth/github/start">
+        <a
+          className="authSocialButton authSocialButtonGithub"
+          href={getOAuthStartHref("github", rememberMe)}
+        >
           <span className="authSocialMark authSocialMarkGithub" aria-hidden="true">
             G
           </span>
@@ -103,7 +113,13 @@ export function LoginForm() {
         />
       </label>
       <label className="authCheckboxLabel">
-        <input disabled={isSubmitting} name="rememberMe" type="checkbox" />
+        <input
+          checked={rememberMe}
+          disabled={isSubmitting}
+          name="rememberMe"
+          onChange={(event) => setRememberMe(event.target.checked)}
+          type="checkbox"
+        />
         <span>로그인 상태 유지</span>
       </label>
       <div className="authFormActions">
@@ -119,6 +135,12 @@ export function LoginForm() {
       </button>
     </form>
   );
+}
+
+function getOAuthStartHref(provider: "naver" | "kakao" | "github", rememberMe: boolean): string {
+  const baseHref = `/api/auth/oauth/${provider}/start`;
+
+  return rememberMe ? `${baseHref}?rememberMe=true` : baseHref;
 }
 
 function getOAuthErrorMessage(oauthError: string): string {
