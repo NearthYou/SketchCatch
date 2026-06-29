@@ -38,6 +38,9 @@ export type ParameterInputPanelProps = DiagramEditorPanelContext;
 
 type ParameterErrors = Record<string, string>;
 type RecordValue = Record<string, unknown>;
+type CloseMenuOptions = {
+  restoreFocus?: boolean;
+};
 
 const parameterCatalog: ParameterCatalog = terraformParameterCatalog;
 
@@ -212,15 +215,22 @@ function RegionField({
   const [activeOptionIndex, setActiveOptionIndex] = useState(-1);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const triggerButtonRef = useRef<HTMLButtonElement | null>(null);
   const listboxId = useId();
   const filteredOptions = useMemo(() => filterAwsRegionOptions(query), [query]);
   const activeOption = activeOptionIndex >= 0 ? filteredOptions[activeOptionIndex] : undefined;
   const selectedRegionLabel = getAwsRegionLabel(value);
 
-  const closeMenu = () => {
+  const closeMenu = ({ restoreFocus = false }: CloseMenuOptions = {}) => {
     setIsOpen(false);
     setQuery("");
     setActiveOptionIndex(-1);
+
+    if (restoreFocus) {
+      requestAnimationFrame(() => {
+        triggerButtonRef.current?.focus();
+      });
+    }
   };
 
   const openMenu = () => {
@@ -242,7 +252,7 @@ function RegionField({
   const handleKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     if (event.key === "Escape") {
       event.preventDefault();
-      closeMenu();
+      closeMenu({ restoreFocus: true });
     }
   };
 
@@ -284,7 +294,7 @@ function RegionField({
 
   const handleSelect = (awsRegion: AwsRegionCode) => {
     onChange(awsRegion);
-    closeMenu();
+    closeMenu({ restoreFocus: true });
   };
 
   const handleSearchQueryChange = (queryValue: string) => {
@@ -314,6 +324,7 @@ function RegionField({
           className={`${styles.regionControl} ${isOpen ? styles.regionControlOpen : ""}`}
           onClick={() => (isOpen ? closeMenu() : openMenu())}
           onKeyDown={handleControlKeyDown}
+          ref={triggerButtonRef}
           type="button"
         >
           <span className={styles.regionControlText}>{selectedRegionLabel}</span>
@@ -362,6 +373,7 @@ function RegionField({
                       onMouseEnter={() => setActiveOptionIndex(optionIndex)}
                       onClick={() => handleSelect(option.value)}
                       role="option"
+                      tabIndex={-1}
                       type="button"
                     >
                       <span className={styles.regionOptionText}>
