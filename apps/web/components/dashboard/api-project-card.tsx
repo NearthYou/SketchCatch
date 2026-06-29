@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { Project } from "@sketchcatch/types";
 import { DashboardIcon } from "./dashboard-icons";
+import { ProjectArchitectureThumbnail } from "./project-architecture-thumbnail";
 
 export type ApiProjectCardProps = {
   readonly project: Project;
@@ -15,27 +16,22 @@ export function ApiProjectCard({
   timestampValue,
   variant = "wide"
 }: ApiProjectCardProps) {
+  const href = getWorkspaceHref(project);
+
   return (
-    <article className={variant === "wide" ? "projectCard projectCardWide" : "projectCard"}>
-      <div className="projectPreview" aria-hidden="true">
-        <span className="projectPreviewFrame" />
-        <span className="projectPreviewNode projectPreviewNodeVpc">VPC</span>
-        <span className="projectPreviewNode projectPreviewNodeApp">APP</span>
-        <span className="projectPreviewNode projectPreviewNodeData">DB</span>
-        <span className="projectPreviewLine projectPreviewLineOne" />
-        <span className="projectPreviewLine projectPreviewLineTwo" />
-      </div>
+    <Link
+      aria-label={`${project.name} 프로젝트 열기`}
+      className={variant === "wide" ? "projectCard projectCardWide projectCardLink" : "projectCard projectCardLink"}
+      href={href}
+    >
+      <ProjectArchitectureThumbnail projectId={project.id} projectName={project.name} />
 
       <div className="projectCardBody">
         <div className="projectCardTitle">
           <span>DB saved project</span>
-          <h3>
-            <Link className="projectTitleLink" href={getWorkspaceHref(project)}>
-              {project.name}
-            </Link>
-          </h3>
+          <h3>{project.name}</h3>
         </div>
-        <p>{project.description ?? "설명 없음"}</p>
+        {project.description?.trim() ? <p>{project.description}</p> : null}
 
         <div className="dashboardChipRow">
           <span className="dashboardChip">Diagram draft</span>
@@ -49,7 +45,7 @@ export function ApiProjectCard({
           </span>
         </div>
       </div>
-    </article>
+    </Link>
   );
 }
 

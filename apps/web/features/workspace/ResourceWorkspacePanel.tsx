@@ -1,10 +1,22 @@
-import { useMemo } from "react";
+﻿import { type KeyboardEvent, useMemo, useState } from "react";
 import type { DiagramNode } from "@sketchcatch/types";
-import { Box, ListTree, MoreHorizontal } from "lucide-react";
+import {
+  Box,
+  ChevronRight,
+  CopyPlus,
+  Database,
+  Edit3,
+  ListTree,
+  MoreHorizontal,
+  Minimize2,
+  Trash2
+} from "lucide-react";
 import type { DiagramEditorPanelContext } from "../diagram-editor";
 import { ParameterInputPanel } from "../parameter-input";
 import type { ResourceWorkspaceView } from "./workspace-right-panel.types";
 import styles from "./workspace.module.css";
+
+const RESOURCE_SUMMARY_COLLAPSED_LIMIT = 5;
 
 export function ResourceWorkspacePanel({
   context,
@@ -56,7 +68,7 @@ export function ResourceWorkspacePanel({
       {view === "settings" ? (
         <ParameterInputPanel {...context} />
       ) : (
-        <ResourceListPanel context={context} nodes={resourceNodes} />
+        <ResourceListPanel context={context} nodes={resourceNodes} onViewChange={onViewChange} />
       )}
     </div>
   );
@@ -64,11 +76,16 @@ export function ResourceWorkspacePanel({
 
 function ResourceListPanel({
   context,
-  nodes
+  nodes,
+  onViewChange
 }: {
   readonly context: DiagramEditorPanelContext;
   readonly nodes: readonly DiagramNode[];
+  readonly onViewChange: (view: ResourceWorkspaceView) => void;
 }) {
+  const [expandedNodeIds, setExpandedNodeIds] = useState<ReadonlySet<string>>(() => new Set());
+  const [openMenuNodeId, setOpenMenuNodeId] = useState<string | null>(null);
+
   if (nodes.length === 0) {
     return (
       <div className={styles.resourceListEmpty}>
@@ -82,17 +99,20 @@ function ResourceListPanel({
     <div className={styles.resourceListPanel}>
       {nodes.map((node) => {
         const summaryRows = getResourceSummaryRows(node);
+        const isActive = node.id === context.selectedNodeId;
+        const isExpanded = expandedNodeIds.has(node.id);
+        const visibleSummaryRows = isExpanded
+          ? summaryRows
+          : summaryRows.slice(0, RESOURCE_SUMMARY_COLLAPSED_LIMIT);
+        const hasHiddenSummaryRows = summaryRows.length > RESOURCE_SUMMARY_COLLAPSED_LIMIT;
 
         return (
-          <button
-            className={
-              node.id === context.selectedNodeId
-                ? styles.resourceListItemActive
-                : styles.resourceListItem
-            }
+          <article
+            className={isActive ? styles.resourceListItemActive : styles.resourceListItem}
             key={node.id}
-            onClick={() => context.focusResourceNode(node.id)}
-            type="button"
+            onClick={() => focusNode(context, node.id)}
+            onKeyDown={(event) => handleResourceCardKeyDown(event, context, node.id)}
+            tabIndex={0}
           >
             <span className={styles.resourceListHeader}>
               <span className={styles.resourceListIdentity}>
@@ -108,26 +128,321 @@ function ResourceListPanel({
                 </span>
                 <strong>{getNodeDisplayName(node)}</strong>
               </span>
-              <MoreHorizontal size={18} aria-hidden="true" />
+              <button
+                aria-expanded={openMenuNodeId === node.id}
+                aria-haspopup="menu"
+                aria-label={`${getNodeDisplayName(node)} actions`}
+                className={styles.resourceListMoreButton}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  focusNode(context, node.id);
+                  setOpenMenuNodeId((currentNodeId) => (currentNodeId === node.id ? null : node.id));
+                }}
+                type="button"
+              >
+                <MoreHorizontal size={18} aria-hidden="true" />
+              </button>
+              {openMenuNodeId === node.id ? (
+                <ResourceCardMenu
+                  context={context}
+                  isExpanded={isExpanded}
+                  node={node}
+                  onClose={() => setOpenMenuNodeId(null)}
+                  onEditConfig={() => {
+                    onViewChange("settings");
+                    setOpenMenuNodeId(null);
+                  }}
+                  onMinimize={() => {
+                    setExpandedNodeIds((currentNodeIds) => removeSetValue(currentNodeIds, node.id));
+                    setOpenMenuNodeId(null);
+                  }}
+                />
+              ) : null}
             </span>
             <span className={styles.resourceListAddress}>{getNodeTerraformAddress(node)}</span>
             {summaryRows.length > 0 ? (
               <span className={styles.resourceListValues}>
-                {summaryRows.map((row) => (
-                  <span className={styles.resourceListValueRow} key={row.label}>
+                {visibleSummaryRows.map((row) => (
+                  <span className={styles.resourceListValueRow} key={row.key}>
                     <span>{row.label}</span>
-                    <strong>{row.value}</strong>
+                    <InlineResourceValueInput
+                      context={context}
+                      node={node}
+                      parameterKey={row.key}
+                      value={row.rawValue}
+                    />
                   </span>
                 ))}
+                {hasHiddenSummaryRows ? (
+                  <button
+                    className={styles.resourceListConfigToggle}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setExpandedNodeIds((currentNodeIds) =>
+                        isExpanded ? removeSetValue(currentNodeIds, node.id) : addSetValue(currentNodeIds, node.id)
+                      );
+                    }}
+                    type="button"
+                  >
+                    <span aria-hidden="true">{isExpanded ? "-" : "+"}</span>
+                    {isExpanded ? "Minimize configuration" : "Show full configuration"}
+                  </button>
+                ) : null}
               </span>
             ) : (
               <span className={styles.resourceListNoValues}>No configured parameters</span>
             )}
-          </button>
+          </article>
         );
       })}
     </div>
   );
+}
+
+function handleResourceCardKeyDown(
+  event: KeyboardEvent<HTMLElement>,
+  context: DiagramEditorPanelContext,
+  nodeId: string
+): void {
+  if (event.key !== "Enter" && event.key !== " ") {
+    return;
+  }
+
+  event.preventDefault();
+  focusNode(context, nodeId);
+}
+
+function ResourceCardMenu({
+  context,
+  isExpanded,
+  node,
+  onClose,
+  onEditConfig,
+  onMinimize
+}: {
+  readonly context: DiagramEditorPanelContext;
+  readonly isExpanded: boolean;
+  readonly node: DiagramNode;
+  readonly onClose: () => void;
+  readonly onEditConfig: () => void;
+  readonly onMinimize: () => void;
+}) {
+  const terraformBlockType = node.parameters?.terraformBlockType === "data" ? "data" : "resource";
+  const switchLabel = terraformBlockType === "data" ? "Switch to resource" : "Switch to data source";
+
+  return (
+    <div className={styles.resourceCardMenu} onClick={(event) => event.stopPropagation()} role="menu">
+      <button
+        className={styles.resourceCardMenuItem}
+        onClick={() => {
+          focusNode(context, node.id);
+          onEditConfig();
+        }}
+        role="menuitem"
+        type="button"
+      >
+        <Edit3 size={17} aria-hidden="true" />
+        <span>Edit config</span>
+      </button>
+      <button
+        className={styles.resourceCardMenuItem}
+        onClick={() => {
+          switchTerraformBlockType(context, node);
+          onClose();
+        }}
+        role="menuitem"
+        type="button"
+      >
+        <Box size={17} aria-hidden="true" />
+        <span>{switchLabel}</span>
+      </button>
+      <button
+        className={styles.resourceCardMenuItem}
+        onClick={() => {
+          focusNode(context, node.id);
+          onClose();
+        }}
+        role="menuitem"
+        type="button"
+      >
+        <Database size={17} aria-hidden="true" />
+        <span>Terraform state</span>
+        <ChevronRight className={styles.resourceCardMenuChevron} size={17} aria-hidden="true" />
+      </button>
+      <button
+        className={styles.resourceCardMenuItem}
+        onClick={() => {
+          duplicateResourceNode(context, node);
+          onClose();
+        }}
+        role="menuitem"
+        type="button"
+      >
+        <CopyPlus size={17} aria-hidden="true" />
+        <span>Duplicate</span>
+      </button>
+      <button
+        className={styles.resourceCardMenuItem}
+        disabled={!isExpanded}
+        onClick={onMinimize}
+        role="menuitem"
+        type="button"
+      >
+        <Minimize2 size={17} aria-hidden="true" />
+        <span>Minimize</span>
+      </button>
+      <button
+        className={`${styles.resourceCardMenuItem} ${styles.resourceCardMenuDanger}`}
+        onClick={() => {
+          deleteResourceNode(context, node.id);
+          onClose();
+        }}
+        role="menuitem"
+        type="button"
+      >
+        <Trash2 size={17} aria-hidden="true" />
+        <span>Delete</span>
+      </button>
+    </div>
+  );
+}
+
+function focusNode(context: DiagramEditorPanelContext, nodeId: string): void {
+  context.focusResourceNode(nodeId);
+  context.setRightPanelOpen(true);
+}
+
+function InlineResourceValueInput({
+  context,
+  node,
+  parameterKey,
+  value
+}: {
+  readonly context: DiagramEditorPanelContext;
+  readonly node: DiagramNode;
+  readonly parameterKey: string;
+  readonly value: unknown;
+}) {
+  if (!node.parameters || !isInlineEditableResourceValue(value)) {
+    return <strong title={formatResourceSummaryValue(value)}>{formatResourceSummaryValue(value)}</strong>;
+  }
+
+  if (typeof value === "boolean") {
+    return (
+      <select
+        className={styles.resourceListInlineSelect}
+        onClick={(event) => event.stopPropagation()}
+        onChange={(event) => updateInlineParameterValue(context, node, parameterKey, event.target.value === "true")}
+        onKeyDown={(event) => event.stopPropagation()}
+        value={String(value)}
+      >
+        <option value="true">true</option>
+        <option value="false">false</option>
+      </select>
+    );
+  }
+
+  return (
+    <input
+      className={styles.resourceListInlineInput}
+      onClick={(event) => event.stopPropagation()}
+      onChange={(event) =>
+        updateInlineParameterValue(context, node, parameterKey, parseInlineResourceValue(event.target.value, value))
+      }
+      onKeyDown={(event) => event.stopPropagation()}
+      value={String(value)}
+    />
+  );
+}
+
+function updateInlineParameterValue(
+  context: DiagramEditorPanelContext,
+  node: DiagramNode,
+  parameterKey: string,
+  value: string | number | boolean
+): void {
+  if (!node.parameters) {
+    return;
+  }
+
+  context.updateNodeParameters(node.id, {
+    ...node.parameters,
+    values: {
+      ...node.parameters.values,
+      [parameterKey]: value
+    }
+  });
+}
+
+function switchTerraformBlockType(context: DiagramEditorPanelContext, node: DiagramNode): void {
+  if (!node.parameters) {
+    return;
+  }
+
+  context.updateNodeParameters(node.id, {
+    ...node.parameters,
+    terraformBlockType: node.parameters.terraformBlockType === "data" ? "resource" : "data"
+  });
+}
+
+function duplicateResourceNode(context: DiagramEditorPanelContext, node: DiagramNode): void {
+  const nextNodeId = createResourceNodeId(node.id);
+  const nextResourceName = node.parameters?.resourceName ? `${node.parameters.resourceName}_copy` : undefined;
+  const duplicatedNode: DiagramNode = {
+    ...node,
+    id: nextNodeId,
+    label: `${getNodeDisplayName(node)} copy`,
+    position: {
+      x: node.position.x + 36,
+      y: node.position.y + 36
+    },
+    zIndex: getNextResourceZIndex(context.nodes),
+    parameters: node.parameters
+      ? {
+          ...node.parameters,
+          resourceName: nextResourceName ?? node.parameters.resourceName
+        }
+      : node.parameters
+  };
+
+  context.applyDiagramJson({
+    ...context.diagram,
+    nodes: [...context.diagram.nodes, duplicatedNode]
+  });
+  context.focusResourceNode(nextNodeId);
+}
+
+function deleteResourceNode(context: DiagramEditorPanelContext, nodeId: string): void {
+  context.applyDiagramJson({
+    ...context.diagram,
+    edges: context.diagram.edges.filter((edge) => edge.sourceNodeId !== nodeId && edge.targetNodeId !== nodeId),
+    nodes: context.diagram.nodes.filter((node) => node.id !== nodeId)
+  });
+  context.closeInspectedNode();
+}
+
+function addSetValue<T>(values: ReadonlySet<T>, value: T): ReadonlySet<T> {
+  const nextValues = new Set(values);
+  nextValues.add(value);
+  return nextValues;
+}
+
+function removeSetValue<T>(values: ReadonlySet<T>, value: T): ReadonlySet<T> {
+  const nextValues = new Set(values);
+  nextValues.delete(value);
+  return nextValues;
+}
+
+function createResourceNodeId(baseId: string): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return `${baseId}-copy-${crypto.randomUUID()}`;
+  }
+
+  return `${baseId}-copy-${Date.now()}`;
+}
+
+function getNextResourceZIndex(nodes: readonly DiagramNode[]): number {
+  return Math.max(0, ...nodes.map((node) => node.zIndex)) + 1;
 }
 
 function getNodeDisplayName(node: DiagramNode): string {
@@ -146,15 +461,15 @@ function getNodeTerraformAddress(node: DiagramNode): string {
   return `${blockType}.${resourceType}.${resourceName}`;
 }
 
-function getResourceSummaryRows(node: DiagramNode): Array<{ label: string; value: string }> {
+function getResourceSummaryRows(node: DiagramNode): Array<{ key: string; label: string; rawValue: unknown }> {
   const values = node.parameters?.values ?? {};
 
   return Object.entries(values)
     .filter(([, value]) => !isEmptyResourceValue(value))
-    .slice(0, 4)
     .map(([key, value]) => ({
+      key,
       label: toResourceSummaryLabel(key),
-      value: formatResourceSummaryValue(value)
+      rawValue: value
     }));
 }
 
@@ -201,4 +516,17 @@ function formatResourceSummaryValue(value: unknown): string {
   }
 
   return "";
+}
+
+function isInlineEditableResourceValue(value: unknown): value is string | number | boolean {
+  return typeof value === "string" || typeof value === "number" || typeof value === "boolean";
+}
+
+function parseInlineResourceValue(value: string, previousValue: string | number | boolean): string | number {
+  if (typeof previousValue !== "number") {
+    return value;
+  }
+
+  const nextNumber = Number(value);
+  return Number.isFinite(nextNumber) ? nextNumber : previousValue;
 }
