@@ -342,11 +342,23 @@ test("runDeploymentDestroy applies the approved destroy plan and clears deployme
     resultWarningSummary: null
   });
   assert.deepEqual(
-    repository.logs.map((log) => ({ stage: log.stage, level: log.level, message: log.message })),
+    repository.logs
+      .filter((log) => !log.message.startsWith("[duration]"))
+      .map((log) => ({ stage: log.stage, level: log.level, message: log.message })),
     [
       { stage: "destroy", level: "INFO", message: "init ok" },
       { stage: "destroy", level: "INFO", message: "aws_instance.web: Destruction complete" }
     ]
+  );
+  assert(
+    repository.logs.some((log) =>
+      log.message.startsWith("[duration] terraform lock file upload completed in ")
+    )
+  );
+  assert(
+    repository.logs.some((log) =>
+      log.message.startsWith("[duration] deployment destroy result save completed in ")
+    )
   );
 });
 

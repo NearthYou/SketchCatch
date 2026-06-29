@@ -28,7 +28,10 @@ import {
   createS3DeploymentApplyArtifactStorage,
   type DeploymentApplyArtifactStorage
 } from "./deployment-apply-artifact-storage.js";
-import { appendTerraformDurationLog } from "./deployment-duration-logs.js";
+import {
+  appendTerraformDurationLog,
+  runLoggedDeploymentOperation
+} from "./deployment-duration-logs.js";
 import { maskDeploymentMessage } from "./log-masking.js";
 import {
   appendDeploymentLogs,
@@ -234,11 +237,21 @@ export async function runDeploymentDestroyPlan(
       });
     }
 
-    await uploadTerraformLockFile({
+    const lockUpload = await runLoggedDeploymentOperation({
       deploymentId: deployment.id,
-      workspace,
-      storage: planArtifactStorage
+      accessContext: input.accessContext,
+      sequence,
+      stage: "init",
+      label: "terraform lock file upload",
+      repository,
+      operation: () =>
+        uploadTerraformLockFile({
+          deploymentId: deployment.id,
+          workspace: workspace!,
+          storage: planArtifactStorage
+        })
     });
+    sequence = lockUpload.sequence;
 
     terraform.plan = await runTerraformDestroyPlan(workspace.workdir, {
       env: awsCredentials.env,
@@ -278,7 +291,7 @@ export async function runDeploymentDestroyPlan(
       planFileName: defaultPlanFileName,
       signal: input.abortSignal
     });
-    await appendTerraformOutput({
+    sequence = await appendTerraformOutput({
       deploymentId: deployment.id,
       accessContext: input.accessContext,
       sequence,
@@ -320,33 +333,55 @@ export async function runDeploymentDestroyPlan(
     > | null = null;
 
     try {
-      uploadedPlanArtifact = await planArtifactStorage.uploadDeploymentPlanArtifact({
+      const planArtifactUpload = await runLoggedDeploymentOperation({
         deploymentId: deployment.id,
-        planArtifactId,
-        planFilePath: join(workspace.workdir, defaultPlanFileName)
+        accessContext: input.accessContext,
+        sequence,
+        stage: "plan",
+        label: "terraform destroy plan artifact upload",
+        repository,
+        operation: () =>
+          planArtifactStorage.uploadDeploymentPlanArtifact({
+            deploymentId: deployment.id,
+            planArtifactId,
+            planFilePath: join(workspace!.workdir, defaultPlanFileName)
+          })
       });
+      const uploadedPlan = planArtifactUpload.result;
+      uploadedPlanArtifact = uploadedPlan;
+      sequence = planArtifactUpload.sequence;
 
-      const updatedDeployment = await repository.saveDeploymentPlan({
+      const planSave = await runLoggedDeploymentOperation({
         deploymentId: deployment.id,
-        planArtifact: {
-          id: planArtifactId,
-          deploymentId: deployment.id,
-          terraformArtifactId: artifact.id,
-          terraformArtifactSha256,
-          operation: "destroy",
-          objectKey: uploadedPlanArtifact.objectKey,
-          sha256: uploadedPlanArtifact.sha256,
-          accountId: awsCredentials.accountId,
-          region: awsCredentials.region
-        },
-        planSummary,
-        isBlocked: block.isBlocked,
-        blockedBy: block.blockedBy,
-        blockedReason: block.blockedReason,
-        terminalStatus: sourceStatus === "FAILED" ? "FAILED" : "SUCCESS",
-        failureStage: sourceStatus === "FAILED" ? sourceFailureStage : null,
-        errorSummary: sourceStatus === "FAILED" ? sourceErrorSummary : null
+        accessContext: input.accessContext,
+        sequence,
+        stage: "plan",
+        label: "deployment destroy plan save",
+        repository,
+        operation: () =>
+          repository.saveDeploymentPlan({
+            deploymentId: deployment.id,
+            planArtifact: {
+              id: planArtifactId,
+              deploymentId: deployment.id,
+              terraformArtifactId: artifact.id,
+              terraformArtifactSha256,
+              operation: "destroy",
+              objectKey: uploadedPlan.objectKey,
+              sha256: uploadedPlan.sha256,
+              accountId: awsCredentials.accountId,
+              region: awsCredentials.region
+            },
+            planSummary,
+            isBlocked: block.isBlocked,
+            blockedBy: block.blockedBy,
+            blockedReason: block.blockedReason,
+            terminalStatus: sourceStatus === "FAILED" ? "FAILED" : "SUCCESS",
+            failureStage: sourceStatus === "FAILED" ? sourceFailureStage : null,
+            errorSummary: sourceStatus === "FAILED" ? sourceErrorSummary : null
+          })
       });
+      const updatedDeployment = planSave.result;
 
       if (!updatedDeployment) {
         throw new DeploymentNotFoundError("Deployment not found");

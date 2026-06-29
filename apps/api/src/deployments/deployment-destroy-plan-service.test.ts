@@ -335,6 +335,21 @@ test("runDeploymentDestroyPlan restores state and stores a destroy plan artifact
   assert.equal(repository.savedPlans[0]?.planArtifact.terraformArtifactSha256, terraformArtifactSha256);
   assert.equal(repository.savedPlans[0]?.terminalStatus, "SUCCESS");
   assert.equal(repository.savedPlans[0]?.blockedBy, "missing_approval");
+  assert(
+    repository.logs.some((log) =>
+      log.message.startsWith("[duration] terraform lock file upload completed in ")
+    )
+  );
+  assert(
+    repository.logs.some((log) =>
+      log.message.startsWith("[duration] terraform destroy plan artifact upload completed in ")
+    )
+  );
+  assert(
+    repository.logs.some((log) =>
+      log.message.startsWith("[duration] deployment destroy plan save completed in ")
+    )
+  );
 });
 
 test("runDeploymentDestroyPlan only allows success or cleanup-capable failed deployments", async () => {

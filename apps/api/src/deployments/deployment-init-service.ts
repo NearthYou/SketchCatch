@@ -27,6 +27,15 @@ import {
 } from "./terraform-runner.js";
 import { maskDeploymentMessage } from "./log-masking.js";
 import { assertTerraformArtifactIsSafe } from "./terraform-artifact-safety.js";
+import {
+  appendTerraformDurationLog,
+  runLoggedDeploymentOperation
+} from "./deployment-duration-logs.js";
+import { createS3DeploymentPlanArtifactStorage } from "./deployment-plan-artifact-storage.js";
+import {
+  type TerraformLockFileCapableStorage,
+  uploadTerraformLockFile
+} from "./terraform-lock-file-workspace.js";
 
 export type RunDeploymentInitInput = {
   deploymentId: string;
@@ -43,6 +52,7 @@ export type RunDeploymentInitOptions = {
     awsConnection: AwsConnection
   ) => Promise<PreparedTerraformAwsCredentialEnv>;
   awsStsGateway?: AwsConnectionStsGateway;
+  initArtifactStorage?: TerraformLockFileCapableStorage;
 };
 
 export type RunDeploymentInitResult = {
@@ -66,6 +76,7 @@ export async function runDeploymentInit(
         awsConnection,
         options.awsStsGateway ?? createAwsSdkStsGateway()
       ));
+  const initArtifactStorage = options.initArtifactStorage ?? createS3DeploymentPlanArtifactStorage();
 
   let workspace: PreparedTerraformWorkspace | undefined;
   let deploymentId: string | undefined;
@@ -149,12 +160,21 @@ export async function runDeploymentInit(
       repository
     });
 
-    await appendOutputLines({
+    sequence = await appendOutputLines({
       deploymentId: deployment.id,
       accessContext: input.accessContext,
       sequence,
       output: terraform.stderr,
       level: terraform.exitCode === 0 ? "WARN" : "ERROR",
+      repository
+    });
+    sequence = await appendTerraformDurationLog({
+      deploymentId: deployment.id,
+      accessContext: input.accessContext,
+      sequence,
+      stage: "init",
+      label: "terraform init",
+      result: terraform,
       repository
     });
 
@@ -174,7 +194,32 @@ export async function runDeploymentInit(
     }
 
     if (terraform.exitCode === 0) {
-      const updatedDeployment = await repository.markDeploymentInitSucceeded(deployment.id);
+      const lockUpload = await runLoggedDeploymentOperation({
+        deploymentId: deployment.id,
+        accessContext: input.accessContext,
+        sequence,
+        stage: "init",
+        label: "terraform lock file upload",
+        repository,
+        operation: () =>
+          uploadTerraformLockFile({
+            deploymentId: deployment.id,
+            workspace: workspace!,
+            storage: initArtifactStorage
+          })
+      });
+      sequence = lockUpload.sequence;
+
+      const initStatusSave = await runLoggedDeploymentOperation({
+        deploymentId: deployment.id,
+        accessContext: input.accessContext,
+        sequence,
+        stage: "init",
+        label: "deployment init status save",
+        repository,
+        operation: () => repository.markDeploymentInitSucceeded(deployment.id)
+      });
+      const updatedDeployment = initStatusSave.result;
 
       if (!updatedDeployment) {
         throw new DeploymentNotFoundError("Deployment not found");
@@ -277,7 +322,7 @@ async function prepareAwsCredentialsForInit(input: {
 function splitOutputLines(output: string): string[] {
   return output
     .split(/\r?\n/)
-    .map((line) => line.trimEnd())
+    .map((line) => maskDeploymentMessage(line.trimEnd()))
     .filter((line) => line.length > 0);
 }
 

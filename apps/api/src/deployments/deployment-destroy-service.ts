@@ -15,7 +15,10 @@ import {
   createS3DeploymentApplyArtifactStorage,
   type DeploymentApplyArtifactStorage
 } from "./deployment-apply-artifact-storage.js";
-import { appendTerraformDurationLog } from "./deployment-duration-logs.js";
+import {
+  appendTerraformDurationLog,
+  runLoggedDeploymentOperation
+} from "./deployment-duration-logs.js";
 import { maskDeploymentMessage } from "./log-masking.js";
 import {
   appendDeploymentLogs,
@@ -220,18 +223,28 @@ export async function runDeploymentDestroy(
       });
     }
 
-    await uploadTerraformLockFile({
+    const lockUpload = await runLoggedDeploymentOperation({
       deploymentId: deployment.id,
-      workspace,
-      storage: applyArtifactStorage
+      accessContext: input.accessContext,
+      sequence,
+      stage: "destroy",
+      label: "terraform lock file upload",
+      repository,
+      operation: () =>
+        uploadTerraformLockFile({
+          deploymentId: deployment.id,
+          workspace: workspace!,
+          storage: applyArtifactStorage
+        })
     });
+    sequence = lockUpload.sequence;
 
     terraform.destroy = await runTerraformApply(workspace.workdir, {
       env: awsCredentials.env,
       planFileName: defaultPlanFileName,
       signal: input.abortSignal
     });
-    await appendTerraformDestroyOutput({
+    sequence = await appendTerraformDestroyOutput({
       deploymentId: deployment.id,
       accessContext: input.accessContext,
       sequence,
@@ -261,12 +274,22 @@ export async function runDeploymentDestroy(
 
     destroySucceeded = true;
 
-    const completedDeployment = await repository.completeDeploymentDestroy(deployment.id, {
-      resultWarningSummary:
-        sourceStatus === "FAILED"
-          ? "Deployment was destroyed after a failed deployment cleanup."
-          : null
+    const destroyResultSave = await runLoggedDeploymentOperation({
+      deploymentId: deployment.id,
+      accessContext: input.accessContext,
+      sequence,
+      stage: "destroy",
+      label: "deployment destroy result save",
+      repository,
+      operation: () =>
+        repository.completeDeploymentDestroy(deployment.id, {
+          resultWarningSummary:
+            sourceStatus === "FAILED"
+              ? "Deployment was destroyed after a failed deployment cleanup."
+              : null
+        })
     });
+    const completedDeployment = destroyResultSave.result;
 
     if (!completedDeployment) {
       throw new DeploymentNotFoundError("Deployment not found");

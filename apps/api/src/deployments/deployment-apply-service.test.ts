@@ -516,8 +516,25 @@ test("runDeploymentApply applies the approved tfplan and stores state resources 
     }
   ]);
   assert.deepEqual(
-    repository.logs.map((log) => log.message),
+    repository.logs
+      .filter((log) => !log.message.startsWith("[duration]"))
+      .map((log) => log.message),
     ["init ok", "aws_vpc.main: Creation complete"]
+  );
+  assert(
+    repository.logs.some((log) =>
+      log.message.startsWith("[duration] terraform lock file upload completed in ")
+    )
+  );
+  assert(
+    repository.logs.some((log) =>
+      log.message.startsWith("[duration] terraform state upload completed in ")
+    )
+  );
+  assert(
+    repository.logs.some((log) =>
+      log.message.startsWith("[duration] deployment apply result save completed in ")
+    )
   );
 });
 
@@ -617,10 +634,12 @@ test("runDeploymentApply marks apply failures failed and masks secret output", a
     /sketchcatch-terraform-apply[\\/]terraform\.tfstate$/
   );
   assert.deepEqual(
-    repository.logs.map((log) => ({
-      level: log.level,
-      message: log.message
-    })),
+    repository.logs
+      .filter((log) => !log.message.startsWith("[duration]"))
+      .map((log) => ({
+        level: log.level,
+        message: log.message
+      })),
     [
       { level: "INFO", message: "init ok" },
       { level: "ERROR", message: "[REDACTED]" },
@@ -630,6 +649,11 @@ test("runDeploymentApply marks apply failures failed and masks secret output", a
         message: "Partial Terraform state was saved after failed apply for explicit cleanup destroy."
       }
     ]
+  );
+  assert(
+    repository.logs.some((log) =>
+      log.message.startsWith("[duration] partial terraform state upload completed in ")
+    )
   );
 });
 
