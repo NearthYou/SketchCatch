@@ -11,6 +11,7 @@ import type { DiagramFlowEdge, DiagramFlowNode, DiagramFlowNodeHandlers } from "
 export function toFlowNodes(
   nodes: readonly DiagramNode[],
   selectedNodeIds: readonly string[],
+  activeReferenceDropTargetNodeId: string | null,
   handlers: DiagramFlowNodeHandlers
 ): DiagramFlowNode[] {
   const selectedNodeIdSet = new Set(selectedNodeIds);
@@ -27,6 +28,7 @@ export function toFlowNodes(
         node,
         selectedNodeCount: selectedNodeIds.length,
         isDimmed: shouldDimUnselectedNodes && !selected,
+        isReferenceDropTarget: node.id === activeReferenceDropTargetNodeId,
         ...handlers
       },
       selected,

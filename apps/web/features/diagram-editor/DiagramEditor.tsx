@@ -47,6 +47,7 @@ import type {
 import type { DiagramEdge, DiagramJson, DiagramNode } from "../../../../packages/types/src";
 
 import { ParameterInputPanel } from "../parameter-input";
+import { terraformParameterCatalog } from "../parameter-input/catalog";
 import { ResourceSettingsPanel } from "../resource-settings";
 import { DEFAULT_DIAGRAM_VIEWPORT, EMPTY_DIAGRAM } from "./constants";
 import { DiagramEdgeToolbar } from "./DiagramEdgeToolbar";
@@ -55,19 +56,24 @@ import {
   applyNodeMetadataUpdate,
   applyNodeParametersUpdate,
   areDiagramsEqual,
+  clearActiveResourceDragPayload,
   cloneDiagram,
   createDiagramEdge,
   createDiagramNodeFromPayload,
   createPastedNodes,
   getDefaultViewport,
+  getActiveResourceDragPayload,
   getNextZIndex,
-  parseResourceDragPayload,
   removeEdgesFromDiagram,
   removeNodesFromDiagram,
   updateDiagramViewport,
   updateNodeById
 } from "./diagram-utils";
 import { toFlowEdges, toFlowNodes } from "./flow-mappers";
+import {
+  applyInnermostReferenceDropTarget,
+  findInnermostVisualDropTarget
+} from "./reference-drop-targets";
 import type {
   DiagramEditorPanelContext,
   DiagramEditorProps,
@@ -111,6 +117,7 @@ function DiagramEditorInner({
   const [isRightPanelOpen, setRightPanelOpen] = useState(true);
   const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
   const [selectedEdgeIds, setSelectedEdgeIds] = useState<string[]>([]);
+  const [activeReferenceDropTargetNodeId, setActiveReferenceDropTargetNodeId] = useState<string | null>(null);
   const [interactionMode, setInteractionMode] = useState<"select" | "pan">("select");
   const temporaryPanPreviousModeRef = useRef<"select" | "pan" | null>(null);
   const clipboardRef = useRef<DiagramNode[]>([]);
@@ -145,6 +152,7 @@ function DiagramEditorInner({
     setInspectedNodeId(null);
     setSelectedNodeIds([]);
     setSelectedEdgeIds([]);
+    setActiveReferenceDropTargetNodeId(null);
   }, [initialDiagram, replaceDiagram]);
 
   const pushHistory = useCallback((before: DiagramJson, after: DiagramJson) => {
@@ -183,6 +191,14 @@ function DiagramEditorInner({
 
   const focusEditorShell = useCallback(() => {
     editorShellRef.current?.focus({ preventScroll: true });
+  }, []);
+
+  const updateActiveReferenceDropTargetNodeId = useCallback((nodeId: string | null) => {
+    setActiveReferenceDropTargetNodeId((currentNodeId) => (currentNodeId === nodeId ? currentNodeId : nodeId));
+  }, []);
+
+  const getVisualDropTargetNodeId = useCallback((childNode: DiagramNode, nodes: readonly DiagramNode[]) => {
+    return findInnermostVisualDropTarget(childNode, nodes, terraformParameterCatalog)?.id ?? null;
   }, []);
 
   const undo = useCallback(() => {
@@ -437,7 +453,7 @@ function DiagramEditorInner({
 
   const flowNodes = useMemo(
     () =>
-      toFlowNodes(diagram.nodes, selectedNodeIds, {
+      toFlowNodes(diagram.nodes, selectedNodeIds, activeReferenceDropTargetNodeId, {
         onBringForward: handleBringForward,
         onSendBackward: handleSendBackward,
         onTextColorChange: handleTextColorChange,
@@ -448,6 +464,7 @@ function DiagramEditorInner({
         onResizeEnd: handleResizeEnd
       }),
     [
+      activeReferenceDropTargetNodeId,
       diagram.nodes,
       handleBorderColorChange,
       handleBringForward,
@@ -549,19 +566,55 @@ function DiagramEditorInner({
 
   const handleNodeDragStart = useCallback(() => {
     dragSnapshotRef.current = cloneDiagram(diagramRef.current);
-  }, []);
+    updateActiveReferenceDropTargetNodeId(null);
+  }, [updateActiveReferenceDropTargetNodeId]);
+
+  const handleNodeDrag = useCallback(
+    (_event: MouseEvent | TouchEvent, draggedFlowNode: DiagramFlowNode, nodes: DiagramFlowNode[]) => {
+      const positionByNodeId = new Map(nodes.map((node) => [node.id, node.position]));
+      const positionedNodes = diagramRef.current.nodes.map((node) => {
+        const position = positionByNodeId.get(node.id);
+
+        return position ? { ...node, position: { ...position } } : node;
+      });
+      const draggedNode = positionedNodes.find((node) => node.id === draggedFlowNode.id);
+
+      updateActiveReferenceDropTargetNodeId(
+        draggedNode ? getVisualDropTargetNodeId(draggedNode, positionedNodes) : null
+      );
+    },
+    [getVisualDropTargetNodeId, updateActiveReferenceDropTargetNodeId]
+  );
 
   const handleNodeDragStop = useCallback(
     (_event: MouseEvent | TouchEvent, _node: DiagramFlowNode, nodes: DiagramFlowNode[]) => {
       const before = dragSnapshotRef.current;
       const positionByNodeId = new Map(nodes.map((node) => [node.id, node.position]));
+      const previousPositionByNodeId = new Map(
+        (before?.nodes ?? diagramRef.current.nodes).map((node) => [node.id, node.position])
+      );
+      const movedNodeIds = new Set<string>();
+
+      for (const [nodeId, position] of positionByNodeId) {
+        const previousPosition = previousPositionByNodeId.get(nodeId);
+
+        if (previousPosition && (previousPosition.x !== position.x || previousPosition.y !== position.y)) {
+          movedNodeIds.add(nodeId);
+        }
+      }
+
+      const positionedNodes = diagramRef.current.nodes.map((node) => {
+        const position = positionByNodeId.get(node.id);
+
+        return position ? { ...node, position: { ...position } } : node;
+      });
       const after = {
         ...diagramRef.current,
-        nodes: diagramRef.current.nodes.map((node) => {
-          const position = positionByNodeId.get(node.id);
-
-          return position ? { ...node, position: { ...position } } : node;
-        })
+        nodes: positionedNodes.map((node) =>
+          movedNodeIds.has(node.id)
+            ? applyInnermostReferenceDropTarget(node, positionedNodes, terraformParameterCatalog)
+            : node
+        )
       };
 
       replaceDiagram(after);
@@ -571,8 +624,9 @@ function DiagramEditorInner({
       }
 
       dragSnapshotRef.current = null;
+      updateActiveReferenceDropTargetNodeId(null);
     },
-    [pushHistory, replaceDiagram]
+    [pushHistory, replaceDiagram, updateActiveReferenceDropTargetNodeId]
   );
 
   const handleConnectStart = useCallback<OnConnectStart>((_event, params) => {
@@ -620,9 +674,11 @@ function DiagramEditorInner({
     (event: DragEvent<HTMLDivElement>) => {
       event.preventDefault();
 
-      const payload = parseResourceDragPayload(event.dataTransfer);
+      const payload = getActiveResourceDragPayload(event.dataTransfer);
 
       if (!payload) {
+        updateActiveReferenceDropTargetNodeId(null);
+        clearActiveResourceDragPayload();
         return;
       }
 
@@ -633,21 +689,57 @@ function DiagramEditorInner({
 
       const nextNode = createDiagramNodeFromPayload(payload, position, getNextZIndex(diagramRef.current.nodes));
 
-      commitDiagramUpdate((currentDiagram) => ({
-        ...currentDiagram,
-        nodes: [...currentDiagram.nodes, nextNode]
-      }));
+      commitDiagramUpdate((currentDiagram) => {
+        const nodesWithNextNode = [...currentDiagram.nodes, nextNode];
+        const nodeWithReferences = applyInnermostReferenceDropTarget(
+          nextNode,
+          nodesWithNextNode,
+          terraformParameterCatalog
+        );
+
+        return {
+          ...currentDiagram,
+          nodes: [...currentDiagram.nodes, nodeWithReferences]
+        };
+      });
       setSelectedNodeIds([nextNode.id]);
       setSelectedEdgeIds([]);
+      updateActiveReferenceDropTargetNodeId(null);
+      clearActiveResourceDragPayload();
       focusEditorShell();
     },
-    [commitDiagramUpdate, focusEditorShell, reactFlow]
+    [commitDiagramUpdate, focusEditorShell, reactFlow, updateActiveReferenceDropTargetNodeId]
   );
 
-  const handleDragOver = useCallback((event: DragEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    event.dataTransfer.dropEffect = "copy";
-  }, []);
+  const handleDragOver = useCallback(
+    (event: DragEvent<HTMLDivElement>) => {
+      event.preventDefault();
+
+      const payload = getActiveResourceDragPayload(event.dataTransfer);
+
+      if (!payload) {
+        event.dataTransfer.dropEffect = "none";
+        updateActiveReferenceDropTargetNodeId(null);
+        return;
+      }
+
+      event.dataTransfer.dropEffect = "copy";
+
+      const position = reactFlow.screenToFlowPosition({
+        x: event.clientX,
+        y: event.clientY
+      });
+      const previewNode = createDiagramNodeFromPayload(payload, position, 0);
+      const nodesWithPreviewNode = [...diagramRef.current.nodes, previewNode];
+
+      updateActiveReferenceDropTargetNodeId(getVisualDropTargetNodeId(previewNode, nodesWithPreviewNode));
+    },
+    [getVisualDropTargetNodeId, reactFlow, updateActiveReferenceDropTargetNodeId]
+  );
+
+  const handleDragLeave = useCallback(() => {
+    updateActiveReferenceDropTargetNodeId(null);
+  }, [updateActiveReferenceDropTargetNodeId]);
 
   const deleteSelection = useCallback(() => {
     const nodeIds = selectedNodeIds;
@@ -1002,6 +1094,7 @@ function DiagramEditorInner({
             onConnect={handleConnect}
             onConnectEnd={handleConnectEnd}
             onConnectStart={handleConnectStart}
+            onDragLeave={handleDragLeave}
             onDragOver={handleDragOver}
             onDrop={handleDrop}
             onEdgesChange={handleEdgesChange}
@@ -1021,6 +1114,7 @@ function DiagramEditorInner({
               focusEditorShell();
             }}
             onNodeDragStart={handleNodeDragStart}
+            onNodeDrag={handleNodeDrag}
             onNodeDragStop={handleNodeDragStop}
             onNodesChange={handleNodesChange}
             onPaneClick={() => {
