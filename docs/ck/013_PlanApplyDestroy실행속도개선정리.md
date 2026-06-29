@@ -1002,40 +1002,53 @@ aws_s3_bucket
 
 | 구간 | 주요 로그 | 시간 |
 | --- | --- | ---: |
-| Deployment 생성 직후 prewarm init | `[duration] terraform init completed in 19.0s` | 19.0s |
-| Apply Plan init | `[duration] terraform init completed in 3.9s` | 3.9s |
-| Apply Plan | `[duration] terraform plan completed in 5.1s` | 5.1s |
-| Apply Plan show | `[duration] terraform show -json completed in 2.8s` | 2.8s |
-| Apply init | `[duration] terraform init completed in 4.0s` | 4.0s |
-| Apply 실행 | `[duration] terraform apply tfplan completed in 39.6s` | 39.6s |
-| Apply output | `[duration] terraform output -json completed in 1.1s` | 1.1s |
-| Apply state show | `[duration] terraform show -json completed in 3.7s` | 3.7s |
+| Deployment 생성 직후 prewarm init | `[duration] terraform init completed in 17.9s` | 17.9s |
+| Apply Plan init | `[duration] terraform init completed in 4.4s` | 4.4s |
+| Apply Plan | `[duration] terraform plan completed in 5.0s` | 5.0s |
+| Apply Plan show | `[duration] terraform show -json completed in 3.0s` | 3.0s |
+| Apply init | `[duration] terraform init completed in 4.3s` | 4.3s |
+| Apply 실행 | `[duration] terraform apply tfplan completed in 39.1s` | 39.1s |
+| Apply output | `[duration] terraform output -json completed in 1.2s` | 1.2s |
+| Apply state show | `[duration] terraform show -json completed in 3.9s` | 3.9s |
 | Destroy Plan init | `[duration] terraform init completed in 5.4s` | 5.4s |
 | Destroy Plan | `[duration] terraform plan -destroy completed in 6.8s` | 6.8s |
-| Destroy Plan show | `[duration] terraform show -json completed in 2.6s` | 2.6s |
-| Destroy init | `[duration] terraform init completed in 4.9s` | 4.9s |
-| Destroy 실행 | `[duration] terraform apply tfplan completed in 60.0s` | 60.0s |
+| Destroy Plan show | `[duration] terraform show -json completed in 3.0s` | 3.0s |
+| Destroy init | `[duration] terraform init completed in 5.4s` | 5.4s |
+| Destroy 실행 | `[duration] terraform apply tfplan completed in 45.7s` | 45.7s |
 
 Plan/Apply/Destroy 사이의 작은 저장 작업은 모두 ms 단위였다.
 
 | 작업 | 시간 |
 | --- | ---: |
-| `terraform lock file upload` after prewarm | 104ms |
-| `deployment init status save` | 4ms |
-| `terraform lock file upload` before apply plan | 52ms |
-| `terraform plan artifact upload` | 87ms |
+| `terraform lock file upload` after prewarm | 75ms |
+| `deployment init status save` | 5ms |
+| `terraform lock file upload` before apply plan | 63ms |
+| `terraform plan artifact upload` | 93ms |
 | `deployment plan save` | 10ms |
-| `terraform lock file upload` before apply | 47ms |
-| `terraform state upload` | 95ms |
-| `deployment apply result save` | 17ms |
-| `terraform lock file upload` before destroy plan | 109ms |
-| `terraform destroy plan artifact upload` | 89ms |
-| `deployment destroy plan save` | 8ms |
-| `terraform lock file upload` before destroy | 45ms |
+| `terraform lock file upload` before apply | 48ms |
+| `terraform state upload` | 85ms |
+| `deployment apply result save` | 15ms |
+| `terraform lock file upload` before destroy plan | 309ms |
+| `terraform destroy plan artifact upload` | 91ms |
+| `deployment destroy plan save` | 10ms |
+| `terraform lock file upload` before destroy | 36ms |
+| `deployment destroy result save` | 10ms |
+
+##### 구간별 합계
+
+| 구간 | 계산 | 합계 |
+| --- | --- | ---: |
+| Deployment 생성 직후 prewarm | `17.9s + 75ms + 5ms` | 17.980s |
+| Apply Plan 전체 | `4.4s + 63ms + 5.0s + 3.0s + 93ms + 10ms` | 12.566s |
+| Apply 전체 | `4.3s + 48ms + 39.1s + 1.2s + 3.9s + 85ms + 15ms` | 48.648s |
+| Destroy Plan 전체 | `5.4s + 309ms + 6.8s + 3.0s + 91ms + 10ms` | 15.610s |
+| Destroy 전체 | `5.4s + 36ms + 45.7s + 10ms` | 51.146s |
+| 사용자 실행 구간 합계 | `Apply Plan + Apply + Destroy Plan + Destroy` | 127.970s |
+| prewarm 포함 총합 | `prewarm + 사용자 실행 구간 합계` | 145.950s |
 
 ##### 3차 개선 효과 확인
 
-prewarm 자체는 첫 실행이라 `terraform init`에 19.0초가 걸렸다. 하지만 사용자가 실제 Apply Plan을 실행할 때는 lock file과 shared cache를 재사용해서 init이 3.9초로 줄었다.
+prewarm 자체는 첫 실행이라 `terraform init`에 17.9초가 걸렸다. 하지만 사용자가 실제 Apply Plan을 실행할 때는 lock file과 shared cache를 재사용해서 init이 4.4초로 줄었다.
 
 ```text
 Reusing previous version of hashicorp/aws from the dependency lock file
@@ -1045,16 +1058,18 @@ Using hashicorp/aws v5.100.0 from the shared cache directory
 Apply, Destroy Plan, Destroy Apply에서도 init은 4~5초대로 유지됐다.
 
 ```text
-Apply init: 4.0s
+Apply init: 4.3s
 Destroy Plan init: 5.4s
-Destroy Apply init: 4.9s
+Destroy Apply init: 5.4s
 ```
+
+사용자 실행 구간의 init 합계는 `4.4s + 4.3s + 5.4s + 5.4s = 19.5s`다. 1차 개선 전에는 같은 구간에서 init만 `70.3s`였으므로, prewarm을 사용자 대기 시간 밖으로 빼면 init 대기만 `50.8s` 줄었다.
 
 따라서 3차에서 의도한 `init prewarm + lock/cache 재사용`은 동작했다. 이제 병목은 init이 아니라 AWS 리소스 생성/삭제 구간이었다.
 
 ##### AWS 리소스 생성 병목
 
-Apply 실행은 39.6초였다.
+Apply 실행은 39.1초였다.
 
 개별 리소스 로그를 보면 시간이 긴 작업은 아래였다.
 
@@ -1062,12 +1077,12 @@ Apply 실행은 39.6초였다.
 | --- | --- | ---: |
 | `aws_vpc.main` | `Creation complete after 12s` | 12s |
 | `aws_subnet.public` | `Creation complete after 11s` | 11s |
-| `aws_instance.web` | `Creation complete after 13s` | 13s |
-| `aws_security_group.web` | `Creation complete after 3s` | 3s |
+| `aws_instance.web` | `Creation complete after 12s` | 12s |
+| `aws_security_group.web` | `Creation complete after 2s` | 2s |
 | `aws_s3_bucket.demo` | `Creation complete after 2s` | 2s |
-| `aws_internet_gateway.igw` | `Creation complete after 1s` | 1s |
+| `aws_internet_gateway.igw` | `Creation complete after 0s` | 0s |
 | `aws_route_table.public` | `Creation complete after 1s` | 1s |
-| `aws_route_table_association.public` | `Creation complete after 1s` | 1s |
+| `aws_route_table_association.public` | `Creation complete after 0s` | 0s |
 
 Terraform은 일부 리소스를 병렬로 만들었지만, 의존 관계 때문에 완전히 동시에 끝나지는 않는다.
 
@@ -1078,11 +1093,11 @@ VPC 생성
 -> EC2 생성
 ```
 
-그래서 EC2 자체가 13초여도 전체 Apply는 39.6초까지 늘어났다.
+그래서 EC2 자체가 12초여도 전체 Apply는 39.1초까지 늘어났다.
 
 ##### AWS 리소스 삭제 병목
 
-Destroy 실행은 60.0초였다.
+Destroy 실행은 45.7초였다.
 
 빠르게 삭제된 리소스도 있었다.
 
@@ -1090,16 +1105,31 @@ Destroy 실행은 60.0초였다.
 aws_route_table_association.public: Destruction complete after 0s
 aws_s3_bucket.demo: Destruction complete after 0s
 aws_route_table.public: Destruction complete after 0s
+aws_subnet.public: Destruction complete after 0s
+aws_vpc.main: Destruction complete after 0s
 ```
 
-하지만 `aws_instance.web`와 `aws_internet_gateway.igw`는 50초까지 계속 대기했다.
+하지만 `aws_instance.web`와 `aws_internet_gateway.igw`는 각각 40초, 38초가 걸렸다.
 
 ```text
-aws_instance.web: Still destroying... 00m50s elapsed
-aws_internet_gateway.igw: Still destroying... 00m50s elapsed
+aws_internet_gateway.igw: Destruction complete after 38s
+aws_instance.web: Destruction complete after 40s
 ```
 
-결국 Destroy 전체는 `terraform apply tfplan completed in 60.0s`로 끝났다. 이 구간은 SketchCatch 내부 DB/S3 저장 시간이 아니라 AWS가 실제 EC2 termination, network detach/delete를 처리하는 시간이다.
+결국 Destroy 전체는 `terraform apply tfplan completed in 45.7s`로 끝났다. 이 구간은 SketchCatch 내부 DB/S3 저장 시간이 아니라 AWS가 실제 EC2 termination, network detach/delete를 처리하는 시간이다.
+
+##### 1차 개선 전 대비
+
+1차 개선 전 실측 총합은 `168.054s`였다. 이번 3차 개선 후 로그를 기준으로 비교하면 아래와 같다.
+
+| 기준 | 1차 개선 전 | 3차 개선 후 | 변화 |
+| --- | ---: | ---: | ---: |
+| 사용자 실행 구간 합계 | 168.054s | 127.970s | 40.084s 감소, 약 23.8% 개선 |
+| prewarm 포함 총합 | 168.054s | 145.950s | 22.104s 감소, 약 13.2% 개선 |
+| 사용자 실행 구간 init 합계 | 70.3s | 19.5s | 50.8s 감소, 약 72.3% 개선 |
+| prewarm 포함 init 합계 | 70.3s | 37.4s | 32.9s 감소, 약 46.8% 개선 |
+
+prewarm은 Deployment 생성 직후 먼저 실행되는 작업이라, 사용자가 Apply Plan 버튼을 누른 뒤의 체감 시간에서는 제외하는 것이 더 자연스럽다. 이 기준으로 보면 3차 개선 후 Plan부터 Destroy 완료까지의 총 대기 시간은 `168.054s`에서 `127.970s`로 줄었다.
 
 ##### 결론
 
@@ -1107,10 +1137,10 @@ aws_internet_gateway.igw: Still destroying... 00m50s elapsed
 
 | 구분 | 판단 |
 | --- | --- |
-| `terraform init` | prewarm/lock/cache로 3.9~5.4초까지 줄어듦 |
-| S3/DB 저장 | 대부분 4~109ms라 병목 아님 |
-| `terraform plan`, `terraform show -json` | 각각 2.6~6.8초 수준 |
-| `terraform apply tfplan` create | 39.6초, AWS 생성 대기 병목 |
-| `terraform apply tfplan` destroy | 60.0초, AWS 삭제 대기 병목 |
+| `terraform init` | prewarm/lock/cache로 사용자 실행 구간에서는 4.3~5.4초대로 줄어듦 |
+| S3/DB/lock 저장 | 대부분 5~309ms라 병목 아님 |
+| `terraform plan`, `terraform show -json` | 각각 3.0~6.8초 수준 |
+| `terraform apply tfplan` create | 39.1초, AWS 생성 대기 병목 |
+| `terraform apply tfplan` destroy | 45.7초, AWS 삭제 대기 병목 |
 
 따라서 VPC/Subnet/IGW/Route Table까지 매번 만들고 지우는 한, 해당 AWS 처리 시간은 반드시 기다려야 한다. 사용자가 체감하는 시간을 더 줄이려면 AWS가 처리할 리소스 수 자체를 줄여야 한다.
