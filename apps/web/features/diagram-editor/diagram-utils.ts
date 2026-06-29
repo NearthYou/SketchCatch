@@ -174,6 +174,27 @@ export function applyNodeParametersUpdate(
   };
 }
 
+export function applyNodeParametersUpdateWithResourceLabel(
+  node: DiagramNode,
+  update:
+    | DiagramNodeParameters
+    | undefined
+    | ((parameters: DiagramNodeParameters | undefined) => DiagramNodeParameters | undefined)
+): DiagramNode {
+  const nextNode = applyNodeParametersUpdate(node, update);
+  const nextResourceName = nextNode.parameters?.resourceName?.trim();
+  const currentResourceName = node.parameters?.resourceName?.trim();
+
+  if (!nextResourceName || nextResourceName === currentResourceName) {
+    return nextNode;
+  }
+
+  return {
+    ...nextNode,
+    label: nextResourceName
+  };
+}
+
 export function removeNodesFromDiagram(diagram: DiagramJson, nodeIds: readonly string[]): DiagramJson {
   const nodeIdSet = new Set(nodeIds);
 

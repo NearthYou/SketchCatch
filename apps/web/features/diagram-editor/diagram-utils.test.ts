@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { DiagramNode, ResourceItem } from "../../../../packages/types/src";
 import {
+  applyNodeParametersUpdateWithResourceLabel,
   clearActiveResourceDragPayload,
   createPastedNodes,
   getActiveResourceDragPayload,
@@ -53,6 +54,40 @@ test("createPastedNodes clears stale parent area metadata from copied nodes", ()
 
   assert.equal(pastedNode?.metadata?.parentAreaNodeId, undefined);
   assert.equal(pastedNode?.metadata?.awsRegion, "ap-northeast-2");
+});
+
+test("applyNodeParametersUpdateWithResourceLabel updates the label from a changed resource name", () => {
+  const node = makeResourceNode({
+    id: "instance-1",
+    resourceName: "web",
+    resourceType: "aws_instance"
+  });
+  const parameters = node.parameters;
+
+  assert(parameters);
+
+  const result = applyNodeParametersUpdateWithResourceLabel(node, {
+    ...parameters,
+    resourceName: "api",
+    values: {}
+  });
+
+  assert.equal(result.label, "api");
+});
+
+test("applyNodeParametersUpdateWithResourceLabel keeps legacy nodes safe without resourceName", () => {
+  const node = makeResourceNode({
+    id: "legacy-1",
+    resourceName: "legacy",
+    resourceType: "aws_instance"
+  });
+  const legacyParameters = {
+    ...node.parameters,
+    resourceName: undefined
+  } as unknown as NonNullable<DiagramNode["parameters"]>;
+
+  assert.doesNotThrow(() => applyNodeParametersUpdateWithResourceLabel(node, legacyParameters));
+  assert.equal(applyNodeParametersUpdateWithResourceLabel(node, legacyParameters).label, "legacy");
 });
 
 function createFakeDataTransfer(): DataTransfer {

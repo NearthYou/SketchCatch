@@ -63,7 +63,7 @@ import { DiagramEdgeToolbar } from "./DiagramEdgeToolbar";
 import { DiagramNodeView } from "./DiagramNodeView";
 import {
   applyNodeMetadataUpdate,
-  applyNodeParametersUpdate,
+  applyNodeParametersUpdateWithResourceLabel,
   areDiagramsEqual,
   clearActiveResourceDragPayload,
   cloneDiagram,
@@ -405,19 +405,9 @@ function DiagramEditorInner({
     (nodeId, update) => {
       commitDiagramUpdate((currentDiagram) => ({
         ...currentDiagram,
-        nodes: updateNodeById(currentDiagram.nodes, nodeId, (node) => {
-          const nextNode = applyNodeParametersUpdate(node, update);
-          const nextResourceName = nextNode.parameters?.resourceName.trim();
-
-          if (!nextResourceName || nextResourceName === node.parameters?.resourceName) {
-            return nextNode;
-          }
-
-          return {
-            ...nextNode,
-            label: nextResourceName
-          };
-        })
+        nodes: updateNodeById(currentDiagram.nodes, nodeId, (node) =>
+          applyNodeParametersUpdateWithResourceLabel(node, update)
+        )
       }));
     },
     [commitDiagramUpdate]
