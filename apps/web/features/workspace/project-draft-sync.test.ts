@@ -81,7 +81,7 @@ const serverDraft: ProjectDraft = {
   updatedAt: "2026-06-24T02:00:00.000Z"
 };
 
-test("loadProjectDiagramDraft loads server draft for a project before local fallback", async () => {
+test("loadProjectDiagramDraft loads the server draft when it is newer than local cache", async () => {
   const calls: string[] = [];
   const result = await loadProjectDiagramDraft(
     {
