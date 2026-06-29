@@ -229,6 +229,7 @@ export type Deployment = DeploymentBlock & {
   terraformArtifactId: string;
   awsConnectionId: string | null;
   currentPlanArtifactId: string | null;
+  currentPlanOperation: "apply" | "destroy" | null;
   stateObjectKey: string | null;
   resultWarningSummary: string | null;
   status: DeploymentStatus;

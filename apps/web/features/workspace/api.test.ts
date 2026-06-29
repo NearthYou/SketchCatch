@@ -11,6 +11,8 @@ import {
   listDeployments,
   listTerraformOutputs,
   listProjects,
+  runDeploymentDestroy,
+  runDeploymentDestroyPlan,
   runDeploymentPlan,
   runDeploymentApply,
   saveProjectDraft,
@@ -527,7 +529,7 @@ test("createDeployment posts selected artifact and verified AWS connection", asy
   assert.equal(deployment.status, "PENDING");
 });
 
-test("deployment helpers list records, start plan, approve plan, apply, and read results", async (context) => {
+test("deployment helpers list records, start plan, approve plan, apply, destroy, and read results", async (context) => {
   const originalFetch = globalThis.fetch;
   const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
   const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
@@ -541,6 +543,25 @@ test("deployment helpers list records, start plan, approve plan, apply, and read
 
   globalThis.fetch = async (input, init) => {
     requests.push({ input, init });
+
+    if (String(input).endsWith("/destroy/plan")) {
+      return new Response(
+        JSON.stringify({
+          deployment: createDeploymentPayload({
+            id: "44444444-4444-4444-8444-444444444444",
+            projectId: project.id,
+            currentPlanOperation: "destroy",
+            status: "RUNNING"
+          })
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json"
+          },
+          status: 202
+        }
+      );
+    }
 
     if (String(input).endsWith("/plan")) {
       return new Response(
@@ -586,6 +607,25 @@ test("deployment helpers list records, start plan, approve plan, apply, and read
             projectId: project.id,
             status: "RUNNING",
             approved: true
+          })
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json"
+          },
+          status: 202
+        }
+      );
+    }
+
+    if (String(input).endsWith("/destroy")) {
+      return new Response(
+        JSON.stringify({
+          deployment: createDeploymentPayload({
+            id: "44444444-4444-4444-8444-444444444444",
+            projectId: project.id,
+            currentPlanOperation: "destroy",
+            status: "RUNNING"
           })
         }),
         {
@@ -667,6 +707,12 @@ test("deployment helpers list records, start plan, approve plan, apply, and read
   const runningDeployment = await runDeploymentPlan("44444444-4444-4444-8444-444444444444");
   const approvedDeployment = await approveDeploymentPlan("44444444-4444-4444-8444-444444444444");
   const applyingDeployment = await runDeploymentApply("44444444-4444-4444-8444-444444444444");
+  const destroyPlanningDeployment = await runDeploymentDestroyPlan(
+    "44444444-4444-4444-8444-444444444444"
+  );
+  const destroyingDeployment = await runDeploymentDestroy(
+    "44444444-4444-4444-8444-444444444444"
+  );
   const resources = await listDeploymentResources("44444444-4444-4444-8444-444444444444");
   const outputs = await listTerraformOutputs("44444444-4444-4444-8444-444444444444");
 
@@ -690,16 +736,30 @@ test("deployment helpers list records, start plan, approve plan, apply, and read
   assert.deepEqual(JSON.parse(String(requests[3]?.init?.body)), {});
   assert.equal(
     String(requests[4]?.input),
+    "/api/deployments/44444444-4444-4444-8444-444444444444/destroy/plan"
+  );
+  assert.equal(requests[4]?.init?.method, "POST");
+  assert.deepEqual(JSON.parse(String(requests[4]?.init?.body)), {});
+  assert.equal(
+    String(requests[5]?.input),
+    "/api/deployments/44444444-4444-4444-8444-444444444444/destroy"
+  );
+  assert.equal(requests[5]?.init?.method, "POST");
+  assert.deepEqual(JSON.parse(String(requests[5]?.init?.body)), {});
+  assert.equal(
+    String(requests[6]?.input),
     "/api/deployments/44444444-4444-4444-8444-444444444444/resources"
   );
   assert.equal(
-    String(requests[5]?.input),
+    String(requests[7]?.input),
     "/api/deployments/44444444-4444-4444-8444-444444444444/outputs"
   );
   assert.equal(deployments[0]?.status, "PENDING");
   assert.equal(runningDeployment.status, "RUNNING");
   assert.equal(approvedDeployment.approvedPlanArtifactId, "99999999-9999-4999-8999-999999999999");
   assert.equal(applyingDeployment.status, "RUNNING");
+  assert.equal(destroyPlanningDeployment.currentPlanOperation, "destroy");
+  assert.equal(destroyingDeployment.currentPlanOperation, "destroy");
   assert.equal(resources[0]?.resourceId, "i-0123456789abcdef0");
   assert.equal(outputs[0]?.name, "instance_id");
 });
@@ -709,6 +769,7 @@ function createDeploymentPayload(input: {
   projectId: string;
   status?: "PENDING" | "RUNNING";
   approved?: boolean;
+  currentPlanOperation?: "apply" | "destroy" | null;
 }) {
   return {
     id: input.id,
@@ -717,6 +778,7 @@ function createDeploymentPayload(input: {
     terraformArtifactId: "66666666-6666-4666-8666-666666666666",
     awsConnectionId: "33333333-3333-4333-8333-333333333333",
     currentPlanArtifactId: null,
+    currentPlanOperation: input.currentPlanOperation ?? null,
     stateObjectKey: null,
     resultWarningSummary: null,
     status: input.status ?? "PENDING",

@@ -55,6 +55,7 @@ type DeploymentResponse = {
     terraformArtifactId: string;
     awsConnectionId: string | null;
     currentPlanArtifactId: string | null;
+    currentPlanOperation: "apply" | "destroy" | null;
     stateObjectKey: string | null;
     resultWarningSummary: string | null;
     status: string;
@@ -1387,6 +1388,31 @@ test("POST /api/deployments/:deploymentId/init maps missing Terraform artifacts 
     error: "not_found",
     message: "Terraform artifact not found for deployment"
   });
+
+  await app.close();
+});
+
+test("GET /api/deployments/:deploymentId includes the current plan operation", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.deployment = createDeploymentRecord(deploymentId, {
+    currentPlanArtifactId: planArtifactId
+  });
+  repository.planArtifact = createDeploymentPlanArtifactRecord({
+    id: planArtifactId,
+    operation: "destroy"
+  });
+  const app = await buildDeploymentTestApp(repository);
+
+  const response = await app.inject({
+    method: "GET",
+    url: `/api/deployments/${deploymentId}`,
+    headers: await authHeaders()
+  });
+
+  assert.equal(response.statusCode, 200);
+  const body = response.json() as DeploymentResponse;
+  assert.equal(body.deployment.currentPlanArtifactId, planArtifactId);
+  assert.equal(body.deployment.currentPlanOperation, "destroy");
 
   await app.close();
 });

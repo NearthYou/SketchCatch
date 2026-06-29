@@ -50,11 +50,14 @@ import {
   listDeployments,
   listTerraformOutputs,
   runDeploymentApply,
+  runDeploymentDestroy,
+  runDeploymentDestroyPlan,
   runDeploymentPlan,
   streamDeploymentLogs,
   syncTerraformToDiagram,
   validateTerraformCode
 } from "./api";
+import { getDeploymentActionState } from "./deployment-actions";
 import { WorkspaceAiPanel } from "./WorkspaceAiPanel";
 import styles from "./workspace.module.css";
 
@@ -1187,6 +1190,7 @@ function DeploymentPanel({
   const [selectedAwsConnectionId, setSelectedAwsConnectionId] = useState("");
   const [selectedDeploymentId, setSelectedDeploymentId] = useState("");
   const [showApplyConfirmation, setShowApplyConfirmation] = useState(false);
+  const [showDestroyConfirmation, setShowDestroyConfirmation] = useState(false);
   const [requestState, setRequestState] = useState<RequestState>("idle");
   const [errorMessage, setErrorMessage] = useState("");
 
@@ -1219,36 +1223,18 @@ function DeploymentPanel({
     selectedAwsConnectionId.length > 0 &&
     requestState !== "loading";
   const hasCurrentPlan = Boolean(selectedDeployment?.currentPlanArtifactId);
-  const isPlanApproved = Boolean(
-    selectedDeployment?.approvedAt && selectedDeployment.approvedPlanArtifactId
-  );
-  const canRunPlan =
-    Boolean(selectedDeployment) &&
-    selectedDeployment?.status !== "RUNNING" &&
-    !isPlanApproved &&
-    requestState !== "loading";
-  const canApprovePlan =
-    hasCurrentPlan &&
-    !isPlanApproved &&
-    selectedDeployment?.status !== "RUNNING" &&
-    selectedDeployment?.isBlocked === true &&
-    selectedDeployment?.blockedBy === "missing_approval" &&
-    requestState !== "loading";
-  const canApply =
-    Boolean(selectedDeployment) &&
-    isPlanApproved &&
-    selectedDeployment?.status !== "RUNNING" &&
-    selectedDeployment?.status !== "SUCCESS" &&
-    selectedDeployment?.isBlocked === false &&
-    requestState !== "loading";
-  const canCancelDeployment =
-    selectedDeployment?.status === "RUNNING" &&
-    !selectedDeployment.cancelRequestedAt &&
-    requestState !== "loading";
-  const shouldShowPlanButton = Boolean(selectedDeployment) && !isPlanApproved;
-  const shouldShowApprovePlanButton =
-    Boolean(selectedDeployment) && hasCurrentPlan && !isPlanApproved;
-  const shouldShowApplyButton = Boolean(selectedDeployment) && isPlanApproved;
+  const deploymentActions = getDeploymentActionState(selectedDeployment, requestState);
+  const canRunPlan = deploymentActions.canRunApplyPlan;
+  const canApprovePlan = deploymentActions.canApprovePlan;
+  const canApply = deploymentActions.canApply;
+  const canRunDestroyPlan = deploymentActions.canRunDestroyPlan;
+  const canDestroy = deploymentActions.canDestroy;
+  const canCancelDeployment = deploymentActions.canCancelDeployment;
+  const shouldShowPlanButton = deploymentActions.shouldShowApplyPlanButton;
+  const shouldShowApprovePlanButton = deploymentActions.shouldShowApprovePlanButton;
+  const shouldShowApplyButton = deploymentActions.shouldShowApplyButton;
+  const shouldShowDestroyPlanButton = deploymentActions.shouldShowDestroyPlanButton;
+  const shouldShowDestroyButton = deploymentActions.shouldShowDestroyButton;
   const deploymentActionHint = selectedDeployment
     ? getDeploymentActionHint(selectedDeployment)
     : "";
@@ -1303,6 +1289,7 @@ function DeploymentPanel({
       setDeploymentResources([]);
       setTerraformOutputs([]);
       setShowApplyConfirmation(false);
+      setShowDestroyConfirmation(false);
       return;
     }
 
@@ -1321,6 +1308,7 @@ function DeploymentPanel({
           setDeploymentResources(resources);
           setTerraformOutputs(outputs);
           setShowApplyConfirmation(false);
+          setShowDestroyConfirmation(false);
         }
       }, "배포 로그를 불러오지 못했습니다.");
     }
@@ -1400,6 +1388,7 @@ function DeploymentPanel({
       setDeploymentResources([]);
       setTerraformOutputs([]);
       setShowApplyConfirmation(false);
+      setShowDestroyConfirmation(false);
     }, "Deployment를 생성하지 못했습니다.");
   }
 
@@ -1424,6 +1413,8 @@ function DeploymentPanel({
       setDeploymentLogs(logs);
       setDeploymentResources(resources);
       setTerraformOutputs(outputs);
+      setShowApplyConfirmation(false);
+      setShowDestroyConfirmation(false);
     }, "Terraform Plan을 시작하지 못했습니다.");
   }
 
@@ -1465,6 +1456,7 @@ function DeploymentPanel({
       );
       setSelectedDeploymentId(deployment.id);
       setShowApplyConfirmation(false);
+      setShowDestroyConfirmation(false);
       const [logs, resources, outputs] = await Promise.all([
         listDeploymentLogs(deployment.id),
         listDeploymentResources(deployment.id),
@@ -1474,6 +1466,58 @@ function DeploymentPanel({
       setDeploymentResources(resources);
       setTerraformOutputs(outputs);
     }, "Terraform Apply를 시작하지 못했습니다.");
+  }
+
+  async function startTerraformDestroyPlan(): Promise<void> {
+    if (!selectedDeployment || !canRunDestroyPlan) {
+      return;
+    }
+
+    await runRequest(async () => {
+      const deployment = await runDeploymentDestroyPlan(selectedDeployment.id);
+      setDeployments((currentDeployments) =>
+        currentDeployments.map((currentDeployment) =>
+          currentDeployment.id === deployment.id ? deployment : currentDeployment
+        )
+      );
+      setSelectedDeploymentId(deployment.id);
+      setShowApplyConfirmation(false);
+      setShowDestroyConfirmation(false);
+      const [logs, resources, outputs] = await Promise.all([
+        listDeploymentLogs(deployment.id),
+        listDeploymentResources(deployment.id),
+        listTerraformOutputs(deployment.id)
+      ]);
+      setDeploymentLogs(logs);
+      setDeploymentResources(resources);
+      setTerraformOutputs(outputs);
+    }, "Terraform Destroy Plan을 시작하지 못했습니다.");
+  }
+
+  async function startTerraformDestroy(): Promise<void> {
+    if (!selectedDeployment || !canDestroy) {
+      return;
+    }
+
+    await runRequest(async () => {
+      const deployment = await runDeploymentDestroy(selectedDeployment.id);
+      setDeployments((currentDeployments) =>
+        currentDeployments.map((currentDeployment) =>
+          currentDeployment.id === deployment.id ? deployment : currentDeployment
+        )
+      );
+      setSelectedDeploymentId(deployment.id);
+      setShowApplyConfirmation(false);
+      setShowDestroyConfirmation(false);
+      const [logs, resources, outputs] = await Promise.all([
+        listDeploymentLogs(deployment.id),
+        listDeploymentResources(deployment.id),
+        listTerraformOutputs(deployment.id)
+      ]);
+      setDeploymentLogs(logs);
+      setDeploymentResources(resources);
+      setTerraformOutputs(outputs);
+    }, "Terraform Destroy를 시작하지 못했습니다.");
   }
 
   async function cancelSelectedDeployment(): Promise<void> {
@@ -1731,7 +1775,7 @@ function DeploymentPanel({
             onClick={approveCurrentPlan}
             type="button"
           >
-            Plan 승인
+            {deploymentActions.approvePlanLabel}
           </button>
         ) : null}
 
@@ -1744,6 +1788,32 @@ function DeploymentPanel({
           >
             <DashboardIcon name="rocket" />
             Terraform Apply 실행
+          </button>
+        ) : null}
+
+        {shouldShowDestroyPlanButton ? (
+          <button
+            className={styles.deploymentSecondaryButton}
+            disabled={!canRunDestroyPlan}
+            onClick={startTerraformDestroyPlan}
+            type="button"
+          >
+            <Trash2 size={16} aria-hidden="true" />
+            {selectedDeployment?.currentPlanOperation === "destroy"
+              ? "Destroy Plan 다시 실행"
+              : "Cleanup Destroy Plan 실행"}
+          </button>
+        ) : null}
+
+        {shouldShowDestroyButton ? (
+          <button
+            className={styles.deploymentDangerButton}
+            disabled={!canDestroy}
+            onClick={() => setShowDestroyConfirmation(true)}
+            type="button"
+          >
+            <Trash2 size={16} aria-hidden="true" />
+            Terraform Destroy 실행
           </button>
         ) : null}
 
@@ -1794,6 +1864,46 @@ function DeploymentPanel({
               >
                 <DashboardIcon name="rocket" />
                 실제 AWS 리소스 생성
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        {selectedDeployment && showDestroyConfirmation ? (
+          <div className={styles.deploymentDestroyConfirm}>
+            <h3>Destroy 확인</h3>
+            <InfoRow
+              label="AWS account"
+              value={selectedDeployment.approvedAwsAccountId ?? "없음"}
+            />
+            <InfoRow label="AWS region" value={selectedDeployment.approvedAwsRegion ?? "없음"} />
+            {selectedDeployment.planSummary ? (
+              <InfoRow
+                label="Destroy changes"
+                value={`+${selectedDeployment.planSummary.createCount} ~${selectedDeployment.planSummary.updateCount} -${selectedDeployment.planSummary.deleteCount} +/-${selectedDeployment.planSummary.replaceCount}`}
+              />
+            ) : null}
+            <p>
+              승인된 Destroy Plan을 실제 AWS에 적용합니다. 실행 후 삭제된 리소스는 SketchCatch에서
+              `DESTROYED` 상태로 정리됩니다.
+            </p>
+            <div className={styles.deploymentApplyActions}>
+              <button
+                className={styles.deploymentSecondaryButton}
+                disabled={requestState === "loading"}
+                onClick={() => setShowDestroyConfirmation(false)}
+                type="button"
+              >
+                취소
+              </button>
+              <button
+                className={styles.deploymentDangerButton}
+                disabled={!canDestroy}
+                onClick={startTerraformDestroy}
+                type="button"
+              >
+                <Trash2 size={16} aria-hidden="true" />
+                실제 AWS 리소스 삭제
               </button>
             </div>
           </div>
@@ -2157,6 +2267,22 @@ function formatApprovalState(deployment: Deployment): string {
 }
 
 function getDeploymentActionHint(deployment: Deployment): string {
+  if (deployment.status === "DESTROYED") {
+    return "Cleanup destroy가 완료되었습니다. Deployment 결과와 state pointer가 정리되었습니다.";
+  }
+
+  if (deployment.currentPlanOperation === "destroy" && deployment.approvedAt) {
+    return "승인된 Destroy Plan이 준비되었습니다. 실제 삭제 전 AWS 계정과 삭제 변경 내용을 다시 확인하세요.";
+  }
+
+  if (
+    deployment.currentPlanOperation === "destroy" &&
+    deployment.isBlocked &&
+    deployment.blockedBy === "missing_approval"
+  ) {
+    return "Destroy Plan 내용을 확인한 뒤 승인할 수 있습니다. 승인 전에는 AWS 리소스를 삭제하지 않습니다.";
+  }
+
   if (deployment.status === "RUNNING") {
     if (deployment.cancelRequestedAt) {
       return "취소 요청을 보냈습니다. Terraform 프로세스가 멈추면 상태가 갱신됩니다.";

@@ -54,7 +54,9 @@ import {
   startTrackedDeploymentRun
 } from "../deployments/deployment-run-registry.js";
 
-type DeploymentRow = DeploymentRecord;
+type DeploymentRow = DeploymentRecord & {
+  readonly currentPlanOperation?: Deployment["currentPlanOperation"];
+};
 
 const createDeploymentParamsSchema = z.object({
   projectId: z.uuid()
@@ -182,7 +184,16 @@ function handleDeploymentError(error: unknown, reply: FastifyReply) {
   throw error;
 }
 
-function toDeployment(row: DeploymentRow): Deployment {
+async function toDeployment(
+  row: DeploymentRow,
+  repository: DeploymentRepository
+): Promise<Deployment> {
+  const currentPlanOperation =
+    row.currentPlanOperation ??
+    (row.currentPlanArtifactId
+      ? (await repository.findDeploymentPlanArtifactById(row.currentPlanArtifactId))?.operation ?? null
+      : null);
+
   return {
     id: row.id,
     projectId: row.projectId,
@@ -190,6 +201,7 @@ function toDeployment(row: DeploymentRow): Deployment {
     terraformArtifactId: row.terraformArtifactId,
     awsConnectionId: row.awsConnectionId,
     currentPlanArtifactId: row.currentPlanArtifactId,
+    currentPlanOperation,
     stateObjectKey: row.stateObjectKey,
     resultWarningSummary: row.resultWarningSummary,
     status: row.status as Deployment["status"],
@@ -267,7 +279,7 @@ export async function registerDeploymentRoutes(
       );
 
       return reply.status(201).send({
-        deployment: toDeployment(deployment)
+        deployment: await toDeployment(deployment, repository)
       });
     } catch (error) {
       return handleDeploymentError(error, reply);
@@ -292,7 +304,9 @@ export async function registerDeploymentRoutes(
       );
 
       return reply.status(200).send({
-        deployments: deployments.map(toDeployment)
+        deployments: await Promise.all(
+          deployments.map((deployment) => toDeployment(deployment, repository))
+        )
       });
     } catch (error) {
       return handleDeploymentError(error, reply);
@@ -317,7 +331,7 @@ export async function registerDeploymentRoutes(
       );
 
       return reply.status(200).send({
-        deployment: toDeployment(deployment)
+        deployment: await toDeployment(deployment, repository)
       });
     } catch (error) {
       return handleDeploymentError(error, reply);
@@ -365,7 +379,7 @@ export async function registerDeploymentRoutes(
       );
 
       return reply.status(202).send({
-        deployment: toDeployment(runningDeployment)
+        deployment: await toDeployment(runningDeployment, repository)
       });
     } catch (error) {
       return handleDeploymentError(error, reply);
@@ -419,7 +433,7 @@ export async function registerDeploymentRoutes(
       );
 
       return reply.status(202).send({
-        deployment: toDeployment(runningDeployment)
+        deployment: await toDeployment(runningDeployment, repository)
       });
     } catch (error) {
       return handleDeploymentError(error, reply);
@@ -447,7 +461,7 @@ export async function registerDeploymentRoutes(
       );
 
       return reply.status(200).send({
-        deployment: toDeployment(deployment)
+        deployment: await toDeployment(deployment, repository)
       });
     } catch (error) {
       return handleDeploymentError(error, reply);
@@ -494,7 +508,7 @@ export async function registerDeploymentRoutes(
       );
 
       return reply.status(202).send({
-        deployment: toDeployment(runningDeployment)
+        deployment: await toDeployment(runningDeployment, repository)
       });
     } catch (error) {
       return handleDeploymentError(error, reply);
@@ -544,7 +558,7 @@ export async function registerDeploymentRoutes(
       );
 
       return reply.status(202).send({
-        deployment: toDeployment(runningDeployment)
+        deployment: await toDeployment(runningDeployment, repository)
       });
     } catch (error) {
       return handleDeploymentError(error, reply);
@@ -592,7 +606,7 @@ export async function registerDeploymentRoutes(
       );
 
       return reply.status(202).send({
-        deployment: toDeployment(runningDeployment)
+        deployment: await toDeployment(runningDeployment, repository)
       });
     } catch (error) {
       return handleDeploymentError(error, reply);
@@ -630,12 +644,12 @@ export async function registerDeploymentRoutes(
         }
 
         return reply.status(202).send({
-          deployment: toDeployment(failedDeployment)
+          deployment: await toDeployment(failedDeployment, repository)
         });
       }
 
       return reply.status(202).send({
-        deployment: toDeployment(cancellationRequestedDeployment)
+        deployment: await toDeployment(cancellationRequestedDeployment, repository)
       });
     } catch (error) {
       return handleDeploymentError(error, reply);
