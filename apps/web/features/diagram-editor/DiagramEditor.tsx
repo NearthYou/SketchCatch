@@ -1134,7 +1134,11 @@ function DiagramEditorInner({
       </div>
 
       <div className={styles.rightRail}>
-        {rightPanel === undefined ? <ParameterInputPanel {...panelContext} /> : rightPanel(panelContext)}
+        {rightPanel === undefined ? (
+          <ParameterInputPanel key={panelContext.selectedNodeId ?? "no-selection"} {...panelContext} />
+        ) : (
+          rightPanel(panelContext)
+        )}
       </div>
     </section>
   );
