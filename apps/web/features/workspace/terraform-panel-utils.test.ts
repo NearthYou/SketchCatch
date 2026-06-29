@@ -49,7 +49,7 @@ resource "aws_subnet" "public" {
   assert.equal(blocks[1]?.startLine, 6);
 });
 
-test("findTerraformBlockForNode matches resource and data nodes by Terraform identity", () => {
+test("findTerraformBlockForNode matches resource and data nodes by Terraform address", () => {
   const blocks = parseTerraformFiles([
     {
       fileName: "main.tf",
@@ -59,49 +59,20 @@ test("findTerraformBlockForNode matches resource and data nodes by Terraform ide
 
 data "aws_ami" "ubuntu" {
   owners = ["099720109477"]
-}
-
-resource "aws_ami" "ubuntu" {
-  name = "custom-ami"
 }`
     }
   ]);
 
   assert.equal(findTerraformBlockForNode(blocks, makeNode("resource", "aws_instance", "web"))?.blockType, "resource");
   assert.equal(findTerraformBlockForNode(blocks, makeNode("data", "aws_ami", "ubuntu"))?.blockType, "data");
-  assert.equal(findTerraformBlockForNode(blocks, makeNode("resource", "aws_ami", "ubuntu"))?.blockType, "resource");
 });
 
-test("findTerraformBlockForNode prefers the node file when duplicate identities exist", () => {
-  const blocks = parseTerraformFiles([
-    {
-      fileName: "legacy.tf",
-      code: `resource "aws_vpc" "main" {
-  cidr_block = "10.0.0.0/16"
-}`
-    },
-    {
-      fileName: "network.tf",
-      code: `resource "aws_vpc" "main" {
-  cidr_block = "172.16.0.0/16"
-}`
-    }
-  ]);
-
-  const block = findTerraformBlockForNode(blocks, makeNode("resource", "aws_vpc", "main", "network"));
-
-  assert.equal(block?.fileName, "network.tf");
-  assert.match(block?.code ?? "", /172\.16\.0\.0\/16/);
-});
-
-test("createTerraformFilesFromGeneratedCode routes generated blocks by Terraform identity", () => {
+test("createTerraformFilesFromGeneratedCode routes generated blocks to node file names", () => {
   const files = createTerraformFilesFromGeneratedCode(
     {
       nodes: [
         makeNode("resource", "aws_vpc", "main", "network"),
-        makeNode("resource", "aws_subnet", "public", "subnets.tf"),
-        makeNode("data", "aws_ami", "ubuntu", "data"),
-        makeNode("resource", "aws_ami", "ubuntu", "images")
+        makeNode("resource", "aws_subnet", "public", "subnets.tf")
       ],
       edges: [],
       viewport: { x: 0, y: 0, zoom: 1 }
@@ -112,25 +83,15 @@ test("createTerraformFilesFromGeneratedCode routes generated blocks by Terraform
 
 resource "aws_subnet" "public" {
   vpc_id = aws_vpc.main.id
-}
-
-data "aws_ami" "ubuntu" {
-  owners = ["099720109477"]
-}
-
-resource "aws_ami" "ubuntu" {
-  name = "custom-ami"
 }`
   );
 
   assert.deepEqual(
     files.map((file) => file.fileName),
-    ["main.tf", "data.tf", "images.tf", "network.tf", "subnets.tf"]
+    ["main.tf", "network.tf", "subnets.tf"]
   );
   assert.equal(files.find((file) => file.fileName === "network.tf")?.code.includes("aws_vpc"), true);
   assert.equal(files.find((file) => file.fileName === "subnets.tf")?.code.includes("aws_subnet"), true);
-  assert.equal(files.find((file) => file.fileName === "data.tf")?.code.includes('data "aws_ami" "ubuntu"'), true);
-  assert.equal(files.find((file) => file.fileName === "images.tf")?.code.includes('resource "aws_ami" "ubuntu"'), true);
 });
 
 test("getTerraformFileOptions includes node and virtual file names in stable order", () => {

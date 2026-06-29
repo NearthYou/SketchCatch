@@ -144,38 +144,24 @@ export function findTerraformBlockForNode(
   node: DiagramNode | null
 ): TerraformBlockLocation | null {
   const address = toNodeTerraformAddress(node);
-  const fileName = toNodeTerraformFileName(node);
 
-  if (!address || !fileName) {
+  if (!address) {
     return null;
   }
 
-  return (
-    blocks.find((block) => block.address === address && block.fileName === fileName) ??
-    blocks.find((block) => block.address === address) ??
-    null
-  );
+  return blocks.find((block) => block.address === address) ?? null;
 }
 
 function toNodeTerraformAddress(node: DiagramNode | null): string | null {
   const parameters = node?.parameters;
   const resourceType = parameters?.resourceType?.trim();
   const resourceName = parameters?.resourceName?.trim();
-  const blockType = parameters?.terraformBlockType === "data" ? "data" : "resource";
 
   if (!resourceType || !resourceName) {
     return null;
   }
 
-  return toTerraformBlockAddress(blockType, resourceType, resourceName);
-}
-
-function toNodeTerraformFileName(node: DiagramNode | null): string | null {
-  if (!node?.parameters) {
-    return null;
-  }
-
-  return normalizeTerraformFileName(node.parameters.fileName);
+  return `${resourceType}.${resourceName}`;
 }
 
 function parseTerraformBlocks(fileName: string, terraformCode: string): TerraformBlockLocation[] {
@@ -216,7 +202,7 @@ function parseTerraformBlocks(fileName: string, terraformCode: string): Terrafor
     const name = headerMatch[3] ?? "";
 
     blocks.push({
-      address: toTerraformBlockAddress(blockType, terraformType, name),
+      address: `${terraformType}.${name}`,
       blockType,
       code: terraformCode.slice(startOffset, endOffset),
       endLine: endIndex + 1,
@@ -232,10 +218,6 @@ function parseTerraformBlocks(fileName: string, terraformCode: string): Terrafor
   }
 
   return blocks;
-}
-
-function toTerraformBlockAddress(blockType: "resource" | "data", terraformType: string, name: string): string {
-  return blockType === "data" ? `data.${terraformType}.${name}` : `${terraformType}.${name}`;
 }
 
 function countBraceDelta(line: string): number {
