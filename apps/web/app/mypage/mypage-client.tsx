@@ -49,7 +49,7 @@ export function MyPageClient() {
   }, []);
 
   const recentModifiedProjects = useMemo(
-    () => [...projects].sort(compareProjectCreatedAtDesc).slice(0, 3),
+    () => [...projects].sort(compareProjectUpdatedAtDesc).slice(0, 3),
     [projects]
   );
   const visibleProjects = useMemo(
@@ -111,8 +111,8 @@ export function MyPageClient() {
               <ApiProjectCard
                 key={project.id}
                 project={project}
-                timestampLabel="생성"
-                timestampValue={project.createdAt}
+                timestampLabel="최근 수정 시간"
+                timestampValue={project.updatedAt}
                 variant="compact"
               />
             ))}
@@ -136,7 +136,7 @@ export function MyPageClient() {
               <ApiProjectCard
                 key={project.id}
                 project={project}
-                timestampLabel="수정"
+                timestampLabel="최근 수정 시간"
                 timestampValue={project.updatedAt}
               />
             ))}
@@ -157,10 +157,6 @@ function ProjectEmptyState() {
       </Link>
     </div>
   );
-}
-
-function compareProjectCreatedAtDesc(left: Project, right: Project): number {
-  return new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
 }
 
 function compareProjectUpdatedAtDesc(left: Project, right: Project): number {
