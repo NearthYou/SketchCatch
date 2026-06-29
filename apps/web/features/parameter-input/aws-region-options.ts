@@ -29,6 +29,18 @@ export function filterAwsRegionOptions(query: string): readonly AwsRegionOption[
   );
 }
 
+export function getNextAwsRegionOptionIndex(
+  options: readonly AwsRegionOption[],
+  currentIndex: number,
+  direction: 1 | -1
+): number {
+  if (options.length === 0) {
+    return -1;
+  }
+
+  return (currentIndex + direction + options.length) % options.length;
+}
+
 export function isAwsRegionCode(value: unknown): value is AwsRegionCode {
   return typeof value === "string" && awsRegionOptions.some((option) => option.value === value);
 }

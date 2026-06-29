@@ -361,9 +361,17 @@ div.resourceIcon,
   outline: none;
 }
 
+.regionOptionActive {
+  background: #eef4ff;
+}
+
 .regionOptionSelected {
   background: #f4f1ff;
   color: #4b2bd6;
+}
+
+.regionOptionSelected.regionOptionActive {
+  background: #ede8ff;
 }
 
 .regionOptionText {

@@ -1,7 +1,7 @@
 "use client";
 
 import { Check, ChevronDown, Plus, Search, Trash2 } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { useId, useMemo, useRef, useState } from "react";
 import type {
   FocusEvent as ReactFocusEvent,
   KeyboardEvent as ReactKeyboardEvent
@@ -13,7 +13,11 @@ import type {
 } from "../../../../packages/types/src";
 
 import type { DiagramEditorPanelContext } from "../diagram-editor/types";
-import { filterAwsRegionOptions, getAwsRegionLabel } from "./aws-region-options";
+import {
+  filterAwsRegionOptions,
+  getAwsRegionLabel,
+  getNextAwsRegionOptionIndex
+} from "./aws-region-options";
 import type { ParameterCatalog, ParameterCatalogDefinition } from "./catalog";
 import { terraformParameterCatalog } from "./catalog";
 import {
@@ -205,17 +209,23 @@ function RegionField({
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [activeOptionIndex, setActiveOptionIndex] = useState(-1);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
-  const filteredOptions = filterAwsRegionOptions(query);
+  const listboxId = useId();
+  const filteredOptions = useMemo(() => filterAwsRegionOptions(query), [query]);
+  const activeOption = activeOptionIndex >= 0 ? filteredOptions[activeOptionIndex] : undefined;
+  const selectedRegionLabel = getAwsRegionLabel(value);
 
   const closeMenu = () => {
     setIsOpen(false);
     setQuery("");
+    setActiveOptionIndex(-1);
   };
 
   const openMenu = () => {
     setIsOpen(true);
+    setActiveOptionIndex(getInitialRegionOptionIndex(filteredOptions, value));
     requestAnimationFrame(() => searchInputRef.current?.focus());
   };
 
@@ -236,9 +246,52 @@ function RegionField({
     }
   };
 
+  const handleControlKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>) => {
+    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") {
+      return;
+    }
+
+    event.preventDefault();
+    setIsOpen(true);
+    setActiveOptionIndex(
+      getNextAwsRegionOptionIndex(
+        filteredOptions,
+        getInitialRegionOptionIndex(filteredOptions, value),
+        event.key === "ArrowDown" ? 1 : -1
+      )
+    );
+    requestAnimationFrame(() => searchInputRef.current?.focus());
+  };
+
+  const handleSearchKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      setActiveOptionIndex((currentIndex) =>
+        getNextAwsRegionOptionIndex(
+          filteredOptions,
+          currentIndex,
+          event.key === "ArrowDown" ? 1 : -1
+        )
+      );
+      return;
+    }
+
+    if (event.key === "Enter" && activeOption) {
+      event.preventDefault();
+      handleSelect(activeOption.value);
+    }
+  };
+
   const handleSelect = (awsRegion: AwsRegionCode) => {
     onChange(awsRegion);
     closeMenu();
+  };
+
+  const handleSearchQueryChange = (queryValue: string) => {
+    const nextOptions = filterAwsRegionOptions(queryValue);
+
+    setQuery(queryValue);
+    setActiveOptionIndex(getInitialRegionOptionIndex(nextOptions, value));
   };
 
   return (
@@ -254,13 +307,16 @@ function RegionField({
         ref={containerRef}
       >
         <button
+          aria-controls={listboxId}
           aria-expanded={isOpen}
           aria-haspopup="listbox"
+          aria-label={`리전 선택: ${selectedRegionLabel}`}
           className={`${styles.regionControl} ${isOpen ? styles.regionControlOpen : ""}`}
           onClick={() => (isOpen ? closeMenu() : openMenu())}
+          onKeyDown={handleControlKeyDown}
           type="button"
         >
-          <span className={styles.regionControlText}>{getAwsRegionLabel(value)}</span>
+          <span className={styles.regionControlText}>{selectedRegionLabel}</span>
           <ChevronDown aria-hidden="true" size={16} />
         </button>
 
@@ -269,8 +325,15 @@ function RegionField({
             <label className={styles.regionSearch}>
               <Search aria-hidden="true" size={17} />
               <input
+                aria-activedescendant={
+                  activeOption ? getRegionOptionDomId(listboxId, activeOption.value) : undefined
+                }
+                aria-autocomplete="list"
+                aria-controls={listboxId}
                 aria-label="리전 검색"
-                onChange={(event) => setQuery(event.currentTarget.value)}
+                autoComplete="off"
+                onChange={(event) => handleSearchQueryChange(event.currentTarget.value)}
+                onKeyDown={handleSearchKeyDown}
                 placeholder="Search option..."
                 ref={searchInputRef}
                 value={query}
@@ -281,18 +344,22 @@ function RegionField({
               <div
                 aria-label="지원 리전"
                 className={styles.regionOptionList}
+                id={listboxId}
                 role="listbox"
               >
-                {filteredOptions.map((option) => {
+                {filteredOptions.map((option, optionIndex) => {
                   const isSelected = option.value === value;
+                  const isActive = optionIndex === activeOptionIndex;
 
                   return (
                     <button
                       aria-selected={isSelected}
                       className={`${styles.regionOption} ${
                         isSelected ? styles.regionOptionSelected : ""
-                      }`}
+                      } ${isActive ? styles.regionOptionActive : ""}`}
+                      id={getRegionOptionDomId(listboxId, option.value)}
                       key={option.value}
+                      onMouseEnter={() => setActiveOptionIndex(optionIndex)}
                       onClick={() => handleSelect(option.value)}
                       role="option"
                       type="button"
@@ -314,6 +381,22 @@ function RegionField({
       </div>
     </div>
   );
+}
+
+function getInitialRegionOptionIndex(
+  options: readonly { value: AwsRegionCode }[],
+  value: AwsRegionCode
+): number {
+  if (options.length === 0) {
+    return -1;
+  }
+
+  const selectedIndex = options.findIndex((option) => option.value === value);
+  return selectedIndex >= 0 ? selectedIndex : 0;
+}
+
+function getRegionOptionDomId(listboxId: string, value: AwsRegionCode): string {
+  return `${listboxId}-${value}`;
 }
 
 function PanelHeader({
