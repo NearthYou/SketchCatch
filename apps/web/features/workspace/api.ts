@@ -1,11 +1,20 @@
 import type {
+  AiArchitectureDraftResult,
+  AiPreDeploymentAnalysisResult,
+  AiTerraformErrorExplanationResult,
+  AiTerraformPreviewExplanationResult,
+  AiTerraformStage,
+  ArchitectureJson,
   AwsConnectionCloudFormationTemplateResponse,
   AwsConnection,
   AwsConnectionListResponse,
+  CreateArchitectureDraftRequest,
   CreateAwsConnectionRequest,
   CreateAwsConnectionResponse,
   CreateDeploymentRequest,
+  CreateDesignSimulationRequest,
   CreateProjectRequest,
+  DesignSimulationResult,
   DeployedResource,
   Deployment,
   DeploymentListResponse,
@@ -33,6 +42,14 @@ import type {
 } from "../../../../packages/types/src";
 import { apiFetch, buildApiUrl } from "../../lib/api-client";
 import { readStoredAuthSession } from "../../lib/auth-storage";
+
+const AI_API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:4000/api").replace(/\/+$/, "");
+
+type AiTerraformErrorExplanationRequest = {
+  readonly stage: AiTerraformStage;
+  readonly rawMessage: string;
+  readonly relatedResourceId?: string | undefined;
+};
 
 export async function createProject(input: CreateProjectRequest): Promise<Project> {
   const response = await apiFetch<ProjectResponse>("/projects", {
@@ -122,6 +139,90 @@ export async function syncTerraformToDiagram({
       terraformCode
     }
   });
+}
+
+// 실제 Workspace AI 패널에서 Requirement Prompt 기반 Architecture Draft를 요청합니다.
+export async function createAiArchitectureDraft(
+  input: CreateArchitectureDraftRequest
+): Promise<AiArchitectureDraftResult> {
+  return postPublicAiJson<AiArchitectureDraftResult>("/ai/architecture-draft", input);
+}
+
+// 현재 Architecture Board를 기준으로 Pre-Deployment Check를 실행합니다.
+export async function runAiPreDeploymentCheck(
+  architectureJson: ArchitectureJson
+): Promise<AiPreDeploymentAnalysisResult> {
+  return postPublicAiJson<AiPreDeploymentAnalysisResult>("/ai/pre-deployment-check", {
+    architectureJson
+  });
+}
+
+// 현재 Architecture Board와 운영 조건을 기준으로 Design Simulation을 실행합니다.
+export async function runAiDesignSimulation(
+  input: CreateDesignSimulationRequest
+): Promise<DesignSimulationResult> {
+  return postPublicAiJson<DesignSimulationResult>("/ai/design-simulation", input);
+}
+
+// Terraform Preview 설명은 실제 Terraform 실행 없이 코드 텍스트만 분석합니다.
+export async function runAiTerraformPreviewExplanation(
+  terraformCode: string
+): Promise<AiTerraformPreviewExplanationResult> {
+  return postPublicAiJson<AiTerraformPreviewExplanationResult>("/ai/terraform-preview-explanation", {
+    terraformCode
+  });
+}
+
+// Terraform 오류 설명은 Preview 분석과 다른 endpoint로 보내 stage와 원인을 분리합니다.
+export async function runAiTerraformErrorExplanation(
+  input: AiTerraformErrorExplanationRequest
+): Promise<AiTerraformErrorExplanationResult> {
+  return postPublicAiJson<AiTerraformErrorExplanationResult>("/ai/terraform-error-explanation", {
+    rawMessage: input.rawMessage,
+    relatedResourceId: input.relatedResourceId,
+    stage: input.stage
+  });
+}
+
+// 인증 없는 gg AI endpoint는 Next rewrite 실패와 분리해 API 서버로 직접 요청합니다.
+async function postPublicAiJson<ResponseBody>(
+  path: string,
+  body: Record<string, unknown>
+): Promise<ResponseBody> {
+  const response = await fetch(`${AI_API_BASE_URL}${path}`, {
+    body: JSON.stringify(body),
+    headers: {
+      "Content-Type": "application/json"
+    },
+    method: "POST"
+  });
+
+  if (!response.ok) {
+    throw new Error(await readPublicAiErrorMessage(response));
+  }
+
+  return response.json() as Promise<ResponseBody>;
+}
+
+// API 서버의 JSON 오류를 사람이 읽을 수 있는 message로 낮춥니다.
+async function readPublicAiErrorMessage(response: Response): Promise<string> {
+  try {
+    const body: unknown = await response.json();
+
+    return isPublicAiErrorBody(body) ? body.message : `API 요청 실패: ${response.status}`;
+  } catch {
+    return `API 요청 실패: ${response.status}`;
+  }
+}
+
+// API 오류 응답에서 message 필드가 있는 경우에만 사용자 메시지로 사용합니다.
+function isPublicAiErrorBody(value: unknown): value is { readonly message: string } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "message" in value &&
+    typeof value.message === "string"
+  );
 }
 
 export async function createAwsConnectionSetup({
