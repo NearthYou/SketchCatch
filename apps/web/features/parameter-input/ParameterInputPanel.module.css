@@ -252,6 +252,155 @@ div.resourceIcon,
   overflow-wrap: anywhere;
 }
 
+.regionCombobox {
+  min-width: 0;
+  position: relative;
+}
+
+.regionControl {
+  align-items: center;
+  background: #f7f9fd;
+  border: 1px solid #dfe7f4;
+  border-radius: 6px;
+  color: #171c2f;
+  cursor: pointer;
+  display: grid;
+  font: inherit;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) 16px;
+  min-height: 38px;
+  padding: 8px 10px;
+  text-align: left;
+  width: 100%;
+}
+
+.regionControl:hover {
+  background: #ffffff;
+  border-color: #c9d4e6;
+}
+
+.regionControl:focus-visible,
+.regionControlOpen {
+  border-color: #6f4cf6;
+  box-shadow: 0 0 0 3px rgba(111, 76, 246, 0.14);
+  outline: none;
+}
+
+.regionControlText {
+  font-size: 0.88rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.regionDropdown {
+  background: #ffffff;
+  border: 1px solid #dfe7f4;
+  border-radius: 8px;
+  box-shadow: 0 18px 42px rgba(23, 28, 47, 0.14);
+  left: 0;
+  overflow: hidden;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 20;
+}
+
+.regionSearch {
+  align-items: center;
+  border-bottom: 1px solid #e6ecf6;
+  color: #748096;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 18px minmax(0, 1fr);
+  padding: 10px 11px;
+}
+
+.regionSearch input {
+  border: 0;
+  color: #171c2f;
+  font: inherit;
+  font-size: 0.86rem;
+  min-width: 0;
+  outline: none;
+  padding: 0;
+  width: 100%;
+}
+
+.regionSearch input::placeholder {
+  color: #98a2b5;
+}
+
+.regionOptionList {
+  max-height: 220px;
+  overflow: auto;
+  padding: 6px;
+}
+
+.regionOption {
+  align-items: center;
+  background: #ffffff;
+  border: 0;
+  border-radius: 6px;
+  color: #171c2f;
+  cursor: pointer;
+  display: grid;
+  font: inherit;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) 16px;
+  min-height: 44px;
+  padding: 8px 10px;
+  text-align: left;
+  width: 100%;
+}
+
+.regionOption:hover,
+.regionOption:focus-visible {
+  background: #f4f7fb;
+  outline: none;
+}
+
+.regionOptionSelected {
+  background: #f4f1ff;
+  color: #4b2bd6;
+}
+
+.regionOptionText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.regionOptionLabel {
+  font-size: 0.86rem;
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.regionOptionCode {
+  color: #687388;
+  font-size: 0.75rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.regionOptionSelected .regionOptionCode {
+  color: #5f3de8;
+}
+
+.regionEmpty {
+  color: #7b8498;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  margin: 0;
+  padding: 14px 12px;
+}
+
 .nestedBlock {
   background: #fbfcff;
   border: 1px solid #e0e7f2;

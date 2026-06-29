@@ -1,12 +1,26 @@
 "use client";
 
-import { Plus, Trash2 } from "lucide-react";
-import { useMemo, useState } from "react";
-import type { DiagramNode, ResourceNodeParameters } from "../../../../packages/types/src";
+import { Check, ChevronDown, Plus, Search, Trash2 } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
+import type {
+  FocusEvent as ReactFocusEvent,
+  KeyboardEvent as ReactKeyboardEvent
+} from "react";
+import type {
+  AwsRegionCode,
+  DiagramNode,
+  ResourceNodeParameters
+} from "../../../../packages/types/src";
 
 import type { DiagramEditorPanelContext } from "../diagram-editor/types";
+import { filterAwsRegionOptions, getAwsRegionLabel } from "./aws-region-options";
 import type { ParameterCatalog, ParameterCatalogDefinition } from "./catalog";
 import { terraformParameterCatalog } from "./catalog";
+import {
+  createRegionNodeMetadata,
+  getRegionNodeAwsRegion,
+  isRegionDesignNode
+} from "./region-node-metadata";
 import {
   buildReferenceOptions,
   getVisibleDefinitions,
@@ -41,6 +55,29 @@ export function ParameterInputPanel({
           title="선택된 리소스 없음"
           description="캔버스에서 AWS 리소스 노드를 선택하면 Terraform metadata와 main parameters를 입력할 수 있습니다."
         />
+      </aside>
+    );
+  }
+
+  if (isRegionDesignNode(selectedNode)) {
+    const selectedRegion = getRegionNodeAwsRegion(selectedNode);
+
+    return (
+      <aside className={styles.panel} aria-label="파라미터 입력 패널">
+        <PanelHeader node={selectedNode} parameters={null} />
+
+        <section className={styles.section} aria-label="Main parameters">
+          <div className={styles.fieldGroup}>
+            <RegionField
+              onChange={(awsRegion) =>
+                updateNodeMetadata(selectedNode.id, {
+                  metadata: createRegionNodeMetadata(selectedNode, awsRegion)
+                })
+              }
+              value={selectedRegion}
+            />
+          </div>
+        </section>
       </aside>
     );
   }
@@ -156,6 +193,126 @@ export function ParameterInputPanel({
         )}
       </section>
     </aside>
+  );
+}
+
+function RegionField({
+  onChange,
+  value
+}: {
+  onChange: (value: AwsRegionCode) => void;
+  value: AwsRegionCode;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const filteredOptions = filterAwsRegionOptions(query);
+
+  const closeMenu = () => {
+    setIsOpen(false);
+    setQuery("");
+  };
+
+  const openMenu = () => {
+    setIsOpen(true);
+    requestAnimationFrame(() => searchInputRef.current?.focus());
+  };
+
+  const handleBlur = (event: ReactFocusEvent<HTMLDivElement>) => {
+    const nextTarget = event.relatedTarget;
+
+    if (nextTarget instanceof Node && containerRef.current?.contains(nextTarget)) {
+      return;
+    }
+
+    closeMenu();
+  };
+
+  const handleKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeMenu();
+    }
+  };
+
+  const handleSelect = (awsRegion: AwsRegionCode) => {
+    onChange(awsRegion);
+    closeMenu();
+  };
+
+  return (
+    <div className={styles.field}>
+      <div className={styles.fieldHeader}>
+        <span className={styles.fieldLabel}>Region</span>
+      </div>
+
+      <div
+        className={styles.regionCombobox}
+        onBlur={handleBlur}
+        onKeyDown={handleKeyDown}
+        ref={containerRef}
+      >
+        <button
+          aria-expanded={isOpen}
+          aria-haspopup="listbox"
+          className={`${styles.regionControl} ${isOpen ? styles.regionControlOpen : ""}`}
+          onClick={() => (isOpen ? closeMenu() : openMenu())}
+          type="button"
+        >
+          <span className={styles.regionControlText}>{getAwsRegionLabel(value)}</span>
+          <ChevronDown aria-hidden="true" size={16} />
+        </button>
+
+        {isOpen ? (
+          <div className={styles.regionDropdown}>
+            <label className={styles.regionSearch}>
+              <Search aria-hidden="true" size={17} />
+              <input
+                aria-label="리전 검색"
+                onChange={(event) => setQuery(event.currentTarget.value)}
+                placeholder="Search option..."
+                ref={searchInputRef}
+                value={query}
+              />
+            </label>
+
+            {filteredOptions.length > 0 ? (
+              <div
+                aria-label="지원 리전"
+                className={styles.regionOptionList}
+                role="listbox"
+              >
+                {filteredOptions.map((option) => {
+                  const isSelected = option.value === value;
+
+                  return (
+                    <button
+                      aria-selected={isSelected}
+                      className={`${styles.regionOption} ${
+                        isSelected ? styles.regionOptionSelected : ""
+                      }`}
+                      key={option.value}
+                      onClick={() => handleSelect(option.value)}
+                      role="option"
+                      type="button"
+                    >
+                      <span className={styles.regionOptionText}>
+                        <span className={styles.regionOptionLabel}>{option.label}</span>
+                        <span className={styles.regionOptionCode}>{option.value}</span>
+                      </span>
+                      {isSelected ? <Check aria-hidden="true" size={15} /> : null}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className={styles.regionEmpty}>검색 결과가 없습니다.</p>
+            )}
+          </div>
+        ) : null}
+      </div>
+    </div>
   );
 }
 
