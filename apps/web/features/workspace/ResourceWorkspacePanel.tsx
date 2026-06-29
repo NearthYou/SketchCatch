@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import type { DiagramEditorPanelContext } from "../diagram-editor";
 import { ParameterInputPanel } from "../parameter-input";
+import { getVisibleResourceWorkspaceView } from "./resource-workspace-view";
 import type { ResourceWorkspaceView } from "./workspace-right-panel.types";
 import styles from "./workspace.module.css";
 
@@ -30,15 +31,16 @@ export function ResourceWorkspacePanel({
     () => context.nodes.filter((node) => node.kind === "resource" || node.parameters?.resourceType),
     [context.nodes]
   );
+  const visibleView = getVisibleResourceWorkspaceView(view, context.selectedNodeId);
 
   return (
     <div className={styles.resourceWorkspacePanel}>
       <div className={styles.resourceSectionToolbar}>
         <div className={styles.resourceSectionTabs} aria-label="Resource sections">
           <button
-            aria-pressed={view === "settings"}
+            aria-pressed={visibleView === "settings"}
             className={
-              view === "settings"
+              visibleView === "settings"
                 ? styles.resourceSectionButtonActive
                 : styles.resourceSectionButton
             }
@@ -49,9 +51,9 @@ export function ResourceWorkspacePanel({
             <Box size={18} aria-hidden="true" />
           </button>
           <button
-            aria-pressed={view === "list"}
+            aria-pressed={visibleView === "list"}
             className={
-              view === "list"
+              visibleView === "list"
                 ? styles.resourceSectionButtonActive
                 : styles.resourceSectionButton
             }
@@ -64,7 +66,7 @@ export function ResourceWorkspacePanel({
         </div>
       </div>
 
-      {view === "settings" ? (
+      {visibleView === "settings" ? (
         <ParameterInputPanel {...context} />
       ) : (
         <ResourceListPanel context={context} nodes={resourceNodes} onViewChange={onViewChange} />

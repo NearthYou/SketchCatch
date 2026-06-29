@@ -18,6 +18,7 @@ import { TerraformCodePanel } from "./TerraformCodePanel";
 import { TerraformIssuesPanel } from "./TerraformIssuesPanel";
 import { TerraformLeaveDialog } from "./TerraformLeaveDialog";
 import { WorkspaceAiPanel } from "./WorkspaceAiPanel";
+import { defaultResourceWorkspaceView } from "./resource-workspace-view";
 import type { ResourceWorkspaceView, WorkspaceRightPanelView } from "./workspace-right-panel.types";
 import styles from "./workspace.module.css";
 
@@ -29,7 +30,9 @@ export type WorkspaceRightPanelProps = {
 
 export function WorkspaceRightPanel({ context, projectId, projectName }: WorkspaceRightPanelProps) {
   const [activeView, setActiveView] = useState<WorkspaceRightPanelView>("resource");
-  const [resourceWorkspaceView, setResourceWorkspaceView] = useState<ResourceWorkspaceView>("settings");
+  const [resourceWorkspaceView, setResourceWorkspaceView] = useState<ResourceWorkspaceView>(
+    defaultResourceWorkspaceView
+  );
   const [pendingView, setPendingView] = useState<WorkspaceRightPanelView | null>(null);
   const [hasUnsavedTerraformChanges, setHasUnsavedTerraformChanges] = useState(false);
   const [showTerraformLeaveDialog, setShowTerraformLeaveDialog] = useState(false);
