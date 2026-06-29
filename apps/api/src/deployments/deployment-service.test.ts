@@ -312,6 +312,18 @@ class FakeDeploymentRepository implements DeploymentRepository {
     return this.deployment;
   };
 
+  markDeploymentDestroyRunning: DeploymentRepository["markDeploymentDestroyRunning"] = async (
+    candidateDeploymentId
+  ) => {
+    if (this.deployment?.id !== candidateDeploymentId || this.deployment.status === "RUNNING") {
+      return undefined;
+    }
+
+    this.deployment = { ...this.deployment, status: "RUNNING", activeStage: "destroy" };
+
+    return this.deployment;
+  };
+
   saveDeploymentPlan: DeploymentRepository["saveDeploymentPlan"] = async (input) => {
     this.calls.push({
       name: "saveDeploymentPlan",
@@ -362,6 +374,27 @@ class FakeDeploymentRepository implements DeploymentRepository {
       ...this.deployment,
       status: "SUCCESS",
       stateObjectKey: input.stateObjectKey,
+      resultWarningSummary: input.resultWarningSummary,
+      failureStage: null,
+      errorSummary: null
+    };
+
+    return this.deployment;
+  };
+
+  completeDeploymentDestroy: DeploymentRepository["completeDeploymentDestroy"] = async (
+    candidateDeploymentId,
+    input
+  ) => {
+    if (this.deployment?.id !== candidateDeploymentId) {
+      return undefined;
+    }
+
+    this.deployment = {
+      ...this.deployment,
+      status: "DESTROYED",
+      currentPlanArtifactId: null,
+      stateObjectKey: null,
       resultWarningSummary: input.resultWarningSummary,
       failureStage: null,
       errorSummary: null
@@ -517,6 +550,7 @@ function createDeploymentPlanArtifactRecord(
     deploymentId,
     terraformArtifactId,
     terraformArtifactSha256: "c".repeat(64),
+    operation: "apply",
     objectKey: "deployments/deployment-id/plans/plan-id.tfplan",
     sha256: "a".repeat(64),
     accountId: "123456789012",

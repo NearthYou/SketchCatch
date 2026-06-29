@@ -16,6 +16,14 @@ import type {
   RunDeploymentApplyInput,
   RunDeploymentApplyResult
 } from "../deployments/deployment-apply-service.js";
+import type {
+  RunDeploymentDestroyPlanInput,
+  RunDeploymentDestroyPlanResult
+} from "../deployments/deployment-destroy-plan-service.js";
+import type {
+  RunDeploymentDestroyInput,
+  RunDeploymentDestroyResult
+} from "../deployments/deployment-destroy-service.js";
 import type { ApproveDeploymentPlanInput } from "../deployments/deployment-approval-service.js";
 import { users } from "../db/schema.js";
 import {
@@ -184,6 +192,10 @@ type RepositoryCall =
       deploymentId: string;
     }
   | {
+      name: "markDeploymentDestroyRunning";
+      deploymentId: string;
+    }
+  | {
       name: "saveDeploymentPlan";
       input: SaveDeploymentPlanInput;
     }
@@ -205,6 +217,7 @@ const awsConnectionId = "77777777-7777-4777-8777-777777777777";
 const planArtifactId = "99999999-9999-4999-8999-999999999999";
 const userId = "55555555-5555-4555-8555-555555555555";
 const fixedNow = new Date("2026-01-01T00:00:00.000Z");
+const stateObjectKey = `deployments/${deploymentId}/state/terraform.tfstate`;
 
 type TerraformArtifactRecordReference = {
   id: string;
@@ -439,6 +452,8 @@ class FakeDeploymentRepository implements DeploymentRepository {
       ...this.deployment,
       status: "RUNNING",
       activeStage: "plan",
+      failureStage: null,
+      errorSummary: null,
       ...clearDeploymentApprovalSnapshot()
     };
 
@@ -486,6 +501,35 @@ class FakeDeploymentRepository implements DeploymentRepository {
     return this.deployment;
   };
 
+  markDeploymentDestroyRunning: DeploymentRepository["markDeploymentDestroyRunning"] = async (
+    candidateDeploymentId
+  ) => {
+    this.calls.push({
+      name: "markDeploymentDestroyRunning",
+      deploymentId: candidateDeploymentId
+    });
+
+    if (
+      !this.deployment ||
+      this.deployment.id !== candidateDeploymentId ||
+      this.deployment.status === "RUNNING"
+    ) {
+      return undefined;
+    }
+
+    this.deployment = {
+      ...this.deployment,
+      status: "RUNNING",
+      activeStage: "destroy",
+      failureStage: null,
+      errorSummary: null,
+      resultWarningSummary: null,
+      updatedAt: fixedNow
+    };
+
+    return this.deployment;
+  };
+
   saveDeploymentPlan: DeploymentRepository["saveDeploymentPlan"] = async (input) => {
     this.calls.push({
       name: "saveDeploymentPlan",
@@ -499,13 +543,13 @@ class FakeDeploymentRepository implements DeploymentRepository {
     this.deployment = {
       ...this.deployment,
       currentPlanArtifactId: input.planArtifact.id,
-      status: "PENDING",
+      status: input.terminalStatus ?? "PENDING",
       planSummary: input.planSummary,
       isBlocked: input.isBlocked,
       blockedBy: input.blockedBy,
       blockedReason: input.blockedReason,
-      failureStage: null,
-      errorSummary: null,
+      failureStage: input.failureStage ?? null,
+      errorSummary: input.errorSummary ?? null,
       updatedAt: fixedNow
     };
 
@@ -552,6 +596,28 @@ class FakeDeploymentRepository implements DeploymentRepository {
       ...this.deployment,
       status: "SUCCESS",
       stateObjectKey: input.stateObjectKey,
+      resultWarningSummary: input.resultWarningSummary,
+      failureStage: null,
+      errorSummary: null,
+      updatedAt: fixedNow
+    };
+
+    return this.deployment;
+  };
+
+  completeDeploymentDestroy: DeploymentRepository["completeDeploymentDestroy"] = async (
+    candidateDeploymentId,
+    input
+  ) => {
+    if (!this.deployment || this.deployment.id !== candidateDeploymentId) {
+      return undefined;
+    }
+
+    this.deployment = {
+      ...this.deployment,
+      status: "DESTROYED",
+      currentPlanArtifactId: null,
+      stateObjectKey: null,
       resultWarningSummary: input.resultWarningSummary,
       failureStage: null,
       errorSummary: null,
@@ -720,6 +786,14 @@ type DeploymentRouteTestOptions = {
     input: RunDeploymentApplyInput,
     repository: DeploymentRepository
   ) => Promise<RunDeploymentApplyResult>;
+  runDeploymentDestroyPlan?: (
+    input: RunDeploymentDestroyPlanInput,
+    repository: DeploymentRepository
+  ) => Promise<RunDeploymentDestroyPlanResult>;
+  runDeploymentDestroy?: (
+    input: RunDeploymentDestroyInput,
+    repository: DeploymentRepository
+  ) => Promise<RunDeploymentDestroyResult>;
   userRows?: UserRecord[];
 };
 
@@ -739,7 +813,13 @@ async function buildDeploymentTestApp(
     ...(routeOptions.approveDeploymentPlan
       ? { approveDeploymentPlan: routeOptions.approveDeploymentPlan }
       : {}),
-    ...(routeOptions.runDeploymentApply ? { runDeploymentApply: routeOptions.runDeploymentApply } : {})
+    ...(routeOptions.runDeploymentApply ? { runDeploymentApply: routeOptions.runDeploymentApply } : {}),
+    ...(routeOptions.runDeploymentDestroyPlan
+      ? { runDeploymentDestroyPlan: routeOptions.runDeploymentDestroyPlan }
+      : {}),
+    ...(routeOptions.runDeploymentDestroy
+      ? { runDeploymentDestroy: routeOptions.runDeploymentDestroy }
+      : {})
   });
 
   return app;
@@ -816,6 +896,7 @@ function createDeploymentPlanArtifactRecord(
     deploymentId,
     terraformArtifactId,
     terraformArtifactSha256: "c".repeat(64),
+    operation: "apply",
     objectKey: `deployments/${deploymentId}/plans/${planArtifactId}.tfplan`,
     sha256: "a".repeat(64),
     accountId: "123456789012",
@@ -1643,6 +1724,158 @@ test("POST /api/deployments/:deploymentId/apply rejects failed deployments until
     message: "Deployment must be replanned and approved before apply"
   });
   assert.equal(applyStarted, false);
+
+  await app.close();
+});
+
+test("POST /api/deployments/:deploymentId/destroy/plan starts cleanup destroy planning", async () => {
+  const repository = new FakeDeploymentRepository();
+  const destroyPlanCalls: RunDeploymentDestroyPlanInput[] = [];
+  repository.deployment = createDeploymentRecord(deploymentId, {
+    status: "FAILED",
+    currentPlanArtifactId: planArtifactId,
+    stateObjectKey,
+    failureStage: "apply",
+    errorSummary: "previous apply failed after creating resources"
+  });
+  repository.deployments = [repository.deployment];
+  const app = await buildDeploymentTestApp(repository, {
+    runDeploymentDestroyPlan: async (input, candidateRepository) => {
+      assert.equal(candidateRepository, repository);
+      destroyPlanCalls.push(input);
+
+      return {
+        deployment: createDeploymentRecord(input.deploymentId, {
+          status: "FAILED",
+          currentPlanArtifactId: planArtifactId,
+          stateObjectKey,
+          failureStage: "apply",
+          errorSummary: "previous apply failed after creating resources",
+          planSummary: {
+            createCount: 0,
+            updateCount: 0,
+            deleteCount: 1,
+            replaceCount: 0,
+            blocked: true,
+            warnings: []
+          },
+          isBlocked: true,
+          blockedBy: "missing_approval",
+          blockedReason: "Terraform Destroy Plan requires user approval before destroy"
+        }),
+        terraform: {
+          init: null,
+          plan: null,
+          showJson: null
+        }
+      };
+    }
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/deployments/${deploymentId}/destroy/plan`,
+    headers: await authHeaders(),
+    payload: {}
+  });
+
+  assert.equal(response.statusCode, 202);
+  const body = response.json() as DeploymentResponse;
+  assert.equal(body.deployment.id, deploymentId);
+  assert.equal(body.deployment.status, "RUNNING");
+  assert.equal(body.deployment.activeStage, "plan");
+  assert.equal(body.deployment.failureStage, null);
+  assert.equal(destroyPlanCalls.length, 1);
+  const { abortSignal: destroyPlanAbortSignal, ...destroyPlanCall } = destroyPlanCalls[0]!;
+  assert.equal(destroyPlanAbortSignal instanceof AbortSignal, true);
+  assert.deepEqual(destroyPlanCall, {
+    deploymentId,
+    startedFromStatus: "FAILED",
+    startedFromFailureStage: "apply",
+    startedFromErrorSummary: "previous apply failed after creating resources",
+    accessContext: {
+      kind: "user",
+      userId
+    }
+  });
+
+  await app.close();
+});
+
+test("POST /api/deployments/:deploymentId/destroy starts approved destroy in the background", async () => {
+  const repository = new FakeDeploymentRepository();
+  const destroyCalls: RunDeploymentDestroyInput[] = [];
+  repository.deployment = createDeploymentRecord(deploymentId, {
+    status: "SUCCESS",
+    currentPlanArtifactId: planArtifactId,
+    stateObjectKey,
+    planSummary: {
+      createCount: 0,
+      updateCount: 0,
+      deleteCount: 1,
+      replaceCount: 0,
+      blocked: false,
+      warnings: []
+    },
+    isBlocked: false,
+    blockedBy: null,
+    blockedReason: null,
+    approvedAt: fixedNow,
+    approvedByUserId: userId,
+    approvedTerraformArtifactId: terraformArtifactId,
+    approvedPlanArtifactId: planArtifactId,
+    approvedTerraformArtifactHash: "c".repeat(64),
+    approvedTfplanHash: "a".repeat(64),
+    approvedAwsAccountId: "123456789012",
+    approvedAwsRegion: "ap-northeast-2"
+  });
+  repository.planArtifact = createDeploymentPlanArtifactRecord({
+    operation: "destroy"
+  });
+  repository.deployments = [repository.deployment];
+  const app = await buildDeploymentTestApp(repository, {
+    runDeploymentDestroy: async (input, candidateRepository) => {
+      assert.equal(candidateRepository, repository);
+      destroyCalls.push(input);
+
+      return {
+        deployment: createDeploymentRecord(input.deploymentId, {
+          status: "DESTROYED",
+          currentPlanArtifactId: null,
+          stateObjectKey: null
+        }),
+        terraform: {
+          init: null,
+          destroy: null
+        }
+      };
+    }
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/deployments/${deploymentId}/destroy`,
+    headers: await authHeaders(),
+    payload: {}
+  });
+
+  assert.equal(response.statusCode, 202);
+  const body = response.json() as DeploymentResponse;
+  assert.equal(body.deployment.id, deploymentId);
+  assert.equal(body.deployment.status, "RUNNING");
+  assert.equal(body.deployment.activeStage, "destroy");
+  assert.equal(destroyCalls.length, 1);
+  const { abortSignal: destroyAbortSignal, ...destroyCall } = destroyCalls[0]!;
+  assert.equal(destroyAbortSignal instanceof AbortSignal, true);
+  assert.deepEqual(destroyCall, {
+    deploymentId,
+    startedFromStatus: "SUCCESS",
+    startedFromFailureStage: null,
+    accessContext: {
+      kind: "user",
+      userId
+    }
+  });
 
   await app.close();
 });

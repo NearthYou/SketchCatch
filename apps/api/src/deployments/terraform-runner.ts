@@ -72,6 +72,19 @@ export async function runTerraformPlan(
   );
 }
 
+export async function runTerraformDestroyPlan(
+  workdir: string,
+  options: RunTerraformCommandOptions & { planFileName?: string } = {}
+): Promise<TerraformRunResult> {
+  const planFileName = options.planFileName ?? defaultTerraformPlanFileName;
+
+  return runTerraformCommand(
+    workdir,
+    ["plan", "-destroy", "-input=false", "-no-color", `-out=${planFileName}`],
+    options
+  );
+}
+
 export async function runTerraformShowJson(
   workdir: string,
   options: RunTerraformCommandOptions & { planFileName?: string } = {}

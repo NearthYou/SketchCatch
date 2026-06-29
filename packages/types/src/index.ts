@@ -214,7 +214,13 @@ export type TerraformArtifact = ProjectAsset & {
   architectureId: string;
 };
 
-export type DeploymentStatus = "PENDING" | "RUNNING" | "SUCCESS" | "FAILED" | "CANCELLED";
+export type DeploymentStatus =
+  | "PENDING"
+  | "RUNNING"
+  | "SUCCESS"
+  | "FAILED"
+  | "CANCELLED"
+  | "DESTROYED";
 
 export type Deployment = DeploymentBlock & {
   id: string;
@@ -271,7 +277,7 @@ export type DeploymentPlanSummary = {
   warnings: DeploymentPlanWarning[];
 };
 
-export type DeploymentStage = "init" | "validate" | "plan" | "apply";
+export type DeploymentStage = "init" | "validate" | "plan" | "apply" | "destroy";
 
 export type Template = {
   id: string;
@@ -303,6 +309,7 @@ export type DeploymentPlanArtifact = {
   deploymentId: string;
   terraformArtifactId: string;
   terraformArtifactSha256: string | null;
+  operation: "apply" | "destroy";
   objectKey: string;
   sha256: string;
   accountId: string;
@@ -447,7 +454,8 @@ export type DeploymentFailureStage =
   | "approval"
   | "aws_connection"
   | "mock_run"
-  | "apply";
+  | "apply"
+  | "destroy";
 
 export type Activity = {
   id: string;

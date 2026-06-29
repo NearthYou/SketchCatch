@@ -201,6 +201,23 @@ class FakeDeploymentRepository implements DeploymentRepository {
     return this.deployment;
   };
 
+  markDeploymentDestroyRunning: DeploymentRepository["markDeploymentDestroyRunning"] = async (
+    candidateDeploymentId
+  ) => {
+    if (!this.deployment || this.deployment.id !== candidateDeploymentId) {
+      return undefined;
+    }
+
+    this.deployment = {
+      ...this.deployment,
+      status: "RUNNING",
+      activeStage: "destroy",
+      updatedAt: fixedNow
+    };
+
+    return this.deployment;
+  };
+
   markDeploymentInitSucceeded: DeploymentRepository["markDeploymentInitSucceeded"] = async () =>
     this.deployment;
 
@@ -231,13 +248,13 @@ class FakeDeploymentRepository implements DeploymentRepository {
     this.deployment = {
       ...this.deployment,
       currentPlanArtifactId: input.planArtifact.id,
-      status: "PENDING",
+      status: input.terminalStatus ?? "PENDING",
       planSummary: input.planSummary,
       isBlocked: input.isBlocked,
       blockedBy: input.blockedBy,
       blockedReason: input.blockedReason,
-      failureStage: null,
-      errorSummary: null,
+      failureStage: input.failureStage ?? null,
+      errorSummary: input.errorSummary ?? null,
       ...clearDeploymentApprovalSnapshot(),
       updatedAt: fixedNow
     };
@@ -262,6 +279,29 @@ class FakeDeploymentRepository implements DeploymentRepository {
       resultWarningSummary: input.resultWarningSummary,
       failureStage: null,
       errorSummary: null,
+      updatedAt: fixedNow
+    };
+
+    return this.deployment;
+  };
+
+  completeDeploymentDestroy: DeploymentRepository["completeDeploymentDestroy"] = async (
+    candidateDeploymentId,
+    input
+  ) => {
+    if (!this.deployment || this.deployment.id !== candidateDeploymentId) {
+      return undefined;
+    }
+
+    this.deployment = {
+      ...this.deployment,
+      status: "DESTROYED",
+      currentPlanArtifactId: null,
+      stateObjectKey: null,
+      resultWarningSummary: input.resultWarningSummary,
+      failureStage: null,
+      errorSummary: null,
+      ...clearDeploymentApprovalSnapshot(),
       updatedAt: fixedNow
     };
 
@@ -431,6 +471,7 @@ function createDeploymentPlanArtifactRecord(
     deploymentId,
     terraformArtifactId,
     terraformArtifactSha256,
+    operation: "apply",
     objectKey: `deployments/${deploymentId}/plans/${planArtifactId}.tfplan`,
     sha256: "0".repeat(64),
     accountId: "123456789012",
@@ -685,6 +726,7 @@ test("runDeploymentPlan saves a tfplan artifact, summary, block, logs, and curre
     deploymentId,
     terraformArtifactId,
     terraformArtifactSha256,
+    operation: "apply",
     objectKey: `deployments/${deploymentId}/plans/${planArtifactId}.tfplan`,
     sha256: "0".repeat(64),
     accountId: "123456789012",

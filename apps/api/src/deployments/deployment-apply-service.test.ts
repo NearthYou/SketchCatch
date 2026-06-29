@@ -51,6 +51,8 @@ class FakeDeploymentRepository implements DeploymentRepository {
         deploymentId: string;
         failureStage: NonNullable<DeploymentRecord["failureStage"]>;
         errorSummary: string;
+        stateObjectKey: string | null | undefined;
+        resultWarningSummary: string | null | undefined;
       }
     | undefined;
 
@@ -150,6 +152,9 @@ class FakeDeploymentRepository implements DeploymentRepository {
   markDeploymentApplyRunning: DeploymentRepository["markDeploymentApplyRunning"] = async () =>
     this.deployment;
 
+  markDeploymentDestroyRunning: DeploymentRepository["markDeploymentDestroyRunning"] = async () =>
+    this.deployment;
+
   markDeploymentInitSucceeded: DeploymentRepository["markDeploymentInitSucceeded"] = async () =>
     this.deployment;
 
@@ -210,11 +215,35 @@ class FakeDeploymentRepository implements DeploymentRepository {
     return this.deployment;
   };
 
+  completeDeploymentDestroy: DeploymentRepository["completeDeploymentDestroy"] = async (
+    candidateDeploymentId,
+    input
+  ) => {
+    if (!this.deployment || this.deployment.id !== candidateDeploymentId) {
+      return undefined;
+    }
+
+    this.deployment = {
+      ...this.deployment,
+      status: "DESTROYED",
+      currentPlanArtifactId: null,
+      stateObjectKey: null,
+      resultWarningSummary: input.resultWarningSummary,
+      failureStage: null,
+      errorSummary: null,
+      updatedAt: fixedNow
+    };
+
+    return this.deployment;
+  };
+
   failDeployment: DeploymentRepository["failDeployment"] = async (candidateDeploymentId, input) => {
     this.failedInput = {
       deploymentId: candidateDeploymentId,
       failureStage: input.failureStage,
-      errorSummary: input.errorSummary
+      errorSummary: input.errorSummary,
+      stateObjectKey: input.stateObjectKey,
+      resultWarningSummary: input.resultWarningSummary
     };
 
     if (!this.deployment || this.deployment.id !== candidateDeploymentId) {
@@ -226,6 +255,8 @@ class FakeDeploymentRepository implements DeploymentRepository {
       status: "FAILED",
       failureStage: input.failureStage,
       errorSummary: input.errorSummary,
+      stateObjectKey: input.stateObjectKey ?? this.deployment.stateObjectKey,
+      resultWarningSummary: input.resultWarningSummary ?? this.deployment.resultWarningSummary,
       updatedAt: fixedNow
     };
 
@@ -321,6 +352,10 @@ class FakeApplyArtifactStorage implements DeploymentApplyArtifactStorage {
     });
 
     return planBuffer;
+  }
+
+  async downloadDeploymentState(): Promise<Buffer> {
+    return Buffer.from("{}");
   }
 
   async uploadDeploymentState(input: UploadDeploymentStateInput) {
@@ -541,6 +576,7 @@ test("runDeploymentApply rejects unsafe Terraform before preparing AWS credentia
 
 test("runDeploymentApply marks apply failures failed and masks secret output", async () => {
   const repository = new FakeDeploymentRepository();
+  const applyArtifactStorage = new FakeApplyArtifactStorage();
 
   const result = await runDeploymentApply(
     {
@@ -549,7 +585,7 @@ test("runDeploymentApply marks apply failures failed and masks secret output", a
     },
     repository,
     {
-      applyArtifactStorage: new FakeApplyArtifactStorage(),
+      applyArtifactStorage,
       readTerraformArtifactFile: async () => terraformArtifactContent,
       writePlanFile: async () => undefined,
       prepareTerraformWorkspace: async () => ({
@@ -572,6 +608,14 @@ test("runDeploymentApply marks apply failures failed and masks secret output", a
   assert.equal(result.deployment.failureStage, "apply");
   assert.equal(repository.failedInput?.failureStage, "apply");
   assert.equal(repository.failedInput?.errorSummary, "[REDACTED]");
+  assert.equal(repository.failedInput?.stateObjectKey, applyArtifactStorage.stateObjectKey);
+  assert.match(repository.failedInput?.resultWarningSummary ?? "", /Partial Terraform state/);
+  assert.equal(applyArtifactStorage.uploadedStates.length, 1);
+  assert.equal(applyArtifactStorage.uploadedStates[0]?.deploymentId, deploymentId);
+  assert.match(
+    applyArtifactStorage.uploadedStates[0]?.stateFilePath ?? "",
+    /sketchcatch-terraform-apply[\\/]terraform\.tfstate$/
+  );
   assert.deepEqual(
     repository.logs.map((log) => ({
       level: log.level,
@@ -580,7 +624,11 @@ test("runDeploymentApply marks apply failures failed and masks secret output", a
     [
       { level: "INFO", message: "init ok" },
       { level: "ERROR", message: "[REDACTED]" },
-      { level: "ERROR", message: "apply failed" }
+      { level: "ERROR", message: "apply failed" },
+      {
+        level: "WARN",
+        message: "Partial Terraform state was saved after failed apply for explicit cleanup destroy."
+      }
     ]
   );
 });
@@ -690,6 +738,7 @@ function createPlanArtifactRecord(
     deploymentId,
     terraformArtifactId,
     terraformArtifactSha256,
+    operation: "apply",
     objectKey: `deployments/${deploymentId}/plans/${planArtifactId}.tfplan`,
     sha256: tfplanSha256,
     accountId: "123456789012",

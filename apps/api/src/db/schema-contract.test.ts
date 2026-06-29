@@ -6,6 +6,9 @@ import {
   awsConnections,
   deploymentFailureStageEnum,
   deploymentLogs,
+  deploymentPlanArtifacts,
+  deploymentPlanOperationEnum,
+  deploymentStageEnum,
   deploymentStatusEnum,
   deployments,
   projectDrafts,
@@ -14,13 +17,24 @@ import {
 
 test("deployment status enum uses a domain-specific database name", () => {
   assert.equal(deploymentStatusEnum.enumName, "deployment_status");
+  assert(deploymentStatusEnum.enumValues.includes("DESTROYED"));
 });
 
 test("deployment failure stages use validate consistently with deployment log stages", () => {
   const values: readonly string[] = deploymentFailureStageEnum.enumValues;
 
   assert(values.includes("validate"));
+  assert(values.includes("destroy"));
   assert.equal(values.includes("validation"), false);
+  assert(deploymentStageEnum.enumValues.includes("destroy"));
+});
+
+test("deployment plan artifacts identify apply and destroy operations", () => {
+  const config = getTableConfig(deploymentPlanArtifacts);
+
+  assert.equal(deploymentPlanOperationEnum.enumName, "deployment_plan_operation");
+  assert.deepEqual(deploymentPlanOperationEnum.enumValues, ["apply", "destroy"]);
+  assert(findColumn(config.columns, "operation"));
 });
 
 test("project drafts have a stable id primary key and one current draft per project", () => {
