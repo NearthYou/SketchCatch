@@ -331,33 +331,31 @@ Destroy plan의 실제 실행은 [deployment-destroy-plan-service.ts](../../apps
 
 큰 흐름은 아래와 같다.
 
-```text
-Deployment 조회
--> 원래 status/failureStage 확보
--> destroy plan 시작 가능 상태 검증
--> Terraform artifact 조회
--> current plan artifact 조회
--> AWS connection 조회
--> Terraform workspace 준비
--> Terraform artifact 파일 읽기
--> artifact 안전성 검사
--> artifact sha256 계산
--> failed cleanup이면 artifact drift 검사
--> state 다운로드
--> workspace/terraform.tfstate 쓰기
--> AWS credential 준비
--> 필요하면 markDeploymentPlanRunning
--> terraform init
--> terraform plan -destroy
--> terraform show -json
--> summary 생성
--> block 상태 생성
--> tfplan S3 업로드
--> deployment_plan_artifacts 저장
--> deployments.currentPlanArtifactId 갱신
--> 승인 대기 상태로 저장
--> workspace cleanup
-```
+Deployment 조회 ([deployment-destroy-plan-service.ts:L125-L131](../../apps/api/src/deployments/deployment-destroy-plan-service.ts#L125-L131))<br>
+-> 원래 status/failureStage 확보 ([deployment-destroy-plan-service.ts:L133-L135](../../apps/api/src/deployments/deployment-destroy-plan-service.ts#L133-L135))<br>
+-> destroy plan 시작 가능 상태 검증 ([호출부 L137](../../apps/api/src/deployments/deployment-destroy-plan-service.ts#L137), [검증 함수 L373-L394](../../apps/api/src/deployments/deployment-destroy-plan-service.ts#L373-L394))<br>
+-> Terraform artifact 조회 ([호출부 L139](../../apps/api/src/deployments/deployment-destroy-plan-service.ts#L139), [조회 함수 L425-L443](../../apps/api/src/deployments/deployment-destroy-plan-service.ts#L425-L443))<br>
+-> current plan artifact 조회 ([deployment-destroy-plan-service.ts:L140-L142](../../apps/api/src/deployments/deployment-destroy-plan-service.ts#L140-L142))<br>
+-> AWS connection 조회 ([호출부 L143-L147](../../apps/api/src/deployments/deployment-destroy-plan-service.ts#L143-L147), [조회 함수 L445-L464](../../apps/api/src/deployments/deployment-destroy-plan-service.ts#L445-L464))<br>
+-> Terraform workspace 준비 ([deployment-destroy-plan-service.ts:L148-L151](../../apps/api/src/deployments/deployment-destroy-plan-service.ts#L148-L151))<br>
+-> Terraform artifact 파일 읽기 ([deployment-destroy-plan-service.ts:L153](../../apps/api/src/deployments/deployment-destroy-plan-service.ts#L153))<br>
+-> artifact 안전성 검사 ([deployment-destroy-plan-service.ts:L154](../../apps/api/src/deployments/deployment-destroy-plan-service.ts#L154))<br>
+-> artifact sha256 계산 ([deployment-destroy-plan-service.ts:L155](../../apps/api/src/deployments/deployment-destroy-plan-service.ts#L155))<br>
+-> failed cleanup이면 artifact drift 검사 ([호출부 L157-L163](../../apps/api/src/deployments/deployment-destroy-plan-service.ts#L157-L163), [검증 함수 L396-L423](../../apps/api/src/deployments/deployment-destroy-plan-service.ts#L396-L423))<br>
+-> state 다운로드 ([deployment-destroy-plan-service.ts:L165-L168](../../apps/api/src/deployments/deployment-destroy-plan-service.ts#L165-L168))<br>
+-> workspace/terraform.tfstate 쓰기 ([deployment-destroy-plan-service.ts:L169](../../apps/api/src/deployments/deployment-destroy-plan-service.ts#L169))<br>
+-> AWS credential 준비 ([호출부 L171-L179](../../apps/api/src/deployments/deployment-destroy-plan-service.ts#L171-L179), [준비 함수 L466-L488](../../apps/api/src/deployments/deployment-destroy-plan-service.ts#L466-L488))<br>
+-> 필요하면 markDeploymentPlanRunning ([deployment-destroy-plan-service.ts:L180-L189](../../apps/api/src/deployments/deployment-destroy-plan-service.ts#L180-L189))<br>
+-> terraform init ([deployment-destroy-plan-service.ts:L193-L204](../../apps/api/src/deployments/deployment-destroy-plan-service.ts#L193-L204))<br>
+-> terraform plan -destroy ([deployment-destroy-plan-service.ts:L224-L236](../../apps/api/src/deployments/deployment-destroy-plan-service.ts#L224-L236))<br>
+-> terraform show -json ([deployment-destroy-plan-service.ts:L256-L268](../../apps/api/src/deployments/deployment-destroy-plan-service.ts#L256-L268))<br>
+-> summary 생성 ([호출부 L288-L294](../../apps/api/src/deployments/deployment-destroy-plan-service.ts#L288-L294), [생성 함수 L548-L572](../../apps/api/src/deployments/deployment-destroy-plan-service.ts#L548-L572))<br>
+-> block 상태 생성 ([호출부 L295](../../apps/api/src/deployments/deployment-destroy-plan-service.ts#L295), [생성 함수 L574-L592](../../apps/api/src/deployments/deployment-destroy-plan-service.ts#L574-L592))<br>
+-> tfplan S3 업로드 ([deployment-destroy-plan-service.ts:L301-L306](../../apps/api/src/deployments/deployment-destroy-plan-service.ts#L301-L306))<br>
+-> deployment_plan_artifacts 저장 ([호출부 L308-L320](../../apps/api/src/deployments/deployment-destroy-plan-service.ts#L308-L320), [저장 구현 L579-L582](../../apps/api/src/deployments/deployment-service.ts#L579-L582))<br>
+-> deployments.currentPlanArtifactId 갱신 ([deployment-service.ts:L584-L588](../../apps/api/src/deployments/deployment-service.ts#L584-L588))<br>
+-> 승인 대기 상태로 저장 ([호출부 L321-L328](../../apps/api/src/deployments/deployment-destroy-plan-service.ts#L321-L328), [저장 구현 L589-L596](../../apps/api/src/deployments/deployment-service.ts#L589-L596))<br>
+-> workspace cleanup ([deployment-destroy-plan-service.ts:L368-L370](../../apps/api/src/deployments/deployment-destroy-plan-service.ts#L368-L370))
 
 ### 9.1 원래 상태 보존
 
@@ -546,30 +544,28 @@ approvedAt
 
 큰 흐름은 아래와 같다.
 
-```text
-Deployment 조회
--> 원래 status/failureStage 확보
--> destroy 가능한 source status인지 확인
--> Terraform artifact 조회
--> current destroy plan artifact 조회
--> AWS connection 조회
--> 승인된 tfplan 다운로드
--> Terraform workspace 준비
--> Terraform artifact 파일 읽기
--> artifact 안전성 검사
--> 현재 Terraform artifact hash 계산
--> tfplan hash 계산
--> approval snapshot 재검증
--> state 다운로드
--> workspace/terraform.tfstate 쓰기
--> AWS credential 준비
--> 필요하면 markDeploymentDestroyRunning
--> workspace/tfplan 쓰기
--> terraform init
--> terraform apply tfplan
--> 성공하면 completeDeploymentDestroy
--> workspace cleanup
-```
+Deployment 조회 ([deployment-destroy-service.ts:L103-L109](../../apps/api/src/deployments/deployment-destroy-service.ts#L103-L109))<br>
+-> 원래 status/failureStage 확보 ([deployment-destroy-service.ts:L111-L112](../../apps/api/src/deployments/deployment-destroy-service.ts#L111-L112))<br>
+-> destroy 가능한 source status인지 확인 ([호출부 L114-L116](../../apps/api/src/deployments/deployment-destroy-service.ts#L114-L116), [검증 함수 L277-L286](../../apps/api/src/deployments/deployment-destroy-service.ts#L277-L286))<br>
+-> Terraform artifact 조회 ([호출부 L118](../../apps/api/src/deployments/deployment-destroy-service.ts#L118), [조회 함수 L288-L306](../../apps/api/src/deployments/deployment-destroy-service.ts#L288-L306))<br>
+-> current destroy plan artifact 조회 ([호출부 L119](../../apps/api/src/deployments/deployment-destroy-service.ts#L119), [조회 함수 L308-L329](../../apps/api/src/deployments/deployment-destroy-service.ts#L308-L329))<br>
+-> AWS connection 조회 ([호출부 L120-L124](../../apps/api/src/deployments/deployment-destroy-service.ts#L120-L124), [조회 함수 L331-L353](../../apps/api/src/deployments/deployment-destroy-service.ts#L331-L353))<br>
+-> 승인된 tfplan 다운로드 ([deployment-destroy-service.ts:L125-L129](../../apps/api/src/deployments/deployment-destroy-service.ts#L125-L129))<br>
+-> Terraform workspace 준비 ([deployment-destroy-service.ts:L131-L134](../../apps/api/src/deployments/deployment-destroy-service.ts#L131-L134))<br>
+-> Terraform artifact 파일 읽기 ([deployment-destroy-service.ts:L136](../../apps/api/src/deployments/deployment-destroy-service.ts#L136))<br>
+-> artifact 안전성 검사 ([deployment-destroy-service.ts:L137](../../apps/api/src/deployments/deployment-destroy-service.ts#L137))<br>
+-> 현재 Terraform artifact hash 계산 ([deployment-destroy-service.ts:L138](../../apps/api/src/deployments/deployment-destroy-service.ts#L138))<br>
+-> tfplan hash 계산 ([deployment-destroy-service.ts:L139](../../apps/api/src/deployments/deployment-destroy-service.ts#L139))<br>
+-> approval snapshot 재검증 ([호출부 L141-L149](../../apps/api/src/deployments/deployment-destroy-service.ts#L141-L149), [검증 함수 L189-L249](../../apps/api/src/deployments/deployment-approval-service.ts#L189-L249))<br>
+-> state 다운로드 ([deployment-destroy-service.ts:L151-L154](../../apps/api/src/deployments/deployment-destroy-service.ts#L151-L154))<br>
+-> workspace/terraform.tfstate 쓰기 ([deployment-destroy-service.ts:L155](../../apps/api/src/deployments/deployment-destroy-service.ts#L155))<br>
+-> AWS credential 준비 ([호출부 L157-L165](../../apps/api/src/deployments/deployment-destroy-service.ts#L157-L165), [준비 함수 L355-L377](../../apps/api/src/deployments/deployment-destroy-service.ts#L355-L377))<br>
+-> 필요하면 markDeploymentDestroyRunning ([deployment-destroy-service.ts:L166-L175](../../apps/api/src/deployments/deployment-destroy-service.ts#L166-L175))<br>
+-> workspace/tfplan 쓰기 ([deployment-destroy-service.ts:L177](../../apps/api/src/deployments/deployment-destroy-service.ts#L177))<br>
+-> terraform init ([deployment-destroy-service.ts:L181-L191](../../apps/api/src/deployments/deployment-destroy-service.ts#L181-L191))<br>
+-> terraform apply tfplan ([deployment-destroy-service.ts:L212-L223](../../apps/api/src/deployments/deployment-destroy-service.ts#L212-L223))<br>
+-> 성공하면 completeDeploymentDestroy ([호출부 L244-L251](../../apps/api/src/deployments/deployment-destroy-service.ts#L244-L251), [저장 구현 L677-L692](../../apps/api/src/deployments/deployment-service.ts#L677-L692))<br>
+-> workspace cleanup ([deployment-destroy-service.ts:L272-L274](../../apps/api/src/deployments/deployment-destroy-service.ts#L272-L274))
 
 Destroy Apply service는 새로운 plan을 만들지 않는다.
 
