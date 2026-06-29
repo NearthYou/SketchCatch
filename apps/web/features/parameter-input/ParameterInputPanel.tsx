@@ -291,7 +291,15 @@ export function ParameterInputPanel({
                   type="button"
                 >
                   <Plus aria-hidden="true" size={14} />
-                  <span>{definition.label}</span>
+                  <span className={styles.advancedOptionText}>
+                    <span className={styles.advancedOptionLabel}>{definition.label}</span>
+                    <span className={styles.advancedOptionMeta}>{definition.terraformName}</span>
+                    {definition.description ? (
+                      <span className={styles.advancedOptionDescription}>
+                        {definition.description}
+                      </span>
+                    ) : null}
+                  </span>
                 </button>
               ))}
             </div>

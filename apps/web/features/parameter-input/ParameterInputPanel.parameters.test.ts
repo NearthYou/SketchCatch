@@ -69,6 +69,9 @@ test("ParameterInputPanel lets users search and add hidden optional parameters",
   );
   assert.match(source, /setAdvancedParameterQuery\(""\);/);
   assert.match(source, /onClick=\{\(\) => addAdvancedParameter\(definition\)\}/);
+  assert.match(source, /className=\{styles\.advancedOptionMeta\}>\{definition\.terraformName\}/);
+  assert.match(source, /definition\.description \?/);
+  assert.match(source, /className=\{styles\.advancedOptionDescription\}/);
 });
 
 test("ParameterInputPanel lets users remove advanced optional parameters and stored values", () => {

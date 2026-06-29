@@ -290,17 +290,18 @@ div.resourceIcon,
 }
 
 .advancedOptionButton {
-  align-items: center;
+  align-items: start;
   background: #ffffff;
   border: 1px solid #e0e7f2;
   border-radius: 6px;
   color: #3c4559;
   cursor: pointer;
-  display: flex;
+  display: grid;
   font: inherit;
   font-size: 0.82rem;
   gap: 8px;
-  min-height: 34px;
+  grid-template-columns: 14px minmax(0, 1fr);
+  min-height: 44px;
   padding: 7px 9px;
   text-align: left;
 }
@@ -312,8 +313,24 @@ div.resourceIcon,
   outline: none;
 }
 
-.advancedOptionButton span {
+.advancedOptionText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   min-width: 0;
+}
+
+.advancedOptionLabel {
+  color: #252c42;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.advancedOptionMeta,
+.advancedOptionDescription {
+  color: #687388;
+  font-size: 0.75rem;
+  line-height: 1.35;
   overflow-wrap: anywhere;
 }
 
