@@ -13,9 +13,9 @@ export function isRegionDesignNode(node: DiagramNode): boolean {
 }
 
 export function getRegionNodeAwsRegion(node: DiagramNode): AwsRegionCode {
-  return isAwsRegionCode(node.metadata?.awsRegion)
-    ? node.metadata.awsRegion
-    : defaultAwsRegion;
+  const awsRegion = node.metadata?.awsRegion;
+
+  return isAwsRegionCode(awsRegion) ? awsRegion : defaultAwsRegion;
 }
 
 export function createRegionNodeMetadata(
