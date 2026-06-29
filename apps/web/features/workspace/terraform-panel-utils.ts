@@ -144,12 +144,17 @@ export function findTerraformBlockForNode(
   node: DiagramNode | null
 ): TerraformBlockLocation | null {
   const address = toNodeTerraformAddress(node);
+  const fileName = toNodeTerraformFileName(node);
 
-  if (!address) {
+  if (!address || !fileName) {
     return null;
   }
 
-  return blocks.find((block) => block.address === address) ?? null;
+  return (
+    blocks.find((block) => block.address === address && block.fileName === fileName) ??
+    blocks.find((block) => block.address === address) ??
+    null
+  );
 }
 
 function toNodeTerraformAddress(node: DiagramNode | null): string | null {
@@ -163,6 +168,14 @@ function toNodeTerraformAddress(node: DiagramNode | null): string | null {
   }
 
   return toTerraformBlockAddress(blockType, resourceType, resourceName);
+}
+
+function toNodeTerraformFileName(node: DiagramNode | null): string | null {
+  if (!node?.parameters) {
+    return null;
+  }
+
+  return normalizeTerraformFileName(node.parameters.fileName);
 }
 
 function parseTerraformBlocks(fileName: string, terraformCode: string): TerraformBlockLocation[] {

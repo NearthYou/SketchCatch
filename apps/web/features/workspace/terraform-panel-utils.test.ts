@@ -72,6 +72,28 @@ resource "aws_ami" "ubuntu" {
   assert.equal(findTerraformBlockForNode(blocks, makeNode("resource", "aws_ami", "ubuntu"))?.blockType, "resource");
 });
 
+test("findTerraformBlockForNode prefers the node file when duplicate identities exist", () => {
+  const blocks = parseTerraformFiles([
+    {
+      fileName: "legacy.tf",
+      code: `resource "aws_vpc" "main" {
+  cidr_block = "10.0.0.0/16"
+}`
+    },
+    {
+      fileName: "network.tf",
+      code: `resource "aws_vpc" "main" {
+  cidr_block = "172.16.0.0/16"
+}`
+    }
+  ]);
+
+  const block = findTerraformBlockForNode(blocks, makeNode("resource", "aws_vpc", "main", "network"));
+
+  assert.equal(block?.fileName, "network.tf");
+  assert.match(block?.code ?? "", /172\.16\.0\.0\/16/);
+});
+
 test("createTerraformFilesFromGeneratedCode routes generated blocks by Terraform identity", () => {
   const files = createTerraformFilesFromGeneratedCode(
     {
