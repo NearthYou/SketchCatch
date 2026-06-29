@@ -111,6 +111,28 @@ export const refreshTokens = pgTable(
   ]
 );
 
+export const passwordResetTokens = pgTable(
+  "password_reset_tokens",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    userId: varchar("user_id", { length: 36 })
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    usedAt: timestamp("used_at", { withTimezone: true }),
+    userAgent: text("user_agent"),
+    ipAddress: varchar("ip_address", { length: 64 }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [
+    uniqueIndex("password_reset_tokens_token_hash_unique").on(table.tokenHash),
+    index("password_reset_tokens_user_id_idx").on(table.userId),
+    index("password_reset_tokens_expires_at_idx").on(table.expiresAt),
+    index("password_reset_tokens_used_at_idx").on(table.usedAt)
+  ]
+);
+
 export const loginAttempts = pgTable(
   "login_attempts",
   {
@@ -385,6 +407,7 @@ export const deploymentLogs = pgTable(
 export const usersRelations = relations(users, ({ many }) => ({
   projects: many(projects),
   refreshTokens: many(refreshTokens),
+  passwordResetTokens: many(passwordResetTokens),
   loginAttempts: many(loginAttempts),
   oauthAccounts: many(oauthAccounts),
   awsConnections: many(awsConnections)
@@ -393,6 +416,13 @@ export const usersRelations = relations(users, ({ many }) => ({
 export const refreshTokensRelations = relations(refreshTokens, ({ one }) => ({
   user: one(users, {
     fields: [refreshTokens.userId],
+    references: [users.id]
+  })
+}));
+
+export const passwordResetTokensRelations = relations(passwordResetTokens, ({ one }) => ({
+  user: one(users, {
+    fields: [passwordResetTokens.userId],
     references: [users.id]
   })
 }));

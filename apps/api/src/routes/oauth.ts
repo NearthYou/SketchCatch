@@ -21,6 +21,12 @@ const oauthStartParamsSchema = z.object({
   provider: z.enum(["naver", "kakao", "github"])
 });
 
+const oauthStartQuerySchema = z
+  .object({
+    rememberMe: z.enum(["true", "false"]).optional()
+  })
+  .passthrough();
+
 const oauthCallbackQuerySchema = z
   .object({
     code: z.string().trim().min(1).optional(),
@@ -49,6 +55,7 @@ export async function registerOAuthRoutes(
 
   app.get("/auth/oauth/:provider/start", async (request, reply) => {
     const { provider } = oauthStartParamsSchema.parse(request.params);
+    const startQuery = oauthStartQuerySchema.parse(request.query);
 
     if (options.startRateLimiter) {
       const rateLimitReply = consumeOAuthRateLimit(
@@ -79,7 +86,8 @@ export async function registerOAuthRoutes(
 
     setOAuthStateCookie(reply, {
       provider,
-      state
+      state,
+      persistent: startQuery.rememberMe === "true"
     });
 
     return reply.redirect(authorizationUrl.toString());
@@ -133,7 +141,9 @@ export async function registerOAuthRoutes(
       const { db } = getOAuthDatabaseClient();
       const user = await findOrCreateOAuthUser(db, profile);
 
-      await createAuthSession(db, user.id, request, reply);
+      await createAuthSession(db, user.id, request, reply, {
+        persistent: storedState.persistent
+      });
       clearOAuthStateCookie(reply);
 
       return reply.redirect("/mypage");

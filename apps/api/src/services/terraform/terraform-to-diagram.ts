@@ -130,7 +130,7 @@ function createNodeAddressMap(nodes: DiagramNode[]): Map<string, DiagramNode> {
 }
 
 function parseTerraformBlocks(terraformCode: string): ParseResult {
-  const lines = terraformCode.split("\n");
+  const lines = splitTerraformLines(terraformCode);
   const blocks: ParsedBlock[] = [];
   const diagnostics: TerraformDiagnostic[] = [];
   const addresses = new Set<string>();
@@ -189,7 +189,8 @@ function parseTerraformBlocks(terraformCode: string): ParseResult {
 
     addresses.add(address);
 
-    const bodyResult = collectBlockBody(lines, index + 1, index + 1, address);
+    const headerLineNumber = index + 1;
+    const bodyResult = collectBlockBody(lines, index + 1, headerLineNumber, address);
     diagnostics.push(...bodyResult.diagnostics);
 
     if (!bodyResult.closed) {
@@ -213,6 +214,10 @@ function parseTerraformBlocks(terraformCode: string): ParseResult {
   }
 
   return { blocks, diagnostics };
+}
+
+function splitTerraformLines(terraformCode: string): string[] {
+  return terraformCode.split(/\r?\n/);
 }
 
 function collectBlockBody(

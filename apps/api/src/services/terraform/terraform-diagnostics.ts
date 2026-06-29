@@ -31,7 +31,7 @@ function checkBalancedTokens(terraformCode: string): TerraformDiagnostic[] {
   let inString = false;
   let escaped = false;
 
-  terraformCode.split("\n").forEach((lineText, lineIndex) => {
+  splitTerraformLines(terraformCode).forEach((lineText, lineIndex) => {
     for (let index = 0; index < lineText.length; index += 1) {
       const char = lineText[index];
 
@@ -102,7 +102,7 @@ function checkBalancedTokens(terraformCode: string): TerraformDiagnostic[] {
 function checkBlocks(terraformCode: string): TerraformDiagnostic[] {
   const diagnostics: TerraformDiagnostic[] = [];
   const addresses = new Set<string>();
-  const lines = terraformCode.split("\n");
+  const lines = splitTerraformLines(terraformCode);
 
   lines.forEach((lineText, index) => {
     const codeLine = stripLineComment(lineText);
@@ -175,7 +175,7 @@ function isEmptyBlock(lines: string[], headerIndex: number): boolean {
 
 function checkQuotedReferences(terraformCode: string): TerraformDiagnostic[] {
   const diagnostics: TerraformDiagnostic[] = [];
-  const lines = terraformCode.split("\n");
+  const lines = splitTerraformLines(terraformCode);
 
   lines.forEach((lineText, index) => {
     const codeLine = stripLineComment(lineText);
@@ -192,6 +192,10 @@ function checkQuotedReferences(terraformCode: string): TerraformDiagnostic[] {
   });
 
   return diagnostics;
+}
+
+function splitTerraformLines(terraformCode: string): string[] {
+  return terraformCode.split(/\r?\n/);
 }
 
 function stripLineComment(lineText: string): string {

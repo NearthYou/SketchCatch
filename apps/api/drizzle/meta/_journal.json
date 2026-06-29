@@ -131,8 +131,15 @@
     {
       "idx": 18,
       "version": "7",
+      "when": 1782700000000,
+      "tag": "0018_password_reset_tokens",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
       "when": 1782720000000,
-      "tag": "0018_destroy_workflow",
+      "tag": "0019_destroy_workflow",
       "breakpoints": true
     }
   ]

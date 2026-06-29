@@ -2,11 +2,17 @@ import { randomUUID } from "node:crypto";
 import { and, count, desc, eq, gt, gte, isNull } from "drizzle-orm";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
-import type {
-  ApiErrorResponse,
-  AuthResponse,
-  CurrentUserResponse,
-  LoginLockedErrorResponse
+import {
+  isPasswordPolicySatisfied,
+  PASSWORD_MAX_LENGTH,
+  PASSWORD_POLICY_ERROR_MESSAGE,
+  type ApiErrorResponse,
+  type AuthResponse,
+  type CurrentUserResponse,
+  type LoginLockedErrorResponse,
+  type PasswordResetConfirmResponse,
+  type PasswordResetRequestResponse,
+  type SignupAvailabilityResponse
 } from "@sketchcatch/types";
 import { requireActiveUserId } from "../auth/current-user.js";
 import {
@@ -17,15 +23,23 @@ import {
 } from "../auth/login-attempt-policy.js";
 import { hashPassword, verifyPassword } from "../auth/password.js";
 import {
+  buildPasswordResetDebugUrl,
+  createPasswordResetToken,
+  getPasswordResetTokenExpiresAt,
+  shouldExposePasswordResetDebugToken
+} from "../auth/password-reset.js";
+import {
   clearRefreshTokenCookie,
   createAuthSession,
   getRefreshTokenCookie,
+  getRefreshTokenPersistence,
   hasValidCsrfToken,
   toPublicUser
 } from "../auth/session.js";
 import { hashToken } from "../auth/tokens.js";
 import { type Database, type DatabaseClient, getDatabaseClient } from "../db/client.js";
-import { loginAttempts, refreshTokens, users } from "../db/schema.js";
+import { loginAttempts, passwordResetTokens, refreshTokens, users } from "../db/schema.js";
+import type { RateLimiter } from "../rate-limit/in-memory-rate-limiter.js";
 
 const usernameSchema = z
   .string()
@@ -35,32 +49,93 @@ const usernameSchema = z
   .regex(/^[A-Za-z0-9_-]+$/)
   .transform((value) => value.toLowerCase());
 
+const emailSchema = z
+  .string()
+  .trim()
+  .email()
+  .max(255)
+  .transform((value) => value.toLowerCase());
+
+const passwordPolicySchema = z
+  .string()
+  .max(PASSWORD_MAX_LENGTH, PASSWORD_POLICY_ERROR_MESSAGE)
+  .refine(isPasswordPolicySatisfied, {
+    message: PASSWORD_POLICY_ERROR_MESSAGE
+  });
+
 const signupBodySchema = z.object({
   username: usernameSchema,
-  email: z
-    .string()
-    .trim()
-    .email()
-    .max(255)
-    .transform((value) => value.toLowerCase()),
+  email: emailSchema,
   nickname: z.string().trim().min(1).max(40),
-  password: z.string().min(8).max(128)
+  password: passwordPolicySchema,
+  privacyAccepted: z.literal(true),
+  termsAccepted: z.literal(true)
 });
+
+const signupAvailabilityBodySchema = z
+  .object({
+    username: usernameSchema.optional(),
+    email: emailSchema.optional()
+  })
+  .refine((body) => body.username || body.email, {
+    message: "username 또는 email 중 하나는 필요합니다."
+  });
 
 const loginBodySchema = z.object({
   username: usernameSchema,
-  password: z.string().min(1).max(128)
+  password: z.string().min(1).max(PASSWORD_MAX_LENGTH),
+  rememberMe: z.boolean().optional().default(false)
+});
+
+const passwordResetRequestBodySchema = z.object({
+  email: emailSchema
+});
+
+const passwordResetConfirmBodySchema = z.object({
+  resetToken: z.string().trim().min(20).max(512),
+  newPassword: passwordPolicySchema
 });
 
 type AuthRouteOptions = {
   getDatabaseClient?: () => DatabaseClient;
+  passwordResetRequestEmailRateLimiter?: RateLimiter;
+  passwordResetRequestIpRateLimiter?: RateLimiter;
 };
+
+const PASSWORD_RESET_REQUEST_RATE_LIMIT_MESSAGE =
+  "비밀번호 재설정 요청이 너무 많습니다. 잠시 후 다시 시도해주세요.";
 
 export async function registerAuthRoutes(
   app: FastifyInstance,
   options: AuthRouteOptions = {}
 ): Promise<void> {
   const getAuthDatabaseClient = options.getDatabaseClient ?? getDatabaseClient;
+
+  app.post("/auth/signup/availability", async (request) => {
+    const body = signupAvailabilityBodySchema.parse(request.body);
+    const { db } = getAuthDatabaseClient();
+    const response: SignupAvailabilityResponse = {};
+
+    if (body.username) {
+      const [existingUsername] = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.username, body.username));
+
+      response.usernameAvailable = !existingUsername;
+    }
+
+    if (body.email) {
+      const [existingEmail] = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.email, body.email));
+
+      response.emailAvailable = !existingEmail;
+    }
+
+    return response;
+  });
 
   app.post("/auth/signup", async (request, reply) => {
     const body = signupBodySchema.parse(request.body);
@@ -115,7 +190,9 @@ export async function registerAuthRoutes(
       throw new Error("사용자를 생성하지 못했습니다.");
     }
 
-    const session = await createAuthSession(db, createdUser.id, request, reply);
+    const session = await createAuthSession(db, createdUser.id, request, reply, {
+      persistent: false
+    });
     const response: AuthResponse = {
       user: toPublicUser(createdUser),
       session
@@ -185,7 +262,9 @@ export async function registerAuthRoutes(
       success: true
     });
 
-    const session = await createAuthSession(db, user.id, request, reply);
+    const session = await createAuthSession(db, user.id, request, reply, {
+      persistent: body.rememberMe
+    });
     const response: AuthResponse = {
       user: toPublicUser(user),
       session
@@ -255,10 +334,103 @@ export async function registerAuthRoutes(
 
     await revokeRefreshToken(db, storedToken.id, now);
 
-    const session = await createAuthSession(db, storedToken.userId, request, reply);
+    const session = await createAuthSession(db, storedToken.userId, request, reply, {
+      persistent: getRefreshTokenPersistence(refreshToken) === "persistent"
+    });
     const response: AuthResponse = {
       user: toPublicUser(user),
       session
+    };
+
+    return response;
+  });
+
+  app.post("/auth/password-reset/request", async (request, reply) => {
+    const body = passwordResetRequestBodySchema.parse(request.body);
+    const rateLimitReply = consumePasswordResetRequestRateLimit(
+      reply,
+      request.ip,
+      body.email,
+      options
+    );
+
+    if (rateLimitReply) {
+      return rateLimitReply;
+    }
+
+    const { db } = getAuthDatabaseClient();
+    const response: PasswordResetRequestResponse = {
+      ok: true
+    };
+
+    const [user] = await db.select().from(users).where(eq(users.email, body.email));
+
+    if (!user || user.deletedAt || !user.passwordHash) {
+      return response;
+    }
+
+    const resetToken = createPasswordResetToken();
+
+    await db.insert(passwordResetTokens).values({
+      id: randomUUID(),
+      userId: user.id,
+      tokenHash: hashToken(resetToken),
+      expiresAt: getPasswordResetTokenExpiresAt(),
+      userAgent: getRequestUserAgent(request),
+      ipAddress: request.ip
+    });
+
+    if (!shouldExposePasswordResetDebugToken()) {
+      return response;
+    }
+
+    return {
+      ...response,
+      debugResetToken: resetToken,
+      debugResetUrl: buildPasswordResetDebugUrl(resetToken)
+    };
+  });
+
+  app.post("/auth/password-reset/confirm", async (request, reply) => {
+    const body = passwordResetConfirmBodySchema.parse(request.body);
+    const { db } = getAuthDatabaseClient();
+    const now = new Date();
+    const [storedToken] = await db
+      .select()
+      .from(passwordResetTokens)
+      .where(eq(passwordResetTokens.tokenHash, hashToken(body.resetToken)));
+
+    if (
+      !storedToken ||
+      storedToken.usedAt ||
+      storedToken.expiresAt.getTime() <= now.getTime()
+    ) {
+      return sendUnauthorized(reply, "비밀번호 재설정 링크가 만료되었거나 이미 사용되었습니다.");
+    }
+
+    const [user] = await db.select().from(users).where(eq(users.id, storedToken.userId));
+
+    if (!user || user.deletedAt) {
+      return sendUnauthorized(reply, "비밀번호 재설정 링크가 만료되었거나 이미 사용되었습니다.");
+    }
+
+    const passwordHash = await hashPassword(body.newPassword);
+
+    await db.transaction(async (tx) => {
+      await tx
+        .update(users)
+        .set({
+          passwordHash,
+          updatedAt: now
+        })
+        .where(eq(users.id, storedToken.userId));
+
+      await expireActivePasswordResetTokensForUser(tx, storedToken.userId, now);
+      await revokeActiveRefreshTokensForUser(tx, storedToken.userId, now);
+    });
+
+    const response: PasswordResetConfirmResponse = {
+      ok: true
     };
 
     return response;
@@ -351,6 +523,57 @@ export async function registerAuthRoutes(
   });
 }
 
+function consumePasswordResetRequestRateLimit(
+  reply: FastifyReply,
+  ipAddress: string,
+  email: string,
+  options: Pick<
+    AuthRouteOptions,
+    "passwordResetRequestEmailRateLimiter" | "passwordResetRequestIpRateLimiter"
+  >
+): FastifyReply | null {
+  if (options.passwordResetRequestIpRateLimiter) {
+    const ipResult = options.passwordResetRequestIpRateLimiter.consume(
+      createPasswordResetRequestRateLimitKey("ip", ipAddress)
+    );
+
+    if (!ipResult.allowed) {
+      return sendTooManyPasswordResetRequests(reply, ipResult.retryAfterSeconds);
+    }
+  }
+
+  if (options.passwordResetRequestEmailRateLimiter) {
+    const emailResult = options.passwordResetRequestEmailRateLimiter.consume(
+      createPasswordResetRequestRateLimitKey("email", email)
+    );
+
+    if (!emailResult.allowed) {
+      return sendTooManyPasswordResetRequests(reply, emailResult.retryAfterSeconds);
+    }
+  }
+
+  return null;
+}
+
+function createPasswordResetRequestRateLimitKey(type: "email" | "ip", value: string): string {
+  return `password-reset:request:${type}:${value}`;
+}
+
+function sendTooManyPasswordResetRequests(
+  reply: FastifyReply,
+  retryAfterSeconds: number
+): FastifyReply {
+  const response: ApiErrorResponse = {
+    error: "too_many_requests",
+    message: PASSWORD_RESET_REQUEST_RATE_LIMIT_MESSAGE
+  };
+
+  return reply
+    .status(429)
+    .header("Retry-After", String(retryAfterSeconds))
+    .send(response);
+}
+
 async function revokeRefreshToken(
   db: Database,
   refreshTokenId: string,
@@ -365,7 +588,7 @@ async function revokeRefreshToken(
 }
 
 async function revokeActiveRefreshTokensForUser(
-  db: Database,
+  db: Pick<Database, "update">,
   userId: string,
   revokedAt: Date
 ): Promise<void> {
@@ -375,6 +598,19 @@ async function revokeActiveRefreshTokensForUser(
       revokedAt
     })
     .where(and(eq(refreshTokens.userId, userId), isNull(refreshTokens.revokedAt)));
+}
+
+async function expireActivePasswordResetTokensForUser(
+  db: Pick<Database, "update">,
+  userId: string,
+  usedAt: Date
+): Promise<void> {
+  await db
+    .update(passwordResetTokens)
+    .set({
+      usedAt
+    })
+    .where(and(eq(passwordResetTokens.userId, userId), isNull(passwordResetTokens.usedAt)));
 }
 
 async function getActiveLoginLock(
@@ -480,6 +716,16 @@ async function recordLoginAttempt(
     failureReason: attempt.failureReason ?? null,
     lockedUntil: attempt.lockedUntil ?? null
   });
+}
+
+function getRequestUserAgent(request: FastifyRequest): string | undefined {
+  const userAgent = request.headers["user-agent"];
+
+  if (Array.isArray(userAgent)) {
+    return userAgent.join(",");
+  }
+
+  return userAgent;
 }
 
 function sendUnauthorized(reply: FastifyReply, message: string): FastifyReply {
