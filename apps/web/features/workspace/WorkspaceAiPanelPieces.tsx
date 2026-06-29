@@ -1,4 +1,5 @@
 import type {
+  ArchitectureGuardrailWarning,
   AiPreDeploymentAnalysisResult,
   AiTerraformErrorExplanationResult,
   AiTerraformPreviewExplanationResult,
@@ -112,6 +113,43 @@ export function WorkspaceAiExplanation({ explanation }: { readonly explanation: 
       ) : null}
     </div>
   );
+}
+
+// Architecture Draft가 MVP 범위 밖 요구를 감지했을 때 사용자가 놓치지 않게 보여줍니다.
+export function WorkspaceAiGuardrailWarnings({
+  warnings
+}: {
+  readonly warnings: readonly ArchitectureGuardrailWarning[] | undefined;
+}) {
+  if (warnings === undefined || warnings.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className={styles.aiWarning} role="status">
+      <strong>지원 범위 경고</strong>
+      <ul>
+        {warnings.map((warning) => (
+          <li key={`${warning.code}-${warning.message}`}>
+            <span>{getGuardrailWarningLabel(warning.code)}</span>
+            <p>{warning.message}</p>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+// 내부 warning code를 발표 화면에서 읽기 쉬운 짧은 한국어 라벨로 바꿉니다.
+function getGuardrailWarningLabel(code: ArchitectureGuardrailWarning["code"]): string {
+  switch (code) {
+    case "low_budget_rds_cost":
+      return "예산 확인";
+    case "scenario_conflict":
+      return "선택값 확인";
+    case "unsupported_requirement":
+      return "MVP 범위 밖";
+  }
 }
 
 // Pre-Deployment Check 결과를 요약과 Check Finding 중심으로 압축 표시합니다.
