@@ -5,7 +5,9 @@ import type {
   AuthResponse,
   LoginLockedErrorResponse,
   PasswordResetConfirmResponse,
-  PasswordResetRequestResponse
+  PasswordResetRequestResponse,
+  SignupAvailabilityResponse,
+  SignupRequest
 } from "@sketchcatch/types";
 import { buildApp } from "../app.js";
 import { createAccessToken, hashToken } from "../auth/tokens.js";
@@ -99,6 +101,30 @@ test("POST /api/auth/signup returns 409 for duplicate email", async () => {
   await app.close();
 });
 
+test("POST /api/auth/signup rejects unaccepted terms or privacy consent", async () => {
+  const fakeDb = new AuthScenarioFakeDb({
+    selectResults: [[], []]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/auth/signup",
+    payload: {
+      ...signupPayload(),
+      privacyAccepted: false
+    }
+  });
+
+  assert.equal(response.statusCode, 400);
+  assert.equal(fakeDb.userRows.length, 0);
+  assert.equal(fakeDb.refreshTokenRows.length, 0);
+
+  await app.close();
+});
+
 test("POST /api/auth/signup rejects passwords without three character categories", async () => {
   const fakeDb = new AuthScenarioFakeDb({
     selectResults: [[], []]
@@ -119,6 +145,33 @@ test("POST /api/auth/signup rejects passwords without three character categories
   assert.equal(response.statusCode, 400);
   assert.equal(fakeDb.userRows.length, 0);
   assert.equal(fakeDb.refreshTokenRows.length, 0);
+
+  await app.close();
+});
+
+test("POST /api/auth/signup/availability checks username and email duplicates", async () => {
+  const fakeDb = new AuthScenarioFakeDb({
+    selectResults: [[{ id: USER_ID }], []]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/auth/signup/availability",
+    payload: {
+      username: "Demo",
+      email: "available@example.com"
+    }
+  });
+
+  assert.equal(response.statusCode, 200);
+  const body = response.json() as SignupAvailabilityResponse;
+  assert.deepEqual(body, {
+    usernameAvailable: false,
+    emailAvailable: true
+  });
 
   await app.close();
 });
@@ -674,12 +727,14 @@ test("GET /api/projects returns 401 for a deleted user", async () => {
   await app.close();
 });
 
-function signupPayload(): Record<string, string> {
+function signupPayload(): SignupRequest {
   return {
     username: "demo",
     email: "demo@example.com",
     nickname: "Demo",
-    password: PASSWORD
+    password: PASSWORD,
+    privacyAccepted: true,
+    termsAccepted: true
   };
 }
 

@@ -139,6 +139,18 @@ export type SignupRequest = {
   email: string;
   nickname: string;
   password: string;
+  privacyAccepted: boolean;
+  termsAccepted: boolean;
+};
+
+export type SignupAvailabilityRequest = {
+  username?: string | undefined;
+  email?: string | undefined;
+};
+
+export type SignupAvailabilityResponse = {
+  usernameAvailable?: boolean | undefined;
+  emailAvailable?: boolean | undefined;
 };
 
 export type LoginRequest = {

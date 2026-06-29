@@ -11,7 +11,8 @@ import {
   type CurrentUserResponse,
   type LoginLockedErrorResponse,
   type PasswordResetConfirmResponse,
-  type PasswordResetRequestResponse
+  type PasswordResetRequestResponse,
+  type SignupAvailabilityResponse
 } from "@sketchcatch/types";
 import { requireActiveUserId } from "../auth/current-user.js";
 import {
@@ -47,6 +48,13 @@ const usernameSchema = z
   .regex(/^[A-Za-z0-9_-]+$/)
   .transform((value) => value.toLowerCase());
 
+const emailSchema = z
+  .string()
+  .trim()
+  .email()
+  .max(255)
+  .transform((value) => value.toLowerCase());
+
 const passwordPolicySchema = z
   .string()
   .max(PASSWORD_MAX_LENGTH, PASSWORD_POLICY_ERROR_MESSAGE)
@@ -56,15 +64,21 @@ const passwordPolicySchema = z
 
 const signupBodySchema = z.object({
   username: usernameSchema,
-  email: z
-    .string()
-    .trim()
-    .email()
-    .max(255)
-    .transform((value) => value.toLowerCase()),
+  email: emailSchema,
   nickname: z.string().trim().min(1).max(40),
-  password: passwordPolicySchema
+  password: passwordPolicySchema,
+  privacyAccepted: z.literal(true),
+  termsAccepted: z.literal(true)
 });
+
+const signupAvailabilityBodySchema = z
+  .object({
+    username: usernameSchema.optional(),
+    email: emailSchema.optional()
+  })
+  .refine((body) => body.username || body.email, {
+    message: "username 또는 email 중 하나는 필요합니다."
+  });
 
 const loginBodySchema = z.object({
   username: usernameSchema,
@@ -73,12 +87,7 @@ const loginBodySchema = z.object({
 });
 
 const passwordResetRequestBodySchema = z.object({
-  email: z
-    .string()
-    .trim()
-    .email()
-    .max(255)
-    .transform((value) => value.toLowerCase())
+  email: emailSchema
 });
 
 const passwordResetConfirmBodySchema = z.object({
@@ -95,6 +104,32 @@ export async function registerAuthRoutes(
   options: AuthRouteOptions = {}
 ): Promise<void> {
   const getAuthDatabaseClient = options.getDatabaseClient ?? getDatabaseClient;
+
+  app.post("/auth/signup/availability", async (request) => {
+    const body = signupAvailabilityBodySchema.parse(request.body);
+    const { db } = getAuthDatabaseClient();
+    const response: SignupAvailabilityResponse = {};
+
+    if (body.username) {
+      const [existingUsername] = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.username, body.username));
+
+      response.usernameAvailable = !existingUsername;
+    }
+
+    if (body.email) {
+      const [existingEmail] = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.email, body.email));
+
+      response.emailAvailable = !existingEmail;
+    }
+
+    return response;
+  });
 
   app.post("/auth/signup", async (request, reply) => {
     const body = signupBodySchema.parse(request.body);

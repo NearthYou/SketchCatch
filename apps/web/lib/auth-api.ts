@@ -6,6 +6,8 @@ import type {
   PasswordResetConfirmResponse,
   PasswordResetRequest,
   PasswordResetRequestResponse,
+  SignupAvailabilityRequest,
+  SignupAvailabilityResponse,
   SignupRequest
 } from "@sketchcatch/types";
 import { apiFetch, refreshAuthSession } from "./api-client";
@@ -19,6 +21,15 @@ export function requestLogin(payload: LoginRequest): Promise<AuthResponse> {
 
 export function requestSignup(payload: SignupRequest): Promise<AuthResponse> {
   return apiFetch<AuthResponse>("/auth/signup", {
+    body: payload,
+    method: "POST"
+  });
+}
+
+export function requestSignupAvailability(
+  payload: SignupAvailabilityRequest
+): Promise<SignupAvailabilityResponse> {
+  return apiFetch<SignupAvailabilityResponse>("/auth/signup/availability", {
     body: payload,
     method: "POST"
   });
