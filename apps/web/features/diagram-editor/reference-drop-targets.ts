@@ -141,6 +141,20 @@ export function applyInnermostReferenceDropTarget(
   return applyReferenceDropTarget(childNode, findInnermostReferenceDropTarget(childNode, nodes, catalog), catalog);
 }
 
+export function applyInnermostReferenceDropTargets(
+  nodes: readonly DiagramNode[],
+  childNodeIds: ReadonlySet<string>,
+  catalog: ParameterCatalog
+): DiagramNode[] {
+  if (childNodeIds.size === 0) {
+    return [...nodes];
+  }
+
+  return nodes.map((node) =>
+    childNodeIds.has(node.id) ? applyInnermostReferenceDropTarget(node, nodes, catalog) : node
+  );
+}
+
 function getReferenceDefinitions(definitions: readonly ParameterCatalogDefinition[]) {
   return definitions.filter(
     (definition) =>

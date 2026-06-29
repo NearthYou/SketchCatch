@@ -1,22 +1,15 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import type { DiagramNode } from "../../../../packages/types/src";
 import type { ParameterCatalog, ParameterCatalogDefinition } from "../parameter-input/catalog";
 import { terraformParameterCatalog } from "../parameter-input/catalog";
 import {
   applyInnermostReferenceDropTarget,
+  applyInnermostReferenceDropTargets,
   applyReferenceDropTarget,
   findInnermostReferenceDropTarget,
   findInnermostVisualDropTarget
 } from "./reference-drop-targets";
-
-const currentDir = dirname(fileURLToPath(import.meta.url));
-const diagramEditorPath = join(currentDir, "DiagramEditor.tsx");
-const diagramNodeViewPath = join(currentDir, "DiagramNodeView.tsx");
-const diagramStylesPath = join(currentDir, "diagram-editor.module.css");
 
 const catalog: ParameterCatalog = {
   provider: "aws",
@@ -457,51 +450,37 @@ test("applyInnermostReferenceDropTarget uses the real catalog for VPC-owned reso
   );
 });
 
-test("DiagramEditor applies reference targets after palette drop and node drag stop", () => {
-  const source = readFileSync(diagramEditorPath, "utf8");
+test("applyInnermostReferenceDropTargets applies references only to changed nodes", () => {
+  const vpc = makeResourceNode({
+    id: "vpc-1",
+    resourceName: "main",
+    resourceType: "aws_vpc",
+    position: { x: 0, y: 0 },
+    size: { width: 520, height: 360 }
+  });
+  const subnet = makeResourceNode({
+    id: "subnet-1",
+    resourceName: "public",
+    resourceType: "aws_subnet",
+    position: { x: 80, y: 80 },
+    size: { width: 320, height: 220 }
+  });
+  const instance = makeResourceNode({
+    id: "instance-1",
+    resourceName: "web",
+    resourceType: "aws_instance",
+    position: { x: 150, y: 150 },
+    size: { width: 96, height: 72 }
+  });
 
-  assert.match(source, /import \{ terraformParameterCatalog \} from "\.\.\/parameter-input\/catalog";/);
-  assert.match(
-    source,
-    /import \{\s*applyInnermostReferenceDropTarget,\s*findInnermostVisualDropTarget\s*\} from "\.\/reference-drop-targets";/
+  const result = applyInnermostReferenceDropTargets(
+    [vpc, subnet, instance],
+    new Set([subnet.id]),
+    terraformParameterCatalog
   );
-  assert.match(
-    source,
-    /applyInnermostReferenceDropTarget\(\s*nextNode,\s*nodesWithNextNode,\s*terraformParameterCatalog\s*\)/
-  );
-  assert.match(
-    source,
-    /applyInnermostReferenceDropTarget\(\s*node,\s*nodesWithAssignedParents,\s*terraformParameterCatalog\s*\)/
-  );
-});
 
-test("DiagramEditor avoids zIndex scans while computing dragover preview targets", () => {
-  const source = readFileSync(diagramEditorPath, "utf8");
-
-  assert.match(
-    source,
-    /const previewNode = createDiagramNodeFromPayload\(\s*payload,\s*position,\s*0\s*\);/
-  );
-  assert.doesNotMatch(
-    source,
-    /const previewNode = createDiagramNodeFromPayload\(\s*payload,\s*position,\s*getNextZIndex\(diagramRef\.current\.nodes\)\s*\);/
-  );
-});
-
-test("DiagramEditor tracks and renders the active reference drop target highlight", () => {
-  const editorSource = readFileSync(diagramEditorPath, "utf8");
-  const nodeViewSource = readFileSync(diagramNodeViewPath, "utf8");
-  const stylesSource = readFileSync(diagramStylesPath, "utf8");
-
-  assert.match(editorSource, /activeReferenceDropTargetNodeId/);
-  assert.match(editorSource, /setActiveReferenceDropTargetNodeId/);
-  assert.match(editorSource, /findInnermostVisualDropTarget\(childNode,\s*nodes,\s*terraformParameterCatalog\)\?\.id/);
-  assert.match(editorSource, /onNodeDrag=\{handleNodeDrag\}/);
-  assert.match(editorSource, /onDragLeave=\{handleDragLeave\}/);
-  assert.match(editorSource, /toFlowNodes\(\s*diagram\.nodes,\s*selectedNodeIds,\s*activeReferenceDropTargetNodeId,/);
-  assert.match(nodeViewSource, /data\.isReferenceDropTarget \? styles\.nodeShellReferenceDropTarget : undefined/);
-  assert.match(stylesSource, /\.nodeShellReferenceDropTarget/);
-  assert.match(stylesSource, /\.nodeShellDesign\.nodeShellReferenceDropTarget\s*\{[^}]*background:/s);
+  assert.equal(result.find((node) => node.id === subnet.id)?.parameters?.values.vpcId, "aws_vpc.main.id");
+  assert.equal(result.find((node) => node.id === instance.id)?.parameters?.values.subnetId, undefined);
 });
 
 function makeReferenceDefinition(

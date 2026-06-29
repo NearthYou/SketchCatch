@@ -80,7 +80,7 @@ import {
 } from "./diagram-utils";
 import { toFlowEdges, toFlowNodes } from "./flow-mappers";
 import {
-  applyInnermostReferenceDropTarget,
+  applyInnermostReferenceDropTargets,
   findInnermostVisualDropTarget
 } from "./reference-drop-targets";
 import type {
@@ -762,10 +762,10 @@ function DiagramEditorInner({
       const movedNodeIds = getMovedNodeIdsFromNodes(snapshotNodes, nodesWithAssignedParents);
       const after = {
         ...diagramRef.current,
-        nodes: nodesWithAssignedParents.map((node) =>
-          movedNodeIds.has(node.id)
-            ? applyInnermostReferenceDropTarget(node, nodesWithAssignedParents, terraformParameterCatalog)
-            : node
+        nodes: applyInnermostReferenceDropTargets(
+          nodesWithAssignedParents,
+          movedNodeIds,
+          terraformParameterCatalog
         )
       };
 
@@ -843,19 +843,18 @@ function DiagramEditorInner({
 
       commitDiagramUpdate((currentDiagram) => {
         const nodesWithNextNode = [...currentDiagram.nodes, nextNode];
-        const nodeWithReferences = applyInnermostReferenceDropTarget(
-          nextNode,
-          nodesWithNextNode,
-          terraformParameterCatalog
-        );
         const nodesWithAssignedParents = applyAreaNodeParentAssignments(
-          [...currentDiagram.nodes, nodeWithReferences],
-          new Set([nodeWithReferences.id])
+          nodesWithNextNode,
+          new Set([nextNode.id])
         );
 
         return {
           ...currentDiagram,
-          nodes: nodesWithAssignedParents
+          nodes: applyInnermostReferenceDropTargets(
+            nodesWithAssignedParents,
+            new Set([nextNode.id]),
+            terraformParameterCatalog
+          )
         };
       });
       setSelectedNodeIds([nextNode.id]);
