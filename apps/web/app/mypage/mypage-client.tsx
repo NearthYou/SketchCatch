@@ -48,7 +48,7 @@ export function MyPageClient() {
     };
   }, []);
 
-  const recentCreatedProjects = useMemo(
+  const recentModifiedProjects = useMemo(
     () => [...projects].sort(compareProjectCreatedAtDesc).slice(0, 3),
     [projects]
   );
@@ -85,8 +85,8 @@ export function MyPageClient() {
         </article>
         <article>
           <DashboardIcon name="clock" />
-          <span>최근 생성</span>
-          <strong>{recentCreatedProjects.length}</strong>
+          <span>최근 수정</span>
+          <strong>{recentModifiedProjects.length}</strong>
         </article>
         <article>
           <DashboardIcon name="check" />
@@ -95,19 +95,19 @@ export function MyPageClient() {
         </article>
       </div>
 
-      <section className="dashboardPanel" aria-labelledby="recent-created-title">
+      <section className="dashboardPanel" aria-labelledby="recent-modified-title">
         <div className="dashboardPanelHeader">
           <div>
-            <p className="dashboardPanelKicker">Recent created</p>
-            <h2 id="recent-created-title">최근 생성된 항목</h2>
+            <p className="dashboardPanelKicker">Recent modified</p>
+            <h2 id="recent-modified-title">최근 수정된 항목</h2>
           </div>
           <span className="dashboardCountBadge">최대 3개</span>
         </div>
-        {recentCreatedProjects.length === 0 ? (
+        {recentModifiedProjects.length === 0 ? (
           <ProjectEmptyState />
         ) : (
           <div className="dashboardCardGrid dashboardCardGridThree">
-            {recentCreatedProjects.map((project) => (
+            {recentModifiedProjects.map((project) => (
               <ApiProjectCard
                 key={project.id}
                 project={project}
