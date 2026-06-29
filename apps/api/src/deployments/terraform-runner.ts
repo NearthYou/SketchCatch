@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 import { mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -7,6 +7,8 @@ const terraformInitArgs = ["init", "-backend=false", "-input=false", "-no-color"
 const terraformValidateArgs = ["validate", "-no-color"] as const;
 const defaultTerraformPlanFileName = "tfplan";
 const defaultTerraformPluginCacheDir = join(tmpdir(), "sketchcatch-terraform-plugin-cache");
+const defaultTerraformOutputMaxBytes = 512 * 1024;
+const terraformForceKillGraceMs = 2_000;
 
 export type TerraformRunResult = {
   command: string[];
@@ -14,12 +16,15 @@ export type TerraformRunResult = {
   stdout: string;
   stderr: string;
   timedOut: boolean;
+  cancelled?: boolean;
 };
 
 export type RunTerraformInitOptions = {
   terraformBinary?: string;
   timeoutMs?: number;
+  maxOutputBytes?: number;
   env?: NodeJS.ProcessEnv;
+  signal?: AbortSignal | undefined;
 };
 
 export type RunTerraformCommandOptions = RunTerraformInitOptions;
@@ -76,6 +81,33 @@ export async function runTerraformShowJson(
   return runTerraformCommand(workdir, ["show", "-json", planFileName], options);
 }
 
+export async function runTerraformApply(
+  workdir: string,
+  options: RunTerraformCommandOptions & { planFileName?: string } = {}
+): Promise<TerraformRunResult> {
+  const planFileName = options.planFileName ?? defaultTerraformPlanFileName;
+
+  return runTerraformCommand(
+    workdir,
+    ["apply", "-input=false", "-no-color", planFileName],
+    options
+  );
+}
+
+export async function runTerraformOutputJson(
+  workdir: string,
+  options: RunTerraformCommandOptions = {}
+): Promise<TerraformRunResult> {
+  return runTerraformCommand(workdir, ["output", "-json"], options);
+}
+
+export async function runTerraformShowStateJson(
+  workdir: string,
+  options: RunTerraformCommandOptions = {}
+): Promise<TerraformRunResult> {
+  return runTerraformCommand(workdir, ["show", "-json"], options);
+}
+
 async function runTerraformCommand(
   workdir: string,
   args: string[],
@@ -83,18 +115,36 @@ async function runTerraformCommand(
 ): Promise<TerraformRunResult> {
   const terraformBinary = options.terraformBinary ?? "terraform";
   const timeoutMs = options.timeoutMs ?? 60_000;
+  const maxOutputBytes = options.maxOutputBytes ?? defaultTerraformOutputMaxBytes;
   const env = createTerraformProcessEnv(options.env);
 
   await ensureTerraformPluginCacheDir(env.TF_PLUGIN_CACHE_DIR);
 
+  if (options.signal?.aborted) {
+    return {
+      command: [terraformBinary, ...args],
+      exitCode: 130,
+      stdout: "",
+      stderr: "Terraform command cancelled",
+      timedOut: false,
+      cancelled: true
+    };
+  }
+
   return new Promise((resolve) => {
     let stdout = "";
     let stderr = "";
+    let stdoutBytes = 0;
+    let stderrBytes = 0;
     let timedOut = false;
+    let cancelled = false;
+    let outputLimitExceeded = false;
     let settled = false;
+    let forceKillTimer: NodeJS.Timeout | undefined;
 
     const child = spawn(terraformBinary, args, {
       cwd: workdir,
+      detached: process.platform !== "win32",
       shell: false,
       windowsHide: true,
       stdio: ["ignore", "pipe", "pipe"],
@@ -103,15 +153,44 @@ async function runTerraformCommand(
 
     const timer = setTimeout(() => {
       timedOut = true;
-      child.kill("SIGTERM");
+      forceKillTimer = terminateTerraformProcess(child);
     }, timeoutMs);
 
+    const abortHandler = () => {
+      cancelled = true;
+      forceKillTimer = terminateTerraformProcess(child);
+    };
+
+    options.signal?.addEventListener("abort", abortHandler, { once: true });
+
+    function clearProcessListeners(): void {
+      clearTimeout(timer);
+      clearTimeout(forceKillTimer);
+      options.signal?.removeEventListener("abort", abortHandler);
+    }
+
     child.stdout?.on("data", (chunk: Buffer | string) => {
-      stdout += chunk.toString();
+      const result = appendTerraformOutputChunk(stdout, stdoutBytes, chunk, maxOutputBytes);
+      stdout = result.output;
+      stdoutBytes = result.bytes;
+
+      if (result.limitExceeded && !outputLimitExceeded) {
+        outputLimitExceeded = true;
+        stderr = appendOutputLimitMessage(stderr, "stdout", maxOutputBytes);
+        forceKillTimer = terminateTerraformProcess(child);
+      }
     });
 
     child.stderr?.on("data", (chunk: Buffer | string) => {
-      stderr += chunk.toString();
+      const result = appendTerraformOutputChunk(stderr, stderrBytes, chunk, maxOutputBytes);
+      stderr = result.output;
+      stderrBytes = result.bytes;
+
+      if (result.limitExceeded && !outputLimitExceeded) {
+        outputLimitExceeded = true;
+        stderr = appendOutputLimitMessage(stderr, "stderr", maxOutputBytes);
+        forceKillTimer = terminateTerraformProcess(child);
+      }
     });
 
     child.on("error", (error) => {
@@ -120,14 +199,15 @@ async function runTerraformCommand(
       }
 
       settled = true;
-      clearTimeout(timer);
+      clearProcessListeners();
 
       resolve({
         command: [terraformBinary, ...args],
         exitCode: 127,
         stdout,
         stderr: stderr || error.message,
-        timedOut
+        timedOut,
+        cancelled
       });
     });
 
@@ -137,17 +217,93 @@ async function runTerraformCommand(
       }
 
       settled = true;
-      clearTimeout(timer);
+      clearProcessListeners();
 
       resolve({
         command: [terraformBinary, ...args],
-        exitCode: code ?? 1,
+        exitCode: outputLimitExceeded ? 1 : (code ?? 1),
         stdout,
         stderr,
-        timedOut
+        timedOut,
+        cancelled
       });
     });
   });
+}
+
+function appendTerraformOutputChunk(
+  output: string,
+  currentBytes: number,
+  chunk: Buffer | string,
+  maxBytes: number
+): { output: string; bytes: number; limitExceeded: boolean } {
+  if (currentBytes >= maxBytes) {
+    return {
+      output,
+      bytes: currentBytes,
+      limitExceeded: true
+    };
+  }
+
+  const buffer = Buffer.from(chunk);
+  const nextBytes = currentBytes + buffer.byteLength;
+
+  if (nextBytes <= maxBytes) {
+    return {
+      output: output + buffer.toString(),
+      bytes: nextBytes,
+      limitExceeded: false
+    };
+  }
+
+  const remainingBytes = Math.max(0, maxBytes - currentBytes);
+  const truncatedChunk = buffer.subarray(0, remainingBytes).toString();
+
+  return {
+    output: `${output}${truncatedChunk}\n[Terraform output truncated after ${maxBytes} bytes]`,
+    bytes: maxBytes,
+    limitExceeded: true
+  };
+}
+
+function appendOutputLimitMessage(stderr: string, streamName: "stdout" | "stderr", maxBytes: number): string {
+  const message = `Terraform ${streamName} exceeded the ${maxBytes} byte output limit`;
+
+  return stderr.length > 0 ? `${stderr}\n${message}` : message;
+}
+
+function terminateTerraformProcess(child: ChildProcess): NodeJS.Timeout {
+  child.kill("SIGTERM");
+
+  return setTimeout(() => {
+    forceKillTerraformProcess(child);
+  }, terraformForceKillGraceMs);
+}
+
+function forceKillTerraformProcess(child: ChildProcess): void {
+  if (!child.pid) {
+    child.kill("SIGKILL");
+    return;
+  }
+
+  if (process.platform === "win32") {
+    const killer = spawn("taskkill", ["/pid", String(child.pid), "/T", "/F"], {
+      shell: false,
+      stdio: "ignore",
+      windowsHide: true
+    });
+
+    killer.on("error", () => {
+      child.kill("SIGKILL");
+    });
+    return;
+  }
+
+  try {
+    process.kill(-child.pid, "SIGKILL");
+  } catch {
+    child.kill("SIGKILL");
+  }
 }
 
 export function createTerraformProcessEnv(

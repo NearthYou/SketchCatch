@@ -29,10 +29,14 @@ test("startApiServer warms the Terraform plugin cache before listening", async (
     warmTerraformPluginCache: async () => {
       events.push("warmup");
       return successfulWarmupResult;
+    },
+    recoverInterruptedDeployments: async () => {
+      events.push("recover");
+      return [];
     }
   });
 
-  assert.deepEqual(events, ["warmup", "listen"]);
+  assert.deepEqual(events, ["warmup", "recover", "listen"]);
 });
 
 test("startApiServer keeps listening when Terraform plugin cache warmup fails", async () => {
@@ -58,10 +62,14 @@ test("startApiServer keeps listening when Terraform plugin cache warmup fails", 
       stdout: "",
       stderr: "provider registry unavailable",
       timedOut: false
-    })
+    }),
+    recoverInterruptedDeployments: async () => {
+      events.push("recover");
+      return [];
+    }
   });
 
-  assert.deepEqual(events, ["warn", "listen"]);
+  assert.deepEqual(events, ["warn", "recover", "listen"]);
 });
 
 test("startApiServer keeps listening when Terraform plugin cache warmup throws", async () => {
@@ -83,8 +91,12 @@ test("startApiServer keeps listening when Terraform plugin cache warmup throws",
     port: 4000,
     warmTerraformPluginCache: async () => {
       throw new Error("terraform is unavailable");
+    },
+    recoverInterruptedDeployments: async () => {
+      events.push("recover");
+      return [];
     }
   });
 
-  assert.deepEqual(events, ["warn", "listen"]);
+  assert.deepEqual(events, ["warn", "recover", "listen"]);
 });

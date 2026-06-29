@@ -24,6 +24,8 @@
 | `Deployment` | 승인된 Terraform 실행 단위 |
 | `DeploymentPlanArtifact` | S3에 저장된 `tfplan` 파일의 Deployment별 metadata |
 | `DeploymentLog` | Deployment 단계별 실행 로그 |
+| `DeployedResource` | Apply 성공 후 Terraform state에서 추출한 실제 생성 리소스 |
+| `TerraformOutput` | Apply 성공 후 `terraform output -json`에서 추출한 output |
 | `CheckFinding` | Pre-Deployment Check의 단일 경고/검증 결과 |
 
 ## ArchitectureJson
@@ -350,6 +352,7 @@ API 경로:
 - `POST /api/aws/connections`
 - `POST /api/aws/connections/:connectionId/test`
 - `POST /api/aws/connections/:connectionId/verify`
+- `POST /api/aws/connections/:connectionId/verify-created-role`
 - `DELETE /api/aws/connections/:connectionId`
 - `GET /api/aws/connections/:connectionId/cloudformation-template`
 
@@ -369,12 +372,23 @@ type Deployment = {
   terraformArtifactId: string;
   awsConnectionId: string | null;
   currentPlanArtifactId: string | null;
+  stateObjectKey: string | null;
+  resultWarningSummary: string | null;
   status: "PENDING" | "RUNNING" | "SUCCESS" | "FAILED" | "CANCELLED";
+  activeStage: "init" | "validate" | "plan" | "apply" | null;
   planSummary: DeploymentPlanSummary | null;
   isBlocked: boolean;
   blockedBy: "risk_analysis" | "cost_analysis" | "missing_approval" | null;
   blockedReason: string | null;
-  failureStage: "init" | "validate" | "plan" | "approval" | "mock_run" | null;
+  failureStage:
+    | "init"
+    | "validate"
+    | "plan"
+    | "approval"
+    | "aws_connection"
+    | "mock_run"
+    | "apply"
+    | null;
   errorSummary: string | null;
   approvedAt: IsoDateTimeString | null;
   approvedByUserId: string | null;
@@ -384,6 +398,11 @@ type Deployment = {
   approvedTfplanHash: string | null;
   approvedAwsAccountId: string | null;
   approvedAwsRegion: string | null;
+  startedAt: IsoDateTimeString | null;
+  completedAt: IsoDateTimeString | null;
+  failedAt: IsoDateTimeString | null;
+  cancelRequestedAt: IsoDateTimeString | null;
+  cancelledAt: IsoDateTimeString | null;
   createdAt: IsoDateTimeString;
   updatedAt: IsoDateTimeString;
 };
@@ -395,6 +414,18 @@ type Deployment = {
 `approvedTerraformArtifactId`, `approvedPlanArtifactId`, `approvedTerraformArtifactHash`,
 `approvedTfplanHash`, `approvedAwsAccountId`, `approvedAwsRegion`을 함께 고정한다. 이후
 Apply 단계는 이 snapshot과 현재 artifact, `tfplan`, AWS account/region이 다르면 실행하지 않는다.
+
+Apply가 성공하면 `stateObjectKey`에는 S3에 업로드한 `terraform.tfstate` object key를 저장한다.
+`terraform output -json`, `terraform show -json`, state 업로드 같은 후처리 중 일부가 실패해도
+실제 AWS Apply가 성공했다면 Deployment는 `SUCCESS`로 유지하고, 사용자가 확인할 수 있도록
+`resultWarningSummary`와 apply stage 로그에 경고를 남긴다.
+
+실행 중인 Deployment는 `activeStage`와 `startedAt`을 가진다. 실행이 끝나면 `activeStage`는
+`null`로 돌아가고 `completedAt`을 저장한다. 실패는 `failedAt`, 사용자가 취소를 요청한 시점은
+`cancelRequestedAt`, 실제 취소 완료 시점은 `cancelledAt`에 저장한다.
+
+한 프로젝트에는 동시에 하나의 `RUNNING` Deployment만 허용한다. 이 제약은 애플리케이션 체크와
+`deployments_project_running_unique` partial unique index를 함께 사용해 보장한다.
 
 ## DeploymentPlanArtifact
 
@@ -434,6 +465,61 @@ type DeploymentPlanSummary = {
 ```
 
 Plan summary는 `terraform show -json tfplan`을 파싱해 만든다. 사용자가 승인한 plan과 apply 대상 plan은 같은 artifact/hash 기준이어야 한다.
+
+MVP live apply는 안전한 데모 범위를 위해 아래 Terraform resource type만 허용한다.
+이외 resource type이 변경 대상에 포함되면 Plan은 `risk_analysis`로 block된다.
+
+- `aws_vpc`
+- `aws_subnet`
+- `aws_internet_gateway`
+- `aws_route_table`
+- `aws_route_table_association`
+- `aws_security_group`
+- `aws_security_group_rule`
+- `aws_instance`
+- `aws_s3_bucket`
+
+## DeployedResource와 TerraformOutput
+
+`DeployedResource`는 Apply 성공 후 `terraform show -json`으로 현재 state를 읽어 RDS에 저장한
+리소스 목록이다. 사용자 화면에서 실제로 어떤 Terraform address와 AWS resource id가 남았는지
+확인하는 데 쓴다.
+
+DB 기준: `deployed_resources`
+
+```ts
+type DeployedResource = {
+  id: string;
+  deploymentId: string;
+  terraformAddress: string;
+  terraformType: string;
+  providerName: string | null;
+  resourceId: string | null;
+  region: string;
+  createdAt: IsoDateTimeString;
+};
+```
+
+`TerraformOutput`은 Apply 성공 후 `terraform output -json` 결과를 RDS에 저장한 값이다.
+Terraform이 sensitive로 표시한 output은 저장과 응답 모두에서 `value: null`로 다룬다.
+
+DB 기준: `terraform_outputs`
+
+```ts
+type TerraformOutput = {
+  id: string;
+  deploymentId: string;
+  name: string;
+  value: unknown | null;
+  sensitive: boolean;
+  createdAt: IsoDateTimeString;
+};
+```
+
+조회 API:
+
+- `GET /api/deployments/:deploymentId/resources`
+- `GET /api/deployments/:deploymentId/outputs`
 
 ## DeploymentLog
 

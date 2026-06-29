@@ -21,6 +21,7 @@ import {
   renderAwsConnectionCloudFormationTemplateFromToken,
   testStoredAwsConnection,
   verifyAwsConnection,
+  verifyAwsConnectionCreatedRole,
   type AwsConnectionRepository
 } from "../aws-connections/aws-connection-service.js";
 import {
@@ -65,6 +66,12 @@ const testAwsConnectionBodySchema = z.object({
 
 const verifyAwsConnectionBodySchema = z.object({
   roleArn: awsRoleArnSchema
+});
+
+const verifyAwsConnectionCreatedRoleBodySchema = z.object({
+  accountId: z.string().trim().regex(/^\d{12}$/, {
+    message: "AWS account ID must be 12 digits"
+  })
 });
 
 export type AwsConnectionRouteOptions = {
@@ -233,6 +240,55 @@ export async function registerAwsConnectionRoutes(
           connectionId: params.connectionId,
           accessContext: createUserProjectAccessContext(currentUserId),
           roleArn: body.roleArn
+        },
+        repository,
+        tester,
+        verifyOptions
+      );
+
+      return reply.status(200).send(result);
+    } catch (error) {
+      return handleAwsConnectionError(error, reply);
+    }
+  });
+
+  app.post("/aws/connections/:connectionId/verify-created-role", async (request, reply) => {
+    const params = awsConnectionParamsSchema.parse(request.params);
+    const body = verifyAwsConnectionCreatedRoleBodySchema.parse(request.body);
+    const client = getAwsConnectionDatabaseClient();
+    const currentUserId = await requireActiveUserId(request, () => client);
+    const repository =
+      options?.createAwsConnectionRepository?.(client.db) ??
+      createPostgresAwsConnectionRepository(client.db);
+    const tester = options?.awsConnectionTester ?? createAwsConnectionTester();
+    const rateLimitResult = (
+      options?.awsConnectionRateLimiter ?? defaultAwsConnectionRateLimiter
+    ).consume(`aws-connection-verify:${currentUserId}`);
+
+    if (!rateLimitResult.allowed) {
+      return reply
+        .status(429)
+        .header("Retry-After", String(rateLimitResult.retryAfterSeconds))
+        .send({
+          error: "too_many_requests",
+          message: "Too many AWS connection attempts"
+        });
+    }
+
+    try {
+      const verifyOptions: {
+        now?: () => Date;
+      } = {};
+
+      if (options?.now) {
+        verifyOptions.now = options.now;
+      }
+
+      const result = await verifyAwsConnectionCreatedRole(
+        {
+          connectionId: params.connectionId,
+          accessContext: createUserProjectAccessContext(currentUserId),
+          accountId: body.accountId
         },
         repository,
         tester,

@@ -6,10 +6,12 @@ import type {
   CreateAwsConnectionResponse,
   CreateDeploymentRequest,
   CreateProjectRequest,
+  DeployedResource,
   Deployment,
   DeploymentListResponse,
   DeploymentLog,
   DeploymentLogListResponse,
+  DeploymentResourceListResponse,
   DeploymentResponse,
   DiagramJson,
   Project,
@@ -18,15 +20,19 @@ import type {
   ProjectListResponse,
   ProjectResponse,
   SaveProjectDraftRequest,
+  TerraformOutput,
+  TerraformOutputListResponse,
   TestAwsConnectionRequest,
   TestAwsConnectionResponse,
   TerraformGenerateResponse,
   TerraformSyncToDiagramResponse,
   TerraformValidateResponse,
+  VerifyAwsConnectionCreatedRoleRequest,
   VerifyAwsConnectionRequest,
   VerifyAwsConnectionResponse
 } from "../../../../packages/types/src";
-import { apiFetch } from "../../lib/api-client";
+import { apiFetch, buildApiUrl } from "../../lib/api-client";
+import { readStoredAuthSession } from "../../lib/auth-storage";
 
 export async function createProject(input: CreateProjectRequest): Promise<Project> {
   const response = await apiFetch<ProjectResponse>("/projects", {
@@ -173,6 +179,24 @@ export async function verifyAwsConnection({
   );
 }
 
+export async function verifyAwsConnectionCreatedRole({
+  connectionId,
+  accountId
+}: {
+  connectionId: string;
+} & VerifyAwsConnectionCreatedRoleRequest): Promise<VerifyAwsConnectionResponse> {
+  return apiFetch<VerifyAwsConnectionResponse>(
+    `/aws/connections/${encodeURIComponent(connectionId)}/verify-created-role`,
+    {
+      auth: true,
+      method: "POST",
+      body: {
+        accountId
+      }
+    }
+  );
+}
+
 export async function deleteAwsConnection(connectionId: string): Promise<void> {
   await apiFetch<void>(`/aws/connections/${encodeURIComponent(connectionId)}`, {
     auth: true,
@@ -265,6 +289,32 @@ export async function approveDeploymentPlan(deploymentId: string): Promise<Deplo
   return response.deployment;
 }
 
+export async function runDeploymentApply(deploymentId: string): Promise<Deployment> {
+  const response = await apiFetch<DeploymentResponse>(
+    `/deployments/${encodeURIComponent(deploymentId)}/apply`,
+    {
+      auth: true,
+      method: "POST",
+      body: {}
+    }
+  );
+
+  return response.deployment;
+}
+
+export async function cancelDeployment(deploymentId: string): Promise<Deployment> {
+  const response = await apiFetch<DeploymentResponse>(
+    `/deployments/${encodeURIComponent(deploymentId)}/cancel`,
+    {
+      auth: true,
+      method: "POST",
+      body: {}
+    }
+  );
+
+  return response.deployment;
+}
+
 export async function listDeploymentLogs(deploymentId: string): Promise<DeploymentLog[]> {
   const response = await apiFetch<DeploymentLogListResponse>(
     `/deployments/${encodeURIComponent(deploymentId)}/logs`,
@@ -274,4 +324,127 @@ export async function listDeploymentLogs(deploymentId: string): Promise<Deployme
   );
 
   return response.logs;
+}
+
+export async function streamDeploymentLogs(input: {
+  deploymentId: string;
+  sinceSequence: number;
+  signal: AbortSignal;
+  onLog: (log: DeploymentLog) => void;
+}): Promise<void> {
+  const session = readStoredAuthSession();
+  const headers = new Headers({
+    Accept: "text/event-stream"
+  });
+
+  if (session) {
+    headers.set("Authorization", `Bearer ${session.accessToken}`);
+  }
+
+  const response = await fetch(
+    buildApiUrl(
+      `/deployments/${encodeURIComponent(input.deploymentId)}/logs/stream?sinceSequence=${input.sinceSequence}`
+    ),
+    {
+      credentials: "include",
+      headers,
+      signal: input.signal
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error("Deployment log stream request failed");
+  }
+
+  if (!response.body) {
+    return;
+  }
+
+  await readDeploymentLogStream(response.body, input.onLog);
+}
+
+export async function listDeploymentResources(deploymentId: string): Promise<DeployedResource[]> {
+  const response = await apiFetch<DeploymentResourceListResponse>(
+    `/deployments/${encodeURIComponent(deploymentId)}/resources`,
+    {
+      auth: true
+    }
+  );
+
+  return response.resources;
+}
+
+export async function listTerraformOutputs(deploymentId: string): Promise<TerraformOutput[]> {
+  const response = await apiFetch<TerraformOutputListResponse>(
+    `/deployments/${encodeURIComponent(deploymentId)}/outputs`,
+    {
+      auth: true
+    }
+  );
+
+  return response.outputs;
+}
+
+async function readDeploymentLogStream(
+  body: ReadableStream<Uint8Array>,
+  onLog: (log: DeploymentLog) => void
+): Promise<void> {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+
+    if (done) {
+      break;
+    }
+
+    buffer += decoder.decode(value, { stream: true });
+    buffer = drainSseBuffer(buffer, onLog);
+  }
+
+  buffer += decoder.decode();
+  drainSseBuffer(`${buffer}\n\n`, onLog);
+}
+
+function drainSseBuffer(buffer: string, onLog: (log: DeploymentLog) => void): string {
+  let nextBuffer = buffer.replace(/\r\n/g, "\n");
+  let separatorIndex = nextBuffer.indexOf("\n\n");
+
+  while (separatorIndex >= 0) {
+    const rawEvent = nextBuffer.slice(0, separatorIndex);
+    nextBuffer = nextBuffer.slice(separatorIndex + 2);
+    separatorIndex = nextBuffer.indexOf("\n\n");
+
+    const log = parseDeploymentLogEvent(rawEvent);
+
+    if (log) {
+      onLog(log);
+    }
+  }
+
+  return nextBuffer;
+}
+
+function parseDeploymentLogEvent(rawEvent: string): DeploymentLog | null {
+  let eventName = "message";
+  const dataLines: string[] = [];
+
+  for (const line of rawEvent.split("\n")) {
+    if (line.startsWith("event:")) {
+      eventName = line.slice("event:".length).trim();
+      continue;
+    }
+
+    if (line.startsWith("data:")) {
+      dataLines.push(line.slice("data:".length).trimStart());
+    }
+  }
+
+  if (eventName !== "log" || dataLines.length === 0) {
+    return null;
+  }
+
+  return JSON.parse(dataLines.join("\n")) as DeploymentLog;
 }

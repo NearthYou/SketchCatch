@@ -2,7 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   DeploymentPlanSummaryParseError,
-  createDeploymentPlanSummaryFromTerraformShowJson
+  createDeploymentPlanSummaryFromTerraformShowJson,
+  findUnsupportedLiveApplyResourceTypesFromTerraformShowJson
 } from "./deployment-plan-summary.js";
 
 test("createDeploymentPlanSummaryFromTerraformShowJson counts create update delete and replace actions", () => {
@@ -126,4 +127,50 @@ test("createDeploymentPlanSummaryFromTerraformShowJson rejects invalid JSON", ()
       return true;
     }
   );
+});
+
+test("findUnsupportedLiveApplyResourceTypesFromTerraformShowJson returns changed resources outside the MVP apply scope", () => {
+  const unsupportedTypes = findUnsupportedLiveApplyResourceTypesFromTerraformShowJson(
+    JSON.stringify({
+      resource_changes: [
+        {
+          mode: "managed",
+          type: "aws_vpc",
+          change: {
+            actions: ["create"]
+          }
+        },
+        {
+          mode: "managed",
+          type: "aws_s3_bucket_versioning",
+          change: {
+            actions: ["create"]
+          }
+        },
+        {
+          mode: "managed",
+          type: "aws_lambda_function",
+          change: {
+            actions: ["update"]
+          }
+        },
+        {
+          mode: "managed",
+          type: "aws_cloudwatch_log_group",
+          change: {
+            actions: ["no-op"]
+          }
+        },
+        {
+          mode: "data",
+          type: "aws_ami",
+          change: {
+            actions: ["read"]
+          }
+        }
+      ]
+    })
+  );
+
+  assert.deepEqual(unsupportedTypes, ["aws_lambda_function", "aws_s3_bucket_versioning"]);
 });

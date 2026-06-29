@@ -304,7 +304,7 @@ function readCookie(name: string): string | null {
   return null;
 }
 
-function buildApiUrl(path: string): string {
+export function buildApiUrl(path: string): string {
   const baseUrl = (process.env.NEXT_PUBLIC_API_BASE_URL?.trim() || DEFAULT_API_BASE_URL).replace(
     /\/+$/,
     ""

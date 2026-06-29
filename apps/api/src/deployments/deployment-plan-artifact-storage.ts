@@ -3,6 +3,12 @@ import { readFile } from "node:fs/promises";
 import { DeleteObjectCommand, PutObjectCommand, type S3Client } from "@aws-sdk/client-s3";
 import { requireS3BucketName } from "../config/env.js";
 import { getS3Client } from "../s3/client.js";
+import {
+  assertDeploymentPlanArtifactObjectKey,
+  createDeploymentArtifactMetadata,
+  createDeploymentArtifactTagging,
+  createS3ChecksumSha256
+} from "./deployment-artifact-security.js";
 
 export type UploadDeploymentPlanArtifactInput = {
   deploymentId: string;
@@ -37,6 +43,13 @@ export function createS3DeploymentPlanArtifactStorage(
     async uploadDeploymentPlanArtifact(input) {
       const body = await readFile(input.planFilePath);
       const objectKey = buildDeploymentPlanArtifactObjectKey(input);
+      const sha256 = createSha256(body);
+
+      assertDeploymentPlanArtifactObjectKey({
+        deploymentId: input.deploymentId,
+        planArtifactId: input.planArtifactId,
+        objectKey
+      });
 
       await s3Client.send(
         new PutObjectCommand({
@@ -44,13 +57,20 @@ export function createS3DeploymentPlanArtifactStorage(
           Key: objectKey,
           Body: body,
           ContentType: "application/octet-stream",
-          ServerSideEncryption: "AES256"
+          ServerSideEncryption: "AES256",
+          Metadata: createDeploymentArtifactMetadata({
+            deploymentId: input.deploymentId,
+            kind: "tfplan",
+            sha256
+          }),
+          Tagging: createDeploymentArtifactTagging("tfplan"),
+          ChecksumSHA256: createS3ChecksumSha256(body)
         })
       );
 
       return {
         objectKey,
-        sha256: createSha256(body)
+        sha256
       };
     },
 

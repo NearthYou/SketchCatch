@@ -14,7 +14,8 @@ import {
   getAwsConnectionCloudFormationTemplate,
   listAwsConnections,
   testAwsConnection,
-  verifyAwsConnection
+  verifyAwsConnection,
+  verifyAwsConnectionCreatedRole
 } from "../../features/workspace/api";
 import { getApiErrorMessage } from "../../lib/api-client";
 
@@ -29,6 +30,7 @@ export function SettingsIntegrationsClient() {
   const [awsConnections, setAwsConnections] = useState<AwsConnection[]>([]);
   const [setup, setSetup] = useState<CreateAwsConnectionResponse | null>(null);
   const [selectedConnectionId, setSelectedConnectionId] = useState("");
+  const [accountId, setAccountId] = useState("");
   const [roleArn, setRoleArn] = useState("");
   const [template, setTemplate] = useState<AwsConnectionCloudFormationTemplateResponse | null>(null);
   const [testResult, setTestResult] = useState<TestAwsConnectionResponse | null>(null);
@@ -45,7 +47,12 @@ export function SettingsIntegrationsClient() {
     (connection) => connection.status === "verified"
   ).length;
   const hasVerifiedAwsConnection = verifiedAwsConnectionCount > 0;
-  const shouldShowAwsSetupControls = !hasVerifiedAwsConnection || isAddingAwsConnection;
+  const shouldShowAwsSetupControls =
+    !hasVerifiedAwsConnection || isAddingAwsConnection || activeConnection?.status !== "verified";
+  const expectedRoleArn =
+    /^\d{12}$/.test(accountId.trim())
+      ? `arn:aws:iam::${accountId.trim()}:role/${setup?.recommendedRoleName ?? "SketchCatchTerraformExecutionRole"}`
+      : "";
 
   useEffect(() => {
     let cancelled = false;
@@ -63,6 +70,7 @@ export function SettingsIntegrationsClient() {
 
         setAwsConnections(nextConnections);
         setSelectedConnectionId(preferredConnection?.id ?? "");
+        setAccountId(preferredConnection?.accountId ?? "");
         setRoleArn(preferredConnection?.roleArn ?? "");
         setSetup(null);
         setTemplate(null);
@@ -92,25 +100,45 @@ export function SettingsIntegrationsClient() {
   }
 
   async function startAwsSetup(): Promise<void> {
+    const launchWindow = openAwsConsolePlaceholder();
+    let didLaunchConsole = false;
+
     await runRequest(async () => {
       const response = await createAwsConnectionSetup({
         region: awsRegion
+      });
+      const templateResponse = await getAwsConnectionCloudFormationTemplate({
+        connectionId: response.awsConnection.id
       });
 
       setSetup(response);
       setAwsConnections((currentConnections) => [response.awsConnection, ...currentConnections]);
       setSelectedConnectionId(response.awsConnection.id);
+      setAccountId("");
       setRoleArn("");
-      setTemplate(null);
+      setTemplate(templateResponse);
       setTestResult(null);
       setIsAddingAwsConnection(true);
+
+      if (templateResponse.launchStackUrl) {
+        openAwsConsoleUrl(templateResponse.launchStackUrl, launchWindow);
+        didLaunchConsole = true;
+      } else {
+        launchWindow?.close();
+      }
     }, "AWS 계정 연결 설정을 시작하지 못했습니다.");
+    if (!didLaunchConsole) {
+      launchWindow?.close();
+    }
   }
 
-  async function loadCloudFormationTemplate(): Promise<void> {
+  async function loadAndOpenCloudFormationTemplate(): Promise<void> {
     if (!activeConnection) {
       return;
     }
+
+    const launchWindow = openAwsConsolePlaceholder();
+    let didLaunchConsole = false;
 
     await runRequest(async () => {
       const response = await getAwsConnectionCloudFormationTemplate({
@@ -118,7 +146,18 @@ export function SettingsIntegrationsClient() {
       });
 
       setTemplate(response);
+
+      if (response.launchStackUrl) {
+        openAwsConsoleUrl(response.launchStackUrl, launchWindow);
+        didLaunchConsole = true;
+      } else {
+        launchWindow?.close();
+      }
     }, "CloudFormation 템플릿을 불러오지 못했습니다.");
+
+    if (!didLaunchConsole) {
+      launchWindow?.close();
+    }
   }
 
   async function runAwsConnectionTest(): Promise<void> {
@@ -155,7 +194,35 @@ export function SettingsIntegrationsClient() {
         )
       );
       setSelectedConnectionId(response.awsConnection.id);
+      setAccountId(response.awsConnection.accountId ?? "");
       setRoleArn(response.awsConnection.roleArn ?? "");
+      setTemplate(null);
+      setIsAddingAwsConnection(false);
+    }, "AWS 연결 검증 저장에 실패했습니다.");
+  }
+
+  async function storeVerifiedConnectionFromAccountId(): Promise<void> {
+    if (!activeConnection || !/^\d{12}$/.test(accountId.trim())) {
+      return;
+    }
+
+    await runRequest(async () => {
+      const response = await verifyAwsConnectionCreatedRole({
+        connectionId: activeConnection.id,
+        accountId: accountId.trim()
+      });
+
+      setTestResult(response);
+      setSetup(null);
+      setAwsConnections((currentConnections) =>
+        currentConnections.map((connection) =>
+          connection.id === response.awsConnection.id ? response.awsConnection : connection
+        )
+      );
+      setSelectedConnectionId(response.awsConnection.id);
+      setAccountId(response.awsConnection.accountId ?? "");
+      setRoleArn(response.awsConnection.roleArn ?? "");
+      setTemplate(null);
       setIsAddingAwsConnection(false);
     }, "AWS 연결 검증 저장에 실패했습니다.");
   }
@@ -186,6 +253,7 @@ export function SettingsIntegrationsClient() {
 
       setAwsConnections(nextConnections);
       setSelectedConnectionId(preferredConnection?.id ?? "");
+      setAccountId(preferredConnection?.accountId ?? "");
       setRoleArn(preferredConnection?.roleArn ?? "");
       setSetup(null);
       setTemplate(null);
@@ -280,6 +348,7 @@ export function SettingsIntegrationsClient() {
                   );
 
                   setSelectedConnectionId(event.target.value);
+                  setAccountId(nextConnection?.accountId ?? "");
                   setRoleArn(nextConnection?.roleArn ?? "");
                   setSetup(null);
                   setTemplate(null);
@@ -348,11 +417,11 @@ export function SettingsIntegrationsClient() {
               <button
                 className="dashboardSecondaryButton"
                 disabled={!activeConnection || requestState === "loading"}
-                onClick={loadCloudFormationTemplate}
+                onClick={loadAndOpenCloudFormationTemplate}
                 type="button"
               >
                 <DashboardIcon name="cloud" />
-                <span>Role 생성 템플릿</span>
+                <span>AWS 콘솔 열기</span>
               </button>
             </div>
           ) : null}
@@ -401,6 +470,35 @@ export function SettingsIntegrationsClient() {
 
           {shouldShowAwsSetupControls ? (
             <>
+              <label className="settingsField">
+                AWS Account ID
+                <input
+                  inputMode="numeric"
+                  maxLength={12}
+                  onChange={(event) => setAccountId(event.target.value.replace(/\D/g, "").slice(0, 12))}
+                  placeholder="123456789012"
+                  value={accountId}
+                />
+              </label>
+
+              {expectedRoleArn ? (
+                <div className="settingsInfoGrid">
+                  <InfoItem label="Expected Role ARN" value={expectedRoleArn} />
+                </div>
+              ) : null}
+
+              <div className="settingsActionRow">
+                <button
+                  className="dashboardTopbarAction"
+                  disabled={!activeConnection || accountId.trim().length !== 12 || requestState === "loading"}
+                  onClick={storeVerifiedConnectionFromAccountId}
+                  type="button"
+                >
+                  <DashboardIcon name="check" />
+                  <span>CloudFormation Role 검증</span>
+                </button>
+              </div>
+
               <label className="settingsField">
                 AWS Role ARN
                 <input
@@ -473,4 +571,29 @@ function formatDate(value: string): string {
     dateStyle: "short",
     timeStyle: "short"
   });
+}
+
+function openAwsConsolePlaceholder(): Window | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const nextWindow = window.open("about:blank", "_blank");
+
+  if (nextWindow) {
+    nextWindow.document.write("<p>Opening AWS console...</p>");
+    nextWindow.document.close();
+    nextWindow.opener = null;
+  }
+
+  return nextWindow;
+}
+
+function openAwsConsoleUrl(url: string, targetWindow: Window | null): void {
+  if (targetWindow) {
+    targetWindow.location.href = url;
+    return;
+  }
+
+  window.open(url, "_blank", "noopener,noreferrer");
 }
