@@ -61,6 +61,7 @@ export type DiagramFlowNodeData = Record<string, unknown> & {
   node: DiagramNode;
   selectedNodeCount: number;
   isDimmed: boolean;
+  isReferenceDropTarget: boolean;
 } & DiagramFlowNodeHandlers;
 
 export type DiagramFlowEdgeData = Record<string, unknown> & {
