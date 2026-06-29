@@ -20,6 +20,7 @@ import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactNode } from
 
 import { BORDER_COLOR_SWATCHES, NODE_COLOR_SWATCHES } from "./constants";
 import { getAreaNodeIconUrl, getAreaNodeLabel, isAreaNode } from "./area-nodes";
+import { getNodeResizeBounds } from "./node-resize-bounds";
 import type { DiagramFlowNode } from "./types";
 import styles from "./diagram-editor.module.css";
 
@@ -43,7 +44,7 @@ export function DiagramNodeView({ data, id, isConnectable, selected }: NodeProps
   const borderColor = getDisplayBorderColor(isArea, node.style?.borderColor);
   const textColor = node.style?.textColor ?? "#172033";
   const isDataNode = node.parameters?.terraformBlockType === "data";
-  const resizeBounds = getResizeBounds(node.kind);
+  const resizeBounds = getNodeResizeBounds(node);
   const nodeShellStyle = getNodeShellStyle(isArea, isResourceNode, borderColor);
   const areaNodeIconUrl = isArea ? getAreaNodeIconUrl(node) : undefined;
   const areaNodeLabel = isArea ? getAreaNodeLabel(node) : "";
@@ -232,24 +233,6 @@ export function DiagramNodeView({ data, id, isConnectable, selected }: NodeProps
       ) : null}
     </>
   );
-}
-
-function getResizeBounds(kind: DiagramFlowNode["data"]["node"]["kind"]) {
-  if (kind === "design") {
-    return {
-      maxHeight: 640,
-      maxWidth: 840,
-      minHeight: 100,
-      minWidth: 140
-    };
-  }
-
-  return {
-    maxHeight: 260,
-    maxWidth: 260,
-    minHeight: 74,
-    minWidth: 74
-  };
 }
 
 function getNodeShellStyle(isArea: boolean, isResourceNode: boolean, borderColor: string): CSSProperties {
