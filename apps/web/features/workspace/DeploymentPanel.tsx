@@ -95,6 +95,11 @@ export function DeploymentPanel({
   useEffect(() => {
     let cancelled = false;
 
+    setSelectedArchitectureId("");
+    setSelectedTerraformArtifactId("");
+    setSelectedAwsConnectionId("");
+    setSelectedDeploymentId("");
+
     async function loadDeploymentData(): Promise<void> {
       await runRequest(async () => {
         const [nextProjectDetails, nextConnections, nextDeployments] = await Promise.all([

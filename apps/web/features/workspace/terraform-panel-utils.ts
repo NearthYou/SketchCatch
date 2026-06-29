@@ -166,13 +166,14 @@ function toNodeTerraformAddress(node: DiagramNode | null): string | null {
 
 function parseTerraformBlocks(fileName: string, terraformCode: string): TerraformBlockLocation[] {
   const blocks: TerraformBlockLocation[] = [];
-  const lines = terraformCode.split(/\r\n|\r|\n/);
+  const rawLines = terraformCode.split("\n");
+  const lines = rawLines.map((line) => line.replace(/\r$/, ""));
   const lineOffsets: number[] = [];
   let offset = 0;
 
-  for (let index = 0; index < lines.length; index += 1) {
+  for (let index = 0; index < rawLines.length; index += 1) {
     lineOffsets.push(offset);
-    offset += (lines[index] ?? "").length + 1;
+    offset += (rawLines[index] ?? "").length + 1;
   }
 
   for (let index = 0; index < lines.length; index += 1) {
@@ -224,7 +225,9 @@ function countBraceDelta(line: string): number {
   let inString = false;
   let escaped = false;
 
-  for (const character of line) {
+  for (let index = 0; index < line.length; index += 1) {
+    const character = line[index];
+
     if (escaped) {
       escaped = false;
       continue;
@@ -242,6 +245,14 @@ function countBraceDelta(line: string): number {
 
     if (inString) {
       continue;
+    }
+
+    if (character === "#") {
+      break;
+    }
+
+    if (character === "/" && line[index + 1] === "/") {
+      break;
     }
 
     if (character === "{") {
