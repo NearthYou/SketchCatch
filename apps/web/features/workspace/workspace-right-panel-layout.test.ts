@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 
 const componentSource = readWorkspaceFile("WorkspaceRightPanel.tsx");
 const deploymentPanelSource = readWorkspaceFile("DeploymentPanel.tsx");
+const terraformPanelSource = readWorkspaceFile("TerraformCodePanel.tsx");
 const stylesSource = readWorkspaceFile("workspace.module.css");
 const diagramEditorStylesSource = readFeatureFile(
   "../diagram-editor/diagram-editor.module.css"
@@ -121,6 +122,30 @@ test("deployment results render as compact rows instead of cards", () => {
   assert.match(resultRowsRule, /\bgap:\s*0;/);
   assert.match(resultRowRule, /\bgrid-template-columns:\s*minmax\(0,\s*1\.15fr\) minmax\(88px,\s*0\.45fr\) minmax\(0,\s*1fr\);/);
   assert.match(resultRowRule, /\bmin-height:\s*32px;/);
+});
+
+test("deployment creation prepares fresh snapshot and terraform artifact before creating the deployment", () => {
+  const prepareIndex = deploymentPanelSource.indexOf(
+    "const savedArtifacts = await onPrepareDeploymentArtifacts();"
+  );
+  const createDeploymentIndex = deploymentPanelSource.indexOf(
+    "const deployment = await createDeployment",
+    prepareIndex
+  );
+
+  assert.ok(prepareIndex > -1);
+  assert.ok(createDeploymentIndex > prepareIndex);
+  assert.match(deploymentPanelSource, /architectureId:\s*savedArtifacts\.architecture\.id/);
+  assert.match(deploymentPanelSource, /terraformArtifactId:\s*savedArtifacts\.terraformArtifact\.id/);
+  assert.match(componentSource, /ref=\{terraformPanelRef\}/);
+  assert.match(componentSource, /onPrepareDeploymentArtifacts=\{prepareDeploymentArtifacts\}/);
+});
+
+test("terraform panel exposes an explicit terraform artifact save action", () => {
+  assert.match(terraformPanelSource, /onSaveTerraformArtifact/);
+  assert.match(terraformPanelSource, /Artifact 저장/);
+  assert.match(terraformPanelSource, /syncTerraformCodeToDiagram/);
+  assert.match(stylesSource, /\.terraformArtifactButton\s*\{/);
 });
 
 function readWorkspaceFile(fileName: string): string {

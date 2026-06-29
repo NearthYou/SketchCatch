@@ -5,14 +5,17 @@ import type {
   AiTerraformPreviewExplanationResult,
   AiTerraformStage,
   ArchitectureJson,
+  ArchitectureSnapshot,
   AwsConnectionCloudFormationTemplateResponse,
   AwsConnection,
   AwsConnectionListResponse,
+  CreateArchitectureSnapshotRequest,
   CreateArchitectureDraftRequest,
   CreateAwsConnectionRequest,
   CreateAwsConnectionResponse,
   CreateDeploymentRequest,
   CreateDesignSimulationRequest,
+  CreateProjectAssetUploadRequest,
   CreateProjectRequest,
   DesignSimulationResult,
   DeployedResource,
@@ -24,6 +27,7 @@ import type {
   DeploymentResponse,
   DiagramJson,
   Project,
+  ProjectAssetUploadResponse,
   ProjectDetailsResponse,
   ProjectDraftResponse,
   ProjectListResponse,
@@ -49,6 +53,10 @@ type AiTerraformErrorExplanationRequest = {
   readonly stage: AiTerraformStage;
   readonly rawMessage: string;
   readonly relatedResourceId?: string | undefined;
+};
+
+type ArchitectureSnapshotResponse = {
+  readonly architecture: ArchitectureSnapshot;
 };
 
 export async function createProject(input: CreateProjectRequest): Promise<Project> {
@@ -107,6 +115,55 @@ export async function saveProjectDraft({
       diagramJson
     }
   });
+}
+
+export async function createArchitectureSnapshot({
+  projectId,
+  ...input
+}: {
+  projectId: string;
+} & CreateArchitectureSnapshotRequest): Promise<ArchitectureSnapshot> {
+  const response = await apiFetch<ArchitectureSnapshotResponse>(
+    `/projects/${encodeURIComponent(projectId)}/architectures`,
+    {
+      auth: true,
+      method: "POST",
+      body: input
+    }
+  );
+
+  return response.architecture;
+}
+
+export async function createProjectAssetUpload({
+  projectId,
+  ...input
+}: {
+  projectId: string;
+} & CreateProjectAssetUploadRequest): Promise<ProjectAssetUploadResponse> {
+  return apiFetch<ProjectAssetUploadResponse>(
+    `/projects/${encodeURIComponent(projectId)}/assets/presigned-upload`,
+    {
+      auth: true,
+      method: "POST",
+      body: input
+    }
+  );
+}
+
+export async function uploadProjectAsset(
+  upload: ProjectAssetUploadResponse["upload"],
+  content: string | Blob
+): Promise<void> {
+  const response = await fetch(upload.url, {
+    method: upload.method,
+    headers: upload.headers,
+    body: content
+  });
+
+  if (!response.ok) {
+    throw new Error("Terraform artifact 업로드에 실패했습니다.");
+  }
 }
 
 export async function generateTerraformCode(diagramJson: DiagramJson): Promise<string> {

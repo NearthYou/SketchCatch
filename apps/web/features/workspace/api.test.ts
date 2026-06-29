@@ -2,8 +2,10 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   approveDeploymentPlan,
+  createArchitectureSnapshot,
   createAwsConnectionSetup,
   createDeployment,
+  createProjectAssetUpload,
   deleteAwsConnection,
   deleteProject,
   getAwsConnectionCloudFormationTemplate,
@@ -18,6 +20,7 @@ import {
   runDeploymentApply,
   saveProjectDraft,
   testAwsConnection,
+  uploadProjectAsset,
   verifyAwsConnection
 } from "./api";
 import type { Project } from "../../../../packages/types/src";
@@ -116,6 +119,155 @@ test("saveProjectDraft sends authenticated PUT request with diagram json", async
       }
     }
   });
+});
+
+test("createArchitectureSnapshot posts converted architecture json", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    restoreWindow(originalWindowDescriptor);
+  });
+
+  installAuthSession();
+
+  globalThis.fetch = async (input, init) => {
+    requests.push({ input, init });
+
+    return new Response(
+      JSON.stringify({
+        architecture: {
+          id: "55555555-5555-4555-8555-555555555555",
+          projectId: project.id,
+          version: 1,
+          source: "manual",
+          architectureJson: { nodes: [], edges: [] },
+          createdAt: "2026-06-26T00:00:00.000Z"
+        }
+      }),
+      {
+        headers: {
+          "Content-Type": "application/json"
+        },
+        status: 201
+      }
+    );
+  };
+
+  const architecture = await createArchitectureSnapshot({
+    projectId: project.id,
+    source: "manual",
+    architectureJson: { nodes: [], edges: [] }
+  });
+
+  assert.equal(String(requests[0]?.input), `/api/projects/${project.id}/architectures`);
+  assert.equal(requests[0]?.init?.method, "POST");
+  assert.equal(new Headers(requests[0]?.init?.headers).get("authorization"), "Bearer access-token");
+  assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), {
+    source: "manual",
+    architectureJson: { nodes: [], edges: [] }
+  });
+  assert.equal(architecture.id, "55555555-5555-4555-8555-555555555555");
+});
+
+test("createProjectAssetUpload requests terraform file presigned upload metadata", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    restoreWindow(originalWindowDescriptor);
+  });
+
+  installAuthSession();
+
+  globalThis.fetch = async (input, init) => {
+    requests.push({ input, init });
+
+    return new Response(
+      JSON.stringify({
+        asset: {
+          id: "66666666-6666-4666-8666-666666666666",
+          projectId: project.id,
+          architectureId: "55555555-5555-4555-8555-555555555555",
+          assetType: "terraform_file",
+          objectKey: "projects/project/assets/terraform.tf",
+          fileName: "main.tf",
+          contentType: "text/plain",
+          byteSize: 12,
+          createdAt: "2026-06-26T00:00:00.000Z"
+        },
+        upload: {
+          method: "PUT",
+          url: "https://s3.example.test/upload",
+          headers: { "Content-Type": "text/plain" },
+          expiresInSeconds: 900
+        }
+      }),
+      {
+        headers: {
+          "Content-Type": "application/json"
+        },
+        status: 201
+      }
+    );
+  };
+
+  const response = await createProjectAssetUpload({
+    projectId: project.id,
+    architectureId: "55555555-5555-4555-8555-555555555555",
+    assetType: "terraform_file",
+    fileName: "main.tf",
+    contentType: "text/plain",
+    byteSize: 12
+  });
+
+  assert.equal(String(requests[0]?.input), `/api/projects/${project.id}/assets/presigned-upload`);
+  assert.equal(requests[0]?.init?.method, "POST");
+  assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), {
+    architectureId: "55555555-5555-4555-8555-555555555555",
+    assetType: "terraform_file",
+    fileName: "main.tf",
+    contentType: "text/plain",
+    byteSize: 12
+  });
+  assert.equal(response.asset.assetType, "terraform_file");
+  assert.equal(response.upload.method, "PUT");
+});
+
+test("uploadProjectAsset uploads terraform content to the presigned URL", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  globalThis.fetch = async (input, init) => {
+    requests.push({ input, init });
+
+    return new Response(null, {
+      status: 200
+    });
+  };
+
+  await uploadProjectAsset(
+    {
+      method: "PUT",
+      url: "https://s3.example.test/upload",
+      headers: { "Content-Type": "text/plain" },
+      expiresInSeconds: 900
+    },
+    "resource {}"
+  );
+
+  assert.equal(String(requests[0]?.input), "https://s3.example.test/upload");
+  assert.equal(requests[0]?.init?.method, "PUT");
+  assert.equal(new Headers(requests[0]?.init?.headers).get("content-type"), "text/plain");
+  assert.equal(requests[0]?.init?.body, "resource {}");
 });
 
 test("deleteProject sends an authenticated DELETE request", async (context) => {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import type { TerraformDiagnostic } from "@sketchcatch/types";
 import {
   AlertCircle,
@@ -14,11 +14,21 @@ import {
 import type { DiagramEditorPanelContext } from "../diagram-editor";
 import { DeploymentPanel } from "./DeploymentPanel";
 import { ResourceWorkspacePanel } from "./ResourceWorkspacePanel";
-import { TerraformCodePanel } from "./TerraformCodePanel";
+import {
+  TerraformCodePanel,
+  type PreparedTerraformArtifactSource,
+  type TerraformCodePanelHandle
+} from "./TerraformCodePanel";
 import { TerraformIssuesPanel } from "./TerraformIssuesPanel";
 import { TerraformLeaveDialog } from "./TerraformLeaveDialog";
 import { WorkspaceAiPanel } from "./WorkspaceAiPanel";
 import { defaultResourceWorkspaceView } from "./resource-workspace-view";
+import {
+  saveWorkspaceArchitectureSnapshot,
+  saveWorkspaceTerraformArtifact,
+  type SavedWorkspaceArchitectureSnapshot,
+  type SavedWorkspaceTerraformArtifact
+} from "./workspace-deployment-artifacts";
 import type { ResourceWorkspaceView, WorkspaceRightPanelView } from "./workspace-right-panel.types";
 import styles from "./workspace.module.css";
 
@@ -29,6 +39,7 @@ export type WorkspaceRightPanelProps = {
 };
 
 export function WorkspaceRightPanel({ context, projectId, projectName }: WorkspaceRightPanelProps) {
+  const terraformPanelRef = useRef<TerraformCodePanelHandle | null>(null);
   const [activeView, setActiveView] = useState<WorkspaceRightPanelView>("resource");
   const [resourceWorkspaceView, setResourceWorkspaceView] = useState<ResourceWorkspaceView>(
     defaultResourceWorkspaceView
@@ -90,6 +101,36 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
     context.setRightPanelOpen(true);
     requestView(nextView);
   }
+
+  const saveCurrentArchitectureSnapshot = useCallback(async (): Promise<SavedWorkspaceArchitectureSnapshot> => {
+    return saveWorkspaceArchitectureSnapshot({
+      diagramJson: context.diagram,
+      projectId,
+      source: "manual"
+    });
+  }, [context.diagram, projectId]);
+
+  const savePreparedTerraformArtifact = useCallback(
+    async (source: PreparedTerraformArtifactSource): Promise<SavedWorkspaceTerraformArtifact> => {
+      return saveWorkspaceTerraformArtifact({
+        diagramJson: source.diagramJson,
+        projectId,
+        source: "manual",
+        terraformCode: source.terraformCode
+      });
+    },
+    [projectId]
+  );
+
+  const prepareDeploymentArtifacts = useCallback(async (): Promise<SavedWorkspaceTerraformArtifact> => {
+    const preparedSource = await terraformPanelRef.current?.prepareTerraformArtifact();
+
+    if (!preparedSource) {
+      throw new Error("Terraform 패널을 준비하지 못했습니다.");
+    }
+
+    return savePreparedTerraformArtifact(preparedSource);
+  }, [savePreparedTerraformArtifact]);
 
   if (!context.isRightPanelOpen) {
     return (
@@ -224,6 +265,7 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
       </div>
       <div className={styles.rightPanelView} hidden={activeView !== "terraform"}>
         <TerraformCodePanel
+          ref={terraformPanelRef}
           context={context}
           externalSaveRequestId={terraformSaveRequestId}
           isVisible={activeView === "terraform"}
@@ -235,6 +277,7 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
             setResourceWorkspaceView("settings");
             requestView("resource");
           }}
+          onSaveTerraformArtifact={savePreparedTerraformArtifact}
         />
       </div>
       <div className={styles.rightPanelView} hidden={activeView !== "issues"}>
@@ -247,6 +290,8 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
         {activeView === "deployment" ? (
           <DeploymentPanel
             currentNodeCount={context.nodes.length}
+            onPrepareDeploymentArtifacts={prepareDeploymentArtifacts}
+            onSaveArchitectureSnapshot={saveCurrentArchitectureSnapshot}
             projectId={projectId}
             projectName={projectName}
           />

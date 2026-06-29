@@ -817,6 +817,37 @@
   padding: 8px 12px;
 }
 
+.terraformArtifactButton {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  color: #243044;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 850;
+  gap: 5px;
+  height: 30px;
+  justify-content: center;
+  min-width: 92px;
+  padding: 0 8px;
+  white-space: nowrap;
+}
+
+.terraformArtifactButton:hover,
+.terraformArtifactButton:focus-visible {
+  background: #f8fafc;
+  border-color: #9fb2cc;
+  outline: none;
+}
+
+.terraformArtifactButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .terraformShortcut {
   background: #f8fafc;
   border: 1px solid #e2e8f0;
