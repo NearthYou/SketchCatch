@@ -175,11 +175,15 @@ function compareDropTargetCandidates(left: DropTargetCandidate, right: DropTarge
     return areaDifference;
   }
 
-  return right.node.zIndex - left.node.zIndex;
+  return getNodeZIndex(right.node) - getNodeZIndex(left.node);
 }
 
 function isVisualDesignDropTarget(node: DiagramNode): boolean {
   return node.kind === "design" && visualDesignDropTargetTypes.has(node.type);
+}
+
+function getNodeZIndex(node: DiagramNode) {
+  return Number.isFinite(node.zIndex) ? node.zIndex : 0;
 }
 
 function containsPoint(

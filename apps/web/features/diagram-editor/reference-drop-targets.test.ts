@@ -137,6 +137,34 @@ test("findInnermostReferenceDropTarget returns null when the child has no matchi
   assert.equal(findInnermostReferenceDropTarget(bucket, [vpc, bucket], catalog), null);
 });
 
+test("findInnermostReferenceDropTarget treats missing zIndex as zero when areas match", () => {
+  const legacyVpc = omitNodeZIndex(
+    makeResourceNode({
+      id: "vpc-legacy",
+      resourceType: "aws_vpc",
+      position: { x: 0, y: 0 },
+      size: { width: 500, height: 500 }
+    })
+  );
+  const frontVpc = makeResourceNode({
+    id: "vpc-front",
+    resourceType: "aws_vpc",
+    position: { x: 0, y: 0 },
+    size: { width: 500, height: 500 },
+    zIndex: 1
+  });
+  const subnet = makeResourceNode({
+    id: "subnet-1",
+    resourceType: "aws_subnet",
+    position: { x: 120, y: 120 },
+    size: { width: 220, height: 180 }
+  });
+
+  const target = findInnermostReferenceDropTarget(subnet, [legacyVpc, frontVpc, subnet], catalog);
+
+  assert.equal(target?.node.id, "vpc-front");
+});
+
 test("findInnermostVisualDropTarget includes Region, AZ, and Group design areas", () => {
   const region = makeDesignNode({
     id: "region-1",
@@ -381,7 +409,8 @@ function makeResourceNode({
   resourceName,
   resourceType,
   size,
-  values
+  values,
+  zIndex
 }: {
   id: string;
   position: DiagramNode["position"];
@@ -389,6 +418,7 @@ function makeResourceNode({
   resourceType: string;
   size: DiagramNode["size"];
   values?: Record<string, unknown>;
+  zIndex?: number;
 }): DiagramNode {
   const terraformResourceName = resourceName ?? id.replaceAll("-", "_");
 
@@ -400,7 +430,7 @@ function makeResourceNode({
     size,
     label: terraformResourceName,
     locked: false,
-    zIndex: 1,
+    zIndex: zIndex ?? 1,
     parameters: {
       terraformBlockType: "resource",
       resourceType,
@@ -409,6 +439,12 @@ function makeResourceNode({
       values: values ?? {}
     }
   };
+}
+
+function omitNodeZIndex(node: DiagramNode): DiagramNode {
+  const serializedNode = JSON.parse(JSON.stringify(node)) as Record<string, unknown>;
+  delete serializedNode.zIndex;
+  return serializedNode as DiagramNode;
 }
 
 function makeDesignNode({
