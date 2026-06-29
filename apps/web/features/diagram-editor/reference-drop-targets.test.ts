@@ -1,11 +1,18 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import type { DiagramNode } from "../../../../packages/types/src";
 import type { ParameterCatalog, ParameterCatalogDefinition } from "../parameter-input/catalog";
 import {
+  applyInnermostReferenceDropTarget,
   applyReferenceDropTarget,
   findInnermostReferenceDropTarget
 } from "./reference-drop-targets";
+
+const currentDir = dirname(fileURLToPath(import.meta.url));
+const diagramEditorPath = join(currentDir, "DiagramEditor.tsx");
 
 const catalog: ParameterCatalog = {
   provider: "aws",
@@ -219,6 +226,45 @@ test("applyReferenceDropTarget formats list references and derived reference att
   assert.equal(
     applyReferenceDropTarget(lambda, lambdaTarget, catalog).parameters?.values.role,
     "aws_iam_role.runtime.arn"
+  );
+});
+
+test("applyInnermostReferenceDropTarget finds the parent target and applies the reference in one step", () => {
+  const vpc = makeResourceNode({
+    id: "vpc-1",
+    resourceName: "main",
+    resourceType: "aws_vpc",
+    position: { x: 0, y: 0 },
+    size: { width: 500, height: 500 }
+  });
+  const subnet = makeResourceNode({
+    id: "subnet-1",
+    resourceName: "public",
+    resourceType: "aws_subnet",
+    position: { x: 120, y: 120 },
+    size: { width: 220, height: 180 }
+  });
+
+  const result = applyInnermostReferenceDropTarget(subnet, [vpc, subnet], catalog);
+
+  assert.equal(result.parameters?.values.vpcId, "aws_vpc.main.id");
+});
+
+test("DiagramEditor applies reference targets after palette drop and node drag stop", () => {
+  const source = readFileSync(diagramEditorPath, "utf8");
+
+  assert.match(source, /import \{ terraformParameterCatalog \} from "\.\.\/parameter-input\/catalog";/);
+  assert.match(
+    source,
+    /import \{ applyInnermostReferenceDropTarget \} from "\.\/reference-drop-targets";/
+  );
+  assert.match(
+    source,
+    /applyInnermostReferenceDropTarget\(\s*nextNode,\s*nodesWithNextNode,\s*terraformParameterCatalog\s*\)/
+  );
+  assert.match(
+    source,
+    /applyInnermostReferenceDropTarget\(\s*node,\s*positionedNodes,\s*terraformParameterCatalog\s*\)/
   );
 });
 

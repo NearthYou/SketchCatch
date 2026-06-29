@@ -47,6 +47,7 @@ import type {
 import type { DiagramEdge, DiagramJson, DiagramNode } from "../../../../packages/types/src";
 
 import { ParameterInputPanel } from "../parameter-input";
+import { terraformParameterCatalog } from "../parameter-input/catalog";
 import { ResourceSettingsPanel } from "../resource-settings";
 import { DEFAULT_DIAGRAM_VIEWPORT, EMPTY_DIAGRAM } from "./constants";
 import { DiagramEdgeToolbar } from "./DiagramEdgeToolbar";
@@ -68,6 +69,7 @@ import {
   updateNodeById
 } from "./diagram-utils";
 import { toFlowEdges, toFlowNodes } from "./flow-mappers";
+import { applyInnermostReferenceDropTarget } from "./reference-drop-targets";
 import type {
   DiagramEditorPanelContext,
   DiagramEditorProps,
@@ -555,13 +557,19 @@ function DiagramEditorInner({
     (_event: MouseEvent | TouchEvent, _node: DiagramFlowNode, nodes: DiagramFlowNode[]) => {
       const before = dragSnapshotRef.current;
       const positionByNodeId = new Map(nodes.map((node) => [node.id, node.position]));
+      const movedNodeIds = new Set(positionByNodeId.keys());
+      const positionedNodes = diagramRef.current.nodes.map((node) => {
+        const position = positionByNodeId.get(node.id);
+
+        return position ? { ...node, position: { ...position } } : node;
+      });
       const after = {
         ...diagramRef.current,
-        nodes: diagramRef.current.nodes.map((node) => {
-          const position = positionByNodeId.get(node.id);
-
-          return position ? { ...node, position: { ...position } } : node;
-        })
+        nodes: positionedNodes.map((node) =>
+          movedNodeIds.has(node.id)
+            ? applyInnermostReferenceDropTarget(node, positionedNodes, terraformParameterCatalog)
+            : node
+        )
       };
 
       replaceDiagram(after);
@@ -633,10 +641,19 @@ function DiagramEditorInner({
 
       const nextNode = createDiagramNodeFromPayload(payload, position, getNextZIndex(diagramRef.current.nodes));
 
-      commitDiagramUpdate((currentDiagram) => ({
-        ...currentDiagram,
-        nodes: [...currentDiagram.nodes, nextNode]
-      }));
+      commitDiagramUpdate((currentDiagram) => {
+        const nodesWithNextNode = [...currentDiagram.nodes, nextNode];
+        const nodeWithReferences = applyInnermostReferenceDropTarget(
+          nextNode,
+          nodesWithNextNode,
+          terraformParameterCatalog
+        );
+
+        return {
+          ...currentDiagram,
+          nodes: [...currentDiagram.nodes, nodeWithReferences]
+        };
+      });
       setSelectedNodeIds([nextNode.id]);
       setSelectedEdgeIds([]);
       focusEditorShell();

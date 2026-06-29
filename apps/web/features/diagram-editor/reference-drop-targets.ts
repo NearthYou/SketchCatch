@@ -101,6 +101,14 @@ export function applyReferenceDropTarget(
   };
 }
 
+export function applyInnermostReferenceDropTarget(
+  childNode: DiagramNode,
+  nodes: readonly DiagramNode[],
+  catalog: ParameterCatalog
+): DiagramNode {
+  return applyReferenceDropTarget(childNode, findInnermostReferenceDropTarget(childNode, nodes, catalog), catalog);
+}
+
 function getReferenceDefinitions(definitions: readonly ParameterCatalogDefinition[]) {
   return definitions.filter(
     (definition) =>
