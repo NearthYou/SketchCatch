@@ -18,6 +18,10 @@ const CSRF_TOKEN_HEADER_NAME = "x-csrf-token";
 const REFRESH_TOKEN_COOKIE_PATH = "/api/auth";
 const CSRF_TOKEN_COOKIE_PATH = "/";
 const REFRESH_TOKEN_COOKIE_MAX_AGE_SECONDS = REFRESH_TOKEN_TTL_DAYS * 24 * 60 * 60;
+const SESSION_REFRESH_TOKEN_PREFIX = "session.";
+const PERSISTENT_REFRESH_TOKEN_PREFIX = "persistent.";
+
+type RefreshTokenPersistence = "session" | "persistent";
 
 export type PublicUserRow = Pick<
   typeof users.$inferSelect,
@@ -28,9 +32,13 @@ export async function createAuthSession(
   db: Database,
   userId: string,
   request: FastifyRequest,
-  reply: FastifyReply
+  reply: FastifyReply,
+  options: {
+    persistent?: boolean;
+  } = {}
 ): Promise<AuthSession> {
-  const refreshToken = createRefreshToken();
+  const persistence = options.persistent === false ? "session" : "persistent";
+  const refreshToken = createSessionRefreshToken(persistence);
 
   await db.insert(refreshTokens).values({
     id: randomUUID(),
@@ -41,7 +49,7 @@ export async function createAuthSession(
     ipAddress: request.ip
   });
 
-  setRefreshTokenCookie(reply, refreshToken);
+  setRefreshTokenCookie(reply, refreshToken, persistence);
 
   return {
     accessToken: await createAccessToken(userId),
@@ -84,6 +92,14 @@ export function clearRefreshTokenCookie(reply: FastifyReply): void {
       path: CSRF_TOKEN_COOKIE_PATH
     })
   ]);
+}
+
+export function getRefreshTokenPersistence(refreshToken: string): RefreshTokenPersistence {
+  if (refreshToken.startsWith(SESSION_REFRESH_TOKEN_PREFIX)) {
+    return "session";
+  }
+
+  return "persistent";
 }
 
 function getUserAgent(request: FastifyRequest): string | undefined {
@@ -132,18 +148,32 @@ function getHeaderValue(request: FastifyRequest, headerName: string): string | n
   return Array.isArray(value) ? (value[0] ?? null) : value;
 }
 
-function setRefreshTokenCookie(reply: FastifyReply, refreshToken: string): void {
+function createSessionRefreshToken(persistence: RefreshTokenPersistence): string {
+  const prefix =
+    persistence === "persistent" ? PERSISTENT_REFRESH_TOKEN_PREFIX : SESSION_REFRESH_TOKEN_PREFIX;
+
+  return `${prefix}${createRefreshToken()}`;
+}
+
+function setRefreshTokenCookie(
+  reply: FastifyReply,
+  refreshToken: string,
+  persistence: RefreshTokenPersistence
+): void {
   const csrfToken = createRefreshToken();
+  const maxAge =
+    persistence === "persistent" ? REFRESH_TOKEN_COOKIE_MAX_AGE_SECONDS : undefined;
+  const lifetimeOptions = maxAge === undefined ? {} : { maxAge };
 
   reply.header("set-cookie", [
     serializeAuthCookie(REFRESH_TOKEN_COOKIE_NAME, encodeURIComponent(refreshToken), {
       httpOnly: true,
-      maxAge: REFRESH_TOKEN_COOKIE_MAX_AGE_SECONDS,
-      path: REFRESH_TOKEN_COOKIE_PATH
+      path: REFRESH_TOKEN_COOKIE_PATH,
+      ...lifetimeOptions
     }),
     serializeAuthCookie(CSRF_TOKEN_COOKIE_NAME, encodeURIComponent(csrfToken), {
-      maxAge: REFRESH_TOKEN_COOKIE_MAX_AGE_SECONDS,
-      path: CSRF_TOKEN_COOKIE_PATH
+      path: CSRF_TOKEN_COOKIE_PATH,
+      ...lifetimeOptions
     })
   ]);
 }
@@ -154,16 +184,19 @@ export function serializeAuthCookie(
   options: {
     expires?: Date;
     httpOnly?: boolean;
-    maxAge: number;
+    maxAge?: number;
     path: string;
   }
 ): string {
   const attributes = [
     `${name}=${value}`,
     "SameSite=Lax",
-    `Path=${options.path}`,
-    `Max-Age=${options.maxAge}`
+    `Path=${options.path}`
   ];
+
+  if (options.maxAge !== undefined) {
+    attributes.push(`Max-Age=${options.maxAge}`);
+  }
 
   if (options.httpOnly) {
     attributes.push("HttpOnly");

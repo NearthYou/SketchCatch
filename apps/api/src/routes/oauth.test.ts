@@ -54,7 +54,37 @@ test("GET /api/auth/oauth/naver/start redirects to Naver authorize URL with a st
     assert.match(cookie, /Max-Age=300/);
     assert.deepEqual(readOAuthStateFromSetCookie(cookie), {
       provider: "naver",
-      state
+      state,
+      persistent: false
+    });
+  } finally {
+    restoreEnv();
+    await app.close();
+  }
+});
+
+test("GET /api/auth/oauth/naver/start stores persistent state when rememberMe is true", async () => {
+  const restoreEnv = setOAuthEnv();
+  const app = buildApp();
+
+  try {
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/auth/oauth/naver/start?rememberMe=true"
+    });
+
+    assert.equal(response.statusCode, 302);
+
+    const location = getHeaderValue(response, "location");
+    const redirectUrl = new URL(location);
+    const state = redirectUrl.searchParams.get("state");
+    const cookie = getSetCookieHeader(response, OAUTH_STATE_COOKIE_NAME);
+
+    assert.ok(state);
+    assert.deepEqual(readOAuthStateFromSetCookie(cookie), {
+      provider: "naver",
+      state,
+      persistent: true
     });
   } finally {
     restoreEnv();
@@ -93,7 +123,8 @@ test("GET /api/auth/oauth/kakao/start redirects to Kakao authorize URL with a st
     const cookie = getSetCookieHeader(response, OAUTH_STATE_COOKIE_NAME);
     assert.deepEqual(readOAuthStateFromSetCookie(cookie), {
       provider: "kakao",
-      state
+      state,
+      persistent: false
     });
   } finally {
     restoreEnv();
@@ -132,7 +163,8 @@ test("GET /api/auth/oauth/github/start redirects to GitHub authorize URL with a 
     const cookie = getSetCookieHeader(response, OAUTH_STATE_COOKIE_NAME);
     assert.deepEqual(readOAuthStateFromSetCookie(cookie), {
       provider: "github",
-      state
+      state,
+      persistent: false
     });
   } finally {
     restoreEnv();
@@ -244,7 +276,49 @@ test("GET /api/auth/oauth/naver/callback completes login and redirects to mypage
 
     assert.doesNotMatch(getHeaderValue(response, "location"), /provider-access-token/);
     assert.doesNotMatch(serializedRows, /provider-access-token/);
-    assertRefreshTokenCookie(response.headers["set-cookie"]);
+    assertSessionRefreshTokenCookie(response.headers["set-cookie"]);
+    assertClearedOAuthStateCookie(response.headers["set-cookie"]);
+  } finally {
+    restoreFetch();
+    restoreEnv();
+    await app.close();
+  }
+});
+
+test("GET /api/auth/oauth/naver/callback keeps refresh cookie persistent when OAuth state is persistent", async () => {
+  const restoreEnv = setOAuthEnv();
+  const fakeDb = new OAuthRouteFakeDb({
+    selectResults: [[], []]
+  });
+  const { restoreFetch } = installOAuthFetch([
+    jsonResponse({
+      access_token: "provider-access-token"
+    }),
+    jsonResponse({
+      response: {
+        email: "persistent@example.com",
+        id: "persistent-naver-user-id",
+        nickname: "Persistent Naver Demo"
+      }
+    })
+  ]);
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  try {
+    const response = await app.inject({
+      headers: {
+        cookie: oauthStateCookie("state-token", "naver", true)
+      },
+      method: "GET",
+      url: "/api/auth/oauth/naver/callback?code=authorization-code&state=state-token"
+    });
+
+    assert.equal(response.statusCode, 302);
+    assert.equal(getHeaderValue(response, "location"), "/mypage");
+    assert.equal(fakeDb.refreshTokenRows.length, 1);
+    assertPersistentRefreshTokenCookie(response.headers["set-cookie"]);
     assertClearedOAuthStateCookie(response.headers["set-cookie"]);
   } finally {
     restoreFetch();
@@ -711,7 +785,10 @@ function assertOAuthErrorRedirect(response: LightMyRequestResponse, oauthError: 
   assert.equal(getHeaderValue(response, "location"), `/login?oauthError=${oauthError}`);
 }
 
-function assertRefreshTokenCookie(setCookieHeader: string | string[] | undefined): void {
+function assertRefreshTokenCookie(setCookieHeader: string | string[] | undefined): {
+  csrfTokenCookie: string;
+  refreshTokenCookie: string;
+} {
   const cookies = getSetCookieHeaders(setCookieHeader);
   const refreshTokenCookie = getCookieHeader(cookies, REFRESH_TOKEN_COOKIE_NAME);
   const csrfTokenCookie = getCookieHeader(cookies, CSRF_TOKEN_COOKIE_NAME);
@@ -723,6 +800,27 @@ function assertRefreshTokenCookie(setCookieHeader: string | string[] | undefined
   assert.match(csrfTokenCookie, new RegExp(`^${CSRF_TOKEN_COOKIE_NAME}=`));
   assert.doesNotMatch(csrfTokenCookie, /HttpOnly/);
   assert.match(csrfTokenCookie, /SameSite=Lax/);
+
+  return {
+    csrfTokenCookie,
+    refreshTokenCookie
+  };
+}
+
+function assertSessionRefreshTokenCookie(setCookieHeader: string | string[] | undefined): void {
+  const { csrfTokenCookie, refreshTokenCookie } = assertRefreshTokenCookie(setCookieHeader);
+
+  assert.match(refreshTokenCookie, new RegExp(`^${REFRESH_TOKEN_COOKIE_NAME}=session\\.`));
+  assert.doesNotMatch(refreshTokenCookie, /Max-Age=/);
+  assert.doesNotMatch(csrfTokenCookie, /Max-Age=/);
+}
+
+function assertPersistentRefreshTokenCookie(setCookieHeader: string | string[] | undefined): void {
+  const { csrfTokenCookie, refreshTokenCookie } = assertRefreshTokenCookie(setCookieHeader);
+
+  assert.match(refreshTokenCookie, new RegExp(`^${REFRESH_TOKEN_COOKIE_NAME}=persistent\\.`));
+  assert.match(refreshTokenCookie, /Max-Age=2592000/);
+  assert.match(csrfTokenCookie, /Max-Age=2592000/);
 }
 
 function assertClearedOAuthStateCookie(setCookieHeader: string | string[] | undefined): void {
@@ -758,7 +856,11 @@ function getCookieHeader(cookies: string[], cookieName: string): string {
   return cookie;
 }
 
-function oauthStateCookie(state: string, provider: OAuthProvider = "naver"): string {
+function oauthStateCookie(
+  state: string,
+  provider: OAuthProvider = "naver",
+  persistent = false
+): string {
   let setCookieHeader: string | undefined;
   const reply = {
     getHeader: () => undefined,
@@ -770,7 +872,8 @@ function oauthStateCookie(state: string, provider: OAuthProvider = "naver"): str
 
   setOAuthStateCookie(reply, {
     provider,
-    state
+    state,
+    persistent
   });
 
   if (!setCookieHeader) {

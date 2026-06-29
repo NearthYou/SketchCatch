@@ -100,16 +100,82 @@ export type AuthSession = {
   expiresInSeconds: number;
 };
 
+export const PASSWORD_MIN_LENGTH = 10;
+export const PASSWORD_MAX_LENGTH = 128;
+export const PASSWORD_REQUIRED_CATEGORY_COUNT = 3;
+export const PASSWORD_POLICY_HELP_TEXT =
+  "10자 이상, 영어 대문자/소문자/숫자/특수문자 중 3가지 이상을 포함해주세요.";
+export const PASSWORD_POLICY_ERROR_MESSAGE =
+  "비밀번호는 10자 이상, 영어 대문자/소문자/숫자/특수문자 중 3가지 이상을 포함해야 합니다.";
+
+const PASSWORD_UPPERCASE_PATTERN = /[A-Z]/;
+const PASSWORD_LOWERCASE_PATTERN = /[a-z]/;
+const PASSWORD_NUMBER_PATTERN = /[0-9]/;
+const PASSWORD_SPECIAL_CHARACTER_PATTERN = /[^\p{L}\p{N}\s]/u;
+
+export function getPasswordPolicyCategoryCount(password: string): number {
+  return [
+    PASSWORD_UPPERCASE_PATTERN,
+    PASSWORD_LOWERCASE_PATTERN,
+    PASSWORD_NUMBER_PATTERN,
+    PASSWORD_SPECIAL_CHARACTER_PATTERN
+  ].filter((pattern) => pattern.test(password)).length;
+}
+
+export function isPasswordPolicySatisfied(password: string): boolean {
+  return (
+    password.length >= PASSWORD_MIN_LENGTH &&
+    password.length <= PASSWORD_MAX_LENGTH &&
+    getPasswordPolicyCategoryCount(password) >= PASSWORD_REQUIRED_CATEGORY_COUNT
+  );
+}
+
+export function getPasswordPolicyErrorMessage(password: string): string | null {
+  return isPasswordPolicySatisfied(password) ? null : PASSWORD_POLICY_ERROR_MESSAGE;
+}
+
 export type SignupRequest = {
   username: string;
   email: string;
   nickname: string;
   password: string;
+  privacyAccepted: boolean;
+  termsAccepted: boolean;
+};
+
+export type SignupAvailabilityRequest = {
+  username?: string | undefined;
+  email?: string | undefined;
+};
+
+export type SignupAvailabilityResponse = {
+  usernameAvailable?: boolean | undefined;
+  emailAvailable?: boolean | undefined;
 };
 
 export type LoginRequest = {
   username: string;
   password: string;
+  rememberMe: boolean;
+};
+
+export type PasswordResetRequest = {
+  email: string;
+};
+
+export type PasswordResetRequestResponse = {
+  debugResetToken?: string | undefined;
+  debugResetUrl?: string | undefined;
+  ok: true;
+};
+
+export type PasswordResetConfirmRequest = {
+  resetToken: string;
+  newPassword: string;
+};
+
+export type PasswordResetConfirmResponse = {
+  ok: true;
 };
 
 export type RefreshTokenRequest = Record<string, never>;
