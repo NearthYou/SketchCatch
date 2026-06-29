@@ -332,7 +332,7 @@ function ResourceWorkspacePanel({
       </div>
 
       {view === "settings" ? (
-        <ParameterInputPanel {...context} />
+        <ParameterInputPanel key={context.selectedNodeId ?? "no-selection"} {...context} />
       ) : (
         <ResourceListPanel context={context} nodes={resourceNodes} />
       )}

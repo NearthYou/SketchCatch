@@ -6,6 +6,8 @@ import { test } from "node:test";
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
 const parameterInputPanelPath = join(currentDir, "ParameterInputPanel.tsx");
+const diagramEditorPath = join(currentDir, "../diagram-editor/DiagramEditor.tsx");
+const workspaceRightPanelPath = join(currentDir, "../workspace/WorkspaceRightPanel.tsx");
 
 test("ParameterInputPanel renders only required definitions in Main parameters", () => {
   const source = readFileSync(parameterInputPanelPath, "utf8");
@@ -18,6 +20,22 @@ test("ParameterInputPanel renders only required definitions in Main parameters",
   assert.match(source, /const mainDefinitions = getRequiredDefinitions\(catalogDefinitions\);/);
   assert.match(source, /mainDefinitions\.map\(\(definition\) =>/);
   assert.doesNotMatch(source, /definitions\.map\(\(definition\) =>/);
+});
+
+test("ParameterInputPanel remounts on selected node changes instead of resetting state after render", () => {
+  const source = readFileSync(parameterInputPanelPath, "utf8");
+  const diagramEditorSource = readFileSync(diagramEditorPath, "utf8");
+  const workspaceRightPanelSource = readFileSync(workspaceRightPanelPath, "utf8");
+
+  assert.doesNotMatch(source, /useEffect/);
+  assert.match(
+    diagramEditorSource,
+    /<ParameterInputPanel key=\{panelContext\.selectedNodeId \?\? "no-selection"\} \{\.\.\.panelContext\} \/>/
+  );
+  assert.match(
+    workspaceRightPanelSource,
+    /<ParameterInputPanel key=\{context\.selectedNodeId \?\? "no-selection"\} \{\.\.\.context\} \/>/
+  );
 });
 
 test("ParameterInputPanel validates required and stored optional definitions", () => {

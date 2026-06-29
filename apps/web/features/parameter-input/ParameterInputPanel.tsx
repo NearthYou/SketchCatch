@@ -1,7 +1,7 @@
 "use client";
 
 import { Check, ChevronDown, Plus, Search, Trash2 } from "lucide-react";
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useId, useMemo, useRef, useState } from "react";
 import type {
   FocusEvent as ReactFocusEvent,
   KeyboardEvent as ReactKeyboardEvent
@@ -64,11 +64,6 @@ export function ParameterInputPanel({
   );
   const [advancedParameterQuery, setAdvancedParameterQuery] = useState("");
   const [addedOptionalParameterNames, setAddedOptionalParameterNames] = useState<string[]>([]);
-
-  useEffect(() => {
-    setAdvancedParameterQuery("");
-    setAddedOptionalParameterNames([]);
-  }, [selectedNodeId]);
 
   if (!selectedNode) {
     return (
