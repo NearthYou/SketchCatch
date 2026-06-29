@@ -660,6 +660,46 @@ test("runDeploymentApply marks apply failures failed and masks secret output", a
   );
 });
 
+test("runDeploymentApply reports apply timeouts with a partial resource warning", async () => {
+  const repository = new FakeDeploymentRepository();
+  const applyArtifactStorage = new FakeApplyArtifactStorage();
+
+  const result = await runDeploymentApply(
+    {
+      deploymentId,
+      accessContext: createAccessContext()
+    },
+    repository,
+    {
+      applyArtifactStorage,
+      readTerraformArtifactFile: async () => terraformArtifactContent,
+      writePlanFile: async () => undefined,
+      prepareTerraformWorkspace: async () => ({
+        workdir: "C:/tmp/sketchcatch-terraform-apply",
+        mainFilePath: "C:/tmp/sketchcatch-terraform-apply/main.tf",
+        cleanup: async () => undefined
+      }),
+      prepareTerraformAwsCredentialEnv: async () => createPreparedCredentials(),
+      runTerraformInit: async () => createRunnerResult("init"),
+      runTerraformApply: async () =>
+        createRunnerResult("apply", {
+          exitCode: 143,
+          stdout:
+            "aws_instance.web: Still creating... [id=i-1234567890abcdef0, 00m50s elapsed]\n",
+          timedOut: true
+        })
+    }
+  );
+
+  assert.equal(result.deployment.status, "FAILED");
+  assert.equal(result.deployment.failureStage, "apply");
+  assert.equal(
+    repository.failedInput?.errorSummary,
+    "Terraform apply timed out. AWS resources may have been partially changed; verify resources before retry."
+  );
+  assert.equal(repository.failedInput?.stateObjectKey, applyArtifactStorage.stateObjectKey);
+});
+
 test("runDeploymentApply keeps successful apply as success when post-apply parsing warns", async () => {
   const repository = new FakeDeploymentRepository();
 

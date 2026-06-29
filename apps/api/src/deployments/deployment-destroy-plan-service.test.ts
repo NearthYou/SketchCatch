@@ -350,6 +350,7 @@ test("runDeploymentDestroyPlan restores state and stores a destroy plan artifact
       log.message.startsWith("[duration] deployment destroy plan save completed in ")
     )
   );
+  assert.equal(repository.logs.some((log) => log.message.includes("resource_changes")), false);
 });
 
 test("runDeploymentDestroyPlan only allows success or cleanup-capable failed deployments", async () => {

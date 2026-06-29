@@ -785,6 +785,10 @@ function splitOutputLines(output: string): string[] {
 
 function summarizeTerraformFailure(stage: string, result: TerraformRunResult): string {
   if (result.timedOut) {
+    if (stage === "Terraform apply") {
+      return `${stage} timed out. AWS resources may have been partially changed; verify resources before retry.`;
+    }
+
     return `${stage} timed out`;
   }
 

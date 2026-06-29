@@ -291,12 +291,10 @@ export async function runDeploymentDestroyPlan(
       planFileName: defaultPlanFileName,
       signal: input.abortSignal
     });
-    sequence = await appendTerraformOutput({
+    sequence = await appendTerraformErrorOutput({
       deploymentId: deployment.id,
       accessContext: input.accessContext,
       sequence,
-      stage: "plan",
-      label: "terraform show -json",
       result: terraform.showJson,
       repository
     });
@@ -682,6 +680,34 @@ async function appendTerraformOutput(input: {
     sequence: nextSequence,
     stage: input.stage,
     label: input.label,
+    result: input.result,
+    repository: input.repository
+  });
+}
+
+async function appendTerraformErrorOutput(input: {
+  deploymentId: string;
+  accessContext: ProjectAccessContext;
+  sequence: number;
+  result: TerraformRunResult;
+  repository: DeploymentRepository;
+}): Promise<number> {
+  const nextSequence = await appendOutputLines({
+    deploymentId: input.deploymentId,
+    accessContext: input.accessContext,
+    sequence: input.sequence,
+    stage: "plan",
+    output: input.result.stderr,
+    level: input.result.exitCode === 0 ? "WARN" : "ERROR",
+    repository: input.repository
+  });
+
+  return appendTerraformDurationLog({
+    deploymentId: input.deploymentId,
+    accessContext: input.accessContext,
+    sequence: nextSequence,
+    stage: "plan",
+    label: "terraform show -json",
     result: input.result,
     repository: input.repository
   });

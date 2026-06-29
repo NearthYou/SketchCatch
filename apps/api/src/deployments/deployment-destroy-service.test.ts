@@ -403,7 +403,10 @@ test("runDeploymentDestroy reports Terraform apply timeouts without marking dura
 
   assert.equal(result.deployment.status, "FAILED");
   assert.equal(result.deployment.failureStage, "destroy");
-  assert.equal(result.deployment.errorSummary, "Terraform destroy timed out");
+  assert.equal(
+    result.deployment.errorSummary,
+    "Terraform destroy timed out. AWS resources may have been partially deleted; verify resources before retry."
+  );
   assert(
     repository.logs.some(
       (log) => log.message === "[duration] terraform apply tfplan timed out after 60.0s"
