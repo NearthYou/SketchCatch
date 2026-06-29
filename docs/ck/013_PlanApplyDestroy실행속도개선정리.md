@@ -399,8 +399,6 @@ Destroy Apply에서 duration log를 붙인 곳:
 | 사용자/운영자 가시성 | Deployment log에 `[duration] ... completed in ...` 저장 |
 | 준비 구간 병렬화 | 독립 DB/S3/workspace 작업을 `Promise.all`로 병렬 실행 |
 | 불필요한 메모리 복사 제거 | `Buffer.from(planBuffer)` 제거 |
-| Terraform lock 파일 재사용 | init이 만든 `.terraform.lock.hcl`을 S3에 저장하고 다음 plan/apply/destroy workspace에 복원 |
-| Provider warmup 버전 정렬 | warmup Terraform도 `hashicorp/aws` `~> 5.0`을 사용해 실제 artifact와 같은 provider major version을 cache |
 
 ## 6. 수치 개선 요약
 
@@ -459,64 +457,6 @@ Destroy Apply: init, apply tfplan
 ```
 
 하지만 Terraform apply가 실제 AWS 리소스를 만드는 데 20초 걸린다면, 전체 체감 개선은 20초 중 일부 준비 시간만 줄어드는 수준이다.
-
-### 6.3 Terraform init 반복 비용 개선
-
-추가로 실제 실행 로그에서 `terraform init` 병목이 분명하게 확인됐다.
-
-수정 전 로그에서는 모든 단계가 새 작업공간에서 provider version을 다시 결정하고 AWS provider를 다시 설치했다.
-
-```text
-Finding hashicorp/aws versions matching "~> 5.0"...
-Installing hashicorp/aws v5.100.0...
-Terraform has created a lock file .terraform.lock.hcl
-```
-
-첨부 로그 기준 수정 전 `terraform init` 시간은 아래와 같았다.
-
-| 흐름 | 수정 전 init 시간 |
-| --- | ---: |
-| Plan | 18.0s |
-| Apply | 17.3s |
-| Destroy Plan | 18.8s |
-| Destroy Apply | 20.1s |
-
-원인은 두 가지였다.
-
-1. API가 Deployment마다 임시 workspace를 새로 만들고 cleanup하므로 `.terraform.lock.hcl`이 다음 단계로 이어지지 않았다.
-2. Provider cache warmup Terraform 파일에는 `hashicorp/aws` source만 있고 `~> 5.0` version 제약이 없어, 실제 생성 Terraform과 같은 provider 선택 경로를 보장하지 못했다.
-
-그래서 이번 수정에서는 `terraform init` 성공 직후 workspace의 `.terraform.lock.hcl`을 S3에 저장하고, 다음 plan/apply/destroy 실행 전에 같은 Deployment scope의 lock 파일을 workspace에 복원한다.
-
-S3 object key는 아래처럼 Deployment 단위로 고정한다.
-
-```text
-deployments/{deploymentId}/terraform/.terraform.lock.hcl
-```
-
-그리고 `provider-warmup.tf`에도 실제 Terraform artifact와 같은 AWS provider version 제약을 넣었다.
-
-```hcl
-terraform {
-  required_providers {
-    aws = {
-      source  = "hashicorp/aws"
-      version = "~> 5.0"
-    }
-  }
-}
-```
-
-이 수정 후 확인할 기준은 아래 구간이 매 단계 반복되지 않는 것이다.
-
-```text
-Installing hashicorp/aws v5.100.0...
-Terraform has created a lock file .terraform.lock.hcl
-```
-
-위 구간이 매 단계 반복되지 않고, provider cache와 lock file을 사용해 init 시간이 줄어드는지 확인한다.
-
-다만 이 문서 작성 시점에는 같은 AWS 환경에서 수정 후 재실측을 아직 하지 않았으므로, 실제 개선 수치는 다음 live Deployment 실행의 `[duration] terraform init completed in ...` 로그로 확정해야 한다.
 
 ## 7. 검증 결과
 
@@ -619,23 +559,6 @@ terraform apply 성공
 
 이 순서를 무리하게 섞으면 속도는 빨라질 수 있어도 안전성이 깨진다.
 
-### 8.6 Terraform lock/cache 최적화는 첫 실행과 AWS 작업 시간을 줄이지 못한다
-
-`.terraform.lock.hcl` 저장/복원과 `TF_PLUGIN_CACHE_DIR` provider cache는 반복 `terraform init` 비용을 줄이기 위한 최적화다.
-
-따라서 아래 시간은 줄이지 못한다.
-
-```text
-첫 Deployment에서 provider를 처음 내려받는 시간
-terraform plan의 AWS refresh/API 조회 시간
-terraform apply tfplan의 실제 리소스 생성/삭제 시간
-terraform show -json의 state parsing 시간
-```
-
-또한 서버의 `TF_PLUGIN_CACHE_DIR`가 컨테이너 재시작 뒤에도 유지되는 volume으로 mount되어 있지 않거나, API 프로세스가 cache directory에 쓸 권한이 없으면 효과가 작아진다.
-
-Provider version 제약을 바꾸거나 Terraform artifact의 provider 구성이 바뀌는 경우에도 lock/cache 재사용 효과는 줄어든다.
-
 ## 9. 앞으로 실제 수치를 쌓는 방법
 
 이번 수정 후부터는 실제 Deployment log에서 Terraform 명령별 시간이 보인다.
@@ -685,3 +608,509 @@ Destroy Apply 준비 일부 순차 대기: 8 -> 3
 실제 AWS 기준의 초 단위 개선폭은 다음 live Deployment 실행 후 `[duration]` 로그를 모아야 확정할 수 있다.
 
 이번 변경은 그 실측을 가능하게 만드는 기반 작업이기도 하다.
+
+## 11. 변경 이력
+
+이 아래부터는 기존 1차 속도 개선 내용과 섞지 않고, 이후에 추가로 진행한 성능 개선을 시간순으로 기록한다.
+
+### 2026-06-29 2차 개선: Terraform init 반복 비용 줄이기
+
+#### 문제
+
+실제 Deployment 실행 로그에서 `terraform init`가 매 단계마다 17~20초 정도 걸리는 것이 확인됐다.
+
+첨부 로그 기준 수정 전 `terraform init` 시간은 아래와 같았다.
+
+| 흐름 | 수정 전 init 시간 |
+| --- | ---: |
+| Plan | 18.0s |
+| Apply | 17.3s |
+| Destroy Plan | 18.8s |
+| Destroy Apply | 20.1s |
+
+로그에는 아래 메시지가 반복해서 나타났다.
+
+```text
+Finding hashicorp/aws versions matching "~> 5.0"...
+Installing hashicorp/aws v5.100.0...
+Terraform has created a lock file .terraform.lock.hcl
+```
+
+즉, Plan에서 provider를 한 번 결정했는데도 Apply, Destroy Plan, Destroy Apply에서 다시 새 workspace를 만들고 같은 provider 설치/lock 생성 과정을 반복하고 있었다.
+
+#### 원인
+
+1. SketchCatch는 안전을 위해 Deployment 실행마다 임시 Terraform workspace를 만들고, 실행 후 cleanup한다.
+2. 따라서 `terraform init`가 만든 `.terraform.lock.hcl`이 다음 단계로 이어지지 않았다.
+3. `TF_PLUGIN_CACHE_DIR`가 있더라도 lock file이 없으면 Terraform이 provider version 선택과 lock 생성을 다시 수행한다.
+4. 기존 `provider-warmup.tf`는 `hashicorp/aws` source만 지정하고 `~> 5.0` version 제약을 지정하지 않아, 실제 생성 Terraform artifact와 같은 provider major version warmup을 보장하지 못했다.
+
+#### 수정 내용
+
+`terraform init` 성공 직후 workspace의 `.terraform.lock.hcl`을 S3에 저장하고, 다음 plan/apply/destroy 실행 전에 같은 Deployment scope의 lock file을 workspace에 복원하도록 했다.
+
+S3 object key는 Deployment 단위로 고정했다.
+
+```text
+deployments/{deploymentId}/terraform/.terraform.lock.hcl
+```
+
+이 lock file은 성능 최적화용 artifact다. 누락되거나 다운로드/업로드에 실패해도 Deployment 자체를 실패시키지 않고, Terraform이 기존처럼 init을 다시 수행하게 둔다.
+
+#### 변경 파일
+
+| 파일 | 변경 내용 |
+| --- | --- |
+| [terraform-lock-file-storage.ts](../../apps/api/src/deployments/terraform-lock-file-storage.ts) | `.terraform.lock.hcl` S3 업로드/다운로드 저장소 추가 |
+| [terraform-lock-file-workspace.ts](../../apps/api/src/deployments/terraform-lock-file-workspace.ts) | workspace에 lock file을 복원하고 init 후 다시 업로드하는 helper 추가 |
+| [deployment-plan-service.ts](../../apps/api/src/deployments/deployment-plan-service.ts) | Plan init 전 lock 복원, init 성공 후 lock 저장 |
+| [deployment-apply-service.ts](../../apps/api/src/deployments/deployment-apply-service.ts) | Apply init 전 lock 복원, init 성공 후 lock 저장 |
+| [deployment-destroy-plan-service.ts](../../apps/api/src/deployments/deployment-destroy-plan-service.ts) | Destroy Plan init 전 lock 복원, init 성공 후 lock 저장 |
+| [deployment-destroy-service.ts](../../apps/api/src/deployments/deployment-destroy-service.ts) | Destroy Apply init 전 lock 복원, init 성공 후 lock 저장 |
+| [deployment-artifact-security.ts](../../apps/api/src/deployments/deployment-artifact-security.ts) | `terraform-lock` artifact kind와 object key 검증 추가 |
+| [deployment-plan-artifact-storage.ts](../../apps/api/src/deployments/deployment-plan-artifact-storage.ts) | plan artifact storage에서 lock file storage capability 제공 |
+| [deployment-apply-artifact-storage.ts](../../apps/api/src/deployments/deployment-apply-artifact-storage.ts) | apply artifact storage에서 lock file storage capability 제공 |
+| [terraform-plugin-cache-warmup.ts](../../apps/api/src/deployments/terraform-plugin-cache-warmup.ts) | warmup provider 제약을 `hashicorp/aws` `~> 5.0`으로 정렬 |
+
+#### 기대 효과
+
+다음 실행부터는 아래 구간이 매 단계 반복되지 않는지 확인한다.
+
+```text
+Installing hashicorp/aws v5.100.0...
+Terraform has created a lock file .terraform.lock.hcl
+```
+
+#### 실측 결과
+
+지난번 로그를 수정 전 기준으로, 이번 로그를 수정 후 기준으로 놓고 비교했다.
+
+수정 후 live Deployment를 다시 실행한 결과, 첫 Plan init은 여전히 provider를 설치했지만 Apply 이후 단계에서는 lock file과 shared cache를 재사용했다.
+
+첫 Plan init 로그:
+
+```text
+Installing hashicorp/aws v5.100.0...
+Terraform has created a lock file .terraform.lock.hcl
+[duration] terraform init completed in 20.9s
+```
+
+Apply 이후 init 로그:
+
+```text
+Reusing previous version of hashicorp/aws from the dependency lock file
+Using hashicorp/aws v5.100.0 from the shared cache directory
+[duration] terraform init completed in 4.5s
+```
+
+Destroy Plan과 Destroy Apply에서도 같은 재사용 흐름이 확인됐다.
+
+```text
+Reusing previous version of hashicorp/aws from the dependency lock file
+Using hashicorp/aws v5.100.0 from the shared cache directory
+Using previously-installed hashicorp/aws v5.100.0
+```
+
+실측 init 시간 비교는 아래와 같다.
+
+| 흐름 | 수정 전 init | 수정 후 init | 변화 |
+| --- | ---: | ---: | ---: |
+| Plan | 18.0s | 20.9s | 2.9s 증가 |
+| Apply | 17.3s | 4.5s | 12.8s 감소 |
+| Destroy Plan | 18.8s | 5.3s | 13.5s 감소 |
+| Destroy Apply | 20.1s | 6.4s | 13.7s 감소 |
+
+첫 Plan은 해당 Deployment의 첫 실행이라 lock/cache 효과를 받지 못했다. 대신 Apply 이후 세 단계의 init 합계는 아래처럼 줄었다.
+
+```text
+수정 전 Apply 이후 init 합계: 17.3s + 18.8s + 20.1s = 56.2s
+수정 후 Apply 이후 init 합계: 4.5s + 5.3s + 6.4s = 16.2s
+감소: 40.0s, 약 71.2%
+```
+
+첫 Plan까지 포함한 전체 init 합계도 줄었다.
+
+```text
+수정 전 전체 init 합계: 74.2s
+수정 후 전체 init 합계: 37.1s
+감소: 37.1s, 약 50.0%
+```
+
+전체 Terraform command 시간 비교는 아래와 같다.
+
+| 단계 | 명령 | 수정 전 | 수정 후 | 변화 |
+| --- | --- | ---: | ---: | ---: |
+| Plan | `terraform init` | 18.0s | 20.9s | 2.9s 증가 |
+| Plan | `terraform plan` | 5.2s | 5.2s | 변화 없음 |
+| Plan | `terraform show -json` | 2.9s | 2.9s | 변화 없음 |
+| Apply | `terraform init` | 17.3s | 4.5s | 12.8s 감소 |
+| Apply | `terraform apply tfplan` | 38.9s | 39.1s | 0.2s 증가 |
+| Apply | `terraform output -json` | 1.2s | 1.2s | 변화 없음 |
+| Apply | `terraform show -json` | 4.0s | 4.3s | 0.3s 증가 |
+| Destroy Plan | `terraform init` | 18.8s | 5.3s | 13.5s 감소 |
+| Destroy Plan | `terraform plan -destroy` | 7.1s | 7.2s | 0.1s 증가 |
+| Destroy Plan | `terraform show -json` | 3.0s | 3.0s | 변화 없음 |
+| Destroy Apply | `terraform init` | 20.1s | 6.4s | 13.7s 감소 |
+| Destroy Apply | `terraform apply tfplan` | 45.7s | 55.8s | 10.1s 증가 |
+
+단계별 소계는 아래와 같다.
+
+| 흐름 | 수정 전 | 수정 후 | 변화 |
+| --- | ---: | ---: | ---: |
+| Plan 전체 | 26.1s | 29.0s | 2.9s 증가 |
+| Apply 전체 | 61.4s | 49.1s | 12.3s 감소 |
+| Destroy Plan 전체 | 28.9s | 15.5s | 13.4s 감소 |
+| Destroy Apply 전체 | 65.8s | 62.2s | 3.6s 감소 |
+
+전체 Terraform command 합계는 아래처럼 줄었다.
+
+```text
+수정 전 전체 Terraform command 합계: 182.2s
+수정 후 전체 Terraform command 합계: 155.8s
+감소: 26.4s, 약 14.5%
+```
+
+init만 따로 보면 개선폭이 더 크다.
+
+```text
+수정 전 init 합계: 74.2s
+수정 후 init 합계: 37.1s
+감소: 37.1s, 약 50.0%
+```
+
+반대로 init 외 Terraform command 시간은 이번 로그에서 늘었다.
+
+```text
+수정 전 init 외 command 합계: 108.0s
+수정 후 init 외 command 합계: 118.7s
+증가: 10.7s
+```
+
+주된 이유는 `terraform apply tfplan`로 실행한 destroy apply가 지난번 45.7s에서 이번 55.8s로 10.1s 늘었기 때문이다.
+
+따라서 이번 수정은 `terraform init` 반복 비용을 줄이는 데는 효과가 있었다. 전체 시간도 26.4s 줄었지만, 실제 AWS 리소스 생성/삭제 구간의 변동성이 있어서 init 감소분이 그대로 전체 감소분이 되지는 않았다.
+
+#### 실행 중 주의할 점
+
+이번 변경은 Terraform 실행의 정합성을 바꾸는 기능이 아니라, init 준비물을 재사용하는 성능 최적화다.
+
+정상 케이스에서는 문제가 생길 가능성이 낮다. 이유는 아래와 같다.
+
+1. `.terraform.lock.hcl` 복원/저장은 best-effort로 동작한다.
+2. lock file 다운로드나 업로드가 실패해도 Deployment를 실패시키지 않는다.
+3. lock file이 없으면 Terraform이 기존처럼 provider version을 다시 선택하고 init을 수행한다.
+4. lock file object key는 `deploymentId` 단위로 고정되어 다른 Deployment와 섞이지 않는다.
+5. 저장하는 lock file에는 provider version/checksum 정보만 있고 AWS credential이나 Terraform state 값은 들어가지 않는다.
+
+다만 아래 상황에서는 실행 중 문제가 생기거나 기대한 성능 개선이 안 나올 수 있다.
+
+| 주의 지점 | 영향 | 대응 |
+| --- | --- | --- |
+| `TF_PLUGIN_CACHE_DIR`가 없거나 API 프로세스가 쓸 수 없음 | shared cache를 못 써서 init이 다시 느려질 수 있음 | API 컨테이너에 writable volume으로 cache directory mount 확인 |
+| S3 lock file 다운로드/업로드가 느림 | init 전에 작은 S3 I/O가 추가되어 약간의 대기 발생 | lock file은 작으므로 보통 작지만, S3 지연이 반복되면 별도 duration log 추가 검토 |
+| 같은 Deployment에서 Terraform provider version 제약이 바뀜 | 기존 lock file이 새 constraint와 맞지 않아 `terraform init` 실패 가능 | provider constraint 변경 기능이 생기면 lock key를 Terraform artifact hash 단위로 분리하거나 init 재시도 정책 추가 |
+| lock/cache 실패가 조용히 무시됨 | 실행은 계속되지만 왜 다시 느려졌는지 로그만으로 바로 알기 어려움 | 필요하면 lock restore/upload 실패를 WARN이 아닌 debug/metric으로 남기는 후속 개선 검토 |
+| 첫 Plan 실행 | 아직 lock file이 없어서 provider 설치 시간이 그대로 발생 | 첫 실행은 warmup/cache 상태에 의존하고, 이후 단계부터 개선 확인 |
+
+현재 실측 로그에서는 Apply, Destroy Plan, Destroy Apply에서 lock/cache 재사용이 확인됐으므로 이번 변경 자체는 의도대로 동작했다.
+
+#### 검증 결과
+
+| 검증 | 결과 |
+| --- | --- |
+| `apps/api` typecheck | 통과 |
+| `apps/api` eslint | 통과 |
+| lock file storage/workspace + deployment 관련 대상 테스트 30개 | 통과 |
+| API 전체 테스트 364개 | 통과 |
+| `apps/api` build | 통과 |
+| `git diff --check` | 통과 |
+
+#### 한계
+
+이 방식은 반복 `terraform init` 비용을 줄이기 위한 최적화다. 아래 시간은 줄이지 못한다.
+
+```text
+첫 Deployment에서 provider를 처음 내려받는 시간
+terraform plan의 AWS refresh/API 조회 시간
+terraform apply tfplan의 실제 리소스 생성/삭제 시간
+terraform show -json의 state parsing 시간
+```
+
+또한 서버의 `TF_PLUGIN_CACHE_DIR`가 컨테이너 재시작 뒤에도 유지되는 volume으로 mount되어 있지 않거나, API 프로세스가 cache directory에 쓸 권한이 없으면 효과가 작아진다.
+
+Provider version 제약을 바꾸거나 Terraform artifact의 provider 구성이 바뀌는 경우에도 lock/cache 재사용 효과는 줄어든다.
+
+### 2026-06-29 3차 개선: 첫 Plan prewarm과 비-Terraform duration 계측
+
+#### 작업 범위
+
+이번 단계에서는 이전에 검토했던 1순위 개선안은 제외했다.
+
+진행한 작업은 아래 2개다.
+
+1. Deployment 생성 직후 `terraform init` prewarm을 실행해서 첫 Plan 전에 `.terraform.lock.hcl`을 만들고 S3에 저장한다.
+2. Terraform CLI 밖에서 발생하는 S3 업로드, DB 저장, 상태 저장 구간에도 duration log를 남긴다.
+
+#### 문제
+
+2차 개선에서는 Apply, Destroy Plan, Destroy Apply의 `terraform init` 반복 비용은 크게 줄었지만 첫 Plan은 여전히 느렸다.
+
+첫 Plan을 누르기 전에는 아직 해당 Deployment의 `.terraform.lock.hcl`이 없다. 그래서 첫 Plan의 `terraform init`은 provider version 탐색과 lock file 생성을 그대로 수행했다.
+
+또 다른 문제는 Terraform command 시간은 보이기 시작했지만, Terraform 밖의 시간이 여전히 불투명했다는 점이다.
+
+예를 들면 아래 구간은 실제로 시간이 걸릴 수 있는데, 이전 로그만으로는 얼마나 걸리는지 알 수 없었다.
+
+```text
+terraform plan artifact upload
+deployment plan save
+terraform state upload
+deployment apply result save
+deployment destroy result save
+```
+
+#### 수정 내용
+
+Deployment 생성 직후 frontend에서 `/deployments/:deploymentId/init`을 호출하도록 했다.
+
+이 init은 AWS 리소스를 생성하지 않는다. Terraform provider 준비와 lock file 생성만 수행한다. 실패하더라도 Deployment 생성 자체는 유지되며, 이후 첫 Plan에서 기존 흐름대로 다시 init을 수행할 수 있다.
+
+관련 코드:
+
+- [DeploymentPanel.tsx](../../apps/web/features/workspace/DeploymentPanel.tsx)
+- [deployment-init-service.ts](../../apps/api/src/deployments/deployment-init-service.ts)
+
+`runDeploymentInit` 성공 시에는 workspace의 `.terraform.lock.hcl`을 S3에 저장한다.
+
+```text
+deployments/{deploymentId}/terraform/.terraform.lock.hcl
+```
+
+비-Terraform duration 계측은 공통 helper로 분리했다.
+
+관련 코드:
+
+- [deployment-duration-logs.ts](../../apps/api/src/deployments/deployment-duration-logs.ts)
+- [deployment-plan-service.ts](../../apps/api/src/deployments/deployment-plan-service.ts)
+- [deployment-apply-service.ts](../../apps/api/src/deployments/deployment-apply-service.ts)
+- [deployment-destroy-plan-service.ts](../../apps/api/src/deployments/deployment-destroy-plan-service.ts)
+- [deployment-destroy-service.ts](../../apps/api/src/deployments/deployment-destroy-service.ts)
+
+추가된 로그 예시는 아래와 같다.
+
+```text
+[duration] terraform lock file upload completed in 12ms
+[duration] terraform plan artifact upload completed in 38ms
+[duration] deployment plan save completed in 21ms
+[duration] terraform state upload completed in 44ms
+[duration] deployment apply result save completed in 18ms
+[duration] deployment destroy result save completed in 15ms
+```
+
+#### 기대 효과
+
+첫 Plan의 `terraform init`도 prewarm이 먼저 끝난 경우에는 lock file을 재사용할 수 있다.
+
+기존에는 첫 Plan에서 아래 메시지가 나왔다.
+
+```text
+Finding hashicorp/aws versions matching "~> 5.0"...
+Installing hashicorp/aws v5.100.0...
+Terraform has created a lock file .terraform.lock.hcl
+```
+
+prewarm이 성공하면 첫 Plan에서도 아래 흐름으로 바뀔 수 있다.
+
+```text
+Reusing previous version of hashicorp/aws from the dependency lock file
+Using hashicorp/aws v5.100.0 from the shared cache directory
+```
+
+다만 이 효과는 사용자가 Deployment 생성 직후 바로 Plan을 누르지 않고, init prewarm이 먼저 끝난 경우에 가장 잘 나타난다.
+
+또한 이제 전체 시간을 아래처럼 나눠서 볼 수 있다.
+
+```text
+Terraform command 시간
+S3 artifact/state upload 시간
+DB 저장 시간
+```
+
+따라서 다음 병목이 `terraform apply tfplan`인지, S3인지, DB인지 로그만 보고 분리할 수 있다.
+
+#### 한계와 주의점
+
+이 방식은 AWS 리소스 생성/삭제 자체를 빠르게 만들지는 않는다.
+
+`terraform apply tfplan`에서 EC2, VPC, Subnet, Route Table, Security Group, S3 Bucket을 실제로 만들거나 지우는 시간은 여전히 AWS와 Terraform provider가 결정한다.
+
+prewarm도 best-effort다.
+
+```text
+Deployment 생성 성공
+-> init prewarm 요청
+-> init 성공 시 lock file 저장
+-> init 실패 시 기존 첫 Plan 흐름으로 fallback
+```
+
+즉, prewarm 실패 때문에 Deployment 생성이 실패하지는 않는다. 대신 첫 Plan에서 다시 차가운 init 비용이 발생할 수 있다.
+
+비-Terraform duration log도 성공한 작업만 기록한다.
+
+S3 업로드나 DB 저장이 실패하면 기존 failure/warning 흐름으로 넘어가며, 실패 작업의 duration은 별도로 남기지 않는다. 실패 duration까지 필요하면 `runLoggedDeploymentOperation`에 실패 duration 기록 정책을 추가해야 한다.
+
+#### 검증 결과
+
+| 검증 | 결과 |
+| --- | --- |
+| `corepack pnpm --filter @sketchcatch/api typecheck` | 통과 |
+| `corepack pnpm --filter @sketchcatch/web typecheck` | 통과 |
+| deployment init/plan/apply/destroy service 테스트 25개 | 통과 |
+| workspace api/deployment-actions 테스트 26개 | 통과 |
+
+초기 문서 작성 시점에는 실제 AWS E2E 재측정을 하지 않았다. 이후 3차 개선 상태로 live Deployment를 다시 실행했고, 아래처럼 실측값을 추가로 확보했다.
+
+다음 실제 측정에서는 아래 항목을 이전 2차 측정값과 비교하면 된다.
+
+| 항목 | 확인할 로그 |
+| --- | --- |
+| 첫 Plan init 개선 여부 | `[duration] terraform init completed in ...` |
+| lock upload 시간 | `[duration] terraform lock file upload completed in ...` |
+| tfplan S3 업로드 시간 | `[duration] terraform plan artifact upload completed in ...` 또는 `[duration] terraform destroy plan artifact upload completed in ...` |
+| DB plan 저장 시간 | `[duration] deployment plan save completed in ...` 또는 `[duration] deployment destroy plan save completed in ...` |
+| state S3 업로드 시간 | `[duration] terraform state upload completed in ...` |
+| 결과 DB 저장 시간 | `[duration] deployment apply result save completed in ...`, `[duration] deployment destroy result save completed in ...` |
+
+#### 3차 개선 후 live AWS 재측정 결과
+
+이 로그는 3차 개선까지 들어간 코드로 실행한 결과다. 따라서 이 값은 3차 개선 후 실제 병목을 확인하기 위한 기준선으로 본다.
+
+실행 대상은 기존 full-stack demo Terraform artifact였고, create plan은 `8 to add`, destroy plan은 `8 to destroy`였다.
+
+```text
+aws_vpc
+aws_subnet
+aws_internet_gateway
+aws_route_table
+aws_route_table_association
+aws_security_group
+aws_instance
+aws_s3_bucket
+```
+
+##### 전체 duration 요약
+
+| 구간 | 주요 로그 | 시간 |
+| --- | --- | ---: |
+| Deployment 생성 직후 prewarm init | `[duration] terraform init completed in 19.0s` | 19.0s |
+| Apply Plan init | `[duration] terraform init completed in 3.9s` | 3.9s |
+| Apply Plan | `[duration] terraform plan completed in 5.1s` | 5.1s |
+| Apply Plan show | `[duration] terraform show -json completed in 2.8s` | 2.8s |
+| Apply init | `[duration] terraform init completed in 4.0s` | 4.0s |
+| Apply 실행 | `[duration] terraform apply tfplan completed in 39.6s` | 39.6s |
+| Apply output | `[duration] terraform output -json completed in 1.1s` | 1.1s |
+| Apply state show | `[duration] terraform show -json completed in 3.7s` | 3.7s |
+| Destroy Plan init | `[duration] terraform init completed in 5.4s` | 5.4s |
+| Destroy Plan | `[duration] terraform plan -destroy completed in 6.8s` | 6.8s |
+| Destroy Plan show | `[duration] terraform show -json completed in 2.6s` | 2.6s |
+| Destroy init | `[duration] terraform init completed in 4.9s` | 4.9s |
+| Destroy 실행 | `[duration] terraform apply tfplan completed in 60.0s` | 60.0s |
+
+Plan/Apply/Destroy 사이의 작은 저장 작업은 모두 ms 단위였다.
+
+| 작업 | 시간 |
+| --- | ---: |
+| `terraform lock file upload` after prewarm | 104ms |
+| `deployment init status save` | 4ms |
+| `terraform lock file upload` before apply plan | 52ms |
+| `terraform plan artifact upload` | 87ms |
+| `deployment plan save` | 10ms |
+| `terraform lock file upload` before apply | 47ms |
+| `terraform state upload` | 95ms |
+| `deployment apply result save` | 17ms |
+| `terraform lock file upload` before destroy plan | 109ms |
+| `terraform destroy plan artifact upload` | 89ms |
+| `deployment destroy plan save` | 8ms |
+| `terraform lock file upload` before destroy | 45ms |
+
+##### 3차 개선 효과 확인
+
+prewarm 자체는 첫 실행이라 `terraform init`에 19.0초가 걸렸다. 하지만 사용자가 실제 Apply Plan을 실행할 때는 lock file과 shared cache를 재사용해서 init이 3.9초로 줄었다.
+
+```text
+Reusing previous version of hashicorp/aws from the dependency lock file
+Using hashicorp/aws v5.100.0 from the shared cache directory
+```
+
+Apply, Destroy Plan, Destroy Apply에서도 init은 4~5초대로 유지됐다.
+
+```text
+Apply init: 4.0s
+Destroy Plan init: 5.4s
+Destroy Apply init: 4.9s
+```
+
+따라서 3차에서 의도한 `init prewarm + lock/cache 재사용`은 동작했다. 이제 병목은 init이 아니라 AWS 리소스 생성/삭제 구간이었다.
+
+##### AWS 리소스 생성 병목
+
+Apply 실행은 39.6초였다.
+
+개별 리소스 로그를 보면 시간이 긴 작업은 아래였다.
+
+| 리소스 | 완료 로그 | 관찰 시간 |
+| --- | --- | ---: |
+| `aws_vpc.main` | `Creation complete after 12s` | 12s |
+| `aws_subnet.public` | `Creation complete after 11s` | 11s |
+| `aws_instance.web` | `Creation complete after 13s` | 13s |
+| `aws_security_group.web` | `Creation complete after 3s` | 3s |
+| `aws_s3_bucket.demo` | `Creation complete after 2s` | 2s |
+| `aws_internet_gateway.igw` | `Creation complete after 1s` | 1s |
+| `aws_route_table.public` | `Creation complete after 1s` | 1s |
+| `aws_route_table_association.public` | `Creation complete after 1s` | 1s |
+
+Terraform은 일부 리소스를 병렬로 만들었지만, 의존 관계 때문에 완전히 동시에 끝나지는 않는다.
+
+```text
+VPC 생성
+-> IGW/Subnet/Security Group 생성
+-> Route Table/Association 생성
+-> EC2 생성
+```
+
+그래서 EC2 자체가 13초여도 전체 Apply는 39.6초까지 늘어났다.
+
+##### AWS 리소스 삭제 병목
+
+Destroy 실행은 60.0초였다.
+
+빠르게 삭제된 리소스도 있었다.
+
+```text
+aws_route_table_association.public: Destruction complete after 0s
+aws_s3_bucket.demo: Destruction complete after 0s
+aws_route_table.public: Destruction complete after 0s
+```
+
+하지만 `aws_instance.web`와 `aws_internet_gateway.igw`는 50초까지 계속 대기했다.
+
+```text
+aws_instance.web: Still destroying... 00m50s elapsed
+aws_internet_gateway.igw: Still destroying... 00m50s elapsed
+```
+
+결국 Destroy 전체는 `terraform apply tfplan completed in 60.0s`로 끝났다. 이 구간은 SketchCatch 내부 DB/S3 저장 시간이 아니라 AWS가 실제 EC2 termination, network detach/delete를 처리하는 시간이다.
+
+##### 결론
+
+이 로그 기준으로 이제 줄여야 할 대상은 명확하다.
+
+| 구분 | 판단 |
+| --- | --- |
+| `terraform init` | prewarm/lock/cache로 3.9~5.4초까지 줄어듦 |
+| S3/DB 저장 | 대부분 4~109ms라 병목 아님 |
+| `terraform plan`, `terraform show -json` | 각각 2.6~6.8초 수준 |
+| `terraform apply tfplan` create | 39.6초, AWS 생성 대기 병목 |
+| `terraform apply tfplan` destroy | 60.0초, AWS 삭제 대기 병목 |
+
+따라서 VPC/Subnet/IGW/Route Table까지 매번 만들고 지우는 한, 해당 AWS 처리 시간은 반드시 기다려야 한다. 사용자가 체감하는 시간을 더 줄이려면 AWS가 처리할 리소스 수 자체를 줄여야 한다.
