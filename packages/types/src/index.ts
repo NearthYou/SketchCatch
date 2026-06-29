@@ -796,6 +796,7 @@ export type AwsRegionCode =
 
 export type DiagramNodeMetadata = {
   awsRegion?: AwsRegionCode | undefined;
+  parentAreaNodeId?: string | undefined;
 };
 
 export type DiagramNodeParameters = {

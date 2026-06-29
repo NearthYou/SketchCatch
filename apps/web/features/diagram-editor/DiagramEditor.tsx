@@ -52,12 +52,18 @@ import { ParameterInputPanel } from "../parameter-input";
 import { terraformParameterCatalog } from "../parameter-input/catalog";
 import { ResourceSettingsPanel } from "../resource-settings";
 import { DEFAULT_DIAGRAM_VIEWPORT, EMPTY_DIAGRAM } from "./constants";
-import { applyAreaNodeMovement } from "./area-node-movement";
+import {
+  applyAreaNodeMovement,
+  applyAreaNodeParentAssignments,
+  clearDeletedAreaParentAssignments,
+  clearOutOfBoundsAreaParentAssignments
+} from "./area-node-movement";
+import { findInnermostAreaNodeAtPoint } from "./area-nodes";
 import { DiagramEdgeToolbar } from "./DiagramEdgeToolbar";
 import { DiagramNodeView } from "./DiagramNodeView";
 import {
   applyNodeMetadataUpdate,
-  applyNodeParametersUpdate,
+  applyNodeParametersUpdateWithResourceLabel,
   areDiagramsEqual,
   clearActiveResourceDragPayload,
   cloneDiagram,
@@ -74,7 +80,7 @@ import {
 } from "./diagram-utils";
 import { toFlowEdges, toFlowNodes } from "./flow-mappers";
 import {
-  applyInnermostReferenceDropTarget,
+  applyInnermostReferenceDropTargets,
   findInnermostVisualDropTarget
 } from "./reference-drop-targets";
 import type {
@@ -399,19 +405,9 @@ function DiagramEditorInner({
     (nodeId, update) => {
       commitDiagramUpdate((currentDiagram) => ({
         ...currentDiagram,
-        nodes: updateNodeById(currentDiagram.nodes, nodeId, (node) => {
-          const nextNode = applyNodeParametersUpdate(node, update);
-          const nextResourceName = nextNode.parameters?.resourceName.trim();
-
-          if (!nextResourceName || nextResourceName === node.parameters?.resourceName) {
-            return nextNode;
-          }
-
-          return {
-            ...nextNode,
-            label: nextResourceName
-          };
-        })
+        nodes: updateNodeById(currentDiagram.nodes, nodeId, (node) =>
+          applyNodeParametersUpdateWithResourceLabel(node, update)
+        )
       }));
     },
     [commitDiagramUpdate]
@@ -572,12 +568,16 @@ function DiagramEditorInner({
   const handleResizeEnd = useCallback(
     (nodeId: string, size: DiagramNode["size"]) => {
       const before = resizeSnapshotRef.current;
-      const after = {
+      const resizedDiagram = {
         ...diagramRef.current,
         nodes: updateNodeById(diagramRef.current.nodes, nodeId, (node) => ({
           ...node,
           size
         }))
+      };
+      const after = {
+        ...resizedDiagram,
+        nodes: clearOutOfBoundsAreaParentAssignments(resizedDiagram.nodes, new Set([nodeId]))
       };
 
       replaceDiagram(after);
@@ -748,13 +748,14 @@ function DiagramEditorInner({
 
         return position ? { ...node, position: { ...position } } : node;
       }), directlyMovedNodeIds);
-      const movedNodeIds = getMovedNodeIdsFromNodes(snapshotNodes, positionedNodes);
+      const nodesWithAssignedParents = applyAreaNodeParentAssignments(positionedNodes, directlyMovedNodeIds);
+      const movedNodeIds = getMovedNodeIdsFromNodes(snapshotNodes, nodesWithAssignedParents);
       const after = {
         ...diagramRef.current,
-        nodes: positionedNodes.map((node) =>
-          movedNodeIds.has(node.id)
-            ? applyInnermostReferenceDropTarget(node, positionedNodes, terraformParameterCatalog)
-            : node
+        nodes: applyInnermostReferenceDropTargets(
+          nodesWithAssignedParents,
+          movedNodeIds,
+          terraformParameterCatalog
         )
       };
 
@@ -832,15 +833,18 @@ function DiagramEditorInner({
 
       commitDiagramUpdate((currentDiagram) => {
         const nodesWithNextNode = [...currentDiagram.nodes, nextNode];
-        const nodeWithReferences = applyInnermostReferenceDropTarget(
-          nextNode,
+        const nodesWithAssignedParents = applyAreaNodeParentAssignments(
           nodesWithNextNode,
-          terraformParameterCatalog
+          new Set([nextNode.id])
         );
 
         return {
           ...currentDiagram,
-          nodes: [...currentDiagram.nodes, nodeWithReferences]
+          nodes: applyInnermostReferenceDropTargets(
+            nodesWithAssignedParents,
+            new Set([nextNode.id]),
+            terraformParameterCatalog
+          )
         };
       });
       setSelectedNodeIds([nextNode.id]);
@@ -882,6 +886,22 @@ function DiagramEditorInner({
     updateActiveReferenceDropTargetNodeId(null);
   }, [updateActiveReferenceDropTargetNodeId]);
 
+  const handlePaneClick = useCallback(
+    (event: ReactMouseEvent) => {
+      const position = reactFlow.screenToFlowPosition({
+        x: event.clientX,
+        y: event.clientY
+      });
+      const areaNode = findInnermostAreaNodeAtPoint(diagramRef.current.nodes, position);
+
+      setSelectedNodeIds(areaNode ? [areaNode.id] : []);
+      setSelectedEdgeIds([]);
+      setInspectedNodeId(null);
+      focusEditorShell();
+    },
+    [focusEditorShell, reactFlow]
+  );
+
   const deleteSelection = useCallback(() => {
     const nodeIds = selectedNodeIds;
     const edgeIds = selectedEdgeIds;
@@ -890,9 +910,18 @@ function DiagramEditorInner({
       return;
     }
 
-    commitDiagramUpdate((currentDiagram) =>
-      removeEdgesFromDiagram(removeNodesFromDiagram(currentDiagram, nodeIds), edgeIds)
-    );
+    commitDiagramUpdate((currentDiagram) => {
+      const deletedNodeIds = new Set(nodeIds);
+      const diagramWithoutSelection = removeEdgesFromDiagram(
+        removeNodesFromDiagram(currentDiagram, nodeIds),
+        edgeIds
+      );
+
+      return {
+        ...diagramWithoutSelection,
+        nodes: clearDeletedAreaParentAssignments(diagramWithoutSelection.nodes, deletedNodeIds)
+      };
+    });
     setSelectedNodeIds([]);
     setSelectedEdgeIds([]);
   }, [commitDiagramUpdate, selectedEdgeIds, selectedNodeIds]);
@@ -916,10 +945,17 @@ function DiagramEditorInner({
 
     const pastedNodes = createPastedNodes(clipboardRef.current, diagramRef.current.nodes);
 
-    commitDiagramUpdate((currentDiagram) => ({
-      ...currentDiagram,
-      nodes: [...currentDiagram.nodes, ...pastedNodes]
-    }));
+    commitDiagramUpdate((currentDiagram) => {
+      const nodesWithPastedNodes = [...currentDiagram.nodes, ...pastedNodes];
+
+      return {
+        ...currentDiagram,
+        nodes: applyAreaNodeParentAssignments(
+          nodesWithPastedNodes,
+          new Set(pastedNodes.map((node) => node.id))
+        )
+      };
+    });
     setSelectedNodeIds(pastedNodes.map((node) => node.id));
     setSelectedEdgeIds([]);
   }, [commitDiagramUpdate]);
@@ -1316,10 +1352,7 @@ function DiagramEditorInner({
             onNodeDrag={handleNodeDrag}
             onNodeDragStop={handleNodeDragStop}
             onNodesChange={handleNodesChange}
-            onPaneClick={() => {
-              setInspectedNodeId(null);
-              focusEditorShell();
-            }}
+            onPaneClick={handlePaneClick}
             onSelectionChange={handleSelectionChange}
             panOnDrag={interactionMode === "pan"}
             proOptions={{ hideAttribution: true }}

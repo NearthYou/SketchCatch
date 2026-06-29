@@ -20,6 +20,7 @@ import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactNode } from
 
 import { BORDER_COLOR_SWATCHES, NODE_COLOR_SWATCHES } from "./constants";
 import { getAreaNodeIconUrl, getAreaNodeLabel, isAreaNode } from "./area-nodes";
+import { getNodeResizeBounds } from "./node-resize-bounds";
 import type { DiagramFlowNode } from "./types";
 import styles from "./diagram-editor.module.css";
 
@@ -28,6 +29,13 @@ const CONNECTION_HANDLES = [
   { id: "handle-top", position: Position.Top },
   { id: "handle-right", position: Position.Right },
   { id: "handle-bottom", position: Position.Bottom }
+] as const;
+
+const AREA_NODE_HIT_EDGES = [
+  styles.areaNodeHitEdgeTop,
+  styles.areaNodeHitEdgeRight,
+  styles.areaNodeHitEdgeBottom,
+  styles.areaNodeHitEdgeLeft
 ] as const;
 
 const AREA_NODE_DEFAULT_BORDER_COLOR = "#bfdbfe";
@@ -43,7 +51,7 @@ export function DiagramNodeView({ data, id, isConnectable, selected }: NodeProps
   const borderColor = getDisplayBorderColor(isArea, node.style?.borderColor);
   const textColor = node.style?.textColor ?? "#172033";
   const isDataNode = node.parameters?.terraformBlockType === "data";
-  const resizeBounds = getResizeBounds(node.kind);
+  const resizeBounds = getNodeResizeBounds(node);
   const nodeShellStyle = getNodeShellStyle(isArea, isResourceNode, borderColor);
   const areaNodeIconUrl = isArea ? getAreaNodeIconUrl(node) : undefined;
   const areaNodeLabel = isArea ? getAreaNodeLabel(node) : "";
@@ -164,12 +172,21 @@ export function DiagramNodeView({ data, id, isConnectable, selected }: NodeProps
         style={nodeShellStyle}
       >
         {isArea ? (
-          <div className={styles.areaNodeHeader} style={{ color: textColor }}>
-            {areaNodeIconUrl ? (
-              <img alt="" className={styles.areaNodeHeaderIcon} draggable={false} src={areaNodeIconUrl} />
-            ) : null}
-            <span className={styles.areaNodeHeaderText}>{areaNodeLabel}</span>
-          </div>
+          <>
+            {AREA_NODE_HIT_EDGES.map((edgeClassName) => (
+              <div
+                aria-hidden="true"
+                className={`${styles.areaNodeHitEdge} ${edgeClassName}`}
+                key={edgeClassName}
+              />
+            ))}
+            <div className={styles.areaNodeHeader} style={{ color: textColor }}>
+              {areaNodeIconUrl ? (
+                <img alt="" className={styles.areaNodeHeaderIcon} draggable={false} src={areaNodeIconUrl} />
+              ) : null}
+              <span className={styles.areaNodeHeaderText}>{areaNodeLabel}</span>
+            </div>
+          </>
         ) : isResourceNode ? (
           <>
             <div className={styles.resourceNodeIconFrame}>
@@ -232,24 +249,6 @@ export function DiagramNodeView({ data, id, isConnectable, selected }: NodeProps
       ) : null}
     </>
   );
-}
-
-function getResizeBounds(kind: DiagramFlowNode["data"]["node"]["kind"]) {
-  if (kind === "design") {
-    return {
-      maxHeight: 640,
-      maxWidth: 840,
-      minHeight: 100,
-      minWidth: 140
-    };
-  }
-
-  return {
-    maxHeight: 260,
-    maxWidth: 260,
-    minHeight: 74,
-    minWidth: 74
-  };
 }
 
 function getNodeShellStyle(isArea: boolean, isResourceNode: boolean, borderColor: string): CSSProperties {

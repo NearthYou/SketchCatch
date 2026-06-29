@@ -329,6 +329,10 @@
   user-select: none;
 }
 
+.canvasPanel :global(.react-flow__node.diagramAreaFlowNode) {
+  pointer-events: none;
+}
+
 .canvasPanel :global(.react-flow__nodes),
 .canvasPanel :global(.react-flow__edges) {
   pointer-events: none;
@@ -616,6 +620,7 @@
   justify-content: flex-start;
   overflow: visible;
   padding: 0;
+  pointer-events: none;
   text-align: left;
 }
 
@@ -655,9 +660,46 @@
   min-width: 0;
   overflow: hidden;
   padding: 5px 9px;
+  pointer-events: all;
   position: absolute;
   top: -30px;
   white-space: nowrap;
+  z-index: 2;
+}
+
+.areaNodeHitEdge {
+  cursor: grab;
+  pointer-events: all;
+  position: absolute;
+  z-index: 1;
+}
+
+.areaNodeHitEdgeTop {
+  height: 10px;
+  left: -5px;
+  right: -5px;
+  top: -5px;
+}
+
+.areaNodeHitEdgeRight {
+  bottom: -5px;
+  right: -5px;
+  top: -5px;
+  width: 10px;
+}
+
+.areaNodeHitEdgeBottom {
+  bottom: -5px;
+  height: 10px;
+  left: -5px;
+  right: -5px;
+}
+
+.areaNodeHitEdgeLeft {
+  bottom: -5px;
+  left: -5px;
+  top: -5px;
+  width: 10px;
 }
 
 .areaNodeHeaderIcon {
@@ -952,6 +994,7 @@
   cursor: nwse-resize;
   height: 13px;
   padding: 0;
+  pointer-events: all;
   position: absolute;
   right: -6px;
   touch-action: none;

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { DiagramNode } from "../../../../packages/types/src";
 import {
+  findInnermostAreaNodeAtPoint,
   getAreaNodeIconUrl,
   getAreaNodeLabel,
   isAreaNode,
@@ -78,49 +79,120 @@ test("getAreaNodeIconUrl returns icons only for resource area nodes", () => {
   );
 });
 
+test("findInnermostAreaNodeAtPoint returns the smallest area containing the point", () => {
+  const region = makeDesignNode({
+    id: "region-1",
+    type: "design_region",
+    position: { x: 0, y: 0 },
+    size: { width: 600, height: 420 },
+    zIndex: 1
+  });
+  const subnet = makeResourceNode({
+    id: "subnet-1",
+    resourceType: "aws_subnet",
+    position: { x: 80, y: 70 },
+    size: { width: 360, height: 260 },
+    zIndex: 2
+  });
+  const vpc = makeResourceNode({
+    id: "vpc-1",
+    resourceType: "aws_vpc",
+    position: { x: 140, y: 120 },
+    size: { width: 180, height: 120 },
+    zIndex: 3
+  });
+  const instance = makeResourceNode({
+    id: "instance-1",
+    resourceType: "aws_instance",
+    position: { x: 160, y: 140 },
+    size: { width: 80, height: 60 },
+    zIndex: 4
+  });
+
+  assert.equal(
+    findInnermostAreaNodeAtPoint([region, subnet, vpc, instance], { x: 180, y: 150 })?.id,
+    "vpc-1"
+  );
+});
+
+test("findInnermostAreaNodeAtPoint uses zIndex when overlapping areas have the same size", () => {
+  const lowerGroup = makeDesignNode({
+    id: "group-1",
+    type: "design_group",
+    position: { x: 0, y: 0 },
+    size: { width: 240, height: 180 },
+    zIndex: 1
+  });
+  const upperGroup = makeDesignNode({
+    id: "group-2",
+    type: "design_group",
+    position: { x: 0, y: 0 },
+    size: { width: 240, height: 180 },
+    zIndex: 5
+  });
+
+  assert.equal(findInnermostAreaNodeAtPoint([lowerGroup, upperGroup], { x: 40, y: 40 })?.id, "group-2");
+});
+
 function makeDesignNode({
+  id,
   iconUrl,
   label,
-  type
+  position = { x: 0, y: 0 },
+  size = { width: 260, height: 180 },
+  type,
+  zIndex = 1
 }: {
+  id?: string;
   iconUrl?: string;
   label?: string;
+  position?: DiagramNode["position"];
+  size?: DiagramNode["size"];
   type: string;
+  zIndex?: number;
 }): DiagramNode {
   return {
-    id: `${type}-1`,
+    id: id ?? `${type}-1`,
     type,
     kind: "design",
-    position: { x: 0, y: 0 },
-    size: { width: 260, height: 180 },
+    position,
+    size,
     label: label ?? type,
     ...(iconUrl ? { iconUrl } : {}),
     locked: false,
-    zIndex: 1
+    zIndex
   };
 }
 
 function makeResourceNode({
+  id,
   iconUrl,
   label,
+  position = { x: 0, y: 0 },
   resourceName,
-  resourceType
+  resourceType,
+  size = { width: 168, height: 96 },
+  zIndex = 1
 }: {
+  id?: string;
   iconUrl?: string;
   label?: string;
+  position?: DiagramNode["position"];
   resourceName?: string;
   resourceType: string;
+  size?: DiagramNode["size"];
+  zIndex?: number;
 }): DiagramNode {
   return {
-    id: `${resourceType}-1`,
+    id: id ?? `${resourceType}-1`,
     type: resourceType,
     kind: "resource",
-    position: { x: 0, y: 0 },
-    size: { width: 168, height: 96 },
+    position,
+    size,
     label: label ?? resourceType,
     ...(iconUrl ? { iconUrl } : {}),
     locked: false,
-    zIndex: 1,
+    zIndex,
     parameters: {
       terraformBlockType: "resource",
       resourceType,
