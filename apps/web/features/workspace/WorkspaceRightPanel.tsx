@@ -263,13 +263,15 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
         <TerraformIssuesPanel diagnostics={terraformDiagnostics} />
       </div>
 
-      {activeView === "deployment" ? (
-        <DeploymentPanel
-          currentNodeCount={context.nodes.length}
-          projectId={projectId}
-          projectName={projectName}
-        />
-      ) : null}
+      <div className={styles.rightPanelView} hidden={activeView !== "deployment"}>
+        {activeView === "deployment" ? (
+          <DeploymentPanel
+            currentNodeCount={context.nodes.length}
+            projectId={projectId}
+            projectName={projectName}
+          />
+        ) : null}
+      </div>
 
       {showTerraformLeaveDialog ? (
         <TerraformLeaveDialog
