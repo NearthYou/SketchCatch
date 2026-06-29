@@ -17,7 +17,7 @@ export function isAreaNode(node: DiagramNode): boolean {
 
 export function getAreaNodeLabel(node: DiagramNode): string {
   if (isResourceAreaNode(node)) {
-    const resourceName = node.parameters?.resourceName.trim();
+    const resourceName = node.parameters?.resourceName?.trim();
 
     if (resourceName) {
       return resourceName;

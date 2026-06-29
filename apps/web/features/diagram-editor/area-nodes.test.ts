@@ -55,6 +55,14 @@ test("getAreaNodeLabel falls back to node label for design areas and unnamed res
   );
 });
 
+test("getAreaNodeLabel falls back to node label when legacy resource data is missing resourceName", () => {
+  const legacyVpc = makeResourceNode({ label: "VPC", resourceType: "aws_vpc" });
+
+  Object.assign(legacyVpc.parameters ?? {}, { resourceName: undefined });
+
+  assert.equal(getAreaNodeLabel(legacyVpc), "VPC");
+});
+
 test("getAreaNodeIconUrl returns icons only for resource area nodes", () => {
   assert.equal(
     getAreaNodeIconUrl(makeResourceNode({ iconUrl: "/icons/vpc.svg", resourceType: "aws_vpc" })),
