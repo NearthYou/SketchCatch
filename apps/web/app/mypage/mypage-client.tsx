@@ -5,12 +5,13 @@ import { useEffect, useMemo, useState } from "react";
 import type { Project } from "@sketchcatch/types";
 import { ApiProjectCard } from "../../components/dashboard/api-project-card";
 import { DashboardIcon } from "../../components/dashboard/dashboard-icons";
+import { filterProjectsByName } from "../../features/projects/project-search";
 import { deleteProject, listProjects } from "../../features/workspace/api";
 import { getApiErrorMessage } from "../../lib/api-client";
 
 type MyPageLoadState = "loading" | "ready" | "error";
 
-export function MyPageClient() {
+export function MyPageClient({ searchQuery }: { readonly searchQuery: string }) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loadState, setLoadState] = useState<MyPageLoadState>("loading");
   const [errorMessage, setErrorMessage] = useState("");
@@ -50,14 +51,16 @@ export function MyPageClient() {
     };
   }, []);
 
-  const recentModifiedProjects = useMemo(
-    () => [...projects].sort(compareProjectUpdatedAtDesc).slice(0, 3),
-    [projects]
+  const isSearchActive = searchQuery.trim().length > 0;
+  const sortedProjects = useMemo(() => [...projects].sort(compareProjectUpdatedAtDesc), [projects]);
+  const searchMatchedProjects = useMemo(
+    () => filterProjectsByName(sortedProjects, searchQuery),
+    [searchQuery, sortedProjects]
   );
-  const visibleProjects = useMemo(
-    () => [...projects].sort(compareProjectUpdatedAtDesc).slice(0, 6),
-    [projects]
-  );
+  const displayProjects = isSearchActive ? searchMatchedProjects : sortedProjects;
+  const recentModifiedProjects = displayProjects.slice(0, 3);
+  const visibleProjects = isSearchActive ? displayProjects : displayProjects.slice(0, 6);
+  const projectCount = isSearchActive ? visibleProjects.length : projects.length;
 
   async function handleDeleteProject(project: Project): Promise<void> {
     const confirmed = window.confirm(
@@ -103,24 +106,6 @@ export function MyPageClient() {
 
   return (
     <>
-      <div className="dashboardStatGrid dashboardStatGridCompact" aria-label="홈 요약">
-        <article>
-          <DashboardIcon name="folder" />
-          <span>전체 프로젝트</span>
-          <strong>{projects.length}</strong>
-        </article>
-        <article>
-          <DashboardIcon name="clock" />
-          <span>최근 수정</span>
-          <strong>{recentModifiedProjects.length}</strong>
-        </article>
-        <article>
-          <DashboardIcon name="check" />
-          <span>DB 저장</span>
-          <strong>ON</strong>
-        </article>
-      </div>
-
       <section className="dashboardPanel" aria-labelledby="recent-modified-title">
         <div className="dashboardPanelHeader">
           <div>
@@ -129,7 +114,9 @@ export function MyPageClient() {
           </div>
           <span className="dashboardCountBadge">최대 3개</span>
         </div>
-        {recentModifiedProjects.length === 0 ? (
+        {recentModifiedProjects.length === 0 && isSearchActive ? (
+          <ProjectSearchEmptyState />
+        ) : recentModifiedProjects.length === 0 ? (
           <ProjectEmptyState />
         ) : (
           <div className="dashboardCardGrid dashboardCardGridThree">
@@ -152,14 +139,16 @@ export function MyPageClient() {
             <p className="dashboardPanelKicker">My projects</p>
             <h2 id="my-projects-title">내 프로젝트</h2>
           </div>
-          <span className="dashboardCountBadge">{projects.length}개</span>
+          <span className="dashboardCountBadge">{projectCount}개</span>
         </div>
         {deleteErrorMessage ? (
           <p className="dashboardMessage" role="alert">
             {deleteErrorMessage}
           </p>
         ) : null}
-        {visibleProjects.length === 0 ? (
+        {visibleProjects.length === 0 && isSearchActive ? (
+          <ProjectSearchEmptyState />
+        ) : visibleProjects.length === 0 ? (
           <ProjectEmptyState />
         ) : (
           <div className="dashboardCardGrid dashboardCardGridThree">
@@ -187,6 +176,18 @@ function ProjectEmptyState() {
       <Link className="dashboardTopbarAction" href="/workspace/new">
         <DashboardIcon name="plus" />
         <span>새 설계 시작</span>
+      </Link>
+    </div>
+  );
+}
+
+function ProjectSearchEmptyState() {
+  return (
+    <div className="projectListEmpty">
+      <p>일치하는 프로젝트가 없습니다.</p>
+      <Link className="dashboardSecondaryButton" href="/mypage">
+        <DashboardIcon name="close" />
+        <span>검색 해제</span>
       </Link>
     </div>
   );
