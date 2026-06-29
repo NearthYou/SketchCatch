@@ -57,13 +57,27 @@ import {
   syncTerraformToDiagram,
   validateTerraformCode
 } from "./api";
-import { getDeploymentActionState } from "./deployment-actions";
+import {
+  getDeploymentActionState,
+  shouldAutoRefreshDeployment,
+  shouldShowDeploymentInfoValue
+} from "./deployment-actions";
 import { WorkspaceAiPanel } from "./WorkspaceAiPanel";
 import styles from "./workspace.module.css";
 
 type WorkspaceRightPanelView = "resource" | "terraform" | "issues" | "ai" | "deployment";
 type ResourceWorkspaceView = "settings" | "list";
 type RequestState = "idle" | "loading" | "error";
+type DeploymentRuntimeSnapshot = {
+  readonly deployments: Deployment[];
+  readonly logs: DeploymentLog[];
+  readonly resources: DeployedResource[];
+  readonly outputs: TerraformOutput[];
+};
+type DeploymentPanelSnapshot = DeploymentRuntimeSnapshot & {
+  readonly projectDetails: ProjectDetailsResponse;
+  readonly awsConnections: AwsConnection[];
+};
 
 const TERRAFORM_EDITOR_LINE_HEIGHT = 19.2;
 const TERRAFORM_EDITOR_VERTICAL_PADDING = 12;
@@ -1238,6 +1252,65 @@ function DeploymentPanel({
   const deploymentActionHint = selectedDeployment
     ? getDeploymentActionHint(selectedDeployment)
     : "";
+  const shouldAutoRefreshSelectedDeployment = shouldAutoRefreshDeployment(selectedDeployment);
+
+  const loadDeploymentRuntimeSnapshot = useCallback(async (): Promise<DeploymentRuntimeSnapshot> => {
+    const [nextDeployments, nextLogs, nextResources, nextOutputs] = await Promise.all([
+      listDeployments(projectId),
+      selectedDeploymentId ? listDeploymentLogs(selectedDeploymentId) : Promise.resolve([]),
+      selectedDeploymentId ? listDeploymentResources(selectedDeploymentId) : Promise.resolve([]),
+      selectedDeploymentId ? listTerraformOutputs(selectedDeploymentId) : Promise.resolve([])
+    ]);
+
+    return {
+      deployments: nextDeployments,
+      logs: nextLogs,
+      resources: nextResources,
+      outputs: nextOutputs
+    };
+  }, [projectId, selectedDeploymentId]);
+
+  const applyDeploymentRuntimeSnapshot = useCallback((snapshot: DeploymentRuntimeSnapshot): void => {
+    setDeployments(snapshot.deployments);
+    setDeploymentLogs(snapshot.logs);
+    setDeploymentResources(snapshot.resources);
+    setTerraformOutputs(snapshot.outputs);
+  }, []);
+
+  const loadDeploymentPanelSnapshot = useCallback(async (): Promise<DeploymentPanelSnapshot> => {
+    const [nextProjectDetails, nextConnections, runtimeSnapshot] = await Promise.all([
+      getProjectDetails(projectId),
+      listAwsConnections(),
+      loadDeploymentRuntimeSnapshot()
+    ]);
+
+    return {
+      ...runtimeSnapshot,
+      projectDetails: nextProjectDetails,
+      awsConnections: nextConnections
+    };
+  }, [loadDeploymentRuntimeSnapshot, projectId]);
+
+  const applyDeploymentPanelSnapshot = useCallback((snapshot: DeploymentPanelSnapshot): void => {
+    const latestArchitecture = snapshot.projectDetails.architectures[0];
+    const latestVerifiedConnection = snapshot.awsConnections.find(
+      (connection) => connection.status === "verified"
+    );
+
+    setProjectDetails(snapshot.projectDetails);
+    setAwsConnections(snapshot.awsConnections);
+    applyDeploymentRuntimeSnapshot(snapshot);
+    setSelectedArchitectureId((currentId) =>
+      snapshot.projectDetails.architectures.some((architecture) => architecture.id === currentId)
+        ? currentId
+        : latestArchitecture?.id ?? ""
+    );
+    setSelectedAwsConnectionId((currentId) =>
+      snapshot.awsConnections.some((connection) => connection.id === currentId)
+        ? currentId
+        : latestVerifiedConnection?.id ?? ""
+    );
+  }, [applyDeploymentRuntimeSnapshot]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1355,6 +1428,52 @@ function DeploymentPanel({
       controller.abort();
     };
   }, [selectedDeploymentId, selectedDeployment?.status]);
+
+  useEffect(() => {
+    if (!shouldAutoRefreshSelectedDeployment) {
+      return;
+    }
+
+    let cancelled = false;
+    let isRefreshing = false;
+
+    async function refreshSnapshot(): Promise<void> {
+      if (isRefreshing) {
+        return;
+      }
+
+      isRefreshing = true;
+
+      try {
+        const snapshot = await loadDeploymentRuntimeSnapshot();
+
+        if (!cancelled) {
+          applyDeploymentRuntimeSnapshot(snapshot);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setErrorMessage(getApiErrorMessage(error, "Deployment 상태 자동 갱신에 실패했습니다."));
+        }
+      } finally {
+        isRefreshing = false;
+      }
+    }
+
+    const intervalId = window.setInterval(() => {
+      void refreshSnapshot();
+    }, 2500);
+
+    void refreshSnapshot();
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [
+    applyDeploymentRuntimeSnapshot,
+    loadDeploymentRuntimeSnapshot,
+    shouldAutoRefreshSelectedDeployment
+  ]);
 
   async function runRequest(request: () => Promise<void>, fallbackMessage: string): Promise<void> {
     setRequestState("loading");
@@ -1540,42 +1659,7 @@ function DeploymentPanel({
 
   async function refreshDeploymentPanel(): Promise<void> {
     await runRequest(async () => {
-      const [
-        nextProjectDetails,
-        nextConnections,
-        nextDeployments,
-        nextLogs,
-        nextResources,
-        nextOutputs
-      ] = await Promise.all([
-        getProjectDetails(projectId),
-        listAwsConnections(),
-        listDeployments(projectId),
-        selectedDeploymentId ? listDeploymentLogs(selectedDeploymentId) : Promise.resolve([]),
-        selectedDeploymentId ? listDeploymentResources(selectedDeploymentId) : Promise.resolve([]),
-        selectedDeploymentId ? listTerraformOutputs(selectedDeploymentId) : Promise.resolve([])
-      ]);
-      const latestArchitecture = nextProjectDetails.architectures[0];
-      const latestVerifiedConnection = nextConnections.find(
-        (connection) => connection.status === "verified"
-      );
-
-      setProjectDetails(nextProjectDetails);
-      setAwsConnections(nextConnections);
-      setDeployments(nextDeployments);
-      setDeploymentLogs(nextLogs);
-      setDeploymentResources(nextResources);
-      setTerraformOutputs(nextOutputs);
-      setSelectedArchitectureId((currentId) =>
-        nextProjectDetails.architectures.some((architecture) => architecture.id === currentId)
-          ? currentId
-          : latestArchitecture?.id ?? ""
-      );
-      setSelectedAwsConnectionId((currentId) =>
-        nextConnections.some((connection) => connection.id === currentId)
-          ? currentId
-          : latestVerifiedConnection?.id ?? ""
-      );
+      applyDeploymentPanelSnapshot(await loadDeploymentPanelSnapshot());
     }, "배포 상태를 새로고침하지 못했습니다.");
   }
 
@@ -1696,28 +1780,28 @@ function DeploymentPanel({
         {selectedDeployment ? (
           <div className={styles.deploymentSummary}>
             <InfoRow label="Status" value={selectedDeployment.status} />
-            <InfoRow label="Active stage" value={selectedDeployment.activeStage ?? "없음"} />
-            <InfoRow label="Started at" value={formatOptionalDate(selectedDeployment.startedAt)} />
-            <InfoRow
+            <OptionalInfoRow label="Active stage" value={selectedDeployment.activeStage} />
+            <OptionalInfoRow
+              label="Started at"
+              value={formatOptionalDate(selectedDeployment.startedAt)}
+            />
+            <OptionalInfoRow
               label="Completed at"
               value={formatOptionalDate(selectedDeployment.completedAt)}
             />
-            <InfoRow label="Failed at" value={formatOptionalDate(selectedDeployment.failedAt)} />
-            <InfoRow
+            <OptionalInfoRow label="Failed at" value={formatOptionalDate(selectedDeployment.failedAt)} />
+            <OptionalInfoRow
               label="Cancel requested"
               value={formatOptionalDate(selectedDeployment.cancelRequestedAt)}
             />
-            <InfoRow
+            <OptionalInfoRow
               label="Cancelled at"
               value={formatOptionalDate(selectedDeployment.cancelledAt)}
             />
-            <InfoRow
-              label="Current plan"
-              value={selectedDeployment.currentPlanArtifactId ?? "없음"}
-            />
+            <OptionalInfoRow label="Current plan" value={selectedDeployment.currentPlanArtifactId} />
             <InfoRow label="Blocked" value={selectedDeployment.isBlocked ? "yes" : "no"} />
-            <InfoRow label="Blocked by" value={selectedDeployment.blockedBy ?? "없음"} />
-            <InfoRow label="Reason" value={selectedDeployment.blockedReason ?? "없음"} />
+            <OptionalInfoRow label="Blocked by" value={selectedDeployment.blockedBy} />
+            <OptionalInfoRow label="Reason" value={selectedDeployment.blockedReason} />
             <InfoRow label="Approval" value={formatApprovalState(selectedDeployment)} />
             {selectedDeployment.planSummary ? (
               <PlanSummaryRows deployment={selectedDeployment} />
@@ -1725,34 +1809,34 @@ function DeploymentPanel({
             {selectedDeployment.approvedAt ? (
               <>
                 <InfoRow label="Approved at" value={formatDate(selectedDeployment.approvedAt)} />
-                <InfoRow
+                <OptionalInfoRow
                   label="Approved plan"
-                  value={selectedDeployment.approvedPlanArtifactId ?? "없음"}
+                  value={selectedDeployment.approvedPlanArtifactId}
                 />
-                <InfoRow
+                <OptionalInfoRow
                   label="tfplan hash"
                   value={formatShortHash(selectedDeployment.approvedTfplanHash)}
                 />
-                <InfoRow
+                <OptionalInfoRow
                   label="Artifact hash"
                   value={formatShortHash(selectedDeployment.approvedTerraformArtifactHash)}
                 />
-                <InfoRow
+                <OptionalInfoRow
                   label="AWS account"
-                  value={selectedDeployment.approvedAwsAccountId ?? "없음"}
+                  value={selectedDeployment.approvedAwsAccountId}
                 />
-                <InfoRow
+                <OptionalInfoRow
                   label="AWS region"
-                  value={selectedDeployment.approvedAwsRegion ?? "없음"}
+                  value={selectedDeployment.approvedAwsRegion}
                 />
               </>
             ) : null}
-            <InfoRow label="State object" value={selectedDeployment.stateObjectKey ?? "없음"} />
-            <InfoRow
+            <OptionalInfoRow label="State object" value={selectedDeployment.stateObjectKey} />
+            <OptionalInfoRow
               label="Result warning"
-              value={selectedDeployment.resultWarningSummary ?? "없음"}
+              value={selectedDeployment.resultWarningSummary}
             />
-            <InfoRow label="Error" value={selectedDeployment.errorSummary ?? "없음"} />
+            <OptionalInfoRow label="Error" value={selectedDeployment.errorSummary} />
           </div>
         ) : null}
 
@@ -2216,6 +2300,20 @@ function InfoRow({ label, value }: { readonly label: string; readonly value: str
   );
 }
 
+function OptionalInfoRow({
+  label,
+  value
+}: {
+  readonly label: string;
+  readonly value: string | null | undefined;
+}) {
+  if (!shouldShowDeploymentInfoValue(value)) {
+    return null;
+  }
+
+  return <InfoRow label={label} value={value} />;
+}
+
 function PlanSummaryRows({ deployment }: { readonly deployment: Deployment }) {
   const summary = deployment.planSummary;
 
@@ -2288,7 +2386,7 @@ function getDeploymentActionHint(deployment: Deployment): string {
       return "취소 요청을 보냈습니다. Terraform 프로세스가 멈추면 상태가 갱신됩니다.";
     }
 
-    return "Terraform 작업이 진행 중입니다. 새로고침으로 상태를 확인해주세요.";
+    return "Terraform 작업이 진행 중입니다. 상태와 로그가 자동으로 갱신됩니다.";
   }
 
   if (deployment.approvedAt) {

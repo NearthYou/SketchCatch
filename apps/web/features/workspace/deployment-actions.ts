@@ -98,6 +98,14 @@ export function getDeploymentActionState(
   };
 }
 
+export function shouldAutoRefreshDeployment(deployment: Deployment | null): boolean {
+  return deployment?.status === "RUNNING";
+}
+
+export function shouldShowDeploymentInfoValue(value: string | null | undefined): value is string {
+  return Boolean(value && value !== "없음");
+}
+
 function isCleanupDestroyCandidate(deployment: Deployment): boolean {
   if (!deployment.stateObjectKey) {
     return false;

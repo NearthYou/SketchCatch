@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Deployment } from "@sketchcatch/types";
-import { getDeploymentActionState } from "./deployment-actions";
+import {
+  getDeploymentActionState,
+  shouldAutoRefreshDeployment,
+  shouldShowDeploymentInfoValue
+} from "./deployment-actions";
 
 test("successful apply deployment offers cleanup planning but not direct destroy", () => {
   const state = getDeploymentActionState(
@@ -73,6 +77,43 @@ test("failed apply with partial state offers cleanup planning", () => {
   assert.equal(state.shouldShowApplyPlanButton, false);
   assert.equal(state.shouldShowDestroyPlanButton, true);
   assert.equal(state.canRunDestroyPlan, true);
+});
+
+test("auto-refreshes while Terraform work is running", () => {
+  assert.equal(
+    shouldAutoRefreshDeployment(
+      createDeployment({
+        status: "RUNNING"
+      })
+    ),
+    true
+  );
+});
+
+test("stops auto-refreshing after Terraform work reaches a stable state", () => {
+  for (const status of ["SUCCESS", "FAILED", "CANCELLED", "DESTROYED", "PENDING"] as const) {
+    assert.equal(
+      shouldAutoRefreshDeployment(
+        createDeployment({
+          status
+        })
+      ),
+      false
+    );
+  }
+});
+
+test("hides empty deployment info values from the detail list", () => {
+  assert.equal(shouldShowDeploymentInfoValue(null), false);
+  assert.equal(shouldShowDeploymentInfoValue(undefined), false);
+  assert.equal(shouldShowDeploymentInfoValue(""), false);
+  assert.equal(shouldShowDeploymentInfoValue("없음"), false);
+});
+
+test("keeps meaningful deployment info values in the detail list", () => {
+  assert.equal(shouldShowDeploymentInfoValue("DESTROYED"), true);
+  assert.equal(shouldShowDeploymentInfoValue("no"), true);
+  assert.equal(shouldShowDeploymentInfoValue("Plan 필요"), true);
 });
 
 function createDeployment(
