@@ -372,8 +372,6 @@ export function ProjectWorkspaceDraftManager({
       rightPanel={(context) => (
         <WorkspaceRightPanel context={context} projectId={projectId} projectName={projectName} />
       )}
-      onSave={() => void flushDraftToServer("manual")}
-      saveDisabled={serverSaveState === "server-saving" || serverSaveState === "server-checkpoint-pending"}
       saveStatus={getProjectSaveStatus(localSaveState, serverSaveState)}
     />
   );
