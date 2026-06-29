@@ -19,6 +19,7 @@ export type DiagramEditorPanelContext = {
   applyDiagramJson: (diagram: DiagramJson) => void;
   closeInspectedNode: () => void;
   focusResourceNode: (nodeId: string) => void;
+  selectResourceNode: (nodeId: string) => void;
   setRightPanelOpen: (isOpen: boolean) => void;
   updateNodeParameters: (
     nodeId: string,

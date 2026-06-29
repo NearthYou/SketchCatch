@@ -1,10 +1,10 @@
 import { type KeyboardEvent, useMemo, useState } from "react";
 import type { DiagramNode } from "@sketchcatch/types";
 import {
+  ArrowLeft,
   Box,
   CopyPlus,
   Edit3,
-  ListTree,
   Maximize2,
   MoreHorizontal,
   Minimize2,
@@ -12,8 +12,12 @@ import {
 } from "lucide-react";
 import type { DiagramEditorPanelContext } from "../diagram-editor";
 import { ParameterInputPanel, terraformParameterCatalog } from "../parameter-input";
+import { getResourceCardKeyboardActivation } from "./resource-card-interaction";
 import { buildResourceListItems } from "./resource-list-summary";
-import { getVisibleResourceWorkspaceView } from "./resource-workspace-view";
+import {
+  getResourceWorkspaceToolbarState,
+  getVisibleResourceWorkspaceView
+} from "./resource-workspace-view";
 import type { ResourceWorkspaceView } from "./workspace-right-panel.types";
 import styles from "./workspace.module.css";
 
@@ -33,37 +37,34 @@ export function ResourceWorkspacePanel({
     [context.nodes]
   );
   const visibleView = getVisibleResourceWorkspaceView(view, context.selectedNodeId);
+  const toolbarState = getResourceWorkspaceToolbarState(visibleView);
 
   return (
     <div className={styles.resourceWorkspacePanel}>
       <div className={styles.resourceSectionToolbar}>
-        <div className={styles.resourceSectionTabs} aria-label="Resource sections">
-          <button
-            aria-pressed={visibleView === "settings"}
-            className={
-              visibleView === "settings"
-                ? styles.resourceSectionButtonActive
-                : styles.resourceSectionButton
-            }
-            onClick={() => onViewChange("settings")}
-            title="Resource settings"
-            type="button"
-          >
-            <Box size={18} aria-hidden="true" />
-          </button>
-          <button
-            aria-pressed={visibleView === "list"}
-            className={
-              visibleView === "list"
-                ? styles.resourceSectionButtonActive
-                : styles.resourceSectionButton
-            }
-            onClick={() => onViewChange("list")}
-            title="Resource list"
-            type="button"
-          >
-            <ListTree size={18} aria-hidden="true" />
-          </button>
+        <div className={styles.resourceSectionTabs} aria-label="Resource navigation">
+          {toolbarState.action === "back-to-list" ? (
+            <button
+              aria-label="Back to resource list"
+              className={styles.resourceSectionButton}
+              onClick={() => onViewChange("list")}
+              title="Back to resource list"
+              type="button"
+            >
+              <ArrowLeft size={18} aria-hidden="true" />
+            </button>
+          ) : (
+            <button
+              aria-label="Resource list"
+              aria-pressed={true}
+              className={styles.resourceSectionButtonActive}
+              onClick={() => onViewChange("list")}
+              title="Resource list"
+              type="button"
+            >
+              <Box size={18} aria-hidden="true" />
+            </button>
+          )}
         </div>
       </div>
 
@@ -113,9 +114,9 @@ function ResourceListPanel({
           <article
             className={isActive ? styles.resourceListItemActive : styles.resourceListItem}
             key={item.nodeId}
-            onClick={() => focusNode(context, item.nodeId)}
+            onClick={() => selectNode(context, item.nodeId)}
             onDoubleClick={() => openResourceConfig(context, item.nodeId, onViewChange)}
-            onKeyDown={(event) => handleResourceCardKeyDown(event, context, item.nodeId)}
+            onKeyDown={(event) => handleResourceCardKeyDown(event, context, item.nodeId, onViewChange)}
             tabIndex={0}
           >
             <div className={styles.resourceListHeader}>
@@ -139,7 +140,7 @@ function ResourceListPanel({
                 className={styles.resourceListMoreButton}
                 onClick={(event) => {
                   event.stopPropagation();
-                  focusNode(context, item.nodeId);
+                  selectNode(context, item.nodeId);
                   setOpenMenuNodeId((currentNodeId) =>
                     currentNodeId === item.nodeId ? null : item.nodeId
                   );
@@ -214,14 +215,23 @@ function ResourceListPanel({
 function handleResourceCardKeyDown(
   event: KeyboardEvent<HTMLElement>,
   context: DiagramEditorPanelContext,
-  nodeId: string
+  nodeId: string,
+  onViewChange: (view: ResourceWorkspaceView) => void
 ): void {
-  if (event.key !== "Enter" && event.key !== " ") {
+  const activation = getResourceCardKeyboardActivation(event.key);
+
+  if (activation === "ignore") {
     return;
   }
 
   event.preventDefault();
-  focusNode(context, nodeId);
+
+  if (activation === "open-settings") {
+    openResourceConfig(context, nodeId, onViewChange);
+    return;
+  }
+
+  selectNode(context, nodeId);
 }
 
 function ResourceCardMenu({
@@ -255,7 +265,6 @@ function ResourceCardMenu({
       <button
         className={styles.resourceCardMenuItem}
         onClick={() => {
-          focusNode(context, node.id);
           onEditConfig();
         }}
         role="menuitem"
@@ -318,9 +327,8 @@ function ResourceCardMenu({
   );
 }
 
-function focusNode(context: DiagramEditorPanelContext, nodeId: string): void {
-  context.focusResourceNode(nodeId);
-  context.setRightPanelOpen(true);
+function selectNode(context: DiagramEditorPanelContext, nodeId: string): void {
+  context.selectResourceNode(nodeId);
 }
 
 function openResourceConfig(
@@ -328,7 +336,7 @@ function openResourceConfig(
   nodeId: string,
   onViewChange: (view: ResourceWorkspaceView) => void
 ): void {
-  focusNode(context, nodeId);
+  selectNode(context, nodeId);
   onViewChange("settings");
 }
 
