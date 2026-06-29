@@ -3,6 +3,7 @@ import { test } from "node:test";
 import type { DiagramNode } from "../../../../packages/types/src";
 import {
   clearDeletedAreaParentAssignments,
+  clearOutOfBoundsAreaParentAssignments,
   applyAreaNodeMovement,
   applyAreaNodeParentAssignments
 } from "./area-node-movement";
@@ -289,6 +290,56 @@ test("clearDeletedAreaParentAssignments preserves unrelated metadata when cleari
   const result = clearDeletedAreaParentAssignments([nodeWithRegion], new Set([region.id]));
 
   assert.deepEqual(getNodeById(result, instance.id)?.metadata, { awsRegion: "ap-northeast-2" });
+});
+
+test("clearOutOfBoundsAreaParentAssignments removes children outside a resized parent area", () => {
+  const region = makeDesignNode({
+    id: "region-1",
+    type: "design_region",
+    position: { x: 0, y: 0 },
+    size: { width: 180, height: 140 }
+  });
+  const subnet = makeResourceNode({
+    id: "subnet-1",
+    parentAreaNodeId: region.id,
+    resourceType: "aws_subnet",
+    position: { x: 40, y: 40 },
+    size: { width: 80, height: 60 }
+  });
+  const instance = makeResourceNode({
+    id: "instance-1",
+    parentAreaNodeId: region.id,
+    resourceType: "aws_instance",
+    position: { x: 160, y: 130 },
+    size: { width: 96, height: 72 }
+  });
+
+  const result = clearOutOfBoundsAreaParentAssignments(
+    [region, subnet, instance],
+    new Set([region.id])
+  );
+
+  assert.equal(getNodeById(result, subnet.id)?.metadata?.parentAreaNodeId, region.id);
+  assert.equal(getNodeById(result, instance.id)?.metadata?.parentAreaNodeId, undefined);
+});
+
+test("clearOutOfBoundsAreaParentAssignments does not adopt stationary nodes covered by a resized area", () => {
+  const region = makeDesignNode({
+    id: "region-1",
+    type: "design_region",
+    position: { x: 0, y: 0 },
+    size: { width: 400, height: 300 }
+  });
+  const instance = makeResourceNode({
+    id: "instance-1",
+    resourceType: "aws_instance",
+    position: { x: 160, y: 130 },
+    size: { width: 96, height: 72 }
+  });
+
+  const result = clearOutOfBoundsAreaParentAssignments([region, instance], new Set([region.id]));
+
+  assert.equal(getNodeById(result, instance.id)?.metadata?.parentAreaNodeId, undefined);
 });
 
 function makeDesignNode({

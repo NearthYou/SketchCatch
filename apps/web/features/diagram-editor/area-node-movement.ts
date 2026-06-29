@@ -87,6 +87,33 @@ export function clearDeletedAreaParentAssignments(
   });
 }
 
+export function clearOutOfBoundsAreaParentAssignments(
+  currentNodes: readonly DiagramNode[],
+  resizedAreaNodeIds: ReadonlySet<string>
+): DiagramNode[] {
+  if (resizedAreaNodeIds.size === 0) {
+    return [...currentNodes];
+  }
+
+  const currentNodeById = new Map(currentNodes.map((node) => [node.id, node]));
+
+  return currentNodes.map((node) => {
+    const parentAreaNodeId = node.metadata?.parentAreaNodeId;
+
+    if (!parentAreaNodeId || !resizedAreaNodeIds.has(parentAreaNodeId)) {
+      return node;
+    }
+
+    const parentAreaNode = currentNodeById.get(parentAreaNodeId);
+
+    if (parentAreaNode && isAreaNode(parentAreaNode) && containsPoint(parentAreaNode, getNodeCenter(node))) {
+      return node;
+    }
+
+    return setParentAreaNodeId(node, undefined);
+  });
+}
+
 function getMovingAreas(
   snapshotNodes: readonly DiagramNode[],
   currentNodeById: ReadonlyMap<string, DiagramNode>,

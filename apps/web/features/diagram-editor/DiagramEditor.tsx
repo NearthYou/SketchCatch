@@ -55,7 +55,8 @@ import { DEFAULT_DIAGRAM_VIEWPORT, EMPTY_DIAGRAM } from "./constants";
 import {
   applyAreaNodeMovement,
   applyAreaNodeParentAssignments,
-  clearDeletedAreaParentAssignments
+  clearDeletedAreaParentAssignments,
+  clearOutOfBoundsAreaParentAssignments
 } from "./area-node-movement";
 import { findInnermostAreaNodeAtPoint } from "./area-nodes";
 import { DiagramEdgeToolbar } from "./DiagramEdgeToolbar";
@@ -577,12 +578,16 @@ function DiagramEditorInner({
   const handleResizeEnd = useCallback(
     (nodeId: string, size: DiagramNode["size"]) => {
       const before = resizeSnapshotRef.current;
-      const after = {
+      const resizedDiagram = {
         ...diagramRef.current,
         nodes: updateNodeById(diagramRef.current.nodes, nodeId, (node) => ({
           ...node,
           size
         }))
+      };
+      const after = {
+        ...resizedDiagram,
+        nodes: clearOutOfBoundsAreaParentAssignments(resizedDiagram.nodes, new Set([nodeId]))
       };
 
       replaceDiagram(after);
