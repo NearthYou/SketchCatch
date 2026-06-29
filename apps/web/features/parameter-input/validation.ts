@@ -96,11 +96,43 @@ const resourceTypeAliases: Record<string, string> = {
   vpc_endpoint: "aws_vpc_endpoint"
 };
 
-export function getVisibleDefinitions(definitions: ParameterCatalogDefinition[]) {
+export function getVisibleDefinitions(definitions: readonly ParameterCatalogDefinition[]) {
+  return getConfigurableDefinitions(definitions).sort(
+    (left, right) => Number(right.required) - Number(left.required)
+  );
+}
+
+export function getRequiredDefinitions(definitions: readonly ParameterCatalogDefinition[]) {
+  return getVisibleDefinitions(definitions).filter((definition) => definition.required);
+}
+
+export function getOptionalDefinitions(definitions: readonly ParameterCatalogDefinition[]) {
+  return getVisibleDefinitions(definitions).filter(
+    (definition) => !definition.required && definition.optional
+  );
+}
+
+export function getActiveOptionalDefinitions(
+  definitions: readonly ParameterCatalogDefinition[],
+  values: Record<string, unknown>
+) {
+  return getOptionalDefinitions(definitions).filter((definition) =>
+    Object.prototype.hasOwnProperty.call(values, definition.name) &&
+    !isEmptyParameterValue(values[definition.name])
+  );
+}
+
+export function getValidationDefinitions(
+  definitions: readonly ParameterCatalogDefinition[],
+  values: Record<string, unknown>
+) {
+  return [...getRequiredDefinitions(definitions), ...getActiveOptionalDefinitions(definitions, values)];
+}
+
+function getConfigurableDefinitions(definitions: readonly ParameterCatalogDefinition[]) {
   return definitions
     .filter((definition) => !definition.computed || definition.required || definition.optional)
-    .slice()
-    .sort((left, right) => Number(right.required) - Number(left.required));
+    .slice();
 }
 
 export function getNodeResourceType(node: DiagramNode, catalog: ParameterCatalog) {

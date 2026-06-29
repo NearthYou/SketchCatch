@@ -14,6 +14,11 @@ import type {
 
 import type { DiagramEditorPanelContext } from "../diagram-editor/types";
 import {
+  filterAdvancedDefinitions,
+  getAdvancedDefinitions,
+  getAdvancedPickerEmptyMessage
+} from "./advanced-parameters";
+import {
   filterAwsRegionOptions,
   getAwsRegionLabel,
   getNextAwsRegionOptionIndex
@@ -27,7 +32,10 @@ import {
 } from "./region-node-metadata";
 import {
   buildReferenceOptions,
-  getVisibleDefinitions,
+  getActiveOptionalDefinitions,
+  getOptionalDefinitions,
+  getRequiredDefinitions,
+  getValidationDefinitions,
   isEmptyParameterValue,
   mergeNodeParameters,
   validateParameters
@@ -54,6 +62,8 @@ export function ParameterInputPanel({
     () => nodes.find((node) => node.id === selectedNodeId) ?? null,
     [nodes, selectedNodeId]
   );
+  const [advancedParameterQuery, setAdvancedParameterQuery] = useState("");
+  const [addedOptionalParameterNames, setAddedOptionalParameterNames] = useState<string[]>([]);
 
   if (!selectedNode) {
     return (
@@ -102,21 +112,39 @@ export function ParameterInputPanel({
   }
 
   const parameters = mergeNodeParameters(selectedNode, parameterCatalog);
-  const definitions = getVisibleDefinitions(
-    parameterCatalog.resources[parameters.resourceType] ?? []
+  const catalogDefinitions = parameterCatalog.resources[parameters.resourceType] ?? [];
+  const mainDefinitions = getRequiredDefinitions(catalogDefinitions);
+  const optionalDefinitions = getOptionalDefinitions(catalogDefinitions);
+  const activeOptionalDefinitions = getActiveOptionalDefinitions(catalogDefinitions, parameters.values);
+  const advancedDefinitions = getAdvancedDefinitions(
+    activeOptionalDefinitions,
+    optionalDefinitions,
+    addedOptionalParameterNames
   );
+  const availableAdvancedDefinitions = filterAdvancedDefinitions(
+    optionalDefinitions,
+    advancedDefinitions,
+    advancedParameterQuery
+  );
+  const advancedPickerEmptyMessage = getAdvancedPickerEmptyMessage(
+    optionalDefinitions,
+    advancedDefinitions,
+    advancedParameterQuery
+  );
+  const validationDefinitions = getValidationDefinitions(catalogDefinitions, parameters.values);
   const validation = validateParameters(
     parameters,
-    definitions,
+    validationDefinitions,
     nodes,
     selectedNode.id,
     parameterCatalog
   );
 
   const commitParameters = (nextParameters: ResourceNodeParameters) => {
+    const nextValidationDefinitions = getValidationDefinitions(catalogDefinitions, nextParameters.values);
     const nextValidation = validateParameters(
       nextParameters,
-      definitions,
+      nextValidationDefinitions,
       nodes,
       selectedNode.id,
       parameterCatalog
@@ -155,6 +183,24 @@ export function ParameterInputPanel({
     });
   };
 
+  const addAdvancedParameter = (definition: ParameterCatalogDefinition) => {
+    setAddedOptionalParameterNames((currentNames) =>
+      currentNames.includes(definition.name) ? currentNames : [...currentNames, definition.name]
+    );
+    setAdvancedParameterQuery("");
+  };
+
+  const removeAdvancedParameter = (definition: ParameterCatalogDefinition) => {
+    setAddedOptionalParameterNames((currentNames) =>
+      currentNames.filter((name) => name !== definition.name)
+    );
+
+    commitParameters({
+      ...parameters,
+      values: deleteRecordValue(parameters.values, definition.name)
+    });
+  };
+
   return (
     <aside className={styles.panel} aria-label="파라미터 입력 패널">
       <PanelHeader node={selectedNode} parameters={parameters} />
@@ -177,9 +223,9 @@ export function ParameterInputPanel({
       </section>
 
       <section className={styles.section} aria-label="Main parameters">
-        {definitions.length > 0 ? (
+        {mainDefinitions.length > 0 ? (
           <div className={styles.fieldGroup}>
-            {definitions.map((definition) => (
+            {mainDefinitions.map((definition) => (
               <ParameterField
                 catalog={parameterCatalog}
                 currentNodeId={selectedNode.id}
@@ -195,9 +241,77 @@ export function ParameterInputPanel({
           </div>
         ) : (
           <p className={styles.inlineEmpty}>
-            이 리소스 타입은 아직 파라미터 카탈로그가 없습니다.
+            {catalogDefinitions.length > 0
+              ? "필수 파라미터가 없습니다."
+              : "이 리소스 타입은 아직 파라미터 카탈로그가 없습니다."}
           </p>
         )}
+      </section>
+
+      <section className={styles.section} aria-label="Advanced Parameters">
+        <div className={styles.sectionHeader}>
+          <h3>Advanced Parameters</h3>
+        </div>
+
+        {advancedDefinitions.length > 0 ? (
+          <div className={styles.fieldGroup}>
+            {advancedDefinitions.map((definition) => (
+              <ParameterField
+                catalog={parameterCatalog}
+                currentNodeId={selectedNode.id}
+                definition={definition}
+                errors={validation.parameterErrors}
+                key={definition.name}
+                nodes={nodes}
+                onChange={(value) => updateParameterValue(definition, value)}
+                onRemove={() => removeAdvancedParameter(definition)}
+                path={definition.name}
+                value={parameters.values[definition.name]}
+              />
+            ))}
+          </div>
+        ) : (
+          <p className={styles.inlineEmpty}>추가된 optional 파라미터가 없습니다.</p>
+        )}
+
+        <div className={styles.advancedPicker}>
+          <label className={styles.advancedSearch}>
+            <Search aria-hidden="true" size={16} />
+            <input
+              aria-label="Optional parameter search"
+              className={styles.input}
+              onChange={(event) => setAdvancedParameterQuery(event.currentTarget.value)}
+              placeholder="Search optional parameter..."
+              value={advancedParameterQuery}
+            />
+          </label>
+
+          {availableAdvancedDefinitions.length > 0 ? (
+            <div className={styles.advancedOptionList}>
+              {availableAdvancedDefinitions.map((definition) => (
+                <button
+                  className={styles.advancedOptionButton}
+                  key={definition.name}
+                  onClick={() => addAdvancedParameter(definition)}
+                  type="button"
+                >
+                  <Plus aria-hidden="true" size={14} />
+                  <span className={styles.advancedOptionText}>
+                    <span className={styles.advancedOptionLabel}>{definition.label}</span>
+                    <span className={styles.advancedOptionMeta}>{definition.terraformName}</span>
+                    {definition.description ? (
+                      <span className={styles.advancedOptionDescription}>
+                        {definition.description}
+                      </span>
+                    ) : null}
+                  </span>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className={styles.inlineEmpty}>{advancedPickerEmptyMessage}</p>
+          )}
+        </div>
       </section>
     </aside>
   );
@@ -488,6 +602,7 @@ function ParameterField({
   errors,
   nodes,
   onChange,
+  onRemove,
   path,
   value
 }: {
@@ -497,6 +612,7 @@ function ParameterField({
   errors: ParameterErrors;
   nodes: readonly DiagramNode[];
   onChange: (value: unknown) => void;
+  onRemove?: (() => void) | undefined;
   path: string;
   value: unknown;
 }) {
@@ -509,6 +625,13 @@ function ParameterField({
           {definition.label}
           {definition.required ? <span className={styles.requiredMark}> *</span> : null}
         </span>
+        {onRemove ? (
+          <IconButton
+            className={styles.fieldActionButton}
+            label={`${definition.label} 삭제`}
+            onClick={onRemove}
+          />
+        ) : null}
       </div>
 
       <ParameterControl
@@ -941,11 +1064,19 @@ function NestedEditor({
   );
 }
 
-function IconButton({ label, onClick }: { label: string; onClick: () => void }) {
+function IconButton({
+  className,
+  label,
+  onClick
+}: {
+  className?: string | undefined;
+  label: string;
+  onClick: () => void;
+}) {
   return (
     <button
       aria-label={label}
-      className={`${styles.iconButton} ${styles.iconButtonDanger}`}
+      className={`${styles.iconButton} ${styles.iconButtonDanger} ${className ?? ""}`}
       onClick={onClick}
       title={label}
       type="button"
@@ -964,6 +1095,12 @@ function setRecordValue(record: RecordValue, key: string, value: unknown): Recor
   }
 
   nextRecord[key] = value;
+  return nextRecord;
+}
+
+function deleteRecordValue(record: RecordValue, key: string): RecordValue {
+  const nextRecord = { ...record };
+  delete nextRecord[key];
   return nextRecord;
 }
 
