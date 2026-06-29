@@ -92,7 +92,7 @@ function findInnermostMovingArea(
   let innermostArea: AreaMovement | undefined;
 
   for (const areaMovement of movingAreas) {
-    if (areaMovement.node.id === node.id || !containsPoint(areaMovement.node, nodeCenter)) {
+    if (areaMovement.node.id === node.id || !isNodeContainedByMovingArea(node, areaMovement, nodeCenter)) {
       continue;
     }
 
@@ -102,6 +102,18 @@ function findInnermostMovingArea(
   }
 
   return innermostArea;
+}
+
+function isNodeContainedByMovingArea(
+  node: DiagramNode,
+  areaMovement: AreaMovement,
+  nodeCenter: DiagramNode["position"]
+) {
+  if (isAreaNode(node)) {
+    return containsNode(areaMovement.node, node);
+  }
+
+  return containsPoint(areaMovement.node, nodeCenter);
 }
 
 function compareAreaMovements(left: AreaMovement, right: AreaMovement) {
@@ -120,6 +132,15 @@ function containsPoint(node: DiagramNode, point: DiagramNode["position"]) {
     point.x <= node.position.x + node.size.width &&
     point.y >= node.position.y &&
     point.y <= node.position.y + node.size.height
+  );
+}
+
+function containsNode(containerNode: DiagramNode, childNode: DiagramNode) {
+  return (
+    childNode.position.x >= containerNode.position.x &&
+    childNode.position.x + childNode.size.width <= containerNode.position.x + containerNode.size.width &&
+    childNode.position.y >= containerNode.position.y &&
+    childNode.position.y + childNode.size.height <= containerNode.position.y + containerNode.size.height
   );
 }
 

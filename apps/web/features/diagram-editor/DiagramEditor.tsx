@@ -53,6 +53,7 @@ import { terraformParameterCatalog } from "../parameter-input/catalog";
 import { ResourceSettingsPanel } from "../resource-settings";
 import { DEFAULT_DIAGRAM_VIEWPORT, EMPTY_DIAGRAM } from "./constants";
 import { applyAreaNodeMovement } from "./area-node-movement";
+import { findInnermostAreaNodeAtPoint } from "./area-nodes";
 import { DiagramEdgeToolbar } from "./DiagramEdgeToolbar";
 import { DiagramNodeView } from "./DiagramNodeView";
 import {
@@ -882,6 +883,22 @@ function DiagramEditorInner({
     updateActiveReferenceDropTargetNodeId(null);
   }, [updateActiveReferenceDropTargetNodeId]);
 
+  const handlePaneClick = useCallback(
+    (event: ReactMouseEvent) => {
+      const position = reactFlow.screenToFlowPosition({
+        x: event.clientX,
+        y: event.clientY
+      });
+      const areaNode = findInnermostAreaNodeAtPoint(diagramRef.current.nodes, position);
+
+      setSelectedNodeIds(areaNode ? [areaNode.id] : []);
+      setSelectedEdgeIds([]);
+      setInspectedNodeId(null);
+      focusEditorShell();
+    },
+    [focusEditorShell, reactFlow]
+  );
+
   const deleteSelection = useCallback(() => {
     const nodeIds = selectedNodeIds;
     const edgeIds = selectedEdgeIds;
@@ -1316,10 +1333,7 @@ function DiagramEditorInner({
             onNodeDrag={handleNodeDrag}
             onNodeDragStop={handleNodeDragStop}
             onNodesChange={handleNodesChange}
-            onPaneClick={() => {
-              setInspectedNodeId(null);
-              focusEditorShell();
-            }}
+            onPaneClick={handlePaneClick}
             onSelectionChange={handleSelectionChange}
             panOnDrag={interactionMode === "pan"}
             proOptions={{ hideAttribution: true }}

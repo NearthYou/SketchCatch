@@ -6,6 +6,7 @@ import {
   getEdgeStrokeWidth,
   normalizeEdgeKind
 } from "./diagram-utils";
+import { isAreaNode } from "./area-nodes";
 import type { DiagramFlowEdge, DiagramFlowNode, DiagramFlowNodeHandlers } from "./types";
 
 export function toFlowNodes(
@@ -19,9 +20,11 @@ export function toFlowNodes(
 
   return nodes.map((node) => {
     const selected = selectedNodeIdSet.has(node.id);
+    const isArea = isAreaNode(node);
 
     return {
       id: node.id,
+      ...(isArea ? { className: "diagramAreaFlowNode" } : {}),
       type: "diagramNode",
       position: { ...node.position },
       data: {
@@ -46,7 +49,8 @@ export function toFlowNodes(
       },
       style: {
         width: node.size.width,
-        height: node.size.height
+        height: node.size.height,
+        ...(isArea ? { pointerEvents: "none" } : {})
       },
       sourcePosition: Position.Right,
       targetPosition: Position.Left,

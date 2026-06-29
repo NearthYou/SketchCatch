@@ -259,7 +259,7 @@ test("applyReferenceDropTarget sets empty child reference values from the parent
   assert.equal(result.parameters?.values.vpcId, "aws_vpc.main.id");
 });
 
-test("applyReferenceDropTarget preserves existing child reference values", () => {
+test("applyReferenceDropTarget overwrites existing child reference values from the current parent resource", () => {
   const vpc = makeResourceNode({
     id: "vpc-1",
     resourceName: "main",
@@ -280,6 +280,23 @@ test("applyReferenceDropTarget preserves existing child reference values", () =>
   const target = findInnermostReferenceDropTarget(subnet, [vpc, subnet], catalog);
 
   const result = applyReferenceDropTarget(subnet, target, catalog);
+
+  assert.equal(result.parameters?.values.vpcId, "aws_vpc.main.id");
+});
+
+test("applyReferenceDropTarget preserves existing child reference values without a valid parent target", () => {
+  const subnet = makeResourceNode({
+    id: "subnet-1",
+    resourceName: "public",
+    resourceType: "aws_subnet",
+    position: { x: 120, y: 120 },
+    size: { width: 220, height: 180 },
+    values: {
+      vpcId: "aws_vpc.existing.id"
+    }
+  });
+
+  const result = applyReferenceDropTarget(subnet, null, catalog);
 
   assert.equal(result.parameters?.values.vpcId, "aws_vpc.existing.id");
 });

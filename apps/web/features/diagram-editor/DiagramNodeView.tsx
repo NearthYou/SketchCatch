@@ -31,6 +31,13 @@ const CONNECTION_HANDLES = [
   { id: "handle-bottom", position: Position.Bottom }
 ] as const;
 
+const AREA_NODE_HIT_EDGES = [
+  styles.areaNodeHitEdgeTop,
+  styles.areaNodeHitEdgeRight,
+  styles.areaNodeHitEdgeBottom,
+  styles.areaNodeHitEdgeLeft
+] as const;
+
 const AREA_NODE_DEFAULT_BORDER_COLOR = "#bfdbfe";
 const LEGACY_DEFAULT_BORDER_COLORS = new Set(["#8b98aa", "#2f6db3"]);
 
@@ -165,12 +172,21 @@ export function DiagramNodeView({ data, id, isConnectable, selected }: NodeProps
         style={nodeShellStyle}
       >
         {isArea ? (
-          <div className={styles.areaNodeHeader} style={{ color: textColor }}>
-            {areaNodeIconUrl ? (
-              <img alt="" className={styles.areaNodeHeaderIcon} draggable={false} src={areaNodeIconUrl} />
-            ) : null}
-            <span className={styles.areaNodeHeaderText}>{areaNodeLabel}</span>
-          </div>
+          <>
+            {AREA_NODE_HIT_EDGES.map((edgeClassName) => (
+              <div
+                aria-hidden="true"
+                className={`${styles.areaNodeHitEdge} ${edgeClassName}`}
+                key={edgeClassName}
+              />
+            ))}
+            <div className={styles.areaNodeHeader} style={{ color: textColor }}>
+              {areaNodeIconUrl ? (
+                <img alt="" className={styles.areaNodeHeaderIcon} draggable={false} src={areaNodeIconUrl} />
+              ) : null}
+              <span className={styles.areaNodeHeaderText}>{areaNodeLabel}</span>
+            </div>
+          </>
         ) : isResourceNode ? (
           <>
             <div className={styles.resourceNodeIconFrame}>

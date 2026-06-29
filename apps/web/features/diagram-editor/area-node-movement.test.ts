@@ -101,6 +101,38 @@ test("applyAreaNodeMovement keeps directly moved child positions instead of addi
   assert.deepEqual(getNodePosition(result, instance.id), movedInstance.position);
 });
 
+test("applyAreaNodeMovement does not move an overlapping parent area when a nested area moves", () => {
+  const region = makeDesignNode({
+    id: "region-1",
+    type: "design_region",
+    position: { x: 0, y: 0 },
+    size: { width: 400, height: 300 }
+  });
+  const availabilityZone = makeDesignNode({
+    id: "az-1",
+    type: "design_az",
+    position: { x: 100, y: 80 },
+    size: { width: 220, height: 160 },
+    zIndex: 2
+  });
+  const instance = makeResourceNode({
+    id: "instance-1",
+    resourceType: "aws_instance",
+    position: { x: 150, y: 120 },
+    size: { width: 96, height: 72 }
+  });
+  const movedAvailabilityZone = moveNode(availabilityZone, { x: 130, y: 100 });
+
+  const result = applyAreaNodeMovement(
+    [region, availabilityZone, instance],
+    [region, movedAvailabilityZone, instance],
+    new Set([availabilityZone.id])
+  );
+
+  assert.deepEqual(getNodePosition(result, region.id), region.position);
+  assert.deepEqual(getNodePosition(result, instance.id), { x: 180, y: 140 });
+});
+
 function makeDesignNode({
   id,
   position,
