@@ -1877,6 +1877,182 @@ nextjs-portal {
   white-space: nowrap;
 }
 
+.diagramEditor {
+  --editor-surface: rgba(17, 20, 30, 0.94);
+  --editor-border: rgba(255, 255, 255, 0.13);
+  --editor-border-strong: rgba(255, 255, 255, 0.2);
+  --editor-text: #f7f8fb;
+  --editor-muted: rgba(247, 248, 251, 0.66);
+  --editor-subtle: rgba(247, 248, 251, 0.46);
+  background:
+    radial-gradient(circle at 15% 16%, rgba(20, 184, 166, 0.14), transparent 24rem),
+    radial-gradient(circle at 84% 18%, rgba(124, 92, 255, 0.13), transparent 22rem),
+    linear-gradient(180deg, #07080d 0%, #0b1019 54%, #07080d 100%);
+  color: var(--editor-text);
+}
+
+.diagramEditor .resourcePanel,
+.diagramEditor .parameterPanel {
+  background: rgba(7, 8, 13, 0.9);
+  border-color: var(--editor-border);
+  color: var(--editor-text);
+}
+
+.diagramEditor .diagramTopbar,
+.diagramEditor .resourceTabs,
+.diagramEditor .resourceAreas,
+.diagramEditor .resourceArea,
+.diagramEditor .resourceArea:last-child {
+  border-color: var(--editor-border);
+}
+
+.diagramEditor .panelHeader h2,
+.diagramEditor .diagramTopbar h1,
+.diagramEditor .resourceCategoryViewHeader h3,
+.diagramEditor .resourceAreaLabel {
+  color: #ffffff;
+}
+
+.diagramEditor .panelEyebrow,
+.diagramEditor .sectionCaption,
+.diagramEditor .fieldLabel {
+  color: var(--editor-muted);
+}
+
+.diagramEditor .providerButton,
+.diagramEditor .topbarActions button,
+.diagramEditor .edgeToolbar button,
+.diagramEditor .nodeToolbar button,
+.diagramEditor .resourceBackButton,
+.diagramEditor .providerSelect,
+.diagramEditor .resourceViewToggle,
+.diagramEditor .resourceViewToggleActive,
+.diagramEditor .resourcePanelCollapse,
+.diagramEditor .resourceTab,
+.diagramEditor .resourceTabActive {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--editor-border);
+  color: var(--editor-muted);
+}
+
+.diagramEditor .providerButton:hover,
+.diagramEditor .topbarActions button:hover,
+.diagramEditor .edgeToolbar button:hover,
+.diagramEditor .nodeToolbar button:hover,
+.diagramEditor .resourceBackButton:hover,
+.diagramEditor .resourceAreaHeader:hover,
+.diagramEditor .resourceAreaHeader:focus-visible,
+.diagramEditor .resourceCategoryButton:hover,
+.diagramEditor .resourceCategoryButton:focus-visible,
+.diagramEditor .resourceTile:not(.resourceTileDisabled):hover {
+  background: rgba(255, 255, 255, 0.09);
+  border-color: rgba(56, 189, 248, 0.44);
+  color: #ffffff;
+}
+
+.diagramEditor .resourceTabActive,
+.diagramEditor .resourceViewToggleActive {
+  background: rgba(56, 189, 248, 0.14);
+  color: #bae6fd;
+}
+
+.diagramEditor .searchBox,
+.diagramEditor .resourcePanel .searchBox,
+.diagramEditor .resourceAreaGroup,
+.diagramEditor .resourceCategoryView,
+.diagramEditor .resourceCategoryButton,
+.diagramEditor .resourceTile {
+  background: rgba(255, 255, 255, 0.055);
+  border-color: var(--editor-border);
+  color: var(--editor-text);
+}
+
+.diagramEditor .searchBox input,
+.diagramEditor .resourcePanel .searchBox input,
+.diagramEditor .parameterSection input,
+.diagramEditor .parameterSection select,
+.diagramEditor .parameterSection textarea,
+.diagramEditor .edgeToolbar select {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--editor-border);
+  color: var(--editor-text);
+}
+
+.diagramEditor .searchBox input::placeholder,
+.diagramEditor .resourcePanel .searchBox input::placeholder,
+.diagramEditor .parameterSection input::placeholder,
+.diagramEditor .parameterSection textarea::placeholder {
+  color: var(--editor-subtle);
+}
+
+.diagramEditor .resourceAreaHeader {
+  background: transparent;
+  color: var(--editor-text);
+}
+
+.diagramEditor .resourceAreaIcon,
+.diagramEditor .awsLogo,
+.diagramEditor .resourceCategoryLabel {
+  color: var(--editor-muted);
+}
+
+.diagramEditor .resourceIconFallback {
+  background: rgba(124, 92, 255, 0.16);
+  border-color: rgba(124, 92, 255, 0.35);
+  color: #c4b5fd;
+}
+
+.diagramEditor .diagramCanvas {
+  background:
+    linear-gradient(rgba(11, 16, 25, 0.92), rgba(11, 16, 25, 0.92)),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.07) 0 1px, transparent 1px 32px),
+    repeating-linear-gradient(rgba(255, 255, 255, 0.07) 0 1px, transparent 1px 32px);
+  border-color: var(--editor-border-strong);
+}
+
+.diagramEditor .sketchNode {
+  background: rgba(17, 20, 30, 0.94);
+  border-color: rgba(124, 92, 255, 0.72);
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.28);
+  color: var(--editor-text);
+}
+
+.diagramEditor .sketchNodeLocked {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.diagramEditor .nodeIcon,
+.diagramEditor .resourceTypeBadge {
+  background: rgba(124, 92, 255, 0.16);
+  color: #c4b5fd;
+}
+
+.diagramEditor .sketchNode span,
+.diagramEditor .emptyPanelState,
+.diagramEditor .fieldHelp {
+  color: var(--editor-muted);
+}
+
+.diagramEditor .nodeToolbar,
+.diagramEditor .edgeToolbar {
+  background: rgba(17, 20, 30, 0.96);
+  border-color: var(--editor-border);
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.32);
+}
+
+.diagramEditor .parameterSection {
+  border-color: var(--editor-border);
+}
+
+.diagramEditor .parameterSection h3,
+.diagramEditor .fieldLabel {
+  color: var(--editor-text);
+}
+
+.diagramEditor .fieldLabel strong {
+  color: #7dd3fc;
+}
+
 .myPageShell {
   background: #f5f7fb;
   color: #152033;
@@ -3069,15 +3245,32 @@ nextjs-portal {
 }
 
 .dashboardShell {
-  background: #d8dadd;
-  color: #151922;
+  --dashboard-bg: #07080d;
+  --dashboard-surface: rgba(17, 20, 30, 0.9);
+  --dashboard-surface-strong: rgba(24, 29, 42, 0.96);
+  --dashboard-border: rgba(255, 255, 255, 0.13);
+  --dashboard-border-strong: rgba(255, 255, 255, 0.2);
+  --dashboard-text: #f7f8fb;
+  --dashboard-muted: rgba(247, 248, 251, 0.66);
+  --dashboard-subtle: rgba(247, 248, 251, 0.46);
+  --dashboard-blue: #38bdf8;
+  --dashboard-purple: #7c5cff;
+  --dashboard-teal: #14b8a6;
+  --dashboard-orange: #f59e0b;
+  background:
+    radial-gradient(circle at 12% 16%, rgba(20, 184, 166, 0.16), transparent 26rem),
+    radial-gradient(circle at 86% 10%, rgba(245, 158, 11, 0.12), transparent 24rem),
+    linear-gradient(180deg, #07080d 0%, #0b1019 48%, #07080d 100%);
+  color: var(--dashboard-text);
   min-height: 100vh;
 }
 
 .dashboardSidebar {
-  background: #f7f8fa;
-  border-right: 1px solid #9da3ad;
+  background: rgba(7, 8, 13, 0.88);
+  backdrop-filter: blur(18px);
+  border-right: 1px solid var(--dashboard-border);
   bottom: 0;
+  box-shadow: 18px 0 44px rgba(0, 0, 0, 0.28);
   display: flex;
   flex-direction: column;
   gap: 18px;
@@ -3091,6 +3284,7 @@ nextjs-portal {
 
 .dashboardBrand {
   align-items: center;
+  color: #ffffff;
   display: inline-flex;
   font-size: 1.1rem;
   font-weight: 900;
@@ -3114,15 +3308,15 @@ nextjs-portal {
 }
 
 .dashboardBrandMark span:nth-child(1) {
-  background: #2563eb;
+  background: var(--dashboard-purple);
 }
 
 .dashboardBrandMark span:nth-child(2) {
-  background: #0f9f7a;
+  background: var(--dashboard-teal);
 }
 
 .dashboardBrandMark span:nth-child(3) {
-  background: #d97706;
+  background: var(--dashboard-orange);
   grid-column: 1 / 3;
   width: 23px;
 }
@@ -3134,8 +3328,9 @@ nextjs-portal {
 
 .dashboardNavItem {
   align-items: center;
-  border-bottom: 1px solid #c6cad1;
-  color: #1f2937;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--dashboard-muted);
   display: grid;
   font-size: 0.95rem;
   font-weight: 850;
@@ -3150,8 +3345,9 @@ nextjs-portal {
 
 .dashboardNavItem:hover,
 .dashboardNavItemActive {
-  background: #ffffff;
-  color: #0f5fd7;
+  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--dashboard-border);
+  color: #ffffff;
 }
 
 .dashboardIcon {
@@ -3189,21 +3385,22 @@ nextjs-portal {
 
 .dashboardSidebarAction,
 .dashboardTopbarAction {
-  background: #0f7bff;
-  border: 1px solid #0f7bff;
+  background: linear-gradient(135deg, var(--dashboard-purple), #2563eb);
+  border: 1px solid rgba(124, 92, 255, 0.8);
+  box-shadow: 0 14px 32px rgba(37, 99, 235, 0.24);
   color: #ffffff;
 }
 
 .dashboardSecondaryButton {
-  background: #ffffff;
-  border: 1px solid #b8c0cc;
-  color: #202938;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--dashboard-border);
+  color: var(--dashboard-text);
 }
 
 .dashboardDangerButton {
-  background: #fff7f5;
-  border: 1px solid #fecaca;
-  color: #b42318;
+  background: rgba(248, 113, 113, 0.1);
+  border: 1px solid rgba(248, 113, 113, 0.34);
+  color: #fca5a5;
 }
 
 .dashboardSidebarAction:hover,
@@ -3223,7 +3420,7 @@ nextjs-portal {
 
 .dashboardSidebarUser {
   align-items: center;
-  border-top: 1px solid #c6cad1;
+  border-top: 1px solid var(--dashboard-border);
   display: flex;
   gap: 10px;
   padding: 16px 8px 0;
@@ -3237,7 +3434,7 @@ nextjs-portal {
 
 .dashboardAvatar {
   align-items: center;
-  background: #182438;
+  background: linear-gradient(135deg, var(--dashboard-purple), var(--dashboard-teal));
   border-radius: 6px;
   color: #ffffff;
   display: inline-flex;
@@ -3251,7 +3448,7 @@ nextjs-portal {
 .dashboardLogout {
   background: transparent;
   border: 0;
-  color: #6b7280;
+  color: var(--dashboard-subtle);
   cursor: pointer;
   font: inherit;
   font-size: 0.78rem;
@@ -3260,7 +3457,7 @@ nextjs-portal {
 }
 
 .dashboardLogout:hover {
-  color: #b42318;
+  color: #fca5a5;
 }
 
 .dashboardMain {
@@ -3281,10 +3478,10 @@ nextjs-portal {
 
 .dashboardSearch {
   align-items: center;
-  background: #ffffff;
-  border: 1px solid #b8c0cc;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid var(--dashboard-border);
   border-radius: 6px;
-  color: #505b6d;
+  color: var(--dashboard-muted);
   display: grid;
   gap: 8px;
   grid-template-columns: auto minmax(0, 1fr);
@@ -3296,17 +3493,21 @@ nextjs-portal {
 .dashboardSearch input {
   background: transparent;
   border: 0;
-  color: #111827;
+  color: var(--dashboard-text);
   min-width: 0;
   outline: 0;
 }
 
+.dashboardSearch input::placeholder {
+  color: var(--dashboard-subtle);
+}
+
 .dashboardIconButton {
   align-items: center;
-  background: #ffffff;
-  border: 1px solid #b8c0cc;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid var(--dashboard-border);
   border-radius: 6px;
-  color: #202938;
+  color: var(--dashboard-text);
   cursor: pointer;
   display: inline-flex;
   height: 38px;
@@ -3315,10 +3516,10 @@ nextjs-portal {
 }
 
 .dashboardMessage {
-  background: #fff7ed;
-  border: 1px solid #fed7aa;
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.34);
   border-radius: 6px;
-  color: #9a3412;
+  color: #fbbf24;
   font-weight: 850;
   margin: 0;
   padding: 11px 14px;
@@ -3333,7 +3534,7 @@ nextjs-portal {
 
 .dashboardEyebrow,
 .dashboardPanelKicker {
-  color: #115fc7;
+  color: var(--dashboard-blue);
   font-size: 0.74rem;
   font-weight: 900;
   letter-spacing: 0;
@@ -3342,6 +3543,7 @@ nextjs-portal {
 }
 
 .dashboardPageHeader h1 {
+  color: #ffffff;
   font-size: 1.85rem;
   line-height: 1.15;
   margin: 0;
@@ -3354,9 +3556,10 @@ nextjs-portal {
 }
 
 .dashboardPanel {
-  background: #ffffff;
-  border: 1px solid #8f98a6;
+  background: var(--dashboard-surface);
+  border: 1px solid var(--dashboard-border);
   border-radius: 6px;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.2);
   display: grid;
   gap: 20px;
   min-width: 0;
@@ -3407,8 +3610,49 @@ nextjs-portal {
   justify-content: flex-end;
 }
 
+.dashboardShell .fieldLabel {
+  color: var(--dashboard-muted);
+}
+
+.dashboardShell .textInput,
+.dashboardShell .selectInput,
+.dashboardShell .textArea,
+.dashboardShell .codeArea {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--dashboard-border);
+  color: var(--dashboard-text);
+}
+
+.dashboardShell .textInput:focus,
+.dashboardShell .selectInput:focus,
+.dashboardShell .textArea:focus,
+.dashboardShell .codeArea:focus {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--dashboard-blue);
+  outline: 2px solid rgba(56, 189, 248, 0.14);
+}
+
+.dashboardShell .textInput::placeholder,
+.dashboardShell .textArea::placeholder {
+  color: var(--dashboard-subtle);
+}
+
+.dashboardShell .choiceButton,
+.dashboardShell .secondaryButton {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--dashboard-border);
+  color: var(--dashboard-muted);
+}
+
+.dashboardShell .choiceButtonActive,
+.dashboardShell .primaryButton {
+  background: linear-gradient(135deg, var(--dashboard-purple), #2563eb);
+  border-color: rgba(124, 92, 255, 0.8);
+  color: #ffffff;
+}
+
 .workspaceStartError {
-  color: #b42318;
+  color: #fca5a5;
   font-size: 0.88rem;
   font-weight: 800;
   margin: 0;
@@ -3416,8 +3660,8 @@ nextjs-portal {
 
 .projectListEmpty {
   align-items: flex-start;
-  background: #f8fafc;
-  border: 1px dashed #b8c0cc;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px dashed var(--dashboard-border-strong);
   border-radius: 6px;
   display: grid;
   gap: 14px;
@@ -3425,16 +3669,16 @@ nextjs-portal {
 }
 
 .projectListEmpty p {
-  color: #465266;
+  color: var(--dashboard-muted);
   font-weight: 800;
   margin: 0;
 }
 
 .dashboardCountBadge {
-  background: #eef2f7;
-  border: 1px solid #cbd3df;
+  background: rgba(56, 189, 248, 0.11);
+  border: 1px solid rgba(56, 189, 248, 0.26);
   border-radius: 999px;
-  color: #465266;
+  color: #bae6fd;
   font-size: 0.78rem;
   font-weight: 900;
   padding: 5px 10px;
@@ -3451,8 +3695,8 @@ nextjs-portal {
 }
 
 .dashboardStatGrid article {
-  background: #ffffff;
-  border: 1px solid #b8c0cc;
+  background: var(--dashboard-surface);
+  border: 1px solid var(--dashboard-border);
   border-radius: 6px;
   display: grid;
   gap: 7px;
@@ -3461,11 +3705,11 @@ nextjs-portal {
 }
 
 .dashboardStatGrid article .dashboardIcon {
-  color: #0f9f7a;
+  color: var(--dashboard-teal);
 }
 
 .dashboardStatGrid span {
-  color: #596579;
+  color: var(--dashboard-muted);
   font-size: 0.78rem;
   font-weight: 850;
 }
@@ -3485,24 +3729,38 @@ nextjs-portal {
 }
 
 .projectCard {
-  background: #ffffff;
+  background: transparent;
   display: grid;
   gap: 12px;
   min-width: 0;
 }
 
+.projectCardLink {
+  border-radius: 8px;
+  color: inherit;
+  cursor: pointer;
+  outline: 0;
+  text-decoration: none;
+}
+
+.projectCardLink:focus-visible {
+  box-shadow:
+    0 0 0 3px rgba(56, 189, 248, 0.22),
+    0 18px 44px rgba(0, 0, 0, 0.2);
+}
+
 .projectCardWide {
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid var(--dashboard-border);
   grid-template-columns: 260px minmax(0, 1fr);
   padding-bottom: 18px;
 }
 
 .projectPreview {
   background:
-    linear-gradient(#ffffff 0 0) padding-box,
-    repeating-linear-gradient(90deg, #e5ebf3 0 1px, transparent 1px 22px),
-    repeating-linear-gradient(#e5ebf3 0 1px, transparent 1px 22px);
-  border: 1px solid #9aa3b0;
+    linear-gradient(rgba(11, 16, 25, 0.94) 0 0) padding-box,
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.08) 0 1px, transparent 1px 22px),
+    repeating-linear-gradient(rgba(255, 255, 255, 0.08) 0 1px, transparent 1px 22px);
+  border: 1px solid var(--dashboard-border-strong);
   border-radius: 6px;
   height: 132px;
   overflow: hidden;
@@ -3514,7 +3772,7 @@ nextjs-portal {
 }
 
 .projectPreviewFrame {
-  border: 1px solid #8d95a2;
+  border: 1px solid rgba(56, 189, 248, 0.55);
   border-radius: 5px;
   height: 72px;
   left: 14%;
@@ -3525,8 +3783,9 @@ nextjs-portal {
 
 .projectPreviewNode {
   align-items: center;
-  border: 1px solid rgba(21, 25, 34, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.24);
   border-radius: 5px;
+  color: #f7f8fb;
   display: inline-flex;
   font-size: 0.68rem;
   font-weight: 900;
@@ -3538,26 +3797,26 @@ nextjs-portal {
 }
 
 .projectPreviewNodeVpc {
-  background: #fae8ff;
+  background: rgba(124, 92, 255, 0.78);
   left: 18%;
   top: 50px;
 }
 
 .projectPreviewNodeApp {
-  background: #dcfce7;
+  background: rgba(20, 184, 166, 0.78);
   left: 50%;
   top: 43px;
   transform: translateX(-50%);
 }
 
 .projectPreviewNodeData {
-  background: #e0f2fe;
+  background: rgba(56, 189, 248, 0.78);
   right: 18%;
   top: 58px;
 }
 
 .projectPreviewLine {
-  background: #a7b0bd;
+  background: rgba(255, 255, 255, 0.36);
   height: 2px;
   position: absolute;
   top: 67px;
@@ -3573,7 +3832,63 @@ nextjs-portal {
   right: calc(18% + 48px);
 }
 
+.projectArchitecturePreview {
+  align-items: center;
+  display: flex;
+  height: 176px;
+  justify-content: center;
+  min-width: 0;
+}
+
+.projectCardWide .projectArchitecturePreview {
+  height: 148px;
+}
+
+.projectArchitectureSvg {
+  display: block;
+  height: 100%;
+  max-width: 860px;
+  overflow: visible;
+  width: 100%;
+}
+
+.projectArchitectureEdge {
+  stroke: rgba(125, 211, 252, 0.58);
+  stroke-linecap: round;
+  stroke-width: 2;
+}
+
+.projectArchitectureNodeBox {
+  fill: rgba(15, 23, 42, 0.94);
+  stroke: rgba(125, 211, 252, 0.42);
+  stroke-width: 1.5;
+}
+
+.projectArchitectureNodeFrame {
+  fill: rgba(124, 92, 255, 0.07);
+  stroke: rgba(124, 92, 255, 0.34);
+  stroke-dasharray: 5 4;
+  stroke-width: 1.4;
+}
+
+.projectArchitectureNodeAccent {
+  fill: #14b8a6;
+}
+
+.projectArchitectureNodeText {
+  fill: #f8fafc;
+  font-weight: 850;
+  pointer-events: none;
+  text-anchor: middle;
+}
+
+.projectArchitectureEmptyBoard {
+  inset: 0;
+  position: absolute;
+}
+
 .projectCardBody {
+  align-content: start;
   display: grid;
   gap: 10px;
   min-width: 0;
@@ -3587,7 +3902,7 @@ nextjs-portal {
 }
 
 .projectCardTitle span {
-  color: #be5f00;
+  color: var(--dashboard-orange);
   flex: 0 0 auto;
   font-size: 0.78rem;
   font-weight: 900;
@@ -3610,13 +3925,13 @@ nextjs-portal {
 
 .projectTitleLink:hover,
 .dashboardTableLink:hover {
-  color: #0f5fd7;
+  color: var(--dashboard-blue);
   text-decoration: underline;
   text-underline-offset: 3px;
 }
 
 .projectCardBody p {
-  color: #5b6678;
+  color: var(--dashboard-muted);
   font-size: 0.9rem;
   line-height: 1.5;
   margin: 0;
@@ -3630,10 +3945,10 @@ nextjs-portal {
 
 .dashboardChip {
   align-items: center;
-  background: #eef7f3;
-  border: 1px solid #d5eadf;
+  background: rgba(20, 184, 166, 0.11);
+  border: 1px solid rgba(20, 184, 166, 0.25);
   border-radius: 6px;
-  color: #096b4f;
+  color: #99f6e4;
   display: inline-flex;
   font-size: 0.76rem;
   font-weight: 850;
@@ -3643,7 +3958,7 @@ nextjs-portal {
 
 .projectCardMeta {
   align-items: center;
-  color: #6b7280;
+  color: var(--dashboard-subtle);
   display: flex;
   flex-wrap: wrap;
   font-size: 0.82rem;
@@ -3662,7 +3977,7 @@ nextjs-portal {
 }
 
 .dashboardTable {
-  border: 1px solid #d6dce5;
+  border: 1px solid var(--dashboard-border);
   border-radius: 6px;
   overflow: hidden;
 }
@@ -3680,8 +3995,8 @@ nextjs-portal {
 }
 
 .dashboardTableHeader {
-  background: #f1f4f8;
-  color: #5b6678;
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--dashboard-muted);
   font-size: 0.78rem;
   font-weight: 900;
   text-transform: uppercase;
@@ -3689,8 +4004,8 @@ nextjs-portal {
 
 .dashboardTableRow {
   align-items: center;
-  border-top: 1px solid #e4e9f0;
-  color: #4b5567;
+  border-top: 1px solid var(--dashboard-border);
+  color: rgba(247, 248, 251, 0.78);
   font-size: 0.9rem;
 }
 
@@ -3710,7 +4025,7 @@ nextjs-portal {
 }
 
 .projectDetailSummary p {
-  color: #5b6678;
+  color: var(--dashboard-muted);
   line-height: 1.6;
   margin: 0;
 }
@@ -3722,8 +4037,8 @@ nextjs-portal {
 }
 
 .projectDetailMetricGrid article {
-  background: #f7f9fc;
-  border: 1px solid #d6dce5;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--dashboard-border);
   border-radius: 6px;
   display: grid;
   gap: 7px;
@@ -3731,7 +4046,7 @@ nextjs-portal {
 }
 
 .projectDetailMetricGrid span {
-  color: #596579;
+  color: var(--dashboard-muted);
   font-size: 0.78rem;
   font-weight: 850;
 }
@@ -3747,7 +4062,7 @@ nextjs-portal {
 
 .projectDetailActivity p {
   align-items: center;
-  color: #4b5567;
+  color: var(--dashboard-muted);
   display: flex;
   gap: 8px;
   margin: 0;
@@ -3762,23 +4077,23 @@ nextjs-portal {
 }
 
 .deploymentStatus-running {
-  background: #dcfce7;
-  color: #047857;
+  background: rgba(16, 185, 129, 0.14);
+  color: #86efac;
 }
 
 .deploymentStatus-stopped {
-  background: #eef2f7;
-  color: #4b5567;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--dashboard-muted);
 }
 
 .deploymentStatus-failed {
-  background: #fee2e2;
-  color: #b42318;
+  background: rgba(248, 113, 113, 0.14);
+  color: #fca5a5;
 }
 
 .deploymentStatus-not_deployed {
-  background: #fef3c7;
-  color: #92400e;
+  background: rgba(245, 158, 11, 0.14);
+  color: #fcd34d;
 }
 
 .dashboardTwoColumn,
@@ -3795,7 +4110,8 @@ nextjs-portal {
 }
 
 .templateCard {
-  border: 1px solid #d6dce5;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid var(--dashboard-border);
   border-radius: 6px;
   display: grid;
   gap: 14px;
@@ -3811,7 +4127,7 @@ nextjs-portal {
 
 .templateCardHeader span,
 .templateListRow span {
-  color: #6b7280;
+  color: var(--dashboard-subtle);
   display: block;
   font-size: 0.8rem;
   font-weight: 850;
@@ -3824,7 +4140,7 @@ nextjs-portal {
 }
 
 .templateCardHeader strong {
-  color: #0f5fd7;
+  color: var(--dashboard-blue);
   font-size: 0.92rem;
 }
 
@@ -3833,7 +4149,7 @@ nextjs-portal {
 .integrationPanel p,
 .costNoticePanel p,
 .costSummaryAmount p {
-  color: #5b6678;
+  color: var(--dashboard-muted);
   line-height: 1.55;
   margin: 0;
 }
@@ -3848,14 +4164,14 @@ nextjs-portal {
 }
 
 .templateCardActions > span {
-  color: #6b7280;
+  color: var(--dashboard-subtle);
   font-size: 0.82rem;
   font-weight: 850;
 }
 
 .isLiked {
-  border-color: #f9a8d4;
-  color: #be185d;
+  border-color: rgba(244, 114, 182, 0.5);
+  color: #f9a8d4;
 }
 
 .templateList {
@@ -3865,8 +4181,8 @@ nextjs-portal {
 
 .templateListRow {
   align-items: center;
-  background: #f7f9fc;
-  border: 1px solid #e2e8f0;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid var(--dashboard-border);
   border-radius: 6px;
   display: flex;
   gap: 14px;
@@ -3894,10 +4210,10 @@ nextjs-portal {
 
 .settingsTab {
   align-items: center;
-  background: #ffffff;
-  border: 1px solid #b8c0cc;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--dashboard-border);
   border-radius: 6px;
-  color: #465266;
+  color: var(--dashboard-muted);
   cursor: pointer;
   display: inline-flex;
   font: inherit;
@@ -3909,14 +4225,14 @@ nextjs-portal {
 }
 
 .settingsTabActive {
-  background: #e9f0ff;
-  border-color: #b9ccff;
-  color: #1f5eff;
+  background: rgba(56, 189, 248, 0.14);
+  border-color: rgba(56, 189, 248, 0.42);
+  color: #bae6fd;
 }
 
 .templateForm label,
 .settingsField {
-  color: #344054;
+  color: var(--dashboard-muted);
   display: grid;
   font-size: 0.86rem;
   font-weight: 900;
@@ -3927,10 +4243,10 @@ nextjs-portal {
 .templateForm textarea,
 .settingsField input,
 .settingsField select {
-  background: #f8fafc;
-  border: 1px solid #c7d0dc;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--dashboard-border);
   border-radius: 6px;
-  color: #111827;
+  color: var(--dashboard-text);
   font: inherit;
   outline: 0;
   padding: 10px 12px;
@@ -3941,14 +4257,14 @@ nextjs-portal {
 .templateForm textarea:focus,
 .settingsField input:focus,
 .settingsField select:focus {
-  border-color: #0f7bff;
-  box-shadow: 0 0 0 3px rgba(15, 123, 255, 0.12);
+  border-color: var(--dashboard-blue);
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.12);
 }
 
 .settingsField input:disabled,
 .settingsField select:disabled {
-  background: #eef2f7;
-  color: #697386;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--dashboard-subtle);
   cursor: not-allowed;
 }
 
@@ -3966,8 +4282,8 @@ nextjs-portal {
 }
 
 .settingsInfoGrid article {
-  background: #f8fafc;
-  border: 1px solid #d6dce5;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--dashboard-border);
   border-radius: 6px;
   display: grid;
   gap: 5px;
@@ -3976,20 +4292,20 @@ nextjs-portal {
 }
 
 .settingsInfoGrid span {
-  color: #6b7280;
+  color: var(--dashboard-subtle);
   font-size: 0.78rem;
   font-weight: 900;
 }
 
 .settingsInfoGrid strong {
-  color: #111827;
+  color: var(--dashboard-text);
   font-size: 0.88rem;
   overflow-wrap: anywhere;
 }
 
 .settingsCodeBlock {
-  background: #f8fafc;
-  border: 1px solid #d6dce5;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--dashboard-border);
   border-radius: 6px;
   display: grid;
   gap: 12px;
@@ -3999,8 +4315,8 @@ nextjs-portal {
 
 .settingsCodeBlock pre,
 .settingsCodeArea {
-  background: #111827;
-  border: 1px solid #1f2937;
+  background: #07080d;
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 6px;
   color: #e5e7eb;
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
@@ -4020,14 +4336,14 @@ nextjs-portal {
 }
 
 .templateForm fieldset {
-  border: 1px solid #d6dce5;
+  border: 1px solid var(--dashboard-border);
   border-radius: 6px;
   margin: 0;
   padding: 12px;
 }
 
 .templateForm legend {
-  color: #344054;
+  color: var(--dashboard-muted);
   font-size: 0.86rem;
   font-weight: 900;
   padding: 0 4px;
@@ -4041,8 +4357,8 @@ nextjs-portal {
 
 .templateServiceOptions label {
   align-items: center;
-  background: #f8fafc;
-  border: 1px solid #d6dce5;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--dashboard-border);
   border-radius: 999px;
   display: inline-flex;
   font-size: 0.8rem;
@@ -4061,7 +4377,8 @@ nextjs-portal {
 }
 
 .costSummaryAmount {
-  background: #101828;
+  background: linear-gradient(135deg, rgba(124, 92, 255, 0.3), rgba(20, 184, 166, 0.2)), #0a0d14;
+  border: 1px solid var(--dashboard-border);
   border-radius: 6px;
   color: #ffffff;
   display: grid;
@@ -4086,7 +4403,7 @@ nextjs-portal {
 }
 
 .costNoticePanel > .dashboardIcon {
-  color: #0f9f7a;
+  color: var(--dashboard-teal);
   height: 32px;
   width: 32px;
 }
@@ -4099,10 +4416,10 @@ nextjs-portal {
 
 .integrationIcon {
   align-items: center;
-  background: #eef2ff;
-  border: 1px solid #c7d2fe;
+  background: rgba(124, 92, 255, 0.13);
+  border: 1px solid rgba(124, 92, 255, 0.34);
   border-radius: 6px;
-  color: #3653d9;
+  color: #c4b5fd;
   display: inline-flex;
   height: 46px;
   justify-content: center;
@@ -4110,14 +4427,14 @@ nextjs-portal {
 }
 
 .integrationIconAws {
-  background: #fff7ed;
-  border-color: #fed7aa;
-  color: #c2410c;
+  background: rgba(245, 158, 11, 0.13);
+  border-color: rgba(245, 158, 11, 0.34);
+  color: var(--dashboard-orange);
 }
 
 .integrationStatus {
   align-items: center;
-  color: #4b5567;
+  color: var(--dashboard-muted);
   display: inline-flex;
   font-weight: 850;
   gap: 8px;
@@ -4151,7 +4468,7 @@ nextjs-portal {
 
 @media (max-width: 860px) {
   .dashboardSidebar {
-    border-bottom: 1px solid #9da3ad;
+    border-bottom: 1px solid var(--dashboard-border);
     border-right: 0;
     bottom: auto;
     height: auto;
@@ -4221,5 +4538,312 @@ nextjs-portal {
 
   .costSummaryAmount {
     min-width: 0;
+  }
+}
+
+/* App surface polish */
+.dashboardShell {
+  --dashboard-surface: rgba(15, 23, 42, 0.96);
+  --dashboard-surface-strong: #111827;
+  --dashboard-surface-soft: rgba(255, 255, 255, 0.075);
+  --dashboard-border: rgba(148, 163, 184, 0.22);
+  --dashboard-border-strong: rgba(148, 163, 184, 0.34);
+  --dashboard-text: #f8fafc;
+  --dashboard-muted: #b6c2d2;
+  --dashboard-subtle: #8794a8;
+  background:
+    radial-gradient(circle at 10% 12%, rgba(20, 184, 166, 0.11), transparent 28rem),
+    radial-gradient(circle at 90% 8%, rgba(124, 92, 255, 0.1), transparent 26rem),
+    linear-gradient(180deg, #070a11 0%, #0b1220 48%, #070a11 100%);
+}
+
+.dashboardSidebar {
+  background: rgba(5, 8, 15, 0.94);
+  box-shadow: 16px 0 42px rgba(0, 0, 0, 0.34);
+  gap: 22px;
+}
+
+.dashboardNav {
+  gap: 6px;
+}
+
+.dashboardNavItem {
+  color: #aab6c8;
+  min-height: 44px;
+}
+
+.dashboardNavItem:hover,
+.dashboardNavItemActive {
+  background: rgba(56, 189, 248, 0.1);
+  border-color: rgba(56, 189, 248, 0.28);
+  box-shadow: inset 3px 0 0 #38bdf8;
+}
+
+.dashboardMain {
+  align-content: start;
+  gap: 26px;
+  padding: 32px 32px 56px;
+}
+
+.dashboardTopbar {
+  background: rgba(7, 10, 17, 0.66);
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.dashboardSearch,
+.dashboardIconButton,
+.dashboardSecondaryButton,
+.dashboardDangerButton,
+.settingsTab,
+.dashboardShell .choiceButton,
+.dashboardShell .secondaryButton {
+  background: rgba(15, 23, 42, 0.82);
+  border-color: rgba(148, 163, 184, 0.26);
+}
+
+.dashboardSearch:focus-within,
+.dashboardIconButton:hover,
+.dashboardSecondaryButton:hover,
+.settingsTab:hover,
+.dashboardShell .choiceButton:hover,
+.dashboardShell .secondaryButton:hover {
+  border-color: rgba(56, 189, 248, 0.48);
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.1);
+}
+
+.dashboardTopbarAction,
+.dashboardShell .choiceButtonActive,
+.dashboardShell .primaryButton {
+  background: #f8fafc;
+  border-color: rgba(255, 255, 255, 0.66);
+  box-shadow: 0 16px 34px rgba(255, 255, 255, 0.1);
+  color: #08111f;
+}
+
+.dashboardTopbarAction:hover,
+.dashboardShell .primaryButton:hover {
+  box-shadow: 0 18px 38px rgba(56, 189, 248, 0.18);
+}
+
+.dashboardPageHeader {
+  align-items: center;
+}
+
+.dashboardPageHeader h1 {
+  font-size: 2rem;
+  letter-spacing: 0;
+}
+
+.dashboardEyebrow,
+.dashboardPanelKicker {
+  color: #7dd3fc;
+}
+
+.dashboardPanel,
+.dashboardStatGrid article,
+.templateCard,
+.templateListRow,
+.settingsInfoGrid article,
+.settingsCodeBlock,
+.projectDetailMetricGrid article {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.018)),
+    var(--dashboard-surface);
+  border-color: var(--dashboard-border);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 18px 44px rgba(0, 0, 0, 0.18);
+}
+
+.dashboardPanelHeader {
+  border-bottom: 1px solid rgba(148, 163, 184, 0.16);
+  margin-bottom: 2px;
+  padding-bottom: 14px;
+}
+
+.dashboardPanelHeader h2,
+.costSummaryPanel h2,
+.costNoticePanel h2,
+.integrationPanel h2,
+.templateCardHeader h3,
+.projectCardTitle h3,
+.projectDetailSummary h2 {
+  color: #f8fafc;
+}
+
+.projectCardWide,
+.dashboardTableRow {
+  transition:
+    background 140ms ease,
+    border-color 140ms ease,
+    transform 140ms ease;
+}
+
+.projectCardWide:hover,
+.dashboardTableRow:hover,
+.templateCard:hover,
+.templateListRow:hover {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(56, 189, 248, 0.26);
+}
+
+.projectCardWide:hover,
+.templateCard:hover {
+  transform: translateY(-1px);
+}
+
+.projectCardBody p,
+.projectDetailSummary p,
+.templateCard p,
+.templateListRow p,
+.integrationPanel p,
+.costNoticePanel p {
+  color: #b6c2d2;
+}
+
+.projectCardMeta,
+.templateCardActions > span,
+.templateCardHeader span,
+.templateListRow span,
+.settingsInfoGrid span {
+  color: #8794a8;
+}
+
+.dashboardChip {
+  background: rgba(20, 184, 166, 0.14);
+  border-color: rgba(20, 184, 166, 0.34);
+  color: #b5f7ea;
+}
+
+.dashboardCountBadge {
+  background: rgba(56, 189, 248, 0.13);
+  border-color: rgba(56, 189, 248, 0.36);
+}
+
+.dashboardTable {
+  background: rgba(15, 23, 42, 0.76);
+}
+
+.dashboardTableHeader {
+  background: rgba(148, 163, 184, 0.1);
+  color: #c8d3e2;
+}
+
+.dashboardTableRow {
+  color: #d5deea;
+}
+
+.projectPreview {
+  background:
+    linear-gradient(rgba(9, 14, 24, 0.94) 0 0) padding-box,
+    repeating-linear-gradient(90deg, rgba(125, 211, 252, 0.08) 0 1px, transparent 1px 22px),
+    repeating-linear-gradient(rgba(125, 211, 252, 0.08) 0 1px, transparent 1px 22px);
+}
+
+.templateForm input,
+.templateForm textarea,
+.settingsField input,
+.settingsField select,
+.dashboardShell .textInput,
+.dashboardShell .selectInput,
+.dashboardShell .textArea,
+.dashboardShell .codeArea {
+  background: rgba(2, 6, 23, 0.58);
+  border-color: rgba(148, 163, 184, 0.26);
+}
+
+.templateForm input:focus,
+.templateForm textarea:focus,
+.settingsField input:focus,
+.settingsField select:focus,
+.dashboardShell .textInput:focus,
+.dashboardShell .selectInput:focus,
+.dashboardShell .textArea:focus,
+.dashboardShell .codeArea:focus {
+  background: rgba(2, 6, 23, 0.76);
+}
+
+.costSummaryAmount {
+  background:
+    linear-gradient(135deg, rgba(56, 189, 248, 0.2), rgba(20, 184, 166, 0.16)),
+    #08111f;
+}
+
+.diagramEditor {
+  --editor-surface: #0f172a;
+  --editor-border: rgba(148, 163, 184, 0.24);
+  --editor-border-strong: rgba(148, 163, 184, 0.36);
+  --editor-muted: #b6c2d2;
+  --editor-subtle: #8794a8;
+  background:
+    radial-gradient(circle at 8% 10%, rgba(20, 184, 166, 0.1), transparent 28rem),
+    radial-gradient(circle at 88% 12%, rgba(124, 92, 255, 0.1), transparent 26rem),
+    linear-gradient(180deg, #070a11 0%, #0b1220 54%, #070a11 100%);
+}
+
+.diagramEditor .resourcePanel,
+.diagramEditor .parameterPanel {
+  background: rgba(5, 8, 15, 0.94);
+}
+
+.diagramEditor .diagramCanvasShell {
+  padding: 18px;
+}
+
+.diagramEditor .diagramTopbar {
+  background: rgba(7, 10, 17, 0.66);
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 8px;
+  margin-bottom: 14px;
+  padding: 10px 12px;
+}
+
+.diagramEditor .diagramCanvas {
+  background:
+    linear-gradient(rgba(9, 14, 24, 0.9), rgba(9, 14, 24, 0.9)),
+    repeating-linear-gradient(90deg, rgba(125, 211, 252, 0.07) 0 1px, transparent 1px 32px),
+    repeating-linear-gradient(rgba(125, 211, 252, 0.07) 0 1px, transparent 1px 32px);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 20px 54px rgba(0, 0, 0, 0.22);
+}
+
+.diagramEditor .resourceTile,
+.diagramEditor .resourceCategoryButton,
+.diagramEditor .resourceCategoryView,
+.diagramEditor .resourceAreaGroup,
+.diagramEditor .searchBox,
+.diagramEditor .resourcePanel .searchBox,
+.diagramEditor .providerSelect,
+.diagramEditor .resourceBackButton,
+.diagramEditor .resourceTab,
+.diagramEditor .resourceTabActive,
+.diagramEditor .resourceViewToggle,
+.diagramEditor .resourceViewToggleActive {
+  background: rgba(15, 23, 42, 0.82);
+  border-color: rgba(148, 163, 184, 0.24);
+}
+
+.diagramEditor .sketchNode {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02)),
+    #0f172a;
+  border-color: rgba(56, 189, 248, 0.58);
+}
+
+.diagramEditor .nodeToolbar,
+.diagramEditor .edgeToolbar {
+  background: rgba(15, 23, 42, 0.98);
+}
+
+@media (max-width: 860px) {
+  .dashboardMain {
+    padding: 22px 16px 36px;
+  }
+
+  .dashboardTopbar {
+    padding: 8px;
   }
 }

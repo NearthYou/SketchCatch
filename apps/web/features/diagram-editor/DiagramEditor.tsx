@@ -40,9 +40,11 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
+  CSSProperties,
   DragEvent,
   KeyboardEvent as ReactKeyboardEvent,
-  MouseEvent as ReactMouseEvent
+  MouseEvent as ReactMouseEvent,
+  PointerEvent as ReactPointerEvent
 } from "react";
 import type { DiagramEdge, DiagramJson, DiagramNode } from "../../../../packages/types/src";
 
@@ -90,6 +92,15 @@ const NODE_TYPES = {
 };
 
 const MAX_HISTORY_ITEMS = 80;
+const LEFT_PANEL_WIDTH_STORAGE_KEY = "sketchcatch.diagramEditor.leftPanelWidth";
+const RIGHT_PANEL_WIDTH_STORAGE_KEY = "sketchcatch.diagramEditor.rightPanelWidth";
+const DEFAULT_LEFT_PANEL_WIDTH = 420;
+const DEFAULT_RIGHT_PANEL_WIDTH = 420;
+const MIN_LEFT_PANEL_WIDTH = 300;
+const MAX_LEFT_PANEL_WIDTH = 640;
+const MIN_RIGHT_PANEL_WIDTH = 300;
+const MAX_RIGHT_PANEL_WIDTH = 640;
+const MIN_WORKSPACE_WIDTH = 420;
 
 export function DiagramEditor(props: DiagramEditorProps) {
   return (
@@ -107,7 +118,7 @@ function DiagramEditorInner({
   myPageHref = "/mypage",
   projectName = "Project workspace",
   rightPanel,
-  saveStatus = "로컬 편집 중"
+  saveStatus = "Local editing"
 }: DiagramEditorProps) {
   const reactFlow = useReactFlow<DiagramFlowNode, DiagramFlowEdge>();
   const [diagram, setDiagram] = useState<DiagramJson>(() => cloneDiagram(initialDiagram ?? EMPTY_DIAGRAM));
@@ -116,18 +127,26 @@ function DiagramEditorInner({
   const [inspectedNodeId, setInspectedNodeId] = useState<string | null>(null);
   const [isLeftPanelOpen, setLeftPanelOpen] = useState(true);
   const [isRightPanelOpen, setRightPanelOpen] = useState(true);
+  const [leftPanelWidth, setLeftPanelWidth] = useState(readStoredLeftPanelWidth);
+  const [rightPanelWidth, setRightPanelWidth] = useState(readStoredRightPanelWidth);
   const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
   const [selectedEdgeIds, setSelectedEdgeIds] = useState<string[]>([]);
   const [activeReferenceDropTargetNodeId, setActiveReferenceDropTargetNodeId] = useState<string | null>(null);
   const [interactionMode, setInteractionMode] = useState<"select" | "pan">("select");
+  const [isFlowReady, setFlowReady] = useState(false);
   const temporaryPanPreviousModeRef = useRef<"select" | "pan" | null>(null);
   const clipboardRef = useRef<DiagramNode[]>([]);
   const canvasPanelRef = useRef<HTMLDivElement | null>(null);
   const dragSnapshotRef = useRef<DiagramJson | null>(null);
   const editorShellRef = useRef<HTMLElement | null>(null);
+  const leftRailRef = useRef<HTMLDivElement | null>(null);
   const resizeSnapshotRef = useRef<DiagramJson | null>(null);
   const flowInstanceRef = useRef<ReactFlowInstance<DiagramFlowNode, DiagramFlowEdge> | null>(null);
   const connectStartNodeIdRef = useRef<string | null>(null);
+  const shouldAutoFitInitialDiagramRef = useRef((initialDiagram?.nodes.length ?? 0) > 0);
+  const initialAutoFitFrameRef = useRef<number | null>(null);
+  const isLeftPanelResizingRef = useRef(false);
+  const isRightPanelResizingRef = useRef(false);
 
   const selectedNodeId = selectedNodeIds.length === 1 ? selectedNodeIds[0] ?? null : null;
   const selectedEdge = selectedEdgeIds.length === 1
@@ -149,11 +168,17 @@ function DiagramEditorInner({
   useEffect(() => {
     const nextDiagram = cloneDiagram(initialDiagram ?? EMPTY_DIAGRAM);
     replaceDiagram(nextDiagram, false);
+    shouldAutoFitInitialDiagramRef.current = nextDiagram.nodes.length > 0;
     setHistory({ past: [], future: [] });
     setInspectedNodeId(null);
     setSelectedNodeIds([]);
     setSelectedEdgeIds([]);
     setActiveReferenceDropTargetNodeId(null);
+
+    if (initialAutoFitFrameRef.current !== null) {
+      window.cancelAnimationFrame(initialAutoFitFrameRef.current);
+      initialAutoFitFrameRef.current = null;
+    }
   }, [initialDiagram, replaceDiagram]);
 
   const pushHistory = useCallback((before: DiagramJson, after: DiagramJson) => {
@@ -193,6 +218,120 @@ function DiagramEditorInner({
   const focusEditorShell = useCallback(() => {
     editorShellRef.current?.focus({ preventScroll: true });
   }, []);
+
+  const updateLeftPanelWidth = useCallback((nextWidth: number) => {
+    setLeftPanelWidth(() => {
+      const clampedWidth = clampLeftPanelWidth(nextWidth);
+      storeLeftPanelWidth(clampedWidth);
+      return clampedWidth;
+    });
+  }, []);
+
+  const updateRightPanelWidth = useCallback((nextWidth: number) => {
+    setRightPanelWidth(() => {
+      const clampedWidth = clampRightPanelWidth(nextWidth);
+      storeRightPanelWidth(clampedWidth);
+      return clampedWidth;
+    });
+  }, []);
+
+  const handleLeftPanelResizeStart = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    isLeftPanelResizingRef.current = true;
+    updateLeftPanelWidth(getLeftPanelWidthFromPointer(event.clientX, leftRailRef.current));
+  }, [updateLeftPanelWidth]);
+
+  const handleLeftPanelResizeMove = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (!isLeftPanelResizingRef.current) {
+      return;
+    }
+
+    updateLeftPanelWidth(getLeftPanelWidthFromPointer(event.clientX, leftRailRef.current));
+  }, [updateLeftPanelWidth]);
+
+  const handleLeftPanelResizeEnd = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (!isLeftPanelResizingRef.current) {
+      return;
+    }
+
+    isLeftPanelResizingRef.current = false;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  }, []);
+
+  const handleLeftPanelResizeKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLButtonElement>) => {
+      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight" && event.key !== "Home" && event.key !== "End") {
+        return;
+      }
+
+      event.preventDefault();
+
+      if (event.key === "Home") {
+        updateLeftPanelWidth(MIN_LEFT_PANEL_WIDTH);
+        return;
+      }
+
+      if (event.key === "End") {
+        updateLeftPanelWidth(MAX_LEFT_PANEL_WIDTH);
+        return;
+      }
+
+      updateLeftPanelWidth(leftPanelWidth + (event.key === "ArrowRight" ? 24 : -24));
+    },
+    [leftPanelWidth, updateLeftPanelWidth]
+  );
+
+  const handleRightPanelResizeStart = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    isRightPanelResizingRef.current = true;
+    updateRightPanelWidth(window.innerWidth - event.clientX);
+  }, [updateRightPanelWidth]);
+
+  const handleRightPanelResizeMove = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (!isRightPanelResizingRef.current) {
+      return;
+    }
+
+    updateRightPanelWidth(window.innerWidth - event.clientX);
+  }, [updateRightPanelWidth]);
+
+  const handleRightPanelResizeEnd = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (!isRightPanelResizingRef.current) {
+      return;
+    }
+
+    isRightPanelResizingRef.current = false;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  }, []);
+
+  const handleRightPanelResizeKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLButtonElement>) => {
+      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight" && event.key !== "Home" && event.key !== "End") {
+        return;
+      }
+
+      event.preventDefault();
+
+      if (event.key === "Home") {
+        updateRightPanelWidth(MIN_RIGHT_PANEL_WIDTH);
+        return;
+      }
+
+      if (event.key === "End") {
+        updateRightPanelWidth(MAX_RIGHT_PANEL_WIDTH);
+        return;
+      }
+
+      updateRightPanelWidth(rightPanelWidth + (event.key === "ArrowLeft" ? 24 : -24));
+    },
+    [rightPanelWidth, updateRightPanelWidth]
+  );
 
   const updateActiveReferenceDropTargetNodeId = useCallback((nodeId: string | null) => {
     setActiveReferenceDropTargetNodeId((currentNodeId) => (currentNodeId === nodeId ? currentNodeId : nodeId));
@@ -483,6 +622,7 @@ function DiagramEditorInner({
 
   const handleInit = useCallback<OnInit<DiagramFlowNode, DiagramFlowEdge>>((instance) => {
     flowInstanceRef.current = instance;
+    setFlowReady(true);
   }, []);
 
   const handleNodesChange = useCallback<OnNodesChange<DiagramFlowNode>>(
@@ -864,6 +1004,31 @@ function DiagramEditorInner({
     applyLiveDiagramUpdate((currentDiagram) => updateDiagramViewport(currentDiagram, viewport));
   }, [applyLiveDiagramUpdate, reactFlow]);
 
+  useEffect(() => {
+    if (!isFlowReady || !shouldAutoFitInitialDiagramRef.current || diagram.nodes.length === 0) {
+      return;
+    }
+
+    if (initialAutoFitFrameRef.current !== null) {
+      return;
+    }
+
+    initialAutoFitFrameRef.current = window.requestAnimationFrame(() => {
+      initialAutoFitFrameRef.current = window.requestAnimationFrame(() => {
+        initialAutoFitFrameRef.current = null;
+        shouldAutoFitInitialDiagramRef.current = false;
+        handleFitView();
+      });
+    });
+
+    return () => {
+      if (initialAutoFitFrameRef.current !== null) {
+        window.cancelAnimationFrame(initialAutoFitFrameRef.current);
+        initialAutoFitFrameRef.current = null;
+      }
+    };
+  }, [diagram.nodes.length, handleFitView, isFlowReady]);
+
   const handleKeyDown = useCallback(
     (event: KeyboardEvent) => {
       if (isEditableEventTarget(event.target)) {
@@ -930,6 +1095,17 @@ function DiagramEditorInner({
     return () => window.removeEventListener("mouseup", handleWindowMouseUp);
   }, []);
 
+  useEffect(() => {
+    function handleWindowResize(): void {
+      updateLeftPanelWidth(leftPanelWidth);
+      updateRightPanelWidth(rightPanelWidth);
+    }
+
+    window.addEventListener("resize", handleWindowResize);
+
+    return () => window.removeEventListener("resize", handleWindowResize);
+  }, [leftPanelWidth, rightPanelWidth, updateLeftPanelWidth, updateRightPanelWidth]);
+
   function handleShellKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
     if (event.key === "Escape") {
       setInspectedNodeId(null);
@@ -938,20 +1114,42 @@ function DiagramEditorInner({
     }
   }
 
+  const editorShellStyle = {
+    "--left-panel-width": `${leftPanelWidth}px`,
+    "--right-panel-width": `${rightPanelWidth}px`
+  } as CSSProperties;
+
   return (
     <section
       className={`${styles.editorShell} ${isRightPanelOpen ? "" : styles.editorShellRightCollapsed}`}
       onKeyDown={handleShellKeyDown}
       ref={editorShellRef}
+      style={editorShellStyle}
       tabIndex={0}
     >
       {isLeftPanelOpen ? (
-        <div className={styles.leftRail}>
+        <div className={styles.leftRail} ref={leftRailRef}>
           {leftPanel === undefined ? (
             <ResourceSettingsPanel onCollapse={() => setLeftPanelOpen(false)} />
           ) : (
             leftPanel
           )}
+          <button
+            aria-label="Resize left panel"
+            aria-orientation="vertical"
+            aria-valuemax={MAX_LEFT_PANEL_WIDTH}
+            aria-valuemin={MIN_LEFT_PANEL_WIDTH}
+            aria-valuenow={leftPanelWidth}
+            className={styles.leftRailResizeHandle}
+            onKeyDown={handleLeftPanelResizeKeyDown}
+            onPointerCancel={handleLeftPanelResizeEnd}
+            onPointerDown={handleLeftPanelResizeStart}
+            onPointerMove={handleLeftPanelResizeMove}
+            onPointerUp={handleLeftPanelResizeEnd}
+            role="separator"
+            title="Drag to resize left panel"
+            type="button"
+          />
         </div>
       ) : (
         <div className={styles.collapsedLeftPanel} aria-label="Left panel shortcuts">
@@ -979,7 +1177,7 @@ function DiagramEditorInner({
       <div className={styles.workspace}>
         <header className={styles.canvasToolbar}>
           <div className={styles.toolbarBrand}>
-            <a aria-label="마이페이지로 돌아가기" className={styles.toolbarHomeLink} href={myPageHref} title="마이페이지">
+            <a aria-label="Go to my page" className={styles.toolbarHomeLink} href={myPageHref} title="My page">
               <UserRound aria-hidden="true" size={16} />
             </a>
             <span className={styles.toolbarTitle}>{projectName}</span>
@@ -1008,41 +1206,41 @@ function DiagramEditorInner({
             </button>
           </div>
 
-          <div className={styles.toolbarGroup} aria-label="히스토리">
+          <div className={styles.toolbarGroup} aria-label="History">
             <button
-              aria-label="뒤로가기"
+              aria-label="Undo"
               className={styles.iconButton}
               disabled={history.past.length === 0}
               onClick={undo}
-              title="뒤로가기"
+              title="Undo"
               type="button"
             >
               <Undo2 aria-hidden="true" size={16} />
             </button>
             <button
-              aria-label="앞으로가기"
+              aria-label="Redo"
               className={styles.iconButton}
               disabled={history.future.length === 0}
               onClick={redo}
-              title="앞으로가기"
+              title="Redo"
               type="button"
             >
               <Redo2 aria-hidden="true" size={16} />
             </button>
           </div>
 
-          <div className={styles.toolbarGroup} aria-label="뷰포트">
-            <button aria-label="줌인" className={styles.iconButton} onClick={handleZoomIn} title="줌인" type="button">
+          <div className={styles.toolbarGroup} aria-label="Viewport">
+            <button aria-label="Zoom in" className={styles.iconButton} onClick={handleZoomIn} title="Zoom in" type="button">
               <ZoomIn aria-hidden="true" size={16} />
             </button>
-            <button aria-label="줌아웃" className={styles.iconButton} onClick={handleZoomOut} title="줌아웃" type="button">
+            <button aria-label="Zoom out" className={styles.iconButton} onClick={handleZoomOut} title="Zoom out" type="button">
               <ZoomOut aria-hidden="true" size={16} />
             </button>
             <button
-              aria-label="화면에 맞추기"
+              aria-label="Fit view"
               className={styles.iconButton}
               onClick={handleFitView}
-              title="화면에 맞추기"
+              title="Fit view"
               type="button"
             >
               <Maximize2 aria-hidden="true" size={16} />
@@ -1075,8 +1273,8 @@ function DiagramEditorInner({
 
           {diagram.nodes.length === 0 ? (
             <div className={styles.emptyState} aria-hidden="true">
-              <strong>빈 다이어그램</strong>
-              <span>왼쪽 항목을 캔버스로 드롭하세요.</span>
+              <strong>Empty diagram</strong>
+              <span>Drag resources from the left panel onto the canvas.</span>
             </div>
           ) : null}
 
@@ -1124,6 +1322,7 @@ function DiagramEditorInner({
             }}
             onSelectionChange={handleSelectionChange}
             panOnDrag={interactionMode === "pan"}
+            proOptions={{ hideAttribution: true }}
             selectionKeyCode={["Shift", "Meta", "Control"]}
             selectionOnDrag={interactionMode === "select"}
             snapGrid={[12, 12]}
@@ -1135,6 +1334,22 @@ function DiagramEditorInner({
       </div>
 
       <div className={styles.rightRail}>
+        <button
+          aria-label="Resize right panel"
+          aria-orientation="vertical"
+          aria-valuemax={MAX_RIGHT_PANEL_WIDTH}
+          aria-valuemin={MIN_RIGHT_PANEL_WIDTH}
+          aria-valuenow={rightPanelWidth}
+          className={styles.rightRailResizeHandle}
+          onKeyDown={handleRightPanelResizeKeyDown}
+          onPointerCancel={handleRightPanelResizeEnd}
+          onPointerDown={handleRightPanelResizeStart}
+          onPointerMove={handleRightPanelResizeMove}
+          onPointerUp={handleRightPanelResizeEnd}
+          role="separator"
+          title="Drag to resize right panel"
+          type="button"
+        />
         {rightPanel === undefined ? (
           <ParameterInputPanel key={panelContext.selectedNodeId ?? "no-selection"} {...panelContext} />
         ) : (
@@ -1189,6 +1404,62 @@ function getMovedNodeIdsFromNodes(
 
 function isDifferentPosition(left: DiagramNode["position"], right: DiagramNode["position"]) {
   return left.x !== right.x || left.y !== right.y;
+}
+
+function readStoredLeftPanelWidth(): number {
+  if (typeof window === "undefined") {
+    return DEFAULT_LEFT_PANEL_WIDTH;
+  }
+
+  const storedWidth = Number(window.localStorage.getItem(LEFT_PANEL_WIDTH_STORAGE_KEY));
+
+  return Number.isFinite(storedWidth) ? clampLeftPanelWidth(storedWidth) : DEFAULT_LEFT_PANEL_WIDTH;
+}
+
+function readStoredRightPanelWidth(): number {
+  if (typeof window === "undefined") {
+    return DEFAULT_RIGHT_PANEL_WIDTH;
+  }
+
+  const storedWidth = Number(window.localStorage.getItem(RIGHT_PANEL_WIDTH_STORAGE_KEY));
+
+  return Number.isFinite(storedWidth) ? clampRightPanelWidth(storedWidth) : DEFAULT_RIGHT_PANEL_WIDTH;
+}
+
+function storeLeftPanelWidth(width: number): void {
+  window.localStorage.setItem(LEFT_PANEL_WIDTH_STORAGE_KEY, String(width));
+}
+
+function storeRightPanelWidth(width: number): void {
+  window.localStorage.setItem(RIGHT_PANEL_WIDTH_STORAGE_KEY, String(width));
+}
+
+function clampLeftPanelWidth(width: number): number {
+  if (typeof window === "undefined") {
+    return clamp(width, MIN_LEFT_PANEL_WIDTH, MAX_LEFT_PANEL_WIDTH);
+  }
+
+  const viewportLimitedMaxWidth = Math.max(MIN_LEFT_PANEL_WIDTH, window.innerWidth - MIN_WORKSPACE_WIDTH);
+  return clamp(width, MIN_LEFT_PANEL_WIDTH, Math.min(MAX_LEFT_PANEL_WIDTH, viewportLimitedMaxWidth));
+}
+
+function clampRightPanelWidth(width: number): number {
+  if (typeof window === "undefined") {
+    return clamp(width, MIN_RIGHT_PANEL_WIDTH, MAX_RIGHT_PANEL_WIDTH);
+  }
+
+  const viewportLimitedMaxWidth = Math.max(MIN_RIGHT_PANEL_WIDTH, window.innerWidth - MIN_WORKSPACE_WIDTH);
+  return clamp(width, MIN_RIGHT_PANEL_WIDTH, Math.min(MAX_RIGHT_PANEL_WIDTH, viewportLimitedMaxWidth));
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
+}
+
+function getLeftPanelWidthFromPointer(clientX: number, panelElement: HTMLElement | null): number {
+  const panelLeft = panelElement?.getBoundingClientRect().left ?? 0;
+
+  return clientX - panelLeft;
 }
 
 function applySelectionChanges(

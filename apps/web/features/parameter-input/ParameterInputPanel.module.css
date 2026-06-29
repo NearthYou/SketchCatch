@@ -9,7 +9,7 @@
   min-width: 320px;
   overflow: auto;
   padding: 16px;
-  width: min(420px, 100%);
+  width: 100%;
 }
 
 .header {

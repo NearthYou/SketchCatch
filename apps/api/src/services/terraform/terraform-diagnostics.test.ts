@@ -10,6 +10,18 @@ test("returns no errors for generated Terraform code", () => {
   assert.equal(diagnostics.some((diagnostic) => diagnostic.severity === "error"), false);
 });
 
+test("returns no errors for CRLF Terraform code", () => {
+  const diagnostics = createTerraformDiagnostics(
+    [
+      `resource "aws_vpc" "main" {`,
+      `  cidr_block = "10.0.0.0/16"`,
+      `}`
+    ].join("\r\n")
+  );
+
+  assert.equal(diagnostics.some((diagnostic) => diagnostic.severity === "error"), false);
+});
+
 test("returns an error for empty Terraform code", () => {
   assert.deepEqual(createTerraformDiagnostics(""), [
     {
