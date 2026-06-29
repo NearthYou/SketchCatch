@@ -57,15 +57,30 @@ test("assertTerraformArtifactIsSafe rejects Terraform module blocks split across
   );
 });
 
-test("assertTerraformArtifactIsSafe rejects data sources before live deployment", () => {
+test("assertTerraformArtifactIsSafe accepts supported AWS AMI data sources", () => {
+  assert.doesNotThrow(() =>
+    assertTerraformArtifactIsSafe(`
+      data "aws_ami" "ubuntu" {
+        most_recent = true
+        owners = ["099720109477"]
+
+        filter {
+          name   = "name"
+          values = ["ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*"]
+        }
+      }
+    `)
+  );
+});
+
+test("assertTerraformArtifactIsSafe rejects unsupported data sources before live deployment", () => {
   assert.throws(
     () =>
       assertTerraformArtifactIsSafe(`
-        data "aws_ami" "ubuntu" {
-          most_recent = true
+        data "aws_caller_identity" "current" {
         }
       `),
-    /top-level block "data" is not allowed/
+    /data source "aws_caller_identity" is not allowed/
   );
 });
 

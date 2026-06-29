@@ -717,8 +717,7 @@ test("runDeploymentInit rejects unsafe Terraform before preparing AWS credential
             }
           }),
           readTerraformArtifactFile: async () => `
-            data "aws_ami" "ubuntu" {
-              most_recent = true
+            data "aws_caller_identity" "current" {
             }
           `,
           prepareTerraformAwsCredentialEnv: async () => {
@@ -731,7 +730,7 @@ test("runDeploymentInit rejects unsafe Terraform before preparing AWS credential
           }
         }
       ),
-    /top-level block "data" is not allowed/
+    /data source "aws_caller_identity" is not allowed/
   );
 
   assert.equal(cleanupCalled, true);
@@ -739,7 +738,7 @@ test("runDeploymentInit rejects unsafe Terraform before preparing AWS credential
   assert.equal(terraformRan, false);
   assert.equal(repository.deployment?.status, "FAILED");
   assert.equal(repository.deployment?.failureStage, "init");
-  assert.match(repository.deployment?.errorSummary ?? "", /top-level block "data" is not allowed/);
+  assert.match(repository.deployment?.errorSummary ?? "", /data source "aws_caller_identity" is not allowed/);
 });
 
 test("runDeploymentInit records failed init output, marks the deployment failed, and masks secret logs", async () => {

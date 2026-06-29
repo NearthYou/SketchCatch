@@ -730,8 +730,7 @@ test("runDeploymentPlan rejects unsafe Terraform before preparing AWS credential
         {
           planArtifactStorage,
           readTerraformArtifactFile: async () => `
-            data "aws_ami" "ubuntu" {
-              most_recent = true
+            data "aws_caller_identity" "current" {
             }
           `,
           analyzePreDeployment: () => createAnalysis(),
@@ -752,7 +751,7 @@ test("runDeploymentPlan rejects unsafe Terraform before preparing AWS credential
           }
         }
       ),
-    /top-level block "data" is not allowed/
+    /data source "aws_caller_identity" is not allowed/
   );
 
   assert.equal(cleanupCalled, true);
@@ -760,7 +759,7 @@ test("runDeploymentPlan rejects unsafe Terraform before preparing AWS credential
   assert.equal(terraformRan, false);
   assert.equal(repository.deployment?.status, "FAILED");
   assert.equal(repository.deployment?.failureStage, "plan");
-  assert.match(repository.deployment?.errorSummary ?? "", /top-level block "data" is not allowed/);
+  assert.match(repository.deployment?.errorSummary ?? "", /data source "aws_caller_identity" is not allowed/);
   assert.equal(planArtifactStorage.uploads.length, 0);
 });
 

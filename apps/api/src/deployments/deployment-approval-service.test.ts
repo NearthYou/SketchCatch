@@ -350,14 +350,13 @@ test("approveDeploymentPlan rejects unsafe Terraform artifacts before approval",
         repository,
         {
           downloadTerraformArtifact: async () => `
-            data "aws_ami" "ubuntu" {
-              most_recent = true
+            data "aws_caller_identity" "current" {
             }
           `,
           now: () => fixedNow
         }
       ),
-    /top-level block "data" is not allowed/
+    /data source "aws_caller_identity" is not allowed/
   );
 
   assert.equal(repository.approvals.length, 0);

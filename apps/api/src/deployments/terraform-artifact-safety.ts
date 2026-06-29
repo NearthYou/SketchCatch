@@ -1,6 +1,7 @@
 import { liveApplySupportedResourceTypes } from "./deployment-plan-summary.js";
 
-const allowedTopLevelBlocks = new Set(["terraform", "provider", "resource", "variable", "output", "locals"]);
+const allowedTopLevelBlocks = new Set(["terraform", "provider", "resource", "data", "variable", "output", "locals"]);
+const liveApplySupportedDataSourceTypes = new Set(["aws_ami"]);
 const allowedProviderSources = new Set(["hashicorp/aws", "registry.terraform.io/hashicorp/aws"]);
 const allowedAwsProviderRegion = "ap-northeast-2";
 const allowedAwsProviderAttributes = new Set(["alias", "region"]);
@@ -158,6 +159,16 @@ function validateTopLevelBlock(block: HclBlock): void {
     throw new TerraformArtifactSafetyError(
       `Terraform provider "${block.labels[0] ?? ""}" is not allowed before live deployment at line ${block.line}`
     );
+  }
+
+  if (block.type === "data") {
+    const dataSourceType = block.labels[0];
+
+    if (!dataSourceType || !liveApplySupportedDataSourceTypes.has(dataSourceType)) {
+      throw new TerraformArtifactSafetyError(
+        `Terraform data source "${dataSourceType ?? ""}" is not allowed before live deployment at line ${block.line}`
+      );
+    }
   }
 
   if (block.type === "resource") {
