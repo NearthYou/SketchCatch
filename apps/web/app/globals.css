@@ -622,6 +622,17 @@ select {
   gap: 8px;
 }
 
+.authField {
+  display: grid;
+  gap: 8px;
+}
+
+.authField > label {
+  color: rgba(247, 248, 251, 0.76);
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
 .authForm input {
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.14);
@@ -639,6 +650,69 @@ select {
 
 .authForm input::placeholder {
   color: rgba(247, 248, 251, 0.36);
+}
+
+.authForm .authCheckboxLabel {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+}
+
+.authForm .authCheckboxLabel input {
+  accent-color: #38bdf8;
+  flex: 0 0 16px;
+  height: 16px;
+  min-height: 0;
+  padding: 0;
+  width: 16px;
+}
+
+.authForm .authCheckboxLabel span {
+  color: rgba(247, 248, 251, 0.78);
+  line-height: 1.4;
+}
+
+.authPasswordField {
+  position: relative;
+}
+
+.authPasswordField input {
+  padding-right: 46px;
+  width: 100%;
+}
+
+.authPasswordToggle {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  color: rgba(247, 248, 251, 0.7);
+  cursor: pointer;
+  display: inline-flex;
+  height: 38px;
+  justify-content: center;
+  padding: 0;
+  position: absolute;
+  right: 4px;
+  top: 4px;
+  width: 38px;
+}
+
+.authPasswordToggle:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+}
+
+.authPasswordToggle:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.authHelpText {
+  color: rgba(247, 248, 251, 0.52);
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.35;
 }
 
 .authSubmit {

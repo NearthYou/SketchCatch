@@ -41,7 +41,7 @@ test("POST /api/auth/signup creates a user and session", async () => {
 
   assert.equal(response.statusCode, 201);
   const body = response.json() as AuthResponse;
-  assertAuthResponse(body, response.headers["set-cookie"]);
+  assertAuthResponse(body, response.headers["set-cookie"], { persistent: false });
   assert.equal(body.user.username, "demo");
   assert.equal(body.user.email, "demo@example.com");
   assert.equal(fakeDb.userRows.length, 1);
@@ -92,7 +92,7 @@ test("POST /api/auth/signup returns 409 for duplicate email", async () => {
   await app.close();
 });
 
-test("POST /api/auth/login returns a session for valid credentials", async () => {
+test("POST /api/auth/login returns a browser-session cookie for valid credentials by default", async () => {
   const user = await makeUserWithPassword(PASSWORD);
   const fakeDb = new AuthScenarioFakeDb({
     selectResults: [[], [user]]
@@ -112,9 +112,37 @@ test("POST /api/auth/login returns a session for valid credentials", async () =>
 
   assert.equal(response.statusCode, 200);
   const body = response.json() as AuthResponse;
-  assertAuthResponse(body, response.headers["set-cookie"]);
+  assertAuthResponse(body, response.headers["set-cookie"], { persistent: false });
   assert.equal(body.user.id, USER_ID);
   assert.equal(fakeDb.loginAttemptRows.at(-1)?.success, true);
+  assert.equal(fakeDb.refreshTokenRows.length, 1);
+
+  await app.close();
+});
+
+test("POST /api/auth/login returns a persistent cookie when rememberMe is true", async () => {
+  const user = await makeUserWithPassword(PASSWORD);
+  const fakeDb = new AuthScenarioFakeDb({
+    selectResults: [[], [user]]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/auth/login",
+    payload: {
+      username: "demo",
+      password: PASSWORD,
+      rememberMe: true
+    }
+  });
+
+  assert.equal(response.statusCode, 200);
+  assertAuthResponse(response.json() as AuthResponse, response.headers["set-cookie"], {
+    persistent: true
+  });
   assert.equal(fakeDb.refreshTokenRows.length, 1);
 
   await app.close();
@@ -319,6 +347,38 @@ test("POST /api/auth/refresh rotates the cookie refresh token and returns a new 
   await app.close();
 });
 
+test("POST /api/auth/refresh preserves browser-session refresh token persistence", async () => {
+  const refreshToken = "session.valid-refresh-token";
+  const fakeDb = new AuthScenarioFakeDb({
+    selectResults: [
+      [
+        makeRefreshToken({
+          tokenHash: hashToken(refreshToken)
+        })
+      ],
+      [makeUser()]
+    ]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/auth/refresh",
+    headers: authCookieHeaders(refreshToken)
+  });
+
+  assert.equal(response.statusCode, 200);
+  assertAuthResponse(response.json() as AuthResponse, response.headers["set-cookie"], {
+    persistent: false
+  });
+  assert.equal(fakeDb.updateCalls.length, 1);
+  assert.equal(fakeDb.refreshTokenRows.length, 1);
+
+  await app.close();
+});
+
 test("POST /api/auth/refresh rejects requests without the CSRF header", async () => {
   const refreshToken = "csrf-refresh-token";
   const fakeDb = new AuthScenarioFakeDb({
@@ -452,7 +512,13 @@ function authCookieHeaders(refreshToken: string): Record<string, string> {
   };
 }
 
-function assertAuthResponse(body: AuthResponse, setCookieHeader: string | string[] | undefined): void {
+function assertAuthResponse(
+  body: AuthResponse,
+  setCookieHeader: string | string[] | undefined,
+  options: {
+    persistent?: boolean;
+  } = {}
+): void {
   assert.deepEqual(Object.keys(body).sort(), ["session", "user"]);
   assert.deepEqual(Object.keys(body.user).sort(), [
     "createdAt",
@@ -464,7 +530,9 @@ function assertAuthResponse(body: AuthResponse, setCookieHeader: string | string
   assert.deepEqual(Object.keys(body.session).sort(), ["accessToken", "expiresInSeconds"]);
   assert.equal(typeof body.session.accessToken, "string");
   assert.equal(typeof body.session.expiresInSeconds, "number");
-  assertRefreshTokenCookie(setCookieHeader);
+  assertRefreshTokenCookie(setCookieHeader, {
+    persistent: options.persistent !== false
+  });
 }
 
 function assertErrorResponse(
@@ -483,7 +551,12 @@ function assertLoginLockedErrorResponse(body: LoginLockedErrorResponse): void {
   assert.equal(typeof body.lockedUntil, "string");
 }
 
-function assertRefreshTokenCookie(setCookieHeader: string | string[] | undefined): void {
+function assertRefreshTokenCookie(
+  setCookieHeader: string | string[] | undefined,
+  options: {
+    persistent: boolean;
+  }
+): void {
   const cookies = getSetCookieHeaders(setCookieHeader);
   const cookie = getCookieHeader(cookies, REFRESH_TOKEN_COOKIE_NAME);
   const csrfCookie = getCookieHeader(cookies, CSRF_TOKEN_COOKIE_NAME);
@@ -495,6 +568,14 @@ function assertRefreshTokenCookie(setCookieHeader: string | string[] | undefined
   assert.match(csrfCookie, new RegExp(`^${CSRF_TOKEN_COOKIE_NAME}=`));
   assert.doesNotMatch(csrfCookie, /HttpOnly/);
   assert.match(csrfCookie, /SameSite=Lax/);
+
+  if (options.persistent) {
+    assert.match(cookie, /Max-Age=2592000/);
+    assert.match(csrfCookie, /Max-Age=2592000/);
+  } else {
+    assert.doesNotMatch(cookie, /Max-Age=/);
+    assert.doesNotMatch(csrfCookie, /Max-Age=/);
+  }
 }
 
 function assertClearedRefreshTokenCookie(setCookieHeader: string | string[] | undefined): void {

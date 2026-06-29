@@ -20,6 +20,7 @@ import {
   clearRefreshTokenCookie,
   createAuthSession,
   getRefreshTokenCookie,
+  getRefreshTokenPersistence,
   hasValidCsrfToken,
   toPublicUser
 } from "../auth/session.js";
@@ -49,7 +50,8 @@ const signupBodySchema = z.object({
 
 const loginBodySchema = z.object({
   username: usernameSchema,
-  password: z.string().min(1).max(128)
+  password: z.string().min(1).max(128),
+  rememberMe: z.boolean().optional().default(false)
 });
 
 type AuthRouteOptions = {
@@ -115,7 +117,9 @@ export async function registerAuthRoutes(
       throw new Error("사용자를 생성하지 못했습니다.");
     }
 
-    const session = await createAuthSession(db, createdUser.id, request, reply);
+    const session = await createAuthSession(db, createdUser.id, request, reply, {
+      persistent: false
+    });
     const response: AuthResponse = {
       user: toPublicUser(createdUser),
       session
@@ -185,7 +189,9 @@ export async function registerAuthRoutes(
       success: true
     });
 
-    const session = await createAuthSession(db, user.id, request, reply);
+    const session = await createAuthSession(db, user.id, request, reply, {
+      persistent: body.rememberMe
+    });
     const response: AuthResponse = {
       user: toPublicUser(user),
       session
@@ -255,7 +261,9 @@ export async function registerAuthRoutes(
 
     await revokeRefreshToken(db, storedToken.id, now);
 
-    const session = await createAuthSession(db, storedToken.userId, request, reply);
+    const session = await createAuthSession(db, storedToken.userId, request, reply, {
+      persistent: getRefreshTokenPersistence(refreshToken) === "persistent"
+    });
     const response: AuthResponse = {
       user: toPublicUser(user),
       session

@@ -33,6 +33,7 @@ export function LoginForm() {
     const formData = new FormData(event.currentTarget);
     const payload: LoginRequest = {
       password: String(formData.get("password") ?? ""),
+      rememberMe: formData.get("rememberMe") === "on",
       username: String(formData.get("username") ?? "").trim()
     };
 
@@ -99,6 +100,10 @@ export function LoginForm() {
           required
           type="password"
         />
+      </label>
+      <label className="authCheckboxLabel">
+        <input disabled={isSubmitting} name="rememberMe" type="checkbox" />
+        <span>로그인 상태 유지</span>
       </label>
       {errorMessage ? (
         <p className="authMessage authMessageError" role="alert">
