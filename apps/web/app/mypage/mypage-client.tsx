@@ -103,24 +103,6 @@ export function MyPageClient() {
 
   return (
     <>
-      <div className="dashboardStatGrid dashboardStatGridCompact" aria-label="홈 요약">
-        <article>
-          <DashboardIcon name="folder" />
-          <span>전체 프로젝트</span>
-          <strong>{projects.length}</strong>
-        </article>
-        <article>
-          <DashboardIcon name="clock" />
-          <span>최근 수정</span>
-          <strong>{recentModifiedProjects.length}</strong>
-        </article>
-        <article>
-          <DashboardIcon name="check" />
-          <span>DB 저장</span>
-          <strong>ON</strong>
-        </article>
-      </div>
-
       <section className="dashboardPanel" aria-labelledby="recent-modified-title">
         <div className="dashboardPanelHeader">
           <div>

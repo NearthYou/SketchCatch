@@ -3684,40 +3684,6 @@ nextjs-portal {
   padding: 5px 10px;
 }
 
-.dashboardStatGrid {
-  display: grid;
-  gap: 10px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.dashboardStatGridCompact {
-  min-width: min(560px, 52vw);
-}
-
-.dashboardStatGrid article {
-  background: var(--dashboard-surface);
-  border: 1px solid var(--dashboard-border);
-  border-radius: 6px;
-  display: grid;
-  gap: 7px;
-  min-height: 96px;
-  padding: 12px;
-}
-
-.dashboardStatGrid article .dashboardIcon {
-  color: var(--dashboard-teal);
-}
-
-.dashboardStatGrid span {
-  color: var(--dashboard-muted);
-  font-size: 0.78rem;
-  font-weight: 850;
-}
-
-.dashboardStatGrid strong {
-  font-size: 1.24rem;
-}
-
 .dashboardCardGrid {
   display: grid;
   gap: 18px;
@@ -4501,9 +4467,6 @@ nextjs-portal {
     grid-template-columns: 1fr;
   }
 
-  .dashboardStatGridCompact {
-    min-width: 0;
-  }
 }
 
 @media (max-width: 860px) {
@@ -4557,7 +4520,6 @@ nextjs-portal {
 
 @media (max-width: 560px) {
   .dashboardNav,
-  .dashboardStatGrid,
   .projectDetailMetricGrid,
   .dashboardCardGrid {
     grid-template-columns: 1fr;
@@ -4688,7 +4650,6 @@ nextjs-portal {
 }
 
 .dashboardPanel,
-.dashboardStatGrid article,
 .templateCard,
 .templateListRow,
 .settingsInfoGrid article,
