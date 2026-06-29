@@ -117,6 +117,27 @@ type DiagramJson = {
 };
 ```
 
+보드 전용 node metadata는 `node.metadata`에 둔다. `metadata`는 화면 편집 상태를 복구하기 위한 값이며,
+Terraform resource/data block 생성에는 사용하지 않는다.
+
+```ts
+type AwsRegionCode =
+  | "ap-northeast-2"
+  | "ap-northeast-1"
+  | "ap-southeast-1"
+  | "us-east-1"
+  | "us-west-2"
+  | "eu-west-1"
+  | "eu-central-1";
+
+type DiagramNodeMetadata = {
+  awsRegion?: AwsRegionCode;
+};
+```
+
+Region 디자인 노드의 선택 리전은 `node.metadata.awsRegion`에 region code로 저장한다.
+예: `ap-northeast-2`. 화면 label은 프론트엔드 option catalog에서 code와 매핑한다.
+
 Terraform 변환에 필요한 값은 아래 4개다.
 
 - `node.parameters.terraformBlockType`
@@ -440,8 +461,35 @@ type AiArchitectureDraftResult = {
   architectureJson: ArchitectureJson;
   title: string;
   metadata: AiResultMetadata;
+  llmExplanation?: LlmExplanation;
 };
 ```
+
+`LlmExplanation`은 rule 기반 결과를 덮어쓰지 않고, 사용자가 읽기 쉬운 요약과 다음 행동을 붙이는 공통 설명 계약이다. OpenAI 호출이 실패하거나 일부 필드가 rule 기반 기본값으로 대체되면 `fallbackUsed`를 `true`로 둔다.
+
+```ts
+type LlmExplanation = {
+  target:
+    | "architecture_draft"
+    | "design_simulation"
+    | "pre_deployment_check"
+    | "terraform_error_explanation";
+  summary: string;
+  highlights: string[];
+  nextActions: string[];
+  fallbackUsed: boolean;
+  fallbackReason?:
+    | "missing_api_key"
+    | "timeout"
+    | "rate_limited"
+    | "invalid_request"
+    | "auth_error"
+    | "provider_error"
+    | "invalid_response";
+};
+```
+
+`AiArchitectureDraftResult`, `AiPreDeploymentAnalysisResult`, `DesignSimulationResult`, `AiTerraformErrorExplanationResult`는 필요할 때 `llmExplanation?: LlmExplanation`를 포함할 수 있다.
 
 ```ts
 type CheckFinding = {

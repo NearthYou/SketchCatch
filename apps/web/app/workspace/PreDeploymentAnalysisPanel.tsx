@@ -4,6 +4,7 @@ import type {
   ChecklistItem,
   CheckFinding
 } from "@sketchcatch/types";
+import { LlmExplanationPanel } from "./LlmExplanationPanel";
 import { ResultList } from "./ResultList";
 
 type PreDeploymentAnalysisPanelProps = {
@@ -25,6 +26,7 @@ export function PreDeploymentAnalysisPanel({ analysis }: PreDeploymentAnalysisPa
         <p className="emptyState">Architecture Draft 생성 후 사전 점검을 실행하면 finding과 checklist가 나옵니다.</p>
       ) : (
         <div className="resultStack">
+          <LlmExplanationPanel explanation={analysis.llmExplanation} />
           <ResultList
             items={createPreDeploymentFindingItems(analysis.findings)}
             summary={analysis.summary}

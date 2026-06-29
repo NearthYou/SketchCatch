@@ -1,4 +1,5 @@
 import type { DesignSimulationRequestFlowStep, DesignSimulationResult } from "@sketchcatch/types";
+import { LlmExplanationPanel } from "./LlmExplanationPanel";
 import { ResultList } from "./ResultList";
 
 type DesignSimulationPanelProps = {
@@ -32,6 +33,7 @@ export function DesignSimulationPanel({
       ) : (
         <div className="resultStack">
           <p className="resultTitle">{designSimulation.summary}</p>
+          <LlmExplanationPanel explanation={designSimulation.llmExplanation} />
           <ResultList
             items={createRequestFlowItems(designSimulation.requestFlow)}
             summary="요청 흐름"

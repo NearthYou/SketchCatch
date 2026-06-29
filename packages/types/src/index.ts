@@ -1,3 +1,4 @@
+// allow: SIZE_OK - shared package root contract; splitting needs a separate repo-wide migration.
 export type IsoDateTimeString = string;
 
 export type ApiErrorCode =
@@ -468,6 +469,7 @@ export type AiArchitectureDraftResult = {
   architectureJson: ArchitectureJson;
   title: string;
   metadata: AiResultMetadata;
+  llmExplanation?: LlmExplanation | undefined;
 };
 
 export type MoneyEstimate = {
@@ -538,6 +540,30 @@ export type ArchitectureSuggestion = {
   explanation: string;
 };
 
+export type LlmExplanationTarget =
+  | "architecture_draft"
+  | "design_simulation"
+  | "pre_deployment_check"
+  | "terraform_error_explanation";
+
+export type LlmExplanationFallbackReason =
+  | "missing_api_key"
+  | "timeout"
+  | "rate_limited"
+  | "invalid_request"
+  | "auth_error"
+  | "provider_error"
+  | "invalid_response";
+
+export type LlmExplanation = {
+  target: LlmExplanationTarget;
+  summary: string;
+  highlights: string[];
+  nextActions: string[];
+  fallbackUsed: boolean;
+  fallbackReason?: LlmExplanationFallbackReason | undefined;
+};
+
 export type AiPreDeploymentAnalysisResult = {
   summary: string;
   totalMonthlyEstimate: MoneyEstimate & {
@@ -547,6 +573,7 @@ export type AiPreDeploymentAnalysisResult = {
   findings: CheckFinding[];
   checklist: ChecklistItem[];
   suggestions: ArchitectureSuggestion[];
+  llmExplanation?: LlmExplanation | undefined;
 };
 
 export type CreateDesignSimulationRequest = {
@@ -585,6 +612,7 @@ export type DesignSimulationResult = {
   failureScenarios: DesignSimulationFailureScenario[];
   costPressure: string[];
   recommendations: string[];
+  llmExplanation?: LlmExplanation | undefined;
 };
 
 export type AiPreDeploymentCheckFromDiagramRequest = {
@@ -611,6 +639,7 @@ export type AiTerraformErrorExplanationResult = {
   likelyCause: string;
   nextActions: string[];
   relatedResourceId?: string | undefined;
+  llmExplanation?: LlmExplanation | undefined;
 };
 
 export type AiTerraformDetectedResource = {
@@ -643,6 +672,19 @@ export type DiagramNodeStyle = {
   borderColor?: string | undefined;
 };
 
+export type AwsRegionCode =
+  | "ap-northeast-2"
+  | "ap-northeast-1"
+  | "ap-southeast-1"
+  | "us-east-1"
+  | "us-west-2"
+  | "eu-west-1"
+  | "eu-central-1";
+
+export type DiagramNodeMetadata = {
+  awsRegion?: AwsRegionCode | undefined;
+};
+
 export type DiagramNodeParameters = {
   terraformBlockType?: TerraformBlockType | undefined;
   resourceType: string;
@@ -663,6 +705,7 @@ export type DiagramNode = {
   locked: boolean;
   zIndex: number;
   style?: DiagramNodeStyle | undefined;
+  metadata?: DiagramNodeMetadata | undefined;
   parameters?: DiagramNodeParameters | undefined;
 };
 

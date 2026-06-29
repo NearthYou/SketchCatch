@@ -1,13 +1,15 @@
 import type { AiArchitectureDraftResult, ArchitectureScenario } from "@sketchcatch/types";
+import { LlmExplanationPanel } from "./LlmExplanationPanel";
 
 type DraftMetadata = AiArchitectureDraftResult["metadata"];
 
 type DraftMetadataPanelProps = {
+  readonly llmExplanation: AiArchitectureDraftResult["llmExplanation"];
   readonly metadata: DraftMetadata;
 };
 
 // Architecture Draft metadata를 팀 발표용 화면에서 읽기 쉬운 블록으로 보여줍니다.
-export function DraftMetadataPanel({ metadata }: DraftMetadataPanelProps) {
+export function DraftMetadataPanel({ llmExplanation, metadata }: DraftMetadataPanelProps) {
   const selectedScenarioLabel =
     metadata.selectedScenario === undefined ? "선택 결과 없음" : getScenarioLabel(metadata.selectedScenario);
   const scenarioScores = metadata.scenarioScores ?? [];
@@ -19,6 +21,8 @@ export function DraftMetadataPanel({ metadata }: DraftMetadataPanelProps) {
         <p className="metadataKicker">선택된 용도</p>
         <p className="mutedText">{selectedScenarioLabel}</p>
       </div>
+
+      <LlmExplanationPanel explanation={llmExplanation} />
 
       {scenarioScores.length > 0 ? (
         <div className="metadataGrid">
