@@ -37,7 +37,17 @@ test("createWorkspaceAiBoardSnapshot returns analysis input and board fingerprin
 
   assert.equal(snapshot.architectureJson.nodes.length, 1);
   assert.equal(snapshot.hasResources, true);
-  assert.equal(snapshot.fingerprint, JSON.stringify(diagramJson));
+  assert.equal(snapshot.fingerprint, JSON.stringify(snapshot.architectureJson));
+});
+
+test("createWorkspaceAiBoardSnapshot keeps the fingerprint stable when only viewport changes", () => {
+  const snapshot = createWorkspaceAiBoardSnapshot(diagramJson);
+  const viewportOnlyChangeSnapshot = createWorkspaceAiBoardSnapshot({
+    ...diagramJson,
+    viewport: { x: 80, y: 120, zoom: 0.7 }
+  });
+
+  assert.equal(viewportOnlyChangeSnapshot.fingerprint, snapshot.fingerprint);
 });
 
 test("isWorkspaceAiResultStale only marks existing results stale after board changes", () => {

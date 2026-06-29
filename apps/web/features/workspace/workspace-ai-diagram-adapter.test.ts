@@ -202,6 +202,46 @@ test("convertDiagramJsonToArchitectureJson keeps only valid resource nodes and c
   });
 });
 
+test("convertDiagramJsonToArchitectureJson keeps only AWS port range values in ingress config", () => {
+  const diagramJson: DiagramJson = {
+    nodes: [
+      makeSecurityGroupRuleNode({ cidrBlock: "0.0.0.0/0", fromPort: "22", id: "ssh-rule", label: "SSH Rule", resourceName: "ssh" }),
+      makeSecurityGroupRuleNode({ cidrBlock: "10.0.0.0/16", fromPort: "70000", id: "invalid-port-rule", label: "Invalid Port Rule", resourceName: "invalid" })
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+
+  const architectureJson = convertDiagramJsonToArchitectureJson(diagramJson);
+
+  assert.deepEqual(
+    architectureJson.nodes.map((node) => node.config["ingress"]),
+    [[{ cidr: "0.0.0.0/0", port: 22 }], [{ cidr: "10.0.0.0/16" }]]
+  );
+});
+
+// Security Group Rule fixture는 포트 범위 테스트가 ingress 값에만 집중하도록 둡니다.
+function makeSecurityGroupRuleNode(node: {
+  readonly cidrBlock: string;
+  readonly fromPort: string;
+  readonly id: string;
+  readonly label: string;
+  readonly resourceName: string;
+}): DiagramJson["nodes"][number] {
+  return makeDiagramNode({
+    id: node.id,
+    label: node.label,
+    parameters: {
+      fileName: "main",
+      resourceName: node.resourceName,
+      resourceType: "aws_security_group_rule",
+      terraformBlockType: "resource",
+      values: { cidrBlocks: [node.cidrBlock], fromPort: node.fromPort, type: "ingress" }
+    },
+    type: "aws_security_group_rule"
+  });
+}
+
 function makeDiagramNode(
   node: Partial<DiagramJson["nodes"][number]> &
     Pick<DiagramJson["nodes"][number], "id" | "label" | "type">

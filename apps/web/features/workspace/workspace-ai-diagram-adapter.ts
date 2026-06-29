@@ -156,11 +156,14 @@ function createFallbackDiagramNode(
   };
 }
 
+// 보드 노드 파라미터는 jh 기본값 위에 AI config를 얹어 Terraform Preview와 맞춥니다.
 function createDiagramNodeParameters(
   node: ArchitectureJson["nodes"][number],
   terraformResourceType: string,
   baseParameters: DiagramNodeParameters | undefined
 ): DiagramNodeParameters {
+  const config = node.config ?? {};
+
   return {
     fileName: baseParameters?.fileName ?? "main",
     resourceName: getArchitectureResourceName(node),
@@ -168,7 +171,7 @@ function createDiagramNodeParameters(
     terraformBlockType: baseParameters?.terraformBlockType ?? "resource",
     values: {
       ...(baseParameters?.values ?? {}),
-      ...node.config
+      ...config
     }
   };
 }
@@ -227,15 +230,13 @@ function normalizeSecurityGroupRuleIngress(values: ResourceConfig): ResourceConf
 
   const port = normalizePort(values["fromPort"] ?? values["from_port"] ?? values["toPort"] ?? values["to_port"]);
 
-  return cidrBlocks.filter(isString).map((cidr) => ({
-    cidr,
-    port
-  }));
+  return cidrBlocks.filter(isString).map((cidr) => (port === undefined ? { cidr } : { cidr, port }));
 }
 
+// Security Group Rule 포트는 AWS가 받을 수 있는 숫자 범위만 분석 입력에 남깁니다.
 function normalizePort(value: unknown): number | undefined {
   if (typeof value === "number" && Number.isFinite(value)) {
-    return value;
+    return isValidPort(value) ? value : undefined;
   }
 
   if (typeof value !== "string" || value.trim().length === 0) {
@@ -244,15 +245,20 @@ function normalizePort(value: unknown): number | undefined {
 
   const port = Number(value);
 
-  return Number.isInteger(port) ? port : undefined;
+  return isValidPort(port) ? port : undefined;
 }
 
+// LLM/API 응답에서 config가 비어도 Architecture Board 반영이 멈추지 않게 이름을 복구합니다.
 function getArchitectureResourceName(node: ArchitectureJson["nodes"][number]): string {
-  const configuredName = node.config["terraformResourceName"];
+  const configuredName = node.config?.["terraformResourceName"];
 
   return typeof configuredName === "string" && configuredName.trim().length > 0
     ? configuredName
     : toTerraformName(node.id);
+}
+
+function isValidPort(port: number): boolean {
+  return Number.isInteger(port) && port >= 0 && port <= 65_535;
 }
 
 function mapResourceTypeToTerraform(resourceType: ResourceType): string {
@@ -263,10 +269,11 @@ function mapTerraformResourceType(terraformResourceType: string): ResourceType {
   return TERRAFORM_RESOURCE_TYPE_TO_RESOURCE[terraformResourceType] ?? "UNKNOWN";
 }
 
+// Terraform resource name은 사용자 로케일과 무관한 ASCII identifier로 정규화합니다.
 function toTerraformName(value: string): string {
   const name = value
     .trim()
-    .toLocaleLowerCase()
+    .toLowerCase()
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "");
 

@@ -13,7 +13,7 @@ export function createWorkspaceAiBoardSnapshot(diagramJson: DiagramJson): Worksp
 
   return {
     architectureJson,
-    fingerprint: createWorkspaceAiDiagramFingerprint(diagramJson),
+    fingerprint: createWorkspaceAiArchitectureFingerprint(architectureJson),
     hasResources: architectureJson.nodes.length > 0
   };
 }
@@ -26,6 +26,7 @@ export function isWorkspaceAiResultStale(
   return resultFingerprint !== null && resultFingerprint !== currentFingerprint;
 }
 
-function createWorkspaceAiDiagramFingerprint(diagramJson: DiagramJson): string {
-  return JSON.stringify(diagramJson);
+// AI 결과 만료 판단은 화면 이동/확대가 아니라 실제 분석 API 입력만 기준으로 합니다.
+function createWorkspaceAiArchitectureFingerprint(architectureJson: ArchitectureJson): string {
+  return JSON.stringify(architectureJson);
 }
