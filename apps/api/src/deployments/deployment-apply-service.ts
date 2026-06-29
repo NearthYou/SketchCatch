@@ -226,20 +226,42 @@ export async function runDeploymentApply(
     });
 
     if (terraform.apply.cancelled) {
+      const partialState = await uploadPartialStateAfterFailedApply({
+        deploymentId: deployment.id,
+        accessContext: input.accessContext,
+        sequence,
+        workspace,
+        applyArtifactStorage,
+        repository
+      });
+
       return failDeploymentApplyRun({
         deployment,
         repository,
         terraform,
+        stateObjectKey: partialState.stateObjectKey,
+        resultWarningSummary: partialState.warningSummary,
         errorSummary:
           "Terraform apply was cancelled. AWS resources may have been partially changed; verify resources before retry."
       });
     }
 
     if (terraform.apply.exitCode !== 0) {
+      const partialState = await uploadPartialStateAfterFailedApply({
+        deploymentId: deployment.id,
+        accessContext: input.accessContext,
+        sequence,
+        workspace,
+        applyArtifactStorage,
+        repository
+      });
+
       return failDeploymentApplyRun({
         deployment,
         repository,
         terraform,
+        stateObjectKey: partialState.stateObjectKey,
+        resultWarningSummary: partialState.warningSummary,
         errorSummary: summarizeTerraformFailure("Terraform apply", terraform.apply)
       });
     }
@@ -473,10 +495,24 @@ async function failDeploymentApplyRun(input: {
   repository: DeploymentRepository;
   terraform: RunDeploymentApplyResult["terraform"];
   errorSummary: string;
+  stateObjectKey?: string | null;
+  resultWarningSummary?: string | null;
 }): Promise<RunDeploymentApplyResult> {
-  const failedDeployment = await input.repository.failDeployment(input.deployment.id, {
+  const failureInput: Parameters<DeploymentRepository["failDeployment"]>[1] = {
     failureStage: "apply",
     errorSummary: input.errorSummary
+  };
+
+  if (input.stateObjectKey !== undefined) {
+    failureInput.stateObjectKey = input.stateObjectKey;
+  }
+
+  if (input.resultWarningSummary !== undefined) {
+    failureInput.resultWarningSummary = input.resultWarningSummary;
+  }
+
+  const failedDeployment = await input.repository.failDeployment(input.deployment.id, {
+    ...failureInput
   });
 
   if (!failedDeployment) {
@@ -487,6 +523,52 @@ async function failDeploymentApplyRun(input: {
     deployment: failedDeployment,
     terraform: input.terraform
   };
+}
+
+async function uploadPartialStateAfterFailedApply(input: {
+  deploymentId: string;
+  accessContext: ProjectAccessContext;
+  sequence: number;
+  workspace: PreparedTerraformWorkspace;
+  applyArtifactStorage: DeploymentApplyArtifactStorage;
+  repository: DeploymentRepository;
+}): Promise<{ stateObjectKey: string | null; warningSummary: string | null }> {
+  try {
+    const uploadedState = await input.applyArtifactStorage.uploadDeploymentState({
+      deploymentId: input.deploymentId,
+      stateFilePath: join(input.workspace.workdir, "terraform.tfstate")
+    });
+    const warningSummary =
+      "Partial Terraform state was saved after failed apply for explicit cleanup destroy.";
+
+    await appendApplyWarnings({
+      deploymentId: input.deploymentId,
+      accessContext: input.accessContext,
+      sequence: input.sequence,
+      warnings: [warningSummary],
+      repository: input.repository
+    });
+
+    return {
+      stateObjectKey: uploadedState.objectKey,
+      warningSummary
+    };
+  } catch (error) {
+    const warningSummary = summarizePostApplyWarning("Partial Terraform state upload", error);
+
+    await appendApplyWarnings({
+      deploymentId: input.deploymentId,
+      accessContext: input.accessContext,
+      sequence: input.sequence,
+      warnings: [warningSummary],
+      repository: input.repository
+    }).catch(() => undefined);
+
+    return {
+      stateObjectKey: null,
+      warningSummary
+    };
+  }
 }
 
 async function appendTerraformApplyOutput(input: {

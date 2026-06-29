@@ -23,7 +23,9 @@
   background: #ffffff;
   border-color: #dde5f2;
   border-style: solid;
+  max-width: 100%;
   min-height: 0;
+  min-width: 0;
 }
 
 .leftRail {
@@ -80,6 +82,8 @@
 .rightRail {
   border-width: 0 0 0 1px;
   grid-column: 3;
+  max-width: 100%;
+  min-width: 0;
   overflow: hidden;
   position: relative;
   width: 100%;

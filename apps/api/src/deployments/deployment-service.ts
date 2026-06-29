@@ -90,6 +90,7 @@ export type CreateDeploymentPlanArtifactRecordInput = {
   deploymentId: string;
   terraformArtifactId: string;
   terraformArtifactSha256: string;
+  operation: "apply" | "destroy";
   objectKey: string;
   sha256: string;
   accountId: string;
@@ -103,6 +104,9 @@ export type SaveDeploymentPlanInput = {
   isBlocked: boolean;
   blockedBy: DeploymentBlockedBy | null;
   blockedReason: string | null;
+  terminalStatus?: "PENDING" | "SUCCESS" | "FAILED";
+  failureStage?: DeploymentFailureStage | null;
+  errorSummary?: string | null;
 };
 
 export type ApproveDeploymentInput = {
@@ -115,6 +119,8 @@ export type ApproveDeploymentInput = {
   approvedAwsAccountId: string;
   approvedAwsRegion: string;
   planSummary: DeploymentPlanSummary;
+  status?: "PENDING" | "SUCCESS" | "FAILED";
+  preserveFailureDetails?: boolean;
 };
 
 export type CreateDeployedResourceRecordInput = {
@@ -140,6 +146,10 @@ export type CompleteDeploymentApplyInput = {
   resultWarningSummary: string | null;
   resources: CreateDeployedResourceRecordInput[];
   outputs: CreateTerraformOutputRecordInput[];
+};
+
+export type CompleteDeploymentDestroyInput = {
+  resultWarningSummary: string | null;
 };
 
 export type ProjectRecord = typeof projects.$inferSelect;
@@ -188,6 +198,7 @@ export type DeploymentRepository = {
   markDeploymentInitRunning(deploymentId: string): Promise<DeploymentRecord | undefined>;
   markDeploymentPlanRunning(deploymentId: string): Promise<DeploymentRecord | undefined>;
   markDeploymentApplyRunning(deploymentId: string): Promise<DeploymentRecord | undefined>;
+  markDeploymentDestroyRunning(deploymentId: string): Promise<DeploymentRecord | undefined>;
   markDeploymentInitSucceeded(deploymentId: string): Promise<DeploymentRecord | undefined>;
   updateDeploymentPlan(
     deploymentId: string,
@@ -207,11 +218,17 @@ export type DeploymentRepository = {
     deploymentId: string,
     input: CompleteDeploymentApplyInput
   ): Promise<DeploymentRecord | undefined>;
+  completeDeploymentDestroy(
+    deploymentId: string,
+    input: CompleteDeploymentDestroyInput
+  ): Promise<DeploymentRecord | undefined>;
   failDeployment(
     deploymentId: string,
     input: {
       failureStage: DeploymentFailureStage;
       errorSummary: string;
+      stateObjectKey?: string | null;
+      resultWarningSummary?: string | null;
     }
   ): Promise<DeploymentRecord | undefined>;
   requestDeploymentCancellation(deploymentId: string): Promise<DeploymentRecord | undefined>;
@@ -276,7 +293,9 @@ function createRunningDeploymentValues(activeStage: DeploymentStage) {
   };
 }
 
-function createTerminalDeploymentValues(status: "PENDING" | "SUCCESS" | "FAILED" | "CANCELLED") {
+function createTerminalDeploymentValues(
+  status: "PENDING" | "SUCCESS" | "FAILED" | "CANCELLED" | "DESTROYED"
+) {
   return {
     status,
     activeStage: null,
@@ -469,7 +488,10 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
             ...clearDeploymentApprovalFields
           })
           .where(
-            and(eq(deployments.id, deploymentId), inArray(deployments.status, ["PENDING", "FAILED"]))
+            and(
+              eq(deployments.id, deploymentId),
+              inArray(deployments.status, ["PENDING", "FAILED", "SUCCESS"])
+            )
           )
           .returning();
 
@@ -528,21 +550,48 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
       }
     },
 
+    async markDeploymentDestroyRunning(deploymentId) {
+      try {
+        const [deployment] = await db
+          .update(deployments)
+          .set({
+            ...createRunningDeploymentValues("destroy"),
+            resultWarningSummary: null
+          })
+          .where(
+            and(
+              eq(deployments.id, deploymentId),
+              inArray(deployments.status, ["SUCCESS", "FAILED"])
+            )
+          )
+          .returning();
+
+        return deployment;
+      } catch (error) {
+        if (isDeploymentProjectRunningUniqueViolation(error)) {
+          return undefined;
+        }
+
+        throw error;
+      }
+    },
+
     async saveDeploymentPlan(input) {
       return db.transaction(async (tx) => {
         await tx.insert(deploymentPlanArtifacts).values(input.planArtifact);
+        const terminalStatus = input.terminalStatus ?? "PENDING";
 
         const [deployment] = await tx
           .update(deployments)
           .set({
             currentPlanArtifactId: input.planArtifact.id,
-            ...createTerminalDeploymentValues("PENDING"),
+            ...createTerminalDeploymentValues(terminalStatus),
             planSummary: input.planSummary,
             isBlocked: input.isBlocked,
             blockedBy: input.blockedBy,
             blockedReason: input.blockedReason,
-            failureStage: null,
-            errorSummary: null,
+            failureStage: input.failureStage ?? null,
+            errorSummary: input.errorSummary ?? null,
             ...clearDeploymentApprovalFields
           })
           .where(eq(deployments.id, input.deploymentId))
@@ -557,32 +606,32 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
     },
 
     async approveDeployment(deploymentId, input) {
+      const nextValues = {
+        approvedByUserId: input.approvedByUserId,
+        approvedAt: input.approvedAt,
+        approvedTerraformArtifactId: input.approvedTerraformArtifactId,
+        approvedPlanArtifactId: input.approvedPlanArtifactId,
+        approvedTerraformArtifactHash: input.approvedTerraformArtifactHash,
+        approvedTfplanHash: input.approvedTfplanHash,
+        approvedAwsAccountId: input.approvedAwsAccountId,
+        approvedAwsRegion: input.approvedAwsRegion,
+        planSummary: input.planSummary,
+        isBlocked: false,
+        blockedBy: null,
+        blockedReason: null,
+        ...(input.preserveFailureDetails ? {} : { failureStage: null, errorSummary: null }),
+        status: input.status ?? "PENDING",
+        activeStage: null,
+        ...touchUpdatedAt
+      };
       const [deployment] = await db
         .update(deployments)
-        .set({
-          approvedByUserId: input.approvedByUserId,
-          approvedAt: input.approvedAt,
-          approvedTerraformArtifactId: input.approvedTerraformArtifactId,
-          approvedPlanArtifactId: input.approvedPlanArtifactId,
-          approvedTerraformArtifactHash: input.approvedTerraformArtifactHash,
-          approvedTfplanHash: input.approvedTfplanHash,
-          approvedAwsAccountId: input.approvedAwsAccountId,
-          approvedAwsRegion: input.approvedAwsRegion,
-          planSummary: input.planSummary,
-          isBlocked: false,
-          blockedBy: null,
-          blockedReason: null,
-          failureStage: null,
-          errorSummary: null,
-          status: "PENDING",
-          activeStage: null,
-          ...touchUpdatedAt
-        })
+        .set(nextValues)
         .where(
           and(
             eq(deployments.id, deploymentId),
             eq(deployments.currentPlanArtifactId, input.approvedPlanArtifactId),
-            eq(deployments.status, "PENDING"),
+            inArray(deployments.status, ["PENDING", "SUCCESS", "FAILED"]),
             eq(deployments.isBlocked, true),
             eq(deployments.blockedBy, "missing_approval")
           )
@@ -619,6 +668,33 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
 
         if (!deployment) {
           throw new Error("Deployment apply could not be completed");
+        }
+
+        return deployment;
+      });
+    },
+
+    async completeDeploymentDestroy(deploymentId, input) {
+      return db.transaction(async (tx) => {
+        await tx.delete(deployedResources).where(eq(deployedResources.deploymentId, deploymentId));
+        await tx.delete(terraformOutputs).where(eq(terraformOutputs.deploymentId, deploymentId));
+
+        const [deployment] = await tx
+          .update(deployments)
+          .set({
+            ...createTerminalDeploymentValues("DESTROYED"),
+            currentPlanArtifactId: null,
+            stateObjectKey: null,
+            resultWarningSummary: input.resultWarningSummary,
+            failureStage: null,
+            errorSummary: null,
+            ...clearDeploymentApprovalFields
+          })
+          .where(eq(deployments.id, deploymentId))
+          .returning();
+
+        if (!deployment) {
+          throw new Error("Deployment destroy could not be completed");
         }
 
         return deployment;

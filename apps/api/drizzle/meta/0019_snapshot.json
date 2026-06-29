@@ -1,6 +1,6 @@
 {
-  "id": "c0b6f05d-070a-49d2-a99e-dd9c92f4dff6",
-  "prevId": "6e91385a-2953-481e-b32f-9dfdddd647eb",
+  "id": "ae718f4b-a9d2-43c0-a181-d204b41d435f",
+  "prevId": "c0b6f05d-070a-49d2-a99e-dd9c92f4dff6",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -484,6 +484,14 @@
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
+        },
+        "operation": {
+          "name": "operation",
+          "type": "deployment_plan_operation",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'apply'"
         }
       },
       "indexes": {
@@ -1845,7 +1853,8 @@
         "approval",
         "aws_connection",
         "mock_run",
-        "apply"
+        "apply",
+        "destroy"
       ]
     },
     "public.deployment_log_level": {
@@ -1864,7 +1873,8 @@
         "init",
         "validate",
         "plan",
-        "apply"
+        "apply",
+        "destroy"
       ]
     },
     "public.deployment_status": {
@@ -1875,7 +1885,16 @@
         "RUNNING",
         "SUCCESS",
         "FAILED",
-        "CANCELLED"
+        "CANCELLED",
+        "DESTROYED"
+      ]
+    },
+    "public.deployment_plan_operation": {
+      "name": "deployment_plan_operation",
+      "schema": "public",
+      "values": [
+        "apply",
+        "destroy"
       ]
     }
   },
