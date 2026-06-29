@@ -81,7 +81,11 @@ function buildTerraformResourceListItem(
     nodeId: node.id,
     rows: buildTerraformResourceRows(parameters.values, definitions),
     status: parameters.invalid || validation.invalid ? "invalid" : "ready",
-    terraformAddress: getTerraformAddress(parameters.terraformBlockType, parameters.resourceType, parameters.resourceName),
+    terraformAddress: getTerraformAddress(
+      parameters.terraformBlockType,
+      parameters.resourceType,
+      node.parameters?.resourceName
+    ),
     typeLabel: parameters.resourceType
   };
 }
@@ -177,11 +181,17 @@ function buildDesignAreaRows(node: DiagramNode): ResourceListSummaryRow[] {
 function getTerraformAddress(
   terraformBlockType: string | undefined,
   resourceType: string,
-  resourceName: string
-): string {
+  resourceName: string | undefined
+): string | undefined {
+  const trimmedResourceName = resourceName?.trim();
+
+  if (!trimmedResourceName) {
+    return undefined;
+  }
+
   const blockPrefix = terraformBlockType === "data" ? "data." : "";
 
-  return `${blockPrefix}${resourceType}.${resourceName}`;
+  return `${blockPrefix}${resourceType}.${trimmedResourceName}`;
 }
 
 function getDesignAreaTypeLabel(node: DiagramNode): string {

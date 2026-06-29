@@ -119,6 +119,23 @@ test("buildResourceListItems falls back when legacy resourceName is missing", ()
   const items = buildResourceListItems([legacyNode], catalog);
 
   assert.equal(items[0]?.displayName, "Legacy VPC");
+  assert.equal(items[0]?.terraformAddress, undefined);
+});
+
+test("buildResourceListItems omits terraformAddress when resourceName is blank", () => {
+  const items = buildResourceListItems(
+    [
+      makeResourceNode({
+        id: "subnet-1",
+        label: "Blank Subnet",
+        resourceName: "  ",
+        resourceType: "aws_subnet"
+      })
+    ],
+    catalog
+  );
+
+  assert.equal(items[0]?.terraformAddress, undefined);
 });
 
 function makeDefinition({
