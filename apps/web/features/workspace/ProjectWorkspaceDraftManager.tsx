@@ -6,6 +6,7 @@ import { DiagramEditor } from "../diagram-editor";
 import { EMPTY_DIAGRAM } from "../diagram-editor/constants";
 import { WorkspaceRightPanel } from "./WorkspaceRightPanel";
 import type { LocalProjectDraft } from "./project-draft-persistence";
+import { shouldFlushProjectDraftBeforePageExit } from "./project-draft-page-exit";
 import {
   defaultProjectDraftRepository,
   type ProjectDraftRepository
@@ -116,16 +117,6 @@ export function ProjectWorkspaceDraftManager({
       localDraft: result.localDraft
     };
   }, [localCacheWorkspaceId, projectId, repository, setCurrentLocalDraft, workspaceId]);
-
-  const saveCurrentDraftLocally = useCallback(async () => {
-    clearLocalSaveTimer();
-
-    try {
-      await persistLocalDraftNow();
-    } catch {
-      setLocalSaveState("local-failed");
-    }
-  }, [clearLocalSaveTimer, persistLocalDraftNow]);
 
   useEffect(() => {
     onDraftPersistenceReadyRef.current = onDraftPersistenceReady;
@@ -247,6 +238,21 @@ export function ProjectWorkspaceDraftManager({
     ]
   );
 
+  const flushDraftBeforePageExit = useCallback(() => {
+    if (
+      !shouldFlushProjectDraftBeforePageExit({
+        draftReady: draftReadyRef.current,
+        hasPendingLocalChanges: hasPendingLocalChangesRef.current,
+        serverDirty: serverDirtyRef.current,
+        serverSaving: serverSavingRef.current
+      })
+    ) {
+      return;
+    }
+
+    void flushDraftToServer("external");
+  }, [flushDraftToServer]);
+
   useEffect(() => {
     let cancelled = false;
     draftReadyRef.current = false;
@@ -295,14 +301,18 @@ export function ProjectWorkspaceDraftManager({
 
   useEffect(() => {
     function handleVisibilityChange() {
-      if (document.visibilityState === "hidden" && hasPendingLocalChangesRef.current) {
-        void saveCurrentDraftLocally();
+      if (document.visibilityState === "hidden") {
+        flushDraftBeforePageExit();
       }
     }
 
+    window.addEventListener("pagehide", flushDraftBeforePageExit);
     document.addEventListener("visibilitychange", handleVisibilityChange);
-    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
-  }, [saveCurrentDraftLocally]);
+    return () => {
+      window.removeEventListener("pagehide", flushDraftBeforePageExit);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [flushDraftBeforePageExit]);
 
   useEffect(() => {
     if (serverCheckpointIntervalMs <= 0) {
