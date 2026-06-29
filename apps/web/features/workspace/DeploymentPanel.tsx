@@ -42,6 +42,10 @@ import {
   type DeploymentLogMessageToken,
   type DeploymentPanelMode
 } from "./deployment-actions";
+import type {
+  SavedWorkspaceArchitectureSnapshot,
+  SavedWorkspaceTerraformArtifact
+} from "./workspace-deployment-artifacts";
 import type { RequestState } from "./workspace-right-panel.types";
 import styles from "./workspace.module.css";
 
@@ -66,10 +70,14 @@ function clampNumber(value: number, min: number, max: number): number {
 
 export function DeploymentPanel({
   currentNodeCount,
+  onPrepareDeploymentArtifacts,
+  onSaveArchitectureSnapshot,
   projectId,
   projectName
 }: {
   readonly currentNodeCount: number;
+  readonly onPrepareDeploymentArtifacts: () => Promise<SavedWorkspaceTerraformArtifact>;
+  readonly onSaveArchitectureSnapshot: () => Promise<SavedWorkspaceArchitectureSnapshot>;
   readonly projectId: string;
   readonly projectName: string;
 }) {
@@ -121,8 +129,6 @@ export function DeploymentPanel({
   const hasDeploymentRecords = deployments.length > 0;
   const compactDeploymentPanelMode = hasDeploymentRecords ? deploymentPanelMode : "setup";
   const canCreateDeployment =
-    selectedArchitectureId.length > 0 &&
-    selectedTerraformArtifactId.length > 0 &&
     selectedAwsConnectionId.length > 0 &&
     requestState !== "loading";
   const hasCurrentPlan = Boolean(selectedDeployment?.currentPlanArtifactId);
@@ -431,10 +437,17 @@ export function DeploymentPanel({
     }
 
     await runRequest(async () => {
+      const savedArtifacts = await onPrepareDeploymentArtifacts();
+      const snapshot = await loadDeploymentPanelSnapshot();
+
+      applyDeploymentPanelSnapshot(snapshot);
+      setSelectedArchitectureId(savedArtifacts.architecture.id);
+      setSelectedTerraformArtifactId(savedArtifacts.terraformArtifact.id);
+
       const deployment = await createDeployment({
         projectId,
-        architectureId: selectedArchitectureId,
-        terraformArtifactId: selectedTerraformArtifactId,
+        architectureId: savedArtifacts.architecture.id,
+        terraformArtifactId: savedArtifacts.terraformArtifact.id,
         awsConnectionId: selectedAwsConnectionId
       });
 
@@ -447,6 +460,20 @@ export function DeploymentPanel({
       setShowApplyConfirmation(false);
       setShowDestroyConfirmation(false);
     }, "Deployment를 생성하지 못했습니다.");
+  }
+
+  async function saveArchitectureSnapshot(): Promise<void> {
+    if (requestState === "loading") {
+      return;
+    }
+
+    await runRequest(async () => {
+      const savedSnapshot = await onSaveArchitectureSnapshot();
+      const snapshot = await loadDeploymentPanelSnapshot();
+
+      applyDeploymentPanelSnapshot(snapshot);
+      setSelectedArchitectureId(savedSnapshot.architecture.id);
+    }, "Architecture snapshot을 저장하지 못했습니다.");
   }
 
   async function startTerraformPlan(): Promise<void> {
@@ -695,6 +722,15 @@ export function DeploymentPanel({
         </select>
       </label>
 
+      <button
+        className={styles.deploymentSecondaryButton}
+        disabled={requestState === "loading"}
+        onClick={saveArchitectureSnapshot}
+        type="button"
+      >
+        설계 버전 저장
+      </button>
+
       <label className={styles.deploymentField}>
         Terraform artifact
         <select
@@ -743,8 +779,7 @@ export function DeploymentPanel({
         Deployment 생성
       </button>
 
-      {!selectedArchitectureId ? <p className={styles.deploymentHint}>먼저 architecture snapshot이 필요합니다.</p> : null}
-      {!selectedTerraformArtifactId ? <p className={styles.deploymentHint}>Terraform artifact가 있어야 Plan을 실행할 수 있습니다.</p> : null}
+      <p className={styles.deploymentHint}>Deployment 생성 전 현재 설계와 Terraform artifact를 자동 저장합니다.</p>
       {!selectedAwsConnectionId ? (
         <p className={styles.deploymentHint}>환경설정에서 AWS 계정을 연결하고 검증해주세요.</p>
       ) : null}

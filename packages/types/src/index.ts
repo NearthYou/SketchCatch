@@ -213,7 +213,7 @@ export type CreateProjectRequest = {
   description?: string | undefined;
 };
 
-export type ArchitectureSource = "manual" | "prompt" | "imported";
+export type ArchitectureSource = "manual" | "prompt" | "ai_draft" | "imported";
 
 export type ArchitectureSnapshot = {
   id: string;

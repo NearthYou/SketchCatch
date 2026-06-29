@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent, UIEvent } from "react";
-import type { TerraformDiagnostic } from "@sketchcatch/types";
+import type { DiagramJson, TerraformDiagnostic } from "@sketchcatch/types";
 import {
   AlertCircle,
   ArrowLeft,
@@ -12,6 +12,7 @@ import {
   Rocket,
   Settings,
   Trash2,
+  UploadCloud,
   X
 } from "lucide-react";
 import { getApiErrorMessage } from "../../lib/api-client";
@@ -36,16 +37,16 @@ import styles from "./workspace.module.css";
 const TERRAFORM_EDITOR_LINE_HEIGHT = 19.2;
 const TERRAFORM_EDITOR_VERTICAL_PADDING = 12;
 
-export function TerraformCodePanel({
-  context,
-  externalSaveRequestId,
-  isVisible,
-  onDiagnosticsChange,
-  onDirtyChange,
-  onExternalSaveComplete,
-  onOpenIssues,
-  onOpenResourceSettings
-}: {
+export type PreparedTerraformArtifactSource = {
+  readonly diagramJson: DiagramJson;
+  readonly terraformCode: string;
+};
+
+export type TerraformCodePanelHandle = {
+  readonly prepareTerraformArtifact: () => Promise<PreparedTerraformArtifactSource>;
+};
+
+export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
   readonly context: DiagramEditorPanelContext;
   readonly externalSaveRequestId: number;
   readonly isVisible: boolean;
@@ -54,7 +55,18 @@ export function TerraformCodePanel({
   readonly onExternalSaveComplete: (saved: boolean) => void;
   readonly onOpenIssues: () => void;
   readonly onOpenResourceSettings: () => void;
-}) {
+  readonly onSaveTerraformArtifact?: (source: PreparedTerraformArtifactSource) => Promise<unknown>;
+}>(function TerraformCodePanel({
+  context,
+  externalSaveRequestId,
+  isVisible,
+  onDiagnosticsChange,
+  onDirtyChange,
+  onExternalSaveComplete,
+  onOpenIssues,
+  onOpenResourceSettings,
+  onSaveTerraformArtifact
+}, ref) {
   const [terraformFiles, setTerraformFiles] = useState<TerraformVirtualFile[]>(() =>
     createTerraformFilesFromGeneratedCode(context.diagram, "")
   );
@@ -71,6 +83,7 @@ export function TerraformCodePanel({
   const [codeScrollTop, setCodeScrollTop] = useState(0);
   const codeRequestIdRef = useRef(0);
   const diagnosticToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isPreparingTerraformArtifactRef = useRef(false);
   const latestDiagramFingerprintRef = useRef("");
   const latestExternalSaveRequestIdRef = useRef(externalSaveRequestId);
   const lineNumberRef = useRef<HTMLOListElement | null>(null);
@@ -185,6 +198,58 @@ export function TerraformCodePanel({
     [context.diagram, onDiagnosticsChange, onDirtyChange, runRequest]
   );
 
+  const syncTerraformCodeToDiagram = useCallback(async (): Promise<PreparedTerraformArtifactSource | null> => {
+    const validationResult = await validateTerraformCode(combinedTerraformCode);
+    setDiagnostics(validationResult.diagnostics);
+    onDiagnosticsChange(validationResult.diagnostics);
+
+    const validationError = validationResult.diagnostics.find(
+      (diagnostic) => diagnostic.severity === "error"
+    );
+
+    if (validationError) {
+      setSaveBanner(null);
+      showDiagnosticToast(validationError);
+      setStatusMessage("저장 실패");
+      return null;
+    }
+
+    const syncResult = await syncTerraformToDiagram({
+      diagramJson: context.diagram,
+      terraformCode: combinedTerraformCode
+    });
+    setDiagnostics(syncResult.diagnostics);
+    onDiagnosticsChange(syncResult.diagnostics);
+
+    const syncError = syncResult.diagnostics.find((diagnostic) => diagnostic.severity === "error");
+
+    if (syncError) {
+      setSaveBanner(null);
+      showDiagnosticToast(syncError);
+      setStatusMessage("저장 실패");
+      return null;
+    }
+
+    context.applyDiagramJson(syncResult.diagramJson);
+    latestDiagramFingerprintRef.current = toDiagramFingerprint(syncResult.diagramJson);
+    setHasLocalEdits(false);
+    setSaveBanner(null);
+    setDiagnosticToast(null);
+    setStatusMessage("저장됨");
+    onDirtyChange(false);
+
+    return {
+      diagramJson: syncResult.diagramJson,
+      terraformCode: combinedTerraformCode
+    };
+  }, [
+    combinedTerraformCode,
+    context,
+    onDiagnosticsChange,
+    onDirtyChange,
+    showDiagnosticToast
+  ]);
+
   const saveCodeToDiagram = useCallback(async (): Promise<boolean> => {
     if (!hasTerraformCode || requestState === "loading") {
       return false;
@@ -193,58 +258,44 @@ export function TerraformCodePanel({
     let saved = false;
 
     await runRequest(async () => {
-      const validationResult = await validateTerraformCode(combinedTerraformCode);
-      setDiagnostics(validationResult.diagnostics);
-      onDiagnosticsChange(validationResult.diagnostics);
-
-      const validationError = validationResult.diagnostics.find(
-        (diagnostic) => diagnostic.severity === "error"
-      );
-
-      if (validationError) {
-        setSaveBanner(null);
-        showDiagnosticToast(validationError);
-        setStatusMessage("저장 실패");
-        return;
-      }
-
-      const syncResult = await syncTerraformToDiagram({
-        diagramJson: context.diagram,
-        terraformCode: combinedTerraformCode
-      });
-      setDiagnostics(syncResult.diagnostics);
-      onDiagnosticsChange(syncResult.diagnostics);
-
-      const syncError = syncResult.diagnostics.find((diagnostic) => diagnostic.severity === "error");
-
-      if (syncError) {
-        setSaveBanner(null);
-        showDiagnosticToast(syncError);
-        setStatusMessage("저장 실패");
-        return;
-      }
-
-      context.applyDiagramJson(syncResult.diagramJson);
-      latestDiagramFingerprintRef.current = toDiagramFingerprint(syncResult.diagramJson);
-      setHasLocalEdits(false);
-      setSaveBanner(null);
-      setDiagnosticToast(null);
-      setStatusMessage("저장됨");
-      onDirtyChange(false);
-      saved = true;
+      saved = Boolean(await syncTerraformCodeToDiagram());
     }, "Terraform 코드를 저장하지 못했습니다.");
 
     return saved;
-  }, [
-    combinedTerraformCode,
-    context,
-    hasTerraformCode,
-    onDiagnosticsChange,
-    onDirtyChange,
-    requestState,
-    runRequest,
-    showDiagnosticToast
-  ]);
+  }, [hasTerraformCode, requestState, runRequest, syncTerraformCodeToDiagram]);
+
+  useImperativeHandle(ref, () => ({
+    prepareTerraformArtifact: async () => {
+      if (!hasTerraformCode) {
+        throw new Error("저장할 Terraform 코드가 없습니다.");
+      }
+
+      if (requestState === "loading" || isPreparingTerraformArtifactRef.current) {
+        throw new Error("Terraform 요청을 처리하는 중입니다.");
+      }
+
+      isPreparingTerraformArtifactRef.current = true;
+      setRequestState("loading");
+      setErrorMessage("");
+
+      try {
+        const preparedSource = await syncTerraformCodeToDiagram();
+
+        if (!preparedSource) {
+          throw new Error("Terraform 코드 검증 또는 그래프 반영에 실패했습니다.");
+        }
+
+        setRequestState("idle");
+        return preparedSource;
+      } catch (error) {
+        setRequestState("error");
+        setErrorMessage(getApiErrorMessage(error, "Terraform 패널을 준비하지 못했습니다."));
+        throw error;
+      } finally {
+        isPreparingTerraformArtifactRef.current = false;
+      }
+    }
+  }), [hasTerraformCode, requestState, syncTerraformCodeToDiagram]);
 
   useEffect(() => {
     if (latestExternalSaveRequestIdRef.current === externalSaveRequestId) {
@@ -386,6 +437,23 @@ export function TerraformCodePanel({
     }, "Terraform 코드를 검증하지 못했습니다.");
   }
 
+  async function saveTerraformArtifact(): Promise<void> {
+    if (!onSaveTerraformArtifact || !hasTerraformCode || requestState === "loading") {
+      return;
+    }
+
+    await runRequest(async () => {
+      const preparedSource = await syncTerraformCodeToDiagram();
+
+      if (!preparedSource) {
+        throw new Error("Terraform 코드 검증 또는 그래프 반영에 실패했습니다.");
+      }
+
+      await onSaveTerraformArtifact(preparedSource);
+      setStatusMessage("Artifact 저장됨");
+    }, "Terraform artifact를 저장하지 못했습니다.");
+  }
+
   function selectTerraformFile(fileName: string): void {
     setTerraformFiles((currentFiles) =>
       currentFiles.some((file) => file.fileName === fileName)
@@ -471,6 +539,16 @@ export function TerraformCodePanel({
               </div>
             ) : null}
           </div>
+          <button
+            className={styles.terraformArtifactButton}
+            disabled={!onSaveTerraformArtifact || requestState === "loading" || !hasTerraformCode}
+            onClick={saveTerraformArtifact}
+            title="현재 Terraform artifact 저장"
+            type="button"
+          >
+            <UploadCloud size={15} aria-hidden="true" />
+            Artifact 저장
+          </button>
           <span className={styles.terraformShortcut}>Ctrl+S</span>
         </header>
       )}
@@ -609,4 +687,4 @@ export function TerraformCodePanel({
       </section>
     </div>
   );
-}
+});
