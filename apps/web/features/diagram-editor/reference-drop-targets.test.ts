@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import type { DiagramNode } from "../../../../packages/types/src";
 import type { ParameterCatalog, ParameterCatalogDefinition } from "../parameter-input/catalog";
+import { terraformParameterCatalog } from "../parameter-input/catalog";
 import {
   applyInnermostReferenceDropTarget,
   applyReferenceDropTarget,
@@ -368,6 +369,92 @@ test("applyInnermostReferenceDropTarget finds the parent target and applies the 
   const result = applyInnermostReferenceDropTarget(subnet, [vpc, subnet], catalog);
 
   assert.equal(result.parameters?.values.vpcId, "aws_vpc.main.id");
+});
+
+test("applyInnermostReferenceDropTarget uses the real catalog for VPC and Subnet placement references", () => {
+  const vpc = makeResourceNode({
+    id: "vpc-1",
+    resourceName: "main",
+    resourceType: "aws_vpc",
+    position: { x: 0, y: 0 },
+    size: { width: 520, height: 360 }
+  });
+  const subnet = makeResourceNode({
+    id: "subnet-1",
+    resourceName: "public",
+    resourceType: "aws_subnet",
+    position: { x: 80, y: 80 },
+    size: { width: 320, height: 220 }
+  });
+  const instance = makeResourceNode({
+    id: "instance-1",
+    resourceName: "web",
+    resourceType: "aws_instance",
+    position: { x: 150, y: 150 },
+    size: { width: 96, height: 72 }
+  });
+
+  const subnetResult = applyInnermostReferenceDropTarget(subnet, [vpc, subnet], terraformParameterCatalog);
+  const instanceResult = applyInnermostReferenceDropTarget(
+    instance,
+    [vpc, subnet, instance],
+    terraformParameterCatalog
+  );
+
+  assert.equal(subnetResult.parameters?.values.vpcId, "aws_vpc.main.id");
+  assert.equal(instanceResult.parameters?.values.subnetId, "aws_subnet.public.id");
+});
+
+test("applyInnermostReferenceDropTarget uses the real catalog for VPC-owned resources inside nested areas", () => {
+  const vpc = makeResourceNode({
+    id: "vpc-1",
+    resourceName: "main",
+    resourceType: "aws_vpc",
+    position: { x: 0, y: 0 },
+    size: { width: 520, height: 360 }
+  });
+  const subnet = makeResourceNode({
+    id: "subnet-1",
+    resourceName: "public",
+    resourceType: "aws_subnet",
+    position: { x: 80, y: 80 },
+    size: { width: 320, height: 220 }
+  });
+  const internetGateway = makeResourceNode({
+    id: "igw-1",
+    resourceName: "main_igw",
+    resourceType: "aws_internet_gateway",
+    position: { x: 120, y: 120 },
+    size: { width: 96, height: 72 }
+  });
+  const routeTable = makeResourceNode({
+    id: "route-table-1",
+    resourceName: "public",
+    resourceType: "aws_route_table",
+    position: { x: 150, y: 140 },
+    size: { width: 96, height: 72 }
+  });
+  const securityGroup = makeResourceNode({
+    id: "security-group-1",
+    resourceName: "web",
+    resourceType: "aws_security_group",
+    position: { x: 180, y: 160 },
+    size: { width: 96, height: 72 }
+  });
+  const nodes = [vpc, subnet, internetGateway, routeTable, securityGroup];
+
+  assert.equal(
+    applyInnermostReferenceDropTarget(internetGateway, nodes, terraformParameterCatalog).parameters?.values.vpcId,
+    "aws_vpc.main.id"
+  );
+  assert.equal(
+    applyInnermostReferenceDropTarget(routeTable, nodes, terraformParameterCatalog).parameters?.values.vpcId,
+    "aws_vpc.main.id"
+  );
+  assert.equal(
+    applyInnermostReferenceDropTarget(securityGroup, nodes, terraformParameterCatalog).parameters?.values.vpcId,
+    "aws_vpc.main.id"
+  );
 });
 
 test("DiagramEditor applies reference targets after palette drop and node drag stop", () => {
