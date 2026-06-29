@@ -148,6 +148,16 @@ test("terraform panel exposes an explicit terraform artifact save action", () =>
   assert.match(stylesSource, /\.terraformArtifactButton\s*\{/);
 });
 
+test("terraform artifact preparation marks the terraform panel as loading", () => {
+  const prepareIndex = terraformPanelSource.indexOf("prepareTerraformArtifact: async () =>");
+
+  assert.ok(prepareIndex > -1);
+  assert.ok(terraformPanelSource.indexOf('setRequestState("loading")', prepareIndex) > prepareIndex);
+  assert.ok(terraformPanelSource.indexOf('setRequestState("idle")', prepareIndex) > prepareIndex);
+  assert.ok(terraformPanelSource.indexOf('setRequestState("error")', prepareIndex) > prepareIndex);
+  assert.match(terraformPanelSource, /isPreparingTerraformArtifactRef/);
+});
+
 function readWorkspaceFile(fileName: string): string {
   return readFileSync(fileURLToPath(new URL(fileName, import.meta.url)), "utf8");
 }

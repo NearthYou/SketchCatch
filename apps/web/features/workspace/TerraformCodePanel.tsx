@@ -83,6 +83,7 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
   const [codeScrollTop, setCodeScrollTop] = useState(0);
   const codeRequestIdRef = useRef(0);
   const diagnosticToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isPreparingTerraformArtifactRef = useRef(false);
   const latestDiagramFingerprintRef = useRef("");
   const latestExternalSaveRequestIdRef = useRef(externalSaveRequestId);
   const lineNumberRef = useRef<HTMLOListElement | null>(null);
@@ -269,17 +270,30 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
         throw new Error("저장할 Terraform 코드가 없습니다.");
       }
 
-      if (requestState === "loading") {
+      if (requestState === "loading" || isPreparingTerraformArtifactRef.current) {
         throw new Error("Terraform 요청을 처리하는 중입니다.");
       }
 
-      const preparedSource = await syncTerraformCodeToDiagram();
+      isPreparingTerraformArtifactRef.current = true;
+      setRequestState("loading");
+      setErrorMessage("");
 
-      if (!preparedSource) {
-        throw new Error("Terraform 코드 검증 또는 그래프 반영에 실패했습니다.");
+      try {
+        const preparedSource = await syncTerraformCodeToDiagram();
+
+        if (!preparedSource) {
+          throw new Error("Terraform 코드 검증 또는 그래프 반영에 실패했습니다.");
+        }
+
+        setRequestState("idle");
+        return preparedSource;
+      } catch (error) {
+        setRequestState("error");
+        setErrorMessage(getApiErrorMessage(error, "Terraform 패널을 준비하지 못했습니다."));
+        throw error;
+      } finally {
+        isPreparingTerraformArtifactRef.current = false;
       }
-
-      return preparedSource;
     }
   }), [hasTerraformCode, requestState, syncTerraformCodeToDiagram]);
 
