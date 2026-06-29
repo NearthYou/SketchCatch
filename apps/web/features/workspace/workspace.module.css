@@ -155,9 +155,12 @@
   font-size: 11.5px;
   grid-template-rows: auto minmax(0, 1fr);
   height: 100%;
+  max-width: 100%;
   min-height: 0;
+  min-width: 0;
   overflow: hidden;
   position: relative;
+  width: 100%;
 }
 
 .collapsedRightPanel {
@@ -202,7 +205,9 @@
   display: flex;
   gap: 8px;
   justify-content: flex-start;
+  max-width: 100%;
   min-height: 46px;
+  min-width: 0;
   padding: 6px 12px 6px 8px;
   position: sticky;
   top: 0;
@@ -212,8 +217,11 @@
 .rightPanelView {
   display: grid;
   height: 100%;
+  max-width: 100%;
   min-height: 0;
+  min-width: 0;
   overflow: hidden;
+  width: 100%;
 }
 
 .rightPanelView[hidden] {
@@ -1708,18 +1716,48 @@
 .deploymentPanel {
   display: grid;
   gap: 16px;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   height: 100%;
+  max-width: 100%;
   min-height: 0;
-  overflow-y: auto;
+  min-width: 0;
+  overflow: hidden;
   padding: 16px;
+  width: 100%;
+}
+
+.deploymentPanelContent {
+  align-content: start;
+  display: grid;
+  gap: 16px;
+  max-width: 100%;
+  min-height: 0;
+  min-width: 0;
+  overflow-y: auto;
+  padding-right: 2px;
   scrollbar-gutter: stable;
+  width: 100%;
 }
 
 .deploymentHeader {
   border-bottom: 1px solid #e3e9f2;
   display: grid;
   gap: 4px;
+  min-width: 0;
   padding-bottom: 14px;
+}
+
+.deploymentHeaderTop {
+  align-items: flex-start;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.deploymentHeaderTop > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
 }
 
 .deploymentHeader h2 {
@@ -1735,10 +1773,32 @@
   font-weight: 800;
 }
 
+.deploymentExpandButton {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  color: #243044;
+  cursor: pointer;
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 34px;
+  justify-content: center;
+  width: 34px;
+}
+
+.deploymentExpandButton:hover,
+.deploymentExpandButton:focus-visible {
+  background: #eff6ff;
+  border-color: #93c5fd;
+  outline: none;
+}
+
 .deploymentSection {
   border-top: 1px solid #e3e9f2;
   display: grid;
   gap: 10px;
+  min-width: 0;
   padding-top: 14px;
 }
 
@@ -1753,6 +1813,7 @@
   display: flex;
   gap: 10px;
   justify-content: space-between;
+  min-width: 0;
 }
 
 .deploymentField {
@@ -1787,7 +1848,8 @@
 }
 
 .deploymentPrimaryButton,
-.deploymentSecondaryButton {
+.deploymentSecondaryButton,
+.deploymentDangerButton {
   align-items: center;
   border-radius: 6px;
   cursor: pointer;
@@ -1797,8 +1859,11 @@
   font-weight: 850;
   gap: 5px;
   justify-content: center;
+  line-height: 1.25;
   min-height: 34px;
   padding: 0 10px;
+  text-align: center;
+  white-space: normal;
 }
 
 .deploymentPrimaryButton {
@@ -1813,10 +1878,45 @@
   color: #243044;
 }
 
+.deploymentDangerButton {
+  background: #dc2626;
+  border: 1px solid #dc2626;
+  color: #ffffff;
+}
+
 .deploymentPrimaryButton:disabled,
-.deploymentSecondaryButton:disabled {
+.deploymentSecondaryButton:disabled,
+.deploymentDangerButton:disabled {
   cursor: not-allowed;
   opacity: 0.55;
+}
+
+.deploymentDangerButton:not(:disabled):hover,
+.deploymentDangerButton:not(:disabled):focus-visible {
+  background: #b91c1c;
+  border-color: #b91c1c;
+  outline: none;
+}
+
+.deploymentPrimaryButton svg,
+.deploymentSecondaryButton svg,
+.deploymentDangerButton svg {
+  flex: 0 0 auto;
+}
+
+.deploymentButtonText {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.deploymentPrimaryButton .deploymentButtonText,
+.deploymentDangerButton .deploymentButtonText {
+  color: #ffffff;
+}
+
+.deploymentPrimaryButton svg,
+.deploymentDangerButton svg {
+  color: #ffffff;
 }
 
 .deploymentHint {
@@ -1832,6 +1932,7 @@
   border-radius: 6px;
   display: grid;
   gap: 8px;
+  min-width: 0;
   padding: 10px;
 }
 
@@ -1879,7 +1980,8 @@
   overflow-wrap: anywhere;
 }
 
-.deploymentApplyConfirm {
+.deploymentApplyConfirm,
+.deploymentDestroyConfirm {
   background: #f8fafc;
   border: 1px solid #cbd5e1;
   border-radius: 6px;
@@ -1888,30 +1990,40 @@
   padding: 10px;
 }
 
-.deploymentApplyConfirm h3 {
+.deploymentDestroyConfirm {
+  background: #fff7ed;
+  border-color: #fdba74;
+}
+
+.deploymentApplyConfirm h3,
+.deploymentDestroyConfirm h3 {
   font-size: 13px;
   margin: 0;
 }
 
-.deploymentApplyConfirm div {
+.deploymentApplyConfirm div,
+.deploymentDestroyConfirm div {
   display: grid;
   gap: 3px;
   min-width: 0;
 }
 
-.deploymentApplyConfirm span {
+.deploymentApplyConfirm span,
+.deploymentDestroyConfirm span {
   color: #68758b;
   font-size: 11px;
   font-weight: 850;
 }
 
-.deploymentApplyConfirm strong {
+.deploymentApplyConfirm strong,
+.deploymentDestroyConfirm strong {
   color: #172033;
   font-size: 12px;
   overflow-wrap: anywhere;
 }
 
-.deploymentApplyConfirm p {
+.deploymentApplyConfirm p,
+.deploymentDestroyConfirm p {
   color: #334155;
   font-size: 12px;
   line-height: 1.5;
@@ -1921,50 +2033,302 @@
 .deploymentApplyActions {
   display: grid;
   gap: 8px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(76px, 0.85fr) minmax(0, 1.15fr);
 }
 
-.deploymentResultList {
-  display: grid;
-  gap: 8px;
+.deploymentApplyActions .deploymentPrimaryButton,
+.deploymentApplyActions .deploymentSecondaryButton,
+.deploymentApplyActions .deploymentDangerButton {
+  min-height: 44px;
+  padding: 8px 12px;
 }
 
-.deploymentResultList div {
-  background: #f8fafc;
+.deploymentResultRows {
   border: 1px solid #dce3ee;
   border-radius: 6px;
   display: grid;
-  gap: 4px;
-  padding: 10px;
+  gap: 0;
+  min-width: 0;
+  overflow: hidden;
 }
 
-.deploymentResultList strong {
+.deploymentResultRow {
+  align-items: center;
+  background: #ffffff;
+  border-top: 1px solid #e6edf5;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1.15fr) minmax(88px, 0.45fr) minmax(0, 1fr);
+  min-height: 32px;
+  min-width: 0;
+  padding: 6px 10px;
+}
+
+.deploymentResultRow:first-child {
+  border-top: 0;
+}
+
+.deploymentResultRow strong {
   color: #172033;
   font-size: 12px;
   overflow-wrap: anywhere;
 }
 
-.deploymentResultList span {
+.deploymentResultMeta,
+.deploymentResultValue {
   color: #526174;
   font-size: 12px;
   overflow-wrap: anywhere;
 }
 
-.deploymentLogConsole {
+.deploymentResultMeta {
+  color: #64748b;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 11px;
+}
+
+.deploymentModeSwitch {
+  align-items: center;
+  background: #f8fafc;
+  border: 1px solid #dce3ee;
+  border-radius: 6px;
+  display: grid;
+  gap: 6px;
+  grid-auto-rows: 40px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  min-width: 0;
+  padding: 6px;
+}
+
+.deploymentModeButton {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  color: #526174;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 850;
+  height: 40px;
+  justify-content: center;
+  line-height: 1.2;
+  min-height: 0;
+  padding: 0 8px;
+}
+
+.deploymentModeButton:hover,
+.deploymentModeButton:focus-visible {
+  background: #eef2f7;
+  color: #172033;
+  outline: none;
+}
+
+.deploymentModeButtonActive {
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 12%);
+  color: #172033;
+}
+
+.deploymentExpandedOverlay {
+  background: rgb(15 23 42 / 38%);
+  inset: 0;
+  padding: 18px;
+  position: fixed;
+  z-index: 60;
+}
+
+.deploymentExpandedShell {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  box-shadow: 0 24px 60px rgb(15 23 42 / 28%);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.deploymentExpandedHeader {
+  align-items: center;
+  border-bottom: 1px solid #e3e9f2;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 14px 16px;
+}
+
+.deploymentExpandedHeader > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.deploymentExpandedHeader h2 {
+  color: #172033;
+  font-size: 18px;
+  line-height: 1.2;
+  margin: 0;
+}
+
+.deploymentExpandedHeader span {
+  color: #68758b;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.deploymentExpandedGrid {
+  --deployment-details-width: 50%;
+
+  display: grid;
+  grid-template-columns:
+    minmax(0, calc(var(--deployment-details-width) - 6px))
+    12px
+    minmax(0, calc(100% - var(--deployment-details-width) - 6px));
+  min-height: 0;
+}
+
+.deploymentExpandedDetails {
+  align-content: start;
+  display: grid;
+  gap: 16px;
+  max-width: 100%;
+  min-height: 0;
+  min-width: 0;
+  overflow: auto;
+  padding: 16px;
+}
+
+.deploymentExpandedLogs {
+  background: #0f172a;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  max-width: 100%;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  padding: 16px;
+}
+
+.deploymentExpandedResizeHandle {
+  align-items: center;
+  background: #f1f5f9;
+  border: 0;
+  border-left: 1px solid #d9e2ef;
+  border-right: 1px solid #d9e2ef;
+  cursor: col-resize;
+  display: flex;
+  justify-content: center;
+  min-height: 0;
+  padding: 0;
+  touch-action: none;
+}
+
+.deploymentExpandedResizeHandle::before {
+  background: #94a3b8;
+  border-radius: 999px;
+  box-shadow:
+    -3px 0 0 #cbd5e1,
+    3px 0 0 #cbd5e1;
+  content: "";
+  height: 44px;
+  width: 2px;
+}
+
+.deploymentExpandedResizeHandle:hover,
+.deploymentExpandedResizeHandle:focus-visible {
+  background: #e2e8f0;
+  outline: 2px solid #2563eb;
+  outline-offset: -2px;
+}
+
+.deploymentExpandedLogs .deploymentSection {
+  border-top: 0;
+  display: grid;
+  gap: 10px;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
+  padding-top: 0;
+}
+
+.deploymentExpandedLogs .deploymentSection h3 {
+  color: #e2e8f0;
+}
+
+.deploymentExpandedLogs .deploymentHint {
+  color: #94a3b8;
+}
+
+.deploymentLogList {
   background: #111827;
   border: 1px solid #243247;
   border-radius: 6px;
   color: #d9e4f5;
+  display: block;
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   font-size: 12px;
   line-height: 1.55;
+  list-style: none;
   margin: 0;
-  max-height: 360px;
-  min-height: 220px;
+  max-width: 100%;
+  min-height: 0;
+  min-width: 0;
   overflow: auto;
   padding: 12px;
   tab-size: 2;
-  white-space: pre;
+}
+
+.deploymentLogList li {
+  color: inherit;
+  min-width: 0;
+  padding: 1px 0;
+  white-space: pre-wrap;
+}
+
+.deploymentLogList li[data-tone="warning"] {
+  color: #fbbf24;
+}
+
+.deploymentLogList li[data-tone="error"] {
+  color: #f87171;
+}
+
+.deploymentLogPrefix {
+  color: #94a3b8;
+}
+
+.deploymentLogList p {
+  color: inherit;
+  display: inline;
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.deploymentLogTokenPlain {
+  color: inherit;
+}
+
+.deploymentLogTokenResource {
+  color: #67e8f9;
+}
+
+.deploymentLogTokenString {
+  color: #86efac;
+}
+
+.deploymentLogTokenMetadata {
+  color: #fbbf24;
+}
+
+.deploymentLogTokenOperation {
+  color: #93c5fd;
+}
+
+.deploymentLogTokenOutput {
+  color: #c4b5fd;
 }
 
 .deploymentNotice,
@@ -2002,5 +2366,35 @@
   .projectForm,
   .noticePanel {
     padding: 20px;
+  }
+
+  .deploymentExpandedOverlay {
+    padding: 0;
+  }
+
+  .deploymentExpandedShell {
+    border-radius: 0;
+  }
+
+  .deploymentExpandedGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .deploymentExpandedResizeHandle {
+    display: none;
+  }
+
+  .deploymentExpandedLogs {
+    border-left: 0;
+    border-top: 1px solid #1e293b;
+  }
+
+  .deploymentResultRow {
+    align-items: start;
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .deploymentResultValue {
+    grid-column: 1 / -1;
   }
 }

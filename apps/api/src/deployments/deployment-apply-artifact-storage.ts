@@ -26,6 +26,10 @@ export type DeploymentApplyArtifactStorage = {
     planArtifactId: string;
     objectKey: string;
   }): Promise<Buffer>;
+  downloadDeploymentState(input: {
+    deploymentId: string;
+    objectKey: string;
+  }): Promise<Buffer>;
   uploadDeploymentState(input: UploadDeploymentStateInput): Promise<UploadedDeploymentState>;
 };
 
@@ -43,6 +47,12 @@ export function createS3DeploymentApplyArtifactStorage(
   return {
     async downloadDeploymentArtifact(input) {
       assertDeploymentPlanArtifactObjectKey(input);
+
+      return downloadTerraformArtifactFromS3(input.objectKey);
+    },
+
+    async downloadDeploymentState(input) {
+      assertDeploymentStateObjectKey(input);
 
       return downloadTerraformArtifactFromS3(input.objectKey);
     },

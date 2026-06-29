@@ -26,7 +26,8 @@ export const deploymentStatusEnum = pgEnum("deployment_status", [
   "RUNNING",
   "SUCCESS",
   "FAILED",
-  "CANCELLED"
+  "CANCELLED",
+  "DESTROYED"
 ]);
 
 export const deploymentBlockedEnum = pgEnum("deployment_blocked_by", [
@@ -42,14 +43,21 @@ export const deploymentFailureStageEnum = pgEnum("deployment_failure_stage", [
   "approval",
   "aws_connection",
   "mock_run",
-  "apply"
+  "apply",
+  "destroy"
 ]);
 
 export const deploymentStageEnum = pgEnum("deployment_stage", [
   "init",
   "validate",
   "plan",
-  "apply"
+  "apply",
+  "destroy"
+]);
+
+export const deploymentPlanOperationEnum = pgEnum("deployment_plan_operation", [
+  "apply",
+  "destroy"
 ]);
 
 export const deploymentLogLevelEnum = pgEnum("deployment_log_level", ["INFO", "WARN", "ERROR"]);
@@ -323,6 +331,7 @@ export const deploymentPlanArtifacts = pgTable(
       .notNull()
       .references(() => projectAssets.id, { onDelete: "restrict" }),
     terraformArtifactSha256: varchar("terraform_artifact_sha256", { length: 64 }),
+    operation: deploymentPlanOperationEnum("operation").notNull().default("apply"),
     objectKey: text("object_key").notNull(),
     sha256: varchar("sha256", { length: 64 }).notNull(),
     accountId: varchar("account_id", { length: 12 }).notNull(),

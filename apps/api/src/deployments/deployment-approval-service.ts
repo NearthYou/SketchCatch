@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { AwsConnection } from "@sketchcatch/types";
+import type { AwsConnection, DeploymentFailureStage, DeploymentStatus } from "@sketchcatch/types";
 import {
   assertAwsApplyPreconditions,
   AwsConnectionRuntimeCredentialsError
@@ -37,6 +37,11 @@ export type AssertDeploymentApplyPreconditionsInput = {
   currentAwsConnection: AwsConnection;
 };
 
+export type AssertDeploymentDestroyPreconditionsInput = AssertDeploymentApplyPreconditionsInput & {
+  sourceStatus: DeploymentStatus;
+  sourceFailureStage: DeploymentFailureStage | null;
+};
+
 export async function approveDeploymentPlan(
   input: ApproveDeploymentPlanInput,
   repository: DeploymentRepository,
@@ -61,6 +66,10 @@ export async function approveDeploymentPlan(
 
   if (currentPlanArtifact.terraformArtifactId !== deployment.terraformArtifactId) {
     throw new DeploymentConflictError("Terraform artifact changed after plan");
+  }
+
+  if (currentPlanArtifact.operation !== "apply" && currentPlanArtifact.operation !== "destroy") {
+    throw new DeploymentConflictError("Unsupported Terraform plan operation");
   }
 
   const terraformArtifact = await repository.findTerraformArtifactById(
@@ -115,7 +124,10 @@ export async function approveDeploymentPlan(
     planSummary: {
       ...deployment.planSummary,
       blocked: false
-    }
+    },
+    status: getApprovedDeploymentStatus(deployment, currentPlanArtifact.operation),
+    preserveFailureDetails:
+      currentPlanArtifact.operation === "destroy" && deployment.status === "FAILED"
   });
 
   if (!approvedDeployment) {
@@ -131,6 +143,10 @@ export function assertDeploymentApplyPreconditions(
   const deployment = input.deployment;
 
   assertDeploymentApprovalSnapshot(deployment);
+
+  if (input.currentPlanArtifact.operation !== "apply") {
+    throw new DeploymentConflictError("Terraform apply plan is required before apply");
+  }
 
   if (deployment.approvedTerraformArtifactId !== deployment.terraformArtifactId) {
     throw new DeploymentConflictError("Terraform artifact changed after approval");
@@ -170,6 +186,68 @@ export function assertDeploymentApplyPreconditions(
   }
 }
 
+export function assertDeploymentDestroyPreconditions(
+  input: AssertDeploymentDestroyPreconditionsInput
+): void {
+  const deployment = input.deployment;
+
+  assertDeploymentApprovalSnapshot(deployment);
+
+  if (input.currentPlanArtifact.operation !== "destroy") {
+    throw new DeploymentConflictError("Terraform destroy plan is required before destroy");
+  }
+
+  if (
+    input.sourceStatus !== "SUCCESS" &&
+    !(
+      input.sourceStatus === "FAILED" &&
+      (input.sourceFailureStage === "apply" || input.sourceFailureStage === "destroy")
+    )
+  ) {
+    throw new DeploymentConflictError("Deployment cannot be destroyed in this state");
+  }
+
+  if (deployment.isBlocked) {
+    throw new DeploymentConflictError("Blocked deployment cannot be destroyed");
+  }
+
+  if (!deployment.stateObjectKey) {
+    throw new DeploymentConflictError("Terraform state is required before destroy");
+  }
+
+  if (deployment.approvedTerraformArtifactId !== deployment.terraformArtifactId) {
+    throw new DeploymentConflictError("Terraform artifact changed after approval");
+  }
+
+  if (
+    deployment.approvedPlanArtifactId !== deployment.currentPlanArtifactId ||
+    deployment.approvedPlanArtifactId !== input.currentPlanArtifact.id ||
+    input.currentPlanArtifact.deploymentId !== deployment.id
+  ) {
+    throw new DeploymentConflictError("Terraform plan changed after approval");
+  }
+
+  if (deployment.approvedTerraformArtifactHash !== input.currentTerraformArtifactHash) {
+    throw new DeploymentConflictError("Terraform artifact content changed after approval");
+  }
+
+  if (!input.currentAwsConnection.accountId) {
+    throw new DeploymentConflictError("AWS connection account is missing before destroy");
+  }
+
+  if (deployment.approvedAwsAccountId !== input.currentAwsConnection.accountId) {
+    throw new DeploymentConflictError("AWS account changed before destroy");
+  }
+
+  if (deployment.approvedAwsRegion !== input.currentAwsConnection.region) {
+    throw new DeploymentConflictError("AWS region changed before destroy");
+  }
+
+  if (deployment.approvedTfplanHash !== input.currentTfplanHash) {
+    throw new DeploymentConflictError("Terraform plan changed before destroy");
+  }
+}
+
 function assertDeploymentCanBeApproved(
   deployment: DeploymentRecord
 ): asserts deployment is DeploymentRecord & {
@@ -187,6 +265,25 @@ function assertDeploymentCanBeApproved(
   if (!deployment.isBlocked || deployment.blockedBy !== "missing_approval") {
     throw new DeploymentConflictError("Blocked deployment cannot be approved");
   }
+}
+
+function getApprovedDeploymentStatus(
+  deployment: DeploymentRecord,
+  operation: DeploymentPlanArtifactRecord["operation"]
+): "PENDING" | "SUCCESS" | "FAILED" {
+  if (operation === "apply") {
+    if (deployment.status !== "PENDING") {
+      throw new DeploymentConflictError("Terraform apply plan can only be approved while pending");
+    }
+
+    return "PENDING";
+  }
+
+  if (deployment.status === "SUCCESS" || deployment.status === "FAILED") {
+    return deployment.status;
+  }
+
+  throw new DeploymentConflictError("Terraform destroy plan cannot be approved in this state");
 }
 
 function assertDeploymentApprovalSnapshot(

@@ -1,15 +1,12 @@
 import { createHash, randomUUID } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type {
-  AiPreDeploymentAnalysisResult,
-  ArchitectureJson,
   AwsConnection,
-  CheckFinding,
-  DeploymentBlockedBy,
-  DeploymentStatus,
+  DeploymentFailureStage,
   DeploymentPlanSummary,
-  DeploymentPlanWarning
+  DeploymentPlanWarning,
+  DeploymentStatus
 } from "@sketchcatch/types";
 import {
   prepareTerraformAwsCredentialEnv as defaultPrepareTerraformAwsCredentialEnv,
@@ -19,17 +16,19 @@ import {
   createAwsSdkStsGateway,
   type AwsConnectionStsGateway
 } from "../aws-connections/aws-connection-test-service.js";
-import { analyzePreDeployment as defaultAnalyzePreDeployment } from "../services/aiPreDeploymentAnalysis.js";
-import { maskDeploymentMessage } from "./log-masking.js";
 import {
   createDeploymentPlanSummaryFromTerraformShowJson,
-  DeploymentPlanSummaryParseError,
   findUnsupportedLiveApplyResourceTypesFromTerraformShowJson
 } from "./deployment-plan-summary.js";
 import {
   createS3DeploymentPlanArtifactStorage,
   type DeploymentPlanArtifactStorage
 } from "./deployment-plan-artifact-storage.js";
+import {
+  createS3DeploymentApplyArtifactStorage,
+  type DeploymentApplyArtifactStorage
+} from "./deployment-apply-artifact-storage.js";
+import { maskDeploymentMessage } from "./log-masking.js";
 import {
   appendDeploymentLogs,
   DeploymentConflictError,
@@ -39,61 +38,64 @@ import {
   type DeploymentRepository,
   type ProjectAccessContext
 } from "./deployment-service.js";
+import { assertTerraformArtifactIsSafe } from "./terraform-artifact-safety.js";
 import {
   prepareTerraformWorkspace as defaultPrepareTerraformWorkspace,
   type PreparedTerraformWorkspace
 } from "./terraform-workspace.js";
 import {
+  runTerraformDestroyPlan as defaultRunTerraformDestroyPlan,
   runTerraformInit as defaultRunTerraformInit,
-  runTerraformPlan as defaultRunTerraformPlan,
   runTerraformShowJson as defaultRunTerraformShowJson,
   type TerraformRunResult
 } from "./terraform-runner.js";
-import { assertTerraformArtifactIsSafe } from "./terraform-artifact-safety.js";
 
 const defaultPlanFileName = "tfplan";
 
-export type RunDeploymentPlanInput = {
+export type RunDeploymentDestroyPlanInput = {
   deploymentId: string;
   accessContext: ProjectAccessContext;
   startedFromStatus?: DeploymentStatus;
+  startedFromFailureStage?: DeploymentFailureStage | null;
+  startedFromErrorSummary?: string | null;
   abortSignal?: AbortSignal;
 };
 
-export type RunDeploymentPlanOptions = {
+export type RunDeploymentDestroyPlanOptions = {
   prepareTerraformWorkspace?: typeof defaultPrepareTerraformWorkspace;
   runTerraformInit?: typeof defaultRunTerraformInit;
-  runTerraformPlan?: typeof defaultRunTerraformPlan;
+  runTerraformDestroyPlan?: typeof defaultRunTerraformDestroyPlan;
   runTerraformShowJson?: typeof defaultRunTerraformShowJson;
   prepareTerraformAwsCredentialEnv?: (
     awsConnection: AwsConnection
   ) => Promise<PreparedTerraformAwsCredentialEnv>;
   awsStsGateway?: AwsConnectionStsGateway;
-  analyzePreDeployment?: (architectureJson: ArchitectureJson) => AiPreDeploymentAnalysisResult;
   planArtifactStorage?: DeploymentPlanArtifactStorage;
+  applyArtifactStorage?: DeploymentApplyArtifactStorage;
   generatePlanArtifactId?: () => string;
   readTerraformArtifactFile?: (filePath: string) => Promise<Buffer | Uint8Array | string>;
+  writeTerraformStateFile?: (filePath: string, content: Buffer) => Promise<void>;
 };
 
-export type RunDeploymentPlanResult = {
+export type RunDeploymentDestroyPlanResult = {
   deployment: DeploymentRecord;
   terraform: {
     init: TerraformRunResult | null;
-    validate: TerraformRunResult | null;
     plan: TerraformRunResult | null;
     showJson: TerraformRunResult | null;
   };
 };
 
-export async function runDeploymentPlan(
-  input: RunDeploymentPlanInput,
+export async function runDeploymentDestroyPlan(
+  input: RunDeploymentDestroyPlanInput,
   repository: DeploymentRepository,
-  options: RunDeploymentPlanOptions = {}
-): Promise<RunDeploymentPlanResult> {
+  options: RunDeploymentDestroyPlanOptions = {}
+): Promise<RunDeploymentDestroyPlanResult> {
   const prepareTerraformWorkspace =
     options.prepareTerraformWorkspace ?? defaultPrepareTerraformWorkspace;
   const runTerraformInit = options.runTerraformInit ?? defaultRunTerraformInit;
-  const runTerraformPlan = options.runTerraformPlan ?? defaultRunTerraformPlan;
+  const runTerraformDestroyPlan =
+    options.runTerraformDestroyPlan ?? defaultRunTerraformDestroyPlan;
   const runTerraformShowJson = options.runTerraformShowJson ?? defaultRunTerraformShowJson;
   const prepareTerraformAwsCredentialEnv =
     options.prepareTerraformAwsCredentialEnv ??
@@ -102,18 +104,19 @@ export async function runDeploymentPlan(
         awsConnection,
         options.awsStsGateway ?? createAwsSdkStsGateway()
       ));
-  const analyzePreDeployment = options.analyzePreDeployment ?? defaultAnalyzePreDeployment;
   const planArtifactStorage =
     options.planArtifactStorage ?? createS3DeploymentPlanArtifactStorage();
+  const applyArtifactStorage =
+    options.applyArtifactStorage ?? createS3DeploymentApplyArtifactStorage();
   const generatePlanArtifactId = options.generatePlanArtifactId ?? randomUUID;
   const readTerraformArtifactFile = options.readTerraformArtifactFile ?? readFile;
+  const writeTerraformStateFile = options.writeTerraformStateFile ?? writeFile;
 
   let workspace: PreparedTerraformWorkspace | undefined;
   let deploymentId: string | undefined;
   let failureRecorded = false;
-  const terraform: RunDeploymentPlanResult["terraform"] = {
+  const terraform: RunDeploymentDestroyPlanResult["terraform"] = {
     init: null,
-    validate: null,
     plan: null,
     showJson: null
   };
@@ -127,48 +130,45 @@ export async function runDeploymentPlan(
       repository
     );
     deploymentId = deployment.id;
+    const sourceStatus = input.startedFromStatus ?? deployment.status;
+    const sourceFailureStage = input.startedFromFailureStage ?? deployment.failureStage;
+    const sourceErrorSummary = input.startedFromErrorSummary ?? deployment.errorSummary;
+
+    assertDeploymentCanStartDestroyPlan(deployment, sourceStatus, sourceFailureStage);
 
     const artifact = await requireDeploymentTerraformArtifact(deployment, repository);
+    const currentPlanArtifact = deployment.currentPlanArtifactId
+      ? await repository.findDeploymentPlanArtifactById(deployment.currentPlanArtifactId)
+      : undefined;
     const awsConnection = await requireDeploymentAwsConnection(
       deployment,
       input.accessContext,
       repository
     );
-    const canReusePlanArtifact = await canReuseDeploymentPlanArtifact({
-      deployment,
-      startedFromStatus: input.startedFromStatus,
-      terraformArtifactId: artifact.id,
-      accountId: awsConnection.accountId,
-      region: awsConnection.region,
-      repository
-    });
-
-    if (canReusePlanArtifact) {
-      return {
-        deployment: await restorePendingDeploymentStatus(deployment, repository),
-        terraform
-      };
-    }
-
-    const architecture = await repository.findArchitectureInProject(
-      deployment.architectureId,
-      deployment.projectId
-    );
-
-    if (!architecture) {
-      throw new DeploymentNotFoundError("Architecture not found for deployment");
-    }
-
-    const preDeploymentAnalysis = analyzePreDeployment(architecture.architectureJson);
     workspace = await prepareTerraformWorkspace({
       objectKey: artifact.objectKey,
       fileName: artifact.fileName
     });
+
     const terraformArtifactContent = await readTerraformArtifactFile(workspace.mainFilePath);
     assertTerraformArtifactIsSafe(terraformArtifactContent);
     const terraformArtifactSha256 = createSha256(terraformArtifactContent);
 
-    const awsCredentials = await prepareAwsCredentialsForPlan({
+    assertDestroyCleanupArtifactHasNotDrifted({
+      sourceStatus,
+      sourceFailureStage,
+      currentPlanArtifact,
+      deployment,
+      terraformArtifactSha256
+    });
+
+    const stateBuffer = await applyArtifactStorage.downloadDeploymentState({
+      deploymentId: deployment.id,
+      objectKey: deployment.stateObjectKey ?? ""
+    });
+    await writeTerraformStateFile(join(workspace.workdir, "terraform.tfstate"), stateBuffer);
+
+    const awsCredentials = await prepareAwsCredentialsForDestroyPlan({
       deploymentId: deployment.id,
       awsConnection,
       prepareTerraformAwsCredentialEnv,
@@ -177,7 +177,6 @@ export async function runDeploymentPlan(
         failureRecorded = true;
       }
     });
-
     const wasPreMarkedRunning =
       deployment.status === "RUNNING" && input.startedFromStatus !== undefined;
 
@@ -185,7 +184,7 @@ export async function runDeploymentPlan(
       const runningDeployment = await repository.markDeploymentPlanRunning(deployment.id);
 
       if (!runningDeployment) {
-        throw new DeploymentConflictError("Deployment plan could not be started");
+        throw new DeploymentConflictError("Deployment destroy plan could not be started");
       }
     }
 
@@ -205,26 +204,24 @@ export async function runDeploymentPlan(
     });
 
     if (terraform.init.cancelled) {
-      return cancelDeploymentPlanRun({
+      return cancelDeploymentDestroyPlanRun({
         deployment,
         repository,
         terraform,
-        errorSummary: "Terraform plan was cancelled during init before AWS resources were changed"
+        errorSummary: "Terraform destroy plan was cancelled during init before AWS resources were changed"
       });
     }
 
     if (terraform.init.exitCode !== 0) {
-      return failDeploymentPlanRun({
+      return failDeploymentDestroyPlanRun({
         deployment,
-        accessContext: input.accessContext,
         repository,
         terraform,
-        failureStage: "init",
-        errorSummary: summarizeTerraformFailure("Terraform init", terraform.init)
+        errorSummary: summarizeTerraformFailure("Terraform init before destroy plan", terraform.init)
       });
     }
 
-    terraform.plan = await runTerraformPlan(workspace.workdir, {
+    terraform.plan = await runTerraformDestroyPlan(workspace.workdir, {
       env: awsCredentials.env,
       planFileName: defaultPlanFileName,
       signal: input.abortSignal
@@ -239,22 +236,20 @@ export async function runDeploymentPlan(
     });
 
     if (terraform.plan.cancelled) {
-      return cancelDeploymentPlanRun({
+      return cancelDeploymentDestroyPlanRun({
         deployment,
         repository,
         terraform,
-        errorSummary: "Terraform plan was cancelled before apply"
+        errorSummary: "Terraform destroy plan was cancelled before destroy"
       });
     }
 
     if (terraform.plan.exitCode !== 0) {
-      return failDeploymentPlanRun({
+      return failDeploymentDestroyPlanRun({
         deployment,
-        accessContext: input.accessContext,
         repository,
         terraform,
-        failureStage: "plan",
-        errorSummary: summarizeTerraformFailure("Terraform plan", terraform.plan)
+        errorSummary: summarizeTerraformFailure("Terraform destroy plan", terraform.plan)
       });
     }
 
@@ -263,43 +258,41 @@ export async function runDeploymentPlan(
       planFileName: defaultPlanFileName,
       signal: input.abortSignal
     });
-    await appendTerraformErrorOutput({
+    await appendTerraformOutput({
       deploymentId: deployment.id,
       accessContext: input.accessContext,
       sequence,
+      stage: "plan",
       result: terraform.showJson,
       repository
     });
 
     if (terraform.showJson.cancelled) {
-      return cancelDeploymentPlanRun({
+      return cancelDeploymentDestroyPlanRun({
         deployment,
         repository,
         terraform,
-        errorSummary: "Terraform plan inspection was cancelled before apply"
+        errorSummary: "Terraform destroy plan inspection was cancelled before destroy"
       });
     }
 
     if (terraform.showJson.exitCode !== 0) {
-      return failDeploymentPlanRun({
+      return failDeploymentDestroyPlanRun({
         deployment,
-        accessContext: input.accessContext,
         repository,
         terraform,
-        failureStage: "plan",
-        errorSummary: summarizeTerraformFailure("Terraform show", terraform.showJson)
+        errorSummary: summarizeTerraformFailure("Terraform destroy plan inspection", terraform.showJson)
       });
     }
 
     const unsupportedResourceTypes = findUnsupportedLiveApplyResourceTypesFromTerraformShowJson(
       terraform.showJson.stdout
     );
-    const planSummary = createBlockedPlanSummary(
+    const planSummary = createDestroyPlanSummary(
       createDeploymentPlanSummaryFromTerraformShowJson(terraform.showJson.stdout),
-      preDeploymentAnalysis.findings,
       unsupportedResourceTypes
     );
-    const block = createDeploymentPlanBlock(planSummary, unsupportedResourceTypes);
+    const block = createDestroyPlanBlock(unsupportedResourceTypes);
     const planArtifactId = generatePlanArtifactId();
     let uploadedPlanArtifact: Awaited<
       ReturnType<DeploymentPlanArtifactStorage["uploadDeploymentPlanArtifact"]>
@@ -319,7 +312,7 @@ export async function runDeploymentPlan(
           deploymentId: deployment.id,
           terraformArtifactId: artifact.id,
           terraformArtifactSha256,
-          operation: "apply",
+          operation: "destroy",
           objectKey: uploadedPlanArtifact.objectKey,
           sha256: uploadedPlanArtifact.sha256,
           accountId: awsCredentials.accountId,
@@ -328,7 +321,10 @@ export async function runDeploymentPlan(
         planSummary,
         isBlocked: block.isBlocked,
         blockedBy: block.blockedBy,
-        blockedReason: block.blockedReason
+        blockedReason: block.blockedReason,
+        terminalStatus: sourceStatus === "FAILED" ? "FAILED" : "SUCCESS",
+        failureStage: sourceStatus === "FAILED" ? sourceFailureStage : null,
+        errorSummary: sourceStatus === "FAILED" ? sourceErrorSummary : null
       });
 
       if (!updatedDeployment) {
@@ -341,16 +337,16 @@ export async function runDeploymentPlan(
       };
     } catch (error) {
       if (uploadedPlanArtifact) {
-        await cleanupUploadedPlanArtifact({
-          deploymentId: deployment.id,
-          accessContext: input.accessContext,
-          objectKey: uploadedPlanArtifact.objectKey,
-          planArtifactStorage,
-          repository
-        }).catch(() => undefined);
+        await planArtifactStorage.deleteDeploymentPlanArtifact(uploadedPlanArtifact.objectKey).catch(
+          () => undefined
+        );
       }
 
-      const failedDeployment = await failDeployment(deployment.id, "plan", error, repository);
+      const failedDeployment = await failDeploymentDestroyPlan(
+        deployment.id,
+        error,
+        repository
+      );
       failureRecorded = true;
 
       return {
@@ -363,7 +359,7 @@ export async function runDeploymentPlan(
       await repository
         .failDeployment(deploymentId, {
           failureStage: "plan",
-          errorSummary: summarizeUnexpectedPlanFailure(error)
+          errorSummary: summarizeUnexpectedDestroyPlanFailure(error)
         })
         .catch(() => undefined);
     }
@@ -374,65 +370,56 @@ export async function runDeploymentPlan(
   }
 }
 
-async function canReuseDeploymentPlanArtifact(input: {
-  deployment: DeploymentRecord;
-  startedFromStatus: DeploymentStatus | undefined;
-  terraformArtifactId: string;
-  accountId: string | null;
-  region: string;
-  repository: DeploymentRepository;
-}): Promise<boolean> {
-  const startedFromStatus = input.startedFromStatus ?? input.deployment.status;
+function assertDeploymentCanStartDestroyPlan(
+  deployment: DeploymentRecord,
+  sourceStatus: DeploymentStatus,
+  sourceFailureStage: DeploymentFailureStage | null
+): asserts deployment is DeploymentRecord & { stateObjectKey: string } {
+  if (!deployment.stateObjectKey) {
+    throw new DeploymentConflictError("Terraform state is required before destroy");
+  }
 
-  if (startedFromStatus !== "PENDING") {
-    return false;
+  if (sourceStatus === "SUCCESS") {
+    return;
   }
 
   if (
-    !input.deployment.currentPlanArtifactId ||
-    !input.deployment.planSummary ||
-    !input.deployment.isBlocked
+    sourceStatus === "FAILED" &&
+    (sourceFailureStage === "apply" || sourceFailureStage === "destroy")
   ) {
-    return false;
+    return;
   }
 
-  const currentPlanArtifact = await input.repository.findDeploymentPlanArtifactById(
-    input.deployment.currentPlanArtifactId
-  );
-
-  if (!currentPlanArtifact || currentPlanArtifact.deploymentId !== input.deployment.id) {
-    return false;
-  }
-
-  if (
-    currentPlanArtifact.terraformArtifactId !== input.terraformArtifactId ||
-    currentPlanArtifact.operation !== "apply" ||
-    !currentPlanArtifact.terraformArtifactSha256 ||
-    !input.accountId ||
-    currentPlanArtifact.accountId !== input.accountId ||
-    currentPlanArtifact.region !== input.region
-  ) {
-    return false;
-  }
-
-  return true;
+  throw new DeploymentConflictError("Deployment cannot be destroyed in this state");
 }
 
-async function restorePendingDeploymentStatus(
-  deployment: DeploymentRecord,
-  repository: DeploymentRepository
-): Promise<DeploymentRecord> {
-  if (deployment.status === "PENDING") {
-    return deployment;
+function assertDestroyCleanupArtifactHasNotDrifted(input: {
+  sourceStatus: DeploymentStatus;
+  sourceFailureStage: DeploymentFailureStage | null;
+  currentPlanArtifact:
+    | Awaited<ReturnType<DeploymentRepository["findDeploymentPlanArtifactById"]>>
+    | undefined;
+  deployment: DeploymentRecord;
+  terraformArtifactSha256: string;
+}): void {
+  if (
+    input.sourceStatus !== "FAILED" ||
+    (input.sourceFailureStage !== "apply" && input.sourceFailureStage !== "destroy")
+  ) {
+    return;
   }
 
-  const updatedDeployment = await repository.updateDeploymentStatus(deployment.id, "PENDING");
-
-  if (!updatedDeployment) {
-    throw new DeploymentNotFoundError("Deployment not found");
+  if (
+    !input.currentPlanArtifact ||
+    input.currentPlanArtifact.deploymentId !== input.deployment.id ||
+    !input.currentPlanArtifact.terraformArtifactSha256
+  ) {
+    throw new DeploymentConflictError("Original Terraform plan is required before cleanup destroy");
   }
 
-  return updatedDeployment;
+  if (input.currentPlanArtifact.terraformArtifactSha256 !== input.terraformArtifactSha256) {
+    throw new DeploymentConflictError("Terraform artifact changed after failed deployment");
+  }
 }
 
 async function requireDeploymentTerraformArtifact(
@@ -476,7 +463,7 @@ async function requireDeploymentAwsConnection(
   return awsConnection;
 }
 
-async function prepareAwsCredentialsForPlan(input: {
+async function prepareAwsCredentialsForDestroyPlan(input: {
   deploymentId: string;
   awsConnection: AwsConnection;
   prepareTerraformAwsCredentialEnv: (
@@ -491,7 +478,7 @@ async function prepareAwsCredentialsForPlan(input: {
     await input.repository
       .failDeployment(input.deploymentId, {
         failureStage: "aws_connection",
-        errorSummary: summarizeUnexpectedPlanFailure(error)
+        errorSummary: summarizeUnexpectedDestroyPlanFailure(error)
       })
       .catch(() => undefined);
     input.markFailureRecorded();
@@ -500,12 +487,12 @@ async function prepareAwsCredentialsForPlan(input: {
   }
 }
 
-async function cancelDeploymentPlanRun(input: {
+async function cancelDeploymentDestroyPlanRun(input: {
   deployment: DeploymentRecord;
   repository: DeploymentRepository;
-  terraform: RunDeploymentPlanResult["terraform"];
+  terraform: RunDeploymentDestroyPlanResult["terraform"];
   errorSummary: string;
-}): Promise<RunDeploymentPlanResult> {
+}): Promise<RunDeploymentDestroyPlanResult> {
   const cancelledDeployment = await input.repository.cancelDeployment(input.deployment.id, {
     errorSummary: input.errorSummary
   });
@@ -520,16 +507,14 @@ async function cancelDeploymentPlanRun(input: {
   };
 }
 
-async function failDeploymentPlanRun(input: {
+async function failDeploymentDestroyPlanRun(input: {
   deployment: DeploymentRecord;
-  accessContext: ProjectAccessContext;
   repository: DeploymentRepository;
-  terraform: RunDeploymentPlanResult["terraform"];
-  failureStage: "init" | "validate" | "plan";
+  terraform: RunDeploymentDestroyPlanResult["terraform"];
   errorSummary: string;
-}): Promise<RunDeploymentPlanResult> {
+}): Promise<RunDeploymentDestroyPlanResult> {
   const failedDeployment = await input.repository.failDeployment(input.deployment.id, {
-    failureStage: input.failureStage,
+    failureStage: "plan",
     errorSummary: input.errorSummary
   });
 
@@ -543,15 +528,14 @@ async function failDeploymentPlanRun(input: {
   };
 }
 
-async function failDeployment(
+async function failDeploymentDestroyPlan(
   deploymentId: string,
-  failureStage: "plan",
   error: unknown,
   repository: DeploymentRepository
 ): Promise<DeploymentRecord> {
   const failedDeployment = await repository.failDeployment(deploymentId, {
-    failureStage,
-    errorSummary: summarizeUnexpectedPlanFailure(error)
+    failureStage: "plan",
+    errorSummary: summarizeUnexpectedDestroyPlanFailure(error)
   });
 
   if (!failedDeployment) {
@@ -561,19 +545,24 @@ async function failDeployment(
   return failedDeployment;
 }
 
-function createBlockedPlanSummary(
+function createDestroyPlanSummary(
   summary: DeploymentPlanSummary,
-  findings: readonly CheckFinding[],
-  unsupportedResourceTypes: readonly string[] = []
+  unsupportedResourceTypes: readonly string[]
 ): DeploymentPlanSummary {
-  const highRiskWarnings = findings
-    .filter((finding) => finding.severity === "high")
-    .map(toPlanWarning);
-  const unsupportedResourceWarnings = unsupportedResourceTypes.map((resourceType) => ({
-    level: "high" as const,
-    message: `MVP live apply does not support Terraform resource type ${resourceType}`
-  }));
-  const warnings = [...summary.warnings, ...highRiskWarnings, ...unsupportedResourceWarnings];
+  const warnings: DeploymentPlanWarning[] = [
+    ...summary.warnings,
+    ...unsupportedResourceTypes.map((resourceType) => ({
+      level: "high" as const,
+      message: `MVP live destroy does not support Terraform resource type ${resourceType}`
+    }))
+  ];
+
+  if (summary.deleteCount === 0 && summary.replaceCount === 0) {
+    warnings.push({
+      level: "medium",
+      message: "Terraform destroy plan has no resources to delete"
+    });
+  }
 
   return {
     ...summary,
@@ -582,74 +571,31 @@ function createBlockedPlanSummary(
   };
 }
 
-function createDeploymentPlanBlock(
-  summary: DeploymentPlanSummary,
-  unsupportedResourceTypes: readonly string[] = []
-): {
+function createDestroyPlanBlock(unsupportedResourceTypes: readonly string[]): {
   isBlocked: boolean;
-  blockedBy: DeploymentBlockedBy;
+  blockedBy: "missing_approval" | "risk_analysis";
   blockedReason: string;
 } {
-  const hasRiskFinding = summary.warnings.some((warning) => warning.level === "high");
-  const hasDestructiveChange = summary.deleteCount > 0 || summary.replaceCount > 0;
-
   if (unsupportedResourceTypes.length > 0) {
     return {
       isBlocked: true,
       blockedBy: "risk_analysis",
-      blockedReason: `Unsupported Terraform resource types for MVP live apply: ${unsupportedResourceTypes.join(", ")}`
-    };
-  }
-
-  if (hasRiskFinding && hasDestructiveChange) {
-    return {
-      isBlocked: true,
-      blockedBy: "risk_analysis",
-      blockedReason: "Plan includes destructive changes and high-risk findings"
-    };
-  }
-
-  if (hasDestructiveChange) {
-    return {
-      isBlocked: true,
-      blockedBy: "risk_analysis",
-      blockedReason: "Plan includes delete or replace changes"
-    };
-  }
-
-  if (hasRiskFinding) {
-    return {
-      isBlocked: true,
-      blockedBy: "risk_analysis",
-      blockedReason: "Pre-Deployment Check found high-risk findings"
+      blockedReason: `Unsupported Terraform resource types for MVP live destroy: ${unsupportedResourceTypes.join(", ")}`
     };
   }
 
   return {
     isBlocked: true,
     blockedBy: "missing_approval",
-    blockedReason: "Terraform Plan requires user approval before apply"
+    blockedReason: "Terraform Destroy Plan requires user approval before destroy"
   };
-}
-
-function toPlanWarning(finding: CheckFinding): DeploymentPlanWarning {
-  const warning: DeploymentPlanWarning = {
-    level: "high",
-    message: `${finding.title}: ${finding.recommendation}`
-  };
-
-  if (finding.resourceId) {
-    warning.relatedResourceId = finding.resourceId;
-  }
-
-  return warning;
 }
 
 async function appendTerraformOutput(input: {
   deploymentId: string;
   accessContext: ProjectAccessContext;
   sequence: number;
-  stage: "init" | "validate" | "plan";
+  stage: "init" | "plan";
   result: TerraformRunResult;
   repository: DeploymentRepository;
 }): Promise<number> {
@@ -676,29 +622,11 @@ async function appendTerraformOutput(input: {
   return nextSequence;
 }
 
-async function appendTerraformErrorOutput(input: {
-  deploymentId: string;
-  accessContext: ProjectAccessContext;
-  sequence: number;
-  result: TerraformRunResult;
-  repository: DeploymentRepository;
-}): Promise<number> {
-  return appendOutputLines({
-    deploymentId: input.deploymentId,
-    accessContext: input.accessContext,
-    sequence: input.sequence,
-    stage: "plan",
-    output: input.result.stderr,
-    level: input.result.exitCode === 0 ? "WARN" : "ERROR",
-    repository: input.repository
-  });
-}
-
 async function appendOutputLines(input: {
   deploymentId: string;
   accessContext: ProjectAccessContext;
   sequence: number;
-  stage: "init" | "validate" | "plan";
+  stage: "init" | "plan";
   output: string;
   level: "INFO" | "WARN" | "ERROR";
   repository: DeploymentRepository;
@@ -727,37 +655,6 @@ async function appendOutputLines(input: {
   return input.sequence + lines.length;
 }
 
-async function cleanupUploadedPlanArtifact(input: {
-  deploymentId: string;
-  accessContext: ProjectAccessContext;
-  objectKey: string;
-  planArtifactStorage: DeploymentPlanArtifactStorage;
-  repository: DeploymentRepository;
-}): Promise<void> {
-  try {
-    await input.planArtifactStorage.deleteDeploymentPlanArtifact(input.objectKey);
-  } catch {
-    const sequence = await input.repository.getNextDeploymentLogSequence(input.deploymentId);
-
-    await appendDeploymentLogs(
-      {
-        deploymentId: input.deploymentId,
-        accessContext: input.accessContext,
-        logs: [
-          {
-            sequence,
-            stage: "plan",
-            level: "WARN",
-            message: "Plan artifact cleanup failed after save error",
-            relatedResourceId: null
-          }
-        ]
-      },
-      input.repository
-    ).catch(() => undefined);
-  }
-}
-
 function splitOutputLines(output: string): string[] {
   return output
     .split(/\r?\n/)
@@ -776,11 +673,7 @@ function summarizeTerraformFailure(stage: string, result: TerraformRunResult): s
   return maskDeploymentMessage(summary);
 }
 
-function summarizeUnexpectedPlanFailure(error: unknown): string {
-  if (error instanceof DeploymentPlanSummaryParseError) {
-    return error.message;
-  }
-
+function summarizeUnexpectedDestroyPlanFailure(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
 
   return maskDeploymentMessage(message);
