@@ -54,7 +54,8 @@ import { ResourceSettingsPanel } from "../resource-settings";
 import { DEFAULT_DIAGRAM_VIEWPORT, EMPTY_DIAGRAM } from "./constants";
 import {
   applyAreaNodeMovement,
-  applyAreaNodeParentAssignments
+  applyAreaNodeParentAssignments,
+  clearDeletedAreaParentAssignments
 } from "./area-node-movement";
 import { findInnermostAreaNodeAtPoint } from "./area-nodes";
 import { DiagramEdgeToolbar } from "./DiagramEdgeToolbar";
@@ -915,9 +916,18 @@ function DiagramEditorInner({
       return;
     }
 
-    commitDiagramUpdate((currentDiagram) =>
-      removeEdgesFromDiagram(removeNodesFromDiagram(currentDiagram, nodeIds), edgeIds)
-    );
+    commitDiagramUpdate((currentDiagram) => {
+      const deletedNodeIds = new Set(nodeIds);
+      const diagramWithoutSelection = removeEdgesFromDiagram(
+        removeNodesFromDiagram(currentDiagram, nodeIds),
+        edgeIds
+      );
+
+      return {
+        ...diagramWithoutSelection,
+        nodes: clearDeletedAreaParentAssignments(diagramWithoutSelection.nodes, deletedNodeIds)
+      };
+    });
     setSelectedNodeIds([]);
     setSelectedEdgeIds([]);
   }, [commitDiagramUpdate, selectedEdgeIds, selectedNodeIds]);

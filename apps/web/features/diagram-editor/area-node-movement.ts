@@ -68,6 +68,25 @@ export function applyAreaNodeParentAssignments(
   });
 }
 
+export function clearDeletedAreaParentAssignments(
+  currentNodes: readonly DiagramNode[],
+  deletedNodeIds: ReadonlySet<string>
+): DiagramNode[] {
+  if (deletedNodeIds.size === 0) {
+    return [...currentNodes];
+  }
+
+  return currentNodes.map((node) => {
+    const parentAreaNodeId = node.metadata?.parentAreaNodeId;
+
+    if (!parentAreaNodeId || !deletedNodeIds.has(parentAreaNodeId)) {
+      return node;
+    }
+
+    return setParentAreaNodeId(node, undefined);
+  });
+}
+
 function getMovingAreas(
   snapshotNodes: readonly DiagramNode[],
   currentNodeById: ReadonlyMap<string, DiagramNode>,
