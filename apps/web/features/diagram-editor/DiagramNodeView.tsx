@@ -19,6 +19,7 @@ import { useCallback } from "react";
 import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactNode } from "react";
 
 import { BORDER_COLOR_SWATCHES, NODE_COLOR_SWATCHES } from "./constants";
+import { getAreaNodeIconUrl, getAreaNodeLabel, isAreaNode } from "./area-nodes";
 import type { DiagramFlowNode } from "./types";
 import styles from "./diagram-editor.module.css";
 
@@ -29,19 +30,23 @@ const CONNECTION_HANDLES = [
   { id: "handle-bottom", position: Position.Bottom }
 ] as const;
 
+const AREA_NODE_DEFAULT_BORDER_COLOR = "#bfdbfe";
+const LEGACY_DEFAULT_BORDER_COLORS = new Set(["#8b98aa", "#2f6db3"]);
+
 export function DiagramNodeView({ data, id, isConnectable, selected }: NodeProps<DiagramFlowNode>) {
   const reactFlow = useReactFlow();
   const node = data.node;
-  const borderColor = node.style?.borderColor ?? "#8b98aa";
-  const textColor = node.style?.textColor ?? "#172033";
   const toolbarVisible = selected && data.selectedNodeCount === 1;
   const canConnect = isConnectable && !node.locked;
   const isResourceNode = node.kind === "resource";
+  const isArea = isAreaNode(node);
+  const borderColor = getDisplayBorderColor(isArea, node.style?.borderColor);
+  const textColor = node.style?.textColor ?? "#172033";
   const isDataNode = node.parameters?.terraformBlockType === "data";
   const resizeBounds = getResizeBounds(node.kind);
-  const nodeShellStyle = isResourceNode
-    ? ({ "--node-border-color": borderColor } as CSSProperties)
-    : { borderColor };
+  const nodeShellStyle = getNodeShellStyle(isArea, isResourceNode, borderColor);
+  const areaNodeIconUrl = isArea ? getAreaNodeIconUrl(node) : undefined;
+  const areaNodeLabel = isArea ? getAreaNodeLabel(node) : "";
   const handleResizePointerDown = useCallback(
     (event: ReactPointerEvent<HTMLButtonElement>) => {
       if (node.locked) {
@@ -150,6 +155,7 @@ export function DiagramNodeView({ data, id, isConnectable, selected }: NodeProps
           selected ? styles.nodeShellSelected : undefined,
           data.isDimmed ? styles.nodeShellDimmed : undefined,
           data.isReferenceDropTarget ? styles.nodeShellReferenceDropTarget : undefined,
+          isArea ? styles.nodeShellArea : undefined,
           node.kind === "design" ? styles.nodeShellDesign : styles.nodeShellResource,
           node.locked ? styles.nodeShellLocked : undefined
         ]
@@ -157,7 +163,14 @@ export function DiagramNodeView({ data, id, isConnectable, selected }: NodeProps
           .join(" ")}
         style={nodeShellStyle}
       >
-        {isResourceNode ? (
+        {isArea ? (
+          <div className={styles.areaNodeHeader} style={{ color: textColor }}>
+            {areaNodeIconUrl ? (
+              <img alt="" className={styles.areaNodeHeaderIcon} draggable={false} src={areaNodeIconUrl} />
+            ) : null}
+            <span className={styles.areaNodeHeaderText}>{areaNodeLabel}</span>
+          </div>
+        ) : isResourceNode ? (
           <>
             <div className={styles.resourceNodeIconFrame}>
               {node.iconUrl ? (
@@ -237,6 +250,26 @@ function getResizeBounds(kind: DiagramFlowNode["data"]["node"]["kind"]) {
     minHeight: 74,
     minWidth: 74
   };
+}
+
+function getNodeShellStyle(isArea: boolean, isResourceNode: boolean, borderColor: string): CSSProperties {
+  if (isArea) {
+    return { "--node-border-color": borderColor, borderColor } as CSSProperties;
+  }
+
+  if (isResourceNode) {
+    return { "--node-border-color": borderColor } as CSSProperties;
+  }
+
+  return { borderColor };
+}
+
+function getDisplayBorderColor(isArea: boolean, borderColor: string | undefined): string {
+  if (isArea && (!borderColor || LEGACY_DEFAULT_BORDER_COLORS.has(borderColor))) {
+    return AREA_NODE_DEFAULT_BORDER_COLOR;
+  }
+
+  return borderColor ?? "#8b98aa";
 }
 
 function clamp(value: number, min: number, max: number) {

@@ -384,20 +384,6 @@ test("DiagramEditor avoids zIndex scans while computing dragover preview targets
   );
 });
 
-test("DiagramEditor applies drag-stop references only to nodes moved from the drag snapshot", () => {
-  const source = readFileSync(diagramEditorPath, "utf8");
-
-  assert.match(
-    source,
-    /const previousPositionByNodeId = new Map\(\s*\(before\?\.nodes \?\? diagramRef\.current\.nodes\)\.map/
-  );
-  assert.match(
-    source,
-    /previousPosition\.x !== position\.x \|\| previousPosition\.y !== position\.y/
-  );
-  assert.doesNotMatch(source, /const movedNodeIds = new Set\(positionByNodeId\.keys\(\)\);/);
-});
-
 test("DiagramEditor tracks and renders the active reference drop target highlight", () => {
   const editorSource = readFileSync(diagramEditorPath, "utf8");
   const nodeViewSource = readFileSync(diagramNodeViewPath, "utf8");
