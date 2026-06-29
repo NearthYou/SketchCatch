@@ -24,6 +24,7 @@ const awsConnectionId = "77777777-7777-4777-8777-777777777777";
 const userId = "55555555-5555-4555-8555-555555555555";
 const otherUserId = "66666666-6666-4666-8666-666666666666";
 const fixedNow = new Date("2026-01-01T00:00:00.000Z");
+const terraformArtifactContent = "terraform { required_version = \">= 1.6.0\" }\n";
 
 type RepositoryCall =
   | {
@@ -193,6 +194,10 @@ class FakeDeploymentRepository implements DeploymentRepository {
     return createDeploymentPlanArtifactRecord({ id: candidatePlanArtifactId });
   }
 
+  async findRunningDeploymentInProject(): Promise<DeploymentRecord | undefined> {
+    return this.deployment?.status === "RUNNING" ? this.deployment : undefined;
+  }
+
   async listDeploymentsByProject(): Promise<DeploymentRecord[]> {
     return this.deployment ? [this.deployment] : [];
   }
@@ -252,6 +257,35 @@ class FakeDeploymentRepository implements DeploymentRepository {
     return this.deployment;
   };
 
+  markDeploymentPlanRunning: DeploymentRepository["markDeploymentPlanRunning"] = async (
+    candidateDeploymentId
+  ) => {
+    if (!this.deployment || this.deployment.id !== candidateDeploymentId) {
+      return undefined;
+    }
+
+    this.deployment = {
+      ...this.deployment,
+      status: "RUNNING",
+      activeStage: "plan",
+      updatedAt: fixedNow
+    };
+
+    return this.deployment;
+  };
+
+  markDeploymentApplyRunning: DeploymentRepository["markDeploymentApplyRunning"] = async (
+    candidateDeploymentId
+  ) => {
+    if (!this.deployment || this.deployment.id !== candidateDeploymentId) {
+      return undefined;
+    }
+
+    this.deployment = { ...this.deployment, status: "RUNNING", updatedAt: fixedNow };
+
+    return this.deployment;
+  };
+
   saveDeploymentPlan: DeploymentRepository["saveDeploymentPlan"] = async (input) => {
     this.calls.push({
       name: "saveDeploymentPlan",
@@ -291,6 +325,27 @@ class FakeDeploymentRepository implements DeploymentRepository {
     return this.deployment;
   };
 
+  completeDeploymentApply: DeploymentRepository["completeDeploymentApply"] = async (
+    candidateDeploymentId,
+    input
+  ) => {
+    if (!this.deployment || this.deployment.id !== candidateDeploymentId) {
+      return undefined;
+    }
+
+    this.deployment = {
+      ...this.deployment,
+      status: "SUCCESS",
+      stateObjectKey: input.stateObjectKey,
+      resultWarningSummary: input.resultWarningSummary,
+      failureStage: null,
+      errorSummary: null,
+      updatedAt: fixedNow
+    };
+
+    return this.deployment;
+  };
+
   failDeployment: DeploymentRepository["failDeployment"] = async (candidateDeploymentId, input) => {
     this.calls.push({
       name: "failDeployment",
@@ -313,6 +368,42 @@ class FakeDeploymentRepository implements DeploymentRepository {
 
     return this.deployment;
   };
+
+  requestDeploymentCancellation: DeploymentRepository["requestDeploymentCancellation"] = async (
+    candidateDeploymentId
+  ) => {
+    if (!this.deployment || this.deployment.id !== candidateDeploymentId) {
+      return undefined;
+    }
+
+    this.deployment = { ...this.deployment, cancelRequestedAt: fixedNow, updatedAt: fixedNow };
+
+    return this.deployment;
+  };
+
+  cancelDeployment: DeploymentRepository["cancelDeployment"] = async (
+    candidateDeploymentId,
+    input
+  ) => {
+    if (!this.deployment || this.deployment.id !== candidateDeploymentId) {
+      return undefined;
+    }
+
+    this.deployment = {
+      ...this.deployment,
+      status: "CANCELLED",
+      activeStage: null,
+      errorSummary: input.errorSummary,
+      cancelledAt: fixedNow,
+      updatedAt: fixedNow
+    };
+
+    return this.deployment;
+  };
+
+  async recoverInterruptedDeployments(): Promise<DeploymentRecord[]> {
+    return [];
+  }
 
   createDeploymentLog: DeploymentRepository["createDeploymentLog"] = async (input) => {
     this.calls.push({
@@ -359,6 +450,14 @@ class FakeDeploymentRepository implements DeploymentRepository {
 
     return this.logs.filter((log) => log.deploymentId === candidateDeploymentId);
   }
+
+  async listDeployedResources() {
+    return [];
+  }
+
+  async listTerraformOutputs() {
+    return [];
+  }
 }
 
 function createDeploymentRecord(
@@ -372,7 +471,10 @@ function createDeploymentRecord(
     terraformArtifactId,
     awsConnectionId,
     currentPlanArtifactId: null,
+    stateObjectKey: null,
+    resultWarningSummary: null,
     status: "PENDING",
+    activeStage: null,
     planSummary: null,
     isBlocked: false,
     blockedBy: null,
@@ -387,6 +489,11 @@ function createDeploymentRecord(
     approvedTfplanHash: null,
     approvedAwsAccountId: null,
     approvedAwsRegion: null,
+    startedAt: null,
+    completedAt: null,
+    failedAt: null,
+    cancelRequestedAt: null,
+    cancelledAt: null,
     createdAt: fixedNow,
     updatedAt: fixedNow,
     ...overrides
@@ -485,6 +592,7 @@ test("runDeploymentInit restores the artifact, runs Terraform init, logs output,
           }
         };
       },
+      readTerraformArtifactFile: async () => terraformArtifactContent,
       runTerraformInit: async (workdir, options) => {
         runnerWorkdirs.push(workdir);
         runnerEnvs.push(options?.env);
@@ -586,6 +694,53 @@ test("runDeploymentInit restores the artifact, runs Terraform init, logs output,
   assert(repository.calls.some((call) => call.name === "markDeploymentInitSucceeded"));
 });
 
+test("runDeploymentInit rejects unsafe Terraform before preparing AWS credentials", async () => {
+  const repository = new FakeDeploymentRepository();
+  let cleanupCalled = false;
+  let credentialsPrepared = false;
+  let terraformRan = false;
+
+  await assert.rejects(
+    () =>
+      runDeploymentInit(
+        {
+          deploymentId,
+          accessContext: createAccessContext()
+        },
+        repository,
+        {
+          prepareTerraformWorkspace: async () => ({
+            workdir: "C:/tmp/sketchcatch-terraform-unsafe-init",
+            mainFilePath: "C:/tmp/sketchcatch-terraform-unsafe-init/main.tf",
+            cleanup: async () => {
+              cleanupCalled = true;
+            }
+          }),
+          readTerraformArtifactFile: async () => `
+            data "aws_caller_identity" "current" {
+            }
+          `,
+          prepareTerraformAwsCredentialEnv: async () => {
+            credentialsPrepared = true;
+            throw new Error("AWS credentials should not be prepared");
+          },
+          runTerraformInit: async () => {
+            terraformRan = true;
+            throw new Error("Terraform init should not run");
+          }
+        }
+      ),
+    /data source "aws_caller_identity" is not allowed/
+  );
+
+  assert.equal(cleanupCalled, true);
+  assert.equal(credentialsPrepared, false);
+  assert.equal(terraformRan, false);
+  assert.equal(repository.deployment?.status, "FAILED");
+  assert.equal(repository.deployment?.failureStage, "init");
+  assert.match(repository.deployment?.errorSummary ?? "", /data source "aws_caller_identity" is not allowed/);
+});
+
 test("runDeploymentInit records failed init output, marks the deployment failed, and masks secret logs", async () => {
   const repository = new FakeDeploymentRepository();
   let cleanupCalled = false;
@@ -604,6 +759,7 @@ test("runDeploymentInit records failed init output, marks the deployment failed,
           cleanupCalled = true;
         }
       }),
+      readTerraformArtifactFile: async () => terraformArtifactContent,
       runTerraformInit: async () => ({
         command: ["terraform", "init", "-backend=false", "-input=false", "-no-color"],
         exitCode: 1,
@@ -676,6 +832,7 @@ test("runDeploymentInit masks secret values in terraform failure summaries", asy
         mainFilePath: "C:/tmp/sketchcatch-terraform-secret-summary/main.tf",
         cleanup: async () => undefined
       }),
+      readTerraformArtifactFile: async () => terraformArtifactContent,
       runTerraformInit: async () => ({
         command: ["terraform", "init", "-backend=false", "-input=false", "-no-color"],
         exitCode: 1,

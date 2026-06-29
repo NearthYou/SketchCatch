@@ -223,7 +223,10 @@ export type Deployment = DeploymentBlock & {
   terraformArtifactId: string;
   awsConnectionId: string | null;
   currentPlanArtifactId: string | null;
+  stateObjectKey: string | null;
+  resultWarningSummary: string | null;
   status: DeploymentStatus;
+  activeStage: DeploymentStage | null;
   planSummary: DeploymentPlanSummary | null;
   failureStage: DeploymentFailureStage | null;
   errorSummary: string | null;
@@ -235,6 +238,11 @@ export type Deployment = DeploymentBlock & {
   approvedTfplanHash: string | null;
   approvedAwsAccountId: string | null;
   approvedAwsRegion: string | null;
+  startedAt: IsoDateTimeString | null;
+  completedAt: IsoDateTimeString | null;
+  failedAt: IsoDateTimeString | null;
+  cancelRequestedAt: IsoDateTimeString | null;
+  cancelledAt: IsoDateTimeString | null;
   createdAt: IsoDateTimeString;
   updatedAt: IsoDateTimeString;
 };
@@ -324,6 +332,34 @@ export type DeploymentLogListResponse = {
   logs: DeploymentLog[];
 };
 
+export type DeployedResource = {
+  id: string;
+  deploymentId: string;
+  terraformAddress: string;
+  terraformType: string;
+  providerName: string | null;
+  resourceId: string | null;
+  region: string;
+  createdAt: IsoDateTimeString;
+};
+
+export type TerraformOutput = {
+  id: string;
+  deploymentId: string;
+  name: string;
+  value: unknown | null;
+  sensitive: boolean;
+  createdAt: IsoDateTimeString;
+};
+
+export type DeploymentResourceListResponse = {
+  resources: DeployedResource[];
+};
+
+export type TerraformOutputListResponse = {
+  outputs: TerraformOutput[];
+};
+
 export type CreateAwsConnectionRequest = {
   region: string;
 };
@@ -372,6 +408,10 @@ export type VerifyAwsConnectionRequest = {
   roleArn: string;
 };
 
+export type VerifyAwsConnectionCreatedRoleRequest = {
+  accountId: string;
+};
+
 export type VerifyAwsConnectionResponse = TestAwsConnectionResponse & {
   awsConnection: AwsConnection;
 };
@@ -400,7 +440,14 @@ export type DeploymentLog = {
   createdAt: IsoDateTimeString;
 };
 
-export type DeploymentFailureStage = "init" | "validate" | "plan" | "approval" | "mock_run";
+export type DeploymentFailureStage =
+  | "init"
+  | "validate"
+  | "plan"
+  | "approval"
+  | "aws_connection"
+  | "mock_run"
+  | "apply";
 
 export type Activity = {
   id: string;
@@ -672,6 +719,19 @@ export type DiagramNodeStyle = {
   borderColor?: string | undefined;
 };
 
+export type AwsRegionCode =
+  | "ap-northeast-2"
+  | "ap-northeast-1"
+  | "ap-southeast-1"
+  | "us-east-1"
+  | "us-west-2"
+  | "eu-west-1"
+  | "eu-central-1";
+
+export type DiagramNodeMetadata = {
+  awsRegion?: AwsRegionCode | undefined;
+};
+
 export type DiagramNodeParameters = {
   terraformBlockType?: TerraformBlockType | undefined;
   resourceType: string;
@@ -692,6 +752,7 @@ export type DiagramNode = {
   locked: boolean;
   zIndex: number;
   style?: DiagramNodeStyle | undefined;
+  metadata?: DiagramNodeMetadata | undefined;
   parameters?: DiagramNodeParameters | undefined;
 };
 

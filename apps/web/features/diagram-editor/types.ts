@@ -38,11 +38,9 @@ export type DiagramEditorProps = {
   initialDiagram?: DiagramJson | undefined;
   leftPanel?: ReactNode;
   onDiagramChange?: ((diagram: DiagramJson) => void) | undefined;
-  onSave?: (() => void) | undefined;
   rightPanel?: ((context: DiagramEditorPanelContext) => ReactNode) | undefined;
   projectName?: string | undefined;
   myPageHref?: string | undefined;
-  saveDisabled?: boolean | undefined;
   saveStatus?: string | undefined;
 };
 
@@ -63,6 +61,7 @@ export type DiagramFlowNodeData = Record<string, unknown> & {
   node: DiagramNode;
   selectedNodeCount: number;
   isDimmed: boolean;
+  isReferenceDropTarget: boolean;
 } & DiagramFlowNodeHandlers;
 
 export type DiagramFlowEdgeData = Record<string, unknown> & {

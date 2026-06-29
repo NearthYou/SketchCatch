@@ -5,6 +5,7 @@ import { buildApp } from "../app.js";
 import { createAccessToken } from "../auth/tokens.js";
 import type { Database, DatabaseClient } from "../db/client.js";
 import { architectures, projectAssets, projects, users } from "../db/schema.js";
+import { defaultTerraformArtifactMaxBytes } from "../deployments/terraform-workspace.js";
 
 process.env.NODE_ENV = "test";
 process.env.AUTH_TOKEN_SECRET = "test-auth-token-secret-with-at-least-32-characters";
@@ -170,6 +171,33 @@ test("POST /api/projects/:id/assets/presigned-upload returns 404 for another use
 
   assert.equal(response.statusCode, 404);
   assertErrorResponse(response.json() as ApiErrorResponse, "not_found");
+
+  await app.close();
+});
+
+test("POST /api/projects/:id/assets/presigned-upload rejects oversized Terraform uploads", async () => {
+  const fakeDb = new ProjectRouteFakeDb({
+    activeUserId: ACTIVE_USER_ID,
+    users: [makeUser({ id: ACTIVE_USER_ID })]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/projects/${ACTIVE_PROJECT_ID}/assets/presigned-upload`,
+    headers: await authHeaders(ACTIVE_USER_ID),
+    payload: {
+      assetType: "terraform_file",
+      fileName: "main.tf",
+      contentType: "application/x-terraform",
+      byteSize: defaultTerraformArtifactMaxBytes + 1
+    }
+  });
+
+  assert.equal(response.statusCode, 400);
+  assert.match(response.json().message, /Terraform file must be/);
 
   await app.close();
 });

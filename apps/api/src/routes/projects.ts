@@ -8,6 +8,7 @@ import type { ApiErrorResponse, ArchitectureJson } from "@sketchcatch/types";
 import { requireActiveUserId } from "../auth/current-user.js";
 import { requireS3BucketName } from "../config/env.js";
 import { getDatabaseClient, type DatabaseClient } from "../db/client.js";
+import { defaultTerraformArtifactMaxBytes } from "../deployments/terraform-workspace.js";
 import {
   architectures,
   projectAssets,
@@ -73,13 +74,36 @@ const assetTypeSchema = z.enum([
   "thumbnail"
 ]);
 
-const presignedUploadBodySchema = z.object({
-  architectureId: z.string().uuid().optional(),
-  assetType: assetTypeSchema,
-  fileName: z.string().min(1).max(255),
-  contentType: z.string().min(1).max(120),
-  byteSize: z.number().int().positive().optional()
-});
+const presignedUploadBodySchema = z
+  .object({
+    architectureId: z.string().uuid().optional(),
+    assetType: assetTypeSchema,
+    fileName: z.string().min(1).max(255),
+    contentType: z.string().min(1).max(120),
+    byteSize: z.number().int().positive().optional()
+  })
+  .superRefine((body, ctx) => {
+    if (body.assetType !== "terraform_file") {
+      return;
+    }
+
+    if (body.byteSize === undefined) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["byteSize"],
+        message: "Terraform file byteSize is required"
+      });
+      return;
+    }
+
+    if (body.byteSize > defaultTerraformArtifactMaxBytes) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["byteSize"],
+        message: `Terraform file must be ${defaultTerraformArtifactMaxBytes} bytes or smaller`
+      });
+    }
+  });
 
 type ProjectRouteOptions = {
   getDatabaseClient?: () => DatabaseClient;

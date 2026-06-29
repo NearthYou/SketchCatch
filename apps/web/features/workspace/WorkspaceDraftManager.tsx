@@ -183,11 +183,9 @@ export function WorkspaceDraftManager() {
       initialDiagram={initialDiagram}
       onDiagramChange={handleDiagramChange}
       projectName={projectName}
-      onSave={() => void saveCurrentDraftLocally()}
       rightPanel={(context) => (
         <WorkspaceRightPanel context={context} projectId={LOCAL_PROJECT_ID} projectName={projectName} />
       )}
-      saveDisabled={saveState === "local-pending" && !workspaceId}
       saveStatus={saveStatusLabels[saveState]}
     />
   );

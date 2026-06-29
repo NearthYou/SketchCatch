@@ -149,6 +149,7 @@ export function DiagramNodeView({ data, id, isConnectable, selected }: NodeProps
           styles.nodeShell,
           selected ? styles.nodeShellSelected : undefined,
           data.isDimmed ? styles.nodeShellDimmed : undefined,
+          data.isReferenceDropTarget ? styles.nodeShellReferenceDropTarget : undefined,
           node.kind === "design" ? styles.nodeShellDesign : styles.nodeShellResource,
           node.locked ? styles.nodeShellLocked : undefined
         ]
