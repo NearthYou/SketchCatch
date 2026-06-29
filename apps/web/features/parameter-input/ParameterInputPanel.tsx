@@ -1,7 +1,7 @@
 "use client";
 
 import { Check, ChevronDown, Plus, Search, Trash2 } from "lucide-react";
-import { useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type {
   FocusEvent as ReactFocusEvent,
   KeyboardEvent as ReactKeyboardEvent
@@ -27,7 +27,10 @@ import {
 } from "./region-node-metadata";
 import {
   buildReferenceOptions,
-  getVisibleDefinitions,
+  getActiveOptionalDefinitions,
+  getOptionalDefinitions,
+  getRequiredDefinitions,
+  getValidationDefinitions,
   isEmptyParameterValue,
   mergeNodeParameters,
   validateParameters
@@ -54,6 +57,13 @@ export function ParameterInputPanel({
     () => nodes.find((node) => node.id === selectedNodeId) ?? null,
     [nodes, selectedNodeId]
   );
+  const [advancedParameterQuery, setAdvancedParameterQuery] = useState("");
+  const [addedOptionalParameterNames, setAddedOptionalParameterNames] = useState<string[]>([]);
+
+  useEffect(() => {
+    setAdvancedParameterQuery("");
+    setAddedOptionalParameterNames([]);
+  }, [selectedNodeId]);
 
   if (!selectedNode) {
     return (
@@ -102,21 +112,34 @@ export function ParameterInputPanel({
   }
 
   const parameters = mergeNodeParameters(selectedNode, parameterCatalog);
-  const definitions = getVisibleDefinitions(
-    parameterCatalog.resources[parameters.resourceType] ?? []
+  const catalogDefinitions = parameterCatalog.resources[parameters.resourceType] ?? [];
+  const mainDefinitions = getRequiredDefinitions(catalogDefinitions);
+  const optionalDefinitions = getOptionalDefinitions(catalogDefinitions);
+  const activeOptionalDefinitions = getActiveOptionalDefinitions(catalogDefinitions, parameters.values);
+  const advancedDefinitions = getAdvancedDefinitions(
+    activeOptionalDefinitions,
+    optionalDefinitions,
+    addedOptionalParameterNames
   );
+  const availableAdvancedDefinitions = filterAdvancedDefinitions(
+    optionalDefinitions,
+    advancedDefinitions,
+    advancedParameterQuery
+  );
+  const validationDefinitions = getValidationDefinitions(catalogDefinitions, parameters.values);
   const validation = validateParameters(
     parameters,
-    definitions,
+    validationDefinitions,
     nodes,
     selectedNode.id,
     parameterCatalog
   );
 
   const commitParameters = (nextParameters: ResourceNodeParameters) => {
+    const nextValidationDefinitions = getValidationDefinitions(catalogDefinitions, nextParameters.values);
     const nextValidation = validateParameters(
       nextParameters,
-      definitions,
+      nextValidationDefinitions,
       nodes,
       selectedNode.id,
       parameterCatalog
@@ -177,9 +200,9 @@ export function ParameterInputPanel({
       </section>
 
       <section className={styles.section} aria-label="Main parameters">
-        {definitions.length > 0 ? (
+        {mainDefinitions.length > 0 ? (
           <div className={styles.fieldGroup}>
-            {definitions.map((definition) => (
+            {mainDefinitions.map((definition) => (
               <ParameterField
                 catalog={parameterCatalog}
                 currentNodeId={selectedNode.id}
@@ -195,12 +218,117 @@ export function ParameterInputPanel({
           </div>
         ) : (
           <p className={styles.inlineEmpty}>
-            이 리소스 타입은 아직 파라미터 카탈로그가 없습니다.
+            {catalogDefinitions.length > 0
+              ? "필수 파라미터가 없습니다."
+              : "이 리소스 타입은 아직 파라미터 카탈로그가 없습니다."}
           </p>
         )}
       </section>
+
+      <section className={styles.section} aria-label="Advanced Parameters">
+        <div className={styles.sectionHeader}>
+          <h3>Advanced Parameters</h3>
+        </div>
+
+        {advancedDefinitions.length > 0 ? (
+          <div className={styles.fieldGroup}>
+            {advancedDefinitions.map((definition) => (
+              <ParameterField
+                catalog={parameterCatalog}
+                currentNodeId={selectedNode.id}
+                definition={definition}
+                errors={validation.parameterErrors}
+                key={definition.name}
+                nodes={nodes}
+                onChange={(value) => updateParameterValue(definition, value)}
+                path={definition.name}
+                value={parameters.values[definition.name]}
+              />
+            ))}
+          </div>
+        ) : (
+          <p className={styles.inlineEmpty}>추가된 optional 파라미터가 없습니다.</p>
+        )}
+
+        <div className={styles.advancedPicker}>
+          <label className={styles.advancedSearch}>
+            <Search aria-hidden="true" size={16} />
+            <input
+              className={styles.input}
+              onChange={(event) => setAdvancedParameterQuery(event.currentTarget.value)}
+              placeholder="Search optional parameter..."
+              value={advancedParameterQuery}
+            />
+          </label>
+
+          {availableAdvancedDefinitions.length > 0 ? (
+            <div className={styles.advancedOptionList}>
+              {availableAdvancedDefinitions.map((definition) => (
+                <button
+                  className={styles.advancedOptionButton}
+                  key={definition.name}
+                  onClick={() =>
+                    setAddedOptionalParameterNames((currentNames) =>
+                      currentNames.includes(definition.name)
+                        ? currentNames
+                        : [...currentNames, definition.name]
+                    )
+                  }
+                  type="button"
+                >
+                  <Plus aria-hidden="true" size={14} />
+                  <span>{definition.label}</span>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className={styles.inlineEmpty}>추가할 optional 파라미터가 없습니다.</p>
+          )}
+        </div>
+      </section>
     </aside>
   );
+}
+
+function getAdvancedDefinitions(
+  activeOptionalDefinitions: readonly ParameterCatalogDefinition[],
+  optionalDefinitions: readonly ParameterCatalogDefinition[],
+  addedOptionalParameterNames: readonly string[]
+) {
+  const advancedDefinitionNames = new Set([
+    ...activeOptionalDefinitions.map((definition) => definition.name),
+    ...addedOptionalParameterNames
+  ]);
+
+  return optionalDefinitions.filter((definition) => advancedDefinitionNames.has(definition.name));
+}
+
+function filterAdvancedDefinitions(
+  optionalDefinitions: readonly ParameterCatalogDefinition[],
+  advancedDefinitions: readonly ParameterCatalogDefinition[],
+  query: string
+) {
+  const advancedDefinitionNames = new Set(advancedDefinitions.map((definition) => definition.name));
+  const normalizedQuery = query.trim().toLowerCase();
+
+  return optionalDefinitions.filter(
+    (definition) =>
+      !advancedDefinitionNames.has(definition.name) &&
+      matchesAdvancedDefinitionQuery(definition, normalizedQuery)
+  );
+}
+
+function matchesAdvancedDefinitionQuery(definition: ParameterCatalogDefinition, normalizedQuery: string) {
+  if (!normalizedQuery) {
+    return true;
+  }
+
+  return [
+    definition.name,
+    definition.terraformName,
+    definition.label,
+    definition.description ?? ""
+  ].some((value) => value.toLowerCase().includes(normalizedQuery));
 }
 
 function RegionField({
