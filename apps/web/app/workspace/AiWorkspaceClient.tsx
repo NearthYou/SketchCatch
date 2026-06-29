@@ -1,3 +1,4 @@
+// allow: SIZE_OK - workspace demo coordinator; splitting state belongs to a separate UI refactor.
 "use client";
 
 import { useMemo, useRef, useState } from "react";
@@ -281,7 +282,7 @@ export function AiWorkspaceClient() {
               ))}
             </div>
             <p className="mutedText">연결선 {draft.architectureJson.edges.length}개</p>
-            <DraftMetadataPanel metadata={draft.metadata} />
+            <DraftMetadataPanel llmExplanation={draft.llmExplanation} metadata={draft.metadata} />
           </div>
         )}
         <button

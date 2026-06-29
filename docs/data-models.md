@@ -526,8 +526,35 @@ type AiArchitectureDraftResult = {
   architectureJson: ArchitectureJson;
   title: string;
   metadata: AiResultMetadata;
+  llmExplanation?: LlmExplanation;
 };
 ```
+
+`LlmExplanation`은 rule 기반 결과를 덮어쓰지 않고, 사용자가 읽기 쉬운 요약과 다음 행동을 붙이는 공통 설명 계약이다. OpenAI 호출이 실패하거나 일부 필드가 rule 기반 기본값으로 대체되면 `fallbackUsed`를 `true`로 둔다.
+
+```ts
+type LlmExplanation = {
+  target:
+    | "architecture_draft"
+    | "design_simulation"
+    | "pre_deployment_check"
+    | "terraform_error_explanation";
+  summary: string;
+  highlights: string[];
+  nextActions: string[];
+  fallbackUsed: boolean;
+  fallbackReason?:
+    | "missing_api_key"
+    | "timeout"
+    | "rate_limited"
+    | "invalid_request"
+    | "auth_error"
+    | "provider_error"
+    | "invalid_response";
+};
+```
+
+`AiArchitectureDraftResult`, `AiPreDeploymentAnalysisResult`, `DesignSimulationResult`, `AiTerraformErrorExplanationResult`는 필요할 때 `llmExplanation?: LlmExplanation`를 포함할 수 있다.
 
 ```ts
 type CheckFinding = {

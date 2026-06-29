@@ -189,7 +189,7 @@ function parseTerraformBlocks(terraformCode: string): ParseResult {
 
     addresses.add(address);
 
-    const bodyResult = collectBlockBody(lines, index + 1, address);
+    const bodyResult = collectBlockBody(lines, index + 1, index + 1, address);
     diagnostics.push(...bodyResult.diagnostics);
 
     if (!bodyResult.closed) {
@@ -218,6 +218,7 @@ function parseTerraformBlocks(terraformCode: string): ParseResult {
 function collectBlockBody(
   lines: string[],
   startIndex: number,
+  headerLine: number,
   resourceAddress: string
 ): {
   bodyLines: Array<{ text: string; line: number }>;
@@ -260,6 +261,7 @@ function collectBlockBody(
   diagnostics.push({
     severity: "error",
     code: "terraform.sync.block_header",
+    line: headerLine,
     resourceAddress,
     message: `${resourceAddress} block이 닫히지 않았습니다.`
   });

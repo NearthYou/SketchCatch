@@ -12,11 +12,14 @@ export type DiagramNodeMetadataUpdate = Partial<Omit<DiagramNode, "id" | "parame
 export type DiagramEditorPanelContext = {
   diagram: DiagramJson;
   inspectedNodeId: string | null;
+  isRightPanelOpen: boolean;
   selectedNodeId: string | null;
   nodes: readonly DiagramNode[];
   edges: readonly DiagramEdge[];
   applyDiagramJson: (diagram: DiagramJson) => void;
   closeInspectedNode: () => void;
+  focusResourceNode: (nodeId: string) => void;
+  setRightPanelOpen: (isOpen: boolean) => void;
   updateNodeParameters: (
     nodeId: string,
     update:
@@ -37,6 +40,8 @@ export type DiagramEditorProps = {
   onDiagramChange?: ((diagram: DiagramJson) => void) | undefined;
   onSave?: (() => void) | undefined;
   rightPanel?: ((context: DiagramEditorPanelContext) => ReactNode) | undefined;
+  projectName?: string | undefined;
+  myPageHref?: string | undefined;
   saveDisabled?: boolean | undefined;
   saveStatus?: string | undefined;
 };
