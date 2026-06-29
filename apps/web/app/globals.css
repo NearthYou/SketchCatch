@@ -3749,10 +3749,50 @@ nextjs-portal {
     0 18px 44px rgba(0, 0, 0, 0.2);
 }
 
+.projectCardContentLink {
+  border-radius: 8px;
+  color: inherit;
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  outline: 0;
+  text-decoration: none;
+}
+
+.projectCardContentLink:focus-visible {
+  box-shadow:
+    0 0 0 3px rgba(56, 189, 248, 0.22),
+    0 18px 44px rgba(0, 0, 0, 0.2);
+}
+
 .projectCardWide {
   border-bottom: 1px solid var(--dashboard-border);
   grid-template-columns: 260px minmax(0, 1fr);
   padding-bottom: 18px;
+}
+
+.projectCardWide.projectCardWithActions {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.projectCardWide .projectCardContentLink {
+  grid-template-columns: 260px minmax(0, 1fr);
+}
+
+.projectCardActions {
+  align-items: flex-start;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.projectDeleteButton {
+  min-height: 34px;
+  padding: 0 10px;
+}
+
+.projectDeleteButton .dashboardIcon {
+  height: 16px;
+  width: 16px;
 }
 
 .projectPreview {
@@ -4500,8 +4540,14 @@ nextjs-portal {
     min-width: 0;
   }
 
-  .projectCardWide {
+  .projectCardWide,
+  .projectCardWide.projectCardWithActions,
+  .projectCardWide .projectCardContentLink {
     grid-template-columns: 1fr;
+  }
+
+  .projectCardActions {
+    justify-content: flex-start;
   }
 
   .dashboardTable {

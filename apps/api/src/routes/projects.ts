@@ -184,6 +184,27 @@ export async function registerProjectRoutes(
     };
   });
 
+  app.delete("/projects/:id", async (request, reply) => {
+    const currentUserId = await requireActiveUserId(request, getProjectDatabaseClient);
+    const params = routeParamsSchema.parse(request.params);
+    const { db } = getProjectDatabaseClient();
+
+    const [project] = await db
+      .select({ id: projects.id })
+      .from(projects)
+      .where(and(eq(projects.id, params.id), eq(projects.userId, currentUserId)));
+
+    if (!project) {
+      return sendNotFound(reply, "프로젝트를 찾을 수 없습니다.");
+    }
+
+    await db
+      .delete(projects)
+      .where(and(eq(projects.id, params.id), eq(projects.userId, currentUserId)));
+
+    return reply.status(204).send();
+  });
+
   app.post("/projects/:id/architectures", async (request, reply) => {
     const currentUserId = await requireActiveUserId(request, getProjectDatabaseClient);
     const params = routeParamsSchema.parse(request.params);

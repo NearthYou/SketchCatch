@@ -72,6 +72,13 @@ export async function getProject(projectId: string): Promise<Project> {
   return response.project;
 }
 
+export async function deleteProject(projectId: string): Promise<void> {
+  await apiFetch<void>(`/projects/${encodeURIComponent(projectId)}`, {
+    auth: true,
+    method: "DELETE"
+  });
+}
+
 export async function getProjectDetails(projectId: string): Promise<ProjectDetailsResponse> {
   return apiFetch<ProjectDetailsResponse>(
     `/projects/${encodeURIComponent(projectId)}`,
