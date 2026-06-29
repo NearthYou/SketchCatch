@@ -38,6 +38,10 @@ export function getNextAwsRegionOptionIndex(
     return -1;
   }
 
+  if (currentIndex === -1) {
+    return direction === 1 ? 0 : options.length - 1;
+  }
+
   return (currentIndex + direction + options.length) % options.length;
 }
 

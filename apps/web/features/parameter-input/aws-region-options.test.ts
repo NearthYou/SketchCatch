@@ -50,6 +50,7 @@ test("getNextAwsRegionOptionIndex moves through options and wraps around", () =>
   const options = filterAwsRegionOptions("");
 
   assert.equal(getNextAwsRegionOptionIndex(options, -1, 1), 0);
+  assert.equal(getNextAwsRegionOptionIndex(options, -1, -1), options.length - 1);
   assert.equal(getNextAwsRegionOptionIndex(options, 0, 1), 1);
   assert.equal(getNextAwsRegionOptionIndex(options, options.length - 1, 1), 0);
   assert.equal(getNextAwsRegionOptionIndex(options, 0, -1), options.length - 1);
