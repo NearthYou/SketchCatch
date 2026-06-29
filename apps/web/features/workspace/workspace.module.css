@@ -385,8 +385,10 @@
 
 .resourceListPanel {
   align-content: start;
+  align-items: start;
   display: grid;
   gap: 10px;
+  grid-auto-rows: max-content;
   min-height: 0;
   overflow: auto;
   padding: 10px 8px 12px;
@@ -401,6 +403,7 @@
   cursor: pointer;
   display: grid;
   gap: 9px;
+  height: auto;
   min-height: 0;
   overflow: visible;
   padding: 12px 13px 13px;

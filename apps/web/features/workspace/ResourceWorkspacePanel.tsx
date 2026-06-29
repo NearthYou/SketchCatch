@@ -114,7 +114,7 @@ function ResourceListPanel({
             onKeyDown={(event) => handleResourceCardKeyDown(event, context, node.id)}
             tabIndex={0}
           >
-            <span className={styles.resourceListHeader}>
+            <div className={styles.resourceListHeader}>
               <span className={styles.resourceListIdentity}>
                 <span className={styles.resourceListCubeIcon}>
                   <Box size={16} aria-hidden="true" />
@@ -158,12 +158,12 @@ function ResourceListPanel({
                   }}
                 />
               ) : null}
-            </span>
-            <span className={styles.resourceListAddress}>{getNodeTerraformAddress(node)}</span>
+            </div>
+            <div className={styles.resourceListAddress}>{getNodeTerraformAddress(node)}</div>
             {summaryRows.length > 0 ? (
-              <span className={styles.resourceListValues}>
+              <div className={styles.resourceListValues}>
                 {visibleSummaryRows.map((row) => (
-                  <span className={styles.resourceListValueRow} key={row.key}>
+                  <div className={styles.resourceListValueRow} key={row.key}>
                     <span>{row.label}</span>
                     <InlineResourceValueInput
                       context={context}
@@ -171,7 +171,7 @@ function ResourceListPanel({
                       parameterKey={row.key}
                       value={row.rawValue}
                     />
-                  </span>
+                  </div>
                 ))}
                 {hasHiddenSummaryRows ? (
                   <button
@@ -188,9 +188,9 @@ function ResourceListPanel({
                     {isExpanded ? "Minimize configuration" : "Show full configuration"}
                   </button>
                 ) : null}
-              </span>
+              </div>
             ) : (
-              <span className={styles.resourceListNoValues}>No configured parameters</span>
+              <div className={styles.resourceListNoValues}>No configured parameters</div>
             )}
           </article>
         );
