@@ -64,6 +64,7 @@ test("runTerraformValidate stops commands that exceed the output limit", async (
     });
 
     assert.equal(result.exitCode, 1);
+    assert.equal(typeof result.durationMs, "number");
     assert.match(result.stdout, /Terraform output truncated after 32 bytes/);
     assert.match(result.stderr, /Terraform stdout exceeded the 32 byte output limit/);
   } finally {
@@ -88,6 +89,7 @@ test("runTerraformDestroyPlan uses a saved destroy plan file", async () => {
     });
 
     assert.equal(result.exitCode, 0);
+    assert.equal(typeof result.durationMs, "number");
     assert.deepEqual(JSON.parse(result.stdout), [
       "-destroy",
       "-input=false",

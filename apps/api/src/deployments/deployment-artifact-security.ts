@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-export type DeploymentArtifactKind = "tfplan" | "terraform-state";
+export type DeploymentArtifactKind = "tfplan" | "terraform-state" | "terraform-lock";
 
 export function assertDeploymentPlanArtifactObjectKey(input: {
   deploymentId: string;
@@ -17,6 +17,15 @@ export function assertDeploymentStateObjectKey(input: {
   objectKey: string;
 }): void {
   const expectedObjectKey = `deployments/${input.deploymentId}/state/terraform.tfstate`;
+
+  assertExactDeploymentObjectKey(input.objectKey, expectedObjectKey);
+}
+
+export function assertDeploymentTerraformLockFileObjectKey(input: {
+  deploymentId: string;
+  objectKey: string;
+}): void {
+  const expectedObjectKey = `deployments/${input.deploymentId}/terraform/.terraform.lock.hcl`;
 
   assertExactDeploymentObjectKey(input.objectKey, expectedObjectKey);
 }

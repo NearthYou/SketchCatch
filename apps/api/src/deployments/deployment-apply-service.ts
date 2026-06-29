@@ -19,6 +19,10 @@ import {
   extractDeployedResourcesFromTerraformStateJson,
   parseTerraformOutputsJson
 } from "./deployment-apply-results.js";
+import {
+  appendTerraformDurationLog,
+  runLoggedDeploymentOperation
+} from "./deployment-duration-logs.js";
 import { maskDeploymentMessage } from "./log-masking.js";
 import {
   appendDeploymentLogs,
@@ -34,6 +38,7 @@ import {
   runTerraformInit as defaultRunTerraformInit,
   runTerraformOutputJson as defaultRunTerraformOutputJson,
   runTerraformShowStateJson as defaultRunTerraformShowStateJson,
+  terraformMutationTimeoutMs,
   type TerraformRunResult
 } from "./terraform-runner.js";
 import { assertTerraformArtifactIsSafe } from "./terraform-artifact-safety.js";
@@ -41,6 +46,10 @@ import {
   prepareTerraformWorkspace as defaultPrepareTerraformWorkspace,
   type PreparedTerraformWorkspace
 } from "./terraform-workspace.js";
+import {
+  restoreTerraformLockFile,
+  uploadTerraformLockFile
+} from "./terraform-lock-file-workspace.js";
 
 const defaultPlanFileName = "tfplan";
 
@@ -128,23 +137,23 @@ export async function runDeploymentApply(
       throw new DeploymentConflictError("Deployment apply has already completed");
     }
 
-    const terraformArtifact = await requireDeploymentTerraformArtifact(deployment, repository);
-    const currentPlanArtifact = await requireCurrentPlanArtifact(deployment, repository);
-    const awsConnection = await requireDeploymentAwsConnection(
-      deployment,
-      input.accessContext,
-      repository
-    );
-    const planBuffer = await applyArtifactStorage.downloadDeploymentArtifact({
-      deploymentId: deployment.id,
-      planArtifactId: currentPlanArtifact.id,
-      objectKey: currentPlanArtifact.objectKey
-    });
-
-    workspace = await prepareTerraformWorkspace({
-      objectKey: terraformArtifact.objectKey,
-      fileName: terraformArtifact.fileName
-    });
+    const [terraformArtifact, currentPlanArtifact, awsConnection] = await Promise.all([
+      requireDeploymentTerraformArtifact(deployment, repository),
+      requireCurrentPlanArtifact(deployment, repository),
+      requireDeploymentAwsConnection(deployment, input.accessContext, repository)
+    ]);
+    const [planBuffer, preparedWorkspace] = await Promise.all([
+      applyArtifactStorage.downloadDeploymentArtifact({
+        deploymentId: deployment.id,
+        planArtifactId: currentPlanArtifact.id,
+        objectKey: currentPlanArtifact.objectKey
+      }),
+      prepareTerraformWorkspace({
+        objectKey: terraformArtifact.objectKey,
+        fileName: terraformArtifact.fileName
+      })
+    ]);
+    workspace = preparedWorkspace;
 
     const currentTerraformArtifactContent = await readTerraformArtifactFile(workspace.mainFilePath);
     assertTerraformArtifactIsSafe(currentTerraformArtifactContent);
@@ -159,15 +168,22 @@ export async function runDeploymentApply(
       currentAwsConnection: awsConnection
     });
 
-    const awsCredentials = await prepareAwsCredentialsForApply({
-      deploymentId: deployment.id,
-      awsConnection,
-      prepareTerraformAwsCredentialEnv,
-      repository,
-      markFailureRecorded: () => {
-        failureRecorded = true;
-      }
-    });
+    const [awsCredentials] = await Promise.all([
+      prepareAwsCredentialsForApply({
+        deploymentId: deployment.id,
+        awsConnection,
+        prepareTerraformAwsCredentialEnv,
+        repository,
+        markFailureRecorded: () => {
+          failureRecorded = true;
+        }
+      }),
+      restoreTerraformLockFile({
+        deploymentId: deployment.id,
+        workspace: preparedWorkspace,
+        storage: applyArtifactStorage
+      })
+    ]);
     const wasPreMarkedRunning =
       deployment.status === "RUNNING" && input.startedFromStatus !== undefined;
 
@@ -178,7 +194,7 @@ export async function runDeploymentApply(
         throw new DeploymentConflictError("Deployment apply could not be started");
       }
     }
-    await writePlanFile(join(workspace.workdir, defaultPlanFileName), Buffer.from(planBuffer));
+    await writePlanFile(join(workspace.workdir, defaultPlanFileName), planBuffer);
 
     let sequence = await repository.getNextDeploymentLogSequence(deployment.id);
 
@@ -190,6 +206,7 @@ export async function runDeploymentApply(
       deploymentId: deployment.id,
       accessContext: input.accessContext,
       sequence,
+      label: "terraform init",
       result: terraform.init,
       repository
     });
@@ -212,15 +229,33 @@ export async function runDeploymentApply(
       });
     }
 
+    const lockUpload = await runLoggedDeploymentOperation({
+      deploymentId: deployment.id,
+      accessContext: input.accessContext,
+      sequence,
+      stage: "apply",
+      label: "terraform lock file upload",
+      repository,
+      operation: () =>
+        uploadTerraformLockFile({
+          deploymentId: deployment.id,
+          workspace: workspace!,
+          storage: applyArtifactStorage
+        })
+    });
+    sequence = lockUpload.sequence;
+
     terraform.apply = await runTerraformApply(workspace.workdir, {
       env: awsCredentials.env,
       planFileName: defaultPlanFileName,
+      timeoutMs: terraformMutationTimeoutMs,
       signal: input.abortSignal
     });
     sequence = await appendTerraformApplyOutput({
       deploymentId: deployment.id,
       accessContext: input.accessContext,
       sequence,
+      label: "terraform apply tfplan",
       result: terraform.apply,
       repository
     });
@@ -281,6 +316,7 @@ export async function runDeploymentApply(
       deploymentId: deployment.id,
       accessContext: input.accessContext,
       sequence,
+      label: "terraform output -json",
       result: terraform.outputJson,
       repository
     });
@@ -305,6 +341,7 @@ export async function runDeploymentApply(
       deploymentId: deployment.id,
       accessContext: input.accessContext,
       sequence,
+      label: "terraform show -json",
       result: terraform.showStateJson,
       repository
     });
@@ -327,16 +364,26 @@ export async function runDeploymentApply(
     }
 
     try {
-      const uploadedState = await applyArtifactStorage.uploadDeploymentState({
+      const stateUpload = await runLoggedDeploymentOperation({
         deploymentId: deployment.id,
-        stateFilePath: join(workspace.workdir, "terraform.tfstate")
+        accessContext: input.accessContext,
+        sequence,
+        stage: "apply",
+        label: "terraform state upload",
+        repository,
+        operation: () =>
+          applyArtifactStorage.uploadDeploymentState({
+            deploymentId: deployment.id,
+            stateFilePath: join(workspace!.workdir, "terraform.tfstate")
+          })
       });
-      stateObjectKey = uploadedState.objectKey;
+      stateObjectKey = stateUpload.result.objectKey;
+      sequence = stateUpload.sequence;
     } catch (error) {
       warnings.push(summarizePostApplyWarning("Terraform state upload", error));
     }
 
-    await appendApplyWarnings({
+    sequence = await appendApplyWarnings({
       deploymentId: deployment.id,
       accessContext: input.accessContext,
       sequence,
@@ -344,20 +391,30 @@ export async function runDeploymentApply(
       repository
     });
 
-    const completedDeployment = await repository.completeDeploymentApply(deployment.id, {
-      stateObjectKey,
-      resultWarningSummary: warnings.length > 0 ? warnings.join("; ") : null,
-      resources: resources.map((resource) => ({
-        id: generateResultId(),
-        deploymentId: deployment.id,
-        ...resource
-      })),
-      outputs: outputs.map((output) => ({
-        id: generateResultId(),
-        deploymentId: deployment.id,
-        ...output
-      }))
+    const applyResultSave = await runLoggedDeploymentOperation({
+      deploymentId: deployment.id,
+      accessContext: input.accessContext,
+      sequence,
+      stage: "apply",
+      label: "deployment apply result save",
+      repository,
+      operation: () =>
+        repository.completeDeploymentApply(deployment.id, {
+          stateObjectKey,
+          resultWarningSummary: warnings.length > 0 ? warnings.join("; ") : null,
+          resources: resources.map((resource) => ({
+            id: generateResultId(),
+            deploymentId: deployment.id,
+            ...resource
+          })),
+          outputs: outputs.map((output) => ({
+            id: generateResultId(),
+            deploymentId: deployment.id,
+            ...output
+          }))
+        })
     });
+    const completedDeployment = applyResultSave.result;
 
     if (!completedDeployment) {
       throw new DeploymentNotFoundError("Deployment not found");
@@ -534,17 +591,27 @@ async function uploadPartialStateAfterFailedApply(input: {
   repository: DeploymentRepository;
 }): Promise<{ stateObjectKey: string | null; warningSummary: string | null }> {
   try {
-    const uploadedState = await input.applyArtifactStorage.uploadDeploymentState({
+    const stateUpload = await runLoggedDeploymentOperation({
       deploymentId: input.deploymentId,
-      stateFilePath: join(input.workspace.workdir, "terraform.tfstate")
+      accessContext: input.accessContext,
+      sequence: input.sequence,
+      stage: "apply",
+      label: "partial terraform state upload",
+      repository: input.repository,
+      operation: () =>
+        input.applyArtifactStorage.uploadDeploymentState({
+          deploymentId: input.deploymentId,
+          stateFilePath: join(input.workspace.workdir, "terraform.tfstate")
+        })
     });
+    const uploadedState = stateUpload.result;
     const warningSummary =
       "Partial Terraform state was saved after failed apply for explicit cleanup destroy.";
 
     await appendApplyWarnings({
       deploymentId: input.deploymentId,
       accessContext: input.accessContext,
-      sequence: input.sequence,
+      sequence: stateUpload.sequence,
       warnings: [warningSummary],
       repository: input.repository
     });
@@ -575,6 +642,7 @@ async function appendTerraformApplyOutput(input: {
   deploymentId: string;
   accessContext: ProjectAccessContext;
   sequence: number;
+  label: string;
   result: TerraformRunResult;
   repository: DeploymentRepository;
 }): Promise<number> {
@@ -596,22 +664,41 @@ async function appendTerraformApplyOutput(input: {
     repository: input.repository
   });
 
-  return nextSequence;
+  return appendTerraformDurationLog({
+    deploymentId: input.deploymentId,
+    accessContext: input.accessContext,
+    sequence: nextSequence,
+    stage: "apply",
+    label: input.label,
+    result: input.result,
+    repository: input.repository
+  });
 }
 
 async function appendTerraformApplyStderr(input: {
   deploymentId: string;
   accessContext: ProjectAccessContext;
   sequence: number;
+  label: string;
   result: TerraformRunResult;
   repository: DeploymentRepository;
 }): Promise<number> {
-  return appendOutputLines({
+  const nextSequence = await appendOutputLines({
     deploymentId: input.deploymentId,
     accessContext: input.accessContext,
     sequence: input.sequence,
     output: input.result.stderr,
     level: input.result.exitCode === 0 ? "WARN" : "ERROR",
+    repository: input.repository
+  });
+
+  return appendTerraformDurationLog({
+    deploymentId: input.deploymentId,
+    accessContext: input.accessContext,
+    sequence: nextSequence,
+    stage: "apply",
+    label: input.label,
+    result: input.result,
     repository: input.repository
   });
 }
@@ -698,6 +785,10 @@ function splitOutputLines(output: string): string[] {
 
 function summarizeTerraformFailure(stage: string, result: TerraformRunResult): string {
   if (result.timedOut) {
+    if (stage === "Terraform apply") {
+      return `${stage} timed out. AWS resources may have been partially changed; verify resources before retry.`;
+    }
+
     return `${stage} timed out`;
   }
 

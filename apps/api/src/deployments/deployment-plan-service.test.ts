@@ -734,22 +734,37 @@ test("runDeploymentPlan saves a tfplan artifact, summary, block, logs, and curre
   });
   assert.equal(planArtifactStorage.uploads[0]?.planFilePath.endsWith("tfplan"), true);
   assert.deepEqual(
-    repository.logs.map((log) => ({
-      sequence: log.sequence,
-      stage: log.stage,
-      level: log.level,
-      message: log.message
-    })),
+    repository.logs
+      .filter((log) => !log.message.startsWith("[duration]"))
+      .map((log) => ({
+        stage: log.stage,
+        level: log.level,
+        message: log.message
+      })),
     [
-      { sequence: 1, stage: "init", level: "INFO", message: "init ok" },
+      { stage: "init", level: "INFO", message: "init ok" },
       {
-        sequence: 2,
         stage: "plan",
         level: "INFO",
         message: "Plan: 1 to add, 0 to change, 0 to destroy."
       },
-      { sequence: 3, stage: "plan", level: "WARN", message: "show warning only" }
+      { stage: "plan", level: "WARN", message: "show warning only" }
     ]
+  );
+  assert(
+    repository.logs.some((log) =>
+      log.message.startsWith("[duration] terraform lock file upload completed in ")
+    )
+  );
+  assert(
+    repository.logs.some((log) =>
+      log.message.startsWith("[duration] terraform plan artifact upload completed in ")
+    )
+  );
+  assert(
+    repository.logs.some((log) =>
+      log.message.startsWith("[duration] deployment plan save completed in ")
+    )
   );
   assert.equal(repository.logs.some((log) => log.message.includes("resource_changes")), false);
 });

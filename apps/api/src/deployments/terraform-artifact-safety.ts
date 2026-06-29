@@ -68,6 +68,7 @@ export function assertTerraformArtifactIsSafe(terraformCode: Buffer | Uint8Array
   validateProviderSourceAttributes(tokens);
   validateDisallowedTerraformFunctionCalls(tokens);
   validateDisallowedStringInterpolations(tokens);
+  validateDeploymentResourceAttributes(code);
 
   for (let index = 0; index < tokens.length; index += 1) {
     const token = tokens[index]!;
@@ -316,6 +317,248 @@ function validateDisallowedStringInterpolations(tokens: HclToken[]): void {
       }
     }
   }
+}
+
+type TerraformResourceBlock = {
+  type: string;
+  body: string;
+  line: number;
+};
+
+function validateDeploymentResourceAttributes(source: string): void {
+  for (const resource of extractResourceBlocks(source)) {
+    const body = stripHclComments(resource.body);
+
+    if (resource.type === "aws_instance" && /\buser_data(?:_base64)?\s*=/.test(body)) {
+      throw new TerraformArtifactSafetyError(
+        `Terraform EC2 user_data is not allowed before live deployment at line ${resource.line}`
+      );
+    }
+
+    if (
+      resource.type === "aws_s3_bucket" &&
+      /\bacl\s*=\s*"public-read(?:-write)?"/.test(body)
+    ) {
+      throw new TerraformArtifactSafetyError(
+        `Terraform public S3 bucket ACL is not allowed before live deployment at line ${resource.line}`
+      );
+    }
+
+    if (resource.type === "aws_security_group") {
+      for (const ingress of extractNamedBlocks(body, "ingress")) {
+        validatePublicRemoteAccessIngress(ingress.body, resource.line);
+      }
+    }
+
+    if (
+      resource.type === "aws_security_group_rule" &&
+      isIngressSecurityGroupRule(body)
+    ) {
+      validatePublicRemoteAccessIngress(body, resource.line);
+    }
+  }
+}
+
+function validatePublicRemoteAccessIngress(body: string, line: number): void {
+  if (!hasWorldCidr(body) || !includesRemoteAccessPort(body)) {
+    return;
+  }
+
+  throw new TerraformArtifactSafetyError(
+    `Terraform public SSH or RDP ingress is not allowed before live deployment at line ${line}`
+  );
+}
+
+function isIngressSecurityGroupRule(body: string): boolean {
+  return /\btype\s*=\s*"ingress"/.test(body);
+}
+
+function hasWorldCidr(body: string): boolean {
+  return (
+    /\bcidr_blocks\s*=\s*\[[^\]]*"0\.0\.0\.0\/0"/.test(body) ||
+    /\bipv6_cidr_blocks\s*=\s*\[[^\]]*"::\/0"/.test(body)
+  );
+}
+
+function includesRemoteAccessPort(body: string): boolean {
+  if (/\bprotocol\s*=\s*"-1"/.test(body)) {
+    return true;
+  }
+
+  const fromPort = findNumericAttribute(body, "from_port");
+  const toPort = findNumericAttribute(body, "to_port");
+
+  if (fromPort === null && toPort === null) {
+    return false;
+  }
+
+  const startPort = fromPort ?? toPort!;
+  const endPort = toPort ?? fromPort!;
+
+  return [22, 3389].some((port) => startPort <= port && port <= endPort);
+}
+
+function findNumericAttribute(body: string, attributeName: string): number | null {
+  const pattern = new RegExp(`\\b${attributeName}\\s*=\\s*(\\d+)`);
+  const match = pattern.exec(body);
+
+  if (!match?.[1]) {
+    return null;
+  }
+
+  return Number.parseInt(match[1], 10);
+}
+
+function extractResourceBlocks(source: string): TerraformResourceBlock[] {
+  const resources: TerraformResourceBlock[] = [];
+  const headerPattern = /\bresource\s+"([^"]+)"\s+"[^"]+"\s*\{/g;
+  let match: RegExpExecArray | null;
+
+  while ((match = headerPattern.exec(source)) !== null) {
+    const openBraceIndex = match.index + match[0].length - 1;
+    const closeBraceIndex = findMatchingCloseBrace(source, openBraceIndex);
+
+    if (closeBraceIndex === -1) {
+      continue;
+    }
+
+    resources.push({
+      type: match[1]!,
+      body: source.slice(openBraceIndex + 1, closeBraceIndex),
+      line: countLineAtOffset(source, match.index)
+    });
+    headerPattern.lastIndex = closeBraceIndex + 1;
+  }
+
+  return resources;
+}
+
+function extractNamedBlocks(source: string, blockName: string): Array<{ body: string }> {
+  const blocks: Array<{ body: string }> = [];
+  const headerPattern = new RegExp(`\\b${blockName}\\s*\\{`, "g");
+  let match: RegExpExecArray | null;
+
+  while ((match = headerPattern.exec(source)) !== null) {
+    const openBraceIndex = match.index + match[0].length - 1;
+    const closeBraceIndex = findMatchingCloseBrace(source, openBraceIndex);
+
+    if (closeBraceIndex === -1) {
+      continue;
+    }
+
+    blocks.push({
+      body: source.slice(openBraceIndex + 1, closeBraceIndex)
+    });
+    headerPattern.lastIndex = closeBraceIndex + 1;
+  }
+
+  return blocks;
+}
+
+function findMatchingCloseBrace(source: string, openBraceIndex: number): number {
+  let depth = 0;
+  let index = openBraceIndex;
+
+  while (index < source.length) {
+    const char = source[index]!;
+    const nextChar = source[index + 1];
+
+    if (char === "\"") {
+      index = skipQuotedString(source, index);
+      continue;
+    }
+
+    if (char === "#" || (char === "/" && nextChar === "/")) {
+      index = skipLineComment(source, index);
+      continue;
+    }
+
+    if (char === "/" && nextChar === "*") {
+      index = skipBlockComment(source, index, 1).index;
+      continue;
+    }
+
+    if (char === "{") {
+      depth += 1;
+    }
+
+    if (char === "}") {
+      depth -= 1;
+
+      if (depth === 0) {
+        return index;
+      }
+    }
+
+    index += 1;
+  }
+
+  return -1;
+}
+
+function stripHclComments(source: string): string {
+  let result = "";
+  let index = 0;
+
+  while (index < source.length) {
+    const char = source[index]!;
+    const nextChar = source[index + 1];
+
+    if (char === "\"") {
+      const nextIndex = skipQuotedString(source, index);
+      result += source.slice(index, nextIndex);
+      index = nextIndex;
+      continue;
+    }
+
+    if (char === "#" || (char === "/" && nextChar === "/")) {
+      index = skipLineComment(source, index);
+      continue;
+    }
+
+    if (char === "/" && nextChar === "*") {
+      index = skipBlockComment(source, index, 1).index;
+      continue;
+    }
+
+    result += char;
+    index += 1;
+  }
+
+  return result;
+}
+
+function skipQuotedString(source: string, index: number): number {
+  let nextIndex = index + 1;
+
+  while (nextIndex < source.length) {
+    const char = source[nextIndex]!;
+
+    if (char === "\\") {
+      nextIndex += 2;
+      continue;
+    }
+
+    if (char === "\"") {
+      return nextIndex + 1;
+    }
+
+    nextIndex += 1;
+  }
+
+  return source.length;
+}
+
+function countLineAtOffset(source: string, offset: number): number {
+  let line = 1;
+
+  for (let index = 0; index < offset; index += 1) {
+    if (source[index] === "\n") {
+      line += 1;
+    }
+  }
+
+  return line;
 }
 
 function findNextValueToken(tokens: HclToken[], startIndex: number): HclToken | undefined {

@@ -41,6 +41,7 @@ test("createS3DeploymentApplyArtifactStorage uploads terraform state with encryp
       Key: `deployments/${deploymentId}/state/terraform.tfstate`,
       Body: Buffer.from(JSON.stringify({ version: 4 })),
       ContentType: "application/json",
+      CacheControl: "no-store",
       ServerSideEncryption: "AES256",
       Metadata: {
         "sketchcatch-deployment-id": deploymentId,

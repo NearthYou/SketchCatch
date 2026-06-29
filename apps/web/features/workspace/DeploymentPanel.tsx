@@ -26,6 +26,7 @@ import {
   listDeploymentLogs,
   listDeployments,
   listTerraformOutputs,
+  runDeploymentInit,
   runDeploymentApply,
   runDeploymentDestroy,
   runDeploymentDestroyPlan,
@@ -450,9 +451,10 @@ export function DeploymentPanel({
         terraformArtifactId: savedArtifacts.terraformArtifact.id,
         awsConnectionId: selectedAwsConnectionId
       });
+      const prewarmedDeployment = await runDeploymentInit(deployment.id).catch(() => deployment);
 
-      setDeployments((currentDeployments) => [deployment, ...currentDeployments]);
-      setSelectedDeploymentId(deployment.id);
+      setDeployments((currentDeployments) => [prewarmedDeployment, ...currentDeployments]);
+      setSelectedDeploymentId(prewarmedDeployment.id);
       setDeploymentPanelMode("records");
       setDeploymentLogs([]);
       setDeploymentResources([]);

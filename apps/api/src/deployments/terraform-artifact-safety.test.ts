@@ -258,6 +258,69 @@ test("assertTerraformArtifactIsSafe rejects local file functions inside interpol
   );
 });
 
+test("assertTerraformArtifactIsSafe rejects EC2 user_data before live deployment", () => {
+  assert.throws(
+    () =>
+      assertTerraformArtifactIsSafe(`
+        resource "aws_instance" "web" {
+          ami           = "ami-1234567890abcdef0"
+          instance_type = "t3.micro"
+          user_data     = "echo hello"
+        }
+      `),
+    /EC2 user_data is not allowed/
+  );
+});
+
+test("assertTerraformArtifactIsSafe rejects public S3 bucket ACLs", () => {
+  assert.throws(
+    () =>
+      assertTerraformArtifactIsSafe(`
+        resource "aws_s3_bucket" "files" {
+          bucket = "sketchcatch-demo-files"
+          acl    = "public-read"
+        }
+      `),
+    /public S3 bucket ACL/
+  );
+});
+
+test("assertTerraformArtifactIsSafe rejects world-open SSH ingress rules", () => {
+  assert.throws(
+    () =>
+      assertTerraformArtifactIsSafe(`
+        resource "aws_security_group" "web" {
+          name = "web"
+
+          ingress {
+            from_port   = 22
+            to_port     = 22
+            protocol    = "tcp"
+            cidr_blocks = ["0.0.0.0/0"]
+          }
+        }
+      `),
+    /public SSH or RDP ingress/
+  );
+});
+
+test("assertTerraformArtifactIsSafe rejects world-open RDP security group rules", () => {
+  assert.throws(
+    () =>
+      assertTerraformArtifactIsSafe(`
+        resource "aws_security_group_rule" "rdp" {
+          type              = "ingress"
+          from_port         = 3389
+          to_port           = 3389
+          protocol          = "tcp"
+          security_group_id = aws_security_group.web.id
+          cidr_blocks       = ["0.0.0.0/0"]
+        }
+      `),
+    /public SSH or RDP ingress/
+  );
+});
+
 test("assertTerraformArtifactIsSafe rejects heredoc values", () => {
   assert.throws(
     () =>

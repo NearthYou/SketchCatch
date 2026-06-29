@@ -37,6 +37,7 @@ const terraformArtifactContent = "terraform { required_version = \">= 1.6.0\" }\
 const terraformArtifactSha256 = createSha256(terraformArtifactContent);
 const planBuffer = Buffer.from("approved binary tfplan");
 const tfplanSha256 = createSha256(planBuffer);
+const expectedTerraformMutationTimeoutMs = 15 * 60 * 1_000;
 
 class FakeDeploymentRepository implements DeploymentRepository {
   project: ProjectRecord | undefined = createProjectRecord();
@@ -401,7 +402,9 @@ test("runDeploymentApply applies the approved tfplan and stores state resources 
         runnerStages.push("init");
         return createRunnerResult("init");
       },
-      runTerraformApply: async () => {
+      runTerraformApply: async (_workdir, options) => {
+        assert.ok(options);
+        assert.equal(options.timeoutMs, expectedTerraformMutationTimeoutMs);
         runnerStages.push("apply");
         return createRunnerResult("apply", {
           stdout: "aws_vpc.main: Creation complete\n"
@@ -516,8 +519,25 @@ test("runDeploymentApply applies the approved tfplan and stores state resources 
     }
   ]);
   assert.deepEqual(
-    repository.logs.map((log) => log.message),
+    repository.logs
+      .filter((log) => !log.message.startsWith("[duration]"))
+      .map((log) => log.message),
     ["init ok", "aws_vpc.main: Creation complete"]
+  );
+  assert(
+    repository.logs.some((log) =>
+      log.message.startsWith("[duration] terraform lock file upload completed in ")
+    )
+  );
+  assert(
+    repository.logs.some((log) =>
+      log.message.startsWith("[duration] terraform state upload completed in ")
+    )
+  );
+  assert(
+    repository.logs.some((log) =>
+      log.message.startsWith("[duration] deployment apply result save completed in ")
+    )
   );
 });
 
@@ -617,10 +637,12 @@ test("runDeploymentApply marks apply failures failed and masks secret output", a
     /sketchcatch-terraform-apply[\\/]terraform\.tfstate$/
   );
   assert.deepEqual(
-    repository.logs.map((log) => ({
-      level: log.level,
-      message: log.message
-    })),
+    repository.logs
+      .filter((log) => !log.message.startsWith("[duration]"))
+      .map((log) => ({
+        level: log.level,
+        message: log.message
+      })),
     [
       { level: "INFO", message: "init ok" },
       { level: "ERROR", message: "[REDACTED]" },
@@ -631,6 +653,51 @@ test("runDeploymentApply marks apply failures failed and masks secret output", a
       }
     ]
   );
+  assert(
+    repository.logs.some((log) =>
+      log.message.startsWith("[duration] partial terraform state upload completed in ")
+    )
+  );
+});
+
+test("runDeploymentApply reports apply timeouts with a partial resource warning", async () => {
+  const repository = new FakeDeploymentRepository();
+  const applyArtifactStorage = new FakeApplyArtifactStorage();
+
+  const result = await runDeploymentApply(
+    {
+      deploymentId,
+      accessContext: createAccessContext()
+    },
+    repository,
+    {
+      applyArtifactStorage,
+      readTerraformArtifactFile: async () => terraformArtifactContent,
+      writePlanFile: async () => undefined,
+      prepareTerraformWorkspace: async () => ({
+        workdir: "C:/tmp/sketchcatch-terraform-apply",
+        mainFilePath: "C:/tmp/sketchcatch-terraform-apply/main.tf",
+        cleanup: async () => undefined
+      }),
+      prepareTerraformAwsCredentialEnv: async () => createPreparedCredentials(),
+      runTerraformInit: async () => createRunnerResult("init"),
+      runTerraformApply: async () =>
+        createRunnerResult("apply", {
+          exitCode: 143,
+          stdout:
+            "aws_instance.web: Still creating... [id=i-1234567890abcdef0, 00m50s elapsed]\n",
+          timedOut: true
+        })
+    }
+  );
+
+  assert.equal(result.deployment.status, "FAILED");
+  assert.equal(result.deployment.failureStage, "apply");
+  assert.equal(
+    repository.failedInput?.errorSummary,
+    "Terraform apply timed out. AWS resources may have been partially changed; verify resources before retry."
+  );
+  assert.equal(repository.failedInput?.stateObjectKey, applyArtifactStorage.stateObjectKey);
 });
 
 test("runDeploymentApply keeps successful apply as success when post-apply parsing warns", async () => {
