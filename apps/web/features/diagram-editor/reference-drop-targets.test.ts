@@ -471,7 +471,7 @@ test("DiagramEditor applies reference targets after palette drop and node drag s
   );
   assert.match(
     source,
-    /applyInnermostReferenceDropTarget\(\s*node,\s*positionedNodes,\s*terraformParameterCatalog\s*\)/
+    /applyInnermostReferenceDropTarget\(\s*node,\s*nodesWithAssignedParents,\s*terraformParameterCatalog\s*\)/
   );
 });
 

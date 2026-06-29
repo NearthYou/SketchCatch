@@ -269,6 +269,7 @@ export function getDefaultViewport(): DiagramJson["viewport"] {
 
 function cloneNode(node: DiagramNode): DiagramNode {
   const style = node.style ? { ...node.style } : undefined;
+  const metadata = node.metadata ? { ...node.metadata } : undefined;
   const parameters = node.parameters ? cloneParameters(node.parameters) : undefined;
 
   return {
@@ -276,6 +277,7 @@ function cloneNode(node: DiagramNode): DiagramNode {
     position: { ...node.position },
     size: { ...node.size },
     ...(style ? { style } : {}),
+    ...(metadata ? { metadata } : {}),
     ...(parameters ? { parameters } : {})
   };
 }

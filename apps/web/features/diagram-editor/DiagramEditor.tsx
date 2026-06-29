@@ -52,7 +52,10 @@ import { ParameterInputPanel } from "../parameter-input";
 import { terraformParameterCatalog } from "../parameter-input/catalog";
 import { ResourceSettingsPanel } from "../resource-settings";
 import { DEFAULT_DIAGRAM_VIEWPORT, EMPTY_DIAGRAM } from "./constants";
-import { applyAreaNodeMovement } from "./area-node-movement";
+import {
+  applyAreaNodeMovement,
+  applyAreaNodeParentAssignments
+} from "./area-node-movement";
 import { findInnermostAreaNodeAtPoint } from "./area-nodes";
 import { DiagramEdgeToolbar } from "./DiagramEdgeToolbar";
 import { DiagramNodeView } from "./DiagramNodeView";
@@ -749,12 +752,13 @@ function DiagramEditorInner({
 
         return position ? { ...node, position: { ...position } } : node;
       }), directlyMovedNodeIds);
-      const movedNodeIds = getMovedNodeIdsFromNodes(snapshotNodes, positionedNodes);
+      const nodesWithAssignedParents = applyAreaNodeParentAssignments(positionedNodes, directlyMovedNodeIds);
+      const movedNodeIds = getMovedNodeIdsFromNodes(snapshotNodes, nodesWithAssignedParents);
       const after = {
         ...diagramRef.current,
-        nodes: positionedNodes.map((node) =>
+        nodes: nodesWithAssignedParents.map((node) =>
           movedNodeIds.has(node.id)
-            ? applyInnermostReferenceDropTarget(node, positionedNodes, terraformParameterCatalog)
+            ? applyInnermostReferenceDropTarget(node, nodesWithAssignedParents, terraformParameterCatalog)
             : node
         )
       };
@@ -838,10 +842,14 @@ function DiagramEditorInner({
           nodesWithNextNode,
           terraformParameterCatalog
         );
+        const nodesWithAssignedParents = applyAreaNodeParentAssignments(
+          [...currentDiagram.nodes, nodeWithReferences],
+          new Set([nodeWithReferences.id])
+        );
 
         return {
           ...currentDiagram,
-          nodes: [...currentDiagram.nodes, nodeWithReferences]
+          nodes: nodesWithAssignedParents
         };
       });
       setSelectedNodeIds([nextNode.id]);

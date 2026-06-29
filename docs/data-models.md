@@ -134,11 +134,15 @@ type AwsRegionCode =
 
 type DiagramNodeMetadata = {
   awsRegion?: AwsRegionCode;
+  parentAreaNodeId?: string;
 };
 ```
 
 Region 디자인 노드의 선택 리전은 `node.metadata.awsRegion`에 region code로 저장한다.
 예: `ap-northeast-2`. 화면 label은 프론트엔드 option catalog에서 code와 매핑한다.
+
+영역 노드 안에 명시적으로 배치된 node는 `node.metadata.parentAreaNodeId`에 부모 영역 node id를 저장한다.
+이 값은 영역 이동 시 자식 node를 함께 이동시키기 위한 보드 편집 metadata이며, Terraform resource/data block 생성에는 사용하지 않는다.
 
 Terraform 변환에 필요한 값은 아래 4개다.
 
