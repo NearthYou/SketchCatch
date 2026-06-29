@@ -113,6 +113,23 @@ export type LoginRequest = {
   rememberMe: boolean;
 };
 
+export type PasswordResetRequest = {
+  email: string;
+};
+
+export type PasswordResetRequestResponse = {
+  ok: true;
+};
+
+export type PasswordResetConfirmRequest = {
+  resetToken: string;
+  newPassword: string;
+};
+
+export type PasswordResetConfirmResponse = {
+  ok: true;
+};
+
 export type RefreshTokenRequest = Record<string, never>;
 
 export type LogoutRequest = Record<string, never>;

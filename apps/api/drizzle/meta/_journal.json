@@ -106,11 +106,19 @@
       "when": 1782533207184,
       "tag": "0014_plan_artifact_source_hash",
       "breakpoints": true
-    },{
+    },
+    {
       "idx": 15,
       "version": "7",
       "when": 1782524969482,
       "tag": "0015_jazzy_plazm",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1782700000000,
+      "tag": "0018_password_reset_tokens",
       "breakpoints": true
     }
   ]
