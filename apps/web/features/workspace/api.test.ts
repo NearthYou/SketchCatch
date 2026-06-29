@@ -5,6 +5,7 @@ import {
   createAwsConnectionSetup,
   createDeployment,
   deleteAwsConnection,
+  deleteProject,
   getAwsConnectionCloudFormationTemplate,
   listDeploymentResources,
   listAwsConnections,
@@ -113,6 +114,33 @@ test("saveProjectDraft sends authenticated PUT request with diagram json", async
       }
     }
   });
+});
+
+test("deleteProject sends an authenticated DELETE request", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    restoreWindow(originalWindowDescriptor);
+  });
+
+  installAuthSession();
+
+  globalThis.fetch = async (input, init) => {
+    requests.push({ input, init });
+
+    return new Response(null, {
+      status: 204
+    });
+  };
+
+  await deleteProject(project.id);
+
+  assert.equal(String(requests[0]?.input), `/api/projects/${project.id}`);
+  assert.equal(requests[0]?.init?.method, "DELETE");
+  assert.equal(new Headers(requests[0]?.init?.headers).get("authorization"), "Bearer access-token");
 });
 
 test("createAwsConnectionSetup requests generated Role setup values", async (context) => {
