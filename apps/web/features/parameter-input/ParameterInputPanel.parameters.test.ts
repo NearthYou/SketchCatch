@@ -66,3 +66,16 @@ test("ParameterInputPanel lets users search and add hidden optional parameters",
     /setAddedOptionalParameterNames\(\(currentNames\) =>\s*currentNames\.includes\(definition\.name\)/
   );
 });
+
+test("ParameterInputPanel lets users remove advanced optional parameters and stored values", () => {
+  const source = readFileSync(parameterInputPanelPath, "utf8");
+
+  assert.match(source, /const removeAdvancedParameter = \(definition: ParameterCatalogDefinition\) => \{/);
+  assert.match(
+    source,
+    /setAddedOptionalParameterNames\(\(currentNames\) =>\s*currentNames\.filter\(\(name\) => name !== definition\.name\)\s*\);/
+  );
+  assert.match(source, /values: deleteRecordValue\(parameters\.values, definition\.name\)/);
+  assert.match(source, /onRemove=\{\(\) => removeAdvancedParameter\(definition\)\}/);
+  assert.match(source, /label=\{`\$\{definition\.label\} 삭제`\}/);
+});

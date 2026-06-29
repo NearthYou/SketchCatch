@@ -107,6 +107,10 @@ div.resourceIcon,
   line-height: 1.35;
 }
 
+.fieldActionButton {
+  margin-left: auto;
+}
+
 .requiredMark {
   color: #b91c1c;
 }
