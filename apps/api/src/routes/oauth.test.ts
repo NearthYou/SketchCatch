@@ -54,7 +54,37 @@ test("GET /api/auth/oauth/naver/start redirects to Naver authorize URL with a st
     assert.match(cookie, /Max-Age=300/);
     assert.deepEqual(readOAuthStateFromSetCookie(cookie), {
       provider: "naver",
-      state
+      state,
+      persistent: false
+    });
+  } finally {
+    restoreEnv();
+    await app.close();
+  }
+});
+
+test("GET /api/auth/oauth/naver/start stores persistent state when rememberMe is true", async () => {
+  const restoreEnv = setOAuthEnv();
+  const app = buildApp();
+
+  try {
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/auth/oauth/naver/start?rememberMe=true"
+    });
+
+    assert.equal(response.statusCode, 302);
+
+    const location = getHeaderValue(response, "location");
+    const redirectUrl = new URL(location);
+    const state = redirectUrl.searchParams.get("state");
+    const cookie = getSetCookieHeader(response, OAUTH_STATE_COOKIE_NAME);
+
+    assert.ok(state);
+    assert.deepEqual(readOAuthStateFromSetCookie(cookie), {
+      provider: "naver",
+      state,
+      persistent: true
     });
   } finally {
     restoreEnv();
@@ -93,7 +123,8 @@ test("GET /api/auth/oauth/kakao/start redirects to Kakao authorize URL with a st
     const cookie = getSetCookieHeader(response, OAUTH_STATE_COOKIE_NAME);
     assert.deepEqual(readOAuthStateFromSetCookie(cookie), {
       provider: "kakao",
-      state
+      state,
+      persistent: false
     });
   } finally {
     restoreEnv();
@@ -132,7 +163,8 @@ test("GET /api/auth/oauth/github/start redirects to GitHub authorize URL with a 
     const cookie = getSetCookieHeader(response, OAUTH_STATE_COOKIE_NAME);
     assert.deepEqual(readOAuthStateFromSetCookie(cookie), {
       provider: "github",
-      state
+      state,
+      persistent: false
     });
   } finally {
     restoreEnv();
@@ -758,7 +790,11 @@ function getCookieHeader(cookies: string[], cookieName: string): string {
   return cookie;
 }
 
-function oauthStateCookie(state: string, provider: OAuthProvider = "naver"): string {
+function oauthStateCookie(
+  state: string,
+  provider: OAuthProvider = "naver",
+  persistent = false
+): string {
   let setCookieHeader: string | undefined;
   const reply = {
     getHeader: () => undefined,
@@ -770,7 +806,8 @@ function oauthStateCookie(state: string, provider: OAuthProvider = "naver"): str
 
   setOAuthStateCookie(reply, {
     provider,
-    state
+    state,
+    persistent
   });
 
   if (!setCookieHeader) {
