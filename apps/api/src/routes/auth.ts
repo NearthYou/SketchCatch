@@ -397,22 +397,20 @@ export async function registerAuthRoutes(
       return sendUnauthorized(reply, "비밀번호 재설정 링크가 만료되었거나 이미 사용되었습니다.");
     }
 
-    await db
-      .update(users)
-      .set({
-        passwordHash: await hashPassword(body.newPassword),
-        updatedAt: now
-      })
-      .where(eq(users.id, storedToken.userId));
+    const passwordHash = await hashPassword(body.newPassword);
 
-    await db
-      .update(passwordResetTokens)
-      .set({
-        usedAt: now
-      })
-      .where(eq(passwordResetTokens.id, storedToken.id));
+    await db.transaction(async (tx) => {
+      await tx
+        .update(users)
+        .set({
+          passwordHash,
+          updatedAt: now
+        })
+        .where(eq(users.id, storedToken.userId));
 
-    await revokeActiveRefreshTokensForUser(db, storedToken.userId, now);
+      await expireActivePasswordResetTokensForUser(tx, storedToken.userId, now);
+      await revokeActiveRefreshTokensForUser(tx, storedToken.userId, now);
+    });
 
     const response: PasswordResetConfirmResponse = {
       ok: true
@@ -522,7 +520,7 @@ async function revokeRefreshToken(
 }
 
 async function revokeActiveRefreshTokensForUser(
-  db: Database,
+  db: Pick<Database, "update">,
   userId: string,
   revokedAt: Date
 ): Promise<void> {
@@ -532,6 +530,19 @@ async function revokeActiveRefreshTokensForUser(
       revokedAt
     })
     .where(and(eq(refreshTokens.userId, userId), isNull(refreshTokens.revokedAt)));
+}
+
+async function expireActivePasswordResetTokensForUser(
+  db: Pick<Database, "update">,
+  userId: string,
+  usedAt: Date
+): Promise<void> {
+  await db
+    .update(passwordResetTokens)
+    .set({
+      usedAt
+    })
+    .where(and(eq(passwordResetTokens.userId, userId), isNull(passwordResetTokens.usedAt)));
 }
 
 async function getActiveLoginLock(

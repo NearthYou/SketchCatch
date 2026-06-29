@@ -32,6 +32,7 @@ type PasswordResetTokenRow = typeof passwordResetTokens.$inferSelect;
 type UpdateCall = {
   table: unknown;
   values: Partial<UserRow & LoginAttemptRow & RefreshTokenRow & PasswordResetTokenRow>;
+  whereArgs: unknown[];
 };
 
 test("POST /api/auth/signup creates a user and session", async () => {
@@ -445,12 +446,18 @@ test("POST /api/auth/password-reset/confirm changes the password and revokes ses
 
   assert.equal(response.statusCode, 200);
   assert.deepEqual(response.json() as PasswordResetConfirmResponse, { ok: true });
+  assert.equal(fakeDb.transactionCalls, 1);
   assert.equal(fakeDb.updateCalls.length, 3);
   assert.equal(fakeDb.updateCalls[0]?.table, users);
   assert.equal(typeof fakeDb.updateCalls[0]?.values.passwordHash, "string");
   assert.notEqual(fakeDb.updateCalls[0]?.values.passwordHash, PASSWORD);
   assert.equal(fakeDb.updateCalls[1]?.table, passwordResetTokens);
   assert.ok(fakeDb.updateCalls[1]?.values.usedAt instanceof Date);
+  assert.deepEqual(collectSqlColumnNames(fakeDb.updateCalls[1]?.whereArgs[0]).sort(), [
+    "used_at",
+    "user_id"
+  ]);
+  assert.deepEqual(collectSqlParamValues(fakeDb.updateCalls[1]?.whereArgs[0]), [USER_ID]);
   assert.equal(fakeDb.updateCalls[2]?.table, refreshTokens);
   assert.ok(fakeDb.updateCalls[2]?.values.revokedAt instanceof Date);
 
@@ -908,6 +915,7 @@ class AuthScenarioFakeDb {
   loginAttemptRows: LoginAttemptRow[] = [];
   refreshTokenRows: RefreshTokenRow[] = [];
   passwordResetTokenRows: PasswordResetTokenRow[] = [];
+  transactionCalls = 0;
   updateCalls: UpdateCall[] = [];
   client: DatabaseClient;
 
@@ -944,13 +952,23 @@ class AuthScenarioFakeDb {
         set: (
           values: Partial<UserRow & LoginAttemptRow & RefreshTokenRow & PasswordResetTokenRow>
         ) => {
-          this.updateCalls.push({ table, values });
+          const updateCall: UpdateCall = { table, values, whereArgs: [] };
+          this.updateCalls.push(updateCall);
 
           return {
-            where: async () => []
+            where: async (...whereArgs: unknown[]) => {
+              updateCall.whereArgs = whereArgs;
+
+              return [];
+            }
           };
         }
-      })
+      }),
+      transaction: async <T>(callback: (tx: Database) => Promise<T>) => {
+        this.transactionCalls += 1;
+
+        return callback(this.createDb() as Database);
+      }
     };
   }
 
@@ -1006,5 +1024,64 @@ class SelectQuery {
     onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null
   ): Promise<TResult1 | TResult2> {
     return Promise.resolve(this.resolveRows()).then(onfulfilled, onrejected);
+  }
+}
+
+function collectSqlColumnNames(value: unknown): string[] {
+  const columnNames: string[] = [];
+  collectSqlConditionParts(value, {
+    onColumn: (name) => columnNames.push(name)
+  });
+
+  return columnNames;
+}
+
+function collectSqlParamValues(value: unknown): unknown[] {
+  const paramValues: unknown[] = [];
+  collectSqlConditionParts(value, {
+    onParam: (paramValue) => paramValues.push(paramValue)
+  });
+
+  return paramValues;
+}
+
+function collectSqlConditionParts(
+  value: unknown,
+  visitors: {
+    onColumn?: (name: string) => void;
+    onParam?: (value: unknown) => void;
+  }
+): void {
+  if (!value || typeof value !== "object") {
+    return;
+  }
+
+  const candidate = value as {
+    columnType?: unknown;
+    encoder?: unknown;
+    name?: unknown;
+    queryChunks?: unknown[];
+    table?: unknown;
+    value?: unknown;
+  };
+
+  if (
+    typeof candidate.name === "string" &&
+    typeof candidate.columnType === "string" &&
+    candidate.table
+  ) {
+    visitors.onColumn?.(candidate.name);
+    return;
+  }
+
+  if ("value" in candidate && candidate.encoder) {
+    visitors.onParam?.(candidate.value);
+    return;
+  }
+
+  if (Array.isArray(candidate.queryChunks)) {
+    for (const chunk of candidate.queryChunks) {
+      collectSqlConditionParts(chunk, visitors);
+    }
   }
 }
