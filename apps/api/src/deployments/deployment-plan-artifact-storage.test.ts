@@ -60,7 +60,15 @@ test("createS3DeploymentPlanArtifactStorage uploads tfplan bytes with hash and s
       Key: `deployments/${deploymentId}/plans/${planArtifactId}.tfplan`,
       Body: Buffer.from("tfplan-bytes"),
       ContentType: "application/octet-stream",
-      ServerSideEncryption: "AES256"
+      ServerSideEncryption: "AES256",
+      Metadata: {
+        "sketchcatch-deployment-id": deploymentId,
+        "sketchcatch-artifact-kind": "tfplan",
+        "sketchcatch-sha256":
+          "14d9d62b8ece2d1aefffce8c325225b4fcfb63b1a2e1436326fe62f3947daa0f"
+      },
+      Tagging: "sketchcatch-artifact=tfplan&sketchcatch-lifecycle=deployment-artifact",
+      ChecksumSHA256: "FNnWK47OLRrv/86MMlIltPz7Y7Gi4UNjJv5i85R9qg8="
     });
   } finally {
     await rm(tempDir, { recursive: true, force: true });

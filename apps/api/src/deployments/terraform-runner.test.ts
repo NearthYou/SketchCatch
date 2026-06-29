@@ -1,6 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createTerraformProcessEnv } from "./terraform-runner.js";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { createTerraformProcessEnv, runTerraformValidate } from "./terraform-runner.js";
 
 test("createTerraformProcessEnv passes only required runtime env and explicit Terraform env", () => {
   const env = createTerraformProcessEnv(
@@ -38,4 +41,28 @@ test("createTerraformProcessEnv sets a default Terraform plugin cache directory"
 
   assert.equal(env.TF_IN_AUTOMATION, "1");
   assert.match(String(env.TF_PLUGIN_CACHE_DIR), /sketchcatch-terraform-plugin-cache$/);
+});
+
+test("runTerraformValidate stops commands that exceed the output limit", async () => {
+  const workdir = await mkdtemp(join(tmpdir(), "sketchcatch-terraform-runner-test-"));
+
+  try {
+    await writeFile(
+      join(workdir, "validate"),
+      "process.stdout.write('x'.repeat(128));\n",
+      "utf8"
+    );
+
+    const result = await runTerraformValidate(workdir, {
+      terraformBinary: process.execPath,
+      maxOutputBytes: 32,
+      timeoutMs: 5_000
+    });
+
+    assert.equal(result.exitCode, 1);
+    assert.match(result.stdout, /Terraform output truncated after 32 bytes/);
+    assert.match(result.stderr, /Terraform stdout exceeded the 32 byte output limit/);
+  } finally {
+    await rm(workdir, { recursive: true, force: true });
+  }
 });
