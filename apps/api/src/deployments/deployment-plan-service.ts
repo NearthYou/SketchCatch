@@ -51,6 +51,10 @@ import {
   type TerraformRunResult
 } from "./terraform-runner.js";
 import { assertTerraformArtifactIsSafe } from "./terraform-artifact-safety.js";
+import {
+  restoreTerraformLockFile,
+  uploadTerraformLockFile
+} from "./terraform-lock-file-workspace.js";
 
 const defaultPlanFileName = "tfplan";
 
@@ -167,15 +171,22 @@ export async function runDeploymentPlan(
     assertTerraformArtifactIsSafe(terraformArtifactContent);
     const terraformArtifactSha256 = createSha256(terraformArtifactContent);
 
-    const awsCredentials = await prepareAwsCredentialsForPlan({
-      deploymentId: deployment.id,
-      awsConnection,
-      prepareTerraformAwsCredentialEnv,
-      repository,
-      markFailureRecorded: () => {
-        failureRecorded = true;
-      }
-    });
+    const [awsCredentials] = await Promise.all([
+      prepareAwsCredentialsForPlan({
+        deploymentId: deployment.id,
+        awsConnection,
+        prepareTerraformAwsCredentialEnv,
+        repository,
+        markFailureRecorded: () => {
+          failureRecorded = true;
+        }
+      }),
+      restoreTerraformLockFile({
+        deploymentId: deployment.id,
+        workspace,
+        storage: planArtifactStorage
+      })
+    ]);
 
     const wasPreMarkedRunning =
       deployment.status === "RUNNING" && input.startedFromStatus !== undefined;
@@ -222,6 +233,12 @@ export async function runDeploymentPlan(
         errorSummary: summarizeTerraformFailure("Terraform init", terraform.init)
       });
     }
+
+    await uploadTerraformLockFile({
+      deploymentId: deployment.id,
+      workspace,
+      storage: planArtifactStorage
+    });
 
     terraform.plan = await runTerraformPlan(workspace.workdir, {
       env: awsCredentials.env,

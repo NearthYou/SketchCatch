@@ -50,6 +50,10 @@ import {
   runTerraformShowJson as defaultRunTerraformShowJson,
   type TerraformRunResult
 } from "./terraform-runner.js";
+import {
+  restoreTerraformLockFile,
+  uploadTerraformLockFile
+} from "./terraform-lock-file-workspace.js";
 
 const defaultPlanFileName = "tfplan";
 
@@ -168,17 +172,23 @@ export async function runDeploymentDestroyPlan(
       terraformArtifactSha256
     });
 
-    await writeTerraformStateFile(join(workspace.workdir, "terraform.tfstate"), stateBuffer);
-
-    const awsCredentials = await prepareAwsCredentialsForDestroyPlan({
-      deploymentId: deployment.id,
-      awsConnection,
-      prepareTerraformAwsCredentialEnv,
-      repository,
-      markFailureRecorded: () => {
-        failureRecorded = true;
-      }
-    });
+    const [awsCredentials] = await Promise.all([
+      prepareAwsCredentialsForDestroyPlan({
+        deploymentId: deployment.id,
+        awsConnection,
+        prepareTerraformAwsCredentialEnv,
+        repository,
+        markFailureRecorded: () => {
+          failureRecorded = true;
+        }
+      }),
+      writeTerraformStateFile(join(workspace.workdir, "terraform.tfstate"), stateBuffer),
+      restoreTerraformLockFile({
+        deploymentId: deployment.id,
+        workspace,
+        storage: planArtifactStorage
+      })
+    ]);
     const wasPreMarkedRunning =
       deployment.status === "RUNNING" && input.startedFromStatus !== undefined;
 
@@ -223,6 +233,12 @@ export async function runDeploymentDestroyPlan(
         errorSummary: summarizeTerraformFailure("Terraform init before destroy plan", terraform.init)
       });
     }
+
+    await uploadTerraformLockFile({
+      deploymentId: deployment.id,
+      workspace,
+      storage: planArtifactStorage
+    });
 
     terraform.plan = await runTerraformDestroyPlan(workspace.workdir, {
       env: awsCredentials.env,

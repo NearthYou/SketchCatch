@@ -42,6 +42,10 @@ import {
   prepareTerraformWorkspace as defaultPrepareTerraformWorkspace,
   type PreparedTerraformWorkspace
 } from "./terraform-workspace.js";
+import {
+  restoreTerraformLockFile,
+  uploadTerraformLockFile
+} from "./terraform-lock-file-workspace.js";
 
 const defaultPlanFileName = "tfplan";
 
@@ -160,15 +164,22 @@ export async function runDeploymentApply(
       currentAwsConnection: awsConnection
     });
 
-    const awsCredentials = await prepareAwsCredentialsForApply({
-      deploymentId: deployment.id,
-      awsConnection,
-      prepareTerraformAwsCredentialEnv,
-      repository,
-      markFailureRecorded: () => {
-        failureRecorded = true;
-      }
-    });
+    const [awsCredentials] = await Promise.all([
+      prepareAwsCredentialsForApply({
+        deploymentId: deployment.id,
+        awsConnection,
+        prepareTerraformAwsCredentialEnv,
+        repository,
+        markFailureRecorded: () => {
+          failureRecorded = true;
+        }
+      }),
+      restoreTerraformLockFile({
+        deploymentId: deployment.id,
+        workspace,
+        storage: applyArtifactStorage
+      })
+    ]);
     const wasPreMarkedRunning =
       deployment.status === "RUNNING" && input.startedFromStatus !== undefined;
 
@@ -213,6 +224,12 @@ export async function runDeploymentApply(
         errorSummary: summarizeTerraformFailure("Terraform init before apply", terraform.init)
       });
     }
+
+    await uploadTerraformLockFile({
+      deploymentId: deployment.id,
+      workspace,
+      storage: applyArtifactStorage
+    });
 
     terraform.apply = await runTerraformApply(workspace.workdir, {
       env: awsCredentials.env,

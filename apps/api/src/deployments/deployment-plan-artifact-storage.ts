@@ -9,6 +9,10 @@ import {
   createDeploymentArtifactTagging,
   createS3ChecksumSha256
 } from "./deployment-artifact-security.js";
+import {
+  createS3DeploymentTerraformLockFileStorage,
+  type DeploymentTerraformLockFileStorage
+} from "./terraform-lock-file-storage.js";
 
 export type UploadDeploymentPlanArtifactInput = {
   deploymentId: string;
@@ -21,7 +25,7 @@ export type UploadedDeploymentPlanArtifact = {
   sha256: string;
 };
 
-export type DeploymentPlanArtifactStorage = {
+export type DeploymentPlanArtifactStorage = Partial<DeploymentTerraformLockFileStorage> & {
   uploadDeploymentPlanArtifact(
     input: UploadDeploymentPlanArtifactInput
   ): Promise<UploadedDeploymentPlanArtifact>;
@@ -38,8 +42,14 @@ export function createS3DeploymentPlanArtifactStorage(
 ): DeploymentPlanArtifactStorage {
   const bucketName = options.bucketName ?? requireS3BucketName();
   const s3Client = options.s3Client ?? getS3Client();
+  const terraformLockFileStorage = createS3DeploymentTerraformLockFileStorage({
+    bucketName,
+    s3Client
+  });
 
   return {
+    ...terraformLockFileStorage,
+
     async uploadDeploymentPlanArtifact(input) {
       const body = await readFile(input.planFilePath);
       const objectKey = buildDeploymentPlanArtifactObjectKey(input);
