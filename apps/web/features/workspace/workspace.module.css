@@ -1909,6 +1909,16 @@
   overflow-wrap: anywhere;
 }
 
+.deploymentPrimaryButton .deploymentButtonText,
+.deploymentDangerButton .deploymentButtonText {
+  color: #ffffff;
+}
+
+.deploymentPrimaryButton svg,
+.deploymentDangerButton svg {
+  color: #ffffff;
+}
+
 .deploymentHint {
   color: #64748b;
   font-size: 12px;
