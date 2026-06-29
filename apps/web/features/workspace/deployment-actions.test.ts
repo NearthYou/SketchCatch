@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Deployment } from "@sketchcatch/types";
 import {
+  getDefaultDeploymentPanelMode,
   getDeploymentActionState,
+  getDeploymentLogMessageTokens,
+  getDeploymentLogTone,
   shouldAutoRefreshDeployment,
   shouldShowDeploymentInfoValue
 } from "./deployment-actions";
@@ -26,6 +29,21 @@ test("successful apply deployment offers cleanup planning but not direct destroy
   assert.equal(state.canDestroy, false);
 });
 
+test("pending deployment without a current plan offers a Terraform plan action", () => {
+  const state = getDeploymentActionState(createDeployment(), "idle");
+
+  assert.equal(state.shouldShowApplyPlanButton, true);
+  assert.equal(state.canRunApplyPlan, true);
+});
+
+test("deployment panel starts on setup when no deployment exists", () => {
+  assert.equal(getDefaultDeploymentPanelMode([]), "setup");
+});
+
+test("deployment panel starts on records when deployments exist", () => {
+  assert.equal(getDefaultDeploymentPanelMode([createDeployment()]), "records");
+});
+
 test("destroy plan waits for approval before showing destroy execution", () => {
   const state = getDeploymentActionState(
     createDeployment({
@@ -42,7 +60,56 @@ test("destroy plan waits for approval before showing destroy execution", () => {
   assert.equal(state.shouldShowApprovePlanButton, true);
   assert.equal(state.canApprovePlan, true);
   assert.equal(state.approvePlanLabel, "Destroy Plan 승인");
+  assert.equal(state.shouldShowApplyPlanButton, false);
   assert.equal(state.shouldShowDestroyButton, false);
+});
+
+test("destroy plan never falls back to the Terraform apply plan action", () => {
+  const state = getDeploymentActionState(
+    createDeployment({
+      blockedBy: "missing_approval",
+      currentPlanArtifactId: "99999999-9999-4999-8999-999999999999",
+      currentPlanOperation: "destroy",
+      isBlocked: true,
+      status: "PENDING"
+    }),
+    "idle"
+  );
+
+  assert.equal(state.shouldShowApplyPlanButton, false);
+  assert.equal(state.canRunApplyPlan, false);
+  assert.equal(state.shouldShowApprovePlanButton, true);
+});
+
+test("current plan without an operation does not fall back to a Terraform plan rerun", () => {
+  const state = getDeploymentActionState(
+    createDeployment({
+      blockedBy: "missing_approval",
+      currentPlanArtifactId: "99999999-9999-4999-8999-999999999999",
+      currentPlanOperation: null,
+      isBlocked: true,
+      status: "PENDING"
+    }),
+    "idle"
+  );
+
+  assert.equal(state.shouldShowApplyPlanButton, false);
+  assert.equal(state.canRunApplyPlan, false);
+  assert.equal(state.shouldShowApprovePlanButton, true);
+});
+
+test("running Terraform work hides stale plan rerun actions", () => {
+  const state = getDeploymentActionState(
+    createDeployment({
+      currentPlanArtifactId: "99999999-9999-4999-8999-999999999999",
+      currentPlanOperation: "destroy",
+      status: "RUNNING"
+    }),
+    "idle"
+  );
+
+  assert.equal(state.shouldShowApplyPlanButton, false);
+  assert.equal(state.shouldShowDestroyPlanButton, false);
 });
 
 test("approved destroy plan enables destroy and keeps apply hidden", () => {
@@ -116,6 +183,38 @@ test("keeps meaningful deployment info values in the detail list", () => {
   assert.equal(shouldShowDeploymentInfoValue("Plan 필요"), true);
 });
 
+test("deployment log tone highlights only important log levels", () => {
+  assert.equal(getDeploymentLogTone(createDeploymentLog({ level: "ERROR", stage: "apply" })), "error");
+  assert.equal(getDeploymentLogTone(createDeploymentLog({ level: "WARN", stage: "plan" })), "warning");
+  assert.equal(getDeploymentLogTone(createDeploymentLog({ level: "INFO", stage: "destroy" })), "default");
+  assert.equal(getDeploymentLogTone(createDeploymentLog({ level: "INFO", stage: "apply" })), "default");
+  assert.equal(getDeploymentLogTone(createDeploymentLog({ level: "INFO", stage: "plan" })), "default");
+  assert.equal(getDeploymentLogTone(createDeploymentLog({ level: "INFO", stage: "init" })), "default");
+});
+
+test("deployment log message tokens highlight Terraform signals without coloring everything", () => {
+  assert.deepEqual(
+    getDeploymentLogMessageTokens(
+      'aws_vpc.main: Creation complete after 11s [id=vpc-0e88956e55c0cb2b2]'
+    ),
+    [
+      { text: "aws_vpc.main", tone: "resource" },
+      { text: ": ", tone: "plain" },
+      { text: "Creation complete", tone: "operation" },
+      { text: " after 11s ", tone: "plain" },
+      { text: "[id=vpc-0e88956e55c0cb2b2]", tone: "metadata" }
+    ]
+  );
+  assert.deepEqual(
+    getDeploymentLogMessageTokens('ec2_public_ip = "15.165.43.171"'),
+    [
+      { text: "ec2_public_ip", tone: "output" },
+      { text: " = ", tone: "plain" },
+      { text: '"15.165.43.171"', tone: "string" }
+    ]
+  );
+});
+
 function createDeployment(
   overrides: Partial<Deployment> & {
     readonly approved?: boolean;
@@ -157,6 +256,16 @@ function createDeployment(
     cancelledAt: null,
     createdAt: "2026-06-26T00:00:00.000Z",
     updatedAt: "2026-06-26T00:00:00.000Z",
+    ...overrides
+  };
+}
+
+function createDeploymentLog(
+  overrides: Partial<Parameters<typeof getDeploymentLogTone>[0]> = {}
+): Parameters<typeof getDeploymentLogTone>[0] {
+  return {
+    level: "INFO",
+    stage: "init",
     ...overrides
   };
 }

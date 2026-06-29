@@ -24,6 +24,7 @@ import {
   GalleryVerticalEnd,
   GitBranch,
   ListTree,
+  Maximize2,
   MoreHorizontal,
   PanelRightClose,
   PanelRightOpen,
@@ -58,9 +59,14 @@ import {
   validateTerraformCode
 } from "./api";
 import {
+  getDefaultDeploymentPanelMode,
   getDeploymentActionState,
+  getDeploymentLogMessageTokens,
+  getDeploymentLogTone,
   shouldAutoRefreshDeployment,
-  shouldShowDeploymentInfoValue
+  shouldShowDeploymentInfoValue,
+  type DeploymentLogMessageToken,
+  type DeploymentPanelMode
 } from "./deployment-actions";
 import { WorkspaceAiPanel } from "./WorkspaceAiPanel";
 import styles from "./workspace.module.css";
@@ -1207,6 +1213,8 @@ function DeploymentPanel({
   const [showDestroyConfirmation, setShowDestroyConfirmation] = useState(false);
   const [requestState, setRequestState] = useState<RequestState>("idle");
   const [errorMessage, setErrorMessage] = useState("");
+  const [deploymentPanelMode, setDeploymentPanelMode] = useState<DeploymentPanelMode>("setup");
+  const [isDeploymentExpanded, setIsDeploymentExpanded] = useState(false);
 
   const verifiedAwsConnections = useMemo(
     () => awsConnections.filter((connection) => connection.status === "verified"),
@@ -1231,6 +1239,8 @@ function DeploymentPanel({
     () => deployments.find((deployment) => deployment.id === selectedDeploymentId) ?? null,
     [deployments, selectedDeploymentId]
   );
+  const hasDeploymentRecords = deployments.length > 0;
+  const compactDeploymentPanelMode = hasDeploymentRecords ? deploymentPanelMode : "setup";
   const canCreateDeployment =
     selectedArchitectureId.length > 0 &&
     selectedTerraformArtifactId.length > 0 &&
@@ -1346,6 +1356,7 @@ function DeploymentPanel({
         setSelectedTerraformArtifactId((currentId) => currentId || latestTerraformArtifact?.id || "");
         setSelectedAwsConnectionId((currentId) => currentId || latestVerifiedConnection?.id || "");
         setSelectedDeploymentId((currentId) => currentId || latestDeployment?.id || "");
+        setDeploymentPanelMode(getDefaultDeploymentPanelMode(nextDeployments));
       }, "배포 정보를 불러오지 못했습니다.");
     }
 
@@ -1355,6 +1366,15 @@ function DeploymentPanel({
       cancelled = true;
     };
   }, [projectId]);
+
+  useEffect(() => {
+    if (deployments.length > 0) {
+      return;
+    }
+
+    setDeploymentPanelMode("setup");
+    setIsDeploymentExpanded(false);
+  }, [deployments.length]);
 
   useEffect(() => {
     if (!selectedDeploymentId) {
@@ -1503,6 +1523,7 @@ function DeploymentPanel({
 
       setDeployments((currentDeployments) => [deployment, ...currentDeployments]);
       setSelectedDeploymentId(deployment.id);
+      setDeploymentPanelMode("records");
       setDeploymentLogs([]);
       setDeploymentResources([]);
       setTerraformOutputs([]);
@@ -1663,387 +1684,480 @@ function DeploymentPanel({
     }, "배포 상태를 새로고침하지 못했습니다.");
   }
 
-  return (
-    <div className={styles.deploymentPanel}>
-      <header className={styles.deploymentHeader}>
-        <p className={styles.projectEyebrow}>Deployment</p>
-        <h2>{projectName}</h2>
-        <span>{currentNodeCount} board nodes</span>
-      </header>
+  const renderSetupSection = () => (
+    <section className={styles.deploymentSection}>
+      <label className={styles.deploymentField}>
+        Architecture snapshot
+        <select
+          onChange={(event) => setSelectedArchitectureId(event.target.value)}
+          value={selectedArchitectureId}
+        >
+          {(projectDetails?.architectures ?? []).length === 0 ? (
+            <option value="">저장된 snapshot 없음</option>
+          ) : (
+            projectDetails?.architectures.map((architecture) => (
+              <option key={architecture.id} value={architecture.id}>
+                v{architecture.version} | {architecture.source} | {formatDate(architecture.createdAt)}
+              </option>
+            ))
+          )}
+        </select>
+      </label>
 
-      <section className={styles.deploymentSection}>
-        <label className={styles.deploymentField}>
-          Architecture snapshot
-          <select
-            onChange={(event) => setSelectedArchitectureId(event.target.value)}
-            value={selectedArchitectureId}
-          >
-            {(projectDetails?.architectures ?? []).length === 0 ? (
-              <option value="">저장된 snapshot 없음</option>
-            ) : (
-              projectDetails?.architectures.map((architecture) => (
-                <option key={architecture.id} value={architecture.id}>
-                  v{architecture.version} | {architecture.source} | {formatDate(architecture.createdAt)}
-                </option>
-              ))
-            )}
-          </select>
-        </label>
+      <label className={styles.deploymentField}>
+        Terraform artifact
+        <select
+          disabled={architectureTerraformArtifacts.length === 0}
+          onChange={(event) => setSelectedTerraformArtifactId(event.target.value)}
+          value={selectedTerraformArtifactId}
+        >
+          {architectureTerraformArtifacts.length === 0 ? (
+            <option value="">Terraform artifact 없음</option>
+          ) : (
+            architectureTerraformArtifacts.map((artifact) => (
+              <option key={artifact.id} value={artifact.id}>
+                {artifact.fileName} | {formatDate(artifact.createdAt)}
+              </option>
+            ))
+          )}
+        </select>
+      </label>
 
-        <label className={styles.deploymentField}>
-          Terraform artifact
-          <select
-            disabled={architectureTerraformArtifacts.length === 0}
-            onChange={(event) => setSelectedTerraformArtifactId(event.target.value)}
-            value={selectedTerraformArtifactId}
-          >
-            {architectureTerraformArtifacts.length === 0 ? (
-              <option value="">Terraform artifact 없음</option>
-            ) : (
-              architectureTerraformArtifacts.map((artifact) => (
-                <option key={artifact.id} value={artifact.id}>
-                  {artifact.fileName} | {formatDate(artifact.createdAt)}
-                </option>
-              ))
-            )}
-          </select>
-        </label>
+      <label className={styles.deploymentField}>
+        AWS connection
+        <select
+          disabled={verifiedAwsConnections.length === 0}
+          onChange={(event) => setSelectedAwsConnectionId(event.target.value)}
+          value={selectedAwsConnectionId}
+        >
+          {verifiedAwsConnections.length === 0 ? (
+            <option value="">검증된 AWS 연결 없음</option>
+          ) : (
+            verifiedAwsConnections.map((connection) => (
+              <option key={connection.id} value={connection.id}>
+                {connection.accountId} | {connection.region}
+              </option>
+            ))
+          )}
+        </select>
+      </label>
 
-        <label className={styles.deploymentField}>
-          AWS connection
-          <select
-            disabled={verifiedAwsConnections.length === 0}
-            onChange={(event) => setSelectedAwsConnectionId(event.target.value)}
-            value={selectedAwsConnectionId}
-          >
-            {verifiedAwsConnections.length === 0 ? (
-              <option value="">검증된 AWS 연결 없음</option>
-            ) : (
-              verifiedAwsConnections.map((connection) => (
-                <option key={connection.id} value={connection.id}>
-                  {connection.accountId} | {connection.region}
-                </option>
-              ))
-            )}
-          </select>
-        </label>
+      <button
+        className={styles.deploymentPrimaryButton}
+        disabled={!canCreateDeployment}
+        onClick={createProjectDeployment}
+        type="button"
+      >
+        <DashboardIcon name="rocket" />
+        Deployment 생성
+      </button>
 
+      {!selectedArchitectureId ? <p className={styles.deploymentHint}>먼저 architecture snapshot이 필요합니다.</p> : null}
+      {!selectedTerraformArtifactId ? <p className={styles.deploymentHint}>Terraform artifact가 있어야 Plan을 실행할 수 있습니다.</p> : null}
+      {!selectedAwsConnectionId ? (
+        <p className={styles.deploymentHint}>환경설정에서 AWS 계정을 연결하고 검증해주세요.</p>
+      ) : null}
+    </section>
+  );
+
+  const renderRecordsSection = () => (
+    <section className={styles.deploymentSection}>
+      <div className={styles.deploymentSectionHeader}>
+        <h3>Deployment records</h3>
+        <button
+          className={styles.deploymentSecondaryButton}
+          disabled={requestState === "loading"}
+          onClick={refreshDeploymentPanel}
+          type="button"
+        >
+          새로고침
+        </button>
+      </div>
+
+      <label className={styles.deploymentField}>
+        실행 기록
+        <select
+          disabled={deployments.length === 0}
+          onChange={(event) => setSelectedDeploymentId(event.target.value)}
+          value={selectedDeploymentId}
+        >
+          {deployments.length === 0 ? (
+            <option value="">Deployment 없음</option>
+          ) : (
+            deployments.map((deployment) => (
+              <option key={deployment.id} value={deployment.id}>
+                {deployment.status} | {formatDate(deployment.createdAt)}
+              </option>
+            ))
+          )}
+        </select>
+      </label>
+
+      {selectedDeployment ? (
+        <div className={styles.deploymentSummary}>
+          <InfoRow label="Status" value={selectedDeployment.status} />
+          <OptionalInfoRow label="Active stage" value={selectedDeployment.activeStage} />
+          <OptionalInfoRow
+            label="Started at"
+            value={formatOptionalDate(selectedDeployment.startedAt)}
+          />
+          <OptionalInfoRow
+            label="Completed at"
+            value={formatOptionalDate(selectedDeployment.completedAt)}
+          />
+          <OptionalInfoRow label="Failed at" value={formatOptionalDate(selectedDeployment.failedAt)} />
+          <OptionalInfoRow
+            label="Cancel requested"
+            value={formatOptionalDate(selectedDeployment.cancelRequestedAt)}
+          />
+          <OptionalInfoRow
+            label="Cancelled at"
+            value={formatOptionalDate(selectedDeployment.cancelledAt)}
+          />
+          <OptionalInfoRow label="Current plan" value={selectedDeployment.currentPlanArtifactId} />
+          <InfoRow label="Blocked" value={selectedDeployment.isBlocked ? "yes" : "no"} />
+          <OptionalInfoRow label="Blocked by" value={selectedDeployment.blockedBy} />
+          <OptionalInfoRow label="Reason" value={selectedDeployment.blockedReason} />
+          <InfoRow label="Approval" value={formatApprovalState(selectedDeployment)} />
+          {selectedDeployment.planSummary ? (
+            <PlanSummaryRows deployment={selectedDeployment} />
+          ) : null}
+          {selectedDeployment.approvedAt ? (
+            <>
+              <InfoRow label="Approved at" value={formatDate(selectedDeployment.approvedAt)} />
+              <OptionalInfoRow
+                label="Approved plan"
+                value={selectedDeployment.approvedPlanArtifactId}
+              />
+              <OptionalInfoRow
+                label="tfplan hash"
+                value={formatShortHash(selectedDeployment.approvedTfplanHash)}
+              />
+              <OptionalInfoRow
+                label="Artifact hash"
+                value={formatShortHash(selectedDeployment.approvedTerraformArtifactHash)}
+              />
+              <OptionalInfoRow
+                label="AWS account"
+                value={selectedDeployment.approvedAwsAccountId}
+              />
+              <OptionalInfoRow
+                label="AWS region"
+                value={selectedDeployment.approvedAwsRegion}
+              />
+            </>
+          ) : null}
+          <OptionalInfoRow label="State object" value={selectedDeployment.stateObjectKey} />
+          <OptionalInfoRow
+            label="Result warning"
+            value={selectedDeployment.resultWarningSummary}
+          />
+          <OptionalInfoRow label="Error" value={selectedDeployment.errorSummary} />
+        </div>
+      ) : null}
+
+      {shouldShowApprovePlanButton ? (
         <button
           className={styles.deploymentPrimaryButton}
-          disabled={!canCreateDeployment}
-          onClick={createProjectDeployment}
+          disabled={!canApprovePlan}
+          onClick={approveCurrentPlan}
+          type="button"
+        >
+          <ClipboardCheck size={16} aria-hidden="true" />
+          {deploymentActions.approvePlanLabel}
+        </button>
+      ) : null}
+
+      {shouldShowPlanButton ? (
+        <button
+          className={styles.deploymentSecondaryButton}
+          disabled={!canRunPlan}
+          onClick={startTerraformPlan}
+          type="button"
+        >
+          <DashboardIcon name="server" />
+          {hasCurrentPlan ? "Terraform Plan 다시 실행" : "Terraform Plan 실행"}
+        </button>
+      ) : null}
+
+      {shouldShowApplyButton ? (
+        <button
+          className={styles.deploymentPrimaryButton}
+          disabled={!canApply}
+          onClick={() => setShowApplyConfirmation(true)}
           type="button"
         >
           <DashboardIcon name="rocket" />
-          Deployment 생성
+          Terraform Apply 실행
         </button>
+      ) : null}
 
-        {!selectedArchitectureId ? <p className={styles.deploymentHint}>먼저 architecture snapshot이 필요합니다.</p> : null}
-        {!selectedTerraformArtifactId ? <p className={styles.deploymentHint}>Terraform artifact가 있어야 Plan을 실행할 수 있습니다.</p> : null}
-        {!selectedAwsConnectionId ? (
-          <p className={styles.deploymentHint}>환경설정에서 AWS 계정을 연결하고 검증해주세요.</p>
-        ) : null}
-      </section>
+      {shouldShowDestroyPlanButton ? (
+        <button
+          className={styles.deploymentSecondaryButton}
+          disabled={!canRunDestroyPlan}
+          onClick={startTerraformDestroyPlan}
+          type="button"
+        >
+          <Trash2 size={16} aria-hidden="true" />
+          {selectedDeployment?.currentPlanOperation === "destroy"
+            ? "Destroy Plan 다시 실행"
+            : "Cleanup Destroy Plan 실행"}
+        </button>
+      ) : null}
 
-      <section className={styles.deploymentSection}>
-        <div className={styles.deploymentSectionHeader}>
-          <h3>Deployment records</h3>
-          <button
-            className={styles.deploymentSecondaryButton}
-            disabled={requestState === "loading"}
-            onClick={refreshDeploymentPanel}
-            type="button"
-          >
-            새로고침
-          </button>
+      {shouldShowDestroyButton ? (
+        <button
+          className={styles.deploymentDangerButton}
+          disabled={!canDestroy}
+          onClick={() => setShowDestroyConfirmation(true)}
+          type="button"
+        >
+          <Trash2 size={16} aria-hidden="true" />
+          Terraform Destroy 실행
+        </button>
+      ) : null}
+
+      {selectedDeployment?.status === "RUNNING" ? (
+        <button
+          className={styles.deploymentSecondaryButton}
+          disabled={!canCancelDeployment}
+          onClick={cancelSelectedDeployment}
+          type="button"
+        >
+          실행 취소 요청
+        </button>
+      ) : null}
+
+      {selectedDeployment && showApplyConfirmation ? (
+        <div className={styles.deploymentApplyConfirm}>
+          <h3>Apply 확인</h3>
+          <InfoRow
+            label="AWS account"
+            value={selectedDeployment.approvedAwsAccountId ?? "없음"}
+          />
+          <InfoRow label="AWS region" value={selectedDeployment.approvedAwsRegion ?? "없음"} />
+          {selectedDeployment.planSummary ? (
+            <InfoRow
+              label="Plan changes"
+              value={`+${selectedDeployment.planSummary.createCount} ~${selectedDeployment.planSummary.updateCount} -${selectedDeployment.planSummary.deleteCount} +/-${selectedDeployment.planSummary.replaceCount}`}
+            />
+          ) : null}
+          <p>
+            이번 MVP Apply는 VPC, Public Subnet, Internet Gateway, Route Table, Security Group,
+            EC2, S3 Bucket 범위만 실행합니다. 실행 후 AWS 비용이 발생할 수 있으니 실습 완료
+            후 콘솔에서 리소스를 직접 확인하고 정리하세요.
+          </p>
+          <div className={styles.deploymentApplyActions}>
+            <button
+              className={styles.deploymentSecondaryButton}
+              disabled={requestState === "loading"}
+              onClick={() => setShowApplyConfirmation(false)}
+              type="button"
+            >
+              취소
+            </button>
+            <button
+              className={styles.deploymentPrimaryButton}
+              disabled={!canApply}
+              onClick={startTerraformApply}
+              type="button"
+            >
+              <DashboardIcon name="rocket" />
+              <span className={styles.deploymentButtonText}>AWS 리소스 생성</span>
+            </button>
+          </div>
         </div>
+      ) : null}
 
-        <label className={styles.deploymentField}>
-          실행 기록
-          <select
-            disabled={deployments.length === 0}
-            onChange={(event) => setSelectedDeploymentId(event.target.value)}
-            value={selectedDeploymentId}
-          >
-            {deployments.length === 0 ? (
-              <option value="">Deployment 없음</option>
-            ) : (
-              deployments.map((deployment) => (
-                <option key={deployment.id} value={deployment.id}>
-                  {deployment.status} | {formatDate(deployment.createdAt)}
-                </option>
-              ))
-            )}
-          </select>
-        </label>
-
-        {selectedDeployment ? (
-          <div className={styles.deploymentSummary}>
-            <InfoRow label="Status" value={selectedDeployment.status} />
-            <OptionalInfoRow label="Active stage" value={selectedDeployment.activeStage} />
-            <OptionalInfoRow
-              label="Started at"
-              value={formatOptionalDate(selectedDeployment.startedAt)}
-            />
-            <OptionalInfoRow
-              label="Completed at"
-              value={formatOptionalDate(selectedDeployment.completedAt)}
-            />
-            <OptionalInfoRow label="Failed at" value={formatOptionalDate(selectedDeployment.failedAt)} />
-            <OptionalInfoRow
-              label="Cancel requested"
-              value={formatOptionalDate(selectedDeployment.cancelRequestedAt)}
-            />
-            <OptionalInfoRow
-              label="Cancelled at"
-              value={formatOptionalDate(selectedDeployment.cancelledAt)}
-            />
-            <OptionalInfoRow label="Current plan" value={selectedDeployment.currentPlanArtifactId} />
-            <InfoRow label="Blocked" value={selectedDeployment.isBlocked ? "yes" : "no"} />
-            <OptionalInfoRow label="Blocked by" value={selectedDeployment.blockedBy} />
-            <OptionalInfoRow label="Reason" value={selectedDeployment.blockedReason} />
-            <InfoRow label="Approval" value={formatApprovalState(selectedDeployment)} />
-            {selectedDeployment.planSummary ? (
-              <PlanSummaryRows deployment={selectedDeployment} />
-            ) : null}
-            {selectedDeployment.approvedAt ? (
-              <>
-                <InfoRow label="Approved at" value={formatDate(selectedDeployment.approvedAt)} />
-                <OptionalInfoRow
-                  label="Approved plan"
-                  value={selectedDeployment.approvedPlanArtifactId}
-                />
-                <OptionalInfoRow
-                  label="tfplan hash"
-                  value={formatShortHash(selectedDeployment.approvedTfplanHash)}
-                />
-                <OptionalInfoRow
-                  label="Artifact hash"
-                  value={formatShortHash(selectedDeployment.approvedTerraformArtifactHash)}
-                />
-                <OptionalInfoRow
-                  label="AWS account"
-                  value={selectedDeployment.approvedAwsAccountId}
-                />
-                <OptionalInfoRow
-                  label="AWS region"
-                  value={selectedDeployment.approvedAwsRegion}
-                />
-              </>
-            ) : null}
-            <OptionalInfoRow label="State object" value={selectedDeployment.stateObjectKey} />
-            <OptionalInfoRow
-              label="Result warning"
-              value={selectedDeployment.resultWarningSummary}
-            />
-            <OptionalInfoRow label="Error" value={selectedDeployment.errorSummary} />
-          </div>
-        ) : null}
-
-        {shouldShowPlanButton ? (
-          <button
-            className={styles.deploymentPrimaryButton}
-            disabled={!canRunPlan}
-            onClick={startTerraformPlan}
-            type="button"
-          >
-            <DashboardIcon name="server" />
-            {hasCurrentPlan ? "Terraform Plan 다시 실행" : "Terraform Plan 실행"}
-          </button>
-        ) : null}
-
-        {shouldShowApprovePlanButton ? (
-          <button
-            className={styles.deploymentSecondaryButton}
-            disabled={!canApprovePlan}
-            onClick={approveCurrentPlan}
-            type="button"
-          >
-            {deploymentActions.approvePlanLabel}
-          </button>
-        ) : null}
-
-        {shouldShowApplyButton ? (
-          <button
-            className={styles.deploymentPrimaryButton}
-            disabled={!canApply}
-            onClick={() => setShowApplyConfirmation(true)}
-            type="button"
-          >
-            <DashboardIcon name="rocket" />
-            Terraform Apply 실행
-          </button>
-        ) : null}
-
-        {shouldShowDestroyPlanButton ? (
-          <button
-            className={styles.deploymentSecondaryButton}
-            disabled={!canRunDestroyPlan}
-            onClick={startTerraformDestroyPlan}
-            type="button"
-          >
-            <Trash2 size={16} aria-hidden="true" />
-            {selectedDeployment?.currentPlanOperation === "destroy"
-              ? "Destroy Plan 다시 실행"
-              : "Cleanup Destroy Plan 실행"}
-          </button>
-        ) : null}
-
-        {shouldShowDestroyButton ? (
-          <button
-            className={styles.deploymentDangerButton}
-            disabled={!canDestroy}
-            onClick={() => setShowDestroyConfirmation(true)}
-            type="button"
-          >
-            <Trash2 size={16} aria-hidden="true" />
-            Terraform Destroy 실행
-          </button>
-        ) : null}
-
-        {selectedDeployment?.status === "RUNNING" ? (
-          <button
-            className={styles.deploymentSecondaryButton}
-            disabled={!canCancelDeployment}
-            onClick={cancelSelectedDeployment}
-            type="button"
-          >
-            실행 취소 요청
-          </button>
-        ) : null}
-
-        {selectedDeployment && showApplyConfirmation ? (
-          <div className={styles.deploymentApplyConfirm}>
-            <h3>Apply 확인</h3>
+      {selectedDeployment && showDestroyConfirmation ? (
+        <div className={styles.deploymentDestroyConfirm}>
+          <h3>Destroy 확인</h3>
+          <InfoRow
+            label="AWS account"
+            value={selectedDeployment.approvedAwsAccountId ?? "없음"}
+          />
+          <InfoRow label="AWS region" value={selectedDeployment.approvedAwsRegion ?? "없음"} />
+          {selectedDeployment.planSummary ? (
             <InfoRow
-              label="AWS account"
-              value={selectedDeployment.approvedAwsAccountId ?? "없음"}
+              label="Destroy changes"
+              value={`+${selectedDeployment.planSummary.createCount} ~${selectedDeployment.planSummary.updateCount} -${selectedDeployment.planSummary.deleteCount} +/-${selectedDeployment.planSummary.replaceCount}`}
             />
-            <InfoRow label="AWS region" value={selectedDeployment.approvedAwsRegion ?? "없음"} />
-            {selectedDeployment.planSummary ? (
-              <InfoRow
-                label="Plan changes"
-                value={`+${selectedDeployment.planSummary.createCount} ~${selectedDeployment.planSummary.updateCount} -${selectedDeployment.planSummary.deleteCount} +/-${selectedDeployment.planSummary.replaceCount}`}
-              />
-            ) : null}
-            <p>
-              이번 MVP Apply는 VPC, Public Subnet, Internet Gateway, Route Table, Security Group,
-              EC2, S3 Bucket 범위만 실행합니다. 실행 후 AWS 비용이 발생할 수 있으니 실습 완료
-              후 콘솔에서 리소스를 직접 확인하고 정리하세요.
-            </p>
-            <div className={styles.deploymentApplyActions}>
-              <button
-                className={styles.deploymentSecondaryButton}
-                disabled={requestState === "loading"}
-                onClick={() => setShowApplyConfirmation(false)}
-                type="button"
-              >
-                취소
-              </button>
-              <button
-                className={styles.deploymentPrimaryButton}
-                disabled={!canApply}
-                onClick={startTerraformApply}
-                type="button"
-              >
-                <DashboardIcon name="rocket" />
-                실제 AWS 리소스 생성
-              </button>
-            </div>
+          ) : null}
+          <p>
+            승인된 Destroy Plan을 실제 AWS에 적용합니다. 실행 후 삭제된 리소스는 SketchCatch에서
+            `DESTROYED` 상태로 정리됩니다.
+          </p>
+          <div className={styles.deploymentApplyActions}>
+            <button
+              className={styles.deploymentSecondaryButton}
+              disabled={requestState === "loading"}
+              onClick={() => setShowDestroyConfirmation(false)}
+              type="button"
+            >
+              취소
+            </button>
+            <button
+              className={styles.deploymentDangerButton}
+              disabled={!canDestroy}
+              onClick={startTerraformDestroy}
+              type="button"
+            >
+              <Trash2 size={16} aria-hidden="true" />
+              <span className={styles.deploymentButtonText}>AWS 리소스 삭제</span>
+            </button>
           </div>
-        ) : null}
+        </div>
+      ) : null}
 
-        {selectedDeployment && showDestroyConfirmation ? (
-          <div className={styles.deploymentDestroyConfirm}>
-            <h3>Destroy 확인</h3>
-            <InfoRow
-              label="AWS account"
-              value={selectedDeployment.approvedAwsAccountId ?? "없음"}
-            />
-            <InfoRow label="AWS region" value={selectedDeployment.approvedAwsRegion ?? "없음"} />
-            {selectedDeployment.planSummary ? (
-              <InfoRow
-                label="Destroy changes"
-                value={`+${selectedDeployment.planSummary.createCount} ~${selectedDeployment.planSummary.updateCount} -${selectedDeployment.planSummary.deleteCount} +/-${selectedDeployment.planSummary.replaceCount}`}
-              />
-            ) : null}
-            <p>
-              승인된 Destroy Plan을 실제 AWS에 적용합니다. 실행 후 삭제된 리소스는 SketchCatch에서
-              `DESTROYED` 상태로 정리됩니다.
-            </p>
-            <div className={styles.deploymentApplyActions}>
-              <button
-                className={styles.deploymentSecondaryButton}
-                disabled={requestState === "loading"}
-                onClick={() => setShowDestroyConfirmation(false)}
-                type="button"
-              >
-                취소
-              </button>
-              <button
-                className={styles.deploymentDangerButton}
-                disabled={!canDestroy}
-                onClick={startTerraformDestroy}
-                type="button"
-              >
-                <Trash2 size={16} aria-hidden="true" />
-                실제 AWS 리소스 삭제
-              </button>
-            </div>
-          </div>
-        ) : null}
+      {deploymentActionHint ? (
+        <p className={styles.deploymentHint}>{deploymentActionHint}</p>
+      ) : null}
+    </section>
+  );
 
-        {deploymentActionHint ? (
-          <p className={styles.deploymentHint}>{deploymentActionHint}</p>
-        ) : null}
-      </section>
+  const renderResultsSection = () => (
+    <section className={styles.deploymentSection}>
+      <h3>Apply results</h3>
+      {deploymentResources.length === 0 ? (
+        <p className={styles.deploymentHint}>아직 기록된 AWS 리소스가 없습니다.</p>
+      ) : (
+        <div className={styles.deploymentResultRows}>
+          {deploymentResources.map((resource) => (
+            <article className={styles.deploymentResultRow} key={resource.id}>
+              <strong>{resource.terraformAddress}</strong>
+              <span className={styles.deploymentResultMeta}>{resource.terraformType}</span>
+              <span className={styles.deploymentResultValue}>{resource.resourceId ?? "resource id 없음"}</span>
+            </article>
+          ))}
+        </div>
+      )}
+      {terraformOutputs.length === 0 ? (
+        <p className={styles.deploymentHint}>Terraform output이 없습니다.</p>
+      ) : (
+        <div className={styles.deploymentResultRows}>
+          {terraformOutputs.map((output) => (
+            <article className={styles.deploymentResultRow} key={output.id}>
+              <strong>{output.name}</strong>
+              <span className={styles.deploymentResultMeta}>{output.sensitive ? "sensitive" : "plain"}</span>
+              <span className={styles.deploymentResultValue}>{formatOutputValue(output)}</span>
+            </article>
+          ))}
+        </div>
+      )}
+    </section>
+  );
 
-      <section className={styles.deploymentSection}>
-        <h3>Apply results</h3>
-        {deploymentResources.length === 0 ? (
-          <p className={styles.deploymentHint}>아직 기록된 AWS 리소스가 없습니다.</p>
-        ) : (
-          <div className={styles.deploymentResultList}>
-            {deploymentResources.map((resource) => (
-              <div key={resource.id}>
-                <strong>{resource.terraformAddress}</strong>
-                <span>{resource.terraformType}</span>
-                <span>{resource.resourceId ?? "resource id 없음"}</span>
-              </div>
-            ))}
-          </div>
-        )}
-        {terraformOutputs.length === 0 ? (
-          <p className={styles.deploymentHint}>Terraform output이 없습니다.</p>
-        ) : (
-          <div className={styles.deploymentResultList}>
-            {terraformOutputs.map((output) => (
-              <div key={output.id}>
-                <strong>{output.name}</strong>
-                <span>{output.sensitive ? "sensitive" : "plain"}</span>
-                <span>{formatOutputValue(output)}</span>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
+  const renderLogsSection = () => (
+    <section className={styles.deploymentSection}>
+      <h3>Logs</h3>
+      <DeploymentLogList logs={deploymentLogs} />
+    </section>
+  );
 
-      <section className={styles.deploymentSection}>
-        <h3>Logs</h3>
-        {deploymentLogs.length === 0 ? (
-          <p className={styles.deploymentHint}>아직 표시할 로그가 없습니다.</p>
-        ) : (
-          <pre aria-label="Deployment logs" className={styles.deploymentLogConsole}>
-            {deploymentLogs.map(formatDeploymentLogLine).join("\n")}
-          </pre>
-        )}
-      </section>
-
+  const renderStatusMessages = () => (
+    <>
       {requestState === "loading" ? <p className={styles.deploymentNotice}>요청을 처리하는 중입니다.</p> : null}
       {requestState === "error" ? (
         <p className={styles.deploymentError} role="alert">
           {errorMessage}
         </p>
+      ) : null}
+    </>
+  );
+
+  return (
+    <div className={styles.deploymentPanel}>
+      <header className={styles.deploymentHeader}>
+        <div className={styles.deploymentHeaderTop}>
+          <div>
+            <p className={styles.projectEyebrow}>Deployment</p>
+            <h2>{projectName}</h2>
+            <span>{currentNodeCount} board nodes</span>
+          </div>
+          <button
+            aria-label="Deployment 패널 확장"
+            className={styles.deploymentExpandButton}
+            onClick={() => setIsDeploymentExpanded(true)}
+            type="button"
+          >
+            <Maximize2 size={16} aria-hidden="true" />
+          </button>
+        </div>
+      </header>
+
+      <div className={styles.deploymentPanelContent}>
+        {compactDeploymentPanelMode === "setup" ? renderSetupSection() : null}
+
+        {compactDeploymentPanelMode === "records" ? (
+          <>
+            {renderRecordsSection()}
+            {renderResultsSection()}
+          </>
+        ) : null}
+
+        {renderStatusMessages()}
+      </div>
+
+      {hasDeploymentRecords ? (
+        <div className={styles.deploymentModeSwitch} role="group" aria-label="Deployment 화면 전환">
+          <button
+            className={`${styles.deploymentModeButton} ${
+              compactDeploymentPanelMode === "setup" ? styles.deploymentModeButtonActive : ""
+            }`}
+            onClick={() => setDeploymentPanelMode("setup")}
+            type="button"
+          >
+            Deployment 생성
+          </button>
+          <button
+            className={`${styles.deploymentModeButton} ${
+              compactDeploymentPanelMode === "records" ? styles.deploymentModeButtonActive : ""
+            }`}
+            onClick={() => setDeploymentPanelMode("records")}
+            type="button"
+          >
+            Records
+          </button>
+        </div>
+      ) : null}
+
+      {isDeploymentExpanded ? (
+        <div
+          aria-label="Deployment console"
+          aria-modal="true"
+          className={styles.deploymentExpandedOverlay}
+          role="dialog"
+        >
+          <div className={styles.deploymentExpandedShell}>
+            <header className={styles.deploymentExpandedHeader}>
+              <div>
+                <p className={styles.projectEyebrow}>Deployment</p>
+                <h2>{projectName}</h2>
+                <span>{currentNodeCount} board nodes</span>
+              </div>
+              <button
+                aria-label="Deployment 패널 닫기"
+                className={styles.deploymentExpandButton}
+                onClick={() => setIsDeploymentExpanded(false)}
+                type="button"
+              >
+                <X size={18} aria-hidden="true" />
+              </button>
+            </header>
+            <div className={styles.deploymentExpandedGrid}>
+              <div className={styles.deploymentExpandedDetails}>
+                {renderSetupSection()}
+                {renderRecordsSection()}
+                {renderResultsSection()}
+                {renderStatusMessages()}
+              </div>
+              <aside className={styles.deploymentExpandedLogs}>
+                {renderLogsSection()}
+              </aside>
+            </div>
+          </div>
+        </div>
       ) : null}
     </div>
   );
@@ -2424,12 +2538,55 @@ function mergeDeploymentLog(logs: DeploymentLog[], log: DeploymentLog): Deployme
   return [...logs, log].sort((left, right) => left.sequence - right.sequence);
 }
 
-function formatDeploymentLogLine(log: DeploymentLog): string {
-  const sequence = String(log.sequence).padStart(3, "0");
-  const stage = log.stage.toUpperCase().padEnd(8, " ");
-  const level = log.level.padEnd(5, " ");
+function DeploymentLogList({ logs }: { readonly logs: DeploymentLog[] }) {
+  if (logs.length === 0) {
+    return <p className={styles.deploymentHint}>아직 표시할 로그가 없습니다.</p>;
+  }
 
-  return `${sequence}  ${stage}  ${level}  ${log.message}`;
+  return (
+    <ol aria-label="Deployment logs" className={styles.deploymentLogList}>
+      {logs.map((log) => {
+        const prefix = `${String(log.sequence).padStart(3, "0")}  ${log.stage
+          .toUpperCase()
+          .padEnd(8, " ")}  `;
+
+        return (
+          <li data-tone={getDeploymentLogTone(log)} key={log.id}>
+            <span className={styles.deploymentLogPrefix}>{prefix}</span>
+            <p>
+              {getDeploymentLogMessageTokens(log.message).map((token, index) => (
+                <span
+                  className={getDeploymentLogTokenClassName(token)}
+                  key={`${log.id}-${index}`}
+                >
+                  {token.text}
+                </span>
+              ))}
+            </p>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+function getDeploymentLogTokenClassName(token: DeploymentLogMessageToken): string {
+  const plainClassName = styles.deploymentLogTokenPlain ?? "";
+
+  switch (token.tone) {
+    case "metadata":
+      return styles.deploymentLogTokenMetadata ?? plainClassName;
+    case "operation":
+      return styles.deploymentLogTokenOperation ?? plainClassName;
+    case "output":
+      return styles.deploymentLogTokenOutput ?? plainClassName;
+    case "resource":
+      return styles.deploymentLogTokenResource ?? plainClassName;
+    case "string":
+      return styles.deploymentLogTokenString ?? plainClassName;
+    case "plain":
+      return plainClassName;
+  }
 }
 
 function formatShortHash(value: string | null): string {
