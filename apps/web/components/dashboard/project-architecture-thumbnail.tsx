@@ -40,9 +40,9 @@ type ThumbnailEdge = {
   readonly width: number;
 };
 
-const THUMBNAIL_WIDTH = 760;
-const THUMBNAIL_HEIGHT = 220;
-const THUMBNAIL_PADDING = 34;
+const THUMBNAIL_WIDTH = 520;
+const THUMBNAIL_HEIGHT = 296;
+const THUMBNAIL_PADDING = 24;
 const draftThumbnailCache = new Map<string, Promise<DraftThumbnailResult>>();
 
 export function ProjectArchitectureThumbnail({
@@ -141,12 +141,12 @@ export function ProjectArchitectureThumbnail({
                   />
                   {node.iconUrl ? (
                     <image
-                      height={Math.min(18, Math.max(12, node.height * 0.34))}
+                      height={Math.min(22, Math.max(14, node.height * 0.34))}
                       href={node.iconUrl}
                       preserveAspectRatio="xMidYMid meet"
-                      width={Math.min(18, Math.max(12, node.width * 0.24))}
+                      width={Math.min(22, Math.max(14, node.width * 0.24))}
                       x={node.x + 8}
-                      y={node.y + node.height / 2 - Math.min(18, Math.max(12, node.height * 0.34)) / 2 + 4}
+                      y={node.y + node.height / 2 - Math.min(22, Math.max(14, node.height * 0.34)) / 2 + 4}
                     />
                   ) : null}
                   {node.showLabel ? (
@@ -240,10 +240,10 @@ function scaleNode(
   offsetX: number,
   offsetY: number
 ): ScaledThumbnailNode {
-  const width = Math.max(node.width * scale, node.kind === "design" ? 52 : 58);
-  const height = Math.max(node.height * scale, node.kind === "design" ? 34 : 38);
-  const fontSize = Math.max(9, Math.min(12, height * 0.28));
-  const availableTextWidth = width - (node.iconUrl ? 42 : 16);
+  const width = Math.max(node.width * scale, node.kind === "design" ? 72 : 78);
+  const height = Math.max(node.height * scale, node.kind === "design" ? 46 : 50);
+  const fontSize = Math.max(10, Math.min(14, height * 0.3));
+  const availableTextWidth = width - (node.iconUrl ? 46 : 18);
   const label = trimThumbnailLabel(node.label, Math.max(3, Math.floor(availableTextWidth / (fontSize * 0.58))));
 
   return {
@@ -254,7 +254,7 @@ function scaleNode(
     width,
     height,
     fontSize,
-    showLabel: label.trim().length > 0 && width >= 54 && height >= 32
+    showLabel: label.trim().length > 0 && width >= 64 && height >= 38
   };
 }
 
