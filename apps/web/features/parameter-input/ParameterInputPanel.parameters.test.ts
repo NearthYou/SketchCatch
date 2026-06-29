@@ -47,6 +47,7 @@ test("ParameterInputPanel renders stored and newly added optional definitions in
     source,
     /const advancedDefinitions = getAdvancedDefinitions\(\s*activeOptionalDefinitions,\s*optionalDefinitions,\s*addedOptionalParameterNames\s*\);/
   );
+  assert.match(source, /from "\.\/advanced-parameters"/);
   assert.match(source, /aria-label="Advanced Parameters"/);
   assert.match(source, /advancedDefinitions\.map\(\(definition\) =>/);
 });
@@ -74,9 +75,6 @@ test("ParameterInputPanel lets users search and add hidden optional parameters",
   assert.match(source, /className=\{styles\.advancedOptionDescription\}/);
   assert.match(source, /const advancedPickerEmptyMessage = getAdvancedPickerEmptyMessage\(/);
   assert.match(source, /\{advancedPickerEmptyMessage\}/);
-  assert.match(source, /return "이 리소스 타입에는 optional 파라미터가 없습니다\.";/);
-  assert.match(source, /return "검색 결과가 없습니다\.";/);
-  assert.match(source, /return "모든 optional 파라미터가 추가되었습니다\.";/);
 });
 
 test("ParameterInputPanel lets users remove advanced optional parameters and stored values", () => {
