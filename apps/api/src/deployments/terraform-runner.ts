@@ -2,6 +2,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { performance } from "node:perf_hooks";
 
 const terraformInitArgs = ["init", "-backend=false", "-input=false", "-no-color"] as const;
 const terraformValidateArgs = ["validate", "-no-color"] as const;
@@ -15,6 +16,7 @@ export type TerraformRunResult = {
   exitCode: number;
   stdout: string;
   stderr: string;
+  durationMs?: number;
   timedOut: boolean;
   cancelled?: boolean;
 };
@@ -130,6 +132,7 @@ async function runTerraformCommand(
   const timeoutMs = options.timeoutMs ?? 60_000;
   const maxOutputBytes = options.maxOutputBytes ?? defaultTerraformOutputMaxBytes;
   const env = createTerraformProcessEnv(options.env);
+  const startedAt = performance.now();
 
   await ensureTerraformPluginCacheDir(env.TF_PLUGIN_CACHE_DIR);
 
@@ -139,6 +142,7 @@ async function runTerraformCommand(
       exitCode: 130,
       stdout: "",
       stderr: "Terraform command cancelled",
+      durationMs: elapsedSince(startedAt),
       timedOut: false,
       cancelled: true
     };
@@ -219,6 +223,7 @@ async function runTerraformCommand(
         exitCode: 127,
         stdout,
         stderr: stderr || error.message,
+        durationMs: elapsedSince(startedAt),
         timedOut,
         cancelled
       });
@@ -237,11 +242,16 @@ async function runTerraformCommand(
         exitCode: outputLimitExceeded ? 1 : (code ?? 1),
         stdout,
         stderr,
+        durationMs: elapsedSince(startedAt),
         timedOut,
         cancelled
       });
     });
   });
+}
+
+function elapsedSince(startedAt: number): number {
+  return Math.max(0, Math.round(performance.now() - startedAt));
 }
 
 function appendTerraformOutputChunk(

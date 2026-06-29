@@ -28,6 +28,7 @@ import {
   createS3DeploymentApplyArtifactStorage,
   type DeploymentApplyArtifactStorage
 } from "./deployment-apply-artifact-storage.js";
+import { appendTerraformDurationLog } from "./deployment-duration-logs.js";
 import { maskDeploymentMessage } from "./log-masking.js";
 import {
   appendDeploymentLogs,
@@ -136,19 +137,24 @@ export async function runDeploymentDestroyPlan(
 
     assertDeploymentCanStartDestroyPlan(deployment, sourceStatus, sourceFailureStage);
 
-    const artifact = await requireDeploymentTerraformArtifact(deployment, repository);
-    const currentPlanArtifact = deployment.currentPlanArtifactId
-      ? await repository.findDeploymentPlanArtifactById(deployment.currentPlanArtifactId)
-      : undefined;
-    const awsConnection = await requireDeploymentAwsConnection(
-      deployment,
-      input.accessContext,
-      repository
-    );
-    workspace = await prepareTerraformWorkspace({
-      objectKey: artifact.objectKey,
-      fileName: artifact.fileName
-    });
+    const [artifact, currentPlanArtifact, awsConnection] = await Promise.all([
+      requireDeploymentTerraformArtifact(deployment, repository),
+      deployment.currentPlanArtifactId
+        ? repository.findDeploymentPlanArtifactById(deployment.currentPlanArtifactId)
+        : Promise.resolve(undefined),
+      requireDeploymentAwsConnection(deployment, input.accessContext, repository)
+    ]);
+    const [preparedWorkspace, stateBuffer] = await Promise.all([
+      prepareTerraformWorkspace({
+        objectKey: artifact.objectKey,
+        fileName: artifact.fileName
+      }),
+      applyArtifactStorage.downloadDeploymentState({
+        deploymentId: deployment.id,
+        objectKey: deployment.stateObjectKey ?? ""
+      })
+    ]);
+    workspace = preparedWorkspace;
 
     const terraformArtifactContent = await readTerraformArtifactFile(workspace.mainFilePath);
     assertTerraformArtifactIsSafe(terraformArtifactContent);
@@ -162,10 +168,6 @@ export async function runDeploymentDestroyPlan(
       terraformArtifactSha256
     });
 
-    const stateBuffer = await applyArtifactStorage.downloadDeploymentState({
-      deploymentId: deployment.id,
-      objectKey: deployment.stateObjectKey ?? ""
-    });
     await writeTerraformStateFile(join(workspace.workdir, "terraform.tfstate"), stateBuffer);
 
     const awsCredentials = await prepareAwsCredentialsForDestroyPlan({
@@ -199,6 +201,7 @@ export async function runDeploymentDestroyPlan(
       accessContext: input.accessContext,
       sequence,
       stage: "init",
+      label: "terraform init",
       result: terraform.init,
       repository
     });
@@ -231,6 +234,7 @@ export async function runDeploymentDestroyPlan(
       accessContext: input.accessContext,
       sequence,
       stage: "plan",
+      label: "terraform plan -destroy",
       result: terraform.plan,
       repository
     });
@@ -263,6 +267,7 @@ export async function runDeploymentDestroyPlan(
       accessContext: input.accessContext,
       sequence,
       stage: "plan",
+      label: "terraform show -json",
       result: terraform.showJson,
       repository
     });
@@ -596,6 +601,7 @@ async function appendTerraformOutput(input: {
   accessContext: ProjectAccessContext;
   sequence: number;
   stage: "init" | "plan";
+  label: string;
   result: TerraformRunResult;
   repository: DeploymentRepository;
 }): Promise<number> {
@@ -619,7 +625,15 @@ async function appendTerraformOutput(input: {
     repository: input.repository
   });
 
-  return nextSequence;
+  return appendTerraformDurationLog({
+    deploymentId: input.deploymentId,
+    accessContext: input.accessContext,
+    sequence: nextSequence,
+    stage: input.stage,
+    label: input.label,
+    result: input.result,
+    repository: input.repository
+  });
 }
 
 async function appendOutputLines(input: {

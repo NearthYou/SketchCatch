@@ -20,6 +20,7 @@ import {
   type AwsConnectionStsGateway
 } from "../aws-connections/aws-connection-test-service.js";
 import { analyzePreDeployment as defaultAnalyzePreDeployment } from "../services/aiPreDeploymentAnalysis.js";
+import { appendTerraformDurationLog } from "./deployment-duration-logs.js";
 import { maskDeploymentMessage } from "./log-masking.js";
 import {
   createDeploymentPlanSummaryFromTerraformShowJson,
@@ -128,12 +129,10 @@ export async function runDeploymentPlan(
     );
     deploymentId = deployment.id;
 
-    const artifact = await requireDeploymentTerraformArtifact(deployment, repository);
-    const awsConnection = await requireDeploymentAwsConnection(
-      deployment,
-      input.accessContext,
-      repository
-    );
+    const [artifact, awsConnection] = await Promise.all([
+      requireDeploymentTerraformArtifact(deployment, repository),
+      requireDeploymentAwsConnection(deployment, input.accessContext, repository)
+    ]);
     const canReusePlanArtifact = await canReuseDeploymentPlanArtifact({
       deployment,
       startedFromStatus: input.startedFromStatus,
@@ -150,20 +149,20 @@ export async function runDeploymentPlan(
       };
     }
 
-    const architecture = await repository.findArchitectureInProject(
-      deployment.architectureId,
-      deployment.projectId
-    );
+    const [architecture, preparedWorkspace] = await Promise.all([
+      repository.findArchitectureInProject(deployment.architectureId, deployment.projectId),
+      prepareTerraformWorkspace({
+        objectKey: artifact.objectKey,
+        fileName: artifact.fileName
+      })
+    ]);
+    workspace = preparedWorkspace;
 
     if (!architecture) {
       throw new DeploymentNotFoundError("Architecture not found for deployment");
     }
 
     const preDeploymentAnalysis = analyzePreDeployment(architecture.architectureJson);
-    workspace = await prepareTerraformWorkspace({
-      objectKey: artifact.objectKey,
-      fileName: artifact.fileName
-    });
     const terraformArtifactContent = await readTerraformArtifactFile(workspace.mainFilePath);
     assertTerraformArtifactIsSafe(terraformArtifactContent);
     const terraformArtifactSha256 = createSha256(terraformArtifactContent);
@@ -673,7 +672,15 @@ async function appendTerraformOutput(input: {
     repository: input.repository
   });
 
-  return nextSequence;
+  return appendTerraformDurationLog({
+    deploymentId: input.deploymentId,
+    accessContext: input.accessContext,
+    sequence: nextSequence,
+    stage: input.stage,
+    label: `terraform ${input.stage}`,
+    result: input.result,
+    repository: input.repository
+  });
 }
 
 async function appendTerraformErrorOutput(input: {
@@ -683,13 +690,23 @@ async function appendTerraformErrorOutput(input: {
   result: TerraformRunResult;
   repository: DeploymentRepository;
 }): Promise<number> {
-  return appendOutputLines({
+  const nextSequence = await appendOutputLines({
     deploymentId: input.deploymentId,
     accessContext: input.accessContext,
     sequence: input.sequence,
     stage: "plan",
     output: input.result.stderr,
     level: input.result.exitCode === 0 ? "WARN" : "ERROR",
+    repository: input.repository
+  });
+
+  return appendTerraformDurationLog({
+    deploymentId: input.deploymentId,
+    accessContext: input.accessContext,
+    sequence: nextSequence,
+    stage: "plan",
+    label: "terraform show -json",
+    result: input.result,
     repository: input.repository
   });
 }
