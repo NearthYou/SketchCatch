@@ -372,6 +372,7 @@ type Deployment = {
   terraformArtifactId: string;
   awsConnectionId: string | null;
   currentPlanArtifactId: string | null;
+  currentPlanOperation: "apply" | "destroy" | null;
   stateObjectKey: string | null;
   resultWarningSummary: string | null;
   status: "PENDING" | "RUNNING" | "SUCCESS" | "FAILED" | "CANCELLED" | "DESTROYED";
@@ -460,6 +461,8 @@ type DeploymentPlanArtifact = {
 destroy 실행은 `operation: "destroy"` Plan만 사용할 수 있다.
 
 `deployment_plan_artifacts.deployment_id`는 `deployments.id`를 FK로 참조한다. `deployments.current_plan_artifact_id`는 현재 승인 대상 Plan을 가리키는 nullable pointer이며, 같은 Deployment의 artifact인지 여부는 Deployment service에서 검증한다.
+
+API 응답의 `Deployment.currentPlanOperation`은 `current_plan_artifact_id`가 가리키는 Plan artifact의 `operation`을 펼쳐서 내려주는 읽기용 필드다. 프론트엔드는 이 값으로 apply plan과 destroy plan을 구분해 Apply 버튼과 Destroy 버튼을 분리한다.
 
 ## DeploymentPlanSummary
 
