@@ -2,11 +2,10 @@
 import type { DiagramNode } from "@sketchcatch/types";
 import {
   Box,
-  ChevronRight,
   CopyPlus,
-  Database,
   Edit3,
   ListTree,
+  Maximize2,
   MoreHorizontal,
   Minimize2,
   Trash2
@@ -111,6 +110,7 @@ function ResourceListPanel({
             className={isActive ? styles.resourceListItemActive : styles.resourceListItem}
             key={node.id}
             onClick={() => focusNode(context, node.id)}
+            onDoubleClick={() => openResourceConfig(context, node.id, onViewChange)}
             onKeyDown={(event) => handleResourceCardKeyDown(event, context, node.id)}
             tabIndex={0}
           >
@@ -138,6 +138,7 @@ function ResourceListPanel({
                   focusNode(context, node.id);
                   setOpenMenuNodeId((currentNodeId) => (currentNodeId === node.id ? null : node.id));
                 }}
+                onDoubleClick={(event) => event.stopPropagation()}
                 type="button"
               >
                 <MoreHorizontal size={18} aria-hidden="true" />
@@ -149,13 +150,16 @@ function ResourceListPanel({
                   node={node}
                   onClose={() => setOpenMenuNodeId(null)}
                   onEditConfig={() => {
-                    onViewChange("settings");
+                    openResourceConfig(context, node.id, onViewChange);
                     setOpenMenuNodeId(null);
                   }}
-                  onMinimize={() => {
-                    setExpandedNodeIds((currentNodeIds) => removeSetValue(currentNodeIds, node.id));
+                  onToggleSize={() => {
+                    setExpandedNodeIds((currentNodeIds) =>
+                      isExpanded ? removeSetValue(currentNodeIds, node.id) : addSetValue(currentNodeIds, node.id)
+                    );
                     setOpenMenuNodeId(null);
                   }}
+                  canMaximize={hasHiddenSummaryRows}
                 />
               ) : null}
             </div>
@@ -182,6 +186,7 @@ function ResourceListPanel({
                         isExpanded ? removeSetValue(currentNodeIds, node.id) : addSetValue(currentNodeIds, node.id)
                       );
                     }}
+                    onDoubleClick={(event) => event.stopPropagation()}
                     type="button"
                   >
                     <span aria-hidden="true">{isExpanded ? "-" : "+"}</span>
@@ -213,25 +218,33 @@ function handleResourceCardKeyDown(
 }
 
 function ResourceCardMenu({
+  canMaximize,
   context,
   isExpanded,
   node,
   onClose,
   onEditConfig,
-  onMinimize
+  onToggleSize
 }: {
+  readonly canMaximize: boolean;
   readonly context: DiagramEditorPanelContext;
   readonly isExpanded: boolean;
   readonly node: DiagramNode;
   readonly onClose: () => void;
   readonly onEditConfig: () => void;
-  readonly onMinimize: () => void;
+  readonly onToggleSize: () => void;
 }) {
   const terraformBlockType = node.parameters?.terraformBlockType === "data" ? "data" : "resource";
   const switchLabel = terraformBlockType === "data" ? "Switch to resource" : "Switch to data source";
+  const isToggleDisabled = !isExpanded && !canMaximize;
 
   return (
-    <div className={styles.resourceCardMenu} onClick={(event) => event.stopPropagation()} role="menu">
+    <div
+      className={styles.resourceCardMenu}
+      onClick={(event) => event.stopPropagation()}
+      onDoubleClick={(event) => event.stopPropagation()}
+      role="menu"
+    >
       <button
         className={styles.resourceCardMenuItem}
         onClick={() => {
@@ -259,19 +272,6 @@ function ResourceCardMenu({
       <button
         className={styles.resourceCardMenuItem}
         onClick={() => {
-          focusNode(context, node.id);
-          onClose();
-        }}
-        role="menuitem"
-        type="button"
-      >
-        <Database size={17} aria-hidden="true" />
-        <span>Terraform state</span>
-        <ChevronRight className={styles.resourceCardMenuChevron} size={17} aria-hidden="true" />
-      </button>
-      <button
-        className={styles.resourceCardMenuItem}
-        onClick={() => {
           duplicateResourceNode(context, node);
           onClose();
         }}
@@ -283,13 +283,17 @@ function ResourceCardMenu({
       </button>
       <button
         className={styles.resourceCardMenuItem}
-        disabled={!isExpanded}
-        onClick={onMinimize}
+        disabled={isToggleDisabled}
+        onClick={onToggleSize}
         role="menuitem"
         type="button"
       >
-        <Minimize2 size={17} aria-hidden="true" />
-        <span>Minimize</span>
+        {isExpanded ? (
+          <Minimize2 size={17} aria-hidden="true" />
+        ) : (
+          <Maximize2 size={17} aria-hidden="true" />
+        )}
+        <span>{isExpanded ? "Minimize" : "Maximize"}</span>
       </button>
       <button
         className={`${styles.resourceCardMenuItem} ${styles.resourceCardMenuDanger}`}
@@ -310,6 +314,15 @@ function ResourceCardMenu({
 function focusNode(context: DiagramEditorPanelContext, nodeId: string): void {
   context.focusResourceNode(nodeId);
   context.setRightPanelOpen(true);
+}
+
+function openResourceConfig(
+  context: DiagramEditorPanelContext,
+  nodeId: string,
+  onViewChange: (view: ResourceWorkspaceView) => void
+): void {
+  focusNode(context, nodeId);
+  onViewChange("settings");
 }
 
 function InlineResourceValueInput({
@@ -333,6 +346,7 @@ function InlineResourceValueInput({
         className={styles.resourceListInlineSelect}
         onClick={(event) => event.stopPropagation()}
         onChange={(event) => updateInlineParameterValue(context, node, parameterKey, event.target.value === "true")}
+        onDoubleClick={(event) => event.stopPropagation()}
         onKeyDown={(event) => event.stopPropagation()}
         value={String(value)}
       >
@@ -349,6 +363,7 @@ function InlineResourceValueInput({
       onChange={(event) =>
         updateInlineParameterValue(context, node, parameterKey, parseInlineResourceValue(event.target.value, value))
       }
+      onDoubleClick={(event) => event.stopPropagation()}
       onKeyDown={(event) => event.stopPropagation()}
       value={String(value)}
     />
