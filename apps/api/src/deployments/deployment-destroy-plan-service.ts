@@ -185,10 +185,10 @@ export async function runDeploymentDestroyPlan(
           failureRecorded = true;
         }
       }),
-      writeTerraformStateFile(join(workspace.workdir, "terraform.tfstate"), stateBuffer),
+      writeTerraformStateFile(join(preparedWorkspace.workdir, "terraform.tfstate"), stateBuffer),
       restoreTerraformLockFile({
         deploymentId: deployment.id,
-        workspace,
+        workspace: preparedWorkspace,
         storage: planArtifactStorage
       })
     ]);

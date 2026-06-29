@@ -180,7 +180,7 @@ export async function runDeploymentApply(
       }),
       restoreTerraformLockFile({
         deploymentId: deployment.id,
-        workspace,
+        workspace: preparedWorkspace,
         storage: applyArtifactStorage
       })
     ]);

@@ -186,7 +186,7 @@ export async function runDeploymentPlan(
       }),
       restoreTerraformLockFile({
         deploymentId: deployment.id,
-        workspace,
+        workspace: preparedWorkspace,
         storage: planArtifactStorage
       })
     ]);
