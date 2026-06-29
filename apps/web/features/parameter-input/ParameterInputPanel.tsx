@@ -178,6 +178,13 @@ export function ParameterInputPanel({
     });
   };
 
+  const addAdvancedParameter = (definition: ParameterCatalogDefinition) => {
+    setAddedOptionalParameterNames((currentNames) =>
+      currentNames.includes(definition.name) ? currentNames : [...currentNames, definition.name]
+    );
+    setAdvancedParameterQuery("");
+  };
+
   const removeAdvancedParameter = (definition: ParameterCatalogDefinition) => {
     setAddedOptionalParameterNames((currentNames) =>
       currentNames.filter((name) => name !== definition.name)
@@ -266,6 +273,7 @@ export function ParameterInputPanel({
           <label className={styles.advancedSearch}>
             <Search aria-hidden="true" size={16} />
             <input
+              aria-label="Optional parameter search"
               className={styles.input}
               onChange={(event) => setAdvancedParameterQuery(event.currentTarget.value)}
               placeholder="Search optional parameter..."
@@ -279,13 +287,7 @@ export function ParameterInputPanel({
                 <button
                   className={styles.advancedOptionButton}
                   key={definition.name}
-                  onClick={() =>
-                    setAddedOptionalParameterNames((currentNames) =>
-                      currentNames.includes(definition.name)
-                        ? currentNames
-                        : [...currentNames, definition.name]
-                    )
-                  }
+                  onClick={() => addAdvancedParameter(definition)}
                   type="button"
                 >
                   <Plus aria-hidden="true" size={14} />

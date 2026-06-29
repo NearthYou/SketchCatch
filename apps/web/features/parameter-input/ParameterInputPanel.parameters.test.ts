@@ -59,12 +59,16 @@ test("ParameterInputPanel lets users search and add hidden optional parameters",
     /const availableAdvancedDefinitions = filterAdvancedDefinitions\(\s*optionalDefinitions,\s*advancedDefinitions,\s*advancedParameterQuery\s*\);/
   );
   assert.match(source, /placeholder="Search optional parameter\.\.\."/);
+  assert.match(source, /aria-label="Optional parameter search"/);
   assert.match(source, /setAdvancedParameterQuery\(event\.currentTarget\.value\)/);
   assert.match(source, /availableAdvancedDefinitions\.map\(\(definition\) =>/);
+  assert.match(source, /const addAdvancedParameter = \(definition: ParameterCatalogDefinition\) => \{/);
   assert.match(
     source,
     /setAddedOptionalParameterNames\(\(currentNames\) =>\s*currentNames\.includes\(definition\.name\)/
   );
+  assert.match(source, /setAdvancedParameterQuery\(""\);/);
+  assert.match(source, /onClick=\{\(\) => addAdvancedParameter\(definition\)\}/);
 });
 
 test("ParameterInputPanel lets users remove advanced optional parameters and stored values", () => {
