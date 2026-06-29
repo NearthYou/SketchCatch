@@ -104,9 +104,9 @@ export const PASSWORD_MIN_LENGTH = 10;
 export const PASSWORD_MAX_LENGTH = 128;
 export const PASSWORD_REQUIRED_CATEGORY_COUNT = 3;
 export const PASSWORD_POLICY_HELP_TEXT =
-  "10자 이상, 128자 이하이며 영어 대문자/소문자/숫자/특수문자 중 3가지 이상을 포함해주세요.";
+  "10자 이상, 영어 대문자/소문자/숫자/특수문자 중 3가지 이상을 포함해주세요.";
 export const PASSWORD_POLICY_ERROR_MESSAGE =
-  "비밀번호는 10자 이상, 128자 이하이며 영어 대문자/소문자/숫자/특수문자 중 3가지 이상을 포함해야 합니다.";
+  "비밀번호는 10자 이상, 영어 대문자/소문자/숫자/특수문자 중 3가지 이상을 포함해야 합니다.";
 
 const PASSWORD_UPPERCASE_PATTERN = /[A-Z]/;
 const PASSWORD_LOWERCASE_PATTERN = /[a-z]/;
