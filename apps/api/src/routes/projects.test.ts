@@ -96,6 +96,41 @@ test("PUT /api/projects/:id/draft upserts the active user's latest diagramJson",
   await app.close();
 });
 
+test("PUT /api/projects/:id/draft stores an empty board as the latest diagramJson", async () => {
+  const emptyDiagram: DiagramJson = {
+    nodes: [],
+    edges: [],
+    viewport: {
+      x: 0,
+      y: 0,
+      zoom: 1
+    }
+  };
+  const fakeDb = new ProjectDraftRouteFakeDb({
+    users: [makeUser()],
+    projects: [makeProject()],
+    drafts: [makeProjectDraft({ revision: 4 })]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  const response = await app.inject({
+    method: "PUT",
+    url: `/api/projects/${ACTIVE_PROJECT_ID}/draft`,
+    headers: await authHeaders(ACTIVE_USER_ID),
+    payload: {
+      diagramJson: emptyDiagram
+    }
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(response.json().draft.diagramJson, emptyDiagram);
+  assert.deepEqual(fakeDb.draftRows[0]?.diagramJson, emptyDiagram);
+
+  await app.close();
+});
+
 async function authHeaders(userId: string): Promise<Record<string, string>> {
   return {
     authorization: `Bearer ${await createAccessToken(userId)}`
