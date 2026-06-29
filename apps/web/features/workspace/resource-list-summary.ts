@@ -75,7 +75,7 @@ function buildTerraformResourceListItem(
   const validation = validateParameters(parameters, validationDefinitions, nodes, node.id, catalog);
 
   return {
-    displayName: parameters.resourceName.trim() || node.label || parameters.resourceType,
+    displayName: getTerraformResourceDisplayName(node, parameters.resourceType),
     iconUrl: node.iconUrl,
     node,
     nodeId: node.id,
@@ -84,6 +84,11 @@ function buildTerraformResourceListItem(
     terraformAddress: getTerraformAddress(parameters.terraformBlockType, parameters.resourceType, parameters.resourceName),
     typeLabel: parameters.resourceType
   };
+}
+
+function getTerraformResourceDisplayName(node: DiagramNode, resourceType: string): string {
+  const resourceName = node.parameters?.resourceName?.trim() ?? "";
+  return resourceName || node.label || resourceType;
 }
 
 function buildTerraformResourceRows(

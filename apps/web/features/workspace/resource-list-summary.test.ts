@@ -109,6 +109,18 @@ test("buildResourceListItems marks resources invalid when required values are mi
   assert.equal(items[0]?.status, "invalid");
 });
 
+test("buildResourceListItems falls back when legacy resourceName is missing", () => {
+  const legacyNode = makeLegacyResourceNodeWithoutResourceName({
+    id: "vpc-1",
+    label: "Legacy VPC",
+    resourceType: "aws_vpc"
+  });
+
+  const items = buildResourceListItems([legacyNode], catalog);
+
+  assert.equal(items[0]?.displayName, "Legacy VPC");
+});
+
 function makeDefinition({
   label,
   name,
@@ -193,4 +205,31 @@ function makeDesignNode({
     zIndex: 0,
     metadata
   };
+}
+
+function makeLegacyResourceNodeWithoutResourceName({
+  id,
+  label,
+  resourceType
+}: {
+  id: string;
+  label: string;
+  resourceType: string;
+}): DiagramNode {
+  return {
+    id,
+    type: resourceType,
+    kind: "resource",
+    position: { x: 0, y: 0 },
+    size: { width: 120, height: 80 },
+    label,
+    locked: false,
+    zIndex: 0,
+    parameters: {
+      terraformBlockType: "resource",
+      resourceType,
+      fileName: "main",
+      values: {}
+    }
+  } as unknown as DiagramNode;
 }
