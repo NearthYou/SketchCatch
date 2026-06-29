@@ -11,20 +11,35 @@ const OAUTH_STATE_COOKIE_MAX_AGE_SECONDS = 5 * 60;
 export type OAuthStateCookie = {
   provider: OAuthProvider;
   state: string;
+  persistent: boolean;
+};
+
+type OAuthStateCookieInput = {
+  provider: OAuthProvider;
+  state: string;
+  persistent?: boolean;
 };
 
 export function createOAuthState(): string {
   return randomBytes(32).toString("base64url");
 }
 
-export function setOAuthStateCookie(reply: FastifyReply, value: OAuthStateCookie): void {
+export function setOAuthStateCookie(reply: FastifyReply, value: OAuthStateCookieInput): void {
   appendSetCookieHeader(
     reply,
-    serializeAuthCookie(OAUTH_STATE_COOKIE_NAME, signOAuthStateCookieValue(value), {
-      httpOnly: true,
-      maxAge: OAUTH_STATE_COOKIE_MAX_AGE_SECONDS,
-      path: OAUTH_STATE_COOKIE_PATH
-    })
+    serializeAuthCookie(
+      OAUTH_STATE_COOKIE_NAME,
+      signOAuthStateCookieValue({
+        provider: value.provider,
+        state: value.state,
+        persistent: value.persistent === true
+      }),
+      {
+        httpOnly: true,
+        maxAge: OAUTH_STATE_COOKIE_MAX_AGE_SECONDS,
+        path: OAUTH_STATE_COOKIE_PATH
+      }
+    )
   );
 }
 
@@ -38,13 +53,18 @@ export function readOAuthStateCookie(request: FastifyRequest): OAuthStateCookie 
   try {
     const parsedValue = verifyOAuthStateCookieValue(rawValue);
 
-    if (!isOAuthProvider(parsedValue.provider) || typeof parsedValue.state !== "string") {
+    if (
+      !isOAuthProvider(parsedValue.provider) ||
+      typeof parsedValue.state !== "string" ||
+      (parsedValue.persistent !== undefined && typeof parsedValue.persistent !== "boolean")
+    ) {
       return null;
     }
 
     return {
       provider: parsedValue.provider,
-      state: parsedValue.state
+      state: parsedValue.state,
+      persistent: parsedValue.persistent ?? false
     };
   } catch {
     return null;

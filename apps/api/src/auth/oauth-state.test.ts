@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { createHmac } from "node:crypto";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import {
   clearOAuthStateCookie,
@@ -26,7 +27,8 @@ test("setOAuthStateCookie writes provider and state with secure cookie attribute
 
   setOAuthStateCookie(reply, {
     provider: "naver",
-    state: "state-token"
+    state: "state-token",
+    persistent: true
   });
 
   const cookie = reply.getSetCookieHeader();
@@ -43,15 +45,35 @@ test("readOAuthStateCookie parses a valid state cookie", () => {
 
   setOAuthStateCookie(reply, {
     provider: "naver",
-    state: "state-token"
+    state: "state-token",
+    persistent: true
   });
 
   const request = createRequestWithCookie(reply.getSetCookieHeader());
 
   assert.deepEqual(readOAuthStateCookie(request), {
     provider: "naver",
+    state: "state-token",
+    persistent: true
+  });
+});
+
+test("readOAuthStateCookie treats legacy cookies without persistence as session login", () => {
+  const cookieValue = signOAuthStateCookieValue({
+    provider: "naver",
     state: "state-token"
   });
+
+  assert.deepEqual(
+    readOAuthStateCookie(
+      createRequestWithCookie(`${OAUTH_STATE_COOKIE_NAME}=${encodeURIComponent(cookieValue)}`)
+    ),
+    {
+      provider: "naver",
+      state: "state-token",
+      persistent: false
+    }
+  );
 });
 
 test("readOAuthStateCookie returns null for invalid state cookie values", () => {
@@ -75,7 +97,8 @@ test("readOAuthStateCookie returns null for tampered signed state cookies", () =
 
   setOAuthStateCookie(reply, {
     provider: "naver",
-    state: "state-token"
+    state: "state-token",
+    persistent: false
   });
 
   const cookieValue = getCookieValue(reply.getSetCookieHeader());
@@ -183,4 +206,13 @@ function getCookieValue(cookie: string): string {
   }
 
   return value;
+}
+
+function signOAuthStateCookieValue(value: Record<string, unknown>): string {
+  const payload = Buffer.from(JSON.stringify(value)).toString("base64url");
+  const signature = createHmac("sha256", process.env.AUTH_TOKEN_SECRET ?? "")
+    .update(payload)
+    .digest("base64url");
+
+  return `${payload}.${signature}`;
 }
