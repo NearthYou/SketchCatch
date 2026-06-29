@@ -1128,7 +1128,7 @@ function DiagramEditorInner({
             snapGrid={[12, 12]}
             snapToGrid
           >
-            <Background color="#d8e0ef" gap={24} size={1} variant={BackgroundVariant.Lines} />
+            <Background color="#d8e0ef" gap={24} size={2} variant={BackgroundVariant.Dots} />
           </ReactFlow>
         </div>
       </div>
