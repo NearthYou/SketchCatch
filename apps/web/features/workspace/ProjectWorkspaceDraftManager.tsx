@@ -6,11 +6,17 @@ import { DiagramEditor } from "../diagram-editor";
 import { EMPTY_DIAGRAM } from "../diagram-editor/constants";
 import { WorkspaceRightPanel } from "./WorkspaceRightPanel";
 import type { LocalProjectDraft } from "./project-draft-persistence";
+import { shouldFlushProjectDraftBeforePageExit } from "./project-draft-page-exit";
 import {
   defaultProjectDraftRepository,
   type ProjectDraftRepository
 } from "./project-draft-repository";
 import { runProjectDraftServerSaveFlight } from "./project-draft-save-flight";
+import {
+  getProjectSaveStatus,
+  type ProjectLocalSaveState,
+  type ProjectServerSaveState
+} from "./project-draft-save-status";
 import type { WorkspaceCloudPlatform } from "./project-draft-persistence";
 import type { SavedServerProjectDiagramDraft } from "./project-draft-sync";
 import styles from "./workspace.module.css";
@@ -19,14 +25,6 @@ const LOCAL_SAVE_DEBOUNCE_MS = 800;
 const SERVER_CHECKPOINT_INTERVAL_MS = 5 * 60 * 1000;
 
 type LoadState = "loading" | "ready" | "error";
-type LocalSaveState = "idle" | "local-pending" | "local-saved" | "local-failed";
-type ServerSaveState =
-  | "server-idle"
-  | "server-dirty"
-  | "server-saving"
-  | "server-checkpoint-pending"
-  | "server-saved"
-  | "server-failed";
 export type FlushDraftReason = "manual" | "checkpoint" | "external";
 type LocalDraftPersistResult = {
   changeVersion: number;
@@ -38,7 +36,7 @@ const sourceServerSaveState = {
   empty: "server-idle",
   local: "server-dirty",
   server: "server-saved"
-} satisfies Record<"empty" | "local" | "server", ServerSaveState>;
+} satisfies Record<"empty" | "local" | "server", ProjectServerSaveState>;
 
 export type FlushDraftToServerResult = SavedServerProjectDiagramDraft;
 
@@ -70,8 +68,8 @@ export function ProjectWorkspaceDraftManager({
 }: ProjectWorkspaceDraftManagerProps) {
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [initialDiagram, setInitialDiagram] = useState<DiagramJson | null>(null);
-  const [localSaveState, setLocalSaveState] = useState<LocalSaveState>("idle");
-  const [serverSaveState, setServerSaveState] = useState<ServerSaveState>("server-idle");
+  const [localSaveState, setLocalSaveState] = useState<ProjectLocalSaveState>("idle");
+  const [serverSaveState, setServerSaveState] = useState<ProjectServerSaveState>("server-idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const latestDiagramRef = useRef<DiagramJson>(EMPTY_DIAGRAM);
   const localDraftRef = useRef<LocalProjectDraft | null>(null);
@@ -119,16 +117,6 @@ export function ProjectWorkspaceDraftManager({
       localDraft: result.localDraft
     };
   }, [localCacheWorkspaceId, projectId, repository, setCurrentLocalDraft, workspaceId]);
-
-  const saveCurrentDraftLocally = useCallback(async () => {
-    clearLocalSaveTimer();
-
-    try {
-      await persistLocalDraftNow();
-    } catch {
-      setLocalSaveState("local-failed");
-    }
-  }, [clearLocalSaveTimer, persistLocalDraftNow]);
 
   useEffect(() => {
     onDraftPersistenceReadyRef.current = onDraftPersistenceReady;
@@ -250,6 +238,21 @@ export function ProjectWorkspaceDraftManager({
     ]
   );
 
+  const flushDraftBeforePageExit = useCallback(() => {
+    if (
+      !shouldFlushProjectDraftBeforePageExit({
+        draftReady: draftReadyRef.current,
+        hasPendingLocalChanges: hasPendingLocalChangesRef.current,
+        serverDirty: serverDirtyRef.current,
+        serverSaving: serverSavingRef.current
+      })
+    ) {
+      return;
+    }
+
+    void flushDraftToServer("external");
+  }, [flushDraftToServer]);
+
   useEffect(() => {
     let cancelled = false;
     draftReadyRef.current = false;
@@ -298,14 +301,18 @@ export function ProjectWorkspaceDraftManager({
 
   useEffect(() => {
     function handleVisibilityChange() {
-      if (document.visibilityState === "hidden" && hasPendingLocalChangesRef.current) {
-        void saveCurrentDraftLocally();
+      if (document.visibilityState === "hidden") {
+        flushDraftBeforePageExit();
       }
     }
 
+    window.addEventListener("pagehide", flushDraftBeforePageExit);
     document.addEventListener("visibilitychange", handleVisibilityChange);
-    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
-  }, [saveCurrentDraftLocally]);
+    return () => {
+      window.removeEventListener("pagehide", flushDraftBeforePageExit);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [flushDraftBeforePageExit]);
 
   useEffect(() => {
     if (serverCheckpointIntervalMs <= 0) {
@@ -375,30 +382,6 @@ export function ProjectWorkspaceDraftManager({
       saveStatus={getProjectSaveStatus(localSaveState, serverSaveState)}
     />
   );
-}
-
-function getProjectSaveStatus(localSaveState: LocalSaveState, serverSaveState: ServerSaveState): string {
-  if (localSaveState === "local-failed" || serverSaveState === "server-failed") {
-    return "저장 실패";
-  }
-
-  if (
-    localSaveState === "local-pending" ||
-    serverSaveState === "server-saving" ||
-    serverSaveState === "server-checkpoint-pending"
-  ) {
-    return "저장 중";
-  }
-
-  if (serverSaveState === "server-dirty") {
-    return "저장 필요";
-  }
-
-  if (localSaveState === "local-saved" || serverSaveState === "server-saved") {
-    return "저장됨";
-  }
-
-  return "편집 중";
 }
 
 function WorkspaceNotice({ title, body }: { title: string; body: string }) {

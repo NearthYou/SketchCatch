@@ -63,6 +63,24 @@ test("save project draft body accepts full DiagramJson", () => {
   assert.equal(parsed.diagramJson.viewport.zoom, 1);
 });
 
+test("save project draft body accepts an empty board DiagramJson", () => {
+  const parsed = saveProjectDraftBodySchema.parse({
+    diagramJson: {
+      nodes: [],
+      edges: [],
+      viewport: {
+        x: 0,
+        y: 0,
+        zoom: 1
+      }
+    }
+  });
+
+  assert.deepEqual(parsed.diagramJson.nodes, []);
+  assert.deepEqual(parsed.diagramJson.edges, []);
+  assert.equal(parsed.diagramJson.viewport.zoom, 1);
+});
+
 test("save project draft body rejects architecture-only json without viewport", () => {
   const result = saveProjectDraftBodySchema.safeParse({
     diagramJson: {

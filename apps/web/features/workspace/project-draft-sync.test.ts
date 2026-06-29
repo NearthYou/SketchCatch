@@ -81,7 +81,7 @@ const serverDraft: ProjectDraft = {
   updatedAt: "2026-06-24T02:00:00.000Z"
 };
 
-test("loadProjectDiagramDraft loads server draft for a project before local fallback", async () => {
+test("loadProjectDiagramDraft loads the server draft when it is newer than local cache", async () => {
   const calls: string[] = [];
   const result = await loadProjectDiagramDraft(
     {
@@ -109,6 +109,70 @@ test("loadProjectDiagramDraft loads server draft for a project before local fall
   assert.deepEqual(result.diagramJson, serverDiagram);
   assert.deepEqual(result.serverDraft, serverDraft);
   assert.deepEqual(result.localDraft, localDraft);
+});
+
+test("loadProjectDiagramDraft restores a newer empty local draft over a stale server draft", async () => {
+  const deletedLocalDraft: LocalProjectDraft = {
+    ...localDraft,
+    diagramJson: emptyDiagram,
+    revision: 4,
+    draftSavedAt: "2026-06-24T02:01:00.000Z",
+    dirty: true
+  };
+  const staleServerDraft: ProjectDraft = {
+    ...serverDraft,
+    serverSavedAt: "2026-06-24T02:00:00.000Z",
+    updatedAt: "2026-06-24T02:00:00.000Z"
+  };
+
+  const result = await loadProjectDiagramDraft(
+    {
+      fallbackDiagram: serverDiagram,
+      projectId: serverDraft.projectId,
+      workspaceId: "workspace-1"
+    },
+    {
+      getProjectDraft: async () => ({ draft: staleServerDraft }),
+      readLocalProjectDraft: async () => deletedLocalDraft
+    }
+  );
+
+  assert.equal(result.source, "local");
+  assert.deepEqual(result.diagramJson, emptyDiagram);
+  assert.deepEqual(result.localDraft, deletedLocalDraft);
+  assert.deepEqual(result.serverDraft, staleServerDraft);
+});
+
+test("loadProjectDiagramDraft restores newer server draft instead of stale empty local cache", async () => {
+  const staleDeletedLocalDraft: LocalProjectDraft = {
+    ...localDraft,
+    diagramJson: emptyDiagram,
+    revision: 4,
+    draftSavedAt: "2026-06-24T02:00:00.000Z",
+    dirty: true
+  };
+  const newerServerDraft: ProjectDraft = {
+    ...serverDraft,
+    serverSavedAt: "2026-06-24T02:01:00.000Z",
+    updatedAt: "2026-06-24T02:01:00.000Z"
+  };
+
+  const result = await loadProjectDiagramDraft(
+    {
+      fallbackDiagram: emptyDiagram,
+      projectId: serverDraft.projectId,
+      workspaceId: "workspace-1"
+    },
+    {
+      getProjectDraft: async () => ({ draft: newerServerDraft }),
+      readLocalProjectDraft: async () => staleDeletedLocalDraft
+    }
+  );
+
+  assert.equal(result.source, "server");
+  assert.deepEqual(result.diagramJson, serverDiagram);
+  assert.deepEqual(result.localDraft, staleDeletedLocalDraft);
+  assert.deepEqual(result.serverDraft, newerServerDraft);
 });
 
 test("loadProjectDiagramDraft can use authenticated server ownership without a workspace query", async () => {
@@ -409,5 +473,32 @@ test("saveProjectDiagramDraft returns local draft when server save fails", async
   assert.equal(writes.length, 1);
   assert.equal(result.localDraft.dirty, true);
   assert.equal(result.localDraft.revision, 4);
+  assert.equal(result.serverDraft, null);
+});
+
+test("saveProjectDiagramDraft keeps an empty local recovery draft when server save fails", async () => {
+  const writes: LocalProjectDraft[] = [];
+  const result = await saveProjectDiagramDraft(
+    {
+      diagramJson: emptyDiagram,
+      previousLocalDraft: localDraft,
+      projectId: serverDraft.projectId,
+      workspaceId: "workspace-1"
+    },
+    {
+      now: () => "2026-06-24T03:00:00.000Z",
+      saveProjectDraft: async () => {
+        throw new Error("server unavailable");
+      },
+      writeLocalProjectDraft: async (draft) => {
+        writes.push(draft);
+      }
+    }
+  );
+
+  assert.equal(writes.length, 1);
+  assert.deepEqual(writes[0]?.diagramJson, emptyDiagram);
+  assert.equal(result.localDraft.dirty, true);
+  assert.deepEqual(result.localDraft.diagramJson, emptyDiagram);
   assert.equal(result.serverDraft, null);
 });
