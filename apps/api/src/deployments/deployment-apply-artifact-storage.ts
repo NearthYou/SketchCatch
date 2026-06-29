@@ -9,6 +9,10 @@ import {
   createDeploymentArtifactTagging,
   createS3ChecksumSha256
 } from "./deployment-artifact-security.js";
+import {
+  createS3DeploymentTerraformLockFileStorage,
+  type DeploymentTerraformLockFileStorage
+} from "./terraform-lock-file-storage.js";
 import { downloadTerraformArtifactFromS3 } from "./terraform-workspace.js";
 
 export type UploadDeploymentStateInput = {
@@ -20,7 +24,7 @@ export type UploadedDeploymentState = {
   objectKey: string;
 };
 
-export type DeploymentApplyArtifactStorage = {
+export type DeploymentApplyArtifactStorage = Partial<DeploymentTerraformLockFileStorage> & {
   downloadDeploymentArtifact(input: {
     deploymentId: string;
     planArtifactId: string;
@@ -43,8 +47,14 @@ export function createS3DeploymentApplyArtifactStorage(
 ): DeploymentApplyArtifactStorage {
   const bucketName = options.bucketName ?? requireS3BucketName();
   const s3Client = options.s3Client ?? getS3Client();
+  const terraformLockFileStorage = createS3DeploymentTerraformLockFileStorage({
+    bucketName,
+    s3Client
+  });
 
   return {
+    ...terraformLockFileStorage,
+
     async downloadDeploymentArtifact(input) {
       assertDeploymentPlanArtifactObjectKey(input);
 
@@ -72,6 +82,7 @@ export function createS3DeploymentApplyArtifactStorage(
           Key: objectKey,
           Body: body,
           ContentType: "application/json",
+          CacheControl: "no-store",
           ServerSideEncryption: "AES256",
           Metadata: createDeploymentArtifactMetadata({
             deploymentId: input.deploymentId,

@@ -1,14 +1,7 @@
 const SECRET_PATTERNS = [
   /\/\/([^:\s/@]+):([^@\s]+)@/g,
   /\b(?:AKIA|ASIA)[A-Z0-9]{16}\b/g,
-  /["']?\baws_access_key_id\b["']?\s*[:=]\s*(?:"[^"]*"|'[^']*'|[^\s,}]+)/gi,
-  /["']?\baws_secret_access_key\b["']?\s*[:=]\s*(?:"[^"]*"|'[^']*'|[^\s,}]+)/gi,
-  /["']?\baws_session_token\b["']?\s*[:=]\s*(?:"[^"]*"|'[^']*'|[^\s,}]+)/gi,
-  /["']?\bauth_token_secret\b["']?\s*[:=]\s*(?:"[^"]*"|'[^']*'|[^\s,}]+)/gi,
-  /["']?\bdatabase_url\b["']?\s*[:=]\s*(?:"[^"]*"|'[^']*'|[^\s,}]+)/gi,
-  /["']?\bpassword\b["']?\s*[:=]\s*(?:"[^"]*"|'[^']*'|[^\s,}]+)/gi,
-  /["']?\btoken\b["']?\s*[:=]\s*(?:"[^"]*"|'[^']*'|[^\s,}]+)/gi,
-  /["']?\bsecret\b["']?\s*[:=]\s*(?:"[^"]*"|'[^']*'|[^\s,}]+)/gi
+  /["']?\b(?:aws_access_key_id|awsAccessKeyId|accessKeyId|aws_secret_access_key|awsSecretAccessKey|secretAccessKey|aws_session_token|awsSessionToken|sessionToken|auth_token_secret|authTokenSecret|database_url|databaseUrl|external_id|externalId|client_secret|clientSecret|private_key|privateKey|secret_key|secretKey|password|token|secret)\b["']?\s*[:=]\s*(?:"[^"]*"|'[^']*'|[^\s,}]+)/gi
 ];
 
 export function maskDeploymentMessage(message: string): string {

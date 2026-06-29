@@ -33,3 +33,21 @@ test("maskDeploymentMessage masks common runtime secret env keys and AWS key ids
   assert.equal(maskedMessage.includes("postgresql://user:password@db/sketchcatch"), false);
   assert.equal(maskedMessage.includes("ASIAABCDEFGHIJKLMNOP"), false);
 });
+
+test("maskDeploymentMessage masks deployment credential key variants", () => {
+  const message = [
+    'externalId = "sc_conn_external_id"',
+    '"secretAccessKey": "temporary-secret-access-key"',
+    "sessionToken=temporary-session-token",
+    'client_secret = "oauth-client-secret"',
+    'private_key = "-----BEGIN PRIVATE KEY-----not-real"'
+  ].join("\n");
+
+  const maskedMessage = maskDeploymentMessage(message);
+
+  assert.equal(maskedMessage.includes("sc_conn_external_id"), false);
+  assert.equal(maskedMessage.includes("temporary-secret-access-key"), false);
+  assert.equal(maskedMessage.includes("temporary-session-token"), false);
+  assert.equal(maskedMessage.includes("oauth-client-secret"), false);
+  assert.equal(maskedMessage.includes("-----BEGIN PRIVATE KEY-----not-real"), false);
+});
