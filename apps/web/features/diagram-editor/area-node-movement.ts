@@ -89,10 +89,19 @@ function findInnermostMovingArea(
   movingAreas: readonly AreaMovement[]
 ): AreaMovement | undefined {
   const nodeCenter = getNodeCenter(node);
+  let innermostArea: AreaMovement | undefined;
 
-  return movingAreas
-    .filter((areaMovement) => areaMovement.node.id !== node.id && containsPoint(areaMovement.node, nodeCenter))
-    .sort(compareAreaMovements)[0];
+  for (const areaMovement of movingAreas) {
+    if (areaMovement.node.id === node.id || !containsPoint(areaMovement.node, nodeCenter)) {
+      continue;
+    }
+
+    if (!innermostArea || compareAreaMovements(areaMovement, innermostArea) < 0) {
+      innermostArea = areaMovement;
+    }
+  }
+
+  return innermostArea;
 }
 
 function compareAreaMovements(left: AreaMovement, right: AreaMovement) {
