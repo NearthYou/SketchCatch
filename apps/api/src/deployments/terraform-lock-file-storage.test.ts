@@ -59,6 +59,7 @@ test("createS3DeploymentTerraformLockFileStorage uploads lock files with encrypt
       Key: `deployments/${deploymentId}/terraform/.terraform.lock.hcl`,
       Body: Buffer.from("provider lock"),
       ContentType: "text/plain; charset=utf-8",
+      CacheControl: "no-store",
       ServerSideEncryption: "AES256",
       Metadata: {
         "sketchcatch-deployment-id": deploymentId,

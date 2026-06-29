@@ -67,6 +67,7 @@ export function createS3DeploymentPlanArtifactStorage(
           Key: objectKey,
           Body: body,
           ContentType: "application/octet-stream",
+          CacheControl: "no-store",
           ServerSideEncryption: "AES256",
           Metadata: createDeploymentArtifactMetadata({
             deploymentId: input.deploymentId,

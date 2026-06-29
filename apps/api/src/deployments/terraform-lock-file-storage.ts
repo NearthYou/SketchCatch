@@ -50,6 +50,7 @@ export function createS3DeploymentTerraformLockFileStorage(
           Key: objectKey,
           Body: body,
           ContentType: "text/plain; charset=utf-8",
+          CacheControl: "no-store",
           ServerSideEncryption: "AES256",
           Metadata: createDeploymentArtifactMetadata({
             deploymentId: input.deploymentId,
