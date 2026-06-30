@@ -12,6 +12,7 @@ import type {
   Deployment,
   DiagramJson,
   DeploymentLog,
+  TerraformDiagnostic,
   TerraformOutput
 } from "@sketchcatch/types";
 import { Clipboard, ClipboardCheck, Maximize2, ShieldCheck, Trash2, X } from "lucide-react";
@@ -49,6 +50,7 @@ import {
   createWorkspaceAiBoardSnapshot,
   isWorkspaceAiResultStale
 } from "./workspace-ai-panel-state";
+import { addTerraformDiagnosticsToPreDeploymentAnalysis } from "./pre-deployment-diagnostics";
 import type { AiRequestState } from "./WorkspaceAiPanelPieces";
 import type { SavedWorkspaceTerraformArtifact } from "./workspace-deployment-artifacts";
 import type { RequestState } from "./workspace-right-panel.types";
@@ -76,6 +78,7 @@ export function DeploymentPanel({
   diagramJson,
   hasUnsavedDeploymentBaseline,
   onPrepareDeploymentArtifacts,
+  onValidateTerraformDiagnostics,
   projectId,
   projectName
 }: {
@@ -83,6 +86,7 @@ export function DeploymentPanel({
   readonly diagramJson: DiagramJson;
   readonly hasUnsavedDeploymentBaseline: boolean;
   readonly onPrepareDeploymentArtifacts: () => Promise<SavedWorkspaceTerraformArtifact>;
+  readonly onValidateTerraformDiagnostics: () => Promise<TerraformDiagnostic[]>;
   readonly projectId: string;
   readonly projectName: string;
 }) {
@@ -430,7 +434,11 @@ export function DeploymentPanel({
     setPreDeploymentErrorMessage("");
 
     try {
-      const result = await runAiPreDeploymentCheck(boardSnapshot.architectureJson);
+      const currentTerraformDiagnostics = await onValidateTerraformDiagnostics();
+      const result = addTerraformDiagnosticsToPreDeploymentAnalysis(
+        await runAiPreDeploymentCheck(boardSnapshot.architectureJson),
+        currentTerraformDiagnostics
+      );
       setPreDeploymentAnalysis(result);
       setPreDeploymentFingerprint(boardSnapshot.fingerprint);
       setPreDeploymentState("idle");

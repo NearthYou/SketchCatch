@@ -217,8 +217,15 @@ test("pre-deployment check is owned by the deployment tab", () => {
   const preflightSummaryRule = getCssRule(stylesSource, "deploymentPreflightSummary");
 
   assert.match(deploymentPanelSource, /runAiPreDeploymentCheck/);
+  assert.match(deploymentPanelSource, /addTerraformDiagnosticsToPreDeploymentAnalysis/);
+  assert.match(deploymentPanelSource, /onValidateTerraformDiagnostics/);
+  assert.match(deploymentPanelSource, /await onValidateTerraformDiagnostics\(\)/);
+  assert.match(deploymentPanelSource, /currentTerraformDiagnostics/);
   assert.match(deploymentPanelSource, /createWorkspaceAiBoardSnapshot/);
   assert.match(componentSource, /diagramJson=\{context\.diagram\}/);
+  assert.match(componentSource, /validateTerraformForPreDeployment/);
+  assert.match(componentSource, /validateCurrentTerraform/);
+  assert.match(terraformPanelSource, /validateCurrentTerraform/);
   assert.doesNotMatch(aiPanelSource, /runAiPreDeploymentCheck/);
   assert.doesNotMatch(aiPanelSource, /WorkspaceAiPreDeploymentResult/);
   assert.match(preflightSummaryRule, /\bgap:\s*8px;/);
@@ -232,7 +239,10 @@ test("terraform error explanation lives in the terraform code panel only when er
   assert.match(terraformPanelSource, /runAiTerraformErrorExplanation/);
   assert.match(terraformPanelSource, /errorDiagnostics\.length > 0 \? \(/);
   assert.match(terraformPanelSource, /errorDiagnostics\.map/);
-  assert.match(terraformPanelSource, /diagnosticExplanation = isExplainedDiagnostic/);
+  assert.match(terraformPanelSource, /terraformErrorExplanationsByKey/);
+  assert.match(terraformPanelSource, /diagnosticExplanation = explanationEntry\?\.explanation/);
+  assert.match(terraformPanelSource, /disabled=\{isExplanationLoading \|\| requestState === "loading"\}/);
+  assert.doesNotMatch(terraformPanelSource, /explainedTerraformErrorKey/);
   assert.match(terraformPanelSource, /오류를 해석하는 중입니다/);
   assert.match(terraformPanelSource, /className=\{styles\.terraformErrorExplanationPanel\}/);
   assert.match(terraformPanelSource, /className=\{styles\.terraformErrorExplanationList\}/);
