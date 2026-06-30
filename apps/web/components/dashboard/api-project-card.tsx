@@ -29,7 +29,6 @@ export function ApiProjectCard({
 
       <div className="projectCardBody">
         <div className="projectCardTitle">
-          <span>DB saved project</span>
           <h3>{project.name}</h3>
         </div>
         {project.description?.trim() ? <p>{project.description}</p> : null}

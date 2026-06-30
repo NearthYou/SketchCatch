@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import type { Project } from "@sketchcatch/types";
 import { ApiProjectCard } from "../../components/dashboard/api-project-card";
 import { getApiErrorMessage } from "../../lib/api-client";
-import { listProjects } from "../../features/workspace/api";
+import { deleteProject, listProjects } from "../../features/workspace/api";
 import { DashboardIcon } from "../../components/dashboard/dashboard-icons";
 
 type ProjectsLoadState = "loading" | "ready" | "error";
@@ -14,6 +14,8 @@ export function ProjectsClient() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loadState, setLoadState] = useState<ProjectsLoadState>("loading");
   const [errorMessage, setErrorMessage] = useState("");
+  const [deleteErrorMessage, setDeleteErrorMessage] = useState("");
+  const [deletingProjectId, setDeletingProjectId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -48,6 +50,30 @@ export function ProjectsClient() {
     };
   }, []);
 
+  async function handleDeleteProject(project: Project): Promise<void> {
+    const confirmed = window.confirm(
+      `'${project.name}' 프로젝트를 삭제할까요?\n\nSketchCatch의 프로젝트 기록만 삭제되며, 이미 AWS에 생성된 리소스는 삭제되지 않습니다.`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setDeleteErrorMessage("");
+    setDeletingProjectId(project.id);
+
+    try {
+      await deleteProject(project.id);
+      setProjects((currentProjects) =>
+        currentProjects.filter((currentProject) => currentProject.id !== project.id)
+      );
+    } catch (error) {
+      setDeleteErrorMessage(getApiErrorMessage(error, "프로젝트를 삭제하지 못했습니다."));
+    } finally {
+      setDeletingProjectId(null);
+    }
+  }
+
   if (loadState === "loading") {
     return (
       <section className="dashboardPanel" aria-label="프로젝트 목록 로딩">
@@ -76,6 +102,12 @@ export function ProjectsClient() {
         <span className="dashboardCountBadge">{projects.length}개</span>
       </div>
 
+      {deleteErrorMessage ? (
+        <p className="dashboardMessage" role="alert">
+          {deleteErrorMessage}
+        </p>
+      ) : null}
+
       {projects.length === 0 ? (
         <div className="projectListEmpty">
           <p>아직 생성한 프로젝트가 없습니다.</p>
@@ -88,7 +120,9 @@ export function ProjectsClient() {
         <div className="dashboardCardGrid">
           {projects.map((project) => (
             <ApiProjectCard
+              isDeleting={deletingProjectId === project.id}
               key={project.id}
+              onDelete={handleDeleteProject}
               project={project}
               timestampLabel="수정"
               timestampValue={project.updatedAt}
