@@ -59,6 +59,10 @@ import {
   clearOutOfBoundsAreaParentAssignments
 } from "./area-node-movement";
 import { findInnermostAreaNodeAtPoint } from "./area-nodes";
+import {
+  getAreaBlankInteractionTarget,
+  isCanvasInteractiveElementTarget
+} from "./canvas-pointer-hit-test";
 import { DiagramEdgeToolbar } from "./DiagramEdgeToolbar";
 import { DiagramNodeView } from "./DiagramNodeView";
 import {
@@ -107,6 +111,18 @@ const MAX_LEFT_PANEL_WIDTH = 640;
 const MIN_RIGHT_PANEL_WIDTH = 300;
 const MAX_RIGHT_PANEL_WIDTH = 640;
 const MIN_WORKSPACE_WIDTH = 420;
+const DIAGRAM_SNAP_GRID_SIZE = 12;
+const DIAGRAM_SNAP_GRID: [number, number] = [DIAGRAM_SNAP_GRID_SIZE, DIAGRAM_SNAP_GRID_SIZE];
+
+type AreaBlankDragState = {
+  before: DiagramJson;
+  hasMoved: boolean;
+  nodeId: string;
+  pointerId: number;
+  snapshotNodes: DiagramNode[];
+  startClientPosition: DiagramNode["position"];
+  startNodePosition: DiagramNode["position"];
+};
 
 export function DiagramEditor(props: DiagramEditorProps) {
   return (
@@ -147,17 +163,25 @@ function DiagramEditorInner({
   const editorShellRef = useRef<HTMLElement | null>(null);
   const leftRailRef = useRef<HTMLDivElement | null>(null);
   const resizeSnapshotRef = useRef<DiagramJson | null>(null);
+  const areaBlankDragRef = useRef<AreaBlankDragState | null>(null);
   const flowInstanceRef = useRef<ReactFlowInstance<DiagramFlowNode, DiagramFlowEdge> | null>(null);
   const connectStartNodeIdRef = useRef<string | null>(null);
   const shouldAutoFitInitialDiagramRef = useRef((initialDiagram?.nodes.length ?? 0) > 0);
   const initialAutoFitFrameRef = useRef<number | null>(null);
   const isLeftPanelResizingRef = useRef(false);
   const isRightPanelResizingRef = useRef(false);
+  const [hoveredAreaBlankNodeId, setHoveredAreaBlankNodeId] = useState<string | null>(null);
+  const [isAreaBlankDragging, setAreaBlankDragging] = useState(false);
 
   const selectedNodeId = selectedNodeIds.length === 1 ? selectedNodeIds[0] ?? null : null;
   const selectedEdge = selectedEdgeIds.length === 1
     ? diagram.edges.find((edge) => edge.id === selectedEdgeIds[0]) ?? null
     : null;
+  const hoveredSelectedAreaNode = hoveredAreaBlankNodeId && selectedNodeId === hoveredAreaBlankNodeId
+    ? diagram.nodes.find((node) => node.id === hoveredAreaBlankNodeId) ?? null
+    : null;
+  const shouldShowAreaBlankMoveCursor = Boolean(hoveredSelectedAreaNode && !hoveredSelectedAreaNode.locked);
+  const shouldShowAreaBlankBlockedCursor = Boolean(hoveredSelectedAreaNode?.locked);
 
   const replaceDiagram = useCallback(
     (nextDiagram: DiagramJson, notifyChange = true) => {
@@ -728,6 +752,270 @@ function DiagramEditorInner({
     }
   }, []);
 
+  const selectAreaBlankNode = useCallback(
+    (nodeId: string) => {
+      setSelectedNodeIds([nodeId]);
+      setSelectedEdgeIds([]);
+      setInspectedNodeId(null);
+      focusEditorShell();
+    },
+    [focusEditorShell]
+  );
+
+  const inspectAreaBlankNode = useCallback(
+    (nodeId: string) => {
+      setSelectedNodeIds([nodeId]);
+      setSelectedEdgeIds([]);
+      setInspectedNodeId(nodeId);
+      setRightPanelOpen(true);
+      focusEditorShell();
+    },
+    [focusEditorShell]
+  );
+
+  const getAreaNodeFromPointerEvent = useCallback(
+    (clientX: number, clientY: number) => {
+      const position = reactFlow.screenToFlowPosition({
+        x: clientX,
+        y: clientY
+      });
+
+      return findInnermostAreaNodeAtPoint(diagramRef.current.nodes, position);
+    },
+    [reactFlow]
+  );
+
+  const handleAreaBlankDragMove = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      const dragState = areaBlankDragRef.current;
+
+      if (!dragState || dragState.pointerId !== event.pointerId) {
+        return false;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      const zoom = reactFlow.getZoom() || 1;
+      const nextPosition = {
+        x: snapToDiagramGrid(dragState.startNodePosition.x + (event.clientX - dragState.startClientPosition.x) / zoom),
+        y: snapToDiagramGrid(dragState.startNodePosition.y + (event.clientY - dragState.startClientPosition.y) / zoom)
+      };
+
+      if (!isDifferentPosition(dragState.startNodePosition, nextPosition) && !dragState.hasMoved) {
+        return true;
+      }
+
+      if (isDifferentPosition(dragState.startNodePosition, nextPosition)) {
+        dragState.hasMoved = true;
+      }
+
+      const directlyMovedNodeIds = new Set([dragState.nodeId]);
+
+      applyLiveDiagramUpdate((currentDiagram) => {
+        const positionedNodes = currentDiagram.nodes.map((node) =>
+          node.id === dragState.nodeId ? { ...node, position: nextPosition } : node
+        );
+
+        const nodes = applyAreaNodeMovement(dragState.snapshotNodes, positionedNodes, directlyMovedNodeIds);
+        const draggedNode = nodes.find((node) => node.id === dragState.nodeId);
+
+        updateActiveReferenceDropTargetNodeId(
+          draggedNode ? getVisualDropTargetNodeId(draggedNode, nodes) : null
+        );
+
+        return {
+          ...currentDiagram,
+          nodes
+        };
+      });
+
+      return true;
+    },
+    [
+      applyLiveDiagramUpdate,
+      getVisualDropTargetNodeId,
+      reactFlow,
+      updateActiveReferenceDropTargetNodeId
+    ]
+  );
+
+  const finishAreaBlankDrag = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      const dragState = areaBlankDragRef.current;
+
+      if (!dragState || dragState.pointerId !== event.pointerId) {
+        return false;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      }
+
+      if (dragState.hasMoved) {
+        const directlyMovedNodeIds = new Set([dragState.nodeId]);
+        const nodesWithAssignedParents = applyAreaNodeParentAssignments(
+          diagramRef.current.nodes,
+          directlyMovedNodeIds
+        );
+        const movedNodeIds = getMovedNodeIdsFromNodes(dragState.snapshotNodes, nodesWithAssignedParents);
+        const after = {
+          ...diagramRef.current,
+          nodes: applyInnermostReferenceDropTargets(
+            nodesWithAssignedParents,
+            movedNodeIds,
+            terraformParameterCatalog
+          )
+        };
+
+        replaceDiagram(after);
+        pushHistory(dragState.before, after);
+      }
+
+      areaBlankDragRef.current = null;
+      setAreaBlankDragging(false);
+      updateActiveReferenceDropTargetNodeId(null);
+
+      return true;
+    },
+    [pushHistory, replaceDiagram, updateActiveReferenceDropTargetNodeId]
+  );
+
+  const handleCanvasPointerDown = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (
+        getAreaBlankInteractionTarget({
+          button: event.button,
+          ctrlKey: event.ctrlKey,
+          interactionMode,
+          metaKey: event.metaKey,
+          shiftKey: event.shiftKey,
+          target: event.target,
+          temporaryPanPreviousMode: temporaryPanPreviousModeRef.current
+        }) === null
+      ) {
+        return;
+      }
+
+      const areaNode = getAreaNodeFromPointerEvent(event.clientX, event.clientY);
+
+      if (!areaNode) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      selectAreaBlankNode(areaNode.id);
+      setHoveredAreaBlankNodeId(areaNode.id);
+
+      if (areaNode.locked) {
+        return;
+      }
+
+      const before = cloneDiagram(diagramRef.current);
+
+      event.currentTarget.setPointerCapture(event.pointerId);
+      areaBlankDragRef.current = {
+        before,
+        hasMoved: false,
+        nodeId: areaNode.id,
+        pointerId: event.pointerId,
+        snapshotNodes: before.nodes,
+        startClientPosition: {
+          x: event.clientX,
+          y: event.clientY
+        },
+        startNodePosition: { ...areaNode.position }
+      };
+      setAreaBlankDragging(true);
+      updateActiveReferenceDropTargetNodeId(null);
+    },
+    [
+      getAreaNodeFromPointerEvent,
+      interactionMode,
+      selectAreaBlankNode,
+      updateActiveReferenceDropTargetNodeId
+    ]
+  );
+
+  const handleCanvasPointerMove = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (handleAreaBlankDragMove(event)) {
+        return;
+      }
+
+      if (
+        interactionMode !== "select" ||
+        isCanvasInteractiveElementTarget(event.target) ||
+        selectedNodeIds.length !== 1
+      ) {
+        setHoveredAreaBlankNodeId(null);
+        return;
+      }
+
+      const areaNode = getAreaNodeFromPointerEvent(event.clientX, event.clientY);
+      const selectedAreaNodeId = selectedNodeIds[0] ?? null;
+      const nextHoveredNodeId = areaNode && areaNode.id === selectedAreaNodeId ? areaNode.id : null;
+
+      setHoveredAreaBlankNodeId((currentNodeId) =>
+        currentNodeId === nextHoveredNodeId ? currentNodeId : nextHoveredNodeId
+      );
+    },
+    [getAreaNodeFromPointerEvent, handleAreaBlankDragMove, interactionMode, selectedNodeIds]
+  );
+
+  const handleCanvasPointerUp = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      finishAreaBlankDrag(event);
+    },
+    [finishAreaBlankDrag]
+  );
+
+  const handleCanvasPointerCancel = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      finishAreaBlankDrag(event);
+    },
+    [finishAreaBlankDrag]
+  );
+
+  const handleCanvasMouseLeave = useCallback(() => {
+    if (!areaBlankDragRef.current) {
+      setHoveredAreaBlankNodeId(null);
+    }
+  }, []);
+
+  const handleCanvasDoubleClick = useCallback(
+    (event: ReactMouseEvent<HTMLDivElement>) => {
+      if (
+        getAreaBlankInteractionTarget({
+          button: event.button,
+          ctrlKey: event.ctrlKey,
+          interactionMode,
+          metaKey: event.metaKey,
+          shiftKey: event.shiftKey,
+          target: event.target,
+          temporaryPanPreviousMode: temporaryPanPreviousModeRef.current
+        }) === null
+      ) {
+        return;
+      }
+
+      const areaNode = getAreaNodeFromPointerEvent(event.clientX, event.clientY);
+
+      if (!areaNode) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      inspectAreaBlankNode(areaNode.id);
+    },
+    [getAreaNodeFromPointerEvent, inspectAreaBlankNode, interactionMode]
+  );
+
   const handleNodeDragStart = useCallback(() => {
     dragSnapshotRef.current = cloneDiagram(diagramRef.current);
     updateActiveReferenceDropTargetNodeId(null);
@@ -1169,6 +1457,14 @@ function DiagramEditorInner({
     "--left-panel-width": `${leftPanelWidth}px`,
     "--right-panel-width": `${rightPanelWidth}px`
   } as CSSProperties;
+  const canvasPanelClassName = [
+    styles.canvasPanel,
+    isAreaBlankDragging ? styles.canvasPanelAreaBlankDragging : undefined,
+    shouldShowAreaBlankMoveCursor ? styles.canvasPanelAreaBlankMoveTarget : undefined,
+    shouldShowAreaBlankBlockedCursor ? styles.canvasPanelAreaBlankBlockedTarget : undefined
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   return (
     <section
@@ -1308,9 +1604,15 @@ function DiagramEditorInner({
         ) : null}
 
         <div
-          className={styles.canvasPanel}
+          className={canvasPanelClassName}
           onAuxClickCapture={handleCanvasAuxClick}
+          onDoubleClickCapture={handleCanvasDoubleClick}
           onMouseDownCapture={handleCanvasMouseDown}
+          onMouseLeave={handleCanvasMouseLeave}
+          onPointerCancelCapture={handleCanvasPointerCancel}
+          onPointerDownCapture={handleCanvasPointerDown}
+          onPointerMoveCapture={handleCanvasPointerMove}
+          onPointerUpCapture={handleCanvasPointerUp}
           ref={canvasPanelRef}
         >
           {selectedEdge ? (
@@ -1373,8 +1675,9 @@ function DiagramEditorInner({
             proOptions={{ hideAttribution: true }}
             selectionKeyCode={["Shift", "Meta", "Control"]}
             selectionOnDrag={interactionMode === "select"}
-            snapGrid={[12, 12]}
+            snapGrid={DIAGRAM_SNAP_GRID}
             snapToGrid
+            zoomOnDoubleClick={false}
           >
             <Background color="#d8e0ef" gap={24} size={2} variant={BackgroundVariant.Dots} />
           </ReactFlow>
@@ -1452,6 +1755,10 @@ function getMovedNodeIdsFromNodes(
 
 function isDifferentPosition(left: DiagramNode["position"], right: DiagramNode["position"]) {
   return left.x !== right.x || left.y !== right.y;
+}
+
+function snapToDiagramGrid(value: number): number {
+  return Math.round(value / DIAGRAM_SNAP_GRID_SIZE) * DIAGRAM_SNAP_GRID_SIZE;
 }
 
 function readStoredLeftPanelWidth(): number {
