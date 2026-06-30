@@ -33,11 +33,6 @@ export function ApiProjectCard({
         </div>
         {project.description?.trim() ? <p>{project.description}</p> : null}
 
-        <div className="dashboardChipRow">
-          <span className="dashboardChip">Diagram draft</span>
-          <span className="dashboardChip">Auto save</span>
-        </div>
-
         <div className="projectCardMeta">
           <span>
             <DashboardIcon name="clock" />

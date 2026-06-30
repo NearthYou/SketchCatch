@@ -4023,13 +4023,16 @@ nextjs-portal {
 }
 
 .dashboardCardGrid {
+  align-content: start;
+  align-items: start;
   display: grid;
   gap: 18px;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(280px, 340px));
+  justify-content: start;
 }
 
 .dashboardCardGridThree {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(280px, 340px));
 }
 
 .projectCard {
@@ -4037,6 +4040,11 @@ nextjs-portal {
   display: grid;
   gap: 12px;
   min-width: 0;
+  width: 100%;
+}
+
+.projectCard:not(.projectCardWide) {
+  max-width: 340px;
 }
 
 .projectCardLink {
@@ -4072,6 +4080,7 @@ nextjs-portal {
 .projectCardWide {
   border-bottom: 1px solid var(--dashboard-border);
   grid-template-columns: 260px minmax(0, 1fr);
+  max-width: 680px;
   padding-bottom: 18px;
 }
 
@@ -4796,7 +4805,6 @@ nextjs-portal {
 }
 
 @media (max-width: 1180px) {
-  .dashboardCardGridThree,
   .dashboardTwoColumn,
   .settingsGrid,
   .costSummaryPanel,
