@@ -303,6 +303,7 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
         {activeView === "deployment" ? (
           <DeploymentPanel
             currentNodeCount={context.nodes.length}
+            diagramJson={context.diagram}
             hasUnsavedDeploymentBaseline={hasUnsavedDeploymentBaseline}
             onPrepareDeploymentArtifacts={prepareDeploymentArtifacts}
             projectId={projectId}

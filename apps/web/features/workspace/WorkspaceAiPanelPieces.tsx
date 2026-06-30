@@ -1,5 +1,4 @@
 import type {
-  AiPreDeploymentAnalysisResult,
   AiTerraformErrorExplanationResult,
   AiTerraformPreviewExplanationResult,
   CheckFinding,
@@ -111,25 +110,6 @@ export function WorkspaceAiExplanation({ explanation }: { readonly explanation: 
       {explanation.nextActions.length > 0 ? (
         <WorkspaceAiTextList title="다음 행동" items={explanation.nextActions} />
       ) : null}
-    </div>
-  );
-}
-
-// Pre-Deployment Check 결과를 요약과 Check Finding 중심으로 압축 표시합니다.
-export function WorkspaceAiPreDeploymentResult({
-  analysis
-}: {
-  readonly analysis: AiPreDeploymentAnalysisResult;
-}) {
-  return (
-    <div className={styles.aiResultStack}>
-      <p className={styles.aiResultSummary}>{analysis.summary}</p>
-      <WorkspaceAiExplanation explanation={analysis.llmExplanation} />
-      <WorkspaceAiFindingList findings={analysis.findings} />
-      <WorkspaceAiTextList
-        title="체크리스트"
-        items={analysis.checklist.map((item) => `${item.status.toUpperCase()} · ${item.label}`)}
-      />
     </div>
   );
 }
