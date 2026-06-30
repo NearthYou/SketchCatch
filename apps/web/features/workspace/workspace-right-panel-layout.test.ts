@@ -133,8 +133,8 @@ test("deployment expanded details use larger action and record text", () => {
     /\.deploymentExpandedDetails\s+\.deploymentField\s*\{[\s\S]*?\bfont-size:\s*13px;/
   );
   assert.match(
-    stylesSource,
-    /\.deploymentExpandedDetails\s+\.deploymentField\s+select\s*\{[\s\S]*?\bmin-height:\s*42px;/
+    deploymentPanelSource,
+    /size=\{isDeploymentExpanded \? "large" : "regular"\}/
   );
   assert.match(
     stylesSource,

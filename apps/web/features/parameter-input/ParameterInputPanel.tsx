@@ -12,6 +12,7 @@ import type {
   ResourceNodeParameters
 } from "../../../../packages/types/src";
 
+import { SelectMenu } from "../../components/ui/SelectMenu";
 import type { DiagramEditorPanelContext } from "../diagram-editor/types";
 import {
   filterAdvancedDefinitions,
@@ -780,19 +781,20 @@ function SelectControl({
   onChange: (value: unknown) => void;
   value: unknown;
 }) {
+  const selectedValue = typeof value === "string" ? value : "";
+
   return (
-    <select
-      className={styles.input}
-      onChange={(event) => onChange(event.currentTarget.value || undefined)}
-      value={typeof value === "string" ? value : ""}
-    >
-      <option value="">Select a value</option>
-      {(definition.options ?? []).map((option) => (
-        <option key={option} value={option}>
-          {option}
-        </option>
-      ))}
-    </select>
+    <SelectMenu
+      ariaLabel={`${definition.label ?? definition.name} 선택`}
+      emptyLabel="Select a value"
+      onChange={(nextValue) => onChange(nextValue || undefined)}
+      options={(definition.options ?? []).map((option) => ({
+        label: option,
+        value: option
+      }))}
+      tone="purple"
+      value={selectedValue}
+    />
   );
 }
 
@@ -880,18 +882,17 @@ function ReferencePicker({
   }
 
   return (
-    <select
-      className={styles.input}
-      onChange={(event) => onChange(event.currentTarget.value || undefined)}
+    <SelectMenu
+      ariaLabel={`${definition.label ?? definition.name} 리소스 선택`}
+      emptyLabel="Select a resource"
+      onChange={(nextValue) => onChange(nextValue || undefined)}
+      options={options.map((option) => ({
+        label: option.label,
+        value: option.reference
+      }))}
+      tone="purple"
       value={typeof value === "string" ? value : ""}
-    >
-      <option value="">Select a resource</option>
-      {options.map((option) => (
-        <option key={option.reference} value={option.reference}>
-          {option.label}
-        </option>
-      ))}
-    </select>
+    />
   );
 }
 

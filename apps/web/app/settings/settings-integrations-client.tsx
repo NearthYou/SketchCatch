@@ -8,6 +8,7 @@ import type {
   TestAwsConnectionResponse
 } from "@sketchcatch/types";
 import { DashboardIcon } from "../../components/dashboard/dashboard-icons";
+import { SelectMenu, type SelectMenuOption } from "../../components/ui/SelectMenu";
 import {
   createAwsConnectionSetup,
   deleteAwsConnection,
@@ -47,6 +48,15 @@ export function SettingsIntegrationsClient() {
     (connection) => connection.status === "verified"
   ).length;
   const hasVerifiedAwsConnection = verifiedAwsConnectionCount > 0;
+  const awsConnectionOptions = useMemo<SelectMenuOption[]>(
+    () =>
+      awsConnections.map((connection) => ({
+        detail: formatDate(connection.updatedAt),
+        label: `${connection.status} | ${connection.accountId ?? "account 미확인"}`,
+        value: connection.id
+      })),
+    [awsConnections]
+  );
   const shouldShowAwsSetupControls =
     !hasVerifiedAwsConnection || isAddingAwsConnection || activeConnection?.status !== "verified";
   const expectedRoleArn =
@@ -262,6 +272,20 @@ export function SettingsIntegrationsClient() {
     }, "AWS 연결 삭제에 실패했습니다.");
   }
 
+  function selectAwsConnection(nextConnectionId: string): void {
+    const nextConnection = awsConnections.find(
+      (connection) => connection.id === nextConnectionId
+    );
+
+    setSelectedConnectionId(nextConnectionId);
+    setAccountId(nextConnection?.accountId ?? "");
+    setRoleArn(nextConnection?.roleArn ?? "");
+    setSetup(null);
+    setTemplate(null);
+    setTestResult(null);
+    setIsAddingAwsConnection(false);
+  }
+
   return (
     <>
       <div className="dashboardPageHeader">
@@ -338,37 +362,18 @@ export function SettingsIntegrationsClient() {
           </p>
 
           <div className="settingsGrid">
-            <label className="settingsField">
+            <div className="settingsField">
               AWS 계정 연결
-              <select
+              <SelectMenu
+                ariaLabel="AWS 계정 연결 선택"
                 disabled={awsConnections.length === 0}
-                onChange={(event) => {
-                  const nextConnection = awsConnections.find(
-                    (connection) => connection.id === event.target.value
-                  );
-
-                  setSelectedConnectionId(event.target.value);
-                  setAccountId(nextConnection?.accountId ?? "");
-                  setRoleArn(nextConnection?.roleArn ?? "");
-                  setSetup(null);
-                  setTemplate(null);
-                  setTestResult(null);
-                  setIsAddingAwsConnection(false);
-                }}
+                emptyLabel="연결 없음"
+                onChange={selectAwsConnection}
+                options={awsConnectionOptions}
+                tone="dashboard"
                 value={selectedConnectionId}
-              >
-                {awsConnections.length === 0 ? (
-                  <option value="">연결 없음</option>
-                ) : (
-                  awsConnections.map((connection) => (
-                    <option key={connection.id} value={connection.id}>
-                      {connection.status} | {connection.accountId ?? "account 미확인"} |{" "}
-                      {formatDate(connection.updatedAt)}
-                    </option>
-                  ))
-                )}
-              </select>
-            </label>
+              />
+            </div>
           </div>
 
           <div className="integrationStatus">

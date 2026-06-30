@@ -13,6 +13,7 @@ import type {
 } from "@sketchcatch/types";
 import { ClipboardCheck, Maximize2, Trash2, X } from "lucide-react";
 import { DashboardIcon } from "../../components/dashboard/dashboard-icons";
+import { SelectMenu, type SelectMenuOption } from "../../components/ui/SelectMenu";
 import { getApiErrorMessage } from "../../lib/api-client";
 import {
   approveDeploymentPlan,
@@ -53,7 +54,6 @@ type DeploymentRuntimeSnapshot = {
 type DeploymentPanelSnapshot = DeploymentRuntimeSnapshot & {
   readonly awsConnections: AwsConnection[];
 };
-
 const DEPLOYMENT_EXPANDED_DEFAULT_DETAILS_PERCENT = 50;
 const DEPLOYMENT_EXPANDED_MIN_DETAILS_PERCENT = 28;
 const DEPLOYMENT_EXPANDED_MAX_DETAILS_PERCENT = 72;
@@ -95,6 +95,24 @@ export function DeploymentPanel({
   const verifiedAwsConnections = useMemo(
     () => awsConnections.filter((connection) => connection.status === "verified"),
     [awsConnections]
+  );
+  const awsConnectionOptions = useMemo<SelectMenuOption[]>(
+    () =>
+      verifiedAwsConnections.map((connection) => ({
+        detail: connection.region,
+        label: connection.accountId ?? "Unknown AWS account",
+        value: connection.id
+      })),
+    [verifiedAwsConnections]
+  );
+  const deploymentOptions = useMemo<SelectMenuOption[]>(
+    () =>
+      deployments.map((deployment) => ({
+        detail: formatDate(deployment.createdAt),
+        label: deployment.status,
+        value: deployment.id
+      })),
+    [deployments]
   );
   const selectedDeployment = useMemo(
     () => deployments.find((deployment) => deployment.id === selectedDeploymentId) ?? null,
@@ -656,24 +674,18 @@ export function DeploymentPanel({
         배포 기준 저장
       </button>
 
-      <label className={styles.deploymentField}>
+      <div className={styles.deploymentField}>
         AWS 연결
-        <select
-          disabled={verifiedAwsConnections.length === 0}
-          onChange={(event) => setSelectedAwsConnectionId(event.target.value)}
+        <SelectMenu
+          ariaLabel="AWS 연결 선택"
+          disabled={awsConnectionOptions.length === 0}
+          emptyLabel="검증된 AWS 연결 없음"
+          onChange={setSelectedAwsConnectionId}
+          options={awsConnectionOptions}
+          size={isDeploymentExpanded ? "large" : "regular"}
           value={selectedAwsConnectionId}
-        >
-          {verifiedAwsConnections.length === 0 ? (
-            <option value="">검증된 AWS 연결 없음</option>
-          ) : (
-            verifiedAwsConnections.map((connection) => (
-              <option key={connection.id} value={connection.id}>
-                {connection.accountId} | {connection.region}
-              </option>
-            ))
-          )}
-        </select>
-      </label>
+        />
+      </div>
 
       <button
         className={styles.deploymentPrimaryButton}
@@ -701,24 +713,18 @@ export function DeploymentPanel({
         </button>
       </div>
 
-      <label className={styles.deploymentField}>
+      <div className={styles.deploymentField}>
         실행 기록
-        <select
-          disabled={deployments.length === 0}
-          onChange={(event) => setSelectedDeploymentId(event.target.value)}
+        <SelectMenu
+          ariaLabel="실행 기록 선택"
+          disabled={deploymentOptions.length === 0}
+          emptyLabel="Deployment 없음"
+          onChange={setSelectedDeploymentId}
+          options={deploymentOptions}
+          size={isDeploymentExpanded ? "large" : "regular"}
           value={selectedDeploymentId}
-        >
-          {deployments.length === 0 ? (
-            <option value="">Deployment 없음</option>
-          ) : (
-            deployments.map((deployment) => (
-              <option key={deployment.id} value={deployment.id}>
-                {deployment.status} | {formatDate(deployment.createdAt)}
-              </option>
-            ))
-          )}
-        </select>
-      </label>
+        />
+      </div>
 
       {selectedDeployment ? (
         <div className={styles.deploymentSummary}>

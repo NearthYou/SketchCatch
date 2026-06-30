@@ -1489,8 +1489,7 @@
 }
 
 .aiField textarea,
-.aiField input,
-.aiField select {
+.aiField input {
   background: #ffffff;
   border: 1px solid #cbd5e1;
   border-radius: 6px;
@@ -1507,8 +1506,7 @@
 }
 
 .aiField textarea:focus,
-.aiField input:focus,
-.aiField select:focus {
+.aiField input:focus {
   border-color: #2f6db3;
   box-shadow: 0 0 0 3px rgb(47 109 179 / 16%);
   outline: none;
@@ -1794,29 +1792,6 @@
   font-size: 12px;
   font-weight: 850;
   gap: 6px;
-}
-
-.deploymentField select {
-  background: #ffffff;
-  border: 1px solid #cbd5e1;
-  border-radius: 6px;
-  color: #172033;
-  font: inherit;
-  min-height: 38px;
-  min-width: 0;
-  padding: 8px 10px;
-  width: 100%;
-}
-
-.deploymentField select:focus {
-  border-color: #2f6db3;
-  box-shadow: 0 0 0 3px rgb(47 109 179 / 16%);
-  outline: none;
-}
-
-.deploymentField select:disabled {
-  background: #f1f5f9;
-  color: #8491a3;
 }
 
 .deploymentPrimaryButton,
@@ -2180,12 +2155,6 @@
 .deploymentExpandedDetails .deploymentField {
   font-size: 13px;
   gap: 7px;
-}
-
-.deploymentExpandedDetails .deploymentField select {
-  font-size: 13px;
-  min-height: 42px;
-  padding: 10px 12px;
 }
 
 .deploymentExpandedDetails .deploymentPrimaryButton,

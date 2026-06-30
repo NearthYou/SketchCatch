@@ -3,6 +3,7 @@
 import { Trash2 } from "lucide-react";
 import type { DiagramEdge, DiagramEdgeStyle } from "../../../../packages/types/src";
 
+import { SelectMenu } from "../../components/ui/SelectMenu";
 import { EDGE_COLOR_SWATCHES } from "./constants";
 import type { DiagramEdgeKind } from "./types";
 import styles from "./diagram-editor.module.css";
@@ -38,18 +39,18 @@ export function DiagramEdgeToolbar({
 
   return (
     <div aria-label="연결선 도구" className={styles.edgeToolbar}>
-      <select
-        aria-label="연결선 타입"
+      <SelectMenu
+        ariaLabel="연결선 타입"
         className={styles.edgeSelect}
-        onChange={(event) => onTypeChange(edge.id, event.target.value as DiagramEdgeKind)}
+        emptyLabel="Smooth"
+        onChange={(nextValue) => onTypeChange(edge.id, nextValue as DiagramEdgeKind)}
+        options={EDGE_TYPES}
+        size="compact"
+        style={{ minWidth: 96 }}
+        tone="purple"
         value={(edge.type as DiagramEdgeKind | undefined) ?? "smoothstep"}
-      >
-        {EDGE_TYPES.map((edgeType) => (
-          <option key={edgeType.value} value={edgeType.value}>
-            {edgeType.label}
-          </option>
-        ))}
-      </select>
+        width="content"
+      />
 
       <div aria-label="연결선 색상" className={styles.edgeSwatches}>
         {EDGE_COLOR_SWATCHES.map((swatchColor) => (
