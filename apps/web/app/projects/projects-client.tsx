@@ -1,21 +1,27 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Project } from "@sketchcatch/types";
 import { ApiProjectCard } from "../../components/dashboard/api-project-card";
 import { getApiErrorMessage } from "../../lib/api-client";
 import { deleteProject, listProjects } from "../../features/workspace/api";
 import { DashboardIcon } from "../../components/dashboard/dashboard-icons";
+import { filterProjectsByName } from "../../features/projects/project-search";
 
 type ProjectsLoadState = "loading" | "ready" | "error";
 
-export function ProjectsClient() {
+export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loadState, setLoadState] = useState<ProjectsLoadState>("loading");
   const [errorMessage, setErrorMessage] = useState("");
   const [deleteErrorMessage, setDeleteErrorMessage] = useState("");
   const [deletingProjectId, setDeletingProjectId] = useState<string | null>(null);
+  const isSearchActive = searchQuery.trim().length > 0;
+  const displayProjects = useMemo(
+    () => (isSearchActive ? filterProjectsByName(projects, searchQuery) : projects),
+    [isSearchActive, projects, searchQuery]
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -99,7 +105,7 @@ export function ProjectsClient() {
           <p className="dashboardPanelKicker">All projects</p>
           <h2 id="all-projects-title">내 프로젝트 전부</h2>
         </div>
-        <span className="dashboardCountBadge">{projects.length}개</span>
+        <span className="dashboardCountBadge">{displayProjects.length}개</span>
       </div>
 
       {deleteErrorMessage ? (
@@ -108,7 +114,15 @@ export function ProjectsClient() {
         </p>
       ) : null}
 
-      {projects.length === 0 ? (
+      {displayProjects.length === 0 && isSearchActive ? (
+        <div className="projectListEmpty">
+          <p>일치하는 프로젝트가 없습니다.</p>
+          <Link className="dashboardSecondaryButton" href="/projects">
+            <DashboardIcon name="close" />
+            <span>검색 해제</span>
+          </Link>
+        </div>
+      ) : displayProjects.length === 0 ? (
         <div className="projectListEmpty">
           <p>아직 생성한 프로젝트가 없습니다.</p>
           <Link className="dashboardTopbarAction" href="/workspace/new">
@@ -118,7 +132,7 @@ export function ProjectsClient() {
         </div>
       ) : (
         <div className="dashboardCardGrid">
-          {projects.map((project) => (
+          {displayProjects.map((project) => (
             <ApiProjectCard
               isDeleting={deletingProjectId === project.id}
               key={project.id}
