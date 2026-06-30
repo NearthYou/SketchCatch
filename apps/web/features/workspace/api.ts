@@ -32,6 +32,8 @@ import type {
   ProjectDraftResponse,
   ProjectListResponse,
   ProjectResponse,
+  RecentSuccessfulDeploymentProject,
+  RecentSuccessfulDeploymentProjectListResponse,
   SaveProjectDraftRequest,
   TerraformOutput,
   TerraformOutputListResponse,
@@ -415,6 +417,17 @@ export async function listDeployments(projectId: string): Promise<Deployment[]> 
   );
 
   return response.deployments;
+}
+
+export async function listRecentSuccessfulDeploymentProjects(): Promise<RecentSuccessfulDeploymentProject[]> {
+  const response = await apiFetch<RecentSuccessfulDeploymentProjectListResponse>(
+    "/deployments/recent-successful-projects",
+    {
+      auth: true
+    }
+  );
+
+  return response.items;
 }
 
 export async function runDeploymentInit(deploymentId: string): Promise<Deployment> {

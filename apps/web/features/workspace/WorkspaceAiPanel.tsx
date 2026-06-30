@@ -3,7 +3,6 @@
 import { useMemo, useState } from "react";
 import type {
   AiArchitectureDraftResult,
-  AiPreDeploymentAnalysisResult,
   ArchitectureDraftBudgetLevel,
   ArchitectureDraftScenarioHint,
   ArchitectureDraftSecurityPriority,
@@ -14,8 +13,7 @@ import { getApiErrorMessage } from "../../lib/api-client";
 import type { DiagramEditorPanelContext } from "../diagram-editor";
 import {
   createAiArchitectureDraft,
-  runAiDesignSimulation,
-  runAiPreDeploymentCheck
+  runAiDesignSimulation
 } from "./api";
 import { convertArchitectureJsonToDiagramJson } from "./workspace-ai-diagram-adapter";
 import {
@@ -27,11 +25,9 @@ import {
   WorkspaceAiDesignSimulationResult,
   WorkspaceAiExplanation,
   WorkspaceAiGuardrailWarnings,
-  WorkspaceAiPreDeploymentResult,
   WorkspaceAiRequestMessage,
   WorkspaceAiSelect
 } from "./WorkspaceAiPanelPieces";
-import { WorkspaceAiTerraformPanel } from "./WorkspaceAiTerraformPanel";
 import type { AiRequestState } from "./WorkspaceAiPanelPieces";
 import {
   budgetOptions,
@@ -54,24 +50,16 @@ export function WorkspaceAiPanel({ context }: WorkspaceAiPanelProps) {
   const [trafficLevel, setTrafficLevel] = useState<ArchitectureDraftTrafficLevel>("small");
   const [securityPriority, setSecurityPriority] = useState<ArchitectureDraftSecurityPriority>("basic");
   const [draft, setDraft] = useState<AiArchitectureDraftResult | null>(null);
-  const [preDeploymentAnalysis, setPreDeploymentAnalysis] =
-    useState<AiPreDeploymentAnalysisResult | null>(null);
   const [designSimulation, setDesignSimulation] = useState<DesignSimulationResult | null>(null);
   const [draftState, setDraftState] = useState<AiRequestState>("idle");
-  const [preDeploymentState, setPreDeploymentState] = useState<AiRequestState>("idle");
   const [simulationState, setSimulationState] = useState<AiRequestState>("idle");
   const [draftErrorMessage, setDraftErrorMessage] = useState("");
-  const [preDeploymentErrorMessage, setPreDeploymentErrorMessage] = useState("");
   const [simulationErrorMessage, setSimulationErrorMessage] = useState("");
-  const [preDeploymentFingerprint, setPreDeploymentFingerprint] = useState<string | null>(null);
   const [simulationFingerprint, setSimulationFingerprint] = useState<string | null>(null);
   const boardSnapshot = useMemo(
     () => createWorkspaceAiBoardSnapshot(context.diagram),
     [context.diagram]
   );
-  const hasStalePreDeploymentAnalysis =
-    preDeploymentAnalysis !== null &&
-    isWorkspaceAiResultStale(preDeploymentFingerprint, boardSnapshot.fingerprint);
   const hasStaleDesignSimulation =
     designSimulation !== null &&
     isWorkspaceAiResultStale(simulationFingerprint, boardSnapshot.fingerprint);
@@ -108,31 +96,8 @@ export function WorkspaceAiPanel({ context }: WorkspaceAiPanelProps) {
     }
 
     context.applyDiagramJson(convertArchitectureJsonToDiagramJson(draft.architectureJson));
-    setPreDeploymentAnalysis(null);
     setDesignSimulation(null);
-    setPreDeploymentFingerprint(null);
     setSimulationFingerprint(null);
-  }
-
-  async function runPreDeploymentCheck(): Promise<void> {
-    if (!boardSnapshot.hasResources) {
-      setPreDeploymentState("error");
-      setPreDeploymentErrorMessage("Architecture Board에 Resource가 있어야 실행할 수 있습니다.");
-      return;
-    }
-
-    setPreDeploymentState("loading");
-    setPreDeploymentErrorMessage("");
-
-    try {
-      const result = await runAiPreDeploymentCheck(boardSnapshot.architectureJson);
-      setPreDeploymentAnalysis(result);
-      setPreDeploymentFingerprint(boardSnapshot.fingerprint);
-      setPreDeploymentState("idle");
-    } catch (error) {
-      setPreDeploymentState("error");
-      setPreDeploymentErrorMessage(getApiErrorMessage(error, "Pre-Deployment Check 중 오류가 발생했습니다."));
-    }
   }
 
   async function runDesignSimulation(): Promise<void> {
@@ -228,22 +193,6 @@ export function WorkspaceAiPanel({ context }: WorkspaceAiPanelProps) {
 
       <section className={styles.aiSection}>
         <WorkspaceAiActionHeader
-          buttonLabel={preDeploymentState === "loading" ? "검사 중" : "Pre-Deployment Check"}
-          disabled={preDeploymentState === "loading"}
-          onClick={() => void runPreDeploymentCheck()}
-          title="배포 전 검사"
-        />
-        <WorkspaceAiRequestMessage state={preDeploymentState} message={preDeploymentErrorMessage} />
-        {hasStalePreDeploymentAnalysis ? <p className={styles.aiStaleNotice}>보드 변경됨 · 다시 실행 필요</p> : null}
-        {preDeploymentAnalysis !== null ? (
-          <WorkspaceAiPreDeploymentResult analysis={preDeploymentAnalysis} />
-        ) : (
-          <p className={styles.aiHint}>현재 보드 기준으로 비용, 보안, 설정 위험을 확인합니다.</p>
-        )}
-      </section>
-
-      <section className={styles.aiSection}>
-        <WorkspaceAiActionHeader
           buttonLabel={simulationState === "loading" ? "계산 중" : "Design Simulation"}
           disabled={simulationState === "loading"}
           onClick={() => void runDesignSimulation()}
@@ -257,8 +206,6 @@ export function WorkspaceAiPanel({ context }: WorkspaceAiPanelProps) {
           <p className={styles.aiHint}>현재 보드 기준으로 요청 흐름, 병목, 장애, 비용 압박을 추정합니다.</p>
         )}
       </section>
-
-      <WorkspaceAiTerraformPanel />
     </div>
   );
 }

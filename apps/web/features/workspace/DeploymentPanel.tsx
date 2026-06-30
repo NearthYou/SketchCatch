@@ -5,13 +5,17 @@ import type {
   PointerEvent as ReactPointerEvent
 } from "react";
 import type {
+  AiPreDeploymentAnalysisResult,
   AwsConnection,
+  CheckFinding,
   DeployedResource,
   Deployment,
+  DiagramJson,
   DeploymentLog,
+  TerraformDiagnostic,
   TerraformOutput
 } from "@sketchcatch/types";
-import { Clipboard, ClipboardCheck, Maximize2, Trash2, X } from "lucide-react";
+import { Clipboard, ClipboardCheck, Maximize2, ShieldCheck, Trash2, X } from "lucide-react";
 import { DashboardIcon } from "../../components/dashboard/dashboard-icons";
 import { SelectMenu, type SelectMenuOption } from "../../components/ui/SelectMenu";
 import { getApiErrorMessage } from "../../lib/api-client";
@@ -29,6 +33,7 @@ import {
   runDeploymentDestroy,
   runDeploymentDestroyPlan,
   runDeploymentPlan,
+  runAiPreDeploymentCheck,
   streamDeploymentLogs
 } from "./api";
 import {
@@ -41,6 +46,12 @@ import {
   type DeploymentLogMessageToken,
   type DeploymentPanelMode
 } from "./deployment-actions";
+import {
+  createWorkspaceAiBoardSnapshot,
+  isWorkspaceAiResultStale
+} from "./workspace-ai-panel-state";
+import { addTerraformDiagnosticsToPreDeploymentAnalysis } from "./pre-deployment-diagnostics";
+import type { AiRequestState } from "./WorkspaceAiPanelPieces";
 import type { SavedWorkspaceTerraformArtifact } from "./workspace-deployment-artifacts";
 import type { RequestState } from "./workspace-right-panel.types";
 import styles from "./workspace.module.css";
@@ -64,14 +75,18 @@ function clampNumber(value: number, min: number, max: number): number {
 
 export function DeploymentPanel({
   currentNodeCount,
+  diagramJson,
   hasUnsavedDeploymentBaseline,
   onPrepareDeploymentArtifacts,
+  onValidateTerraformDiagnostics,
   projectId,
   projectName
 }: {
   readonly currentNodeCount: number;
+  readonly diagramJson: DiagramJson;
   readonly hasUnsavedDeploymentBaseline: boolean;
   readonly onPrepareDeploymentArtifacts: () => Promise<SavedWorkspaceTerraformArtifact>;
+  readonly onValidateTerraformDiagnostics: () => Promise<TerraformDiagnostic[]>;
   readonly projectId: string;
   readonly projectName: string;
 }) {
@@ -91,6 +106,11 @@ export function DeploymentPanel({
   const [deploymentDetailsWidthPercent, setDeploymentDetailsWidthPercent] = useState(
     DEPLOYMENT_EXPANDED_DEFAULT_DETAILS_PERCENT
   );
+  const [preDeploymentAnalysis, setPreDeploymentAnalysis] =
+    useState<AiPreDeploymentAnalysisResult | null>(null);
+  const [preDeploymentState, setPreDeploymentState] = useState<AiRequestState>("idle");
+  const [preDeploymentErrorMessage, setPreDeploymentErrorMessage] = useState("");
+  const [preDeploymentFingerprint, setPreDeploymentFingerprint] = useState<string | null>(null);
   const deploymentExpandedGridRef = useRef<HTMLDivElement | null>(null);
   const deploymentResizeCleanupRef = useRef<(() => void) | null>(null);
 
@@ -143,6 +163,13 @@ export function DeploymentPanel({
     : "";
   const DeploymentBaselineIcon = hasUnsavedDeploymentBaseline ? Clipboard : ClipboardCheck;
   const shouldAutoRefreshSelectedDeployment = shouldAutoRefreshDeployment(selectedDeployment);
+  const boardSnapshot = useMemo(
+    () => createWorkspaceAiBoardSnapshot(diagramJson),
+    [diagramJson]
+  );
+  const hasStalePreDeploymentAnalysis =
+    preDeploymentAnalysis !== null &&
+    isWorkspaceAiResultStale(preDeploymentFingerprint, boardSnapshot.fingerprint);
   const deploymentExpandedGridStyle = useMemo(
     () =>
       ({
@@ -393,6 +420,31 @@ export function DeploymentPanel({
     } catch (error) {
       setRequestState("error");
       setErrorMessage(getApiErrorMessage(error, fallbackMessage));
+    }
+  }
+
+  async function runPreDeploymentCheck(): Promise<void> {
+    if (!boardSnapshot.hasResources) {
+      setPreDeploymentState("error");
+      setPreDeploymentErrorMessage("Architecture Board에 Resource가 있어야 실행할 수 있습니다.");
+      return;
+    }
+
+    setPreDeploymentState("loading");
+    setPreDeploymentErrorMessage("");
+
+    try {
+      const currentTerraformDiagnostics = await onValidateTerraformDiagnostics();
+      const result = addTerraformDiagnosticsToPreDeploymentAnalysis(
+        await runAiPreDeploymentCheck(boardSnapshot.architectureJson),
+        currentTerraformDiagnostics
+      );
+      setPreDeploymentAnalysis(result);
+      setPreDeploymentFingerprint(boardSnapshot.fingerprint);
+      setPreDeploymentState("idle");
+    } catch (error) {
+      setPreDeploymentState("error");
+      setPreDeploymentErrorMessage(getApiErrorMessage(error, "배포 전 검사 중 오류가 발생했습니다."));
     }
   }
 
@@ -664,6 +716,40 @@ export function DeploymentPanel({
       setDeploymentDetailsWidthPercent(DEPLOYMENT_EXPANDED_MAX_DETAILS_PERCENT);
     }
   }
+
+  const renderPreDeploymentCheckSection = () => (
+    <section className={styles.deploymentSection}>
+      <div className={styles.deploymentSectionHeader}>
+        <h3>배포 전 검사</h3>
+        <button
+          className={styles.deploymentSecondaryButton}
+          disabled={preDeploymentState === "loading"}
+          onClick={() => void runPreDeploymentCheck()}
+          type="button"
+        >
+          <ShieldCheck size={16} aria-hidden="true" />
+          {preDeploymentState === "loading" ? "검사 중" : "검사 실행"}
+        </button>
+      </div>
+
+      {preDeploymentState === "loading" ? (
+        <p className={styles.deploymentNotice}>검사 중입니다.</p>
+      ) : null}
+      {preDeploymentState === "error" ? (
+        <p className={styles.deploymentError} role="alert">
+          {preDeploymentErrorMessage}
+        </p>
+      ) : null}
+      {hasStalePreDeploymentAnalysis ? (
+        <p className={styles.deploymentStaleNotice}>보드 변경됨 · 다시 실행 필요</p>
+      ) : null}
+      {preDeploymentAnalysis !== null ? (
+        <DeploymentPreDeploymentSummary analysis={preDeploymentAnalysis} />
+      ) : (
+        <p className={styles.deploymentHint}>현재 보드 기준으로 비용, 보안, 설정 위험을 확인합니다.</p>
+      )}
+    </section>
+  );
 
   const renderSetupSection = () => (
     <section className={styles.deploymentSection}>
@@ -1023,7 +1109,12 @@ export function DeploymentPanel({
       </header>
 
       <div className={styles.deploymentPanelContent}>
-        {compactDeploymentPanelMode === "setup" ? renderSetupSection() : null}
+        {compactDeploymentPanelMode === "setup" ? (
+          <>
+            {renderPreDeploymentCheckSection()}
+            {renderSetupSection()}
+          </>
+        ) : null}
 
         {compactDeploymentPanelMode === "records" ? (
           <>
@@ -1087,6 +1178,7 @@ export function DeploymentPanel({
               style={deploymentExpandedGridStyle}
             >
               <div className={styles.deploymentExpandedDetails}>
+                {renderPreDeploymentCheckSection()}
                 {renderSetupSection()}
                 {renderRecordsSection()}
                 {renderResultsSection()}
@@ -1113,6 +1205,66 @@ export function DeploymentPanel({
       ) : null}
     </div>
   );
+}
+
+function DeploymentPreDeploymentSummary({
+  analysis
+}: {
+  readonly analysis: AiPreDeploymentAnalysisResult;
+}) {
+  const failCount = countChecklistItems(analysis, "fail");
+  const warningCount = countChecklistItems(analysis, "warning");
+  const visibleFindings = analysis.findings.slice(0, 3);
+  const hiddenFindingCount = Math.max(0, analysis.findings.length - visibleFindings.length);
+
+  return (
+    <div className={styles.deploymentPreflightSummary}>
+      <p>{analysis.summary}</p>
+      <div className={styles.deploymentPreflightStats} aria-label="배포 전 검사 요약">
+        <span>
+          <strong>{analysis.findings.length}</strong>
+          Findings
+        </span>
+        <span>
+          <strong>{failCount}</strong>
+          Fail
+        </span>
+        <span>
+          <strong>{warningCount}</strong>
+          Warning
+        </span>
+      </div>
+      {visibleFindings.length > 0 ? (
+        <ul className={styles.deploymentPreflightFindings}>
+          {visibleFindings.map((finding) => (
+            <DeploymentPreDeploymentFindingItem finding={finding} key={finding.id} />
+          ))}
+        </ul>
+      ) : (
+        <p className={styles.deploymentHint}>표시할 Check Finding이 없습니다.</p>
+      )}
+      {hiddenFindingCount > 0 ? (
+        <p className={styles.deploymentPreflightMore}>외 {hiddenFindingCount}개 항목</p>
+      ) : null}
+    </div>
+  );
+}
+
+function DeploymentPreDeploymentFindingItem({ finding }: { readonly finding: CheckFinding }) {
+  return (
+    <li>
+      <span>{finding.severity.toUpperCase()}</span>
+      <strong>{finding.title}</strong>
+      {finding.resourceId ? <em>{finding.resourceId}</em> : null}
+    </li>
+  );
+}
+
+function countChecklistItems(
+  analysis: AiPreDeploymentAnalysisResult,
+  status: AiPreDeploymentAnalysisResult["checklist"][number]["status"]
+): number {
+  return analysis.checklist.filter((item) => item.status === status).length;
 }
 
 function InfoRow({ label, value }: { readonly label: string; readonly value: string }) {

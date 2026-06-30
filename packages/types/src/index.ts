@@ -406,6 +406,16 @@ export type DeploymentListResponse = {
   deployments: Deployment[];
 };
 
+export type RecentSuccessfulDeploymentProject = {
+  project: Project;
+  deployment: Deployment;
+  deployedAt: IsoDateTimeString;
+};
+
+export type RecentSuccessfulDeploymentProjectListResponse = {
+  items: RecentSuccessfulDeploymentProject[];
+};
+
 export type DeploymentLogListResponse = {
   logs: DeploymentLog[];
 };

@@ -882,3 +882,36 @@ resource "aws_db_instance" "main" {
 
   await app.close();
 });
+
+test("POST /api/ai/terraform-preview-explanation explains route table associations as subnet routing", async () => {
+  const app = buildApp();
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/ai/terraform-preview-explanation",
+    payload: {
+      terraformCode: `
+resource "aws_route_table_association" "public" {
+  subnet_id      = aws_subnet.public.id
+  route_table_id = aws_route_table.public.id
+}
+`
+    }
+  });
+
+  assert.equal(response.statusCode, 200);
+
+  const body = terraformPreviewExplanationResponseSchema.parse(response.json());
+  const routeTableAssociation = body.detectedResources.find(
+    (resource) => resource.terraformType === "aws_route_table_association"
+  );
+
+  assert.ok(routeTableAssociation);
+  assert.match(body.summary, /Route Table Association/);
+  assert.doesNotMatch(body.summary, /감지했습니다/);
+  assert.match(routeTableAssociation.explanation, /aws_subnet\.public\.id/);
+  assert.match(routeTableAssociation.explanation, /aws_route_table\.public\.id/);
+  assert.match(routeTableAssociation.explanation, /라우팅 규칙/);
+
+  await app.close();
+});

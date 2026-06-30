@@ -684,6 +684,13 @@
   padding: 6px 8px;
 }
 
+.terraformTopActions {
+  align-items: center;
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 6px;
+}
+
 .terraformFileChip {
   align-items: center;
   background: #f8fafc;
@@ -983,6 +990,36 @@
   opacity: 0.62;
 }
 
+.terraformPreviewButton {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #7c5cff;
+  border-radius: 6px;
+  color: #6f4cf6;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 900;
+  gap: 5px;
+  justify-content: center;
+  line-height: 1.2;
+  min-height: 28px;
+  padding: 0 8px;
+  white-space: nowrap;
+}
+
+.terraformPreviewButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.terraformPreviewButton:not(:disabled):hover,
+.terraformPreviewButton:not(:disabled):focus-visible {
+  background: #f6f3ff;
+  outline: none;
+}
+
 .terraformStatusBar {
   align-items: center;
   background: #ffffff;
@@ -1073,6 +1110,362 @@
   box-shadow: inset 0 0 0 2px rgba(111, 76, 246, 0.62);
 }
 
+.terraformPreviewExplanationPanel {
+  background: #f8fafc;
+  border-top: 1px solid #dce3ee;
+  color: #172033;
+  display: grid;
+  flex: 0 0 auto;
+  gap: 7px;
+  max-height: 180px;
+  overflow: auto;
+  padding: 9px 10px;
+}
+
+.terraformPreviewExplanationHeader {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.terraformPreviewExplanationHeader > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.terraformPreviewExplanationHeader strong {
+  color: #243044;
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.terraformPreviewExplanationHeader span {
+  color: #64748b;
+  font-size: 10.5px;
+  font-weight: 850;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.terraformPreviewExplanationActions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 6px;
+}
+
+.terraformPreviewExplanationHeader button {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  color: #243044;
+  cursor: pointer;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 900;
+  gap: 5px;
+  min-height: 28px;
+  padding: 0 8px;
+}
+
+.terraformPreviewExplanationHeader .terraformPreviewExplanationCloseButton {
+  justify-content: center;
+  min-width: 28px;
+  padding: 0;
+}
+
+.terraformPreviewExplanationHeader button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.terraformPreviewExplanationHeader button:not(:disabled):hover,
+.terraformPreviewExplanationHeader button:not(:disabled):focus-visible {
+  background: #eef2ff;
+  border-color: #c7d2fe;
+  outline: none;
+}
+
+.terraformPreviewExplanationNotice,
+.terraformPreviewExplanationError,
+.terraformPreviewExplanationResult p {
+  font-size: 11.5px;
+  line-height: 1.45;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.terraformPreviewExplanationNotice {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 6px;
+  color: #1d4ed8;
+  font-weight: 800;
+  padding: 7px 8px;
+}
+
+.terraformPreviewExplanationError {
+  background: #fff1f0;
+  border: 1px solid #ffd1cc;
+  border-radius: 6px;
+  color: #9f2a1d;
+  font-weight: 800;
+  padding: 7px 8px;
+}
+
+.terraformPreviewExplanationResult {
+  background: #ffffff;
+  border: 1px solid #dce3ee;
+  border-radius: 6px;
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  padding: 8px;
+}
+
+.terraformPreviewExplanationResult p {
+  color: #172033;
+  font-weight: 800;
+}
+
+.terraformPreviewExplanationResult ul {
+  display: grid;
+  gap: 5px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.terraformPreviewExplanationResult li {
+  align-items: start;
+  border-top: 1px solid #edf1f7;
+  display: grid;
+  gap: 6px;
+  grid-template-columns: minmax(108px, 0.72fr) minmax(0, 1.28fr);
+  min-width: 0;
+  padding-top: 5px;
+}
+
+.terraformPreviewExplanationResult li:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.terraformPreviewExplanationResult li strong {
+  color: #243044;
+  font-size: 11px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.terraformPreviewExplanationResult li span {
+  color: #64748b;
+  font-size: 11px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.terraformPreviewExplanationStats {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.terraformPreviewExplanationStats span {
+  background: #eef2ff;
+  border-radius: 999px;
+  color: #3730a3;
+  font-size: 10.5px;
+  font-weight: 900;
+  padding: 4px 7px;
+}
+
+.terraformErrorExplanationPanel {
+  background: #fff7ed;
+  border-top: 1px solid #fed7aa;
+  color: #172033;
+  display: grid;
+  flex: 0 0 auto;
+  gap: 8px;
+  max-height: 240px;
+  overflow: auto;
+  padding: 10px;
+  scrollbar-gutter: stable;
+}
+
+.terraformErrorExplanationHeader {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.terraformErrorExplanationHeader > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.terraformErrorExplanationHeader strong {
+  color: #9a3412;
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.terraformErrorExplanationHeader span {
+  color: #475569;
+  font-size: 10.5px;
+  font-weight: 850;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.terraformErrorExplanationList button {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #fdba74;
+  border-radius: 6px;
+  color: #9a3412;
+  cursor: pointer;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 900;
+  gap: 5px;
+  min-height: 28px;
+  padding: 0 8px;
+}
+
+.terraformErrorExplanationList button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.terraformErrorExplanationList button:not(:disabled):hover,
+.terraformErrorExplanationList button:not(:disabled):focus-visible {
+  background: #ffedd5;
+  outline: none;
+}
+
+.terraformErrorExplanationList {
+  display: grid;
+  gap: 6px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.terraformErrorExplanationList li {
+  align-items: start;
+  background: #ffffff;
+  border: 1px solid #fed7aa;
+  border-radius: 6px;
+  display: grid;
+  gap: 7px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-width: 0;
+  padding: 7px 8px;
+}
+
+.terraformErrorExplanationItemText {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.terraformErrorExplanationItemText strong {
+  color: #9a3412;
+  font-size: 10.5px;
+  font-weight: 950;
+  overflow-wrap: anywhere;
+}
+
+.terraformErrorExplanationNotice,
+.terraformErrorExplanationError,
+.terraformErrorExplanationItemText span,
+.terraformErrorExplanationResult p {
+  font-size: 11.5px;
+  line-height: 1.45;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.terraformErrorExplanationItemText span {
+  color: #334155;
+}
+
+.terraformErrorExplanationNotice {
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 6px;
+  color: #92400e;
+  font-weight: 800;
+  grid-column: 1 / -1;
+  padding: 7px 8px;
+}
+
+.terraformErrorExplanationError {
+  background: #fff1f0;
+  border: 1px solid #ffd1cc;
+  border-radius: 6px;
+  color: #9f2a1d;
+  font-weight: 800;
+  grid-column: 1 / -1;
+  padding: 7px 8px;
+}
+
+.terraformErrorExplanationResult {
+  background: #ffffff;
+  border: 1px solid #fed7aa;
+  border-radius: 6px;
+  display: grid;
+  gap: 7px;
+  grid-column: 1 / -1;
+  min-width: 0;
+  padding: 8px;
+}
+
+.terraformErrorExplanationResult p {
+  color: #172033;
+  font-weight: 800;
+}
+
+.terraformErrorExplanationResult dl {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.terraformErrorExplanationResult dl div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.terraformErrorExplanationResult dt {
+  color: #9a3412;
+  font-size: 10px;
+  font-weight: 950;
+}
+
+.terraformErrorExplanationResult dd {
+  color: #475569;
+  font-size: 11.5px;
+  line-height: 1.45;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
 .terraformBlockHighlightBox {
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.44);
@@ -1161,41 +1554,6 @@
   border-radius: 4px;
   outline: 2px solid currentColor;
   outline-offset: 3px;
-}
-
-.terraformDiagnosticToast {
-  animation: terraformToastIn 180ms ease-out;
-  background: #ffffff;
-  border: 1px solid #dce3ee;
-  border-radius: 6px;
-  bottom: 18px;
-  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.22);
-  color: #172033;
-  display: grid;
-  gap: 5px;
-  left: 18px;
-  max-width: min(520px, calc(100% - 36px));
-  padding: 10px 12px;
-  pointer-events: none;
-  position: absolute;
-  right: 18px;
-  z-index: 6;
-}
-
-.terraformDiagnosticToast {
-  border-left: 4px solid #dc2626;
-}
-
-.terraformDiagnosticToast strong {
-  color: #111827;
-  font-size: 11px;
-  font-weight: 900;
-}
-
-.terraformDiagnosticToast span {
-  color: #475569;
-  font-size: 12px;
-  line-height: 1.45;
 }
 
 .serverSaveToast {
@@ -1437,18 +1795,6 @@
   background: #5f3de8;
   border-color: #5f3de8;
   outline: none;
-}
-
-@keyframes terraformToastIn {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
 }
 
 @keyframes serverSaveToastIn {
@@ -1947,6 +2293,113 @@
   color: #64748b;
   font-size: 12px;
   line-height: 1.45;
+  margin: 0;
+}
+
+.deploymentStaleNotice {
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  border-radius: 6px;
+  color: #9a3412;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.45;
+  margin: 0;
+  padding: 8px 10px;
+}
+
+.deploymentPreflightSummary {
+  background: #f8fafc;
+  border: 1px solid #dce3ee;
+  border-radius: 6px;
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px;
+}
+
+.deploymentPreflightSummary p {
+  color: #334155;
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.deploymentPreflightStats {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  min-width: 0;
+}
+
+.deploymentPreflightStats span {
+  background: #ffffff;
+  border: 1px solid #dce3ee;
+  border-radius: 5px;
+  color: #64748b;
+  display: grid;
+  font-size: 10.5px;
+  font-weight: 850;
+  gap: 2px;
+  min-width: 0;
+  padding: 6px 7px;
+}
+
+.deploymentPreflightStats strong {
+  color: #172033;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.deploymentPreflightFindings {
+  display: grid;
+  gap: 6px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.deploymentPreflightFindings li {
+  align-items: start;
+  background: #ffffff;
+  border: 1px solid #e3e9f2;
+  border-left: 4px solid #f59e0b;
+  border-radius: 6px;
+  display: grid;
+  gap: 5px;
+  grid-template-columns: auto minmax(0, 1fr);
+  min-width: 0;
+  padding: 7px 8px;
+}
+
+.deploymentPreflightFindings span {
+  color: #9a3412;
+  font-size: 10px;
+  font-weight: 950;
+  line-height: 1.4;
+}
+
+.deploymentPreflightFindings strong {
+  color: #172033;
+  font-size: 12px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.deploymentPreflightFindings em {
+  color: #64748b;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 10.5px;
+  font-style: normal;
+  grid-column: 2;
+  overflow-wrap: anywhere;
+}
+
+.deploymentPreflightMore {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 850;
+  line-height: 1.4;
   margin: 0;
 }
 

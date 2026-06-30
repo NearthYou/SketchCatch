@@ -146,6 +146,10 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
     return savedArtifacts;
   }, [savePreparedTerraformArtifact]);
 
+  const validateTerraformForPreDeployment = useCallback(async (): Promise<TerraformDiagnostic[]> => {
+    return terraformPanelRef.current?.validateCurrentTerraform() ?? terraformDiagnostics;
+  }, [terraformDiagnostics]);
+
   if (!context.isRightPanelOpen) {
     return (
       <aside className={styles.collapsedRightPanel} aria-label="Right panel shortcuts">
@@ -303,8 +307,10 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
         {activeView === "deployment" ? (
           <DeploymentPanel
             currentNodeCount={context.nodes.length}
+            diagramJson={context.diagram}
             hasUnsavedDeploymentBaseline={hasUnsavedDeploymentBaseline}
             onPrepareDeploymentArtifacts={prepareDeploymentArtifacts}
+            onValidateTerraformDiagnostics={validateTerraformForPreDeployment}
             projectId={projectId}
             projectName={projectName}
           />

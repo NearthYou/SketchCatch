@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import Fastify from "fastify";
-import type { AwsConnection } from "@sketchcatch/types";
+import type { AwsConnection, RecentSuccessfulDeploymentProjectListResponse } from "@sketchcatch/types";
 import { createAccessToken } from "../auth/tokens.js";
 import type { DatabaseClient } from "../db/client.js";
 import type {
@@ -33,6 +33,7 @@ import {
   type CreateDeploymentRecordInput,
   type SaveDeploymentPlanInput,
   type DeployedResourceRecord,
+  type DeploymentProjectRecord,
   type DeploymentPlanArtifactRecord,
   type DeploymentLogRecord,
   type DeploymentRecord,
@@ -178,6 +179,10 @@ type RepositoryCall =
       projectId: string;
     }
   | {
+      name: "listDeploymentProjectRows";
+      accessContext: ProjectAccessContext;
+    }
+  | {
       name: "markDeploymentInitSucceeded";
       deploymentId: string;
     }
@@ -249,6 +254,12 @@ class FakeDeploymentRepository implements DeploymentRepository {
   deployment: DeploymentRecord | undefined = createDeploymentRecord(deploymentId);
   planArtifact: DeploymentPlanArtifactRecord | undefined = createDeploymentPlanArtifactRecord();
   deployments: DeploymentRecord[] = [createDeploymentRecord(deploymentId)];
+  deploymentProjectRows: DeploymentProjectRecord[] = [
+    {
+      project: createProjectRecord(),
+      deployment: createDeploymentRecord(deploymentId)
+    }
+  ];
   logs: DeploymentLogRecord[] = [];
   resources: DeployedResourceRecord[] = [];
   outputs: TerraformOutputRecord[] = [];
@@ -381,6 +392,15 @@ class FakeDeploymentRepository implements DeploymentRepository {
     return this.deployments.find(
       (deployment) => deployment.projectId === candidateProjectId && deployment.status === "RUNNING"
     );
+  }
+
+  async listDeploymentProjectRows(accessContext: ProjectAccessContext) {
+    this.calls.push({
+      name: "listDeploymentProjectRows",
+      accessContext
+    });
+
+    return this.deploymentProjectRows;
   }
 
   async listDeploymentsByProject(candidateProjectId: string) {
@@ -2024,6 +2044,97 @@ test("GET /api/projects/:projectId/deployments maps missing project ownership to
     {
       name: "findAccessibleProject",
       projectId,
+      accessContext: {
+        kind: "user",
+        userId
+      }
+    }
+  ]);
+
+  await app.close();
+});
+
+test("GET /api/deployments/recent-successful-projects returns latest successful deployments by project", async () => {
+  const otherProjectId = "66666666-6666-4666-8666-666666666666";
+  const latestSuccessAt = new Date("2026-01-04T00:00:00.000Z");
+  const otherSuccessAt = new Date("2026-01-03T00:00:00.000Z");
+  const repository = new FakeDeploymentRepository();
+  repository.deploymentProjectRows = [
+    {
+      project: createProjectRecord({
+        name: "Primary Project"
+      }),
+      deployment: createDeploymentRecord("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", {
+        status: "SUCCESS",
+        completedAt: new Date("2026-01-02T00:00:00.000Z")
+      })
+    },
+    {
+      project: createProjectRecord({
+        id: otherProjectId,
+        name: "Other Project"
+      }),
+      deployment: createDeploymentRecord("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", {
+        projectId: otherProjectId,
+        status: "DESTROYED",
+        completedAt: new Date("2026-01-05T00:00:00.000Z")
+      })
+    },
+    {
+      project: createProjectRecord({
+        id: otherProjectId,
+        name: "Other Project"
+      }),
+      deployment: createDeploymentRecord("cccccccc-cccc-4ccc-8ccc-cccccccccccc", {
+        projectId: otherProjectId,
+        status: "FAILED",
+        failedAt: new Date("2026-01-06T00:00:00.000Z")
+      })
+    },
+    {
+      project: createProjectRecord({
+        id: otherProjectId,
+        name: "Other Project"
+      }),
+      deployment: createDeploymentRecord("dddddddd-dddd-4ddd-8ddd-dddddddddddd", {
+        projectId: otherProjectId,
+        status: "SUCCESS",
+        completedAt: otherSuccessAt
+      })
+    },
+    {
+      project: createProjectRecord({
+        name: "Primary Project"
+      }),
+      deployment: createDeploymentRecord(deploymentId, {
+        status: "SUCCESS",
+        completedAt: latestSuccessAt
+      })
+    }
+  ];
+  const app = await buildDeploymentTestApp(repository);
+
+  const response = await app.inject({
+    method: "GET",
+    url: "/api/deployments/recent-successful-projects",
+    headers: await authHeaders()
+  });
+
+  assert.equal(response.statusCode, 200);
+  const body = response.json() as RecentSuccessfulDeploymentProjectListResponse;
+  assert.deepEqual(
+    body.items.map((item) => item.deployment.id),
+    [deploymentId, "dddddddd-dddd-4ddd-8ddd-dddddddddddd"]
+  );
+  assert.deepEqual(
+    body.items.map((item) => item.deployment.status),
+    ["SUCCESS", "SUCCESS"]
+  );
+  assert.equal(body.items[0]?.project.name, "Primary Project");
+  assert.equal(body.items[0]?.deployedAt, latestSuccessAt.toISOString());
+  assert.deepEqual(repository.calls, [
+    {
+      name: "listDeploymentProjectRows",
       accessContext: {
         kind: "user",
         userId
