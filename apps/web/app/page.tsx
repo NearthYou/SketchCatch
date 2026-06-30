@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { LandingHeaderActions } from "./landing-auth-actions";
 
 export default function HomePage() {
   return (
@@ -19,14 +20,7 @@ export default function HomePage() {
           <a href="#templates">Templates</a>
         </nav>
 
-        <div className="headerActions">
-          <Link className="navButton navButtonGhost" href="/login">
-            로그인
-          </Link>
-          <Link className="navButton navButtonSolid" href="/signup">
-            회원가입
-          </Link>
-        </div>
+        <LandingHeaderActions />
       </header>
 
       <section className="landingHero" aria-labelledby="hero-title">

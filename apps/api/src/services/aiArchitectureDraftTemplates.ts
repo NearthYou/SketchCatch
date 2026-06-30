@@ -66,14 +66,14 @@ function createApiServerDraft(): AiArchitectureDraftResult {
     architectureJson: {
       nodes: [
         createVpcNode(),
-        createSubnetNode("subnet-public", "Public Subnet", 280, 140),
-        createSecurityGroupNode("sg-api", "API Security Group", 280, 300),
+        createSubnetNode("subnet-public", "Public Subnet", 140, 150),
+        createSecurityGroupNode("sg-api", "API Security Group", 170, 390),
         {
           id: "ec2-api",
           type: "EC2",
           label: "API Server",
-          positionX: 500,
-          positionY: 220,
+          positionX: 330,
+          positionY: 200,
           config: {
             instanceType: "t3.micro",
             subnetId: "subnet-public",
@@ -103,16 +103,16 @@ function createDatabaseBackendDraft(): AiArchitectureDraftResult {
     architectureJson: {
       nodes: [
         createVpcNode(),
-        createSubnetNode("subnet-app", "App Subnet", 280, 140),
-        createSubnetNode("subnet-db", "DB Subnet", 280, 340),
-        createSecurityGroupNode("sg-app", "App Security Group", 500, 140),
-        createSecurityGroupNode("sg-db", "DB Security Group", 500, 340),
+        createSubnetNode("subnet-app", "App Subnet", 140, 150),
+        createSubnetNode("subnet-db", "DB Subnet", 140, 430),
+        createSecurityGroupNode("sg-app", "App Security Group", 500, 150),
+        createSecurityGroupNode("sg-db", "DB Security Group", 500, 430),
         {
           id: "ec2-backend",
           type: "EC2",
           label: "Backend Server",
-          positionX: 720,
-          positionY: 140,
+          positionX: 330,
+          positionY: 200,
           config: {
             instanceType: "t3.micro",
             subnetId: "subnet-app",
@@ -123,8 +123,8 @@ function createDatabaseBackendDraft(): AiArchitectureDraftResult {
           id: "rds-primary",
           type: "RDS",
           label: "Backend Database",
-          positionX: 720,
-          positionY: 340,
+          positionX: 330,
+          positionY: 480,
           config: {
             engine: "postgres",
             instanceClass: "db.t4g.micro",
@@ -157,7 +157,7 @@ function createVpcNode(): ArchitectureJson["nodes"][number] {
     type: "VPC",
     label: "Main VPC",
     positionX: 80,
-    positionY: 220,
+    positionY: 80,
     config: {
       cidrBlock: "10.0.0.0/16"
     }

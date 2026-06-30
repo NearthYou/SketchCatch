@@ -50,7 +50,7 @@ export function toFlowNodes(
       style: {
         width: node.size.width,
         height: node.size.height,
-        ...(isArea ? { pointerEvents: "none" } : {})
+        ...(isArea && !node.locked ? { pointerEvents: "none" } : {})
       },
       sourcePosition: Position.Right,
       targetPosition: Position.Left,
