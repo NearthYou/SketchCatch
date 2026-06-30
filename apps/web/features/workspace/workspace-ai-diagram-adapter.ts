@@ -23,10 +23,14 @@ const AREA_CHILD_PADDING = 48;
 const AREA_TERRAFORM_RESOURCE_TYPES = new Set(["aws_subnet", "aws_vpc"]);
 const AREA_PARENT_EDGE_LABELS = new Set(["contains", "hosts"]);
 const RESOURCE_TO_TERRAFORM_RESOURCE_TYPE: Record<ResourceType, string> = {
+  AMI: "aws_ami",
   CLOUDFRONT: "aws_cloudfront_distribution",
   EC2: "aws_instance",
+  INTERNET_GATEWAY: "aws_internet_gateway",
   LAMBDA: "aws_lambda_function",
   RDS: "aws_db_instance",
+  ROUTE_TABLE: "aws_route_table",
+  ROUTE_TABLE_ASSOCIATION: "aws_route_table_association",
   S3: "aws_s3_bucket",
   SECURITY_GROUP: "aws_security_group",
   SUBNET: "aws_subnet",
@@ -34,10 +38,14 @@ const RESOURCE_TO_TERRAFORM_RESOURCE_TYPE: Record<ResourceType, string> = {
   VPC: "aws_vpc"
 };
 const TERRAFORM_RESOURCE_TYPE_TO_RESOURCE: Record<string, ResourceType> = {
+  aws_ami: "AMI",
   aws_cloudfront_distribution: "CLOUDFRONT",
   aws_db_instance: "RDS",
+  aws_internet_gateway: "INTERNET_GATEWAY",
   aws_instance: "EC2",
   aws_lambda_function: "LAMBDA",
+  aws_route_table: "ROUTE_TABLE",
+  aws_route_table_association: "ROUTE_TABLE_ASSOCIATION",
   aws_s3_bucket: "S3",
   aws_security_group: "SECURITY_GROUP",
   aws_security_group_rule: "SECURITY_GROUP",

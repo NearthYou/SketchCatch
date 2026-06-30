@@ -27,6 +27,7 @@ export const DEFAULT_TERRAFORM_ERROR_MESSAGE = "Error: Missing required argument
 export const scenarioOptions: readonly ChoiceOption<ArchitectureDraftScenarioHint>[] = [
   { label: "자동", value: "auto" },
   { label: "백엔드+DB", value: "backend_with_db" },
+  { label: "서버+스토리지", value: "server_storage" },
   { label: "정적 웹", value: "static_site" },
   { label: "API 서버", value: "api_server" }
 ];

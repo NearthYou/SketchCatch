@@ -28,6 +28,12 @@ function getRequiredConfigKeys(node: ResourceNode): readonly string[] {
       return ["cidrBlock"];
     case "SUBNET":
       return ["cidrBlock", "vpcId"];
+    case "INTERNET_GATEWAY":
+      return ["vpcId"];
+    case "ROUTE_TABLE":
+      return ["vpcId"];
+    case "ROUTE_TABLE_ASSOCIATION":
+      return ["subnetId", "routeTableId"];
     case "EC2":
       return ["instanceType", "subnetId", "securityGroupIds"];
     case "RDS":
@@ -37,6 +43,7 @@ function getRequiredConfigKeys(node: ResourceNode): readonly string[] {
     case "S3":
     case "CLOUDFRONT":
     case "LAMBDA":
+    case "AMI":
     case "UNKNOWN":
       return [];
   }

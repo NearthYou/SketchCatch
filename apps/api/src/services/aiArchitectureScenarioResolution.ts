@@ -24,6 +24,11 @@ const SCENARIO_KEYWORD_RULES: readonly ScenarioKeywordRule[] = [
     reason: "DB가 필요한 백엔드 단서"
   },
   {
+    scenario: "server_storage",
+    keywords: ["s3", "스토리지", "storage", "버킷", "bucket", "파일", "이미지", "업로드"],
+    reason: "서버와 스토리지를 함께 쓰는 단서"
+  },
+  {
     scenario: "api_server",
     keywords: ["api", "서버", "server", "ec2", "express", "spring"],
     reason: "API 서버 단서"
@@ -35,7 +40,12 @@ const SCENARIO_KEYWORD_RULES: readonly ScenarioKeywordRule[] = [
   }
 ];
 
-const SCENARIO_PRIORITY: readonly ArchitectureScenario[] = ["backend_with_db", "api_server", "static_site"];
+const SCENARIO_PRIORITY: readonly ArchitectureScenario[] = [
+  "backend_with_db",
+  "server_storage",
+  "api_server",
+  "static_site"
+];
 
 const UNSUPPORTED_REQUIREMENT_KEYWORDS = [
   "멀티 리전",
@@ -98,9 +108,14 @@ function scorePromptScenarios(prompt: string): ArchitectureScenarioScore[] {
 function selectScenarioFromScores(scenarioScores: readonly ArchitectureScenarioScore[]): ArchitectureScenario {
   const backendScore = findScenarioScore(scenarioScores, "backend_with_db");
   const apiScore = findScenarioScore(scenarioScores, "api_server");
+  const serverStorageScore = findScenarioScore(scenarioScores, "server_storage");
 
   if (backendScore > 0 && apiScore > 0) {
     return "backend_with_db";
+  }
+
+  if (serverStorageScore > 0 && apiScore > 0) {
+    return "server_storage";
   }
 
   const highestScore = Math.max(...scenarioScores.map((scenarioScore) => scenarioScore.score));

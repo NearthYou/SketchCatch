@@ -180,6 +180,108 @@ test("convertArchitectureJsonToDiagramJson marks VPC and Subnet containment for 
   );
 });
 
+test("convertArchitectureJsonToDiagramJson maps server and storage draft resources to Terraform nodes", () => {
+  const architectureJson: ArchitectureJson = {
+    nodes: [
+      {
+        id: "internet-gateway",
+        type: "INTERNET_GATEWAY",
+        label: "Internet Gateway",
+        positionX: 80,
+        positionY: 80,
+        config: { vpcId: "aws_vpc.vpc.id" }
+      },
+      {
+        id: "route-table",
+        type: "ROUTE_TABLE",
+        label: "Route Table",
+        positionX: 220,
+        positionY: 80,
+        config: {
+          route: [{ cidrBlock: "0.0.0.0/0", gatewayId: "aws_internet_gateway.internet_gateway.id" }],
+          vpcId: "aws_vpc.vpc.id"
+        }
+      },
+      {
+        id: "route-table-association",
+        type: "ROUTE_TABLE_ASSOCIATION",
+        label: "Route Table Association",
+        positionX: 360,
+        positionY: 80,
+        config: {
+          routeTableId: "aws_route_table.route_table.id",
+          subnetId: "aws_subnet.subnet.id"
+        }
+      },
+      {
+        id: "ami",
+        type: "AMI",
+        label: "Amazon Linux AMI",
+        positionX: 500,
+        positionY: 80,
+        config: {
+          mostRecent: true,
+          nameRegex: "^al2023-ami-2023.*-x86_64$",
+          owners: ["amazon"]
+        }
+      }
+    ],
+    edges: []
+  };
+
+  const diagramJson = convertArchitectureJsonToDiagramJson(architectureJson);
+
+  assert.deepEqual(
+    diagramJson.nodes.map((node) => ({
+      id: node.id,
+      resourceName: node.parameters?.resourceName,
+      resourceType: node.parameters?.resourceType,
+      terraformBlockType: node.parameters?.terraformBlockType,
+      values: node.parameters?.values
+    })),
+    [
+      {
+        id: "internet-gateway",
+        resourceName: "internet_gateway",
+        resourceType: "aws_internet_gateway",
+        terraformBlockType: "resource",
+        values: { vpcId: "aws_vpc.vpc.id" }
+      },
+      {
+        id: "route-table",
+        resourceName: "route_table",
+        resourceType: "aws_route_table",
+        terraformBlockType: "resource",
+        values: {
+          route: [{ cidrBlock: "0.0.0.0/0", gatewayId: "aws_internet_gateway.internet_gateway.id" }],
+          vpcId: "aws_vpc.vpc.id"
+        }
+      },
+      {
+        id: "route-table-association",
+        resourceName: "route_table_association",
+        resourceType: "aws_route_table_association",
+        terraformBlockType: "resource",
+        values: {
+          routeTableId: "aws_route_table.route_table.id",
+          subnetId: "aws_subnet.subnet.id"
+        }
+      },
+      {
+        id: "ami",
+        resourceName: "ami",
+        resourceType: "aws_ami",
+        terraformBlockType: "data",
+        values: {
+          mostRecent: true,
+          nameRegex: "^al2023-ami-2023.*-x86_64$",
+          owners: ["amazon"]
+        }
+      }
+    ]
+  );
+});
+
 test("convertDiagramJsonToArchitectureJson keeps only valid resource nodes and connected edges", () => {
   const diagramJson: DiagramJson = {
     nodes: [

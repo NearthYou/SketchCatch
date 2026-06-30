@@ -50,6 +50,7 @@ resource "aws_subnet" "public" {
 export const scenarioOptions: readonly ChoiceOption<ArchitectureDraftScenarioHint>[] = [
   { label: "정적 웹사이트", value: "static_site" },
   { label: "API 서버", value: "api_server" },
+  { label: "서버+스토리지", value: "server_storage" },
   { label: "DB 포함 백엔드", value: "backend_with_db" },
   { label: "잘 모르겠음", value: "auto" }
 ];

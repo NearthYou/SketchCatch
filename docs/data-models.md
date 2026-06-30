@@ -184,6 +184,10 @@ type ResourceType =
   | "S3"
   | "SECURITY_GROUP"
   | "CLOUDFRONT"
+  | "INTERNET_GATEWAY"
+  | "ROUTE_TABLE"
+  | "ROUTE_TABLE_ASSOCIATION"
+  | "AMI"
   | "LAMBDA"
   | "UNKNOWN";
 ```
