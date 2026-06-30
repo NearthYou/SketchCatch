@@ -262,6 +262,8 @@ function createServerStorageDraft(): AiArchitectureDraftResult {
         }
       ],
       edges: [
+        createEdge("s3-bucket-to-internet-gateway", "s3-bucket", "internet-gateway", "access"),
+        createEdge("internet-gateway-to-route-table-association", "internet-gateway", "route-table-association", "routes"),
         createEdge("subnet-to-route-table-association", "subnet", "route-table-association", "uses"),
         createEdge("route-table-association-to-route-table", "route-table-association", "route-table", "uses"),
         createEdge("subnet-to-ec2-instance", "subnet", "ec2-instance", "hosts"),

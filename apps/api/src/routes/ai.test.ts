@@ -390,6 +390,8 @@ test("POST /api/ai/architecture-draft creates a server and storage draft", async
   assert.ok(nodeTypes.includes("S3"));
   assert.equal(nodeTypes.includes("RDS"), false);
   assert.deepEqual(edgeIds, [
+    "s3-bucket-to-internet-gateway",
+    "internet-gateway-to-route-table-association",
     "subnet-to-route-table-association",
     "route-table-association-to-route-table",
     "subnet-to-ec2-instance",
