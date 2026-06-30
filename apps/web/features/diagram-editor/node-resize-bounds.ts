@@ -21,16 +21,42 @@ const resourceNodeResizeBounds: NodeResizeBounds = {
   minWidth: 74
 };
 
-const areaResourceResizeBoundsByType: Record<string, NodeResizeBounds> = {
+const areaNodeMaxResizeBounds = {
+  maxHeight: Number.MAX_SAFE_INTEGER,
+  maxWidth: Number.MAX_SAFE_INTEGER
+};
+
+const designAreaResizeBoundsByType: Record<string, NodeResizeBounds> = Object.fromEntries(
+  [
+    "design_region",
+    "design_az",
+    "design_group",
+    "sketchcatch_region",
+    "sketchcatch_az",
+    "sketchcatch_group"
+  ].map((type) => [
+    type,
+    {
+      ...areaNodeMaxResizeBounds,
+      minHeight: designNodeResizeBounds.minHeight,
+      minWidth: designNodeResizeBounds.minWidth
+    }
+  ])
+);
+
+const resourceAreaResizeBoundsByType: Record<string, NodeResizeBounds> = {
   aws_vpc: {
-    maxHeight: 960,
-    maxWidth: 1440,
+    ...areaNodeMaxResizeBounds,
     minHeight: 240,
     minWidth: 360
   },
   aws_subnet: {
-    maxHeight: 720,
-    maxWidth: 960,
+    ...areaNodeMaxResizeBounds,
+    minHeight: 168,
+    minWidth: 240
+  },
+  aws_security_group: {
+    ...areaNodeMaxResizeBounds,
     minHeight: 168,
     minWidth: 240
   }
@@ -38,10 +64,10 @@ const areaResourceResizeBoundsByType: Record<string, NodeResizeBounds> = {
 
 export function getNodeResizeBounds(node: Pick<DiagramNode, "kind" | "parameters" | "type">): NodeResizeBounds {
   if (node.kind === "design") {
-    return designNodeResizeBounds;
+    return designAreaResizeBoundsByType[node.type] ?? designNodeResizeBounds;
   }
 
-  return areaResourceResizeBoundsByType[getResourceNodeType(node)] ?? resourceNodeResizeBounds;
+  return resourceAreaResizeBoundsByType[getResourceNodeType(node)] ?? resourceNodeResizeBounds;
 }
 
 function getResourceNodeType(node: Pick<DiagramNode, "parameters" | "type">): string {

@@ -114,6 +114,28 @@ export function clearOutOfBoundsAreaParentAssignments(
   });
 }
 
+export function getDirectlyMovedNodeIdsFromPositionMap(
+  previousNodes: readonly DiagramNode[],
+  positionByNodeId: ReadonlyMap<string, DiagramNode["position"]>,
+  candidateNodeIds?: ReadonlySet<string> | undefined
+): Set<string> {
+  const movedNodeIds = new Set<string>();
+  const previousPositionByNodeId = new Map(previousNodes.map((node) => [node.id, node.position]));
+  const nodeIdsToCheck =
+    candidateNodeIds && candidateNodeIds.size > 0 ? candidateNodeIds : new Set(positionByNodeId.keys());
+
+  for (const nodeId of nodeIdsToCheck) {
+    const position = positionByNodeId.get(nodeId);
+    const previousPosition = previousPositionByNodeId.get(nodeId);
+
+    if (position && previousPosition && isDifferentPosition(previousPosition, position)) {
+      movedNodeIds.add(nodeId);
+    }
+  }
+
+  return movedNodeIds;
+}
+
 function getMovingAreas(
   snapshotNodes: readonly DiagramNode[],
   currentNodeById: ReadonlyMap<string, DiagramNode>,
@@ -258,6 +280,13 @@ function getNodeArea(node: DiagramNode) {
 
 function getNodeZIndex(node: DiagramNode) {
   return Number.isFinite(node.zIndex) ? node.zIndex : 0;
+}
+
+function isDifferentPosition(
+  firstPosition: DiagramNode["position"],
+  secondPosition: DiagramNode["position"]
+): boolean {
+  return firstPosition.x !== secondPosition.x || firstPosition.y !== secondPosition.y;
 }
 
 function setParentAreaNodeId(node: DiagramNode, parentAreaNodeId: string | undefined): DiagramNode {

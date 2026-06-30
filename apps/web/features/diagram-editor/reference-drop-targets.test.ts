@@ -4,9 +4,11 @@ import type { DiagramNode } from "../../../../packages/types/src";
 import type { ParameterCatalog, ParameterCatalogDefinition } from "../parameter-input/catalog";
 import { terraformParameterCatalog } from "../parameter-input/catalog";
 import {
+  applyContainingReferenceDropTarget,
   applyInnermostReferenceDropTarget,
   applyInnermostReferenceDropTargets,
   applyReferenceDropTarget,
+  findContainingReferenceDropTargets,
   findInnermostReferenceDropTarget,
   findInnermostVisualDropTarget
 } from "./reference-drop-targets";
@@ -21,6 +23,12 @@ const catalog: ParameterCatalog = {
         name: "subnetId",
         terraformName: "subnet_id",
         referenceTargetTypes: ["aws_subnet"]
+      }),
+      makeReferenceDefinition({
+        name: "vpcSecurityGroupIds",
+        terraformName: "vpc_security_group_ids",
+        referenceTargetTypes: ["aws_security_group"],
+        type: "list"
       })
     ],
     aws_lambda_function: [
@@ -50,6 +58,19 @@ const catalog: ParameterCatalog = {
         name: "vpcId",
         terraformName: "vpc_id",
         referenceTargetTypes: ["aws_vpc"]
+      })
+    ],
+    aws_route_table: [],
+    aws_route_table_association: [
+      makeReferenceDefinition({
+        name: "subnetId",
+        terraformName: "subnet_id",
+        referenceTargetTypes: ["aws_subnet"]
+      }),
+      makeReferenceDefinition({
+        name: "routeTableId",
+        terraformName: "route_table_id",
+        referenceTargetTypes: ["aws_route_table"]
       })
     ],
     aws_s3_bucket: []
@@ -362,6 +383,79 @@ test("applyInnermostReferenceDropTarget finds the parent target and applies the 
   const result = applyInnermostReferenceDropTarget(subnet, [vpc, subnet], catalog);
 
   assert.equal(result.parameters?.values.vpcId, "aws_vpc.main.id");
+});
+
+test("applyContainingReferenceDropTarget applies multiple containing resource references", () => {
+  const subnet = makeResourceNode({
+    id: "subnet-1",
+    resourceName: "public",
+    resourceType: "aws_subnet",
+    position: { x: 0, y: 0 },
+    size: { width: 420, height: 300 },
+    zIndex: 1
+  });
+  const securityGroup = makeResourceNode({
+    id: "security-group-1",
+    resourceName: "web",
+    resourceType: "aws_security_group",
+    position: { x: 60, y: 60 },
+    size: { width: 300, height: 220 },
+    zIndex: 2
+  });
+  const instance = makeResourceNode({
+    id: "instance-1",
+    resourceName: "api",
+    resourceType: "aws_instance",
+    position: { x: 140, y: 130 },
+    size: { width: 96, height: 72 },
+    zIndex: 3
+  });
+
+  const targets = findContainingReferenceDropTargets(instance, [subnet, securityGroup, instance], catalog);
+  const result = applyContainingReferenceDropTarget(instance, [subnet, securityGroup, instance], catalog);
+
+  assert.deepEqual(
+    targets.flatMap((target) => target.definitions.map((definition) => definition.name)),
+    ["subnetId", "vpcSecurityGroupIds"]
+  );
+  assert.equal(result.parameters?.values.subnetId, "aws_subnet.public.id");
+  assert.deepEqual(result.parameters?.values.vpcSecurityGroupIds, ["aws_security_group.web.id"]);
+});
+
+test("applyContainingReferenceDropTarget fills Route Table Association subnet and route table references", () => {
+  const subnet = makeResourceNode({
+    id: "subnet-1",
+    resourceName: "public",
+    resourceType: "aws_subnet",
+    position: { x: 0, y: 0 },
+    size: { width: 420, height: 300 },
+    zIndex: 1
+  });
+  const routeTable = makeResourceNode({
+    id: "route-table-1",
+    resourceName: "public",
+    resourceType: "aws_route_table",
+    position: { x: 140, y: 120 },
+    size: { width: 160, height: 120 },
+    zIndex: 2
+  });
+  const routeTableAssociation = makeResourceNode({
+    id: "route-table-association-1",
+    resourceName: "public",
+    resourceType: "aws_route_table_association",
+    position: { x: 170, y: 145 },
+    size: { width: 96, height: 72 },
+    zIndex: 3
+  });
+
+  const result = applyContainingReferenceDropTarget(
+    routeTableAssociation,
+    [subnet, routeTable, routeTableAssociation],
+    catalog
+  );
+
+  assert.equal(result.parameters?.values.subnetId, "aws_subnet.public.id");
+  assert.equal(result.parameters?.values.routeTableId, "aws_route_table.public.id");
 });
 
 test("applyInnermostReferenceDropTarget uses the real catalog for VPC and Subnet placement references", () => {

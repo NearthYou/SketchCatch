@@ -43,12 +43,24 @@ test("toFlowNodes keeps dimmed nodes interactive when another node is selected",
 
 test("toFlowNodes marks area nodes for click-through body hit testing", () => {
   const vpc = makeNode({ id: "vpc-1", resourceType: "aws_vpc" });
+  const securityGroup = makeNode({ id: "security-group-1", resourceType: "aws_security_group" });
   const instance = makeNode({ id: "instance-1", resourceType: "aws_instance" });
 
-  const flowNodes = toFlowNodes([vpc, instance], [], null, handlers);
+  const flowNodes = toFlowNodes([vpc, securityGroup, instance], [], null, handlers);
 
   assert.equal(flowNodes.find((node) => node.id === "vpc-1")?.className, "diagramAreaFlowNode");
+  assert.equal(flowNodes.find((node) => node.id === "security-group-1")?.className, "diagramAreaFlowNode");
   assert.equal(flowNodes.find((node) => node.id === "instance-1")?.className, undefined);
+});
+
+test("toFlowNodes keeps selected area nodes pointer-addressable for resize controls", () => {
+  const vpc = makeNode({ id: "vpc-1", resourceType: "aws_vpc" });
+
+  const flowNodes = toFlowNodes([vpc], ["vpc-1"], null, handlers);
+  const flowNode = flowNodes.find((node) => node.id === "vpc-1");
+
+  assert.equal(flowNode?.style?.pointerEvents, undefined);
+  assert.match(flowNode?.className ?? "", /\bdiagramAreaFlowNodeInteractive\b/);
 });
 
 test("toFlowNodes keeps locked area node bodies from falling through to pane selection", () => {

@@ -504,6 +504,42 @@ test("normalizes compact security group ingress rules before rendering Terraform
   assert.doesNotMatch(terraformCode, /\bcidr =|\bport =/);
 });
 
+test("renders route table association references with Terraform snake_case attribute names", () => {
+  const diagramJson: DiagramJson = {
+    nodes: [
+      makeNode({
+        id: "route-table-association-1",
+        type: "aws_route_table_association",
+        kind: "resource",
+        label: "public",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_route_table_association",
+          resourceName: "public",
+          fileName: "network",
+          values: {
+            subnetId: "aws_subnet.public.id",
+            routeTableId: "aws_route_table.public.id"
+          }
+        }
+      })
+    ],
+    edges: [],
+    viewport: {
+      x: 0,
+      y: 0,
+      zoom: 1
+    }
+  };
+
+  const terraformCode = generateTerraformFromDiagramJson(diagramJson);
+
+  assert.match(terraformCode, /resource "aws_route_table_association" "public" \{/);
+  assert.match(terraformCode, /subnet_id = aws_subnet\.public\.id/);
+  assert.match(terraformCode, /route_table_id = aws_route_table\.public\.id/);
+  assert.doesNotMatch(terraformCode, /subnetId|routeTableId/);
+});
+
 function makeNode(
   node: Omit<DiagramNode, "position" | "size" | "locked" | "zIndex"> &
     Partial<Pick<DiagramNode, "position" | "size" | "locked" | "zIndex">>

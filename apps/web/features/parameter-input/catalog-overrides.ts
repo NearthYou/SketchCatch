@@ -293,6 +293,34 @@ export const terraformAwsParameterCatalog = {
       },
       commonTags
     ],
+    aws_route_table_association: [
+      {
+        name: "subnetId",
+        terraformName: "subnet_id",
+        label: "Subnet",
+        type: "string",
+        required: true,
+        optional: false,
+        computed: false,
+        sensitive: false,
+        description: "Route Table을 적용할 Subnet입니다.",
+        inputKind: "reference-picker",
+        referenceTargetTypes: ["aws_subnet"]
+      },
+      {
+        name: "routeTableId",
+        terraformName: "route_table_id",
+        label: "Route table",
+        type: "string",
+        required: true,
+        optional: false,
+        computed: false,
+        sensitive: false,
+        description: "Subnet에 연결할 Route Table입니다.",
+        inputKind: "reference-picker",
+        referenceTargetTypes: ["aws_route_table"]
+      }
+    ],
     aws_nat_gateway: [
       {
         name: "subnetId",

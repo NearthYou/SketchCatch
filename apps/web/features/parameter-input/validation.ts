@@ -80,6 +80,8 @@ const resourceTypeAliases: Record<string, string> = {
   nat_gateway: "aws_nat_gateway",
   rds: "aws_db_instance",
   route_table: "aws_route_table",
+  route_table_association: "aws_route_table_association",
+  rta: "aws_route_table_association",
   s3: "aws_s3_bucket",
   s3_bucket: "aws_s3_bucket",
   s3_lifecycle: "aws_s3_bucket_lifecycle_configuration",
