@@ -632,8 +632,8 @@ function DiagramEditorInner({
   );
 
   const flowNodes = useMemo(
-    () =>
-      toFlowNodes(diagram.nodes, selectedNodeIds, activeReferenceDropTargetNodeId, {
+    () => {
+      const nextFlowNodes = toFlowNodes(diagram.nodes, selectedNodeIds, activeReferenceDropTargetNodeId, {
         onBringForward: handleBringForward,
         onSendBackward: handleSendBackward,
         onTextColorChange: handleTextColorChange,
@@ -642,12 +642,25 @@ function DiagramEditorInner({
         onResizeStart: handleResizeStart,
         onResize: handleResize,
         onResizeEnd: handleResizeEnd
-      }),
+      });
+
+      if (interactionMode === "select") {
+        return nextFlowNodes;
+      }
+
+      // React Flow는 노드별 draggable 값이 있으면 전체 nodesDraggable 설정보다 그 값을 우선한다.
+      return nextFlowNodes.map((node) => ({
+        ...node,
+        connectable: false,
+        draggable: false
+      }));
+    },
     [
       activeReferenceDropTargetNodeId,
       diagram.nodes,
       handleBorderColorChange,
       handleBringForward,
+      interactionMode,
       handleResizeEnd,
       handleResize,
       handleResizeStart,
@@ -674,7 +687,7 @@ function DiagramEditorInner({
         setSelectedNodeIds(nextSelectedNodeIds);
       }
 
-      if (positionChanges.length === 0) {
+      if (positionChanges.length === 0 || interactionMode !== "select") {
         return;
       }
 
@@ -705,7 +718,7 @@ function DiagramEditorInner({
         };
       });
     },
-    [applyLiveDiagramUpdate, selectedNodeIds]
+    [applyLiveDiagramUpdate, interactionMode, selectedNodeIds]
   );
 
   const handleEdgesChange = useCallback<OnEdgesChange<DiagramFlowEdge>>(
@@ -1018,12 +1031,20 @@ function DiagramEditorInner({
   );
 
   const handleNodeDragStart = useCallback(() => {
+    if (interactionMode !== "select") {
+      return;
+    }
+
     dragSnapshotRef.current = cloneDiagram(diagramRef.current);
     updateActiveReferenceDropTargetNodeId(null);
-  }, [updateActiveReferenceDropTargetNodeId]);
+  }, [interactionMode, updateActiveReferenceDropTargetNodeId]);
 
   const handleNodeDrag = useCallback(
     (_event: MouseEvent | TouchEvent, draggedFlowNode: DiagramFlowNode, nodes: DiagramFlowNode[]) => {
+      if (interactionMode !== "select") {
+        return;
+      }
+
       const positionByNodeId = new Map(nodes.map((node) => [node.id, node.position]));
       const snapshotNodes = dragSnapshotRef.current?.nodes ?? diagramRef.current.nodes;
       const directlyMovedNodeIds = getMovedNodeIdsFromPositionMap(snapshotNodes, positionByNodeId);
@@ -1038,11 +1059,17 @@ function DiagramEditorInner({
         draggedNode ? getVisualDropTargetNodeId(draggedNode, positionedNodes) : null
       );
     },
-    [getVisualDropTargetNodeId, updateActiveReferenceDropTargetNodeId]
+    [getVisualDropTargetNodeId, interactionMode, updateActiveReferenceDropTargetNodeId]
   );
 
   const handleNodeDragStop = useCallback(
     (_event: MouseEvent | TouchEvent, _node: DiagramFlowNode, nodes: DiagramFlowNode[]) => {
+      if (interactionMode !== "select") {
+        dragSnapshotRef.current = null;
+        updateActiveReferenceDropTargetNodeId(null);
+        return;
+      }
+
       const before = dragSnapshotRef.current;
       const positionByNodeId = new Map(nodes.map((node) => [node.id, node.position]));
       const snapshotNodes = before?.nodes ?? diagramRef.current.nodes;
@@ -1072,7 +1099,7 @@ function DiagramEditorInner({
       dragSnapshotRef.current = null;
       updateActiveReferenceDropTargetNodeId(null);
     },
-    [pushHistory, replaceDiagram, updateActiveReferenceDropTargetNodeId]
+    [interactionMode, pushHistory, replaceDiagram, updateActiveReferenceDropTargetNodeId]
   );
 
   const handleConnectStart = useCallback<OnConnectStart>((_event, params) => {
@@ -1642,6 +1669,8 @@ function DiagramEditorInner({
             multiSelectionKeyCode={["Shift", "Meta", "Control"]}
             nodeTypes={NODE_TYPES}
             nodes={flowNodes}
+            nodesConnectable={interactionMode === "select"}
+            nodesDraggable={interactionMode === "select"}
             onClickConnectEnd={handleConnectEnd}
             onClickConnectStart={handleConnectStart}
             onConnect={handleConnect}
