@@ -4,6 +4,7 @@ import {
   Background,
   BackgroundVariant,
   ConnectionMode,
+  PanOnScrollMode,
   ReactFlow,
   ReactFlowProvider,
   getViewportForBounds,
@@ -1672,12 +1673,16 @@ function DiagramEditorInner({
             onPaneClick={handlePaneClick}
             onSelectionChange={handleSelectionChange}
             panOnDrag={interactionMode === "pan"}
+            panOnScroll
+            panOnScrollMode={PanOnScrollMode.Free}
             proOptions={{ hideAttribution: true }}
             selectionKeyCode={["Shift", "Meta", "Control"]}
             selectionOnDrag={interactionMode === "select"}
             snapGrid={DIAGRAM_SNAP_GRID}
             snapToGrid
             zoomOnDoubleClick={false}
+            zoomActivationKeyCode={["Meta", "Control"]}
+            zoomOnScroll={false}
           >
             <Background color="#d8e0ef" gap={24} size={2} variant={BackgroundVariant.Dots} />
           </ReactFlow>
