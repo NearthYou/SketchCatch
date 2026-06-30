@@ -112,7 +112,6 @@ export function MyPageClient({ searchQuery }: { readonly searchQuery: string }) 
             <p className="dashboardPanelKicker">Recent modified</p>
             <h2 id="recent-modified-title">최근 수정된 항목</h2>
           </div>
-          <span className="dashboardCountBadge">최대 3개</span>
         </div>
         {recentModifiedProjects.length === 0 && isSearchActive ? (
           <ProjectSearchEmptyState />
