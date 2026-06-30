@@ -117,7 +117,7 @@ export function ProjectsClient() {
           </Link>
         </div>
       ) : (
-        <div className="dashboardCardGrid dashboardCardGridWide">
+        <div className="dashboardCardGrid">
           {projects.map((project) => (
             <ApiProjectCard
               isDeleting={deletingProjectId === project.id}
@@ -126,6 +126,7 @@ export function ProjectsClient() {
               project={project}
               timestampLabel="수정"
               timestampValue={project.updatedAt}
+              variant="compact"
             />
           ))}
         </div>

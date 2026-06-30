@@ -4035,10 +4035,6 @@ nextjs-portal {
   grid-template-columns: repeat(auto-fill, minmax(280px, 340px));
 }
 
-.dashboardCardGridWide {
-  grid-template-columns: repeat(auto-fill, minmax(520px, 680px));
-}
-
 .projectCard {
   background: transparent;
   display: grid;
@@ -4855,10 +4851,6 @@ nextjs-portal {
   .projectCardWide,
   .projectCardWide.projectCardWithActions,
   .projectCardWide .projectCardContentLink {
-    grid-template-columns: 1fr;
-  }
-
-  .dashboardCardGridWide {
     grid-template-columns: 1fr;
   }
 
