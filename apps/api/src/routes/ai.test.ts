@@ -352,6 +352,64 @@ test("POST /api/ai/architecture-draft uses readable resource ids in nodes, edges
   await app.close();
 });
 
+test("POST /api/ai/architecture-draft creates a server and storage draft", async () => {
+  const app = buildApp();
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/ai/architecture-draft",
+    payload: {
+      prompt: "EC2 서버와 S3 버킷을 같이 쓰는 구조를 만들고 싶어",
+      scenarioHint: "server_storage"
+    }
+  });
+
+  assert.equal(response.statusCode, 200);
+
+  const body = architectureDraftResponseSchema.parse(response.json());
+  const nodeIds = body.architectureJson.nodes.map((node) => node.id);
+  const nodeTypes = body.architectureJson.nodes.map((node) => node.type);
+  const edgeIds = body.architectureJson.edges.map((edge) => edge.id);
+  const instanceNode = body.architectureJson.nodes.find((node) => node.id === "ec2-instance");
+  const routeTableNode = body.architectureJson.nodes.find((node) => node.id === "route-table");
+
+  assert.equal(body.title, "서버+스토리지 Practice Architecture");
+  assert.equal(body.metadata.selectedScenario, "server_storage");
+  assert.deepEqual(nodeIds, [
+    "vpc",
+    "subnet",
+    "internet-gateway",
+    "route-table",
+    "route-table-association",
+    "ami",
+    "security-group",
+    "ec2-instance",
+    "s3-bucket"
+  ]);
+  assert.ok(nodeTypes.includes("EC2"));
+  assert.ok(nodeTypes.includes("S3"));
+  assert.equal(nodeTypes.includes("RDS"), false);
+  assert.deepEqual(edgeIds, [
+    "s3-bucket-to-internet-gateway",
+    "internet-gateway-to-route-table-association",
+    "subnet-to-route-table-association",
+    "route-table-association-to-route-table",
+    "subnet-to-ec2-instance",
+    "security-group-to-ec2-instance"
+  ]);
+  assert.equal(instanceNode?.config.ami, "data.aws_ami.ami.id");
+  assert.equal(instanceNode?.config.subnetId, "aws_subnet.subnet.id");
+  assert.deepEqual(instanceNode?.config.securityGroupIds, ["aws_security_group.security_group.id"]);
+  assert.deepEqual(routeTableNode?.config.route, [
+    {
+      cidrBlock: "0.0.0.0/0",
+      gatewayId: "aws_internet_gateway.internet_gateway.id"
+    }
+  ]);
+
+  await app.close();
+});
+
 test("POST /api/ai/architecture-draft applies operating choices inside supported MVP config", async () => {
   const app = buildApp();
 

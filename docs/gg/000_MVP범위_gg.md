@@ -59,7 +59,7 @@ DB가 포함된 백엔드 API 서버를 만들고 싶어요.
 ```ts
 type CreateArchitectureDraftRequest = {
   prompt: string;
-  scenarioHint: "auto" | "static_site" | "api_server" | "backend_with_db";
+  scenarioHint: "auto" | "static_site" | "api_server" | "backend_with_db" | "server_storage";
   budgetLevel: "low" | "normal";
   trafficLevel: "small" | "normal";
   securityPriority: "basic" | "high";
@@ -73,7 +73,7 @@ type CreateArchitectureDraftRequest = {
 [ DB가 포함된 백엔드 API 서버를 만들고 싶어요 ]
 
 용도 선택
-[ 정적 웹사이트 ] [ API 서버 ] [ DB 포함 백엔드 ] [ 잘 모르겠음 ]
+[ 정적 웹사이트 ] [ API 서버 ] [ 서버+스토리지 ] [ DB 포함 백엔드 ] [ 잘 모르겠음 ]
 
 예산
 [ 낮게 ] [ 보통 ]
@@ -95,6 +95,7 @@ type CreateArchitectureDraftRequest = {
 | --- | --- |
 | 정적 웹사이트 | S3 + CloudFront |
 | API 서버 | VPC + Subnet + EC2 + Security Group |
+| 서버+스토리지 | VPC + Subnet + Internet Gateway + Route Table + Security Group + EC2 + S3 |
 | DB 포함 백엔드 | VPC + Subnet + EC2 + RDS + Security Group |
 
 지원하지 않는 말이 들어오면 실패시키지 않는다.
@@ -115,10 +116,13 @@ type CreateArchitectureDraftRequest = {
 예:
 
 - `db`, `database`, `rds`, `데이터베이스`가 있으면 DB 포함 백엔드 점수 증가
+- `s3`, `스토리지`, `bucket`, `버킷`, `파일`, `업로드`가 있으면 서버+스토리지 점수 증가
 - `api`, `서버`, `ec2`, `express`, `spring`이 있으면 API 서버 점수 증가
 - `정적`, `웹사이트`, `frontend`, `react`, `next`가 있으면 정적 웹사이트 점수 증가
 
 점수가 가장 높은 것을 고른다.
+
+API 서버 단서와 스토리지 단서가 같이 있으면 서버+스토리지 초안을 우선한다.
 
 점수가 모두 0이면 정적 웹사이트 기본 초안으로 시작한다.
 
@@ -167,6 +171,9 @@ sg-api
 - API 서버 EC2 → `ec2-api`
 - 기본 DB RDS → `rds-primary`
 - 메인 VPC → `vpc-main`
+- 서버+스토리지 EC2 → `ec2-instance`
+- 서버+스토리지 S3 → `s3-bucket`
+- 서버+스토리지 Route Table → `route-table`
 
 랜덤 id는 쓰지 않는다.
 
@@ -204,9 +211,9 @@ type AiResultMetadata = {
   confidence: "low" | "medium" | "high";
   assumptions: string[];
   explanations: string[];
-  selectedScenario?: "static_site" | "api_server" | "backend_with_db";
+  selectedScenario?: "static_site" | "api_server" | "backend_with_db" | "server_storage";
   scenarioScores?: {
-    scenario: "static_site" | "api_server" | "backend_with_db";
+    scenario: "static_site" | "api_server" | "backend_with_db" | "server_storage";
     score: number;
     reasons: string[];
   }[];

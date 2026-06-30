@@ -9,6 +9,8 @@ export function createDraftByScenario(scenario: ArchitectureScenario): AiArchite
       return createApiServerDraft();
     case "backend_with_db":
       return createDatabaseBackendDraft();
+    case "server_storage":
+      return createServerStorageDraft();
   }
 }
 
@@ -146,6 +148,133 @@ function createDatabaseBackendDraft(): AiArchitectureDraftResult {
       confidence: "medium",
       assumptions: ["백엔드 서버가 RDS PostgreSQL에 연결하는 연습용 구조로 가정합니다."],
       explanations: ["App Resource와 DB Resource를 분리해 비용과 보안 Check Finding을 붙이기 쉬운 초안을 반환합니다."]
+    }
+  };
+}
+
+// EC2 서버와 S3 버킷을 함께 쓰는 MVP 배포 연습용 초안을 만듭니다.
+function createServerStorageDraft(): AiArchitectureDraftResult {
+  return {
+    title: "서버+스토리지 Practice Architecture",
+    architectureJson: {
+      nodes: [
+        {
+          id: "vpc",
+          type: "VPC",
+          label: "VPC",
+          positionX: 100,
+          positionY: 300,
+          config: {
+            cidrBlock: "172.16.0.0/16"
+          }
+        },
+        {
+          id: "subnet",
+          type: "SUBNET",
+          label: "Subnet",
+          positionX: 245,
+          positionY: 650,
+          config: {
+            vpcId: "aws_vpc.vpc.id",
+            cidrBlock: "172.16.1.0/24"
+          }
+        },
+        {
+          id: "internet-gateway",
+          type: "INTERNET_GATEWAY",
+          label: "Internet Gateway",
+          positionX: 590,
+          positionY: 365,
+          config: {
+            vpcId: "aws_vpc.vpc.id"
+          }
+        },
+        {
+          id: "route-table",
+          type: "ROUTE_TABLE",
+          label: "Route Table",
+          positionX: 940,
+          positionY: 610,
+          config: {
+            vpcId: "aws_vpc.vpc.id",
+            route: [
+              {
+                cidrBlock: "0.0.0.0/0",
+                gatewayId: "aws_internet_gateway.internet_gateway.id"
+              }
+            ]
+          }
+        },
+        {
+          id: "route-table-association",
+          type: "ROUTE_TABLE_ASSOCIATION",
+          label: "Route Table Association",
+          positionX: 700,
+          positionY: 620,
+          config: {
+            subnetId: "aws_subnet.subnet.id",
+            routeTableId: "aws_route_table.route_table.id"
+          }
+        },
+        {
+          id: "ami",
+          type: "AMI",
+          label: "Amazon Linux AMI",
+          positionX: 120,
+          positionY: 130,
+          config: {
+            owners: ["amazon"],
+            mostRecent: true,
+            nameRegex: "^al2023-ami-2023.*-x86_64$"
+          }
+        },
+        {
+          id: "security-group",
+          type: "SECURITY_GROUP",
+          label: "Security Group",
+          positionX: 200,
+          positionY: 520,
+          config: {
+            vpcId: "aws_vpc.vpc.id"
+          }
+        },
+        {
+          id: "ec2-instance",
+          type: "EC2",
+          label: "EC2 Instance",
+          positionX: 330,
+          positionY: 765,
+          config: {
+            ami: "data.aws_ami.ami.id",
+            instanceType: "t3.micro",
+            subnetId: "aws_subnet.subnet.id",
+            securityGroupIds: ["aws_security_group.security_group.id"],
+            associatePublicIpAddress: true
+          }
+        },
+        {
+          id: "s3-bucket",
+          type: "S3",
+          label: "S3 Bucket",
+          positionX: 950,
+          positionY: 130,
+          config: {}
+        }
+      ],
+      edges: [
+        createEdge("s3-bucket-to-internet-gateway", "s3-bucket", "internet-gateway", "access"),
+        createEdge("internet-gateway-to-route-table-association", "internet-gateway", "route-table-association", "routes"),
+        createEdge("subnet-to-route-table-association", "subnet", "route-table-association", "uses"),
+        createEdge("route-table-association-to-route-table", "route-table-association", "route-table", "uses"),
+        createEdge("subnet-to-ec2-instance", "subnet", "ec2-instance", "hosts"),
+        createEdge("security-group-to-ec2-instance", "security-group", "ec2-instance", "allows traffic")
+      ]
+    },
+    metadata: {
+      source: "template_fallback",
+      confidence: "medium",
+      assumptions: ["EC2 서버가 public subnet에서 실행되고 S3 Bucket을 함께 사용하는 연습용 구조로 가정합니다."],
+      explanations: ["VPC, Subnet, Internet Gateway, Route Table, Security Group, EC2, S3를 포함한 MVP 범위 초안입니다."]
     }
   };
 }

@@ -3,12 +3,16 @@ import type { ResourceType } from "@sketchcatch/types";
 const resourceTypeLabels: Record<ResourceType, string> = {
 	VPC: "VPC",
 	SUBNET: "Subnet",
+	INTERNET_GATEWAY: "Internet Gateway",
+	ROUTE_TABLE: "Route Table",
+	ROUTE_TABLE_ASSOCIATION: "Route Table Association",
 	EC2: "EC2",
 	RDS: "RDS",
 	S3: "S3",
 	SECURITY_GROUP: "Security Group",
 	CLOUDFRONT: "CloudFront",
 	LAMBDA: "Lambda",
+	AMI: "AMI",
 	UNKNOWN: "Unknown"
 };
 

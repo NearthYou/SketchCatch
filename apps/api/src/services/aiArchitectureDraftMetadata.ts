@@ -94,5 +94,7 @@ function getScenarioLabel(scenario: ArchitectureScenario): string {
       return "API 서버";
     case "backend_with_db":
       return "DB 포함 백엔드";
+    case "server_storage":
+      return "서버+스토리지";
   }
 }

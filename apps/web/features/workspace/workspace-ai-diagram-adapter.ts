@@ -9,8 +9,10 @@ import type {
   ResourceItem,
   ResourceType
 } from "@sketchcatch/types";
+import { isAreaNode } from "../diagram-editor/area-nodes";
 import { createDiagramNodeFromPayload } from "../diagram-editor/diagram-utils";
 import { resourceCatalog } from "../resource-settings/catalog";
+import { addServerStorageAreaNodes } from "./server-storage-board-layout";
 
 const DEFAULT_VIEWPORT: DiagramJson["viewport"] = { x: 0, y: 0, zoom: 1 };
 const DEFAULT_NODE_SIZE: DiagramNode["size"] = { width: 180, height: 96 };
@@ -20,13 +22,17 @@ const DEFAULT_EDGE_STYLE: NonNullable<DiagramEdge["style"]> = {
   width: "medium"
 };
 const AREA_CHILD_PADDING = 48;
-const AREA_TERRAFORM_RESOURCE_TYPES = new Set(["aws_subnet", "aws_vpc"]);
+const MAX_AREA_FIT_PASSES = 8;
 const AREA_PARENT_EDGE_LABELS = new Set(["contains", "hosts"]);
 const RESOURCE_TO_TERRAFORM_RESOURCE_TYPE: Record<ResourceType, string> = {
+  AMI: "aws_ami",
   CLOUDFRONT: "aws_cloudfront_distribution",
   EC2: "aws_instance",
+  INTERNET_GATEWAY: "aws_internet_gateway",
   LAMBDA: "aws_lambda_function",
   RDS: "aws_db_instance",
+  ROUTE_TABLE: "aws_route_table",
+  ROUTE_TABLE_ASSOCIATION: "aws_route_table_association",
   S3: "aws_s3_bucket",
   SECURITY_GROUP: "aws_security_group",
   SUBNET: "aws_subnet",
@@ -34,10 +40,14 @@ const RESOURCE_TO_TERRAFORM_RESOURCE_TYPE: Record<ResourceType, string> = {
   VPC: "aws_vpc"
 };
 const TERRAFORM_RESOURCE_TYPE_TO_RESOURCE: Record<string, ResourceType> = {
+  aws_ami: "AMI",
   aws_cloudfront_distribution: "CLOUDFRONT",
   aws_db_instance: "RDS",
+  aws_internet_gateway: "INTERNET_GATEWAY",
   aws_instance: "EC2",
   aws_lambda_function: "LAMBDA",
+  aws_route_table: "ROUTE_TABLE",
+  aws_route_table_association: "ROUTE_TABLE_ASSOCIATION",
   aws_s3_bucket: "S3",
   aws_security_group: "SECURITY_GROUP",
   aws_security_group_rule: "SECURITY_GROUP",
@@ -51,8 +61,9 @@ const RESOURCE_ITEMS_BY_TERRAFORM_TYPE = new Map<string, ResourceItem>(
 // AI Draft를 실제 Architecture Board가 받을 수 있는 DiagramJson으로 바꾸는 gg 경계입니다.
 export function convertArchitectureJsonToDiagramJson(architectureJson: ArchitectureJson): DiagramJson {
   const nodeIds = new Set(architectureJson.nodes.map((node) => node.id));
+  const convertedNodes = architectureJson.nodes.map(convertArchitectureNodeToDiagramNode);
   const nodes = fitAreaNodesToChildren(
-    applyAreaParentMetadata(architectureJson.nodes.map(convertArchitectureNodeToDiagramNode), architectureJson.edges)
+    applyAreaParentMetadata(addServerStorageAreaNodes(convertedNodes), architectureJson.edges)
   );
 
   return {
@@ -202,7 +213,9 @@ function applyAreaParentMetadata(
 
   return nodes.map((node) => {
     const parentAreaNodeId =
-      findConfigParentAreaNodeId(node, nodeById) ?? findEdgeParentAreaNodeId(node, nodeById, edges);
+      node.metadata?.parentAreaNodeId ??
+      findConfigParentAreaNodeId(node, nodeById) ??
+      findEdgeParentAreaNodeId(node, nodeById, edges);
 
     if (!parentAreaNodeId) {
       return node;
@@ -220,9 +233,28 @@ function applyAreaParentMetadata(
 
 // 자식이 밖으로 튀어나오지 않도록 VPC/Subnet 박스 크기를 필요한 만큼 키웁니다.
 function fitAreaNodesToChildren(nodes: readonly DiagramNode[]): DiagramNode[] {
-  const firstPass = fitAreaNodesToDirectChildren(nodes);
+  let currentNodes = [...nodes];
 
-  return fitAreaNodesToDirectChildren(firstPass);
+  for (let pass = 0; pass < MAX_AREA_FIT_PASSES; pass += 1) {
+    const nextNodes = fitAreaNodesToDirectChildren(currentNodes);
+
+    if (areNodeSizesEqual(currentNodes, nextNodes)) {
+      return nextNodes;
+    }
+
+    currentNodes = nextNodes;
+  }
+
+  return currentNodes;
+}
+
+// 깊게 중첩된 Region/VPC/AZ/SG/Subnet 박스가 안정될 때 반복 계산을 멈춥니다.
+function areNodeSizesEqual(leftNodes: readonly DiagramNode[], rightNodes: readonly DiagramNode[]): boolean {
+  return leftNodes.every((leftNode, index) => {
+    const rightNode = rightNodes[index];
+
+    return rightNode?.size.width === leftNode.size.width && rightNode.size.height === leftNode.size.height;
+  });
 }
 
 function fitAreaNodesToDirectChildren(nodes: readonly DiagramNode[]): DiagramNode[] {
@@ -321,7 +353,7 @@ function isAreaParentEdge(edge: ArchitectureJson["edges"][number]): boolean {
 }
 
 function isAreaDiagramNode(node: DiagramNode): boolean {
-  return AREA_TERRAFORM_RESOURCE_TYPES.has(node.parameters?.resourceType ?? node.type);
+  return isAreaNode(node);
 }
 
 function getStringParameterValue(node: DiagramNode, key: string): string | undefined {

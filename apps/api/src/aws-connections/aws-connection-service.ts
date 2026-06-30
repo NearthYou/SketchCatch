@@ -614,18 +614,20 @@ export async function getAwsConnectionCloudFormationTemplate(
     externalId: awsConnection.externalId
   });
   const publicBaseUrl = input.publicBaseUrl?.trim();
+  const inlineTemplateResponse: AwsConnectionCloudFormationTemplateResponse = {
+    roleName,
+    stackName,
+    region: awsConnection.region,
+    capabilities: ["CAPABILITY_NAMED_IAM"],
+    templateBody,
+    templateUrl: null,
+    templateUrlExpiresAt: null,
+    launchStackUrl: null
+  };
 
-  if (!publicBaseUrl) {
-    return {
-      roleName,
-      stackName,
-      region: awsConnection.region,
-      capabilities: ["CAPABILITY_NAMED_IAM"],
-      templateBody,
-      templateUrl: null,
-      templateUrlExpiresAt: null,
-      launchStackUrl: null
-    };
+  // 로컬 개발 URL은 CloudFormation 콘솔이 접근할 수 없으므로 S3 URL 대신 인라인 템플릿을 유지합니다.
+  if (!publicBaseUrl || isLocalPublicBaseUrl(publicBaseUrl)) {
+    return inlineTemplateResponse;
   }
 
   const now = options.now ?? (() => new Date());
@@ -880,6 +882,20 @@ function createAwsConnectionCloudFormationTemplateUrl(
   templateUrl.searchParams.set("token", token);
 
   return templateUrl.toString();
+}
+
+function isLocalPublicBaseUrl(publicBaseUrl: string): boolean {
+  if (!URL.canParse(publicBaseUrl)) {
+    return false;
+  }
+
+  const baseUrl = new URL(publicBaseUrl);
+  const localHostnames = ["localhost", "127.0.0.1", "0.0.0.0", "::1", "[::1]", "[::]"];
+
+  return (
+    (baseUrl.protocol === "http:" || baseUrl.protocol === "https:") &&
+    localHostnames.includes(baseUrl.hostname)
+  );
 }
 
 function createAwsConnectionLaunchStackUrl(input: {

@@ -22,12 +22,16 @@ export type LoginLockedErrorResponse = ApiErrorResponse & {
 export type ResourceType =
   | "VPC"
   | "SUBNET"
+  | "INTERNET_GATEWAY"
+  | "ROUTE_TABLE"
+  | "ROUTE_TABLE_ASSOCIATION"
   | "EC2"
   | "RDS"
   | "S3"
   | "SECURITY_GROUP"
   | "CLOUDFRONT"
   | "LAMBDA"
+  | "AMI"
   | "UNKNOWN";
 
 export type CloudProvider = "aws";
@@ -562,7 +566,7 @@ export type AiResultMetadata = {
   guardrailWarnings?: ArchitectureGuardrailWarning[];
 };
 
-export type ArchitectureScenario = "static_site" | "api_server" | "backend_with_db";
+export type ArchitectureScenario = "static_site" | "api_server" | "backend_with_db" | "server_storage";
 
 export type ArchitectureScenarioScore = {
   scenario: ArchitectureScenario;
