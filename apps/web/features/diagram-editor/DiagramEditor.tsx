@@ -88,6 +88,10 @@ import {
   applyInnermostReferenceDropTargets,
   findInnermostVisualDropTarget
 } from "./reference-drop-targets";
+import {
+  getSingleSelectedEdgeForToolbar,
+  normalizeSelectedNodeIds
+} from "./selection-utils";
 import type {
   DiagramEditorPanelContext,
   DiagramEditorProps,
@@ -175,9 +179,7 @@ function DiagramEditorInner({
   const [isAreaBlankDragging, setAreaBlankDragging] = useState(false);
 
   const selectedNodeId = selectedNodeIds.length === 1 ? selectedNodeIds[0] ?? null : null;
-  const selectedEdge = selectedEdgeIds.length === 1
-    ? diagram.edges.find((edge) => edge.id === selectedEdgeIds[0]) ?? null
-    : null;
+  const selectedEdge = getSingleSelectedEdgeForToolbar(diagram.edges, selectedNodeIds, selectedEdgeIds);
   const hoveredSelectedAreaNode = hoveredAreaBlankNodeId && selectedNodeId === hoveredAreaBlankNodeId
     ? diagram.nodes.find((node) => node.id === hoveredAreaBlankNodeId) ?? null
     : null;
@@ -684,7 +686,7 @@ function DiagramEditorInner({
       const positionChanges = changes.filter(isNodePositionChangeWithPosition);
 
       if (nextSelectedNodeIds) {
-        setSelectedNodeIds(nextSelectedNodeIds);
+        setSelectedNodeIds(normalizeSelectedNodeIds(diagramRef.current.nodes, nextSelectedNodeIds));
       }
 
       if (positionChanges.length === 0 || interactionMode !== "select") {
@@ -734,8 +736,13 @@ function DiagramEditorInner({
 
   const handleSelectionChange = useCallback<OnSelectionChangeFunc<DiagramFlowNode, DiagramFlowEdge>>(
     ({ edges, nodes }) => {
-      setSelectedNodeIds(nodes.map((node) => node.id));
-      setSelectedEdgeIds(edges.map((edge) => edge.id));
+      const nextSelectedNodeIds = normalizeSelectedNodeIds(
+        diagramRef.current.nodes,
+        nodes.map((node) => node.id)
+      );
+
+      setSelectedNodeIds(nextSelectedNodeIds);
+      setSelectedEdgeIds(nextSelectedNodeIds.length > 0 ? [] : edges.map((edge) => edge.id));
 
       if (nodes.length > 0 || edges.length > 0) {
         focusEditorShell();
