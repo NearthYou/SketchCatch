@@ -448,6 +448,42 @@ test("keeps the input diagram when an unsupported nested block is found", () => 
   assert.equal(result.diagnostics[0]?.code, "terraform.sync.nested_block");
 });
 
+test("syncs route table association references into camelCase values", () => {
+  const diagramJson: DiagramJson = {
+    nodes: [
+      makeNode({
+        id: "route-table-association-1",
+        type: "aws_route_table_association",
+        kind: "resource",
+        label: "public",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_route_table_association",
+          resourceName: "public",
+          fileName: "network",
+          values: {}
+        }
+      })
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+
+  const result = syncTerraformToDiagramJson(
+    diagramJson,
+    `resource "aws_route_table_association" "public" {
+  subnet_id = aws_subnet.public.id
+  route_table_id = aws_route_table.public.id
+}`
+  );
+
+  assert.deepEqual(result.diagnostics, []);
+  assert.deepEqual(result.diagramJson.nodes[0]?.parameters?.values, {
+    subnetId: "aws_subnet.public.id",
+    routeTableId: "aws_route_table.public.id"
+  });
+});
+
 test("reports the block header line when a block is not closed", () => {
   const result = syncTerraformToDiagramJson(
     makeSingleVpcDiagramJson(),

@@ -337,6 +337,10 @@
   pointer-events: none;
 }
 
+.canvasPanel :global(.react-flow__node.diagramAreaFlowNode.diagramAreaFlowNodeInteractive) {
+  pointer-events: all;
+}
+
 .canvasPanel :global(.react-flow__nodes),
 .canvasPanel :global(.react-flow__edges) {
   pointer-events: none;
@@ -661,7 +665,7 @@
 }
 
 .areaNodeHeader {
-  align-items: center;
+  align-items: flex-start;
   background: rgba(255, 255, 255, 0.92);
   border: 1px solid color-mix(in srgb, var(--node-border-color, #8b98aa) 45%, #ffffff);
   border-radius: 999px;
@@ -671,15 +675,15 @@
   font-weight: 850;
   gap: 6px;
   left: -2px;
-  line-height: 1;
-  max-width: 260px;
+  line-height: 1.15;
+  max-width: max(260px, calc(100% + 4px));
   min-width: 0;
-  overflow: hidden;
+  overflow: visible;
   padding: 5px 9px;
   pointer-events: all;
   position: absolute;
   top: -30px;
-  white-space: nowrap;
+  white-space: normal;
   z-index: 2;
 }
 
@@ -728,9 +732,10 @@
 
 .areaNodeHeaderText {
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow: visible;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+  white-space: normal;
 }
 
 .nodeGlyph {
@@ -827,13 +832,14 @@
   font-size: clamp(0.7rem, 12px, 0.86rem);
   font-weight: 850;
   line-height: 1.15;
-  max-width: 100%;
+  max-width: max(100%, 220px);
   min-height: 1.1em;
-  overflow: hidden;
+  overflow: visible;
   overflow-wrap: anywhere;
   text-align: center;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  text-overflow: clip;
+  white-space: normal;
+  width: max-content;
 }
 
 .resourceNodeBadge {

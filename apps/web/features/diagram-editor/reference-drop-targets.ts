@@ -63,6 +63,54 @@ export function findInnermostReferenceDropTarget(
   return candidates.sort(compareDropTargetCandidates)[0] ?? null;
 }
 
+export function findContainingReferenceDropTargets(
+  childNode: DiagramNode,
+  nodes: readonly DiagramNode[],
+  catalog: ParameterCatalog
+): ReferenceDropTarget[] {
+  if (childNode.kind !== "resource") {
+    return [];
+  }
+
+  const childParameters = mergeNodeParameters(childNode, catalog);
+  const referenceDefinitions = getReferenceDefinitions(catalog.resources[childParameters.resourceType] ?? []);
+
+  if (referenceDefinitions.length === 0) {
+    return [];
+  }
+
+  const childCenter = getNodeCenter(childNode);
+  const candidateByDefinitionName = new Map<string, ReferenceDropTargetCandidate>();
+
+  for (const node of nodes) {
+    if (node.id === childNode.id || node.kind !== "resource" || !containsPoint(node, childCenter)) {
+      continue;
+    }
+
+    const parentParameters = mergeNodeParameters(node, catalog);
+    const area = getNodeArea(node);
+
+    for (const definition of referenceDefinitions) {
+      if (!definition.referenceTargetTypes?.includes(parentParameters.resourceType)) {
+        continue;
+      }
+
+      const candidate: ReferenceDropTargetCandidate = {
+        definitions: [definition],
+        node,
+        area
+      };
+      const currentCandidate = candidateByDefinitionName.get(definition.name);
+
+      if (!currentCandidate || compareDropTargetCandidates(candidate, currentCandidate) < 0) {
+        candidateByDefinitionName.set(definition.name, candidate);
+      }
+    }
+  }
+
+  return groupReferenceTargetCandidates(referenceDefinitions, candidateByDefinitionName);
+}
+
 export function findInnermostVisualDropTarget(
   childNode: DiagramNode,
   nodes: readonly DiagramNode[],
@@ -133,12 +181,31 @@ export function applyReferenceDropTarget(
   };
 }
 
+export function applyReferenceDropTargets(
+  childNode: DiagramNode,
+  targets: readonly ReferenceDropTarget[],
+  catalog: ParameterCatalog
+): DiagramNode {
+  return targets.reduce(
+    (currentNode, target) => applyReferenceDropTarget(currentNode, target, catalog),
+    childNode
+  );
+}
+
 export function applyInnermostReferenceDropTarget(
   childNode: DiagramNode,
   nodes: readonly DiagramNode[],
   catalog: ParameterCatalog
 ): DiagramNode {
   return applyReferenceDropTarget(childNode, findInnermostReferenceDropTarget(childNode, nodes, catalog), catalog);
+}
+
+export function applyContainingReferenceDropTarget(
+  childNode: DiagramNode,
+  nodes: readonly DiagramNode[],
+  catalog: ParameterCatalog
+): DiagramNode {
+  return applyReferenceDropTargets(childNode, findContainingReferenceDropTargets(childNode, nodes, catalog), catalog);
 }
 
 export function applyInnermostReferenceDropTargets(
@@ -155,11 +222,54 @@ export function applyInnermostReferenceDropTargets(
   );
 }
 
+export function applyContainingReferenceDropTargets(
+  nodes: readonly DiagramNode[],
+  childNodeIds: ReadonlySet<string>,
+  catalog: ParameterCatalog
+): DiagramNode[] {
+  if (childNodeIds.size === 0) {
+    return [...nodes];
+  }
+
+  return nodes.map((node) =>
+    childNodeIds.has(node.id) ? applyContainingReferenceDropTarget(node, nodes, catalog) : node
+  );
+}
+
 function getReferenceDefinitions(definitions: readonly ParameterCatalogDefinition[]) {
   return definitions.filter(
     (definition) =>
       definition.inputKind === "reference-picker" && (definition.referenceTargetTypes?.length ?? 0) > 0
   );
+}
+
+function groupReferenceTargetCandidates(
+  referenceDefinitions: readonly ParameterCatalogDefinition[],
+  candidateByDefinitionName: ReadonlyMap<string, ReferenceDropTargetCandidate>
+): ReferenceDropTarget[] {
+  const targetByNodeId = new Map<string, ReferenceDropTarget>();
+
+  for (const definition of referenceDefinitions) {
+    const candidate = candidateByDefinitionName.get(definition.name);
+
+    if (!candidate) {
+      continue;
+    }
+
+    const currentTarget = targetByNodeId.get(candidate.node.id);
+
+    if (currentTarget) {
+      currentTarget.definitions.push(definition);
+      continue;
+    }
+
+    targetByNodeId.set(candidate.node.id, {
+      definitions: [definition],
+      node: candidate.node
+    });
+  }
+
+  return [...targetByNodeId.values()];
 }
 
 function createReferenceParameterValue(definition: ParameterCatalogDefinition, reference: string) {

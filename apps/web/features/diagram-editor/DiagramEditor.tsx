@@ -57,7 +57,8 @@ import {
   applyAreaNodeMovement,
   applyAreaNodeParentAssignments,
   clearDeletedAreaParentAssignments,
-  clearOutOfBoundsAreaParentAssignments
+  clearOutOfBoundsAreaParentAssignments,
+  getDirectlyMovedNodeIdsFromPositionMap
 } from "./area-node-movement";
 import { findInnermostAreaNodeAtPoint } from "./area-nodes";
 import {
@@ -85,7 +86,7 @@ import {
 } from "./diagram-utils";
 import { toFlowEdges, toFlowNodes } from "./flow-mappers";
 import {
-  applyInnermostReferenceDropTargets,
+  applyContainingReferenceDropTargets,
   findInnermostVisualDropTarget
 } from "./reference-drop-targets";
 import {
@@ -164,6 +165,7 @@ function DiagramEditorInner({
   const temporaryPanPreviousModeRef = useRef<"select" | "pan" | null>(null);
   const clipboardRef = useRef<DiagramNode[]>([]);
   const canvasPanelRef = useRef<HTMLDivElement | null>(null);
+  const directNodeDragIdsRef = useRef<Set<string> | null>(null);
   const dragSnapshotRef = useRef<DiagramJson | null>(null);
   const editorShellRef = useRef<HTMLElement | null>(null);
   const leftRailRef = useRef<HTMLDivElement | null>(null);
@@ -694,12 +696,16 @@ function DiagramEditorInner({
       }
 
       const positionByNodeId = new Map(positionChanges.map((change) => [change.id, change.position]));
-      const directlyMovedNodeIds = new Set(positionChanges.map((change) => change.id));
 
       applyLiveDiagramUpdate((currentDiagram) => {
         const snapshotNodes = dragSnapshotRef.current?.nodes ?? currentDiagram.nodes;
+        const directlyMovedNodeIds = getDirectlyMovedNodeIdsFromPositionMap(
+          snapshotNodes,
+          positionByNodeId,
+          directNodeDragIdsRef.current ?? undefined
+        );
         const positionedNodes = currentDiagram.nodes.map((node) => {
-          const position = positionByNodeId.get(node.id);
+          const position = directlyMovedNodeIds.has(node.id) ? positionByNodeId.get(node.id) : undefined;
 
           return {
             ...node,
@@ -885,7 +891,7 @@ function DiagramEditorInner({
         const movedNodeIds = getMovedNodeIdsFromNodes(dragState.snapshotNodes, nodesWithAssignedParents);
         const after = {
           ...diagramRef.current,
-          nodes: applyInnermostReferenceDropTargets(
+          nodes: applyContainingReferenceDropTargets(
             nodesWithAssignedParents,
             movedNodeIds,
             terraformParameterCatalog
@@ -1037,14 +1043,15 @@ function DiagramEditorInner({
     [getAreaNodeFromPointerEvent, inspectAreaBlankNode, interactionMode]
   );
 
-  const handleNodeDragStart = useCallback(() => {
+  const handleNodeDragStart = useCallback((_event: MouseEvent | TouchEvent, draggedFlowNode: DiagramFlowNode) => {
     if (interactionMode !== "select") {
       return;
     }
 
     dragSnapshotRef.current = cloneDiagram(diagramRef.current);
+    directNodeDragIdsRef.current = createDirectNodeDragIdSet(draggedFlowNode.id, selectedNodeIds);
     updateActiveReferenceDropTargetNodeId(null);
-  }, [interactionMode, updateActiveReferenceDropTargetNodeId]);
+  }, [interactionMode, selectedNodeIds, updateActiveReferenceDropTargetNodeId]);
 
   const handleNodeDrag = useCallback(
     (_event: MouseEvent | TouchEvent, draggedFlowNode: DiagramFlowNode, nodes: DiagramFlowNode[]) => {
@@ -1054,9 +1061,13 @@ function DiagramEditorInner({
 
       const positionByNodeId = new Map(nodes.map((node) => [node.id, node.position]));
       const snapshotNodes = dragSnapshotRef.current?.nodes ?? diagramRef.current.nodes;
-      const directlyMovedNodeIds = getMovedNodeIdsFromPositionMap(snapshotNodes, positionByNodeId);
+      const directlyMovedNodeIds = getDirectlyMovedNodeIdsFromPositionMap(
+        snapshotNodes,
+        positionByNodeId,
+        directNodeDragIdsRef.current ?? createDirectNodeDragIdSet(draggedFlowNode.id, selectedNodeIds)
+      );
       const positionedNodes = applyAreaNodeMovement(snapshotNodes, diagramRef.current.nodes.map((node) => {
-        const position = positionByNodeId.get(node.id);
+        const position = directlyMovedNodeIds.has(node.id) ? positionByNodeId.get(node.id) : undefined;
 
         return position ? { ...node, position: { ...position } } : node;
       }), directlyMovedNodeIds);
@@ -1066,13 +1077,14 @@ function DiagramEditorInner({
         draggedNode ? getVisualDropTargetNodeId(draggedNode, positionedNodes) : null
       );
     },
-    [getVisualDropTargetNodeId, interactionMode, updateActiveReferenceDropTargetNodeId]
+    [getVisualDropTargetNodeId, interactionMode, selectedNodeIds, updateActiveReferenceDropTargetNodeId]
   );
 
   const handleNodeDragStop = useCallback(
-    (_event: MouseEvent | TouchEvent, _node: DiagramFlowNode, nodes: DiagramFlowNode[]) => {
+    (_event: MouseEvent | TouchEvent, node: DiagramFlowNode, nodes: DiagramFlowNode[]) => {
       if (interactionMode !== "select") {
         dragSnapshotRef.current = null;
+        directNodeDragIdsRef.current = null;
         updateActiveReferenceDropTargetNodeId(null);
         return;
       }
@@ -1080,9 +1092,13 @@ function DiagramEditorInner({
       const before = dragSnapshotRef.current;
       const positionByNodeId = new Map(nodes.map((node) => [node.id, node.position]));
       const snapshotNodes = before?.nodes ?? diagramRef.current.nodes;
-      const directlyMovedNodeIds = getMovedNodeIdsFromPositionMap(snapshotNodes, positionByNodeId);
+      const directlyMovedNodeIds = getDirectlyMovedNodeIdsFromPositionMap(
+        snapshotNodes,
+        positionByNodeId,
+        directNodeDragIdsRef.current ?? createDirectNodeDragIdSet(node.id, selectedNodeIds)
+      );
       const positionedNodes = applyAreaNodeMovement(snapshotNodes, diagramRef.current.nodes.map((node) => {
-        const position = positionByNodeId.get(node.id);
+        const position = directlyMovedNodeIds.has(node.id) ? positionByNodeId.get(node.id) : undefined;
 
         return position ? { ...node, position: { ...position } } : node;
       }), directlyMovedNodeIds);
@@ -1090,7 +1106,7 @@ function DiagramEditorInner({
       const movedNodeIds = getMovedNodeIdsFromNodes(snapshotNodes, nodesWithAssignedParents);
       const after = {
         ...diagramRef.current,
-        nodes: applyInnermostReferenceDropTargets(
+        nodes: applyContainingReferenceDropTargets(
           nodesWithAssignedParents,
           movedNodeIds,
           terraformParameterCatalog
@@ -1104,9 +1120,10 @@ function DiagramEditorInner({
       }
 
       dragSnapshotRef.current = null;
+      directNodeDragIdsRef.current = null;
       updateActiveReferenceDropTargetNodeId(null);
     },
-    [interactionMode, pushHistory, replaceDiagram, updateActiveReferenceDropTargetNodeId]
+    [interactionMode, pushHistory, replaceDiagram, selectedNodeIds, updateActiveReferenceDropTargetNodeId]
   );
 
   const handleConnectStart = useCallback<OnConnectStart>((_event, params) => {
@@ -1178,7 +1195,7 @@ function DiagramEditorInner({
 
         return {
           ...currentDiagram,
-          nodes: applyInnermostReferenceDropTargets(
+          nodes: applyContainingReferenceDropTargets(
             nodesWithAssignedParents,
             new Set([nextNode.id]),
             terraformParameterCatalog
@@ -1757,24 +1774,6 @@ function isNodePositionChangeWithPosition(
   return change.type === "position" && Boolean(change.position);
 }
 
-function getMovedNodeIdsFromPositionMap(
-  previousNodes: readonly DiagramNode[],
-  positionByNodeId: ReadonlyMap<string, DiagramNode["position"]>
-): Set<string> {
-  const movedNodeIds = new Set<string>();
-  const previousPositionByNodeId = new Map(previousNodes.map((node) => [node.id, node.position]));
-
-  for (const [nodeId, position] of positionByNodeId) {
-    const previousPosition = previousPositionByNodeId.get(nodeId);
-
-    if (previousPosition && isDifferentPosition(previousPosition, position)) {
-      movedNodeIds.add(nodeId);
-    }
-  }
-
-  return movedNodeIds;
-}
-
 function getMovedNodeIdsFromNodes(
   previousNodes: readonly DiagramNode[],
   currentNodes: readonly DiagramNode[]
@@ -1791,6 +1790,13 @@ function getMovedNodeIdsFromNodes(
   }
 
   return movedNodeIds;
+}
+
+function createDirectNodeDragIdSet(
+  draggedNodeId: string,
+  selectedNodeIds: readonly string[]
+): Set<string> {
+  return new Set(selectedNodeIds.includes(draggedNodeId) ? selectedNodeIds : [draggedNodeId]);
 }
 
 function isDifferentPosition(left: DiagramNode["position"], right: DiagramNode["position"]) {
