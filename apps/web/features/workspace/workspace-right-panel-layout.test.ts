@@ -4,6 +4,7 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 const componentSource = readWorkspaceFile("WorkspaceRightPanel.tsx");
+const aiPanelSource = readWorkspaceFile("WorkspaceAiPanel.tsx");
 const deploymentPanelSource = readWorkspaceFile("DeploymentPanel.tsx");
 const terraformPanelSource = readWorkspaceFile("TerraformCodePanel.tsx");
 const stylesSource = readWorkspaceFile("workspace.module.css");
@@ -210,6 +211,49 @@ test("deployment baseline save button shows pending and saved icons", () => {
     componentSource,
     /hasUnsavedDeploymentBaseline=\{hasUnsavedDeploymentBaseline\}/
   );
+});
+
+test("pre-deployment check is owned by the deployment tab", () => {
+  const preflightSummaryRule = getCssRule(stylesSource, "deploymentPreflightSummary");
+
+  assert.match(deploymentPanelSource, /runAiPreDeploymentCheck/);
+  assert.match(deploymentPanelSource, /createWorkspaceAiBoardSnapshot/);
+  assert.match(componentSource, /diagramJson=\{context\.diagram\}/);
+  assert.doesNotMatch(aiPanelSource, /runAiPreDeploymentCheck/);
+  assert.doesNotMatch(aiPanelSource, /WorkspaceAiPreDeploymentResult/);
+  assert.match(preflightSummaryRule, /\bgap:\s*8px;/);
+});
+
+test("terraform error explanation lives in the terraform code panel only when errors exist", () => {
+  const errorExplanationRule = getCssRule(stylesSource, "terraformErrorExplanationPanel");
+  const errorExplanationListRule = getCssRule(stylesSource, "terraformErrorExplanationList");
+
+  assert.match(terraformPanelSource, /runAiTerraformErrorExplanation/);
+  assert.match(terraformPanelSource, /errorDiagnostics\.length > 0 \? \(/);
+  assert.match(terraformPanelSource, /errorDiagnostics\.map/);
+  assert.match(terraformPanelSource, /className=\{styles\.terraformErrorExplanationPanel\}/);
+  assert.match(terraformPanelSource, /className=\{styles\.terraformErrorExplanationList\}/);
+  assert.doesNotMatch(terraformPanelSource, /diagnosticToast/);
+  assert.doesNotMatch(terraformPanelSource, /showDiagnosticToast/);
+  assert.doesNotMatch(aiPanelSource, /runAiTerraformErrorExplanation/);
+  assert.doesNotMatch(aiPanelSource, /Terraform 오류 설명/);
+  assert.doesNotMatch(stylesSource, /\.terraformDiagnosticToast\s*\{/);
+  assert.match(errorExplanationRule, /\bmax-height:\s*240px;/);
+  assert.match(errorExplanationRule, /\boverflow:\s*auto;/);
+  assert.match(errorExplanationListRule, /\blist-style:\s*none;/);
+});
+
+test("terraform preview explanation is triggered from the terraform code panel", () => {
+  const previewExplanationRule = getCssRule(stylesSource, "terraformPreviewExplanationPanel");
+
+  assert.match(terraformPanelSource, /runAiTerraformPreviewExplanation/);
+  assert.match(terraformPanelSource, /highlightedBlock\.code/);
+  assert.match(terraformPanelSource, /displayedTerraformCode/);
+  assert.match(terraformPanelSource, /className=\{styles\.terraformPreviewExplanationPanel\}/);
+  assert.doesNotMatch(aiPanelSource, /WorkspaceAiTerraformPanel/);
+  assert.doesNotMatch(aiPanelSource, /Terraform Preview 설명/);
+  assert.match(previewExplanationRule, /\bmax-height:\s*180px;/);
+  assert.match(previewExplanationRule, /\boverflow:\s*auto;/);
 });
 
 test("terraform panel does not expose a detached artifact save action", () => {

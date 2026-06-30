@@ -1,6 +1,11 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent, UIEvent } from "react";
-import type { DiagramJson, TerraformDiagnostic } from "@sketchcatch/types";
+import type {
+  AiTerraformErrorExplanationResult,
+  AiTerraformPreviewExplanationResult,
+  DiagramJson,
+  TerraformDiagnostic
+} from "@sketchcatch/types";
 import {
   AlertCircle,
   ArrowLeft,
@@ -11,12 +16,19 @@ import {
   Play,
   Rocket,
   Settings,
+  Sparkles,
   Trash2,
   X
 } from "lucide-react";
 import { getApiErrorMessage } from "../../lib/api-client";
 import type { DiagramEditorPanelContext } from "../diagram-editor";
-import { generateTerraformCode, syncTerraformToDiagram, validateTerraformCode } from "./api";
+import {
+  generateTerraformCode,
+  runAiTerraformErrorExplanation,
+  runAiTerraformPreviewExplanation,
+  syncTerraformToDiagram,
+  validateTerraformCode
+} from "./api";
 import {
   combineTerraformFiles,
   compareTerraformFileNames,
@@ -35,6 +47,72 @@ import styles from "./workspace.module.css";
 
 const TERRAFORM_EDITOR_LINE_HEIGHT = 19.2;
 const TERRAFORM_EDITOR_VERTICAL_PADDING = 12;
+
+type TerraformPreviewExplanationScope = {
+  readonly code: string;
+  readonly key: string;
+  readonly label: string;
+};
+
+function createTerraformDiagnosticKey(diagnostic: TerraformDiagnostic | null): string {
+  if (!diagnostic) {
+    return "";
+  }
+
+  return JSON.stringify({
+    code: diagnostic.code ?? "",
+    line: diagnostic.line ?? 0,
+    message: diagnostic.message,
+    nodeId: diagnostic.nodeId ?? "",
+    resourceAddress: diagnostic.resourceAddress ?? "",
+    severity: diagnostic.severity
+  });
+}
+
+function formatTerraformErrorRawMessage(diagnostic: TerraformDiagnostic): string {
+  return `${formatTerraformDiagnosticTitle(diagnostic)}\n${diagnostic.message}`;
+}
+
+function createTerraformPreviewExplanationScope({
+  activeFileName,
+  displayedTerraformCode,
+  highlightedBlock,
+  inspectedBlock
+}: {
+  readonly activeFileName: string;
+  readonly displayedTerraformCode: string;
+  readonly highlightedBlock: { readonly address: string; readonly code: string } | null;
+  readonly inspectedBlock: { readonly address: string; readonly code: string } | null;
+}): TerraformPreviewExplanationScope {
+  if (inspectedBlock) {
+    return createTerraformPreviewExplanationScopeValue(
+      inspectedBlock.code,
+      `리소스 코드 · ${inspectedBlock.address}`
+    );
+  }
+
+  if (highlightedBlock) {
+    return createTerraformPreviewExplanationScopeValue(
+      highlightedBlock.code,
+      `강조 코드 · ${highlightedBlock.address}`
+    );
+  }
+
+  return createTerraformPreviewExplanationScopeValue(displayedTerraformCode, `현재 파일 · ${activeFileName}`);
+}
+
+function createTerraformPreviewExplanationScopeValue(
+  code: string,
+  label: string
+): TerraformPreviewExplanationScope {
+  const trimmedCode = code.trim();
+
+  return {
+    code: trimmedCode,
+    key: JSON.stringify({ code: trimmedCode, label }),
+    label
+  };
+}
 
 export type PreparedTerraformArtifactSource = {
   readonly diagramJson: DiagramJson;
@@ -76,10 +154,20 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
   const [statusMessage, setStatusMessage] = useState("main.tf");
   const [hasLocalEdits, setHasLocalEdits] = useState(false);
   const [saveBanner, setSaveBanner] = useState<TerraformSaveBanner | null>(null);
-  const [diagnosticToast, setDiagnosticToast] = useState<TerraformDiagnostic | null>(null);
+  const [terraformPreviewExplanation, setTerraformPreviewExplanation] =
+    useState<AiTerraformPreviewExplanationResult | null>(null);
+  const [terraformPreviewExplanationState, setTerraformPreviewExplanationState] =
+    useState<RequestState>("idle");
+  const [terraformPreviewExplanationMessage, setTerraformPreviewExplanationMessage] = useState("");
+  const [explainedTerraformPreviewKey, setExplainedTerraformPreviewKey] = useState("");
+  const [terraformErrorExplanation, setTerraformErrorExplanation] =
+    useState<AiTerraformErrorExplanationResult | null>(null);
+  const [terraformErrorExplanationState, setTerraformErrorExplanationState] =
+    useState<RequestState>("idle");
+  const [terraformErrorExplanationMessage, setTerraformErrorExplanationMessage] = useState("");
+  const [explainedTerraformErrorKey, setExplainedTerraformErrorKey] = useState("");
   const [codeScrollTop, setCodeScrollTop] = useState(0);
   const codeRequestIdRef = useRef(0);
-  const diagnosticToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isPreparingTerraformArtifactRef = useRef(false);
   const latestDiagramFingerprintRef = useRef("");
   const latestExternalSaveRequestIdRef = useRef(externalSaveRequestId);
@@ -92,8 +180,19 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
     [activeFileName, terraformFiles]
   );
   const hasTerraformCode = combinedTerraformCode.trim().length > 0;
-  const hasErrorDiagnostics = diagnostics.some((diagnostic) => diagnostic.severity === "error");
-  const firstErrorDiagnostic = diagnostics.find((diagnostic) => diagnostic.severity === "error") ?? null;
+  const errorDiagnostics = useMemo(
+    () => diagnostics.filter((diagnostic) => diagnostic.severity === "error"),
+    [diagnostics]
+  );
+  const errorDiagnosticKeys = useMemo(
+    () => new Set(errorDiagnostics.map((diagnostic) => createTerraformDiagnosticKey(diagnostic))),
+    [errorDiagnostics]
+  );
+  const hasErrorDiagnostics = errorDiagnostics.length > 0;
+  const activeTerraformErrorExplanation =
+    terraformErrorExplanation !== null && errorDiagnosticKeys.has(explainedTerraformErrorKey)
+      ? terraformErrorExplanation
+      : null;
   const currentDiagramFingerprint = useMemo(() => toDiagramFingerprint(context.diagram), [context.diagram]);
   const terraformBlocks = useMemo(() => parseTerraformFiles(terraformFiles), [terraformFiles]);
   const selectedNode = useMemo(
@@ -129,6 +228,21 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
   const displayedTerraformCode = inspectedBlock?.code ?? activeFileCode;
   const highlightedBlock =
     !isResourceCodeMode && selectedBlock?.fileName === activeFileName ? selectedBlock : null;
+  const terraformPreviewExplanationScope = useMemo(
+    () =>
+      createTerraformPreviewExplanationScope({
+        activeFileName,
+        displayedTerraformCode,
+        highlightedBlock,
+        inspectedBlock
+      }),
+    [activeFileName, displayedTerraformCode, highlightedBlock, inspectedBlock]
+  );
+  const activeTerraformPreviewExplanation =
+    terraformPreviewExplanation !== null &&
+    explainedTerraformPreviewKey === terraformPreviewExplanationScope.key
+      ? terraformPreviewExplanation
+      : null;
   const lineNumbers = useMemo(
     () => Array.from({ length: Math.max(1, displayedTerraformCode.split(/\r\n|\r|\n/).length) }, (_, index) => index + 1),
     [displayedTerraformCode]
@@ -153,17 +267,56 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
     }
   }, []);
 
-  const showDiagnosticToast = useCallback((diagnostic: TerraformDiagnostic) => {
-    if (diagnosticToastTimerRef.current) {
-      clearTimeout(diagnosticToastTimerRef.current);
+  async function explainTerraformPreviewScope(): Promise<void> {
+    if (!terraformPreviewExplanationScope.code || terraformPreviewExplanationState === "loading") {
+      return;
     }
 
-    setDiagnosticToast(diagnostic);
-    diagnosticToastTimerRef.current = setTimeout(() => {
-      setDiagnosticToast(null);
-      diagnosticToastTimerRef.current = null;
-    }, 3800);
-  }, []);
+    setTerraformPreviewExplanationState("loading");
+    setTerraformPreviewExplanationMessage("");
+    setTerraformPreviewExplanation(null);
+    setExplainedTerraformPreviewKey("");
+
+    try {
+      const explanation = await runAiTerraformPreviewExplanation(terraformPreviewExplanationScope.code);
+
+      setTerraformPreviewExplanation(explanation);
+      setExplainedTerraformPreviewKey(terraformPreviewExplanationScope.key);
+      setTerraformPreviewExplanationState("idle");
+    } catch (error) {
+      setTerraformPreviewExplanationState("error");
+      setTerraformPreviewExplanationMessage(getApiErrorMessage(error, "Terraform Preview 설명 중 오류가 발생했습니다."));
+    }
+  }
+
+  async function explainTerraformError(diagnostic: TerraformDiagnostic): Promise<void> {
+    if (terraformErrorExplanationState === "loading") {
+      return;
+    }
+
+    const diagnosticKey = createTerraformDiagnosticKey(diagnostic);
+    const relatedResourceId = diagnostic.resourceAddress ?? diagnostic.nodeId;
+
+    setTerraformErrorExplanationState("loading");
+    setTerraformErrorExplanationMessage("");
+    setTerraformErrorExplanation(null);
+    setExplainedTerraformErrorKey(diagnosticKey);
+
+    try {
+      const explanation = await runAiTerraformErrorExplanation({
+        rawMessage: formatTerraformErrorRawMessage(diagnostic),
+        ...(relatedResourceId ? { relatedResourceId } : {}),
+        stage: "validate"
+      });
+
+      setTerraformErrorExplanation(explanation);
+      setExplainedTerraformErrorKey(diagnosticKey);
+      setTerraformErrorExplanationState("idle");
+    } catch (error) {
+      setTerraformErrorExplanationState("error");
+      setTerraformErrorExplanationMessage(getApiErrorMessage(error, "Terraform 오류 설명 중 오류가 발생했습니다."));
+    }
+  }
 
   const refreshTerraformCode = useCallback(
     async (diagramFingerprint: string) => {
@@ -186,7 +339,14 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
         onDiagnosticsChange([]);
         setHasLocalEdits(false);
         setSaveBanner(null);
-        setDiagnosticToast(null);
+        setTerraformPreviewExplanation(null);
+        setTerraformPreviewExplanationMessage("");
+        setTerraformPreviewExplanationState("idle");
+        setExplainedTerraformPreviewKey("");
+        setTerraformErrorExplanation(null);
+        setTerraformErrorExplanationMessage("");
+        setTerraformErrorExplanationState("idle");
+        setExplainedTerraformErrorKey("");
         setStatusMessage("그래프 기준으로 동기화됨");
         latestDiagramFingerprintRef.current = diagramFingerprint;
         onDirtyChange(false);
@@ -206,7 +366,6 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
 
     if (validationError) {
       setSaveBanner(null);
-      showDiagnosticToast(validationError);
       setStatusMessage("저장 실패");
       return null;
     }
@@ -222,7 +381,6 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
 
     if (syncError) {
       setSaveBanner(null);
-      showDiagnosticToast(syncError);
       setStatusMessage("저장 실패");
       return null;
     }
@@ -231,7 +389,6 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
     latestDiagramFingerprintRef.current = toDiagramFingerprint(syncResult.diagramJson);
     setHasLocalEdits(false);
     setSaveBanner(null);
-    setDiagnosticToast(null);
     setStatusMessage("저장됨");
     onDirtyChange(false);
 
@@ -243,8 +400,7 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
     combinedTerraformCode,
     context,
     onDiagnosticsChange,
-    onDirtyChange,
-    showDiagnosticToast
+    onDirtyChange
   ]);
 
   const saveCodeToDiagram = useCallback(async (): Promise<boolean> => {
@@ -329,13 +485,45 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
   }, [hasLocalEdits, onDirtyChange]);
 
   useEffect(() => {
-    return () => {
-      if (diagnosticToastTimerRef.current) {
-        clearTimeout(diagnosticToastTimerRef.current);
-      }
+    if (!terraformPreviewExplanationScope.code) {
+      setTerraformPreviewExplanation(null);
+      setTerraformPreviewExplanationMessage("");
+      setTerraformPreviewExplanationState("idle");
+      setExplainedTerraformPreviewKey("");
+      return;
+    }
 
-    };
-  }, []);
+    if (
+      explainedTerraformPreviewKey &&
+      explainedTerraformPreviewKey !== terraformPreviewExplanationScope.key
+    ) {
+      setTerraformPreviewExplanation(null);
+      setTerraformPreviewExplanationMessage("");
+      setTerraformPreviewExplanationState("idle");
+      setExplainedTerraformPreviewKey("");
+    }
+  }, [
+    explainedTerraformPreviewKey,
+    terraformPreviewExplanationScope.code,
+    terraformPreviewExplanationScope.key
+  ]);
+
+  useEffect(() => {
+    if (errorDiagnosticKeys.size === 0) {
+      setTerraformErrorExplanation(null);
+      setTerraformErrorExplanationMessage("");
+      setTerraformErrorExplanationState("idle");
+      setExplainedTerraformErrorKey("");
+      return;
+    }
+
+    if (explainedTerraformErrorKey && !errorDiagnosticKeys.has(explainedTerraformErrorKey)) {
+      setTerraformErrorExplanation(null);
+      setTerraformErrorExplanationMessage("");
+      setTerraformErrorExplanationState("idle");
+      setExplainedTerraformErrorKey("");
+    }
+  }, [errorDiagnosticKeys, explainedTerraformErrorKey]);
 
   useEffect(() => {
     if (!isVisible || isResourceCodeMode || !selectedBlock || !textareaRef.current) {
@@ -399,7 +587,14 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
 
     setHasLocalEdits(true);
     setSaveBanner({ kind: "dirty" });
-    setDiagnosticToast(null);
+    setTerraformPreviewExplanation(null);
+    setTerraformPreviewExplanationMessage("");
+    setTerraformPreviewExplanationState("idle");
+    setExplainedTerraformPreviewKey("");
+    setTerraformErrorExplanation(null);
+    setTerraformErrorExplanationMessage("");
+    setTerraformErrorExplanationState("idle");
+    setExplainedTerraformErrorKey("");
     setStatusMessage("수정 중");
   }
 
@@ -423,15 +618,27 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
       const validationResult = await validateTerraformCode(displayedTerraformCode);
       setDiagnostics(validationResult.diagnostics);
       onDiagnosticsChange(validationResult.diagnostics);
-      const firstDiagnostic = validationResult.diagnostics[0] ?? null;
-
-      if (firstDiagnostic) {
-        showDiagnosticToast(firstDiagnostic);
-      } else {
-        setDiagnosticToast(null);
-      }
       setStatusMessage(validationResult.diagnostics.length === 0 ? "검증 완료" : "진단 확인 필요");
     }, "Terraform 코드를 검증하지 못했습니다.");
+  }
+
+  function renderTerraformPreviewExplanationButton() {
+    return (
+      <button
+        className={styles.terraformPreviewButton}
+        disabled={
+          !terraformPreviewExplanationScope.code ||
+          requestState === "loading" ||
+          terraformPreviewExplanationState === "loading"
+        }
+        onClick={() => void explainTerraformPreviewScope()}
+        title={terraformPreviewExplanationScope.label}
+        type="button"
+      >
+        <Sparkles size={14} aria-hidden="true" />
+        <span>{terraformPreviewExplanationState === "loading" ? "설명 중" : "Preview 설명"}</span>
+      </button>
+    );
   }
 
   function selectTerraformFile(fileName: string): void {
@@ -519,12 +726,16 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
               </div>
             ) : null}
           </div>
-          <span className={styles.terraformShortcut}>Ctrl+S</span>
+          <div className={styles.terraformTopActions}>
+            {renderTerraformPreviewExplanationButton()}
+            <span className={styles.terraformShortcut}>Ctrl+S</span>
+          </div>
         </header>
       )}
 
       {isResourceCodeMode ? (
         <div className={styles.resourceActionBar}>
+          {renderTerraformPreviewExplanationButton()}
           <button className={styles.resourceActionPrimary} disabled type="button" title="리소스 단위 plan API 연결 예정">
             <Play size={16} aria-hidden="true" />
             Plan
@@ -615,16 +826,117 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
         ) : null}
       </div>
 
-      {diagnosticToast ? (
-        <div className={styles.terraformDiagnosticToast} role="status" aria-live="polite">
-          <strong>{formatTerraformDiagnosticTitle(diagnosticToast)}</strong>
-          <span>{diagnosticToast.message}</span>
-        </div>
+      {terraformPreviewExplanationState !== "idle" || activeTerraformPreviewExplanation ? (
+        <section className={styles.terraformPreviewExplanationPanel} aria-live="polite">
+          <div className={styles.terraformPreviewExplanationHeader}>
+            <div>
+              <strong>Terraform Preview 설명</strong>
+              <span>{terraformPreviewExplanationScope.label}</span>
+            </div>
+            <button
+              disabled={
+                !terraformPreviewExplanationScope.code ||
+                requestState === "loading" ||
+                terraformPreviewExplanationState === "loading"
+              }
+              onClick={() => void explainTerraformPreviewScope()}
+              type="button"
+            >
+              <Sparkles size={14} aria-hidden="true" />
+              {terraformPreviewExplanationState === "loading" ? "설명 중" : "다시 설명"}
+            </button>
+          </div>
+          {terraformPreviewExplanationState === "loading" ? (
+            <p className={styles.terraformPreviewExplanationNotice}>코드를 해석하는 중입니다.</p>
+          ) : null}
+          {terraformPreviewExplanationState === "error" ? (
+            <p className={styles.terraformPreviewExplanationError} role="alert">
+              {terraformPreviewExplanationMessage}
+            </p>
+          ) : null}
+          {activeTerraformPreviewExplanation ? (
+            <div className={styles.terraformPreviewExplanationResult}>
+              <p>{activeTerraformPreviewExplanation.summary}</p>
+              {activeTerraformPreviewExplanation.detectedResources.length > 0 ? (
+                <ul>
+                  {activeTerraformPreviewExplanation.detectedResources.slice(0, 3).map((resource) => (
+                    <li key={`${resource.terraformType}-${resource.label}`}>
+                      <strong>{resource.terraformType}</strong>
+                      <span>{resource.label}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              <div className={styles.terraformPreviewExplanationStats}>
+                <span>{activeTerraformPreviewExplanation.findings.length} Findings</span>
+                <span>{activeTerraformPreviewExplanation.checklist.length} Checks</span>
+              </div>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
+
+      {errorDiagnostics.length > 0 ? (
+        <section className={styles.terraformErrorExplanationPanel} aria-live="polite">
+          <div className={styles.terraformErrorExplanationHeader}>
+            <div>
+              <strong>Terraform 오류</strong>
+              <span>{errorDiagnostics.length}개 오류</span>
+            </div>
+          </div>
+          <ol className={styles.terraformErrorExplanationList}>
+            {errorDiagnostics.map((diagnostic, index) => {
+              const diagnosticKey = createTerraformDiagnosticKey(diagnostic);
+              const isExplainedDiagnostic = explainedTerraformErrorKey === diagnosticKey;
+
+              return (
+                <li key={`${diagnosticKey}-${index}`}>
+                  <div className={styles.terraformErrorExplanationItemText}>
+                    <strong>{formatTerraformDiagnosticTitle(diagnostic)}</strong>
+                    <span>{diagnostic.message}</span>
+                  </div>
+                  <button
+                    disabled={terraformErrorExplanationState === "loading" || requestState === "loading"}
+                    onClick={() => void explainTerraformError(diagnostic)}
+                    type="button"
+                  >
+                    <Sparkles size={14} aria-hidden="true" />
+                    {terraformErrorExplanationState === "loading" && isExplainedDiagnostic
+                      ? "설명 중"
+                      : "AI 설명"}
+                  </button>
+                </li>
+              );
+            })}
+          </ol>
+          {terraformErrorExplanationState === "error" ? (
+            <p className={styles.terraformErrorExplanationError} role="alert">
+              {terraformErrorExplanationMessage}
+            </p>
+          ) : null}
+          {activeTerraformErrorExplanation ? (
+            <div className={styles.terraformErrorExplanationResult}>
+              <p>{activeTerraformErrorExplanation.summary}</p>
+              <dl>
+                <div>
+                  <dt>원인</dt>
+                  <dd>{activeTerraformErrorExplanation.likelyCause}</dd>
+                </div>
+                {activeTerraformErrorExplanation.nextActions.slice(0, 2).map((action, index) => (
+                  <div key={`${action}-${index}`}>
+                    <dt>{index === 0 ? "다음 행동" : "추가 행동"}</dt>
+                    <dd>{action}</dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
+          ) : null}
+        </section>
       ) : null}
 
       <section className={styles.terraformDiagnosticsHidden} aria-live="polite" id="terraform-issues">
         <div className={styles.terraformDiagnosticsHeader}>
-          {firstErrorDiagnostic ? (
+          {hasErrorDiagnostics ? (
             <AlertCircle size={15} aria-hidden="true" />
           ) : (
             <GitBranch size={15} aria-hidden="true" />
