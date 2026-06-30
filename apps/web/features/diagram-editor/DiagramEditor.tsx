@@ -89,6 +89,7 @@ import {
   applyContainingReferenceDropTargets,
   findInnermostVisualDropTarget
 } from "./reference-drop-targets";
+import type { NodeResizeUpdate } from "./node-resize";
 import {
   getSingleSelectedEdgeForToolbar,
   normalizeSelectedNodeIds
@@ -597,12 +598,13 @@ function DiagramEditorInner({
   }, []);
 
   const handleResize = useCallback(
-    (nodeId: string, size: DiagramNode["size"]) => {
+    (nodeId: string, update: NodeResizeUpdate) => {
       applyLiveDiagramUpdate((currentDiagram) => ({
         ...currentDiagram,
         nodes: updateNodeById(currentDiagram.nodes, nodeId, (node) => ({
           ...node,
-          size
+          position: update.position,
+          size: update.size
         }))
       }));
     },
@@ -610,13 +612,14 @@ function DiagramEditorInner({
   );
 
   const handleResizeEnd = useCallback(
-    (nodeId: string, size: DiagramNode["size"]) => {
+    (nodeId: string, update: NodeResizeUpdate) => {
       const before = resizeSnapshotRef.current;
       const resizedDiagram = {
         ...diagramRef.current,
         nodes: updateNodeById(diagramRef.current.nodes, nodeId, (node) => ({
           ...node,
-          size
+          position: update.position,
+          size: update.size
         }))
       };
       const after = {

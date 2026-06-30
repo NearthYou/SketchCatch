@@ -21,6 +21,13 @@ import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactNode } from
 import { BORDER_COLOR_SWATCHES, NODE_COLOR_SWATCHES } from "./constants";
 import { getAreaNodeIconUrl, getAreaNodeLabel, isAreaNode } from "./area-nodes";
 import { getNodeResizeBounds } from "./node-resize-bounds";
+import { calculateNodeResize } from "./node-resize";
+import type { NodeResizeHandlePosition, NodeResizeUpdate } from "./node-resize";
+import {
+  RESOURCE_NODE_BORDER_COLOR,
+  canChangeNodeBorderColor,
+  getNodeDisplayBorderColor
+} from "./node-style";
 import type { DiagramFlowNode } from "./types";
 import styles from "./diagram-editor.module.css";
 
@@ -38,8 +45,32 @@ const AREA_NODE_HIT_EDGES = [
   styles.areaNodeHitEdgeLeft
 ] as const;
 
-const AREA_NODE_DEFAULT_BORDER_COLOR = "#bfdbfe";
-const LEGACY_DEFAULT_BORDER_COLORS = new Set(["#8b98aa", "#2f6db3"]);
+const RESIZE_HANDLES: readonly {
+  className: string;
+  label: string;
+  position: NodeResizeHandlePosition;
+}[] = [
+  {
+    className: styles.manualResizeHandleTopLeft ?? "",
+    label: "좌상단에서 노드 크기 조절",
+    position: "top-left"
+  },
+  {
+    className: styles.manualResizeHandleTopRight ?? "",
+    label: "우상단에서 노드 크기 조절",
+    position: "top-right"
+  },
+  {
+    className: styles.manualResizeHandleBottomLeft ?? "",
+    label: "좌하단에서 노드 크기 조절",
+    position: "bottom-left"
+  },
+  {
+    className: styles.manualResizeHandleBottomRight ?? "",
+    label: "우하단에서 노드 크기 조절",
+    position: "bottom-right"
+  }
+];
 
 export function DiagramNodeView({ data, id, isConnectable, selected }: NodeProps<DiagramFlowNode>) {
   const reactFlow = useReactFlow();
@@ -48,7 +79,8 @@ export function DiagramNodeView({ data, id, isConnectable, selected }: NodeProps
   const canConnect = isConnectable && !node.locked;
   const isResourceNode = node.kind === "resource";
   const isArea = isAreaNode(node);
-  const borderColor = getDisplayBorderColor(isArea, node.style?.borderColor);
+  const canChangeBorderColor = canChangeNodeBorderColor(node);
+  const borderColor = getNodeDisplayBorderColor(node);
   const textColor = node.style?.textColor ?? "#172033";
   const isDataNode = node.parameters?.terraformBlockType === "data";
   const resizeBounds = getNodeResizeBounds(node);
@@ -56,7 +88,7 @@ export function DiagramNodeView({ data, id, isConnectable, selected }: NodeProps
   const areaNodeIconUrl = isArea ? getAreaNodeIconUrl(node) : undefined;
   const areaNodeLabel = isArea ? getAreaNodeLabel(node) : "";
   const handleResizePointerDown = useCallback(
-    (event: ReactPointerEvent<HTMLButtonElement>) => {
+    (event: ReactPointerEvent<HTMLButtonElement>, handlePosition: NodeResizeHandlePosition) => {
       if (node.locked) {
         return;
       }
@@ -67,40 +99,41 @@ export function DiagramNodeView({ data, id, isConnectable, selected }: NodeProps
       const zoom = reactFlow.getZoom() || 1;
       const startX = event.clientX;
       const startY = event.clientY;
+      const startPosition = node.position;
       const startSize = node.size;
-      let latestSize = startSize;
+      let latestUpdate: NodeResizeUpdate = {
+        position: startPosition,
+        size: startSize
+      };
 
       data.onResizeStart();
 
       const handlePointerMove = (moveEvent: PointerEvent) => {
-        const nextWidth = clamp(
-          startSize.width + (moveEvent.clientX - startX) / zoom,
-          resizeBounds.minWidth,
-          resizeBounds.maxWidth
-        );
-        const nextHeight = clamp(
-          startSize.height + (moveEvent.clientY - startY) / zoom,
-          resizeBounds.minHeight,
-          resizeBounds.maxHeight
-        );
-
-        latestSize = {
-          width: Math.round(nextWidth),
-          height: Math.round(nextHeight)
-        };
-        data.onResize(id, latestSize);
+        latestUpdate = calculateNodeResize({
+          bounds: resizeBounds,
+          delta: {
+            x: moveEvent.clientX - startX,
+            y: moveEvent.clientY - startY
+          },
+          handlePosition,
+          resizeMode: isResourceNode && !isArea ? "square" : "free",
+          startPosition,
+          startSize,
+          zoom
+        });
+        data.onResize(id, latestUpdate);
       };
 
       const handlePointerUp = () => {
         window.removeEventListener("pointermove", handlePointerMove);
         window.removeEventListener("pointerup", handlePointerUp);
-        data.onResizeEnd(id, latestSize);
+        data.onResizeEnd(id, latestUpdate);
       };
 
       window.addEventListener("pointermove", handlePointerMove);
       window.addEventListener("pointerup", handlePointerUp, { once: true });
     },
-    [data, id, node.locked, node.size, reactFlow, resizeBounds]
+    [data, id, isArea, isResourceNode, node.locked, node.position, node.size, reactFlow, resizeBounds]
   );
 
   return (
@@ -138,13 +171,15 @@ export function DiagramNodeView({ data, id, isConnectable, selected }: NodeProps
           onChange={(color) => data.onTextColorChange(id, color)}
           value={textColor}
         />
-        <ColorMenu
-          colors={BORDER_COLOR_SWATCHES}
-          icon={<Square aria-hidden="true" size={15} />}
-          label="테두리 색상"
-          onChange={(color) => data.onBorderColorChange(id, color)}
-          value={borderColor}
-        />
+        {canChangeBorderColor ? (
+          <ColorMenu
+            colors={BORDER_COLOR_SWATCHES}
+            icon={<Square aria-hidden="true" size={15} />}
+            label="테두리 색상"
+            onChange={(color) => data.onBorderColorChange(id, color)}
+            value={borderColor}
+          />
+        ) : null}
         <button
           aria-label={node.locked ? "잠금 해제" : "잠금"}
           aria-pressed={node.locked}
@@ -225,13 +260,18 @@ export function DiagramNodeView({ data, id, isConnectable, selected }: NodeProps
       </div>
 
       {selected && !node.locked ? (
-        <button
-          aria-label="노드 크기 조절"
-          className={`${styles.manualResizeHandle} nodrag`}
-          onPointerDown={handleResizePointerDown}
-          title="노드 크기 조절"
-          type="button"
-        />
+        <>
+          {RESIZE_HANDLES.map((handle) => (
+            <button
+              aria-label={handle.label}
+              className={`${styles.manualResizeHandle} ${handle.className} nodrag`}
+              key={handle.position}
+              onPointerDown={(event) => handleResizePointerDown(event, handle.position)}
+              title={handle.label}
+              type="button"
+            />
+          ))}
+        </>
       ) : null}
 
       {canConnect ? (
@@ -257,22 +297,10 @@ function getNodeShellStyle(isArea: boolean, isResourceNode: boolean, borderColor
   }
 
   if (isResourceNode) {
-    return { "--node-border-color": borderColor } as CSSProperties;
+    return { "--resource-node-border-color": RESOURCE_NODE_BORDER_COLOR } as CSSProperties;
   }
 
   return { borderColor };
-}
-
-function getDisplayBorderColor(isArea: boolean, borderColor: string | undefined): string {
-  if (isArea && (!borderColor || LEGACY_DEFAULT_BORDER_COLORS.has(borderColor))) {
-    return AREA_NODE_DEFAULT_BORDER_COLOR;
-  }
-
-  return borderColor ?? "#8b98aa";
-}
-
-function clamp(value: number, min: number, max: number) {
-  return Math.min(Math.max(value, min), max);
 }
 
 type ColorMenuProps = {
