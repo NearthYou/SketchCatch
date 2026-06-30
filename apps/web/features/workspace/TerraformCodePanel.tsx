@@ -173,6 +173,7 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
   const latestExternalSaveRequestIdRef = useRef(externalSaveRequestId);
   const lineNumberRef = useRef<HTMLOListElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const terraformPreviewExplanationRequestIdRef = useRef(0);
 
   const combinedTerraformCode = useMemo(() => combineTerraformFiles(terraformFiles), [terraformFiles]);
   const activeFileCode = useMemo(
@@ -272,6 +273,9 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
       return;
     }
 
+    const requestId = terraformPreviewExplanationRequestIdRef.current + 1;
+
+    terraformPreviewExplanationRequestIdRef.current = requestId;
     setTerraformPreviewExplanationState("loading");
     setTerraformPreviewExplanationMessage("");
     setTerraformPreviewExplanation(null);
@@ -280,13 +284,29 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
     try {
       const explanation = await runAiTerraformPreviewExplanation(terraformPreviewExplanationScope.code);
 
+      if (terraformPreviewExplanationRequestIdRef.current !== requestId) {
+        return;
+      }
+
       setTerraformPreviewExplanation(explanation);
       setExplainedTerraformPreviewKey(terraformPreviewExplanationScope.key);
       setTerraformPreviewExplanationState("idle");
     } catch (error) {
+      if (terraformPreviewExplanationRequestIdRef.current !== requestId) {
+        return;
+      }
+
       setTerraformPreviewExplanationState("error");
       setTerraformPreviewExplanationMessage(getApiErrorMessage(error, "Terraform Preview 설명 중 오류가 발생했습니다."));
     }
+  }
+
+  function closeTerraformPreviewExplanation(): void {
+    terraformPreviewExplanationRequestIdRef.current += 1;
+    setTerraformPreviewExplanationState("idle");
+    setTerraformPreviewExplanationMessage("");
+    setTerraformPreviewExplanation(null);
+    setExplainedTerraformPreviewKey("");
   }
 
   async function explainTerraformError(diagnostic: TerraformDiagnostic): Promise<void> {
@@ -833,18 +853,29 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
               <strong>Terraform Preview 설명</strong>
               <span>{terraformPreviewExplanationScope.label}</span>
             </div>
-            <button
-              disabled={
-                !terraformPreviewExplanationScope.code ||
-                requestState === "loading" ||
-                terraformPreviewExplanationState === "loading"
-              }
-              onClick={() => void explainTerraformPreviewScope()}
-              type="button"
-            >
-              <Sparkles size={14} aria-hidden="true" />
-              {terraformPreviewExplanationState === "loading" ? "설명 중" : "다시 설명"}
-            </button>
+            <div className={styles.terraformPreviewExplanationActions}>
+              <button
+                disabled={
+                  !terraformPreviewExplanationScope.code ||
+                  requestState === "loading" ||
+                  terraformPreviewExplanationState === "loading"
+                }
+                onClick={() => void explainTerraformPreviewScope()}
+                type="button"
+              >
+                <Sparkles size={14} aria-hidden="true" />
+                {terraformPreviewExplanationState === "loading" ? "설명 중" : "다시 설명"}
+              </button>
+              <button
+                aria-label="Terraform Preview 설명 닫기"
+                className={styles.terraformPreviewExplanationCloseButton}
+                onClick={closeTerraformPreviewExplanation}
+                title="닫기"
+                type="button"
+              >
+                <X size={14} aria-hidden="true" />
+              </button>
+            </div>
           </div>
           {terraformPreviewExplanationState === "loading" ? (
             <p className={styles.terraformPreviewExplanationNotice}>코드를 해석하는 중입니다.</p>
@@ -889,6 +920,7 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
             {errorDiagnostics.map((diagnostic, index) => {
               const diagnosticKey = createTerraformDiagnosticKey(diagnostic);
               const isExplainedDiagnostic = explainedTerraformErrorKey === diagnosticKey;
+              const diagnosticExplanation = isExplainedDiagnostic ? activeTerraformErrorExplanation : null;
 
               return (
                 <li key={`${diagnosticKey}-${index}`}>
@@ -906,32 +938,35 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
                       ? "설명 중"
                       : "AI 설명"}
                   </button>
+                  {terraformErrorExplanationState === "loading" && isExplainedDiagnostic ? (
+                    <p className={styles.terraformErrorExplanationNotice}>오류를 해석하는 중입니다.</p>
+                  ) : null}
+                  {terraformErrorExplanationState === "error" && isExplainedDiagnostic ? (
+                    <p className={styles.terraformErrorExplanationError} role="alert">
+                      {terraformErrorExplanationMessage}
+                    </p>
+                  ) : null}
+                  {diagnosticExplanation ? (
+                    <div className={styles.terraformErrorExplanationResult}>
+                      <p>{diagnosticExplanation.summary}</p>
+                      <dl>
+                        <div>
+                          <dt>원인</dt>
+                          <dd>{diagnosticExplanation.likelyCause}</dd>
+                        </div>
+                        {diagnosticExplanation.nextActions.slice(0, 2).map((action, actionIndex) => (
+                          <div key={`${action}-${actionIndex}`}>
+                            <dt>{actionIndex === 0 ? "다음 행동" : "추가 행동"}</dt>
+                            <dd>{action}</dd>
+                          </div>
+                        ))}
+                      </dl>
+                    </div>
+                  ) : null}
                 </li>
               );
             })}
           </ol>
-          {terraformErrorExplanationState === "error" ? (
-            <p className={styles.terraformErrorExplanationError} role="alert">
-              {terraformErrorExplanationMessage}
-            </p>
-          ) : null}
-          {activeTerraformErrorExplanation ? (
-            <div className={styles.terraformErrorExplanationResult}>
-              <p>{activeTerraformErrorExplanation.summary}</p>
-              <dl>
-                <div>
-                  <dt>원인</dt>
-                  <dd>{activeTerraformErrorExplanation.likelyCause}</dd>
-                </div>
-                {activeTerraformErrorExplanation.nextActions.slice(0, 2).map((action, index) => (
-                  <div key={`${action}-${index}`}>
-                    <dt>{index === 0 ? "다음 행동" : "추가 행동"}</dt>
-                    <dd>{action}</dd>
-                  </div>
-                ))}
-              </dl>
-            </div>
-          ) : null}
         </section>
       ) : null}
 

@@ -227,10 +227,13 @@ test("pre-deployment check is owned by the deployment tab", () => {
 test("terraform error explanation lives in the terraform code panel only when errors exist", () => {
   const errorExplanationRule = getCssRule(stylesSource, "terraformErrorExplanationPanel");
   const errorExplanationListRule = getCssRule(stylesSource, "terraformErrorExplanationList");
+  const errorExplanationResultRule = getCssRule(stylesSource, "terraformErrorExplanationResult");
 
   assert.match(terraformPanelSource, /runAiTerraformErrorExplanation/);
   assert.match(terraformPanelSource, /errorDiagnostics\.length > 0 \? \(/);
   assert.match(terraformPanelSource, /errorDiagnostics\.map/);
+  assert.match(terraformPanelSource, /diagnosticExplanation = isExplainedDiagnostic/);
+  assert.match(terraformPanelSource, /오류를 해석하는 중입니다/);
   assert.match(terraformPanelSource, /className=\{styles\.terraformErrorExplanationPanel\}/);
   assert.match(terraformPanelSource, /className=\{styles\.terraformErrorExplanationList\}/);
   assert.doesNotMatch(terraformPanelSource, /diagnosticToast/);
@@ -241,6 +244,7 @@ test("terraform error explanation lives in the terraform code panel only when er
   assert.match(errorExplanationRule, /\bmax-height:\s*240px;/);
   assert.match(errorExplanationRule, /\boverflow:\s*auto;/);
   assert.match(errorExplanationListRule, /\blist-style:\s*none;/);
+  assert.match(errorExplanationResultRule, /\bgrid-column:\s*1 \/ -1;/);
 });
 
 test("terraform preview explanation is triggered from the terraform code panel", () => {
@@ -250,7 +254,10 @@ test("terraform preview explanation is triggered from the terraform code panel",
   assert.match(terraformPanelSource, /highlightedBlock\.code/);
   assert.match(terraformPanelSource, /displayedTerraformCode/);
   assert.match(terraformPanelSource, /resource\.explanation/);
+  assert.match(terraformPanelSource, /closeTerraformPreviewExplanation/);
+  assert.match(terraformPanelSource, /Terraform Preview 설명 닫기/);
   assert.match(terraformPanelSource, /className=\{styles\.terraformPreviewExplanationPanel\}/);
+  assert.match(terraformPanelSource, /className=\{styles\.terraformPreviewExplanationActions\}/);
   assert.doesNotMatch(aiPanelSource, /WorkspaceAiTerraformPanel/);
   assert.doesNotMatch(aiPanelSource, /Terraform Preview 설명/);
   assert.doesNotMatch(terraformPanelSource, /checklist\.length\} Checks/);
