@@ -6,7 +6,7 @@ import type { Project } from "@sketchcatch/types";
 import { ApiProjectCard } from "../../components/dashboard/api-project-card";
 import { DashboardIcon } from "../../components/dashboard/dashboard-icons";
 import { filterProjectsByName } from "../../features/projects/project-search";
-import { deleteProject, listProjects } from "../../features/workspace/api";
+import { listProjects } from "../../features/workspace/api";
 import { getApiErrorMessage } from "../../lib/api-client";
 
 type MyPageLoadState = "loading" | "ready" | "error";
@@ -15,8 +15,6 @@ export function MyPageClient({ searchQuery }: { readonly searchQuery: string }) 
   const [projects, setProjects] = useState<Project[]>([]);
   const [loadState, setLoadState] = useState<MyPageLoadState>("loading");
   const [errorMessage, setErrorMessage] = useState("");
-  const [deleteErrorMessage, setDeleteErrorMessage] = useState("");
-  const [deletingProjectId, setDeletingProjectId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -61,30 +59,6 @@ export function MyPageClient({ searchQuery }: { readonly searchQuery: string }) 
   const recentModifiedProjects = displayProjects.slice(0, 3);
   const visibleProjects = isSearchActive ? displayProjects : displayProjects.slice(0, 6);
   const projectCount = isSearchActive ? visibleProjects.length : projects.length;
-
-  async function handleDeleteProject(project: Project): Promise<void> {
-    const confirmed = window.confirm(
-      `'${project.name}' 프로젝트를 삭제할까요?\n\nSketchCatch의 프로젝트 기록만 삭제되며, 이미 AWS에 생성된 리소스는 삭제되지 않습니다.`
-    );
-
-    if (!confirmed) {
-      return;
-    }
-
-    setDeleteErrorMessage("");
-    setDeletingProjectId(project.id);
-
-    try {
-      await deleteProject(project.id);
-      setProjects((currentProjects) =>
-        currentProjects.filter((currentProject) => currentProject.id !== project.id)
-      );
-    } catch (error) {
-      setDeleteErrorMessage(getApiErrorMessage(error, "프로젝트를 삭제하지 못했습니다."));
-    } finally {
-      setDeletingProjectId(null);
-    }
-  }
 
   if (loadState === "loading") {
     return (
@@ -140,11 +114,6 @@ export function MyPageClient({ searchQuery }: { readonly searchQuery: string }) 
           </div>
           <span className="dashboardCountBadge">{projectCount}개</span>
         </div>
-        {deleteErrorMessage ? (
-          <p className="dashboardMessage" role="alert">
-            {deleteErrorMessage}
-          </p>
-        ) : null}
         {visibleProjects.length === 0 && isSearchActive ? (
           <ProjectSearchEmptyState />
         ) : visibleProjects.length === 0 ? (
@@ -153,9 +122,7 @@ export function MyPageClient({ searchQuery }: { readonly searchQuery: string }) 
           <div className="dashboardCardGrid dashboardCardGridThree">
             {visibleProjects.map((project) => (
               <ApiProjectCard
-                isDeleting={deletingProjectId === project.id}
                 key={project.id}
-                onDelete={handleDeleteProject}
                 project={project}
                 timestampLabel="최근 수정 시간"
                 timestampValue={project.updatedAt}
