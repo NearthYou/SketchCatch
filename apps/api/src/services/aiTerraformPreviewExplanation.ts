@@ -218,9 +218,62 @@ function parseTerraformResourceBlocks(terraformCode: string): TerraformResourceB
 
 function findTerraformBlockEndIndex(terraformCode: string, bodyStartIndex: number): number {
   let depth = 1;
+  let inString = false;
+  let inSingleLineComment = false;
+  let inMultiLineComment = false;
 
   for (let index = bodyStartIndex; index < terraformCode.length; index += 1) {
-    const char = terraformCode[index];
+    const char = terraformCode[index] ?? "";
+    const nextChar = terraformCode[index + 1] ?? "";
+
+    if (inSingleLineComment) {
+      if (char === "\n" || char === "\r") {
+        inSingleLineComment = false;
+      }
+      continue;
+    }
+
+    if (inMultiLineComment) {
+      if (char === "*" && nextChar === "/") {
+        inMultiLineComment = false;
+        index += 1;
+      }
+      continue;
+    }
+
+    if (inString) {
+      if (char === "\\") {
+        index += 1;
+        continue;
+      }
+
+      if (char === "\"") {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === "\"") {
+      inString = true;
+      continue;
+    }
+
+    if (char === "#") {
+      inSingleLineComment = true;
+      continue;
+    }
+
+    if (char === "/" && nextChar === "/") {
+      inSingleLineComment = true;
+      index += 1;
+      continue;
+    }
+
+    if (char === "/" && nextChar === "*") {
+      inMultiLineComment = true;
+      index += 1;
+      continue;
+    }
 
     if (char === "{") {
       depth += 1;
