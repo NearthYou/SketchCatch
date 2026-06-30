@@ -3,6 +3,7 @@ import type { ResourceItem } from "../../../../packages/types/src/index";
 const size = { width: 112, height: 108 };
 const vpcAreaSize = { width: 516, height: 360 };
 const subnetAreaSize = { width: 324, height: 216 };
+const securityGroupAreaSize = subnetAreaSize;
 
 const groupIconPath = "/Architecture-Group-Icons_07312025";
 const serviceIconPath = "/Architecture-Service-Icons_07312025";
@@ -80,6 +81,16 @@ export const resourceCatalog: ResourceItem[] = [
     nodeDefaults: { type: "aws_route_table", label: "Route Table", size }
   },
   {
+    id: "aws-route-table-association",
+    name: "Route Table Association",
+    cloudProvider: "aws",
+    area: "network",
+    category: "Network",
+    iconUrl: `${resourceIconPath}/Res_Networking-Content-Delivery/Res_AWS-Cloud-WAN_Transit-Gateway-Route-Table-Attachment_48.svg`,
+    enabled: true,
+    nodeDefaults: { type: "aws_route_table_association", label: "Route Table Association", size }
+  },
+  {
     id: "aws-nat-gateway",
     name: "NAT Gateway",
     cloudProvider: "aws",
@@ -107,7 +118,7 @@ export const resourceCatalog: ResourceItem[] = [
     category: "Security",
     iconUrl: `${serviceIconPath}/Arch_Security-Identity-Compliance/64/Arch_AWS-Network-Firewall_64.svg`,
     enabled: true,
-    nodeDefaults: { type: "aws_security_group", label: "Security Group", size }
+    nodeDefaults: { type: "aws_security_group", label: "Security Group", size: securityGroupAreaSize }
   },
   {
     id: "aws-security-group-rule",

@@ -21,10 +21,11 @@ export function toFlowNodes(
   return nodes.map((node) => {
     const selected = selectedNodeIdSet.has(node.id);
     const isArea = isAreaNode(node);
+    const areaClassName = selected ? "diagramAreaFlowNode diagramAreaFlowNodeInteractive" : "diagramAreaFlowNode";
 
     return {
       id: node.id,
-      ...(isArea ? { className: "diagramAreaFlowNode" } : {}),
+      ...(isArea ? { className: areaClassName } : {}),
       type: "diagramNode",
       position: { ...node.position },
       data: {
@@ -50,7 +51,7 @@ export function toFlowNodes(
       style: {
         width: node.size.width,
         height: node.size.height,
-        ...(isArea ? { pointerEvents: "none" } : {})
+        ...(isArea && !node.locked && !selected ? { pointerEvents: "none" } : {})
       },
       sourcePosition: Position.Right,
       targetPosition: Position.Left,

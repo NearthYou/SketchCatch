@@ -393,6 +393,8 @@
   display: grid;
   gap: 10px;
   grid-auto-rows: max-content;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 280px));
+  justify-content: start;
   min-height: 0;
   overflow: auto;
   padding: 10px 8px 12px;
@@ -413,7 +415,6 @@
   padding: 12px 13px 13px;
   position: relative;
   text-align: left;
-  width: 100%;
 }
 
 .resourceListItem:hover,
@@ -1984,7 +1985,17 @@
   padding: 10px;
 }
 
+.aiWarning {
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  border-radius: 7px;
+  display: grid;
+  gap: 7px;
+  padding: 10px;
+}
+
 .aiExplanationHeader strong,
+.aiWarning strong,
 .aiListBlock strong {
   color: #172033;
   font-size: 11.5px;
@@ -2034,6 +2045,39 @@
   color: #9f2a1d;
   font-weight: 800;
   padding: 9px 10px;
+}
+
+.aiWarning ul {
+  display: grid;
+  gap: 7px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.aiWarning li {
+  border-top: 1px solid #fed7aa;
+  display: grid;
+  gap: 3px;
+  padding-top: 7px;
+}
+
+.aiWarning li:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.aiWarning span {
+  color: #9a3412;
+  font-size: 11px;
+  font-weight: 950;
+}
+
+.aiWarning p {
+  color: #7c2d12;
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 0;
 }
 
 .aiListBlock {

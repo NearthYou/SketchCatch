@@ -161,6 +161,10 @@ export type TerraformArtifactRecord = Pick<
 > & {
   assetType: "terraform_file";
 };
+export type DeploymentProjectRecord = {
+  project: ProjectRecord;
+  deployment: DeploymentRecord;
+};
 
 export type DeploymentRepository = {
   findAccessibleProject(
@@ -190,6 +194,9 @@ export type DeploymentRepository = {
   ): Promise<DeploymentPlanArtifactRecord | undefined>;
   findRunningDeploymentInProject(projectId: string): Promise<DeploymentRecord | undefined>;
 
+  listDeploymentProjectRows?(
+    accessContext: ProjectAccessContext
+  ): Promise<DeploymentProjectRecord[]>;
   listDeploymentsByProject(projectId: string): Promise<DeploymentRecord[]>;
   updateDeploymentStatus(
     deploymentId: string,
@@ -428,6 +435,18 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
         .limit(1);
 
       return deployment;
+    },
+
+    async listDeploymentProjectRows(accessContext) {
+      return db
+        .select({
+          project: projects,
+          deployment: deployments
+        })
+        .from(deployments)
+        .innerJoin(projects, eq(deployments.projectId, projects.id))
+        .where(and(eq(projects.userId, accessContext.userId), eq(deployments.status, "SUCCESS")))
+        .orderBy(desc(deployments.completedAt), desc(deployments.updatedAt), desc(deployments.createdAt));
     },
 
     async listDeploymentsByProject(projectId) {
@@ -922,6 +941,37 @@ export async function listProjectDeployments(
   return repository.listDeploymentsByProject(input.projectId);
 }
 
+export async function listRecentSuccessfulDeploymentProjects(
+  input: { accessContext: ProjectAccessContext },
+  repository: DeploymentRepository
+): Promise<DeploymentProjectRecord[]> {
+  if (!repository.listDeploymentProjectRows) {
+    throw new Error("Deployment repository does not support deployment project listing");
+  }
+
+  const rows = await repository.listDeploymentProjectRows(input.accessContext);
+
+  return selectRecentSuccessfulDeploymentProjects(rows);
+}
+
+export function selectRecentSuccessfulDeploymentProjects(
+  rows: readonly DeploymentProjectRecord[]
+): DeploymentProjectRecord[] {
+  const seenProjectIds = new Set<string>();
+
+  return [...rows]
+    .filter(({ deployment }) => deployment.status === "SUCCESS")
+    .sort(compareDeploymentProjectRecordDesc)
+    .filter(({ project }) => {
+      if (seenProjectIds.has(project.id)) {
+        return false;
+      }
+
+      seenProjectIds.add(project.id);
+      return true;
+    });
+}
+
 export async function listDeploymentLogs(
   input: { deploymentId: string; accessContext: ProjectAccessContext },
   repository: DeploymentRepository
@@ -1075,6 +1125,20 @@ function createInterruptedDeploymentSummary(stage: DeploymentStage): string {
   }
 
   return `Deployment was interrupted while Terraform ${stage} was running and was marked failed before retry.`;
+}
+
+function compareDeploymentProjectRecordDesc(
+  left: DeploymentProjectRecord,
+  right: DeploymentProjectRecord
+): number {
+  return (
+    getDeploymentDeployedAt(right.deployment).getTime() -
+    getDeploymentDeployedAt(left.deployment).getTime()
+  );
+}
+
+export function getDeploymentDeployedAt(deployment: DeploymentRecord): Date {
+  return deployment.completedAt ?? deployment.updatedAt ?? deployment.createdAt;
 }
 
 function isDeploymentProjectRunningUniqueViolation(error: unknown): boolean {

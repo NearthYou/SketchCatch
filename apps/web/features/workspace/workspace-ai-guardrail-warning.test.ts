@@ -1,0 +1,21 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { test } from "node:test";
+import { fileURLToPath } from "node:url";
+
+const workspaceAiPanelSource = readWorkspaceFile("WorkspaceAiPanel.tsx");
+const workspaceAiPanelPiecesSource = readWorkspaceFile("WorkspaceAiPanelPieces.tsx");
+const stylesSource = readWorkspaceFile("workspace.module.css");
+
+test("workspace AI draft result exposes guardrail warnings", () => {
+  assert.match(workspaceAiPanelSource, /WorkspaceAiGuardrailWarnings/);
+  assert.match(workspaceAiPanelSource, /draft\.metadata\.guardrailWarnings/);
+  assert.match(workspaceAiPanelPiecesSource, /지원 범위 경고/);
+  assert.match(workspaceAiPanelPiecesSource, /unsupported_requirement/);
+  assert.match(workspaceAiPanelPiecesSource, /low_budget_rds_cost/);
+  assert.match(stylesSource, /\.aiWarning\s*{/);
+});
+
+function readWorkspaceFile(fileName: string): string {
+  return readFileSync(fileURLToPath(new URL(fileName, import.meta.url)), "utf8");
+}

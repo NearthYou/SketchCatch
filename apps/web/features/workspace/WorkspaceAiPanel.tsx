@@ -24,6 +24,7 @@ import {
   WorkspaceAiActionHeader,
   WorkspaceAiDesignSimulationResult,
   WorkspaceAiExplanation,
+  WorkspaceAiGuardrailWarnings,
   WorkspaceAiRequestMessage,
   WorkspaceAiSelect
 } from "./WorkspaceAiPanelPieces";
@@ -182,6 +183,7 @@ export function WorkspaceAiPanel({ context }: WorkspaceAiPanelProps) {
               <span>{draft.architectureJson.nodes.length} Resources</span>
             </div>
             <WorkspaceAiExplanation explanation={draft.llmExplanation} />
+            <WorkspaceAiGuardrailWarnings warnings={draft.metadata.guardrailWarnings} />
             <button className={styles.aiSecondaryButton} onClick={applyDraftToBoard} type="button">
               보드에 반영
             </button>

@@ -10,7 +10,7 @@ import {
   isResourceAreaNode
 } from "./area-nodes";
 
-test("isAreaNode matches Region, Availability Zone, Group, VPC, and Subnet nodes", () => {
+test("isAreaNode matches Region, Availability Zone, Group, VPC, Subnet, and Security Group nodes", () => {
   assert.equal(isAreaNode(makeDesignNode({ type: "design_region" })), true);
   assert.equal(isAreaNode(makeDesignNode({ type: "design_az" })), true);
   assert.equal(isAreaNode(makeDesignNode({ type: "design_group" })), true);
@@ -19,6 +19,7 @@ test("isAreaNode matches Region, Availability Zone, Group, VPC, and Subnet nodes
   assert.equal(isAreaNode(makeDesignNode({ type: "sketchcatch_group" })), true);
   assert.equal(isAreaNode(makeResourceNode({ resourceType: "aws_vpc" })), true);
   assert.equal(isAreaNode(makeResourceNode({ resourceType: "aws_subnet" })), true);
+  assert.equal(isAreaNode(makeResourceNode({ resourceType: "aws_security_group" })), true);
 });
 
 test("isAreaNode excludes regular design and resource nodes", () => {
@@ -37,7 +38,7 @@ test("area node helpers distinguish design containers from resource containers",
   assert.equal(isResourceAreaNode(vpc), true);
 });
 
-test("getAreaNodeLabel uses resource name for VPC and Subnet area resources", () => {
+test("getAreaNodeLabel uses resource name for resource area nodes", () => {
   assert.equal(
     getAreaNodeLabel(makeResourceNode({ resourceName: "main_vpc", resourceType: "aws_vpc" })),
     "main_vpc"
@@ -45,6 +46,10 @@ test("getAreaNodeLabel uses resource name for VPC and Subnet area resources", ()
   assert.equal(
     getAreaNodeLabel(makeResourceNode({ resourceName: "public_subnet", resourceType: "aws_subnet" })),
     "public_subnet"
+  );
+  assert.equal(
+    getAreaNodeLabel(makeResourceNode({ resourceName: "web_sg", resourceType: "aws_security_group" })),
+    "web_sg"
   );
 });
 

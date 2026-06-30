@@ -31,6 +31,8 @@ export function DashboardShell({ children, projectSearchQuery = "" }: DashboardS
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [projectSearchInput, setProjectSearchInput] = useState(projectSearchQuery);
   const isCheckingSession = status === "loading";
+  const canSearchProjects = pathname === "/mypage" || pathname === "/projects";
+  const projectSearchPath = pathname === "/projects" ? "/projects" : "/mypage";
   const displayName = user?.nickname ?? user?.username ?? "사용자";
   const avatarText = displayName.slice(0, 1).toUpperCase();
 
@@ -61,7 +63,7 @@ export function DashboardShell({ children, projectSearchQuery = "" }: DashboardS
     const query = projectSearchInput.trim();
 
     if (!query) {
-      router.push("/mypage");
+      router.push(projectSearchPath);
       return;
     }
 
@@ -69,7 +71,7 @@ export function DashboardShell({ children, projectSearchQuery = "" }: DashboardS
       q: query
     });
 
-    router.push(`/mypage?${params.toString()}`);
+    router.push(`${projectSearchPath}?${params.toString()}`);
   }
 
   if (isCheckingSession) {
@@ -135,19 +137,21 @@ export function DashboardShell({ children, projectSearchQuery = "" }: DashboardS
 
       <section className="dashboardMain">
         <header className="dashboardTopbar">
-          <form className="dashboardSearch" aria-label="프로젝트 검색" onSubmit={handleProjectSearchSubmit}>
-            <DashboardIcon name="search" />
-            <input
-              aria-label="내 프로젝트 검색"
-              onChange={(event) => setProjectSearchInput(event.target.value)}
-              placeholder="내 프로젝트에서 검색"
-              type="search"
-              value={projectSearchInput}
-            />
-            <button className="dashboardSearchButton" title="프로젝트 검색" type="submit">
+          {canSearchProjects ? (
+            <form className="dashboardSearch" aria-label="프로젝트 검색" onSubmit={handleProjectSearchSubmit}>
               <DashboardIcon name="search" />
-            </button>
-          </form>
+              <input
+                aria-label="내 프로젝트 검색"
+                onChange={(event) => setProjectSearchInput(event.target.value)}
+                placeholder="내 프로젝트에서 검색"
+                type="search"
+                value={projectSearchInput}
+              />
+              <button className="dashboardSearchButton" title="프로젝트 검색" type="submit">
+                <DashboardIcon name="search" />
+              </button>
+            </form>
+          ) : null}
           <Link className="dashboardTopbarAction" href="/workspace/new">
             <DashboardIcon name="plus" />
             <span>새로 만들기</span>

@@ -1,4 +1,6 @@
 import type {
+  ArchitectureGuardrailWarning,
+  AiPreDeploymentAnalysisResult,
   AiTerraformErrorExplanationResult,
   AiTerraformPreviewExplanationResult,
   CheckFinding,
@@ -110,6 +112,61 @@ export function WorkspaceAiExplanation({ explanation }: { readonly explanation: 
       {explanation.nextActions.length > 0 ? (
         <WorkspaceAiTextList title="다음 행동" items={explanation.nextActions} />
       ) : null}
+    </div>
+  );
+}
+
+// Architecture Draft가 MVP 범위 밖 요구를 감지했을 때 사용자가 놓치지 않게 보여줍니다.
+export function WorkspaceAiGuardrailWarnings({
+  warnings
+}: {
+  readonly warnings: readonly ArchitectureGuardrailWarning[] | undefined;
+}) {
+  if (warnings === undefined || warnings.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className={styles.aiWarning} role="status">
+      <strong>지원 범위 경고</strong>
+      <ul>
+        {warnings.map((warning) => (
+          <li key={`${warning.code}-${warning.message}`}>
+            <span>{getGuardrailWarningLabel(warning.code)}</span>
+            <p>{warning.message}</p>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+// 내부 warning code를 발표 화면에서 읽기 쉬운 짧은 한국어 라벨로 바꿉니다.
+function getGuardrailWarningLabel(code: ArchitectureGuardrailWarning["code"]): string {
+  const warningLabels = {
+    low_budget_rds_cost: "예산 확인",
+    scenario_conflict: "선택값 확인",
+    unsupported_requirement: "MVP 범위 밖"
+  } satisfies Record<ArchitectureGuardrailWarning["code"], string>;
+
+  return warningLabels[code];
+}
+
+// Pre-Deployment Check 결과를 요약과 Check Finding 중심으로 압축 표시합니다.
+export function WorkspaceAiPreDeploymentResult({
+  analysis
+}: {
+  readonly analysis: AiPreDeploymentAnalysisResult;
+}) {
+  return (
+    <div className={styles.aiResultStack}>
+      <p className={styles.aiResultSummary}>{analysis.summary}</p>
+      <WorkspaceAiExplanation explanation={analysis.llmExplanation} />
+      <WorkspaceAiFindingList findings={analysis.findings} />
+      <WorkspaceAiTextList
+        title="체크리스트"
+        items={analysis.checklist.map((item) => `${item.status.toUpperCase()} · ${item.label}`)}
+      />
     </div>
   );
 }
