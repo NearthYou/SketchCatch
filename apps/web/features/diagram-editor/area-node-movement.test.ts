@@ -5,7 +5,8 @@ import {
   clearDeletedAreaParentAssignments,
   clearOutOfBoundsAreaParentAssignments,
   applyAreaNodeMovement,
-  applyAreaNodeParentAssignments
+  applyAreaNodeParentAssignments,
+  getDirectlyMovedNodeIdsFromPositionMap
 } from "./area-node-movement";
 
 test("applyAreaNodeMovement moves nodes contained in a moved area by the same delta", () => {
@@ -197,6 +198,58 @@ test("applyAreaNodeMovement does not move an overlapping parent area when a nest
 
   assert.deepEqual(getNodePosition(result, region.id), region.position);
   assert.deepEqual(getNodePosition(result, instance.id), { x: 180, y: 140 });
+});
+
+test("getDirectlyMovedNodeIdsFromPositionMap ignores parent position changes outside direct drag candidates", () => {
+  const region = makeDesignNode({
+    id: "region-1",
+    type: "design_region",
+    position: { x: 0, y: 0 },
+    size: { width: 400, height: 300 }
+  });
+  const subnet = makeResourceNode({
+    id: "subnet-1",
+    parentAreaNodeId: region.id,
+    resourceType: "aws_subnet",
+    position: { x: 80, y: 70 },
+    size: { width: 280, height: 220 }
+  });
+  const positionByNodeId = new Map([
+    [region.id, { x: 20, y: 20 }],
+    [subnet.id, { x: 120, y: 110 }]
+  ]);
+
+  const result = getDirectlyMovedNodeIdsFromPositionMap(
+    [region, subnet],
+    positionByNodeId,
+    new Set([subnet.id])
+  );
+
+  assert.deepEqual([...result], [subnet.id]);
+});
+
+test("getDirectlyMovedNodeIdsFromPositionMap falls back to all moved positions without candidates", () => {
+  const region = makeDesignNode({
+    id: "region-1",
+    type: "design_region",
+    position: { x: 0, y: 0 },
+    size: { width: 400, height: 300 }
+  });
+  const subnet = makeResourceNode({
+    id: "subnet-1",
+    parentAreaNodeId: region.id,
+    resourceType: "aws_subnet",
+    position: { x: 80, y: 70 },
+    size: { width: 280, height: 220 }
+  });
+  const positionByNodeId = new Map([
+    [region.id, { x: 20, y: 20 }],
+    [subnet.id, { x: 120, y: 110 }]
+  ]);
+
+  const result = getDirectlyMovedNodeIdsFromPositionMap([region, subnet], positionByNodeId);
+
+  assert.deepEqual([...result], [region.id, subnet.id]);
 });
 
 test("applyAreaNodeParentAssignments assigns a parent only to directly moved nodes", () => {
