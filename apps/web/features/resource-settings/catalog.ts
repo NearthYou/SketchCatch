@@ -1,6 +1,6 @@
 import type { ResourceItem } from "../../../../packages/types/src/index";
 
-const size = { width: 112, height: 108 };
+const size = { width: 112, height: 112 };
 const vpcAreaSize = { width: 516, height: 360 };
 const subnetAreaSize = { width: 324, height: 216 };
 const securityGroupAreaSize = subnetAreaSize;
