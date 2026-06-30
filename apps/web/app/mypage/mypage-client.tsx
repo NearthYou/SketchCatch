@@ -156,10 +156,6 @@ function ProjectEmptyState() {
   return (
     <div className="projectListEmpty">
       <p>아직 생성한 프로젝트가 없습니다.</p>
-      <Link className="dashboardTopbarAction" href="/workspace/new">
-        <DashboardIcon name="plus" />
-        <span>새 설계 시작</span>
-      </Link>
     </div>
   );
 }

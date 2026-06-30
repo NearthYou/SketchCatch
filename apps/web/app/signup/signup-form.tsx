@@ -53,6 +53,7 @@ export function SignupForm() {
   const [isPasswordConfirmCapsLockOn, setIsPasswordConfirmCapsLockOn] = useState(false);
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [nickname, setNickname] = useState("");
   const [password, setPassword] = useState("");
   const [passwordConfirm, setPasswordConfirm] = useState("");
   const [privacyAccepted, setPrivacyAccepted] = useState(false);
@@ -185,9 +186,10 @@ export function SignupForm() {
     const normalizedEmail = normalizeEmail(email);
     const password = String(formData.get("password") ?? "");
     const passwordConfirm = String(formData.get("passwordConfirm") ?? "");
+    const normalizedNickname = nickname.trim();
     const payload: SignupRequest = {
       email: normalizedEmail,
-      nickname: String(formData.get("nickname") ?? "").trim(),
+      nickname: normalizedNickname,
       password,
       privacyAccepted,
       termsAccepted,
@@ -248,6 +250,20 @@ export function SignupForm() {
     password,
     passwordConfirm
   );
+  const currentNormalizedUsername = normalizeUsername(username);
+  const currentNormalizedEmail = normalizeEmail(email);
+  const currentNormalizedNickname = nickname.trim();
+  const isSignupReady =
+    currentNormalizedNickname.length > 0 &&
+    currentNormalizedUsername.length > 0 &&
+    currentNormalizedEmail.length > 0 &&
+    isCurrentValueAvailable(usernameAvailability, currentNormalizedUsername) &&
+    isCurrentValueAvailable(emailAvailability, currentNormalizedEmail) &&
+    getPasswordPolicyErrorMessage(password) === null &&
+    passwordConfirm.length > 0 &&
+    password === passwordConfirm &&
+    termsAccepted &&
+    privacyAccepted;
 
   function handlePasswordKeyEvent(event: ReactKeyboardEvent<HTMLInputElement>): void {
     setIsPasswordCapsLockOn(isCapsLockActive(event));
@@ -266,8 +282,10 @@ export function SignupForm() {
             autoComplete="nickname"
             disabled={isSubmitting}
             name="nickname"
+            onChange={(event) => setNickname(event.target.value)}
             required
             type="text"
+            value={nickname}
           />
         </label>
         <div className="authField">
@@ -504,7 +522,7 @@ export function SignupForm() {
         <button
           aria-busy={isSubmitting}
           className="authSubmit fullField"
-          disabled={isSubmitting}
+          disabled={isSubmitting || !isSignupReady}
           type="submit"
         >
           {isSubmitting ? "가입 중" : "회원가입"}
