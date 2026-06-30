@@ -283,6 +283,7 @@ select {
     rotate(var(--float-rotate, 0deg))
     scale(var(--float-scale, 1));
   animation: floatingObject var(--float-duration, 6.2s) ease-in-out infinite;
+  animation-delay: var(--float-delay, -2.1s);
   will-change: transform;
   z-index: 1;
 }
@@ -317,6 +318,7 @@ select {
   left: 9%;
   top: 25%;
   --float-depth: 42px;
+  --float-delay: -1.7s;
   --float-duration: 6.1s;
   --float-rotate: -1deg;
 }
@@ -325,6 +327,7 @@ select {
   bottom: 15%;
   left: 22%;
   --float-depth: 82px;
+  --float-delay: -3.2s;
   --float-duration: 7.4s;
   --float-rotate: 8deg;
 }
@@ -341,6 +344,7 @@ select {
   top: 28%;
   width: 380px;
   --float-depth: 28px;
+  --float-delay: -4.1s;
 }
 
 .selectionHandle {
@@ -376,6 +380,7 @@ select {
 
 .resourceChip {
   animation: floatingChip var(--float-duration, 4.9s) ease-in-out infinite;
+  animation-delay: var(--float-delay, -1.4s);
   border-radius: 999px;
   box-shadow: 0 16px 36px rgba(0, 0, 0, 0.28);
   color: #071016;
@@ -390,6 +395,7 @@ select {
   background: #38bdf8;
   left: 34px;
   top: 34px;
+  --float-delay: -1.3s;
   --float-duration: 4.7s;
 }
 
@@ -397,6 +403,7 @@ select {
   background: #f59e0b;
   right: 46px;
   top: 70px;
+  --float-delay: -2.4s;
   --float-duration: 5.4s;
 }
 
@@ -404,6 +411,7 @@ select {
   background: #34d399;
   bottom: 42px;
   left: 126px;
+  --float-delay: -3s;
   --float-duration: 5s;
 }
 
@@ -430,6 +438,7 @@ select {
   bottom: 18%;
   right: 20%;
   --float-depth: 96px;
+  --float-delay: -2.8s;
   --float-duration: 6.7s;
   --float-rotate: 14deg;
 }
@@ -441,6 +450,7 @@ select {
   bottom: 12%;
   right: 8%;
   --float-depth: 120px;
+  --float-delay: -1.9s;
   --float-duration: 5.7s;
   --float-rotate: -9deg;
 }
@@ -460,6 +470,7 @@ select {
   bottom: 22%;
   left: 7%;
   --float-depth: 70px;
+  --float-delay: -2.5s;
   --float-duration: 5.1s;
   --float-rotate: 0deg;
 }
@@ -469,6 +480,7 @@ select {
   right: 8%;
   top: 25%;
   --float-depth: 88px;
+  --float-delay: -3.4s;
   --float-duration: 6.2s;
   --float-rotate: 0deg;
 }
