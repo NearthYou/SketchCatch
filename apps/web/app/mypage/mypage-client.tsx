@@ -77,9 +77,6 @@ export function MyPageClient({ searchQuery }: { readonly searchQuery: string }) 
   const visibleDeploymentItems = isSearchActive
     ? displayDeploymentItems
     : displayDeploymentItems.slice(0, 6);
-  const deploymentItemCount = isSearchActive
-    ? visibleDeploymentItems.length
-    : recentDeploymentItems.length;
 
   if (loadState === "loading") {
     return (
@@ -133,7 +130,6 @@ export function MyPageClient({ searchQuery }: { readonly searchQuery: string }) 
             <p className="dashboardPanelKicker">Recent deployments</p>
             <h2 id="recent-deployments-title">최근 배포한 항목</h2>
           </div>
-          <span className="dashboardCountBadge">{deploymentItemCount}개</span>
         </div>
         {visibleDeploymentItems.length === 0 && isSearchActive ? (
           <ProjectSearchEmptyState />
