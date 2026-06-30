@@ -19,6 +19,9 @@ const DEFAULT_EDGE_STYLE: NonNullable<DiagramEdge["style"]> = {
   color: "#506176",
   width: "medium"
 };
+const AREA_CHILD_PADDING = 48;
+const AREA_TERRAFORM_RESOURCE_TYPES = new Set(["aws_subnet", "aws_vpc"]);
+const AREA_PARENT_EDGE_LABELS = new Set(["contains", "hosts"]);
 const RESOURCE_TO_TERRAFORM_RESOURCE_TYPE: Record<ResourceType, string> = {
   CLOUDFRONT: "aws_cloudfront_distribution",
   EC2: "aws_instance",
@@ -48,12 +51,15 @@ const RESOURCE_ITEMS_BY_TERRAFORM_TYPE = new Map<string, ResourceItem>(
 // AI Draft를 실제 Architecture Board가 받을 수 있는 DiagramJson으로 바꾸는 gg 경계입니다.
 export function convertArchitectureJsonToDiagramJson(architectureJson: ArchitectureJson): DiagramJson {
   const nodeIds = new Set(architectureJson.nodes.map((node) => node.id));
+  const nodes = fitAreaNodesToChildren(
+    applyAreaParentMetadata(architectureJson.nodes.map(convertArchitectureNodeToDiagramNode), architectureJson.edges)
+  );
 
   return {
     edges: architectureJson.edges
       .filter((edge) => nodeIds.has(edge.sourceId) && nodeIds.has(edge.targetId))
       .map(convertArchitectureEdgeToDiagramEdge),
-    nodes: architectureJson.nodes.map(convertArchitectureNodeToDiagramNode),
+    nodes,
     viewport: { ...DEFAULT_VIEWPORT }
   };
 }
@@ -185,6 +191,143 @@ function convertArchitectureEdgeToDiagramEdge(edge: ArchitectureJson["edges"][nu
     targetNodeId: edge.targetId,
     type: "smoothstep"
   };
+}
+
+// AI 초안의 vpcId/subnetId/contains/hosts 정보를 보드의 포함관계 이름표로 바꿉니다.
+function applyAreaParentMetadata(
+  nodes: readonly DiagramNode[],
+  edges: readonly ArchitectureJson["edges"][number][]
+): DiagramNode[] {
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+
+  return nodes.map((node) => {
+    const parentAreaNodeId =
+      findConfigParentAreaNodeId(node, nodeById) ?? findEdgeParentAreaNodeId(node, nodeById, edges);
+
+    if (!parentAreaNodeId) {
+      return node;
+    }
+
+    return {
+      ...node,
+      metadata: {
+        ...node.metadata,
+        parentAreaNodeId
+      }
+    };
+  });
+}
+
+// 자식이 밖으로 튀어나오지 않도록 VPC/Subnet 박스 크기를 필요한 만큼 키웁니다.
+function fitAreaNodesToChildren(nodes: readonly DiagramNode[]): DiagramNode[] {
+  const firstPass = fitAreaNodesToDirectChildren(nodes);
+
+  return fitAreaNodesToDirectChildren(firstPass);
+}
+
+function fitAreaNodesToDirectChildren(nodes: readonly DiagramNode[]): DiagramNode[] {
+  const childrenByParentId = new Map<string, DiagramNode[]>();
+
+  for (const node of nodes) {
+    const parentAreaNodeId = node.metadata?.parentAreaNodeId;
+
+    if (!parentAreaNodeId) {
+      continue;
+    }
+
+    const children = childrenByParentId.get(parentAreaNodeId) ?? [];
+    children.push(node);
+    childrenByParentId.set(parentAreaNodeId, children);
+  }
+
+  return nodes.map((node) => {
+    if (!isAreaDiagramNode(node)) {
+      return node;
+    }
+
+    const children = childrenByParentId.get(node.id) ?? [];
+
+    if (children.length === 0) {
+      return node;
+    }
+
+    const requiredSize = getRequiredAreaSize(node, children);
+
+    if (requiredSize.width === node.size.width && requiredSize.height === node.size.height) {
+      return node;
+    }
+
+    return {
+      ...node,
+      size: requiredSize
+    };
+  });
+}
+
+function getRequiredAreaSize(node: DiagramNode, children: readonly DiagramNode[]): DiagramNode["size"] {
+  let right = node.position.x + node.size.width;
+  let bottom = node.position.y + node.size.height;
+
+  for (const child of children) {
+    right = Math.max(right, child.position.x + child.size.width + AREA_CHILD_PADDING);
+    bottom = Math.max(bottom, child.position.y + child.size.height + AREA_CHILD_PADDING);
+  }
+
+  return {
+    width: right - node.position.x,
+    height: bottom - node.position.y
+  };
+}
+
+function findConfigParentAreaNodeId(
+  node: DiagramNode,
+  nodeById: ReadonlyMap<string, DiagramNode>
+): string | undefined {
+  const subnetId = getStringParameterValue(node, "subnetId");
+  const subnetNode = subnetId ? nodeById.get(subnetId) : undefined;
+
+  if (subnetNode && subnetNode.id !== node.id && isAreaDiagramNode(subnetNode)) {
+    return subnetNode.id;
+  }
+
+  const vpcId = getStringParameterValue(node, "vpcId");
+  const vpcNode = vpcId ? nodeById.get(vpcId) : undefined;
+
+  return vpcNode && vpcNode.id !== node.id && isAreaDiagramNode(vpcNode) ? vpcNode.id : undefined;
+}
+
+function findEdgeParentAreaNodeId(
+  node: DiagramNode,
+  nodeById: ReadonlyMap<string, DiagramNode>,
+  edges: readonly ArchitectureJson["edges"][number][]
+): string | undefined {
+  for (const edge of edges) {
+    if (edge.targetId !== node.id || !isAreaParentEdge(edge)) {
+      continue;
+    }
+
+    const sourceNode = nodeById.get(edge.sourceId);
+
+    if (sourceNode && sourceNode.id !== node.id && isAreaDiagramNode(sourceNode)) {
+      return sourceNode.id;
+    }
+  }
+
+  return undefined;
+}
+
+function isAreaParentEdge(edge: ArchitectureJson["edges"][number]): boolean {
+  return typeof edge.label === "string" && AREA_PARENT_EDGE_LABELS.has(edge.label.trim().toLowerCase());
+}
+
+function isAreaDiagramNode(node: DiagramNode): boolean {
+  return AREA_TERRAFORM_RESOURCE_TYPES.has(node.parameters?.resourceType ?? node.type);
+}
+
+function getStringParameterValue(node: DiagramNode, key: string): string | undefined {
+  const value = node.parameters?.values[key];
+
+  return typeof value === "string" && value.trim().length > 0 ? value : undefined;
 }
 
 function isConvertibleResourceNode(

@@ -4,6 +4,7 @@ import {
   Background,
   BackgroundVariant,
   ConnectionMode,
+  PanOnScrollMode,
   ReactFlow,
   ReactFlowProvider,
   getViewportForBounds,
@@ -87,6 +88,10 @@ import {
   applyInnermostReferenceDropTargets,
   findInnermostVisualDropTarget
 } from "./reference-drop-targets";
+import {
+  getSingleSelectedEdgeForToolbar,
+  normalizeSelectedNodeIds
+} from "./selection-utils";
 import type {
   DiagramEditorPanelContext,
   DiagramEditorProps,
@@ -174,9 +179,7 @@ function DiagramEditorInner({
   const [isAreaBlankDragging, setAreaBlankDragging] = useState(false);
 
   const selectedNodeId = selectedNodeIds.length === 1 ? selectedNodeIds[0] ?? null : null;
-  const selectedEdge = selectedEdgeIds.length === 1
-    ? diagram.edges.find((edge) => edge.id === selectedEdgeIds[0]) ?? null
-    : null;
+  const selectedEdge = getSingleSelectedEdgeForToolbar(diagram.edges, selectedNodeIds, selectedEdgeIds);
   const hoveredSelectedAreaNode = hoveredAreaBlankNodeId && selectedNodeId === hoveredAreaBlankNodeId
     ? diagram.nodes.find((node) => node.id === hoveredAreaBlankNodeId) ?? null
     : null;
@@ -631,8 +634,8 @@ function DiagramEditorInner({
   );
 
   const flowNodes = useMemo(
-    () =>
-      toFlowNodes(diagram.nodes, selectedNodeIds, activeReferenceDropTargetNodeId, {
+    () => {
+      const nextFlowNodes = toFlowNodes(diagram.nodes, selectedNodeIds, activeReferenceDropTargetNodeId, {
         onBringForward: handleBringForward,
         onSendBackward: handleSendBackward,
         onTextColorChange: handleTextColorChange,
@@ -641,12 +644,25 @@ function DiagramEditorInner({
         onResizeStart: handleResizeStart,
         onResize: handleResize,
         onResizeEnd: handleResizeEnd
-      }),
+      });
+
+      if (interactionMode === "select") {
+        return nextFlowNodes;
+      }
+
+      // React Flow는 노드별 draggable 값이 있으면 전체 nodesDraggable 설정보다 그 값을 우선한다.
+      return nextFlowNodes.map((node) => ({
+        ...node,
+        connectable: false,
+        draggable: false
+      }));
+    },
     [
       activeReferenceDropTargetNodeId,
       diagram.nodes,
       handleBorderColorChange,
       handleBringForward,
+      interactionMode,
       handleResizeEnd,
       handleResize,
       handleResizeStart,
@@ -670,10 +686,10 @@ function DiagramEditorInner({
       const positionChanges = changes.filter(isNodePositionChangeWithPosition);
 
       if (nextSelectedNodeIds) {
-        setSelectedNodeIds(nextSelectedNodeIds);
+        setSelectedNodeIds(normalizeSelectedNodeIds(diagramRef.current.nodes, nextSelectedNodeIds));
       }
 
-      if (positionChanges.length === 0) {
+      if (positionChanges.length === 0 || interactionMode !== "select") {
         return;
       }
 
@@ -704,7 +720,7 @@ function DiagramEditorInner({
         };
       });
     },
-    [applyLiveDiagramUpdate, selectedNodeIds]
+    [applyLiveDiagramUpdate, interactionMode, selectedNodeIds]
   );
 
   const handleEdgesChange = useCallback<OnEdgesChange<DiagramFlowEdge>>(
@@ -720,8 +736,13 @@ function DiagramEditorInner({
 
   const handleSelectionChange = useCallback<OnSelectionChangeFunc<DiagramFlowNode, DiagramFlowEdge>>(
     ({ edges, nodes }) => {
-      setSelectedNodeIds(nodes.map((node) => node.id));
-      setSelectedEdgeIds(edges.map((edge) => edge.id));
+      const nextSelectedNodeIds = normalizeSelectedNodeIds(
+        diagramRef.current.nodes,
+        nodes.map((node) => node.id)
+      );
+
+      setSelectedNodeIds(nextSelectedNodeIds);
+      setSelectedEdgeIds(nextSelectedNodeIds.length > 0 ? [] : edges.map((edge) => edge.id));
 
       if (nodes.length > 0 || edges.length > 0) {
         focusEditorShell();
@@ -1017,12 +1038,20 @@ function DiagramEditorInner({
   );
 
   const handleNodeDragStart = useCallback(() => {
+    if (interactionMode !== "select") {
+      return;
+    }
+
     dragSnapshotRef.current = cloneDiagram(diagramRef.current);
     updateActiveReferenceDropTargetNodeId(null);
-  }, [updateActiveReferenceDropTargetNodeId]);
+  }, [interactionMode, updateActiveReferenceDropTargetNodeId]);
 
   const handleNodeDrag = useCallback(
     (_event: MouseEvent | TouchEvent, draggedFlowNode: DiagramFlowNode, nodes: DiagramFlowNode[]) => {
+      if (interactionMode !== "select") {
+        return;
+      }
+
       const positionByNodeId = new Map(nodes.map((node) => [node.id, node.position]));
       const snapshotNodes = dragSnapshotRef.current?.nodes ?? diagramRef.current.nodes;
       const directlyMovedNodeIds = getMovedNodeIdsFromPositionMap(snapshotNodes, positionByNodeId);
@@ -1037,11 +1066,17 @@ function DiagramEditorInner({
         draggedNode ? getVisualDropTargetNodeId(draggedNode, positionedNodes) : null
       );
     },
-    [getVisualDropTargetNodeId, updateActiveReferenceDropTargetNodeId]
+    [getVisualDropTargetNodeId, interactionMode, updateActiveReferenceDropTargetNodeId]
   );
 
   const handleNodeDragStop = useCallback(
     (_event: MouseEvent | TouchEvent, _node: DiagramFlowNode, nodes: DiagramFlowNode[]) => {
+      if (interactionMode !== "select") {
+        dragSnapshotRef.current = null;
+        updateActiveReferenceDropTargetNodeId(null);
+        return;
+      }
+
       const before = dragSnapshotRef.current;
       const positionByNodeId = new Map(nodes.map((node) => [node.id, node.position]));
       const snapshotNodes = before?.nodes ?? diagramRef.current.nodes;
@@ -1071,7 +1106,7 @@ function DiagramEditorInner({
       dragSnapshotRef.current = null;
       updateActiveReferenceDropTargetNodeId(null);
     },
-    [pushHistory, replaceDiagram, updateActiveReferenceDropTargetNodeId]
+    [interactionMode, pushHistory, replaceDiagram, updateActiveReferenceDropTargetNodeId]
   );
 
   const handleConnectStart = useCallback<OnConnectStart>((_event, params) => {
@@ -1641,6 +1676,8 @@ function DiagramEditorInner({
             multiSelectionKeyCode={["Shift", "Meta", "Control"]}
             nodeTypes={NODE_TYPES}
             nodes={flowNodes}
+            nodesConnectable={interactionMode === "select"}
+            nodesDraggable={interactionMode === "select"}
             onClickConnectEnd={handleConnectEnd}
             onClickConnectStart={handleConnectStart}
             onConnect={handleConnect}
@@ -1672,12 +1709,15 @@ function DiagramEditorInner({
             onPaneClick={handlePaneClick}
             onSelectionChange={handleSelectionChange}
             panOnDrag={interactionMode === "pan"}
+            panOnScroll
+            panOnScrollMode={PanOnScrollMode.Free}
             proOptions={{ hideAttribution: true }}
             selectionKeyCode={["Shift", "Meta", "Control"]}
             selectionOnDrag={interactionMode === "select"}
             snapGrid={DIAGRAM_SNAP_GRID}
             snapToGrid
             zoomOnDoubleClick={false}
+            zoomActivationKeyCode={["Meta", "Control"]}
           >
             <Background color="#d8e0ef" gap={24} size={2} variant={BackgroundVariant.Dots} />
           </ReactFlow>

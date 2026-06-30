@@ -51,11 +51,24 @@ test("toFlowNodes marks area nodes for click-through body hit testing", () => {
   assert.equal(flowNodes.find((node) => node.id === "instance-1")?.className, undefined);
 });
 
+test("toFlowNodes keeps locked area node bodies from falling through to pane selection", () => {
+  const vpc = makeNode({ id: "vpc-1", locked: true, resourceType: "aws_vpc" });
+
+  const flowNodes = toFlowNodes([vpc], [], null, handlers);
+  const flowNode = flowNodes.find((node) => node.id === "vpc-1");
+
+  assert.equal(flowNode?.style?.pointerEvents, undefined);
+  assert.equal(flowNode?.draggable, false);
+  assert.equal(flowNode?.connectable, false);
+});
+
 function makeNode({
   id,
+  locked = false,
   resourceType
 }: {
   id: string;
+  locked?: boolean;
   resourceType: string;
 }): DiagramNode {
   return {
@@ -65,7 +78,7 @@ function makeNode({
     position: { x: 0, y: 0 },
     size: { width: 168, height: 96 },
     label: id,
-    locked: false,
+    locked,
     zIndex: 1,
     parameters: {
       terraformBlockType: "resource",

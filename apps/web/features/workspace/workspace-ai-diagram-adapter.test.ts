@@ -121,6 +121,65 @@ test("convertArchitectureJsonToDiagramJson creates board nodes and edges from an
   assert.deepEqual(diagramJson.viewport, { x: 0, y: 0, zoom: 1 });
 });
 
+test("convertArchitectureJsonToDiagramJson marks VPC and Subnet containment for board area nodes", () => {
+  const architectureJson: ArchitectureJson = {
+    nodes: [
+      {
+        id: "vpc-main",
+        type: "VPC",
+        label: "Main VPC",
+        positionX: 80,
+        positionY: 80,
+        config: { cidrBlock: "10.0.0.0/16" }
+      },
+      {
+        id: "subnet-app",
+        type: "SUBNET",
+        label: "App Subnet",
+        positionX: 140,
+        positionY: 150,
+        config: { cidrBlock: "10.0.1.0/24", vpcId: "vpc-main" }
+      },
+      {
+        id: "sg-app",
+        type: "SECURITY_GROUP",
+        label: "App Security Group",
+        positionX: 210,
+        positionY: 190,
+        config: { vpcId: "vpc-main" }
+      },
+      {
+        id: "ec2-api",
+        type: "EC2",
+        label: "API Server",
+        positionX: 300,
+        positionY: 190,
+        config: { subnetId: "subnet-app", securityGroupIds: ["sg-app"] }
+      }
+    ],
+    edges: [
+      {
+        id: "subnet-to-ec2",
+        sourceId: "subnet-app",
+        targetId: "ec2-api",
+        label: "hosts"
+      }
+    ]
+  };
+
+  const diagramJson = convertArchitectureJsonToDiagramJson(architectureJson);
+
+  assert.deepEqual(
+    diagramJson.nodes.map((node) => ({ id: node.id, parentAreaNodeId: node.metadata?.parentAreaNodeId })),
+    [
+      { id: "vpc-main", parentAreaNodeId: undefined },
+      { id: "subnet-app", parentAreaNodeId: "vpc-main" },
+      { id: "sg-app", parentAreaNodeId: "vpc-main" },
+      { id: "ec2-api", parentAreaNodeId: "subnet-app" }
+    ]
+  );
+});
+
 test("convertDiagramJsonToArchitectureJson keeps only valid resource nodes and connected edges", () => {
   const diagramJson: DiagramJson = {
     nodes: [

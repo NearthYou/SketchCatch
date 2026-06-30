@@ -4,8 +4,8 @@
 
 기준 문서:
 
-- `docs/gg/009_WorkspaceAI통합마감계획_gg.md`
-- `docs/gg/003_고도화.md`
+- `docs/gg/feat-gg-62-workspace-ai-finish/000_WorkspaceAI통합마감계획_gg.md`
+- `docs/gg/001_고도화.md`
 
 완료 기준은 실제 `/workspace`에서 아래 흐름이 한 번 끝까지 되는 것이다.
 
@@ -116,4 +116,4 @@ TDD 기준:
 - streaming 응답
 - `/workspace/ai` 제거 또는 접근 제한
 
-위 항목은 필요하면 `docs/gg/003_고도화.md`에 남긴다.
+위 항목은 필요하면 `docs/gg/001_고도화.md`에 남긴다.
