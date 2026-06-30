@@ -12,7 +12,6 @@ import {
   Rocket,
   Settings,
   Trash2,
-  UploadCloud,
   X
 } from "lucide-react";
 import { getApiErrorMessage } from "../../lib/api-client";
@@ -55,7 +54,6 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
   readonly onExternalSaveComplete: (saved: boolean) => void;
   readonly onOpenIssues: () => void;
   readonly onOpenResourceSettings: () => void;
-  readonly onSaveTerraformArtifact?: (source: PreparedTerraformArtifactSource) => Promise<unknown>;
 }>(function TerraformCodePanel({
   context,
   externalSaveRequestId,
@@ -64,8 +62,7 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
   onDirtyChange,
   onExternalSaveComplete,
   onOpenIssues,
-  onOpenResourceSettings,
-  onSaveTerraformArtifact
+  onOpenResourceSettings
 }, ref) {
   const [terraformFiles, setTerraformFiles] = useState<TerraformVirtualFile[]>(() =>
     createTerraformFilesFromGeneratedCode(context.diagram, "")
@@ -437,23 +434,6 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
     }, "Terraform 코드를 검증하지 못했습니다.");
   }
 
-  async function saveTerraformArtifact(): Promise<void> {
-    if (!onSaveTerraformArtifact || !hasTerraformCode || requestState === "loading") {
-      return;
-    }
-
-    await runRequest(async () => {
-      const preparedSource = await syncTerraformCodeToDiagram();
-
-      if (!preparedSource) {
-        throw new Error("Terraform 코드 검증 또는 그래프 반영에 실패했습니다.");
-      }
-
-      await onSaveTerraformArtifact(preparedSource);
-      setStatusMessage("Artifact 저장됨");
-    }, "Terraform artifact를 저장하지 못했습니다.");
-  }
-
   function selectTerraformFile(fileName: string): void {
     setTerraformFiles((currentFiles) =>
       currentFiles.some((file) => file.fileName === fileName)
@@ -539,16 +519,6 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
               </div>
             ) : null}
           </div>
-          <button
-            className={styles.terraformArtifactButton}
-            disabled={!onSaveTerraformArtifact || requestState === "loading" || !hasTerraformCode}
-            onClick={saveTerraformArtifact}
-            title="현재 Terraform artifact 저장"
-            type="button"
-          >
-            <UploadCloud size={15} aria-hidden="true" />
-            Artifact 저장
-          </button>
           <span className={styles.terraformShortcut}>Ctrl+S</span>
         </header>
       )}

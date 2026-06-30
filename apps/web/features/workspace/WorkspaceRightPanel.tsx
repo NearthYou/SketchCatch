@@ -24,9 +24,7 @@ import { TerraformLeaveDialog } from "./TerraformLeaveDialog";
 import { WorkspaceAiPanel } from "./WorkspaceAiPanel";
 import { defaultResourceWorkspaceView } from "./resource-workspace-view";
 import {
-  saveWorkspaceArchitectureSnapshot,
   saveWorkspaceTerraformArtifact,
-  type SavedWorkspaceArchitectureSnapshot,
   type SavedWorkspaceTerraformArtifact
 } from "./workspace-deployment-artifacts";
 import type { ResourceWorkspaceView, WorkspaceRightPanelView } from "./workspace-right-panel.types";
@@ -101,14 +99,6 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
     context.setRightPanelOpen(true);
     requestView(nextView);
   }
-
-  const saveCurrentArchitectureSnapshot = useCallback(async (): Promise<SavedWorkspaceArchitectureSnapshot> => {
-    return saveWorkspaceArchitectureSnapshot({
-      diagramJson: context.diagram,
-      projectId,
-      source: "manual"
-    });
-  }, [context.diagram, projectId]);
 
   const savePreparedTerraformArtifact = useCallback(
     async (source: PreparedTerraformArtifactSource): Promise<SavedWorkspaceTerraformArtifact> => {
@@ -244,16 +234,16 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
           >
             <Sparkles size={18} aria-hidden="true" />
           </button>
+          <button
+            aria-pressed={activeView === "deployment"}
+            className={activeView === "deployment" ? styles.panelModeButtonActive : styles.panelModeButton}
+            onClick={() => requestView("deployment")}
+            title="Deploy"
+            type="button"
+          >
+            <Rocket size={18} aria-hidden="true" />
+          </button>
         </div>
-        <button
-          aria-pressed={activeView === "deployment"}
-          className={`${activeView === "deployment" ? styles.panelIconButtonActive : styles.panelIconButton} ${styles.panelDeployButton}`}
-          onClick={() => requestView("deployment")}
-          title="Deploy"
-          type="button"
-        >
-          <Rocket size={18} aria-hidden="true" />
-        </button>
       </div>
 
       <div className={styles.rightPanelView} hidden={activeView !== "resource"}>
@@ -277,7 +267,6 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
             setResourceWorkspaceView("settings");
             requestView("resource");
           }}
-          onSaveTerraformArtifact={savePreparedTerraformArtifact}
         />
       </div>
       <div className={styles.rightPanelView} hidden={activeView !== "issues"}>
@@ -291,7 +280,6 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
           <DeploymentPanel
             currentNodeCount={context.nodes.length}
             onPrepareDeploymentArtifacts={prepareDeploymentArtifacts}
-            onSaveArchitectureSnapshot={saveCurrentArchitectureSnapshot}
             projectId={projectId}
             projectName={projectName}
           />

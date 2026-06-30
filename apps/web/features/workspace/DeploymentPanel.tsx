@@ -9,8 +9,6 @@ import type {
   DeployedResource,
   Deployment,
   DeploymentLog,
-  ProjectDetailsResponse,
-  TerraformArtifact,
   TerraformOutput
 } from "@sketchcatch/types";
 import { ClipboardCheck, Maximize2, Trash2, X } from "lucide-react";
@@ -20,7 +18,6 @@ import {
   approveDeploymentPlan,
   cancelDeployment as cancelDeploymentRun,
   createDeployment,
-  getProjectDetails,
   listAwsConnections,
   listDeploymentResources,
   listDeploymentLogs,
@@ -43,10 +40,7 @@ import {
   type DeploymentLogMessageToken,
   type DeploymentPanelMode
 } from "./deployment-actions";
-import type {
-  SavedWorkspaceArchitectureSnapshot,
-  SavedWorkspaceTerraformArtifact
-} from "./workspace-deployment-artifacts";
+import type { SavedWorkspaceTerraformArtifact } from "./workspace-deployment-artifacts";
 import type { RequestState } from "./workspace-right-panel.types";
 import styles from "./workspace.module.css";
 
@@ -57,7 +51,6 @@ type DeploymentRuntimeSnapshot = {
   readonly outputs: TerraformOutput[];
 };
 type DeploymentPanelSnapshot = DeploymentRuntimeSnapshot & {
-  readonly projectDetails: ProjectDetailsResponse;
   readonly awsConnections: AwsConnection[];
 };
 
@@ -72,24 +65,19 @@ function clampNumber(value: number, min: number, max: number): number {
 export function DeploymentPanel({
   currentNodeCount,
   onPrepareDeploymentArtifacts,
-  onSaveArchitectureSnapshot,
   projectId,
   projectName
 }: {
   readonly currentNodeCount: number;
   readonly onPrepareDeploymentArtifacts: () => Promise<SavedWorkspaceTerraformArtifact>;
-  readonly onSaveArchitectureSnapshot: () => Promise<SavedWorkspaceArchitectureSnapshot>;
   readonly projectId: string;
   readonly projectName: string;
 }) {
-  const [projectDetails, setProjectDetails] = useState<ProjectDetailsResponse | null>(null);
   const [awsConnections, setAwsConnections] = useState<AwsConnection[]>([]);
   const [deployments, setDeployments] = useState<Deployment[]>([]);
   const [deploymentLogs, setDeploymentLogs] = useState<DeploymentLog[]>([]);
   const [deploymentResources, setDeploymentResources] = useState<DeployedResource[]>([]);
   const [terraformOutputs, setTerraformOutputs] = useState<TerraformOutput[]>([]);
-  const [selectedArchitectureId, setSelectedArchitectureId] = useState("");
-  const [selectedTerraformArtifactId, setSelectedTerraformArtifactId] = useState("");
   const [selectedAwsConnectionId, setSelectedAwsConnectionId] = useState("");
   const [selectedDeploymentId, setSelectedDeploymentId] = useState("");
   const [showApplyConfirmation, setShowApplyConfirmation] = useState(false);
@@ -108,28 +96,13 @@ export function DeploymentPanel({
     () => awsConnections.filter((connection) => connection.status === "verified"),
     [awsConnections]
   );
-  const terraformArtifacts = useMemo(
-    () =>
-      (projectDetails?.assets ?? []).filter(
-        (asset): asset is TerraformArtifact =>
-          asset.assetType === "terraform_file" && typeof asset.architectureId === "string"
-      ),
-    [projectDetails]
-  );
-  const architectureTerraformArtifacts = useMemo(
-    () =>
-      selectedArchitectureId
-        ? terraformArtifacts.filter((artifact) => artifact.architectureId === selectedArchitectureId)
-        : terraformArtifacts,
-    [selectedArchitectureId, terraformArtifacts]
-  );
   const selectedDeployment = useMemo(
     () => deployments.find((deployment) => deployment.id === selectedDeploymentId) ?? null,
     [deployments, selectedDeploymentId]
   );
   const hasDeploymentRecords = deployments.length > 0;
   const compactDeploymentPanelMode = hasDeploymentRecords ? deploymentPanelMode : "setup";
-  const canCreateDeployment =
+  const canStartDeploymentReview =
     selectedAwsConnectionId.length > 0 &&
     requestState !== "loading";
   const hasCurrentPlan = Boolean(selectedDeployment?.currentPlanArtifactId);
@@ -205,33 +178,24 @@ export function DeploymentPanel({
   }, []);
 
   const loadDeploymentPanelSnapshot = useCallback(async (): Promise<DeploymentPanelSnapshot> => {
-    const [nextProjectDetails, nextConnections, runtimeSnapshot] = await Promise.all([
-      getProjectDetails(projectId),
+    const [nextConnections, runtimeSnapshot] = await Promise.all([
       listAwsConnections(),
       loadDeploymentRuntimeSnapshot()
     ]);
 
     return {
       ...runtimeSnapshot,
-      projectDetails: nextProjectDetails,
       awsConnections: nextConnections
     };
-  }, [loadDeploymentRuntimeSnapshot, projectId]);
+  }, [loadDeploymentRuntimeSnapshot]);
 
   const applyDeploymentPanelSnapshot = useCallback((snapshot: DeploymentPanelSnapshot): void => {
-    const latestArchitecture = snapshot.projectDetails.architectures[0];
     const latestVerifiedConnection = snapshot.awsConnections.find(
       (connection) => connection.status === "verified"
     );
 
-    setProjectDetails(snapshot.projectDetails);
     setAwsConnections(snapshot.awsConnections);
     applyDeploymentRuntimeSnapshot(snapshot);
-    setSelectedArchitectureId((currentId) =>
-      snapshot.projectDetails.architectures.some((architecture) => architecture.id === currentId)
-        ? currentId
-        : latestArchitecture?.id ?? ""
-    );
     setSelectedAwsConnectionId((currentId) =>
       snapshot.awsConnections.some((connection) => connection.id === currentId)
         ? currentId
@@ -244,8 +208,7 @@ export function DeploymentPanel({
 
     async function loadDeploymentData(): Promise<void> {
       await runRequest(async () => {
-        const [nextProjectDetails, nextConnections, nextDeployments] = await Promise.all([
-          getProjectDetails(projectId),
+        const [nextConnections, nextDeployments] = await Promise.all([
           listAwsConnections(),
           listDeployments(projectId)
         ]);
@@ -254,23 +217,14 @@ export function DeploymentPanel({
           return;
         }
 
-        setProjectDetails(nextProjectDetails);
         setAwsConnections(nextConnections);
         setDeployments(nextDeployments);
 
-        const latestArchitecture = nextProjectDetails.architectures[0];
-        const latestTerraformArtifact = nextProjectDetails.assets.find(
-          (asset): asset is TerraformArtifact =>
-            asset.assetType === "terraform_file" &&
-            asset.architectureId === latestArchitecture?.id
-        );
         const latestVerifiedConnection = nextConnections.find(
           (connection) => connection.status === "verified"
         );
         const latestDeployment = nextDeployments[0];
 
-        setSelectedArchitectureId((currentId) => currentId || latestArchitecture?.id || "");
-        setSelectedTerraformArtifactId((currentId) => currentId || latestTerraformArtifact?.id || "");
         setSelectedAwsConnectionId((currentId) => currentId || latestVerifiedConnection?.id || "");
         setSelectedDeploymentId((currentId) => currentId || latestDeployment?.id || "");
         setDeploymentPanelMode(getDefaultDeploymentPanelMode(nextDeployments));
@@ -336,17 +290,6 @@ export function DeploymentPanel({
       cancelled = true;
     };
   }, [selectedDeploymentId]);
-
-  useEffect(() => {
-    if (
-      selectedTerraformArtifactId &&
-      architectureTerraformArtifacts.some((artifact) => artifact.id === selectedTerraformArtifactId)
-    ) {
-      return;
-    }
-
-    setSelectedTerraformArtifactId(architectureTerraformArtifacts[0]?.id ?? "");
-  }, [architectureTerraformArtifacts, selectedTerraformArtifactId]);
 
   useEffect(() => {
     if (!selectedDeploymentId || selectedDeployment?.status !== "RUNNING") {
@@ -432,8 +375,8 @@ export function DeploymentPanel({
     }
   }
 
-  async function createProjectDeployment(): Promise<void> {
-    if (!canCreateDeployment) {
+  async function startDeploymentReview(): Promise<void> {
+    if (!canStartDeploymentReview) {
       return;
     }
 
@@ -442,8 +385,6 @@ export function DeploymentPanel({
       const snapshot = await loadDeploymentPanelSnapshot();
 
       applyDeploymentPanelSnapshot(snapshot);
-      setSelectedArchitectureId(savedArtifacts.architecture.id);
-      setSelectedTerraformArtifactId(savedArtifacts.terraformArtifact.id);
 
       const deployment = await createDeployment({
         projectId,
@@ -461,21 +402,20 @@ export function DeploymentPanel({
       setTerraformOutputs([]);
       setShowApplyConfirmation(false);
       setShowDestroyConfirmation(false);
-    }, "Deployment를 생성하지 못했습니다.");
+    }, "배포 검토를 시작하지 못했습니다.");
   }
 
-  async function saveArchitectureSnapshot(): Promise<void> {
+  async function saveDeploymentBaseline(): Promise<void> {
     if (requestState === "loading") {
       return;
     }
 
     await runRequest(async () => {
-      const savedSnapshot = await onSaveArchitectureSnapshot();
+      await onPrepareDeploymentArtifacts();
       const snapshot = await loadDeploymentPanelSnapshot();
 
       applyDeploymentPanelSnapshot(snapshot);
-      setSelectedArchitectureId(savedSnapshot.architecture.id);
-    }, "Architecture snapshot을 저장하지 못했습니다.");
+    }, "배포 기준을 저장하지 못했습니다.");
   }
 
   async function startTerraformPlan(): Promise<void> {
@@ -706,54 +646,18 @@ export function DeploymentPanel({
 
   const renderSetupSection = () => (
     <section className={styles.deploymentSection}>
-      <label className={styles.deploymentField}>
-        Architecture snapshot
-        <select
-          onChange={(event) => setSelectedArchitectureId(event.target.value)}
-          value={selectedArchitectureId}
-        >
-          {(projectDetails?.architectures ?? []).length === 0 ? (
-            <option value="">저장된 snapshot 없음</option>
-          ) : (
-            projectDetails?.architectures.map((architecture) => (
-              <option key={architecture.id} value={architecture.id}>
-                v{architecture.version} | {architecture.source} | {formatDate(architecture.createdAt)}
-              </option>
-            ))
-          )}
-        </select>
-      </label>
-
       <button
         className={styles.deploymentSecondaryButton}
         disabled={requestState === "loading"}
-        onClick={saveArchitectureSnapshot}
+        onClick={saveDeploymentBaseline}
         type="button"
       >
-        설계 버전 저장
+        <ClipboardCheck size={16} aria-hidden="true" />
+        배포 기준 저장
       </button>
 
       <label className={styles.deploymentField}>
-        Terraform artifact
-        <select
-          disabled={architectureTerraformArtifacts.length === 0}
-          onChange={(event) => setSelectedTerraformArtifactId(event.target.value)}
-          value={selectedTerraformArtifactId}
-        >
-          {architectureTerraformArtifacts.length === 0 ? (
-            <option value="">Terraform artifact 없음</option>
-          ) : (
-            architectureTerraformArtifacts.map((artifact) => (
-              <option key={artifact.id} value={artifact.id}>
-                {artifact.fileName} | {formatDate(artifact.createdAt)}
-              </option>
-            ))
-          )}
-        </select>
-      </label>
-
-      <label className={styles.deploymentField}>
-        AWS connection
+        AWS 연결
         <select
           disabled={verifiedAwsConnections.length === 0}
           onChange={(event) => setSelectedAwsConnectionId(event.target.value)}
@@ -773,18 +677,13 @@ export function DeploymentPanel({
 
       <button
         className={styles.deploymentPrimaryButton}
-        disabled={!canCreateDeployment}
-        onClick={createProjectDeployment}
+        disabled={!canStartDeploymentReview}
+        onClick={startDeploymentReview}
         type="button"
       >
         <DashboardIcon name="rocket" />
-        Deployment 생성
+        배포 검토 시작
       </button>
-
-      <p className={styles.deploymentHint}>Deployment 생성 전 현재 설계와 Terraform artifact를 자동 저장합니다.</p>
-      {!selectedAwsConnectionId ? (
-        <p className={styles.deploymentHint}>환경설정에서 AWS 계정을 연결하고 검증해주세요.</p>
-      ) : null}
     </section>
   );
 
@@ -1136,7 +1035,7 @@ export function DeploymentPanel({
             onClick={() => setDeploymentPanelMode("setup")}
             type="button"
           >
-            Deployment 생성
+            배포 검토
           </button>
           <button
             className={`${styles.deploymentModeButton} ${
