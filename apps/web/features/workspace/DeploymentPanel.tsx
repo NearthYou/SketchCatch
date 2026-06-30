@@ -11,7 +11,7 @@ import type {
   DeploymentLog,
   TerraformOutput
 } from "@sketchcatch/types";
-import { ClipboardCheck, Maximize2, Trash2, X } from "lucide-react";
+import { Clipboard, ClipboardCheck, Maximize2, Trash2, X } from "lucide-react";
 import { DashboardIcon } from "../../components/dashboard/dashboard-icons";
 import { SelectMenu, type SelectMenuOption } from "../../components/ui/SelectMenu";
 import { getApiErrorMessage } from "../../lib/api-client";
@@ -64,11 +64,13 @@ function clampNumber(value: number, min: number, max: number): number {
 
 export function DeploymentPanel({
   currentNodeCount,
+  hasUnsavedDeploymentBaseline,
   onPrepareDeploymentArtifacts,
   projectId,
   projectName
 }: {
   readonly currentNodeCount: number;
+  readonly hasUnsavedDeploymentBaseline: boolean;
   readonly onPrepareDeploymentArtifacts: () => Promise<SavedWorkspaceTerraformArtifact>;
   readonly projectId: string;
   readonly projectName: string;
@@ -139,6 +141,7 @@ export function DeploymentPanel({
   const deploymentActionHint = selectedDeployment
     ? getDeploymentActionHint(selectedDeployment)
     : "";
+  const DeploymentBaselineIcon = hasUnsavedDeploymentBaseline ? Clipboard : ClipboardCheck;
   const shouldAutoRefreshSelectedDeployment = shouldAutoRefreshDeployment(selectedDeployment);
   const deploymentExpandedGridStyle = useMemo(
     () =>
@@ -670,7 +673,7 @@ export function DeploymentPanel({
         onClick={saveDeploymentBaseline}
         type="button"
       >
-        <ClipboardCheck size={16} aria-hidden="true" />
+        <DeploymentBaselineIcon size={16} aria-hidden="true" />
         배포 기준 저장
       </button>
 

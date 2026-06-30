@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import type { TerraformDiagnostic } from "@sketchcatch/types";
 import {
   AlertCircle,
@@ -27,6 +27,7 @@ import {
   saveWorkspaceTerraformArtifact,
   type SavedWorkspaceTerraformArtifact
 } from "./workspace-deployment-artifacts";
+import { toDiagramFingerprint } from "./terraform-panel-utils";
 import type { ResourceWorkspaceView, WorkspaceRightPanelView } from "./workspace-right-panel.types";
 import styles from "./workspace.module.css";
 
@@ -44,10 +45,28 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
   );
   const [pendingView, setPendingView] = useState<WorkspaceRightPanelView | null>(null);
   const [hasUnsavedTerraformChanges, setHasUnsavedTerraformChanges] = useState(false);
+  const [isDeploymentBaselineDirty, setIsDeploymentBaselineDirty] = useState(true);
+  const [lastSavedDeploymentBaselineFingerprint, setLastSavedDeploymentBaselineFingerprint] =
+    useState<string | null>(null);
   const [showTerraformLeaveDialog, setShowTerraformLeaveDialog] = useState(false);
   const [terraformSaveRequestId, setTerraformSaveRequestId] = useState(0);
   const [terraformDiagnostics, setTerraformDiagnostics] = useState<TerraformDiagnostic[]>([]);
   const hasTerraformIssueErrors = terraformDiagnostics.some((diagnostic) => diagnostic.severity === "error");
+  const currentDeploymentBaselineFingerprint = useMemo(
+    () => toDiagramFingerprint(context.diagram),
+    [context.diagram]
+  );
+  const hasUnsavedDeploymentBaseline =
+    isDeploymentBaselineDirty ||
+    lastSavedDeploymentBaselineFingerprint !== currentDeploymentBaselineFingerprint;
+
+  const handleTerraformDirtyChange = useCallback((isDirty: boolean): void => {
+    setHasUnsavedTerraformChanges(isDirty);
+
+    if (isDirty) {
+      setIsDeploymentBaselineDirty(true);
+    }
+  }, []);
 
   const requestView = useCallback((nextView: WorkspaceRightPanelView): void => {
     if (nextView === activeView) {
@@ -119,7 +138,12 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
       throw new Error("Terraform 패널을 준비하지 못했습니다.");
     }
 
-    return savePreparedTerraformArtifact(preparedSource);
+    const savedArtifacts = await savePreparedTerraformArtifact(preparedSource);
+
+    setLastSavedDeploymentBaselineFingerprint(toDiagramFingerprint(preparedSource.diagramJson));
+    setIsDeploymentBaselineDirty(false);
+
+    return savedArtifacts;
   }, [savePreparedTerraformArtifact]);
 
   if (!context.isRightPanelOpen) {
@@ -260,7 +284,7 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
           externalSaveRequestId={terraformSaveRequestId}
           isVisible={activeView === "terraform"}
           onDiagnosticsChange={setTerraformDiagnostics}
-          onDirtyChange={setHasUnsavedTerraformChanges}
+          onDirtyChange={handleTerraformDirtyChange}
           onExternalSaveComplete={handleTerraformExternalSaveComplete}
           onOpenIssues={() => requestView("issues")}
           onOpenResourceSettings={() => {
@@ -279,6 +303,7 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
         {activeView === "deployment" ? (
           <DeploymentPanel
             currentNodeCount={context.nodes.length}
+            hasUnsavedDeploymentBaseline={hasUnsavedDeploymentBaseline}
             onPrepareDeploymentArtifacts={prepareDeploymentArtifacts}
             projectId={projectId}
             projectName={projectName}

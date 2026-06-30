@@ -195,6 +195,23 @@ test("deployment setup exposes only baseline save, AWS connection, and review st
   assert.doesNotMatch(stylesSource, /\.deploymentBaselinePanel\s*\{/);
 });
 
+test("deployment baseline save button shows pending and saved icons", () => {
+  assert.match(deploymentPanelSource, /import \{ Clipboard, ClipboardCheck,/);
+  assert.match(
+    deploymentPanelSource,
+    /const DeploymentBaselineIcon = hasUnsavedDeploymentBaseline \? Clipboard : ClipboardCheck;/
+  );
+  assert.match(deploymentPanelSource, /<DeploymentBaselineIcon size=\{16\} aria-hidden="true" \/>/);
+  assert.match(componentSource, /lastSavedDeploymentBaselineFingerprint/);
+  assert.match(componentSource, /isDeploymentBaselineDirty/);
+  assert.match(componentSource, /toDiagramFingerprint\(preparedSource\.diagramJson\)/);
+  assert.match(componentSource, /setIsDeploymentBaselineDirty\(false\)/);
+  assert.match(
+    componentSource,
+    /hasUnsavedDeploymentBaseline=\{hasUnsavedDeploymentBaseline\}/
+  );
+});
+
 test("terraform panel does not expose a detached artifact save action", () => {
   assert.doesNotMatch(terraformPanelSource, /onSaveTerraformArtifact/);
   assert.doesNotMatch(terraformPanelSource, /Artifact 저장/);
