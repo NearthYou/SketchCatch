@@ -732,6 +732,15 @@ select {
   color: #fde68a;
 }
 
+.authErrorText {
+  color: #fecaca;
+}
+
+.authInlineMessageStack {
+  display: grid;
+  gap: 4px;
+}
+
 .authInlineControl {
   display: grid;
   gap: 8px;

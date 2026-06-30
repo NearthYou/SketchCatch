@@ -2,15 +2,23 @@
 
 import { Eye, EyeOff, Search, X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { type FormEvent, useEffect, useState } from "react";
 import {
+  type FormEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+  useEffect,
+  useState
+} from "react";
+import {
+  getPasswordPolicyCategoryCount,
   getPasswordPolicyErrorMessage,
   PASSWORD_MAX_LENGTH,
   PASSWORD_MIN_LENGTH,
   PASSWORD_POLICY_HELP_TEXT,
+  PASSWORD_REQUIRED_CATEGORY_COUNT,
   type SignupRequest
 } from "@sketchcatch/types";
 import { useAuth } from "../../components/auth/auth-provider";
+import { getCapsLockWarningMessage, isCapsLockActive } from "../../features/auth/caps-lock";
 import { getApiErrorMessage } from "../../lib/api-client";
 import { requestSignupAvailability } from "../../lib/auth-api";
 import { LEGAL_DOCUMENTS, type LegalDocument, type LegalDocumentKey } from "./legal-documents";
@@ -41,8 +49,12 @@ export function SignupForm() {
   );
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isPasswordConfirmVisible, setIsPasswordConfirmVisible] = useState(false);
+  const [isPasswordCapsLockOn, setIsPasswordCapsLockOn] = useState(false);
+  const [isPasswordConfirmCapsLockOn, setIsPasswordConfirmCapsLockOn] = useState(false);
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [password, setPassword] = useState("");
+  const [passwordConfirm, setPasswordConfirm] = useState("");
   const [privacyAccepted, setPrivacyAccepted] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [activeLegalDocumentKey, setActiveLegalDocumentKey] = useState<LegalDocumentKey | null>(
@@ -229,6 +241,21 @@ export function SignupForm() {
   const activeLegalDocument = activeLegalDocumentKey
     ? LEGAL_DOCUMENTS[activeLegalDocumentKey]
     : null;
+  const passwordCapsLockWarning = getCapsLockWarningMessage(isPasswordCapsLockOn);
+  const passwordConfirmCapsLockWarning = getCapsLockWarningMessage(isPasswordConfirmCapsLockOn);
+  const passwordValidationMessages = getPasswordValidationMessages(password);
+  const passwordConfirmMismatchMessage = getPasswordConfirmMismatchMessage(
+    password,
+    passwordConfirm
+  );
+
+  function handlePasswordKeyEvent(event: ReactKeyboardEvent<HTMLInputElement>): void {
+    setIsPasswordCapsLockOn(isCapsLockActive(event));
+  }
+
+  function handlePasswordConfirmKeyEvent(event: ReactKeyboardEvent<HTMLInputElement>): void {
+    setIsPasswordConfirmCapsLockOn(isCapsLockActive(event));
+  }
 
   return (
     <>
@@ -280,16 +307,26 @@ export function SignupForm() {
           <label htmlFor="signup-password">비밀번호</label>
           <div className="authPasswordField">
             <input
-              aria-describedby="signup-password-help"
+              aria-describedby={
+                passwordCapsLockWarning
+                  ? "signup-password-help signup-password-requirements signup-password-caps-lock"
+                  : "signup-password-help signup-password-requirements"
+              }
+              aria-invalid={passwordValidationMessages.length > 0}
               autoComplete="new-password"
               disabled={isSubmitting}
               id="signup-password"
               maxLength={PASSWORD_MAX_LENGTH}
               minLength={PASSWORD_MIN_LENGTH}
               name="password"
+              onBlur={() => setIsPasswordCapsLockOn(false)}
+              onChange={(event) => setPassword(event.target.value)}
+              onKeyDown={handlePasswordKeyEvent}
+              onKeyUp={handlePasswordKeyEvent}
               placeholder="Password"
               required
               type={isPasswordVisible ? "text" : "password"}
+              value={password}
             />
             <button
               aria-label={isPasswordVisible ? "비밀번호 숨기기" : "비밀번호 보기"}
@@ -310,20 +347,48 @@ export function SignupForm() {
           <span className="authHelpText" id="signup-password-help">
             {PASSWORD_POLICY_HELP_TEXT}
           </span>
+          <PasswordValidationMessages
+            id="signup-password-requirements"
+            messages={passwordValidationMessages}
+          />
+          {passwordCapsLockWarning ? (
+            <span
+              className="authHelpText authWarningText"
+              id="signup-password-caps-lock"
+              role="alert"
+            >
+              {passwordCapsLockWarning}
+            </span>
+          ) : null}
         </div>
         <div className="authField">
           <label htmlFor="signup-password-confirm">비밀번호 확인</label>
           <div className="authPasswordField">
             <input
+              aria-describedby={
+                passwordConfirmCapsLockWarning && passwordConfirmMismatchMessage
+                  ? "signup-password-confirm-mismatch signup-password-confirm-caps-lock"
+                  : passwordConfirmCapsLockWarning
+                    ? "signup-password-confirm-caps-lock"
+                    : passwordConfirmMismatchMessage
+                      ? "signup-password-confirm-mismatch"
+                      : undefined
+              }
+              aria-invalid={Boolean(passwordConfirmMismatchMessage)}
               autoComplete="new-password"
               disabled={isSubmitting}
               id="signup-password-confirm"
               maxLength={PASSWORD_MAX_LENGTH}
               minLength={PASSWORD_MIN_LENGTH}
               name="passwordConfirm"
+              onBlur={() => setIsPasswordConfirmCapsLockOn(false)}
+              onChange={(event) => setPasswordConfirm(event.target.value)}
+              onKeyDown={handlePasswordConfirmKeyEvent}
+              onKeyUp={handlePasswordConfirmKeyEvent}
               placeholder="Password"
               required
               type={isPasswordConfirmVisible ? "text" : "password"}
+              value={passwordConfirm}
             />
             <button
               aria-label={isPasswordConfirmVisible ? "비밀번호 확인 숨기기" : "비밀번호 확인 보기"}
@@ -341,6 +406,24 @@ export function SignupForm() {
               )}
             </button>
           </div>
+          {passwordConfirmMismatchMessage ? (
+            <span
+              className="authHelpText authErrorText"
+              id="signup-password-confirm-mismatch"
+              role="alert"
+            >
+              {passwordConfirmMismatchMessage}
+            </span>
+          ) : null}
+          {passwordConfirmCapsLockWarning ? (
+            <span
+              className="authHelpText authWarningText"
+              id="signup-password-confirm-caps-lock"
+              role="alert"
+            >
+              {passwordConfirmCapsLockWarning}
+            </span>
+          ) : null}
         </div>
         <div className="authField">
           <label htmlFor="signup-email">이메일</label>
@@ -437,6 +520,22 @@ export function SignupForm() {
   );
 }
 
+function PasswordValidationMessages({ id, messages }: { id: string; messages: string[] }) {
+  if (messages.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="authInlineMessageStack" id={id} aria-live="polite">
+      {messages.map((message) => (
+        <span className="authHelpText authErrorText" key={message} role="alert">
+          {message}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function LegalDocumentDialog({
   document,
   onClose
@@ -528,6 +627,35 @@ function getAvailabilityClassSuffix(status: AvailabilityStatus): "Success" | "Er
   }
 
   return "Neutral";
+}
+
+function getPasswordValidationMessages(password: string): string[] {
+  if (password.length === 0) {
+    return [];
+  }
+
+  const messages: string[] = [];
+
+  if (password.length < PASSWORD_MIN_LENGTH) {
+    messages.push("10자 이상 입력해주세요.");
+  }
+
+  if (getPasswordPolicyCategoryCount(password) < PASSWORD_REQUIRED_CATEGORY_COUNT) {
+    messages.push("조건을 충족하지 못했습니다. 다시 입력해주세요.");
+  }
+
+  return messages;
+}
+
+function getPasswordConfirmMismatchMessage(
+  password: string,
+  passwordConfirm: string
+): string | null {
+  if (passwordConfirm.length === 0 || password === passwordConfirm) {
+    return null;
+  }
+
+  return "비밀번호가 일치하지 않습니다.";
 }
 
 function isCurrentValueAvailable(state: AvailabilityState, value: string): boolean {
