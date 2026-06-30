@@ -25,7 +25,7 @@ const PARENT_BY_NODE_ID: Readonly<Record<string, string>> = {
   "route-table-association": "vpc",
   "s3-bucket": AREA_NODE_IDS.region,
   "security-group": AREA_NODE_IDS.availabilityZone,
-  subnet: "security-group",
+  subnet: AREA_NODE_IDS.availabilityZone,
   vpc: AREA_NODE_IDS.region
 };
 const RESOURCE_ITEMS_BY_TYPE = new Map<string, ResourceItem>(

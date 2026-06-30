@@ -401,7 +401,7 @@ test("convertArchitectureJsonToDiagramJson lays out server and storage draft as 
       {
         id: "subnet",
         kind: "resource",
-        parentAreaNodeId: "security-group",
+        parentAreaNodeId: "server-storage-az",
         position: { x: 245, y: 650 },
         type: "aws_subnet"
       },

@@ -695,27 +695,30 @@ test("GET /api/aws/connections/:connectionId/cloudformation-template returns lau
 test("GET /api/aws/connections/:connectionId/cloudformation-template returns an inline template for localhost", async () => {
   const repository = new FakeAwsConnectionRepository();
   repository.awsConnection = createAwsConnectionRecord();
-  const app = await buildAwsConnectionTestApp(repository, {
-    awsConnectionConfig: {
-      callerPrincipalArn,
-      publicBaseUrl: "http://localhost:3000"
-    }
-  });
 
-  const response = await app.inject({
-    method: "GET",
-    url: `/api/aws/connections/${awsConnectionId}/cloudformation-template`,
-    headers: await authHeaders()
-  });
+  for (const publicBaseUrl of ["http://localhost:3000", "https://localhost:3000"]) {
+    const app = await buildAwsConnectionTestApp(repository, {
+      awsConnectionConfig: {
+        callerPrincipalArn,
+        publicBaseUrl
+      }
+    });
 
-  assert.equal(response.statusCode, 200);
-  const body = response.json() as AwsConnectionCloudFormationTemplateResponse;
-  assert.equal(body.templateUrl, null);
-  assert.equal(body.templateUrlExpiresAt, null);
-  assert.equal(body.launchStackUrl, null);
-  assert.match(body.templateBody, /Type: AWS::IAM::Role/);
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/aws/connections/${awsConnectionId}/cloudformation-template`,
+      headers: await authHeaders()
+    });
 
-  await app.close();
+    assert.equal(response.statusCode, 200);
+    const body = response.json() as AwsConnectionCloudFormationTemplateResponse;
+    assert.equal(body.templateUrl, null);
+    assert.equal(body.templateUrlExpiresAt, null);
+    assert.equal(body.launchStackUrl, null);
+    assert.match(body.templateBody, /Type: AWS::IAM::Role/);
+
+    await app.close();
+  }
 });
 
 test("GET /api/aws/connections/cloudformation-template returns public template yaml", async () => {
