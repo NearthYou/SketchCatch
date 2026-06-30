@@ -208,7 +208,17 @@ export function SignupForm() {
   }
 
   return (
-    <form className="authForm authFormGrid" onSubmit={handleSubmit}>
+    <form className="authForm" onSubmit={handleSubmit}>
+      <label>
+        이름
+        <input
+          autoComplete="nickname"
+          disabled={isSubmitting}
+          name="nickname"
+          required
+          type="text"
+        />
+      </label>
       <div className="authField">
         <label htmlFor="signup-username">아이디</label>
         <div className="authInlineControl">
@@ -241,45 +251,6 @@ export function SignupForm() {
           </button>
         </div>
         <AvailabilityMessage state={usernameAvailability} />
-      </div>
-      <label>
-        이름
-        <input
-          autoComplete="nickname"
-          disabled={isSubmitting}
-          name="nickname"
-          required
-          type="text"
-        />
-      </label>
-      <div className="authField fullField">
-        <label htmlFor="signup-email">이메일</label>
-        <div className="authInlineControl">
-          <input
-            autoComplete="email"
-            disabled={isSubmitting}
-            id="signup-email"
-            name="email"
-            onChange={(event) => {
-              setEmail(event.target.value);
-              setEmailAvailability(INITIAL_AVAILABILITY_STATE);
-            }}
-            placeholder="user@example.com"
-            required
-            type="email"
-            value={email}
-          />
-          <button
-            className="authCheckButton"
-            disabled={isSubmitting || emailAvailability.status === "checking" || !email.trim()}
-            onClick={handleEmailAvailabilityCheck}
-            type="button"
-          >
-            <Search aria-hidden="true" size={16} />
-            중복 확인
-          </button>
-        </div>
-        <AvailabilityMessage state={emailAvailability} />
       </div>
       <div className="authField">
         <label htmlFor="signup-password">비밀번호</label>
@@ -346,6 +317,35 @@ export function SignupForm() {
             )}
           </button>
         </div>
+      </div>
+      <div className="authField">
+        <label htmlFor="signup-email">이메일</label>
+        <div className="authInlineControl">
+          <input
+            autoComplete="email"
+            disabled={isSubmitting}
+            id="signup-email"
+            name="email"
+            onChange={(event) => {
+              setEmail(event.target.value);
+              setEmailAvailability(INITIAL_AVAILABILITY_STATE);
+            }}
+            placeholder="user@example.com"
+            required
+            type="email"
+            value={email}
+          />
+          <button
+            className="authCheckButton"
+            disabled={isSubmitting || emailAvailability.status === "checking" || !email.trim()}
+            onClick={handleEmailAvailabilityCheck}
+            type="button"
+          >
+            <Search aria-hidden="true" size={16} />
+            중복 확인
+          </button>
+        </div>
+        <AvailabilityMessage state={emailAvailability} />
       </div>
       <div className="authConsentGroup fullField">
         <label className="authCheckboxLabel">
