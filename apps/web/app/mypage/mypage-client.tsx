@@ -2,17 +2,19 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import type { Project } from "@sketchcatch/types";
+import type { Project, RecentSuccessfulDeploymentProject } from "@sketchcatch/types";
 import { ApiProjectCard } from "../../components/dashboard/api-project-card";
 import { DashboardIcon } from "../../components/dashboard/dashboard-icons";
 import { filterProjectsByName } from "../../features/projects/project-search";
-import { listProjects } from "../../features/workspace/api";
+import { listProjects, listRecentSuccessfulDeploymentProjects } from "../../features/workspace/api";
 import { getApiErrorMessage } from "../../lib/api-client";
 
 type MyPageLoadState = "loading" | "ready" | "error";
+type RecentDeploymentItem = RecentSuccessfulDeploymentProject;
 
 export function MyPageClient({ searchQuery }: { readonly searchQuery: string }) {
   const [projects, setProjects] = useState<Project[]>([]);
+  const [recentDeploymentItems, setRecentDeploymentItems] = useState<RecentDeploymentItem[]>([]);
   const [loadState, setLoadState] = useState<MyPageLoadState>("loading");
   const [errorMessage, setErrorMessage] = useState("");
 
@@ -24,13 +26,17 @@ export function MyPageClient({ searchQuery }: { readonly searchQuery: string }) 
       setErrorMessage("");
 
       try {
-        const nextProjects = await listProjects();
+        const [nextProjects, nextRecentDeploymentItems] = await Promise.all([
+          listProjects(),
+          listRecentSuccessfulDeploymentProjects()
+        ]);
 
         if (cancelled) {
           return;
         }
 
         setProjects(nextProjects);
+        setRecentDeploymentItems(nextRecentDeploymentItems);
         setLoadState("ready");
       } catch (error) {
         if (cancelled) {
@@ -51,14 +57,29 @@ export function MyPageClient({ searchQuery }: { readonly searchQuery: string }) 
 
   const isSearchActive = searchQuery.trim().length > 0;
   const sortedProjects = useMemo(() => [...projects].sort(compareProjectUpdatedAtDesc), [projects]);
+  const sortedDeploymentItems = useMemo(
+    () => [...recentDeploymentItems].sort(compareRecentDeploymentDesc),
+    [recentDeploymentItems]
+  );
   const searchMatchedProjects = useMemo(
     () => filterProjectsByName(sortedProjects, searchQuery),
     [searchQuery, sortedProjects]
   );
+  const searchMatchedProjectIds = useMemo(
+    () => new Set(searchMatchedProjects.map((project) => project.id)),
+    [searchMatchedProjects]
+  );
   const displayProjects = isSearchActive ? searchMatchedProjects : sortedProjects;
   const recentModifiedProjects = displayProjects.slice(0, 3);
-  const visibleProjects = isSearchActive ? displayProjects : displayProjects.slice(0, 6);
-  const projectCount = isSearchActive ? visibleProjects.length : projects.length;
+  const displayDeploymentItems = isSearchActive
+    ? sortedDeploymentItems.filter((item) => searchMatchedProjectIds.has(item.project.id))
+    : sortedDeploymentItems;
+  const visibleDeploymentItems = isSearchActive
+    ? displayDeploymentItems
+    : displayDeploymentItems.slice(0, 6);
+  const deploymentItemCount = isSearchActive
+    ? visibleDeploymentItems.length
+    : recentDeploymentItems.length;
 
   if (loadState === "loading") {
     return (
@@ -106,26 +127,26 @@ export function MyPageClient({ searchQuery }: { readonly searchQuery: string }) 
         )}
       </section>
 
-      <section className="dashboardPanel" aria-labelledby="my-projects-title">
+      <section className="dashboardPanel" aria-labelledby="recent-deployments-title">
         <div className="dashboardPanelHeader">
           <div>
-            <p className="dashboardPanelKicker">My projects</p>
-            <h2 id="my-projects-title">내 프로젝트</h2>
+            <p className="dashboardPanelKicker">Recent deployments</p>
+            <h2 id="recent-deployments-title">최근 배포한 항목</h2>
           </div>
-          <span className="dashboardCountBadge">{projectCount}개</span>
+          <span className="dashboardCountBadge">{deploymentItemCount}개</span>
         </div>
-        {visibleProjects.length === 0 && isSearchActive ? (
+        {visibleDeploymentItems.length === 0 && isSearchActive ? (
           <ProjectSearchEmptyState />
-        ) : visibleProjects.length === 0 ? (
-          <ProjectEmptyState />
+        ) : visibleDeploymentItems.length === 0 ? (
+          <DeploymentEmptyState />
         ) : (
           <div className="dashboardCardGrid dashboardCardGridThree">
-            {visibleProjects.map((project) => (
+            {visibleDeploymentItems.map(({ deployment, deployedAt, project }) => (
               <ApiProjectCard
-                key={project.id}
+                key={`${project.id}-${deployment.id}`}
                 project={project}
-                timestampLabel="최근 수정 시간"
-                timestampValue={project.updatedAt}
+                timestampLabel="최근 배포 시간"
+                timestampValue={deployedAt}
               />
             ))}
           </div>
@@ -159,6 +180,25 @@ function ProjectSearchEmptyState() {
   );
 }
 
+function DeploymentEmptyState() {
+  return (
+    <div className="projectListEmpty">
+      <p>아직 배포한 프로젝트가 없습니다.</p>
+      <Link className="dashboardTopbarAction" href="/projects">
+        <DashboardIcon name="folder" />
+        <span>프로젝트에서 배포 시작</span>
+      </Link>
+    </div>
+  );
+}
+
 function compareProjectUpdatedAtDesc(left: Project, right: Project): number {
   return new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime();
+}
+
+function compareRecentDeploymentDesc(
+  left: RecentDeploymentItem,
+  right: RecentDeploymentItem
+): number {
+  return new Date(right.deployedAt).getTime() - new Date(left.deployedAt).getTime();
 }

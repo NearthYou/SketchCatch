@@ -2,7 +2,15 @@ import { z } from "zod";
 import { requireS3BucketName } from "../config/env.js";
 import { requireActiveUserId } from "../auth/current-user.js";
 import { getDatabaseClient } from "../db/client.js";
-import type { DeployedResource, Deployment, DeploymentLog, TerraformOutput } from "@sketchcatch/types";
+import type {
+  DeployedResource,
+  Deployment,
+  DeploymentLog,
+  Project,
+  RecentSuccessfulDeploymentProject,
+  RecentSuccessfulDeploymentProjectListResponse,
+  TerraformOutput
+} from "@sketchcatch/types";
 import type { FastifyReply, FastifyInstance, FastifyRequest } from "fastify";
 import type { DatabaseClient } from "../db/client.js";
 import { getS3Client } from "../s3/client.js";
@@ -41,10 +49,13 @@ import {
   DeploymentConflictError,
   DeploymentNotFoundError,
   getDeployment,
+  getDeploymentDeployedAt,
   listDeployedResources,
   listProjectDeployments,
   listDeploymentLogs,
+  listRecentSuccessfulDeploymentProjects,
   listTerraformOutputs,
+  type DeploymentProjectRecord,
   requestDeploymentCancellation,
   type DeploymentRecord,
   type DeploymentRepository,
@@ -273,6 +284,28 @@ function toTerraformOutput(row: TerraformOutput): TerraformOutput {
   return row;
 }
 
+function toProject(row: DeploymentProjectRecord["project"]): Project {
+  return {
+    id: row.id,
+    userId: row.userId,
+    name: row.name,
+    description: row.description,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString()
+  };
+}
+
+async function toRecentSuccessfulDeploymentProject(
+  row: DeploymentProjectRecord,
+  repository: DeploymentRepository
+): Promise<RecentSuccessfulDeploymentProject> {
+  return {
+    project: toProject(row.project),
+    deployment: await toDeployment(row.deployment, repository),
+    deployedAt: getDeploymentDeployedAt(row.deployment).toISOString()
+  };
+}
+
 function toDeploymentLog(row: DeploymentLogRecord): DeploymentLog {
   return {
     id: row.id,
@@ -368,6 +401,23 @@ export async function registerDeploymentRoutes(
     } catch (error) {
       return handleDeploymentError(error, reply);
     }
+  });
+
+  app.get("/deployments/recent-successful-projects", async (request, reply) => {
+    const { accessContext, repository } = await getDeploymentRequestContext(
+      request,
+      options,
+      getDeploymentDatabaseClient
+    );
+
+    const rows = await listRecentSuccessfulDeploymentProjects({ accessContext }, repository);
+    const response: RecentSuccessfulDeploymentProjectListResponse = {
+      items: await Promise.all(
+        rows.map((row) => toRecentSuccessfulDeploymentProject(row, repository))
+      )
+    };
+
+    return reply.status(200).send(response);
   });
 
   app.get("/deployments/:deploymentId", async (request, reply) => {
