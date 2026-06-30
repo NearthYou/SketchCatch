@@ -184,10 +184,6 @@ function DeploymentEmptyState() {
   return (
     <div className="projectListEmpty">
       <p>아직 배포한 프로젝트가 없습니다.</p>
-      <Link className="dashboardTopbarAction" href="/projects">
-        <DashboardIcon name="folder" />
-        <span>프로젝트에서 배포 시작</span>
-      </Link>
     </div>
   );
 }
