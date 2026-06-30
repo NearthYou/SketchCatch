@@ -23,6 +23,7 @@ import styles from "./workspace.module.css";
 
 const LOCAL_SAVE_DEBOUNCE_MS = 800;
 const SERVER_CHECKPOINT_INTERVAL_MS = 5 * 60 * 1000;
+const SERVER_SAVE_TOAST_VISIBLE_MS = 3200;
 
 type LoadState = "loading" | "ready" | "error";
 export type FlushDraftReason = "manual" | "checkpoint" | "external";
@@ -70,6 +71,7 @@ export function ProjectWorkspaceDraftManager({
   const [initialDiagram, setInitialDiagram] = useState<DiagramJson | null>(null);
   const [localSaveState, setLocalSaveState] = useState<ProjectLocalSaveState>("idle");
   const [serverSaveState, setServerSaveState] = useState<ProjectServerSaveState>("server-idle");
+  const [serverSaveToastVisible, setServerSaveToastVisible] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const latestDiagramRef = useRef<DiagramJson>(EMPTY_DIAGRAM);
   const localDraftRef = useRef<LocalProjectDraft | null>(null);
@@ -80,6 +82,7 @@ export function ProjectWorkspaceDraftManager({
   const serverDirtyRef = useRef(false);
   const serverSavingRef = useRef(false);
   const serverSavePromiseRef = useRef<Promise<FlushDraftToServerResult> | null>(null);
+  const serverSaveToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onDraftPersistenceReadyRef =
     useRef<ProjectWorkspaceDraftManagerProps["onDraftPersistenceReady"]>(onDraftPersistenceReady);
 
@@ -93,6 +96,22 @@ export function ProjectWorkspaceDraftManager({
       localSaveTimerRef.current = null;
     }
   }, []);
+
+  const clearServerSaveToastTimer = useCallback(() => {
+    if (serverSaveToastTimerRef.current) {
+      clearTimeout(serverSaveToastTimerRef.current);
+      serverSaveToastTimerRef.current = null;
+    }
+  }, []);
+
+  const showServerSaveToast = useCallback(() => {
+    clearServerSaveToastTimer();
+    setServerSaveToastVisible(true);
+    serverSaveToastTimerRef.current = setTimeout(() => {
+      setServerSaveToastVisible(false);
+      serverSaveToastTimerRef.current = null;
+    }, SERVER_SAVE_TOAST_VISIBLE_MS);
+  }, [clearServerSaveToastTimer]);
 
   const persistLocalDraftNow = useCallback(async (): Promise<LocalDraftPersistResult> => {
     const changeVersion = draftChangeVersionRef.current;
@@ -191,6 +210,7 @@ export function ProjectWorkspaceDraftManager({
                 serverDirtyRef.current = false;
                 setLocalSaveState("local-saved");
                 setServerSaveState("server-saved");
+                showServerSaveToast();
                 return result;
               }
 
@@ -234,9 +254,14 @@ export function ProjectWorkspaceDraftManager({
       projectId,
       repository,
       setCurrentLocalDraft,
+      showServerSaveToast,
       workspaceId
     ]
   );
+
+  useEffect(() => {
+    return clearServerSaveToastTimer;
+  }, [clearServerSaveToastTimer]);
 
   const flushDraftBeforePageExit = useCallback(() => {
     if (
@@ -372,15 +397,22 @@ export function ProjectWorkspaceDraftManager({
   }
 
   return (
-    <DiagramEditor
-      initialDiagram={initialDiagram}
-      onDiagramChange={handleDiagramChange}
-      projectName={projectName}
-      rightPanel={(context) => (
-        <WorkspaceRightPanel context={context} projectId={projectId} projectName={projectName} />
-      )}
-      saveStatus={getProjectSaveStatus(localSaveState, serverSaveState)}
-    />
+    <>
+      <DiagramEditor
+        initialDiagram={initialDiagram}
+        onDiagramChange={handleDiagramChange}
+        projectName={projectName}
+        rightPanel={(context) => (
+          <WorkspaceRightPanel context={context} projectId={projectId} projectName={projectName} />
+        )}
+        saveStatus={getProjectSaveStatus(localSaveState, serverSaveState)}
+      />
+      {serverSaveToastVisible ? (
+        <div className={styles.serverSaveToast} role="status" aria-live="polite">
+          저장되었습니다.
+        </div>
+      ) : null}
+    </>
   );
 }
 
