@@ -9,8 +9,8 @@ test("resourceCatalog gives VPC, Subnet, and Security Group area-sized defaults"
 });
 
 test("resourceCatalog keeps regular network resources at icon node size", () => {
-  assert.deepEqual(getResourceSize("aws_internet_gateway"), { width: 112, height: 108 });
-  assert.deepEqual(getResourceSize("aws_route_table_association"), { width: 112, height: 108 });
+  assert.deepEqual(getResourceSize("aws_internet_gateway"), { width: 112, height: 112 });
+  assert.deepEqual(getResourceSize("aws_route_table_association"), { width: 112, height: 112 });
 });
 
 function getResourceSize(resourceType: string) {

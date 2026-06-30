@@ -6,6 +6,7 @@ import type {
   DiagramNode,
   DiagramNodeParameters
 } from "../../../../packages/types/src";
+import type { NodeResizeUpdate } from "./node-resize";
 
 export type DiagramNodeMetadataUpdate = Partial<Omit<DiagramNode, "id" | "parameters">>;
 
@@ -54,8 +55,8 @@ export type DiagramFlowNodeHandlers = {
   onBorderColorChange: (nodeId: string, color: string) => void;
   onToggleLock: (nodeId: string) => void;
   onResizeStart: () => void;
-  onResize: (nodeId: string, size: DiagramNode["size"]) => void;
-  onResizeEnd: (nodeId: string, size: DiagramNode["size"]) => void;
+  onResize: (nodeId: string, update: NodeResizeUpdate) => void;
+  onResizeEnd: (nodeId: string, update: NodeResizeUpdate) => void;
 };
 
 export type DiagramFlowNodeData = Record<string, unknown> & {

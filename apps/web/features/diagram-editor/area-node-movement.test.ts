@@ -8,6 +8,7 @@ import {
   applyAreaNodeParentAssignments,
   getDirectlyMovedNodeIdsFromPositionMap
 } from "./area-node-movement";
+import { calculateNodeResize } from "./node-resize";
 
 test("applyAreaNodeMovement moves nodes contained in a moved area by the same delta", () => {
   const region = makeDesignNode({
@@ -393,6 +394,55 @@ test("clearOutOfBoundsAreaParentAssignments does not adopt stationary nodes cove
   const result = clearOutOfBoundsAreaParentAssignments([region, instance], new Set([region.id]));
 
   assert.equal(getNodeById(result, instance.id)?.metadata?.parentAreaNodeId, undefined);
+});
+
+test("clearOutOfBoundsAreaParentAssignments keeps child positions after top-left area resize", () => {
+  const region = makeDesignNode({
+    id: "region-1",
+    type: "design_region",
+    position: { x: 0, y: 0 },
+    size: { width: 240, height: 180 }
+  });
+  const resizedRegion = {
+    ...region,
+    ...calculateNodeResize({
+      bounds: {
+        minWidth: 140,
+        minHeight: 100,
+        maxWidth: Number.MAX_SAFE_INTEGER,
+        maxHeight: Number.MAX_SAFE_INTEGER
+      },
+      delta: { x: 60, y: 40 },
+      handlePosition: "top-left",
+      startPosition: region.position,
+      startSize: region.size,
+      zoom: 1
+    })
+  };
+  const insideInstance = makeResourceNode({
+    id: "inside-instance-1",
+    parentAreaNodeId: region.id,
+    resourceType: "aws_instance",
+    position: { x: 100, y: 90 },
+    size: { width: 40, height: 40 }
+  });
+  const outsideInstance = makeResourceNode({
+    id: "outside-instance-1",
+    parentAreaNodeId: region.id,
+    resourceType: "aws_instance",
+    position: { x: 20, y: 20 },
+    size: { width: 40, height: 40 }
+  });
+
+  const result = clearOutOfBoundsAreaParentAssignments(
+    [resizedRegion, insideInstance, outsideInstance],
+    new Set([region.id])
+  );
+
+  assert.deepEqual(getNodeById(result, insideInstance.id)?.position, insideInstance.position);
+  assert.deepEqual(getNodeById(result, outsideInstance.id)?.position, outsideInstance.position);
+  assert.equal(getNodeById(result, insideInstance.id)?.metadata?.parentAreaNodeId, region.id);
+  assert.equal(getNodeById(result, outsideInstance.id)?.metadata?.parentAreaNodeId, undefined);
 });
 
 function makeDesignNode({
