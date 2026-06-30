@@ -143,14 +143,13 @@ export function WorkspaceAiGuardrailWarnings({
 
 // 내부 warning code를 발표 화면에서 읽기 쉬운 짧은 한국어 라벨로 바꿉니다.
 function getGuardrailWarningLabel(code: ArchitectureGuardrailWarning["code"]): string {
-  switch (code) {
-    case "low_budget_rds_cost":
-      return "예산 확인";
-    case "scenario_conflict":
-      return "선택값 확인";
-    case "unsupported_requirement":
-      return "MVP 범위 밖";
-  }
+  const warningLabels = {
+    low_budget_rds_cost: "예산 확인",
+    scenario_conflict: "선택값 확인",
+    unsupported_requirement: "MVP 범위 밖"
+  } satisfies Record<ArchitectureGuardrailWarning["code"], string>;
+
+  return warningLabels[code];
 }
 
 // Pre-Deployment Check 결과를 요약과 Check Finding 중심으로 압축 표시합니다.

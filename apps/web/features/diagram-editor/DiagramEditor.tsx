@@ -1718,7 +1718,6 @@ function DiagramEditorInner({
             snapToGrid
             zoomOnDoubleClick={false}
             zoomActivationKeyCode={["Meta", "Control"]}
-            zoomOnScroll={false}
           >
             <Background color="#d8e0ef" gap={24} size={2} variant={BackgroundVariant.Dots} />
           </ReactFlow>
