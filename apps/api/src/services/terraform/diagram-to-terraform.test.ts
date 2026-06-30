@@ -376,6 +376,134 @@ test("renders placement references with Terraform snake_case attribute names", (
   assert.doesNotMatch(terraformCode, /vpcId|subnetId/);
 });
 
+test("renders AWS nested block lists as Terraform blocks with snake_case attributes", () => {
+  const diagramJson: DiagramJson = {
+    nodes: [
+      makeNode({
+        id: "route-table-1",
+        type: "aws_route_table",
+        kind: "resource",
+        label: "public",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_route_table",
+          resourceName: "public",
+          fileName: "network",
+          values: {
+            vpcId: "aws_vpc.main.id",
+            route: [
+              {
+                cidrBlock: "0.0.0.0/0",
+                gatewayId: "aws_internet_gateway.igw.id"
+              }
+            ]
+          }
+        }
+      }),
+      makeNode({
+        id: "security-group-1",
+        type: "aws_security_group",
+        kind: "resource",
+        label: "web",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_security_group",
+          resourceName: "web",
+          fileName: "security",
+          values: {
+            name: "web",
+            vpcId: "aws_vpc.main.id",
+            egress: [
+              {
+                toPort: 0,
+                fromPort: 0,
+                protocol: "-1",
+                cidrBlocks: ["0.0.0.0/0"]
+              }
+            ],
+            ingress: [
+              {
+                toPort: 80,
+                fromPort: 80,
+                protocol: "tcp",
+                cidrBlocks: ["0.0.0.0/0"]
+              }
+            ]
+          }
+        }
+      })
+    ],
+    edges: [],
+    viewport: {
+      x: 0,
+      y: 0,
+      zoom: 1
+    }
+  };
+
+  const terraformCode = generateTerraformFromDiagramJson(diagramJson);
+
+  assert.match(
+    terraformCode,
+    /resource "aws_route_table" "public" \{[\s\S]*route \{[\s\S]*cidr_block = "0\.0\.0\.0\/0"[\s\S]*gateway_id = aws_internet_gateway\.igw\.id[\s\S]*\}/
+  );
+  assert.match(
+    terraformCode,
+    /resource "aws_security_group" "web" \{[\s\S]*egress \{[\s\S]*to_port = 0[\s\S]*from_port = 0[\s\S]*protocol = "-1"[\s\S]*cidr_blocks = \[[\s\S]*"0\.0\.0\.0\/0",[\s\S]*\][\s\S]*\}/
+  );
+  assert.match(
+    terraformCode,
+    /resource "aws_security_group" "web" \{[\s\S]*ingress \{[\s\S]*to_port = 80[\s\S]*from_port = 80[\s\S]*protocol = "tcp"[\s\S]*cidr_blocks = \[[\s\S]*"0\.0\.0\.0\/0",[\s\S]*\][\s\S]*\}/
+  );
+  assert.doesNotMatch(terraformCode, /route = \[/);
+  assert.doesNotMatch(terraformCode, /ingress = \[/);
+  assert.doesNotMatch(terraformCode, /egress = \[/);
+  assert.doesNotMatch(terraformCode, /cidrBlock|gatewayId|cidrBlocks|fromPort|toPort/);
+});
+
+test("normalizes compact security group ingress rules before rendering Terraform blocks", () => {
+  const diagramJson: DiagramJson = {
+    nodes: [
+      makeNode({
+        id: "security-group-1",
+        type: "aws_security_group",
+        kind: "resource",
+        label: "web",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_security_group",
+          resourceName: "web",
+          fileName: "security",
+          values: {
+            name: "web",
+            vpcId: "aws_vpc.main.id",
+            ingress: [
+              {
+                cidr: "0.0.0.0/0",
+                port: 80
+              }
+            ]
+          }
+        }
+      })
+    ],
+    edges: [],
+    viewport: {
+      x: 0,
+      y: 0,
+      zoom: 1
+    }
+  };
+
+  const terraformCode = generateTerraformFromDiagramJson(diagramJson);
+
+  assert.match(
+    terraformCode,
+    /ingress \{[\s\S]*from_port = 80[\s\S]*to_port = 80[\s\S]*protocol = "tcp"[\s\S]*cidr_blocks = \[[\s\S]*"0\.0\.0\.0\/0",[\s\S]*\]/
+  );
+  assert.doesNotMatch(terraformCode, /\bcidr =|\bport =/);
+});
+
 function makeNode(
   node: Omit<DiagramNode, "position" | "size" | "locked" | "zIndex"> &
     Partial<Pick<DiagramNode, "position" | "size" | "locked" | "zIndex">>

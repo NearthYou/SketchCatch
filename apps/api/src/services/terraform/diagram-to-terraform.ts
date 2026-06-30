@@ -9,6 +9,10 @@ const INDENT_UNIT = "  ";
 const HCL_IDENTIFIER_PATTERN = /^[a-zA-Z_][a-zA-Z0-9_-]*$/;
 const TERRAFORM_REFERENCE_PATTERN =
   /^(?:var|local|each|count|path|terraform)\.[a-zA-Z_][a-zA-Z0-9_]*$|^module\.[a-zA-Z0-9_]+\.[a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)*$|^aws_[a-zA-Z0-9_]+\.[a-zA-Z0-9_]+\.[a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)*$|^data\.aws_[a-zA-Z0-9_]+\.[a-zA-Z0-9_]+\.[a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)*$/;
+const TERRAFORM_NESTED_BLOCK_ATTRIBUTES: Record<string, ReadonlySet<string>> = {
+  aws_route_table: new Set(["route"]),
+  aws_security_group: new Set(["egress", "ingress"])
+};
 
 // DiagramJson 전체를 Terraform 코드 문자열 하나로 변환하는 공개 순수 함수다.
 export function generateTerraformFromDiagramJson(diagramJson: DiagramJson): string {
@@ -30,8 +34,8 @@ function isRenderableParameters(
 // resource/data block 하나를 만든다. 예: resource "aws_vpc" "main" { ... }
 function renderBlock(parameters: DiagramNodeParameters): string {
   const terraformBlockType = parameters.terraformBlockType ?? DEFAULT_TERRAFORM_BLOCK_TYPE;
-  const body = Object.entries(parameters.values).map(([key, value]) =>
-    renderAttribute(key, value, 1)
+  const body = Object.entries(parameters.values).flatMap(([key, value]) =>
+    renderBodyEntry(parameters.resourceType, key, value, 1)
   );
 
   return [
@@ -39,6 +43,102 @@ function renderBlock(parameters: DiagramNodeParameters): string {
     ...body,
     "}"
   ].join("\n");
+}
+
+function renderBodyEntry(
+  resourceType: string,
+  key: string,
+  value: unknown,
+  indentLevel: number
+): string[] {
+  const normalizedValue = normalizeTopLevelValue(resourceType, key, value);
+
+  if (shouldRenderNestedBlocks(resourceType, key, normalizedValue)) {
+    return renderNestedBlocks(key, normalizedValue, indentLevel);
+  }
+
+  return [renderAttribute(key, normalizedValue, indentLevel)];
+}
+
+function normalizeTopLevelValue(resourceType: string, key: string, value: unknown): unknown {
+  if (
+    resourceType === "aws_security_group" &&
+    (key === "egress" || key === "ingress") &&
+    Array.isArray(value)
+  ) {
+    return value.map((item) => (isRecord(item) ? normalizeSecurityGroupRuleBlock(item) : item));
+  }
+
+  return value;
+}
+
+function normalizeSecurityGroupRuleBlock(rule: Record<string, unknown>): Record<string, unknown> {
+  const normalizedRule: Record<string, unknown> = {};
+  const port = rule["port"];
+  const cidr = rule["cidr"];
+  const hasCidrBlocks = rule["cidrBlocks"] !== undefined || rule["cidr_blocks"] !== undefined;
+
+  for (const [key, value] of Object.entries(rule)) {
+    if (key !== "cidr" && key !== "port") {
+      normalizedRule[key] = value;
+    }
+  }
+
+  if (port !== undefined) {
+    if (rule["fromPort"] === undefined && rule["from_port"] === undefined) {
+      normalizedRule.fromPort = port;
+    }
+
+    if (rule["toPort"] === undefined && rule["to_port"] === undefined) {
+      normalizedRule.toPort = port;
+    }
+
+    if (rule["protocol"] === undefined) {
+      normalizedRule.protocol = "tcp";
+    }
+  }
+
+  if (cidr !== undefined && !hasCidrBlocks) {
+    normalizedRule.cidrBlocks = [cidr];
+  }
+
+  return normalizedRule;
+}
+
+function shouldRenderNestedBlocks(
+  resourceType: string,
+  key: string,
+  value: unknown
+): value is Record<string, unknown>[] {
+  return (
+    TERRAFORM_NESTED_BLOCK_ATTRIBUTES[resourceType]?.has(key) === true &&
+    Array.isArray(value) &&
+    value.every(isRecord)
+  );
+}
+
+function renderNestedBlocks(
+  key: string,
+  values: Record<string, unknown>[],
+  indentLevel: number
+): string[] {
+  return values.map((value) =>
+    [
+      `${indent(indentLevel)}${toSnakeCase(key)} {`,
+      ...Object.entries(value).flatMap(([nestedKey, nestedValue]) =>
+        renderNestedBlockEntry(nestedKey, nestedValue, indentLevel + 1)
+      ),
+      `${indent(indentLevel)}}`
+    ].join("\n")
+  );
+}
+
+function renderNestedBlockEntry(key: string, value: unknown, indentLevel: number): string[] {
+  if (Array.isArray(value) && value.every(isRecord)) {
+    return renderNestedBlocks(key, value, indentLevel);
+  }
+
+  return [renderAttribute(key, value, indentLevel)];
 }
 
 // DiagramJson의 top-level values key/value 하나를 Terraform attribute 한 줄로 바꾼다.
@@ -107,7 +207,7 @@ function renderObjectKey(key: string): string {
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 // Terraform reference는 따옴표 없이 출력해야 하므로 일반 문자열과 구분한다.
