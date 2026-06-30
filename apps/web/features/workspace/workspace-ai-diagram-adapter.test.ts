@@ -282,6 +282,193 @@ test("convertArchitectureJsonToDiagramJson maps server and storage draft resourc
   );
 });
 
+test("convertArchitectureJsonToDiagramJson lays out server and storage draft as nested cloud areas", () => {
+  const architectureJson: ArchitectureJson = {
+    nodes: [
+      {
+        id: "vpc",
+        type: "VPC",
+        label: "VPC",
+        positionX: 80,
+        positionY: 120,
+        config: { cidrBlock: "172.16.0.0/16" }
+      },
+      {
+        id: "subnet",
+        type: "SUBNET",
+        label: "Subnet",
+        positionX: 220,
+        positionY: 430,
+        config: { cidrBlock: "172.16.1.0/24", vpcId: "aws_vpc.vpc.id" }
+      },
+      {
+        id: "security-group",
+        type: "SECURITY_GROUP",
+        label: "Security Group",
+        positionX: 180,
+        positionY: 340,
+        config: { vpcId: "aws_vpc.vpc.id" }
+      },
+      {
+        id: "ec2-instance",
+        type: "EC2",
+        label: "EC2 Instance",
+        positionX: 300,
+        positionY: 540,
+        config: {
+          ami: "data.aws_ami.ami.id",
+          instanceType: "t3.micro",
+          securityGroupIds: ["aws_security_group.security_group.id"],
+          subnetId: "aws_subnet.subnet.id"
+        }
+      },
+      {
+        id: "internet-gateway",
+        type: "INTERNET_GATEWAY",
+        label: "Internet Gateway",
+        positionX: 500,
+        positionY: 230,
+        config: { vpcId: "aws_vpc.vpc.id" }
+      },
+      {
+        id: "route-table-association",
+        type: "ROUTE_TABLE_ASSOCIATION",
+        label: "Route Table Association",
+        positionX: 620,
+        positionY: 450,
+        config: { routeTableId: "aws_route_table.route_table.id", subnetId: "aws_subnet.subnet.id" }
+      },
+      {
+        id: "route-table",
+        type: "ROUTE_TABLE",
+        label: "Route Table",
+        positionX: 820,
+        positionY: 440,
+        config: { vpcId: "aws_vpc.vpc.id" }
+      },
+      {
+        id: "ami",
+        type: "AMI",
+        label: "Amazon Linux AMI",
+        positionX: 120,
+        positionY: 130,
+        config: { owners: ["amazon"] }
+      },
+      {
+        id: "s3-bucket",
+        type: "S3",
+        label: "S3 Bucket",
+        positionX: 950,
+        positionY: 130,
+        config: {}
+      }
+    ],
+    edges: []
+  };
+
+  const diagramJson = convertArchitectureJsonToDiagramJson(architectureJson);
+
+  assert.deepEqual(
+    diagramJson.nodes.map((node) => ({
+      id: node.id,
+      kind: node.kind,
+      parentAreaNodeId: node.metadata?.parentAreaNodeId,
+      position: node.position,
+      type: node.type
+    })),
+    [
+      {
+        id: "server-storage-region",
+        kind: "design",
+        parentAreaNodeId: undefined,
+        position: { x: 40, y: 70 },
+        type: "design_region"
+      },
+      {
+        id: "server-storage-az",
+        kind: "design",
+        parentAreaNodeId: "vpc",
+        position: { x: 120, y: 300 },
+        type: "design_az"
+      },
+      {
+        id: "vpc",
+        kind: "resource",
+        parentAreaNodeId: "server-storage-region",
+        position: { x: 80, y: 120 },
+        type: "aws_vpc"
+      },
+      {
+        id: "subnet",
+        kind: "resource",
+        parentAreaNodeId: "security-group",
+        position: { x: 220, y: 430 },
+        type: "aws_subnet"
+      },
+      {
+        id: "security-group",
+        kind: "resource",
+        parentAreaNodeId: "server-storage-az",
+        position: { x: 180, y: 340 },
+        type: "aws_security_group"
+      },
+      {
+        id: "ec2-instance",
+        kind: "resource",
+        parentAreaNodeId: "subnet",
+        position: { x: 300, y: 540 },
+        type: "aws_instance"
+      },
+      {
+        id: "internet-gateway",
+        kind: "resource",
+        parentAreaNodeId: "vpc",
+        position: { x: 500, y: 230 },
+        type: "aws_internet_gateway"
+      },
+      {
+        id: "route-table-association",
+        kind: "resource",
+        parentAreaNodeId: "vpc",
+        position: { x: 620, y: 450 },
+        type: "aws_route_table_association"
+      },
+      {
+        id: "route-table",
+        kind: "resource",
+        parentAreaNodeId: "vpc",
+        position: { x: 820, y: 440 },
+        type: "aws_route_table"
+      },
+      {
+        id: "ami",
+        kind: "resource",
+        parentAreaNodeId: "server-storage-region",
+        position: { x: 120, y: 130 },
+        type: "aws_ami"
+      },
+      {
+        id: "s3-bucket",
+        kind: "resource",
+        parentAreaNodeId: "server-storage-region",
+        position: { x: 950, y: 130 },
+        type: "aws_s3_bucket"
+      }
+    ]
+  );
+
+  const nodeById = new Map(diagramJson.nodes.map((node) => [node.id, node]));
+  const regionNode = nodeById.get("server-storage-region");
+  const vpcNode = nodeById.get("vpc");
+  const azNode = nodeById.get("server-storage-az");
+  assert.equal(regionNode?.size.width, 1120);
+  assert.equal(regionNode?.size.height, 900);
+  assert.equal(vpcNode?.size.width, 900);
+  assert.equal(vpcNode?.size.height, 768);
+  assert.equal(azNode?.size.width, 780);
+  assert.equal(azNode?.size.height, 540);
+});
+
 test("convertDiagramJsonToArchitectureJson keeps only valid resource nodes and connected edges", () => {
   const diagramJson: DiagramJson = {
     nodes: [

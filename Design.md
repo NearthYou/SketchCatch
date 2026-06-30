@@ -141,3 +141,18 @@ Use borders-only for workspace tools. The product should feel reviewable and sta
 
 - Cards may use `8px` radius at most in workspace flows.
 - Do not add decorative orbs or gradient blobs to operational screens.
+
+## 8. Workspace Board Area Boxes
+
+### Structure
+
+- Area boxes describe containment, not deployment execution.
+- Server+storage drafts should read from outside to inside as `Region -> VPC -> Availability Zone -> Security Group -> Subnet -> Resource`.
+- AMI and S3 stay inside Region but outside VPC.
+- Internet Gateway, Route Table, and Route Table Association stay inside VPC beside the nested compute area.
+
+### Spacing
+
+- Area boxes keep at least `48px` of breathing room around direct children.
+- Nested boxes should show their labels without overlapping child resources.
+- Relationship edges should support the diagram without replacing visual containment.

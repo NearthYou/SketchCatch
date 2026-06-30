@@ -163,7 +163,7 @@ function createServerStorageDraft(): AiArchitectureDraftResult {
           type: "VPC",
           label: "VPC",
           positionX: 80,
-          positionY: 80,
+          positionY: 120,
           config: {
             cidrBlock: "172.16.0.0/16"
           }
@@ -172,8 +172,8 @@ function createServerStorageDraft(): AiArchitectureDraftResult {
           id: "subnet",
           type: "SUBNET",
           label: "Subnet",
-          positionX: 160,
-          positionY: 180,
+          positionX: 220,
+          positionY: 430,
           config: {
             vpcId: "aws_vpc.vpc.id",
             cidrBlock: "172.16.1.0/24"
@@ -183,8 +183,8 @@ function createServerStorageDraft(): AiArchitectureDraftResult {
           id: "internet-gateway",
           type: "INTERNET_GATEWAY",
           label: "Internet Gateway",
-          positionX: 520,
-          positionY: 120,
+          positionX: 500,
+          positionY: 230,
           config: {
             vpcId: "aws_vpc.vpc.id"
           }
@@ -193,8 +193,8 @@ function createServerStorageDraft(): AiArchitectureDraftResult {
           id: "route-table",
           type: "ROUTE_TABLE",
           label: "Route Table",
-          positionX: 520,
-          positionY: 260,
+          positionX: 820,
+          positionY: 440,
           config: {
             vpcId: "aws_vpc.vpc.id",
             route: [
@@ -209,8 +209,8 @@ function createServerStorageDraft(): AiArchitectureDraftResult {
           id: "route-table-association",
           type: "ROUTE_TABLE_ASSOCIATION",
           label: "Route Table Association",
-          positionX: 520,
-          positionY: 400,
+          positionX: 620,
+          positionY: 450,
           config: {
             subnetId: "aws_subnet.subnet.id",
             routeTableId: "aws_route_table.route_table.id"
@@ -220,8 +220,8 @@ function createServerStorageDraft(): AiArchitectureDraftResult {
           id: "ami",
           type: "AMI",
           label: "Amazon Linux AMI",
-          positionX: 160,
-          positionY: 480,
+          positionX: 120,
+          positionY: 130,
           config: {
             owners: ["amazon"],
             mostRecent: true,
@@ -232,8 +232,8 @@ function createServerStorageDraft(): AiArchitectureDraftResult {
           id: "security-group",
           type: "SECURITY_GROUP",
           label: "Security Group",
-          positionX: 330,
-          positionY: 180,
+          positionX: 180,
+          positionY: 340,
           config: {
             vpcId: "aws_vpc.vpc.id"
           }
@@ -242,8 +242,8 @@ function createServerStorageDraft(): AiArchitectureDraftResult {
           id: "ec2-instance",
           type: "EC2",
           label: "EC2 Instance",
-          positionX: 330,
-          positionY: 330,
+          positionX: 300,
+          positionY: 540,
           config: {
             ami: "data.aws_ami.ami.id",
             instanceType: "t3.micro",
@@ -256,18 +256,16 @@ function createServerStorageDraft(): AiArchitectureDraftResult {
           id: "s3-bucket",
           type: "S3",
           label: "S3 Bucket",
-          positionX: 720,
-          positionY: 330,
+          positionX: 950,
+          positionY: 130,
           config: {}
         }
       ],
       edges: [
-        createEdge("vpc-to-subnet", "vpc", "subnet", "contains"),
-        createEdge("vpc-to-internet-gateway", "vpc", "internet-gateway", "contains"),
-        createEdge("vpc-to-route-table", "vpc", "route-table", "contains"),
+        createEdge("s3-bucket-to-internet-gateway", "s3-bucket", "internet-gateway", "access"),
+        createEdge("internet-gateway-to-route-table-association", "internet-gateway", "route-table-association", "routes"),
         createEdge("subnet-to-route-table-association", "subnet", "route-table-association", "uses"),
-        createEdge("route-table-to-route-table-association", "route-table", "route-table-association", "uses"),
-        createEdge("ami-to-ec2-instance", "ami", "ec2-instance", "ami"),
+        createEdge("route-table-association-to-route-table", "route-table-association", "route-table", "uses"),
         createEdge("subnet-to-ec2-instance", "subnet", "ec2-instance", "hosts"),
         createEdge("security-group-to-ec2-instance", "security-group", "ec2-instance", "allows traffic")
       ]
