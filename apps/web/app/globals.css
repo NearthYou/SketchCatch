@@ -2881,7 +2881,8 @@ nextjs-portal {
 .resourcePanel .resourceGrid {
   display: grid;
   gap: 9px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fill, 88px);
+  justify-content: start;
 }
 
 .resourceSearchResults {
