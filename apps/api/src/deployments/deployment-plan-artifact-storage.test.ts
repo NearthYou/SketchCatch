@@ -60,6 +60,7 @@ test("createS3DeploymentPlanArtifactStorage uploads tfplan bytes with hash and s
       Key: `deployments/${deploymentId}/plans/${planArtifactId}.tfplan`,
       Body: Buffer.from("tfplan-bytes"),
       ContentType: "application/octet-stream",
+      CacheControl: "no-store",
       ServerSideEncryption: "AES256",
       Metadata: {
         "sketchcatch-deployment-id": deploymentId,

@@ -7,6 +7,7 @@ import type {
   DesignSimulationResult,
   LlmExplanation
 } from "@sketchcatch/types";
+import { SelectMenu } from "../../components/ui/SelectMenu";
 import styles from "./workspace.module.css";
 
 export type AiRequestState = "idle" | "loading" | "error";
@@ -36,16 +37,16 @@ export function WorkspaceAiSelect<Value extends string>({
   }
 
   return (
-    <label className={styles.aiField}>
+    <div className={styles.aiField}>
       <span>{label}</span>
-      <select onChange={(event) => handleChange(event.target.value)} value={value}>
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-    </label>
+      <SelectMenu
+        ariaLabel={`${label} 선택`}
+        emptyLabel="Select a value"
+        onChange={handleChange}
+        options={options}
+        value={value}
+      />
+    </div>
   );
 }
 

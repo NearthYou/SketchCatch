@@ -5,12 +5,13 @@ import { useEffect, useMemo, useState } from "react";
 import type { Project } from "@sketchcatch/types";
 import { ApiProjectCard } from "../../components/dashboard/api-project-card";
 import { DashboardIcon } from "../../components/dashboard/dashboard-icons";
+import { filterProjectsByName } from "../../features/projects/project-search";
 import { listProjects } from "../../features/workspace/api";
 import { getApiErrorMessage } from "../../lib/api-client";
 
 type MyPageLoadState = "loading" | "ready" | "error";
 
-export function MyPageClient() {
+export function MyPageClient({ searchQuery }: { readonly searchQuery: string }) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loadState, setLoadState] = useState<MyPageLoadState>("loading");
   const [errorMessage, setErrorMessage] = useState("");
@@ -48,14 +49,16 @@ export function MyPageClient() {
     };
   }, []);
 
-  const recentCreatedProjects = useMemo(
-    () => [...projects].sort(compareProjectCreatedAtDesc).slice(0, 3),
-    [projects]
+  const isSearchActive = searchQuery.trim().length > 0;
+  const sortedProjects = useMemo(() => [...projects].sort(compareProjectUpdatedAtDesc), [projects]);
+  const searchMatchedProjects = useMemo(
+    () => filterProjectsByName(sortedProjects, searchQuery),
+    [searchQuery, sortedProjects]
   );
-  const visibleProjects = useMemo(
-    () => [...projects].sort(compareProjectUpdatedAtDesc).slice(0, 6),
-    [projects]
-  );
+  const displayProjects = isSearchActive ? searchMatchedProjects : sortedProjects;
+  const recentModifiedProjects = displayProjects.slice(0, 3);
+  const visibleProjects = isSearchActive ? displayProjects : displayProjects.slice(0, 6);
+  const projectCount = isSearchActive ? visibleProjects.length : projects.length;
 
   if (loadState === "loading") {
     return (
@@ -77,42 +80,25 @@ export function MyPageClient() {
 
   return (
     <>
-      <div className="dashboardStatGrid dashboardStatGridCompact" aria-label="홈 요약">
-        <article>
-          <DashboardIcon name="folder" />
-          <span>전체 프로젝트</span>
-          <strong>{projects.length}</strong>
-        </article>
-        <article>
-          <DashboardIcon name="clock" />
-          <span>최근 생성</span>
-          <strong>{recentCreatedProjects.length}</strong>
-        </article>
-        <article>
-          <DashboardIcon name="check" />
-          <span>DB 저장</span>
-          <strong>ON</strong>
-        </article>
-      </div>
-
-      <section className="dashboardPanel" aria-labelledby="recent-created-title">
+      <section className="dashboardPanel" aria-labelledby="recent-modified-title">
         <div className="dashboardPanelHeader">
           <div>
-            <p className="dashboardPanelKicker">Recent created</p>
-            <h2 id="recent-created-title">최근 생성된 항목</h2>
+            <p className="dashboardPanelKicker">Recent modified</p>
+            <h2 id="recent-modified-title">최근 수정된 항목</h2>
           </div>
-          <span className="dashboardCountBadge">최대 3개</span>
         </div>
-        {recentCreatedProjects.length === 0 ? (
+        {recentModifiedProjects.length === 0 && isSearchActive ? (
+          <ProjectSearchEmptyState />
+        ) : recentModifiedProjects.length === 0 ? (
           <ProjectEmptyState />
         ) : (
           <div className="dashboardCardGrid dashboardCardGridThree">
-            {recentCreatedProjects.map((project) => (
+            {recentModifiedProjects.map((project) => (
               <ApiProjectCard
                 key={project.id}
                 project={project}
-                timestampLabel="생성"
-                timestampValue={project.createdAt}
+                timestampLabel="최근 수정 시간"
+                timestampValue={project.updatedAt}
                 variant="compact"
               />
             ))}
@@ -126,17 +112,19 @@ export function MyPageClient() {
             <p className="dashboardPanelKicker">My projects</p>
             <h2 id="my-projects-title">내 프로젝트</h2>
           </div>
-          <span className="dashboardCountBadge">{projects.length}개</span>
+          <span className="dashboardCountBadge">{projectCount}개</span>
         </div>
-        {visibleProjects.length === 0 ? (
+        {visibleProjects.length === 0 && isSearchActive ? (
+          <ProjectSearchEmptyState />
+        ) : visibleProjects.length === 0 ? (
           <ProjectEmptyState />
         ) : (
-          <div className="dashboardCardGrid">
+          <div className="dashboardCardGrid dashboardCardGridThree">
             {visibleProjects.map((project) => (
               <ApiProjectCard
                 key={project.id}
                 project={project}
-                timestampLabel="수정"
+                timestampLabel="최근 수정 시간"
                 timestampValue={project.updatedAt}
               />
             ))}
@@ -159,8 +147,16 @@ function ProjectEmptyState() {
   );
 }
 
-function compareProjectCreatedAtDesc(left: Project, right: Project): number {
-  return new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
+function ProjectSearchEmptyState() {
+  return (
+    <div className="projectListEmpty">
+      <p>일치하는 프로젝트가 없습니다.</p>
+      <Link className="dashboardSecondaryButton" href="/mypage">
+        <DashboardIcon name="close" />
+        <span>검색 해제</span>
+      </Link>
+    </div>
+  );
 }
 
 function compareProjectUpdatedAtDesc(left: Project, right: Project): number {

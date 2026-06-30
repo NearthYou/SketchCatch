@@ -12,6 +12,7 @@ import type {
   ResourceNodeParameters
 } from "../../../../packages/types/src";
 
+import { SelectMenu } from "../../components/ui/SelectMenu";
 import type { DiagramEditorPanelContext } from "../diagram-editor/types";
 import {
   filterAdvancedDefinitions,
@@ -30,6 +31,7 @@ import {
   getRegionNodeAwsRegion,
   isRegionDesignNode
 } from "./region-node-metadata";
+import { buildResourceMetadataRows } from "./resource-metadata-rows";
 import {
   buildReferenceOptions,
   getActiveOptionalDefinitions,
@@ -132,6 +134,7 @@ export function ParameterInputPanel({
     advancedParameterQuery
   );
   const validationDefinitions = getValidationDefinitions(catalogDefinitions, parameters.values);
+  const metadataRows = buildResourceMetadataRows(parameters);
   const validation = validateParameters(
     parameters,
     validationDefinitions,
@@ -206,23 +209,30 @@ export function ParameterInputPanel({
       <PanelHeader node={selectedNode} parameters={parameters} />
 
       <section className={styles.section} aria-label="Metadata">
+        <div className={styles.sectionHeader}>
+          <h3>Metadata</h3>
+        </div>
         <div className={styles.fieldGroup}>
-          <MetadataField
-            error={validation.metadataErrors.resourceName}
-            label="Resource name"
-            onChange={(value) => updateMetadataField("resourceName", value)}
-            value={parameters.resourceName}
-          />
-          <MetadataField
-            error={validation.metadataErrors.fileName}
-            label="File name"
-            onChange={(value) => updateMetadataField("fileName", value)}
-            value={parameters.fileName}
-          />
+          {metadataRows.map((row) =>
+            row.editable ? (
+              <MetadataField
+                error={validation.metadataErrors[row.key]}
+                key={row.key}
+                label={row.label}
+                onChange={(value) => updateMetadataField(row.key, value)}
+                value={row.value}
+              />
+            ) : (
+              <ReadonlyMetadataField key={row.key} label={row.label} value={row.value} />
+            )
+          )}
         </div>
       </section>
 
       <section className={styles.section} aria-label="Main parameters">
+        <div className={styles.sectionHeader}>
+          <h3>Main parameters</h3>
+        </div>
         {mainDefinitions.length > 0 ? (
           <div className={styles.fieldGroup}>
             {mainDefinitions.map((definition) => (
@@ -595,6 +605,17 @@ function MetadataField({
   );
 }
 
+function ReadonlyMetadataField({ label, value }: { label: string; value: string }) {
+  return (
+    <div className={styles.field}>
+      <span className={styles.fieldHeader}>
+        <span className={styles.fieldLabel}>{label}</span>
+      </span>
+      <span className={styles.readonlyValue}>{value}</span>
+    </div>
+  );
+}
+
 function ParameterField({
   catalog,
   currentNodeId,
@@ -760,19 +781,20 @@ function SelectControl({
   onChange: (value: unknown) => void;
   value: unknown;
 }) {
+  const selectedValue = typeof value === "string" ? value : "";
+
   return (
-    <select
-      className={styles.input}
-      onChange={(event) => onChange(event.currentTarget.value || undefined)}
-      value={typeof value === "string" ? value : ""}
-    >
-      <option value="">Select a value</option>
-      {(definition.options ?? []).map((option) => (
-        <option key={option} value={option}>
-          {option}
-        </option>
-      ))}
-    </select>
+    <SelectMenu
+      ariaLabel={`${definition.label ?? definition.name} 선택`}
+      emptyLabel="Select a value"
+      onChange={(nextValue) => onChange(nextValue || undefined)}
+      options={(definition.options ?? []).map((option) => ({
+        label: option,
+        value: option
+      }))}
+      tone="purple"
+      value={selectedValue}
+    />
   );
 }
 
@@ -860,18 +882,17 @@ function ReferencePicker({
   }
 
   return (
-    <select
-      className={styles.input}
-      onChange={(event) => onChange(event.currentTarget.value || undefined)}
+    <SelectMenu
+      ariaLabel={`${definition.label ?? definition.name} 리소스 선택`}
+      emptyLabel="Select a resource"
+      onChange={(nextValue) => onChange(nextValue || undefined)}
+      options={options.map((option) => ({
+        label: option.label,
+        value: option.reference
+      }))}
+      tone="purple"
       value={typeof value === "string" ? value : ""}
-    >
-      <option value="">Select a resource</option>
-      {options.map((option) => (
-        <option key={option.reference} value={option.reference}>
-          {option.label}
-        </option>
-      ))}
-    </select>
+    />
   );
 }
 

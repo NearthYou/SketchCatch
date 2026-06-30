@@ -1,12 +1,13 @@
 .editorShell {
-  --side-panel-width: clamp(300px, 24vw, 330px);
+  --left-panel-width: 420px;
+  --right-panel-width: 420px;
 
   background: #f4f6fb;
   color: #171c2f;
   display: grid;
-  grid-template-columns: 0 minmax(0, 1fr) var(--side-panel-width);
-  height: 100vh;
-  min-height: 640px;
+  grid-template-columns: 0 minmax(0, 1fr) var(--right-panel-width);
+  height: 100dvh;
+  min-height: 0;
   outline: none;
   overflow: hidden;
   position: relative;
@@ -22,7 +23,9 @@
   background: #ffffff;
   border-color: #dde5f2;
   border-style: solid;
+  max-width: 100%;
   min-height: 0;
+  min-width: 0;
 }
 
 .leftRail {
@@ -35,7 +38,7 @@
   overflow: hidden;
   position: fixed;
   top: 76px;
-  width: min(var(--side-panel-width), calc(100vw - 32px));
+  width: min(var(--left-panel-width), calc(100vw - 32px));
   z-index: 21;
 }
 
@@ -79,7 +82,10 @@
 .rightRail {
   border-width: 0 0 0 1px;
   grid-column: 3;
+  max-width: 100%;
+  min-width: 0;
   overflow: hidden;
+  position: relative;
   width: 100%;
 }
 
@@ -87,6 +93,69 @@
   border-width: 0;
   overflow: visible;
   pointer-events: none;
+}
+
+.leftRailResizeHandle,
+.rightRailResizeHandle {
+  background: transparent;
+  border: 0;
+  bottom: 0;
+  cursor: col-resize;
+  padding: 0;
+  position: absolute;
+  top: 0;
+  touch-action: none;
+  width: 14px;
+  z-index: 5;
+}
+
+.leftRailResizeHandle {
+  right: 0;
+}
+
+.rightRailResizeHandle {
+  left: -7px;
+}
+
+.leftRailResizeHandle::after,
+.rightRailResizeHandle::after {
+  background: transparent;
+  border-radius: 999px;
+  bottom: 10px;
+  content: "";
+  position: absolute;
+  top: 10px;
+  transition:
+    background 120ms ease,
+    box-shadow 120ms ease;
+  width: 2px;
+}
+
+.leftRailResizeHandle::after {
+  right: 6px;
+}
+
+.rightRailResizeHandle::after {
+  left: 6px;
+}
+
+.leftRailResizeHandle:hover::after,
+.leftRailResizeHandle:focus-visible::after,
+.leftRailResizeHandle:active::after,
+.rightRailResizeHandle:hover::after,
+.rightRailResizeHandle:focus-visible::after,
+.rightRailResizeHandle:active::after {
+  background: #7c5cff;
+  box-shadow: 0 0 0 3px rgba(124, 92, 255, 0.14);
+}
+
+.leftRailResizeHandle:focus-visible,
+.rightRailResizeHandle:focus-visible {
+  outline: none;
+}
+
+.editorShellRightCollapsed .rightRailResizeHandle {
+  display: none;
 }
 
 .workspace {
@@ -262,6 +331,10 @@
   position: absolute;
   transform-origin: 0 0;
   user-select: none;
+}
+
+.canvasPanel :global(.react-flow__node.diagramAreaFlowNode) {
+  pointer-events: none;
 }
 
 .canvasPanel :global(.react-flow__nodes),
@@ -551,6 +624,7 @@
   justify-content: flex-start;
   overflow: visible;
   padding: 0;
+  pointer-events: none;
   text-align: left;
 }
 
@@ -590,9 +664,46 @@
   min-width: 0;
   overflow: hidden;
   padding: 5px 9px;
+  pointer-events: all;
   position: absolute;
   top: -30px;
   white-space: nowrap;
+  z-index: 2;
+}
+
+.areaNodeHitEdge {
+  cursor: grab;
+  pointer-events: all;
+  position: absolute;
+  z-index: 1;
+}
+
+.areaNodeHitEdgeTop {
+  height: 10px;
+  left: -5px;
+  right: -5px;
+  top: -5px;
+}
+
+.areaNodeHitEdgeRight {
+  bottom: -5px;
+  right: -5px;
+  top: -5px;
+  width: 10px;
+}
+
+.areaNodeHitEdgeBottom {
+  bottom: -5px;
+  height: 10px;
+  left: -5px;
+  right: -5px;
+}
+
+.areaNodeHitEdgeLeft {
+  bottom: -5px;
+  left: -5px;
+  top: -5px;
+  width: 10px;
 }
 
 .areaNodeHeaderIcon {
@@ -887,6 +998,7 @@
   cursor: nwse-resize;
   height: 13px;
   padding: 0;
+  pointer-events: all;
   position: absolute;
   right: -6px;
   touch-action: none;
@@ -903,13 +1015,6 @@
 }
 
 .edgeSelect {
-  background: #f8f9fd;
-  border: 1px solid #dfe5f0;
-  border-radius: 5px;
-  color: #272f45;
-  font: inherit;
-  font-size: 0.78rem;
-  height: 30px;
   min-width: 96px;
 }
 
@@ -953,15 +1058,15 @@
 
 @media (max-width: 900px) {
   .editorShell {
-    grid-template-columns: 0 minmax(520px, 1fr);
-    overflow: auto;
+    grid-template-columns: 0 minmax(0, 1fr);
+    overflow: hidden;
   }
 
   .leftRail {
-    height: min(840px, calc(100vh - 86px));
+    height: min(840px, calc(100dvh - 86px));
     left: 10px;
     top: 74px;
-    width: min(300px, calc(100vw - 20px));
+    width: min(var(--left-panel-width), calc(100vw - 20px));
   }
 
   .collapsedLeftPanel {

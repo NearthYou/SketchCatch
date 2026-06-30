@@ -174,6 +174,27 @@ export function applyNodeParametersUpdate(
   };
 }
 
+export function applyNodeParametersUpdateWithResourceLabel(
+  node: DiagramNode,
+  update:
+    | DiagramNodeParameters
+    | undefined
+    | ((parameters: DiagramNodeParameters | undefined) => DiagramNodeParameters | undefined)
+): DiagramNode {
+  const nextNode = applyNodeParametersUpdate(node, update);
+  const nextResourceName = nextNode.parameters?.resourceName?.trim();
+  const currentResourceName = node.parameters?.resourceName?.trim();
+
+  if (!nextResourceName || nextResourceName === currentResourceName) {
+    return nextNode;
+  }
+
+  return {
+    ...nextNode,
+    label: nextResourceName
+  };
+}
+
 export function removeNodesFromDiagram(diagram: DiagramJson, nodeIds: readonly string[]): DiagramJson {
   const nodeIdSet = new Set(nodeIds);
 
@@ -230,7 +251,7 @@ export function createPastedNodes(
   const resourceNamesByType = getResourceNamesByType(currentNodes);
 
   return sourceNodes.map((node, index) => {
-    const pastedNode = {
+    const pastedNode = clearParentAreaNodeId({
       ...cloneNode(node),
       id: createDiagramId("node"),
       position: {
@@ -238,7 +259,7 @@ export function createPastedNodes(
         y: node.position.y + 32 + index * 12
       },
       zIndex: maxZIndex + index + 1
-    };
+    });
 
     if (!pastedNode.parameters) {
       return pastedNode;
@@ -269,6 +290,7 @@ export function getDefaultViewport(): DiagramJson["viewport"] {
 
 function cloneNode(node: DiagramNode): DiagramNode {
   const style = node.style ? { ...node.style } : undefined;
+  const metadata = node.metadata ? { ...node.metadata } : undefined;
   const parameters = node.parameters ? cloneParameters(node.parameters) : undefined;
 
   return {
@@ -276,7 +298,21 @@ function cloneNode(node: DiagramNode): DiagramNode {
     position: { ...node.position },
     size: { ...node.size },
     ...(style ? { style } : {}),
+    ...(metadata ? { metadata } : {}),
     ...(parameters ? { parameters } : {})
+  };
+}
+
+function clearParentAreaNodeId(node: DiagramNode): DiagramNode {
+  if (!node.metadata?.parentAreaNodeId) {
+    return node;
+  }
+
+  const { parentAreaNodeId: _parentAreaNodeId, ...nextMetadata } = node.metadata;
+
+  return {
+    ...node,
+    ...(Object.keys(nextMetadata).length > 0 ? { metadata: nextMetadata } : { metadata: undefined })
   };
 }
 

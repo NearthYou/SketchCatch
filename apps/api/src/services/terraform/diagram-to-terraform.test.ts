@@ -260,6 +260,122 @@ test("renders arrays, numbers, booleans, null, and references", () => {
   );
 });
 
+test("renders placement references with Terraform snake_case attribute names", () => {
+  const diagramJson: DiagramJson = {
+    nodes: [
+      makeNode({
+        id: "vpc-1",
+        type: "aws_vpc",
+        kind: "resource",
+        label: "main",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_vpc",
+          resourceName: "main",
+          fileName: "network",
+          values: {
+            cidrBlock: "172.16.0.0/16"
+          }
+        }
+      }),
+      makeNode({
+        id: "subnet-1",
+        type: "aws_subnet",
+        kind: "resource",
+        label: "public",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_subnet",
+          resourceName: "public",
+          fileName: "network",
+          values: {
+            vpcId: "aws_vpc.main.id",
+            cidrBlock: "172.16.1.0/24"
+          }
+        }
+      }),
+      makeNode({
+        id: "instance-1",
+        type: "aws_instance",
+        kind: "resource",
+        label: "web",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_instance",
+          resourceName: "web",
+          fileName: "compute",
+          values: {
+            ami: "ami-1234567890abcdef0",
+            instanceType: "t3.micro",
+            subnetId: "aws_subnet.public.id"
+          }
+        }
+      }),
+      makeNode({
+        id: "igw-1",
+        type: "aws_internet_gateway",
+        kind: "resource",
+        label: "main_igw",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_internet_gateway",
+          resourceName: "main",
+          fileName: "network",
+          values: {
+            vpcId: "aws_vpc.main.id"
+          }
+        }
+      }),
+      makeNode({
+        id: "route-table-1",
+        type: "aws_route_table",
+        kind: "resource",
+        label: "public",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_route_table",
+          resourceName: "public",
+          fileName: "network",
+          values: {
+            vpcId: "aws_vpc.main.id"
+          }
+        }
+      }),
+      makeNode({
+        id: "security-group-1",
+        type: "aws_security_group",
+        kind: "resource",
+        label: "web",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_security_group",
+          resourceName: "web",
+          fileName: "security",
+          values: {
+            name: "web",
+            vpcId: "aws_vpc.main.id"
+          }
+        }
+      })
+    ],
+    edges: [],
+    viewport: {
+      x: 0,
+      y: 0,
+      zoom: 1
+    }
+  };
+
+  const terraformCode = generateTerraformFromDiagramJson(diagramJson);
+
+  assert.match(terraformCode, /resource "aws_subnet" "public" \{[\s\S]*vpc_id = aws_vpc\.main\.id/);
+  assert.match(terraformCode, /resource "aws_instance" "web" \{[\s\S]*subnet_id = aws_subnet\.public\.id/);
+  assert.match(terraformCode, /resource "aws_internet_gateway" "main" \{[\s\S]*vpc_id = aws_vpc\.main\.id/);
+  assert.match(terraformCode, /resource "aws_route_table" "public" \{[\s\S]*vpc_id = aws_vpc\.main\.id/);
+  assert.match(terraformCode, /resource "aws_security_group" "web" \{[\s\S]*vpc_id = aws_vpc\.main\.id/);
+  assert.doesNotMatch(terraformCode, /vpcId|subnetId/);
+});
+
 function makeNode(
   node: Omit<DiagramNode, "position" | "size" | "locked" | "zIndex"> &
     Partial<Pick<DiagramNode, "position" | "size" | "locked" | "zIndex">>

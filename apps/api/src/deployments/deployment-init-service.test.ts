@@ -286,6 +286,23 @@ class FakeDeploymentRepository implements DeploymentRepository {
     return this.deployment;
   };
 
+  markDeploymentDestroyRunning: DeploymentRepository["markDeploymentDestroyRunning"] = async (
+    candidateDeploymentId
+  ) => {
+    if (!this.deployment || this.deployment.id !== candidateDeploymentId) {
+      return undefined;
+    }
+
+    this.deployment = {
+      ...this.deployment,
+      status: "RUNNING",
+      activeStage: "destroy",
+      updatedAt: fixedNow
+    };
+
+    return this.deployment;
+  };
+
   saveDeploymentPlan: DeploymentRepository["saveDeploymentPlan"] = async (input) => {
     this.calls.push({
       name: "saveDeploymentPlan",
@@ -337,6 +354,28 @@ class FakeDeploymentRepository implements DeploymentRepository {
       ...this.deployment,
       status: "SUCCESS",
       stateObjectKey: input.stateObjectKey,
+      resultWarningSummary: input.resultWarningSummary,
+      failureStage: null,
+      errorSummary: null,
+      updatedAt: fixedNow
+    };
+
+    return this.deployment;
+  };
+
+  completeDeploymentDestroy: DeploymentRepository["completeDeploymentDestroy"] = async (
+    candidateDeploymentId,
+    input
+  ) => {
+    if (!this.deployment || this.deployment.id !== candidateDeploymentId) {
+      return undefined;
+    }
+
+    this.deployment = {
+      ...this.deployment,
+      status: "DESTROYED",
+      currentPlanArtifactId: null,
+      stateObjectKey: null,
       resultWarningSummary: input.resultWarningSummary,
       failureStage: null,
       errorSummary: null,
@@ -508,6 +547,7 @@ function createDeploymentPlanArtifactRecord(
     deploymentId,
     terraformArtifactId,
     terraformArtifactSha256: "c".repeat(64),
+    operation: "apply",
     objectKey: "deployments/deployment-id/plans/plan-id.tfplan",
     sha256: "a".repeat(64),
     accountId: "123456789012",
@@ -567,11 +607,21 @@ function createAccessContext(): ProjectAccessContext {
   };
 }
 
+function toComparableLog(log: DeploymentLogRecord) {
+  return {
+    sequence: log.sequence,
+    stage: log.stage,
+    level: log.level,
+    message: log.message
+  };
+}
+
 test("runDeploymentInit restores the artifact, runs Terraform init, logs output, and returns status to PENDING", async () => {
   const repository = new FakeDeploymentRepository();
   const workspaceInputs: Array<{ objectKey: string; fileName?: string | null }> = [];
   const runnerWorkdirs: string[] = [];
   const runnerEnvs: Array<NodeJS.ProcessEnv | undefined> = [];
+  const lockUploads: Array<{ deploymentId: string; lockFilePath: string }> = [];
   let cleanupCalled = false;
 
   const result = await runDeploymentInit(
@@ -620,6 +670,15 @@ test("runDeploymentInit restores the artifact, runs Terraform init, logs output,
             "arn:aws:sts::123456789012:assumed-role/SketchCatchTerraformExecutionRole/sketchcatch-terraform",
           region: "ap-northeast-2"
         };
+      },
+      initArtifactStorage: {
+        uploadDeploymentTerraformLockFile: async (input) => {
+          lockUploads.push(input);
+
+          return {
+            objectKey: `deployments/${input.deploymentId}/terraform/.terraform.lock.hcl`
+          };
+        }
       }
     }
   );
@@ -643,27 +702,33 @@ test("runDeploymentInit restores the artifact, runs Terraform init, logs output,
     }
   ]);
   assert.equal(cleanupCalled, true);
-  assert.deepEqual(
-    repository.logs.map((log) => ({
-      sequence: log.sequence,
-      stage: log.stage,
-      level: log.level,
-      message: log.message
-    })),
-    [
-      {
-        sequence: 1,
-        stage: "init",
-        level: "INFO",
-        message: "Initializing the backend..."
-      },
-      {
-        sequence: 2,
-        stage: "init",
-        level: "INFO",
-        message: "Terraform has been successfully initialized!"
-      }
-    ]
+  assert.deepEqual(lockUploads, [
+    {
+      deploymentId,
+      lockFilePath: "C:\\tmp\\sketchcatch-terraform-success\\.terraform.lock.hcl"
+    }
+  ]);
+  assert.deepEqual(repository.logs.slice(0, 2).map(toComparableLog), [
+    {
+      sequence: 1,
+      stage: "init",
+      level: "INFO",
+      message: "Initializing the backend..."
+    },
+    {
+      sequence: 2,
+      stage: "init",
+      level: "INFO",
+      message: "Terraform has been successfully initialized!"
+    }
+  ]);
+  assert.match(
+    repository.logs[2]?.message ?? "",
+    /^\[duration] terraform lock file upload completed in /
+  );
+  assert.match(
+    repository.logs[3]?.message ?? "",
+    /^\[duration] deployment init status save completed in /
   );
   assert(repository.calls.some((call) => call.name === "findDeploymentById"));
   assert(
@@ -688,7 +753,7 @@ test("runDeploymentInit restores the artifact, runs Terraform init, logs output,
       (call) => call.name === "getNextDeploymentLogSequence" && call.deploymentId === deploymentId
     )
   );
-  assert.equal(repository.calls.filter((call) => call.name === "createDeploymentLogs").length, 1);
+  assert.equal(repository.calls.filter((call) => call.name === "createDeploymentLogs").length, 3);
   assert(!repository.calls.some((call) => call.name === "createDeploymentLog"));
   assert(!repository.calls.some((call) => call.name === "listDeploymentLogs"));
   assert(repository.calls.some((call) => call.name === "markDeploymentInitSucceeded"));

@@ -9,7 +9,7 @@
   min-width: 320px;
   overflow: auto;
   padding: 16px;
-  width: min(420px, 100%);
+  width: 100%;
 }
 
 .header {
@@ -124,6 +124,19 @@ div.resourceIcon,
   font-size: 0.88rem;
   min-height: 36px;
   min-width: 0;
+  padding: 8px 10px;
+  width: 100%;
+}
+
+.readonlyValue {
+  background: #f6f8fc;
+  border: 1px solid #dfe7f4;
+  border-radius: 6px;
+  color: #475166;
+  font-size: 0.88rem;
+  line-height: 1.4;
+  min-height: 36px;
+  overflow-wrap: anywhere;
   padding: 8px 10px;
   width: 100%;
 }

@@ -1,9 +1,16 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { type FormEvent, useEffect, useState } from "react";
+import {
+  type FormEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+  useEffect,
+  useState
+} from "react";
 import type { LoginRequest } from "@sketchcatch/types";
 import { useAuth } from "../../components/auth/auth-provider";
+import { getCapsLockWarningMessage, isCapsLockActive } from "../../features/auth/caps-lock";
 import { getApiErrorMessage } from "../../lib/api-client";
 
 export function LoginForm() {
@@ -11,6 +18,9 @@ export function LoginForm() {
   const { login, status } = useAuth();
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isPasswordCapsLockOn, setIsPasswordCapsLockOn] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
+  const passwordCapsLockWarning = getCapsLockWarningMessage(isPasswordCapsLockOn);
 
   useEffect(() => {
     const oauthError = new URLSearchParams(window.location.search).get("oauthError");
@@ -33,6 +43,7 @@ export function LoginForm() {
     const formData = new FormData(event.currentTarget);
     const payload: LoginRequest = {
       password: String(formData.get("password") ?? ""),
+      rememberMe,
       username: String(formData.get("username") ?? "").trim()
     };
 
@@ -53,22 +64,35 @@ export function LoginForm() {
     }
   }
 
+  function handlePasswordKeyEvent(event: ReactKeyboardEvent<HTMLInputElement>): void {
+    setIsPasswordCapsLockOn(isCapsLockActive(event));
+  }
+
   return (
     <form className="authForm" onSubmit={handleSubmit}>
       <div className="authSocialStack" aria-label="소셜 로그인">
-        <a className="authSocialButton authSocialButtonNaver" href="/api/auth/oauth/naver/start">
+        <a
+          className="authSocialButton authSocialButtonNaver"
+          href={getOAuthStartHref("naver", rememberMe)}
+        >
           <span className="authSocialMark" aria-hidden="true">
             N
           </span>
           <span>Naver로 계속하기</span>
         </a>
-        <a className="authSocialButton authSocialButtonKakao" href="/api/auth/oauth/kakao/start">
+        <a
+          className="authSocialButton authSocialButtonKakao"
+          href={getOAuthStartHref("kakao", rememberMe)}
+        >
           <span className="authSocialMark authSocialMarkKakao" aria-hidden="true">
             K
           </span>
           <span>Kakao로 계속하기</span>
         </a>
-        <a className="authSocialButton authSocialButtonGithub" href="/api/auth/oauth/github/start">
+        <a
+          className="authSocialButton authSocialButtonGithub"
+          href={getOAuthStartHref("github", rememberMe)}
+        >
           <span className="authSocialMark authSocialMarkGithub" aria-hidden="true">
             G
           </span>
@@ -92,14 +116,36 @@ export function LoginForm() {
       <label>
         비밀번호
         <input
+          aria-describedby={passwordCapsLockWarning ? "login-password-caps-lock" : undefined}
           autoComplete="current-password"
           disabled={isSubmitting}
           name="password"
+          onBlur={() => setIsPasswordCapsLockOn(false)}
+          onKeyDown={handlePasswordKeyEvent}
+          onKeyUp={handlePasswordKeyEvent}
           placeholder="Password"
           required
           type="password"
         />
+        {passwordCapsLockWarning ? (
+          <span className="authHelpText authWarningText" id="login-password-caps-lock" role="alert">
+            {passwordCapsLockWarning}
+          </span>
+        ) : null}
       </label>
+      <label className="authCheckboxLabel">
+        <input
+          checked={rememberMe}
+          disabled={isSubmitting}
+          name="rememberMe"
+          onChange={(event) => setRememberMe(event.target.checked)}
+          type="checkbox"
+        />
+        <span>로그인 상태 유지</span>
+      </label>
+      <div className="authFormActions">
+        <Link href="/password-reset">비밀번호를 잊으셨나요?</Link>
+      </div>
       {errorMessage ? (
         <p className="authMessage authMessageError" role="alert">
           {errorMessage}
@@ -110,6 +156,12 @@ export function LoginForm() {
       </button>
     </form>
   );
+}
+
+function getOAuthStartHref(provider: "naver" | "kakao" | "github", rememberMe: boolean): string {
+  const baseHref = `/api/auth/oauth/${provider}/start`;
+
+  return rememberMe ? `${baseHref}?rememberMe=true` : baseHref;
 }
 
 function getOAuthErrorMessage(oauthError: string): string {

@@ -2,7 +2,6 @@ import type { DiagramNode } from "../../../../packages/types/src";
 import { isAreaNode } from "./area-nodes";
 
 type AreaMovement = {
-  area: number;
   delta: DiagramNode["position"];
   node: DiagramNode;
 };
@@ -15,6 +14,7 @@ export function applyAreaNodeMovement(
   const currentNodeById = new Map(currentNodes.map((node) => [node.id, node]));
   const snapshotNodeById = new Map(snapshotNodes.map((node) => [node.id, node]));
   const movingAreas = getMovingAreas(snapshotNodes, currentNodeById, directlyMovedNodeIds);
+  const movingAreaById = new Map(movingAreas.map((areaMovement) => [areaMovement.node.id, areaMovement]));
 
   if (movingAreas.length === 0) {
     return [...currentNodes];
@@ -31,7 +31,7 @@ export function applyAreaNodeMovement(
       return currentNode;
     }
 
-    const parentArea = findInnermostMovingArea(snapshotNode, movingAreas);
+    const parentArea = findClosestMovingParentArea(snapshotNode, snapshotNodeById, movingAreaById);
 
     if (!parentArea) {
       return currentNode;
@@ -44,6 +44,73 @@ export function applyAreaNodeMovement(
         y: snapshotNode.position.y + parentArea.delta.y
       }
     };
+  });
+}
+
+export function applyAreaNodeParentAssignments(
+  currentNodes: readonly DiagramNode[],
+  directlyMovedNodeIds: ReadonlySet<string>
+): DiagramNode[] {
+  if (directlyMovedNodeIds.size === 0) {
+    return [...currentNodes];
+  }
+
+  const currentNodeById = new Map(currentNodes.map((node) => [node.id, node]));
+
+  return currentNodes.map((node) => {
+    if (!directlyMovedNodeIds.has(node.id)) {
+      return node;
+    }
+
+    const parentArea = findInnermostContainingAreaNode(node, currentNodes, currentNodeById);
+
+    return setParentAreaNodeId(node, parentArea?.id);
+  });
+}
+
+export function clearDeletedAreaParentAssignments(
+  currentNodes: readonly DiagramNode[],
+  deletedNodeIds: ReadonlySet<string>
+): DiagramNode[] {
+  if (deletedNodeIds.size === 0) {
+    return [...currentNodes];
+  }
+
+  return currentNodes.map((node) => {
+    const parentAreaNodeId = node.metadata?.parentAreaNodeId;
+
+    if (!parentAreaNodeId || !deletedNodeIds.has(parentAreaNodeId)) {
+      return node;
+    }
+
+    return setParentAreaNodeId(node, undefined);
+  });
+}
+
+export function clearOutOfBoundsAreaParentAssignments(
+  currentNodes: readonly DiagramNode[],
+  resizedAreaNodeIds: ReadonlySet<string>
+): DiagramNode[] {
+  if (resizedAreaNodeIds.size === 0) {
+    return [...currentNodes];
+  }
+
+  const currentNodeById = new Map(currentNodes.map((node) => [node.id, node]));
+
+  return currentNodes.map((node) => {
+    const parentAreaNodeId = node.metadata?.parentAreaNodeId;
+
+    if (!parentAreaNodeId || !resizedAreaNodeIds.has(parentAreaNodeId)) {
+      return node;
+    }
+
+    const parentAreaNode = currentNodeById.get(parentAreaNodeId);
+
+    if (parentAreaNode && isAreaNode(parentAreaNode) && containsPoint(parentAreaNode, getNodeCenter(node))) {
+      return node;
+    }
+
+    return setParentAreaNodeId(node, undefined);
   });
 }
 
@@ -76,42 +143,97 @@ function getMovingAreas(
 
     movingAreas.push({
       node: snapshotNode,
-      delta,
-      area: getNodeArea(snapshotNode)
+      delta
     });
   }
 
   return movingAreas;
 }
 
-function findInnermostMovingArea(
+function findClosestMovingParentArea(
   node: DiagramNode,
-  movingAreas: readonly AreaMovement[]
+  snapshotNodeById: ReadonlyMap<string, DiagramNode>,
+  movingAreaById: ReadonlyMap<string, AreaMovement>
 ): AreaMovement | undefined {
-  const nodeCenter = getNodeCenter(node);
-  let innermostArea: AreaMovement | undefined;
+  let parentAreaNodeId = node.metadata?.parentAreaNodeId;
+  const visitedNodeIds = new Set<string>([node.id]);
 
-  for (const areaMovement of movingAreas) {
-    if (areaMovement.node.id === node.id || !containsPoint(areaMovement.node, nodeCenter)) {
+  while (parentAreaNodeId) {
+    if (visitedNodeIds.has(parentAreaNodeId)) {
+      return undefined;
+    }
+
+    const movingArea = movingAreaById.get(parentAreaNodeId);
+
+    if (movingArea) {
+      return movingArea;
+    }
+
+    visitedNodeIds.add(parentAreaNodeId);
+    parentAreaNodeId = snapshotNodeById.get(parentAreaNodeId)?.metadata?.parentAreaNodeId;
+  }
+
+  return undefined;
+}
+
+function findInnermostContainingAreaNode(
+  node: DiagramNode,
+  nodes: readonly DiagramNode[],
+  nodeById: ReadonlyMap<string, DiagramNode>
+): DiagramNode | undefined {
+  const nodeCenter = getNodeCenter(node);
+  let innermostArea: DiagramNode | undefined;
+
+  for (const areaNode of nodes) {
+    if (
+      areaNode.id === node.id ||
+      !isAreaNode(areaNode) ||
+      isNodeDescendantOf(areaNode, node.id, nodeById) ||
+      !containsPoint(areaNode, nodeCenter)
+    ) {
       continue;
     }
 
-    if (!innermostArea || compareAreaMovements(areaMovement, innermostArea) < 0) {
-      innermostArea = areaMovement;
+    if (!innermostArea || compareAreaNodes(areaNode, innermostArea) < 0) {
+      innermostArea = areaNode;
     }
   }
 
   return innermostArea;
 }
 
-function compareAreaMovements(left: AreaMovement, right: AreaMovement) {
-  const areaDifference = left.area - right.area;
+function isNodeDescendantOf(
+  node: DiagramNode,
+  ancestorNodeId: string,
+  nodeById: ReadonlyMap<string, DiagramNode>
+): boolean {
+  let parentAreaNodeId = node.metadata?.parentAreaNodeId;
+  const visitedNodeIds = new Set<string>([node.id]);
+
+  while (parentAreaNodeId) {
+    if (parentAreaNodeId === ancestorNodeId) {
+      return true;
+    }
+
+    if (visitedNodeIds.has(parentAreaNodeId)) {
+      return false;
+    }
+
+    visitedNodeIds.add(parentAreaNodeId);
+    parentAreaNodeId = nodeById.get(parentAreaNodeId)?.metadata?.parentAreaNodeId;
+  }
+
+  return false;
+}
+
+function compareAreaNodes(left: DiagramNode, right: DiagramNode) {
+  const areaDifference = getNodeArea(left) - getNodeArea(right);
 
   if (areaDifference !== 0) {
     return areaDifference;
   }
 
-  return getNodeZIndex(right.node) - getNodeZIndex(left.node);
+  return getNodeZIndex(right) - getNodeZIndex(left);
 }
 
 function containsPoint(node: DiagramNode, point: DiagramNode["position"]) {
@@ -136,4 +258,27 @@ function getNodeArea(node: DiagramNode) {
 
 function getNodeZIndex(node: DiagramNode) {
   return Number.isFinite(node.zIndex) ? node.zIndex : 0;
+}
+
+function setParentAreaNodeId(node: DiagramNode, parentAreaNodeId: string | undefined): DiagramNode {
+  if (node.metadata?.parentAreaNodeId === parentAreaNodeId) {
+    return node;
+  }
+
+  if (parentAreaNodeId) {
+    return {
+      ...node,
+      metadata: {
+        ...node.metadata,
+        parentAreaNodeId
+      }
+    };
+  }
+
+  const { parentAreaNodeId: _parentAreaNodeId, ...nextMetadata } = node.metadata ?? {};
+
+  return {
+    ...node,
+    ...(Object.keys(nextMetadata).length > 0 ? { metadata: nextMetadata } : { metadata: undefined })
+  };
 }

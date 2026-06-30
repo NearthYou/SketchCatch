@@ -30,6 +30,7 @@ test("warmTerraformPluginCache initializes an AWS provider workspace and removes
 
       assert.match(warmupFile, /required_providers/);
       assert.match(warmupFile, /hashicorp\/aws/);
+      assert.match(warmupFile, /version = "~> 5\.0"/);
       assert.equal(options.timeoutMs, 12_345);
       assert.equal(options.env?.TF_PLUGIN_CACHE_DIR, "C:\\terraform-plugin-cache");
 

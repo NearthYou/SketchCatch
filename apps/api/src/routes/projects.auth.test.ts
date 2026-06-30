@@ -118,6 +118,53 @@ test("GET /api/projects/:id returns 404 for another user's project", async () =>
   await app.close();
 });
 
+test("DELETE /api/projects/:id deletes a project owned by the active user", async () => {
+  const fakeDb = new ProjectRouteFakeDb({
+    activeUserId: ACTIVE_USER_ID,
+    requestedProjectId: ACTIVE_PROJECT_ID,
+    users: [makeUser({ id: ACTIVE_USER_ID })],
+    projects: [makeProject({ id: ACTIVE_PROJECT_ID, userId: ACTIVE_USER_ID })]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  const response = await app.inject({
+    method: "DELETE",
+    url: `/api/projects/${ACTIVE_PROJECT_ID}`,
+    headers: await authHeaders(ACTIVE_USER_ID)
+  });
+
+  assert.equal(response.statusCode, 204);
+  assert.equal(fakeDb.projectRows.some((project) => project.id === ACTIVE_PROJECT_ID), false);
+
+  await app.close();
+});
+
+test("DELETE /api/projects/:id returns 404 for another user's project", async () => {
+  const fakeDb = new ProjectRouteFakeDb({
+    activeUserId: ACTIVE_USER_ID,
+    requestedProjectId: OTHER_PROJECT_ID,
+    users: [makeUser({ id: ACTIVE_USER_ID })],
+    projects: [makeProject({ id: OTHER_PROJECT_ID, userId: OTHER_USER_ID })]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  const response = await app.inject({
+    method: "DELETE",
+    url: `/api/projects/${OTHER_PROJECT_ID}`,
+    headers: await authHeaders(ACTIVE_USER_ID)
+  });
+
+  assert.equal(response.statusCode, 404);
+  assertErrorResponse(response.json() as ApiErrorResponse, "not_found");
+  assert.equal(fakeDb.projectRows.some((project) => project.id === OTHER_PROJECT_ID), true);
+
+  await app.close();
+});
+
 test("POST /api/projects/:id/architectures returns 404 for another user's project", async () => {
   const fakeDb = new ProjectRouteFakeDb({
     activeUserId: ACTIVE_USER_ID,
@@ -297,6 +344,21 @@ class ProjectRouteFakeDb {
         set: () => ({
           where: async () => []
         })
+      }),
+      delete: (table: unknown) => ({
+        where: async () => {
+          if (table === projects) {
+            this.projectRows = this.projectRows.filter(
+              (project) =>
+                !(
+                  project.userId === this.activeUserId &&
+                  (!this.requestedProjectId || project.id === this.requestedProjectId)
+                )
+            );
+          }
+
+          return [];
+        }
       })
     };
   }

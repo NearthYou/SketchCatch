@@ -100,6 +100,37 @@ test("updates data block values", () => {
   });
 });
 
+test("updates values from CRLF Terraform input", () => {
+  const diagramJson = makeSingleVpcDiagramJson();
+
+  const result = syncTerraformToDiagramJson(
+    diagramJson,
+    [
+      `resource "aws_vpc" "main" {`,
+      `  cidr_block = "10.2.0.0/16"`,
+      `}`
+    ].join("\r\n")
+  );
+
+  assert.deepEqual(result.diagnostics, []);
+  assert.equal(result.diagramJson.nodes[0]?.parameters?.values.cidrBlock, "10.2.0.0/16");
+});
+
+test("ignores braces in Terraform comments while syncing values", () => {
+  const diagramJson = makeSingleVpcDiagramJson();
+
+  const result = syncTerraformToDiagramJson(
+    diagramJson,
+    `resource "aws_vpc" "main" {
+  # comment with { should not affect block depth
+  cidr_block = "10.3.0.0/16" // comment with } should not close the block
+}`
+  );
+
+  assert.deepEqual(result.diagnostics, []);
+  assert.equal(result.diagramJson.nodes[0]?.parameters?.values.cidrBlock, "10.3.0.0/16");
+});
+
 test("keeps the input diagram when a block is unmatched", () => {
   const diagramJson = makeSingleVpcDiagramJson();
 

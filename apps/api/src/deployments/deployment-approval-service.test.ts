@@ -31,6 +31,7 @@ const fixedNow = new Date("2026-01-01T00:00:00.000Z");
 const artifactContent = "terraform { required_version = \">= 1.6.0\" }\n";
 const artifactHash = createSha256(artifactContent);
 const tfplanHash = "a".repeat(64);
+const stateObjectKey = `deployments/${deploymentId}/state/terraform.tfstate`;
 
 class FakeDeploymentRepository implements DeploymentRepository {
   deployment: DeploymentRecord | undefined = createDeploymentRecord();
@@ -139,6 +140,9 @@ class FakeDeploymentRepository implements DeploymentRepository {
   markDeploymentApplyRunning: DeploymentRepository["markDeploymentApplyRunning"] = async () =>
     this.deployment;
 
+  markDeploymentDestroyRunning: DeploymentRepository["markDeploymentDestroyRunning"] = async () =>
+    this.deployment;
+
   markDeploymentInitSucceeded: DeploymentRepository["markDeploymentInitSucceeded"] = async () =>
     this.deployment;
 
@@ -187,12 +191,11 @@ class FakeDeploymentRepository implements DeploymentRepository {
     this.deployment = {
       ...this.deployment,
       ...input,
-      status: "PENDING",
+      status: input.status ?? "PENDING",
       isBlocked: false,
       blockedBy: null,
       blockedReason: null,
-      failureStage: null,
-      errorSummary: null,
+      ...(input.preserveFailureDetails ? {} : { failureStage: null, errorSummary: null }),
       updatedAt: fixedNow
     };
 
@@ -211,6 +214,28 @@ class FakeDeploymentRepository implements DeploymentRepository {
       ...this.deployment,
       status: "SUCCESS",
       stateObjectKey: input.stateObjectKey,
+      resultWarningSummary: input.resultWarningSummary,
+      failureStage: null,
+      errorSummary: null,
+      updatedAt: fixedNow
+    };
+
+    return this.deployment;
+  };
+
+  completeDeploymentDestroy: DeploymentRepository["completeDeploymentDestroy"] = async (
+    candidateDeploymentId,
+    input
+  ) => {
+    if (!this.deployment || this.deployment.id !== candidateDeploymentId) {
+      return undefined;
+    }
+
+    this.deployment = {
+      ...this.deployment,
+      status: "DESTROYED",
+      currentPlanArtifactId: null,
+      stateObjectKey: null,
       resultWarningSummary: input.resultWarningSummary,
       failureStage: null,
       errorSummary: null,
@@ -302,7 +327,70 @@ test("approveDeploymentPlan stores the approved artifact plan and AWS snapshot",
     planSummary: {
       ...createPlanSummary(),
       blocked: false
+    },
+    status: "PENDING",
+    preserveFailureDetails: false
+  });
+});
+
+test("approveDeploymentPlan preserves failed cleanup state for destroy approvals", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.deployment = createDeploymentRecord(undefined, {
+    status: "FAILED",
+    stateObjectKey,
+    failureStage: "apply",
+    errorSummary: "previous apply failed after creating resources",
+    planSummary: {
+      createCount: 0,
+      updateCount: 0,
+      deleteCount: 1,
+      replaceCount: 0,
+      blocked: true,
+      warnings: []
+    },
+    isBlocked: true,
+    blockedBy: "missing_approval",
+    blockedReason: "Terraform Destroy Plan requires user approval before destroy"
+  });
+  repository.planArtifact = createPlanArtifactRecord({
+    operation: "destroy"
+  });
+
+  const deployment = await approveDeploymentPlan(
+    {
+      deploymentId,
+      accessContext: createAccessContext()
+    },
+    repository,
+    {
+      downloadTerraformArtifact: async () => artifactContent,
+      now: () => fixedNow
     }
+  );
+
+  assert.equal(deployment.status, "FAILED");
+  assert.equal(deployment.failureStage, "apply");
+  assert.equal(deployment.errorSummary, "previous apply failed after creating resources");
+  assert.equal(deployment.isBlocked, false);
+  assert.deepEqual(repository.approvals[0]?.input, {
+    approvedByUserId: userId,
+    approvedAt: fixedNow,
+    approvedTerraformArtifactId: terraformArtifactId,
+    approvedPlanArtifactId: planArtifactId,
+    approvedTerraformArtifactHash: artifactHash,
+    approvedTfplanHash: tfplanHash,
+    approvedAwsAccountId: "123456789012",
+    approvedAwsRegion: "ap-northeast-2",
+    planSummary: {
+      createCount: 0,
+      updateCount: 0,
+      deleteCount: 1,
+      replaceCount: 0,
+      blocked: false,
+      warnings: []
+    },
+    status: "FAILED",
+    preserveFailureDetails: true
   });
 });
 
@@ -597,6 +685,7 @@ function createPlanArtifactRecord(
     deploymentId,
     terraformArtifactId,
     terraformArtifactSha256: artifactHash,
+    operation: "apply",
     objectKey: `deployments/${deploymentId}/plans/${planArtifactId}.tfplan`,
     sha256: tfplanHash,
     accountId: "123456789012",

@@ -15,6 +15,25 @@ export function isAreaNode(node: DiagramNode): boolean {
   return isDesignAreaNode(node) || isResourceAreaNode(node);
 }
 
+export function findInnermostAreaNodeAtPoint(
+  nodes: readonly DiagramNode[],
+  point: DiagramNode["position"]
+): DiagramNode | null {
+  let innermostNode: DiagramNode | null = null;
+
+  for (const node of nodes) {
+    if (!isAreaNode(node) || !containsPoint(node, point)) {
+      continue;
+    }
+
+    if (!innermostNode || compareAreaNodes(node, innermostNode) < 0) {
+      innermostNode = node;
+    }
+  }
+
+  return innermostNode;
+}
+
 export function getAreaNodeLabel(node: DiagramNode): string {
   if (isResourceAreaNode(node)) {
     const resourceName = node.parameters?.resourceName?.trim();
@@ -41,4 +60,31 @@ export function isResourceAreaNode(node: DiagramNode): boolean {
 
 function getResourceNodeType(node: DiagramNode): string {
   return node.parameters?.resourceType ?? node.type;
+}
+
+function compareAreaNodes(left: DiagramNode, right: DiagramNode) {
+  const areaDifference = getNodeArea(left) - getNodeArea(right);
+
+  if (areaDifference !== 0) {
+    return areaDifference;
+  }
+
+  return getNodeZIndex(right) - getNodeZIndex(left);
+}
+
+function containsPoint(node: DiagramNode, point: DiagramNode["position"]) {
+  return (
+    point.x >= node.position.x &&
+    point.x <= node.position.x + node.size.width &&
+    point.y >= node.position.y &&
+    point.y <= node.position.y + node.size.height
+  );
+}
+
+function getNodeArea(node: DiagramNode) {
+  return Math.max(0, node.size.width) * Math.max(0, node.size.height);
+}
+
+function getNodeZIndex(node: DiagramNode) {
+  return Number.isFinite(node.zIndex) ? node.zIndex : 0;
 }

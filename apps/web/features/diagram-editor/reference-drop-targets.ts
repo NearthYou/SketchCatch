@@ -2,7 +2,6 @@ import type { DiagramNode } from "../../../../packages/types/src";
 import type { ParameterCatalog, ParameterCatalogDefinition } from "../parameter-input/catalog";
 import {
   getReferenceAttribute,
-  isEmptyParameterValue,
   mergeNodeParameters
 } from "../parameter-input/validation";
 import { isDesignAreaNode } from "./area-nodes";
@@ -108,10 +107,7 @@ export function applyReferenceDropTarget(
   let nextValues = childParameters.values;
 
   for (const definition of target.definitions) {
-    if (
-      !definition.referenceTargetTypes?.includes(parentParameters.resourceType) ||
-      !isEmptyParameterValue(nextValues[definition.name])
-    ) {
+    if (!definition.referenceTargetTypes?.includes(parentParameters.resourceType)) {
       continue;
     }
 
@@ -143,6 +139,20 @@ export function applyInnermostReferenceDropTarget(
   catalog: ParameterCatalog
 ): DiagramNode {
   return applyReferenceDropTarget(childNode, findInnermostReferenceDropTarget(childNode, nodes, catalog), catalog);
+}
+
+export function applyInnermostReferenceDropTargets(
+  nodes: readonly DiagramNode[],
+  childNodeIds: ReadonlySet<string>,
+  catalog: ParameterCatalog
+): DiagramNode[] {
+  if (childNodeIds.size === 0) {
+    return [...nodes];
+  }
+
+  return nodes.map((node) =>
+    childNodeIds.has(node.id) ? applyInnermostReferenceDropTarget(node, nodes, catalog) : node
+  );
 }
 
 function getReferenceDefinitions(definitions: readonly ParameterCatalogDefinition[]) {

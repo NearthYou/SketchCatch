@@ -26,6 +26,8 @@ export type BuildAppOptions = {
   createLlmExplanation?: CreateLlmExplanation;
   oauthCallbackRateLimiter?: RateLimiter;
   oauthStartRateLimiter?: RateLimiter;
+  passwordResetRequestEmailRateLimiter?: RateLimiter;
+  passwordResetRequestIpRateLimiter?: RateLimiter;
 };
 
 // 테스트와 서버가 같은 앱을 쓰되, LLM 호출 계층은 옵션으로만 주입합니다.
@@ -42,6 +44,18 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     createInMemoryRateLimiter({
       limit: 60,
       windowMs: 5 * 60 * 1000
+    });
+  const passwordResetRequestIpRateLimiter =
+    options.passwordResetRequestIpRateLimiter ??
+    createInMemoryRateLimiter({
+      limit: 5,
+      windowMs: 15 * 60 * 1000
+    });
+  const passwordResetRequestEmailRateLimiter =
+    options.passwordResetRequestEmailRateLimiter ??
+    createInMemoryRateLimiter({
+      limit: 3,
+      windowMs: 60 * 60 * 1000
     });
   const app = Fastify({
     logger: process.env.NODE_ENV !== "test",
@@ -100,7 +114,9 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   app.register(registerAiRoutes, createAiRouteOptions(options));
   app.register(registerAuthRoutes, {
     prefix: "/api",
-    getDatabaseClient: getAppDatabaseClient
+    getDatabaseClient: getAppDatabaseClient,
+    passwordResetRequestEmailRateLimiter,
+    passwordResetRequestIpRateLimiter
   });
   app.register(registerOAuthRoutes, {
     callbackRateLimiter: oauthCallbackRateLimiter,

@@ -5,14 +5,17 @@ import type {
   AiTerraformPreviewExplanationResult,
   AiTerraformStage,
   ArchitectureJson,
+  ArchitectureSnapshot,
   AwsConnectionCloudFormationTemplateResponse,
   AwsConnection,
   AwsConnectionListResponse,
+  CreateArchitectureSnapshotRequest,
   CreateArchitectureDraftRequest,
   CreateAwsConnectionRequest,
   CreateAwsConnectionResponse,
   CreateDeploymentRequest,
   CreateDesignSimulationRequest,
+  CreateProjectAssetUploadRequest,
   CreateProjectRequest,
   DesignSimulationResult,
   DeployedResource,
@@ -24,6 +27,7 @@ import type {
   DeploymentResponse,
   DiagramJson,
   Project,
+  ProjectAssetUploadResponse,
   ProjectDetailsResponse,
   ProjectDraftResponse,
   ProjectListResponse,
@@ -51,6 +55,10 @@ type AiTerraformErrorExplanationRequest = {
   readonly relatedResourceId?: string | undefined;
 };
 
+type ArchitectureSnapshotResponse = {
+  readonly architecture: ArchitectureSnapshot;
+};
+
 export async function createProject(input: CreateProjectRequest): Promise<Project> {
   const response = await apiFetch<ProjectResponse>("/projects", {
     auth: true,
@@ -70,6 +78,13 @@ export async function listProjects(): Promise<Project[]> {
 export async function getProject(projectId: string): Promise<Project> {
   const response = await getProjectDetails(projectId);
   return response.project;
+}
+
+export async function deleteProject(projectId: string): Promise<void> {
+  await apiFetch<void>(`/projects/${encodeURIComponent(projectId)}`, {
+    auth: true,
+    method: "DELETE"
+  });
 }
 
 export async function getProjectDetails(projectId: string): Promise<ProjectDetailsResponse> {
@@ -100,6 +115,55 @@ export async function saveProjectDraft({
       diagramJson
     }
   });
+}
+
+export async function createArchitectureSnapshot({
+  projectId,
+  ...input
+}: {
+  projectId: string;
+} & CreateArchitectureSnapshotRequest): Promise<ArchitectureSnapshot> {
+  const response = await apiFetch<ArchitectureSnapshotResponse>(
+    `/projects/${encodeURIComponent(projectId)}/architectures`,
+    {
+      auth: true,
+      method: "POST",
+      body: input
+    }
+  );
+
+  return response.architecture;
+}
+
+export async function createProjectAssetUpload({
+  projectId,
+  ...input
+}: {
+  projectId: string;
+} & CreateProjectAssetUploadRequest): Promise<ProjectAssetUploadResponse> {
+  return apiFetch<ProjectAssetUploadResponse>(
+    `/projects/${encodeURIComponent(projectId)}/assets/presigned-upload`,
+    {
+      auth: true,
+      method: "POST",
+      body: input
+    }
+  );
+}
+
+export async function uploadProjectAsset(
+  upload: ProjectAssetUploadResponse["upload"],
+  content: string | Blob
+): Promise<void> {
+  const response = await fetch(upload.url, {
+    method: upload.method,
+    headers: upload.headers,
+    body: content
+  });
+
+  if (!response.ok) {
+    throw new Error("Terraform artifact 업로드에 실패했습니다.");
+  }
 }
 
 export async function generateTerraformCode(diagramJson: DiagramJson): Promise<string> {
@@ -393,6 +457,32 @@ export async function approveDeploymentPlan(deploymentId: string): Promise<Deplo
 export async function runDeploymentApply(deploymentId: string): Promise<Deployment> {
   const response = await apiFetch<DeploymentResponse>(
     `/deployments/${encodeURIComponent(deploymentId)}/apply`,
+    {
+      auth: true,
+      method: "POST",
+      body: {}
+    }
+  );
+
+  return response.deployment;
+}
+
+export async function runDeploymentDestroyPlan(deploymentId: string): Promise<Deployment> {
+  const response = await apiFetch<DeploymentResponse>(
+    `/deployments/${encodeURIComponent(deploymentId)}/destroy/plan`,
+    {
+      auth: true,
+      method: "POST",
+      body: {}
+    }
+  );
+
+  return response.deployment;
+}
+
+export async function runDeploymentDestroy(deploymentId: string): Promise<Deployment> {
+  const response = await apiFetch<DeploymentResponse>(
+    `/deployments/${encodeURIComponent(deploymentId)}/destroy`,
     {
       auth: true,
       method: "POST",

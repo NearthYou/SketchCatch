@@ -134,11 +134,15 @@ type AwsRegionCode =
 
 type DiagramNodeMetadata = {
   awsRegion?: AwsRegionCode;
+  parentAreaNodeId?: string;
 };
 ```
 
 Region 디자인 노드의 선택 리전은 `node.metadata.awsRegion`에 region code로 저장한다.
 예: `ap-northeast-2`. 화면 label은 프론트엔드 option catalog에서 code와 매핑한다.
+
+영역 노드 안에 명시적으로 배치된 node는 `node.metadata.parentAreaNodeId`에 부모 영역 node id를 저장한다.
+이 값은 영역 이동 시 자식 node를 함께 이동시키기 위한 보드 편집 metadata이며, Terraform resource/data block 생성에는 사용하지 않는다.
 
 Terraform 변환에 필요한 값은 아래 4개다.
 
@@ -327,6 +331,8 @@ type TerraformValidateResponse = {
 
 같은 사용자가 같은 AWS `accountId`를 `verified` 상태로 중복 연결할 수 없도록 `userId + accountId` partial unique index를 둔다. `pending` 연결은 아직 accountId를 모르기 때문에 생성될 수 있지만, verify 시점에 이미 연결된 AWS account면 실패 처리한다.
 
+새 AWS 연결을 만들면 사용자별 오래된 미검증 연결을 정리한다. 기본 정책은 `pending`/`failed` 연결 중 최신 5개를 남기고 나머지를 삭제하는 것이다. `verified` 연결과 `Deployment`가 참조 중인 연결은 자동 정리 대상에서 제외한다.
+
 DB 기준: `aws_connections`
 
 저장하는 값은 연결 metadata뿐이다. Access Key ID, Secret Access Key, Session Token, `AssumeRole` 결과 credential은 저장하지 않는다.
@@ -372,10 +378,11 @@ type Deployment = {
   terraformArtifactId: string;
   awsConnectionId: string | null;
   currentPlanArtifactId: string | null;
+  currentPlanOperation: "apply" | "destroy" | null;
   stateObjectKey: string | null;
   resultWarningSummary: string | null;
-  status: "PENDING" | "RUNNING" | "SUCCESS" | "FAILED" | "CANCELLED";
-  activeStage: "init" | "validate" | "plan" | "apply" | null;
+  status: "PENDING" | "RUNNING" | "SUCCESS" | "FAILED" | "CANCELLED" | "DESTROYED";
+  activeStage: "init" | "validate" | "plan" | "apply" | "destroy" | null;
   planSummary: DeploymentPlanSummary | null;
   isBlocked: boolean;
   blockedBy: "risk_analysis" | "cost_analysis" | "missing_approval" | null;
@@ -388,6 +395,7 @@ type Deployment = {
     | "aws_connection"
     | "mock_run"
     | "apply"
+    | "destroy"
     | null;
   errorSummary: string | null;
   approvedAt: IsoDateTimeString | null;
@@ -420,12 +428,24 @@ Apply가 성공하면 `stateObjectKey`에는 S3에 업로드한 `terraform.tfsta
 실제 AWS Apply가 성공했다면 Deployment는 `SUCCESS`로 유지하고, 사용자가 확인할 수 있도록
 `resultWarningSummary`와 apply stage 로그에 경고를 남긴다.
 
+`terraform apply tfplan`이 시작된 뒤 실패하거나 취소되면 로컬 `terraform.tfstate`를 best-effort로 S3에 저장하고,
+성공하면 `stateObjectKey`를 남긴다. 이 상태의 Deployment는 `FAILED`와 `failureStage: "apply"`를 유지하며,
+사용자가 명시적으로 cleanup을 실행할 때 `terraform plan -destroy` → 승인 → destroy apply 순서로 정리한다.
+Destroy가 성공하면 Deployment는 `DESTROYED`가 되고, `stateObjectKey`, 현재 Plan pointer, 배포 리소스, output을 정리한다.
+
 실행 중인 Deployment는 `activeStage`와 `startedAt`을 가진다. 실행이 끝나면 `activeStage`는
 `null`로 돌아가고 `completedAt`을 저장한다. 실패는 `failedAt`, 사용자가 취소를 요청한 시점은
 `cancelRequestedAt`, 실제 취소 완료 시점은 `cancelledAt`에 저장한다.
 
 한 프로젝트에는 동시에 하나의 `RUNNING` Deployment만 허용한다. 이 제약은 애플리케이션 체크와
 `deployments_project_running_unique` partial unique index를 함께 사용해 보장한다.
+
+Deployment 생성 후에는 프로젝트 단위 retention을 실행한다. 기본 정책은 최신 Deployment 기록 20개,
+사용 중이지 않은 최신 TerraformArtifact 5개, 사용 중이지 않은 최신 ArchitectureSnapshot 5개를
+남긴다. 다만 `RUNNING`, `SUCCESS`, `stateObjectKey`가 남은 `FAILED`, `failureStage: "destroy"`인
+`FAILED` Deployment는 실제 리소스 확인이나 cleanup 재시도에 필요할 수 있으므로 개수 제한을 넘어도
+삭제하지 않는다. 삭제되는 Deployment의 `DeploymentPlanArtifact`, `DeploymentLog`,
+`DeployedResource`, `TerraformOutput`은 DB cascade로 함께 정리하고, S3 object는 best-effort로 삭제한다.
 
 ## DeploymentPlanArtifact
 
@@ -439,6 +459,7 @@ type DeploymentPlanArtifact = {
   deploymentId: string;
   terraformArtifactId: string;
   terraformArtifactSha256: string | null;
+  operation: "apply" | "destroy";
   objectKey: string;
   sha256: string;
   accountId: string;
@@ -449,7 +470,12 @@ type DeploymentPlanArtifact = {
 
 `terraformArtifactSha256`은 Plan 생성 시점에 복원한 Terraform artifact 내용을 기준으로 계산한다. 컬럼은 기존 row 마이그레이션을 위해 nullable이지만, 새 Plan은 반드시 값을 저장해야 하며 hash가 없는 Plan artifact는 승인할 수 없다. Approval 단계는 현재 S3 Terraform artifact hash와 이 값을 비교해 Plan 생성 이후 원본 Terraform artifact가 바뀐 경우 승인을 막는다.
 
+`operation`은 해당 `tfplan`이 일반 apply용인지 cleanup destroy용인지 구분한다. Apply 실행은 `operation: "apply"` Plan만,
+destroy 실행은 `operation: "destroy"` Plan만 사용할 수 있다.
+
 `deployment_plan_artifacts.deployment_id`는 `deployments.id`를 FK로 참조한다. `deployments.current_plan_artifact_id`는 현재 승인 대상 Plan을 가리키는 nullable pointer이며, 같은 Deployment의 artifact인지 여부는 Deployment service에서 검증한다.
+
+API 응답의 `Deployment.currentPlanOperation`은 `current_plan_artifact_id`가 가리키는 Plan artifact의 `operation`을 펼쳐서 내려주는 읽기용 필드다. 프론트엔드는 이 값으로 apply plan과 destroy plan을 구분해 Apply 버튼과 Destroy 버튼을 분리한다.
 
 ## DeploymentPlanSummary
 
@@ -528,7 +554,7 @@ type DeploymentLog = {
   id: string;
   deploymentId: string;
   sequence: number;
-  stage: "init" | "validate" | "plan" | "apply";
+  stage: "init" | "validate" | "plan" | "apply" | "destroy";
   level: "INFO" | "WARN" | "ERROR";
   message: string;
   relatedResourceId: string | null;

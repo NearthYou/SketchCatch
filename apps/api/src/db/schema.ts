@@ -26,7 +26,8 @@ export const deploymentStatusEnum = pgEnum("deployment_status", [
   "RUNNING",
   "SUCCESS",
   "FAILED",
-  "CANCELLED"
+  "CANCELLED",
+  "DESTROYED"
 ]);
 
 export const deploymentBlockedEnum = pgEnum("deployment_blocked_by", [
@@ -42,14 +43,21 @@ export const deploymentFailureStageEnum = pgEnum("deployment_failure_stage", [
   "approval",
   "aws_connection",
   "mock_run",
-  "apply"
+  "apply",
+  "destroy"
 ]);
 
 export const deploymentStageEnum = pgEnum("deployment_stage", [
   "init",
   "validate",
   "plan",
-  "apply"
+  "apply",
+  "destroy"
+]);
+
+export const deploymentPlanOperationEnum = pgEnum("deployment_plan_operation", [
+  "apply",
+  "destroy"
 ]);
 
 export const deploymentLogLevelEnum = pgEnum("deployment_log_level", ["INFO", "WARN", "ERROR"]);
@@ -100,6 +108,28 @@ export const refreshTokens = pgTable(
     index("refresh_tokens_user_id_idx").on(table.userId),
     index("refresh_tokens_expires_at_idx").on(table.expiresAt),
     index("refresh_tokens_revoked_at_idx").on(table.revokedAt)
+  ]
+);
+
+export const passwordResetTokens = pgTable(
+  "password_reset_tokens",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    userId: varchar("user_id", { length: 36 })
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    usedAt: timestamp("used_at", { withTimezone: true }),
+    userAgent: text("user_agent"),
+    ipAddress: varchar("ip_address", { length: 64 }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [
+    uniqueIndex("password_reset_tokens_token_hash_unique").on(table.tokenHash),
+    index("password_reset_tokens_user_id_idx").on(table.userId),
+    index("password_reset_tokens_expires_at_idx").on(table.expiresAt),
+    index("password_reset_tokens_used_at_idx").on(table.usedAt)
   ]
 );
 
@@ -301,6 +331,7 @@ export const deploymentPlanArtifacts = pgTable(
       .notNull()
       .references(() => projectAssets.id, { onDelete: "restrict" }),
     terraformArtifactSha256: varchar("terraform_artifact_sha256", { length: 64 }),
+    operation: deploymentPlanOperationEnum("operation").notNull().default("apply"),
     objectKey: text("object_key").notNull(),
     sha256: varchar("sha256", { length: 64 }).notNull(),
     accountId: varchar("account_id", { length: 12 }).notNull(),
@@ -376,6 +407,7 @@ export const deploymentLogs = pgTable(
 export const usersRelations = relations(users, ({ many }) => ({
   projects: many(projects),
   refreshTokens: many(refreshTokens),
+  passwordResetTokens: many(passwordResetTokens),
   loginAttempts: many(loginAttempts),
   oauthAccounts: many(oauthAccounts),
   awsConnections: many(awsConnections)
@@ -384,6 +416,13 @@ export const usersRelations = relations(users, ({ many }) => ({
 export const refreshTokensRelations = relations(refreshTokens, ({ one }) => ({
   user: one(users, {
     fields: [refreshTokens.userId],
+    references: [users.id]
+  })
+}));
+
+export const passwordResetTokensRelations = relations(passwordResetTokens, ({ one }) => ({
+  user: one(users, {
+    fields: [passwordResetTokens.userId],
     references: [users.id]
   })
 }));

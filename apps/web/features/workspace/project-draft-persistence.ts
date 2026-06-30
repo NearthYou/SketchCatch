@@ -96,6 +96,20 @@ export function chooseInitialDiagram({
   localDraft: LocalProjectDraft | null;
   fallbackDiagram: DiagramJson;
 }): InitialDiagramChoice {
+  if (serverDraft && localDraft) {
+    if (isLocalDraftNewerThanServerDraft(localDraft, serverDraft)) {
+      return {
+        diagramJson: localDraft.diagramJson,
+        source: "local"
+      };
+    }
+
+    return {
+      diagramJson: serverDraft.diagramJson,
+      source: "server"
+    };
+  }
+
   if (serverDraft) {
     return {
       diagramJson: serverDraft.diagramJson,
@@ -114,6 +128,26 @@ export function chooseInitialDiagram({
     diagramJson: fallbackDiagram,
     source: "empty"
   };
+}
+
+function isLocalDraftNewerThanServerDraft(
+  localDraft: LocalProjectDraft,
+  serverDraft: ProjectDraft
+): boolean {
+  const localSavedAt = parseIsoDateTime(localDraft.draftSavedAt);
+  const serverSavedAt = parseIsoDateTime(serverDraft.serverSavedAt);
+
+  return localSavedAt !== null && (serverSavedAt === null || localSavedAt > serverSavedAt);
+}
+
+export function parseIsoDateTime(value: string | null | undefined): number | null {
+  if (!value) {
+    return null;
+  }
+
+  const timestamp = Date.parse(value);
+
+  return Number.isFinite(timestamp) ? timestamp : null;
 }
 
 export async function readWorkspaceClientMetadata(): Promise<WorkspaceClientMetadata | null> {

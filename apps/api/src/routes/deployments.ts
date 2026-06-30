@@ -1,9 +1,11 @@
 import { z } from "zod";
+import { requireS3BucketName } from "../config/env.js";
 import { requireActiveUserId } from "../auth/current-user.js";
 import { getDatabaseClient } from "../db/client.js";
 import type { DeployedResource, Deployment, DeploymentLog, TerraformOutput } from "@sketchcatch/types";
 import type { FastifyReply, FastifyInstance, FastifyRequest } from "fastify";
 import type { DatabaseClient } from "../db/client.js";
+import { getS3Client } from "../s3/client.js";
 import {
   runDeploymentInit as defaultRunDeploymentInit,
   type RunDeploymentInitInput,
@@ -19,6 +21,16 @@ import {
   type RunDeploymentApplyInput,
   type RunDeploymentApplyResult
 } from "../deployments/deployment-apply-service.js";
+import {
+  runDeploymentDestroyPlan as defaultRunDeploymentDestroyPlan,
+  type RunDeploymentDestroyPlanInput,
+  type RunDeploymentDestroyPlanResult
+} from "../deployments/deployment-destroy-plan-service.js";
+import {
+  runDeploymentDestroy as defaultRunDeploymentDestroy,
+  type RunDeploymentDestroyInput,
+  type RunDeploymentDestroyResult
+} from "../deployments/deployment-destroy-service.js";
 import {
   approveDeploymentPlan as defaultApproveDeploymentPlan,
   type ApproveDeploymentPlanInput
@@ -43,8 +55,15 @@ import {
   cancelTrackedDeploymentRun,
   startTrackedDeploymentRun
 } from "../deployments/deployment-run-registry.js";
+import {
+  createS3DeploymentRetentionStorage,
+  pruneProjectDeploymentStorage as defaultPruneProjectDeploymentStorage,
+  type PruneProjectDeploymentStorageResult
+} from "../deployments/deployment-retention.js";
 
-type DeploymentRow = DeploymentRecord;
+type DeploymentRow = DeploymentRecord & {
+  readonly currentPlanOperation?: Deployment["currentPlanOperation"];
+};
 
 const createDeploymentParamsSchema = z.object({
   projectId: z.uuid()
@@ -76,6 +95,10 @@ const listDeploymentsParamsSchema = z.object({
 type DeploymentRouteOptions = {
   getDatabaseClient?: () => DatabaseClient;
   createDeploymentRepository?: (db: DatabaseClient["db"]) => DeploymentRepository;
+  pruneProjectDeploymentStorage?: (input: {
+    db: DatabaseClient["db"];
+    projectId: string;
+  }) => Promise<PruneProjectDeploymentStorageResult>;
   runDeploymentInit?: (
     input: RunDeploymentInitInput,
     repository: DeploymentRepository
@@ -92,10 +115,19 @@ type DeploymentRouteOptions = {
     input: RunDeploymentApplyInput,
     repository: DeploymentRepository
   ) => Promise<RunDeploymentApplyResult>;
+  runDeploymentDestroyPlan?: (
+    input: RunDeploymentDestroyPlanInput,
+    repository: DeploymentRepository
+  ) => Promise<RunDeploymentDestroyPlanResult>;
+  runDeploymentDestroy?: (
+    input: RunDeploymentDestroyInput,
+    repository: DeploymentRepository
+  ) => Promise<RunDeploymentDestroyResult>;
 };
 
 type DeploymentRequestContext = {
   accessContext: ProjectAccessContext;
+  db: DatabaseClient["db"];
   repository: DeploymentRepository;
 };
 
@@ -140,10 +172,33 @@ async function getDeploymentRequestContext(
 
   return {
     accessContext: createUserProjectAccessContext(currentUserId),
+    db: client.db,
     repository:
       options?.createDeploymentRepository?.(client.db) ??
       createPostgresDeploymentRepository(client.db)
   };
+}
+
+function createDefaultProjectDeploymentStoragePruner(
+  options: DeploymentRouteOptions | undefined
+): DeploymentRouteOptions["pruneProjectDeploymentStorage"] | undefined {
+  if (options?.pruneProjectDeploymentStorage) {
+    return options.pruneProjectDeploymentStorage;
+  }
+
+  if (options?.createDeploymentRepository) {
+    return undefined;
+  }
+
+  return ({ db, projectId }) =>
+    defaultPruneProjectDeploymentStorage({
+      db,
+      projectId,
+      storage: createS3DeploymentRetentionStorage({
+        bucketName: requireS3BucketName(),
+        s3Client: getS3Client()
+      })
+    });
 }
 
 function handleDeploymentError(error: unknown, reply: FastifyReply) {
@@ -164,7 +219,16 @@ function handleDeploymentError(error: unknown, reply: FastifyReply) {
   throw error;
 }
 
-function toDeployment(row: DeploymentRow): Deployment {
+async function toDeployment(
+  row: DeploymentRow,
+  repository: DeploymentRepository
+): Promise<Deployment> {
+  const currentPlanOperation =
+    row.currentPlanOperation ??
+    (row.currentPlanArtifactId
+      ? (await repository.findDeploymentPlanArtifactById(row.currentPlanArtifactId))?.operation ?? null
+      : null);
+
   return {
     id: row.id,
     projectId: row.projectId,
@@ -172,6 +236,7 @@ function toDeployment(row: DeploymentRow): Deployment {
     terraformArtifactId: row.terraformArtifactId,
     awsConnectionId: row.awsConnectionId,
     currentPlanArtifactId: row.currentPlanArtifactId,
+    currentPlanOperation,
     stateObjectKey: row.stateObjectKey,
     resultWarningSummary: row.resultWarningSummary,
     status: row.status as Deployment["status"],
@@ -226,11 +291,12 @@ export async function registerDeploymentRoutes(
   options?: DeploymentRouteOptions
 ): Promise<void> {
   const getDeploymentDatabaseClient = options?.getDatabaseClient ?? getDatabaseClient;
+  const pruneProjectDeploymentStorage = createDefaultProjectDeploymentStoragePruner(options);
 
   app.post("/projects/:projectId/deployments", async (request, reply) => {
     const params = createDeploymentParamsSchema.parse(request.params);
     const body = createDeploymentBodySchema.parse(request.body);
-    const { accessContext, repository } = await getDeploymentRequestContext(
+    const { accessContext, db, repository } = await getDeploymentRequestContext(
       request,
       options,
       getDeploymentDatabaseClient
@@ -248,8 +314,29 @@ export async function registerDeploymentRoutes(
         repository
       );
 
+      if (pruneProjectDeploymentStorage) {
+        try {
+          const pruneResult = await pruneProjectDeploymentStorage({
+            db,
+            projectId: params.projectId
+          });
+
+          if (pruneResult.failedObjectKeys.length > 0) {
+            request.log.warn(
+              {
+                failedObjectKeyCount: pruneResult.failedObjectKeys.length,
+                projectId: params.projectId
+              },
+              "Failed to prune some deployment S3 objects"
+            );
+          }
+        } catch (error) {
+          request.log.warn({ error, projectId: params.projectId }, "Failed to prune deployment history");
+        }
+      }
+
       return reply.status(201).send({
-        deployment: toDeployment(deployment)
+        deployment: await toDeployment(deployment, repository)
       });
     } catch (error) {
       return handleDeploymentError(error, reply);
@@ -274,7 +361,9 @@ export async function registerDeploymentRoutes(
       );
 
       return reply.status(200).send({
-        deployments: deployments.map(toDeployment)
+        deployments: await Promise.all(
+          deployments.map((deployment) => toDeployment(deployment, repository))
+        )
       });
     } catch (error) {
       return handleDeploymentError(error, reply);
@@ -299,7 +388,7 @@ export async function registerDeploymentRoutes(
       );
 
       return reply.status(200).send({
-        deployment: toDeployment(deployment)
+        deployment: await toDeployment(deployment, repository)
       });
     } catch (error) {
       return handleDeploymentError(error, reply);
@@ -347,7 +436,7 @@ export async function registerDeploymentRoutes(
       );
 
       return reply.status(202).send({
-        deployment: toDeployment(runningDeployment)
+        deployment: await toDeployment(runningDeployment, repository)
       });
     } catch (error) {
       return handleDeploymentError(error, reply);
@@ -377,6 +466,10 @@ export async function registerDeploymentRoutes(
         throw new DeploymentConflictError("Deployment plan is already running");
       }
 
+      if (deployment.status === "SUCCESS" || deployment.status === "DESTROYED") {
+        throw new DeploymentConflictError("Deployment cannot be replanned in this state");
+      }
+
       await requireNoRunningDeploymentInProject(deployment, repository);
 
       const runningDeployment = await repository.markDeploymentPlanRunning(deployment.id);
@@ -397,7 +490,7 @@ export async function registerDeploymentRoutes(
       );
 
       return reply.status(202).send({
-        deployment: toDeployment(runningDeployment)
+        deployment: await toDeployment(runningDeployment, repository)
       });
     } catch (error) {
       return handleDeploymentError(error, reply);
@@ -425,7 +518,7 @@ export async function registerDeploymentRoutes(
       );
 
       return reply.status(200).send({
-        deployment: toDeployment(deployment)
+        deployment: await toDeployment(deployment, repository)
       });
     } catch (error) {
       return handleDeploymentError(error, reply);
@@ -472,7 +565,105 @@ export async function registerDeploymentRoutes(
       );
 
       return reply.status(202).send({
-        deployment: toDeployment(runningDeployment)
+        deployment: await toDeployment(runningDeployment, repository)
+      });
+    } catch (error) {
+      return handleDeploymentError(error, reply);
+    }
+  });
+
+  app.post("/deployments/:deploymentId/destroy/plan", async (request, reply) => {
+    const params = deploymentParamsSchema.parse(request.params);
+    z.object({}).parse(request.body ?? {});
+    const { accessContext, repository } = await getDeploymentRequestContext(
+      request,
+      options,
+      getDeploymentDatabaseClient
+    );
+    const runDeploymentDestroyPlan =
+      options?.runDeploymentDestroyPlan ?? defaultRunDeploymentDestroyPlan;
+
+    try {
+      const deployment = await getDeployment(
+        {
+          deploymentId: params.deploymentId,
+          accessContext
+        },
+        repository
+      );
+      await requireDeploymentInitArtifact(deployment, repository);
+      requireDeploymentCanStartDestroyPlan(deployment);
+      await requireNoRunningDeploymentInProject(deployment, repository);
+
+      const runningDeployment = await repository.markDeploymentPlanRunning(deployment.id);
+
+      if (!runningDeployment) {
+        throw new DeploymentConflictError("Deployment destroy plan could not be started");
+      }
+
+      startDeploymentDestroyPlanJob(
+        {
+          deploymentId: params.deploymentId,
+          accessContext,
+          startedFromStatus: deployment.status,
+          startedFromFailureStage: deployment.failureStage,
+          startedFromErrorSummary: deployment.errorSummary
+        },
+        repository,
+        runDeploymentDestroyPlan,
+        request.log
+      );
+
+      return reply.status(202).send({
+        deployment: await toDeployment(runningDeployment, repository)
+      });
+    } catch (error) {
+      return handleDeploymentError(error, reply);
+    }
+  });
+
+  app.post("/deployments/:deploymentId/destroy", async (request, reply) => {
+    const params = deploymentParamsSchema.parse(request.params);
+    z.object({}).parse(request.body ?? {});
+    const { accessContext, repository } = await getDeploymentRequestContext(
+      request,
+      options,
+      getDeploymentDatabaseClient
+    );
+    const runDeploymentDestroy = options?.runDeploymentDestroy ?? defaultRunDeploymentDestroy;
+
+    try {
+      const deployment = await getDeployment(
+        {
+          deploymentId: params.deploymentId,
+          accessContext
+        },
+        repository
+      );
+      await requireDeploymentInitArtifact(deployment, repository);
+      await requireDeploymentCanStartDestroy(deployment, repository);
+      await requireNoRunningDeploymentInProject(deployment, repository);
+
+      const runningDeployment = await repository.markDeploymentDestroyRunning(deployment.id);
+
+      if (!runningDeployment) {
+        throw new DeploymentConflictError("Deployment destroy could not be started");
+      }
+
+      startDeploymentDestroyJob(
+        {
+          deploymentId: params.deploymentId,
+          accessContext,
+          startedFromStatus: deployment.status,
+          startedFromFailureStage: deployment.failureStage
+        },
+        repository,
+        runDeploymentDestroy,
+        request.log
+      );
+
+      return reply.status(202).send({
+        deployment: await toDeployment(runningDeployment, repository)
       });
     } catch (error) {
       return handleDeploymentError(error, reply);
@@ -510,12 +701,12 @@ export async function registerDeploymentRoutes(
         }
 
         return reply.status(202).send({
-          deployment: toDeployment(failedDeployment)
+          deployment: await toDeployment(failedDeployment, repository)
         });
       }
 
       return reply.status(202).send({
-        deployment: toDeployment(cancellationRequestedDeployment)
+        deployment: await toDeployment(cancellationRequestedDeployment, repository)
       });
     } catch (error) {
       return handleDeploymentError(error, reply);
@@ -841,6 +1032,56 @@ function requireDeploymentCanStartApply(deployment: DeploymentRecord): void {
   }
 }
 
+function requireDeploymentCanStartDestroyPlan(deployment: DeploymentRecord): void {
+  if (deployment.status === "RUNNING") {
+    throw new DeploymentConflictError("Deployment destroy plan is already running");
+  }
+
+  if (!deployment.stateObjectKey) {
+    throw new DeploymentConflictError("Terraform state is required before destroy");
+  }
+
+  if (deployment.status === "SUCCESS") {
+    return;
+  }
+
+  if (
+    deployment.status === "FAILED" &&
+    (deployment.failureStage === "apply" || deployment.failureStage === "destroy")
+  ) {
+    return;
+  }
+
+  throw new DeploymentConflictError("Deployment cannot be destroyed in this state");
+}
+
+async function requireDeploymentCanStartDestroy(
+  deployment: DeploymentRecord,
+  repository: DeploymentRepository
+): Promise<void> {
+  requireDeploymentCanStartDestroyPlan(deployment);
+
+  if (!deployment.approvedAt || !deployment.approvedPlanArtifactId) {
+    throw new DeploymentConflictError("Deployment approval is required before destroy");
+  }
+
+  if (deployment.isBlocked) {
+    throw new DeploymentConflictError("Blocked deployment cannot be destroyed");
+  }
+
+  if (!deployment.currentPlanArtifactId) {
+    throw new DeploymentConflictError("Terraform Destroy Plan must be completed before destroy");
+  }
+
+  const currentPlanArtifact = await repository.findDeploymentPlanArtifactById(
+    deployment.currentPlanArtifactId
+  );
+
+  if (!currentPlanArtifact || currentPlanArtifact.operation !== "destroy") {
+    throw new DeploymentConflictError("Terraform destroy plan is required before destroy");
+  }
+}
+
 function startDeploymentInitJob(
   input: RunDeploymentInitInput,
   repository: DeploymentRepository,
@@ -885,6 +1126,38 @@ function startDeploymentApplyJob(
   startTrackedDeploymentRun(input.deploymentId, async (abortSignal) => {
     await runDeploymentApply({ ...input, abortSignal }, repository).catch(() => {
       log.error({ deploymentId: input.deploymentId }, "Deployment apply background job failed");
+    });
+  });
+}
+
+function startDeploymentDestroyPlanJob(
+  input: RunDeploymentDestroyPlanInput,
+  repository: DeploymentRepository,
+  runDeploymentDestroyPlan: (
+    input: RunDeploymentDestroyPlanInput,
+    repository: DeploymentRepository
+  ) => Promise<RunDeploymentDestroyPlanResult>,
+  log: FastifyRequest["log"]
+): void {
+  startTrackedDeploymentRun(input.deploymentId, async (abortSignal) => {
+    await runDeploymentDestroyPlan({ ...input, abortSignal }, repository).catch(() => {
+      log.error({ deploymentId: input.deploymentId }, "Deployment destroy plan background job failed");
+    });
+  });
+}
+
+function startDeploymentDestroyJob(
+  input: RunDeploymentDestroyInput,
+  repository: DeploymentRepository,
+  runDeploymentDestroy: (
+    input: RunDeploymentDestroyInput,
+    repository: DeploymentRepository
+  ) => Promise<RunDeploymentDestroyResult>,
+  log: FastifyRequest["log"]
+): void {
+  startTrackedDeploymentRun(input.deploymentId, async (abortSignal) => {
+    await runDeploymentDestroy({ ...input, abortSignal }, repository).catch(() => {
+      log.error({ deploymentId: input.deploymentId }, "Deployment destroy background job failed");
     });
   });
 }

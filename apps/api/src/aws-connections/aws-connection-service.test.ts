@@ -7,6 +7,8 @@ import {
   createAwsConnection,
   deleteAwsConnection,
   listAwsConnections,
+  pruneStaleAwsConnections,
+  selectPrunableAwsConnections,
   verifyAwsConnection,
   verifyAwsConnectionCreatedRole,
   type AwsConnectionRecord,
@@ -25,9 +27,18 @@ const roleArn = "arn:aws:iam::123456789012:role/SketchCatchTerraformExecutionRol
 
 class FakeAwsConnectionRepository implements AwsConnectionRepository {
   readonly calls: Array<{ name: string; [key: string]: unknown }> = [];
-  awsConnection: AwsConnectionRecord | undefined;
+  awsConnections: AwsConnectionRecord[] = [];
   duplicateAwsConnection: AwsConnectionRecord | undefined;
   deploymentUsesConnection = false;
+  deploymentUsedConnectionIds = new Set<string>();
+
+  get awsConnection(): AwsConnectionRecord | undefined {
+    return this.awsConnections[0];
+  }
+
+  set awsConnection(value: AwsConnectionRecord | undefined) {
+    this.awsConnections = value ? [value] : [];
+  }
 
   async createAwsConnection(input: {
     id: string;
@@ -41,7 +52,7 @@ class FakeAwsConnectionRepository implements AwsConnectionRepository {
       input
     });
 
-    this.awsConnection = {
+    const awsConnection = {
       id: input.id,
       userId: input.userId,
       accountId: null,
@@ -53,8 +64,12 @@ class FakeAwsConnectionRepository implements AwsConnectionRepository {
       createdAt: fixedNow,
       updatedAt: fixedNow
     };
+    this.awsConnections = [
+      awsConnection,
+      ...this.awsConnections.filter((connection) => connection.id !== input.id)
+    ];
 
-    return this.awsConnection;
+    return awsConnection;
   }
 
   async findAccessibleAwsConnection(
@@ -67,15 +82,10 @@ class FakeAwsConnectionRepository implements AwsConnectionRepository {
       accessContext
     });
 
-    if (
-      !this.awsConnection ||
-      this.awsConnection.id !== candidateConnectionId ||
-      this.awsConnection.userId !== accessContext.userId
-    ) {
-      return undefined;
-    }
-
-    return this.awsConnection;
+    return this.awsConnections.find(
+      (awsConnection) =>
+        awsConnection.id === candidateConnectionId && awsConnection.userId === accessContext.userId
+    );
   }
 
   async listAccessibleAwsConnections(accessContext: ProjectAccessContext) {
@@ -84,11 +94,7 @@ class FakeAwsConnectionRepository implements AwsConnectionRepository {
       accessContext
     });
 
-    if (!this.awsConnection || this.awsConnection.userId !== accessContext.userId) {
-      return [];
-    }
-
-    return [this.awsConnection];
+    return this.awsConnections.filter((awsConnection) => awsConnection.userId === accessContext.userId);
   }
 
   async findVerifiedAwsConnectionByAccountId(
@@ -101,7 +107,7 @@ class FakeAwsConnectionRepository implements AwsConnectionRepository {
       accessContext
     });
 
-    return [this.awsConnection, this.duplicateAwsConnection].find(
+    return [...this.awsConnections, this.duplicateAwsConnection].find(
       (awsConnection) =>
         awsConnection?.userId === accessContext.userId &&
         awsConnection.accountId === accountId &&
@@ -110,11 +116,7 @@ class FakeAwsConnectionRepository implements AwsConnectionRepository {
   }
 
   async findAwsConnectionById(candidateConnectionId: string) {
-    if (!this.awsConnection || this.awsConnection.id !== candidateConnectionId) {
-      return undefined;
-    }
-
-    return this.awsConnection;
+    return this.awsConnections.find((awsConnection) => awsConnection.id === candidateConnectionId);
   }
 
   async hasDeploymentUsingAwsConnection(candidateConnectionId: string) {
@@ -123,7 +125,10 @@ class FakeAwsConnectionRepository implements AwsConnectionRepository {
       connectionId: candidateConnectionId
     });
 
-    return this.deploymentUsesConnection && candidateConnectionId === this.awsConnection?.id;
+    return (
+      this.deploymentUsedConnectionIds.has(candidateConnectionId) ||
+      (this.deploymentUsesConnection && candidateConnectionId === this.awsConnection?.id)
+    );
   }
 
   async deleteAccessibleAwsConnection(
@@ -136,16 +141,18 @@ class FakeAwsConnectionRepository implements AwsConnectionRepository {
       accessContext
     });
 
-    if (
-      !this.awsConnection ||
-      this.awsConnection.id !== candidateConnectionId ||
-      this.awsConnection.userId !== accessContext.userId
-    ) {
+    const deletedConnection = this.awsConnections.find(
+      (awsConnection) =>
+        awsConnection.id === candidateConnectionId && awsConnection.userId === accessContext.userId
+    );
+
+    if (!deletedConnection) {
       return undefined;
     }
 
-    const deletedConnection = this.awsConnection;
-    this.awsConnection = undefined;
+    this.awsConnections = this.awsConnections.filter(
+      (awsConnection) => awsConnection.id !== candidateConnectionId
+    );
 
     return deletedConnection;
   }
@@ -163,20 +170,27 @@ class FakeAwsConnectionRepository implements AwsConnectionRepository {
       input
     });
 
-    if (!this.awsConnection || this.awsConnection.id !== input.connectionId) {
+    const awsConnection = this.awsConnections.find(
+      (candidateConnection) => candidateConnection.id === input.connectionId
+    );
+
+    if (!awsConnection) {
       return undefined;
     }
 
-    this.awsConnection = {
-      ...this.awsConnection,
+    const updatedConnection = {
+      ...awsConnection,
       accountId: input.accountId,
       roleArn: input.roleArn,
       status: input.status,
       lastVerifiedAt: input.lastVerifiedAt,
-      updatedAt: input.lastVerifiedAt ?? this.awsConnection.updatedAt
+      updatedAt: input.lastVerifiedAt ?? awsConnection.updatedAt
     };
+    this.awsConnections = this.awsConnections.map((candidateConnection) =>
+      candidateConnection.id === input.connectionId ? updatedConnection : candidateConnection
+    );
 
-    return this.awsConnection;
+    return updatedConnection;
   }
 }
 
@@ -400,6 +414,109 @@ test("deleteAwsConnection rejects deleting a connection that is used by a deploy
   );
 
   assert.equal(repository.awsConnection?.id, awsConnectionId);
+});
+
+test("selectPrunableAwsConnections keeps verified and newest unverified connections", () => {
+  const verifiedConnection = createAwsConnectionRecord({
+    id: "10000000-0000-4000-8000-000000000001",
+    status: "verified",
+    updatedAt: date("2026-06-20")
+  });
+  const recentPendingConnection = createAwsConnectionRecord({
+    id: "10000000-0000-4000-8000-000000000002",
+    status: "pending",
+    updatedAt: date("2026-06-19")
+  });
+  const protectedFailedConnection = createAwsConnectionRecord({
+    id: "10000000-0000-4000-8000-000000000003",
+    status: "failed",
+    updatedAt: date("2026-06-18")
+  });
+  const stalePendingConnection = createAwsConnectionRecord({
+    id: "10000000-0000-4000-8000-000000000004",
+    status: "pending",
+    updatedAt: date("2026-06-17")
+  });
+
+  const result = selectPrunableAwsConnections({
+    awsConnections: [
+      stalePendingConnection,
+      protectedFailedConnection,
+      recentPendingConnection,
+      verifiedConnection
+    ],
+    policy: {
+      maxUnverifiedConnectionsPerUser: 1
+    },
+    protectedConnectionIds: new Set([protectedFailedConnection.id])
+  });
+
+  assert.deepEqual(
+    result.map((awsConnection) => awsConnection.id),
+    [stalePendingConnection.id]
+  );
+});
+
+test("pruneStaleAwsConnections deletes only old unverified connections that deployments do not use", async () => {
+  const repository = new FakeAwsConnectionRepository();
+  const verifiedConnection = createAwsConnectionRecord({
+    id: "10000000-0000-4000-8000-000000000001",
+    status: "verified",
+    updatedAt: date("2026-06-20")
+  });
+  const recentPendingConnection = createAwsConnectionRecord({
+    id: "10000000-0000-4000-8000-000000000002",
+    status: "pending",
+    updatedAt: date("2026-06-19")
+  });
+  const deploymentUsedPendingConnection = createAwsConnectionRecord({
+    id: "10000000-0000-4000-8000-000000000003",
+    status: "pending",
+    updatedAt: date("2026-06-18")
+  });
+  const protectedFailedConnection = createAwsConnectionRecord({
+    id: "10000000-0000-4000-8000-000000000004",
+    status: "failed",
+    updatedAt: date("2026-06-17")
+  });
+  const staleFailedConnection = createAwsConnectionRecord({
+    id: "10000000-0000-4000-8000-000000000005",
+    status: "failed",
+    updatedAt: date("2026-06-16")
+  });
+  repository.awsConnections = [
+    verifiedConnection,
+    recentPendingConnection,
+    deploymentUsedPendingConnection,
+    protectedFailedConnection,
+    staleFailedConnection
+  ];
+  repository.deploymentUsedConnectionIds.add(deploymentUsedPendingConnection.id);
+
+  const result = await pruneStaleAwsConnections(
+    {
+      accessContext: {
+        kind: "user",
+        userId
+      },
+      protectedConnectionIds: [protectedFailedConnection.id]
+    },
+    repository,
+    {
+      maxUnverifiedConnectionsPerUser: 1
+    }
+  );
+
+  assert.deepEqual(result.awsConnectionIdsDeleted, [staleFailedConnection.id]);
+  assert.deepEqual(
+    repository.awsConnections.map((awsConnection) => awsConnection.id),
+    [
+      verifiedConnection.id,
+      recentPendingConnection.id,
+      deploymentUsedPendingConnection.id,
+      protectedFailedConnection.id
+    ]
+  );
 });
 
 test("verifyAwsConnection stores only verified role metadata after STS caller identity succeeds", async () => {
@@ -687,4 +804,8 @@ function createAwsConnectionRecord(
     updatedAt: fixedNow,
     ...overrides
   };
+}
+
+function date(value: string): Date {
+  return new Date(`${value}T00:00:00.000Z`);
 }

@@ -73,7 +73,7 @@ test("convertArchitectureJsonToDiagramJson creates board nodes and edges from an
           }
         },
         position: { x: 120, y: 80 },
-        size: { width: 112, height: 108 },
+        size: { width: 516, height: 360 },
         style: {
           borderColor: "#2f6db3",
           textColor: "#172033"

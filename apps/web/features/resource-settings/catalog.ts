@@ -1,6 +1,8 @@
 import type { ResourceItem } from "../../../../packages/types/src/index";
 
 const size = { width: 112, height: 108 };
+const vpcAreaSize = { width: 516, height: 360 };
+const subnetAreaSize = { width: 324, height: 216 };
 
 const groupIconPath = "/Architecture-Group-Icons_07312025";
 const serviceIconPath = "/Architecture-Service-Icons_07312025";
@@ -45,7 +47,7 @@ export const resourceCatalog: ResourceItem[] = [
     category: "Network",
     iconUrl: `${serviceIconPath}/Arch_Networking-Content-Delivery/64/Arch_Amazon-Virtual-Private-Cloud_64.svg`,
     enabled: true,
-    nodeDefaults: { type: "aws_vpc", label: "VPC", size }
+    nodeDefaults: { type: "aws_vpc", label: "VPC", size: vpcAreaSize }
   },
   {
     id: "aws-subnet",
@@ -55,7 +57,7 @@ export const resourceCatalog: ResourceItem[] = [
     category: "Network",
     iconUrl: `${groupIconPath}/Private-subnet_32.svg`,
     enabled: true,
-    nodeDefaults: { type: "aws_subnet", label: "Subnet", size }
+    nodeDefaults: { type: "aws_subnet", label: "Subnet", size: subnetAreaSize }
   },
   {
     id: "aws-internet-gateway",
