@@ -1015,13 +1015,6 @@
 }
 
 .edgeSelect {
-  background: #f8f9fd;
-  border: 1px solid #dfe5f0;
-  border-radius: 5px;
-  color: #272f45;
-  font: inherit;
-  font-size: 0.78rem;
-  height: 30px;
   min-width: 96px;
 }
 

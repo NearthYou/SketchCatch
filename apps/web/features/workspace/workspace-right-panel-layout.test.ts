@@ -62,9 +62,9 @@ test("deployment mode switch keeps tabs the same size across modes", () => {
   const modeButtonRule = getCssRule(stylesSource, "deploymentModeButton");
 
   assert.match(deploymentPanelRule, /\bgrid-template-rows:\s*auto minmax\(0,\s*1fr\) auto;/);
-  assert.match(modeSwitchRule, /\bgrid-auto-rows:\s*40px;/);
+  assert.match(modeSwitchRule, /\bgrid-auto-rows:\s*32px;/);
   assert.match(modeSwitchRule, /\balign-items:\s*center;/);
-  assert.match(modeButtonRule, /\bheight:\s*40px;/);
+  assert.match(modeButtonRule, /\bheight:\s*32px;/);
 });
 
 test("deployment mode switch is pinned after the scrollable content area", () => {
@@ -74,6 +74,24 @@ test("deployment mode switch is pinned after the scrollable content area", () =>
   assert.notEqual(contentIndex, -1);
   assert.notEqual(modeSwitchIndex, -1);
   assert.ok(contentIndex < modeSwitchIndex);
+});
+
+test("deployment toolbar action is grouped with the other panel mode buttons", () => {
+  const toolbarIndex = componentSource.indexOf("className={styles.rightPanelToolbar}");
+  const modeToggleIndex = componentSource.indexOf("className={styles.panelModeToggle}", toolbarIndex);
+  const aiButtonIndex = componentSource.indexOf('title="AI"', modeToggleIndex);
+  const deployButtonIndex = componentSource.indexOf('title="Deploy"', aiButtonIndex);
+  const toolbarContentEndIndex = componentSource.indexOf(
+    "<div className={styles.rightPanelView}",
+    modeToggleIndex
+  );
+
+  assert.ok(modeToggleIndex > toolbarIndex);
+  assert.ok(deployButtonIndex > aiButtonIndex);
+  assert.ok(deployButtonIndex < toolbarContentEndIndex);
+  assert.match(componentSource, /activeView === "deployment" \? styles\.panelModeButtonActive : styles\.panelModeButton/);
+  assert.doesNotMatch(componentSource, /panelDeployButton/);
+  assert.doesNotMatch(stylesSource, /\.panelDeployButton\s*\{/);
 });
 
 test("deployment expanded logs use a single terminal scrollbar", () => {
@@ -109,6 +127,25 @@ test("deployment expanded panel has a resizable split handle", () => {
   assert.match(resizeHandleRule, /\btouch-action:\s*none;/);
 });
 
+test("deployment expanded details use larger action and record text", () => {
+  assert.match(
+    stylesSource,
+    /\.deploymentExpandedDetails\s+\.deploymentField\s*\{[\s\S]*?\bfont-size:\s*13px;/
+  );
+  assert.match(
+    deploymentPanelSource,
+    /size=\{isDeploymentExpanded \? "large" : "regular"\}/
+  );
+  assert.match(
+    stylesSource,
+    /\.deploymentExpandedDetails\s+\.deploymentPrimaryButton,\s*\.deploymentExpandedDetails\s+\.deploymentSecondaryButton,\s*\.deploymentExpandedDetails\s+\.deploymentDangerButton\s*\{[\s\S]*?\bfont-size:\s*14px;[\s\S]*?\bmin-height:\s*40px;/
+  );
+  assert.match(
+    stylesSource,
+    /\.deploymentExpandedDetails\s+\.deploymentSummary\s+strong\s*\{[\s\S]*?\bfont-size:\s*13px;/
+  );
+});
+
 test("deployment log prefix omits the level label because color carries severity", () => {
   assert.doesNotMatch(deploymentPanelSource, /log\.level\.padEnd/);
 });
@@ -141,11 +178,45 @@ test("deployment creation prepares fresh snapshot and terraform artifact before 
   assert.match(componentSource, /onPrepareDeploymentArtifacts=\{prepareDeploymentArtifacts\}/);
 });
 
-test("terraform panel exposes an explicit terraform artifact save action", () => {
-  assert.match(terraformPanelSource, /onSaveTerraformArtifact/);
-  assert.match(terraformPanelSource, /Artifact 저장/);
+test("deployment setup exposes only baseline save, AWS connection, and review start controls", () => {
+  const saveIndex = deploymentPanelSource.indexOf("배포 기준 저장");
+  const awsConnectionIndex = deploymentPanelSource.indexOf("AWS 연결", saveIndex);
+  const reviewStartIndex = deploymentPanelSource.indexOf("배포 검토 시작", awsConnectionIndex);
+
+  assert.ok(saveIndex > -1);
+  assert.ok(awsConnectionIndex > saveIndex);
+  assert.ok(reviewStartIndex > awsConnectionIndex);
+  assert.doesNotMatch(deploymentPanelSource, /설계 버전 저장/);
+  assert.doesNotMatch(deploymentPanelSource, /저장된 설계 기준/);
+  assert.doesNotMatch(deploymentPanelSource, /저장된 Terraform 파일/);
+  assert.doesNotMatch(deploymentPanelSource, /Deployment 생성/);
+  assert.doesNotMatch(deploymentPanelSource, /현재 설계와 Terraform 코드를 함께 저장합니다/);
+  assert.doesNotMatch(deploymentPanelSource, /onSaveArchitectureSnapshot/);
+  assert.doesNotMatch(stylesSource, /\.deploymentBaselinePanel\s*\{/);
+});
+
+test("deployment baseline save button shows pending and saved icons", () => {
+  assert.match(deploymentPanelSource, /import \{ Clipboard, ClipboardCheck,/);
+  assert.match(
+    deploymentPanelSource,
+    /const DeploymentBaselineIcon = hasUnsavedDeploymentBaseline \? Clipboard : ClipboardCheck;/
+  );
+  assert.match(deploymentPanelSource, /<DeploymentBaselineIcon size=\{16\} aria-hidden="true" \/>/);
+  assert.match(componentSource, /lastSavedDeploymentBaselineFingerprint/);
+  assert.match(componentSource, /isDeploymentBaselineDirty/);
+  assert.match(componentSource, /toDiagramFingerprint\(preparedSource\.diagramJson\)/);
+  assert.match(componentSource, /setIsDeploymentBaselineDirty\(false\)/);
+  assert.match(
+    componentSource,
+    /hasUnsavedDeploymentBaseline=\{hasUnsavedDeploymentBaseline\}/
+  );
+});
+
+test("terraform panel does not expose a detached artifact save action", () => {
+  assert.doesNotMatch(terraformPanelSource, /onSaveTerraformArtifact/);
+  assert.doesNotMatch(terraformPanelSource, /Artifact 저장/);
   assert.match(terraformPanelSource, /syncTerraformCodeToDiagram/);
-  assert.match(stylesSource, /\.terraformArtifactButton\s*\{/);
+  assert.doesNotMatch(stylesSource, /\.terraformArtifactButton\s*\{/);
 });
 
 test("terraform artifact preparation marks the terraform panel as loading", () => {

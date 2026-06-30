@@ -17,11 +17,14 @@ import {
   getAwsConnectionCloudFormationTemplate,
   isRecommendedAwsConnectionRoleArn,
   listAwsConnections,
+  pruneStaleAwsConnections as defaultPruneStaleAwsConnections,
   recommendedAwsConnectionRoleName,
   renderAwsConnectionCloudFormationTemplateFromToken,
   testStoredAwsConnection,
   verifyAwsConnection,
   verifyAwsConnectionCreatedRole,
+  type PruneStaleAwsConnectionsInput,
+  type PruneStaleAwsConnectionsResult,
   type AwsConnectionRepository
 } from "../aws-connections/aws-connection-service.js";
 import {
@@ -86,6 +89,10 @@ export type AwsConnectionRouteOptions = {
   awsConnectionRateLimiter?: RateLimiter;
   generateAwsConnectionId?: () => string;
   generateAwsExternalId?: () => string;
+  pruneStaleAwsConnections?: (
+    input: PruneStaleAwsConnectionsInput,
+    repository: AwsConnectionRepository
+  ) => Promise<PruneStaleAwsConnectionsResult>;
   now?: () => Date;
 };
 
@@ -130,6 +137,7 @@ export async function registerAwsConnectionRoutes(
     const repository =
       options?.createAwsConnectionRepository?.(client.db) ??
       createPostgresAwsConnectionRepository(client.db);
+    const accessContext = createUserProjectAccessContext(currentUserId);
 
     try {
       const createOptions: {
@@ -147,7 +155,7 @@ export async function registerAwsConnectionRoutes(
 
       const result = await createAwsConnection(
         {
-          accessContext: createUserProjectAccessContext(currentUserId),
+          accessContext,
           region: body.region,
           callerPrincipalArn:
             options?.awsConnectionConfig?.callerPrincipalArn ??
@@ -156,6 +164,18 @@ export async function registerAwsConnectionRoutes(
         repository,
         createOptions
       );
+
+      try {
+        await (options?.pruneStaleAwsConnections ?? defaultPruneStaleAwsConnections)(
+          {
+            accessContext,
+            protectedConnectionIds: [result.awsConnection.id]
+          },
+          repository
+        );
+      } catch (error) {
+        request.log.warn({ error, userId: currentUserId }, "Failed to prune AWS connections");
+      }
 
       return reply.status(201).send(result);
     } catch (error) {

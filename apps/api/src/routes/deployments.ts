@@ -1,9 +1,11 @@
 import { z } from "zod";
+import { requireS3BucketName } from "../config/env.js";
 import { requireActiveUserId } from "../auth/current-user.js";
 import { getDatabaseClient } from "../db/client.js";
 import type { DeployedResource, Deployment, DeploymentLog, TerraformOutput } from "@sketchcatch/types";
 import type { FastifyReply, FastifyInstance, FastifyRequest } from "fastify";
 import type { DatabaseClient } from "../db/client.js";
+import { getS3Client } from "../s3/client.js";
 import {
   runDeploymentInit as defaultRunDeploymentInit,
   type RunDeploymentInitInput,
@@ -53,6 +55,11 @@ import {
   cancelTrackedDeploymentRun,
   startTrackedDeploymentRun
 } from "../deployments/deployment-run-registry.js";
+import {
+  createS3DeploymentRetentionStorage,
+  pruneProjectDeploymentStorage as defaultPruneProjectDeploymentStorage,
+  type PruneProjectDeploymentStorageResult
+} from "../deployments/deployment-retention.js";
 
 type DeploymentRow = DeploymentRecord & {
   readonly currentPlanOperation?: Deployment["currentPlanOperation"];
@@ -88,6 +95,10 @@ const listDeploymentsParamsSchema = z.object({
 type DeploymentRouteOptions = {
   getDatabaseClient?: () => DatabaseClient;
   createDeploymentRepository?: (db: DatabaseClient["db"]) => DeploymentRepository;
+  pruneProjectDeploymentStorage?: (input: {
+    db: DatabaseClient["db"];
+    projectId: string;
+  }) => Promise<PruneProjectDeploymentStorageResult>;
   runDeploymentInit?: (
     input: RunDeploymentInitInput,
     repository: DeploymentRepository
@@ -116,6 +127,7 @@ type DeploymentRouteOptions = {
 
 type DeploymentRequestContext = {
   accessContext: ProjectAccessContext;
+  db: DatabaseClient["db"];
   repository: DeploymentRepository;
 };
 
@@ -160,10 +172,33 @@ async function getDeploymentRequestContext(
 
   return {
     accessContext: createUserProjectAccessContext(currentUserId),
+    db: client.db,
     repository:
       options?.createDeploymentRepository?.(client.db) ??
       createPostgresDeploymentRepository(client.db)
   };
+}
+
+function createDefaultProjectDeploymentStoragePruner(
+  options: DeploymentRouteOptions | undefined
+): DeploymentRouteOptions["pruneProjectDeploymentStorage"] | undefined {
+  if (options?.pruneProjectDeploymentStorage) {
+    return options.pruneProjectDeploymentStorage;
+  }
+
+  if (options?.createDeploymentRepository) {
+    return undefined;
+  }
+
+  return ({ db, projectId }) =>
+    defaultPruneProjectDeploymentStorage({
+      db,
+      projectId,
+      storage: createS3DeploymentRetentionStorage({
+        bucketName: requireS3BucketName(),
+        s3Client: getS3Client()
+      })
+    });
 }
 
 function handleDeploymentError(error: unknown, reply: FastifyReply) {
@@ -256,11 +291,12 @@ export async function registerDeploymentRoutes(
   options?: DeploymentRouteOptions
 ): Promise<void> {
   const getDeploymentDatabaseClient = options?.getDatabaseClient ?? getDatabaseClient;
+  const pruneProjectDeploymentStorage = createDefaultProjectDeploymentStoragePruner(options);
 
   app.post("/projects/:projectId/deployments", async (request, reply) => {
     const params = createDeploymentParamsSchema.parse(request.params);
     const body = createDeploymentBodySchema.parse(request.body);
-    const { accessContext, repository } = await getDeploymentRequestContext(
+    const { accessContext, db, repository } = await getDeploymentRequestContext(
       request,
       options,
       getDeploymentDatabaseClient
@@ -277,6 +313,27 @@ export async function registerDeploymentRoutes(
         },
         repository
       );
+
+      if (pruneProjectDeploymentStorage) {
+        try {
+          const pruneResult = await pruneProjectDeploymentStorage({
+            db,
+            projectId: params.projectId
+          });
+
+          if (pruneResult.failedObjectKeys.length > 0) {
+            request.log.warn(
+              {
+                failedObjectKeyCount: pruneResult.failedObjectKeys.length,
+                projectId: params.projectId
+              },
+              "Failed to prune some deployment S3 objects"
+            );
+          }
+        } catch (error) {
+          request.log.warn({ error, projectId: params.projectId }, "Failed to prune deployment history");
+        }
+      }
 
       return reply.status(201).send({
         deployment: await toDeployment(deployment, repository)

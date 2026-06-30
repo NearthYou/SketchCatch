@@ -390,6 +390,51 @@ test("POST /api/aws/connections returns caller principal ARN and generated exter
   await app.close();
 });
 
+test("POST /api/aws/connections prunes stale AWS connections after creation", async () => {
+  const repository = new FakeAwsConnectionRepository();
+  const pruneCalls: Array<{
+    accessContext: ProjectAccessContext;
+    protectedConnectionIds: string[] | undefined;
+    sameRepository: boolean;
+  }> = [];
+  const app = await buildAwsConnectionTestApp(repository, {
+    pruneStaleAwsConnections: async (input, candidateRepository) => {
+      pruneCalls.push({
+        accessContext: input.accessContext,
+        protectedConnectionIds: input.protectedConnectionIds,
+        sameRepository: candidateRepository === repository
+      });
+
+      return {
+        awsConnectionIdsDeleted: ["old-connection-id"]
+      };
+    }
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/aws/connections",
+    headers: await authHeaders(),
+    payload: {
+      region: "ap-northeast-2"
+    }
+  });
+
+  assert.equal(response.statusCode, 201);
+  assert.deepEqual(pruneCalls, [
+    {
+      accessContext: {
+        kind: "user",
+        userId
+      },
+      protectedConnectionIds: [awsConnectionId],
+      sameRepository: true
+    }
+  ]);
+
+  await app.close();
+});
+
 test("POST /api/aws/connections/:connectionId/test returns caller identity without raw credentials", async () => {
   const repository = new FakeAwsConnectionRepository();
   repository.awsConnection = createAwsConnectionRecord();

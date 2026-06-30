@@ -1,4 +1,6 @@
 import type { AiTerraformErrorExplanationResult, AiTerraformStage } from "@sketchcatch/types";
+import { SelectMenu } from "../../components/ui/SelectMenu";
+import { createTerraformErrorExplanationItems } from "./terraform-error-explanation-items";
 import { LlmExplanationPanel } from "./LlmExplanationPanel";
 import { ResultList } from "./ResultList";
 
@@ -12,12 +14,6 @@ type TerraformErrorExplanationPanelProps = {
   readonly rawMessage: string;
   readonly relatedResourceId: string;
   readonly stage: AiTerraformStage;
-};
-
-type TerraformErrorExplanationResultItem = {
-  readonly id: string;
-  readonly label: string;
-  readonly text: string;
 };
 
 const stageOptions: readonly AiTerraformStage[] = ["validate", "export", "plan", "apply"];
@@ -40,18 +36,17 @@ export function TerraformErrorExplanationPanel({
       <label className="fieldLabel" htmlFor="terraform-error-stage">
         stage
       </label>
-      <select
-        className="selectInput"
+      <SelectMenu
+        ariaLabel="Terraform 오류 stage 선택"
+        emptyLabel="stage"
         id="terraform-error-stage"
-        onChange={(event) => onStageChange(parseTerraformStage(event.target.value))}
+        onChange={(nextValue) => onStageChange(parseTerraformStage(nextValue))}
+        options={stageOptions.map((option) => ({
+          label: option,
+          value: option
+        }))}
         value={stage}
-      >
-        {stageOptions.map((option) => (
-          <option key={option} value={option}>
-            {option}
-          </option>
-        ))}
-      </select>
+      />
 
       <label className="fieldLabel" htmlFor="terraform-error-message">
         rawMessage
@@ -94,23 +89,6 @@ export function TerraformErrorExplanationPanel({
       )}
     </section>
   );
-}
-
-export function createTerraformErrorExplanationItems(
-  explanation: AiTerraformErrorExplanationResult
-): TerraformErrorExplanationResultItem[] {
-  return [
-    {
-      id: "likely-cause",
-      label: `${explanation.severity.toUpperCase()} · ${explanation.category}`,
-      text: explanation.likelyCause
-    },
-    ...explanation.nextActions.map((action, index) => ({
-      id: `next-action-${index}`,
-      label: "다음 행동",
-      text: action
-    }))
-  ];
 }
 
 // select 값은 DOM에서 string으로 나오므로 허용된 stage만 다시 좁힙니다.

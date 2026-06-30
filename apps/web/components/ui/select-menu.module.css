@@ -1,0 +1,256 @@
+.selectMenu {
+  display: grid;
+  min-width: 0;
+  position: relative;
+  width: 100%;
+}
+
+.contentWidth {
+  width: max-content;
+}
+
+.selectMenuTrigger {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  color: #172033;
+  cursor: pointer;
+  display: grid;
+  font: inherit;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) 16px;
+  min-width: 0;
+  text-align: left;
+  width: 100%;
+}
+
+.selectMenuTrigger:hover,
+.selectMenuTrigger:focus-visible,
+.selectMenuTriggerOpen {
+  border-color: #2f6db3;
+  box-shadow: 0 0 0 3px rgb(47 109 179 / 16%);
+  outline: none;
+}
+
+.selectMenuTrigger:disabled {
+  background: #f1f5f9;
+  color: #8491a3;
+  cursor: not-allowed;
+}
+
+.selectMenuTrigger svg {
+  color: #516078;
+  transition: transform 120ms ease;
+}
+
+.selectMenuTriggerOpen svg {
+  transform: rotate(180deg);
+}
+
+.selectMenuValue {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.selectMenuDropdown {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  box-shadow: 0 14px 32px rgb(15 23 42 / 14%);
+  display: grid;
+  gap: 1px;
+  left: 0;
+  margin-top: 6px;
+  max-height: 180px;
+  min-width: 100%;
+  overflow: auto;
+  padding: 4px;
+  position: absolute;
+  right: 0;
+  top: 100%;
+  z-index: 30;
+}
+
+.selectMenuOption {
+  align-items: center;
+  background: #ffffff;
+  border: 0;
+  border-radius: 5px;
+  color: #172033;
+  cursor: pointer;
+  display: grid;
+  font: inherit;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) 16px;
+  min-height: 32px;
+  min-width: 0;
+  padding: 5px 8px;
+  text-align: left;
+  width: 100%;
+}
+
+.selectMenuOption:hover,
+.selectMenuOption:focus-visible,
+.selectMenuOptionActive {
+  background: #eef4ff;
+  outline: none;
+}
+
+.selectMenuOptionSelected {
+  background: #f0f7ff;
+  color: #1f5fbf;
+}
+
+.selectMenuOptionSelected.selectMenuOptionActive {
+  background: #e5f0ff;
+}
+
+.selectMenuOptionText {
+  align-items: baseline;
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+}
+
+.selectMenuOptionLabel,
+.selectMenuOptionDetail {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.selectMenuOptionLabel {
+  flex: 0 1 auto;
+  font-size: 12px;
+  font-weight: 850;
+  min-width: 0;
+}
+
+.selectMenuOptionDetail {
+  color: #64748b;
+  flex: 1 1 auto;
+  font-size: 11px;
+  font-weight: 750;
+  min-width: 0;
+  text-align: right;
+}
+
+.selectMenuOptionSelected .selectMenuOptionDetail,
+.selectMenuOptionSelected svg {
+  color: #1f5fbf;
+}
+
+.compact .selectMenuTrigger {
+  font-size: 12px;
+  min-height: 30px;
+  padding: 5px 8px;
+}
+
+.compact .selectMenuDropdown {
+  max-height: 156px;
+}
+
+.compact .selectMenuOption {
+  min-height: 28px;
+  padding: 4px 7px;
+}
+
+.regular .selectMenuTrigger {
+  min-height: 38px;
+  padding: 8px 10px;
+}
+
+.large .selectMenuTrigger {
+  font-size: 13px;
+  min-height: 42px;
+  padding: 10px 12px;
+}
+
+.large .selectMenuOption {
+  min-height: 34px;
+  padding: 5px 9px;
+}
+
+.dashboardTone .selectMenuTrigger {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--dashboard-border);
+  color: var(--dashboard-text);
+  padding: 10px 12px;
+}
+
+.dashboardTone .selectMenuTrigger:hover,
+.dashboardTone .selectMenuTrigger:focus-visible,
+.dashboardTone .selectMenuTriggerOpen {
+  border-color: var(--dashboard-blue);
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.12);
+}
+
+.dashboardTone .selectMenuTrigger:disabled {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--dashboard-subtle);
+}
+
+.dashboardTone .selectMenuTrigger svg {
+  color: var(--dashboard-muted);
+}
+
+.dashboardTone .selectMenuDropdown {
+  background: #101827;
+  border-color: var(--dashboard-border);
+  box-shadow: 0 18px 42px rgb(0 0 0 / 28%);
+}
+
+.dashboardTone .selectMenuOption {
+  background: transparent;
+  color: var(--dashboard-text);
+}
+
+.dashboardTone .selectMenuOption:hover,
+.dashboardTone .selectMenuOption:focus-visible,
+.dashboardTone .selectMenuOptionActive {
+  background: rgba(56, 189, 248, 0.12);
+}
+
+.dashboardTone .selectMenuOptionSelected {
+  background: rgba(56, 189, 248, 0.16);
+  color: #bae6fd;
+}
+
+.dashboardTone .selectMenuOptionDetail {
+  color: var(--dashboard-muted);
+}
+
+.dashboardTone .selectMenuOptionSelected .selectMenuOptionDetail,
+.dashboardTone .selectMenuOptionSelected svg {
+  color: #7dd3fc;
+}
+
+.purpleTone .selectMenuTrigger:hover,
+.purpleTone .selectMenuTrigger:focus-visible,
+.purpleTone .selectMenuTriggerOpen {
+  border-color: #8b71ff;
+  box-shadow: 0 0 0 3px rgba(111, 76, 246, 0.14);
+}
+
+.purpleTone .selectMenuOption:hover,
+.purpleTone .selectMenuOption:focus-visible,
+.purpleTone .selectMenuOptionActive {
+  background: #f2efff;
+}
+
+.purpleTone .selectMenuOptionSelected {
+  background: #f4f1ff;
+  color: #5f3de8;
+}
+
+.purpleTone .selectMenuOptionSelected.selectMenuOptionActive {
+  background: #ede8ff;
+}
+
+.purpleTone .selectMenuOptionSelected .selectMenuOptionDetail,
+.purpleTone .selectMenuOptionSelected svg {
+  color: #5f3de8;
+}

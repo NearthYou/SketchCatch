@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createTerraformErrorExplanationItems } from "../../app/workspace/TerraformErrorExplanationPanel";
+import { createTerraformErrorExplanationItems } from "../../app/workspace/terraform-error-explanation-items";
 
 test("createTerraformErrorExplanationItems keeps duplicate next actions render-safe", () => {
   const items = createTerraformErrorExplanationItems({
