@@ -861,16 +861,17 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
                 <ul>
                   {activeTerraformPreviewExplanation.detectedResources.slice(0, 3).map((resource) => (
                     <li key={`${resource.terraformType}-${resource.label}`}>
-                      <strong>{resource.terraformType}</strong>
-                      <span>{resource.label}</span>
+                      <strong>{resource.label}</strong>
+                      <span>{resource.explanation}</span>
                     </li>
                   ))}
                 </ul>
               ) : null}
-              <div className={styles.terraformPreviewExplanationStats}>
-                <span>{activeTerraformPreviewExplanation.findings.length} Findings</span>
-                <span>{activeTerraformPreviewExplanation.checklist.length} Checks</span>
-              </div>
+              {activeTerraformPreviewExplanation.findings.length > 0 ? (
+                <div className={styles.terraformPreviewExplanationStats}>
+                  <span>{activeTerraformPreviewExplanation.findings.length} Findings</span>
+                </div>
+              ) : null}
             </div>
           ) : null}
         </section>

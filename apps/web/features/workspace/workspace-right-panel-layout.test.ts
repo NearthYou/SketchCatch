@@ -249,9 +249,11 @@ test("terraform preview explanation is triggered from the terraform code panel",
   assert.match(terraformPanelSource, /runAiTerraformPreviewExplanation/);
   assert.match(terraformPanelSource, /highlightedBlock\.code/);
   assert.match(terraformPanelSource, /displayedTerraformCode/);
+  assert.match(terraformPanelSource, /resource\.explanation/);
   assert.match(terraformPanelSource, /className=\{styles\.terraformPreviewExplanationPanel\}/);
   assert.doesNotMatch(aiPanelSource, /WorkspaceAiTerraformPanel/);
   assert.doesNotMatch(aiPanelSource, /Terraform Preview 설명/);
+  assert.doesNotMatch(terraformPanelSource, /checklist\.length\} Checks/);
   assert.match(previewExplanationRule, /\bmax-height:\s*180px;/);
   assert.match(previewExplanationRule, /\boverflow:\s*auto;/);
 });

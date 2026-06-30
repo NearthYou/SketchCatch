@@ -1230,11 +1230,11 @@
 }
 
 .terraformPreviewExplanationResult li {
-  align-items: center;
+  align-items: start;
   border-top: 1px solid #edf1f7;
   display: grid;
   gap: 6px;
-  grid-template-columns: minmax(86px, 0.65fr) minmax(0, 1fr);
+  grid-template-columns: minmax(108px, 0.72fr) minmax(0, 1.28fr);
   min-width: 0;
   padding-top: 5px;
 }
@@ -1247,12 +1247,14 @@
 .terraformPreviewExplanationResult li strong {
   color: #243044;
   font-size: 11px;
+  line-height: 1.35;
   overflow-wrap: anywhere;
 }
 
 .terraformPreviewExplanationResult li span {
   color: #64748b;
   font-size: 11px;
+  line-height: 1.45;
   overflow-wrap: anywhere;
 }
 
