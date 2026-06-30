@@ -331,6 +331,8 @@ type TerraformValidateResponse = {
 
 같은 사용자가 같은 AWS `accountId`를 `verified` 상태로 중복 연결할 수 없도록 `userId + accountId` partial unique index를 둔다. `pending` 연결은 아직 accountId를 모르기 때문에 생성될 수 있지만, verify 시점에 이미 연결된 AWS account면 실패 처리한다.
 
+새 AWS 연결을 만들면 사용자별 오래된 미검증 연결을 정리한다. 기본 정책은 `pending`/`failed` 연결 중 최신 5개를 남기고 나머지를 삭제하는 것이다. `verified` 연결과 `Deployment`가 참조 중인 연결은 자동 정리 대상에서 제외한다.
+
 DB 기준: `aws_connections`
 
 저장하는 값은 연결 metadata뿐이다. Access Key ID, Secret Access Key, Session Token, `AssumeRole` 결과 credential은 저장하지 않는다.

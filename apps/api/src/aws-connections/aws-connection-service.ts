@@ -26,6 +26,14 @@ const cloudFormationTemplateTokenVersion = 1;
 const cloudFormationTemplateTokenSeparator = "~";
 const defaultCloudFormationTemplateTokenTtlMs = 60 * 60 * 1000;
 
+export type AwsConnectionRetentionPolicy = {
+  maxUnverifiedConnectionsPerUser: number;
+};
+
+export const defaultAwsConnectionRetentionPolicy: AwsConnectionRetentionPolicy = {
+  maxUnverifiedConnectionsPerUser: 5
+};
+
 export type AwsConnectionRecord = typeof awsConnections.$inferSelect;
 
 export type CreateAwsConnectionInput = {
@@ -86,6 +94,15 @@ export type TestStoredAwsConnectionInput = VerifyAwsConnectionInput;
 export type DeleteAwsConnectionInput = {
   connectionId: string;
   accessContext: ProjectAccessContext;
+};
+
+export type PruneStaleAwsConnectionsInput = {
+  accessContext: ProjectAccessContext;
+  protectedConnectionIds?: string[];
+};
+
+export type PruneStaleAwsConnectionsResult = {
+  awsConnectionIdsDeleted: string[];
 };
 
 export type VerifyAwsConnectionOptions = {
@@ -324,6 +341,67 @@ export async function deleteAwsConnection(
   if (!deletedConnection) {
     throw new AwsConnectionNotFoundError("AWS connection not found");
   }
+}
+
+export async function pruneStaleAwsConnections(
+  input: PruneStaleAwsConnectionsInput,
+  repository: AwsConnectionRepository,
+  policy: AwsConnectionRetentionPolicy = defaultAwsConnectionRetentionPolicy
+): Promise<PruneStaleAwsConnectionsResult> {
+  const awsConnectionRows = await repository.listAccessibleAwsConnections(input.accessContext);
+  const protectedConnectionIds = new Set(input.protectedConnectionIds ?? []);
+
+  for (const awsConnection of awsConnectionRows) {
+    if (awsConnection.status === "verified") {
+      protectedConnectionIds.add(awsConnection.id);
+      continue;
+    }
+
+    if (await repository.hasDeploymentUsingAwsConnection(awsConnection.id)) {
+      protectedConnectionIds.add(awsConnection.id);
+    }
+  }
+
+  const awsConnectionsToDelete = selectPrunableAwsConnections({
+    awsConnections: awsConnectionRows,
+    policy,
+    protectedConnectionIds
+  });
+  const awsConnectionIdsDeleted: string[] = [];
+
+  for (const awsConnection of awsConnectionsToDelete) {
+    const deletedAwsConnection = await repository.deleteAccessibleAwsConnection(
+      awsConnection.id,
+      input.accessContext
+    );
+
+    if (deletedAwsConnection) {
+      awsConnectionIdsDeleted.push(deletedAwsConnection.id);
+    }
+  }
+
+  return {
+    awsConnectionIdsDeleted
+  };
+}
+
+export function selectPrunableAwsConnections({
+  awsConnections: awsConnectionRows,
+  policy = defaultAwsConnectionRetentionPolicy,
+  protectedConnectionIds = new Set()
+}: {
+  awsConnections: AwsConnectionRecord[];
+  policy?: AwsConnectionRetentionPolicy;
+  protectedConnectionIds?: ReadonlySet<string>;
+}): AwsConnectionRecord[] {
+  const unusedUnverifiedConnections = [...awsConnectionRows]
+    .sort(compareAwsConnectionsForRetention)
+    .filter(
+      (awsConnection) =>
+        awsConnection.status !== "verified" && !protectedConnectionIds.has(awsConnection.id)
+    );
+
+  return unusedUnverifiedConnections.slice(policy.maxUnverifiedConnectionsPerUser);
 }
 
 export function createAwsExternalId(connectionId: string): string {
@@ -920,4 +998,17 @@ function isAwsConnectionCloudFormationTemplateTokenPayload(
 
 function yamlDoubleQuote(value: string): string {
   return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+
+function compareAwsConnectionsForRetention(
+  left: AwsConnectionRecord,
+  right: AwsConnectionRecord
+): number {
+  const updatedAtDiff = right.updatedAt.getTime() - left.updatedAt.getTime();
+
+  if (updatedAtDiff !== 0) {
+    return updatedAtDiff;
+  }
+
+  return right.createdAt.getTime() - left.createdAt.getTime();
 }
