@@ -115,6 +115,26 @@ test("findInnermostAreaNodeAtPoint returns the smallest area containing the poin
   );
 });
 
+test("findInnermostAreaNodeAtPoint distinguishes parent and nested area blank spaces", () => {
+  const vpc = makeResourceNode({
+    id: "vpc-1",
+    resourceType: "aws_vpc",
+    position: { x: 100, y: 100 },
+    size: { width: 420, height: 300 },
+    zIndex: 1
+  });
+  const subnet = makeResourceNode({
+    id: "subnet-1",
+    resourceType: "aws_subnet",
+    position: { x: 180, y: 160 },
+    size: { width: 220, height: 140 },
+    zIndex: 2
+  });
+
+  assert.equal(findInnermostAreaNodeAtPoint([vpc, subnet], { x: 140, y: 140 })?.id, "vpc-1");
+  assert.equal(findInnermostAreaNodeAtPoint([vpc, subnet], { x: 220, y: 200 })?.id, "subnet-1");
+});
+
 test("findInnermostAreaNodeAtPoint uses zIndex when overlapping areas have the same size", () => {
   const lowerGroup = makeDesignNode({
     id: "group-1",
