@@ -324,6 +324,130 @@ test("parses references as string values", () => {
   assert.equal(result.diagramJson.nodes[0]?.parameters?.values.vpcId, "aws_vpc.main.id");
 });
 
+test("syncs AWS nested blocks into camelCase array values", () => {
+  const diagramJson: DiagramJson = {
+    nodes: [
+      makeNode({
+        id: "route-table-1",
+        type: "aws_route_table",
+        kind: "resource",
+        label: "public",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_route_table",
+          resourceName: "public",
+          fileName: "network",
+          values: {
+            vpcId: "aws_vpc.main.id"
+          }
+        }
+      }),
+      makeNode({
+        id: "security-group-1",
+        type: "aws_security_group",
+        kind: "resource",
+        label: "web",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_security_group",
+          resourceName: "web",
+          fileName: "security",
+          values: {
+            name: "web",
+            vpcId: "aws_vpc.main.id"
+          }
+        }
+      })
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+
+  const result = syncTerraformToDiagramJson(
+    diagramJson,
+    `resource "aws_route_table" "public" {
+  vpc_id = aws_vpc.main.id
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.igw.id
+  }
+}
+
+resource "aws_security_group" "web" {
+  name = "web"
+  vpc_id = aws_vpc.main.id
+
+  egress {
+    to_port = 0
+    from_port = 0
+    protocol = "-1"
+    cidr_blocks = [
+      "0.0.0.0/0",
+    ]
+  }
+
+  ingress {
+    to_port = 80
+    from_port = 80
+    protocol = "tcp"
+    cidr_blocks = [
+      "0.0.0.0/0",
+    ]
+  }
+}`
+  );
+
+  assert.deepEqual(result.diagnostics, []);
+  assert.deepEqual(result.diagramJson.nodes[0]?.parameters?.values, {
+    vpcId: "aws_vpc.main.id",
+    route: [
+      {
+        cidrBlock: "0.0.0.0/0",
+        gatewayId: "aws_internet_gateway.igw.id"
+      }
+    ]
+  });
+  assert.deepEqual(result.diagramJson.nodes[1]?.parameters?.values, {
+    name: "web",
+    vpcId: "aws_vpc.main.id",
+    egress: [
+      {
+        toPort: 0,
+        fromPort: 0,
+        protocol: "-1",
+        cidrBlocks: ["0.0.0.0/0"]
+      }
+    ],
+    ingress: [
+      {
+        toPort: 80,
+        fromPort: 80,
+        protocol: "tcp",
+        cidrBlocks: ["0.0.0.0/0"]
+      }
+    ]
+  });
+});
+
+test("keeps the input diagram when an unsupported nested block is found", () => {
+  const diagramJson = makeSingleVpcDiagramJson();
+
+  const result = syncTerraformToDiagramJson(
+    diagramJson,
+    `resource "aws_vpc" "main" {
+  cidr_block = "10.0.0.0/16"
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}`
+  );
+
+  assert.equal(result.diagramJson, diagramJson);
+  assert.equal(result.diagnostics[0]?.code, "terraform.sync.nested_block");
+});
+
 test("reports the block header line when a block is not closed", () => {
   const result = syncTerraformToDiagramJson(
     makeSingleVpcDiagramJson(),

@@ -404,6 +404,18 @@
   border: 1px dotted rgba(111, 76, 246, 0.72);
 }
 
+.canvasPanelAreaBlankMoveTarget :global(.react-flow__pane) {
+  cursor: grab;
+}
+
+.canvasPanelAreaBlankDragging :global(.react-flow__pane) {
+  cursor: grabbing;
+}
+
+.canvasPanelAreaBlankBlockedTarget :global(.react-flow__pane) {
+  cursor: not-allowed;
+}
+
 .emptyState {
   align-items: center;
   background: rgba(255, 255, 255, 0.88);

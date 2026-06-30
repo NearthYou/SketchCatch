@@ -10,10 +10,15 @@ const DEFAULT_TERRAFORM_BLOCK_TYPE: TerraformBlockType = "resource";
 const BLOCK_HEADER_PATTERN =
   /^\s*(resource|data)\s+"([^"]+)"\s+"([^"]+)"\s*\{\s*$/;
 const TOP_LEVEL_BLOCK_PATTERN = /^\s*([A-Za-z_][A-Za-z0-9_-]*)\b.*\{\s*$/;
+const NESTED_BLOCK_PATTERN = /^\s*([A-Za-z_][A-Za-z0-9_-]*)\s*\{\s*$/;
 const ATTRIBUTE_PATTERN = /^\s*([A-Za-z_][A-Za-z0-9_-]*)\s*=\s*(.*)$/;
 const IDENTIFIER_PATTERN = /^[A-Za-z_][A-Za-z0-9_-]*$/;
 const REFERENCE_PATTERN =
   /^(?:var|local|each|count|path|terraform)\.[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)*$|^module\.[A-Za-z0-9_]+\.[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*$|^aws_[A-Za-z0-9_]+\.[A-Za-z0-9_]+\.[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*$|^data\.aws_[A-Za-z0-9_]+\.[A-Za-z0-9_]+\.[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*$/;
+const TERRAFORM_NESTED_BLOCK_ATTRIBUTES: Record<string, ReadonlySet<string>> = {
+  aws_route_table: new Set(["route"]),
+  aws_security_group: new Set(["egress", "ingress"])
+};
 
 type ParsedBlock = {
   blockType: TerraformBlockType;
@@ -27,6 +32,11 @@ type ParsedBlock = {
 type ParseResult = {
   blocks: ParsedBlock[];
   diagnostics: TerraformDiagnostic[];
+};
+
+type BodyLine = {
+  text: string;
+  line: number;
 };
 
 export function syncTerraformToDiagramJson(
@@ -198,7 +208,11 @@ function parseTerraformBlocks(terraformCode: string): ParseResult {
       continue;
     }
 
-    const valuesResult = parseAttributes(bodyResult.bodyLines, address);
+    const valuesResult = parseAttributes(
+      bodyResult.bodyLines,
+      address,
+      TERRAFORM_NESTED_BLOCK_ATTRIBUTES[resourceType]
+    );
     diagnostics.push(...valuesResult.diagnostics);
 
     blocks.push({
@@ -226,14 +240,15 @@ function collectBlockBody(
   headerLine: number,
   resourceAddress: string
 ): {
-  bodyLines: Array<{ text: string; line: number }>;
+  bodyLines: BodyLine[];
   diagnostics: TerraformDiagnostic[];
   endIndex: number;
   closed: boolean;
 } {
-  const bodyLines: Array<{ text: string; line: number }> = [];
+  const bodyLines: BodyLine[] = [];
   const diagnostics: TerraformDiagnostic[] = [];
   let valueDepth = 0;
+  let nestedBlockDepth = 0;
 
   for (let index = startIndex; index < lines.length; index += 1) {
     const lineText = lines[index] ?? "";
@@ -241,6 +256,12 @@ function collectBlockBody(
     const trimmedLine = codeLine.trim();
 
     if (valueDepth === 0 && trimmedLine === "}") {
+      if (nestedBlockDepth > 0) {
+        bodyLines.push({ text: lineText, line: index + 1 });
+        nestedBlockDepth -= 1;
+        continue;
+      }
+
       return {
         bodyLines,
         diagnostics,
@@ -249,14 +270,10 @@ function collectBlockBody(
       };
     }
 
-    if (valueDepth === 0 && trimmedLine.endsWith("{") && !trimmedLine.includes("=")) {
-      diagnostics.push({
-        severity: "error",
-        code: "terraform.sync.nested_block",
-        line: index + 1,
-        resourceAddress,
-        message: "nested block은 Terraform 동기화 subset에서 지원하지 않습니다."
-      });
+    if (valueDepth === 0 && isNestedBlockOpening(trimmedLine)) {
+      bodyLines.push({ text: lineText, line: index + 1 });
+      nestedBlockDepth += 1;
+      continue;
     }
 
     bodyLines.push({ text: lineText, line: index + 1 });
@@ -280,8 +297,9 @@ function collectBlockBody(
 }
 
 function parseAttributes(
-  bodyLines: Array<{ text: string; line: number }>,
-  resourceAddress: string
+  bodyLines: BodyLine[],
+  resourceAddress: string,
+  supportedNestedBlocks?: ReadonlySet<string>
 ): { values: Record<string, unknown>; diagnostics: TerraformDiagnostic[] } {
   const values: Record<string, unknown> = {};
   const diagnostics: TerraformDiagnostic[] = [];
@@ -297,6 +315,40 @@ function parseAttributes(
     const trimmedLine = codeLine.trim();
 
     if (!trimmedLine) {
+      continue;
+    }
+
+    const nestedBlockName = getNestedBlockName(trimmedLine);
+
+    if (nestedBlockName) {
+      const nestedBlock = collectNestedBlockBody(
+        bodyLines,
+        index + 1,
+        bodyLine.line,
+        resourceAddress
+      );
+
+      diagnostics.push(...nestedBlock.diagnostics);
+      index = nestedBlock.endIndex;
+
+      if (supportedNestedBlocks?.has(nestedBlockName) !== true) {
+        diagnostics.push({
+          severity: "error",
+          code: "terraform.sync.nested_block",
+          line: bodyLine.line,
+          resourceAddress,
+          message: "nested block은 Terraform 동기화 subset에서 지원하지 않습니다."
+        });
+        continue;
+      }
+
+      if (!nestedBlock.closed) {
+        continue;
+      }
+
+      const nestedValues = parseAttributes(nestedBlock.bodyLines, resourceAddress);
+      diagnostics.push(...nestedValues.diagnostics);
+      appendNestedBlockValue(values, nestedBlockName, nestedValues.values);
       continue;
     }
 
@@ -357,6 +409,97 @@ function parseAttributes(
   }
 
   return { values, diagnostics };
+}
+
+function collectNestedBlockBody(
+  bodyLines: BodyLine[],
+  startIndex: number,
+  blockLine: number,
+  resourceAddress: string
+): {
+  bodyLines: BodyLine[];
+  diagnostics: TerraformDiagnostic[];
+  endIndex: number;
+  closed: boolean;
+} {
+  const nestedBodyLines: BodyLine[] = [];
+  const diagnostics: TerraformDiagnostic[] = [];
+  let valueDepth = 0;
+  let nestedBlockDepth = 0;
+
+  for (let index = startIndex; index < bodyLines.length; index += 1) {
+    const bodyLine = bodyLines[index];
+
+    if (!bodyLine) {
+      continue;
+    }
+
+    const codeLine = stripLineComment(bodyLine.text);
+    const trimmedLine = codeLine.trim();
+
+    if (valueDepth === 0 && trimmedLine === "}") {
+      if (nestedBlockDepth > 0) {
+        nestedBodyLines.push(bodyLine);
+        nestedBlockDepth -= 1;
+        continue;
+      }
+
+      return {
+        bodyLines: nestedBodyLines,
+        diagnostics,
+        endIndex: index,
+        closed: true
+      };
+    }
+
+    if (valueDepth === 0 && isNestedBlockOpening(trimmedLine)) {
+      nestedBodyLines.push(bodyLine);
+      nestedBlockDepth += 1;
+      continue;
+    }
+
+    nestedBodyLines.push(bodyLine);
+    valueDepth += countOpenValueDelimiters(codeLine);
+  }
+
+  diagnostics.push({
+    severity: "error",
+    code: "terraform.sync.block_header",
+    line: blockLine,
+    resourceAddress,
+    message: "nested block이 닫히지 않았습니다."
+  });
+
+  return {
+    bodyLines: nestedBodyLines,
+    diagnostics,
+    endIndex: bodyLines.length - 1,
+    closed: false
+  };
+}
+
+function appendNestedBlockValue(
+  values: Record<string, unknown>,
+  terraformName: string,
+  nestedValue: Record<string, unknown>
+): void {
+  const name = toCamelCase(terraformName);
+  const currentValue = values[name];
+
+  if (Array.isArray(currentValue)) {
+    currentValue.push(nestedValue);
+    return;
+  }
+
+  values[name] = [nestedValue];
+}
+
+function getNestedBlockName(lineText: string): string | null {
+  return NESTED_BLOCK_PATTERN.exec(lineText)?.[1] ?? null;
+}
+
+function isNestedBlockOpening(lineText: string): boolean {
+  return getNestedBlockName(lineText) !== null;
 }
 
 function parseAttributeValue(
