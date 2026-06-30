@@ -25,6 +25,7 @@ import type {
   RunDeploymentDestroyResult
 } from "../deployments/deployment-destroy-service.js";
 import type { ApproveDeploymentPlanInput } from "../deployments/deployment-approval-service.js";
+import type { PruneProjectDeploymentStorageResult } from "../deployments/deployment-retention.js";
 import { users } from "../db/schema.js";
 import {
   type ApproveDeploymentInput,
@@ -771,6 +772,10 @@ class FakeDeploymentRepository implements DeploymentRepository {
 }
 
 type DeploymentRouteTestOptions = {
+  pruneProjectDeploymentStorage?: (input: {
+    db: DatabaseClient["db"];
+    projectId: string;
+  }) => Promise<PruneProjectDeploymentStorageResult>;
   runDeploymentInit?: (
     input: RunDeploymentInitInput,
     repository: DeploymentRepository
@@ -809,6 +814,9 @@ async function buildDeploymentTestApp(
     prefix: "/api",
     getDatabaseClient: () => fakeAuthDb.client,
     createDeploymentRepository: () => repository,
+    ...(routeOptions.pruneProjectDeploymentStorage
+      ? { pruneProjectDeploymentStorage: routeOptions.pruneProjectDeploymentStorage }
+      : {}),
     ...(routeOptions.runDeploymentInit ? { runDeploymentInit: routeOptions.runDeploymentInit } : {}),
     ...(routeOptions.runDeploymentPlan ? { runDeploymentPlan: routeOptions.runDeploymentPlan } : {}),
     ...(routeOptions.approveDeploymentPlan
@@ -1118,6 +1126,36 @@ test("POST /api/projects/:projectId/deployments returns a created deployment", a
       }
     }
   ]);
+
+  await app.close();
+});
+
+test("POST /api/projects/:projectId/deployments prunes stale deployment storage after creation", async () => {
+  const repository = new FakeDeploymentRepository();
+  const pruneCalls: Array<{ projectId: string }> = [];
+  const app = await buildDeploymentTestApp(repository, {
+    pruneProjectDeploymentStorage: async ({ projectId: candidateProjectId }) => {
+      pruneCalls.push({ projectId: candidateProjectId });
+
+      return {
+        architectureIdsToDelete: [],
+        deploymentIdsToDelete: [],
+        failedObjectKeys: [],
+        objectKeysToDelete: [],
+        terraformArtifactIdsToDelete: []
+      };
+    }
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/projects/${projectId}/deployments`,
+    headers: await authHeaders(),
+    payload: createDeploymentBody()
+  });
+
+  assert.equal(response.statusCode, 201);
+  assert.deepEqual(pruneCalls, [{ projectId }]);
 
   await app.close();
 });
