@@ -692,7 +692,7 @@ export function DeploymentPanel({
       <div className={styles.deploymentSectionHeader}>
         <h3>Deployment records</h3>
         <button
-          className={styles.deploymentSecondaryButton}
+          className={`${styles.deploymentSecondaryButton} ${styles.deploymentRefreshButton}`}
           disabled={requestState === "loading"}
           onClick={refreshDeploymentPanel}
           type="button"

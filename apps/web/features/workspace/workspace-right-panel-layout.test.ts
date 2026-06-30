@@ -62,9 +62,9 @@ test("deployment mode switch keeps tabs the same size across modes", () => {
   const modeButtonRule = getCssRule(stylesSource, "deploymentModeButton");
 
   assert.match(deploymentPanelRule, /\bgrid-template-rows:\s*auto minmax\(0,\s*1fr\) auto;/);
-  assert.match(modeSwitchRule, /\bgrid-auto-rows:\s*40px;/);
+  assert.match(modeSwitchRule, /\bgrid-auto-rows:\s*32px;/);
   assert.match(modeSwitchRule, /\balign-items:\s*center;/);
-  assert.match(modeButtonRule, /\bheight:\s*40px;/);
+  assert.match(modeButtonRule, /\bheight:\s*32px;/);
 });
 
 test("deployment mode switch is pinned after the scrollable content area", () => {
