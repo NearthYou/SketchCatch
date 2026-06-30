@@ -282,7 +282,7 @@ select {
     translate3d(0, 0, var(--float-depth, 0))
     rotate(var(--float-rotate, 0deg))
     scale(var(--float-scale, 1));
-  animation: floatingObject var(--float-duration, 6.9s) ease-in-out infinite;
+  animation: floatingObject var(--float-duration, 6.2s) ease-in-out infinite;
   will-change: transform;
   z-index: 1;
 }
@@ -317,7 +317,7 @@ select {
   left: 9%;
   top: 25%;
   --float-depth: 42px;
-  --float-duration: 6.8s;
+  --float-duration: 6.1s;
   --float-rotate: -1deg;
 }
 
@@ -325,12 +325,12 @@ select {
   bottom: 15%;
   left: 22%;
   --float-depth: 82px;
-  --float-duration: 8.2s;
+  --float-duration: 7.4s;
   --float-rotate: 8deg;
 }
 
 .selectionFrame {
-  animation-duration: 8.8s;
+  animation-duration: 7.9s;
   border: 2px dashed rgba(255, 255, 255, 0.58);
   border-radius: 8px;
   box-shadow:
@@ -375,7 +375,7 @@ select {
 }
 
 .resourceChip {
-  animation: floatingChip var(--float-duration, 5.4s) ease-in-out infinite;
+  animation: floatingChip var(--float-duration, 4.9s) ease-in-out infinite;
   border-radius: 999px;
   box-shadow: 0 16px 36px rgba(0, 0, 0, 0.28);
   color: #071016;
@@ -390,21 +390,21 @@ select {
   background: #38bdf8;
   left: 34px;
   top: 34px;
-  --float-duration: 5.2s;
+  --float-duration: 4.7s;
 }
 
 .chipRds {
   background: #f59e0b;
   right: 46px;
   top: 70px;
-  --float-duration: 6s;
+  --float-duration: 5.4s;
 }
 
 .chipS3 {
   background: #34d399;
   bottom: 42px;
   left: 126px;
-  --float-duration: 5.5s;
+  --float-duration: 5s;
 }
 
 .providerTile {
@@ -430,7 +430,7 @@ select {
   bottom: 18%;
   right: 20%;
   --float-depth: 96px;
-  --float-duration: 7.4s;
+  --float-duration: 6.7s;
   --float-rotate: 14deg;
 }
 
@@ -441,7 +441,7 @@ select {
   bottom: 12%;
   right: 8%;
   --float-depth: 120px;
-  --float-duration: 6.3s;
+  --float-duration: 5.7s;
   --float-rotate: -9deg;
 }
 
@@ -460,7 +460,7 @@ select {
   bottom: 22%;
   left: 7%;
   --float-depth: 70px;
-  --float-duration: 5.7s;
+  --float-duration: 5.1s;
   --float-rotate: 0deg;
 }
 
@@ -469,7 +469,7 @@ select {
   right: 8%;
   top: 25%;
   --float-depth: 88px;
-  --float-duration: 6.9s;
+  --float-duration: 6.2s;
   --float-rotate: 0deg;
 }
 
