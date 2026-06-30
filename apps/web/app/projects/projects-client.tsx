@@ -117,7 +117,7 @@ export function ProjectsClient() {
           </Link>
         </div>
       ) : (
-        <div className="dashboardCardGrid">
+        <div className="dashboardCardGrid dashboardCardGridWide">
           {projects.map((project) => (
             <ApiProjectCard
               isDeleting={deletingProjectId === project.id}
