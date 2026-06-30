@@ -162,8 +162,8 @@ function createServerStorageDraft(): AiArchitectureDraftResult {
           id: "vpc",
           type: "VPC",
           label: "VPC",
-          positionX: 80,
-          positionY: 120,
+          positionX: 100,
+          positionY: 300,
           config: {
             cidrBlock: "172.16.0.0/16"
           }
@@ -172,8 +172,8 @@ function createServerStorageDraft(): AiArchitectureDraftResult {
           id: "subnet",
           type: "SUBNET",
           label: "Subnet",
-          positionX: 220,
-          positionY: 430,
+          positionX: 245,
+          positionY: 650,
           config: {
             vpcId: "aws_vpc.vpc.id",
             cidrBlock: "172.16.1.0/24"
@@ -183,8 +183,8 @@ function createServerStorageDraft(): AiArchitectureDraftResult {
           id: "internet-gateway",
           type: "INTERNET_GATEWAY",
           label: "Internet Gateway",
-          positionX: 500,
-          positionY: 230,
+          positionX: 590,
+          positionY: 365,
           config: {
             vpcId: "aws_vpc.vpc.id"
           }
@@ -193,8 +193,8 @@ function createServerStorageDraft(): AiArchitectureDraftResult {
           id: "route-table",
           type: "ROUTE_TABLE",
           label: "Route Table",
-          positionX: 820,
-          positionY: 440,
+          positionX: 940,
+          positionY: 610,
           config: {
             vpcId: "aws_vpc.vpc.id",
             route: [
@@ -209,8 +209,8 @@ function createServerStorageDraft(): AiArchitectureDraftResult {
           id: "route-table-association",
           type: "ROUTE_TABLE_ASSOCIATION",
           label: "Route Table Association",
-          positionX: 620,
-          positionY: 450,
+          positionX: 700,
+          positionY: 620,
           config: {
             subnetId: "aws_subnet.subnet.id",
             routeTableId: "aws_route_table.route_table.id"
@@ -232,8 +232,8 @@ function createServerStorageDraft(): AiArchitectureDraftResult {
           id: "security-group",
           type: "SECURITY_GROUP",
           label: "Security Group",
-          positionX: 180,
-          positionY: 340,
+          positionX: 200,
+          positionY: 520,
           config: {
             vpcId: "aws_vpc.vpc.id"
           }
@@ -242,8 +242,8 @@ function createServerStorageDraft(): AiArchitectureDraftResult {
           id: "ec2-instance",
           type: "EC2",
           label: "EC2 Instance",
-          positionX: 300,
-          positionY: 540,
+          positionX: 330,
+          positionY: 765,
           config: {
             ami: "data.aws_ami.ami.id",
             instanceType: "t3.micro",
@@ -262,8 +262,6 @@ function createServerStorageDraft(): AiArchitectureDraftResult {
         }
       ],
       edges: [
-        createEdge("s3-bucket-to-internet-gateway", "s3-bucket", "internet-gateway", "access"),
-        createEdge("internet-gateway-to-route-table-association", "internet-gateway", "route-table-association", "routes"),
         createEdge("subnet-to-route-table-association", "subnet", "route-table-association", "uses"),
         createEdge("route-table-association-to-route-table", "route-table-association", "route-table", "uses"),
         createEdge("subnet-to-ec2-instance", "subnet", "ec2-instance", "hosts"),

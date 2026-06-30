@@ -289,32 +289,32 @@ test("convertArchitectureJsonToDiagramJson lays out server and storage draft as 
         id: "vpc",
         type: "VPC",
         label: "VPC",
-        positionX: 80,
-        positionY: 120,
+        positionX: 100,
+        positionY: 300,
         config: { cidrBlock: "172.16.0.0/16" }
       },
       {
         id: "subnet",
         type: "SUBNET",
         label: "Subnet",
-        positionX: 220,
-        positionY: 430,
+        positionX: 245,
+        positionY: 650,
         config: { cidrBlock: "172.16.1.0/24", vpcId: "aws_vpc.vpc.id" }
       },
       {
         id: "security-group",
         type: "SECURITY_GROUP",
         label: "Security Group",
-        positionX: 180,
-        positionY: 340,
+        positionX: 200,
+        positionY: 520,
         config: { vpcId: "aws_vpc.vpc.id" }
       },
       {
         id: "ec2-instance",
         type: "EC2",
         label: "EC2 Instance",
-        positionX: 300,
-        positionY: 540,
+        positionX: 330,
+        positionY: 765,
         config: {
           ami: "data.aws_ami.ami.id",
           instanceType: "t3.micro",
@@ -326,24 +326,24 @@ test("convertArchitectureJsonToDiagramJson lays out server and storage draft as 
         id: "internet-gateway",
         type: "INTERNET_GATEWAY",
         label: "Internet Gateway",
-        positionX: 500,
-        positionY: 230,
+        positionX: 590,
+        positionY: 365,
         config: { vpcId: "aws_vpc.vpc.id" }
       },
       {
         id: "route-table-association",
         type: "ROUTE_TABLE_ASSOCIATION",
         label: "Route Table Association",
-        positionX: 620,
-        positionY: 450,
+        positionX: 700,
+        positionY: 620,
         config: { routeTableId: "aws_route_table.route_table.id", subnetId: "aws_subnet.subnet.id" }
       },
       {
         id: "route-table",
         type: "ROUTE_TABLE",
         label: "Route Table",
-        positionX: 820,
-        positionY: 440,
+        positionX: 940,
+        positionY: 610,
         config: { vpcId: "aws_vpc.vpc.id" }
       },
       {
@@ -388,56 +388,56 @@ test("convertArchitectureJsonToDiagramJson lays out server and storage draft as 
         id: "server-storage-az",
         kind: "design",
         parentAreaNodeId: "vpc",
-        position: { x: 120, y: 300 },
+        position: { x: 155, y: 430 },
         type: "design_az"
       },
       {
         id: "vpc",
         kind: "resource",
         parentAreaNodeId: "server-storage-region",
-        position: { x: 80, y: 120 },
+        position: { x: 100, y: 300 },
         type: "aws_vpc"
       },
       {
         id: "subnet",
         kind: "resource",
         parentAreaNodeId: "security-group",
-        position: { x: 220, y: 430 },
+        position: { x: 245, y: 650 },
         type: "aws_subnet"
       },
       {
         id: "security-group",
         kind: "resource",
         parentAreaNodeId: "server-storage-az",
-        position: { x: 180, y: 340 },
+        position: { x: 200, y: 520 },
         type: "aws_security_group"
       },
       {
         id: "ec2-instance",
         kind: "resource",
         parentAreaNodeId: "subnet",
-        position: { x: 300, y: 540 },
+        position: { x: 330, y: 765 },
         type: "aws_instance"
       },
       {
         id: "internet-gateway",
         kind: "resource",
         parentAreaNodeId: "vpc",
-        position: { x: 500, y: 230 },
+        position: { x: 590, y: 365 },
         type: "aws_internet_gateway"
       },
       {
         id: "route-table-association",
         kind: "resource",
         parentAreaNodeId: "vpc",
-        position: { x: 620, y: 450 },
+        position: { x: 700, y: 620 },
         type: "aws_route_table_association"
       },
       {
         id: "route-table",
         kind: "resource",
         parentAreaNodeId: "vpc",
-        position: { x: 820, y: 440 },
+        position: { x: 940, y: 610 },
         type: "aws_route_table"
       },
       {
@@ -461,12 +461,12 @@ test("convertArchitectureJsonToDiagramJson lays out server and storage draft as 
   const regionNode = nodeById.get("server-storage-region");
   const vpcNode = nodeById.get("vpc");
   const azNode = nodeById.get("server-storage-az");
-  assert.equal(regionNode?.size.width, 1120);
-  assert.equal(regionNode?.size.height, 900);
-  assert.equal(vpcNode?.size.width, 900);
-  assert.equal(vpcNode?.size.height, 768);
+  assert.equal(regionNode?.size.width, 1160);
+  assert.equal(regionNode?.size.height, 1080);
+  assert.equal(vpcNode?.size.width, 1000);
+  assert.equal(vpcNode?.size.height, 798);
   assert.equal(azNode?.size.width, 780);
-  assert.equal(azNode?.size.height, 540);
+  assert.equal(azNode?.size.height, 620);
 });
 
 test("convertDiagramJsonToArchitectureJson keeps only valid resource nodes and connected edges", () => {

@@ -43,7 +43,7 @@ export function addServerStorageAreaNodes(nodes: readonly DiagramNode[]): Diagra
       id: AREA_NODE_IDS.region,
       label: "Region",
       position: { x: 40, y: 70 },
-      size: { width: 1120, height: 900 },
+      size: { width: 1160, height: 1080 },
       type: "design_region",
       zIndex: 0
     }),
@@ -51,8 +51,8 @@ export function addServerStorageAreaNodes(nodes: readonly DiagramNode[]): Diagra
       id: AREA_NODE_IDS.availabilityZone,
       label: "Availability Zone",
       metadata: { parentAreaNodeId: "vpc" },
-      position: { x: 120, y: 300 },
-      size: { width: 780, height: 540 },
+      position: { x: 155, y: 430 },
+      size: { width: 780, height: 620 },
       type: "design_az",
       zIndex: 2
     }),
