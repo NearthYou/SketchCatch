@@ -25,7 +25,10 @@ export function normalizeSelectedNodeIds(
 
   const areaNodeIds = new Set(nodes.filter(isAreaNode).map((node) => node.id));
   const resourceNodeIds = selectedNodeIds.filter((nodeId) => !areaNodeIds.has(nodeId));
-  const firstSelectedNodeId = selectedNodeIds[0];
 
-  return resourceNodeIds.length > 0 || !firstSelectedNodeId ? resourceNodeIds : [firstSelectedNodeId];
+  return resourceNodeIds.length > 0 ? resourceNodeIds : [...selectedNodeIds];
+}
+
+export function canStartAreaBlankDrag(areaNodeId: string, selectedNodeIds: readonly string[]): boolean {
+  return selectedNodeIds.length === 1 && selectedNodeIds[0] === areaNodeId;
 }

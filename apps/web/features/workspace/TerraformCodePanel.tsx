@@ -13,11 +13,8 @@ import {
   ClipboardCheck,
   FileCode2,
   GitBranch,
-  Play,
-  Rocket,
   Settings,
   Sparkles,
-  Trash2,
   X
 } from "lucide-react";
 import { getApiErrorMessage } from "../../lib/api-client";
@@ -38,7 +35,7 @@ import {
   getTerraformFileCode,
   getTerraformFileOptions,
   parseTerraformFiles,
-  toDiagramFingerprint,
+  toTerraformRefreshFingerprint,
   type TerraformSaveBanner,
   type TerraformVirtualFile
 } from "./terraform-panel-utils";
@@ -193,7 +190,10 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
     [errorDiagnostics]
   );
   const hasErrorDiagnostics = errorDiagnostics.length > 0;
-  const currentDiagramFingerprint = useMemo(() => toDiagramFingerprint(context.diagram), [context.diagram]);
+  const currentDiagramFingerprint = useMemo(
+    () => toTerraformRefreshFingerprint(context.diagram),
+    [context.diagram]
+  );
   const terraformBlocks = useMemo(() => parseTerraformFiles(terraformFiles), [terraformFiles]);
   const selectedNode = useMemo(
     () => context.nodes.find((node) => node.id === context.selectedNodeId) ?? null,
@@ -419,7 +419,7 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
     }
 
     context.applyDiagramJson(syncResult.diagramJson);
-    latestDiagramFingerprintRef.current = toDiagramFingerprint(syncResult.diagramJson);
+    latestDiagramFingerprintRef.current = toTerraformRefreshFingerprint(syncResult.diagramJson);
     setHasLocalEdits(false);
     setSaveBanner(null);
     setStatusMessage("저장됨");
@@ -800,10 +800,6 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
       {isResourceCodeMode ? (
         <div className={styles.resourceActionBar}>
           {renderTerraformPreviewExplanationButton()}
-          <button className={styles.resourceActionPrimary} disabled type="button" title="리소스 단위 plan API 연결 예정">
-            <Play size={16} aria-hidden="true" />
-            Plan
-          </button>
           <button
             className={styles.resourceActionSecondary}
             disabled={requestState === "loading" || !displayedTerraformCode.trim()}
@@ -812,14 +808,6 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
           >
             <ClipboardCheck size={16} aria-hidden="true" />
             Validate
-          </button>
-          <button className={styles.resourceActionSecondary} disabled type="button" title="리소스 단위 apply API 연결 예정">
-            <Rocket size={16} aria-hidden="true" />
-            Apply
-          </button>
-          <button className={styles.resourceActionDanger} disabled type="button" title="리소스 단위 destroy API 연결 예정">
-            <Trash2 size={16} aria-hidden="true" />
-            Destroy
           </button>
         </div>
       ) : null}

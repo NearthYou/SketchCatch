@@ -63,6 +63,28 @@ test("save project draft body accepts full DiagramJson", () => {
   assert.equal(parsed.diagramJson.viewport.zoom, 1);
 });
 
+test("save project draft body preserves diagram node metadata", () => {
+  const parsed = saveProjectDraftBodySchema.parse({
+    diagramJson: {
+      ...validDiagram,
+      nodes: [
+        {
+          ...validDiagram.nodes[0]!,
+          metadata: {
+            awsRegion: "ap-northeast-2",
+            parentAreaNodeId: "area-1"
+          }
+        }
+      ]
+    }
+  });
+
+  assert.deepEqual(parsed.diagramJson.nodes[0]?.metadata, {
+    awsRegion: "ap-northeast-2",
+    parentAreaNodeId: "area-1"
+  });
+});
+
 test("save project draft body accepts an empty board DiagramJson", () => {
   const parsed = saveProjectDraftBodySchema.parse({
     diagramJson: {

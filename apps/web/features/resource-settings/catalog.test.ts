@@ -2,10 +2,13 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { resourceCatalog } from "./catalog";
 
-test("resourceCatalog gives VPC, Subnet, and Security Group area-sized defaults", () => {
-  assert.deepEqual(getResourceSize("aws_vpc"), { width: 516, height: 360 });
-  assert.deepEqual(getResourceSize("aws_subnet"), { width: 324, height: 216 });
-  assert.deepEqual(getResourceSize("aws_security_group"), { width: 324, height: 216 });
+test("resourceCatalog sizes area defaults below the Region hierarchy root", () => {
+  assert.deepEqual(getResourceSize("design_region"), { width: 260, height: 180 });
+  assert.deepEqual(getResourceSize("aws_vpc"), { width: 240, height: 160 });
+  assert.deepEqual(getResourceSize("design_az"), { width: 220, height: 150 });
+  assert.deepEqual(getResourceSize("design_group"), { width: 200, height: 130 });
+  assert.deepEqual(getResourceSize("aws_subnet"), { width: 180, height: 120 });
+  assert.deepEqual(getResourceSize("aws_security_group"), { width: 180, height: 120 });
 });
 
 test("resourceCatalog keeps regular network resources at icon node size", () => {

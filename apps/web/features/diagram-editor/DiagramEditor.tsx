@@ -7,6 +7,7 @@ import {
   PanOnScrollMode,
   ReactFlow,
   ReactFlowProvider,
+  SelectionMode,
   getViewportForBounds,
   useReactFlow
 } from "@xyflow/react";
@@ -54,11 +55,9 @@ import { terraformParameterCatalog } from "../parameter-input/catalog";
 import { ResourceSettingsPanel } from "../resource-settings";
 import { DEFAULT_DIAGRAM_VIEWPORT, EMPTY_DIAGRAM } from "./constants";
 import {
-  applyAreaNodeMovement,
   applyAreaNodeParentAssignments,
   clearDeletedAreaParentAssignments,
-  clearOutOfBoundsAreaParentAssignments,
-  getDirectlyMovedNodeIdsFromPositionMap
+  clearOutOfBoundsAreaParentAssignments
 } from "./area-node-movement";
 import { findInnermostAreaNodeAtPoint } from "./area-nodes";
 import {
@@ -67,6 +66,11 @@ import {
 } from "./canvas-pointer-hit-test";
 import { DiagramEdgeToolbar } from "./DiagramEdgeToolbar";
 import { DiagramNodeView } from "./DiagramNodeView";
+import {
+  finalizeDraggedNodes,
+  getDraggedPreviewNodes,
+  snapPositionToDiagramGrid
+} from "./drag-transaction";
 import {
   applyNodeMetadataUpdate,
   applyNodeParametersUpdateWithResourceLabel,
@@ -91,6 +95,7 @@ import {
 } from "./reference-drop-targets";
 import type { NodeResizeUpdate } from "./node-resize";
 import {
+  canStartAreaBlankDrag,
   getSingleSelectedEdgeForToolbar,
   normalizeSelectedNodeIds
 } from "./selection-utils";
@@ -120,10 +125,13 @@ const MAX_RIGHT_PANEL_WIDTH = 640;
 const MIN_WORKSPACE_WIDTH = 420;
 const DIAGRAM_SNAP_GRID_SIZE = 12;
 const DIAGRAM_SNAP_GRID: [number, number] = [DIAGRAM_SNAP_GRID_SIZE, DIAGRAM_SNAP_GRID_SIZE];
+const SNAP_ANIMATION_MS = 110;
+const SNAP_ANIMATION_CLEAR_MS = SNAP_ANIMATION_MS + 30;
 
 type AreaBlankDragState = {
   before: DiagramJson;
   hasMoved: boolean;
+  latestNodePosition: DiagramNode["position"];
   nodeId: string;
   pointerId: number;
   snapshotNodes: DiagramNode[];
@@ -160,6 +168,7 @@ function DiagramEditorInner({
   const [rightPanelWidth, setRightPanelWidth] = useState(readStoredRightPanelWidth);
   const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
   const [selectedEdgeIds, setSelectedEdgeIds] = useState<string[]>([]);
+  const [dragPreviewNodes, setDragPreviewNodes] = useState<DiagramNode[] | null>(null);
   const [activeReferenceDropTargetNodeId, setActiveReferenceDropTargetNodeId] = useState<string | null>(null);
   const [interactionMode, setInteractionMode] = useState<"select" | "pan">("select");
   const [isFlowReady, setFlowReady] = useState(false);
@@ -167,6 +176,8 @@ function DiagramEditorInner({
   const clipboardRef = useRef<DiagramNode[]>([]);
   const canvasPanelRef = useRef<HTMLDivElement | null>(null);
   const directNodeDragIdsRef = useRef<Set<string> | null>(null);
+  const dragAnchorNodeIdRef = useRef<string | null>(null);
+  const dragPreviewNodesRef = useRef<DiagramNode[] | null>(null);
   const dragSnapshotRef = useRef<DiagramJson | null>(null);
   const editorShellRef = useRef<HTMLElement | null>(null);
   const leftRailRef = useRef<HTMLDivElement | null>(null);
@@ -178,8 +189,11 @@ function DiagramEditorInner({
   const initialAutoFitFrameRef = useRef<number | null>(null);
   const isLeftPanelResizingRef = useRef(false);
   const isRightPanelResizingRef = useRef(false);
+  const snapAnimationFrameRef = useRef<number | null>(null);
+  const snapAnimationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [hoveredAreaBlankNodeId, setHoveredAreaBlankNodeId] = useState<string | null>(null);
   const [isAreaBlankDragging, setAreaBlankDragging] = useState(false);
+  const [isSnapAnimating, setSnapAnimating] = useState(false);
 
   const selectedNodeId = selectedNodeIds.length === 1 ? selectedNodeIds[0] ?? null : null;
   const selectedEdge = getSingleSelectedEdgeForToolbar(diagram.edges, selectedNodeIds, selectedEdgeIds);
@@ -201,7 +215,71 @@ function DiagramEditorInner({
     [onDiagramChange]
   );
 
+  const setDragPreviewNodesForState = useCallback((nodes: DiagramNode[] | null) => {
+    dragPreviewNodesRef.current = nodes;
+    setDragPreviewNodes(nodes);
+  }, []);
+
+  const clearSnapAnimationHandles = useCallback(() => {
+    if (snapAnimationFrameRef.current !== null) {
+      window.cancelAnimationFrame(snapAnimationFrameRef.current);
+      snapAnimationFrameRef.current = null;
+    }
+
+    if (snapAnimationTimeoutRef.current !== null) {
+      clearTimeout(snapAnimationTimeoutRef.current);
+      snapAnimationTimeoutRef.current = null;
+    }
+  }, []);
+
+  const cancelSnapAnimation = useCallback(() => {
+    clearSnapAnimationHandles();
+    setSnapAnimating(false);
+    setDragPreviewNodesForState(null);
+  }, [clearSnapAnimationHandles, setDragPreviewNodesForState]);
+
+  const startSnapAnimation = useCallback(
+    (fromNodes: readonly DiagramNode[], toNodes: readonly DiagramNode[]) => {
+      clearSnapAnimationHandles();
+
+      if (
+        !haveAnyNodePositionDifference(fromNodes, toNodes) ||
+        (typeof window !== "undefined" &&
+          typeof window.matchMedia === "function" &&
+          window.matchMedia("(prefers-reduced-motion: reduce)").matches)
+      ) {
+        setSnapAnimating(false);
+        setDragPreviewNodesForState(null);
+        return;
+      }
+
+      setSnapAnimating(true);
+      setDragPreviewNodesForState([...fromNodes]);
+      snapAnimationFrameRef.current = window.requestAnimationFrame(() => {
+        snapAnimationFrameRef.current = window.requestAnimationFrame(() => {
+          snapAnimationFrameRef.current = null;
+          setDragPreviewNodesForState([...toNodes]);
+        });
+      });
+      snapAnimationTimeoutRef.current = setTimeout(() => {
+        snapAnimationTimeoutRef.current = null;
+        setSnapAnimating(false);
+        setDragPreviewNodesForState(null);
+      }, SNAP_ANIMATION_CLEAR_MS);
+    },
+    [clearSnapAnimationHandles, setDragPreviewNodesForState]
+  );
+
+  const clearNodeDragState = useCallback(() => {
+    dragSnapshotRef.current = null;
+    directNodeDragIdsRef.current = null;
+    dragAnchorNodeIdRef.current = null;
+  }, []);
+
+  useEffect(() => () => clearSnapAnimationHandles(), [clearSnapAnimationHandles]);
+
   useEffect(() => {
+    cancelSnapAnimation();
     const nextDiagram = cloneDiagram(initialDiagram ?? EMPTY_DIAGRAM);
     replaceDiagram(nextDiagram, false);
     shouldAutoFitInitialDiagramRef.current = nextDiagram.nodes.length > 0;
@@ -215,7 +293,7 @@ function DiagramEditorInner({
       window.cancelAnimationFrame(initialAutoFitFrameRef.current);
       initialAutoFitFrameRef.current = null;
     }
-  }, [initialDiagram, replaceDiagram]);
+  }, [cancelSnapAnimation, initialDiagram, replaceDiagram]);
 
   const pushHistory = useCallback((before: DiagramJson, after: DiagramJson) => {
     if (areDiagramsEqual(before, after)) {
@@ -378,6 +456,7 @@ function DiagramEditorInner({
   }, []);
 
   const undo = useCallback(() => {
+    cancelSnapAnimation();
     setHistory((currentHistory) => {
       const previous = currentHistory.past.at(-1);
 
@@ -396,9 +475,10 @@ function DiagramEditorInner({
         future: [cloneDiagram(currentDiagram), ...currentHistory.future]
       };
     });
-  }, [replaceDiagram]);
+  }, [cancelSnapAnimation, replaceDiagram]);
 
   const redo = useCallback(() => {
+    cancelSnapAnimation();
     setHistory((currentHistory) => {
       const next = currentHistory.future[0];
 
@@ -417,7 +497,7 @@ function DiagramEditorInner({
         future: currentHistory.future.slice(1)
       };
     });
-  }, [replaceDiagram]);
+  }, [cancelSnapAnimation, replaceDiagram]);
 
   const updateNodeMetadata = useCallback(
     (nodeId: string, update: DiagramNodeMetadataUpdate | ((node: DiagramNode) => DiagramNodeMetadataUpdate)) => {
@@ -594,8 +674,9 @@ function DiagramEditorInner({
   );
 
   const handleResizeStart = useCallback(() => {
+    cancelSnapAnimation();
     resizeSnapshotRef.current = cloneDiagram(diagramRef.current);
-  }, []);
+  }, [cancelSnapAnimation]);
 
   const handleResize = useCallback(
     (nodeId: string, update: NodeResizeUpdate) => {
@@ -638,9 +719,10 @@ function DiagramEditorInner({
     [pushHistory, replaceDiagram]
   );
 
+  const displayNodes = dragPreviewNodes ?? diagram.nodes;
   const flowNodes = useMemo(
     () => {
-      const nextFlowNodes = toFlowNodes(diagram.nodes, selectedNodeIds, activeReferenceDropTargetNodeId, {
+      const nextFlowNodes = toFlowNodes(displayNodes, selectedNodeIds, activeReferenceDropTargetNodeId, {
         onBringForward: handleBringForward,
         onSendBackward: handleSendBackward,
         onTextColorChange: handleTextColorChange,
@@ -664,7 +746,7 @@ function DiagramEditorInner({
     },
     [
       activeReferenceDropTargetNodeId,
-      diagram.nodes,
+      displayNodes,
       handleBorderColorChange,
       handleBringForward,
       interactionMode,
@@ -699,37 +781,36 @@ function DiagramEditorInner({
       }
 
       const positionByNodeId = new Map(positionChanges.map((change) => [change.id, change.position]));
+      const dragSnapshot = dragSnapshotRef.current;
+      const directNodeDragIds = directNodeDragIdsRef.current;
+
+      if (dragSnapshot && directNodeDragIds) {
+        setDragPreviewNodesForState(
+          getDraggedPreviewNodes({
+            currentNodes: diagramRef.current.nodes,
+            directlyMovedNodeIds: directNodeDragIds,
+            positionByNodeId,
+            snapshotNodes: dragSnapshot.nodes
+          })
+        );
+        return;
+      }
 
       applyLiveDiagramUpdate((currentDiagram) => {
-        const snapshotNodes = dragSnapshotRef.current?.nodes ?? currentDiagram.nodes;
-        const directlyMovedNodeIds = getDirectlyMovedNodeIdsFromPositionMap(
-          snapshotNodes,
-          positionByNodeId,
-          directNodeDragIdsRef.current ?? undefined
-        );
-        const positionedNodes = currentDiagram.nodes.map((node) => {
-          const position = directlyMovedNodeIds.has(node.id) ? positionByNodeId.get(node.id) : undefined;
-
-          return {
-            ...node,
-            ...(position
-              ? {
-                  position: {
-                    x: position.x,
-                    y: position.y
-                  }
-                }
-              : {})
-          };
-        });
+        const directlyMovedNodeIds = new Set(positionByNodeId.keys());
 
         return {
           ...currentDiagram,
-          nodes: applyAreaNodeMovement(snapshotNodes, positionedNodes, directlyMovedNodeIds)
+          nodes: getDraggedPreviewNodes({
+            currentNodes: currentDiagram.nodes,
+            directlyMovedNodeIds,
+            positionByNodeId,
+            snapshotNodes: currentDiagram.nodes
+          })
         };
       });
     },
-    [applyLiveDiagramUpdate, interactionMode, selectedNodeIds]
+    [applyLiveDiagramUpdate, interactionMode, selectedNodeIds, setDragPreviewNodesForState]
   );
 
   const handleEdgesChange = useCallback<OnEdgesChange<DiagramFlowEdge>>(
@@ -828,8 +909,8 @@ function DiagramEditorInner({
 
       const zoom = reactFlow.getZoom() || 1;
       const nextPosition = {
-        x: snapToDiagramGrid(dragState.startNodePosition.x + (event.clientX - dragState.startClientPosition.x) / zoom),
-        y: snapToDiagramGrid(dragState.startNodePosition.y + (event.clientY - dragState.startClientPosition.y) / zoom)
+        x: dragState.startNodePosition.x + (event.clientX - dragState.startClientPosition.x) / zoom,
+        y: dragState.startNodePosition.y + (event.clientY - dragState.startClientPosition.y) / zoom
       };
 
       if (!isDifferentPosition(dragState.startNodePosition, nextPosition) && !dragState.hasMoved) {
@@ -840,32 +921,27 @@ function DiagramEditorInner({
         dragState.hasMoved = true;
       }
 
+      dragState.latestNodePosition = nextPosition;
       const directlyMovedNodeIds = new Set([dragState.nodeId]);
-
-      applyLiveDiagramUpdate((currentDiagram) => {
-        const positionedNodes = currentDiagram.nodes.map((node) =>
-          node.id === dragState.nodeId ? { ...node, position: nextPosition } : node
-        );
-
-        const nodes = applyAreaNodeMovement(dragState.snapshotNodes, positionedNodes, directlyMovedNodeIds);
-        const draggedNode = nodes.find((node) => node.id === dragState.nodeId);
-
-        updateActiveReferenceDropTargetNodeId(
-          draggedNode ? getVisualDropTargetNodeId(draggedNode, nodes) : null
-        );
-
-        return {
-          ...currentDiagram,
-          nodes
-        };
+      const previewNodes = getDraggedPreviewNodes({
+        currentNodes: diagramRef.current.nodes,
+        directlyMovedNodeIds,
+        positionByNodeId: new Map([[dragState.nodeId, nextPosition]]),
+        snapshotNodes: dragState.snapshotNodes
       });
+      const draggedNode = previewNodes.find((node) => node.id === dragState.nodeId);
+
+      setDragPreviewNodesForState(previewNodes);
+      updateActiveReferenceDropTargetNodeId(
+        draggedNode ? getVisualDropTargetNodeId(draggedNode, previewNodes) : null
+      );
 
       return true;
     },
     [
-      applyLiveDiagramUpdate,
       getVisualDropTargetNodeId,
       reactFlow,
+      setDragPreviewNodesForState,
       updateActiveReferenceDropTargetNodeId
     ]
   );
@@ -887,22 +963,36 @@ function DiagramEditorInner({
 
       if (dragState.hasMoved) {
         const directlyMovedNodeIds = new Set([dragState.nodeId]);
-        const nodesWithAssignedParents = applyAreaNodeParentAssignments(
-          diagramRef.current.nodes,
-          directlyMovedNodeIds
-        );
-        const movedNodeIds = getMovedNodeIdsFromNodes(dragState.snapshotNodes, nodesWithAssignedParents);
+        const positionByNodeId = new Map([[dragState.nodeId, dragState.latestNodePosition]]);
+        const previewNodes = dragPreviewNodesRef.current ?? getDraggedPreviewNodes({
+          currentNodes: diagramRef.current.nodes,
+          directlyMovedNodeIds,
+          positionByNodeId,
+          snapshotNodes: dragState.snapshotNodes
+        });
+        const finalizedNodes = finalizeDraggedNodes({
+          anchorNodeId: dragState.nodeId,
+          catalog: terraformParameterCatalog,
+          currentNodes: diagramRef.current.nodes,
+          directlyMovedNodeIds,
+          positionByNodeId,
+          snapGridSize: DIAGRAM_SNAP_GRID_SIZE,
+          snapshotNodes: dragState.snapshotNodes
+        });
         const after = {
           ...diagramRef.current,
-          nodes: applyContainingReferenceDropTargets(
-            nodesWithAssignedParents,
-            movedNodeIds,
-            terraformParameterCatalog
-          )
+          nodes: finalizedNodes.nodes
         };
 
-        replaceDiagram(after);
-        pushHistory(dragState.before, after);
+        if (!areDiagramsEqual(dragState.before, after)) {
+          replaceDiagram(after);
+          pushHistory(dragState.before, after);
+          startSnapAnimation(previewNodes, finalizedNodes.nodes);
+        } else {
+          setDragPreviewNodesForState(null);
+        }
+      } else {
+        setDragPreviewNodesForState(null);
       }
 
       areaBlankDragRef.current = null;
@@ -911,7 +1001,13 @@ function DiagramEditorInner({
 
       return true;
     },
-    [pushHistory, replaceDiagram, updateActiveReferenceDropTargetNodeId]
+    [
+      pushHistory,
+      replaceDiagram,
+      setDragPreviewNodesForState,
+      startSnapAnimation,
+      updateActiveReferenceDropTargetNodeId
+    ]
   );
 
   const handleCanvasPointerDown = useCallback(
@@ -936,6 +1032,11 @@ function DiagramEditorInner({
         return;
       }
 
+      if (!canStartAreaBlankDrag(areaNode.id, selectedNodeIds)) {
+        return;
+      }
+
+      cancelSnapAnimation();
       event.preventDefault();
       event.stopPropagation();
       selectAreaBlankNode(areaNode.id);
@@ -951,6 +1052,7 @@ function DiagramEditorInner({
       areaBlankDragRef.current = {
         before,
         hasMoved: false,
+        latestNodePosition: { ...areaNode.position },
         nodeId: areaNode.id,
         pointerId: event.pointerId,
         snapshotNodes: before.nodes,
@@ -964,9 +1066,11 @@ function DiagramEditorInner({
       updateActiveReferenceDropTargetNodeId(null);
     },
     [
+      cancelSnapAnimation,
       getAreaNodeFromPointerEvent,
       interactionMode,
       selectAreaBlankNode,
+      selectedNodeIds,
       updateActiveReferenceDropTargetNodeId
     ]
   );
@@ -1051,10 +1155,12 @@ function DiagramEditorInner({
       return;
     }
 
+    cancelSnapAnimation();
     dragSnapshotRef.current = cloneDiagram(diagramRef.current);
+    dragAnchorNodeIdRef.current = draggedFlowNode.id;
     directNodeDragIdsRef.current = createDirectNodeDragIdSet(draggedFlowNode.id, selectedNodeIds);
     updateActiveReferenceDropTargetNodeId(null);
-  }, [interactionMode, selectedNodeIds, updateActiveReferenceDropTargetNodeId]);
+  }, [cancelSnapAnimation, interactionMode, selectedNodeIds, updateActiveReferenceDropTargetNodeId]);
 
   const handleNodeDrag = useCallback(
     (_event: MouseEvent | TouchEvent, draggedFlowNode: DiagramFlowNode, nodes: DiagramFlowNode[]) => {
@@ -1064,30 +1170,35 @@ function DiagramEditorInner({
 
       const positionByNodeId = new Map(nodes.map((node) => [node.id, node.position]));
       const snapshotNodes = dragSnapshotRef.current?.nodes ?? diagramRef.current.nodes;
-      const directlyMovedNodeIds = getDirectlyMovedNodeIdsFromPositionMap(
-        snapshotNodes,
+      const directlyMovedNodeIds =
+        directNodeDragIdsRef.current ?? createDirectNodeDragIdSet(draggedFlowNode.id, selectedNodeIds);
+      const previewNodes = getDraggedPreviewNodes({
+        currentNodes: diagramRef.current.nodes,
+        directlyMovedNodeIds,
         positionByNodeId,
-        directNodeDragIdsRef.current ?? createDirectNodeDragIdSet(draggedFlowNode.id, selectedNodeIds)
-      );
-      const positionedNodes = applyAreaNodeMovement(snapshotNodes, diagramRef.current.nodes.map((node) => {
-        const position = directlyMovedNodeIds.has(node.id) ? positionByNodeId.get(node.id) : undefined;
+        snapshotNodes
+      });
+      const draggedNode = previewNodes.find((node) => node.id === draggedFlowNode.id);
 
-        return position ? { ...node, position: { ...position } } : node;
-      }), directlyMovedNodeIds);
-      const draggedNode = positionedNodes.find((node) => node.id === draggedFlowNode.id);
-
+      setDragPreviewNodesForState(previewNodes);
       updateActiveReferenceDropTargetNodeId(
-        draggedNode ? getVisualDropTargetNodeId(draggedNode, positionedNodes) : null
+        draggedNode ? getVisualDropTargetNodeId(draggedNode, previewNodes) : null
       );
     },
-    [getVisualDropTargetNodeId, interactionMode, selectedNodeIds, updateActiveReferenceDropTargetNodeId]
+    [
+      getVisualDropTargetNodeId,
+      interactionMode,
+      selectedNodeIds,
+      setDragPreviewNodesForState,
+      updateActiveReferenceDropTargetNodeId
+    ]
   );
 
   const handleNodeDragStop = useCallback(
     (_event: MouseEvent | TouchEvent, node: DiagramFlowNode, nodes: DiagramFlowNode[]) => {
       if (interactionMode !== "select") {
-        dragSnapshotRef.current = null;
-        directNodeDragIdsRef.current = null;
+        clearNodeDragState();
+        setDragPreviewNodesForState(null);
         updateActiveReferenceDropTargetNodeId(null);
         return;
       }
@@ -1095,38 +1206,49 @@ function DiagramEditorInner({
       const before = dragSnapshotRef.current;
       const positionByNodeId = new Map(nodes.map((node) => [node.id, node.position]));
       const snapshotNodes = before?.nodes ?? diagramRef.current.nodes;
-      const directlyMovedNodeIds = getDirectlyMovedNodeIdsFromPositionMap(
-        snapshotNodes,
+      const directlyMovedNodeIds =
+        directNodeDragIdsRef.current ?? createDirectNodeDragIdSet(node.id, selectedNodeIds);
+      const previewNodes = dragPreviewNodesRef.current ?? getDraggedPreviewNodes({
+        currentNodes: diagramRef.current.nodes,
+        directlyMovedNodeIds,
         positionByNodeId,
-        directNodeDragIdsRef.current ?? createDirectNodeDragIdSet(node.id, selectedNodeIds)
-      );
-      const positionedNodes = applyAreaNodeMovement(snapshotNodes, diagramRef.current.nodes.map((node) => {
-        const position = directlyMovedNodeIds.has(node.id) ? positionByNodeId.get(node.id) : undefined;
-
-        return position ? { ...node, position: { ...position } } : node;
-      }), directlyMovedNodeIds);
-      const nodesWithAssignedParents = applyAreaNodeParentAssignments(positionedNodes, directlyMovedNodeIds);
-      const movedNodeIds = getMovedNodeIdsFromNodes(snapshotNodes, nodesWithAssignedParents);
+        snapshotNodes
+      });
+      const finalizedNodes = finalizeDraggedNodes({
+        anchorNodeId: dragAnchorNodeIdRef.current ?? node.id,
+        catalog: terraformParameterCatalog,
+        currentNodes: diagramRef.current.nodes,
+        directlyMovedNodeIds,
+        positionByNodeId,
+        snapGridSize: DIAGRAM_SNAP_GRID_SIZE,
+        snapshotNodes
+      });
       const after = {
         ...diagramRef.current,
-        nodes: applyContainingReferenceDropTargets(
-          nodesWithAssignedParents,
-          movedNodeIds,
-          terraformParameterCatalog
-        )
+        nodes: finalizedNodes.nodes
       };
 
-      replaceDiagram(after);
-
-      if (before) {
+      if (before && !areDiagramsEqual(before, after)) {
+        replaceDiagram(after);
         pushHistory(before, after);
+        startSnapAnimation(previewNodes, finalizedNodes.nodes);
+      } else {
+        setDragPreviewNodesForState(null);
       }
 
-      dragSnapshotRef.current = null;
-      directNodeDragIdsRef.current = null;
+      clearNodeDragState();
       updateActiveReferenceDropTargetNodeId(null);
     },
-    [interactionMode, pushHistory, replaceDiagram, selectedNodeIds, updateActiveReferenceDropTargetNodeId]
+    [
+      clearNodeDragState,
+      interactionMode,
+      pushHistory,
+      replaceDiagram,
+      selectedNodeIds,
+      setDragPreviewNodesForState,
+      startSnapAnimation,
+      updateActiveReferenceDropTargetNodeId
+    ]
   );
 
   const handleConnectStart = useCallback<OnConnectStart>((_event, params) => {
@@ -1170,9 +1292,95 @@ function DiagramEditorInner({
     [commitDiagramUpdate]
   );
 
+  const finalizeAreaBlankDragWithoutAnimation = useCallback(() => {
+    const dragState = areaBlankDragRef.current;
+
+    if (!dragState || !dragState.hasMoved) {
+      return false;
+    }
+
+    const directlyMovedNodeIds = new Set([dragState.nodeId]);
+    const finalizedNodes = finalizeDraggedNodes({
+      anchorNodeId: dragState.nodeId,
+      catalog: terraformParameterCatalog,
+      currentNodes: diagramRef.current.nodes,
+      directlyMovedNodeIds,
+      positionByNodeId: new Map([[dragState.nodeId, dragState.latestNodePosition]]),
+      snapGridSize: DIAGRAM_SNAP_GRID_SIZE,
+      snapshotNodes: dragState.snapshotNodes
+    });
+    const after = {
+      ...diagramRef.current,
+      nodes: finalizedNodes.nodes
+    };
+
+    if (!areDiagramsEqual(dragState.before, after)) {
+      replaceDiagram(after);
+      pushHistory(dragState.before, after);
+    }
+
+    areaBlankDragRef.current = null;
+    setAreaBlankDragging(false);
+    setDragPreviewNodesForState(null);
+    updateActiveReferenceDropTargetNodeId(null);
+
+    return true;
+  }, [pushHistory, replaceDiagram, setDragPreviewNodesForState, updateActiveReferenceDropTargetNodeId]);
+
+  const finalizeNodeDragWithoutAnimation = useCallback(() => {
+    const before = dragSnapshotRef.current;
+    const directlyMovedNodeIds = directNodeDragIdsRef.current;
+    const anchorNodeId = dragAnchorNodeIdRef.current;
+    const previewNodes = dragPreviewNodesRef.current;
+
+    if (!before || !directlyMovedNodeIds || !anchorNodeId || !previewNodes) {
+      return false;
+    }
+
+    const finalizedNodes = finalizeDraggedNodes({
+      anchorNodeId,
+      catalog: terraformParameterCatalog,
+      currentNodes: diagramRef.current.nodes,
+      directlyMovedNodeIds,
+      positionByNodeId: new Map(previewNodes.map((previewNode) => [previewNode.id, previewNode.position])),
+      snapGridSize: DIAGRAM_SNAP_GRID_SIZE,
+      snapshotNodes: before.nodes
+    });
+    const after = {
+      ...diagramRef.current,
+      nodes: finalizedNodes.nodes
+    };
+
+    if (!areDiagramsEqual(before, after)) {
+      replaceDiagram(after);
+      pushHistory(before, after);
+    }
+
+    clearNodeDragState();
+    setDragPreviewNodesForState(null);
+    updateActiveReferenceDropTargetNodeId(null);
+
+    return true;
+  }, [
+    clearNodeDragState,
+    pushHistory,
+    replaceDiagram,
+    setDragPreviewNodesForState,
+    updateActiveReferenceDropTargetNodeId
+  ]);
+
+  const finalizeActiveDragWithoutAnimation = useCallback(() => {
+    if (finalizeAreaBlankDragWithoutAnimation()) {
+      return;
+    }
+
+    finalizeNodeDragWithoutAnimation();
+  }, [finalizeAreaBlankDragWithoutAnimation, finalizeNodeDragWithoutAnimation]);
+
   const handleDrop = useCallback(
     (event: DragEvent<HTMLDivElement>) => {
       event.preventDefault();
+      cancelSnapAnimation();
 
       const payload = getActiveResourceDragPayload(event.dataTransfer);
 
@@ -1182,10 +1390,13 @@ function DiagramEditorInner({
         return;
       }
 
-      const position = reactFlow.screenToFlowPosition({
-        x: event.clientX,
-        y: event.clientY
-      });
+      const position = snapPositionToDiagramGrid(
+        reactFlow.screenToFlowPosition({
+          x: event.clientX,
+          y: event.clientY
+        }),
+        DIAGRAM_SNAP_GRID_SIZE
+      );
 
       const nextNode = createDiagramNodeFromPayload(payload, position, getNextZIndex(diagramRef.current.nodes));
 
@@ -1211,7 +1422,7 @@ function DiagramEditorInner({
       clearActiveResourceDragPayload();
       focusEditorShell();
     },
-    [commitDiagramUpdate, focusEditorShell, reactFlow, updateActiveReferenceDropTargetNodeId]
+    [cancelSnapAnimation, commitDiagramUpdate, focusEditorShell, reactFlow, updateActiveReferenceDropTargetNodeId]
   );
 
   const handleDragOver = useCallback(
@@ -1246,6 +1457,7 @@ function DiagramEditorInner({
 
   const handlePaneClick = useCallback(
     (event: ReactMouseEvent) => {
+      cancelSnapAnimation();
       const position = reactFlow.screenToFlowPosition({
         x: event.clientX,
         y: event.clientY
@@ -1257,10 +1469,11 @@ function DiagramEditorInner({
       setInspectedNodeId(null);
       focusEditorShell();
     },
-    [focusEditorShell, reactFlow]
+    [cancelSnapAnimation, focusEditorShell, reactFlow]
   );
 
   const deleteSelection = useCallback(() => {
+    cancelSnapAnimation();
     const nodeIds = selectedNodeIds;
     const edgeIds = selectedEdgeIds;
 
@@ -1282,7 +1495,7 @@ function DiagramEditorInner({
     });
     setSelectedNodeIds([]);
     setSelectedEdgeIds([]);
-  }, [commitDiagramUpdate, selectedEdgeIds, selectedNodeIds]);
+  }, [cancelSnapAnimation, commitDiagramUpdate, selectedEdgeIds, selectedNodeIds]);
 
   const copySelectedNodes = useCallback(() => {
     if (selectedNodeIds.length === 0) {
@@ -1301,6 +1514,7 @@ function DiagramEditorInner({
       return;
     }
 
+    cancelSnapAnimation();
     const pastedNodes = createPastedNodes(clipboardRef.current, diagramRef.current.nodes);
 
     commitDiagramUpdate((currentDiagram) => {
@@ -1316,7 +1530,7 @@ function DiagramEditorInner({
     });
     setSelectedNodeIds(pastedNodes.map((node) => node.id));
     setSelectedEdgeIds([]);
-  }, [commitDiagramUpdate]);
+  }, [cancelSnapAnimation, commitDiagramUpdate]);
 
   const updateEdgeStyle = useCallback(
     (edgeId: string, style: DiagramEdge["style"]) => {
@@ -1423,6 +1637,26 @@ function DiagramEditorInner({
     };
   }, [diagram.nodes.length, handleFitView, isFlowReady]);
 
+  useEffect(() => {
+    function handleVisibilityChange(): void {
+      if (document.visibilityState === "hidden") {
+        finalizeActiveDragWithoutAnimation();
+      }
+    }
+
+    function handlePageHide(): void {
+      finalizeActiveDragWithoutAnimation();
+    }
+
+    document.addEventListener("visibilitychange", handleVisibilityChange, { capture: true });
+    window.addEventListener("pagehide", handlePageHide, { capture: true });
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange, { capture: true });
+      window.removeEventListener("pagehide", handlePageHide, { capture: true });
+    };
+  }, [finalizeActiveDragWithoutAnimation]);
+
   const handleKeyDown = useCallback(
     (event: KeyboardEvent) => {
       if (isEditableEventTarget(event.target)) {
@@ -1515,6 +1749,7 @@ function DiagramEditorInner({
   const canvasPanelClassName = [
     styles.canvasPanel,
     isAreaBlankDragging ? styles.canvasPanelAreaBlankDragging : undefined,
+    isSnapAnimating ? styles.canvasPanelSnapAnimating : undefined,
     shouldShowAreaBlankMoveCursor ? styles.canvasPanelAreaBlankMoveTarget : undefined,
     shouldShowAreaBlankBlockedCursor ? styles.canvasPanelAreaBlankBlockedTarget : undefined
   ]
@@ -1733,9 +1968,10 @@ function DiagramEditorInner({
             panOnScrollMode={PanOnScrollMode.Free}
             proOptions={{ hideAttribution: true }}
             selectionKeyCode={["Shift", "Meta", "Control"]}
+            selectionMode={SelectionMode.Partial}
             selectionOnDrag={interactionMode === "select"}
             snapGrid={DIAGRAM_SNAP_GRID}
-            snapToGrid
+            snapToGrid={false}
             zoomOnDoubleClick={false}
             zoomActivationKeyCode={["Meta", "Control"]}
           >
@@ -1777,24 +2013,6 @@ function isNodePositionChangeWithPosition(
   return change.type === "position" && Boolean(change.position);
 }
 
-function getMovedNodeIdsFromNodes(
-  previousNodes: readonly DiagramNode[],
-  currentNodes: readonly DiagramNode[]
-): Set<string> {
-  const movedNodeIds = new Set<string>();
-  const previousPositionByNodeId = new Map(previousNodes.map((node) => [node.id, node.position]));
-
-  for (const node of currentNodes) {
-    const previousPosition = previousPositionByNodeId.get(node.id);
-
-    if (previousPosition && isDifferentPosition(previousPosition, node.position)) {
-      movedNodeIds.add(node.id);
-    }
-  }
-
-  return movedNodeIds;
-}
-
 function createDirectNodeDragIdSet(
   draggedNodeId: string,
   selectedNodeIds: readonly string[]
@@ -1806,8 +2024,17 @@ function isDifferentPosition(left: DiagramNode["position"], right: DiagramNode["
   return left.x !== right.x || left.y !== right.y;
 }
 
-function snapToDiagramGrid(value: number): number {
-  return Math.round(value / DIAGRAM_SNAP_GRID_SIZE) * DIAGRAM_SNAP_GRID_SIZE;
+function haveAnyNodePositionDifference(
+  leftNodes: readonly DiagramNode[],
+  rightNodes: readonly DiagramNode[]
+): boolean {
+  const rightPositionByNodeId = new Map(rightNodes.map((node) => [node.id, node.position]));
+
+  return leftNodes.some((node) => {
+    const rightPosition = rightPositionByNodeId.get(node.id);
+
+    return Boolean(rightPosition && isDifferentPosition(node.position, rightPosition));
+  });
 }
 
 function readStoredLeftPanelWidth(): number {

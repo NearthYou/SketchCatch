@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { DiagramEdge, DiagramNode } from "../../../../packages/types/src";
 import {
+  canStartAreaBlankDrag,
   getSingleSelectedEdgeForToolbar,
   normalizeSelectedNodeIds
 } from "./selection-utils";
@@ -80,7 +81,7 @@ test("normalizeSelectedNodeIds removes area nodes from mixed lasso selection", (
   );
 });
 
-test("normalizeSelectedNodeIds keeps one area node if only areas were selected", () => {
+test("normalizeSelectedNodeIds keeps multiple area nodes selected for marquee deletion", () => {
   const nodes: DiagramNode[] = [
     {
       ...baseNode,
@@ -96,5 +97,12 @@ test("normalizeSelectedNodeIds keeps one area node if only areas were selected",
     }
   ];
 
-  assert.deepEqual(normalizeSelectedNodeIds(nodes, ["vpc", "subnet"]), ["vpc"]);
+  assert.deepEqual(normalizeSelectedNodeIds(nodes, ["vpc", "subnet"]), ["vpc", "subnet"]);
+});
+
+test("canStartAreaBlankDrag only allows dragging the single selected area", () => {
+  assert.equal(canStartAreaBlankDrag("sg-app", []), false);
+  assert.equal(canStartAreaBlankDrag("sg-app", ["sg-db"]), false);
+  assert.equal(canStartAreaBlankDrag("sg-app", ["sg-app", "sg-db"]), false);
+  assert.equal(canStartAreaBlankDrag("sg-app", ["sg-app"]), true);
 });

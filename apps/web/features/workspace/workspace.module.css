@@ -895,11 +895,12 @@
   padding: 6px 8px;
 }
 
-.resourceActionPrimary,
-.resourceActionSecondary,
-.resourceActionDanger {
+.resourceActionSecondary {
   align-items: center;
+  background: #ffffff;
+  border: 1px solid #7c5cff;
   border-radius: 6px;
+  color: #6f4cf6;
   cursor: pointer;
   display: inline-flex;
   font: inherit;
@@ -911,48 +912,14 @@
   white-space: nowrap;
 }
 
-.resourceActionPrimary {
-  background: #6f4cf6;
-  border: 1px solid #6f4cf6;
-  color: #ffffff;
-}
-
-.resourceActionSecondary {
-  background: #ffffff;
-  border: 1px solid #7c5cff;
-  color: #6f4cf6;
-}
-
-.resourceActionDanger {
-  background: #ef4444;
-  border: 1px solid #ef4444;
-  color: #ffffff;
-}
-
-.resourceActionPrimary:disabled,
-.resourceActionSecondary:disabled,
-.resourceActionDanger:disabled {
+.resourceActionSecondary:disabled {
   cursor: not-allowed;
   opacity: 0.5;
-}
-
-.resourceActionPrimary:not(:disabled):hover,
-.resourceActionPrimary:not(:disabled):focus-visible {
-  background: #5f3de8;
-  border-color: #5f3de8;
-  outline: none;
 }
 
 .resourceActionSecondary:not(:disabled):hover,
 .resourceActionSecondary:not(:disabled):focus-visible {
   background: #f6f3ff;
-  outline: none;
-}
-
-.resourceActionDanger:not(:disabled):hover,
-.resourceActionDanger:not(:disabled):focus-visible {
-  background: #dc2626;
-  border-color: #dc2626;
   outline: none;
 }
 

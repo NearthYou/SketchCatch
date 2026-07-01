@@ -291,6 +291,125 @@ test("applyAreaNodeParentAssignments does not assign stationary nodes to a moved
   assert.equal(getNodeById(result, instance.id)?.metadata?.parentAreaNodeId, undefined);
 });
 
+test("applyAreaNodeParentAssignments requires full containment when assigning area parents", () => {
+  const smallSecurityGroup = makeResourceNode({
+    id: "sg-small-1",
+    resourceType: "aws_security_group",
+    position: { x: 120, y: 80 },
+    size: { width: 160, height: 140 },
+    zIndex: 2
+  });
+  const largeSubnet = makeResourceNode({
+    id: "subnet-large-1",
+    resourceType: "aws_subnet",
+    position: { x: 0, y: 0 },
+    size: { width: 500, height: 360 },
+    zIndex: 1
+  });
+
+  const result = applyAreaNodeParentAssignments(
+    [largeSubnet, smallSecurityGroup],
+    new Set([largeSubnet.id])
+  );
+
+  assert.equal(getNodeById(result, largeSubnet.id)?.metadata?.parentAreaNodeId, undefined);
+});
+
+test("applyAreaNodeParentAssignments assigns an area parent when the full child box is contained", () => {
+  const region = makeDesignNode({
+    id: "region-1",
+    type: "design_region",
+    position: { x: 0, y: 0 },
+    size: { width: 500, height: 360 },
+    zIndex: 1
+  });
+  const subnet = makeResourceNode({
+    id: "subnet-1",
+    resourceType: "aws_subnet",
+    position: { x: 80, y: 70 },
+    size: { width: 280, height: 220 },
+    zIndex: 2
+  });
+
+  const result = applyAreaNodeParentAssignments([region, subnet], new Set([subnet.id]));
+
+  assert.equal(getNodeById(result, subnet.id)?.metadata?.parentAreaNodeId, region.id);
+});
+
+test("applyAreaNodeParentAssignments keeps regular resources on center-point containment", () => {
+  const region = makeDesignNode({
+    id: "region-1",
+    type: "design_region",
+    position: { x: 0, y: 0 },
+    size: { width: 100, height: 100 }
+  });
+  const instance = makeResourceNode({
+    id: "instance-1",
+    resourceType: "aws_instance",
+    position: { x: 60, y: 40 },
+    size: { width: 60, height: 60 }
+  });
+
+  const result = applyAreaNodeParentAssignments([region, instance], new Set([instance.id]));
+
+  assert.equal(getNodeById(result, instance.id)?.metadata?.parentAreaNodeId, region.id);
+});
+
+test("applyAreaNodeParentAssignments does not assign overlapping areas moved together as parents", () => {
+  const subnet = makeResourceNode({
+    id: "subnet-1",
+    resourceType: "aws_subnet",
+    position: { x: 0, y: 0 },
+    size: { width: 500, height: 360 },
+    zIndex: 1
+  });
+  const securityGroupApp = makeResourceNode({
+    id: "sg-app-1",
+    resourceType: "aws_security_group",
+    position: { x: 120, y: 80 },
+    size: { width: 260, height: 220 },
+    zIndex: 2
+  });
+  const securityGroupDb = makeResourceNode({
+    id: "sg-db-1",
+    resourceType: "aws_security_group",
+    position: { x: 170, y: 120 },
+    size: { width: 160, height: 140 },
+    zIndex: 3
+  });
+
+  const result = applyAreaNodeParentAssignments(
+    [subnet, securityGroupApp, securityGroupDb],
+    new Set([subnet.id, securityGroupApp.id, securityGroupDb.id])
+  );
+
+  assert.equal(getNodeById(result, subnet.id)?.metadata?.parentAreaNodeId, undefined);
+  assert.equal(getNodeById(result, securityGroupApp.id)?.metadata?.parentAreaNodeId, undefined);
+  assert.equal(getNodeById(result, securityGroupDb.id)?.metadata?.parentAreaNodeId, undefined);
+});
+
+test("applyAreaNodeParentAssignments keeps existing area ancestry when nested areas move together", () => {
+  const region = makeDesignNode({
+    id: "region-1",
+    type: "design_region",
+    position: { x: 0, y: 0 },
+    size: { width: 500, height: 360 },
+    zIndex: 1
+  });
+  const subnet = makeResourceNode({
+    id: "subnet-1",
+    parentAreaNodeId: region.id,
+    resourceType: "aws_subnet",
+    position: { x: 80, y: 70 },
+    size: { width: 280, height: 220 },
+    zIndex: 2
+  });
+
+  const result = applyAreaNodeParentAssignments([region, subnet], new Set([region.id, subnet.id]));
+
+  assert.equal(getNodeById(result, subnet.id)?.metadata?.parentAreaNodeId, region.id);
+});
+
 test("clearDeletedAreaParentAssignments removes only deleted direct parent references", () => {
   const region = makeDesignNode({
     id: "region-1",
@@ -375,6 +494,46 @@ test("clearOutOfBoundsAreaParentAssignments removes children outside a resized p
 
   assert.equal(getNodeById(result, subnet.id)?.metadata?.parentAreaNodeId, region.id);
   assert.equal(getNodeById(result, instance.id)?.metadata?.parentAreaNodeId, undefined);
+});
+
+test("clearOutOfBoundsAreaParentAssignments requires full containment for area children", () => {
+  const region = makeDesignNode({
+    id: "region-1",
+    type: "design_region",
+    position: { x: 0, y: 0 },
+    size: { width: 200, height: 160 }
+  });
+  const securityGroup = makeResourceNode({
+    id: "sg-1",
+    parentAreaNodeId: region.id,
+    resourceType: "aws_security_group",
+    position: { x: 120, y: 40 },
+    size: { width: 120, height: 100 }
+  });
+
+  const result = clearOutOfBoundsAreaParentAssignments([region, securityGroup], new Set([region.id]));
+
+  assert.equal(getNodeById(result, securityGroup.id)?.metadata?.parentAreaNodeId, undefined);
+});
+
+test("clearOutOfBoundsAreaParentAssignments keeps regular resources on center-point containment", () => {
+  const region = makeDesignNode({
+    id: "region-1",
+    type: "design_region",
+    position: { x: 0, y: 0 },
+    size: { width: 100, height: 100 }
+  });
+  const instance = makeResourceNode({
+    id: "instance-1",
+    parentAreaNodeId: region.id,
+    resourceType: "aws_instance",
+    position: { x: 60, y: 40 },
+    size: { width: 60, height: 60 }
+  });
+
+  const result = clearOutOfBoundsAreaParentAssignments([region, instance], new Set([region.id]));
+
+  assert.equal(getNodeById(result, instance.id)?.metadata?.parentAreaNodeId, region.id);
 });
 
 test("clearOutOfBoundsAreaParentAssignments does not adopt stationary nodes covered by a resized area", () => {

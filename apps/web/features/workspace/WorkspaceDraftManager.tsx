@@ -42,6 +42,7 @@ export function WorkspaceDraftManager() {
   const localDraftRef = useRef<LocalProjectDraft | null>(null);
   const localSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasUnsavedChangesRef = useRef(false);
+  const draftChangeVersionRef = useRef(0);
 
   const setCurrentLocalDraft = useCallback((draft: LocalProjectDraft | null) => {
     localDraftRef.current = draft;
@@ -59,6 +60,7 @@ export function WorkspaceDraftManager() {
       return null;
     }
 
+    const changeVersion = draftChangeVersionRef.current;
     const draft = createLocalProjectDraft({
       workspaceId,
       projectId: LOCAL_PROJECT_ID,
@@ -68,9 +70,13 @@ export function WorkspaceDraftManager() {
     });
 
     await writeLocalProjectDraft(draft);
-    setCurrentLocalDraft(draft);
-    hasUnsavedChangesRef.current = false;
-    setSaveState("local-saved");
+
+    if (draftChangeVersionRef.current === changeVersion) {
+      setCurrentLocalDraft(draft);
+      hasUnsavedChangesRef.current = false;
+      setSaveState("local-saved");
+    }
+
     return draft;
   }, [setCurrentLocalDraft, workspaceId]);
 
@@ -113,6 +119,7 @@ export function WorkspaceDraftManager() {
         const nextDiagram = storedLocalDraft?.diagramJson ?? EMPTY_DIAGRAM;
         latestDiagramRef.current = nextDiagram;
         hasUnsavedChangesRef.current = false;
+        draftChangeVersionRef.current = 0;
         setWorkspaceId(nextWorkspaceId);
         setProjectName(nextProjectName);
         setInitialDiagram(nextDiagram);
@@ -154,6 +161,7 @@ export function WorkspaceDraftManager() {
         return;
       }
 
+      draftChangeVersionRef.current += 1;
       latestDiagramRef.current = diagram;
       hasUnsavedChangesRef.current = true;
       setSaveState("local-pending");

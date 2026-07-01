@@ -205,7 +205,7 @@ test("deployment baseline save button shows pending and saved icons", () => {
   assert.match(deploymentPanelSource, /<DeploymentBaselineIcon size=\{16\} aria-hidden="true" \/>/);
   assert.match(componentSource, /lastSavedDeploymentBaselineFingerprint/);
   assert.match(componentSource, /isDeploymentBaselineDirty/);
-  assert.match(componentSource, /toDiagramFingerprint\(preparedSource\.diagramJson\)/);
+  assert.match(componentSource, /toDeploymentBaselineFingerprint\(preparedSource\.diagramJson\)/);
   assert.match(componentSource, /setIsDeploymentBaselineDirty\(false\)/);
   assert.match(
     componentSource,
@@ -273,6 +273,21 @@ test("terraform preview explanation is triggered from the terraform code panel",
   assert.doesNotMatch(terraformPanelSource, /checklist\.length\} Checks/);
   assert.match(previewExplanationRule, /\bmax-height:\s*180px;/);
   assert.match(previewExplanationRule, /\boverflow:\s*auto;/);
+});
+
+test("terraform resource code mode keeps validation and explanation but omits deployment actions", () => {
+  assert.match(terraformPanelSource, /renderTerraformPreviewExplanationButton\(\)/);
+  assert.match(terraformPanelSource, /Validate/);
+  assert.doesNotMatch(terraformPanelSource, /리소스 단위 plan API 연결 예정/);
+  assert.doesNotMatch(terraformPanelSource, /리소스 단위 apply API 연결 예정/);
+  assert.doesNotMatch(terraformPanelSource, /리소스 단위 destroy API 연결 예정/);
+  assert.doesNotMatch(terraformPanelSource, /className=\{styles\.resourceActionPrimary\}/);
+  assert.doesNotMatch(terraformPanelSource, /className=\{styles\.resourceActionDanger\}/);
+  assert.doesNotMatch(stylesSource, /\.resourceActionPrimary\s*\{/);
+  assert.doesNotMatch(stylesSource, /\.resourceActionDanger\s*\{/);
+  assert.match(deploymentPanelSource, /Terraform Plan 실행/);
+  assert.match(deploymentPanelSource, /Terraform Apply 실행/);
+  assert.match(deploymentPanelSource, /Terraform Destroy 실행/);
 });
 
 test("terraform panel does not expose a detached artifact save action", () => {

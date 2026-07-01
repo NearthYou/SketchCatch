@@ -60,7 +60,20 @@ test("toFlowNodes keeps selected area nodes pointer-addressable for resize contr
   const flowNode = flowNodes.find((node) => node.id === "vpc-1");
 
   assert.equal(flowNode?.style?.pointerEvents, undefined);
+  assert.equal(flowNode?.selectable, true);
   assert.match(flowNode?.className ?? "", /\bdiagramAreaFlowNodeInteractive\b/);
+});
+
+test("toFlowNodes keeps unselected area nodes available for marquee selection", () => {
+  const subnet = makeNode({ id: "subnet-1", resourceType: "aws_subnet" });
+  const securityGroup = makeNode({ id: "security-group-1", resourceType: "aws_security_group" });
+  const instance = makeNode({ id: "instance-1", resourceType: "aws_instance" });
+
+  const flowNodes = toFlowNodes([subnet, securityGroup, instance], [], null, handlers);
+
+  assert.equal(flowNodes.find((node) => node.id === "subnet-1")?.selectable, true);
+  assert.equal(flowNodes.find((node) => node.id === "security-group-1")?.selectable, true);
+  assert.equal(flowNodes.find((node) => node.id === "instance-1")?.selectable, true);
 });
 
 test("toFlowNodes keeps locked area node bodies from falling through to pane selection", () => {

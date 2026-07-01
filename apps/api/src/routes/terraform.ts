@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type {
   DiagramJson,
+  DiagramNodeMetadata,
   TerraformGenerateResponse,
   TerraformSyncToDiagramResponse,
   TerraformValidateResponse
@@ -25,6 +26,21 @@ const diagramNodeParametersSchema = z.object({
   fileName: z.string().min(1),
   values: z.record(z.string(), z.unknown()),
   invalid: z.boolean().optional()
+});
+
+const awsRegionCodeSchema = z.enum([
+  "ap-northeast-2",
+  "ap-northeast-1",
+  "ap-southeast-1",
+  "us-east-1",
+  "us-west-2",
+  "eu-west-1",
+  "eu-central-1"
+]);
+
+const diagramNodeMetadataSchema: z.ZodType<DiagramNodeMetadata> = z.object({
+  awsRegion: awsRegionCodeSchema.optional(),
+  parentAreaNodeId: z.string().min(1).optional()
 });
 
 const diagramNodeSchema = z.object({
@@ -53,6 +69,7 @@ const diagramNodeSchema = z.object({
       borderColor: z.string().min(1).optional()
     })
     .optional(),
+  metadata: diagramNodeMetadataSchema.optional(),
   parameters: diagramNodeParametersSchema.optional()
 });
 
