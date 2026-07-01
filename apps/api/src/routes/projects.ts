@@ -487,7 +487,7 @@ export async function registerProjectRoutes(
       .where(and(eq(projects.id, params.id), eq(projects.userId, currentUserId)));
 
     if (!project) {
-      return sendNotFound(reply, "?꾨줈?앺듃瑜?李얠쓣 ???놁뒿?덈떎.");
+      return sendNotFound(reply, "프로젝트를 찾을 수 없습니다.");
     }
 
     const [asset] = await db
@@ -496,7 +496,7 @@ export async function registerProjectRoutes(
       .where(and(eq(projectAssets.id, params.assetId), eq(projectAssets.projectId, params.id)));
 
     if (!asset) {
-      return sendNotFound(reply, "?낅줈???뚯씪湲곕줉???李얠쓣 ???놁뒿?덈떎.");
+      return sendNotFound(reply, "업로드된 파일 기록을 찾을 수 없습니다.");
     }
 
     if (asset.uploadStatus === "uploaded") {
@@ -513,21 +513,17 @@ export async function registerProjectRoutes(
     });
 
     if (!uploaded) {
-      return sendConflict(reply, "S3?먯꽌 ?낅줈???뚯씪???뺤씤?섏? 紐삵뻽?듬땲??");
+      return sendConflict(reply, "S3에서 업로드된 파일을 확인하지 못했습니다.");
     }
 
-    await db
+    const [confirmedAsset] = await db
       .update(projectAssets)
       .set({ uploadStatus: "uploaded" })
-      .where(and(eq(projectAssets.id, params.assetId), eq(projectAssets.projectId, params.id)));
-
-    const [confirmedAsset] = await db
-      .select()
-      .from(projectAssets)
-      .where(and(eq(projectAssets.id, params.assetId), eq(projectAssets.projectId, params.id)));
+      .where(and(eq(projectAssets.id, params.assetId), eq(projectAssets.projectId, params.id)))
+      .returning();
 
     if (!confirmedAsset) {
-      throw new Error("Confirmed project asset disappeared");
+      return sendNotFound(reply, "업로드된 파일 기록을 찾을 수 없습니다.");
     }
 
     const response = { asset: confirmedAsset };
@@ -546,7 +542,7 @@ export async function registerProjectRoutes(
       .where(and(eq(projects.id, params.id), eq(projects.userId, currentUserId)));
 
     if (!project) {
-      return sendNotFound(reply, "?꾨줈?앺듃瑜?李얠쓣 ???놁뒿?덈떎.");
+      return sendNotFound(reply, "프로젝트를 찾을 수 없습니다.");
     }
 
     const [asset] = await db

@@ -858,7 +858,9 @@ class ProjectRouteFakeDb {
       }),
       update: (table: unknown) => ({
         set: (values: Partial<DeploymentRow> | Partial<ProjectAssetRow>) => ({
-          where: async () => {
+          where: () => {
+            let updatedRows: unknown[] = [];
+
             if (table === deployments) {
               const deploymentValues = values as Partial<DeploymentRow>;
 
@@ -892,25 +894,36 @@ class ProjectRouteFakeDb {
                   currentPlanArtifactId: deployment.currentPlanArtifactId,
                   id: deployment.id
                 }));
+              updatedRows = this.deploymentRows;
             }
 
             if (table === projectAssets) {
+              const nextProjectAssetRows: ProjectAssetRow[] = [];
+
               this.projectAssetRows = this.projectAssetRows.map((asset) => {
-                if (
-                  (this.requestedProjectId && asset.projectId !== this.requestedProjectId) ||
-                  (this.requestedProjectAssetId && asset.id !== this.requestedProjectAssetId)
-                ) {
+                const shouldUpdate =
+                  (!this.requestedProjectId || asset.projectId === this.requestedProjectId) &&
+                  (!this.requestedProjectAssetId || asset.id === this.requestedProjectAssetId);
+
+                if (!shouldUpdate) {
                   return asset;
                 }
 
-                return {
+                const nextAsset = {
                   ...asset,
                   ...(values as Partial<ProjectAssetRow>)
                 };
+
+                nextProjectAssetRows.push(nextAsset);
+
+                return nextAsset;
               });
+              updatedRows = nextProjectAssetRows;
             }
 
-            return [];
+            return {
+              returning: async () => updatedRows
+            };
           }
         })
       }),
