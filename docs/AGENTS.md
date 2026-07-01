@@ -14,9 +14,11 @@ This folder contains product, architecture, data model, development, and deploym
 2. Before adding a new document, check `docs/README.md` and update an existing document if possible.
 3. Keep the regular reading set small.
 4. Remove or merge stale content instead of preserving old versions.
-5. Keep product direction aligned with Terraform-first, multi-cloud-ready IaC platform positioning. MVP implementation is AWS-first.
-6. Keep the first MVP goal explicit: AI-recommended infrastructure must be deployable to real AWS through a controlled Deployment flow.
-7. Keep safety boundaries explicit: no real AWS apply unless it is explicit Deployment work, no secrets, and no frontend AWS SDK calls.
+5. Keep product direction aligned with the multi-cloud-ready IaC operations service positioning. MVP implementation is AWS-first and Terraform-first, but the domain model must stay provider-neutral.
+6. Keep the first MVP goal explicit: users must be able to move from Requirement Input, Source Repository evidence, or Reverse Engineering input to a Practice Architecture, IaC Preview, Pre-Deployment Check, and either an approved Direct Deployment Path or Git/CI/CD Deployment Path.
+7. Treat presentation flows as Representative Use Journeys. Do not let demo-only wording replace the service's real user journey.
+8. Keep safety boundaries explicit: no real cloud apply unless it is explicit Deployment work or approved Git/CI/CD handoff, no secrets, no frontend cloud SDK calls, no AI or voice input state changes without user acceptance.
+9. Document Redis as internal Runtime Cache infrastructure only unless a separate product decision turns it into a user Practice Architecture Resource.
 
 ## Document Filename Rules
 

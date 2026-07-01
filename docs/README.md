@@ -6,11 +6,11 @@ SketchCatch 문서는 **SSOT(Single Source of Truth)** 기준으로 관리한다
 
 | 문서 | 책임 | 언제 읽는가 |
 | --- | --- | --- |
-| [제품 방향](./product.md) | 제품 정의, MVP 목표, 기능 우선순위, 3주 로드맵 | 무엇을 만들지, 이번 작업이 MVP에 포함되는지 판단할 때 |
+| [제품 방향](./product.md) | 제품 정의, MVP 목표, 핵심 서비스 여정, 기능 우선순위, 3주 로드맵 | 무엇을 만들지, 이번 작업이 MVP에 포함되는지 판단할 때 |
 | [데이터 모델](./data-models.md) | DB/API/프론트/AI/배포 공통 타입과 필드명 | DTO, DB schema, Zod schema, 프론트 상태를 바꿀 때 |
 | [아키텍처](./architecture.md) | 모노레포 구조, 앱 경계, 저장소 경계, Terraform/AWS 실행 위치 | API, storage, worker, 인프라 실행 경계를 정할 때 |
 | [개발 가이드](./development.md) | 로컬 실행, Git flow, 팀 AI 협업 규칙, PR 체크 | 구현 전후 작업 절차와 검증 기준을 확인할 때 |
-| [배포 운영 문서](./deployment.md) | 운영 배포와 실제 AWS E2E 데모 실행/cleanup 절차 | Terraform Plan/Apply/Destroy, AWS 연결, 운영 배포를 다룰 때 |
+| [배포 운영 문서](./deployment.md) | 운영 배포, Direct Deployment Path, Git/CI/CD Deployment Path, cleanup 절차 | Terraform Plan/Apply/Destroy, Git/CI/CD handoff, AWS 연결, 운영 배포를 다룰 때 |
 | [루트 README](../README.md) | 저장소 빠른 시작 | 처음 저장소를 실행할 때 |
 
 ## SSOT 우선순위
@@ -31,7 +31,7 @@ SketchCatch 문서는 **SSOT(Single Source of Truth)** 기준으로 관리한다
 - 공통 타입, API DTO, DB 모델, 프론트 상태 이름은 [데이터 모델](./data-models.md)에 모은다.
 - 기술 스택, 저장 기준, 실행 경계, ADR 수준 결정은 [아키텍처](./architecture.md)에 모은다.
 - Git 흐름, 팀 AI 작업 순서, PR 체크리스트는 [개발 가이드](./development.md)에 모은다.
-- 운영 배포와 실제 AWS E2E 데모 절차는 [배포 운영 문서](./deployment.md)에 모은다.
+- 운영 배포, Direct Deployment Path, Git/CI/CD Deployment Path, cleanup 절차는 [배포 운영 문서](./deployment.md)에 모은다.
 - 같은 내용을 새 문서로 복제하지 않는다. 먼저 canonical 문서를 갱신한다.
 - 오래된 범위 문구는 남겨두지 않는다. MVP 목표가 바뀌면 canonical 문서에서 즉시 갱신한다.
 

@@ -1,6 +1,6 @@
 # SketchCatch
 
-SketchCatch is an AI-assisted infrastructure design and simulation context for developers who turn requirements into cloud architecture graphs, Terraform previews, and cost/performance/security analysis.
+SketchCatch is a multi-cloud-ready IaC operations service that turns text or voice requirements, Source Repository evidence, and existing cloud state into provider-neutral Practice Architectures, strengthens them with AI, Bedrock, and Amazon Q Assistance, and connects them to Terraform IaC Preview, Git/CI/CD Integration, Direct Deployment, Reverse Engineering, Deployment History, and Auto Cleanup.
 
 ## Language
 
@@ -13,8 +13,16 @@ The visual workspace where a Practice Architecture is shown and edited as resour
 _Avoid_: Main board, canvas, drawing board
 
 **Resource**:
-An AWS building block inside a Practice Architecture, such as VPC, Subnet, EC2, RDS, Security Group, IAM, S3, or CloudFront.
+An infrastructure building block from a cloud provider inside a Practice Architecture, such as AWS VPC, Azure Virtual Network, GCP VPC Network, compute instances, databases, storage, IAM, or edge delivery resources.
 _Avoid_: Component, block, service
+
+**Provider Adapter**:
+The cloud-specific connector that translates provider APIs, Resource types, IaC import details, and deployment constraints into SketchCatch's provider-neutral Practice Architecture model.
+_Avoid_: Cloud plugin, provider switch, cloud mode
+
+**Runtime Cache**:
+SketchCatch's internal runtime support for short-lived coordination, cached results, session-adjacent state, background job status, or streaming-friendly execution metadata. It is not a user Practice Architecture Resource. The first priority is long-running workflow support for Deployment, Reverse Engineering, and Git/CI/CD Integration status; AI result caching is secondary.
+_Avoid_: User Redis, cache resource, cloud cache node
 
 **Template**:
 A reusable starter Practice Architecture that a user can choose instead of starting from a blank prompt.
@@ -24,17 +32,57 @@ _Avoid_: Preset, sample, example
 A proposed Practice Architecture that has not yet been accepted, corrected, or saved by the user.
 _Avoid_: AI result, generated diagram, draft infrastructure
 
+**AI Architecture Recommendation**:
+The service capability that interprets a Requirement Prompt, proposes an Architecture Draft, explains the trade-offs, and lets the user accept it onto the Architecture Board.
+_Avoid_: Chatbot answer, auto-generated diagram, magic design
+
+**User-Accepted Change**:
+A state-changing update that only happens after the user explicitly accepts an Architecture Draft, Architecture Suggestion, IaC handoff, Git change, or Deployment action. AI may propose or explain the change, but it does not silently alter the Practice Architecture or execution path.
+_Avoid_: Auto apply, silent fix, AI edit
+
 **Source Repository**:
 A code repository used as optional evidence for proposing an Architecture Draft when the user starts from an existing application.
 _Avoid_: GitHub link, repo URL, codebase
+
+**Git Integration**:
+The service capability that connects a Practice Architecture and its IaC Preview to a Source Repository so infrastructure changes can be reviewed, versioned, and handed off to the team's normal development workflow.
+_Avoid_: GitHub feature, repo sync, code push
+
+**CI/CD Integration**:
+The service capability that connects approved infrastructure changes to an external delivery pipeline, including pipeline templates, execution status, and deployment handoff, without bypassing SketchCatch's approval and safety boundaries.
+_Avoid_: Auto deploy, build script, deployment button
+
+**Direct Deployment Path**:
+The SketchCatch-managed execution path used for quick validation, sandbox runs, practice environments, or demos, where the service runs plan, approval, apply, logs, outputs, and cleanup directly.
+_Avoid_: Main deployment, instant deploy, bypass deploy
+
+**Git/CI/CD Deployment Path**:
+The team-operated execution path where an approved IaC Preview is committed to a Source Repository, reviewed through pull requests, and deployed by an external CI/CD pipeline while SketchCatch tracks handoff and status.
+_Avoid_: Alternative deploy, export only, GitHub deploy
+
+**AWS-First MVP**:
+The implementation strategy where SketchCatch proves the end-to-end service with AWS and Terraform first, while keeping Resource modeling, Reverse Engineering, and IaC handoff extensible through Provider Adapters for Azure and GCP later.
+_Avoid_: AWS-only product, single-cloud scope, cloud lock-in
 
 **Requirement Prompt**:
 A natural-language description of desired infrastructure constraints, such as budget, traffic, runtime, database, availability, or security priorities.
 _Avoid_: User question, chat input, AI prompt
 
+**Requirement Input**:
+The user's natural-language entry point for creating or changing a Practice Architecture, supplied as text or transcribed voice and normalized into a Requirement Prompt.
+_Avoid_: Text box, voice command, chat message
+
+**Voice Requirement Input**:
+An audio Requirement Input that is transcribed through Amazon Transcribe, shown back to the user for confirmation, and only then normalized into a Requirement Prompt.
+_Avoid_: Voice deploy, speech command, direct voice edit
+
 **Infrastructure Graph**:
 The normalized graph of Resources and relationships that syncs Architecture Board state and IaC Preview state without treating either surface as the only source of truth. It carries stable resource identity, IaC identity, configuration, and relationships.
 _Avoid_: AI JSON, canvas state, diagram data
+
+**Reverse Engineering**:
+The service capability that scans existing cloud Resources through provider adapters, reconstructs them as a Practice Architecture, and prepares an IaC handoff path through IaC Preview and import suggestions.
+_Avoid_: Resource list, AWS scan, diagram import
 
 **IaC Preview**:
 The generated infrastructure-as-code representation of a Practice Architecture before the user approves deployment.
@@ -44,6 +92,10 @@ _Avoid_: Code editor, Terraform code, deploy code
 A condition that can create unexpected AWS charges, especially when selected resources, budget, traffic, or practice duration do not match.
 _Avoid_: Price warning, billing issue
 
+**Cost Analysis**:
+The service capability that estimates and explains cost pressure across a Practice Architecture, IaC Preview, Deployment Plan, and Deployment History so users can understand Cost Risk before and after cloud changes.
+_Avoid_: Price calculator, billing dashboard, monthly total
+
 **Security Risk**:
 A configuration that exposes a Practice Architecture beyond the user's intended access, such as open SSH, public storage, or excessive permissions.
 _Avoid_: Vulnerability, danger
@@ -52,6 +104,10 @@ _Avoid_: Vulnerability, danger
 The review step that evaluates a Practice Architecture for cost, security, permissions, and missing configuration before deployment can be approved.
 _Avoid_: Validation, review, inspection
 
+**Deployment Safety Gate**:
+The approval boundary that blocks high-risk cloud changes before Deployment while allowing lower-risk Check Findings to proceed only after explicit user acknowledgement.
+_Avoid_: Warning popup, AI blocker, safety modal
+
 **Check Finding**:
 A single user-facing observation produced by a Pre-Deployment Check, tied to a cost, security, permission, configuration, performance, or availability concern.
 _Avoid_: AI warning, issue, message
@@ -59,6 +115,14 @@ _Avoid_: AI warning, issue, message
 **Architecture Suggestion**:
 A structured, non-applied proposal for changing a Practice Architecture in response to a Check Finding or Design Simulation result.
 _Avoid_: Auto fix, patch, edit command
+
+**Amazon Q Assistance**:
+AWS-specialized AI support used to strengthen Architecture Draft recommendations, Resource explanations, Well-Architected guidance, security reasoning, IaC Preview explanation, and Terraform error interpretation without bypassing user approval or deterministic safety checks.
+_Avoid_: Amazon Q deployment, auto apply, autonomous AWS operator
+
+**Bedrock AI Layer**:
+The managed AI layer used for Architecture Draft recommendations, review reasoning, guardrails, and explanation workflows while keeping structured changes behind user confirmation and deterministic safety checks.
+_Avoid_: AI backend, Bedrock automation, model magic
 
 **Design Simulation**:
 An analysis that estimates request flow, bottlenecks, failure exposure, cost pressure, and capacity from the Infrastructure Graph under stated assumptions.
@@ -75,6 +139,10 @@ _Avoid_: Auto delete, shutdown, removal
 **Deployment History**:
 The record of Deployment attempts, results, outputs, cleanup status, and changes for a Practice Architecture.
 _Avoid_: Version history, CI/CD history, logs
+
+**Representative Use Journey**:
+A presentation or rehearsal path that proves SketchCatch's core service flow through realistic user work. It demonstrates the product; it does not define a separate demo-only scope.
+_Avoid_: Demo script, feature showcase, sample flow
 
 **Deployment**:
 The approved execution that applies an IaC Preview to real cloud resources and tracks plan, approval, logs, outputs, and cleanup.

@@ -10,6 +10,8 @@
 - 공유 타입에는 `passwordHash`, raw access key, secret key, private token, DB password를 넣지 않는다.
 - 새 필드, enum, status, DTO는 먼저 이 문서와 `packages/types/src/index.ts`에 맞춘다.
 - API 요청/응답은 shared type을 기준으로 하고, API route에서는 Zod schema로 같은 계약을 검증한다.
+- `Resource`, `Practice Architecture`, `InfrastructureGraph`, `Reverse Engineering`은 provider-neutral 개념으로 다룬다. AWS-first 구현은 가능하지만 공통 모델에 AWS-only 가정을 섞지 않는다.
+- AI, Bedrock, Amazon Q, 음성 입력은 제안과 설명 계층이다. Practice Architecture, IaC Preview, Git 변경, Deployment 실행 같은 상태 변경은 `User-Accepted Change`여야 한다.
 
 ## 핵심 계약
 
@@ -27,6 +29,42 @@
 | `DeployedResource` | Apply 성공 후 Terraform state에서 추출한 실제 생성 리소스 |
 | `TerraformOutput` | Apply 성공 후 `terraform output -json`에서 추출한 output |
 | `CheckFinding` | Pre-Deployment Check의 단일 경고/검증 결과 |
+| `RequirementInput` | 텍스트 또는 음성에서 들어온 요구사항 입력 |
+| `ProviderAdapter` | provider별 Resource 조회, import, IaC 세부를 공통 모델로 변환하는 경계 |
+| `GitCicdHandoff` | IaC Preview를 Source Repository PR과 외부 pipeline으로 넘기는 handoff metadata |
+| `ReverseEngineeringScan` | 기존 cloud Resource 스캔 작업과 복원 결과 metadata |
+
+## Requirement Input과 User-Accepted Change
+
+`RequirementInput`은 사용자가 Practice Architecture를 만들거나 바꾸기 위해 제공하는 자연어 입력이다. 입력 채널은 텍스트 또는 음성일 수 있다. 음성 입력은 Amazon Transcribe 같은 전사 단계를 거쳐 텍스트로 확인된 뒤 `RequirementPrompt`로 확정된다.
+
+```ts
+type RequirementInputMode = "text" | "voice";
+
+type RequirementInput = {
+  mode: RequirementInputMode;
+  text: string;
+  transcriptSource?: "amazon_transcribe";
+  confirmedByUser: boolean;
+};
+```
+
+AI가 만든 `ArchitectureDraft`, `ArchitectureSuggestion`, Git 변경, Deployment 실행은 자동으로 프로젝트 상태를 바꾸지 않는다. 상태 변경 API는 사용자의 명시적 수락/승인 시점과 대상을 추적할 수 있어야 한다.
+
+```ts
+type UserAcceptedChangeTarget =
+  | "architecture_draft"
+  | "architecture_suggestion"
+  | "iac_handoff"
+  | "git_change"
+  | "deployment_action";
+
+type UserAcceptedChange = {
+  target: UserAcceptedChangeTarget;
+  acceptedByUserId: string;
+  acceptedAt: IsoDateTimeString;
+};
+```
 
 ## ArchitectureJson
 
@@ -163,7 +201,7 @@ type AuthSession = {
 소셜 로그인 provider 계정은 `oauth_accounts`에 저장한다. `oauth_accounts.provider + provider_user_id`는 외부 provider 계정의 고유 연결 키이며, 실제 provider access token은 저장하지 않는다. 소셜 전용 사용자는 `users.password_hash`가 `null`일 수 있고, 일반 비밀번호 로그인에서는 password hash가 없는 사용자를 로그인 실패로 처리한다.
 
 
-4일 AWS E2E 데모에서는 `DiagramJson -> InfrastructureGraph -> Terraform` 흐름을 우선 사용한다. Terraform 편집 내용을 다시 반영할 때는 `Terraform -> InfrastructureGraph patch -> DiagramJson` 흐름으로 같은 node의 `parameters.values`를 갱신한다. AI 분석이나 비용/위험 분석이 `ArchitectureJson`을 요구하면 `DiagramJson -> ArchitectureJson` 어댑터를 둔다.
+AWS-first Direct Deployment Path에서는 `DiagramJson -> InfrastructureGraph -> Terraform` 흐름을 우선 사용한다. Terraform 편집 내용을 다시 반영할 때는 `Terraform -> InfrastructureGraph patch -> DiagramJson` 흐름으로 같은 node의 `parameters.values`를 갱신한다. AI 분석이나 비용/위험 분석이 `ArchitectureJson`을 요구하면 `DiagramJson -> ArchitectureJson` 어댑터를 둔다.
 
 `ArchitectureJson`, `InfrastructureGraph`, `DiagramJson`은 서로 대체 관계가 아니다.
 
@@ -172,6 +210,8 @@ type AuthSession = {
 - `DiagramJson`: 보드 편집/화면 복구/Terraform 변환 계약
 
 ## ResourceType
+
+`ResourceType`은 provider-neutral `Resource` 개념을 코드에서 분류하기 위한 값이다. 현재 shared type은 AWS-first MVP 리소스를 먼저 담고 있지만, `Resource` 자체를 AWS 전용 개념으로 해석하지 않는다. Azure/GCP 등 provider별 타입은 Provider Adapter와 shared type 확장 작업에서 추가한다.
 
 MVP에서 공통으로 사용할 `ResourceType` 값은 아래로 고정한다.
 
@@ -192,7 +232,7 @@ type ResourceType =
   | "UNKNOWN";
 ```
 
-팀원은 `Security Group`, `security-group`, `cloudfront` 같은 새 문자열을 임의로 만들지 않는다. 새 Resource가 필요하면 `docs/data-models.md`, `packages/types`, API Zod schema, 프론트 소비처를 같은 PR에서 맞춘다.
+팀원은 `Security Group`, `security-group`, `cloudfront` 같은 새 문자열을 임의로 만들지 않는다. 새 Resource나 provider가 필요하면 `docs/data-models.md`, `packages/types`, API Zod schema, 프론트 소비처를 같은 PR에서 맞춘다.
 
 ## Project
 
@@ -552,7 +592,7 @@ Plan summary는 사용자 승인 화면에 필요한 최소 요약이다. 현재
 
 사용자가 승인한 plan과 apply 대상 plan은 같은 artifact/hash 기준이어야 한다.
 
-MVP live apply는 안전한 데모 범위를 위해 아래 Terraform resource type만 허용한다.
+MVP Direct Deployment Path live apply는 안전 범위를 위해 아래 Terraform resource type만 허용한다.
 이외 resource type이 변경 대상에 포함되면 Plan은 `risk_analysis`로 block된다.
 
 - `aws_vpc`
@@ -626,6 +666,69 @@ type DeploymentLog = {
 ```
 
 로그는 sequence 순서를 보장한다. message에는 credential, token, password, DB URL, sensitive output이 남지 않아야 한다.
+
+## Git/CI/CD Handoff
+
+`GitCicdHandoff`는 `IaC Preview`를 Source Repository와 외부 pipeline으로 넘기는 팀 운영 배포 경로의 metadata다. Direct Deployment Path를 대체하는 것이 아니라 운영 배포용 별도 경로다.
+
+```ts
+type GitCicdHandoffStatus =
+  | "draft"
+  | "pr_created"
+  | "pipeline_running"
+  | "pipeline_success"
+  | "pipeline_failed"
+  | "cancelled";
+
+type GitCicdHandoff = {
+  id: string;
+  projectId: string;
+  architectureId: string;
+  terraformArtifactId: string;
+  sourceRepositoryId: string;
+  pullRequestUrl: string | null;
+  pipelineRunUrl: string | null;
+  status: GitCicdHandoffStatus;
+  createdAt: IsoDateTimeString;
+  updatedAt: IsoDateTimeString;
+};
+```
+
+Git/CI/CD handoff도 `UserAcceptedChange` 이후에만 생성한다. 저장소 토큰, private key, CI secret 원문은 shared type, DB, 로그에 저장하지 않는다.
+
+## Reverse Engineering Scan
+
+`ReverseEngineeringScan`은 Provider Adapter를 통해 기존 cloud Resource를 읽고 Practice Architecture와 import suggestion을 만드는 작업 단위다. MVP는 AWS adapter부터 구현할 수 있지만 모델은 provider-neutral하게 둔다.
+
+```ts
+type ReverseEngineeringScanStatus =
+  | "pending"
+  | "running"
+  | "success"
+  | "failed"
+  | "cancelled";
+
+type ReverseEngineeringScan = {
+  id: string;
+  projectId: string;
+  provider: CloudProvider;
+  status: ReverseEngineeringScanStatus;
+  architectureId: string | null;
+  errorSummary: string | null;
+  startedAt: IsoDateTimeString | null;
+  completedAt: IsoDateTimeString | null;
+  createdAt: IsoDateTimeString;
+  updatedAt: IsoDateTimeString;
+};
+```
+
+스캔 결과가 만든 Practice Architecture와 import suggestion은 사용자가 확인하기 전까지 기존 프로젝트 상태를 덮어쓰지 않는다.
+
+## Runtime Cache
+
+Redis 기반 Runtime Cache는 Deployment, Reverse Engineering, Git/CI/CD Integration 같은 long-running workflow의 status/cache/log streaming 보조에 사용한다. Runtime Cache 데이터는 원천 기록이 아니며, 최종 기록은 RDS/S3에 저장한다.
+
+Runtime Cache는 사용자 Practice Architecture Resource가 아니므로 `ResourceType`에 Redis를 추가하지 않는다. AI 결과 캐싱은 2순위이며, 캐시된 결과가 deterministic validation이나 Deployment Safety Gate를 대체할 수 없다.
 
 ## AI 결과 DTO
 

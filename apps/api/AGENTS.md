@@ -4,7 +4,7 @@ This folder contains the Fastify backend API.
 
 ## Product Role
 
-The API owns project persistence, architecture snapshots, asset metadata, validation, and controlled Terraform/AWS Deployment workflows. Keep real infrastructure mutation behind explicit safety gates and user approval.
+The API owns project persistence, architecture snapshots, asset metadata, validation, AI/Bedrock/Amazon Q orchestration, Provider Adapter boundaries, Runtime Cache integration, and controlled Terraform/cloud Deployment workflows. Keep real infrastructure mutation behind explicit safety gates and user approval.
 
 ## Boundaries
 
@@ -13,6 +13,8 @@ The API owns project persistence, architecture snapshots, asset metadata, valida
 3. Keep frontend clients away from AWS SDK and Terraform execution details.
 4. Store project records and architecture JSON in RDS.
 5. Store diagram images, IaC files, exports, and thumbnails in S3 through metadata records and object keys.
+6. Keep Reverse Engineering behind Provider Adapters. AWS can be the first adapter, but API models should not bake in AWS-only assumptions unless the type is explicitly AWS-specific.
+7. Runtime Cache such as Redis is internal infrastructure for long-running workflow status, polling, and streaming support. Do not expose it as a user Practice Architecture Resource.
 
 ## API Structure
 
@@ -40,7 +42,8 @@ The API owns project persistence, architecture snapshots, asset metadata, valida
 5. Capture deployment logs and failure reasons without leaking secrets.
 6. Keep the first DiagramJson-to-Terraform converter as a pure service with no DB, S3, filesystem, Terraform CLI, or AWS SDK side effects.
 7. Terraform CLI validation may be added later only in backend or worker code when the issue covers temp directories, state, credentials, provider setup, and log masking.
-8. Never add `apply` or `destroy` behavior outside explicit Deployment work.
+8. Never add `apply` or `destroy` behavior outside explicit Deployment work or approved Git/CI/CD handoff.
+9. Support Direct Deployment Path and Git/CI/CD Deployment Path as different execution paths with the same plan, approval, logging, masking, and cleanup safety expectations.
 
 ## AI Assistance Rules
 
@@ -49,6 +52,8 @@ The API owns project persistence, architecture snapshots, asset metadata, valida
 3. Prefer rule-based cost and security checks for blocking decisions; use AI as an explanation and suggestion layer.
 4. Keep prompts, model outputs, and logs free of secrets and credentials.
 5. Make AI suggestions reviewable by humans before turning them into project state.
+6. Voice Requirement Input must be transcribed and confirmed before it becomes a Requirement Prompt.
+7. Amazon Q Assistance and Bedrock AI Layer may recommend and explain, but Practice Architecture changes, IaC handoff, Git changes, and Deployment actions must be User-Accepted Changes.
 
 ## Verification
 

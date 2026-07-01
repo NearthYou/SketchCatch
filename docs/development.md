@@ -122,16 +122,17 @@ Codex 작업자는 아래 행동을 하지 않는다.
 - 공통 API 응답 형식이 정해졌다고 가정하지 않는다. 코드에 없으면 팀장에게 확인한다.
 - 다른 팀원이 맡은 실제 AWS apply, Terraform 실행, 인증/권한 저장을 자신의 구현에서 열지 않는다.
 - "나중에 맞추면 됨"으로 shared type과 Zod schema 불일치를 방치하지 않는다.
+- AI, Bedrock, Amazon Q, Voice Requirement Input 결과를 사용자 확인 없이 Practice Architecture, IaC Preview, Git 변경, Deployment 실행에 반영하지 않는다.
+- Representative Use Journey를 위해 실제 서비스 흐름과 다른 데모 전용 상태나 우회 API를 만들지 않는다.
 
 ## 역할별 SSOT 체크
 
-| 담당 | 구현 전 확인할 SSOT | 특히 확인할 계약 |
+| 담당 축 | 구현 전 확인할 SSOT | 특히 확인할 계약 |
 | --- | --- | --- |
-| 정현 | `docs/product.md`, `docs/data-models.md`, `apps/web/AGENTS.md` | `DiagramJson`, Resource node/edge, draft 저장 |
-| 시원 | `docs/data-models.md`, `docs/architecture.md`, `apps/api/AGENTS.md` | `DiagramNode.parameters`, Terraform generate/validate DTO |
-| 채강 | `docs/deployment.md`, `docs/data-models.md`, `apps/api/AGENTS.md` | `Deployment`, `DeploymentLog`, approval, cleanup |
-| 경근 | `docs/product.md`, `docs/data-models.md`, `docs/adr/*` | `ArchitectureJson`, `CheckFinding`, AI DTO |
-| 윤서 | `docs/data-models.md`, `docs/development.md`, `apps/web/AGENTS.md` | `User`, `AuthSession`, `Project`, project routes |
+| `Requirement Input` + `AI Architecture Recommendation` + Bedrock/Amazon Q | `docs/product.md`, `docs/data-models.md`, `apps/api/AGENTS.md`, `apps/web/AGENTS.md` | `RequirementInput`, `ArchitectureDraft`, `LlmExplanation`, `UserAcceptedChange`, Voice Requirement Input 확인 흐름 |
+| `Architecture Board` + `Infrastructure Graph` + `IaC Preview` | `docs/data-models.md`, `docs/architecture.md`, `apps/web/AGENTS.md`, `apps/api/AGENTS.md` | `DiagramJson`, `InfrastructureGraph`, `DiagramNode.parameters`, Terraform generate/validate/sync DTO |
+| `Deployment` + `Git/CI/CD Integration` + `Runtime Cache` | `docs/deployment.md`, `docs/data-models.md`, `docs/architecture.md`, `apps/api/AGENTS.md` | `Deployment`, `DeploymentLog`, `GitCicdHandoff`, approval, cleanup, Redis Runtime Cache |
+| `Reverse Engineering` + `Cost Analysis` + `Deployment Safety Gate` | `docs/product.md`, `docs/data-models.md`, `docs/architecture.md`, `apps/api/AGENTS.md` | `ProviderAdapter`, `ReverseEngineeringScan`, `CheckFinding`, `CostAnalysis`, `DeploymentSafetyGate` |
 | 팀장 | canonical 문서 전체 | DB schema, API 응답, shared type 충돌 조정 |
 
 담당자별 문서는 참고 자료다. 공통 계약은 반드시 canonical 문서와 shared type에 반영한 뒤 구현한다.

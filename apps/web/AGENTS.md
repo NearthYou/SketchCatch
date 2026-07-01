@@ -4,7 +4,7 @@ This folder contains the Next.js frontend application.
 
 ## Product Role
 
-The web app provides the visual workspace for Terraform-first cloud architecture design. It may show diagrams, IaC previews, editor surfaces, safety warnings, Deployment records, and learning guidance, but it must not execute infrastructure changes directly.
+The web app provides the visual workspace for Terraform-first, multi-cloud-ready IaC operations. It may show Requirement Input, Architecture Board, IaC Preview, AI recommendations, safety warnings, Git/CI/CD handoff state, Deployment records, Reverse Engineering results, and learning guidance, but it must not execute infrastructure changes directly.
 
 ## Boundaries
 
@@ -15,6 +15,8 @@ The web app provides the visual workspace for Terraform-first cloud architecture
 5. Store only UI state in components; persistent project state belongs in the API and database.
 6. For SW Terraform conversion, call backend APIs and render results; do not run Terraform CLI, AWS SDK, S3 upload, or RDS persistence directly from the browser.
 7. Keep DiagramJson editor state aligned with `docs/data-models.md` and shared types.
+8. Voice Requirement Input must show the transcribed text and require user confirmation before sending a Requirement Prompt.
+9. AI Architecture Drafts, Architecture Suggestions, Git handoff, and Deployment actions must require explicit user acceptance before changing project state.
 
 ## UI Architecture
 
@@ -32,6 +34,7 @@ The web app provides the visual workspace for Terraform-first cloud architecture
 3. Beginner explanations should be short, concrete, and tied to the selected resource or warning.
 4. Avoid decorative UI that makes operational workflows harder to scan.
 5. Prefer clear states for loading, empty, error, warning, and blocked actions.
+6. Treat presentation flows as Representative Use Journeys, not demo-only surfaces that diverge from the real service workflow.
 
 ## Verification
 

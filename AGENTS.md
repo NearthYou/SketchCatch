@@ -2,16 +2,22 @@
 
 This repository is SketchCatch.
 
-SketchCatch is a Terraform-first, multi-cloud-ready AI infrastructure design, validation, and deployment platform. The MVP uses AWS and Terraform to prove the end-to-end path from natural-language requirements to a working cloud Deployment.
+SketchCatch is a multi-cloud-ready IaC operations service. It turns text or voice requirements, Source Repository evidence, and existing cloud state into provider-neutral Practice Architectures, strengthens them with AI, Bedrock, and Amazon Q Assistance, and connects them to Terraform IaC Preview, Git/CI/CD Integration, Direct Deployment, Reverse Engineering, Deployment History, and Auto Cleanup. The MVP is AWS-first and Terraform-first, but SketchCatch must not be described as AWS-only.
 
 ## Product Direction
 
-1. Treat SketchCatch as an AI-assisted IaC platform, not just a visual cloud diagram tool.
+1. Treat SketchCatch as an IaC operations service, not just a visual cloud diagram tool or a demo script.
 2. Terraform is the primary IaC target for the MVP and the extension point for future cloud providers.
-3. AWS is the MVP provider. Do not describe SketchCatch as AWS-only.
-4. The first MVP goal is an end-to-end demo where AI-recommended infrastructure is actually deployed to AWS and verified.
-5. CloudFormation may be used as an AWS reference or future compatibility target, but it is not the default MVP direction.
-6. Real AWS apply, deploy, update, delete, or destroy behavior is allowed only for explicit Deployment work with plan, approval, logging, secret masking, and cleanup safeguards.
+3. AWS is the first Provider Adapter for the MVP. Keep the domain model provider-neutral and do not describe SketchCatch as AWS-only.
+4. The first MVP goal is a complete service journey: Requirement Input or Source Repository or Reverse Engineering input -> Practice Architecture -> IaC Preview -> Pre-Deployment Check -> approved execution or Git/CI/CD handoff -> Deployment History and Auto Cleanup.
+5. Representative Use Journeys may be used for presentation and rehearsal, but they must prove the real service flow rather than define a separate demo-only scope.
+6. Requirement Input can be text or Voice Requirement Input. Voice must be transcribed, shown back to the user, and confirmed before becoming a Requirement Prompt.
+7. AI, Bedrock, and Amazon Q Assistance may recommend, explain, and review, but Practice Architecture changes, IaC handoff, Git changes, and Deployment actions must be User-Accepted Changes.
+8. SketchCatch supports two execution paths: Direct Deployment Path for fast validation and sandbox/practice runs, and Git/CI/CD Deployment Path for team review and operational delivery.
+9. Reverse Engineering must be provider-adapter based. The MVP can implement AWS first, but the concept is not an AWS-only resource list.
+10. Redis is internal Runtime Cache infrastructure for long-running workflow status, polling, and streaming support. It is not a user Practice Architecture Resource unless a separate product decision changes that.
+11. CloudFormation may be used as an AWS reference or future compatibility target, but it is not the default MVP direction.
+12. Real cloud apply, deploy, update, delete, or destroy behavior is allowed only for explicit Deployment work or approved Git/CI/CD handoff with plan, approval, logging, secret masking, and cleanup safeguards.
 
 ## Required Reading
 
