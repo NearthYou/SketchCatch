@@ -146,7 +146,11 @@ export function createProjectDeletePreview(snapshot: ProjectDeleteSnapshot): Pro
   const runningDeployments = deployments.filter(
     (deployment) => deployment.status === "RUNNING" || deployment.activeStage !== null
   );
-  const activeResourceDeployments = deployments.filter(isActiveResourceDeployment);
+  const activeResourceDeployments = deployments.filter(
+    (deployment) =>
+      isActiveResourceDeployment(deployment) &&
+      !isDeploymentCleanedUpByLaterDestroy(deployment, deployments)
+  );
   const latestDeployment = deployments[0];
   const hasDeploymentHistory = deployments.length > 0;
   const hasPlanHistory =
@@ -473,6 +477,23 @@ function isActiveResourceDeployment(deployment: ProjectDeleteDeploymentSummary):
     deployment.status === "FAILED" &&
     (deployment.resourceCount > 0 || deployment.stateObjectKey !== null)
   );
+}
+
+function isDeploymentCleanedUpByLaterDestroy(
+  deployment: ProjectDeleteDeploymentSummary,
+  deployments: readonly ProjectDeleteDeploymentSummary[]
+): boolean {
+  const activeDeploymentCreatedAt = deployment.createdAt.getTime();
+
+  return deployments.some(
+    (candidate) =>
+      candidate.status === "DESTROYED" &&
+      getDeploymentCleanupTime(candidate) > activeDeploymentCreatedAt
+  );
+}
+
+function getDeploymentCleanupTime(deployment: ProjectDeleteDeploymentSummary): number {
+  return deployment.completedAt?.getTime() ?? deployment.updatedAt.getTime();
 }
 
 function sortDeploymentsDesc(

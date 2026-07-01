@@ -63,6 +63,35 @@ test("createProjectDeletePreview blocks automatic destroy when multiple deployme
   assert.deepEqual(preview.availableActions, ["delete_project_only"]);
 });
 
+test("createProjectDeletePreview treats failed state as cleaned up after a later destroy", () => {
+  const failedAt = new Date("2026-06-24T00:00:00.000Z");
+  const destroyedAt = new Date("2026-06-25T00:00:00.000Z");
+  const preview = createProjectDeletePreview(
+    createSnapshot({
+      deployments: [
+        createDeploymentSummary({
+          completedAt: destroyedAt,
+          createdAt: destroyedAt,
+          id: "deployment-destroyed",
+          status: "DESTROYED",
+          updatedAt: destroyedAt
+        }),
+        createDeploymentSummary({
+          createdAt: failedAt,
+          id: "deployment-failed",
+          stateObjectKey: "deployments/deployment-failed/state/terraform.tfstate",
+          status: "FAILED",
+          updatedAt: new Date("2026-06-26T00:00:00.000Z")
+        })
+      ]
+    })
+  );
+
+  assert.equal(preview.mode, "deployment_history");
+  assert.equal(preview.activeResourceCount, 0);
+  assert.deepEqual(preview.availableActions, ["delete_project"]);
+});
+
 test("createProjectDeletePreview treats current plan pointers as planned projects", () => {
   const preview = createProjectDeletePreview(
     createSnapshot({
