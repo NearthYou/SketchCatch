@@ -12,6 +12,7 @@ import { registerProjectRoutes } from "./routes/projects.js";
 import { registerDeploymentRoutes } from "./routes/deployments.js";
 import { registerTerraformRoutes } from "./routes/terraform.js";
 import { registerAwsConnectionRoutes } from "./routes/aws-connections.js";
+import type { ProjectDeletionStorage } from "./projects/project-deletion-service.js";
 import {
   createInMemoryRateLimiter,
   type RateLimiter
@@ -28,6 +29,7 @@ export type BuildAppOptions = {
   oauthStartRateLimiter?: RateLimiter;
   passwordResetRequestEmailRateLimiter?: RateLimiter;
   passwordResetRequestIpRateLimiter?: RateLimiter;
+  projectDeletionStorage?: ProjectDeletionStorage;
 };
 
 // 테스트와 서버가 같은 앱을 쓰되, LLM 호출 계층은 옵션으로만 주입합니다.
@@ -126,7 +128,8 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   });
   app.register(registerProjectRoutes, {
     prefix: "/api",
-    getDatabaseClient: getAppDatabaseClient
+    getDatabaseClient: getAppDatabaseClient,
+    projectDeletionStorage: options.projectDeletionStorage
   });
   app.register(registerDeploymentRoutes, {
     prefix: "/api",

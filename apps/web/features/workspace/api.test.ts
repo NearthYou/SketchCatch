@@ -9,6 +9,7 @@ import {
   deleteAwsConnection,
   deleteProject,
   getAwsConnectionCloudFormationTemplate,
+  getProjectDeletePreview,
   listDeploymentResources,
   listAwsConnections,
   listDeployments,
@@ -285,16 +286,80 @@ test("deleteProject sends an authenticated DELETE request", async (context) => {
   globalThis.fetch = async (input, init) => {
     requests.push({ input, init });
 
-    return new Response(null, {
-      status: 204
-    });
+    return new Response(
+      JSON.stringify({
+        deleted: true,
+        cleanup: {
+          failedObjectCount: 0,
+          message: null,
+          s3Status: "success"
+        }
+      }),
+      {
+        headers: {
+          "Content-Type": "application/json"
+        },
+        status: 200
+      }
+    );
   };
 
-  await deleteProject(project.id);
+  const result = await deleteProject(project.id, "delete_project_only");
 
   assert.equal(String(requests[0]?.input), `/api/projects/${project.id}`);
   assert.equal(requests[0]?.init?.method, "DELETE");
   assert.equal(new Headers(requests[0]?.init?.headers).get("authorization"), "Bearer access-token");
+  assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), {
+    action: "delete_project_only"
+  });
+  assert.equal(result.cleanup.s3Status, "success");
+});
+
+test("getProjectDeletePreview fetches the project deletion mode", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    restoreWindow(originalWindowDescriptor);
+  });
+
+  installAuthSession();
+
+  globalThis.fetch = async (input, init) => {
+    requests.push({ input, init });
+
+    return new Response(
+      JSON.stringify({
+        preview: {
+          activeDeploymentCount: 1,
+          activeDeploymentId: "44444444-4444-4444-8444-444444444444",
+          activeResourceCount: 2,
+          availableActions: ["destroy_then_delete", "delete_project_only"],
+          hasDeploymentHistory: true,
+          hasPlanHistory: true,
+          latestDeploymentStatus: "SUCCESS",
+          message: "현재 AWS에 배포된 리소스가 있습니다.",
+          mode: "active_resources",
+          projectId: project.id
+        }
+      }),
+      {
+        headers: {
+          "Content-Type": "application/json"
+        },
+        status: 200
+      }
+    );
+  };
+
+  const preview = await getProjectDeletePreview(project.id);
+
+  assert.equal(String(requests[0]?.input), `/api/projects/${project.id}/delete-preview`);
+  assert.equal(new Headers(requests[0]?.init?.headers).get("authorization"), "Bearer access-token");
+  assert.equal(preview.mode, "active_resources");
+  assert.equal(preview.activeDeploymentId, "44444444-4444-4444-8444-444444444444");
 });
 
 test("createAwsConnectionSetup requests generated Role setup values", async (context) => {

@@ -17,6 +17,8 @@ import type {
   CreateDesignSimulationRequest,
   CreateProjectAssetUploadRequest,
   CreateProjectRequest,
+  DeleteProjectRequest,
+  DeleteProjectResponse,
   DesignSimulationResult,
   DeployedResource,
   Deployment,
@@ -30,6 +32,7 @@ import type {
   ProjectAssetUploadResponse,
   ProjectDetailsResponse,
   ProjectDraftResponse,
+  ProjectDeletePreviewResponse,
   ProjectListResponse,
   ProjectResponse,
   RecentSuccessfulDeploymentProject,
@@ -82,10 +85,29 @@ export async function getProject(projectId: string): Promise<Project> {
   return response.project;
 }
 
-export async function deleteProject(projectId: string): Promise<void> {
-  await apiFetch<void>(`/projects/${encodeURIComponent(projectId)}`, {
+export async function getProjectDeletePreview(
+  projectId: string
+): Promise<ProjectDeletePreviewResponse["preview"]> {
+  const response = await apiFetch<ProjectDeletePreviewResponse>(
+    `/projects/${encodeURIComponent(projectId)}/delete-preview`,
+    {
+      auth: true
+    }
+  );
+
+  return response.preview;
+}
+
+export async function deleteProject(
+  projectId: string,
+  action: DeleteProjectRequest["action"] = "delete_project"
+): Promise<DeleteProjectResponse> {
+  return apiFetch<DeleteProjectResponse>(`/projects/${encodeURIComponent(projectId)}`, {
     auth: true,
-    method: "DELETE"
+    method: "DELETE",
+    body: {
+      action
+    }
   });
 }
 
