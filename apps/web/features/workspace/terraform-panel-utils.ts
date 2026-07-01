@@ -1,4 +1,4 @@
-import type { DiagramNode, TerraformDiagnostic } from "@sketchcatch/types";
+import type { DiagramJson, DiagramNode, TerraformDiagnostic } from "@sketchcatch/types";
 import type { DiagramEditorPanelContext } from "../diagram-editor";
 
 export type TerraformSaveBanner =
@@ -20,6 +20,21 @@ const TERRAFORM_STANDARD_FILE_NAMES = ["main.tf"] as const;
 
 export function toDiagramFingerprint(value: unknown): string {
   return JSON.stringify(value);
+}
+
+export function toTerraformRefreshFingerprint(diagramJson: DiagramJson): string {
+  return toDiagramContentFingerprint(diagramJson);
+}
+
+export function toDeploymentBaselineFingerprint(diagramJson: DiagramJson): string {
+  return toDiagramContentFingerprint(diagramJson);
+}
+
+function toDiagramContentFingerprint(diagramJson: DiagramJson): string {
+  return JSON.stringify({
+    nodes: diagramJson.nodes,
+    edges: diagramJson.edges
+  });
 }
 
 export function createTerraformFilesFromGeneratedCode(

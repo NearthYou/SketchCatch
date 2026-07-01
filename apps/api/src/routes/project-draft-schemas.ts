@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { DiagramJson } from "@sketchcatch/types";
+import type { DiagramJson, DiagramNodeMetadata } from "@sketchcatch/types";
 
 const diagramPositionSchema = z.object({
   x: z.number().finite(),
@@ -14,6 +14,21 @@ const diagramSizeSchema = z.object({
 const diagramNodeStyleSchema = z.object({
   textColor: z.string().min(1).optional(),
   borderColor: z.string().min(1).optional()
+});
+
+const awsRegionCodeSchema = z.enum([
+  "ap-northeast-2",
+  "ap-northeast-1",
+  "ap-southeast-1",
+  "us-east-1",
+  "us-west-2",
+  "eu-west-1",
+  "eu-central-1"
+]);
+
+const diagramNodeMetadataSchema: z.ZodType<DiagramNodeMetadata> = z.object({
+  awsRegion: awsRegionCodeSchema.optional(),
+  parentAreaNodeId: z.string().min(1).optional()
 });
 
 const diagramNodeParametersSchema = z.object({
@@ -36,6 +51,7 @@ const diagramNodeSchema = z.object({
   locked: z.boolean(),
   zIndex: z.number().finite(),
   style: diagramNodeStyleSchema.optional(),
+  metadata: diagramNodeMetadataSchema.optional(),
   parameters: diagramNodeParametersSchema.optional()
 });
 

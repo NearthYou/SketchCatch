@@ -205,7 +205,7 @@ test("deployment baseline save button shows pending and saved icons", () => {
   assert.match(deploymentPanelSource, /<DeploymentBaselineIcon size=\{16\} aria-hidden="true" \/>/);
   assert.match(componentSource, /lastSavedDeploymentBaselineFingerprint/);
   assert.match(componentSource, /isDeploymentBaselineDirty/);
-  assert.match(componentSource, /toDiagramFingerprint\(preparedSource\.diagramJson\)/);
+  assert.match(componentSource, /toDeploymentBaselineFingerprint\(preparedSource\.diagramJson\)/);
   assert.match(componentSource, /setIsDeploymentBaselineDirty\(false\)/);
   assert.match(
     componentSource,

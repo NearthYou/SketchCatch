@@ -40,6 +40,10 @@ test("POST /api/terraform/generate returns Terraform code for an active user", a
             type: "aws_vpc",
             kind: "resource",
             label: "main_vpc",
+            metadata: {
+              awsRegion: "ap-northeast-2",
+              parentAreaNodeId: "area-1"
+            },
             parameters: {
               resourceType: "aws_vpc",
               resourceName: "main",
@@ -278,6 +282,10 @@ test("POST /api/terraform/sync-to-diagram updates matching DiagramJson values", 
             type: "aws_vpc",
             kind: "resource",
             label: "main_vpc",
+            metadata: {
+              awsRegion: "ap-northeast-2",
+              parentAreaNodeId: "area-1"
+            },
             parameters: {
               resourceType: "aws_vpc",
               resourceName: "main",
@@ -313,6 +321,10 @@ test("POST /api/terraform/sync-to-diagram updates matching DiagramJson values", 
   assert.deepEqual(body.diagnostics, []);
   assert.deepEqual(body.diagramJson.nodes[0]?.parameters?.values, {
     cidrBlock: "10.1.0.0/16"
+  });
+  assert.deepEqual(body.diagramJson.nodes[0]?.metadata, {
+    awsRegion: "ap-northeast-2",
+    parentAreaNodeId: "area-1"
   });
   assert.deepEqual(body.diagramJson.edges, [
     {

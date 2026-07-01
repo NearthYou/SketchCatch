@@ -5,7 +5,9 @@ import {
   createTerraformFilesFromGeneratedCode,
   findTerraformBlockForNode,
   getTerraformFileOptions,
-  parseTerraformFiles
+  parseTerraformFiles,
+  toDeploymentBaselineFingerprint,
+  toTerraformRefreshFingerprint
 } from "./terraform-panel-utils";
 
 test("parseTerraformFiles keeps CRLF offsets aligned with original source slices", () => {
@@ -108,6 +110,51 @@ test("getTerraformFileOptions includes node and virtual file names in stable ord
     getTerraformFileOptions(diagramJson, [{ fileName: "terraform.tfvars", code: "" }]),
     ["main.tf", "network.tf", "subnets.tf", "terraform.tfvars"]
   );
+});
+
+test("diagram fingerprints ignore viewport-only changes", () => {
+  const diagramJson: DiagramJson = {
+    nodes: [makeNode("resource", "aws_vpc", "main")],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+  const pannedDiagramJson: DiagramJson = {
+    ...diagramJson,
+    viewport: { x: 240, y: -80, zoom: 0.75 }
+  };
+
+  assert.equal(toTerraformRefreshFingerprint(diagramJson), toTerraformRefreshFingerprint(pannedDiagramJson));
+  assert.equal(toDeploymentBaselineFingerprint(diagramJson), toDeploymentBaselineFingerprint(pannedDiagramJson));
+});
+
+test("diagram fingerprints change when nodes or edges change", () => {
+  const diagramJson: DiagramJson = {
+    nodes: [makeNode("resource", "aws_vpc", "main")],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+  const movedDiagramJson: DiagramJson = {
+    ...diagramJson,
+    nodes: [
+      {
+        ...diagramJson.nodes[0]!,
+        position: { x: 12, y: 0 }
+      }
+    ]
+  };
+  const connectedDiagramJson: DiagramJson = {
+    ...diagramJson,
+    edges: [
+      {
+        id: "edge-1",
+        sourceNodeId: "source",
+        targetNodeId: "target"
+      }
+    ]
+  };
+
+  assert.notEqual(toTerraformRefreshFingerprint(diagramJson), toTerraformRefreshFingerprint(movedDiagramJson));
+  assert.notEqual(toDeploymentBaselineFingerprint(diagramJson), toDeploymentBaselineFingerprint(connectedDiagramJson));
 });
 
 function makeNode(

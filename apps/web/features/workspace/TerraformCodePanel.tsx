@@ -35,7 +35,7 @@ import {
   getTerraformFileCode,
   getTerraformFileOptions,
   parseTerraformFiles,
-  toDiagramFingerprint,
+  toTerraformRefreshFingerprint,
   type TerraformSaveBanner,
   type TerraformVirtualFile
 } from "./terraform-panel-utils";
@@ -190,7 +190,10 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
     [errorDiagnostics]
   );
   const hasErrorDiagnostics = errorDiagnostics.length > 0;
-  const currentDiagramFingerprint = useMemo(() => toDiagramFingerprint(context.diagram), [context.diagram]);
+  const currentDiagramFingerprint = useMemo(
+    () => toTerraformRefreshFingerprint(context.diagram),
+    [context.diagram]
+  );
   const terraformBlocks = useMemo(() => parseTerraformFiles(terraformFiles), [terraformFiles]);
   const selectedNode = useMemo(
     () => context.nodes.find((node) => node.id === context.selectedNodeId) ?? null,
@@ -416,7 +419,7 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
     }
 
     context.applyDiagramJson(syncResult.diagramJson);
-    latestDiagramFingerprintRef.current = toDiagramFingerprint(syncResult.diagramJson);
+    latestDiagramFingerprintRef.current = toTerraformRefreshFingerprint(syncResult.diagramJson);
     setHasLocalEdits(false);
     setSaveBanner(null);
     setStatusMessage("저장됨");

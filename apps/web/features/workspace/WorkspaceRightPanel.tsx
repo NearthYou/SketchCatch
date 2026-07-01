@@ -27,7 +27,7 @@ import {
   saveWorkspaceTerraformArtifact,
   type SavedWorkspaceTerraformArtifact
 } from "./workspace-deployment-artifacts";
-import { toDiagramFingerprint } from "./terraform-panel-utils";
+import { toDeploymentBaselineFingerprint } from "./terraform-panel-utils";
 import type { ResourceWorkspaceView, WorkspaceRightPanelView } from "./workspace-right-panel.types";
 import styles from "./workspace.module.css";
 
@@ -53,7 +53,7 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
   const [terraformDiagnostics, setTerraformDiagnostics] = useState<TerraformDiagnostic[]>([]);
   const hasTerraformIssueErrors = terraformDiagnostics.some((diagnostic) => diagnostic.severity === "error");
   const currentDeploymentBaselineFingerprint = useMemo(
-    () => toDiagramFingerprint(context.diagram),
+    () => toDeploymentBaselineFingerprint(context.diagram),
     [context.diagram]
   );
   const hasUnsavedDeploymentBaseline =
@@ -140,7 +140,7 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
 
     const savedArtifacts = await savePreparedTerraformArtifact(preparedSource);
 
-    setLastSavedDeploymentBaselineFingerprint(toDiagramFingerprint(preparedSource.diagramJson));
+    setLastSavedDeploymentBaselineFingerprint(toDeploymentBaselineFingerprint(preparedSource.diagramJson));
     setIsDeploymentBaselineDirty(false);
 
     return savedArtifacts;
