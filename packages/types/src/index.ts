@@ -217,6 +217,51 @@ export type CreateProjectRequest = {
   description?: string | undefined;
 };
 
+export type ProjectDeletePreviewMode =
+  | "plain"
+  | "planned"
+  | "deployment_history"
+  | "active_resources"
+  | "blocked_running_deployment"
+  | "blocked_multiple_active_deployments";
+
+export type ProjectDeleteAction =
+  | "delete_project"
+  | "delete_project_only"
+  | "destroy_then_delete";
+
+export type DeleteProjectRequest = {
+  action: Exclude<ProjectDeleteAction, "destroy_then_delete">;
+};
+
+export type ProjectDeletePreview = {
+  projectId: string;
+  mode: ProjectDeletePreviewMode;
+  hasDeploymentHistory: boolean;
+  hasPlanHistory: boolean;
+  activeDeploymentId: string | null;
+  activeDeploymentCount: number;
+  activeResourceCount: number;
+  latestDeploymentStatus: DeploymentStatus | null;
+  message: string;
+  availableActions: ProjectDeleteAction[];
+};
+
+export type ProjectDeletePreviewResponse = {
+  preview: ProjectDeletePreview;
+};
+
+export type ProjectDeleteCleanupStatus = "success" | "partial_failed" | "failed";
+
+export type DeleteProjectResponse = {
+  deleted: true;
+  cleanup: {
+    s3Status: ProjectDeleteCleanupStatus;
+    failedObjectCount: number;
+    message: string | null;
+  };
+};
+
 export type ArchitectureSource = "manual" | "prompt" | "ai_draft" | "imported";
 
 export type ArchitectureSnapshot = {

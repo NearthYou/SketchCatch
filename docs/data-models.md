@@ -211,6 +211,59 @@ DB 기준: `projects`
 
 `userId`는 인증된 사용자 소유자 키다. 프로젝트 접근은 `Authorization: Bearer <accessToken>`에서 확인한 사용자와 `projects.user_id`를 비교한다.
 
+### Project Delete Preview
+
+프로젝트 삭제 전에는 `GET /api/projects/:id/delete-preview`로 현재 삭제 방식을 판정한다.
+
+```ts
+type ProjectDeletePreviewMode =
+  | "plain"
+  | "planned"
+  | "deployment_history"
+  | "active_resources"
+  | "blocked_running_deployment"
+  | "blocked_multiple_active_deployments";
+
+type ProjectDeleteAction =
+  | "delete_project"
+  | "delete_project_only"
+  | "destroy_then_delete";
+
+type ProjectDeletePreview = {
+  projectId: string;
+  mode: ProjectDeletePreviewMode;
+  hasDeploymentHistory: boolean;
+  hasPlanHistory: boolean;
+  activeDeploymentId: string | null;
+  activeDeploymentCount: number;
+  activeResourceCount: number;
+  latestDeploymentStatus: DeploymentStatus | null;
+  message: string;
+  availableActions: ProjectDeleteAction[];
+};
+```
+
+`RUNNING` Deployment가 있으면 삭제를 막는다. 현재 AWS 리소스가 남아 있는 Deployment가 정확히 하나면 `destroy_then_delete`와 `delete_project_only`를 제공한다. 여러 개면 자동 destroy 대상을 특정하지 않고 `delete_project_only`만 제공한다.
+
+`destroy_then_delete`는 `DELETE /api/projects/:id`의 직접 action이 아니다. 화면은 기존 Destroy Plan 생성, 승인, Destroy 실행을 완료한 뒤 `delete_project`로 프로젝트 기록을 삭제한다.
+
+```ts
+type DeleteProjectRequest = {
+  action: "delete_project" | "delete_project_only";
+};
+
+type DeleteProjectResponse = {
+  deleted: true;
+  cleanup: {
+    s3Status: "success" | "partial_failed" | "failed";
+    failedObjectCount: number;
+    message: string | null;
+  };
+};
+```
+
+프로젝트 삭제 시 RDS의 프로젝트 관련 기록은 삭제한다. S3 object 삭제는 best-effort로 처리하며, 일부 실패해도 프로젝트 삭제는 완료하고 `cleanup`으로 경고를 전달한다.
+
 ## ArchitectureSnapshot
 
 ```ts
