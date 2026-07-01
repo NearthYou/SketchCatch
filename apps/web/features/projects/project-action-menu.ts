@@ -12,8 +12,12 @@ export function getProjectActionMenuItems(
   preview: ProjectDeletePreview
 ): readonly ProjectActionMenuItem[] {
   const availableActions = new Set(preview.availableActions);
+  const shouldShowCleanupActions =
+    preview.mode === "active_resources" ||
+    availableActions.has("destroy_then_delete") ||
+    availableActions.has("delete_project_only");
   const deleteItems: ProjectActionMenuItem[] =
-    preview.activeResourceCount > 0
+    shouldShowCleanupActions
       ? [
           {
             disabled: !availableActions.has("destroy_then_delete"),

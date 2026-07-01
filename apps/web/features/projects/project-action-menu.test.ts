@@ -42,6 +42,22 @@ test("getProjectActionMenuItems hides resource delete when no resources are acti
   );
 });
 
+test("getProjectActionMenuItems keeps cleanup choices for active state without counted resources", () => {
+  const items = getProjectActionMenuItems(
+    createPreview({
+      activeResourceCount: 0,
+      availableActions: ["destroy_then_delete", "delete_project_only"],
+      mode: "active_resources"
+    })
+  );
+
+  assert.deepEqual(
+    items.map((item) => item.kind),
+    ["destroy_then_delete", "delete_project_only", "edit"]
+  );
+  assert.equal(items.every((item) => !item.disabled), true);
+});
+
 function createPreview(
   overrides: Pick<ProjectDeletePreview, "activeResourceCount" | "availableActions" | "mode">
 ): ProjectDeletePreview {
