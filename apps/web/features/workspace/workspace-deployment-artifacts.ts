@@ -2,9 +2,12 @@ import type {
   ArchitectureSnapshot,
   ArchitectureSource,
   DiagramJson,
+  ProjectAssetUploadResponse,
   TerraformArtifact
 } from "@sketchcatch/types";
 import {
+  abortProjectAssetUpload,
+  confirmProjectAssetUpload,
   createArchitectureSnapshot,
   createProjectAssetUpload,
   uploadProjectAsset,
@@ -75,26 +78,45 @@ export async function saveWorkspaceTerraformArtifact({
     source
   });
   const byteSize = new TextEncoder().encode(terraformCode).byteLength;
-  const uploadResponse = await createProjectAssetUpload({
-    projectId,
-    architectureId: architecture.id,
-    assetType: "terraform_file",
-    fileName,
-    contentType: TERRAFORM_ARTIFACT_CONTENT_TYPE,
-    byteSize
-  });
+  let uploadResponse: ProjectAssetUploadResponse | undefined;
 
-  await uploadProjectAsset(uploadResponse.upload, terraformCode);
+  try {
+    uploadResponse = await createProjectAssetUpload({
+      projectId,
+      architectureId: architecture.id,
+      assetType: "terraform_file",
+      fileName,
+      contentType: TERRAFORM_ARTIFACT_CONTENT_TYPE,
+      byteSize
+    });
 
-  if (
-    uploadResponse.asset.assetType !== "terraform_file" ||
-    typeof uploadResponse.asset.architectureId !== "string"
-  ) {
-    throw new Error("저장된 Terraform artifact가 Architecture snapshot과 연결되지 않았습니다.");
+    await uploadProjectAsset(uploadResponse.upload, terraformCode);
+
+    const confirmedAsset = await confirmProjectAssetUpload({
+      projectId,
+      assetId: uploadResponse.asset.id
+    });
+
+    if (
+      confirmedAsset.assetType !== "terraform_file" ||
+      typeof confirmedAsset.architectureId !== "string" ||
+      confirmedAsset.uploadStatus !== "uploaded"
+    ) {
+      throw new Error("저장된 Terraform artifact가 Architecture snapshot과 연결되지 않았습니다.");
+    }
+
+    return {
+      architecture,
+      terraformArtifact: confirmedAsset as TerraformArtifact
+    };
+  } catch (error) {
+    if (uploadResponse) {
+      await abortProjectAssetUpload({
+        projectId,
+        assetId: uploadResponse.asset.id
+      }).catch(() => undefined);
+    }
+
+    throw error;
   }
-
-  return {
-    architecture,
-    terraformArtifact: uploadResponse.asset as TerraformArtifact
-  };
 }

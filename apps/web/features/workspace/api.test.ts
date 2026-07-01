@@ -2,6 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   approveDeploymentPlan,
+  abortProjectAssetUpload,
+  confirmProjectAssetUpload,
   createArchitectureSnapshot,
   createAwsConnectionSetup,
   createDeployment,
@@ -25,10 +27,7 @@ import {
   verifyAwsConnection
 } from "./api";
 import type { Project } from "../../../../packages/types/src";
-import {
-  clearStoredAuthSession,
-  writeStoredAuthSession
-} from "../../lib/auth-storage";
+import { clearStoredAuthSession, writeStoredAuthSession } from "../../lib/auth-storage";
 
 const project: Project = {
   id: "11111111-1111-4111-8111-111111111111",
@@ -199,6 +198,7 @@ test("createProjectAssetUpload requests terraform file presigned upload metadata
           fileName: "main.tf",
           contentType: "text/plain",
           byteSize: 12,
+          uploadStatus: "pending",
           createdAt: "2026-06-26T00:00:00.000Z"
         },
         upload: {
@@ -236,6 +236,7 @@ test("createProjectAssetUpload requests terraform file presigned upload metadata
     byteSize: 12
   });
   assert.equal(response.asset.assetType, "terraform_file");
+  assert.equal(response.asset.uploadStatus, "pending");
   assert.equal(response.upload.method, "PUT");
 });
 
@@ -269,6 +270,94 @@ test("uploadProjectAsset uploads terraform content to the presigned URL", async 
   assert.equal(requests[0]?.init?.method, "PUT");
   assert.equal(new Headers(requests[0]?.init?.headers).get("content-type"), "text/plain");
   assert.equal(requests[0]?.init?.body, "resource {}");
+});
+
+test("confirmProjectAssetUpload marks the uploaded asset through the API", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
+  const assetId = "66666666-6666-4666-8666-666666666666";
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    restoreWindow(originalWindowDescriptor);
+  });
+
+  installAuthSession();
+
+  globalThis.fetch = async (input, init) => {
+    requests.push({ input, init });
+
+    return new Response(
+      JSON.stringify({
+        asset: {
+          id: assetId,
+          projectId: project.id,
+          architectureId: "55555555-5555-4555-8555-555555555555",
+          assetType: "terraform_file",
+          objectKey: "projects/project/assets/terraform.tf",
+          fileName: "main.tf",
+          contentType: "text/plain",
+          byteSize: 12,
+          uploadStatus: "uploaded",
+          createdAt: "2026-06-26T00:00:00.000Z"
+        }
+      }),
+      {
+        headers: {
+          "Content-Type": "application/json"
+        },
+        status: 200
+      }
+    );
+  };
+
+  const asset = await confirmProjectAssetUpload({
+    projectId: project.id,
+    assetId
+  });
+
+  assert.equal(
+    String(requests[0]?.input),
+    `/api/projects/${project.id}/assets/${assetId}/confirm-upload`
+  );
+  assert.equal(requests[0]?.init?.method, "POST");
+  assert.equal(new Headers(requests[0]?.init?.headers).get("authorization"), "Bearer access-token");
+  assert.equal(asset.uploadStatus, "uploaded");
+});
+
+test("abortProjectAssetUpload requests pending upload cleanup", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
+  const assetId = "66666666-6666-4666-8666-666666666666";
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    restoreWindow(originalWindowDescriptor);
+  });
+
+  installAuthSession();
+
+  globalThis.fetch = async (input, init) => {
+    requests.push({ input, init });
+
+    return new Response(null, {
+      status: 204
+    });
+  };
+
+  await abortProjectAssetUpload({
+    projectId: project.id,
+    assetId
+  });
+
+  assert.equal(
+    String(requests[0]?.input),
+    `/api/projects/${project.id}/assets/${assetId}/abort-upload`
+  );
+  assert.equal(requests[0]?.init?.method, "POST");
+  assert.equal(new Headers(requests[0]?.init?.headers).get("authorization"), "Bearer access-token");
 });
 
 test("deleteProject sends an authenticated DELETE request", async (context) => {
@@ -698,6 +787,7 @@ test("getAwsConnectionCloudFormationTemplate fetches the launch stack setup", as
         templateUrl:
           "https://api.sketchcatch.test/api/aws/connections/cloudformation-template?token=signed",
         templateUrlExpiresAt: "2026-06-26T01:00:00.000Z",
+        manualTemplateFallbackAvailable: false,
         launchStackUrl:
           "https://console.aws.amazon.com/cloudformation/home?region=ap-northeast-2#/stacks/quickcreate?templateURL=https%3A%2F%2Fapi.sketchcatch.test%2Fapi%2Faws%2Fconnections%2Fcloudformation-template%3Ftoken%3Dsigned&stackName=sketchcatch-aws-connection-33333333"
       }),
@@ -722,6 +812,7 @@ test("getAwsConnectionCloudFormationTemplate fetches the launch stack setup", as
   assert.equal(new Headers(requests[0]?.init?.headers).get("authorization"), "Bearer access-token");
   assert.equal(response.roleName, "SketchCatchTerraformExecutionRole");
   assert.equal(response.capabilities[0], "CAPABILITY_NAMED_IAM");
+  assert.equal(response.manualTemplateFallbackAvailable, false);
   assert.match(response.launchStackUrl ?? "", /cloudformation\/home/);
 });
 
@@ -955,9 +1046,7 @@ test("deployment helpers list records, start plan, approve plan, apply, destroy,
   const destroyPlanningDeployment = await runDeploymentDestroyPlan(
     "44444444-4444-4444-8444-444444444444"
   );
-  const destroyingDeployment = await runDeploymentDestroy(
-    "44444444-4444-4444-8444-444444444444"
-  );
+  const destroyingDeployment = await runDeploymentDestroy("44444444-4444-4444-8444-444444444444");
   const resources = await listDeploymentResources("44444444-4444-4444-8444-444444444444");
   const outputs = await listTerraformOutputs("44444444-4444-4444-8444-444444444444");
 

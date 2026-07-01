@@ -340,7 +340,8 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
             eq(projectAssets.id, terraformArtifactId),
             eq(projectAssets.projectId, projectId),
             eq(projectAssets.architectureId, architectureId),
-            eq(projectAssets.assetType, "terraform_file")
+            eq(projectAssets.assetType, "terraform_file"),
+            eq(projectAssets.uploadStatus, "uploaded")
           )
         );
 
@@ -369,7 +370,8 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
         .where(
           and(
             eq(projectAssets.id, terraformArtifactId),
-            eq(projectAssets.assetType, "terraform_file")
+            eq(projectAssets.assetType, "terraform_file"),
+            eq(projectAssets.uploadStatus, "uploaded")
           )
         );
 
@@ -446,7 +448,11 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
         .from(deployments)
         .innerJoin(projects, eq(deployments.projectId, projects.id))
         .where(and(eq(projects.userId, accessContext.userId), eq(deployments.status, "SUCCESS")))
-        .orderBy(desc(deployments.completedAt), desc(deployments.updatedAt), desc(deployments.createdAt));
+        .orderBy(
+          desc(deployments.completedAt),
+          desc(deployments.updatedAt),
+          desc(deployments.createdAt)
+        );
     },
 
     async listDeploymentsByProject(projectId) {
@@ -483,7 +489,10 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
             ...clearDeploymentApprovalFields
           })
           .where(
-            and(eq(deployments.id, deploymentId), inArray(deployments.status, ["PENDING", "FAILED"]))
+            and(
+              eq(deployments.id, deploymentId),
+              inArray(deployments.status, ["PENDING", "FAILED"])
+            )
           )
           .returning();
 

@@ -1,7 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import Fastify from "fastify";
-import type { AwsConnection, RecentSuccessfulDeploymentProjectListResponse } from "@sketchcatch/types";
+import type {
+  AwsConnection,
+  RecentSuccessfulDeploymentProjectListResponse
+} from "@sketchcatch/types";
 import { createAccessToken } from "../auth/tokens.js";
 import type { DatabaseClient } from "../db/client.js";
 import type {
@@ -301,7 +304,8 @@ class FakeDeploymentRepository implements DeploymentRepository {
       this.terraformArtifact.id !== candidateTerraformArtifactId ||
       this.terraformArtifact.projectId !== candidateProjectId ||
       this.terraformArtifact.architectureId !== candidateArchitectureId ||
-      this.terraformArtifact.assetType !== "terraform_file"
+      this.terraformArtifact.assetType !== "terraform_file" ||
+      this.terraformArtifact.uploadStatus !== "uploaded"
     ) {
       return undefined;
     }
@@ -578,7 +582,10 @@ class FakeDeploymentRepository implements DeploymentRepository {
     return this.deployment;
   };
 
-  approveDeployment: DeploymentRepository["approveDeployment"] = async (candidateDeploymentId, input) => {
+  approveDeployment: DeploymentRepository["approveDeployment"] = async (
+    candidateDeploymentId,
+    input
+  ) => {
     this.calls.push({
       name: "approveDeployment",
       deploymentId: candidateDeploymentId,
@@ -837,12 +844,18 @@ async function buildDeploymentTestApp(
     ...(routeOptions.pruneProjectDeploymentStorage
       ? { pruneProjectDeploymentStorage: routeOptions.pruneProjectDeploymentStorage }
       : {}),
-    ...(routeOptions.runDeploymentInit ? { runDeploymentInit: routeOptions.runDeploymentInit } : {}),
-    ...(routeOptions.runDeploymentPlan ? { runDeploymentPlan: routeOptions.runDeploymentPlan } : {}),
+    ...(routeOptions.runDeploymentInit
+      ? { runDeploymentInit: routeOptions.runDeploymentInit }
+      : {}),
+    ...(routeOptions.runDeploymentPlan
+      ? { runDeploymentPlan: routeOptions.runDeploymentPlan }
+      : {}),
     ...(routeOptions.approveDeploymentPlan
       ? { approveDeploymentPlan: routeOptions.approveDeploymentPlan }
       : {}),
-    ...(routeOptions.runDeploymentApply ? { runDeploymentApply: routeOptions.runDeploymentApply } : {}),
+    ...(routeOptions.runDeploymentApply
+      ? { runDeploymentApply: routeOptions.runDeploymentApply }
+      : {}),
     ...(routeOptions.runDeploymentDestroyPlan
       ? { runDeploymentDestroyPlan: routeOptions.runDeploymentDestroyPlan }
       : {}),
@@ -1002,6 +1015,7 @@ function createProjectAssetRecord(overrides: Partial<ProjectAssetRecord> = {}): 
     fileName: "main.tf",
     contentType: "application/x-terraform",
     byteSize: null,
+    uploadStatus: "uploaded",
     createdAt: fixedNow,
     ...overrides
   };
