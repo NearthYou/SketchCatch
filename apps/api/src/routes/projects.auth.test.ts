@@ -4,7 +4,15 @@ import type { ApiErrorResponse } from "@sketchcatch/types";
 import { buildApp } from "../app.js";
 import { createAccessToken } from "../auth/tokens.js";
 import type { Database, DatabaseClient } from "../db/client.js";
-import { architectures, projectAssets, projects, users } from "../db/schema.js";
+import {
+  architectures,
+  deployedResources,
+  deploymentPlanArtifacts,
+  deployments,
+  projectAssets,
+  projects,
+  users
+} from "../db/schema.js";
 import { defaultTerraformArtifactMaxBytes } from "../deployments/terraform-workspace.js";
 
 process.env.NODE_ENV = "test";
@@ -19,6 +27,9 @@ type UserRow = typeof users.$inferSelect;
 type ProjectRow = typeof projects.$inferSelect;
 type ArchitectureRow = typeof architectures.$inferSelect;
 type ProjectAssetRow = typeof projectAssets.$inferSelect;
+type DeploymentRow = typeof deployments.$inferSelect;
+type DeployedResourceRow = typeof deployedResources.$inferSelect;
+type DeploymentPlanArtifactRow = typeof deploymentPlanArtifacts.$inferSelect;
 
 test("GET /api/projects returns 401 for a deleted user", async () => {
   const fakeDb = new ProjectRouteFakeDb({
@@ -135,8 +146,130 @@ test("DELETE /api/projects/:id deletes a project owned by the active user", asyn
     headers: await authHeaders(ACTIVE_USER_ID)
   });
 
-  assert.equal(response.statusCode, 204);
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(response.json(), {
+    deleted: true,
+    cleanup: {
+      failedObjectCount: 0,
+      message: null,
+      s3Status: "success"
+    }
+  });
   assert.equal(fakeDb.projectRows.some((project) => project.id === ACTIVE_PROJECT_ID), false);
+
+  await app.close();
+});
+
+test("DELETE /api/projects/:id reports S3 cleanup failures but still deletes records", async () => {
+  const deletedObjectKeys: string[] = [];
+  const fakeDb = new ProjectRouteFakeDb({
+    activeUserId: ACTIVE_USER_ID,
+    requestedProjectId: ACTIVE_PROJECT_ID,
+    users: [makeUser({ id: ACTIVE_USER_ID })],
+    projects: [makeProject({ id: ACTIVE_PROJECT_ID, userId: ACTIVE_USER_ID })],
+    projectAssets: [
+      makeProjectAsset({
+        objectKey: "projects/project-id/diagram.png",
+        projectId: ACTIVE_PROJECT_ID
+      })
+    ]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client,
+    projectDeletionStorage: {
+      async deleteObject(objectKey) {
+        deletedObjectKeys.push(objectKey);
+        throw new Error("S3 delete failed");
+      }
+    }
+  });
+
+  const response = await app.inject({
+    method: "DELETE",
+    url: `/api/projects/${ACTIVE_PROJECT_ID}`,
+    headers: await authHeaders(ACTIVE_USER_ID),
+    payload: {
+      action: "delete_project"
+    }
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(response.json(), {
+    deleted: true,
+    cleanup: {
+      failedObjectCount: 1,
+      message: "일부 SketchCatch 산출물 정리에 실패했습니다.",
+      s3Status: "failed"
+    }
+  });
+  assert.deepEqual(deletedObjectKeys, ["projects/project-id/diagram.png"]);
+  assert.equal(fakeDb.projectRows.some((project) => project.id === ACTIVE_PROJECT_ID), false);
+  assert.equal(fakeDb.projectAssetRows.length, 0);
+
+  await app.close();
+});
+
+test("GET /api/projects/:id/delete-preview reports planned deployments", async () => {
+  const fakeDb = new ProjectRouteFakeDb({
+    activeUserId: ACTIVE_USER_ID,
+    requestedProjectId: ACTIVE_PROJECT_ID,
+    users: [makeUser({ id: ACTIVE_USER_ID })],
+    projects: [makeProject({ id: ACTIVE_PROJECT_ID, userId: ACTIVE_USER_ID })],
+    deployments: [
+      makeDeployment({
+        currentPlanArtifactId: "99999999-9999-4999-8999-999999999999",
+        projectId: ACTIVE_PROJECT_ID,
+        status: "PENDING"
+      })
+    ]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  const response = await app.inject({
+    method: "GET",
+    url: `/api/projects/${ACTIVE_PROJECT_ID}/delete-preview`,
+    headers: await authHeaders(ACTIVE_USER_ID)
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.json().preview.mode, "planned");
+  assert.deepEqual(response.json().preview.availableActions, ["delete_project"]);
+
+  await app.close();
+});
+
+test("DELETE /api/projects/:id returns conflict while a deployment is running", async () => {
+  const fakeDb = new ProjectRouteFakeDb({
+    activeUserId: ACTIVE_USER_ID,
+    requestedProjectId: ACTIVE_PROJECT_ID,
+    users: [makeUser({ id: ACTIVE_USER_ID })],
+    projects: [makeProject({ id: ACTIVE_PROJECT_ID, userId: ACTIVE_USER_ID })],
+    deployments: [
+      makeDeployment({
+        activeStage: "apply",
+        projectId: ACTIVE_PROJECT_ID,
+        status: "RUNNING"
+      })
+    ]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  const response = await app.inject({
+    method: "DELETE",
+    url: `/api/projects/${ACTIVE_PROJECT_ID}`,
+    headers: await authHeaders(ACTIVE_USER_ID),
+    payload: {
+      action: "delete_project"
+    }
+  });
+
+  assert.equal(response.statusCode, 409);
+  assertErrorResponse(response.json() as ApiErrorResponse, "conflict");
+  assert.equal(fakeDb.projectRows.some((project) => project.id === ACTIVE_PROJECT_ID), true);
 
   await app.close();
 });
@@ -290,6 +423,58 @@ function makeProject(overrides: Partial<ProjectRow> = {}): ProjectRow {
   };
 }
 
+function makeProjectAsset(overrides: Partial<ProjectAssetRow> = {}): ProjectAssetRow {
+  return {
+    architectureId: null,
+    assetType: "diagram_png",
+    byteSize: 1024,
+    contentType: "image/png",
+    createdAt: new Date("2026-06-24T00:00:00.000Z"),
+    fileName: "diagram.png",
+    id: "44444444-4444-4444-8444-444444444444",
+    objectKey: "projects/project-id/diagram.png",
+    projectId: ACTIVE_PROJECT_ID,
+    ...overrides
+  };
+}
+
+function makeDeployment(overrides: Partial<DeploymentRow> = {}): DeploymentRow {
+  return {
+    activeStage: null,
+    approvedAt: null,
+    approvedAwsAccountId: null,
+    approvedAwsRegion: null,
+    approvedByUserId: null,
+    approvedPlanArtifactId: null,
+    approvedTerraformArtifactHash: null,
+    approvedTerraformArtifactId: null,
+    approvedTfplanHash: null,
+    architectureId: "55555555-5555-4555-8555-555555555555",
+    awsConnectionId: null,
+    blockedBy: null,
+    blockedReason: null,
+    cancelRequestedAt: null,
+    cancelledAt: null,
+    completedAt: null,
+    createdAt: new Date("2026-06-24T00:00:00.000Z"),
+    currentPlanArtifactId: null,
+    errorSummary: null,
+    failedAt: null,
+    failureStage: null,
+    id: "66666666-6666-4666-8666-666666666666",
+    isBlocked: false,
+    planSummary: null,
+    projectId: ACTIVE_PROJECT_ID,
+    resultWarningSummary: null,
+    startedAt: null,
+    stateObjectKey: null,
+    status: "PENDING",
+    terraformArtifactId: "77777777-7777-4777-8777-777777777777",
+    updatedAt: new Date("2026-06-24T00:00:00.000Z"),
+    ...overrides
+  };
+}
+
 class ProjectRouteFakeDb {
   activeUserId: string;
   requestedProjectId: string | undefined;
@@ -297,6 +482,9 @@ class ProjectRouteFakeDb {
   projectRows: ProjectRow[];
   architectureRows: ArchitectureRow[];
   projectAssetRows: ProjectAssetRow[];
+  deploymentRows: DeploymentRow[];
+  deployedResourceRows: DeployedResourceRow[];
+  deploymentPlanArtifactRows: DeploymentPlanArtifactRow[];
   client: DatabaseClient;
 
   constructor(data: {
@@ -306,6 +494,9 @@ class ProjectRouteFakeDb {
     projects?: ProjectRow[];
     architectures?: ArchitectureRow[];
     projectAssets?: ProjectAssetRow[];
+    deployments?: DeploymentRow[];
+    deployedResources?: DeployedResourceRow[];
+    deploymentPlanArtifacts?: DeploymentPlanArtifactRow[];
   }) {
     this.activeUserId = data.activeUserId;
     this.requestedProjectId = data.requestedProjectId;
@@ -313,6 +504,9 @@ class ProjectRouteFakeDb {
     this.projectRows = data.projects ?? [];
     this.architectureRows = data.architectures ?? [];
     this.projectAssetRows = data.projectAssets ?? [];
+    this.deploymentRows = data.deployments ?? [];
+    this.deployedResourceRows = data.deployedResources ?? [];
+    this.deploymentPlanArtifactRows = data.deploymentPlanArtifacts ?? [];
     this.client = {
       db: this.createDb() as Database,
       pool: {
@@ -347,6 +541,32 @@ class ProjectRouteFakeDb {
       }),
       delete: (table: unknown) => ({
         where: async () => {
+          if (table === deploymentPlanArtifacts) {
+            this.deploymentPlanArtifactRows = [];
+          }
+
+          if (table === deployedResources) {
+            this.deployedResourceRows = [];
+          }
+
+          if (table === deployments) {
+            this.deploymentRows = this.deploymentRows.filter(
+              (deployment) => deployment.projectId !== this.requestedProjectId
+            );
+          }
+
+          if (table === projectAssets) {
+            this.projectAssetRows = this.projectAssetRows.filter(
+              (asset) => asset.projectId !== this.requestedProjectId
+            );
+          }
+
+          if (table === architectures) {
+            this.architectureRows = this.architectureRows.filter(
+              (architecture) => architecture.projectId !== this.requestedProjectId
+            );
+          }
+
           if (table === projects) {
             this.projectRows = this.projectRows.filter(
               (project) =>
@@ -359,7 +579,8 @@ class ProjectRouteFakeDb {
 
           return [];
         }
-      })
+      }),
+      transaction: async (callback: (tx: unknown) => Promise<unknown>) => callback(this.createDb())
     };
   }
 
@@ -391,6 +612,21 @@ class ProjectRouteFakeDb {
       return this.projectAssetRows.filter(
         (asset) => !this.requestedProjectId || asset.projectId === this.requestedProjectId
       );
+    }
+
+    if (table === deployments) {
+      return this.deploymentRows.filter(
+        (deployment) =>
+          !this.requestedProjectId || deployment.projectId === this.requestedProjectId
+      );
+    }
+
+    if (table === deployedResources) {
+      return this.deployedResourceRows;
+    }
+
+    if (table === deploymentPlanArtifacts) {
+      return this.deploymentPlanArtifactRows;
     }
 
     return [];

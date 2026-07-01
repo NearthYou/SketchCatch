@@ -10,6 +10,12 @@ import { requireS3BucketName } from "../config/env.js";
 import { getDatabaseClient, type DatabaseClient } from "../db/client.js";
 import { defaultTerraformArtifactMaxBytes } from "../deployments/terraform-workspace.js";
 import {
+  createS3ProjectDeletionStorage,
+  deleteProjectRecords,
+  getProjectDeletePreview,
+  type ProjectDeletionStorage
+} from "../projects/project-deletion-service.js";
+import {
   architectures,
   projectAssets,
   projectDrafts,
@@ -24,6 +30,12 @@ const createProjectBodySchema = z.object({
   name: z.string().min(1).max(120),
   description: z.string().max(2000).optional()
 });
+
+const deleteProjectBodySchema = z
+  .object({
+    action: z.enum(["delete_project", "delete_project_only"]).default("delete_project")
+  })
+  .default({ action: "delete_project" });
 
 const routeParamsSchema = z.object({
   id: z.string().uuid()
@@ -107,6 +119,7 @@ const presignedUploadBodySchema = z
 
 type ProjectRouteOptions = {
   getDatabaseClient?: () => DatabaseClient;
+  projectDeletionStorage?: ProjectDeletionStorage;
 };
 
 export async function registerProjectRoutes(
@@ -150,6 +163,21 @@ export async function registerProjectRoutes(
     });
   });
 
+  app.get("/projects/:id/delete-preview", async (request) => {
+    const currentUserId = await requireActiveUserId(request, getProjectDatabaseClient);
+    const params = routeParamsSchema.parse(request.params);
+    const { db } = getProjectDatabaseClient();
+    const preview = await getProjectDeletePreview({
+      db,
+      projectId: params.id,
+      userId: currentUserId
+    });
+
+    return {
+      preview
+    };
+  });
+
   app.get("/projects/:id", async (request, reply) => {
     const currentUserId = await requireActiveUserId(request, getProjectDatabaseClient);
     const params = routeParamsSchema.parse(request.params);
@@ -187,6 +215,7 @@ export async function registerProjectRoutes(
   app.delete("/projects/:id", async (request, reply) => {
     const currentUserId = await requireActiveUserId(request, getProjectDatabaseClient);
     const params = routeParamsSchema.parse(request.params);
+    const body = deleteProjectBodySchema.parse(request.body);
     const { db } = getProjectDatabaseClient();
 
     const [project] = await db
@@ -198,11 +227,26 @@ export async function registerProjectRoutes(
       return sendNotFound(reply, "프로젝트를 찾을 수 없습니다.");
     }
 
-    await db
-      .delete(projects)
-      .where(and(eq(projects.id, params.id), eq(projects.userId, currentUserId)));
+    const result = await deleteProjectRecords({
+      action: body.action,
+      db,
+      projectId: params.id,
+      storage: options.projectDeletionStorage ?? createDefaultProjectDeletionStorage(),
+      userId: currentUserId
+    });
 
-    return reply.status(204).send();
+    if (result.cleanup.failedObjectCount > 0) {
+      request.log.warn(
+        {
+          failedObjectCount: result.cleanup.failedObjectCount,
+          projectId: params.id,
+          s3Status: result.cleanup.s3Status
+        },
+        "Failed to delete some project S3 objects"
+      );
+    }
+
+    return reply.status(200).send(result);
   });
 
   app.post("/projects/:id/architectures", async (request, reply) => {
@@ -410,6 +454,19 @@ function sendNotFound(reply: FastifyReply, message: string): FastifyReply {
   };
 
   return reply.status(404).send(response);
+}
+
+function createDefaultProjectDeletionStorage(): ProjectDeletionStorage {
+  return {
+    async deleteObject(objectKey) {
+      const storage = createS3ProjectDeletionStorage({
+        bucketName: requireS3BucketName(),
+        s3Client: getS3Client()
+      });
+
+      await storage.deleteObject(objectKey);
+    }
+  };
 }
 
 function buildObjectKey(
