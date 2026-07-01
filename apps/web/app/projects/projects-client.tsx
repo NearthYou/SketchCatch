@@ -1,9 +1,21 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import type { Deployment, Project, ProjectDeletePreview } from "@sketchcatch/types";
-import { ApiProjectCard } from "../../components/dashboard/api-project-card";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent
+} from "react";
+import type {
+  Deployment,
+  Project,
+  ProjectDeleteAction,
+  ProjectDeletePreview
+} from "@sketchcatch/types";
+import { MoreHorizontal } from "lucide-react";
+import { ApiProjectCard, getWorkspaceHref } from "../../components/dashboard/api-project-card";
 import { getApiErrorMessage } from "../../lib/api-client";
 import {
   approveDeploymentPlan,
@@ -15,6 +27,10 @@ import {
   runDeploymentDestroyPlan
 } from "../../features/workspace/api";
 import { DashboardIcon } from "../../components/dashboard/dashboard-icons";
+import {
+  getProjectActionMenuItems,
+  type ProjectActionMenuItemKind
+} from "../../features/projects/project-action-menu";
 import { filterProjectsByName } from "../../features/projects/project-search";
 
 const DELETE_DEPLOYMENT_POLL_INTERVAL_MS = 2500;
@@ -23,14 +39,24 @@ const DELETE_DEPLOYMENT_POLL_TIMEOUT_MS = 10 * 60 * 1000;
 type ProjectsLoadState = "loading" | "ready" | "error";
 type DeleteDialogState =
   | { readonly status: "closed" }
-  | { readonly project: Project; readonly status: "loading" }
+  | {
+      readonly project: Project;
+      readonly selectedAction?: ProjectDeleteAction | undefined;
+      readonly status: "loading";
+    }
   | {
       readonly deployment?: Deployment | undefined;
       readonly errorMessage?: string | undefined;
       readonly preview: ProjectDeletePreview;
       readonly project: Project;
+      readonly selectedAction?: ProjectDeleteAction | undefined;
       readonly status: "ready" | "planning" | "approval" | "destroying" | "deleting";
     };
+type ProjectActionMenuState =
+  | { readonly status: "closed" }
+  | { readonly project: Project; readonly status: "loading" }
+  | { readonly preview: ProjectDeletePreview; readonly project: Project; readonly status: "ready" }
+  | { readonly errorMessage: string; readonly project: Project; readonly status: "error" };
 
 export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }) {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -39,6 +65,9 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
   const [deleteErrorMessage, setDeleteErrorMessage] = useState("");
   const [deletingProjectId, setDeletingProjectId] = useState<string | null>(null);
   const [deleteDialog, setDeleteDialog] = useState<DeleteDialogState>({ status: "closed" });
+  const [projectActionMenu, setProjectActionMenu] = useState<ProjectActionMenuState>({
+    status: "closed"
+  });
   const isSearchActive = searchQuery.trim().length > 0;
   const displayProjects = useMemo(
     () => (isSearchActive ? filterProjectsByName(projects, searchQuery) : projects),
@@ -78,16 +107,70 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
     };
   }, []);
 
-  async function openProjectDeleteDialog(project: Project): Promise<void> {
+  async function toggleProjectActionMenu(project: Project): Promise<void> {
+    if (projectActionMenu.status !== "closed" && projectActionMenu.project.id === project.id) {
+      setProjectActionMenu({ status: "closed" });
+      return;
+    }
+
     setDeleteErrorMessage("");
-    setDeleteDialog({ project, status: "loading" });
+    setProjectActionMenu({ project, status: "loading" });
 
     try {
       const preview = await getProjectDeletePreview(project.id);
 
+      setProjectActionMenu((currentMenu) =>
+        currentMenu.status === "loading" && currentMenu.project.id === project.id
+          ? {
+              preview,
+              project,
+              status: "ready"
+            }
+          : currentMenu
+      );
+    } catch (error) {
+      setProjectActionMenu((currentMenu) =>
+        currentMenu.status === "loading" && currentMenu.project.id === project.id
+          ? {
+              errorMessage: getApiErrorMessage(error, "삭제 상태를 확인하지 못했습니다."),
+              project,
+              status: "error"
+            }
+          : currentMenu
+      );
+    }
+  }
+
+  function closeProjectActionMenu(): void {
+    setProjectActionMenu({ status: "closed" });
+  }
+
+  async function openProjectDeleteDialog(
+    project: Project,
+    preview?: ProjectDeletePreview | undefined,
+    selectedAction?: ProjectDeleteAction | undefined
+  ): Promise<void> {
+    setDeleteErrorMessage("");
+
+    if (preview) {
       setDeleteDialog({
         preview,
         project,
+        selectedAction,
+        status: "ready"
+      });
+      return;
+    }
+
+    setDeleteDialog({ project, selectedAction, status: "loading" });
+
+    try {
+      const nextPreview = await getProjectDeletePreview(project.id);
+
+      setDeleteDialog({
+        preview: nextPreview,
+        project,
+        selectedAction,
         status: "ready"
       });
     } catch (error) {
@@ -101,13 +184,14 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
       return;
     }
 
-    const { preview, project } = deleteDialog;
+    const { preview, project, selectedAction } = deleteDialog;
 
     setDeleteErrorMessage("");
     setDeletingProjectId(project.id);
     setDeleteDialog({
       preview,
       project,
+      selectedAction,
       status: "deleting"
     });
 
@@ -127,6 +211,7 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
         errorMessage: getApiErrorMessage(error, "프로젝트를 삭제하지 못했습니다."),
         preview,
         project,
+        selectedAction,
         status: "ready"
       });
     } finally {
@@ -139,13 +224,14 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
       return;
     }
 
-    const { preview, project } = deleteDialog;
+    const { preview, project, selectedAction } = deleteDialog;
 
     if (!preview.activeDeploymentId) {
       setDeleteDialog({
         errorMessage: "정리할 Deployment를 찾을 수 없습니다.",
         preview,
         project,
+        selectedAction,
         status: "ready"
       });
       return;
@@ -156,6 +242,7 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
     setDeleteDialog({
       preview,
       project,
+      selectedAction,
       status: "planning"
     });
 
@@ -173,6 +260,7 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
         deployment,
         preview,
         project,
+        selectedAction,
         status: "approval"
       });
     } catch (error) {
@@ -180,6 +268,7 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
         errorMessage: getApiErrorMessage(error, "Destroy Plan을 생성하지 못했습니다."),
         preview,
         project,
+        selectedAction,
         status: "ready"
       });
       setDeletingProjectId(null);
@@ -191,12 +280,13 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
       return;
     }
 
-    const { deployment, preview, project } = deleteDialog;
+    const { deployment, preview, project, selectedAction } = deleteDialog;
 
     setDeleteDialog({
       deployment,
       preview,
       project,
+      selectedAction,
       status: "destroying"
     });
 
@@ -227,6 +317,7 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
         errorMessage: getApiErrorMessage(error, "리소스 포함 삭제를 완료하지 못했습니다."),
         preview,
         project,
+        selectedAction,
         status: "approval"
       });
     } finally {
@@ -257,6 +348,11 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
       deleteDialog.status === "destroying" ||
       deleteDialog.status === "deleting";
     const projectName = deleteDialog.project.name;
+    const selectedAction = deleteDialog.selectedAction;
+    const shouldShowDeleteAction = (action: ProjectDeleteAction): boolean =>
+      deleteDialog.status !== "loading" &&
+      deleteDialog.preview.availableActions.includes(action) &&
+      (!selectedAction || selectedAction === action);
 
     return (
       <div
@@ -345,7 +441,7 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
             </button>
 
             {deleteDialog.status !== "loading" &&
-            deleteDialog.preview.availableActions.includes("delete_project") ? (
+            shouldShowDeleteAction("delete_project") ? (
               <button
                 className="dashboardDangerButton"
                 disabled={isBusy}
@@ -358,7 +454,7 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
             ) : null}
 
             {deleteDialog.status !== "loading" &&
-            deleteDialog.preview.availableActions.includes("delete_project_only") ? (
+            shouldShowDeleteAction("delete_project_only") ? (
               <button
                 className="dashboardDangerButton"
                 disabled={isBusy}
@@ -371,7 +467,7 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
             ) : null}
 
             {deleteDialog.status !== "loading" &&
-            deleteDialog.preview.availableActions.includes("destroy_then_delete") &&
+            shouldShowDeleteAction("destroy_then_delete") &&
             deleteDialog.status !== "approval" ? (
               <button
                 className="dashboardDangerButton"
@@ -454,9 +550,26 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
         <div className="dashboardCardGrid">
           {displayProjects.map((project) => (
             <ApiProjectCard
+              actions={
+                <ProjectCardActionMenu
+                  isDeleting={deletingProjectId === project.id}
+                  menuState={
+                    projectActionMenu.status !== "closed" &&
+                    projectActionMenu.project.id === project.id
+                      ? projectActionMenu
+                      : { status: "closed" }
+                  }
+                  onClose={closeProjectActionMenu}
+                  onDeleteAction={(preview, action) => {
+                    closeProjectActionMenu();
+                    void openProjectDeleteDialog(project, preview, action);
+                  }}
+                  onToggle={() => void toggleProjectActionMenu(project)}
+                  project={project}
+                />
+              }
               isDeleting={deletingProjectId === project.id}
               key={project.id}
-              onDelete={openProjectDeleteDialog}
               project={project}
               timestampLabel="수정"
               timestampValue={project.updatedAt}
@@ -468,6 +581,173 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
 
       {renderDeleteDialog()}
     </section>
+  );
+}
+
+function ProjectCardActionMenu({
+  isDeleting,
+  menuState,
+  onClose,
+  onDeleteAction,
+  onToggle,
+  project
+}: {
+  readonly isDeleting: boolean;
+  readonly menuState: ProjectActionMenuState;
+  readonly onClose: () => void;
+  readonly onDeleteAction: (preview: ProjectDeletePreview, action: ProjectDeleteAction) => void;
+  readonly onToggle: () => void;
+  readonly project: Project;
+}) {
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const isOpen = menuState.status !== "closed";
+  const menuId = `project-action-menu-${project.id}`;
+
+  useEffect(() => {
+    if (!isOpen) {
+      return undefined;
+    }
+
+    function handlePointerDown(event: PointerEvent): void {
+      if (
+        event.target instanceof Node &&
+        menuRef.current &&
+        menuRef.current.contains(event.target)
+      ) {
+        return;
+      }
+
+      onClose();
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown);
+
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+    };
+  }, [isOpen, onClose]);
+
+  function handleKeyDown(event: ReactKeyboardEvent<HTMLDivElement>): void {
+    if (event.key !== "Escape") {
+      return;
+    }
+
+    event.stopPropagation();
+    onClose();
+  }
+
+  return (
+    <div className="projectCardActionMenuWrap" onKeyDown={handleKeyDown} ref={menuRef}>
+      <button
+        aria-controls={isOpen ? menuId : undefined}
+        aria-expanded={isOpen}
+        aria-haspopup="menu"
+        aria-label={`${project.name} 프로젝트 메뉴`}
+        className="projectCardMenuButton"
+        disabled={isDeleting}
+        onClick={onToggle}
+        type="button"
+      >
+        <MoreHorizontal aria-hidden="true" size={20} />
+      </button>
+
+      {isOpen ? (
+        <div className="projectCardActionMenu" id={menuId} role="menu">
+          {menuState.status === "loading" ? (
+            <ProjectActionMenuStatus text="삭제 상태 확인 중" />
+          ) : null}
+
+          {menuState.status === "error" ? (
+            <ProjectActionMenuStatus text={menuState.errorMessage} />
+          ) : null}
+
+          {menuState.status === "ready"
+            ? getProjectActionMenuItems(menuState.preview).map((item) => {
+                if (!isProjectDeleteAction(item.kind)) {
+                  return (
+                    <ProjectActionMenuEditItem key={item.kind} onClose={onClose} project={project} />
+                  );
+                }
+
+                const deleteAction = item.kind;
+
+                return (
+                  <ProjectActionMenuDeleteItem
+                    disabled={isDeleting || item.disabled}
+                    itemKind={deleteAction}
+                    key={deleteAction}
+                    label={item.label}
+                    onClick={() => onDeleteAction(menuState.preview, deleteAction)}
+                    title={item.disabled ? menuState.preview.message : undefined}
+                  />
+                );
+              })
+            : (
+                <ProjectActionMenuEditItem onClose={onClose} project={project} />
+              )}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function isProjectDeleteAction(kind: ProjectActionMenuItemKind): kind is ProjectDeleteAction {
+  return kind !== "edit";
+}
+
+function ProjectActionMenuStatus({ text }: { readonly text: string }) {
+  return (
+    <div aria-live="polite" className="projectCardActionMenuStatus">
+      {text}
+    </div>
+  );
+}
+
+function ProjectActionMenuEditItem({
+  onClose,
+  project
+}: {
+  readonly onClose: () => void;
+  readonly project: Project;
+}) {
+  return (
+    <Link
+      className="projectCardActionMenuItem"
+      href={getWorkspaceHref(project)}
+      onClick={onClose}
+      role="menuitem"
+    >
+      <DashboardIcon name="edit" />
+      <span>수정</span>
+    </Link>
+  );
+}
+
+function ProjectActionMenuDeleteItem({
+  disabled,
+  itemKind,
+  label,
+  onClick,
+  title
+}: {
+  readonly disabled: boolean;
+  readonly itemKind: Exclude<ProjectActionMenuItemKind, "edit">;
+  readonly label: string;
+  readonly onClick: () => void;
+  readonly title?: string | undefined;
+}) {
+  return (
+    <button
+      className="projectCardActionMenuItem projectCardActionMenuItemDanger"
+      disabled={disabled}
+      onClick={onClick}
+      role="menuitem"
+      title={title}
+      type="button"
+    >
+      <DashboardIcon name={itemKind === "destroy_then_delete" ? "cloud" : "trash"} />
+      <span>{label}</span>
+    </button>
   );
 }
 

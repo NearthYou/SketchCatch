@@ -1,9 +1,11 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
 import type { Project } from "@sketchcatch/types";
 import { DashboardIcon } from "./dashboard-icons";
 import { ProjectArchitectureThumbnail } from "./project-architecture-thumbnail";
 
 export type ApiProjectCardProps = {
+  readonly actions?: ReactNode;
   readonly isDeleting?: boolean;
   readonly onDelete?: ((project: Project) => void) | undefined;
   readonly project: Project;
@@ -13,6 +15,7 @@ export type ApiProjectCardProps = {
 };
 
 export function ApiProjectCard({
+  actions,
   isDeleting = false,
   onDelete,
   project,
@@ -43,23 +46,25 @@ export function ApiProjectCard({
     </>
   );
 
-  if (onDelete) {
+  if (actions || onDelete) {
     return (
       <article className={`${className} projectCardWithActions`}>
         <Link aria-label={`${project.name} 프로젝트 열기`} className="projectCardContentLink" href={href}>
           {cardContent}
         </Link>
         <div className="projectCardActions">
-          <button
-            aria-label={`${project.name} 프로젝트 삭제`}
-            className="dashboardDangerButton projectDeleteButton"
-            disabled={isDeleting}
-            onClick={() => onDelete(project)}
-            type="button"
-          >
-            <DashboardIcon name="trash" />
-            <span>{isDeleting ? "삭제 중" : "삭제"}</span>
-          </button>
+          {actions ?? (
+            <button
+              aria-label={`${project.name} 프로젝트 삭제`}
+              className="dashboardDangerButton projectDeleteButton"
+              disabled={isDeleting}
+              onClick={() => onDelete?.(project)}
+              type="button"
+            >
+              <DashboardIcon name="trash" />
+              <span>{isDeleting ? "삭제 중" : "삭제"}</span>
+            </button>
+          )}
         </div>
       </article>
     );

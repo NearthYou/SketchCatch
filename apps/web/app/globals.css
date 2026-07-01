@@ -4043,6 +4043,10 @@ nextjs-portal {
   width: 100%;
 }
 
+.projectCardWithActions {
+  position: relative;
+}
+
 .projectCard:not(.projectCardWide) {
   max-width: 340px;
 }
@@ -4085,7 +4089,7 @@ nextjs-portal {
 }
 
 .projectCardWide.projectCardWithActions {
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .projectCardWide .projectCardContentLink {
@@ -4096,6 +4100,130 @@ nextjs-portal {
   align-items: flex-start;
   display: flex;
   justify-content: flex-end;
+  position: absolute;
+  right: 0;
+  top: 188px;
+  z-index: 20;
+}
+
+.projectCardWithActions .projectCardBody {
+  padding-right: 52px;
+}
+
+.projectCardWide .projectCardActions {
+  top: 0;
+}
+
+.projectCardActionMenuWrap {
+  display: inline-flex;
+  position: relative;
+}
+
+.projectCardMenuButton {
+  align-items: center;
+  background: rgba(15, 23, 42, 0.86);
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 8px;
+  color: var(--dashboard-muted);
+  cursor: pointer;
+  display: inline-flex;
+  height: 38px;
+  justify-content: center;
+  padding: 0;
+  transition:
+    background 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease,
+    box-shadow 140ms ease;
+  width: 42px;
+}
+
+.projectCardMenuButton:hover,
+.projectCardMenuButton:focus-visible {
+  background: rgba(56, 189, 248, 0.1);
+  border-color: rgba(56, 189, 248, 0.42);
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.1);
+  color: #e0f2fe;
+  outline: 0;
+}
+
+.projectCardMenuButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.56;
+}
+
+.projectCardActionMenu {
+  background: #0b1220;
+  border: 1px solid var(--dashboard-border-strong);
+  border-radius: 8px;
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.38);
+  color: var(--dashboard-text);
+  display: grid;
+  min-width: 196px;
+  overflow: hidden;
+  padding: 6px;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  z-index: 35;
+}
+
+.projectCardActionMenuItem,
+.projectCardActionMenuStatus {
+  align-items: center;
+  border-radius: 6px;
+  display: flex;
+  font-size: 0.86rem;
+  font-weight: 850;
+  gap: 9px;
+  min-height: 38px;
+  padding: 0 10px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.projectCardActionMenuItem {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: var(--dashboard-text);
+  cursor: pointer;
+  text-decoration: none;
+  width: 100%;
+}
+
+.projectCardActionMenuItem:hover,
+.projectCardActionMenuItem:focus-visible {
+  background: rgba(56, 189, 248, 0.1);
+  color: #e0f2fe;
+  outline: 0;
+}
+
+.projectCardActionMenuItem:disabled {
+  color: var(--dashboard-subtle);
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.projectCardActionMenuItemDanger {
+  color: #fecaca;
+}
+
+.projectCardActionMenuItemDanger:hover,
+.projectCardActionMenuItemDanger:focus-visible {
+  background: rgba(248, 113, 113, 0.11);
+  color: #fee2e2;
+}
+
+.projectCardActionMenuItem .dashboardIcon {
+  flex: 0 0 auto;
+  height: 17px;
+  width: 17px;
+}
+
+.projectCardActionMenuStatus {
+  color: var(--dashboard-subtle);
+  cursor: default;
 }
 
 .projectDeleteButton {
@@ -4949,7 +5077,7 @@ nextjs-portal {
   }
 
   .projectCardActions {
-    justify-content: flex-start;
+    justify-content: flex-end;
   }
 
   .dashboardTable {
