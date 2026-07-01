@@ -17,11 +17,14 @@ import { defaultTerraformArtifactMaxBytes } from "../deployments/terraform-works
 
 process.env.NODE_ENV = "test";
 process.env.AUTH_TOKEN_SECRET = "test-auth-token-secret-with-at-least-32-characters";
+process.env.S3_BUCKET_NAME = "sketchcatch-test-bucket";
 
 const ACTIVE_USER_ID = "11111111-1111-4111-8111-111111111111";
 const OTHER_USER_ID = "22222222-2222-4222-8222-222222222222";
 const ACTIVE_PROJECT_ID = "33333333-3333-4333-8333-333333333333";
 const OTHER_PROJECT_ID = "44444444-4444-4444-8444-444444444444";
+const ACTIVE_ASSET_ID = "77777777-7777-4777-8777-777777777777";
+const ACTIVE_ARCHITECTURE_ID = "55555555-5555-4555-8555-555555555555";
 
 type UserRow = typeof users.$inferSelect;
 type ProjectRow = typeof projects.$inferSelect;
@@ -155,7 +158,10 @@ test("DELETE /api/projects/:id deletes a project owned by the active user", asyn
       s3Status: "success"
     }
   });
-  assert.equal(fakeDb.projectRows.some((project) => project.id === ACTIVE_PROJECT_ID), false);
+  assert.equal(
+    fakeDb.projectRows.some((project) => project.id === ACTIVE_PROJECT_ID),
+    false
+  );
 
   await app.close();
 });
@@ -260,7 +266,10 @@ test("DELETE /api/projects/:id reports S3 cleanup failures but still deletes rec
     }
   });
   assert.deepEqual(deletedObjectKeys, ["projects/project-id/diagram.png"]);
-  assert.equal(fakeDb.projectRows.some((project) => project.id === ACTIVE_PROJECT_ID), false);
+  assert.equal(
+    fakeDb.projectRows.some((project) => project.id === ACTIVE_PROJECT_ID),
+    false
+  );
   assert.equal(fakeDb.projectAssetRows.length, 0);
 
   await app.close();
@@ -326,7 +335,10 @@ test("DELETE /api/projects/:id returns conflict while a deployment is running", 
 
   assert.equal(response.statusCode, 409);
   assertErrorResponse(response.json() as ApiErrorResponse, "conflict");
-  assert.equal(fakeDb.projectRows.some((project) => project.id === ACTIVE_PROJECT_ID), true);
+  assert.equal(
+    fakeDb.projectRows.some((project) => project.id === ACTIVE_PROJECT_ID),
+    true
+  );
 
   await app.close();
 });
@@ -350,7 +362,10 @@ test("DELETE /api/projects/:id returns 404 for another user's project", async ()
 
   assert.equal(response.statusCode, 404);
   assertErrorResponse(response.json() as ApiErrorResponse, "not_found");
-  assert.equal(fakeDb.projectRows.some((project) => project.id === OTHER_PROJECT_ID), true);
+  assert.equal(
+    fakeDb.projectRows.some((project) => project.id === OTHER_PROJECT_ID),
+    true
+  );
 
   await app.close();
 });
@@ -439,6 +454,206 @@ test("POST /api/projects/:id/assets/presigned-upload rejects oversized Terraform
   await app.close();
 });
 
+test("POST /api/projects/:id/assets/presigned-upload creates a pending asset upload", async () => {
+  const uploadUrlRequests: Array<{
+    bucketName: string;
+    contentType: string;
+    expiresInSeconds: number;
+    objectKey: string;
+  }> = [];
+  const fakeDb = new ProjectRouteFakeDb({
+    activeUserId: ACTIVE_USER_ID,
+    requestedProjectId: ACTIVE_PROJECT_ID,
+    users: [makeUser({ id: ACTIVE_USER_ID })],
+    projects: [makeProject({ id: ACTIVE_PROJECT_ID, userId: ACTIVE_USER_ID })],
+    architectures: [
+      makeArchitecture({
+        id: ACTIVE_ARCHITECTURE_ID,
+        projectId: ACTIVE_PROJECT_ID
+      })
+    ]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client,
+    projectAssetStorage: {
+      async createUploadUrl(input) {
+        uploadUrlRequests.push(input);
+        return "https://s3.example.test/upload";
+      },
+      async deleteObject() {
+        throw new Error("deleteObject should not run");
+      },
+      async objectExists() {
+        throw new Error("objectExists should not run");
+      }
+    }
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/projects/${ACTIVE_PROJECT_ID}/assets/presigned-upload`,
+    headers: await authHeaders(ACTIVE_USER_ID),
+    payload: {
+      architectureId: ACTIVE_ARCHITECTURE_ID,
+      assetType: "terraform_file",
+      fileName: "main.tf",
+      contentType: "text/plain",
+      byteSize: 12
+    }
+  });
+
+  assert.equal(response.statusCode, 201);
+  assert.equal(response.json().asset.uploadStatus, "pending");
+  assert.equal(fakeDb.projectAssetRows[0]?.uploadStatus, "pending");
+  assert.equal(response.json().upload.url, "https://s3.example.test/upload");
+  assert.equal(uploadUrlRequests[0]?.bucketName, "sketchcatch-test-bucket");
+
+  await app.close();
+});
+
+test("POST /api/projects/:id/assets/:assetId/confirm-upload marks an existing S3 object uploaded", async () => {
+  const objectExistsRequests: Array<{
+    bucketName: string;
+    byteSize: number | null;
+    objectKey: string;
+  }> = [];
+  const fakeDb = new ProjectRouteFakeDb({
+    activeUserId: ACTIVE_USER_ID,
+    requestedProjectAssetId: ACTIVE_ASSET_ID,
+    requestedProjectId: ACTIVE_PROJECT_ID,
+    users: [makeUser({ id: ACTIVE_USER_ID })],
+    projects: [makeProject({ id: ACTIVE_PROJECT_ID, userId: ACTIVE_USER_ID })],
+    projectAssets: [
+      makeProjectAsset({
+        id: ACTIVE_ASSET_ID,
+        projectId: ACTIVE_PROJECT_ID,
+        uploadStatus: "pending"
+      })
+    ]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client,
+    projectAssetStorage: {
+      async createUploadUrl() {
+        throw new Error("createUploadUrl should not run");
+      },
+      async deleteObject() {
+        throw new Error("deleteObject should not run");
+      },
+      async objectExists(input) {
+        objectExistsRequests.push(input);
+        return true;
+      }
+    }
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/projects/${ACTIVE_PROJECT_ID}/assets/${ACTIVE_ASSET_ID}/confirm-upload`,
+    headers: await authHeaders(ACTIVE_USER_ID)
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.json().asset.uploadStatus, "uploaded");
+  assert.equal(fakeDb.projectAssetRows[0]?.uploadStatus, "uploaded");
+  assert.deepEqual(objectExistsRequests, [
+    {
+      bucketName: "sketchcatch-test-bucket",
+      byteSize: 1024,
+      objectKey: "projects/project-id/diagram.png"
+    }
+  ]);
+
+  await app.close();
+});
+
+test("POST /api/projects/:id/assets/:assetId/confirm-upload rejects a missing S3 object", async () => {
+  const fakeDb = new ProjectRouteFakeDb({
+    activeUserId: ACTIVE_USER_ID,
+    requestedProjectAssetId: ACTIVE_ASSET_ID,
+    requestedProjectId: ACTIVE_PROJECT_ID,
+    users: [makeUser({ id: ACTIVE_USER_ID })],
+    projects: [makeProject({ id: ACTIVE_PROJECT_ID, userId: ACTIVE_USER_ID })],
+    projectAssets: [
+      makeProjectAsset({
+        id: ACTIVE_ASSET_ID,
+        projectId: ACTIVE_PROJECT_ID,
+        uploadStatus: "pending"
+      })
+    ]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client,
+    projectAssetStorage: {
+      async createUploadUrl() {
+        throw new Error("createUploadUrl should not run");
+      },
+      async deleteObject() {
+        throw new Error("deleteObject should not run");
+      },
+      async objectExists() {
+        return false;
+      }
+    }
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/projects/${ACTIVE_PROJECT_ID}/assets/${ACTIVE_ASSET_ID}/confirm-upload`,
+    headers: await authHeaders(ACTIVE_USER_ID)
+  });
+
+  assert.equal(response.statusCode, 409);
+  assertErrorResponse(response.json() as ApiErrorResponse, "conflict");
+  assert.equal(fakeDb.projectAssetRows[0]?.uploadStatus, "pending");
+
+  await app.close();
+});
+
+test("POST /api/projects/:id/assets/:assetId/abort-upload deletes only pending asset uploads", async () => {
+  const deletedObjectKeys: string[] = [];
+  const fakeDb = new ProjectRouteFakeDb({
+    activeUserId: ACTIVE_USER_ID,
+    requestedProjectAssetId: ACTIVE_ASSET_ID,
+    requestedProjectId: ACTIVE_PROJECT_ID,
+    users: [makeUser({ id: ACTIVE_USER_ID })],
+    projects: [makeProject({ id: ACTIVE_PROJECT_ID, userId: ACTIVE_USER_ID })],
+    projectAssets: [
+      makeProjectAsset({
+        id: ACTIVE_ASSET_ID,
+        projectId: ACTIVE_PROJECT_ID,
+        uploadStatus: "pending"
+      })
+    ]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client,
+    projectAssetStorage: {
+      async createUploadUrl() {
+        throw new Error("createUploadUrl should not run");
+      },
+      async deleteObject(input) {
+        deletedObjectKeys.push(input.objectKey);
+      },
+      async objectExists() {
+        throw new Error("objectExists should not run");
+      }
+    }
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/projects/${ACTIVE_PROJECT_ID}/assets/${ACTIVE_ASSET_ID}/abort-upload`,
+    headers: await authHeaders(ACTIVE_USER_ID)
+  });
+
+  assert.equal(response.statusCode, 204);
+  assert.deepEqual(deletedObjectKeys, ["projects/project-id/diagram.png"]);
+  assert.equal(fakeDb.projectAssetRows.length, 0);
+
+  await app.close();
+});
+
 function assertErrorResponse(
   body: ApiErrorResponse,
   expectedError: ApiErrorResponse["error"]
@@ -480,6 +695,21 @@ function makeProject(overrides: Partial<ProjectRow> = {}): ProjectRow {
   };
 }
 
+function makeArchitecture(overrides: Partial<ArchitectureRow> = {}): ArchitectureRow {
+  return {
+    id: ACTIVE_ARCHITECTURE_ID,
+    projectId: ACTIVE_PROJECT_ID,
+    version: 1,
+    source: "manual",
+    architectureJson: {
+      nodes: [],
+      edges: []
+    },
+    createdAt: new Date("2026-06-24T00:00:00.000Z"),
+    ...overrides
+  };
+}
+
 function makeProjectAsset(overrides: Partial<ProjectAssetRow> = {}): ProjectAssetRow {
   return {
     architectureId: null,
@@ -491,6 +721,7 @@ function makeProjectAsset(overrides: Partial<ProjectAssetRow> = {}): ProjectAsse
     id: "44444444-4444-4444-8444-444444444444",
     objectKey: "projects/project-id/diagram.png",
     projectId: ACTIVE_PROJECT_ID,
+    uploadStatus: "uploaded",
     ...overrides
   };
 }
@@ -552,6 +783,7 @@ function makeDeployment(overrides: Partial<DeploymentRow> = {}): DeploymentRow {
 
 class ProjectRouteFakeDb {
   activeUserId: string;
+  requestedProjectAssetId: string | undefined;
   requestedProjectId: string | undefined;
   userRows: UserRow[];
   projectRows: ProjectRow[];
@@ -568,6 +800,7 @@ class ProjectRouteFakeDb {
 
   constructor(data: {
     activeUserId: string;
+    requestedProjectAssetId?: string;
     requestedProjectId?: string;
     users?: UserRow[];
     projects?: ProjectRow[];
@@ -578,6 +811,7 @@ class ProjectRouteFakeDb {
     deploymentPlanArtifacts?: DeploymentPlanArtifactRow[];
   }) {
     this.activeUserId = data.activeUserId;
+    this.requestedProjectAssetId = data.requestedProjectAssetId;
     this.requestedProjectId = data.requestedProjectId;
     this.userRows = data.users ?? [];
     this.projectRows = data.projects ?? [];
@@ -602,13 +836,20 @@ class ProjectRouteFakeDb {
         from: (table: unknown) => new SelectQuery(() => this.selectRows(table, selection))
       }),
       insert: (table: unknown) => ({
-        values: (values: Partial<ProjectRow>) => ({
+        values: (values: Partial<ProjectAssetRow> | Partial<ProjectRow>) => ({
           returning: async () => {
             if (table === projects) {
-              const project = makeProject(values);
+              const project = makeProject(values as Partial<ProjectRow>);
               this.projectRows.push(project);
 
               return [project];
+            }
+
+            if (table === projectAssets) {
+              const asset = makeProjectAsset(values as Partial<ProjectAssetRow>);
+              this.projectAssetRows.push(asset);
+
+              return [asset];
             }
 
             return [values];
@@ -616,9 +857,11 @@ class ProjectRouteFakeDb {
         })
       }),
       update: (table: unknown) => ({
-        set: (values: Partial<DeploymentRow>) => ({
+        set: (values: Partial<DeploymentRow> | Partial<ProjectAssetRow>) => ({
           where: async () => {
             if (table === deployments) {
+              const deploymentValues = values as Partial<DeploymentRow>;
+
               this.operationLog.push("update:deployments");
               this.deploymentRows = this.deploymentRows.map((deployment) => {
                 if (this.requestedProjectId && deployment.projectId !== this.requestedProjectId) {
@@ -627,12 +870,14 @@ class ProjectRouteFakeDb {
 
                 const nextDeployment = { ...deployment };
 
-                if ("approvedPlanArtifactId" in values) {
-                  nextDeployment.approvedPlanArtifactId = values.approvedPlanArtifactId ?? null;
+                if ("approvedPlanArtifactId" in deploymentValues) {
+                  nextDeployment.approvedPlanArtifactId =
+                    deploymentValues.approvedPlanArtifactId ?? null;
                 }
 
-                if ("currentPlanArtifactId" in values) {
-                  nextDeployment.currentPlanArtifactId = values.currentPlanArtifactId ?? null;
+                if ("currentPlanArtifactId" in deploymentValues) {
+                  nextDeployment.currentPlanArtifactId =
+                    deploymentValues.currentPlanArtifactId ?? null;
                 }
 
                 return nextDeployment;
@@ -647,6 +892,22 @@ class ProjectRouteFakeDb {
                   currentPlanArtifactId: deployment.currentPlanArtifactId,
                   id: deployment.id
                 }));
+            }
+
+            if (table === projectAssets) {
+              this.projectAssetRows = this.projectAssetRows.map((asset) => {
+                if (
+                  (this.requestedProjectId && asset.projectId !== this.requestedProjectId) ||
+                  (this.requestedProjectAssetId && asset.id !== this.requestedProjectAssetId)
+                ) {
+                  return asset;
+                }
+
+                return {
+                  ...asset,
+                  ...(values as Partial<ProjectAssetRow>)
+                };
+              });
             }
 
             return [];
@@ -671,9 +932,17 @@ class ProjectRouteFakeDb {
           }
 
           if (table === projectAssets) {
-            this.projectAssetRows = this.projectAssetRows.filter(
-              (asset) => asset.projectId !== this.requestedProjectId
-            );
+            this.projectAssetRows = this.projectAssetRows.filter((asset) => {
+              if (this.requestedProjectAssetId) {
+                return !(
+                  asset.projectId === this.requestedProjectId &&
+                  asset.id === this.requestedProjectAssetId &&
+                  asset.uploadStatus === "pending"
+                );
+              }
+
+              return asset.projectId !== this.requestedProjectId;
+            });
           }
 
           if (table === architectures) {
@@ -725,14 +994,15 @@ class ProjectRouteFakeDb {
 
     if (table === projectAssets) {
       return this.projectAssetRows.filter(
-        (asset) => !this.requestedProjectId || asset.projectId === this.requestedProjectId
+        (asset) =>
+          (!this.requestedProjectId || asset.projectId === this.requestedProjectId) &&
+          (!this.requestedProjectAssetId || asset.id === this.requestedProjectAssetId)
       );
     }
 
     if (table === deployments) {
       return this.deploymentRows.filter(
-        (deployment) =>
-          !this.requestedProjectId || deployment.projectId === this.requestedProjectId
+        (deployment) => !this.requestedProjectId || deployment.projectId === this.requestedProjectId
       );
     }
 

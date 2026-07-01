@@ -280,6 +280,8 @@ export type ProjectAssetType =
   | "project_export_zip"
   | "thumbnail";
 
+export type ProjectAssetUploadStatus = "pending" | "uploaded";
+
 export type ProjectAsset = {
   id: string;
   projectId: string;
@@ -289,6 +291,7 @@ export type ProjectAsset = {
   fileName: string;
   contentType: string;
   byteSize: number | null;
+  uploadStatus: ProjectAssetUploadStatus;
   createdAt: IsoDateTimeString;
 };
 
@@ -324,9 +327,14 @@ export type ProjectAssetUploadResponse = {
   };
 };
 
+export type ConfirmProjectAssetUploadResponse = {
+  asset: ProjectAsset;
+};
+
 export type TerraformArtifact = ProjectAsset & {
   assetType: "terraform_file";
   architectureId: string;
+  uploadStatus: "uploaded";
 };
 
 export type DeploymentStatus =
@@ -558,6 +566,7 @@ export type AwsConnectionCloudFormationTemplateResponse = {
   templateUrl: string | null;
   templateUrlExpiresAt: IsoDateTimeString | null;
   launchStackUrl: string | null;
+  manualTemplateFallbackAvailable: boolean;
 };
 
 export type DeploymentLogLevel = "INFO" | "WARN" | "ERROR";

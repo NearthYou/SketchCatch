@@ -80,13 +80,21 @@ test("deployment retention prunes only old records that cannot own live cleanup 
 
   assert.deepEqual(plan.deploymentIdsToDelete, [oldPending.id, oldDestroyed.id]);
   assert.ok(
-    plan.objectKeysToDelete.includes(`deployments/${oldPending.id}/plans/10000000-0000-4000-8000-000000000003.tfplan`)
+    plan.objectKeysToDelete.includes(
+      `deployments/${oldPending.id}/plans/10000000-0000-4000-8000-000000000003.tfplan`
+    )
   );
   assert.ok(
-    plan.objectKeysToDelete.includes(`deployments/${oldDestroyed.id}/plans/10000000-0000-4000-8000-000000000004.tfplan`)
+    plan.objectKeysToDelete.includes(
+      `deployments/${oldDestroyed.id}/plans/10000000-0000-4000-8000-000000000004.tfplan`
+    )
   );
-  assert.ok(plan.objectKeysToDelete.includes(`deployments/${oldPending.id}/state/terraform.tfstate`));
-  assert.ok(plan.objectKeysToDelete.includes(`deployments/${oldDestroyed.id}/terraform/.terraform.lock.hcl`));
+  assert.ok(
+    plan.objectKeysToDelete.includes(`deployments/${oldPending.id}/state/terraform.tfstate`)
+  );
+  assert.ok(
+    plan.objectKeysToDelete.includes(`deployments/${oldDestroyed.id}/terraform/.terraform.lock.hcl`)
+  );
 });
 
 test("deployment retention prunes unreferenced terraform artifacts before unreferenced snapshots", () => {
@@ -146,11 +154,18 @@ test("deployment retention prunes unreferenced terraform artifacts before unrefe
     deletedAssetArchitectureId,
     unusedOldArchitectureId
   ]);
-  assert.ok(plan.objectKeysToDelete.includes("projects/project/assets/terraform_file/50000000-0000-4000-8000-000000000004-main.tf"));
+  assert.ok(
+    plan.objectKeysToDelete.includes(
+      "projects/project/assets/terraform_file/50000000-0000-4000-8000-000000000004-main.tf"
+    )
+  );
 });
 
 test("deployment retention protects records that can still need cleanup", () => {
-  assert.equal(isDeploymentRecordPrunable(createDeploymentRecord("80000000-0000-4000-8000-000000000001")), true);
+  assert.equal(
+    isDeploymentRecordPrunable(createDeploymentRecord("80000000-0000-4000-8000-000000000001")),
+    true
+  );
   assert.equal(
     isDeploymentRecordPrunable(
       createDeploymentRecord("80000000-0000-4000-8000-000000000002", {
@@ -295,6 +310,7 @@ function createProjectAssetRecord(
     fileName: "main.tf",
     contentType: "text/plain",
     byteSize: 128,
+    uploadStatus: "uploaded",
     createdAt,
     ...overrides
   };

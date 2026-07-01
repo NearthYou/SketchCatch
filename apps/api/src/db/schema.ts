@@ -21,6 +21,11 @@ export const assetTypeEnum = pgEnum("asset_type", [
   "thumbnail"
 ]);
 
+export const projectAssetUploadStatusEnum = pgEnum("project_asset_upload_status", [
+  "pending",
+  "uploaded"
+]);
+
 export const deploymentStatusEnum = pgEnum("deployment_status", [
   "PENDING",
   "RUNNING",
@@ -234,6 +239,7 @@ export const projectAssets = pgTable("project_assets", {
   fileName: varchar("file_name", { length: 255 }).notNull(),
   contentType: varchar("content_type", { length: 120 }).notNull(),
   byteSize: integer("byte_size"),
+  uploadStatus: projectAssetUploadStatusEnum("upload_status").notNull().default("uploaded"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
 });
 

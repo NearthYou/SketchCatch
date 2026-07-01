@@ -141,6 +141,13 @@
       "when": 1782720000000,
       "tag": "0019_destroy_workflow",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1782950400000,
+      "tag": "0020_project_asset_upload_status",
+      "breakpoints": true
     }
   ]
 }
