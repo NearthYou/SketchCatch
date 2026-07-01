@@ -13,11 +13,8 @@ import {
   ClipboardCheck,
   FileCode2,
   GitBranch,
-  Play,
-  Rocket,
   Settings,
   Sparkles,
-  Trash2,
   X
 } from "lucide-react";
 import { getApiErrorMessage } from "../../lib/api-client";
@@ -800,10 +797,6 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
       {isResourceCodeMode ? (
         <div className={styles.resourceActionBar}>
           {renderTerraformPreviewExplanationButton()}
-          <button className={styles.resourceActionPrimary} disabled type="button" title="리소스 단위 plan API 연결 예정">
-            <Play size={16} aria-hidden="true" />
-            Plan
-          </button>
           <button
             className={styles.resourceActionSecondary}
             disabled={requestState === "loading" || !displayedTerraformCode.trim()}
@@ -812,14 +805,6 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
           >
             <ClipboardCheck size={16} aria-hidden="true" />
             Validate
-          </button>
-          <button className={styles.resourceActionSecondary} disabled type="button" title="리소스 단위 apply API 연결 예정">
-            <Rocket size={16} aria-hidden="true" />
-            Apply
-          </button>
-          <button className={styles.resourceActionDanger} disabled type="button" title="리소스 단위 destroy API 연결 예정">
-            <Trash2 size={16} aria-hidden="true" />
-            Destroy
           </button>
         </div>
       ) : null}

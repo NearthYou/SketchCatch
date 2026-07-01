@@ -14,6 +14,11 @@ const designNodeResizeBounds: NodeResizeBounds = {
   minWidth: 140
 };
 
+const designAreaMinResizeBounds = {
+  minHeight: 72,
+  minWidth: 96
+} as const;
+
 const resourceNodeResizeBounds: NodeResizeBounds = {
   maxHeight: 260,
   maxWidth: 260,
@@ -38,8 +43,8 @@ const designAreaResizeBoundsByType: Record<string, NodeResizeBounds> = Object.fr
     type,
     {
       ...areaNodeMaxResizeBounds,
-      minHeight: designNodeResizeBounds.minHeight,
-      minWidth: designNodeResizeBounds.minWidth
+      minHeight: designAreaMinResizeBounds.minHeight,
+      minWidth: designAreaMinResizeBounds.minWidth
     }
   ])
 );
@@ -47,18 +52,18 @@ const designAreaResizeBoundsByType: Record<string, NodeResizeBounds> = Object.fr
 const resourceAreaResizeBoundsByType: Record<string, NodeResizeBounds> = {
   aws_vpc: {
     ...areaNodeMaxResizeBounds,
-    minHeight: 240,
-    minWidth: 360
+    minHeight: 160,
+    minWidth: 240
   },
   aws_subnet: {
     ...areaNodeMaxResizeBounds,
-    minHeight: 168,
-    minWidth: 240
+    minHeight: 112,
+    minWidth: 144
   },
   aws_security_group: {
     ...areaNodeMaxResizeBounds,
-    minHeight: 168,
-    minWidth: 240
+    minHeight: 112,
+    minWidth: 144
   }
 };
 

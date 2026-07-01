@@ -7,6 +7,7 @@ import {
   PanOnScrollMode,
   ReactFlow,
   ReactFlowProvider,
+  SelectionMode,
   getViewportForBounds,
   useReactFlow
 } from "@xyflow/react";
@@ -91,6 +92,7 @@ import {
 } from "./reference-drop-targets";
 import type { NodeResizeUpdate } from "./node-resize";
 import {
+  canStartAreaBlankDrag,
   getSingleSelectedEdgeForToolbar,
   normalizeSelectedNodeIds
 } from "./selection-utils";
@@ -936,6 +938,10 @@ function DiagramEditorInner({
         return;
       }
 
+      if (!canStartAreaBlankDrag(areaNode.id, selectedNodeIds)) {
+        return;
+      }
+
       event.preventDefault();
       event.stopPropagation();
       selectAreaBlankNode(areaNode.id);
@@ -967,6 +973,7 @@ function DiagramEditorInner({
       getAreaNodeFromPointerEvent,
       interactionMode,
       selectAreaBlankNode,
+      selectedNodeIds,
       updateActiveReferenceDropTargetNodeId
     ]
   );
@@ -1733,6 +1740,7 @@ function DiagramEditorInner({
             panOnScrollMode={PanOnScrollMode.Free}
             proOptions={{ hideAttribution: true }}
             selectionKeyCode={["Shift", "Meta", "Control"]}
+            selectionMode={SelectionMode.Partial}
             selectionOnDrag={interactionMode === "select"}
             snapGrid={DIAGRAM_SNAP_GRID}
             snapToGrid

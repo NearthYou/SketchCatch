@@ -56,13 +56,23 @@ export function applyAreaNodeParentAssignments(
   }
 
   const currentNodeById = new Map(currentNodes.map((node) => [node.id, node]));
+  const directlyMovedAreaNodeIds = new Set(
+    currentNodes
+      .filter((node) => directlyMovedNodeIds.has(node.id) && isAreaNode(node))
+      .map((node) => node.id)
+  );
 
   return currentNodes.map((node) => {
     if (!directlyMovedNodeIds.has(node.id)) {
       return node;
     }
 
-    const parentArea = findInnermostContainingAreaNode(node, currentNodes, currentNodeById);
+    const parentArea = findInnermostContainingAreaNode(
+      node,
+      currentNodes,
+      currentNodeById,
+      getIgnoredMovedAreaParentIds(node, currentNodeById, directlyMovedAreaNodeIds)
+    );
 
     return setParentAreaNodeId(node, parentArea?.id);
   });
@@ -106,7 +116,7 @@ export function clearOutOfBoundsAreaParentAssignments(
 
     const parentAreaNode = currentNodeById.get(parentAreaNodeId);
 
-    if (parentAreaNode && isAreaNode(parentAreaNode) && containsPoint(parentAreaNode, getNodeCenter(node))) {
+    if (parentAreaNode && isAreaNode(parentAreaNode) && containsNodeForParentAssignment(parentAreaNode, node)) {
       return node;
     }
 
@@ -201,17 +211,18 @@ function findClosestMovingParentArea(
 function findInnermostContainingAreaNode(
   node: DiagramNode,
   nodes: readonly DiagramNode[],
-  nodeById: ReadonlyMap<string, DiagramNode>
+  nodeById: ReadonlyMap<string, DiagramNode>,
+  ignoredAreaNodeIds: ReadonlySet<string> = new Set()
 ): DiagramNode | undefined {
-  const nodeCenter = getNodeCenter(node);
   let innermostArea: DiagramNode | undefined;
 
   for (const areaNode of nodes) {
     if (
       areaNode.id === node.id ||
+      ignoredAreaNodeIds.has(areaNode.id) ||
       !isAreaNode(areaNode) ||
       isNodeDescendantOf(areaNode, node.id, nodeById) ||
-      !containsPoint(areaNode, nodeCenter)
+      !containsNodeForParentAssignment(areaNode, node)
     ) {
       continue;
     }
@@ -222,6 +233,39 @@ function findInnermostContainingAreaNode(
   }
 
   return innermostArea;
+}
+
+function getIgnoredMovedAreaParentIds(
+  node: DiagramNode,
+  nodeById: ReadonlyMap<string, DiagramNode>,
+  directlyMovedAreaNodeIds: ReadonlySet<string>
+): ReadonlySet<string> {
+  if (!isAreaNode(node) || directlyMovedAreaNodeIds.size === 0) {
+    return new Set();
+  }
+
+  const existingAncestorIds = getAncestorAreaNodeIds(node, nodeById);
+
+  return new Set([...directlyMovedAreaNodeIds].filter((nodeId) => !existingAncestorIds.has(nodeId)));
+}
+
+function getAncestorAreaNodeIds(
+  node: DiagramNode,
+  nodeById: ReadonlyMap<string, DiagramNode>
+): Set<string> {
+  const ancestorIds = new Set<string>();
+  let parentAreaNodeId = node.metadata?.parentAreaNodeId;
+
+  while (parentAreaNodeId) {
+    if (ancestorIds.has(parentAreaNodeId)) {
+      break;
+    }
+
+    ancestorIds.add(parentAreaNodeId);
+    parentAreaNodeId = nodeById.get(parentAreaNodeId)?.metadata?.parentAreaNodeId;
+  }
+
+  return ancestorIds;
 }
 
 function isNodeDescendantOf(
@@ -264,6 +308,23 @@ function containsPoint(node: DiagramNode, point: DiagramNode["position"]) {
     point.x <= node.position.x + node.size.width &&
     point.y >= node.position.y &&
     point.y <= node.position.y + node.size.height
+  );
+}
+
+function containsNodeForParentAssignment(parentAreaNode: DiagramNode, childNode: DiagramNode): boolean {
+  if (isAreaNode(childNode)) {
+    return containsNodeBox(parentAreaNode, childNode);
+  }
+
+  return containsPoint(parentAreaNode, getNodeCenter(childNode));
+}
+
+function containsNodeBox(parentAreaNode: DiagramNode, childNode: DiagramNode): boolean {
+  return (
+    childNode.position.x >= parentAreaNode.position.x &&
+    childNode.position.x + childNode.size.width <= parentAreaNode.position.x + parentAreaNode.size.width &&
+    childNode.position.y >= parentAreaNode.position.y &&
+    childNode.position.y + childNode.size.height <= parentAreaNode.position.y + parentAreaNode.size.height
   );
 }
 
