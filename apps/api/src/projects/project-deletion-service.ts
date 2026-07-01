@@ -405,6 +405,13 @@ async function deleteProjectDatabaseRows(input: {
   await input.db.transaction(async (tx) => {
     if (input.deploymentIds.length > 0) {
       await tx
+        .update(deployments)
+        .set({
+          approvedPlanArtifactId: null,
+          currentPlanArtifactId: null
+        })
+        .where(inArray(deployments.id, input.deploymentIds));
+      await tx
         .delete(deploymentLogs)
         .where(inArray(deploymentLogs.deploymentId, input.deploymentIds));
       await tx
@@ -513,9 +520,5 @@ function compareDeploymentDesc(
 }
 
 function getDeploymentSortTime(deployment: ProjectDeleteDeploymentSummary): number {
-  return (
-    deployment.completedAt?.getTime() ??
-    deployment.updatedAt.getTime() ??
-    deployment.createdAt.getTime()
-  );
+  return deployment.completedAt?.getTime() ?? deployment.updatedAt.getTime();
 }

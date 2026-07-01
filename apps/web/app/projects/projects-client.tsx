@@ -68,11 +68,20 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
   const [projectActionMenu, setProjectActionMenu] = useState<ProjectActionMenuState>({
     status: "closed"
   });
+  const isMountedRef = useRef(true);
   const isSearchActive = searchQuery.trim().length > 0;
   const displayProjects = useMemo(
     () => (isSearchActive ? filterProjectsByName(projects, searchQuery) : projects),
     [isSearchActive, projects, searchQuery]
   );
+
+  useEffect(() => {
+    isMountedRef.current = true;
+
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -215,7 +224,9 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
         status: "ready"
       });
     } finally {
-      setDeletingProjectId(null);
+      if (isMountedRef.current) {
+        setDeletingProjectId(null);
+      }
     }
   }
 
@@ -249,12 +260,17 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
     try {
       await runDeploymentDestroyPlan(preview.activeDeploymentId);
       const deployment = await waitForProjectDeployment({
+        checkMounted: () => isMountedRef.current,
         deploymentId: preview.activeDeploymentId,
         failureMessage: "Destroy Plan이 승인 가능한 상태로 완료되지 않았습니다.",
         isReady: isDestroyPlanReadyForApproval,
         projectId: project.id,
         timeoutMessage: "Destroy Plan 생성 시간이 초과되었습니다."
       });
+
+      if (!isMountedRef.current) {
+        return;
+      }
 
       setDeleteDialog({
         deployment,
@@ -264,6 +280,10 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
         status: "approval"
       });
     } catch (error) {
+      if (!isMountedRef.current) {
+        return;
+      }
+
       setDeleteDialog({
         errorMessage: getApiErrorMessage(error, "Destroy Plan을 생성하지 못했습니다."),
         preview,
@@ -294,6 +314,7 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
       await approveDeploymentPlan(deployment.id);
       await runDeploymentDestroy(deployment.id);
       await waitForProjectDeployment({
+        checkMounted: () => isMountedRef.current,
         deploymentId: deployment.id,
         failureMessage: "Destroy가 완료되지 않았습니다.",
         isReady: (currentDeployment) => currentDeployment.status === "DESTROYED",
@@ -301,7 +322,15 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
         timeoutMessage: "Destroy 완료 대기 시간이 초과되었습니다."
       });
 
+      if (!isMountedRef.current) {
+        return;
+      }
+
       const result = await deleteProject(project.id, "delete_project");
+
+      if (!isMountedRef.current) {
+        return;
+      }
 
       setProjects((currentProjects) =>
         currentProjects.filter((currentProject) => currentProject.id !== project.id)
@@ -312,6 +341,10 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
         setDeleteErrorMessage(result.cleanup.message ?? "일부 SketchCatch 산출물 정리에 실패했습니다.");
       }
     } catch (error) {
+      if (!isMountedRef.current) {
+        return;
+      }
+
       setDeleteDialog({
         deployment,
         errorMessage: getApiErrorMessage(error, "리소스 포함 삭제를 완료하지 못했습니다."),
@@ -321,7 +354,9 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
         status: "approval"
       });
     } finally {
-      setDeletingProjectId(null);
+      if (isMountedRef.current) {
+        setDeletingProjectId(null);
+      }
     }
   }
 
@@ -335,6 +370,7 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
     }
 
     setDeleteDialog({ status: "closed" });
+    setDeletingProjectId(null);
   }
 
   function renderDeleteDialog() {
@@ -752,6 +788,7 @@ function ProjectActionMenuDeleteItem({
 }
 
 async function waitForProjectDeployment(input: {
+  readonly checkMounted?: (() => boolean) | undefined;
   readonly deploymentId: string;
   readonly failureMessage: string;
   readonly isReady: (deployment: Deployment) => boolean;
@@ -761,7 +798,16 @@ async function waitForProjectDeployment(input: {
   const startedAt = Date.now();
 
   while (Date.now() - startedAt <= DELETE_DEPLOYMENT_POLL_TIMEOUT_MS) {
+    if (input.checkMounted?.() === false) {
+      throw new Error("Deployment polling was cancelled.");
+    }
+
     const deployments = await listDeployments(input.projectId);
+
+    if (input.checkMounted?.() === false) {
+      throw new Error("Deployment polling was cancelled.");
+    }
+
     const deployment = deployments.find(
       (candidateDeployment) => candidateDeployment.id === input.deploymentId
     );

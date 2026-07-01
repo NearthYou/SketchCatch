@@ -160,6 +160,63 @@ test("DELETE /api/projects/:id deletes a project owned by the active user", asyn
   await app.close();
 });
 
+test("DELETE /api/projects/:id clears deployment plan pointers before deleting plan artifacts", async () => {
+  const currentPlanArtifactId = "88888888-8888-4888-8888-888888888888";
+  const approvedPlanArtifactId = "99999999-9999-4999-8999-999999999999";
+  const deploymentId = "66666666-6666-4666-8666-666666666666";
+  const fakeDb = new ProjectRouteFakeDb({
+    activeUserId: ACTIVE_USER_ID,
+    requestedProjectId: ACTIVE_PROJECT_ID,
+    users: [makeUser({ id: ACTIVE_USER_ID })],
+    projects: [makeProject({ id: ACTIVE_PROJECT_ID, userId: ACTIVE_USER_ID })],
+    deployments: [
+      makeDeployment({
+        approvedPlanArtifactId,
+        currentPlanArtifactId,
+        id: deploymentId,
+        projectId: ACTIVE_PROJECT_ID
+      })
+    ],
+    deploymentPlanArtifacts: [
+      makeDeploymentPlanArtifact({
+        deploymentId,
+        id: currentPlanArtifactId
+      }),
+      makeDeploymentPlanArtifact({
+        deploymentId,
+        id: approvedPlanArtifactId,
+        objectKey: "deployments/deployment-id/plans/approved.tfplan"
+      })
+    ]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  const response = await app.inject({
+    method: "DELETE",
+    url: `/api/projects/${ACTIVE_PROJECT_ID}`,
+    headers: await authHeaders(ACTIVE_USER_ID),
+    payload: {
+      action: "delete_project"
+    }
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(fakeDb.operationLog.slice(0, 2), [
+    "update:deployments",
+    "delete:deploymentPlanArtifacts"
+  ]);
+  assert.equal(fakeDb.clearedDeploymentPlanPointers.length, 1);
+  assert.deepEqual(fakeDb.clearedDeploymentPlanPointers[0], {
+    approvedPlanArtifactId: null,
+    currentPlanArtifactId: null,
+    id: deploymentId
+  });
+
+  await app.close();
+});
+
 test("DELETE /api/projects/:id reports S3 cleanup failures but still deletes records", async () => {
   const deletedObjectKeys: string[] = [];
   const fakeDb = new ProjectRouteFakeDb({
@@ -438,6 +495,24 @@ function makeProjectAsset(overrides: Partial<ProjectAssetRow> = {}): ProjectAsse
   };
 }
 
+function makeDeploymentPlanArtifact(
+  overrides: Partial<DeploymentPlanArtifactRow> = {}
+): DeploymentPlanArtifactRow {
+  return {
+    accountId: "123456789012",
+    createdAt: new Date("2026-06-24T00:00:00.000Z"),
+    deploymentId: "66666666-6666-4666-8666-666666666666",
+    id: "88888888-8888-4888-8888-888888888888",
+    objectKey: "deployments/deployment-id/plans/current.tfplan",
+    operation: "apply",
+    region: "ap-northeast-2",
+    sha256: "a".repeat(64),
+    terraformArtifactId: "77777777-7777-4777-8777-777777777777",
+    terraformArtifactSha256: "b".repeat(64),
+    ...overrides
+  };
+}
+
 function makeDeployment(overrides: Partial<DeploymentRow> = {}): DeploymentRow {
   return {
     activeStage: null,
@@ -485,6 +560,10 @@ class ProjectRouteFakeDb {
   deploymentRows: DeploymentRow[];
   deployedResourceRows: DeployedResourceRow[];
   deploymentPlanArtifactRows: DeploymentPlanArtifactRow[];
+  clearedDeploymentPlanPointers: Array<
+    Pick<DeploymentRow, "approvedPlanArtifactId" | "currentPlanArtifactId" | "id">
+  >;
+  operationLog: string[];
   client: DatabaseClient;
 
   constructor(data: {
@@ -507,6 +586,8 @@ class ProjectRouteFakeDb {
     this.deploymentRows = data.deployments ?? [];
     this.deployedResourceRows = data.deployedResources ?? [];
     this.deploymentPlanArtifactRows = data.deploymentPlanArtifacts ?? [];
+    this.clearedDeploymentPlanPointers = [];
+    this.operationLog = [];
     this.client = {
       db: this.createDb() as Database,
       pool: {
@@ -534,14 +615,48 @@ class ProjectRouteFakeDb {
           }
         })
       }),
-      update: () => ({
-        set: () => ({
-          where: async () => []
+      update: (table: unknown) => ({
+        set: (values: Partial<DeploymentRow>) => ({
+          where: async () => {
+            if (table === deployments) {
+              this.operationLog.push("update:deployments");
+              this.deploymentRows = this.deploymentRows.map((deployment) => {
+                if (this.requestedProjectId && deployment.projectId !== this.requestedProjectId) {
+                  return deployment;
+                }
+
+                const nextDeployment = { ...deployment };
+
+                if ("approvedPlanArtifactId" in values) {
+                  nextDeployment.approvedPlanArtifactId = values.approvedPlanArtifactId ?? null;
+                }
+
+                if ("currentPlanArtifactId" in values) {
+                  nextDeployment.currentPlanArtifactId = values.currentPlanArtifactId ?? null;
+                }
+
+                return nextDeployment;
+              });
+              this.clearedDeploymentPlanPointers = this.deploymentRows
+                .filter(
+                  (deployment) =>
+                    !this.requestedProjectId || deployment.projectId === this.requestedProjectId
+                )
+                .map((deployment) => ({
+                  approvedPlanArtifactId: deployment.approvedPlanArtifactId,
+                  currentPlanArtifactId: deployment.currentPlanArtifactId,
+                  id: deployment.id
+                }));
+            }
+
+            return [];
+          }
         })
       }),
       delete: (table: unknown) => ({
         where: async () => {
           if (table === deploymentPlanArtifacts) {
+            this.operationLog.push("delete:deploymentPlanArtifacts");
             this.deploymentPlanArtifactRows = [];
           }
 

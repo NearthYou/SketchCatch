@@ -4044,7 +4044,7 @@ nextjs-portal {
 }
 
 .projectCardWithActions {
-  position: relative;
+  display: grid;
 }
 
 .projectCard:not(.projectCardWide) {
@@ -4096,13 +4096,17 @@ nextjs-portal {
   grid-template-columns: 260px minmax(0, 1fr);
 }
 
+.projectCardWithActions .projectCardContentLink {
+  grid-area: 1 / 1;
+}
+
 .projectCardActions {
   align-items: flex-start;
+  align-self: end;
   display: flex;
+  grid-area: 1 / 1;
   justify-content: flex-end;
-  position: absolute;
-  right: 0;
-  top: 188px;
+  justify-self: end;
   z-index: 20;
 }
 
@@ -4111,7 +4115,7 @@ nextjs-portal {
 }
 
 .projectCardWide .projectCardActions {
-  top: 0;
+  align-self: start;
 }
 
 .projectCardActionMenuWrap {
