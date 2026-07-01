@@ -89,6 +89,7 @@ type AwsConnectionCloudFormationTemplateResponse = {
   templateUrl: string | null;
   templateUrlExpiresAt: string | null;
   launchStackUrl: string | null;
+  manualTemplateFallbackAvailable: boolean;
 };
 
 class FakeAwsConnectionRepository implements AwsConnectionRepository {
@@ -681,6 +682,7 @@ test("GET /api/aws/connections/:connectionId/cloudformation-template returns lau
     /^https:\/\/api\.sketchcatch\.test\/api\/aws\/connections\/cloudformation-template\?token=/
   );
   assert.equal(body.templateUrlExpiresAt, "2026-06-26T01:00:00.000Z");
+  assert.equal(body.manualTemplateFallbackAvailable, false);
   assert.match(
     body.launchStackUrl ?? "",
     /^https:\/\/console\.aws\.amazon\.com\/cloudformation\/home\?region=ap-northeast-2#/
@@ -715,6 +717,7 @@ test("GET /api/aws/connections/:connectionId/cloudformation-template returns an 
     assert.equal(body.templateUrl, null);
     assert.equal(body.templateUrlExpiresAt, null);
     assert.equal(body.launchStackUrl, null);
+    assert.equal(body.manualTemplateFallbackAvailable, true);
     assert.match(body.templateBody, /Type: AWS::IAM::Role/);
 
     await app.close();
