@@ -3,10 +3,33 @@ import type {
   DiagramNodeParameters,
   InfrastructureGraph,
   InfrastructureGraphNode,
-  ResourceType
+  ResourceType,
+  TerraformBlockType
 } from "@sketchcatch/types";
 
-const DEFAULT_TERRAFORM_BLOCK_TYPE = "resource";
+const DEFAULT_TERRAFORM_BLOCK_TYPE: TerraformBlockType = "resource";
+const RESOURCE_TYPE_BY_TERRAFORM_RESOURCE_TYPE: Readonly<Record<string, ResourceType>> = {
+  aws_ami: "AMI",
+  aws_instance: "EC2",
+  aws_internet_gateway: "INTERNET_GATEWAY",
+  aws_route_table: "ROUTE_TABLE",
+  aws_route_table_association: "ROUTE_TABLE_ASSOCIATION",
+  aws_s3_bucket: "S3",
+  aws_security_group: "SECURITY_GROUP",
+  aws_subnet: "SUBNET",
+  aws_vpc: "VPC"
+};
+const ALLOWED_TERRAFORM_PREVIEW_BLOCKS = new Set<string>([
+  createTerraformBlockKey("resource", "aws_vpc"),
+  createTerraformBlockKey("resource", "aws_subnet"),
+  createTerraformBlockKey("resource", "aws_internet_gateway"),
+  createTerraformBlockKey("resource", "aws_route_table"),
+  createTerraformBlockKey("resource", "aws_route_table_association"),
+  createTerraformBlockKey("resource", "aws_security_group"),
+  createTerraformBlockKey("resource", "aws_instance"),
+  createTerraformBlockKey("resource", "aws_s3_bucket"),
+  createTerraformBlockKey("data", "aws_ami")
+]);
 
 export function buildInfrastructureGraphFromDiagramJson(
   diagramJson: DiagramJson
@@ -17,6 +40,13 @@ export function buildInfrastructureGraphFromDiagramJson(
         return [];
       }
 
+      const terraformBlockType =
+        node.parameters.terraformBlockType ?? DEFAULT_TERRAFORM_BLOCK_TYPE;
+
+      if (!isAllowedTerraformPreviewBlock(terraformBlockType, node.parameters.resourceType)) {
+        return [];
+      }
+
       return [
         {
           id: node.id,
@@ -24,8 +54,7 @@ export function buildInfrastructureGraphFromDiagramJson(
           label: node.label,
           iac: {
             provider: "aws",
-            terraformBlockType:
-              node.parameters.terraformBlockType ?? DEFAULT_TERRAFORM_BLOCK_TYPE,
+            terraformBlockType,
             resourceType: node.parameters.resourceType,
             resourceName: node.parameters.resourceName,
             fileName: node.parameters.fileName
@@ -45,9 +74,21 @@ function isRenderableParameters(
 }
 
 function toResourceType(resourceType: string): ResourceType {
-  if (resourceType === "aws_vpc") {
-    return "VPC";
-  }
+  return RESOURCE_TYPE_BY_TERRAFORM_RESOURCE_TYPE[resourceType] ?? "UNKNOWN";
+}
 
-  return "UNKNOWN";
+function isAllowedTerraformPreviewBlock(
+  terraformBlockType: TerraformBlockType,
+  resourceType: string
+): boolean {
+  return ALLOWED_TERRAFORM_PREVIEW_BLOCKS.has(
+    createTerraformBlockKey(terraformBlockType, resourceType)
+  );
+}
+
+function createTerraformBlockKey(
+  terraformBlockType: TerraformBlockType,
+  resourceType: string
+): string {
+  return `${terraformBlockType}:${resourceType}`;
 }

@@ -78,6 +78,100 @@ test("projects renderable DiagramJson resource nodes into InfrastructureGraph no
   });
 });
 
+test("maps supported Terraform preview blocks and excludes allowlist misses", () => {
+  const diagramJson: DiagramJson = {
+    nodes: [
+      makeResourceNode("vpc-1", "resource", "aws_vpc", "main"),
+      makeResourceNode("subnet-1", "resource", "aws_subnet", "public"),
+      makeResourceNode("igw-1", "resource", "aws_internet_gateway", "main"),
+      makeResourceNode("route-table-1", "resource", "aws_route_table", "public"),
+      makeResourceNode(
+        "route-table-association-1",
+        "resource",
+        "aws_route_table_association",
+        "public"
+      ),
+      makeResourceNode("security-group-1", "resource", "aws_security_group", "web"),
+      makeResourceNode("instance-1", "resource", "aws_instance", "web"),
+      makeResourceNode("bucket-1", "resource", "aws_s3_bucket", "assets"),
+      makeResourceNode("ami-1", "data", "aws_ami", "ubuntu"),
+      makeResourceNode("sg-rule-1", "resource", "aws_security_group_rule", "ssh"),
+      makeResourceNode("vpc-data-1", "data", "aws_vpc", "selected")
+    ],
+    edges: [],
+    viewport: {
+      x: 0,
+      y: 0,
+      zoom: 1
+    }
+  };
+
+  assert.deepEqual(
+    buildInfrastructureGraphFromDiagramJson(diagramJson).nodes.map((node) => ({
+      id: node.id,
+      type: node.type,
+      terraformBlockType: node.iac.terraformBlockType,
+      resourceType: node.iac.resourceType
+    })),
+    [
+      {
+        id: "vpc-1",
+        type: "VPC",
+        terraformBlockType: "resource",
+        resourceType: "aws_vpc"
+      },
+      {
+        id: "subnet-1",
+        type: "SUBNET",
+        terraformBlockType: "resource",
+        resourceType: "aws_subnet"
+      },
+      {
+        id: "igw-1",
+        type: "INTERNET_GATEWAY",
+        terraformBlockType: "resource",
+        resourceType: "aws_internet_gateway"
+      },
+      {
+        id: "route-table-1",
+        type: "ROUTE_TABLE",
+        terraformBlockType: "resource",
+        resourceType: "aws_route_table"
+      },
+      {
+        id: "route-table-association-1",
+        type: "ROUTE_TABLE_ASSOCIATION",
+        terraformBlockType: "resource",
+        resourceType: "aws_route_table_association"
+      },
+      {
+        id: "security-group-1",
+        type: "SECURITY_GROUP",
+        terraformBlockType: "resource",
+        resourceType: "aws_security_group"
+      },
+      {
+        id: "instance-1",
+        type: "EC2",
+        terraformBlockType: "resource",
+        resourceType: "aws_instance"
+      },
+      {
+        id: "bucket-1",
+        type: "S3",
+        terraformBlockType: "resource",
+        resourceType: "aws_s3_bucket"
+      },
+      {
+        id: "ami-1",
+        type: "AMI",
+        terraformBlockType: "data",
+        resourceType: "aws_ami"
+      }
+    ]
+  );
+});
+
 function makeNode(
   node: Omit<DiagramNode, "position" | "size" | "locked" | "zIndex"> &
     Partial<Pick<DiagramNode, "position" | "size" | "locked" | "zIndex">>
@@ -95,4 +189,27 @@ function makeNode(
     zIndex: 0,
     ...node
   };
+}
+
+function makeResourceNode(
+  id: string,
+  terraformBlockType: "resource" | "data",
+  resourceType: string,
+  resourceName: string
+): DiagramNode {
+  return makeNode({
+    id,
+    type: resourceType,
+    kind: "resource",
+    label: resourceName,
+    parameters: {
+      terraformBlockType,
+      resourceType,
+      resourceName,
+      fileName: "main",
+      values: {
+        name: resourceName
+      }
+    }
+  });
 }
