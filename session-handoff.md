@@ -7,11 +7,16 @@
 - `scripts/init-harness.ps1` 기본 실행이 통과했다.
 - `pnpm harness:check`가 통과했다.
 - `feature_list.json`은 PowerShell `ConvertFrom-Json`과 Node JSON parse를 통과했다.
+- docs H1 scan에서 H1 없는 markdown 파일이 더 이상 나오지 않았다.
 - `pnpm lint`, `pnpm typecheck`, `pnpm build`가 모두 통과했다.
 - `HARNESS-001`부터 `HARNESS-006`까지 `passing` evidence가 기록되었다.
 
 ## 이번 세션의 변경 사항
 
+- `docs/adr`, `docs/ck`, `docs/sw`, `docs/ys`에 README 인덱스를 추가했다.
+- `docs/README.md`의 담당자별 참고 문서 표를 폴더별 인덱스로 연결했다.
+- `docs/AGENTS.md`에 담당자별 참고 문서 추가/변경 시 인덱스 갱신 규칙을 추가했다.
+- H1이 없던 `docs/gg/004_역할분배.md`, `docs/ys/006-로그인&익명로그인_삭제관련.md`에 제목을 추가했다.
 - root `AGENTS.md`에 Harness Operating Loop를 추가했다.
 - 루트에 `agent-progress.md`, `feature_list.json`, `session-handoff.md`, `clean-state-checklist.md`, `evaluator-rubric.md`, `quality-document.md`를 추가했다.
 - `scripts/check-harness.mjs`와 `scripts/init-harness.ps1`를 추가해 시작 기준선과 하네스 규칙을 검사한다.
@@ -22,6 +27,7 @@
 - `HARNESS-007`: Representative Use Journey의 browser/API smoke는 아직 없다.
 - Turbo는 체크를 통과하지만 sandbox git user 때문에 dubious ownership warning을 출력한다.
 - 기존 unrelated 변경 `apps/web/next-env.d.ts`는 이 세션에서 건드리지 않았다.
+- 이번 docs 정리는 삭제/이동 없이 인덱스 추가와 제목 보강으로 제한했다.
 
 ## 다음으로 최선의 행동
 

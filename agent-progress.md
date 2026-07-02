@@ -15,6 +15,29 @@
 
 ## 세션 레코드
 
+### 2026-07-02 - Docs folder cleanup
+
+- Goal: `docs` 폴더에서 canonical 문서와 담당자별 참고 문서를 더 쉽게 찾을 수 있게 정리한다.
+- Completed:
+  - `docs/adr/README.md`, `docs/ck/README.md`, `docs/sw/README.md`, `docs/ys/README.md` 인덱스를 추가했다.
+  - `docs/README.md`의 담당자별 참고 문서 표를 각 폴더 인덱스로 연결했다.
+  - `docs/AGENTS.md`에 담당자별 참고 문서를 추가/변경할 때 해당 인덱스를 갱신하라는 규칙을 추가했다.
+  - H1 제목이 없던 `docs/gg/004_역할분배.md`, `docs/ys/006-로그인&익명로그인_삭제관련.md`에 제목을 추가했다.
+- Verification run:
+  - `pnpm --dir C:\Users\siwon\Desktop\Jungle\Week17~21\SketchCatch harness:check` - passed
+  - docs H1 scan - passed
+  - docs link target scan - passed
+- Evidence recorded:
+  - docs H1 scan found no markdown files without an H1 after cleanup.
+  - docs link target scan found no missing relative targets in changed index files.
+- Commits:
+  - `Docs: 문서 인덱스 정리` current commit
+- Known risks:
+  - 삭제나 이동은 하지 않았다. 기존 링크 파손 위험을 줄이기 위해 인덱스 추가 중심으로 정리했다.
+  - Existing unrelated worktree change remains: `apps/web/next-env.d.ts`.
+- Next best action:
+  - If the team wants stronger cleanup later, merge or archive stale owner-specific docs after confirming with each owner.
+
 ### 2026-07-02 - Harness gap hardening
 
 - Goal: `learn-harness-engineering`의 하네스 원칙을 SketchCatch repo 운영 표면에 맞게 반영한다.
@@ -33,8 +56,7 @@
 - Evidence recorded:
   - `HARNESS-001` through `HARNESS-006` are marked `passing` in `feature_list.json` with command evidence.
 - Commits:
-  - `eaf6fb83 Docs: 에이전트 하네스 보강`
-  - Pending amend: strengthen `AGENTS.md` so `pnpm harness:check` is an explicit start/end gate.
+  - `b096e541 Docs: 에이전트 하네스 보강`
 - Known risks:
   - `feature_list.json`은 제품 로드맵이 아니라 에이전트 하네스 작업 추적용이다.
   - Turbo checks pass, but Turbo prints a git dubious ownership warning because the sandbox user differs from the repository owner.
