@@ -353,6 +353,56 @@ test("runDeploymentDestroyPlan restores state and stores a destroy plan artifact
   assert.equal(repository.logs.some((log) => log.message.includes("resource_changes")), false);
 });
 
+test("runDeploymentDestroyPlan marks unsupported resources as approval-blocking safety warnings", async () => {
+  const repository = new FakeDeploymentRepository();
+  const planArtifactStorage = new FakePlanArtifactStorage();
+  const applyArtifactStorage = new FakeApplyArtifactStorage();
+  const runnerStages: string[] = [];
+
+  const result = await runDeploymentDestroyPlan(
+    {
+      deploymentId,
+      accessContext: createAccessContext()
+    },
+    repository,
+    {
+      ...createDestroyPlanOptions(runnerStages),
+      planArtifactStorage,
+      applyArtifactStorage,
+      writeTerraformStateFile: async () => undefined,
+      generatePlanArtifactId: () => planArtifactId,
+      runTerraformShowJson: async () => {
+        runnerStages.push("show-json");
+        return createRunnerResult("show", {
+          stdout: JSON.stringify({
+            resource_changes: [
+              {
+                address: "aws_nat_gateway.outbound",
+                mode: "managed",
+                type: "aws_nat_gateway",
+                change: {
+                  actions: ["delete"]
+                }
+              }
+            ]
+          })
+        });
+      }
+    }
+  );
+
+  const warning = result.deployment.planSummary?.warnings.find(
+    (candidate) => candidate.code === "unsupported_live_destroy_resource"
+  );
+
+  assert.deepEqual(runnerStages, ["init", "destroy-plan", "show-json"]);
+  assert.equal(result.deployment.blockedBy, "risk_analysis");
+  assert.equal(warning?.level, "high");
+  assert.equal(warning?.source, "mvp_scope");
+  assert.equal(warning?.blocksApproval, true);
+  assert.equal(warning?.approvalRequired, false);
+});
+
 test("runDeploymentDestroyPlan only allows success or cleanup-capable failed deployments", async () => {
   const rejectedStatuses: Array<{
     status: DeploymentStatus;
