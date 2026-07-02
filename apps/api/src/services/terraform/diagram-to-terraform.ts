@@ -1,8 +1,10 @@
 import type {
   DiagramJson,
-  DiagramNodeParameters,
+  InfrastructureGraph,
+  InfrastructureGraphNode,
   TerraformBlockType
 } from "@sketchcatch/types";
+import { buildInfrastructureGraphFromDiagramJson } from "./infrastructure-graph.js";
 
 const DEFAULT_TERRAFORM_BLOCK_TYPE: TerraformBlockType = "resource";
 const INDENT_UNIT = "  ";
@@ -16,30 +18,24 @@ const TERRAFORM_NESTED_BLOCK_ATTRIBUTES: Record<string, ReadonlySet<string>> = {
 
 // DiagramJson 전체를 Terraform 코드 문자열 하나로 변환하는 공개 순수 함수다.
 export function generateTerraformFromDiagramJson(diagramJson: DiagramJson): string {
-  return diagramJson.nodes
-    .filter((node) => node.kind === "resource")
-    .map((node) => node.parameters)
-    .filter(isRenderableParameters)
+  return renderTerraformFromInfrastructureGraph(buildInfrastructureGraphFromDiagramJson(diagramJson));
+}
+
+export function renderTerraformFromInfrastructureGraph(graph: InfrastructureGraph): string {
+  return graph.nodes
     .map(renderBlock)
     .join("\n\n");
 }
 
-// parameters가 있는 resource node는 미완성 상태여도 Preview skeleton을 유지한다.
-function isRenderableParameters(
-  parameters: DiagramNodeParameters | undefined
-): parameters is DiagramNodeParameters {
-  return parameters !== undefined;
-}
-
 // resource/data block 하나를 만든다. 예: resource "aws_vpc" "main" { ... }
-function renderBlock(parameters: DiagramNodeParameters): string {
-  const terraformBlockType = parameters.terraformBlockType ?? DEFAULT_TERRAFORM_BLOCK_TYPE;
-  const body = Object.entries(parameters.values).flatMap(([key, value]) =>
-    renderBodyEntry(parameters.resourceType, key, value, 1)
+function renderBlock(node: InfrastructureGraphNode): string {
+  const terraformBlockType = node.iac.terraformBlockType ?? DEFAULT_TERRAFORM_BLOCK_TYPE;
+  const body = Object.entries(node.config).flatMap(([key, value]) =>
+    renderBodyEntry(node.iac.resourceType, key, value, 1)
   );
 
   return [
-    `${terraformBlockType} "${parameters.resourceType}" "${parameters.resourceName}" {`,
+    `${terraformBlockType} "${node.iac.resourceType}" "${node.iac.resourceName}" {`,
     ...body,
     "}"
   ].join("\n");

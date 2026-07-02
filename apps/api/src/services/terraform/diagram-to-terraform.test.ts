@@ -87,6 +87,57 @@ resource "aws_subnet" "public" {
   );
 });
 
+test("generates stable Terraform code repeatedly from the same DiagramJson", () => {
+  const diagramJson: DiagramJson = {
+    nodes: [
+      makeNode({
+        id: "node-1",
+        type: "aws_vpc",
+        kind: "resource",
+        label: "main",
+        parameters: {
+          resourceType: "aws_vpc",
+          resourceName: "main",
+          fileName: "network",
+          values: {
+            cidrBlock: "10.0.0.0/16",
+            tags: {
+              Name: "main"
+            }
+          }
+        }
+      }),
+      makeNode({
+        id: "node-2",
+        type: "aws_s3_bucket",
+        kind: "resource",
+        label: "logs",
+        parameters: {
+          resourceType: "aws_s3_bucket",
+          resourceName: "logs",
+          fileName: "storage",
+          values: {
+            tags: {
+              Name: "logs"
+            }
+          }
+        }
+      })
+    ],
+    edges: [],
+    viewport: {
+      x: 240,
+      y: -80,
+      zoom: 0.75
+    }
+  };
+
+  assert.equal(
+    generateTerraformFromDiagramJson(diagramJson),
+    generateTerraformFromDiagramJson(diagramJson)
+  );
+});
+
 test("renders invalid resource nodes so Terraform Preview does not disappear after parameter edits", () => {
   const diagramJson: DiagramJson = {
     nodes: [
