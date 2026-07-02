@@ -10,6 +10,7 @@ import type {
   CheckFinding,
   DeployedResource,
   Deployment,
+  DeploymentPlanWarning,
   DiagramJson,
   DeploymentLog,
   TerraformDiagnostic,
@@ -41,6 +42,8 @@ import {
   getDeploymentActionState,
   getDeploymentLogMessageTokens,
   getDeploymentLogTone,
+  getDeploymentPlanWarningReviewLabel,
+  getDeploymentPlanWarningSourceLabel,
   shouldAutoRefreshDeployment,
   shouldShowDeploymentInfoValue,
   type DeploymentLogMessageToken,
@@ -1308,15 +1311,31 @@ function PlanSummaryRows({ deployment }: { readonly deployment: Deployment }) {
           <span>Warnings</span>
           <ul>
             {summary.warnings.map((warning, index) => (
-              <li key={`${warning.level}-${index}`}>
-                <strong>{warning.level}</strong>
-                <p>{warning.message}</p>
-              </li>
+              <PlanWarningItem
+                key={`${warning.level}-${warning.code ?? "warning"}-${index}`}
+                warning={warning}
+              />
             ))}
           </ul>
         </div>
       ) : null}
     </>
+  );
+}
+
+function PlanWarningItem({ warning }: { readonly warning: DeploymentPlanWarning }) {
+  return (
+    <li data-blocking={warning.blocksApproval ? "true" : undefined}>
+      <div className={styles.deploymentWarningMeta}>
+        <strong>{warning.level}</strong>
+        <span data-review-state={warning.blocksApproval ? "blocked" : "approval"}>
+          {getDeploymentPlanWarningReviewLabel(warning)}
+        </span>
+        <span>{getDeploymentPlanWarningSourceLabel(warning)}</span>
+        {warning.code ? <code>{warning.code}</code> : null}
+      </div>
+      <p>{warning.message}</p>
+    </li>
   );
 }
 
