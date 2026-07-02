@@ -22,11 +22,16 @@
 - Resource card Duplicate는 같은 resource type 안에서 `web_copy`, `web_copy_2`처럼 유니크한 Terraform resourceName을 만들고, 자동 생성 `tags.Name`도 함께 동기화한다.
 - Diagram icon 삭제는 Terraform Preview에 즉시 반영된다. 마지막 아이콘 삭제도 빈 `main.tf`로 갱신되고, Terraform editor가 dirty 상태여도 삭제된 리소스 주소에 해당하는 block만 제거한다.
 - Terraform editor 저장 sync action은 빈 Terraform 코드를 전체 삭제 의도로 처리한다. 지원 범위 안의 Diagram-only resource는 `delete_candidate`로 자동 반영되고, Diagram도 이미 비어 있으면 diagnostics 없이 저장 성공한다.
+- 사용자가 보드에서 리소스 아이콘을 직접 추가하면 `parameters.values`는 `{}`로 시작한다. EC2 `instanceType`, VPC `cidrBlock`, `tags.Name` 같은 Terraform parameter 값은 사용자 입력, AI draft config, Terraform editor sync처럼 명시 입력이 있을 때만 채운다.
 - `docs/data-models.md`는 diagnostic/proposal source metadata와 proposal 지원 범위를 현재 코드에 맞게 기록한다.
 - `feature_list.json`에는 동시에 `in_progress`인 항목이 없다.
 
 ## 이번 세션의 변경 사항
 
+- EC2 Instance를 포함한 모든 수동 리소스 아이콘 생성에서 Terraform parameter 자동 채움을 제거했다.
+- VPC/Subnet/Security Group/EC2/S3에 들어가던 Terraform Preview skeleton default helper를 삭제했다.
+- AI Architecture Draft 변환 테스트는 catalog default가 아니라 AI가 명시한 config 값만 유지하도록 조정했다.
+- `docs/data-models.md`에 수동 리소스 아이콘 생성 시 `parameters.values`가 `{}`로 시작한다는 계약을 추가했다.
 - 리소스 아이콘 삭제 후 Terraform 코드를 전부 지워 저장할 때 저장이 실패하던 문제를 수정했다.
 - Frontend `saveCodeToDiagram`이 빈 Terraform 코드를 막지 않고 sync API까지 보내도록 변경했다.
 - API `syncTerraformToDiagramJson`이 공백 Terraform 입력을 `terraform.sync.empty` 오류가 아니라 Diagram-only resource 삭제 proposals로 처리하게 했다.
@@ -59,6 +64,8 @@
 - `pnpm --filter @sketchcatch/web typecheck` - passed
 - `pnpm --filter @sketchcatch/api exec tsx --test src/routes/terraform.test.ts src/services/terraform/terraform-to-diagram.test.ts` - passed
 - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/terraform-sync-proposals.test.ts features/workspace/workspace-right-panel-layout.test.ts features/workspace/terraform-panel-utils.test.ts` - passed
+- `pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/diagram-utils.test.ts features/workspace/workspace-ai-diagram-adapter.test.ts features/diagram-editor/reference-drop-targets.test.ts features/diagram-editor/drag-transaction.test.ts features/workspace/terraform-panel-utils.test.ts features/parameter-input/validation.test.ts` - passed
+- `pnpm --filter @sketchcatch/web typecheck` - passed
 - `pnpm catalog:generate` - passed
 - `pnpm catalog:check` - passed after one transient Terraform AWS provider schema handshake retry
 - `pnpm typecheck` - passed

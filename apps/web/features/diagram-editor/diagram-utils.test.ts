@@ -41,102 +41,48 @@ test("active resource drag payload is available when dragover dataTransfer reads
   assert.equal(getActiveResourceDragPayload(dragOverDataTransfer), null);
 });
 
-test("createDiagramNodeFromPayload creates Terraform Preview skeleton values for supported resources", () => {
+test("createDiagramNodeFromPayload does not auto-fill Terraform parameter values for resource icons", () => {
   const cases = [
     {
       resourceType: "aws_vpc",
-      label: "VPC",
-      expectedValues: {
-        cidrBlock: "10.0.0.0/16",
-        enableDnsSupport: true,
-        enableDnsHostnames: true,
-        tags: {
-          Name: "vpc"
-        }
-      }
+      label: "VPC"
     },
     {
       resourceType: "aws_subnet",
-      label: "Subnet",
-      expectedValues: {
-        cidrBlock: "10.0.1.0/24",
-        mapPublicIpOnLaunch: true,
-        tags: {
-          Name: "subnet"
-        }
-      }
+      label: "Subnet"
     },
     {
       resourceType: "aws_security_group",
-      label: "Security Group",
-      expectedValues: {
-        name: "security_group",
-        description: "Managed by SketchCatch",
-        egress: [
-          {
-            fromPort: 0,
-            toPort: 0,
-            protocol: "-1",
-            cidrBlocks: ["0.0.0.0/0"]
-          }
-        ],
-        tags: {
-          Name: "security_group"
-        }
-      }
+      label: "Security Group"
     },
     {
       resourceType: "aws_instance",
-      label: "EC2 Instance",
-      expectedValues: {
-        instanceType: "t3.micro",
-        tags: {
-          Name: "ec2_instance"
-        }
-      }
+      label: "EC2 Instance"
     },
     {
       resourceType: "aws_s3_bucket",
-      label: "S3 Bucket",
-      expectedValues: {
-        tags: {
-          Name: "s3_bucket"
-        }
-      }
+      label: "S3 Bucket"
+    },
+    {
+      resourceType: "aws_ami",
+      label: "AMI",
+      terraformBlockType: "data" as const
+    },
+    {
+      resourceType: "aws_internet_gateway",
+      label: "Internet Gateway"
     }
   ];
 
-  for (const { resourceType, label, expectedValues } of cases) {
+  for (const { resourceType, label, terraformBlockType } of cases) {
     const node = createDiagramNodeFromPayload(
-      makeResourceDragPayload(makeResourceItem({ resourceType, label })),
+      makeResourceDragPayload(makeResourceItem({ resourceType, label, terraformBlockType })),
       { x: 0, y: 0 },
       1
     );
 
-    assert.deepEqual(node.parameters?.values, expectedValues);
+    assert.deepEqual(node.parameters?.values, {});
   }
-});
-
-test("createDiagramNodeFromPayload leaves excluded and unsupported resource values empty", () => {
-  const ami = createDiagramNodeFromPayload(
-    makeResourceDragPayload(
-      makeResourceItem({
-        resourceType: "aws_ami",
-        label: "AMI",
-        terraformBlockType: "data"
-      })
-    ),
-    { x: 0, y: 0 },
-    1
-  );
-  const internetGateway = createDiagramNodeFromPayload(
-    makeResourceDragPayload(makeResourceItem({ resourceType: "aws_internet_gateway", label: "Internet Gateway" })),
-    { x: 0, y: 0 },
-    1
-  );
-
-  assert.deepEqual(ami.parameters?.values, {});
-  assert.deepEqual(internetGateway.parameters?.values, {});
 });
 
 test("createDiagramNodeFromPayload does not attach parameters to design nodes", () => {

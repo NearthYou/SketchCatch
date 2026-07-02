@@ -69,11 +69,6 @@ test("convertArchitectureJsonToDiagramJson creates board nodes and edges from an
           terraformBlockType: "resource",
           values: {
             cidrBlock: "10.0.0.0/16",
-            enableDnsSupport: true,
-            enableDnsHostnames: true,
-            tags: {
-              Name: "vpc"
-            },
             terraformResourceName: "main"
           }
         },
@@ -96,10 +91,7 @@ test("convertArchitectureJsonToDiagramJson creates board nodes and edges from an
           resourceType: "aws_instance",
           terraformBlockType: "resource",
           values: {
-            instanceType: "t3.micro",
-            tags: {
-              Name: "ec2_instance"
-            }
+            instanceType: "t3.micro"
           }
         },
         position: { x: 360, y: 220 },

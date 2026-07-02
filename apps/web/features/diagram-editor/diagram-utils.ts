@@ -450,68 +450,8 @@ function createDefaultNodeParameters(item: ResourceItem): DiagramNodeParameters 
     resourceType: item.nodeDefaults.type,
     resourceName,
     fileName: "main",
-    values: createDefaultParameterValues(item.nodeDefaults.type, resourceName)
+    values: {}
   };
-}
-
-function createDefaultParameterValues(resourceType: string, resourceName: string): Record<string, unknown> {
-  if (resourceType === "aws_vpc") {
-    return {
-      cidrBlock: "10.0.0.0/16",
-      enableDnsSupport: true,
-      enableDnsHostnames: true,
-      tags: {
-        Name: resourceName
-      }
-    };
-  }
-
-  if (resourceType === "aws_subnet") {
-    return {
-      cidrBlock: "10.0.1.0/24",
-      mapPublicIpOnLaunch: true,
-      tags: {
-        Name: resourceName
-      }
-    };
-  }
-
-  if (resourceType === "aws_security_group") {
-    return {
-      name: resourceName,
-      description: "Managed by SketchCatch",
-      egress: [
-        {
-          fromPort: 0,
-          toPort: 0,
-          protocol: "-1",
-          cidrBlocks: ["0.0.0.0/0"]
-        }
-      ],
-      tags: {
-        Name: resourceName
-      }
-    };
-  }
-
-  if (resourceType === "aws_instance") {
-    return {
-      instanceType: "t3.micro",
-      tags: {
-        Name: resourceName
-      }
-    };
-  }
-
-  if (resourceType === "aws_s3_bucket") {
-    return {
-      tags: {
-        Name: resourceName
-      }
-    };
-  }
-
-  return {};
 }
 
 function mergeOptionalStyle(

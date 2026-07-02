@@ -15,6 +15,31 @@
 
 ## 세션 레코드
 
+### 2026-07-03 - 리소스 아이콘 생성 시 파라미터 자동 채움 제거
+
+- Goal: EC2 Instance를 포함한 모든 리소스 아이콘 추가 시 `instanceType`, `cidrBlock`, `tags.Name` 같은 Terraform parameter 값이 자동으로 채워지지 않게 한다.
+- Completed:
+  - `createDiagramNodeFromPayload`가 수동 리소스 아이콘 생성 시 Terraform identity metadata만 만들고 `parameters.values`는 `{}`로 시작하게 했다.
+  - VPC/Subnet/Security Group/EC2/S3 등에 들어가던 Terraform Preview skeleton default helper를 제거했다.
+  - AI Architecture Draft 변환은 AI가 명시한 `config` 값만 `parameters.values`에 유지하도록 테스트 기대값을 조정했다.
+  - `docs/data-models.md`에 수동 리소스 아이콘 생성은 parameter values를 자동 채우지 않는다는 계약을 기록했다.
+- Verification run:
+  - Red before fix: `pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/diagram-utils.test.ts` - failed because VPC default values were still auto-filled
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/diagram-utils.test.ts features/workspace/workspace-ai-diagram-adapter.test.ts features/diagram-editor/reference-drop-targets.test.ts features/diagram-editor/drag-transaction.test.ts features/workspace/terraform-panel-utils.test.ts features/parameter-input/validation.test.ts` - passed
+  - `pnpm --filter @sketchcatch/web typecheck` - passed
+  - `pnpm lint` - passed
+  - `pnpm typecheck` - passed
+  - `pnpm build` - passed
+  - `pnpm harness:check` - passed
+- Evidence recorded:
+  - 실제 Terraform apply/destroy, cloud mutation, Git/CI/CD handoff는 실행하지 않았다.
+  - frontend UI에 Terraform CLI 실행 또는 AWS SDK 호출을 추가하지 않았다.
+- Known risks:
+  - 브라우저 수동 smoke는 수행하지 않았다. 자동/단위/타입/빌드 검증으로 확인했다.
+  - 기존 unrelated worktree changes remain: `DESIGN.md` 삭제 상태, `apps/web/next-env.d.ts` 변경 상태.
+- Next best action:
+  - 브라우저에서 EC2/VPC/S3 아이콘을 추가했을 때 우측 파라미터 값이 비어 있고, AI draft나 Terraform editor에서 명시한 값은 유지되는지 수동 smoke한다.
+
 ### 2026-07-03 - 빈 Terraform 코드 저장 동기화 수정
 
 - Goal: 리소스 아이콘 삭제 후 Terraform 코드를 전부 지운 상태에서도 저장이 성공하고 Diagram/Terraform 동기화가 깨지지 않게 한다.
