@@ -284,7 +284,11 @@ function countBraceDelta(line: string): number {
 }
 
 export function formatTerraformDiagnosticTitle(diagnostic: TerraformDiagnostic): string {
-  const location = diagnostic.line ? `line ${diagnostic.line}` : "Terraform";
+  const location = diagnostic.line
+    ? diagnostic.sourceFileName
+      ? `${diagnostic.sourceFileName}:${diagnostic.line}`
+      : `line ${diagnostic.line}`
+    : "Terraform";
   const resource = diagnostic.resourceAddress ? ` | ${diagnostic.resourceAddress}` : "";
   return `${diagnostic.severity.toUpperCase()} | ${location}${resource}`;
 }

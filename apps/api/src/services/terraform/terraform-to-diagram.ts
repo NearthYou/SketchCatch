@@ -29,8 +29,12 @@ const TERRAFORM_NESTED_BLOCK_ATTRIBUTES: Record<string, ReadonlySet<string>> = {
   aws_security_group: new Set(["egress", "ingress"])
 };
 const PROPOSAL_SUPPORTED_BLOCKS = new Set<string>([
+  "resource/aws_cloudfront_distribution",
+  "resource/aws_internet_gateway",
   "resource/aws_vpc",
   "resource/aws_subnet",
+  "resource/aws_route_table",
+  "resource/aws_route_table_association",
   "resource/aws_security_group",
   "resource/aws_instance",
   "resource/aws_s3_bucket",
@@ -122,6 +126,7 @@ export function syncTerraformToDiagramJson(
           severity: "error",
           code: "terraform.sync.unsupported_resource",
           line: block.line,
+          sourceFileName: block.sourceFileName,
           resourceAddress: block.address,
           message: `${block.address}는 Terraform 동기화 v1 지원 리소스가 아닙니다.`
         });
@@ -236,6 +241,8 @@ function createChangeProposals(
       kind: "rename_candidate",
       from,
       to: renameBlock.identity,
+      sourceFileName: renameBlock.sourceFileName,
+      line: renameBlock.line,
       nodeId: node.id,
       resourceAddress: createTerraformBlockAddress(from)
     });
@@ -400,6 +407,7 @@ function parseTerraformInput(input: TerraformSyncInput): ParseResult {
           severity: "error",
           code: "terraform.sync.duplicate_address",
           line: block.line,
+          sourceFileName: block.sourceFileName,
           resourceAddress: block.address,
           message: `${block.address} block이 중복되었습니다.`
         });
@@ -409,7 +417,12 @@ function parseTerraformInput(input: TerraformSyncInput): ParseResult {
       blocks.push(block);
     }
 
-    diagnostics.push(...parseResult.diagnostics);
+    diagnostics.push(
+      ...parseResult.diagnostics.map((diagnostic) => ({
+        ...diagnostic,
+        sourceFileName: diagnostic.sourceFileName ?? file.fileName
+      }))
+    );
   }
 
   return { blocks, diagnostics };

@@ -10,6 +10,8 @@ type TerraformDiagnosticLineHighlightOptions = {
   readonly codeLineCount: number;
   readonly lineHeight: number;
   readonly scrollTop: number;
+  readonly sourceFileName?: string | null | undefined;
+  readonly sourceLineOffset?: number | undefined;
   readonly verticalPadding: number;
 };
 
@@ -19,6 +21,8 @@ export function createTerraformDiagnosticLineHighlights(
     codeLineCount,
     lineHeight,
     scrollTop,
+    sourceFileName,
+    sourceLineOffset = 0,
     verticalPadding
   }: TerraformDiagnosticLineHighlightOptions
 ): TerraformDiagnosticLineHighlight[] {
@@ -31,11 +35,21 @@ export function createTerraformDiagnosticLineHighlights(
       continue;
     }
 
-    if (!Number.isInteger(line) || line < 1 || line > codeLineCount) {
+    if (
+      diagnostic.sourceFileName &&
+      sourceFileName &&
+      diagnostic.sourceFileName !== sourceFileName
+    ) {
       continue;
     }
 
-    errorLines.add(line);
+    const displayedLine = line - sourceLineOffset;
+
+    if (!Number.isInteger(displayedLine) || displayedLine < 1 || displayedLine > codeLineCount) {
+      continue;
+    }
+
+    errorLines.add(displayedLine);
   }
 
   return Array.from(errorLines)

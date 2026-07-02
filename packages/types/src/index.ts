@@ -1039,6 +1039,7 @@ export type TerraformDiagnostic = {
   message: string;
   code?: string | undefined;
   line?: number | undefined;
+  sourceFileName?: string | undefined;
   resourceAddress?: string | undefined;
   nodeId?: string | undefined;
 };
@@ -1080,6 +1081,8 @@ export type TerraformDiagramChangeProposal =
       kind: "rename_candidate";
       from: TerraformBlockIdentity;
       to: TerraformBlockIdentity;
+      sourceFileName?: string | undefined;
+      line?: number | undefined;
       nodeId: string;
       resourceAddress: string;
     };

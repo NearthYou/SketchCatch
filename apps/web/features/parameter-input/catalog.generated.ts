@@ -289,6 +289,20 @@ export const terraformAwsParameterCatalog = {
         ]
       }
     ],
+    "aws_cloudfront_distribution": [
+      {
+        "name": "tags",
+        "terraformName": "tags",
+        "label": "Tags",
+        "type": "map",
+        "required": false,
+        "optional": true,
+        "computed": false,
+        "sensitive": false,
+        "description": "AWS 콘솔과 비용 추적에서 리소스를 구분하기 위한 key-value 태그입니다.",
+        "inputKind": "key-value"
+      }
+    ],
     "aws_nat_gateway": [
       {
         "name": "subnetId",

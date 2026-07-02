@@ -84,6 +84,52 @@ test("applyTerraformSyncProposals uses data source catalog icons for approved da
   assert.deepEqual(createdNode?.size, catalogResource.nodeDefaults.size);
 });
 
+test("applyTerraformSyncProposals deep clones created node defaults and parameter values", () => {
+  const diagramJson = makeDiagramJson();
+  const proposal: Extract<TerraformDiagramChangeProposal, { kind: "create_candidate" }> = {
+    kind: "create_candidate",
+    identity: {
+      terraformBlockType: "resource",
+      resourceType: "aws_s3_bucket",
+      resourceName: "logs"
+    },
+    parameters: {
+      resourceType: "aws_s3_bucket",
+      resourceName: "logs",
+      fileName: "storage.tf",
+      values: {
+        tags: {
+          Name: "logs"
+        }
+      }
+    }
+  };
+  const proposals: TerraformDiagramChangeProposal[] = [proposal];
+  const catalogResource = getCatalogResource("aws_s3_bucket");
+
+  const result = applyTerraformSyncProposals(
+    diagramJson,
+    proposals,
+    [getTerraformSyncProposalId(proposal, 0)]
+  );
+  const createdNode = result.nodes[1];
+
+  assert.ok(createdNode);
+  assert.notEqual(createdNode.size, catalogResource.nodeDefaults.size);
+  assert.notEqual(createdNode.parameters?.values, proposal.parameters.values);
+  assert.notEqual(createdNode.parameters?.values.tags, proposal.parameters.values.tags);
+
+  createdNode.size.width = 999;
+  (createdNode.parameters?.values.tags as Record<string, unknown>).Name = "mutated";
+
+  assert.deepEqual(catalogResource.nodeDefaults.size, { width: 112, height: 112 });
+  assert.deepEqual(proposal.parameters.values, {
+    tags: {
+      Name: "logs"
+    }
+  });
+});
+
 test("applyTerraformSyncProposals removes approved delete proposal nodes and connected edges", () => {
   const diagramJson = makeDiagramJson({
     nodes: [makeNode("vpc-1", "aws_vpc", "main"), makeNode("subnet-1", "aws_subnet", "public")],
@@ -133,6 +179,8 @@ test("applyTerraformSyncProposals renames approved nodes", () => {
         resourceType: "aws_vpc",
         resourceName: "network"
       },
+      sourceFileName: "network.tf",
+      line: 1,
       nodeId: "vpc-1",
       resourceAddress: "aws_vpc.main"
     }
@@ -146,6 +194,7 @@ test("applyTerraformSyncProposals renames approved nodes", () => {
 
   assert.equal(result.nodes[0]?.label, "network");
   assert.equal(result.nodes[0]?.parameters?.resourceName, "network");
+  assert.equal(result.nodes[0]?.parameters?.fileName, "network.tf");
 });
 
 test("applyTerraformSyncProposals ignores unapproved proposals", () => {

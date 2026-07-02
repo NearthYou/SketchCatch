@@ -321,6 +321,9 @@ export const terraformAwsParameterCatalog = {
         referenceTargetTypes: ["aws_route_table"]
       }
     ],
+    aws_cloudfront_distribution: [
+      commonTags
+    ],
     aws_nat_gateway: [
       {
         name: "subnetId",

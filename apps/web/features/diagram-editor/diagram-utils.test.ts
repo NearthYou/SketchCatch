@@ -147,6 +147,7 @@ test("createDiagramNodeFromPayload does not attach parameters to design nodes", 
   );
 
   assert.equal(node.parameters, undefined);
+  assert.equal(node.iconUrl, "/test.svg");
 });
 
 test("createPastedNodes clears stale parent area metadata from copied nodes", () => {

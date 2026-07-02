@@ -13,7 +13,19 @@ test("resourceCatalog sizes area defaults below the Region hierarchy root", () =
 
 test("resourceCatalog keeps regular network resources at icon node size", () => {
   assert.deepEqual(getResourceSize("aws_internet_gateway"), { width: 112, height: 112 });
+  assert.deepEqual(getResourceSize("aws_cloudfront_distribution"), { width: 112, height: 112 });
   assert.deepEqual(getResourceSize("aws_route_table_association"), { width: 112, height: 112 });
+});
+
+test("resourceCatalog provides a CloudFront icon for converted drafts and Terraform proposals", () => {
+  const resource = resourceCatalog.find(
+    (item) => item.nodeDefaults.type === "aws_cloudfront_distribution"
+  );
+
+  assert.equal(
+    resource?.iconUrl,
+    "/Architecture-Service-Icons_07312025/Arch_Networking-Content-Delivery/64/Arch_Amazon-CloudFront_64.svg"
+  );
 });
 
 function getResourceSize(resourceType: string) {

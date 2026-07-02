@@ -15,6 +15,42 @@
 
 ## 세션 레코드
 
+### 2026-07-03 - Terraform Preview 아이콘/진단/동기화 회귀 보강
+
+- Goal: 하위 AI 6개 축으로 Terraform Preview/동기화 구현을 재검증하고, 실제 사용자 증상과 연결되는 문제를 수정한다.
+- Completed:
+  - 하위 AI 6개 축으로 API sync/parser, frontend proposal 적용, Terraform editor UX, resource catalog/icon, deployment boundary, docs/contracts를 read-only 검증했다.
+  - CloudFront AI draft와 Terraform proposal이 catalog icon/size를 찾을 수 있도록 `aws_cloudfront_distribution` resource catalog와 parameter override/generated catalog를 추가했다.
+  - 기본 Palette가 오래된 `DEFAULT_PALETTE_ITEMS` 대신 `resourceCatalog`를 사용하게 하고, design area node도 catalog icon을 유지하게 했다.
+  - `TerraformDiagnostic.sourceFileName` 계약을 추가하고 API multi-file sync diagnostics, duplicate block diagnostics, unsupported resource diagnostics에 source file metadata를 채웠다.
+  - Terraform editor validation을 file별로 실행해 diagnostic line이 현재 파일 기준으로 표시되게 했고, resource-code 부분보기에서는 원본 파일 줄 번호를 부분 코드 줄 번호로 보정했다.
+  - 사용자가 Terraform 코드를 수정하면 stale diagnostics와 Issues 상태를 즉시 비우고, 오래된 async validation/save 응답이 새 코드에 다시 칠해지지 않도록 code version guard를 추가했다.
+  - proposal이 있어도 같은 identity의 안전한 `parameters.values` 변경은 먼저 DiagramJson에 반영하고, create/delete/rename 구조 변경만 사용자 승인 대기로 남기게 했다.
+  - rename proposal 승인 시 이동된 source file metadata를 node `parameters.fileName`에 보존하게 했다.
+  - create proposal 적용 시 catalog size와 proposal parameter values를 deep clone해 참조 공유를 제거했다.
+  - Route Table/Internet Gateway/CloudFront 등 sync 가능한 네트워크 리소스의 create/delete proposal 범위를 보강해 diagram-only 삭제가 조용히 성공 처리되지 않게 했다.
+  - Resource card Duplicate가 같은 Terraform identity를 반복 생성하지 않도록 resourceName suffix를 유니크하게 만들고 auto-generated `tags.Name`을 함께 동기화했다.
+  - `docs/data-models.md`의 diagnostic/proposal 계약과 proposal 지원 범위를 현재 구현에 맞게 갱신했다.
+- Verification run:
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-to-diagram.test.ts src/routes/terraform.test.ts src/services/terraform/diagram-to-terraform.test.ts src/services/terraform/infrastructure-graph.test.ts` - passed
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/terraform-sync-proposals.test.ts features/workspace/terraform-diagnostic-line-highlights.test.ts features/workspace/workspace-right-panel-layout.test.ts features/workspace/workspace-ai-diagram-adapter.test.ts features/diagram-editor/diagram-utils.test.ts features/resource-settings/catalog.test.ts features/workspace/pre-deployment-diagnostics.test.ts features/parameter-input/validation.test.ts` - passed
+  - `pnpm catalog:generate` - passed
+  - `pnpm catalog:check` - passed after one transient Terraform AWS provider schema handshake retry
+  - `pnpm typecheck` - passed
+  - `pnpm lint` - passed
+  - `pnpm build` - passed
+  - `pnpm harness:check` - passed
+- Evidence recorded:
+  - 실제 Terraform apply/destroy, cloud mutation, Git/CI/CD handoff는 실행하지 않았다.
+  - frontend UI에 Terraform 실행 또는 AWS SDK 호출을 추가하지 않았다.
+  - 하위 AI 검증 중 deployment safety preflight mismatch와 DeploymentPanel stale PENDING state는 확인했지만 이번 아이콘/preview/editor 회귀 보강 범위 밖이라 별도 후속 후보로 남겼다.
+- Known risks:
+  - 브라우저 수동 smoke는 수행하지 않았다. 자동/단위/소스/타입/빌드 검증으로 확인했다.
+  - 기존 unrelated worktree changes remain: `DESIGN.md` 삭제 상태, `apps/web/next-env.d.ts` 변경 상태.
+- Next best action:
+  - 브라우저에서 CloudFront AI draft, Terraform-only create proposal, multi-file validation error, proposal pending 상태의 same-identity value update를 수동 smoke한다.
+  - 별도 작업으로 pre-deployment artifact path가 backend artifact safety checks를 미리 반영하는지 검토한다.
+
 ### 2026-07-03 - Terraform 생성 리소스 아이콘 누락 수정
 
 - Goal: Terraform 코드에서 생성/승인된 리소스가 아이콘이 있음에도 다이어그램에서 빈 박스와 `AWS` fallback으로 보이는 문제를 수정한다.

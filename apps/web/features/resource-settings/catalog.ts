@@ -91,6 +91,16 @@ export const resourceCatalog: ResourceItem[] = [
     nodeDefaults: { type: "aws_route_table_association", label: "Route Table Association", size }
   },
   {
+    id: "aws-cloudfront-distribution",
+    name: "CloudFront Distribution",
+    cloudProvider: "aws",
+    area: "network",
+    category: "Network",
+    iconUrl: `${serviceIconPath}/Arch_Networking-Content-Delivery/64/Arch_Amazon-CloudFront_64.svg`,
+    enabled: true,
+    nodeDefaults: { type: "aws_cloudfront_distribution", label: "CloudFront Distribution", size }
+  },
+  {
     id: "aws-nat-gateway",
     name: "NAT Gateway",
     cloudProvider: "aws",

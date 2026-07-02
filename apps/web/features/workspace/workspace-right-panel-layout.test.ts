@@ -378,19 +378,20 @@ test("terraform artifact preparation marks the terraform panel as loading", () =
   assert.match(terraformPanelSource, /isPreparingTerraformArtifactRef/);
 });
 
-test("terraform sync proposals require explicit approval before mutating the diagram", () => {
+test("terraform sync proposals apply safe value updates while structural proposals require approval", () => {
   const proposalBranchIndex = terraformPanelSource.indexOf(
     "syncResult.proposals && syncResult.proposals.length > 0"
   );
-  const proposalReturnIndex = terraformPanelSource.indexOf("return null;", proposalBranchIndex);
-  const automaticApplyIndex = terraformPanelSource.indexOf(
+  const proposalApplyIndex = terraformPanelSource.indexOf(
     "context.applyDiagramJson(syncResult.diagramJson)",
     proposalBranchIndex
   );
+  const proposalReturnIndex = terraformPanelSource.indexOf("return null;", proposalBranchIndex);
 
   assert.ok(proposalBranchIndex > -1);
+  assert.ok(proposalApplyIndex > proposalBranchIndex);
   assert.ok(proposalReturnIndex > proposalBranchIndex);
-  assert.ok(automaticApplyIndex > proposalReturnIndex);
+  assert.ok(proposalApplyIndex < proposalReturnIndex);
   assert.match(terraformPanelSource, /terraformFiles:\s*terraformFiles\.map/);
   assert.match(terraformPanelSource, /pendingTerraformSync/);
   assert.match(terraformPanelSource, /getTerraformSyncProposalId/);
@@ -403,6 +404,15 @@ test("terraform sync proposals require explicit approval before mutating the dia
   assert.match(stylesSource, /\.terraformSyncProposalPanel\s*\{/);
   assert.match(stylesSource, /\.terraformSyncProposalList\s*\{/);
   assert.match(stylesSource, /\.terraformSyncProposalActions button:disabled\s*\{/);
+});
+
+test("terraform editor clears stale diagnostics after local edits", () => {
+  const handleCodeChangeIndex = terraformPanelSource.indexOf("function handleCodeChange");
+
+  assert.ok(handleCodeChangeIndex > -1);
+  assert.ok(terraformPanelSource.indexOf("codeVersionRef.current += 1", handleCodeChangeIndex) > handleCodeChangeIndex);
+  assert.ok(terraformPanelSource.indexOf("setDiagnostics([])", handleCodeChangeIndex) > handleCodeChangeIndex);
+  assert.ok(terraformPanelSource.indexOf("onDiagnosticsChange([])", handleCodeChangeIndex) > handleCodeChangeIndex);
 });
 
 function readWorkspaceFile(fileName: string): string {

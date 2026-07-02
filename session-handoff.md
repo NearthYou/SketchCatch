@@ -6,64 +6,64 @@
 
 - InfrastructureGraph 중심 Workspace 동기화 v1 구현이 현재 브랜치에 커밋됐다.
 - Terraform Preview 생성 경로는 `DiagramJson -> InfrastructureGraph -> Terraform`로 정리됐다.
-- 같은 DiagramJson에서 VPC/EC2/S3 계열 Terraform Preview가 반복 생성되는 테스트가 통과했다.
-- `data.aws_ami.filter`는 renderer/parser/catalog에서 `values.filter: [{ name, values }]` 구조로 정렬됐다.
-- Advanced Parameters UI는 제거됐고, 기존 optional 또는 catalog 밖 `parameters.values`는 보존된다.
-- Terraform editor 역동기화는 create/delete/rename 구조 변경을 proposal로 반환하며, 사용자 승인 전 DiagramJson 구조를 바꾸지 않는다.
-- rename proposal은 같은 `terraformBlockType/resourceType/normalized values` 그룹에서 diagram-only 1개와 terraform-only 1개가 정확히 한 쌍일 때만 생성된다.
-- Frontend proposal 적용은 사용자가 체크한 proposal만 반영하며, 미반영 proposal이 남으면 dirty/pending 상태를 유지한다.
-- `docs/data-models.md`, `docs/jh/기타/008_...AI작업지시서_JH.md`, `docs/jh/기타/009_...사람용설명_JH.md`가 실제 구현 결과에 맞게 갱신됐다.
-- Terraform leave dialog의 `저장하고 나가기`는 저장 실패/검증 오류/proposal 대기 시 더 이상 무반응처럼 보이지 않고, 다이얼로그 안에 차단 안내를 표시한다.
-- Terraform leave dialog 저장 중에는 버튼을 잠가 중복 저장과 race를 줄인다.
-- Terraform editor는 `TerraformDiagnostic.line`이 있는 error diagnostic을 해당 줄의 빨간 underline과 빨간 줄 번호로 표시한다.
-- Terraform-only create proposal 승인으로 생긴 새 DiagramJson node는 resource catalog의 `iconUrl`과 `nodeDefaults.size`를 사용하므로 더 이상 `AWS` fallback 빈 박스로 보이지 않는다.
+- VPC/EC2/S3/AMI 계열 Preview와 proposal 승인 흐름은 focused API/Web 테스트, typecheck, lint, build를 통과했다.
+- Terraform-only create proposal 승인으로 생긴 새 DiagramJson node는 resource catalog의 `iconUrl`과 `nodeDefaults.size`를 사용한다.
+- CloudFront draft/proposal도 `aws_cloudfront_distribution` catalog icon과 size를 사용할 수 있다.
+- 기본 Palette는 `resourceCatalog`를 기본값으로 사용한다.
+- Design area node도 catalog icon을 유지하며 area header에서 iconUrl을 사용할 수 있다.
+- Terraform editor diagnostics는 `sourceFileName`을 가질 수 있고, multi-file validation에서 현재 파일 기준 빨간줄만 표시한다.
+- Resource code 부분보기에서는 원본 파일 line을 부분 코드 line으로 보정해 빨간줄을 표시한다.
+- Terraform 코드를 수정하면 stale diagnostics/Issues 상태가 즉시 비워진다.
+- 오래된 async validation/save 응답은 code version guard로 새 코드 위에 다시 반영되지 않는다.
+- 같은 Terraform identity의 `parameters.values` 변경은 proposal pending 상태가 있어도 먼저 DiagramJson에 반영된다.
+- Create/delete/rename 구조 변경은 계속 사용자 승인 proposal로 남는다.
+- Rename proposal 승인 시 source file metadata가 `parameters.fileName`에 보존된다.
+- Route Table/Internet Gateway/CloudFront 같은 sync 가능한 네트워크 리소스는 create/delete proposal 대상에 포함된다.
+- Resource card Duplicate는 같은 resource type 안에서 `web_copy`, `web_copy_2`처럼 유니크한 Terraform resourceName을 만들고, 자동 생성 `tags.Name`도 함께 동기화한다.
+- `docs/data-models.md`는 diagnostic/proposal source metadata와 proposal 지원 범위를 현재 코드에 맞게 기록한다.
 - `feature_list.json`에는 동시에 `in_progress`인 항목이 없다.
 
 ## 이번 세션의 변경 사항
 
-- shared type에 Terraform block identity, multi-file sync input, sync proposal response를 추가했다.
-- API Terraform service에 identity helper, InfrastructureGraph projection, graph 기반 preview renderer, multi-file parser/source metadata, create/delete/rename proposal 생성을 추가했다.
-- API proposal 생성은 unsupported/parser error/duplicate identity에서 자동 반영하지 않고 diagnostics를 반환한다.
-- Web parameter panel에서 Advanced Parameters UI를 제거하고 nested `list`/`set` block 반복 렌더링을 보강했다.
-- Web Terraform panel은 여러 Terraform file을 sync API에 전달하고, structural proposal은 pending panel에서 명시 선택 후 반영한다.
-- Web Terraform leave dialog에 저장 상태 모델과 status/alert 피드백 UI를 추가했다.
-- Web Terraform editor에 diagnostic line highlight helper와 빨간줄 overlay를 추가했다.
-- Web Terraform proposal 적용 경로에서 새 resource/data node에 catalog icon/size metadata를 붙이도록 수정했다.
-- 하위 AI 리뷰 6개 축에서 나온 blocking 피드백을 반영했다.
-  - Preview 지원 범위와 proposal 지원 범위를 문서에서 분리했다.
-  - ambiguous rename과 object key order 문제를 수정했다.
-  - partial proposal approval 후 clean 처리되는 문제를 수정했다.
-  - ignored JH 문서 008/009를 `git add -f`로 커밋했다.
+- 하위 AI 6개 축으로 API sync/parser, frontend proposal 적용, Terraform editor UX, resource catalog/icon, deployment boundary, docs/contracts를 read-only 검증했다.
+- `TerraformDiagnostic.sourceFileName`을 shared type에 추가했다.
+- `TerraformDiagramChangeProposal.rename_candidate`에 `sourceFileName`과 `line`을 추가했다.
+- API Terraform sync parser가 file별 diagnostics에 source file metadata를 채우도록 수정했다.
+- Frontend Terraform panel이 전체 검증을 file별로 실행하고 diagnostic source metadata를 UI에 보존하게 했다.
+- Diagnostic line highlight helper가 source file filtering과 source line offset을 지원하게 했다.
+- CloudFront catalog, parameter override, generated parameter catalog를 추가했다.
+- Proposal helper의 create/rename 적용 경로에서 icon/size/fileName/deep clone 보존을 강화했다.
+- Palette, diagram node creation, area node icon lookup을 catalog 기준으로 정렬했다.
+- Resource Duplicate 중복 identity와 stale auto tag 문제를 수정했다.
+- 관련 regression tests와 docs/data-models 계약을 갱신했다.
 
 ## 검증
 
-- `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-identity.test.ts src/services/terraform/infrastructure-graph.test.ts src/services/terraform/diagram-to-terraform.test.ts src/services/terraform/terraform-to-diagram.test.ts src/routes/terraform.test.ts` - passed
-- `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/terraform-sync-proposals.test.ts features/workspace/terraform-panel-utils.test.ts features/workspace/workspace-right-panel-layout.test.ts features/parameter-input/validation.test.ts features/parameter-input/parameter-panel-source.test.ts features/diagram-editor/diagram-utils.test.ts` - passed
-- `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/terraform-leave-save-state.test.ts features/workspace/workspace-right-panel-layout.test.ts features/workspace/terraform-sync-proposals.test.ts features/workspace/workspace-deployment-artifacts.test.ts features/workspace/deployment-actions.test.ts` - passed
-- `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/terraform-diagnostic-line-highlights.test.ts features/workspace/workspace-right-panel-layout.test.ts features/workspace/terraform-panel-utils.test.ts features/workspace/terraform-sync-proposals.test.ts features/workspace/terraform-leave-save-state.test.ts` - passed
-- `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/terraform-sync-proposals.test.ts features/workspace/workspace-right-panel-layout.test.ts features/resource-settings/catalog.test.ts features/resource-settings/catalog-provider.test.ts features/diagram-editor/diagram-utils.test.ts` - passed
-- `pnpm --filter @sketchcatch/web typecheck` - passed
-- `pnpm catalog:check` - passed
-- `pnpm harness:check` - passed
-- `pnpm lint` - passed
+- `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-to-diagram.test.ts src/routes/terraform.test.ts src/services/terraform/diagram-to-terraform.test.ts src/services/terraform/infrastructure-graph.test.ts` - passed
+- `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/terraform-sync-proposals.test.ts features/workspace/terraform-diagnostic-line-highlights.test.ts features/workspace/workspace-right-panel-layout.test.ts features/workspace/workspace-ai-diagram-adapter.test.ts features/diagram-editor/diagram-utils.test.ts features/resource-settings/catalog.test.ts features/workspace/pre-deployment-diagnostics.test.ts features/parameter-input/validation.test.ts` - passed
+- `pnpm catalog:generate` - passed
+- `pnpm catalog:check` - passed after one transient Terraform AWS provider schema handshake retry
 - `pnpm typecheck` - passed
+- `pnpm lint` - passed
 - `pnpm build` - passed
+- `pnpm harness:check` - passed
 
 ## 아직 깨졌거나 미검증된 것
 
 - 기존 unrelated 변경 `DESIGN.md` 삭제 상태는 이번 작업에서 건드리지 않았다.
 - 기존 unrelated 변경 `apps/web/next-env.d.ts` 변경 상태는 이번 작업에서 건드리지 않았다.
 - 실제 Terraform apply/destroy, cloud mutation, Git/CI/CD handoff는 실행하지 않았다.
+- 브라우저 수동 smoke는 수행하지 않았다. 자동/단위/타입/빌드 검증으로 이번 구현 범위를 확인했다.
+- 하위 AI가 지적한 deployment safety preflight mismatch와 DeploymentPanel init 실패 후 stale PENDING state는 이번 아이콘/preview/editor 회귀 보강 범위 밖이라 후속 작업 후보로 남았다.
 - `HARNESS-007`: Representative Use Journey의 browser/API smoke는 아직 없다.
-- 브라우저 수동 smoke는 수행하지 않았다. 자동/단위/빌드 검증으로 이번 구현 범위를 확인했다.
 
 ## 다음으로 최선의 행동
 
-- 브라우저에서 VPC, EC2, S3, `data.aws_ami`를 포함한 workspace를 열어 Terraform Preview와 proposal panel을 수동 smoke한다.
-- Terraform editor에서 proposal 대기 상태를 만든 뒤 leave dialog의 `저장하고 나가기`, `계속 편집하기`, `저장하지 않고 나가기`를 수동 smoke한다.
-- Terraform editor에서 잘못된 Terraform 코드를 입력하고 검증 오류 줄의 빨간 underline/줄 번호 표시를 수동 smoke한다.
-- Terraform editor에서 Terraform-only resource/data create proposal을 승인한 뒤 S3/AMI 같은 노드의 실제 아이콘 표시를 수동 smoke한다.
-- 다음 조각을 진행한다면 proposal 승인 후 실제 diagram edge 추론 정책 또는 Terraform code -> resource 생성 UX를 별도 이슈로 다룬다.
+- 브라우저에서 CloudFront AI draft가 `AWS` fallback이 아니라 CloudFront icon으로 보이는지 수동 smoke한다.
+- Terraform editor에서 `aws_s3_bucket`, `data.aws_ami`, `aws_cloudfront_distribution` create proposal을 승인해 icon/size가 유지되는지 수동 smoke한다.
+- Multi-file Terraform에서 `network.tf` 오류가 `main.tf`에 표시되지 않고 해당 파일에서만 빨간줄로 보이는지 확인한다.
+- Proposal pending 상태에서 기존 VPC `cidr_block` 같은 same-identity value update가 proposal 승인과 무관하게 반영되는지 확인한다.
+- 별도 이슈로 pre-deployment artifact path와 backend artifact safety check 정렬을 검토한다.
 
 ## 건드리지 말아야 할 것
 

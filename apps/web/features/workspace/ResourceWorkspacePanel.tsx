@@ -11,6 +11,7 @@ import {
   Trash2
 } from "lucide-react";
 import type { DiagramEditorPanelContext } from "../diagram-editor";
+import { applyNodeParametersUpdateWithResourceLabel } from "../diagram-editor/diagram-utils";
 import { ParameterInputPanel, terraformParameterCatalog } from "../parameter-input";
 import { getResourceCardKeyboardActivation } from "./resource-card-interaction";
 import { buildResourceListItems } from "./resource-list-summary";
@@ -353,8 +354,8 @@ function switchTerraformBlockType(context: DiagramEditorPanelContext, node: Diag
 
 function duplicateResourceNode(context: DiagramEditorPanelContext, node: DiagramNode): void {
   const nextNodeId = createResourceNodeId(node.id);
-  const nextResourceName = node.parameters?.resourceName ? `${node.parameters.resourceName}_copy` : undefined;
-  const duplicatedNode: DiagramNode = {
+  const nextResourceName = createDuplicateResourceName(context.nodes, node);
+  const duplicatedNodeBase: DiagramNode = {
     ...node,
     id: nextNodeId,
     label: `${getNodeDisplayName(node)} copy`,
@@ -363,19 +364,52 @@ function duplicateResourceNode(context: DiagramEditorPanelContext, node: Diagram
       y: node.position.y + 36
     },
     zIndex: getNextResourceZIndex(context.nodes),
-    parameters: node.parameters
-      ? {
-          ...structuredClone(node.parameters),
-          resourceName: nextResourceName ?? node.parameters.resourceName
-        }
-      : undefined
+    parameters: node.parameters ? structuredClone(node.parameters) : undefined
   };
+  const duplicatedNode = node.parameters && nextResourceName
+    ? applyNodeParametersUpdateWithResourceLabel(
+        duplicatedNodeBase,
+        {
+          ...structuredClone(node.parameters),
+          resourceName: nextResourceName
+        }
+      )
+    : duplicatedNodeBase;
 
   context.applyDiagramJson({
     ...context.diagram,
     nodes: [...context.diagram.nodes, duplicatedNode]
   });
   context.focusResourceNode(nextNodeId);
+}
+
+function createDuplicateResourceName(
+  nodes: readonly DiagramNode[],
+  node: DiagramNode
+): string | undefined {
+  const resourceType = node.parameters?.resourceType;
+  const resourceName = node.parameters?.resourceName;
+
+  if (!resourceType || !resourceName) {
+    return undefined;
+  }
+
+  const usedNames = new Set(
+    nodes
+      .filter((candidate) => candidate.parameters?.resourceType === resourceType)
+      .map((candidate) => candidate.parameters?.resourceName)
+      .filter((candidateName): candidateName is string => Boolean(candidateName))
+  );
+  const baseName = resourceName.replace(/_copy(?:_\d+)?$/u, "") || "resource";
+  let candidate = `${baseName}_copy`;
+  let index = 2;
+
+  while (usedNames.has(candidate)) {
+    candidate = `${baseName}_copy_${index}`;
+    index += 1;
+  }
+
+  return candidate;
 }
 
 function deleteResourceNode(context: DiagramEditorPanelContext, nodeId: string): void {

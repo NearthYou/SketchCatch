@@ -81,7 +81,8 @@ function createTerraformDiagnosticKey(diagnostic: TerraformDiagnostic | null): s
     message: diagnostic.message,
     nodeId: diagnostic.nodeId ?? "",
     resourceAddress: diagnostic.resourceAddress ?? "",
-    severity: diagnostic.severity
+    severity: diagnostic.severity,
+    sourceFileName: diagnostic.sourceFileName ?? ""
   });
 }
 
@@ -168,6 +169,36 @@ function createTerraformPreviewExplanationScopeValue(
   };
 }
 
+async function validateTerraformVirtualFiles(
+  files: readonly TerraformVirtualFile[]
+): Promise<TerraformDiagnostic[]> {
+  const diagnosticsByFile = await Promise.all(
+    files
+      .filter((file) => file.code.trim().length > 0)
+      .map(async (file) => {
+        const validationResult = await validateTerraformCode(file.code);
+
+        return validationResult.diagnostics.map((diagnostic) =>
+          addTerraformDiagnosticSource(diagnostic, file.fileName)
+        );
+      })
+  );
+
+  return diagnosticsByFile.flat();
+}
+
+function addTerraformDiagnosticSource(
+  diagnostic: TerraformDiagnostic,
+  sourceFileName: string,
+  sourceLineOffset = 0
+): TerraformDiagnostic {
+  return {
+    ...diagnostic,
+    sourceFileName: diagnostic.sourceFileName ?? sourceFileName,
+    ...(diagnostic.line !== undefined ? { line: diagnostic.line + sourceLineOffset } : {})
+  };
+}
+
 export type PreparedTerraformArtifactSource = {
   readonly diagramJson: DiagramJson;
   readonly terraformCode: string;
@@ -222,6 +253,7 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
     useState<Record<string, TerraformErrorExplanationEntry>>({});
   const [codeScrollTop, setCodeScrollTop] = useState(0);
   const codeRequestIdRef = useRef(0);
+  const codeVersionRef = useRef(0);
   const isPreparingTerraformArtifactRef = useRef(false);
   const latestDiagramFingerprintRef = useRef("");
   const latestExternalDiscardRequestIdRef = useRef(externalDiscardRequestId);
@@ -281,6 +313,8 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
   }, [fileSearchQuery, terraformFileOptions]);
   const isResourceCodeMode = Boolean(inspectedNode && inspectedBlock);
   const displayedTerraformCode = inspectedBlock?.code ?? activeFileCode;
+  const displayedSourceFileName = inspectedBlock?.fileName ?? activeFileName;
+  const displayedSourceLineOffset = inspectedBlock ? inspectedBlock.startLine - 1 : 0;
   const highlightedBlock =
     !isResourceCodeMode && selectedBlock?.fileName === activeFileName ? selectedBlock : null;
   const terraformPreviewExplanationScope = useMemo(
@@ -314,9 +348,11 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
         codeLineCount: lineNumbers.length,
         lineHeight: TERRAFORM_EDITOR_LINE_HEIGHT,
         scrollTop: codeScrollTop,
+        sourceFileName: displayedSourceFileName,
+        sourceLineOffset: displayedSourceLineOffset,
         verticalPadding: TERRAFORM_EDITOR_VERTICAL_PADDING
       }),
-    [codeScrollTop, diagnostics, lineNumbers.length]
+    [codeScrollTop, diagnostics, displayedSourceFileName, displayedSourceLineOffset, lineNumbers.length]
   );
   const diagnosticLineNumberSet = useMemo(
     () => new Set(diagnosticLineHighlights.map((highlight) => highlight.line)),
@@ -436,6 +472,7 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
         }
 
         const nextFiles = createTerraformFilesFromGeneratedCode(context.diagram, generatedCode);
+        codeVersionRef.current += 1;
         setTerraformFiles(nextFiles);
         setActiveFileName((currentFileName) =>
           nextFiles.some((file) => file.fileName === currentFileName) ? currentFileName : "main.tf"
@@ -459,11 +496,17 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
   );
 
   const syncTerraformCodeToDiagram = useCallback(async (): Promise<PreparedTerraformArtifactSource | null> => {
-    const validationResult = await validateTerraformCode(combinedTerraformCode);
-    setDiagnostics(validationResult.diagnostics);
-    onDiagnosticsChange(validationResult.diagnostics);
+    const requestCodeVersion = codeVersionRef.current;
+    const validationDiagnostics = await validateTerraformVirtualFiles(terraformFiles);
 
-    const validationError = validationResult.diagnostics.find(
+    if (requestCodeVersion !== codeVersionRef.current) {
+      return null;
+    }
+
+    setDiagnostics(validationDiagnostics);
+    onDiagnosticsChange(validationDiagnostics);
+
+    const validationError = validationDiagnostics.find(
       (diagnostic) => diagnostic.severity === "error"
     );
 
@@ -481,6 +524,11 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
         terraformCode: file.code
       }))
     });
+
+    if (requestCodeVersion !== codeVersionRef.current) {
+      return null;
+    }
+
     setDiagnostics(syncResult.diagnostics);
     onDiagnosticsChange(syncResult.diagnostics);
 
@@ -494,6 +542,8 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
     }
 
     if (syncResult.proposals && syncResult.proposals.length > 0) {
+      context.applyDiagramJson(syncResult.diagramJson);
+      latestDiagramFingerprintRef.current = toTerraformRefreshFingerprint(syncResult.diagramJson);
       setPendingTerraformSync({
         approvedProposalIds: new Set(),
         diagramJson: syncResult.diagramJson,
@@ -554,18 +604,25 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
     setErrorMessage("");
 
     try {
-      const validationResult = await validateTerraformCode(combinedTerraformCode);
-      setDiagnostics(validationResult.diagnostics);
-      onDiagnosticsChange(validationResult.diagnostics);
-      setStatusMessage(validationResult.diagnostics.length === 0 ? "검증 완료" : "진단 확인 필요");
+      const requestCodeVersion = codeVersionRef.current;
+      const validationDiagnostics = await validateTerraformVirtualFiles(terraformFiles);
+
+      if (requestCodeVersion !== codeVersionRef.current) {
+        setRequestState("idle");
+        return [];
+      }
+
+      setDiagnostics(validationDiagnostics);
+      onDiagnosticsChange(validationDiagnostics);
+      setStatusMessage(validationDiagnostics.length === 0 ? "검증 완료" : "진단 확인 필요");
       setRequestState("idle");
-      return validationResult.diagnostics;
+      return validationDiagnostics;
     } catch (error) {
       setRequestState("error");
       setErrorMessage(getApiErrorMessage(error, "Terraform 코드를 검증하지 못했습니다."));
       throw error;
     }
-  }, [combinedTerraformCode, hasTerraformCode, onDiagnosticsChange, requestState]);
+  }, [hasTerraformCode, onDiagnosticsChange, requestState, terraformFiles]);
 
   useImperativeHandle(ref, () => ({
     prepareTerraformArtifact: async () => {
@@ -728,6 +785,7 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
   }
 
   function handleCodeChange(nextCode: string): void {
+    codeVersionRef.current += 1;
     setTerraformFiles((currentFiles) =>
       currentFiles.map((file) => {
         if (inspectedBlock && file.fileName === inspectedBlock.fileName) {
@@ -757,6 +815,8 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
     setTerraformPreviewExplanationState("idle");
     setExplainedTerraformPreviewKey("");
     setTerraformErrorExplanationsByKey({});
+    setDiagnostics([]);
+    onDiagnosticsChange([]);
     setPendingTerraformSync(null);
     setStatusMessage("수정 중");
   }
@@ -842,10 +902,20 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
     }
 
     await runRequest(async () => {
+      const requestCodeVersion = codeVersionRef.current;
       const validationResult = await validateTerraformCode(displayedTerraformCode);
-      setDiagnostics(validationResult.diagnostics);
-      onDiagnosticsChange(validationResult.diagnostics);
-      setStatusMessage(validationResult.diagnostics.length === 0 ? "검증 완료" : "진단 확인 필요");
+
+      if (requestCodeVersion !== codeVersionRef.current) {
+        return;
+      }
+
+      const validationDiagnostics = validationResult.diagnostics.map((diagnostic) =>
+        addTerraformDiagnosticSource(diagnostic, displayedSourceFileName, displayedSourceLineOffset)
+      );
+
+      setDiagnostics(validationDiagnostics);
+      onDiagnosticsChange(validationDiagnostics);
+      setStatusMessage(validationDiagnostics.length === 0 ? "검증 완료" : "진단 확인 필요");
     }, "Terraform 코드를 검증하지 못했습니다.");
   }
 

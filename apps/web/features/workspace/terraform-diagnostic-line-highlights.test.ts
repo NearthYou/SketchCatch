@@ -44,3 +44,42 @@ test("createTerraformDiagnosticLineHighlights ignores diagnostics outside the di
     [{ line: 1, style: { top: "29.2px" } }]
   );
 });
+
+test("createTerraformDiagnosticLineHighlights filters diagnostics by displayed source file", () => {
+  assert.deepEqual(
+    createTerraformDiagnosticLineHighlights(
+      [
+        { line: 1, message: "network error", severity: "error", sourceFileName: "network.tf" },
+        { line: 1, message: "compute error", severity: "error", sourceFileName: "compute.tf" }
+      ],
+      {
+        codeLineCount: 2,
+        lineHeight: 20,
+        scrollTop: 0,
+        sourceFileName: "compute.tf",
+        verticalPadding: 12
+      }
+    ),
+    [{ line: 1, style: { top: "30px" } }]
+  );
+});
+
+test("createTerraformDiagnosticLineHighlights maps source file lines to resource code lines", () => {
+  assert.deepEqual(
+    createTerraformDiagnosticLineHighlights(
+      [
+        { line: 8, message: "inside block", severity: "error", sourceFileName: "network.tf" },
+        { line: 3, message: "outside block", severity: "error", sourceFileName: "network.tf" }
+      ],
+      {
+        codeLineCount: 3,
+        lineHeight: 20,
+        scrollTop: 0,
+        sourceFileName: "network.tf",
+        sourceLineOffset: 6,
+        verticalPadding: 12
+      }
+    ),
+    [{ line: 2, style: { top: "50px" } }]
+  );
+});

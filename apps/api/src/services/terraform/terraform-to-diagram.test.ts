@@ -290,6 +290,8 @@ test("returns rename proposals for deterministic same-type value matches", () =>
         resourceType: "aws_vpc",
         resourceName: "renamed"
       },
+      sourceFileName: "main.tf",
+      line: 1,
       nodeId: "node-1",
       resourceAddress: "aws_vpc.main"
     }
@@ -566,6 +568,7 @@ test("rejects duplicate block addresses across Terraform files", () => {
 
   assert.equal(result.diagramJson, diagramJson);
   assert.equal(result.diagnostics[0]?.code, "terraform.sync.duplicate_address");
+  assert.equal(result.diagnostics[0]?.sourceFileName, "compute.tf");
   assert.equal(result.diagnostics[0]?.resourceAddress, "aws_vpc.main");
 });
 
@@ -761,6 +764,67 @@ test("syncs route table association references into camelCase values", () => {
     subnetId: "aws_subnet.public.id",
     routeTableId: "aws_route_table.public.id"
   });
+});
+
+test("returns delete proposals for syncable diagram-only network resources", () => {
+  const diagramJson: DiagramJson = {
+    nodes: [
+      makeNode({
+        id: "vpc-1",
+        type: "aws_vpc",
+        kind: "resource",
+        label: "main",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_vpc",
+          resourceName: "main",
+          fileName: "network",
+          values: {
+            cidrBlock: "10.0.0.0/16"
+          }
+        }
+      }),
+      makeNode({
+        id: "route-table-1",
+        type: "aws_route_table",
+        kind: "resource",
+        label: "public",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_route_table",
+          resourceName: "public",
+          fileName: "network",
+          values: {
+            vpcId: "aws_vpc.main.id"
+          }
+        }
+      })
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+
+  const result = syncTerraformToDiagramJson(
+    diagramJson,
+    `resource "aws_vpc" "main" {
+  cidr_block = "10.1.0.0/16"
+}`
+  );
+
+  assert.deepEqual(result.diagnostics, []);
+  assert.equal(result.diagramJson.nodes[0]?.parameters?.values.cidrBlock, "10.1.0.0/16");
+  assert.deepEqual(result.proposals, [
+    {
+      kind: "delete_candidate",
+      identity: {
+        terraformBlockType: "resource",
+        resourceType: "aws_route_table",
+        resourceName: "public"
+      },
+      nodeId: "route-table-1",
+      resourceAddress: "aws_route_table.public"
+    }
+  ]);
 });
 
 test("reports the block header line when a block is not closed", () => {

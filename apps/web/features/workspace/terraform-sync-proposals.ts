@@ -98,7 +98,9 @@ function applyCreateProposal(
     type: proposal.identity.resourceType,
     kind: "resource",
     position: getNextCreatedNodePosition(diagramJson.nodes.length),
-    size: catalogResource?.nodeDefaults.size ?? DEFAULT_CREATED_NODE_SIZE,
+    size: catalogResource
+      ? { ...catalogResource.nodeDefaults.size }
+      : { ...DEFAULT_CREATED_NODE_SIZE },
     label: proposal.identity.resourceName,
     ...(catalogResource ? { iconUrl: catalogResource.iconUrl } : {}),
     locked: false,
@@ -107,7 +109,8 @@ function applyCreateProposal(
       ...proposal.parameters,
       terraformBlockType: proposal.identity.terraformBlockType,
       resourceType: proposal.identity.resourceType,
-      resourceName: proposal.identity.resourceName
+      resourceName: proposal.identity.resourceName,
+      values: cloneParameterValue(proposal.parameters.values)
     }
   };
 
@@ -165,7 +168,8 @@ function applyRenameProposal(
           ...node.parameters,
           terraformBlockType: proposal.to.terraformBlockType,
           resourceType: proposal.to.resourceType,
-          resourceName: proposal.to.resourceName
+          resourceName: proposal.to.resourceName,
+          fileName: proposal.sourceFileName ?? node.parameters.fileName
         }
       };
     }),

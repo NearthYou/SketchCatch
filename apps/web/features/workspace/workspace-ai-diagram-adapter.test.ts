@@ -69,6 +69,11 @@ test("convertArchitectureJsonToDiagramJson creates board nodes and edges from an
           terraformBlockType: "resource",
           values: {
             cidrBlock: "10.0.0.0/16",
+            enableDnsSupport: true,
+            enableDnsHostnames: true,
+            tags: {
+              Name: "vpc"
+            },
             terraformResourceName: "main"
           }
         },
@@ -91,7 +96,10 @@ test("convertArchitectureJsonToDiagramJson creates board nodes and edges from an
           resourceType: "aws_instance",
           terraformBlockType: "resource",
           values: {
-            instanceType: "t3.micro"
+            instanceType: "t3.micro",
+            tags: {
+              Name: "ec2_instance"
+            }
           }
         },
         position: { x: 360, y: 220 },
@@ -119,6 +127,35 @@ test("convertArchitectureJsonToDiagramJson creates board nodes and edges from an
     }
   ]);
   assert.deepEqual(diagramJson.viewport, { x: 0, y: 0, zoom: 1 });
+});
+
+test("convertArchitectureJsonToDiagramJson uses catalog icon and size for CloudFront drafts", () => {
+  const architectureJson: ArchitectureJson = {
+    nodes: [
+      {
+        id: "cloudfront-site",
+        type: "CLOUDFRONT",
+        label: "CloudFront CDN",
+        positionX: 120,
+        positionY: 80,
+        config: {
+          originResourceId: "s3-site"
+        }
+      }
+    ],
+    edges: []
+  };
+
+  const diagramJson = convertArchitectureJsonToDiagramJson(architectureJson);
+  const cloudFrontNode = diagramJson.nodes[0];
+
+  assert.equal(cloudFrontNode?.type, "aws_cloudfront_distribution");
+  assert.equal(
+    cloudFrontNode?.iconUrl,
+    "/Architecture-Service-Icons_07312025/Arch_Networking-Content-Delivery/64/Arch_Amazon-CloudFront_64.svg"
+  );
+  assert.deepEqual(cloudFrontNode?.size, { width: 112, height: 112 });
+  assert.equal(cloudFrontNode?.parameters?.resourceName, "cloudfront_site");
 });
 
 test("convertArchitectureJsonToDiagramJson marks VPC and Subnet containment for board area nodes", () => {
