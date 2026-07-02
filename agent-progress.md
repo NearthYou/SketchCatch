@@ -15,6 +15,35 @@
 
 ## 세션 레코드
 
+### 2026-07-02 - 기본 IaC 파라미터 skeleton 자동 생성
+
+- Goal: 캔버스 리소스 추가 시 Terraform Preview가 읽을 수 있는 최소 `parameters.values` skeleton을 자동 생성한다.
+- Completed:
+  - `aws_vpc`, `aws_subnet`, `aws_security_group`, `aws_instance`, `aws_s3_bucket`에 Preview skeleton subset 기본값을 추가했다.
+  - `aws_ami`와 범위 밖 리소스는 기존처럼 `values: {}`를 유지하게 했다.
+  - `aws_security_group`에는 공개 `ingress`를 자동 생성하지 않고 기본 `egress`만 생성하게 했다.
+  - `aws_instance`의 `ami`, `subnetId`, `vpcSecurityGroupIds`와 S3 `bucket` 이름처럼 target 또는 사용자 확정이 필요한 값은 자동 생성하지 않게 했다.
+  - `parameters.values` nested 객체/배열을 deep clone해 copy/paste 후 원본과 공유되지 않게 했다.
+  - copy/paste 또는 resource name 변경 시 기존 resource name과 같던 자동 `tags.Name`만 새 이름으로 갱신하고 사용자 수정값은 보존하게 했다.
+- Verification run:
+  - `pnpm harness:check` - passed
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/diagram-utils.test.ts` - passed
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/diagram-utils.test.ts features/diagram-editor/reference-drop-targets.test.ts features/diagram-editor/drag-transaction.test.ts` - passed
+  - `pnpm lint` - passed
+  - `pnpm typecheck` - passed
+  - `pnpm build` - passed
+- Evidence recorded:
+  - 테스트를 먼저 실패시키고 구현 후 통과시키는 TDD 흐름으로 skeleton 생성, 제외 리소스, design node, deep clone, 자동 태그 동기화/보존을 검증했다.
+  - 실제 Terraform apply/destroy, cloud mutation, Git/CI/CD handoff는 실행하지 않았다.
+  - frontend helper만 수정했으며 API route, DB/RDS/S3 저장 계약, Terraform renderer 출력 정책은 변경하지 않았다.
+- Commits:
+  - `f4f3217 Feat: 리소스 기본 파라미터 skeleton 생성`
+  - `d169035 Fix: 파라미터 복사와 이름 변경 보존 정책 적용`
+- Known risks:
+  - 기존 unrelated worktree change remains: `DESIGN.md` 삭제 상태.
+- Next best action:
+  - Terraform Preview 화면에서 subset 리소스를 실제로 추가해 사용자가 보는 파라미터 패널/Preview 표시가 기대와 맞는지 수동 smoke를 수행한다.
+
 ### 2026-07-02 - 중복 상세 기획 문서 정리
 
 - Goal: 별도 재구성본을 제거하고 상세 기획서는 canonical 상세 기획서 하나로 유지한다.
