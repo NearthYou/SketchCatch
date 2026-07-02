@@ -13,6 +13,8 @@
 - rename proposal은 같은 `terraformBlockType/resourceType/normalized values` 그룹에서 diagram-only 1개와 terraform-only 1개가 정확히 한 쌍일 때만 생성된다.
 - Frontend proposal 적용은 사용자가 체크한 proposal만 반영하며, 미반영 proposal이 남으면 dirty/pending 상태를 유지한다.
 - `docs/data-models.md`, `docs/jh/기타/008_...AI작업지시서_JH.md`, `docs/jh/기타/009_...사람용설명_JH.md`가 실제 구현 결과에 맞게 갱신됐다.
+- Terraform leave dialog의 `저장하고 나가기`는 저장 실패/검증 오류/proposal 대기 시 더 이상 무반응처럼 보이지 않고, 다이얼로그 안에 차단 안내를 표시한다.
+- Terraform leave dialog 저장 중에는 버튼을 잠가 중복 저장과 race를 줄인다.
 - `feature_list.json`에는 동시에 `in_progress`인 항목이 없다.
 
 ## 이번 세션의 변경 사항
@@ -22,6 +24,7 @@
 - API proposal 생성은 unsupported/parser error/duplicate identity에서 자동 반영하지 않고 diagnostics를 반환한다.
 - Web parameter panel에서 Advanced Parameters UI를 제거하고 nested `list`/`set` block 반복 렌더링을 보강했다.
 - Web Terraform panel은 여러 Terraform file을 sync API에 전달하고, structural proposal은 pending panel에서 명시 선택 후 반영한다.
+- Web Terraform leave dialog에 저장 상태 모델과 status/alert 피드백 UI를 추가했다.
 - 하위 AI 리뷰 6개 축에서 나온 blocking 피드백을 반영했다.
   - Preview 지원 범위와 proposal 지원 범위를 문서에서 분리했다.
   - ambiguous rename과 object key order 문제를 수정했다.
@@ -32,6 +35,8 @@
 
 - `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-identity.test.ts src/services/terraform/infrastructure-graph.test.ts src/services/terraform/diagram-to-terraform.test.ts src/services/terraform/terraform-to-diagram.test.ts src/routes/terraform.test.ts` - passed
 - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/terraform-sync-proposals.test.ts features/workspace/terraform-panel-utils.test.ts features/workspace/workspace-right-panel-layout.test.ts features/parameter-input/validation.test.ts features/parameter-input/parameter-panel-source.test.ts features/diagram-editor/diagram-utils.test.ts` - passed
+- `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/terraform-leave-save-state.test.ts features/workspace/workspace-right-panel-layout.test.ts features/workspace/terraform-sync-proposals.test.ts features/workspace/workspace-deployment-artifacts.test.ts features/workspace/deployment-actions.test.ts` - passed
+- `pnpm --filter @sketchcatch/web typecheck` - passed
 - `pnpm catalog:check` - passed
 - `pnpm harness:check` - passed
 - `pnpm lint` - passed
@@ -41,6 +46,7 @@
 ## 아직 깨졌거나 미검증된 것
 
 - 기존 unrelated 변경 `DESIGN.md` 삭제 상태는 이번 작업에서 건드리지 않았다.
+- 기존 unrelated 변경 `apps/web/next-env.d.ts` 변경 상태는 이번 작업에서 건드리지 않았다.
 - 실제 Terraform apply/destroy, cloud mutation, Git/CI/CD handoff는 실행하지 않았다.
 - `HARNESS-007`: Representative Use Journey의 browser/API smoke는 아직 없다.
 - 브라우저 수동 smoke는 수행하지 않았다. 자동/단위/빌드 검증으로 이번 구현 범위를 확인했다.
@@ -48,6 +54,7 @@
 ## 다음으로 최선의 행동
 
 - 브라우저에서 VPC, EC2, S3, `data.aws_ami`를 포함한 workspace를 열어 Terraform Preview와 proposal panel을 수동 smoke한다.
+- Terraform editor에서 proposal 대기 상태를 만든 뒤 leave dialog의 `저장하고 나가기`, `계속 편집하기`, `저장하지 않고 나가기`를 수동 smoke한다.
 - 다음 조각을 진행한다면 proposal 승인 후 실제 diagram edge 추론 정책 또는 Terraform code -> resource 생성 UX를 별도 이슈로 다룬다.
 
 ## 건드리지 말아야 할 것

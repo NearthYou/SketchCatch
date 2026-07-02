@@ -1823,6 +1823,25 @@
   margin: 0;
 }
 
+.terraformDialogStatus,
+.terraformDialogError {
+  border-radius: 7px;
+  font-size: 13px;
+  padding: 10px 12px;
+}
+
+.terraformDialogStatus {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1d4ed8;
+}
+
+.terraformDialogError {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+}
+
 .terraformDialogActions {
   display: grid;
   gap: 10px;
@@ -1840,6 +1859,13 @@
   font-size: 12px;
   min-height: 34px;
   padding: 0 12px;
+}
+
+.terraformDialogDangerButton:disabled,
+.terraformDialogSecondaryButton:disabled,
+.terraformDialogPrimaryButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
 }
 
 .terraformDialogDangerButton {

@@ -27,6 +27,12 @@ import {
   saveWorkspaceTerraformArtifact,
   type SavedWorkspaceTerraformArtifact
 } from "./workspace-deployment-artifacts";
+import {
+  createTerraformLeaveSaveStartFeedback,
+  resolveTerraformLeaveSaveCompletion,
+  type TerraformLeaveSaveFeedback,
+  type TerraformLeaveSaveState
+} from "./terraform-leave-save-state";
 import { toDeploymentBaselineFingerprint } from "./terraform-panel-utils";
 import type { ResourceWorkspaceView, WorkspaceRightPanelView } from "./workspace-right-panel.types";
 import styles from "./workspace.module.css";
@@ -57,6 +63,9 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
   const [lastSavedDeploymentBaselineFingerprint, setLastSavedDeploymentBaselineFingerprint] =
     useState<string | null>(null);
   const [showTerraformLeaveDialog, setShowTerraformLeaveDialog] = useState(false);
+  const [terraformLeaveSaveState, setTerraformLeaveSaveState] =
+    useState<TerraformLeaveSaveState>("idle");
+  const [terraformLeaveSaveMessage, setTerraformLeaveSaveMessage] = useState("");
   const [terraformSaveRequestId, setTerraformSaveRequestId] = useState(0);
   const [terraformDiscardRequestId, setTerraformDiscardRequestId] = useState(0);
   const [terraformDiagnostics, setTerraformDiagnostics] = useState<TerraformDiagnostic[]>([]);
@@ -83,6 +92,8 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
     }
 
     pendingTerraformLeaveActionRef.current = action;
+    setTerraformLeaveSaveState("idle");
+    setTerraformLeaveSaveMessage("");
     setShowTerraformLeaveDialog(true);
     return false;
   }, [hasUnsavedTerraformChanges]);
@@ -134,29 +145,53 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
     setActiveView(nextView);
   }, [activeView, requestTerraformLeave]);
 
+  const applyTerraformLeaveSaveFeedback = useCallback((feedback: TerraformLeaveSaveFeedback): void => {
+    setTerraformLeaveSaveState(feedback.state);
+    setTerraformLeaveSaveMessage(feedback.message);
+  }, []);
+
+  const resetTerraformLeaveSaveFeedback = useCallback((): void => {
+    setTerraformLeaveSaveState("idle");
+    setTerraformLeaveSaveMessage("");
+  }, []);
+
   function continueTerraformEditing(): void {
     pendingTerraformLeaveActionRef.current = null;
+    resetTerraformLeaveSaveFeedback();
     setShowTerraformLeaveDialog(false);
   }
 
   function discardTerraformChanges(): void {
     setTerraformDiscardRequestId((requestId) => requestId + 1);
     setHasUnsavedTerraformChanges(false);
+    resetTerraformLeaveSaveFeedback();
     setShowTerraformLeaveDialog(false);
     runPendingTerraformLeaveAction();
   }
 
   function saveTerraformBeforeLeaving(): void {
+    if (terraformLeaveSaveState === "saving") {
+      return;
+    }
+
+    applyTerraformLeaveSaveFeedback(createTerraformLeaveSaveStartFeedback());
     setTerraformSaveRequestId((requestId) => requestId + 1);
   }
 
   function handleTerraformExternalSaveComplete(saved: boolean): void {
-    if (!saved || !showTerraformLeaveDialog) {
+    if (!showTerraformLeaveDialog) {
+      return;
+    }
+
+    const feedback = resolveTerraformLeaveSaveCompletion(saved);
+    applyTerraformLeaveSaveFeedback(feedback);
+
+    if (!feedback.canRunPendingAction) {
       return;
     }
 
     setHasUnsavedTerraformChanges(false);
-    setShowTerraformLeaveDialog(false);
+    setShowTerraformLeaveDialog(feedback.shouldKeepDialogOpen);
     runPendingTerraformLeaveAction();
   }
 
@@ -238,12 +273,13 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
       event.stopPropagation();
       event.stopImmediatePropagation();
       pendingTerraformLeaveActionRef.current = { kind: "replay-click", target: replayTarget };
+      resetTerraformLeaveSaveFeedback();
       setShowTerraformLeaveDialog(true);
     }
 
     document.addEventListener("click", handleDocumentClick, true);
     return () => document.removeEventListener("click", handleDocumentClick, true);
-  }, [hasUnsavedTerraformChanges]);
+  }, [hasUnsavedTerraformChanges, resetTerraformLeaveSaveFeedback]);
 
   useEffect(() => {
     if (!hasUnsavedTerraformChanges) {
@@ -436,6 +472,8 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
           onContinue={continueTerraformEditing}
           onDiscard={discardTerraformChanges}
           onSave={saveTerraformBeforeLeaving}
+          saveMessage={terraformLeaveSaveMessage}
+          saveState={terraformLeaveSaveState}
         />
       ) : null}
     </aside>

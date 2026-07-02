@@ -15,6 +15,34 @@
 
 ## 세션 레코드
 
+### 2026-07-03 - Terraform leave dialog 저장 실패 피드백 수정
+
+- Goal: Terraform 변경사항이 있는 상태에서 나가기 다이얼로그의 `저장하고 나가기`를 눌러도 검증 오류나 proposal 대기 때문에 저장이 실패하면 아무 반응이 없어 보이는 버그를 코드리뷰와 시나리오 테스트로 잡는다.
+- Completed:
+  - `TerraformCodePanel`의 external save가 `false`를 반환하는 경로가 부모 다이얼로그에서 조용히 무시되는 문제를 확인했다.
+  - `terraform-leave-save-state` 상태 모델을 추가해 저장 시작, 저장 성공, 저장 차단 상태를 테스트 가능한 순수 함수로 분리했다.
+  - `WorkspaceRightPanel`이 저장 실패 시 다이얼로그를 닫지 않고 "Terraform 패널의 오류나 변경 제안 확인" 안내를 표시하게 했다.
+  - 저장 중에는 다이얼로그 버튼을 잠가 중복 저장이나 저장 완료 후 의도치 않은 pending action 실행 가능성을 줄였다.
+  - `TerraformLeaveDialog`에 `status`/`alert` 피드백 영역을 추가했다.
+- Verification run:
+  - Red before fix: `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/terraform-leave-save-state.test.ts features/workspace/workspace-right-panel-layout.test.ts` - failed because the save feedback module/state did not exist.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/terraform-leave-save-state.test.ts features/workspace/workspace-right-panel-layout.test.ts` - passed
+  - `pnpm --filter @sketchcatch/web typecheck` - passed
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/terraform-leave-save-state.test.ts features/workspace/workspace-right-panel-layout.test.ts features/workspace/terraform-sync-proposals.test.ts features/workspace/workspace-deployment-artifacts.test.ts features/workspace/deployment-actions.test.ts` - passed
+  - `pnpm harness:check` - passed
+  - `pnpm lint` - passed
+  - `pnpm typecheck` - passed
+  - `pnpm build` - passed
+- Evidence recorded:
+  - 저장 성공은 pending leave action을 실행하고 다이얼로그를 닫는다.
+  - 저장 실패, 검증 오류, proposal 대기, 이미 loading 중인 저장 차단은 다이얼로그를 유지하고 사용자에게 다음 행동을 보여준다.
+  - 실제 Terraform apply/destroy, cloud mutation, Git/CI/CD handoff는 실행하지 않았다.
+- Known risks:
+  - 브라우저 수동 smoke는 수행하지 않았다. 자동/단위/소스/타입/빌드 검증으로 확인했다.
+  - 기존 unrelated worktree changes remain: `DESIGN.md` 삭제 상태, `apps/web/next-env.d.ts` 변경 상태.
+- Next best action:
+  - 브라우저에서 Terraform editor에 구조 변경 Terraform을 입력한 뒤 proposal 발생 상태에서 `저장하고 나가기`, `계속 편집하기`, `저장하지 않고 나가기`를 수동 smoke한다.
+
 ### 2026-07-03 - InfrastructureGraph Workspace 동기화 v1 구현
 
 - Goal: `docs/jh/기타/008_InfrastructureGraphWorkspace동기화v1_AI작업지시서_JH.md` 기준으로 InfrastructureGraph 중심 Workspace 동기화 v1 기능을 구현하고 하위 AI 리뷰와 테스트로 검증한다.

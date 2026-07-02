@@ -132,6 +132,22 @@ test("terraform leave dialog uses Korean copy", () => {
   assert.doesNotMatch(terraformLeaveDialogSource, /Discard Changes/);
 });
 
+test("terraform leave dialog exposes blocked save feedback instead of ignoring failed saves", () => {
+  assert.match(componentSource, /terraformLeaveSaveState/);
+  assert.match(componentSource, /terraformLeaveSaveMessage/);
+  assert.match(componentSource, /createTerraformLeaveSaveStartFeedback/);
+  assert.match(componentSource, /resolveTerraformLeaveSaveCompletion/);
+  assert.match(componentSource, /setTerraformLeaveSaveState\(feedback\.state\)/);
+  assert.match(componentSource, /setTerraformLeaveSaveMessage\(feedback\.message\)/);
+  assert.match(componentSource, /saveState=\{terraformLeaveSaveState\}/);
+  assert.match(componentSource, /saveMessage=\{terraformLeaveSaveMessage\}/);
+  assert.match(terraformLeaveDialogSource, /saveState === "saving"/);
+  assert.match(terraformLeaveDialogSource, /saveState === "blocked"/);
+  assert.match(terraformLeaveDialogSource, /role=\{saveState === "blocked" \? "alert" : "status"\}/);
+  assert.match(terraformLeaveDialogSource, /저장 중/);
+  assert.match(terraformLeaveDialogSource, /disabled=\{isSaving\}/);
+});
+
 test("deployment expanded logs use a single terminal scrollbar", () => {
   const expandedLogsRule = getCssRule(stylesSource, "deploymentExpandedLogs");
   const expandedLogSectionRule = getDescendantCssRule(
