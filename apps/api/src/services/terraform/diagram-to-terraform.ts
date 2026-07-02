@@ -8,7 +8,7 @@ import { buildInfrastructureGraphFromDiagramJson } from "./infrastructure-graph.
 
 const DEFAULT_TERRAFORM_BLOCK_TYPE: TerraformBlockType = "resource";
 const INDENT_UNIT = "  ";
-const HCL_IDENTIFIER_PATTERN = /^[a-zA-Z_][a-zA-Z0-9_-]*$/;
+export const TERRAFORM_IDENTIFIER_PATTERN = /^[a-zA-Z_][a-zA-Z0-9_-]*$/;
 const TERRAFORM_REFERENCE_PATTERN =
   /^(?:var|local|each|count|path|terraform)\.[a-zA-Z_][a-zA-Z0-9_]*$|^module\.[a-zA-Z0-9_]+\.[a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)*$|^aws_[a-zA-Z0-9_]+\.[a-zA-Z0-9_]+\.[a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)*$|^data\.aws_[a-zA-Z0-9_]+\.[a-zA-Z0-9_]+\.[a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)*$/;
 const TERRAFORM_NESTED_BLOCK_ATTRIBUTES: Record<string, ReadonlySet<string>> = {
@@ -31,6 +31,9 @@ export function renderTerraformFromInfrastructureGraph(graph: InfrastructureGrap
 // resource/data block 하나를 만든다. 예: resource "aws_vpc" "main" { ... }
 function renderBlock(node: InfrastructureGraphNode): string {
   const terraformBlockType = node.iac.terraformBlockType ?? DEFAULT_TERRAFORM_BLOCK_TYPE;
+  assertTerraformIdentifier(node.iac.resourceType, "resource type");
+  assertTerraformIdentifier(node.iac.resourceName, "resource name");
+
   const body = Object.entries(node.config).flatMap(([key, value]) =>
     renderBodyEntry(node.iac.resourceType, key, value, 1)
   );
@@ -119,9 +122,12 @@ function renderNestedBlocks(
   values: Record<string, unknown>[],
   indentLevel: number
 ): string[] {
+  const blockName = toSnakeCase(key);
+  assertTerraformIdentifier(blockName, "nested block name");
+
   return values.map((value) =>
     [
-      `${indent(indentLevel)}${toSnakeCase(key)} {`,
+      `${indent(indentLevel)}${blockName} {`,
       ...Object.entries(value).flatMap(([nestedKey, nestedValue]) =>
         renderNestedBlockEntry(nestedKey, nestedValue, indentLevel + 1)
       ),
@@ -140,7 +146,10 @@ function renderNestedBlockEntry(key: string, value: unknown, indentLevel: number
 
 // DiagramJson의 top-level values key/value 하나를 Terraform attribute 한 줄로 바꾼다.
 function renderAttribute(key: string, value: unknown, indentLevel: number): string {
-  return `${indent(indentLevel)}${toSnakeCase(key)} = ${renderValue(value, indentLevel)}`;
+  const attributeName = toSnakeCase(key);
+  assertTerraformIdentifier(attributeName, "attribute name");
+
+  return `${indent(indentLevel)}${attributeName} = ${renderValue(value, indentLevel)}`;
 }
 
 // JavaScript 값을 Terraform HCL 값 표현으로 바꾼다.
@@ -200,7 +209,7 @@ function renderObject(value: Record<string, unknown>, indentLevel: number): stri
 }
 
 function renderObjectKey(key: string): string {
-  return HCL_IDENTIFIER_PATTERN.test(key) ? key : JSON.stringify(key);
+  return TERRAFORM_IDENTIFIER_PATTERN.test(key) ? key : JSON.stringify(key);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -222,4 +231,18 @@ function toSnakeCase(value: string): string {
 
 function indent(level: number): string {
   return INDENT_UNIT.repeat(level);
+}
+
+function assertTerraformIdentifier(value: string, label: string): void {
+  if (TERRAFORM_IDENTIFIER_PATTERN.test(value)) {
+    return;
+  }
+
+  const error = new Error(`Invalid Terraform ${label}: ${value}`) as Error & {
+    errorCode: "bad_request";
+    statusCode: number;
+  };
+  error.errorCode = "bad_request";
+  error.statusCode = 400;
+  throw error;
 }

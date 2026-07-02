@@ -234,6 +234,70 @@ test("defaults missing terraformBlockType to resource", () => {
   );
 });
 
+test("rejects unsafe Terraform block labels before rendering HCL", () => {
+  const diagramJson: DiagramJson = {
+    nodes: [
+      makeNode({
+        id: "node-1",
+        type: "aws_instance",
+        kind: "resource",
+        label: "web",
+        parameters: {
+          resourceType: "aws_instance",
+          resourceName: `web" {\n}\nresource "aws_s3_bucket" "owned`,
+          fileName: "main",
+          values: {
+            ami: "ami-1234567890abcdef0"
+          }
+        }
+      })
+    ],
+    edges: [],
+    viewport: {
+      x: 0,
+      y: 0,
+      zoom: 1
+    }
+  };
+
+  assert.throws(
+    () => generateTerraformFromDiagramJson(diagramJson),
+    /Invalid Terraform resource name/
+  );
+});
+
+test("rejects unsafe Terraform attribute keys before rendering HCL", () => {
+  const diagramJson: DiagramJson = {
+    nodes: [
+      makeNode({
+        id: "node-1",
+        type: "aws_instance",
+        kind: "resource",
+        label: "web",
+        parameters: {
+          resourceType: "aws_instance",
+          resourceName: "web",
+          fileName: "main",
+          values: {
+            [`ami"\nresource "aws_s3_bucket" "owned"`]: "ami-1234567890abcdef0"
+          }
+        }
+      })
+    ],
+    edges: [],
+    viewport: {
+      x: 0,
+      y: 0,
+      zoom: 1
+    }
+  };
+
+  assert.throws(
+    () => generateTerraformFromDiagramJson(diagramJson),
+    /Invalid Terraform attribute name/
+  );
+});
+
 test("renders data blocks", () => {
   const diagramJson: DiagramJson = {
     nodes: [

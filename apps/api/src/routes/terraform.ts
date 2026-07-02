@@ -9,7 +9,10 @@ import type {
 } from "@sketchcatch/types";
 import { requireActiveUserId } from "../auth/current-user.js";
 import { getDatabaseClient, type DatabaseClient } from "../db/client.js";
-import { generateTerraformFromDiagramJson } from "../services/terraform/diagram-to-terraform.js";
+import {
+  TERRAFORM_IDENTIFIER_PATTERN,
+  generateTerraformFromDiagramJson
+} from "../services/terraform/diagram-to-terraform.js";
 import { createTerraformDiagnostics } from "../services/terraform/terraform-diagnostics.js";
 import { syncTerraformToDiagramJson } from "../services/terraform/terraform-to-diagram.js";
 
@@ -18,11 +21,12 @@ const terraformValidateBodySchema = z.object({
 });
 
 const terraformBlockTypeSchema = z.enum(["resource", "data"]);
+const terraformIdentifierSchema = z.string().min(1).regex(TERRAFORM_IDENTIFIER_PATTERN);
 
 const diagramNodeParametersSchema = z.object({
   terraformBlockType: terraformBlockTypeSchema.optional(),
-  resourceType: z.string().min(1),
-  resourceName: z.string().min(1),
+  resourceType: terraformIdentifierSchema,
+  resourceName: terraformIdentifierSchema,
   fileName: z.string().min(1),
   values: z.record(z.string(), z.unknown()),
   invalid: z.boolean().optional()

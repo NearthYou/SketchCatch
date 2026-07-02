@@ -15,6 +15,41 @@
 
 ## 세션 레코드
 
+### 2026-07-03 - 하위 AI 6개 축 검증 및 회귀 수정
+
+- Goal: 최근 Terraform Preview/Diagram 동기화 보강 작업을 하위 AI 6개 축으로 다시 검증하고, 실제 문제가 확인된 부분을 수정한다.
+- Completed:
+  - 하위 AI 6개가 catalog/diagram, Terraform sync/proposal, AI draft layout, CSS/resize, backend API/generator, docs/contracts를 read-only로 나눠 검증했다.
+  - 일반 resource node가 `56x56`이어도 `.nodeShell`의 기존 `min-height: 72px` 때문에 빈 박스가 커지는 문제를 `.nodeShellResource`에서 해소했다.
+  - Terraform create proposal fallback과 AI draft fallback unknown resource 크기를 `56x56`으로 맞추고 회귀 테스트를 추가했다.
+  - AI draft area fit이 오른쪽/아래쪽으로만 커져 왼쪽/위쪽 자식이 부모 밖으로 나갈 수 있던 문제를 position+size 동시 보정으로 수정했다.
+  - `vpcId: "aws_vpc.main.id"`, `subnetId: "aws_subnet.public.id"` 같은 Terraform reference 문자열도 `(resourceType, resourceName)`으로 찾아 부모 영역 metadata에 반영하게 했다.
+  - Design area icon contract 테스트를 현재 catalog 동작에 맞췄고, 사용하지 않는 `DEFAULT_PALETTE_ITEMS` fallback drift 지점을 제거했다.
+  - Terraform HCL injection을 막기 위해 `resourceType`, `resourceName`, top-level/nested attribute/block key를 identifier 형식으로 검증하도록 API schema와 generator 양쪽을 보강했다.
+  - `docs/data-models.md`에 Terraform identifier 검증 계약을 추가했다.
+- Verification run:
+  - Red before fix: `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-ai-diagram-adapter.test.ts` - failed because Terraform-style references did not resolve to area parent nodes
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-ai-diagram-adapter.test.ts` - passed
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/diagram-to-terraform.test.ts src/routes/terraform.test.ts` - passed
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/terraform-sync-proposals.test.ts features/workspace/workspace-ai-diagram-adapter.test.ts features/diagram-editor/area-nodes.test.ts features/diagram-editor/diagram-editor-layout.test.ts` - passed
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/resource-settings/catalog.test.ts features/resource-settings/catalog-provider.test.ts features/diagram-editor/diagram-utils.test.ts features/diagram-editor/node-resize-bounds.test.ts features/diagram-editor/node-resize.test.ts features/diagram-editor/flow-mappers.test.ts features/diagram-editor/node-style.test.ts features/diagram-editor/drag-transaction.test.ts features/diagram-editor/reference-drop-targets.test.ts features/workspace/workspace-ai-diagram-adapter.test.ts features/workspace/terraform-sync-proposals.test.ts features/workspace/terraform-panel-utils.test.ts features/workspace/workspace-right-panel-layout.test.ts features/workspace/pre-deployment-diagnostics.test.ts` - passed
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-to-diagram.test.ts src/routes/terraform.test.ts src/services/terraform/diagram-to-terraform.test.ts src/services/terraform/infrastructure-graph.test.ts` - passed
+  - `pnpm catalog:check` - passed
+  - `pnpm lint` - passed
+  - `pnpm typecheck` - passed after strict parser index guard fix
+  - `pnpm build` - passed
+  - `pnpm harness:check` - passed
+  - `git diff --check` - passed
+- Evidence recorded:
+  - 실제 Terraform apply/destroy, cloud mutation, Git/CI/CD handoff는 실행하지 않았다.
+  - frontend UI에 Terraform CLI 실행 또는 AWS SDK 호출을 추가하지 않았다.
+- Known risks:
+  - 브라우저 수동 smoke는 수행하지 않았다. 자동/단위/타입/빌드 검증으로 확인했다.
+  - 하위 AI가 deployment apply/destroy 테스트의 macOS path suffix 취약 가능성을 보고했지만, 이번 Diagram/Terraform preview 회귀 수정 범위 밖이라 고치지 않았다.
+  - 기존 unrelated worktree changes remain: `DESIGN.md` 삭제 상태, `apps/web/next-env.d.ts` 변경 상태.
+- Next best action:
+  - 브라우저에서 compact icon, Terraform reference 기반 AI draft containment, Terraform editor 저장/삭제 sync를 수동 smoke한다.
+
 ### 2026-07-03 - 기본 리소스 아이콘 크기 절반 축소
 
 - Goal: 새로 생성되는 일반 리소스 아이콘이 너무 크게 보이지 않도록 기본 크기를 현재의 절반으로 줄인다.

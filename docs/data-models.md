@@ -189,6 +189,8 @@ Terraform 변환에 필요한 값은 아래 4개다.
 - `node.parameters.resourceName`
 - `node.parameters.values`
 
+`resourceType`과 `resourceName`은 Terraform block label로 직접 렌더링되므로 Terraform identifier 형식(`^[a-zA-Z_][a-zA-Z0-9_-]*$`)만 허용한다. `parameters.values`의 top-level key와 nested block key도 `camelCase`에서 `snake_case`로 정규화한 뒤 같은 identifier 형식을 만족해야 하며, 형식이 맞지 않으면 Terraform 생성 API는 HCL을 만들기 전에 `bad_request`로 거부한다.
+
 사용자가 보드에서 리소스 아이콘을 직접 추가할 때는 Terraform identity metadata인 `terraformBlockType`, `resourceType`, `resourceName`, `fileName`만 자동 생성하고, `parameters.values`는 `{}`로 시작한다. 같은 `resourceType`의 아이콘을 반복 추가하면 `resourceName`은 `ec2_instance`, `ec2_instance_2`, `ec2_instance_3`처럼 숫자 suffix를 붙여 Terraform address 중복을 피한다. EC2 `instanceType`, VPC `cidrBlock`, `tags.Name` 같은 실제 Terraform parameter 값은 사용자 입력, AI draft config, Terraform editor sync처럼 명시 입력이 있을 때만 채운다.
 
 신규 일반 리소스 아이콘 node의 기본 `size`는 `56x56`이다. VPC, Subnet, Security Group, Region, AZ, Group처럼 포함 관계를 표현하는 영역 node는 catalog의 별도 영역 크기를 사용하며, 일반 아이콘 축소 때문에 자동으로 절반 축소하지 않는다.

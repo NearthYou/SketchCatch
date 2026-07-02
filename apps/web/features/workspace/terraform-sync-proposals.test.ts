@@ -84,6 +84,37 @@ test("applyTerraformSyncProposals uses data source catalog icons for approved da
   assert.deepEqual(createdNode?.size, catalogResource.nodeDefaults.size);
 });
 
+test("applyTerraformSyncProposals uses compact fallback metadata for unknown create proposals", () => {
+  const diagramJson = makeDiagramJson();
+  const proposals: TerraformDiagramChangeProposal[] = [
+    {
+      kind: "create_candidate",
+      identity: {
+        terraformBlockType: "resource",
+        resourceType: "custom_provider_widget",
+        resourceName: "example"
+      },
+      parameters: {
+        resourceType: "custom_provider_widget",
+        resourceName: "example",
+        fileName: "custom.tf",
+        values: {}
+      }
+    }
+  ];
+
+  const result = applyTerraformSyncProposals(
+    diagramJson,
+    proposals,
+    [getTerraformSyncProposalId(proposals[0]!, 0)]
+  );
+  const createdNode = result.nodes[1];
+
+  assert.equal(createdNode?.iconUrl, undefined);
+  assert.deepEqual(createdNode?.size, { width: 56, height: 56 });
+  assert.equal(createdNode?.parameters?.fileName, "custom.tf");
+});
+
 test("applyTerraformSyncProposals deep clones created node defaults and parameter values", () => {
   const diagramJson = makeDiagramJson();
   const proposal: Extract<TerraformDiagramChangeProposal, { kind: "create_candidate" }> = {

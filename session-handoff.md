@@ -25,11 +25,21 @@
 - 사용자가 보드에서 리소스 아이콘을 직접 추가하면 `parameters.values`는 `{}`로 시작한다. EC2 `instanceType`, VPC `cidrBlock`, `tags.Name` 같은 Terraform parameter 값은 사용자 입력, AI draft config, Terraform editor sync처럼 명시 입력이 있을 때만 채운다.
 - 같은 리소스 아이콘을 반복 추가하면 같은 `resourceType` 안에서 `resourceName`이 `ec2_instance`, `ec2_instance_2`, `ec2_instance_3`처럼 숫자 suffix로 유니크하게 생성된다.
 - 새로 생성되는 일반 리소스 icon node의 기본 크기는 `56x56`이다. VPC/Subnet/Security Group/Region/AZ/Group 같은 영역 node는 기존 영역 크기를 유지한다.
+- Compact resource node는 generic `.nodeShell`의 `72px` 최소 높이를 상속하지 않아 `56x56` 아이콘이 빈 박스처럼 커지지 않는다.
+- AI draft 변환은 `vpcId: "aws_vpc.main.id"`, `subnetId: "aws_subnet.public.id"` 같은 Terraform reference 문자열도 `(resourceType, resourceName)`으로 풀어 area parent metadata를 찾는다.
+- Terraform 생성 API는 `resourceType`, `resourceName`, top-level/nested attribute/block key가 Terraform identifier 형식이 아니면 HCL을 만들기 전에 거부한다.
 - `docs/data-models.md`는 diagnostic/proposal source metadata와 proposal 지원 범위를 현재 코드에 맞게 기록한다.
 - `feature_list.json`에는 동시에 `in_progress`인 항목이 없다.
 
 ## 이번 세션의 변경 사항
 
+- 하위 AI 6개 축으로 catalog/diagram, Terraform sync/proposal, AI draft layout, CSS/resize, backend API/generator, docs/contracts를 read-only 검증했다.
+- `.nodeShellResource`에서 generic `min-height`를 해소해 compact icon node가 의도한 크기로 렌더링되게 했다.
+- Terraform create proposal fallback과 AI draft fallback unknown resource 크기를 `56x56`으로 통일했다.
+- AI draft area fit이 왼쪽/위쪽 자식까지 포함하도록 position+size를 함께 보정하게 했다.
+- ArchitectureJson config의 Terraform reference 문자열을 Diagram node identity로 역해석해 VPC/Subnet 부모 영역을 찾도록 했다.
+- HCL injection을 막기 위해 Terraform block label과 attribute/block key identifier 검증을 API schema와 generator에 추가했다.
+- Design area icon 테스트와 `docs/data-models.md` 계약을 최신 동작에 맞췄고, 사용하지 않는 `DEFAULT_PALETTE_ITEMS` fallback을 제거했다.
 - 일반 리소스 catalog 기본 icon size를 `112x112`에서 `56x56`으로 줄였다.
 - legacy palette fallback, Terraform create proposal fallback, AI draft fallback 크기도 절반 비율로 낮췄다.
 - 일반 resource resize 최소값과 CSS icon frame 최소값을 새 compact icon 크기에 맞췄다.
@@ -67,6 +77,15 @@
 
 ## 검증
 
+- Red before fix: `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-ai-diagram-adapter.test.ts` - failed because Terraform-style references did not resolve to area parent nodes
+- `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-ai-diagram-adapter.test.ts` - passed
+- `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/diagram-to-terraform.test.ts src/routes/terraform.test.ts` - passed
+- `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/terraform-sync-proposals.test.ts features/workspace/workspace-ai-diagram-adapter.test.ts features/diagram-editor/area-nodes.test.ts features/diagram-editor/diagram-editor-layout.test.ts` - passed
+- `pnpm --filter @sketchcatch/web exec tsx --test features/resource-settings/catalog.test.ts features/resource-settings/catalog-provider.test.ts features/diagram-editor/diagram-utils.test.ts features/diagram-editor/node-resize-bounds.test.ts features/diagram-editor/node-resize.test.ts features/diagram-editor/flow-mappers.test.ts features/diagram-editor/node-style.test.ts features/diagram-editor/drag-transaction.test.ts features/diagram-editor/reference-drop-targets.test.ts features/workspace/workspace-ai-diagram-adapter.test.ts features/workspace/terraform-sync-proposals.test.ts features/workspace/terraform-panel-utils.test.ts features/workspace/workspace-right-panel-layout.test.ts features/workspace/pre-deployment-diagnostics.test.ts` - passed
+- `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-to-diagram.test.ts src/routes/terraform.test.ts src/services/terraform/diagram-to-terraform.test.ts src/services/terraform/infrastructure-graph.test.ts` - passed
+- `pnpm catalog:check` - passed
+- `pnpm harness:check` - passed
+- `git diff --check` - passed
 - `pnpm --filter @sketchcatch/web exec tsx --test features/resource-settings/catalog.test.ts features/workspace/workspace-ai-diagram-adapter.test.ts features/workspace/terraform-sync-proposals.test.ts features/diagram-editor/node-resize-bounds.test.ts` - passed
 - `pnpm --filter @sketchcatch/web exec tsx --test features/resource-settings/catalog.test.ts features/resource-settings/catalog-provider.test.ts features/diagram-editor/diagram-utils.test.ts features/diagram-editor/node-resize-bounds.test.ts features/diagram-editor/node-resize.test.ts features/workspace/workspace-ai-diagram-adapter.test.ts features/workspace/terraform-sync-proposals.test.ts features/workspace/terraform-panel-utils.test.ts` - passed
 - `pnpm lint` - passed

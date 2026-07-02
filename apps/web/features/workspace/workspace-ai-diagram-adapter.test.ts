@@ -150,6 +150,109 @@ test("convertArchitectureJsonToDiagramJson uses catalog icon and size for CloudF
   assert.equal(cloudFrontNode?.parameters?.resourceName, "cloudfront_site");
 });
 
+test("convertArchitectureJsonToDiagramJson uses compact fallback size for unknown draft resources", () => {
+  const architectureJson: ArchitectureJson = {
+    nodes: [
+      {
+        id: "unknown-1",
+        type: "UNKNOWN",
+        label: "Unknown Resource",
+        positionX: 120,
+        positionY: 80,
+        config: {}
+      }
+    ],
+    edges: []
+  };
+
+  const diagramJson = convertArchitectureJsonToDiagramJson(architectureJson);
+  const unknownNode = diagramJson.nodes[0];
+
+  assert.equal(unknownNode?.type, "unknown_resource");
+  assert.deepEqual(unknownNode?.size, { width: 56, height: 56 });
+});
+
+test("convertArchitectureJsonToDiagramJson expands area nodes to include upper-left children", () => {
+  const architectureJson: ArchitectureJson = {
+    nodes: [
+      {
+        id: "vpc-main",
+        type: "VPC",
+        label: "Main VPC",
+        positionX: 200,
+        positionY: 200,
+        config: {}
+      },
+      {
+        id: "ec2-left",
+        type: "EC2",
+        label: "Left EC2",
+        positionX: 160,
+        positionY: 160,
+        config: {
+          vpcId: "vpc-main"
+        }
+      }
+    ],
+    edges: []
+  };
+
+  const diagramJson = convertArchitectureJsonToDiagramJson(architectureJson);
+  const vpcNode = diagramJson.nodes.find((node) => node.id === "vpc-main");
+  const ec2Node = diagramJson.nodes.find((node) => node.id === "ec2-left");
+
+  assert.equal(ec2Node?.metadata?.parentAreaNodeId, "vpc-main");
+  assert.equal(vpcNode?.position.x, 112);
+  assert.equal(vpcNode?.position.y, 112);
+  assert.equal(vpcNode?.size.width, 328);
+  assert.equal(vpcNode?.size.height, 248);
+});
+
+test("convertArchitectureJsonToDiagramJson resolves Terraform references to area parent nodes", () => {
+  const architectureJson: ArchitectureJson = {
+    nodes: [
+      {
+        id: "network-main",
+        type: "VPC",
+        label: "Main VPC",
+        positionX: 100,
+        positionY: 100,
+        config: {
+          terraformResourceName: "main"
+        }
+      },
+      {
+        id: "public-a",
+        type: "SUBNET",
+        label: "Public Subnet",
+        positionX: 160,
+        positionY: 180,
+        config: {
+          terraformResourceName: "public",
+          vpcId: "aws_vpc.main.id"
+        }
+      },
+      {
+        id: "web-server",
+        type: "EC2",
+        label: "Web Server",
+        positionX: 220,
+        positionY: 260,
+        config: {
+          subnetId: "aws_subnet.public.id"
+        }
+      }
+    ],
+    edges: []
+  };
+
+  const diagramJson = convertArchitectureJsonToDiagramJson(architectureJson);
+  const parentByNodeId = new Map(diagramJson.nodes.map((node) => [node.id, node.metadata?.parentAreaNodeId]));
+
+  assert.equal(parentByNodeId.get("public-a"), "network-main");
+  assert.equal(parentByNodeId.get("web-server"), "public-a");
+});
+
 test("convertArchitectureJsonToDiagramJson marks VPC and Subnet containment for board area nodes", () => {
   const architectureJson: ArchitectureJson = {
     nodes: [
@@ -417,7 +520,7 @@ test("convertArchitectureJsonToDiagramJson lays out server and storage draft as 
         id: "server-storage-az",
         kind: "design",
         parentAreaNodeId: "vpc",
-        position: { x: 155, y: 430 },
+        position: { x: 152, y: 430 },
         type: "design_az"
       },
       {
@@ -494,7 +597,7 @@ test("convertArchitectureJsonToDiagramJson lays out server and storage draft as 
   assert.equal(regionNode?.size.height, 1080);
   assert.equal(vpcNode?.size.width, 1000);
   assert.equal(vpcNode?.size.height, 798);
-  assert.equal(azNode?.size.width, 780);
+  assert.equal(azNode?.size.width, 783);
   assert.equal(azNode?.size.height, 620);
 });
 

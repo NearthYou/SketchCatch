@@ -15,7 +15,7 @@ import { resourceCatalog } from "../resource-settings/catalog";
 import { addServerStorageAreaNodes } from "./server-storage-board-layout";
 
 const DEFAULT_VIEWPORT: DiagramJson["viewport"] = { x: 0, y: 0, zoom: 1 };
-const DEFAULT_NODE_SIZE: DiagramNode["size"] = { width: 90, height: 48 };
+const DEFAULT_NODE_SIZE: DiagramNode["size"] = { width: 56, height: 56 };
 const DEFAULT_EDGE_STYLE: NonNullable<DiagramEdge["style"]> = {
   animated: false,
   color: "#506176",
@@ -239,7 +239,7 @@ function fitAreaNodesToChildren(nodes: readonly DiagramNode[]): DiagramNode[] {
   for (let pass = 0; pass < MAX_AREA_FIT_PASSES; pass += 1) {
     const nextNodes = fitAreaNodesToDirectChildren(currentNodes);
 
-    if (areNodeSizesEqual(currentNodes, nextNodes)) {
+    if (areNodeLayoutsEqual(currentNodes, nextNodes)) {
       return nextNodes;
     }
 
@@ -250,11 +250,16 @@ function fitAreaNodesToChildren(nodes: readonly DiagramNode[]): DiagramNode[] {
 }
 
 // 깊게 중첩된 Region/VPC/AZ/SG/Subnet 박스가 안정될 때 반복 계산을 멈춥니다.
-function areNodeSizesEqual(leftNodes: readonly DiagramNode[], rightNodes: readonly DiagramNode[]): boolean {
+function areNodeLayoutsEqual(leftNodes: readonly DiagramNode[], rightNodes: readonly DiagramNode[]): boolean {
   return leftNodes.every((leftNode, index) => {
     const rightNode = rightNodes[index];
 
-    return rightNode?.size.width === leftNode.size.width && rightNode.size.height === leftNode.size.height;
+    return (
+      rightNode?.position.x === leftNode.position.x &&
+      rightNode.position.y === leftNode.position.y &&
+      rightNode.size.width === leftNode.size.width &&
+      rightNode.size.height === leftNode.size.height
+    );
   });
 }
 
@@ -284,32 +289,51 @@ function fitAreaNodesToDirectChildren(nodes: readonly DiagramNode[]): DiagramNod
       return node;
     }
 
-    const requiredSize = getRequiredAreaSize(node, children);
+    const requiredLayout = getRequiredAreaLayout(node, children);
 
-    if (requiredSize.width === node.size.width && requiredSize.height === node.size.height) {
+    if (
+      requiredLayout.position.x === node.position.x &&
+      requiredLayout.position.y === node.position.y &&
+      requiredLayout.size.width === node.size.width &&
+      requiredLayout.size.height === node.size.height
+    ) {
       return node;
     }
 
     return {
       ...node,
-      size: requiredSize
+      position: requiredLayout.position,
+      size: requiredLayout.size
     };
   });
 }
 
-function getRequiredAreaSize(node: DiagramNode, children: readonly DiagramNode[]): DiagramNode["size"] {
+function getRequiredAreaLayout(
+  node: DiagramNode,
+  children: readonly DiagramNode[]
+): Pick<DiagramNode, "position" | "size"> {
+  let left = node.position.x;
+  let top = node.position.y;
   let right = node.position.x + node.size.width;
   let bottom = node.position.y + node.size.height;
 
   for (const child of children) {
     const childFitSize = getAreaChildFitSize(child);
+    left = Math.min(left, child.position.x - AREA_CHILD_PADDING);
+    top = Math.min(top, child.position.y - AREA_CHILD_PADDING);
     right = Math.max(right, child.position.x + childFitSize.width + AREA_CHILD_PADDING);
     bottom = Math.max(bottom, child.position.y + childFitSize.height + AREA_CHILD_PADDING);
   }
 
   return {
-    width: right - node.position.x,
-    height: bottom - node.position.y
+    position: {
+      x: left,
+      y: top
+    },
+    size: {
+      width: right - left,
+      height: bottom - top
+    }
   };
 }
 
@@ -329,16 +353,76 @@ function findConfigParentAreaNodeId(
   nodeById: ReadonlyMap<string, DiagramNode>
 ): string | undefined {
   const subnetId = getStringParameterValue(node, "subnetId");
-  const subnetNode = subnetId ? nodeById.get(subnetId) : undefined;
+  const subnetNode = subnetId ? findReferencedDiagramNode(subnetId, nodeById) : undefined;
 
   if (subnetNode && subnetNode.id !== node.id && isAreaDiagramNode(subnetNode)) {
     return subnetNode.id;
   }
 
   const vpcId = getStringParameterValue(node, "vpcId");
-  const vpcNode = vpcId ? nodeById.get(vpcId) : undefined;
+  const vpcNode = vpcId ? findReferencedDiagramNode(vpcId, nodeById) : undefined;
 
   return vpcNode && vpcNode.id !== node.id && isAreaDiagramNode(vpcNode) ? vpcNode.id : undefined;
+}
+
+function findReferencedDiagramNode(
+  reference: string,
+  nodeById: ReadonlyMap<string, DiagramNode>
+): DiagramNode | undefined {
+  const directNode = nodeById.get(reference);
+
+  if (directNode) {
+    return directNode;
+  }
+
+  const identity = parseTerraformResourceReference(reference);
+
+  if (!identity) {
+    return undefined;
+  }
+
+  for (const candidate of nodeById.values()) {
+    if (
+      candidate.parameters?.resourceType === identity.resourceType &&
+      candidate.parameters.resourceName === identity.resourceName
+    ) {
+      return candidate;
+    }
+  }
+
+  return undefined;
+}
+
+function parseTerraformResourceReference(
+  reference: string
+): Pick<DiagramNodeParameters, "resourceType" | "resourceName"> | undefined {
+  const parts = reference.trim().split(".");
+
+  if (parts[0] === "data") {
+    const resourceType = parts[1];
+    const resourceName = parts[2];
+
+    if (!resourceType || !resourceName) {
+      return undefined;
+    }
+
+    return {
+      resourceName,
+      resourceType
+    };
+  }
+
+  const resourceType = parts[0];
+  const resourceName = parts[1];
+
+  if (!resourceType || !resourceName) {
+    return undefined;
+  }
+
+  return {
+    resourceName,
+    resourceType
+  };
 }
 
 function findEdgeParentAreaNodeId(
