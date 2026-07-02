@@ -31,12 +31,27 @@ CREATE TABLE "users" (
 	"deleted_at" timestamp with time zone
 );
 --> statement-breakpoint
--- Existing anonymous projects cannot be safely mapped to authenticated users.
-DELETE FROM "projects";--> statement-breakpoint
+INSERT INTO "users" (
+	"id",
+	"username",
+	"email",
+	"nickname",
+	"password_hash",
+	"deleted_at"
+) VALUES (
+	'system-migration-user',
+	'system-migration-user',
+	'system-migration-user@sketchcatch.local',
+	'Migration User',
+	'not-a-login-password',
+	now()
+);--> statement-breakpoint
+ALTER TABLE "projects" ADD COLUMN "user_id" varchar(36);--> statement-breakpoint
+UPDATE "projects" SET "user_id" = 'system-migration-user' WHERE "user_id" IS NULL;--> statement-breakpoint
+ALTER TABLE "projects" ALTER COLUMN "user_id" SET NOT NULL;--> statement-breakpoint
 ALTER TABLE "projects" DROP CONSTRAINT "projects_workspace_id_anonymous_workspaces_id_fk";--> statement-breakpoint
 ALTER TABLE "projects" DROP COLUMN "workspace_id";--> statement-breakpoint
 DROP TABLE "anonymous_workspaces";--> statement-breakpoint
-ALTER TABLE "projects" ADD COLUMN "user_id" varchar(36) NOT NULL;--> statement-breakpoint
 ALTER TABLE "login_attempts" ADD CONSTRAINT "login_attempts_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "refresh_tokens" ADD CONSTRAINT "refresh_tokens_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "login_attempts_user_id_idx" ON "login_attempts" USING btree ("user_id");--> statement-breakpoint
