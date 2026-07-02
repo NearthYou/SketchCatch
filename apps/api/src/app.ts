@@ -8,7 +8,7 @@ import type { CreateLlmExplanation } from "./services/aiLlmExplanation.js";
 import { registerHealthRoutes } from "./routes/health.js";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { registerOAuthRoutes } from "./routes/oauth.js";
-import { registerProjectRoutes } from "./routes/projects.js";
+import { registerProjectRoutes, type ProjectAssetStorage } from "./routes/projects.js";
 import { registerDeploymentRoutes } from "./routes/deployments.js";
 import { registerTerraformRoutes } from "./routes/terraform.js";
 import { registerAwsConnectionRoutes } from "./routes/aws-connections.js";
@@ -29,6 +29,7 @@ export type BuildAppOptions = {
   oauthStartRateLimiter?: RateLimiter;
   passwordResetRequestEmailRateLimiter?: RateLimiter;
   passwordResetRequestIpRateLimiter?: RateLimiter;
+  projectAssetStorage?: ProjectAssetStorage;
   projectDeletionStorage?: ProjectDeletionStorage;
 };
 
@@ -129,6 +130,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   app.register(registerProjectRoutes, {
     prefix: "/api",
     getDatabaseClient: getAppDatabaseClient,
+    projectAssetStorage: options.projectAssetStorage,
     projectDeletionStorage: options.projectDeletionStorage
   });
   app.register(registerDeploymentRoutes, {

@@ -1,10 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { DiagramJson, Project } from "../../../../packages/types/src";
-import {
-  clearStoredAuthSession,
-  writeStoredAuthSession
-} from "../../lib/auth-storage";
+import { clearStoredAuthSession, writeStoredAuthSession } from "../../lib/auth-storage";
 import {
   saveWorkspaceArchitectureSnapshot,
   saveWorkspaceTerraformArtifact
@@ -112,7 +109,7 @@ test("saveWorkspaceTerraformArtifact validates, snapshots, uploads, and links te
   const originalFetch = globalThis.fetch;
   const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
   const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
-  const terraformCode = "resource \"aws_instance\" \"web\" {}\n";
+  const terraformCode = 'resource "aws_instance" "web" {}\n';
 
   context.after(() => {
     globalThis.fetch = originalFetch;
@@ -160,6 +157,7 @@ test("saveWorkspaceTerraformArtifact validates, snapshots, uploads, and links te
             fileName: "main.tf",
             contentType: "text/plain",
             byteSize: new TextEncoder().encode(terraformCode).byteLength,
+            uploadStatus: "pending",
             createdAt: "2026-06-26T00:00:00.000Z"
           },
           upload: {
@@ -171,6 +169,27 @@ test("saveWorkspaceTerraformArtifact validates, snapshots, uploads, and links te
         },
         201
       );
+    }
+
+    if (
+      String(input).endsWith(
+        `/projects/${project.id}/assets/66666666-6666-4666-8666-666666666666/confirm-upload`
+      )
+    ) {
+      return jsonResponse({
+        asset: {
+          id: "66666666-6666-4666-8666-666666666666",
+          projectId: project.id,
+          architectureId: "55555555-5555-4555-8555-555555555555",
+          assetType: "terraform_file",
+          objectKey: "projects/project/assets/terraform_file/main.tf",
+          fileName: "main.tf",
+          contentType: "text/plain",
+          byteSize: new TextEncoder().encode(terraformCode).byteLength,
+          uploadStatus: "uploaded",
+          createdAt: "2026-06-26T00:00:00.000Z"
+        }
+      });
     }
 
     return new Response(null, { status: 200 });
@@ -196,8 +215,117 @@ test("saveWorkspaceTerraformArtifact validates, snapshots, uploads, and links te
   assert.equal(String(requests[3]?.input), "https://s3.example.test/upload");
   assert.equal(requests[3]?.init?.method, "PUT");
   assert.equal(requests[3]?.init?.body, terraformCode);
+  assert.equal(
+    String(requests[4]?.input),
+    `/api/projects/${project.id}/assets/66666666-6666-4666-8666-666666666666/confirm-upload`
+  );
+  assert.equal(requests[4]?.init?.method, "POST");
   assert.equal(savedArtifact.architecture.id, "55555555-5555-4555-8555-555555555555");
-  assert.equal(savedArtifact.terraformArtifact.architectureId, "55555555-5555-4555-8555-555555555555");
+  assert.equal(
+    savedArtifact.terraformArtifact.architectureId,
+    "55555555-5555-4555-8555-555555555555"
+  );
+  assert.equal(savedArtifact.terraformArtifact.uploadStatus, "uploaded");
+});
+
+test("saveWorkspaceTerraformArtifact aborts a pending asset when S3 upload fails", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
+  const terraformCode = 'resource "aws_instance" "web" {}\n';
+  const assetId = "66666666-6666-4666-8666-666666666666";
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    restoreWindow(originalWindowDescriptor);
+  });
+
+  installAuthSession();
+
+  globalThis.fetch = async (input, init) => {
+    requests.push({ input, init });
+
+    if (String(input).endsWith("/terraform/validate")) {
+      return jsonResponse({
+        ok: true,
+        diagnostics: [],
+        summary: { errorCount: 0, warningCount: 0 }
+      });
+    }
+
+    if (String(input).endsWith(`/projects/${project.id}/architectures`)) {
+      return jsonResponse(
+        {
+          architecture: {
+            id: "55555555-5555-4555-8555-555555555555",
+            projectId: project.id,
+            version: 1,
+            source: "manual",
+            architectureJson: { nodes: [], edges: [] },
+            createdAt: "2026-06-26T00:00:00.000Z"
+          }
+        },
+        201
+      );
+    }
+
+    if (String(input).endsWith(`/projects/${project.id}/assets/presigned-upload`)) {
+      return jsonResponse(
+        {
+          asset: {
+            id: assetId,
+            projectId: project.id,
+            architectureId: "55555555-5555-4555-8555-555555555555",
+            assetType: "terraform_file",
+            objectKey: "projects/project/assets/terraform_file/main.tf",
+            fileName: "main.tf",
+            contentType: "text/plain",
+            byteSize: new TextEncoder().encode(terraformCode).byteLength,
+            uploadStatus: "pending",
+            createdAt: "2026-06-26T00:00:00.000Z"
+          },
+          upload: {
+            method: "PUT",
+            url: "https://s3.example.test/upload",
+            headers: { "Content-Type": "text/plain" },
+            expiresInSeconds: 900
+          }
+        },
+        201
+      );
+    }
+
+    if (String(input) === "https://s3.example.test/upload") {
+      return new Response(null, { status: 500 });
+    }
+
+    if (String(input).endsWith(`/projects/${project.id}/assets/${assetId}/abort-upload`)) {
+      return new Response(null, { status: 204 });
+    }
+
+    return new Response(null, { status: 404 });
+  };
+
+  await assert.rejects(
+    () =>
+      saveWorkspaceTerraformArtifact({
+        diagramJson,
+        projectId: project.id,
+        terraformCode
+      }),
+    /Terraform artifact/
+  );
+
+  assert.equal(String(requests[3]?.input), "https://s3.example.test/upload");
+  assert.equal(
+    String(requests[4]?.input),
+    `/api/projects/${project.id}/assets/${assetId}/abort-upload`
+  );
+  assert.equal(requests[4]?.init?.method, "POST");
+  assert.equal(
+    requests.some((request) => String(request.input).includes("confirm-upload")),
+    false
+  );
 });
 
 test("saveWorkspaceTerraformArtifact stops before snapshot when terraform validation fails", async (context) => {

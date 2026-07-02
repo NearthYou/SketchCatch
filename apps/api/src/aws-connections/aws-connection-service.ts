@@ -166,10 +166,7 @@ export function createPostgresAwsConnectionRepository(db: Database): AwsConnecti
         .select()
         .from(awsConnections)
         .where(
-          and(
-            eq(awsConnections.id, connectionId),
-            eq(awsConnections.userId, accessContext.userId)
-          )
+          and(eq(awsConnections.id, connectionId), eq(awsConnections.userId, accessContext.userId))
         );
 
       return awsConnection;
@@ -231,10 +228,7 @@ export function createPostgresAwsConnectionRepository(db: Database): AwsConnecti
       const [awsConnection] = await db
         .delete(awsConnections)
         .where(
-          and(
-            eq(awsConnections.id, connectionId),
-            eq(awsConnections.userId, accessContext.userId)
-          )
+          and(eq(awsConnections.id, connectionId), eq(awsConnections.userId, accessContext.userId))
         )
         .returning();
 
@@ -253,10 +247,7 @@ export function createPostgresAwsConnectionRepository(db: Database): AwsConnecti
           updatedAt
         })
         .where(
-          and(
-            eq(awsConnections.id, input.connectionId),
-            eq(awsConnections.userId, input.userId)
-          )
+          and(eq(awsConnections.id, input.connectionId), eq(awsConnections.userId, input.userId))
         )
         .returning();
 
@@ -487,11 +478,10 @@ export async function verifyAwsConnection(
     throw new AwsConnectionVerificationError("AWS Role account mismatch");
   }
 
-  const existingVerifiedAccountConnection =
-    await repository.findVerifiedAwsConnectionByAccountId(
-      result.accountId,
-      input.accessContext
-    );
+  const existingVerifiedAccountConnection = await repository.findVerifiedAwsConnectionByAccountId(
+    result.accountId,
+    input.accessContext
+  );
 
   if (
     existingVerifiedAccountConnection &&
@@ -622,7 +612,8 @@ export async function getAwsConnectionCloudFormationTemplate(
     templateBody,
     templateUrl: null,
     templateUrlExpiresAt: null,
-    launchStackUrl: null
+    launchStackUrl: null,
+    manualTemplateFallbackAvailable: true
   };
 
   // 로컬 개발 URL은 CloudFormation 콘솔이 접근할 수 없으므로 S3 URL 대신 인라인 템플릿을 유지합니다.
@@ -654,6 +645,7 @@ export async function getAwsConnectionCloudFormationTemplate(
     templateBody,
     templateUrl,
     templateUrlExpiresAt: templateUrlExpiresAt.toISOString(),
+    manualTemplateFallbackAvailable: false,
     launchStackUrl: createAwsConnectionLaunchStackUrl({
       region: awsConnection.region,
       stackName,

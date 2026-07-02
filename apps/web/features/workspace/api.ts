@@ -14,6 +14,7 @@ import type {
   CreateAwsConnectionRequest,
   CreateAwsConnectionResponse,
   CreateDeploymentRequest,
+  ConfirmProjectAssetUploadResponse,
   CreateDesignSimulationRequest,
   CreateProjectAssetUploadRequest,
   CreateProjectRequest,
@@ -52,7 +53,9 @@ import type {
 import { apiFetch, buildApiUrl } from "../../lib/api-client";
 import { readStoredAuthSession } from "../../lib/auth-storage";
 
-const AI_API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:4000/api").replace(/\/+$/, "");
+const AI_API_BASE_URL = (
+  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:4000/api"
+).replace(/\/+$/, "");
 
 type AiTerraformErrorExplanationRequest = {
   readonly stage: AiTerraformStage;
@@ -112,12 +115,9 @@ export async function deleteProject(
 }
 
 export async function getProjectDetails(projectId: string): Promise<ProjectDetailsResponse> {
-  return apiFetch<ProjectDetailsResponse>(
-    `/projects/${encodeURIComponent(projectId)}`,
-    {
-      auth: true
-    }
-  );
+  return apiFetch<ProjectDetailsResponse>(`/projects/${encodeURIComponent(projectId)}`, {
+    auth: true
+  });
 }
 
 export async function getProjectDraft(projectId: string): Promise<ProjectDraftResponse> {
@@ -175,6 +175,40 @@ export async function createProjectAssetUpload({
   );
 }
 
+export async function confirmProjectAssetUpload({
+  assetId,
+  projectId
+}: {
+  assetId: string;
+  projectId: string;
+}): Promise<ConfirmProjectAssetUploadResponse["asset"]> {
+  const response = await apiFetch<ConfirmProjectAssetUploadResponse>(
+    `/projects/${encodeURIComponent(projectId)}/assets/${encodeURIComponent(assetId)}/confirm-upload`,
+    {
+      auth: true,
+      method: "POST"
+    }
+  );
+
+  return response.asset;
+}
+
+export async function abortProjectAssetUpload({
+  assetId,
+  projectId
+}: {
+  assetId: string;
+  projectId: string;
+}): Promise<void> {
+  await apiFetch<void>(
+    `/projects/${encodeURIComponent(projectId)}/assets/${encodeURIComponent(assetId)}/abort-upload`,
+    {
+      auth: true,
+      method: "POST"
+    }
+  );
+}
+
 export async function uploadProjectAsset(
   upload: ProjectAssetUploadResponse["upload"],
   content: string | Blob
@@ -202,7 +236,9 @@ export async function generateTerraformCode(diagramJson: DiagramJson): Promise<s
   return response.terraformCode;
 }
 
-export async function validateTerraformCode(terraformCode: string): Promise<TerraformValidateResponse> {
+export async function validateTerraformCode(
+  terraformCode: string
+): Promise<TerraformValidateResponse> {
   return apiFetch<TerraformValidateResponse>("/terraform/validate", {
     auth: true,
     method: "POST",
@@ -256,9 +292,12 @@ export async function runAiDesignSimulation(
 export async function runAiTerraformPreviewExplanation(
   terraformCode: string
 ): Promise<AiTerraformPreviewExplanationResult> {
-  return postPublicAiJson<AiTerraformPreviewExplanationResult>("/ai/terraform-preview-explanation", {
-    terraformCode
-  });
+  return postPublicAiJson<AiTerraformPreviewExplanationResult>(
+    "/ai/terraform-preview-explanation",
+    {
+      terraformCode
+    }
+  );
 }
 
 // Terraform 오류 설명은 Preview 분석과 다른 endpoint로 보내 stage와 원인을 분리합니다.
@@ -441,7 +480,9 @@ export async function listDeployments(projectId: string): Promise<Deployment[]> 
   return response.deployments;
 }
 
-export async function listRecentSuccessfulDeploymentProjects(): Promise<RecentSuccessfulDeploymentProject[]> {
+export async function listRecentSuccessfulDeploymentProjects(): Promise<
+  RecentSuccessfulDeploymentProject[]
+> {
   const response = await apiFetch<RecentSuccessfulDeploymentProjectListResponse>(
     "/deployments/recent-successful-projects",
     {

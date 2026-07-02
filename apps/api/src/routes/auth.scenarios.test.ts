@@ -18,6 +18,8 @@ import type { RateLimitResult, RateLimiter } from "../rate-limit/in-memory-rate-
 
 process.env.NODE_ENV = "test";
 process.env.AUTH_TOKEN_SECRET = "test-auth-token-secret-with-at-least-32-characters";
+process.env.OAUTH_REDIRECT_BASE_URL = "http://localhost:3000";
+process.env.SKETCHCATCH_PUBLIC_BASE_URL = "http://localhost:3000";
 
 const USER_ID = "11111111-1111-4111-8111-111111111111";
 const PASSWORD = "demo-password-123";

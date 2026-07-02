@@ -1,5 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { PutObjectCommand } from "@aws-sdk/client-s3";
+import {
+  DeleteObjectCommand,
+  HeadObjectCommand,
+  PutObjectCommand,
+  S3ServiceException
+} from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { and, desc, eq, sql } from "drizzle-orm";
 import type { FastifyInstance, FastifyReply } from "fastify";
@@ -39,6 +44,11 @@ const deleteProjectBodySchema = z
 
 const routeParamsSchema = z.object({
   id: z.string().uuid()
+});
+
+const assetRouteParamsSchema = z.object({
+  id: z.string().uuid(),
+  assetId: z.string().uuid()
 });
 
 const resourceNodeSchema = z.object({
@@ -119,7 +129,23 @@ const presignedUploadBodySchema = z
 
 type ProjectRouteOptions = {
   getDatabaseClient?: () => DatabaseClient;
+  projectAssetStorage?: ProjectAssetStorage;
   projectDeletionStorage?: ProjectDeletionStorage;
+};
+
+export type ProjectAssetStorage = {
+  createUploadUrl(input: {
+    bucketName: string;
+    objectKey: string;
+    contentType: string;
+    expiresInSeconds: number;
+  }): Promise<string>;
+  deleteObject(input: { bucketName: string; objectKey: string }): Promise<void>;
+  objectExists(input: {
+    bucketName: string;
+    objectKey: string;
+    byteSize: number | null;
+  }): Promise<boolean>;
 };
 
 export async function registerProjectRoutes(
@@ -127,6 +153,8 @@ export async function registerProjectRoutes(
   options: ProjectRouteOptions = {}
 ): Promise<void> {
   const getProjectDatabaseClient = options.getDatabaseClient ?? getDatabaseClient;
+  const getProjectAssetStorage = () =>
+    options.projectAssetStorage ?? createDefaultProjectAssetStorage();
 
   app.get("/projects", async (request) => {
     const currentUserId = await requireActiveUserId(request, getProjectDatabaseClient);
@@ -201,7 +229,9 @@ export async function registerProjectRoutes(
       db
         .select()
         .from(projectAssets)
-        .where(eq(projectAssets.projectId, params.id))
+        .where(
+          and(eq(projectAssets.projectId, params.id), eq(projectAssets.uploadStatus, "uploaded"))
+        )
         .orderBy(desc(projectAssets.createdAt))
     ]);
 
@@ -408,6 +438,13 @@ export async function registerProjectRoutes(
 
     const bucketName = requireS3BucketName();
     const objectKey = buildObjectKey(params.id, body.assetType, assetId, body.fileName);
+    const expiresInSeconds = 900;
+    const uploadUrl = await getProjectAssetStorage().createUploadUrl({
+      bucketName,
+      objectKey,
+      contentType: body.contentType,
+      expiresInSeconds
+    });
 
     const [asset] = await db
       .insert(projectAssets)
@@ -419,21 +456,12 @@ export async function registerProjectRoutes(
         objectKey,
         fileName: body.fileName,
         contentType: body.contentType,
-        byteSize: body.byteSize
+        byteSize: body.byteSize,
+        uploadStatus: "pending"
       })
       .returning();
 
-    const uploadUrl = await getSignedUrl(
-      getS3Client(),
-      new PutObjectCommand({
-        Bucket: bucketName,
-        Key: objectKey,
-        ContentType: body.contentType
-      }),
-      { expiresIn: 900 }
-    );
-
-    return reply.status(201).send({
+    const response = {
       asset,
       upload: {
         method: "PUT",
@@ -441,9 +469,114 @@ export async function registerProjectRoutes(
         headers: {
           "Content-Type": body.contentType
         },
-        expiresInSeconds: 900
+        expiresInSeconds
       }
+    };
+
+    return reply.status(201).send(response);
+  });
+
+  app.post("/projects/:id/assets/:assetId/confirm-upload", async (request, reply) => {
+    const currentUserId = await requireActiveUserId(request, getProjectDatabaseClient);
+    const params = assetRouteParamsSchema.parse(request.params);
+    const { db } = getProjectDatabaseClient();
+
+    const [project] = await db
+      .select()
+      .from(projects)
+      .where(and(eq(projects.id, params.id), eq(projects.userId, currentUserId)));
+
+    if (!project) {
+      return sendNotFound(reply, "프로젝트를 찾을 수 없습니다.");
+    }
+
+    const [asset] = await db
+      .select()
+      .from(projectAssets)
+      .where(and(eq(projectAssets.id, params.assetId), eq(projectAssets.projectId, params.id)));
+
+    if (!asset) {
+      return sendNotFound(reply, "업로드된 파일 기록을 찾을 수 없습니다.");
+    }
+
+    if (asset.uploadStatus === "uploaded") {
+      const response = { asset };
+
+      return response;
+    }
+
+    const bucketName = requireS3BucketName();
+    const uploaded = await getProjectAssetStorage().objectExists({
+      bucketName,
+      objectKey: asset.objectKey,
+      byteSize: asset.byteSize
     });
+
+    if (!uploaded) {
+      return sendConflict(reply, "S3에서 업로드된 파일을 확인하지 못했습니다.");
+    }
+
+    const [confirmedAsset] = await db
+      .update(projectAssets)
+      .set({ uploadStatus: "uploaded" })
+      .where(and(eq(projectAssets.id, params.assetId), eq(projectAssets.projectId, params.id)))
+      .returning();
+
+    if (!confirmedAsset) {
+      return sendNotFound(reply, "업로드된 파일 기록을 찾을 수 없습니다.");
+    }
+
+    const response = { asset: confirmedAsset };
+
+    return response;
+  });
+
+  app.post("/projects/:id/assets/:assetId/abort-upload", async (request, reply) => {
+    const currentUserId = await requireActiveUserId(request, getProjectDatabaseClient);
+    const params = assetRouteParamsSchema.parse(request.params);
+    const { db } = getProjectDatabaseClient();
+
+    const [project] = await db
+      .select()
+      .from(projects)
+      .where(and(eq(projects.id, params.id), eq(projects.userId, currentUserId)));
+
+    if (!project) {
+      return sendNotFound(reply, "프로젝트를 찾을 수 없습니다.");
+    }
+
+    const [asset] = await db
+      .select()
+      .from(projectAssets)
+      .where(and(eq(projectAssets.id, params.assetId), eq(projectAssets.projectId, params.id)));
+
+    if (!asset || asset.uploadStatus !== "pending") {
+      return reply.status(204).send();
+    }
+
+    try {
+      await getProjectAssetStorage().deleteObject({
+        bucketName: requireS3BucketName(),
+        objectKey: asset.objectKey
+      });
+    } catch (error) {
+      request.log.warn(
+        { error, objectKey: asset.objectKey, projectId: params.id },
+        "Failed to delete aborted project asset object"
+      );
+    }
+
+    await db
+      .delete(projectAssets)
+      .where(
+        and(
+          eq(projectAssets.id, params.assetId),
+          eq(projectAssets.projectId, params.id),
+          eq(projectAssets.uploadStatus, "pending")
+        )
+      );
+
+    return reply.status(204).send();
   });
 }
 
@@ -454,6 +587,63 @@ function sendNotFound(reply: FastifyReply, message: string): FastifyReply {
   };
 
   return reply.status(404).send(response);
+}
+
+function sendConflict(reply: FastifyReply, message: string): FastifyReply {
+  const response: ApiErrorResponse = {
+    error: "conflict",
+    message
+  };
+
+  return reply.status(409).send(response);
+}
+
+function createDefaultProjectAssetStorage(): ProjectAssetStorage {
+  const s3Client = getS3Client();
+
+  return {
+    async createUploadUrl(input) {
+      return getSignedUrl(
+        s3Client,
+        new PutObjectCommand({
+          Bucket: input.bucketName,
+          Key: input.objectKey,
+          ContentType: input.contentType
+        }),
+        { expiresIn: input.expiresInSeconds }
+      );
+    },
+    async deleteObject(input) {
+      await s3Client.send(
+        new DeleteObjectCommand({
+          Bucket: input.bucketName,
+          Key: input.objectKey
+        })
+      );
+    },
+    async objectExists(input) {
+      try {
+        const object = await s3Client.send(
+          new HeadObjectCommand({
+            Bucket: input.bucketName,
+            Key: input.objectKey
+          })
+        );
+
+        if (input.byteSize !== null) {
+          return object.ContentLength === input.byteSize;
+        }
+
+        return true;
+      } catch (error) {
+        if (isS3ObjectMissingError(error)) {
+          return false;
+        }
+
+        throw error;
+      }
+    }
+  };
 }
 
 function createDefaultProjectDeletionStorage(): ProjectDeletionStorage {
@@ -467,6 +657,19 @@ function createDefaultProjectDeletionStorage(): ProjectDeletionStorage {
       await storage.deleteObject(objectKey);
     }
   };
+}
+
+function isS3ObjectMissingError(error: unknown): boolean {
+  if (error instanceof S3ServiceException) {
+    return error.$metadata.httpStatusCode === 404 || error.name === "NotFound";
+  }
+
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "name" in error &&
+    (error.name === "NotFound" || error.name === "NoSuchKey")
+  );
 }
 
 function buildObjectKey(

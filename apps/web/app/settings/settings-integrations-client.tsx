@@ -33,7 +33,9 @@ export function SettingsIntegrationsClient() {
   const [selectedConnectionId, setSelectedConnectionId] = useState("");
   const [accountId, setAccountId] = useState("");
   const [roleArn, setRoleArn] = useState("");
-  const [template, setTemplate] = useState<AwsConnectionCloudFormationTemplateResponse | null>(null);
+  const [template, setTemplate] = useState<AwsConnectionCloudFormationTemplateResponse | null>(
+    null
+  );
   const [testResult, setTestResult] = useState<TestAwsConnectionResponse | null>(null);
   const [requestState, setRequestState] = useState<RequestState>("idle");
   const [errorMessage, setErrorMessage] = useState("");
@@ -59,10 +61,11 @@ export function SettingsIntegrationsClient() {
   );
   const shouldShowAwsSetupControls =
     !hasVerifiedAwsConnection || isAddingAwsConnection || activeConnection?.status !== "verified";
-  const expectedRoleArn =
-    /^\d{12}$/.test(accountId.trim())
-      ? `arn:aws:iam::${accountId.trim()}:role/${setup?.recommendedRoleName ?? "SketchCatchTerraformExecutionRole"}`
-      : "";
+  const shouldShowCloudFormationOpenButton =
+    shouldShowAwsSetupControls && Boolean(activeConnection) && !template?.launchStackUrl;
+  const expectedRoleArn = /^\d{12}$/.test(accountId.trim())
+    ? `arn:aws:iam::${accountId.trim()}:role/${setup?.recommendedRoleName ?? "SketchCatchTerraformExecutionRole"}`
+    : "";
 
   useEffect(() => {
     let cancelled = false;
@@ -76,7 +79,8 @@ export function SettingsIntegrationsClient() {
         }
 
         const preferredConnection =
-          nextConnections.find((connection) => connection.status === "verified") ?? nextConnections[0];
+          nextConnections.find((connection) => connection.status === "verified") ??
+          nextConnections[0];
 
         setAwsConnections(nextConnections);
         setSelectedConnectionId(preferredConnection?.id ?? "");
@@ -259,7 +263,8 @@ export function SettingsIntegrationsClient() {
         (connection) => connection.id !== deletedConnectionId
       );
       const preferredConnection =
-        nextConnections.find((connection) => connection.status === "verified") ?? nextConnections[0];
+        nextConnections.find((connection) => connection.status === "verified") ??
+        nextConnections[0];
 
       setAwsConnections(nextConnections);
       setSelectedConnectionId(preferredConnection?.id ?? "");
@@ -273,9 +278,7 @@ export function SettingsIntegrationsClient() {
   }
 
   function selectAwsConnection(nextConnectionId: string): void {
-    const nextConnection = awsConnections.find(
-      (connection) => connection.id === nextConnectionId
-    );
+    const nextConnection = awsConnections.find((connection) => connection.id === nextConnectionId);
 
     setSelectedConnectionId(nextConnectionId);
     setAccountId(nextConnection?.accountId ?? "");
@@ -319,7 +322,10 @@ export function SettingsIntegrationsClient() {
       </div>
 
       {activeTab === "github" ? (
-        <section className="dashboardPanel integrationPanel" aria-labelledby="github-settings-title">
+        <section
+          className="dashboardPanel integrationPanel"
+          aria-labelledby="github-settings-title"
+        >
           <div className="integrationHeader">
             <span className="integrationIcon">
               <DashboardIcon name="github" />
@@ -356,9 +362,9 @@ export function SettingsIntegrationsClient() {
           </div>
 
           <p>
-            SketchCatch가 발급한 External ID와 CloudFormation 템플릿으로 사용자 AWS 계정에
-            Role을 한 번 만들고, 검증된 Role ARN만 저장합니다. 프로젝트에서는 이 연결을 선택해서
-            배포에 재사용합니다.
+            SketchCatch가 발급한 External ID와 CloudFormation 템플릿으로 사용자 AWS 계정에 Role을 한
+            번 만들고, 검증된 Role ARN만 저장합니다. 프로젝트에서는 이 연결을 선택해서 배포에
+            재사용합니다.
           </p>
 
           <div className="settingsGrid">
@@ -377,7 +383,9 @@ export function SettingsIntegrationsClient() {
           </div>
 
           <div className="integrationStatus">
-            <span className={hasVerifiedAwsConnection ? "statusDot statusDotConnected" : "statusDot"} />
+            <span
+              className={hasVerifiedAwsConnection ? "statusDot statusDotConnected" : "statusDot"}
+            />
             {hasVerifiedAwsConnection
               ? `검증된 연결 ${verifiedAwsConnectionCount}개`
               : "검증된 연결 없음"}
@@ -419,15 +427,17 @@ export function SettingsIntegrationsClient() {
                   <span>새 AWS 연결 시작</span>
                 </button>
               ) : null}
-              <button
-                className="dashboardSecondaryButton"
-                disabled={!activeConnection || requestState === "loading"}
-                onClick={loadAndOpenCloudFormationTemplate}
-                type="button"
-              >
-                <DashboardIcon name="cloud" />
-                <span>AWS 콘솔 열기</span>
-              </button>
+              {shouldShowCloudFormationOpenButton ? (
+                <button
+                  className="dashboardSecondaryButton"
+                  disabled={requestState === "loading"}
+                  onClick={loadAndOpenCloudFormationTemplate}
+                  type="button"
+                >
+                  <DashboardIcon name="cloud" />
+                  <span>AWS 콘솔 열기</span>
+                </button>
+              ) : null}
             </div>
           ) : null}
 
@@ -458,18 +468,36 @@ export function SettingsIntegrationsClient() {
                   <h2>{template.stackName}</h2>
                 </div>
                 {template.launchStackUrl ? (
-                  <a
+                  <button
                     className="dashboardTopbarAction"
-                    href={template.launchStackUrl}
-                    rel="noreferrer"
-                    target="_blank"
+                    disabled={requestState === "loading"}
+                    onClick={loadAndOpenCloudFormationTemplate}
+                    type="button"
                   >
                     <DashboardIcon name="cloud" />
                     <span>AWS 콘솔에서 생성</span>
-                  </a>
+                  </button>
                 ) : null}
               </div>
-              <textarea className="settingsCodeArea" readOnly rows={12} value={template.templateBody} />
+              {template.manualTemplateFallbackAvailable ? (
+                <>
+                  <p className="settingsCloudFormationNote">
+                    Quick Create 링크를 만들 수 없어 수동으로 Stack을 생성해야 합니다.
+                  </p>
+                  <CloudFormationManualFallback startsOpen template={template} />
+                </>
+              ) : (
+                <div className="settingsCloudFormationNotes">
+                  <p className="settingsCloudFormationNote">
+                    'AWS 콘솔에서 생성' 버튼을 눌러 로그인 후 Quick Create 화면에서 Stack을
+                    생성하세요.
+                  </p>
+                  <p className="settingsCloudFormationNote">
+                    링크가 열리지 않으면 브라우저 팝업 차단을 허용한 뒤 다시 누르세요.
+                  </p>
+                  <CloudFormationManualFallback template={template} />
+                </div>
+              )}
             </div>
           ) : null}
 
@@ -480,7 +508,9 @@ export function SettingsIntegrationsClient() {
                 <input
                   inputMode="numeric"
                   maxLength={12}
-                  onChange={(event) => setAccountId(event.target.value.replace(/\D/g, "").slice(0, 12))}
+                  onChange={(event) =>
+                    setAccountId(event.target.value.replace(/\D/g, "").slice(0, 12))
+                  }
                   placeholder="123456789012"
                   value={accountId}
                 />
@@ -495,7 +525,11 @@ export function SettingsIntegrationsClient() {
               <div className="settingsActionRow">
                 <button
                   className="dashboardTopbarAction"
-                  disabled={!activeConnection || accountId.trim().length !== 12 || requestState === "loading"}
+                  disabled={
+                    !activeConnection ||
+                    accountId.trim().length !== 12 ||
+                    requestState === "loading"
+                  }
                   onClick={storeVerifiedConnectionFromAccountId}
                   type="button"
                 >
@@ -516,7 +550,9 @@ export function SettingsIntegrationsClient() {
               <div className="settingsActionRow">
                 <button
                   className="dashboardSecondaryButton"
-                  disabled={!activeConnection || roleArn.trim().length === 0 || requestState === "loading"}
+                  disabled={
+                    !activeConnection || roleArn.trim().length === 0 || requestState === "loading"
+                  }
                   onClick={runAwsConnectionTest}
                   type="button"
                 >
@@ -525,7 +561,9 @@ export function SettingsIntegrationsClient() {
                 </button>
                 <button
                   className="dashboardTopbarAction"
-                  disabled={!activeConnection || roleArn.trim().length === 0 || requestState === "loading"}
+                  disabled={
+                    !activeConnection || roleArn.trim().length === 0 || requestState === "loading"
+                  }
                   onClick={storeVerifiedConnection}
                   type="button"
                 >
@@ -544,7 +582,9 @@ export function SettingsIntegrationsClient() {
             </div>
           ) : null}
 
-          {requestState === "loading" ? <p className="dashboardMessage">요청을 처리하는 중입니다.</p> : null}
+          {requestState === "loading" ? (
+            <p className="dashboardMessage">요청을 처리하는 중입니다.</p>
+          ) : null}
           {requestState === "error" ? (
             <p className="dashboardMessage" role="alert">
               {errorMessage}
@@ -562,6 +602,46 @@ function InfoItem({ label, value }: { readonly label: string; readonly value: st
       <span>{label}</span>
       <strong>{value}</strong>
     </article>
+  );
+}
+
+function CloudFormationManualFallback({
+  startsOpen = false,
+  template
+}: {
+  readonly startsOpen?: boolean;
+  readonly template: AwsConnectionCloudFormationTemplateResponse;
+}) {
+  return (
+    <details className="settingsCloudFormationFallback" open={startsOpen}>
+      <summary>
+        {startsOpen ? "수동으로 Stack 생성하기" : "Quick Create가 실패하면 여기를 확인하세요"}
+      </summary>
+      <div className="settingsCloudFormationFallbackBody">
+        <p className="settingsCloudFormationNote">
+          아래 템플릿을 파일로 업로드해 같은 Stack을 만들 수 있습니다.
+        </p>
+        <ol className="settingsCloudFormationSteps">
+          <li>
+            AWS 콘솔에서 CloudFormation으로 이동한 뒤 Stack 생성의 새 리소스 사용(표준)을
+            선택합니다.
+          </li>
+          <li>
+            템플릿 준비에서 템플릿 파일 업로드를 선택하고, 아래 내용을 .yaml 파일로 저장해
+            업로드합니다.
+          </li>
+          <li>
+            Stack 이름과 Role 이름을 확인한 뒤 IAM 리소스 생성 권한(Capabilities)을 승인하고
+            생성합니다.
+          </li>
+          <li>
+            수동 업로드 방식은 AWS 콘솔이 템플릿 보관용 cf-templates-* S3 버킷을 추가로 만들 수
+            있습니다.
+          </li>
+        </ol>
+        <textarea className="settingsCodeArea" readOnly rows={12} value={template.templateBody} />
+      </div>
+    </details>
   );
 }
 

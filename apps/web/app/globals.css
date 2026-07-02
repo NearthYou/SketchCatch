@@ -4892,6 +4892,59 @@ nextjs-portal {
   padding: 14px;
 }
 
+.settingsCloudFormationNote {
+  color: var(--dashboard-subtle);
+  font-size: 0.84rem;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.settingsCloudFormationNotes {
+  display: grid;
+  gap: 8px;
+}
+
+.settingsCloudFormationFallback {
+  border-top: 1px solid var(--dashboard-border);
+  display: grid;
+  gap: 10px;
+  padding-top: 10px;
+}
+
+.settingsCloudFormationFallback summary {
+  color: var(--dashboard-muted);
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 850;
+  outline: 0;
+}
+
+.settingsCloudFormationFallback summary:focus-visible {
+  border-radius: 4px;
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.14);
+}
+
+.settingsCloudFormationFallback[open] summary {
+  margin-bottom: 4px;
+}
+
+.settingsCloudFormationFallbackBody {
+  display: grid;
+  gap: 10px;
+}
+
+.settingsCloudFormationSteps {
+  color: var(--dashboard-subtle);
+  font-size: 0.84rem;
+  line-height: 1.6;
+  margin: 0;
+  padding-left: 20px;
+}
+
+.settingsCloudFormationSteps li + li {
+  margin-top: 6px;
+}
+
 .settingsCodeBlock pre,
 .settingsCodeArea {
   background: #07080d;

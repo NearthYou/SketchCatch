@@ -160,7 +160,8 @@ class FakeDeploymentRepository implements DeploymentRepository {
       this.terraformArtifact.id !== candidateTerraformArtifactId ||
       this.terraformArtifact.projectId !== candidateProjectId ||
       this.terraformArtifact.architectureId !== candidateArchitectureId ||
-      this.terraformArtifact.assetType !== "terraform_file"
+      this.terraformArtifact.assetType !== "terraform_file" ||
+      this.terraformArtifact.uploadStatus !== "uploaded"
     ) {
       return undefined;
     }
@@ -597,6 +598,7 @@ function createProjectAssetRecord(overrides: Partial<ProjectAssetRecord> = {}): 
     fileName: "main.tf",
     contentType: "application/x-terraform",
     byteSize: null,
+    uploadStatus: "uploaded",
     createdAt: fixedNow,
     ...overrides
   };
@@ -742,6 +744,40 @@ test("createDeployment rejects an artifact that is not a terraform file for the 
   repository.terraformArtifact = createProjectAssetRecord({
     projectId: otherProjectId,
     assetType: "diagram_png"
+  });
+
+  await assert.rejects(
+    () => createDeployment(createInput(), repository, () => deploymentId),
+    new DeploymentNotFoundError("Terraform artifact not found for project architecture")
+  );
+
+  assert.deepEqual(repository.calls, [
+    {
+      name: "findAccessibleProject",
+      projectId,
+      accessContext: {
+        kind: "user",
+        userId
+      }
+    },
+    {
+      name: "findArchitectureInProject",
+      architectureId,
+      projectId
+    },
+    {
+      name: "findTerraformArtifactForArchitecture",
+      terraformArtifactId,
+      projectId,
+      architectureId
+    }
+  ]);
+});
+
+test("createDeployment rejects a terraform artifact that has not been confirmed uploaded", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.terraformArtifact = createProjectAssetRecord({
+    uploadStatus: "pending"
   });
 
   await assert.rejects(
