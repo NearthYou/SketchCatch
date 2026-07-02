@@ -15,6 +15,28 @@
 
 ## 세션 레코드
 
+### 2026-07-03 - YS 작업별 구현 계획 문서 추가
+
+- Goal: Reverse Engineering, Cost Analysis, Deployment Safety Gate 작업을 `docs/ys` 담당자 참고 문서로 분리한다.
+- Completed:
+  - `docs/ys/009_배포안전게이트구현계획_ys.md`를 추가해 High risk block rule, Medium/Low acknowledgement, approval/apply/destroy 연결 계획을 정리했다.
+  - `docs/ys/010_비용위험분석구현계획_ys.md`를 추가해 Cost Risk scope, 월 730시간 fallback estimate, 비용관리 페이지와 Deployment History 연결 계획을 정리했다.
+  - `docs/ys/011_ReverseEngineering구현계획_ys.md`를 추가해 Provider Adapter scan, AWS-first resource 복원, import suggestion, risk/cost finding 통합 계획을 정리했다.
+  - `docs/ys/README.md`에 새 문서 3개를 빠른 읽기 순서와 문서 목록에 추가했다.
+- Verification run:
+  - `pnpm harness:check` - passed
+  - `git diff --check` - passed
+  - `Test-Path` link target check for the three new `docs/ys` files - passed
+- Evidence recorded:
+  - 문서 변경만 수행했으며 code/infrastructure 파일은 수정하지 않았다.
+  - 실제 Terraform apply/destroy, cloud mutation, Git/CI/CD handoff는 실행하지 않았다.
+  - 이전 PDF 확인 과정에서 만든 임시 `tmp/` 렌더링 파일은 정리했다.
+- Known risks:
+  - `pnpm lint`, `pnpm typecheck`, `pnpm build`는 문서 전용 변경이라 실행하지 않았다.
+  - Existing unrelated worktree change remains: `DESIGN.md` deleted.
+- Next best action:
+  - 세 문서 중 하나를 선택해 GitHub issue 또는 feature branch 단위 구현으로 시작한다.
+
 ### 2026-07-02 - 중복 상세 기획 문서 정리
 
 - Goal: 별도 재구성본을 제거하고 상세 기획서는 canonical 상세 기획서 하나로 유지한다.
