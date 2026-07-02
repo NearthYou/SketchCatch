@@ -4,6 +4,7 @@ import type { DiagramNode, ResourceItem } from "../../../../packages/types/src";
 import {
   applyNodeParametersUpdateWithResourceLabel,
   clearActiveResourceDragPayload,
+  createDiagramNodeFromPayload,
   createPastedNodes,
   getActiveResourceDragPayload,
   writeResourceDragPayload
@@ -38,6 +39,114 @@ test("active resource drag payload is available when dragover dataTransfer reads
   clearActiveResourceDragPayload();
 
   assert.equal(getActiveResourceDragPayload(dragOverDataTransfer), null);
+});
+
+test("createDiagramNodeFromPayload creates Terraform Preview skeleton values for supported resources", () => {
+  const cases = [
+    {
+      resourceType: "aws_vpc",
+      label: "VPC",
+      expectedValues: {
+        cidrBlock: "10.0.0.0/16",
+        enableDnsSupport: true,
+        enableDnsHostnames: true,
+        tags: {
+          Name: "vpc"
+        }
+      }
+    },
+    {
+      resourceType: "aws_subnet",
+      label: "Subnet",
+      expectedValues: {
+        cidrBlock: "10.0.1.0/24",
+        mapPublicIpOnLaunch: true,
+        tags: {
+          Name: "subnet"
+        }
+      }
+    },
+    {
+      resourceType: "aws_security_group",
+      label: "Security Group",
+      expectedValues: {
+        name: "security_group",
+        description: "Managed by SketchCatch",
+        egress: [
+          {
+            fromPort: 0,
+            toPort: 0,
+            protocol: "-1",
+            cidrBlocks: ["0.0.0.0/0"]
+          }
+        ],
+        tags: {
+          Name: "security_group"
+        }
+      }
+    },
+    {
+      resourceType: "aws_instance",
+      label: "EC2 Instance",
+      expectedValues: {
+        instanceType: "t3.micro",
+        tags: {
+          Name: "ec2_instance"
+        }
+      }
+    },
+    {
+      resourceType: "aws_s3_bucket",
+      label: "S3 Bucket",
+      expectedValues: {
+        tags: {
+          Name: "s3_bucket"
+        }
+      }
+    }
+  ];
+
+  for (const { resourceType, label, expectedValues } of cases) {
+    const node = createDiagramNodeFromPayload(
+      makeResourceDragPayload(makeResourceItem({ resourceType, label })),
+      { x: 0, y: 0 },
+      1
+    );
+
+    assert.deepEqual(node.parameters?.values, expectedValues);
+  }
+});
+
+test("createDiagramNodeFromPayload leaves excluded and unsupported resource values empty", () => {
+  const ami = createDiagramNodeFromPayload(
+    makeResourceDragPayload(
+      makeResourceItem({
+        resourceType: "aws_ami",
+        label: "AMI",
+        terraformBlockType: "data"
+      })
+    ),
+    { x: 0, y: 0 },
+    1
+  );
+  const internetGateway = createDiagramNodeFromPayload(
+    makeResourceDragPayload(makeResourceItem({ resourceType: "aws_internet_gateway", label: "Internet Gateway" })),
+    { x: 0, y: 0 },
+    1
+  );
+
+  assert.deepEqual(ami.parameters?.values, {});
+  assert.deepEqual(internetGateway.parameters?.values, {});
+});
+
+test("createDiagramNodeFromPayload does not attach parameters to design nodes", () => {
+  const node = createDiagramNodeFromPayload(
+    makeResourceDragPayload(makeResourceItem({ resourceType: "design_region", label: "Region", id: "design-region" })),
+    { x: 0, y: 0 },
+    1
+  );
+
+  assert.equal(node.parameters, undefined);
 });
 
 test("createPastedNodes clears stale parent area metadata from copied nodes", () => {
@@ -101,6 +210,44 @@ function createFakeDataTransfer(): DataTransfer {
     },
     getData: (mimeType: string) => data.get(mimeType) ?? ""
   } as DataTransfer;
+}
+
+function makeResourceDragPayload(item: ResourceItem) {
+  return {
+    source: "resource-settings-panel" as const,
+    item
+  };
+}
+
+function makeResourceItem({
+  id,
+  label,
+  resourceType,
+  terraformBlockType
+}: {
+  id?: string;
+  label: string;
+  resourceType: string;
+  terraformBlockType?: ResourceItem["nodeDefaults"]["terraformBlockType"];
+}): ResourceItem {
+  return {
+    id: id ?? resourceType,
+    name: label,
+    cloudProvider: "aws",
+    area: "network",
+    category: "Test",
+    iconUrl: "/test.svg",
+    enabled: true,
+    nodeDefaults: {
+      ...(terraformBlockType ? { terraformBlockType } : {}),
+      type: resourceType,
+      label,
+      size: {
+        width: 168,
+        height: 96
+      }
+    }
+  };
 }
 
 function makeResourceNode({
