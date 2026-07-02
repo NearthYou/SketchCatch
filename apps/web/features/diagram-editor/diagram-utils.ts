@@ -72,7 +72,8 @@ export function clearActiveResourceDragPayload(): void {
 export function createDiagramNodeFromPayload(
   payload: ResourceDragPayload,
   position: DiagramNode["position"],
-  zIndex: number
+  zIndex: number,
+  currentNodes: readonly DiagramNode[] = []
 ): DiagramNode {
   const item = payload.item;
   const kind = getNodeKind(item);
@@ -95,7 +96,7 @@ export function createDiagramNodeFromPayload(
 
   return {
     ...nodeBase,
-    parameters: createDefaultNodeParameters(item)
+    parameters: createDefaultNodeParameters(item, currentNodes)
   };
 }
 
@@ -440,18 +441,40 @@ function getDefaultNodeStyle(kind: DiagramNodeKind): DiagramNodeStyle {
   };
 }
 
-function createDefaultNodeParameters(item: ResourceItem): DiagramNodeParameters {
-  const resourceName = toTerraformName(item.nodeDefaults.label);
+function createDefaultNodeParameters(
+  item: ResourceItem,
+  currentNodes: readonly DiagramNode[]
+): DiagramNodeParameters {
+  const resourceType = item.nodeDefaults.type;
+  const baseResourceName = toTerraformName(item.nodeDefaults.label);
+  const usedNames = getResourceNamesByType(currentNodes).get(resourceType) ?? new Set<string>();
+  const resourceName = createUniqueNumberedResourceName(baseResourceName, usedNames);
 
   return {
     ...(item.nodeDefaults.terraformBlockType
       ? { terraformBlockType: item.nodeDefaults.terraformBlockType }
       : {}),
-    resourceType: item.nodeDefaults.type,
+    resourceType,
     resourceName,
     fileName: "main",
     values: {}
   };
+}
+
+function createUniqueNumberedResourceName(resourceName: string, usedNames: ReadonlySet<string>) {
+  if (!usedNames.has(resourceName)) {
+    return resourceName;
+  }
+
+  let index = 2;
+  let candidate = `${resourceName}_${index}`;
+
+  while (usedNames.has(candidate)) {
+    index += 1;
+    candidate = `${resourceName}_${index}`;
+  }
+
+  return candidate;
 }
 
 function mergeOptionalStyle(

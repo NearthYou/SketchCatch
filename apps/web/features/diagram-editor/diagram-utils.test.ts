@@ -85,6 +85,36 @@ test("createDiagramNodeFromPayload does not auto-fill Terraform parameter values
   }
 });
 
+test("createDiagramNodeFromPayload appends a numeric suffix for duplicate resource icon names", () => {
+  const existingNodes = [
+    makeResourceNode({
+      id: "instance-1",
+      resourceName: "ec2_instance",
+      resourceType: "aws_instance"
+    }),
+    makeResourceNode({
+      id: "instance-2",
+      resourceName: "ec2_instance_2",
+      resourceType: "aws_instance"
+    }),
+    makeResourceNode({
+      id: "bucket-1",
+      resourceName: "ec2_instance",
+      resourceType: "aws_s3_bucket"
+    })
+  ];
+
+  const node = createDiagramNodeFromPayload(
+    makeResourceDragPayload(makeResourceItem({ resourceType: "aws_instance", label: "EC2 Instance" })),
+    { x: 0, y: 0 },
+    1,
+    existingNodes
+  );
+
+  assert.equal(node.parameters?.resourceName, "ec2_instance_3");
+  assert.equal(node.label, "EC2 Instance");
+});
+
 test("createDiagramNodeFromPayload does not attach parameters to design nodes", () => {
   const node = createDiagramNodeFromPayload(
     makeResourceDragPayload(makeResourceItem({ resourceType: "design_region", label: "Region", id: "design-region" })),

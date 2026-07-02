@@ -23,11 +23,15 @@
 - Diagram icon 삭제는 Terraform Preview에 즉시 반영된다. 마지막 아이콘 삭제도 빈 `main.tf`로 갱신되고, Terraform editor가 dirty 상태여도 삭제된 리소스 주소에 해당하는 block만 제거한다.
 - Terraform editor 저장 sync action은 빈 Terraform 코드를 전체 삭제 의도로 처리한다. 지원 범위 안의 Diagram-only resource는 `delete_candidate`로 자동 반영되고, Diagram도 이미 비어 있으면 diagnostics 없이 저장 성공한다.
 - 사용자가 보드에서 리소스 아이콘을 직접 추가하면 `parameters.values`는 `{}`로 시작한다. EC2 `instanceType`, VPC `cidrBlock`, `tags.Name` 같은 Terraform parameter 값은 사용자 입력, AI draft config, Terraform editor sync처럼 명시 입력이 있을 때만 채운다.
+- 같은 리소스 아이콘을 반복 추가하면 같은 `resourceType` 안에서 `resourceName`이 `ec2_instance`, `ec2_instance_2`, `ec2_instance_3`처럼 숫자 suffix로 유니크하게 생성된다.
 - `docs/data-models.md`는 diagnostic/proposal source metadata와 proposal 지원 범위를 현재 코드에 맞게 기록한다.
 - `feature_list.json`에는 동시에 `in_progress`인 항목이 없다.
 
 ## 이번 세션의 변경 사항
 
+- 수동 리소스 아이콘 생성 경로가 현재 Diagram node 목록을 보고 중복 Terraform `resourceName`에 숫자 suffix를 붙이도록 수정했다.
+- 다이어그램 drop 경로에서 `createDiagramNodeFromPayload`에 현재 node 목록을 전달하도록 연결했다.
+- `docs/data-models.md`에 수동 리소스 아이콘의 Terraform identity 중복 회피 계약을 추가했다.
 - EC2 Instance를 포함한 모든 수동 리소스 아이콘 생성에서 Terraform parameter 자동 채움을 제거했다.
 - VPC/Subnet/Security Group/EC2/S3에 들어가던 Terraform Preview skeleton default helper를 삭제했다.
 - AI Architecture Draft 변환 테스트는 catalog default가 아니라 AI가 명시한 config 값만 유지하도록 조정했다.
@@ -57,6 +61,14 @@
 
 ## 검증
 
+- `pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/diagram-utils.test.ts` - passed
+- `pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/diagram-utils.test.ts features/diagram-editor/drag-transaction.test.ts features/diagram-editor/reference-drop-targets.test.ts features/workspace/terraform-panel-utils.test.ts features/workspace/workspace-ai-diagram-adapter.test.ts` - passed
+- `pnpm --filter @sketchcatch/web typecheck` - passed
+- `pnpm lint` - passed
+- `pnpm typecheck` - passed
+- `pnpm build` - passed
+- `pnpm harness:check` - passed
+- `git diff --check` - passed
 - `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-to-diagram.test.ts src/routes/terraform.test.ts src/services/terraform/diagram-to-terraform.test.ts src/services/terraform/infrastructure-graph.test.ts` - passed
 - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/terraform-sync-proposals.test.ts features/workspace/terraform-diagnostic-line-highlights.test.ts features/workspace/workspace-right-panel-layout.test.ts features/workspace/workspace-ai-diagram-adapter.test.ts features/diagram-editor/diagram-utils.test.ts features/resource-settings/catalog.test.ts features/workspace/pre-deployment-diagnostics.test.ts features/parameter-input/validation.test.ts` - passed
 - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/terraform-sync-proposals.test.ts features/workspace/workspace-right-panel-layout.test.ts features/workspace/terraform-leave-save-state.test.ts` - passed
@@ -84,6 +96,7 @@
 
 ## 다음으로 최선의 행동
 
+- 브라우저에서 EC2/VPC/S3 아이콘을 반복 추가했을 때 Terraform Preview 이름이 순차 suffix로 생성되는지 수동 smoke한다.
 - 브라우저에서 CloudFront AI draft가 `AWS` fallback이 아니라 CloudFront icon으로 보이는지 수동 smoke한다.
 - Terraform editor에서 `aws_s3_bucket`, `data.aws_ami`, `aws_cloudfront_distribution` create proposal이 저장 시 자동 반영되고 icon/size가 유지되는지 수동 smoke한다.
 - Multi-file Terraform에서 `network.tf` 오류가 `main.tf`에 표시되지 않고 해당 파일에서만 빨간줄로 보이는지 확인한다.

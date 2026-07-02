@@ -15,6 +15,36 @@
 
 ## 세션 레코드
 
+### 2026-07-03 - 중복 리소스 아이콘 Terraform 이름 suffix 수정
+
+- Goal: 같은 리소스 아이콘을 여러 번 추가해도 Terraform Preview의 resource block 이름이 중복되지 않게 한다.
+- Root cause:
+  - 수동 리소스 아이콘 생성 경로가 현재 다이어그램 node 목록을 보지 않고 catalog label에서 만든 기본 `resourceName`만 사용했다.
+  - 그래서 EC2 Instance를 반복 추가하면 `aws_instance.ec2_instance`가 계속 생성되어 Terraform address가 중복될 수 있었다.
+- Completed:
+  - `createDiagramNodeFromPayload`가 현재 node 목록을 받아 같은 `resourceType` 안의 기존 `resourceName`을 확인하게 했다.
+  - 새 수동 리소스 아이콘의 `resourceName`이 중복되면 `ec2_instance_2`, `ec2_instance_3`처럼 숫자 suffix를 붙이게 했다.
+  - 다이어그램 drop 경로에서 현재 node 목록을 전달하도록 연결했다.
+  - `docs/data-models.md`에 수동 리소스 아이콘의 Terraform identity 중복 회피 계약을 기록했다.
+- Verification run:
+  - Red before fix: `pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/diagram-utils.test.ts` - failed because duplicate EC2 icon creation returned `ec2_instance` instead of `ec2_instance_3`
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/diagram-utils.test.ts` - passed
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/diagram-utils.test.ts features/diagram-editor/drag-transaction.test.ts features/diagram-editor/reference-drop-targets.test.ts features/workspace/terraform-panel-utils.test.ts features/workspace/workspace-ai-diagram-adapter.test.ts` - passed
+  - `pnpm --filter @sketchcatch/web typecheck` - passed
+  - `pnpm lint` - passed
+  - `pnpm typecheck` - passed
+  - `pnpm build` - passed
+  - `pnpm harness:check` - passed
+  - `git diff --check` - passed
+- Evidence recorded:
+  - 실제 Terraform apply/destroy, cloud mutation, Git/CI/CD handoff는 실행하지 않았다.
+  - frontend UI에 Terraform CLI 실행 또는 AWS SDK 호출을 추가하지 않았다.
+- Known risks:
+  - 브라우저 수동 smoke는 수행하지 않았다. 자동/단위/타입/빌드 검증으로 확인했다.
+  - 기존 unrelated worktree changes remain: `DESIGN.md` 삭제 상태, `apps/web/next-env.d.ts` 변경 상태.
+- Next best action:
+  - 브라우저에서 EC2/VPC/S3 아이콘을 반복 추가했을 때 Terraform Preview resource name이 순차 suffix로 생성되는지 수동 smoke한다.
+
 ### 2026-07-03 - 리소스 아이콘 생성 시 파라미터 자동 채움 제거
 
 - Goal: EC2 Instance를 포함한 모든 리소스 아이콘 추가 시 `instanceType`, `cidrBlock`, `tags.Name` 같은 Terraform parameter 값이 자동으로 채워지지 않게 한다.
