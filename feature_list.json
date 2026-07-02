@@ -1,0 +1,179 @@
+{
+  "schemaVersion": 1,
+  "lastUpdated": "2026-07-02",
+  "purpose": "Tracks agent-harness hardening work. Product scope remains in docs/product.md.",
+  "statusRules": {
+    "allowedStatuses": ["not_started", "in_progress", "blocked", "passing"],
+    "singleActiveFeature": true,
+    "passingRequiresEvidence": true,
+    "blockedRequiresReason": true
+  },
+  "features": [
+    {
+      "id": "HARNESS-001",
+      "priority": 1,
+      "area": "agent-harness",
+      "title": "Durable agent operating surface",
+      "user_visible_behavior": "새 세션이 root AGENTS.md, agent-progress.md, feature_list.json, session-handoff.md를 읽고 현재 작업 상태를 복구한다.",
+      "status": "passing",
+      "verification": [
+        "AGENTS.md가 하네스 시작/종료 루프를 명시한다.",
+        "agent-progress.md가 현재 검증 상태와 다음 행동을 기록한다.",
+        "session-handoff.md가 다음 세션의 시작점을 제공한다.",
+        "scripts/init-harness.ps1이 필수 하네스 파일과 feature_list.json 구조를 확인한다."
+      ],
+      "evidence": {
+        "lastVerified": "2026-07-02",
+        "commands": [
+          "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/init-harness.ps1",
+          "Get-Content -Encoding UTF8 -Raw -LiteralPath feature_list.json | ConvertFrom-Json | Out-Null",
+          "pnpm lint",
+          "pnpm typecheck",
+          "pnpm build"
+        ],
+        "notes": "Root operating loop, progress log, feature tracker, handoff note, clean checklist, evaluator rubric, quality document, and startup helper were created and verified."
+      },
+      "notes": "AGENTS.md를 길게 만드는 대신 지속 상태 파일을 분리한다."
+    },
+    {
+      "id": "HARNESS-002",
+      "priority": 2,
+      "area": "startup",
+      "title": "Standard startup helper",
+      "user_visible_behavior": "에이전트가 매번 실행 경로를 재발견하지 않고 같은 시작 명령으로 repo 기준선을 확인한다.",
+      "status": "passing",
+      "verification": [
+        "scripts/init-harness.ps1이 repo root와 필수 파일을 확인한다.",
+        "scripts/init-harness.ps1이 feature_list.json을 파싱한다.",
+        "기본 실행은 install이나 lockfile rewrite를 하지 않는다.",
+        "-Verify 또는 -Full 플래그가 있을 때만 프로젝트 체크를 실행한다."
+      ],
+      "evidence": {
+        "lastVerified": "2026-07-02",
+        "commands": [
+          "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/init-harness.ps1",
+          "pnpm lint",
+          "pnpm typecheck",
+          "pnpm build"
+        ],
+        "notes": "PowerShell helper validates required harness files and feature_list.json without install or lockfile writes."
+      },
+      "notes": "이 repo의 기본 shell이 PowerShell이므로 init.sh 대신 PowerShell helper를 표준으로 둔다."
+    },
+    {
+      "id": "HARNESS-003",
+      "priority": 3,
+      "area": "completion",
+      "title": "Evidence-bound completion gates",
+      "user_visible_behavior": "에이전트가 실행 가능한 증거 없이 완료를 선언하지 못하고, 스킵한 검증은 이유와 함께 남긴다.",
+      "status": "passing",
+      "verification": [
+        "clean-state-checklist.md가 종료 전 확인 항목을 명시한다.",
+        "evaluator-rubric.md가 hard fail 조건과 점수 기준을 명시한다.",
+        "passing 상태에는 lastVerified와 commands 증거가 필요하다."
+      ],
+      "evidence": {
+        "lastVerified": "2026-07-02",
+        "commands": [
+          "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/init-harness.ps1",
+          "pnpm lint",
+          "pnpm typecheck",
+          "pnpm build"
+        ],
+        "notes": "clean-state-checklist.md and evaluator-rubric.md now make evidence-free completion a harness failure."
+      },
+      "notes": "증거 없는 passing은 하네스 실패로 취급한다."
+    },
+    {
+      "id": "HARNESS-004",
+      "priority": 4,
+      "area": "handoff",
+      "title": "Multi-session handoff discipline",
+      "user_visible_behavior": "긴 세션 후에도 다음 에이전트가 검증된 것, 미검증 위험, 다음 행동을 바로 볼 수 있다.",
+      "status": "passing",
+      "verification": [
+        "agent-progress.md가 세션 레코드를 보존한다.",
+        "session-handoff.md가 최신 handoff snapshot을 제공한다.",
+        "AGENTS.md가 장기/미완성 작업에서 두 파일 갱신을 요구한다."
+      ],
+      "evidence": {
+        "lastVerified": "2026-07-02",
+        "commands": [
+          "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/init-harness.ps1",
+          "pnpm lint",
+          "pnpm typecheck",
+          "pnpm build"
+        ],
+        "notes": "agent-progress.md keeps history and session-handoff.md keeps the latest continuation snapshot."
+      },
+      "notes": "progress는 기록, handoff는 다음 세션용 최신 압축본이다."
+    },
+    {
+      "id": "HARNESS-005",
+      "priority": 5,
+      "area": "quality",
+      "title": "Project quality snapshot",
+      "user_visible_behavior": "에이전트 작업 품질과 코드베이스 건전성을 별도 문서로 평가한다.",
+      "status": "passing",
+      "verification": [
+        "quality-document.md가 초기 품질 스냅샷과 알려진 격차를 기록한다.",
+        "evaluator-rubric.md가 세션 산출물 평가 기준을 기록한다."
+      ],
+      "evidence": {
+        "lastVerified": "2026-07-02",
+        "commands": [
+          "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/init-harness.ps1",
+          "pnpm lint",
+          "pnpm typecheck",
+          "pnpm build"
+        ],
+        "notes": "quality-document.md records the initial adversarial quality snapshot and remaining harness gaps."
+      },
+      "notes": "품질 문서는 코드베이스, 루브릭은 에이전트 산출물을 본다."
+    },
+    {
+      "id": "HARNESS-006",
+      "priority": 6,
+      "area": "automation",
+      "title": "Automated harness lint",
+      "user_visible_behavior": "하네스 파일 구조, single in_progress 규칙, passing evidence 규칙을 CI나 로컬 명령으로 자동 확인한다.",
+      "status": "passing",
+      "verification": [
+        "하네스 lint가 feature_list.json의 status/evidence 규칙을 검사한다.",
+        "하네스 lint가 agent-progress.md와 session-handoff.md의 필수 heading 존재를 검사한다.",
+        "필요하면 package script로 연결하되 lockfile을 불필요하게 바꾸지 않는다."
+      ],
+      "evidence": {
+        "lastVerified": "2026-07-02",
+        "commands": [
+          "pnpm harness:check",
+          "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/init-harness.ps1",
+          "pnpm lint",
+          "pnpm typecheck",
+          "pnpm build"
+        ],
+        "notes": "scripts/check-harness.mjs validates feature statuses, passing evidence, required headings, unresolved pending placeholders, and root/docs wiring. package.json exposes it as pnpm harness:check."
+      },
+      "notes": "CI 연결은 아직 하지 않았지만, 독립 실행 가능한 local harness lint는 추가했다."
+    },
+    {
+      "id": "HARNESS-007",
+      "priority": 7,
+      "area": "e2e",
+      "title": "Baseline user-journey smoke",
+      "user_visible_behavior": "핵심 MVP 흐름이 브라우저 또는 API smoke로 확인되어 조기 완료 선언을 막는다.",
+      "status": "not_started",
+      "verification": [
+        "Representative Use Journey의 최소 happy path가 자동 또는 반자동 smoke로 표현된다.",
+        "실제 AWS apply가 필요한 경로는 명시 승인과 cleanup plan 없이 실행하지 않는다.",
+        "검증 결과가 agent-progress.md 또는 별도 run report에 남는다."
+      ],
+      "evidence": {
+        "lastVerified": null,
+        "commands": [],
+        "notes": ""
+      },
+      "notes": "현재는 unit/type/build checks 중심이다. 실제 서비스 여정 smoke가 하네스의 다음 큰 빈틈이다."
+    }
+  ]
+}
