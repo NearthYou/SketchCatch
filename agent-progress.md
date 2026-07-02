@@ -15,6 +15,37 @@
 
 ## 세션 레코드
 
+### 2026-07-03 - 기본 리소스 아이콘 크기 절반 축소
+
+- Goal: 새로 생성되는 일반 리소스 아이콘이 너무 크게 보이지 않도록 기본 크기를 현재의 절반으로 줄인다.
+- Root cause:
+  - 일반 리소스 catalog 기본 크기가 `112x112`였고, Terraform proposal/AI draft 생성 경로도 이 catalog 크기를 그대로 사용했다.
+  - CSS icon frame과 resize 최소값도 큰 icon 기준으로 맞춰져 있어 단순 size 변경만으로는 작은 기본 크기와 충돌할 수 있었다.
+- Completed:
+  - 일반 리소스 icon node catalog 기본 크기를 `56x56`으로 줄였다.
+  - legacy palette fallback, Terraform create proposal fallback, AI draft fallback 크기도 같은 비율로 줄였다.
+  - 일반 resource resize 최소값을 `56x56`으로 낮춰 새 기본 크기 상태를 유지할 수 있게 했다.
+  - CSS icon frame 최소 크기를 줄여 `56x56` node 안에서 icon과 label이 밀리지 않게 했다.
+  - VPC/Subnet/Region 같은 영역 node는 기존 영역 크기를 유지하고, AI draft area fit은 작은 icon을 배치할 때 기존 112px footprint를 최소 배치 기준으로 사용하게 했다.
+  - `docs/data-models.md`에 신규 일반 리소스 icon node 기본 크기와 영역 node 예외를 기록했다.
+- Verification run:
+  - Red before fix: `pnpm --filter @sketchcatch/web exec tsx --test features/resource-settings/catalog.test.ts features/workspace/workspace-ai-diagram-adapter.test.ts features/workspace/terraform-sync-proposals.test.ts` - failed because catalog and generated nodes still used `112x112`
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/resource-settings/catalog.test.ts features/workspace/workspace-ai-diagram-adapter.test.ts features/workspace/terraform-sync-proposals.test.ts features/diagram-editor/node-resize-bounds.test.ts` - passed
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/resource-settings/catalog.test.ts features/resource-settings/catalog-provider.test.ts features/diagram-editor/diagram-utils.test.ts features/diagram-editor/node-resize-bounds.test.ts features/diagram-editor/node-resize.test.ts features/workspace/workspace-ai-diagram-adapter.test.ts features/workspace/terraform-sync-proposals.test.ts features/workspace/terraform-panel-utils.test.ts` - passed
+  - `pnpm lint` - passed
+  - `pnpm typecheck` - passed
+  - `pnpm build` - passed
+  - `pnpm harness:check` - passed
+  - `git diff --check` - passed
+- Evidence recorded:
+  - 실제 Terraform apply/destroy, cloud mutation, Git/CI/CD handoff는 실행하지 않았다.
+  - frontend UI에 Terraform CLI 실행 또는 AWS SDK 호출을 추가하지 않았다.
+- Known risks:
+  - 브라우저 수동 smoke는 수행하지 않았다. 자동/단위/타입/빌드 검증으로 확인했다.
+  - 기존 unrelated worktree changes remain: `DESIGN.md` 삭제 상태, `apps/web/next-env.d.ts` 변경 상태.
+- Next best action:
+  - 브라우저에서 EC2/S3/CloudFront 같은 일반 resource icon을 새로 추가해 `56x56` 크기로 보이고, VPC/Subnet 같은 영역 node는 기존 크기를 유지하는지 수동 smoke한다.
+
 ### 2026-07-03 - 중복 리소스 아이콘 Terraform 이름 suffix 수정
 
 - Goal: 같은 리소스 아이콘을 여러 번 추가해도 Terraform Preview의 resource block 이름이 중복되지 않게 한다.

@@ -9,8 +9,8 @@ import { resourceCatalog } from "../resource-settings/catalog";
 
 type ApprovedProposalIds = ReadonlySet<string> | readonly string[];
 const DEFAULT_CREATED_NODE_SIZE = {
-  width: 160,
-  height: 96
+  width: 80,
+  height: 48
 } as const;
 
 export function getTerraformSyncProposalId(

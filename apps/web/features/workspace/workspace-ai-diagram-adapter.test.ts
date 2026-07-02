@@ -95,7 +95,7 @@ test("convertArchitectureJsonToDiagramJson creates board nodes and edges from an
           }
         },
         position: { x: 360, y: 220 },
-        size: { width: 112, height: 112 },
+        size: { width: 56, height: 56 },
         style: {
           borderColor: "#2f6db3",
           textColor: "#172033"
@@ -146,7 +146,7 @@ test("convertArchitectureJsonToDiagramJson uses catalog icon and size for CloudF
     cloudFrontNode?.iconUrl,
     "/Architecture-Service-Icons_07312025/Arch_Networking-Content-Delivery/64/Arch_Amazon-CloudFront_64.svg"
   );
-  assert.deepEqual(cloudFrontNode?.size, { width: 112, height: 112 });
+  assert.deepEqual(cloudFrontNode?.size, { width: 56, height: 56 });
   assert.equal(cloudFrontNode?.parameters?.resourceName, "cloudfront_site");
 });
 

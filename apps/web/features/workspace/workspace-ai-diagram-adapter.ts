@@ -15,13 +15,14 @@ import { resourceCatalog } from "../resource-settings/catalog";
 import { addServerStorageAreaNodes } from "./server-storage-board-layout";
 
 const DEFAULT_VIEWPORT: DiagramJson["viewport"] = { x: 0, y: 0, zoom: 1 };
-const DEFAULT_NODE_SIZE: DiagramNode["size"] = { width: 180, height: 96 };
+const DEFAULT_NODE_SIZE: DiagramNode["size"] = { width: 90, height: 48 };
 const DEFAULT_EDGE_STYLE: NonNullable<DiagramEdge["style"]> = {
   animated: false,
   color: "#506176",
   width: "medium"
 };
 const AREA_CHILD_PADDING = 48;
+const MIN_RESOURCE_AREA_CHILD_FOOTPRINT: DiagramNode["size"] = { width: 112, height: 112 };
 const MAX_AREA_FIT_PASSES = 8;
 const AREA_PARENT_EDGE_LABELS = new Set(["contains", "hosts"]);
 const RESOURCE_TO_TERRAFORM_RESOURCE_TYPE: Record<ResourceType, string> = {
@@ -301,13 +302,25 @@ function getRequiredAreaSize(node: DiagramNode, children: readonly DiagramNode[]
   let bottom = node.position.y + node.size.height;
 
   for (const child of children) {
-    right = Math.max(right, child.position.x + child.size.width + AREA_CHILD_PADDING);
-    bottom = Math.max(bottom, child.position.y + child.size.height + AREA_CHILD_PADDING);
+    const childFitSize = getAreaChildFitSize(child);
+    right = Math.max(right, child.position.x + childFitSize.width + AREA_CHILD_PADDING);
+    bottom = Math.max(bottom, child.position.y + childFitSize.height + AREA_CHILD_PADDING);
   }
 
   return {
     width: right - node.position.x,
     height: bottom - node.position.y
+  };
+}
+
+function getAreaChildFitSize(child: DiagramNode): DiagramNode["size"] {
+  if (isAreaDiagramNode(child) || child.kind !== "resource") {
+    return child.size;
+  }
+
+  return {
+    width: Math.max(child.size.width, MIN_RESOURCE_AREA_CHILD_FOOTPRINT.width),
+    height: Math.max(child.size.height, MIN_RESOURCE_AREA_CHILD_FOOTPRINT.height)
   };
 }
 

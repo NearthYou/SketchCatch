@@ -798,8 +798,8 @@
   margin: 0 auto;
   max-height: calc(100% - 22px);
   max-width: 100%;
-  min-height: 44px;
-  min-width: 44px;
+  min-height: 22px;
+  min-width: 22px;
   pointer-events: none;
   width: auto;
 }

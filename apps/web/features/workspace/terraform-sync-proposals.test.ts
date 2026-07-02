@@ -122,7 +122,7 @@ test("applyTerraformSyncProposals deep clones created node defaults and paramete
   createdNode.size.width = 999;
   (createdNode.parameters?.values.tags as Record<string, unknown>).Name = "mutated";
 
-  assert.deepEqual(catalogResource.nodeDefaults.size, { width: 112, height: 112 });
+  assert.deepEqual(catalogResource.nodeDefaults.size, { width: 56, height: 56 });
   assert.deepEqual(proposal.parameters.values, {
     tags: {
       Name: "logs"
