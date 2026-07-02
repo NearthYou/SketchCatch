@@ -314,6 +314,155 @@ test("skips Terraform Preview resources outside the InfrastructureGraph allowlis
   );
 });
 
+test("generates stable VPC EC2 S3 Terraform Preview repeatedly", () => {
+  const diagramJson: DiagramJson = {
+    nodes: [
+      makeNode({
+        id: "vpc-1",
+        type: "aws_vpc",
+        kind: "resource",
+        label: "main",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_vpc",
+          resourceName: "main",
+          fileName: "network",
+          values: {
+            cidrBlock: "10.0.0.0/16",
+            enableDnsSupport: true,
+            enableDnsHostnames: true
+          }
+        }
+      }),
+      makeNode({
+        id: "subnet-1",
+        type: "aws_subnet",
+        kind: "resource",
+        label: "public",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_subnet",
+          resourceName: "public",
+          fileName: "network",
+          values: {
+            vpcId: "aws_vpc.main.id",
+            cidrBlock: "10.0.1.0/24",
+            availabilityZone: "ap-northeast-2a",
+            mapPublicIpOnLaunch: true
+          }
+        }
+      }),
+      makeNode({
+        id: "security-group-1",
+        type: "aws_security_group",
+        kind: "resource",
+        label: "web",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_security_group",
+          resourceName: "web",
+          fileName: "security",
+          values: {
+            name: "web",
+            vpcId: "aws_vpc.main.id",
+            ingress: [
+              {
+                fromPort: 80,
+                toPort: 80,
+                protocol: "tcp",
+                cidrBlocks: ["0.0.0.0/0"]
+              }
+            ],
+            egress: [
+              {
+                fromPort: 0,
+                toPort: 0,
+                protocol: "-1",
+                cidrBlocks: ["0.0.0.0/0"]
+              }
+            ]
+          }
+        }
+      }),
+      makeNode({
+        id: "ami-1",
+        type: "aws_ami",
+        kind: "resource",
+        label: "ubuntu",
+        parameters: {
+          terraformBlockType: "data",
+          resourceType: "aws_ami",
+          resourceName: "ubuntu",
+          fileName: "compute",
+          values: {
+            mostRecent: true,
+            owners: ["099720109477"]
+          }
+        }
+      }),
+      makeNode({
+        id: "instance-1",
+        type: "aws_instance",
+        kind: "resource",
+        label: "web",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_instance",
+          resourceName: "web",
+          fileName: "compute",
+          values: {
+            ami: "data.aws_ami.ubuntu.id",
+            instanceType: "t3.micro",
+            subnetId: "aws_subnet.public.id",
+            vpcSecurityGroupIds: ["aws_security_group.web.id"]
+          }
+        }
+      }),
+      makeNode({
+        id: "bucket-1",
+        type: "aws_s3_bucket",
+        kind: "resource",
+        label: "assets",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_s3_bucket",
+          resourceName: "assets",
+          fileName: "storage",
+          values: {
+            bucket: "sketchcatch-assets"
+          }
+        }
+      })
+    ],
+    edges: [
+      {
+        id: "edge-1",
+        sourceNodeId: "vpc-1",
+        targetNodeId: "subnet-1"
+      },
+      {
+        id: "edge-2",
+        sourceNodeId: "subnet-1",
+        targetNodeId: "instance-1"
+      }
+    ],
+    viewport: {
+      x: 0,
+      y: 0,
+      zoom: 1
+    }
+  };
+
+  const firstTerraformCode = generateTerraformFromDiagramJson(diagramJson);
+  const secondTerraformCode = generateTerraformFromDiagramJson(diagramJson);
+
+  assert.equal(secondTerraformCode, firstTerraformCode);
+  assert.match(firstTerraformCode, /resource "aws_vpc" "main" \{/);
+  assert.match(firstTerraformCode, /resource "aws_instance" "web" \{/);
+  assert.match(firstTerraformCode, /resource "aws_s3_bucket" "assets" \{/);
+  assert.match(firstTerraformCode, /data "aws_ami" "ubuntu" \{/);
+});
+
 test("renders placement references with Terraform snake_case attribute names", () => {
   const diagramJson: DiagramJson = {
     nodes: [
