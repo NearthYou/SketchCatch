@@ -5,7 +5,7 @@ import type {
   DesignSimulationResult
 } from "@sketchcatch/types";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:4000/api";
+const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "/api").replace(/\/+$/, "");
 
 type TerraformErrorExplanationRequest = {
   readonly stage: AiTerraformStage;

@@ -62,7 +62,7 @@ test("requestDesignSimulation posts ArchitectureJson and operating choices", asy
     trafficLevel: "normal"
   });
 
-  assert.equal(String(requests[0]?.input), "http://127.0.0.1:4000/api/ai/design-simulation");
+  assert.equal(String(requests[0]?.input), "/api/ai/design-simulation");
   assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), {
     architectureJson,
     budgetLevel: "low",
@@ -107,7 +107,7 @@ test("requestTerraformErrorExplanation posts stage and raw Terraform message", a
     stage: "export"
   });
 
-  assert.equal(String(requests[0]?.input), "http://127.0.0.1:4000/api/ai/terraform-error-explanation");
+  assert.equal(String(requests[0]?.input), "/api/ai/terraform-error-explanation");
   assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), {
     rawMessage: "Error: Missing required argument",
     relatedResourceId: "ec2-backend",
@@ -151,7 +151,7 @@ test("runAiTerraformPreviewExplanation posts Terraform code from the real worksp
 
   const result = await runAiTerraformPreviewExplanation('resource "aws_vpc" "main" {}');
 
-  assert.equal(String(requests[0]?.input), "http://127.0.0.1:4000/api/ai/terraform-preview-explanation");
+  assert.equal(String(requests[0]?.input), "/api/ai/terraform-preview-explanation");
   assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), {
     terraformCode: 'resource "aws_vpc" "main" {}'
   });
@@ -194,7 +194,7 @@ test("runAiTerraformErrorExplanation posts Terraform stage and raw message from 
     stage: "plan"
   });
 
-  assert.equal(String(requests[0]?.input), "http://127.0.0.1:4000/api/ai/terraform-error-explanation");
+  assert.equal(String(requests[0]?.input), "/api/ai/terraform-error-explanation");
   assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), {
     rawMessage: "AccessDenied",
     relatedResourceId: "ec2-backend",
