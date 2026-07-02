@@ -16,6 +16,7 @@
 - Terraform leave dialog의 `저장하고 나가기`는 저장 실패/검증 오류/proposal 대기 시 더 이상 무반응처럼 보이지 않고, 다이얼로그 안에 차단 안내를 표시한다.
 - Terraform leave dialog 저장 중에는 버튼을 잠가 중복 저장과 race를 줄인다.
 - Terraform editor는 `TerraformDiagnostic.line`이 있는 error diagnostic을 해당 줄의 빨간 underline과 빨간 줄 번호로 표시한다.
+- Terraform-only create proposal 승인으로 생긴 새 DiagramJson node는 resource catalog의 `iconUrl`과 `nodeDefaults.size`를 사용하므로 더 이상 `AWS` fallback 빈 박스로 보이지 않는다.
 - `feature_list.json`에는 동시에 `in_progress`인 항목이 없다.
 
 ## 이번 세션의 변경 사항
@@ -27,6 +28,7 @@
 - Web Terraform panel은 여러 Terraform file을 sync API에 전달하고, structural proposal은 pending panel에서 명시 선택 후 반영한다.
 - Web Terraform leave dialog에 저장 상태 모델과 status/alert 피드백 UI를 추가했다.
 - Web Terraform editor에 diagnostic line highlight helper와 빨간줄 overlay를 추가했다.
+- Web Terraform proposal 적용 경로에서 새 resource/data node에 catalog icon/size metadata를 붙이도록 수정했다.
 - 하위 AI 리뷰 6개 축에서 나온 blocking 피드백을 반영했다.
   - Preview 지원 범위와 proposal 지원 범위를 문서에서 분리했다.
   - ambiguous rename과 object key order 문제를 수정했다.
@@ -39,6 +41,7 @@
 - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/terraform-sync-proposals.test.ts features/workspace/terraform-panel-utils.test.ts features/workspace/workspace-right-panel-layout.test.ts features/parameter-input/validation.test.ts features/parameter-input/parameter-panel-source.test.ts features/diagram-editor/diagram-utils.test.ts` - passed
 - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/terraform-leave-save-state.test.ts features/workspace/workspace-right-panel-layout.test.ts features/workspace/terraform-sync-proposals.test.ts features/workspace/workspace-deployment-artifacts.test.ts features/workspace/deployment-actions.test.ts` - passed
 - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/terraform-diagnostic-line-highlights.test.ts features/workspace/workspace-right-panel-layout.test.ts features/workspace/terraform-panel-utils.test.ts features/workspace/terraform-sync-proposals.test.ts features/workspace/terraform-leave-save-state.test.ts` - passed
+- `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/terraform-sync-proposals.test.ts features/workspace/workspace-right-panel-layout.test.ts features/resource-settings/catalog.test.ts features/resource-settings/catalog-provider.test.ts features/diagram-editor/diagram-utils.test.ts` - passed
 - `pnpm --filter @sketchcatch/web typecheck` - passed
 - `pnpm catalog:check` - passed
 - `pnpm harness:check` - passed
@@ -59,6 +62,7 @@
 - 브라우저에서 VPC, EC2, S3, `data.aws_ami`를 포함한 workspace를 열어 Terraform Preview와 proposal panel을 수동 smoke한다.
 - Terraform editor에서 proposal 대기 상태를 만든 뒤 leave dialog의 `저장하고 나가기`, `계속 편집하기`, `저장하지 않고 나가기`를 수동 smoke한다.
 - Terraform editor에서 잘못된 Terraform 코드를 입력하고 검증 오류 줄의 빨간 underline/줄 번호 표시를 수동 smoke한다.
+- Terraform editor에서 Terraform-only resource/data create proposal을 승인한 뒤 S3/AMI 같은 노드의 실제 아이콘 표시를 수동 smoke한다.
 - 다음 조각을 진행한다면 proposal 승인 후 실제 diagram edge 추론 정책 또는 Terraform code -> resource 생성 UX를 별도 이슈로 다룬다.
 
 ## 건드리지 말아야 할 것

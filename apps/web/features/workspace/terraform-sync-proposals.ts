@@ -1,10 +1,17 @@
 import type {
   DiagramJson,
   DiagramNode,
+  ResourceItem,
+  TerraformBlockType,
   TerraformDiagramChangeProposal
 } from "../../../../packages/types/src";
+import { resourceCatalog } from "../resource-settings/catalog";
 
 type ApprovedProposalIds = ReadonlySet<string> | readonly string[];
+const DEFAULT_CREATED_NODE_SIZE = {
+  width: 160,
+  height: 96
+} as const;
 
 export function getTerraformSyncProposalId(
   proposal: TerraformDiagramChangeProposal,
@@ -82,16 +89,18 @@ function applyCreateProposal(
     diagramJson.nodes,
     `terraform-${proposal.identity.resourceType}-${proposal.identity.resourceName}`
   );
+  const catalogResource = findCatalogResourceForTerraformBlock(
+    proposal.identity.resourceType,
+    proposal.identity.terraformBlockType
+  );
   const createdNode: DiagramNode = {
     id: nodeId,
     type: proposal.identity.resourceType,
     kind: "resource",
     position: getNextCreatedNodePosition(diagramJson.nodes.length),
-    size: {
-      width: 160,
-      height: 96
-    },
+    size: catalogResource?.nodeDefaults.size ?? DEFAULT_CREATED_NODE_SIZE,
     label: proposal.identity.resourceName,
+    ...(catalogResource ? { iconUrl: catalogResource.iconUrl } : {}),
     locked: false,
     zIndex: 0,
     parameters: {
@@ -108,6 +117,20 @@ function applyCreateProposal(
     edges: [...diagramJson.edges],
     viewport: { ...diagramJson.viewport }
   };
+}
+
+function findCatalogResourceForTerraformBlock(
+  resourceType: string,
+  terraformBlockType: TerraformBlockType
+): ResourceItem | undefined {
+  return resourceCatalog.find((resource) => {
+    const catalogTerraformBlockType = resource.nodeDefaults.terraformBlockType ?? "resource";
+
+    return (
+      resource.nodeDefaults.type === resourceType &&
+      catalogTerraformBlockType === terraformBlockType
+    );
+  });
 }
 
 function applyDeleteProposal(

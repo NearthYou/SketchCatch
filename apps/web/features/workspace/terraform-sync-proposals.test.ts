@@ -10,6 +10,7 @@ import {
   getTerraformSyncProposalId,
   splitTerraformSyncProposalsByApproval
 } from "./terraform-sync-proposals";
+import { resourceCatalog } from "../resource-settings/catalog";
 
 test("applyTerraformSyncProposals applies only approved create proposals without creating edges", () => {
   const diagramJson = makeDiagramJson();
@@ -44,8 +45,43 @@ test("applyTerraformSyncProposals applies only approved create proposals without
 
   assert.equal(result.nodes.length, 2);
   assert.equal(result.nodes[1]?.type, "aws_s3_bucket");
+  assert.equal(result.nodes[1]?.iconUrl, getCatalogResource("aws_s3_bucket").iconUrl);
+  assert.deepEqual(result.nodes[1]?.size, getCatalogResource("aws_s3_bucket").nodeDefaults.size);
   assert.equal(result.nodes[1]?.parameters?.resourceName, "logs");
   assert.deepEqual(result.edges, diagramJson.edges);
+});
+
+test("applyTerraformSyncProposals uses data source catalog icons for approved data create proposals", () => {
+  const diagramJson = makeDiagramJson();
+  const proposals: TerraformDiagramChangeProposal[] = [
+    {
+      kind: "create_candidate",
+      identity: {
+        terraformBlockType: "data",
+        resourceType: "aws_ami",
+        resourceName: "ubuntu"
+      },
+      parameters: {
+        terraformBlockType: "data",
+        resourceType: "aws_ami",
+        resourceName: "ubuntu",
+        fileName: "compute.tf",
+        values: {}
+      }
+    }
+  ];
+
+  const result = applyTerraformSyncProposals(
+    diagramJson,
+    proposals,
+    [getTerraformSyncProposalId(proposals[0]!, 0)]
+  );
+  const createdNode = result.nodes[1];
+  const catalogResource = getCatalogResource("aws_ami", "data");
+
+  assert.equal(createdNode?.parameters?.terraformBlockType, "data");
+  assert.equal(createdNode?.iconUrl, catalogResource.iconUrl);
+  assert.deepEqual(createdNode?.size, catalogResource.nodeDefaults.size);
 });
 
 test("applyTerraformSyncProposals removes approved delete proposal nodes and connected edges", () => {
@@ -194,4 +230,16 @@ function makeNode(id: string, resourceType: string, resourceName: string): Diagr
       values: {}
     }
   };
+}
+
+function getCatalogResource(resourceType: string, terraformBlockType = "resource") {
+  const resource = resourceCatalog.find((item) => {
+    const catalogTerraformBlockType = item.nodeDefaults.terraformBlockType ?? "resource";
+
+    return item.nodeDefaults.type === resourceType && catalogTerraformBlockType === terraformBlockType;
+  });
+
+  assert.ok(resource, `Missing catalog resource: ${resourceType}`);
+
+  return resource;
 }

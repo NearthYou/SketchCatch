@@ -15,6 +15,36 @@
 
 ## 세션 레코드
 
+### 2026-07-03 - Terraform 생성 리소스 아이콘 누락 수정
+
+- Goal: Terraform 코드에서 생성/승인된 리소스가 아이콘이 있음에도 다이어그램에서 빈 박스와 `AWS` fallback으로 보이는 문제를 수정한다.
+- Root cause:
+  - Terraform-only `create_candidate` proposal을 승인해 새 DiagramJson node를 만들 때 `iconUrl`과 catalog 기반 `size`를 채우지 않았다.
+  - `DiagramNodeView`는 `node.iconUrl`이 없으면 `AWS` fallback을 렌더링하므로, 실제 catalog icon이 있어도 Terraform 생성 노드에서는 보이지 않았다.
+- Completed:
+  - `applyTerraformSyncProposals`의 create proposal 적용 경로가 `resourceCatalog`에서 `resourceType + terraformBlockType`에 맞는 resource/data item을 찾게 했다.
+  - 새로 만든 Terraform 생성 node에 catalog `iconUrl`과 `nodeDefaults.size`를 적용하게 했다.
+  - catalog에 없는 미래 리소스는 기존 fallback size를 유지하도록 했다.
+  - `aws_s3_bucket` resource와 `data.aws_ami` data source create proposal에 icon/size가 적용되는 테스트를 추가했다.
+- Verification run:
+  - Red before fix: `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/terraform-sync-proposals.test.ts` - failed because created S3 node `iconUrl` was `undefined`.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/terraform-sync-proposals.test.ts` - passed
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/terraform-sync-proposals.test.ts features/workspace/workspace-right-panel-layout.test.ts features/resource-settings/catalog.test.ts features/resource-settings/catalog-provider.test.ts features/diagram-editor/diagram-utils.test.ts` - passed
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-to-diagram.test.ts` - passed
+  - `pnpm --filter @sketchcatch/web typecheck` - passed
+  - `pnpm harness:check` - passed
+  - `pnpm lint` - passed
+  - `pnpm typecheck` - passed
+  - `pnpm build` - passed
+- Evidence recorded:
+  - API/shared DTO 계약은 변경하지 않았다. proposal 승인 후 frontend node 생성 metadata만 보강했다.
+  - 실제 Terraform CLI 실행, apply/destroy, cloud mutation, Git/CI/CD handoff는 실행하지 않았다.
+- Known risks:
+  - 브라우저 수동 smoke는 수행하지 않았다. 자동/단위/소스/타입/빌드 검증으로 확인했다.
+  - 기존 unrelated worktree changes remain: `DESIGN.md` 삭제 상태, `apps/web/next-env.d.ts` 변경 상태.
+- Next best action:
+  - 브라우저에서 Terraform editor로 `aws_s3_bucket` 또는 `data.aws_ami` create proposal을 만들고 승인했을 때 실제 아이콘이 보이는지 수동 smoke한다.
+
 ### 2026-07-03 - Terraform 검증 오류 줄 표시
 
 - Goal: Terraform 검증에서 오류가 난 줄을 editor 안에서 빨간줄로 표시한다.
