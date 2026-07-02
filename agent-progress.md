@@ -15,6 +15,96 @@
 
 ## 세션 레코드
 
+### 2026-07-03 - InfrastructureGraph Workspace 동기화 v1 구현
+
+- Goal: `docs/jh/기타/008_InfrastructureGraphWorkspace동기화v1_AI작업지시서_JH.md` 기준으로 InfrastructureGraph 중심 Workspace 동기화 v1 기능을 구현하고 하위 AI 리뷰와 테스트로 검증한다.
+- Completed:
+  - Terraform block identity, multi-file sync input, create/delete/rename proposal shared type을 추가했다.
+  - `DiagramJson -> InfrastructureGraph -> Terraform` Preview 경로를 API service에 연결했다.
+  - Preview renderer가 invalid resource node를 유지하고 VPC/EC2/S3 계열 반복 생성 테스트를 통과하게 했다.
+  - `data.aws_ami.filter` nested block 구조를 renderer/parser/catalog에서 `values.filter: [{ name, values }]`로 맞췄다.
+  - Advanced Parameters UI를 제거하고 기존 optional 또는 catalog 밖 values 보존 정책을 테스트로 고정했다.
+  - Terraform editor 역동기화에서 Terraform-only, Diagram-only, 명확한 rename을 proposal로 반환하게 했다.
+  - rename proposal은 normalized values 기준으로 정확히 한 쌍일 때만 생성되도록 ambiguity를 제거했다.
+  - Frontend Terraform panel은 proposal이 있으면 자동 apply하지 않고, 사용자가 체크한 proposal만 반영한다.
+  - partial proposal approval 후 남은 proposal이 있으면 dirty/pending 상태를 유지하게 했다.
+  - 하위 AI 리뷰에서 나온 blocking 피드백을 반영하고, ignored JH 문서 008/009를 강제 add로 커밋했다.
+- Verification run:
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-identity.test.ts src/services/terraform/infrastructure-graph.test.ts src/services/terraform/diagram-to-terraform.test.ts src/services/terraform/terraform-to-diagram.test.ts src/routes/terraform.test.ts` - passed
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/terraform-sync-proposals.test.ts features/workspace/terraform-panel-utils.test.ts features/workspace/workspace-right-panel-layout.test.ts features/parameter-input/validation.test.ts features/parameter-input/parameter-panel-source.test.ts features/diagram-editor/diagram-utils.test.ts` - passed
+  - `pnpm catalog:check` - passed
+  - `pnpm harness:check` - passed
+  - `pnpm lint` - passed
+  - `pnpm typecheck` - passed
+  - `pnpm build` - passed
+- Evidence recorded:
+  - 실제 Terraform apply/destroy, cloud mutation, Git/CI/CD handoff는 실행하지 않았다.
+  - frontend UI에 Terraform 실행 또는 AWS SDK 호출을 추가하지 않았다.
+  - `docs/data-models.md`에 proposal response, block identity, Advanced Parameters UI 제거/값 보존 정책을 기록했다.
+  - `docs/jh/기타/008_...AI작업지시서_JH.md`, `docs/jh/기타/009_...사람용설명_JH.md`는 ignore 대상이지만 이번 커밋에 포함했다.
+- Commits:
+  - `619194b Feat: Terraform 동기화 proposal 타입 추가`
+  - `cd7c870 Feat: DiagramJson InfrastructureGraph projection 추가`
+  - `4e1bbf0 Feat: InfrastructureGraph 기반 Terraform Preview 생성`
+  - `5e7fee7 Feat: AMI data source filter 동기화 지원`
+  - `59444e2 Feat: Advanced Parameters UI 제거`
+  - `9bb6a14 Feat: Terraform sync proposal 생성`
+  - `315ee43 Feat: Terraform 동기화 proposal 승인 UI 연결`
+  - `08223af Docs: Terraform sync proposal 계약 문서화`
+  - `8f126fd Fix: Terraform rename proposal 명확성 보강`
+  - `f0bbb91 Fix: Terraform proposal 부분 승인 상태 유지`
+  - `474f278 Docs: InfrastructureGraph 동기화 v1 구현 기준 정리`
+  - `caf849d Fix: Terraform proposal 테스트 fixture 보강`
+- Known risks:
+  - 기존 unrelated worktree change remains: `DESIGN.md` 삭제 상태.
+  - 브라우저 수동 smoke는 아직 수행하지 않았다.
+  - `HARNESS-007`: Representative Use Journey의 browser/API smoke는 아직 없다.
+- Next best action:
+  - 브라우저에서 VPC/EC2/S3/AMI workspace를 열고 Preview 반복 생성과 proposal panel 부분 승인 흐름을 수동 smoke한다.
+
+### 2026-07-03 - AI 작업 지시서 마일스톤 추가
+
+- Goal: `docs/jh/기타/008_InfrastructureGraphWorkspace동기화v1_AI작업지시서_JH.md` 최상단에 50줄 이하 마일스톤을 추가한다.
+- Completed:
+  - AI 작업 지시서를 읽고 제목 바로 아래에 `## 마일스톤` 섹션을 추가했다.
+  - 마일스톤은 계약 고정, Preview 경로 정리, 지원 리소스 값 구조 정렬, 파라미터 UI 단순화, Terraform 역동기화 proposal화, Frontend 승인 흐름 연결, 최종 문서화와 검증의 7단계로 정리했다.
+  - 추가된 마일스톤 섹션이 35줄임을 확인했다.
+- Verification run:
+  - `pnpm harness:check` - passed
+  - `awk 'BEGIN{count=0; in_section=0} /^## 마일스톤$/{in_section=1} in_section{count++} in_section && /^> \\*\\*For agentic workers:/{print count-1; exit}' docs/jh/기타/008_InfrastructureGraphWorkspace동기화v1_AI작업지시서_JH.md` - `35`
+- Evidence recorded:
+  - 문서 변경만 수행했으며 code/infrastructure 파일은 수정하지 않았다.
+  - 실제 Terraform apply/destroy, cloud mutation, Git/CI/CD handoff는 실행하지 않았다.
+  - `docs/jh/기타`는 ignore 대상이라 커밋 시 `git add -f docs/jh/기타/...`가 필요하다.
+- Known risks:
+  - 기능 구현은 아직 시작하지 않았다.
+  - 기존 unrelated worktree change remains: `DESIGN.md` 삭제 상태.
+- Next best action:
+  - AI 작업 지시서의 마일스톤을 기준으로 Commit 1부터 구현을 시작한다.
+
+### 2026-07-02 - InfrastructureGraph 동기화 v1 문서 정리
+
+- Goal: InfrastructureGraph 중심 Workspace 동기화 v1 구현을 시작하기 전에 단계 문서 번호를 정렬하고, 실제 구현용 AI 작업 지시서와 사람용 설명 문서를 분리해 작성한다.
+- Completed:
+  - `docs/jh/기타`의 단계 문서 순서를 `003_1단계`부터 `007_5단계`까지 맞췄다.
+  - `docs/jh/기타/008_InfrastructureGraphWorkspace동기화v1_AI작업지시서_JH.md`를 추가했다.
+  - `docs/jh/기타/009_InfrastructureGraphWorkspace동기화v1_사람용설명_JH.md`를 추가했다.
+  - AI 작업 지시서의 commit plan에서 문서 순서 정리 작업은 제외하고, 실제 기능 구현만 15개 커밋으로 나눴다.
+  - Advanced Parameters는 내부 정책 미정으로 UI에서 제거하되, 기존 optional 값은 삭제하지 않는 정책을 문서에 반영했다.
+- Verification run:
+  - `pnpm harness:check` - passed
+  - `find docs/jh/기타 -maxdepth 1 -type f -name '*.md' | sort` - 단계 문서가 `003_1단계`부터 `007_5단계` 순서로 정렬됨
+  - `rg -n "문서 순서|단계 문서 번호|007_1단계|003_2단계" docs/jh/기타/008_InfrastructureGraphWorkspace동기화v1_AI작업지시서_JH.md docs/jh/기타/009_InfrastructureGraphWorkspace동기화v1_사람용설명_JH.md` - no matches
+- Evidence recorded:
+  - 문서 변경만 수행했으며 code/infrastructure 파일은 수정하지 않았다.
+  - 실제 Terraform apply/destroy, cloud mutation, Git/CI/CD handoff는 실행하지 않았다.
+  - `docs/jh/기타`는 ignore 대상이라 커밋 시 `git add -f docs/jh/기타/...`가 필요하다.
+- Known risks:
+  - 기능 구현은 아직 시작하지 않았다. 이번 세션 산출물은 구현 계획과 설명 문서다.
+  - 기존 unrelated worktree change remains: `DESIGN.md` 삭제 상태.
+- Next best action:
+  - AI 작업 지시서의 commit plan에 따라 `Types: Terraform sync proposal 계약 추가`부터 구현을 시작한다.
+
 ### 2026-07-02 - invalid 파라미터 Terraform Preview 유지 수정
 
 - Goal: 파라미터 값을 변경한 뒤 불완전한 리소스가 `invalid: true`로 표시되어도 Terraform Preview에서 해당 resource block이 사라지지 않게 한다.
