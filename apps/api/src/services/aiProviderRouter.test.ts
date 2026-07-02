@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import type { ChatSyncCommand, ChatSyncCommandInput } from "@aws-sdk/client-qbusiness";
 import type { DesignSimulationResult, LlmExplanation } from "@sketchcatch/types";
 import {
   createAiProviderBackedLlmExplanation,
+  createAmazonQBusinessTextProvider,
   createFallbackOnlyLlmExplanation,
   resolveAiProviderRegions,
   type AiTextProvider
@@ -205,6 +207,170 @@ test("createAiProviderBackedLlmExplanation uses Amazon Q first for Terraform err
   assert.equal(second.providerMetadata?.cacheHit, true);
   assert.equal(qCalls.length, 1);
   assert.equal(bedrockCalls.length, 0);
+});
+
+test("createAiProviderBackedLlmExplanation returns Amazon Q fallback without letting Bedrock overwrite it", async () => {
+  const qCalls: unknown[] = [];
+  const bedrockCalls: unknown[] = [];
+  const createLlmExplanation = createAiProviderBackedLlmExplanation({
+    amazonQProvider: {
+      provider: "amazon_q",
+      service: "amazon_q_business",
+      model: "amazon-q-model",
+      generate: async (request) => {
+        qCalls.push(request);
+        return {
+          text: "Sorry, I could not find relevant information to complete your request."
+        };
+      }
+    },
+    bedrockProvider: {
+      provider: "bedrock",
+      service: "bedrock_runtime",
+      model: "bedrock-model",
+      generate: async (request) => {
+        bedrockCalls.push(request);
+        return {
+          text: JSON.stringify({
+            target: "terraform_error_explanation",
+            summary: "Bedrock should not overwrite Amazon Q.",
+            highlights: ["Bedrock should not run."],
+            nextActions: ["Keep Amazon Q result."],
+            fallbackUsed: false
+          })
+        };
+      }
+    },
+    fallbackProvider: createFallbackOnlyLlmExplanation,
+    creditPolicy: {
+      bedrock: true,
+      amazonQ: true,
+      transcribe: false,
+      billingMode: "aws_credit_only"
+    },
+    limits: { dailyCallLimit: 10, windowCallLimit: 10, windowMs: 60_000 }
+  });
+
+  const result = await createLlmExplanation({
+    target: "terraform_error_explanation",
+    result: {
+      stage: "plan",
+      category: "permission",
+      severity: "high",
+      rawMessage: "AccessDenied",
+      summary: "권한 부족으로 plan이 실패했습니다.",
+      likelyCause: "실행 Role에 필요한 권한이 없습니다.",
+      nextActions: ["IAM policy를 확인하세요."]
+    }
+  });
+
+  assert.equal(result.fallbackUsed, true);
+  assert.equal(result.fallbackReason, "invalid_response");
+  assert.equal(result.providerMetadata?.provider, "amazon_q");
+  assert.equal(qCalls.length, 1);
+  assert.equal(bedrockCalls.length, 0);
+});
+
+test("createAiProviderBackedLlmExplanation reports missing Amazon Q configuration before Bedrock fallback errors", async () => {
+  const bedrockCalls: unknown[] = [];
+  const createLlmExplanation = createAiProviderBackedLlmExplanation({
+    amazonQProvider: undefined,
+    bedrockProvider: {
+      provider: "bedrock",
+      service: "bedrock_runtime",
+      model: "bedrock-model",
+      generate: async (request) => {
+        bedrockCalls.push(request);
+        throw new Error("Bedrock provider failed");
+      }
+    },
+    fallbackProvider: createFallbackOnlyLlmExplanation,
+    creditPolicy: {
+      bedrock: true,
+      amazonQ: true,
+      transcribe: false,
+      billingMode: "aws_credit_only"
+    },
+    limits: { dailyCallLimit: 10, windowCallLimit: 10, windowMs: 60_000 }
+  });
+
+  const result = await createLlmExplanation({
+    target: "terraform_error_explanation",
+    result: {
+      stage: "plan",
+      category: "permission",
+      severity: "high",
+      rawMessage: "AccessDenied",
+      summary: "권한 부족으로 plan이 실패했습니다.",
+      likelyCause: "실행 Role에 필요한 권한이 없습니다.",
+      nextActions: ["IAM policy를 확인하세요."]
+    }
+  });
+
+  assert.equal(result.fallbackUsed, true);
+  assert.equal(result.fallbackReason, "provider_not_configured");
+  assert.equal(result.providerMetadata?.provider, "fallback");
+  assert.equal(bedrockCalls.length, 1);
+});
+
+test("createAmazonQBusinessTextProvider omits userId for anonymous identity applications", async () => {
+  const sentInputs: ChatSyncCommandInput[] = [];
+  const provider = createAmazonQBusinessTextProvider({
+    applicationId: "qbusiness-application-id",
+    region: "ap-southeast-2",
+    client: {
+      send: async (command: ChatSyncCommand) => {
+        sentInputs.push(command.input);
+        return { systemMessage: "anonymous response" };
+      }
+    }
+  });
+
+  const result = await provider.generate({
+    target: "terraform_error_explanation",
+    instructions: "Return JSON.",
+    prompt: "hello",
+    payload: {}
+  });
+
+  assert.equal(result.text, "anonymous response");
+  assert.deepEqual(sentInputs, [
+    {
+      applicationId: "qbusiness-application-id",
+      userMessage: "hello"
+    }
+  ]);
+});
+
+test("createAmazonQBusinessTextProvider sends userId when one is configured", async () => {
+  const sentInputs: ChatSyncCommandInput[] = [];
+  const provider = createAmazonQBusinessTextProvider({
+    applicationId: "qbusiness-application-id",
+    region: "ap-southeast-2",
+    userId: "songchaegang@gmail.com",
+    client: {
+      send: async (command: ChatSyncCommand) => {
+        sentInputs.push(command.input);
+        return { systemMessage: "user response" };
+      }
+    }
+  });
+
+  const result = await provider.generate({
+    target: "terraform_error_explanation",
+    instructions: "Return JSON.",
+    prompt: "hello",
+    payload: {}
+  });
+
+  assert.equal(result.text, "user response");
+  assert.deepEqual(sentInputs, [
+    {
+      applicationId: "qbusiness-application-id",
+      userId: "songchaegang@gmail.com",
+      userMessage: "hello"
+    }
+  ]);
 });
 
 test("createAiProviderBackedLlmExplanation keeps daily limits across rate windows", async () => {

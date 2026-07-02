@@ -1,3 +1,4 @@
+import "../config/load-env.js";
 import { BedrockRuntimeClient, ConverseCommand } from "@aws-sdk/client-bedrock-runtime";
 import { ChatSyncCommand, QBusinessClient } from "@aws-sdk/client-qbusiness";
 import OpenAI from "openai";
@@ -306,7 +307,17 @@ export function createAiProviderBackedLlmExplanation(
   const limits = options.limits ?? readAiProviderLimitsFromEnv();
 
   return async (input) => {
+    let primaryProviderFallback: LlmExplanation | null = null;
+
     if (input.target === "terraform_error_explanation") {
+      if (options.amazonQProvider === undefined) {
+        primaryProviderFallback = createFallbackExplanationWithMetadata(
+          input,
+          resolveAmazonQUnavailableFallbackReason(creditPolicy),
+          creditPolicy.billingMode
+        );
+      }
+
       const qResult = await tryProvider({
         provider: options.amazonQProvider,
         input,
@@ -316,7 +327,7 @@ export function createAiProviderBackedLlmExplanation(
         limits
       });
 
-      if (qResult !== null && !qResult.fallbackUsed) {
+      if (qResult !== null) {
         return qResult;
       }
     }
@@ -331,6 +342,10 @@ export function createAiProviderBackedLlmExplanation(
     });
 
     if (bedrockResult !== null) {
+      if (bedrockResult.fallbackUsed && primaryProviderFallback !== null) {
+        return primaryProviderFallback;
+      }
+
       return bedrockResult;
     }
 
@@ -344,6 +359,10 @@ export function createAiProviderBackedLlmExplanation(
     });
 
     if (openAiResult !== null) {
+      if (openAiResult.fallbackUsed && primaryProviderFallback !== null) {
+        return primaryProviderFallback;
+      }
+
       return openAiResult;
     }
 
@@ -396,23 +415,28 @@ function createAmazonQBusinessTextProviderFromEnv(input: { readonly region: stri
   const applicationId = process.env.AMAZON_Q_APPLICATION_ID?.trim();
   const userId = process.env.AMAZON_Q_USER_ID?.trim();
 
-  if (!applicationId || !userId) {
+  if (!applicationId) {
     return undefined;
   }
 
   return createAmazonQBusinessTextProvider({
     applicationId,
-    userId,
+    userId: userId === "" ? undefined : userId,
     region: input.region
   });
 }
 
-function createAmazonQBusinessTextProvider(input: {
+type AmazonQBusinessChatClient = {
+  readonly send: (command: ChatSyncCommand) => Promise<{ readonly systemMessage?: string | undefined }>;
+};
+
+export function createAmazonQBusinessTextProvider(input: {
   readonly applicationId: string;
-  readonly userId: string;
+  readonly userId?: string | undefined;
   readonly region: string;
+  readonly client?: AmazonQBusinessChatClient | undefined;
 }): AiTextProvider {
-  const client = new QBusinessClient({ region: input.region });
+  const client = input.client ?? createDefaultAmazonQBusinessChatClient(input.region);
 
   return {
     provider: "amazon_q",
@@ -421,7 +445,7 @@ function createAmazonQBusinessTextProvider(input: {
     generate: async (request) => {
       const command = new ChatSyncCommand({
         applicationId: input.applicationId,
-        userId: input.userId,
+        ...(input.userId ? { userId: input.userId } : {}),
         userMessage: request.prompt
       });
       const response = await client.send(command);
@@ -432,6 +456,14 @@ function createAmazonQBusinessTextProvider(input: {
         outputCharacters: text.length
       };
     }
+  };
+}
+
+function createDefaultAmazonQBusinessChatClient(region: string): AmazonQBusinessChatClient {
+  const client = new QBusinessClient({ region });
+
+  return {
+    send: (command) => client.send(command)
   };
 }
 
@@ -619,6 +651,16 @@ function getCreditFallbackReason(provider: AiProvider, creditPolicy: AiCreditPol
   }
 
   return null;
+}
+
+function resolveAmazonQUnavailableFallbackReason(
+  creditPolicy: AiCreditPolicy
+): LlmExplanationFallbackReason {
+  if (creditPolicy.billingMode !== "aws_credit_only" || !creditPolicy.amazonQ) {
+    return "credit_not_confirmed";
+  }
+
+  return "provider_not_configured";
 }
 
 function reserveProviderCall(

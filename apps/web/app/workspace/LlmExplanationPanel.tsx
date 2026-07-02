@@ -65,6 +65,10 @@ export function getLlmExplanationSourceLabel(explanation: LlmExplanation): strin
     return getProviderLabel(explanation.providerMetadata?.provider);
   }
 
+  if (explanation.providerMetadata?.provider === "amazon_q") {
+    return `Amazon Q 응답 · ${getFallbackReasonLabel(explanation.fallbackReason)}`;
+  }
+
   return `기본 설명 · ${getFallbackReasonLabel(explanation.fallbackReason)}`;
 }
 
