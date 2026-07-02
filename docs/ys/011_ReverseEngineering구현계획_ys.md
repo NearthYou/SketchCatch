@@ -15,6 +15,14 @@ AWS-first scanner를 만들되 제품 모델은 provider-neutral `ProviderAdapte
 - 사용자가 확인하기 전 기존 ProjectDraft나 Practice Architecture를 덮어쓰지 않는다.
 - Git/CI/CD 실제 PR 생성은 별도 기능으로 두고, v1에서는 handoff-ready metadata까지만 만든다.
 
+## 핵심 관점
+
+Reverse Engineering은 AWS 리소스 목록 조회가 아니라 기존 cloud state를 Practice Architecture로 복원하는 기능이다. 목록 화면은 결과 표현 중 하나일 뿐이고, 핵심 산출물은 provider-neutral architecture 후보, import suggestion, risk/cost finding이다.
+
+MVP는 AWS adapter로 시작한다. 다만 scan 결과는 `ProviderAdapter` 경계 안에서 provider-neutral `ResourceType`, 관계, config로 정규화하고, raw AWS response를 제품 계약으로 노출하지 않는다.
+
+복원 결과는 이후 IaC Preview, Terraform import suggestion, Cost Risk, Git/CI/CD handoff 준비 흐름으로 이어진다. 사용자가 accept하기 전에는 기존 Practice Architecture나 ProjectDraft를 덮어쓰지 않는다.
+
 ## 현재 구현 기반
 
 현재 코드와 문서에는 Reverse Engineering 방향이 잡혀 있지만 실제 scan 구현은 없다.
@@ -168,6 +176,8 @@ type ProviderAdapter = {
 ### 4. AWS-first scan 범위
 
 MVP v1 scan 대상:
+
+AWS read-only describe/list 호출은 adapter 내부 책임으로 제한한다. service와 UI는 provider-neutral `DiscoveredResource`와 `ArchitectureJson`만 다루며, AWS resource list를 그대로 제품 결과로 노출하지 않는다.
 
 - VPC
 - Subnet

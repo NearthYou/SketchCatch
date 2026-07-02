@@ -15,6 +15,30 @@
 
 ## 세션 레코드
 
+### 2026-07-03 - YS 작업별 구현 계획 문서 보강
+
+- Goal: 피드백 스크린샷의 핵심 문장을 `docs/ys`의 세 작업별 구현 계획에 반영해 각 문서의 개발 방향을 더 선명하게 만든다.
+- Completed:
+  - `docs/ys/009_배포안전게이트구현계획_ys.md`에 `Pre-Deployment Check`, `Terraform Plan Summary`, `Cost Risk`, `Approval Snapshot`을 하나의 gate로 묶는 핵심 관점을 추가했다.
+  - `docs/ys/009_배포안전게이트구현계획_ys.md`에서 Cost Risk도 Safety Gate 입력으로 받는다는 범위와 finding shape 정규화 목적을 보강했다.
+  - `docs/ys/010_비용위험분석구현계획_ys.md`에 Cost Analysis를 월 비용 카드가 아니라 Cost Risk 관리 기능으로 보는 핵심 관점을 추가했다.
+  - `docs/ys/010_비용위험분석구현계획_ys.md`에서 Practice Architecture, IaC Preview, Deployment Plan, Deployment History별 표시 책임과 fallback estimate 고지 기준을 보강했다.
+  - `docs/ys/011_ReverseEngineering구현계획_ys.md`에 Reverse Engineering은 AWS 목록 조회가 아니라 기존 cloud state를 Practice Architecture로 복원하는 기능이라는 핵심 관점을 추가했다.
+  - `docs/ys/011_ReverseEngineering구현계획_ys.md`에서 AWS read-only scan은 adapter 내부 책임이고 결과는 provider-neutral model로만 노출한다는 정책을 보강했다.
+- Verification run:
+  - `pnpm harness:check` - passed after docs edits
+  - `git diff --check` - passed after docs edits
+  - `Test-Path` link target check for the three `docs/ys` files - passed
+  - `node -e` keyword check for the three `docs/ys` files - passed
+- Evidence recorded:
+  - 문서 변경만 수행했으며 code/infrastructure 파일은 수정하지 않았다.
+  - 실제 Terraform apply/destroy, cloud mutation, Git/CI/CD handoff는 실행하지 않았다.
+- Known risks:
+  - `pnpm lint`, `pnpm typecheck`, `pnpm build`는 문서 전용 변경이라 실행하지 않을 예정이다.
+  - Existing unrelated worktree change remains: `DESIGN.md` deleted.
+- Next best action:
+  - 009~011 중 하나를 선택해 shared type/API/service/UI 순서의 실제 feature branch 구현으로 전환한다.
+
 ### 2026-07-03 - YS 작업별 구현 계획 문서 추가
 
 - Goal: Reverse Engineering, Cost Analysis, Deployment Safety Gate 작업을 `docs/ys` 담당자 참고 문서로 분리한다.
