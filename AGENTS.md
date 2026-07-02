@@ -2,32 +2,53 @@
 
 This repository is SketchCatch.
 
-SketchCatch is a Terraform-first IaC platform for safe AWS learning. It helps beginners design infrastructure visually, understand resource relationships, validate cost and security risks, manage IaC versions, and eventually deploy only explicitly approved practice environments with automatic cleanup.
+SketchCatch is a multi-cloud-ready IaC operations service. It turns text or voice requirements, Source Repository evidence, and existing cloud state into provider-neutral Practice Architectures, strengthens them with AI, Bedrock, and Amazon Q Assistance, and connects them to Terraform IaC Preview, Git/CI/CD Integration, Direct Deployment, Reverse Engineering, Deployment History, and Auto Cleanup. The MVP is AWS-first and Terraform-first, but SketchCatch must not be described as AWS-only.
 
 ## Product Direction
 
-1. Treat SketchCatch as an IaC-based infrastructure creation, validation, deployment, versioning, and safety platform, not just a visual cloud diagram tool.
-2. Terraform is the primary IaC target for product planning and implementation.
-3. CloudFormation may be used as an AWS learning reference or future compatibility target, but it is not the default MVP direction.
-4. Prefer beginner-safe AWS workflows, cost-accident prevention, explicit review, and time-limited practice environments.
-5. Do not implement real AWS apply, deploy, update, delete, or destroy behavior unless the user explicitly asks for it in the current task.
+1. Treat SketchCatch as an IaC operations service, not just a visual cloud diagram tool or a demo script.
+2. Terraform is the primary IaC target for the MVP and the extension point for future cloud providers.
+3. AWS is the first Provider Adapter for the MVP. Keep the domain model provider-neutral and do not describe SketchCatch as AWS-only.
+4. The first MVP goal is a complete service journey: Requirement Input or Source Repository or Reverse Engineering input -> Practice Architecture -> IaC Preview -> Pre-Deployment Check -> approved execution or Git/CI/CD handoff -> Deployment History and Auto Cleanup.
+5. Representative Use Journeys may be used for presentation and rehearsal, but they must prove the real service flow rather than define a separate demo-only scope.
+6. Requirement Input can be text or Voice Requirement Input. Voice must be transcribed, shown back to the user, and confirmed before becoming a Requirement Prompt.
+7. AI, Bedrock, and Amazon Q Assistance may recommend, explain, and review, but Practice Architecture changes, IaC handoff, Git changes, and Deployment actions must be User-Accepted Changes.
+8. SketchCatch supports two execution paths: Direct Deployment Path for fast validation and sandbox/practice runs, and Git/CI/CD Deployment Path for team review and operational delivery.
+9. Reverse Engineering must be provider-adapter based. The MVP can implement AWS first, but the concept is not an AWS-only resource list.
+10. Redis is internal Runtime Cache infrastructure for long-running workflow status, polling, and streaming support. It is not a user Practice Architecture Resource unless a separate product decision changes that.
+11. CloudFormation may be used as an AWS reference or future compatibility target, but it is not the default MVP direction.
+12. Real cloud apply, deploy, update, delete, or destroy behavior is allowed only for explicit Deployment work or approved Git/CI/CD handoff with plan, approval, logging, secret masking, and cleanup safeguards.
 
 ## Required Reading
 
 Before making changes, always read the nearest `AGENTS.md` and this root file. Read additional docs only when they are relevant:
 
+- If a local `AGENTS.gg.md` exists, read it when working with gg or on the gg AI part.
 - Read `docs/README.md` when working on documentation or when you need the document map.
-- Read `docs/product.md` when changing product scope, MVP behavior, AI/IaC workflows, or safety policy.
-- Read `docs/architecture.md` when changing stack, storage, API scope, deployment architecture, or ADR-level decisions.
-- Read `docs/data-models.md` when changing DB models, API DTOs, shared types, or frontend state.
-- Read `docs/development.md` when working with Git flow, code conventions, or required checks.
-- Read `docs/deployment.md` when touching deployment, infrastructure, RDS, S3, or operations.
+- Read `docs/product.md` when changing product scope, MVP behavior, AI/IaC workflows, roadmap, or safety policy.
+- Read `docs/data-models.md` when changing DB models, API DTOs, shared types, frontend state, AI results, Terraform artifacts, or Deployment contracts.
+- Read `docs/architecture.md` when changing stack, storage, API scope, execution boundaries, deployment architecture, or ADR-level decisions.
+- Read `docs/development.md` when working with Git flow, code conventions, team AI collaboration, PR checks, or required checks.
+- Read `docs/deployment.md` when touching operational deployment, Terraform Plan/Apply/Destroy, AWS credentials, RDS, S3, logs, outputs, or cleanup.
+
+## Harness Operating Loop
+
+1. For every non-trivial work session, run `pnpm harness:check` before editing files. If `pnpm` is unavailable, run `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/init-harness.ps1` instead. If the harness check fails, fix or report that baseline before starting feature work.
+2. After the harness check, read `agent-progress.md` and `feature_list.json` after the required `AGENTS.md` files. If the task continues prior work or leaves any risk unfinished, also read `session-handoff.md`.
+3. Use `scripts/init-harness.ps1` as the standard startup helper when you need the repo startup path. Run it without flags for a lightweight baseline, with `-Verify` for lint/typecheck, and with `-Full` before finishing substantial code or infrastructure changes.
+4. Keep `feature_list.json` as the machine-readable agent harness tracker. Product scope still belongs in `docs/product.md`; shared contracts still belong in `docs/data-models.md`.
+5. Work on at most one active feature/workstream at a time. Do not leave more than one `in_progress` item in `feature_list.json`.
+6. Do not mark a feature `passing` unless `evidence.lastVerified` and concrete verification commands are recorded.
+7. Before finishing, run `pnpm harness:check` again and apply `clean-state-checklist.md`. Update `agent-progress.md` with completed work, verification, known risks, and next action. Update `session-handoff.md` when the next session needs a compressed continuation point.
+8. Use `evaluator-rubric.md` for adversarial self-review when a change affects safety, deployment, contracts, or multi-session continuity.
 
 ## Language Rules
 
 1. Write `AGENTS.md` files in English.
 2. Write regular project docs and user-facing explanations in Korean unless the user asks otherwise.
 3. Keep code identifiers, commands, API paths, environment variable names, package names, and AWS service names in their original form.
+4. Write Pull Request titles and bodies in Korean unless the user explicitly asks for another language.
+5. Write Pull Request titles in the `Type: Korean title` format, such as `Feat: 로그인 기능 구현`.
 
 ## Repository Boundaries
 
@@ -38,7 +59,7 @@ Before making changes, always read the nearest `AGENTS.md` and this root file. R
 5. Keep project data, architecture JSON, deployment records, and metadata in RDS.
 6. Keep diagram images, IaC files, generated exports, thumbnails, and release artifacts in S3.
 7. Do not mix Terraform generation, AWS SDK calls, deployment execution, or infrastructure mutation logic into UI components.
-8. Future Terraform execution belongs in backend or worker code behind explicit safety gates.
+8. Terraform execution belongs in backend or worker code behind explicit safety gates.
 
 ## Safety Rules
 
@@ -88,6 +109,7 @@ For model, API, or state changes, `docs/data-models.md` is the naming source of 
 Run these before finishing code or infrastructure changes:
 
 ```bash
+pnpm harness:check
 pnpm lint
 pnpm typecheck
 pnpm build
@@ -108,5 +130,7 @@ For documentation-only changes, full build checks are optional unless package fi
 2. Do not push directly to `main`.
 3. Do not push directly to `dev` except for one-time repository administration or explicit user approval.
 4. Use focused branches and PRs small enough to review.
-5. Follow the Git and PR conventions in `docs/development.md`.
-6. Before asking for review, summarize changed files, checks run, and any checks that could not be run.
+5. Write Pull Request titles in the `Type: Korean title` format, such as `Feat: 로그인 기능 구현`.
+6. Write Pull Request bodies in Korean unless the user explicitly asks for another language.
+7. Follow the Git and PR conventions in `docs/development.md`.
+8. Before asking for review, summarize changed files, checks run, and any checks that could not be run.

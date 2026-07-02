@@ -7,4 +7,5 @@ allowBuilds:
 minimumReleaseAgeExclude:
   - "@types/node@26.0.0"
   - "@aws-sdk/client-s3@3.1073.0"
+  - "@aws-sdk/client-sts@3.1073.0"
   - "@aws-sdk/s3-request-presigner@3.1073.0"

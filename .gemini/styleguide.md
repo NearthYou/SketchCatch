@@ -103,3 +103,9 @@ pnpm lint
 pnpm typecheck
 pnpm build
 ```
+
+## Code Review Rules
+
+1. When new commits are added to the same PR, run code review again instead of reusing only the previous review result.
+2. During re-review, inspect the new commit diff and the full PR context for regressions, missing tests, and whether prior review feedback was addressed.
+3. Clearly verify which previous review comments were resolved by the new commits, and raise unresolved items again.

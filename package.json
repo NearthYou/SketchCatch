@@ -6,6 +6,9 @@
   "scripts": {
     "dev": "turbo dev",
     "build": "turbo build",
+    "catalog:check": "node scripts/generate-terraform-aws-catalog.mjs --check",
+    "catalog:generate": "node scripts/generate-terraform-aws-catalog.mjs",
+    "harness:check": "node scripts/check-harness.mjs",
     "lint": "turbo lint",
     "typecheck": "turbo typecheck",
     "test": "turbo test",

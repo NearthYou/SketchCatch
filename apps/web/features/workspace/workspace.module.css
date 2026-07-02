@@ -1,0 +1,2880 @@
+.projectShell {
+  align-items: center;
+  background: #f4f7fb;
+  color: #172033;
+  display: flex;
+  min-height: 100vh;
+  padding: 32px;
+}
+
+.projectForm,
+.noticePanel {
+  background: #ffffff;
+  border: 1px solid #dce3ee;
+  border-radius: 8px;
+  box-shadow: 0 18px 48px rgb(36 50 70 / 10%);
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  margin: 0 auto;
+  max-width: 520px;
+  padding: 28px;
+  width: min(100%, 520px);
+}
+
+.projectHeader {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.projectHeader h1 {
+  font-size: 24px;
+  line-height: 1.2;
+  margin: 0;
+}
+
+.projectEyebrow {
+  color: #4f6177;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.field span {
+  color: #2b3a4f;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.field input,
+.field textarea {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  color: #172033;
+  font: inherit;
+  min-width: 0;
+  padding: 10px 12px;
+  resize: vertical;
+}
+
+.field input:focus,
+.field textarea:focus {
+  border-color: #2f6db3;
+  box-shadow: 0 0 0 3px rgb(47 109 179 / 16%);
+  outline: none;
+}
+
+.primaryButton {
+  align-items: center;
+  background: #1f6feb;
+  border: 0;
+  border-radius: 6px;
+  color: #ffffff;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-weight: 700;
+  justify-content: center;
+  min-height: 42px;
+  padding: 0 16px;
+}
+
+.primaryButton:disabled {
+  background: #9fb2cc;
+  cursor: not-allowed;
+}
+
+.errorText {
+  color: #b42318;
+  font-size: 13px;
+  margin: 0;
+}
+
+.draftStatusPanel {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid #dfe7f4;
+  border-radius: 8px;
+  box-shadow: 0 10px 24px rgba(31, 41, 55, 0.08);
+  color: #39465c;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-height: 34px;
+  padding: 6px 10px;
+  width: max-content;
+  max-width: 100%;
+}
+
+.draftStatusLabel {
+  color: #65758d;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.draftStatusItem {
+  background: #f4f7fb;
+  border: 1px solid #dfe7f4;
+  border-radius: 6px;
+  color: #2d3a50;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.2;
+  padding: 5px 8px;
+}
+
+.draftStatusItem[data-state="local-failed"],
+.draftStatusItem[data-state="server-failed"] {
+  background: #fff1f0;
+  border-color: #ffd1cc;
+  color: #9f2a1d;
+}
+
+.draftStatusItem[data-state="server-dirty"],
+.draftStatusItem[data-state="server-checkpoint-pending"],
+.draftStatusItem[data-state="server-saving"],
+.draftStatusItem[data-state="local-pending"] {
+  background: #fff8e6;
+  border-color: #f6dda4;
+  color: #7a4d00;
+}
+
+.rightPanelShell {
+  display: grid;
+  font-size: 11.5px;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100%;
+  max-width: 100%;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  position: relative;
+  width: 100%;
+}
+
+.collapsedRightPanel {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #dde5f2;
+  border-radius: 8px;
+  box-shadow: 0 14px 32px rgba(15, 23, 42, 0.14);
+  display: flex;
+  flex-direction: row;
+  font-size: 13px;
+  gap: 6px;
+  height: auto;
+  padding: 6px;
+  pointer-events: auto;
+  position: fixed;
+  right: 18px;
+  top: 16px;
+  z-index: 30;
+}
+
+.collapsedRightPanel > button:first-child {
+  margin-right: 8px;
+}
+
+.collapsedRightPanel > button:first-child::after {
+  background: #d8e0ec;
+  content: "";
+  height: 22px;
+  pointer-events: none;
+  position: absolute;
+  right: -8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 1px;
+}
+
+.rightPanelToolbar {
+  align-items: center;
+  background: #ffffff;
+  border-bottom: 1px solid #dde5f2;
+  display: flex;
+  gap: 8px;
+  justify-content: flex-start;
+  max-width: 100%;
+  min-height: 46px;
+  min-width: 0;
+  padding: 6px 12px 6px 8px;
+  position: sticky;
+  top: 0;
+  z-index: 4;
+}
+
+.rightPanelView {
+  display: grid;
+  height: 100%;
+  max-width: 100%;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  width: 100%;
+}
+
+.rightPanelView[hidden] {
+  display: none;
+}
+
+.panelModeToggle {
+  align-items: center;
+  background: #eef0f4;
+  border: 1px solid #e2e8f0;
+  border-radius: 7px;
+  display: inline-flex;
+  gap: 3px;
+  padding: 3px;
+}
+
+.panelModeButton,
+.panelModeButtonActive,
+.panelIconButton,
+.panelIconButtonActive,
+.panelCollapseButton,
+.collapsedPanelButton,
+.collapsedPanelButtonActive {
+  align-items: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: #58677d;
+  cursor: pointer;
+  display: inline-flex;
+  height: 30px;
+  justify-content: center;
+  padding: 0;
+  width: 30px;
+  position: relative;
+}
+
+.panelModeButtonActive,
+.panelIconButtonActive,
+.collapsedPanelButtonActive {
+  background: #ffffff;
+  border-color: #d8ceff;
+  box-shadow: 0 1px 4px rgba(23, 32, 51, 0.12);
+  color: #6f4cf6;
+}
+
+.panelIconButton,
+.panelIconButtonActive {
+  background: #ffffff;
+  border-color: #cbd5e1;
+}
+
+.panelCollapseButton {
+  background: #f8fafc;
+  border-color: #d7dee9;
+  color: #243044;
+  flex: 0 0 auto;
+}
+
+.collapsedPanelButton,
+.collapsedPanelButtonActive {
+  background: #ffffff;
+  border-color: transparent;
+}
+
+.panelModeButton:hover,
+.panelModeButton:focus-visible,
+.panelIconButton:hover,
+.panelIconButton:focus-visible,
+.panelCollapseButton:hover,
+.panelCollapseButton:focus-visible,
+.collapsedPanelButton:hover,
+.collapsedPanelButton:focus-visible {
+  background: #f6f3ff;
+  border-color: #d8ceff;
+  color: #5f3de8;
+  outline: none;
+}
+
+.panelIssueBadge,
+.panelIssueBadgeError {
+  align-items: center;
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 10px;
+  font-weight: 900;
+  height: 16px;
+  justify-content: center;
+  min-width: 16px;
+  padding: 0 4px;
+  position: absolute;
+  right: -5px;
+  top: -5px;
+}
+
+.panelIssueBadge {
+  background: #eef2ff;
+  color: #3730a3;
+}
+
+.panelIssueBadgeError {
+  background: #fef2f2;
+  color: #b42318;
+}
+
+.resourceWorkspacePanel {
+  background: #fafbfe;
+  color: #172033;
+  display: grid;
+  font-size: 12px;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
+  padding-top: 4px;
+}
+
+.resourceSectionToolbar {
+  align-items: center;
+  background: #ffffff;
+  border-bottom: 1px solid #dce3ee;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  min-height: 44px;
+  padding: 7px 12px;
+}
+
+.resourceSectionTabs {
+  align-items: center;
+  display: inline-flex;
+  gap: 7px;
+  min-width: 0;
+}
+
+.resourceSectionButton,
+.resourceSectionButtonActive {
+  align-items: center;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  cursor: pointer;
+  display: inline-flex;
+  height: 30px;
+  justify-content: center;
+  padding: 0;
+  width: 30px;
+}
+
+.resourceSectionButton {
+  background: transparent;
+  color: #243044;
+}
+
+.resourceSectionButton:hover,
+.resourceSectionButton:focus-visible {
+  background: #f3f0ff;
+  border-color: #ded6ff;
+  color: #6f4cf6;
+  outline: none;
+}
+
+.resourceSectionButtonActive {
+  background: #eef0f4;
+  border-color: #e2e8f0;
+  color: #6f4cf6;
+}
+
+.resourceListPanel {
+  align-content: start;
+  align-items: start;
+  display: grid;
+  gap: 10px;
+  grid-auto-rows: max-content;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 280px));
+  justify-content: start;
+  min-height: 0;
+  overflow: auto;
+  padding: 10px 8px 12px;
+}
+
+.resourceListItem,
+.resourceListItemActive {
+  background: #ffffff;
+  border: 1px solid #dce3ee;
+  border-radius: 7px;
+  color: #172033;
+  cursor: pointer;
+  display: grid;
+  gap: 9px;
+  height: auto;
+  min-height: 0;
+  overflow: visible;
+  padding: 12px 13px 13px;
+  position: relative;
+  text-align: left;
+}
+
+.resourceListItem:hover,
+.resourceListItem:focus-visible,
+.resourceListItemActive:focus-visible {
+  border-color: #b9a9ff;
+  box-shadow: 0 8px 20px rgba(111, 76, 246, 0.12);
+  outline: none;
+}
+
+.resourceListItemActive {
+  border-color: #8b6cff;
+  box-shadow: 0 0 0 1px rgba(139, 108, 255, 0.78);
+}
+
+.resourceListHeader {
+  align-items: flex-start;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.resourceListMoreButton {
+  align-items: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: #172033;
+  cursor: pointer;
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 28px;
+  justify-content: center;
+  padding: 0;
+  width: 28px;
+}
+
+.resourceListMoreButton:hover,
+.resourceListMoreButton:focus-visible {
+  background: #f3f0ff;
+  border-color: #ded6ff;
+  color: #6f4cf6;
+  outline: none;
+}
+
+.resourceListIdentity {
+  align-items: center;
+  background: #eef0f2;
+  border-radius: 5px;
+  color: #5d6b80;
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 850;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.resourceListIdentity strong {
+  overflow: hidden;
+  padding: 0 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.resourceListCubeIcon {
+  align-items: center;
+  background: #f3f5f8;
+  border-radius: 5px 0 0 5px;
+  color: #243044;
+  display: inline-flex;
+  height: 28px;
+  justify-content: center;
+  width: 30px;
+}
+
+.resourceListServiceIcon {
+  align-items: center;
+  border-left: 1px solid #d7dde7;
+  color: #6f4cf6;
+  display: inline-flex;
+  height: 22px;
+  justify-content: center;
+  width: 28px;
+}
+
+.resourceListServiceIcon img {
+  display: block;
+  height: 18px;
+  object-fit: contain;
+  width: 18px;
+}
+
+.resourceListAddress {
+  color: #64748b;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 10.5px;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.resourceListValues {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.resourceListValueRow {
+  align-items: start;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(92px, 0.82fr) minmax(0, 1.18fr);
+  min-width: 0;
+}
+
+.resourceListValueRow span {
+  color: #243044;
+  font-size: 12px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.resourceListValueRow strong {
+  color: #516178;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.resourceListConfigToggle {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: #243044;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 750;
+  gap: 8px;
+  justify-self: start;
+  margin-top: 3px;
+  padding: 6px 7px;
+}
+
+.resourceListConfigToggle:hover,
+.resourceListConfigToggle:focus-visible {
+  background: #f3f0ff;
+  color: #6f4cf6;
+  outline: none;
+}
+
+.resourceListConfigToggle span {
+  color: inherit;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.resourceCardMenu {
+  background: #ffffff;
+  border: 1px solid #dce3ee;
+  border-radius: 8px;
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.18);
+  display: grid;
+  min-width: 220px;
+  overflow: hidden;
+  position: absolute;
+  right: 12px;
+  top: 48px;
+  z-index: 20;
+}
+
+.resourceCardMenuItem {
+  align-items: center;
+  background: #ffffff;
+  border: 0;
+  border-bottom: 1px solid #e4e9f1;
+  color: #172033;
+  cursor: pointer;
+  display: grid;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 720;
+  gap: 10px;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  min-height: 40px;
+  padding: 0 12px;
+  text-align: left;
+}
+
+.resourceCardMenuItem:last-child {
+  border-bottom: 0;
+}
+
+.resourceCardMenuItem:hover,
+.resourceCardMenuItem:focus-visible {
+  background: #f8fafc;
+  outline: none;
+}
+
+.resourceCardMenuItem:disabled {
+  color: #a8b3c4;
+  cursor: not-allowed;
+}
+
+.resourceCardMenuItem:disabled:hover {
+  background: #ffffff;
+}
+
+.resourceCardMenuChevron {
+  color: #94a3b8;
+}
+
+.resourceCardMenuDanger {
+  color: #ef4444;
+}
+
+.resourceListNoValues {
+  background: #f8fafc;
+  border-radius: 6px;
+  color: #64748b;
+  font-size: 11px;
+  padding: 9px 10px;
+}
+
+.resourceListEmpty {
+  align-content: center;
+  color: #64748b;
+  display: grid;
+  gap: 5px;
+  min-height: 180px;
+  padding: 18px;
+  text-align: center;
+}
+
+.resourceListEmpty strong {
+  color: #172033;
+  font-size: 12px;
+}
+
+.resourceListEmpty span {
+  font-size: 11px;
+}
+
+.terraformPanel {
+  background: #f7f9fd;
+  color: #172033;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.terraformTopBar {
+  align-items: center;
+  background: #ffffff;
+  border-bottom: 1px solid #dce3ee;
+  display: flex;
+  gap: 7px;
+  justify-content: space-between;
+  min-height: 42px;
+  padding: 6px 8px;
+}
+
+.terraformTopActions {
+  align-items: center;
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 6px;
+}
+
+.terraformFileChip {
+  align-items: center;
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  color: #172033;
+  display: inline-flex;
+  font-size: 11px;
+  font-weight: 850;
+  gap: 5px;
+  min-width: 0;
+  padding: 5px 7px;
+}
+
+.terraformFileChip span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.terraformFilePicker {
+  min-width: 0;
+  position: relative;
+}
+
+.terraformFileButton {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  color: #172033;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 850;
+  gap: 5px;
+  height: 30px;
+  max-width: 132px;
+  min-width: 88px;
+  padding: 0 7px;
+}
+
+.terraformFileButton span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.terraformFileButton:hover,
+.terraformFileButton:focus-visible {
+  background: #f8fafc;
+  border-color: #9fb2cc;
+  outline: none;
+}
+
+.terraformFileMenu {
+  background: #ffffff;
+  border: 1px solid #d7dee9;
+  border-radius: 6px;
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.18);
+  display: grid;
+  gap: 6px;
+  left: 0;
+  max-width: calc(100vw - 40px);
+  min-width: 240px;
+  padding: 8px;
+  position: absolute;
+  top: calc(100% + 8px);
+  z-index: 8;
+}
+
+.terraformFileSearch {
+  background: #ffffff;
+  border: 1px solid #d3dce8;
+  border-radius: 5px;
+  color: #172033;
+  font: inherit;
+  font-size: 12px;
+  min-height: 34px;
+  min-width: 0;
+  padding: 7px 9px;
+}
+
+.terraformFileSearch:focus {
+  border-color: #6f4cf6;
+  box-shadow: 0 0 0 3px rgba(111, 76, 246, 0.14);
+  outline: none;
+}
+
+.terraformFileList {
+  display: grid;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.terraformFileOption,
+.terraformFileOptionActive {
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  color: #111827;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  min-height: 32px;
+  padding: 6px 10px;
+  text-align: left;
+}
+
+.terraformFileOptionActive {
+  background: #f0edff;
+  color: #5f3de8;
+  font-weight: 850;
+}
+
+.terraformFileOption:hover,
+.terraformFileOption:focus-visible,
+.terraformFileOptionActive:hover,
+.terraformFileOptionActive:focus-visible {
+  background: #f6f3ff;
+  outline: none;
+}
+
+.terraformFileEmpty {
+  color: #64748b;
+  font-size: 12px;
+  padding: 8px 12px;
+}
+
+.terraformShortcut {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 900;
+  padding: 5px 8px;
+}
+
+.resourceCodeHeader {
+  align-items: center;
+  background: #ffffff;
+  border-bottom: 1px solid #dce3ee;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  min-height: 44px;
+  padding: 6px 8px;
+}
+
+.resourceCodeTitle {
+  align-items: center;
+  color: #172033;
+  display: inline-flex;
+  font-size: 13px;
+  font-weight: 900;
+  gap: 7px;
+  min-width: 0;
+}
+
+.resourceCodeTitle span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.resourceCodeBackButton,
+.resourceCodeCloseButton {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: #243044;
+  cursor: pointer;
+  display: inline-flex;
+  height: 28px;
+  justify-content: center;
+  padding: 0;
+  width: 28px;
+}
+
+.resourceCodeBackButton:hover,
+.resourceCodeBackButton:focus-visible,
+.resourceCodeCloseButton:hover,
+.resourceCodeCloseButton:focus-visible {
+  background: #f6f3ff;
+  border-color: #d8ceff;
+  color: #5f3de8;
+  outline: none;
+}
+
+.resourceActionBar {
+  align-items: center;
+  background: #ffffff;
+  border-bottom: 1px solid #dce3ee;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  justify-content: flex-end;
+  min-height: 44px;
+  padding: 6px 8px;
+}
+
+.resourceActionSecondary {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #7c5cff;
+  border-radius: 6px;
+  color: #6f4cf6;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 850;
+  gap: 5px;
+  min-height: 31px;
+  padding: 0 9px;
+  white-space: nowrap;
+}
+
+.resourceActionSecondary:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.resourceActionSecondary:not(:disabled):hover,
+.resourceActionSecondary:not(:disabled):focus-visible {
+  background: #f6f3ff;
+  outline: none;
+}
+
+.terraformActions {
+  align-items: center;
+  display: inline-flex;
+  gap: 4px;
+}
+
+.terraformActions button {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 5px;
+  color: #243044;
+  cursor: pointer;
+  display: inline-flex;
+  height: 28px;
+  justify-content: center;
+  padding: 0;
+  width: 28px;
+}
+
+.terraformActions button:hover,
+.terraformActions button:focus-visible {
+  background: #f0edff;
+  border-color: #cfc4ff;
+  color: #5f3de8;
+  outline: none;
+}
+
+.terraformActions button:disabled {
+  color: #a6b1c0;
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.terraformPreviewButton {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #7c5cff;
+  border-radius: 6px;
+  color: #6f4cf6;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 900;
+  gap: 5px;
+  justify-content: center;
+  line-height: 1.2;
+  min-height: 28px;
+  padding: 0 8px;
+  white-space: nowrap;
+}
+
+.terraformPreviewButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.terraformPreviewButton:not(:disabled):hover,
+.terraformPreviewButton:not(:disabled):focus-visible {
+  background: #f6f3ff;
+  outline: none;
+}
+
+.terraformStatusBar {
+  align-items: center;
+  background: #ffffff;
+  border-bottom: 1px solid #dce3ee;
+  color: #64748b;
+  display: flex;
+  font-size: 11px;
+  font-weight: 800;
+  gap: 10px;
+  justify-content: space-between;
+  min-height: 30px;
+  padding: 6px 10px;
+}
+
+.terraformStatusEdited,
+.terraformStatusSynced {
+  border-radius: 999px;
+  padding: 3px 8px;
+}
+
+.terraformStatusEdited {
+  background: #fff7ed;
+  color: #9a3412;
+}
+
+.terraformStatusSynced {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.terraformEditorFrame {
+  background: #1c1c1c;
+  border-bottom: 1px solid #101214;
+  display: grid;
+  flex: 1 1 0;
+  grid-template-columns: 42px minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.terraformLineNumbers {
+  background: #191919;
+  border-right: 1px solid #3a3a3a;
+  box-sizing: border-box;
+  color: #9aa4b2;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  height: 100%;
+  line-height: 1.6;
+  list-style: none;
+  margin: 0;
+  max-height: 100%;
+  overflow: hidden;
+  padding: 12px 8px 12px 0;
+  text-align: right;
+}
+
+.terraformTextarea {
+  background: #1c1c1c;
+  border: 0;
+  box-sizing: border-box;
+  color: #d7e4f7;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  height: 100%;
+  line-height: 1.6;
+  max-height: 100%;
+  min-height: 0;
+  min-width: 0;
+  outline: none;
+  overflow: auto;
+  overflow-wrap: normal;
+  padding: 12px 10px;
+  resize: none;
+  scrollbar-gutter: stable;
+  tab-size: 2;
+  word-break: normal;
+  white-space: pre;
+}
+
+.terraformTextarea::placeholder {
+  color: #6d7788;
+}
+
+.terraformTextarea:focus {
+  box-shadow: inset 0 0 0 2px rgba(111, 76, 246, 0.62);
+}
+
+.terraformPreviewExplanationPanel {
+  background: #f8fafc;
+  border-top: 1px solid #dce3ee;
+  color: #172033;
+  display: grid;
+  flex: 0 0 auto;
+  gap: 7px;
+  max-height: 180px;
+  overflow: auto;
+  padding: 9px 10px;
+}
+
+.terraformPreviewExplanationHeader {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.terraformPreviewExplanationHeader > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.terraformPreviewExplanationHeader strong {
+  color: #243044;
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.terraformPreviewExplanationHeader span {
+  color: #64748b;
+  font-size: 10.5px;
+  font-weight: 850;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.terraformPreviewExplanationActions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 6px;
+}
+
+.terraformPreviewExplanationHeader button {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  color: #243044;
+  cursor: pointer;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 900;
+  gap: 5px;
+  min-height: 28px;
+  padding: 0 8px;
+}
+
+.terraformPreviewExplanationHeader .terraformPreviewExplanationCloseButton {
+  justify-content: center;
+  min-width: 28px;
+  padding: 0;
+}
+
+.terraformPreviewExplanationHeader button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.terraformPreviewExplanationHeader button:not(:disabled):hover,
+.terraformPreviewExplanationHeader button:not(:disabled):focus-visible {
+  background: #eef2ff;
+  border-color: #c7d2fe;
+  outline: none;
+}
+
+.terraformPreviewExplanationNotice,
+.terraformPreviewExplanationError,
+.terraformPreviewExplanationResult p {
+  font-size: 11.5px;
+  line-height: 1.45;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.terraformPreviewExplanationNotice {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 6px;
+  color: #1d4ed8;
+  font-weight: 800;
+  padding: 7px 8px;
+}
+
+.terraformPreviewExplanationError {
+  background: #fff1f0;
+  border: 1px solid #ffd1cc;
+  border-radius: 6px;
+  color: #9f2a1d;
+  font-weight: 800;
+  padding: 7px 8px;
+}
+
+.terraformPreviewExplanationResult {
+  background: #ffffff;
+  border: 1px solid #dce3ee;
+  border-radius: 6px;
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  padding: 8px;
+}
+
+.terraformPreviewExplanationResult p {
+  color: #172033;
+  font-weight: 800;
+}
+
+.terraformPreviewExplanationResult ul {
+  display: grid;
+  gap: 5px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.terraformPreviewExplanationResult li {
+  align-items: start;
+  border-top: 1px solid #edf1f7;
+  display: grid;
+  gap: 6px;
+  grid-template-columns: minmax(108px, 0.72fr) minmax(0, 1.28fr);
+  min-width: 0;
+  padding-top: 5px;
+}
+
+.terraformPreviewExplanationResult li:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.terraformPreviewExplanationResult li strong {
+  color: #243044;
+  font-size: 11px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.terraformPreviewExplanationResult li span {
+  color: #64748b;
+  font-size: 11px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.terraformPreviewExplanationStats {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.terraformPreviewExplanationStats span {
+  background: #eef2ff;
+  border-radius: 999px;
+  color: #3730a3;
+  font-size: 10.5px;
+  font-weight: 900;
+  padding: 4px 7px;
+}
+
+.terraformErrorExplanationPanel {
+  background: #fff7ed;
+  border-top: 1px solid #fed7aa;
+  color: #172033;
+  display: grid;
+  flex: 0 0 auto;
+  gap: 8px;
+  max-height: 240px;
+  overflow: auto;
+  padding: 10px;
+  scrollbar-gutter: stable;
+}
+
+.terraformErrorExplanationHeader {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.terraformErrorExplanationHeader > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.terraformErrorExplanationHeader strong {
+  color: #9a3412;
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.terraformErrorExplanationHeader span {
+  color: #475569;
+  font-size: 10.5px;
+  font-weight: 850;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.terraformErrorExplanationList button {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #fdba74;
+  border-radius: 6px;
+  color: #9a3412;
+  cursor: pointer;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 900;
+  gap: 5px;
+  min-height: 28px;
+  padding: 0 8px;
+}
+
+.terraformErrorExplanationList button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.terraformErrorExplanationList button:not(:disabled):hover,
+.terraformErrorExplanationList button:not(:disabled):focus-visible {
+  background: #ffedd5;
+  outline: none;
+}
+
+.terraformErrorExplanationList {
+  display: grid;
+  gap: 6px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.terraformErrorExplanationList li {
+  align-items: start;
+  background: #ffffff;
+  border: 1px solid #fed7aa;
+  border-radius: 6px;
+  display: grid;
+  gap: 7px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-width: 0;
+  padding: 7px 8px;
+}
+
+.terraformErrorExplanationItemText {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.terraformErrorExplanationItemText strong {
+  color: #9a3412;
+  font-size: 10.5px;
+  font-weight: 950;
+  overflow-wrap: anywhere;
+}
+
+.terraformErrorExplanationNotice,
+.terraformErrorExplanationError,
+.terraformErrorExplanationItemText span,
+.terraformErrorExplanationResult p {
+  font-size: 11.5px;
+  line-height: 1.45;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.terraformErrorExplanationItemText span {
+  color: #334155;
+}
+
+.terraformErrorExplanationNotice {
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 6px;
+  color: #92400e;
+  font-weight: 800;
+  grid-column: 1 / -1;
+  padding: 7px 8px;
+}
+
+.terraformErrorExplanationError {
+  background: #fff1f0;
+  border: 1px solid #ffd1cc;
+  border-radius: 6px;
+  color: #9f2a1d;
+  font-weight: 800;
+  grid-column: 1 / -1;
+  padding: 7px 8px;
+}
+
+.terraformErrorExplanationResult {
+  background: #ffffff;
+  border: 1px solid #fed7aa;
+  border-radius: 6px;
+  display: grid;
+  gap: 7px;
+  grid-column: 1 / -1;
+  min-width: 0;
+  padding: 8px;
+}
+
+.terraformErrorExplanationResult p {
+  color: #172033;
+  font-weight: 800;
+}
+
+.terraformErrorExplanationResult dl {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.terraformErrorExplanationResult dl div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.terraformErrorExplanationResult dt {
+  color: #9a3412;
+  font-size: 10px;
+  font-weight: 950;
+}
+
+.terraformErrorExplanationResult dd {
+  color: #475569;
+  font-size: 11.5px;
+  line-height: 1.45;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.terraformBlockHighlightBox {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.44);
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1px rgba(111, 76, 246, 0.22);
+  left: 50px;
+  pointer-events: none;
+  position: absolute;
+  right: 10px;
+  z-index: 4;
+}
+
+.terraformBlockSettingsButton {
+  align-items: center;
+  background: #242424;
+  border: 1px solid #6b7280;
+  border-radius: 5px;
+  color: #d7e4f7;
+  cursor: pointer;
+  display: inline-flex;
+  height: 24px;
+  justify-content: center;
+  padding: 0;
+  pointer-events: auto;
+  position: absolute;
+  right: 6px;
+  top: 3px;
+  width: 24px;
+}
+
+.terraformBlockSettingsButton:hover,
+.terraformBlockSettingsButton:focus-visible {
+  background: #f3f0ff;
+  border-color: #b9a9ff;
+  color: #6f4cf6;
+  outline: none;
+}
+
+.terraformSaveBanner,
+.terraformSaveBannerError {
+  align-items: center;
+  display: flex;
+  font-size: 10.5px;
+  font-weight: 750;
+  gap: 6px;
+  justify-content: space-between;
+  line-height: 1.2;
+  min-height: 26px;
+  padding: 5px 8px;
+}
+
+.terraformSaveBanner span,
+.terraformSaveBannerError span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.terraformSaveBanner {
+  background: #2c2c2c;
+  color: #b7bec8;
+}
+
+.terraformSaveBannerError {
+  background: #f1434a;
+  color: #ffffff;
+}
+
+.terraformSaveBanner button,
+.terraformSaveBannerError button {
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 900;
+  flex: 0 0 auto;
+  padding: 0;
+  text-decoration: underline;
+  white-space: nowrap;
+}
+
+.terraformSaveBanner button:focus-visible,
+.terraformSaveBannerError button:focus-visible {
+  border-radius: 4px;
+  outline: 2px solid currentColor;
+  outline-offset: 3px;
+}
+
+.serverSaveToast {
+  animation: serverSaveToastIn 180ms ease-out;
+  background: #ecfdf5;
+  border: 1px solid #bbf7d0;
+  border-left: 8px solid #22c55e;
+  border-radius: 10px;
+  box-shadow: 0 24px 64px rgba(21, 128, 61, 0.26);
+  color: #166534;
+  font-size: 25px;
+  font-weight: 900;
+  line-height: 1.3;
+  min-width: 380px;
+  max-width: min(520px, calc(100vw - 32px));
+  padding: 22px 30px;
+  pointer-events: none;
+  position: fixed;
+  right: 24px;
+  top: 56px;
+  z-index: 80;
+}
+
+.terraformDiagnostics {
+  background: #ffffff;
+  border-top: 1px solid #dce3ee;
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+}
+
+.terraformDiagnosticsHidden {
+  display: none;
+}
+
+.issuesPanel {
+  background: #ffffff;
+  color: #172033;
+  display: grid;
+  min-height: 100%;
+}
+
+.issuesPanel .terraformDiagnostics {
+  align-content: start;
+  border-top: 0;
+  min-height: 100%;
+  padding: 14px;
+}
+
+.terraformDiagnosticsHeader {
+  align-items: center;
+  color: #243044;
+  display: flex;
+  gap: 7px;
+}
+
+.terraformDiagnosticsHeader h3 {
+  font-size: 13px;
+  margin: 0;
+}
+
+.terraformIssueCount,
+.terraformIssueCountError {
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 900;
+  margin-left: auto;
+  min-width: 24px;
+  padding: 3px 7px;
+  text-align: center;
+}
+
+.terraformIssueCount {
+  background: #eef2ff;
+  color: #3730a3;
+}
+
+.terraformIssueCountError {
+  background: #fef2f2;
+  color: #b42318;
+}
+
+.terraformEmpty,
+.terraformNotice,
+.terraformError {
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 0;
+  padding: 9px 10px;
+}
+
+.terraformEmpty {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  color: #64748b;
+}
+
+.terraformNotice {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1d4ed8;
+  font-weight: 800;
+}
+
+.terraformError {
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  color: #9a3412;
+  font-weight: 800;
+}
+
+.terraformDiagnosticList {
+  display: grid;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.terraformDiagnosticList li {
+  border: 1px solid #dce3ee;
+  border-left: 4px solid #64748b;
+  border-radius: 6px;
+  display: grid;
+  gap: 4px;
+  padding: 9px 10px;
+}
+
+.terraformDiagnosticList li[data-severity="error"] {
+  border-left-color: #dc2626;
+}
+
+.terraformDiagnosticList li[data-severity="warning"] {
+  border-left-color: #f59e0b;
+}
+
+.terraformDiagnosticList strong {
+  color: #172033;
+  font-size: 11px;
+}
+
+.terraformDiagnosticList span {
+  color: #475569;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.terraformDialogBackdrop {
+  align-items: center;
+  backdrop-filter: blur(6px);
+  background: rgba(15, 23, 42, 0.38);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 24px;
+  position: fixed;
+  z-index: 40;
+}
+
+.terraformDialog {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  box-shadow: 0 22px 64px rgba(15, 23, 42, 0.28);
+  color: #111827;
+  display: grid;
+  gap: 14px;
+  max-width: 520px;
+  padding: 28px 34px;
+  width: min(100%, 520px);
+}
+
+.terraformDialog h2 {
+  font-size: 18px;
+  line-height: 1.25;
+  margin: 0;
+}
+
+.terraformDialog p {
+  color: #1f2937;
+  font-size: 15px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.terraformDialogActions {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 8px;
+}
+
+.terraformDialogDangerButton,
+.terraformDialogSecondaryButton,
+.terraformDialogPrimaryButton {
+  border-radius: 7px;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 850;
+  font-size: 12px;
+  min-height: 34px;
+  padding: 0 12px;
+}
+
+.terraformDialogDangerButton {
+  background: #ef4444;
+  border: 1px solid #ef4444;
+  color: #ffffff;
+}
+
+.terraformDialogSecondaryButton {
+  background: #ffffff;
+  border: 1px solid #7c5cff;
+  color: #6f4cf6;
+}
+
+.terraformDialogPrimaryButton {
+  background: #6f4cf6;
+  border: 1px solid #6f4cf6;
+  color: #ffffff;
+}
+
+.terraformDialogDangerButton:hover,
+.terraformDialogDangerButton:focus-visible {
+  background: #dc2626;
+  border-color: #dc2626;
+  outline: none;
+}
+
+.terraformDialogSecondaryButton:hover,
+.terraformDialogSecondaryButton:focus-visible {
+  background: #f6f3ff;
+  outline: none;
+}
+
+.terraformDialogPrimaryButton:hover,
+.terraformDialogPrimaryButton:focus-visible {
+  background: #5f3de8;
+  border-color: #5f3de8;
+  outline: none;
+}
+
+@keyframes serverSaveToastIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.aiPanel {
+  align-content: start;
+  background: #ffffff;
+  color: #172033;
+  display: grid;
+  gap: 14px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px;
+}
+
+.aiPanelHeader {
+  border-bottom: 1px solid #e3e9f2;
+  display: grid;
+  gap: 4px;
+  padding-bottom: 14px;
+}
+
+.aiPanelHeader span {
+  color: #6f4cf6;
+  font-size: 11px;
+  font-weight: 950;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.aiPanelHeader h2 {
+  color: #172033;
+  font-size: 18px;
+  line-height: 1.2;
+  margin: 0;
+}
+
+.aiSection,
+.aiResultCard,
+.aiExplanation,
+.aiResultStack {
+  display: grid;
+  gap: 10px;
+}
+
+.aiSection {
+  border-top: 1px solid #e3e9f2;
+  padding-top: 14px;
+}
+
+.aiSection:first-of-type {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.aiField {
+  color: #334155;
+  display: grid;
+  font-size: 12px;
+  font-weight: 850;
+  gap: 6px;
+}
+
+.aiField textarea,
+.aiField input {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  color: #172033;
+  font: inherit;
+  min-width: 0;
+  padding: 8px 10px;
+  width: 100%;
+}
+
+.aiField textarea {
+  line-height: 1.45;
+  resize: vertical;
+}
+
+.aiField textarea:focus,
+.aiField input:focus {
+  border-color: #2f6db3;
+  box-shadow: 0 0 0 3px rgb(47 109 179 / 16%);
+  outline: none;
+}
+
+.aiInlineFields {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.aiPrimaryButton,
+.aiSecondaryButton {
+  align-items: center;
+  border-radius: 6px;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 850;
+  justify-content: center;
+  min-height: 34px;
+  padding: 0 10px;
+}
+
+.aiPrimaryButton {
+  background: #6f4cf6;
+  border: 1px solid #6f4cf6;
+  color: #ffffff;
+}
+
+.aiSecondaryButton {
+  background: #ffffff;
+  border: 1px solid #7c5cff;
+  color: #6f4cf6;
+}
+
+.aiPrimaryButton:disabled,
+.aiSecondaryButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.aiPrimaryButton:not(:disabled):hover,
+.aiPrimaryButton:not(:disabled):focus-visible {
+  background: #5f3de8;
+  border-color: #5f3de8;
+  outline: none;
+}
+
+.aiSecondaryButton:not(:disabled):hover,
+.aiSecondaryButton:not(:disabled):focus-visible {
+  background: #f6f3ff;
+  outline: none;
+}
+
+.aiResultCard {
+  background: #f8fafc;
+  border: 1px solid #dce3ee;
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.aiResultHeader,
+.aiActionHeader,
+.aiExplanationHeader {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.aiResultHeader h3,
+.aiActionHeader h3 {
+  color: #172033;
+  font-size: 13px;
+  line-height: 1.25;
+  margin: 0;
+}
+
+.aiResultHeader span,
+.aiExplanationHeader span {
+  background: #eef2ff;
+  border-radius: 999px;
+  color: #3730a3;
+  font-size: 10.5px;
+  font-weight: 900;
+  padding: 4px 7px;
+  white-space: nowrap;
+}
+
+.aiExplanation {
+  background: #f4f7fb;
+  border: 1px solid #dfe7f4;
+  border-radius: 7px;
+  padding: 10px;
+}
+
+.aiWarning {
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  border-radius: 7px;
+  display: grid;
+  gap: 7px;
+  padding: 10px;
+}
+
+.aiExplanationHeader strong,
+.aiWarning strong,
+.aiListBlock strong {
+  color: #172033;
+  font-size: 11.5px;
+  font-weight: 950;
+}
+
+.aiExplanation p,
+.aiResultSummary,
+.aiHint,
+.aiNotice,
+.aiError,
+.aiStaleNotice {
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.aiExplanation p,
+.aiResultSummary {
+  color: #334155;
+}
+
+.aiHint {
+  color: #64748b;
+}
+
+.aiNotice,
+.aiStaleNotice {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 6px;
+  color: #1d4ed8;
+  font-weight: 800;
+  padding: 9px 10px;
+}
+
+.aiStaleNotice {
+  background: #fff7ed;
+  border-color: #fed7aa;
+  color: #9a3412;
+}
+
+.aiError {
+  background: #fff1f0;
+  border: 1px solid #ffd1cc;
+  border-radius: 6px;
+  color: #9f2a1d;
+  font-weight: 800;
+  padding: 9px 10px;
+}
+
+.aiWarning ul {
+  display: grid;
+  gap: 7px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.aiWarning li {
+  border-top: 1px solid #fed7aa;
+  display: grid;
+  gap: 3px;
+  padding-top: 7px;
+}
+
+.aiWarning li:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.aiWarning span {
+  color: #9a3412;
+  font-size: 11px;
+  font-weight: 950;
+}
+
+.aiWarning p {
+  color: #7c2d12;
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.aiListBlock {
+  display: grid;
+  gap: 5px;
+}
+
+.aiListBlock ul {
+  display: grid;
+  gap: 5px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.aiListBlock li {
+  border-top: 1px solid #dce3ee;
+  color: #475569;
+  font-size: 11.5px;
+  line-height: 1.45;
+  padding-top: 5px;
+}
+
+.aiListBlock li:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.deploymentPanel {
+  display: grid;
+  gap: 16px;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  height: 100%;
+  max-width: 100%;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  padding: 16px;
+  width: 100%;
+}
+
+.deploymentPanelContent {
+  align-content: start;
+  display: grid;
+  gap: 16px;
+  max-width: 100%;
+  min-height: 0;
+  min-width: 0;
+  overflow-y: auto;
+  padding-right: 2px;
+  scrollbar-gutter: stable;
+  width: 100%;
+}
+
+.deploymentHeader {
+  border-bottom: 1px solid #e3e9f2;
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding-bottom: 14px;
+}
+
+.deploymentHeaderTop {
+  align-items: flex-start;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.deploymentHeaderTop > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.deploymentHeader h2 {
+  color: #172033;
+  font-size: 18px;
+  line-height: 1.2;
+  margin: 0;
+}
+
+.deploymentHeader span {
+  color: #68758b;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.deploymentExpandButton {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  color: #243044;
+  cursor: pointer;
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 34px;
+  justify-content: center;
+  width: 34px;
+}
+
+.deploymentExpandButton:hover,
+.deploymentExpandButton:focus-visible {
+  background: #eff6ff;
+  border-color: #93c5fd;
+  outline: none;
+}
+
+.deploymentSection {
+  border-top: 1px solid #e3e9f2;
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding-top: 14px;
+}
+
+.deploymentSection h3 {
+  color: #172033;
+  font-size: 14px;
+  margin: 0;
+}
+
+.deploymentSectionHeader {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.deploymentField {
+  color: #334155;
+  display: grid;
+  font-size: 12px;
+  font-weight: 850;
+  gap: 6px;
+}
+
+.deploymentPrimaryButton,
+.deploymentSecondaryButton,
+.deploymentDangerButton {
+  align-items: center;
+  border-radius: 6px;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 850;
+  gap: 5px;
+  justify-content: center;
+  line-height: 1.25;
+  min-height: 34px;
+  padding: 0 10px;
+  text-align: center;
+  white-space: normal;
+}
+
+.deploymentPrimaryButton {
+  background: #1f6feb;
+  border: 1px solid #1f6feb;
+  color: #ffffff;
+}
+
+.deploymentSecondaryButton {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  color: #243044;
+}
+
+.deploymentDangerButton {
+  background: #dc2626;
+  border: 1px solid #dc2626;
+  color: #ffffff;
+}
+
+.deploymentPrimaryButton:disabled,
+.deploymentSecondaryButton:disabled,
+.deploymentDangerButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.deploymentDangerButton:not(:disabled):hover,
+.deploymentDangerButton:not(:disabled):focus-visible {
+  background: #b91c1c;
+  border-color: #b91c1c;
+  outline: none;
+}
+
+.deploymentPrimaryButton svg,
+.deploymentSecondaryButton svg,
+.deploymentDangerButton svg {
+  flex: 0 0 auto;
+}
+
+.deploymentButtonText {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.deploymentPrimaryButton .deploymentButtonText,
+.deploymentDangerButton .deploymentButtonText {
+  color: #ffffff;
+}
+
+.deploymentPrimaryButton svg,
+.deploymentDangerButton svg {
+  color: #ffffff;
+}
+
+.deploymentHint {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.deploymentStaleNotice {
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  border-radius: 6px;
+  color: #9a3412;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.45;
+  margin: 0;
+  padding: 8px 10px;
+}
+
+.deploymentPreflightSummary {
+  background: #f8fafc;
+  border: 1px solid #dce3ee;
+  border-radius: 6px;
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px;
+}
+
+.deploymentPreflightSummary p {
+  color: #334155;
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.deploymentPreflightStats {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  min-width: 0;
+}
+
+.deploymentPreflightStats span {
+  background: #ffffff;
+  border: 1px solid #dce3ee;
+  border-radius: 5px;
+  color: #64748b;
+  display: grid;
+  font-size: 10.5px;
+  font-weight: 850;
+  gap: 2px;
+  min-width: 0;
+  padding: 6px 7px;
+}
+
+.deploymentPreflightStats strong {
+  color: #172033;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.deploymentPreflightFindings {
+  display: grid;
+  gap: 6px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.deploymentPreflightFindings li {
+  align-items: start;
+  background: #ffffff;
+  border: 1px solid #e3e9f2;
+  border-left: 4px solid #f59e0b;
+  border-radius: 6px;
+  display: grid;
+  gap: 5px;
+  grid-template-columns: auto minmax(0, 1fr);
+  min-width: 0;
+  padding: 7px 8px;
+}
+
+.deploymentPreflightFindings span {
+  color: #9a3412;
+  font-size: 10px;
+  font-weight: 950;
+  line-height: 1.4;
+}
+
+.deploymentPreflightFindings strong {
+  color: #172033;
+  font-size: 12px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.deploymentPreflightFindings em {
+  color: #64748b;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 10.5px;
+  font-style: normal;
+  grid-column: 2;
+  overflow-wrap: anywhere;
+}
+
+.deploymentPreflightMore {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 850;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.deploymentSummary {
+  background: #f8fafc;
+  border: 1px solid #dce3ee;
+  border-radius: 6px;
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px;
+}
+
+.deploymentSummary div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.deploymentSummary span {
+  color: #68758b;
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.deploymentSummary strong {
+  color: #172033;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.deploymentWarnings {
+  border-top: 1px solid #dce3ee;
+  padding-top: 8px;
+}
+
+.deploymentWarnings ul {
+  display: grid;
+  gap: 6px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.deploymentWarnings li {
+  display: grid;
+  gap: 3px;
+}
+
+.deploymentWarnings p {
+  color: #334155;
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.deploymentApplyConfirm,
+.deploymentDestroyConfirm {
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+}
+
+.deploymentDestroyConfirm {
+  background: #fff7ed;
+  border-color: #fdba74;
+}
+
+.deploymentApplyConfirm h3,
+.deploymentDestroyConfirm h3 {
+  font-size: 13px;
+  margin: 0;
+}
+
+.deploymentApplyConfirm div,
+.deploymentDestroyConfirm div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.deploymentApplyConfirm span,
+.deploymentDestroyConfirm span {
+  color: #68758b;
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.deploymentApplyConfirm strong,
+.deploymentDestroyConfirm strong {
+  color: #172033;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.deploymentApplyConfirm p,
+.deploymentDestroyConfirm p {
+  color: #334155;
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.deploymentApplyActions {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(76px, 0.85fr) minmax(0, 1.15fr);
+}
+
+.deploymentApplyActions .deploymentPrimaryButton,
+.deploymentApplyActions .deploymentSecondaryButton,
+.deploymentApplyActions .deploymentDangerButton {
+  min-height: 44px;
+  padding: 8px 12px;
+}
+
+.deploymentResultRows {
+  border: 1px solid #dce3ee;
+  border-radius: 6px;
+  display: grid;
+  gap: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.deploymentResultRow {
+  align-items: center;
+  background: #ffffff;
+  border-top: 1px solid #e6edf5;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1.15fr) minmax(88px, 0.45fr) minmax(0, 1fr);
+  min-height: 32px;
+  min-width: 0;
+  padding: 6px 10px;
+}
+
+.deploymentResultRow:first-child {
+  border-top: 0;
+}
+
+.deploymentResultRow strong {
+  color: #172033;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.deploymentResultMeta,
+.deploymentResultValue {
+  color: #526174;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.deploymentResultMeta {
+  color: #64748b;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 11px;
+}
+
+.deploymentModeSwitch {
+  align-items: center;
+  background: #f8fafc;
+  border: 1px solid #dce3ee;
+  border-radius: 6px;
+  display: grid;
+  gap: 6px;
+  grid-auto-rows: 32px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  min-width: 0;
+  padding: 3px;
+}
+
+.deploymentModeButton {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  color: #526174;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 850;
+  height: 32px;
+  justify-content: center;
+  line-height: 1.2;
+  min-height: 0;
+  padding: 0 8px;
+}
+
+.deploymentModeButton:hover,
+.deploymentModeButton:focus-visible {
+  background: #eef2f7;
+  color: #172033;
+  outline: none;
+}
+
+.deploymentModeButtonActive {
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 12%);
+  color: #172033;
+}
+
+.deploymentExpandedOverlay {
+  background: rgb(15 23 42 / 38%);
+  inset: 0;
+  padding: 18px;
+  position: fixed;
+  z-index: 60;
+}
+
+.deploymentExpandedShell {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  box-shadow: 0 24px 60px rgb(15 23 42 / 28%);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.deploymentExpandedHeader {
+  align-items: center;
+  border-bottom: 1px solid #e3e9f2;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 14px 16px;
+}
+
+.deploymentExpandedHeader > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.deploymentExpandedHeader h2 {
+  color: #172033;
+  font-size: 18px;
+  line-height: 1.2;
+  margin: 0;
+}
+
+.deploymentExpandedHeader span {
+  color: #68758b;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.deploymentExpandedGrid {
+  --deployment-details-width: 50%;
+
+  display: grid;
+  grid-template-columns:
+    minmax(0, calc(var(--deployment-details-width) - 6px))
+    12px
+    minmax(0, calc(100% - var(--deployment-details-width) - 6px));
+  min-height: 0;
+}
+
+.deploymentExpandedDetails {
+  align-content: start;
+  display: grid;
+  gap: 16px;
+  max-width: 100%;
+  min-height: 0;
+  min-width: 0;
+  overflow: auto;
+  padding: 16px;
+}
+
+.deploymentExpandedDetails .deploymentSection h3 {
+  font-size: 15px;
+}
+
+.deploymentExpandedDetails .deploymentField {
+  font-size: 13px;
+  gap: 7px;
+}
+
+.deploymentExpandedDetails .deploymentPrimaryButton,
+.deploymentExpandedDetails .deploymentSecondaryButton,
+.deploymentExpandedDetails .deploymentDangerButton {
+  font-size: 14px;
+  gap: 7px;
+  min-height: 40px;
+  padding: 8px 12px;
+}
+
+.deploymentExpandedDetails .deploymentRefreshButton {
+  font-size: 12px;
+}
+
+.deploymentExpandedDetails .deploymentSummary {
+  gap: 10px;
+  padding: 12px;
+}
+
+.deploymentExpandedDetails .deploymentSummary span {
+  font-size: 12px;
+}
+
+.deploymentExpandedDetails .deploymentSummary strong {
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.deploymentExpandedLogs {
+  background: #0f172a;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  max-width: 100%;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  padding: 16px;
+}
+
+.deploymentExpandedResizeHandle {
+  align-items: center;
+  background: #f1f5f9;
+  border: 0;
+  border-left: 1px solid #d9e2ef;
+  border-right: 1px solid #d9e2ef;
+  cursor: col-resize;
+  display: flex;
+  justify-content: center;
+  min-height: 0;
+  padding: 0;
+  touch-action: none;
+}
+
+.deploymentExpandedResizeHandle::before {
+  background: #94a3b8;
+  border-radius: 999px;
+  box-shadow:
+    -3px 0 0 #cbd5e1,
+    3px 0 0 #cbd5e1;
+  content: "";
+  height: 44px;
+  width: 2px;
+}
+
+.deploymentExpandedResizeHandle:hover,
+.deploymentExpandedResizeHandle:focus-visible {
+  background: #e2e8f0;
+  outline: 2px solid #2563eb;
+  outline-offset: -2px;
+}
+
+.deploymentExpandedLogs .deploymentSection {
+  border-top: 0;
+  display: grid;
+  gap: 10px;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
+  padding-top: 0;
+}
+
+.deploymentExpandedLogs .deploymentSection h3 {
+  color: #e2e8f0;
+}
+
+.deploymentExpandedLogs .deploymentHint {
+  color: #94a3b8;
+}
+
+.deploymentLogList {
+  background: #111827;
+  border: 1px solid #243247;
+  border-radius: 6px;
+  color: #d9e4f5;
+  display: block;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  list-style: none;
+  margin: 0;
+  max-width: 100%;
+  min-height: 0;
+  min-width: 0;
+  overflow: auto;
+  padding: 12px;
+  tab-size: 2;
+}
+
+.deploymentLogList li {
+  color: inherit;
+  min-width: 0;
+  padding: 1px 0;
+  white-space: pre-wrap;
+}
+
+.deploymentLogList li[data-tone="warning"] {
+  color: #fbbf24;
+}
+
+.deploymentLogList li[data-tone="error"] {
+  color: #f87171;
+}
+
+.deploymentLogPrefix {
+  color: #94a3b8;
+}
+
+.deploymentLogList p {
+  color: inherit;
+  display: inline;
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.deploymentLogTokenPlain {
+  color: inherit;
+}
+
+.deploymentLogTokenResource {
+  color: #67e8f9;
+}
+
+.deploymentLogTokenString {
+  color: #86efac;
+}
+
+.deploymentLogTokenMetadata {
+  color: #fbbf24;
+}
+
+.deploymentLogTokenOperation {
+  color: #93c5fd;
+}
+
+.deploymentLogTokenOutput {
+  color: #c4b5fd;
+}
+
+.deploymentNotice,
+.deploymentError {
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.45;
+  margin: 0;
+  padding: 10px;
+}
+
+.deploymentNotice {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1d4ed8;
+}
+
+.deploymentError {
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  color: #9a3412;
+}
+
+.noticePanel p {
+  color: #2b3a4f;
+  margin: 0;
+}
+
+@media (max-width: 640px) {
+  .projectShell {
+    padding: 16px;
+  }
+
+  .projectForm,
+  .noticePanel {
+    padding: 20px;
+  }
+
+  .deploymentExpandedOverlay {
+    padding: 0;
+  }
+
+  .deploymentExpandedShell {
+    border-radius: 0;
+  }
+
+  .deploymentExpandedGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .deploymentExpandedResizeHandle {
+    display: none;
+  }
+
+  .deploymentExpandedLogs {
+    border-left: 0;
+    border-top: 1px solid #1e293b;
+  }
+
+  .deploymentResultRow {
+    align-items: start;
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .deploymentResultValue {
+    grid-column: 1 / -1;
+  }
+}

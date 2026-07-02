@@ -8,6 +8,8 @@ This folder contains deployment scripts for the production deployment flow.
 2. Production deployment must not use Docker Compose.
 3. Prefer SSH-free deployment through SSM.
 4. Keep rollback paths simple and documented.
+5. Keep production deployment scripts separate from user Direct Deployment Path and Git/CI/CD Deployment Path workflows.
+6. Do not add user cloud resource mutation behavior to production deploy scripts.
 
 ## Script Rules
 

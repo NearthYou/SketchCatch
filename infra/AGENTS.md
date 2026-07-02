@@ -17,6 +17,9 @@ This folder contains infrastructure configuration, AWS templates, IAM policies, 
 2. Production deployment does not use Docker Compose.
 3. Keep RDS for structured project data and S3 for file artifacts.
 4. Prefer templates and policies that are readable by the team over overly clever infrastructure code.
+5. Keep SketchCatch production infrastructure separate from user Practice Architecture Resources and user Deployment artifacts.
+6. Treat Redis, if provisioned for SketchCatch, as internal Runtime Cache infrastructure for workflow status, polling, and streaming support.
+7. Provider Adapter examples may start with AWS, but do not document SketchCatch as an AWS-only product.
 
 ## Review Checklist
 

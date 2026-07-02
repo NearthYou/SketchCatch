@@ -1,102 +1,74 @@
 # 데이터 모델
 
-이 문서는 SketchCatch에서 DB 테이블, API DTO, 프론트 상태 객체가 같은 의미로 쓰이도록 맞춘 공통 데이터 모델 기준이다.
+이 문서는 SketchCatch에서 DB 테이블, API DTO, 프론트 상태 객체, AI 결과, Terraform/Deployment 흐름이 같은 의미로 쓰이도록 맞춘 공통 데이터 모델 기준이다.
 
-## 결론
-
-사용자가 제안한 모델 방향은 타당하다. 특히 `Project`, `ResourceNode`, `ResourceEdge`, `TerraformCode`, `Deployment`처럼 팀원이 서로 다른 이름으로 구현하면 API 연결 단계에서 깨질 수 있는 영역을 먼저 고정해야 한다는 판단이 맞다.
-
-다만 현재 SketchCatch의 실제 구현과 제품 전략을 기준으로 아래처럼 수정한다.
-
-- MVP 초반은 로그인 사용자가 아니라 `AnonymousWorkspace` 기반이다. `User`는 인증 도입 시 추가한다.
-- `Diagram`은 DB에 이미 `architectures` 테이블로 들어가 있다. 공통 타입 이름은 `ArchitectureSnapshot`으로 두고, 화면에서는 다이어그램 또는 보드라고 불러도 된다.
-- 저장되는 아키텍처 JSON은 `nodes`와 `edges`를 가진 `ArchitectureJson`으로 고정한다.
-- Terraform 원문은 RDS `content` 컬럼에 저장하지 않는다. IaC 파일은 S3에 두고, RDS/API에는 `ProjectAsset` 또는 `TerraformArtifact` 메타데이터와 `objectKey`를 저장한다.
-- 실제 AWS 배포 실행은 후순위다. 3주 안에 구현할 `Deployment`는 통제된 배포/연습 세션 상태 기록 또는 모의 실행 이력으로 제한하고, 프론트에서 AWS SDK를 직접 호출하지 않는다.
-
-## 이름 규칙
+## 원칙
 
 - TypeScript, API DTO, 프론트 상태 객체는 `camelCase`를 사용한다.
 - PostgreSQL 컬럼은 `snake_case`를 사용한다.
-- API 경계에서 변환된 객체는 반드시 공유 타입의 의미를 따른다.
-- 날짜는 API와 프론트에서 ISO 문자열(`IsoDateTimeString`)로 다룬다. DB/ORM 내부에서만 `Date` 객체를 사용할 수 있다.
-- 공유 타입에는 비밀번호 해시, 암호화 전 access key, secret key 같은 민감값을 넣지 않는다.
+- 날짜는 API와 프론트에서 `IsoDateTimeString`으로 다룬다.
+- 공유 타입에는 `passwordHash`, raw access key, secret key, private token, DB password를 넣지 않는다.
+- 새 필드, enum, status, DTO는 먼저 이 문서와 `packages/types/src/index.ts`에 맞춘다.
+- API 요청/응답은 shared type을 기준으로 하고, API route에서는 Zod schema로 같은 계약을 검증한다.
+- `Resource`, `Practice Architecture`, `InfrastructureGraph`, `Reverse Engineering`은 provider-neutral 개념으로 다룬다. AWS-first 구현은 가능하지만 공통 모델에 AWS-only 가정을 섞지 않는다.
+- AI, Bedrock, Amazon Q, 음성 입력은 제안과 설명 계층이다. Practice Architecture, IaC Preview, Git 변경, Deployment 실행 같은 상태 변경은 `User-Accepted Change`여야 한다.
 
-예시:
+## 핵심 계약
 
-| DB 컬럼 | API / 프론트 필드 |
+| 모델 | 책임 |
 | --- | --- |
-| `project_id` | `projectId` |
-| `workspace_id` | `workspaceId` |
-| `created_at` | `createdAt` |
-| `architecture_json` | `architectureJson` |
+| `ArchitectureJson` | 저장된 Practice Architecture의 도메인 그래프 |
+| `InfrastructureGraph` | `DiagramJson`과 Terraform 사이의 양방향 동기화 중간 그래프 |
+| `DiagramJson` | Architecture Board 편집 상태와 Terraform 변환 입력 |
+| `ProjectDraft` | 프로젝트별 최신 편집 draft |
+| `TerraformArtifact` | S3에 저장된 Terraform 파일 메타데이터 |
+| `AwsConnection` | 사용자가 한 번 연결해 여러 프로젝트에서 재사용하는 AWS Role 연결 metadata |
+| `Deployment` | 승인된 Terraform 실행 단위 |
+| `DeploymentPlanArtifact` | S3에 저장된 `tfplan` 파일의 Deployment별 metadata |
+| `DeploymentLog` | Deployment 단계별 실행 로그 |
+| `DeployedResource` | Apply 성공 후 Terraform state에서 추출한 실제 생성 리소스 |
+| `TerraformOutput` | Apply 성공 후 `terraform output -json`에서 추출한 output |
+| `CheckFinding` | Pre-Deployment Check의 단일 경고/검증 결과 |
+| `RequirementInput` | 텍스트 또는 음성에서 들어온 요구사항 입력 |
+| `ProviderAdapter` | provider별 Resource 조회, import, IaC 세부를 공통 모델로 변환하는 경계 |
+| `GitCicdHandoff` | IaC Preview를 Source Repository PR과 외부 pipeline으로 넘기는 handoff metadata |
+| `ReverseEngineeringScan` | 기존 cloud Resource 스캔 작업과 복원 결과 metadata |
 
-## MVP 모델
+## Requirement Input과 User-Accepted Change
 
-3주 안에 구현을 끝내는 일정에서는 아래 모델을 모두 3주차 종료 전까지 코드 기준으로 맞춘다. 다만 `User`, `AwsCredential`, 실제 AWS apply 실행은 인증/권한/비용 사고 방지 설계가 필요하므로 별도 명시가 있을 때만 포함한다.
-
-권장 순서:
-
-| 주차 | 구현 모델 | 목적 |
-| --- | --- | --- |
-| 1주차 | `AnonymousWorkspace`, `Project`, `ArchitectureSnapshot`, `ArchitectureJson`, `ResourceNode`, `ResourceEdge` | 프로젝트 생성과 보드 저장 기준 확정 |
-| 2주차 | `ProjectAsset`, `TerraformArtifact` | 다이어그램 이미지, Terraform 파일, export 산출물 저장 |
-| 3주차 | `Deployment`, `Template` | 모의/통제된 실행 이력과 템플릿 공유 기준 확정 |
-
-### AnonymousWorkspace
-
-현재 인증이 없으므로 프로젝트 소유자는 `User`가 아니라 익명 워크스페이스다.
+`RequirementInput`은 사용자가 Practice Architecture를 만들거나 바꾸기 위해 제공하는 자연어 입력이다. 입력 채널은 텍스트 또는 음성일 수 있다. 음성 입력은 Amazon Transcribe 같은 전사 단계를 거쳐 텍스트로 확인된 뒤 `RequirementPrompt`로 확정된다.
 
 ```ts
-type AnonymousWorkspace = {
-  id: string;
-  createdAt: IsoDateTimeString;
-  updatedAt: IsoDateTimeString;
+type RequirementInputMode = "text" | "voice";
+
+type RequirementInput = {
+  mode: RequirementInputMode;
+  text: string;
+  transcriptSource?: "amazon_transcribe";
+  confirmedByUser: boolean;
 };
 ```
 
-DB 기준: `anonymous_workspaces`
-
-### Project
-
-사용자가 만드는 인프라 설계 프로젝트다.
+AI가 만든 `ArchitectureDraft`, `ArchitectureSuggestion`, Git 변경, Deployment 실행은 자동으로 프로젝트 상태를 바꾸지 않는다. 상태 변경 API는 사용자의 명시적 수락/승인 시점과 대상을 추적할 수 있어야 한다.
 
 ```ts
-type Project = {
-  id: string;
-  workspaceId: string;
-  userId?: string;
-  name: string;
-  description: string | null;
-  createdAt: IsoDateTimeString;
-  updatedAt: IsoDateTimeString;
+type UserAcceptedChangeTarget =
+  | "architecture_draft"
+  | "architecture_suggestion"
+  | "iac_handoff"
+  | "git_change"
+  | "deployment_action";
+
+type UserAcceptedChange = {
+  target: UserAcceptedChangeTarget;
+  acceptedByUserId: string;
+  acceptedAt: IsoDateTimeString;
 };
 ```
 
-DB 기준: `projects`
+## ArchitectureJson
 
-`userId`는 인증 도입 후 마이그레이션할 수 있도록 선택값으로 둔다. 현재 MVP에서는 `workspaceId`가 필수 소유자 키다.
-
-### ArchitectureSnapshot
-
-다이어그램의 저장 단위다. 사용자가 보드에서 수정할 때마다 새 버전을 만들 수 있으므로 `version`을 가진 스냅샷으로 본다.
-
-```ts
-type ArchitectureSnapshot = {
-  id: string;
-  projectId: string;
-  version: number;
-  source: "manual" | "prompt_mock" | "imported" | string;
-  architectureJson: ArchitectureJson;
-  createdAt: IsoDateTimeString;
-};
-```
-
-DB 기준: `architectures`
-
-### ArchitectureJson
-
-화면 보드, API 저장, 비용/위험 룰 엔진, IaC 생성이 함께 보는 핵심 JSON이다.
+`ArchitectureJson`은 프로젝트 저장, AI 분석, 비용/위험 분석이 바라보는 도메인 그래프다.
 
 ```ts
 type ArchitectureJson = {
@@ -105,14 +77,12 @@ type ArchitectureJson = {
 };
 ```
 
-### ResourceNode
-
-화면에 보이는 AWS 리소스 노드다.
+`ResourceNode`:
 
 ```ts
 type ResourceNode = {
   id: string;
-  type: "VPC" | "EC2" | "RDS" | "S3" | "LAMBDA" | "UNKNOWN";
+  type: ResourceType;
   label?: string;
   positionX: number;
   positionY: number;
@@ -120,11 +90,7 @@ type ResourceNode = {
 };
 ```
 
-`config`는 리소스별 설정을 담는 확장 필드다. 예를 들어 EC2는 `instanceType`, `ami`, RDS는 `engine`, `instanceClass`처럼 서로 다른 값을 가질 수 있다.
-
-### ResourceEdge
-
-리소스 사이의 연결 정보다.
+`ResourceEdge`:
 
 ```ts
 type ResourceEdge = {
@@ -135,11 +101,247 @@ type ResourceEdge = {
 };
 ```
 
-`sourceId`와 `targetId`는 반드시 같은 `ArchitectureJson.nodes` 안의 `ResourceNode.id`를 가리켜야 한다.
+`sourceId`와 `targetId`는 같은 `ArchitectureJson.nodes[].id`를 가리켜야 한다.
 
-### ProjectAsset
+## InfrastructureGraph
 
-다이어그램 이미지, Terraform 파일, export zip처럼 S3에 저장되는 산출물의 메타데이터다.
+`InfrastructureGraph`는 `DiagramJson`과 Terraform을 양방향 동기화할 때 사용하는 정규화된 중간 모델이다. Architecture Board 전용 그래프를 새로 만드는 것이 아니라, 보드 편집 상태와 Terraform HCL subset이 같은 Resource identity와 IaC identity를 공유하도록 맞추는 동기화 계약이다.
+
+```ts
+type InfrastructureGraph = {
+  nodes: InfrastructureGraphNode[];
+  edges: InfrastructureGraphEdge[];
+};
+```
+
+`InfrastructureGraphNode`:
+
+```ts
+type InfrastructureGraphNode = {
+  id: string;
+  type: ResourceType;
+  label?: string;
+  iac: {
+    provider: CloudProvider;
+    terraformBlockType: TerraformBlockType;
+    resourceType: string;
+    resourceName: string;
+    fileName?: string;
+  };
+  config: Record<string, unknown>;
+};
+```
+
+`InfrastructureGraphEdge`:
+
+```ts
+type InfrastructureGraphEdge = {
+  id: string;
+  sourceId: string;
+  targetId: string;
+  label?: string;
+};
+```
+
+`id`는 `DiagramJson.nodes[].id`와 안정적으로 대응해야 한다. Terraform에서 들어온 변경은 `(resourceType, resourceName)`으로 기존 node를 찾고, 찾은 node의 `id`를 유지한 채 `config`를 갱신한다. 매칭할 수 없는 block, 알 수 없는 block, 복잡한 expression처럼 안전하게 해석할 수 없는 입력은 기존 그래프나 `DiagramJson`을 변경하지 않고 diagnostic으로 반환한다.
+
+## DiagramJson
+
+`DiagramJson`은 Architecture Board 편집 상태와 Terraform 변환 입력이다. React Flow 스타일의 위치, 크기, viewport, node style, Terraform parameters를 포함할 수 있다.
+
+```ts
+type DiagramJson = {
+  nodes: DiagramNode[];
+  edges: DiagramEdge[];
+  viewport: DiagramViewport;
+};
+```
+
+보드 전용 node metadata는 `node.metadata`에 둔다. `metadata`는 화면 편집 상태를 복구하기 위한 값이며,
+Terraform resource/data block 생성에는 사용하지 않는다.
+
+```ts
+type AwsRegionCode =
+  | "ap-northeast-2"
+  | "ap-northeast-1"
+  | "ap-southeast-1"
+  | "us-east-1"
+  | "us-west-2"
+  | "eu-west-1"
+  | "eu-central-1";
+
+type DiagramNodeMetadata = {
+  awsRegion?: AwsRegionCode;
+  parentAreaNodeId?: string;
+};
+```
+
+Region 디자인 노드의 선택 리전은 `node.metadata.awsRegion`에 region code로 저장한다.
+예: `ap-northeast-2`. 화면 label은 프론트엔드 option catalog에서 code와 매핑한다.
+
+영역 노드 안에 명시적으로 배치된 node는 `node.metadata.parentAreaNodeId`에 부모 영역 node id를 저장한다.
+이 값은 영역 이동 시 자식 node를 함께 이동시키기 위한 보드 편집 metadata이며, Terraform resource/data block 생성에는 사용하지 않는다.
+
+Terraform 변환에 필요한 값은 아래 4개다.
+
+- `node.parameters.terraformBlockType`
+- `node.parameters.resourceType`
+- `node.parameters.resourceName`
+- `node.parameters.values`
+
+DB에는 refresh token 원문을 저장하지 않고 hash만 저장한다. API 응답 DTO와 프론트 상태에는 refresh token 원문을 넣지 않고, 서버가 `HttpOnly`, `SameSite=Lax` 쿠키로 내려보낸다. access token은 짧은 만료 시간을 가진 표준 JWT로 다루며, 프론트는 access token을 `localStorage`나 `sessionStorage`에 저장하지 않고 런타임 메모리에만 보관한다. 새로고침처럼 메모리가 비면 `/api/auth/refresh`가 refresh cookie로 새 access token을 복구한다. refresh/logout 같은 cookie 기반 인증 요청은 CSRF 방지를 위해 별도 CSRF cookie 값과 `X-CSRF-Token` header 값이 일치해야 한다.
+
+```ts
+type AuthSession = {
+  accessToken: string;
+  expiresInSeconds: number;
+};
+```
+
+소셜 로그인 provider 계정은 `oauth_accounts`에 저장한다. `oauth_accounts.provider + provider_user_id`는 외부 provider 계정의 고유 연결 키이며, 실제 provider access token은 저장하지 않는다. 소셜 전용 사용자는 `users.password_hash`가 `null`일 수 있고, 일반 비밀번호 로그인에서는 password hash가 없는 사용자를 로그인 실패로 처리한다.
+
+
+AWS-first Direct Deployment Path에서는 `DiagramJson -> InfrastructureGraph -> Terraform` 흐름을 우선 사용한다. Terraform 편집 내용을 다시 반영할 때는 `Terraform -> InfrastructureGraph patch -> DiagramJson` 흐름으로 같은 node의 `parameters.values`를 갱신한다. AI 분석이나 비용/위험 분석이 `ArchitectureJson`을 요구하면 `DiagramJson -> ArchitectureJson` 어댑터를 둔다.
+
+`ArchitectureJson`, `InfrastructureGraph`, `DiagramJson`은 서로 대체 관계가 아니다.
+
+- `ArchitectureJson`: 도메인 저장/분석 계약
+- `InfrastructureGraph`: Terraform/DiagramJson 동기화 계약
+- `DiagramJson`: 보드 편집/화면 복구/Terraform 변환 계약
+
+## ResourceType
+
+`ResourceType`은 provider-neutral `Resource` 개념을 코드에서 분류하기 위한 값이다. 현재 shared type은 AWS-first MVP 리소스를 먼저 담고 있지만, `Resource` 자체를 AWS 전용 개념으로 해석하지 않는다. Azure/GCP 등 provider별 타입은 Provider Adapter와 shared type 확장 작업에서 추가한다.
+
+MVP에서 공통으로 사용할 `ResourceType` 값은 아래로 고정한다.
+
+```ts
+type ResourceType =
+  | "VPC"
+  | "SUBNET"
+  | "EC2"
+  | "RDS"
+  | "S3"
+  | "SECURITY_GROUP"
+  | "CLOUDFRONT"
+  | "INTERNET_GATEWAY"
+  | "ROUTE_TABLE"
+  | "ROUTE_TABLE_ASSOCIATION"
+  | "AMI"
+  | "LAMBDA"
+  | "UNKNOWN";
+```
+
+팀원은 `Security Group`, `security-group`, `cloudfront` 같은 새 문자열을 임의로 만들지 않는다. 새 Resource나 provider가 필요하면 `docs/data-models.md`, `packages/types`, API Zod schema, 프론트 소비처를 같은 PR에서 맞춘다.
+
+## Project
+
+```ts
+type Project = {
+  id: string;
+  userId: string;
+  name: string;
+  description: string | null;
+  createdAt: IsoDateTimeString;
+  updatedAt: IsoDateTimeString;
+};
+```
+
+DB 기준: `projects`
+
+`userId`는 인증된 사용자 소유자 키다. 프로젝트 접근은 `Authorization: Bearer <accessToken>`에서 확인한 사용자와 `projects.user_id`를 비교한다.
+
+### Project Delete Preview
+
+프로젝트 삭제 전에는 `GET /api/projects/:id/delete-preview`로 현재 삭제 방식을 판정한다.
+
+```ts
+type ProjectDeletePreviewMode =
+  | "plain"
+  | "planned"
+  | "deployment_history"
+  | "active_resources"
+  | "blocked_running_deployment"
+  | "blocked_multiple_active_deployments";
+
+type ProjectDeleteAction =
+  | "delete_project"
+  | "delete_project_only"
+  | "destroy_then_delete";
+
+type ProjectDeletePreview = {
+  projectId: string;
+  mode: ProjectDeletePreviewMode;
+  hasDeploymentHistory: boolean;
+  hasPlanHistory: boolean;
+  activeDeploymentId: string | null;
+  activeDeploymentCount: number;
+  activeResourceCount: number;
+  latestDeploymentStatus: DeploymentStatus | null;
+  message: string;
+  availableActions: ProjectDeleteAction[];
+};
+```
+
+`RUNNING` Deployment가 있으면 삭제를 막는다. 현재 AWS 리소스가 남아 있는 Deployment가 정확히 하나면 `destroy_then_delete`와 `delete_project_only`를 제공한다. 여러 개면 자동 destroy 대상을 특정하지 않고 `delete_project_only`만 제공한다.
+
+`destroy_then_delete`는 `DELETE /api/projects/:id`의 직접 action이 아니다. 화면은 기존 Destroy Plan 생성, 승인, Destroy 실행을 완료한 뒤 `delete_project`로 프로젝트 기록을 삭제한다.
+
+```ts
+type DeleteProjectRequest = {
+  action: "delete_project" | "delete_project_only";
+};
+
+type DeleteProjectResponse = {
+  deleted: true;
+  cleanup: {
+    s3Status: "success" | "partial_failed" | "failed";
+    failedObjectCount: number;
+    message: string | null;
+  };
+};
+```
+
+프로젝트 삭제 시 RDS의 프로젝트 관련 기록은 삭제한다. S3 object 삭제는 best-effort로 처리하며, 일부 실패해도 프로젝트 삭제는 완료하고 `cleanup`으로 경고를 전달한다.
+
+## ArchitectureSnapshot
+
+```ts
+type ArchitectureSnapshot = {
+  id: string;
+  projectId: string;
+  version: number;
+  source: "manual" | "prompt" | "template" | "imported" | string;
+  architectureJson: ArchitectureJson;
+  createdAt: IsoDateTimeString;
+};
+```
+
+DB 기준: `architectures`
+
+저장된 버전은 `ArchitectureSnapshot`이다. 화면에서 다이어그램, 보드, 설계라고 부르더라도 API/DB 계약에서는 이 이름을 따른다.
+
+## ProjectDraft
+
+```ts
+type ProjectDraft = {
+  id: string;
+  projectId: string;
+  diagramJson: DiagramJson;
+  revision: number;
+  serverSavedAt: IsoDateTimeString;
+  createdAt: IsoDateTimeString;
+  updatedAt: IsoDateTimeString;
+};
+```
+
+DB 기준: `project_drafts`
+
+프로젝트당 최신 draft 1개를 유지한다. `diagramJson`은 화면 복구와 Terraform 변환을 위해 JSONB로 저장한다.
+
+## ProjectAsset와 TerraformArtifact
+
+파일성 산출물은 S3에 저장하고, RDS에는 metadata와 `objectKey`만 저장한다.
 
 ```ts
 type ProjectAsset = {
@@ -158,146 +360,443 @@ type ProjectAsset = {
   byteSize: number | null;
   createdAt: IsoDateTimeString;
 };
-```
 
-DB 기준: `project_assets`
-
-### TerraformArtifact
-
-사용자 제안의 `TerraformCode`는 방향은 맞지만, `content`를 RDS에 저장하는 구조는 프로젝트 규칙과 맞지 않는다. Terraform 파일은 S3에 저장하고, RDS에는 참조 정보만 둔다.
-
-```ts
 type TerraformArtifact = ProjectAsset & {
   assetType: "terraform_file";
   architectureId: string;
 };
 ```
 
-API가 미리보기를 제공해야 한다면 S3에서 파일을 읽어 응답 DTO에 `content`를 임시로 포함할 수는 있다. 하지만 영구 저장 기준 모델은 `objectKey`다.
+Terraform 원문은 RDS `content` 컬럼에 저장하지 않는다. API가 미리보기를 제공하기 위해 S3에서 읽어 임시 응답으로 내려줄 수는 있지만, 영구 저장 기준은 S3 object다.
 
-### Deployment
+## Terraform 생성과 정적 검증 DTO
 
-통제된 배포 또는 연습 세션의 실행 이력이다. 3주차까지는 모의 실행, dry-run, 제한된 demo 상태 기록으로 구현한다. 실제 AWS apply 기능은 명시적으로 설계될 때까지 후순위이며, 프론트에서 직접 AWS SDK를 호출하지 않는다.
+Terraform 생성은 `DiagramJson`을 입력으로 받고 내부에서 `InfrastructureGraph`로 정규화한 뒤 Terraform 문자열을 반환한다.
+
+```ts
+type TerraformGenerateRequest = {
+  diagramJson: DiagramJson;
+};
+
+type TerraformGenerateResponse = {
+  terraformCode: string;
+};
+```
+
+Terraform 역동기화는 사용자가 편집 중인 Terraform 문자열을 기존 `DiagramJson`에 반영한다. 지원 범위 밖 HCL, 매칭할 수 없는 block, 불확실한 파싱이 있으면 기존 `DiagramJson`을 변경하지 않고 diagnostics를 반환한다.
+
+```ts
+type TerraformSyncToDiagramRequest = {
+  diagramJson: DiagramJson;
+  terraformCode: string;
+};
+
+type TerraformSyncToDiagramResponse = {
+  diagramJson: DiagramJson;
+  diagnostics: TerraformDiagnostic[];
+};
+```
+
+정적 검증은 실제 Terraform CLI를 실행하지 않고 사용자가 편집 중인 Terraform 문자열만 점검한다.
+
+```ts
+type TerraformDiagnosticSeverity = "info" | "warning" | "error";
+
+type TerraformDiagnostic = {
+  severity: TerraformDiagnosticSeverity;
+  message: string;
+  code?: string;
+  line?: number;
+  resourceAddress?: string;
+  nodeId?: string;
+};
+
+type TerraformValidateRequest = {
+  terraformCode: string;
+};
+
+type TerraformValidateResponse = {
+  diagnostics: TerraformDiagnostic[];
+};
+```
+
+정적 diagnostics는 Deployment의 `init`, `validate`, `plan`, `apply` stage와 섞지 않는다. 실제 Terraform CLI 기반 검증은 Deployment 실행 흐름에서 다룬다.
+
+## AwsConnection
+
+`AwsConnection`은 프로젝트별 설정이 아니라 사용자 계정 단위의 AWS Role 연결이다. 사용자는 환경설정에서 AWS 계정을 한 번 연결하고, 각 프로젝트의 Deployment 흐름에서는 검증된 연결을 선택해 재사용한다.
+
+같은 사용자가 같은 AWS `accountId`를 `verified` 상태로 중복 연결할 수 없도록 `userId + accountId` partial unique index를 둔다. `pending` 연결은 아직 accountId를 모르기 때문에 생성될 수 있지만, verify 시점에 이미 연결된 AWS account면 실패 처리한다.
+
+새 AWS 연결을 만들면 사용자별 오래된 미검증 연결을 정리한다. 기본 정책은 `pending`/`failed` 연결 중 최신 5개를 남기고 나머지를 삭제하는 것이다. `verified` 연결과 `Deployment`가 참조 중인 연결은 자동 정리 대상에서 제외한다.
+
+DB 기준: `aws_connections`
+
+저장하는 값은 연결 metadata뿐이다. Access Key ID, Secret Access Key, Session Token, `AssumeRole` 결과 credential은 저장하지 않는다.
+
+```ts
+type AwsConnection = {
+  id: string;
+  userId: string;
+  accountId: string | null;
+  roleArn: string | null;
+  externalId: string;
+  region: "ap-northeast-2";
+  status: "pending" | "verified" | "failed";
+  lastVerifiedAt: IsoDateTimeString | null;
+  createdAt: IsoDateTimeString;
+  updatedAt: IsoDateTimeString;
+};
+```
+
+API 경로:
+
+- `GET /api/aws/connections`
+- `POST /api/aws/connections`
+- `POST /api/aws/connections/:connectionId/test`
+- `POST /api/aws/connections/:connectionId/verify`
+- `POST /api/aws/connections/:connectionId/verify-created-role`
+- `DELETE /api/aws/connections/:connectionId`
+- `GET /api/aws/connections/:connectionId/cloudformation-template`
+
+`DELETE /api/aws/connections/:connectionId`는 SketchCatch의 연결 metadata만 삭제한다. 사용자 AWS 계정에 생성된 IAM Role이나 CloudFormation Stack은 자동으로 삭제하지 않는다. `Deployment`가 참조 중인 연결은 삭제할 수 없고 `409 conflict`를 반환한다.
+
+`Deployment`는 이 연결을 `awsConnectionId`로 참조한다.
+
+## Deployment
+
+`Deployment`는 사용자가 승인한 IaC Preview를 실제 클라우드 리소스에 반영하는 실행 단위다.
 
 ```ts
 type Deployment = {
   id: string;
   projectId: string;
   architectureId: string;
-  status: "PENDING" | "RUNNING" | "SUCCESS" | "FAILED" | "CANCELLED";
-  startedAt: IsoDateTimeString;
-  finishedAt: IsoDateTimeString | null;
-};
-```
-
-### Template
-
-커뮤니티 공유용 템플릿이다. 3주 일정에서는 보드 저장이 안정된 뒤 3주차 안에 추가한다.
-
-```ts
-type Template = {
-  id: string;
-  ownerId: string;
-  title: string;
-  description: string;
-  architectureJson: ArchitectureJson;
-  likeCount: number;
+  terraformArtifactId: string;
+  awsConnectionId: string | null;
+  currentPlanArtifactId: string | null;
+  currentPlanOperation: "apply" | "destroy" | null;
+  stateObjectKey: string | null;
+  resultWarningSummary: string | null;
+  status: "PENDING" | "RUNNING" | "SUCCESS" | "FAILED" | "CANCELLED" | "DESTROYED";
+  activeStage: "init" | "validate" | "plan" | "apply" | "destroy" | null;
+  planSummary: DeploymentPlanSummary | null;
+  isBlocked: boolean;
+  blockedBy: "risk_analysis" | "cost_analysis" | "missing_approval" | null;
+  blockedReason: string | null;
+  failureStage:
+    | "init"
+    | "validate"
+    | "plan"
+    | "approval"
+    | "aws_connection"
+    | "mock_run"
+    | "apply"
+    | "destroy"
+    | null;
+  errorSummary: string | null;
+  approvedAt: IsoDateTimeString | null;
+  approvedByUserId: string | null;
+  approvedTerraformArtifactId: string | null;
+  approvedPlanArtifactId: string | null;
+  approvedTerraformArtifactHash: string | null;
+  approvedTfplanHash: string | null;
+  approvedAwsAccountId: string | null;
+  approvedAwsRegion: string | null;
+  startedAt: IsoDateTimeString | null;
+  completedAt: IsoDateTimeString | null;
+  failedAt: IsoDateTimeString | null;
+  cancelRequestedAt: IsoDateTimeString | null;
+  cancelledAt: IsoDateTimeString | null;
   createdAt: IsoDateTimeString;
+  updatedAt: IsoDateTimeString;
 };
 ```
 
-`diagramJson`보다는 `architectureJson`을 사용한다. 프로젝트 전체에서 같은 JSON 이름을 쓰기 위해서다.
+`Deployment`는 제품/문서/화면/코드에서 실제 실행 단위로 통일한다.
 
-## 후순위 모델
+승인 시점에는 사용자가 확인한 Plan을 이후 Apply 대상과 비교할 수 있도록
+`approvedTerraformArtifactId`, `approvedPlanArtifactId`, `approvedTerraformArtifactHash`,
+`approvedTfplanHash`, `approvedAwsAccountId`, `approvedAwsRegion`을 함께 고정한다. 이후
+Apply 단계는 이 snapshot과 현재 artifact, `tfplan`, AWS account/region이 다르면 실행하지 않는다.
 
-아래 모델은 3주 안에 모든 기능을 끝내더라도 기본 구현 범위에서 분리한다. 이유는 CRUD 난이도보다 보안/권한/운영 정책 결정이 더 중요하기 때문이다.
+Apply가 성공하면 `terraform output -json`, `terraform show -json`, `terraform.tfstate` S3 업로드를 순서대로 시도한다.
+실제 AWS Apply가 성공했다면 이 단계 중 일부가 실패해도 Deployment는 `SUCCESS`로 유지하고 apply stage 로그에 경고를 남긴다.
 
-### User
+`stateObjectKey`에는 S3에 업로드한 `terraform.tfstate` object key를 저장한다. state 업로드에 실패하면 `null`일 수 있다.
+`terraform show -json` 기반 resource inventory는 현재 `SUCCESS` 저장 전에 `TerraformOutput`과 함께 저장한다.
 
-인증 도입 후 추가한다. 공유 타입의 `User`에는 `passwordHash`를 넣지 않는다.
+`terraform apply tfplan`이 시작된 뒤 실패하거나 취소되면 로컬 `terraform.tfstate`를 best-effort로 S3에 저장하고,
+성공하면 `stateObjectKey`를 남긴다. 이 상태의 Deployment는 `FAILED`와 `failureStage: "apply"`를 유지하며,
+사용자가 명시적으로 cleanup을 실행할 때 `terraform plan -destroy` → 승인 → destroy apply 순서로 정리한다.
+Destroy가 성공하면 Deployment는 `DESTROYED`가 되고, `stateObjectKey`, 현재 Plan pointer, 배포 리소스, output을 정리한다.
+
+실행 중인 Deployment는 `activeStage`와 `startedAt`을 가진다. 실행이 끝나면 `activeStage`는
+`null`로 돌아가고 `completedAt`을 저장한다. 실패는 `failedAt`, 사용자가 취소를 요청한 시점은
+`cancelRequestedAt`, 실제 취소 완료 시점은 `cancelledAt`에 저장한다.
+
+한 프로젝트에는 동시에 하나의 `RUNNING` Deployment만 허용한다. 이 제약은 애플리케이션 체크와
+`deployments_project_running_unique` partial unique index를 함께 사용해 보장한다.
+
+Deployment 생성 후에는 프로젝트 단위 retention을 실행한다. 기본 정책은 최신 Deployment 기록 20개,
+사용 중이지 않은 최신 TerraformArtifact 5개, 사용 중이지 않은 최신 ArchitectureSnapshot 5개를
+남긴다. 다만 `RUNNING`, `SUCCESS`, `stateObjectKey`가 남은 `FAILED`, `failureStage: "destroy"`인
+`FAILED` Deployment는 실제 리소스 확인이나 cleanup 재시도에 필요할 수 있으므로 개수 제한을 넘어도
+삭제하지 않는다. 삭제되는 Deployment의 `DeploymentPlanArtifact`, `DeploymentLog`,
+`DeployedResource`, `TerraformOutput`은 DB cascade로 함께 정리하고, S3 object는 best-effort로 삭제한다.
+
+## DeploymentPlanArtifact
+
+`DeploymentPlanArtifact`는 사용자가 승인할 수 있는 특정 Terraform Plan 파일의 metadata다. `tfplan` 바이너리는 S3에 저장하고, RDS에는 object key와 hash, Plan 생성 시점의 Terraform artifact hash, 실행 계정/region만 저장한다. Terraform plan/show의 raw JSON 전체는 저장하지 않는다.
+
+DB 기준: `deployment_plan_artifacts`
 
 ```ts
-type User = {
+type DeploymentPlanArtifact = {
   id: string;
-  email: string;
-  nickname: string;
-  createdAt: IsoDateTimeString;
-};
-```
-
-DB 내부 테이블에는 `password_hash`가 있을 수 있지만, API DTO와 프론트 상태 객체로 노출하지 않는다.
-
-### AwsCredential
-
-실제 AWS 연결이 필요해질 때 추가한다. 초반 MVP에는 넣지 않는다.
-
-```ts
-type AwsCredential = {
-  id: string;
-  userId: string;
+  deploymentId: string;
+  terraformArtifactId: string;
+  terraformArtifactSha256: string | null;
+  operation: "apply" | "destroy";
+  objectKey: string;
+  sha256: string;
   accountId: string;
-  roleArn: string;
+  region: string;
   createdAt: IsoDateTimeString;
 };
 ```
 
-가능하면 access key/secret key 저장보다 role assumption 기반 연결을 우선한다. 불가피하게 key를 저장해야 할 때는 암호화 저장과 접근 권한 분리를 먼저 설계한다.
+`terraformArtifactSha256`은 Plan 생성 시점에 복원한 Terraform artifact 내용을 기준으로 계산한다. 컬럼은 기존 row 마이그레이션을 위해 nullable이지만, 새 Plan은 반드시 값을 저장해야 하며 hash가 없는 Plan artifact는 승인할 수 없다. Approval 단계는 현재 S3 Terraform artifact hash와 이 값을 비교해 Plan 생성 이후 원본 Terraform artifact가 바뀐 경우 승인을 막는다.
 
-### DeploymentLog
+`operation`은 해당 `tfplan`이 일반 apply용인지 cleanup destroy용인지 구분한다. Apply 실행은 `operation: "apply"` Plan만,
+destroy 실행은 `operation: "destroy"` Plan만 사용할 수 있다.
 
-배포 워커 또는 통제된 실행 기능이 생긴 뒤 추가한다.
+`deployment_plan_artifacts.deployment_id`는 `deployments.id`를 FK로 참조한다. `deployments.current_plan_artifact_id`는 현재 승인 대상 Plan을 가리키는 nullable pointer이며, 같은 Deployment의 artifact인지 여부는 Deployment service에서 검증한다.
+
+API 응답의 `Deployment.currentPlanOperation`은 `current_plan_artifact_id`가 가리키는 Plan artifact의 `operation`을 펼쳐서 내려주는 읽기용 필드다. 프론트엔드는 이 값으로 apply plan과 destroy plan을 구분해 Apply 버튼과 Destroy 버튼을 분리한다.
+
+## DeploymentPlanSummary
+
+```ts
+type DeploymentPlanSummary = {
+  createCount: number;
+  updateCount: number;
+  deleteCount: number;
+  replaceCount: number;
+  blocked: boolean;
+  warnings: DeploymentPlanWarning[];
+};
+```
+
+Plan summary는 사용자 승인 화면에 필요한 최소 요약이다. 현재 기본 흐름에서는 `terraform plan -out=tfplan` 이후 `terraform show -json tfplan` 결과의 `resource_changes`를 파싱해 생성한다.
+
+사용자가 승인한 plan과 apply 대상 plan은 같은 artifact/hash 기준이어야 한다.
+
+MVP Direct Deployment Path live apply는 안전 범위를 위해 아래 Terraform resource type만 허용한다.
+이외 resource type이 변경 대상에 포함되면 Plan은 `risk_analysis`로 block된다.
+
+- `aws_vpc`
+- `aws_subnet`
+- `aws_internet_gateway`
+- `aws_route_table`
+- `aws_route_table_association`
+- `aws_security_group`
+- `aws_security_group_rule`
+- `aws_instance`
+- `aws_s3_bucket`
+
+## DeployedResource와 TerraformOutput
+
+`DeployedResource`는 Apply 성공 후 `terraform show -json`으로 현재 state를 읽어 RDS에 저장한
+리소스 목록이다. 사용자 화면에서 실제로 어떤 Terraform address와 AWS resource id가 남았는지
+확인하는 데 쓴다.
+
+이 목록은 Apply 완료 저장 시 `TerraformOutput`과 함께 같은 Deployment 범위로 교체 저장한다.
+다만 `terraform show -json`이 실패하거나 취소되면 실제 AWS Apply는 성공으로 유지되고, 리소스 목록은 빈 값으로 저장될 수 있다.
+
+DB 기준: `deployed_resources`
+
+```ts
+type DeployedResource = {
+  id: string;
+  deploymentId: string;
+  terraformAddress: string;
+  terraformType: string;
+  providerName: string | null;
+  resourceId: string | null;
+  region: string;
+  createdAt: IsoDateTimeString;
+};
+```
+
+`TerraformOutput`은 Apply 성공 후 `terraform output -json` 결과를 RDS에 저장한 값이다.
+Terraform이 sensitive로 표시한 output은 저장과 응답 모두에서 `value: null`로 다룬다.
+
+DB 기준: `terraform_outputs`
+
+```ts
+type TerraformOutput = {
+  id: string;
+  deploymentId: string;
+  name: string;
+  value: unknown | null;
+  sensitive: boolean;
+  createdAt: IsoDateTimeString;
+};
+```
+
+조회 API:
+
+- `GET /api/deployments/:deploymentId/resources`
+- `GET /api/deployments/:deploymentId/outputs`
+
+## DeploymentLog
 
 ```ts
 type DeploymentLog = {
   id: string;
   deploymentId: string;
+  sequence: number;
+  stage: "init" | "validate" | "plan" | "apply" | "destroy";
   level: "INFO" | "WARN" | "ERROR";
   message: string;
+  relatedResourceId: string | null;
   createdAt: IsoDateTimeString;
 };
 ```
 
-### Activity
+로그는 sequence 순서를 보장한다. message에는 credential, token, password, DB URL, sensitive output이 남지 않아야 한다.
 
-알림, 감사 로그, 최근 활동 UI가 필요해질 때 추가한다.
+## Git/CI/CD Handoff
+
+`GitCicdHandoff`는 `IaC Preview`를 Source Repository와 외부 pipeline으로 넘기는 팀 운영 배포 경로의 metadata다. Direct Deployment Path를 대체하는 것이 아니라 운영 배포용 별도 경로다.
 
 ```ts
-type Activity = {
+type GitCicdHandoffStatus =
+  | "draft"
+  | "pr_created"
+  | "pipeline_running"
+  | "pipeline_success"
+  | "pipeline_failed"
+  | "cancelled";
+
+type GitCicdHandoff = {
   id: string;
-  userId: string;
-  action: string;
+  projectId: string;
+  architectureId: string;
+  terraformArtifactId: string;
+  sourceRepositoryId: string;
+  pullRequestUrl: string | null;
+  pipelineRunUrl: string | null;
+  status: GitCicdHandoffStatus;
   createdAt: IsoDateTimeString;
+  updatedAt: IsoDateTimeString;
 };
 ```
 
-## 현재 구현 매핑
+Git/CI/CD handoff도 `UserAcceptedChange` 이후에만 생성한다. 저장소 토큰, private key, CI secret 원문은 shared type, DB, 로그에 저장하지 않는다.
 
-| 공통 모델 | 현재 DB/API 구현 | 상태 |
-| --- | --- | --- |
-| `AnonymousWorkspace` | `anonymous_workspaces` | 구현됨 |
-| `Project` | `projects` | 구현됨 |
-| `ArchitectureSnapshot` | `architectures` | 구현됨 |
-| `ArchitectureJson` | `architectures.architecture_json` | 공유 패키지에 타입 정의됨 |
-| `ResourceNode` | `architectureJson.nodes` 내부 객체 | 공유 패키지에 타입 정의됨 |
-| `ResourceEdge` | `architectureJson.edges` 내부 객체 | 공유 패키지에 타입 정의됨 |
-| `ProjectAsset` | `project_assets` | 구현됨 |
-| `TerraformArtifact` | `project_assets.asset_type = "terraform_file"` | 저장 모델 구현됨 |
-| `Deployment` | 향후 table/API | 3주차 구현 대상 |
-| `Template` | 향후 table/API | 3주차 구현 대상 |
-| `User` | 향후 auth table/API | 후순위 |
+## Reverse Engineering Scan
+
+`ReverseEngineeringScan`은 Provider Adapter를 통해 기존 cloud Resource를 읽고 Practice Architecture와 import suggestion을 만드는 작업 단위다. MVP는 AWS adapter부터 구현할 수 있지만 모델은 provider-neutral하게 둔다.
+
+```ts
+type ReverseEngineeringScanStatus =
+  | "pending"
+  | "running"
+  | "success"
+  | "failed"
+  | "cancelled";
+
+type ReverseEngineeringScan = {
+  id: string;
+  projectId: string;
+  provider: CloudProvider;
+  status: ReverseEngineeringScanStatus;
+  architectureId: string | null;
+  errorSummary: string | null;
+  startedAt: IsoDateTimeString | null;
+  completedAt: IsoDateTimeString | null;
+  createdAt: IsoDateTimeString;
+  updatedAt: IsoDateTimeString;
+};
+```
+
+스캔 결과가 만든 Practice Architecture와 import suggestion은 사용자가 확인하기 전까지 기존 프로젝트 상태를 덮어쓰지 않는다.
+
+## Runtime Cache
+
+Redis 기반 Runtime Cache는 Deployment, Reverse Engineering, Git/CI/CD Integration 같은 long-running workflow의 status/cache/log streaming 보조에 사용한다. Runtime Cache 데이터는 원천 기록이 아니며, 최종 기록은 RDS/S3에 저장한다.
+
+Runtime Cache는 사용자 Practice Architecture Resource가 아니므로 `ResourceType`에 Redis를 추가하지 않는다. AI 결과 캐싱은 2순위이며, 캐시된 결과가 deterministic validation이나 Deployment Safety Gate를 대체할 수 없다.
+
+## AI 결과 DTO
+
+AI는 원천 진실이 아니라 설명과 제안 계층이다. 배포 가능한 artifact는 deterministic graph, generator, validation, Terraform CLI 결과를 거쳐야 한다.
+
+```ts
+type AiArchitectureDraftResult = {
+  architectureJson: ArchitectureJson;
+  title: string;
+  metadata: AiResultMetadata;
+  llmExplanation?: LlmExplanation;
+};
+```
+
+`LlmExplanation`은 rule 기반 결과를 덮어쓰지 않고, 사용자가 읽기 쉬운 요약과 다음 행동을 붙이는 공통 설명 계약이다. OpenAI 호출이 실패하거나 일부 필드가 rule 기반 기본값으로 대체되면 `fallbackUsed`를 `true`로 둔다.
+
+```ts
+type LlmExplanation = {
+  target:
+    | "architecture_draft"
+    | "design_simulation"
+    | "pre_deployment_check"
+    | "terraform_error_explanation";
+  summary: string;
+  highlights: string[];
+  nextActions: string[];
+  fallbackUsed: boolean;
+  fallbackReason?:
+    | "missing_api_key"
+    | "timeout"
+    | "rate_limited"
+    | "invalid_request"
+    | "auth_error"
+    | "provider_error"
+    | "invalid_response";
+};
+```
+
+`AiArchitectureDraftResult`, `AiPreDeploymentAnalysisResult`, `DesignSimulationResult`, `AiTerraformErrorExplanationResult`는 필요할 때 `llmExplanation?: LlmExplanation`를 포함할 수 있다.
+
+```ts
+type CheckFinding = {
+  id: string;
+  category:
+    | "cost"
+    | "security"
+    | "configuration"
+    | "permission"
+    | "network"
+    | "performance"
+    | "availability";
+  severity: "low" | "medium" | "high";
+  resourceId?: string;
+  title: string;
+  description: string;
+  recommendation: string;
+};
+```
+
+`CheckFinding.resourceId`가 있으면 같은 `ArchitectureJson.nodes[].id` 또는 변환된 보드 node id를 가리켜야 한다.
 
 ## 팀 작업 규칙
 
-새 API나 프론트 상태를 만들기 전에 먼저 `packages/types/src/index.ts`에 공통 타입을 추가하거나 수정한다. 그 다음 API의 Zod schema, DB schema, 프론트 상태 타입이 같은 필드명을 따르는지 확인한다.
+- 정현: Architecture Board는 `DiagramJson` 계약을 따른다.
+- 시원: Terraform 변환은 `DiagramNode.parameters`를 입력으로 삼는다.
+- 채강: Deployment는 `TerraformArtifact`, `Deployment`, `DeploymentLog` 계약을 따른다.
+- 경근: AI 분석은 `ArchitectureJson`, `CheckFinding`, 비용 DTO를 따른다.
+- 윤서: 플랫폼 화면은 `User`, `Project`, 인증 DTO, 프로젝트 DTO를 따른다.
+- 팀장: DB schema, API 응답, shared type 충돌을 최종 조정한다.
 
-특히 아래 이름은 바꾸지 않는다.
-
-- `projectId`
-- `workspaceId`
-- `architectureId`
-- `architectureJson`
-- `nodes`
-- `edges`
-- `sourceId`
-- `targetId`
-- `objectKey`
+새 계약이 필요하면 담당자 문서에만 쓰지 말고, 이 문서와 `packages/types/src/index.ts`에 먼저 반영한다.
