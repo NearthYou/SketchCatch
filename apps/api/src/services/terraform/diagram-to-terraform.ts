@@ -24,11 +24,11 @@ export function generateTerraformFromDiagramJson(diagramJson: DiagramJson): stri
     .join("\n\n");
 }
 
-// parameters가 없거나 invalid 표시가 있는 resource node는 Terraform 출력에서 제외한다.
+// parameters가 있는 resource node는 미완성 상태여도 Preview skeleton을 유지한다.
 function isRenderableParameters(
   parameters: DiagramNodeParameters | undefined
 ): parameters is DiagramNodeParameters {
-  return parameters !== undefined && parameters.invalid !== true;
+  return parameters !== undefined;
 }
 
 // resource/data block 하나를 만든다. 예: resource "aws_vpc" "main" { ... }

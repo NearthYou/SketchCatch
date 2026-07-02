@@ -87,7 +87,7 @@ resource "aws_subnet" "public" {
   );
 });
 
-test("skips non-resource, missing parameters, and invalid nodes", () => {
+test("renders invalid resource nodes so Terraform Preview does not disappear after parameter edits", () => {
   const diagramJson: DiagramJson = {
     nodes: [
       makeNode({
@@ -126,7 +126,12 @@ test("skips non-resource, missing parameters, and invalid nodes", () => {
     }
   };
 
-  assert.equal(generateTerraformFromDiagramJson(diagramJson), "");
+  assert.equal(
+    generateTerraformFromDiagramJson(diagramJson),
+    `resource "aws_vpc" "invalid" {
+  cidr_block = "10.0.0.0/16"
+}`
+  );
 });
 
 test("defaults missing terraformBlockType to resource", () => {
