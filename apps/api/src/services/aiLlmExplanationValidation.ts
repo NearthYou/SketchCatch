@@ -7,7 +7,14 @@ const ITEM_MAX_LENGTH = 120;
 const ITEM_MAX_COUNT = 5;
 const BLOCKED_GUARANTEE_PHRASES = ["배포 가능 보장", "비용 없음", "보안 안전"] as const;
 const llmExplanationSchema: z.ZodType<LlmExplanation> = z.object({
-  target: z.enum(["architecture_draft", "design_simulation", "pre_deployment_check", "terraform_error_explanation"]),
+  target: z.enum([
+    "architecture_draft",
+    "design_simulation",
+    "pre_deployment_check",
+    "terraform_error_explanation",
+    "terraform_preview_explanation",
+    "architecture_patch_preview"
+  ]),
   summary: z.string(),
   highlights: z.array(z.string()),
   nextActions: z.array(z.string()),
@@ -52,6 +59,16 @@ export function validateLlmExplanation(value: LlmExplanation | null, fallback: L
   };
 }
 
+export function parseLlmExplanationText(value: string, fallback: LlmExplanation): LlmExplanation {
+  const parsed = parseJsonObject(value);
+
+  if (parsed === null) {
+    return fallback;
+  }
+
+  return validateLlmExplanation(parsed as LlmExplanation, fallback);
+}
+
 // summary는 짧고 보장 문장이 없을 때만 OpenAI 값을 그대로 사용합니다.
 function validateSummary(value: string, fallbackValue: string): ValidationResult<string> {
   const normalized = value.trim();
@@ -91,5 +108,32 @@ function validateTextItems(values: readonly string[], fallbackValues: string[]):
 
 // LLM이 비용, 보안, 배포 가능성을 보장하는 문장은 MVP에서 그대로 노출하지 않습니다.
 function containsBlockedGuarantee(value: string): boolean {
-  return BLOCKED_GUARANTEE_PHRASES.some((phrase) => value.includes(phrase));
+  const normalizedValue = value.toLowerCase();
+  const englishBlockedPhrases = ["deployment is guaranteed", "no cost", "security is guaranteed"];
+
+  return (
+    BLOCKED_GUARANTEE_PHRASES.some((phrase) => value.includes(phrase)) ||
+    englishBlockedPhrases.some((phrase) => normalizedValue.includes(phrase))
+  );
+}
+
+function parseJsonObject(value: string): unknown | null {
+  const trimmed = value.trim();
+
+  try {
+    return JSON.parse(trimmed) as unknown;
+  } catch {
+    const firstBraceIndex = trimmed.indexOf("{");
+    const lastBraceIndex = trimmed.lastIndexOf("}");
+
+    if (firstBraceIndex < 0 || lastBraceIndex <= firstBraceIndex) {
+      return null;
+    }
+
+    try {
+      return JSON.parse(trimmed.slice(firstBraceIndex, lastBraceIndex + 1)) as unknown;
+    } catch {
+      return null;
+    }
+  }
 }

@@ -2,6 +2,8 @@ import type {
   AiArchitectureDraftResult,
   AiPreDeploymentAnalysisResult,
   AiTerraformErrorExplanationResult,
+  AiTerraformPreviewExplanationResult,
+  ArchitecturePatchPreview,
   DesignSimulationResult,
   LlmExplanation,
   LlmExplanationFallbackReason
@@ -62,6 +64,43 @@ export function createTerraformErrorExplanationFallbackExplanation(
     summary: result.summary,
     highlights: createTerraformErrorExplanationHighlights(result),
     nextActions: result.nextActions.slice(0, 5),
+    fallbackUsed: true,
+    fallbackReason
+  };
+}
+
+export function createTerraformPreviewFallbackExplanation(
+  result: AiTerraformPreviewExplanationResult,
+  fallbackReason: LlmExplanationFallbackReason
+): LlmExplanation {
+  return {
+    target: "terraform_preview_explanation",
+    summary: result.summary,
+    highlights: [
+      ...result.detectedResources.map((resource) => `${resource.label}: ${resource.terraformType}`),
+      ...result.findings.map((finding) => finding.title)
+    ].slice(0, 5),
+    nextActions:
+      result.findings.length > 0
+        ? result.findings.map((finding) => finding.recommendation).slice(0, 5)
+        : ["IaC Preview와 Architecture Board가 같은 의도인지 확인한 뒤 다음 단계로 진행하세요."],
+    fallbackUsed: true,
+    fallbackReason
+  };
+}
+
+export function createArchitecturePatchPreviewFallbackExplanation(
+  result: ArchitecturePatchPreview,
+  fallbackReason: LlmExplanationFallbackReason
+): LlmExplanation {
+  return {
+    target: "architecture_patch_preview",
+    summary: "Architecture Patch Preview를 만들었습니다. 아직 Architecture Board에는 적용되지 않았습니다.",
+    highlights: result.changes.map((change) => change.summary).slice(0, 5),
+    nextActions: [
+      "diff preview를 검토하세요.",
+      "원하는 변경일 때만 적용 버튼으로 User-Accepted Change를 기록하세요."
+    ],
     fallbackUsed: true,
     fallbackReason
   };
