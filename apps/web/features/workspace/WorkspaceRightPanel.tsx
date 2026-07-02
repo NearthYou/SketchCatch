@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { TerraformDiagnostic } from "@sketchcatch/types";
 import {
   AlertCircle,
@@ -37,19 +37,28 @@ export type WorkspaceRightPanelProps = {
   readonly projectName: string;
 };
 
+type PendingTerraformLeaveAction =
+  | { readonly kind: "view"; readonly view: WorkspaceRightPanelView }
+  | { readonly kind: "right-panel-close" }
+  | { readonly kind: "resource-settings" }
+  | { readonly kind: "replay-click"; readonly target: HTMLElement };
+
 export function WorkspaceRightPanel({ context, projectId, projectName }: WorkspaceRightPanelProps) {
   const terraformPanelRef = useRef<TerraformCodePanelHandle | null>(null);
+  const terraformViewRef = useRef<HTMLDivElement | null>(null);
+  const pendingTerraformLeaveActionRef = useRef<PendingTerraformLeaveAction | null>(null);
+  const skipTerraformLeaveGuardRef = useRef(false);
   const [activeView, setActiveView] = useState<WorkspaceRightPanelView>("resource");
   const [resourceWorkspaceView, setResourceWorkspaceView] = useState<ResourceWorkspaceView>(
     defaultResourceWorkspaceView
   );
-  const [pendingView, setPendingView] = useState<WorkspaceRightPanelView | null>(null);
   const [hasUnsavedTerraformChanges, setHasUnsavedTerraformChanges] = useState(false);
   const [isDeploymentBaselineDirty, setIsDeploymentBaselineDirty] = useState(true);
   const [lastSavedDeploymentBaselineFingerprint, setLastSavedDeploymentBaselineFingerprint] =
     useState<string | null>(null);
   const [showTerraformLeaveDialog, setShowTerraformLeaveDialog] = useState(false);
   const [terraformSaveRequestId, setTerraformSaveRequestId] = useState(0);
+  const [terraformDiscardRequestId, setTerraformDiscardRequestId] = useState(0);
   const [terraformDiagnostics, setTerraformDiagnostics] = useState<TerraformDiagnostic[]>([]);
   const hasTerraformIssueErrors = terraformDiagnostics.some((diagnostic) => diagnostic.severity === "error");
   const currentDeploymentBaselineFingerprint = useMemo(
@@ -68,35 +77,73 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
     }
   }, []);
 
+  const requestTerraformLeave = useCallback((action: PendingTerraformLeaveAction): boolean => {
+    if (!hasUnsavedTerraformChanges || skipTerraformLeaveGuardRef.current) {
+      return true;
+    }
+
+    pendingTerraformLeaveActionRef.current = action;
+    setShowTerraformLeaveDialog(true);
+    return false;
+  }, [hasUnsavedTerraformChanges]);
+
+  const runPendingTerraformLeaveAction = useCallback((): void => {
+    const pendingAction = pendingTerraformLeaveActionRef.current;
+    pendingTerraformLeaveActionRef.current = null;
+
+    if (!pendingAction) {
+      return;
+    }
+
+    skipTerraformLeaveGuardRef.current = true;
+
+    try {
+      if (pendingAction.kind === "view") {
+        setActiveView(pendingAction.view);
+        return;
+      }
+
+      if (pendingAction.kind === "right-panel-close") {
+        context.setRightPanelOpen(false);
+        return;
+      }
+
+      if (pendingAction.kind === "resource-settings") {
+        setResourceWorkspaceView("settings");
+        setActiveView("resource");
+        return;
+      }
+
+      pendingAction.target.click();
+    } finally {
+      window.setTimeout(() => {
+        skipTerraformLeaveGuardRef.current = false;
+      }, 0);
+    }
+  }, [context]);
+
   const requestView = useCallback((nextView: WorkspaceRightPanelView): void => {
     if (nextView === activeView) {
       return;
     }
 
-    if (
-      (activeView === "terraform" || activeView === "issues") &&
-      nextView !== "terraform" &&
-      nextView !== "issues" &&
-      hasUnsavedTerraformChanges
-    ) {
-      setPendingView(nextView);
-      setShowTerraformLeaveDialog(true);
+    if (!requestTerraformLeave({ kind: "view", view: nextView })) {
       return;
     }
 
     setActiveView(nextView);
-  }, [activeView, hasUnsavedTerraformChanges]);
+  }, [activeView, requestTerraformLeave]);
 
   function continueTerraformEditing(): void {
-    setPendingView(null);
+    pendingTerraformLeaveActionRef.current = null;
     setShowTerraformLeaveDialog(false);
   }
 
   function discardTerraformChanges(): void {
+    setTerraformDiscardRequestId((requestId) => requestId + 1);
     setHasUnsavedTerraformChanges(false);
     setShowTerraformLeaveDialog(false);
-    setActiveView(pendingView ?? "resource");
-    setPendingView(null);
+    runPendingTerraformLeaveAction();
   }
 
   function saveTerraformBeforeLeaving(): void {
@@ -110,13 +157,24 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
 
     setHasUnsavedTerraformChanges(false);
     setShowTerraformLeaveDialog(false);
-    setActiveView(pendingView ?? "resource");
-    setPendingView(null);
+    runPendingTerraformLeaveAction();
   }
 
   function openCollapsedView(nextView: WorkspaceRightPanelView): void {
+    if (!requestTerraformLeave({ kind: "view", view: nextView })) {
+      return;
+    }
+
     context.setRightPanelOpen(true);
-    requestView(nextView);
+    setActiveView(nextView);
+  }
+
+  function requestRightPanelClose(): void {
+    if (!requestTerraformLeave({ kind: "right-panel-close" })) {
+      return;
+    }
+
+    context.setRightPanelOpen(false);
   }
 
   const savePreparedTerraformArtifact = useCallback(
@@ -149,6 +207,57 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
   const validateTerraformForPreDeployment = useCallback(async (): Promise<TerraformDiagnostic[]> => {
     return terraformPanelRef.current?.validateCurrentTerraform() ?? terraformDiagnostics;
   }, [terraformDiagnostics]);
+
+  useEffect(() => {
+    if (!hasUnsavedTerraformChanges) {
+      return;
+    }
+
+    function handleDocumentClick(event: MouseEvent): void {
+      if (skipTerraformLeaveGuardRef.current) {
+        return;
+      }
+
+      const target = event.target;
+
+      if (!(target instanceof Node)) {
+        return;
+      }
+
+      if (isInsideTerraformLeaveDialog(target) || terraformViewRef.current?.contains(target)) {
+        return;
+      }
+
+      const replayTarget = getTerraformLeaveReplayTarget(target);
+
+      if (!replayTarget) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      pendingTerraformLeaveActionRef.current = { kind: "replay-click", target: replayTarget };
+      setShowTerraformLeaveDialog(true);
+    }
+
+    document.addEventListener("click", handleDocumentClick, true);
+    return () => document.removeEventListener("click", handleDocumentClick, true);
+  }, [hasUnsavedTerraformChanges]);
+
+  useEffect(() => {
+    if (!hasUnsavedTerraformChanges) {
+      return;
+    }
+
+    function handleBeforeUnload(event: BeforeUnloadEvent): void {
+      event.preventDefault();
+      event.returnValue = "";
+    }
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [hasUnsavedTerraformChanges]);
 
   if (!context.isRightPanelOpen) {
     return (
@@ -213,7 +322,7 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
       <div className={styles.rightPanelToolbar}>
         <button
           className={styles.panelCollapseButton}
-          onClick={() => context.setRightPanelOpen(false)}
+          onClick={requestRightPanelClose}
           title="Close right panel"
           type="button"
         >
@@ -281,10 +390,11 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
           view={resourceWorkspaceView}
         />
       </div>
-      <div className={styles.rightPanelView} hidden={activeView !== "terraform"}>
+      <div ref={terraformViewRef} className={styles.rightPanelView} hidden={activeView !== "terraform"}>
         <TerraformCodePanel
           ref={terraformPanelRef}
           context={context}
+          externalDiscardRequestId={terraformDiscardRequestId}
           externalSaveRequestId={terraformSaveRequestId}
           isVisible={activeView === "terraform"}
           onDiagnosticsChange={setTerraformDiagnostics}
@@ -292,8 +402,12 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
           onExternalSaveComplete={handleTerraformExternalSaveComplete}
           onOpenIssues={() => requestView("issues")}
           onOpenResourceSettings={() => {
+            if (!requestTerraformLeave({ kind: "resource-settings" })) {
+              return;
+            }
+
             setResourceWorkspaceView("settings");
-            requestView("resource");
+            setActiveView("resource");
           }}
         />
       </div>
@@ -326,4 +440,28 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
       ) : null}
     </aside>
   );
+}
+
+function getTerraformLeaveReplayTarget(target: EventTarget | null): HTMLElement | null {
+  if (!(target instanceof Element)) {
+    return null;
+  }
+
+  const interactiveTarget = target.closest<HTMLElement>(
+    "button, a, input, select, textarea, [role='button'], [tabindex]"
+  );
+
+  if (interactiveTarget) {
+    return interactiveTarget;
+  }
+
+  if (target instanceof HTMLElement) {
+    return target;
+  }
+
+  return target.parentElement;
+}
+
+function isInsideTerraformLeaveDialog(target: Node): boolean {
+  return target instanceof Element && Boolean(target.closest("[data-terraform-leave-dialog]"));
 }

@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 const componentSource = readWorkspaceFile("WorkspaceRightPanel.tsx");
 const aiPanelSource = readWorkspaceFile("WorkspaceAiPanel.tsx");
 const deploymentPanelSource = readWorkspaceFile("DeploymentPanel.tsx");
+const terraformLeaveDialogSource = readWorkspaceFile("TerraformLeaveDialog.tsx");
 const terraformPanelSource = readWorkspaceFile("TerraformCodePanel.tsx");
 const stylesSource = readWorkspaceFile("workspace.module.css");
 const diagramEditorStylesSource = readFeatureFile(
@@ -93,6 +94,42 @@ test("deployment toolbar action is grouped with the other panel mode buttons", (
   assert.match(componentSource, /activeView === "deployment" \? styles\.panelModeButtonActive : styles\.panelModeButton/);
   assert.doesNotMatch(componentSource, /panelDeployButton/);
   assert.doesNotMatch(stylesSource, /\.panelDeployButton\s*\{/);
+});
+
+test("terraform leave guard covers workspace escape actions while editing", () => {
+  assert.match(componentSource, /PendingTerraformLeaveAction/);
+  assert.match(componentSource, /pendingTerraformLeaveActionRef/);
+  assert.match(componentSource, /requestTerraformLeave/);
+  assert.match(componentSource, /runPendingTerraformLeaveAction/);
+  assert.match(componentSource, /terraformViewRef/);
+  assert.match(componentSource, /document\.addEventListener\("click", handleDocumentClick, true\)/);
+  assert.match(componentSource, /window\.addEventListener\("beforeunload", handleBeforeUnload\)/);
+  assert.match(componentSource, /onClick=\{requestRightPanelClose\}/);
+  assert.match(componentSource, /requestTerraformLeave\(\{ kind: "view", view: nextView \}\)/);
+  assert.match(componentSource, /requestTerraformLeave\(\{ kind: "resource-settings" \}\)/);
+  assert.match(componentSource, /kind: "replay-click"/);
+  assert.doesNotMatch(componentSource, /activeView === "terraform" \|\| activeView === "issues"/);
+});
+
+test("discarding terraform edits resets the terraform code panel dirty state", () => {
+  assert.match(componentSource, /terraformDiscardRequestId/);
+  assert.match(componentSource, /setTerraformDiscardRequestId\(\(requestId\) => requestId \+ 1\)/);
+  assert.match(componentSource, /externalDiscardRequestId=\{terraformDiscardRequestId\}/);
+  assert.match(terraformPanelSource, /externalDiscardRequestId/);
+  assert.match(terraformPanelSource, /latestExternalDiscardRequestIdRef/);
+  assert.match(terraformPanelSource, /latestExternalDiscardRequestIdRef\.current === externalDiscardRequestId/);
+  assert.match(terraformPanelSource, /void refreshTerraformCode\(currentDiagramFingerprint\)/);
+});
+
+test("terraform leave dialog uses Korean copy", () => {
+  assert.match(terraformLeaveDialogSource, /나가기 전에 변경사항을 저장할까요\?/);
+  assert.match(terraformLeaveDialogSource, /저장하지 않은 Terraform 변경사항이 있습니다/);
+  assert.match(terraformLeaveDialogSource, /변경사항을 저장하시겠습니까\?/);
+  assert.match(terraformLeaveDialogSource, /저장하지 않고 나가기/);
+  assert.match(terraformLeaveDialogSource, /계속 편집하기/);
+  assert.match(terraformLeaveDialogSource, /저장하고 나가기/);
+  assert.doesNotMatch(terraformLeaveDialogSource, /Save changes before leaving\?/);
+  assert.doesNotMatch(terraformLeaveDialogSource, /Discard Changes/);
 });
 
 test("deployment expanded logs use a single terminal scrollbar", () => {
