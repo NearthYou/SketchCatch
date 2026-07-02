@@ -1,4 +1,4 @@
-import type { Deployment, DeploymentLog } from "@sketchcatch/types";
+import type { Deployment, DeploymentLog, DeploymentPlanWarning } from "@sketchcatch/types";
 
 type DeploymentRequestState = "idle" | "loading" | "error";
 export type DeploymentPanelMode = "setup" | "records";
@@ -161,6 +161,37 @@ export function getDeploymentLogMessageTokens(message: string): DeploymentLogMes
 
 export function shouldShowDeploymentInfoValue(value: string | null | undefined): value is string {
   return Boolean(value && value !== "없음");
+}
+
+export function getDeploymentPlanWarningReviewLabel(
+  warning: DeploymentPlanWarning
+): string {
+  if (warning.blocksApproval) {
+    return "승인 불가";
+  }
+
+  if (warning.approvalRequired || warning.level === "medium" || warning.level === "low") {
+    return "승인 후 진행";
+  }
+
+  return "검토 필요";
+}
+
+export function getDeploymentPlanWarningSourceLabel(
+  warning: DeploymentPlanWarning
+): string {
+  switch (warning.source) {
+    case "architecture_check":
+      return "Architecture Check";
+    case "terraform_plan":
+      return "Terraform Plan";
+    case "mvp_scope":
+      return "MVP Scope";
+    case "approval_policy":
+      return "Approval Policy";
+    default:
+      return "Plan Summary";
+  }
 }
 
 function getNextDeploymentLogMessageToken(

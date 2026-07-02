@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { Deployment } from "@sketchcatch/types";
+import type { Deployment, DeploymentPlanWarning } from "@sketchcatch/types";
 import {
   getDefaultDeploymentPanelMode,
   getDeploymentActionState,
   getDeploymentLogMessageTokens,
   getDeploymentLogTone,
+  getDeploymentPlanWarningReviewLabel,
+  getDeploymentPlanWarningSourceLabel,
   shouldAutoRefreshDeployment,
   shouldShowDeploymentInfoValue
 } from "./deployment-actions";
@@ -42,6 +44,41 @@ test("deployment panel starts on setup when no deployment exists", () => {
 
 test("deployment panel starts on records when deployments exist", () => {
   assert.equal(getDefaultDeploymentPanelMode([createDeployment()]), "records");
+});
+
+test("deployment warning review label blocks approval-blocking high risk findings", () => {
+  assert.equal(
+    getDeploymentPlanWarningReviewLabel(
+      createPlanWarning({
+        blocksApproval: true,
+        level: "high"
+      })
+    ),
+    "승인 불가"
+  );
+});
+
+test("deployment warning review label marks medium and low findings as approval gated", () => {
+  assert.equal(
+    getDeploymentPlanWarningReviewLabel(createPlanWarning({ level: "medium" })),
+    "승인 후 진행"
+  );
+  assert.equal(
+    getDeploymentPlanWarningReviewLabel(createPlanWarning({ level: "low" })),
+    "승인 후 진행"
+  );
+});
+
+test("deployment warning source label shows the originating safety signal", () => {
+  assert.equal(
+    getDeploymentPlanWarningSourceLabel(createPlanWarning({ source: "terraform_plan" })),
+    "Terraform Plan"
+  );
+  assert.equal(
+    getDeploymentPlanWarningSourceLabel(createPlanWarning({ source: "architecture_check" })),
+    "Architecture Check"
+  );
+  assert.equal(getDeploymentPlanWarningSourceLabel(createPlanWarning()), "Plan Summary");
 });
 
 test("destroy plan waits for approval before showing destroy execution", () => {
@@ -256,6 +293,14 @@ function createDeployment(
     cancelledAt: null,
     createdAt: "2026-06-26T00:00:00.000Z",
     updatedAt: "2026-06-26T00:00:00.000Z",
+    ...overrides
+  };
+}
+
+function createPlanWarning(overrides: Partial<DeploymentPlanWarning> = {}): DeploymentPlanWarning {
+  return {
+    level: "medium",
+    message: "테스트 경고입니다.",
     ...overrides
   };
 }
