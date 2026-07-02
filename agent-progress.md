@@ -15,6 +15,32 @@
 
 ## 세션 레코드
 
+### 2026-07-03 - Terraform 검증 오류 줄 표시
+
+- Goal: Terraform 검증에서 오류가 난 줄을 editor 안에서 빨간줄로 표시한다.
+- Completed:
+  - `TerraformDiagnostic.line`과 `severity: "error"`를 기준으로 editor 줄 위치를 계산하는 `terraform-diagnostic-line-highlights` helper를 추가했다.
+  - Terraform editor에 diagnostic underline overlay를 추가해 오류 줄 하단에 얇은 빨간줄을 표시하게 했다.
+  - 같은 오류 줄 번호도 빨간색으로 강조해 실제 오류 위치를 더 빨리 찾을 수 있게 했다.
+  - warning/info 또는 line이 없는 diagnostic은 빨간줄 대상에서 제외했다.
+- Verification run:
+  - Red before fix: `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/terraform-diagnostic-line-highlights.test.ts features/workspace/workspace-right-panel-layout.test.ts` - failed because helper/CSS/render wiring did not exist.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/terraform-diagnostic-line-highlights.test.ts features/workspace/workspace-right-panel-layout.test.ts` - passed
+  - `pnpm --filter @sketchcatch/web typecheck` - passed
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/terraform-diagnostic-line-highlights.test.ts features/workspace/workspace-right-panel-layout.test.ts features/workspace/terraform-panel-utils.test.ts features/workspace/terraform-sync-proposals.test.ts features/workspace/terraform-leave-save-state.test.ts` - passed
+  - `pnpm harness:check` - passed
+  - `pnpm lint` - passed
+  - `pnpm typecheck` - passed
+  - `pnpm build` - passed
+- Evidence recorded:
+  - API/shared DTO 계약은 변경하지 않았다. 기존 `TerraformDiagnostic.line`만 UI에서 사용한다.
+  - 실제 Terraform CLI 실행, apply/destroy, cloud mutation, Git/CI/CD handoff는 실행하지 않았다.
+- Known risks:
+  - 브라우저 수동 smoke는 수행하지 않았다. 자동/단위/소스/타입/빌드 검증으로 확인했다.
+  - 기존 unrelated worktree changes remain: `DESIGN.md` 삭제 상태, `apps/web/next-env.d.ts` 변경 상태.
+- Next best action:
+  - 브라우저에서 잘못된 Terraform 코드를 입력해 검증 오류가 난 줄에 빨간 underline과 빨간 줄 번호가 보이는지 수동 smoke한다.
+
 ### 2026-07-03 - Terraform leave dialog 저장 실패 피드백 수정
 
 - Goal: Terraform 변경사항이 있는 상태에서 나가기 다이얼로그의 `저장하고 나가기`를 눌러도 검증 오류나 proposal 대기 때문에 저장이 실패하면 아무 반응이 없어 보이는 버그를 코드리뷰와 시나리오 테스트로 잡는다.

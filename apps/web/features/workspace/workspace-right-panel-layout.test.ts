@@ -310,6 +310,24 @@ test("terraform error explanation lives in the terraform code panel only when er
   assert.match(errorExplanationResultRule, /\bgrid-column:\s*1 \/ -1;/);
 });
 
+test("terraform editor renders red line markers for diagnostics with error lines", () => {
+  const diagnosticLineLayerRule = getCssRule(stylesSource, "terraformDiagnosticLineLayer");
+  const diagnosticLineHighlightRule = getCssRule(stylesSource, "terraformDiagnosticLineHighlight");
+  const lineNumberErrorRule = getCssRule(stylesSource, "terraformLineNumberError");
+
+  assert.match(terraformPanelSource, /createTerraformDiagnosticLineHighlights/);
+  assert.match(terraformPanelSource, /diagnosticLineHighlights/);
+  assert.match(terraformPanelSource, /terraformDiagnosticLineLayer/);
+  assert.match(terraformPanelSource, /terraformDiagnosticLineHighlight/);
+  assert.match(terraformPanelSource, /terraformLineNumberError/);
+  assert.match(terraformPanelSource, /diagnosticLineNumberSet\.has\(lineNumber\)/);
+  assert.match(diagnosticLineLayerRule, /\bpointer-events:\s*none;/);
+  assert.match(diagnosticLineLayerRule, /\bposition:\s*absolute;/);
+  assert.match(diagnosticLineHighlightRule, /\bbackground:\s*#ef4444;/);
+  assert.match(diagnosticLineHighlightRule, /\bheight:\s*2px;/);
+  assert.match(lineNumberErrorRule, /\bcolor:\s*#fca5a5;/);
+});
+
 test("terraform preview explanation is triggered from the terraform code panel", () => {
   const previewExplanationRule = getCssRule(stylesSource, "terraformPreviewExplanationPanel");
 

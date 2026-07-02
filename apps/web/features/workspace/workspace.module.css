@@ -1046,6 +1046,32 @@
   text-align: right;
 }
 
+.terraformLineNumberError {
+  color: #fca5a5;
+  font-weight: 900;
+}
+
+.terraformDiagnosticLineLayer {
+  bottom: 0;
+  left: 42px;
+  overflow: hidden;
+  pointer-events: none;
+  position: absolute;
+  right: 0;
+  top: 0;
+  z-index: 3;
+}
+
+.terraformDiagnosticLineHighlight {
+  background: #ef4444;
+  border-radius: 999px;
+  box-shadow: 0 0 0 1px rgba(127, 29, 29, 0.46);
+  height: 2px;
+  left: 10px;
+  position: absolute;
+  right: 10px;
+}
+
 .terraformTextarea {
   background: #1c1c1c;
   border: 0;

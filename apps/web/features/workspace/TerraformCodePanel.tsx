@@ -40,6 +40,7 @@ import {
   type TerraformSaveBanner,
   type TerraformVirtualFile
 } from "./terraform-panel-utils";
+import { createTerraformDiagnosticLineHighlights } from "./terraform-diagnostic-line-highlights";
 import {
   applyTerraformSyncProposals,
   getTerraformSyncProposalId,
@@ -307,6 +308,20 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
         top: `${TERRAFORM_EDITOR_VERTICAL_PADDING + (highlightedBlock.startLine - 1) * TERRAFORM_EDITOR_LINE_HEIGHT - codeScrollTop}px`
       }
     : null;
+  const diagnosticLineHighlights = useMemo(
+    () =>
+      createTerraformDiagnosticLineHighlights(diagnostics, {
+        codeLineCount: lineNumbers.length,
+        lineHeight: TERRAFORM_EDITOR_LINE_HEIGHT,
+        scrollTop: codeScrollTop,
+        verticalPadding: TERRAFORM_EDITOR_VERTICAL_PADDING
+      }),
+    [codeScrollTop, diagnostics, lineNumbers.length]
+  );
+  const diagnosticLineNumberSet = useMemo(
+    () => new Set(diagnosticLineHighlights.map((highlight) => highlight.line)),
+    [diagnosticLineHighlights]
+  );
 
   const runRequest = useCallback(async (request: () => Promise<void>, fallbackMessage: string) => {
     setRequestState("loading");
@@ -1032,9 +1047,25 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
       <div className={styles.terraformEditorFrame}>
         <ol ref={lineNumberRef} className={styles.terraformLineNumbers} aria-hidden="true">
           {lineNumbers.map((lineNumber) => (
-            <li key={lineNumber}>{lineNumber}</li>
+            <li
+              className={diagnosticLineNumberSet.has(lineNumber) ? styles.terraformLineNumberError : undefined}
+              key={lineNumber}
+            >
+              {lineNumber}
+            </li>
           ))}
         </ol>
+        {diagnosticLineHighlights.length > 0 ? (
+          <div className={styles.terraformDiagnosticLineLayer} aria-hidden="true">
+            {diagnosticLineHighlights.map((highlight) => (
+              <span
+                className={styles.terraformDiagnosticLineHighlight}
+                key={highlight.line}
+                style={highlight.style}
+              />
+            ))}
+          </div>
+        ) : null}
         <textarea
           ref={textareaRef}
           autoCapitalize="off"
