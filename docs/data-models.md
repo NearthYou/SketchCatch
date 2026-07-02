@@ -440,6 +440,10 @@ type TerraformDiagramChangeProposal =
 
 `proposals`는 `User-Accepted Change` 대상이다. 프론트엔드는 제안을 보여주고 사용자가 선택한 항목만 `DiagramJson`에 반영해야 한다. 사용자가 승인하지 않은 create/delete/rename 후보는 Architecture Board를 바꾸지 않는다.
 
+Terraform editor에서 새로 발견한 구조 변경 proposal의 v1 범위는 `resource.aws_vpc`, `resource.aws_subnet`, `resource.aws_security_group`, `resource.aws_instance`, `resource.aws_s3_bucket`, `data.aws_ami`다. Terraform Preview 렌더링은 기존 VPC/EC2/S3 계열 리소스 지원을 유지할 수 있으며, 이미 같은 identity로 매칭된 block은 parser가 안전하게 해석할 수 있는 경우 `parameters.values` 갱신 대상이 될 수 있다.
+
+Parameter panel의 `Advanced Parameters` UI는 내부 노출 정책이 정해질 때까지 숨긴다. 이는 UI 노출 정책이며 저장 정책이 아니다. 기존 `parameters.values`에 남아 있는 optional 또는 catalog 밖 값은 사용자가 명시적으로 삭제하지 않는 한 보존하고, Terraform Preview renderer가 이해할 수 있으면 계속 렌더링 입력으로 사용한다.
+
 정적 검증은 실제 Terraform CLI를 실행하지 않고 사용자가 편집 중인 Terraform 문자열만 점검한다.
 
 ```ts
