@@ -296,6 +296,105 @@ test("returns rename proposals for deterministic same-type value matches", () =>
   ]);
 });
 
+test("returns rename proposals for normalized object value matches", () => {
+  const diagramJson: DiagramJson = {
+    nodes: [
+      makeNode({
+        id: "node-1",
+        type: "aws_vpc",
+        kind: "resource",
+        label: "main",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_vpc",
+          resourceName: "main",
+          fileName: "main",
+          values: {
+            cidrBlock: "10.0.0.0/16",
+            tags: {
+              Owner: "platform",
+              Name: "main"
+            }
+          }
+        }
+      })
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+
+  const result = syncTerraformToDiagramJson(
+    diagramJson,
+    `resource "aws_vpc" "renamed" {
+  tags = {
+    Name = "main"
+    Owner = "platform"
+  }
+  cidr_block = "10.0.0.0/16"
+}`
+  );
+
+  assert.deepEqual(result.diagnostics, []);
+  assert.deepEqual(result.diagramJson, diagramJson);
+  assert.equal(result.proposals?.[0]?.kind, "rename_candidate");
+});
+
+test("does not return rename proposals for ambiguous same-type value matches", () => {
+  const diagramJson: DiagramJson = {
+    nodes: [
+      makeNode({
+        id: "node-1",
+        type: "aws_vpc",
+        kind: "resource",
+        label: "main-a",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_vpc",
+          resourceName: "main_a",
+          fileName: "main",
+          values: {
+            cidrBlock: "10.0.0.0/16"
+          }
+        }
+      }),
+      makeNode({
+        id: "node-2",
+        type: "aws_vpc",
+        kind: "resource",
+        label: "main-b",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_vpc",
+          resourceName: "main_b",
+          fileName: "main",
+          values: {
+            cidrBlock: "10.0.0.0/16"
+          }
+        }
+      })
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+
+  const result = syncTerraformToDiagramJson(
+    diagramJson,
+    `resource "aws_vpc" "renamed_a" {
+  cidr_block = "10.0.0.0/16"
+}
+
+resource "aws_vpc" "renamed_b" {
+  cidr_block = "10.0.0.0/16"
+}`
+  );
+
+  assert.deepEqual(result.diagnostics, []);
+  assert.deepEqual(result.diagramJson, diagramJson);
+  assert.equal(result.proposals?.some((proposal) => proposal.kind === "rename_candidate"), false);
+  assert.equal(result.proposals?.filter((proposal) => proposal.kind === "create_candidate").length, 2);
+  assert.equal(result.proposals?.filter((proposal) => proposal.kind === "delete_candidate").length, 2);
+});
+
 test("keeps the input diagram when Terraform code has no syncable blocks", () => {
   const diagramJson = makeSingleVpcDiagramJson();
 
@@ -439,6 +538,35 @@ resource "aws_vpc" "main" {
 
   assert.equal(result.diagramJson, diagramJson);
   assert.equal(result.diagnostics[0]?.code, "terraform.sync.duplicate_address");
+});
+
+test("rejects duplicate block addresses across Terraform files", () => {
+  const diagramJson = makeSingleVpcDiagramJson();
+
+  const result = syncTerraformToDiagramJson(
+    diagramJson,
+    {
+      terraformCode: "",
+      terraformFiles: [
+        {
+          fileName: "network.tf",
+          terraformCode: `resource "aws_vpc" "main" {
+  cidr_block = "10.1.0.0/16"
+}`
+        },
+        {
+          fileName: "compute.tf",
+          terraformCode: `resource "aws_vpc" "main" {
+  cidr_block = "10.2.0.0/16"
+}`
+        }
+      ]
+    }
+  );
+
+  assert.equal(result.diagramJson, diagramJson);
+  assert.equal(result.diagnostics[0]?.code, "terraform.sync.duplicate_address");
+  assert.equal(result.diagnostics[0]?.resourceAddress, "aws_vpc.main");
 });
 
 test("parses references as string values", () => {

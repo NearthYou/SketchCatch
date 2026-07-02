@@ -109,6 +109,21 @@ test("generates stable Terraform code repeatedly from the same DiagramJson", () 
       }),
       makeNode({
         id: "node-2",
+        type: "aws_instance",
+        kind: "resource",
+        label: "web",
+        parameters: {
+          resourceType: "aws_instance",
+          resourceName: "web",
+          fileName: "compute",
+          values: {
+            ami: "ami-1234567890abcdef0",
+            instanceType: "t3.micro"
+          }
+        }
+      }),
+      makeNode({
+        id: "node-3",
         type: "aws_s3_bucket",
         kind: "resource",
         label: "logs",

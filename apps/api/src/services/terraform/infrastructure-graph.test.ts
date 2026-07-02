@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { DiagramJson, DiagramNode } from "@sketchcatch/types";
+import type { DiagramNode } from "@sketchcatch/types";
 import { buildInfrastructureGraphFromDiagramJson } from "./infrastructure-graph.js";
 
 test("buildInfrastructureGraphFromDiagramJson projects renderable resource nodes", () => {

@@ -219,27 +219,16 @@ function createChangeProposals(
   const proposals: TerraformDiagramChangeProposal[] = [];
   const usedTerraformBlockKeys = new Set<string>();
   const usedDiagramNodeIds = new Set<string>();
+  const renameGroups = createRenameCandidateGroups(diagramOnlyNodes, terraformOnlyBlocks);
 
-  for (const node of diagramOnlyNodes) {
-    if (!node.parameters) {
+  for (const group of renameGroups.values()) {
+    if (group.diagramNodes.length !== 1 || group.terraformBlocks.length !== 1) {
       continue;
     }
 
+    const node = group.diagramNodes[0]!;
+    const renameBlock = group.terraformBlocks[0]!;
     const from = toNodeIdentity(node);
-    const renameBlock = terraformOnlyBlocks.find((block) => {
-      const blockKey = createTerraformBlockIdentityKey(block.identity);
-
-      return (
-        !usedTerraformBlockKeys.has(blockKey) &&
-        block.identity.terraformBlockType === from.terraformBlockType &&
-        block.identity.resourceType === from.resourceType &&
-        deeplyEqual(block.values, node.parameters?.values)
-      );
-    });
-
-    if (!renameBlock) {
-      continue;
-    }
 
     usedDiagramNodeIds.add(node.id);
     usedTerraformBlockKeys.add(createTerraformBlockIdentityKey(renameBlock.identity));
@@ -284,6 +273,63 @@ function createChangeProposals(
   return proposals;
 }
 
+function createRenameCandidateGroups(
+  diagramOnlyNodes: DiagramNode[],
+  terraformOnlyBlocks: ParsedBlock[]
+): Map<string, { diagramNodes: DiagramNode[]; terraformBlocks: ParsedBlock[] }> {
+  const groups = new Map<string, { diagramNodes: DiagramNode[]; terraformBlocks: ParsedBlock[] }>();
+
+  for (const node of diagramOnlyNodes) {
+    if (!node.parameters) {
+      continue;
+    }
+
+    const identity = toNodeIdentity(node);
+    const key = createRenameCandidateKey(identity, node.parameters.values);
+    const group = getOrCreateRenameCandidateGroup(groups, key);
+    group.diagramNodes.push(node);
+  }
+
+  for (const block of terraformOnlyBlocks) {
+    const key = createRenameCandidateKey(block.identity, block.values);
+    const group = getOrCreateRenameCandidateGroup(groups, key);
+    group.terraformBlocks.push(block);
+  }
+
+  return groups;
+}
+
+function createRenameCandidateKey(
+  identity: TerraformBlockIdentity,
+  values: Record<string, unknown>
+): string {
+  return JSON.stringify({
+    terraformBlockType: identity.terraformBlockType,
+    resourceType: identity.resourceType,
+    values: normalizeComparisonValue(values)
+  });
+}
+
+function getOrCreateRenameCandidateGroup(
+  groups: Map<string, { diagramNodes: DiagramNode[]; terraformBlocks: ParsedBlock[] }>,
+  key: string
+): { diagramNodes: DiagramNode[]; terraformBlocks: ParsedBlock[] } {
+  const existingGroup = groups.get(key);
+
+  if (existingGroup) {
+    return existingGroup;
+  }
+
+  const group = {
+    diagramNodes: [],
+    terraformBlocks: []
+  };
+
+  groups.set(key, group);
+
+  return group;
+}
+
 function toDiagramNodeParameters(block: ParsedBlock): DiagramNodeParameters {
   return {
     ...(block.blockType !== DEFAULT_TERRAFORM_BLOCK_TYPE ? { terraformBlockType: block.blockType } : {}),
@@ -308,8 +354,25 @@ function isProposalSupportedBlock(identity: TerraformBlockIdentity): boolean {
   return PROPOSAL_SUPPORTED_BLOCKS.has(`${identity.terraformBlockType}/${identity.resourceType}`);
 }
 
-function deeplyEqual(left: unknown, right: unknown): boolean {
-  return JSON.stringify(left) === JSON.stringify(right);
+function normalizeComparisonValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => normalizeComparisonValue(item));
+  }
+
+  if (isRecord(value)) {
+    return Object.fromEntries(
+      Object.keys(value)
+        .sort()
+        .filter((key) => value[key] !== undefined)
+        .map((key) => [key, normalizeComparisonValue(value[key])])
+    );
+  }
+
+  return value;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function parseTerraformInput(input: TerraformSyncInput): ParseResult {
