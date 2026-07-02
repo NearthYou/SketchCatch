@@ -10,8 +10,11 @@ import type {
 import { requireActiveUserId } from "../auth/current-user.js";
 import { getDatabaseClient, type DatabaseClient } from "../db/client.js";
 import { generateTerraformFromDiagramJson } from "../services/terraform/diagram-to-terraform.js";
-import { createTerraformDiagnostics } from "../services/terraform/terraform-diagnostics.js";
 import { syncTerraformToDiagramJson } from "../services/terraform/terraform-to-diagram.js";
+import {
+  createTerraformValidationDiagnostics as defaultCreateTerraformValidationDiagnostics,
+  type CreateTerraformValidationDiagnostics
+} from "../services/terraform/terraform-validation.js";
 
 const terraformValidateBodySchema = z.object({
   terraformCode: z.string()
@@ -111,6 +114,7 @@ const terraformSyncToDiagramBodySchema = z.object({
 
 type TerraformRouteOptions = {
   getDatabaseClient?: () => DatabaseClient;
+  createTerraformValidationDiagnostics?: CreateTerraformValidationDiagnostics;
 };
 
 export async function registerTerraformRoutes(
@@ -118,6 +122,8 @@ export async function registerTerraformRoutes(
   options: TerraformRouteOptions = {}
 ): Promise<void> {
   const getTerraformDatabaseClient = options.getDatabaseClient ?? getDatabaseClient;
+  const createTerraformValidationDiagnostics =
+    options.createTerraformValidationDiagnostics ?? defaultCreateTerraformValidationDiagnostics;
 
   app.post("/terraform/generate", async (request): Promise<TerraformGenerateResponse> => {
     await requireActiveUserId(request, getTerraformDatabaseClient);
@@ -135,7 +141,7 @@ export async function registerTerraformRoutes(
     const body = terraformValidateBodySchema.parse(request.body);
 
     return {
-      diagnostics: createTerraformDiagnostics(body.terraformCode)
+      diagnostics: await createTerraformValidationDiagnostics(body.terraformCode)
     };
   });
 
