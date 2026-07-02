@@ -31,6 +31,10 @@ import {
   findUnsupportedLiveApplyResourceTypesFromTerraformShowJson
 } from "./deployment-plan-summary.js";
 import {
+  createDeploymentSafetyGateWarningsFromTerraformShowJson,
+  hasApprovalBlockingSafetyGateWarning
+} from "./deployment-safety-gate.js";
+import {
   createS3DeploymentPlanArtifactStorage,
   type DeploymentPlanArtifactStorage
 } from "./deployment-plan-artifact-storage.js";
@@ -323,10 +327,14 @@ export async function runDeploymentPlan(
     const unsupportedResourceTypes = findUnsupportedLiveApplyResourceTypesFromTerraformShowJson(
       terraform.showJson.stdout
     );
+    const safetyGateWarnings = createDeploymentSafetyGateWarningsFromTerraformShowJson(
+      terraform.showJson.stdout
+    );
     const planSummary = createBlockedPlanSummary(
       createDeploymentPlanSummaryFromTerraformShowJson(terraform.showJson.stdout),
       preDeploymentAnalysis.findings,
-      unsupportedResourceTypes
+      unsupportedResourceTypes,
+      safetyGateWarnings
     );
     const block = createDeploymentPlanBlock(planSummary, unsupportedResourceTypes);
     const planArtifactId = generatePlanArtifactId();
@@ -615,16 +623,26 @@ async function failDeployment(
 function createBlockedPlanSummary(
   summary: DeploymentPlanSummary,
   findings: readonly CheckFinding[],
-  unsupportedResourceTypes: readonly string[] = []
+  unsupportedResourceTypes: readonly string[] = [],
+  safetyGateWarnings: readonly DeploymentPlanWarning[] = []
 ): DeploymentPlanSummary {
   const highRiskWarnings = findings
     .filter((finding) => finding.severity === "high")
     .map(toPlanWarning);
   const unsupportedResourceWarnings = unsupportedResourceTypes.map((resourceType) => ({
     level: "high" as const,
-    message: `MVP live apply does not support Terraform resource type ${resourceType}`
+    message: `MVP live apply does not support Terraform resource type ${resourceType}`,
+    code: "unsupported_live_apply_resource" as const,
+    source: "mvp_scope" as const,
+    blocksApproval: true,
+    approvalRequired: false
   }));
-  const warnings = [...summary.warnings, ...highRiskWarnings, ...unsupportedResourceWarnings];
+  const warnings = [
+    ...summary.warnings,
+    ...highRiskWarnings,
+    ...unsupportedResourceWarnings,
+    ...safetyGateWarnings
+  ];
 
   return {
     ...summary,
@@ -642,6 +660,7 @@ function createDeploymentPlanBlock(
   blockedReason: string;
 } {
   const hasRiskFinding = summary.warnings.some((warning) => warning.level === "high");
+  const hasSafetyGateBlock = hasApprovalBlockingSafetyGateWarning(summary.warnings);
   const hasDestructiveChange = summary.deleteCount > 0 || summary.replaceCount > 0;
 
   if (unsupportedResourceTypes.length > 0) {
@@ -649,6 +668,14 @@ function createDeploymentPlanBlock(
       isBlocked: true,
       blockedBy: "risk_analysis",
       blockedReason: `Unsupported Terraform resource types for MVP live apply: ${unsupportedResourceTypes.join(", ")}`
+    };
+  }
+
+  if (hasSafetyGateBlock) {
+    return {
+      isBlocked: true,
+      blockedBy: "risk_analysis",
+      blockedReason: "Deployment Safety Gate blocked high-risk findings"
     };
   }
 
@@ -684,16 +711,46 @@ function createDeploymentPlanBlock(
 }
 
 function toPlanWarning(finding: CheckFinding): DeploymentPlanWarning {
+  const code = getSafetyGateWarningCodeForFinding(finding);
   const warning: DeploymentPlanWarning = {
     level: "high",
-    message: `${finding.title}: ${finding.recommendation}`
+    message: `${finding.title}: ${finding.recommendation}`,
+    source: "architecture_check",
+    blocksApproval: true,
+    approvalRequired: false
   };
+
+  if (code) {
+    warning.code = code;
+  }
 
   if (finding.resourceId) {
     warning.relatedResourceId = finding.resourceId;
   }
 
   return warning;
+}
+
+function getSafetyGateWarningCodeForFinding(
+  finding: CheckFinding
+): DeploymentPlanWarning["code"] {
+  if (finding.id.includes("public-rds")) {
+    return "public_rds";
+  }
+
+  if (finding.id.includes("open-ssh")) {
+    return "public_ssh";
+  }
+
+  if (finding.id.includes("public-s3")) {
+    return "s3_public_access";
+  }
+
+  if (finding.id.includes("excessive-iam")) {
+    return "excessive_iam";
+  }
+
+  return undefined;
 }
 
 async function appendTerraformOutput(input: {

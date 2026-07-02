@@ -1009,9 +1009,63 @@ test("runDeploymentPlan blocks destructive or high-risk plans with risk_analysis
     {
       level: "high",
       message: "Public ingress: Restrict CIDR",
-      relatedResourceId: "sg-1"
+      relatedResourceId: "sg-1",
+      source: "architecture_check",
+      blocksApproval: true,
+      approvalRequired: false
     }
   ]);
+});
+
+test("runDeploymentPlan blocks Terraform plan public S3 access with risk_analysis", async () => {
+  const repository = new FakeDeploymentRepository();
+  const planArtifactStorage = new FakePlanArtifactStorage();
+
+  const result = await runDeploymentPlan(
+    {
+      deploymentId,
+      accessContext: createAccessContext()
+    },
+    repository,
+    {
+      generatePlanArtifactId: () => planArtifactId,
+      planArtifactStorage,
+      readTerraformArtifactFile: async () => terraformArtifactContent,
+      analyzePreDeployment: () => createAnalysis(),
+      prepareTerraformWorkspace: async () => ({
+        workdir: "C:/tmp/sketchcatch-terraform-public-s3",
+        mainFilePath: "C:/tmp/sketchcatch-terraform-public-s3/main.tf",
+        cleanup: async () => undefined
+      }),
+      prepareTerraformAwsCredentialEnv: async () => createPreparedCredentials(),
+      runTerraformInit: async () => createRunnerResult("init"),
+      runTerraformPlan: async () => createRunnerResult("plan"),
+      runTerraformShowJson: async () =>
+        createRunnerResult("show", {
+          stdout: createPlanJson([
+            {
+              address: "aws_s3_bucket.assets",
+              type: "aws_s3_bucket",
+              change: {
+                actions: ["create"],
+                after: {
+                  acl: "public-read"
+                }
+              }
+            }
+          ])
+        })
+    }
+  );
+
+  assert.equal(result.deployment.blockedBy, "risk_analysis");
+  assert.equal(
+    result.deployment.blockedReason,
+    "Deployment Safety Gate blocked high-risk findings"
+  );
+  assert.equal(result.deployment.planSummary?.warnings[0]?.code, "s3_public_access");
+  assert.equal(result.deployment.planSummary?.warnings[0]?.blocksApproval, true);
+  assert.equal(result.deployment.planSummary?.warnings[0]?.source, "terraform_plan");
 });
 
 test("runDeploymentPlan marks plan validation failures failed and masks secret output", async () => {
