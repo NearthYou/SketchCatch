@@ -397,13 +397,40 @@ resource "aws_vpc" "renamed_b" {
   assert.equal(result.proposals?.filter((proposal) => proposal.kind === "delete_candidate").length, 2);
 });
 
-test("keeps the input diagram when Terraform code has no syncable blocks", () => {
+test("returns delete proposals when Terraform code is intentionally empty", () => {
   const diagramJson = makeSingleVpcDiagramJson();
 
   const result = syncTerraformToDiagramJson(diagramJson, "");
 
   assert.equal(result.diagramJson, diagramJson);
-  assert.equal(result.diagnostics[0]?.code, "terraform.sync.empty");
+  assert.deepEqual(result.diagnostics, []);
+  assert.deepEqual(result.proposals, [
+    {
+      kind: "delete_candidate",
+      identity: {
+        terraformBlockType: "resource",
+        resourceType: "aws_vpc",
+        resourceName: "main"
+      },
+      nodeId: "node-1",
+      resourceAddress: "aws_vpc.main"
+    }
+  ]);
+});
+
+test("accepts empty Terraform code when the diagram is already empty", () => {
+  const result = syncTerraformToDiagramJson(
+    {
+      nodes: [],
+      edges: [],
+      viewport: { x: 0, y: 0, zoom: 1 }
+    },
+    ""
+  );
+
+  assert.deepEqual(result.diagnostics, []);
+  assert.deepEqual(result.proposals, []);
+  assert.deepEqual(result.diagramJson.nodes, []);
 });
 
 test("keeps the input diagram when an unsupported expression is found", () => {

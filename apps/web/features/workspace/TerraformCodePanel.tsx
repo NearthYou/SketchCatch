@@ -521,7 +521,7 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
   ]);
 
   const saveCodeToDiagram = useCallback(async (): Promise<boolean> => {
-    if (!hasTerraformCode || requestState === "loading") {
+    if (requestState === "loading") {
       return false;
     }
 
@@ -532,7 +532,7 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
     }, "Terraform 코드를 저장하지 못했습니다.");
 
     return saved;
-  }, [hasTerraformCode, requestState, runRequest, syncTerraformCodeToDiagram]);
+  }, [requestState, runRequest, syncTerraformCodeToDiagram]);
 
   const validateCurrentTerraform = useCallback(async (): Promise<TerraformDiagnostic[]> => {
     if (!hasTerraformCode) {

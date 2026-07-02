@@ -15,6 +15,38 @@
 
 ## 세션 레코드
 
+### 2026-07-03 - 빈 Terraform 코드 저장 동기화 수정
+
+- Goal: 리소스 아이콘 삭제 후 Terraform 코드를 전부 지운 상태에서도 저장이 성공하고 Diagram/Terraform 동기화가 깨지지 않게 한다.
+- Root cause:
+  - Frontend `saveCodeToDiagram`이 `!hasTerraformCode`일 때 즉시 `false`를 반환해 빈 Terraform 저장을 막았다.
+  - API `syncTerraformToDiagramJson`도 공백 Terraform 입력을 `terraform.sync.empty` 오류로 처리해, 사용자의 전체 삭제 의도를 delete proposal로 만들지 못했다.
+- Completed:
+  - Terraform editor 저장은 빈 Terraform 코드도 `syncTerraformCodeToDiagram`까지 보내도록 변경했다.
+  - Terraform sync API는 `terraformCode`와 모든 `terraformFiles[].terraformCode`가 공백이면 지원 범위 안의 Diagram-only resource를 `delete_candidate`로 반환하게 했다.
+  - Diagram도 이미 비어 있으면 빈 Terraform sync를 diagnostics 없이 성공 처리하게 했다.
+  - `docs/data-models.md`에 빈 Terraform 저장 sync action의 삭제 의도 계약을 추가했다.
+  - API/Web 회귀 테스트를 red-green으로 추가했다.
+- Verification run:
+  - Red before fix: `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-to-diagram.test.ts` - failed on `terraform.sync.empty`
+  - Red before fix: `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-right-panel-layout.test.ts` - failed because `saveCodeToDiagram` still matched `!hasTerraformCode`
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-to-diagram.test.ts` - passed
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-right-panel-layout.test.ts` - passed
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/routes/terraform.test.ts src/services/terraform/terraform-to-diagram.test.ts` - passed
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/terraform-sync-proposals.test.ts features/workspace/workspace-right-panel-layout.test.ts features/workspace/terraform-panel-utils.test.ts` - passed
+  - `pnpm lint` - passed
+  - `pnpm typecheck` - passed
+  - `pnpm build` - passed
+  - `pnpm harness:check` - passed
+- Evidence recorded:
+  - 실제 Terraform apply/destroy, cloud mutation, Git/CI/CD handoff는 실행하지 않았다.
+  - frontend UI에 Terraform CLI 실행 또는 AWS SDK 호출을 추가하지 않았다.
+- Known risks:
+  - 브라우저 수동 smoke는 수행하지 않았다. 자동/단위/소스/타입/빌드 검증으로 확인했다.
+  - 기존 unrelated worktree changes remain: `DESIGN.md` 삭제 상태, `apps/web/next-env.d.ts` 변경 상태.
+- Next best action:
+  - 브라우저에서 리소스 아이콘 삭제 후 Terraform editor가 빈 코드 상태일 때 저장/나가기 저장이 성공하는지 수동 smoke한다.
+
 ### 2026-07-03 - Diagram 삭제 시 Terraform Preview 동기화
 
 - Goal: 다이어그램 아이콘을 삭제하면 해당 Terraform 코드도 함께 삭제되어 Diagram과 Terraform Preview가 계속 동기화되게 한다.

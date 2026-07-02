@@ -84,6 +84,14 @@ export function syncTerraformToDiagramJson(
   }
 
   if (parseResult.blocks.length === 0) {
+    if (isTerraformSyncInputBlank(input)) {
+      return {
+        diagramJson,
+        diagnostics: [],
+        proposals: createChangeProposals(createDiagramOnlyNodes(diagramJson.nodes, new Map()), [])
+      };
+    }
+
     return {
       diagramJson,
       diagnostics: [
@@ -145,18 +153,7 @@ export function syncTerraformToDiagramJson(
     };
   }
 
-  const diagramOnlyNodes = diagramJson.nodes.filter((node) => {
-    if (node.kind !== "resource" || !node.parameters) {
-      return false;
-    }
-
-    const identity = toNodeIdentity(node);
-
-    return (
-      isProposalSupportedBlock(identity) &&
-      !blockByIdentityKey.has(createTerraformBlockIdentityKey(identity))
-    );
-  });
+  const diagramOnlyNodes = createDiagramOnlyNodes(diagramJson.nodes, blockByIdentityKey);
   const proposals = createChangeProposals(diagramOnlyNodes, terraformOnlyBlocks);
 
   return {
@@ -183,6 +180,24 @@ export function syncTerraformToDiagramJson(
     diagnostics: [],
     proposals
   };
+}
+
+function createDiagramOnlyNodes(
+  nodes: DiagramNode[],
+  blockByIdentityKey: ReadonlyMap<string, ParsedBlock>
+): DiagramNode[] {
+  return nodes.filter((node) => {
+    if (node.kind !== "resource" || !node.parameters) {
+      return false;
+    }
+
+    const identity = toNodeIdentity(node);
+
+    return (
+      isProposalSupportedBlock(identity) &&
+      !blockByIdentityKey.has(createTerraformBlockIdentityKey(identity))
+    );
+  });
 }
 
 function createNodeIdentityMap(nodes: DiagramNode[]): {
@@ -426,6 +441,15 @@ function parseTerraformInput(input: TerraformSyncInput): ParseResult {
   }
 
   return { blocks, diagnostics };
+}
+
+function isTerraformSyncInputBlank(input: TerraformSyncInput): boolean {
+  const files =
+    typeof input === "string" || input.terraformFiles === undefined || input.terraformFiles.length === 0
+      ? [typeof input === "string" ? input : input.terraformCode]
+      : input.terraformFiles.map((file) => file.terraformCode);
+
+  return files.every((terraformCode) => terraformCode.trim().length === 0);
 }
 
 function parseTerraformBlocks(sourceFileName: string, terraformCode: string): ParseResult {

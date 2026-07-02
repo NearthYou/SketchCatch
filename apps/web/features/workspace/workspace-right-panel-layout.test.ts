@@ -397,6 +397,17 @@ test("terraform sync proposals are auto-applied on explicit save without asking 
   assert.doesNotMatch(stylesSource, /\.terraformSyncProposalActions/);
 });
 
+test("terraform editor save allows intentionally empty terraform code", () => {
+  const saveStartIndex = terraformPanelSource.indexOf("const saveCodeToDiagram = useCallback");
+  const saveEndIndex = terraformPanelSource.indexOf("const validateCurrentTerraform", saveStartIndex);
+  const saveSource = terraformPanelSource.slice(saveStartIndex, saveEndIndex);
+
+  assert.ok(saveStartIndex > -1);
+  assert.ok(saveEndIndex > saveStartIndex);
+  assert.match(saveSource, /syncTerraformCodeToDiagram/);
+  assert.doesNotMatch(saveSource, /!hasTerraformCode/);
+});
+
 test("terraform editor clears stale diagnostics after local edits", () => {
   const handleCodeChangeIndex = terraformPanelSource.indexOf("function handleCodeChange");
 

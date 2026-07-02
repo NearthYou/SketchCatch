@@ -442,6 +442,8 @@ type TerraformDiagramChangeProposal =
 
 `proposals`는 Terraform editor 저장 또는 배포 준비처럼 사용자가 명시적으로 실행한 Terraform sync action 안에서 반영된다. 프론트엔드는 별도 변경 제안 확인 UI를 띄우지 않고, 해당 명시 action을 사용자 승인 경계로 삼아 create/delete/rename 후보를 `DiagramJson`에 자동 반영할 수 있다.
 
+Terraform editor 저장 sync action에서 `terraformCode`와 모든 `terraformFiles[].terraformCode`가 공백이면 사용자가 Terraform 리소스를 모두 삭제하려는 명시 의도로 본다. 이때 API는 지원 범위 안의 Diagram-only resource를 `delete_candidate`로 반환하고, Diagram도 이미 비어 있으면 diagnostics 없이 성공한다.
+
 Terraform editor에서 새로 발견한 구조 변경 proposal의 v1 범위는 `resource.aws_vpc`, `resource.aws_subnet`, `resource.aws_internet_gateway`, `resource.aws_route_table`, `resource.aws_route_table_association`, `resource.aws_security_group`, `resource.aws_instance`, `resource.aws_s3_bucket`, `resource.aws_cloudfront_distribution`, `data.aws_ami`다. Terraform Preview 렌더링은 기존 VPC/EC2/S3 계열 리소스 지원을 유지할 수 있으며, 이미 같은 identity로 매칭된 block은 parser가 안전하게 해석할 수 있는 경우 `parameters.values` 갱신 대상이 될 수 있다.
 
 Parameter panel의 `Advanced Parameters` UI는 내부 노출 정책이 정해질 때까지 숨긴다. 이는 UI 노출 정책이며 저장 정책이 아니다. 기존 `parameters.values`에 남아 있는 optional 또는 catalog 밖 값은 사용자가 명시적으로 삭제하지 않는 한 보존하고, Terraform Preview renderer가 이해할 수 있으면 계속 렌더링 입력으로 사용한다.
