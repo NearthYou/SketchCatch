@@ -74,7 +74,13 @@ test("updates data block values", () => {
           fileName: "main",
           values: {
             mostRecent: true,
-            owners: ["099720109477"]
+            owners: ["099720109477"],
+            filter: [
+              {
+                name: "name",
+                values: ["ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*"]
+              }
+            ]
           }
         }
       })
@@ -85,18 +91,31 @@ test("updates data block values", () => {
 
   const result = syncTerraformToDiagramJson(
     diagramJson,
-    `data "aws_ami" "ubuntu" {
+`data "aws_ami" "ubuntu" {
   most_recent = false
   owners = [
     "self",
   ]
+
+  filter {
+    name = "virtualization-type"
+    values = [
+      "hvm",
+    ]
+  }
 }`
   );
 
   assert.deepEqual(result.diagnostics, []);
   assert.deepEqual(result.diagramJson.nodes[0]?.parameters?.values, {
     mostRecent: false,
-    owners: ["self"]
+    owners: ["self"],
+    filter: [
+      {
+        name: "virtualization-type",
+        values: ["hvm"]
+      }
+    ]
   });
 });
 

@@ -234,7 +234,13 @@ test("renders data blocks", () => {
           fileName: "main",
           values: {
             mostRecent: true,
-            owners: ["099720109477"]
+            owners: ["099720109477"],
+            filter: [
+              {
+                name: "name",
+                values: ["ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*"]
+              }
+            ]
           }
         }
       })
@@ -249,11 +255,17 @@ test("renders data blocks", () => {
 
   assert.equal(
     generateTerraformFromDiagramJson(diagramJson),
-    `data "aws_ami" "ubuntu" {
+`data "aws_ami" "ubuntu" {
   most_recent = true
   owners = [
     "099720109477",
   ]
+  filter {
+    name = "name"
+    values = [
+      "ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*",
+    ]
+  }
 }`
   );
 });
