@@ -2,6 +2,7 @@ import type {
   DiagramJson,
   DiagramNodeParameters,
   InfrastructureGraph,
+  InfrastructureGraphEdge,
   InfrastructureGraphNode,
   ResourceType,
   TerraformBlockType
@@ -34,36 +35,51 @@ const ALLOWED_TERRAFORM_PREVIEW_BLOCKS = new Set<string>([
 export function buildInfrastructureGraphFromDiagramJson(
   diagramJson: DiagramJson
 ): InfrastructureGraph {
-  return {
-    nodes: diagramJson.nodes.flatMap((node): InfrastructureGraphNode[] => {
-      if (node.kind !== "resource" || !isRenderableParameters(node.parameters)) {
-        return [];
+  const nodes = diagramJson.nodes.flatMap((node): InfrastructureGraphNode[] => {
+    if (node.kind !== "resource" || !isRenderableParameters(node.parameters)) {
+      return [];
+    }
+
+    const terraformBlockType = node.parameters.terraformBlockType ?? DEFAULT_TERRAFORM_BLOCK_TYPE;
+
+    if (!isAllowedTerraformPreviewBlock(terraformBlockType, node.parameters.resourceType)) {
+      return [];
+    }
+
+    return [
+      {
+        id: node.id,
+        type: toResourceType(node.parameters.resourceType),
+        label: node.label,
+        iac: {
+          provider: "aws",
+          terraformBlockType,
+          resourceType: node.parameters.resourceType,
+          resourceName: node.parameters.resourceName,
+          fileName: node.parameters.fileName
+        },
+        config: node.parameters.values
       }
+    ];
+  });
+  const projectedNodeIds = new Set(nodes.map((node) => node.id));
 
-      const terraformBlockType =
-        node.parameters.terraformBlockType ?? DEFAULT_TERRAFORM_BLOCK_TYPE;
-
-      if (!isAllowedTerraformPreviewBlock(terraformBlockType, node.parameters.resourceType)) {
+  return {
+    nodes,
+    edges: diagramJson.edges.flatMap((edge): InfrastructureGraphEdge[] => {
+      if (!projectedNodeIds.has(edge.sourceNodeId) || !projectedNodeIds.has(edge.targetNodeId)) {
         return [];
       }
 
       return [
         {
-          id: node.id,
-          type: toResourceType(node.parameters.resourceType),
-          label: node.label,
-          iac: {
-            provider: "aws",
-            terraformBlockType,
-            resourceType: node.parameters.resourceType,
-            resourceName: node.parameters.resourceName,
-            fileName: node.parameters.fileName
-          },
-          config: node.parameters.values
+          id: edge.id,
+          sourceId: edge.sourceNodeId,
+          targetId: edge.targetNodeId,
+          ...(edge.label === undefined ? {} : { label: edge.label })
         }
       ];
-    }),
-    edges: []
+    })
   };
 }
 

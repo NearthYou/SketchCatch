@@ -172,6 +172,61 @@ test("maps supported Terraform preview blocks and excludes allowlist misses", ()
   );
 });
 
+test("keeps only edges between projected nodes and preserves labels", () => {
+  const diagramJson: DiagramJson = {
+    nodes: [
+      makeResourceNode("vpc-1", "resource", "aws_vpc", "main"),
+      makeResourceNode("subnet-1", "resource", "aws_subnet", "public"),
+      makeResourceNode("sg-rule-1", "resource", "aws_security_group_rule", "ssh"),
+      makeNode({
+        id: "design-1",
+        type: "memo",
+        kind: "design",
+        label: "memo"
+      })
+    ],
+    edges: [
+      {
+        id: "edge-1",
+        sourceNodeId: "vpc-1",
+        targetNodeId: "subnet-1",
+        label: "contains"
+      },
+      {
+        id: "edge-2",
+        sourceNodeId: "vpc-1",
+        targetNodeId: "sg-rule-1",
+        label: "unsupported target"
+      },
+      {
+        id: "edge-3",
+        sourceNodeId: "design-1",
+        targetNodeId: "subnet-1",
+        label: "design source"
+      },
+      {
+        id: "edge-4",
+        sourceNodeId: "missing-source",
+        targetNodeId: "subnet-1"
+      }
+    ],
+    viewport: {
+      x: 0,
+      y: 0,
+      zoom: 1
+    }
+  };
+
+  assert.deepEqual(buildInfrastructureGraphFromDiagramJson(diagramJson).edges, [
+    {
+      id: "edge-1",
+      sourceId: "vpc-1",
+      targetId: "subnet-1",
+      label: "contains"
+    }
+  ]);
+});
+
 function makeNode(
   node: Omit<DiagramNode, "position" | "size" | "locked" | "zIndex"> &
     Partial<Pick<DiagramNode, "position" | "size" | "locked" | "zIndex">>
