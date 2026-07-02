@@ -42,7 +42,8 @@ import {
 } from "./terraform-panel-utils";
 import {
   applyTerraformSyncProposals,
-  getTerraformSyncProposalId
+  getTerraformSyncProposalId,
+  splitTerraformSyncProposalsByApproval
 } from "./terraform-sync-proposals";
 import type { RequestState } from "./workspace-right-panel.types";
 import styles from "./workspace.module.css";
@@ -479,9 +480,7 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
 
     if (syncResult.proposals && syncResult.proposals.length > 0) {
       setPendingTerraformSync({
-        approvedProposalIds: new Set(
-          syncResult.proposals.map((proposal, index) => getTerraformSyncProposalId(proposal, index))
-        ),
+        approvedProposalIds: new Set(),
         diagramJson: syncResult.diagramJson,
         proposals: syncResult.proposals
       });
@@ -789,9 +788,27 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
       pendingTerraformSync.proposals,
       pendingTerraformSync.approvedProposalIds
     );
+    const { remainingProposals } = splitTerraformSyncProposalsByApproval(
+      pendingTerraformSync.proposals,
+      pendingTerraformSync.approvedProposalIds
+    );
 
     context.applyDiagramJson(nextDiagramJson);
     latestDiagramFingerprintRef.current = toTerraformRefreshFingerprint(nextDiagramJson);
+
+    if (remainingProposals.length > 0) {
+      setPendingTerraformSync({
+        approvedProposalIds: new Set(),
+        diagramJson: nextDiagramJson,
+        proposals: remainingProposals
+      });
+      setHasLocalEdits(true);
+      setSaveBanner({ kind: "dirty" });
+      setStatusMessage("미반영 제안 확인 필요");
+      onDirtyChange(true);
+      return;
+    }
+
     setPendingTerraformSync(null);
     setHasLocalEdits(false);
     setSaveBanner(null);
@@ -975,7 +992,11 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
               <span>{pendingTerraformSync.proposals.length}개 제안</span>
             </div>
             <div className={styles.terraformSyncProposalActions}>
-              <button onClick={applyPendingTerraformSync} type="button">
+              <button
+                disabled={pendingTerraformSync.approvedProposalIds.size === 0}
+                onClick={applyPendingTerraformSync}
+                type="button"
+              >
                 <ClipboardCheck size={14} aria-hidden="true" />
                 선택 반영
               </button>

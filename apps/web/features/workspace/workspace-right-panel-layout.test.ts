@@ -361,9 +361,14 @@ test("terraform sync proposals require explicit approval before mutating the dia
   assert.match(terraformPanelSource, /pendingTerraformSync/);
   assert.match(terraformPanelSource, /getTerraformSyncProposalId/);
   assert.match(terraformPanelSource, /applyTerraformSyncProposals/);
+  assert.match(terraformPanelSource, /splitTerraformSyncProposalsByApproval/);
+  assert.match(terraformPanelSource, /approvedProposalIds:\s*new Set\(\)/);
+  assert.match(terraformPanelSource, /remainingProposals\.length > 0/);
+  assert.match(terraformPanelSource, /disabled=\{pendingTerraformSync\.approvedProposalIds\.size === 0\}/);
   assert.match(terraformPanelSource, /className=\{styles\.terraformSyncProposalPanel\}/);
   assert.match(stylesSource, /\.terraformSyncProposalPanel\s*\{/);
   assert.match(stylesSource, /\.terraformSyncProposalList\s*\{/);
+  assert.match(stylesSource, /\.terraformSyncProposalActions button:disabled\s*\{/);
 });
 
 function readWorkspaceFile(fileName: string): string {

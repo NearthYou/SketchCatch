@@ -47,6 +47,33 @@ export function applyTerraformSyncProposals(
   return nextDiagramJson;
 }
 
+export function splitTerraformSyncProposalsByApproval(
+  proposals: readonly TerraformDiagramChangeProposal[],
+  approvedProposalIds: ApprovedProposalIds
+): {
+  readonly approvedProposals: TerraformDiagramChangeProposal[];
+  readonly remainingProposals: TerraformDiagramChangeProposal[];
+} {
+  const approvedIds =
+    approvedProposalIds instanceof Set ? approvedProposalIds : new Set(approvedProposalIds);
+  const approvedProposals: TerraformDiagramChangeProposal[] = [];
+  const remainingProposals: TerraformDiagramChangeProposal[] = [];
+
+  proposals.forEach((proposal, index) => {
+    if (approvedIds.has(getTerraformSyncProposalId(proposal, index))) {
+      approvedProposals.push(proposal);
+      return;
+    }
+
+    remainingProposals.push(proposal);
+  });
+
+  return {
+    approvedProposals,
+    remainingProposals
+  };
+}
+
 function applyCreateProposal(
   diagramJson: DiagramJson,
   proposal: Extract<TerraformDiagramChangeProposal, { kind: "create_candidate" }>

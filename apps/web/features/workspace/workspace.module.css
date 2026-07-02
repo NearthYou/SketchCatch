@@ -1586,6 +1586,11 @@
   outline: none;
 }
 
+.terraformSyncProposalActions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .terraformSyncProposalList {
   display: grid;
   gap: 6px;

@@ -7,7 +7,8 @@ import type {
 } from "../../../../packages/types/src";
 import {
   applyTerraformSyncProposals,
-  getTerraformSyncProposalId
+  getTerraformSyncProposalId,
+  splitTerraformSyncProposalsByApproval
 } from "./terraform-sync-proposals";
 
 test("applyTerraformSyncProposals applies only approved create proposals without creating edges", () => {
@@ -127,6 +128,41 @@ test("applyTerraformSyncProposals ignores unapproved proposals", () => {
   ];
 
   assert.deepEqual(applyTerraformSyncProposals(diagramJson, proposals, []), diagramJson);
+});
+
+test("splitTerraformSyncProposalsByApproval keeps unapproved proposals pending", () => {
+  const proposals: TerraformDiagramChangeProposal[] = [
+    {
+      kind: "create_candidate",
+      identity: {
+        terraformBlockType: "resource",
+        resourceType: "aws_s3_bucket",
+        resourceName: "logs"
+      },
+      parameters: {
+        resourceType: "aws_s3_bucket",
+        resourceName: "logs",
+        values: {}
+      }
+    },
+    {
+      kind: "delete_candidate",
+      identity: {
+        terraformBlockType: "resource",
+        resourceType: "aws_vpc",
+        resourceName: "main"
+      },
+      nodeId: "vpc-1",
+      resourceAddress: "aws_vpc.main"
+    }
+  ];
+  const result = splitTerraformSyncProposalsByApproval(
+    proposals,
+    [getTerraformSyncProposalId(proposals[0]!, 0)]
+  );
+
+  assert.deepEqual(result.approvedProposals, [proposals[0]]);
+  assert.deepEqual(result.remainingProposals, [proposals[1]]);
 });
 
 function makeDiagramJson(
