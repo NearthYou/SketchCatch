@@ -4,6 +4,7 @@ import type { DesignSimulationResult, LlmExplanation } from "@sketchcatch/types"
 import {
   createAiProviderBackedLlmExplanation,
   createFallbackOnlyLlmExplanation,
+  resolveAiProviderRegions,
   type AiTextProvider
 } from "./aiLlmExplanation.js";
 import { createArchitectureDraft } from "./aiArchitectureDrafts.js";
@@ -19,6 +20,17 @@ const designSimulationResult: DesignSimulationResult = {
   costPressure: [],
   recommendations: ["Architecture Board에서 연결을 확인하세요."]
 };
+
+test("resolveAiProviderRegions allows Amazon Q Business to use a different region", () => {
+  const regions = resolveAiProviderRegions({
+    AMAZON_Q_REGION: "ap-southeast-2",
+    AWS_REGION: "ap-northeast-2"
+  });
+
+  assert.equal(regions.bedrockRegion, "ap-northeast-2");
+  assert.equal(regions.amazonQRegion, "ap-southeast-2");
+  assert.equal(regions.transcribeRegion, "ap-northeast-2");
+});
 
 function createProvider(
   provider: AiTextProvider["provider"],

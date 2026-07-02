@@ -533,6 +533,7 @@ ChatSyncCommand
 | 조건 | 의미 |
 | --- | --- |
 | `AMAZON_Q_ENABLED=true` | Q provider 활성화 |
+| `AMAZON_Q_REGION` 있음 | Q Business application이 있는 리전이다. 없으면 `AWS_REGION`을 사용한다. |
 | `AMAZON_Q_APPLICATION_ID` 있음 | Q Business application id |
 | `AMAZON_Q_USER_ID` 있음 | ChatSync user id |
 | `AMAZON_Q_CREDIT_CONFIRMED=true` | credit guard 통과 |
@@ -860,6 +861,7 @@ BEDROCK_MODEL_ID=anthropic.claude-3-5-haiku-20241022-v1:0
 
 AMAZON_Q_ENABLED=false
 AMAZON_Q_CREDIT_CONFIRMED=false
+AMAZON_Q_REGION=
 AMAZON_Q_APPLICATION_ID=
 AMAZON_Q_USER_ID=
 
@@ -945,9 +947,10 @@ credit flag를 끄면 fallback badge가 표시되어야 한다.
 
 1. `AMAZON_Q_ENABLED=true`를 설정한다.
 2. `AMAZON_Q_CREDIT_CONFIRMED=true`를 설정한다.
-3. `AMAZON_Q_APPLICATION_ID`, `AMAZON_Q_USER_ID`를 설정한다.
-4. `/workspace/ai`에서 Terraform Error Explanation을 실행한다.
-5. LLM 설명 badge가 Amazon Q로 표시되는지 확인한다.
+3. Q Business application이 `AWS_REGION`과 다른 리전에 있으면 `AMAZON_Q_REGION`을 설정한다.
+4. `AMAZON_Q_APPLICATION_ID`, `AMAZON_Q_USER_ID`를 설정한다.
+5. `/workspace/ai`에서 Terraform Error Explanation을 실행한다.
+6. LLM 설명 badge가 Amazon Q로 표시되는지 확인한다.
 
 Q 설정이 없거나 실패하면 Bedrock 또는 fallback으로 내려간다.
 

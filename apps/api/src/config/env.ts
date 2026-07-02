@@ -7,6 +7,7 @@ export type RuntimeEnv = {
   amazonQApplicationId?: string | undefined;
   amazonQCreditConfirmed?: string | undefined;
   amazonQEnabled?: string | undefined;
+  amazonQRegion?: string | undefined;
   amazonQUserId?: string | undefined;
   awsRegion: string;
   authTokenSecret: string | undefined;
@@ -40,6 +41,7 @@ export function getRuntimeEnv(): RuntimeEnv {
     amazonQApplicationId: process.env.AMAZON_Q_APPLICATION_ID,
     amazonQCreditConfirmed: process.env.AMAZON_Q_CREDIT_CONFIRMED,
     amazonQEnabled: process.env.AMAZON_Q_ENABLED,
+    amazonQRegion: process.env.AMAZON_Q_REGION,
     amazonQUserId: process.env.AMAZON_Q_USER_ID,
     awsRegion: process.env.AWS_REGION ?? "ap-northeast-2",
     authTokenSecret: process.env.AUTH_TOKEN_SECRET,

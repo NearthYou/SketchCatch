@@ -228,6 +228,12 @@ export type AiProviderLimits = {
   readonly windowMs: number;
 };
 
+export type AiProviderRegions = {
+  readonly bedrockRegion: string;
+  readonly amazonQRegion: string;
+  readonly transcribeRegion: string;
+};
+
 export type CreateAiProviderBackedLlmExplanationOptions = {
   readonly bedrockProvider?: AiTextProvider | undefined;
   readonly amazonQProvider?: AiTextProvider | undefined;
@@ -259,17 +265,17 @@ type ProviderCallWindow = {
 export function createConfiguredAiExplanation(
   options: CreateConfiguredAiExplanationOptions = {}
 ): CreateLlmExplanation {
-  const region = process.env.AWS_REGION ?? "ap-northeast-2";
+  const regions = resolveAiProviderRegions(process.env);
   const bedrockProvider =
     options.bedrockProvider ??
     createBedrockTextProvider({
-      region,
+      region: regions.bedrockRegion,
       modelId: process.env.BEDROCK_MODEL_ID ?? DEFAULT_BEDROCK_MODEL_ID
     });
   const amazonQProvider =
     options.amazonQProvider ??
     createAmazonQBusinessTextProviderFromEnv({
-      region
+      region: regions.amazonQRegion
     });
 
   return createAiProviderBackedLlmExplanation({
@@ -279,6 +285,16 @@ export function createConfiguredAiExplanation(
     creditPolicy: options.creditPolicy ?? readAiCreditPolicyFromEnv(),
     limits: options.limits ?? readAiProviderLimitsFromEnv()
   });
+}
+
+export function resolveAiProviderRegions(env: NodeJS.ProcessEnv): AiProviderRegions {
+  const defaultRegion = readRegionEnv(env.AWS_REGION) ?? "ap-northeast-2";
+
+  return {
+    bedrockRegion: defaultRegion,
+    amazonQRegion: readRegionEnv(env.AMAZON_Q_REGION) ?? defaultRegion,
+    transcribeRegion: defaultRegion
+  };
 }
 
 export function createAiProviderBackedLlmExplanation(
@@ -715,6 +731,12 @@ function readPositiveIntEnv(key: string, fallback: number): number {
   const value = Number.parseInt(process.env[key] ?? "", 10);
 
   return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+function readRegionEnv(value: string | undefined): string | undefined {
+  const trimmedValue = value?.trim();
+
+  return trimmedValue === undefined || trimmedValue.length === 0 ? undefined : trimmedValue;
 }
 
 function extractBedrockText(content: unknown): string {
