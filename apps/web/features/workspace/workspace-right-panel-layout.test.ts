@@ -121,6 +121,11 @@ test("discarding terraform edits resets the terraform code panel dirty state", (
   assert.match(terraformPanelSource, /void refreshTerraformCode\(currentDiagramFingerprint\)/);
 });
 
+test("terraform preview refreshes when the last diagram icon is deleted", () => {
+  assert.match(terraformPanelSource, /void refreshTerraformCode\(currentDiagramFingerprint\)/);
+  assert.doesNotMatch(terraformPanelSource, /context\.nodes\.length === 0/);
+});
+
 test("terraform leave dialog uses Korean copy", () => {
   assert.match(terraformLeaveDialogSource, /나가기 전에 변경사항을 저장할까요\?/);
   assert.match(terraformLeaveDialogSource, /저장하지 않은 Terraform 변경사항이 있습니다/);

@@ -4,8 +4,10 @@ import type { DiagramJson, DiagramNode } from "@sketchcatch/types";
 import {
   createTerraformFilesFromGeneratedCode,
   findTerraformBlockForNode,
+  getDiagramTerraformAddresses,
   getTerraformFileOptions,
   parseTerraformFiles,
+  removeTerraformBlocksByAddress,
   toDeploymentBaselineFingerprint,
   toTerraformRefreshFingerprint
 } from "./terraform-panel-utils";
@@ -120,6 +122,59 @@ resource "aws_subnet" "public" {
   );
   assert.equal(files.find((file) => file.fileName === "network.tf")?.code.includes("aws_vpc"), true);
   assert.equal(files.find((file) => file.fileName === "subnets.tf")?.code.includes("aws_subnet"), true);
+});
+
+test("createTerraformFilesFromGeneratedCode clears terraform code when the diagram has no resources", () => {
+  const files = createTerraformFilesFromGeneratedCode(
+    {
+      nodes: [],
+      edges: [],
+      viewport: { x: 0, y: 0, zoom: 1 }
+    },
+    ""
+  );
+
+  assert.deepEqual(files, [{ fileName: "main.tf", code: "" }]);
+});
+
+test("getDiagramTerraformAddresses returns resource and data addresses from diagram nodes", () => {
+  const addresses = getDiagramTerraformAddresses({
+    nodes: [
+      makeNode("resource", "aws_instance", "web"),
+      makeNode("data", "aws_ami", "ubuntu")
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  });
+
+  assert.deepEqual(Array.from(addresses).sort(), ["aws_instance.web", "data.aws_ami.ubuntu"]);
+});
+
+test("removeTerraformBlocksByAddress removes only deleted diagram resource blocks", () => {
+  const files = removeTerraformBlocksByAddress(
+    [
+      {
+        fileName: "main.tf",
+        code: `resource "aws_vpc" "main" {
+  cidr_block = "10.0.0.0/16"
+}
+
+resource "aws_subnet" "public" {
+  vpc_id = aws_vpc.main.id
+}
+
+data "aws_ami" "ubuntu" {
+  owners = ["099720109477"]
+}`
+      }
+    ],
+    ["aws_subnet.public"]
+  );
+
+  assert.equal(files[0]?.code.includes('resource "aws_vpc" "main"'), true);
+  assert.equal(files[0]?.code.includes('resource "aws_subnet" "public"'), false);
+  assert.equal(files[0]?.code.includes('data "aws_ami" "ubuntu"'), true);
+  assert.doesNotMatch(files[0]?.code ?? "", /\n{3,}/);
 });
 
 test("getTerraformFileOptions includes node and virtual file names in stable order", () => {

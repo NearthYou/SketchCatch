@@ -15,6 +15,30 @@
 
 ## 세션 레코드
 
+### 2026-07-03 - Diagram 삭제 시 Terraform Preview 동기화
+
+- Goal: 다이어그램 아이콘을 삭제하면 해당 Terraform 코드도 함께 삭제되어 Diagram과 Terraform Preview가 계속 동기화되게 한다.
+- Completed:
+  - `TerraformCodePanel`의 자동 Preview 갱신에서 `context.nodes.length === 0` 차단 조건을 제거해 마지막 아이콘 삭제도 빈 Terraform Preview로 반영되게 했다.
+  - Terraform editor에 로컬 편집이 남아 있는 상태에서도 다이어그램에서 삭제된 리소스 주소에 해당하는 Terraform `resource`/`data` block만 제거하는 부분 동기화를 추가했다.
+  - 삭제 동기화로 Terraform 코드가 완전히 비면 dirty 상태를 해제해 저장할 수 없는 빈 변경 상태가 남지 않게 했다.
+  - 빈 다이어그램 Preview, Diagram node의 Terraform address 추출, 주소 기반 block 제거, 마지막 아이콘 삭제 refresh 조건을 회귀 테스트로 고정했다.
+- Verification run:
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/terraform-panel-utils.test.ts features/workspace/workspace-right-panel-layout.test.ts` - passed
+  - `pnpm --filter @sketchcatch/web typecheck` - passed
+  - `pnpm lint` - passed
+  - `pnpm typecheck` - passed
+  - `pnpm build` - passed
+  - `pnpm harness:check` - passed
+- Evidence recorded:
+  - 실제 Terraform apply/destroy, cloud mutation, Git/CI/CD handoff는 실행하지 않았다.
+  - frontend UI에 Terraform CLI 실행 또는 AWS SDK 호출을 추가하지 않았다.
+- Known risks:
+  - 브라우저 수동 smoke는 수행하지 않았다. 자동/단위/소스/타입/빌드 검증으로 확인했다.
+  - 기존 unrelated worktree changes remain: `DESIGN.md` 삭제 상태, `apps/web/next-env.d.ts` 변경 상태.
+- Next best action:
+  - 브라우저에서 VPC/S3/EC2 아이콘을 추가한 뒤 Terraform Preview가 생성되는지, 아이콘을 삭제하면 해당 block이 사라지는지 수동 smoke한다.
+
 ### 2026-07-03 - Terraform 변경 제안 확인 UI 제거
 
 - Goal: Terraform editor 저장 시 나오는 `Terraform 변경 제안` 확인 패널이 불편하므로 제거한다.

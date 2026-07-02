@@ -20,11 +20,17 @@
 - Rename proposal 자동 반영 시 source file metadata가 `parameters.fileName`에 보존된다.
 - Route Table/Internet Gateway/CloudFront 같은 sync 가능한 네트워크 리소스는 create/delete proposal 대상에 포함된다.
 - Resource card Duplicate는 같은 resource type 안에서 `web_copy`, `web_copy_2`처럼 유니크한 Terraform resourceName을 만들고, 자동 생성 `tags.Name`도 함께 동기화한다.
+- Diagram icon 삭제는 Terraform Preview에 즉시 반영된다. 마지막 아이콘 삭제도 빈 `main.tf`로 갱신되고, Terraform editor가 dirty 상태여도 삭제된 리소스 주소에 해당하는 block만 제거한다.
 - `docs/data-models.md`는 diagnostic/proposal source metadata와 proposal 지원 범위를 현재 코드에 맞게 기록한다.
 - `feature_list.json`에는 동시에 `in_progress`인 항목이 없다.
 
 ## 이번 세션의 변경 사항
 
+- Diagram icon 삭제 시 Terraform 코드가 남는 문제를 수정했다.
+- Terraform Preview 자동 refresh에서 빈 다이어그램 차단 조건을 제거했다.
+- Terraform editor 로컬 편집 중에도 삭제된 Diagram resource 주소의 Terraform block만 부분 제거하는 helper와 패널 effect를 추가했다.
+- 삭제 동기화 결과 Terraform 코드가 비면 dirty 상태가 남지 않게 했다.
+- 관련 regression tests를 추가했다.
 - 하위 AI 6개 축으로 API sync/parser, frontend proposal 적용, Terraform editor UX, resource catalog/icon, deployment boundary, docs/contracts를 read-only 검증했다.
 - Terraform 변경 제안 확인 패널을 제거하고 저장 시 proposals를 자동 반영하도록 바꿨다.
 - `TerraformDiagnostic.sourceFileName`을 shared type에 추가했다.
@@ -43,6 +49,8 @@
 - `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-to-diagram.test.ts src/routes/terraform.test.ts src/services/terraform/diagram-to-terraform.test.ts src/services/terraform/infrastructure-graph.test.ts` - passed
 - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/terraform-sync-proposals.test.ts features/workspace/terraform-diagnostic-line-highlights.test.ts features/workspace/workspace-right-panel-layout.test.ts features/workspace/workspace-ai-diagram-adapter.test.ts features/diagram-editor/diagram-utils.test.ts features/resource-settings/catalog.test.ts features/workspace/pre-deployment-diagnostics.test.ts features/parameter-input/validation.test.ts` - passed
 - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/terraform-sync-proposals.test.ts features/workspace/workspace-right-panel-layout.test.ts features/workspace/terraform-leave-save-state.test.ts` - passed
+- `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/terraform-panel-utils.test.ts features/workspace/workspace-right-panel-layout.test.ts` - passed
+- `pnpm --filter @sketchcatch/web typecheck` - passed
 - `pnpm catalog:generate` - passed
 - `pnpm catalog:check` - passed after one transient Terraform AWS provider schema handshake retry
 - `pnpm typecheck` - passed

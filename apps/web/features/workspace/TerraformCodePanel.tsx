@@ -32,9 +32,11 @@ import {
   createTerraformFilesFromGeneratedCode,
   findTerraformBlockForNode,
   formatTerraformDiagnosticTitle,
+  getDiagramTerraformAddresses,
   getTerraformFileCode,
   getTerraformFileOptions,
   parseTerraformFiles,
+  removeTerraformBlocksByAddress,
   toTerraformRefreshFingerprint,
   type TerraformSaveBanner,
   type TerraformVirtualFile
@@ -206,6 +208,7 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
   const codeVersionRef = useRef(0);
   const isPreparingTerraformArtifactRef = useRef(false);
   const latestDiagramFingerprintRef = useRef("");
+  const latestDiagramResourceAddressesRef = useRef<Set<string> | null>(null);
   const latestExternalDiscardRequestIdRef = useRef(externalDiscardRequestId);
   const latestExternalSaveRequestIdRef = useRef(externalSaveRequestId);
   const lineNumberRef = useRef<HTMLOListElement | null>(null);
@@ -229,6 +232,10 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
   const hasErrorDiagnostics = errorDiagnostics.length > 0;
   const currentDiagramFingerprint = useMemo(
     () => toTerraformRefreshFingerprint(context.diagram),
+    [context.diagram]
+  );
+  const currentDiagramResourceAddresses = useMemo(
+    () => getDiagramTerraformAddresses(context.diagram),
     [context.diagram]
   );
   const terraformBlocks = useMemo(() => parseTerraformFiles(terraformFiles), [terraformFiles]);
@@ -615,7 +622,56 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
   }, [currentDiagramFingerprint, externalDiscardRequestId, refreshTerraformCode]);
 
   useEffect(() => {
-    if (context.nodes.length === 0 || hasLocalEdits) {
+    const previousAddresses = latestDiagramResourceAddressesRef.current;
+    latestDiagramResourceAddressesRef.current = currentDiagramResourceAddresses;
+
+    if (!previousAddresses || !hasLocalEdits) {
+      return;
+    }
+
+    const deletedAddresses = Array.from(previousAddresses).filter(
+      (address) => !currentDiagramResourceAddresses.has(address)
+    );
+
+    if (deletedAddresses.length === 0) {
+      return;
+    }
+
+    const nextFiles = removeTerraformBlocksByAddress(terraformFiles, deletedAddresses);
+    const didRemoveBlock = nextFiles.some((file, index) => file !== terraformFiles[index]);
+
+    if (!didRemoveBlock) {
+      return;
+    }
+
+    codeVersionRef.current += 1;
+    const hasRemainingTerraformCode = combineTerraformFiles(nextFiles).trim().length > 0;
+    setTerraformFiles(nextFiles);
+    setDiagnostics([]);
+    onDiagnosticsChange([]);
+    setHasLocalEdits(hasRemainingTerraformCode);
+    setSaveBanner(hasRemainingTerraformCode ? { kind: "dirty" } : null);
+    setTerraformPreviewExplanation(null);
+    setTerraformPreviewExplanationMessage("");
+    setTerraformPreviewExplanationState("idle");
+    setExplainedTerraformPreviewKey("");
+    setTerraformErrorExplanationsByKey({});
+    setStatusMessage("다이어그램 삭제 반영됨");
+    if (!hasRemainingTerraformCode) {
+      latestDiagramFingerprintRef.current = currentDiagramFingerprint;
+      onDirtyChange(false);
+    }
+  }, [
+    currentDiagramFingerprint,
+    currentDiagramResourceAddresses,
+    hasLocalEdits,
+    onDiagnosticsChange,
+    onDirtyChange,
+    terraformFiles
+  ]);
+
+  useEffect(() => {
+    if (hasLocalEdits) {
       return;
     }
 
@@ -628,12 +684,7 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
     }, 250);
 
     return () => clearTimeout(timerId);
-  }, [
-    context.nodes.length,
-    currentDiagramFingerprint,
-    hasLocalEdits,
-    refreshTerraformCode
-  ]);
+  }, [currentDiagramFingerprint, hasLocalEdits, refreshTerraformCode]);
 
   useEffect(() => {
     onDirtyChange(hasLocalEdits);
