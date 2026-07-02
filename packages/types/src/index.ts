@@ -38,6 +38,12 @@ export type CloudProvider = "aws";
 
 export type TerraformBlockType = "resource" | "data";
 
+export type TerraformBlockIdentity = {
+  terraformBlockType: TerraformBlockType;
+  resourceType: string;
+  resourceName: string;
+};
+
 export type ResourceConfig = Record<string, unknown>;
 
 export type ResourceNode = {
@@ -1048,9 +1054,38 @@ export type TerraformValidateResponse = {
 export type TerraformSyncToDiagramRequest = {
   diagramJson: DiagramJson;
   terraformCode: string;
+  terraformFiles?: TerraformSyncFileInput[] | undefined;
 };
+
+export type TerraformSyncFileInput = {
+  fileName: string;
+  terraformCode: string;
+};
+
+export type TerraformDiagramChangeProposal =
+  | {
+      kind: "create_candidate";
+      identity: TerraformBlockIdentity;
+      sourceFileName?: string | undefined;
+      line?: number | undefined;
+      parameters: DiagramNodeParameters;
+    }
+  | {
+      kind: "delete_candidate";
+      identity: TerraformBlockIdentity;
+      nodeId: string;
+      resourceAddress: string;
+    }
+  | {
+      kind: "rename_candidate";
+      from: TerraformBlockIdentity;
+      to: TerraformBlockIdentity;
+      nodeId: string;
+      resourceAddress: string;
+    };
 
 export type TerraformSyncToDiagramResponse = {
   diagramJson: DiagramJson;
   diagnostics: TerraformDiagnostic[];
+  proposals?: TerraformDiagramChangeProposal[] | undefined;
 };
