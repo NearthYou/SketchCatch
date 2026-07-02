@@ -262,6 +262,14 @@ function assertDeploymentCanBeApproved(
     throw new DeploymentConflictError("Terraform Plan must be completed before approval");
   }
 
+  if (
+    deployment.planSummary.warnings.some(
+      (warning) => warning.level === "high" && warning.blocksApproval === true
+    )
+  ) {
+    throw new DeploymentConflictError("High-risk Deployment Safety Gate findings cannot be approved");
+  }
+
   if (!deployment.isBlocked || deployment.blockedBy !== "missing_approval") {
     throw new DeploymentConflictError("Blocked deployment cannot be approved");
   }

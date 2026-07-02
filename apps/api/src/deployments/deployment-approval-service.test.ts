@@ -425,6 +425,54 @@ test("approveDeploymentPlan rejects risk blocked deployments", async () => {
   assert.equal(repository.approvals.length, 0);
 });
 
+test("approveDeploymentPlan rejects approval-blocking safety gate warnings", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.deployment = createDeploymentRecord(undefined, {
+    isBlocked: true,
+    blockedBy: "missing_approval",
+    blockedReason: "Terraform Plan requires user approval before apply",
+    planSummary: {
+      ...createPlanSummary(),
+      warnings: [
+        {
+          level: "high",
+          message: "aws_s3_bucket.assets enables S3 public access",
+          relatedResourceId: "aws_s3_bucket.assets",
+          code: "s3_public_access",
+          source: "terraform_plan",
+          blocksApproval: true,
+          approvalRequired: false
+        }
+      ]
+    }
+  });
+
+  await assert.rejects(
+    () =>
+      approveDeploymentPlan(
+        {
+          deploymentId,
+          accessContext: createAccessContext()
+        },
+        repository,
+        {
+          downloadTerraformArtifact: async () => artifactContent,
+          now: () => fixedNow
+        }
+      ),
+    (error) => {
+      assert.equal(error instanceof DeploymentConflictError, true);
+      assert.equal(
+        (error as Error).message,
+        "High-risk Deployment Safety Gate findings cannot be approved"
+      );
+
+      return true;
+    }
+  );
+  assert.equal(repository.approvals.length, 0);
+});
+
 test("approveDeploymentPlan rejects unsafe Terraform artifacts before approval", async () => {
   const repository = new FakeDeploymentRepository();
 
