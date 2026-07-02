@@ -7,6 +7,7 @@ SketchCatch 문서는 **SSOT(Single Source of Truth)** 기준으로 관리한다
 | 문서 | 책임 | 언제 읽는가 |
 | --- | --- | --- |
 | [제품 방향](./product.md) | 제품 정의, MVP 목표, 핵심 서비스 여정, 기능 우선순위, 3주 로드맵 | 무엇을 만들지, 이번 작업이 MVP에 포함되는지 판단할 때 |
+| [상세 기획서](./000_상세기획서.md) | 기획자와 개발자가 함께 읽는 서비스 흐름, 기능 요구사항, 현재 구현 상태, 책임 분배 | 제품 방향을 구현 가능한 업무 단위로 풀어 이해해야 할 때 |
 | [데이터 모델](./data-models.md) | DB/API/프론트/AI/배포 공통 타입과 필드명 | DTO, DB schema, Zod schema, 프론트 상태를 바꿀 때 |
 | [아키텍처](./architecture.md) | 모노레포 구조, 앱 경계, 저장소 경계, Terraform/AWS 실행 위치 | API, storage, worker, 인프라 실행 경계를 정할 때 |
 | [개발 가이드](./development.md) | 로컬 실행, Git flow, 팀 AI 협업 규칙, PR 체크 | 구현 전후 작업 절차와 검증 기준을 확인할 때 |
@@ -30,7 +31,8 @@ SketchCatch 문서는 **SSOT(Single Source of Truth)** 기준으로 관리한다
 
 ## 문서 정리 기준
 
-- 제품 전략, 상세 기획서, 마일스톤, 리스크는 [제품 방향](./product.md)에 모은다.
+- 제품 전략, MVP 범위, canonical 로드맵, 리스크는 [제품 방향](./product.md)에 모은다.
+- 기획자/개발자 공통 이해를 위한 상세 기획서는 [상세 기획서](./000_상세기획서.md)에 두되, 계약 충돌 시 canonical 문서를 우선한다.
 - 공통 타입, API DTO, DB 모델, 프론트 상태 이름은 [데이터 모델](./data-models.md)에 모은다.
 - 기술 스택, 저장 기준, 실행 경계, ADR 수준 결정은 [아키텍처](./architecture.md)에 모은다.
 - Git 흐름, 팀 AI 작업 순서, PR 체크리스트는 [개발 가이드](./development.md)에 모은다.

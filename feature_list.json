@@ -27,9 +27,9 @@
         "commands": [
           "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/init-harness.ps1",
           "Get-Content -Encoding UTF8 -Raw -LiteralPath feature_list.json | ConvertFrom-Json | Out-Null",
-          "pnpm --dir C:\\Users\\siwon\\Desktop\\Jungle\\Week17~21\\SketchCatch lint",
-          "pnpm --dir C:\\Users\\siwon\\Desktop\\Jungle\\Week17~21\\SketchCatch typecheck",
-          "pnpm --dir C:\\Users\\siwon\\Desktop\\Jungle\\Week17~21\\SketchCatch build"
+          "pnpm lint",
+          "pnpm typecheck",
+          "pnpm build"
         ],
         "notes": "Root operating loop, progress log, feature tracker, handoff note, clean checklist, evaluator rubric, quality document, and startup helper were created and verified."
       },
@@ -52,9 +52,9 @@
         "lastVerified": "2026-07-02",
         "commands": [
           "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/init-harness.ps1",
-          "pnpm --dir C:\\Users\\siwon\\Desktop\\Jungle\\Week17~21\\SketchCatch lint",
-          "pnpm --dir C:\\Users\\siwon\\Desktop\\Jungle\\Week17~21\\SketchCatch typecheck",
-          "pnpm --dir C:\\Users\\siwon\\Desktop\\Jungle\\Week17~21\\SketchCatch build"
+          "pnpm lint",
+          "pnpm typecheck",
+          "pnpm build"
         ],
         "notes": "PowerShell helper validates required harness files and feature_list.json without install or lockfile writes."
       },
@@ -76,9 +76,9 @@
         "lastVerified": "2026-07-02",
         "commands": [
           "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/init-harness.ps1",
-          "pnpm --dir C:\\Users\\siwon\\Desktop\\Jungle\\Week17~21\\SketchCatch lint",
-          "pnpm --dir C:\\Users\\siwon\\Desktop\\Jungle\\Week17~21\\SketchCatch typecheck",
-          "pnpm --dir C:\\Users\\siwon\\Desktop\\Jungle\\Week17~21\\SketchCatch build"
+          "pnpm lint",
+          "pnpm typecheck",
+          "pnpm build"
         ],
         "notes": "clean-state-checklist.md and evaluator-rubric.md now make evidence-free completion a harness failure."
       },
@@ -100,9 +100,9 @@
         "lastVerified": "2026-07-02",
         "commands": [
           "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/init-harness.ps1",
-          "pnpm --dir C:\\Users\\siwon\\Desktop\\Jungle\\Week17~21\\SketchCatch lint",
-          "pnpm --dir C:\\Users\\siwon\\Desktop\\Jungle\\Week17~21\\SketchCatch typecheck",
-          "pnpm --dir C:\\Users\\siwon\\Desktop\\Jungle\\Week17~21\\SketchCatch build"
+          "pnpm lint",
+          "pnpm typecheck",
+          "pnpm build"
         ],
         "notes": "agent-progress.md keeps history and session-handoff.md keeps the latest continuation snapshot."
       },
@@ -123,9 +123,9 @@
         "lastVerified": "2026-07-02",
         "commands": [
           "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/init-harness.ps1",
-          "pnpm --dir C:\\Users\\siwon\\Desktop\\Jungle\\Week17~21\\SketchCatch lint",
-          "pnpm --dir C:\\Users\\siwon\\Desktop\\Jungle\\Week17~21\\SketchCatch typecheck",
-          "pnpm --dir C:\\Users\\siwon\\Desktop\\Jungle\\Week17~21\\SketchCatch build"
+          "pnpm lint",
+          "pnpm typecheck",
+          "pnpm build"
         ],
         "notes": "quality-document.md records the initial adversarial quality snapshot and remaining harness gaps."
       },
@@ -146,11 +146,11 @@
       "evidence": {
         "lastVerified": "2026-07-02",
         "commands": [
-          "pnpm --dir C:\\Users\\siwon\\Desktop\\Jungle\\Week17~21\\SketchCatch harness:check",
+          "pnpm harness:check",
           "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/init-harness.ps1",
-          "pnpm --dir C:\\Users\\siwon\\Desktop\\Jungle\\Week17~21\\SketchCatch lint",
-          "pnpm --dir C:\\Users\\siwon\\Desktop\\Jungle\\Week17~21\\SketchCatch typecheck",
-          "pnpm --dir C:\\Users\\siwon\\Desktop\\Jungle\\Week17~21\\SketchCatch build"
+          "pnpm lint",
+          "pnpm typecheck",
+          "pnpm build"
         ],
         "notes": "scripts/check-harness.mjs validates feature statuses, passing evidence, required headings, unresolved pending placeholders, and root/docs wiring. package.json exposes it as pnpm harness:check."
       },

@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -6,7 +6,12 @@ const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const problems = [];
 
 function readText(relativePath) {
-  return readFileSync(join(repoRoot, relativePath), "utf8");
+  const filePath = join(repoRoot, relativePath);
+  if (!existsSync(filePath)) {
+    problems.push(`${relativePath}: file does not exist`);
+    return "";
+  }
+  return readFileSync(filePath, "utf8");
 }
 
 function requireIncludes(relativePath, needle, message) {
@@ -26,6 +31,11 @@ function checkFeatureList() {
     parsed = JSON.parse(readText("feature_list.json"));
   } catch (error) {
     problems.push(`feature_list.json: invalid JSON (${error.message})`);
+    return;
+  }
+
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    problems.push("feature_list.json: root must be an object");
     return;
   }
 
