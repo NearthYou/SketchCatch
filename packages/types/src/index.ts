@@ -386,10 +386,31 @@ export type DeploymentBlock = {
 export type DeploymentWarningLevel = "low" | "medium" | "high";
 export type DeploymentBlockedBy = "risk_analysis" | "cost_analysis" | "missing_approval";
 
+export type DeploymentSafetyGateWarningCode =
+  | "public_rds"
+  | "public_ssh"
+  | "s3_public_access"
+  | "excessive_iam"
+  | "destructive_change"
+  | "unsupported_live_apply_resource"
+  | "unsupported_live_destroy_resource"
+  | "unknown_plan_action"
+  | "explicit_approval_required";
+
+export type DeploymentSafetyGateWarningSource =
+  | "architecture_check"
+  | "terraform_plan"
+  | "mvp_scope"
+  | "approval_policy";
+
 export type DeploymentPlanWarning = {
   level: DeploymentWarningLevel;
   message: string;
   relatedResourceId?: string;
+  code?: DeploymentSafetyGateWarningCode;
+  source?: DeploymentSafetyGateWarningSource;
+  blocksApproval?: boolean;
+  approvalRequired?: boolean;
 };
 
 export type DeploymentPlanSummary = {
