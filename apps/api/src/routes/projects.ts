@@ -9,7 +9,7 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { and, desc, eq, sql } from "drizzle-orm";
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
-import type { ApiErrorResponse, ArchitectureJson } from "@sketchcatch/types";
+import type { ApiErrorResponse, ArchitectureJson, ResourceType } from "@sketchcatch/types";
 import { requireActiveUserId } from "../auth/current-user.js";
 import { requireS3BucketName } from "../config/env.js";
 import { getDatabaseClient, type DatabaseClient } from "../db/client.js";
@@ -51,19 +51,25 @@ const assetRouteParamsSchema = z.object({
   assetId: z.string().uuid()
 });
 
+const architectureResourceTypes = [
+  "VPC",
+  "SUBNET",
+  "INTERNET_GATEWAY",
+  "ROUTE_TABLE",
+  "ROUTE_TABLE_ASSOCIATION",
+  "EC2",
+  "RDS",
+  "S3",
+  "SECURITY_GROUP",
+  "CLOUDFRONT",
+  "LAMBDA",
+  "AMI",
+  "UNKNOWN"
+] as const satisfies readonly [ResourceType, ...ResourceType[]];
+
 const resourceNodeSchema = z.object({
   id: z.string().min(1),
-  type: z.enum([
-    "VPC",
-    "SUBNET",
-    "EC2",
-    "RDS",
-    "S3",
-    "SECURITY_GROUP",
-    "CLOUDFRONT",
-    "LAMBDA",
-    "UNKNOWN"
-  ]),
+  type: z.enum(architectureResourceTypes),
   label: z.string().min(1).optional(),
   positionX: z.number(),
   positionY: z.number(),

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import type { ApiErrorResponse } from "@sketchcatch/types";
+import type { ApiErrorResponse, ResourceType } from "@sketchcatch/types";
 import { buildApp } from "../app.js";
 import { createAccessToken } from "../auth/tokens.js";
 import type { Database, DatabaseClient } from "../db/client.js";
@@ -395,6 +395,59 @@ test("POST /api/projects/:id/architectures returns 404 for another user's projec
 
   assert.equal(response.statusCode, 404);
   assertErrorResponse(response.json() as ApiErrorResponse, "not_found");
+
+  await app.close();
+});
+
+test("POST /api/projects/:id/architectures accepts every shared resource type", async () => {
+  const resourceTypes: ResourceType[] = [
+    "VPC",
+    "SUBNET",
+    "INTERNET_GATEWAY",
+    "ROUTE_TABLE",
+    "ROUTE_TABLE_ASSOCIATION",
+    "EC2",
+    "RDS",
+    "S3",
+    "SECURITY_GROUP",
+    "CLOUDFRONT",
+    "LAMBDA",
+    "AMI",
+    "UNKNOWN"
+  ];
+  const fakeDb = new ProjectRouteFakeDb({
+    activeUserId: ACTIVE_USER_ID,
+    users: [makeUser({ id: ACTIVE_USER_ID })],
+    projects: [makeProject({ id: ACTIVE_PROJECT_ID, userId: ACTIVE_USER_ID })]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/projects/${ACTIVE_PROJECT_ID}/architectures`,
+    headers: await authHeaders(ACTIVE_USER_ID),
+    payload: {
+      architectureJson: {
+        nodes: resourceTypes.map((type, index) => ({
+          id: `node-${index}`,
+          type,
+          label: type,
+          positionX: index * 10,
+          positionY: index * 20,
+          config: {}
+        })),
+        edges: []
+      }
+    }
+  });
+
+  assert.equal(response.statusCode, 201);
+  assert.deepEqual(
+    response.json().architecture.architectureJson.nodes.map((node: { type: ResourceType }) => node.type),
+    resourceTypes
+  );
 
   await app.close();
 });
