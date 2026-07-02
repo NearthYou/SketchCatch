@@ -206,13 +206,13 @@ test("renders arrays, numbers, booleans, null, and references", () => {
   const diagramJson: DiagramJson = {
     nodes: [
       makeNode({
-        id: "sg-rule-1",
-        type: "aws_security_group_rule",
+        id: "instance-1",
+        type: "aws_instance",
         kind: "resource",
-        label: "ssh",
+        label: "web",
         parameters: {
-          resourceType: "aws_security_group_rule",
-          resourceName: "ssh",
+          resourceType: "aws_instance",
+          resourceName: "web",
           fileName: "main",
           values: {
             vpcId: "var.vpc_id",
@@ -241,7 +241,7 @@ test("renders arrays, numbers, booleans, null, and references", () => {
 
   assert.equal(
     generateTerraformFromDiagramJson(diagramJson),
-    `resource "aws_security_group_rule" "ssh" {
+    `resource "aws_instance" "web" {
   vpc_id = var.vpc_id
   subnet_id = module.vpc.subnet_id
   ami_id = data.aws_ami.ubuntu.id
@@ -256,6 +256,60 @@ test("renders arrays, numbers, booleans, null, and references", () => {
   ]
   description = null
   self = false
+}`
+  );
+});
+
+test("skips Terraform Preview resources outside the InfrastructureGraph allowlist", () => {
+  const diagramJson: DiagramJson = {
+    nodes: [
+      makeNode({
+        id: "vpc-1",
+        type: "aws_vpc",
+        kind: "resource",
+        label: "main",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_vpc",
+          resourceName: "main",
+          fileName: "network",
+          values: {
+            cidrBlock: "10.0.0.0/16"
+          }
+        }
+      }),
+      makeNode({
+        id: "sg-rule-1",
+        type: "aws_security_group_rule",
+        kind: "resource",
+        label: "ssh",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_security_group_rule",
+          resourceName: "ssh",
+          fileName: "security",
+          values: {
+            type: "ingress",
+            fromPort: 22,
+            toPort: 22,
+            protocol: "tcp",
+            cidrBlocks: ["0.0.0.0/0"]
+          }
+        }
+      })
+    ],
+    edges: [],
+    viewport: {
+      x: 0,
+      y: 0,
+      zoom: 1
+    }
+  };
+
+  assert.equal(
+    generateTerraformFromDiagramJson(diagramJson),
+    `resource "aws_vpc" "main" {
+  cidr_block = "10.0.0.0/16"
 }`
   );
 });

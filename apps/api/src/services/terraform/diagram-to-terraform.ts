@@ -1,10 +1,10 @@
 import type {
   DiagramJson,
-  DiagramNodeParameters,
-  TerraformBlockType
+  InfrastructureGraph,
+  InfrastructureGraphNode
 } from "@sketchcatch/types";
+import { buildInfrastructureGraphFromDiagramJson } from "./infrastructure-graph.js";
 
-const DEFAULT_TERRAFORM_BLOCK_TYPE: TerraformBlockType = "resource";
 const INDENT_UNIT = "  ";
 const HCL_IDENTIFIER_PATTERN = /^[a-zA-Z_][a-zA-Z0-9_-]*$/;
 const TERRAFORM_REFERENCE_PATTERN =
@@ -16,30 +16,21 @@ const TERRAFORM_NESTED_BLOCK_ATTRIBUTES: Record<string, ReadonlySet<string>> = {
 
 // DiagramJson 전체를 Terraform 코드 문자열 하나로 변환하는 공개 순수 함수다.
 export function generateTerraformFromDiagramJson(diagramJson: DiagramJson): string {
-  return diagramJson.nodes
-    .filter((node) => node.kind === "resource")
-    .map((node) => node.parameters)
-    .filter(isRenderableParameters)
-    .map(renderBlock)
-    .join("\n\n");
+  return renderTerraformFromInfrastructureGraph(buildInfrastructureGraphFromDiagramJson(diagramJson));
 }
 
-// parameters가 없거나 invalid 표시가 있는 resource node는 Terraform 출력에서 제외한다.
-function isRenderableParameters(
-  parameters: DiagramNodeParameters | undefined
-): parameters is DiagramNodeParameters {
-  return parameters !== undefined && parameters.invalid !== true;
+function renderTerraformFromInfrastructureGraph(graph: InfrastructureGraph): string {
+  return graph.nodes.map(renderBlock).join("\n\n");
 }
 
 // resource/data block 하나를 만든다. 예: resource "aws_vpc" "main" { ... }
-function renderBlock(parameters: DiagramNodeParameters): string {
-  const terraformBlockType = parameters.terraformBlockType ?? DEFAULT_TERRAFORM_BLOCK_TYPE;
-  const body = Object.entries(parameters.values).flatMap(([key, value]) =>
-    renderBodyEntry(parameters.resourceType, key, value, 1)
+function renderBlock(node: InfrastructureGraphNode): string {
+  const body = Object.entries(node.config).flatMap(([key, value]) =>
+    renderBodyEntry(node.iac.resourceType, key, value, 1)
   );
 
   return [
-    `${terraformBlockType} "${parameters.resourceType}" "${parameters.resourceName}" {`,
+    `${node.iac.terraformBlockType} "${node.iac.resourceType}" "${node.iac.resourceName}" {`,
     ...body,
     "}"
   ].join("\n");
