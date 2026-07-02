@@ -96,10 +96,27 @@ function validateSummary(value: string, fallbackValue: string): ValidationResult
 
 // list 필드는 빈 항목과 긴 항목을 제거하고, 전부 사라질 때만 field fallback을 사용합니다.
 function validateTextItems(values: readonly string[], fallbackValues: string[]): ValidationResult<string[]> {
-  const normalized = values
-    .map((value) => value.trim())
-    .filter((value) => value.length > 0 && value.length <= ITEM_MAX_LENGTH && !containsBlockedGuarantee(value))
-    .slice(0, ITEM_MAX_COUNT);
+  let blockedItemFound = false;
+  const normalized: string[] = [];
+
+  for (const value of values) {
+    const trimmed = value.trim();
+
+    if (trimmed.length === 0) {
+      continue;
+    }
+
+    if (containsBlockedGuarantee(trimmed)) {
+      blockedItemFound = true;
+      continue;
+    }
+
+    normalized.push(trimTextItem(trimmed));
+
+    if (normalized.length >= ITEM_MAX_COUNT) {
+      break;
+    }
+  }
 
   if (normalized.length === 0) {
     return {
@@ -110,8 +127,16 @@ function validateTextItems(values: readonly string[], fallbackValues: string[]):
 
   return {
     value: normalized,
-    fallbackUsed: normalized.length !== values.length
+    fallbackUsed: blockedItemFound
   };
+}
+
+function trimTextItem(value: string): string {
+  if (value.length <= ITEM_MAX_LENGTH) {
+    return value;
+  }
+
+  return value.slice(0, ITEM_MAX_LENGTH).trim();
 }
 
 // LLM이 비용, 보안, 배포 가능성을 보장하는 문장은 MVP에서 그대로 노출하지 않습니다.
