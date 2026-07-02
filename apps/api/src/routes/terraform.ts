@@ -106,7 +106,15 @@ const terraformGenerateBodySchema = z.object({
 
 const terraformSyncToDiagramBodySchema = z.object({
   diagramJson: diagramJsonSchema,
-  terraformCode: z.string()
+  terraformCode: z.string(),
+  terraformFiles: z
+    .array(
+      z.object({
+        fileName: z.string().min(1),
+        terraformCode: z.string()
+      })
+    )
+    .optional()
 });
 
 type TerraformRouteOptions = {
@@ -146,7 +154,10 @@ export async function registerTerraformRoutes(
 
       const body = terraformSyncToDiagramBodySchema.parse(request.body);
 
-      return syncTerraformToDiagramJson(body.diagramJson, body.terraformCode);
+      return syncTerraformToDiagramJson(body.diagramJson, {
+        terraformCode: body.terraformCode,
+        terraformFiles: body.terraformFiles
+      });
     }
   );
 }

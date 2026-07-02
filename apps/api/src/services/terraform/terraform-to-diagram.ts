@@ -1,10 +1,18 @@
 import type {
   DiagramJson,
   DiagramNode,
+  DiagramNodeParameters,
+  TerraformBlockIdentity,
   TerraformBlockType,
+  TerraformDiagramChangeProposal,
   TerraformDiagnostic,
+  TerraformSyncFileInput,
   TerraformSyncToDiagramResponse
 } from "@sketchcatch/types";
+import {
+  createTerraformBlockAddress,
+  createTerraformBlockIdentityKey
+} from "./terraform-identity.js";
 
 const DEFAULT_TERRAFORM_BLOCK_TYPE: TerraformBlockType = "resource";
 const BLOCK_HEADER_PATTERN =
@@ -20,13 +28,23 @@ const TERRAFORM_NESTED_BLOCK_ATTRIBUTES: Record<string, ReadonlySet<string>> = {
   aws_route_table: new Set(["route"]),
   aws_security_group: new Set(["egress", "ingress"])
 };
+const PROPOSAL_SUPPORTED_BLOCKS = new Set<string>([
+  "resource/aws_vpc",
+  "resource/aws_subnet",
+  "resource/aws_security_group",
+  "resource/aws_instance",
+  "resource/aws_s3_bucket",
+  "data/aws_ami"
+]);
 
 type ParsedBlock = {
   blockType: TerraformBlockType;
   resourceType: string;
   resourceName: string;
   address: string;
+  identity: TerraformBlockIdentity;
   line: number;
+  sourceFileName: string;
   values: Record<string, unknown>;
 };
 
@@ -40,16 +58,24 @@ type BodyLine = {
   line: number;
 };
 
+type TerraformSyncInput =
+  | string
+  | {
+      terraformCode: string;
+      terraformFiles?: TerraformSyncFileInput[] | undefined;
+    };
+
 export function syncTerraformToDiagramJson(
   diagramJson: DiagramJson,
-  terraformCode: string
+  input: TerraformSyncInput
 ): TerraformSyncToDiagramResponse {
-  const parseResult = parseTerraformBlocks(terraformCode);
+  const parseResult = parseTerraformInput(input);
 
   if (parseResult.diagnostics.length > 0) {
     return {
       diagramJson,
-      diagnostics: parseResult.diagnostics
+      diagnostics: parseResult.diagnostics,
+      proposals: []
     };
   }
 
@@ -62,25 +88,44 @@ export function syncTerraformToDiagramJson(
           code: "terraform.sync.empty",
           message: "동기화할 resource/data block이 없습니다."
         }
-      ]
+      ],
+      proposals: []
     };
   }
 
-  const nodeByAddress = createNodeAddressMap(diagramJson.nodes);
+  const nodeMapResult = createNodeIdentityMap(diagramJson.nodes);
+
+  if (nodeMapResult.diagnostics.length > 0) {
+    return {
+      diagramJson,
+      diagnostics: nodeMapResult.diagnostics,
+      proposals: []
+    };
+  }
+
+  const nodeByIdentityKey = nodeMapResult.nodeByIdentityKey;
+  const blockByIdentityKey = new Map(
+    parseResult.blocks.map((block) => [createTerraformBlockIdentityKey(block.identity), block])
+  );
   const diagnostics: TerraformDiagnostic[] = [];
   const valuesByNodeId = new Map<string, Record<string, unknown>>();
+  const terraformOnlyBlocks: ParsedBlock[] = [];
 
   for (const block of parseResult.blocks) {
-    const node = nodeByAddress.get(block.address);
+    const node = nodeByIdentityKey.get(createTerraformBlockIdentityKey(block.identity));
 
     if (!node) {
-      diagnostics.push({
-        severity: "error",
-        code: "terraform.sync.unmatched_block",
-        line: block.line,
-        resourceAddress: block.address,
-        message: `${block.address}와 매칭되는 DiagramJson node를 찾을 수 없습니다.`
-      });
+      if (isProposalSupportedBlock(block.identity)) {
+        terraformOnlyBlocks.push(block);
+      } else {
+        diagnostics.push({
+          severity: "error",
+          code: "terraform.sync.unsupported_resource",
+          line: block.line,
+          resourceAddress: block.address,
+          message: `${block.address}는 Terraform 동기화 v1 지원 리소스가 아닙니다.`
+        });
+      }
       continue;
     }
 
@@ -90,9 +135,24 @@ export function syncTerraformToDiagramJson(
   if (diagnostics.length > 0) {
     return {
       diagramJson,
-      diagnostics
+      diagnostics,
+      proposals: []
     };
   }
+
+  const diagramOnlyNodes = diagramJson.nodes.filter((node) => {
+    if (node.kind !== "resource" || !node.parameters) {
+      return false;
+    }
+
+    const identity = toNodeIdentity(node);
+
+    return (
+      isProposalSupportedBlock(identity) &&
+      !blockByIdentityKey.has(createTerraformBlockIdentityKey(identity))
+    );
+  });
+  const proposals = createChangeProposals(diagramOnlyNodes, terraformOnlyBlocks);
 
   return {
     diagramJson: {
@@ -115,36 +175,187 @@ export function syncTerraformToDiagramJson(
       edges: diagramJson.edges.map((edge) => ({ ...edge })),
       viewport: { ...diagramJson.viewport }
     },
-    diagnostics: []
+    diagnostics: [],
+    proposals
   };
 }
 
-function createNodeAddressMap(nodes: DiagramNode[]): Map<string, DiagramNode> {
-  const nodeByAddress = new Map<string, DiagramNode>();
+function createNodeIdentityMap(nodes: DiagramNode[]): {
+  nodeByIdentityKey: Map<string, DiagramNode>;
+  diagnostics: TerraformDiagnostic[];
+} {
+  const nodeByIdentityKey = new Map<string, DiagramNode>();
+  const diagnostics: TerraformDiagnostic[] = [];
 
   for (const node of nodes) {
     if (node.kind !== "resource" || !node.parameters) {
       continue;
     }
 
-    const blockType = node.parameters.terraformBlockType ?? DEFAULT_TERRAFORM_BLOCK_TYPE;
-    const address = createAddress(
-      blockType,
-      node.parameters.resourceType,
-      node.parameters.resourceName
-    );
+    const identity = toNodeIdentity(node);
+    const key = createTerraformBlockIdentityKey(identity);
 
-    nodeByAddress.set(address, node);
+    if (nodeByIdentityKey.has(key)) {
+      diagnostics.push({
+        severity: "error",
+        code: "terraform.sync.duplicate_diagram_identity",
+        nodeId: node.id,
+        resourceAddress: createTerraformBlockAddress(identity),
+        message: `${createTerraformBlockAddress(identity)} DiagramJson node가 중복되었습니다.`
+      });
+      continue;
+    }
+
+    nodeByIdentityKey.set(key, node);
   }
 
-  return nodeByAddress;
+  return { nodeByIdentityKey, diagnostics };
 }
 
-function parseTerraformBlocks(terraformCode: string): ParseResult {
+function createChangeProposals(
+  diagramOnlyNodes: DiagramNode[],
+  terraformOnlyBlocks: ParsedBlock[]
+): TerraformDiagramChangeProposal[] {
+  const proposals: TerraformDiagramChangeProposal[] = [];
+  const usedTerraformBlockKeys = new Set<string>();
+  const usedDiagramNodeIds = new Set<string>();
+
+  for (const node of diagramOnlyNodes) {
+    if (!node.parameters) {
+      continue;
+    }
+
+    const from = toNodeIdentity(node);
+    const renameBlock = terraformOnlyBlocks.find((block) => {
+      const blockKey = createTerraformBlockIdentityKey(block.identity);
+
+      return (
+        !usedTerraformBlockKeys.has(blockKey) &&
+        block.identity.terraformBlockType === from.terraformBlockType &&
+        block.identity.resourceType === from.resourceType &&
+        deeplyEqual(block.values, node.parameters?.values)
+      );
+    });
+
+    if (!renameBlock) {
+      continue;
+    }
+
+    usedDiagramNodeIds.add(node.id);
+    usedTerraformBlockKeys.add(createTerraformBlockIdentityKey(renameBlock.identity));
+    proposals.push({
+      kind: "rename_candidate",
+      from,
+      to: renameBlock.identity,
+      nodeId: node.id,
+      resourceAddress: createTerraformBlockAddress(from)
+    });
+  }
+
+  for (const block of terraformOnlyBlocks) {
+    if (usedTerraformBlockKeys.has(createTerraformBlockIdentityKey(block.identity))) {
+      continue;
+    }
+
+    proposals.push({
+      kind: "create_candidate",
+      identity: block.identity,
+      sourceFileName: block.sourceFileName,
+      line: block.line,
+      parameters: toDiagramNodeParameters(block)
+    });
+  }
+
+  for (const node of diagramOnlyNodes) {
+    if (!node.parameters || usedDiagramNodeIds.has(node.id)) {
+      continue;
+    }
+
+    const identity = toNodeIdentity(node);
+
+    proposals.push({
+      kind: "delete_candidate",
+      identity,
+      nodeId: node.id,
+      resourceAddress: createTerraformBlockAddress(identity)
+    });
+  }
+
+  return proposals;
+}
+
+function toDiagramNodeParameters(block: ParsedBlock): DiagramNodeParameters {
+  return {
+    ...(block.blockType !== DEFAULT_TERRAFORM_BLOCK_TYPE ? { terraformBlockType: block.blockType } : {}),
+    resourceType: block.resourceType,
+    resourceName: block.resourceName,
+    fileName: block.sourceFileName,
+    values: block.values
+  };
+}
+
+function toNodeIdentity(node: DiagramNode): TerraformBlockIdentity {
+  const parameters = node.parameters;
+
+  return {
+    terraformBlockType: parameters?.terraformBlockType ?? DEFAULT_TERRAFORM_BLOCK_TYPE,
+    resourceType: parameters?.resourceType ?? "",
+    resourceName: parameters?.resourceName ?? ""
+  };
+}
+
+function isProposalSupportedBlock(identity: TerraformBlockIdentity): boolean {
+  return PROPOSAL_SUPPORTED_BLOCKS.has(`${identity.terraformBlockType}/${identity.resourceType}`);
+}
+
+function deeplyEqual(left: unknown, right: unknown): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function parseTerraformInput(input: TerraformSyncInput): ParseResult {
+  const files =
+    typeof input === "string" || input.terraformFiles === undefined || input.terraformFiles.length === 0
+      ? [
+          {
+            fileName: "main.tf",
+            terraformCode: typeof input === "string" ? input : input.terraformCode
+          }
+        ]
+      : input.terraformFiles;
+  const blocks: ParsedBlock[] = [];
+  const diagnostics: TerraformDiagnostic[] = [];
+  const identityKeys = new Set<string>();
+
+  for (const file of files) {
+    const parseResult = parseTerraformBlocks(file.fileName, file.terraformCode);
+
+    for (const block of parseResult.blocks) {
+      const identityKey = createTerraformBlockIdentityKey(block.identity);
+
+      if (identityKeys.has(identityKey)) {
+        diagnostics.push({
+          severity: "error",
+          code: "terraform.sync.duplicate_address",
+          line: block.line,
+          resourceAddress: block.address,
+          message: `${block.address} block이 중복되었습니다.`
+        });
+      }
+
+      identityKeys.add(identityKey);
+      blocks.push(block);
+    }
+
+    diagnostics.push(...parseResult.diagnostics);
+  }
+
+  return { blocks, diagnostics };
+}
+
+function parseTerraformBlocks(sourceFileName: string, terraformCode: string): ParseResult {
   const lines = splitTerraformLines(terraformCode);
   const blocks: ParsedBlock[] = [];
   const diagnostics: TerraformDiagnostic[] = [];
-  const addresses = new Set<string>();
 
   for (let index = 0; index < lines.length; index += 1) {
     const lineText = lines[index] ?? "";
@@ -186,19 +397,8 @@ function parseTerraformBlocks(terraformCode: string): ParseResult {
       continue;
     }
 
-    const address = createAddress(blockType as TerraformBlockType, resourceType, resourceName);
-
-    if (addresses.has(address)) {
-      diagnostics.push({
-        severity: "error",
-        code: "terraform.sync.duplicate_address",
-        line: index + 1,
-        resourceAddress: address,
-        message: `${address} block이 중복되었습니다.`
-      });
-    }
-
-    addresses.add(address);
+    const identity = { terraformBlockType: blockType, resourceType, resourceName };
+    const address = createTerraformBlockAddress(identity);
 
     const headerLineNumber = index + 1;
     const bodyResult = collectBlockBody(lines, index + 1, headerLineNumber, address);
@@ -221,7 +421,9 @@ function parseTerraformBlocks(terraformCode: string): ParseResult {
       resourceType,
       resourceName,
       address,
+      identity,
       line: index + 1,
+      sourceFileName,
       values: valuesResult.values
     });
 
@@ -838,14 +1040,6 @@ function stripLineComment(lineText: string): string {
   }
 
   return lineText;
-}
-
-function createAddress(
-  blockType: TerraformBlockType,
-  resourceType: string,
-  resourceName: string
-): string {
-  return `${blockType}.${resourceType}.${resourceName}`;
 }
 
 function toCamelCase(value: string): string {

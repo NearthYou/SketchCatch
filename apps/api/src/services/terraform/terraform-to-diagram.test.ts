@@ -150,7 +150,7 @@ test("ignores braces in Terraform comments while syncing values", () => {
   assert.equal(result.diagramJson.nodes[0]?.parameters?.values.cidrBlock, "10.3.0.0/16");
 });
 
-test("keeps the input diagram when a block is unmatched", () => {
+test("returns create and delete proposals when Terraform and DiagramJson identities do not match", () => {
   const diagramJson = makeSingleVpcDiagramJson();
 
   const result = syncTerraformToDiagramJson(
@@ -160,8 +160,140 @@ test("keeps the input diagram when a block is unmatched", () => {
 }`
   );
 
+  assert.deepEqual(result.diagnostics, []);
+  assert.deepEqual(result.diagramJson, diagramJson);
+  assert.deepEqual(result.proposals, [
+    {
+      kind: "create_candidate",
+      identity: {
+        terraformBlockType: "resource",
+        resourceType: "aws_vpc",
+        resourceName: "unknown"
+      },
+      sourceFileName: "main.tf",
+      line: 1,
+      parameters: {
+        resourceType: "aws_vpc",
+        resourceName: "unknown",
+        fileName: "main.tf",
+        values: {
+          cidrBlock: "10.1.0.0/16"
+        }
+      }
+    },
+    {
+      kind: "delete_candidate",
+      identity: {
+        terraformBlockType: "resource",
+        resourceType: "aws_vpc",
+        resourceName: "main"
+      },
+      nodeId: "node-1",
+      resourceAddress: "aws_vpc.main"
+    }
+  ]);
+});
+
+test("returns source metadata for Terraform-only blocks from multi-file sync input", () => {
+  const result = syncTerraformToDiagramJson(
+    {
+      nodes: [],
+      edges: [],
+      viewport: { x: 0, y: 0, zoom: 1 }
+    },
+    {
+      terraformCode: "",
+      terraformFiles: [
+        {
+          fileName: "network.tf",
+          terraformCode: `resource "aws_vpc" "main" {
+  cidr_block = "10.0.0.0/16"
+}`
+        }
+      ]
+    }
+  );
+
+  assert.deepEqual(result.diagnostics, []);
+  assert.equal(result.proposals?.[0]?.kind, "create_candidate");
+  assert.equal(result.proposals?.[0]?.sourceFileName, "network.tf");
+  assert.equal(result.proposals?.[0]?.line, 1);
+});
+
+test("rejects duplicate DiagramJson identities without mutating", () => {
+  const diagramJson: DiagramJson = {
+    nodes: [
+      makeNode({
+        id: "node-1",
+        type: "aws_vpc",
+        kind: "resource",
+        label: "main",
+        parameters: {
+          resourceType: "aws_vpc",
+          resourceName: "main",
+          fileName: "network",
+          values: {}
+        }
+      }),
+      makeNode({
+        id: "node-2",
+        type: "aws_vpc",
+        kind: "resource",
+        label: "main duplicate",
+        parameters: {
+          resourceType: "aws_vpc",
+          resourceName: "main",
+          fileName: "other-file",
+          values: {}
+        }
+      })
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+
+  const result = syncTerraformToDiagramJson(
+    diagramJson,
+    `resource "aws_vpc" "main" {
+  cidr_block = "10.0.0.0/16"
+}`
+  );
+
   assert.equal(result.diagramJson, diagramJson);
-  assert.equal(result.diagnostics[0]?.code, "terraform.sync.unmatched_block");
+  assert.equal(result.diagnostics[0]?.code, "terraform.sync.duplicate_diagram_identity");
+  assert.equal(result.diagnostics[0]?.resourceAddress, "aws_vpc.main");
+  assert.deepEqual(result.proposals, []);
+});
+
+test("returns rename proposals for deterministic same-type value matches", () => {
+  const diagramJson = makeSingleVpcDiagramJson();
+
+  const result = syncTerraformToDiagramJson(
+    diagramJson,
+    `resource "aws_vpc" "renamed" {
+  cidr_block = "10.0.0.0/16"
+}`
+  );
+
+  assert.deepEqual(result.diagnostics, []);
+  assert.deepEqual(result.diagramJson, diagramJson);
+  assert.deepEqual(result.proposals, [
+    {
+      kind: "rename_candidate",
+      from: {
+        terraformBlockType: "resource",
+        resourceType: "aws_vpc",
+        resourceName: "main"
+      },
+      to: {
+        terraformBlockType: "resource",
+        resourceType: "aws_vpc",
+        resourceName: "renamed"
+      },
+      nodeId: "node-1",
+      resourceAddress: "aws_vpc.main"
+    }
+  ]);
 });
 
 test("keeps the input diagram when Terraform code has no syncable blocks", () => {
@@ -512,7 +644,7 @@ test("reports the block header line when a block is not closed", () => {
 
   assert.equal(result.diagnostics[0]?.code, "terraform.sync.block_header");
   assert.equal(result.diagnostics[0]?.line, 1);
-  assert.equal(result.diagnostics[0]?.resourceAddress, "resource.aws_vpc.main");
+  assert.equal(result.diagnostics[0]?.resourceAddress, "aws_vpc.main");
 });
 
 function makeSingleVpcDiagramJson(): DiagramJson {

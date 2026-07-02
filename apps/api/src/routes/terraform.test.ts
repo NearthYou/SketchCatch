@@ -337,6 +337,55 @@ test("POST /api/terraform/sync-to-diagram updates matching DiagramJson values", 
   await app.close();
 });
 
+test("POST /api/terraform/sync-to-diagram accepts Terraform file inputs", async () => {
+  const fakeDb = new AuthOnlyFakeDb({
+    users: [
+      {
+        id: ACTIVE_USER_ID,
+        deletedAt: null
+      }
+    ]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/terraform/sync-to-diagram",
+    headers: await authHeaders(ACTIVE_USER_ID),
+    payload: {
+      diagramJson: {
+        nodes: [],
+        edges: [],
+        viewport: {
+          x: 0,
+          y: 0,
+          zoom: 1
+        }
+      },
+      terraformCode: "",
+      terraformFiles: [
+        {
+          fileName: "network.tf",
+          terraformCode: `resource "aws_vpc" "main" {
+  cidr_block = "10.0.0.0/16"
+}`
+        }
+      ]
+    }
+  });
+
+  const body = response.json() as TerraformSyncToDiagramResponse;
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(body.diagnostics, []);
+  assert.equal(body.proposals?.[0]?.kind, "create_candidate");
+  assert.equal(body.proposals?.[0]?.sourceFileName, "network.tf");
+
+  await app.close();
+});
+
 test("POST /api/terraform/sync-to-diagram returns diagnostics without mutating on unsupported input", async () => {
   const fakeDb = new AuthOnlyFakeDb({
     users: [

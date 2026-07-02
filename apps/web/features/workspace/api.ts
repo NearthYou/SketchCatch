@@ -44,6 +44,7 @@ import type {
   TestAwsConnectionRequest,
   TestAwsConnectionResponse,
   TerraformGenerateResponse,
+  TerraformSyncFileInput,
   TerraformSyncToDiagramResponse,
   TerraformValidateResponse,
   VerifyAwsConnectionCreatedRoleRequest,
@@ -250,17 +251,20 @@ export async function validateTerraformCode(
 
 export async function syncTerraformToDiagram({
   diagramJson,
-  terraformCode
+  terraformCode,
+  terraformFiles
 }: {
   diagramJson: DiagramJson;
   terraformCode: string;
+  terraformFiles?: TerraformSyncFileInput[] | undefined;
 }): Promise<TerraformSyncToDiagramResponse> {
   return apiFetch<TerraformSyncToDiagramResponse>("/terraform/sync-to-diagram", {
     auth: true,
     method: "POST",
     body: {
       diagramJson,
-      terraformCode
+      terraformCode,
+      ...(terraformFiles !== undefined ? { terraformFiles } : {})
     }
   });
 }
