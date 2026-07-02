@@ -28,7 +28,7 @@ export function resolveTerraformLeaveSaveCompletion(saved: boolean): TerraformLe
 
   return {
     canRunPendingAction: false,
-    message: "저장하지 못했습니다. Terraform 패널의 오류나 변경 제안을 확인해 주세요.",
+    message: "저장하지 못했습니다. Terraform 패널의 오류를 확인해 주세요.",
     shouldKeepDialogOpen: true,
     state: "blocked"
   };

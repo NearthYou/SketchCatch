@@ -26,7 +26,7 @@ test("terraform leave save feedback closes the dialog only after a successful sa
 test("terraform leave save feedback keeps the dialog open when save is blocked", () => {
   assert.deepEqual(resolveTerraformLeaveSaveCompletion(false), {
     canRunPendingAction: false,
-    message: "저장하지 못했습니다. Terraform 패널의 오류나 변경 제안을 확인해 주세요.",
+    message: "저장하지 못했습니다. Terraform 패널의 오류를 확인해 주세요.",
     shouldKeepDialogOpen: true,
     state: "blocked"
   });

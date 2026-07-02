@@ -6,9 +6,9 @@ import type {
   TerraformDiagramChangeProposal
 } from "../../../../packages/types/src";
 import {
+  applyAllTerraformSyncProposals,
   applyTerraformSyncProposals,
-  getTerraformSyncProposalId,
-  splitTerraformSyncProposalsByApproval
+  getTerraformSyncProposalId
 } from "./terraform-sync-proposals";
 import { resourceCatalog } from "../resource-settings/catalog";
 
@@ -215,7 +215,7 @@ test("applyTerraformSyncProposals ignores unapproved proposals", () => {
   assert.deepEqual(applyTerraformSyncProposals(diagramJson, proposals, []), diagramJson);
 });
 
-test("splitTerraformSyncProposalsByApproval keeps unapproved proposals pending", () => {
+test("applyAllTerraformSyncProposals applies every structural change without a second prompt", () => {
   const proposals: TerraformDiagramChangeProposal[] = [
     {
       kind: "create_candidate",
@@ -242,13 +242,13 @@ test("splitTerraformSyncProposalsByApproval keeps unapproved proposals pending",
       resourceAddress: "aws_vpc.main"
     }
   ];
-  const result = splitTerraformSyncProposalsByApproval(
-    proposals,
-    [getTerraformSyncProposalId(proposals[0]!, 0)]
-  );
+  const result = applyAllTerraformSyncProposals(makeDiagramJson(), proposals);
 
-  assert.deepEqual(result.approvedProposals, [proposals[0]]);
-  assert.deepEqual(result.remainingProposals, [proposals[1]]);
+  assert.deepEqual(
+    result.nodes.map((node) => node.parameters?.resourceName),
+    ["logs"]
+  );
+  assert.equal(result.nodes[0]?.type, "aws_s3_bucket");
 });
 
 function makeDiagramJson(

@@ -6,8 +6,8 @@
 
 - InfrastructureGraph 중심 Workspace 동기화 v1 구현이 현재 브랜치에 커밋됐다.
 - Terraform Preview 생성 경로는 `DiagramJson -> InfrastructureGraph -> Terraform`로 정리됐다.
-- VPC/EC2/S3/AMI 계열 Preview와 proposal 승인 흐름은 focused API/Web 테스트, typecheck, lint, build를 통과했다.
-- Terraform-only create proposal 승인으로 생긴 새 DiagramJson node는 resource catalog의 `iconUrl`과 `nodeDefaults.size`를 사용한다.
+- VPC/EC2/S3/AMI 계열 Preview와 Terraform sync 흐름은 focused API/Web 테스트, typecheck, lint, build를 통과했다.
+- Terraform-only create proposal 자동 반영으로 생긴 새 DiagramJson node는 resource catalog의 `iconUrl`과 `nodeDefaults.size`를 사용한다.
 - CloudFront draft/proposal도 `aws_cloudfront_distribution` catalog icon과 size를 사용할 수 있다.
 - 기본 Palette는 `resourceCatalog`를 기본값으로 사용한다.
 - Design area node도 catalog icon을 유지하며 area header에서 iconUrl을 사용할 수 있다.
@@ -15,9 +15,9 @@
 - Resource code 부분보기에서는 원본 파일 line을 부분 코드 line으로 보정해 빨간줄을 표시한다.
 - Terraform 코드를 수정하면 stale diagnostics/Issues 상태가 즉시 비워진다.
 - 오래된 async validation/save 응답은 code version guard로 새 코드 위에 다시 반영되지 않는다.
-- 같은 Terraform identity의 `parameters.values` 변경은 proposal pending 상태가 있어도 먼저 DiagramJson에 반영된다.
-- Create/delete/rename 구조 변경은 계속 사용자 승인 proposal로 남는다.
-- Rename proposal 승인 시 source file metadata가 `parameters.fileName`에 보존된다.
+- 같은 Terraform identity의 `parameters.values` 변경은 Terraform editor 저장 시 DiagramJson에 반영된다.
+- Create/delete/rename 구조 변경은 별도 변경 제안 확인 UI 없이 Terraform editor 저장 또는 배포 준비 action 안에서 자동 반영된다.
+- Rename proposal 자동 반영 시 source file metadata가 `parameters.fileName`에 보존된다.
 - Route Table/Internet Gateway/CloudFront 같은 sync 가능한 네트워크 리소스는 create/delete proposal 대상에 포함된다.
 - Resource card Duplicate는 같은 resource type 안에서 `web_copy`, `web_copy_2`처럼 유니크한 Terraform resourceName을 만들고, 자동 생성 `tags.Name`도 함께 동기화한다.
 - `docs/data-models.md`는 diagnostic/proposal source metadata와 proposal 지원 범위를 현재 코드에 맞게 기록한다.
@@ -26,13 +26,14 @@
 ## 이번 세션의 변경 사항
 
 - 하위 AI 6개 축으로 API sync/parser, frontend proposal 적용, Terraform editor UX, resource catalog/icon, deployment boundary, docs/contracts를 read-only 검증했다.
+- Terraform 변경 제안 확인 패널을 제거하고 저장 시 proposals를 자동 반영하도록 바꿨다.
 - `TerraformDiagnostic.sourceFileName`을 shared type에 추가했다.
 - `TerraformDiagramChangeProposal.rename_candidate`에 `sourceFileName`과 `line`을 추가했다.
 - API Terraform sync parser가 file별 diagnostics에 source file metadata를 채우도록 수정했다.
 - Frontend Terraform panel이 전체 검증을 file별로 실행하고 diagnostic source metadata를 UI에 보존하게 했다.
 - Diagnostic line highlight helper가 source file filtering과 source line offset을 지원하게 했다.
 - CloudFront catalog, parameter override, generated parameter catalog를 추가했다.
-- Proposal helper의 create/rename 적용 경로에서 icon/size/fileName/deep clone 보존을 강화했다.
+- Proposal helper의 create/rename 적용 경로에서 icon/size/fileName/deep clone 보존을 강화했고, `applyAllTerraformSyncProposals`를 추가했다.
 - Palette, diagram node creation, area node icon lookup을 catalog 기준으로 정렬했다.
 - Resource Duplicate 중복 identity와 stale auto tag 문제를 수정했다.
 - 관련 regression tests와 docs/data-models 계약을 갱신했다.
@@ -41,6 +42,7 @@
 
 - `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-to-diagram.test.ts src/routes/terraform.test.ts src/services/terraform/diagram-to-terraform.test.ts src/services/terraform/infrastructure-graph.test.ts` - passed
 - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/terraform-sync-proposals.test.ts features/workspace/terraform-diagnostic-line-highlights.test.ts features/workspace/workspace-right-panel-layout.test.ts features/workspace/workspace-ai-diagram-adapter.test.ts features/diagram-editor/diagram-utils.test.ts features/resource-settings/catalog.test.ts features/workspace/pre-deployment-diagnostics.test.ts features/parameter-input/validation.test.ts` - passed
+- `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/terraform-sync-proposals.test.ts features/workspace/workspace-right-panel-layout.test.ts features/workspace/terraform-leave-save-state.test.ts` - passed
 - `pnpm catalog:generate` - passed
 - `pnpm catalog:check` - passed after one transient Terraform AWS provider schema handshake retry
 - `pnpm typecheck` - passed
@@ -60,9 +62,9 @@
 ## 다음으로 최선의 행동
 
 - 브라우저에서 CloudFront AI draft가 `AWS` fallback이 아니라 CloudFront icon으로 보이는지 수동 smoke한다.
-- Terraform editor에서 `aws_s3_bucket`, `data.aws_ami`, `aws_cloudfront_distribution` create proposal을 승인해 icon/size가 유지되는지 수동 smoke한다.
+- Terraform editor에서 `aws_s3_bucket`, `data.aws_ami`, `aws_cloudfront_distribution` create proposal이 저장 시 자동 반영되고 icon/size가 유지되는지 수동 smoke한다.
 - Multi-file Terraform에서 `network.tf` 오류가 `main.tf`에 표시되지 않고 해당 파일에서만 빨간줄로 보이는지 확인한다.
-- Proposal pending 상태에서 기존 VPC `cidr_block` 같은 same-identity value update가 proposal 승인과 무관하게 반영되는지 확인한다.
+- 기존 VPC `cidr_block` 같은 same-identity value update가 저장 시 바로 반영되는지 확인한다.
 - 별도 이슈로 pre-deployment artifact path와 backend artifact safety check 정렬을 검토한다.
 
 ## 건드리지 말아야 할 것

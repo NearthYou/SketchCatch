@@ -15,6 +15,32 @@
 
 ## 세션 레코드
 
+### 2026-07-03 - Terraform 변경 제안 확인 UI 제거
+
+- Goal: Terraform editor 저장 시 나오는 `Terraform 변경 제안` 확인 패널이 불편하므로 제거한다.
+- Completed:
+  - Terraform sync API가 반환한 create/delete/rename proposals를 Terraform editor의 명시적 저장 또는 배포 준비 action 안에서 자동 반영하게 했다.
+  - `TerraformCodePanel`의 `pendingTerraformSync` 상태, 선택 반영/무시 버튼, proposal 목록 UI를 제거했다.
+  - proposal panel 전용 CSS를 제거했다.
+  - leave dialog 저장 실패 문구에서 더 이상 존재하지 않는 "변경 제안 확인" 안내를 제거했다.
+  - `applyAllTerraformSyncProposals` helper와 회귀 테스트를 추가했다.
+  - `docs/data-models.md`에 Terraform editor 저장/배포 준비 action을 사용자 승인 경계로 삼아 proposals를 자동 반영할 수 있다고 기록했다.
+- Verification run:
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/terraform-sync-proposals.test.ts features/workspace/workspace-right-panel-layout.test.ts features/workspace/terraform-leave-save-state.test.ts` - passed
+  - `pnpm typecheck` - passed
+  - `pnpm lint` - passed
+  - `pnpm build` - passed
+  - `pnpm harness:check` - passed
+  - `git diff --check` - passed
+- Evidence recorded:
+  - 실제 Terraform apply/destroy, cloud mutation, Git/CI/CD handoff는 실행하지 않았다.
+  - frontend UI에 Terraform 실행 또는 AWS SDK 호출을 추가하지 않았다.
+- Known risks:
+  - 브라우저 수동 smoke는 수행하지 않았다.
+  - 기존 unrelated worktree changes remain: `DESIGN.md` 삭제 상태, `apps/web/next-env.d.ts` 변경 상태.
+- Next best action:
+  - 브라우저에서 Terraform 코드 저장 시 create/delete/rename이 별도 확인 UI 없이 바로 DiagramJson에 반영되는지 수동 smoke한다.
+
 ### 2026-07-03 - Terraform Preview 아이콘/진단/동기화 회귀 보강
 
 - Goal: 하위 AI 6개 축으로 Terraform Preview/동기화 구현을 재검증하고, 실제 사용자 증상과 연결되는 문제를 수정한다.

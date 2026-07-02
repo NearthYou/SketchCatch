@@ -378,32 +378,18 @@ test("terraform artifact preparation marks the terraform panel as loading", () =
   assert.match(terraformPanelSource, /isPreparingTerraformArtifactRef/);
 });
 
-test("terraform sync proposals apply safe value updates while structural proposals require approval", () => {
-  const proposalBranchIndex = terraformPanelSource.indexOf(
-    "syncResult.proposals && syncResult.proposals.length > 0"
-  );
-  const proposalApplyIndex = terraformPanelSource.indexOf(
-    "context.applyDiagramJson(syncResult.diagramJson)",
-    proposalBranchIndex
-  );
-  const proposalReturnIndex = terraformPanelSource.indexOf("return null;", proposalBranchIndex);
-
-  assert.ok(proposalBranchIndex > -1);
-  assert.ok(proposalApplyIndex > proposalBranchIndex);
-  assert.ok(proposalReturnIndex > proposalBranchIndex);
-  assert.ok(proposalApplyIndex < proposalReturnIndex);
+test("terraform sync proposals are auto-applied on explicit save without asking again", () => {
   assert.match(terraformPanelSource, /terraformFiles:\s*terraformFiles\.map/);
-  assert.match(terraformPanelSource, /pendingTerraformSync/);
-  assert.match(terraformPanelSource, /getTerraformSyncProposalId/);
-  assert.match(terraformPanelSource, /applyTerraformSyncProposals/);
-  assert.match(terraformPanelSource, /splitTerraformSyncProposalsByApproval/);
-  assert.match(terraformPanelSource, /approvedProposalIds:\s*new Set\(\)/);
-  assert.match(terraformPanelSource, /remainingProposals\.length > 0/);
-  assert.match(terraformPanelSource, /disabled=\{pendingTerraformSync\.approvedProposalIds\.size === 0\}/);
-  assert.match(terraformPanelSource, /className=\{styles\.terraformSyncProposalPanel\}/);
-  assert.match(stylesSource, /\.terraformSyncProposalPanel\s*\{/);
-  assert.match(stylesSource, /\.terraformSyncProposalList\s*\{/);
-  assert.match(stylesSource, /\.terraformSyncProposalActions button:disabled\s*\{/);
+  assert.match(terraformPanelSource, /applyAllTerraformSyncProposals/);
+  assert.match(terraformPanelSource, /syncResult\.proposals && syncResult\.proposals\.length > 0/);
+  assert.match(terraformPanelSource, /context\.applyDiagramJson\(nextDiagramJson\)/);
+  assert.doesNotMatch(terraformPanelSource, /pendingTerraformSync/);
+  assert.doesNotMatch(terraformPanelSource, /Terraform 변경 제안/);
+  assert.doesNotMatch(terraformPanelSource, /선택 반영/);
+  assert.doesNotMatch(terraformPanelSource, /제안 무시/);
+  assert.doesNotMatch(stylesSource, /\.terraformSyncProposalPanel\s*\{/);
+  assert.doesNotMatch(stylesSource, /\.terraformSyncProposalList\s*\{/);
+  assert.doesNotMatch(stylesSource, /\.terraformSyncProposalActions/);
 });
 
 test("terraform editor clears stale diagnostics after local edits", () => {

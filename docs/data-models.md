@@ -406,7 +406,7 @@ type TerraformSyncToDiagramResponse = {
 
 `terraformCode`는 기존 단일 파일 호환용 입력이다. Workspace가 여러 Terraform 파일을 들고 있으면 `terraformFiles`를 함께 보내며, API는 `fileName + block identity`를 기준으로 source file metadata를 유지한다.
 
-동일한 `(terraformBlockType, resourceType, resourceName)`을 가진 Terraform block과 Diagram node는 같은 리소스로 보고 `parameters.values`만 갱신할 수 있다. Terraform에만 있거나 Diagram에만 있는 구조 변경, 이름 변경 후보처럼 사용자 판단이 필요한 변경은 자동 반영하지 않고 `proposals`로 반환한다.
+동일한 `(terraformBlockType, resourceType, resourceName)`을 가진 Terraform block과 Diagram node는 같은 리소스로 보고 `parameters.values`만 갱신할 수 있다. Terraform에만 있거나 Diagram에만 있는 구조 변경, 이름 변경 후보는 API 응답에서 `proposals`로 표시할 수 있다.
 
 ```ts
 type TerraformBlockIdentity = {
@@ -440,7 +440,7 @@ type TerraformDiagramChangeProposal =
     };
 ```
 
-`proposals`는 `User-Accepted Change` 대상이다. 프론트엔드는 제안을 보여주고 사용자가 선택한 항목만 `DiagramJson`에 반영해야 한다. 사용자가 승인하지 않은 create/delete/rename 후보는 Architecture Board를 바꾸지 않는다.
+`proposals`는 Terraform editor 저장 또는 배포 준비처럼 사용자가 명시적으로 실행한 Terraform sync action 안에서 반영된다. 프론트엔드는 별도 변경 제안 확인 UI를 띄우지 않고, 해당 명시 action을 사용자 승인 경계로 삼아 create/delete/rename 후보를 `DiagramJson`에 자동 반영할 수 있다.
 
 Terraform editor에서 새로 발견한 구조 변경 proposal의 v1 범위는 `resource.aws_vpc`, `resource.aws_subnet`, `resource.aws_internet_gateway`, `resource.aws_route_table`, `resource.aws_route_table_association`, `resource.aws_security_group`, `resource.aws_instance`, `resource.aws_s3_bucket`, `resource.aws_cloudfront_distribution`, `data.aws_ami`다. Terraform Preview 렌더링은 기존 VPC/EC2/S3 계열 리소스 지원을 유지할 수 있으며, 이미 같은 identity로 매칭된 block은 parser가 안전하게 해석할 수 있는 경우 `parameters.values` 갱신 대상이 될 수 있다.
 
