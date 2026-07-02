@@ -165,6 +165,81 @@ test("createPastedNodes clears stale parent area metadata from copied nodes", ()
   assert.equal(pastedNode?.metadata?.awsRegion, "ap-northeast-2");
 });
 
+test("createPastedNodes deep clones nested parameter values", () => {
+  const node = makeResourceNode({
+    id: "security-group-1",
+    resourceName: "web",
+    resourceType: "aws_security_group",
+    values: {
+      tags: {
+        Name: "web"
+      },
+      egress: [
+        {
+          fromPort: 0,
+          toPort: 0,
+          protocol: "-1",
+          cidrBlocks: ["0.0.0.0/0"]
+        }
+      ]
+    }
+  });
+
+  const pastedNode = createPastedNodes([node], [node])[0];
+
+  assert(pastedNode?.parameters);
+  assert.notEqual(pastedNode.parameters.values.tags, node.parameters?.values.tags);
+  assert.notEqual(pastedNode.parameters.values.egress, node.parameters?.values.egress);
+
+  const pastedTags = pastedNode.parameters.values.tags as Record<string, unknown>;
+  const pastedEgress = pastedNode.parameters.values.egress as Array<{ cidrBlocks: string[] }>;
+  pastedTags.Name = "mutated";
+  pastedEgress[0]?.cidrBlocks.splice(0, 1, "10.0.0.0/16");
+
+  assert.deepEqual(node.parameters?.values.tags, { Name: "web" });
+  assert.deepEqual(node.parameters?.values.egress, [
+    {
+      fromPort: 0,
+      toPort: 0,
+      protocol: "-1",
+      cidrBlocks: ["0.0.0.0/0"]
+    }
+  ]);
+});
+
+test("createPastedNodes updates only auto-generated tag names after resource name changes", () => {
+  const generatedTagNode = makeResourceNode({
+    id: "instance-1",
+    resourceName: "web",
+    resourceType: "aws_instance",
+    values: {
+      tags: {
+        Name: "web"
+      }
+    }
+  });
+  const customTagNode = makeResourceNode({
+    id: "instance-2",
+    resourceName: "api",
+    resourceType: "aws_instance",
+    values: {
+      tags: {
+        Name: "Public API"
+      }
+    }
+  });
+
+  const [generatedTagCopy, customTagCopy] = createPastedNodes(
+    [generatedTagNode, customTagNode],
+    [generatedTagNode, customTagNode]
+  );
+
+  assert.equal(generatedTagCopy?.parameters?.resourceName, "web_copy");
+  assert.deepEqual(generatedTagCopy?.parameters?.values.tags, { Name: "web_copy" });
+  assert.equal(customTagCopy?.parameters?.resourceName, "api_copy");
+  assert.deepEqual(customTagCopy?.parameters?.values.tags, { Name: "Public API" });
+});
+
 test("applyNodeParametersUpdateWithResourceLabel updates the label from a changed resource name", () => {
   const node = makeResourceNode({
     id: "instance-1",
@@ -182,6 +257,44 @@ test("applyNodeParametersUpdateWithResourceLabel updates the label from a change
   });
 
   assert.equal(result.label, "api");
+});
+
+test("applyNodeParametersUpdateWithResourceLabel updates only auto-generated tag names", () => {
+  const node = makeResourceNode({
+    id: "instance-1",
+    resourceName: "web",
+    resourceType: "aws_instance",
+    values: {
+      tags: {
+        Name: "web"
+      }
+    }
+  });
+  const parameters = node.parameters;
+
+  assert(parameters);
+
+  const generatedTagResult = applyNodeParametersUpdateWithResourceLabel(node, {
+    ...parameters,
+    resourceName: "api",
+    values: {
+      tags: {
+        Name: "web"
+      }
+    }
+  });
+  const customTagResult = applyNodeParametersUpdateWithResourceLabel(node, {
+    ...parameters,
+    resourceName: "api",
+    values: {
+      tags: {
+        Name: "Public API"
+      }
+    }
+  });
+
+  assert.deepEqual(generatedTagResult.parameters?.values.tags, { Name: "api" });
+  assert.deepEqual(customTagResult.parameters?.values.tags, { Name: "Public API" });
 });
 
 test("applyNodeParametersUpdateWithResourceLabel keeps legacy nodes safe without resourceName", () => {
@@ -254,12 +367,14 @@ function makeResourceNode({
   id,
   metadata,
   resourceName,
-  resourceType
+  resourceType,
+  values
 }: {
   id: string;
   metadata?: DiagramNode["metadata"];
   resourceName: string;
   resourceType: string;
+  values?: Record<string, unknown>;
 }): DiagramNode {
   return {
     id,
@@ -276,7 +391,7 @@ function makeResourceNode({
       resourceType,
       resourceName,
       fileName: "main",
-      values: {}
+      values: values ?? {}
     }
   };
 }
