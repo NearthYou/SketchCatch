@@ -1,4 +1,4 @@
-import type { LlmExplanation, LlmExplanationFallbackReason } from "@sketchcatch/types";
+import type { AiProvider, LlmExplanation, LlmExplanationFallbackReason } from "@sketchcatch/types";
 
 type LlmExplanationPanelProps = {
   readonly explanation: LlmExplanation | undefined;
@@ -62,16 +62,38 @@ export function createLlmExplanationSections(explanation: LlmExplanation): LlmEx
 // fallbackReason을 화면에서 읽기 쉬운 짧은 상태 문구로 바꿉니다.
 export function getLlmExplanationSourceLabel(explanation: LlmExplanation): string {
   if (!explanation.fallbackUsed) {
-    return "OpenAI 설명";
+    return getProviderLabel(explanation.providerMetadata?.provider);
   }
 
   return `기본 설명 · ${getFallbackReasonLabel(explanation.fallbackReason)}`;
+}
+
+function getProviderLabel(provider: AiProvider | undefined): string {
+  switch (provider) {
+    case "bedrock":
+      return "Bedrock 설명";
+    case "amazon_q":
+      return "Amazon Q 설명";
+    case "amazon_transcribe":
+      return "Amazon Transcribe";
+    case "openai":
+      return "OpenAI legacy 설명";
+    case "fallback":
+    case undefined:
+      return "AI 설명";
+  }
 }
 
 function getFallbackReasonLabel(reason: LlmExplanationFallbackReason | undefined): string {
   switch (reason) {
     case "missing_api_key":
       return "API key 없음";
+    case "provider_not_configured":
+      return "provider 설정 없음";
+    case "credit_not_confirmed":
+      return "credit 확인 필요";
+    case "daily_limit_exceeded":
+      return "일일 호출 제한";
     case "timeout":
       return "timeout";
     case "rate_limited":
@@ -87,4 +109,6 @@ function getFallbackReasonLabel(reason: LlmExplanationFallbackReason | undefined
     case undefined:
       return "fallback";
   }
+
+  return "fallback";
 }
