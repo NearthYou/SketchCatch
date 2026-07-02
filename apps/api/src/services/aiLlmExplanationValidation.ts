@@ -28,9 +28,11 @@ type ValidationResult<T> = {
   readonly fallbackUsed: boolean;
 };
 
+type JsonRecord = Record<string, unknown>;
+
 // OpenAI 응답은 field별로 다시 확인해 깨진 부분만 rule 기반 fallback으로 바꿉니다.
 export function validateLlmExplanation(value: LlmExplanation | null, fallback: LlmExplanation): LlmExplanation {
-  const parsed = llmExplanationSchema.safeParse(value);
+  const parsed = llmExplanationSchema.safeParse(normalizeLlmExplanationCandidate(value));
 
   if (!parsed.success) {
     return fallback;
@@ -46,7 +48,13 @@ export function validateLlmExplanation(value: LlmExplanation | null, fallback: L
   const fallbackUsed = summary.fallbackUsed || highlights.fallbackUsed || nextActions.fallbackUsed;
 
   if (!fallbackUsed) {
-    return parsed.data;
+    return {
+      target: parsed.data.target,
+      summary: summary.value,
+      highlights: highlights.value,
+      nextActions: nextActions.value,
+      fallbackUsed: false
+    };
   }
 
   return {
@@ -82,7 +90,7 @@ function validateSummary(value: string, fallbackValue: string): ValidationResult
 
   return {
     value: normalized,
-    fallbackUsed: normalized !== value
+    fallbackUsed: false
   };
 }
 
@@ -102,7 +110,7 @@ function validateTextItems(values: readonly string[], fallbackValues: string[]):
 
   return {
     value: normalized,
-    fallbackUsed: normalized.length !== values.length || normalized.some((value, index) => value !== values[index])
+    fallbackUsed: normalized.length !== values.length
   };
 }
 
@@ -136,4 +144,45 @@ function parseJsonObject(value: string): unknown | null {
       return null;
     }
   }
+}
+
+function normalizeLlmExplanationCandidate(value: unknown): unknown {
+  if (!isJsonRecord(value)) {
+    return value;
+  }
+
+  const target = typeof value.target === "string" ? value.target : undefined;
+  const summary = typeof value.summary === "string" ? value.summary : undefined;
+  const highlights = normalizeTextListCandidate(value.highlights);
+  const nextActions = normalizeTextListCandidate(
+    value.nextActions ?? value.next_actions ?? value.nextSteps ?? value.next_steps
+  );
+
+  if (target === undefined || summary === undefined || highlights.length === 0 || nextActions.length === 0) {
+    return value;
+  }
+
+  return {
+    target,
+    summary,
+    highlights,
+    nextActions,
+    fallbackUsed: false
+  };
+}
+
+function normalizeTextListCandidate(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.filter((item): item is string => typeof item === "string");
+  }
+
+  if (typeof value === "string") {
+    return [value];
+  }
+
+  return [];
+}
+
+function isJsonRecord(value: unknown): value is JsonRecord {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
