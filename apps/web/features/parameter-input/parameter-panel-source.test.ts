@@ -21,6 +21,10 @@ test("ParameterInputPanel styles do not keep advanced picker rules", () => {
   assert.doesNotMatch(stylesSource, /\.advancedSearch\b/);
 });
 
+test("ParameterInputPanel treats list and set nested blocks as repeatable blocks", () => {
+  assert.match(panelSource, /definition\.type === "list" \|\| definition\.type === "set"/);
+});
+
 function readParameterInputFile(fileName: string): string {
   return readFileSync(fileURLToPath(new URL(fileName, import.meta.url)), "utf8");
 }

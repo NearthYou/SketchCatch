@@ -905,7 +905,7 @@ function NestedEditor({
 }) {
   const children = definition.children ?? [];
 
-  if (definition.type === "list") {
+  if (definition.type === "list" || definition.type === "set") {
     const blocks = Array.isArray(value) ? value.map(toRecord) : [];
 
     return (

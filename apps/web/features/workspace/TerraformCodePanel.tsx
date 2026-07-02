@@ -4,6 +4,7 @@ import type {
   AiTerraformErrorExplanationResult,
   AiTerraformPreviewExplanationResult,
   DiagramJson,
+  TerraformDiagramChangeProposal,
   TerraformDiagnostic
 } from "@sketchcatch/types";
 import {
@@ -39,6 +40,10 @@ import {
   type TerraformSaveBanner,
   type TerraformVirtualFile
 } from "./terraform-panel-utils";
+import {
+  applyTerraformSyncProposals,
+  getTerraformSyncProposalId
+} from "./terraform-sync-proposals";
 import type { RequestState } from "./workspace-right-panel.types";
 import styles from "./workspace.module.css";
 
@@ -55,6 +60,12 @@ type TerraformErrorExplanationEntry = {
   readonly explanation: AiTerraformErrorExplanationResult | null;
   readonly message: string;
   readonly state: RequestState;
+};
+
+type PendingTerraformSync = {
+  readonly approvedProposalIds: ReadonlySet<string>;
+  readonly diagramJson: DiagramJson;
+  readonly proposals: readonly TerraformDiagramChangeProposal[];
 };
 
 function createTerraformDiagnosticKey(diagnostic: TerraformDiagnostic | null): string {
@@ -74,6 +85,44 @@ function createTerraformDiagnosticKey(diagnostic: TerraformDiagnostic | null): s
 
 function formatTerraformErrorRawMessage(diagnostic: TerraformDiagnostic): string {
   return `${formatTerraformDiagnosticTitle(diagnostic)}\n${diagnostic.message}`;
+}
+
+function formatTerraformSyncProposalTitle(proposal: TerraformDiagramChangeProposal): string {
+  if (proposal.kind === "create_candidate") {
+    return `생성: ${formatTerraformSyncIdentity(proposal.identity)}`;
+  }
+
+  if (proposal.kind === "delete_candidate") {
+    return `삭제: ${formatTerraformSyncIdentity(proposal.identity)}`;
+  }
+
+  return `이름 변경: ${formatTerraformSyncIdentity(proposal.from)} -> ${proposal.to.resourceName}`;
+}
+
+function formatTerraformSyncProposalDetail(proposal: TerraformDiagramChangeProposal): string {
+  if (proposal.kind === "create_candidate") {
+    return `${proposal.sourceFileName ?? "main.tf"}${proposal.line ? `:${proposal.line}` : ""}`;
+  }
+
+  if (proposal.kind === "delete_candidate") {
+    return proposal.resourceAddress;
+  }
+
+  return `${proposal.resourceAddress} -> ${formatTerraformSyncIdentity(proposal.to)}`;
+}
+
+function formatTerraformSyncIdentity({
+  resourceName,
+  resourceType,
+  terraformBlockType
+}: {
+  readonly resourceName: string;
+  readonly resourceType: string;
+  readonly terraformBlockType: "resource" | "data";
+}): string {
+  return terraformBlockType === "data"
+    ? `data.${resourceType}.${resourceName}`
+    : `${resourceType}.${resourceName}`;
 }
 
 function createTerraformPreviewExplanationScope({
@@ -160,6 +209,7 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
   const [statusMessage, setStatusMessage] = useState("main.tf");
   const [hasLocalEdits, setHasLocalEdits] = useState(false);
   const [saveBanner, setSaveBanner] = useState<TerraformSaveBanner | null>(null);
+  const [pendingTerraformSync, setPendingTerraformSync] = useState<PendingTerraformSync | null>(null);
   const [terraformPreviewExplanation, setTerraformPreviewExplanation] =
     useState<AiTerraformPreviewExplanationResult | null>(null);
   const [terraformPreviewExplanationState, setTerraformPreviewExplanationState] =
@@ -376,6 +426,7 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
         );
         setDiagnostics([]);
         onDiagnosticsChange([]);
+        setPendingTerraformSync(null);
         setHasLocalEdits(false);
         setSaveBanner(null);
         setTerraformPreviewExplanation(null);
@@ -408,7 +459,11 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
 
     const syncResult = await syncTerraformToDiagram({
       diagramJson: context.diagram,
-      terraformCode: combinedTerraformCode
+      terraformCode: combinedTerraformCode,
+      terraformFiles: terraformFiles.map((file) => ({
+        fileName: file.fileName,
+        terraformCode: file.code
+      }))
     });
     setDiagnostics(syncResult.diagnostics);
     onDiagnosticsChange(syncResult.diagnostics);
@@ -417,10 +472,26 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
 
     if (syncError) {
       setSaveBanner(null);
+      setPendingTerraformSync(null);
       setStatusMessage("저장 실패");
       return null;
     }
 
+    if (syncResult.proposals && syncResult.proposals.length > 0) {
+      setPendingTerraformSync({
+        approvedProposalIds: new Set(
+          syncResult.proposals.map((proposal, index) => getTerraformSyncProposalId(proposal, index))
+        ),
+        diagramJson: syncResult.diagramJson,
+        proposals: syncResult.proposals
+      });
+      setSaveBanner({ kind: "dirty" });
+      setStatusMessage("변경 제안 확인 필요");
+      onDirtyChange(true);
+      return null;
+    }
+
+    setPendingTerraformSync(null);
     context.applyDiagramJson(syncResult.diagramJson);
     latestDiagramFingerprintRef.current = toTerraformRefreshFingerprint(syncResult.diagramJson);
     setHasLocalEdits(false);
@@ -436,7 +507,8 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
     combinedTerraformCode,
     context,
     onDiagnosticsChange,
-    onDirtyChange
+    onDirtyChange,
+    terraformFiles
   ]);
 
   const saveCodeToDiagram = useCallback(async (): Promise<boolean> => {
@@ -671,6 +743,7 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
     setTerraformPreviewExplanationState("idle");
     setExplainedTerraformPreviewKey("");
     setTerraformErrorExplanationsByKey({});
+    setPendingTerraformSync(null);
     setStatusMessage("수정 중");
   }
 
@@ -683,6 +756,52 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
 
   function handleSeeMore(): void {
     onOpenIssues();
+  }
+
+  function togglePendingProposal(proposalId: string, checked: boolean): void {
+    setPendingTerraformSync((currentSync) => {
+      if (!currentSync) {
+        return currentSync;
+      }
+
+      const nextProposalIds = new Set(currentSync.approvedProposalIds);
+
+      if (checked) {
+        nextProposalIds.add(proposalId);
+      } else {
+        nextProposalIds.delete(proposalId);
+      }
+
+      return {
+        ...currentSync,
+        approvedProposalIds: nextProposalIds
+      };
+    });
+  }
+
+  function applyPendingTerraformSync(): void {
+    if (!pendingTerraformSync) {
+      return;
+    }
+
+    const nextDiagramJson = applyTerraformSyncProposals(
+      pendingTerraformSync.diagramJson,
+      pendingTerraformSync.proposals,
+      pendingTerraformSync.approvedProposalIds
+    );
+
+    context.applyDiagramJson(nextDiagramJson);
+    latestDiagramFingerprintRef.current = toTerraformRefreshFingerprint(nextDiagramJson);
+    setPendingTerraformSync(null);
+    setHasLocalEdits(false);
+    setSaveBanner(null);
+    setStatusMessage("제안 반영됨");
+    onDirtyChange(false);
+  }
+
+  function clearPendingTerraformSync(): void {
+    setPendingTerraformSync(null);
+    setStatusMessage(hasLocalEdits ? "수정 중" : "제안 무시됨");
   }
 
   async function validateDisplayedCode(): Promise<void> {
@@ -846,6 +965,47 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
             See more
           </button>
         </div>
+      ) : null}
+
+      {pendingTerraformSync ? (
+        <section className={styles.terraformSyncProposalPanel} aria-live="polite">
+          <div className={styles.terraformSyncProposalHeader}>
+            <div>
+              <strong>Terraform 변경 제안</strong>
+              <span>{pendingTerraformSync.proposals.length}개 제안</span>
+            </div>
+            <div className={styles.terraformSyncProposalActions}>
+              <button onClick={applyPendingTerraformSync} type="button">
+                <ClipboardCheck size={14} aria-hidden="true" />
+                선택 반영
+              </button>
+              <button onClick={clearPendingTerraformSync} type="button">
+                무시
+              </button>
+            </div>
+          </div>
+          <ol className={styles.terraformSyncProposalList}>
+            {pendingTerraformSync.proposals.map((proposal, index) => {
+              const proposalId = getTerraformSyncProposalId(proposal, index);
+
+              return (
+                <li key={proposalId}>
+                  <label>
+                    <input
+                      checked={pendingTerraformSync.approvedProposalIds.has(proposalId)}
+                      onChange={(event) => togglePendingProposal(proposalId, event.currentTarget.checked)}
+                      type="checkbox"
+                    />
+                    <span>
+                      <strong>{formatTerraformSyncProposalTitle(proposal)}</strong>
+                      <small>{formatTerraformSyncProposalDetail(proposal)}</small>
+                    </span>
+                  </label>
+                </li>
+              );
+            })}
+          </ol>
+        </section>
       ) : null}
 
       <div className={styles.terraformEditorFrame}>

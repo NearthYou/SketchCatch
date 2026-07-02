@@ -171,12 +171,15 @@ function toNodeTerraformAddress(node: DiagramNode | null): string | null {
   const parameters = node?.parameters;
   const resourceType = parameters?.resourceType?.trim();
   const resourceName = parameters?.resourceName?.trim();
+  const terraformBlockType = parameters?.terraformBlockType === "data" ? "data" : "resource";
 
   if (!resourceType || !resourceName) {
     return null;
   }
 
-  return `${resourceType}.${resourceName}`;
+  return terraformBlockType === "data"
+    ? `data.${resourceType}.${resourceName}`
+    : `${resourceType}.${resourceName}`;
 }
 
 function parseTerraformBlocks(fileName: string, terraformCode: string): TerraformBlockLocation[] {
@@ -217,7 +220,7 @@ function parseTerraformBlocks(fileName: string, terraformCode: string): Terrafor
     const name = headerMatch[3] ?? "";
 
     blocks.push({
-      address: `${terraformType}.${name}`,
+      address: blockType === "data" ? `data.${terraformType}.${name}` : `${terraformType}.${name}`,
       blockType,
       code: terraformCode.slice(startOffset, endOffset),
       endLine: endIndex + 1,

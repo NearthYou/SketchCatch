@@ -65,8 +65,34 @@ data "aws_ami" "ubuntu" {
     }
   ]);
 
+  assert.equal(blocks[0]?.address, "aws_instance.web");
+  assert.equal(blocks[1]?.address, "data.aws_ami.ubuntu");
   assert.equal(findTerraformBlockForNode(blocks, makeNode("resource", "aws_instance", "web"))?.blockType, "resource");
   assert.equal(findTerraformBlockForNode(blocks, makeNode("data", "aws_ami", "ubuntu"))?.blockType, "data");
+});
+
+test("findTerraformBlockForNode keeps resource and data blocks with the same type and name separate", () => {
+  const blocks = parseTerraformFiles([
+    {
+      fileName: "main.tf",
+      code: `resource "aws_ami" "ubuntu" {
+  name = "custom-ubuntu"
+}
+
+data "aws_ami" "ubuntu" {
+  owners = ["099720109477"]
+}`
+    }
+  ]);
+
+  assert.equal(
+    findTerraformBlockForNode(blocks, makeNode("resource", "aws_ami", "ubuntu"))?.address,
+    "aws_ami.ubuntu"
+  );
+  assert.equal(
+    findTerraformBlockForNode(blocks, makeNode("data", "aws_ami", "ubuntu"))?.address,
+    "data.aws_ami.ubuntu"
+  );
 });
 
 test("createTerraformFilesFromGeneratedCode routes generated blocks to node file names", () => {

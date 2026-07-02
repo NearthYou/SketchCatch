@@ -344,6 +344,28 @@ test("terraform artifact preparation marks the terraform panel as loading", () =
   assert.match(terraformPanelSource, /isPreparingTerraformArtifactRef/);
 });
 
+test("terraform sync proposals require explicit approval before mutating the diagram", () => {
+  const proposalBranchIndex = terraformPanelSource.indexOf(
+    "syncResult.proposals && syncResult.proposals.length > 0"
+  );
+  const proposalReturnIndex = terraformPanelSource.indexOf("return null;", proposalBranchIndex);
+  const automaticApplyIndex = terraformPanelSource.indexOf(
+    "context.applyDiagramJson(syncResult.diagramJson)",
+    proposalBranchIndex
+  );
+
+  assert.ok(proposalBranchIndex > -1);
+  assert.ok(proposalReturnIndex > proposalBranchIndex);
+  assert.ok(automaticApplyIndex > proposalReturnIndex);
+  assert.match(terraformPanelSource, /terraformFiles:\s*terraformFiles\.map/);
+  assert.match(terraformPanelSource, /pendingTerraformSync/);
+  assert.match(terraformPanelSource, /getTerraformSyncProposalId/);
+  assert.match(terraformPanelSource, /applyTerraformSyncProposals/);
+  assert.match(terraformPanelSource, /className=\{styles\.terraformSyncProposalPanel\}/);
+  assert.match(stylesSource, /\.terraformSyncProposalPanel\s*\{/);
+  assert.match(stylesSource, /\.terraformSyncProposalList\s*\{/);
+});
+
 function readWorkspaceFile(fileName: string): string {
   return readFileSync(fileURLToPath(new URL(fileName, import.meta.url)), "utf8");
 }
