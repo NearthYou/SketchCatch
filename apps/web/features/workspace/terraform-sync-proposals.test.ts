@@ -142,6 +142,7 @@ test("splitTerraformSyncProposalsByApproval keeps unapproved proposals pending",
       parameters: {
         resourceType: "aws_s3_bucket",
         resourceName: "logs",
+        fileName: "storage.tf",
         values: {}
       }
     },
