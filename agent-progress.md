@@ -15,6 +15,33 @@
 
 ## 세션 레코드
 
+### 2026-07-02 - invalid 파라미터 Terraform Preview 유지 수정
+
+- Goal: 파라미터 값을 변경한 뒤 불완전한 리소스가 `invalid: true`로 표시되어도 Terraform Preview에서 해당 resource block이 사라지지 않게 한다.
+- Root cause:
+  - 파라미터 패널은 값 변경 시 required 값 누락을 감지해 `parameters.invalid = true`를 저장한다.
+  - Terraform Preview 생성기는 `parameters.invalid === true`인 node를 출력에서 제외하고 있었다.
+  - 2단계 skeleton 정책상 `aws_subnet.vpcId`, `aws_instance.ami`처럼 사용자가 나중에 확정해야 하는 값이 있을 수 있으므로, invalid 상태가 Preview block 숨김 조건이 되면 리소스 코드가 사라진다.
+- Completed:
+  - `generateTerraformFromDiagramJson`이 `parameters`가 있는 resource node는 invalid 상태여도 렌더링하도록 수정했다.
+  - invalid 상태는 파라미터 패널/리소스 목록의 경고 상태로 유지하고, Terraform Preview block 제외 조건으로 쓰지 않게 문서를 갱신했다.
+  - 재현 테스트를 추가해 `invalid: true`인 resource node도 Terraform Preview에 남는지 검증했다.
+- Verification run:
+  - `pnpm harness:check` - passed
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/diagram-to-terraform.test.ts` - red before fix, passed after fix
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/diagram-to-terraform.test.ts src/routes/terraform.test.ts` - passed
+  - `pnpm lint` - passed
+  - `pnpm typecheck` - passed
+  - `pnpm build` - passed
+- Evidence recorded:
+  - 재현 실패는 `actual: ""`로 확인했으며, 수정 후 같은 테스트가 `resource "aws_vpc" "invalid"` block을 렌더링했다.
+  - 실제 Terraform apply/destroy, cloud mutation, Git/CI/CD handoff는 실행하지 않았다.
+  - frontend UI에 Terraform 실행 또는 AWS SDK 호출을 추가하지 않았다.
+- Known risks:
+  - 기존 unrelated worktree change remains: `DESIGN.md` 삭제 상태.
+- Next best action:
+  - 브라우저에서 Subnet 또는 EC2 Instance의 파라미터 값을 변경한 뒤 Terraform Preview block이 유지되는지 수동 smoke를 수행한다.
+
 ### 2026-07-02 - 기본 IaC 파라미터 skeleton 자동 생성
 
 - Goal: 캔버스 리소스 추가 시 Terraform Preview가 읽을 수 있는 최소 `parameters.values` skeleton을 자동 생성한다.
