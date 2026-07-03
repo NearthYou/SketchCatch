@@ -426,6 +426,97 @@ test("approveDeploymentPlan rejects risk blocked deployments", async () => {
   assert.equal(repository.approvals.length, 0);
 });
 
+test("approveDeploymentPlan requires acknowledgement for medium and low warnings", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.deployment = createDeploymentRecord(undefined, {
+    planSummary: {
+      ...createPlanSummary(),
+      warnings: [
+        {
+          id: "pre_deployment_check:configuration-review-subnet-1",
+          level: "medium",
+          category: "configuration",
+          source: "pre_deployment_check",
+          code: "UNKNOWN_TERRAFORM_ACTION",
+          message: "Review subnet setting",
+          requiresAcknowledgement: true,
+          blocksApproval: false
+        }
+      ]
+    }
+  });
+
+  await assert.rejects(
+    () =>
+      approveDeploymentPlan(
+        {
+          deploymentId,
+          accessContext: createAccessContext()
+        },
+        repository,
+        {
+          downloadTerraformArtifact: async () => artifactContent,
+          now: () => fixedNow
+        }
+      ),
+    /Deployment warnings must be acknowledged before approval/
+  );
+
+  const deployment = await approveDeploymentPlan(
+    {
+      deploymentId,
+      accessContext: createAccessContext(),
+      acknowledgedWarningIds: ["pre_deployment_check:configuration-review-subnet-1"]
+    },
+    repository,
+    {
+      downloadTerraformArtifact: async () => artifactContent,
+      now: () => fixedNow
+    }
+  );
+
+  assert.equal(deployment.isBlocked, false);
+});
+
+test("approveDeploymentPlan rejects blocking warnings even if blockedBy is missing_approval", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.deployment = createDeploymentRecord(undefined, {
+    planSummary: {
+      ...createPlanSummary(),
+      warnings: [
+        {
+          id: "pre_deployment_check:security-open-ssh-sg-1",
+          level: "high",
+          category: "security",
+          source: "pre_deployment_check",
+          code: "PUBLIC_SSH",
+          message: "Public SSH",
+          requiresAcknowledgement: false,
+          blocksApproval: true
+        }
+      ]
+    }
+  });
+
+  await assert.rejects(
+    () =>
+      approveDeploymentPlan(
+        {
+          deploymentId,
+          accessContext: createAccessContext(),
+          acknowledgedWarningIds: ["pre_deployment_check:security-open-ssh-sg-1"]
+        },
+        repository,
+        {
+          downloadTerraformArtifact: async () => artifactContent,
+          now: () => fixedNow
+        }
+      ),
+    /High risk deployment warnings cannot be approved/
+  );
+  assert.equal(repository.approvals.length, 0);
+});
+
 test("approveDeploymentPlan rejects unsafe Terraform artifacts before approval", async () => {
   const repository = new FakeDeploymentRepository();
 

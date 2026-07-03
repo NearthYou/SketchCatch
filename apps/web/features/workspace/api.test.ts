@@ -1100,6 +1100,51 @@ test("deployment helpers list records, start plan, approve plan, apply, destroy,
   assert.equal(outputs[0]?.name, "instance_id");
 });
 
+test("approveDeploymentPlan sends acknowledged warning ids", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    restoreWindow(originalWindowDescriptor);
+  });
+
+  installAuthSession();
+
+  globalThis.fetch = async (input, init) => {
+    requests.push({ input, init });
+
+    return new Response(
+      JSON.stringify({
+        deployment: createDeploymentPayload({
+          id: "44444444-4444-4444-8444-444444444444",
+          projectId: project.id,
+          approved: true
+        })
+      }),
+      {
+        headers: {
+          "Content-Type": "application/json"
+        },
+        status: 200
+      }
+    );
+  };
+
+  await approveDeploymentPlan("44444444-4444-4444-8444-444444444444", {
+    acknowledgedWarningIds: ["warning-1", "warning-2"]
+  });
+
+  assert.equal(
+    String(requests[0]?.input),
+    "/api/deployments/44444444-4444-4444-8444-444444444444/approve"
+  );
+  assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), {
+    acknowledgedWarningIds: ["warning-1", "warning-2"]
+  });
+});
+
 function createDeploymentPayload(input: {
   id: string;
   projectId: string;

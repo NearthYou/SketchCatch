@@ -81,6 +81,22 @@ test("destroy plan never falls back to the Terraform apply plan action", () => {
   assert.equal(state.shouldShowApprovePlanButton, true);
 });
 
+test("risk blocked deployments do not offer approval action", () => {
+  const state = getDeploymentActionState(
+    createDeployment({
+      blockedBy: "risk_analysis",
+      currentPlanArtifactId: "99999999-9999-4999-8999-999999999999",
+      currentPlanOperation: "apply",
+      isBlocked: true,
+      status: "PENDING"
+    }),
+    "idle"
+  );
+
+  assert.equal(state.shouldShowApprovePlanButton, false);
+  assert.equal(state.canApprovePlan, false);
+});
+
 test("current plan without an operation does not fall back to a Terraform plan rerun", () => {
   const state = getDeploymentActionState(
     createDeployment({
