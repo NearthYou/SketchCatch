@@ -13,6 +13,25 @@
 - Highest priority unfinished harness feature: `HARNESS-007`
 - Current blocker: none
 
+### 2026-07-03 - Security Group area 포함관계 수정
+
+- Goal: Security Group이 area로 표시될 때 AI 생성 다이어그램의 포함관계가 시각적으로 명확하게 보이도록 한다.
+- Completed:
+  - `securityGroupIds`가 있는 리소스를 참조된 Security Group area 아래에 배치하도록 AI diagram 변환을 수정했다.
+  - Security Group area는 보호 대상 리소스가 사용하는 Subnet 아래에 배치되도록 수정했다.
+  - `aws_security_group.security_group.id`, `aws_subnet.subnet.id` 같은 Terraform reference 값을 실제 보드 노드로 해석하도록 보강했다.
+  - parent box가 child node를 실제로 감싸도록 area fitting을 오른쪽/아래뿐 아니라 왼쪽/위쪽으로도 확장하게 수정했다.
+  - workspace adapter 테스트에서 `VPC > Subnet > Security Group > Resource` 포함관계를 검증하도록 갱신했다.
+- Verification run:
+  - `.\apps\web\node_modules\.bin\tsx.CMD apps/web/features/workspace/workspace-ai-diagram-adapter.test.ts` - passed with 6 tests after sandbox spawn EPERM.
+  - `node scripts/check-harness.mjs` - passed.
+  - `.\node_modules\.bin\eslint.CMD apps/web/features/workspace/workspace-ai-diagram-adapter.ts apps/web/features/workspace/workspace-ai-diagram-adapter.test.ts` - passed.
+  - `.\node_modules\.bin\tsc.CMD --noEmit -p apps/web/tsconfig.json` - passed.
+  - `.\apps\web\node_modules\.bin\next.CMD build` - passed after sandbox `.next` unlink EPERM.
+- Known risks:
+  - 현재 shell에서 `pnpm`을 찾을 수 없어 `pnpm harness:check`와 `scripts/init-harness.ps1`은 실패했고, `node scripts/check-harness.mjs`로 하네스 검증을 대체했다.
+  - 기존 unrelated worktree change인 `apps/web/next-env.d.ts`는 그대로 남아 있다.
+
 ### 2026-07-03 - Architecture Draft 화살표 렌더링 수정
 
 - Goal: AI 초안 다이어그램 생성 시 edge/화살표가 보이지 않는 문제를 바로잡는다.

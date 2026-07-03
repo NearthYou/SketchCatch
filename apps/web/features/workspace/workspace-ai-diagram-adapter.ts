@@ -30,6 +30,7 @@ const EDGE_HANDLE_IDS = {
 const AREA_CHILD_PADDING = 48;
 const MAX_AREA_FIT_PASSES = 8;
 const AREA_PARENT_EDGE_LABELS = new Set(["contains", "hosts"]);
+const SECURITY_GROUP_REFERENCE_KEYS = ["securityGroupIds", "vpcSecurityGroupIds", "securityGroupId"] as const;
 const RESOURCE_TO_TERRAFORM_RESOURCE_TYPE: Record<ResourceType, string> = {
   AMI: "aws_ami",
   CLOUDFRONT: "aws_cloudfront_distribution",
@@ -273,6 +274,7 @@ function applyAreaParentMetadata(
 
   return nodes.map((node) => {
     const parentAreaNodeId =
+      findSecurityBoundaryParentAreaNodeId(node, nodeById) ??
       node.metadata?.parentAreaNodeId ??
       findConfigParentAreaNodeId(node, nodeById) ??
       findEdgeParentAreaNodeId(node, nodeById, edges);
@@ -298,7 +300,7 @@ function fitAreaNodesToChildren(nodes: readonly DiagramNode[]): DiagramNode[] {
   for (let pass = 0; pass < MAX_AREA_FIT_PASSES; pass += 1) {
     const nextNodes = fitAreaNodesToDirectChildren(currentNodes);
 
-    if (areNodeSizesEqual(currentNodes, nextNodes)) {
+    if (areNodeBoundsEqual(currentNodes, nextNodes)) {
       return nextNodes;
     }
 
@@ -309,11 +311,16 @@ function fitAreaNodesToChildren(nodes: readonly DiagramNode[]): DiagramNode[] {
 }
 
 // 깊게 중첩된 Region/VPC/AZ/SG/Subnet 박스가 안정될 때 반복 계산을 멈춥니다.
-function areNodeSizesEqual(leftNodes: readonly DiagramNode[], rightNodes: readonly DiagramNode[]): boolean {
+function areNodeBoundsEqual(leftNodes: readonly DiagramNode[], rightNodes: readonly DiagramNode[]): boolean {
   return leftNodes.every((leftNode, index) => {
     const rightNode = rightNodes[index];
 
-    return rightNode?.size.width === leftNode.size.width && rightNode.size.height === leftNode.size.height;
+    return (
+      rightNode?.position.x === leftNode.position.x &&
+      rightNode.position.y === leftNode.position.y &&
+      rightNode.size.width === leftNode.size.width &&
+      rightNode.size.height === leftNode.size.height
+    );
   });
 }
 
@@ -343,49 +350,175 @@ function fitAreaNodesToDirectChildren(nodes: readonly DiagramNode[]): DiagramNod
       return node;
     }
 
-    const requiredSize = getRequiredAreaSize(node, children);
+    const requiredBounds = getRequiredAreaBounds(node, children);
 
-    if (requiredSize.width === node.size.width && requiredSize.height === node.size.height) {
+    if (
+      requiredBounds.position.x === node.position.x &&
+      requiredBounds.position.y === node.position.y &&
+      requiredBounds.size.width === node.size.width &&
+      requiredBounds.size.height === node.size.height
+    ) {
       return node;
     }
 
     return {
       ...node,
-      size: requiredSize
+      position: requiredBounds.position,
+      size: requiredBounds.size
     };
   });
 }
 
-function getRequiredAreaSize(node: DiagramNode, children: readonly DiagramNode[]): DiagramNode["size"] {
+function getRequiredAreaBounds(
+  node: DiagramNode,
+  children: readonly DiagramNode[]
+): Pick<DiagramNode, "position" | "size"> {
+  let left = node.position.x;
+  let top = node.position.y;
   let right = node.position.x + node.size.width;
   let bottom = node.position.y + node.size.height;
 
   for (const child of children) {
+    left = Math.min(left, child.position.x - AREA_CHILD_PADDING);
+    top = Math.min(top, child.position.y - AREA_CHILD_PADDING);
     right = Math.max(right, child.position.x + child.size.width + AREA_CHILD_PADDING);
     bottom = Math.max(bottom, child.position.y + child.size.height + AREA_CHILD_PADDING);
   }
 
   return {
-    width: right - node.position.x,
-    height: bottom - node.position.y
+    position: {
+      x: left,
+      y: top
+    },
+    size: {
+      width: right - left,
+      height: bottom - top
+    }
   };
+}
+
+function findSecurityBoundaryParentAreaNodeId(
+  node: DiagramNode,
+  nodeById: ReadonlyMap<string, DiagramNode>
+): string | undefined {
+  if (isSecurityGroupAreaNode(node)) {
+    return findProtectedSubnetAreaNodeId(node, nodeById);
+  }
+
+  const securityGroupNode = findReferencedSecurityGroupAreaNodes(node, nodeById)[0];
+
+  return securityGroupNode?.id;
+}
+
+function findProtectedSubnetAreaNodeId(
+  securityGroupNode: DiagramNode,
+  nodeById: ReadonlyMap<string, DiagramNode>
+): string | undefined {
+  for (const node of nodeById.values()) {
+    if (node.id === securityGroupNode.id || !referencesSecurityGroup(node, securityGroupNode, nodeById)) {
+      continue;
+    }
+
+    const subnetNode = findConfigAreaNodeByParameter(node, "subnetId", nodeById);
+
+    if (subnetNode && subnetNode.id !== securityGroupNode.id) {
+      return subnetNode.id;
+    }
+  }
+
+  return undefined;
+}
+
+function referencesSecurityGroup(
+  node: DiagramNode,
+  securityGroupNode: DiagramNode,
+  nodeById: ReadonlyMap<string, DiagramNode>
+): boolean {
+  return getSecurityGroupReferenceValues(node).some((referenceValue) => {
+    const referencedNode = findReferencedNode(referenceValue, nodeById);
+
+    return referencedNode?.id === securityGroupNode.id;
+  });
+}
+
+function findReferencedSecurityGroupAreaNodes(
+  node: DiagramNode,
+  nodeById: ReadonlyMap<string, DiagramNode>
+): DiagramNode[] {
+  return getSecurityGroupReferenceValues(node)
+    .map((referenceValue) => findReferencedNode(referenceValue, nodeById))
+    .filter((referencedNode): referencedNode is DiagramNode => {
+      return referencedNode !== undefined && isSecurityGroupAreaNode(referencedNode);
+    });
 }
 
 function findConfigParentAreaNodeId(
   node: DiagramNode,
   nodeById: ReadonlyMap<string, DiagramNode>
 ): string | undefined {
-  const subnetId = getStringParameterValue(node, "subnetId");
-  const subnetNode = subnetId ? nodeById.get(subnetId) : undefined;
+  const subnetNode = findConfigAreaNodeByParameter(node, "subnetId", nodeById);
 
-  if (subnetNode && subnetNode.id !== node.id && isAreaDiagramNode(subnetNode)) {
+  if (subnetNode && subnetNode.id !== node.id) {
     return subnetNode.id;
   }
 
-  const vpcId = getStringParameterValue(node, "vpcId");
-  const vpcNode = vpcId ? nodeById.get(vpcId) : undefined;
+  const vpcNode = findConfigAreaNodeByParameter(node, "vpcId", nodeById);
 
-  return vpcNode && vpcNode.id !== node.id && isAreaDiagramNode(vpcNode) ? vpcNode.id : undefined;
+  return vpcNode && vpcNode.id !== node.id ? vpcNode.id : undefined;
+}
+
+function findConfigAreaNodeByParameter(
+  node: DiagramNode,
+  parameterName: string,
+  nodeById: ReadonlyMap<string, DiagramNode>
+): DiagramNode | undefined {
+  const referenceValue = getStringParameterValue(node, parameterName);
+  const referencedNode = referenceValue ? findReferencedNode(referenceValue, nodeById) : undefined;
+
+  return referencedNode && isAreaDiagramNode(referencedNode) ? referencedNode : undefined;
+}
+
+function findReferencedNode(
+  rawReferenceValue: string,
+  nodeById: ReadonlyMap<string, DiagramNode>
+): DiagramNode | undefined {
+  const referenceValue = normalizeReferenceValue(rawReferenceValue);
+  const directNode = nodeById.get(referenceValue);
+
+  if (directNode) {
+    return directNode;
+  }
+
+  for (const node of nodeById.values()) {
+    if (matchesTerraformNodeReference(referenceValue, node)) {
+      return node;
+    }
+  }
+
+  return undefined;
+}
+
+function matchesTerraformNodeReference(referenceValue: string, node: DiagramNode): boolean {
+  const parameters = node.parameters;
+
+  if (!parameters) {
+    return false;
+  }
+
+  const referenceNames = new Set([parameters.resourceName, node.id]);
+  const references = [...referenceNames].flatMap((resourceName) => {
+    const resourceReference = `${parameters.resourceType}.${resourceName}.id`;
+
+    return parameters.terraformBlockType === "data"
+      ? [resourceReference, `data.${resourceReference}`]
+      : [resourceReference];
+  });
+
+  return references.includes(referenceValue);
+}
+
+function normalizeReferenceValue(value: string): string {
+  return value.trim().replace(/^\$\{(.+)\}$/u, "$1");
 }
 
 function findEdgeParentAreaNodeId(
@@ -416,10 +549,32 @@ function isAreaDiagramNode(node: DiagramNode): boolean {
   return isAreaNode(node);
 }
 
+function isSecurityGroupAreaNode(node: DiagramNode): boolean {
+  return node.kind === "resource" && (node.parameters?.resourceType ?? node.type) === "aws_security_group";
+}
+
 function getStringParameterValue(node: DiagramNode, key: string): string | undefined {
   const value = node.parameters?.values[key];
 
   return typeof value === "string" && value.trim().length > 0 ? value : undefined;
+}
+
+function getSecurityGroupReferenceValues(node: DiagramNode): string[] {
+  return SECURITY_GROUP_REFERENCE_KEYS.flatMap((key) => getStringParameterValues(node, key));
+}
+
+function getStringParameterValues(node: DiagramNode, key: string): string[] {
+  const value = node.parameters?.values[key];
+
+  if (typeof value === "string" && value.trim().length > 0) {
+    return [value];
+  }
+
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.filter(isString).filter((item) => item.trim().length > 0);
 }
 
 function isConvertibleResourceNode(

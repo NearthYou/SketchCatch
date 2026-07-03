@@ -125,3 +125,21 @@ pnpm build
 - `npm exec --package=pnpm@11.8.0 -- pnpm ...` 체크는 npm cache/network 접근이 `ENOTCACHED`로 실패했다.
 - root `turbo build`는 package manager binary를 찾지 못해 실패했지만, 변경 영향이 있는 web build는 직접 통과했다.
 - 기존 unrelated 변경인 `apps/web/next-env.d.ts`는 건드리지 않았다.
+## 2026-07-03 최신 핸드오프 - Security Group area 포함관계 수정
+
+### 현재 검증된 것
+- AI 생성 다이어그램에서 `securityGroupIds`가 있는 EC2/RDS 같은 리소스는 참조된 Security Group area 아래에 배치된다.
+- Security Group area는 보호 대상 리소스가 사용하는 Subnet 아래에 배치된다.
+- `aws_security_group.security_group.id`, `aws_subnet.subnet.id` 같은 Terraform reference도 보드 노드 참조로 해석된다.
+- area box는 오른쪽/아래뿐 아니라 왼쪽/위쪽으로도 확장되어 child node를 실제로 감싼다.
+- `VPC > Subnet > Security Group > Resource` 포함관계가 adapter 테스트로 검증됐다.
+
+### 이번 세션 변경 사항
+- `apps/web/features/workspace/workspace-ai-diagram-adapter.ts`에서 security boundary parent 결정 로직을 추가했다.
+- `apps/web/features/workspace/workspace-ai-diagram-adapter.ts`에서 Terraform reference 기반 parent lookup을 추가했다.
+- `apps/web/features/workspace/workspace-ai-diagram-adapter.ts`에서 area fitting을 bounds 기반으로 바꿨다.
+- `apps/web/features/workspace/workspace-ai-diagram-adapter.test.ts`에서 SG containment 기대값과 실제 containment assertion을 추가했다.
+
+### 아직 주의할 점
+- 현재 shell에서 `pnpm`이 없어 `pnpm harness:check`와 `scripts/init-harness.ps1`은 실패했다. `node scripts/check-harness.mjs`, lint, typecheck, web build는 통과했다.
+- 기존 unrelated 변경인 `apps/web/next-env.d.ts`는 건드리지 않았다.

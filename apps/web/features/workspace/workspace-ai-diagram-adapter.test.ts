@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { ArchitectureJson, DiagramJson } from "@sketchcatch/types";
+import type { ArchitectureJson, DiagramJson, DiagramNode } from "@sketchcatch/types";
 import {
   convertArchitectureJsonToDiagramJson,
   convertDiagramJsonToArchitectureJson
@@ -176,10 +176,15 @@ test("convertArchitectureJsonToDiagramJson marks VPC and Subnet containment for 
     [
       { id: "vpc-main", parentAreaNodeId: undefined },
       { id: "subnet-app", parentAreaNodeId: "vpc-main" },
-      { id: "sg-app", parentAreaNodeId: "vpc-main" },
-      { id: "ec2-api", parentAreaNodeId: "subnet-app" }
+      { id: "sg-app", parentAreaNodeId: "subnet-app" },
+      { id: "ec2-api", parentAreaNodeId: "sg-app" }
     ]
   );
+
+  const nodeById = new Map(diagramJson.nodes.map((node) => [node.id, node]));
+  assertContainsNode(nodeById.get("vpc-main"), nodeById.get("subnet-app"));
+  assertContainsNode(nodeById.get("subnet-app"), nodeById.get("sg-app"));
+  assertContainsNode(nodeById.get("sg-app"), nodeById.get("ec2-api"));
 });
 
 test("convertArchitectureJsonToDiagramJson maps server and storage draft resources to Terraform nodes", () => {
@@ -375,7 +380,6 @@ test("convertArchitectureJsonToDiagramJson lays out server and storage draft as 
       id: node.id,
       kind: node.kind,
       parentAreaNodeId: node.metadata?.parentAreaNodeId,
-      position: node.position,
       type: node.type
     })),
     [
@@ -383,77 +387,66 @@ test("convertArchitectureJsonToDiagramJson lays out server and storage draft as 
         id: "server-storage-region",
         kind: "design",
         parentAreaNodeId: undefined,
-        position: { x: 40, y: 70 },
         type: "design_region"
       },
       {
         id: "server-storage-az",
         kind: "design",
         parentAreaNodeId: "vpc",
-        position: { x: 155, y: 430 },
         type: "design_az"
       },
       {
         id: "vpc",
         kind: "resource",
         parentAreaNodeId: "server-storage-region",
-        position: { x: 100, y: 300 },
         type: "aws_vpc"
       },
       {
         id: "subnet",
         kind: "resource",
         parentAreaNodeId: "server-storage-az",
-        position: { x: 245, y: 650 },
         type: "aws_subnet"
       },
       {
         id: "security-group",
         kind: "resource",
-        parentAreaNodeId: "server-storage-az",
-        position: { x: 200, y: 520 },
+        parentAreaNodeId: "subnet",
         type: "aws_security_group"
       },
       {
         id: "ec2-instance",
         kind: "resource",
-        parentAreaNodeId: "subnet",
-        position: { x: 330, y: 765 },
+        parentAreaNodeId: "security-group",
         type: "aws_instance"
       },
       {
         id: "internet-gateway",
         kind: "resource",
         parentAreaNodeId: "vpc",
-        position: { x: 590, y: 365 },
         type: "aws_internet_gateway"
       },
       {
         id: "route-table-association",
         kind: "resource",
         parentAreaNodeId: "vpc",
-        position: { x: 700, y: 620 },
         type: "aws_route_table_association"
       },
       {
         id: "route-table",
         kind: "resource",
         parentAreaNodeId: "vpc",
-        position: { x: 940, y: 610 },
         type: "aws_route_table"
       },
       {
         id: "ami",
         kind: "resource",
         parentAreaNodeId: "server-storage-region",
-        position: { x: 120, y: 130 },
         type: "aws_ami"
       },
       {
         id: "s3-bucket",
         kind: "resource",
         parentAreaNodeId: "server-storage-region",
-        position: { x: 950, y: 130 },
         type: "aws_s3_bucket"
       }
     ]
@@ -463,12 +456,15 @@ test("convertArchitectureJsonToDiagramJson lays out server and storage draft as 
   const regionNode = nodeById.get("server-storage-region");
   const vpcNode = nodeById.get("vpc");
   const azNode = nodeById.get("server-storage-az");
-  assert.equal(regionNode?.size.width, 1160);
-  assert.equal(regionNode?.size.height, 1080);
-  assert.equal(vpcNode?.size.width, 1000);
-  assert.equal(vpcNode?.size.height, 798);
-  assert.equal(azNode?.size.width, 780);
-  assert.equal(azNode?.size.height, 620);
+  const subnetNode = nodeById.get("subnet");
+  const securityGroupNode = nodeById.get("security-group");
+  const instanceNode = nodeById.get("ec2-instance");
+
+  assertContainsNode(regionNode, vpcNode);
+  assertContainsNode(vpcNode, azNode);
+  assertContainsNode(azNode, subnetNode);
+  assertContainsNode(subnetNode, securityGroupNode);
+  assertContainsNode(securityGroupNode, instanceNode);
 });
 
 test("convertDiagramJsonToArchitectureJson keeps only valid resource nodes and connected edges", () => {
@@ -607,4 +603,19 @@ function makeDiagramNode(
     zIndex: node.zIndex ?? 1,
     ...(node.parameters !== undefined ? { parameters: node.parameters } : {})
   };
+}
+
+function assertContainsNode(parent: DiagramNode | undefined, child: DiagramNode | undefined): void {
+  assert.ok(parent, "Expected parent node to exist");
+  assert.ok(child, "Expected child node to exist");
+  assert.ok(child.position.x >= parent.position.x, `${parent.id} should contain ${child.id} on the left edge`);
+  assert.ok(child.position.y >= parent.position.y, `${parent.id} should contain ${child.id} on the top edge`);
+  assert.ok(
+    child.position.x + child.size.width <= parent.position.x + parent.size.width,
+    `${parent.id} should contain ${child.id} on the right edge`
+  );
+  assert.ok(
+    child.position.y + child.size.height <= parent.position.y + parent.size.height,
+    `${parent.id} should contain ${child.id} on the bottom edge`
+  );
 }
