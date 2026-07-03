@@ -49,6 +49,11 @@ const architectureDraftResponseSchema = z.object({
   })
 });
 
+const apiErrorResponseSchema = z.object({
+  error: z.string(),
+  message: z.string()
+});
+
 const preDeploymentAnalysisResponseSchema = z.object({
   summary: z.string(),
   totalMonthlyEstimate: z.object({
@@ -311,10 +316,6 @@ test("POST /api/ai/architecture-draft returns scenario scores and unsupported su
   assert.ok(
     unsupportedBody.metadata.guardrailWarnings?.some((warning) => warning.code === "selection_overridden_by_prompt")
   );
-  assert.equal(
-    unsupportedBody.metadata.guardrailWarnings?.some((warning) => warning.code === "ambiguous_prompt_fallback") ?? false,
-    false
-  );
 
   const partialResponse = await app.inject({
     method: "POST",
@@ -384,7 +385,7 @@ test("POST /api/ai/architecture-draft understands beginner-friendly prompt wordi
   await app.close();
 });
 
-test("POST /api/ai/architecture-draft uses helper choices only for ambiguous prompts", async () => {
+test("POST /api/ai/architecture-draft rejects ambiguous prompts instead of creating a fallback draft", async () => {
   const app = buildApp();
 
   const helperChoiceResponse = await app.inject({
@@ -399,16 +400,13 @@ test("POST /api/ai/architecture-draft uses helper choices only for ambiguous pro
     }
   });
 
-  assert.equal(helperChoiceResponse.statusCode, 200);
+  assert.equal(helperChoiceResponse.statusCode, 400);
 
-  const helperChoiceBody = architectureDraftResponseSchema.parse(helperChoiceResponse.json());
+  const helperChoiceBody = apiErrorResponseSchema.parse(helperChoiceResponse.json());
 
-  assert.equal(helperChoiceBody.metadata.selectedScenario, "static_site");
-  assert.equal(
-    helperChoiceBody.metadata.guardrailWarnings?.some((warning) => warning.code === "ambiguous_prompt_fallback") ??
-      false,
-    false
-  );
+  assert.equal(helperChoiceBody.error, "bad_request");
+  assert.match(helperChoiceBody.message, /명확한 아키텍처 단서/);
+  assert.match(helperChoiceBody.message, /웹사이트|파일 업로드|로그인/);
 
   const fallbackResponse = await app.inject({
     method: "POST",
@@ -422,12 +420,12 @@ test("POST /api/ai/architecture-draft uses helper choices only for ambiguous pro
     }
   });
 
-  assert.equal(fallbackResponse.statusCode, 200);
+  assert.equal(fallbackResponse.statusCode, 400);
 
-  const fallbackBody = architectureDraftResponseSchema.parse(fallbackResponse.json());
+  const fallbackBody = apiErrorResponseSchema.parse(fallbackResponse.json());
 
-  assert.equal(fallbackBody.metadata.selectedScenario, "api_server");
-  assert.ok(fallbackBody.metadata.guardrailWarnings?.some((warning) => warning.code === "ambiguous_prompt_fallback"));
+  assert.equal(fallbackBody.error, "bad_request");
+  assert.match(fallbackBody.message, /명확한 아키텍처 단서/);
 
   await app.close();
 });

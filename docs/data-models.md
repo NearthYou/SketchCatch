@@ -791,6 +791,8 @@ type ArchitectureDraftScenarioHint = "auto" | ArchitectureScenario;
 
 `ArchitectureDraft`가 자동 생성하는 node type은 `ResourceType` 중 `UNKNOWN`을 제외한 지원 목록으로 제한한다. 현재 지원 목록은 `VPC`, `SUBNET`, `INTERNET_GATEWAY`, `ROUTE_TABLE`, `ROUTE_TABLE_ASSOCIATION`, `EC2`, `RDS`, `S3`, `SECURITY_GROUP`, `CLOUDFRONT`, `LAMBDA`, `AMI`다.
 
+Requirement Prompt에서 지원 가능한 아키텍처 단서나 대체 가능한 요구사항을 찾지 못하면 `ArchitectureDraft`를 생성하지 않고 `400 bad_request`로 되돌린다. 보조 선택값은 자연어를 보완할 수 있지만, 명확한 자연어 단서 없이 기본 초안을 강제로 만들지 않는다.
+
 `metadata.guardrailWarnings`는 AI 초안 카드 하단에 표시할 경고 계약이다.
 
 ```ts
@@ -798,12 +800,10 @@ type ArchitectureGuardrailWarningCode =
   | "unsupported_resource_omitted"
   | "unsupported_requirement_substituted"
   | "selection_overridden_by_prompt"
-  | "ambiguous_prompt_fallback"
   | "partial_generation"
   | "guardrail_adjusted_config"
   | "board_replacement_required"
   | "low_budget_rds_cost"
-  | "unsupported_requirement"
   | "scenario_conflict";
 ```
 

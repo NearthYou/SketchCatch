@@ -13,6 +13,30 @@
 - Highest priority unfinished harness feature: `HARNESS-007`
 - Current blocker: none
 
+### 2026-07-03 - 애매한 자연어 요구사항 초안 생성 차단
+
+- Goal: 자연어 요구사항에서 명확한 아키텍처 단서를 찾지 못하면 기본 API 서버 초안으로 fallback하지 않고 초안 생성을 막는다.
+- Completed:
+  - `resolveScenario`의 ambiguous prompt fallback 분기를 제거하고 `400 bad_request` 오류를 반환하도록 바꿨다.
+  - `scenarioHint`만 선택되어 있어도 자연어 단서가 없으면 초안을 생성하지 않도록 했다.
+  - `ambiguous_prompt_fallback`, `unsupported_requirement` guardrail code를 shared type, Web warning label, canonical docs에서 제거했다.
+  - `docs/gg`의 오래된 fallback 관련 참고 문구를 현행 정책에 맞춰 정리했다.
+  - API 테스트를 애매한 prompt rejection 기준으로 갱신했다.
+- Verification run:
+  - `.\apps\web\node_modules\.bin\tsx.CMD apps/web/features/workspace/workspace-ai-guardrail-warning.test.ts` - passed with 4 tests.
+  - `.\apps\api\node_modules\.bin\tsx.CMD apps/api/src/routes/ai.test.ts` - passed with 26 tests after sandbox spawn EPERM.
+  - `.\node_modules\.bin\eslint.CMD apps/api/src/services/aiArchitectureScenarioResolution.ts apps/api/src/routes/ai.test.ts apps/web/features/workspace/WorkspaceAiPanelPieces.tsx apps/web/features/workspace/workspace-ai-guardrail-warning.test.ts packages/types/src/index.ts` - passed after removing one unused argument warning.
+  - `.\node_modules\.bin\tsc.CMD --noEmit -p apps/api/tsconfig.json` - passed.
+  - `.\node_modules\.bin\tsc.CMD --noEmit -p apps/web/tsconfig.json` - passed.
+  - `.\node_modules\.bin\tsc.CMD --noEmit -p packages/types/tsconfig.json` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm lint` - passed after non-escalated cache-only `ENOTCACHED`.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm typecheck` - passed after non-escalated cache-only `ENOTCACHED`.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm build` - passed.
+  - `node scripts/check-harness.mjs` - passed.
+  - `git diff --check` - passed with line-ending warnings only.
+- Known risks:
+  - `next build` temporarily changed `apps/web/next-env.d.ts`; the generated route type path was restored and left out of the final diff.
+
 ### 2026-07-03 - 초보자용 요구사항 프롬프트 가이드 추가
 
 - Goal: 사용자가 AWS/EC2/S3 같은 기술 용어를 몰라도 "웹사이트 하나 배포하고 싶어"처럼 요구사항을 시작할 수 있게 Workspace AI 입력 UI를 보강한다.

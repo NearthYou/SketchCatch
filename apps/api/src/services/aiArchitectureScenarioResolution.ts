@@ -12,6 +12,16 @@ export type ScenarioResolution = {
   readonly guardrailWarnings: ArchitectureGuardrailWarning[];
 };
 
+export class AmbiguousArchitecturePromptError extends Error {
+  readonly statusCode = 400;
+
+  constructor() {
+    super(
+      "자연어 요구사항에서 명확한 아키텍처 단서를 찾지 못해 초안을 생성하지 않았습니다. 예: 웹사이트 하나 배포하고 싶어, 파일 업로드 페이지가 필요해, 로그인 있는 작은 웹서비스가 필요해"
+    );
+  }
+}
+
 type PromptScenarioKeywordRule = {
   readonly scenario: ArchitectureScenario;
   readonly keywords: readonly string[];
@@ -159,7 +169,7 @@ export function resolveScenario(request: CreateArchitectureDraftRequest): Scenar
   const hasPromptSignal = hasPromptScenarioSignal(scenarioScores);
   const unsupportedRequirementMatches = findUnsupportedRequirementMatches(request.prompt);
   const substituteScenario = selectSubstituteScenario(unsupportedRequirementMatches);
-  const unsupportedWarnings = createUnsupportedRequirementWarnings(unsupportedRequirementMatches, hasPromptSignal);
+  const unsupportedWarnings = createUnsupportedRequirementWarnings(unsupportedRequirementMatches);
 
   if (hasPromptSignal) {
     return {
@@ -184,25 +194,7 @@ export function resolveScenario(request: CreateArchitectureDraftRequest): Scenar
     };
   }
 
-  if (request.scenarioHint !== "auto") {
-    return {
-      selectedScenario: request.scenarioHint,
-      scenarioScores,
-      guardrailWarnings: unsupportedWarnings
-    };
-  }
-
-  return {
-    selectedScenario: "api_server",
-    scenarioScores,
-    guardrailWarnings: [
-      ...unsupportedWarnings,
-      {
-        code: "ambiguous_prompt_fallback",
-        message: "요구사항에서 명확한 아키텍처 단서를 찾지 못해 기본 API 서버 초안으로 시작합니다."
-      }
-    ]
-  };
+  throw new AmbiguousArchitecturePromptError();
 }
 
 function scorePromptScenarios(prompt: string): ArchitectureScenarioScore[] {
@@ -293,8 +285,7 @@ function selectSubstituteScenario(
 }
 
 function createUnsupportedRequirementWarnings(
-  unsupportedRequirementMatches: readonly UnsupportedRequirementRule[],
-  hasPromptSignal: boolean
+  unsupportedRequirementMatches: readonly UnsupportedRequirementRule[]
 ): ArchitectureGuardrailWarning[] {
   if (unsupportedRequirementMatches.length === 0) {
     return [];
@@ -322,13 +313,6 @@ function createUnsupportedRequirementWarnings(
     warnings.push({
       code: "unsupported_resource_omitted",
       message: `현재 자동 생성 범위 밖의 요구사항(${omittedText})은 초안에서 제외했습니다. 지원되는 리소스만 보드에 그립니다.`
-    });
-  }
-
-  if (!hasPromptSignal && substitutedRequirements.length === 0) {
-    warnings.push({
-      code: "unsupported_requirement",
-      message: "지원 범위 밖의 요구사항만 감지되어 기본 API 서버 초안으로 시작합니다."
     });
   }
 
