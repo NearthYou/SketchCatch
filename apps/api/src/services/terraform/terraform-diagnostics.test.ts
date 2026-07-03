@@ -1,6 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createTerraformDiagnostics } from "./terraform-diagnostics.js";
+import {
+  createFirstBlockingTerraformDiagnostic,
+  createTerraformDiagnostics
+} from "./terraform-diagnostics.js";
 
 test("returns no errors for generated Terraform code", () => {
   const diagnostics = createTerraformDiagnostics(`resource "aws_vpc" "main" {
@@ -38,6 +41,18 @@ test("detects unbalanced braces", () => {
 
   assert.equal(diagnostics[0]?.code, "terraform.unbalanced");
   assert.equal(diagnostics[0]?.severity, "error");
+});
+
+test("returns the first blocking diagnostic in source order", () => {
+  const diagnostic = createFirstBlockingTerraformDiagnostic(`resource "aws_vpc" "main" {
+  cidr_block = "10.0.0.0/16"
+}
+
+resource "aws_subnet" {
+}`);
+
+  assert.equal(diagnostic?.code, "terraform.block_header");
+  assert.equal(diagnostic?.line, 5);
 });
 
 test("detects invalid block headers", () => {

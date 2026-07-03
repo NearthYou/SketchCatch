@@ -4,6 +4,7 @@ import type {
   ApiErrorResponse,
   TerraformGenerateResponse,
   TerraformSyncToDiagramResponse,
+  TerraformValidateRequest,
   TerraformValidateResponse
 } from "@sketchcatch/types";
 import { buildApp } from "../app.js";
@@ -230,6 +231,113 @@ test("POST /api/terraform/generate maps Terraform render errors to 400 responses
 
   assert.equal(response.statusCode, 400);
   assertErrorResponse(response.json() as ApiErrorResponse, "bad_request");
+
+  await app.close();
+});
+
+test("POST /api/terraform/validate forwards full validation options to the validation service", async () => {
+  const fakeDb = new AuthOnlyFakeDb({
+    users: [
+      {
+        id: ACTIVE_USER_ID,
+        deletedAt: null
+      }
+    ]
+  });
+  let capturedRequest: TerraformValidateRequest | null = null;
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client,
+    validateTerraformPreviewCode: async (input) => {
+      capturedRequest = input;
+      return {
+        diagnostics: [],
+        mode: "full",
+        stage: "cli_validate",
+        status: "passed"
+      };
+    }
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/terraform/validate",
+    headers: await authHeaders(ACTIVE_USER_ID),
+    payload: {
+      mode: "full",
+      projectId: "project-1",
+      terraformCode: "",
+      terraformFiles: [
+        {
+          fileName: "main.tf",
+          terraformCode: `resource "aws_vpc" "main" {}`
+        }
+      ]
+    }
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(response.json() as TerraformValidateResponse, {
+    diagnostics: [],
+    mode: "full",
+    stage: "cli_validate",
+    status: "passed"
+  });
+  assert.deepEqual(capturedRequest, {
+    mode: "full",
+    projectId: "project-1",
+    terraformCode: "",
+    terraformFiles: [
+      {
+        fileName: "main.tf",
+        terraformCode: `resource "aws_vpc" "main" {}`
+      }
+    ]
+  });
+
+  await app.close();
+});
+
+test("POST /api/terraform/validate/prepare warms Terraform validation workspace", async () => {
+  const fakeDb = new AuthOnlyFakeDb({
+    users: [
+      {
+        id: ACTIVE_USER_ID,
+        deletedAt: null
+      }
+    ]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client,
+    prepareTerraformValidationWorkspace: async (input) => {
+      assert.deepEqual(input, {
+        projectId: "project-1",
+        provider: "aws"
+      });
+
+      return {
+        diagnostics: [],
+        stage: "cli_prepare",
+        status: "passed"
+      };
+    }
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/terraform/validate/prepare",
+    headers: await authHeaders(ACTIVE_USER_ID),
+    payload: {
+      projectId: "project-1",
+      provider: "aws"
+    }
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(response.json(), {
+    diagnostics: [],
+    stage: "cli_prepare",
+    status: "passed"
+  });
 
   await app.close();
 });

@@ -25,6 +25,30 @@ export function createTerraformDiagnostics(terraformCode: string): TerraformDiag
   ];
 }
 
+export function createFirstBlockingTerraformDiagnostic(
+  terraformCode: string
+): TerraformDiagnostic | null {
+  return getFirstDiagnosticBySourceOrder(
+    createTerraformDiagnostics(terraformCode).filter(
+      (diagnostic) => diagnostic.severity === "error"
+    )
+  );
+}
+
+export function getFirstDiagnosticBySourceOrder(
+  diagnostics: readonly TerraformDiagnostic[]
+): TerraformDiagnostic | null {
+  const [firstDiagnostic] = [...diagnostics].sort(
+    (left, right) => getDiagnosticSortLine(left) - getDiagnosticSortLine(right)
+  );
+
+  return firstDiagnostic ?? null;
+}
+
+function getDiagnosticSortLine(diagnostic: TerraformDiagnostic): number {
+  return diagnostic.line ?? Number.MAX_SAFE_INTEGER;
+}
+
 function checkBalancedTokens(terraformCode: string): TerraformDiagnostic[] {
   const diagnostics: TerraformDiagnostic[] = [];
   const stack: Array<{ token: "{" | "["; line: number }> = [];

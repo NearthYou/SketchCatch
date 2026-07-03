@@ -10,7 +10,10 @@ import { registerAuthRoutes } from "./routes/auth.js";
 import { registerOAuthRoutes } from "./routes/oauth.js";
 import { registerProjectRoutes, type ProjectAssetStorage } from "./routes/projects.js";
 import { registerDeploymentRoutes } from "./routes/deployments.js";
-import { registerTerraformRoutes } from "./routes/terraform.js";
+import {
+  registerTerraformRoutes,
+  type TerraformRouteOptions
+} from "./routes/terraform.js";
 import { registerAwsConnectionRoutes } from "./routes/aws-connections.js";
 import type { ProjectDeletionStorage } from "./projects/project-deletion-service.js";
 import {
@@ -31,6 +34,8 @@ export type BuildAppOptions = {
   passwordResetRequestIpRateLimiter?: RateLimiter;
   projectAssetStorage?: ProjectAssetStorage;
   projectDeletionStorage?: ProjectDeletionStorage;
+  validateTerraformPreviewCode?: TerraformRouteOptions["validateTerraformPreviewCode"];
+  prepareTerraformValidationWorkspace?: TerraformRouteOptions["prepareTerraformValidationWorkspace"];
 };
 
 // 테스트와 서버가 같은 앱을 쓰되, LLM 호출 계층은 옵션으로만 주입합니다.
@@ -137,10 +142,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     prefix: "/api",
     getDatabaseClient: getAppDatabaseClient
   });
-  app.register(registerTerraformRoutes, {
-    prefix: "/api",
-    getDatabaseClient: getAppDatabaseClient
-  });
+  app.register(registerTerraformRoutes, createTerraformRouteOptions(options, getAppDatabaseClient));
   app.register(registerAwsConnectionRoutes, {
     prefix: "/api",
     getDatabaseClient: getAppDatabaseClient
@@ -158,6 +160,22 @@ function createAiRouteOptions(options: BuildAppOptions): { readonly prefix: "/ap
   return {
     prefix: "/api",
     createLlmExplanation: options.createLlmExplanation
+  };
+}
+
+function createTerraformRouteOptions(
+  options: BuildAppOptions,
+  getDatabaseClient: () => DatabaseClient
+): TerraformRouteOptions & { readonly prefix: "/api" } {
+  return {
+    prefix: "/api",
+    getDatabaseClient,
+    ...(options.validateTerraformPreviewCode !== undefined
+      ? { validateTerraformPreviewCode: options.validateTerraformPreviewCode }
+      : {}),
+    ...(options.prepareTerraformValidationWorkspace !== undefined
+      ? { prepareTerraformValidationWorkspace: options.prepareTerraformValidationWorkspace }
+      : {})
   };
 }
 
