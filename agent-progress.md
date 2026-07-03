@@ -15,6 +15,89 @@
 
 ## 세션 레코드
 
+### 2026-07-03 - Terraform Issues 탭 접근성과 저장 모달 메시지 정리
+
+- Goal: Terraform diagnostics가 떠 있는 상태에서는 Issues 탭을 바로 열 수 있게 하고, `저장하고 나가기` 클릭 직후 곧 사라질 저장 중 문구가 사용자 시선을 끌지 않게 한다.
+- Root cause:
+  - document-level Terraform leave guard가 Terraform editor 영역 밖의 Issues 탭 클릭을 먼저 가로채 저장 확인 모달을 띄웠다.
+  - `createTerraformLeaveSaveStartFeedback()`가 `Terraform 변경사항을 저장하는 중입니다.` 메시지를 채워, 저장 성공 또는 diagnostics reveal로 모달이 곧 닫히는 흐름에서도 짧은 status 문구가 렌더링됐다.
+- Completed:
+  - diagnostics가 1개 이상 있을 때 Issues 탭/shortcut 버튼에는 `data-terraform-issues-navigation` 예외를 적용해 dirty Terraform 상태에서도 바로 열리게 했다.
+  - `requestView("issues")`와 collapsed Issues shortcut도 diagnostics가 있으면 leave guard 없이 Issues 탭을 열게 했다.
+  - 저장 시작 feedback 메시지를 빈 문자열로 바꿔 모달에는 순간적인 저장 중 status 문구가 뜨지 않고, 버튼의 `저장 중` disabled 상태만 남게 했다.
+- Verification run:
+  - Red before fix: `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/terraform-leave-save-state.test.ts features/workspace/workspace-right-panel-layout.test.ts` - failed because saving feedback still had a message and Issues navigation had no leave guard exception.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/terraform-leave-save-state.test.ts features/workspace/workspace-right-panel-layout.test.ts` - passed.
+  - `pnpm --filter @sketchcatch/web test` - passed, 312 tests.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `pnpm build` - passed.
+  - `git diff --check` - passed.
+- Evidence recorded:
+  - 실제 Terraform apply/destroy, cloud mutation, Git/CI/CD handoff는 실행하지 않았다.
+  - frontend UI에 Terraform CLI 실행 또는 AWS SDK 호출을 추가하지 않았다.
+- Known risks:
+  - 브라우저 수동 smoke는 수행하지 않았다. 자동/단위/타입/빌드 검증으로 확인했다.
+  - 기존 unrelated worktree changes remain: `DESIGN.md` 삭제 상태, `apps/web/next-env.d.ts` 변경 상태.
+- Next best action:
+  - 브라우저에서 Terraform diagnostics가 있는 상태로 Issues 탭을 클릭했을 때 저장 확인 모달 없이 Issues 탭이 열리는지 smoke한다.
+
+### 2026-07-03 - Terraform leave save 실패 모달 UX 수정
+
+- Goal: Terraform 변경사항 모달에서 `저장하고 나가기`가 validation diagnostics 때문에 실패했을 때, 모달이 계속 패널을 가려 사용자가 오류를 확인하지 못하는 UX를 수정한다.
+- Root cause:
+  - `resolveTerraformLeaveSaveCompletion(false)`가 저장 실패 원인을 구분하지 않고 항상 모달을 열린 상태로 유지했다.
+  - 부모 패널은 Terraform editor가 방금 전달한 diagnostics를 즉시 참조하지 않아, 실패가 패널에서 확인 가능한 오류인지 판단하는 상태가 없었다.
+- Completed:
+  - 저장 실패가 Terraform error diagnostics로 설명되는 경우 `TerraformLeaveSaveFeedback`이 모달 유지 대신 Terraform 패널 노출을 지시하도록 상태 모델을 확장했다.
+  - `WorkspaceRightPanel`이 최신 Terraform diagnostics를 ref로 보관해 external save 완료 콜백에서 React state 반영 타이밍과 무관하게 blocking error를 판단하게 했다.
+  - diagnostics 때문에 저장이 막힌 경우 pending 이동/닫기 action을 취소하고, 오른쪽 패널을 열어 Terraform 탭을 보여준 뒤 leave dialog를 닫게 했다.
+  - diagnostics가 없는 저장 실패는 기존처럼 모달 안에 실패 메시지를 남기게 했다.
+- Verification run:
+  - Red before fix: `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/terraform-leave-save-state.test.ts` - failed because leave save feedback had no `shouldRevealTerraformPanel` path.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/terraform-leave-save-state.test.ts features/workspace/workspace-right-panel-layout.test.ts` - passed.
+  - `pnpm --filter @sketchcatch/web typecheck` - passed.
+  - `pnpm --filter @sketchcatch/web test` - passed, 311 tests.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `pnpm build` - passed.
+  - `pnpm harness:check` - passed.
+  - `git diff --check` - passed.
+- Evidence recorded:
+  - 실제 Terraform apply/destroy, cloud mutation, Git/CI/CD handoff는 실행하지 않았다.
+  - frontend UI에 Terraform CLI 실행 또는 AWS SDK 호출을 추가하지 않았다.
+- Known risks:
+  - 브라우저 수동 smoke는 수행하지 않았다. 자동/단위/타입/빌드 검증으로 확인했다.
+  - 기존 unrelated worktree changes remain: `DESIGN.md` 삭제 상태, `apps/web/next-env.d.ts` 변경 상태.
+- Next best action:
+  - 브라우저에서 Terraform syntax error를 만든 뒤 `저장하고 나가기`를 눌렀을 때 모달이 닫히고 Terraform 탭의 물결 오류 표시가 바로 보이는지 smoke한다.
+
+### 2026-07-03 - Terraform 에디터 syntax color와 물결 오류 표시
+
+- Goal: Terraform 코드 에디터를 VS Code처럼 syntax color가 있는 편집면으로 만들고, validation error를 직선 marker가 아니라 빨간 물결 밑줄로 표시한다.
+- Completed:
+  - Terraform HCL tokenizing helper를 추가해 `resource`, identifier/reference, string, brace, operator, comment를 색상별 token으로 나눴다.
+  - 기존 `textarea` 앞에 read-only syntax highlight layer를 깔고 textarea 글자는 투명 처리해 입력 가능성과 색상 표시를 동시에 유지했다.
+  - diagnostic error line은 highlight layer의 해당 line에 `text-decoration-style: wavy` 물결 밑줄을 적용하게 변경했다.
+  - 기존 2px 직선 red line marker 렌더링을 제거하고, line number error 강조는 유지했다.
+  - Playwright로 `/workspace` Terraform 탭에 샘플 HCL을 입력해 syntax color를 확인했고, `/api/terraform/validate` mock 응답으로 line 2 물결 밑줄 표시를 확인했다.
+- Verification run:
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/terraform-code-highlighting.test.ts features/workspace/terraform-diagnostic-line-highlights.test.ts features/workspace/workspace-right-panel-layout.test.ts features/workspace/terraform-panel-utils.test.ts features/workspace/pre-deployment-diagnostics.test.ts` - passed
+  - `pnpm --filter @sketchcatch/web test` - passed, 309 tests
+  - `pnpm --filter @sketchcatch/web typecheck` - passed
+  - `pnpm lint` - passed
+  - `pnpm typecheck` - passed
+  - `pnpm build` - passed
+  - `pnpm harness:check` - passed
+  - `git diff --check` - passed
+- Evidence recorded:
+  - 실제 Terraform apply/destroy, cloud mutation, Git/CI/CD handoff는 실행하지 않았다.
+  - Playwright에서는 validation API만 mock했고 backend/Terraform CLI는 실행하지 않았다.
+- Known risks:
+  - 기존 unrelated worktree changes remain: `DESIGN.md` 삭제 상태, `apps/web/next-env.d.ts` 변경 상태.
+- Next best action:
+  - 실제 API 서버까지 연결된 상태에서 Terraform validation error가 같은 물결 밑줄로 표시되는지 한 번 더 smoke한다.
+
 ### 2026-07-03 - 하위 AI 6개 축 검증 및 회귀 수정
 
 - Goal: 최근 Terraform Preview/Diagram 동기화 보강 작업을 하위 AI 6개 축으로 다시 검증하고, 실제 문제가 확인된 부분을 수정한다.

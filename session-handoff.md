@@ -28,11 +28,23 @@
 - Compact resource node는 generic `.nodeShell`의 `72px` 최소 높이를 상속하지 않아 `56x56` 아이콘이 빈 박스처럼 커지지 않는다.
 - AI draft 변환은 `vpcId: "aws_vpc.main.id"`, `subnetId: "aws_subnet.public.id"` 같은 Terraform reference 문자열도 `(resourceType, resourceName)`으로 풀어 area parent metadata를 찾는다.
 - Terraform 생성 API는 `resourceType`, `resourceName`, top-level/nested attribute/block key가 Terraform identifier 형식이 아니면 HCL을 만들기 전에 거부한다.
+- Terraform 코드 에디터는 textarea 위에 read-only syntax highlight layer를 겹쳐 HCL keyword/reference/string/brace 색상을 표시하고, validation error line은 빨간 물결 밑줄로 표시한다.
+- Terraform leave dialog에서 `저장하고 나가기`가 Terraform error diagnostics 때문에 실패하면, 모달을 닫고 오른쪽 Terraform 패널을 다시 보여줘 사용자가 물결 오류 표시를 확인할 수 있다.
+- Terraform diagnostics가 있는 동안 Issues 탭/shortcut은 unsaved Terraform leave guard에 막히지 않고 바로 열릴 수 있다.
+- Terraform leave dialog의 `저장하고 나가기` 시작 상태는 별도 status 문구를 띄우지 않고 버튼 disabled/`저장 중` 상태만 보여준다.
 - `docs/data-models.md`는 diagnostic/proposal source metadata와 proposal 지원 범위를 현재 코드에 맞게 기록한다.
 - `feature_list.json`에는 동시에 `in_progress`인 항목이 없다.
 
 ## 이번 세션의 변경 사항
 
+- Terraform HCL tokenizing helper와 회귀 테스트를 추가했다.
+- Terraform editor의 기존 2px 빨간 직선 marker를 제거하고, syntax highlight line에 `text-decoration-style: wavy` 오류 밑줄을 적용했다.
+- Terraform editor textarea 글자를 투명 처리하고 caret은 유지해, 실제 입력은 textarea가 담당하고 보이는 코드는 highlight layer가 담당하게 했다.
+- Playwright로 `/workspace` Terraform 탭에서 syntax color와 mock validation error의 물결 밑줄 표시를 확인했다.
+- Terraform leave save 실패 상태 모델에 `shouldRevealTerraformPanel` 흐름을 추가했다.
+- `WorkspaceRightPanel`이 최신 Terraform diagnostics를 ref로 보관하고, diagnostics 때문에 저장이 막힌 경우 pending leave action을 취소한 뒤 Terraform 탭을 보여주며 모달을 닫게 했다.
+- Diagnostics가 있을 때 Issues 탭과 collapsed Issues shortcut에 Terraform leave guard 예외를 적용했다.
+- `createTerraformLeaveSaveStartFeedback`의 저장 중 메시지를 비워 곧 닫힐 모달 안에 순간적인 status 문구가 뜨지 않게 했다.
 - 하위 AI 6개 축으로 catalog/diagram, Terraform sync/proposal, AI draft layout, CSS/resize, backend API/generator, docs/contracts를 read-only 검증했다.
 - `.nodeShellResource`에서 generic `min-height`를 해소해 compact icon node가 의도한 크기로 렌더링되게 했다.
 - Terraform create proposal fallback과 AI draft fallback unknown resource 크기를 `56x56`으로 통일했다.
@@ -77,6 +89,19 @@
 
 ## 검증
 
+- `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/terraform-code-highlighting.test.ts features/workspace/terraform-diagnostic-line-highlights.test.ts features/workspace/workspace-right-panel-layout.test.ts features/workspace/terraform-panel-utils.test.ts features/workspace/pre-deployment-diagnostics.test.ts` - passed
+- `pnpm --filter @sketchcatch/web test` - passed, 309 tests
+- `pnpm --filter @sketchcatch/web typecheck` - passed
+- Playwright `/workspace` smoke - passed for syntax color and mocked validation squiggle underline
+- Red before fix: `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/terraform-leave-save-state.test.ts` - failed because leave save feedback had no panel reveal path for diagnostics-blocked saves
+- `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/terraform-leave-save-state.test.ts features/workspace/workspace-right-panel-layout.test.ts` - passed
+- Red before fix: `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/terraform-leave-save-state.test.ts features/workspace/workspace-right-panel-layout.test.ts` - failed because saving feedback still had a status message and Issues navigation had no leave guard exception
+- `pnpm --filter @sketchcatch/web test` - passed, 312 tests
+- `pnpm lint` - passed
+- `pnpm typecheck` - passed
+- `pnpm build` - passed
+- `pnpm harness:check` - passed
+- `git diff --check` - passed
 - Red before fix: `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-ai-diagram-adapter.test.ts` - failed because Terraform-style references did not resolve to area parent nodes
 - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-ai-diagram-adapter.test.ts` - passed
 - `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/diagram-to-terraform.test.ts src/routes/terraform.test.ts` - passed
@@ -123,6 +148,8 @@
 - 기존 unrelated 변경 `apps/web/next-env.d.ts` 변경 상태는 이번 작업에서 건드리지 않았다.
 - 실제 Terraform apply/destroy, cloud mutation, Git/CI/CD handoff는 실행하지 않았다.
 - 브라우저 수동 smoke는 수행하지 않았다. 자동/단위/타입/빌드 검증으로 이번 구현 범위를 확인했다.
+- Terraform leave save diagnostics 실패 모달 UX는 자동 테스트로 확인했고, 실제 브라우저 수동 smoke는 아직 수행하지 않았다.
+- Diagnostics가 있을 때 Issues 탭/shortcut이 leave guard에 막히지 않는 흐름은 자동 테스트로 확인했고, 실제 브라우저 수동 smoke는 아직 수행하지 않았다.
 - 하위 AI가 지적한 deployment safety preflight mismatch와 DeploymentPanel init 실패 후 stale PENDING state는 이번 아이콘/preview/editor 회귀 보강 범위 밖이라 후속 작업 후보로 남았다.
 - `HARNESS-007`: Representative Use Journey의 browser/API smoke는 아직 없다.
 
@@ -134,6 +161,8 @@
 - Terraform editor에서 `aws_s3_bucket`, `data.aws_ami`, `aws_cloudfront_distribution` create proposal이 저장 시 자동 반영되고 icon/size가 유지되는지 수동 smoke한다.
 - Multi-file Terraform에서 `network.tf` 오류가 `main.tf`에 표시되지 않고 해당 파일에서만 빨간줄로 보이는지 확인한다.
 - 기존 VPC `cidr_block` 같은 same-identity value update가 저장 시 바로 반영되는지 확인한다.
+- Terraform editor에서 syntax error를 만든 뒤 `저장하고 나가기`를 눌렀을 때 모달이 닫히고 Terraform 탭의 물결 오류 표시가 바로 보이는지 확인한다.
+- Terraform diagnostics가 있는 상태에서 Issues 탭을 클릭했을 때 저장 확인 모달 없이 Issues 탭이 열리는지 확인한다.
 - 별도 이슈로 pre-deployment artifact path와 backend artifact safety check 정렬을 검토한다.
 
 ## 건드리지 말아야 할 것
