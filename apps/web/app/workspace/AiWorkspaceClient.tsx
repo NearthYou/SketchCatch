@@ -32,6 +32,13 @@ import {
 } from "./workspace-api-client";
 import { sampleDiagramTerraform, samplePrompt, sampleTerraform } from "./workspace-options";
 
+const TERRAFORM_VALIDATE_ERROR_EXAMPLE = `Error: Unsupported argument
+
+  on main.tf line 12, in resource "aws_instance" "web":
+  12: instance_typ = "t3.micro"
+
+An argument named "instance_typ" is not expected here. Did you mean "instance_type"?`;
+
 // gg AI API를 팀에 보여주기 위한 임시 작업 화면입니다. 최종 보드 UI가 붙으면 대체될 수 있습니다.
 export function AiWorkspaceClient() {
   const [prompt, setPrompt] = useState(samplePrompt);
@@ -152,6 +159,15 @@ export function AiWorkspaceClient() {
   }
 
   // 사용자가 붙여 넣은 Terraform 오류 메시지를 Preview 설명과 분리해 해석합니다.
+  function useTerraformValidateErrorExample(): void {
+    setTerraformErrorStage("validate");
+    setTerraformErrorMessage(TERRAFORM_VALIDATE_ERROR_EXAMPLE);
+    setTerraformErrorResourceId("aws_instance.web");
+    setTerraformErrorExplanation(null);
+    setStatus("idle");
+    setErrorMessage("");
+  }
+
   async function runTerraformErrorExplanation(): Promise<void> {
     const rawMessage = terraformErrorMessage.trim();
 
@@ -324,6 +340,7 @@ export function AiWorkspaceClient() {
         onRelatedResourceIdChange={setTerraformErrorResourceId}
         onStageChange={setTerraformErrorStage}
         onTerraformErrorExplanation={runTerraformErrorExplanation}
+        onUseValidateExample={useTerraformValidateErrorExample}
         rawMessage={terraformErrorMessage}
         relatedResourceId={terraformErrorResourceId}
         stage={terraformErrorStage}

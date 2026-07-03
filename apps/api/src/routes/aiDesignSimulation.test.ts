@@ -126,9 +126,8 @@ test("POST /api/ai/design-simulation estimates flow, bottlenecks, failures, and 
   await app.close();
 });
 
-test("POST /api/ai/design-simulation returns fallback llmExplanation when API key is missing", async () => {
-  const originalApiKey = process.env.OPENAI_API_KEY;
-  delete process.env.OPENAI_API_KEY;
+test("POST /api/ai/design-simulation returns fallback llmExplanation when Bedrock credit is not confirmed", async () => {
+  const restoreAiEnv = forceAwsAiCreditBlocked();
 
   const app = buildApp();
 
@@ -162,17 +161,12 @@ test("POST /api/ai/design-simulation returns fallback llmExplanation when API ke
     const body = llmEnhancedDesignSimulationResponseSchema.parse(response.json());
 
     assert.equal(body.llmExplanation.fallbackUsed, true);
-    assert.equal(body.llmExplanation.fallbackReason, "missing_api_key");
+    assert.equal(body.llmExplanation.fallbackReason, "credit_not_confirmed");
     assert.ok(body.llmExplanation.summary.length > 0);
     assert.ok(body.llmExplanation.highlights.length > 0);
     assert.ok(body.llmExplanation.nextActions.length > 0);
   } finally {
-    if (originalApiKey === undefined) {
-      delete process.env.OPENAI_API_KEY;
-    } else {
-      process.env.OPENAI_API_KEY = originalApiKey;
-    }
-
+    restoreAiEnv();
     await app.close();
   }
 });
@@ -274,3 +268,30 @@ test("POST /api/ai/design-simulation explains public exposure as a failure scena
 
   await app.close();
 });
+
+function forceAwsAiCreditBlocked(): () => void {
+  const originalEnv = {
+    AI_BILLING_MODE: process.env.AI_BILLING_MODE,
+    BEDROCK_CREDIT_CONFIRMED: process.env.BEDROCK_CREDIT_CONFIRMED,
+    OPENAI_API_KEY: process.env.OPENAI_API_KEY
+  };
+
+  process.env.AI_BILLING_MODE = "aws_credit_only";
+  process.env.BEDROCK_CREDIT_CONFIRMED = "false";
+  delete process.env.OPENAI_API_KEY;
+
+  return () => {
+    restoreEnvValue("AI_BILLING_MODE", originalEnv.AI_BILLING_MODE);
+    restoreEnvValue("BEDROCK_CREDIT_CONFIRMED", originalEnv.BEDROCK_CREDIT_CONFIRMED);
+    restoreEnvValue("OPENAI_API_KEY", originalEnv.OPENAI_API_KEY);
+  };
+}
+
+function restoreEnvValue(key: string, value: string | undefined): void {
+  if (value === undefined) {
+    delete process.env[key];
+    return;
+  }
+
+  process.env[key] = value;
+}

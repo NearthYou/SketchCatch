@@ -11,6 +11,7 @@ type TerraformErrorExplanationPanelProps = {
   readonly onRelatedResourceIdChange: (value: string) => void;
   readonly onStageChange: (value: AiTerraformStage) => void;
   readonly onTerraformErrorExplanation: () => void;
+  readonly onUseValidateExample?: () => void;
   readonly rawMessage: string;
   readonly relatedResourceId: string;
   readonly stage: AiTerraformStage;
@@ -26,12 +27,23 @@ export function TerraformErrorExplanationPanel({
   onRelatedResourceIdChange,
   onStageChange,
   onTerraformErrorExplanation,
+  onUseValidateExample,
   rawMessage,
   relatedResourceId,
   stage
 }: TerraformErrorExplanationPanelProps) {
   return (
     <section className="workspacePanel toolPanel">
+      {onUseValidateExample ? (
+        <button
+          className="secondaryButton"
+          disabled={isLoading}
+          onClick={onUseValidateExample}
+          type="button"
+        >
+          validate 예시 넣기
+        </button>
+      ) : null}
       <h2>Terraform 오류 설명</h2>
       <label className="fieldLabel" htmlFor="terraform-error-stage">
         stage

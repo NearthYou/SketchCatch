@@ -25,7 +25,14 @@ test("POST /api/terraform/generate returns Terraform code for an active user", a
     ]
   });
   const app = buildApp({
-    getDatabaseClient: () => fakeDb.client
+    getDatabaseClient: () => fakeDb.client,
+    createTerraformValidationDiagnostics: async () => [
+      {
+        severity: "warning",
+        code: "terraform.quoted_reference",
+        message: "quoted reference"
+      }
+    ]
   });
 
   const response = await app.inject({
@@ -201,10 +208,7 @@ test("POST /api/terraform/validate returns diagnostics for an active user", asyn
   });
 
   assert.equal(response.statusCode, 200);
-  assert.equal(
-    (response.json() as TerraformValidateResponse).diagnostics[0]?.code,
-    "terraform.quoted_reference"
-  );
+  assert.equal((response.json() as TerraformValidateResponse).diagnostics[0]?.code, "terraform.quoted_reference");
 
   await app.close();
 });
