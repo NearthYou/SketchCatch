@@ -142,7 +142,7 @@ type InfrastructureGraphEdge = {
 };
 ```
 
-`id`는 `DiagramJson.nodes[].id`와 안정적으로 대응해야 한다. Terraform Preview 경로의 리소스 identity는 내부 `ResourceType` 변환값이 아니라 `iac.provider + iac.terraformBlockType + iac.resourceType + iac.resourceName`이다. Terraform에서 들어온 변경은 `(resourceType, resourceName)`으로 기존 node를 찾고, 찾은 node의 `id`를 유지한 채 `config`를 갱신한다. 매칭할 수 없는 block, 알 수 없는 block, 복잡한 expression처럼 안전하게 해석할 수 없는 입력은 기존 그래프나 `DiagramJson`을 변경하지 않고 diagnostic으로 반환한다.
+`id`는 `DiagramJson.nodes[].id`와 안정적으로 대응해야 한다. Terraform Preview 경로의 리소스 identity는 내부 `ResourceType` 변환값이 아니라 `iac.provider + iac.terraformBlockType + iac.resourceType + iac.resourceName`이다. Terraform sync v1은 Terraform HCL 안의 `(terraformBlockType, resourceType, resourceName)`으로 기존 node를 찾고, provider는 shared `ResourceDefinition`에서 해석한다. 매칭할 수 없는 block, 알 수 없는 block, 복잡한 expression처럼 안전하게 해석할 수 없는 입력은 기존 그래프나 `DiagramJson`을 변경하지 않고 diagnostic으로 반환한다.
 
 ## DiagramJson
 

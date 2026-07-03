@@ -25,9 +25,12 @@
   - `iac.resourceType`에는 `aws_instance`, `aws_vpc`, `aws_s3_bucket` 같은 provider-specific Terraform resource type이 그대로 유지된다.
   - `ResourceType`, `ArchitectureJson`, `ResourceDefinition.resourceType`, AI/Architecture 변환 경로는 Terraform Preview identity와 다른 domain classification으로 유지했다.
   - `docs/data-models.md`에 Terraform Preview identity가 `iac.provider + iac.terraformBlockType + iac.resourceType + iac.resourceName` 기준임을 기록했다.
+  - 하위 AI 6개 축 코드리뷰를 실행했고, block type을 무시하던 unused `getResourceDefinitionByTerraformResourceType` helper 제거, `aws_security_group_rule` preview-only/sync-unsupported 테스트 보강, web catalog drift 테스트의 `aws_` prefix 의존 제거, identity 문서 표현 정리를 반영했다.
 - Verification run:
   - Red before fix: `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/infrastructure-graph.test.ts` - failed because graph nodes still contained `type: "VPC"`/`type: "EC2"` and source still used `resourceDefinition.resourceType`.
   - `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/infrastructure-graph.test.ts src/services/terraform/diagram-to-terraform.test.ts` - passed.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/infrastructure-graph.test.ts src/services/terraform/diagram-to-terraform.test.ts src/services/terraform/terraform-to-diagram.test.ts` - passed after review fixes.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/resource-settings/catalog.test.ts` - passed after review fixes.
   - `pnpm --filter @sketchcatch/types typecheck` - passed.
   - `pnpm typecheck` - passed.
   - `pnpm lint` - passed.
@@ -48,7 +51,7 @@
 - Completed:
   - `packages/types/src/resource-definitions.ts`를 추가해 44개 AWS Terraform catalog 항목의 provider, domain `ResourceType`, Terraform block identity, `terraformPreview`/`terraformSync`/`parameterPanel` capability를 정의했다.
   - `@sketchcatch/types/resource-definitions` package subpath를 열어 API/Web이 같은 shared definition을 import하게 했다. root `index.ts` 재수출은 Next/Turbopack source resolve 문제를 피하기 위해 사용하지 않는다.
-  - `infrastructure-graph.ts`의 preview hardcoded set과 Terraform type 매핑을 제거하고 `terraformPreview` capability와 shared `resourceType`/`provider`를 사용하게 했다.
+  - `infrastructure-graph.ts`의 preview hardcoded set과 Terraform type 매핑을 제거하고 shared `terraformPreview` capability와 provider를 사용하게 했다.
   - `terraform-to-diagram.ts`의 sync proposal hardcoded set을 제거하고 `terraformSync` capability를 사용하게 했다.
   - web `resource-settings/catalog.ts`를 shared definition + web presentation(icon/category/label/size) 구조로 정리했다. `design_region`, `design_az`, `design_group`은 IaC 리소스가 아니므로 web catalog에만 남겼다.
   - API/Web drift 방지 테스트를 추가해 preview/sync capability 차이, CloudFront sync-only 정책, web catalog와 shared definition/parameter catalog 정합성을 확인하게 했다.
@@ -70,7 +73,7 @@
   - 브라우저 수동 smoke는 수행하지 않았다. 자동/단위/타입/빌드 검증으로 확인했다.
   - `parameterPanel` capability는 현재 parameter catalog 보유 여부와 맞췄다. 새 리소스 추가 시 shared definition, web presentation, parameter catalog 정합성 테스트를 함께 갱신해야 한다.
 - Next best action:
-  - 다음 리소스 추가 작업에서는 `packages/types/src/resource-definitions.ts`를 먼저 수정하고 web catalog에는 presentation 정보만 추가하는 흐름을 따른다.
+  - 다음 리소스 추가 작업에서는 shared definition/capability, web presentation, 필요 시 parameter catalog/`parameterPanel`, `ResourceType` 확장 여부, drift 테스트를 함께 맞춘다.
 
 ### 2026-07-03 - Terraform 코드리뷰 피드백 반영
 

@@ -260,13 +260,6 @@ const resourceDefinitionByTerraformKey = new Map<string, ResourceDefinition>(
     definition
   ])
 );
-const resourceDefinitionByTerraformResourceType = new Map<string, ResourceDefinition>();
-
-for (const definition of resourceDefinitions) {
-  if (!resourceDefinitionByTerraformResourceType.has(definition.terraform.resourceType)) {
-    resourceDefinitionByTerraformResourceType.set(definition.terraform.resourceType, definition);
-  }
-}
 
 export function getResourceDefinitionById(id: string): ResourceDefinition | undefined {
   return resourceDefinitionById.get(id);
@@ -277,12 +270,6 @@ export function getResourceDefinitionByTerraform(
   resourceType: string
 ): ResourceDefinition | undefined {
   return resourceDefinitionByTerraformKey.get(createTerraformDefinitionKey(blockType, resourceType));
-}
-
-export function getResourceDefinitionByTerraformResourceType(
-  resourceType: string
-): ResourceDefinition | undefined {
-  return resourceDefinitionByTerraformResourceType.get(resourceType);
 }
 
 function createAwsResourceDefinition({

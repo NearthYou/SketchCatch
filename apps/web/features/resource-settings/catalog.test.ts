@@ -7,6 +7,12 @@ import {
 import { terraformParameterCatalog } from "../parameter-input/catalog";
 import { resourceCatalog } from "./catalog";
 
+const terraformDefinitionKeys = new Set(
+  resourceDefinitions.map(
+    (definition) => `${definition.terraform.blockType}/${definition.terraform.resourceType}`
+  )
+);
+
 test("resourceCatalog sizes area defaults below the Region hierarchy root", () => {
   assert.deepEqual(getResourceSize("design_region"), { width: 260, height: 180 });
   assert.deepEqual(getResourceSize("aws_vpc"), { width: 240, height: 160 });
@@ -80,5 +86,9 @@ function getResourceSize(resourceType: string) {
 }
 
 function getTerraformCatalogItems() {
-  return resourceCatalog.filter((resource) => resource.nodeDefaults.type.startsWith("aws_"));
+  return resourceCatalog.filter((resource) => terraformDefinitionKeys.has(createCatalogResourceKey(resource)));
+}
+
+function createCatalogResourceKey(resource: (typeof resourceCatalog)[number]): string {
+  return `${resource.nodeDefaults.terraformBlockType ?? "resource"}/${resource.nodeDefaults.type}`;
 }

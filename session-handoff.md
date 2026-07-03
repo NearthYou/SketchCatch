@@ -58,9 +58,10 @@
 - `resourceDefinition` 사용처를 preview capability 확인과 `iac.provider` 설정으로 축소했다.
 - InfrastructureGraph API 테스트에 EC2가 `EC2`로 변환되지 않고 `iac.resourceType: "aws_instance"`를 유지하는 회귀 케이스를 추가했다.
 - `docs/data-models.md`에 Terraform Preview identity와 `ResourceDefinition.resourceType`의 역할 차이를 기록했다.
+- 하위 AI 6개 축 코드리뷰를 실행했고, block type을 무시하던 unused shared lookup helper 제거, `aws_security_group_rule` preview-only/sync-unsupported 테스트 보강, web catalog drift 테스트의 `aws_` prefix 의존 제거, identity 문서 표현 정리를 반영했다.
 - `packages/types/src/resource-definitions.ts`를 추가해 44개 AWS Terraform resource/data 항목의 provider, domain `ResourceType`, Terraform identity, capability를 정의했다.
 - `packages/types/package.json`에 `./resource-definitions` export를 추가했다. root `index.ts` re-export는 Next/Turbopack source resolve 문제 때문에 사용하지 않는다.
-- `infrastructure-graph.ts`에서 `PREVIEW_SUPPORTED_BLOCKS`와 `RESOURCE_TYPE_BY_TERRAFORM_TYPE`를 제거하고 shared definition의 `terraformPreview`, `resourceType`, `provider`를 사용하게 했다.
+- `infrastructure-graph.ts`에서 `PREVIEW_SUPPORTED_BLOCKS`와 `RESOURCE_TYPE_BY_TERRAFORM_TYPE`를 제거하고 shared definition의 `terraformPreview` capability와 provider를 사용하게 했다.
 - `terraform-to-diagram.ts`에서 `PROPOSAL_SUPPORTED_BLOCKS`를 제거하고 shared definition의 `terraformSync`를 사용하게 했다.
 - Web `resource-settings/catalog.ts`를 shared definition + presentation metadata 구조로 정리했다.
 - API/Web 테스트에 hardcoded support list 제거, preview/sync capability 차이, catalog/definition/parameter panel drift 방지 케이스를 추가했다.
@@ -124,6 +125,8 @@
 
 - Red before fix: `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/infrastructure-graph.test.ts` - failed because graph nodes still contained internal `type` and source still used `resourceDefinition.resourceType`
 - `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/infrastructure-graph.test.ts src/services/terraform/diagram-to-terraform.test.ts` - passed
+- `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/infrastructure-graph.test.ts src/services/terraform/diagram-to-terraform.test.ts src/services/terraform/terraform-to-diagram.test.ts` - passed after subagent review fixes
+- `pnpm --filter @sketchcatch/web exec tsx --test features/resource-settings/catalog.test.ts` - passed after subagent review fixes
 - `pnpm --filter @sketchcatch/types typecheck` - passed
 - `pnpm typecheck` - passed
 - `pnpm --filter @sketchcatch/types typecheck` - passed
@@ -207,7 +210,7 @@
 
 ## 다음으로 최선의 행동
 
-- 다음 Terraform 리소스 추가 시 `packages/types/src/resource-definitions.ts`를 먼저 수정하고, web catalog에는 presentation 정보만 추가한다.
+- 다음 Terraform 리소스 추가 시 shared definition/capability, web presentation, 필요 시 parameter catalog/`parameterPanel`, `ResourceType` 확장 여부, drift 테스트를 함께 맞춘다.
 - 브라우저에서 EC2/S3/CloudFront 같은 일반 resource icon을 새로 추가했을 때 `56x56` 크기로 보이고, VPC/Subnet 같은 영역 node는 기존 크기를 유지하는지 수동 smoke한다.
 - 브라우저에서 EC2/VPC/S3 아이콘을 반복 추가했을 때 Terraform Preview 이름이 순차 suffix로 생성되는지 수동 smoke한다.
 - 브라우저에서 CloudFront AI draft가 `AWS` fallback이 아니라 CloudFront icon으로 보이는지 수동 smoke한다.

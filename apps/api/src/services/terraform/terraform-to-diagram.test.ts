@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { DiagramJson, DiagramNode } from "@sketchcatch/types";
+import { getResourceDefinitionByTerraform } from "@sketchcatch/types/resource-definitions";
 import { syncTerraformToDiagramJson } from "./terraform-to-diagram.js";
 
 test("updates values for a matching generated resource block", () => {
@@ -252,6 +253,54 @@ test("rejects Terraform-only blocks without terraformSync capability", () => {
   assert.equal(result.proposals?.length, 0);
   assert.equal(result.diagnostics[0]?.code, "terraform.sync.unsupported_resource");
   assert.equal(result.diagnostics[0]?.resourceAddress, "aws_lambda_function.handler");
+});
+
+test("keeps security group rule as preview-only and unsupported for Terraform sync proposals", () => {
+  const securityGroupRuleDefinition = getResourceDefinitionByTerraform(
+    "resource",
+    "aws_security_group_rule"
+  );
+  const terraformOnlyResult = syncTerraformToDiagramJson(
+    {
+      nodes: [],
+      edges: [],
+      viewport: { x: 0, y: 0, zoom: 1 }
+    },
+    `resource "aws_security_group_rule" "ssh" {
+  type = "ingress"
+}`
+  );
+  const diagramOnlyResult = syncTerraformToDiagramJson(
+    {
+      nodes: [
+        makeNode({
+          id: "sg-rule-1",
+          type: "aws_security_group_rule",
+          kind: "resource",
+          label: "ssh",
+          parameters: {
+            resourceType: "aws_security_group_rule",
+            resourceName: "ssh",
+            fileName: "main",
+            values: {
+              type: "ingress"
+            }
+          }
+        })
+      ],
+      edges: [],
+      viewport: { x: 0, y: 0, zoom: 1 }
+    },
+    ""
+  );
+
+  assert.equal(securityGroupRuleDefinition?.capabilities.terraformPreview, true);
+  assert.equal(securityGroupRuleDefinition?.capabilities.terraformSync, false);
+  assert.equal(terraformOnlyResult.proposals?.length, 0);
+  assert.equal(terraformOnlyResult.diagnostics[0]?.code, "terraform.sync.unsupported_resource");
+  assert.equal(terraformOnlyResult.diagnostics[0]?.resourceAddress, "aws_security_group_rule.ssh");
+  assert.deepEqual(diagramOnlyResult.diagnostics, []);
+  assert.deepEqual(diagramOnlyResult.proposals, []);
 });
 
 test("rejects duplicate DiagramJson identities without mutating", () => {
