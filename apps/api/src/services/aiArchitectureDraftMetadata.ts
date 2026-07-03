@@ -6,7 +6,7 @@ import type {
 } from "@sketchcatch/types";
 import type { ScenarioResolution } from "./aiArchitectureScenarioResolution.js";
 
-// 용도 결정 결과와 guardrail 경고를 최종 Architecture Draft metadata에 붙입니다.
+
 export function applyGuardrailMetadata(
   draft: AiArchitectureDraftResult,
   request: CreateArchitectureDraftRequest,
@@ -30,24 +30,29 @@ export function applyGuardrailMetadata(
   };
 }
 
-// 운영 조건이 현재 MVP 초안과 충돌할 때 사용자에게 먼저 보여줄 경고를 만듭니다.
 function createOperatingConditionWarnings(
   request: CreateArchitectureDraftRequest,
   selectedScenario: ArchitectureScenario
 ): ArchitectureGuardrailWarning[] {
+  const warnings: ArchitectureGuardrailWarning[] = [];
+
   if (request.budgetLevel === "low" && selectedScenario === "backend_with_db") {
-    return [
-      {
-        code: "low_budget_rds_cost",
-        message: "낮은 예산을 선택했지만 RDS는 월 비용이 생길 수 있습니다. 배포 전 비용 점검을 꼭 확인해야 합니다."
-      }
-    ];
+    warnings.push({
+      code: "low_budget_rds_cost",
+      message: "낮은 예산을 선택했지만 RDS가 포함되어 비용이 발생할 수 있습니다. 배포 전에 비용 추정을 확인해야 합니다."
+    });
   }
 
-  return [];
+  if (request.securityPriority === "high") {
+    warnings.push({
+      code: "guardrail_adjusted_config",
+      message: "보안 우선 조건에 맞춰 지원 가능한 리소스 config만 안전한 기본값으로 조정했습니다."
+    });
+  }
+
+  return warnings;
 }
 
-// 사용자가 고른 예산/트래픽/보안 조건을 초안의 가정 문장으로 남깁니다.
 function createGuardrailAssumptions(request: CreateArchitectureDraftRequest): string[] {
   const assumptions: string[] = [];
 
@@ -66,26 +71,24 @@ function createGuardrailAssumptions(request: CreateArchitectureDraftRequest): st
   return assumptions;
 }
 
-// 선택된 용도와 guardrail 경고를 사용자가 읽을 설명 문장으로 바꿉니다.
 function createGuardrailExplanations(
   request: CreateArchitectureDraftRequest,
   resolution: ScenarioResolution,
   guardrailWarnings: readonly ArchitectureGuardrailWarning[]
 ): string[] {
-  const explanations = [`최종 선택된 용도는 ${getScenarioLabel(resolution.selectedScenario)}입니다.`];
+  const explanations = [`최종 초안 유형은 ${getScenarioLabel(resolution.selectedScenario)}입니다.`];
 
   if (request.trafficLevel === "normal") {
-    explanations.push("트래픽이 보통이면 ALB나 Auto Scaling을 검토할 수 있지만, 이번 MVP에서는 자동 추가하지 않습니다.");
+    explanations.push("트래픽이 보통 이상이면 ALB나 Auto Scaling을 검토할 수 있지만, 이번 MVP 초안에는 자동 추가하지 않습니다.");
   }
 
   if (request.securityPriority === "high") {
-    explanations.push("보안 우선순위가 높아 공개 접근을 줄이는 기본 config만 반영했습니다. 실제 보안 적합성은 보장하지 않습니다.");
+    explanations.push("보안 우선순위가 높아 공개 접근을 줄이는 기본 config만 반영했습니다. 실제 보안 적합성을 보장하지는 않습니다.");
   }
 
   return [...explanations, ...guardrailWarnings.map((warning) => warning.message)];
 }
 
-// 내부 scenario 값을 화면에 보여줄 한국어 용도 이름으로 바꿉니다.
 function getScenarioLabel(scenario: ArchitectureScenario): string {
   switch (scenario) {
     case "static_site":
@@ -95,6 +98,6 @@ function getScenarioLabel(scenario: ArchitectureScenario): string {
     case "backend_with_db":
       return "DB 포함 백엔드";
     case "server_storage":
-      return "서버+스토리지";
+      return "서버와 스토리지";
   }
 }

@@ -179,14 +179,14 @@ test("POST /api/ai/architecture-draft selects API server and database backend te
 	await app.close();
 });
 
-test("POST /api/ai/architecture-draft uses guardrail choices before prompt keywords", async () => {
+test("POST /api/ai/architecture-draft lets prompt keywords override helper choices", async () => {
 	const app = buildApp();
 
 	const response = await app.inject({
 		method: "POST",
 		url: "/api/ai/architecture-draft",
 		payload: {
-			prompt: "DB가 포함된 백엔드 서버를 만들고 싶어",
+			prompt: "DB가 포함된 백엔드 API 서버를 만들고 싶어",
 			scenarioHint: "static_site",
 			budgetLevel: "low",
 			trafficLevel: "small",
@@ -199,11 +199,12 @@ test("POST /api/ai/architecture-draft uses guardrail choices before prompt keywo
 	const body = architectureDraftResponseSchema.parse(response.json());
 	const nodeTypes = body.architectureJson.nodes.map((node) => node.type);
 
-	assert.equal(body.title, "정적 웹사이트 Practice Architecture");
-	assert.ok(nodeTypes.includes("S3"));
-	assert.equal(nodeTypes.includes("RDS"), false);
-  assert.equal(body.metadata.selectedScenario, "static_site");
-  assert.ok(body.metadata.guardrailWarnings?.some((warning) => warning.code === "scenario_conflict"));
+	assert.equal(body.title, "DB 포함 백엔드 Practice Architecture");
+	assert.ok(nodeTypes.includes("RDS"));
+	assert.equal(nodeTypes.includes("CLOUDFRONT"), false);
+  assert.equal(body.metadata.selectedScenario, "backend_with_db");
+  assert.ok(body.metadata.guardrailWarnings?.some((warning) => warning.code === "selection_overridden_by_prompt"));
+  assert.ok(body.metadata.guardrailWarnings?.some((warning) => warning.code === "guardrail_adjusted_config"));
 	assert.ok(body.metadata.assumptions.some((item) => item.includes("낮은 예산")));
 	assert.ok(body.metadata.assumptions.some((item) => item.includes("작은 트래픽")));
 	assert.ok(body.metadata.assumptions.some((item) => item.includes("보안 우선순위")));
@@ -252,8 +253,62 @@ test("POST /api/ai/architecture-draft returns auto scenario scores and fallback 
 
   const unsupportedBody = architectureDraftResponseSchema.parse(unsupportedResponse.json());
 
-  assert.equal(unsupportedBody.metadata.selectedScenario, "static_site");
-  assert.ok(unsupportedBody.metadata.guardrailWarnings?.some((warning) => warning.code === "unsupported_requirement"));
+  assert.equal(unsupportedBody.metadata.selectedScenario, "api_server");
+  assert.equal(unsupportedBody.architectureJson.nodes.some((node) => node.type === "UNKNOWN"), false);
+  assert.ok(unsupportedBody.metadata.guardrailWarnings?.some((warning) => warning.code === "unsupported_resource_omitted"));
+  assert.ok(unsupportedBody.metadata.guardrailWarnings?.some((warning) => warning.code === "ambiguous_prompt_fallback"));
+
+  const partialResponse = await app.inject({
+    method: "POST",
+    url: "/api/ai/architecture-draft",
+    payload: {
+      prompt: "EKS 기반 API 서버를 연습용으로 설계하고 싶어",
+      scenarioHint: "auto",
+      budgetLevel: "normal",
+      trafficLevel: "normal",
+      securityPriority: "basic"
+    }
+  });
+
+  assert.equal(partialResponse.statusCode, 200);
+
+  const partialBody = architectureDraftResponseSchema.parse(partialResponse.json());
+
+  assert.equal(partialBody.metadata.selectedScenario, "api_server");
+  assert.ok(partialBody.metadata.guardrailWarnings?.some((warning) => warning.code === "unsupported_resource_omitted"));
+  assert.ok(partialBody.metadata.guardrailWarnings?.some((warning) => warning.code === "partial_generation"));
+
+  await app.close();
+});
+
+test("POST /api/ai/architecture-draft returns deterministic ArchitectureJson for the same request", async () => {
+  const app = buildApp();
+  const payload = {
+    prompt: "작은 백엔드 API 서버와 PostgreSQL DB를 만들어줘",
+    scenarioHint: "static_site",
+    budgetLevel: "normal",
+    trafficLevel: "small",
+    securityPriority: "basic"
+  };
+
+  const firstResponse = await app.inject({
+    method: "POST",
+    url: "/api/ai/architecture-draft",
+    payload
+  });
+  const secondResponse = await app.inject({
+    method: "POST",
+    url: "/api/ai/architecture-draft",
+    payload
+  });
+
+  assert.equal(firstResponse.statusCode, 200);
+  assert.equal(secondResponse.statusCode, 200);
+
+  const firstBody = architectureDraftResponseSchema.parse(firstResponse.json());
+  const secondBody = architectureDraftResponseSchema.parse(secondResponse.json());
+
+  assert.deepEqual(firstBody.architectureJson, secondBody.architectureJson);
 
   await app.close();
 });
