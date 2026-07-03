@@ -2403,6 +2403,28 @@
   padding-top: 8px;
 }
 
+.deploymentSafetyBlock {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  display: grid;
+  gap: 4px;
+  padding: 8px;
+}
+
+.deploymentSafetyBlock strong {
+  color: #991b1b;
+  font-size: 12px;
+}
+
+.deploymentSafetyBlock p {
+  color: #7f1d1d;
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
 .deploymentWarnings ul {
   display: grid;
   gap: 6px;
@@ -2416,12 +2438,41 @@
   gap: 3px;
 }
 
+.deploymentWarnings li[data-level="high"] strong {
+  color: #991b1b;
+}
+
+.deploymentWarnings li[data-level="medium"] strong {
+  color: #92400e;
+}
+
+.deploymentWarnings em {
+  color: #991b1b;
+  font-size: 11px;
+  font-style: normal;
+}
+
 .deploymentWarnings p {
   color: #334155;
   font-size: 12px;
   line-height: 1.45;
   margin: 0;
   overflow-wrap: anywhere;
+}
+
+.deploymentWarningAcknowledgement {
+  align-items: center;
+  color: #334155;
+  display: flex;
+  gap: 6px;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.deploymentWarningAcknowledgement input {
+  height: 14px;
+  margin: 0;
+  width: 14px;
 }
 
 .deploymentApplyConfirm,

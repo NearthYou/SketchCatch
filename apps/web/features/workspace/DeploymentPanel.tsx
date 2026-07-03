@@ -10,6 +10,7 @@ import type {
   CheckFinding,
   DeployedResource,
   Deployment,
+  DeploymentPlanWarning,
   DiagramJson,
   DeploymentLog,
   TerraformDiagnostic,
@@ -99,6 +100,7 @@ export function DeploymentPanel({
   const [selectedDeploymentId, setSelectedDeploymentId] = useState("");
   const [showApplyConfirmation, setShowApplyConfirmation] = useState(false);
   const [showDestroyConfirmation, setShowDestroyConfirmation] = useState(false);
+  const [acknowledgedWarningIds, setAcknowledgedWarningIds] = useState<string[]>([]);
   const [requestState, setRequestState] = useState<RequestState>("idle");
   const [errorMessage, setErrorMessage] = useState("");
   const [deploymentPanelMode, setDeploymentPanelMode] = useState<DeploymentPanelMode>("setup");
@@ -147,8 +149,22 @@ export function DeploymentPanel({
     requestState !== "loading";
   const hasCurrentPlan = Boolean(selectedDeployment?.currentPlanArtifactId);
   const deploymentActions = getDeploymentActionState(selectedDeployment, requestState);
+  const requiredApprovalWarnings = useMemo(
+    () =>
+      selectedDeployment?.planSummary?.warnings.filter(
+        (warning) => warning.requiresAcknowledgement && !warning.blocksApproval
+      ) ?? [],
+    [selectedDeployment?.planSummary]
+  );
+  const acknowledgedWarningIdSet = useMemo(
+    () => new Set(acknowledgedWarningIds),
+    [acknowledgedWarningIds]
+  );
+  const hasUnacknowledgedWarnings = requiredApprovalWarnings.some(
+    (warning) => !acknowledgedWarningIdSet.has(warning.id)
+  );
   const canRunPlan = deploymentActions.canRunApplyPlan;
-  const canApprovePlan = deploymentActions.canApprovePlan;
+  const canApprovePlan = deploymentActions.canApprovePlan && !hasUnacknowledgedWarnings;
   const canApply = deploymentActions.canApply;
   const canRunDestroyPlan = deploymentActions.canRunDestroyPlan;
   const canDestroy = deploymentActions.canDestroy;
@@ -177,6 +193,10 @@ export function DeploymentPanel({
       }) as CSSProperties,
     [deploymentDetailsWidthPercent]
   );
+
+  useEffect(() => {
+    setAcknowledgedWarningIds([]);
+  }, [selectedDeployment?.id, selectedDeployment?.currentPlanArtifactId]);
 
   const updateDeploymentDetailsWidthFromClientX = useCallback((clientX: number): void => {
     const grid = deploymentExpandedGridRef.current;
@@ -523,7 +543,9 @@ export function DeploymentPanel({
     }
 
     await runRequest(async () => {
-      const deployment = await approveDeploymentPlan(selectedDeployment.id);
+      const deployment = await approveDeploymentPlan(selectedDeployment.id, {
+        acknowledgedWarningIds
+      });
       setDeployments((currentDeployments) =>
         currentDeployments.map((currentDeployment) =>
           currentDeployment.id === deployment.id ? deployment : currentDeployment
@@ -539,6 +561,16 @@ export function DeploymentPanel({
       setDeploymentResources(resources);
       setTerraformOutputs(outputs);
     }, "Terraform Plan을 승인하지 못했습니다.");
+  }
+
+  function toggleWarningAcknowledgement(warningId: string, checked: boolean): void {
+    setAcknowledgedWarningIds((currentIds) => {
+      if (checked) {
+        return currentIds.includes(warningId) ? currentIds : [...currentIds, warningId];
+      }
+
+      return currentIds.filter((currentId) => currentId !== warningId);
+    });
   }
 
   async function startTerraformApply(): Promise<void> {
@@ -841,8 +873,18 @@ export function DeploymentPanel({
           <OptionalInfoRow label="Blocked by" value={selectedDeployment.blockedBy} />
           <OptionalInfoRow label="Reason" value={selectedDeployment.blockedReason} />
           <InfoRow label="Approval" value={formatApprovalState(selectedDeployment)} />
+          {selectedDeployment.isBlocked && selectedDeployment.blockedBy !== "missing_approval" ? (
+            <div className={styles.deploymentSafetyBlock} role="alert">
+              <strong>High risk block</strong>
+              <p>{selectedDeployment.blockedReason ?? "Safety Gate blocked this deployment."}</p>
+            </div>
+          ) : null}
           {selectedDeployment.planSummary ? (
-            <PlanSummaryRows deployment={selectedDeployment} />
+            <PlanSummaryRows
+              acknowledgedWarningIds={acknowledgedWarningIds}
+              deployment={selectedDeployment}
+              onToggleWarningAcknowledgement={toggleWarningAcknowledgement}
+            />
           ) : null}
           {selectedDeployment.approvedAt ? (
             <>
@@ -1290,12 +1332,22 @@ function OptionalInfoRow({
   return <InfoRow label={label} value={value} />;
 }
 
-function PlanSummaryRows({ deployment }: { readonly deployment: Deployment }) {
+function PlanSummaryRows({
+  acknowledgedWarningIds,
+  deployment,
+  onToggleWarningAcknowledgement
+}: {
+  readonly acknowledgedWarningIds: readonly string[];
+  readonly deployment: Deployment;
+  readonly onToggleWarningAcknowledgement: (warningId: string, checked: boolean) => void;
+}) {
   const summary = deployment.planSummary;
 
   if (!summary) {
     return null;
   }
+
+  const acknowledgedWarningIdSet = new Set(acknowledgedWarningIds);
 
   return (
     <>
@@ -1307,10 +1359,27 @@ function PlanSummaryRows({ deployment }: { readonly deployment: Deployment }) {
         <div className={styles.deploymentWarnings}>
           <span>Warnings</span>
           <ul>
-            {summary.warnings.map((warning, index) => (
-              <li key={`${warning.level}-${index}`}>
-                <strong>{warning.level}</strong>
+            {summary.warnings.map((warning) => (
+              <li key={warning.id} data-level={warning.level}>
+                <strong>
+                  {formatDeploymentWarningLabel(warning)}
+                </strong>
                 <p>{warning.message}</p>
+                {warning.blocksApproval ? (
+                  <em>승인으로 해제할 수 없는 High risk입니다.</em>
+                ) : null}
+                {warning.requiresAcknowledgement && !warning.blocksApproval ? (
+                  <label className={styles.deploymentWarningAcknowledgement}>
+                    <input
+                      checked={acknowledgedWarningIdSet.has(warning.id)}
+                      onChange={(event) =>
+                        onToggleWarningAcknowledgement(warning.id, event.currentTarget.checked)
+                      }
+                      type="checkbox"
+                    />
+                    <span>이 finding을 확인했습니다</span>
+                  </label>
+                ) : null}
               </li>
             ))}
           </ul>
@@ -1318,6 +1387,10 @@ function PlanSummaryRows({ deployment }: { readonly deployment: Deployment }) {
       ) : null}
     </>
   );
+}
+
+function formatDeploymentWarningLabel(warning: DeploymentPlanWarning): string {
+  return `${warning.level.toUpperCase()} · ${warning.code} · ${warning.source}`;
 }
 
 function formatApprovalState(deployment: Deployment): string {

@@ -4,6 +4,7 @@ import type {
   AiTerraformErrorExplanationResult,
   AiTerraformPreviewExplanationResult,
   AiTerraformStage,
+  ApproveDeploymentPlanRequest,
   ArchitectureJson,
   ArchitectureSnapshot,
   AwsConnectionCloudFormationTemplateResponse,
@@ -517,13 +518,16 @@ export async function runDeploymentPlan(deploymentId: string): Promise<Deploymen
   return response.deployment;
 }
 
-export async function approveDeploymentPlan(deploymentId: string): Promise<Deployment> {
+export async function approveDeploymentPlan(
+  deploymentId: string,
+  request: ApproveDeploymentPlanRequest = { acknowledgedWarningIds: [] }
+): Promise<Deployment> {
   const response = await apiFetch<DeploymentResponse>(
     `/deployments/${encodeURIComponent(deploymentId)}/approve`,
     {
       auth: true,
       method: "POST",
-      body: {}
+      body: request
     }
   );
 

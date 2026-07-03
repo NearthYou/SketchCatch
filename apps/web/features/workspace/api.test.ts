@@ -1061,7 +1061,9 @@ test("deployment helpers list records, start plan, approve plan, apply, destroy,
     "/api/deployments/44444444-4444-4444-8444-444444444444/approve"
   );
   assert.equal(requests[2]?.init?.method, "POST");
-  assert.deepEqual(JSON.parse(String(requests[2]?.init?.body)), {});
+  assert.deepEqual(JSON.parse(String(requests[2]?.init?.body)), {
+    acknowledgedWarningIds: []
+  });
   assert.equal(
     String(requests[3]?.input),
     "/api/deployments/44444444-4444-4444-8444-444444444444/apply"
