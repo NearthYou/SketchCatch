@@ -583,6 +583,7 @@ test("POST /api/ai/architecture-draft creates a server and storage draft", async
   const edgeIds = body.architectureJson.edges.map((edge) => edge.id);
   const instanceNode = body.architectureJson.nodes.find((node) => node.id === "ec2-instance");
   const routeTableNode = body.architectureJson.nodes.find((node) => node.id === "route-table");
+  const internetRouteEdge = body.architectureJson.edges.find((edge) => edge.id === "route-table-to-internet-gateway");
 
   assert.equal(body.title, "서버+스토리지 Practice Architecture");
   assert.equal(body.metadata.selectedScenario, "server_storage");
@@ -603,12 +604,17 @@ test("POST /api/ai/architecture-draft creates a server and storage draft", async
   assert.deepEqual(edgeIds, [
     "ami-to-ec2-instance",
     "ec2-instance-to-s3-bucket",
-    "internet-gateway-to-route-table-association",
+    "route-table-to-internet-gateway",
     "subnet-to-route-table-association",
     "route-table-association-to-route-table",
     "subnet-to-ec2-instance",
     "security-group-to-ec2-instance"
   ]);
+  assert.deepEqual(internetRouteEdge, {
+    id: "route-table-to-internet-gateway",
+    sourceId: "route-table",
+    targetId: "internet-gateway"
+  });
   assert.equal(instanceNode?.config.ami, "data.aws_ami.ami.id");
   assert.equal(instanceNode?.config.subnetId, "aws_subnet.subnet.id");
   assert.deepEqual(instanceNode?.config.securityGroupIds, ["aws_security_group.security_group.id"]);

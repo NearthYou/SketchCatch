@@ -13,6 +13,22 @@
 - Highest priority unfinished harness feature: `HARNESS-007`
 - Current blocker: none
 
+### 2026-07-03 - Server Storage Route edge 방향 보정
+
+- Goal: `EC2 서버 + 이미지 저장용 S3` 초안에서 Route Table 라우팅 화살표가 실제 관계와 반대로 보이는 문제를 바로잡는다.
+- Completed:
+  - Server Storage 템플릿의 `routes` edge를 `Internet Gateway -> Route Table Association`에서 `Route Table -> Internet Gateway`로 변경했다.
+  - API 테스트가 `route-table-to-internet-gateway` edge의 source/target 방향을 직접 검증하도록 보강했다.
+- Verification run:
+  - `.\apps\api\node_modules\.bin\tsx.CMD apps/api/src/routes/ai.test.ts` - 먼저 기대 실패를 확인한 뒤 수정 후 25 tests passed.
+  - `node scripts/check-harness.mjs` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm harness:check` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm lint` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm typecheck` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm build` - 첫 실행은 timeout, 더 긴 제한으로 재실행해 passed.
+- Known risks:
+  - 실제 브라우저 스크린샷 재확인은 하지 않았지만, 보드 화살표 방향은 API `ArchitectureJson.edges`의 source/target을 그대로 따른다.
+
 ### 2026-07-03 - Natural Language Diagramming 결정사항 재감사
 
 - Goal: Natural Language Diagramming 결정사항 전체를 현재 구현에 대조하고, 빠진 동작이 있으면 바로 보강한다.
