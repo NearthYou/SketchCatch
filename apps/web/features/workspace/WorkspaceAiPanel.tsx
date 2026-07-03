@@ -33,6 +33,7 @@ import type { AiRequestState } from "./WorkspaceAiPanelPieces";
 import {
   budgetOptions,
   DEFAULT_REQUIREMENT_PROMPT,
+  promptGuideExamples,
   scenarioOptions,
   securityOptions,
   trafficOptions
@@ -165,6 +166,25 @@ export function WorkspaceAiPanel({ context }: WorkspaceAiPanelProps) {
             value={prompt}
           />
         </label>
+        <div className={styles.aiPromptGuide} aria-label="프롬프트 작성 가이드">
+          <div className={styles.aiPromptGuideHeader}>
+            <strong>그냥 이렇게 시작해도 돼요</strong>
+            <span>원하는 서비스만 적어도 초안을 만듭니다.</span>
+          </div>
+          <div className={styles.aiPromptChips}>
+            {promptGuideExamples.map((example) => (
+              <button
+                className={styles.aiPromptChip}
+                key={example}
+                onClick={() => setPrompt(example)}
+                type="button"
+              >
+                {example}
+              </button>
+            ))}
+          </div>
+          <p className={styles.aiPromptTinyHint}>더 정확히: 공개 여부 · 파일/데이터 · 비용/보안</p>
+        </div>
         <WorkspaceAiSelect
           label="보조 선택"
           onChange={setScenarioHint}

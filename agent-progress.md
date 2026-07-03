@@ -13,6 +13,29 @@
 - Highest priority unfinished harness feature: `HARNESS-007`
 - Current blocker: none
 
+### 2026-07-03 - 초보자용 요구사항 프롬프트 가이드 추가
+
+- Goal: 사용자가 AWS/EC2/S3 같은 기술 용어를 몰라도 "웹사이트 하나 배포하고 싶어"처럼 요구사항을 시작할 수 있게 Workspace AI 입력 UI를 보강한다.
+- Completed:
+  - Workspace AI 요구사항 입력창 아래에 짧은 안내, 예시 칩 3개, 최소 힌트(`공개 여부`, `파일/데이터`, `비용/보안`)를 추가했다.
+  - 기본 프롬프트를 기술 중심 문장에서 "웹사이트 하나 배포하고 싶어. 업로드한 파일도 저장할 수 있으면 좋겠어."로 바꿨다.
+  - 자연어 분류에서 `로그인`, `회원`, `계정`, `홈페이지`, `사이트`, `웹서비스` 같은 초보자 표현을 인식하도록 보강했다.
+  - Web/API 테스트에 초보자용 UI 가이드와 beginner-friendly prompt 분류 검증을 추가했다.
+- Verification run:
+  - `.\apps\web\node_modules\.bin\tsx.CMD apps/web/features/workspace/workspace-ai-guardrail-warning.test.ts` - passed with 4 tests after sandbox spawn EPERM.
+  - `.\apps\api\node_modules\.bin\tsx.CMD apps/api/src/routes/ai.test.ts` - passed with 26 tests after sandbox spawn EPERM.
+  - `.\node_modules\.bin\eslint.CMD apps/web/features/workspace/WorkspaceAiPanel.tsx apps/web/features/workspace/workspace-ai-panel-options.ts apps/web/features/workspace/workspace-ai-guardrail-warning.test.ts apps/api/src/services/aiArchitectureScenarioResolution.ts apps/api/src/routes/ai.test.ts` - passed.
+  - `.\node_modules\.bin\tsc.CMD --noEmit -p apps/web/tsconfig.json` - passed.
+  - `.\node_modules\.bin\tsc.CMD --noEmit -p apps/api/tsconfig.json` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm lint` - passed after non-escalated cache-only `ENOTCACHED`.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm typecheck` - passed after non-escalated cache-only `ENOTCACHED`.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm build` - first run timed out without failure output; reran with longer timeout and passed.
+  - `node scripts/check-harness.mjs` - passed.
+  - `git diff --check` - passed with line-ending warnings only.
+- Known risks:
+  - Browser screenshot verification was not run; the change was reviewed through source tests, focused CSS review, typecheck, and production build.
+  - `next build` temporarily changed `apps/web/next-env.d.ts`; the generated route type path was restored and left out of the final diff.
+
 ### 2026-07-03 - 아키텍처 다이어그램 검수 가이드 작성
 
 - Goal: 자동 생성된 클라우드 아키텍처 다이어그램이 맞는지 판단할 수 있도록, 코드 구현 기준이 아닌 일반 클라우드 개념 기준의 검수 문서를 작성한다.

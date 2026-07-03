@@ -30,7 +30,21 @@ type UnsupportedRequirementRule = {
 const PROMPT_SCENARIO_KEYWORD_RULES: readonly PromptScenarioKeywordRule[] = [
   {
     scenario: "backend_with_db",
-    keywords: ["db", "database", "rds", "postgres", "postgresql", "mysql", "mariadb", "데이터베이스", "디비"],
+    keywords: [
+      "db",
+      "database",
+      "rds",
+      "postgres",
+      "postgresql",
+      "mysql",
+      "mariadb",
+      "데이터베이스",
+      "디비",
+      "로그인",
+      "회원",
+      "계정",
+      "사용자 정보"
+    ],
     reason: "데이터베이스가 필요한 요구사항"
   },
   {
@@ -50,7 +64,21 @@ const PROMPT_SCENARIO_KEYWORD_RULES: readonly PromptScenarioKeywordRule[] = [
   },
   {
     scenario: "static_site",
-    keywords: ["static", "frontend", "react", "next", "next.js", "cloudfront", "정적", "웹사이트", "프론트엔드", "리액트"],
+    keywords: [
+      "static",
+      "frontend",
+      "react",
+      "next",
+      "next.js",
+      "cloudfront",
+      "정적",
+      "웹사이트",
+      "홈페이지",
+      "사이트",
+      "웹서비스",
+      "프론트엔드",
+      "리액트"
+    ],
     reason: "정적 웹사이트 요구사항"
   }
 ];

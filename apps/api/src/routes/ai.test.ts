@@ -343,6 +343,47 @@ test("POST /api/ai/architecture-draft returns scenario scores and unsupported su
   await app.close();
 });
 
+test("POST /api/ai/architecture-draft understands beginner-friendly prompt wording", async () => {
+  const app = buildApp();
+  const promptCases = [
+    {
+      prompt: "웹사이트 하나 배포하고 싶어",
+      scenario: "static_site"
+    },
+    {
+      prompt: "파일 업로드 페이지가 필요해",
+      scenario: "server_storage"
+    },
+    {
+      prompt: "로그인 있는 작은 웹서비스가 필요해",
+      scenario: "backend_with_db"
+    }
+  ] as const;
+
+  for (const promptCase of promptCases) {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/ai/architecture-draft",
+      payload: {
+        prompt: promptCase.prompt,
+        scenarioHint: "auto",
+        budgetLevel: "normal",
+        trafficLevel: "normal",
+        securityPriority: "basic"
+      }
+    });
+
+    assert.equal(response.statusCode, 200);
+
+    const body = architectureDraftResponseSchema.parse(response.json());
+
+    assert.equal(body.metadata.selectedScenario, promptCase.scenario);
+    assert.ok(body.metadata.scenarioScores?.some((score) => score.scenario === promptCase.scenario && score.score > 0));
+  }
+
+  await app.close();
+});
+
 test("POST /api/ai/architecture-draft uses helper choices only for ambiguous prompts", async () => {
   const app = buildApp();
 

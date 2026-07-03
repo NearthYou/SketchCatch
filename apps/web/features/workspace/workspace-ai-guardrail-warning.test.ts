@@ -43,6 +43,17 @@ test("workspace AI scenario helper labels keep prompt-first wording", () => {
   assert.match(workspaceAiPanelSource, /useState<ArchitectureDraftScenarioHint>\("auto"\)/);
 });
 
+test("workspace AI prompt guide uses beginner-friendly examples", () => {
+  assert.match(workspaceAiPanelSource, /프롬프트 작성 가이드/);
+  assert.match(workspaceAiPanelSource, /그냥 이렇게 시작해도 돼요/);
+  assert.match(workspaceAiPanelSource, /원하는 서비스만 적어도 초안을 만듭니다/);
+  assert.match(workspaceAiPanelOptionsSource, /웹사이트 하나 배포하고 싶어/);
+  assert.match(workspaceAiPanelOptionsSource, /파일 업로드 페이지가 필요해/);
+  assert.match(workspaceAiPanelOptionsSource, /로그인 있는 작은 웹서비스가 필요해/);
+  assert.match(stylesSource, /\.aiPromptGuide\s*{/);
+  assert.match(stylesSource, /\.aiPromptChip\s*{/);
+});
+
 function readWorkspaceFile(fileName: string): string {
   return readFileSync(fileURLToPath(new URL(fileName, import.meta.url)), "utf8");
 }
