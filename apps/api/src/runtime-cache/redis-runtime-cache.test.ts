@@ -58,10 +58,62 @@ test("createRedisRuntimeCache falls back to memory when Redis connect fails", as
 
   await cache.set(entryKey, { status: "running" }, { ttlMs: 1000 });
 
+  assert.equal(redisClient.connectCount, 1);
   assert.deepEqual(await cache.get(entryKey), { status: "running" });
   assert.equal(await cache.delete(entryKey), true);
   assert.equal(await cache.get(entryKey), null);
   assert.equal(degradedErrors.length, 4);
+});
+
+test("createRedisRuntimeCache does not use memory fallback on healthy Redis cache miss", async () => {
+  const redisClient = new FakeRedisClient();
+  const fallbackCache = createInMemoryRuntimeCache({ cleanupIntervalMs: null });
+  const cache = createRedisRuntimeCache({
+    createClient: () => redisClient,
+    fallbackCache,
+    redisUrl: "redis://localhost:6379"
+  });
+  const entryKey = {
+    key: "deployment:123",
+    namespace: "deployment.status"
+  };
+
+  await fallbackCache.set(entryKey, "stale_value", { ttlMs: 1000 });
+
+  assert.equal(await cache.get(entryKey), null);
+  assert.equal(redisClient.connectCount, 1);
+});
+
+test("createRedisRuntimeCache suppresses repeated reconnect attempts during cooldown", async () => {
+  let currentTimeMs = 1000;
+  const redisClient = new FakeRedisClient({
+    connectError: new Error("Redis unavailable")
+  });
+  const degradedErrors: unknown[] = [];
+  const cache = createRedisRuntimeCache({
+    connectCooldownMs: 10_000,
+    createClient: () => redisClient,
+    fallbackCache: createInMemoryRuntimeCache({ cleanupIntervalMs: null }),
+    now: () => currentTimeMs,
+    onDegraded: (error) => degradedErrors.push(error),
+    redisUrl: "redis://localhost:6379"
+  });
+  const entryKey = {
+    key: "scan:123",
+    namespace: "reverse-engineering.scan"
+  };
+
+  await cache.set(entryKey, { status: "running" }, { ttlMs: 1000 });
+  assert.equal(redisClient.connectCount, 1);
+
+  assert.deepEqual(await cache.get(entryKey), { status: "running" });
+  assert.equal(redisClient.connectCount, 1);
+
+  currentTimeMs += 10_001;
+
+  assert.deepEqual(await cache.get(entryKey), { status: "running" });
+  assert.equal(redisClient.connectCount, 2);
+  assert.equal(degradedErrors.length, 3);
 });
 
 test("createRedisRuntimeCache falls back to memory when Redis commands fail", async () => {

@@ -31,16 +31,22 @@ export type CreateRedisRuntimeCacheOptions = {
   readonly fallbackCache?: RuntimeCache | undefined;
   readonly createClient?: ((redisUrl: string) => RedisRuntimeCacheClient) | undefined;
   readonly onDegraded?: ((error: unknown) => void) | undefined;
+  readonly connectCooldownMs?: number | undefined;
+  readonly now?: (() => number) | undefined;
 };
 
 const DEFAULT_REDIS_RUNTIME_CACHE_KEY_PREFIX = "sketchcatch:runtime-cache";
+const DEFAULT_REDIS_CONNECT_COOLDOWN_MS = 10_000;
 
 export function createRedisRuntimeCache(options: CreateRedisRuntimeCacheOptions): RuntimeCache {
   const keyPrefix = options.keyPrefix ?? DEFAULT_REDIS_RUNTIME_CACHE_KEY_PREFIX;
   const fallbackCache = options.fallbackCache ?? createInMemoryRuntimeCache();
   const createRedisClient = options.createClient ?? createDefaultRedisClient;
+  const connectCooldownMs = options.connectCooldownMs ?? DEFAULT_REDIS_CONNECT_COOLDOWN_MS;
+  const now = options.now ?? Date.now;
   let client: RedisRuntimeCacheClient | null = null;
   let connectPromise: Promise<RedisRuntimeCacheClient> | null = null;
+  let lastConnectErrorAt = Number.NEGATIVE_INFINITY;
 
   return {
     async get<TValue = RuntimeCacheJsonValue>(
@@ -51,7 +57,7 @@ export function createRedisRuntimeCache(options: CreateRedisRuntimeCacheOptions)
           const valueJson = await redisClient.get(createRedisCacheKey(keyPrefix, entryKey));
 
           if (valueJson === null) {
-            return fallbackCache.get<TValue>(entryKey);
+            return null;
           }
 
           return JSON.parse(valueJson) as TValue;
@@ -109,6 +115,10 @@ export function createRedisRuntimeCache(options: CreateRedisRuntimeCacheOptions)
       return connectPromise;
     }
 
+    if (now() - lastConnectErrorAt < connectCooldownMs) {
+      throw new Error("Redis Runtime Cache connection is cooling down after a recent failure");
+    }
+
     client = createRedisClient(options.redisUrl);
     client.on?.("error", options.onDegraded ?? (() => undefined));
     connectPromise = client.connect().then(() => {
@@ -126,6 +136,7 @@ export function createRedisRuntimeCache(options: CreateRedisRuntimeCacheOptions)
     } catch (error) {
       connectPromise = null;
       client = null;
+      lastConnectErrorAt = now();
       throw error;
     }
   }
