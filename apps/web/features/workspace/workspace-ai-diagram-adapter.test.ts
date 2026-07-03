@@ -509,6 +509,79 @@ test("convertArchitectureJsonToDiagramJson lays out server and storage draft as 
   assertContainsNode(securityGroupNode, instanceNode);
 });
 
+test("convertArchitectureJsonToDiagramJson keeps server-storage usage arrows visible", () => {
+  const architectureJson: ArchitectureJson = {
+    nodes: [
+      {
+        id: "ami",
+        type: "AMI",
+        label: "Amazon Linux AMI",
+        positionX: 120,
+        positionY: 130,
+        config: { owners: ["amazon"] }
+      },
+      {
+        id: "ec2-instance",
+        type: "EC2",
+        label: "EC2 Instance",
+        positionX: 330,
+        positionY: 765,
+        config: {
+          ami: "data.aws_ami.ami.id",
+          instanceType: "t3.micro"
+        }
+      },
+      {
+        id: "s3-bucket",
+        type: "S3",
+        label: "S3 Bucket",
+        positionX: 950,
+        positionY: 130,
+        config: {}
+      }
+    ],
+    edges: [
+      {
+        id: "ami-to-ec2-instance",
+        sourceId: "ami",
+        targetId: "ec2-instance",
+        label: "launch image"
+      },
+      {
+        id: "ec2-instance-to-s3-bucket",
+        sourceId: "ec2-instance",
+        targetId: "s3-bucket",
+        label: "stores images"
+      }
+    ]
+  };
+
+  const diagramJson = convertArchitectureJsonToDiagramJson(architectureJson);
+
+  assert.deepEqual(
+    diagramJson.edges.map((edge) => ({
+      id: edge.id,
+      label: edge.label,
+      sourceNodeId: edge.sourceNodeId,
+      targetNodeId: edge.targetNodeId
+    })),
+    [
+      {
+        id: "ami-to-ec2-instance",
+        label: "launch image",
+        sourceNodeId: "ami",
+        targetNodeId: "ec2-instance"
+      },
+      {
+        id: "ec2-instance-to-s3-bucket",
+        label: "stores images",
+        sourceNodeId: "ec2-instance",
+        targetNodeId: "s3-bucket"
+      }
+    ]
+  );
+});
+
 test("convertDiagramJsonToArchitectureJson keeps only valid resource nodes and connected edges", () => {
   const diagramJson: DiagramJson = {
     nodes: [

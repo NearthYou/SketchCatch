@@ -13,6 +13,26 @@
 - Highest priority unfinished harness feature: `HARNESS-007`
 - Current blocker: none
 
+### 2026-07-03 - Server Storage 핵심 관계 edge 보정
+
+- Goal: `EC2 서버 + 이미지 저장용 S3` 요청에서 EC2, AMI, S3의 핵심 관계가 다이어그램에 보이도록 한다.
+- Completed:
+  - Server Storage 템플릿에서 애매한 `S3 -> Internet Gateway` edge를 제거했다.
+  - `AMI -> EC2` `launch image` edge를 추가해 EC2가 어떤 AMI로 생성되는지 보이게 했다.
+  - `EC2 -> S3` `stores images` edge를 추가해 이미지 저장 요구사항이 다이어그램에 드러나게 했다.
+  - API 테스트와 workspace adapter 테스트에서 새 관계 edge를 검증하도록 갱신했다.
+- Verification run:
+  - `.\apps\api\node_modules\.bin\tsx.CMD apps/api/src/routes/ai.test.ts` - passed with 21 tests after sandbox spawn EPERM.
+  - `.\apps\web\node_modules\.bin\tsx.CMD apps/web/features/workspace/workspace-ai-diagram-adapter.test.ts` - passed with 8 tests after sandbox spawn EPERM.
+  - `node scripts/check-harness.mjs` - passed.
+  - `.\node_modules\.bin\eslint.CMD apps/api/src/services/aiArchitectureDraftTemplates.ts apps/api/src/routes/ai.test.ts apps/web/features/workspace/workspace-ai-diagram-adapter.test.ts` - passed.
+  - `.\node_modules\.bin\tsc.CMD --noEmit -p apps/api/tsconfig.json` - passed.
+  - `.\node_modules\.bin\tsc.CMD --noEmit -p apps/web/tsconfig.json` - passed.
+  - `.\apps\web\node_modules\.bin\next.CMD build` - passed after sandbox `.next` unlink EPERM.
+- Known risks:
+  - `pnpm` is still unavailable in the current shell, so checks were run through local project binaries.
+  - Existing unrelated worktree change remains: `apps/web/next-env.d.ts`.
+
 ### 2026-07-03 - 포함관계 area 화살표 숨김
 
 - Goal: area 포함관계가 박스 중첩으로 표현될 때 중복 화살표가 나와 보드가 지저분해지는 문제를 줄인다.
