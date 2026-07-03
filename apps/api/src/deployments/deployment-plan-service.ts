@@ -5,10 +5,7 @@ import type {
   AiPreDeploymentAnalysisResult,
   ArchitectureJson,
   AwsConnection,
-  CheckFinding,
-  DeploymentBlockedBy,
-  DeploymentStatus,
-  DeploymentPlanSummary
+  DeploymentStatus
 } from "@sketchcatch/types";
 import {
   prepareTerraformAwsCredentialEnv as defaultPrepareTerraformAwsCredentialEnv,
@@ -33,10 +30,7 @@ import {
   createS3DeploymentPlanArtifactStorage,
   type DeploymentPlanArtifactStorage
 } from "./deployment-plan-artifact-storage.js";
-import {
-  createPreDeploymentCheckWarning,
-  createUnsupportedResourceWarning
-} from "./deployment-warning-factory.js";
+import { evaluateDeploymentSafetyGate } from "./deployment-safety-gate.js";
 import {
   appendDeploymentLogs,
   DeploymentConflictError,
@@ -326,12 +320,14 @@ export async function runDeploymentPlan(
     const unsupportedResourceTypes = findUnsupportedLiveApplyResourceTypesFromTerraformShowJson(
       terraform.showJson.stdout
     );
-    const planSummary = createBlockedPlanSummary(
-      createDeploymentPlanSummaryFromTerraformShowJson(terraform.showJson.stdout),
-      preDeploymentAnalysis.findings,
+    const safetyGate = evaluateDeploymentSafetyGate({
+      operation: "apply",
+      planSummary: createDeploymentPlanSummaryFromTerraformShowJson(terraform.showJson.stdout),
+      findings: preDeploymentAnalysis.findings,
       unsupportedResourceTypes
-    );
-    const block = createDeploymentPlanBlock(planSummary, unsupportedResourceTypes);
+    });
+    const planSummary = safetyGate.summary;
+    const block = safetyGate.block;
     const planArtifactId = generatePlanArtifactId();
     let uploadedPlanArtifact: Awaited<
       ReturnType<DeploymentPlanArtifactStorage["uploadDeploymentPlanArtifact"]>
@@ -613,76 +609,6 @@ async function failDeployment(
   }
 
   return failedDeployment;
-}
-
-function createBlockedPlanSummary(
-  summary: DeploymentPlanSummary,
-  findings: readonly CheckFinding[],
-  unsupportedResourceTypes: readonly string[] = []
-): DeploymentPlanSummary {
-  const highRiskWarnings = findings
-    .filter((finding) => finding.severity === "high")
-    .map(createPreDeploymentCheckWarning);
-  const unsupportedResourceWarnings = unsupportedResourceTypes.map((resourceType) =>
-    createUnsupportedResourceWarning("apply", resourceType)
-  );
-  const warnings = [...summary.warnings, ...highRiskWarnings, ...unsupportedResourceWarnings];
-
-  return {
-    ...summary,
-    blocked: true,
-    warnings
-  };
-}
-
-function createDeploymentPlanBlock(
-  summary: DeploymentPlanSummary,
-  unsupportedResourceTypes: readonly string[] = []
-): {
-  isBlocked: boolean;
-  blockedBy: DeploymentBlockedBy;
-  blockedReason: string;
-} {
-  const hasRiskFinding = summary.warnings.some((warning) => warning.level === "high");
-  const hasDestructiveChange = summary.deleteCount > 0 || summary.replaceCount > 0;
-
-  if (unsupportedResourceTypes.length > 0) {
-    return {
-      isBlocked: true,
-      blockedBy: "risk_analysis",
-      blockedReason: `Unsupported Terraform resource types for MVP live apply: ${unsupportedResourceTypes.join(", ")}`
-    };
-  }
-
-  if (hasRiskFinding && hasDestructiveChange) {
-    return {
-      isBlocked: true,
-      blockedBy: "risk_analysis",
-      blockedReason: "Plan includes destructive changes and high-risk findings"
-    };
-  }
-
-  if (hasDestructiveChange) {
-    return {
-      isBlocked: true,
-      blockedBy: "risk_analysis",
-      blockedReason: "Plan includes delete or replace changes"
-    };
-  }
-
-  if (hasRiskFinding) {
-    return {
-      isBlocked: true,
-      blockedBy: "risk_analysis",
-      blockedReason: "Pre-Deployment Check found high-risk findings"
-    };
-  }
-
-  return {
-    isBlocked: true,
-    blockedBy: "missing_approval",
-    blockedReason: "Terraform Plan requires user approval before apply"
-  };
 }
 
 async function appendTerraformOutput(input: {

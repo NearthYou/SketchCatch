@@ -1007,9 +1007,26 @@ test("runDeploymentPlan blocks destructive or high-risk plans with risk_analysis
   assert.equal(result.deployment.planSummary?.replaceCount, 1);
   assert.deepEqual(result.deployment.planSummary?.warnings, [
     {
+      id: "pre_deployment_check:finding-1",
       level: "high",
+      category: "security",
+      source: "pre_deployment_check",
+      code: "PUBLIC_SSH",
       message: "Public ingress: Restrict CIDR",
-      relatedResourceId: "sg-1"
+      relatedFindingId: "finding-1",
+      relatedResourceId: "sg-1",
+      requiresAcknowledgement: false,
+      blocksApproval: true
+    },
+    {
+      id: "terraform_plan:DESTRUCTIVE_CHANGE:apply",
+      level: "high",
+      category: "configuration",
+      source: "terraform_plan",
+      code: "DESTRUCTIVE_CHANGE",
+      message: "Terraform apply plan includes delete or replace changes",
+      requiresAcknowledgement: false,
+      blocksApproval: true
     }
   ]);
 });
