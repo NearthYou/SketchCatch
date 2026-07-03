@@ -2,6 +2,42 @@
 
 이 파일은 최신 세션 하나를 다음 세션이 빠르게 이어받기 위한 압축본이다. 누적 이력은 `agent-progress.md`에 남긴다.
 
+## 2026-07-03 최신 핸드오프 - 자연어 우선 Architecture Draft 미리보기
+
+### 현재 검증된 것
+
+- Workspace AI Architecture Draft는 자연어 프롬프트 단서를 선택지보다 우선한다.
+- 프롬프트가 모호하고 선택지도 `auto`이면 기본 `api_server` 초안을 만들고 `ambiguous_prompt_fallback` 경고를 남긴다.
+- 지원 범위 밖 요구사항은 리소스로 만들지 않고 `unsupported_resource_omitted` 경고를 남긴다.
+- 지원 가능한 단서와 미지원 요구가 섞이면 지원 가능한 부분만 만들고 `partial_generation` 경고를 남긴다.
+- 같은 요청은 같은 `ArchitectureJson`을 반환한다. LLM 설명은 별도 보조 설명이다.
+- Workspace AI 초안은 실제 workspace 보드에 반투명 preview로 표시된다.
+- preview 중 보드 드래그, 드롭, 연결, 선택 편집, 삭제, 복사/붙여넣기는 막힌다.
+- 사용자가 `생성`을 누르면 preview가 실제 보드로 전체 교체 적용된다. `취소`와 `다시 생성`도 제공된다.
+- 기존 보드에 리소스가 있으면 카드 하단에 전체 교체 경고가 표시된다.
+- 공식 검증: `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build` 모두 통과했다.
+
+### 이번 세션의 변경 사항
+
+- `packages/types/src/index.ts`에 Architecture Draft 경고 코드들을 추가했다.
+- `apps/api/src/services/aiArchitectureScenarioResolution.ts`를 자연어 우선 rule-based 결정기로 정리했다.
+- `apps/api/src/services/aiArchitectureDraftMetadata.ts`에서 보안 config 조정, 예산, 부분 생성 경고 문구를 한국어로 정리했다.
+- `apps/web/features/workspace/WorkspaceAiPanel.tsx`에서 초안 생성과 보드 적용을 분리하고 preview 생성/취소/재생성 흐름을 구현했다.
+- `apps/web/features/diagram-editor/*`에 preview diagram 상태, 읽기 전용 flow mapper, 반투명 노드/엣지 스타일, preview 안내 배지를 추가했다.
+- 관련 API/Web 테스트를 자연어 우선, 결정적 `ArchitectureJson`, preview read-only 계약에 맞춰 갱신했다.
+
+### 아직 깨졌거나 미검증된 것
+
+- Patch mode는 아직 없다. 현재 `생성`은 의도적으로 전체 보드 교체다.
+- Browser 수동 확인은 하지 않았다. 단위 테스트, 타입체크, lint, build로 검증했다.
+- 기존 unrelated 변경 `apps/web/next-env.d.ts`는 이번 작업 전부터 있었고 건드리지 않았다.
+- `git diff --check`는 통과했지만 Windows line-ending warning을 출력했다.
+
+### 다음으로 최선의 행동
+
+- Patch-preview mode를 추가한다. 패치된 모습만 반투명으로 보여주고 사용자가 승인할 때만 실제 보드에 반영한다.
+- 브라우저에서 Workspace AI 패널로 초안 생성, 취소, 다시 생성, 생성 적용 흐름을 수동 확인한다.
+
 ## 현재 검증된 것
 
 - `pnpm harness:check`가 중복 상세 기획 문서 정리 후 통과했다.
@@ -71,3 +107,21 @@ pnpm lint
 pnpm typecheck
 pnpm build
 ```
+## 2026-07-03 최신 핸드오프 - Architecture Draft 화살표 렌더링 수정
+
+### 현재 검증된 것
+- AI 초안 `ArchitectureJson.edges`는 보드 `DiagramEdge`로 변환될 때 source/target handle ID를 갖는다.
+- 생성 edge는 노드 위치를 기준으로 `handle-left/right/top/bottom` 중 자연스러운 연결점을 자동 선택한다.
+- preview/locked 상태에서도 React Flow의 edge 위치 계산용 handle DOM은 유지되고, 사용자 연결 생성만 비활성화된다.
+- 관련 테스트와 web build가 통과했다.
+
+### 이번 세션 변경 사항
+- `apps/web/features/workspace/workspace-ai-diagram-adapter.ts`에서 생성 edge에 기본 handle을 부여했다.
+- `apps/web/features/diagram-editor/DiagramNodeView.tsx`에서 preview/locked 상태의 handle 렌더링 방식을 바꿨다.
+- `apps/web/features/diagram-editor/diagram-editor.module.css`에 비활성 handle 숨김 규칙을 추가했다.
+- `apps/web/features/workspace/workspace-ai-diagram-adapter.test.ts` 기대값에 handle 계약을 추가했다.
+
+### 아직 주의할 점
+- `npm exec --package=pnpm@11.8.0 -- pnpm ...` 체크는 npm cache/network 접근이 `ENOTCACHED`로 실패했다.
+- root `turbo build`는 package manager binary를 찾지 못해 실패했지만, 변경 영향이 있는 web build는 직접 통과했다.
+- 기존 unrelated 변경인 `apps/web/next-env.d.ts`는 건드리지 않았다.

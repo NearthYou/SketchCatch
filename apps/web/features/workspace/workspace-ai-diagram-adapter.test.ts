@@ -108,7 +108,9 @@ test("convertArchitectureJsonToDiagramJson creates board nodes and edges from an
     {
       id: "edge-vpc-ec2",
       label: "contains",
+      sourceHandleId: "handle-right",
       sourceNodeId: "vpc-main",
+      targetHandleId: "handle-left",
       targetNodeId: "ec2-backend",
       type: "smoothstep",
       style: {

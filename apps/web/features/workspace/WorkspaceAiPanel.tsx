@@ -7,6 +7,7 @@ import type {
   ArchitectureDraftScenarioHint,
   ArchitectureDraftSecurityPriority,
   ArchitectureDraftTrafficLevel,
+  ArchitectureGuardrailWarning,
   DesignSimulationResult
 } from "@sketchcatch/types";
 import { getApiErrorMessage } from "../../lib/api-client";
@@ -45,8 +46,8 @@ export type WorkspaceAiPanelProps = {
 // 실제 Architecture Board 오른쪽 패널에서 gg AI MVP 흐름을 실행합니다.
 export function WorkspaceAiPanel({ context }: WorkspaceAiPanelProps) {
   const [prompt, setPrompt] = useState(DEFAULT_REQUIREMENT_PROMPT);
-  const [scenarioHint, setScenarioHint] = useState<ArchitectureDraftScenarioHint>("backend_with_db");
-  const [budgetLevel, setBudgetLevel] = useState<ArchitectureDraftBudgetLevel>("low");
+  const [scenarioHint, setScenarioHint] = useState<ArchitectureDraftScenarioHint>("auto");
+  const [budgetLevel, setBudgetLevel] = useState<ArchitectureDraftBudgetLevel>("normal");
   const [trafficLevel, setTrafficLevel] = useState<ArchitectureDraftTrafficLevel>("small");
   const [securityPriority, setSecurityPriority] = useState<ArchitectureDraftSecurityPriority>("basic");
   const [draft, setDraft] = useState<AiArchitectureDraftResult | null>(null);
@@ -63,6 +64,10 @@ export function WorkspaceAiPanel({ context }: WorkspaceAiPanelProps) {
   const hasStaleDesignSimulation =
     designSimulation !== null &&
     isWorkspaceAiResultStale(simulationFingerprint, boardSnapshot.fingerprint);
+  const draftWarnings = useMemo(
+    () => createDraftWarnings(draft, boardSnapshot.hasResources),
+    [boardSnapshot.hasResources, draft]
+  );
 
   async function createDraftFromPrompt(): Promise<void> {
     if (prompt.trim().length === 0) {
@@ -73,6 +78,8 @@ export function WorkspaceAiPanel({ context }: WorkspaceAiPanelProps) {
 
     setDraftState("loading");
     setDraftErrorMessage("");
+    setDraft(null);
+    context.setPreviewDiagram(null);
 
     try {
       const result = await createAiArchitectureDraft({
@@ -82,7 +89,10 @@ export function WorkspaceAiPanel({ context }: WorkspaceAiPanelProps) {
         securityPriority,
         trafficLevel
       });
+      const previewDiagram = convertArchitectureJsonToDiagramJson(result.architectureJson);
+
       setDraft(result);
+      context.setPreviewDiagram(previewDiagram);
       setDraftState("idle");
     } catch (error) {
       setDraftState("error");
@@ -95,12 +105,26 @@ export function WorkspaceAiPanel({ context }: WorkspaceAiPanelProps) {
       return;
     }
 
-    context.applyDiagramJson(convertArchitectureJsonToDiagramJson(draft.architectureJson));
+    context.applyDiagramJson(context.previewDiagram ?? convertArchitectureJsonToDiagramJson(draft.architectureJson));
+    setDraft(null);
     setDesignSimulation(null);
     setSimulationFingerprint(null);
   }
 
+  function cancelDraftPreview(): void {
+    context.setPreviewDiagram(null);
+    setDraft(null);
+    setDraftErrorMessage("");
+    setDraftState("idle");
+  }
+
   async function runDesignSimulation(): Promise<void> {
+    if (context.isPreviewActive) {
+      setSimulationState("error");
+      setSimulationErrorMessage("AI 초안 미리보기 중에는 현재 보드 시뮬레이션을 실행할 수 없습니다.");
+      return;
+    }
+
     if (!boardSnapshot.hasResources) {
       setSimulationState("error");
       setSimulationErrorMessage("Architecture Board에 Resource가 있어야 실행할 수 있습니다.");
@@ -129,12 +153,12 @@ export function WorkspaceAiPanel({ context }: WorkspaceAiPanelProps) {
     <div className={styles.aiPanel}>
       <header className={styles.aiPanelHeader}>
         <span>AI</span>
-        <h2>Workspace AI</h2>
+        <h2>워크스페이스 AI</h2>
       </header>
 
       <section className={styles.aiSection}>
         <label className={styles.aiField}>
-          <span>Requirement Prompt</span>
+          <span>요구사항 프롬프트</span>
           <textarea
             onChange={(event) => setPrompt(event.target.value)}
             rows={4}
@@ -142,7 +166,7 @@ export function WorkspaceAiPanel({ context }: WorkspaceAiPanelProps) {
           />
         </label>
         <WorkspaceAiSelect
-          label="용도"
+          label="보조 선택"
           onChange={setScenarioHint}
           options={scenarioOptions}
           value={scenarioHint}
@@ -173,28 +197,41 @@ export function WorkspaceAiPanel({ context }: WorkspaceAiPanelProps) {
           onClick={() => void createDraftFromPrompt()}
           type="button"
         >
-          {draftState === "loading" ? "초안 생성 중" : "Architecture Draft 생성"}
+          {draftState === "loading" ? "초안 생성 중" : "초안 미리보기 생성"}
         </button>
         <WorkspaceAiRequestMessage state={draftState} message={draftErrorMessage} />
         {draft !== null ? (
           <article className={styles.aiResultCard}>
             <div className={styles.aiResultHeader}>
               <h3>{draft.title}</h3>
-              <span>{draft.architectureJson.nodes.length} Resources</span>
+              <span>{draft.architectureJson.nodes.length}개 리소스</span>
             </div>
             <WorkspaceAiExplanation explanation={draft.llmExplanation} />
-            <WorkspaceAiGuardrailWarnings warnings={draft.metadata.guardrailWarnings} />
-            <button className={styles.aiSecondaryButton} onClick={applyDraftToBoard} type="button">
-              보드에 반영
-            </button>
+            <div className={styles.aiActionRow}>
+              <button className={styles.aiPrimaryButton} onClick={applyDraftToBoard} type="button">
+                생성
+              </button>
+              <button className={styles.aiSecondaryButton} onClick={cancelDraftPreview} type="button">
+                취소
+              </button>
+              <button
+                className={styles.aiSecondaryButton}
+                disabled={draftState === "loading"}
+                onClick={() => void createDraftFromPrompt()}
+                type="button"
+              >
+                다시 생성
+              </button>
+            </div>
+            <WorkspaceAiGuardrailWarnings warnings={draftWarnings} />
           </article>
         ) : null}
       </section>
 
       <section className={styles.aiSection}>
         <WorkspaceAiActionHeader
-          buttonLabel={simulationState === "loading" ? "계산 중" : "Design Simulation"}
-          disabled={simulationState === "loading"}
+          buttonLabel={simulationState === "loading" ? "계산 중" : "시뮬레이션"}
+          disabled={simulationState === "loading" || context.isPreviewActive}
           onClick={() => void runDesignSimulation()}
           title="설계 시뮬레이션"
         />
@@ -208,4 +245,24 @@ export function WorkspaceAiPanel({ context }: WorkspaceAiPanelProps) {
       </section>
     </div>
   );
+}
+
+function createDraftWarnings(
+  draft: AiArchitectureDraftResult | null,
+  boardHasResources: boolean
+): ArchitectureGuardrailWarning[] | undefined {
+  if (draft === null) {
+    return undefined;
+  }
+
+  const warnings = [...(draft.metadata.guardrailWarnings ?? [])];
+
+  if (boardHasResources) {
+    warnings.push({
+      code: "board_replacement_required",
+      message: "생성을 누르면 현재 보드가 AI 초안으로 전체 교체됩니다. 이번 버전은 패치 적용이 아니라 전체 교체입니다."
+    });
+  }
+
+  return warnings;
 }

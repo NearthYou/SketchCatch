@@ -42,7 +42,7 @@ export function WorkspaceAiSelect<Value extends string>({
       <span>{label}</span>
       <SelectMenu
         ariaLabel={`${label} 선택`}
-        emptyLabel="Select a value"
+        emptyLabel="값 선택"
         onChange={handleChange}
         options={options}
         value={value}
@@ -162,8 +162,14 @@ export function WorkspaceAiGuardrailWarnings({
 function getGuardrailWarningLabel(code: ArchitectureGuardrailWarning["code"]): string {
   const warningLabels = {
     low_budget_rds_cost: "예산 확인",
-    scenario_conflict: "선택값 확인",
-    unsupported_requirement: "MVP 범위 밖"
+    scenario_conflict: "선택 조건 확인",
+    unsupported_requirement: "지원 범위 확인",
+    unsupported_resource_omitted: "일부 제외",
+    selection_overridden_by_prompt: "자연어 우선",
+    ambiguous_prompt_fallback: "기본 초안",
+    partial_generation: "부분 생성",
+    guardrail_adjusted_config: "설정 조정",
+    board_replacement_required: "전체 교체"
   } satisfies Record<ArchitectureGuardrailWarning["code"], string>;
 
   return warningLabels[code];

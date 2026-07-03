@@ -21,6 +21,12 @@ const DEFAULT_EDGE_STYLE: NonNullable<DiagramEdge["style"]> = {
   color: "#506176",
   width: "medium"
 };
+const EDGE_HANDLE_IDS = {
+  bottom: "handle-bottom",
+  left: "handle-left",
+  right: "handle-right",
+  top: "handle-top"
+} as const;
 const AREA_CHILD_PADDING = 48;
 const MAX_AREA_FIT_PASSES = 8;
 const AREA_PARENT_EDGE_LABELS = new Set(["contains", "hosts"]);
@@ -65,11 +71,12 @@ export function convertArchitectureJsonToDiagramJson(architectureJson: Architect
   const nodes = fitAreaNodesToChildren(
     applyAreaParentMetadata(addServerStorageAreaNodes(convertedNodes), architectureJson.edges)
   );
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
 
   return {
     edges: architectureJson.edges
       .filter((edge) => nodeIds.has(edge.sourceId) && nodeIds.has(edge.targetId))
-      .map(convertArchitectureEdgeToDiagramEdge),
+      .map((edge) => convertArchitectureEdgeToDiagramEdge(edge, nodeById)),
     nodes,
     viewport: { ...DEFAULT_VIEWPORT }
   };
@@ -193,14 +200,67 @@ function createDiagramNodeParameters(
   };
 }
 
-function convertArchitectureEdgeToDiagramEdge(edge: ArchitectureJson["edges"][number]): DiagramEdge {
+function convertArchitectureEdgeToDiagramEdge(
+  edge: ArchitectureJson["edges"][number],
+  nodeById: ReadonlyMap<string, DiagramNode>
+): DiagramEdge {
+  const handles = getDefaultEdgeHandles(nodeById.get(edge.sourceId), nodeById.get(edge.targetId));
+
   return {
     id: edge.id,
     label: edge.label,
     sourceNodeId: edge.sourceId,
+    sourceHandleId: handles.sourceHandleId,
     style: { ...DEFAULT_EDGE_STYLE },
+    targetHandleId: handles.targetHandleId,
     targetNodeId: edge.targetId,
     type: "smoothstep"
+  };
+}
+
+function getDefaultEdgeHandles(
+  sourceNode: DiagramNode | undefined,
+  targetNode: DiagramNode | undefined
+): Pick<DiagramEdge, "sourceHandleId" | "targetHandleId"> {
+  if (!sourceNode || !targetNode) {
+    return {
+      sourceHandleId: EDGE_HANDLE_IDS.right,
+      targetHandleId: EDGE_HANDLE_IDS.left
+    };
+  }
+
+  const sourceCenter = getNodeCenter(sourceNode);
+  const targetCenter = getNodeCenter(targetNode);
+  const deltaX = targetCenter.x - sourceCenter.x;
+  const deltaY = targetCenter.y - sourceCenter.y;
+
+  if (Math.abs(deltaX) >= Math.abs(deltaY)) {
+    return deltaX >= 0
+      ? {
+          sourceHandleId: EDGE_HANDLE_IDS.right,
+          targetHandleId: EDGE_HANDLE_IDS.left
+        }
+      : {
+          sourceHandleId: EDGE_HANDLE_IDS.left,
+          targetHandleId: EDGE_HANDLE_IDS.right
+        };
+  }
+
+  return deltaY >= 0
+    ? {
+        sourceHandleId: EDGE_HANDLE_IDS.bottom,
+        targetHandleId: EDGE_HANDLE_IDS.top
+      }
+    : {
+        sourceHandleId: EDGE_HANDLE_IDS.top,
+        targetHandleId: EDGE_HANDLE_IDS.bottom
+      };
+}
+
+function getNodeCenter(node: DiagramNode): DiagramNode["position"] {
+  return {
+    x: node.position.x + node.size.width / 2,
+    y: node.position.y + node.size.height / 2
   };
 }
 

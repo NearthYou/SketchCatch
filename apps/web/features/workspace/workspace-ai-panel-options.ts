@@ -25,26 +25,26 @@ resource "aws_security_group_rule" "ssh" {
 export const DEFAULT_TERRAFORM_ERROR_MESSAGE = "Error: Missing required argument on generated variables.tf";
 
 export const scenarioOptions: readonly ChoiceOption<ArchitectureDraftScenarioHint>[] = [
-  { label: "자동", value: "auto" },
-  { label: "백엔드+DB", value: "backend_with_db" },
-  { label: "서버+스토리지", value: "server_storage" },
-  { label: "정적 웹", value: "static_site" },
-  { label: "API 서버", value: "api_server" }
+  { label: "자연어 기준 자동 판단", value: "auto" },
+  { label: "API 서버", value: "api_server" },
+  { label: "백엔드와 DB", value: "backend_with_db" },
+  { label: "서버와 스토리지", value: "server_storage" },
+  { label: "정적 웹사이트", value: "static_site" }
 ];
 
 export const budgetOptions: readonly ChoiceOption<ArchitectureDraftBudgetLevel>[] = [
-  { label: "낮음", value: "low" },
+  { label: "낮게", value: "low" },
   { label: "보통", value: "normal" }
 ];
 
 export const trafficOptions: readonly ChoiceOption<ArchitectureDraftTrafficLevel>[] = [
-  { label: "작음", value: "small" },
+  { label: "작게", value: "small" },
   { label: "보통", value: "normal" }
 ];
 
 export const securityOptions: readonly ChoiceOption<ArchitectureDraftSecurityPriority>[] = [
   { label: "기본", value: "basic" },
-  { label: "높음", value: "high" }
+  { label: "높게", value: "high" }
 ];
 
 export const terraformStageOptions: readonly ChoiceOption<AiTerraformStage>[] = [
