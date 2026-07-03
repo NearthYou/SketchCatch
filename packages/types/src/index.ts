@@ -337,6 +337,79 @@ export type TerraformArtifact = ProjectAsset & {
   uploadStatus: "uploaded";
 };
 
+export type SourceRepositoryProvider = "internal";
+
+export type SourceRepository = {
+  id: string;
+  projectId: string;
+  provider: SourceRepositoryProvider;
+  owner: string;
+  name: string;
+  defaultBranch: string;
+  repositoryUrl: string | null;
+  createdAt: IsoDateTimeString;
+  updatedAt: IsoDateTimeString;
+};
+
+export type GitCicdHandoffStatus =
+  | "draft"
+  | "pr_created"
+  | "pipeline_running"
+  | "pipeline_success"
+  | "pipeline_failed"
+  | "cancelled";
+
+export type GitCicdHandoff = {
+  id: string;
+  projectId: string;
+  architectureId: string;
+  terraformArtifactId: string;
+  sourceRepositoryId: string;
+  repositoryProvider: SourceRepositoryProvider;
+  repositoryOwner: string;
+  repositoryName: string;
+  targetBranch: string;
+  sourceBranch: string | null;
+  commitMessage: string | null;
+  pullRequestTitle: string | null;
+  pullRequestUrl: string | null;
+  pipelineRunUrl: string | null;
+  status: GitCicdHandoffStatus;
+  statusMessage: string | null;
+  userAcceptedChangeId: string;
+  createdByUserId: string;
+  createdAt: IsoDateTimeString;
+  updatedAt: IsoDateTimeString;
+};
+
+export type CreateGitCicdHandoffRequest = {
+  architectureId: string;
+  terraformArtifactId: string;
+  sourceRepositoryId: string;
+  repositoryOwner: string;
+  repositoryName: string;
+  targetBranch: string;
+  sourceBranch?: string | undefined;
+  commitMessage?: string | undefined;
+  pullRequestTitle?: string | undefined;
+  userAcceptedChangeId: string;
+};
+
+export type UpdateGitCicdHandoffStatusRequest = {
+  status: GitCicdHandoffStatus;
+  pullRequestUrl?: string | null | undefined;
+  pipelineRunUrl?: string | null | undefined;
+  statusMessage?: string | null | undefined;
+};
+
+export type GitCicdHandoffResponse = {
+  handoff: GitCicdHandoff;
+};
+
+export type GitCicdHandoffListResponse = {
+  handoffs: GitCicdHandoff[];
+};
+
 export type DeploymentStatus =
   | "PENDING"
   | "RUNNING"

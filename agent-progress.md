@@ -15,6 +15,40 @@
 
 ## 세션 레코드
 
+### 2026-07-03 - #134 GitCicdHandoff 계약/API 기반 구현
+
+- Goal: Git/CI/CD Deployment Path의 v0 metadata handoff 계약, DB schema/migration, API routes, tests, SW 학습 문서를 구현한다.
+- Completed:
+  - `packages/types/src/index.ts`에 secret-free `SourceRepository`, `GitCicdHandoffStatus`, `GitCicdHandoff`, create/list/get/status DTO를 추가했다.
+  - `apps/api/src/db/schema.ts`에 `git_cicd_repository_provider`, `git_cicd_handoff_status`, `git_cicd_handoffs` table/relation을 추가했다.
+  - `apps/api/drizzle/0021_git_cicd_handoffs.sql`와 `apps/api/drizzle/meta/0021_snapshot.json`, `_journal.json` entry를 추가했다. `drizzle-kit generate`는 기존 snapshot collision 때문에 실패해 명시적 SQL과 수동 snapshot으로 처리했다.
+  - `apps/api/src/git-cicd/git-cicd-handoff-service.ts`에 project access, architecture, uploaded Terraform artifact 검증과 fake/internal provider boundary를 구현했다.
+  - `apps/api/src/routes/git-cicd-handoffs.ts`와 route registration을 추가해 create/list/get/status update를 제공한다.
+  - `apps/api/src/routes/git-cicd-handoffs.test.ts`와 `apps/api/src/db/schema-contract.test.ts`로 access control, artifact linkage, create/list/get/status update, no-secret response/schema를 검증했다.
+  - `docs/data-models.md`, `docs/sw/005_GitCicdHandoff계약API클론코딩가이드_sw.md`, `docs/sw/README.md`를 갱신했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/routes/git-cicd-handoffs.test.ts` - initially failed once because isolated test app lacked the global Zod error handler; fixed test helper and reran passed
+  - `pnpm --filter @sketchcatch/api typecheck` - passed
+  - `pnpm --filter @sketchcatch/types typecheck` - passed
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/routes/git-cicd-handoffs.test.ts src/db/schema-contract.test.ts` - passed
+  - `pnpm --filter @sketchcatch/api lint` - passed
+  - `pnpm --filter @sketchcatch/types lint` - passed
+  - `pnpm harness:check` - passed after edits
+  - `pnpm lint` - passed
+  - `pnpm typecheck` - passed
+  - `pnpm build` - passed
+  - `git diff --check` - passed with Git line-ending warnings only
+- Evidence recorded:
+  - No real GitHub PR/commit/pipeline calls were implemented or executed; provider is internal/fake metadata boundary only.
+  - No Terraform apply/destroy, cloud mutation, real Git/CI/CD handoff execution, or secret handling was performed.
+  - Request schemas are strict and tests reject secret-looking fields such as `accessToken`.
+- Known risks:
+  - `drizzle-kit generate` could not be used because existing snapshots `0008` and `0015` point to a colliding parent snapshot path. The new migration is explicit SQL and the snapshot/journal were updated manually.
+  - #135 still needs the real GitHub/provider implementation and should keep secrets out of DB/logs/responses.
+- Next best action:
+  - Parent agent should review #134 diff, especially manual Drizzle metadata, then #135 can replace the internal provider boundary with real GitHub/CI behavior.
+
 ### 2026-07-02 - 중복 상세 기획 문서 정리
 
 - Goal: 별도 재구성본을 제거하고 상세 기획서는 canonical 상세 기획서 하나로 유지한다.

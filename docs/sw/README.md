@@ -10,6 +10,7 @@
 4. Terraform 표현식 확장은 [004_테라폼표현식확장설계_sw.md](./004_테라폼표현식확장설계_sw.md)를 본다.
 5. Runtime Cache 추상화와 메모리 fallback은 [005_런타임캐시추상화가이드_sw.md](./005_런타임캐시추상화가이드_sw.md)를 본다.
 6. Direct Deployment 승인 스냅샷 재검증은 [005_승인스냅샷재검증클론코딩가이드_sw.md](./005_승인스냅샷재검증클론코딩가이드_sw.md)를 본다.
+7. Git/CI/CD handoff 계약과 API 생명주기는 [007_GitCicdHandoff계약API클론코딩가이드_sw.md](./007_GitCicdHandoff계약API클론코딩가이드_sw.md)를 본다.
 
 ## 문서 목록
 
@@ -23,6 +24,7 @@
 | [004_테라폼표현식확장설계_sw.md](./004_테라폼표현식확장설계_sw.md) | Terraform 표현식 확장 설계 메모 |
 | [005_런타임캐시추상화가이드_sw.md](./005_런타임캐시추상화가이드_sw.md) | Runtime Cache 추상화, 메모리 fallback, Redis adapter 준비 가이드 |
 | [006_승인스냅샷재검증클론코딩가이드_sw.md](./005_승인스냅샷재검증클론코딩가이드_sw.md) | Direct Deployment 승인 스냅샷 재검증 클론 코딩 가이드 |
+| [007_GitCicdHandoff계약API클론코딩가이드_sw.md](./007_GitCicdHandoff계약API클론코딩가이드_sw.md) | Git/CI/CD handoff 계약과 API 생명주기 클론 코딩 가이드 |
 
 ## 정리 규칙
 

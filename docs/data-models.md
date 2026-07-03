@@ -672,6 +672,20 @@ type DeploymentLog = {
 `GitCicdHandoff`는 `IaC Preview`를 Source Repository와 외부 pipeline으로 넘기는 팀 운영 배포 경로의 metadata다. Direct Deployment Path를 대체하는 것이 아니라 운영 배포용 별도 경로다.
 
 ```ts
+type SourceRepositoryProvider = "internal";
+
+type SourceRepository = {
+  id: string;
+  projectId: string;
+  provider: SourceRepositoryProvider;
+  owner: string;
+  name: string;
+  defaultBranch: string;
+  repositoryUrl: string | null;
+  createdAt: IsoDateTimeString;
+  updatedAt: IsoDateTimeString;
+};
+
 type GitCicdHandoffStatus =
   | "draft"
   | "pr_created"
@@ -686,15 +700,25 @@ type GitCicdHandoff = {
   architectureId: string;
   terraformArtifactId: string;
   sourceRepositoryId: string;
+  repositoryProvider: SourceRepositoryProvider;
+  repositoryOwner: string;
+  repositoryName: string;
+  targetBranch: string;
+  sourceBranch: string | null;
+  commitMessage: string | null;
+  pullRequestTitle: string | null;
   pullRequestUrl: string | null;
   pipelineRunUrl: string | null;
   status: GitCicdHandoffStatus;
+  statusMessage: string | null;
+  userAcceptedChangeId: string;
+  createdByUserId: string;
   createdAt: IsoDateTimeString;
   updatedAt: IsoDateTimeString;
 };
 ```
 
-Git/CI/CD handoff도 `UserAcceptedChange` 이후에만 생성한다. 저장소 토큰, private key, CI secret 원문은 shared type, DB, 로그에 저장하지 않는다.
+Git/CI/CD handoff도 `UserAcceptedChange` 이후에만 생성한다. v0 API는 `internal` provider boundary만 사용하며 실제 GitHub PR 생성은 별도 provider 구현에서 담당한다. 저장소 토큰, private key, deploy key, CI secret 원문은 shared type, DB, 응답, 로그에 저장하지 않는다.
 
 ## Reverse Engineering Scan
 
