@@ -111,6 +111,15 @@ test("terraform leave guard covers workspace escape actions while editing", () =
   assert.doesNotMatch(componentSource, /activeView === "terraform" \|\| activeView === "issues"/);
 });
 
+test("terraform issues navigation stays reachable while diagnostics are visible", () => {
+  assert.match(componentSource, /canOpenTerraformIssuesDuringEdit/);
+  assert.match(componentSource, /nextView === "issues" && canOpenTerraformIssuesDuringEdit/);
+  assert.match(componentSource, /data-terraform-issues-navigation/);
+  assert.match(componentSource, /isTerraformIssuesNavigationTarget/);
+  assert.match(componentSource, /canOpenTerraformIssuesDuringEdit && isTerraformIssuesNavigationTarget\(target\)/);
+  assert.match(componentSource, /openCollapsedView\("issues"\)/);
+});
+
 test("discarding terraform edits resets the terraform code panel dirty state", () => {
   assert.match(componentSource, /terraformDiscardRequestId/);
   assert.match(componentSource, /setTerraformDiscardRequestId\(\(requestId\) => requestId \+ 1\)/);
@@ -151,6 +160,19 @@ test("terraform leave dialog exposes blocked save feedback instead of ignoring f
   assert.match(terraformLeaveDialogSource, /role=\{saveState === "blocked" \? "alert" : "status"\}/);
   assert.match(terraformLeaveDialogSource, /저장 중/);
   assert.match(terraformLeaveDialogSource, /disabled=\{isSaving\}/);
+});
+
+test("blocked terraform leave save reveals the terraform panel when diagnostics explain the failure", () => {
+  assert.match(componentSource, /latestTerraformDiagnosticsRef/);
+  assert.match(componentSource, /handleTerraformDiagnosticsChange/);
+  assert.match(componentSource, /latestTerraformDiagnosticsRef\.current = diagnostics/);
+  assert.match(componentSource, /onDiagnosticsChange=\{handleTerraformDiagnosticsChange\}/);
+  assert.match(componentSource, /hasBlockingDiagnostics/);
+  assert.match(componentSource, /shouldRevealTerraformPanel/);
+  assert.match(componentSource, /pendingTerraformLeaveActionRef\.current = null/);
+  assert.match(componentSource, /context\.setRightPanelOpen\(true\)/);
+  assert.match(componentSource, /setActiveView\("terraform"\)/);
+  assert.match(componentSource, /setShowTerraformLeaveDialog\(false\)/);
 });
 
 test("deployment expanded logs use a single terminal scrollbar", () => {
