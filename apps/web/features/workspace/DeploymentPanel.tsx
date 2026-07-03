@@ -146,7 +146,6 @@ export function DeploymentPanel({
     () => deployments.find((deployment) => deployment.id === selectedDeploymentId) ?? null,
     [deployments, selectedDeploymentId]
   );
-  const latestDeploymentLogSequence = deploymentLogs.at(-1)?.sequence ?? 0;
   const hasDeploymentRecords = deployments.length > 0;
   const compactDeploymentPanelMode = hasDeploymentRecords ? deploymentPanelMode : "setup";
   const canStartDeploymentReview =
@@ -388,7 +387,6 @@ export function DeploymentPanel({
       cancelled = true;
     };
   }, [
-    latestDeploymentLogSequence,
     selectedDeployment?.errorSummary,
     selectedDeployment?.failureStage,
     selectedDeployment?.id,

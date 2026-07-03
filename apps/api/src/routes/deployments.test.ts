@@ -1358,6 +1358,54 @@ test("GET /api/deployments/:deploymentId/failure-explanation returns a masked fa
   await app.close();
 });
 
+test("GET /api/deployments/:deploymentId/failure-explanation uses the earliest error without overlong excerpts", async () => {
+  const repository = new FakeDeploymentRepository();
+  const longFirstError = "x".repeat(700);
+  repository.deployment = createDeploymentRecord(deploymentId, {
+    status: "FAILED",
+    failureStage: "plan",
+    failedAt: fixedNow
+  });
+  repository.logs = [
+    {
+      id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      deploymentId,
+      sequence: 20,
+      stage: "plan",
+      level: "ERROR",
+      message: "later error should not be selected",
+      relatedResourceId: null,
+      createdAt: fixedNow
+    },
+    {
+      id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      deploymentId,
+      sequence: 10,
+      stage: "plan",
+      level: "ERROR",
+      message: longFirstError,
+      relatedResourceId: null,
+      createdAt: fixedNow
+    }
+  ];
+  const app = await buildDeploymentTestApp(repository);
+
+  const response = await app.inject({
+    method: "GET",
+    url: `/api/deployments/${deploymentId}/failure-explanation`,
+    headers: await authHeaders()
+  });
+
+  assert.equal(response.statusCode, 200);
+  const body = response.json<DeploymentFailureExplanationResponse>();
+
+  assert.equal(body.explanation.firstErrorLog?.length, 600);
+  assert.match(body.explanation.firstErrorLog ?? "", /^x+\.\.\.$/);
+  assert.equal(body.explanation.firstErrorLog?.includes("later error"), false);
+
+  await app.close();
+});
+
 test("GET /api/deployments/:deploymentId/failure-explanation rejects non-failed deployments", async () => {
   const repository = new FakeDeploymentRepository();
   const app = await buildDeploymentTestApp(repository);

@@ -68,9 +68,15 @@ export async function createDeploymentFailureExplanation(
 }
 
 function findFirstErrorLog(logs: readonly DeploymentLogRecord[]): DeploymentLogRecord | undefined {
-  return [...logs]
-    .sort((left, right) => left.sequence - right.sequence)
-    .find((log) => log.level === "ERROR");
+  let firstErrorLog: DeploymentLogRecord | undefined;
+
+  for (const log of logs) {
+    if (log.level === "ERROR" && (!firstErrorLog || log.sequence < firstErrorLog.sequence)) {
+      firstErrorLog = log;
+    }
+  }
+
+  return firstErrorLog;
 }
 
 function normalizeFailureExcerpt(message: string): string {
@@ -80,7 +86,7 @@ function normalizeFailureExcerpt(message: string): string {
     return maskedMessage;
   }
 
-  return `${maskedMessage.slice(0, maxFailureExcerptLength - 1)}...`;
+  return `${maskedMessage.slice(0, maxFailureExcerptLength - 3)}...`;
 }
 
 function toAiTerraformStage(stage: DeploymentFailureStage | null): AiTerraformStage {
