@@ -397,6 +397,9 @@ test("GET /api/git-cicd-handoffs/:handoffId hides handoffs from other users", as
 
 test("PATCH /api/git-cicd-handoffs/:handoffId/status updates status metadata", async () => {
   const repository = new FakeGitCicdHandoffRepository();
+  repository.handoff = createHandoffRecord(handoffId, {
+    status: "pr_created"
+  });
   const app = await buildGitCicdHandoffTestApp(repository);
 
   const response = await app.inject({
@@ -424,6 +427,36 @@ test("PATCH /api/git-cicd-handoffs/:handoffId/status updates status metadata", a
   );
   assert.equal(body.handoff.statusMessage, "Pipeline started by internal provider worker");
   assertResponseHasNoSecretFields(body.handoff);
+
+  await app.close();
+});
+
+test("PATCH /api/git-cicd-handoffs/:handoffId/status rejects invalid status transitions", async () => {
+  const repository = new FakeGitCicdHandoffRepository();
+  repository.handoff = createHandoffRecord(handoffId, {
+    status: "pipeline_success"
+  });
+  const app = await buildGitCicdHandoffTestApp(repository);
+
+  const response = await app.inject({
+    method: "PATCH",
+    url: `/api/git-cicd-handoffs/${handoffId}/status`,
+    headers: await authHeaders(),
+    payload: {
+      status: "pipeline_running" satisfies GitCicdHandoffStatus
+    }
+  });
+
+  assert.equal(response.statusCode, 409);
+  assert.deepEqual(response.json(), {
+    error: "conflict",
+    message:
+      "Invalid Git/CI/CD handoff status transition from pipeline_success to pipeline_running"
+  });
+  assert.equal(
+    repository.calls.some((call) => call.name === "updateHandoffStatus"),
+    false
+  );
 
   await app.close();
 });

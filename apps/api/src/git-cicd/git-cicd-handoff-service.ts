@@ -142,6 +142,28 @@ export class GitCicdHandoffNotFoundError extends Error {
   }
 }
 
+export class GitCicdHandoffInvalidStatusTransitionError extends Error {
+  constructor(
+    readonly currentStatus: GitCicdHandoffStatus,
+    readonly nextStatus: GitCicdHandoffStatus
+  ) {
+    super(`Invalid Git/CI/CD handoff status transition from ${currentStatus} to ${nextStatus}`);
+    this.name = "GitCicdHandoffInvalidStatusTransitionError";
+  }
+}
+
+const allowedGitCicdHandoffStatusTransitions: Record<
+  GitCicdHandoffStatus,
+  readonly GitCicdHandoffStatus[]
+> = {
+  cancelled: [],
+  draft: ["pr_created", "cancelled"],
+  pipeline_failed: ["pipeline_running", "cancelled"],
+  pipeline_running: ["pipeline_success", "pipeline_failed", "cancelled"],
+  pipeline_success: [],
+  pr_created: ["pipeline_running", "cancelled"]
+};
+
 export function createInternalGitCicdHandoffProvider(): GitCicdHandoffProvider {
   return {
     async createHandoff() {
@@ -374,13 +396,15 @@ export async function updateGitCicdHandoffStatus(
   input: UpdateGitCicdHandoffStatusInput,
   repository: GitCicdHandoffRepository
 ): Promise<GitCicdHandoffRecord> {
-  await getGitCicdHandoff(
+  const currentHandoff = await getGitCicdHandoff(
     {
       handoffId: input.handoffId,
       accessContext: input.accessContext
     },
     repository
   );
+
+  assertGitCicdHandoffStatusTransition(currentHandoff.status, input.status);
 
   const handoff = await repository.updateHandoffStatus(input.handoffId, {
     status: input.status,
@@ -394,6 +418,19 @@ export async function updateGitCicdHandoffStatus(
   }
 
   return handoff;
+}
+
+function assertGitCicdHandoffStatusTransition(
+  currentStatus: GitCicdHandoffStatus,
+  nextStatus: GitCicdHandoffStatus
+): void {
+  if (currentStatus === nextStatus) {
+    return;
+  }
+
+  if (!allowedGitCicdHandoffStatusTransitions[currentStatus].includes(nextStatus)) {
+    throw new GitCicdHandoffInvalidStatusTransitionError(currentStatus, nextStatus);
+  }
 }
 
 async function requireAccessibleProject(
