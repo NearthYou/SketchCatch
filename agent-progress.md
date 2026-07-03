@@ -13,6 +13,26 @@
 - Highest priority unfinished harness feature: `HARNESS-007`
 - Current blocker: none
 
+### 2026-07-03 - PR #144 review comment resolution
+
+- Goal: Address the unresolved PR review thread on `apps/api/src/routes/aws-connections.ts`.
+- Completed:
+  - Replaced the `in` operator check for `cloudFormationTemplatePublisher` with an explicit `options?.cloudFormationTemplatePublisher !== undefined` check.
+  - Preserved the existing `null` override behavior for tests and fallback S3 publisher creation when the option is omitted.
+- Verification run:
+  - `pnpm harness:check` - passed before editing
+  - `.\apps\api\node_modules\.bin\tsx.CMD --test apps/api/src/routes/aws-connections.test.ts` - passed with 11 tests
+  - `pnpm lint` - passed
+  - `pnpm typecheck` - passed
+  - `pnpm build` - passed
+- Evidence recorded:
+  - The unresolved review thread was actionable and limited to the route option guard.
+  - No Terraform apply/destroy, stack creation, cloud mutation, or deployment was run.
+- Known risks:
+  - Final GitHub thread resolution still requires pushing this commit and marking the review thread resolved.
+- Next best action:
+  - Push the hotfix branch update and resolve the GitHub review thread.
+
 ### 2026-07-03 - Web Docker public asset 404 hotfix
 
 - Goal: Fix deployed frontend 404s for `favicon.svg`, `terraform.svg`, and AWS SVG icon assets served from `apps/web/public`.

@@ -360,7 +360,7 @@ export async function registerAwsConnectionRoutes(
         }
 
         const cloudFormationTemplatePublisher =
-          options && "cloudFormationTemplatePublisher" in options
+          options?.cloudFormationTemplatePublisher !== undefined
             ? options.cloudFormationTemplatePublisher
             : createS3CloudFormationTemplatePublisher(getRuntimeEnv().s3BucketName);
 
