@@ -11,17 +11,34 @@ type StoredRuntimeCacheValue = {
 };
 
 export type CreateInMemoryRuntimeCacheOptions = {
+  readonly cleanupIntervalMs?: number | null | undefined;
   readonly now?: () => number;
 };
+
+const DEFAULT_CLEANUP_INTERVAL_MS = 60_000;
 
 export function createInMemoryRuntimeCache(
   options: CreateInMemoryRuntimeCacheOptions = {}
 ): RuntimeCache {
   const entriesByNamespace = new Map<string, Map<string, StoredRuntimeCacheValue>>();
   const now = options.now ?? (() => Date.now());
+  const cleanupIntervalMs =
+    options.cleanupIntervalMs === undefined
+      ? DEFAULT_CLEANUP_INTERVAL_MS
+      : options.cleanupIntervalMs;
+
+  if (cleanupIntervalMs !== null) {
+    assertPositiveFiniteMs(cleanupIntervalMs, "RuntimeCache cleanupIntervalMs");
+
+    const cleanupTimer = setInterval(() => {
+      deleteExpiredEntries(entriesByNamespace, now());
+    }, cleanupIntervalMs);
+
+    (cleanupTimer as { unref?: () => void }).unref?.();
+  }
 
   return {
-    async get<TValue extends RuntimeCacheJsonValue = RuntimeCacheJsonValue>(
+    async get<TValue = RuntimeCacheJsonValue>(
       entryKey: RuntimeCacheEntryKey
     ): Promise<TValue | null> {
       const namespaceEntries = entriesByNamespace.get(entryKey.namespace);
@@ -45,12 +62,14 @@ export function createInMemoryRuntimeCache(
       value: RuntimeCacheJsonValue,
       options: RuntimeCacheSetOptions
     ): Promise<void> {
-      assertPositiveTtl(options.ttlMs);
+      assertPositiveFiniteMs(options.ttlMs, "RuntimeCache ttlMs");
 
+      const currentTimeMs = now();
+      deleteExpiredEntries(entriesByNamespace, currentTimeMs);
       const namespaceEntries = getOrCreateNamespace(entriesByNamespace, entryKey.namespace);
 
       namespaceEntries.set(entryKey.key, {
-        expiresAtMs: now() + options.ttlMs,
+        expiresAtMs: currentTimeMs + options.ttlMs,
         valueJson: serializeRuntimeCacheValue(value)
       });
     },
@@ -92,6 +111,21 @@ function deleteNamespaceIfEmpty(
   }
 }
 
+function deleteExpiredEntries(
+  entriesByNamespace: Map<string, Map<string, StoredRuntimeCacheValue>>,
+  nowMs: number
+): void {
+  for (const [namespace, namespaceEntries] of entriesByNamespace) {
+    for (const [key, storedValue] of namespaceEntries) {
+      if (storedValue.expiresAtMs <= nowMs) {
+        namespaceEntries.delete(key);
+      }
+    }
+
+    deleteNamespaceIfEmpty(entriesByNamespace, namespace);
+  }
+}
+
 function serializeRuntimeCacheValue(value: RuntimeCacheJsonValue): string {
   const valueJson = JSON.stringify(value);
 
@@ -102,8 +136,8 @@ function serializeRuntimeCacheValue(value: RuntimeCacheJsonValue): string {
   return valueJson;
 }
 
-function assertPositiveTtl(ttlMs: number): void {
-  if (!Number.isFinite(ttlMs) || ttlMs <= 0) {
-    throw new RangeError("RuntimeCache ttlMs must be a positive finite number");
+function assertPositiveFiniteMs(valueMs: number, label: string): void {
+  if (!Number.isFinite(valueMs) || valueMs <= 0) {
+    throw new RangeError(`${label} must be a positive finite number`);
   }
 }

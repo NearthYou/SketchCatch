@@ -16,9 +16,7 @@ export type RuntimeCacheSetOptions = {
 };
 
 export type RuntimeCache = {
-  get<TValue extends RuntimeCacheJsonValue = RuntimeCacheJsonValue>(
-    entryKey: RuntimeCacheEntryKey
-  ): Promise<TValue | null>;
+  get<TValue = RuntimeCacheJsonValue>(entryKey: RuntimeCacheEntryKey): Promise<TValue | null>;
   set(
     entryKey: RuntimeCacheEntryKey,
     value: RuntimeCacheJsonValue,

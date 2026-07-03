@@ -23,6 +23,26 @@ test("set and get returns cached JSON values", async () => {
   assert.deepEqual(await cache.get<typeof value>(entryKey), value);
 });
 
+test("get accepts interface-shaped cached values", async () => {
+  interface DeploymentRuntimeStatus {
+    readonly startedAt: string;
+    readonly status: "running";
+  }
+
+  const cache = createInMemoryRuntimeCache();
+  const entryKey = {
+    key: "deployment-typed",
+    namespace: "deployment.status"
+  };
+
+  await cache.set(entryKey, { startedAt: "2026-07-03T00:00:00.000Z", status: "running" }, { ttlMs: 1000 });
+
+  assert.deepEqual(await cache.get<DeploymentRuntimeStatus>(entryKey), {
+    startedAt: "2026-07-03T00:00:00.000Z",
+    status: "running"
+  });
+});
+
 test("delete removes one cached entry", async () => {
   const cache = createInMemoryRuntimeCache();
   const entryKey = {
@@ -54,6 +74,30 @@ test("ttl expiry uses the injected clock", async () => {
 
   currentTimeMs = 10_500;
   assert.equal(await cache.get(entryKey), null);
+});
+
+test("set sweeps expired entries before writing new values", async () => {
+  let currentTimeMs = 20_000;
+  const cache = createInMemoryRuntimeCache({
+    cleanupIntervalMs: null,
+    now: () => currentTimeMs
+  });
+  const expiredEntryKey = {
+    key: "expired-deployment",
+    namespace: "deployment.status"
+  };
+  const currentEntryKey = {
+    key: "current-deployment",
+    namespace: "deployment.status"
+  };
+
+  await cache.set(expiredEntryKey, "running", { ttlMs: 100 });
+
+  currentTimeMs = 20_100;
+  await cache.set(currentEntryKey, "queued", { ttlMs: 1000 });
+
+  assert.equal(await cache.delete(expiredEntryKey), false);
+  assert.equal(await cache.get<string>(currentEntryKey), "queued");
 });
 
 test("namespaces isolate entries with the same key", async () => {
