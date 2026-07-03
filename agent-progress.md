@@ -15,6 +15,39 @@
 
 ## 세션 레코드
 
+### 2026-07-03 - Terraform editor 2단계 검증과 CLI 진행 상태
+
+- Goal: Terraform editor 저장/manual Validate에서 빠른 정적 검증을 먼저 수행하고, 통과한 경우에만 backend Terraform CLI 검증을 실행하며, CLI 검증 진행 상태를 editor 상단 bar로 표시한다.
+- Completed:
+  - `TerraformValidateRequest`/`TerraformValidateResponse`에 `mode`, `stage`, `status`, `terraformFiles`, `projectId` 계약을 추가했다.
+  - API에 `terraform-validation.ts`를 추가해 `static -> cli_prepare -> cli_validate` 검증 흐름을 분리했다.
+  - `terraform validate -json` runner를 추가하고, CLI diagnostics를 `TerraformDiagnostic`으로 변환하게 했다.
+  - `full` mode는 정적 오류를 먼저 fail-fast로 반환하고, 정적 오류가 없을 때만 임시 workdir에서 `terraform init -backend=false`와 `terraform validate -json`을 실행한다.
+  - Editor validation은 `module`, `provider`, 사용자 정의 `terraform` root block을 CLI 실행 전에 막고, 파일명/파일 수/입력 크기 제한과 격리된 HOME/TF_DATA_DIR/TF_CLI_CONFIG_FILE 환경을 사용한다.
+  - Terraform panel 진입 시 `/terraform/validate/prepare`로 provider plugin cache warmup을 요청하고, 저장/manual Validate 시에는 code editor 위 progress bar에 준비/정적검증/CLI검증/완료/오류 상태를 표시한다.
+  - 검증 중 코드가 바뀐 경우 이전 결과를 성공처럼 반영하지 않고 재검증 필요 diagnostics를 남기게 했다.
+  - Terraform leave modal에서 저장 취소/폐기 뒤 오래된 save completion이 나중에 도착해도 현재 모달 상태를 덮지 않도록 request id를 무효화했다.
+  - 배포 준비 저장은 Terraform panel에서 이미 full validation을 통과한 source를 다시 combined-code로 중복 검증하지 않도록 `skipValidation` 경로를 추가했다.
+  - `docs/data-models.md`와 `docs/sw/003_테라폼동기화구조설명_sw.md`에 editor validation 경계와 CLI 제한 범위를 기록했다.
+- Verification run:
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-diagnostics.test.ts src/services/terraform/terraform-validation.test.ts src/routes/terraform.test.ts src/deployments/terraform-runner.test.ts src/deployments/terraform-plugin-cache-warmup.test.ts` - passed.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/api.test.ts features/workspace/workspace-right-panel-layout.test.ts features/workspace/workspace-deployment-artifacts.test.ts features/workspace/terraform-diagnostic-line-highlights.test.ts features/workspace/pre-deployment-diagnostics.test.ts` - passed.
+  - `pnpm --filter @sketchcatch/types typecheck` - passed.
+  - `pnpm --filter @sketchcatch/api typecheck` - passed.
+  - `pnpm --filter @sketchcatch/web typecheck` - passed.
+  - `git diff --check` - passed.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `pnpm build` - passed.
+- Evidence recorded:
+  - 실제 Terraform cloud mutation은 실행하지 않았다. CLI 검증 경로는 `init -backend=false`와 `validate -json`만 사용한다.
+  - `pnpm build`가 `apps/web/next-env.d.ts`를 prod route type 경로로 바꿨지만, 생성물 변경이라 다시 tracked dev 경로로 원복했다.
+- Known risks:
+  - 브라우저 수동 smoke는 아직 수행하지 않았다. 자동 source/layout 테스트와 build로 progress bar 위치/계약을 확인했다.
+  - 전체 `pnpm test`는 이전 세션에서 deployment lock-file/path expectation 실패가 알려져 있어 이번 마무리에서는 focused tests와 필수 게이트를 기준으로 검증했다.
+- Next best action:
+  - Terraform editor에서 실제로 저장 버튼을 눌렀을 때 progress bar 문구와 오류 line squiggle이 사용자가 기대하는 속도로 보이는지 브라우저 smoke를 한 번 확인한다.
+
 ### 2026-07-03 - Terraform Preview 오케스트레이션 분리
 
 - Goal: `diagram-to-terraform.ts`가 `DiagramJson`을 직접 알지 않게 하고, Terraform Preview 흐름을 `DiagramJson -> InfrastructureGraph -> Terraform` 책임으로 분리한다.

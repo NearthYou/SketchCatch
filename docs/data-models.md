@@ -412,7 +412,7 @@ type TerraformArtifact = ProjectAsset & {
 
 Terraform 원문은 RDS `content` 컬럼에 저장하지 않는다. API가 미리보기를 제공하기 위해 S3에서 읽어 임시 응답으로 내려줄 수는 있지만, 영구 저장 기준은 S3 object다.
 
-## Terraform 생성과 정적 검증 DTO
+## Terraform 생성과 Editor 검증 DTO
 
 Terraform 생성 API는 `DiagramJson`을 입력으로 받지만 내부 pipeline은 `DiagramJson -> InfrastructureGraph -> Terraform` 순서로 나뉜다. API용 preview orchestration은 `terraform-preview.ts`가 담당하고, `diagram-to-terraform.ts`는 이미 정규화된 `InfrastructureGraph`를 Terraform HCL 문자열로 렌더링하는 책임만 가진다.
 
@@ -491,7 +491,14 @@ Terraform editor에서 새로 발견한 구조 변경 proposal의 v1 범위는 s
 
 Parameter panel의 `Advanced Parameters` UI는 내부 노출 정책이 정해질 때까지 숨긴다. 이는 UI 노출 정책이며 저장 정책이 아니다. 기존 `parameters.values`에 남아 있는 optional 또는 catalog 밖 값은 사용자가 명시적으로 삭제하지 않는 한 보존하고, Terraform Preview renderer가 이해할 수 있으면 계속 렌더링 입력으로 사용한다.
 
-정적 검증은 실제 Terraform CLI를 실행하지 않고 사용자가 편집 중인 Terraform 문자열만 점검한다.
+Terraform editor 검증은 두 단계로 나뉜다.
+
+- `static`: 실제 Terraform CLI를 실행하지 않고 문자열 구조, block header, 따옴표로 감싼 reference 같은 빠른 diagnostics를 반환한다.
+- `full`: 먼저 `static`을 fail-fast로 통과한 뒤, API 서버의 격리된 임시 디렉터리에서 `terraform init -backend=false`와 `terraform validate -json`만 실행한다. 이 경로는 editor 저장/manual Validate용 검증이며 `terraform plan`, `apply`, `destroy`를 실행하지 않는다.
+
+`full` mode는 editor 검증용이므로 사용자 HCL의 `module`, `provider`, `terraform` root block을 CLI 실행 전에 막는다. API는 자체 provider support 파일만 임시 디렉터리에 추가하고, 고정된 AWS provider 검증 범위 안에서 `validate -json` 결과를 diagnostics로 변환한다. 외부 module download, backend 설정, plan/apply/destroy, state mutation은 editor validation 범위가 아니다.
+
+Workspace가 여러 Terraform 파일을 들고 있으면 `terraformFiles`를 함께 보내고, API는 같은 temp workdir 안에 파일들을 복원해 하나의 Terraform module로 검증한다. 파일명은 영문, 숫자, 점, 밑줄, 하이픈만 허용하고, 파일 수와 전체 입력 크기는 API가 제한한다. `terraformCode`는 단일 파일 호환용 입력이자 빈 코드 저장 의도 판별용 입력이다.
 
 ```ts
 type TerraformDiagnosticSeverity = "info" | "warning" | "error";
@@ -506,16 +513,41 @@ type TerraformDiagnostic = {
   nodeId?: string;
 };
 
+type TerraformValidationMode = "static" | "full";
+
+type TerraformValidationStage = "static" | "cli_prepare" | "cli_validate";
+
+type TerraformValidationStatus = "passed" | "failed";
+
 type TerraformValidateRequest = {
   terraformCode: string;
+  terraformFiles?: TerraformSyncFileInput[];
+  mode?: TerraformValidationMode;
+  projectId?: string;
 };
 
 type TerraformValidateResponse = {
   diagnostics: TerraformDiagnostic[];
+  mode: TerraformValidationMode;
+  stage: TerraformValidationStage;
+  status: TerraformValidationStatus;
+};
+
+type TerraformValidationPrepareRequest = {
+  projectId?: string;
+  provider?: CloudProvider;
+};
+
+type TerraformValidationPrepareResponse = {
+  diagnostics: TerraformDiagnostic[];
+  stage: "cli_prepare";
+  status: TerraformValidationStatus;
 };
 ```
 
-정적 diagnostics는 Deployment의 `init`, `validate`, `plan`, `apply` stage와 섞지 않는다. 실제 Terraform CLI 기반 검증은 Deployment 실행 흐름에서 다룬다.
+Terraform panel에 진입하면 프론트엔드는 `TerraformValidationPrepareRequest`로 provider plugin cache warmup을 요청할 수 있다. Prepare 실패는 사용자 저장 action을 자동 차단하지 않고, 저장/manual Validate 시 full validation이 다시 실제 검증을 수행한다.
+
+Editor validation의 `cli_prepare`/`cli_validate`는 Deployment의 `init`, `validate`, `plan`, `apply` stage와 섞지 않는다. Deployment 실행은 승인된 Terraform artifact와 AWS 연결을 기준으로 별도 안전 게이트를 가진다. Editor validation은 사용자 편집 코드가 저장 가능한지 확인하는 선행 검사일 뿐, 실제 cloud mutation을 의미하지 않는다.
 
 ## AwsConnection
 
