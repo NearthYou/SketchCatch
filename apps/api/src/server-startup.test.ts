@@ -26,6 +26,7 @@ test("startApiServer warms the Terraform plugin cache before listening", async (
     },
     host: "127.0.0.1",
     port: 4000,
+    validateAwsCredentialSource: () => {},
     warmTerraformPluginCache: async () => {
       events.push("warmup");
       return successfulWarmupResult;
@@ -56,6 +57,7 @@ test("startApiServer keeps listening when Terraform plugin cache warmup fails", 
     },
     host: "127.0.0.1",
     port: 4000,
+    validateAwsCredentialSource: () => {},
     warmTerraformPluginCache: async () => ({
       command: ["terraform", "init"],
       exitCode: 1,
@@ -89,6 +91,7 @@ test("startApiServer keeps listening when Terraform plugin cache warmup throws",
     },
     host: "127.0.0.1",
     port: 4000,
+    validateAwsCredentialSource: () => {},
     warmTerraformPluginCache: async () => {
       throw new Error("terraform is unavailable");
     },
@@ -100,3 +103,86 @@ test("startApiServer keeps listening when Terraform plugin cache warmup throws",
 
   assert.deepEqual(events, ["warn", "recover", "listen"]);
 });
+
+test("startApiServer validates the AWS credential source before Terraform warmup", async () => {
+  const events: string[] = [];
+
+  await assert.rejects(
+    () =>
+      startApiServer({
+        app: {
+          listen: async () => {
+            events.push("listen");
+          },
+          log: {
+            info: () => {},
+            warn: () => {}
+          }
+        },
+        host: "127.0.0.1",
+        port: 4000,
+        validateAwsCredentialSource: () => {
+          events.push("validate");
+          throw new Error("static AWS credentials are configured");
+        },
+        warmTerraformPluginCache: async () => {
+          events.push("warmup");
+          return successfulWarmupResult;
+        },
+        recoverInterruptedDeployments: async () => {
+          events.push("recover");
+          return [];
+        }
+      }),
+    /static AWS credentials are configured/
+  );
+
+  assert.deepEqual(events, ["validate"]);
+});
+
+test("startApiServer rejects static AWS credentials with the default startup guard", async () => {
+  const originalAccessKeyId = process.env.AWS_ACCESS_KEY_ID;
+  const events: string[] = [];
+  process.env.AWS_ACCESS_KEY_ID = "static-access-key-id";
+
+  try {
+    await assert.rejects(
+      () =>
+        startApiServer({
+          app: {
+            listen: async () => {
+              events.push("listen");
+            },
+            log: {
+              info: () => {},
+              warn: () => {}
+            }
+          },
+          host: "127.0.0.1",
+          port: 4000,
+          warmTerraformPluginCache: async () => {
+            events.push("warmup");
+            return successfulWarmupResult;
+          },
+          recoverInterruptedDeployments: async () => {
+            events.push("recover");
+            return [];
+          }
+        }),
+      /Static AWS credentials are not allowed/
+    );
+
+    assert.deepEqual(events, []);
+  } finally {
+    restoreEnvValue("AWS_ACCESS_KEY_ID", originalAccessKeyId);
+  }
+});
+
+function restoreEnvValue(key: string, value: string | undefined): void {
+  if (value === undefined) {
+    delete process.env[key];
+    return;
+  }
+
+  process.env[key] = value;
+}
