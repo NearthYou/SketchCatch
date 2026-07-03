@@ -674,10 +674,11 @@
 }
 
 .terraformTopBar {
-  align-items: center;
+  align-items: flex-start;
   background: #ffffff;
   border-bottom: 1px solid #dce3ee;
   display: flex;
+  flex-wrap: wrap;
   gap: 7px;
   justify-content: space-between;
   min-height: 42px;
@@ -687,8 +688,11 @@
 .terraformTopActions {
   align-items: center;
   display: inline-flex;
-  flex: 0 0 auto;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
   gap: 6px;
+  justify-content: flex-end;
+  min-width: 0;
 }
 
 .terraformFileChip {
@@ -712,6 +716,7 @@
 }
 
 .terraformFilePicker {
+  flex: 1 1 120px;
   min-width: 0;
   position: relative;
 }
@@ -829,6 +834,7 @@
   font-size: 11px;
   font-weight: 900;
   padding: 5px 8px;
+  white-space: nowrap;
 }
 
 .resourceCodeHeader {
@@ -1602,6 +1608,40 @@
   border-radius: 4px;
   outline: 2px solid currentColor;
   outline-offset: 3px;
+}
+
+.terraformValidationProgressBar {
+  align-items: stretch;
+  display: flex;
+  min-height: 28px;
+  padding: 0 12px;
+}
+
+.terraformValidationProgressBar span {
+  align-items: center;
+  color: #ffffff;
+  display: flex;
+  flex: 1 1 auto;
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1.2;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0 4px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.terraformValidationProgressWorking {
+  background: #2563eb;
+}
+
+.terraformValidationProgressDone {
+  background: #2fa36b;
+}
+
+.terraformValidationProgressError {
+  background: #f1434a;
 }
 
 .serverSaveToast {

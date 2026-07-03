@@ -55,6 +55,7 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
   const pendingTerraformLeaveActionRef = useRef<PendingTerraformLeaveAction | null>(null);
   const skipTerraformLeaveGuardRef = useRef(false);
   const latestTerraformDiagnosticsRef = useRef<TerraformDiagnostic[]>([]);
+  const latestTerraformSaveRequestIdRef = useRef(0);
   const [activeView, setActiveView] = useState<WorkspaceRightPanelView>("resource");
   const [resourceWorkspaceView, setResourceWorkspaceView] = useState<ResourceWorkspaceView>(
     defaultResourceWorkspaceView
@@ -167,13 +168,19 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
     setTerraformLeaveSaveMessage("");
   }, []);
 
+  function invalidatePendingTerraformSaveCompletion(): void {
+    latestTerraformSaveRequestIdRef.current += 1;
+  }
+
   function continueTerraformEditing(): void {
+    invalidatePendingTerraformSaveCompletion();
     pendingTerraformLeaveActionRef.current = null;
     resetTerraformLeaveSaveFeedback();
     setShowTerraformLeaveDialog(false);
   }
 
   function discardTerraformChanges(): void {
+    invalidatePendingTerraformSaveCompletion();
     setTerraformDiscardRequestId((requestId) => requestId + 1);
     setHasUnsavedTerraformChanges(false);
     resetTerraformLeaveSaveFeedback();
@@ -187,10 +194,18 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
     }
 
     applyTerraformLeaveSaveFeedback(createTerraformLeaveSaveStartFeedback());
-    setTerraformSaveRequestId((requestId) => requestId + 1);
+    setTerraformSaveRequestId((requestId) => {
+      const nextRequestId = requestId + 1;
+      latestTerraformSaveRequestIdRef.current = nextRequestId;
+      return nextRequestId;
+    });
   }
 
-  function handleTerraformExternalSaveComplete(saved: boolean): void {
+  function handleTerraformExternalSaveComplete(saved: boolean, requestId: number): void {
+    if (requestId !== latestTerraformSaveRequestIdRef.current) {
+      return;
+    }
+
     if (!showTerraformLeaveDialog) {
       return;
     }
@@ -246,6 +261,7 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
       return saveWorkspaceTerraformArtifact({
         diagramJson: source.diagramJson,
         projectId,
+        skipValidation: true,
         source: "manual",
         terraformCode: source.terraformCode
       });
@@ -480,6 +496,7 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
             setResourceWorkspaceView("settings");
             setActiveView("resource");
           }}
+          projectId={projectId}
         />
       </div>
       <div className={styles.rightPanelView} hidden={activeView !== "issues"}>

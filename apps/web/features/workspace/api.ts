@@ -44,8 +44,11 @@ import type {
   TestAwsConnectionRequest,
   TestAwsConnectionResponse,
   TerraformGenerateResponse,
+  TerraformValidationPrepareRequest,
+  TerraformValidationPrepareResponse,
   TerraformSyncFileInput,
   TerraformSyncToDiagramResponse,
+  TerraformValidateRequest,
   TerraformValidateResponse,
   VerifyAwsConnectionCreatedRoleRequest,
   VerifyAwsConnectionRequest,
@@ -238,14 +241,24 @@ export async function generateTerraformCode(diagramJson: DiagramJson): Promise<s
 }
 
 export async function validateTerraformCode(
-  terraformCode: string
+  input: string | TerraformValidateRequest
 ): Promise<TerraformValidateResponse> {
+  const body = typeof input === "string" ? { terraformCode: input } : input;
+
   return apiFetch<TerraformValidateResponse>("/terraform/validate", {
     auth: true,
     method: "POST",
-    body: {
-      terraformCode
-    }
+    body
+  });
+}
+
+export async function prepareTerraformValidationWorkspace(
+  input: TerraformValidationPrepareRequest
+): Promise<TerraformValidationPrepareResponse> {
+  return apiFetch<TerraformValidationPrepareResponse>("/terraform/validate/prepare", {
+    auth: true,
+    method: "POST",
+    body: input
   });
 }
 

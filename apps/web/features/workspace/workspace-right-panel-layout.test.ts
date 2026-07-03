@@ -175,6 +175,14 @@ test("blocked terraform leave save reveals the terraform panel when diagnostics 
   assert.match(componentSource, /setShowTerraformLeaveDialog\(false\)/);
 });
 
+test("terraform leave save ignores stale external save completions", () => {
+  assert.match(componentSource, /latestTerraformSaveRequestIdRef/);
+  assert.match(componentSource, /latestTerraformSaveRequestIdRef\.current = nextRequestId/);
+  assert.match(componentSource, /handleTerraformExternalSaveComplete\(saved: boolean, requestId: number\)/);
+  assert.match(componentSource, /requestId !== latestTerraformSaveRequestIdRef\.current/);
+  assert.match(terraformPanelSource, /onExternalSaveComplete\(saved, externalSaveRequestId\)/);
+});
+
 test("deployment expanded logs use a single terminal scrollbar", () => {
   const expandedLogsRule = getCssRule(stylesSource, "deploymentExpandedLogs");
   const expandedLogSectionRule = getDescendantCssRule(
@@ -423,8 +431,74 @@ test("terraform artifact preparation marks the terraform panel as loading", () =
   assert.match(terraformPanelSource, /isPreparingTerraformArtifactRef/);
 });
 
+test("terraform validation progress bar sits directly above the code editor", () => {
+  const progressIndex = terraformPanelSource.indexOf("className={styles.terraformValidationProgressBar");
+  const editorIndex = terraformPanelSource.indexOf("className={styles.terraformEditorFrame}");
+  const topBarRule = getCssRule(stylesSource, "terraformTopBar");
+  const topActionsRule = getCssRule(stylesSource, "terraformTopActions");
+  const progressRule = getCssRule(stylesSource, "terraformValidationProgressBar");
+  const progressSpanRule = getElementDescendantCssRule(
+    stylesSource,
+    "terraformValidationProgressBar",
+    "span"
+  );
+  const progressWorkingRule = getCssRule(stylesSource, "terraformValidationProgressWorking");
+  const progressDoneRule = getCssRule(stylesSource, "terraformValidationProgressDone");
+  const progressErrorRule = getCssRule(stylesSource, "terraformValidationProgressError");
+
+  assert.ok(progressIndex > -1);
+  assert.ok(editorIndex > progressIndex);
+  assert.match(terraformPanelSource, /aria-live="polite"/);
+  assert.match(terraformPanelSource, /완료/);
+  assert.match(topBarRule, /\bflex-wrap:\s*wrap;/);
+  assert.match(topActionsRule, /\bflex-wrap:\s*wrap;/);
+  assert.match(progressRule, /\bmin-height:\s*28px;/);
+  assert.match(progressRule, /\bpadding:\s*0 12px;/);
+  assert.match(progressSpanRule, /\boverflow:\s*hidden;/);
+  assert.match(progressSpanRule, /\btext-overflow:\s*ellipsis;/);
+  assert.match(progressWorkingRule, /\bbackground:\s*#2563eb;/);
+  assert.match(progressDoneRule, /\bbackground:\s*#2fa36b;/);
+  assert.match(progressErrorRule, /\bbackground:\s*#f1434a;/);
+});
+
+test("terraform panel warms CLI validation when the panel becomes visible", () => {
+  assert.match(terraformPanelSource, /prepareTerraformValidationWorkspace/);
+  assert.match(terraformPanelSource, /preparedValidationProjectIdsRef/);
+  assert.match(terraformPanelSource, /if \(!isVisible\)/);
+  assert.match(terraformPanelSource, /projectId/);
+  assert.match(terraformPanelSource, /currentProgress\.kind === "idle"/);
+  assert.match(terraformPanelSource, /currentProgress\.kind === "preparing"/);
+});
+
+test("terraform save and manual validate use full validation for the whole virtual file set", () => {
+  assert.match(terraformPanelSource, /validateTerraformVirtualFiles\(\{[\s\S]*?mode: "full"/);
+  assert.match(terraformPanelSource, /terraformFiles:\s*toTerraformValidationFiles\(terraformFiles\)/);
+  assert.match(terraformPanelSource, /terraformCode:\s*terraformFiles\.length > 0 \? "" : combinedTerraformCode/);
+  assert.match(terraformPanelSource, /projectId/);
+  assert.doesNotMatch(terraformPanelSource, /validateTerraformCode\(displayedTerraformCode\)/);
+});
+
+test("terraform save modal invalidates stale external save completions when user continues or discards", () => {
+  const continueIndex = componentSource.indexOf("function continueTerraformEditing");
+  const discardIndex = componentSource.indexOf("function discardTerraformChanges");
+  const saveCompleteIndex = componentSource.indexOf("function handleTerraformExternalSaveComplete");
+
+  assert.ok(continueIndex > -1);
+  assert.ok(discardIndex > -1);
+  assert.ok(saveCompleteIndex > -1);
+  assert.ok(
+    componentSource.indexOf("invalidatePendingTerraformSaveCompletion()", continueIndex) >
+      continueIndex
+  );
+  assert.ok(
+    componentSource.indexOf("invalidatePendingTerraformSaveCompletion()", discardIndex) >
+      discardIndex
+  );
+  assert.match(componentSource, /requestId !== latestTerraformSaveRequestIdRef\.current/);
+});
+
 test("terraform sync proposals are auto-applied on explicit save without asking again", () => {
-  assert.match(terraformPanelSource, /terraformFiles:\s*terraformFiles\.map/);
+  assert.match(terraformPanelSource, /terraformFiles:\s*toTerraformValidationFiles\(terraformFiles\)/);
   assert.match(terraformPanelSource, /applyAllTerraformSyncProposals/);
   assert.match(terraformPanelSource, /syncResult\.proposals && syncResult\.proposals\.length > 0/);
   assert.match(terraformPanelSource, /context\.applyDiagramJson\(nextDiagramJson\)/);
@@ -449,7 +523,6 @@ test("terraform editor save allows intentionally empty terraform code", () => {
 });
 
 test("terraform virtual file validation avoids request bursts and combined-code empty checks", () => {
-  assert.match(terraformPanelSource, /for \(const file of files\)/);
   assert.doesNotMatch(terraformPanelSource, /Promise\.all\(\s*files/);
   assert.match(terraformPanelSource, /nextFiles\.some\(\(file\) => file\.code\.trim\(\)\.length > 0\)/);
   assert.doesNotMatch(terraformPanelSource, /combineTerraformFiles\(nextFiles\)\.trim\(\)\.length > 0/);
@@ -488,6 +561,19 @@ function getDescendantCssRule(source: string, parentClassName: string, childClas
   assert.ok(
     match?.groups?.body,
     `Expected .${parentClassName} .${childClassName} CSS rule to exist`
+  );
+
+  return match.groups.body;
+}
+
+function getElementDescendantCssRule(source: string, parentClassName: string, elementName: string): string {
+  const match = new RegExp(
+    `\\.${parentClassName}\\s+${elementName}\\s*\\{(?<body>[^}]*)\\}`
+  ).exec(source);
+
+  assert.ok(
+    match?.groups?.body,
+    `Expected .${parentClassName} ${elementName} CSS rule to exist`
   );
 
   return match.groups.body;

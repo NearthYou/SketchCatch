@@ -49,12 +49,14 @@ export async function saveWorkspaceTerraformArtifact({
   diagramJson,
   fileName = DEFAULT_TERRAFORM_ARTIFACT_FILE_NAME,
   projectId,
+  skipValidation = false,
   source = "manual",
   terraformCode
 }: {
   readonly diagramJson: DiagramJson;
   readonly fileName?: string;
   readonly projectId: string;
+  readonly skipValidation?: boolean;
   readonly source?: ArchitectureSource | string;
   readonly terraformCode: string;
 }): Promise<SavedWorkspaceTerraformArtifact> {
@@ -62,14 +64,20 @@ export async function saveWorkspaceTerraformArtifact({
     throw new Error("저장할 Terraform 코드가 없습니다.");
   }
 
-  const validationResult = await validateTerraformCode(terraformCode);
-  const validationError = validationResult.diagnostics.find(
-    (diagnostic) => diagnostic.severity === "error"
-  );
+  if (!skipValidation) {
+    const validationResult = await validateTerraformCode({
+      mode: "full",
+      projectId,
+      terraformCode
+    });
+    const validationError = validationResult.diagnostics.find(
+      (diagnostic) => diagnostic.severity === "error"
+    );
 
-  if (validationError) {
-    const line = validationError.line ? `${validationError.line}번째 줄: ` : "";
-    throw new Error(`Terraform 검증 실패: ${line}${validationError.message}`);
+    if (validationError) {
+      const line = validationError.line ? `${validationError.line}번째 줄: ` : "";
+      throw new Error(`Terraform 검증 실패: ${line}${validationError.message}`);
+    }
   }
 
   const { architecture } = await saveWorkspaceArchitectureSnapshot({
