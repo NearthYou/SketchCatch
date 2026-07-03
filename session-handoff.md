@@ -4,6 +4,10 @@
 
 ## 현재 검증된 것
 
+- `InfrastructureGraphNode`는 더 이상 내부 `ResourceType` `type` 필드를 갖지 않는다.
+- Terraform Preview identity는 `iac.provider + iac.terraformBlockType + iac.resourceType + iac.resourceName` 기준이다.
+- `iac.resourceType`은 `aws_instance`, `aws_vpc`, `aws_s3_bucket` 같은 provider-specific Terraform resource type을 그대로 유지한다.
+- `ResourceType`은 AI/Architecture 분석용 domain classification으로 유지되며 Terraform Preview identity 기준이 아니다.
 - Terraform IaC 리소스 지원 여부의 단일 출처는 `packages/types/src/resource-definitions.ts`의 shared `ResourceDefinition`이다.
 - API와 Web은 `@sketchcatch/types/resource-definitions` subpath를 통해 같은 resource definition/capability를 사용한다.
 - API는 web resource catalog를 import하지 않는다. Web catalog는 icon/category/label/size 같은 presentation 정보만 소유한다.
@@ -49,6 +53,11 @@
 
 ## 이번 세션의 변경 사항
 
+- `packages/types`의 `InfrastructureGraphNode`에서 `type: ResourceType`를 제거했다.
+- `infrastructure-graph.ts`가 graph node에 `type: resourceDefinition.resourceType`를 넣지 않도록 변경했다.
+- `resourceDefinition` 사용처를 preview capability 확인과 `iac.provider` 설정으로 축소했다.
+- InfrastructureGraph API 테스트에 EC2가 `EC2`로 변환되지 않고 `iac.resourceType: "aws_instance"`를 유지하는 회귀 케이스를 추가했다.
+- `docs/data-models.md`에 Terraform Preview identity와 `ResourceDefinition.resourceType`의 역할 차이를 기록했다.
 - `packages/types/src/resource-definitions.ts`를 추가해 44개 AWS Terraform resource/data 항목의 provider, domain `ResourceType`, Terraform identity, capability를 정의했다.
 - `packages/types/package.json`에 `./resource-definitions` export를 추가했다. root `index.ts` re-export는 Next/Turbopack source resolve 문제 때문에 사용하지 않는다.
 - `infrastructure-graph.ts`에서 `PREVIEW_SUPPORTED_BLOCKS`와 `RESOURCE_TYPE_BY_TERRAFORM_TYPE`를 제거하고 shared definition의 `terraformPreview`, `resourceType`, `provider`를 사용하게 했다.
@@ -113,6 +122,10 @@
 
 ## 검증
 
+- Red before fix: `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/infrastructure-graph.test.ts` - failed because graph nodes still contained internal `type` and source still used `resourceDefinition.resourceType`
+- `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/infrastructure-graph.test.ts src/services/terraform/diagram-to-terraform.test.ts` - passed
+- `pnpm --filter @sketchcatch/types typecheck` - passed
+- `pnpm typecheck` - passed
 - `pnpm --filter @sketchcatch/types typecheck` - passed
 - `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/infrastructure-graph.test.ts src/services/terraform/terraform-to-diagram.test.ts` - passed
 - `pnpm --filter @sketchcatch/web exec tsx --test features/resource-settings/catalog.test.ts` - passed

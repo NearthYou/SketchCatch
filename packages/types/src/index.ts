@@ -77,7 +77,6 @@ export type InfrastructureGraphNodeIaC = {
 
 export type InfrastructureGraphNode = {
   id: string;
-  type: ResourceType;
   label?: string | undefined;
   iac: InfrastructureGraphNodeIaC;
   config: ResourceConfig;

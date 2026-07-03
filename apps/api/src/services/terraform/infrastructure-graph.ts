@@ -54,7 +54,6 @@ function toInfrastructureGraphNode(node: DiagramNode): InfrastructureGraphNode |
 
   return {
     id: node.id,
-    type: resourceDefinition.resourceType,
     label: node.label,
     iac: {
       provider: resourceDefinition.provider,

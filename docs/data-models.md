@@ -119,7 +119,6 @@ type InfrastructureGraph = {
 ```ts
 type InfrastructureGraphNode = {
   id: string;
-  type: ResourceType;
   label?: string;
   iac: {
     provider: CloudProvider;
@@ -143,7 +142,7 @@ type InfrastructureGraphEdge = {
 };
 ```
 
-`id`는 `DiagramJson.nodes[].id`와 안정적으로 대응해야 한다. Terraform에서 들어온 변경은 `(resourceType, resourceName)`으로 기존 node를 찾고, 찾은 node의 `id`를 유지한 채 `config`를 갱신한다. 매칭할 수 없는 block, 알 수 없는 block, 복잡한 expression처럼 안전하게 해석할 수 없는 입력은 기존 그래프나 `DiagramJson`을 변경하지 않고 diagnostic으로 반환한다.
+`id`는 `DiagramJson.nodes[].id`와 안정적으로 대응해야 한다. Terraform Preview 경로의 리소스 identity는 내부 `ResourceType` 변환값이 아니라 `iac.provider + iac.terraformBlockType + iac.resourceType + iac.resourceName`이다. Terraform에서 들어온 변경은 `(resourceType, resourceName)`으로 기존 node를 찾고, 찾은 node의 `id`를 유지한 채 `config`를 갱신한다. 매칭할 수 없는 block, 알 수 없는 block, 복잡한 expression처럼 안전하게 해석할 수 없는 입력은 기존 그래프나 `DiagramJson`을 변경하지 않고 diagnostic으로 반환한다.
 
 ## DiagramJson
 
@@ -242,7 +241,7 @@ type ResourceType =
 
 ## ResourceDefinition과 Terraform Capability
 
-Terraform IaC 리소스의 지원 여부는 `packages/types/src/resource-definitions.ts`의 `ResourceDefinition`을 단일 출처로 삼는다. 여기에는 `provider`, domain `resourceType`, Terraform block identity, capability만 둔다. `design_region`, `design_az`, `design_group`처럼 화면 배치만 위한 container node는 IaC 리소스가 아니므로 공통 definition에 넣지 않고 web catalog에만 둔다.
+Terraform IaC 리소스의 지원 여부는 `packages/types/src/resource-definitions.ts`의 `ResourceDefinition`을 단일 출처로 삼는다. 여기에는 `provider`, domain `resourceType`, Terraform block identity, capability만 둔다. 여기서 domain `resourceType`은 AI/Architecture 분석용 분류값이며 Terraform Preview identity 기준이 아니다. `design_region`, `design_az`, `design_group`처럼 화면 배치만 위한 container node는 IaC 리소스가 아니므로 공통 definition에 넣지 않고 web catalog에만 둔다.
 
 ```ts
 type ResourceCapability = {

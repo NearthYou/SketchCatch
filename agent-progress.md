@@ -15,6 +15,33 @@
 
 ## 세션 레코드
 
+### 2026-07-03 - InfrastructureGraph 리소스 식별 기준 정리
+
+- Goal: Terraform Preview 경로의 `InfrastructureGraphNode`가 내부 `ResourceType` 변환값에 의존하지 않고 provider-specific Terraform identity만 사용하도록 정리한다.
+- Completed:
+  - `InfrastructureGraphNode` shared type에서 `type: ResourceType` 필드를 제거했다.
+  - `buildInfrastructureGraphFromDiagramJson`이 더 이상 `type: resourceDefinition.resourceType`를 graph node에 넣지 않게 했다.
+  - `resourceDefinition`은 preview capability 확인과 `iac.provider` 채우는 용도로만 남겼다.
+  - `iac.resourceType`에는 `aws_instance`, `aws_vpc`, `aws_s3_bucket` 같은 provider-specific Terraform resource type이 그대로 유지된다.
+  - `ResourceType`, `ArchitectureJson`, `ResourceDefinition.resourceType`, AI/Architecture 변환 경로는 Terraform Preview identity와 다른 domain classification으로 유지했다.
+  - `docs/data-models.md`에 Terraform Preview identity가 `iac.provider + iac.terraformBlockType + iac.resourceType + iac.resourceName` 기준임을 기록했다.
+- Verification run:
+  - Red before fix: `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/infrastructure-graph.test.ts` - failed because graph nodes still contained `type: "VPC"`/`type: "EC2"` and source still used `resourceDefinition.resourceType`.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/infrastructure-graph.test.ts src/services/terraform/diagram-to-terraform.test.ts` - passed.
+  - `pnpm --filter @sketchcatch/types typecheck` - passed.
+  - `pnpm typecheck` - passed.
+  - `pnpm lint` - passed.
+  - `pnpm build` - passed.
+  - `pnpm harness:check` - passed.
+  - `git diff --check` - passed.
+- Evidence recorded:
+  - 실제 Terraform apply/destroy, cloud mutation, Git/CI/CD handoff는 실행하지 않았다.
+  - Terraform 생성 output은 기존 `node.iac.resourceType` 기반 renderer를 유지해 VPC/EC2/S3 preview 생성 경로를 보존했다.
+- Known risks:
+  - 브라우저 수동 smoke는 수행하지 않았다. 타입/단위/빌드 검증으로 Terraform Preview 계약 변경을 확인했다.
+- Next best action:
+  - 새 Terraform Preview 정책을 추가할 때는 `InfrastructureGraphNode.type`를 되살리지 말고 `iac` identity와 capability를 기준으로 판단한다.
+
 ### 2026-07-03 - 공통 ResourceDefinition 기반 Terraform 지원 목록 정리
 
 - Goal: API/Web에 흩어진 Terraform 지원 목록(`PREVIEW_SUPPORTED_BLOCKS`, `PROPOSAL_SUPPORTED_BLOCKS`, Terraform type 매핑)을 `packages/types`의 공통 `ResourceDefinition` capability로 단일 출처화한다.

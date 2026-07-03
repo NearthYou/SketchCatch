@@ -30,7 +30,6 @@ test("buildInfrastructureGraphFromDiagramJson projects renderable resource nodes
   assert.deepEqual(graph.nodes, [
     {
       id: "vpc-1",
-      type: "VPC",
       label: "main",
       iac: {
         provider: "aws",
@@ -44,6 +43,34 @@ test("buildInfrastructureGraphFromDiagramJson projects renderable resource nodes
       }
     }
   ]);
+});
+
+test("buildInfrastructureGraphFromDiagramJson keeps provider-specific Terraform resource identity", () => {
+  const graph = buildInfrastructureGraphFromDiagramJson({
+    nodes: [
+      makeNode({
+        id: "instance-1",
+        type: "aws_instance",
+        kind: "resource",
+        label: "web",
+        parameters: {
+          resourceType: "aws_instance",
+          resourceName: "web",
+          fileName: "compute",
+          values: {
+            ami: "ami-1234567890abcdef0"
+          }
+        }
+      })
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  });
+
+  assert.equal(graph.nodes[0]?.iac.provider, "aws");
+  assert.equal(graph.nodes[0]?.iac.terraformBlockType, "resource");
+  assert.equal(graph.nodes[0]?.iac.resourceType, "aws_instance");
+  assert.ok(!("type" in (graph.nodes[0] ?? {})));
 });
 
 test("buildInfrastructureGraphFromDiagramJson keeps invalid nodes for preview skeleton stability", () => {
@@ -204,6 +231,7 @@ test("Terraform preview support is read from shared resource definitions", () =>
   assert.doesNotMatch(infrastructureGraphSource, /PREVIEW_SUPPORTED_BLOCKS/);
   assert.doesNotMatch(infrastructureGraphSource, /RESOURCE_TYPE_BY_TERRAFORM_TYPE/);
   assert.doesNotMatch(terraformSyncSource, /PROPOSAL_SUPPORTED_BLOCKS/);
+  assert.doesNotMatch(infrastructureGraphSource, /resourceDefinition\.resourceType/);
   assert.match(infrastructureGraphSource, /getResourceDefinitionByTerraform/);
   assert.match(terraformSyncSource, /getResourceDefinitionByTerraform/);
 });
