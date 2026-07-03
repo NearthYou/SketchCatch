@@ -89,6 +89,17 @@
   width: 100%;
 }
 
+.floatingPanelSlot {
+  inset: 0;
+  pointer-events: none;
+  position: fixed;
+  z-index: 42;
+}
+
+.floatingPanelSlot > * {
+  pointer-events: auto;
+}
+
 .editorShellRightCollapsed .rightRail {
   border-width: 0;
   overflow: visible;

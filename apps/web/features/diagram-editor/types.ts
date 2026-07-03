@@ -40,6 +40,7 @@ export type DiagramEditorPanelContext = {
 
 export type DiagramEditorProps = {
   draftStatusPanel?: ReactNode | undefined;
+  floatingPanel?: ((context: DiagramEditorPanelContext) => ReactNode) | undefined;
   initialDiagram?: DiagramJson | undefined;
   leftPanel?: ReactNode;
   onDiagramChange?: ((diagram: DiagramJson) => void) | undefined;

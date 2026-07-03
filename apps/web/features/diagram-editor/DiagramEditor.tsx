@@ -149,6 +149,7 @@ export function DiagramEditor(props: DiagramEditorProps) {
 
 function DiagramEditorInner({
   draftStatusPanel,
+  floatingPanel,
   initialDiagram,
   leftPanel,
   onDiagramChange,
@@ -1958,7 +1959,7 @@ function DiagramEditorInner({
 
         {isPreviewActive ? (
           <div className={styles.previewNotice} role="status">
-            AI 초안 미리보기입니다. 오른쪽 패널에서 생성 또는 취소를 선택하세요.
+            AI 초안 미리보기입니다. AI 채팅창에서 생성 또는 취소를 선택하세요.
           </div>
         ) : null}
 
@@ -2066,6 +2067,10 @@ function DiagramEditorInner({
           rightPanel(panelContext)
         )}
       </div>
+
+      {floatingPanel ? (
+        <div className={styles.floatingPanelSlot}>{floatingPanel?.(panelContext)}</div>
+      ) : null}
     </section>
   );
 }

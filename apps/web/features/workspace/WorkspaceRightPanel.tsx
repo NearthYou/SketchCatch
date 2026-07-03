@@ -8,8 +8,7 @@ import {
   GalleryVerticalEnd,
   PanelRightClose,
   PanelRightOpen,
-  Rocket,
-  Sparkles
+  Rocket
 } from "lucide-react";
 import type { DiagramEditorPanelContext } from "../diagram-editor";
 import { DeploymentPanel } from "./DeploymentPanel";
@@ -21,7 +20,6 @@ import {
 } from "./TerraformCodePanel";
 import { TerraformIssuesPanel } from "./TerraformIssuesPanel";
 import { TerraformLeaveDialog } from "./TerraformLeaveDialog";
-import { WorkspaceAiPanel } from "./WorkspaceAiPanel";
 import { defaultResourceWorkspaceView } from "./resource-workspace-view";
 import {
   saveWorkspaceTerraformArtifact,
@@ -299,14 +297,6 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
         </button>
         <button
           className={styles.collapsedPanelButton}
-          onClick={() => openCollapsedView("ai")}
-          title="AI"
-          type="button"
-        >
-          <Sparkles size={18} aria-hidden="true" />
-        </button>
-        <button
-          className={styles.collapsedPanelButton}
           onClick={() => openCollapsedView("deployment")}
           title="Deploy"
           type="button"
@@ -363,15 +353,6 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
             </span>
           </button>
           <button
-            aria-pressed={activeView === "ai"}
-            className={activeView === "ai" ? styles.panelModeButtonActive : styles.panelModeButton}
-            onClick={() => requestView("ai")}
-            title="AI"
-            type="button"
-          >
-            <Sparkles size={18} aria-hidden="true" />
-          </button>
-          <button
             aria-pressed={activeView === "deployment"}
             className={activeView === "deployment" ? styles.panelModeButtonActive : styles.panelModeButton}
             onClick={() => requestView("deployment")}
@@ -413,9 +394,6 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
       </div>
       <div className={styles.rightPanelView} hidden={activeView !== "issues"}>
         <TerraformIssuesPanel diagnostics={terraformDiagnostics} />
-      </div>
-      <div className={styles.rightPanelView} hidden={activeView !== "ai"}>
-        <WorkspaceAiPanel context={context} />
       </div>
       <div className={styles.rightPanelView} hidden={activeView !== "deployment"}>
         {activeView === "deployment" ? (

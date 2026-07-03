@@ -13,6 +13,26 @@
 - Highest priority unfinished harness feature: `HARNESS-007`
 - Current blocker: none
 
+### 2026-07-04 - Workspace AI 채팅 dock 전환
+
+- Goal: 오른쪽 패널의 AI 탭을 제거하고, 워크스페이스 오른쪽 하단의 GPT형 채팅 dock에서 AI 초안 생성, 미리보기, 적용, 대화 기록을 처리하게 한다.
+- Completed:
+  - `WorkspaceRightPanel`에서 AI 탭과 AI 패널 진입점을 제거하고, `DiagramEditor`에 floating panel 슬롯을 추가해 워크스페이스 위에 AI 채팅 dock을 띄우도록 연결했다.
+  - `WorkspaceAiChatDock`을 추가해 하단 채팅 UI, 프로젝트별 `localStorage` 채팅 기록, 초안 미리보기, `생성`/`취소`/`다시 생성` 흐름을 구현했다.
+  - 명확한 아키텍처 단서가 없거나 지원 범위가 부족한 경우 경고로 끝내지 않고, 한국어 후속 질문을 채팅 기록에 남기도록 바꿨다.
+  - 전체 교체 적용 경고는 초안 카드 안에 유지했고, 현재 적용 방식이 전체 교체임을 계속 알리도록 했다.
+- Verification run:
+  - `node scripts/check-harness.mjs` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm harness:check` - passed after non-escalated cache-only `ENOTCACHED`.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm lint` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm typecheck` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm build` - passed.
+  - `git diff --check` - passed with line-ending warnings only.
+  - `Invoke-WebRequest http://localhost:3000` - returned `200`; existing Next dev server is available at `http://localhost:3000`.
+- Known risks:
+  - Browser screenshot verification was not completed because the local Playwright browser executable is not installed; source tests, lint, typecheck, build, and HTTP readiness were verified.
+  - Existing unrelated worktree change remains in `docs/ck/ai/002_아키텍처다이어그램검수가이드.md` and is intentionally excluded from this commit.
+
 ### 2026-07-04 - Architecture Draft 거절 메시지 표시 수정
 
 - Goal: 아키텍처 단서가 없는 자연어 입력을 거절할 때, Workspace AI 패널이 일반 오류 문구 대신 API의 구체적인 한국어 거절 메시지를 표시하게 한다.
