@@ -569,48 +569,6 @@ test("assertDeploymentApplyPreconditions blocks artifact plan and AWS drift", ()
   );
 });
 
-test("assertDeploymentApplyPreconditions rejects artifact hash drift before apply", () => {
-  assert.throws(
-    () =>
-      assertDeploymentApplyPreconditions({
-        deployment: createApprovedDeploymentRecord(),
-        currentPlanArtifact: createPlanArtifactRecord(),
-        currentTerraformArtifactHash: "changed-artifact-hash",
-        currentTfplanHash: tfplanHash,
-        currentAwsConnection: createVerifiedAwsConnection()
-      }),
-    /Terraform artifact content changed after approval/
-  );
-});
-
-test("assertDeploymentApplyPreconditions rejects tfplan hash drift before apply", () => {
-  assert.throws(
-    () =>
-      assertDeploymentApplyPreconditions({
-        deployment: createApprovedDeploymentRecord(),
-        currentPlanArtifact: createPlanArtifactRecord(),
-        currentTerraformArtifactHash: artifactHash,
-        currentTfplanHash: "b".repeat(64),
-        currentAwsConnection: createVerifiedAwsConnection()
-      }),
-    /Terraform plan changed before apply/
-  );
-});
-
-test("assertDeploymentApplyPreconditions rejects AWS account drift before apply", () => {
-  assert.throws(
-    () =>
-      assertDeploymentApplyPreconditions({
-        deployment: createApprovedDeploymentRecord(),
-        currentPlanArtifact: createPlanArtifactRecord(),
-        currentTerraformArtifactHash: artifactHash,
-        currentTfplanHash: tfplanHash,
-        currentAwsConnection: createVerifiedAwsConnection({ accountId: "999999999999" })
-      }),
-    /AWS account changed before apply/
-  );
-});
-
 test("assertDeploymentApplyPreconditions rejects AWS region drift before apply", () => {
   assert.throws(
     () =>
