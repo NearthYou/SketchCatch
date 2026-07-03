@@ -33,3 +33,52 @@ test("createLlmExplanationSections groups highlights and next actions under one 
 test("getLlmExplanationSourceLabel shows fallback reason when fallback is used", () => {
   assert.equal(getLlmExplanationSourceLabel(fallbackExplanation), "기본 설명 · API key 없음");
 });
+
+test("getLlmExplanationSourceLabel shows Amazon Q when Q returned an unstructured fallback", () => {
+  assert.match(
+    getLlmExplanationSourceLabel({
+      ...fallbackExplanation,
+      fallbackReason: "invalid_response",
+      providerMetadata: {
+        provider: "amazon_q",
+        service: "amazon_q_business",
+        model: "test-q-app",
+        routeTarget: "terraform_error_explanation",
+        cacheHit: false,
+        cacheKey: "test-cache-key",
+        estimatedUsage: {
+          inputCharacters: 10,
+          inputTokensEstimate: 3
+        },
+        billingMode: "aws_credit_only",
+        generatedAt: new Date(0).toISOString()
+      }
+    }),
+    /^Amazon Q/
+  );
+});
+
+test("getLlmExplanationSourceLabel shows provider when provider metadata is present", () => {
+  assert.equal(
+    getLlmExplanationSourceLabel({
+      ...fallbackExplanation,
+      fallbackUsed: false,
+      fallbackReason: undefined,
+      providerMetadata: {
+        provider: "bedrock",
+        service: "bedrock_runtime",
+        model: "test-model",
+        routeTarget: "design_simulation",
+        cacheHit: false,
+        cacheKey: "test-cache-key",
+        estimatedUsage: {
+          inputCharacters: 10,
+          inputTokensEstimate: 3
+        },
+        billingMode: "aws_credit_only",
+        generatedAt: new Date(0).toISOString()
+      }
+    }),
+    "Bedrock 설명"
+  );
+});

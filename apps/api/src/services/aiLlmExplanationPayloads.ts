@@ -1,7 +1,8 @@
 import type {
-  AiArchitectureDraftResult,
   AiPreDeploymentAnalysisResult,
   AiTerraformErrorExplanationResult,
+  AiTerraformPreviewExplanationResult,
+  ArchitecturePatchPreview,
   DesignSimulationResult
 } from "@sketchcatch/types";
 import type { LlmExplanationInput } from "./aiLlmExplanationTypes.js";
@@ -18,6 +19,7 @@ type DesignSimulationSummaryPayload = {
 
 type ArchitectureDraftSummaryPayload = {
   readonly target: "architecture_draft";
+  readonly requirementPromptText: string | null;
   readonly title: string;
   readonly source: string;
   readonly confidence: string;
@@ -48,6 +50,23 @@ type TerraformErrorExplanationSummaryPayload = {
   readonly relatedResourceId: string | null;
 };
 
+type TerraformPreviewExplanationSummaryPayload = {
+  readonly target: "terraform_preview_explanation";
+  readonly summary: string;
+  readonly detectedResources: readonly string[];
+  readonly findings: readonly string[];
+  readonly checklist: readonly string[];
+};
+
+type ArchitecturePatchPreviewSummaryPayload = {
+  readonly target: "architecture_patch_preview";
+  readonly requestedAction: string;
+  readonly resourceType: string | null;
+  readonly targetResourceId: string | null;
+  readonly changes: readonly string[];
+  readonly requiresUserAcceptance: true;
+};
+
 // schema는 Structured Outputs에 맡기고, prompt에는 설명 기준과 금지 기준만 남깁니다.
 export function createSystemInstructions(): string {
   return [
@@ -65,23 +84,34 @@ export function createSummaryPayload(
   | ArchitectureDraftSummaryPayload
   | PreDeploymentCheckSummaryPayload
   | DesignSimulationSummaryPayload
-  | TerraformErrorExplanationSummaryPayload {
+  | TerraformErrorExplanationSummaryPayload
+  | TerraformPreviewExplanationSummaryPayload
+  | ArchitecturePatchPreviewSummaryPayload {
   switch (input.target) {
     case "architecture_draft":
-      return createArchitectureDraftSummaryPayload(input.result);
+      return createArchitectureDraftSummaryPayload(input);
     case "design_simulation":
       return createDesignSimulationSummaryPayload(input.result);
     case "pre_deployment_check":
       return createPreDeploymentCheckSummaryPayload(input.result);
     case "terraform_error_explanation":
       return createTerraformErrorExplanationSummaryPayload(input.result);
+    case "terraform_preview_explanation":
+      return createTerraformPreviewExplanationSummaryPayload(input.result);
+    case "architecture_patch_preview":
+      return createArchitecturePatchPreviewSummaryPayload(input.result);
   }
 }
 
 // Architecture Draft는 초안 구조와 metadata만 넘기고 Board 전체 상태는 보내지 않습니다.
-function createArchitectureDraftSummaryPayload(result: AiArchitectureDraftResult): ArchitectureDraftSummaryPayload {
+function createArchitectureDraftSummaryPayload(
+  input: Extract<LlmExplanationInput, { readonly target: "architecture_draft" }>
+): ArchitectureDraftSummaryPayload {
+  const result = input.result;
+
   return {
     target: "architecture_draft",
+    requirementPromptText: input.requirementPromptText ?? null,
     title: result.title,
     source: result.metadata.source,
     confidence: result.metadata.confidence,
@@ -131,5 +161,32 @@ function createTerraformErrorExplanationSummaryPayload(
     likelyCause: result.likelyCause,
     nextActions: result.nextActions,
     relatedResourceId: result.relatedResourceId ?? null
+  };
+}
+
+function createTerraformPreviewExplanationSummaryPayload(
+  result: AiTerraformPreviewExplanationResult
+): TerraformPreviewExplanationSummaryPayload {
+  return {
+    target: "terraform_preview_explanation",
+    summary: result.summary,
+    detectedResources: result.detectedResources.map(
+      (resource) => `${resource.terraformType}: ${resource.label}`
+    ),
+    findings: result.findings.map((finding) => `${finding.severity} ${finding.category}: ${finding.title}`),
+    checklist: result.checklist.map((item) => `${item.status}: ${item.label}`)
+  };
+}
+
+function createArchitecturePatchPreviewSummaryPayload(
+  result: ArchitecturePatchPreview
+): ArchitecturePatchPreviewSummaryPayload {
+  return {
+    target: "architecture_patch_preview",
+    requestedAction: result.intent.requestedAction,
+    resourceType: result.intent.resourceType ?? null,
+    targetResourceId: result.intent.targetResourceId ?? null,
+    changes: result.changes.map((change) => `${change.action}: ${change.summary}`),
+    requiresUserAcceptance: true
   };
 }

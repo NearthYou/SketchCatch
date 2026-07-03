@@ -13,6 +13,7 @@ import { registerDeploymentRoutes } from "./routes/deployments.js";
 import { registerTerraformRoutes } from "./routes/terraform.js";
 import { registerAwsConnectionRoutes } from "./routes/aws-connections.js";
 import type { ProjectDeletionStorage } from "./projects/project-deletion-service.js";
+import type { CreateTerraformValidationDiagnostics } from "./services/terraform/terraform-validation.js";
 import {
   createInMemoryRateLimiter,
   type RateLimiter
@@ -31,6 +32,7 @@ export type BuildAppOptions = {
   passwordResetRequestIpRateLimiter?: RateLimiter;
   projectAssetStorage?: ProjectAssetStorage;
   projectDeletionStorage?: ProjectDeletionStorage;
+  createTerraformValidationDiagnostics?: CreateTerraformValidationDiagnostics;
 };
 
 // 테스트와 서버가 같은 앱을 쓰되, LLM 호출 계층은 옵션으로만 주입합니다.
@@ -137,10 +139,10 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     prefix: "/api",
     getDatabaseClient: getAppDatabaseClient
   });
-  app.register(registerTerraformRoutes, {
-    prefix: "/api",
-    getDatabaseClient: getAppDatabaseClient
-  });
+  app.register(
+    registerTerraformRoutes,
+    createTerraformRouteOptions(options, getAppDatabaseClient)
+  );
   app.register(registerAwsConnectionRoutes, {
     prefix: "/api",
     getDatabaseClient: getAppDatabaseClient
@@ -158,6 +160,28 @@ function createAiRouteOptions(options: BuildAppOptions): { readonly prefix: "/ap
   return {
     prefix: "/api",
     createLlmExplanation: options.createLlmExplanation
+  };
+}
+
+function createTerraformRouteOptions(
+  options: BuildAppOptions,
+  getDatabaseClient: () => DatabaseClient
+): {
+  readonly prefix: "/api";
+  readonly getDatabaseClient: () => DatabaseClient;
+  readonly createTerraformValidationDiagnostics?: CreateTerraformValidationDiagnostics;
+} {
+  if (options.createTerraformValidationDiagnostics === undefined) {
+    return {
+      prefix: "/api",
+      getDatabaseClient
+    };
+  }
+
+  return {
+    prefix: "/api",
+    getDatabaseClient,
+    createTerraformValidationDiagnostics: options.createTerraformValidationDiagnostics
   };
 }
 
