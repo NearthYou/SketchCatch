@@ -13,6 +13,32 @@
 - Highest priority unfinished harness feature: `HARNESS-007`
 - Current blocker: none
 
+### 2026-07-03 - Web Docker public asset 404 hotfix
+
+- Goal: Fix deployed frontend 404s for `favicon.svg`, `terraform.svg`, and AWS SVG icon assets served from `apps/web/public`.
+- Completed:
+  - Confirmed the local source contains `apps/web/public/favicon.svg`, `apps/web/public/terraform.svg`, and AWS icon directories.
+  - Confirmed `apps/web/next.config.mjs` uses `output: "standalone"`.
+  - Confirmed `docker/web.Dockerfile` copied `.next/standalone` and `.next/static` but did not copy `apps/web/public` into the runtime image.
+  - Added `COPY --from=build /repo/apps/web/public ./apps/web/public` to the web runtime image.
+- Verification run:
+  - Dockerfile public asset copy assertion - passed.
+  - `node scripts/check-harness.mjs` - passed.
+  - `pnpm harness:check` - failed before the harness script body because pnpm/corepack could not unlink temporary `_tmp_*` files with `EPERM`; the direct Node harness check passed.
+  - `git diff --check` - passed with the existing LF-to-CRLF warning for `docker/web.Dockerfile`.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm lint` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm typecheck` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm build` - passed.
+- Evidence recorded:
+  - The web image now includes the public asset directory required by Next.js standalone runtime.
+  - The browser screenshot's `/api/auth/refresh` 401 is a separate unauthenticated or expired-session response, not the SVG asset 404 root cause.
+  - No Terraform apply/destroy, cloud mutation, or Git/CI/CD handoff was run.
+- Known risks:
+  - The live site will keep serving 404s until the web Docker image is rebuilt, released, and redeployed.
+  - `apps/web/next-env.d.ts` remains dirty as a generated Next.js file and was not changed as part of this hotfix.
+- Next best action:
+  - Rebuild and redeploy the production Docker release, then smoke-test `/favicon.svg`, `/terraform.svg`, and one AWS icon URL through the live site.
+
 ### 2026-07-03 - CloudFormation Quick Create S3 TemplateURL hotfix
 
 - Goal: Fix the AWS Console Quick Create `TemplateURL must be a supported URL` error.
