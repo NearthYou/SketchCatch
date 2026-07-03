@@ -610,6 +610,36 @@ export type AiResultSource = "prompt" | "github" | "template_fallback" | "llm_fa
 
 export type AiConfidence = "low" | "medium" | "high";
 
+export type AiProvider = "bedrock" | "amazon_q" | "amazon_transcribe" | "openai" | "fallback";
+
+export type AiProviderService =
+  | "bedrock_runtime"
+  | "amazon_q_business"
+  | "amazon_transcribe"
+  | "openai_responses"
+  | "rule_fallback";
+
+export type AiBillingMode = "aws_credit_only" | "standard" | "disabled";
+
+export type AiEstimatedUsage = {
+  inputCharacters: number;
+  inputTokensEstimate: number;
+  outputCharacters?: number | undefined;
+  outputTokensEstimate?: number | undefined;
+};
+
+export type AiProviderMetadata = {
+  provider: AiProvider;
+  service: AiProviderService;
+  model?: string | undefined;
+  routeTarget: string;
+  cacheHit: boolean;
+  cacheKey: string;
+  estimatedUsage: AiEstimatedUsage;
+  billingMode: AiBillingMode;
+  generatedAt: IsoDateTimeString;
+};
+
 export type AiResultMetadata = {
   source: AiResultSource;
   confidence: AiConfidence;
@@ -647,6 +677,115 @@ export type ArchitectureDraftTrafficLevel = "small" | "normal";
 export type ArchitectureDraftSecurityPriority = "basic" | "high";
 
 // Architecture Draft를 만들 때 AI가 자유롭게 해석하지 않도록 입력 선택지를 좁힌 계약입니다.
+export type RequirementInputMode = "text" | "voice";
+
+export type RequirementInput = {
+  mode: RequirementInputMode;
+  text: string;
+  transcriptSource?: "amazon_transcribe" | undefined;
+  confirmedByUser: boolean;
+};
+
+export type RequirementPromptSource = "text" | "voice_transcript";
+
+export type RequirementPrompt = {
+  text: string;
+  source: RequirementPromptSource;
+  requirementInput: RequirementInput;
+  confirmedByUser: boolean;
+  confirmedByUserId?: string | undefined;
+  confirmedAt: IsoDateTimeString;
+};
+
+export type VoiceRequirementMediaFormat =
+  | "mp3"
+  | "mp4"
+  | "wav"
+  | "flac"
+  | "ogg"
+  | "amr"
+  | "webm";
+
+export type VoiceRequirementInput = {
+  mediaUri: string;
+  mediaFormat: VoiceRequirementMediaFormat;
+  languageCode?: string | undefined;
+};
+
+export type TranscribeConfirmationStatus =
+  | "transcribing"
+  | "awaiting_user_confirmation"
+  | "confirmed"
+  | "failed";
+
+export type TranscribeConfirmation = {
+  transcriptionJobName: string | null;
+  voiceRequirementInput: VoiceRequirementInput | null;
+  transcriptText: string | null;
+  confirmedText: string | null;
+  confirmedByUser: boolean;
+  confirmedByUserId?: string | undefined;
+  status: TranscribeConfirmationStatus;
+  failureReason?: string | undefined;
+  providerMetadata: AiProviderMetadata;
+};
+
+export type ConfirmTranscribeRequest = {
+  transcriptText: string;
+  confirmedText: string;
+  confirmedByUserId?: string | undefined;
+};
+
+export type ConfirmTranscribeResponse = {
+  confirmation: TranscribeConfirmation;
+  requirementPrompt: RequirementPrompt;
+};
+
+export type UserAcceptedChangeTarget =
+  | "architecture_draft"
+  | "architecture_suggestion"
+  | "architecture_patch_preview"
+  | "iac_handoff"
+  | "git_change"
+  | "deployment_action";
+
+export type UserAcceptedChange = {
+  target: UserAcceptedChangeTarget;
+  acceptedByUserId: string;
+  acceptedAt: IsoDateTimeString;
+};
+
+export type ArchitecturePatchAction =
+  | "add_resource"
+  | "remove_resource"
+  | "modify_resource"
+  | "manual_review";
+
+export type ArchitecturePatchIntent = {
+  instruction: string;
+  requestedAction: ArchitecturePatchAction;
+  targetResourceId?: string | undefined;
+  resourceType?: ResourceType | undefined;
+};
+
+export type ArchitecturePatchPreviewChange = {
+  action: ArchitecturePatchAction;
+  resourceType?: ResourceType | undefined;
+  resourceId?: string | undefined;
+  summary: string;
+};
+
+export type ArchitecturePatchPreview = {
+  intent: ArchitecturePatchIntent;
+  baseArchitectureJson: ArchitectureJson;
+  proposedArchitectureJson: ArchitectureJson;
+  changes: ArchitecturePatchPreviewChange[];
+  requiresUserAcceptance: true;
+  userAcceptedChange: UserAcceptedChange | null;
+  llmExplanation?: LlmExplanation | undefined;
+  providerMetadata: AiProviderMetadata;
+};
+
 export type CreateArchitectureDraftRequest = {
   prompt: string;
   scenarioHint: ArchitectureDraftScenarioHint;
@@ -734,10 +873,15 @@ export type LlmExplanationTarget =
   | "architecture_draft"
   | "design_simulation"
   | "pre_deployment_check"
-  | "terraform_error_explanation";
+  | "terraform_error_explanation"
+  | "terraform_preview_explanation"
+  | "architecture_patch_preview";
 
 export type LlmExplanationFallbackReason =
   | "missing_api_key"
+  | "provider_not_configured"
+  | "credit_not_confirmed"
+  | "daily_limit_exceeded"
   | "timeout"
   | "rate_limited"
   | "invalid_request"
@@ -752,6 +896,7 @@ export type LlmExplanation = {
   nextActions: string[];
   fallbackUsed: boolean;
   fallbackReason?: LlmExplanationFallbackReason | undefined;
+  providerMetadata?: AiProviderMetadata | undefined;
 };
 
 export type AiPreDeploymentAnalysisResult = {
@@ -843,6 +988,7 @@ export type AiTerraformPreviewExplanationResult = {
   detectedResources: AiTerraformDetectedResource[];
   findings: CheckFinding[];
   checklist: ChecklistItem[];
+  llmExplanation?: LlmExplanation | undefined;
 };
 
 export type PracticeSession = {

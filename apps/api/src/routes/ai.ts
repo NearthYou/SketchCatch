@@ -6,10 +6,14 @@ import type {
   AiPreDeploymentAnalysisResult,
   AiTerraformErrorExplanationResult,
   AiTerraformPreviewExplanationResult,
+  ArchitecturePatchPreview,
   ArchitectureJson,
+  ConfirmTranscribeResponse,
   CreateArchitectureDraftRequest,
   CreateDesignSimulationRequest,
-  DesignSimulationResult
+  DesignSimulationResult,
+  TranscribeConfirmation,
+  VoiceRequirementInput
 } from "@sketchcatch/types";
 import {
   createArchitectureDraft,
@@ -17,12 +21,18 @@ import {
 } from "../services/aiArchitectureDrafts.js";
 import { simulateDesign } from "../services/aiDesignSimulation.js";
 import {
-  createConfiguredOpenAiExplanation,
+  createConfiguredAiExplanation,
   type CreateLlmExplanation
 } from "../services/aiLlmExplanation.js";
+import { createArchitecturePatchPreview } from "../services/aiArchitecturePatchPreview.js";
 import { analyzePreDeployment } from "../services/aiPreDeploymentAnalysis.js";
 import { explainTerraformError } from "../services/aiTerraformErrorExplanation.js";
 import { explainTerraformPreview } from "../services/aiTerraformPreviewExplanation.js";
+import { sanitizeTerraformErrorForAi } from "../services/aiProviderSafety.js";
+import {
+  createConfiguredTranscribeRequirementService,
+  type TranscribeRequirementService
+} from "../services/aiTranscribe.js";
 import { convertDiagramJsonToArchitectureJson } from "../services/diagram-to-architecture.js";
 import { diagramJsonSchema } from "./project-draft-schemas.js";
 
@@ -105,19 +115,43 @@ const terraformPreviewExplanationBodySchema = z.object({
   terraformCode: z.string().trim().min(1)
 });
 
+const architecturePatchPreviewBodySchema = z.object({
+  architectureJson: architectureJsonSchema,
+  instruction: z.string().trim().min(1)
+});
+
+const voiceRequirementInputBodySchema: z.ZodType<VoiceRequirementInput> = z.object({
+  mediaUri: z.string().trim().min(1),
+  mediaFormat: z.enum(["mp3", "mp4", "wav", "flac", "ogg", "amr", "webm"]),
+  languageCode: z.string().trim().min(1).optional()
+});
+
+const voiceTranscribeParamsSchema = z.object({
+  jobName: z.string().trim().min(1)
+});
+
+const confirmTranscribeBodySchema = z.object({
+  transcriptText: z.string().trim().min(1),
+  confirmedText: z.string().trim().min(1),
+  confirmedByUserId: z.string().trim().min(1).optional()
+});
+
 export type AiRouteOptions = {
   readonly createLlmExplanation?: CreateLlmExplanation;
+  readonly transcribeRequirementService?: TranscribeRequirementService;
 };
 
 // AI MVP API의 입구입니다. 요청 모양은 여기서 확인하고, 실제 판단은 service 함수에 맡깁니다.
 export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOptions = {}): Promise<void> {
-  const createLlmExplanation = options.createLlmExplanation ?? createConfiguredOpenAiExplanation();
+  const createLlmExplanation = options.createLlmExplanation ?? createConfiguredAiExplanation();
+  const transcribeRequirementService =
+    options.transcribeRequirementService ?? createConfiguredTranscribeRequirementService();
 
   app.post("/ai/architecture-draft", async (request): Promise<AiArchitectureDraftResult> => {
     const body = architectureDraftBodySchema.parse(request.body);
     const result = createArchitectureDraft(body);
 
-    return addArchitectureDraftLlmExplanation(result, createLlmExplanation);
+    return addArchitectureDraftLlmExplanation(result, createLlmExplanation, body.prompt);
   });
 
   app.post("/ai/github-architecture-draft", async (request): Promise<AiArchitectureDraftResult> => {
@@ -166,7 +200,12 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
     "/ai/terraform-error-explanation",
     async (request): Promise<AiTerraformErrorExplanationResult> => {
       const body = terraformErrorExplanationBodySchema.parse(request.body);
-      const result = explainTerraformError(body);
+      const sanitizedError = sanitizeTerraformErrorForAi(body);
+      const result = explainTerraformError({
+        stage: body.stage,
+        rawMessage: sanitizedError.sanitizedMessage,
+        relatedResourceId: body.relatedResourceId
+      });
 
       return {
         ...result,
@@ -182,22 +221,64 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
     "/ai/terraform-preview-explanation",
     async (request): Promise<AiTerraformPreviewExplanationResult> => {
       const body = terraformPreviewExplanationBodySchema.parse(request.body);
+      const result = explainTerraformPreview(body.terraformCode);
 
-      return explainTerraformPreview(body.terraformCode);
+      return {
+        ...result,
+        llmExplanation: await createLlmExplanation({
+          target: "terraform_preview_explanation",
+          result
+        })
+      };
     }
   );
+
+  app.post("/ai/architecture-patch-preview", async (request): Promise<ArchitecturePatchPreview> => {
+    const body = architecturePatchPreviewBodySchema.parse(request.body);
+    const preview = createArchitecturePatchPreview(body);
+    const llmExplanation = await createLlmExplanation({
+      target: "architecture_patch_preview",
+      result: preview
+    });
+
+    return {
+      ...preview,
+      llmExplanation,
+      providerMetadata: llmExplanation.providerMetadata ?? preview.providerMetadata
+    };
+  });
+
+  app.post("/ai/voice-requirement/transcribe", async (request): Promise<TranscribeConfirmation> => {
+    const body = voiceRequirementInputBodySchema.parse(request.body);
+
+    return transcribeRequirementService.start(body);
+  });
+
+  app.get("/ai/voice-requirement/transcribe/:jobName", async (request): Promise<TranscribeConfirmation> => {
+    const params = voiceTranscribeParamsSchema.parse(request.params);
+
+    return transcribeRequirementService.getConfirmation(params.jobName);
+  });
+
+  app.post("/ai/voice-requirement/confirm", async (request): Promise<ConfirmTranscribeResponse> => {
+    const body = confirmTranscribeBodySchema.parse(request.body);
+
+    return transcribeRequirementService.confirmTranscript(body);
+  });
 }
 
 // Architecture Draft 계열 route가 같은 LLM 설명 계약을 쓰도록 한곳에서 붙입니다.
 async function addArchitectureDraftLlmExplanation(
   result: AiArchitectureDraftResult,
-  createLlmExplanation: CreateLlmExplanation
+  createLlmExplanation: CreateLlmExplanation,
+  requirementPromptText?: string | undefined
 ): Promise<AiArchitectureDraftResult> {
   return {
     ...result,
     llmExplanation: await createLlmExplanation({
       target: "architecture_draft",
-      result
+      result,
+      requirementPromptText
     })
   };
 }
