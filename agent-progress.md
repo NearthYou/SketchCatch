@@ -15,6 +15,36 @@
 
 ## 세션 레코드
 
+### 2026-07-03 - 공통 ResourceDefinition 기반 Terraform 지원 목록 정리
+
+- Goal: API/Web에 흩어진 Terraform 지원 목록(`PREVIEW_SUPPORTED_BLOCKS`, `PROPOSAL_SUPPORTED_BLOCKS`, Terraform type 매핑)을 `packages/types`의 공통 `ResourceDefinition` capability로 단일 출처화한다.
+- Completed:
+  - `packages/types/src/resource-definitions.ts`를 추가해 44개 AWS Terraform catalog 항목의 provider, domain `ResourceType`, Terraform block identity, `terraformPreview`/`terraformSync`/`parameterPanel` capability를 정의했다.
+  - `@sketchcatch/types/resource-definitions` package subpath를 열어 API/Web이 같은 shared definition을 import하게 했다. root `index.ts` 재수출은 Next/Turbopack source resolve 문제를 피하기 위해 사용하지 않는다.
+  - `infrastructure-graph.ts`의 preview hardcoded set과 Terraform type 매핑을 제거하고 `terraformPreview` capability와 shared `resourceType`/`provider`를 사용하게 했다.
+  - `terraform-to-diagram.ts`의 sync proposal hardcoded set을 제거하고 `terraformSync` capability를 사용하게 했다.
+  - web `resource-settings/catalog.ts`를 shared definition + web presentation(icon/category/label/size) 구조로 정리했다. `design_region`, `design_az`, `design_group`은 IaC 리소스가 아니므로 web catalog에만 남겼다.
+  - API/Web drift 방지 테스트를 추가해 preview/sync capability 차이, CloudFront sync-only 정책, web catalog와 shared definition/parameter catalog 정합성을 확인하게 했다.
+  - `docs/data-models.md`에 새 Terraform 리소스 추가 절차와 API가 web catalog를 import하지 않는 경계를 문서화했다.
+- Verification run:
+  - `pnpm --filter @sketchcatch/types typecheck` - passed.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/infrastructure-graph.test.ts src/services/terraform/terraform-to-diagram.test.ts` - passed.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/resource-settings/catalog.test.ts` - passed.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `pnpm build` - passed after replacing root re-export with package subpath export.
+  - `pnpm harness:check` - passed.
+  - `git diff --check` - passed.
+- Evidence recorded:
+  - 실제 Terraform apply/destroy, cloud mutation, Git/CI/CD handoff는 실행하지 않았다.
+  - `packages/types/package.json`은 dependency 변경이 아니라 subpath export 추가만 포함하므로 lockfile 변경은 발생하지 않았다.
+  - `apps/web/next-env.d.ts`는 `pnpm build` 중 생성 흔적으로 변경됐으나 이번 작업 범위가 아니라 원래 tracked 상태로 되돌렸다.
+- Known risks:
+  - 브라우저 수동 smoke는 수행하지 않았다. 자동/단위/타입/빌드 검증으로 확인했다.
+  - `parameterPanel` capability는 현재 parameter catalog 보유 여부와 맞췄다. 새 리소스 추가 시 shared definition, web presentation, parameter catalog 정합성 테스트를 함께 갱신해야 한다.
+- Next best action:
+  - 다음 리소스 추가 작업에서는 `packages/types/src/resource-definitions.ts`를 먼저 수정하고 web catalog에는 presentation 정보만 추가하는 흐름을 따른다.
+
 ### 2026-07-03 - Terraform 코드리뷰 피드백 반영
 
 - Goal: 리뷰에서 지적된 Terraform Preview/Editor 구현의 레이어 경계, 불필요한 계산, 중복 유틸, dead code를 실제 코드 기준으로 검토하고 타당한 항목을 수정한다.

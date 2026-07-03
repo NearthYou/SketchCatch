@@ -1,40 +1,14 @@
+import { getResourceDefinitionByTerraform } from "@sketchcatch/types/resource-definitions";
 import type {
   DiagramJson,
   DiagramNode,
   InfrastructureGraph,
   InfrastructureGraphEdge,
   InfrastructureGraphNode,
-  ResourceType,
   TerraformBlockType
 } from "@sketchcatch/types";
 
 const DEFAULT_TERRAFORM_BLOCK_TYPE: TerraformBlockType = "resource";
-
-const PREVIEW_SUPPORTED_BLOCKS = new Set<string>([
-  "resource/aws_vpc",
-  "resource/aws_subnet",
-  "resource/aws_internet_gateway",
-  "resource/aws_route_table",
-  "resource/aws_route_table_association",
-  "resource/aws_security_group",
-  "resource/aws_security_group_rule",
-  "resource/aws_instance",
-  "resource/aws_s3_bucket",
-  "data/aws_ami"
-]);
-
-const RESOURCE_TYPE_BY_TERRAFORM_TYPE: Record<string, ResourceType> = {
-  aws_ami: "AMI",
-  aws_instance: "EC2",
-  aws_internet_gateway: "INTERNET_GATEWAY",
-  aws_route_table: "ROUTE_TABLE",
-  aws_route_table_association: "ROUTE_TABLE_ASSOCIATION",
-  aws_s3_bucket: "S3",
-  aws_security_group: "SECURITY_GROUP",
-  aws_security_group_rule: "SECURITY_GROUP",
-  aws_subnet: "SUBNET",
-  aws_vpc: "VPC"
-};
 
 export function buildInfrastructureGraphFromDiagramJson(diagramJson: DiagramJson): InfrastructureGraph {
   const nodes = diagramJson.nodes.flatMap((node) => {
@@ -69,17 +43,21 @@ function toInfrastructureGraphNode(node: DiagramNode): InfrastructureGraphNode |
   }
 
   const terraformBlockType = node.parameters.terraformBlockType ?? DEFAULT_TERRAFORM_BLOCK_TYPE;
+  const resourceDefinition = getResourceDefinitionByTerraform(
+    terraformBlockType,
+    node.parameters.resourceType
+  );
 
-  if (!isPreviewSupportedBlock(terraformBlockType, node.parameters.resourceType)) {
+  if (resourceDefinition?.capabilities.terraformPreview !== true) {
     return null;
   }
 
   return {
     id: node.id,
-    type: toResourceType(node.parameters.resourceType),
+    type: resourceDefinition.resourceType,
     label: node.label,
     iac: {
-      provider: "aws",
+      provider: resourceDefinition.provider,
       terraformBlockType,
       resourceType: node.parameters.resourceType,
       resourceName: node.parameters.resourceName,
@@ -87,15 +65,4 @@ function toInfrastructureGraphNode(node: DiagramNode): InfrastructureGraphNode |
     },
     config: node.parameters.values
   };
-}
-
-function isPreviewSupportedBlock(
-  terraformBlockType: TerraformBlockType,
-  resourceType: string
-): boolean {
-  return PREVIEW_SUPPORTED_BLOCKS.has(`${terraformBlockType}/${resourceType}`);
-}
-
-function toResourceType(terraformResourceType: string): ResourceType {
-  return RESOURCE_TYPE_BY_TERRAFORM_TYPE[terraformResourceType] ?? "UNKNOWN";
 }

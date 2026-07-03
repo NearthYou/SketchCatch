@@ -220,6 +220,40 @@ test("returns source metadata for Terraform-only blocks from multi-file sync inp
   assert.equal(result.proposals?.[0]?.line, 1);
 });
 
+test("returns create proposals for resources with terraformSync capability", () => {
+  const result = syncTerraformToDiagramJson(
+    {
+      nodes: [],
+      edges: [],
+      viewport: { x: 0, y: 0, zoom: 1 }
+    },
+    `resource "aws_cloudfront_distribution" "cdn" {
+  enabled = true
+}`
+  );
+
+  assert.deepEqual(result.diagnostics, []);
+  assert.equal(result.proposals?.[0]?.kind, "create_candidate");
+  assert.equal(result.proposals?.[0]?.identity.resourceType, "aws_cloudfront_distribution");
+});
+
+test("rejects Terraform-only blocks without terraformSync capability", () => {
+  const result = syncTerraformToDiagramJson(
+    {
+      nodes: [],
+      edges: [],
+      viewport: { x: 0, y: 0, zoom: 1 }
+    },
+    `resource "aws_lambda_function" "handler" {
+  function_name = "handler"
+}`
+  );
+
+  assert.equal(result.proposals?.length, 0);
+  assert.equal(result.diagnostics[0]?.code, "terraform.sync.unsupported_resource");
+  assert.equal(result.diagnostics[0]?.resourceAddress, "aws_lambda_function.handler");
+});
+
 test("rejects duplicate DiagramJson identities without mutating", () => {
   const diagramJson: DiagramJson = {
     nodes: [

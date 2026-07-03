@@ -1,5 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import {
+  getResourceDefinitionByTerraform,
+  resourceDefinitions
+} from "@sketchcatch/types/resource-definitions";
+import { terraformParameterCatalog } from "../parameter-input/catalog";
 import { resourceCatalog } from "./catalog";
 
 test("resourceCatalog sizes area defaults below the Region hierarchy root", () => {
@@ -28,10 +33,52 @@ test("resourceCatalog provides a CloudFront icon for converted drafts and Terraf
   );
 });
 
+test("resourceCatalog Terraform entries use shared resource definitions", () => {
+  for (const resource of getTerraformCatalogItems()) {
+    const terraformBlockType = resource.nodeDefaults.terraformBlockType ?? "resource";
+    const definition = getResourceDefinitionByTerraform(terraformBlockType, resource.nodeDefaults.type);
+
+    assert.ok(
+      definition,
+      `Missing shared definition for ${terraformBlockType}/${resource.nodeDefaults.type}`
+    );
+    assert.equal(resource.id, definition.id);
+    assert.equal(resource.cloudProvider, definition.provider);
+  }
+});
+
+test("resourceCatalog displays every shared Terraform resource definition", () => {
+  const catalogKeys = new Set(
+    getTerraformCatalogItems().map(
+      (resource) => `${resource.nodeDefaults.terraformBlockType ?? "resource"}/${resource.nodeDefaults.type}`
+    )
+  );
+
+  for (const definition of resourceDefinitions) {
+    const key = `${definition.terraform.blockType}/${definition.terraform.resourceType}`;
+
+    assert.ok(catalogKeys.has(key), `Missing catalog presentation for ${key}`);
+  }
+});
+
+test("resource parameter panel capability matches the parameter catalog", () => {
+  const parameterCatalogResourceTypes = Object.keys(terraformParameterCatalog.resources).sort();
+  const capabilityResourceTypes = resourceDefinitions
+    .filter((definition) => definition.capabilities.parameterPanel)
+    .map((definition) => definition.terraform.resourceType)
+    .sort();
+
+  assert.deepEqual(capabilityResourceTypes, parameterCatalogResourceTypes);
+});
+
 function getResourceSize(resourceType: string) {
   const resource = resourceCatalog.find((item) => item.nodeDefaults.type === resourceType);
 
   assert.ok(resource, `Missing catalog resource: ${resourceType}`);
 
   return resource.nodeDefaults.size;
+}
+
+function getTerraformCatalogItems() {
+  return resourceCatalog.filter((resource) => resource.nodeDefaults.type.startsWith("aws_"));
 }

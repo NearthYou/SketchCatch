@@ -1,3 +1,4 @@
+import { getResourceDefinitionByTerraform } from "@sketchcatch/types/resource-definitions";
 import type {
   DiagramJson,
   DiagramNode,
@@ -28,19 +29,6 @@ const TERRAFORM_NESTED_BLOCK_ATTRIBUTES: Record<string, ReadonlySet<string>> = {
   aws_route_table: new Set(["route"]),
   aws_security_group: new Set(["egress", "ingress"])
 };
-const PROPOSAL_SUPPORTED_BLOCKS = new Set<string>([
-  "resource/aws_cloudfront_distribution",
-  "resource/aws_internet_gateway",
-  "resource/aws_vpc",
-  "resource/aws_subnet",
-  "resource/aws_route_table",
-  "resource/aws_route_table_association",
-  "resource/aws_security_group",
-  "resource/aws_instance",
-  "resource/aws_s3_bucket",
-  "data/aws_ami"
-]);
-
 type ParsedBlock = {
   blockType: TerraformBlockType;
   resourceType: string;
@@ -373,7 +361,10 @@ function toNodeIdentity(node: DiagramNode): TerraformBlockIdentity {
 }
 
 function isProposalSupportedBlock(identity: TerraformBlockIdentity): boolean {
-  return PROPOSAL_SUPPORTED_BLOCKS.has(`${identity.terraformBlockType}/${identity.resourceType}`);
+  return (
+    getResourceDefinitionByTerraform(identity.terraformBlockType, identity.resourceType)
+      ?.capabilities.terraformSync === true
+  );
 }
 
 function normalizeComparisonValue(value: unknown): unknown {

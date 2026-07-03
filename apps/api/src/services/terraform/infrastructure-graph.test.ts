@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 import type { DiagramNode } from "@sketchcatch/types";
 import { buildInfrastructureGraphFromDiagramJson } from "./infrastructure-graph.js";
 
@@ -106,6 +108,29 @@ test("buildInfrastructureGraphFromDiagramJson excludes design, parameterless, an
   assert.deepEqual(graph.nodes, []);
 });
 
+test("buildInfrastructureGraphFromDiagramJson excludes resources without terraformPreview capability", () => {
+  const graph = buildInfrastructureGraphFromDiagramJson({
+    nodes: [
+      makeNode({
+        id: "cloudfront-1",
+        type: "aws_cloudfront_distribution",
+        kind: "resource",
+        label: "cdn",
+        parameters: {
+          resourceType: "aws_cloudfront_distribution",
+          resourceName: "cdn",
+          fileName: "network",
+          values: {}
+        }
+      })
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  });
+
+  assert.deepEqual(graph.nodes, []);
+});
+
 test("buildInfrastructureGraphFromDiagramJson keeps edges only between projected nodes", () => {
   const graph = buildInfrastructureGraphFromDiagramJson({
     nodes: [
@@ -172,6 +197,17 @@ test("buildInfrastructureGraphFromDiagramJson keeps edges only between projected
   ]);
 });
 
+test("Terraform preview support is read from shared resource definitions", () => {
+  const infrastructureGraphSource = readTerraformServiceFile("infrastructure-graph.ts");
+  const terraformSyncSource = readTerraformServiceFile("terraform-to-diagram.ts");
+
+  assert.doesNotMatch(infrastructureGraphSource, /PREVIEW_SUPPORTED_BLOCKS/);
+  assert.doesNotMatch(infrastructureGraphSource, /RESOURCE_TYPE_BY_TERRAFORM_TYPE/);
+  assert.doesNotMatch(terraformSyncSource, /PROPOSAL_SUPPORTED_BLOCKS/);
+  assert.match(infrastructureGraphSource, /getResourceDefinitionByTerraform/);
+  assert.match(terraformSyncSource, /getResourceDefinitionByTerraform/);
+});
+
 function makeNode(
   node: Omit<DiagramNode, "position" | "size" | "locked" | "zIndex"> &
     Partial<Pick<DiagramNode, "position" | "size" | "locked" | "zIndex">>
@@ -189,4 +225,8 @@ function makeNode(
     zIndex: 0,
     ...node
   };
+}
+
+function readTerraformServiceFile(fileName: string): string {
+  return readFileSync(fileURLToPath(new URL(fileName, import.meta.url)), "utf8");
 }

@@ -240,6 +240,44 @@ type ResourceType =
 
 팀원은 `Security Group`, `security-group`, `cloudfront` 같은 새 문자열을 임의로 만들지 않는다. 새 Resource나 provider가 필요하면 `docs/data-models.md`, `packages/types`, API Zod schema, 프론트 소비처를 같은 PR에서 맞춘다.
 
+## ResourceDefinition과 Terraform Capability
+
+Terraform IaC 리소스의 지원 여부는 `packages/types/src/resource-definitions.ts`의 `ResourceDefinition`을 단일 출처로 삼는다. 여기에는 `provider`, domain `resourceType`, Terraform block identity, capability만 둔다. `design_region`, `design_az`, `design_group`처럼 화면 배치만 위한 container node는 IaC 리소스가 아니므로 공통 definition에 넣지 않고 web catalog에만 둔다.
+
+```ts
+type ResourceCapability = {
+  terraformPreview: boolean;
+  terraformSync: boolean;
+  parameterPanel: boolean;
+};
+
+type ResourceDefinition = {
+  id: string;
+  provider: CloudProvider;
+  resourceType: ResourceType;
+  terraform: {
+    blockType: TerraformBlockType;
+    resourceType: string;
+  };
+  capabilities: ResourceCapability;
+};
+```
+
+capability의 의미는 아래와 같다.
+
+- `terraformPreview`: `DiagramJson -> InfrastructureGraph -> Terraform` preview 생성 대상인지 나타낸다.
+- `terraformSync`: Terraform editor에서 발견한 block을 Diagram 변경 후보로 받아들일 수 있는지 나타낸다.
+- `parameterPanel`: web parameter catalog에 사용자 입력 UI가 있는지 나타낸다.
+
+새 Terraform 리소스를 추가할 때는 아래 순서를 따른다.
+
+1. `packages/types/src/resource-definitions.ts`에 shared `ResourceDefinition`을 추가하거나 capability를 수정한다.
+2. `apps/web/features/resource-settings/catalog.ts`에는 icon URL, category, label, size 같은 화면 표현만 추가한다.
+3. parameter 입력 UI가 필요하면 web parameter catalog를 추가하고 `parameterPanel` capability를 맞춘다.
+4. API는 web catalog를 import하지 않는다. API는 shared `ResourceDefinition`만 보고 preview/sync 지원 여부를 판단한다.
+
+현재 `ResourceType` union에 없는 세부 AWS Terraform type은 v1에서 `UNKNOWN`으로 둔다. domain type 확장이 필요하면 `ResourceType`과 shared definition, API/Web 소비처, 문서를 같은 변경에서 맞춘다.
+
 ## Project
 
 ```ts
@@ -450,7 +488,7 @@ type TerraformDiagramChangeProposal =
 
 Terraform editor 저장 sync action에서 `terraformCode`와 모든 `terraformFiles[].terraformCode`가 공백이면 사용자가 Terraform 리소스를 모두 삭제하려는 명시 의도로 본다. 이때 API는 지원 범위 안의 Diagram-only resource를 `delete_candidate`로 반환하고, Diagram도 이미 비어 있으면 diagnostics 없이 성공한다.
 
-Terraform editor에서 새로 발견한 구조 변경 proposal의 v1 범위는 `resource.aws_vpc`, `resource.aws_subnet`, `resource.aws_internet_gateway`, `resource.aws_route_table`, `resource.aws_route_table_association`, `resource.aws_security_group`, `resource.aws_instance`, `resource.aws_s3_bucket`, `resource.aws_cloudfront_distribution`, `data.aws_ami`다. Terraform Preview 렌더링은 기존 VPC/EC2/S3 계열 리소스 지원을 유지할 수 있으며, 이미 같은 identity로 매칭된 block은 parser가 안전하게 해석할 수 있는 경우 `parameters.values` 갱신 대상이 될 수 있다.
+Terraform editor에서 새로 발견한 구조 변경 proposal의 v1 범위는 shared `ResourceDefinition`의 `terraformSync` capability가 `true`인 Terraform block이다. Terraform Preview 렌더링 대상은 `terraformPreview` capability로 따로 판단한다. 따라서 `aws_cloudfront_distribution`처럼 sync는 가능하지만 preview는 아직 제외되는 리소스가 있을 수 있다. 이미 같은 identity로 매칭된 block은 parser가 안전하게 해석할 수 있는 경우 `parameters.values` 갱신 대상이 될 수 있다.
 
 Parameter panel의 `Advanced Parameters` UI는 내부 노출 정책이 정해질 때까지 숨긴다. 이는 UI 노출 정책이며 저장 정책이 아니다. 기존 `parameters.values`에 남아 있는 optional 또는 catalog 밖 값은 사용자가 명시적으로 삭제하지 않는 한 보존하고, Terraform Preview renderer가 이해할 수 있으면 계속 렌더링 입력으로 사용한다.
 

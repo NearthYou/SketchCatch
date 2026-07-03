@@ -4,6 +4,14 @@
 
 ## 현재 검증된 것
 
+- Terraform IaC 리소스 지원 여부의 단일 출처는 `packages/types/src/resource-definitions.ts`의 shared `ResourceDefinition`이다.
+- API와 Web은 `@sketchcatch/types/resource-definitions` subpath를 통해 같은 resource definition/capability를 사용한다.
+- API는 web resource catalog를 import하지 않는다. Web catalog는 icon/category/label/size 같은 presentation 정보만 소유한다.
+- `design_region`, `design_az`, `design_group` 같은 화면 전용 container node는 shared definition에 넣지 않고 web catalog에만 둔다.
+- `terraformPreview` capability가 true인 리소스만 `InfrastructureGraph` preview node로 포함된다.
+- `terraformSync` capability가 true인 리소스만 Terraform editor 구조 변경 proposal 대상이 된다.
+- `aws_cloudfront_distribution`은 현재 `terraformPreview: false`, `terraformSync: true` 차이를 유지한다.
+- Web catalog의 AWS Terraform 항목과 shared definition/parameter catalog drift 방지 테스트가 있다.
 - InfrastructureGraph 중심 Workspace 동기화 v1 구현이 현재 브랜치에 커밋됐다.
 - Terraform Preview 생성 경로는 `DiagramJson -> InfrastructureGraph -> Terraform`로 정리됐다.
 - VPC/EC2/S3/AMI 계열 Preview와 Terraform sync 흐름은 focused API/Web 테스트, typecheck, lint, build를 통과했다.
@@ -41,6 +49,13 @@
 
 ## 이번 세션의 변경 사항
 
+- `packages/types/src/resource-definitions.ts`를 추가해 44개 AWS Terraform resource/data 항목의 provider, domain `ResourceType`, Terraform identity, capability를 정의했다.
+- `packages/types/package.json`에 `./resource-definitions` export를 추가했다. root `index.ts` re-export는 Next/Turbopack source resolve 문제 때문에 사용하지 않는다.
+- `infrastructure-graph.ts`에서 `PREVIEW_SUPPORTED_BLOCKS`와 `RESOURCE_TYPE_BY_TERRAFORM_TYPE`를 제거하고 shared definition의 `terraformPreview`, `resourceType`, `provider`를 사용하게 했다.
+- `terraform-to-diagram.ts`에서 `PROPOSAL_SUPPORTED_BLOCKS`를 제거하고 shared definition의 `terraformSync`를 사용하게 했다.
+- Web `resource-settings/catalog.ts`를 shared definition + presentation metadata 구조로 정리했다.
+- API/Web 테스트에 hardcoded support list 제거, preview/sync capability 차이, catalog/definition/parameter panel drift 방지 케이스를 추가했다.
+- `docs/data-models.md`에 ResourceDefinition/capability 의미, 새 리소스 추가 절차, API/Web 의존성 경계를 문서화했다.
 - Terraform HCL tokenizing helper와 회귀 테스트를 추가했다.
 - Terraform editor의 기존 2px 빨간 직선 marker를 제거하고, syntax highlight line에 `text-decoration-style: wavy` 오류 밑줄을 적용했다.
 - Terraform editor textarea 글자를 투명 처리하고 caret은 유지해, 실제 입력은 textarea가 담당하고 보이는 코드는 highlight layer가 담당하게 했다.
@@ -98,6 +113,14 @@
 
 ## 검증
 
+- `pnpm --filter @sketchcatch/types typecheck` - passed
+- `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/infrastructure-graph.test.ts src/services/terraform/terraform-to-diagram.test.ts` - passed
+- `pnpm --filter @sketchcatch/web exec tsx --test features/resource-settings/catalog.test.ts` - passed
+- `pnpm lint` - passed
+- `pnpm typecheck` - passed
+- `pnpm build` - passed
+- `pnpm harness:check` - passed
+- `git diff --check` - passed
 - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/terraform-code-highlighting.test.ts features/workspace/terraform-diagnostic-line-highlights.test.ts features/workspace/workspace-right-panel-layout.test.ts features/workspace/terraform-panel-utils.test.ts features/workspace/pre-deployment-diagnostics.test.ts` - passed
 - `pnpm --filter @sketchcatch/web test` - passed, 309 tests
 - `pnpm --filter @sketchcatch/web typecheck` - passed
@@ -157,6 +180,8 @@
 
 ## 아직 깨졌거나 미검증된 것
 
+- 새 shared definition 변경에 대한 브라우저 수동 smoke는 수행하지 않았다. 자동/타입/빌드 검증으로 확인했다.
+- `parameterPanel` capability는 현재 web parameter catalog 보유 여부와 맞췄다. 새 리소스 추가 시 shared definition, web presentation, parameter catalog를 함께 갱신해야 한다.
 - `apps/web/next-env.d.ts`는 `pnpm build`가 일시적으로 바꿨지만 이번 작업 범위가 아니라 tracked 상태로 되돌렸다.
 - 로컬 브랜치는 upstream보다 1 commit behind 상태다. upstream에는 `docs/jh` 추적 해제 관련 삭제 commit이 하나 있다.
 - tracked 상태로 남아 있는 `docs/jh` 파일은 PR 정리 전 ignore 정책에 맞게 제거해야 한다.
@@ -169,6 +194,7 @@
 
 ## 다음으로 최선의 행동
 
+- 다음 Terraform 리소스 추가 시 `packages/types/src/resource-definitions.ts`를 먼저 수정하고, web catalog에는 presentation 정보만 추가한다.
 - 브라우저에서 EC2/S3/CloudFront 같은 일반 resource icon을 새로 추가했을 때 `56x56` 크기로 보이고, VPC/Subnet 같은 영역 node는 기존 크기를 유지하는지 수동 smoke한다.
 - 브라우저에서 EC2/VPC/S3 아이콘을 반복 추가했을 때 Terraform Preview 이름이 순차 suffix로 생성되는지 수동 smoke한다.
 - 브라우저에서 CloudFront AI draft가 `AWS` fallback이 아니라 CloudFront icon으로 보이는지 수동 smoke한다.
