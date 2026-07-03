@@ -13,6 +13,20 @@
 - Highest priority unfinished harness feature: `HARNESS-007`
 - Current blocker: none
 
+### 2026-07-03 - 아키텍처 다이어그램 검수 가이드 작성
+
+- Goal: 자동 생성된 클라우드 아키텍처 다이어그램이 맞는지 판단할 수 있도록, 코드 구현 기준이 아닌 일반 클라우드 개념 기준의 검수 문서를 작성한다.
+- Completed:
+  - `docs/ck/ai/002_아키텍처다이어그램검수가이드.md`를 추가해 포함관계, 의존성, 화살표 방향, 네트워크/보안/저장소/컴퓨트 검수 기준을 정리했다.
+  - `docs/ck/README.md`의 빠른 읽기 순서와 문서 목록에 AI 다이어그램 검수 문서를 추가했다.
+  - 잘못된 위치에 생성됐던 루트 `docs/001_아키텍처다이어그램_검수_가이드.md` 문서를 제거했다.
+- Verification run:
+  - `node scripts/check-harness.mjs` - passed before editing and after documentation updates.
+  - `git diff --check` - passed with line-ending warnings only.
+  - `rg -n "ArchitectureJson|DiagramJson|ResourceType|metadata|config|현재 구현|현재 AI|MVP|SketchCatch|UNKNOWN" docs\ck\ai\002_아키텍처다이어그램검수가이드.md` - no matches.
+- Known risks:
+  - Documentation-only change; full lint/typecheck/build were not run.
+
 ### 2026-07-03 - Server Storage Route edge 방향 보정
 
 - Goal: `EC2 서버 + 이미지 저장용 S3` 초안에서 Route Table 라우팅 화살표가 실제 관계와 반대로 보이는 문제를 바로잡는다.
