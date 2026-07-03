@@ -25,10 +25,11 @@ resource "aws_security_group_rule" "ssh" {
 export const DEFAULT_TERRAFORM_ERROR_MESSAGE = "Error: Missing required argument on generated variables.tf";
 
 export const scenarioOptions: readonly ChoiceOption<ArchitectureDraftScenarioHint>[] = [
-  { label: "자연어 기준 자동 판단", value: "auto" },
+  { label: "자연어 기준으로 자동 판단", value: "auto" },
   { label: "API 서버", value: "api_server" },
   { label: "백엔드와 DB", value: "backend_with_db" },
   { label: "서버와 스토리지", value: "server_storage" },
+  { label: "Lambda 함수", value: "serverless_function" },
   { label: "정적 웹사이트", value: "static_site" }
 ];
 

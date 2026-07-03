@@ -650,7 +650,12 @@ export type AiResultMetadata = {
   guardrailWarnings?: ArchitectureGuardrailWarning[];
 };
 
-export type ArchitectureScenario = "static_site" | "api_server" | "backend_with_db" | "server_storage";
+export type ArchitectureScenario =
+  | "static_site"
+  | "api_server"
+  | "backend_with_db"
+  | "server_storage"
+  | "serverless_function";
 
 export type ArchitectureScenarioScore = {
   scenario: ArchitectureScenario;

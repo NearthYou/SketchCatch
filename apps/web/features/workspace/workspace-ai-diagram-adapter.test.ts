@@ -331,6 +331,53 @@ test("convertArchitectureJsonToDiagramJson maps server and storage draft resourc
   );
 });
 
+test("convertArchitectureJsonToDiagramJson maps Lambda draft resources to Terraform nodes", () => {
+  const architectureJson: ArchitectureJson = {
+    nodes: [
+      {
+        id: "lambda-function",
+        type: "LAMBDA",
+        label: "Lambda Function",
+        positionX: 260,
+        positionY: 220,
+        config: {
+          functionName: "practice-function",
+          handler: "index.handler",
+          runtime: "nodejs20.x"
+        }
+      }
+    ],
+    edges: []
+  };
+
+  const diagramJson = convertArchitectureJsonToDiagramJson(architectureJson);
+
+  assert.deepEqual(
+    diagramJson.nodes.map((node) => ({
+      id: node.id,
+      resourceName: node.parameters?.resourceName,
+      resourceType: node.parameters?.resourceType,
+      terraformBlockType: node.parameters?.terraformBlockType,
+      type: node.type,
+      values: node.parameters?.values
+    })),
+    [
+      {
+        id: "lambda-function",
+        resourceName: "lambda_function",
+        resourceType: "aws_lambda_function",
+        terraformBlockType: "resource",
+        type: "aws_lambda_function",
+        values: {
+          functionName: "practice-function",
+          handler: "index.handler",
+          runtime: "nodejs20.x"
+        }
+      }
+    ]
+  );
+});
+
 test("convertArchitectureJsonToDiagramJson lays out server and storage draft as nested cloud areas", () => {
   const architectureJson: ArchitectureJson = {
     nodes: [

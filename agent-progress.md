@@ -13,6 +13,33 @@
 - Highest priority unfinished harness feature: `HARNESS-007`
 - Current blocker: none
 
+### 2026-07-03 - Natural Language Diagramming 결정사항 재감사
+
+- Goal: Natural Language Diagramming 결정사항 전체를 현재 구현에 대조하고, 빠진 동작이 있으면 바로 보강한다.
+- Completed:
+  - `/workspace/ai` 별도 AI 화면을 `/workspace`로 redirect해 Natural Language Diagramming 위치를 workspace 보드 안으로 고정했다.
+  - 미리보기 초안이 떠 있을 때 상단 `초안 미리보기 생성` 버튼을 숨겨 카드 안의 `생성`, `취소`, `다시 생성`만 남도록 했다.
+  - 지원 ResourceType 목록에 있던 `LAMBDA`를 자연어 규칙 엔진과 고정 템플릿에 연결해 Lambda/서버리스 프롬프트에서 `LAMBDA` 초안을 생성하도록 했다.
+  - `serverless_function` 시나리오를 shared type, API schema, metadata label, 보조 선택 UI, 기존 metadata panel에 반영했다.
+  - Redis, SQS/SNS/EventBridge/Step Functions 등 지원 밖 리소스 감지를 추가하고, DynamoDB/NoSQL은 RDS 대체 경고로 처리하도록 보강했다.
+  - `docs/data-models.md`에 Natural Language Diagramming 시나리오, 지원 ResourceType, guardrail warning 계약을 기록했다.
+  - API/Web 테스트에 모호한 프롬프트 처리, 지원 타입 제한, Lambda 초안, 미지원 리소스 제외 경고, `/workspace/ai` redirect, preview action 제한, Lambda board adapter 검증을 추가했다.
+- Verification run:
+  - `.\apps\api\node_modules\.bin\tsx.CMD apps/api/src/routes/ai.test.ts` - passed with 25 tests after sandbox spawn EPERM.
+  - `.\apps\web\node_modules\.bin\tsx.CMD apps/web/features/workspace/workspace-ai-guardrail-warning.test.ts` - passed with 3 tests after sandbox spawn EPERM.
+  - `.\apps\web\node_modules\.bin\tsx.CMD apps/web/app/workspace/workspace-resource-chip-class.test.ts` - passed with 3 tests after sandbox spawn EPERM.
+  - `.\apps\web\node_modules\.bin\tsx.CMD apps/web/features/workspace/workspace-ai-diagram-adapter.test.ts` - passed with 9 tests after sandbox spawn EPERM.
+  - `.\apps\web\node_modules\.bin\tsx.CMD apps/web/features/diagram-editor/flow-mappers.test.ts` - passed with 7 tests after sandbox spawn EPERM.
+  - `node scripts/check-harness.mjs` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm harness:check` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm lint` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm typecheck` - failed once because old `DraftMetadataPanel` did not handle `serverless_function`; fixed and reran successfully.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm build` - passed.
+  - `git diff --check` - passed with line-ending warnings only.
+- Known risks:
+  - `/workspace/ai` still exists as a Next route but now redirects to `/workspace`; it no longer renders the old separate AI workspace.
+  - Existing unrelated worktree change remains: `apps/web/next-env.d.ts`.
+
 ### 2026-07-03 - 지원 불가 요구사항 대체 생성
 
 - Goal: 자연어 다이어그램 생성에서 지원 범위 밖 리소스 요구가 들어오면 조용히 제외하지 않고 지원 가능한 유사 초안으로 대체하고 경고를 표시한다.

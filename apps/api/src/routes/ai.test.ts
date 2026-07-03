@@ -176,7 +176,55 @@ test("POST /api/ai/architecture-draft selects API server and database backend te
   assert.ok(databaseBackendNodeTypes.includes("RDS"));
   assert.ok(databaseBackendNodeTypes.includes("SECURITY_GROUP"));
 
-	await app.close();
+  await app.close();
+});
+
+test("POST /api/ai/architecture-draft selects a Lambda draft from serverless prompt keywords", async () => {
+  const app = buildApp();
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/ai/architecture-draft",
+    payload: {
+      prompt: "간단한 Lambda 함수 기반 서버리스 구조를 만들어줘",
+      scenarioHint: "auto"
+    }
+  });
+
+  assert.equal(response.statusCode, 200);
+
+  const body = architectureDraftResponseSchema.parse(response.json());
+  const nodeTypes = body.architectureJson.nodes.map((node) => node.type);
+
+  assert.equal(body.title, "Lambda 함수 Practice Architecture");
+  assert.equal(body.metadata.selectedScenario, "serverless_function");
+  assert.deepEqual(nodeTypes, ["LAMBDA"]);
+
+  await app.close();
+});
+
+test("POST /api/ai/architecture-draft warns when unsupported resources are omitted", async () => {
+  const app = buildApp();
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/ai/architecture-draft",
+    payload: {
+      prompt: "API 서버에 Redis 캐시와 SQS 메시지 큐를 붙여줘",
+      scenarioHint: "auto"
+    }
+  });
+
+  assert.equal(response.statusCode, 200);
+
+  const body = architectureDraftResponseSchema.parse(response.json());
+
+  assert.equal(body.metadata.selectedScenario, "api_server");
+  assert.ok(body.metadata.guardrailWarnings?.some((warning) => warning.code === "unsupported_resource_omitted"));
+  assert.ok(body.metadata.guardrailWarnings?.some((warning) => warning.code === "partial_generation"));
+  assert.equal(body.architectureJson.nodes.some((node) => node.type === "UNKNOWN"), false);
+
+  await app.close();
 });
 
 test("POST /api/ai/architecture-draft lets prompt keywords override helper choices", async () => {
@@ -291,6 +339,100 @@ test("POST /api/ai/architecture-draft returns scenario scores and unsupported su
     )
   );
   assert.ok(partialBody.metadata.guardrailWarnings?.some((warning) => warning.code === "partial_generation"));
+
+  await app.close();
+});
+
+test("POST /api/ai/architecture-draft uses helper choices only for ambiguous prompts", async () => {
+  const app = buildApp();
+
+  const helperChoiceResponse = await app.inject({
+    method: "POST",
+    url: "/api/ai/architecture-draft",
+    payload: {
+      prompt: "연습용 구조를 하나 만들어줘",
+      scenarioHint: "static_site",
+      budgetLevel: "normal",
+      trafficLevel: "normal",
+      securityPriority: "basic"
+    }
+  });
+
+  assert.equal(helperChoiceResponse.statusCode, 200);
+
+  const helperChoiceBody = architectureDraftResponseSchema.parse(helperChoiceResponse.json());
+
+  assert.equal(helperChoiceBody.metadata.selectedScenario, "static_site");
+  assert.equal(
+    helperChoiceBody.metadata.guardrailWarnings?.some((warning) => warning.code === "ambiguous_prompt_fallback") ??
+      false,
+    false
+  );
+
+  const fallbackResponse = await app.inject({
+    method: "POST",
+    url: "/api/ai/architecture-draft",
+    payload: {
+      prompt: "연습용 구조를 하나 만들어줘",
+      scenarioHint: "auto",
+      budgetLevel: "normal",
+      trafficLevel: "normal",
+      securityPriority: "basic"
+    }
+  });
+
+  assert.equal(fallbackResponse.statusCode, 200);
+
+  const fallbackBody = architectureDraftResponseSchema.parse(fallbackResponse.json());
+
+  assert.equal(fallbackBody.metadata.selectedScenario, "api_server");
+  assert.ok(fallbackBody.metadata.guardrailWarnings?.some((warning) => warning.code === "ambiguous_prompt_fallback"));
+
+  await app.close();
+});
+
+test("POST /api/ai/architecture-draft generates only supported ResourceType values", async () => {
+  const app = buildApp();
+  const supportedResourceTypes = new Set([
+    "VPC",
+    "SUBNET",
+    "INTERNET_GATEWAY",
+    "ROUTE_TABLE",
+    "ROUTE_TABLE_ASSOCIATION",
+    "EC2",
+    "RDS",
+    "S3",
+    "SECURITY_GROUP",
+    "CLOUDFRONT",
+    "LAMBDA",
+    "AMI"
+  ]);
+  const payloads = [
+    { prompt: "정적 웹사이트를 만들어줘", scenarioHint: "auto" },
+    { prompt: "API 서버를 만들어줘", scenarioHint: "auto" },
+    { prompt: "DB가 있는 백엔드를 만들어줘", scenarioHint: "auto" },
+    { prompt: "EC2 서버와 이미지 저장용 S3 버킷을 만들어줘", scenarioHint: "auto" },
+    { prompt: "Lambda 함수 기반 서버리스 구조를 만들어줘", scenarioHint: "auto" },
+    { prompt: "EKS 클러스터를 만들어줘", scenarioHint: "auto" }
+  ] as const;
+
+  for (const payload of payloads) {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/ai/architecture-draft",
+      payload
+    });
+
+    assert.equal(response.statusCode, 200);
+
+    const body = architectureDraftResponseSchema.parse(response.json());
+
+    assert.ok(
+      body.architectureJson.nodes.every((node) => supportedResourceTypes.has(node.type)),
+      `Expected supported node types for prompt: ${payload.prompt}`
+    );
+    assert.equal(body.architectureJson.nodes.some((node) => node.type === "UNKNOWN"), false);
+  }
 
   await app.close();
 });

@@ -76,7 +76,9 @@ const architectureJsonSchema: z.ZodType<ArchitectureJson> = z.object({
 // 프론트가 일부 선택값을 안 보내도 서비스 안쪽은 항상 같은 요청 모양만 보게 만듭니다.
 const architectureDraftBodySchema: z.ZodType<CreateArchitectureDraftRequest> = z.object({
   prompt: z.string().trim().min(1),
-  scenarioHint: z.enum(["auto", "static_site", "api_server", "backend_with_db", "server_storage"]).default("auto"),
+  scenarioHint: z
+    .enum(["auto", "static_site", "api_server", "backend_with_db", "server_storage", "serverless_function"])
+    .default("auto"),
   budgetLevel: z.enum(["low", "normal"]).default("normal"),
   trafficLevel: z.enum(["small", "normal"]).default("normal"),
   securityPriority: z.enum(["basic", "high"]).default("basic")

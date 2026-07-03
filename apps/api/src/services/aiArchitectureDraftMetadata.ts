@@ -99,5 +99,7 @@ function getScenarioLabel(scenario: ArchitectureScenario): string {
       return "DB 포함 백엔드";
     case "server_storage":
       return "서버와 스토리지";
+    case "serverless_function":
+      return "Lambda 함수";
   }
 }

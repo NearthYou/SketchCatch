@@ -1,6 +1,6 @@
-import { AiWorkspaceClient } from "../AiWorkspaceClient";
+import { redirect } from "next/navigation";
 
-// gg AI 데모 화면을 실제 보드 작업대와 분리해 팀이 직접 눌러볼 수 있게 노출합니다.
+// Natural Language Diagramming은 별도 AI 화면이 아니라 workspace 보드 안에서 실행합니다.
 export default function WorkspaceAiPage() {
-  return <AiWorkspaceClient />;
+  redirect("/workspace");
 }

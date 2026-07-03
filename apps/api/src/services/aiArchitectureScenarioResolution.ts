@@ -39,6 +39,11 @@ const PROMPT_SCENARIO_KEYWORD_RULES: readonly PromptScenarioKeywordRule[] = [
     reason: "서버와 스토리지를 함께 쓰는 요구사항"
   },
   {
+    scenario: "serverless_function",
+    keywords: ["lambda", "serverless", "람다", "서버리스", "함수"],
+    reason: "Lambda 함수 또는 서버리스 요구사항"
+  },
+  {
     scenario: "api_server",
     keywords: ["api", "server", "ec2", "express", "spring", "fastapi", "nestjs", "서버", "백엔드", "애플리케이션"],
     reason: "API 서버 요구사항"
@@ -53,6 +58,7 @@ const PROMPT_SCENARIO_KEYWORD_RULES: readonly PromptScenarioKeywordRule[] = [
 const PROMPT_SCENARIO_PRIORITY: readonly ArchitectureScenario[] = [
   "backend_with_db",
   "server_storage",
+  "serverless_function",
   "api_server",
   "static_site"
 ];
@@ -73,6 +79,22 @@ const UNSUPPORTED_REQUIREMENT_RULES: readonly UnsupportedRequirementRule[] = [
       label: "단일 EC2 API 서버",
       scenario: "api_server"
     }
+  },
+  {
+    label: "DynamoDB/NoSQL",
+    keywords: ["dynamodb", "dynamo db", "nosql", "다이나모db", "다이나모디비"],
+    substitution: {
+      label: "RDS 데이터베이스",
+      scenario: "backend_with_db"
+    }
+  },
+  {
+    label: "ElastiCache/Redis",
+    keywords: ["elasticache", "redis", "레디스"]
+  },
+  {
+    label: "메시징/워크플로 서비스",
+    keywords: ["sqs", "sns", "eventbridge", "step functions", "stepfunctions", "스텝펑션", "메시지 큐", "이벤트브리지"]
   },
   {
     label: "ALB/Auto Scaling",

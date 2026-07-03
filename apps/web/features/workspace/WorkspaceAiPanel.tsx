@@ -152,8 +152,8 @@ export function WorkspaceAiPanel({ context }: WorkspaceAiPanelProps) {
   return (
     <div className={styles.aiPanel}>
       <header className={styles.aiPanelHeader}>
-        <span>AI</span>
-        <h2>워크스페이스 AI</h2>
+        <span>Natural Language Diagramming</span>
+        <h2>자연어 다이어그램</h2>
       </header>
 
       <section className={styles.aiSection}>
@@ -191,14 +191,16 @@ export function WorkspaceAiPanel({ context }: WorkspaceAiPanelProps) {
           options={securityOptions}
           value={securityPriority}
         />
-        <button
-          className={styles.aiPrimaryButton}
-          disabled={draftState === "loading"}
-          onClick={() => void createDraftFromPrompt()}
-          type="button"
-        >
-          {draftState === "loading" ? "초안 생성 중" : "초안 미리보기 생성"}
-        </button>
+        {draft === null ? (
+          <button
+            className={styles.aiPrimaryButton}
+            disabled={draftState === "loading"}
+            onClick={() => void createDraftFromPrompt()}
+            type="button"
+          >
+            {draftState === "loading" ? "초안 생성 중" : "초안 미리보기 생성"}
+          </button>
+        ) : null}
         <WorkspaceAiRequestMessage state={draftState} message={draftErrorMessage} />
         {draft !== null ? (
           <article className={styles.aiResultCard}>

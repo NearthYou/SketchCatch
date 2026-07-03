@@ -776,6 +776,37 @@ type AiArchitectureDraftResult = {
 };
 ```
 
+Natural Language Diagramming의 `ArchitectureDraft`는 LLM 자유 생성이 아니라 규칙 기반 시나리오 선택과 고정 템플릿으로 만든다. 같은 Requirement Prompt와 같은 보조 조건은 같은 `ArchitectureJson`을 반환해야 한다. `LlmExplanation` 문구는 보조 설명이므로 결정성 기준에 포함하지 않는다.
+
+```ts
+type ArchitectureScenario =
+  | "static_site"
+  | "api_server"
+  | "backend_with_db"
+  | "server_storage"
+  | "serverless_function";
+
+type ArchitectureDraftScenarioHint = "auto" | ArchitectureScenario;
+```
+
+`ArchitectureDraft`가 자동 생성하는 node type은 `ResourceType` 중 `UNKNOWN`을 제외한 지원 목록으로 제한한다. 현재 지원 목록은 `VPC`, `SUBNET`, `INTERNET_GATEWAY`, `ROUTE_TABLE`, `ROUTE_TABLE_ASSOCIATION`, `EC2`, `RDS`, `S3`, `SECURITY_GROUP`, `CLOUDFRONT`, `LAMBDA`, `AMI`다.
+
+`metadata.guardrailWarnings`는 AI 초안 카드 하단에 표시할 경고 계약이다.
+
+```ts
+type ArchitectureGuardrailWarningCode =
+  | "unsupported_resource_omitted"
+  | "unsupported_requirement_substituted"
+  | "selection_overridden_by_prompt"
+  | "ambiguous_prompt_fallback"
+  | "partial_generation"
+  | "guardrail_adjusted_config"
+  | "board_replacement_required"
+  | "low_budget_rds_cost"
+  | "unsupported_requirement"
+  | "scenario_conflict";
+```
+
 `LlmExplanation`은 rule 기반 결과를 덮어쓰지 않고, 사용자가 읽기 쉬운 요약과 다음 행동을 붙이는 공통 설명 계약이다. Bedrock, Amazon Q Business, OpenAI legacy/fallback provider 호출이 실패하거나 일부 필드가 rule 기반 기본값으로 대체되면 `fallbackUsed`를 `true`로 둔다.
 
 ```ts

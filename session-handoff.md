@@ -2,6 +2,46 @@
 
 이 파일은 최신 세션 하나를 다음 세션이 빠르게 이어받기 위한 압축본이다. 누적 이력은 `agent-progress.md`에 남긴다.
 
+## 2026-07-03 최신 핸드오프 - Natural Language Diagramming 결정사항 재감사
+
+### 현재 검증된 것
+
+- Natural Language Diagramming은 `/workspace/ai` 별도 화면이 아니라 `/workspace` 보드 안의 오른쪽 AI 패널에서 동작한다. `/workspace/ai`는 `/workspace`로 redirect한다.
+- 자연어 Requirement Prompt가 우선이고, 보조 선택은 자연어가 모호할 때만 사용된다.
+- 보조 선택 기본값은 `auto`이며 UI 라벨은 `자연어 기준으로 자동 판단`이다.
+- 자연어와 선택지가 충돌하면 자연어/대체 시나리오가 우선되고 `selection_overridden_by_prompt` 경고가 표시된다.
+- 같은 요청은 같은 `ArchitectureJson`을 반환한다. LLM 설명 문구는 결정성 기준 밖이다.
+- 규칙 엔진은 고정 템플릿으로 `static_site`, `api_server`, `backend_with_db`, `server_storage`, `serverless_function` 초안을 만든다.
+- 생성 node type은 `UNKNOWN` 없이 지원 ResourceType만 사용한다.
+- Lambda/서버리스 프롬프트는 `LAMBDA` 초안을 생성한다.
+- Redis, SQS/SNS/EventBridge/Step Functions 등 지원 밖 리소스는 제외 경고를 남기고, DynamoDB/NoSQL은 RDS 대체 경고를 남긴다.
+- 초안은 workspace 보드에 반투명 preview로 먼저 표시되고, preview 중 보드 편집은 read-only로 잠긴다.
+- preview 중 사용자는 카드 안의 `생성`, `취소`, `다시 생성`만 사용할 수 있다.
+- `생성`은 전체 보드 교체로 적용하고 preview를 제거한다. `취소`는 preview만 제거한다.
+- 기존 보드에 리소스가 있으면 `board_replacement_required` 경고가 AI 초안 카드 하단에 표시된다.
+
+### 이번 세션의 변경 사항
+
+- `serverless_function` 시나리오와 Lambda 고정 템플릿을 추가했다.
+- `/workspace/ai` route를 `/workspace` redirect로 바꿨다.
+- Workspace AI 패널 제목을 Natural Language Diagramming 방향으로 정리하고, preview 상태의 추가 생성 버튼을 숨겼다.
+- 미지원 리소스 감지/대체 규칙을 보강하고, 관련 API/Web/adapter 테스트를 추가했다.
+- `docs/data-models.md`에 시나리오, 지원 ResourceType, guardrail warning 계약을 기록했다.
+
+### 검증
+
+- `apps/api/src/routes/ai.test.ts` - 25 tests passed.
+- `workspace-ai-guardrail-warning.test.ts` - 3 tests passed.
+- `workspace-resource-chip-class.test.ts` - 3 tests passed.
+- `workspace-ai-diagram-adapter.test.ts` - 9 tests passed.
+- `flow-mappers.test.ts` - 7 tests passed.
+- `npm exec --package=pnpm@11.8.0 -- pnpm harness:check`, `lint`, `typecheck`, `build` - passed.
+
+### 아직 주의할 점
+
+- Patch preview/apply는 미래 확장으로만 남아 있다. 현재 생성 적용은 전체 교체다.
+- Existing unrelated change: `apps/web/next-env.d.ts` remains unstaged.
+
 ## 2026-07-03 최신 핸드오프 - 지원 불가 요구사항 대체 생성
 
 ### 현재 검증된 것

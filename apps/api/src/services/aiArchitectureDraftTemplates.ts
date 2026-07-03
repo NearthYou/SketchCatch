@@ -11,6 +11,8 @@ export function createDraftByScenario(scenario: ArchitectureScenario): AiArchite
       return createDatabaseBackendDraft();
     case "server_storage":
       return createServerStorageDraft();
+    case "serverless_function":
+      return createServerlessFunctionDraft();
   }
 }
 
@@ -276,6 +278,36 @@ function createServerStorageDraft(): AiArchitectureDraftResult {
       confidence: "medium",
       assumptions: ["EC2 서버가 public subnet에서 실행되고 S3 Bucket을 함께 사용하는 연습용 구조로 가정합니다."],
       explanations: ["VPC, Subnet, Internet Gateway, Route Table, Security Group, EC2, S3를 포함한 MVP 범위 초안입니다."]
+    }
+  };
+}
+
+// Lambda 함수 요구사항에는 지원 ResourceType인 LAMBDA만 사용한 작은 서버리스 초안을 반환합니다.
+function createServerlessFunctionDraft(): AiArchitectureDraftResult {
+  return {
+    title: "Lambda 함수 Practice Architecture",
+    architectureJson: {
+      nodes: [
+        {
+          id: "lambda-function",
+          type: "LAMBDA",
+          label: "Lambda Function",
+          positionX: 260,
+          positionY: 220,
+          config: {
+            functionName: "practice-function",
+            handler: "index.handler",
+            runtime: "nodejs20.x"
+          }
+        }
+      ],
+      edges: []
+    },
+    metadata: {
+      source: "template_fallback",
+      confidence: "medium",
+      assumptions: ["단일 Lambda 함수가 이벤트를 처리하는 연습용 서버리스 구조로 가정합니다."],
+      explanations: ["지원 ResourceType인 LAMBDA만 사용해 Architecture Board에 바로 표시할 수 있는 초안을 반환합니다."]
     }
   };
 }
