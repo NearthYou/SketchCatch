@@ -4,6 +4,21 @@
 
 ## 현재 검증된 것
 
+- Issue #129 worktree `feature/sw/129-direct-deployment-failure-ai`는 `origin/dev` 기준으로 fast-forward된 뒤 Direct Deployment 실패 설명 slice를 구현했다.
+- `GET /api/deployments/:deploymentId/failure-explanation`은 `FAILED` deployment만 허용하며, 첫 `ERROR` 로그 또는 `errorSummary`를 마스킹해 실패 stage, 첫 오류 로그, cleanup 필요 여부, nextActions를 반환한다.
+- `DeploymentPanel`은 실패한 deployment가 선택됐을 때 실패 요약 카드와 다음 행동을 표시한다.
+- `docs/data-models.md`와 `docs/sw/008_배포실패설명가이드_sw.md`에 DTO/흐름/클론 코딩 자료가 반영됐다.
+- #129 검증:
+  - `pnpm harness:check` - passed before edits
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/routes/deployments.test.ts` - passed
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/api.test.ts` - passed
+  - `pnpm typecheck` - passed
+  - `pnpm lint` - passed
+  - `pnpm build` - passed
+  - `$env:S3_BUCKET_NAME='sketchcatch-test-bucket'; pnpm --filter @sketchcatch/api test` - passed
+  - `$env:S3_BUCKET_NAME='sketchcatch-test-bucket'; pnpm exec turbo test --env-mode=loose` - passed
+  - `git diff --check` - passed
+- 루트 `pnpm test`는 기존 Turbo strict task env에서 `S3_BUCKET_NAME`이 API task로 전달되지 않아 실패한다. 같은 전체 테스트는 `turbo test --env-mode=loose`로 통과했다.
 - `pnpm harness:check`가 중복 상세 기획 문서 정리 후 통과했다.
 - `git diff --check`가 중복 상세 기획 문서 정리 후 통과했다.
 - 삭제 대상 문서 참조가 repo 전체에서 더 이상 나오지 않는다.
@@ -23,6 +38,11 @@
 
 ## 이번 세션의 변경 사항
 
+- #129에서 Direct Deployment 실패 설명 DTO/API/UI/docs를 추가했다.
+- `packages/types/src/index.ts`에 `DeploymentFailureExplanation`과 response type을 추가했다.
+- `apps/api/src/deployments/deployment-failure-explanation.ts`를 추가하고 deployment route에 실패 설명 endpoint를 연결했다.
+- `apps/web/features/workspace/DeploymentPanel.tsx`와 API helper에 실패 설명 조회/표시를 추가했다.
+- `docs/sw/008_배포실패설명가이드_sw.md`를 추가했다.
 - 별도 재구성본 파일과 관련 기록을 삭제했다.
 - `docs/README.md`에서 별도 재구성본 링크와 문서 정리 기준을 삭제했다.
 - `docs/product.md`, `docs/000_상세기획서.md`의 대상 사용자 소개에서 부정형/방어형 포지셔닝 문장을 삭제했다.

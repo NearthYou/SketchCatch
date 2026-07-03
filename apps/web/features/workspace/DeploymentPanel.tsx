@@ -10,6 +10,7 @@ import type {
   CheckFinding,
   DeployedResource,
   Deployment,
+  DeploymentFailureExplanation,
   DiagramJson,
   DeploymentLog,
   TerraformDiagnostic,
@@ -23,6 +24,7 @@ import {
   approveDeploymentPlan,
   cancelDeployment as cancelDeploymentRun,
   createDeployment,
+  getDeploymentFailureExplanation,
   listAwsConnections,
   listDeploymentResources,
   listDeploymentLogs,
@@ -111,6 +113,10 @@ export function DeploymentPanel({
   const [preDeploymentState, setPreDeploymentState] = useState<AiRequestState>("idle");
   const [preDeploymentErrorMessage, setPreDeploymentErrorMessage] = useState("");
   const [preDeploymentFingerprint, setPreDeploymentFingerprint] = useState<string | null>(null);
+  const [failureExplanation, setFailureExplanation] =
+    useState<DeploymentFailureExplanation | null>(null);
+  const [failureExplanationState, setFailureExplanationState] = useState<RequestState>("idle");
+  const [failureExplanationErrorMessage, setFailureExplanationErrorMessage] = useState("");
   const deploymentExpandedGridRef = useRef<HTMLDivElement | null>(null);
   const deploymentResizeCleanupRef = useRef<(() => void) | null>(null);
 
@@ -140,6 +146,7 @@ export function DeploymentPanel({
     () => deployments.find((deployment) => deployment.id === selectedDeploymentId) ?? null,
     [deployments, selectedDeploymentId]
   );
+  const latestDeploymentLogSequence = deploymentLogs.at(-1)?.sequence ?? 0;
   const hasDeploymentRecords = deployments.length > 0;
   const compactDeploymentPanelMode = hasDeploymentRecords ? deploymentPanelMode : "setup";
   const canStartDeploymentReview =
@@ -307,6 +314,9 @@ export function DeploymentPanel({
       setDeploymentLogs([]);
       setDeploymentResources([]);
       setTerraformOutputs([]);
+      setFailureExplanation(null);
+      setFailureExplanationState("idle");
+      setFailureExplanationErrorMessage("");
       setShowApplyConfirmation(false);
       setShowDestroyConfirmation(false);
       return;
@@ -338,6 +348,52 @@ export function DeploymentPanel({
       cancelled = true;
     };
   }, [selectedDeploymentId]);
+
+  useEffect(() => {
+    if (!selectedDeployment || selectedDeployment.status !== "FAILED") {
+      setFailureExplanation(null);
+      setFailureExplanationState("idle");
+      setFailureExplanationErrorMessage("");
+      return;
+    }
+
+    let cancelled = false;
+    const deploymentIdForExplanation = selectedDeployment.id;
+
+    async function loadFailureExplanation(): Promise<void> {
+      setFailureExplanationState("loading");
+      setFailureExplanationErrorMessage("");
+
+      try {
+        const explanation = await getDeploymentFailureExplanation(deploymentIdForExplanation);
+
+        if (!cancelled) {
+          setFailureExplanation(explanation);
+          setFailureExplanationState("idle");
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setFailureExplanation(null);
+          setFailureExplanationState("error");
+          setFailureExplanationErrorMessage(
+            getApiErrorMessage(error, "Deployment 실패 설명을 불러오지 못했습니다.")
+          );
+        }
+      }
+    }
+
+    void loadFailureExplanation();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    latestDeploymentLogSequence,
+    selectedDeployment?.errorSummary,
+    selectedDeployment?.failureStage,
+    selectedDeployment?.id,
+    selectedDeployment?.status
+  ]);
 
   useEffect(() => {
     if (!selectedDeploymentId || selectedDeployment?.status !== "RUNNING") {
@@ -878,6 +934,14 @@ export function DeploymentPanel({
         </div>
       ) : null}
 
+      {selectedDeployment?.status === "FAILED" ? (
+        <DeploymentFailureExplanationCard
+          errorMessage={failureExplanationErrorMessage}
+          explanation={failureExplanation}
+          state={failureExplanationState}
+        />
+      ) : null}
+
       {shouldShowApprovePlanButton ? (
         <button
           className={styles.deploymentPrimaryButton}
@@ -1257,6 +1321,70 @@ function DeploymentPreDeploymentFindingItem({ finding }: { readonly finding: Che
       <strong>{finding.title}</strong>
       {finding.resourceId ? <em>{finding.resourceId}</em> : null}
     </li>
+  );
+}
+
+function DeploymentFailureExplanationCard({
+  errorMessage,
+  explanation,
+  state
+}: {
+  readonly errorMessage: string;
+  readonly explanation: DeploymentFailureExplanation | null;
+  readonly state: RequestState;
+}) {
+  if (state === "loading") {
+    return <p className={styles.deploymentNotice}>실패 설명을 생성하는 중입니다.</p>;
+  }
+
+  if (state === "error") {
+    return (
+      <p className={styles.deploymentError} role="alert">
+        {errorMessage}
+      </p>
+    );
+  }
+
+  if (!explanation) {
+    return null;
+  }
+
+  return (
+    <article className={styles.deploymentFailureExplanation}>
+      <div className={styles.deploymentFailureHeader}>
+        <span>{explanation.severity.toUpperCase()}</span>
+        <strong>실패 요약</strong>
+      </div>
+      <p>{explanation.summary}</p>
+      <div className={styles.deploymentFailureMeta}>
+        <InfoRow label="Failure stage" value={explanation.stage ?? "unknown"} />
+        <InfoRow label="Cleanup" value={explanation.cleanupRequired ? "필요" : "현재 필수 아님"} />
+        {explanation.llmExplanation?.fallbackUsed ? (
+          <InfoRow
+            label="AI fallback"
+            value={explanation.llmExplanation.fallbackReason ?? "rule_based"}
+          />
+        ) : null}
+      </div>
+      <div className={styles.deploymentFailureBody}>
+        <strong>원인 후보</strong>
+        <p>{explanation.likelyCause}</p>
+      </div>
+      {explanation.firstErrorLog ? (
+        <div className={styles.deploymentFailureBody}>
+          <strong>첫 오류 로그</strong>
+          <code>{explanation.firstErrorLog}</code>
+        </div>
+      ) : null}
+      <div className={styles.deploymentFailureBody}>
+        <strong>다음 행동</strong>
+        <ul>
+          {explanation.nextActions.map((action) => (
+            <li key={action}>{action}</li>
+          ))}
+        </ul>
+      </div>
+    </article>
   );
 }
 

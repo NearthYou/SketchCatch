@@ -15,6 +15,36 @@
 
 ## 세션 레코드
 
+### 2026-07-04 - Issue #129 Direct Deployment 실패 로그 AI 요약
+
+- Goal: Direct Deployment 실패 로그와 errorSummary를 사용자에게 읽기 쉬운 실패 요약, 원인 후보, 다음 행동으로 제공하는 다음 slice를 완성한다.
+- Completed:
+  - `DeploymentFailureExplanation`/`DeploymentFailureExplanationResponse` shared type을 추가했다.
+  - `GET /api/deployments/:deploymentId/failure-explanation`을 추가해 `FAILED` deployment에만 실패 설명을 반환한다.
+  - 첫 `ERROR` 로그 또는 `errorSummary`를 다시 `maskDeploymentMessage`로 마스킹하고, 실패 stage와 cleanup 필요 여부를 포함한 rule 기반 fallback 요약을 생성한다.
+  - OpenAI API key 미설정/호출 실패 시 기존 LLM explanation fallback reason이 응답에 남도록 `CreateLlmExplanation`을 주입 가능하게 연결했다.
+  - `DeploymentPanel`에서 실패한 Direct Deployment 선택 시 실패 요약, 첫 오류 로그, cleanup 필요 여부, 다음 행동을 보여준다.
+  - `docs/data-models.md`와 `docs/sw/008_배포실패설명가이드_sw.md`에 DTO, 흐름, 의사결정, 클론 코딩 자료를 기록했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/routes/deployments.test.ts` - passed
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/api.test.ts` - passed
+  - `pnpm typecheck` - passed
+  - `pnpm lint` - passed
+  - `pnpm build` - passed
+  - `pnpm test` - failed because Turbo strict task env did not pass existing API test prerequisite `S3_BUCKET_NAME`
+  - `$env:S3_BUCKET_NAME='sketchcatch-test-bucket'; pnpm --filter @sketchcatch/api test` - passed
+  - `$env:S3_BUCKET_NAME='sketchcatch-test-bucket'; pnpm exec turbo test --env-mode=loose` - passed
+  - `git diff --check` - passed
+- Evidence recorded:
+  - 실패 설명 route test verifies masked first error log, fallback reason `missing_api_key`, cleanup required, and 409 for non-failed deployments.
+  - Web API helper test verifies `/api/deployments/:id/failure-explanation` and response mapping.
+  - 실제 Terraform apply/destroy, cloud mutation, Git/CI/CD handoff, secret access는 수행하지 않았다.
+- Known risks:
+  - 루트 `pnpm test`는 기존 Turbo env strict 설정에서는 `S3_BUCKET_NAME`을 API test task로 넘기지 않아 실패한다. 같은 테스트는 package-level과 `turbo test --env-mode=loose`에서 통과했다.
+- Next best action:
+  - PR #129를 dev 대상으로 열고 CI 결과를 확인한다.
+
 ### 2026-07-02 - 중복 상세 기획 문서 정리
 
 - Goal: 별도 재구성본을 제거하고 상세 기획서는 canonical 상세 기획서 하나로 유지한다.

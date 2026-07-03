@@ -667,6 +667,31 @@ type DeploymentLog = {
 
 로그는 sequence 순서를 보장한다. message에는 credential, token, password, DB URL, sensitive output이 남지 않아야 한다.
 
+## DeploymentFailureExplanation
+
+`DeploymentFailureExplanation`은 실패한 Direct Deployment를 사용자가 바로 읽을 수 있는 원인 후보와 다음 행동으로 낮춘 계산 DTO다. DB row를 새로 만들지 않고 `deployments.error_summary`, `deployments.failure_stage`, `deployment_logs`를 읽어 API 응답 시점에 생성한다.
+
+```ts
+type DeploymentFailureExplanation = {
+  deploymentId: string;
+  stage: DeploymentFailureStage | null;
+  severity: RiskLevel;
+  summary: string;
+  likelyCause: string;
+  nextActions: string[];
+  firstErrorLog: string | null;
+  cleanupRequired: boolean;
+  llmExplanation?: LlmExplanation;
+};
+```
+
+조회 API:
+
+- `GET /api/deployments/:deploymentId/failure-explanation`
+
+응답은 `DeploymentFailureExplanationResponse = { explanation: DeploymentFailureExplanation }`이다.
+이 endpoint는 `FAILED` deployment에만 허용된다. `firstErrorLog`와 `summary`에 포함되는 로그 원문은 `maskDeploymentMessage`를 다시 통과해야 하며, OpenAI API key가 없거나 provider 호출이 실패하면 `llmExplanation.fallbackUsed: true`와 fallback reason을 내려준다. Rule 기반 fallback 요약은 실패 stage, 첫 오류 로그, cleanup 필요 여부를 포함해야 한다.
+
 ## Git/CI/CD Handoff
 
 `GitCicdHandoff`는 `IaC Preview`를 Source Repository와 외부 pipeline으로 넘기는 팀 운영 배포 경로의 metadata다. Direct Deployment Path를 대체하는 것이 아니라 운영 배포용 별도 경로다.
