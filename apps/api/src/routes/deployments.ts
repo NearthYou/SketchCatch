@@ -90,6 +90,10 @@ const deploymentParamsSchema = z.object({
   deploymentId: z.uuid()
 });
 
+const approveDeploymentBodySchema = z.object({
+  acknowledgedWarningIds: z.array(z.string().min(1)).default([])
+});
+
 const deploymentLogStreamQuerySchema = z.object({
   sinceSequence: z.coerce.number().int().min(0).default(0),
   once: z.enum(["true", "false"]).optional()
@@ -549,7 +553,7 @@ export async function registerDeploymentRoutes(
 
   app.post("/deployments/:deploymentId/approve", async (request, reply) => {
     const params = deploymentParamsSchema.parse(request.params);
-    z.object({}).parse(request.body ?? {});
+    const body = approveDeploymentBodySchema.parse(request.body ?? {});
     const { accessContext, repository } = await getDeploymentRequestContext(
       request,
       options,
@@ -562,7 +566,8 @@ export async function registerDeploymentRoutes(
       const deployment = await approveDeploymentPlan(
         {
           deploymentId: params.deploymentId,
-          accessContext
+          accessContext,
+          acknowledgedWarningIds: body.acknowledgedWarningIds
         },
         repository
       );

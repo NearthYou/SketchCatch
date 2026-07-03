@@ -1,5 +1,10 @@
 import { createHash } from "node:crypto";
-import type { AwsConnection, DeploymentFailureStage, DeploymentStatus } from "@sketchcatch/types";
+import type {
+  ApproveDeploymentPlanRequest,
+  AwsConnection,
+  DeploymentFailureStage,
+  DeploymentStatus
+} from "@sketchcatch/types";
 import {
   assertAwsApplyPreconditions,
   AwsConnectionRuntimeCredentialsError
@@ -22,6 +27,7 @@ import {
 export type ApproveDeploymentPlanInput = {
   deploymentId: string;
   accessContext: ProjectAccessContext;
+  acknowledgedWarningIds?: ApproveDeploymentPlanRequest["acknowledgedWarningIds"];
 };
 
 export type ApproveDeploymentPlanOptions = {
@@ -55,6 +61,7 @@ export async function approveDeploymentPlan(
   const deployment = await getDeployment(input, repository);
 
   assertDeploymentCanBeApproved(deployment);
+  assertDeploymentWarningsCanBeApproved(deployment, input.acknowledgedWarningIds ?? []);
 
   const currentPlanArtifact = await repository.findDeploymentPlanArtifactById(
     deployment.currentPlanArtifactId
@@ -264,6 +271,33 @@ function assertDeploymentCanBeApproved(
 
   if (!deployment.isBlocked || deployment.blockedBy !== "missing_approval") {
     throw new DeploymentConflictError("Blocked deployment cannot be approved");
+  }
+}
+
+function assertDeploymentWarningsCanBeApproved(
+  deployment: DeploymentRecord & {
+    planSummary: NonNullable<DeploymentRecord["planSummary"]>;
+  },
+  acknowledgedWarningIds: readonly string[]
+): void {
+  const blockingWarning = deployment.planSummary.warnings.find(
+    (warning) => warning.blocksApproval
+  );
+
+  if (blockingWarning) {
+    throw new DeploymentConflictError("High risk deployment warnings cannot be approved");
+  }
+
+  const acknowledged = new Set(acknowledgedWarningIds);
+  const missingAcknowledgements = deployment.planSummary.warnings
+    .filter((warning) => warning.requiresAcknowledgement)
+    .map((warning) => warning.id)
+    .filter((warningId) => !acknowledged.has(warningId));
+
+  if (missingAcknowledgements.length > 0) {
+    throw new DeploymentConflictError(
+      `Deployment warnings must be acknowledged before approval: ${missingAcknowledgements.join(", ")}`
+    );
   }
 }
 
