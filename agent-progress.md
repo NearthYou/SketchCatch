@@ -15,6 +15,41 @@
 
 ## 세션 레코드
 
+### 2026-07-03 - Terraform Preview 오케스트레이션 분리
+
+- Goal: `diagram-to-terraform.ts`가 `DiagramJson`을 직접 알지 않게 하고, Terraform Preview 흐름을 `DiagramJson -> InfrastructureGraph -> Terraform` 책임으로 분리한다.
+- Completed:
+  - `apps/api/src/services/terraform/terraform-preview.ts`를 추가해 `generateTerraformFromDiagramJson` orchestration을 담당하게 했다.
+  - `diagram-to-terraform.ts`에서 `DiagramJson` import, `buildInfrastructureGraphFromDiagramJson` import, `generateTerraformFromDiagramJson` export를 제거했다.
+  - `/terraform/generate` route는 preview orchestration을 `terraform-preview.ts`에서 import하고, renderer validation error와 identifier pattern은 기존 renderer module에서 import하도록 분리했다.
+  - 기존 `DiagramJson` 기반 preview 회귀 테스트를 `terraform-preview.test.ts`로 옮겼다.
+  - `diagram-to-terraform.test.ts`는 `InfrastructureGraph` fixture를 직접 넣는 renderer 단위 테스트와 source regression test로 정리했다.
+  - `docs/data-models.md`에 API 입력과 내부 변환 pipeline, `terraform-preview.ts`/`diagram-to-terraform.ts` 책임 차이를 기록했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/infrastructure-graph.test.ts src/services/terraform/diagram-to-terraform.test.ts src/services/terraform/terraform-preview.test.ts` - passed.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/routes/terraform.test.ts` - passed.
+  - `pnpm --filter @sketchcatch/api typecheck` - passed.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `pnpm build` - passed.
+  - `git diff --check` - passed.
+  - `pnpm harness:check` - passed after harness record updates.
+  - `pnpm test` - failed in unrelated deployment lock-file/path expectation tests:
+    `deployment-apply-service.test.ts`, `deployment-destroy-plan-service.test.ts`,
+    `deployment-destroy-service.test.ts`, `deployment-init-service.test.ts`,
+    `terraform-lock-file-workspace.test.ts`.
+- Evidence recorded:
+  - Terraform 생성 API DTO와 응답 형태는 변경하지 않았다.
+  - 실제 Terraform apply/destroy, cloud mutation, Git/CI/CD handoff는 실행하지 않았다.
+  - frontend UI에 Terraform 실행 또는 AWS SDK 호출을 추가하지 않았다.
+- Known risks:
+  - 브라우저 수동 smoke는 수행하지 않았다. API service/route tests, typecheck, lint, build로 책임 분리 범위를 확인했다.
+  - 전체 `pnpm test`는 이번 변경 범위 밖 deployment lock-file/path expectation 실패 6건으로 통과하지 못했다. 이번 리팩토링이 수정한 Terraform Preview service/route focused tests는 통과했다.
+- Next best action:
+  - Terraform Preview 경로에 새 변환 단계를 추가할 때는 `terraform-preview.ts`에 orchestration을 모으고, `diagram-to-terraform.ts`는 `InfrastructureGraph` renderer로 유지한다.
+  - 별도 작업에서 deployment lock-file path separator 기대값을 현재 runtime 동작과 맞춘다.
+
 ### 2026-07-03 - InfrastructureGraph 리소스 식별 기준 정리
 
 - Goal: Terraform Preview 경로의 `InfrastructureGraphNode`가 내부 `ResourceType` 변환값에 의존하지 않고 provider-specific Terraform identity만 사용하도록 정리한다.

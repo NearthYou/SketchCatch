@@ -5,6 +5,8 @@
 ## 현재 검증된 것
 
 - `InfrastructureGraphNode`는 더 이상 내부 `ResourceType` `type` 필드를 갖지 않는다.
+- Terraform Preview API orchestration은 `terraform-preview.ts`가 담당하고, `diagram-to-terraform.ts`는 `InfrastructureGraph -> Terraform HCL` 렌더러로만 동작한다.
+- `diagram-to-terraform.ts`는 더 이상 `DiagramJson` 또는 `buildInfrastructureGraphFromDiagramJson`를 import하지 않는다.
 - Terraform Preview identity는 `iac.provider + iac.terraformBlockType + iac.resourceType + iac.resourceName` 기준이다.
 - `iac.resourceType`은 `aws_instance`, `aws_vpc`, `aws_s3_bucket` 같은 provider-specific Terraform resource type을 그대로 유지한다.
 - `ResourceType`은 AI/Architecture 분석용 domain classification으로 유지되며 Terraform Preview identity 기준이 아니다.
@@ -53,6 +55,11 @@
 
 ## 이번 세션의 변경 사항
 
+- `apps/api/src/services/terraform/terraform-preview.ts`를 추가해 `generateTerraformFromDiagramJson`을 `DiagramJson -> InfrastructureGraph -> Terraform` orchestration 함수로 옮겼다.
+- `apps/api/src/services/terraform/diagram-to-terraform.ts`에서 `DiagramJson`/`buildInfrastructureGraphFromDiagramJson` import와 `generateTerraformFromDiagramJson` export를 제거했다.
+- `/terraform/generate` route가 `generateTerraformFromDiagramJson`을 `terraform-preview.ts`에서 import하도록 변경했다.
+- 기존 `DiagramJson` 기반 Terraform Preview 회귀 테스트를 `terraform-preview.test.ts`로 옮겼고, `diagram-to-terraform.test.ts`는 `InfrastructureGraph` renderer 단위 테스트와 source regression test로 정리했다.
+- `docs/data-models.md`에 Terraform 생성 API 입력과 내부 pipeline, preview orchestrator와 renderer 책임 차이를 기록했다.
 - `packages/types`의 `InfrastructureGraphNode`에서 `type: ResourceType`를 제거했다.
 - `infrastructure-graph.ts`가 graph node에 `type: resourceDefinition.resourceType`를 넣지 않도록 변경했다.
 - `resourceDefinition` 사용처를 preview capability 확인과 `iac.provider` 설정으로 축소했다.
@@ -123,6 +130,16 @@
 
 ## 검증
 
+- `pnpm harness:check` - passed before edits
+- `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/infrastructure-graph.test.ts src/services/terraform/diagram-to-terraform.test.ts src/services/terraform/terraform-preview.test.ts` - passed
+- `pnpm --filter @sketchcatch/api exec tsx --test src/routes/terraform.test.ts` - passed
+- `pnpm --filter @sketchcatch/api typecheck` - passed
+- `pnpm lint` - passed
+- `pnpm typecheck` - passed
+- `pnpm build` - passed
+- `git diff --check` - passed
+- `pnpm harness:check` - passed after harness record updates
+- `pnpm test` - failed in unrelated deployment lock-file/path expectation tests: `deployment-apply-service.test.ts`, `deployment-destroy-plan-service.test.ts`, `deployment-destroy-service.test.ts`, `deployment-init-service.test.ts`, `terraform-lock-file-workspace.test.ts`
 - Red before fix: `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/infrastructure-graph.test.ts` - failed because graph nodes still contained internal `type` and source still used `resourceDefinition.resourceType`
 - `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/infrastructure-graph.test.ts src/services/terraform/diagram-to-terraform.test.ts` - passed
 - `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/infrastructure-graph.test.ts src/services/terraform/diagram-to-terraform.test.ts src/services/terraform/terraform-to-diagram.test.ts` - passed after subagent review fixes
@@ -197,6 +214,7 @@
 ## 아직 깨졌거나 미검증된 것
 
 - 새 shared definition 변경에 대한 브라우저 수동 smoke는 수행하지 않았다. 자동/타입/빌드 검증으로 확인했다.
+- 전체 `pnpm test`는 deployment lock-file/path separator 기대값 실패 6건으로 통과하지 못했다. 이번 Terraform Preview orchestration focused tests, route tests, `lint`, `typecheck`, `build`, `harness:check`는 통과했다.
 - `parameterPanel` capability는 현재 web parameter catalog 보유 여부와 맞췄다. 새 리소스 추가 시 shared definition, web presentation, parameter catalog를 함께 갱신해야 한다.
 - `apps/web/next-env.d.ts`는 `pnpm build`가 일시적으로 바꿨지만 이번 작업 범위가 아니라 tracked 상태로 되돌렸다.
 - 로컬 브랜치는 upstream보다 1 commit behind 상태다. upstream에는 `docs/jh` 추적 해제 관련 삭제 commit이 하나 있다.
