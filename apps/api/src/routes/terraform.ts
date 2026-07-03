@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type {
+  ApiErrorResponse,
   DiagramJson,
   DiagramNodeMetadata,
   TerraformGenerateResponse,
@@ -11,6 +12,7 @@ import { requireActiveUserId } from "../auth/current-user.js";
 import { getDatabaseClient, type DatabaseClient } from "../db/client.js";
 import {
   TERRAFORM_IDENTIFIER_PATTERN,
+  TerraformDiagramValidationError,
   generateTerraformFromDiagramJson
 } from "../services/terraform/diagram-to-terraform.js";
 import { createTerraformDiagnostics } from "../services/terraform/terraform-diagnostics.js";
@@ -131,14 +133,28 @@ export async function registerTerraformRoutes(
 ): Promise<void> {
   const getTerraformDatabaseClient = options.getDatabaseClient ?? getDatabaseClient;
 
-  app.post("/terraform/generate", async (request): Promise<TerraformGenerateResponse> => {
+  app.post("/terraform/generate", async (request, reply): Promise<TerraformGenerateResponse | void> => {
     await requireActiveUserId(request, getTerraformDatabaseClient);
 
     const body = terraformGenerateBodySchema.parse(request.body);
 
-    return {
-      terraformCode: generateTerraformFromDiagramJson(body.diagramJson)
-    };
+    try {
+      return {
+        terraformCode: generateTerraformFromDiagramJson(body.diagramJson)
+      };
+    } catch (error) {
+      if (error instanceof TerraformDiagramValidationError) {
+        const response: ApiErrorResponse = {
+          error: "bad_request",
+          message: error.message
+        };
+
+        reply.status(400).send(response);
+        return;
+      }
+
+      throw error;
+    }
   });
 
   app.post("/terraform/validate", async (request): Promise<TerraformValidateResponse> => {

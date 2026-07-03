@@ -41,7 +41,7 @@ import {
   type TerraformSaveBanner,
   type TerraformVirtualFile
 } from "./terraform-panel-utils";
-import { createTerraformDiagnosticLineHighlights } from "./terraform-diagnostic-line-highlights";
+import { createTerraformDiagnosticLineNumbers } from "./terraform-diagnostic-line-highlights";
 import {
   createTerraformHighlightedLines,
   type TerraformHighlightedToken,
@@ -142,19 +142,22 @@ function createTerraformPreviewExplanationScopeValue(
 async function validateTerraformVirtualFiles(
   files: readonly TerraformVirtualFile[]
 ): Promise<TerraformDiagnostic[]> {
-  const diagnosticsByFile = await Promise.all(
-    files
-      .filter((file) => file.code.trim().length > 0)
-      .map(async (file) => {
-        const validationResult = await validateTerraformCode(file.code);
+  const diagnostics: TerraformDiagnostic[] = [];
 
-        return validationResult.diagnostics.map((diagnostic) =>
-          addTerraformDiagnosticSource(diagnostic, file.fileName)
-        );
-      })
-  );
+  for (const file of files) {
+    if (file.code.trim().length === 0) {
+      continue;
+    }
 
-  return diagnosticsByFile.flat();
+    const validationResult = await validateTerraformCode(file.code);
+    diagnostics.push(
+      ...validationResult.diagnostics.map((diagnostic) =>
+        addTerraformDiagnosticSource(diagnostic, file.fileName)
+      )
+    );
+  }
+
+  return diagnostics;
 }
 
 function addTerraformDiagnosticSource(
@@ -325,21 +328,18 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
         top: `${TERRAFORM_EDITOR_VERTICAL_PADDING + (highlightedBlock.startLine - 1) * TERRAFORM_EDITOR_LINE_HEIGHT - codeScrollTop}px`
       }
     : null;
-  const diagnosticLineHighlights = useMemo(
+  const diagnosticLineNumbers = useMemo(
     () =>
-      createTerraformDiagnosticLineHighlights(diagnostics, {
+      createTerraformDiagnosticLineNumbers(diagnostics, {
         codeLineCount: lineNumbers.length,
-        lineHeight: TERRAFORM_EDITOR_LINE_HEIGHT,
-        scrollTop: codeScrollTop,
         sourceFileName: displayedSourceFileName,
-        sourceLineOffset: displayedSourceLineOffset,
-        verticalPadding: TERRAFORM_EDITOR_VERTICAL_PADDING
+        sourceLineOffset: displayedSourceLineOffset
       }),
-    [codeScrollTop, diagnostics, displayedSourceFileName, displayedSourceLineOffset, lineNumbers.length]
+    [diagnostics, displayedSourceFileName, displayedSourceLineOffset, lineNumbers.length]
   );
   const diagnosticLineNumberSet = useMemo(
-    () => new Set(diagnosticLineHighlights.map((highlight) => highlight.line)),
-    [diagnosticLineHighlights]
+    () => new Set(diagnosticLineNumbers),
+    [diagnosticLineNumbers]
   );
   const highlightedTerraformLines = useMemo(
     () => createTerraformHighlightedLines(displayedTerraformCode, diagnosticLineNumberSet),
@@ -681,7 +681,7 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
     }
 
     codeVersionRef.current += 1;
-    const hasRemainingTerraformCode = combineTerraformFiles(nextFiles).trim().length > 0;
+    const hasRemainingTerraformCode = nextFiles.some((file) => file.code.trim().length > 0);
     setTerraformFiles(nextFiles);
     setDiagnostics([]);
     onDiagnosticsChange([]);

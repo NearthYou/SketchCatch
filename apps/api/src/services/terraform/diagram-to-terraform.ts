@@ -17,6 +17,15 @@ const TERRAFORM_NESTED_BLOCK_ATTRIBUTES: Record<string, ReadonlySet<string>> = {
   aws_security_group: new Set(["egress", "ingress"])
 };
 
+export class TerraformDiagramValidationError extends Error {
+  readonly reason = "invalid_identifier";
+
+  constructor(label: string, value: string) {
+    super(`Invalid Terraform ${label}: ${value}`);
+    this.name = "TerraformDiagramValidationError";
+  }
+}
+
 // DiagramJson 전체를 Terraform 코드 문자열 하나로 변환하는 공개 순수 함수다.
 export function generateTerraformFromDiagramJson(diagramJson: DiagramJson): string {
   return renderTerraformFromInfrastructureGraph(buildInfrastructureGraphFromDiagramJson(diagramJson));
@@ -238,11 +247,5 @@ function assertTerraformIdentifier(value: string, label: string): void {
     return;
   }
 
-  const error = new Error(`Invalid Terraform ${label}: ${value}`) as Error & {
-    errorCode: "bad_request";
-    statusCode: number;
-  };
-  error.errorCode = "bad_request";
-  error.statusCode = 400;
-  throw error;
+  throw new TerraformDiagramValidationError(label, value);
 }

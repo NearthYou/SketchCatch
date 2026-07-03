@@ -11,6 +11,7 @@ import type {
 } from "../../../../packages/types/src";
 
 import { DEFAULT_DIAGRAM_VIEWPORT, RESOURCE_DRAG_MIME_TYPE } from "./constants";
+import { cloneParameterValue } from "./parameter-value-utils";
 import type { DiagramEdgeKind, DiagramNodeMetadataUpdate } from "./types";
 
 let activeResourceDragPayload: ResourceDragPayload | null = null;
@@ -364,20 +365,6 @@ function cloneParameters(parameters: DiagramNodeParameters): DiagramNodeParamete
     ...parameters,
     values: cloneParameterValue(parameters.values) as Record<string, unknown>
   };
-}
-
-function cloneParameterValue(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map((item) => cloneParameterValue(item));
-  }
-
-  if (isRecord(value)) {
-    return Object.fromEntries(
-      Object.entries(value).map(([key, item]) => [key, cloneParameterValue(item)])
-    );
-  }
-
-  return value;
 }
 
 function getResourceNamesByType(nodes: readonly DiagramNode[]) {

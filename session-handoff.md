@@ -32,6 +32,10 @@
 - Terraform leave dialog에서 `저장하고 나가기`가 Terraform error diagnostics 때문에 실패하면, 모달을 닫고 오른쪽 Terraform 패널을 다시 보여줘 사용자가 물결 오류 표시를 확인할 수 있다.
 - Terraform diagnostics가 있는 동안 Issues 탭/shortcut은 unsaved Terraform leave guard에 막히지 않고 바로 열릴 수 있다.
 - Terraform leave dialog의 `저장하고 나가기` 시작 상태는 별도 status 문구를 띄우지 않고 버튼 disabled/`저장 중` 상태만 보여준다.
+- Terraform generator 서비스는 HTTP 속성 없는 `TerraformDiagramValidationError`를 던지고, `/terraform/generate` 라우터가 이를 400 `bad_request`로 매핑한다.
+- Terraform editor의 virtual file validation은 파일별 validate API를 `Promise.all`로 동시에 호출하지 않고 순차 실행한다.
+- Diagnostic wavy underline helper는 더 이상 absolute `top` style을 계산하지 않고 표시 대상 line number만 반환한다.
+- `cloneParameterValue`는 diagram/workspace 양쪽 중복 정의가 아니라 `apps/web/features/diagram-editor/parameter-value-utils.ts`를 공유한다.
 - `docs/data-models.md`는 diagnostic/proposal source metadata와 proposal 지원 범위를 현재 코드에 맞게 기록한다.
 - `feature_list.json`에는 동시에 `in_progress`인 항목이 없다.
 
@@ -45,6 +49,11 @@
 - `WorkspaceRightPanel`이 최신 Terraform diagnostics를 ref로 보관하고, diagnostics 때문에 저장이 막힌 경우 pending leave action을 취소한 뒤 Terraform 탭을 보여주며 모달을 닫게 했다.
 - Diagnostics가 있을 때 Issues 탭과 collapsed Issues shortcut에 Terraform leave guard 예외를 적용했다.
 - `createTerraformLeaveSaveStartFeedback`의 저장 중 메시지를 비워 곧 닫힐 모달 안에 순간적인 status 문구가 뜨지 않게 했다.
+- 코드리뷰 피드백을 반영해 Terraform 서비스 에러와 HTTP 응답 매핑을 분리했다.
+- Terraform virtual file validation을 순차 실행으로 바꿔 파일 수 증가 시 동시 요청 burst를 줄였다.
+- 삭제 sync 후 남은 Terraform 코드 확인을 `combineTerraformFiles(nextFiles)` 병합 대신 `nextFiles.some(...)`으로 바꿨다.
+- `cloneParameterValue` 중복을 공통 helper로 분리했다.
+- wavy underline 전환 후 남아 있던 diagnostic line absolute position 계산 dead code를 제거했다.
 - 하위 AI 6개 축으로 catalog/diagram, Terraform sync/proposal, AI draft layout, CSS/resize, backend API/generator, docs/contracts를 read-only 검증했다.
 - `.nodeShellResource`에서 generic `min-height`를 해소해 compact icon node가 의도한 크기로 렌더링되게 했다.
 - Terraform create proposal fallback과 AI draft fallback unknown resource 크기를 `56x56`으로 통일했다.
@@ -97,6 +106,10 @@
 - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/terraform-leave-save-state.test.ts features/workspace/workspace-right-panel-layout.test.ts` - passed
 - Red before fix: `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/terraform-leave-save-state.test.ts features/workspace/workspace-right-panel-layout.test.ts` - failed because saving feedback still had a status message and Issues navigation had no leave guard exception
 - `pnpm --filter @sketchcatch/web test` - passed, 312 tests
+- `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/diagram-to-terraform.test.ts src/routes/terraform.test.ts` - passed
+- `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-right-panel-layout.test.ts features/workspace/terraform-diagnostic-line-highlights.test.ts features/workspace/terraform-sync-proposals.test.ts features/diagram-editor/diagram-utils.test.ts` - passed
+- `pnpm --filter @sketchcatch/api typecheck` - passed
+- `pnpm --filter @sketchcatch/web typecheck` - passed
 - `pnpm lint` - passed
 - `pnpm typecheck` - passed
 - `pnpm build` - passed
@@ -144,8 +157,9 @@
 
 ## 아직 깨졌거나 미검증된 것
 
-- 기존 unrelated 변경 `DESIGN.md` 삭제 상태는 이번 작업에서 건드리지 않았다.
-- 기존 unrelated 변경 `apps/web/next-env.d.ts` 변경 상태는 이번 작업에서 건드리지 않았다.
+- `apps/web/next-env.d.ts`는 `pnpm build`가 일시적으로 바꿨지만 이번 작업 범위가 아니라 tracked 상태로 되돌렸다.
+- 로컬 브랜치는 upstream보다 1 commit behind 상태다. upstream에는 `docs/jh` 추적 해제 관련 삭제 commit이 하나 있다.
+- tracked 상태로 남아 있는 `docs/jh` 파일은 PR 정리 전 ignore 정책에 맞게 제거해야 한다.
 - 실제 Terraform apply/destroy, cloud mutation, Git/CI/CD handoff는 실행하지 않았다.
 - 브라우저 수동 smoke는 수행하지 않았다. 자동/단위/타입/빌드 검증으로 이번 구현 범위를 확인했다.
 - Terraform leave save diagnostics 실패 모달 UX는 자동 테스트로 확인했고, 실제 브라우저 수동 smoke는 아직 수행하지 않았다.

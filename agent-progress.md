@@ -15,6 +15,38 @@
 
 ## 세션 레코드
 
+### 2026-07-03 - Terraform 코드리뷰 피드백 반영
+
+- Goal: 리뷰에서 지적된 Terraform Preview/Editor 구현의 레이어 경계, 불필요한 계산, 중복 유틸, dead code를 실제 코드 기준으로 검토하고 타당한 항목을 수정한다.
+- Completed:
+  - `diagram-to-terraform.ts` 서비스에서 HTTP 속성(`statusCode`, `errorCode`)을 붙여 던지던 에러를 `TerraformDiagramValidationError` 도메인 에러로 교체했다.
+  - `/terraform/generate` 라우터가 `TerraformDiagramValidationError`를 400 `bad_request` API 응답으로 매핑하도록 역할을 분리했다.
+  - Terraform virtual file validation이 파일별 API 호출을 `Promise.all`로 동시에 터뜨리지 않고 순차 실행하도록 바꿨다. 배치 검증 API 신설은 별도 계약 변경이라 이번 범위에서는 보류했다.
+  - 리소스 삭제 반영 후 남은 Terraform 코드 여부를 `combineTerraformFiles(nextFiles)` 문자열 병합 대신 `nextFiles.some(...)`으로 확인하게 했다.
+  - 중복된 `cloneParameterValue`를 `apps/web/features/diagram-editor/parameter-value-utils.ts` 공통 helper로 분리해 diagram/workspace 양쪽에서 재사용하게 했다.
+  - wavy underline 렌더링 이후 사용하지 않던 diagnostic line의 `lineHeight`, `scrollTop`, `verticalPadding`, `style.top` 계산을 제거하고 line number 목록만 반환하도록 단순화했다.
+  - 관련 regression/source tests를 갱신해 HTTP 경계, 순차 검증, line number helper, dead code 제거를 확인하게 했다.
+- Verification run:
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/diagram-to-terraform.test.ts src/routes/terraform.test.ts` - passed.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-right-panel-layout.test.ts features/workspace/terraform-diagnostic-line-highlights.test.ts features/workspace/terraform-sync-proposals.test.ts features/diagram-editor/diagram-utils.test.ts` - passed.
+  - `pnpm --filter @sketchcatch/api typecheck` - passed.
+  - `pnpm --filter @sketchcatch/web typecheck` - passed.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `pnpm build` - passed.
+  - `pnpm harness:check` - passed.
+  - `git diff --check` - passed.
+- Evidence recorded:
+  - 실제 Terraform apply/destroy, cloud mutation, Git/CI/CD handoff는 실행하지 않았다.
+  - frontend UI에 Terraform CLI 실행 또는 AWS SDK 호출을 추가하지 않았다.
+  - `apps/web/next-env.d.ts`는 `pnpm build` 중 생성 흔적으로 변경됐으나 이번 작업 범위가 아니라 원래 tracked 상태로 되돌렸다.
+- Known risks:
+  - 배치 Terraform validation API는 아직 없다. 이번에는 기존 API 계약을 유지하며 동시 요청 burst만 줄였다.
+  - 브라우저 수동 smoke는 수행하지 않았다. 자동/단위/타입/빌드 검증으로 확인했다.
+  - 로컬 브랜치는 upstream보다 1 commit behind 상태다. upstream에는 `docs/jh` 추적 해제 관련 삭제 commit이 하나 있다.
+- Next best action:
+  - PR 정리 전 upstream을 반영하고, tracked 상태로 남아 있는 `docs/jh` 파일을 ignore 정책에 맞게 제거한다.
+
 ### 2026-07-03 - Terraform Issues 탭 접근성과 저장 모달 메시지 정리
 
 - Goal: Terraform diagnostics가 떠 있는 상태에서는 Issues 탭을 바로 열 수 있게 하고, `저장하고 나가기` 클릭 직후 곧 사라질 저장 중 문구가 사용자 시선을 끌지 않게 한다.

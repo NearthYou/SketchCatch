@@ -5,6 +5,7 @@ import type {
   TerraformBlockType,
   TerraformDiagramChangeProposal
 } from "../../../../packages/types/src";
+import { cloneParameterValue } from "../diagram-editor/parameter-value-utils";
 import { resourceCatalog } from "../resource-settings/catalog";
 
 type ApprovedProposalIds = ReadonlySet<string> | readonly string[];
@@ -187,20 +188,6 @@ function cloneDiagramJson(diagramJson: DiagramJson): DiagramJson {
   };
 }
 
-function cloneParameterValue<T>(value: T): T {
-  if (Array.isArray(value)) {
-    return value.map((item) => cloneParameterValue(item)) as T;
-  }
-
-  if (isRecord(value)) {
-    return Object.fromEntries(
-      Object.entries(value).map(([key, nestedValue]) => [key, cloneParameterValue(nestedValue)])
-    ) as T;
-  }
-
-  return value;
-}
-
 function createUniqueNodeId(nodes: readonly DiagramNode[], baseId: string): string {
   const existingNodeIds = new Set(nodes.map((node) => node.id));
   const normalizedBaseId = baseId.replace(/[^A-Za-z0-9_-]+/g, "-");
@@ -223,8 +210,4 @@ function getNextCreatedNodePosition(nodeCount: number): { x: number; y: number }
     x: 80 + (nodeCount % 4) * 220,
     y: 80 + Math.floor(nodeCount / 4) * 160
   };
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

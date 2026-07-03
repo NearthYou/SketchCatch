@@ -1,7 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { DiagramJson, DiagramNode } from "@sketchcatch/types";
-import { generateTerraformFromDiagramJson } from "./diagram-to-terraform.js";
+import {
+  TerraformDiagramValidationError,
+  generateTerraformFromDiagramJson
+} from "./diagram-to-terraform.js";
 
 test("generates Terraform code from resource nodes", () => {
   const diagramJson: DiagramJson = {
@@ -260,10 +263,20 @@ test("rejects unsafe Terraform block labels before rendering HCL", () => {
     }
   };
 
-  assert.throws(
-    () => generateTerraformFromDiagramJson(diagramJson),
-    /Invalid Terraform resource name/
-  );
+  let error: (TerraformDiagramValidationError & { errorCode?: unknown; statusCode?: unknown }) | null = null;
+
+  try {
+    generateTerraformFromDiagramJson(diagramJson);
+  } catch (caughtError) {
+    if (caughtError instanceof TerraformDiagramValidationError) {
+      error = caughtError;
+    }
+  }
+
+  assert.ok(error);
+  assert.match(error.message, /Invalid Terraform resource name/);
+  assert.equal(error.errorCode, undefined);
+  assert.equal(error.statusCode, undefined);
 });
 
 test("rejects unsafe Terraform attribute keys before rendering HCL", () => {

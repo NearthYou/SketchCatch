@@ -183,6 +183,57 @@ test("POST /api/terraform/generate rejects unsafe Terraform resource names", asy
   await app.close();
 });
 
+test("POST /api/terraform/generate maps Terraform render errors to 400 responses", async () => {
+  const fakeDb = new AuthOnlyFakeDb({
+    users: [
+      {
+        id: ACTIVE_USER_ID,
+        deletedAt: null
+      }
+    ]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/terraform/generate",
+    headers: await authHeaders(ACTIVE_USER_ID),
+    payload: {
+      diagramJson: {
+        nodes: [
+          {
+            id: "node-1",
+            type: "aws_instance",
+            kind: "resource",
+            label: "web",
+            parameters: {
+              resourceType: "aws_instance",
+              resourceName: "web",
+              fileName: "main",
+              values: {
+                [`ami"\nresource "aws_s3_bucket" "owned"`]: "ami-1234567890abcdef0"
+              }
+            }
+          }
+        ],
+        edges: [],
+        viewport: {
+          x: 0,
+          y: 0,
+          zoom: 1
+        }
+      }
+    }
+  });
+
+  assert.equal(response.statusCode, 400);
+  assertErrorResponse(response.json() as ApiErrorResponse, "bad_request");
+
+  await app.close();
+});
+
 async function authHeaders(userId: string): Promise<Record<string, string>> {
   return {
     authorization: `Bearer ${await createAccessToken(userId)}`

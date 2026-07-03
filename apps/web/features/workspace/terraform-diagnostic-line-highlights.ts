@@ -1,31 +1,19 @@
-import type { CSSProperties } from "react";
 import type { TerraformDiagnostic } from "@sketchcatch/types";
 
-export type TerraformDiagnosticLineHighlight = {
-  readonly line: number;
-  readonly style: Pick<CSSProperties, "top">;
-};
-
-type TerraformDiagnosticLineHighlightOptions = {
+type TerraformDiagnosticLineNumberOptions = {
   readonly codeLineCount: number;
-  readonly lineHeight: number;
-  readonly scrollTop: number;
   readonly sourceFileName?: string | null | undefined;
   readonly sourceLineOffset?: number | undefined;
-  readonly verticalPadding: number;
 };
 
-export function createTerraformDiagnosticLineHighlights(
+export function createTerraformDiagnosticLineNumbers(
   diagnostics: readonly TerraformDiagnostic[],
   {
     codeLineCount,
-    lineHeight,
-    scrollTop,
     sourceFileName,
-    sourceLineOffset = 0,
-    verticalPadding
-  }: TerraformDiagnosticLineHighlightOptions
-): TerraformDiagnosticLineHighlight[] {
+    sourceLineOffset = 0
+  }: TerraformDiagnosticLineNumberOptions
+): number[] {
   const errorLines = new Set<number>();
 
   for (const diagnostic of diagnostics) {
@@ -53,11 +41,5 @@ export function createTerraformDiagnosticLineHighlights(
   }
 
   return Array.from(errorLines)
-    .sort((left, right) => left - right)
-    .map((line) => ({
-      line,
-      style: {
-        top: `${verticalPadding + line * lineHeight - scrollTop - 2}px`
-      }
-    }));
+    .sort((left, right) => left - right);
 }

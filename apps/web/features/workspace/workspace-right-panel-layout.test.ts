@@ -348,14 +348,16 @@ test("terraform editor renders syntax colors and squiggly error underlines", () 
   const stringRule = getCssRule(stylesSource, "terraformTokenString");
   const braceRule = getCssRule(stylesSource, "terraformTokenBrace");
 
-  assert.match(terraformPanelSource, /createTerraformDiagnosticLineHighlights/);
+  assert.match(terraformPanelSource, /createTerraformDiagnosticLineNumbers/);
   assert.match(terraformPanelSource, /createTerraformHighlightedLines/);
-  assert.match(terraformPanelSource, /diagnosticLineHighlights/);
+  assert.match(terraformPanelSource, /diagnosticLineNumbers/);
   assert.match(terraformPanelSource, /terraformSyntaxHighlightLayer/);
   assert.match(terraformPanelSource, /terraformHighlightedLineError/);
   assert.match(terraformPanelSource, /terraformTokenKeyword/);
   assert.match(terraformPanelSource, /terraformLineNumberError/);
   assert.match(terraformPanelSource, /diagnosticLineNumberSet\.has\(lineNumber\)/);
+  assert.doesNotMatch(terraformPanelSource, /lineHeight:\s*TERRAFORM_EDITOR_LINE_HEIGHT/);
+  assert.doesNotMatch(terraformPanelSource, /verticalPadding:\s*TERRAFORM_EDITOR_VERTICAL_PADDING/);
   assert.doesNotMatch(terraformPanelSource, /terraformDiagnosticLineLayer/);
   assert.match(syntaxHighlightLayerRule, /\bpointer-events:\s*none;/);
   assert.match(syntaxHighlightLayerRule, /\bposition:\s*absolute;/);
@@ -444,6 +446,13 @@ test("terraform editor save allows intentionally empty terraform code", () => {
   assert.ok(saveEndIndex > saveStartIndex);
   assert.match(saveSource, /syncTerraformCodeToDiagram/);
   assert.doesNotMatch(saveSource, /!hasTerraformCode/);
+});
+
+test("terraform virtual file validation avoids request bursts and combined-code empty checks", () => {
+  assert.match(terraformPanelSource, /for \(const file of files\)/);
+  assert.doesNotMatch(terraformPanelSource, /Promise\.all\(\s*files/);
+  assert.match(terraformPanelSource, /nextFiles\.some\(\(file\) => file\.code\.trim\(\)\.length > 0\)/);
+  assert.doesNotMatch(terraformPanelSource, /combineTerraformFiles\(nextFiles\)\.trim\(\)\.length > 0/);
 });
 
 test("terraform editor clears stale diagnostics after local edits", () => {
