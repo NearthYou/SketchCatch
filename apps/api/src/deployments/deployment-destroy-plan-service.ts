@@ -5,7 +5,6 @@ import type {
   AwsConnection,
   DeploymentFailureStage,
   DeploymentPlanSummary,
-  DeploymentPlanWarning,
   DeploymentStatus
 } from "@sketchcatch/types";
 import {
@@ -24,6 +23,10 @@ import {
   createS3DeploymentPlanArtifactStorage,
   type DeploymentPlanArtifactStorage
 } from "./deployment-plan-artifact-storage.js";
+import {
+  createDestroyNoOpWarning,
+  createUnsupportedResourceWarning
+} from "./deployment-warning-factory.js";
 import {
   createS3DeploymentApplyArtifactStorage,
   type DeploymentApplyArtifactStorage
@@ -603,31 +606,15 @@ function createDestroyPlanSummary(
   summary: DeploymentPlanSummary,
   unsupportedResourceTypes: readonly string[]
 ): DeploymentPlanSummary {
-  const warnings: DeploymentPlanWarning[] = [
+  const warnings = [
     ...summary.warnings,
-    ...unsupportedResourceTypes.map((resourceType) => ({
-      id: `terraform_plan:UNSUPPORTED_RESOURCE:destroy:${resourceType}`,
-      level: "high" as const,
-      category: "configuration" as const,
-      source: "terraform_plan" as const,
-      code: "UNSUPPORTED_RESOURCE" as const,
-      message: `MVP live destroy does not support Terraform resource type ${resourceType}`,
-      requiresAcknowledgement: false,
-      blocksApproval: true
-    }))
+    ...unsupportedResourceTypes.map((resourceType) =>
+      createUnsupportedResourceWarning("destroy", resourceType)
+    )
   ];
 
   if (summary.deleteCount === 0 && summary.replaceCount === 0) {
-    warnings.push({
-      id: "terraform_plan:UNKNOWN_TERRAFORM_ACTION:destroy:no-op",
-      level: "medium",
-      category: "configuration",
-      source: "terraform_plan",
-      code: "UNKNOWN_TERRAFORM_ACTION",
-      message: "Terraform destroy plan has no resources to delete",
-      requiresAcknowledgement: true,
-      blocksApproval: false
-    });
+    warnings.push(createDestroyNoOpWarning());
   }
 
   return {

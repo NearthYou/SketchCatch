@@ -8,9 +8,7 @@ import type {
   CheckFinding,
   DeploymentBlockedBy,
   DeploymentStatus,
-  DeploymentPlanSummary,
-  DeploymentPlanWarning,
-  DeploymentPlanWarningCode
+  DeploymentPlanSummary
 } from "@sketchcatch/types";
 import {
   prepareTerraformAwsCredentialEnv as defaultPrepareTerraformAwsCredentialEnv,
@@ -35,6 +33,10 @@ import {
   createS3DeploymentPlanArtifactStorage,
   type DeploymentPlanArtifactStorage
 } from "./deployment-plan-artifact-storage.js";
+import {
+  createPreDeploymentCheckWarning,
+  createUnsupportedResourceWarning
+} from "./deployment-warning-factory.js";
 import {
   appendDeploymentLogs,
   DeploymentConflictError,
@@ -620,17 +622,10 @@ function createBlockedPlanSummary(
 ): DeploymentPlanSummary {
   const highRiskWarnings = findings
     .filter((finding) => finding.severity === "high")
-    .map(toPlanWarning);
-  const unsupportedResourceWarnings = unsupportedResourceTypes.map((resourceType) => ({
-    id: `terraform_plan:UNSUPPORTED_RESOURCE:apply:${resourceType}`,
-    level: "high" as const,
-    category: "configuration" as const,
-    source: "terraform_plan" as const,
-    code: "UNSUPPORTED_RESOURCE" as const,
-    message: `MVP live apply does not support Terraform resource type ${resourceType}`,
-    requiresAcknowledgement: false,
-    blocksApproval: true
-  }));
+    .map(createPreDeploymentCheckWarning);
+  const unsupportedResourceWarnings = unsupportedResourceTypes.map((resourceType) =>
+    createUnsupportedResourceWarning("apply", resourceType)
+  );
   const warnings = [...summary.warnings, ...highRiskWarnings, ...unsupportedResourceWarnings];
 
   return {
@@ -688,42 +683,6 @@ function createDeploymentPlanBlock(
     blockedBy: "missing_approval",
     blockedReason: "Terraform Plan requires user approval before apply"
   };
-}
-
-function toPlanWarning(finding: CheckFinding): DeploymentPlanWarning {
-  const warning: DeploymentPlanWarning = {
-    id: `finding:${finding.id}`,
-    level: "high",
-    category: finding.category,
-    source: "pre_deployment_check",
-    code: toPlanWarningCode(finding),
-    message: `${finding.title}: ${finding.recommendation}`,
-    relatedFindingId: finding.id,
-    requiresAcknowledgement: false,
-    blocksApproval: true
-  };
-
-  if (finding.resourceId) {
-    warning.relatedResourceId = finding.resourceId;
-  }
-
-  return warning;
-}
-
-function toPlanWarningCode(finding: CheckFinding): DeploymentPlanWarningCode {
-  if (finding.category === "permission") {
-    return "IAM_WILDCARD";
-  }
-
-  if (finding.id.toLowerCase().includes("rds")) {
-    return "PUBLIC_RDS";
-  }
-
-  if (finding.id.toLowerCase().includes("s3")) {
-    return "PUBLIC_S3";
-  }
-
-  return "PUBLIC_SSH";
 }
 
 async function appendTerraformOutput(input: {

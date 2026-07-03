@@ -1,4 +1,5 @@
 import type { DeploymentPlanSummary, DeploymentPlanWarning } from "@sketchcatch/types";
+import { createUnknownTerraformActionWarning } from "./deployment-warning-factory.js";
 
 type TerraformShowJson = {
   resource_changes?: unknown;
@@ -56,7 +57,7 @@ export function createDeploymentPlanSummaryFromTerraformShowJson(
     const actions = resourceChange.change?.actions;
 
     if (!Array.isArray(actions) || !actions.every((action) => typeof action === "string")) {
-      warnings.push(createUnknownActionWarning(resourceChange.address, "missing actions"));
+      warnings.push(createUnknownTerraformActionWarning(resourceChange.address, "missing actions"));
       continue;
     }
 
@@ -84,7 +85,7 @@ export function createDeploymentPlanSummaryFromTerraformShowJson(
       continue;
     }
 
-    warnings.push(createUnknownActionWarning(resourceChange.address, actions.join(",")));
+    warnings.push(createUnknownTerraformActionWarning(resourceChange.address, actions.join(",")));
   }
 
   return summary;
@@ -153,25 +154,4 @@ function isSameActions(actions: string[], expectedActions: string[]): boolean {
     actions.length === expectedActions.length &&
     actions.every((action, index) => action === expectedActions[index])
   );
-}
-
-function createUnknownActionWarning(
-  resourceAddress: unknown,
-  actionsDescription: string
-): DeploymentPlanWarning {
-  const message =
-    typeof resourceAddress === "string" && resourceAddress.trim().length > 0
-      ? `Unsupported Terraform plan action for ${resourceAddress}: ${actionsDescription}`
-      : `Unsupported Terraform plan action: ${actionsDescription}`;
-
-  return {
-    id: `terraform_plan:UNKNOWN_TERRAFORM_ACTION:${typeof resourceAddress === "string" ? resourceAddress : "unknown"}`,
-    level: "medium",
-    category: "configuration",
-    source: "terraform_plan",
-    code: "UNKNOWN_TERRAFORM_ACTION",
-    message,
-    requiresAcknowledgement: true,
-    blocksApproval: false
-  };
 }
