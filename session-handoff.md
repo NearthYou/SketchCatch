@@ -71,3 +71,11 @@ pnpm lint
 pnpm typecheck
 pnpm build
 ```
+
+## 최신 핸드오프 - 2026-07-03 Deployment Safety Gate
+
+- 완료: `docs/ys/009_배포안전게이트구현계획_ys.md` 기준 작업 0~12 구현 및 단계별 커밋 완료.
+- 핵심 변경: shared warning 계약 확장, `deployment-safety-gate.ts`, warning factory, public RDS/SSH/S3/IAM wildcard security rule, apply/destroy plan Safety Gate 연결, approval `acknowledgedWarningIds`, apply/destroy final guard, UI acknowledgement checkbox.
+- 검증 완료: `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm test`, `git diff --check`.
+- 현재 작업 트리: 최종 검증 시점 기준 깨끗해야 한다.
+- 주의: 실제 Terraform apply/destroy와 AWS mutation은 수행하지 않았다.

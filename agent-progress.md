@@ -213,3 +213,31 @@
   - `HARNESS-007` baseline E2E smoke remains not started.
 - Next best action:
   - Define a minimal Representative Use Journey smoke that does not run real AWS apply/destroy without explicit approval and cleanup planning.
+
+### 2026-07-03 - Deployment Safety Gate 구현 완료
+
+- Goal: `docs/ys/009_배포안전게이트구현계획_ys.md`의 작업 0~12를 실제 코드로 구현하고 단계별 커밋을 남긴다.
+- Completed:
+  - `DeploymentPlanWarning` 계약을 stable `id`, `source`, `code`, acknowledgement/block 필드까지 확장했다.
+  - `deployment-safety-gate.ts` pure service와 warning factory를 추가해 Pre-Deployment Check, Terraform plan warning, unsupported resource, destructive change를 하나의 Safety Gate 결과로 합쳤다.
+  - Pre-Deployment security rule에 public RDS, public S3, IAM wildcard, 확장된 public SSH 탐지를 추가했다.
+  - apply/destroy plan 저장 흐름이 Safety Gate 결과를 사용하도록 연결했다.
+  - approval API에 `acknowledgedWarningIds`를 추가하고 Medium/Low acknowledgement 누락, High risk warning 승인을 차단했다.
+  - apply/destroy 실행 직전 승인 snapshot, operation, artifact hash, tfplan hash, AWS account/region guard를 보강했다.
+  - Deployment UI에서 High risk block banner, warning list, Medium/Low acknowledgement checkbox, approve request body 연결을 추가했다.
+  - Safety Gate, security rule, approval acknowledgement, web approve body, risk blocked action state 테스트를 보강했다.
+- Verification run:
+  - `pnpm harness:check` - passed
+  - `pnpm lint` - passed
+  - `pnpm typecheck` - passed
+  - `pnpm build` - passed
+  - `pnpm test` - passed
+  - `git diff --check` - passed
+- Evidence recorded:
+  - High risk warning은 `risk_analysis` block으로 남아 approval로 해제되지 않는다.
+  - Medium/Low warning은 `acknowledgedWarningIds`에 required warning id가 있어야 approval 가능하다.
+  - 실제 Terraform apply/destroy 또는 AWS mutation은 실행하지 않았다.
+- Known risks:
+  - UI checkbox의 실제 브라우저 렌더링은 unit/type/build로 검증했고 Playwright 시각 검증은 이번 단계에서 수행하지 않았다.
+- Next best action:
+  - 실제 demo 데이터로 public RDS, public SSH, public S3, IAM wildcard finding이 Deployment Panel에 표시되는지 수동 smoke를 진행한다.
