@@ -13,7 +13,67 @@
 - Highest priority unfinished harness feature: `HARNESS-007`
 - Current blocker: none
 
+### 2026-07-03 - CloudFormation Quick Create S3 TemplateURL hotfix
+
+- Goal: Fix the AWS Console Quick Create `TemplateURL must be a supported URL` error.
+- Completed:
+  - Confirmed root cause: Quick Create was receiving a SketchCatch API URL as `templateURL`, but CloudFormation supports S3 object URLs or SSM document URLs for templates.
+  - Changed AWS connection CloudFormation setup to publish the generated YAML template to the SketchCatch artifact S3 bucket.
+  - Changed `templateUrl` and `launchStackUrl` to use a presigned S3 `GetObject` URL.
+  - Kept inline template fallback when S3 publishing is unavailable or explicitly disabled in tests.
+  - Removed the old signed public API template route from AWS connection routing because it does not satisfy Quick Create URL requirements.
+  - Updated API and web API tests for S3-backed Quick Create URLs.
+- Verification run:
+  - `.env` key presence check - `S3_BUCKET_NAME`, `AWS_PROFILE`, `AWS_SDK_LOAD_CONFIG` set; static AWS credential vars empty/unset. Values were not printed.
+  - `.\apps\api\node_modules\.bin\tsx.CMD --test apps/api/src/routes/aws-connections.test.ts apps/api/src/config/env.test.ts apps/api/src/server-startup.test.ts` - passed with 20 tests.
+  - Actual AWS S3 publish smoke through SSO credential - `PutObject -> presigned GetObject URL -> DeleteObject` passed. Bucket name and URL were not printed.
+  - Actual CloudFormation `ValidateTemplate` smoke through AWS CLI - presigned S3 URL was accepted as `TemplateURL`; no stack was created.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api typecheck` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api lint` - passed.
+  - `.\apps\web\node_modules\.bin\tsx.CMD --test apps/web/features/workspace/api.test.ts` - passed with 17 tests.
+  - `node scripts/check-harness.mjs` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm lint` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm typecheck` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm build` - passed.
+- Evidence recorded:
+  - The generated Quick Create URL now uses an S3 presigned URL for `templateURL`, not a SketchCatch API URL.
+  - The real S3 smoke used a temporary object and deleted it immediately.
+  - No Terraform apply/destroy or Git/CI/CD deployment was run.
+- Known risks:
+  - Full AWS Console stack creation still requires opening the generated Quick Create URL and approving stack creation in the target AWS account.
+  - Runtime IAM role or SSO profile must have S3 object write/read permissions for the artifact bucket.
+- Next best action:
+  - Start the API with current `.env`, request a new AWS connection CloudFormation template, and open the returned `launchStackUrl` in AWS Console.
+
 ## 세션 레코드
+
+### 2026-07-03 - AWS connection SSO source credential hotfix
+
+- Goal: AWS 계정 등록/연결 검증 경로에서 기존 STS AssumeRole 모델은 유지하되, 로컬/API 시작 credential source가 static AWS access key가 아니라 SSO 기반 `AWS_PROFILE`을 쓰도록 한다.
+- Completed:
+  - `.env.example`의 AWS profile 안내를 `sketchcatch-caller` access-key 방식에서 `AWS_PROFILE=sketchcatch-dev`와 `aws configure sso` / `aws sso login` 안내로 바꿨다.
+  - `SKETCHCATCH_AWS_CALLER_PRINCIPAL_ARN`이 사용자 계정의 `SketchCatchTerraformExecutionRole` trust policy가 신뢰할 SketchCatch caller Role ARN임을 명확히 했다.
+  - hotfix 범위를 SSO로 좁히기 위해 관련 없는 Bedrock, Amazon Q, Transcribe `.env.example` 값 변경은 제외했다.
+  - `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`이 API process env에 있으면 전 환경에서 시작을 막는 `assertNoStaticAwsCredentialsForApiServer`를 추가했다.
+  - API server startup에서 Terraform plugin warmup과 interrupted deployment recovery 전에 static credential guard를 실행하도록 연결했다.
+  - `AWS_PROFILE` 허용, static credential 거부, startup guard 순서, 기본 startup guard 동작을 테스트로 고정했다.
+- Verification run:
+  - `node scripts/check-harness.mjs` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm harness:check` - passed after non-escalated `npm exec` hit npm cache/registry restrictions
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api test -- src/config/env.test.ts src/server-startup.test.ts` - passed; pnpm ran the API test suite and reported 414 passing tests
+  - `git diff --check` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm lint` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm typecheck` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm build` - passed on rerun with a longer timeout after the first build command timed out before returning a result
+- Evidence recorded:
+  - 실제 AWS connection verification, Terraform apply/destroy, cloud mutation, Git/CI/CD handoff는 실행하지 않았다.
+  - 이전 실패한 pnpm/corepack 실행이 남긴 임시 `_tmp_*` 파일은 삭제했다.
+  - build가 건드린 범위 밖 생성 파일 `apps/web/next-env.d.ts`는 원복했다.
+- Known risks:
+  - 최종 live AWS 계정 등록/연결 검증은 유효한 SSO login과 AWS 계정 설정으로 사용자가 실행해야 한다.
+  - 이 환경에서는 `pnpm`이 PATH에 없어 `npm exec --package=pnpm@11.8.0 -- pnpm ...` 경로로 검증했다.
+- Next best action:
+  - `.env`에 `AWS_PROFILE=sketchcatch-dev`를 두고 static AWS credential env vars를 제거한 뒤 API를 시작해 AWS connection create/test/verify flow를 대상 계정으로 확인한다.
 
 ### 2026-07-02 - 중복 상세 기획 문서 정리
 
