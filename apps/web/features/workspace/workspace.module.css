@@ -1051,7 +1051,7 @@
   font-weight: 900;
 }
 
-.terraformDiagnosticLineLayer {
+.terraformSyntaxHighlightLayer {
   bottom: 0;
   left: 42px;
   overflow: hidden;
@@ -1059,24 +1059,78 @@
   position: absolute;
   right: 0;
   top: 0;
-  z-index: 3;
+  z-index: 1;
 }
 
-.terraformDiagnosticLineHighlight {
-  background: #ef4444;
-  border-radius: 999px;
-  box-shadow: 0 0 0 1px rgba(127, 29, 29, 0.46);
-  height: 2px;
-  left: 10px;
+.terraformSyntaxHighlightCode {
+  box-sizing: border-box;
+  color: #d7e4f7;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  left: 0;
+  line-height: 1.6;
+  margin: 0;
+  min-width: max-content;
+  padding: 12px 10px;
   position: absolute;
-  right: 10px;
+  tab-size: 2;
+  top: 0;
+  white-space: pre;
+}
+
+.terraformHighlightedLine {
+  display: block;
+  min-height: 1.6em;
+  text-decoration-skip-ink: none;
+}
+
+.terraformHighlightedLineError {
+  text-decoration-color: #ef4444;
+  text-decoration-line: underline;
+  text-decoration-style: wavy;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 3px;
+}
+
+.terraformTokenKeyword {
+  color: #2dd4bf;
+}
+
+.terraformTokenIdentifier {
+  color: #74bdf8;
+}
+
+.terraformTokenReference {
+  color: #74bdf8;
+}
+
+.terraformTokenString {
+  color: #d99a7b;
+}
+
+.terraformTokenBrace {
+  color: #facc15;
+}
+
+.terraformTokenOperator,
+.terraformTokenPlain {
+  color: #cbd5e1;
+}
+
+.terraformTokenNumber {
+  color: #f4bf75;
+}
+
+.terraformTokenComment {
+  color: #7a8797;
 }
 
 .terraformTextarea {
-  background: #1c1c1c;
+  background: transparent;
   border: 0;
   box-sizing: border-box;
-  color: #d7e4f7;
+  caret-color: #d7e4f7;
+  color: transparent;
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   font-size: 12px;
   height: 100%;
@@ -1093,6 +1147,7 @@
   tab-size: 2;
   word-break: normal;
   white-space: pre;
+  z-index: 2;
 }
 
 .terraformTextarea::placeholder {

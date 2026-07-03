@@ -315,21 +315,37 @@ test("terraform error explanation lives in the terraform code panel only when er
   assert.match(errorExplanationResultRule, /\bgrid-column:\s*1 \/ -1;/);
 });
 
-test("terraform editor renders red line markers for diagnostics with error lines", () => {
-  const diagnosticLineLayerRule = getCssRule(stylesSource, "terraformDiagnosticLineLayer");
-  const diagnosticLineHighlightRule = getCssRule(stylesSource, "terraformDiagnosticLineHighlight");
+test("terraform editor renders syntax colors and squiggly error underlines", () => {
+  const syntaxHighlightLayerRule = getCssRule(stylesSource, "terraformSyntaxHighlightLayer");
+  const highlightedLineErrorRule = getCssRule(stylesSource, "terraformHighlightedLineError");
   const lineNumberErrorRule = getCssRule(stylesSource, "terraformLineNumberError");
+  const textareaRule = getCssRule(stylesSource, "terraformTextarea");
+  const keywordRule = getCssRule(stylesSource, "terraformTokenKeyword");
+  const identifierRule = getCssRule(stylesSource, "terraformTokenIdentifier");
+  const referenceRule = getCssRule(stylesSource, "terraformTokenReference");
+  const stringRule = getCssRule(stylesSource, "terraformTokenString");
+  const braceRule = getCssRule(stylesSource, "terraformTokenBrace");
 
   assert.match(terraformPanelSource, /createTerraformDiagnosticLineHighlights/);
+  assert.match(terraformPanelSource, /createTerraformHighlightedLines/);
   assert.match(terraformPanelSource, /diagnosticLineHighlights/);
-  assert.match(terraformPanelSource, /terraformDiagnosticLineLayer/);
-  assert.match(terraformPanelSource, /terraformDiagnosticLineHighlight/);
+  assert.match(terraformPanelSource, /terraformSyntaxHighlightLayer/);
+  assert.match(terraformPanelSource, /terraformHighlightedLineError/);
+  assert.match(terraformPanelSource, /terraformTokenKeyword/);
   assert.match(terraformPanelSource, /terraformLineNumberError/);
   assert.match(terraformPanelSource, /diagnosticLineNumberSet\.has\(lineNumber\)/);
-  assert.match(diagnosticLineLayerRule, /\bpointer-events:\s*none;/);
-  assert.match(diagnosticLineLayerRule, /\bposition:\s*absolute;/);
-  assert.match(diagnosticLineHighlightRule, /\bbackground:\s*#ef4444;/);
-  assert.match(diagnosticLineHighlightRule, /\bheight:\s*2px;/);
+  assert.doesNotMatch(terraformPanelSource, /terraformDiagnosticLineLayer/);
+  assert.match(syntaxHighlightLayerRule, /\bpointer-events:\s*none;/);
+  assert.match(syntaxHighlightLayerRule, /\bposition:\s*absolute;/);
+  assert.match(highlightedLineErrorRule, /\btext-decoration-style:\s*wavy;/);
+  assert.match(highlightedLineErrorRule, /\btext-decoration-color:\s*#ef4444;/);
+  assert.match(textareaRule, /\bcolor:\s*transparent;/);
+  assert.match(textareaRule, /\bcaret-color:\s*#d7e4f7;/);
+  assert.match(keywordRule, /\bcolor:\s*#2dd4bf;/);
+  assert.match(identifierRule, /\bcolor:\s*#74bdf8;/);
+  assert.match(referenceRule, /\bcolor:\s*#74bdf8;/);
+  assert.match(stringRule, /\bcolor:\s*#d99a7b;/);
+  assert.match(braceRule, /\bcolor:\s*#facc15;/);
   assert.match(lineNumberErrorRule, /\bcolor:\s*#fca5a5;/);
 });
 

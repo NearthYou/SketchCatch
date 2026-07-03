@@ -42,12 +42,29 @@ import {
   type TerraformVirtualFile
 } from "./terraform-panel-utils";
 import { createTerraformDiagnosticLineHighlights } from "./terraform-diagnostic-line-highlights";
+import {
+  createTerraformHighlightedLines,
+  type TerraformHighlightedToken,
+  type TerraformTokenKind
+} from "./terraform-code-highlighting";
 import { applyAllTerraformSyncProposals } from "./terraform-sync-proposals";
 import type { RequestState } from "./workspace-right-panel.types";
 import styles from "./workspace.module.css";
 
 const TERRAFORM_EDITOR_LINE_HEIGHT = 19.2;
 const TERRAFORM_EDITOR_VERTICAL_PADDING = 12;
+
+const TERRAFORM_TOKEN_CLASS_NAMES: Record<TerraformTokenKind, string | undefined> = {
+  brace: styles.terraformTokenBrace,
+  comment: styles.terraformTokenComment,
+  identifier: styles.terraformTokenIdentifier,
+  keyword: styles.terraformTokenKeyword,
+  number: styles.terraformTokenNumber,
+  operator: styles.terraformTokenOperator,
+  plain: styles.terraformTokenPlain,
+  reference: styles.terraformTokenReference,
+  string: styles.terraformTokenString
+};
 
 type TerraformPreviewExplanationScope = {
   readonly code: string;
@@ -152,6 +169,14 @@ function addTerraformDiagnosticSource(
   };
 }
 
+function renderTerraformToken(token: TerraformHighlightedToken, index: number) {
+  return (
+    <span className={TERRAFORM_TOKEN_CLASS_NAMES[token.kind]} key={`${index}-${token.kind}-${token.text}`}>
+      {token.text}
+    </span>
+  );
+}
+
 export type PreparedTerraformArtifactSource = {
   readonly diagramJson: DiagramJson;
   readonly terraformCode: string;
@@ -204,6 +229,7 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
   const [terraformErrorExplanationsByKey, setTerraformErrorExplanationsByKey] =
     useState<Record<string, TerraformErrorExplanationEntry>>({});
   const [codeScrollTop, setCodeScrollTop] = useState(0);
+  const [codeScrollLeft, setCodeScrollLeft] = useState(0);
   const codeRequestIdRef = useRef(0);
   const codeVersionRef = useRef(0);
   const isPreparingTerraformArtifactRef = useRef(false);
@@ -314,6 +340,16 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
   const diagnosticLineNumberSet = useMemo(
     () => new Set(diagnosticLineHighlights.map((highlight) => highlight.line)),
     [diagnosticLineHighlights]
+  );
+  const highlightedTerraformLines = useMemo(
+    () => createTerraformHighlightedLines(displayedTerraformCode, diagnosticLineNumberSet),
+    [diagnosticLineNumberSet, displayedTerraformCode]
+  );
+  const terraformSyntaxHighlightStyle = useMemo(
+    () => ({
+      transform: `translate(${-codeScrollLeft}px, ${-codeScrollTop}px)`
+    }),
+    [codeScrollLeft, codeScrollTop]
   );
 
   const runRequest = useCallback(async (request: () => Promise<void>, fallbackMessage: string) => {
@@ -750,6 +786,7 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
     const lineHeight = Number.parseFloat(window.getComputedStyle(textarea).lineHeight) || 20;
     textarea.scrollTop = Math.max(0, (selectedBlock.startLine - 2) * lineHeight);
     setCodeScrollTop(textarea.scrollTop);
+    setCodeScrollLeft(textarea.scrollLeft);
 
     if (lineNumberRef.current) {
       lineNumberRef.current.scrollTop = textarea.scrollTop;
@@ -767,6 +804,7 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
 
   function handleCodeScroll(event: UIEvent<HTMLTextAreaElement>): void {
     setCodeScrollTop(event.currentTarget.scrollTop);
+    setCodeScrollLeft(event.currentTarget.scrollLeft);
 
     if (lineNumberRef.current) {
       lineNumberRef.current.scrollTop = event.currentTarget.scrollTop;
@@ -1004,17 +1042,22 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
             </li>
           ))}
         </ol>
-        {diagnosticLineHighlights.length > 0 ? (
-          <div className={styles.terraformDiagnosticLineLayer} aria-hidden="true">
-            {diagnosticLineHighlights.map((highlight) => (
+        <div className={styles.terraformSyntaxHighlightLayer} aria-hidden="true">
+          <pre className={styles.terraformSyntaxHighlightCode} style={terraformSyntaxHighlightStyle}>
+            {highlightedTerraformLines.map((line) => (
               <span
-                className={styles.terraformDiagnosticLineHighlight}
-                key={highlight.line}
-                style={highlight.style}
-              />
+                className={
+                  line.hasDiagnostic
+                    ? `${styles.terraformHighlightedLine} ${styles.terraformHighlightedLineError}`
+                    : styles.terraformHighlightedLine
+                }
+                key={line.line}
+              >
+                {line.tokens.map(renderTerraformToken)}
+              </span>
             ))}
-          </div>
-        ) : null}
+          </pre>
+        </div>
         <textarea
           ref={textareaRef}
           autoCapitalize="off"
