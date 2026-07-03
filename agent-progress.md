@@ -15,6 +15,29 @@
 
 ## 세션 레코드
 
+### 2026-07-03 - 009 Deployment Safety Gate 구현 계획 세부화
+
+- Goal: `docs/ys/009_배포안전게이트구현계획_ys.md`를 바로 구현에 들어갈 수 있는 세부 작업 지시서로 고도화한다.
+- Completed:
+  - 현재 코드 기준 Gap 요약 표를 추가해 `DeploymentPlanWarning`, `deployment-safety-gate.ts`, `aiPreDeploymentSecurity.ts`, plan/destroy/approval/UI의 부족한 점과 구현 목표를 정리했다.
+  - 구현 범위를 작업 0~12 순서로 재구성해 사전 확인, shared type 확장, Safety Gate pure service, warning 표준화, security rule 확장, plan/destroy 연결, approval API, UI, 테스트, 최종 검증까지 나눴다.
+  - `DeploymentPlanWarningSource`, `DeploymentPlanWarningCode`, `ApproveDeploymentPlanRequest`, `DeploymentSafetyGateResult` 계약 예시를 문서에 고정했다.
+  - Warning 계약 표와 Risk 정책 표를 추가해 High/Medium/Low, `missing_approval`, `risk_analysis`, `cost_analysis` 해석을 명확히 했다.
+  - 테스트 섹션을 파일별 테스트 계획과 Backend/Approval/Route/UI 검증 항목으로 확장했다.
+- Verification run:
+  - `pnpm harness:check` - passed after docs edits
+  - `git diff --check` - passed after docs edits
+  - `Test-Path docs\ys\009_배포안전게이트구현계획_ys.md` - passed
+  - keyword check for required 009 doc sections - passed
+  - `Select-String` check for disallowed wording in the doc - no matches
+- Evidence recorded:
+  - 문서 변경만 수행했으며 code/infrastructure 파일은 수정하지 않았다.
+  - 실제 Terraform apply/destroy, cloud mutation, Git/CI/CD handoff는 실행하지 않았다.
+- Known risks:
+  - `pnpm lint`, `pnpm typecheck`, `pnpm build`는 문서 전용 변경이라 실행하지 않을 예정이다.
+- Next best action:
+  - 009 문서의 작업 0부터 순서대로 실제 구현을 시작한다.
+
 ### 2026-07-03 - YS 작업별 구현 계획 문서 보강
 
 - Goal: 피드백 스크린샷의 핵심 문장을 `docs/ys`의 세 작업별 구현 계획에 반영해 각 문서의 개발 방향을 더 선명하게 만든다.
