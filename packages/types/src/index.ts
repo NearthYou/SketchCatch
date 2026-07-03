@@ -663,6 +663,7 @@ export type ArchitectureGuardrailWarningCode =
   | "unsupported_requirement"
   | "low_budget_rds_cost"
   | "unsupported_resource_omitted"
+  | "unsupported_requirement_substituted"
   | "selection_overridden_by_prompt"
   | "ambiguous_prompt_fallback"
   | "partial_generation"

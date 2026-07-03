@@ -2,6 +2,30 @@
 
 이 파일은 최신 세션 하나를 다음 세션이 빠르게 이어받기 위한 압축본이다. 누적 이력은 `agent-progress.md`에 남긴다.
 
+## 2026-07-03 최신 핸드오프 - 지원 불가 요구사항 대체 생성
+
+### 현재 검증된 것
+
+- 자연어 다이어그램 생성은 지원 범위 밖 리소스 요구를 감지하면 가능한 경우 지원 리소스 초안으로 대체한다.
+- `EKS/Kubernetes`, `ECS/Fargate`, `ALB/Auto Scaling` 요구는 단일 EC2/API 서버 초안으로 대체되고 `unsupported_requirement_substituted` 경고가 표시된다.
+- `멀티 리전` 요구는 단일 리전 초안으로 대체했다는 경고를 남긴다.
+- `CI/CD 자동 구성`, 실시간 비용/보안 보장, 조직 내부 시스템 연동처럼 보드 리소스로 대체할 수 없는 요구는 기존처럼 제외 경고를 남긴다.
+- 선택지가 다른 값이어도 자연어에서 대체 가능한 요구가 감지되면 대체 시나리오가 우선된다.
+- 공식 검증: `npm exec --package=pnpm@11.8.0 -- pnpm harness:check`, `lint`, `typecheck`, `build`가 모두 통과했다.
+
+### 이번 세션의 변경 사항
+
+- `packages/types/src/index.ts`에 `unsupported_requirement_substituted` warning code를 추가했다.
+- `apps/api/src/services/aiArchitectureScenarioResolution.ts`에 지원 불가 요구사항 대체 규칙과 대체/제외 경고 분기 로직을 추가했다.
+- `apps/api/src/routes/ai.test.ts`에서 대체 생성 경고, 선택지보다 자연어 대체가 우선되는 동작, 애매한 기본 fallback이 발생하지 않는 동작을 검증했다.
+- `apps/web/features/workspace/WorkspaceAiPanelPieces.tsx`와 관련 테스트에 새 경고 라벨을 추가했다.
+
+### 아직 주의할 점
+
+- Patch mode는 아직 없다. 현재 `생성`은 전체 보드 교체다.
+- 기존 unrelated 변경인 `apps/web/next-env.d.ts`는 이번 작업 범위 밖이라 건드리지 않았다.
+- `pnpm`은 현재 shell PATH에 없어서 공식 검증은 `npm exec --package=pnpm@11.8.0 -- pnpm ...`로 실행했다.
+
 ## 2026-07-03 최신 핸드오프 - 자연어 우선 Architecture Draft 미리보기
 
 ### 현재 검증된 것

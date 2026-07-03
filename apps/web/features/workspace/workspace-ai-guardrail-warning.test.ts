@@ -12,6 +12,7 @@ test("workspace AI draft result exposes guardrail warnings", () => {
   assert.match(workspaceAiPanelSource, /createDraftWarnings/);
   assert.match(workspaceAiPanelPiecesSource, /지원 범위 경고/);
   assert.match(workspaceAiPanelPiecesSource, /unsupported_resource_omitted/);
+  assert.match(workspaceAiPanelPiecesSource, /unsupported_requirement_substituted/);
   assert.match(workspaceAiPanelPiecesSource, /board_replacement_required/);
   assert.match(workspaceAiPanelPiecesSource, /low_budget_rds_cost/);
   assert.match(stylesSource, /\.aiWarning\s*{/);

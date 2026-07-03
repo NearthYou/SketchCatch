@@ -21,6 +21,10 @@ type PromptScenarioKeywordRule = {
 type UnsupportedRequirementRule = {
   readonly label: string;
   readonly keywords: readonly string[];
+  readonly substitution?: {
+    readonly label: string;
+    readonly scenario?: ArchitectureScenario;
+  };
 };
 
 const PROMPT_SCENARIO_KEYWORD_RULES: readonly PromptScenarioKeywordRule[] = [
@@ -56,11 +60,34 @@ const PROMPT_SCENARIO_PRIORITY: readonly ArchitectureScenario[] = [
 const UNSUPPORTED_REQUIREMENT_RULES: readonly UnsupportedRequirementRule[] = [
   {
     label: "EKS/Kubernetes",
-    keywords: ["eks", "kubernetes", "쿠버네티스", "k8s"]
+    keywords: ["eks", "kubernetes", "쿠버네티스", "k8s"],
+    substitution: {
+      label: "단일 EC2 API 서버",
+      scenario: "api_server"
+    }
+  },
+  {
+    label: "ECS/Fargate",
+    keywords: ["ecs", "fargate"],
+    substitution: {
+      label: "단일 EC2 API 서버",
+      scenario: "api_server"
+    }
+  },
+  {
+    label: "ALB/Auto Scaling",
+    keywords: ["alb", "load balancer", "로드밸런서", "auto scaling", "autoscaling", "오토스케일링"],
+    substitution: {
+      label: "단일 EC2 서버",
+      scenario: "api_server"
+    }
   },
   {
     label: "멀티 리전",
-    keywords: ["multi region", "multi-region", "멀티 리전", "다중 리전", "active-active"]
+    keywords: ["multi region", "multi-region", "멀티 리전", "다중 리전", "active-active"],
+    substitution: {
+      label: "단일 리전 초안"
+    }
   },
   {
     label: "CI/CD 자동 구성",
@@ -80,7 +107,9 @@ export function resolveScenario(request: CreateArchitectureDraftRequest): Scenar
   const scenarioScores = scorePromptScenarios(request.prompt);
   const promptScenario = selectScenarioFromScores(scenarioScores);
   const hasPromptSignal = hasPromptScenarioSignal(scenarioScores);
-  const unsupportedWarnings = createUnsupportedRequirementWarnings(request.prompt, hasPromptSignal);
+  const unsupportedRequirementMatches = findUnsupportedRequirementMatches(request.prompt);
+  const substituteScenario = selectSubstituteScenario(unsupportedRequirementMatches);
+  const unsupportedWarnings = createUnsupportedRequirementWarnings(unsupportedRequirementMatches, hasPromptSignal);
 
   if (hasPromptSignal) {
     return {
@@ -90,6 +119,17 @@ export function resolveScenario(request: CreateArchitectureDraftRequest): Scenar
         ...unsupportedWarnings,
         ...createPromptOverrideWarnings(request.scenarioHint, promptScenario),
         ...createPartialGenerationWarnings(unsupportedWarnings, hasPromptSignal)
+      ]
+    };
+  }
+
+  if (substituteScenario !== undefined) {
+    return {
+      selectedScenario: substituteScenario,
+      scenarioScores,
+      guardrailWarnings: [
+        ...unsupportedWarnings,
+        ...createPromptOverrideWarnings(request.scenarioHint, substituteScenario)
       ]
     };
   }
@@ -186,28 +226,56 @@ function createPromptOverrideWarnings(
   ];
 }
 
+function findUnsupportedRequirementMatches(prompt: string): UnsupportedRequirementRule[] {
+  const normalizedPrompt = normalizePrompt(prompt);
+
+  return UNSUPPORTED_REQUIREMENT_RULES.filter((rule) =>
+    rule.keywords.some((keyword) => normalizedPrompt.includes(keyword.toLowerCase()))
+  );
+}
+
+function selectSubstituteScenario(
+  unsupportedRequirementMatches: readonly UnsupportedRequirementRule[]
+): ArchitectureScenario | undefined {
+  const substituteMatch = unsupportedRequirementMatches.find((rule) => rule.substitution?.scenario !== undefined);
+
+  return substituteMatch?.substitution?.scenario;
+}
+
 function createUnsupportedRequirementWarnings(
-  prompt: string,
+  unsupportedRequirementMatches: readonly UnsupportedRequirementRule[],
   hasPromptSignal: boolean
 ): ArchitectureGuardrailWarning[] {
-  const normalizedPrompt = normalizePrompt(prompt);
-  const unsupportedLabels = UNSUPPORTED_REQUIREMENT_RULES
-    .filter((rule) => rule.keywords.some((keyword) => normalizedPrompt.includes(keyword.toLowerCase())))
-    .map((rule) => rule.label);
-
-  if (unsupportedLabels.length === 0) {
+  if (unsupportedRequirementMatches.length === 0) {
     return [];
   }
 
-  const omittedText = unsupportedLabels.join(", ");
-  const warnings: ArchitectureGuardrailWarning[] = [
-    {
+  const substitutedRequirements = unsupportedRequirementMatches.filter((rule) => rule.substitution !== undefined);
+  const omittedRequirements = unsupportedRequirementMatches.filter((rule) => rule.substitution === undefined);
+  const warnings: ArchitectureGuardrailWarning[] = [];
+
+  if (substitutedRequirements.length > 0) {
+    const requestedText = substitutedRequirements.map((rule) => rule.label).join(", ");
+    const substitutionText = Array.from(
+      new Set(substitutedRequirements.map((rule) => rule.substitution?.label).filter(isDefined))
+    ).join(", ");
+
+    warnings.push({
+      code: "unsupported_requirement_substituted",
+      message: `현재 자동 생성 범위 밖의 요구사항(${requestedText})은 지원 가능한 ${substitutionText}로 대체했습니다. 보드에는 지원되는 리소스만 생성됩니다.`
+    });
+  }
+
+  if (omittedRequirements.length > 0) {
+    const omittedText = omittedRequirements.map((rule) => rule.label).join(", ");
+
+    warnings.push({
       code: "unsupported_resource_omitted",
       message: `현재 자동 생성 범위 밖의 요구사항(${omittedText})은 초안에서 제외했습니다. 지원되는 리소스만 보드에 그립니다.`
-    }
-  ];
+    });
+  }
 
-  if (!hasPromptSignal) {
+  if (!hasPromptSignal && substitutedRequirements.length === 0) {
     warnings.push({
       code: "unsupported_requirement",
       message: "지원 범위 밖의 요구사항만 감지되어 기본 API 서버 초안으로 시작합니다."
@@ -215,6 +283,10 @@ function createUnsupportedRequirementWarnings(
   }
 
   return warnings;
+}
+
+function isDefined<T>(value: T | undefined): value is T {
+  return value !== undefined;
 }
 
 function createPartialGenerationWarnings(
@@ -228,7 +300,7 @@ function createPartialGenerationWarnings(
   return [
     {
       code: "partial_generation",
-      message: "요구사항 중 지원 가능한 부분만 초안으로 생성했습니다. 제외된 항목은 보드 하단 경고를 확인해 주세요."
+      message: "요구사항 중 지원 가능한 부분만 초안으로 생성했습니다. 대체되거나 제외된 항목은 보드 하단 경고를 확인해 주세요."
     }
   ];
 }

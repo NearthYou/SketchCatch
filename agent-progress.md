@@ -13,6 +13,27 @@
 - Highest priority unfinished harness feature: `HARNESS-007`
 - Current blocker: none
 
+### 2026-07-03 - 지원 불가 요구사항 대체 생성
+
+- Goal: 자연어 다이어그램 생성에서 지원 범위 밖 리소스 요구가 들어오면 조용히 제외하지 않고 지원 가능한 유사 초안으로 대체하고 경고를 표시한다.
+- Completed:
+  - `unsupported_requirement_substituted` warning code를 shared type과 Workspace AI 경고 라벨에 추가했다.
+  - EKS/Kubernetes, ECS/Fargate, ALB/Auto Scaling 요구를 지원 가능한 단일 EC2/API 서버 초안으로 대체하도록 시나리오 결정 규칙을 추가했다.
+  - 멀티 리전 요구는 단일 리전 초안으로 대체했다는 경고를 남기고, CI/CD/보장/내부 연동처럼 보드 리소스로 대체할 수 없는 요구는 기존처럼 제외 경고를 남기도록 분리했다.
+  - 선택지가 다른 값이어도 자연어에서 대체 가능한 요구가 감지되면 대체 시나리오가 우선되도록 테스트를 갱신했다.
+- Verification run:
+  - `.\apps\api\node_modules\.bin\tsx.CMD apps/api/src/routes/ai.test.ts` - passed with 21 tests after sandbox spawn EPERM.
+  - `.\apps\web\node_modules\.bin\tsx.CMD apps/web/features/workspace/workspace-ai-guardrail-warning.test.ts` - passed with 1 test after sandbox spawn EPERM.
+  - `node scripts/check-harness.mjs` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm harness:check` - passed after non-escalated cache-only `ENOTCACHED`.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm lint` - passed after non-escalated cache-only `ENOTCACHED`.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm typecheck` - passed after non-escalated cache-only `ENOTCACHED`.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm build` - passed after non-escalated cache-only `ENOTCACHED`.
+  - `git diff --check` - passed with line-ending warnings only.
+- Known risks:
+  - `pnpm` is still unavailable directly in the current shell; required checks passed through `npm exec`.
+  - Existing unrelated worktree change remains: `apps/web/next-env.d.ts`.
+
 ### 2026-07-03 - Server Storage 핵심 관계 edge 보정
 
 - Goal: `EC2 서버 + 이미지 저장용 S3` 요청에서 EC2, AMI, S3의 핵심 관계가 다이어그램에 보이도록 한다.

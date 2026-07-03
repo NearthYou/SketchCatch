@@ -212,7 +212,7 @@ test("POST /api/ai/architecture-draft lets prompt keywords override helper choic
 	await app.close();
 });
 
-test("POST /api/ai/architecture-draft returns auto scenario scores and fallback warning metadata", async () => {
+test("POST /api/ai/architecture-draft returns scenario scores and unsupported substitution warning metadata", async () => {
   const app = buildApp();
 
   const scoredResponse = await app.inject({
@@ -242,7 +242,7 @@ test("POST /api/ai/architecture-draft returns auto scenario scores and fallback 
     url: "/api/ai/architecture-draft",
     payload: {
       prompt: "멀티 리전 EKS 기반 금융권 서비스를 자동 설계하고 싶어",
-      scenarioHint: "auto",
+      scenarioHint: "static_site",
       budgetLevel: "normal",
       trafficLevel: "normal",
       securityPriority: "basic"
@@ -255,8 +255,18 @@ test("POST /api/ai/architecture-draft returns auto scenario scores and fallback 
 
   assert.equal(unsupportedBody.metadata.selectedScenario, "api_server");
   assert.equal(unsupportedBody.architectureJson.nodes.some((node) => node.type === "UNKNOWN"), false);
-  assert.ok(unsupportedBody.metadata.guardrailWarnings?.some((warning) => warning.code === "unsupported_resource_omitted"));
-  assert.ok(unsupportedBody.metadata.guardrailWarnings?.some((warning) => warning.code === "ambiguous_prompt_fallback"));
+  assert.ok(
+    unsupportedBody.metadata.guardrailWarnings?.some(
+      (warning) => warning.code === "unsupported_requirement_substituted"
+    )
+  );
+  assert.ok(
+    unsupportedBody.metadata.guardrailWarnings?.some((warning) => warning.code === "selection_overridden_by_prompt")
+  );
+  assert.equal(
+    unsupportedBody.metadata.guardrailWarnings?.some((warning) => warning.code === "ambiguous_prompt_fallback") ?? false,
+    false
+  );
 
   const partialResponse = await app.inject({
     method: "POST",
@@ -275,7 +285,11 @@ test("POST /api/ai/architecture-draft returns auto scenario scores and fallback 
   const partialBody = architectureDraftResponseSchema.parse(partialResponse.json());
 
   assert.equal(partialBody.metadata.selectedScenario, "api_server");
-  assert.ok(partialBody.metadata.guardrailWarnings?.some((warning) => warning.code === "unsupported_resource_omitted"));
+  assert.ok(
+    partialBody.metadata.guardrailWarnings?.some(
+      (warning) => warning.code === "unsupported_requirement_substituted"
+    )
+  );
   assert.ok(partialBody.metadata.guardrailWarnings?.some((warning) => warning.code === "partial_generation"));
 
   await app.close();
