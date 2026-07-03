@@ -42,6 +42,19 @@ export function createUnsupportedResourceWarning(
   };
 }
 
+export function createTerraformPlanWarnings(input: {
+  operation: DeploymentSafetyGateOperation;
+  summary: DeploymentPlanSummary;
+  unsupportedResourceTypes?: readonly string[];
+}): DeploymentPlanWarning[] {
+  return [
+    ...(input.unsupportedResourceTypes ?? []).map((resourceType) =>
+      createUnsupportedResourceWarning(input.operation, resourceType)
+    ),
+    ...createDestructiveChangeWarnings(input.operation, input.summary)
+  ];
+}
+
 export function createDestructiveChangeWarnings(
   operation: DeploymentSafetyGateOperation,
   summary: DeploymentPlanSummary

@@ -6,9 +6,8 @@ import type {
   DeploymentSafetyGateResult
 } from "@sketchcatch/types";
 import {
-  createDestructiveChangeWarnings,
   createPreDeploymentCheckWarning,
-  createUnsupportedResourceWarning,
+  createTerraformPlanWarnings,
   deduplicateDeploymentPlanWarnings
 } from "./deployment-warning-factory.js";
 
@@ -28,10 +27,11 @@ export function evaluateDeploymentSafetyGate(
   const warnings = deduplicateDeploymentPlanWarnings([
     ...input.planSummary.warnings,
     ...(input.findings ?? []).map(createPreDeploymentCheckWarning),
-    ...(input.unsupportedResourceTypes ?? []).map((resourceType) =>
-      createUnsupportedResourceWarning(input.operation, resourceType)
-    ),
-    ...createDestructiveChangeWarnings(input.operation, input.planSummary),
+    ...createTerraformPlanWarnings({
+      operation: input.operation,
+      summary: input.planSummary,
+      unsupportedResourceTypes: input.unsupportedResourceTypes ?? []
+    }),
     ...(input.warnings ?? [])
   ]);
 
