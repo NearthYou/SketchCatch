@@ -155,6 +155,10 @@ export function assertDeploymentApplyPreconditions(
     throw new DeploymentConflictError("Terraform apply plan is required before apply");
   }
 
+  if (deployment.isBlocked) {
+    throw new DeploymentConflictError("Blocked deployment cannot be applied");
+  }
+
   if (deployment.approvedTerraformArtifactId !== deployment.terraformArtifactId) {
     throw new DeploymentConflictError("Terraform artifact changed after approval");
   }

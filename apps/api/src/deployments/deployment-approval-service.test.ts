@@ -4,7 +4,8 @@ import assert from "node:assert/strict";
 import type { AwsConnection, DeploymentPlanSummary } from "@sketchcatch/types";
 import {
   approveDeploymentPlan,
-  assertDeploymentApplyPreconditions
+  assertDeploymentApplyPreconditions,
+  assertDeploymentDestroyPreconditions
 } from "./deployment-approval-service.js";
 import {
   DeploymentConflictError,
@@ -566,6 +567,121 @@ test("assertDeploymentApplyPreconditions blocks artifact plan and AWS drift", ()
         currentAwsConnection: createVerifiedAwsConnection({ accountId: "999999999999" })
       }),
     /AWS account changed before apply/
+  );
+
+  assert.throws(
+    () =>
+      assertDeploymentApplyPreconditions({
+        deployment: {
+          ...approvedDeployment,
+          isBlocked: true,
+          blockedBy: "missing_approval",
+          blockedReason: "approval required"
+        },
+        currentPlanArtifact,
+        currentTerraformArtifactHash: artifactHash,
+        currentTfplanHash: tfplanHash,
+        currentAwsConnection
+      }),
+    /Blocked deployment cannot be applied/
+  );
+});
+
+test("assertDeploymentDestroyPreconditions blocks artifact plan and AWS drift", () => {
+  const approvedDeployment = createApprovedDeploymentRecord({
+    status: "SUCCESS",
+    stateObjectKey
+  });
+  const currentPlanArtifact = createPlanArtifactRecord({
+    operation: "destroy"
+  });
+  const currentAwsConnection = createVerifiedAwsConnection();
+
+  assert.doesNotThrow(() =>
+    assertDeploymentDestroyPreconditions({
+      deployment: approvedDeployment,
+      currentPlanArtifact,
+      currentTerraformArtifactHash: artifactHash,
+      currentTfplanHash: tfplanHash,
+      currentAwsConnection,
+      sourceStatus: "SUCCESS",
+      sourceFailureStage: null
+    })
+  );
+
+  assert.throws(
+    () =>
+      assertDeploymentDestroyPreconditions({
+        deployment: approvedDeployment,
+        currentPlanArtifact: createPlanArtifactRecord({ operation: "apply" }),
+        currentTerraformArtifactHash: artifactHash,
+        currentTfplanHash: tfplanHash,
+        currentAwsConnection,
+        sourceStatus: "SUCCESS",
+        sourceFailureStage: null
+      }),
+    /Terraform destroy plan is required before destroy/
+  );
+
+  assert.throws(
+    () =>
+      assertDeploymentDestroyPreconditions({
+        deployment: {
+          ...approvedDeployment,
+          isBlocked: true,
+          blockedBy: "missing_approval",
+          blockedReason: "approval required"
+        },
+        currentPlanArtifact,
+        currentTerraformArtifactHash: artifactHash,
+        currentTfplanHash: tfplanHash,
+        currentAwsConnection,
+        sourceStatus: "SUCCESS",
+        sourceFailureStage: null
+      }),
+    /Blocked deployment cannot be destroyed/
+  );
+
+  assert.throws(
+    () =>
+      assertDeploymentDestroyPreconditions({
+        deployment: approvedDeployment,
+        currentPlanArtifact,
+        currentTerraformArtifactHash: "changed-artifact-hash",
+        currentTfplanHash: tfplanHash,
+        currentAwsConnection,
+        sourceStatus: "SUCCESS",
+        sourceFailureStage: null
+      }),
+    /Terraform artifact content changed after approval/
+  );
+
+  assert.throws(
+    () =>
+      assertDeploymentDestroyPreconditions({
+        deployment: approvedDeployment,
+        currentPlanArtifact,
+        currentTerraformArtifactHash: artifactHash,
+        currentTfplanHash: "b".repeat(64),
+        currentAwsConnection,
+        sourceStatus: "SUCCESS",
+        sourceFailureStage: null
+      }),
+    /Terraform plan changed before destroy/
+  );
+
+  assert.throws(
+    () =>
+      assertDeploymentDestroyPreconditions({
+        deployment: approvedDeployment,
+        currentPlanArtifact,
+        currentTerraformArtifactHash: artifactHash,
+        currentTfplanHash: tfplanHash,
+        currentAwsConnection: createVerifiedAwsConnection({ region: "us-east-1" }),
+        sourceStatus: "SUCCESS",
+        sourceFailureStage: null
+      }),
+    /AWS region changed before destroy/
   );
 });
 
