@@ -9,7 +9,8 @@ import type {
   DeploymentBlockedBy,
   DeploymentStatus,
   DeploymentPlanSummary,
-  DeploymentPlanWarning
+  DeploymentPlanWarning,
+  DeploymentPlanWarningCode
 } from "@sketchcatch/types";
 import {
   prepareTerraformAwsCredentialEnv as defaultPrepareTerraformAwsCredentialEnv,
@@ -621,8 +622,14 @@ function createBlockedPlanSummary(
     .filter((finding) => finding.severity === "high")
     .map(toPlanWarning);
   const unsupportedResourceWarnings = unsupportedResourceTypes.map((resourceType) => ({
+    id: `terraform_plan:UNSUPPORTED_RESOURCE:apply:${resourceType}`,
     level: "high" as const,
-    message: `MVP live apply does not support Terraform resource type ${resourceType}`
+    category: "configuration" as const,
+    source: "terraform_plan" as const,
+    code: "UNSUPPORTED_RESOURCE" as const,
+    message: `MVP live apply does not support Terraform resource type ${resourceType}`,
+    requiresAcknowledgement: false,
+    blocksApproval: true
   }));
   const warnings = [...summary.warnings, ...highRiskWarnings, ...unsupportedResourceWarnings];
 
@@ -685,8 +692,15 @@ function createDeploymentPlanBlock(
 
 function toPlanWarning(finding: CheckFinding): DeploymentPlanWarning {
   const warning: DeploymentPlanWarning = {
+    id: `finding:${finding.id}`,
     level: "high",
-    message: `${finding.title}: ${finding.recommendation}`
+    category: finding.category,
+    source: "pre_deployment_check",
+    code: toPlanWarningCode(finding),
+    message: `${finding.title}: ${finding.recommendation}`,
+    relatedFindingId: finding.id,
+    requiresAcknowledgement: false,
+    blocksApproval: true
   };
 
   if (finding.resourceId) {
@@ -694,6 +708,22 @@ function toPlanWarning(finding: CheckFinding): DeploymentPlanWarning {
   }
 
   return warning;
+}
+
+function toPlanWarningCode(finding: CheckFinding): DeploymentPlanWarningCode {
+  if (finding.category === "permission") {
+    return "IAM_WILDCARD";
+  }
+
+  if (finding.id.toLowerCase().includes("rds")) {
+    return "PUBLIC_RDS";
+  }
+
+  if (finding.id.toLowerCase().includes("s3")) {
+    return "PUBLIC_S3";
+  }
+
+  return "PUBLIC_SSH";
 }
 
 async function appendTerraformOutput(input: {

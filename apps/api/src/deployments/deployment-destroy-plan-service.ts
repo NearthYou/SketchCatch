@@ -606,15 +606,27 @@ function createDestroyPlanSummary(
   const warnings: DeploymentPlanWarning[] = [
     ...summary.warnings,
     ...unsupportedResourceTypes.map((resourceType) => ({
+      id: `terraform_plan:UNSUPPORTED_RESOURCE:destroy:${resourceType}`,
       level: "high" as const,
-      message: `MVP live destroy does not support Terraform resource type ${resourceType}`
+      category: "configuration" as const,
+      source: "terraform_plan" as const,
+      code: "UNSUPPORTED_RESOURCE" as const,
+      message: `MVP live destroy does not support Terraform resource type ${resourceType}`,
+      requiresAcknowledgement: false,
+      blocksApproval: true
     }))
   ];
 
   if (summary.deleteCount === 0 && summary.replaceCount === 0) {
     warnings.push({
+      id: "terraform_plan:UNKNOWN_TERRAFORM_ACTION:destroy:no-op",
       level: "medium",
-      message: "Terraform destroy plan has no resources to delete"
+      category: "configuration",
+      source: "terraform_plan",
+      code: "UNKNOWN_TERRAFORM_ACTION",
+      message: "Terraform destroy plan has no resources to delete",
+      requiresAcknowledgement: true,
+      blocksApproval: false
     });
   }
 

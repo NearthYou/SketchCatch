@@ -165,7 +165,13 @@ function createUnknownActionWarning(
       : `Unsupported Terraform plan action: ${actionsDescription}`;
 
   return {
+    id: `terraform_plan:UNKNOWN_TERRAFORM_ACTION:${typeof resourceAddress === "string" ? resourceAddress : "unknown"}`,
     level: "medium",
-    message
+    category: "configuration",
+    source: "terraform_plan",
+    code: "UNKNOWN_TERRAFORM_ACTION",
+    message,
+    requiresAcknowledgement: true,
+    blocksApproval: false
   };
 }

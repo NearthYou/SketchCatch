@@ -386,10 +386,33 @@ export type DeploymentBlock = {
 export type DeploymentWarningLevel = "low" | "medium" | "high";
 export type DeploymentBlockedBy = "risk_analysis" | "cost_analysis" | "missing_approval";
 
+export type DeploymentPlanWarningSource =
+  | "pre_deployment_check"
+  | "terraform_plan"
+  | "cost_risk"
+  | "approval_snapshot";
+
+export type DeploymentPlanWarningCode =
+  | "PUBLIC_RDS"
+  | "PUBLIC_SSH"
+  | "PUBLIC_S3"
+  | "IAM_WILDCARD"
+  | "DESTRUCTIVE_CHANGE"
+  | "UNSUPPORTED_RESOURCE"
+  | "UNKNOWN_TERRAFORM_ACTION"
+  | "MISSING_APPROVAL";
+
 export type DeploymentPlanWarning = {
+  id: string;
   level: DeploymentWarningLevel;
+  category?: CheckFindingCategory;
+  source: DeploymentPlanWarningSource;
+  code: DeploymentPlanWarningCode;
   message: string;
+  relatedFindingId?: string;
   relatedResourceId?: string;
+  requiresAcknowledgement: boolean;
+  blocksApproval: boolean;
 };
 
 export type DeploymentPlanSummary = {
@@ -399,6 +422,16 @@ export type DeploymentPlanSummary = {
   replaceCount: number;
   blocked: boolean;
   warnings: DeploymentPlanWarning[];
+};
+
+export type ApproveDeploymentPlanRequest = {
+  acknowledgedWarningIds: string[];
+};
+
+export type DeploymentSafetyGateResult = {
+  summary: DeploymentPlanSummary;
+  block: DeploymentBlock;
+  requiredAcknowledgementWarningIds: string[];
 };
 
 export type DeploymentStage = "init" | "validate" | "plan" | "apply" | "destroy";
