@@ -173,3 +173,31 @@
   - The broad `pnpm build` temporarily touched `apps/web/next-env.d.ts`; the generated content change was restored and the final dirty list is scoped to #128 files.
 - Next best action:
   - Parent agent should review the focused diff and open the PR. Worker 1-1 should not expand into issue 1-2 or 1-3 from this branch.
+
+### 2026-07-04 - Runtime Cache Redis adapter slice
+
+- Goal: SketchCatch issue #132 범위에서 #131 RuntimeCache abstraction 위에 Redis adapter를 붙이고, `REDIS_URL`이 없거나 test 환경이면 in-memory fallback을 유지한다.
+- Completed:
+  - `apps/api`에 `redis` client dependency를 추가하고 `pnpm-lock.yaml`에 해당 dependency graph를 반영했다.
+  - `redis-runtime-cache.ts`에 lazy Redis connection, millisecond TTL `PX` set, encoded key prefix, memory fallback, degraded callback 처리를 구현했다.
+  - `runtime-cache-factory.ts`에서 `REDIS_URL`/`NODE_ENV` 기반 adapter 선택 정책을 추가했다.
+  - `config/env.ts`, `.env.example`, `docs/data-models.md`, `docs/deployment.md`에 Runtime Cache Redis 설정과 fallback 정책을 반영했다.
+  - `docs/sw/007_레디스런타임캐시어댑터가이드_sw.md` 학습 문서를 추가하고 `docs/sw/README.md`에 연결했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/runtime-cache/in-memory-runtime-cache.test.ts src/runtime-cache/redis-runtime-cache.test.ts src/runtime-cache/runtime-cache-factory.test.ts` - passed
+  - `pnpm --filter @sketchcatch/api lint` - passed
+  - `pnpm --filter @sketchcatch/api typecheck` - passed
+  - `pnpm lint` - passed
+  - `pnpm typecheck` - passed
+  - `pnpm build` - passed
+  - `$env:S3_BUCKET_NAME='sketchcatch-test-bucket'; pnpm --filter @sketchcatch/api test` - passed
+  - `git diff --check` - passed
+- Evidence recorded:
+  - Tests cover Redis JSON/TTL write, key escaping, Redis connect failure fallback, Redis command failure fallback, missing `REDIS_URL` fallback, and `NODE_ENV=test` fallback.
+  - No real Redis server, cloud mutation, Terraform apply/destroy, Git/CI/CD handoff execution, or secret access was performed.
+- Known risks:
+  - The Redis adapter currently provides in-process fallback for degraded Redis operations; fallback state is not durable across API process restart.
+  - Full API tests need a non-secret `S3_BUCKET_NAME` value in this environment because unrelated S3-backed tests construct plan artifact storage.
+- Next best action:
+  - Review the focused #132 diff, run final harness, commit, push, and open a PR targeting `dev`.

@@ -105,3 +105,32 @@ pnpm build
 
 - 이 worker branch를 #128 Worker 1-2 또는 1-3 범위로 확장하지 않는다. Parent agent가 이 focused diff를 review하고 PR을 연다.
 - 실제 AWS apply/destroy, cloud mutation, Git/CI/CD handoff, secret access는 수행하지 않았다.
+
+## 2026-07-04 - Issue #132 Redis Runtime Cache adapter handoff
+
+### 현재 검증된 것
+
+- #131의 `RuntimeCache` abstraction 위에 Redis adapter slice를 추가했다.
+- `REDIS_URL`이 없거나 `NODE_ENV=test`이면 Redis client를 만들지 않고 in-memory Runtime Cache를 사용한다.
+- Redis adapter는 lazy connection을 사용하고, `set`은 Redis `PX` TTL과 local fallback을 함께 기록한다.
+- Redis connect 실패나 command 실패는 API 요청을 깨지 않고 `onDegraded` callback 후 local fallback으로 돌아간다.
+- `redis` dependency 추가 때문에 `apps/api/package.json`과 `pnpm-lock.yaml`이 변경되었다.
+- `.env.example`, `docs/data-models.md`, `docs/deployment.md`, `docs/sw/007_레디스런타임캐시어댑터가이드_sw.md`, `docs/sw/README.md`에 설정/설계/학습 문서를 반영했다.
+
+### 실행한 검증
+
+- `pnpm harness:check` - passed before edits
+- `pnpm --filter @sketchcatch/api exec tsx --test src/runtime-cache/in-memory-runtime-cache.test.ts src/runtime-cache/redis-runtime-cache.test.ts src/runtime-cache/runtime-cache-factory.test.ts` - passed
+- `pnpm --filter @sketchcatch/api lint` - passed
+- `pnpm --filter @sketchcatch/api typecheck` - passed
+- `pnpm lint` - passed
+- `pnpm typecheck` - passed
+- `pnpm build` - passed
+- `$env:S3_BUCKET_NAME='sketchcatch-test-bucket'; pnpm --filter @sketchcatch/api test` - passed
+- `git diff --check` - passed
+
+### 남은 행동
+
+- final `pnpm harness:check`를 다시 실행한다.
+- diff 자체 리뷰 후 #132 범위만 commit/push/PR 생성한다.
+- 다른 이슈(#129~#136)는 이 branch에서 건드리지 않는다.
