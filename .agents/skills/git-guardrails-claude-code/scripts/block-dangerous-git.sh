@@ -1,6 +1,11 @@
 #!/bin/bash
 
 INPUT=$(cat)
+if ! command -v jq >/dev/null 2>&1; then
+  echo "ERROR: 'jq' command is required but not installed. Cannot verify git guardrails." >&2
+  exit 2
+fi
+
 COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command')
 
 DANGEROUS_PATTERNS=(

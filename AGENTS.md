@@ -31,6 +31,17 @@ Before making changes, always read the nearest `AGENTS.md` and this root file. R
 - Read `docs/development.md` when working with Git flow, code conventions, team AI collaboration, PR checks, or required checks.
 - Read `docs/deployment.md` when touching operational deployment, Terraform Plan/Apply/Destroy, AWS credentials, RDS, S3, logs, outputs, or cleanup.
 
+## Harness Operating Loop
+
+1. For every non-trivial work session, run `pnpm harness:check` before editing files. If `pnpm` is unavailable, run `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/init-harness.ps1` instead. If the harness check fails, fix or report that baseline before starting feature work.
+2. After the harness check, read `agent-progress.md` and `feature_list.json` after the required `AGENTS.md` files. If the task continues prior work or leaves any risk unfinished, also read `session-handoff.md`.
+3. Use `scripts/init-harness.ps1` as the standard startup helper when you need the repo startup path. Run it without flags for a lightweight baseline, with `-Verify` for lint/typecheck, and with `-Full` before finishing substantial code or infrastructure changes.
+4. Keep `feature_list.json` as the machine-readable agent harness tracker. Product scope still belongs in `docs/product.md`; shared contracts still belong in `docs/data-models.md`.
+5. Work on at most one active feature/workstream at a time. Do not leave more than one `in_progress` item in `feature_list.json`.
+6. Do not mark a feature `passing` unless `evidence.lastVerified` and concrete verification commands are recorded.
+7. Before finishing, run `pnpm harness:check` again and apply `clean-state-checklist.md`. Update `agent-progress.md` with completed work, verification, known risks, and next action. Update `session-handoff.md` when the next session needs a compressed continuation point.
+8. Use `evaluator-rubric.md` for adversarial self-review when a change affects safety, deployment, contracts, or multi-session continuity.
+
 ## Language Rules
 
 1. Write `AGENTS.md` files in English.
@@ -98,6 +109,7 @@ For model, API, or state changes, `docs/data-models.md` is the naming source of 
 Run these before finishing code or infrastructure changes:
 
 ```bash
+pnpm harness:check
 pnpm lint
 pnpm typecheck
 pnpm build

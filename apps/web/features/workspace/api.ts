@@ -54,7 +54,7 @@ import { apiFetch, buildApiUrl } from "../../lib/api-client";
 import { readStoredAuthSession } from "../../lib/auth-storage";
 
 const AI_API_BASE_URL = (
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:4000/api"
+  process.env.NEXT_PUBLIC_API_BASE_URL ?? "/api"
 ).replace(/\/+$/, "");
 
 type AiTerraformErrorExplanationRequest = {

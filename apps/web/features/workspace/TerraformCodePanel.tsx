@@ -129,6 +129,7 @@ export type TerraformCodePanelHandle = {
 
 export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
   readonly context: DiagramEditorPanelContext;
+  readonly externalDiscardRequestId: number;
   readonly externalSaveRequestId: number;
   readonly isVisible: boolean;
   readonly onDiagnosticsChange: (diagnostics: TerraformDiagnostic[]) => void;
@@ -138,6 +139,7 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
   readonly onOpenResourceSettings: () => void;
 }>(function TerraformCodePanel({
   context,
+  externalDiscardRequestId,
   externalSaveRequestId,
   isVisible,
   onDiagnosticsChange,
@@ -170,6 +172,7 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
   const codeRequestIdRef = useRef(0);
   const isPreparingTerraformArtifactRef = useRef(false);
   const latestDiagramFingerprintRef = useRef("");
+  const latestExternalDiscardRequestIdRef = useRef(externalDiscardRequestId);
   const latestExternalSaveRequestIdRef = useRef(externalSaveRequestId);
   const lineNumberRef = useRef<HTMLOListElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -520,6 +523,15 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
     latestExternalSaveRequestIdRef.current = externalSaveRequestId;
     void saveCodeToDiagram().then(onExternalSaveComplete);
   }, [externalSaveRequestId, onExternalSaveComplete, saveCodeToDiagram]);
+
+  useEffect(() => {
+    if (latestExternalDiscardRequestIdRef.current === externalDiscardRequestId) {
+      return;
+    }
+
+    latestExternalDiscardRequestIdRef.current = externalDiscardRequestId;
+    void refreshTerraformCode(currentDiagramFingerprint);
+  }, [currentDiagramFingerprint, externalDiscardRequestId, refreshTerraformCode]);
 
   useEffect(() => {
     if (context.nodes.length === 0 || hasLocalEdits) {
