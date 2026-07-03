@@ -1,10 +1,8 @@
 import type {
-  DiagramJson,
   InfrastructureGraph,
   InfrastructureGraphNode,
   TerraformBlockType
 } from "@sketchcatch/types";
-import { buildInfrastructureGraphFromDiagramJson } from "./infrastructure-graph.js";
 
 const DEFAULT_TERRAFORM_BLOCK_TYPE: TerraformBlockType = "resource";
 const INDENT_UNIT = "  ";
@@ -24,11 +22,6 @@ export class TerraformDiagramValidationError extends Error {
     super(`Invalid Terraform ${label}: ${value}`);
     this.name = "TerraformDiagramValidationError";
   }
-}
-
-// DiagramJson 전체를 Terraform 코드 문자열 하나로 변환하는 공개 순수 함수다.
-export function generateTerraformFromDiagramJson(diagramJson: DiagramJson): string {
-  return renderTerraformFromInfrastructureGraph(buildInfrastructureGraphFromDiagramJson(diagramJson));
 }
 
 export function renderTerraformFromInfrastructureGraph(graph: InfrastructureGraph): string {
@@ -153,7 +146,6 @@ function renderNestedBlockEntry(key: string, value: unknown, indentLevel: number
   return [renderAttribute(key, value, indentLevel)];
 }
 
-// DiagramJson의 top-level values key/value 하나를 Terraform attribute 한 줄로 바꾼다.
 function renderAttribute(key: string, value: unknown, indentLevel: number): string {
   const attributeName = toSnakeCase(key);
   assertTerraformIdentifier(attributeName, "attribute name");

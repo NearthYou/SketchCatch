@@ -12,10 +12,10 @@ import { requireActiveUserId } from "../auth/current-user.js";
 import { getDatabaseClient, type DatabaseClient } from "../db/client.js";
 import {
   TERRAFORM_IDENTIFIER_PATTERN,
-  TerraformDiagramValidationError,
-  generateTerraformFromDiagramJson
+  TerraformDiagramValidationError
 } from "../services/terraform/diagram-to-terraform.js";
 import { createTerraformDiagnostics } from "../services/terraform/terraform-diagnostics.js";
+import { generateTerraformFromDiagramJson } from "../services/terraform/terraform-preview.js";
 import { syncTerraformToDiagramJson } from "../services/terraform/terraform-to-diagram.js";
 
 const terraformValidateBodySchema = z.object({
