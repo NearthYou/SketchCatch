@@ -13,6 +13,23 @@
 - Highest priority unfinished harness feature: `HARNESS-007`
 - Current blocker: none
 
+### 2026-07-03 - 포함관계 area 화살표 숨김
+
+- Goal: area 포함관계가 박스 중첩으로 표현될 때 중복 화살표가 나와 보드가 지저분해지는 문제를 줄인다.
+- Completed:
+  - `contains`, `hosts` 같은 area parent edge는 렌더링용 `DiagramEdge`에서 제외하도록 수정했다.
+  - area node와 그 descendant 사이의 edge도 포함관계 표현으로 판단해 화살표를 숨기도록 보강했다.
+  - `reads/writes` 같은 실제 non-containment 관계 edge는 계속 화살표로 남도록 테스트를 추가했다.
+- Verification run:
+  - `.\apps\web\node_modules\.bin\tsx.CMD apps/web/features/workspace/workspace-ai-diagram-adapter.test.ts` - passed with 7 tests after sandbox spawn EPERM.
+  - `node scripts/check-harness.mjs` - passed.
+  - `.\node_modules\.bin\eslint.CMD apps/web/features/workspace/workspace-ai-diagram-adapter.ts apps/web/features/workspace/workspace-ai-diagram-adapter.test.ts` - passed.
+  - `.\node_modules\.bin\tsc.CMD --noEmit -p apps/web/tsconfig.json` - passed.
+  - `.\apps\web\node_modules\.bin\next.CMD build` - passed after sandbox `.next` unlink EPERM.
+- Known risks:
+  - `pnpm` is still unavailable in the current shell, so checks were run through local project binaries.
+  - Existing unrelated worktree change remains: `apps/web/next-env.d.ts`.
+
 ### 2026-07-03 - Security Group area 포함관계 수정
 
 - Goal: Security Group이 area로 표시될 때 AI 생성 다이어그램의 포함관계가 시각적으로 명확하게 보이도록 한다.

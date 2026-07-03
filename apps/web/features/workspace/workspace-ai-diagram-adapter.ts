@@ -76,7 +76,7 @@ export function convertArchitectureJsonToDiagramJson(architectureJson: Architect
 
   return {
     edges: architectureJson.edges
-      .filter((edge) => nodeIds.has(edge.sourceId) && nodeIds.has(edge.targetId))
+      .filter((edge) => shouldRenderArchitectureEdge(edge, nodeIds, nodeById))
       .map((edge) => convertArchitectureEdgeToDiagramEdge(edge, nodeById)),
     nodes,
     viewport: { ...DEFAULT_VIEWPORT }
@@ -217,6 +217,65 @@ function convertArchitectureEdgeToDiagramEdge(
     targetNodeId: edge.targetId,
     type: "smoothstep"
   };
+}
+
+function shouldRenderArchitectureEdge(
+  edge: ArchitectureJson["edges"][number],
+  architectureNodeIds: ReadonlySet<string>,
+  nodeById: ReadonlyMap<string, DiagramNode>
+): boolean {
+  if (!architectureNodeIds.has(edge.sourceId) || !architectureNodeIds.has(edge.targetId)) {
+    return false;
+  }
+
+  const sourceNode = nodeById.get(edge.sourceId);
+  const targetNode = nodeById.get(edge.targetId);
+
+  if (!sourceNode || !targetNode) {
+    return false;
+  }
+
+  return !isAreaContainmentRenderEdge(edge, sourceNode, targetNode, nodeById);
+}
+
+function isAreaContainmentRenderEdge(
+  edge: ArchitectureJson["edges"][number],
+  sourceNode: DiagramNode,
+  targetNode: DiagramNode,
+  nodeById: ReadonlyMap<string, DiagramNode>
+): boolean {
+  if (isAreaParentEdge(edge)) {
+    return true;
+  }
+
+  return (
+    (isAreaDiagramNode(sourceNode) && hasAreaAncestor(targetNode, sourceNode.id, nodeById)) ||
+    (isAreaDiagramNode(targetNode) && hasAreaAncestor(sourceNode, targetNode.id, nodeById))
+  );
+}
+
+function hasAreaAncestor(
+  node: DiagramNode,
+  ancestorAreaNodeId: string,
+  nodeById: ReadonlyMap<string, DiagramNode>
+): boolean {
+  let parentAreaNodeId = node.metadata?.parentAreaNodeId;
+  const visitedNodeIds = new Set<string>();
+
+  while (parentAreaNodeId) {
+    if (parentAreaNodeId === ancestorAreaNodeId) {
+      return true;
+    }
+
+    if (visitedNodeIds.has(parentAreaNodeId)) {
+      return false;
+    }
+
+    visitedNodeIds.add(parentAreaNodeId);
+    parentAreaNodeId = nodeById.get(parentAreaNodeId)?.metadata?.parentAreaNodeId;
+  }
+
+  return false;
 }
 
 function getDefaultEdgeHandles(

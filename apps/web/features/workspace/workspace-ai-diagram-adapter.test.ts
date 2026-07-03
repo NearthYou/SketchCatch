@@ -6,7 +6,7 @@ import {
   convertDiagramJsonToArchitectureJson
 } from "./workspace-ai-diagram-adapter";
 
-test("convertArchitectureJsonToDiagramJson creates board nodes and edges from an Architecture Draft", () => {
+test("convertArchitectureJsonToDiagramJson creates board nodes and hides containment arrows from an Architecture Draft", () => {
   const architectureJson: ArchitectureJson = {
     nodes: [
       {
@@ -104,14 +104,50 @@ test("convertArchitectureJsonToDiagramJson creates board nodes and edges from an
       }
     ]
   );
+  assert.deepEqual(diagramJson.edges, []);
+  assert.deepEqual(diagramJson.viewport, { x: 0, y: 0, zoom: 1 });
+});
+
+test("convertArchitectureJsonToDiagramJson keeps non-containment edges as arrows", () => {
+  const architectureJson: ArchitectureJson = {
+    nodes: [
+      {
+        id: "ec2-backend",
+        type: "EC2",
+        label: "Backend Server",
+        positionX: 160,
+        positionY: 220,
+        config: {}
+      },
+      {
+        id: "rds-primary",
+        type: "RDS",
+        label: "Database",
+        positionX: 420,
+        positionY: 220,
+        config: {}
+      }
+    ],
+    edges: [
+      {
+        id: "backend-to-database",
+        sourceId: "ec2-backend",
+        targetId: "rds-primary",
+        label: "reads/writes"
+      }
+    ]
+  };
+
+  const diagramJson = convertArchitectureJsonToDiagramJson(architectureJson);
+
   assert.deepEqual(diagramJson.edges, [
     {
-      id: "edge-vpc-ec2",
-      label: "contains",
+      id: "backend-to-database",
+      label: "reads/writes",
       sourceHandleId: "handle-right",
-      sourceNodeId: "vpc-main",
+      sourceNodeId: "ec2-backend",
       targetHandleId: "handle-left",
-      targetNodeId: "ec2-backend",
+      targetNodeId: "rds-primary",
       type: "smoothstep",
       style: {
         animated: false,
@@ -120,7 +156,6 @@ test("convertArchitectureJsonToDiagramJson creates board nodes and edges from an
       }
     }
   ]);
-  assert.deepEqual(diagramJson.viewport, { x: 0, y: 0, zoom: 1 });
 });
 
 test("convertArchitectureJsonToDiagramJson marks VPC and Subnet containment for board area nodes", () => {
@@ -165,6 +200,12 @@ test("convertArchitectureJsonToDiagramJson marks VPC and Subnet containment for 
         sourceId: "subnet-app",
         targetId: "ec2-api",
         label: "hosts"
+      },
+      {
+        id: "sg-to-ec2",
+        sourceId: "sg-app",
+        targetId: "ec2-api",
+        label: "allows traffic"
       }
     ]
   };
@@ -185,6 +226,7 @@ test("convertArchitectureJsonToDiagramJson marks VPC and Subnet containment for 
   assertContainsNode(nodeById.get("vpc-main"), nodeById.get("subnet-app"));
   assertContainsNode(nodeById.get("subnet-app"), nodeById.get("sg-app"));
   assertContainsNode(nodeById.get("sg-app"), nodeById.get("ec2-api"));
+  assert.deepEqual(diagramJson.edges, []);
 });
 
 test("convertArchitectureJsonToDiagramJson maps server and storage draft resources to Terraform nodes", () => {
