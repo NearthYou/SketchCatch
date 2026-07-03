@@ -13,6 +13,26 @@
 - Highest priority unfinished harness feature: `HARNESS-007`
 - Current blocker: none
 
+### 2026-07-04 - Architecture Draft 거절 메시지 표시 수정
+
+- Goal: 아키텍처 단서가 없는 자연어 입력을 거절할 때, Workspace AI 패널이 일반 오류 문구 대신 API의 구체적인 한국어 거절 메시지를 표시하게 한다.
+- Completed:
+  - Workspace AI 전용 public AI 요청 래퍼가 API 오류 응답을 일반 `Error`가 아니라 공용 `ApiClientError`로 던지도록 수정했다.
+  - 표준 `error`/`message` 응답만 사용자 메시지로 받아들이도록 타입 가드를 보강했다.
+  - `된장찌개 레시피 알려줘`처럼 비아키텍처 프롬프트가 거절될 때 `Architecture Draft 생성 중 오류가 발생했습니다.`로 덮이지 않는 회귀 테스트를 추가했다.
+- Verification run:
+  - `.\apps\web\node_modules\.bin\tsx.CMD apps/web/features/workspace/ai-workspace-api.test.ts` - passed with 5 tests after sandbox spawn EPERM.
+  - `.\node_modules\.bin\eslint.CMD apps\web\features\workspace\api.ts apps\web\features\workspace\ai-workspace-api.test.ts` - passed.
+  - `.\node_modules\.bin\tsc.CMD --noEmit -p apps\web\tsconfig.json` - passed.
+  - `node scripts/check-harness.mjs` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm harness:check` - passed after non-escalated cache-only `ENOTCACHED`.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm lint` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm typecheck` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm build` - passed.
+  - `git diff --check` - passed with line-ending warnings only.
+- Known risks:
+  - `next build` temporarily changed `apps/web/next-env.d.ts`; the generated route type path was restored and left out of the final diff.
+
 ### 2026-07-03 - 애매한 자연어 요구사항 초안 생성 차단
 
 - Goal: 자연어 요구사항에서 명확한 아키텍처 단서를 찾지 못하면 기본 API 서버 초안으로 fallback하지 않고 초안 생성을 막는다.
