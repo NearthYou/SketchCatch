@@ -2,15 +2,16 @@ import { z } from "zod";
 import { requireActiveUserId } from "../auth/current-user.js";
 import {
   getRuntimeEnv,
-  requireCloudFormationTemplateTokenSecret,
   requireSketchCatchAwsCallerPrincipalArn
 } from "../config/env.js";
 import { getDatabaseClient, type DatabaseClient } from "../db/client.js";
+import { publishAwsConnectionCloudFormationTemplateToS3 } from "../aws-connections/aws-connection-template-storage.js";
 import {
   AwsConnectionDeleteConflictError,
   AwsConnectionCloudFormationTemplateError,
   AwsConnectionNotFoundError,
   AwsConnectionVerificationError,
+  type AwsConnectionCloudFormationTemplatePublisher,
   createAwsConnection,
   createPostgresAwsConnectionRepository,
   deleteAwsConnection,
@@ -19,7 +20,6 @@ import {
   listAwsConnections,
   pruneStaleAwsConnections as defaultPruneStaleAwsConnections,
   recommendedAwsConnectionRoleName,
-  renderAwsConnectionCloudFormationTemplateFromToken,
   testStoredAwsConnection,
   verifyAwsConnection,
   verifyAwsConnectionCreatedRole,
@@ -55,10 +55,6 @@ const awsConnectionParamsSchema = z.object({
 
 const cloudFormationTemplateParamsSchema = awsConnectionParamsSchema;
 
-const publicCloudFormationTemplateQuerySchema = z.object({
-  token: z.string().trim().min(1).max(4096)
-});
-
 const createAwsConnectionBodySchema = z.object({
   region: awsRegionSchema
 });
@@ -82,9 +78,8 @@ export type AwsConnectionRouteOptions = {
   createAwsConnectionRepository?: (db: DatabaseClient["db"]) => AwsConnectionRepository;
   awsConnectionConfig?: {
     callerPrincipalArn: string;
-    publicBaseUrl?: string | undefined;
   };
-  cloudFormationTemplateTokenSecret?: string;
+  cloudFormationTemplatePublisher?: AwsConnectionCloudFormationTemplatePublisher | null;
   awsConnectionTester?: AwsConnectionTester;
   awsConnectionRateLimiter?: RateLimiter;
   generateAwsConnectionId?: () => string;
@@ -357,10 +352,20 @@ export async function registerAwsConnectionRoutes(
       try {
         const templateOptions: {
           now?: () => Date;
+          cloudFormationTemplatePublisher?: AwsConnectionCloudFormationTemplatePublisher;
         } = {};
 
         if (options?.now) {
           templateOptions.now = options.now;
+        }
+
+        const cloudFormationTemplatePublisher =
+          options?.cloudFormationTemplatePublisher !== undefined
+            ? options.cloudFormationTemplatePublisher
+            : createS3CloudFormationTemplatePublisher(getRuntimeEnv().s3BucketName);
+
+        if (cloudFormationTemplatePublisher) {
+          templateOptions.cloudFormationTemplatePublisher = cloudFormationTemplatePublisher;
         }
 
         const result = await getAwsConnectionCloudFormationTemplate(
@@ -369,13 +374,7 @@ export async function registerAwsConnectionRoutes(
             accessContext: createUserProjectAccessContext(currentUserId),
             callerPrincipalArn:
               options?.awsConnectionConfig?.callerPrincipalArn ??
-              requireSketchCatchAwsCallerPrincipalArn(),
-            publicBaseUrl:
-              options?.awsConnectionConfig?.publicBaseUrl ??
-              getRuntimeEnv().sketchcatchPublicBaseUrl,
-            tokenSecret:
-              options?.cloudFormationTemplateTokenSecret ??
-              requireCloudFormationTemplateTokenSecret()
+              requireSketchCatchAwsCallerPrincipalArn()
           },
           repository,
           templateOptions
@@ -388,26 +387,22 @@ export async function registerAwsConnectionRoutes(
     }
   );
 
-  app.get("/aws/connections/cloudformation-template", async (request, reply) => {
-    const query = publicCloudFormationTemplateQuerySchema.parse(request.query);
-    const client = getAwsConnectionDatabaseClient();
-    const repository =
-      options?.createAwsConnectionRepository?.(client.db) ??
-      createPostgresAwsConnectionRepository(client.db);
+}
 
-    try {
-      const templateBody = await renderAwsConnectionCloudFormationTemplateFromToken(
-        query.token,
-        options?.cloudFormationTemplateTokenSecret ?? requireCloudFormationTemplateTokenSecret(),
-        repository,
-        options?.now?.()
-      );
+function createS3CloudFormationTemplatePublisher(
+  bucketName: string | undefined
+): AwsConnectionCloudFormationTemplatePublisher | undefined {
+  if (!bucketName) {
+    return undefined;
+  }
 
-      return reply.status(200).type("application/x-yaml").send(templateBody);
-    } catch (error) {
-      return handleAwsConnectionError(error, reply);
-    }
-  });
+  return async ({ connectionId, templateBody, expiresInSeconds }) =>
+    publishAwsConnectionCloudFormationTemplateToS3({
+      bucketName,
+      connectionId,
+      templateBody,
+      expiresInSeconds
+    });
 }
 
 function handleAwsConnectionError(error: unknown, reply: FastifyReply) {

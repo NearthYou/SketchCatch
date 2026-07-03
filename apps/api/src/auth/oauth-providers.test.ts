@@ -109,7 +109,7 @@ test("requireOAuthProviderConfig reports missing GitHub env values", () => {
           githubOauthClientSecret: ""
         })
       ),
-    /GITHUB_OAUTH_CLIENT_SECRET is required/
+    /GIT_OAUTH_CLIENT_SECRET is required/
   );
 });
 
