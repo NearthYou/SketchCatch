@@ -13,22 +13,25 @@
 - Highest priority unfinished harness feature: `HARNESS-007`
 - Current blocker: none
 
-### 2026-07-05 - 생성 다이어그램 운영형 기본 구조 보강
-- Goal: 자연어로 생성되는 AWS Practice Architecture가 운영형 피드백을 반영해 진입 경로, private app, S3 접근, DB, HA, IAM, 모니터링을 더 명확히 보여주게 한다.
+### 2026-07-05 - 지원 타입 기반 생성 다이어그램 구조 보정
+- Goal: 자연어 생성 다이어그램이 현재 지원되는 ResourceType만 쓰면서 운영형 피드백을 가능한 범위에서 반영하게 한다.
 - Completed:
-  - Route 53, WAF, ALB/Listener, VPC Endpoint, DB Subnet Group, Secrets Manager ResourceType과 카탈로그 매핑을 추가했다.
-  - EC2 초안은 public subnet 직접 배치 대신 ALB 뒤 private app subnet 2개 AZ에 배치되게 했다.
-  - S3 접근은 서버에서 VPC Endpoint와 IAM policy를 거쳐 bucket으로 가는 흐름으로 바꿨다.
-  - RDS는 DB subnet group, 2개 private DB subnet, backup/encryption, Secrets Manager, CloudWatch alarm 연결을 포함한다.
-  - 기존 exact test를 운영형 핵심 리소스/config/edge 검증으로 갱신했다.
+  - `최소`, `간단`, `작게` 같은 자연어 단서를 낮은 예산/작은 트래픽 의도로 해석하게 했다.
+  - 작은/basic API 서버 요청은 CloudFront/S3/IAM/CloudWatch를 붙이지 않고 VPC, public subnet, route, security group, AMI, EC2만 생성하게 했다.
+  - 최소 API 서버에서도 EC2는 단독 노드가 아니라 VPC/Subnet/Security Group 컨테이너 안에 배치되도록 했다.
+  - Route53, WAF, ALB/Listener, VPC Endpoint, DB Subnet Group, Secrets Manager 같은 미지원 타입을 생성 초안에서 제거했다.
+  - CloudFront public entry, 2-AZ public/private subnet, private EC2 배치, RDS multi-AZ subnet config를 지원 타입만으로 표현했다.
+  - S3는 VPC 내부 리소스로 그리지 않고 앱 서버 사용 edge와 IAM policy 권한 edge로 표현했다.
+  - IAM 관계는 Instance Profile -> Role -> Policy 및 Policy -> Logs/S3/KMS edge로 읽히게 정리했다.
+  - API exact test를 지원 타입 기준의 핵심 리소스/config/edge 검증으로 갱신했다.
 - Verification run:
-  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api exec tsx --test src/routes/ai.test.ts` - passed, 34 tests
-  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web exec tsx --test features/resource-settings/catalog.test.ts features/workspace/workspace-ai-diagram-adapter.test.ts` - passed, 23 tests
-  - `npm exec --package=pnpm@11.8.0 -- pnpm typecheck` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api exec tsx --test src/routes/ai.test.ts` - passed, 35 tests
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api typecheck` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-ai-diagram-adapter.test.ts` - passed, 17 tests
   - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api lint` - passed
-  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web lint` - passed
 - Known risks:
-  - 전체 `pnpm build`는 실행하지 않았다. 변경 검증은 관련 API/Web 테스트, 전체 typecheck, API/Web lint 중심으로 수행했다.
+  - Route53/WAF/ALB/DB Subnet Group/Secrets Manager/VPC Endpoint는 나중에 ResourceType이 추가되기 전까지 생성하지 않는다.
+  - 전체 `pnpm build`는 실행하지 않았다. 변경 검증은 관련 API/Web 테스트, API typecheck, API lint 중심으로 수행했다.
 
 ### 2026-07-05 - AI 패치 질문과 area 레이어 보정
 - Goal: 기존 다이어그램 수정 중 내부 리소스 목록을 그대로 묻지 않고 서비스/용도를 물은 뒤, 새 리소스 연결과 area/resource 레이어를 자연스럽게 처리한다.

@@ -432,7 +432,7 @@ function createOperatingProfile(
 ): ArchitectureDraftOperatingProfile {
   const normalizedPrompt = normalizePrompt(prompt);
   const factSet = new Set(requirementFacts);
-  const lowBudgetKeywords = ["저렴", "낮은 예산", "비용 낮", "low budget", "연습용", "소수", "처음엔"];
+  const lowBudgetKeywords = ["저렴", "낮은 예산", "비용 낮", "low budget", "연습용", "소수", "처음엔", "최소", "간단", "작게"];
   const growthKeywords = ["방문자 증가", "홍보", "공개 서비스", "트래픽", "growth", "여러 사람", "많은 사용자"];
   const highSecurityKeywords = ["보호", "보안", "개인정보", "로그인", "회원", "계정", "private", "암호화"];
 
