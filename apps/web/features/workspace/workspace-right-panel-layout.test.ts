@@ -113,15 +113,14 @@ test("workspace AI opens from a floating chat dock instead of the right panel", 
   assert.match(stylesSource, /\.aiChatDock\s*\{/);
 });
 
-test("workspace AI chat uses full-width composer with compact prompt guide", () => {
+test("workspace AI chat keeps the floating dock width with compact prompt guide", () => {
   const dockRule = getCssRule(stylesSource, "aiChatDock");
   const composerRule = getCssRule(stylesSource, "aiChatComposer");
   const promptGuideRule = getCssRule(stylesSource, "aiChatPromptGuide");
 
   assert.match(aiChatDockSource, /styles\.aiChatPromptGuide/);
-  assert.match(dockRule, /left:\s*24px/);
   assert.match(dockRule, /right:\s*24px/);
-  assert.match(dockRule, /width:\s*auto/);
+  assert.match(dockRule, /width:\s*min\(860px,\s*calc\(100vw - 48px\)\)/);
   assert.match(composerRule, /grid-template-columns:\s*minmax\(0,\s*1fr\)\s*auto/);
   assert.match(promptGuideRule, /grid-column:\s*1\s*\/\s*-1/);
 });

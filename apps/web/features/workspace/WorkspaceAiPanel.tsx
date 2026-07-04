@@ -156,7 +156,6 @@ export function WorkspaceAiPanel({ context }: WorkspaceAiPanelProps) {
         <div className={styles.aiPromptGuide} aria-label="프롬프트 작성 가이드">
           <div className={styles.aiPromptGuideHeader}>
             <strong>그냥 이렇게 시작해도 돼요</strong>
-            <span>정보가 부족하면 질문부터 할게요.</span>
           </div>
           <div className={styles.aiPromptChips}>
             {promptGuideExamples.map((example) => (
@@ -170,7 +169,6 @@ export function WorkspaceAiPanel({ context }: WorkspaceAiPanelProps) {
               </button>
             ))}
           </div>
-          <p className={styles.aiPromptTinyHint}>더 정확히: 공개 여부 · 파일/데이터 · 비용 영향 · 보호 범위</p>
         </div>
         {draft === null ? (
           <button

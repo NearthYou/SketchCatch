@@ -13,6 +13,26 @@
 - Highest priority unfinished harness feature: `HARNESS-007`
 - Current blocker: none
 
+### 2026-07-04 - AI 채팅 입력 보조 문구 제거
+
+- Goal: AI 채팅 입력 영역에서 `정보가 부족하면 질문부터 할게요`, `더 정확히: 공개 여부...`, `메시지` 라벨, 입력칸 placeholder를 제거하고, 채팅 패널 폭은 이전 floating dock 크기로 되돌린다.
+- Completed:
+  - `WorkspaceAiChatDock`에서 prompt guide 보조 문구, 입력 라벨, placeholder를 제거하고 textarea에는 화면에 보이지 않는 `aria-label`만 남겼다.
+  - 기존 `WorkspaceAiPanel` prompt guide에서도 같은 보조 문구와 tiny hint를 제거했다.
+  - `aiChatDock` 폭을 다시 `min(860px, ...)` 제한으로 복구해 하단 패널이 과하게 길어지지 않게 했다.
+  - 제거된 tiny hint CSS와 dock guide 3열 레이아웃을 정리했다.
+  - source-based UI 테스트가 제거된 문구와 floating dock 폭을 회귀 검증하게 했다.
+- Verification run:
+  - `.\apps\web\node_modules\.bin\tsx.CMD --test apps\web\features\workspace\workspace-ai-guardrail-warning.test.ts apps\web\features\workspace\workspace-right-panel-layout.test.ts` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm lint` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm typecheck` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm build` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm harness:check` - passed.
+  - `git diff --check` - passed with line-ending warnings only.
+- Known risks:
+  - `next build` temporarily changed `apps/web/next-env.d.ts`; the route type import was restored before commit.
+  - Visual browser screenshot was not captured in this turn.
+
 ### 2026-07-04 - AI 채팅 Dock 입력 영역 레이아웃 보정
 
 - Goal: 하단 AI 채팅창이 가로 공간을 꽉 쓰고, 안내 문구는 위쪽 compact 영역으로 빠지며, 남는 공간은 메시지/채팅 영역이 차지하게 한다.

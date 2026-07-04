@@ -43,7 +43,6 @@ import {
   type ArchitectureDraftFollowUpSession
 } from "./workspace-ai-draft-follow-up";
 import {
-  DEFAULT_REQUIREMENT_PROMPT,
   promptGuideExamples
 } from "./workspace-ai-panel-options";
 import styles from "./workspace.module.css";
@@ -599,7 +598,6 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
         >
           <div className={styles.aiPromptGuideHeader}>
             <strong>그냥 이렇게 시작해도 돼요</strong>
-            <span>정보가 부족하면 질문부터 할게요.</span>
           </div>
           <div className={styles.aiPromptChips}>
             {promptGuideExamples.map((example) => (
@@ -613,14 +611,12 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
               </button>
             ))}
           </div>
-          <p className={styles.aiPromptTinyHint}>더 정확히: 공개 여부 · 파일/데이터 · 비용 영향 · 보호 범위</p>
         </div>
         <label className={styles.aiChatInput}>
-          <span>메시지</span>
           <textarea
+            aria-label="AI 채팅 입력"
             onChange={(event) => setComposerValue(event.target.value)}
             onKeyDown={handleComposerKeyDown}
-            placeholder={DEFAULT_REQUIREMENT_PROMPT}
             rows={2}
             value={composerValue}
           />

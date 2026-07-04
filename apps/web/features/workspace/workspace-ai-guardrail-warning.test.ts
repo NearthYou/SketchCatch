@@ -58,7 +58,10 @@ test("workspace AI chat does not expose auxiliary draft selectors", () => {
 test("workspace AI prompt guide uses beginner-friendly examples", () => {
   assert.match(workspaceAiChatDockSource, /프롬프트 작성 가이드/);
   assert.match(workspaceAiChatDockSource, /그냥 이렇게 시작해도 돼요/);
-  assert.match(workspaceAiChatDockSource, /정보가 부족하면 질문부터 할게요/);
+  assert.doesNotMatch(workspaceAiChatDockSource, /정보가 부족하면 질문부터 할게요/);
+  assert.doesNotMatch(workspaceAiChatDockSource, /더 정확히/);
+  assert.doesNotMatch(workspaceAiChatDockSource, /DEFAULT_REQUIREMENT_PROMPT/);
+  assert.doesNotMatch(workspaceAiChatDockSource, /<span>메시지<\/span>/);
   assert.match(workspaceAiPanelOptionsSource, /웹사이트 하나 배포하고 싶어/);
   assert.match(workspaceAiPanelOptionsSource, /파일 업로드 페이지가 필요해/);
   assert.match(workspaceAiPanelOptionsSource, /로그인 있는 작은 웹서비스가 필요해/);
