@@ -13,6 +13,31 @@
 - Highest priority unfinished harness feature: `HARNESS-007`
 - Current blocker: none
 
+### 2026-07-04 - 보조 선택 기반 웹사이트 초안 보정
+
+- Goal: `웹사이트 하나 배포하고 싶어`처럼 자연어는 부족하지만 보조 선택에서 `api_server` 또는 `backend_with_db`를 명시한 경우, 보조 선택을 실제 Architecture Draft 힌트로 사용하게 한다.
+- Completed:
+  - API 시나리오 결정에서 generic 웹사이트 요청은 `auto`일 때만 추가 확인이 필요하도록 유지하고, 명시 보조 선택이 있으면 해당 시나리오로 초안을 생성하도록 고쳤다.
+  - `api_server` 선택과 `backend_with_db` 선택이 서로 다른 `ArchitectureJson`을 만들고, DB 선택 시 RDS/KMS가 포함되는 회귀 테스트를 추가했다.
+  - Workspace AI 채팅 dock은 보조 선택이 `auto`가 아닐 때 generic 웹사이트 문장을 질문 흐름으로 가로채지 않고 API 요청으로 보내도록 고쳤다.
+  - `docs/data-models.md`에 명시 보조 선택은 부족한 자연어 단서를 채우는 힌트로 사용한다는 계약을 보강했다.
+- Verification run:
+  - `.\apps\api\node_modules\.bin\tsx.CMD apps/api/src/routes/ai.test.ts` - failed before fix with the new helper-choice regression test returning 400 instead of 200, then passed with 28 tests after the fix.
+  - `.\apps\web\node_modules\.bin\tsx.CMD apps/web/features/workspace/workspace-ai-clarification.test.ts` - failed before fix because explicit helper choices still triggered clarification, then passed with 3 tests after the fix.
+  - `.\node_modules\.bin\eslint.CMD apps/api/src/services/aiArchitectureScenarioResolution.ts apps/api/src/routes/ai.test.ts apps/web/features/workspace/WorkspaceAiChatDock.tsx apps/web/features/workspace/workspace-ai-clarification.ts apps/web/features/workspace/workspace-ai-clarification.test.ts` - passed.
+  - `.\node_modules\.bin\tsc.CMD --noEmit -p apps/api/tsconfig.json` - passed.
+  - `.\node_modules\.bin\tsc.CMD --noEmit -p apps/web/tsconfig.json` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm harness:check` - passed after non-escalated cache-only `ENOTCACHED`.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm lint` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm typecheck` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm test` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm build` - passed.
+  - `git diff --check` - passed with line-ending warnings only.
+- Known risks:
+  - 보조 선택은 아키텍처와 관련 있는 generic 웹사이트 요청에서만 부족한 단서로 사용한다. `연습용 구조를 만들어줘`처럼 아키텍처 대상 자체가 불명확한 요청은 여전히 질문/거절 흐름을 탄다.
+  - `next build`가 `apps/web/next-env.d.ts`를 일시 변경했지만 원래 dev route reference로 복구했다.
+  - Existing unrelated worktree change remains in `docs/ck/ai/002_아키텍처다이어그램검수가이드.md` and is intentionally excluded from this commit.
+
 ### 2026-07-04 - 웹사이트 요구사항 질문 흐름 추가
 
 - Goal: `웹사이트 하나 배포하고 싶어`처럼 아키텍처 단서가 부족한 입력을 정적 사이트로 바로 생성하지 않고, 초보자도 답할 수 있는 질문 흐름으로 필요한 조건을 먼저 모은다.

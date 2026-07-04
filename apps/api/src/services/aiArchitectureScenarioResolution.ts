@@ -209,7 +209,15 @@ export function resolveScenario(request: CreateArchitectureDraftRequest): Scenar
   const substituteScenario = selectSubstituteScenario(unsupportedRequirementMatches);
   const unsupportedWarnings = createUnsupportedRequirementWarnings(unsupportedRequirementMatches);
 
-  if (needsGenericWebsiteClarification(request.prompt, scenarioScores)) {
+  if (isGenericWebsitePromptWithoutConcreteArchitecture(request.prompt, scenarioScores)) {
+    if (request.scenarioHint !== "auto") {
+      return {
+        selectedScenario: request.scenarioHint,
+        scenarioScores,
+        guardrailWarnings: unsupportedWarnings
+      };
+    }
+
     throw new AmbiguousArchitecturePromptError(
       "웹사이트라고만 하면 화면만 보여주는 사이트인지, 방문자가 파일을 올리는 서비스인지, 로그인이나 데이터 저장이 필요한 서비스인지 먼저 확인해야 합니다."
     );
@@ -296,7 +304,7 @@ function hasPromptScenarioSignal(scenarioScores: readonly ArchitectureScenarioSc
   return scenarioScores.some((scenarioScore) => scenarioScore.score > 0);
 }
 
-function needsGenericWebsiteClarification(
+function isGenericWebsitePromptWithoutConcreteArchitecture(
   prompt: string,
   scenarioScores: readonly ArchitectureScenarioScore[]
 ): boolean {

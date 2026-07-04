@@ -154,7 +154,14 @@ const CLARIFICATION_QUESTIONS: readonly ArchitectureClarificationQuestion[] = [
   }
 ];
 
-export function needsArchitectureClarification(prompt: string): boolean {
+export function needsArchitectureClarification(
+  prompt: string,
+  scenarioHint: ArchitectureDraftScenarioHint = "auto"
+): boolean {
+  if (scenarioHint !== "auto") {
+    return false;
+  }
+
   const normalizedPrompt = normalizeText(prompt);
   const hasGenericWebsiteKeyword = GENERIC_WEBSITE_KEYWORDS.some((keyword) =>
     normalizedPrompt.includes(keyword)

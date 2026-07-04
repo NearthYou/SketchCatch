@@ -164,7 +164,7 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
       return;
     }
 
-    if (needsArchitectureClarification(trimmedPrompt)) {
+    if (needsArchitectureClarification(trimmedPrompt, scenarioHint)) {
       const session = createArchitectureClarificationSession(trimmedPrompt);
 
       setClarificationSession(session);

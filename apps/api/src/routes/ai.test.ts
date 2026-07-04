@@ -508,6 +508,53 @@ test("POST /api/ai/architecture-draft rejects generic website prompts until clar
   await app.close();
 });
 
+test("POST /api/ai/architecture-draft uses helper choice when a generic website prompt is architecture-related", async () => {
+  const app = buildApp();
+  const prompt = "웹사이트 하나 배포하고 싶어";
+
+  const apiServerResponse = await app.inject({
+    method: "POST",
+    url: "/api/ai/architecture-draft",
+    payload: {
+      prompt,
+      scenarioHint: "api_server",
+      budgetLevel: "normal",
+      trafficLevel: "normal",
+      securityPriority: "basic"
+    }
+  });
+
+  assert.equal(apiServerResponse.statusCode, 200);
+
+  const apiServerBody = architectureDraftResponseSchema.parse(apiServerResponse.json());
+
+  assert.equal(apiServerBody.metadata.selectedScenario, "api_server");
+  assertDraftHasNodeTypes(apiServerBody, ["EC2", "AMI", "SECURITY_GROUP"]);
+  assert.equal(apiServerBody.architectureJson.nodes.some((node) => node.type === "RDS"), false);
+
+  const backendResponse = await app.inject({
+    method: "POST",
+    url: "/api/ai/architecture-draft",
+    payload: {
+      prompt,
+      scenarioHint: "backend_with_db",
+      budgetLevel: "normal",
+      trafficLevel: "normal",
+      securityPriority: "basic"
+    }
+  });
+
+  assert.equal(backendResponse.statusCode, 200);
+
+  const backendBody = architectureDraftResponseSchema.parse(backendResponse.json());
+
+  assert.equal(backendBody.metadata.selectedScenario, "backend_with_db");
+  assertDraftHasNodeTypes(backendBody, ["EC2", "RDS", "KMS_KEY"]);
+  assert.notDeepEqual(apiServerBody.architectureJson, backendBody.architectureJson);
+
+  await app.close();
+});
+
 test("POST /api/ai/architecture-draft rejects ambiguous prompts instead of creating a fallback draft", async () => {
   const app = buildApp();
 

@@ -13,6 +13,8 @@ import {
 
 test("generic website prompts start a beginner-friendly clarification flow", () => {
   assert.equal(needsArchitectureClarification("웹사이트 하나 배포하고 싶어"), true);
+  assert.equal(needsArchitectureClarification("웹사이트 하나 배포하고 싶어", "backend_with_db"), false);
+  assert.equal(needsArchitectureClarification("웹사이트 하나 배포하고 싶어", "api_server"), false);
   assert.equal(needsArchitectureClarification("소개용 랜딩 웹사이트를 배포하고 싶어"), false);
   assert.equal(needsArchitectureClarification("파일 업로드 페이지가 필요해"), false);
 
