@@ -594,6 +594,104 @@ test("runDeploymentApply rejects unsafe Terraform before preparing AWS credentia
   assert.match(repository.failedInput?.errorSummary ?? "", /data source "aws_caller_identity" is not allowed/);
 });
 
+test("runDeploymentApply rejects approval snapshot drift before credentials or Terraform", async () => {
+  const cases: Array<{
+    name: string;
+    expectedError: RegExp;
+    mutateRepository?: (repository: FakeDeploymentRepository) => void;
+    readTerraformArtifactFile?: () => Promise<Buffer | Uint8Array | string>;
+  }> = [
+    {
+      name: "artifact hash drift",
+      expectedError: /Terraform artifact content changed after approval/,
+      readTerraformArtifactFile: async () => `${terraformArtifactContent}# drift\n`
+    },
+    {
+      name: "tfplan hash drift",
+      expectedError: /Terraform plan changed before apply/,
+      mutateRepository: (repository) => {
+        repository.deployment = createApprovedDeploymentRecord({
+          approvedTfplanHash: "b".repeat(64)
+        });
+      }
+    },
+    {
+      name: "AWS account drift",
+      expectedError: /AWS account changed before apply/,
+      mutateRepository: (repository) => {
+        repository.awsConnection = createVerifiedAwsConnection({ accountId: "999999999999" });
+      }
+    },
+    {
+      name: "AWS region drift",
+      expectedError: /AWS region changed before apply/,
+      mutateRepository: (repository) => {
+        repository.awsConnection = createVerifiedAwsConnection({ region: "us-east-1" });
+      }
+    }
+  ];
+
+  for (const testCase of cases) {
+    const repository = new FakeDeploymentRepository();
+    let cleanupCalled = false;
+    let credentialsPrepared = false;
+    let terraformRan = false;
+    let planWritten = false;
+
+    testCase.mutateRepository?.(repository);
+
+    await assert.rejects(
+      () =>
+        runDeploymentApply(
+          {
+            deploymentId,
+            accessContext: createAccessContext()
+          },
+          repository,
+          {
+            applyArtifactStorage: new FakeApplyArtifactStorage(),
+            readTerraformArtifactFile:
+              testCase.readTerraformArtifactFile ?? (async () => terraformArtifactContent),
+            writePlanFile: async () => {
+              planWritten = true;
+            },
+            prepareTerraformWorkspace: async () => ({
+              workdir: "C:/tmp/sketchcatch-terraform-drift-apply",
+              mainFilePath: "C:/tmp/sketchcatch-terraform-drift-apply/main.tf",
+              cleanup: async () => {
+                cleanupCalled = true;
+              }
+            }),
+            prepareTerraformAwsCredentialEnv: async () => {
+              credentialsPrepared = true;
+
+              return createPreparedCredentials();
+            },
+            runTerraformInit: async () => {
+              terraformRan = true;
+
+              return createRunnerResult("init");
+            }
+          }
+        ),
+      (error) => {
+        assert.equal(error instanceof Error, true, testCase.name);
+        assert.match((error as Error).message, testCase.expectedError, testCase.name);
+
+        return true;
+      }
+    );
+
+    assert.equal(cleanupCalled, true, testCase.name);
+    assert.equal(credentialsPrepared, false, testCase.name);
+    assert.equal(terraformRan, false, testCase.name);
+    assert.equal(planWritten, false, testCase.name);
+    assert.equal(repository.deployment?.status, "FAILED", testCase.name);
+    assert.equal(repository.failedInput?.failureStage, "apply", testCase.name);
+    assert.match(repository.failedInput?.errorSummary ?? "", testCase.expectedError, testCase.name);
+  }
+});
+
 test("runDeploymentApply marks apply failures failed and masks secret output", async () => {
   const repository = new FakeDeploymentRepository();
   const applyArtifactStorage = new FakeApplyArtifactStorage();

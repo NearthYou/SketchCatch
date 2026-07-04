@@ -414,10 +414,7 @@ test("POST /api/terraform/validate returns diagnostics for an active user", asyn
   });
 
   assert.equal(response.statusCode, 200);
-  assert.equal(
-    (response.json() as TerraformValidateResponse).diagnostics[0]?.code,
-    "terraform.quoted_reference"
-  );
+  assert.equal((response.json() as TerraformValidateResponse).diagnostics[0]?.code, "terraform.quoted_reference");
 
   await app.close();
 });

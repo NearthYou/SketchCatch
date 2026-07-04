@@ -17,6 +17,8 @@ const QUOTED_REFERENCE_PATTERN =
   /"((?:aws_[A-Za-z0-9_]+|data\.aws_[A-Za-z0-9_]+)\.[A-Za-z0-9_]+\.[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*)"/g;
 const TERRAFORM_REFERENCE_PATTERN =
   /\b(?:data\.aws_[A-Za-z0-9_]+\.[A-Za-z0-9_]+|aws_[A-Za-z0-9_]+\.[A-Za-z0-9_]+)(?:\.[A-Za-z0-9_]+)+\b/g;
+const TRAILING_ATTRIBUTE_COMMA_PATTERN = /^\s*[A-Za-z_][A-Za-z0-9_]*\s*=.+,\s*$/;
+
 type TerraformValidationFile = {
   readonly fileName: string;
   readonly terraformCode: string;
@@ -60,6 +62,8 @@ export function createTerraformDiagnostics(terraformCode: string): TerraformDiag
     ...tokenDiagnostics,
     ...blockDiagnostics,
     ...checkBodySyntax(commentStrippedCode),
+    ...checkUnexpectedTokens(commentStrippedCode),
+    ...checkTrailingAttributeCommas(commentStrippedCode),
     ...checkUndefinedReferences(commentStrippedCode),
     ...checkQuotedReferences(commentStrippedCode)
   ];
@@ -496,6 +500,84 @@ function checkUndefinedReferences(terraformCode: string): TerraformDiagnostic[] 
   return diagnostics;
 }
 
+function checkUnexpectedTokens(terraformCode: string): TerraformDiagnostic[] {
+  const diagnostics: TerraformDiagnostic[] = [];
+  let depth = 0;
+
+  splitTerraformLines(terraformCode).forEach((lineText, lineIndex) => {
+    let inString = false;
+    let escaped = false;
+
+    for (let index = 0; index < lineText.length; index += 1) {
+      const char = lineText[index];
+
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+
+      if (char === "\\") {
+        escaped = true;
+        continue;
+      }
+
+      if (char === "\"") {
+        inString = !inString;
+        continue;
+      }
+
+      if (inString) {
+        continue;
+      }
+
+      if (isLineCommentStart(lineText, index)) {
+        break;
+      }
+
+      if (char === "{") {
+        depth += 1;
+        continue;
+      }
+
+      if (char !== "}") {
+        continue;
+      }
+
+      depth = Math.max(depth - 1, 0);
+
+      if (depth === 0 && hasCodeAfterToken(lineText, index + 1)) {
+        diagnostics.push({
+          severity: "error",
+          code: "terraform.unexpected_token",
+          line: lineIndex + 1,
+          message: "닫힌 block 뒤에 알 수 없는 Terraform 코드가 붙어 있습니다."
+        });
+      }
+    }
+  });
+
+  return diagnostics;
+}
+
+function checkTrailingAttributeCommas(terraformCode: string): TerraformDiagnostic[] {
+  const diagnostics: TerraformDiagnostic[] = [];
+
+  splitTerraformLines(terraformCode).forEach((lineText, index) => {
+    const codeLine = stripLineComment(lineText);
+
+    if (TRAILING_ATTRIBUTE_COMMA_PATTERN.test(codeLine)) {
+      diagnostics.push({
+        severity: "error",
+        code: "terraform.trailing_comma",
+        line: index + 1,
+        message: "Terraform attribute 할당 끝에는 쉼표를 붙이지 않습니다."
+      });
+    }
+  });
+
+  return diagnostics;
+}
+
 function isEmptyBlock(lines: string[], headerIndex: number): boolean {
   for (let index = headerIndex + 1; index < lines.length; index += 1) {
     const lineText = lines[index];
@@ -791,6 +873,12 @@ function stripLineComment(lineText: string): string {
   }
 
   return lineText;
+}
+
+function hasCodeAfterToken(lineText: string, startIndex: number): boolean {
+  const rest = stripLineComment(lineText.slice(startIndex));
+
+  return rest.trim().length > 0;
 }
 
 function isLineCommentStart(lineText: string, index: number): boolean {

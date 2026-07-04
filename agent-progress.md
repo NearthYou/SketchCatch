@@ -15,6 +15,24 @@
 
 ## 세션 레코드
 
+### 2026-07-04 - PR #137 dev 병합 충돌 해결
+
+- Goal: PR 브랜치가 `origin/dev`와 충돌해 병합 불가 상태가 된 `apps/api/src/app.ts`, `apps/api/src/routes/terraform.ts`, `apps/api/src/services/terraform/terraform-diagnostics.ts`를 정리한다.
+- Root cause:
+  - `origin/dev`에는 Terraform validate parser 진단을 위해 `terraform-validation.ts`와 route/app 주입 옵션이 추가되어 있었다.
+  - 현재 브랜치는 이후 사용자 결정에 따라 editor CLI 검증을 폐기하고 `terraform-diagnostics.ts` static-only 검증으로 되돌렸다.
+  - 두 변경이 같은 route/app/diagnostics 경계를 수정해 GitHub PR conflict가 발생했다.
+- Completed:
+  - `origin/dev`를 현재 feature branch에 merge하고 세 충돌 파일을 수동 해결했다.
+  - `app.ts`와 `routes/terraform.ts`는 `validateTerraformPreviewCode` static-only 주입 경로를 유지했다.
+  - `terraform-validation.ts`와 전용 테스트는 CLI 검증 폐기 정책에 맞춰 병합 결과에서 제거했다.
+  - `dev` 쪽 정적 진단 강화 중 `unexpected_token`, `trailing_comma` 검사는 `terraform-diagnostics.ts`에 흡수했다.
+- Verification run:
+  - `pnpm harness:check` - passed before merge.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-diagnostics.test.ts src/routes/terraform.test.ts` - passed.
+- Evidence recorded:
+  - 실제 Terraform CLI validate/fmt/init/plan/apply/destroy, cloud mutation, Git/CI/CD handoff는 실행하지 않았다.
+
 ### 2026-07-04 - Terraform diagnostics 구조 오류 연쇄 표시 수정
 
 - Goal: 닫히지 않은 문자열 따옴표나 `{}` 같은 구조 오류 하나 때문에 뒤쪽 Terraform resource까지 오류로 표시되는 diagnostics 연쇄 오류를 줄인다.
@@ -896,3 +914,32 @@
   - `HARNESS-007` baseline E2E smoke remains not started.
 - Next best action:
   - Define a minimal Representative Use Journey smoke that does not run real AWS apply/destroy without explicit approval and cleanup planning.
+
+### 2026-07-03 - Direct Deployment 승인 스냅샷 재검증 테스트와 SW 문서
+
+- Goal: SketchCatch issue #128의 Worker 1-1 범위에서 Direct Deployment approval/apply precondition 회귀 테스트와 `docs/sw` 학습 문서를 보강한다.
+- Completed:
+  - `deployment-approval-service.test.ts`에 artifact hash drift, tfplan hash drift, AWS account drift, AWS region drift, missing approval snapshot fields 테스트를 추가했다.
+  - `deployment-apply-service.test.ts`에 apply 진입점에서 approval snapshot drift가 AWS credential 준비, plan file write, Terraform 실행 전에 막히는 회귀 테스트를 추가했다.
+  - production code는 수정하지 않았다. 기존 `deployment-approval-service.ts`의 approval snapshot 저장과 apply precondition 재검증이 새 테스트를 통과했다.
+  - `docs/sw/005_승인스냅샷재검증클론코딩가이드_sw.md`를 추가하고 `docs/sw/README.md`에 연결했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/deployments/deployment-approval-service.test.ts src/deployments/deployment-apply-service.test.ts src/deployments/deployment-destroy-service.test.ts` - passed
+  - `pnpm --filter @sketchcatch/api test` - failed once because existing tests require `S3_BUCKET_NAME`
+  - `$env:S3_BUCKET_NAME='sketchcatch-test-bucket'; pnpm --filter @sketchcatch/api test` - passed
+  - `pnpm --filter @sketchcatch/api lint` - passed
+  - `pnpm --filter @sketchcatch/api typecheck` - passed
+  - `pnpm lint` - passed
+  - `pnpm typecheck` - passed
+  - `pnpm build` - passed
+  - `git diff --check` - passed
+  - `pnpm harness:check` - passed after edits
+- Evidence recorded:
+  - Targeted deployment tests now explicitly cover apply precondition artifact hash drift, tfplan hash drift, AWS account drift, AWS region drift, missing approval snapshot fields, missing plan source hash, and existing destroy service behavior.
+  - No real Terraform apply/destroy, cloud mutation, Git/CI/CD handoff, or secret access was performed.
+- Known risks:
+  - Full API tests need a non-secret `S3_BUCKET_NAME` value in this environment because unrelated S3-backed tests construct plan artifact storage.
+  - The broad `pnpm build` temporarily touched `apps/web/next-env.d.ts`; the generated content change was restored and the final dirty list is scoped to #128 files.
+- Next best action:
+  - Parent agent should review the focused diff and open the PR. Worker 1-1 should not expand into issue 1-2 or 1-3 from this branch.

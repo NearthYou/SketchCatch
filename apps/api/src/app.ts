@@ -141,7 +141,10 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     prefix: "/api",
     getDatabaseClient: getAppDatabaseClient
   });
-  app.register(registerTerraformRoutes, createTerraformRouteOptions(options, getAppDatabaseClient));
+  app.register(
+    registerTerraformRoutes,
+    createTerraformRouteOptions(options, getAppDatabaseClient)
+  );
   app.register(registerAwsConnectionRoutes, {
     prefix: "/api",
     getDatabaseClient: getAppDatabaseClient

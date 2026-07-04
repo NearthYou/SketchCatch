@@ -79,6 +79,26 @@ test("detects invalid block headers", () => {
   assert.equal(diagnostics[0]?.line, 1);
 });
 
+test("detects unexpected tokens after a closed block", () => {
+  const diagnostics = createTerraformDiagnostics(`resource "aws_instance" "web" {
+  ami = "ami-12345678"
+}dfgdf`);
+
+  assert.equal(diagnostics[0]?.code, "terraform.unexpected_token");
+  assert.equal(diagnostics[0]?.line, 3);
+  assert.equal(diagnostics[0]?.severity, "error");
+});
+
+test("detects trailing commas after attribute assignments", () => {
+  const diagnostics = createTerraformDiagnostics(`resource "aws_security_group_rule" "ssh" {
+  type = "ingress",
+}`);
+
+  assert.equal(diagnostics[0]?.code, "terraform.trailing_comma");
+  assert.equal(diagnostics[0]?.line, 2);
+  assert.equal(diagnostics[0]?.severity, "error");
+});
+
 test("detects duplicate resource addresses", () => {
   const diagnostics = createTerraformDiagnostics(`resource "aws_vpc" "main" {
   cidr_block = "10.0.0.0/16"

@@ -4,6 +4,10 @@
 
 ## 현재 검증된 것
 
+- PR #137 충돌 해결을 위해 현재 feature branch에 `origin/dev`를 병합했다.
+- `apps/api/src/app.ts`, `apps/api/src/routes/terraform.ts`, `apps/api/src/services/terraform/terraform-diagnostics.ts`의 conflict는 static-only Terraform editor validation 정책을 기준으로 해결했다.
+- `origin/dev`의 `terraform-validation.ts`는 `terraform fmt` CLI를 호출하는 경로였으므로, CLI 검증 폐기 정책에 맞춰 병합 결과에서 제거했다.
+- `origin/dev`의 정적 진단 보강 중 `unexpected_token`, `trailing_comma` 검사는 `terraform-diagnostics.ts`에 흡수했다.
 - Terraform editor validation은 static-only diagnostics다.
 - `/terraform/validate`는 `TerraformValidateResponse = { diagnostics }`만 반환한다.
 - `/terraform/validate/prepare`, editor validation prepare/warmup, `mode`, `stage`, `status`, `projectId` DTO는 제거됐다.
@@ -68,6 +72,10 @@
 
 ## 이번 세션의 변경 사항
 
+- `origin/dev` merge conflict를 해결했다.
+- `apps/api/src/app.ts`와 `apps/api/src/routes/terraform.ts`는 `validateTerraformPreviewCode` 기반 static-only 검증 주입을 유지한다.
+- `apps/api/src/services/terraform/terraform-diagnostics.ts`는 기존 no-cascade 진단에 `unexpected_token`, `trailing_comma` 정적 검사를 함께 실행한다.
+- `apps/api/src/services/terraform/terraform-validation.ts`와 `terraform-validation.test.ts`는 editor CLI 검증 폐기 정책에 맞춰 제거 상태로 유지한다.
 - `apps/api/src/services/terraform/terraform-diagnostics.ts`에서 일반 quoted string이 줄을 넘지 않도록 처리해, line 20의 누락 quote가 line 24 resource header로 밀려 표시되지 않게 했다.
 - `apps/api/src/services/terraform/terraform-diagnostics.ts`에서 balance error가 있으면 뒤쪽 body/reference 검사를 중단해, line 17의 누락 `}`가 line 23 다음 resource에 파생 오류를 만들지 않게 했다.
 - `apps/api/src/services/terraform/terraform-diagnostics.ts`가 block comment를 줄 보존 공백으로 처리하고, token error보다 앞선 block header error는 유지하게 했다.
@@ -304,3 +312,37 @@ pnpm lint
 pnpm typecheck
 pnpm build
 ```
+
+## 2026-07-03 - Issue #128 Worker 1-1 핸드오프
+
+### 현재 검증된 것
+
+- Direct Deployment 승인 스냅샷 재검증 동작은 기존 production code가 이미 만족했다. production 파일은 수정하지 않았다.
+- apply precondition 회귀 테스트를 추가했다.
+  - artifact hash drift
+  - tfplan hash drift
+  - AWS account drift
+  - AWS region drift
+  - missing approval snapshot fields
+  - drift 감지 시 apply service가 AWS credential 준비, plan file write, Terraform 실행 전에 멈추는지
+- 기존 destroy precondition 동작은 targeted destroy service test run으로 계속 검증했다.
+- `docs/sw/005_승인스냅샷재검증클론코딩가이드_sw.md`를 추가하고 `docs/sw/README.md`에서 연결했다.
+
+### 실행한 검증
+
+- `pnpm harness:check` - passed before edits
+- `pnpm --filter @sketchcatch/api exec tsx --test src/deployments/deployment-approval-service.test.ts src/deployments/deployment-apply-service.test.ts src/deployments/deployment-destroy-service.test.ts` - passed
+- `pnpm --filter @sketchcatch/api test` - failed once because existing tests require `S3_BUCKET_NAME`
+- `$env:S3_BUCKET_NAME='sketchcatch-test-bucket'; pnpm --filter @sketchcatch/api test` - passed
+- `pnpm --filter @sketchcatch/api lint` - passed
+- `pnpm --filter @sketchcatch/api typecheck` - passed
+- `pnpm lint` - passed
+- `pnpm typecheck` - passed
+- `pnpm build` - passed
+- `git diff --check` - passed
+- `pnpm harness:check` - passed after note update
+
+### 남은 리스크와 다음 행동
+
+- 이 worker branch를 #128 Worker 1-2 또는 1-3 범위로 확장하지 않는다. Parent agent가 이 focused diff를 review하고 PR을 연다.
+- 실제 AWS apply/destroy, cloud mutation, Git/CI/CD handoff, secret access는 수행하지 않았다.

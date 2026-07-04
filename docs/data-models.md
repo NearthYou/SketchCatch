@@ -834,6 +834,39 @@ Runtime Cache는 사용자 Practice Architecture Resource가 아니므로 `Resou
 
 AI는 원천 진실이 아니라 설명과 제안 계층이다. 배포 가능한 artifact는 deterministic graph, generator, validation, Terraform CLI 결과를 거쳐야 한다.
 
+AI provider 응답에는 호출 출처와 비용 추적을 위한 metadata를 함께 둔다. Bedrock, Amazon Q Business, Amazon Transcribe는 `AI_BILLING_MODE=aws_credit_only`와 provider별 credit confirmation flag가 모두 충족될 때만 실제 호출한다. 조건이 맞지 않으면 provider 호출 없이 fallback 설명이나 실패 상태를 반환한다.
+
+```ts
+type AiProvider =
+  | "bedrock"
+  | "amazon_q"
+  | "amazon_transcribe"
+  | "openai"
+  | "fallback";
+
+type AiProviderMetadata = {
+  provider: AiProvider;
+  service:
+    | "bedrock_runtime"
+    | "amazon_q_business"
+    | "amazon_transcribe"
+    | "openai_responses"
+    | "rule_fallback";
+  model?: string;
+  routeTarget: string;
+  cacheHit: boolean;
+  cacheKey: string;
+  estimatedUsage: {
+    inputCharacters: number;
+    inputTokensEstimate: number;
+    outputCharacters?: number;
+    outputTokensEstimate?: number;
+  };
+  billingMode: "aws_credit_only" | "standard" | "disabled";
+  generatedAt: IsoDateTimeString;
+};
+```
+
 ```ts
 type AiArchitectureDraftResult = {
   architectureJson: ArchitectureJson;
@@ -843,7 +876,7 @@ type AiArchitectureDraftResult = {
 };
 ```
 
-`LlmExplanation`은 rule 기반 결과를 덮어쓰지 않고, 사용자가 읽기 쉬운 요약과 다음 행동을 붙이는 공통 설명 계약이다. OpenAI 호출이 실패하거나 일부 필드가 rule 기반 기본값으로 대체되면 `fallbackUsed`를 `true`로 둔다.
+`LlmExplanation`은 rule 기반 결과를 덮어쓰지 않고, 사용자가 읽기 쉬운 요약과 다음 행동을 붙이는 공통 설명 계약이다. Bedrock, Amazon Q Business, OpenAI legacy/fallback provider 호출이 실패하거나 일부 필드가 rule 기반 기본값으로 대체되면 `fallbackUsed`를 `true`로 둔다.
 
 ```ts
 type LlmExplanation = {
@@ -851,7 +884,9 @@ type LlmExplanation = {
     | "architecture_draft"
     | "design_simulation"
     | "pre_deployment_check"
-    | "terraform_error_explanation";
+    | "terraform_error_explanation"
+    | "terraform_preview_explanation"
+    | "architecture_patch_preview";
   summary: string;
   highlights: string[];
   nextActions: string[];
@@ -863,11 +898,59 @@ type LlmExplanation = {
     | "invalid_request"
     | "auth_error"
     | "provider_error"
-    | "invalid_response";
+    | "invalid_response"
+    | "provider_not_configured"
+    | "credit_not_confirmed"
+    | "daily_limit_exceeded";
+  providerMetadata?: AiProviderMetadata;
 };
 ```
 
 `AiArchitectureDraftResult`, `AiPreDeploymentAnalysisResult`, `DesignSimulationResult`, `AiTerraformErrorExplanationResult`는 필요할 때 `llmExplanation?: LlmExplanation`를 포함할 수 있다.
+
+자연어 Architecture 수정 요청은 `ArchitecturePatchPreview`로만 반환한다. 이 preview는 `proposedArchitectureJson`과 diff 성격의 `changes`를 보여줄 뿐이며, `requiresUserAcceptance: true`와 `userAcceptedChange: null` 상태로 내려간다. 실제 Architecture Board 반영은 별도 적용 버튼에서 `UserAcceptedChange`를 기록한 뒤에만 가능하다.
+
+```ts
+type ArchitecturePatchIntent = {
+  instruction: string;
+  requestedAction: "add_resource" | "remove_resource" | "modify_resource" | "manual_review";
+  targetResourceId?: string;
+  resourceType?: ResourceType;
+};
+
+type ArchitecturePatchPreview = {
+  intent: ArchitecturePatchIntent;
+  baseArchitectureJson: ArchitectureJson;
+  proposedArchitectureJson: ArchitectureJson;
+  changes: ArchitecturePatchPreviewChange[];
+  requiresUserAcceptance: true;
+  userAcceptedChange: UserAcceptedChange | null;
+  llmExplanation?: LlmExplanation;
+  providerMetadata: AiProviderMetadata;
+};
+```
+
+Voice Requirement Input은 Amazon Transcribe 작업 결과가 나온 뒤에도 곧바로 `RequirementPrompt`가 되지 않는다. 전사 결과는 `TranscribeConfirmation`으로 내려가고, 사용자가 확인/수정/확정한 뒤에만 `RequirementPrompt`가 생성된다.
+
+```ts
+type VoiceRequirementInput = {
+  mediaUri: string;
+  mediaFormat: "mp3" | "mp4" | "wav" | "flac" | "ogg" | "amr" | "webm";
+  languageCode?: string;
+};
+
+type TranscribeConfirmation = {
+  transcriptionJobName: string | null;
+  voiceRequirementInput: VoiceRequirementInput | null;
+  transcriptText: string | null;
+  confirmedText: string | null;
+  confirmedByUser: boolean;
+  confirmedByUserId?: string;
+  status: "transcribing" | "awaiting_user_confirmation" | "confirmed" | "failed";
+  failureReason?: string;
+  providerMetadata: AiProviderMetadata;
+};
+```
 
 ```ts
 type CheckFinding = {

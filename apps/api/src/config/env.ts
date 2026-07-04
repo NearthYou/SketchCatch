@@ -1,8 +1,18 @@
 import "./load-env.js";
 
 export type RuntimeEnv = {
+  aiBillingMode?: string | undefined;
+  aiDailyCallLimit?: string | undefined;
+  aiRateLimitPerMinute?: string | undefined;
+  amazonQApplicationId?: string | undefined;
+  amazonQCreditConfirmed?: string | undefined;
+  amazonQEnabled?: string | undefined;
+  amazonQRegion?: string | undefined;
+  amazonQUserId?: string | undefined;
   awsRegion: string;
   authTokenSecret: string | undefined;
+  bedrockCreditConfirmed?: string | undefined;
+  bedrockModelId?: string | undefined;
   cloudFormationTemplateTokenSecret: string | undefined;
   databaseUrl: string | undefined;
   databaseSsl: boolean;
@@ -16,14 +26,27 @@ export type RuntimeEnv = {
   s3BucketName: string | undefined;
   sketchcatchAwsCallerPrincipalArn: string | undefined;
   sketchcatchPublicBaseUrl: string | undefined;
+  transcribeCreditConfirmed?: string | undefined;
+  transcribeLanguageCode?: string | undefined;
+  transcribeMediaBucket?: string | undefined;
 };
 
 const AUTH_TOKEN_SECRET_PLACEHOLDER = "replace-with-a-local-secret-of-at-least-32-characters";
 
 export function getRuntimeEnv(): RuntimeEnv {
   return {
+    aiBillingMode: process.env.AI_BILLING_MODE,
+    aiDailyCallLimit: process.env.AI_DAILY_CALL_LIMIT,
+    aiRateLimitPerMinute: process.env.AI_RATE_LIMIT_PER_MINUTE,
+    amazonQApplicationId: process.env.AMAZON_Q_APPLICATION_ID,
+    amazonQCreditConfirmed: process.env.AMAZON_Q_CREDIT_CONFIRMED,
+    amazonQEnabled: process.env.AMAZON_Q_ENABLED,
+    amazonQRegion: process.env.AMAZON_Q_REGION,
+    amazonQUserId: process.env.AMAZON_Q_USER_ID,
     awsRegion: process.env.AWS_REGION ?? "ap-northeast-2",
     authTokenSecret: process.env.AUTH_TOKEN_SECRET,
+    bedrockCreditConfirmed: process.env.BEDROCK_CREDIT_CONFIRMED,
+    bedrockModelId: process.env.BEDROCK_MODEL_ID,
     cloudFormationTemplateTokenSecret: process.env.CLOUDFORMATION_TEMPLATE_TOKEN_SECRET,
     databaseUrl: process.env.DATABASE_URL,
     databaseSsl: process.env.DATABASE_SSL === "true",
@@ -36,7 +59,10 @@ export function getRuntimeEnv(): RuntimeEnv {
     oauthRedirectBaseUrl: process.env.OAUTH_REDIRECT_BASE_URL,
     s3BucketName: process.env.S3_BUCKET_NAME,
     sketchcatchAwsCallerPrincipalArn: process.env.SKETCHCATCH_AWS_CALLER_PRINCIPAL_ARN,
-    sketchcatchPublicBaseUrl: process.env.SKETCHCATCH_PUBLIC_BASE_URL
+    sketchcatchPublicBaseUrl: process.env.SKETCHCATCH_PUBLIC_BASE_URL,
+    transcribeCreditConfirmed: process.env.TRANSCRIBE_CREDIT_CONFIRMED,
+    transcribeLanguageCode: process.env.TRANSCRIBE_LANGUAGE_CODE,
+    transcribeMediaBucket: process.env.TRANSCRIBE_MEDIA_BUCKET
   };
 }
 
