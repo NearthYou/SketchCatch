@@ -77,6 +77,12 @@ import {
   pruneProjectDeploymentStorage as defaultPruneProjectDeploymentStorage,
   type PruneProjectDeploymentStorageResult
 } from "../deployments/deployment-retention.js";
+import {
+  createRuntimeCachedDeploymentRepository,
+  readDeploymentLogStreamCursor,
+  writeDeploymentLogStreamCursor
+} from "../deployments/deployment-runtime-cache.js";
+import type { RuntimeCache } from "../runtime-cache/index.js";
 
 type DeploymentRow = DeploymentRecord & {
   readonly currentPlanOperation?: Deployment["currentPlanOperation"];
@@ -141,6 +147,7 @@ type DeploymentRouteOptions = {
     repository: DeploymentRepository
   ) => Promise<RunDeploymentDestroyResult>;
   createLlmExplanation?: CreateLlmExplanation;
+  runtimeCache?: RuntimeCache;
 };
 
 type DeploymentRequestContext = {
@@ -188,12 +195,19 @@ async function getDeploymentRequestContext(
   const client = getDeploymentDatabaseClient();
   const currentUserId = await requireActiveUserId(request, () => client);
 
+  const repository =
+    options?.createDeploymentRepository?.(client.db) ??
+    createPostgresDeploymentRepository(client.db);
+
   return {
     accessContext: createUserProjectAccessContext(currentUserId),
     db: client.db,
-    repository:
-      options?.createDeploymentRepository?.(client.db) ??
-      createPostgresDeploymentRepository(client.db)
+    repository: options?.runtimeCache
+      ? createRuntimeCachedDeploymentRepository({
+          repository,
+          runtimeCache: options.runtimeCache
+        })
+      : repository
   };
 }
 
@@ -867,6 +881,7 @@ export async function registerDeploymentRoutes(
         once: query.once === "true",
         repository,
         reply,
+        runtimeCache: options?.runtimeCache,
         request
       });
     } catch (error) {
@@ -944,9 +959,15 @@ async function streamDeploymentLogs(input: {
   once: boolean;
   repository: DeploymentRepository;
   reply: FastifyReply;
+  runtimeCache?: RuntimeCache | undefined;
   request: FastifyRequest;
 }): Promise<void> {
-  let lastSequence = input.sinceSequence;
+  let lastSequence = await getDeploymentLogStreamStartSequence({
+    deploymentId: input.deploymentId,
+    once: input.once,
+    runtimeCache: input.runtimeCache,
+    sinceSequence: input.sinceSequence
+  });
   let polling = false;
   let closed = false;
 
@@ -1031,6 +1052,14 @@ async function streamDeploymentLogs(input: {
           return;
         }
       }
+
+      if (nextLogs.length > 0 && input.runtimeCache) {
+        await writeDeploymentLogStreamCursor({
+          deploymentId: input.deploymentId,
+          lastSequence,
+          runtimeCache: input.runtimeCache
+        });
+      }
     } finally {
       polling = false;
     }
@@ -1090,6 +1119,24 @@ async function streamDeploymentLogs(input: {
   input.request.raw.on("close", () => {
     closeStream();
   });
+}
+
+async function getDeploymentLogStreamStartSequence(input: {
+  deploymentId: string;
+  once: boolean;
+  runtimeCache?: RuntimeCache | undefined;
+  sinceSequence: number;
+}): Promise<number> {
+  if (input.once || !input.runtimeCache) {
+    return input.sinceSequence;
+  }
+
+  const cursor = await readDeploymentLogStreamCursor({
+    deploymentId: input.deploymentId,
+    runtimeCache: input.runtimeCache
+  });
+
+  return Math.max(input.sinceSequence, cursor?.lastSequence ?? 0);
 }
 
 async function requireDeploymentInitArtifact(

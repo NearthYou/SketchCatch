@@ -477,3 +477,9 @@ pnpm build
 - final `pnpm harness:check`를 다시 실행한다.
 - diff 자체 리뷰 후 #132 범위만 commit/push/PR 생성한다.
 - 다른 이슈(#129~#136)는 이 branch에서 건드리지 않는다.
+## 2026-07-05 - Issue #133 Deployment Runtime Cache handoff
+
+- Branch/worktree: `feature/sw/133-deployment-runtime-cache-status` at `C:\Users\siwon\Desktop\Jungle\Week17~21\SketchCatch-worktrees\133-deployment-runtime-cache-status`.
+- Scope completed: Deployment repository mutation wrapper writes `deployment.status`, log creation/SSE stream writes `deployment.log_cursor`, stream cursor read falls back to RDS on cache miss/failure, `buildApp` wires `createRuntimeCacheFromEnv`, and docs/sw has key/TTL/future reverse scan/pipeline convention.
+- Verification completed: targeted deployment route tests, API lint/typecheck, workspace lint/typecheck/build, `git diff --check`; final harness still needs to be rerun after this handoff note.
+- Remaining risk: no real Redis server or AWS apply/destroy was run.

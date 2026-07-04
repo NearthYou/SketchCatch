@@ -1332,3 +1332,24 @@
 - Known risks:
   - 이번 확인은 정적 체크와 테스트 중심이며, 최신 툴바 위치는 브라우저 스크린샷으로 재확인하지 않았다.
   - 실제 AWS apply/destroy나 Git/CI/CD 실행은 수행하지 않았다.
+## 2026-07-05 - Issue #133 Deployment Runtime Cache 상태/로그 커서 연결
+
+- Goal: #131 RuntimeCache abstraction과 #132 Redis adapter/fallback 정책 위에 Deployment 장기 실행 상태와 log stream cursor를 보조 cache 계층으로 연결한다.
+- Completed:
+  - `createRuntimeCachedDeploymentRepository`를 추가해 기존 `DeploymentRepository` mutation 성공 결과를 기준으로 `deployment.status` snapshot을 best-effort cache write하도록 했다.
+  - `createDeploymentLog`/`createDeploymentLogs`와 SSE log stream이 `deployment.log_cursor`를 갱신하도록 연결했다.
+  - log stream 시작 시 Runtime Cache cursor를 보조 힌트로 읽되, cache miss/failure 시 기존 RDS `deployment_logs` 조회 흐름을 유지했다.
+  - `buildApp`에서 `createRuntimeCacheFromEnv`를 구성해 production은 Redis/fallback 정책을 쓰고 test는 in-memory fallback을 유지하게 했다.
+  - `docs/sw/010_Deployment_Runtime_Cache_상태로그커서가이드_sw.md`를 추가하고 key namespace/TTL/reverse scan/pipeline polling convention을 문서화했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/routes/deployments.test.ts` - passed
+  - `pnpm --filter @sketchcatch/api lint` - passed
+  - `pnpm --filter @sketchcatch/api typecheck` - passed
+  - `pnpm lint` - passed
+  - `pnpm typecheck` - passed
+  - `pnpm build` - passed
+  - `git diff --check` - passed
+- Known risks:
+  - 실제 Redis 서버 의존 테스트는 수행하지 않았고 in-memory/fake cache로 검증했다.
+  - Runtime Cache는 원천 기록이 아니며 RDS/S3 조회가 계속 기준이다.
