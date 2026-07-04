@@ -34,6 +34,7 @@ export type DiagramEditorPanelContext = {
     annotations?: DiagramPreviewAnnotations | null
   ) => void;
   setRightPanelOpen: (isOpen: boolean) => void;
+  saveDiagramNow?: (() => Promise<unknown>) | undefined;
   updateNodeParameters: (
     nodeId: string,
     update:
@@ -53,6 +54,7 @@ export type DiagramEditorProps = {
   initialDiagram?: DiagramJson | undefined;
   leftPanel?: ReactNode;
   onDiagramChange?: ((diagram: DiagramJson) => void) | undefined;
+  onDiagramSaveRequest?: (() => Promise<unknown>) | undefined;
   rightPanel?: ((context: DiagramEditorPanelContext) => ReactNode) | undefined;
   projectName?: string | undefined;
   myPageHref?: string | undefined;

@@ -113,6 +113,13 @@ test("workspace AI opens from a floating chat dock instead of the right panel", 
   assert.match(stylesSource, /\.aiChatDock\s*\{/);
 });
 
+test("workspace AI saves accepted generated and patched diagrams immediately", () => {
+  assert.match(projectDraftManagerSource, /onDiagramSaveRequest=\{\(\) => flushDraftToServer\("manual"\)\}/);
+  assert.match(workspaceDraftManagerSource, /onDiagramSaveRequest=\{saveCurrentDraftLocally\}/);
+  assert.match(diagramEditorSource, /saveDiagramNow:\s*onDiagramSaveRequest/);
+  assert.match(aiChatDockSource, /context\.saveDiagramNow\?\.\(\)/);
+});
+
 test("workspace AI chat keeps the floating dock width with compact prompt guide", () => {
   const dockRule = getCssRule(stylesSource, "aiChatDock");
   const composerRule = getCssRule(stylesSource, "aiChatComposer");

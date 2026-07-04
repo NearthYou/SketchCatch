@@ -194,6 +194,7 @@ export function WorkspaceDraftManager() {
       )}
       initialDiagram={initialDiagram}
       onDiagramChange={handleDiagramChange}
+      onDiagramSaveRequest={saveCurrentDraftLocally}
       projectName={projectName}
       rightPanel={(context) => (
         <WorkspaceRightPanel context={context} projectId={LOCAL_PROJECT_ID} projectName={projectName} />

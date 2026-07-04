@@ -95,9 +95,18 @@ export function WorkspaceAiPanel({ context }: WorkspaceAiPanelProps) {
     }
 
     context.applyDiagramJson(context.previewDiagram ?? convertArchitectureJsonToDiagramJson(draft.architectureJson));
+    requestImmediateDiagramSave();
     setDraft(null);
     setDesignSimulation(null);
     setSimulationFingerprint(null);
+  }
+
+  function requestImmediateDiagramSave(): void {
+    const savePromise = context.saveDiagramNow?.();
+
+    if (savePromise) {
+      void savePromise.catch(() => undefined);
+    }
   }
 
   function cancelDraftPreview(): void {

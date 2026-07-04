@@ -13,6 +13,19 @@
 - Highest priority unfinished harness feature: `HARNESS-007`
 - Current blocker: none
 
+### 2026-07-05 - AI 다이어그램 적용 직후 저장 연결
+- Goal: AI가 생성/수정한 다이어그램을 사용자가 보드에 적용하면 debounce나 체크포인트를 기다리지 않고 즉시 저장한다.
+- Completed:
+  - `DiagramEditor` 패널 컨텍스트에 즉시 저장 요청 훅을 추가했다.
+  - 프로젝트 워크스페이스는 AI 적용 직후 기존 `flushDraftToServer("manual")` 저장 파이프라인을 호출하게 했다.
+  - 로컬 워크스페이스는 AI 적용 직후 로컬 draft 저장을 즉시 실행하게 했다.
+  - 생성 초안 적용과 patch preview 적용 모두 저장 요청을 트리거하게 했다.
+- Verification run:
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web test -- workspace-right-panel-layout.test.ts` - passed, 377 tests
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web typecheck` - passed
+- Known risks:
+  - 변경 범위가 웹 저장 연결로 한정되어 전체 `pnpm build`는 실행하지 않았다.
+
 ### 2026-07-05 - 생성 요청이 리소스 질문에 갇히는 흐름 수정
 - Goal: 사용자가 “로그인 있는 작은 웹서비스 하나 만들고 싶어”처럼 새 서비스를 말하면 기존 patch 질문 상태가 있어도 쉬운 생성 확인 질문으로 안내한다.
 - Completed:

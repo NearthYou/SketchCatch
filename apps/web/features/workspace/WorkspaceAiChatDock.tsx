@@ -549,6 +549,7 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
     context.applyDiagramJson(
       context.previewDiagram ?? convertArchitectureJsonToDiagramJson(draft.architectureJson)
     );
+    requestImmediateDiagramSave();
     setDraft(null);
     setPatchPreviewModel(null);
     setPatchClarification(null);
@@ -564,11 +565,20 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
     }
 
     context.applyDiagramJson(patchPreviewModel.proposedDiagram);
+    requestImmediateDiagramSave();
     setPatchPreviewModel(null);
     setPatchClarification(null);
     setDesignSimulation(null);
     setSimulationFingerprint(null);
     appendAssistantMessage("status", "수정 사항을 보드에 적용했습니다.");
+  }
+
+  function requestImmediateDiagramSave(): void {
+    const savePromise = context.saveDiagramNow?.();
+
+    if (savePromise) {
+      void savePromise.catch(() => undefined);
+    }
   }
 
   function cancelDraftPreview(): void {
