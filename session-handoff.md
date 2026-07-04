@@ -113,3 +113,33 @@ pnpm build
 
 - 이 worker branch를 #128 Worker 1-2 또는 1-3 범위로 확장하지 않는다. Parent agent가 이 focused diff를 review하고 PR을 연다.
 - 실제 AWS apply/destroy, cloud mutation, Git/CI/CD handoff, secret access는 수행하지 않았다.
+
+## 최신 핸드오프 - 2026-07-04 Deployment Safety Gate 수정 UX와 AI 설명
+
+### 현재 검증된 것
+
+- `pnpm lint` - passed; Turbo cache rename warning only.
+- `pnpm typecheck` - passed; Turbo cache rename warning only.
+- `pnpm build` - passed.
+- `pnpm test` - passed; API reported 470 passing tests and Turbo reported 5 successful test tasks.
+- `pnpm harness:check` - passed before the final record update.
+- `git diff --check` - passed before the final record update.
+
+### 이번 작업 변경 사항
+
+- Finding `sourceLocation`을 `CheckFinding`/`DeploymentPlanWarning`에 연결했다.
+- Deployment finding 카드의 `수정` 버튼이 Terraform 탭으로 이동하고 해당 line을 highlight한다.
+- OpenAI GPT API 기반 safety finding 설명 service와 deterministic fallback을 추가했다.
+- Pre-deployment check 결과에 finding별 `aiSafetyExplanation`을 포함했다.
+- `AI 창` 버튼이 `sketchcatch:safety-finding-ai-open` 이벤트를 발생시키고, `WorkspaceAiPanel` 임시 설명 패널이 선택된 finding을 표시한다.
+- High는 빨간색, Medium은 기존 노란색, Low는 초록색으로 명시했다.
+- Medium/Low required warning acknowledgement를 모두 체크해야 승인 버튼이 활성화된다.
+- High risk block banner는 승인 불가, `수정`/`AI 창`, Terraform Plan 재실행 경로를 안내한다.
+- Safety Gate cost/risk warning 통합과 stable id dedupe 테스트를 보강했다.
+- `docs/ys/009_배포안전게이트구현계획_ys.md`에 구현 확인 경로와 검증 명령을 추가했다.
+
+### 주의와 다음 행동
+
+- 실제 Terraform apply/destroy, AWS mutation, Git/CI/CD handoff, secret access는 수행하지 않았다.
+- Browser visual smoke는 아직 수동으로 해야 한다.
+- 다음에는 안전한 public SSH 예시로 `검사 실행` -> 빨간 High finding -> `수정` 이동 -> `AI 창` 설명 -> Plan 단계 High block을 확인하면 된다.

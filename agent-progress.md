@@ -376,3 +376,40 @@
   - The broad `pnpm build` temporarily touched `apps/web/next-env.d.ts`; the generated content change was restored and the final dirty list is scoped to #128 files.
 - Next best action:
   - Parent agent should review the focused diff and open the PR. Worker 1-1 should not expand into issue 1-2 or 1-3 from this branch.
+
+### 2026-07-04 - Deployment Safety Gate 수정 UX와 AI 설명 보강
+
+- Goal: 009 Deployment Safety Gate 구현 위에 finding별 Terraform 수정 이동, AI 설명 표시, High/Medium/Low UI 상태, Medium/Low 승인 acknowledgement 검증을 보강한다.
+- Completed:
+  - `CheckFinding`과 `DeploymentPlanWarning`에 `sourceLocation`을 연결해 pre-deployment finding에서 Terraform 코드 위치로 이동할 수 있게 했다.
+  - `DeploymentPanel` finding 카드에 `수정` 버튼을 추가하고, Terraform 탭 전환 후 해당 line highlight를 연결했다.
+  - OpenAI GPT API 기반 safety finding 설명 service와 deterministic fallback 설명을 추가했다.
+  - pre-deployment check 응답에 finding별 `aiSafetyExplanation`을 포함하고, Deployment UI와 AI 탭에서 설명을 표시했다.
+  - `AI 창` 버튼과 `sketchcatch:safety-finding-ai-open` 이벤트 계약을 추가하고, `WorkspaceAiPanel` 임시 설명 패널로 연결했다.
+  - High는 빨간색, Medium은 기존 노란색, Low는 초록색으로 표시되도록 severity 색상 계약을 명시했다.
+  - Medium/Low required warning acknowledgement를 순수 helper와 테스트로 고정하고, 모두 확인되어야 승인 버튼이 활성화되게 했다.
+  - High risk block banner가 승인으로 해제 불가, `수정` 또는 `AI 창` 확인, Terraform Plan 재실행 흐름을 안내하게 했다.
+  - Safety Gate cost/risk warning 통합과 stable id dedupe 테스트를 보강했다.
+  - `docs/ys/009_배포안전게이트구현계획_ys.md`에 실제 구현 확인 경로와 검증 명령을 추가했다.
+- Verification run:
+  - `pnpm --filter @sketchcatch/types typecheck` - passed
+  - `pnpm --filter @sketchcatch/api typecheck` - passed
+  - `pnpm --filter @sketchcatch/web typecheck` - passed
+  - `pnpm --filter @sketchcatch/api exec tsx --test --test-concurrency=1 src/deployments/deployment-safety-gate.test.ts src/deployments/deployment-approval-service.test.ts src/services/aiSafetyFindingExplanation.test.ts src/routes/aiLlmExplanationRoutes.test.ts` - passed across the implementation steps
+  - `pnpm --filter @sketchcatch/web exec tsx --test --test-concurrency=1 features/workspace/terraform-panel-utils.test.ts features/workspace/pre-deployment-diagnostics.test.ts features/workspace/deployment-actions.test.ts features/workspace/workspace-right-panel-layout.test.ts features/workspace/safety-finding-ai-event.test.ts` - passed across the implementation steps
+  - `pnpm lint` - passed; Turbo reported cache rename warnings only
+  - `pnpm typecheck` - passed; Turbo reported cache rename warnings only
+  - `pnpm build` - passed
+  - `pnpm test` - passed; API reported 470 passing tests and Turbo reported 5 successful test tasks
+  - `pnpm harness:check` - passed before the final record update
+  - `git diff --check` - passed before the final record update
+- Evidence recorded:
+  - AI remains an explanation layer only. Severity, block state, approval state, apply/destroy permission remain deterministic rule/service decisions.
+  - High risk approval remains blocked by Safety Gate and approval service rules.
+  - Medium/Low warning approval requires all required `acknowledgedWarningIds`.
+  - No real Terraform apply/destroy, AWS mutation, Git/CI/CD handoff, or secret access was performed.
+- Known risks:
+  - Browser visual smoke was not run in this final pass; UI behavior is covered by typecheck, unit tests, static layout tests, build, and full test suite.
+  - A real manual demo still needs valid local auth and a safe Terraform sample; do not run real apply/destroy during that smoke.
+- Next best action:
+  - In the browser, create a safe public SSH test sample, run `검사 실행`, confirm the red High finding, use `수정` and `AI 창`, then run plan and confirm High risk does not become approvable.
