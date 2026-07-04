@@ -49,7 +49,10 @@ import {
 import {
   promptGuideExamples
 } from "./workspace-ai-panel-options";
-import { resolveWorkspaceAiChatAction } from "./workspace-ai-chat-routing";
+import {
+  resolveWorkspaceAiChatAction,
+  shouldInterruptPatchClarificationForDraft
+} from "./workspace-ai-chat-routing";
 import {
   createWorkspaceAiPatchPreviewModel,
   type WorkspaceAiPatchPreviewModel
@@ -221,7 +224,24 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
     trimmedPrompt: string,
     nextMessages: readonly WorkspaceAiChatMessage[]
   ): Promise<void> {
+    const needsDraftClarification = needsArchitectureClarification(trimmedPrompt);
+
     if (patchClarification !== null) {
+      if (
+        shouldInterruptPatchClarificationForDraft({
+          boardHasResources: boardSnapshot.hasResources,
+          needsDraftClarification,
+          prompt: trimmedPrompt
+        })
+      ) {
+        const session = createArchitectureClarificationSession(trimmedPrompt);
+
+        setPatchClarification(null);
+        setClarificationSession(session);
+        appendClarificationQuestion(session);
+        return;
+      }
+
       await handlePatchClarificationMessage(trimmedPrompt);
       return;
     }
@@ -238,7 +258,7 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
 
     const chatAction = resolveWorkspaceAiChatAction({
       boardHasResources: boardSnapshot.hasResources,
-      needsDraftClarification: needsArchitectureClarification(trimmedPrompt),
+      needsDraftClarification,
       prompt: trimmedPrompt
     });
 

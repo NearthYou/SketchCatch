@@ -21,8 +21,8 @@ const RESOURCE_KEYWORDS: readonly {
   readonly keywords: readonly string[];
   readonly label: string;
 }[] = [
-  { resourceType: "VPC", keywords: ["vpc", "virtual private cloud", "network", "네트워크", "브이피씨"], label: "VPC" },
-  { resourceType: "SUBNET", keywords: ["subnet", "sub net", "서브넷"], label: "서브넷" },
+  { resourceType: "VPC", keywords: ["vpc", "virtual private cloud", "network", "네트워크", "네트워크 공간", "브이피씨"], label: "VPC" },
+  { resourceType: "SUBNET", keywords: ["subnet", "sub net", "서브넷", "작은 네트워크"], label: "서브넷" },
   {
     resourceType: "INTERNET_GATEWAY",
     keywords: ["internet gateway", "igw", "internet gw", "인터넷 게이트웨이", "인터넷 gateway"],
@@ -41,19 +41,19 @@ const RESOURCE_KEYWORDS: readonly {
   },
   {
     resourceType: "RDS",
-    keywords: ["rds", "database", "db", "postgres", "mysql", "데이터베이스", "디비", "데이터 저장소"],
+    keywords: ["rds", "database", "db", "postgres", "mysql", "데이터베이스", "디비", "데이터 저장소", "데이터 저장 공간"],
     label: "RDS 데이터베이스"
   },
-  { resourceType: "S3", keywords: ["s3", "bucket", "storage", "file", "upload", "버킷", "스토리지", "파일", "업로드"], label: "S3 버킷" },
+  { resourceType: "S3", keywords: ["s3", "bucket", "storage", "file", "upload", "버킷", "스토리지", "파일", "파일 저장 공간", "업로드"], label: "S3 버킷" },
   {
     resourceType: "SECURITY_GROUP",
-    keywords: ["security group", "securitygroup", "firewall", "ssh", "보안 그룹", "보안그룹", "방화벽"],
+    keywords: ["security group", "securitygroup", "firewall", "ssh", "보안 그룹", "보안그룹", "보안 설정", "방화벽"],
     label: "보안 그룹"
   },
   { resourceType: "CLOUDFRONT", keywords: ["cloudfront", "cloud front", "cdn", "클라우드프론트"], label: "CloudFront CDN" },
   { resourceType: "LAMBDA", keywords: ["lambda", "serverless", "function", "람다", "서버리스", "함수"], label: "Lambda 함수" },
   { resourceType: "AMI", keywords: ["ami", "machine image", "image", "이미지", "머신 이미지"], label: "AMI" },
-  { resourceType: "API_GATEWAY_REST_API", keywords: ["api gateway", "rest api", "apigateway", "api 게이트웨이"], label: "API Gateway" },
+  { resourceType: "API_GATEWAY_REST_API", keywords: ["api gateway", "rest api", "apigateway", "api 게이트웨이", "api 입구"], label: "API Gateway" },
   { resourceType: "IAM_ROLE", keywords: ["iam role", "role", "역할", "롤"], label: "IAM 역할" },
   { resourceType: "IAM_POLICY", keywords: ["iam policy", "policy", "정책", "폴리시"], label: "IAM 정책" },
   {
@@ -153,12 +153,12 @@ const MANUAL_REVIEW_PATCH_SUGGESTIONS = [
 ] as const;
 
 const RESOURCE_TYPE_PATCH_SUGGESTIONS = [
-  "데이터베이스 추가",
-  "스토리지 버킷 추가",
-  "서버 인스턴스 추가",
-  "보안 그룹 추가",
-  "서브넷 추가",
-  "API Gateway 추가"
+  "데이터 저장 공간",
+  "파일 저장 공간",
+  "서버",
+  "보안 설정",
+  "네트워크 공간",
+  "API 입구"
 ] as const;
 
 const SKIP_CONNECTION_SUGGESTION = "연결하지 않기";
@@ -279,12 +279,12 @@ function resolvePatchActionFromNaturalLanguage(normalizedInstruction: string): A
     return "remove_resource";
   }
 
-  if (includesAnyPhrase(normalizedInstruction, MODIFY_ACTION_KEYWORDS)) {
-    return "modify_resource";
-  }
-
   if (includesAnyPhrase(normalizedInstruction, ADD_ACTION_KEYWORDS)) {
     return "add_resource";
+  }
+
+  if (includesAnyPhrase(normalizedInstruction, MODIFY_ACTION_KEYWORDS)) {
+    return "modify_resource";
   }
 
   return "manual_review";
@@ -564,7 +564,7 @@ function createClarificationQuestion(
   }
 
   if (intent.requestedAction === "add_resource" && intent.resourceType === undefined) {
-    return "어떤 리소스를 추가할까요? 필요한 리소스 종류를 하나 골라주거나 직접 적어주세요.";
+    return "무엇을 더 추가할까요? 데이터 저장 공간, 파일 저장 공간, 서버처럼 필요한 것을 골라주세요.";
   }
 
   if (intent.requestedAction === "add_resource" && intent.resourceType !== undefined) {

@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   resolveWorkspaceAiChatAction,
-  resolveWorkspaceAiChatMode
+  resolveWorkspaceAiChatMode,
+  shouldInterruptPatchClarificationForDraft
 } from "./workspace-ai-chat-routing";
 
 test("resolveWorkspaceAiChatMode keeps empty boards on the draft generation flow", () => {
@@ -56,6 +57,25 @@ test("resolveWorkspaceAiChatAction keeps existing-board edit prompts on patch", 
       item.prompt
     );
   }
+});
+
+test("shouldInterruptPatchClarificationForDraft lets new service requests escape resource questions", () => {
+  assert.equal(
+    shouldInterruptPatchClarificationForDraft({
+      boardHasResources: true,
+      needsDraftClarification: true,
+      prompt: "로그인 있는 작은 웹서비스 하나 만들고 싶어"
+    }),
+    true
+  );
+  assert.equal(
+    shouldInterruptPatchClarificationForDraft({
+      boardHasResources: true,
+      needsDraftClarification: true,
+      prompt: "여기에 로그인 기능 추가해줘"
+    }),
+    false
+  );
 });
 
 test("resolveWorkspaceAiChatAction asks draft clarification only on draft generation", () => {

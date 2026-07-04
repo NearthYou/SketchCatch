@@ -106,6 +106,10 @@ test("createArchitecturePatchPreview removes the selected target and connected e
 test("createArchitecturePatchPreview recognizes broad natural-language add requests", () => {
   const addCases: readonly { readonly instruction: string; readonly resourceType: ResourceType }[] = [
     { instruction: "네트워크 하나 추가해줘", resourceType: "VPC" },
+    { instruction: "데이터 저장 공간 추가", resourceType: "RDS" },
+    { instruction: "파일 저장 공간 추가", resourceType: "S3" },
+    { instruction: "보안 설정 추가", resourceType: "SECURITY_GROUP" },
+    { instruction: "API 입구 추가", resourceType: "API_GATEWAY_REST_API" },
     { instruction: "여기에 데이터베이스 하나 추가해줘", resourceType: "RDS" },
     { instruction: "스토리지 버킷도 넣어줘", resourceType: "S3" },
     { instruction: "웹 서버 인스턴스 만들어줘", resourceType: "EC2" },
@@ -214,14 +218,14 @@ test("createArchitecturePatchPreview asks for the resource type when add request
 
   assert.equal(response.status, "needs_clarification");
   assert.equal(response.intent.requestedAction, "add_resource");
-  assert.match(response.question, /어떤 리소스/);
+  assert.match(response.question, /무엇을 더 추가/);
   assert.deepEqual(response.suggestions, [
-    "데이터베이스 추가",
-    "스토리지 버킷 추가",
-    "서버 인스턴스 추가",
-    "보안 그룹 추가",
-    "서브넷 추가",
-    "API Gateway 추가"
+    "데이터 저장 공간",
+    "파일 저장 공간",
+    "서버",
+    "보안 설정",
+    "네트워크 공간",
+    "API 입구"
   ]);
 });
 

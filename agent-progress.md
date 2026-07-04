@@ -13,6 +13,25 @@
 - Highest priority unfinished harness feature: `HARNESS-007`
 - Current blocker: none
 
+### 2026-07-05 - 생성 요청이 리소스 질문에 갇히는 흐름 수정
+- Goal: 사용자가 “로그인 있는 작은 웹서비스 하나 만들고 싶어”처럼 새 서비스를 말하면 기존 patch 질문 상태가 있어도 쉬운 생성 확인 질문으로 안내한다.
+- Completed:
+  - pending patch clarification 상태에서 새 서비스 생성 요청이 들어오면 기존 patch 질문을 끊고 draft clarification으로 전환하게 했다.
+  - add-resource 종류 선택 질문을 “어떤 리소스” 대신 “무엇을 더 추가할까요?”처럼 쉬운 말로 낮췄다.
+  - 버튼 선택지도 데이터 저장 공간, 파일 저장 공간, 서버, 보안 설정, 네트워크 공간, API 입구로 바꿨다.
+  - 쉬운 선택지 문구가 실제 RDS/S3/EC2/Security Group/VPC/API Gateway 타입으로 해석되도록 키워드를 보강했다.
+  - “보안 설정 추가”처럼 `설정`과 `추가`가 같이 있는 요청은 수정이 아니라 추가로 해석되게 action 우선순위를 보정했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edit
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-ai-chat-routing.test.ts` - passed, 7 tests
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api exec tsx --test src/services/aiArchitecturePatchPreview.test.ts` - passed, 14 tests
+  - `npm exec --package=pnpm@11.8.0 -- pnpm typecheck` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web lint` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api lint` - passed
+- Known risks:
+  - 전체 `pnpm build`는 변경 폭 대비 과해서 실행하지 않았다.
+  - 브라우저 UI 클릭 스모크는 수행하지 않았고, 라우팅/API patch preview 단위 테스트와 타입/lint로 검증했다.
+
 ### 2026-07-05 - 수정 패치 리소스 추가 연결 질문 보강
 - Goal: 기존 다이어그램 수정 중 새 리소스를 추가할 때 영어 리소스 이름을 쓰고, 연결 대상 또는 연결하지 않기 선택 후 preview에 edge까지 반영한다.
 - Completed:

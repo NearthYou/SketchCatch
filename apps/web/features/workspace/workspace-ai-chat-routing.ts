@@ -17,11 +17,7 @@ export function resolveWorkspaceAiChatAction(input: {
   readonly needsDraftClarification: boolean;
   readonly prompt: string;
 }): WorkspaceAiChatAction {
-  if (
-    input.boardHasResources &&
-    input.needsDraftClarification &&
-    isNewServiceDraftRequest(input.prompt)
-  ) {
+  if (shouldInterruptPatchClarificationForDraft(input)) {
     return "draft_clarification";
   }
 
@@ -32,6 +28,18 @@ export function resolveWorkspaceAiChatAction(input: {
   }
 
   return input.needsDraftClarification ? "draft_clarification" : "draft";
+}
+
+export function shouldInterruptPatchClarificationForDraft(input: {
+  readonly boardHasResources: boolean;
+  readonly needsDraftClarification: boolean;
+  readonly prompt: string;
+}): boolean {
+  return (
+    input.boardHasResources &&
+    input.needsDraftClarification &&
+    isNewServiceDraftRequest(input.prompt)
+  );
 }
 
 function isNewServiceDraftRequest(prompt: string): boolean {
