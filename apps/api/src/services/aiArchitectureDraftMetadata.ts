@@ -1,16 +1,16 @@
 import type {
   AiArchitectureDraftResult,
+  ArchitectureDraftPattern,
   ArchitectureGuardrailWarning,
-  ArchitectureScenario,
   CreateArchitectureDraftRequest
 } from "@sketchcatch/types";
-import type { ScenarioResolution } from "./aiArchitectureScenarioResolution.js";
+import type { ArchitectureRequirementResolution } from "./aiArchitectureRequirementResolution.js";
 
 
 export function applyGuardrailMetadata(
   draft: AiArchitectureDraftResult,
   _request: CreateArchitectureDraftRequest,
-  resolution: ScenarioResolution
+  resolution: ArchitectureRequirementResolution
 ): AiArchitectureDraftResult {
   const guardrailWarnings = [
     ...resolution.guardrailWarnings,
@@ -21,8 +21,7 @@ export function applyGuardrailMetadata(
     ...draft,
     metadata: {
       ...draft.metadata,
-      selectedScenario: resolution.selectedScenario,
-      scenarioScores: resolution.scenarioScores,
+      selectedDraftPattern: resolution.selectedDraftPattern,
       requirementFacts: resolution.requirementFacts,
       operatingProfile: resolution.operatingProfile,
       guardrailWarnings,
@@ -32,7 +31,9 @@ export function applyGuardrailMetadata(
   };
 }
 
-function createOperatingConditionWarnings(resolution: ScenarioResolution): ArchitectureGuardrailWarning[] {
+function createOperatingConditionWarnings(
+  resolution: ArchitectureRequirementResolution
+): ArchitectureGuardrailWarning[] {
   const warnings: ArchitectureGuardrailWarning[] = [];
 
   if (resolution.operatingProfile.budgetLevel === "low" && resolution.requirementFacts.includes("database")) {
@@ -52,7 +53,7 @@ function createOperatingConditionWarnings(resolution: ScenarioResolution): Archi
   return warnings;
 }
 
-function createGuardrailAssumptions(resolution: ScenarioResolution): string[] {
+function createGuardrailAssumptions(resolution: ArchitectureRequirementResolution): string[] {
   const assumptions: string[] = [];
 
   if (resolution.operatingProfile.budgetLevel === "low") {
@@ -71,11 +72,11 @@ function createGuardrailAssumptions(resolution: ScenarioResolution): string[] {
 }
 
 function createGuardrailExplanations(
-  resolution: ScenarioResolution,
+  resolution: ArchitectureRequirementResolution,
   guardrailWarnings: readonly ArchitectureGuardrailWarning[]
 ): string[] {
   const explanations = [
-    `대표 초안 유형은 ${getScenarioLabel(resolution.selectedScenario)}이지만, 실제 리소스는 자연어 단서 조합으로 생성했습니다.`
+    `대표 초안 패턴은 ${getDraftPatternLabel(resolution.selectedDraftPattern)}이지만, 실제 리소스는 자연어 단서 조합으로 생성했습니다.`
   ];
 
   if (resolution.operatingProfile.trafficLevel === "normal") {
@@ -89,8 +90,8 @@ function createGuardrailExplanations(
   return [...explanations, ...guardrailWarnings.map((warning) => warning.message)];
 }
 
-function getScenarioLabel(scenario: ArchitectureScenario): string {
-  switch (scenario) {
+function getDraftPatternLabel(pattern: ArchitectureDraftPattern): string {
+  switch (pattern) {
     case "static_site":
       return "정적 웹사이트";
     case "api_server":

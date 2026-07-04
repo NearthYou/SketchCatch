@@ -1,16 +1,13 @@
 import type {
+  ArchitectureDraftPattern,
   ArchitectureDraftOperatingProfile,
   ArchitectureGuardrailWarning,
   ArchitectureRequirementFact,
-  ArchitectureScenario,
-  ArchitectureScenarioScore,
   CreateArchitectureDraftRequest
 } from "@sketchcatch/types";
 
-
-export type ScenarioResolution = {
-  readonly selectedScenario: ArchitectureScenario;
-  readonly scenarioScores: ArchitectureScenarioScore[];
+export type ArchitectureRequirementResolution = {
+  readonly selectedDraftPattern: ArchitectureDraftPattern;
   readonly requirementFacts: ArchitectureRequirementFact[];
   readonly operatingProfile: ArchitectureDraftOperatingProfile;
   readonly guardrailWarnings: ArchitectureGuardrailWarning[];
@@ -28,84 +25,14 @@ export class AmbiguousArchitecturePromptError extends Error {
   }
 }
 
-type PromptScenarioKeywordRule = {
-  readonly scenario: ArchitectureScenario;
-  readonly keywords: readonly string[];
-  readonly reason: string;
-};
-
 type UnsupportedRequirementRule = {
   readonly label: string;
   readonly keywords: readonly string[];
   readonly substitution?: {
     readonly label: string;
-    readonly scenario?: ArchitectureScenario;
+    readonly facts?: readonly ArchitectureRequirementFact[];
   };
 };
-
-const PROMPT_SCENARIO_KEYWORD_RULES: readonly PromptScenarioKeywordRule[] = [
-  {
-    scenario: "backend_with_db",
-    keywords: [
-      "db",
-      "database",
-      "rds",
-      "postgres",
-      "postgresql",
-      "mysql",
-      "mariadb",
-      "데이터베이스",
-      "디비",
-      "로그인",
-      "회원",
-      "계정",
-      "사용자 정보"
-    ],
-    reason: "데이터베이스가 필요한 요구사항"
-  },
-  {
-    scenario: "server_storage",
-    keywords: ["s3", "storage", "bucket", "object storage", "스토리지", "버킷", "파일", "이미지", "업로드"],
-    reason: "서버와 스토리지를 함께 쓰는 요구사항"
-  },
-  {
-    scenario: "serverless_function",
-    keywords: ["lambda", "serverless", "람다", "서버리스", "함수"],
-    reason: "Lambda 함수 또는 서버리스 요구사항"
-  },
-  {
-    scenario: "api_server",
-    keywords: ["api", "server", "ec2", "express", "spring", "fastapi", "nestjs", "서버", "백엔드", "애플리케이션"],
-    reason: "API 서버 요구사항"
-  },
-  {
-    scenario: "static_site",
-    keywords: [
-      "static",
-      "frontend",
-      "react",
-      "next",
-      "next.js",
-      "cloudfront",
-      "정적",
-      "웹사이트",
-      "홈페이지",
-      "사이트",
-      "웹서비스",
-      "프론트엔드",
-      "리액트"
-    ],
-    reason: "정적 웹사이트 요구사항"
-  }
-];
-
-const PROMPT_SCENARIO_PRIORITY: readonly ArchitectureScenario[] = [
-  "backend_with_db",
-  "server_storage",
-  "serverless_function",
-  "api_server",
-  "static_site"
-];
 
 const GENERIC_WEBSITE_KEYWORDS = ["웹사이트", "홈페이지", "웹서비스", "사이트"] as const;
 
@@ -115,6 +42,11 @@ const CONCRETE_WEBSITE_KEYWORDS = [
   "react",
   "next",
   "next.js",
+  "s3",
+  "cloudfront",
+  "cdn",
+  "storage",
+  "bucket",
   "정적",
   "프론트엔드",
   "리액트",
@@ -140,8 +72,17 @@ const CONCRETE_WEBSITE_KEYWORDS = [
   "db",
   "database",
   "데이터베이스",
-  "디비"
+  "디비",
+  "스토리지",
+  "버킷"
 ] as const;
+
+const GENERIC_WEBSITE_DERIVED_FACTS: ReadonlySet<ArchitectureRequirementFact> = new Set([
+  "web_frontend",
+  "static_delivery",
+  "object_storage",
+  "iam_permissions"
+]);
 
 type RequirementFactKeywordRule = {
   readonly fact: ArchitectureRequirementFact;
@@ -235,7 +176,7 @@ const UNSUPPORTED_REQUIREMENT_RULES: readonly UnsupportedRequirementRule[] = [
     keywords: ["eks", "kubernetes", "쿠버네티스", "k8s"],
     substitution: {
       label: "단일 EC2 API 서버",
-      scenario: "api_server"
+      facts: ["server_runtime", "network_boundary", "iam_permissions", "observability"]
     }
   },
   {
@@ -243,7 +184,7 @@ const UNSUPPORTED_REQUIREMENT_RULES: readonly UnsupportedRequirementRule[] = [
     keywords: ["ecs", "fargate"],
     substitution: {
       label: "단일 EC2 API 서버",
-      scenario: "api_server"
+      facts: ["server_runtime", "network_boundary", "iam_permissions", "observability"]
     }
   },
   {
@@ -251,7 +192,7 @@ const UNSUPPORTED_REQUIREMENT_RULES: readonly UnsupportedRequirementRule[] = [
     keywords: ["dynamodb", "dynamo db", "nosql", "다이나모db", "다이나모디비"],
     substitution: {
       label: "RDS 데이터베이스",
-      scenario: "backend_with_db"
+      facts: ["server_runtime", "database", "network_boundary", "iam_permissions", "observability", "encryption"]
     }
   },
   {
@@ -267,7 +208,7 @@ const UNSUPPORTED_REQUIREMENT_RULES: readonly UnsupportedRequirementRule[] = [
     keywords: ["alb", "load balancer", "로드밸런서", "auto scaling", "autoscaling", "오토스케일링"],
     substitution: {
       label: "단일 EC2 서버",
-      scenario: "api_server"
+      facts: ["server_runtime", "network_boundary", "iam_permissions", "observability"]
     }
   },
   {
@@ -291,14 +232,15 @@ const UNSUPPORTED_REQUIREMENT_RULES: readonly UnsupportedRequirementRule[] = [
   }
 ];
 
-export function resolveScenario(request: CreateArchitectureDraftRequest): ScenarioResolution {
-  const scenarioScores = scorePromptScenarios(request.prompt);
+export function resolveArchitectureRequirement(
+  request: CreateArchitectureDraftRequest
+): ArchitectureRequirementResolution {
   const unsupportedRequirementMatches = findUnsupportedRequirementMatches(request.prompt);
   const requirementFacts = createRequirementFacts(request.prompt, unsupportedRequirementMatches);
   const hasPromptSignal = requirementFacts.length > 0;
   const unsupportedWarnings = createUnsupportedRequirementWarnings(unsupportedRequirementMatches);
 
-  if (isGenericWebsitePromptWithoutConcreteArchitecture(request.prompt, scenarioScores)) {
+  if (isGenericWebsitePromptWithoutConcreteArchitecture(request.prompt, requirementFacts)) {
     throw new AmbiguousArchitecturePromptError(
       "웹사이트라고만 하면 화면만 보여주는 사이트인지, 방문자가 파일을 올리는 서비스인지, 로그인이나 데이터 저장이 필요한 서비스인지 먼저 확인해야 합니다."
     );
@@ -306,8 +248,7 @@ export function resolveScenario(request: CreateArchitectureDraftRequest): Scenar
 
   if (hasPromptSignal) {
     return {
-      selectedScenario: selectRepresentativeScenario(requirementFacts, scenarioScores),
-      scenarioScores,
+      selectedDraftPattern: selectDraftPattern(requirementFacts),
       requirementFacts,
       operatingProfile: createOperatingProfile(request.prompt, requirementFacts),
       guardrailWarnings: [
@@ -320,24 +261,7 @@ export function resolveScenario(request: CreateArchitectureDraftRequest): Scenar
   throw new AmbiguousArchitecturePromptError();
 }
 
-function scorePromptScenarios(prompt: string): ArchitectureScenarioScore[] {
-  const normalizedPrompt = normalizePrompt(prompt);
-
-  return PROMPT_SCENARIO_KEYWORD_RULES.map((rule) => {
-    const matchedKeywords = rule.keywords.filter((keyword) => normalizedPrompt.includes(keyword.toLowerCase()));
-
-    return {
-      scenario: rule.scenario,
-      score: matchedKeywords.length,
-      reasons: matchedKeywords.map((keyword) => `${rule.reason}: "${keyword}"`)
-    };
-  });
-}
-
-function selectRepresentativeScenario(
-  requirementFacts: readonly ArchitectureRequirementFact[],
-  scenarioScores: readonly ArchitectureScenarioScore[]
-): ArchitectureScenario {
+function selectDraftPattern(requirementFacts: readonly ArchitectureRequirementFact[]): ArchitectureDraftPattern {
   const factSet = new Set(requirementFacts);
 
   if (factSet.has("serverless_runtime")) {
@@ -360,30 +284,15 @@ function selectRepresentativeScenario(
     return "static_site";
   }
 
-  const highestScore = Math.max(...scenarioScores.map((scenarioScore) => scenarioScore.score));
-
-  return (
-    PROMPT_SCENARIO_PRIORITY.find((scenario) => findPromptScenarioScore(scenarioScores, scenario) === highestScore) ??
-    "api_server"
-  );
-}
-
-function findPromptScenarioScore(
-  scenarioScores: readonly ArchitectureScenarioScore[],
-  scenario: ArchitectureScenario
-): number {
-  return scenarioScores.find((scenarioScore) => scenarioScore.scenario === scenario)?.score ?? 0;
+  return "api_server";
 }
 
 function isGenericWebsitePromptWithoutConcreteArchitecture(
   prompt: string,
-  scenarioScores: readonly ArchitectureScenarioScore[]
+  requirementFacts: readonly ArchitectureRequirementFact[]
 ): boolean {
   const normalizedPrompt = normalizePrompt(prompt);
-  const staticSiteScore = findPromptScenarioScore(scenarioScores, "static_site");
-  const nonStaticScore = scenarioScores
-    .filter((scenarioScore) => scenarioScore.scenario !== "static_site")
-    .reduce((sum, scenarioScore) => sum + scenarioScore.score, 0);
+  const factSet = new Set(requirementFacts);
   const hasGenericWebsiteKeyword = GENERIC_WEBSITE_KEYWORDS.some((keyword) =>
     normalizedPrompt.includes(keyword)
   );
@@ -391,7 +300,12 @@ function isGenericWebsitePromptWithoutConcreteArchitecture(
     normalizedPrompt.includes(keyword.toLowerCase())
   );
 
-  return staticSiteScore > 0 && nonStaticScore === 0 && hasGenericWebsiteKeyword && !hasConcreteWebsiteKeyword;
+  return (
+    hasGenericWebsiteKeyword &&
+    factSet.has("web_frontend") &&
+    Array.from(factSet).every((fact) => GENERIC_WEBSITE_DERIVED_FACTS.has(fact)) &&
+    !hasConcreteWebsiteKeyword
+  );
 }
 
 function createRequirementFacts(
@@ -408,20 +322,8 @@ function createRequirementFacts(
   }
 
   for (const rule of unsupportedRequirementMatches) {
-    if (rule.substitution?.scenario === "api_server") {
-      facts.add("server_runtime");
-      facts.add("network_boundary");
-      facts.add("iam_permissions");
-      facts.add("observability");
-    }
-
-    if (rule.substitution?.scenario === "backend_with_db") {
-      facts.add("server_runtime");
-      facts.add("database");
-      facts.add("network_boundary");
-      facts.add("iam_permissions");
-      facts.add("observability");
-      facts.add("encryption");
+    for (const fact of rule.substitution?.facts ?? []) {
+      facts.add(fact);
     }
   }
 

@@ -162,10 +162,8 @@ export function WorkspaceAiGuardrailWarnings({
 function getGuardrailWarningLabel(code: ArchitectureGuardrailWarning["code"]): string {
   const warningLabels = {
     low_budget_rds_cost: "예산 확인",
-    scenario_conflict: "선택 조건 확인",
     unsupported_resource_omitted: "일부 제외",
     unsupported_requirement_substituted: "대체 생성",
-    selection_overridden_by_prompt: "자연어 우선",
     partial_generation: "부분 생성",
     guardrail_adjusted_config: "설정 조정",
     board_replacement_required: "전체 교체"

@@ -3,10 +3,12 @@ import type {
   ArchitectureJson,
   ArchitectureRequirementFact
 } from "@sketchcatch/types";
-import type { ScenarioResolution } from "./aiArchitectureScenarioResolution.js";
+import type { ArchitectureRequirementResolution } from "./aiArchitectureRequirementResolution.js";
 
 // Requirement fact 조합을 지원 가능한 ResourceType만 포함한 ArchitectureJson으로 조립합니다.
-export function createDraftFromRequirementFacts(resolution: ScenarioResolution): AiArchitectureDraftResult {
+export function createDraftFromRequirementFacts(
+  resolution: ArchitectureRequirementResolution
+): AiArchitectureDraftResult {
   const factSet = new Set(resolution.requirementFacts);
   const nodes: ArchitectureJson["nodes"] = [];
   const edges: ArchitectureJson["edges"] = [];

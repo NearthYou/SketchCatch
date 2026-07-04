@@ -26,8 +26,8 @@ test("workspace draft result exposes guardrail metadata sections", () => {
 	const globalsCssSource = readFileSync(globalsCssPath, "utf8");
 
 	assert.match(workspaceClientSource, /DraftMetadataPanel/);
-	assert.match(draftMetadataPanelSource, /selectedScenario/);
-	assert.match(draftMetadataPanelSource, /scenarioScores/);
+	assert.match(draftMetadataPanelSource, /selectedDraftPattern/);
+	assert.match(draftMetadataPanelSource, /requirementFacts/);
 	assert.match(draftMetadataPanelSource, /guardrailWarnings/);
 	assert.match(globalsCssSource, /\.metadataBlock\s*{/);
 	assert.match(globalsCssSource, /\.warningList\s*{/);

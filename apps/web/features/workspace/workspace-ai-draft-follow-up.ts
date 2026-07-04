@@ -7,7 +7,6 @@ import type {
 export type ArchitectureDraftFollowUpKind =
   | "unsupported_requirement_substituted"
   | "partial_generation"
-  | "scenario_conflict"
   | "low_budget_rds_cost";
 
 export type ArchitectureDraftFollowUpSession = {
@@ -113,10 +112,6 @@ function findDraftFollowUpKind(
     return "partial_generation";
   }
 
-  if (warnings.some((warning) => warning.code === "scenario_conflict")) {
-    return "scenario_conflict";
-  }
-
   if (warnings.some((warning) => warning.code === "low_budget_rds_cost")) {
     return "low_budget_rds_cost";
   }
@@ -139,12 +134,6 @@ function createFollowUpCopy(
         question:
           "질문: 지원 가능한 부분만 초안으로 만들 수 있습니다. 제외된 요구사항을 다른 방식으로 대체할까요?",
         suggestions: ["지원 범위로 진행", "조건 다시 정리"]
-      };
-    case "scenario_conflict":
-      return {
-        question:
-          "질문: 요구사항 안의 조건이 서로 달라 보입니다. 자연어 기준으로 만든 초안으로 진행할까요?",
-        suggestions: ["자연어 기준으로 진행", "조건 다시 정리"]
       };
     case "low_budget_rds_cost":
       return {

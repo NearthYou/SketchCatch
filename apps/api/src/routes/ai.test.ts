@@ -28,16 +28,7 @@ const architectureDraftResponseSchema = z.object({
     confidence: z.string(),
     assumptions: z.array(z.string()),
     explanations: z.array(z.string()),
-    selectedScenario: z.string().optional(),
-    scenarioScores: z
-      .array(
-        z.object({
-          scenario: z.string(),
-          score: z.number(),
-          reasons: z.array(z.string())
-        })
-      )
-      .optional(),
+    selectedDraftPattern: z.string().optional(),
     requirementFacts: z.array(z.string()).optional(),
     operatingProfile: z
       .object({
@@ -281,7 +272,7 @@ test("POST /api/ai/architecture-draft selects a Lambda draft from serverless pro
   const body = architectureDraftResponseSchema.parse(response.json());
 
   assert.equal(body.title, "Lambda 함수 Practice Architecture");
-  assert.equal(body.metadata.selectedScenario, "serverless_function");
+  assert.equal(body.metadata.selectedDraftPattern, "serverless_function");
   assertDraftHasNodeTypes(body, [
     "API_GATEWAY_REST_API",
     "IAM_ROLE",
@@ -311,7 +302,7 @@ test("POST /api/ai/architecture-draft selects a Lambda draft from serverless pro
   await app.close();
 });
 
-test("POST /api/ai/architecture-draft composes resources from natural language facts instead of choosing one fixed scenario", async () => {
+test("POST /api/ai/architecture-draft composes resources from natural language facts instead of choosing one fixed preset", async () => {
   const app = buildApp();
 
   const response = await app.inject({
@@ -377,7 +368,7 @@ test("POST /api/ai/architecture-draft warns when unsupported resources are omitt
 
   const body = architectureDraftResponseSchema.parse(response.json());
 
-  assert.equal(body.metadata.selectedScenario, "api_server");
+  assert.equal(body.metadata.selectedDraftPattern, "api_server");
   assert.ok(body.metadata.guardrailWarnings?.some((warning) => warning.code === "unsupported_resource_omitted"));
   assert.ok(body.metadata.guardrailWarnings?.some((warning) => warning.code === "partial_generation"));
   assert.equal(body.architectureJson.nodes.some((node) => node.type === "UNKNOWN"), false);
@@ -404,7 +395,7 @@ test("POST /api/ai/architecture-draft derives operating profile from natural lan
 	assert.equal(body.title, "DB 포함 백엔드 Practice Architecture");
 	assert.ok(nodeTypes.includes("RDS"));
 	assert.equal(nodeTypes.includes("CLOUDFRONT"), false);
-  assert.equal(body.metadata.selectedScenario, "backend_with_db");
+  assert.equal(body.metadata.selectedDraftPattern, "backend_with_db");
   assert.ok(body.metadata.guardrailWarnings?.some((warning) => warning.code === "guardrail_adjusted_config"));
   assert.ok(body.metadata.guardrailWarnings?.some((warning) => warning.code === "low_budget_rds_cost"));
 	assert.ok(body.metadata.assumptions.some((item) => item.includes("낮은 예산")));
@@ -414,7 +405,7 @@ test("POST /api/ai/architecture-draft derives operating profile from natural lan
 	await app.close();
 });
 
-test("POST /api/ai/architecture-draft returns scenario scores and unsupported substitution warning metadata", async () => {
+test("POST /api/ai/architecture-draft returns requirement facts and unsupported substitution warning metadata", async () => {
   const app = buildApp();
 
   const scoredResponse = await app.inject({
@@ -428,12 +419,10 @@ test("POST /api/ai/architecture-draft returns scenario scores and unsupported su
   assert.equal(scoredResponse.statusCode, 200);
 
   const scoredBody = architectureDraftResponseSchema.parse(scoredResponse.json());
-  const staticSiteScore = scoredBody.metadata.scenarioScores?.find((score) => score.scenario === "static_site");
 
-  assert.equal(scoredBody.metadata.selectedScenario, "static_site");
-  assert.ok(staticSiteScore !== undefined);
-  assert.ok(staticSiteScore.score > 0);
-  assert.ok(staticSiteScore.reasons.length > 0);
+  assert.equal(scoredBody.metadata.selectedDraftPattern, "static_site");
+  assert.ok(scoredBody.metadata.requirementFacts?.includes("web_frontend"));
+  assert.ok(scoredBody.metadata.requirementFacts?.includes("static_delivery"));
 
   const unsupportedResponse = await app.inject({
     method: "POST",
@@ -447,18 +436,14 @@ test("POST /api/ai/architecture-draft returns scenario scores and unsupported su
 
   const unsupportedBody = architectureDraftResponseSchema.parse(unsupportedResponse.json());
 
-  assert.equal(unsupportedBody.metadata.selectedScenario, "api_server");
+  assert.equal(unsupportedBody.metadata.selectedDraftPattern, "api_server");
   assert.equal(unsupportedBody.architectureJson.nodes.some((node) => node.type === "UNKNOWN"), false);
   assert.ok(
     unsupportedBody.metadata.guardrailWarnings?.some(
       (warning) => warning.code === "unsupported_requirement_substituted"
     )
   );
-  assert.equal(
-    unsupportedBody.metadata.guardrailWarnings?.some((warning) => warning.code === "selection_overridden_by_prompt") ??
-      false,
-    false
-  );
+  assert.ok(unsupportedBody.metadata.requirementFacts?.includes("server_runtime"));
 
   const partialResponse = await app.inject({
     method: "POST",
@@ -472,7 +457,7 @@ test("POST /api/ai/architecture-draft returns scenario scores and unsupported su
 
   const partialBody = architectureDraftResponseSchema.parse(partialResponse.json());
 
-  assert.equal(partialBody.metadata.selectedScenario, "api_server");
+  assert.equal(partialBody.metadata.selectedDraftPattern, "api_server");
   assert.ok(
     partialBody.metadata.guardrailWarnings?.some(
       (warning) => warning.code === "unsupported_requirement_substituted"
@@ -488,15 +473,18 @@ test("POST /api/ai/architecture-draft understands beginner-friendly prompt wordi
   const promptCases = [
     {
       prompt: "소개용 랜딩 웹사이트를 배포하고 싶어",
-      scenario: "static_site"
+      draftPattern: "static_site",
+      expectedFact: "web_frontend"
     },
     {
       prompt: "파일 업로드 페이지가 필요해",
-      scenario: "server_storage"
+      draftPattern: "server_storage",
+      expectedFact: "file_upload"
     },
     {
       prompt: "로그인 있는 작은 웹서비스가 필요해",
-      scenario: "backend_with_db"
+      draftPattern: "backend_with_db",
+      expectedFact: "auth_or_user_data"
     }
   ] as const;
 
@@ -513,8 +501,8 @@ test("POST /api/ai/architecture-draft understands beginner-friendly prompt wordi
 
     const body = architectureDraftResponseSchema.parse(response.json());
 
-    assert.equal(body.metadata.selectedScenario, promptCase.scenario);
-    assert.ok(body.metadata.scenarioScores?.some((score) => score.scenario === promptCase.scenario && score.score > 0));
+    assert.equal(body.metadata.selectedDraftPattern, promptCase.draftPattern);
+    assert.ok(body.metadata.requirementFacts?.includes(promptCase.expectedFact));
   }
 
   await app.close();
@@ -683,6 +671,43 @@ test("POST /api/ai/architecture-draft returns deterministic ArchitectureJson for
   const secondBody = architectureDraftResponseSchema.parse(secondResponse.json());
 
   assert.deepEqual(firstBody.architectureJson, secondBody.architectureJson);
+
+  await app.close();
+});
+
+test("POST /api/ai/architecture-draft returns the same ArchitectureJson for equivalent wording", async () => {
+  const app = buildApp();
+  const equivalentPrompts = [
+    "EC2 서버 하나랑 이미지 저장용 S3 버킷이 있는 연습용 구조를 만들어줘",
+    "연습용으로 서버 한 대에서 이미지 파일을 저장하는 구조를 만들어줘",
+    "연습용 파일 업로드 서버 구조를 만들어줘",
+    "연습용으로 서버가 파일을 받아 이미지 저장 공간에 보관하는 구조를 설계해줘",
+    "연습용 작은 서버 서비스에서 사용자가 이미지를 올리는 구조를 만들어줘"
+  ];
+  const architectureJsonResults: ArchitectureDraftResponse["architectureJson"][] = [];
+
+  for (const prompt of equivalentPrompts) {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/ai/architecture-draft",
+      payload: {
+        prompt
+      }
+    });
+
+    assert.equal(response.statusCode, 200);
+
+    const body = architectureDraftResponseSchema.parse(response.json());
+
+    assert.equal(body.metadata.selectedDraftPattern, "server_storage");
+    assert.ok(body.metadata.requirementFacts?.includes("server_runtime"));
+    assert.ok(body.metadata.requirementFacts?.includes("object_storage"));
+    architectureJsonResults.push(body.architectureJson);
+  }
+
+  for (const architectureJson of architectureJsonResults.slice(1)) {
+    assert.deepEqual(architectureJson, architectureJsonResults[0]);
+  }
 
   await app.close();
 });
@@ -856,7 +881,7 @@ test("POST /api/ai/architecture-draft creates a server and storage draft", async
   const internetRouteEdge = body.architectureJson.edges.find((edge) => edge.id === "public-route-table-to-internet-gateway");
 
   assert.equal(body.title, "서버+스토리지 Practice Architecture");
-  assert.equal(body.metadata.selectedScenario, "server_storage");
+  assert.equal(body.metadata.selectedDraftPattern, "server_storage");
   assert.ok(nodeIds.includes("vpc-main"));
   assert.ok(nodeIds.includes("public-subnet"));
   assert.ok(nodeIds.includes("app-server"));
@@ -1055,7 +1080,7 @@ test("POST /api/ai/architecture-draft ignores legacy guardrail choice fields", a
 
   const body = architectureDraftResponseSchema.parse(response.json());
 
-  assert.equal(body.metadata.selectedScenario, "api_server");
+  assert.equal(body.metadata.selectedDraftPattern, "api_server");
   assertDraftHasNodeTypes(body, ["EC2", "AMI", "SECURITY_GROUP"]);
 
 	await app.close();

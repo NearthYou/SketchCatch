@@ -23,7 +23,7 @@ type ArchitectureDraftSummaryPayload = {
   readonly title: string;
   readonly source: string;
   readonly confidence: string;
-  readonly selectedScenario: string | null;
+  readonly selectedDraftPattern: string | null;
   readonly nodeTypes: readonly string[];
   readonly edgeCount: number;
   readonly assumptions: readonly string[];
@@ -115,7 +115,7 @@ function createArchitectureDraftSummaryPayload(
     title: result.title,
     source: result.metadata.source,
     confidence: result.metadata.confidence,
-    selectedScenario: result.metadata.selectedScenario ?? null,
+    selectedDraftPattern: result.metadata.selectedDraftPattern ?? null,
     nodeTypes: result.architectureJson.nodes.map((node) => node.type),
     edgeCount: result.architectureJson.edges.length,
     assumptions: result.metadata.assumptions,

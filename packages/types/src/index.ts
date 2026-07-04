@@ -653,32 +653,23 @@ export type AiResultMetadata = {
   confidence: AiConfidence;
   assumptions: string[];
   explanations: string[];
-  selectedScenario?: ArchitectureScenario;
-  scenarioScores?: ArchitectureScenarioScore[];
+  selectedDraftPattern?: ArchitectureDraftPattern;
   requirementFacts?: ArchitectureRequirementFact[];
   operatingProfile?: ArchitectureDraftOperatingProfile;
   guardrailWarnings?: ArchitectureGuardrailWarning[];
 };
 
-export type ArchitectureScenario =
+export type ArchitectureDraftPattern =
   | "static_site"
   | "api_server"
   | "backend_with_db"
   | "server_storage"
   | "serverless_function";
 
-export type ArchitectureScenarioScore = {
-  scenario: ArchitectureScenario;
-  score: number;
-  reasons: string[];
-};
-
 export type ArchitectureGuardrailWarningCode =
-  | "scenario_conflict"
   | "low_budget_rds_cost"
   | "unsupported_resource_omitted"
   | "unsupported_requirement_substituted"
-  | "selection_overridden_by_prompt"
   | "partial_generation"
   | "guardrail_adjusted_config"
   | "board_replacement_required";
