@@ -1018,43 +1018,37 @@
 }
 
 .terraformEditorFrame {
+  --terraform-gutter-width: 54px;
   background: #111820;
   border-bottom: 1px solid #0c1218;
-  display: grid;
+  display: block;
   flex: 1 1 0;
-  grid-template-columns: 42px minmax(0, 1fr);
   height: 100%;
   min-height: 0;
   overflow: hidden;
   position: relative;
-}
-
-.terraformLineNumbers {
-  background: #0f151c;
-  border-right: 1px solid #263746;
-  box-sizing: border-box;
-  color: #6e8192;
-  font-family: var(--bp-mono);
-  font-size: 12px;
-  height: 100%;
-  line-height: 1.6;
-  list-style: none;
-  margin: 0;
-  max-height: 100%;
-  overflow: hidden;
-  padding: 12px 8px 12px 0;
-  text-align: right;
 }
 
 .terraformCodeViewport {
   background:
     linear-gradient(90deg, rgba(87, 128, 158, 0.12) 1px, transparent 1px) 0 0 / 24px 24px,
     #111820;
+  height: 100%;
   min-height: 0;
   min-width: 0;
   overflow: hidden;
   position: relative;
   width: 100%;
+}
+
+.terraformCodeViewport::before {
+  background: #0f151c;
+  border-right: 1px solid #263746;
+  content: "";
+  inset: 0 auto 0 0;
+  position: absolute;
+  width: var(--terraform-gutter-width);
+  z-index: 0;
 }
 
 .terraformHighlightLayer {
@@ -1067,24 +1061,48 @@
   margin: 0;
   min-width: 0;
   overflow-wrap: anywhere;
-  padding: 12px 10px;
+  padding: 12px 0;
   pointer-events: none;
   position: absolute;
   tab-size: 2;
   white-space: pre-wrap;
   width: 100%;
-  z-index: 0;
+  z-index: 1;
 }
 
-.terraformHighlightLine {
-  display: block;
-  margin: 0 -10px;
+.terraformHighlightRow {
+  display: grid;
+  grid-template-columns: var(--terraform-gutter-width) minmax(0, 1fr);
   min-height: 19.2px;
-  padding: 0 10px;
-  width: calc(100% + 20px);
+  width: 100%;
 }
 
-.terraformHighlightLineSelected {
+.terraformHighlightLineNumber {
+  background: #0f151c;
+  border-right: 1px solid #263746;
+  box-sizing: border-box;
+  color: #7d96aa;
+  min-height: 19.2px;
+  padding: 0 10px 0 0;
+  text-align: right;
+  user-select: none;
+}
+
+.terraformHighlightCode {
+  box-sizing: border-box;
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  padding: 0 14px 0 18px;
+  white-space: pre-wrap;
+}
+
+.terraformHighlightRowSelected .terraformHighlightLineNumber {
+  background: rgba(126, 103, 255, 0.22);
+  color: #bfb3ff;
+}
+
+.terraformHighlightRowSelected .terraformHighlightCode {
   background: rgba(126, 103, 255, 0.16);
   box-shadow:
     inset 2px 0 0 #9f8cff,
@@ -1138,18 +1156,19 @@
   min-height: 0;
   min-width: 0;
   outline: none;
+  inset: 0 0 0 var(--terraform-gutter-width);
   overflow-x: hidden;
   overflow-y: auto;
   overflow-wrap: anywhere;
-  padding: 12px 10px;
+  padding: 12px 14px 12px 18px;
+  position: absolute;
   resize: none;
   scrollbar-gutter: stable;
   tab-size: 2;
   white-space: pre-wrap;
   word-break: normal;
-  position: relative;
-  width: 100%;
-  z-index: 1;
+  width: calc(100% - var(--terraform-gutter-width));
+  z-index: 2;
 }
 
 .terraformTextarea::placeholder {
@@ -3351,8 +3370,7 @@
 .deploymentPanel {
   background:
     linear-gradient(var(--bp-grid) 1px, transparent 1px),
-    linear-gradient(90deg, var(--bp-grid) 1px, transparent 1px),
-    var(--bp-page);
+    linear-gradient(90deg, var(--bp-grid) 1px, transparent 1px), var(--bp-page);
   background-size: 52px 52px;
 }
 
@@ -3515,8 +3533,11 @@
 
 .aiPanelHeader,
 .deploymentHeader {
-  background:
-    linear-gradient(135deg, color-mix(in srgb, var(--bp-paper) 92%, #ffffff), var(--bp-paper-2));
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--bp-paper) 92%, #ffffff),
+    var(--bp-paper-2)
+  );
   border: 1.5px solid var(--bp-line);
   border-radius: var(--bp-r);
   padding: 14px;
@@ -3631,6 +3652,12 @@
 
 .deploymentPanelContent {
   gap: 14px;
+  padding-right: 0;
+  scrollbar-gutter: auto;
+}
+
+.deploymentHeader {
+  margin-right: 0;
 }
 
 .deploymentPanel .deploymentSection:first-of-type {
@@ -3659,9 +3686,7 @@
 }
 
 .deploymentLogList {
-  background:
-    linear-gradient(rgba(126, 167, 198, 0.08) 1px, transparent 1px),
-    #0e151d;
+  background: linear-gradient(rgba(126, 167, 198, 0.08) 1px, transparent 1px), #0e151d;
   background-size: 100% 28px;
   border: 1px solid #33495c;
   min-height: calc(100vh - 174px);
