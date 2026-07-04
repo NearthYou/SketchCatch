@@ -1316,12 +1316,41 @@ function DeploymentPreDeploymentFindingItem({
   readonly onOpenTerraformSourceLocation: (sourceLocation: TerraformSourceLocation) => void;
 }) {
   const sourceLocation = finding.sourceLocation;
+  const aiSafetyExplanation = finding.aiSafetyExplanation;
 
   return (
     <li data-severity={finding.severity}>
       <span>{finding.severity.toUpperCase()}</span>
       <strong>{finding.title}</strong>
       {finding.resourceId ? <em>{finding.resourceId}</em> : null}
+      {aiSafetyExplanation ? (
+        <div className={styles.deploymentFindingAiExplanation}>
+          <p>{aiSafetyExplanation.riskSummary}</p>
+          <dl>
+            <div>
+              <dt>왜 위험한가</dt>
+              <dd>{aiSafetyExplanation.whyDangerous}</dd>
+            </div>
+            <div>
+              <dt>권장 수정</dt>
+              <dd>{aiSafetyExplanation.recommendedFix}</dd>
+            </div>
+            {aiSafetyExplanation.terraformHint ? (
+              <div>
+                <dt>Terraform</dt>
+                <dd>{aiSafetyExplanation.terraformHint}</dd>
+              </div>
+            ) : null}
+          </dl>
+          {aiSafetyExplanation.verificationSteps.length > 0 ? (
+            <ul>
+              {aiSafetyExplanation.verificationSteps.slice(0, 3).map((step, index) => (
+                <li key={`${finding.id}-verification-${index}`}>{step}</li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
       {sourceLocation ? (
         <button
           className={styles.deploymentFindingFixButton}

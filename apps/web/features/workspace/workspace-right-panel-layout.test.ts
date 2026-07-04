@@ -270,19 +270,31 @@ test("pre-deployment check is owned by the deployment tab", () => {
 
 test("pre-deployment finding severity colors keep medium as the default warning tone", () => {
   assert.match(deploymentPanelSource, /<li data-severity=\{finding\.severity\}>/);
-  assert.match(stylesSource, /\.deploymentPreflightFindings li\s*\{/);
+  assert.match(stylesSource, /\.deploymentPreflightFindings > li\s*\{/);
   assert.match(
     stylesSource,
-    /\.deploymentPreflightFindings li\s*\{[^}]*border-left:\s*4px solid #f59e0b;/s
+    /\.deploymentPreflightFindings > li\s*\{[^}]*border-left:\s*4px solid #f59e0b;/s
   );
   assert.match(
     stylesSource,
-    /\.deploymentPreflightFindings li\[data-severity="high"\]\s*\{[^}]*border-left-color:\s*#dc2626;/s
+    /\.deploymentPreflightFindings > li\[data-severity="high"\]\s*\{[^}]*border-left-color:\s*#dc2626;/s
   );
   assert.match(
     stylesSource,
-    /\.deploymentPreflightFindings li\[data-severity="low"\]\s*\{[^}]*border-left-color:\s*#16a34a;/s
+    /\.deploymentPreflightFindings > li\[data-severity="low"\]\s*\{[^}]*border-left-color:\s*#16a34a;/s
   );
+});
+
+test("pre-deployment findings render AI safety explanations inside the finding card", () => {
+  const explanationRule = getCssRule(stylesSource, "deploymentFindingAiExplanation");
+
+  assert.match(deploymentPanelSource, /finding\.aiSafetyExplanation/);
+  assert.match(deploymentPanelSource, /aiSafetyExplanation\.riskSummary/);
+  assert.match(deploymentPanelSource, /aiSafetyExplanation\.whyDangerous/);
+  assert.match(deploymentPanelSource, /aiSafetyExplanation\.recommendedFix/);
+  assert.match(deploymentPanelSource, /aiSafetyExplanation\.verificationSteps/);
+  assert.match(explanationRule, /\bgrid-column:\s*1 \/ -1;/);
+  assert.match(explanationRule, /\bgap:\s*7px;/);
 });
 
 test("pre-deployment findings can jump to Terraform source locations", () => {

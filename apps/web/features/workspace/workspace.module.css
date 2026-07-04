@@ -2337,7 +2337,7 @@
   padding: 0;
 }
 
-.deploymentPreflightFindings li {
+.deploymentPreflightFindings > li {
   align-items: start;
   background: #ffffff;
   border: 1px solid #e3e9f2;
@@ -2350,43 +2350,100 @@
   padding: 7px 8px;
 }
 
-.deploymentPreflightFindings li[data-severity="high"] {
+.deploymentPreflightFindings > li[data-severity="high"] {
   border-left-color: #dc2626;
 }
 
-.deploymentPreflightFindings li[data-severity="low"] {
+.deploymentPreflightFindings > li[data-severity="low"] {
   border-left-color: #16a34a;
 }
 
-.deploymentPreflightFindings span {
+.deploymentPreflightFindings > li > span {
   color: #9a3412;
   font-size: 10px;
   font-weight: 950;
   line-height: 1.4;
 }
 
-.deploymentPreflightFindings li[data-severity="high"] span {
+.deploymentPreflightFindings > li[data-severity="high"] > span {
   color: #b91c1c;
 }
 
-.deploymentPreflightFindings li[data-severity="low"] span {
+.deploymentPreflightFindings > li[data-severity="low"] > span {
   color: #15803d;
 }
 
-.deploymentPreflightFindings strong {
+.deploymentPreflightFindings > li > strong {
   color: #172033;
   font-size: 12px;
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
 
-.deploymentPreflightFindings em {
+.deploymentPreflightFindings > li > em {
   color: #64748b;
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   font-size: 10.5px;
   font-style: normal;
   grid-column: 2;
   overflow-wrap: anywhere;
+}
+
+.deploymentFindingAiExplanation {
+  background: #f8fafc;
+  border: 1px solid #dce3ee;
+  border-radius: 5px;
+  display: grid;
+  gap: 7px;
+  grid-column: 1 / -1;
+  padding: 8px;
+}
+
+.deploymentFindingAiExplanation p {
+  color: #334155;
+  font-size: 11.5px;
+  font-weight: 750;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.deploymentFindingAiExplanation dl {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.deploymentFindingAiExplanation dl div {
+  display: grid;
+  gap: 2px;
+}
+
+.deploymentFindingAiExplanation dt {
+  color: #475569;
+  font-size: 10px;
+  font-weight: 950;
+}
+
+.deploymentFindingAiExplanation dd {
+  color: #172033;
+  font-size: 11.5px;
+  line-height: 1.45;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.deploymentFindingAiExplanation ul {
+  display: grid;
+  gap: 4px;
+  list-style: disc;
+  margin: 0;
+  padding-left: 16px;
+}
+
+.deploymentFindingAiExplanation li {
+  color: #475569;
+  font-size: 11px;
+  line-height: 1.4;
 }
 
 .deploymentFindingFixButton {
