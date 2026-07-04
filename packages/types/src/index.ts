@@ -529,6 +529,22 @@ export type DeploymentLogListResponse = {
   logs: DeploymentLog[];
 };
 
+export type DeploymentFailureExplanation = {
+  deploymentId: string;
+  stage: DeploymentFailureStage | null;
+  severity: RiskLevel;
+  summary: string;
+  likelyCause: string;
+  nextActions: string[];
+  firstErrorLog: string | null;
+  cleanupRequired: boolean;
+  llmExplanation?: LlmExplanation | undefined;
+};
+
+export type DeploymentFailureExplanationResponse = {
+  explanation: DeploymentFailureExplanation;
+};
+
 export type DeployedResource = {
   id: string;
   deploymentId: string;

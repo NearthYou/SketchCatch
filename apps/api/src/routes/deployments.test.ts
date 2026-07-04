@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import Fastify from "fastify";
 import type {
   AwsConnection,
+  DeploymentFailureExplanationResponse,
   RecentSuccessfulDeploymentProjectListResponse
 } from "@sketchcatch/types";
 import { createAccessToken } from "../auth/tokens.js";
@@ -30,6 +31,7 @@ import type {
 import type { ApproveDeploymentPlanInput } from "../deployments/deployment-approval-service.js";
 import type { PruneProjectDeploymentStorageResult } from "../deployments/deployment-retention.js";
 import { users } from "../db/schema.js";
+import type { CreateLlmExplanation } from "../services/aiLlmExplanation.js";
 import {
   type ApproveDeploymentInput,
   type ArchitectureRecord,
@@ -827,6 +829,7 @@ type DeploymentRouteTestOptions = {
     input: RunDeploymentDestroyInput,
     repository: DeploymentRepository
   ) => Promise<RunDeploymentDestroyResult>;
+  createLlmExplanation?: CreateLlmExplanation;
   userRows?: UserRecord[];
 };
 
@@ -861,6 +864,9 @@ async function buildDeploymentTestApp(
       : {}),
     ...(routeOptions.runDeploymentDestroy
       ? { runDeploymentDestroy: routeOptions.runDeploymentDestroy }
+      : {}),
+    ...(routeOptions.createLlmExplanation
+      ? { createLlmExplanation: routeOptions.createLlmExplanation }
       : {})
   });
 
@@ -1293,6 +1299,124 @@ test("GET /api/deployments/:deploymentId maps missing deployments to not_found",
       deploymentId
     }
   ]);
+
+  await app.close();
+});
+
+test("GET /api/deployments/:deploymentId/failure-explanation returns a masked fallback explanation", async () => {
+  const repository = new FakeDeploymentRepository();
+  const leakedSecret = "temporary-secret-access-key";
+  repository.deployment = createDeploymentRecord(deploymentId, {
+    status: "FAILED",
+    failureStage: "apply",
+    errorSummary: `apply failed AWS_SECRET_ACCESS_KEY=${leakedSecret}`,
+    stateObjectKey,
+    failedAt: fixedNow
+  });
+  repository.logs = [
+    {
+      id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      deploymentId,
+      sequence: 1,
+      stage: "apply",
+      level: "ERROR",
+      message: `AccessDenied: not authorized AWS_SECRET_ACCESS_KEY=${leakedSecret}`,
+      relatedResourceId: null,
+      createdAt: fixedNow
+    }
+  ];
+  const app = await buildDeploymentTestApp(repository, {
+    createLlmExplanation: async (input) => ({
+      target: input.target,
+      summary: "fallback summary",
+      highlights: ["fallback highlight"],
+      nextActions: ["fallback next action"],
+      fallbackUsed: true,
+      fallbackReason: "missing_api_key"
+    })
+  });
+
+  const response = await app.inject({
+    method: "GET",
+    url: `/api/deployments/${deploymentId}/failure-explanation`,
+    headers: await authHeaders()
+  });
+
+  assert.equal(response.statusCode, 200);
+  const body = response.json<DeploymentFailureExplanationResponse>();
+
+  assert.equal(body.explanation.deploymentId, deploymentId);
+  assert.equal(body.explanation.stage, "apply");
+  assert.equal(body.explanation.cleanupRequired, true);
+  assert.equal(body.explanation.firstErrorLog?.includes(leakedSecret), false);
+  assert.match(body.explanation.summary, /apply/);
+  assert.match(body.explanation.summary, /첫 오류 로그/);
+  assert.match(body.explanation.summary, /Cleanup 필요 여부: 필요/);
+  assert.equal(body.explanation.llmExplanation?.fallbackUsed, true);
+  assert.equal(body.explanation.llmExplanation?.fallbackReason, "missing_api_key");
+
+  await app.close();
+});
+
+test("GET /api/deployments/:deploymentId/failure-explanation uses the earliest error without overlong excerpts", async () => {
+  const repository = new FakeDeploymentRepository();
+  const longFirstError = "x".repeat(700);
+  repository.deployment = createDeploymentRecord(deploymentId, {
+    status: "FAILED",
+    failureStage: "plan",
+    failedAt: fixedNow
+  });
+  repository.logs = [
+    {
+      id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      deploymentId,
+      sequence: 20,
+      stage: "plan",
+      level: "ERROR",
+      message: "later error should not be selected",
+      relatedResourceId: null,
+      createdAt: fixedNow
+    },
+    {
+      id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      deploymentId,
+      sequence: 10,
+      stage: "plan",
+      level: "ERROR",
+      message: longFirstError,
+      relatedResourceId: null,
+      createdAt: fixedNow
+    }
+  ];
+  const app = await buildDeploymentTestApp(repository);
+
+  const response = await app.inject({
+    method: "GET",
+    url: `/api/deployments/${deploymentId}/failure-explanation`,
+    headers: await authHeaders()
+  });
+
+  assert.equal(response.statusCode, 200);
+  const body = response.json<DeploymentFailureExplanationResponse>();
+
+  assert.equal(body.explanation.firstErrorLog?.length, 600);
+  assert.match(body.explanation.firstErrorLog ?? "", /^x+\.\.\.$/);
+  assert.equal(body.explanation.firstErrorLog?.includes("later error"), false);
+
+  await app.close();
+});
+
+test("GET /api/deployments/:deploymentId/failure-explanation rejects non-failed deployments", async () => {
+  const repository = new FakeDeploymentRepository();
+  const app = await buildDeploymentTestApp(repository);
+
+  const response = await app.inject({
+    method: "GET",
+    url: `/api/deployments/${deploymentId}/failure-explanation`,
+    headers: await authHeaders()
+  });
+
+  assert.equal(response.statusCode, 409);
 
   await app.close();
 });

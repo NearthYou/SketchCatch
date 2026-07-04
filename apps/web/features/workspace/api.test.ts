@@ -11,6 +11,7 @@ import {
   deleteAwsConnection,
   deleteProject,
   getAwsConnectionCloudFormationTemplate,
+  getDeploymentFailureExplanation,
   getProjectDeletePreview,
   listDeploymentResources,
   listAwsConnections,
@@ -1076,6 +1077,37 @@ test("deployment helpers list records, start plan, approve plan, apply, destroy,
       );
     }
 
+    if (String(input).endsWith("/failure-explanation")) {
+      return new Response(
+        JSON.stringify({
+          explanation: {
+            deploymentId: "44444444-4444-4444-8444-444444444444",
+            stage: "apply",
+            severity: "high",
+            summary: "apply 단계에서 Direct Deployment가 실패했습니다.",
+            likelyCause: "권한 부족",
+            nextActions: ["권한을 확인하세요."],
+            firstErrorLog: "AccessDenied",
+            cleanupRequired: true,
+            llmExplanation: {
+              target: "terraform_error_explanation",
+              summary: "fallback summary",
+              highlights: [],
+              nextActions: ["권한을 확인하세요."],
+              fallbackUsed: true,
+              fallbackReason: "missing_api_key"
+            }
+          }
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json"
+          },
+          status: 200
+        }
+      );
+    }
+
     return new Response(
       JSON.stringify({
         deployments: [
@@ -1104,6 +1136,9 @@ test("deployment helpers list records, start plan, approve plan, apply, destroy,
   const destroyingDeployment = await runDeploymentDestroy("44444444-4444-4444-8444-444444444444");
   const resources = await listDeploymentResources("44444444-4444-4444-8444-444444444444");
   const outputs = await listTerraformOutputs("44444444-4444-4444-8444-444444444444");
+  const failureExplanation = await getDeploymentFailureExplanation(
+    "44444444-4444-4444-8444-444444444444"
+  );
 
   assert.equal(String(requests[0]?.input), `/api/projects/${project.id}/deployments`);
   assert.equal(
@@ -1145,6 +1180,10 @@ test("deployment helpers list records, start plan, approve plan, apply, destroy,
     String(requests[7]?.input),
     "/api/deployments/44444444-4444-4444-8444-444444444444/outputs"
   );
+  assert.equal(
+    String(requests[8]?.input),
+    "/api/deployments/44444444-4444-4444-8444-444444444444/failure-explanation"
+  );
   assert.equal(deployments[0]?.status, "PENDING");
   assert.equal(runningDeployment.status, "RUNNING");
   assert.equal(approvedDeployment.approvedPlanArtifactId, "99999999-9999-4999-8999-999999999999");
@@ -1153,6 +1192,7 @@ test("deployment helpers list records, start plan, approve plan, apply, destroy,
   assert.equal(destroyingDeployment.currentPlanOperation, "destroy");
   assert.equal(resources[0]?.resourceId, "i-0123456789abcdef0");
   assert.equal(outputs[0]?.name, "instance_id");
+  assert.equal(failureExplanation.cleanupRequired, true);
 });
 
 test("approveDeploymentPlan sends acknowledged warning ids", async (context) => {
