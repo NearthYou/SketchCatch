@@ -77,8 +77,8 @@ export function DiagramNodeView({ data, id, isConnectable, selected }: NodeProps
   const reactFlow = useReactFlow();
   const updateNodeInternals = useUpdateNodeInternals();
   const node = data.node;
-  const toolbarVisible = selected && data.selectedNodeCount === 1;
-  const canConnect = isConnectable && !node.locked;
+  const toolbarVisible = !data.isPreview && selected && data.selectedNodeCount === 1;
+  const canConnect = !data.isPreview && Boolean(isConnectable) && !node.locked;
   const isResourceNode = node.kind === "resource";
   const isArea = isAreaNode(node);
   const canChangeBorderColor = canChangeNodeBorderColor(node);
@@ -208,6 +208,7 @@ export function DiagramNodeView({ data, id, isConnectable, selected }: NodeProps
           styles.nodeShell,
           selected ? styles.nodeShellSelected : undefined,
           data.isDimmed ? styles.nodeShellDimmed : undefined,
+          data.isPreview ? styles.nodeShellAiPreview : undefined,
           data.isReferenceDropTarget ? styles.nodeShellReferenceDropTarget : undefined,
           isArea ? styles.nodeShellArea : undefined,
           !isArea ? (node.kind === "design" ? styles.nodeShellDesign : styles.nodeShellResource) : undefined,
@@ -272,7 +273,7 @@ export function DiagramNodeView({ data, id, isConnectable, selected }: NodeProps
         ) : null}
       </div>
 
-      {selected && !node.locked ? (
+      {selected && !node.locked && !data.isPreview ? (
         <>
           {RESIZE_HANDLES.map((handle) => (
             <button
@@ -287,38 +288,38 @@ export function DiagramNodeView({ data, id, isConnectable, selected }: NodeProps
         </>
       ) : null}
 
-      {canConnect ? (
-        <>
-          {CONNECTION_HANDLES.map((handle) => (
-            <Fragment key={handle.id}>
-              <Handle
-                className={[
-                  styles.connectionHandle,
-                  styles.connectionHandleSource,
-                  data.isConnectionActive ? styles.connectionHandleActive : undefined
-                ]
-                  .filter(Boolean)
-                  .join(" ")}
-                id={`source-${handle.id}`}
-                position={handle.position}
-                type="source"
-              />
-              <Handle
-                className={[
-                  styles.connectionHandle,
-                  styles.connectionHandleTarget,
-                  data.isConnectionActive ? styles.connectionHandleActive : undefined
-                ]
-                  .filter(Boolean)
-                  .join(" ")}
-                id={`target-${handle.id}`}
-                position={handle.position}
-                type="target"
-              />
-            </Fragment>
-          ))}
-        </>
-      ) : null}
+      {CONNECTION_HANDLES.map((handle) => (
+        <Fragment key={handle.id}>
+          <Handle
+            className={[
+              styles.connectionHandle,
+              styles.connectionHandleSource,
+              canConnect ? undefined : styles.connectionHandleInactive,
+              data.isConnectionActive ? styles.connectionHandleActive : undefined
+            ]
+              .filter(Boolean)
+              .join(" ")}
+            id={`source-${handle.id}`}
+            isConnectable={canConnect}
+            position={handle.position}
+            type="source"
+          />
+          <Handle
+            className={[
+              styles.connectionHandle,
+              styles.connectionHandleTarget,
+              canConnect ? undefined : styles.connectionHandleInactive,
+              data.isConnectionActive ? styles.connectionHandleActive : undefined
+            ]
+              .filter(Boolean)
+              .join(" ")}
+            id={`target-${handle.id}`}
+            isConnectable={canConnect}
+            position={handle.position}
+            type="target"
+          />
+        </Fragment>
+      ))}
     </>
   );
 }

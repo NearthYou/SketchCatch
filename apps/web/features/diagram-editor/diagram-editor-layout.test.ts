@@ -13,8 +13,14 @@ const diagramEditorStylesSource = readFileSync(
 );
 
 test("diagram editor uses partial box selection for overlapping area nodes", () => {
-  assert.match(diagramEditorSource, /selectionOnDrag=\{interactionMode === "select"\}/);
+  assert.match(diagramEditorSource, /selectionOnDrag=\{interactionMode === "select" && !isPreviewActive\}/);
   assert.match(diagramEditorSource, /selectionMode=\{SelectionMode\.Partial\}/);
+});
+
+test("diagram editor exposes a floating panel slot over the workspace", () => {
+  assert.match(diagramEditorSource, /floatingPanel/);
+  assert.match(diagramEditorSource, /floatingPanel\?\.\(panelContext\)/);
+  assert.match(diagramEditorSource, /className=\{styles\.floatingPanelSlot\}/);
 });
 
 test("compact resource node shell does not keep the generic minimum height", () => {

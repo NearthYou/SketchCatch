@@ -13,7 +13,9 @@ export type DiagramNodeMetadataUpdate = Partial<Omit<DiagramNode, "id" | "parame
 export type DiagramEditorPanelContext = {
   diagram: DiagramJson;
   inspectedNodeId: string | null;
+  isPreviewActive: boolean;
   isRightPanelOpen: boolean;
+  previewDiagram: DiagramJson | null;
   selectedNodeId: string | null;
   nodes: readonly DiagramNode[];
   edges: readonly DiagramEdge[];
@@ -21,6 +23,7 @@ export type DiagramEditorPanelContext = {
   closeInspectedNode: () => void;
   focusResourceNode: (nodeId: string) => void;
   selectResourceNode: (nodeId: string) => void;
+  setPreviewDiagram: (diagram: DiagramJson | null) => void;
   setRightPanelOpen: (isOpen: boolean) => void;
   updateNodeParameters: (
     nodeId: string,
@@ -37,6 +40,7 @@ export type DiagramEditorPanelContext = {
 
 export type DiagramEditorProps = {
   draftStatusPanel?: ReactNode | undefined;
+  floatingPanel?: ((context: DiagramEditorPanelContext) => ReactNode) | undefined;
   initialDiagram?: DiagramJson | undefined;
   leftPanel?: ReactNode;
   onDiagramChange?: ((diagram: DiagramJson) => void) | undefined;
@@ -64,6 +68,7 @@ export type DiagramFlowNodeData = Record<string, unknown> & {
   selectedNodeCount: number;
   isDimmed: boolean;
   isConnectionActive: boolean;
+  isPreview: boolean;
   isReferenceDropTarget: boolean;
 } & DiagramFlowNodeHandlers;
 

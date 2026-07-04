@@ -94,18 +94,22 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-iam-role",
+    resourceType: "IAM_ROLE",
     terraformResourceType: "aws_iam_role"
   }),
   createAwsResourceDefinition({
     id: "aws-iam-policy",
+    resourceType: "IAM_POLICY",
     terraformResourceType: "aws_iam_policy"
   }),
   createAwsResourceDefinition({
     id: "aws-iam-instance-profile",
+    resourceType: "IAM_INSTANCE_PROFILE",
     terraformResourceType: "aws_iam_instance_profile"
   }),
   createAwsResourceDefinition({
     id: "aws-kms-key",
+    resourceType: "KMS_KEY",
     terraformResourceType: "aws_kms_key"
   }),
   createAwsResourceDefinition({
@@ -206,11 +210,12 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-lambda-permission",
-    resourceType: "LAMBDA",
+    resourceType: "LAMBDA_PERMISSION",
     terraformResourceType: "aws_lambda_permission"
   }),
   createAwsResourceDefinition({
     id: "aws-api-gateway-rest-api",
+    resourceType: "API_GATEWAY_REST_API",
     terraformResourceType: "aws_api_gateway_rest_api"
   }),
   createAwsResourceDefinition({
@@ -227,10 +232,12 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-cloudwatch-log-group",
+    resourceType: "CLOUDWATCH_LOG_GROUP",
     terraformResourceType: "aws_cloudwatch_log_group"
   }),
   createAwsResourceDefinition({
     id: "aws-cloudwatch-metric-alarm",
+    resourceType: "CLOUDWATCH_METRIC_ALARM",
     terraformResourceType: "aws_cloudwatch_metric_alarm"
   }),
   createAwsResourceDefinition({
@@ -254,6 +261,7 @@ export const resourceDefinitions = [
 const resourceDefinitionById = new Map<string, ResourceDefinition>(
   resourceDefinitions.map((definition) => [definition.id, definition])
 );
+const defaultResourceDefinitionByResourceType = createDefaultResourceDefinitionByResourceType();
 const resourceDefinitionByTerraformKey = new Map<string, ResourceDefinition>(
   resourceDefinitions.map((definition) => [
     createTerraformDefinitionKey(definition.terraform.blockType, definition.terraform.resourceType),
@@ -265,11 +273,31 @@ export function getResourceDefinitionById(id: string): ResourceDefinition | unde
   return resourceDefinitionById.get(id);
 }
 
+export function getDefaultResourceDefinitionByResourceType(
+  resourceType: ResourceType
+): ResourceDefinition | undefined {
+  return defaultResourceDefinitionByResourceType.get(resourceType);
+}
+
 export function getResourceDefinitionByTerraform(
   blockType: TerraformBlockType,
   resourceType: string
 ): ResourceDefinition | undefined {
   return resourceDefinitionByTerraformKey.get(createTerraformDefinitionKey(blockType, resourceType));
+}
+
+function createDefaultResourceDefinitionByResourceType(): Map<ResourceType, ResourceDefinition> {
+  const definitions = new Map<ResourceType, ResourceDefinition>();
+
+  for (const definition of resourceDefinitions) {
+    if (definition.resourceType === DEFAULT_RESOURCE_TYPE || definitions.has(definition.resourceType)) {
+      continue;
+    }
+
+    definitions.set(definition.resourceType, definition);
+  }
+
+  return definitions;
 }
 
 function createAwsResourceDefinition({

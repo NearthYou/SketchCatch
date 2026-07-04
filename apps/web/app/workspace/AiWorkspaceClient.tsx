@@ -8,10 +8,6 @@ import type {
   AiTerraformErrorExplanationResult,
   AiTerraformStage,
   AiTerraformPreviewExplanationResult,
-  ArchitectureDraftBudgetLevel,
-  ArchitectureDraftScenarioHint,
-  ArchitectureDraftSecurityPriority,
-  ArchitectureDraftTrafficLevel,
   ArchitectureJson,
   DesignSimulationResult,
   TerraformDiagnostic,
@@ -39,13 +35,14 @@ const TERRAFORM_VALIDATE_ERROR_EXAMPLE = `Error: Unsupported argument
 
 An argument named "instance_typ" is not expected here. Did you mean "instance_type"?`;
 
+const DESIGN_SIMULATION_DEFAULTS = {
+  budgetLevel: "normal",
+  trafficLevel: "normal"
+} as const;
+
 // gg AI API를 팀에 보여주기 위한 임시 작업 화면입니다. 최종 보드 UI가 붙으면 대체될 수 있습니다.
 export function AiWorkspaceClient() {
   const [prompt, setPrompt] = useState(samplePrompt);
-  const [scenarioHint, setScenarioHint] = useState<ArchitectureDraftScenarioHint>("backend_with_db");
-  const [budgetLevel, setBudgetLevel] = useState<ArchitectureDraftBudgetLevel>("low");
-  const [trafficLevel, setTrafficLevel] = useState<ArchitectureDraftTrafficLevel>("small");
-  const [securityPriority, setSecurityPriority] = useState<ArchitectureDraftSecurityPriority>("basic");
   const [repositoryUrl, setRepositoryUrl] = useState("");
   const [terraformCode, setTerraformCode] = useState(sampleTerraform);
   const [draft, setDraft] = useState<AiArchitectureDraftResult | null>(null);
@@ -76,11 +73,7 @@ export function AiWorkspaceClient() {
   async function runPromptDraft(): Promise<void> {
     await runRequest(async () => {
       const result = await postJson<AiArchitectureDraftResult>("/ai/architecture-draft", {
-        budgetLevel,
-        prompt,
-        scenarioHint,
-        securityPriority,
-        trafficLevel
+        prompt
       });
       setDraft(result);
       setAnalysis(null);
@@ -127,8 +120,7 @@ export function AiWorkspaceClient() {
     await runRequest(async () => {
       const result = await requestDesignSimulation({
         architectureJson,
-        budgetLevel,
-        trafficLevel
+        ...DESIGN_SIMULATION_DEFAULTS
       });
       setDesignSimulation(result);
     });
@@ -263,21 +255,13 @@ export function AiWorkspaceClient() {
   return (
     <div className="workspaceGrid workspaceGridWide">
       <ArchitectureDraftPanel
-        budgetLevel={budgetLevel}
         isLoading={status === "loading"}
-        onBudgetLevelChange={setBudgetLevel}
         onGitHubDraft={runGitHubDraft}
         onPromptChange={setPrompt}
         onPromptDraft={runPromptDraft}
         onRepositoryUrlChange={setRepositoryUrl}
-        onScenarioHintChange={setScenarioHint}
-        onSecurityPriorityChange={setSecurityPriority}
-        onTrafficLevelChange={setTrafficLevel}
         prompt={prompt}
         repositoryUrl={repositoryUrl}
-        scenarioHint={scenarioHint}
-        securityPriority={securityPriority}
-        trafficLevel={trafficLevel}
       />
 
       <section className="workspacePanel resultPanel">

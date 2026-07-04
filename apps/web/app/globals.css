@@ -3062,12 +3062,12 @@ nextjs-portal {
 }
 
 .modulesImportButton {
-  background: #f0eaff;
-  color: #7b50ff;
+  background: var(--bp-blue-tint);
+  color: var(--bp-blue);
 }
 
 .modulesCatalogButton {
-  background: #764cff;
+  background: var(--bp-blue);
   color: #ffffff;
 }
 
@@ -3122,8 +3122,8 @@ nextjs-portal {
 }
 
 .resourceTile:not(.resourceTileDisabled):hover {
-  border-color: #8b71ff;
-  box-shadow: 0 10px 22px rgba(43, 51, 84, 0.08);
+  border-color: color-mix(in srgb, var(--bp-blue) 44%, var(--bp-line));
+  box-shadow: 0 10px 22px color-mix(in srgb, var(--bp-blue) 10%, transparent);
   transform: translateY(-1px);
 }
 
@@ -3159,9 +3159,9 @@ nextjs-portal {
 }
 
 .resourceIconFallback {
-  background: #f1edff;
-  border: 1px solid #d6cbff;
-  color: #5f3de8;
+  background: var(--bp-blue-tint);
+  border: 1px solid color-mix(in srgb, var(--bp-blue) 32%, var(--bp-line));
+  color: var(--bp-blue);
 }
 
 .brainboardTile {
@@ -7179,8 +7179,8 @@ nextjs-portal {
 }
 
 .resourcePanel .resourceGrid {
-  gap: 20px 12px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px 12px;
+  grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
 }
 
 .resourceTile {

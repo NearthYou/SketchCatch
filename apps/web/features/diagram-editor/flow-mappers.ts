@@ -9,19 +9,25 @@ import {
 import { isAreaNode } from "./area-nodes";
 import type { DiagramFlowEdge, DiagramFlowNode, DiagramFlowNodeHandlers } from "./types";
 
+type FlowMapperOptions = {
+  readonly isPreview?: boolean;
+};
+
 export function toFlowNodes(
   nodes: readonly DiagramNode[],
   selectedNodeIds: readonly string[],
   activeReferenceDropTargetNodeId: string | null,
   isConnectionActive: boolean,
-  handlers: DiagramFlowNodeHandlers
+  handlers: DiagramFlowNodeHandlers,
+  options: FlowMapperOptions = {}
 ): DiagramFlowNode[] {
   const selectedNodeIdSet = new Set(selectedNodeIds);
   const shouldDimUnselectedNodes = selectedNodeIds.length > 0;
+  const isPreview = options.isPreview === true;
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
 
   return nodes.map((node) => {
-    const selected = selectedNodeIdSet.has(node.id);
+    const selected = !isPreview && selectedNodeIdSet.has(node.id);
     const isArea = isAreaNode(node);
     const areaClassName = selected ? "diagramAreaFlowNode diagramAreaFlowNodeInteractive" : "diagramAreaFlowNode";
 
@@ -32,17 +38,18 @@ export function toFlowNodes(
       position: { ...node.position },
       data: {
         node,
-        selectedNodeCount: selectedNodeIds.length,
-        isDimmed: shouldDimUnselectedNodes && !selected,
+        selectedNodeCount: isPreview ? 0 : selectedNodeIds.length,
+        isDimmed: !isPreview && shouldDimUnselectedNodes && !selected,
         isConnectionActive,
-        isReferenceDropTarget: node.id === activeReferenceDropTargetNodeId,
+        isPreview,
+        isReferenceDropTarget: !isPreview && node.id === activeReferenceDropTargetNodeId,
         ...handlers
       },
       selected,
-      draggable: !node.locked,
-      selectable: true,
-      connectable: !node.locked,
-      deletable: true,
+      draggable: !isPreview && !node.locked,
+      selectable: !isPreview,
+      connectable: !isPreview && !node.locked,
+      deletable: !isPreview,
       width: node.size.width,
       height: node.size.height,
       initialWidth: node.size.width,
@@ -66,13 +73,15 @@ export function toFlowNodes(
 export function toFlowEdges(
   edges: readonly DiagramEdge[],
   selectedEdgeIds: readonly string[],
-  nodes: readonly DiagramNode[] = []
+  nodes: readonly DiagramNode[] = [],
+  options: FlowMapperOptions = {}
 ): DiagramFlowEdge[] {
   const selectedEdgeIdSet = new Set(selectedEdgeIds);
+  const isPreview = options.isPreview === true;
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
 
   return edges.map((edge) => {
-    const selected = selectedEdgeIdSet.has(edge.id);
+    const selected = !isPreview && selectedEdgeIdSet.has(edge.id);
     const color = edge.style?.color ?? "#506176";
     const flowEdge: DiagramFlowEdge = {
       id: edge.id,
@@ -85,10 +94,23 @@ export function toFlowEdges(
         edge
       },
       selected,
-      animated: selected || edge.style?.animated === true,
+      animated: !isPreview && (selected || edge.style?.animated === true),
       label: edge.label,
-      selectable: true,
-      deletable: true,
+      labelBgBorderRadius: 2,
+      labelBgPadding: [7, 4],
+      labelBgStyle: {
+        fill: selected ? "#eaf4ff" : "#f8fbff",
+        stroke: selected ? "#1f6feb" : "#9fb2c8",
+        strokeWidth: 1
+      },
+      labelStyle: {
+        fill: "#172033",
+        fontFamily: "var(--bp-head)",
+        fontSize: 12,
+        fontWeight: 800
+      },
+      selectable: !isPreview,
+      deletable: !isPreview,
       interactionWidth: 18,
       zIndex: getFlowEdgeZIndex(edge, nodeById, selected),
       markerEnd: {
@@ -97,7 +119,7 @@ export function toFlowEdges(
         width: 18,
         height: 18
       },
-      style: getFlowEdgeStyle(edge, selected)
+      style: getFlowEdgeStyle(edge, selected, isPreview)
     };
 
     if (edge.label) {
@@ -108,12 +130,14 @@ export function toFlowEdges(
   });
 }
 
-function getFlowEdgeStyle(edge: DiagramEdge, selected: boolean): CSSProperties {
+function getFlowEdgeStyle(edge: DiagramEdge, selected: boolean, isPreview: boolean): CSSProperties {
   const color = edge.style?.color ?? "#506176";
   const strokeWidth = getEdgeStrokeWidth(edge.style?.width);
 
   return {
     stroke: selected ? "#1f6feb" : color,
+    strokeDasharray: isPreview ? "7 5" : undefined,
+    strokeOpacity: isPreview ? 0.48 : undefined,
     strokeWidth
   };
 }

@@ -14,6 +14,7 @@ import {
   writeWorkspaceClientMetadata
 } from "./project-draft-persistence";
 import type { LocalProjectDraft } from "./project-draft-persistence";
+import { WorkspaceAiChatDock } from "./WorkspaceAiChatDock";
 import { WorkspaceRightPanel } from "./WorkspaceRightPanel";
 import styles from "./workspace.module.css";
 
@@ -188,6 +189,9 @@ export function WorkspaceDraftManager() {
 
   return (
     <DiagramEditor
+      floatingPanel={(context) => (
+        <WorkspaceAiChatDock context={context} projectId={LOCAL_PROJECT_ID} />
+      )}
       initialDiagram={initialDiagram}
       onDiagramChange={handleDiagramChange}
       projectName={projectName}
