@@ -4,15 +4,18 @@ import type {
   ArchitectureRequirementFact
 } from "@sketchcatch/types";
 import type { ArchitectureRequirementResolution } from "./aiArchitectureRequirementResolution.js";
+import type { ArchitectureResourceQuantities } from "./aiArchitectureResourceQuantities.js";
+import { DEFAULT_ARCHITECTURE_RESOURCE_QUANTITIES } from "./aiArchitectureResourceQuantities.js";
 
 // Requirement fact 조합을 지원 가능한 ResourceType만 포함한 ArchitectureJson으로 조립합니다.
 export function createDraftFromRequirementFacts(
-  resolution: ArchitectureRequirementResolution
+  resolution: ArchitectureRequirementResolution,
+  resourceQuantities: ArchitectureResourceQuantities = DEFAULT_ARCHITECTURE_RESOURCE_QUANTITIES
 ): AiArchitectureDraftResult {
   const factSet = new Set(resolution.requirementFacts);
   const nodes: ArchitectureJson["nodes"] = [];
   const edges: ArchitectureJson["edges"] = [];
-  const context: DraftBuildContext = { edges, factSet, nodes };
+  const context: DraftBuildContext = { edges, factSet, nodes, resourceQuantities };
 
   if (factSet.has("web_frontend") || factSet.has("static_delivery")) {
     addStaticWebsiteDelivery(context);
@@ -41,7 +44,7 @@ export function createDraftFromRequirementFacts(
     metadata: {
       source: "template_fallback",
       confidence: "medium",
-      assumptions: createDraftAssumptions(resolution.requirementFacts),
+      assumptions: createDraftAssumptions(resolution.requirementFacts, resourceQuantities),
       explanations: [
         `요구사항 단서: ${resolution.requirementFacts.map(getRequirementFactLabel).join(", ")}`
       ]
@@ -54,6 +57,7 @@ type DraftBuildContext = {
   readonly edges: ArchitectureJson["edges"];
   readonly factSet: ReadonlySet<ArchitectureRequirementFact>;
   readonly nodes: ArchitectureJson["nodes"];
+  readonly resourceQuantities: ArchitectureResourceQuantities;
 };
 
 function addStaticWebsiteDelivery(context: DraftBuildContext): void {
@@ -83,6 +87,8 @@ function addStaticWebsiteDelivery(context: DraftBuildContext): void {
 
 function addEc2ApplicationRuntime(context: DraftBuildContext): void {
   addNetworkBoundary(context);
+  const appServerIds = createNumberedIds("app-server", context.resourceQuantities.ec2Instances);
+
   addNode(context, {
     id: "app-security-group",
     type: "SECURITY_GROUP",
@@ -116,27 +122,37 @@ function addEc2ApplicationRuntime(context: DraftBuildContext): void {
   });
   addIamRuntimeNodes(context);
   addObservabilityNodes(context);
-  addNode(context, {
-    id: "app-server",
-    type: "EC2",
-    label: "Application Server",
-    positionX: 370,
-    positionY: 620,
-    config: {
-      ami: "data.aws_ami.app_ami.id",
-      associatePublicIpAddress: true,
-      iamInstanceProfile: "aws_iam_instance_profile.app_instance_profile.name",
-      instanceType: "t3.micro",
-      subnetId: "aws_subnet.public_subnet.id",
-      vpcSecurityGroupIds: ["aws_security_group.app_security_group.id"]
-    }
+  appServerIds.forEach((appServerId, index) => {
+    const position = getRepeatedNodePosition(index, {
+      columns: 3,
+      startX: appServerIds.length === 1 ? 370 : 300,
+      startY: 620,
+      xGap: 140,
+      yGap: 130
+    });
+
+    addNode(context, {
+      id: appServerId,
+      type: "EC2",
+      label: appServerIds.length === 1 ? "Application Server" : `Application Server ${index + 1}`,
+      positionX: position.x,
+      positionY: position.y,
+      config: {
+        ami: "data.aws_ami.app_ami.id",
+        associatePublicIpAddress: true,
+        iamInstanceProfile: "aws_iam_instance_profile.app_instance_profile.name",
+        instanceType: "t3.micro",
+        subnetId: "aws_subnet.public_subnet.id",
+        vpcSecurityGroupIds: ["aws_security_group.app_security_group.id"]
+      }
+    });
+    addEdge(context, `app-ami-to-${appServerId}`, "app-ami", appServerId, "launch image");
+    addEdge(context, `app-instance-profile-to-${appServerId}`, "app-instance-profile", appServerId, "attaches role");
+    addEdge(context, `${appServerId}-to-app-log-group`, appServerId, "app-log-group", "writes logs");
+    addEdge(context, `app-cpu-alarm-to-${appServerId}`, "app-cpu-alarm", appServerId, "monitors CPU");
+    addEdge(context, `public-subnet-to-${appServerId}`, "public-subnet", appServerId, "hosts");
+    addEdge(context, `app-security-group-to-${appServerId}`, "app-security-group", appServerId, "allows traffic");
   });
-  addEdge(context, "app-ami-to-app-server", "app-ami", "app-server", "launch image");
-  addEdge(context, "app-instance-profile-to-app-server", "app-instance-profile", "app-server", "attaches role");
-  addEdge(context, "app-server-to-app-log-group", "app-server", "app-log-group", "writes logs");
-  addEdge(context, "app-cpu-alarm-to-app-server", "app-cpu-alarm", "app-server", "monitors CPU");
-  addEdge(context, "public-subnet-to-app-server", "public-subnet", "app-server", "hosts");
-  addEdge(context, "app-security-group-to-app-server", "app-security-group", "app-server", "allows traffic");
 }
 
 function addNetworkBoundary(context: DraftBuildContext): void {
@@ -373,16 +389,28 @@ function addDatabase(context: DraftBuildContext): void {
 }
 
 function addUploadBucket(context: DraftBuildContext): void {
-  addNode(context, {
-    id: "upload-bucket",
-    type: "S3",
-    label: "Upload Storage Bucket",
-    positionX: 900,
-    positionY: 160,
-    config: {
-      bucketPurpose: "user_uploads",
-      publicAccessBlock: true
-    }
+  const uploadBucketIds = createNumberedIds("upload-bucket", context.resourceQuantities.s3Buckets);
+
+  uploadBucketIds.forEach((uploadBucketId, index) => {
+    const position = getRepeatedNodePosition(index, {
+      columns: 5,
+      startX: 900,
+      startY: 160,
+      xGap: 180,
+      yGap: 130
+    });
+
+    addNode(context, {
+      id: uploadBucketId,
+      type: "S3",
+      label: uploadBucketIds.length === 1 ? "Upload Storage Bucket" : `Upload Storage Bucket ${index + 1}`,
+      positionX: position.x,
+      positionY: position.y,
+      config: {
+        bucketPurpose: "user_uploads",
+        publicAccessBlock: true
+      }
+    });
   });
 }
 
@@ -500,20 +528,31 @@ function addServerlessRuntime(context: DraftBuildContext): void {
 }
 
 function addCrossResourceEdges(context: DraftBuildContext): void {
-  if (hasNode(context, "cloudfront-distribution") && hasNode(context, "app-server")) {
-    addEdge(context, "cloudfront-to-app-server", "cloudfront-distribution", "app-server", "forwards app requests");
+  const appServerIds = getNodeIdsByTypePrefix(context, "EC2", "app-server");
+  const uploadBucketIds = getNodeIdsByTypePrefix(context, "S3", "upload-bucket");
+
+  for (const appServerId of appServerIds) {
+    if (hasNode(context, "cloudfront-distribution")) {
+      addEdge(context, `cloudfront-to-${appServerId}`, "cloudfront-distribution", appServerId, "forwards app requests");
+    }
   }
 
-  if (hasNode(context, "app-server") && hasNode(context, "upload-bucket")) {
-    addEdge(context, "app-server-to-upload-bucket", "app-server", "upload-bucket", "stores files");
+  for (const appServerId of appServerIds) {
+    for (const uploadBucketId of uploadBucketIds) {
+      addEdge(context, `${appServerId}-to-${uploadBucketId}`, appServerId, uploadBucketId, "stores files");
+    }
   }
 
-  if (hasNode(context, "app-server") && hasNode(context, "app-database")) {
-    addEdge(context, "app-server-to-app-database", "app-server", "app-database", "reads/writes");
+  for (const appServerId of appServerIds) {
+    if (hasNode(context, "app-database")) {
+      addEdge(context, `${appServerId}-to-app-database`, appServerId, "app-database", "reads/writes");
+    }
   }
 
-  if (hasNode(context, "lambda-function") && hasNode(context, "upload-bucket")) {
-    addEdge(context, "lambda-function-to-upload-bucket", "lambda-function", "upload-bucket", "stores files");
+  if (hasNode(context, "lambda-function")) {
+    for (const uploadBucketId of uploadBucketIds) {
+      addEdge(context, `lambda-function-to-${uploadBucketId}`, "lambda-function", uploadBucketId, "stores files");
+    }
   }
 }
 
@@ -549,7 +588,10 @@ function createDraftTitle(factSet: ReadonlySet<ArchitectureRequirementFact>): st
   return "Practice Architecture";
 }
 
-function createDraftAssumptions(requirementFacts: readonly ArchitectureRequirementFact[]): string[] {
+function createDraftAssumptions(
+  requirementFacts: readonly ArchitectureRequirementFact[],
+  resourceQuantities: ArchitectureResourceQuantities
+): string[] {
   const factSet = new Set(requirementFacts);
   const assumptions = ["동일한 자연어 단서 조합은 동일한 ArchitectureJson으로 생성합니다."];
 
@@ -567,6 +609,14 @@ function createDraftAssumptions(requirementFacts: readonly ArchitectureRequireme
 
   if (factSet.has("file_upload")) {
     assumptions.push("사용자 파일은 애플리케이션 실행 공간과 분리된 객체 저장소에 보관한다고 가정합니다.");
+  }
+
+  if (resourceQuantities.ec2Instances > 1) {
+    assumptions.push(`요청한 수량에 맞춰 EC2 실행 공간 ${resourceQuantities.ec2Instances}개를 초안에 포함했습니다.`);
+  }
+
+  if (resourceQuantities.s3Buckets > 1 && factSet.has("object_storage")) {
+    assumptions.push(`요청한 수량에 맞춰 S3 저장 공간 ${resourceQuantities.s3Buckets}개를 초안에 포함했습니다.`);
   }
 
   return assumptions;
@@ -623,6 +673,32 @@ function addEdge(
 
 function hasNode(context: DraftBuildContext, nodeId: string): boolean {
   return context.nodes.some((node) => node.id === nodeId);
+}
+
+function createNumberedIds(baseId: string, count: number): string[] {
+  return Array.from({ length: count }, (_, index) => (index === 0 ? baseId : `${baseId}-${index + 1}`));
+}
+
+function getRepeatedNodePosition(
+  index: number,
+  layout: {
+    readonly columns: number;
+    readonly startX: number;
+    readonly startY: number;
+    readonly xGap: number;
+    readonly yGap: number;
+  }
+): { readonly x: number; readonly y: number } {
+  return {
+    x: layout.startX + (index % layout.columns) * layout.xGap,
+    y: layout.startY + Math.floor(index / layout.columns) * layout.yGap
+  };
+}
+
+function getNodeIdsByTypePrefix(context: DraftBuildContext, type: string, idPrefix: string): string[] {
+  return context.nodes
+    .filter((node) => node.type === type && (node.id === idPrefix || node.id.startsWith(`${idPrefix}-`)))
+    .map((node) => node.id);
 }
 
 function createAmazonLinuxAmiConfig(): ArchitectureJson["nodes"][number]["config"] {

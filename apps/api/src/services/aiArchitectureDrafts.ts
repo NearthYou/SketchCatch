@@ -2,13 +2,15 @@ import type { AiArchitectureDraftResult, CreateArchitectureDraftRequest } from "
 import { applyGuardrailMetadata } from "./aiArchitectureDraftMetadata.js";
 import { createDraftFromRequirementFacts } from "./aiArchitectureRequirementDraftBuilder.js";
 import { applyOperatingConditionConfig } from "./aiArchitectureOperatingConditions.js";
+import { resolveArchitectureResourceQuantities } from "./aiArchitectureResourceQuantities.js";
 import { resolveArchitectureRequirement } from "./aiArchitectureRequirementResolution.js";
 
 // 자연어 요청을 보드가 열 수 있는 ArchitectureJson 초안으로 바꾸는 1차 진입점입니다.
 export function createArchitectureDraft(input: string | CreateArchitectureDraftRequest): AiArchitectureDraftResult {
   const request = normalizeArchitectureDraftRequest(input);
   const resolution = resolveArchitectureRequirement(request);
-  const draft = createDraftFromRequirementFacts(resolution);
+  const resourceQuantities = resolveArchitectureResourceQuantities(request.prompt);
+  const draft = createDraftFromRequirementFacts(resolution, resourceQuantities);
   const configuredDraft = applyOperatingConditionConfig(draft, resolution.operatingProfile);
 
   return applyGuardrailMetadata(configuredDraft, request, resolution);

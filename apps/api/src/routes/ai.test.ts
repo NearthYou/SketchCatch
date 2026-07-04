@@ -917,6 +917,40 @@ test("POST /api/ai/architecture-draft creates a server and storage draft", async
   await app.close();
 });
 
+test("POST /api/ai/architecture-draft honors requested EC2 and S3 counts", async () => {
+  const app = buildApp();
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/ai/architecture-draft",
+    payload: {
+      prompt: "있잖아 난 ec2 3개 정도 있는 서비스를 만들고 싶어. s3는 한 5개 정도 필요해."
+    }
+  });
+
+  assert.equal(response.statusCode, 200);
+
+  const body = architectureDraftResponseSchema.parse(response.json());
+  const ec2Nodes = body.architectureJson.nodes.filter((node) => node.type === "EC2");
+  const s3Nodes = body.architectureJson.nodes.filter((node) => node.type === "S3");
+  const edgeIds = body.architectureJson.edges.map((edge) => edge.id);
+
+  assert.equal(ec2Nodes.length, 3);
+  assert.equal(s3Nodes.length, 5);
+  assert.deepEqual(
+    ec2Nodes.map((node) => node.id),
+    ["app-server", "app-server-2", "app-server-3"]
+  );
+  assert.deepEqual(
+    s3Nodes.map((node) => node.id),
+    ["upload-bucket", "upload-bucket-2", "upload-bucket-3", "upload-bucket-4", "upload-bucket-5"]
+  );
+  assert.ok(edgeIds.includes("app-server-to-upload-bucket"));
+  assert.ok(edgeIds.includes("app-server-3-to-upload-bucket-5"));
+
+  await app.close();
+});
+
 test("POST /api/ai/architecture-draft applies operating intent inside supported MVP config", async () => {
   const app = buildApp();
 
