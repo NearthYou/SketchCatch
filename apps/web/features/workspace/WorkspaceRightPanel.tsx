@@ -20,6 +20,7 @@ import {
 } from "./TerraformCodePanel";
 import { TerraformIssuesPanel } from "./TerraformIssuesPanel";
 import { TerraformLeaveDialog } from "./TerraformLeaveDialog";
+import { WorkspaceAiPanel } from "./WorkspaceAiPanel";
 import { defaultResourceWorkspaceView } from "./resource-workspace-view";
 import {
   WORKSPACE_SAFETY_FINDING_AI_EVENT,
