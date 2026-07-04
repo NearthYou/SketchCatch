@@ -25,6 +25,7 @@ import {
   saveProjectDraft,
   testAwsConnection,
   uploadProjectAsset,
+  validateTerraformCode,
   verifyAwsConnection
 } from "./api";
 import type { Project } from "../../../../packages/types/src";
@@ -119,6 +120,60 @@ test("saveProjectDraft sends authenticated PUT request with diagram json", async
         zoom: 1
       }
     }
+  });
+});
+
+test("validateTerraformCode sends static validation files only", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    restoreWindow(originalWindowDescriptor);
+  });
+
+  installAuthSession();
+
+  globalThis.fetch = async (input, init) => {
+    requests.push({ input, init });
+
+    return new Response(
+      JSON.stringify({
+        diagnostics: []
+      }),
+      {
+        headers: {
+          "Content-Type": "application/json"
+        },
+        status: 200
+      }
+    );
+  };
+
+  const response = await validateTerraformCode({
+    terraformCode: "",
+    terraformFiles: [
+      {
+        fileName: "main.tf",
+        terraformCode: `resource "aws_vpc" "main" {}`
+      }
+    ]
+  });
+
+  assert.deepEqual(response, {
+    diagnostics: []
+  });
+  assert.equal(String(requests[0]?.input), "/api/terraform/validate");
+  assert.equal(requests[0]?.init?.method, "POST");
+  assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), {
+    terraformCode: "",
+    terraformFiles: [
+      {
+        fileName: "main.tf",
+        terraformCode: `resource "aws_vpc" "main" {}`
+      }
+    ]
   });
 });
 
@@ -786,11 +841,11 @@ test("getAwsConnectionCloudFormationTemplate fetches the launch stack setup", as
         templateBody:
           "Resources:\n  SketchCatchTerraformExecutionRole:\n    Type: AWS::IAM::Role\n",
         templateUrl:
-          "https://api.sketchcatch.test/api/aws/connections/cloudformation-template?token=signed",
+          "https://sketchcatch-test-bucket.s3.ap-northeast-2.amazonaws.com/aws-connections/33333333-3333-4333-8333-333333333333/cloudformation-template.yaml?X-Amz-Signature=signed",
         templateUrlExpiresAt: "2026-06-26T01:00:00.000Z",
         manualTemplateFallbackAvailable: false,
         launchStackUrl:
-          "https://console.aws.amazon.com/cloudformation/home?region=ap-northeast-2#/stacks/quickcreate?templateURL=https%3A%2F%2Fapi.sketchcatch.test%2Fapi%2Faws%2Fconnections%2Fcloudformation-template%3Ftoken%3Dsigned&stackName=sketchcatch-aws-connection-33333333"
+          "https://console.aws.amazon.com/cloudformation/home?region=ap-northeast-2#/stacks/quickcreate?templateURL=https%3A%2F%2Fsketchcatch-test-bucket.s3.ap-northeast-2.amazonaws.com%2Faws-connections%2F33333333-3333-4333-8333-333333333333%2Fcloudformation-template.yaml%3FX-Amz-Signature%3Dsigned&stackName=sketchcatch-aws-connection-33333333"
       }),
       {
         headers: {

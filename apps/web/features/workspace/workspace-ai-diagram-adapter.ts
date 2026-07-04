@@ -7,53 +7,39 @@ import type {
   ResourceConfig,
   ResourceDragPayload,
   ResourceItem,
-  ResourceType
+  ResourceType,
+  TerraformBlockType
 } from "@sketchcatch/types";
+import {
+  getDefaultResourceDefinitionByResourceType,
+  getResourceDefinitionByTerraform
+} from "@sketchcatch/types/resource-definitions";
 import { isAreaNode } from "../diagram-editor/area-nodes";
 import { createDiagramNodeFromPayload } from "../diagram-editor/diagram-utils";
 import { resourceCatalog } from "../resource-settings/catalog";
 import { addServerStorageAreaNodes } from "./server-storage-board-layout";
 
 const DEFAULT_VIEWPORT: DiagramJson["viewport"] = { x: 0, y: 0, zoom: 1 };
-const DEFAULT_NODE_SIZE: DiagramNode["size"] = { width: 180, height: 96 };
+const DEFAULT_NODE_SIZE: DiagramNode["size"] = { width: 56, height: 56 };
+const DEFAULT_TERRAFORM_BLOCK_TYPE: TerraformBlockType = "resource";
+const UNKNOWN_TERRAFORM_RESOURCE_TYPE = "unknown_resource";
 const DEFAULT_EDGE_STYLE: NonNullable<DiagramEdge["style"]> = {
   animated: false,
   color: "#506176",
   width: "medium"
 };
+const EDGE_HANDLE_IDS = {
+  bottom: "handle-bottom",
+  left: "handle-left",
+  right: "handle-right",
+  top: "handle-top"
+} as const;
 const AREA_CHILD_PADDING = 48;
+const MIN_RESOURCE_AREA_CHILD_FOOTPRINT: DiagramNode["size"] = { width: 112, height: 112 };
 const MAX_AREA_FIT_PASSES = 8;
 const AREA_PARENT_EDGE_LABELS = new Set(["contains", "hosts"]);
-const RESOURCE_TO_TERRAFORM_RESOURCE_TYPE: Record<ResourceType, string> = {
-  AMI: "aws_ami",
-  CLOUDFRONT: "aws_cloudfront_distribution",
-  EC2: "aws_instance",
-  INTERNET_GATEWAY: "aws_internet_gateway",
-  LAMBDA: "aws_lambda_function",
-  RDS: "aws_db_instance",
-  ROUTE_TABLE: "aws_route_table",
-  ROUTE_TABLE_ASSOCIATION: "aws_route_table_association",
-  S3: "aws_s3_bucket",
-  SECURITY_GROUP: "aws_security_group",
-  SUBNET: "aws_subnet",
-  UNKNOWN: "unknown_resource",
-  VPC: "aws_vpc"
-};
-const TERRAFORM_RESOURCE_TYPE_TO_RESOURCE: Record<string, ResourceType> = {
-  aws_ami: "AMI",
-  aws_cloudfront_distribution: "CLOUDFRONT",
-  aws_db_instance: "RDS",
-  aws_internet_gateway: "INTERNET_GATEWAY",
-  aws_instance: "EC2",
-  aws_lambda_function: "LAMBDA",
-  aws_route_table: "ROUTE_TABLE",
-  aws_route_table_association: "ROUTE_TABLE_ASSOCIATION",
-  aws_s3_bucket: "S3",
-  aws_security_group: "SECURITY_GROUP",
-  aws_security_group_rule: "SECURITY_GROUP",
-  aws_subnet: "SUBNET",
-  aws_vpc: "VPC"
-};
+const TERRAFORM_REFERENCE_ATTRIBUTE_SUFFIXES = ["id", "arn", "name", "execution_arn"] as const;
+const SECURITY_GROUP_REFERENCE_KEYS = ["securityGroupIds", "vpcSecurityGroupIds", "securityGroupId"] as const;
 const RESOURCE_ITEMS_BY_TERRAFORM_TYPE = new Map<string, ResourceItem>(
   resourceCatalog.map((item) => [item.nodeDefaults.type, item])
 );
@@ -65,11 +51,12 @@ export function convertArchitectureJsonToDiagramJson(architectureJson: Architect
   const nodes = fitAreaNodesToChildren(
     applyAreaParentMetadata(addServerStorageAreaNodes(convertedNodes), architectureJson.edges)
   );
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
 
   return {
     edges: architectureJson.edges
-      .filter((edge) => nodeIds.has(edge.sourceId) && nodeIds.has(edge.targetId))
-      .map(convertArchitectureEdgeToDiagramEdge),
+      .filter((edge) => shouldRenderArchitectureEdge(edge, nodeIds, nodeById))
+      .map((edge) => convertArchitectureEdgeToDiagramEdge(edge, nodeById)),
     nodes,
     viewport: { ...DEFAULT_VIEWPORT }
   };
@@ -86,7 +73,7 @@ export function convertDiagramJsonToArchitectureJson(diagramJson: DiagramJson): 
       label: node.label,
       positionX: node.position.x,
       positionY: node.position.y,
-      type: mapTerraformResourceType(parameters.resourceType)
+      type: mapTerraformResourceType(parameters)
     };
   });
   const nodeIds = new Set(nodes.map((node) => node.id));
@@ -159,7 +146,7 @@ function createFallbackDiagramNode(
       fileName: "main",
       resourceName: "resource",
       resourceType: terraformResourceType,
-      terraformBlockType: "resource",
+      terraformBlockType: DEFAULT_TERRAFORM_BLOCK_TYPE,
       values: {}
     },
     position,
@@ -185,7 +172,7 @@ function createDiagramNodeParameters(
     fileName: baseParameters?.fileName ?? "main",
     resourceName: getArchitectureResourceName(node),
     resourceType: terraformResourceType,
-    terraformBlockType: baseParameters?.terraformBlockType ?? "resource",
+    terraformBlockType: baseParameters?.terraformBlockType ?? DEFAULT_TERRAFORM_BLOCK_TYPE,
     values: {
       ...(baseParameters?.values ?? {}),
       ...config
@@ -193,14 +180,126 @@ function createDiagramNodeParameters(
   };
 }
 
-function convertArchitectureEdgeToDiagramEdge(edge: ArchitectureJson["edges"][number]): DiagramEdge {
+function convertArchitectureEdgeToDiagramEdge(
+  edge: ArchitectureJson["edges"][number],
+  nodeById: ReadonlyMap<string, DiagramNode>
+): DiagramEdge {
+  const handles = getDefaultEdgeHandles(nodeById.get(edge.sourceId), nodeById.get(edge.targetId));
+
   return {
     id: edge.id,
     label: edge.label,
     sourceNodeId: edge.sourceId,
+    sourceHandleId: handles.sourceHandleId,
     style: { ...DEFAULT_EDGE_STYLE },
+    targetHandleId: handles.targetHandleId,
     targetNodeId: edge.targetId,
     type: "smoothstep"
+  };
+}
+
+function shouldRenderArchitectureEdge(
+  edge: ArchitectureJson["edges"][number],
+  architectureNodeIds: ReadonlySet<string>,
+  nodeById: ReadonlyMap<string, DiagramNode>
+): boolean {
+  if (!architectureNodeIds.has(edge.sourceId) || !architectureNodeIds.has(edge.targetId)) {
+    return false;
+  }
+
+  const sourceNode = nodeById.get(edge.sourceId);
+  const targetNode = nodeById.get(edge.targetId);
+
+  if (!sourceNode || !targetNode) {
+    return false;
+  }
+
+  return !isAreaContainmentRenderEdge(edge, sourceNode, targetNode, nodeById);
+}
+
+function isAreaContainmentRenderEdge(
+  edge: ArchitectureJson["edges"][number],
+  sourceNode: DiagramNode,
+  targetNode: DiagramNode,
+  nodeById: ReadonlyMap<string, DiagramNode>
+): boolean {
+  if (isAreaParentEdge(edge)) {
+    return true;
+  }
+
+  return (
+    (isAreaDiagramNode(sourceNode) && hasAreaAncestor(targetNode, sourceNode.id, nodeById)) ||
+    (isAreaDiagramNode(targetNode) && hasAreaAncestor(sourceNode, targetNode.id, nodeById))
+  );
+}
+
+function hasAreaAncestor(
+  node: DiagramNode,
+  ancestorAreaNodeId: string,
+  nodeById: ReadonlyMap<string, DiagramNode>
+): boolean {
+  let parentAreaNodeId = node.metadata?.parentAreaNodeId;
+  const visitedNodeIds = new Set<string>();
+
+  while (parentAreaNodeId) {
+    if (parentAreaNodeId === ancestorAreaNodeId) {
+      return true;
+    }
+
+    if (visitedNodeIds.has(parentAreaNodeId)) {
+      return false;
+    }
+
+    visitedNodeIds.add(parentAreaNodeId);
+    parentAreaNodeId = nodeById.get(parentAreaNodeId)?.metadata?.parentAreaNodeId;
+  }
+
+  return false;
+}
+
+function getDefaultEdgeHandles(
+  sourceNode: DiagramNode | undefined,
+  targetNode: DiagramNode | undefined
+): Pick<DiagramEdge, "sourceHandleId" | "targetHandleId"> {
+  if (!sourceNode || !targetNode) {
+    return {
+      sourceHandleId: EDGE_HANDLE_IDS.right,
+      targetHandleId: EDGE_HANDLE_IDS.left
+    };
+  }
+
+  const sourceCenter = getNodeCenter(sourceNode);
+  const targetCenter = getNodeCenter(targetNode);
+  const deltaX = targetCenter.x - sourceCenter.x;
+  const deltaY = targetCenter.y - sourceCenter.y;
+
+  if (Math.abs(deltaX) >= Math.abs(deltaY)) {
+    return deltaX >= 0
+      ? {
+          sourceHandleId: EDGE_HANDLE_IDS.right,
+          targetHandleId: EDGE_HANDLE_IDS.left
+        }
+      : {
+          sourceHandleId: EDGE_HANDLE_IDS.left,
+          targetHandleId: EDGE_HANDLE_IDS.right
+        };
+  }
+
+  return deltaY >= 0
+    ? {
+        sourceHandleId: EDGE_HANDLE_IDS.bottom,
+        targetHandleId: EDGE_HANDLE_IDS.top
+      }
+    : {
+        sourceHandleId: EDGE_HANDLE_IDS.top,
+        targetHandleId: EDGE_HANDLE_IDS.bottom
+      };
+}
+
+function getNodeCenter(node: DiagramNode): DiagramNode["position"] {
+  return {
+    x: node.position.x + node.size.width / 2,
+    y: node.position.y + node.size.height / 2
   };
 }
 
@@ -213,6 +312,7 @@ function applyAreaParentMetadata(
 
   return nodes.map((node) => {
     const parentAreaNodeId =
+      findSecurityBoundaryParentAreaNodeId(node, nodeById) ??
       node.metadata?.parentAreaNodeId ??
       findConfigParentAreaNodeId(node, nodeById) ??
       findEdgeParentAreaNodeId(node, nodeById, edges);
@@ -238,7 +338,7 @@ function fitAreaNodesToChildren(nodes: readonly DiagramNode[]): DiagramNode[] {
   for (let pass = 0; pass < MAX_AREA_FIT_PASSES; pass += 1) {
     const nextNodes = fitAreaNodesToDirectChildren(currentNodes);
 
-    if (areNodeSizesEqual(currentNodes, nextNodes)) {
+    if (areNodeLayoutsEqual(currentNodes, nextNodes)) {
       return nextNodes;
     }
 
@@ -249,11 +349,16 @@ function fitAreaNodesToChildren(nodes: readonly DiagramNode[]): DiagramNode[] {
 }
 
 // 깊게 중첩된 Region/VPC/AZ/SG/Subnet 박스가 안정될 때 반복 계산을 멈춥니다.
-function areNodeSizesEqual(leftNodes: readonly DiagramNode[], rightNodes: readonly DiagramNode[]): boolean {
+function areNodeLayoutsEqual(leftNodes: readonly DiagramNode[], rightNodes: readonly DiagramNode[]): boolean {
   return leftNodes.every((leftNode, index) => {
     const rightNode = rightNodes[index];
 
-    return rightNode?.size.width === leftNode.size.width && rightNode.size.height === leftNode.size.height;
+    return (
+      rightNode?.position.x === leftNode.position.x &&
+      rightNode.position.y === leftNode.position.y &&
+      rightNode.size.width === leftNode.size.width &&
+      rightNode.size.height === leftNode.size.height
+    );
   });
 }
 
@@ -283,49 +388,193 @@ function fitAreaNodesToDirectChildren(nodes: readonly DiagramNode[]): DiagramNod
       return node;
     }
 
-    const requiredSize = getRequiredAreaSize(node, children);
+    const requiredLayout = getRequiredAreaLayout(node, children);
 
-    if (requiredSize.width === node.size.width && requiredSize.height === node.size.height) {
+    if (
+      requiredLayout.position.x === node.position.x &&
+      requiredLayout.position.y === node.position.y &&
+      requiredLayout.size.width === node.size.width &&
+      requiredLayout.size.height === node.size.height
+    ) {
       return node;
     }
 
     return {
       ...node,
-      size: requiredSize
+      position: requiredLayout.position,
+      size: requiredLayout.size
     };
   });
 }
 
-function getRequiredAreaSize(node: DiagramNode, children: readonly DiagramNode[]): DiagramNode["size"] {
+function getRequiredAreaLayout(
+  node: DiagramNode,
+  children: readonly DiagramNode[]
+): Pick<DiagramNode, "position" | "size"> {
+  let left = node.position.x;
+  let top = node.position.y;
   let right = node.position.x + node.size.width;
   let bottom = node.position.y + node.size.height;
 
   for (const child of children) {
-    right = Math.max(right, child.position.x + child.size.width + AREA_CHILD_PADDING);
-    bottom = Math.max(bottom, child.position.y + child.size.height + AREA_CHILD_PADDING);
+    const childFitSize = getAreaChildFitSize(child);
+    left = Math.min(left, child.position.x - AREA_CHILD_PADDING);
+    top = Math.min(top, child.position.y - AREA_CHILD_PADDING);
+    right = Math.max(right, child.position.x + childFitSize.width + AREA_CHILD_PADDING);
+    bottom = Math.max(bottom, child.position.y + childFitSize.height + AREA_CHILD_PADDING);
   }
 
   return {
-    width: right - node.position.x,
-    height: bottom - node.position.y
+    position: {
+      x: left,
+      y: top
+    },
+    size: {
+      width: right - left,
+      height: bottom - top
+    }
   };
+}
+
+function getAreaChildFitSize(child: DiagramNode): DiagramNode["size"] {
+  if (isAreaDiagramNode(child) || child.kind !== "resource") {
+    return child.size;
+  }
+
+  return {
+    width: Math.max(child.size.width, MIN_RESOURCE_AREA_CHILD_FOOTPRINT.width),
+    height: Math.max(child.size.height, MIN_RESOURCE_AREA_CHILD_FOOTPRINT.height)
+  };
+}
+
+function findSecurityBoundaryParentAreaNodeId(
+  node: DiagramNode,
+  nodeById: ReadonlyMap<string, DiagramNode>
+): string | undefined {
+  if (isSecurityGroupAreaNode(node)) {
+    return findProtectedSubnetAreaNodeId(node, nodeById);
+  }
+
+  const securityGroupNode = findReferencedSecurityGroupAreaNodes(node, nodeById)[0];
+
+  return securityGroupNode?.id;
+}
+
+function findProtectedSubnetAreaNodeId(
+  securityGroupNode: DiagramNode,
+  nodeById: ReadonlyMap<string, DiagramNode>
+): string | undefined {
+  for (const node of nodeById.values()) {
+    if (node.id === securityGroupNode.id || !referencesSecurityGroup(node, securityGroupNode, nodeById)) {
+      continue;
+    }
+
+    const subnetNode = findConfigAreaNodeByParameter(node, "subnetId", nodeById);
+
+    if (subnetNode && subnetNode.id !== securityGroupNode.id) {
+      return subnetNode.id;
+    }
+  }
+
+  return undefined;
+}
+
+function referencesSecurityGroup(
+  node: DiagramNode,
+  securityGroupNode: DiagramNode,
+  nodeById: ReadonlyMap<string, DiagramNode>
+): boolean {
+  return getSecurityGroupReferenceValues(node).some((referenceValue) => {
+    const referencedNode = findReferencedNode(referenceValue, nodeById);
+
+    return referencedNode?.id === securityGroupNode.id;
+  });
+}
+
+function findReferencedSecurityGroupAreaNodes(
+  node: DiagramNode,
+  nodeById: ReadonlyMap<string, DiagramNode>
+): DiagramNode[] {
+  return getSecurityGroupReferenceValues(node)
+    .map((referenceValue) => findReferencedNode(referenceValue, nodeById))
+    .filter((referencedNode): referencedNode is DiagramNode => {
+      return referencedNode !== undefined && isSecurityGroupAreaNode(referencedNode);
+    });
 }
 
 function findConfigParentAreaNodeId(
   node: DiagramNode,
   nodeById: ReadonlyMap<string, DiagramNode>
 ): string | undefined {
-  const subnetId = getStringParameterValue(node, "subnetId");
-  const subnetNode = subnetId ? nodeById.get(subnetId) : undefined;
+  const subnetNode = findConfigAreaNodeByParameter(node, "subnetId", nodeById);
 
-  if (subnetNode && subnetNode.id !== node.id && isAreaDiagramNode(subnetNode)) {
+  if (subnetNode && subnetNode.id !== node.id) {
     return subnetNode.id;
   }
 
-  const vpcId = getStringParameterValue(node, "vpcId");
-  const vpcNode = vpcId ? nodeById.get(vpcId) : undefined;
+  const vpcNode = findConfigAreaNodeByParameter(node, "vpcId", nodeById);
 
-  return vpcNode && vpcNode.id !== node.id && isAreaDiagramNode(vpcNode) ? vpcNode.id : undefined;
+  return vpcNode && vpcNode.id !== node.id ? vpcNode.id : undefined;
+}
+
+function findConfigAreaNodeByParameter(
+  node: DiagramNode,
+  parameterName: string,
+  nodeById: ReadonlyMap<string, DiagramNode>
+): DiagramNode | undefined {
+  const referenceValue = getStringParameterValue(node, parameterName);
+  const referencedNode = referenceValue ? findReferencedNode(referenceValue, nodeById) : undefined;
+
+  return referencedNode && isAreaDiagramNode(referencedNode) ? referencedNode : undefined;
+}
+
+function findReferencedNode(
+  rawReferenceValue: string,
+  nodeById: ReadonlyMap<string, DiagramNode>
+): DiagramNode | undefined {
+  const referenceValue = normalizeReferenceValue(rawReferenceValue);
+  const directNode = nodeById.get(referenceValue);
+
+  if (directNode) {
+    return directNode;
+  }
+
+  for (const node of nodeById.values()) {
+    if (matchesTerraformNodeReference(referenceValue, node)) {
+      return node;
+    }
+  }
+
+  return undefined;
+}
+
+function matchesTerraformNodeReference(referenceValue: string, node: DiagramNode): boolean {
+  const parameters = node.parameters;
+
+  if (!parameters) {
+    return false;
+  }
+
+  const referenceNames = new Set(
+    [parameters.resourceName, node.id].filter(
+      (referenceName): referenceName is string => typeof referenceName === "string" && referenceName.length > 0
+    )
+  );
+  const references = [...referenceNames].flatMap((resourceName) => {
+    const resourceReferences = TERRAFORM_REFERENCE_ATTRIBUTE_SUFFIXES.map(
+      (suffix) => `${parameters.resourceType}.${resourceName}.${suffix}`
+    );
+
+    return parameters.terraformBlockType === "data"
+      ? [...resourceReferences, ...resourceReferences.map((resourceReference) => `data.${resourceReference}`)]
+      : resourceReferences;
+  });
+
+  return references.includes(referenceValue);
+}
+
+function normalizeReferenceValue(value: string): string {
+  return value.trim().replace(/^\$\{(.+)\}$/u, "$1");
 }
 
 function findEdgeParentAreaNodeId(
@@ -356,10 +605,32 @@ function isAreaDiagramNode(node: DiagramNode): boolean {
   return isAreaNode(node);
 }
 
+function isSecurityGroupAreaNode(node: DiagramNode): boolean {
+  return node.kind === "resource" && (node.parameters?.resourceType ?? node.type) === "aws_security_group";
+}
+
 function getStringParameterValue(node: DiagramNode, key: string): string | undefined {
   const value = node.parameters?.values[key];
 
   return typeof value === "string" && value.trim().length > 0 ? value : undefined;
+}
+
+function getSecurityGroupReferenceValues(node: DiagramNode): string[] {
+  return SECURITY_GROUP_REFERENCE_KEYS.flatMap((key) => getStringParameterValues(node, key));
+}
+
+function getStringParameterValues(node: DiagramNode, key: string): string[] {
+  const value = node.parameters?.values[key];
+
+  if (typeof value === "string" && value.trim().length > 0) {
+    return [value];
+  }
+
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.filter(isString).filter((item) => item.trim().length > 0);
 }
 
 function isConvertibleResourceNode(
@@ -437,11 +708,22 @@ function isValidPort(port: number): boolean {
 }
 
 function mapResourceTypeToTerraform(resourceType: ResourceType): string {
-  return RESOURCE_TO_TERRAFORM_RESOURCE_TYPE[resourceType];
+  if (resourceType === "UNKNOWN") {
+    return UNKNOWN_TERRAFORM_RESOURCE_TYPE;
+  }
+
+  return (
+    getDefaultResourceDefinitionByResourceType(resourceType)?.terraform.resourceType ??
+    UNKNOWN_TERRAFORM_RESOURCE_TYPE
+  );
 }
 
-function mapTerraformResourceType(terraformResourceType: string): ResourceType {
-  return TERRAFORM_RESOURCE_TYPE_TO_RESOURCE[terraformResourceType] ?? "UNKNOWN";
+function mapTerraformResourceType(parameters: DiagramNodeParameters): ResourceType {
+  const terraformBlockType = parameters.terraformBlockType ?? DEFAULT_TERRAFORM_BLOCK_TYPE;
+
+  return (
+    getResourceDefinitionByTerraform(terraformBlockType, parameters.resourceType)?.resourceType ?? "UNKNOWN"
+  );
 }
 
 // Terraform resource name은 사용자 로케일과 무관한 ASCII identifier로 정규화합니다.

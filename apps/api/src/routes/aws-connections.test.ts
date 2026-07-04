@@ -650,10 +650,21 @@ test("DELETE /api/aws/connections/:connectionId returns conflict when a deployme
 test("GET /api/aws/connections/:connectionId/cloudformation-template returns launch stack setup", async () => {
   const repository = new FakeAwsConnectionRepository();
   repository.awsConnection = createAwsConnectionRecord();
+  const publishedTemplateUrl =
+    "https://sketchcatch-test-bucket.s3.ap-northeast-2.amazonaws.com/aws-connections/33333333-3333-4333-8333-333333333333/cloudformation-template.yaml?X-Amz-Signature=signed";
+  const publisherCalls: Array<{
+    connectionId: string;
+    stackName: string;
+    templateBody: string;
+    expiresInSeconds: number;
+  }> = [];
   const app = await buildAwsConnectionTestApp(repository, {
-    awsConnectionConfig: {
-      callerPrincipalArn,
-      publicBaseUrl: "https://api.sketchcatch.test"
+    cloudFormationTemplatePublisher: async (input) => {
+      publisherCalls.push(input);
+
+      return {
+        templateUrl: publishedTemplateUrl
+      };
     }
   });
 
@@ -677,10 +688,7 @@ test("GET /api/aws/connections/:connectionId/cloudformation-template returns lau
     new RegExp(callerPrincipalArn.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
   );
   assert.match(body.templateBody, new RegExp(externalId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
-  assert.match(
-    body.templateUrl ?? "",
-    /^https:\/\/api\.sketchcatch\.test\/api\/aws\/connections\/cloudformation-template\?token=/
-  );
+  assert.equal(body.templateUrl, publishedTemplateUrl);
   assert.equal(body.templateUrlExpiresAt, "2026-06-26T01:00:00.000Z");
   assert.equal(body.manualTemplateFallbackAvailable, false);
   assert.match(
@@ -688,105 +696,43 @@ test("GET /api/aws/connections/:connectionId/cloudformation-template returns lau
     /^https:\/\/console\.aws\.amazon\.com\/cloudformation\/home\?region=ap-northeast-2#/
   );
   assert.match(body.launchStackUrl ?? "", /templateURL=/);
+  assert.match(body.launchStackUrl ?? "", /s3\.ap-northeast-2\.amazonaws\.com/);
+  assert.doesNotMatch(body.launchStackUrl ?? "", /api\/aws\/connections\/cloudformation-template/);
   assert.match(body.launchStackUrl ?? "", /stackName=sketchcatch-aws-connection-33333333/);
   assert.match(body.launchStackUrl ?? "", /capabilities=CAPABILITY_NAMED_IAM/);
+  assert.deepEqual(publisherCalls, [
+    {
+      connectionId: awsConnectionId,
+      stackName: "sketchcatch-aws-connection-33333333",
+      templateBody: body.templateBody,
+      expiresInSeconds: 3600
+    }
+  ]);
 
   await app.close();
 });
 
-test("GET /api/aws/connections/:connectionId/cloudformation-template returns an inline template for localhost", async () => {
+test("GET /api/aws/connections/:connectionId/cloudformation-template returns an inline template without S3 publishing", async () => {
   const repository = new FakeAwsConnectionRepository();
   repository.awsConnection = createAwsConnectionRecord();
 
-  for (const publicBaseUrl of ["http://localhost:3000", "https://localhost:3000"]) {
-    const app = await buildAwsConnectionTestApp(repository, {
-      awsConnectionConfig: {
-        callerPrincipalArn,
-        publicBaseUrl
-      }
-    });
-
-    const response = await app.inject({
-      method: "GET",
-      url: `/api/aws/connections/${awsConnectionId}/cloudformation-template`,
-      headers: await authHeaders()
-    });
-
-    assert.equal(response.statusCode, 200);
-    const body = response.json() as AwsConnectionCloudFormationTemplateResponse;
-    assert.equal(body.templateUrl, null);
-    assert.equal(body.templateUrlExpiresAt, null);
-    assert.equal(body.launchStackUrl, null);
-    assert.equal(body.manualTemplateFallbackAvailable, true);
-    assert.match(body.templateBody, /Type: AWS::IAM::Role/);
-
-    await app.close();
-  }
-});
-
-test("GET /api/aws/connections/cloudformation-template returns public template yaml", async () => {
-  const repository = new FakeAwsConnectionRepository();
-  repository.awsConnection = createAwsConnectionRecord();
   const app = await buildAwsConnectionTestApp(repository, {
-    awsConnectionConfig: {
-      callerPrincipalArn,
-      publicBaseUrl: "https://api.sketchcatch.test"
-    }
+    cloudFormationTemplatePublisher: null
   });
-
-  const setupResponse = await app.inject({
-    method: "GET",
-    url: `/api/aws/connections/${awsConnectionId}/cloudformation-template`,
-    headers: await authHeaders()
-  });
-  const setupBody = setupResponse.json() as AwsConnectionCloudFormationTemplateResponse;
-  const templateUrl = new URL(setupBody.templateUrl ?? "");
-  const templatePath = `${templateUrl.pathname}${templateUrl.search}`;
 
   const response = await app.inject({
     method: "GET",
-    url: templatePath
+    url: `/api/aws/connections/${awsConnectionId}/cloudformation-template`,
+    headers: await authHeaders()
   });
 
   assert.equal(response.statusCode, 200);
-  assert.equal(response.headers["content-type"], "application/x-yaml");
-  assert.equal(response.body, setupBody.templateBody);
-  assert.match(response.body, /RoleName: "SketchCatchTerraformExecutionRole"/);
-
-  await app.close();
-});
-
-test("GET /api/aws/connections/cloudformation-template rejects a token after the connection row disappears", async () => {
-  const repository = new FakeAwsConnectionRepository();
-  repository.awsConnection = createAwsConnectionRecord();
-  const app = await buildAwsConnectionTestApp(repository, {
-    awsConnectionConfig: {
-      callerPrincipalArn,
-      publicBaseUrl: "https://api.sketchcatch.test"
-    }
-  });
-
-  const setupResponse = await app.inject({
-    method: "GET",
-    url: `/api/aws/connections/${awsConnectionId}/cloudformation-template`,
-    headers: await authHeaders()
-  });
-  const setupBody = setupResponse.json() as AwsConnectionCloudFormationTemplateResponse;
-  const templateUrl = new URL(setupBody.templateUrl ?? "");
-  const templatePath = `${templateUrl.pathname}${templateUrl.search}`;
-
-  repository.awsConnection = undefined;
-
-  const response = await app.inject({
-    method: "GET",
-    url: templatePath
-  });
-
-  assert.equal(response.statusCode, 400);
-  assert.deepEqual(response.json(), {
-    error: "bad_request",
-    message: "CloudFormation template URL is invalid or expired"
-  });
+  const body = response.json() as AwsConnectionCloudFormationTemplateResponse;
+  assert.equal(body.templateUrl, null);
+  assert.equal(body.templateUrlExpiresAt, null);
+  assert.equal(body.launchStackUrl, null);
+  assert.equal(body.manualTemplateFallbackAvailable, true);
+  assert.match(body.templateBody, /Type: AWS::IAM::Role/);
 
   await app.close();
 });
@@ -807,7 +753,6 @@ async function buildAwsConnectionTestApp(
     },
     generateAwsConnectionId: () => awsConnectionId,
     generateAwsExternalId: () => externalId,
-    cloudFormationTemplateTokenSecret: "test-cloudformation-template-token-secret",
     now: () => fixedNow,
     ...routeOverrides
   });
