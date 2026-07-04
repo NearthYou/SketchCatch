@@ -1,6 +1,7 @@
 import type { CreateArchitectureDraftRequest } from "@sketchcatch/types";
 
 type ClarificationQuestionId = "sitePurpose" | "visitorAction" | "operationPreference";
+type ClarificationSelectionMode = "single" | "multiple";
 
 type ClarificationAnswerValue =
   | "landing"
@@ -25,6 +26,7 @@ export type ArchitectureClarificationQuestion = {
   readonly id: ClarificationQuestionId;
   readonly options: readonly ArchitectureClarificationOption[];
   readonly question: string;
+  readonly selectionMode?: ClarificationSelectionMode;
 };
 
 type ArchitectureClarificationAnswer = {
@@ -42,6 +44,7 @@ export type ArchitectureClarificationSession = {
 
 export type ArchitectureClarificationMessage = {
   readonly content: string;
+  readonly selectionMode?: ClarificationSelectionMode;
   readonly suggestions: readonly string[];
 };
 
@@ -87,7 +90,8 @@ const CLARIFICATION_QUESTIONS: readonly ArchitectureClarificationQuestion[] = [
   {
     id: "sitePurpose",
     question: "어떤 웹사이트에 가까워요?",
-    helpText: "아직 기술 이름은 몰라도 됩니다. 만들려는 서비스의 모습만 골라주세요.",
+    helpText: "아직 기술 이름은 몰라도 됩니다. 겹치면 여러 개를 함께 골라도 됩니다.",
+    selectionMode: "multiple",
     options: [
       {
         value: "landing",
@@ -97,20 +101,21 @@ const CLARIFICATION_QUESTIONS: readonly ArchitectureClarificationQuestion[] = [
       },
       {
         value: "form",
-        label: "문의만 받는 사이트",
-        description: "방문자가 연락처나 문의 내용을 남기고, 운영자가 나중에 확인하는 정도입니다. 로그인 없이도 만들 수 있습니다."
+        label: "문의/예약/신청을 받는 사이트",
+        description: "방문자가 문의, 예약, 신청 내용을 남기고 운영자가 확인합니다. 로그인/마이페이지가 필요하면 함께 선택해도 됩니다."
       },
       {
         value: "memberService",
-        label: "예약/신청을 관리하는 서비스",
-        description: "예약이나 신청 내역을 저장하고 상태를 관리합니다. 로그인/마이페이지가 필요한지는 다음 질문에서 따로 고릅니다."
+        label: "로그인/마이페이지가 있는 서비스",
+        description: "사용자별 정보를 다루고 본인이 다시 확인하는 흐름입니다. 예약/신청과 함께 선택할 수 있습니다."
       }
     ]
   },
   {
     id: "visitorAction",
     question: "방문자가 무엇을 할 수 있어야 하나요?",
-    helpText: "이 답에 따라 화면만 있으면 되는지, 서버나 저장 공간이 필요한지 결정됩니다.",
+    helpText: "이 답에 따라 화면만 있으면 되는지, 서버나 저장 공간이 필요한지 결정됩니다. 필요한 기능을 여러 개 골라도 됩니다.",
+    selectionMode: "multiple",
     options: [
       {
         value: "readOnly",
@@ -125,8 +130,8 @@ const CLARIFICATION_QUESTIONS: readonly ArchitectureClarificationQuestion[] = [
       },
       {
         value: "storeData",
-        label: "로그인/마이페이지가 필요해요",
-        description: "사용자별 정보를 저장하고 본인이 다시 확인해야 합니다. 비용은 조금 늘지만 예약/신청 상태 관리에 더 적합합니다."
+        label: "게시글/회원 정보를 저장해야 해요",
+        description: "사용자별 정보나 글 내용을 저장하고 다시 확인해야 합니다. 비용은 조금 늘지만 서비스 기능을 만들 때 필요합니다."
       }
     ]
   },
@@ -198,8 +203,7 @@ export function answerArchitectureClarification(
     return session;
   }
 
-  const answer = createClarificationAnswer(question, answerText);
-  const answers = [...session.answers, answer];
+  const answers = [...session.answers, ...createClarificationAnswers(question, answerText)];
   const nextStepIndex = session.stepIndex + 1;
 
   return {
@@ -213,6 +217,7 @@ export function answerArchitectureClarification(
 export function createArchitectureClarificationQuestionMessage(
   question: ArchitectureClarificationQuestion
 ): ArchitectureClarificationMessage {
+  const isMultiple = question.selectionMode === "multiple";
   const optionLines = question.options.map((option, index) => {
     const recommendedText = option.recommended ? " (추천)" : "";
 
@@ -220,7 +225,13 @@ export function createArchitectureClarificationQuestionMessage(
   });
 
   return {
-    content: [`질문: ${question.question}`, question.helpText, "추천 답안:", ...optionLines].join("\n"),
+    content: [
+      `질문: ${question.question}`,
+      question.helpText,
+      isMultiple ? "추천 답안(여러 개 선택 가능):" : "추천 답안:",
+      ...optionLines
+    ].join("\n"),
+    selectionMode: question.selectionMode ?? "single",
     suggestions: question.options.map((option) => option.label)
   };
 }
@@ -229,7 +240,10 @@ export function createArchitectureClarificationSummaryMessage(
   session: ArchitectureClarificationSession
 ): ArchitectureClarificationMessage {
   const implementationItems = createImplementationList(session.answers);
-  const answerLines = session.answers.map((answer) => `- ${getQuestionLabel(answer.questionId)}: ${answer.label}`);
+  const answerLines = CLARIFICATION_QUESTIONS.map((question) => ({
+    label: getQuestionLabel(question.id),
+    value: getAnswerLabel(session.answers, question.id)
+  })).map((answer) => `- ${answer.label}: ${answer.value}`);
   const implementationLines = implementationItems.map((item) => `- ${item}`);
 
   return {
@@ -264,6 +278,21 @@ export function createClarifiedDraftRequest(
   };
 }
 
+function createClarificationAnswers(
+  question: ArchitectureClarificationQuestion,
+  answerText: string
+): ArchitectureClarificationAnswer[] {
+  if (question.selectionMode === "multiple") {
+    const selectedOptions = findSelectedOptions(question, answerText);
+
+    if (selectedOptions.length > 0) {
+      return selectedOptions.map((option) => createClarificationAnswerFromOption(question.id, option));
+    }
+  }
+
+  return [createClarificationAnswer(question, answerText)];
+}
+
 function createClarificationAnswer(
   question: ArchitectureClarificationQuestion,
   answerText: string
@@ -275,11 +304,7 @@ function createClarificationAnswer(
     question.options.find((option) => normalizeText(option.value).includes(normalizedAnswer));
 
   if (selectedOption) {
-    return {
-      label: selectedOption.label,
-      questionId: question.id,
-      value: selectedOption.value
-    };
+    return createClarificationAnswerFromOption(question.id, selectedOption);
   }
 
   return {
@@ -289,13 +314,52 @@ function createClarificationAnswer(
   };
 }
 
+function findSelectedOptions(
+  question: ArchitectureClarificationQuestion,
+  answerText: string
+): ArchitectureClarificationOption[] {
+  const normalizedAnswer = normalizeText(answerText);
+
+  return question.options.filter((option, index) => {
+    const normalizedLabel = normalizeText(option.label);
+    const normalizedValue = normalizeText(option.value);
+
+    return (
+      normalizedAnswer.includes(normalizedLabel) ||
+      normalizedAnswer.includes(normalizedValue) ||
+      normalizedAnswer.split(/[\s,./]+/).includes(String(index + 1))
+    );
+  });
+}
+
+function createClarificationAnswerFromOption(
+  questionId: ClarificationQuestionId,
+  option: ArchitectureClarificationOption
+): ArchitectureClarificationAnswer {
+  return {
+    label: option.label,
+    questionId,
+    value: option.value
+  };
+}
+
 function createClarifiedPrompt(session: ArchitectureClarificationSession): string {
-  const purposeValue = getAnswerValue(session.answers, "sitePurpose");
-  const visitorActionValue = getAnswerValue(session.answers, "visitorAction");
-  const operationPreferenceValue = getAnswerValue(session.answers, "operationPreference");
   const purpose = getAnswerLabel(session.answers, "sitePurpose");
   const visitorAction = getAnswerLabel(session.answers, "visitorAction");
   const operationPreference = getAnswerLabel(session.answers, "operationPreference");
+  const hasLandingPurpose = hasAnswerValue(session.answers, "sitePurpose", "landing");
+  const hasFormPurpose = hasAnswerValue(session.answers, "sitePurpose", "form");
+  const hasMemberServicePurpose = hasAnswerValue(session.answers, "sitePurpose", "memberService");
+  const hasReadOnlyAction = hasAnswerValue(session.answers, "visitorAction", "readOnly");
+  const hasUploadAction = hasAnswerValue(session.answers, "visitorAction", "uploadFiles");
+  const hasStoreDataAction = hasAnswerValue(session.answers, "visitorAction", "storeData");
+  const isReadOnlyLanding =
+    hasLandingPurpose &&
+    hasReadOnlyAction &&
+    !hasFormPurpose &&
+    !hasMemberServicePurpose &&
+    !hasUploadAction &&
+    !hasStoreDataAction;
   const promptParts = [
     session.originalPrompt,
     `사이트 성격: ${purpose}.`,
@@ -303,40 +367,40 @@ function createClarifiedPrompt(session: ArchitectureClarificationSession): strin
     `운영 기준: ${operationPreference}.`
   ];
 
-  if (purposeValue === "landing" && visitorActionValue === "readOnly") {
+  if (isReadOnlyLanding) {
     promptParts.push("소개용 랜딩 정적 웹사이트를 배포하고 싶어.");
     promptParts.push("방문자는 글과 이미지만 보는 공개 웹사이트 구조로 설계해줘.");
   }
 
-  if (visitorActionValue === "uploadFiles") {
+  if (hasUploadAction) {
     promptParts.push("파일 업로드가 있는 웹사이트를 만들고 싶어.");
     promptParts.push("서버가 업로드를 받고 파일과 이미지를 저장하는 구조로 설계해줘.");
   }
 
-  if (purposeValue === "form") {
-    promptParts.push("문의 내용을 받는 웹사이트를 만들고 싶어.");
+  if (hasFormPurpose) {
+    promptParts.push("문의/예약/신청을 받는 웹사이트를 만들고 싶어.");
     promptParts.push("방문자 입력 내용을 저장하고 운영자가 확인할 수 있는 구조로 설계해줘.");
   }
 
-  if (purposeValue === "memberService") {
-    promptParts.push("예약/신청을 관리하는 웹서비스를 만들고 싶어.");
-    promptParts.push("예약/신청 내역을 저장하고 처리하는 구조로 설계해줘.");
+  if (hasMemberServicePurpose) {
+    promptParts.push("로그인/마이페이지가 있는 웹서비스를 만들고 싶어.");
+    promptParts.push("사용자별 정보와 본인 화면을 다시 확인할 수 있는 구조로 설계해줘.");
   }
 
-  if (visitorActionValue === "storeData") {
-    promptParts.push("로그인/마이페이지가 필요해.");
-    promptParts.push("사용자별 정보와 예약/신청 상태를 다시 확인할 수 있는 구조로 설계해줘.");
+  if (hasStoreDataAction) {
+    promptParts.push("게시글/회원 정보를 저장해야 해.");
+    promptParts.push("사용자별 데이터와 서비스 상태를 저장하고 다시 확인할 수 있는 구조로 설계해줘.");
   }
 
-  if (operationPreferenceValue === "lowCost") {
+  if (hasAnswerValue(session.answers, "operationPreference", "lowCost")) {
     promptParts.push("처음엔 저렴하게 시작하고 싶어.");
   }
 
-  if (operationPreferenceValue === "protectData") {
+  if (hasAnswerValue(session.answers, "operationPreference", "protectData")) {
     promptParts.push("로그인/개인정보 보호를 우선해줘.");
   }
 
-  if (operationPreferenceValue === "growthReady") {
+  if (hasAnswerValue(session.answers, "operationPreference", "growthReady")) {
     promptParts.push("홍보 후 방문자 증가에 대비하고 싶어.");
   }
 
@@ -344,31 +408,34 @@ function createClarifiedPrompt(session: ArchitectureClarificationSession): strin
 }
 
 function createImplementationList(answers: readonly ArchitectureClarificationAnswer[]): string[] {
-  const purpose = getAnswerValue(answers, "sitePurpose");
-  const visitorAction = getAnswerValue(answers, "visitorAction");
-  const operationPreference = getAnswerValue(answers, "operationPreference");
+  const hasFormPurpose = hasAnswerValue(answers, "sitePurpose", "form");
+  const hasMemberServicePurpose = hasAnswerValue(answers, "sitePurpose", "memberService");
+  const hasUploadAction = hasAnswerValue(answers, "visitorAction", "uploadFiles");
+  const hasStoreDataAction = hasAnswerValue(answers, "visitorAction", "storeData");
+  const needsRuntime =
+    hasUploadAction || hasFormPurpose || hasMemberServicePurpose || hasStoreDataAction;
   const items: string[] = [];
 
   items.push("웹페이지를 올리고 방문자에게 전달하는 앞단");
 
-  if (visitorAction === "uploadFiles" || purpose === "form" || purpose === "memberService" || visitorAction === "storeData") {
+  if (needsRuntime) {
     items.push("웹 요청을 받는 실행 공간");
   }
 
-  if (visitorAction === "uploadFiles") {
+  if (hasUploadAction) {
     items.push("파일과 이미지를 보관하는 공간");
   }
 
-  if (purpose === "memberService" || visitorAction === "storeData") {
+  if (hasMemberServicePurpose) {
     items.push("사용자 로그인과 마이페이지");
   }
 
-  if (purpose === "form" || purpose === "memberService" || visitorAction === "storeData") {
+  if (hasFormPurpose || hasMemberServicePurpose || hasStoreDataAction) {
     items.push("데이터를 보관하는 공간");
     items.push("외부 접속과 내부 저장 공간을 나누는 경계");
   }
 
-  if (operationPreference === "protectData") {
+  if (hasAnswerValue(answers, "operationPreference", "protectData")) {
     items.push("접근 제한과 민감한 정보 보호 기본값");
   }
 
@@ -377,18 +444,23 @@ function createImplementationList(answers: readonly ArchitectureClarificationAns
   return Array.from(new Set(items));
 }
 
-function getAnswerValue(
+function hasAnswerValue(
   answers: readonly ArchitectureClarificationAnswer[],
-  questionId: ClarificationQuestionId
-): ClarificationAnswerValue | "custom" | undefined {
-  return answers.find((answer) => answer.questionId === questionId)?.value;
+  questionId: ClarificationQuestionId,
+  value: ClarificationAnswerValue
+): boolean {
+  return answers.some((answer) => answer.questionId === questionId && answer.value === value);
 }
 
 function getAnswerLabel(
   answers: readonly ArchitectureClarificationAnswer[],
   questionId: ClarificationQuestionId
 ): string {
-  return answers.find((answer) => answer.questionId === questionId)?.label ?? "아직 정하지 않음";
+  const labels = answers
+    .filter((answer) => answer.questionId === questionId)
+    .map((answer) => answer.label);
+
+  return labels.length > 0 ? labels.join(", ") : "아직 정하지 않음";
 }
 
 function getQuestionLabel(questionId: ClarificationQuestionId): string {

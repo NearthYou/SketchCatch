@@ -55,6 +55,7 @@ export type WorkspaceAiChatDockProps = {
 
 type WorkspaceAiChatMessageRole = "assistant" | "user";
 type WorkspaceAiChatMessageKind = "draft" | "error" | "question" | "simulation" | "status";
+type WorkspaceAiChatSelectionMode = "single" | "multiple";
 
 type WorkspaceAiChatMessage = {
   readonly id: string;
@@ -62,6 +63,7 @@ type WorkspaceAiChatMessage = {
   readonly createdAt: string;
   readonly kind: WorkspaceAiChatMessageKind;
   readonly role: WorkspaceAiChatMessageRole;
+  readonly selectionMode?: WorkspaceAiChatSelectionMode;
   readonly suggestions?: readonly string[];
 };
 
@@ -78,6 +80,9 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
   const [messages, setMessages] = useState<WorkspaceAiChatMessage[]>(() =>
     readStoredChatMessages(projectId)
   );
+  const [selectedSuggestionLabelsByMessageId, setSelectedSuggestionLabelsByMessageId] = useState<
+    Record<string, readonly string[]>
+  >({});
   const [draft, setDraft] = useState<AiArchitectureDraftResult | null>(null);
   const [clarificationSession, setClarificationSession] =
     useState<ArchitectureClarificationSession | null>(null);
@@ -107,6 +112,7 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
 
   useEffect(() => {
     setMessages(readStoredChatMessages(projectId));
+    setSelectedSuggestionLabelsByMessageId({});
   }, [projectId]);
 
   useEffect(() => {
@@ -123,11 +129,12 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
   function appendAssistantMessage(
     kind: WorkspaceAiChatMessageKind,
     content: string,
-    suggestions: readonly string[] = []
+    suggestions: readonly string[] = [],
+    selectionMode: WorkspaceAiChatSelectionMode = "single"
   ): void {
     setMessages((currentMessages) => trimChatMessages([
       ...currentMessages,
-      createChatMessage("assistant", kind, content, suggestions)
+      createChatMessage("assistant", kind, content, suggestions, selectionMode)
     ]));
   }
 
@@ -148,6 +155,7 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
     const nextMessages = trimChatMessages([...messages, userMessage]);
 
     setComposerValue("");
+    setSelectedSuggestionLabelsByMessageId({});
     setMessages(nextMessages);
     await handleUserMessage(trimmedPrompt, nextMessages);
   }
@@ -238,7 +246,7 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
     if (nextSession.awaitingConfirmation) {
       const summary = createArchitectureClarificationSummaryMessage(nextSession);
 
-      appendAssistantMessage("question", summary.content, summary.suggestions);
+      appendAssistantMessage("question", summary.content, summary.suggestions, summary.selectionMode);
       return;
     }
 
@@ -325,7 +333,7 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
 
     const message = createArchitectureClarificationQuestionMessage(question);
 
-    appendAssistantMessage("question", message.content, message.suggestions);
+    appendAssistantMessage("question", message.content, message.suggestions, message.selectionMode);
   }
 
   function applyDraftToBoard(): void {
@@ -359,6 +367,30 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
     }
 
     await createDraftFromConversation(messages);
+  }
+
+  function toggleSuggestionSelection(messageId: string, suggestion: string): void {
+    setSelectedSuggestionLabelsByMessageId((currentSelections) => {
+      const selectedSuggestions = currentSelections[messageId] ?? [];
+      const nextSuggestions = selectedSuggestions.includes(suggestion)
+        ? selectedSuggestions.filter((selectedSuggestion) => selectedSuggestion !== suggestion)
+        : [...selectedSuggestions, suggestion];
+
+      return {
+        ...currentSelections,
+        [messageId]: nextSuggestions
+      };
+    });
+  }
+
+  async function submitSelectedSuggestions(message: WorkspaceAiChatMessage): Promise<void> {
+    const selectedSuggestions = selectedSuggestionLabelsByMessageId[message.id] ?? [];
+
+    if (selectedSuggestions.length === 0) {
+      return;
+    }
+
+    await submitUserMessage(selectedSuggestions.join(", "));
   }
 
   async function runDesignSimulation(): Promise<void> {
@@ -461,33 +493,60 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
       </div>
 
       <div className={styles.aiChatTranscript} ref={transcriptRef}>
-        {messages.map((message) => (
-          <article
-            className={
-              message.role === "user" ? styles.aiChatUserMessage : styles.aiChatAssistantMessage
-            }
-            data-kind={message.kind}
-            key={message.id}
-          >
-            <span>{message.role === "user" ? "나" : message.kind === "question" ? "질문" : "AI"}</span>
-            <p>{message.content}</p>
-            {message.role === "assistant" && message.suggestions && message.suggestions.length > 0 ? (
-              <div className={styles.aiChatSuggestions} aria-label="추천 답안">
-                {message.suggestions.map((suggestion) => (
-                  <button
-                    className={styles.aiChatSuggestionButton}
-                    disabled={draftState === "loading"}
-                    key={suggestion}
-                    onClick={() => void submitUserMessage(suggestion)}
-                    type="button"
-                  >
-                    {suggestion}
-                  </button>
-                ))}
-              </div>
-            ) : null}
-          </article>
-        ))}
+        {messages.map((message) => {
+          const isMultiSelect = message.selectionMode === "multiple";
+          const selectedSuggestions = selectedSuggestionLabelsByMessageId[message.id] ?? [];
+
+          return (
+            <article
+              className={
+                message.role === "user" ? styles.aiChatUserMessage : styles.aiChatAssistantMessage
+              }
+              data-kind={message.kind}
+              key={message.id}
+            >
+              <span>{message.role === "user" ? "나" : message.kind === "question" ? "질문" : "AI"}</span>
+              <p>{message.content}</p>
+              {message.role === "assistant" && message.suggestions && message.suggestions.length > 0 ? (
+                <div className={styles.aiChatSuggestions} aria-label="추천 답안">
+                  {message.suggestions.map((suggestion) => {
+                    const isSelected = selectedSuggestions.includes(suggestion);
+                    const suggestionButtonClassName = isSelected
+                      ? `${styles.aiChatSuggestionButton} ${styles.aiChatSuggestionButtonSelected}`
+                      : styles.aiChatSuggestionButton;
+
+                    return (
+                      <button
+                        aria-pressed={isMultiSelect ? isSelected : undefined}
+                        className={suggestionButtonClassName}
+                        disabled={draftState === "loading"}
+                        key={suggestion}
+                        onClick={
+                          isMultiSelect
+                            ? () => toggleSuggestionSelection(message.id, suggestion)
+                            : () => void submitUserMessage(suggestion)
+                        }
+                        type="button"
+                      >
+                        {suggestion}
+                      </button>
+                    );
+                  })}
+                  {isMultiSelect ? (
+                    <button
+                      className={styles.aiChatSelectionSubmitButton}
+                      disabled={draftState === "loading" || selectedSuggestions.length === 0}
+                      onClick={() => void submitSelectedSuggestions(message)}
+                      type="button"
+                    >
+                      선택 완료
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
+            </article>
+          );
+        })}
 
         <WorkspaceAiRequestMessage state={draftState} message={draftErrorMessage} />
         <WorkspaceAiRequestMessage state={simulationState} message={simulationErrorMessage} />
@@ -663,14 +722,16 @@ function createChatMessage(
   role: WorkspaceAiChatMessageRole,
   kind: WorkspaceAiChatMessageKind,
   content: string,
-  suggestions: readonly string[] = []
+  suggestions: readonly string[] = [],
+  selectionMode: WorkspaceAiChatSelectionMode = "single"
 ): WorkspaceAiChatMessage {
   const message: WorkspaceAiChatMessage = {
     id: createChatMessageId(),
     content,
     createdAt: new Date().toISOString(),
     kind,
-    role
+    role,
+    selectionMode
   };
 
   if (suggestions.length > 0) {
@@ -707,6 +768,9 @@ function isWorkspaceAiChatMessage(value: unknown): value is WorkspaceAiChatMessa
     typeof candidate.content === "string" &&
     typeof candidate.createdAt === "string" &&
     typeof candidate.id === "string" &&
+    (candidate.selectionMode === undefined ||
+      candidate.selectionMode === "single" ||
+      candidate.selectionMode === "multiple") &&
     (candidate.suggestions === undefined ||
       (Array.isArray(candidate.suggestions) &&
         candidate.suggestions.every((suggestion) => typeof suggestion === "string"))) &&

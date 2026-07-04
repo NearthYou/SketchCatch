@@ -74,6 +74,16 @@ test("workspace AI chat history is persisted per project", () => {
   assert.match(workspaceAiChatDockSource, /messages/);
 });
 
+test("workspace AI clarification supports multi-select suggestion chips", () => {
+  assert.match(workspaceAiChatDockSource, /selectedSuggestionLabelsByMessageId/);
+  assert.match(workspaceAiChatDockSource, /toggleSuggestionSelection/);
+  assert.match(workspaceAiChatDockSource, /submitSelectedSuggestions/);
+  assert.match(workspaceAiChatDockSource, /selectionMode/);
+  assert.match(workspaceAiChatDockSource, /선택 완료/);
+  assert.match(stylesSource, /\.aiChatSuggestionButtonSelected\s*{/);
+  assert.match(stylesSource, /\.aiChatSelectionSubmitButton\s*{/);
+});
+
 function readWorkspaceFile(fileName: string): string {
   return readFileSync(fileURLToPath(new URL(fileName, import.meta.url)), "utf8");
 }

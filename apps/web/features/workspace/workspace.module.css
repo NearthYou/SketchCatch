@@ -2442,7 +2442,38 @@
   outline: none;
 }
 
+.aiChatSuggestionButtonSelected {
+  background: #dbeafe;
+  border-color: #2563eb;
+  color: #1e3a8a;
+}
+
 .aiChatSuggestionButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.aiChatSelectionSubmitButton {
+  background: #2563eb;
+  border: 1px solid #1d4ed8;
+  border-radius: 7px;
+  color: #ffffff;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 850;
+  line-height: 1.35;
+  min-height: 32px;
+  padding: 7px 10px;
+}
+
+.aiChatSelectionSubmitButton:hover,
+.aiChatSelectionSubmitButton:focus-visible {
+  background: #1d4ed8;
+  outline: none;
+}
+
+.aiChatSelectionSubmitButton:disabled {
   cursor: not-allowed;
   opacity: 0.55;
 }
