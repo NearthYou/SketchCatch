@@ -276,6 +276,8 @@ S3에 저장하는 데이터:
 
 Redis Runtime Cache는 Deployment, Reverse Engineering, Git/CI/CD Integration 상태 추적을 우선 지원합니다. AI 결과물 캐싱은 2순위이며, 캐시된 결과가 RDS/S3의 원천 기록이나 Deployment Safety Gate를 대체하지 않습니다.
 
+`REDIS_URL`이 설정된 API runtime은 Redis Runtime Cache adapter를 사용합니다. `REDIS_URL`이 비어 있거나 `NODE_ENV=test`이면 in-memory fallback을 사용합니다. Redis 연결 또는 명령 실패는 long-running workflow의 보조 상태를 degraded로 만들 수 있지만, Deployment 원천 기록과 artifact는 계속 RDS/S3를 기준으로 확인해야 합니다.
+
 ## 수동 마이그레이션
 
 마이그레이션은 배포 중 자동 실행하지 않습니다. GitHub Actions의 `Run Database Migrations` 워크플로를 수동 실행합니다.

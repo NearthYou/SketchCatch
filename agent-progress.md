@@ -869,6 +869,39 @@
 
 ## 세션 레코드
 
+### 2026-07-03 - #134 GitCicdHandoff 계약/API 기반 구현
+
+- Goal: Git/CI/CD Deployment Path의 v0 metadata handoff 계약, DB schema/migration, API routes, tests, SW 학습 문서를 구현한다.
+- Completed:
+  - `packages/types/src/index.ts`에 secret-free `SourceRepository`, `GitCicdHandoffStatus`, `GitCicdHandoff`, create/list/get/status DTO를 추가했다.
+  - `apps/api/src/db/schema.ts`에 `git_cicd_repository_provider`, `git_cicd_handoff_status`, `git_cicd_handoffs` table/relation을 추가했다.
+  - `apps/api/drizzle/0021_git_cicd_handoffs.sql`와 `apps/api/drizzle/meta/0021_snapshot.json`, `_journal.json` entry를 추가했다. `drizzle-kit generate`는 기존 snapshot collision 때문에 실패해 명시적 SQL과 수동 snapshot으로 처리했다.
+  - `apps/api/src/git-cicd/git-cicd-handoff-service.ts`에 project access, architecture, uploaded Terraform artifact 검증과 fake/internal provider boundary를 구현했다.
+  - `apps/api/src/routes/git-cicd-handoffs.ts`와 route registration을 추가해 create/list/get/status update를 제공한다.
+  - `apps/api/src/routes/git-cicd-handoffs.test.ts`와 `apps/api/src/db/schema-contract.test.ts`로 access control, artifact linkage, create/list/get/status update, no-secret response/schema를 검증했다.
+  - `docs/data-models.md`, `docs/sw/005_GitCicdHandoff계약API클론코딩가이드_sw.md`, `docs/sw/README.md`를 갱신했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/routes/git-cicd-handoffs.test.ts` - initially failed once because isolated test app lacked the global Zod error handler; fixed test helper and reran passed
+  - `pnpm --filter @sketchcatch/api typecheck` - passed
+  - `pnpm --filter @sketchcatch/types typecheck` - passed
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/routes/git-cicd-handoffs.test.ts src/db/schema-contract.test.ts` - passed
+  - `pnpm --filter @sketchcatch/api lint` - passed
+  - `pnpm --filter @sketchcatch/types lint` - passed
+  - `pnpm harness:check` - passed after edits
+  - `pnpm lint` - passed
+  - `pnpm typecheck` - passed
+  - `pnpm build` - passed
+  - `git diff --check` - passed with Git line-ending warnings only
+- Evidence recorded:
+  - No real GitHub PR/commit/pipeline calls were implemented or executed; provider is internal/fake metadata boundary only.
+  - No Terraform apply/destroy, cloud mutation, real Git/CI/CD handoff execution, or secret handling was performed.
+  - Request schemas are strict and tests reject secret-looking fields such as `accessToken`.
+- Known risks:
+  - `drizzle-kit generate` could not be used because existing snapshots `0008` and `0015` point to a colliding parent snapshot path. The new migration is explicit SQL and the snapshot/journal were updated manually.
+  - #135 still needs the real GitHub/provider implementation and should keep secrets out of DB/logs/responses.
+- Next best action:
+  - Parent agent should review #134 diff, especially manual Drizzle metadata, then #135 can replace the internal provider boundary with real GitHub/CI behavior.
 ### 2026-07-04 - Blueprint 리디자인 스펙 문서화
 ### 2026-07-04 - Issue #129 Direct Deployment 실패 로그 AI 요약
 
@@ -1194,6 +1227,35 @@
 - Known risks:
   - Browser visual smoke was not captured; verification is API regression, full API test, lint/typecheck/build.
   - `next build` regenerated `apps/web/next-env.d.ts`; the generated diff was restored.
+
+### 2026-07-04 - Runtime Cache Redis adapter slice
+
+- Goal: SketchCatch issue #132 범위에서 #131 RuntimeCache abstraction 위에 Redis adapter를 붙이고, `REDIS_URL`이 없거나 test 환경이면 in-memory fallback을 유지한다.
+- Completed:
+  - `apps/api`에 `redis` client dependency를 추가하고 `pnpm-lock.yaml`에 해당 dependency graph를 반영했다.
+  - `redis-runtime-cache.ts`에 lazy Redis connection, millisecond TTL `PX` set, encoded key prefix, memory fallback, degraded callback 처리를 구현했다.
+  - `runtime-cache-factory.ts`에서 `REDIS_URL`/`NODE_ENV` 기반 adapter 선택 정책을 추가했다.
+  - `config/env.ts`, `.env.example`, `docs/data-models.md`, `docs/deployment.md`에 Runtime Cache Redis 설정과 fallback 정책을 반영했다.
+  - `docs/sw/007_레디스런타임캐시어댑터가이드_sw.md` 학습 문서를 추가하고 `docs/sw/README.md`에 연결했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/runtime-cache/in-memory-runtime-cache.test.ts src/runtime-cache/redis-runtime-cache.test.ts src/runtime-cache/runtime-cache-factory.test.ts` - passed
+  - `pnpm --filter @sketchcatch/api lint` - passed
+  - `pnpm --filter @sketchcatch/api typecheck` - passed
+  - `pnpm lint` - passed
+  - `pnpm typecheck` - passed
+  - `pnpm build` - passed
+  - `$env:S3_BUCKET_NAME='sketchcatch-test-bucket'; pnpm --filter @sketchcatch/api test` - passed
+  - `git diff --check` - passed
+- Evidence recorded:
+  - Tests cover Redis JSON/TTL write, key escaping, Redis connect failure fallback, Redis command failure fallback, missing `REDIS_URL` fallback, and `NODE_ENV=test` fallback.
+  - No real Redis server, cloud mutation, Terraform apply/destroy, Git/CI/CD handoff execution, or secret access was performed.
+- Known risks:
+  - The Redis adapter currently provides in-process fallback for degraded Redis operations; fallback state is not durable across API process restart.
+  - Full API tests need a non-secret `S3_BUCKET_NAME` value in this environment because unrelated S3-backed tests construct plan artifact storage.
+- Next best action:
+  - Review the focused #132 diff, run final harness, commit, push, and open a PR targeting `dev`.
+
 ### 2026-07-04 - Blueprint 전체 리디자인 적용
 
 - Goal: `docs/sw/spec2.md`와 `docs/sw/plan2.md` 기준으로 SketchCatch 웹 화면 전체를 Blueprint 언어로 맞추고, Architecture Board와 Deployment Safety Gate 완성도를 우선 보강한다.

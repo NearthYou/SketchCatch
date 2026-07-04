@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { getTableConfig } from "drizzle-orm/pg-core";
 import {
+  architectures,
   awsConnectionStatusEnum,
   awsConnections,
   deploymentFailureStageEnum,
@@ -11,7 +12,12 @@ import {
   deploymentStageEnum,
   deploymentStatusEnum,
   deployments,
+  gitCicdHandoffStatusEnum,
+  gitCicdHandoffs,
+  gitCicdRepositoryProviderEnum,
+  projectAssets,
   projectDrafts,
+  projects,
   users
 } from "./schema.js";
 
@@ -116,6 +122,39 @@ test("AWS connections store generated external ids without raw credentials", () 
   assert(hasUniqueIndex(config.indexes, "aws_connections_external_id_unique", ["external_id"]));
 });
 
+test("Git/CI/CD handoffs store repository metadata without raw provider secrets", () => {
+  const config = getTableConfig(gitCicdHandoffs);
+
+  assert.equal(gitCicdRepositoryProviderEnum.enumName, "git_cicd_repository_provider");
+  assert.deepEqual(gitCicdRepositoryProviderEnum.enumValues, ["internal"]);
+  assert.equal(gitCicdHandoffStatusEnum.enumName, "git_cicd_handoff_status");
+  assert.deepEqual(gitCicdHandoffStatusEnum.enumValues, [
+    "draft",
+    "pr_created",
+    "pipeline_running",
+    "pipeline_success",
+    "pipeline_failed",
+    "cancelled"
+  ]);
+  assert(findColumn(config.columns, "source_repository_id"));
+  assert(findColumn(config.columns, "repository_provider"));
+  assert(findColumn(config.columns, "repository_owner"));
+  assert(findColumn(config.columns, "repository_name"));
+  assert(findColumn(config.columns, "target_branch"));
+  assert(findColumn(config.columns, "user_accepted_change_id"));
+  assert(findColumn(config.columns, "created_by_user_id"));
+  assert.equal(findColumn(config.columns, "access_token"), undefined);
+  assert.equal(findColumn(config.columns, "private_key"), undefined);
+  assert.equal(findColumn(config.columns, "ci_secret"), undefined);
+  assert.equal(findColumn(config.columns, "deploy_key"), undefined);
+  assert(hasIndex(config.indexes, "git_cicd_handoffs_project_id_idx", ["project_id"]));
+  assert(hasIndex(config.indexes, "git_cicd_handoffs_status_idx", ["status"]));
+  assert(hasForeignKey(config.foreignKeys, "project_id", projects, "id"));
+  assert(hasForeignKey(config.foreignKeys, "architecture_id", architectures, "id"));
+  assert(hasForeignKey(config.foreignKeys, "terraform_artifact_id", projectAssets, "id"));
+  assert(hasForeignKey(config.foreignKeys, "created_by_user_id", users, "id"));
+});
+
 function findColumn(columns: Array<{ name: string }>, name: string) {
   return columns.find((column) => column.name === name) as
     | { name: string; primary?: boolean }
@@ -162,4 +201,21 @@ function getColumnName(column: unknown): string | undefined {
   return typeof column === "object" && column !== null && "name" in column
     ? String(column.name)
     : undefined;
+}
+
+function hasForeignKey(
+  foreignKeys: ReturnType<typeof getTableConfig>["foreignKeys"],
+  columnName: string,
+  foreignTable: unknown,
+  foreignColumnName: string
+): boolean {
+  return foreignKeys.some((foreignKey) => {
+    const reference = foreignKey.reference();
+
+    return (
+      reference.columns.some((column) => column.name === columnName) &&
+      reference.foreignTable === foreignTable &&
+      reference.foreignColumns.some((column) => column.name === foreignColumnName)
+    );
+  });
 }
