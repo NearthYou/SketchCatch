@@ -7,6 +7,7 @@ import type {
   ApiErrorCode,
   ApiErrorResponse,
   ArchitectureJson,
+  ArchitecturePatchPreviewResponse,
   ArchitectureSnapshot,
   AwsConnectionCloudFormationTemplateResponse,
   AwsConnection,
@@ -17,6 +18,7 @@ import type {
   CreateAwsConnectionResponse,
   CreateDeploymentRequest,
   ConfirmProjectAssetUploadResponse,
+  CreateArchitecturePatchPreviewRequest,
   CreateDesignSimulationRequest,
   CreateProjectAssetUploadRequest,
   CreateProjectRequest,
@@ -277,6 +279,18 @@ export async function createAiArchitectureDraft(
   input: CreateArchitectureDraftRequest
 ): Promise<AiArchitectureDraftResult> {
   return postPublicAiJson<AiArchitectureDraftResult>("/ai/architecture-draft", input);
+}
+
+export async function createAiArchitecturePatchPreview(
+  input: CreateArchitecturePatchPreviewRequest
+): Promise<ArchitecturePatchPreviewResponse> {
+  return postPublicAiJson<ArchitecturePatchPreviewResponse>("/ai/architecture-patch-preview", {
+    architectureJson: input.architectureJson,
+    instruction: input.instruction,
+    ...(input.selectedTargetResourceId !== undefined
+      ? { selectedTargetResourceId: input.selectedTargetResourceId }
+      : {})
+  });
 }
 
 // 현재 Architecture Board를 기준으로 Pre-Deployment Check를 실행합니다.

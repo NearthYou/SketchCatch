@@ -105,7 +105,8 @@ import type {
   DiagramFlowEdge,
   DiagramFlowNode,
   DiagramHistoryState,
-  DiagramNodeMetadataUpdate
+  DiagramNodeMetadataUpdate,
+  DiagramPreviewAnnotations
 } from "./types";
 import styles from "./diagram-editor.module.css";
 
@@ -161,7 +162,8 @@ function DiagramEditorInner({
   const reactFlow = useReactFlow<DiagramFlowNode, DiagramFlowEdge>();
   const [diagram, setDiagram] = useState<DiagramJson>(() => cloneDiagram(initialDiagram ?? EMPTY_DIAGRAM));
   const diagramRef = useRef(diagram);
-  const [previewDiagram, setPreviewDiagram] = useState<DiagramJson | null>(null);
+  const [previewDiagram, setPreviewDiagramState] = useState<DiagramJson | null>(null);
+  const [previewAnnotations, setPreviewAnnotations] = useState<DiagramPreviewAnnotations | null>(null);
   const [history, setHistory] = useState<DiagramHistoryState>({ past: [], future: [] });
   const [inspectedNodeId, setInspectedNodeId] = useState<string | null>(null);
   const [isLeftPanelOpen, setLeftPanelOpen] = useState(true);
@@ -217,6 +219,14 @@ function DiagramEditorInner({
       }
     },
     [onDiagramChange]
+  );
+
+  const setPreviewDiagram = useCallback<DiagramEditorPanelContext["setPreviewDiagram"]>(
+    (nextPreviewDiagram, nextPreviewAnnotations = null) => {
+      setPreviewDiagramState(nextPreviewDiagram);
+      setPreviewAnnotations(nextPreviewDiagram === null ? null : nextPreviewAnnotations);
+    },
+    []
   );
 
   const setDragPreviewNodesForState = useCallback((nodes: DiagramNode[] | null) => {
@@ -602,6 +612,7 @@ function DiagramEditorInner({
       inspectedNodeId,
       isPreviewActive,
       isRightPanelOpen,
+      previewAnnotations,
       previewDiagram,
       selectedNodeId,
       nodes: diagram.nodes,
@@ -622,7 +633,9 @@ function DiagramEditorInner({
       inspectedNodeId,
       isPreviewActive,
       isRightPanelOpen,
+      previewAnnotations,
       previewDiagram,
+      setPreviewDiagram,
       selectResourceNode,
       selectedNodeId,
       updateNodeMetadata,
@@ -747,7 +760,10 @@ function DiagramEditorInner({
           onResize: handleResize,
           onResizeEnd: handleResizeEnd
         },
-        { isPreview: isPreviewActive }
+        {
+          isPreview: isPreviewActive,
+          previewAnnotations: isPreviewActive ? previewAnnotations ?? undefined : undefined
+        }
       );
 
       if (interactionMode === "select" && !isPreviewActive) {
@@ -768,6 +784,7 @@ function DiagramEditorInner({
       handleBringForward,
       interactionMode,
       isPreviewActive,
+      previewAnnotations,
       handleResizeEnd,
       handleResize,
       handleResizeStart,
@@ -779,8 +796,12 @@ function DiagramEditorInner({
   );
 
   const flowEdges = useMemo(
-    () => toFlowEdges(visibleDiagram.edges, isPreviewActive ? [] : selectedEdgeIds, { isPreview: isPreviewActive }),
-    [isPreviewActive, selectedEdgeIds, visibleDiagram.edges]
+    () =>
+      toFlowEdges(visibleDiagram.edges, isPreviewActive ? [] : selectedEdgeIds, {
+        isPreview: isPreviewActive,
+        previewAnnotations: isPreviewActive ? previewAnnotations ?? undefined : undefined
+      }),
+    [isPreviewActive, previewAnnotations, selectedEdgeIds, visibleDiagram.edges]
   );
 
   const handleInit = useCallback<OnInit<DiagramFlowNode, DiagramFlowEdge>>((instance) => {

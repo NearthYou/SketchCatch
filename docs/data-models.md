@@ -977,7 +977,20 @@ type ArchitecturePatchIntent = {
   resourceType?: ResourceType;
 };
 
+type ArchitecturePatchClarification = {
+  status: "needs_clarification";
+  intent: ArchitecturePatchIntent;
+  question: string;
+  candidates: {
+    resourceId: string;
+    resourceType: ResourceType;
+    label: string;
+  }[];
+  providerMetadata: AiProviderMetadata;
+};
+
 type ArchitecturePatchPreview = {
+  status: "preview";
   intent: ArchitecturePatchIntent;
   baseArchitectureJson: ArchitectureJson;
   proposedArchitectureJson: ArchitectureJson;
@@ -987,6 +1000,10 @@ type ArchitecturePatchPreview = {
   llmExplanation?: LlmExplanation;
   providerMetadata: AiProviderMetadata;
 };
+
+type ArchitecturePatchPreviewResponse =
+  | ArchitecturePatchPreview
+  | ArchitecturePatchClarification;
 ```
 
 Voice Requirement Input은 Amazon Transcribe 작업 결과가 나온 뒤에도 곧바로 `RequirementPrompt`가 되지 않는다. 전사 결과는 `TranscribeConfirmation`으로 내려가고, 사용자가 확인/수정/확정한 뒤에만 `RequirementPrompt`가 생성된다.

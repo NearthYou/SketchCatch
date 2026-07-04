@@ -4,6 +4,7 @@ import {
   approveDeploymentPlan,
   abortProjectAssetUpload,
   confirmProjectAssetUpload,
+  createAiArchitecturePatchPreview,
   createArchitectureSnapshot,
   createAwsConnectionSetup,
   createDeployment,
@@ -225,6 +226,82 @@ test("createArchitectureSnapshot posts converted architecture json", async (cont
     architectureJson: { nodes: [], edges: [] }
   });
   assert.equal(architecture.id, "55555555-5555-4555-8555-555555555555");
+});
+
+test("createAiArchitecturePatchPreview posts natural language edit requests to the public AI patch endpoint", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  globalThis.fetch = async (input, init) => {
+    requests.push({ input, init });
+
+    return new Response(
+      JSON.stringify({
+        status: "preview",
+        intent: {
+          instruction: "delete bucket",
+          requestedAction: "remove_resource",
+          resourceType: "S3",
+          targetResourceId: "assets-bucket"
+        },
+        baseArchitectureJson: {
+          nodes: [],
+          edges: []
+        },
+        proposedArchitectureJson: {
+          nodes: [],
+          edges: []
+        },
+        changes: [],
+        requiresUserAcceptance: true,
+        userAcceptedChange: null,
+        providerMetadata: {
+          provider: "fallback",
+          service: "rule_fallback",
+          routeTarget: "architecture_patch_preview",
+          cacheHit: false,
+          cacheKey: "test",
+          estimatedUsage: {
+            inputCharacters: 1,
+            inputTokensEstimate: 1
+          },
+          billingMode: "disabled",
+          generatedAt: new Date(0).toISOString()
+        }
+      }),
+      {
+        headers: {
+          "Content-Type": "application/json"
+        },
+        status: 200
+      }
+    );
+  };
+
+  const response = await createAiArchitecturePatchPreview({
+    architectureJson: {
+      nodes: [],
+      edges: []
+    },
+    instruction: "delete bucket",
+    selectedTargetResourceId: "assets-bucket"
+  });
+
+  assert.equal(String(requests[0]?.input), "/api/ai/architecture-patch-preview");
+  assert.equal(requests[0]?.init?.method, "POST");
+  assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), {
+    architectureJson: {
+      nodes: [],
+      edges: []
+    },
+    instruction: "delete bucket",
+    selectedTargetResourceId: "assets-bucket"
+  });
+  assert.equal(response.status, "preview");
 });
 
 test("createProjectAssetUpload requests terraform file presigned upload metadata", async (context) => {

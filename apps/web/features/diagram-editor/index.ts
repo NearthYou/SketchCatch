@@ -4,5 +4,7 @@ export type { DefaultDiagramPaletteProps } from "./DefaultDiagramPalette";
 export type {
   DiagramEditorPanelContext,
   DiagramEditorProps,
-  DiagramNodeMetadataUpdate
+  DiagramNodeMetadataUpdate,
+  DiagramPreviewAnnotations,
+  DiagramPreviewState
 } from "./types";

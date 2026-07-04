@@ -13,6 +13,27 @@
 - Highest priority unfinished harness feature: `HARNESS-007`
 - Current blocker: none
 
+### 2026-07-04 - 자연어 다이어그램 수정 미리보기
+- Goal: 빈 보드는 기존 자연어 생성 미리보기를 유지하고, 기존 보드는 자연어 수정 요청을 patch preview/후보 선택/사용자 적용 흐름으로 처리한다.
+- Completed:
+  - `ArchitecturePatchPreviewResponse`를 `preview`와 `needs_clarification` union으로 확장하고, 후보가 여러 개인 수정/삭제 요청은 resource 후보 질문으로 반환하게 했다.
+  - 선택된 target resource id가 있으면 같은 원문 instruction에 target id를 실어 preview를 재생성하고, 삭제 preview는 proposed graph에서 node와 연결 edge를 제거한다.
+  - DiagramEditor preview state를 `previewDiagram`과 별도 `previewAnnotations`로 분리해 추가/수정은 반투명 preview, 삭제는 회색 반투명 ghost로 표시한다.
+  - AI chat dock은 빈 보드에서는 기존 draft 생성 흐름을 유지하고, 기존 보드는 기본 patch preview로 라우팅하며 `새로/처음부터/기존 무시` 계열 요청만 draft 생성으로 보낸다.
+  - patch 적용은 visual ghost가 아니라 `proposedDiagram`만 커밋하고, 취소는 preview/annotation/pending 후보 상태를 모두 지운다.
+- Verification run:
+  - Red before fix: focused API/Web tests failed on missing patch status, target clarification, preview annotations, routing helper, and API client export.
+  - `.\node_modules\.bin\tsx.CMD --test src\services\aiArchitecturePatchPreview.test.ts src\routes\aiAwsProviders.test.ts` - passed.
+  - `.\node_modules\.bin\tsx.CMD --test features\workspace\workspace-ai-chat-routing.test.ts features\workspace\workspace-ai-patch-preview.test.ts features\diagram-editor\flow-mappers.test.ts features\workspace\api.test.ts` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm lint` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm typecheck` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm build` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm test` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm harness:check` - passed after edits.
+- Known risks:
+  - No real Terraform apply/destroy, cloud mutation, Git/CI/CD handoff, or secret access was performed.
+  - Browser visual smoke was not captured; behavior is covered by unit tests, typecheck, build, and full test suite.
+
 ### 2026-07-04 - PR #151 리뷰 대응
 
 - Goal: PR #151에 남은 review thread를 반영해 프로젝트별 AI 채팅 기록 저장과 Terraform 참조 기반 area 부모 추론을 보정한다.

@@ -6,10 +6,11 @@ import type {
   AiPreDeploymentAnalysisResult,
   AiTerraformErrorExplanationResult,
   AiTerraformPreviewExplanationResult,
-  ArchitecturePatchPreview,
+  ArchitecturePatchPreviewResponse,
   ArchitectureJson,
   ConfirmTranscribeResponse,
   CreateArchitectureDraftRequest,
+  CreateArchitecturePatchPreviewRequest,
   CreateDesignSimulationRequest,
   DesignSimulationResult,
   TranscribeConfirmation,
@@ -118,9 +119,10 @@ const terraformPreviewExplanationBodySchema = z.object({
   terraformCode: z.string().trim().min(1)
 });
 
-const architecturePatchPreviewBodySchema = z.object({
+const architecturePatchPreviewBodySchema: z.ZodType<CreateArchitecturePatchPreviewRequest> = z.object({
   architectureJson: architectureJsonSchema,
-  instruction: z.string().trim().min(1)
+  instruction: z.string().trim().min(1),
+  selectedTargetResourceId: z.string().trim().min(1).optional()
 });
 
 const voiceRequirementInputBodySchema: z.ZodType<VoiceRequirementInput> = z.object({
@@ -236,9 +238,14 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
     }
   );
 
-  app.post("/ai/architecture-patch-preview", async (request): Promise<ArchitecturePatchPreview> => {
+  app.post("/ai/architecture-patch-preview", async (request): Promise<ArchitecturePatchPreviewResponse> => {
     const body = architecturePatchPreviewBodySchema.parse(request.body);
     const preview = createArchitecturePatchPreview(body);
+
+    if (preview.status === "needs_clarification") {
+      return preview;
+    }
+
     const llmExplanation = await createLlmExplanation({
       target: "architecture_patch_preview",
       result: preview

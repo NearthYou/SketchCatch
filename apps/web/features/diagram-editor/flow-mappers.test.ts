@@ -116,6 +116,52 @@ test("flow mappers make AI preview nodes and edges read-only", () => {
   assert.equal(flowEdges[0]?.style?.strokeOpacity, 0.48);
 });
 
+test("flow mappers carry patch preview states for added, modified, and deleted elements", () => {
+  const instance = makeNode({ id: "instance-1", resourceType: "aws_instance" });
+  const bucket = makeNode({ id: "bucket-1", resourceType: "aws_s3_bucket" });
+  const flowNodes = toFlowNodes([instance, bucket], [], null, handlers, {
+    isPreview: true,
+    previewAnnotations: {
+      edgeStates: {
+        "instance-to-bucket": "deleted"
+      },
+      nodeStates: {
+        "bucket-1": "deleted",
+        "instance-1": "modified"
+      }
+    }
+  });
+  const flowEdges = toFlowEdges(
+    [
+      {
+        id: "instance-to-bucket",
+        sourceNodeId: "instance-1",
+        targetNodeId: "bucket-1"
+      }
+    ],
+    [],
+    {
+      isPreview: true,
+      previewAnnotations: {
+        edgeStates: {
+          "instance-to-bucket": "deleted"
+        },
+        nodeStates: {}
+      }
+    }
+  );
+
+  const previewEdge = flowEdges[0];
+
+  assert.ok(previewEdge);
+  assert.ok(previewEdge.data);
+  assert.equal(flowNodes.find((node) => node.id === "bucket-1")?.data.previewState, "deleted");
+  assert.equal(flowNodes.find((node) => node.id === "instance-1")?.data.previewState, "modified");
+  assert.equal(previewEdge.data.previewState, "deleted");
+  assert.equal(previewEdge.style?.stroke, "#8b949e");
+  assert.equal(previewEdge.style?.strokeOpacity, 0.36);
+});
+
 function makeNode({
   id,
   locked = false,

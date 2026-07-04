@@ -9,12 +9,18 @@ import type {
 import type { NodeResizeUpdate } from "./node-resize";
 
 export type DiagramNodeMetadataUpdate = Partial<Omit<DiagramNode, "id" | "parameters">>;
+export type DiagramPreviewState = "added" | "modified" | "deleted";
+export type DiagramPreviewAnnotations = {
+  readonly nodeStates: Readonly<Record<string, DiagramPreviewState>>;
+  readonly edgeStates: Readonly<Record<string, DiagramPreviewState>>;
+};
 
 export type DiagramEditorPanelContext = {
   diagram: DiagramJson;
   inspectedNodeId: string | null;
   isPreviewActive: boolean;
   isRightPanelOpen: boolean;
+  previewAnnotations: DiagramPreviewAnnotations | null;
   previewDiagram: DiagramJson | null;
   selectedNodeId: string | null;
   nodes: readonly DiagramNode[];
@@ -23,7 +29,10 @@ export type DiagramEditorPanelContext = {
   closeInspectedNode: () => void;
   focusResourceNode: (nodeId: string) => void;
   selectResourceNode: (nodeId: string) => void;
-  setPreviewDiagram: (diagram: DiagramJson | null) => void;
+  setPreviewDiagram: (
+    diagram: DiagramJson | null,
+    annotations?: DiagramPreviewAnnotations | null
+  ) => void;
   setRightPanelOpen: (isOpen: boolean) => void;
   updateNodeParameters: (
     nodeId: string,
@@ -68,11 +77,13 @@ export type DiagramFlowNodeData = Record<string, unknown> & {
   selectedNodeCount: number;
   isDimmed: boolean;
   isPreview: boolean;
+  previewState?: DiagramPreviewState | undefined;
   isReferenceDropTarget: boolean;
 } & DiagramFlowNodeHandlers;
 
 export type DiagramFlowEdgeData = Record<string, unknown> & {
   edge: DiagramEdge;
+  previewState?: DiagramPreviewState | undefined;
 };
 
 export type DiagramFlowNode = Node<DiagramFlowNodeData, "diagramNode">;

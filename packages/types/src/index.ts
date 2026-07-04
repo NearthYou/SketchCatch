@@ -809,7 +809,22 @@ export type ArchitecturePatchPreviewChange = {
   summary: string;
 };
 
+export type ArchitecturePatchClarificationCandidate = {
+  resourceId: string;
+  resourceType: ResourceType;
+  label: string;
+};
+
+export type ArchitecturePatchClarification = {
+  status: "needs_clarification";
+  intent: ArchitecturePatchIntent;
+  question: string;
+  candidates: ArchitecturePatchClarificationCandidate[];
+  providerMetadata: AiProviderMetadata;
+};
+
 export type ArchitecturePatchPreview = {
+  status: "preview";
   intent: ArchitecturePatchIntent;
   baseArchitectureJson: ArchitectureJson;
   proposedArchitectureJson: ArchitectureJson;
@@ -818,6 +833,16 @@ export type ArchitecturePatchPreview = {
   userAcceptedChange: UserAcceptedChange | null;
   llmExplanation?: LlmExplanation | undefined;
   providerMetadata: AiProviderMetadata;
+};
+
+export type ArchitecturePatchPreviewResponse =
+  | ArchitecturePatchPreview
+  | ArchitecturePatchClarification;
+
+export type CreateArchitecturePatchPreviewRequest = {
+  architectureJson: ArchitectureJson;
+  instruction: string;
+  selectedTargetResourceId?: string | undefined;
 };
 
 export type CreateArchitectureDraftRequest = {
