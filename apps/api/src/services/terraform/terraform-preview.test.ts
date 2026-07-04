@@ -102,7 +102,7 @@ test("omits the AWS provider block when no Region area resource is present", () 
   assert.equal(generateTerraformFromDiagramJson(diagramJson), "");
 });
 
-test("generates an AWS provider block from the Region area resource value", () => {
+test("does not generate an AWS provider block from Region area resources", () => {
   const diagramJson: DiagramJson = {
     nodes: [
       makeNode({
@@ -144,16 +144,13 @@ test("generates an AWS provider block from the Region area resource value", () =
 
   assert.equal(
     generateTerraformFromDiagramJson(diagramJson),
-    withAwsProvider(
-      `resource "aws_s3_bucket" "logs" {
+    `resource "aws_s3_bucket" "logs" {
   bucket = "sketchcatch-logs"
-}`,
-      "us-east-1"
-    )
+}`
   );
 });
 
-test("allows multiple Region area resources when they select the same AWS region", () => {
+test("ignores Region-only area resources when generating Terraform", () => {
   const diagramJson: DiagramJson = {
     nodes: [
       makeNode({
@@ -193,10 +190,10 @@ test("allows multiple Region area resources when they select the same AWS region
     }
   };
 
-  assert.equal(generateTerraformFromDiagramJson(diagramJson), makeAwsProviderBlock("eu-west-1"));
+  assert.equal(generateTerraformFromDiagramJson(diagramJson), "");
 });
 
-test("rejects Terraform Preview for conflicting Region area resources", () => {
+test("allows conflicting Region area resources because provider generation is out of scope", () => {
   const diagramJson: DiagramJson = {
     nodes: [
       makeNode({
@@ -236,10 +233,7 @@ test("rejects Terraform Preview for conflicting Region area resources", () => {
     }
   };
 
-  assert.throws(
-    () => generateTerraformFromDiagramJson(diagramJson),
-    /Multiple AWS Region area resources/
-  );
+  assert.equal(generateTerraformFromDiagramJson(diagramJson), "");
 });
 
 test("generates stable Terraform code repeatedly from the same DiagramJson", () => {
@@ -415,7 +409,9 @@ test("rejects unsafe Terraform block labels before rendering HCL", () => {
     }
   };
 
-  let error: (TerraformDiagramValidationError & { errorCode?: unknown; statusCode?: unknown }) | null = null;
+  let error:
+    | (TerraformDiagramValidationError & { errorCode?: unknown; statusCode?: unknown })
+    | null = null;
 
   try {
     generateTerraformFromDiagramJson(diagramJson);
@@ -499,7 +495,7 @@ test("renders data blocks", () => {
 
   assert.equal(
     generateTerraformFromDiagramJson(diagramJson),
-`data "aws_ami" "ubuntu" {
+    `data "aws_ami" "ubuntu" {
   most_recent = true
   owners = [
     "099720109477",
@@ -681,10 +677,22 @@ test("renders placement references with Terraform snake_case attribute names", (
   const terraformCode = generateTerraformFromDiagramJson(diagramJson);
 
   assert.match(terraformCode, /resource "aws_subnet" "public" \{[\s\S]*vpc_id = aws_vpc\.main\.id/);
-  assert.match(terraformCode, /resource "aws_instance" "web" \{[\s\S]*subnet_id = aws_subnet\.public\.id/);
-  assert.match(terraformCode, /resource "aws_internet_gateway" "main" \{[\s\S]*vpc_id = aws_vpc\.main\.id/);
-  assert.match(terraformCode, /resource "aws_route_table" "public" \{[\s\S]*vpc_id = aws_vpc\.main\.id/);
-  assert.match(terraformCode, /resource "aws_security_group" "web" \{[\s\S]*vpc_id = aws_vpc\.main\.id/);
+  assert.match(
+    terraformCode,
+    /resource "aws_instance" "web" \{[\s\S]*subnet_id = aws_subnet\.public\.id/
+  );
+  assert.match(
+    terraformCode,
+    /resource "aws_internet_gateway" "main" \{[\s\S]*vpc_id = aws_vpc\.main\.id/
+  );
+  assert.match(
+    terraformCode,
+    /resource "aws_route_table" "public" \{[\s\S]*vpc_id = aws_vpc\.main\.id/
+  );
+  assert.match(
+    terraformCode,
+    /resource "aws_security_group" "web" \{[\s\S]*vpc_id = aws_vpc\.main\.id/
+  );
   assert.doesNotMatch(terraformCode, /vpcId|subnetId/);
 });
 
@@ -869,16 +877,4 @@ function makeNode(
     zIndex: 0,
     ...node
   };
-}
-
-function makeAwsProviderBlock(region: string): string {
-  return `provider "aws" {
-  region = "${region}"
-}`;
-}
-
-function withAwsProvider(terraformBlocks: string, region = "ap-northeast-2"): string {
-  return `${makeAwsProviderBlock(region)}
-
-${terraformBlocks}`;
 }

@@ -15,10 +15,7 @@ import {
   TERRAFORM_IDENTIFIER_PATTERN,
   TerraformDiagramValidationError
 } from "../services/terraform/diagram-to-terraform.js";
-import {
-  generateTerraformFromDiagramJson,
-  TerraformPreviewValidationError
-} from "../services/terraform/terraform-preview.js";
+import { generateTerraformFromDiagramJson } from "../services/terraform/terraform-preview.js";
 import { syncTerraformToDiagramJson } from "../services/terraform/terraform-to-diagram.js";
 import { createTerraformValidationDiagnostics } from "../services/terraform/terraform-diagnostics.js";
 
@@ -26,18 +23,20 @@ const terraformValidationMaxCharacters = 1024 * 1024;
 const terraformValidationMaxFileCount = 64;
 const terraformValidationMaxFileNameLength = 120;
 
-const terraformValidateBodySchema = z.object({
-  terraformCode: z.string().max(terraformValidationMaxCharacters),
-  terraformFiles: z
-    .array(
-      z.object({
-        fileName: z.string().min(1).max(terraformValidationMaxFileNameLength),
-        terraformCode: z.string().max(terraformValidationMaxCharacters)
-      })
-    )
-    .max(terraformValidationMaxFileCount)
-    .optional()
-}).strict();
+const terraformValidateBodySchema = z
+  .object({
+    terraformCode: z.string().max(terraformValidationMaxCharacters),
+    terraformFiles: z
+      .array(
+        z.object({
+          fileName: z.string().min(1).max(terraformValidationMaxFileNameLength),
+          terraformCode: z.string().max(terraformValidationMaxCharacters)
+        })
+      )
+      .max(terraformValidationMaxFileCount)
+      .optional()
+  })
+  .strict();
 
 const terraformBlockTypeSchema = z.enum(["resource", "data"]);
 const terraformIdentifierSchema = z.string().min(1).regex(TERRAFORM_IDENTIFIER_PATTERN);
@@ -60,7 +59,10 @@ const awsRegionCodeSchema = z.enum([
   "eu-west-1",
   "eu-central-1"
 ]);
-const awsAvailabilityZoneCodeSchema = z.string().min(1).regex(/^[a-z]{2}-[a-z]+-\d[a-z]$/);
+const awsAvailabilityZoneCodeSchema = z
+  .string()
+  .min(1)
+  .regex(/^[a-z]{2}-[a-z]+-\d[a-z]$/);
 
 const diagramNodeMetadataSchema: z.ZodType<DiagramNodeMetadata> = z.object({
   awsAvailabilityZone: awsAvailabilityZoneCodeSchema.optional(),
@@ -157,32 +159,32 @@ export async function registerTerraformRoutes(
   const validateTerraformPreviewCode =
     options.validateTerraformPreviewCode ?? validateTerraformPreviewCodeStatic;
 
-  app.post("/terraform/generate", async (request, reply): Promise<TerraformGenerateResponse | void> => {
-    await requireActiveUserId(request, getTerraformDatabaseClient);
+  app.post(
+    "/terraform/generate",
+    async (request, reply): Promise<TerraformGenerateResponse | void> => {
+      await requireActiveUserId(request, getTerraformDatabaseClient);
 
-    const body = terraformGenerateBodySchema.parse(request.body);
+      const body = terraformGenerateBodySchema.parse(request.body);
 
-    try {
-      return {
-        terraformCode: generateTerraformFromDiagramJson(body.diagramJson)
-      };
-    } catch (error) {
-      if (
-        error instanceof TerraformDiagramValidationError ||
-        error instanceof TerraformPreviewValidationError
-      ) {
-        const response: ApiErrorResponse = {
-          error: "bad_request",
-          message: error.message
+      try {
+        return {
+          terraformCode: generateTerraformFromDiagramJson(body.diagramJson)
         };
+      } catch (error) {
+        if (error instanceof TerraformDiagramValidationError) {
+          const response: ApiErrorResponse = {
+            error: "bad_request",
+            message: error.message
+          };
 
-        reply.status(400).send(response);
-        return;
+          reply.status(400).send(response);
+          return;
+        }
+
+        throw error;
       }
-
-      throw error;
     }
-  });
+  );
 
   app.post("/terraform/validate", async (request): Promise<TerraformValidateResponse> => {
     await requireActiveUserId(request, getTerraformDatabaseClient);

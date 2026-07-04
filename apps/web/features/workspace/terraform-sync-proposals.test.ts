@@ -115,6 +115,55 @@ test("applyTerraformSyncProposals uses compact fallback metadata for unknown cre
   assert.equal(createdNode?.parameters?.fileName, "custom.tf");
 });
 
+test("applyTerraformSyncProposals preserves area create proposal ids and metadata", () => {
+  const proposals: TerraformDiagramChangeProposal[] = [
+    {
+      kind: "create_candidate",
+      identity: {
+        terraformBlockType: "resource",
+        resourceType: "aws_availability_zone",
+        resourceName: "availability_zone"
+      },
+      nodeId: "terraform-aws-availability-zone-ap-northeast-2c",
+      parameters: {
+        resourceType: "aws_availability_zone",
+        resourceName: "availability_zone",
+        fileName: "main.tf",
+        values: {
+          awsAvailabilityZone: "ap-northeast-2c"
+        }
+      }
+    },
+    {
+      kind: "create_candidate",
+      identity: {
+        terraformBlockType: "resource",
+        resourceType: "aws_subnet",
+        resourceName: "public"
+      },
+      metadata: {
+        parentAreaNodeId: "terraform-aws-availability-zone-ap-northeast-2c"
+      },
+      parameters: {
+        resourceType: "aws_subnet",
+        resourceName: "public",
+        fileName: "network.tf",
+        values: {
+          cidrBlock: "10.0.2.0/24"
+        }
+      }
+    }
+  ];
+
+  const result = applyAllTerraformSyncProposals(makeDiagramJson(), proposals);
+  const azNode = result.nodes.find((node) => node.parameters?.resourceType === "aws_availability_zone");
+  const subnetNode = result.nodes.find((node) => node.parameters?.resourceType === "aws_subnet");
+
+  assert.equal(azNode?.id, "terraform-aws-availability-zone-ap-northeast-2c");
+  assert.deepEqual(azNode?.size, { width: 220, height: 150 });
+  assert.equal(subnetNode?.metadata?.parentAreaNodeId, azNode?.id);
+});
+
 test("applyTerraformSyncProposals deep clones created node defaults and parameter values", () => {
   const diagramJson = makeDiagramJson();
   const proposal: Extract<TerraformDiagramChangeProposal, { kind: "create_candidate" }> = {

@@ -1216,6 +1216,8 @@ export type TerraformDiagramChangeProposal =
   | {
       kind: "create_candidate";
       identity: TerraformBlockIdentity;
+      metadata?: DiagramNodeMetadata | undefined;
+      nodeId?: string | undefined;
       sourceFileName?: string | undefined;
       line?: number | undefined;
       parameters: DiagramNodeParameters;

@@ -15,6 +15,30 @@
 
 ## 세션 레코드
 
+### 2026-07-04 - Brainboard AWS resource configurator 조사
+
+- Goal: Brainboard가 AWS 1순위/2순위 리소스에 대해 어떤 `Main parameters`와 `Add blocks`를 들고 있는지 수집해 `docs/jh/000_AWS리소스목록_JH.md`에 기록한다.
+- Completed:
+  - 사용자가 열어 둔 Brainboard `innovation_sandbox` 설계 화면에서 AWS Provider `6.47.0` 기준 configurator 구조를 확인했다.
+  - Brainboard 화면이 로드한 CDN identity card 경로(`cloud_providers/aws/6.47.0/identity_cards/{resource|data}`)를 확인하고, 112개 대상 리소스의 schema를 수집했다.
+  - `docs/jh/000_AWS리소스목록_JH.md`에 `Brainboard configurator 조사 결과` 섹션을 추가했다.
+  - 각 리소스 하위에 Brainboard 상태, `Main parameters(attributes)`, `Add blocks(blockTypes)` 목록을 기록했다.
+  - 111개 리소스는 Brainboard identity card로 확인했고, `aws_wafv2_web_acl`은 Brainboard AWS Provider `6.47.0` 좌측 WAFv2 카탈로그와 identity card에서 확인되지 않아 미제공으로 기록했다.
+- Verification run:
+  - `pnpm harness:check` - passed before browser/docs work.
+  - Brainboard doc count script - passed: resource heading 112개, unique heading 112개, 확인됨 111개, 미제공/미확인 1개.
+  - Markdown whitespace check - passed: `docs/jh/000_AWS리소스목록_JH.md` trailing whitespace 0개.
+  - `git diff --check` - passed for tracked changes.
+  - `pnpm harness:check` - passed after doc update.
+- Evidence recorded:
+  - 실제 Terraform CLI, apply/destroy, cloud mutation, Git/CI/CD handoff는 실행하지 않았다.
+  - Brainboard에서는 메뉴/DOM/정적 identity card만 읽었고, 배포 또는 클라우드 변경은 하지 않았다.
+  - `docs/jh`는 `.gitignore` 대상이므로 커밋하려면 `git add -f docs/jh/000_AWS리소스목록_JH.md`가 필요하다.
+- Known risks:
+  - Brainboard Form 화면은 배치 위치, 연결 관계, 생성된 `cloudConfigs`, required 계열 조건에 따라 identity card schema 중 일부만 우선 노출한다. 문서는 Brainboard 원천 schema 기준 목록이다.
+- Next best action:
+  - SketchCatch resource definition 확장 시 이 문서의 `Main parameters`/`Add blocks`를 참고하되, 구현 전 Terraform AWS Provider schema required/validation 조건을 별도 확인한다.
+
 ### 2026-07-04 - Region/AZ 영역 리소스 전환과 nested block/AZ 검증 롤백
 
 - Goal: 최신 nested block sync/AZ 입력 검증 수정은 롤백하되, 이미 구현된 Terraform Preview/Sync 지원 리소스 확장은 유지하고 Region/AZ를 다른 포함 영역처럼 board-only resource area node로 처리한다.
@@ -23,8 +47,12 @@
   - `packages/types/src/resource-definitions.ts` 기반 shared Terraform resource/data 지원 확장과 main parameter HCL 정규화 변경은 롤백하지 않았다.
   - Web catalog에서 Region/AZ를 `design_region`/`design_az`가 아니라 `aws_region`/`aws_availability_zone` resource area node로 생성하게 했다.
   - Region/AZ 영역 선택값은 `parameters.values.awsRegion`, `parameters.values.awsAvailabilityZone`에 저장하고, 기존 metadata 기반 design node는 저장 데이터 호환용으로만 읽게 했다.
-  - Terraform Preview는 Region 영역 리소스가 있을 때만 provider block을 생성하고, Region 영역 리소스가 없으면 기본 provider region을 자동 생성하지 않게 했다.
+  - Terraform Preview는 Region 영역 리소스가 있어도 provider block을 생성하지 않게 했다.
   - AZ 영역 리소스 안의 AZ-aware 리소스는 명시 `availabilityZone`이 없을 때만 영역의 AZ 값을 상속하게 했다.
+  - Terraform Sync는 provider block을 Region 영역 리소스 create/update/delete 의도로 해석하지 않고 무시하게 했다.
+  - Terraform Sync가 `aws_subnet`, `aws_ebs_volume`의 `availability_zone`을 `aws_availability_zone` 영역 리소스로 승격하고 child `metadata.parentAreaNodeId`를 연결하게 했다.
+  - Terraform Sync create proposal에 `nodeId`와 `metadata`를 실을 수 있게 해, 새 AZ 영역과 새 child resource가 같은 저장 흐름에서 연결되게 했다.
+  - `DiagramJson -> Terraform Preview -> Terraform Sync` AZ 영역 리소스 왕복 회귀 테스트를 추가하고, Region 영역 리소스는 Terraform provider로 왕복하지 않음을 테스트했다.
   - Auto Scaling Group은 visual area node로 다룰 수 있게 catalog size, area-node 판정, resize bounds를 맞췄다.
   - board-only `aws_region`/`aws_availability_zone`은 ArchitectureJson 변환과 Terraform resource projection에서 제외되게 했다.
   - `docs/data-models.md`와 `session-handoff.md`를 Region/AZ resource area 정책 기준으로 갱신했다.
@@ -36,9 +64,23 @@
   - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/resource-list-summary.test.ts features/workspace/workspace-ai-diagram-adapter.test.ts` - passed.
   - `pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/diagram-utils.test.ts features/diagram-editor/drag-transaction.test.ts features/diagram-editor/reference-drop-targets.test.ts features/diagram-editor/area-nodes.test.ts features/diagram-editor/node-resize-bounds.test.ts features/diagram-editor/area-node-movement.test.ts features/diagram-editor/node-style.test.ts features/resource-settings/catalog.test.ts features/parameter-input/region-node-metadata.test.ts features/parameter-input/availability-zone-node-metadata.test.ts features/parameter-input/aws-region-options.test.ts features/parameter-input/availability-zone-options.test.ts features/parameter-input/parameter-panel-source.test.ts features/parameter-input/validation.test.ts features/workspace/resource-list-summary.test.ts features/workspace/workspace-ai-diagram-adapter.test.ts` - passed.
   - `pnpm --filter @sketchcatch/web exec tsx --test features/parameter-input/region-node-metadata.test.ts features/parameter-input/availability-zone-node-metadata.test.ts` - passed after fixture type cleanup.
+  - Red before fix: `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-to-diagram.test.ts` - failed because `provider "aws"` was reported as `terraform.sync.unsupported_block` and `availability_zone` did not create AZ area resources.
+  - Red before fix: `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/terraform-sync-proposals.test.ts` - failed because create proposals ignored explicit `nodeId` and `metadata`.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-to-diagram.test.ts` - passed after Region/AZ sync implementation.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/terraform-sync-proposals.test.ts` - passed after create proposal metadata implementation.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-to-diagram.test.ts src/services/terraform/terraform-preview.test.ts src/services/terraform/infrastructure-graph.test.ts src/routes/terraform.test.ts` - passed.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/terraform-sync-proposals.test.ts features/workspace/workspace-right-panel-layout.test.ts features/diagram-editor/diagram-utils.test.ts features/resource-settings/catalog.test.ts` - passed.
+  - Red before provider removal: `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-preview.test.ts src/services/terraform/terraform-to-diagram.test.ts src/routes/terraform.test.ts` - failed because Region area resources still generated `provider "aws"` blocks and provider blocks still created/updated `aws_region` proposals.
+  - Red before provider-only no-op guard: `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-to-diagram.test.ts` - failed because provider-only Terraform input produced diagram resource delete proposals.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-preview.test.ts src/services/terraform/terraform-to-diagram.test.ts src/routes/terraform.test.ts` - passed after provider generation/sync removal.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/terraform-sync-proposals.test.ts features/workspace/workspace-right-panel-layout.test.ts features/diagram-editor/diagram-utils.test.ts features/resource-settings/catalog.test.ts` - passed after provider removal.
+  - `pnpm lint` - passed after provider removal and formatting.
+  - `pnpm typecheck` - passed after provider removal and formatting.
+  - `pnpm build` - passed after provider removal and formatting.
+  - `git diff --check` - passed after provider removal and formatting.
   - `pnpm catalog:check` - failed because local root `node_modules` cannot resolve `@sketchcatch/types/resource-definitions` for `scripts/generate-terraform-aws-catalog.mjs`.
   - `pnpm lint` - passed.
-  - `pnpm typecheck` - passed after fixture type cleanup.
+  - `pnpm typecheck` - passed after Region/AZ sync proposal typing.
   - `pnpm build` - passed.
   - `git diff --check` - passed.
   - `pnpm harness:check` - passed after record updates.

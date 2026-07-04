@@ -76,7 +76,7 @@ test("POST /api/terraform/generate returns Terraform code for an active user", a
   await app.close();
 });
 
-test("POST /api/terraform/generate maps conflicting Region area resources to 400 responses", async () => {
+test("POST /api/terraform/generate ignores Region area resources for provider generation", async () => {
   const fakeDb = new AuthOnlyFakeDb({
     users: [
       {
@@ -135,8 +135,10 @@ test("POST /api/terraform/generate maps conflicting Region area resources to 400
     }
   });
 
-  assert.equal(response.statusCode, 400);
-  assertErrorResponse(response.json() as ApiErrorResponse, "bad_request");
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(response.json() as TerraformGenerateResponse, {
+    terraformCode: ""
+  });
 
   await app.close();
 });
@@ -553,7 +555,10 @@ test("POST /api/terraform/validate returns diagnostics for an active user", asyn
   });
 
   assert.equal(response.statusCode, 200);
-  assert.equal((response.json() as TerraformValidateResponse).diagnostics[0]?.code, "terraform.quoted_reference");
+  assert.equal(
+    (response.json() as TerraformValidateResponse).diagnostics[0]?.code,
+    "terraform.quoted_reference"
+  );
 
   await app.close();
 });

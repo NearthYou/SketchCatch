@@ -70,10 +70,13 @@ function applyCreateProposal(
   diagramJson: DiagramJson,
   proposal: Extract<TerraformDiagramChangeProposal, { kind: "create_candidate" }>
 ): DiagramJson {
-  const nodeId = createUniqueNodeId(
-    diagramJson.nodes,
-    `terraform-${proposal.identity.resourceType}-${proposal.identity.resourceName}`
-  );
+  const nodeId =
+    proposal.nodeId && !diagramJson.nodes.some((node) => node.id === proposal.nodeId)
+      ? proposal.nodeId
+      : createUniqueNodeId(
+          diagramJson.nodes,
+          `terraform-${proposal.identity.resourceType}-${proposal.identity.resourceName}`
+        );
   const catalogResource = findCatalogResourceForTerraformBlock(
     proposal.identity.resourceType,
     proposal.identity.terraformBlockType
@@ -90,6 +93,7 @@ function applyCreateProposal(
     ...(catalogResource ? { iconUrl: catalogResource.iconUrl } : {}),
     locked: false,
     zIndex: 0,
+    ...(proposal.metadata ? { metadata: { ...proposal.metadata } } : {}),
     parameters: {
       ...proposal.parameters,
       terraformBlockType: proposal.identity.terraformBlockType,

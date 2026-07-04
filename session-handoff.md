@@ -8,9 +8,11 @@
 - 현재 Web catalog에서 생성 가능한 shared Terraform resource/data definition은 모두 `terraformPreview: true`와 `terraformSync: true`다. 아이콘은 생성되지만 Terraform Preview 또는 Terraform Sync 변환에서 제외되는 shared Terraform 리소스 목록은 없다.
 - Region/AZ는 더 이상 신규 생성 시 `design_region`/`design_az` metadata node가 아니라 board-only resource area node인 `aws_region`, `aws_availability_zone`으로 생성된다.
 - Region/AZ 영역 선택값은 `parameters.values.awsRegion`, `parameters.values.awsAvailabilityZone`에 저장한다. 기존 `design_region`, `design_az`, `sketchcatch_region`, `sketchcatch_az` metadata는 저장 데이터 호환을 위해 읽을 수 있다.
-- Terraform Preview는 `aws_region` 영역 리소스가 있을 때만 `provider "aws"` block을 생성한다. Region 영역 리소스가 없으면 `ap-northeast-2` 같은 기본 provider region을 자동으로 넣지 않는다.
-- Preview v1은 단일 AWS provider region만 지원한다. 서로 다른 region을 선택한 Region 영역 리소스가 둘 이상이면 `/terraform/generate`가 400 `bad_request`를 반환한다.
+- Terraform Preview는 `aws_region` 영역 리소스가 있어도 `provider "aws"` block을 생성하지 않는다. `ap-northeast-2` 같은 기본 provider region도 자동으로 넣지 않는다.
+- Terraform Sync는 `provider "aws" { region = ... }` block을 `aws_region` 영역 리소스 create/update/delete 의도로 해석하지 않고 무시한다.
+- Preview v1은 Region 영역 리소스를 provider 충돌 검증 대상으로 삼지 않는다. 서로 다른 region을 선택한 Region 영역 리소스가 둘 이상 있어도 `/terraform/generate`는 provider 이유로 400을 반환하지 않는다.
 - AZ-aware 리소스(`aws_subnet`, `aws_ebs_volume`)가 `aws_availability_zone` 영역 안에 있고 명시 `availabilityZone` 값이 없으면 영역의 AZ 값을 Terraform Preview config로 상속한다. 리소스 parameter에 AZ가 있으면 그 값을 우선한다.
+- Terraform Sync는 `aws_subnet`, `aws_ebs_volume`의 `availability_zone` attribute를 `aws_availability_zone` 영역 리소스로 승격하고, child resource의 `metadata.parentAreaNodeId`를 AZ 영역 node id로 연결한다. child의 직접 `availabilityZone` 값은 제거해 다음 Preview에서 영역 값으로 같은 HCL을 재생성한다.
 - Auto Scaling Group은 Terraform resource projection 대상이면서 visual area node로도 동작한다.
 - `aws_region`, `aws_availability_zone`은 board-only area resource라 Terraform resource/data block과 ArchitectureJson resource로 변환하지 않는다.
 - Branch는 `origin/Feat/jh/149-terraform-지원하지-않는-리소스-추가`를 추적 중이다. staging/commit은 사용자 수동 커밋 요청 때문에 하지 않았다.
@@ -20,6 +22,9 @@
 - `docs/jh/000_AWS리소스목록_JH.md`에 1순위/2순위 AWS Terraform 리소스 후보와 현재 SketchCatch 보유/미보유 목록을 정리했다.
 - 리소스 후보는 1순위 90개, 2순위 22개, 합계 112개다.
 - 현재 SketchCatch 보유 리소스는 `packages/types/src/resource-definitions.ts` 기준 44개이며, 대상 후보 중 미보유 리소스는 68개다.
+- 같은 문서에 Brainboard AWS Provider `6.47.0` identity card 기준 `Brainboard configurator 조사 결과`를 추가했다.
+- Brainboard 조사 결과는 대상 112개 중 111개 확인, `aws_wafv2_web_acl` 1개 미제공/미확인이다.
+- Brainboard 조사 섹션에서 `Main parameters`는 identity card `attributes`, `Add blocks`는 `blockTypes` 기준으로 적었다. 실제 Form 화면은 배치 위치, 연결 관계, 생성된 `cloudConfigs`, required 계열 조건에 따라 일부만 우선 노출될 수 있다.
 - `docs/jh`는 `.gitignore` 대상이므로 이 문서를 커밋하려면 `git add -f docs/jh/000_AWS리소스목록_JH.md`가 필요하다.
 - PR #137 충돌 해결을 위해 현재 feature branch에 `origin/dev`를 병합했다.
 - `apps/api/src/app.ts`, `apps/api/src/routes/terraform.ts`, `apps/api/src/services/terraform/terraform-diagnostics.ts`의 conflict는 static-only Terraform editor validation 정책을 기준으로 해결했다.
@@ -98,11 +103,15 @@
 
 ## 이번 세션의 변경 사항
 
+- `docs/jh/000_AWS리소스목록_JH.md`에 Brainboard configurator 조사 결과를 추가했다. 대상 리소스 heading 112개, 확인됨 111개, 미제공/미확인 1개(`aws_wafv2_web_acl`)로 검증했다.
 - `apps/web/features/resource-settings/catalog.ts`에서 Region/AZ catalog entry를 resource area node로 바꾸고, ASG를 area node size로 조정했다.
 - `apps/web/features/diagram-editor`의 node creation, area-node 판정, resize bounds, visual drop target 로직이 `aws_region`, `aws_availability_zone`, `aws_autoscaling_group` 영역 처리를 인식하게 했다.
 - `apps/web/features/parameter-input`의 Region/AZ helper와 `ParameterInputPanel`은 resource area node의 선택값을 metadata가 아니라 `parameters.values`에 저장한다. legacy design node metadata 경로는 호환용으로 남겼다.
-- `apps/api/src/services/terraform/terraform-preview.ts`는 Region area resource가 있을 때만 provider block을 만들고, 서로 다른 region이 섞이면 preview validation error를 반환한다.
+- `apps/api/src/services/terraform/terraform-preview.ts`는 Region area resource를 provider block으로 렌더링하지 않는다.
 - `apps/api/src/services/terraform/infrastructure-graph.ts`는 AZ area resource 값을 AZ-aware resource에 상속하되, 리소스의 명시 AZ 값을 덮어쓰지 않는다.
+- `apps/api/src/services/terraform/terraform-to-diagram.ts`는 provider block을 무시하고, AZ-aware resource의 `availability_zone`만 board-only AZ area resource proposal과 metadata로 되돌린다.
+- `packages/types/src/index.ts`의 create proposal은 Region/AZ area sync를 위해 optional `nodeId`와 `metadata`를 가질 수 있다.
+- `apps/web/features/workspace/terraform-sync-proposals.ts`는 create proposal의 `nodeId`와 `metadata`를 보존해 새 AZ area와 새 child resource가 같은 save에서 연결되게 한다.
 - `apps/web/features/workspace/resource-list-summary.ts`와 `workspace-ai-diagram-adapter.ts`는 Region/AZ board-only area resource를 Terraform/Architecture resource로 취급하지 않도록 정리했다.
 - Representative Use Journey server/storage board layout은 신규 Region/AZ를 `aws_region`, `aws_availability_zone` resource area node로 생성한다.
 - `docs/data-models.md`와 이 handoff를 Region/AZ resource area 정책 기준으로 갱신했다.
@@ -235,6 +244,13 @@
 - `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-preview.test.ts src/services/terraform/infrastructure-graph.test.ts src/services/terraform/diagram-to-terraform.test.ts src/services/terraform/terraform-to-diagram.test.ts src/services/terraform/terraform-diagnostics.test.ts src/routes/terraform.test.ts src/routes/project-draft-schemas.test.ts` - passed.
 - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/resource-list-summary.test.ts features/workspace/workspace-ai-diagram-adapter.test.ts` - passed.
 - `pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/diagram-utils.test.ts features/diagram-editor/drag-transaction.test.ts features/diagram-editor/reference-drop-targets.test.ts features/diagram-editor/area-nodes.test.ts features/diagram-editor/node-resize-bounds.test.ts features/diagram-editor/area-node-movement.test.ts features/diagram-editor/node-style.test.ts features/resource-settings/catalog.test.ts features/parameter-input/region-node-metadata.test.ts features/parameter-input/availability-zone-node-metadata.test.ts features/parameter-input/aws-region-options.test.ts features/parameter-input/availability-zone-options.test.ts features/parameter-input/parameter-panel-source.test.ts features/parameter-input/validation.test.ts features/workspace/resource-list-summary.test.ts features/workspace/workspace-ai-diagram-adapter.test.ts` - passed.
+- Red before fix: `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-to-diagram.test.ts` - failed because `provider "aws"` was unsupported and `availability_zone` did not create AZ area resources.
+- Red before fix: `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/terraform-sync-proposals.test.ts` - failed because create proposals ignored explicit `nodeId` and `metadata`.
+- `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-to-diagram.test.ts` - passed after Region/AZ sync implementation.
+- `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/terraform-sync-proposals.test.ts` - passed after create proposal metadata implementation.
+- `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-to-diagram.test.ts src/services/terraform/terraform-preview.test.ts src/services/terraform/infrastructure-graph.test.ts src/routes/terraform.test.ts` - passed.
+- `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/terraform-sync-proposals.test.ts features/workspace/workspace-right-panel-layout.test.ts features/diagram-editor/diagram-utils.test.ts features/resource-settings/catalog.test.ts` - passed.
+- Red before provider removal: API focused tests failed because Region area resources still generated `provider "aws"` blocks, provider blocks created/updated `aws_region` proposals, and provider-only input could delete diagram resources. The same API focused tests now pass after provider removal and provider-only no-op guard.
 - `pnpm --filter @sketchcatch/web exec tsx --test features/parameter-input/region-node-metadata.test.ts features/parameter-input/availability-zone-node-metadata.test.ts` - passed after fixture type cleanup.
 - `pnpm catalog:check` - failed because local root `node_modules` cannot resolve `@sketchcatch/types/resource-definitions` for `scripts/generate-terraform-aws-catalog.mjs`.
 - `pnpm lint` - passed.

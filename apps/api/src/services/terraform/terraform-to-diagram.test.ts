@@ -1,10 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import type { DiagramJson, DiagramNode } from "@sketchcatch/types";
+import type { DiagramJson, DiagramNode, TerraformDiagramChangeProposal } from "@sketchcatch/types";
 import {
   getResourceDefinitionByTerraform,
   resourceDefinitions
 } from "@sketchcatch/types/resource-definitions";
+import { generateTerraformFromDiagramJson } from "./terraform-preview.js";
 import { syncTerraformToDiagramJson } from "./terraform-to-diagram.js";
 
 test("updates values for a matching generated resource block", () => {
@@ -95,7 +96,7 @@ test("updates data block values", () => {
 
   const result = syncTerraformToDiagramJson(
     diagramJson,
-`data "aws_ami" "ubuntu" {
+    `data "aws_ami" "ubuntu" {
   most_recent = false
   owners = [
     "self",
@@ -128,11 +129,7 @@ test("updates values from CRLF Terraform input", () => {
 
   const result = syncTerraformToDiagramJson(
     diagramJson,
-    [
-      `resource "aws_vpc" "main" {`,
-      `  cidr_block = "10.2.0.0/16"`,
-      `}`
-    ].join("\r\n")
+    [`resource "aws_vpc" "main" {`, `  cidr_block = "10.2.0.0/16"`, `}`].join("\r\n")
   );
 
   assert.deepEqual(result.diagnostics, []);
@@ -276,6 +273,280 @@ resource "aws_security_group_rule" "ssh" {
   assert.equal(result.proposals?.[1]?.identity.resourceType, "aws_security_group_rule");
 });
 
+test("ignores AWS provider blocks during Terraform Sync", () => {
+  const result = syncTerraformToDiagramJson(
+    {
+      nodes: [],
+      edges: [],
+      viewport: { x: 0, y: 0, zoom: 1 }
+    },
+    `provider "aws" {
+  region = "ap-northeast-2"
+}`
+  );
+
+  assert.deepEqual(result.diagnostics, []);
+  assert.deepEqual(result.diagramJson.nodes, []);
+  assert.deepEqual(result.proposals, []);
+});
+
+test("does not update existing Region area resources from AWS provider blocks", () => {
+  const result = syncTerraformToDiagramJson(
+    {
+      nodes: [
+        makeNode({
+          id: "region-1",
+          type: "aws_region",
+          kind: "resource",
+          label: "Region",
+          parameters: {
+            resourceType: "aws_region",
+            resourceName: "region",
+            fileName: "main",
+            values: {
+              awsRegion: "us-east-1"
+            }
+          }
+        })
+      ],
+      edges: [],
+      viewport: { x: 0, y: 0, zoom: 1 }
+    },
+    `provider "aws" {
+  region = "eu-west-1"
+}`
+  );
+
+  assert.deepEqual(result.diagnostics, []);
+  assert.deepEqual(result.proposals, []);
+  assert.deepEqual(result.diagramJson.nodes[0]?.parameters?.values, {
+    awsRegion: "us-east-1"
+  });
+});
+
+test("does not treat provider-only Terraform input as deleting diagram resources", () => {
+  const diagramJson: DiagramJson = {
+    nodes: [
+      makeNode({
+        id: "vpc-1",
+        type: "aws_vpc",
+        kind: "resource",
+        label: "main",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_vpc",
+          resourceName: "main",
+          fileName: "main",
+          values: {
+            cidrBlock: "10.0.0.0/16"
+          }
+        }
+      })
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+
+  const result = syncTerraformToDiagramJson(
+    diagramJson,
+    `provider "aws" {
+  region = "ap-northeast-2"
+}`
+  );
+
+  assert.deepEqual(result.diagnostics, []);
+  assert.deepEqual(result.proposals, []);
+  assert.deepEqual(result.diagramJson, diagramJson);
+});
+
+test("ignores AWS provider blocks while syncing Terraform resources", () => {
+  const result = syncTerraformToDiagramJson(
+    {
+      nodes: [],
+      edges: [],
+      viewport: { x: 0, y: 0, zoom: 1 }
+    },
+    `provider "aws" {
+  region = "ap-northeast-2"
+}
+
+resource "aws_subnet" "public" {
+  cidr_block = "10.0.2.0/24"
+  availability_zone = "ap-northeast-2c"
+}`
+  );
+
+  assert.deepEqual(result.diagnostics, []);
+  const availabilityZoneProposal = getCreateProposal(result.proposals, 0);
+  const subnetProposal = getCreateProposal(result.proposals, 1);
+
+  assert.deepEqual(
+    [availabilityZoneProposal, subnetProposal].map((proposal) => proposal.identity.resourceType),
+    ["aws_availability_zone", "aws_subnet"]
+  );
+  assert.deepEqual(subnetProposal.metadata, {
+    parentAreaNodeId: "terraform-aws-availability-zone-ap-northeast-2c"
+  });
+});
+
+test("syncs availability_zone attributes into AZ area resources and parent metadata", () => {
+  const diagramJson: DiagramJson = {
+    nodes: [
+      makeNode({
+        id: "subnet-1",
+        type: "aws_subnet",
+        kind: "resource",
+        label: "public",
+        parameters: {
+          resourceType: "aws_subnet",
+          resourceName: "public",
+          fileName: "network",
+          values: {
+            cidrBlock: "10.0.1.0/24"
+          }
+        }
+      })
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+
+  const result = syncTerraformToDiagramJson(
+    diagramJson,
+    `resource "aws_subnet" "public" {
+  cidr_block = "10.0.2.0/24"
+  availability_zone = "ap-northeast-2c"
+}`
+  );
+
+  assert.deepEqual(result.diagnostics, []);
+  const availabilityZoneProposal = getCreateProposal(result.proposals, 0);
+
+  assert.equal(availabilityZoneProposal.identity.resourceType, "aws_availability_zone");
+  assert.equal(availabilityZoneProposal.nodeId, "terraform-aws-availability-zone-ap-northeast-2c");
+  assert.deepEqual(availabilityZoneProposal.parameters.values, {
+    awsAvailabilityZone: "ap-northeast-2c"
+  });
+  assert.deepEqual(result.diagramJson.nodes[0]?.metadata, {
+    parentAreaNodeId: "terraform-aws-availability-zone-ap-northeast-2c"
+  });
+  assert.deepEqual(result.diagramJson.nodes[0]?.parameters?.values, {
+    cidrBlock: "10.0.2.0/24"
+  });
+});
+
+test("syncs Terraform-only AZ-aware create proposals under AZ area resources", () => {
+  const result = syncTerraformToDiagramJson(
+    {
+      nodes: [],
+      edges: [],
+      viewport: { x: 0, y: 0, zoom: 1 }
+    },
+    `resource "aws_subnet" "public" {
+  cidr_block = "10.0.2.0/24"
+  availability_zone = "ap-northeast-2c"
+}`
+  );
+
+  assert.deepEqual(result.diagnostics, []);
+  const availabilityZoneProposal = getCreateProposal(result.proposals, 0);
+  const subnetProposal = getCreateProposal(result.proposals, 1);
+
+  assert.equal(availabilityZoneProposal.identity.resourceType, "aws_availability_zone");
+  assert.equal(subnetProposal.identity.resourceType, "aws_subnet");
+  assert.deepEqual(subnetProposal.metadata, {
+    parentAreaNodeId: "terraform-aws-availability-zone-ap-northeast-2c"
+  });
+  assert.deepEqual(subnetProposal.parameters.values, {
+    cidrBlock: "10.0.2.0/24"
+  });
+});
+
+test("round-trips Region and AZ area resources through Terraform Preview and Sync", () => {
+  const terraformCode = generateTerraformFromDiagramJson({
+    nodes: [
+      makeNode({
+        id: "region-1",
+        type: "aws_region",
+        kind: "resource",
+        label: "Region",
+        parameters: {
+          resourceType: "aws_region",
+          resourceName: "region",
+          fileName: "main",
+          values: {
+            awsRegion: "ap-northeast-2"
+          }
+        }
+      }),
+      makeNode({
+        id: "az-1",
+        type: "aws_availability_zone",
+        kind: "resource",
+        label: "AZ",
+        metadata: {
+          parentAreaNodeId: "region-1"
+        },
+        parameters: {
+          resourceType: "aws_availability_zone",
+          resourceName: "availability_zone",
+          fileName: "main",
+          values: {
+            awsAvailabilityZone: "ap-northeast-2c"
+          }
+        }
+      }),
+      makeNode({
+        id: "subnet-1",
+        type: "aws_subnet",
+        kind: "resource",
+        label: "public",
+        metadata: {
+          parentAreaNodeId: "az-1"
+        },
+        parameters: {
+          resourceType: "aws_subnet",
+          resourceName: "public",
+          fileName: "network",
+          values: {
+            cidrBlock: "10.0.2.0/24"
+          }
+        }
+      })
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  });
+
+  const result = syncTerraformToDiagramJson(
+    {
+      nodes: [],
+      edges: [],
+      viewport: { x: 0, y: 0, zoom: 1 }
+    },
+    terraformCode
+  );
+
+  assert.deepEqual(result.diagnostics, []);
+  const availabilityZoneProposal = getCreateProposal(result.proposals, 0);
+  const subnetProposal = getCreateProposal(result.proposals, 1);
+
+  assert.deepEqual(
+    [availabilityZoneProposal, subnetProposal].map((proposal) => proposal.identity.resourceType),
+    ["aws_availability_zone", "aws_subnet"]
+  );
+  assert.deepEqual(availabilityZoneProposal.parameters.values, {
+    awsAvailabilityZone: "ap-northeast-2c"
+  });
+  assert.equal(availabilityZoneProposal.metadata, undefined);
+  assert.deepEqual(subnetProposal.metadata, {
+    parentAreaNodeId: "terraform-aws-availability-zone-ap-northeast-2c"
+  });
+  assert.deepEqual(subnetProposal.parameters.values, {
+    cidrBlock: "10.0.2.0/24"
+  });
+});
+
 test("syncs security group rule create and delete proposals", () => {
   const securityGroupRuleDefinition = getResourceDefinitionByTerraform(
     "resource",
@@ -319,7 +590,10 @@ test("syncs security group rule create and delete proposals", () => {
   assert.equal(securityGroupRuleDefinition?.capabilities.terraformSync, true);
   assert.deepEqual(terraformOnlyResult.diagnostics, []);
   assert.equal(terraformOnlyResult.proposals?.[0]?.kind, "create_candidate");
-  assert.equal(terraformOnlyResult.proposals?.[0]?.identity.resourceType, "aws_security_group_rule");
+  assert.equal(
+    terraformOnlyResult.proposals?.[0]?.identity.resourceType,
+    "aws_security_group_rule"
+  );
   assert.deepEqual(diagramOnlyResult.diagnostics, []);
   assert.deepEqual(diagramOnlyResult.proposals, [
     {
@@ -374,7 +648,7 @@ test("rejects duplicate DiagramJson identities without mutating", () => {
 }`
   );
 
-  assert.equal(result.diagramJson, diagramJson);
+  assert.deepEqual(result.diagramJson, diagramJson);
   assert.equal(result.diagnostics[0]?.code, "terraform.sync.duplicate_diagram_identity");
   assert.equal(result.diagnostics[0]?.resourceAddress, "aws_vpc.main");
   assert.deepEqual(result.proposals, []);
@@ -507,9 +781,18 @@ resource "aws_vpc" "renamed_b" {
 
   assert.deepEqual(result.diagnostics, []);
   assert.deepEqual(result.diagramJson, diagramJson);
-  assert.equal(result.proposals?.some((proposal) => proposal.kind === "rename_candidate"), false);
-  assert.equal(result.proposals?.filter((proposal) => proposal.kind === "create_candidate").length, 2);
-  assert.equal(result.proposals?.filter((proposal) => proposal.kind === "delete_candidate").length, 2);
+  assert.equal(
+    result.proposals?.some((proposal) => proposal.kind === "rename_candidate"),
+    false
+  );
+  assert.equal(
+    result.proposals?.filter((proposal) => proposal.kind === "create_candidate").length,
+    2
+  );
+  assert.equal(
+    result.proposals?.filter((proposal) => proposal.kind === "delete_candidate").length,
+    2
+  );
 });
 
 test("returns delete proposals when Terraform code is intentionally empty", () => {
@@ -517,7 +800,7 @@ test("returns delete proposals when Terraform code is intentionally empty", () =
 
   const result = syncTerraformToDiagramJson(diagramJson, "");
 
-  assert.equal(result.diagramJson, diagramJson);
+  assert.deepEqual(result.diagramJson, diagramJson);
   assert.deepEqual(result.diagnostics, []);
   assert.deepEqual(result.proposals, [
     {
@@ -687,26 +970,23 @@ resource "aws_vpc" "main" {
 test("rejects duplicate block addresses across Terraform files", () => {
   const diagramJson = makeSingleVpcDiagramJson();
 
-  const result = syncTerraformToDiagramJson(
-    diagramJson,
-    {
-      terraformCode: "",
-      terraformFiles: [
-        {
-          fileName: "network.tf",
-          terraformCode: `resource "aws_vpc" "main" {
+  const result = syncTerraformToDiagramJson(diagramJson, {
+    terraformCode: "",
+    terraformFiles: [
+      {
+        fileName: "network.tf",
+        terraformCode: `resource "aws_vpc" "main" {
   cidr_block = "10.1.0.0/16"
 }`
-        },
-        {
-          fileName: "compute.tf",
-          terraformCode: `resource "aws_vpc" "main" {
+      },
+      {
+        fileName: "compute.tf",
+        terraformCode: `resource "aws_vpc" "main" {
   cidr_block = "10.2.0.0/16"
 }`
-        }
-      ]
-    }
-  );
+      }
+    ]
+  });
 
   assert.equal(result.diagramJson, diagramJson);
   assert.equal(result.diagnostics[0]?.code, "terraform.sync.duplicate_address");
@@ -1066,6 +1346,21 @@ test("reports the block header line when a block is not closed", () => {
   assert.equal(result.diagnostics[0]?.line, 1);
   assert.equal(result.diagnostics[0]?.resourceAddress, "aws_vpc.main");
 });
+
+function getCreateProposal(
+  proposals: TerraformDiagramChangeProposal[] | undefined,
+  index: number
+): Extract<TerraformDiagramChangeProposal, { kind: "create_candidate" }> {
+  const proposal = proposals?.[index];
+
+  assert.equal(proposal?.kind, "create_candidate");
+
+  if (!proposal || proposal.kind !== "create_candidate") {
+    throw new Error(`Expected create proposal at index ${index}`);
+  }
+
+  return proposal;
+}
 
 function makeSingleVpcDiagramJson(): DiagramJson {
   return {
