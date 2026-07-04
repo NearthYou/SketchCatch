@@ -15,6 +15,29 @@
 
 ## 세션 레코드
 
+### 2026-07-04 - Main parameter 정책 문서화와 최종 검증
+
+- Goal: Region/AZ, catalog Preview/Sync, main parameter-only UI 정책, HCL 정규화 책임을 최신 문서와 handoff에 맞추고 전체 검증을 완료한다.
+- Completed:
+  - `docs/data-models.md`에 현재 catalog 기준으로 아이콘은 생성되지만 Terraform Preview 또는 Terraform Sync 변환에서 제외되는 shared Terraform 리소스가 없음을 명시했다.
+  - `docs/sw/001_테라폼변환구현가이드_sw.md`의 초기 클론 코딩 순서에서 diagnostics/sync가 후속 이슈라는 stale 문구를 현재 구현 기준으로 정리했다.
+  - `docs/sw/003_테라폼동기화구조설명_sw.md`에 Sync parser의 허용 nested block 범위, shared definition 전체 Preview/Sync 대상 정책, create/delete/rename proposal 테스트 기준을 반영했다.
+  - `session-handoff.md`의 stale `terraformSync` 별도 확장 문구와 다음 행동을 최신 상태로 갱신했다.
+- Verification run:
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/infrastructure-graph.test.ts src/services/terraform/terraform-preview.test.ts src/services/terraform/diagram-to-terraform.test.ts src/services/terraform/terraform-to-diagram.test.ts src/services/terraform/terraform-diagnostics.test.ts src/routes/terraform.test.ts src/routes/project-draft-schemas.test.ts` - passed.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/diagram-utils.test.ts features/diagram-editor/drag-transaction.test.ts features/parameter-input/availability-zone-options.test.ts features/parameter-input/availability-zone-node-metadata.test.ts features/parameter-input/aws-region-options.test.ts features/parameter-input/region-node-metadata.test.ts features/parameter-input/parameter-panel-source.test.ts features/resource-settings/catalog.test.ts` - passed.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `pnpm build` - passed.
+  - `git diff --check` - passed.
+  - `pnpm harness:check` - passed.
+- Evidence recorded:
+  - 실제 Terraform CLI, apply/destroy, cloud mutation, Git/CI/CD handoff는 실행하지 않았다.
+- Known risks:
+  - 브라우저 수동 smoke와 Representative Use Journey 자동 smoke(`HARNESS-007`)는 아직 남아 있다.
+- Next best action:
+  - 사용자가 수동 커밋 후 필요하면 PR 본문 정리 또는 브라우저 smoke를 진행한다.
+
 ### 2026-07-04 - Terraform Sync와 diagnostics 호환 범위 확장
 
 - Goal: 현재 Web catalog에서 생성 가능한 shared Terraform resource/data definition을 Terraform editor sync proposal 범위에도 포함하고, 새 nested-block main parameter HCL을 sync parser가 안전하게 읽게 한다.

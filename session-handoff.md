@@ -26,7 +26,7 @@
 - Terraform Preview는 `design_region`/`sketchcatch_region`의 `metadata.awsRegion`을 `provider "aws"` block으로 렌더링한다. Region 디자인 노드가 없으면 `ap-northeast-2`를 기본 provider region으로 쓴다.
 - Preview v1은 단일 AWS provider region만 지원한다. 서로 다른 region을 선택한 Region 디자인 노드가 둘 이상이면 `/terraform/generate`가 400 `bad_request`를 반환한다.
 - `DiagramNodeMetadata.awsAvailabilityZone`은 AZ 디자인 노드의 선택 AZ code를 저장한다. `design_az`/`sketchcatch_az` 안에 배치된 `aws_subnet`, `aws_ebs_volume`은 명시 `availabilityZone` 값이 없으면 AZ metadata를 Terraform Preview config로 상속한다.
-- 현재 Web catalog에서 생성 가능한 shared Terraform resource/data definition은 모두 `terraformPreview: true`다. `terraformSync` capability는 아직 별도 지원 범위로 남아 있다.
+- 현재 Web catalog에서 생성 가능한 shared Terraform resource/data definition은 모두 `terraformPreview: true`와 `terraformSync: true`다. 아이콘은 생성되지만 Terraform Preview 또는 Terraform Sync 변환에서 제외되는 shared Terraform 리소스 목록은 없다.
 - Parameter panel은 현재 required main parameter만 노출한다. Terraform renderer는 main parameter의 짧은 입력 중 S3 Versioning `status`, S3 Encryption `sseAlgorithm`/`kmsMasterKeyId`, S3 Lifecycle `expirationDays`를 provider가 기대하는 HCL nested block으로 정규화한다.
 - Terraform renderer는 catalog nested-block main parameter를 attribute/list assignment가 아니라 HCL nested block으로 출력한다. 현재 helper는 AMI filter, EC2 root block device, Route Table route, Security Group ingress/egress, Auto Scaling Group launch template/tag, S3 versioning/encryption/lifecycle block, DB parameter group parameter, DynamoDB attribute, Lambda environment, API Gateway endpoint configuration을 인식한다.
 - top-level nested block 값이 object 하나로 저장된 경우에도 단일 HCL nested block으로 렌더링한다.
@@ -81,6 +81,10 @@
 
 ## 이번 세션의 변경 사항
 
+- `docs/data-models.md`에 현재 catalog 기준으로 아이콘은 생성되지만 Terraform Preview 또는 Terraform Sync 변환에서 제외되는 shared Terraform 리소스가 없음을 명시했다.
+- `docs/sw/001_테라폼변환구현가이드_sw.md`에서 diagnostics/sync가 후속 이슈라는 stale 문구를 최신 구현 기준으로 정리했다.
+- `docs/sw/003_테라폼동기화구조설명_sw.md`에 허용 nested block sync, shared definition 전체 Preview/Sync 대상 정책, create/delete/rename proposal 테스트 기준을 반영했다.
+- 마지막 단계에서 focused API/Web 회귀 테스트와 `pnpm lint`, `pnpm typecheck`, `pnpm build`, `git diff --check`, `pnpm harness:check`를 다시 실행했다.
 - `packages/types/src/resource-definitions.ts`에서 shared AWS resource definition의 `terraformSync` 기본값을 true로 바꿨다.
 - `apps/api/src/services/terraform/terraform-to-diagram.ts`가 sync parser의 top-level nested block 지원 여부를 snake_case Set 직접 조회가 아니라 `isTerraformNestedBlockAttribute` helper로 판정하게 했다.
 - `apps/api/src/services/terraform/terraform-to-diagram.ts`가 허용된 top-level nested block 내부의 하위 nested block을 camelCase 배열 값으로 보존하게 했다.
@@ -334,7 +338,7 @@
 ## 다음으로 최선의 행동
 
 - 다음 Terraform 리소스 추가 시 shared definition/capability, web presentation, 필요 시 parameter catalog/`parameterPanel`, `ResourceType` 확장 여부, drift 테스트를 함께 맞춘다.
-- 다음 단계에서는 리소스별 main parameter normalization과 Terraform editor sync/provider compatibility를 이어서 확장한다.
+- 다음 단계에서는 전체 변경분을 커밋하거나 PR로 묶기 전에 필요하면 브라우저 수동 smoke와 GitHub PR 본문 정리를 수행한다.
 - 브라우저에서 EC2/S3/CloudFront 같은 일반 resource icon을 새로 추가했을 때 `56x56` 크기로 보이고, VPC/Subnet 같은 영역 node는 기존 크기를 유지하는지 수동 smoke한다.
 - 브라우저에서 EC2/VPC/S3 아이콘을 반복 추가했을 때 Terraform Preview 이름이 순차 suffix로 생성되는지 수동 smoke한다.
 - 브라우저에서 CloudFront AI draft가 `AWS` fallback이 아니라 CloudFront icon으로 보이는지 수동 smoke한다.

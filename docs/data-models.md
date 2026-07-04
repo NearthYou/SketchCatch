@@ -275,7 +275,7 @@ capability의 의미는 아래와 같다.
 - `terraformSync`: Terraform editor에서 발견한 block을 Diagram 변경 후보로 받아들일 수 있는지 나타낸다.
 - `parameterPanel`: web parameter catalog에 사용자 입력 UI가 있는지 나타낸다.
 
-현재 Web catalog에서 생성할 수 있는 shared Terraform resource/data definition은 모두 `terraformPreview: true`와 `terraformSync: true`다. Terraform Sync는 shared definition에 없는 AWS block은 warning 또는 unsupported diagnostic으로 남기고, shared definition 안의 block은 create/delete/rename proposal 또는 동일 identity의 `parameters.values` 갱신 대상으로 다룬다.
+현재 Web catalog에서 생성할 수 있는 shared Terraform resource/data definition은 모두 `terraformPreview: true`와 `terraformSync: true`다. 따라서 현재 catalog 기준으로 아이콘은 생성되지만 Terraform Preview 또는 Terraform Sync 변환에서 제외되는 shared Terraform 리소스 목록은 없다. Terraform Sync는 shared definition에 없는 AWS block은 warning 또는 unsupported diagnostic으로 남기고, shared definition 안의 block은 create/delete/rename proposal 또는 동일 identity의 `parameters.values` 갱신 대상으로 다룬다.
 
 새 Terraform 리소스를 추가할 때는 아래 순서를 따른다.
 
