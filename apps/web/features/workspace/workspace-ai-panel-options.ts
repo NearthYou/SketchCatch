@@ -25,8 +25,8 @@ resource "aws_security_group_rule" "ssh" {
 export const DEFAULT_TERRAFORM_ERROR_MESSAGE = "Error: Missing required argument on generated variables.tf";
 
 export const terraformStageOptions: readonly ChoiceOption<AiTerraformStage>[] = [
-  { label: "validate", value: "validate" },
-  { label: "export", value: "export" },
-  { label: "plan", value: "plan" },
-  { label: "apply", value: "apply" }
+  { label: "검증", value: "validate" },
+  { label: "내보내기", value: "export" },
+  { label: "계획", value: "plan" },
+  { label: "적용", value: "apply" }
 ];

@@ -85,7 +85,7 @@ export function WorkspaceAiPanel({ context }: WorkspaceAiPanelProps) {
       setDraftState("idle");
     } catch (error) {
       setDraftState("error");
-      setDraftErrorMessage(getApiErrorMessage(error, "Architecture Draft 생성 중 오류가 발생했습니다."));
+      setDraftErrorMessage(getApiErrorMessage(error, "아키텍처 초안 생성 중 오류가 발생했습니다."));
     }
   }
 
@@ -116,7 +116,7 @@ export function WorkspaceAiPanel({ context }: WorkspaceAiPanelProps) {
 
     if (!boardSnapshot.hasResources) {
       setSimulationState("error");
-      setSimulationErrorMessage("Architecture Board에 Resource가 있어야 실행할 수 있습니다.");
+      setSimulationErrorMessage("아키텍처 보드에 리소스가 있어야 실행할 수 있습니다.");
       return;
     }
 
@@ -133,14 +133,14 @@ export function WorkspaceAiPanel({ context }: WorkspaceAiPanelProps) {
       setSimulationState("idle");
     } catch (error) {
       setSimulationState("error");
-      setSimulationErrorMessage(getApiErrorMessage(error, "Design Simulation 중 오류가 발생했습니다."));
+      setSimulationErrorMessage(getApiErrorMessage(error, "설계 시뮬레이션 중 오류가 발생했습니다."));
     }
   }
 
   return (
     <div className={styles.aiPanel}>
       <header className={styles.aiPanelHeader}>
-        <span>Natural Language Diagramming</span>
+        <span>자연어 다이어그램</span>
         <h2>자연어 다이어그램</h2>
       </header>
 

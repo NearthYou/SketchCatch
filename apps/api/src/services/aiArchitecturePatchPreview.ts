@@ -22,28 +22,28 @@ const RESOURCE_KEYWORDS: readonly {
   readonly label: string;
 }[] = [
   { resourceType: "VPC", keywords: ["vpc", "network"], label: "VPC" },
-  { resourceType: "SUBNET", keywords: ["subnet"], label: "Subnet" },
-  { resourceType: "INTERNET_GATEWAY", keywords: ["internet gateway", "igw"], label: "Internet Gateway" },
-  { resourceType: "ROUTE_TABLE", keywords: ["route table"], label: "Route Table" },
-  { resourceType: "EC2", keywords: ["ec2", "server", "instance", "compute"], label: "EC2 Instance" },
-  { resourceType: "RDS", keywords: ["rds", "database", "postgres", "mysql"], label: "RDS Database" },
-  { resourceType: "S3", keywords: ["s3", "bucket", "storage", "file", "upload"], label: "S3 Bucket" },
-  { resourceType: "SECURITY_GROUP", keywords: ["security group", "firewall", "ssh"], label: "Security Group" },
+  { resourceType: "SUBNET", keywords: ["subnet"], label: "서브넷" },
+  { resourceType: "INTERNET_GATEWAY", keywords: ["internet gateway", "igw"], label: "인터넷 게이트웨이" },
+  { resourceType: "ROUTE_TABLE", keywords: ["route table"], label: "라우트 테이블" },
+  { resourceType: "EC2", keywords: ["ec2", "server", "instance", "compute"], label: "EC2 인스턴스" },
+  { resourceType: "RDS", keywords: ["rds", "database", "postgres", "mysql"], label: "RDS 데이터베이스" },
+  { resourceType: "S3", keywords: ["s3", "bucket", "storage", "file", "upload"], label: "S3 버킷" },
+  { resourceType: "SECURITY_GROUP", keywords: ["security group", "firewall", "ssh"], label: "보안 그룹" },
   { resourceType: "CLOUDFRONT", keywords: ["cloudfront", "cdn"], label: "CloudFront CDN" },
-  { resourceType: "LAMBDA", keywords: ["lambda", "serverless", "function"], label: "Lambda Function" },
+  { resourceType: "LAMBDA", keywords: ["lambda", "serverless", "function"], label: "Lambda 함수" },
   { resourceType: "API_GATEWAY_REST_API", keywords: ["api gateway", "rest api"], label: "API Gateway" },
-  { resourceType: "IAM_ROLE", keywords: ["iam role", "role"], label: "IAM Role" },
-  { resourceType: "IAM_POLICY", keywords: ["iam policy", "policy"], label: "IAM Policy" },
-  { resourceType: "KMS_KEY", keywords: ["kms", "key", "encryption"], label: "KMS Key" },
+  { resourceType: "IAM_ROLE", keywords: ["iam role", "role"], label: "IAM 역할" },
+  { resourceType: "IAM_POLICY", keywords: ["iam policy", "policy"], label: "IAM 정책" },
+  { resourceType: "KMS_KEY", keywords: ["kms", "key", "encryption"], label: "KMS 키" },
   {
     resourceType: "CLOUDWATCH_LOG_GROUP",
     keywords: ["cloudwatch log", "log group", "logs"],
-    label: "CloudWatch Log Group"
+    label: "CloudWatch 로그 그룹"
   },
   {
     resourceType: "CLOUDWATCH_METRIC_ALARM",
     keywords: ["cloudwatch alarm", "metric alarm", "alarm"],
-    label: "CloudWatch Alarm"
+    label: "CloudWatch 알람"
   }
 ];
 
@@ -232,17 +232,17 @@ function createClarificationQuestion(
   candidates: readonly ArchitecturePatchClarificationCandidate[]
 ): string {
   if (candidates.length === 0) {
-    return "I could not find a matching resource on the current diagram. Please describe the target resource more specifically.";
+    return "현재 다이어그램에서 일치하는 리소스를 찾지 못했습니다. 대상 리소스를 조금 더 구체적으로 알려주세요.";
   }
 
   const actionLabel =
     intent.requestedAction === "remove_resource"
-      ? "remove"
+      ? "삭제"
       : intent.requestedAction === "modify_resource"
-        ? "modify"
-        : "change";
+        ? "수정"
+        : "변경";
 
-  return `Which resource should I ${actionLabel}?`;
+  return `어떤 리소스를 ${actionLabel}할까요?`;
 }
 
 function toClarificationCandidate(node: ResourceNode): ArchitecturePatchClarificationCandidate {
@@ -272,7 +272,7 @@ function createResolvedPatchChanges(
     return [
       {
         action: "manual_review",
-        summary: "The request needs manual review before it can become a diagram patch."
+        summary: "요청을 다이어그램 패치로 만들기 전에 수동 검토가 필요합니다."
       }
     ];
   }
@@ -282,7 +282,7 @@ function createResolvedPatchChanges(
       {
         action: "add_resource",
         resourceType: intent.resourceType,
-        summary: `${intent.resourceType} resource will be added to the preview.`
+        summary: `${formatPatchResourceType(intent.resourceType)} 리소스를 미리보기에 추가합니다.`
       }
     ];
   }
@@ -292,7 +292,7 @@ function createResolvedPatchChanges(
       {
         action: "manual_review",
         resourceType: intent.resourceType,
-        summary: `${intent.resourceType} resource could not be resolved automatically.`
+        summary: `${formatPatchResourceType(intent.resourceType)} 리소스를 자동으로 찾지 못했습니다.`
       }
     ];
   }
@@ -302,9 +302,29 @@ function createResolvedPatchChanges(
       action: intent.requestedAction,
       resourceType: targetNode.type,
       resourceId: targetNode.id,
-      summary: `${targetNode.label ?? targetNode.id} will be changed by ${intent.requestedAction}.`
+      summary: `${targetNode.label ?? targetNode.id} 리소스를 ${formatPatchAction(intent.requestedAction)}합니다.`
     }
   ];
+}
+
+function formatPatchResourceType(resourceType: ResourceType): string {
+  return RESOURCE_KEYWORDS.find((item) => item.resourceType === resourceType)?.label ?? resourceType;
+}
+
+function formatPatchAction(action: ArchitecturePatchAction): string {
+  if (action === "remove_resource") {
+    return "삭제";
+  }
+
+  if (action === "modify_resource") {
+    return "수정";
+  }
+
+  if (action === "add_resource") {
+    return "추가";
+  }
+
+  return "검토";
 }
 
 function applyResolvedPreviewChanges(

@@ -21,7 +21,7 @@ test("createArchitecturePatchPreview asks for a target when multiple resources m
     response.candidates.map((candidate) => candidate.resourceId),
     ["assets-bucket", "logs-bucket"]
   );
-  assert.match(response.question, /which/i);
+  assert.match(response.question, /어떤 리소스/);
 });
 
 test("createArchitecturePatchPreview removes the selected target and connected edges in the proposed preview", () => {

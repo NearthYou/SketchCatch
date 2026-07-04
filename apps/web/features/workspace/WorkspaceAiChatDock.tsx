@@ -407,7 +407,7 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
 
       showDraftPreview(previewDecision.result);
     } catch (error) {
-      const message = getApiErrorMessage(error, "Architecture Draft 생성 중 오류가 발생했습니다.");
+      const message = getApiErrorMessage(error, "아키텍처 초안 생성 중 오류가 발생했습니다.");
       const question = createQuestionFromDraftError(message);
 
       if (question) {
@@ -546,7 +546,7 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
 
     if (!boardSnapshot.hasResources) {
       setSimulationState("error");
-      setSimulationErrorMessage("Architecture Board에 Resource가 있어야 실행할 수 있습니다.");
+      setSimulationErrorMessage("아키텍처 보드에 리소스가 있어야 실행할 수 있습니다.");
       appendAssistantMessage(
         "question",
         "질문: 아직 보드에 리소스가 없습니다. 먼저 만들고 싶은 서비스를 알려주면 초안을 생성해볼게요."
@@ -567,7 +567,7 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
       setSimulationState("idle");
       appendAssistantMessage("simulation", `현재 보드 시뮬레이션 결과: ${result.summary}`);
     } catch (error) {
-      const message = getApiErrorMessage(error, "Design Simulation 중 오류가 발생했습니다.");
+      const message = getApiErrorMessage(error, "설계 시뮬레이션 중 오류가 발생했습니다.");
 
       setSimulationState("error");
       setSimulationErrorMessage(message);
@@ -607,7 +607,7 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
     >
       <header className={styles.aiChatHeader}>
         <div>
-          <span>Natural Language Diagramming</span>
+          <span>자연어 다이어그램</span>
           <h2>AI 채팅</h2>
         </div>
         <button
@@ -728,7 +728,7 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
           <article className={styles.aiChatDraftCard}>
             <div className={styles.aiResultHeader}>
               <h3>수정 미리보기</h3>
-              <span>{patchPreviewModel.preview.changes.length} changes</span>
+              <span>{patchPreviewModel.preview.changes.length}개 변경</span>
             </div>
             <WorkspaceAiExplanation explanation={patchPreviewModel.preview.llmExplanation} />
             <div className={styles.aiSafetyNotice} role="status">

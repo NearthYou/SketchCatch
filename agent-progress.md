@@ -1739,3 +1739,19 @@
 - Known risks:
   - Browser visual smoke was not captured in this audit turn; verification is unit/type/build based.
   - `pnpm build` regenerated `apps/web/next-env.d.ts`; the generated diff was restored.
+
+### 2026-07-04 - AI panel Korean UI text cleanup
+
+- Goal: AI 패널에 직접 보이는 영어 UI 문구만 한국어로 정리하고, 이전에 넓게 건드린 일반 페이지 문구는 되돌린다.
+- Completed:
+  - 전역 landing/auth/dashboard/cost 페이지 영어 변경은 원복했다.
+  - AI 채팅/AI 패널의 `Natural Language Diagramming`, `changes`, `Terraform Code`, `rawMessage`, `relatedResourceId`, `Check Finding`, 상태 라벨을 한국어로 바꿨다.
+  - AI patch preview 질문/요약 문구가 채팅 패널에 영어로 나오지 않도록 API fallback 문구를 한국어로 바꿨다.
+- Verification run:
+  - `.\node_modules\.bin\tsx.CMD --test src\services\aiArchitecturePatchPreview.test.ts` in `apps/api` - passed
+  - `.\node_modules\.bin\tsx.CMD --test features\workspace\workspace-ai-chat-routing.test.ts features\workspace\workspace-ai-patch-preview.test.ts features\workspace\workspace-ai-guardrail-warning.test.ts features\workspace\api.test.ts` in `apps/web` - passed
+  - `pnpm lint` - passed
+  - `pnpm typecheck` - passed
+  - `pnpm build` - passed
+- Known risks:
+  - Browser visual smoke was not captured; verification is focused tests plus lint/typecheck/build.
