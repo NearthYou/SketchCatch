@@ -32,7 +32,8 @@ function renderBlock(node: InfrastructureGraphNode): string {
   assertTerraformIdentifier(node.iac.resourceType, "resource type");
   assertTerraformIdentifier(node.iac.resourceName, "resource name");
 
-  const body = Object.entries(node.config).flatMap(([key, value]) =>
+  const config = normalizeResourceConfig(node.iac.resourceType, node.config);
+  const body = Object.entries(config).flatMap(([key, value]) =>
     renderBodyEntry(node.iac.resourceType, key, value, 1)
   );
 
@@ -50,12 +51,144 @@ function renderBodyEntry(
   indentLevel: number
 ): string[] {
   const normalizedValue = normalizeTopLevelValue(resourceType, key, value);
+  const nestedBlockValues = getNestedBlockValues(resourceType, key, normalizedValue);
 
-  if (shouldRenderNestedBlocks(resourceType, key, normalizedValue)) {
-    return renderNestedBlocks(key, normalizedValue, indentLevel);
+  if (nestedBlockValues) {
+    return renderNestedBlocks(key, nestedBlockValues, indentLevel);
   }
 
   return [renderAttribute(key, normalizedValue, indentLevel)];
+}
+
+function normalizeResourceConfig(
+  resourceType: string,
+  config: Record<string, unknown>
+): Record<string, unknown> {
+  if (resourceType === "aws_s3_bucket_versioning") {
+    return normalizeS3BucketVersioningConfig(config);
+  }
+
+  if (resourceType === "aws_s3_bucket_server_side_encryption_configuration") {
+    return normalizeS3BucketEncryptionConfig(config);
+  }
+
+  if (resourceType === "aws_s3_bucket_lifecycle_configuration") {
+    return normalizeS3BucketLifecycleConfig(config);
+  }
+
+  return config;
+}
+
+function normalizeS3BucketVersioningConfig(
+  config: Record<string, unknown>
+): Record<string, unknown> {
+  const hasExplicitVersioningConfiguration = hasAnyKey(config, [
+    "versioningConfiguration",
+    "versioning_configuration"
+  ]);
+  const status = config["status"];
+  const shouldAddVersioningConfiguration =
+    status !== undefined && !hasExplicitVersioningConfiguration;
+  const normalizedConfig: Record<string, unknown> = {};
+
+  for (const [key, value] of Object.entries(config)) {
+    if (key === "status") {
+      continue;
+    }
+
+    normalizedConfig[key] = value;
+  }
+
+  if (shouldAddVersioningConfiguration) {
+    normalizedConfig.versioningConfiguration = [{ status }];
+  }
+
+  return normalizedConfig;
+}
+
+function normalizeS3BucketEncryptionConfig(
+  config: Record<string, unknown>
+): Record<string, unknown> {
+  const hasExplicitRule = config["rule"] !== undefined;
+  const sseAlgorithm = config["sseAlgorithm"] ?? config["sse_algorithm"];
+  const kmsMasterKeyId = config["kmsMasterKeyId"] ?? config["kms_master_key_id"];
+  const shouldAddRule =
+    !hasExplicitRule && (sseAlgorithm !== undefined || kmsMasterKeyId !== undefined);
+  const normalizedConfig: Record<string, unknown> = {};
+
+  for (const [key, value] of Object.entries(config)) {
+    if (
+      key === "sseAlgorithm" ||
+      key === "sse_algorithm" ||
+      key === "kmsMasterKeyId" ||
+      key === "kms_master_key_id"
+    ) {
+      continue;
+    }
+
+    normalizedConfig[key] = value;
+  }
+
+  if (shouldAddRule) {
+    const encryptionDefaults: Record<string, unknown> = {};
+
+    if (sseAlgorithm !== undefined) {
+      encryptionDefaults.sseAlgorithm = sseAlgorithm;
+    }
+
+    if (kmsMasterKeyId !== undefined) {
+      encryptionDefaults.kmsMasterKeyId = kmsMasterKeyId;
+    }
+
+    normalizedConfig.rule = [
+      {
+        applyServerSideEncryptionByDefault: [encryptionDefaults]
+      }
+    ];
+  }
+
+  return normalizedConfig;
+}
+
+function normalizeS3BucketLifecycleConfig(
+  config: Record<string, unknown>
+): Record<string, unknown> {
+  const normalizedConfig: Record<string, unknown> = {};
+
+  for (const [key, value] of Object.entries(config)) {
+    if (key === "rule" && Array.isArray(value)) {
+      normalizedConfig.rule = value.map((item) =>
+        isRecord(item) ? normalizeS3BucketLifecycleRuleBlock(item) : item
+      );
+      continue;
+    }
+
+    normalizedConfig[key] = value;
+  }
+
+  return normalizedConfig;
+}
+
+function normalizeS3BucketLifecycleRuleBlock(
+  rule: Record<string, unknown>
+): Record<string, unknown> {
+  const hasExplicitExpiration = rule["expiration"] !== undefined;
+  const expirationDays = rule["expirationDays"] ?? rule["expiration_days"];
+  const normalizedRule: Record<string, unknown> = {};
+
+  for (const [key, value] of Object.entries(rule)) {
+    if (key === "expirationDays" || key === "expiration_days") {
+      continue;
+    }
+
+    normalizedRule[key] = value;
+  }
+
+  if (expirationDays !== undefined && !hasExplicitExpiration) {
+    normalizedRule.expiration = [{ days: expirationDays }];
+  }
+
+  return normalizedRule;
 }
 
 function normalizeTopLevelValue(resourceType: string, key: string, value: unknown): unknown {
@@ -103,16 +236,24 @@ function normalizeSecurityGroupRuleBlock(rule: Record<string, unknown>): Record<
   return normalizedRule;
 }
 
-function shouldRenderNestedBlocks(
+function getNestedBlockValues(
   resourceType: string,
   key: string,
   value: unknown
-): value is Record<string, unknown>[] {
-  return (
-    isTerraformNestedBlockAttribute(resourceType, key) &&
-    Array.isArray(value) &&
-    value.every(isRecord)
-  );
+): Record<string, unknown>[] | undefined {
+  if (!isTerraformNestedBlockAttribute(resourceType, key)) {
+    return undefined;
+  }
+
+  if (Array.isArray(value) && value.every(isRecord)) {
+    return value;
+  }
+
+  if (isRecord(value)) {
+    return [value];
+  }
+
+  return undefined;
 }
 
 function renderNestedBlocks(
@@ -211,6 +352,10 @@ function renderObjectKey(key: string): string {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function hasAnyKey(value: Record<string, unknown>, keys: readonly string[]): boolean {
+  return keys.some((key) => value[key] !== undefined);
 }
 
 // Terraform reference는 따옴표 없이 출력해야 하므로 일반 문자열과 구분한다.

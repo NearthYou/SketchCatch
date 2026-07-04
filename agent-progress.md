@@ -15,6 +15,33 @@
 
 ## 세션 레코드
 
+### 2026-07-04 - Terraform Preview main parameter HCL 정규화
+
+- Goal: Parameter panel에서 main parameter로 받은 짧은 입력과 catalog nested-block 값을 Terraform provider가 기대하는 HCL nested block 구조로 렌더링한다.
+- Completed:
+  - Terraform renderer가 `aws_s3_bucket_versioning.status`를 `versioning_configuration { status = ... }` block으로 정규화하게 했다.
+  - Terraform renderer가 `aws_s3_bucket_server_side_encryption_configuration`의 `sseAlgorithm`/`kmsMasterKeyId`를 `rule.apply_server_side_encryption_by_default` block으로 정규화하게 했다.
+  - Terraform renderer가 S3 Lifecycle rule의 `expirationDays`를 `expiration { days = ... }` block으로 정규화하게 했다.
+  - shared Terraform nested block helper가 EC2 root block device, Auto Scaling Group launch template/tag, DynamoDB attribute, Lambda environment, API Gateway endpoint configuration, S3 nested blocks 등 catalog main nested-block 입력을 HCL block으로 인식하게 했다.
+  - top-level nested block 값이 object 하나로 저장된 경우에도 단일 HCL nested block으로 렌더링하게 했다.
+  - `docs/data-models.md`에 main parameter UI 정책과 Terraform renderer의 HCL 정규화 책임을 기록했다.
+- Verification run:
+  - Red before fix: `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/diagram-to-terraform.test.ts` - failed because S3 compact fields and catalog nested-block values were rendered as plain attributes/lists.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/diagram-to-terraform.test.ts` - passed.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/diagram-to-terraform.test.ts src/services/terraform/terraform-to-diagram.test.ts src/services/terraform/terraform-diagnostics.test.ts src/services/terraform/terraform-preview.test.ts src/routes/terraform.test.ts` - passed.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `pnpm build` - passed.
+  - `git diff --check` - passed.
+  - `pnpm harness:check` - passed.
+- Evidence recorded:
+  - 실제 Terraform CLI, apply/destroy, cloud mutation, Git/CI/CD handoff는 실행하지 않았다.
+- Known risks:
+  - `terraformSync` capability 확장은 아직 다음 단계로 남아 있다.
+  - 실제 provider schema validation은 editor static diagnostics 범위가 아니며, Deployment validation에서 별도로 다룬다.
+- Next best action:
+  - Terraform Sync/Diagnostics 지원 범위를 shared capability 기준으로 확장한다.
+
 ### 2026-07-04 - Terraform Preview AZ placement와 전체 catalog preview 지원
 
 - Goal: AZ 디자인 노드를 Terraform Preview 입력으로 연결하고, 현재 Web catalog에서 생성할 수 있지만 `terraformPreview`가 꺼져 있던 Terraform resource/data 정의를 Preview 대상에 포함한다.

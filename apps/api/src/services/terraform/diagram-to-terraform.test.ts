@@ -111,6 +111,222 @@ test("rejects unsafe Terraform identifiers while rendering InfrastructureGraph",
   );
 });
 
+test("normalizes compact S3 main parameters into Terraform nested blocks", () => {
+  const graph: InfrastructureGraph = {
+    nodes: [
+      {
+        id: "versioning-node",
+        label: "bucket_versioning",
+        iac: {
+          provider: "aws",
+          terraformBlockType: "resource",
+          resourceType: "aws_s3_bucket_versioning",
+          resourceName: "logs",
+          fileName: "main"
+        },
+        config: {
+          bucket: "aws_s3_bucket.logs.id",
+          status: "Enabled"
+        }
+      },
+      {
+        id: "encryption-node",
+        label: "bucket_encryption",
+        iac: {
+          provider: "aws",
+          terraformBlockType: "resource",
+          resourceType: "aws_s3_bucket_server_side_encryption_configuration",
+          resourceName: "logs",
+          fileName: "main"
+        },
+        config: {
+          bucket: "aws_s3_bucket.logs.id",
+          sseAlgorithm: "aws:kms",
+          kmsMasterKeyId: "aws_kms_key.logs.arn"
+        }
+      },
+      {
+        id: "lifecycle-node",
+        label: "bucket_lifecycle",
+        iac: {
+          provider: "aws",
+          terraformBlockType: "resource",
+          resourceType: "aws_s3_bucket_lifecycle_configuration",
+          resourceName: "logs",
+          fileName: "main"
+        },
+        config: {
+          bucket: "aws_s3_bucket.logs.id",
+          rule: [
+            {
+              id: "expire-old-objects",
+              status: "Enabled",
+              expirationDays: 30
+            }
+          ]
+        }
+      }
+    ],
+    edges: []
+  };
+
+  assert.equal(
+    renderTerraformFromInfrastructureGraph(graph),
+    `resource "aws_s3_bucket_versioning" "logs" {
+  bucket = aws_s3_bucket.logs.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "logs" {
+  bucket = aws_s3_bucket.logs.id
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "aws:kms"
+      kms_master_key_id = aws_kms_key.logs.arn
+    }
+  }
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "logs" {
+  bucket = aws_s3_bucket.logs.id
+  rule {
+    id = "expire-old-objects"
+    status = "Enabled"
+    expiration {
+      days = 30
+    }
+  }
+}`
+  );
+});
+
+test("renders catalog nested-block main parameters as Terraform blocks", () => {
+  const graph: InfrastructureGraph = {
+    nodes: [
+      {
+        id: "dynamodb-node",
+        label: "table",
+        iac: {
+          provider: "aws",
+          terraformBlockType: "resource",
+          resourceType: "aws_dynamodb_table",
+          resourceName: "sessions",
+          fileName: "main"
+        },
+        config: {
+          name: "practice-sessions",
+          billingMode: "PAY_PER_REQUEST",
+          hashKey: "id",
+          attribute: [
+            {
+              name: "id",
+              type: "S"
+            }
+          ]
+        }
+      },
+      {
+        id: "lambda-node",
+        label: "handler",
+        iac: {
+          provider: "aws",
+          terraformBlockType: "resource",
+          resourceType: "aws_lambda_function",
+          resourceName: "handler",
+          fileName: "main"
+        },
+        config: {
+          functionName: "practice-handler",
+          role: "aws_iam_role.lambda.arn",
+          handler: "index.handler",
+          runtime: "nodejs22.x",
+          filename: "dist/handler.zip",
+          environment: {
+            variables: {
+              LOG_LEVEL: "info"
+            }
+          }
+        }
+      },
+      {
+        id: "asg-node",
+        label: "asg",
+        iac: {
+          provider: "aws",
+          terraformBlockType: "resource",
+          resourceType: "aws_autoscaling_group",
+          resourceName: "web",
+          fileName: "main"
+        },
+        config: {
+          minSize: 1,
+          maxSize: 2,
+          vpcZoneIdentifier: ["aws_subnet.public.id"],
+          launchTemplate: [
+            {
+              id: "aws_launch_template.web.id",
+              version: "$Latest"
+            }
+          ],
+          tag: [
+            {
+              key: "Name",
+              value: "practice-web",
+              propagateAtLaunch: true
+            }
+          ]
+        }
+      }
+    ],
+    edges: []
+  };
+
+  assert.equal(
+    renderTerraformFromInfrastructureGraph(graph),
+    `resource "aws_dynamodb_table" "sessions" {
+  name = "practice-sessions"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key = "id"
+  attribute {
+    name = "id"
+    type = "S"
+  }
+}
+
+resource "aws_lambda_function" "handler" {
+  function_name = "practice-handler"
+  role = aws_iam_role.lambda.arn
+  handler = "index.handler"
+  runtime = "nodejs22.x"
+  filename = "dist/handler.zip"
+  environment {
+    variables = {
+      LOG_LEVEL = "info"
+    }
+  }
+}
+
+resource "aws_autoscaling_group" "web" {
+  min_size = 1
+  max_size = 2
+  vpc_zone_identifier = [
+    aws_subnet.public.id,
+  ]
+  launch_template {
+    id = aws_launch_template.web.id
+    version = "$Latest"
+  }
+  tag {
+    key = "Name"
+    value = "practice-web"
+    propagate_at_launch = true
+  }
+}`
+  );
+});
+
 test("diagram-to-terraform renderer does not import diagram projection concerns", () => {
   const source = readFileSync(new URL("./diagram-to-terraform.ts", import.meta.url), "utf8");
 

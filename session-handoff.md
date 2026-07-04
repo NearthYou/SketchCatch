@@ -27,6 +27,9 @@
 - Preview v1은 단일 AWS provider region만 지원한다. 서로 다른 region을 선택한 Region 디자인 노드가 둘 이상이면 `/terraform/generate`가 400 `bad_request`를 반환한다.
 - `DiagramNodeMetadata.awsAvailabilityZone`은 AZ 디자인 노드의 선택 AZ code를 저장한다. `design_az`/`sketchcatch_az` 안에 배치된 `aws_subnet`, `aws_ebs_volume`은 명시 `availabilityZone` 값이 없으면 AZ metadata를 Terraform Preview config로 상속한다.
 - 현재 Web catalog에서 생성 가능한 shared Terraform resource/data definition은 모두 `terraformPreview: true`다. `terraformSync` capability는 아직 별도 지원 범위로 남아 있다.
+- Parameter panel은 현재 required main parameter만 노출한다. Terraform renderer는 main parameter의 짧은 입력 중 S3 Versioning `status`, S3 Encryption `sseAlgorithm`/`kmsMasterKeyId`, S3 Lifecycle `expirationDays`를 provider가 기대하는 HCL nested block으로 정규화한다.
+- Terraform renderer는 catalog nested-block main parameter를 attribute/list assignment가 아니라 HCL nested block으로 출력한다. 현재 helper는 AMI filter, EC2 root block device, Route Table route, Security Group ingress/egress, Auto Scaling Group launch template/tag, S3 versioning/encryption/lifecycle block, DB parameter group parameter, DynamoDB attribute, Lambda environment, API Gateway endpoint configuration을 인식한다.
+- top-level nested block 값이 object 하나로 저장된 경우에도 단일 HCL nested block으로 렌더링한다.
 - `diagram-to-terraform.ts`는 더 이상 `DiagramJson` 또는 `buildInfrastructureGraphFromDiagramJson`를 import하지 않는다.
 - Terraform Preview identity는 `iac.provider + iac.terraformBlockType + iac.resourceType + iac.resourceName` 기준이다.
 - `iac.resourceType`은 `aws_instance`, `aws_vpc`, `aws_s3_bucket` 같은 provider-specific Terraform resource type을 그대로 유지한다.
@@ -76,6 +79,11 @@
 
 ## 이번 세션의 변경 사항
 
+- `apps/api/src/services/terraform/diagram-to-terraform.ts`에 S3 Versioning/Encryption/Lifecycle compact main parameter 정규화를 추가했다.
+- `apps/api/src/services/terraform/diagram-to-terraform.ts`가 top-level nested block object를 단일 block으로 렌더링하게 했다.
+- `apps/api/src/services/terraform/terraform-nested-blocks.ts`의 nested block support list를 현재 catalog main nested-block 입력에 맞게 확장하고, snake_case로 들어온 attribute name도 camelCase helper lookup으로 인식하게 했다.
+- `apps/api/src/services/terraform/diagram-to-terraform.test.ts`에 S3 compact main parameter와 catalog nested-block HCL 렌더링 회귀 테스트를 추가했다.
+- `docs/data-models.md`에 main parameter UI 노출 정책과 Terraform renderer HCL 정규화 책임을 기록했다.
 - `origin/dev` merge conflict를 해결했다.
 - `apps/api/src/app.ts`와 `apps/api/src/routes/terraform.ts`는 `validateTerraformPreviewCode` 기반 static-only 검증 주입을 유지한다.
 - `apps/api/src/services/terraform/terraform-diagnostics.ts`는 기존 no-cascade 진단에 `unexpected_token`, `trailing_comma` 정적 검사를 함께 실행한다.
