@@ -805,7 +805,7 @@ type DeploymentFailureExplanation = {
 `GitCicdHandoff`는 `IaC Preview`를 Source Repository와 외부 pipeline으로 넘기는 팀 운영 배포 경로의 metadata다. Direct Deployment Path를 대체하는 것이 아니라 운영 배포용 별도 경로다.
 
 ```ts
-type SourceRepositoryProvider = "internal";
+type SourceRepositoryProvider = "internal" | "github";
 
 type SourceRepository = {
   id: string;
@@ -852,6 +852,12 @@ type GitCicdHandoff = {
 ```
 
 Git/CI/CD handoff도 `UserAcceptedChange` 이후에만 생성한다. v0 API는 `internal` provider boundary만 사용하며 실제 GitHub PR 생성은 별도 provider 구현에서 담당한다. 저장소 토큰, private key, deploy key, CI secret 원문은 shared type, DB, 응답, 로그에 저장하지 않는다.
+
+`github` provider slice에서는 Terraform artifact metadata를 provider boundary로 넘겨 Source Repository PR 생성 요청 payload를 만든다.
+이 payload에는 PR title/body 초안, IaC Preview artifact 경로, plan summary, Pre-Deployment Check 확인 문구,
+리뷰 체크리스트 초안이 포함된다. provider 결과로 `pullRequestUrl`이 돌아오면 handoff record는 `status: "pr_created"`와
+PR URL을 저장한다. 실제 GitHub token, deploy key, CI secret 원문은 DB, shared type, 응답, 로그에 저장하지 않는다.
+pipeline polling/cache 연동은 별도 slice에서 다룬다.
 
 ## Reverse Engineering Scan
 

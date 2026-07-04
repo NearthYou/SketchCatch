@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type {
+  DeploymentPlanSummary,
   GitCicdHandoff,
   GitCicdHandoffListResponse,
   GitCicdHandoffResponse
@@ -13,6 +14,7 @@ import {
   getGitCicdHandoff,
   GitCicdHandoffInvalidStatusTransitionError,
   GitCicdHandoffNotFoundError,
+  GitCicdHandoffProviderMismatchError,
   listProjectGitCicdHandoffs,
   updateGitCicdHandoffStatus,
   type GitCicdHandoffProvider,
@@ -30,6 +32,7 @@ const gitCicdHandoffStatusSchema = z.enum([
   "pipeline_failed",
   "cancelled"
 ]);
+const sourceRepositoryProviderSchema = z.enum(["internal", "github"]);
 
 const projectHandoffParamsSchema = z.object({
   projectId: z.uuid()
@@ -41,18 +44,38 @@ const handoffParamsSchema = z.object({
 
 const nameSchema = z.string().trim().min(1).max(120);
 const branchSchema = z.string().trim().min(1).max(255);
+const deploymentPlanSummarySchema = z
+  .object({
+    createCount: z.number().int().min(0),
+    updateCount: z.number().int().min(0),
+    deleteCount: z.number().int().min(0),
+    replaceCount: z.number().int().min(0),
+    blocked: z.boolean(),
+    warnings: z.array(
+      z
+        .object({
+          level: z.enum(["low", "medium", "high"]),
+          message: z.string().trim().min(1).max(500),
+          relatedResourceId: z.string().trim().min(1).max(128).optional()
+        })
+        .strict()
+    )
+  })
+  .strict();
 
 const createGitCicdHandoffBodySchema = z
   .object({
     architectureId: z.uuid(),
     terraformArtifactId: z.uuid(),
     sourceRepositoryId: z.string().trim().min(1).max(128),
+    repositoryProvider: sourceRepositoryProviderSchema.optional(),
     repositoryOwner: nameSchema,
     repositoryName: nameSchema,
     targetBranch: branchSchema,
     sourceBranch: branchSchema.optional(),
     commitMessage: z.string().trim().min(1).max(500).optional(),
     pullRequestTitle: z.string().trim().min(1).max(255).optional(),
+    planSummary: deploymentPlanSummarySchema.optional(),
     userAcceptedChangeId: z.string().trim().min(1).max(128)
   })
   .strict();
@@ -80,6 +103,25 @@ type GitCicdHandoffRequestContext = {
   provider: GitCicdHandoffProvider;
 };
 
+type GitCicdHandoffBody = z.infer<typeof createGitCicdHandoffBodySchema>;
+
+function toDeploymentPlanSummary(
+  planSummary: GitCicdHandoffBody["planSummary"]
+): DeploymentPlanSummary | undefined {
+  if (!planSummary) {
+    return undefined;
+  }
+
+  return {
+    ...planSummary,
+    warnings: planSummary.warnings.map((warning) => ({
+      level: warning.level,
+      message: warning.message,
+      ...(warning.relatedResourceId ? { relatedResourceId: warning.relatedResourceId } : {})
+    }))
+  };
+}
+
 export async function registerGitCicdHandoffRoutes(
   app: FastifyInstance,
   options?: GitCicdHandoffRouteOptions
@@ -103,12 +145,14 @@ export async function registerGitCicdHandoffRoutes(
           architectureId: body.architectureId,
           terraformArtifactId: body.terraformArtifactId,
           sourceRepositoryId: body.sourceRepositoryId,
+          repositoryProvider: body.repositoryProvider,
           repositoryOwner: body.repositoryOwner,
           repositoryName: body.repositoryName,
           targetBranch: body.targetBranch,
           sourceBranch: body.sourceBranch,
           commitMessage: body.commitMessage,
           pullRequestTitle: body.pullRequestTitle,
+          planSummary: toDeploymentPlanSummary(body.planSummary),
           userAcceptedChangeId: body.userAcceptedChangeId
         },
         repository,
@@ -262,6 +306,13 @@ function handleGitCicdHandoffError(error: unknown, reply: FastifyReply) {
   }
 
   if (error instanceof GitCicdHandoffInvalidStatusTransitionError) {
+    return reply.status(409).send({
+      error: "conflict",
+      message: error.message
+    });
+  }
+
+  if (error instanceof GitCicdHandoffProviderMismatchError) {
     return reply.status(409).send({
       error: "conflict",
       message: error.message

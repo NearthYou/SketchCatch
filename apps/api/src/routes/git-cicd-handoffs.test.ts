@@ -11,7 +11,9 @@ import { createAccessToken } from "../auth/tokens.js";
 import type { DatabaseClient } from "../db/client.js";
 import { users } from "../db/schema.js";
 import {
+  createGitHubGitCicdHandoffProvider,
   type CreateGitCicdHandoffRecordInput,
+  type GitProviderCreatePullRequestInput,
   type GitCicdHandoffArchitectureRecord,
   type GitCicdHandoffProvider,
   type GitCicdHandoffRecord,
@@ -226,23 +228,112 @@ test("POST /api/projects/:projectId/git-cicd-handoffs creates an internal metada
   assert.equal(body.handoff.pipelineRunUrl, null);
   assert.equal(body.handoff.createdByUserId, userId);
   assert.equal(providerCalls.length, 1);
-  assert.deepEqual(providerCalls[0], {
-    projectId,
-    architectureId,
-    terraformArtifactId,
-    sourceRepository: {
-      id: sourceRepositoryId,
-      provider: "internal",
-      owner: "sketchcatch",
-      name: "infra-live",
-      defaultBranch: "main"
-    },
-    sourceBranch: "sketchcatch/iac-preview",
-    commitMessage: "Add SketchCatch Terraform preview",
-    pullRequestTitle: "SketchCatch IaC preview",
-    userAcceptedChangeId: "accepted-change-1"
+  const providerCall = providerCalls[0];
+  assert.equal(providerCall?.projectId, projectId);
+  assert.equal(providerCall?.terraformArtifact.fileName, "main.tf");
+  assert.equal(providerCall?.terraformArtifact.objectKey, "projects/project-id/terraform/main.tf");
+  assert.deepEqual(providerCall?.sourceRepository, {
+    id: sourceRepositoryId,
+    provider: "internal",
+    owner: "sketchcatch",
+    name: "infra-live",
+    defaultBranch: "main"
   });
+  assert.equal(providerCall?.sourceBranch, "sketchcatch/iac-preview");
+  assert.equal(providerCall?.commitMessage, "Add SketchCatch Terraform preview");
+  assert.equal(providerCall?.pullRequestTitle, "SketchCatch IaC preview");
+  assert.equal(providerCall?.pullRequestDraft.title, "SketchCatch IaC preview");
+  assert.match(providerCall?.pullRequestDraft.body ?? "", /## IaC Preview/);
+  assert.match(providerCall?.pullRequestDraft.body ?? "", /## Review checklist/);
+  assert.equal(providerCall?.pullRequestDraft.reviewChecklist.length, 4);
+  assert.equal(providerCall?.userAcceptedChangeId, "accepted-change-1");
   assertResponseHasNoSecretFields(body.handoff);
+
+  await app.close();
+});
+
+test("POST /api/projects/:projectId/git-cicd-handoffs creates GitHub PR handoff through fake provider", async () => {
+  const repository = new FakeGitCicdHandoffRepository();
+  const gitProviderCalls: GitProviderCreatePullRequestInput[] = [];
+  const provider = createGitHubGitCicdHandoffProvider({
+    async createPullRequest(input) {
+      gitProviderCalls.push(input);
+
+      return {
+        pullRequestUrl: "https://github.com/sketchcatch/infra-live/pull/42",
+        sourceBranch: input.sourceBranch,
+        commitSha: "abc1234"
+      };
+    }
+  });
+  const app = await buildGitCicdHandoffTestApp(repository, { provider });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/projects/${projectId}/git-cicd-handoffs`,
+    headers: await authHeaders(),
+    payload: {
+      ...createHandoffBody(),
+      repositoryProvider: "github",
+      sourceBranch: undefined,
+      planSummary: createPlanSummary()
+    }
+  });
+
+  assert.equal(response.statusCode, 201);
+  const body = response.json() as GitCicdHandoffResponse;
+  assert.equal(body.handoff.repositoryProvider, "github");
+  assert.equal(body.handoff.status, "pr_created");
+  assert.equal(body.handoff.pullRequestUrl, "https://github.com/sketchcatch/infra-live/pull/42");
+  assert.equal(body.handoff.sourceBranch, `sketchcatch/iac-${terraformArtifactId.slice(0, 8)}`);
+  assert.match(body.handoff.statusMessage ?? "", /GitHub PR created/);
+  assert.equal(gitProviderCalls.length, 1);
+  assert.deepEqual(gitProviderCalls[0]?.repository, {
+    provider: "github",
+    owner: "sketchcatch",
+    name: "infra-live"
+  });
+  assert.equal(gitProviderCalls[0]?.targetBranch, "main");
+  assert.equal(gitProviderCalls[0]?.files[0]?.path, "terraform/main.tf");
+  assert.equal(
+    gitProviderCalls[0]?.files[0]?.artifactObjectKey,
+    "projects/project-id/terraform/main.tf"
+  );
+  assert.match(gitProviderCalls[0]?.pullRequest.body ?? "", /Create 2, update 1, delete 0, replace 0/);
+  assert.match(gitProviderCalls[0]?.pullRequest.body ?? "", /Pre-Deployment Check/);
+  assert.equal(gitProviderCalls[0]?.pullRequest.reviewChecklist.length, 4);
+  assert.equal(
+    gitProviderCalls[0]?.pullRequest.planSummary?.warnings[0]?.relatedResourceId,
+    "aws_instance.web"
+  );
+  assertResponseHasNoSecretFields(body.handoff);
+
+  await app.close();
+});
+
+test("POST /api/projects/:projectId/git-cicd-handoffs rejects provider mismatch", async () => {
+  const repository = new FakeGitCicdHandoffRepository();
+  const providerCalls: GitCicdProviderCreateInput[] = [];
+  const app = await buildGitCicdHandoffTestApp(repository, {
+    provider: createProviderSpy(providerCalls)
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/projects/${projectId}/git-cicd-handoffs`,
+    headers: await authHeaders(),
+    payload: {
+      ...createHandoffBody(),
+      repositoryProvider: "github"
+    }
+  });
+
+  assert.equal(response.statusCode, 409);
+  assert.deepEqual(response.json(), {
+    error: "conflict",
+    message: "Git/CI/CD handoff provider mismatch: requested github, received internal"
+  });
+  assert.equal(repository.calls.some((call) => call.name === "createHandoff"), false);
 
   await app.close();
 });
@@ -613,6 +704,23 @@ function createHandoffBody() {
     commitMessage: "Add SketchCatch Terraform preview",
     pullRequestTitle: "SketchCatch IaC preview",
     userAcceptedChangeId: "accepted-change-1"
+  };
+}
+
+function createPlanSummary() {
+  return {
+    createCount: 2,
+    updateCount: 1,
+    deleteCount: 0,
+    replaceCount: 0,
+    blocked: false,
+    warnings: [
+      {
+        level: "medium",
+        message: "Confirm destination repository variables before merge.",
+        relatedResourceId: "aws_instance.web"
+      }
+    ]
   };
 }
 

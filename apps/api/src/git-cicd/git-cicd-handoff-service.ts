@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { and, desc, eq } from "drizzle-orm";
 import type {
+  DeploymentPlanSummary,
   GitCicdHandoffStatus,
   SourceRepositoryProvider
 } from "@sketchcatch/types";
@@ -37,12 +38,14 @@ export type CreateGitCicdHandoffInput = {
   architectureId: string;
   terraformArtifactId: string;
   sourceRepositoryId: string;
+  repositoryProvider?: SourceRepositoryProvider | undefined;
   repositoryOwner: string;
   repositoryName: string;
   targetBranch: string;
   sourceBranch?: string | undefined;
   commitMessage?: string | undefined;
   pullRequestTitle?: string | undefined;
+  planSummary?: DeploymentPlanSummary | undefined;
   userAcceptedChangeId: string;
 };
 
@@ -87,6 +90,12 @@ export type GitCicdProviderCreateInput = {
   projectId: string;
   architectureId: string;
   terraformArtifactId: string;
+  terraformArtifact: {
+    id: string;
+    objectKey: string;
+    fileName: string;
+    contentType: string;
+  };
   sourceRepository: {
     id: string;
     provider: SourceRepositoryProvider;
@@ -97,11 +106,13 @@ export type GitCicdProviderCreateInput = {
   sourceBranch: string | null;
   commitMessage: string | null;
   pullRequestTitle: string | null;
+  pullRequestDraft: GitCicdPullRequestDraft;
   userAcceptedChangeId: string;
 };
 
 export type GitCicdProviderCreateResult = {
   repositoryProvider: SourceRepositoryProvider;
+  sourceBranch?: string | null | undefined;
   pullRequestUrl: string | null;
   pipelineRunUrl: string | null;
   status: GitCicdHandoffStatus;
@@ -110,6 +121,51 @@ export type GitCicdProviderCreateResult = {
 
 export type GitCicdHandoffProvider = {
   createHandoff(input: GitCicdProviderCreateInput): Promise<GitCicdProviderCreateResult>;
+};
+
+export type GitCicdReviewChecklistItem = {
+  id: string;
+  label: string;
+  required: boolean;
+};
+
+export type GitCicdPullRequestDraft = {
+  title: string;
+  body: string;
+  planSummary: DeploymentPlanSummary | null;
+  reviewChecklist: GitCicdReviewChecklistItem[];
+};
+
+export type GitProviderPullRequestFile = {
+  path: string;
+  artifactObjectKey: string;
+  contentType: string;
+};
+
+export type GitProviderCreatePullRequestInput = {
+  repository: {
+    provider: "github";
+    owner: string;
+    name: string;
+  };
+  targetBranch: string;
+  sourceBranch: string;
+  commitMessage: string;
+  files: GitProviderPullRequestFile[];
+  pullRequest: GitCicdPullRequestDraft;
+  userAcceptedChangeId: string;
+};
+
+export type GitProviderCreatePullRequestResult = {
+  pullRequestUrl: string;
+  sourceBranch: string;
+  commitSha: string;
+};
+
+export type GitProvider = {
+  createPullRequest(
+    input: GitProviderCreatePullRequestInput
+  ): Promise<GitProviderCreatePullRequestResult>;
 };
 
 export type GitCicdHandoffRepository = {
@@ -152,6 +208,18 @@ export class GitCicdHandoffInvalidStatusTransitionError extends Error {
   }
 }
 
+export class GitCicdHandoffProviderMismatchError extends Error {
+  constructor(
+    readonly requestedProvider: SourceRepositoryProvider,
+    readonly resultProvider: SourceRepositoryProvider
+  ) {
+    super(
+      `Git/CI/CD handoff provider mismatch: requested ${requestedProvider}, received ${resultProvider}`
+    );
+    this.name = "GitCicdHandoffProviderMismatchError";
+  }
+}
+
 const allowedGitCicdHandoffStatusTransitions: Record<
   GitCicdHandoffStatus,
   readonly GitCicdHandoffStatus[]
@@ -176,6 +244,122 @@ export function createInternalGitCicdHandoffProvider(): GitCicdHandoffProvider {
       };
     }
   };
+}
+
+export function createGitHubGitCicdHandoffProvider(
+  gitProvider: GitProvider
+): GitCicdHandoffProvider {
+  return {
+    async createHandoff(input) {
+      const sourceBranch =
+        input.sourceBranch ?? createDefaultSourceBranch(input.terraformArtifactId);
+      const commitMessage =
+        input.commitMessage ?? `Add SketchCatch Terraform artifact ${input.terraformArtifact.fileName}`;
+      const result = await gitProvider.createPullRequest({
+        repository: {
+          provider: "github",
+          owner: input.sourceRepository.owner,
+          name: input.sourceRepository.name
+        },
+        targetBranch: input.sourceRepository.defaultBranch,
+        sourceBranch,
+        commitMessage,
+        files: [
+          {
+            path: `terraform/${input.terraformArtifact.fileName}`,
+            artifactObjectKey: input.terraformArtifact.objectKey,
+            contentType: input.terraformArtifact.contentType
+          }
+        ],
+        pullRequest: input.pullRequestDraft,
+        userAcceptedChangeId: input.userAcceptedChangeId
+      });
+
+      return {
+        repositoryProvider: "github",
+        sourceBranch: result.sourceBranch,
+        pullRequestUrl: result.pullRequestUrl,
+        pipelineRunUrl: null,
+        status: "pr_created",
+        statusMessage: `GitHub PR created from ${result.sourceBranch} at ${result.commitSha}`
+      };
+    }
+  };
+}
+
+export function createGitCicdPullRequestDraft(input: {
+  repositoryOwner: string;
+  repositoryName: string;
+  terraformArtifact: GitCicdHandoffTerraformArtifactRecord;
+  planSummary: DeploymentPlanSummary | null;
+  title: string | null;
+}): GitCicdPullRequestDraft {
+  const title =
+    input.title ??
+    `SketchCatch IaC preview for ${input.repositoryOwner}/${input.repositoryName}`;
+  const reviewChecklist = createDefaultReviewChecklist();
+  const planSummaryText = input.planSummary
+    ? `Create ${input.planSummary.createCount}, update ${input.planSummary.updateCount}, delete ${input.planSummary.deleteCount}, replace ${input.planSummary.replaceCount}. Blocked: ${input.planSummary.blocked ? "yes" : "no"}.`
+    : "Plan summary was not attached to this handoff request.";
+  const warningLines =
+    input.planSummary?.warnings?.map((warning) => `- ${warning.level}: ${warning.message}`) ?? [];
+  const body = [
+    "## IaC Preview",
+    "",
+    `- Terraform artifact: ${input.terraformArtifact.fileName}`,
+    `- Artifact object key: ${input.terraformArtifact.objectKey}`,
+    "",
+    "## Plan summary",
+    "",
+    planSummaryText,
+    ...(warningLines.length > 0 ? ["", "### Plan warnings", "", ...warningLines] : []),
+    "",
+    "## Pre-Deployment Check",
+    "",
+    "- Confirm Terraform artifact matches the approved SketchCatch preview.",
+    "- Confirm target account, region, and variables in the destination repository pipeline.",
+    "- Do not merge until team review and pipeline policy checks pass.",
+    "",
+    "## Review checklist",
+    "",
+    ...reviewChecklist.map((item) => `- [ ] ${item.required ? "(required) " : ""}${item.label}`)
+  ].join("\n");
+
+  return {
+    title,
+    body,
+    planSummary: input.planSummary,
+    reviewChecklist
+  };
+}
+
+function createDefaultReviewChecklist(): GitCicdReviewChecklistItem[] {
+  return [
+    {
+      id: "terraform-artifact",
+      label: "Terraform artifact path and generated resources match the approved IaC Preview.",
+      required: true
+    },
+    {
+      id: "plan-summary",
+      label: "Plan summary create/update/delete/replace counts are reviewed by the team.",
+      required: true
+    },
+    {
+      id: "pre-deployment-check",
+      label: "Pre-Deployment Check findings are accepted or resolved before merge.",
+      required: true
+    },
+    {
+      id: "pipeline-policy",
+      label: "Destination repository pipeline policy and reviewers are configured.",
+      required: true
+    }
+  ];
+}
+
+function createDefaultSourceBranch(terraformArtifactId: string): string {
+  return `sketchcatch/iac-${terraformArtifactId.slice(0, 8)}`;
 }
 
 export function createPostgresGitCicdHandoffRepository(
@@ -318,14 +502,28 @@ export async function createGitCicdHandoff(
 
   const sourceBranch = input.sourceBranch ?? null;
   const commitMessage = input.commitMessage ?? null;
-  const pullRequestTitle = input.pullRequestTitle ?? null;
+  const pullRequestDraft = createGitCicdPullRequestDraft({
+    repositoryOwner: input.repositoryOwner,
+    repositoryName: input.repositoryName,
+    terraformArtifact,
+    planSummary: input.planSummary ?? null,
+    title: input.pullRequestTitle ?? null
+  });
+  const pullRequestTitle = input.pullRequestTitle ?? pullRequestDraft.title;
+  const repositoryProvider = input.repositoryProvider ?? "internal";
   const providerResult = await provider.createHandoff({
     projectId: input.projectId,
     architectureId: input.architectureId,
     terraformArtifactId: input.terraformArtifactId,
+    terraformArtifact: {
+      id: terraformArtifact.id,
+      objectKey: terraformArtifact.objectKey,
+      fileName: terraformArtifact.fileName,
+      contentType: terraformArtifact.contentType
+    },
     sourceRepository: {
       id: input.sourceRepositoryId,
-      provider: "internal",
+      provider: repositoryProvider,
       owner: input.repositoryOwner,
       name: input.repositoryName,
       defaultBranch: input.targetBranch
@@ -333,8 +531,16 @@ export async function createGitCicdHandoff(
     sourceBranch,
     commitMessage,
     pullRequestTitle,
+    pullRequestDraft,
     userAcceptedChangeId: input.userAcceptedChangeId
   });
+
+  if (providerResult.repositoryProvider !== repositoryProvider) {
+    throw new GitCicdHandoffProviderMismatchError(
+      repositoryProvider,
+      providerResult.repositoryProvider
+    );
+  }
 
   return repository.createHandoff({
     id: generateId(),
@@ -346,7 +552,7 @@ export async function createGitCicdHandoff(
     repositoryOwner: input.repositoryOwner,
     repositoryName: input.repositoryName,
     targetBranch: input.targetBranch,
-    sourceBranch,
+    sourceBranch: providerResult.sourceBranch ?? sourceBranch,
     commitMessage,
     pullRequestTitle,
     pullRequestUrl: providerResult.pullRequestUrl,

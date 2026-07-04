@@ -1606,3 +1606,67 @@
 - Known risks:
   - 이번 확인은 정적 체크와 테스트 중심이며, 최신 툴바 위치는 브라우저 스크린샷으로 재확인하지 않았다.
   - 실제 AWS apply/destroy나 Git/CI/CD 실행은 수행하지 않았다.
+## 2026-07-05 - Issue #135 GitHub PR handoff v0
+
+- Goal: #134 GitCicdHandoff 계약/API 위에 Terraform artifact를 GitHub PR 생성 요청 payload로 넘기는 두 번째 vertical slice를 구현한다.
+- Completed:
+  - `SourceRepositoryProvider`에 `github` provider를 추가하고 additive enum migration `0022_git_cicd_github_provider.sql`을 만들었다.
+  - `CreateGitCicdHandoffRequest`가 `repositoryProvider`와 optional `planSummary`를 받을 수 있게 확장했다.
+  - Git provider abstraction과 `createGitHubGitCicdHandoffProvider`를 추가해 Terraform artifact metadata, source/target branch, commit message, PR title/body draft, review checklist를 fake provider payload로 전달한다.
+  - provider 결과 PR URL/source branch/commit SHA를 handoff record의 `pr_created` status, PR URL, source branch, status message에 반영한다.
+  - provider mismatch를 409로 막아 실제 GitHub provider가 주입되지 않은 상태에서 `github` 요청이 조용히 draft로 저장되지 않게 했다.
+  - `docs/sw/010_GitHub_PR_Handoff_v0_클론코딩가이드_sw.md`와 data model/docs index를 보강했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/routes/git-cicd-handoffs.test.ts src/db/schema-contract.test.ts` - passed
+  - `pnpm --filter @sketchcatch/api typecheck` - passed
+  - `pnpm --filter @sketchcatch/types typecheck` - passed
+  - `pnpm --filter @sketchcatch/api lint` - passed
+  - `pnpm lint` - passed
+  - `pnpm typecheck` - passed
+  - `pnpm build` - passed
+  - `pnpm harness:check` - passed
+  - `git diff --check` - passed
+- Known risks:
+  - 실제 GitHub API 호출, GitHub token 사용, pipeline polling/cache 연동, Runtime Cache 신규 작업, AWS apply/destroy는 수행하지 않았다.
+  - full `pnpm test`는 시간 범위상 실행하지 않았고, #135 targeted API tests와 lint/typecheck/build로 검증했다.
+## 2026-07-05 - Issue #130 Direct Deployment 신뢰도 UX
+
+- Goal: Direct Deployment apply 직전 승인된 Terraform artifact/tfplan/AWS account/region snapshot과 실제 apply 입력 불일치를 사용자에게 명확히 보여주고, API 상태/로그/UI/docs가 같은 의미를 말하도록 정리한다.
+- Completed:
+  - apply precondition 전용 `DeploymentApplyPreconditionError`를 추가하고 artifact id, plan id, artifact hash, tfplan hash, AWS account, AWS region mismatch 메시지에 승인값/current 값을 포함했다.
+  - apply job catch 흐름에서 precondition mismatch를 `failureStage: "approval"`로 저장하고 `Apply blocked before Terraform apply: ...` 로그를 남기도록 했다.
+  - UI action state가 완성된 approval snapshot이 있을 때만 apply/destroy 실행을 허용하도록 보강하고, Apply 확인 UI에 승인된 tfplan/artifact hash를 표시했다.
+  - `docs/sw/009_Direct_Deployment_신뢰도_UX_클론코딩가이드_sw.md`를 추가하고 docs/sw README에 연결했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/deployments/deployment-approval-service.test.ts src/deployments/deployment-apply-service.test.ts` - passed
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/deployment-actions.test.ts` - passed
+  - `pnpm lint` - passed
+  - `pnpm typecheck` - passed
+  - `pnpm build` - passed
+  - `pnpm harness:check` - passed after edits
+- Known risks:
+  - 실제 AWS apply/destroy는 실행하지 않았다.
+  - full `pnpm test`는 시간 범위상 실행하지 않았고, #130 관련 targeted tests와 lint/typecheck/build로 검증했다.
+## 2026-07-05 - Issue #133 Deployment Runtime Cache 상태/로그 커서 연결
+
+- Goal: #131 RuntimeCache abstraction과 #132 Redis adapter/fallback 정책 위에 Deployment 장기 실행 상태와 log stream cursor를 보조 cache 계층으로 연결한다.
+- Completed:
+  - `createRuntimeCachedDeploymentRepository`를 추가해 기존 `DeploymentRepository` mutation 성공 결과를 기준으로 `deployment.status` snapshot을 best-effort cache write하도록 했다.
+  - `createDeploymentLog`/`createDeploymentLogs`와 SSE log stream이 `deployment.log_cursor`를 갱신하도록 연결했다.
+  - log stream 시작 시 Runtime Cache cursor를 보조 힌트로 읽되, cache miss/failure 시 기존 RDS `deployment_logs` 조회 흐름을 유지했다.
+  - `buildApp`에서 `createRuntimeCacheFromEnv`를 구성해 production은 Redis/fallback 정책을 쓰고 test는 in-memory fallback을 유지하게 했다.
+  - `docs/sw/010_Deployment_Runtime_Cache_상태로그커서가이드_sw.md`를 추가하고 key namespace/TTL/reverse scan/pipeline polling convention을 문서화했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/routes/deployments.test.ts` - passed
+  - `pnpm --filter @sketchcatch/api lint` - passed
+  - `pnpm --filter @sketchcatch/api typecheck` - passed
+  - `pnpm lint` - passed
+  - `pnpm typecheck` - passed
+  - `pnpm build` - passed
+  - `git diff --check` - passed
+- Known risks:
+  - 실제 Redis 서버 의존 테스트는 수행하지 않았고 in-memory/fake cache로 검증했다.
+  - Runtime Cache는 원천 기록이 아니며 RDS/S3 조회가 계속 기준이다.

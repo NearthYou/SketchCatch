@@ -357,7 +357,7 @@ export type TerraformArtifact = ProjectAsset & {
   uploadStatus: "uploaded";
 };
 
-export type SourceRepositoryProvider = "internal";
+export type SourceRepositoryProvider = "internal" | "github";
 
 export type SourceRepository = {
   id: string;
@@ -369,6 +369,10 @@ export type SourceRepository = {
   repositoryUrl: string | null;
   createdAt: IsoDateTimeString;
   updatedAt: IsoDateTimeString;
+};
+
+export type SourceRepositoryListResponse = {
+  repositories: SourceRepository[];
 };
 
 export type GitCicdHandoffStatus =
@@ -406,12 +410,14 @@ export type CreateGitCicdHandoffRequest = {
   architectureId: string;
   terraformArtifactId: string;
   sourceRepositoryId: string;
+  repositoryProvider?: SourceRepositoryProvider | undefined;
   repositoryOwner: string;
   repositoryName: string;
   targetBranch: string;
   sourceBranch?: string | undefined;
   commitMessage?: string | undefined;
   pullRequestTitle?: string | undefined;
+  planSummary?: DeploymentPlanSummary | undefined;
   userAcceptedChangeId: string;
 };
 

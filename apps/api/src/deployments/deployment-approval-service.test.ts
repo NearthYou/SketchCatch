@@ -4,7 +4,8 @@ import assert from "node:assert/strict";
 import type { AwsConnection, DeploymentPlanSummary } from "@sketchcatch/types";
 import {
   approveDeploymentPlan,
-  assertDeploymentApplyPreconditions
+  assertDeploymentApplyPreconditions,
+  DeploymentApplyPreconditionError
 } from "./deployment-approval-service.js";
 import {
   DeploymentConflictError,
@@ -608,7 +609,16 @@ test("assertDeploymentApplyPreconditions rejects missing approval snapshot field
           currentTfplanHash: tfplanHash,
           currentAwsConnection: createVerifiedAwsConnection()
         }),
-      /Deployment approval is required before apply/,
+      (error) => {
+        assert.equal(error instanceof DeploymentApplyPreconditionError, true, String(field));
+        assert.match(
+          (error as Error).message,
+          new RegExp(`Deployment approval snapshot is incomplete before apply: missing ${String(field)}`),
+          String(field)
+        );
+
+        return true;
+      },
       String(field)
     );
   }
