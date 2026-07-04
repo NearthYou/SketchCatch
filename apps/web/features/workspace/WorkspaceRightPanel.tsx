@@ -424,6 +424,7 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
             diagramJson={context.diagram}
             hasUnsavedDeploymentBaseline={hasUnsavedDeploymentBaseline}
             onPrepareDeploymentArtifacts={prepareDeploymentArtifacts}
+            onReadTerraformSourceFiles={() => terraformPanelRef.current?.getTerraformFiles() ?? []}
             onValidateTerraformDiagnostics={validateTerraformForPreDeployment}
             projectId={projectId}
             projectName={projectName}

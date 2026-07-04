@@ -52,6 +52,7 @@ import {
   isWorkspaceAiResultStale
 } from "./workspace-ai-panel-state";
 import { addTerraformDiagnosticsToPreDeploymentAnalysis } from "./pre-deployment-diagnostics";
+import type { TerraformVirtualFile } from "./terraform-panel-utils";
 import type { AiRequestState } from "./WorkspaceAiPanelPieces";
 import type { SavedWorkspaceTerraformArtifact } from "./workspace-deployment-artifacts";
 import type { RequestState } from "./workspace-right-panel.types";
@@ -79,6 +80,7 @@ export function DeploymentPanel({
   diagramJson,
   hasUnsavedDeploymentBaseline,
   onPrepareDeploymentArtifacts,
+  onReadTerraformSourceFiles,
   onValidateTerraformDiagnostics,
   projectId,
   projectName
@@ -87,6 +89,7 @@ export function DeploymentPanel({
   readonly diagramJson: DiagramJson;
   readonly hasUnsavedDeploymentBaseline: boolean;
   readonly onPrepareDeploymentArtifacts: () => Promise<SavedWorkspaceTerraformArtifact>;
+  readonly onReadTerraformSourceFiles: () => readonly TerraformVirtualFile[];
   readonly onValidateTerraformDiagnostics: () => Promise<TerraformDiagnostic[]>;
   readonly projectId: string;
   readonly projectName: string;
@@ -457,7 +460,8 @@ export function DeploymentPanel({
       const currentTerraformDiagnostics = await onValidateTerraformDiagnostics();
       const result = addTerraformDiagnosticsToPreDeploymentAnalysis(
         await runAiPreDeploymentCheck(boardSnapshot.architectureJson),
-        currentTerraformDiagnostics
+        currentTerraformDiagnostics,
+        onReadTerraformSourceFiles()
       );
       setPreDeploymentAnalysis(result);
       setPreDeploymentFingerprint(boardSnapshot.fingerprint);

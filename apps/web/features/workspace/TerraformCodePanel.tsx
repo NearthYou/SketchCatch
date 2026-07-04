@@ -123,6 +123,7 @@ export type PreparedTerraformArtifactSource = {
 };
 
 export type TerraformCodePanelHandle = {
+  readonly getTerraformFiles: () => readonly TerraformVirtualFile[];
   readonly prepareTerraformArtifact: () => Promise<PreparedTerraformArtifactSource>;
   readonly validateCurrentTerraform: () => Promise<TerraformDiagnostic[]>;
 };
@@ -482,6 +483,7 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
   }, [combinedTerraformCode, hasTerraformCode, onDiagnosticsChange, requestState]);
 
   useImperativeHandle(ref, () => ({
+    getTerraformFiles: () => terraformFiles,
     prepareTerraformArtifact: async () => {
       if (!hasTerraformCode) {
         throw new Error("저장할 Terraform 코드가 없습니다.");
@@ -513,7 +515,7 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
       }
     },
     validateCurrentTerraform
-  }), [hasTerraformCode, requestState, syncTerraformCodeToDiagram, validateCurrentTerraform]);
+  }), [hasTerraformCode, requestState, syncTerraformCodeToDiagram, terraformFiles, validateCurrentTerraform]);
 
   useEffect(() => {
     if (latestExternalSaveRequestIdRef.current === externalSaveRequestId) {

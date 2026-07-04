@@ -3,10 +3,15 @@ import type {
   CheckFinding,
   TerraformDiagnostic
 } from "@sketchcatch/types";
+import {
+  findTerraformSourceLocationForAddress,
+  type TerraformVirtualFile
+} from "./terraform-panel-utils";
 
 export function addTerraformDiagnosticsToPreDeploymentAnalysis(
   analysis: AiPreDeploymentAnalysisResult,
-  diagnostics: readonly TerraformDiagnostic[]
+  diagnostics: readonly TerraformDiagnostic[],
+  sourceFiles: readonly TerraformVirtualFile[] = []
 ): AiPreDeploymentAnalysisResult {
   const actionableDiagnostics = diagnostics.filter((diagnostic) => diagnostic.severity !== "info");
 
@@ -14,7 +19,9 @@ export function addTerraformDiagnosticsToPreDeploymentAnalysis(
     return analysis;
   }
 
-  const diagnosticFindings = actionableDiagnostics.map(createTerraformDiagnosticFinding);
+  const diagnosticFindings = actionableDiagnostics.map((diagnostic, index) =>
+    createTerraformDiagnosticFinding(diagnostic, index, sourceFiles)
+  );
   const diagnosticFindingIds = diagnosticFindings.map((finding) => finding.id);
   const hasErrorDiagnostic = actionableDiagnostics.some(
     (diagnostic) => diagnostic.severity === "error"
@@ -54,19 +61,53 @@ export function addTerraformDiagnosticsToPreDeploymentAnalysis(
 
 function createTerraformDiagnosticFinding(
   diagnostic: TerraformDiagnostic,
-  index: number
+  index: number,
+  sourceFiles: readonly TerraformVirtualFile[]
 ): CheckFinding {
+  const sourceLocation = createTerraformDiagnosticSourceLocation(diagnostic, sourceFiles);
+
   return {
     id: `terraform-diagnostic-${index}-${diagnostic.code ?? diagnostic.severity}`,
     category: "configuration",
     severity: diagnostic.severity === "error" ? "high" : "medium",
     resourceId: diagnostic.resourceAddress ?? diagnostic.nodeId,
+    ...(sourceLocation ? { sourceLocation } : {}),
     title: diagnostic.line
       ? `Terraform 코드 ${diagnostic.line}번째 줄 확인 필요`
       : "Terraform 코드 확인 필요",
     description: diagnostic.message,
     recommendation: "Terraform 탭에서 해당 진단을 수정한 뒤 Validate 또는 저장을 다시 실행하세요."
   };
+}
+
+function createTerraformDiagnosticSourceLocation(
+  diagnostic: TerraformDiagnostic,
+  sourceFiles: readonly TerraformVirtualFile[]
+): CheckFinding["sourceLocation"] {
+  const blockLocation = findTerraformSourceLocationForAddress(sourceFiles, diagnostic.resourceAddress);
+
+  if (blockLocation) {
+    return sourceFiles.length === 1 && diagnostic.line
+      ? { ...blockLocation, line: diagnostic.line }
+      : blockLocation;
+  }
+
+  if (sourceFiles.length === 1 && diagnostic.line) {
+    const [sourceFile] = sourceFiles;
+
+    if (!sourceFile) {
+      return undefined;
+    }
+
+    return {
+      fileName: sourceFile.fileName,
+      line: diagnostic.line,
+      column: 1,
+      resourceAddress: diagnostic.resourceAddress
+    };
+  }
+
+  return undefined;
 }
 
 function createPreDeploymentSummaryWithTerraformDiagnostics(

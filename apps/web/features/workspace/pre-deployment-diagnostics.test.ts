@@ -18,15 +18,27 @@ test("addTerraformDiagnosticsToPreDeploymentAnalysis keeps clean analysis unchan
 });
 
 test("addTerraformDiagnosticsToPreDeploymentAnalysis turns terraform errors into failed preflight findings", () => {
-  const result = addTerraformDiagnosticsToPreDeploymentAnalysis(createAnalysis(), [
-    {
-      severity: "error",
-      message: "Unsupported argument",
-      code: "unsupported-argument",
-      line: 30,
-      resourceAddress: "aws_route_table.public"
-    }
-  ]);
+  const result = addTerraformDiagnosticsToPreDeploymentAnalysis(
+    createAnalysis(),
+    [
+      {
+        severity: "error",
+        message: "Unsupported argument",
+        code: "unsupported-argument",
+        line: 3,
+        resourceAddress: "aws_route_table.public"
+      }
+    ],
+    [
+      {
+        fileName: "network.tf",
+        code: `resource "aws_route_table" "public" {
+  vpc_id = aws_vpc.main.id
+  unsupported = true
+}`
+      }
+    ]
+  );
 
   assert.match(result.summary, /오류 1개/);
   assert.equal(result.checklist[0]?.id, "terraform-diagnostics-check");
@@ -37,7 +49,15 @@ test("addTerraformDiagnosticsToPreDeploymentAnalysis turns terraform errors into
   assert.equal(result.findings[0]?.category, "configuration");
   assert.equal(result.findings[0]?.severity, "high");
   assert.equal(result.findings[0]?.resourceId, "aws_route_table.public");
-  assert.equal(result.findings[0]?.title, "Terraform 코드 30번째 줄 확인 필요");
+  assert.equal(result.findings[0]?.title, "Terraform 코드 3번째 줄 확인 필요");
+  assert.deepEqual(result.findings[0]?.sourceLocation, {
+    fileName: "network.tf",
+    line: 3,
+    column: 1,
+    resourceAddress: "aws_route_table.public",
+    terraformBlockType: "resource",
+    terraformBlockName: "public"
+  });
   assert.equal(result.suggestions[0]?.findingId, result.findings[0]?.id);
   assert.equal(result.suggestions[0]?.action, "manual_review");
 });
