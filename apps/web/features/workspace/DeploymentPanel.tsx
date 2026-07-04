@@ -39,6 +39,7 @@ import {
   streamDeploymentLogs
 } from "./api";
 import {
+  canApproveDeploymentPlanWithAcknowledgements,
   getDefaultDeploymentPanelMode,
   getDeploymentActionState,
   getDeploymentLogMessageTokens,
@@ -156,22 +157,12 @@ export function DeploymentPanel({
     requestState !== "loading";
   const hasCurrentPlan = Boolean(selectedDeployment?.currentPlanArtifactId);
   const deploymentActions = getDeploymentActionState(selectedDeployment, requestState);
-  const requiredApprovalWarnings = useMemo(
-    () =>
-      selectedDeployment?.planSummary?.warnings.filter(
-        (warning) => warning.requiresAcknowledgement && !warning.blocksApproval
-      ) ?? [],
-    [selectedDeployment?.planSummary]
-  );
-  const acknowledgedWarningIdSet = useMemo(
-    () => new Set(acknowledgedWarningIds),
-    [acknowledgedWarningIds]
-  );
-  const hasUnacknowledgedWarnings = requiredApprovalWarnings.some(
-    (warning) => !acknowledgedWarningIdSet.has(warning.id)
-  );
   const canRunPlan = deploymentActions.canRunApplyPlan;
-  const canApprovePlan = deploymentActions.canApprovePlan && !hasUnacknowledgedWarnings;
+  const canApprovePlan = canApproveDeploymentPlanWithAcknowledgements(
+    selectedDeployment,
+    requestState,
+    acknowledgedWarningIds
+  );
   const canApply = deploymentActions.canApply;
   const canRunDestroyPlan = deploymentActions.canRunDestroyPlan;
   const canDestroy = deploymentActions.canDestroy;

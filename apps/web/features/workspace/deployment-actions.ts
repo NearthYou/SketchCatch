@@ -114,6 +114,45 @@ export function getDeploymentActionState(
   };
 }
 
+export function getRequiredDeploymentWarningAcknowledgementIds(
+  deployment: Deployment | null
+): string[] {
+  return (
+    deployment?.planSummary?.warnings
+      .filter((warning) => warning.requiresAcknowledgement && !warning.blocksApproval)
+      .map((warning) => warning.id) ?? []
+  );
+}
+
+export function hasBlockingDeploymentPlanWarning(deployment: Deployment | null): boolean {
+  return Boolean(deployment?.planSummary?.warnings.some((warning) => warning.blocksApproval));
+}
+
+export function hasAcknowledgedRequiredDeploymentWarnings(
+  deployment: Deployment | null,
+  acknowledgedWarningIds: readonly string[]
+): boolean {
+  const acknowledgedWarningIdSet = new Set(acknowledgedWarningIds);
+
+  return getRequiredDeploymentWarningAcknowledgementIds(deployment).every((warningId) =>
+    acknowledgedWarningIdSet.has(warningId)
+  );
+}
+
+export function canApproveDeploymentPlanWithAcknowledgements(
+  deployment: Deployment | null,
+  requestState: DeploymentRequestState,
+  acknowledgedWarningIds: readonly string[]
+): boolean {
+  const actionState = getDeploymentActionState(deployment, requestState);
+
+  return (
+    actionState.canApprovePlan &&
+    !hasBlockingDeploymentPlanWarning(deployment) &&
+    hasAcknowledgedRequiredDeploymentWarnings(deployment, acknowledgedWarningIds)
+  );
+}
+
 export function shouldAutoRefreshDeployment(deployment: Deployment | null): boolean {
   return deployment?.status === "RUNNING";
 }

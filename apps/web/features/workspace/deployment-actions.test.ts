@@ -2,10 +2,14 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Deployment } from "@sketchcatch/types";
 import {
+  canApproveDeploymentPlanWithAcknowledgements,
   getDefaultDeploymentPanelMode,
   getDeploymentActionState,
   getDeploymentLogMessageTokens,
   getDeploymentLogTone,
+  getRequiredDeploymentWarningAcknowledgementIds,
+  hasAcknowledgedRequiredDeploymentWarnings,
+  hasBlockingDeploymentPlanWarning,
   shouldAutoRefreshDeployment,
   shouldShowDeploymentInfoValue
 } from "./deployment-actions";
@@ -95,6 +99,77 @@ test("risk blocked deployments do not offer approval action", () => {
 
   assert.equal(state.shouldShowApprovePlanButton, false);
   assert.equal(state.canApprovePlan, false);
+});
+
+test("medium and low deployment warnings require explicit acknowledgement before approval", () => {
+  const deployment = createDeployment({
+    blockedBy: "missing_approval",
+    currentPlanArtifactId: "99999999-9999-4999-8999-999999999999",
+    currentPlanOperation: "apply",
+    isBlocked: true,
+    planSummary: createPlanSummaryWithWarnings([
+      {
+        id: "pre_deployment_check:medium-warning",
+        level: "medium",
+        code: "UNKNOWN_TERRAFORM_ACTION",
+        message: "Review generated subnet settings",
+        requiresAcknowledgement: true
+      },
+      {
+        id: "cost_risk:low-warning",
+        level: "low",
+        code: "UNSUPPORTED_RESOURCE",
+        message: "Fallback estimate was used",
+        requiresAcknowledgement: true
+      }
+    ])
+  });
+
+  assert.deepEqual(getRequiredDeploymentWarningAcknowledgementIds(deployment), [
+    "pre_deployment_check:medium-warning",
+    "cost_risk:low-warning"
+  ]);
+  assert.equal(hasAcknowledgedRequiredDeploymentWarnings(deployment, []), false);
+  assert.equal(
+    canApproveDeploymentPlanWithAcknowledgements(deployment, "idle", [
+      "pre_deployment_check:medium-warning"
+    ]),
+    false
+  );
+  assert.equal(
+    canApproveDeploymentPlanWithAcknowledgements(deployment, "idle", [
+      "pre_deployment_check:medium-warning",
+      "cost_risk:low-warning"
+    ]),
+    true
+  );
+});
+
+test("blocking deployment warnings keep approval disabled even when acknowledged", () => {
+  const deployment = createDeployment({
+    blockedBy: "missing_approval",
+    currentPlanArtifactId: "99999999-9999-4999-8999-999999999999",
+    currentPlanOperation: "apply",
+    isBlocked: true,
+    planSummary: createPlanSummaryWithWarnings([
+      {
+        id: "pre_deployment_check:high-warning",
+        level: "high",
+        code: "PUBLIC_SSH",
+        message: "Public SSH",
+        requiresAcknowledgement: false,
+        blocksApproval: true
+      }
+    ])
+  });
+
+  assert.equal(hasBlockingDeploymentPlanWarning(deployment), true);
+  assert.equal(
+    canApproveDeploymentPlanWithAcknowledgements(deployment, "idle", [
+      "pre_deployment_check:high-warning"
+    ]),
+    false
+  );
 });
 
 test("current plan without an operation does not fall back to a Terraform plan rerun", () => {
@@ -273,6 +348,30 @@ function createDeployment(
     createdAt: "2026-06-26T00:00:00.000Z",
     updatedAt: "2026-06-26T00:00:00.000Z",
     ...overrides
+  };
+}
+
+function createPlanSummaryWithWarnings(
+  warnings: Array<
+    Pick<
+      NonNullable<Deployment["planSummary"]>["warnings"][number],
+      "code" | "id" | "level" | "message" | "requiresAcknowledgement"
+    > &
+      Partial<NonNullable<Deployment["planSummary"]>["warnings"][number]>
+  >
+): NonNullable<Deployment["planSummary"]> {
+  return {
+    blocked: true,
+    createCount: 1,
+    deleteCount: 0,
+    replaceCount: 0,
+    updateCount: 0,
+    warnings: warnings.map((warning) => ({
+      blocksApproval: false,
+      category: "configuration",
+      source: "pre_deployment_check",
+      ...warning
+    }))
   };
 }
 
