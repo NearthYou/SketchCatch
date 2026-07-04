@@ -83,6 +83,8 @@ type WorkspaceAiChatMessage = {
 
 const MAX_CHAT_MESSAGES = 80;
 const STORAGE_KEY_PREFIX = "sketchcatch.workspaceAiChat";
+const NO_RESOURCE_ADDITION_SUGGESTION = "추가 안 함";
+const NO_RESOURCE_ADDITION_MESSAGE = "추가하지 않고 현재 다이어그램을 유지합니다.";
 const DESIGN_SIMULATION_DEFAULTS = {
   budgetLevel: "normal",
   trafficLevel: "normal"
@@ -337,6 +339,16 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
         const originalInstruction = patchClarification.intent.instruction;
 
         setPatchClarification(null);
+
+        if (isNoResourceAdditionSuggestion(selectedSuggestion)) {
+          setDraftState("idle");
+          setDraftErrorMessage("");
+          setPatchPreviewModel(null);
+          context.setPreviewDiagram(null);
+          appendAssistantMessage("status", NO_RESOURCE_ADDITION_MESSAGE);
+          return;
+        }
+
         await createPatchPreviewFromPrompt(
           isSkipConnectionSuggestion(selectedSuggestion)
             ? originalInstruction
@@ -1064,6 +1076,13 @@ function isSkipConnectionSuggestion(suggestion: string): boolean {
   return normalizePatchClarificationAnswer(suggestion) === normalizePatchClarificationAnswer("연결하지 않기");
 }
 
+function isNoResourceAdditionSuggestion(suggestion: string): boolean {
+  return (
+    normalizePatchClarificationAnswer(suggestion) ===
+    normalizePatchClarificationAnswer(NO_RESOURCE_ADDITION_SUGGESTION)
+  );
+}
+
 function getPatchClarificationSuggestions(
   clarification: ArchitecturePatchClarification
 ): readonly string[] {
@@ -1088,6 +1107,10 @@ function formatPatchCandidateSuggestion(candidate: ArchitecturePatchClarificatio
 }
 
 function createPatchPreviewSummary(preview: ArchitecturePatchPreview): string {
+  if (preview.changes.length === 0) {
+    return NO_RESOURCE_ADDITION_MESSAGE;
+  }
+
   const changeSummary =
     preview.changes.length === 1
       ? preview.changes[0]?.summary

@@ -160,8 +160,31 @@ const RESOURCE_TYPE_PATCH_SUGGESTIONS = [
   "서버",
   "보안 설정",
   "네트워크 공간",
-  "API 입구"
+  "API 입구",
+  "추가 안 함"
 ] as const;
+
+const NO_RESOURCE_ADDITION_KEYWORDS = [
+  "추가 안 함",
+  "추가 안함",
+  "추가하지 않",
+  "추가하지마",
+  "추가하지 마",
+  "아무것도 추가하지",
+  "더 추가 안",
+  "더 넣지",
+  "넣지 마",
+  "넣지마",
+  "필요 없어",
+  "필요없어",
+  "no additional",
+  "do not add",
+  "don't add",
+  "nothing else",
+  "no more"
+] as const;
+
+const NO_RESOURCE_ADDITION_ALTERNATIVE_KEYWORDS = ["말고", "대신", "but add", "instead"] as const;
 
 const ADD_RESOURCE_PURPOSE_SUGGESTIONS: Partial<Record<ResourceType, readonly string[]>> = {
   RDS: ["로그인/회원 데이터를 저장할래", "주문이나 예약 데이터를 저장할래", "기존 서버가 읽고 쓰는 서비스 DB로 쓸래"],
@@ -219,6 +242,11 @@ export function createArchitecturePatchPreview(
   input: CreateArchitecturePatchPreviewInput
 ): ArchitecturePatchPreviewResponse {
   const providerMetadata = createPatchFallbackMetadata(input.instruction);
+
+  if (isNoResourceAdditionInstruction(input.instruction)) {
+    return createNoResourceAdditionPreview(input, providerMetadata);
+  }
+
   const intent = resolvePatchIntent(input);
   const selectedTargetNode =
     intent.requestedAction === "add_resource"
@@ -251,6 +279,25 @@ export function createArchitecturePatchPreview(
     baseArchitectureJson: input.architectureJson,
     proposedArchitectureJson,
     changes,
+    requiresUserAcceptance: true,
+    userAcceptedChange: null,
+    providerMetadata
+  };
+}
+
+function createNoResourceAdditionPreview(
+  input: CreateArchitecturePatchPreviewInput,
+  providerMetadata: AiProviderMetadata
+): ArchitecturePatchPreview {
+  return {
+    status: "preview",
+    intent: {
+      instruction: input.instruction,
+      requestedAction: "manual_review"
+    },
+    baseArchitectureJson: input.architectureJson,
+    proposedArchitectureJson: input.architectureJson,
+    changes: [],
     requiresUserAcceptance: true,
     userAcceptedChange: null,
     providerMetadata
@@ -319,6 +366,15 @@ function resolvePatchActionFromNaturalLanguage(normalizedInstruction: string): A
   }
 
   return "manual_review";
+}
+
+function isNoResourceAdditionInstruction(instruction: string): boolean {
+  const normalizedInstruction = normalizeSearchText(instruction);
+
+  return (
+    includesAnyPhrase(normalizedInstruction, NO_RESOURCE_ADDITION_KEYWORDS) &&
+    !includesAnyPhrase(normalizedInstruction, NO_RESOURCE_ADDITION_ALTERNATIVE_KEYWORDS)
+  );
 }
 
 function resolveReplacementPatchIntent(normalizedInstruction: string): ReplacementPatchIntent | undefined {

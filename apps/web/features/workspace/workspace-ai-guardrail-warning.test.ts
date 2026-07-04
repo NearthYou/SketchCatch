@@ -109,6 +109,13 @@ test("workspace AI clarification supports multi-select suggestion chips", () => 
   assert.match(stylesSource, /\.aiChatSelectionSubmitButton\s*{/);
 });
 
+test("workspace AI patch clarification can decline optional resource additions", () => {
+  assert.match(workspaceAiChatDockSource, /NO_RESOURCE_ADDITION_SUGGESTION/);
+  assert.match(workspaceAiChatDockSource, /isNoResourceAdditionSuggestion/);
+  assert.match(workspaceAiChatDockSource, /NO_RESOURCE_ADDITION_MESSAGE/);
+  assert.match(workspaceAiChatDockSource, /setPatchPreviewModel\(null\)/);
+});
+
 function readWorkspaceFile(fileName: string): string {
   return readFileSync(fileURLToPath(new URL(fileName, import.meta.url)), "utf8");
 }

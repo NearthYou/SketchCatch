@@ -272,8 +272,28 @@ test("createArchitecturePatchPreview asks for the resource type when add request
     "서버",
     "보안 설정",
     "네트워크 공간",
-    "API 입구"
+    "API 입구",
+    "추가 안 함"
   ]);
+});
+
+test("createArchitecturePatchPreview keeps the diagram unchanged when no resource addition is selected", () => {
+  const architectureJson: ArchitectureJson = {
+    nodes: [makeNode({ id: "app-server", type: "EC2", label: "App Server" })],
+    edges: []
+  };
+
+  for (const instruction of ["리소스를 하나 추가해줘\n추가 안 함", "아무것도 추가하지 마"]) {
+    const response = createArchitecturePatchPreview({
+      architectureJson,
+      instruction
+    });
+
+    assert.equal(response.status, "preview", instruction);
+    assert.equal(response.intent.requestedAction, "manual_review", instruction);
+    assert.deepEqual(response.changes, [], instruction);
+    assert.deepEqual(response.proposedArchitectureJson, architectureJson, instruction);
+  }
 });
 
 test("createArchitecturePatchPreview resolves label-mentioned targets before asking a clarification", () => {
