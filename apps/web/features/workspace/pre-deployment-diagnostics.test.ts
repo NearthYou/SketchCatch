@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { AiPreDeploymentAnalysisResult, TerraformDiagnostic } from "@sketchcatch/types";
+import type { AiPreDeploymentAnalysisResult, ArchitectureJson, TerraformDiagnostic } from "@sketchcatch/types";
 import { addTerraformDiagnosticsToPreDeploymentAnalysis } from "./pre-deployment-diagnostics";
 
 test("addTerraformDiagnosticsToPreDeploymentAnalysis keeps clean analysis unchanged", () => {
@@ -79,7 +79,91 @@ test("addTerraformDiagnosticsToPreDeploymentAnalysis keeps warning-only diagnost
   assert.equal(result.findings[0]?.resourceId, "s3-bucket");
 });
 
-function createAnalysis(): AiPreDeploymentAnalysisResult {
+test("addTerraformDiagnosticsToPreDeploymentAnalysis attaches Terraform source locations to security findings", () => {
+  const result = addTerraformDiagnosticsToPreDeploymentAnalysis(
+    createAnalysis({
+      findings: [
+        {
+          id: "security-open-ssh-sg-app",
+          category: "security",
+          severity: "high",
+          resourceId: "sg-app",
+          title: "SSH가 전체 인터넷에 열려 있습니다",
+          description: "22번 포트가 0.0.0.0/0으로 열려 있습니다.",
+          recommendation: "SSH 접근 대상을 제한하세요."
+        }
+      ]
+    }),
+    [],
+    [
+      {
+        fileName: "main.tf",
+        code: `resource "aws_vpc" "main" {
+  cidr_block = "10.0.0.0/16"
+}
+
+resource "aws_security_group" "sg_app" {
+  name = "sg-app"
+}`
+      }
+    ],
+    createArchitectureJson()
+  );
+
+  assert.deepEqual(result.findings[0]?.sourceLocation, {
+    fileName: "main.tf",
+    line: 5,
+    column: 1,
+    resourceAddress: "aws_security_group.sg_app",
+    terraformBlockType: "resource",
+    terraformBlockName: "sg_app"
+  });
+});
+
+test("addTerraformDiagnosticsToPreDeploymentAnalysis falls back to finding type when resource id mapping is missing", () => {
+  const result = addTerraformDiagnosticsToPreDeploymentAnalysis(
+    createAnalysis({
+      findings: [
+        {
+          id: "security-open-ssh-unknown",
+          category: "security",
+          severity: "high",
+          resourceId: "unknown-sg-id",
+          title: "SSH가 전체 인터넷에 열려 있습니다",
+          description: "22번 포트가 0.0.0.0/0으로 열려 있습니다.",
+          recommendation: "Security Group ingress를 제한하세요."
+        }
+      ]
+    }),
+    [],
+    [
+      {
+        fileName: "main.tf",
+        code: `resource "aws_vpc" "main" {
+  cidr_block = "10.0.0.0/16"
+}
+
+resource "aws_security_group" "sg_app" {
+  name = "sg-app"
+}`
+      }
+    ],
+    { nodes: [], edges: [] }
+  );
+
+  assert.deepEqual(result.findings[0]?.sourceLocation, {
+    fileName: "main.tf",
+    line: 5,
+    column: 1,
+    resourceAddress: "aws_security_group.sg_app",
+    terraformBlockType: "resource",
+    terraformBlockName: "sg_app"
+  });
+});
+
+function createAnalysis(
+  overrides: Partial<AiPreDeploymentAnalysisResult> = {}
+): AiPreDeploymentAnalysisResult {
   return {
     summary: "배포 전 검사에서 문제가 발견되지 않았습니다.",
     totalMonthlyEstimate: {
@@ -90,6 +174,26 @@ function createAnalysis(): AiPreDeploymentAnalysisResult {
     resourceCostEstimates: [],
     findings: [],
     checklist: [],
-    suggestions: []
+    suggestions: [],
+    ...overrides
+  };
+}
+
+function createArchitectureJson(): ArchitectureJson {
+  return {
+    nodes: [
+      {
+        id: "sg-app",
+        type: "SECURITY_GROUP",
+        label: "App Security Group",
+        positionX: 0,
+        positionY: 0,
+        config: {
+          terraformResourceName: "sg_app",
+          terraformResourceType: "aws_security_group"
+        }
+      }
+    ],
+    edges: []
   };
 }

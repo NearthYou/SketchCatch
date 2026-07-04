@@ -456,7 +456,8 @@ export function DeploymentPanel({
       const result = addTerraformDiagnosticsToPreDeploymentAnalysis(
         await runAiPreDeploymentCheck(boardSnapshot.architectureJson),
         currentTerraformDiagnostics,
-        onReadTerraformSourceFiles()
+        onReadTerraformSourceFiles(),
+        boardSnapshot.architectureJson
       );
       setPreDeploymentAnalysis(result);
       setPreDeploymentFingerprint(boardSnapshot.fingerprint);

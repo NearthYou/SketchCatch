@@ -255,6 +255,7 @@ test("pre-deployment check is owned by the deployment tab", () => {
 
   assert.match(deploymentPanelSource, /runAiPreDeploymentCheck/);
   assert.match(deploymentPanelSource, /addTerraformDiagnosticsToPreDeploymentAnalysis/);
+  assert.match(deploymentPanelSource, /onReadTerraformSourceFiles\(\),\s*boardSnapshot\.architectureJson/s);
   assert.match(deploymentPanelSource, /onValidateTerraformDiagnostics/);
   assert.match(deploymentPanelSource, /await onValidateTerraformDiagnostics\(\)/);
   assert.match(deploymentPanelSource, /currentTerraformDiagnostics/);
