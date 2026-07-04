@@ -1,4 +1,5 @@
 export type WorkspaceAiChatMode = "draft" | "patch";
+export type WorkspaceAiChatAction = "draft" | "draft_clarification" | "patch";
 
 export function resolveWorkspaceAiChatMode(input: {
   readonly boardHasResources: boolean;
@@ -9,6 +10,20 @@ export function resolveWorkspaceAiChatMode(input: {
   }
 
   return isFreshArchitectureRequest(input.prompt) ? "draft" : "patch";
+}
+
+export function resolveWorkspaceAiChatAction(input: {
+  readonly boardHasResources: boolean;
+  readonly needsDraftClarification: boolean;
+  readonly prompt: string;
+}): WorkspaceAiChatAction {
+  const mode = resolveWorkspaceAiChatMode(input);
+
+  if (mode === "patch") {
+    return "patch";
+  }
+
+  return input.needsDraftClarification ? "draft_clarification" : "draft";
 }
 
 function isFreshArchitectureRequest(prompt: string): boolean {

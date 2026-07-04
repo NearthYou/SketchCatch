@@ -49,7 +49,7 @@ import {
 import {
   promptGuideExamples
 } from "./workspace-ai-panel-options";
-import { resolveWorkspaceAiChatMode } from "./workspace-ai-chat-routing";
+import { resolveWorkspaceAiChatAction } from "./workspace-ai-chat-routing";
 import {
   createWorkspaceAiPatchPreviewModel,
   type WorkspaceAiPatchPreviewModel
@@ -197,21 +197,22 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
       return;
     }
 
-    if (needsArchitectureClarification(trimmedPrompt)) {
+    const chatAction = resolveWorkspaceAiChatAction({
+      boardHasResources: boardSnapshot.hasResources,
+      needsDraftClarification: needsArchitectureClarification(trimmedPrompt),
+      prompt: trimmedPrompt
+    });
+
+    if (chatAction === "patch") {
+      await createPatchPreviewFromPrompt(trimmedPrompt);
+      return;
+    }
+
+    if (chatAction === "draft_clarification") {
       const session = createArchitectureClarificationSession(trimmedPrompt);
 
       setClarificationSession(session);
       appendClarificationQuestion(session);
-      return;
-    }
-
-    const chatMode = resolveWorkspaceAiChatMode({
-      boardHasResources: boardSnapshot.hasResources,
-      prompt: trimmedPrompt
-    });
-
-    if (chatMode === "patch") {
-      await createPatchPreviewFromPrompt(trimmedPrompt);
       return;
     }
 

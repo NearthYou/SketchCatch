@@ -1720,3 +1720,22 @@
   - The broad `pnpm build` temporarily touched `apps/web/next-env.d.ts`; the generated content change was restored and the final dirty list is scoped to #128 files.
 - Next best action:
   - Parent agent should review the focused diff and open the PR. Worker 1-1 should not expand into issue 1-2 or 1-3 from this branch.
+
+### 2026-07-04 - AI diagram natural-language patch routing audit
+
+- Goal: 자연어 기반 빈 보드 생성, 기존 다이어그램 수정 미리보기, 후보 선택, 삭제 ghost 표시 요구사항이 구현 흐름에 맞는지 재확인한다.
+- Completed:
+  - 기존 보드에서는 생성용 clarification 조건에 걸려도 먼저 patch preview로 라우팅되도록 `resolveWorkspaceAiChatAction`을 추가했다.
+  - 빈 보드 또는 명시적 새로 만들기 요청에서는 기존 draft/clarification 흐름을 유지했다.
+  - 기존 보드 자연어 요청이 patch로 유지되는 회귀 테스트를 추가했다.
+- Verification run:
+  - `.\node_modules\.bin\tsx.CMD --test features\workspace\workspace-ai-chat-routing.test.ts features\workspace\workspace-ai-patch-preview.test.ts features\diagram-editor\flow-mappers.test.ts features\workspace\api.test.ts` - passed
+  - `.\node_modules\.bin\tsx.CMD --test src\services\aiArchitecturePatchPreview.test.ts src\routes\aiAwsProviders.test.ts` in `apps/api` - passed
+  - `..\..\node_modules\.bin\tsc.CMD --noEmit -p tsconfig.json` in `apps/web` - passed
+  - `pnpm harness:check` - passed
+  - `pnpm lint` - passed
+  - `pnpm typecheck` - passed
+  - `pnpm build` - passed
+- Known risks:
+  - Browser visual smoke was not captured in this audit turn; verification is unit/type/build based.
+  - `pnpm build` regenerated `apps/web/next-env.d.ts`; the generated diff was restored.
