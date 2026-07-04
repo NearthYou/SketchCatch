@@ -1755,3 +1755,66 @@
   - `pnpm build` - passed
 - Known risks:
   - Browser visual smoke was not captured; verification is focused tests plus lint/typecheck/build.
+
+### 2026-07-04 - Korean database patch request recognition fix
+
+- Goal: `여기에 데이터베이스 하나 추가해줘` 요청이 수동 검토로 빠지지 않고 RDS 추가 미리보기로 생성되게 한다.
+- Completed:
+  - RDS 리소스 키워드에 `데이터베이스`, `디비`, `데이터 저장소` 같은 한국어 표현을 추가했다.
+  - 자연어 패치 동작 판별을 한국어 동사 후보 목록 기반으로 보강했다.
+  - 한국어 데이터베이스 추가 요청 회귀 테스트를 추가했다.
+- Verification run:
+  - `.\node_modules\.bin\tsx.CMD --test src\services\aiArchitecturePatchPreview.test.ts` in `apps/api` - passed
+  - `..\..\node_modules\.bin\tsc.CMD --noEmit -p tsconfig.json` in `apps/api` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm harness:check` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm lint` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm typecheck` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm build` - passed
+  - `git diff --check` - passed
+- Known risks:
+  - Browser visual smoke was not captured; verification is service regression test plus lint/typecheck/build.
+  - Local `pnpm` was not on PATH, so required pnpm checks were executed through `npm exec --package=pnpm@11.8.0 -- pnpm ...`.
+
+### 2026-07-04 - Broad natural-language architecture patch coverage
+
+- Goal: 단일 `데이터베이스 추가` 케이스가 아니라 지원 ResourceType 전반의 추가/삭제/수정 자연어 요청이 같은 패치 미리보기 엔진으로 들어가게 한다.
+- Completed:
+  - 지원 리소스별 한국어/영어 alias 카탈로그를 넓히고, 더 구체적인 alias가 우선되도록 매칭 점수를 적용했다.
+  - 삭제/수정/추가 동작 alias를 공통 목록으로 분리해 한국어 동사 변형을 넓혔다.
+  - 라벨/id로 특정한 기존 리소스를 후보 질문 전에 우선 선택하도록 대상 해석을 보강했다.
+  - 한국어 EC2 instance type 수정 요청도 구조화된 `instanceType` 변경으로 반영되게 했다.
+- Verification run:
+  - `.\node_modules\.bin\tsx.CMD --test src\services\aiArchitecturePatchPreview.test.ts` in `apps/api` - passed
+  - `$env:S3_BUCKET_NAME='sketchcatch-test-bucket'; npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api test` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api lint` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api typecheck` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm harness:check` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm lint` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm typecheck` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm build` - passed
+  - `git diff --check` - passed
+- Known risks:
+  - Browser visual smoke was not captured; verification is API regression, full API test, lint/typecheck/build.
+  - `next build` regenerated `apps/web/next-env.d.ts`; the generated diff was restored.
+
+### 2026-07-04 - Natural-language replacement patch coverage
+
+- Goal: 자연어 수정 요청 중 `A를 B로 교체`를 단순 수정으로 뭉개지 않고 삭제+추가 미리보기 패치로 표현한다.
+- Completed:
+  - 교체 문장을 source/replacement segment로 분리하는 내부 파서를 추가했다.
+  - 교체 요청은 shared action을 늘리지 않고 `remove_resource` + `add_resource` change 조합으로 반환하게 했다.
+  - source type이 없어도 라벨/id로 기존 대상이 특정되면 교체되도록 했다.
+  - 교체 대상이 여러 개면 “어떤 리소스를 교체할까요?” 후보 선택으로 빠지게 했다.
+- Verification run:
+  - `.\node_modules\.bin\tsx.CMD --test src\services\aiArchitecturePatchPreview.test.ts` in `apps/api` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api lint` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api typecheck` - passed
+  - `$env:S3_BUCKET_NAME='sketchcatch-test-bucket'; npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api test` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm harness:check` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm lint` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm typecheck` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm build` - passed
+  - `git diff --check` - passed
+- Known risks:
+  - Browser visual smoke was not captured; verification is API regression, full API test, lint/typecheck/build.
+  - `next build` regenerated `apps/web/next-env.d.ts`; the generated diff was restored.
