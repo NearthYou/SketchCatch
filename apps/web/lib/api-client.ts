@@ -28,6 +28,15 @@ const DEFAULT_API_ERROR_MESSAGES = {
 const API_MESSAGE_TRANSLATIONS: Partial<Record<string, string>> = {
   "API request failed": "요청 처리 중 오류가 발생했습니다.",
   "Authentication required": "인증이 필요합니다.",
+  "AWS account ID must be 12 digits": "AWS Account ID는 12자리 숫자여야 합니다.",
+  "AWS account is already connected": "이미 연결된 AWS Account입니다.",
+  "AWS Role account mismatch": "입력한 Account ID와 AWS에서 확인된 Account가 다릅니다.",
+  "AWS Role connection test failed":
+    "AWS Role 연결 검증에 실패했습니다. CloudFormation Stack 생성 완료 후 잠시 기다렸다가 다시 시도하고, Account ID와 Trust Policy를 확인해주세요.",
+  "AWS Role external ID requirement could not be verified":
+    "AWS Role의 External ID 조건을 확인하지 못했습니다. CloudFormation Stack의 Trust Policy에 SketchCatch External ID 조건이 있는지 확인해주세요.",
+  "AWS Role trust policy must require external ID":
+    "AWS Role Trust Policy에 SketchCatch External ID 조건이 필요합니다.",
   "Email already exists": "이미 사용 중인 이메일입니다.",
   "Refresh token is invalid or expired": "로그인 세션이 만료되었습니다. 다시 로그인해주세요.",
   "Route not found": "요청한 API 경로를 찾을 수 없습니다.",
