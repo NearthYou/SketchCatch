@@ -22,17 +22,24 @@ test("generic website prompts start a beginner-friendly clarification flow", () 
 
   assert.ok(question);
   assert.match(question.question, /어떤 웹사이트/);
-  assert.deepEqual(
-    question.options.map((option) => option.label),
-    ["소개/랜딩 페이지", "문의/예약/신청을 받는 사이트", "로그인/마이페이지가 있는 서비스"]
-  );
+  const labels = question.options.map((option) => option.label);
+
+  assert.equal(labels.length, 6);
+  assert.deepEqual(labels, [
+    "소개/랜딩 페이지",
+    "블로그/콘텐츠 사이트",
+    "문의/예약/신청을 받는 사이트",
+    "로그인/마이페이지가 있는 서비스",
+    "상품 판매/결제 서비스",
+    "운영자 관리 화면"
+  ]);
   assert.equal(question.selectionMode, "multiple");
   assert.ok(question.options.some((option) => option.recommended));
 
   const message = createArchitectureClarificationQuestionMessage(question);
 
   assert.match(message.content, /여러 개 선택 가능/);
-  assert.equal(message.suggestions.length, 3);
+  assert.equal(message.suggestions.length, 6);
   assert.equal(message.selectionMode, "multiple");
   assert.doesNotMatch(message.content, /S3|CloudFront|EC2|버킷|보안 그룹/);
 });
@@ -48,10 +55,14 @@ test("clarification keeps visitor actions separate from multi-select site purpos
   assert.ok(question);
   assert.match(question.question, /방문자/);
   assert.equal(question.selectionMode, "multiple");
-  assert.deepEqual(
-    question.options.map((option) => option.label),
-    ["글/이미지 보기만 하면 돼요", "파일이나 이미지를 올려야 해요", "게시글/회원 정보를 저장해야 해요"]
-  );
+  assert.deepEqual(question.options.map((option) => option.label), [
+    "글/이미지 보기만 하면 돼요",
+    "검색하거나 목록을 필터링해야 해요",
+    "파일이나 이미지를 올려야 해요",
+    "게시글/회원 정보를 저장해야 해요",
+    "주문/결제가 필요해요",
+    "운영자가 신청/주문을 확인해야 해요"
+  ]);
 });
 
 test("clarification records multiple selected options from one answer", () => {
@@ -123,4 +134,28 @@ test("booking and application services include account context without duplicati
   assert.match(draftRequest.prompt, /문의\/예약\/신청/);
   assert.match(draftRequest.prompt, /로그인\/마이페이지/);
   assert.match(draftRequest.prompt, /사용자별/);
+});
+
+test("commerce and admin choices add matching implementation context", () => {
+  const started = createArchitectureClarificationSession("웹사이트 하나 배포하고 싶어");
+  const purposeAnswered = answerArchitectureClarification(
+    started,
+    "상품 판매/결제 서비스, 운영자 관리 화면"
+  );
+  const actionAnswered = answerArchitectureClarification(
+    purposeAnswered,
+    "검색하거나 목록을 필터링해야 해요, 주문/결제가 필요해요, 운영자가 신청/주문을 확인해야 해요"
+  );
+  const completed = answerArchitectureClarification(actionAnswered, "운영자가 장애를 빨리 알아야 해요");
+  const summary = createArchitectureClarificationSummaryMessage(completed);
+  const draftRequest = createClarifiedDraftRequest(completed);
+
+  assert.match(summary.content, /상품 판매\/결제 서비스, 운영자 관리 화면/);
+  assert.match(summary.content, /검색과 목록 필터/);
+  assert.match(summary.content, /결제와 주문 흐름/);
+  assert.match(summary.content, /운영자가 확인하는 관리 화면/);
+  assert.match(summary.content, /운영 상태를 확인하는 알림/);
+  assert.match(draftRequest.prompt, /상품 판매/);
+  assert.match(draftRequest.prompt, /주문\/결제/);
+  assert.match(draftRequest.prompt, /운영자/);
 });

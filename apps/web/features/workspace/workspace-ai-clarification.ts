@@ -5,14 +5,21 @@ type ClarificationSelectionMode = "single" | "multiple";
 
 type ClarificationAnswerValue =
   | "landing"
+  | "contentSite"
   | "form"
   | "memberService"
+  | "commerceService"
+  | "adminConsole"
   | "readOnly"
+  | "searchFilter"
   | "uploadFiles"
   | "storeData"
+  | "ordersPayments"
+  | "adminReview"
   | "lowCost"
   | "protectData"
-  | "growthReady";
+  | "growthReady"
+  | "fastTroubleshoot";
 
 type ArchitectureClarificationOption = {
   readonly description: string;
@@ -56,10 +63,21 @@ const CONCRETE_WEBSITE_KEYWORDS = [
   "소개",
   "포트폴리오",
   "회사",
+  "블로그",
+  "콘텐츠",
   "문의",
   "예약",
   "신청",
+  "상품",
+  "판매",
+  "결제",
+  "주문",
+  "관리자",
+  "운영자",
+  "관리 화면",
   "게시판",
+  "검색",
+  "필터",
   "마이페이지",
   "로그인",
   "회원",
@@ -100,6 +118,11 @@ const CLARIFICATION_QUESTIONS: readonly ArchitectureClarificationQuestion[] = [
         description: "회사, 프로젝트, 포트폴리오처럼 화면을 보여주는 용도입니다. 가장 단순하고 비용을 낮게 시작하기 좋습니다."
       },
       {
+        value: "contentSite",
+        label: "블로그/콘텐츠 사이트",
+        description: "글, 소식, 이미지 자료를 꾸준히 올리고 방문자가 찾아보는 사이트입니다. 검색이나 목록 기능과 함께 고를 수 있습니다."
+      },
+      {
         value: "form",
         label: "문의/예약/신청을 받는 사이트",
         description: "방문자가 문의, 예약, 신청 내용을 남기고 운영자가 확인합니다. 로그인/마이페이지가 필요하면 함께 선택해도 됩니다."
@@ -108,6 +131,16 @@ const CLARIFICATION_QUESTIONS: readonly ArchitectureClarificationQuestion[] = [
         value: "memberService",
         label: "로그인/마이페이지가 있는 서비스",
         description: "사용자별 정보를 다루고 본인이 다시 확인하는 흐름입니다. 예약/신청과 함께 선택할 수 있습니다."
+      },
+      {
+        value: "commerceService",
+        label: "상품 판매/결제 서비스",
+        description: "상품을 보여주고 주문이나 결제 흐름이 필요합니다. 사용자 정보와 주문 기록을 함께 저장할 수 있습니다."
+      },
+      {
+        value: "adminConsole",
+        label: "운영자 관리 화면",
+        description: "운영자가 신청, 주문, 게시글, 회원 상태를 확인하고 처리하는 화면입니다. 공개 화면과 함께 만들 수 있습니다."
       }
     ]
   },
@@ -124,6 +157,11 @@ const CLARIFICATION_QUESTIONS: readonly ArchitectureClarificationQuestion[] = [
         description: "공개 화면 중심입니다. 빠르고 저렴하게 시작할 수 있지만, 방문자 입력이나 로그인 기능은 포함하지 않습니다."
       },
       {
+        value: "searchFilter",
+        label: "검색하거나 목록을 필터링해야 해요",
+        description: "방문자가 글, 상품, 신청 목록을 조건에 맞게 찾아볼 수 있어야 합니다. 저장된 데이터와 조회 처리가 필요합니다."
+      },
+      {
         value: "uploadFiles",
         label: "파일이나 이미지를 올려야 해요",
         description: "방문자가 올린 파일을 보관하고 접근을 조절해야 합니다. 저장 공간과 서버 처리가 함께 필요합니다."
@@ -132,6 +170,16 @@ const CLARIFICATION_QUESTIONS: readonly ArchitectureClarificationQuestion[] = [
         value: "storeData",
         label: "게시글/회원 정보를 저장해야 해요",
         description: "사용자별 정보나 글 내용을 저장하고 다시 확인해야 합니다. 비용은 조금 늘지만 서비스 기능을 만들 때 필요합니다."
+      },
+      {
+        value: "ordersPayments",
+        label: "주문/결제가 필요해요",
+        description: "방문자가 상품을 고르고 주문 상태를 남겨야 합니다. 결제 자체는 외부 결제 서비스와 연결하는 전제로 초안을 잡습니다."
+      },
+      {
+        value: "adminReview",
+        label: "운영자가 신청/주문을 확인해야 해요",
+        description: "운영자가 방문자 입력이나 주문 상태를 확인하고 처리합니다. 운영자용 화면과 접근 제한이 필요합니다."
       }
     ]
   },
@@ -155,6 +203,11 @@ const CLARIFICATION_QUESTIONS: readonly ArchitectureClarificationQuestion[] = [
         value: "growthReady",
         label: "홍보/방문자 증가 대비",
         description: "응답 속도와 운영 확인을 더 챙깁니다. 가장 단순한 구성보다 비용이 늘 수 있지만 갑작스러운 방문자 증가에 낫습니다."
+      },
+      {
+        value: "fastTroubleshoot",
+        label: "운영자가 장애를 빨리 알아야 해요",
+        description: "문제가 생겼을 때 기록과 알림을 더 빨리 확인합니다. 운영 확인 범위가 늘어 설정과 비용이 조금 늘 수 있습니다."
       }
     ]
   }
@@ -348,18 +401,38 @@ function createClarifiedPrompt(session: ArchitectureClarificationSession): strin
   const visitorAction = getAnswerLabel(session.answers, "visitorAction");
   const operationPreference = getAnswerLabel(session.answers, "operationPreference");
   const hasLandingPurpose = hasAnswerValue(session.answers, "sitePurpose", "landing");
+  const hasContentSitePurpose = hasAnswerValue(session.answers, "sitePurpose", "contentSite");
   const hasFormPurpose = hasAnswerValue(session.answers, "sitePurpose", "form");
   const hasMemberServicePurpose = hasAnswerValue(session.answers, "sitePurpose", "memberService");
+  const hasCommerceServicePurpose = hasAnswerValue(
+    session.answers,
+    "sitePurpose",
+    "commerceService"
+  );
+  const hasAdminConsolePurpose = hasAnswerValue(session.answers, "sitePurpose", "adminConsole");
   const hasReadOnlyAction = hasAnswerValue(session.answers, "visitorAction", "readOnly");
+  const hasSearchFilterAction = hasAnswerValue(session.answers, "visitorAction", "searchFilter");
   const hasUploadAction = hasAnswerValue(session.answers, "visitorAction", "uploadFiles");
   const hasStoreDataAction = hasAnswerValue(session.answers, "visitorAction", "storeData");
+  const hasOrdersPaymentsAction = hasAnswerValue(
+    session.answers,
+    "visitorAction",
+    "ordersPayments"
+  );
+  const hasAdminReviewAction = hasAnswerValue(session.answers, "visitorAction", "adminReview");
   const isReadOnlyLanding =
     hasLandingPurpose &&
     hasReadOnlyAction &&
+    !hasContentSitePurpose &&
     !hasFormPurpose &&
     !hasMemberServicePurpose &&
+    !hasCommerceServicePurpose &&
+    !hasAdminConsolePurpose &&
+    !hasSearchFilterAction &&
     !hasUploadAction &&
-    !hasStoreDataAction;
+    !hasStoreDataAction &&
+    !hasOrdersPaymentsAction &&
+    !hasAdminReviewAction;
   const promptParts = [
     session.originalPrompt,
     `사이트 성격: ${purpose}.`,
@@ -377,6 +450,11 @@ function createClarifiedPrompt(session: ArchitectureClarificationSession): strin
     promptParts.push("서버가 업로드를 받고 파일과 이미지를 저장하는 구조로 설계해줘.");
   }
 
+  if (hasContentSitePurpose) {
+    promptParts.push("블로그/콘텐츠 사이트를 만들고 싶어.");
+    promptParts.push("글과 이미지 콘텐츠를 저장하고 방문자가 목록으로 찾아보는 구조로 설계해줘.");
+  }
+
   if (hasFormPurpose) {
     promptParts.push("문의/예약/신청을 받는 웹사이트를 만들고 싶어.");
     promptParts.push("방문자 입력 내용을 저장하고 운영자가 확인할 수 있는 구조로 설계해줘.");
@@ -392,6 +470,31 @@ function createClarifiedPrompt(session: ArchitectureClarificationSession): strin
     promptParts.push("사용자별 데이터와 서비스 상태를 저장하고 다시 확인할 수 있는 구조로 설계해줘.");
   }
 
+  if (hasCommerceServicePurpose) {
+    promptParts.push("상품 판매/결제 서비스가 필요해.");
+    promptParts.push("상품 정보, 주문 내역, 결제 연결 흐름을 분리해서 확인할 수 있게 설계해줘.");
+  }
+
+  if (hasAdminConsolePurpose) {
+    promptParts.push("운영자 관리 화면이 필요해.");
+    promptParts.push("운영자가 신청, 주문, 회원 상태를 확인하고 처리하는 구조로 설계해줘.");
+  }
+
+  if (hasSearchFilterAction) {
+    promptParts.push("검색과 목록 필터 기능이 필요해.");
+    promptParts.push("저장된 글, 상품, 신청 목록을 조건에 맞게 조회하는 흐름을 포함해줘.");
+  }
+
+  if (hasOrdersPaymentsAction) {
+    promptParts.push("주문/결제가 필요해.");
+    promptParts.push("주문 상태를 저장하고 외부 결제 서비스와 연결 가능한 구조로 설계해줘.");
+  }
+
+  if (hasAdminReviewAction) {
+    promptParts.push("운영자가 신청/주문을 확인해야 해.");
+    promptParts.push("운영자만 접근하는 확인 화면과 처리 흐름을 포함해줘.");
+  }
+
   if (hasAnswerValue(session.answers, "operationPreference", "lowCost")) {
     promptParts.push("처음엔 저렴하게 시작하고 싶어.");
   }
@@ -404,16 +507,35 @@ function createClarifiedPrompt(session: ArchitectureClarificationSession): strin
     promptParts.push("홍보 후 방문자 증가에 대비하고 싶어.");
   }
 
+  if (hasAnswerValue(session.answers, "operationPreference", "fastTroubleshoot")) {
+    promptParts.push("운영자가 장애를 빨리 알아야 해.");
+    promptParts.push("접근 기록과 장애 알림을 초안에 포함해줘.");
+  }
+
   return promptParts.join(" ");
 }
 
 function createImplementationList(answers: readonly ArchitectureClarificationAnswer[]): string[] {
+  const hasContentSitePurpose = hasAnswerValue(answers, "sitePurpose", "contentSite");
   const hasFormPurpose = hasAnswerValue(answers, "sitePurpose", "form");
   const hasMemberServicePurpose = hasAnswerValue(answers, "sitePurpose", "memberService");
+  const hasCommerceServicePurpose = hasAnswerValue(answers, "sitePurpose", "commerceService");
+  const hasAdminConsolePurpose = hasAnswerValue(answers, "sitePurpose", "adminConsole");
+  const hasSearchFilterAction = hasAnswerValue(answers, "visitorAction", "searchFilter");
   const hasUploadAction = hasAnswerValue(answers, "visitorAction", "uploadFiles");
   const hasStoreDataAction = hasAnswerValue(answers, "visitorAction", "storeData");
+  const hasOrdersPaymentsAction = hasAnswerValue(answers, "visitorAction", "ordersPayments");
+  const hasAdminReviewAction = hasAnswerValue(answers, "visitorAction", "adminReview");
   const needsRuntime =
-    hasUploadAction || hasFormPurpose || hasMemberServicePurpose || hasStoreDataAction;
+    hasUploadAction ||
+    hasFormPurpose ||
+    hasMemberServicePurpose ||
+    hasCommerceServicePurpose ||
+    hasAdminConsolePurpose ||
+    hasSearchFilterAction ||
+    hasStoreDataAction ||
+    hasOrdersPaymentsAction ||
+    hasAdminReviewAction;
   const items: string[] = [];
 
   items.push("웹페이지를 올리고 방문자에게 전달하는 앞단");
@@ -426,17 +548,53 @@ function createImplementationList(answers: readonly ArchitectureClarificationAns
     items.push("파일과 이미지를 보관하는 공간");
   }
 
+  if (hasContentSitePurpose) {
+    items.push("글과 이미지를 정리해 보여주는 콘텐츠 화면");
+  }
+
+  if (hasSearchFilterAction) {
+    items.push("검색과 목록 필터");
+  }
+
   if (hasMemberServicePurpose) {
     items.push("사용자 로그인과 마이페이지");
   }
 
-  if (hasFormPurpose || hasMemberServicePurpose || hasStoreDataAction) {
+  if (hasCommerceServicePurpose || hasOrdersPaymentsAction) {
+    items.push("결제와 주문 흐름");
+  }
+
+  if (hasAdminConsolePurpose || hasAdminReviewAction) {
+    items.push("운영자가 확인하는 관리 화면");
+  }
+
+  if (
+    hasContentSitePurpose ||
+    hasFormPurpose ||
+    hasMemberServicePurpose ||
+    hasCommerceServicePurpose ||
+    hasAdminConsolePurpose ||
+    hasSearchFilterAction ||
+    hasStoreDataAction ||
+    hasOrdersPaymentsAction ||
+    hasAdminReviewAction
+  ) {
     items.push("데이터를 보관하는 공간");
     items.push("외부 접속과 내부 저장 공간을 나누는 경계");
   }
 
-  if (hasAnswerValue(answers, "operationPreference", "protectData")) {
+  if (
+    hasAnswerValue(answers, "operationPreference", "protectData") ||
+    hasCommerceServicePurpose ||
+    hasAdminConsolePurpose ||
+    hasOrdersPaymentsAction ||
+    hasAdminReviewAction
+  ) {
     items.push("접근 제한과 민감한 정보 보호 기본값");
+  }
+
+  if (hasAnswerValue(answers, "operationPreference", "fastTroubleshoot")) {
+    items.push("운영 상태를 확인하는 알림");
   }
 
   items.push("접근 기록과 기본 알림");
