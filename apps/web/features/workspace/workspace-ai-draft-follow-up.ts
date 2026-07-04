@@ -152,7 +152,7 @@ function createFollowUpCopy(
     case "low_budget_rds_cost":
       return {
         question:
-          "질문: DB가 포함되면 비용이 늘 수 있습니다. 낮은 예산을 우선해서 DB 없는 구조로 바꿀까요?",
+          "질문: DB가 포함되면 비용이 늘 수 있습니다. 낮은 예산을 우선해서 DB 없는 구조로 만들까요?",
         suggestions: ["DB 없이 다시 만들기", "DB 포함해서 진행"]
       };
   }
