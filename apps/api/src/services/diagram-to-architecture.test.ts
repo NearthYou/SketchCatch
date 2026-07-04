@@ -1,7 +1,19 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 import type { DiagramNode, DiagramNodeParameters } from "@sketchcatch/types";
 import { convertDiagramJsonToArchitectureJson } from "./diagram-to-architecture.js";
+
+test("diagram-to-architecture uses shared resource definitions for Terraform mapping", () => {
+  const source = readFileSync(
+    fileURLToPath(new URL("diagram-to-architecture.ts", import.meta.url)),
+    "utf8"
+  );
+
+  assert.doesNotMatch(source, /TERRAFORM_RESOURCE_TYPE_TO_RESOURCE_TYPE/);
+  assert.match(source, /getResourceDefinitionByTerraform/);
+});
 
 test("converts supported DiagramJson resource nodes to ArchitectureJson nodes", () => {
   const architectureJson = convertDiagramJsonToArchitectureJson({

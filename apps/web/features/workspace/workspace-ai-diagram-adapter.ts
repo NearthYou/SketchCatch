@@ -7,8 +7,13 @@ import type {
   ResourceConfig,
   ResourceDragPayload,
   ResourceItem,
-  ResourceType
+  ResourceType,
+  TerraformBlockType
 } from "@sketchcatch/types";
+import {
+  getDefaultResourceDefinitionByResourceType,
+  getResourceDefinitionByTerraform
+} from "@sketchcatch/types/resource-definitions";
 import { isAreaNode } from "../diagram-editor/area-nodes";
 import { createDiagramNodeFromPayload } from "../diagram-editor/diagram-utils";
 import { resourceCatalog } from "../resource-settings/catalog";
@@ -16,6 +21,8 @@ import { addServerStorageAreaNodes } from "./server-storage-board-layout";
 
 const DEFAULT_VIEWPORT: DiagramJson["viewport"] = { x: 0, y: 0, zoom: 1 };
 const DEFAULT_NODE_SIZE: DiagramNode["size"] = { width: 56, height: 56 };
+const DEFAULT_TERRAFORM_BLOCK_TYPE: TerraformBlockType = "resource";
+const UNKNOWN_TERRAFORM_RESOURCE_TYPE = "unknown_resource";
 const DEFAULT_EDGE_STYLE: NonNullable<DiagramEdge["style"]> = {
   animated: false,
   color: "#506176",
@@ -32,52 +39,6 @@ const MIN_RESOURCE_AREA_CHILD_FOOTPRINT: DiagramNode["size"] = { width: 112, hei
 const MAX_AREA_FIT_PASSES = 8;
 const AREA_PARENT_EDGE_LABELS = new Set(["contains", "hosts"]);
 const SECURITY_GROUP_REFERENCE_KEYS = ["securityGroupIds", "vpcSecurityGroupIds", "securityGroupId"] as const;
-const RESOURCE_TO_TERRAFORM_RESOURCE_TYPE: Record<ResourceType, string> = {
-  AMI: "aws_ami",
-  API_GATEWAY_REST_API: "aws_api_gateway_rest_api",
-  CLOUDWATCH_LOG_GROUP: "aws_cloudwatch_log_group",
-  CLOUDWATCH_METRIC_ALARM: "aws_cloudwatch_metric_alarm",
-  CLOUDFRONT: "aws_cloudfront_distribution",
-  EC2: "aws_instance",
-  IAM_INSTANCE_PROFILE: "aws_iam_instance_profile",
-  IAM_POLICY: "aws_iam_policy",
-  IAM_ROLE: "aws_iam_role",
-  INTERNET_GATEWAY: "aws_internet_gateway",
-  KMS_KEY: "aws_kms_key",
-  LAMBDA: "aws_lambda_function",
-  LAMBDA_PERMISSION: "aws_lambda_permission",
-  RDS: "aws_db_instance",
-  ROUTE_TABLE: "aws_route_table",
-  ROUTE_TABLE_ASSOCIATION: "aws_route_table_association",
-  S3: "aws_s3_bucket",
-  SECURITY_GROUP: "aws_security_group",
-  SUBNET: "aws_subnet",
-  UNKNOWN: "unknown_resource",
-  VPC: "aws_vpc"
-};
-const TERRAFORM_RESOURCE_TYPE_TO_RESOURCE: Record<string, ResourceType> = {
-  aws_api_gateway_rest_api: "API_GATEWAY_REST_API",
-  aws_ami: "AMI",
-  aws_cloudwatch_log_group: "CLOUDWATCH_LOG_GROUP",
-  aws_cloudwatch_metric_alarm: "CLOUDWATCH_METRIC_ALARM",
-  aws_cloudfront_distribution: "CLOUDFRONT",
-  aws_db_instance: "RDS",
-  aws_iam_instance_profile: "IAM_INSTANCE_PROFILE",
-  aws_iam_policy: "IAM_POLICY",
-  aws_iam_role: "IAM_ROLE",
-  aws_internet_gateway: "INTERNET_GATEWAY",
-  aws_instance: "EC2",
-  aws_kms_key: "KMS_KEY",
-  aws_lambda_function: "LAMBDA",
-  aws_lambda_permission: "LAMBDA_PERMISSION",
-  aws_route_table: "ROUTE_TABLE",
-  aws_route_table_association: "ROUTE_TABLE_ASSOCIATION",
-  aws_s3_bucket: "S3",
-  aws_security_group: "SECURITY_GROUP",
-  aws_security_group_rule: "SECURITY_GROUP",
-  aws_subnet: "SUBNET",
-  aws_vpc: "VPC"
-};
 const RESOURCE_ITEMS_BY_TERRAFORM_TYPE = new Map<string, ResourceItem>(
   resourceCatalog.map((item) => [item.nodeDefaults.type, item])
 );
@@ -111,7 +72,7 @@ export function convertDiagramJsonToArchitectureJson(diagramJson: DiagramJson): 
       label: node.label,
       positionX: node.position.x,
       positionY: node.position.y,
-      type: mapTerraformResourceType(parameters.resourceType)
+      type: mapTerraformResourceType(parameters)
     };
   });
   const nodeIds = new Set(nodes.map((node) => node.id));
@@ -184,7 +145,7 @@ function createFallbackDiagramNode(
       fileName: "main",
       resourceName: "resource",
       resourceType: terraformResourceType,
-      terraformBlockType: "resource",
+      terraformBlockType: DEFAULT_TERRAFORM_BLOCK_TYPE,
       values: {}
     },
     position,
@@ -210,7 +171,7 @@ function createDiagramNodeParameters(
     fileName: baseParameters?.fileName ?? "main",
     resourceName: getArchitectureResourceName(node),
     resourceType: terraformResourceType,
-    terraformBlockType: baseParameters?.terraformBlockType ?? "resource",
+    terraformBlockType: baseParameters?.terraformBlockType ?? DEFAULT_TERRAFORM_BLOCK_TYPE,
     values: {
       ...(baseParameters?.values ?? {}),
       ...config
@@ -740,11 +701,22 @@ function isValidPort(port: number): boolean {
 }
 
 function mapResourceTypeToTerraform(resourceType: ResourceType): string {
-  return RESOURCE_TO_TERRAFORM_RESOURCE_TYPE[resourceType];
+  if (resourceType === "UNKNOWN") {
+    return UNKNOWN_TERRAFORM_RESOURCE_TYPE;
+  }
+
+  return (
+    getDefaultResourceDefinitionByResourceType(resourceType)?.terraform.resourceType ??
+    UNKNOWN_TERRAFORM_RESOURCE_TYPE
+  );
 }
 
-function mapTerraformResourceType(terraformResourceType: string): ResourceType {
-  return TERRAFORM_RESOURCE_TYPE_TO_RESOURCE[terraformResourceType] ?? "UNKNOWN";
+function mapTerraformResourceType(parameters: DiagramNodeParameters): ResourceType {
+  const terraformBlockType = parameters.terraformBlockType ?? DEFAULT_TERRAFORM_BLOCK_TYPE;
+
+  return (
+    getResourceDefinitionByTerraform(terraformBlockType, parameters.resourceType)?.resourceType ?? "UNKNOWN"
+  );
 }
 
 // Terraform resource name은 사용자 로케일과 무관한 ASCII identifier로 정규화합니다.

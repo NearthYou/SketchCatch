@@ -1,10 +1,24 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 import type { ArchitectureJson, DiagramJson, DiagramNode } from "@sketchcatch/types";
 import {
   convertArchitectureJsonToDiagramJson,
   convertDiagramJsonToArchitectureJson
 } from "./workspace-ai-diagram-adapter";
+
+test("workspace AI diagram adapter uses shared resource definitions for Terraform mapping", () => {
+  const source = readFileSync(
+    fileURLToPath(new URL("workspace-ai-diagram-adapter.ts", import.meta.url)),
+    "utf8"
+  );
+
+  assert.doesNotMatch(source, /RESOURCE_TO_TERRAFORM_RESOURCE_TYPE/);
+  assert.doesNotMatch(source, /TERRAFORM_RESOURCE_TYPE_TO_RESOURCE/);
+  assert.match(source, /getDefaultResourceDefinitionByResourceType/);
+  assert.match(source, /getResourceDefinitionByTerraform/);
+});
 
 test("convertArchitectureJsonToDiagramJson creates board nodes and hides containment arrows from an Architecture Draft", () => {
   const architectureJson: ArchitectureJson = {
