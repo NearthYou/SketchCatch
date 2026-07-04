@@ -1433,6 +1433,17 @@
   overflow-wrap: anywhere;
 }
 
+.terraformSourceLineHighlight {
+  background: rgba(59, 130, 246, 0.22);
+  border-bottom: 1px solid rgba(147, 197, 253, 0.78);
+  border-top: 1px solid rgba(147, 197, 253, 0.78);
+  left: 42px;
+  pointer-events: none;
+  position: absolute;
+  right: 10px;
+  z-index: 3;
+}
+
 .terraformBlockHighlightBox {
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.44);

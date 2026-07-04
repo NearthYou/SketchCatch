@@ -287,6 +287,7 @@ test("pre-deployment finding severity colors keep medium as the default warning 
 
 test("pre-deployment findings can jump to Terraform source locations", () => {
   const fixButtonRule = getCssRule(stylesSource, "deploymentFindingFixButton");
+  const sourceHighlightRule = getCssRule(stylesSource, "terraformSourceLineHighlight");
 
   assert.match(componentSource, /openTerraformSourceLocation/);
   assert.match(componentSource, /openTerraformSourceLocation\(sourceLocation\)/);
@@ -295,9 +296,13 @@ test("pre-deployment findings can jump to Terraform source locations", () => {
   assert.match(deploymentPanelSource, /deploymentFindingFixButton/);
   assert.match(terraformPanelSource, /openTerraformSourceLocation/);
   assert.match(terraformPanelSource, /setPendingSourceLocation/);
+  assert.match(terraformPanelSource, /setActiveSourceHighlightLine/);
   assert.match(terraformPanelSource, /setSelectionRange/);
+  assert.match(terraformPanelSource, /terraformSourceLineHighlight/);
   assert.match(fixButtonRule, /\bgrid-column:\s*2;/);
   assert.match(fixButtonRule, /\bjustify-self:\s*start;/);
+  assert.match(sourceHighlightRule, /\bpointer-events:\s*none;/);
+  assert.match(sourceHighlightRule, /\bz-index:\s*3;/);
 });
 
 test("terraform error explanation lives in the terraform code panel only when errors exist", () => {
