@@ -305,15 +305,13 @@ test("pre-deployment findings render AI safety explanations inside the finding c
   assert.match(explanationRule, /\bgap:\s*7px;/);
 });
 
-test("pre-deployment findings prioritize jumping to Terraform source lines", () => {
-  const fixButtonRule = getCssRule(stylesSource, "deploymentFindingFixButton");
+test("pre-deployment findings expose an AI window open event", () => {
+  const aiButtonRule = getCssRule(stylesSource, "deploymentFindingAiButton");
 
-  assert.match(deploymentPanelSource, /Terraform 코드로 이동/);
-  assert.doesNotMatch(deploymentPanelSource, /dispatchWorkspaceSafetyFindingAiEvent/);
-  assert.doesNotMatch(deploymentPanelSource, /AI 창/);
-  assert.doesNotMatch(stylesSource, /deploymentFindingAiButton/);
-  assert.match(fixButtonRule, /\bbackground:\s*#eff6ff;/);
-  assert.match(fixButtonRule, /\bcolor:\s*#1d4ed8;/);
+  assert.match(deploymentPanelSource, /dispatchWorkspaceSafetyFindingAiEvent/);
+  assert.match(deploymentPanelSource, /AI 창/);
+  assert.match(stylesSource, /deploymentFindingAiButton/);
+  assert.match(aiButtonRule, /\bcolor:\s*#6f4cf6;/);
 });
 
 test("safety finding AI event opens the AI panel with the selected finding", () => {
@@ -369,8 +367,7 @@ test("high risk deployment block banner points users back to fixes and plan reru
   assert.match(deploymentPanelSource, /DeploymentSafetyBlockBanner/);
   assert.match(deploymentPanelSource, /blockedBy === "missing_approval"/);
   assert.match(deploymentPanelSource, /High risk는 승인으로 해제할 수 없습니다/);
-  assert.match(deploymentPanelSource, /Terraform 코드로 이동해/);
-  assert.match(deploymentPanelSource, /해당 line을 고친 뒤/);
+  assert.match(deploymentPanelSource, /수정 또는 AI 창/);
   assert.match(deploymentPanelSource, /Terraform Plan을 다시 실행/);
   assert.match(deploymentPanelSource, /warning\.blocksApproval/);
   assert.match(safetyBlockRule, /\bbackground:\s*#fef2f2;/);
