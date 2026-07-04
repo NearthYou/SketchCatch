@@ -97,13 +97,13 @@ const CLARIFICATION_QUESTIONS: readonly ArchitectureClarificationQuestion[] = [
       },
       {
         value: "form",
-        label: "문의/예약/신청을 받는 사이트",
-        description: "방문자가 입력한 내용을 받아서 보관하거나 처리해야 합니다. 단순 페이지보다 서버와 저장 공간이 더 필요할 수 있습니다."
+        label: "문의만 받는 사이트",
+        description: "방문자가 연락처나 문의 내용을 남기고, 운영자가 나중에 확인하는 정도입니다. 로그인 없이도 만들 수 있습니다."
       },
       {
         value: "memberService",
-        label: "로그인/마이페이지가 있는 서비스",
-        description: "사용자별 정보를 다뤄야 합니다. 접근 제한, 데이터 보관, 운영 기록을 더 꼼꼼히 잡아야 합니다."
+        label: "예약/신청을 관리하는 서비스",
+        description: "예약이나 신청 내역을 저장하고 상태를 관리합니다. 로그인/마이페이지가 필요한지는 다음 질문에서 따로 고릅니다."
       }
     ]
   },
@@ -125,8 +125,8 @@ const CLARIFICATION_QUESTIONS: readonly ArchitectureClarificationQuestion[] = [
       },
       {
         value: "storeData",
-        label: "게시글/회원 정보를 저장해야 해요",
-        description: "데이터를 안전하게 보관하고 나중에 다시 읽어야 합니다. 비용은 조금 늘지만 서비스 기능을 만들 수 있습니다."
+        label: "로그인/마이페이지가 필요해요",
+        description: "사용자별 정보를 저장하고 본인이 다시 확인해야 합니다. 비용은 조금 늘지만 예약/신청 상태 관리에 더 적합합니다."
       }
     ]
   },
@@ -313,9 +313,19 @@ function createClarifiedPrompt(session: ArchitectureClarificationSession): strin
     promptParts.push("서버가 업로드를 받고 파일과 이미지를 저장하는 구조로 설계해줘.");
   }
 
-  if (purposeValue === "form" || purposeValue === "memberService" || visitorActionValue === "storeData") {
-    promptParts.push("로그인이나 사용자 입력 데이터를 저장하는 웹서비스를 만들고 싶어.");
-    promptParts.push("서버와 데이터 보관 공간이 있는 구조로 설계해줘.");
+  if (purposeValue === "form") {
+    promptParts.push("문의 내용을 받는 웹사이트를 만들고 싶어.");
+    promptParts.push("방문자 입력 내용을 저장하고 운영자가 확인할 수 있는 구조로 설계해줘.");
+  }
+
+  if (purposeValue === "memberService") {
+    promptParts.push("예약/신청을 관리하는 웹서비스를 만들고 싶어.");
+    promptParts.push("예약/신청 내역을 저장하고 처리하는 구조로 설계해줘.");
+  }
+
+  if (visitorActionValue === "storeData") {
+    promptParts.push("로그인/마이페이지가 필요해.");
+    promptParts.push("사용자별 정보와 예약/신청 상태를 다시 확인할 수 있는 구조로 설계해줘.");
   }
 
   if (operationPreferenceValue === "lowCost") {
@@ -347,6 +357,10 @@ function createImplementationList(answers: readonly ArchitectureClarificationAns
 
   if (visitorAction === "uploadFiles") {
     items.push("파일과 이미지를 보관하는 공간");
+  }
+
+  if (purpose === "memberService" || visitorAction === "storeData") {
+    items.push("사용자 로그인과 마이페이지");
   }
 
   if (purpose === "form" || purpose === "memberService" || visitorAction === "storeData") {

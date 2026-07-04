@@ -130,7 +130,12 @@ const REQUIREMENT_FACT_KEYWORD_RULES: readonly RequirementFactKeywordRule[] = [
       "백엔드",
       "애플리케이션",
       "앱",
-      "처리"
+      "처리",
+      "문의",
+      "예약",
+      "신청",
+      "접수",
+      "관리"
     ]
   },
   {
@@ -148,6 +153,14 @@ const REQUIREMENT_FACT_KEYWORD_RULES: readonly RequirementFactKeywordRule[] = [
       "게시글",
       "회원 정보",
       "사용자 정보",
+      "문의",
+      "문의 내용",
+      "예약",
+      "예약 내역",
+      "신청",
+      "신청 내역",
+      "접수",
+      "상태",
       "주문",
       "결제 내역"
     ]
@@ -162,7 +175,19 @@ const REQUIREMENT_FACT_KEYWORD_RULES: readonly RequirementFactKeywordRule[] = [
   },
   {
     fact: "auth_or_user_data",
-    keywords: ["로그인", "회원", "계정", "사용자 정보", "개인정보", "마이페이지", "사용자별"]
+    keywords: [
+      "로그인",
+      "회원",
+      "계정",
+      "사용자 정보",
+      "개인정보",
+      "마이페이지",
+      "사용자별",
+      "예약",
+      "예약 내역",
+      "신청",
+      "신청 내역"
+    ]
   },
   {
     fact: "serverless_runtime",

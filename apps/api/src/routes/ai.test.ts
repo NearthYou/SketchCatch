@@ -474,17 +474,22 @@ test("POST /api/ai/architecture-draft understands beginner-friendly prompt wordi
     {
       prompt: "소개용 랜딩 웹사이트를 배포하고 싶어",
       draftPattern: "static_site",
-      expectedFact: "web_frontend"
+      expectedFacts: ["web_frontend"]
     },
     {
       prompt: "파일 업로드 페이지가 필요해",
       draftPattern: "server_storage",
-      expectedFact: "file_upload"
+      expectedFacts: ["file_upload"]
     },
     {
       prompt: "로그인 있는 작은 웹서비스가 필요해",
       draftPattern: "backend_with_db",
-      expectedFact: "auth_or_user_data"
+      expectedFacts: ["auth_or_user_data"]
+    },
+    {
+      prompt: "예약/신청을 관리하는 웹사이트가 필요해",
+      draftPattern: "backend_with_db",
+      expectedFacts: ["auth_or_user_data", "database", "server_runtime"]
     }
   ] as const;
 
@@ -502,7 +507,9 @@ test("POST /api/ai/architecture-draft understands beginner-friendly prompt wordi
     const body = architectureDraftResponseSchema.parse(response.json());
 
     assert.equal(body.metadata.selectedDraftPattern, promptCase.draftPattern);
-    assert.ok(body.metadata.requirementFacts?.includes(promptCase.expectedFact));
+    for (const expectedFact of promptCase.expectedFacts) {
+      assert.ok(body.metadata.requirementFacts?.includes(expectedFact));
+    }
   }
 
   await app.close();
