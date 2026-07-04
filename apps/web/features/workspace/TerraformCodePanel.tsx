@@ -10,7 +10,6 @@ import type {
 import {
   ArrowLeft,
   ChevronDown,
-  ClipboardCheck,
   FileCode2,
   Settings,
   Sparkles,
@@ -909,14 +908,6 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
     onOpenIssues();
   }
 
-  async function validateDisplayedCode(): Promise<void> {
-    if (!hasTerraformCode || requestState === "loading") {
-      return;
-    }
-
-    await validateCurrentTerraform();
-  }
-
   function renderTerraformPreviewExplanationButton() {
     return (
       <button
@@ -1023,15 +1014,6 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
           </div>
           <div className={styles.terraformTopActions}>
             {renderTerraformPreviewExplanationButton()}
-            <button
-              className={styles.terraformPreviewButton}
-              disabled={requestState === "loading" || !hasTerraformCode}
-              onClick={validateDisplayedCode}
-              type="button"
-            >
-              <ClipboardCheck size={14} aria-hidden="true" />
-              <span>Validate</span>
-            </button>
             <span className={styles.terraformShortcut}>Ctrl+S</span>
           </div>
         </header>
@@ -1040,15 +1022,6 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
       {isResourceCodeMode ? (
         <div className={styles.resourceActionBar}>
           {renderTerraformPreviewExplanationButton()}
-          <button
-            className={styles.resourceActionSecondary}
-            disabled={requestState === "loading" || !displayedTerraformCode.trim()}
-            onClick={validateDisplayedCode}
-            type="button"
-          >
-            <ClipboardCheck size={16} aria-hidden="true" />
-            Validate
-          </button>
         </div>
       ) : null}
 

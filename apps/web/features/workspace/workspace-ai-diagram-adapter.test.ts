@@ -87,7 +87,7 @@ test("convertArchitectureJsonToDiagramJson creates board nodes and hides contain
           }
         },
         position: { x: 120, y: 80 },
-        size: { width: 400, height: 300 },
+        size: { width: 412, height: 300 },
         style: {
           borderColor: "#2f6db3",
           textColor: "#172033"
@@ -109,7 +109,7 @@ test("convertArchitectureJsonToDiagramJson creates board nodes and hides contain
           }
         },
         position: { x: 360, y: 220 },
-        size: { width: 56, height: 56 },
+        size: { width: 124, height: 96 },
         style: {
           borderColor: "#2f6db3",
           textColor: "#172033"
@@ -197,11 +197,11 @@ test("convertArchitectureJsonToDiagramJson uses catalog icon and size for CloudF
     cloudFrontNode?.iconUrl,
     "/Architecture-Service-Icons_07312025/Arch_Networking-Content-Delivery/64/Arch_Amazon-CloudFront_64.svg"
   );
-  assert.deepEqual(cloudFrontNode?.size, { width: 56, height: 56 });
+  assert.deepEqual(cloudFrontNode?.size, { width: 124, height: 96 });
   assert.equal(cloudFrontNode?.parameters?.resourceName, "cloudfront_site");
 });
 
-test("convertArchitectureJsonToDiagramJson uses compact fallback size for unknown draft resources", () => {
+test("convertArchitectureJsonToDiagramJson uses fallback size for unknown draft resources", () => {
   const architectureJson: ArchitectureJson = {
     nodes: [
       {
@@ -839,7 +839,7 @@ test("convertArchitectureJsonToDiagramJson lays out server and storage draft as 
   assertContainsNode(securityGroupNode, instanceNode);
   assert.equal(regionNode?.size.width, 1192);
   assert.equal(regionNode?.size.height, 1080);
-  assert.equal(vpcNode?.size.width, 1044);
+  assert.equal(vpcNode?.size.width, 1056);
   assert.equal(vpcNode?.size.height, 798);
   assert.equal(azNode?.size.width, 831);
   assert.equal(azNode?.size.height, 626);

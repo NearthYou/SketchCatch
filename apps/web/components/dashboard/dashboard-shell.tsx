@@ -94,11 +94,7 @@ export function DashboardShell({ children, projectSearchQuery = "" }: DashboardS
     <main className="dashboardShell">
       <aside className="dashboardSidebar" aria-label="SketchCatch dashboard">
         <Link className="dashboardBrand" href="/mypage" aria-label="SketchCatch 홈">
-          <span className="dashboardBrandMark" aria-hidden="true">
-            <span />
-            <span />
-            <span />
-          </span>
+          <img className="dashboardBrandLogo" src="/sketchcatch-logo.svg" alt="" />
           <span>SketchCatch</span>
         </Link>
 

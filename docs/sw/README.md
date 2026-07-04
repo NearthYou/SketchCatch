@@ -4,13 +4,14 @@
 
 ## 빠른 읽기 순서
 
-1. 현재 Workspace Snapshot과 Terraform Artifact 작업은 [spec.md](./spec.md)와 [plan.md](./plan.md)를 먼저 본다.
-2. Terraform 변환 기본 흐름은 [001_테라폼변환구현가이드_sw.md](./001_테라폼변환구현가이드_sw.md)를 본다.
-3. 코드와 다이어그램 동기화는 [002_테라폼변환동기화클론코딩가이드_sw.md](./002_테라폼변환동기화클론코딩가이드_sw.md)와 [003_테라폼동기화구조설명_sw.md](./003_테라폼동기화구조설명_sw.md)를 본다.
-4. Terraform 표현식 확장은 [004_테라폼표현식확장설계_sw.md](./004_테라폼표현식확장설계_sw.md)를 본다.
-5. Runtime Cache 추상화와 메모리 fallback은 [005_런타임캐시추상화가이드_sw.md](./005_런타임캐시추상화가이드_sw.md)를 본다.
-6. Direct Deployment 승인 스냅샷 재검증은 [005_승인스냅샷재검증클론코딩가이드_sw.md](./005_승인스냅샷재검증클론코딩가이드_sw.md)를 본다.
-7. Direct Deployment 실패 설명은 [008_배포실패설명가이드_sw.md](./008_배포실패설명가이드_sw.md)를 본다.
+1. Blueprint 리디자인 작업은 [spec2.md](./spec2.md), [plan2.md](./plan2.md), [agents2.md](./agents2.md)를 먼저 본다.
+2. 현재 Workspace Snapshot과 Terraform Artifact 작업은 [spec.md](./spec.md)와 [plan.md](./plan.md)를 먼저 본다.
+3. Terraform 변환 기본 흐름은 [001_테라폼변환구현가이드_sw.md](./001_테라폼변환구현가이드_sw.md)를 본다.
+4. 코드와 다이어그램 동기화는 [002_테라폼변환동기화클론코딩가이드_sw.md](./002_테라폼변환동기화클론코딩가이드_sw.md)와 [003_테라폼동기화구조설명_sw.md](./003_테라폼동기화구조설명_sw.md)를 본다.
+5. Terraform 표현식 확장은 [004_테라폼표현식확장설계_sw.md](./004_테라폼표현식확장설계_sw.md)를 본다.
+6. Runtime Cache 추상화와 메모리 fallback은 [005_런타임캐시추상화가이드_sw.md](./005_런타임캐시추상화가이드_sw.md)를 본다.
+7. Direct Deployment 승인 스냅샷 재검증은 [005_승인스냅샷재검증클론코딩가이드_sw.md](./005_승인스냅샷재검증클론코딩가이드_sw.md)를 본다.
+8. Direct Deployment 실패 설명은 [008_배포실패설명가이드_sw.md](./008_배포실패설명가이드_sw.md)를 본다.
 
 ## 문서 목록
 
@@ -18,6 +19,9 @@
 | --- | --- |
 | [spec.md](./spec.md) | Workspace Snapshot 및 Terraform Artifact 저장 스펙 |
 | [plan.md](./plan.md) | Workspace Snapshot 및 Terraform Artifact 구현 계획 |
+| [spec2.md](./spec2.md) | Blueprint 리디자인 적용 스펙 |
+| [plan2.md](./plan2.md) | Blueprint 리디자인 구현 마일스톤 |
+| [agents2.md](./agents2.md) | Blueprint 리디자인 작업 규범 |
 | [001_테라폼변환구현가이드_sw.md](./001_테라폼변환구현가이드_sw.md) | Terraform 변환 클론 코딩 가이드 |
 | [002_테라폼변환동기화클론코딩가이드_sw.md](./002_테라폼변환동기화클론코딩가이드_sw.md) | Terraform 변환 동기화 클론 코딩 가이드 |
 | [003_테라폼동기화구조설명_sw.md](./003_테라폼동기화구조설명_sw.md) | Terraform 변환/검증/동기화 구조 설명 |

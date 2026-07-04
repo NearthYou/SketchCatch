@@ -870,66 +870,69 @@ export function DeploymentPanel({
       </div>
 
       {selectedDeployment ? (
-        <div className={styles.deploymentSummary}>
-          <InfoRow label="Status" value={selectedDeployment.status} />
-          <OptionalInfoRow label="Active stage" value={selectedDeployment.activeStage} />
-          <OptionalInfoRow
-            label="Started at"
-            value={formatOptionalDate(selectedDeployment.startedAt)}
-          />
-          <OptionalInfoRow
-            label="Completed at"
-            value={formatOptionalDate(selectedDeployment.completedAt)}
-          />
-          <OptionalInfoRow label="Failed at" value={formatOptionalDate(selectedDeployment.failedAt)} />
-          <OptionalInfoRow
-            label="Cancel requested"
-            value={formatOptionalDate(selectedDeployment.cancelRequestedAt)}
-          />
-          <OptionalInfoRow
-            label="Cancelled at"
-            value={formatOptionalDate(selectedDeployment.cancelledAt)}
-          />
-          <OptionalInfoRow label="Current plan" value={selectedDeployment.currentPlanArtifactId} />
-          <InfoRow label="Blocked" value={selectedDeployment.isBlocked ? "yes" : "no"} />
-          <OptionalInfoRow label="Blocked by" value={selectedDeployment.blockedBy} />
-          <OptionalInfoRow label="Reason" value={selectedDeployment.blockedReason} />
-          <InfoRow label="Approval" value={formatApprovalState(selectedDeployment)} />
-          {selectedDeployment.planSummary ? (
-            <PlanSummaryRows deployment={selectedDeployment} />
-          ) : null}
-          {selectedDeployment.approvedAt ? (
-            <>
-              <InfoRow label="Approved at" value={formatDate(selectedDeployment.approvedAt)} />
-              <OptionalInfoRow
-                label="Approved plan"
-                value={selectedDeployment.approvedPlanArtifactId}
-              />
-              <OptionalInfoRow
-                label="tfplan hash"
-                value={formatShortHash(selectedDeployment.approvedTfplanHash)}
-              />
-              <OptionalInfoRow
-                label="Artifact hash"
-                value={formatShortHash(selectedDeployment.approvedTerraformArtifactHash)}
-              />
-              <OptionalInfoRow
-                label="AWS account"
-                value={selectedDeployment.approvedAwsAccountId}
-              />
-              <OptionalInfoRow
-                label="AWS region"
-                value={selectedDeployment.approvedAwsRegion}
-              />
-            </>
-          ) : null}
-          <OptionalInfoRow label="State object" value={selectedDeployment.stateObjectKey} />
-          <OptionalInfoRow
-            label="Result warning"
-            value={selectedDeployment.resultWarningSummary}
-          />
-          <OptionalInfoRow label="Error" value={selectedDeployment.errorSummary} />
-        </div>
+        <>
+          <DeploymentGateCard deployment={selectedDeployment} />
+          <div className={styles.deploymentSummary}>
+            <InfoRow label="Status" value={selectedDeployment.status} />
+            <OptionalInfoRow label="Active stage" value={selectedDeployment.activeStage} />
+            <OptionalInfoRow
+              label="Started at"
+              value={formatOptionalDate(selectedDeployment.startedAt)}
+            />
+            <OptionalInfoRow
+              label="Completed at"
+              value={formatOptionalDate(selectedDeployment.completedAt)}
+            />
+            <OptionalInfoRow label="Failed at" value={formatOptionalDate(selectedDeployment.failedAt)} />
+            <OptionalInfoRow
+              label="Cancel requested"
+              value={formatOptionalDate(selectedDeployment.cancelRequestedAt)}
+            />
+            <OptionalInfoRow
+              label="Cancelled at"
+              value={formatOptionalDate(selectedDeployment.cancelledAt)}
+            />
+            <OptionalInfoRow label="Current plan" value={selectedDeployment.currentPlanArtifactId} />
+            <InfoRow label="Blocked" value={selectedDeployment.isBlocked ? "yes" : "no"} />
+            <OptionalInfoRow label="Blocked by" value={selectedDeployment.blockedBy} />
+            <OptionalInfoRow label="Reason" value={selectedDeployment.blockedReason} />
+            <InfoRow label="Approval" value={formatApprovalState(selectedDeployment)} />
+            {selectedDeployment.planSummary ? (
+              <PlanSummaryRows deployment={selectedDeployment} />
+            ) : null}
+            {selectedDeployment.approvedAt ? (
+              <>
+                <InfoRow label="Approved at" value={formatDate(selectedDeployment.approvedAt)} />
+                <OptionalInfoRow
+                  label="Approved plan"
+                  value={selectedDeployment.approvedPlanArtifactId}
+                />
+                <OptionalInfoRow
+                  label="tfplan hash"
+                  value={formatShortHash(selectedDeployment.approvedTfplanHash)}
+                />
+                <OptionalInfoRow
+                  label="Artifact hash"
+                  value={formatShortHash(selectedDeployment.approvedTerraformArtifactHash)}
+                />
+                <OptionalInfoRow
+                  label="AWS account"
+                  value={selectedDeployment.approvedAwsAccountId}
+                />
+                <OptionalInfoRow
+                  label="AWS region"
+                  value={selectedDeployment.approvedAwsRegion}
+                />
+              </>
+            ) : null}
+            <OptionalInfoRow label="State object" value={selectedDeployment.stateObjectKey} />
+            <OptionalInfoRow
+              label="Result warning"
+              value={selectedDeployment.resultWarningSummary}
+            />
+            <OptionalInfoRow label="Error" value={selectedDeployment.errorSummary} />
+          </div>
+        </>
       ) : null}
 
       {selectedDeployment?.status === "FAILED" ? (
@@ -1276,11 +1279,16 @@ function DeploymentPreDeploymentSummary({
 }) {
   const failCount = countChecklistItems(analysis, "fail");
   const warningCount = countChecklistItems(analysis, "warning");
+  const gateLevel = getPreDeploymentGateLevel(analysis);
   const visibleFindings = analysis.findings.slice(0, 3);
   const hiddenFindingCount = Math.max(0, analysis.findings.length - visibleFindings.length);
 
   return (
-    <div className={styles.deploymentPreflightSummary}>
+    <div className={styles.deploymentPreflightSummary} data-level={gateLevel}>
+      <div className={styles.deploymentGateHeader}>
+        <span className={styles.deploymentGateBadge}>{gateLevel.toUpperCase()}</span>
+        <strong>Pre-Deployment Gate</strong>
+      </div>
       <p>{analysis.summary}</p>
       <div className={styles.deploymentPreflightStats} aria-label="배포 전 검사 요약">
         <span>
@@ -1314,12 +1322,40 @@ function DeploymentPreDeploymentSummary({
 
 function DeploymentPreDeploymentFindingItem({ finding }: { readonly finding: CheckFinding }) {
   return (
-    <li>
+    <li data-severity={finding.severity}>
       <span>{finding.severity.toUpperCase()}</span>
       <strong>{finding.title}</strong>
       {finding.resourceId ? <em>{finding.resourceId}</em> : null}
     </li>
   );
+}
+
+function DeploymentGateCard({ deployment }: { readonly deployment: Deployment }) {
+  const gate = getDeploymentGateMeta(deployment);
+
+  return (
+    <div className={styles.deploymentGateCard} data-level={gate.level}>
+      <div className={styles.deploymentGateHeader}>
+        <span className={styles.deploymentGateBadge}>{gate.level.toUpperCase()}</span>
+        <strong>{gate.title}</strong>
+      </div>
+      <p>{gate.description}</p>
+      <dl className={styles.deploymentGateFacts}>
+        <div>
+          <dt>Blocked by</dt>
+          <dd>{deployment.blockedBy ?? "none"}</dd>
+        </div>
+        <div>
+          <dt>Approval</dt>
+          <dd>{formatApprovalState(deployment)}</dd>
+        </div>
+        <div>
+          <dt>Warnings</dt>
+          <dd>{deployment.planSummary?.warnings.length ?? 0}</dd>
+        </div>
+      </dl>
+    </div>
+    )
 }
 
 function DeploymentFailureExplanationCard({
@@ -1434,7 +1470,7 @@ function PlanSummaryRows({ deployment }: { readonly deployment: Deployment }) {
           <span>Warnings</span>
           <ul>
             {summary.warnings.map((warning, index) => (
-              <li key={`${warning.level}-${index}`}>
+              <li data-level={getWarningLevel(String(warning.level))} key={`${warning.level}-${index}`}>
                 <strong>{warning.level}</strong>
                 <p>{warning.message}</p>
               </li>
@@ -1444,6 +1480,60 @@ function PlanSummaryRows({ deployment }: { readonly deployment: Deployment }) {
       ) : null}
     </>
   );
+}
+
+function getDeploymentGateMeta(deployment: Deployment): {
+  readonly description: string;
+  readonly level: "high" | "medium" | "low";
+  readonly title: string;
+} {
+  if (deployment.isBlocked) {
+    return {
+      description:
+        deployment.blockedReason ??
+        "Plan approval, risk analysis, or cost analysis must be resolved before execution.",
+      level: "high",
+      title: "Deployment intentionally locked"
+    };
+  }
+
+  if ((deployment.planSummary?.warnings.length ?? 0) > 0) {
+    return {
+      description: "Plan warnings are present. Review the summary before running Apply or Destroy.",
+      level: "medium",
+      title: "Review required"
+    };
+  }
+
+  return {
+    description: "No blocking deployment gate is currently reported for this plan.",
+    level: "low",
+    title: "Gate clear"
+  };
+}
+
+function getPreDeploymentGateLevel(analysis: AiPreDeploymentAnalysisResult): "high" | "medium" | "low" {
+  if (analysis.findings.some((finding) => finding.severity === "high")) {
+    return "high";
+  }
+
+  if (
+    analysis.findings.some((finding) => finding.severity === "medium") ||
+    countChecklistItems(analysis, "fail") > 0 ||
+    countChecklistItems(analysis, "warning") > 0
+  ) {
+    return "medium";
+  }
+
+  return "low";
+}
+
+function getWarningLevel(level: string): "high" | "medium" | "low" {
+  if (level === "high" || level === "medium" || level === "low") {
+    return level;
+  }
+
+  return "medium";
 }
 
 function formatApprovalState(deployment: Deployment): string {

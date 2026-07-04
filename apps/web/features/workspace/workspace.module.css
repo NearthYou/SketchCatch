@@ -375,29 +375,29 @@
 
 .resourceSectionButton:hover,
 .resourceSectionButton:focus-visible {
-  background: #f3f0ff;
-  border-color: #ded6ff;
-  color: #6f4cf6;
+  background: var(--bp-blue-tint);
+  border-color: color-mix(in srgb, var(--bp-blue) 32%, var(--bp-line));
+  color: var(--bp-blue);
   outline: none;
 }
 
 .resourceSectionButtonActive {
   background: #eef0f4;
   border-color: #e2e8f0;
-  color: #6f4cf6;
+  color: var(--bp-blue);
 }
 
 .resourceListPanel {
   align-content: start;
   align-items: start;
   display: grid;
-  gap: 10px;
+  gap: 12px;
   grid-auto-rows: max-content;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 280px));
-  justify-content: start;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+  justify-content: stretch;
   min-height: 0;
   overflow: auto;
-  padding: 10px 8px 12px;
+  padding: 12px;
 }
 
 .resourceListItem,
@@ -420,14 +420,14 @@
 .resourceListItem:hover,
 .resourceListItem:focus-visible,
 .resourceListItemActive:focus-visible {
-  border-color: #b9a9ff;
-  box-shadow: 0 8px 20px rgba(111, 76, 246, 0.12);
+  border-color: color-mix(in srgb, var(--bp-blue) 38%, var(--bp-line));
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--bp-blue) 12%, transparent);
   outline: none;
 }
 
 .resourceListItemActive {
-  border-color: #8b6cff;
-  box-shadow: 0 0 0 1px rgba(139, 108, 255, 0.78);
+  border-color: var(--bp-blue);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--bp-blue) 66%, transparent);
 }
 
 .resourceListHeader {
@@ -455,9 +455,9 @@
 
 .resourceListMoreButton:hover,
 .resourceListMoreButton:focus-visible {
-  background: #f3f0ff;
-  border-color: #ded6ff;
-  color: #6f4cf6;
+  background: var(--bp-blue-tint);
+  border-color: color-mix(in srgb, var(--bp-blue) 32%, var(--bp-line));
+  color: var(--bp-blue);
   outline: none;
 }
 
@@ -494,7 +494,7 @@
 .resourceListServiceIcon {
   align-items: center;
   border-left: 1px solid #d7dde7;
-  color: #6f4cf6;
+  color: var(--bp-blue);
   display: inline-flex;
   height: 22px;
   justify-content: center;
@@ -526,7 +526,7 @@
   align-items: start;
   display: grid;
   gap: 10px;
-  grid-template-columns: minmax(92px, 0.82fr) minmax(0, 1.18fr);
+  grid-template-columns: minmax(104px, 0.58fr) minmax(0, 1.42fr);
   min-width: 0;
 }
 
@@ -544,6 +544,7 @@
   line-height: 1.35;
   overflow-wrap: anywhere;
   white-space: normal;
+  word-break: break-word;
 }
 
 .resourceListConfigToggle {
@@ -565,8 +566,8 @@
 
 .resourceListConfigToggle:hover,
 .resourceListConfigToggle:focus-visible {
-  background: #f3f0ff;
-  color: #6f4cf6;
+  background: var(--bp-blue-tint);
+  color: var(--bp-blue);
   outline: none;
 }
 
@@ -863,9 +864,9 @@
 .resourceCodeBackButton:focus-visible,
 .resourceCodeCloseButton:hover,
 .resourceCodeCloseButton:focus-visible {
-  background: #f6f3ff;
-  border-color: #d8ceff;
-  color: #5f3de8;
+  background: var(--bp-blue-tint);
+  border-color: color-mix(in srgb, var(--bp-blue) 34%, var(--bp-line));
+  color: var(--bp-blue);
   outline: none;
 }
 
@@ -884,9 +885,9 @@
 .resourceActionSecondary {
   align-items: center;
   background: #ffffff;
-  border: 1px solid #7c5cff;
+  border: 1px solid var(--bp-line-strong);
   border-radius: 6px;
-  color: #6f4cf6;
+  color: var(--bp-blue);
   cursor: pointer;
   display: inline-flex;
   font: inherit;
@@ -905,16 +906,16 @@
 
 .resourceActionSecondary:not(:disabled):hover,
 .resourceActionSecondary:not(:disabled):focus-visible {
-  background: #f6f3ff;
+  background: var(--bp-blue-tint);
   outline: none;
 }
 
 .terraformPreviewButton {
   align-items: center;
   background: #ffffff;
-  border: 1px solid #7c5cff;
+  border: 1px solid var(--bp-line-strong);
   border-radius: 6px;
-  color: #6f4cf6;
+  color: var(--bp-blue);
   cursor: pointer;
   display: inline-flex;
   font: inherit;
@@ -935,7 +936,7 @@
 
 .terraformPreviewButton:not(:disabled):hover,
 .terraformPreviewButton:not(:disabled):focus-visible {
-  background: #f6f3ff;
+  background: var(--bp-blue-tint);
   outline: none;
 }
 
@@ -1045,36 +1046,36 @@
 }
 
 .terraformTokenKeyword {
-  color: #2dd4bf;
+  color: #f6c85f;
 }
 
 .terraformTokenIdentifier {
-  color: #74bdf8;
+  color: #7fd2ff;
 }
 
 .terraformTokenReference {
-  color: #74bdf8;
+  color: #5fe0c1;
 }
 
 .terraformTokenString {
-  color: #d99a7b;
+  color: #f0a77d;
 }
 
 .terraformTokenBrace {
-  color: #facc15;
+  color: #9bd7ff;
 }
 
 .terraformTokenOperator,
 .terraformTokenPlain {
-  color: #cbd5e1;
+  color: #d6e3ee;
 }
 
 .terraformTokenNumber {
-  color: #f4bf75;
+  color: #ff8ec7;
 }
 
 .terraformTokenComment {
-  color: #7a8797;
+  color: #73879a;
 }
 
 .terraformTextarea {
@@ -1789,13 +1790,13 @@
 
 .terraformDialogSecondaryButton {
   background: #ffffff;
-  border: 1px solid #7c5cff;
-  color: #6f4cf6;
+  border: 1px solid var(--bp-line-strong);
+  color: var(--bp-blue);
 }
 
 .terraformDialogPrimaryButton {
-  background: #6f4cf6;
-  border: 1px solid #6f4cf6;
+  background: var(--bp-blue);
+  border: 1px solid var(--bp-blue);
   color: #ffffff;
 }
 
@@ -1808,14 +1809,14 @@
 
 .terraformDialogSecondaryButton:hover,
 .terraformDialogSecondaryButton:focus-visible {
-  background: #f6f3ff;
+  background: var(--bp-blue-tint);
   outline: none;
 }
 
 .terraformDialogPrimaryButton:hover,
 .terraformDialogPrimaryButton:focus-visible {
-  background: #5f3de8;
-  border-color: #5f3de8;
+  background: color-mix(in srgb, var(--bp-blue) 88%, #000000);
+  border-color: color-mix(in srgb, var(--bp-blue) 88%, #000000);
   outline: none;
 }
 
@@ -2006,15 +2007,15 @@
 }
 
 .aiPrimaryButton {
-  background: #6f4cf6;
-  border: 1px solid #6f4cf6;
+  background: var(--bp-blue);
+  border: 1px solid var(--bp-blue);
   color: #ffffff;
 }
 
 .aiSecondaryButton {
   background: #ffffff;
-  border: 1px solid #7c5cff;
-  color: #6f4cf6;
+  border: 1px solid var(--bp-line-strong);
+  color: var(--bp-blue);
 }
 
 .aiPrimaryButton:disabled,
@@ -2025,14 +2026,14 @@
 
 .aiPrimaryButton:not(:disabled):hover,
 .aiPrimaryButton:not(:disabled):focus-visible {
-  background: #5f3de8;
-  border-color: #5f3de8;
+  background: color-mix(in srgb, var(--bp-blue) 88%, #000000);
+  border-color: color-mix(in srgb, var(--bp-blue) 88%, #000000);
   outline: none;
 }
 
 .aiSecondaryButton:not(:disabled):hover,
 .aiSecondaryButton:not(:disabled):focus-visible {
-  background: #f6f3ff;
+  background: var(--bp-blue-tint);
   outline: none;
 }
 
@@ -2062,9 +2063,9 @@
 
 .aiResultHeader span,
 .aiExplanationHeader span {
-  background: #eef2ff;
+  background: var(--bp-blue-tint);
   border-radius: 999px;
-  color: #3730a3;
+  color: var(--bp-blue);
   font-size: 10.5px;
   font-weight: 900;
   padding: 4px 7px;
@@ -2199,13 +2200,73 @@
   padding-top: 0;
 }
 
+.aiSimulationResult {
+  gap: 12px;
+}
+
+.aiSimulationGrid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.aiSimulationCard {
+  background: #ffffff;
+  border: 1px solid var(--bp-line);
+  border-radius: var(--bp-r);
+  box-shadow: 0 8px 20px rgba(31, 61, 88, 0.06);
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+}
+
+.aiSimulationCard > strong {
+  color: var(--bp-blue);
+  font-size: 11.5px;
+  font-weight: 950;
+}
+
+.aiSimulationCard ul {
+  display: grid;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.aiSimulationCard li {
+  border-top: 1px solid #e3e9f2;
+  display: grid;
+  gap: 3px;
+  padding-top: 8px;
+}
+
+.aiSimulationCard li:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.aiSimulationCard li span {
+  color: var(--bp-ink);
+  font-family: var(--bp-mono);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.aiSimulationCard li p {
+  color: #4a5d72;
+  font-size: 12px;
+  line-height: 1.48;
+  margin: 0;
+}
+
 .aiChatLauncher {
   align-items: center;
-  background: #6f4cf6;
-  border: 1px solid #6f4cf6;
+  background: var(--bp-blue);
+  border: 1px solid var(--bp-blue);
   border-radius: 999px;
   bottom: 24px;
-  box-shadow: 0 18px 44px rgba(62, 45, 138, 0.28);
+  box-shadow: 0 18px 44px color-mix(in srgb, var(--bp-blue) 24%, transparent);
   color: #ffffff;
   cursor: pointer;
   display: inline-flex;
@@ -2226,23 +2287,23 @@
 
 .aiChatLauncher:hover,
 .aiChatLauncher:focus-visible {
-  background: #5f3de8;
-  box-shadow: 0 22px 54px rgba(62, 45, 138, 0.34);
+  background: color-mix(in srgb, var(--bp-blue) 88%, #000000);
+  box-shadow: 0 22px 54px color-mix(in srgb, var(--bp-blue) 30%, transparent);
   outline: none;
   transform: translateY(-1px);
 }
 
 .aiChatDock {
   background: #ffffff;
-  border: 1px solid #cbd5e1;
-  border-radius: 8px;
+  border: 1px solid var(--bp-line);
+  border-radius: var(--bp-r);
   bottom: 24px;
   box-shadow: 0 24px 70px rgba(15, 23, 42, 0.24);
   color: #172033;
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr) auto;
-  max-height: min(78vh, 720px);
-  min-height: min(560px, calc(100vh - 48px));
+  max-height: min(82vh, 760px);
+  min-height: min(590px, calc(100vh - 48px));
   min-width: 0;
   overflow: hidden;
   position: fixed;
@@ -2252,7 +2313,7 @@
 
 .aiChatDock[data-right-panel-open="true"] {
   right: calc(var(--right-panel-width) + 24px);
-  width: min(860px, calc(100vw - var(--right-panel-width) - 48px));
+  width: min(920px, calc(100vw - var(--right-panel-width) - 48px));
 }
 
 .aiChatHeader {
@@ -2272,7 +2333,7 @@
 }
 
 .aiChatHeader span {
-  color: #6f4cf6;
+  color: var(--bp-blue);
   font-size: 11px;
   font-weight: 950;
   letter-spacing: 0;
@@ -2302,24 +2363,87 @@
 
 .aiChatCloseButton:hover,
 .aiChatCloseButton:focus-visible {
-  background: #f6f3ff;
-  border-color: #d8ceff;
-  color: #5f3de8;
+  background: var(--bp-blue-tint);
+  border-color: color-mix(in srgb, var(--bp-blue) 35%, var(--bp-line));
+  color: var(--bp-blue);
+  outline: none;
+}
+
+.aiChatTabBar {
+  align-items: center;
+  background: #ffffff;
+  border-bottom: 1px solid #e3e9f2;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 10px 14px;
+}
+
+.aiChatTabs {
+  background: var(--bp-paper-2);
+  border: 1px solid var(--bp-line);
+  border-radius: 7px;
+  display: inline-flex;
+  gap: 3px;
+  padding: 3px;
+}
+
+.aiChatTabButton {
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  color: var(--bp-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 900;
+  min-height: 30px;
+  padding: 0 12px;
+}
+
+.aiChatTabButton[aria-selected="true"] {
+  background: #ffffff;
+  box-shadow: 0 1px 4px rgba(23, 32, 51, 0.14);
+  color: var(--bp-blue);
+}
+
+.aiChatClearButton {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid var(--bp-line);
+  border-radius: 6px;
+  color: var(--bp-muted);
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 850;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 10px;
+  white-space: nowrap;
+}
+
+.aiChatClearButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.aiChatClearButton:not(:disabled):hover,
+.aiChatClearButton:not(:disabled):focus-visible {
+  background: #fff7f5;
+  border-color: #f2b7ad;
+  color: #a83225;
   outline: none;
 }
 
 .aiChatControls {
   align-items: end;
-  background: #f8fafc;
+  background: var(--bp-paper-2);
   border-bottom: 1px solid #e3e9f2;
-  display: grid;
+  display: none;
   gap: 8px;
-  grid-template-columns:
-    minmax(132px, 1.2fr)
-    minmax(88px, 0.72fr)
-    minmax(88px, 0.72fr)
-    minmax(88px, 0.72fr)
-    minmax(112px, 0.82fr);
+  justify-content: flex-start;
   min-width: 0;
   padding: 10px 14px;
 }
@@ -2330,20 +2454,38 @@
 
 .aiChatTranscript {
   align-content: start;
-  background: #f4f7fb;
+  background: linear-gradient(180deg, #f7fbff 0%, var(--bp-paper-2) 100%);
   display: grid;
-  gap: 10px;
+  gap: 16px;
   min-height: 0;
   overflow-y: auto;
-  padding: 14px;
+  padding: 18px;
   scrollbar-gutter: stable;
+}
+
+.aiChatSimulationIntro {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid var(--bp-line);
+  border-radius: var(--bp-r);
+  box-shadow: 0 10px 24px rgba(31, 61, 88, 0.08);
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 12px;
+}
+
+.aiChatSimulationIntro strong {
+  color: var(--bp-ink);
+  font-size: 13px;
+  line-height: 1.45;
 }
 
 .aiChatAssistantMessage,
 .aiChatUserMessage {
   display: grid;
-  gap: 5px;
-  max-width: min(84%, 620px);
+  gap: 8px;
+  max-width: min(78%, 760px);
   min-width: 0;
 }
 
@@ -2368,24 +2510,26 @@
 
 .aiChatAssistantMessage p,
 .aiChatUserMessage p {
-  border: 1px solid #dce3ee;
-  border-radius: 8px;
-  font-size: 12.5px;
-  line-height: 1.5;
+  border: 1px solid var(--bp-line);
+  border-radius: var(--bp-r);
+  font-size: 13px;
+  line-height: 1.62;
   margin: 0;
   overflow-wrap: anywhere;
-  padding: 10px 12px;
+  padding: 14px 16px;
+  white-space: pre-line;
 }
 
 .aiChatAssistantMessage p {
   background: #ffffff;
   color: #263549;
+  box-shadow: 0 10px 24px rgba(31, 61, 88, 0.08);
 }
 
 .aiChatAssistantMessage[data-kind="question"] p {
-  border-color: #bfdbfe;
-  box-shadow: inset 3px 0 0 #2f6db3;
-  white-space: pre-line;
+  background: color-mix(in srgb, var(--bp-blue-tint) 46%, #ffffff);
+  border-color: color-mix(in srgb, var(--bp-blue) 36%, var(--bp-line));
+  box-shadow: inset 4px 0 0 var(--bp-blue);
 }
 
 .aiChatAssistantMessage[data-kind="error"] p {
@@ -2395,45 +2539,46 @@
 }
 
 .aiChatUserMessage p {
-  background: #6f4cf6;
-  border-color: #6f4cf6;
+  background: var(--bp-blue);
+  border-color: var(--bp-blue);
   color: #ffffff;
 }
 
 .aiChatSuggestions {
-  display: grid;
-  gap: 6px;
-  justify-items: start;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  justify-content: flex-start;
 }
 
 .aiChatSuggestionButton {
   background: #ffffff;
-  border: 1px solid #bfdbfe;
-  border-radius: 7px;
-  color: #1d4ed8;
+  border: 1px solid var(--bp-line);
+  border-radius: 6px;
+  color: var(--bp-blue);
   cursor: pointer;
   font: inherit;
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 850;
   line-height: 1.35;
   max-width: 100%;
-  min-height: 32px;
+  min-height: 34px;
   overflow-wrap: anywhere;
-  padding: 7px 9px;
+  padding: 7px 10px;
   text-align: left;
 }
 
 .aiChatSuggestionButton:hover,
 .aiChatSuggestionButton:focus-visible {
-  background: #eff6ff;
-  border-color: #60a5fa;
+  background: var(--bp-blue-tint);
+  border-color: color-mix(in srgb, var(--bp-blue) 44%, var(--bp-line));
   outline: none;
 }
 
 .aiChatSuggestionButtonSelected {
-  background: #dbeafe;
-  border-color: #2563eb;
-  color: #1e3a8a;
+  background: color-mix(in srgb, var(--bp-blue-tint) 72%, #ffffff);
+  border-color: var(--bp-blue);
+  color: var(--bp-blue);
 }
 
 .aiChatSuggestionButton:disabled {
@@ -2442,22 +2587,22 @@
 }
 
 .aiChatSelectionSubmitButton {
-  background: #2563eb;
-  border: 1px solid #1d4ed8;
-  border-radius: 7px;
+  background: var(--bp-blue);
+  border: 1px solid var(--bp-blue);
+  border-radius: var(--bp-r);
   color: #ffffff;
   cursor: pointer;
   font: inherit;
   font-size: 12px;
   font-weight: 850;
   line-height: 1.35;
-  min-height: 32px;
-  padding: 7px 10px;
+  min-height: 36px;
+  padding: 8px 13px;
 }
 
 .aiChatSelectionSubmitButton:hover,
 .aiChatSelectionSubmitButton:focus-visible {
-  background: #1d4ed8;
+  background: color-mix(in srgb, var(--bp-blue) 88%, #000000);
   outline: none;
 }
 
@@ -2497,34 +2642,43 @@
   background: #ffffff;
   border-top: 1px solid #e3e9f2;
   display: grid;
-  gap: 8px;
+  gap: 10px;
   grid-template-columns: minmax(0, 1fr) auto;
-  padding: 10px 14px 14px;
+  padding: 12px 16px 16px;
+}
+
+.aiChatDock[data-chat-tab="simulation"] .aiChatComposer {
+  display: none;
 }
 
 .aiChatPromptGuide {
-  align-items: start;
-  background: #f8fafc;
-  display: grid;
-  gap: 6px;
+  align-items: center;
+  background: #f8fbff;
+  border: 1px solid var(--bp-line);
+  border-radius: var(--bp-r);
+  display: flex;
+  gap: 12px;
   grid-column: 1 / -1;
-  grid-template-columns: minmax(150px, auto) minmax(0, 1fr);
-  padding: 8px 10px;
+  justify-content: flex-start;
+  padding: 8px 12px;
 }
 
 .aiChatPromptGuide .aiPromptGuideHeader {
+  flex: 0 0 auto;
   gap: 1px;
 }
 
 .aiChatPromptGuide .aiPromptChips {
   align-content: start;
-  gap: 5px;
+  gap: 6px;
+  justify-content: flex-start;
   min-width: 0;
 }
 
 .aiChatPromptGuide .aiPromptChip {
-  font-size: 10.5px;
-  padding: 5px 7px;
+  font-size: 11.5px;
+  min-height: 30px;
+  padding: 5px 9px;
 }
 
 .aiChatInput {
@@ -2543,8 +2697,8 @@
   color: #172033;
   font: inherit;
   line-height: 1.45;
-  max-height: 120px;
-  min-height: 58px;
+  max-height: 132px;
+  min-height: 68px;
   min-width: 0;
   padding: 9px 10px;
   resize: vertical;
@@ -2559,9 +2713,10 @@
 
 .aiChatSendButton {
   align-items: center;
-  background: #6f4cf6;
-  border: 1px solid #6f4cf6;
-  border-radius: 7px;
+  align-self: end;
+  background: var(--bp-blue);
+  border: 1px solid var(--bp-blue);
+  border-radius: var(--bp-r);
   color: #ffffff;
   cursor: pointer;
   display: inline-flex;
@@ -2570,7 +2725,7 @@
   font-weight: 900;
   gap: 6px;
   justify-content: center;
-  min-height: 58px;
+  min-height: 68px;
   padding: 0 14px;
   white-space: nowrap;
 }
@@ -2582,8 +2737,8 @@
 
 .aiChatSendButton:not(:disabled):hover,
 .aiChatSendButton:not(:disabled):focus-visible {
-  background: #5f3de8;
-  border-color: #5f3de8;
+  background: color-mix(in srgb, var(--bp-blue) 88%, #000000);
+  border-color: color-mix(in srgb, var(--bp-blue) 88%, #000000);
   outline: none;
 }
 
@@ -3526,5 +3681,448 @@
 
   .deploymentResultValue {
     grid-column: 1 / -1;
+  }
+}
+
+/* Blueprint panel polish pass */
+.rightPanelShell,
+.resourceWorkspacePanel,
+.terraformPanel,
+.issuesPanel,
+.aiPanel,
+.deploymentPanel {
+  background: var(--bp-paper);
+  color: var(--bp-ink);
+  font-family: var(--bp-head);
+}
+
+.rightPanelToolbar,
+.resourceSectionToolbar,
+.terraformTopBar,
+.terraformDiagnostics,
+.deploymentHeader,
+.aiPanelHeader {
+  background: var(--bp-paper);
+  border-color: var(--bp-line);
+}
+
+.rightPanelToolbar {
+  min-height: 48px;
+  padding: 7px 10px;
+}
+
+.panelModeToggle,
+.resourceSectionTabs,
+.deploymentModeSwitch {
+  background: var(--bp-paper-2);
+  border: 1px solid var(--bp-line);
+  border-radius: var(--bp-r);
+  box-shadow: none;
+}
+
+.terraformTopActions {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0;
+}
+
+.panelModeButton,
+.panelModeButtonActive,
+.panelIconButton,
+.panelIconButtonActive,
+.panelCollapseButton,
+.collapsedPanelButton,
+.collapsedPanelButtonActive,
+.resourceSectionButton,
+.resourceSectionButtonActive,
+.terraformFileButton,
+.deploymentExpandButton {
+  border-radius: var(--bp-r);
+  color: var(--bp-text);
+  font-family: var(--bp-head);
+  font-weight: 850;
+}
+
+.panelModeButtonActive,
+.panelIconButtonActive,
+.collapsedPanelButtonActive,
+.resourceSectionButtonActive {
+  background: var(--bp-blue-tint);
+  border-color: color-mix(in srgb, var(--bp-blue) 46%, transparent);
+  box-shadow: none;
+  color: var(--bp-blue);
+}
+
+.panelModeButton:hover,
+.panelModeButton:focus-visible,
+.panelIconButton:hover,
+.panelIconButton:focus-visible,
+.panelCollapseButton:hover,
+.panelCollapseButton:focus-visible,
+.collapsedPanelButton:hover,
+.collapsedPanelButton:focus-visible,
+.resourceSectionButton:hover,
+.resourceSectionButton:focus-visible,
+.terraformFileButton:hover,
+.terraformFileButton:focus-visible,
+.deploymentExpandButton:hover,
+.deploymentExpandButton:focus-visible {
+  background: var(--bp-blue-tint);
+  border-color: var(--bp-blue);
+  color: var(--bp-blue);
+  outline: none;
+}
+
+.resourceWorkspacePanel {
+  padding-top: 0;
+}
+
+.resourceSectionToolbar {
+  min-height: 48px;
+  padding: 7px 10px;
+}
+
+.resourceSectionButton,
+.resourceSectionButtonActive {
+  min-height: 30px;
+  padding: 0 10px;
+}
+
+.terraformPanel,
+.issuesPanel,
+.aiPanel,
+.deploymentPanel {
+  background:
+    linear-gradient(var(--bp-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--bp-grid) 1px, transparent 1px), var(--bp-page);
+  background-size: 52px 52px;
+}
+
+.terraformTopBar,
+.terraformDiagnostics,
+.issuesPanel .terraformDiagnostics,
+.aiPanel,
+.deploymentPanel {
+  border-left: 1px solid var(--bp-line);
+}
+
+.terraformFileButton,
+.terraformFileMenu,
+.terraformFileSearch,
+.terraformEmpty,
+.terraformNotice,
+.terraformError,
+.terraformDiagnosticList li,
+.aiField textarea,
+.aiField input,
+.aiResultCard,
+.aiExplanation,
+.aiWarning,
+.deploymentSection,
+.deploymentPreflightSummary,
+.deploymentSummary,
+.deploymentApplyConfirm,
+.deploymentDestroyConfirm,
+.deploymentField input,
+.deploymentField select,
+.deploymentField textarea {
+  background: var(--bp-paper);
+  border-color: var(--bp-line);
+  border-radius: var(--bp-r);
+  box-shadow: none;
+  color: var(--bp-text);
+}
+
+.terraformFileMenu {
+  box-shadow: 0 16px 34px rgb(7 36 60 / 14%);
+}
+
+.terraformFileSearch:focus,
+.aiField textarea:focus,
+.aiField input:focus,
+.deploymentField input:focus,
+.deploymentField select:focus,
+.deploymentField textarea:focus {
+  border-color: var(--bp-blue);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--bp-blue) 18%, transparent);
+}
+
+.terraformDiagnosticsHeader h3,
+.aiPanelHeader h2,
+.deploymentHeader h2,
+.deploymentSection h3 {
+  color: var(--bp-ink);
+  font-family: var(--bp-head);
+  letter-spacing: 0;
+}
+
+.terraformDiagnosticsHeader,
+.aiPanelHeader span,
+.deploymentHeader span,
+.deploymentHint,
+.terraformDiagnosticList span {
+  color: var(--bp-text);
+}
+
+.terraformIssueCount,
+.panelIssueBadge {
+  background: var(--bp-blue-tint);
+  color: var(--bp-blue);
+}
+
+.terraformIssueCountError,
+.panelIssueBadgeError {
+  background: var(--bp-high-tint);
+  color: var(--bp-high);
+}
+
+.terraformDiagnosticList li,
+.deploymentWarnings li,
+.deploymentPreflightFindings li {
+  background: var(--bp-paper);
+}
+
+.terraformEmpty {
+  background: var(--bp-paper-2);
+  color: var(--bp-muted);
+}
+
+.terraformNotice {
+  background: var(--bp-blue-tint);
+  border-color: color-mix(in srgb, var(--bp-blue) 42%, var(--bp-line));
+  color: var(--bp-blue);
+}
+
+.terraformError,
+.deploymentStaleNotice,
+.aiWarning {
+  background: var(--bp-med-tint);
+  border-color: color-mix(in srgb, var(--bp-med) 54%, var(--bp-line));
+  color: #7a4d00;
+}
+
+.aiPrimaryButton,
+.deploymentPrimaryButton {
+  background: var(--bp-blue);
+  border-color: var(--bp-blue);
+  color: #ffffff;
+}
+
+.aiSecondaryButton,
+.deploymentSecondaryButton {
+  background: var(--bp-paper);
+  border-color: var(--bp-line);
+  color: var(--bp-blue);
+}
+
+.deploymentDangerButton {
+  background: var(--bp-high);
+  border-color: var(--bp-high);
+  color: #ffffff;
+}
+
+.aiPrimaryButton:hover,
+.aiPrimaryButton:focus-visible,
+.deploymentPrimaryButton:not(:disabled):hover,
+.deploymentPrimaryButton:not(:disabled):focus-visible {
+  background: color-mix(in srgb, var(--bp-blue) 86%, #000000);
+  border-color: color-mix(in srgb, var(--bp-blue) 86%, #000000);
+  outline: none;
+}
+
+.aiSecondaryButton:hover,
+.aiSecondaryButton:focus-visible,
+.deploymentSecondaryButton:not(:disabled):hover,
+.deploymentSecondaryButton:not(:disabled):focus-visible {
+  background: var(--bp-blue-tint);
+  border-color: var(--bp-blue);
+  color: var(--bp-blue);
+  outline: none;
+}
+
+.deploymentPrimaryButton:disabled,
+.deploymentSecondaryButton:disabled,
+.deploymentDangerButton:disabled {
+  opacity: 0.62;
+}
+
+.aiPanel,
+.deploymentPanel {
+  gap: 14px;
+  padding: 16px;
+}
+
+.aiPanelHeader,
+.deploymentHeader {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--bp-paper) 92%, #ffffff), var(--bp-paper-2));
+  border: 1.5px solid var(--bp-line);
+  border-radius: var(--bp-r);
+  padding: 14px;
+  position: relative;
+}
+
+.aiPanelHeader::before,
+.aiPanelHeader::after,
+.deploymentHeader::before,
+.deploymentHeader::after,
+.aiSection::before,
+.deploymentSection::before {
+  border: 1.5px solid var(--bp-blue);
+  content: "";
+  height: 10px;
+  pointer-events: none;
+  position: absolute;
+  width: 10px;
+}
+
+.aiPanelHeader::before,
+.deploymentHeader::before,
+.aiSection::before,
+.deploymentSection::before {
+  border-bottom: 0;
+  border-right: 0;
+  left: -1px;
+  top: -1px;
+}
+
+.aiPanelHeader::after,
+.deploymentHeader::after {
+  border-left: 0;
+  border-top: 0;
+  bottom: -1px;
+  right: -1px;
+}
+
+.aiPanelHeader span,
+.deploymentHeader > span,
+.deploymentHeaderTop span {
+  color: var(--bp-blue);
+  font-family: var(--bp-mono);
+  font-size: 10px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.aiPanelHeader h2,
+.deploymentHeader h2 {
+  font-size: 20px;
+  line-height: 1.1;
+}
+
+.aiSection,
+.deploymentSection {
+  background: color-mix(in srgb, var(--bp-paper) 94%, transparent);
+  border: 1px solid var(--bp-line);
+  border-radius: var(--bp-r);
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  position: relative;
+}
+
+.aiSection {
+  border-top: 1px solid var(--bp-line);
+}
+
+.aiSection:first-of-type {
+  border-top: 1px solid var(--bp-line);
+}
+
+.aiField {
+  color: var(--bp-blue);
+  font-family: var(--bp-head);
+  font-size: 12px;
+}
+
+.aiField textarea,
+.aiField input,
+.aiField select,
+.deploymentField input,
+.deploymentField select,
+.deploymentField textarea {
+  background: #f8fbfd;
+  border: 1.5px solid var(--bp-line);
+  color: var(--bp-ink);
+  font-size: 13px;
+}
+
+.aiField textarea {
+  min-height: 124px;
+}
+
+.aiInlineFields {
+  gap: 12px;
+}
+
+.aiPrimaryButton,
+.deploymentPrimaryButton,
+.deploymentDangerButton {
+  min-height: 42px;
+}
+
+.aiSecondaryButton,
+.deploymentSecondaryButton,
+.deploymentExpandButton,
+.terraformPreviewButton {
+  border-color: color-mix(in srgb, var(--bp-blue) 38%, var(--bp-line));
+}
+
+.terraformPreviewButton {
+  background: var(--bp-paper);
+  color: var(--bp-blue);
+}
+
+.deploymentPanelContent {
+  gap: 14px;
+  padding-right: 0;
+  scrollbar-gutter: auto;
+}
+
+.deploymentHeader {
+  margin-right: 0;
+}
+
+.deploymentPanel .deploymentSection:first-of-type {
+  background: color-mix(in srgb, var(--bp-blue-tint) 38%, var(--bp-paper));
+}
+
+.deploymentSectionHeader {
+  align-items: center;
+}
+
+.deploymentPreflightSummary,
+.deploymentGateCard {
+  border-radius: var(--bp-r);
+}
+
+.deploymentExpandedLogs {
+  background: #101923;
+  border-left: 1px solid #2d4255;
+  padding: 16px;
+}
+
+.deploymentExpandedLogs h3,
+.deploymentExpandedLogs span,
+.deploymentExpandedLogs p {
+  color: #cfe1ef;
+}
+
+.deploymentLogList {
+  background: linear-gradient(rgba(126, 167, 198, 0.08) 1px, transparent 1px), #0e151d;
+  background-size: 100% 28px;
+  border: 1px solid #33495c;
+  min-height: calc(100vh - 174px);
+  padding: 14px;
+}
+
+.deploymentLogPrefix {
+  color: #7ea7c6;
+}
+
+@media (max-width: 640px) {
+  .deploymentGateFacts {
+    grid-template-columns: 1fr;
   }
 }
