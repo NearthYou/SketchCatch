@@ -54,7 +54,7 @@ function main() {
       ? fs.readFileSync(generatedCatalogPath, "utf8")
       : "";
 
-    if (currentOutput !== output) {
+    if (normalizeLineEndings(currentOutput) !== normalizeLineEndings(output)) {
       fail(
         [
           "Generated catalog is out of date.",
@@ -405,6 +405,10 @@ function renderGeneratedCatalog(catalog) {
   ].join("\n");
 }
 
+function normalizeLineEndings(value) {
+  return value.replace(/\r\n/g, "\n");
+}
+
 function loadTsModule(filePath) {
   const source = fs.readFileSync(filePath, "utf8");
   const compiled = ts.transpileModule(source, {
@@ -417,13 +421,14 @@ function loadTsModule(filePath) {
   }).outputText;
   const module = { exports: {} };
   const dirname = path.dirname(filePath);
+  const moduleRequire = createRequire(filePath);
 
   vm.runInNewContext(compiled, {
     __dirname: dirname,
     __filename: filePath,
     exports: module.exports,
     module,
-    require,
+    require: moduleRequire,
     console
   });
 

@@ -5,6 +5,8 @@ import type {
   AiTerraformPreviewExplanationResult,
   AiTerraformStage,
   ApproveDeploymentPlanRequest,
+  ApiErrorCode,
+  ApiErrorResponse,
   ArchitectureJson,
   ArchitectureSnapshot,
   AwsConnectionCloudFormationTemplateResponse,
@@ -53,7 +55,7 @@ import type {
   VerifyAwsConnectionRequest,
   VerifyAwsConnectionResponse
 } from "../../../../packages/types/src";
-import { apiFetch, buildApiUrl } from "../../lib/api-client";
+import { ApiClientError, apiFetch, buildApiUrl } from "../../lib/api-client";
 import { readStoredAuthSession } from "../../lib/auth-storage";
 
 const AI_API_BASE_URL = (
@@ -331,30 +333,50 @@ async function postPublicAiJson<ResponseBody>(
   });
 
   if (!response.ok) {
-    throw new Error(await readPublicAiErrorMessage(response));
+    throw await readPublicAiError(response);
   }
 
   return response.json() as Promise<ResponseBody>;
 }
 
-// API 서버의 JSON 오류를 사람이 읽을 수 있는 message로 낮춥니다.
-async function readPublicAiErrorMessage(response: Response): Promise<string> {
+// API 서버의 JSON 오류를 공용 에러 타입으로 유지해 화면별 메시지 fallback에 덮이지 않게 합니다.
+async function readPublicAiError(response: Response): Promise<ApiClientError> {
   try {
     const body: unknown = await response.json();
 
-    return isPublicAiErrorBody(body) ? body.message : `API 요청 실패: ${response.status}`;
+    if (isPublicAiErrorBody(body)) {
+      return new ApiClientError(response.status, body);
+    }
   } catch {
-    return `API 요청 실패: ${response.status}`;
+    // Fall through to a typed fallback error below.
   }
+
+  return new ApiClientError(response.status, {
+    error: response.status >= 500 ? "internal_server_error" : "bad_request",
+    message: `API 요청 실패: ${response.status}`
+  });
 }
 
-// API 오류 응답에서 message 필드가 있는 경우에만 사용자 메시지로 사용합니다.
-function isPublicAiErrorBody(value: unknown): value is { readonly message: string } {
+// API 오류 응답에서 표준 error/message 필드가 있는 경우에만 사용자 메시지로 사용합니다.
+function isPublicAiErrorBody(value: unknown): value is ApiErrorResponse {
   return (
     typeof value === "object" &&
     value !== null &&
+    "error" in value &&
     "message" in value &&
+    isApiErrorCode(value.error) &&
     typeof value.message === "string"
+  );
+}
+
+function isApiErrorCode(value: unknown): value is ApiErrorCode {
+  return (
+    value === "bad_request" ||
+    value === "unauthorized" ||
+    value === "not_found" ||
+    value === "conflict" ||
+    value === "too_many_requests" ||
+    value === "internal_server_error"
   );
 }
 

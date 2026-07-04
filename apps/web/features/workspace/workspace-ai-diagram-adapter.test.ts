@@ -1,12 +1,26 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import type { ArchitectureJson, DiagramJson } from "@sketchcatch/types";
+import { fileURLToPath } from "node:url";
+import type { ArchitectureJson, DiagramJson, DiagramNode } from "@sketchcatch/types";
 import {
   convertArchitectureJsonToDiagramJson,
   convertDiagramJsonToArchitectureJson
 } from "./workspace-ai-diagram-adapter";
 
-test("convertArchitectureJsonToDiagramJson creates board nodes and edges from an Architecture Draft", () => {
+test("workspace AI diagram adapter uses shared resource definitions for Terraform mapping", () => {
+  const source = readFileSync(
+    fileURLToPath(new URL("workspace-ai-diagram-adapter.ts", import.meta.url)),
+    "utf8"
+  );
+
+  assert.doesNotMatch(source, /RESOURCE_TO_TERRAFORM_RESOURCE_TYPE/);
+  assert.doesNotMatch(source, /TERRAFORM_RESOURCE_TYPE_TO_RESOURCE/);
+  assert.match(source, /getDefaultResourceDefinitionByResourceType/);
+  assert.match(source, /getResourceDefinitionByTerraform/);
+});
+
+test("convertArchitectureJsonToDiagramJson creates board nodes and hides containment arrows from an Architecture Draft", () => {
   const architectureJson: ArchitectureJson = {
     nodes: [
       {
@@ -104,12 +118,50 @@ test("convertArchitectureJsonToDiagramJson creates board nodes and edges from an
       }
     ]
   );
+  assert.deepEqual(diagramJson.edges, []);
+  assert.deepEqual(diagramJson.viewport, { x: 0, y: 0, zoom: 1 });
+});
+
+test("convertArchitectureJsonToDiagramJson keeps non-containment edges as arrows", () => {
+  const architectureJson: ArchitectureJson = {
+    nodes: [
+      {
+        id: "ec2-backend",
+        type: "EC2",
+        label: "Backend Server",
+        positionX: 160,
+        positionY: 220,
+        config: {}
+      },
+      {
+        id: "rds-primary",
+        type: "RDS",
+        label: "Database",
+        positionX: 420,
+        positionY: 220,
+        config: {}
+      }
+    ],
+    edges: [
+      {
+        id: "backend-to-database",
+        sourceId: "ec2-backend",
+        targetId: "rds-primary",
+        label: "reads/writes"
+      }
+    ]
+  };
+
+  const diagramJson = convertArchitectureJsonToDiagramJson(architectureJson);
+
   assert.deepEqual(diagramJson.edges, [
     {
-      id: "edge-vpc-ec2",
-      label: "contains",
-      sourceNodeId: "vpc-main",
-      targetNodeId: "ec2-backend",
+      id: "backend-to-database",
+      label: "reads/writes",
+      sourceHandleId: "handle-right",
+      sourceNodeId: "ec2-backend",
+      targetHandleId: "handle-left",
+      targetNodeId: "rds-primary",
       type: "smoothstep",
       style: {
         animated: false,
@@ -118,7 +170,6 @@ test("convertArchitectureJsonToDiagramJson creates board nodes and edges from an
       }
     }
   ]);
-  assert.deepEqual(diagramJson.viewport, { x: 0, y: 0, zoom: 1 });
 });
 
 test("convertArchitectureJsonToDiagramJson uses catalog icon and size for CloudFront drafts", () => {
@@ -253,6 +304,51 @@ test("convertArchitectureJsonToDiagramJson resolves Terraform references to area
   assert.equal(parentByNodeId.get("web-server"), "public-a");
 });
 
+test("convertArchitectureJsonToDiagramJson resolves common Terraform reference attributes", () => {
+  const architectureJson: ArchitectureJson = {
+    nodes: [
+      {
+        id: "network-main",
+        type: "VPC",
+        label: "Main VPC",
+        positionX: 100,
+        positionY: 100,
+        config: {
+          terraformResourceName: "main"
+        }
+      },
+      {
+        id: "public-a",
+        type: "SUBNET",
+        label: "Public Subnet",
+        positionX: 160,
+        positionY: 180,
+        config: {
+          terraformResourceName: "public",
+          vpcId: "aws_vpc.main.arn"
+        }
+      },
+      {
+        id: "web-server",
+        type: "EC2",
+        label: "Web Server",
+        positionX: 220,
+        positionY: 260,
+        config: {
+          subnetId: "aws_subnet.public.name"
+        }
+      }
+    ],
+    edges: []
+  };
+
+  const diagramJson = convertArchitectureJsonToDiagramJson(architectureJson);
+  const parentByNodeId = new Map(diagramJson.nodes.map((node) => [node.id, node.metadata?.parentAreaNodeId]));
+
+  assert.equal(parentByNodeId.get("public-a"), "network-main");
+  assert.equal(parentByNodeId.get("web-server"), "public-a");
+});
+
 test("convertArchitectureJsonToDiagramJson marks VPC and Subnet containment for board area nodes", () => {
   const architectureJson: ArchitectureJson = {
     nodes: [
@@ -295,6 +391,12 @@ test("convertArchitectureJsonToDiagramJson marks VPC and Subnet containment for 
         sourceId: "subnet-app",
         targetId: "ec2-api",
         label: "hosts"
+      },
+      {
+        id: "sg-to-ec2",
+        sourceId: "sg-app",
+        targetId: "ec2-api",
+        label: "allows traffic"
       }
     ]
   };
@@ -306,10 +408,16 @@ test("convertArchitectureJsonToDiagramJson marks VPC and Subnet containment for 
     [
       { id: "vpc-main", parentAreaNodeId: undefined },
       { id: "subnet-app", parentAreaNodeId: "vpc-main" },
-      { id: "sg-app", parentAreaNodeId: "vpc-main" },
-      { id: "ec2-api", parentAreaNodeId: "subnet-app" }
+      { id: "sg-app", parentAreaNodeId: "subnet-app" },
+      { id: "ec2-api", parentAreaNodeId: "sg-app" }
     ]
   );
+
+  const nodeById = new Map(diagramJson.nodes.map((node) => [node.id, node]));
+  assertContainsNode(nodeById.get("vpc-main"), nodeById.get("subnet-app"));
+  assertContainsNode(nodeById.get("subnet-app"), nodeById.get("sg-app"));
+  assertContainsNode(nodeById.get("sg-app"), nodeById.get("ec2-api"));
+  assert.deepEqual(diagramJson.edges, []);
 });
 
 test("convertArchitectureJsonToDiagramJson maps server and storage draft resources to Terraform nodes", () => {
@@ -414,6 +522,145 @@ test("convertArchitectureJsonToDiagramJson maps server and storage draft resourc
   );
 });
 
+test("convertArchitectureJsonToDiagramJson maps Lambda draft resources to Terraform nodes", () => {
+  const architectureJson: ArchitectureJson = {
+    nodes: [
+      {
+        id: "lambda-function",
+        type: "LAMBDA",
+        label: "Lambda Function",
+        positionX: 260,
+        positionY: 220,
+        config: {
+          functionName: "practice-function",
+          handler: "index.handler",
+          runtime: "nodejs20.x"
+        }
+      }
+    ],
+    edges: []
+  };
+
+  const diagramJson = convertArchitectureJsonToDiagramJson(architectureJson);
+
+  assert.deepEqual(
+    diagramJson.nodes.map((node) => ({
+      id: node.id,
+      resourceName: node.parameters?.resourceName,
+      resourceType: node.parameters?.resourceType,
+      terraformBlockType: node.parameters?.terraformBlockType,
+      type: node.type,
+      values: node.parameters?.values
+    })),
+    [
+      {
+        id: "lambda-function",
+        resourceName: "lambda_function",
+        resourceType: "aws_lambda_function",
+        terraformBlockType: "resource",
+        type: "aws_lambda_function",
+        values: {
+          functionName: "practice-function",
+          handler: "index.handler",
+          runtime: "nodejs20.x"
+        }
+      }
+    ]
+  );
+});
+
+test("convertArchitectureJsonToDiagramJson maps operations and permission draft resources", () => {
+  const architectureJson = {
+    nodes: [
+      {
+        id: "api-gateway",
+        type: "API_GATEWAY_REST_API",
+        label: "Practice API",
+        positionX: 80,
+        positionY: 80,
+        config: { name: "practice-api" }
+      },
+      {
+        id: "lambda-execution-role",
+        type: "IAM_ROLE",
+        label: "Lambda Execution Role",
+        positionX: 220,
+        positionY: 80,
+        config: { assumeRolePolicy: "policy-json" }
+      },
+      {
+        id: "lambda-execution-policy",
+        type: "IAM_POLICY",
+        label: "Lambda Execution Policy",
+        positionX: 360,
+        positionY: 80,
+        config: { policy: "policy-json" }
+      },
+      {
+        id: "api-instance-profile",
+        type: "IAM_INSTANCE_PROFILE",
+        label: "API Instance Profile",
+        positionX: 500,
+        positionY: 80,
+        config: { role: "aws_iam_role.api_runtime_role.name" }
+      },
+      {
+        id: "db-encryption-key",
+        type: "KMS_KEY",
+        label: "DB Encryption Key",
+        positionX: 640,
+        positionY: 80,
+        config: { enableKeyRotation: true }
+      },
+      {
+        id: "lambda-log-group",
+        type: "CLOUDWATCH_LOG_GROUP",
+        label: "Lambda Logs",
+        positionX: 780,
+        positionY: 80,
+        config: { retentionInDays: 14 }
+      },
+      {
+        id: "lambda-error-alarm",
+        type: "CLOUDWATCH_METRIC_ALARM",
+        label: "Lambda Error Alarm",
+        positionX: 920,
+        positionY: 80,
+        config: { alarmName: "lambda-errors", namespace: "AWS/Lambda", metricName: "Errors" }
+      },
+      {
+        id: "lambda-invoke-permission",
+        type: "LAMBDA_PERMISSION",
+        label: "API Invoke Permission",
+        positionX: 1060,
+        positionY: 80,
+        config: { action: "lambda:InvokeFunction", principal: "apigateway.amazonaws.com" }
+      }
+    ],
+    edges: []
+  } as ArchitectureJson;
+
+  const diagramJson = convertArchitectureJsonToDiagramJson(architectureJson);
+
+  assert.deepEqual(
+    diagramJson.nodes.map((node) => ({
+      id: node.id,
+      resourceType: node.parameters?.resourceType,
+      terraformBlockType: node.parameters?.terraformBlockType
+    })),
+    [
+      { id: "api-gateway", resourceType: "aws_api_gateway_rest_api", terraformBlockType: "resource" },
+      { id: "lambda-execution-role", resourceType: "aws_iam_role", terraformBlockType: "resource" },
+      { id: "lambda-execution-policy", resourceType: "aws_iam_policy", terraformBlockType: "resource" },
+      { id: "api-instance-profile", resourceType: "aws_iam_instance_profile", terraformBlockType: "resource" },
+      { id: "db-encryption-key", resourceType: "aws_kms_key", terraformBlockType: "resource" },
+      { id: "lambda-log-group", resourceType: "aws_cloudwatch_log_group", terraformBlockType: "resource" },
+      { id: "lambda-error-alarm", resourceType: "aws_cloudwatch_metric_alarm", terraformBlockType: "resource" },
+      { id: "lambda-invoke-permission", resourceType: "aws_lambda_permission", terraformBlockType: "resource" }
+    ]
+  );
+});
+
 test("convertArchitectureJsonToDiagramJson lays out server and storage draft as nested cloud areas", () => {
   const architectureJson: ArchitectureJson = {
     nodes: [
@@ -505,7 +752,6 @@ test("convertArchitectureJsonToDiagramJson lays out server and storage draft as 
       id: node.id,
       kind: node.kind,
       parentAreaNodeId: node.metadata?.parentAreaNodeId,
-      position: node.position,
       type: node.type
     })),
     [
@@ -513,77 +759,66 @@ test("convertArchitectureJsonToDiagramJson lays out server and storage draft as 
         id: "server-storage-region",
         kind: "design",
         parentAreaNodeId: undefined,
-        position: { x: 40, y: 70 },
         type: "design_region"
       },
       {
         id: "server-storage-az",
         kind: "design",
         parentAreaNodeId: "vpc",
-        position: { x: 152, y: 430 },
         type: "design_az"
       },
       {
         id: "vpc",
         kind: "resource",
         parentAreaNodeId: "server-storage-region",
-        position: { x: 100, y: 300 },
         type: "aws_vpc"
       },
       {
         id: "subnet",
         kind: "resource",
         parentAreaNodeId: "server-storage-az",
-        position: { x: 245, y: 650 },
         type: "aws_subnet"
       },
       {
         id: "security-group",
         kind: "resource",
-        parentAreaNodeId: "server-storage-az",
-        position: { x: 200, y: 520 },
+        parentAreaNodeId: "subnet",
         type: "aws_security_group"
       },
       {
         id: "ec2-instance",
         kind: "resource",
-        parentAreaNodeId: "subnet",
-        position: { x: 330, y: 765 },
+        parentAreaNodeId: "security-group",
         type: "aws_instance"
       },
       {
         id: "internet-gateway",
         kind: "resource",
         parentAreaNodeId: "vpc",
-        position: { x: 590, y: 365 },
         type: "aws_internet_gateway"
       },
       {
         id: "route-table-association",
         kind: "resource",
         parentAreaNodeId: "vpc",
-        position: { x: 700, y: 620 },
         type: "aws_route_table_association"
       },
       {
         id: "route-table",
         kind: "resource",
         parentAreaNodeId: "vpc",
-        position: { x: 940, y: 610 },
         type: "aws_route_table"
       },
       {
         id: "ami",
         kind: "resource",
         parentAreaNodeId: "server-storage-region",
-        position: { x: 120, y: 130 },
         type: "aws_ami"
       },
       {
         id: "s3-bucket",
         kind: "resource",
         parentAreaNodeId: "server-storage-region",
-        position: { x: 950, y: 130 },
         type: "aws_s3_bucket"
       }
     ]
@@ -593,12 +828,94 @@ test("convertArchitectureJsonToDiagramJson lays out server and storage draft as 
   const regionNode = nodeById.get("server-storage-region");
   const vpcNode = nodeById.get("vpc");
   const azNode = nodeById.get("server-storage-az");
-  assert.equal(regionNode?.size.width, 1160);
+  const subnetNode = nodeById.get("subnet");
+  const securityGroupNode = nodeById.get("security-group");
+  const instanceNode = nodeById.get("ec2-instance");
+
+  assertContainsNode(regionNode, vpcNode);
+  assertContainsNode(vpcNode, azNode);
+  assertContainsNode(azNode, subnetNode);
+  assertContainsNode(subnetNode, securityGroupNode);
+  assertContainsNode(securityGroupNode, instanceNode);
+  assert.equal(regionNode?.size.width, 1192);
   assert.equal(regionNode?.size.height, 1080);
-  assert.equal(vpcNode?.size.width, 1000);
+  assert.equal(vpcNode?.size.width, 1044);
   assert.equal(vpcNode?.size.height, 798);
-  assert.equal(azNode?.size.width, 783);
-  assert.equal(azNode?.size.height, 620);
+  assert.equal(azNode?.size.width, 831);
+  assert.equal(azNode?.size.height, 626);
+});
+
+test("convertArchitectureJsonToDiagramJson keeps server-storage usage arrows visible", () => {
+  const architectureJson: ArchitectureJson = {
+    nodes: [
+      {
+        id: "ami",
+        type: "AMI",
+        label: "Amazon Linux AMI",
+        positionX: 120,
+        positionY: 130,
+        config: { owners: ["amazon"] }
+      },
+      {
+        id: "ec2-instance",
+        type: "EC2",
+        label: "EC2 Instance",
+        positionX: 330,
+        positionY: 765,
+        config: {
+          ami: "data.aws_ami.ami.id",
+          instanceType: "t3.micro"
+        }
+      },
+      {
+        id: "s3-bucket",
+        type: "S3",
+        label: "S3 Bucket",
+        positionX: 950,
+        positionY: 130,
+        config: {}
+      }
+    ],
+    edges: [
+      {
+        id: "ami-to-ec2-instance",
+        sourceId: "ami",
+        targetId: "ec2-instance",
+        label: "launch image"
+      },
+      {
+        id: "ec2-instance-to-s3-bucket",
+        sourceId: "ec2-instance",
+        targetId: "s3-bucket",
+        label: "stores images"
+      }
+    ]
+  };
+
+  const diagramJson = convertArchitectureJsonToDiagramJson(architectureJson);
+
+  assert.deepEqual(
+    diagramJson.edges.map((edge) => ({
+      id: edge.id,
+      label: edge.label,
+      sourceNodeId: edge.sourceNodeId,
+      targetNodeId: edge.targetNodeId
+    })),
+    [
+      {
+        id: "ami-to-ec2-instance",
+        label: "launch image",
+        sourceNodeId: "ami",
+        targetNodeId: "ec2-instance"
+      },
+      {
+        id: "ec2-instance-to-s3-bucket",
+        label: "stores images",
+        sourceNodeId: "ec2-instance",
+        targetNodeId: "s3-bucket"
+      }
+    ]
+  );
 });
 
 test("convertDiagramJsonToArchitectureJson keeps only valid resource nodes and connected edges", () => {
@@ -737,4 +1054,19 @@ function makeDiagramNode(
     zIndex: node.zIndex ?? 1,
     ...(node.parameters !== undefined ? { parameters: node.parameters } : {})
   };
+}
+
+function assertContainsNode(parent: DiagramNode | undefined, child: DiagramNode | undefined): void {
+  assert.ok(parent, "Expected parent node to exist");
+  assert.ok(child, "Expected child node to exist");
+  assert.ok(child.position.x >= parent.position.x, `${parent.id} should contain ${child.id} on the left edge`);
+  assert.ok(child.position.y >= parent.position.y, `${parent.id} should contain ${child.id} on the top edge`);
+  assert.ok(
+    child.position.x + child.size.width <= parent.position.x + parent.size.width,
+    `${parent.id} should contain ${child.id} on the right edge`
+  );
+  assert.ok(
+    child.position.y + child.size.height <= parent.position.y + parent.size.height,
+    `${parent.id} should contain ${child.id} on the bottom edge`
+  );
 }

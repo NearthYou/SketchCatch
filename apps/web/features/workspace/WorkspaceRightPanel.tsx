@@ -8,8 +8,7 @@ import {
   GalleryVerticalEnd,
   PanelRightClose,
   PanelRightOpen,
-  Rocket,
-  Sparkles
+  Rocket
 } from "lucide-react";
 import type { DiagramEditorPanelContext } from "../diagram-editor";
 import { DeploymentPanel } from "./DeploymentPanel";
@@ -21,7 +20,6 @@ import {
 } from "./TerraformCodePanel";
 import { TerraformIssuesPanel } from "./TerraformIssuesPanel";
 import { TerraformLeaveDialog } from "./TerraformLeaveDialog";
-import { WorkspaceAiPanel } from "./WorkspaceAiPanel";
 import { defaultResourceWorkspaceView } from "./resource-workspace-view";
 import {
   WORKSPACE_SAFETY_FINDING_AI_EVENT,
@@ -415,14 +413,6 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
         </button>
         <button
           className={styles.collapsedPanelButton}
-          onClick={() => openCollapsedView("ai")}
-          title="AI"
-          type="button"
-        >
-          <Sparkles size={18} aria-hidden="true" />
-        </button>
-        <button
-          className={styles.collapsedPanelButton}
           onClick={() => openCollapsedView("deployment")}
           title="Deploy"
           type="button"
@@ -478,15 +468,6 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
             >
               {terraformDiagnostics.length}
             </span>
-          </button>
-          <button
-            aria-pressed={activeView === "ai"}
-            className={activeView === "ai" ? styles.panelModeButtonActive : styles.panelModeButton}
-            onClick={() => requestView("ai")}
-            title="AI"
-            type="button"
-          >
-            <Sparkles size={18} aria-hidden="true" />
           </button>
           <button
             aria-pressed={activeView === "deployment"}
