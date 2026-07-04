@@ -79,3 +79,37 @@ pnpm build
 - 검증 완료: `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm test`, `git diff --check`.
 - 현재 작업 트리: 최종 검증 시점 기준 깨끗해야 한다.
 - 주의: 실제 Terraform apply/destroy와 AWS mutation은 수행하지 않았다.
+
+## 2026-07-03 - Issue #128 Worker 1-1 핸드오프
+
+### 현재 검증된 것
+
+- Direct Deployment 승인 스냅샷 재검증 동작은 기존 production code가 이미 만족했다. production 파일은 수정하지 않았다.
+- apply precondition 회귀 테스트를 추가했다.
+  - artifact hash drift
+  - tfplan hash drift
+  - AWS account drift
+  - AWS region drift
+  - missing approval snapshot fields
+  - drift 감지 시 apply service가 AWS credential 준비, plan file write, Terraform 실행 전에 멈추는지
+- 기존 destroy precondition 동작은 targeted destroy service test run으로 계속 검증했다.
+- `docs/sw/005_승인스냅샷재검증클론코딩가이드_sw.md`를 추가하고 `docs/sw/README.md`에서 연결했다.
+
+### 실행한 검증
+
+- `pnpm harness:check` - passed before edits
+- `pnpm --filter @sketchcatch/api exec tsx --test src/deployments/deployment-approval-service.test.ts src/deployments/deployment-apply-service.test.ts src/deployments/deployment-destroy-service.test.ts` - passed
+- `pnpm --filter @sketchcatch/api test` - failed once because existing tests require `S3_BUCKET_NAME`
+- `$env:S3_BUCKET_NAME='sketchcatch-test-bucket'; pnpm --filter @sketchcatch/api test` - passed
+- `pnpm --filter @sketchcatch/api lint` - passed
+- `pnpm --filter @sketchcatch/api typecheck` - passed
+- `pnpm lint` - passed
+- `pnpm typecheck` - passed
+- `pnpm build` - passed
+- `git diff --check` - passed
+- `pnpm harness:check` - passed after note update
+
+### 남은 리스크와 다음 행동
+
+- 이 worker branch를 #128 Worker 1-2 또는 1-3 범위로 확장하지 않는다. Parent agent가 이 focused diff를 review하고 PR을 연다.
+- 실제 AWS apply/destroy, cloud mutation, Git/CI/CD handoff, secret access는 수행하지 않았다.

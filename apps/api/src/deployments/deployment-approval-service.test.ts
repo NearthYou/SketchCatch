@@ -776,6 +776,51 @@ test("assertDeploymentDestroyPreconditions blocks artifact plan and AWS drift", 
   );
 });
 
+test("assertDeploymentApplyPreconditions rejects AWS region drift before apply", () => {
+  assert.throws(
+    () =>
+      assertDeploymentApplyPreconditions({
+        deployment: createApprovedDeploymentRecord(),
+        currentPlanArtifact: createPlanArtifactRecord(),
+        currentTerraformArtifactHash: artifactHash,
+        currentTfplanHash: tfplanHash,
+        currentAwsConnection: createVerifiedAwsConnection({ region: "us-east-1" })
+      }),
+    /AWS region changed before apply/
+  );
+});
+
+test("assertDeploymentApplyPreconditions rejects missing approval snapshot fields", () => {
+  const requiredSnapshotFields: Array<keyof DeploymentRecord> = [
+    "approvedAt",
+    "approvedByUserId",
+    "approvedTerraformArtifactId",
+    "approvedPlanArtifactId",
+    "approvedTerraformArtifactHash",
+    "approvedTfplanHash",
+    "approvedAwsAccountId",
+    "approvedAwsRegion"
+  ];
+
+  for (const field of requiredSnapshotFields) {
+    assert.throws(
+      () =>
+        assertDeploymentApplyPreconditions({
+          deployment: {
+            ...createApprovedDeploymentRecord(),
+            [field]: null
+          },
+          currentPlanArtifact: createPlanArtifactRecord(),
+          currentTerraformArtifactHash: artifactHash,
+          currentTfplanHash: tfplanHash,
+          currentAwsConnection: createVerifiedAwsConnection()
+        }),
+      /Deployment approval is required before apply/,
+      String(field)
+    );
+  }
+});
+
 function createAccessContext(): ProjectAccessContext {
   return {
     kind: "user",
