@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { TerraformDiagnostic } from "@sketchcatch/types";
+import type { TerraformDiagnostic, TerraformSourceLocation } from "@sketchcatch/types";
 import {
   AlertCircle,
   Code2,
@@ -207,6 +207,14 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
   const validateTerraformForPreDeployment = useCallback(async (): Promise<TerraformDiagnostic[]> => {
     return terraformPanelRef.current?.validateCurrentTerraform() ?? terraformDiagnostics;
   }, [terraformDiagnostics]);
+
+  const openTerraformSourceLocation = useCallback((sourceLocation: TerraformSourceLocation): void => {
+    context.setRightPanelOpen(true);
+    setActiveView("terraform");
+    window.setTimeout(() => {
+      terraformPanelRef.current?.openTerraformSourceLocation(sourceLocation);
+    }, 0);
+  }, [context]);
 
   useEffect(() => {
     if (!hasUnsavedTerraformChanges) {
@@ -423,6 +431,7 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
             currentNodeCount={context.nodes.length}
             diagramJson={context.diagram}
             hasUnsavedDeploymentBaseline={hasUnsavedDeploymentBaseline}
+            onOpenTerraformSourceLocation={openTerraformSourceLocation}
             onPrepareDeploymentArtifacts={prepareDeploymentArtifacts}
             onReadTerraformSourceFiles={() => terraformPanelRef.current?.getTerraformFiles() ?? []}
             onValidateTerraformDiagnostics={validateTerraformForPreDeployment}

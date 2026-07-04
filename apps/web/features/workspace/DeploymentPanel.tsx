@@ -14,9 +14,10 @@ import type {
   DiagramJson,
   DeploymentLog,
   TerraformDiagnostic,
+  TerraformSourceLocation,
   TerraformOutput
 } from "@sketchcatch/types";
-import { Clipboard, ClipboardCheck, Maximize2, ShieldCheck, Trash2, X } from "lucide-react";
+import { Clipboard, ClipboardCheck, FileCode2, Maximize2, ShieldCheck, Trash2, X } from "lucide-react";
 import { DashboardIcon } from "../../components/dashboard/dashboard-icons";
 import { SelectMenu, type SelectMenuOption } from "../../components/ui/SelectMenu";
 import { getApiErrorMessage } from "../../lib/api-client";
@@ -79,6 +80,7 @@ export function DeploymentPanel({
   currentNodeCount,
   diagramJson,
   hasUnsavedDeploymentBaseline,
+  onOpenTerraformSourceLocation,
   onPrepareDeploymentArtifacts,
   onReadTerraformSourceFiles,
   onValidateTerraformDiagnostics,
@@ -88,6 +90,7 @@ export function DeploymentPanel({
   readonly currentNodeCount: number;
   readonly diagramJson: DiagramJson;
   readonly hasUnsavedDeploymentBaseline: boolean;
+  readonly onOpenTerraformSourceLocation: (sourceLocation: TerraformSourceLocation) => void;
   readonly onPrepareDeploymentArtifacts: () => Promise<SavedWorkspaceTerraformArtifact>;
   readonly onReadTerraformSourceFiles: () => readonly TerraformVirtualFile[];
   readonly onValidateTerraformDiagnostics: () => Promise<TerraformDiagnostic[]>;
@@ -780,7 +783,10 @@ export function DeploymentPanel({
         <p className={styles.deploymentStaleNotice}>보드 변경됨 · 다시 실행 필요</p>
       ) : null}
       {preDeploymentAnalysis !== null ? (
-        <DeploymentPreDeploymentSummary analysis={preDeploymentAnalysis} />
+        <DeploymentPreDeploymentSummary
+          analysis={preDeploymentAnalysis}
+          onOpenTerraformSourceLocation={onOpenTerraformSourceLocation}
+        />
       ) : (
         <p className={styles.deploymentHint}>현재 보드 기준으로 비용, 보안, 설정 위험을 확인합니다.</p>
       )}
@@ -1254,9 +1260,11 @@ export function DeploymentPanel({
 }
 
 function DeploymentPreDeploymentSummary({
-  analysis
+  analysis,
+  onOpenTerraformSourceLocation
 }: {
   readonly analysis: AiPreDeploymentAnalysisResult;
+  readonly onOpenTerraformSourceLocation: (sourceLocation: TerraformSourceLocation) => void;
 }) {
   const failCount = countChecklistItems(analysis, "fail");
   const warningCount = countChecklistItems(analysis, "warning");
@@ -1283,7 +1291,11 @@ function DeploymentPreDeploymentSummary({
       {visibleFindings.length > 0 ? (
         <ul className={styles.deploymentPreflightFindings}>
           {visibleFindings.map((finding) => (
-            <DeploymentPreDeploymentFindingItem finding={finding} key={finding.id} />
+            <DeploymentPreDeploymentFindingItem
+              finding={finding}
+              key={finding.id}
+              onOpenTerraformSourceLocation={onOpenTerraformSourceLocation}
+            />
           ))}
         </ul>
       ) : (
@@ -1296,12 +1308,30 @@ function DeploymentPreDeploymentSummary({
   );
 }
 
-function DeploymentPreDeploymentFindingItem({ finding }: { readonly finding: CheckFinding }) {
+function DeploymentPreDeploymentFindingItem({
+  finding,
+  onOpenTerraformSourceLocation
+}: {
+  readonly finding: CheckFinding;
+  readonly onOpenTerraformSourceLocation: (sourceLocation: TerraformSourceLocation) => void;
+}) {
+  const sourceLocation = finding.sourceLocation;
+
   return (
     <li data-severity={finding.severity}>
       <span>{finding.severity.toUpperCase()}</span>
       <strong>{finding.title}</strong>
       {finding.resourceId ? <em>{finding.resourceId}</em> : null}
+      {sourceLocation ? (
+        <button
+          className={styles.deploymentFindingFixButton}
+          onClick={() => onOpenTerraformSourceLocation(sourceLocation)}
+          type="button"
+        >
+          <FileCode2 size={13} aria-hidden="true" />
+          수정
+        </button>
+      ) : null}
     </li>
   );
 }

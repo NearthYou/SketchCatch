@@ -4,7 +4,8 @@ import type {
   AiTerraformErrorExplanationResult,
   AiTerraformPreviewExplanationResult,
   DiagramJson,
-  TerraformDiagnostic
+  TerraformDiagnostic,
+  TerraformSourceLocation
 } from "@sketchcatch/types";
 import {
   AlertCircle,
@@ -117,6 +118,28 @@ function createTerraformPreviewExplanationScopeValue(
   };
 }
 
+function getTerraformLineStartOffset(code: string, line: number): number {
+  if (line <= 1) {
+    return 0;
+  }
+
+  let currentLine = 1;
+
+  for (let index = 0; index < code.length; index += 1) {
+    const character = code[index];
+
+    if (character === "\n") {
+      currentLine += 1;
+
+      if (currentLine === line) {
+        return index + 1;
+      }
+    }
+  }
+
+  return code.length;
+}
+
 export type PreparedTerraformArtifactSource = {
   readonly diagramJson: DiagramJson;
   readonly terraformCode: string;
@@ -124,6 +147,7 @@ export type PreparedTerraformArtifactSource = {
 
 export type TerraformCodePanelHandle = {
   readonly getTerraformFiles: () => readonly TerraformVirtualFile[];
+  readonly openTerraformSourceLocation: (sourceLocation: TerraformSourceLocation) => void;
   readonly prepareTerraformArtifact: () => Promise<PreparedTerraformArtifactSource>;
   readonly validateCurrentTerraform: () => Promise<TerraformDiagnostic[]>;
 };
@@ -156,6 +180,7 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
   const [isFileMenuOpen, setIsFileMenuOpen] = useState(false);
   const [fileSearchQuery, setFileSearchQuery] = useState("");
   const [diagnostics, setDiagnostics] = useState<TerraformDiagnostic[]>([]);
+  const [pendingSourceLocation, setPendingSourceLocation] = useState<TerraformSourceLocation | null>(null);
   const [requestState, setRequestState] = useState<RequestState>("idle");
   const [errorMessage, setErrorMessage] = useState("");
   const [statusMessage, setStatusMessage] = useState("main.tf");
@@ -257,6 +282,13 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
         top: `${TERRAFORM_EDITOR_VERTICAL_PADDING + (highlightedBlock.startLine - 1) * TERRAFORM_EDITOR_LINE_HEIGHT - codeScrollTop}px`
       }
     : null;
+
+  const openTerraformSourceLocation = useCallback((sourceLocation: TerraformSourceLocation): void => {
+    context.closeInspectedNode();
+    setActiveFileName(sourceLocation.fileName);
+    setPendingSourceLocation(sourceLocation);
+    setStatusMessage(`${sourceLocation.fileName}:${sourceLocation.line}`);
+  }, [context]);
 
   const runRequest = useCallback(async (request: () => Promise<void>, fallbackMessage: string) => {
     setRequestState("loading");
@@ -484,6 +516,7 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
 
   useImperativeHandle(ref, () => ({
     getTerraformFiles: () => terraformFiles,
+    openTerraformSourceLocation,
     prepareTerraformArtifact: async () => {
       if (!hasTerraformCode) {
         throw new Error("저장할 Terraform 코드가 없습니다.");
@@ -515,7 +548,14 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
       }
     },
     validateCurrentTerraform
-  }), [hasTerraformCode, requestState, syncTerraformCodeToDiagram, terraformFiles, validateCurrentTerraform]);
+  }), [
+    hasTerraformCode,
+    openTerraformSourceLocation,
+    requestState,
+    syncTerraformCodeToDiagram,
+    terraformFiles,
+    validateCurrentTerraform
+  ]);
 
   useEffect(() => {
     if (latestExternalSaveRequestIdRef.current === externalSaveRequestId) {
@@ -626,6 +666,44 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
     }
 
   }, [activeFileName, isResourceCodeMode, isVisible, selectedBlock]);
+
+  useEffect(() => {
+    if (!pendingSourceLocation || !isVisible || isResourceCodeMode) {
+      return;
+    }
+
+    if (pendingSourceLocation.fileName !== activeFileName) {
+      setActiveFileName(pendingSourceLocation.fileName);
+      return;
+    }
+
+    const textarea = textareaRef.current;
+
+    if (!textarea) {
+      return;
+    }
+
+    const targetLine = Math.max(1, Math.min(pendingSourceLocation.line, lineNumbers.length));
+    const lineHeight = Number.parseFloat(window.getComputedStyle(textarea).lineHeight) || TERRAFORM_EDITOR_LINE_HEIGHT;
+    textarea.scrollTop = Math.max(0, (targetLine - 2) * lineHeight);
+    setCodeScrollTop(textarea.scrollTop);
+
+    if (lineNumberRef.current) {
+      lineNumberRef.current.scrollTop = textarea.scrollTop;
+    }
+
+    const cursorOffset = getTerraformLineStartOffset(displayedTerraformCode, targetLine);
+    textarea.focus();
+    textarea.setSelectionRange(cursorOffset, cursorOffset);
+    setPendingSourceLocation(null);
+  }, [
+    activeFileName,
+    displayedTerraformCode,
+    isResourceCodeMode,
+    isVisible,
+    lineNumbers.length,
+    pendingSourceLocation
+  ]);
 
   useEffect(() => {
     if (!inspectedBlock) {
