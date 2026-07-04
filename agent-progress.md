@@ -13,6 +13,25 @@
 - Highest priority unfinished harness feature: `HARNESS-007`
 - Current blocker: none
 
+### 2026-07-04 - 운영 조건 기반 Architecture Draft config 반영
+
+- Goal: 예산, 트래픽, 보호 수준 보조 선택이 단순 설명이 아니라 실제 Architecture Draft 리소스 config에 반영되도록 한다.
+- Completed:
+  - Architecture Draft 생성 후 `EC2`, `RDS`, `S3`, `CLOUDFRONT`, `LAMBDA`, `CLOUDWATCH_LOG_GROUP` config를 `budgetLevel`, `trafficLevel`, `securityPriority`에 따라 결정적으로 조정하도록 변경했다.
+  - 낮은 예산/작은 트래픽은 `t3.micro`, `db.t4g.micro`, 작은 스토리지, 낮은 로그 보존 기간, `forceDestroy` 같은 연습 비용 정리 값을 쓰고, 보통 예산/보통 트래픽/높은 보호는 `t3.small`, `db.t3.small`, 더 큰 스토리지, 긴 로그 보존, 공개 접근 차단 값을 쓰도록 고정했다.
+  - API route 테스트에 운영 조건별 backend/static/serverless config 차이를 검증하는 회귀 테스트를 추가했다.
+  - `docs/data-models.md`에 보조 선택값이 Architecture Draft 생성 조건이라는 계약을 기록했다.
+- Verification run:
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api exec tsx --test src/routes/ai.test.ts --test-name-pattern "changes backend parameters|changes delivery"` - failed before fix for unchanged/missing config, then passed after fix.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm test` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm lint` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm typecheck` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm build` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm harness:check` - passed.
+- Known risks:
+  - `next build` temporarily changed `apps/web/next-env.d.ts`; the generated route type path was restored and left out of the final diff.
+  - Existing unrelated worktree change remains in `docs/ck/ai/002_아키텍처다이어그램검수가이드.md` and is intentionally excluded from this commit.
+
 ### 2026-07-04 - 보조 선택 기반 웹사이트 초안 보정
 
 - Goal: `웹사이트 하나 배포하고 싶어`처럼 자연어는 부족하지만 보조 선택에서 `api_server` 또는 `backend_with_db`를 명시한 경우, 보조 선택을 실제 Architecture Draft 힌트로 사용하게 한다.

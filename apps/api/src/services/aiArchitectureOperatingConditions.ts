@@ -5,20 +5,110 @@ export function applyOperatingConditionConfig(
   draft: AiArchitectureDraftResult,
   request: CreateArchitectureDraftRequest
 ): AiArchitectureDraftResult {
-  if (request.securityPriority !== "high") {
-    return draft;
-  }
-
   return {
     ...draft,
     architectureJson: {
       ...draft.architectureJson,
-      nodes: draft.architectureJson.nodes.map(applyHighSecurityConfig)
+      nodes: draft.architectureJson.nodes.map((node) => applyNodeOperatingConditionConfig(node, request))
     }
   };
 }
 
-// MVP에서 안전하게 표현할 수 있는 보안 설정만 Resource config에 반영합니다.
+// Helper choices must affect generated resource parameters, not only metadata text.
+function applyNodeOperatingConditionConfig(
+  node: ArchitectureJson["nodes"][number],
+  request: CreateArchitectureDraftRequest
+): ArchitectureJson["nodes"][number] {
+  const configuredNode = applySizingAndTrafficConfig(node, request);
+
+  return request.securityPriority === "high" ? applyHighSecurityConfig(configuredNode) : configuredNode;
+}
+
+function applySizingAndTrafficConfig(
+  node: ArchitectureJson["nodes"][number],
+  request: CreateArchitectureDraftRequest
+): ArchitectureJson["nodes"][number] {
+  if (node.type === "EC2") {
+    return {
+      ...node,
+      config: {
+        ...node.config,
+        instanceType: selectEc2InstanceType(request),
+        monitoring: request.trafficLevel === "normal"
+      }
+    };
+  }
+
+  if (node.type === "RDS") {
+    return {
+      ...node,
+      config: {
+        ...node.config,
+        allocatedStorage: request.trafficLevel === "normal" ? 50 : 20,
+        deletionProtection: request.securityPriority === "high",
+        instanceClass: selectRdsInstanceClass(request),
+        skipFinalSnapshot: request.securityPriority !== "high"
+      }
+    };
+  }
+
+  if (node.type === "S3") {
+    return {
+      ...node,
+      config: {
+        ...node.config,
+        forceDestroy: request.budgetLevel === "low"
+      }
+    };
+  }
+
+  if (node.type === "CLOUDFRONT") {
+    return {
+      ...node,
+      config: {
+        ...node.config,
+        enabled: true,
+        priceClass: selectCloudFrontPriceClass(request)
+      }
+    };
+  }
+
+  if (node.type === "LAMBDA") {
+    return {
+      ...node,
+      config: {
+        ...node.config,
+        memorySize: request.budgetLevel === "normal" && request.trafficLevel === "normal" ? 256 : 128,
+        timeout: request.trafficLevel === "normal" ? 20 : 10
+      }
+    };
+  }
+
+  if (node.type === "CLOUDWATCH_LOG_GROUP") {
+    return {
+      ...node,
+      config: {
+        ...node.config,
+        retentionInDays: request.securityPriority === "high" || request.trafficLevel === "normal" ? 30 : 7
+      }
+    };
+  }
+
+  return node;
+}
+
+function selectEc2InstanceType(request: CreateArchitectureDraftRequest): string {
+  return request.budgetLevel === "normal" && request.trafficLevel === "normal" ? "t3.small" : "t3.micro";
+}
+
+function selectRdsInstanceClass(request: CreateArchitectureDraftRequest): string {
+  return request.budgetLevel === "normal" && request.trafficLevel === "normal" ? "db.t3.small" : "db.t4g.micro";
+}
+
+function selectCloudFrontPriceClass(request: CreateArchitectureDraftRequest): string {
+  return request.budgetLevel === "normal" && request.trafficLevel === "normal" ? "PriceClass_200" : "PriceClass_100";
+}
+
 function applyHighSecurityConfig(node: ArchitectureJson["nodes"][number]): ArchitectureJson["nodes"][number] {
   if (node.type === "S3") {
     return {

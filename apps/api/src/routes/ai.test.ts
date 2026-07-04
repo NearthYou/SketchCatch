@@ -941,6 +941,141 @@ test("POST /api/ai/architecture-draft applies operating choices inside supported
   await app.close();
 });
 
+test("POST /api/ai/architecture-draft changes backend parameters from budget traffic and security choices", async () => {
+  const app = buildApp();
+  const basePayload = {
+    prompt: "Build an API backend with a PostgreSQL database",
+    scenarioHint: "backend_with_db"
+  } as const;
+
+  const lowSmallBasicResponse = await app.inject({
+    method: "POST",
+    url: "/api/ai/architecture-draft",
+    payload: {
+      ...basePayload,
+      budgetLevel: "low",
+      trafficLevel: "small",
+      securityPriority: "basic"
+    }
+  });
+  const normalHighResponse = await app.inject({
+    method: "POST",
+    url: "/api/ai/architecture-draft",
+    payload: {
+      ...basePayload,
+      budgetLevel: "normal",
+      trafficLevel: "normal",
+      securityPriority: "high"
+    }
+  });
+
+  assert.equal(lowSmallBasicResponse.statusCode, 200);
+  assert.equal(normalHighResponse.statusCode, 200);
+
+  const lowSmallBasicBody = architectureDraftResponseSchema.parse(lowSmallBasicResponse.json());
+  const normalHighBody = architectureDraftResponseSchema.parse(normalHighResponse.json());
+  const lowBackendNode = findDraftNode(lowSmallBasicBody, "ec2-backend");
+  const normalBackendNode = findDraftNode(normalHighBody, "ec2-backend");
+  const lowDatabaseNode = findDraftNode(lowSmallBasicBody, "rds-primary");
+  const normalDatabaseNode = findDraftNode(normalHighBody, "rds-primary");
+  const lowLogNode = findDraftNode(lowSmallBasicBody, "backend-log-group");
+  const normalLogNode = findDraftNode(normalHighBody, "backend-log-group");
+
+  assert.equal(lowBackendNode?.config.instanceType, "t3.micro");
+  assert.equal(normalBackendNode?.config.instanceType, "t3.small");
+  assert.equal(lowDatabaseNode?.config.instanceClass, "db.t4g.micro");
+  assert.equal(normalDatabaseNode?.config.instanceClass, "db.t3.small");
+  assert.equal(lowDatabaseNode?.config.allocatedStorage, 20);
+  assert.equal(normalDatabaseNode?.config.allocatedStorage, 50);
+  assert.equal(lowDatabaseNode?.config.deletionProtection, false);
+  assert.equal(normalDatabaseNode?.config.deletionProtection, true);
+  assert.equal(lowLogNode?.config.retentionInDays, 7);
+  assert.equal(normalLogNode?.config.retentionInDays, 30);
+
+  await app.close();
+});
+
+test("POST /api/ai/architecture-draft changes delivery and serverless parameters from operating choices", async () => {
+  const app = buildApp();
+
+  const lowStaticResponse = await app.inject({
+    method: "POST",
+    url: "/api/ai/architecture-draft",
+    payload: {
+      prompt: "Build a static website",
+      scenarioHint: "static_site",
+      budgetLevel: "low",
+      trafficLevel: "small",
+      securityPriority: "basic"
+    }
+  });
+  const normalStaticResponse = await app.inject({
+    method: "POST",
+    url: "/api/ai/architecture-draft",
+    payload: {
+      prompt: "Build a static website",
+      scenarioHint: "static_site",
+      budgetLevel: "normal",
+      trafficLevel: "normal",
+      securityPriority: "high"
+    }
+  });
+  const lowLambdaResponse = await app.inject({
+    method: "POST",
+    url: "/api/ai/architecture-draft",
+    payload: {
+      prompt: "Build a Lambda API",
+      scenarioHint: "serverless_function",
+      budgetLevel: "low",
+      trafficLevel: "small",
+      securityPriority: "basic"
+    }
+  });
+  const normalLambdaResponse = await app.inject({
+    method: "POST",
+    url: "/api/ai/architecture-draft",
+    payload: {
+      prompt: "Build a Lambda API",
+      scenarioHint: "serverless_function",
+      budgetLevel: "normal",
+      trafficLevel: "normal",
+      securityPriority: "high"
+    }
+  });
+
+  assert.equal(lowStaticResponse.statusCode, 200);
+  assert.equal(normalStaticResponse.statusCode, 200);
+  assert.equal(lowLambdaResponse.statusCode, 200);
+  assert.equal(normalLambdaResponse.statusCode, 200);
+
+  const lowStaticBody = architectureDraftResponseSchema.parse(lowStaticResponse.json());
+  const normalStaticBody = architectureDraftResponseSchema.parse(normalStaticResponse.json());
+  const lowLambdaBody = architectureDraftResponseSchema.parse(lowLambdaResponse.json());
+  const normalLambdaBody = architectureDraftResponseSchema.parse(normalLambdaResponse.json());
+  const lowCloudFrontNode = findDraftNode(lowStaticBody, "cloudfront-site");
+  const normalCloudFrontNode = findDraftNode(normalStaticBody, "cloudfront-site");
+  const lowBucketNode = findDraftNode(lowStaticBody, "s3-site");
+  const normalBucketNode = findDraftNode(normalStaticBody, "s3-site");
+  const lowLambdaNode = findDraftNode(lowLambdaBody, "lambda-function");
+  const normalLambdaNode = findDraftNode(normalLambdaBody, "lambda-function");
+  const lowLambdaLogNode = findDraftNode(lowLambdaBody, "lambda-log-group");
+  const normalLambdaLogNode = findDraftNode(normalLambdaBody, "lambda-log-group");
+
+  assert.equal(lowCloudFrontNode?.config.priceClass, "PriceClass_100");
+  assert.equal(normalCloudFrontNode?.config.priceClass, "PriceClass_200");
+  assert.equal(lowBucketNode?.config.forceDestroy, true);
+  assert.equal(normalBucketNode?.config.forceDestroy, false);
+  assert.equal(normalBucketNode?.config.publicAccessBlock, true);
+  assert.equal(lowLambdaNode?.config.memorySize, 128);
+  assert.equal(normalLambdaNode?.config.memorySize, 256);
+  assert.equal(lowLambdaNode?.config.timeout, 10);
+  assert.equal(normalLambdaNode?.config.timeout, 20);
+  assert.equal(lowLambdaLogNode?.config.retentionInDays, 7);
+  assert.equal(normalLambdaLogNode?.config.retentionInDays, 30);
+
+  await app.close();
+});
+
 test("POST /api/ai/architecture-draft rejects invalid guardrail choices", async () => {
 	const app = buildApp();
 
