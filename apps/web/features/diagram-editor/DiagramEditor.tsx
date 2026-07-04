@@ -1419,7 +1419,12 @@ function DiagramEditorInner({
         DIAGRAM_SNAP_GRID_SIZE
       );
 
-      const nextNode = createDiagramNodeFromPayload(payload, position, getNextZIndex(diagramRef.current.nodes));
+      const nextNode = createDiagramNodeFromPayload(
+        payload,
+        position,
+        getNextZIndex(diagramRef.current.nodes),
+        diagramRef.current.nodes
+      );
 
       commitDiagramUpdate((currentDiagram) => {
         const nodesWithNextNode = [...currentDiagram.nodes, nextNode];
