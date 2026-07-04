@@ -11,10 +11,12 @@ import { registerOAuthRoutes } from "./routes/oauth.js";
 import { registerProjectRoutes, type ProjectAssetStorage } from "./routes/projects.js";
 import { registerDeploymentRoutes } from "./routes/deployments.js";
 import { registerGitCicdHandoffRoutes } from "./routes/git-cicd-handoffs.js";
-import { registerTerraformRoutes } from "./routes/terraform.js";
+import {
+  registerTerraformRoutes,
+  type TerraformRouteOptions
+} from "./routes/terraform.js";
 import { registerAwsConnectionRoutes } from "./routes/aws-connections.js";
 import type { ProjectDeletionStorage } from "./projects/project-deletion-service.js";
-import type { CreateTerraformValidationDiagnostics } from "./services/terraform/terraform-validation.js";
 import {
   createInMemoryRateLimiter,
   type RateLimiter
@@ -33,7 +35,7 @@ export type BuildAppOptions = {
   passwordResetRequestIpRateLimiter?: RateLimiter;
   projectAssetStorage?: ProjectAssetStorage;
   projectDeletionStorage?: ProjectDeletionStorage;
-  createTerraformValidationDiagnostics?: CreateTerraformValidationDiagnostics;
+  validateTerraformPreviewCode?: TerraformRouteOptions["validateTerraformPreviewCode"];
 };
 
 // 테스트와 서버가 같은 앱을 쓰되, LLM 호출 계층은 옵션으로만 주입합니다.
@@ -171,22 +173,13 @@ function createAiRouteOptions(options: BuildAppOptions): { readonly prefix: "/ap
 function createTerraformRouteOptions(
   options: BuildAppOptions,
   getDatabaseClient: () => DatabaseClient
-): {
-  readonly prefix: "/api";
-  readonly getDatabaseClient: () => DatabaseClient;
-  readonly createTerraformValidationDiagnostics?: CreateTerraformValidationDiagnostics;
-} {
-  if (options.createTerraformValidationDiagnostics === undefined) {
-    return {
-      prefix: "/api",
-      getDatabaseClient
-    };
-  }
-
+): TerraformRouteOptions & { readonly prefix: "/api" } {
   return {
     prefix: "/api",
     getDatabaseClient,
-    createTerraformValidationDiagnostics: options.createTerraformValidationDiagnostics
+    ...(options.validateTerraformPreviewCode !== undefined
+      ? { validateTerraformPreviewCode: options.validateTerraformPreviewCode }
+      : {})
   };
 }
 

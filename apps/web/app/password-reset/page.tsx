@@ -4,22 +4,24 @@ import { PasswordResetRequestForm } from "./request-form";
 export default function PasswordResetPage() {
   return (
     <main className="authPage">
-      <section className="authPanel" aria-labelledby="password-reset-title">
-        <Link className="authBrand" href="/">
-          SketchCatch
-        </Link>
-        <div className="authIntro">
-          <p className="eyebrow">Password reset</p>
-          <h1 id="password-reset-title">비밀번호 재설정</h1>
-          <p>가입한 이메일로 비밀번호를 다시 설정할 수 있는 링크를 보냅니다.</p>
-        </div>
+      <div className="authBlueprintShell authBlueprintShellSingle">
+        <section className="authPanel" aria-labelledby="password-reset-title">
+          <Link className="authBrand" href="/">
+            <img className="brandLogoImage" src="/sketchcatch-logo.svg" alt="" />
+            <span>SketchCatch</span>
+          </Link>
+          <div className="authIntro">
+            <p className="eyebrow">Password reset</p>
+            <h1 id="password-reset-title">비밀번호 재설정</h1>
+          </div>
 
-        <PasswordResetRequestForm />
+          <PasswordResetRequestForm />
 
-        <p className="authSwitch">
-          비밀번호가 기억났나요? <Link href="/login">로그인</Link>
-        </p>
-      </section>
+          <p className="authSwitch">
+            비밀번호가 기억나나요? <Link href="/login">로그인</Link>
+          </p>
+        </section>
+      </div>
     </main>
   );
 }

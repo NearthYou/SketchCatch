@@ -117,11 +117,7 @@ test("POST /api/ai/architecture-draft returns fallback llmExplanation when Bedro
       method: "POST",
       url: "/api/ai/architecture-draft",
       payload: {
-        prompt: "Node API 서버와 Postgres 데이터베이스가 필요합니다.",
-        scenarioHint: "auto",
-        budgetLevel: "normal",
-        trafficLevel: "small",
-        securityPriority: "high"
+        prompt: "Node API 서버와 Postgres 데이터베이스가 필요합니다. 개인정보 보호도 필요합니다."
       }
     });
 

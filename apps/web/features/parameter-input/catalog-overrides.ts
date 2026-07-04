@@ -321,6 +321,9 @@ export const terraformAwsParameterCatalog = {
         referenceTargetTypes: ["aws_route_table"]
       }
     ],
+    aws_cloudfront_distribution: [
+      commonTags
+    ],
     aws_nat_gateway: [
       {
         name: "subnetId",
@@ -896,30 +899,44 @@ export const terraformAwsParameterCatalog = {
         inputKind: "checkbox"
       },
       {
-        name: "filterName",
-        terraformName: "filter.name",
-        label: "Filter name",
-        type: "string",
-        required: true,
-        optional: false,
-        computed: false,
-        sensitive: false,
-        description: "AMI 조회 filter 이름입니다.",
-        inputKind: "text",
-        placeholder: "name"
-      },
-      {
-        name: "filterValues",
-        terraformName: "filter.values",
-        label: "Filter values",
+        name: "filter",
+        terraformName: "filter",
+        label: "Filter",
         type: "list",
         required: true,
-        optional: false,
+        optional: true,
         computed: false,
         sensitive: false,
-        description: "AMI 조회 filter 값 목록입니다.",
-        inputKind: "text",
-        placeholder: "amzn2-ami-hvm-*-x86_64-gp2"
+        description: "AMI 조회 filter 조건입니다.",
+        inputKind: "nested-block",
+        children: [
+          {
+            name: "name",
+            terraformName: "name",
+            label: "Name",
+            type: "string",
+            required: true,
+            optional: false,
+            computed: false,
+            sensitive: false,
+            description: "AMI 조회 filter 이름입니다.",
+            inputKind: "text",
+            placeholder: "name"
+          },
+          {
+            name: "values",
+            terraformName: "values",
+            label: "Values",
+            type: "list",
+            required: true,
+            optional: false,
+            computed: false,
+            sensitive: false,
+            description: "AMI 조회 filter 값 목록입니다.",
+            inputKind: "text",
+            placeholder: "amzn2-ami-hvm-*-x86_64-gp2"
+          }
+        ]
       }
     ],
     aws_key_pair: [

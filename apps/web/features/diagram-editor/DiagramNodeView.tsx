@@ -12,14 +12,15 @@ import {
   Handle,
   NodeToolbar,
   Position,
-  useReactFlow
+  useReactFlow,
+  useUpdateNodeInternals
 } from "@xyflow/react";
 import type { NodeProps } from "@xyflow/react";
-import { useCallback } from "react";
+import { Fragment, useCallback, useEffect } from "react";
 import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactNode } from "react";
 
 import { BORDER_COLOR_SWATCHES, NODE_COLOR_SWATCHES } from "./constants";
-import { getAreaNodeIconUrl, getAreaNodeLabel, isAreaNode } from "./area-nodes";
+import { getAreaNodeIconUrl, getAreaNodeLabel, getAreaNodeMetaLabel, isAreaNode } from "./area-nodes";
 import { getNodeResizeBounds } from "./node-resize-bounds";
 import { calculateNodeResize } from "./node-resize";
 import type { NodeResizeHandlePosition, NodeResizeUpdate } from "./node-resize";
@@ -74,9 +75,10 @@ const RESIZE_HANDLES: readonly {
 
 export function DiagramNodeView({ data, id, isConnectable, selected }: NodeProps<DiagramFlowNode>) {
   const reactFlow = useReactFlow();
+  const updateNodeInternals = useUpdateNodeInternals();
   const node = data.node;
-  const toolbarVisible = selected && data.selectedNodeCount === 1;
-  const canConnect = isConnectable && !node.locked;
+  const toolbarVisible = !data.isPreview && selected && data.selectedNodeCount === 1;
+  const canConnect = !data.isPreview && Boolean(isConnectable) && !node.locked;
   const isResourceNode = node.kind === "resource";
   const isArea = isAreaNode(node);
   const canChangeBorderColor = canChangeNodeBorderColor(node);
@@ -87,6 +89,13 @@ export function DiagramNodeView({ data, id, isConnectable, selected }: NodeProps
   const nodeShellStyle = getNodeShellStyle(isArea, isResourceNode, borderColor);
   const areaNodeIconUrl = isArea ? getAreaNodeIconUrl(node) : undefined;
   const areaNodeLabel = isArea ? getAreaNodeLabel(node) : "";
+  const areaNodeMetaLabel = isArea ? getAreaNodeMetaLabel(node) : undefined;
+  const resourceNodeLabelStyle = getResourceNodeLabelStyle(node.label, node.size.width, textColor);
+
+  useEffect(() => {
+    updateNodeInternals(id);
+  }, [id, node.size.height, node.size.width, updateNodeInternals]);
+
   const handleResizePointerDown = useCallback(
     (event: ReactPointerEvent<HTMLButtonElement>, handlePosition: NodeResizeHandlePosition) => {
       if (node.locked) {
@@ -122,29 +131,31 @@ export function DiagramNodeView({ data, id, isConnectable, selected }: NodeProps
           zoom
         });
         data.onResize(id, latestUpdate);
+        window.requestAnimationFrame(() => updateNodeInternals(id));
       };
 
       const handlePointerUp = () => {
         window.removeEventListener("pointermove", handlePointerMove);
         window.removeEventListener("pointerup", handlePointerUp);
         data.onResizeEnd(id, latestUpdate);
+        window.requestAnimationFrame(() => updateNodeInternals(id));
       };
 
       window.addEventListener("pointermove", handlePointerMove);
       window.addEventListener("pointerup", handlePointerUp, { once: true });
     },
-    [data, id, isArea, isResourceNode, node.locked, node.position, node.size, reactFlow, resizeBounds]
+    [data, id, isArea, isResourceNode, node.locked, node.position, node.size, reactFlow, resizeBounds, updateNodeInternals]
   );
 
   return (
     <>
       <NodeToolbar
         align="center"
-        className={styles.nodeToolbar}
+        className={[styles.nodeToolbar, isArea ? styles.nodeToolbarArea : undefined].filter(Boolean).join(" ")}
         isVisible={toolbarVisible}
         nodeId={id}
         offset={10}
-        position={Position.Top}
+        position={isArea ? Position.Bottom : Position.Top}
       >
         <button
           aria-label="앞으로 가져오기"
@@ -197,9 +208,10 @@ export function DiagramNodeView({ data, id, isConnectable, selected }: NodeProps
           styles.nodeShell,
           selected ? styles.nodeShellSelected : undefined,
           data.isDimmed ? styles.nodeShellDimmed : undefined,
+          data.isPreview ? styles.nodeShellAiPreview : undefined,
           data.isReferenceDropTarget ? styles.nodeShellReferenceDropTarget : undefined,
           isArea ? styles.nodeShellArea : undefined,
-          node.kind === "design" ? styles.nodeShellDesign : styles.nodeShellResource,
+          !isArea ? (node.kind === "design" ? styles.nodeShellDesign : styles.nodeShellResource) : undefined,
           node.locked ? styles.nodeShellLocked : undefined
         ]
           .filter(Boolean)
@@ -220,6 +232,7 @@ export function DiagramNodeView({ data, id, isConnectable, selected }: NodeProps
                 <img alt="" className={styles.areaNodeHeaderIcon} draggable={false} src={areaNodeIconUrl} />
               ) : null}
               <span className={styles.areaNodeHeaderText}>{areaNodeLabel}</span>
+              {areaNodeMetaLabel ? <span className={styles.areaNodeHeaderMeta}>{areaNodeMetaLabel}</span> : null}
             </div>
           </>
         ) : isResourceNode ? (
@@ -233,9 +246,10 @@ export function DiagramNodeView({ data, id, isConnectable, selected }: NodeProps
                 </div>
               )}
             </div>
-            <div className={styles.resourceNodeLabel} style={{ color: textColor }}>
+            <div className={styles.resourceNodeLabel} style={resourceNodeLabelStyle}>
               {node.label}
             </div>
+            <div className={styles.resourceNodeType}>{node.type}</div>
             {isDataNode ? <div className={styles.resourceNodeBadge}>Data</div> : null}
           </>
         ) : (
@@ -259,7 +273,7 @@ export function DiagramNodeView({ data, id, isConnectable, selected }: NodeProps
         ) : null}
       </div>
 
-      {selected && !node.locked ? (
+      {selected && !node.locked && !data.isPreview ? (
         <>
           {RESIZE_HANDLES.map((handle) => (
             <button
@@ -274,26 +288,45 @@ export function DiagramNodeView({ data, id, isConnectable, selected }: NodeProps
         </>
       ) : null}
 
-      {canConnect ? (
-        <>
-          {CONNECTION_HANDLES.map((handle) => (
-            <Handle
-              className={styles.connectionHandle}
-              id={handle.id}
-              key={handle.id}
-              position={handle.position}
-              type="source"
-            />
-          ))}
-        </>
-      ) : null}
+      {CONNECTION_HANDLES.map((handle) => (
+        <Fragment key={handle.id}>
+          <Handle
+            className={[
+              styles.connectionHandle,
+              styles.connectionHandleSource,
+              canConnect ? undefined : styles.connectionHandleInactive,
+              data.isConnectionActive ? styles.connectionHandleActive : undefined
+            ]
+              .filter(Boolean)
+              .join(" ")}
+            id={`source-${handle.id}`}
+            isConnectable={canConnect}
+            position={handle.position}
+            type="source"
+          />
+          <Handle
+            className={[
+              styles.connectionHandle,
+              styles.connectionHandleTarget,
+              canConnect ? undefined : styles.connectionHandleInactive,
+              data.isConnectionActive ? styles.connectionHandleActive : undefined
+            ]
+              .filter(Boolean)
+              .join(" ")}
+            id={`target-${handle.id}`}
+            isConnectable={canConnect}
+            position={handle.position}
+            type="target"
+          />
+        </Fragment>
+      ))}
     </>
   );
 }
 
 function getNodeShellStyle(isArea: boolean, isResourceNode: boolean, borderColor: string): CSSProperties {
   if (isArea) {
-    return { "--node-border-color": borderColor, borderColor } as CSSProperties;
+    return { "--node-border-color": borderColor } as CSSProperties;
   }
 
   if (isResourceNode) {
@@ -301,6 +334,17 @@ function getNodeShellStyle(isArea: boolean, isResourceNode: boolean, borderColor
   }
 
   return { borderColor };
+}
+
+function getResourceNodeLabelStyle(label: string, nodeWidth: number, textColor: string): CSSProperties {
+  const usableWidth = Math.max(42, nodeWidth - 12);
+  const estimatedTextWidth = Math.max(1, label.length) * 7.1;
+  const fittedFontSize = Math.min(12.5, Math.max(8, (usableWidth / estimatedTextWidth) * 12.5));
+
+  return {
+    color: textColor,
+    fontSize: `${fittedFontSize.toFixed(2)}px`
+  };
 }
 
 type ColorMenuProps = {

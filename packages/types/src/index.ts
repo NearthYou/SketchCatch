@@ -32,11 +32,25 @@ export type ResourceType =
   | "CLOUDFRONT"
   | "LAMBDA"
   | "AMI"
+  | "IAM_ROLE"
+  | "IAM_POLICY"
+  | "IAM_INSTANCE_PROFILE"
+  | "KMS_KEY"
+  | "CLOUDWATCH_LOG_GROUP"
+  | "CLOUDWATCH_METRIC_ALARM"
+  | "API_GATEWAY_REST_API"
+  | "LAMBDA_PERMISSION"
   | "UNKNOWN";
 
 export type CloudProvider = "aws";
 
 export type TerraformBlockType = "resource" | "data";
+
+export type TerraformBlockIdentity = {
+  terraformBlockType: TerraformBlockType;
+  resourceType: string;
+  resourceName: string;
+};
 
 export type ResourceConfig = Record<string, unknown>;
 
@@ -71,7 +85,6 @@ export type InfrastructureGraphNodeIaC = {
 
 export type InfrastructureGraphNode = {
   id: string;
-  type: ResourceType;
   label?: string | undefined;
   iac: InfrastructureGraphNodeIaC;
   config: ResourceConfig;
@@ -546,6 +559,22 @@ export type DeploymentLogListResponse = {
   logs: DeploymentLog[];
 };
 
+export type DeploymentFailureExplanation = {
+  deploymentId: string;
+  stage: DeploymentFailureStage | null;
+  severity: RiskLevel;
+  summary: string;
+  likelyCause: string;
+  nextActions: string[];
+  firstErrorLog: string | null;
+  cleanupRequired: boolean;
+  llmExplanation?: LlmExplanation | undefined;
+};
+
+export type DeploymentFailureExplanationResponse = {
+  explanation: DeploymentFailureExplanation;
+};
+
 export type DeployedResource = {
   id: string;
   deploymentId: string;
@@ -718,30 +747,31 @@ export type AiResultMetadata = {
   confidence: AiConfidence;
   assumptions: string[];
   explanations: string[];
-  selectedScenario?: ArchitectureScenario;
-  scenarioScores?: ArchitectureScenarioScore[];
+  selectedDraftPattern?: ArchitectureDraftPattern;
+  requirementFacts?: ArchitectureRequirementFact[];
+  operatingProfile?: ArchitectureDraftOperatingProfile;
   guardrailWarnings?: ArchitectureGuardrailWarning[];
 };
 
-export type ArchitectureScenario = "static_site" | "api_server" | "backend_with_db" | "server_storage";
-
-export type ArchitectureScenarioScore = {
-  scenario: ArchitectureScenario;
-  score: number;
-  reasons: string[];
-};
+export type ArchitectureDraftPattern =
+  | "static_site"
+  | "api_server"
+  | "backend_with_db"
+  | "server_storage"
+  | "serverless_function";
 
 export type ArchitectureGuardrailWarningCode =
-  | "scenario_conflict"
-  | "unsupported_requirement"
-  | "low_budget_rds_cost";
+  | "low_budget_rds_cost"
+  | "unsupported_resource_omitted"
+  | "unsupported_requirement_substituted"
+  | "partial_generation"
+  | "guardrail_adjusted_config"
+  | "board_replacement_required";
 
 export type ArchitectureGuardrailWarning = {
   code: ArchitectureGuardrailWarningCode;
   message: string;
 };
-
-export type ArchitectureDraftScenarioHint = "auto" | ArchitectureScenario;
 
 export type ArchitectureDraftBudgetLevel = "low" | "normal";
 
@@ -749,7 +779,27 @@ export type ArchitectureDraftTrafficLevel = "small" | "normal";
 
 export type ArchitectureDraftSecurityPriority = "basic" | "high";
 
-// Architecture Draft를 만들 때 AI가 자유롭게 해석하지 않도록 입력 선택지를 좁힌 계약입니다.
+export type ArchitectureRequirementFact =
+  | "web_frontend"
+  | "static_delivery"
+  | "server_runtime"
+  | "database"
+  | "object_storage"
+  | "file_upload"
+  | "auth_or_user_data"
+  | "serverless_runtime"
+  | "network_boundary"
+  | "iam_permissions"
+  | "observability"
+  | "encryption";
+
+export type ArchitectureDraftOperatingProfile = {
+  budgetLevel: ArchitectureDraftBudgetLevel;
+  trafficLevel: ArchitectureDraftTrafficLevel;
+  securityPriority: ArchitectureDraftSecurityPriority;
+};
+
+// Architecture Draft는 자연어 요구사항과 확인 질문 답변을 기준으로 결정적으로 생성한다.
 export type RequirementInputMode = "text" | "voice";
 
 export type RequirementInput = {
@@ -861,10 +911,6 @@ export type ArchitecturePatchPreview = {
 
 export type CreateArchitectureDraftRequest = {
   prompt: string;
-  scenarioHint: ArchitectureDraftScenarioHint;
-  budgetLevel: ArchitectureDraftBudgetLevel;
-  trafficLevel: ArchitectureDraftTrafficLevel;
-  securityPriority: ArchitectureDraftSecurityPriority;
 };
 
 export type AiArchitectureDraftResult = {
@@ -1252,12 +1298,14 @@ export type TerraformDiagnostic = {
   message: string;
   code?: string | undefined;
   line?: number | undefined;
+  sourceFileName?: string | undefined;
   resourceAddress?: string | undefined;
   nodeId?: string | undefined;
 };
 
 export type TerraformValidateRequest = {
   terraformCode: string;
+  terraformFiles?: TerraformSyncFileInput[] | undefined;
 };
 
 export type TerraformValidateResponse = {
@@ -1267,9 +1315,40 @@ export type TerraformValidateResponse = {
 export type TerraformSyncToDiagramRequest = {
   diagramJson: DiagramJson;
   terraformCode: string;
+  terraformFiles?: TerraformSyncFileInput[] | undefined;
 };
+
+export type TerraformSyncFileInput = {
+  fileName: string;
+  terraformCode: string;
+};
+
+export type TerraformDiagramChangeProposal =
+  | {
+      kind: "create_candidate";
+      identity: TerraformBlockIdentity;
+      sourceFileName?: string | undefined;
+      line?: number | undefined;
+      parameters: DiagramNodeParameters;
+    }
+  | {
+      kind: "delete_candidate";
+      identity: TerraformBlockIdentity;
+      nodeId: string;
+      resourceAddress: string;
+    }
+  | {
+      kind: "rename_candidate";
+      from: TerraformBlockIdentity;
+      to: TerraformBlockIdentity;
+      sourceFileName?: string | undefined;
+      line?: number | undefined;
+      nodeId: string;
+      resourceAddress: string;
+    };
 
 export type TerraformSyncToDiagramResponse = {
   diagramJson: DiagramJson;
   diagnostics: TerraformDiagnostic[];
+  proposals?: TerraformDiagramChangeProposal[] | undefined;
 };

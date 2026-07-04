@@ -252,6 +252,27 @@ test("findInnermostVisualDropTarget supports legacy sketchcatch area node types"
   assert.equal(target?.id, "group-1");
 });
 
+test("findInnermostVisualDropTarget includes resource area containers for placement feedback", () => {
+  const vpc = makeResourceNode({
+    id: "vpc-1",
+    resourceName: "main",
+    resourceType: "aws_vpc",
+    position: { x: 0, y: 0 },
+    size: { width: 520, height: 360 }
+  });
+  const bucket = makeResourceNode({
+    id: "bucket-1",
+    resourceName: "assets",
+    resourceType: "aws_s3_bucket",
+    position: { x: 180, y: 130 },
+    size: { width: 96, height: 72 }
+  });
+
+  const target = findInnermostVisualDropTarget(bucket, [vpc, bucket], catalog);
+
+  assert.equal(target?.id, "vpc-1");
+});
+
 test("applyReferenceDropTarget sets empty child reference values from the parent resource", () => {
   const vpc = makeResourceNode({
     id: "vpc-1",
