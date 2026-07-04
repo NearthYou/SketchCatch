@@ -1,4 +1,5 @@
 import { getDatabaseClient } from "./db/client.js";
+import { assertNoStaticAwsCredentialsForApiServer } from "./config/env.js";
 import {
   createPostgresDeploymentRepository,
   recoverInterruptedDeployments as recoverInterruptedDeploymentsWithRepository
@@ -20,16 +21,20 @@ export type StartApiServerOptions = {
   app: StartupApp;
   host: string;
   port: number;
+  validateAwsCredentialSource?: () => void;
   warmTerraformPluginCache?: () => Promise<TerraformRunResult>;
   recoverInterruptedDeployments?: () => Promise<unknown[]>;
 };
 
 export async function startApiServer(options: StartApiServerOptions): Promise<void> {
+  const validateAwsCredentialSource =
+    options.validateAwsCredentialSource ?? assertNoStaticAwsCredentialsForApiServer;
   const warmTerraformPluginCache =
     options.warmTerraformPluginCache ?? defaultWarmTerraformPluginCache;
   const recoverInterruptedDeployments =
     options.recoverInterruptedDeployments ?? defaultRecoverInterruptedDeployments;
 
+  validateAwsCredentialSource();
   await warmTerraformCacheBeforeListen(options.app, warmTerraformPluginCache);
   await recoverInterruptedDeploymentsBeforeListen(options.app, recoverInterruptedDeployments);
   await options.app.listen({ host: options.host, port: options.port });

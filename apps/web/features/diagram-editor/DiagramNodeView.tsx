@@ -75,8 +75,8 @@ const RESIZE_HANDLES: readonly {
 export function DiagramNodeView({ data, id, isConnectable, selected }: NodeProps<DiagramFlowNode>) {
   const reactFlow = useReactFlow();
   const node = data.node;
-  const toolbarVisible = selected && data.selectedNodeCount === 1;
-  const canConnect = isConnectable && !node.locked;
+  const toolbarVisible = !data.isPreview && selected && data.selectedNodeCount === 1;
+  const canConnect = !data.isPreview && Boolean(isConnectable) && !node.locked;
   const isResourceNode = node.kind === "resource";
   const isArea = isAreaNode(node);
   const canChangeBorderColor = canChangeNodeBorderColor(node);
@@ -197,6 +197,7 @@ export function DiagramNodeView({ data, id, isConnectable, selected }: NodeProps
           styles.nodeShell,
           selected ? styles.nodeShellSelected : undefined,
           data.isDimmed ? styles.nodeShellDimmed : undefined,
+          data.isPreview ? styles.nodeShellAiPreview : undefined,
           data.isReferenceDropTarget ? styles.nodeShellReferenceDropTarget : undefined,
           isArea ? styles.nodeShellArea : undefined,
           node.kind === "design" ? styles.nodeShellDesign : styles.nodeShellResource,
@@ -259,7 +260,7 @@ export function DiagramNodeView({ data, id, isConnectable, selected }: NodeProps
         ) : null}
       </div>
 
-      {selected && !node.locked ? (
+      {selected && !node.locked && !data.isPreview ? (
         <>
           {RESIZE_HANDLES.map((handle) => (
             <button
@@ -274,19 +275,21 @@ export function DiagramNodeView({ data, id, isConnectable, selected }: NodeProps
         </>
       ) : null}
 
-      {canConnect ? (
-        <>
-          {CONNECTION_HANDLES.map((handle) => (
-            <Handle
-              className={styles.connectionHandle}
-              id={handle.id}
-              key={handle.id}
-              position={handle.position}
-              type="source"
-            />
-          ))}
-        </>
-      ) : null}
+      {CONNECTION_HANDLES.map((handle) => (
+        <Handle
+          className={[
+            styles.connectionHandle,
+            canConnect ? undefined : styles.connectionHandleInactive
+          ]
+            .filter(Boolean)
+            .join(" ")}
+          id={handle.id}
+          isConnectable={canConnect}
+          key={handle.id}
+          position={handle.position}
+          type="source"
+        />
+      ))}
     </>
   );
 }

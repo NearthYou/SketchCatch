@@ -234,6 +234,14 @@ type ResourceType =
   | "ROUTE_TABLE_ASSOCIATION"
   | "AMI"
   | "LAMBDA"
+  | "IAM_ROLE"
+  | "IAM_POLICY"
+  | "IAM_INSTANCE_PROFILE"
+  | "KMS_KEY"
+  | "CLOUDWATCH_LOG_GROUP"
+  | "CLOUDWATCH_METRIC_ALARM"
+  | "API_GATEWAY_REST_API"
+  | "LAMBDA_PERMISSION"
   | "UNKNOWN";
 ```
 
@@ -874,6 +882,57 @@ type AiArchitectureDraftResult = {
   metadata: AiResultMetadata;
   llmExplanation?: LlmExplanation;
 };
+```
+
+Natural Language Diagramming의 `ArchitectureDraft`는 LLM 자유 생성이 아니라 규칙 기반 요구사항 fact 조립으로 만든다. 같은 Requirement Prompt는 같은 `ArchitectureJson`을 반환해야 한다. `LlmExplanation` 문구는 보조 설명이므로 결정성 기준에 포함하지 않는다.
+
+```ts
+type CreateArchitectureDraftRequest = {
+  prompt: string;
+};
+
+type ArchitectureRequirementFact =
+  | "web_frontend"
+  | "static_delivery"
+  | "server_runtime"
+  | "database"
+  | "object_storage"
+  | "file_upload"
+  | "auth_or_user_data"
+  | "serverless_runtime"
+  | "network_boundary"
+  | "iam_permissions"
+  | "observability"
+  | "encryption";
+
+type ArchitectureDraftPattern =
+  | "static_site"
+  | "api_server"
+  | "backend_with_db"
+  | "server_storage"
+  | "serverless_function";
+```
+
+`selectedDraftPattern`은 UI와 LLM 설명을 위한 대표 패턴 라벨이다. 생성 기준은 패턴 점수가 아니라 `requirementFacts` 조합이며, 같은 fact 조합은 같은 리소스 조립 순서와 같은 node/edge id를 사용한다.
+
+`ArchitectureDraft`가 자동 생성하는 node type은 `ResourceType` 중 `UNKNOWN`을 제외한 지원 목록으로 제한한다. 현재 지원 목록은 `VPC`, `SUBNET`, `INTERNET_GATEWAY`, `ROUTE_TABLE`, `ROUTE_TABLE_ASSOCIATION`, `EC2`, `RDS`, `S3`, `SECURITY_GROUP`, `CLOUDFRONT`, `LAMBDA`, `AMI`, `IAM_ROLE`, `IAM_POLICY`, `IAM_INSTANCE_PROFILE`, `KMS_KEY`, `CLOUDWATCH_LOG_GROUP`, `CLOUDWATCH_METRIC_ALARM`, `API_GATEWAY_REST_API`, `LAMBDA_PERMISSION`이다.
+
+Requirement Prompt에서 지원 가능한 아키텍처 단서나 대체 가능한 요구사항을 찾지 못하면 `ArchitectureDraft`를 생성하지 않고 `400 bad_request`로 되돌린다. 보조 선택값은 `CreateArchitectureDraftRequest` 계약에서 제거되었으며, 명확한 자연어 단서 없이 기본 초안을 강제로 만들지 않는다.
+
+`웹사이트 하나 배포하고 싶어`처럼 대상은 아키텍처와 관련 있지만 화면만 필요한지, 방문자 입력/파일 업로드가 필요한지, 로그인/데이터 저장이 필요한지 알 수 없는 요구사항은 곧바로 `static_site`로 단정하지 않는다. Workspace AI는 전문 용어 대신 쉬운 질문과 추천 답안을 차례로 보여주고, 답변을 모아 구현 리스트를 확인받은 뒤 사용자가 진행을 승인할 때만 자연어 `prompt`를 다시 구성해 `ArchitectureDraft`를 요청한다. 질문에서는 `S3`, `EC2`, `RDS`, `IAM` 같은 내부 리소스 이름을 먼저 묻지 않고, 비용 영향과 보호 범위를 사용자 언어로 설명한다.
+
+예산, 방문자 규모, 보호 수준은 별도 보조 선택값이 아니라 자연어 단서에서 `operatingProfile`로 계산된다. 예를 들어 `저렴하게`, `처음엔`, `방문자 증가`, `개인정보 보호` 같은 표현은 EC2/RDS 크기, CloudFront price class, 로그 보존 기간, public access block, deletion protection 같은 지원 가능한 config 차이로 반영된다.
+
+`metadata.guardrailWarnings`는 AI 초안 카드 하단에 표시할 경고 계약이다.
+
+```ts
+type ArchitectureGuardrailWarningCode =
+  | "unsupported_resource_omitted"
+  | "unsupported_requirement_substituted"
+  | "partial_generation"
+  | "guardrail_adjusted_config"
+  | "board_replacement_required"
+  | "low_budget_rds_cost";
 ```
 
 `LlmExplanation`은 rule 기반 결과를 덮어쓰지 않고, 사용자가 읽기 쉬운 요약과 다음 행동을 붙이는 공통 설명 계약이다. Bedrock, Amazon Q Business, OpenAI legacy/fallback provider 호출이 실패하거나 일부 필드가 rule 기반 기본값으로 대체되면 `fallbackUsed`를 `true`로 둔다.

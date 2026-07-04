@@ -1,6 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { requireSketchCatchAwsCallerPrincipalArn } from "./env.js";
+import {
+  assertNoStaticAwsCredentialsForApiServer,
+  requireSketchCatchAwsCallerPrincipalArn
+} from "./env.js";
 
 process.env.NODE_ENV = "test";
 
@@ -32,6 +35,27 @@ test("requireSketchCatchAwsCallerPrincipalArn rejects non-IAM role ARNs", () => 
   } finally {
     restoreEnvValue("SKETCHCATCH_AWS_CALLER_PRINCIPAL_ARN", originalValue);
   }
+});
+
+test("assertNoStaticAwsCredentialsForApiServer allows AWS_PROFILE without static keys", () => {
+  assert.doesNotThrow(() =>
+    assertNoStaticAwsCredentialsForApiServer({
+      AWS_PROFILE: "sketchcatch-dev"
+    })
+  );
+});
+
+test("assertNoStaticAwsCredentialsForApiServer rejects static AWS credential environment variables", () => {
+  assert.throws(
+    () =>
+      assertNoStaticAwsCredentialsForApiServer({
+        AWS_ACCESS_KEY_ID: "access-key-id",
+        AWS_SECRET_ACCESS_KEY: "secret-access-key",
+        AWS_SESSION_TOKEN: "session-token",
+        AWS_PROFILE: "sketchcatch-dev"
+      }),
+    /Remove AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN/
+  );
 });
 
 function restoreEnvValue(key: string, value: string | undefined): void {
