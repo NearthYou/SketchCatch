@@ -11,3 +11,9 @@ export function isAwsAvailabilityZoneCode(value: unknown): value is AwsAvailabil
 export function getAwsAvailabilityZoneLabel(value: unknown): string {
   return isAwsAvailabilityZoneCode(value) ? value : defaultAwsAvailabilityZone;
 }
+
+export function getAwsAvailabilityZoneValidationError(value: unknown): string | undefined {
+  return isAwsAvailabilityZoneCode(value)
+    ? undefined
+    : "Availability Zone 형식은 ap-northeast-2a처럼 리전 코드 뒤에 zone 문자가 필요합니다.";
+}

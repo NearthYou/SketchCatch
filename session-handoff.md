@@ -42,7 +42,10 @@
 - `terraformSync` capability가 true인 리소스만 Terraform editor 구조 변경 proposal 대상이 된다.
 - 현재 Web catalog에서 생성 가능한 shared Terraform definitions는 모두 `terraformPreview: true`와 `terraformSync: true`다.
 - Terraform Sync parser는 provider schema 전체를 재현하지 않는다. shared definition 안의 block이라도 복잡한 expression, dynamic block, count/indexing 등 deterministic subset 밖 입력은 diagnostic으로 막는다.
-- Terraform Sync parser는 top-level nested block을 `terraform-nested-blocks.ts`의 허용 목록으로 판단한다. 허용된 top-level nested block 내부의 하위 nested block은 camelCase 배열 값으로 보존한다.
+- Terraform Sync parser는 top-level nested block을 `terraform-nested-blocks.ts`의 허용 목록으로 판단한다. single nested block은 object 값으로, repeatable nested block은 배열 값으로 저장한다. single nested block이 중복 선언되면 `terraform.sync.nested_block_cardinality` error diagnostic으로 sync를 중단한다.
+- 허용된 top-level nested block 내부의 하위 nested block은 camelCase 배열 값으로 보존한다.
+- Parameter panel은 기존 저장 데이터의 single nested block 값이 `[object]` 형태로 남아 있어도 첫 번째 object를 읽어 UI 값 유실을 방지한다.
+- AZ metadata 입력은 기존 input UI를 유지하되 invalid Availability Zone code에 client-side error를 표시하고, invalid draft는 metadata에 커밋하지 않는다.
 - Web catalog의 AWS Terraform 항목과 shared definition/parameter catalog drift 방지 테스트가 있다.
 - InfrastructureGraph 중심 Workspace 동기화 v1 구현이 현재 브랜치에 커밋됐다.
 - Terraform Preview 생성 경로는 `DiagramJson -> InfrastructureGraph -> Terraform`로 정리됐다.
@@ -81,6 +84,12 @@
 
 ## 이번 세션의 변경 사항
 
+- `apps/api/src/services/terraform/terraform-nested-blocks.ts`에 nested block cardinality를 추가했다.
+- `apps/api/src/services/terraform/terraform-to-diagram.ts`가 `aws_lambda_function.environment` 같은 single nested block을 배열이 아닌 object로 저장하고, 중복 single block을 diagnostic으로 막게 했다.
+- `apps/web/features/parameter-input/parameter-value-record.ts`를 추가해 Parameter panel이 legacy `[object]` 형태 값을 첫 번째 object로 읽게 했다.
+- `apps/web/features/parameter-input/ParameterInputPanel.tsx`가 AZ metadata raw 입력값에 client-side format error를 표시하고 invalid draft를 metadata에 저장하지 않게 했다.
+- `apps/web/features/parameter-input/availability-zone-options.ts`에 AZ validation error helper를 추가했다.
+- 관련 API/Web regression tests를 추가했고 focused tests, lint, typecheck, build를 통과했다.
 - `docs/data-models.md`에 현재 catalog 기준으로 아이콘은 생성되지만 Terraform Preview 또는 Terraform Sync 변환에서 제외되는 shared Terraform 리소스가 없음을 명시했다.
 - `docs/sw/001_테라폼변환구현가이드_sw.md`에서 diagnostics/sync가 후속 이슈라는 stale 문구를 최신 구현 기준으로 정리했다.
 - `docs/sw/003_테라폼동기화구조설명_sw.md`에 허용 nested block sync, shared definition 전체 Preview/Sync 대상 정책, create/delete/rename proposal 테스트 기준을 반영했다.

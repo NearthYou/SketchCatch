@@ -14,7 +14,10 @@ import {
   createTerraformBlockAddress,
   createTerraformBlockIdentityKey
 } from "./terraform-identity.js";
-import { isTerraformNestedBlockAttribute } from "./terraform-nested-blocks.js";
+import {
+  getTerraformNestedBlockCardinality,
+  isTerraformNestedBlockAttribute
+} from "./terraform-nested-blocks.js";
 
 const DEFAULT_TERRAFORM_BLOCK_TYPE: TerraformBlockType = "resource";
 const BLOCK_HEADER_PATTERN =
@@ -635,7 +638,18 @@ function parseAttributes(
 
       const nestedValues = parseAttributes(nestedBlock.bodyLines, resourceAddress, undefined, true);
       diagnostics.push(...nestedValues.diagnostics);
-      appendNestedBlockValue(values, nestedBlockName, nestedValues.values);
+      const appendDiagnostic = appendNestedBlockValue(
+        values,
+        resourceType,
+        nestedBlockName,
+        nestedValues.values,
+        bodyLine.line,
+        resourceAddress
+      );
+
+      if (appendDiagnostic) {
+        diagnostics.push(appendDiagnostic);
+      }
       continue;
     }
 
@@ -771,18 +785,43 @@ function collectNestedBlockBody(
 
 function appendNestedBlockValue(
   values: Record<string, unknown>,
+  resourceType: string | undefined,
   terraformName: string,
-  nestedValue: Record<string, unknown>
-): void {
+  nestedValue: Record<string, unknown>,
+  line: number,
+  resourceAddress: string
+): TerraformDiagnostic | undefined {
   const name = toCamelCase(terraformName);
   const currentValue = values[name];
+  const cardinality = getTerraformNestedBlockCardinality(resourceType, terraformName);
+
+  if (cardinality === "single") {
+    if (currentValue !== undefined) {
+      return {
+        severity: "error",
+        code: "terraform.sync.nested_block_cardinality",
+        line,
+        resourceAddress,
+        message: `${terraformName} nested block은 이 리소스에서 한 번만 사용할 수 있습니다.`
+      };
+    }
+
+    values[name] = nestedValue;
+    return undefined;
+  }
 
   if (Array.isArray(currentValue)) {
     currentValue.push(nestedValue);
-    return;
+    return undefined;
+  }
+
+  if (currentValue !== undefined) {
+    values[name] = [currentValue, nestedValue];
+    return undefined;
   }
 
   values[name] = [nestedValue];
+  return undefined;
 }
 
 function getNestedBlockName(lineText: string): string | null {

@@ -1,12 +1,13 @@
 "use client";
 
 import { Check, ChevronDown, Plus, Search, Trash2 } from "lucide-react";
-import { useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type {
   FocusEvent as ReactFocusEvent,
   KeyboardEvent as ReactKeyboardEvent
 } from "react";
 import type {
+  AwsAvailabilityZoneCode,
   AwsRegionCode,
   DiagramNode,
   ResourceNodeParameters
@@ -24,8 +25,13 @@ import {
   getAvailabilityZoneNodeAwsAvailabilityZone,
   isAvailabilityZoneDesignNode
 } from "./availability-zone-node-metadata";
+import {
+  getAwsAvailabilityZoneValidationError,
+  isAwsAvailabilityZoneCode
+} from "./availability-zone-options";
 import type { ParameterCatalog, ParameterCatalogDefinition } from "./catalog";
 import { terraformParameterCatalog } from "./catalog";
+import { toParameterRecord, type ParameterRecord } from "./parameter-value-record";
 import {
   createRegionNodeMetadata,
   getRegionNodeAwsRegion,
@@ -45,7 +51,7 @@ import styles from "./ParameterInputPanel.module.css";
 export type ParameterInputPanelProps = DiagramEditorPanelContext;
 
 type ParameterErrors = Record<string, string>;
-type RecordValue = Record<string, unknown>;
+type RecordValue = ParameterRecord;
 type CloseMenuOptions = {
   restoreFocus?: boolean;
 };
@@ -98,7 +104,10 @@ export function ParameterInputPanel({
   }
 
   if (isAvailabilityZoneDesignNode(selectedNode)) {
-    const selectedAvailabilityZone = getAvailabilityZoneNodeAwsAvailabilityZone(selectedNode);
+    const selectedAvailabilityZone =
+      typeof selectedNode.metadata?.awsAvailabilityZone === "string"
+        ? selectedNode.metadata.awsAvailabilityZone
+        : getAvailabilityZoneNodeAwsAvailabilityZone(selectedNode);
 
     return (
       <aside className={styles.panel} aria-label="파라미터 입력 패널">
@@ -106,8 +115,7 @@ export function ParameterInputPanel({
 
         <section className={styles.section} aria-label="Main parameters">
           <div className={styles.fieldGroup}>
-            <MetadataField
-              label="Availability Zone"
+            <AvailabilityZoneField
               onChange={(awsAvailabilityZone) =>
                 updateNodeMetadata(selectedNode.id, {
                   metadata: createAvailabilityZoneNodeMetadata(selectedNode, awsAvailabilityZone)
@@ -244,6 +252,39 @@ export function ParameterInputPanel({
       </section>
 
     </aside>
+  );
+}
+
+function AvailabilityZoneField({
+  onChange,
+  value
+}: {
+  onChange: (value: AwsAvailabilityZoneCode) => void;
+  value: string;
+}) {
+  const [draftValue, setDraftValue] = useState(value);
+  const selectedAvailabilityZone = draftValue;
+  const availabilityZoneError = getAwsAvailabilityZoneValidationError(selectedAvailabilityZone);
+
+  useEffect(() => {
+    setDraftValue(value);
+  }, [value]);
+
+  const handleChange = (nextAvailabilityZone: string) => {
+    setDraftValue(nextAvailabilityZone);
+
+    if (isAwsAvailabilityZoneCode(nextAvailabilityZone)) {
+      onChange(nextAvailabilityZone);
+    }
+  };
+
+  return (
+    <MetadataField
+      error={availabilityZoneError}
+      label="Availability Zone"
+      onChange={handleChange}
+      value={selectedAvailabilityZone}
+    />
   );
 }
 
@@ -855,7 +896,7 @@ function ListEditor({
 }
 
 function MapEditor({ onChange, value }: { onChange: (value: unknown) => void; value: unknown }) {
-  const record = toRecord(value);
+  const record = toParameterRecord(value);
   const entries = Object.entries(record);
 
   return (
@@ -935,7 +976,7 @@ function NestedEditor({
   const children = definition.children ?? [];
 
   if (definition.type === "list" || definition.type === "set") {
-    const blocks = Array.isArray(value) ? value.map(toRecord) : [];
+    const blocks = Array.isArray(value) ? value.map(toParameterRecord) : [];
 
     return (
       <div className={styles.nestedEditor}>
@@ -979,7 +1020,7 @@ function NestedEditor({
     );
   }
 
-  const block = toRecord(value);
+  const block = toParameterRecord(value);
 
   return (
     <div className={styles.nestedEditor}>
@@ -1065,14 +1106,6 @@ function toStringArray(value: unknown): string[] {
   }
 
   return value.filter((item): item is string => typeof item === "string");
-}
-
-function toRecord(value: unknown): RecordValue {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return {};
-  }
-
-  return value as RecordValue;
 }
 
 function getInitials(value: string): string {

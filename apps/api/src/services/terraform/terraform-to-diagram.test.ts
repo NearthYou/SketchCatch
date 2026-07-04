@@ -276,6 +276,144 @@ resource "aws_security_group_rule" "ssh" {
   assert.equal(result.proposals?.[1]?.identity.resourceType, "aws_security_group_rule");
 });
 
+test("syncs Lambda environment nested block as a single object value", () => {
+  const diagramJson: DiagramJson = {
+    nodes: [
+      makeNode({
+        id: "lambda-1",
+        type: "aws_lambda_function",
+        kind: "resource",
+        label: "handler",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_lambda_function",
+          resourceName: "handler",
+          fileName: "application",
+          values: {}
+        }
+      })
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+
+  const result = syncTerraformToDiagramJson(
+    diagramJson,
+    `resource "aws_lambda_function" "handler" {
+  function_name = "handler"
+  role          = aws_iam_role.lambda.arn
+  handler       = "index.handler"
+  runtime       = "nodejs22.x"
+
+  environment {
+    variables = {
+      LOG_LEVEL = "info"
+    }
+  }
+}`
+  );
+
+  assert.deepEqual(result.diagnostics, []);
+  assert.deepEqual(result.diagramJson.nodes[0]?.parameters?.values.environment, {
+    variables: {
+      LOG_LEVEL: "info"
+    }
+  });
+});
+
+test("keeps repeatable ASG tag nested blocks as an array", () => {
+  const diagramJson: DiagramJson = {
+    nodes: [
+      makeNode({
+        id: "asg-1",
+        type: "aws_autoscaling_group",
+        kind: "resource",
+        label: "web",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_autoscaling_group",
+          resourceName: "web",
+          fileName: "compute",
+          values: {}
+        }
+      })
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+
+  const result = syncTerraformToDiagramJson(
+    diagramJson,
+    `resource "aws_autoscaling_group" "web" {
+  min_size            = 1
+  max_size            = 2
+  vpc_zone_identifier = [aws_subnet.public.id]
+
+  tag {
+    key                 = "Name"
+    value               = "web"
+    propagate_at_launch = true
+  }
+}`
+  );
+
+  assert.deepEqual(result.diagnostics, []);
+  assert.deepEqual(result.diagramJson.nodes[0]?.parameters?.values.tag, [
+    {
+      key: "Name",
+      value: "web",
+      propagateAtLaunch: true
+    }
+  ]);
+});
+
+test("rejects duplicate single nested blocks during Terraform sync", () => {
+  const diagramJson: DiagramJson = {
+    nodes: [
+      makeNode({
+        id: "lambda-1",
+        type: "aws_lambda_function",
+        kind: "resource",
+        label: "handler",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_lambda_function",
+          resourceName: "handler",
+          fileName: "application",
+          values: {}
+        }
+      })
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+
+  const result = syncTerraformToDiagramJson(
+    diagramJson,
+    `resource "aws_lambda_function" "handler" {
+  function_name = "handler"
+
+  environment {
+    variables = {
+      FIRST = "1"
+    }
+  }
+
+  environment {
+    variables = {
+      SECOND = "2"
+    }
+  }
+}`
+  );
+
+  assert.deepEqual(result.diagramJson, diagramJson);
+  assert.deepEqual(result.proposals, []);
+  assert.equal(result.diagnostics.length, 1);
+  assert.equal(result.diagnostics[0]?.code, "terraform.sync.nested_block_cardinality");
+  assert.equal(result.diagnostics[0]?.resourceAddress, "aws_lambda_function.handler");
+});
+
 test("syncs security group rule create and delete proposals", () => {
   const securityGroupRuleDefinition = getResourceDefinitionByTerraform(
     "resource",
@@ -927,16 +1065,14 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "logs" {
   });
   assert.deepEqual(result.diagramJson.nodes[1]?.parameters?.values, {
     bucket: "aws_s3_bucket.logs.id",
-    rule: [
-      {
-        applyServerSideEncryptionByDefault: [
-          {
-            sseAlgorithm: "aws:kms",
-            kmsMasterKeyId: "aws_kms_key.logs.arn"
-          }
-        ]
-      }
-    ]
+    rule: {
+      applyServerSideEncryptionByDefault: [
+        {
+          sseAlgorithm: "aws:kms",
+          kmsMasterKeyId: "aws_kms_key.logs.arn"
+        }
+      ]
+    }
   });
 });
 

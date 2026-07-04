@@ -15,6 +15,34 @@
 
 ## 세션 레코드
 
+### 2026-07-04 - Nested block sync cardinality와 AZ 입력 검증 수정
+
+- Goal: Terraform Sync가 single nested block 값을 배열로 저장해 Parameter panel에서 값이 유실되는 문제를 고치고, AZ metadata 입력의 클라이언트 포맷 검증을 추가한다.
+- Completed:
+  - `aws_lambda_function.environment`, `aws_s3_bucket_versioning.versioningConfiguration`, `aws_s3_bucket_server_side_encryption_configuration.rule`, `aws_api_gateway_rest_api.endpointConfiguration`을 single nested block으로 분류하고 object 값으로 sync 저장하게 했다.
+  - 반복 가능한 nested block은 기존처럼 배열로 유지하고, single nested block이 중복 선언되면 `terraform.sync.nested_block_cardinality` error diagnostic으로 sync를 중단하게 했다.
+  - Parameter panel record 변환 helper가 기존 저장 데이터의 `[object]` 형태 single nested block 값을 첫 번째 object로 방어적으로 읽게 했다.
+  - AZ metadata 입력은 기존 input UI를 유지하되 invalid Availability Zone code에 client-side error를 표시하고, invalid draft는 metadata에 커밋하지 않게 했다.
+- Verification run:
+  - Red before fix: `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-to-diagram.test.ts` - failed because Lambda `environment` synced as an array and duplicate single nested blocks had no diagnostic.
+  - Red before fix: `pnpm --filter @sketchcatch/web exec tsx --test features/parameter-input/availability-zone-options.test.ts features/parameter-input/parameter-panel-source.test.ts features/parameter-input/parameter-value-record.test.ts` - failed because AZ validation/helper wiring and record helper did not exist.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-to-diagram.test.ts` - passed.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/parameter-input/availability-zone-options.test.ts features/parameter-input/parameter-panel-source.test.ts features/parameter-input/parameter-value-record.test.ts` - passed.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-to-diagram.test.ts src/services/terraform/diagram-to-terraform.test.ts src/services/terraform/terraform-diagnostics.test.ts` - passed.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/parameter-input/availability-zone-options.test.ts features/parameter-input/availability-zone-node-metadata.test.ts features/parameter-input/parameter-panel-source.test.ts features/parameter-input/parameter-value-record.test.ts features/parameter-input/validation.test.ts` - passed.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `pnpm build` - passed.
+  - `git diff --check` - passed.
+  - `pnpm harness:check` - passed.
+- Evidence recorded:
+  - 실제 Terraform CLI, apply/destroy, cloud mutation, Git/CI/CD handoff는 실행하지 않았다.
+  - `pnpm build`가 `apps/web/next-env.d.ts`를 prod route type 경로로 바꿨지만, 생성물 변경이라 tracked dev 경로로 원복했다.
+- Known risks:
+  - Region/AZ/ASG를 resource-area node로 재정의하는 큰 설계 변경은 별도 작업으로 남아 있다.
+- Next best action:
+  - 사용자가 수동 커밋 후 Region/AZ/ASG 영역 리소스 플랜 구현으로 넘어간다.
+
 ### 2026-07-04 - Main parameter 정책 문서화와 최종 검증
 
 - Goal: Region/AZ, catalog Preview/Sync, main parameter-only UI 정책, HCL 정규화 책임을 최신 문서와 handoff에 맞추고 전체 검증을 완료한다.
