@@ -252,6 +252,137 @@
 - Next best action:
   - Run final full checks and commit the feedback polish.
 
+### 2026-07-04 - Architecture Board area and connection handle feedback
+
+- Goal: 영역 제목/팔레트/연결선이 Architecture Board에서 서로 가리거나, 사용자가 찍은 연결점과 다른 위치에 선이 붙는 문제를 바로잡는다.
+- Completed:
+  - 선택 팔레트를 영역 제목을 가리지 않도록 선택 영역 하단으로 이동했다.
+  - 영역 제목은 영역 내부를 덮지 않게 경계선 위 바깥으로 띄우고, Region 라벨에는 선택된 AWS Region 값을 함께 표시했다.
+  - Region/AZ/VPC 같은 영역 배경을 더 읽기 쉬운 흰색 기반으로 정리하고, 드래그 중 포함 후보 영역은 초록색 피드백으로 명확히 보이게 했다.
+  - 영역 안 리소스와 연결선의 z-index를 containment depth 기준으로 정리해, 부모/자식 영역이 겹쳐도 소속 리소스와 화살표가 의도한 계층에 보이게 했다.
+  - React Flow edge가 `handle-left` 같은 stale handle 경고를 내지 않도록 source/target 전용 핸들을 실제로 렌더링하고, 저장된 논리 핸들 값을 실제 핸들 ID로 매핑했다.
+  - 연결 핸들 크기와 보이지 않는 클릭 범위를 키워 선 연결 시작/종료가 더 쉽게 되도록 조정했다.
+- Verification run:
+  - `pnpm --dir . --filter @sketchcatch/web test -- flow-mappers.test.ts` - passed, 275 tests
+  - `pnpm --dir . typecheck` - passed
+  - `pnpm --dir . lint` - passed
+  - `pnpm --dir . build` - passed
+  - `pnpm --dir . harness:check` - passed
+- Known risks:
+  - Browser에서 실제 포인터 드래그를 다시 손으로 확인하면 미세한 클릭 감도 조정이 추가로 필요할 수 있다.
+  - Turbo는 sandbox 사용자와 로컬 git 소유자가 달라 `safe.directory` 경고를 계속 출력하지만, 작업 자체는 성공했다.
+
+### 2026-07-04 - Logo, landing header, and multi-edge handle feedback
+
+- Goal: SketchCatch 로고가 서비스 개성을 드러내도록 교체하고, 메인 페이지의 불필요한 네비게이터와 연결선 핸들 UX 문제를 정리한다.
+- Completed:
+  - GPT Image built-in tool로 SketchCatch 로고 콘셉트를 생성하고, 스케치 보드/클라우드/실행 흐름 모티프를 작은 화면에서도 선명한 `sketchcatch-logo.svg` 자산으로 재구성했다.
+  - 랜딩, 로그인, 회원가입, 비밀번호 재설정, 대시보드 사이드바 브랜드 마크를 새 로고 자산으로 교체했다.
+  - 메인 페이지의 `Flow / Review` 네비게이터를 제거하고 헤더 액션은 `새 작업 시작` 하나만 남겼다.
+  - 연결 핸들을 source/target 전용으로 분리하고 레이어를 조정해, 여러 선을 이어 그릴 때 target 핸들이 시작 클릭을 가로채지 않게 했다.
+- Verification run:
+  - Browser smoke on `/`: `siteNav` count 0, header CTA text `새 작업 시작`, logo rendered at 44x44.
+  - `pnpm --dir . --filter @sketchcatch/web test -- flow-mappers.test.ts` - passed, 275 tests
+  - `pnpm --dir . typecheck` - passed
+  - `pnpm --dir . lint` - passed
+  - `pnpm --dir . build` - passed
+  - `pnpm --dir . harness:check` - passed
+- Known risks:
+  - Browser smoke showed an expected unauthenticated 401 from auth status loading on the public landing page; the page rendered normally.
+  - The generated GPT Image concept remains in the Codex generated image cache; the app uses the cleaned SVG asset for production UI.
+
+### 2026-07-04 - Landing hero and board area feedback
+
+- Goal: 메인 페이지가 한눈에 들어오도록 문구/배치/플로팅 요소를 정리하고, Architecture Board의 영역 컨테이너가 배경에 묻히지 않게 보강한다.
+- Completed:
+  - 메인 hero 문구를 짧게 줄이고, 서브 문구는 데스크톱에서 한 줄로 보이도록 폭과 정렬을 조정했다.
+  - hero CTA `새 작업 시작`을 왼쪽 정렬로 바꾸고, hero 안 로그인 CTA는 제거된 상태를 유지했다.
+  - 오른쪽 Blueprint 보드 프레임 높이를 낮추고 Terraform Preview 플로팅 카드가 화면 바깥으로 넘어가지 않게 위치를 조정했다.
+  - 보드 내부 리소스 아이콘의 개별 floating animation을 제거하고 EC2-S3-CloudWatch 선을 실제 노드 가장자리에 맞춘 wire로 교체했다.
+  - 반복되던 Review 플로팅 카드를 제거하고, AWS 연결 카드는 EC2 아이콘 대신 AWS Cloud logo를 사용하도록 수정했다.
+  - Region/AZ/VPC 같은 area node는 흰색 paper 면, 더 진한 테두리, 선명한 라벨 pill로 바꿔 배경 그리드에 묻히지 않게 했다.
+- Verification run:
+  - Browser smoke with installed Chrome on `/`: desktop 1920px에서 서브 문구 1줄, CTA left aligned, Terraform Preview card inside viewport, no horizontal overflow.
+  - Browser smoke with installed Chrome on `/`: EC2-S3 wire touches node edges and S3-CloudWatch wire starts from S3 edge; Review floating card count is 0.
+  - `pnpm --dir . harness:check` - passed
+  - `pnpm --dir . lint` - passed
+  - `pnpm --dir . typecheck` - passed
+  - `pnpm --dir . build` - passed before final area-node white paper adjustment; final build rerun pending.
+- Known risks:
+  - Browser smoke used local frontend rendering only; no real AWS apply/destroy, backend deployment, or Git/CI/CD handoff was executed.
+  - Next.js build toggles `apps/web/next-env.d.ts` between dev/prod generated route type imports; this file should be excluded from the UI diff.
+
+### 2026-07-04 - Terraform editor wrapped-line highlight feedback
+
+- Goal: Terraform 패널을 좁혔을 때 soft wrap 때문에 줄번호와 코드 줄, 선택 하이라이트 위치가 어긋나는 문제를 고친다.
+- Completed:
+  - Terraform editor의 별도 line-number `ol`을 제거하고, `line number + code`를 같은 row 안에서 렌더링하도록 바꿨다.
+  - 선택 하이라이트가 큰 고정 박스처럼 덮이지 않고, 실제 코드 row의 gutter와 code 영역에만 들어가도록 CSS를 정리했다.
+  - 선택 리소스로 자동 스크롤할 때 고정 line-height 계산 대신 실제 row offset을 우선 사용하도록 바꿔, 줄바꿈된 코드에서도 이전/다음 리소스 블록으로 밀리지 않게 했다.
+  - editor viewport 전체에 gutter 배경을 깔아 코드가 짧거나 아래 여백이 남아도 줄번호 영역이 끊겨 보이지 않게 했다.
+- Verification run:
+  - Browser smoke on `/workspace` with auth mocks: Terraform tab at 245px visible textarea width measured wrapped rows; row/gutter/code heights matched with `anyHeightMismatch=false`.
+  - `pnpm --dir . harness:check` - passed
+  - `pnpm --dir . lint` - passed
+  - `pnpm --dir . typecheck` - passed
+  - `pnpm --dir . build` - passed
+- Known risks:
+  - Browser smoke used mocked auth/API responses and manually injected Terraform text; no real backend generation, save, AWS apply, or destroy was executed.
+
+### 2026-07-04 - MyPage project thumbnail icon-only feedback
+
+- Goal: 마이페이지 프로젝트 썸네일의 리소스 타일에서 리소스 이름을 빼고 아이콘만 크게 보이게 한다.
+- Completed:
+  - `ProjectArchitectureThumbnail`의 일반 리소스 label 렌더링과 label trim 로직을 제거했다.
+  - 썸네일 리소스 아이콘을 노드 중앙에 배치하고 최대 56px까지 커지도록 조정했다.
+- Verification run:
+  - Browser smoke on `/mypage` with auth/API mocks: project thumbnail SVG `text` count 0, EC2 icon size 56x56.
+  - `pnpm --dir . harness:check` - passed
+  - `pnpm --dir . lint` - passed
+  - `pnpm --dir . typecheck` - passed
+  - `pnpm --dir . build` - passed
+- Known risks:
+  - Browser smoke used mocked project/draft responses; no real backend draft fetch or deployment path was exercised.
+
+### 2026-07-04 - Architecture Board connection stability feedback
+
+- Goal: 리소스 간 연결선이 간헐적으로 사라지거나, 노드 크기 조절 뒤에야 다시 보이는 문제를 줄인다.
+- Completed:
+  - React Flow 연결 드래그 시작/종료 상태를 노드 데이터로 전달해, 연결 중에는 모든 연결 핸들이 보이고 실제로 pointer target이 되도록 정리했다.
+  - 노드 수동 리사이즈 중/후 `useUpdateNodeInternals`를 호출해 React Flow의 handle/edge geometry가 노드 크기 변화와 함께 갱신되도록 했다.
+  - `toFlowNodes` 계약과 관련 단위 테스트 호출부에 `isConnectionActive` 인자를 반영했다.
+- Verification run:
+  - `pnpm --dir C:\Users\siwon\Desktop\Jungle\Week17~21\SketchCatch --filter @sketchcatch/web lint` - passed
+  - `pnpm --dir C:\Users\siwon\Desktop\Jungle\Week17~21\SketchCatch --filter @sketchcatch/web typecheck` - passed
+  - Browser smoke on `/workspace`: EC2/S3 nodes dropped through the app drop payload, edge connected, all handles visible during connection drag, and the edge remained present after resizing EC2.
+  - `pnpm --dir C:\Users\siwon\Desktop\Jungle\Week17~21\SketchCatch lint` - passed
+  - `pnpm --dir C:\Users\siwon\Desktop\Jungle\Week17~21\SketchCatch typecheck` - passed
+  - `pnpm --dir C:\Users\siwon\Desktop\Jungle\Week17~21\SketchCatch build` - passed
+- Known risks:
+  - Browser smoke used auth mocks and synthetic drop payloads for UI-only verification; no backend or AWS deployment path was executed.
+  - Turbo reported a Git safe.directory warning under the sandbox user, but all lint/typecheck/build tasks completed successfully.
+
+### 2026-07-04 - Dashboard and auth layout feedback
+
+- Goal: 템플릿/마이페이지 계열 dashboard 본문이 비정상적으로 아래로 밀리는 문제와 Auth 화면 좌우 여백, 회원가입 상태 문구 가독성/밀도를 보정한다.
+- Completed:
+  - Blueprint dashboard override에서 sidebar가 `position: relative`로 문서 흐름에 들어가던 문제를 데스크톱 `fixed` sidebar로 되돌려 dashboard 본문이 상단에서 시작하도록 수정했다.
+  - Dashboard topbar와 본문 gap/padding을 줄여 템플릿 허브 첫 화면이 불필요한 빈 공간 없이 시작되도록 조정했다.
+  - Login/Signup 단일 auth shell 폭과 panel 폭을 일치시켜 좌우 여백을 균등하게 맞췄다.
+  - Signup 입력 높이, 내부 gap, button 높이, 상태 메시지 line-height를 줄이고 success/error 색을 진하게 조정했다.
+  - 아이디/이메일 중복 확인 메시지 영역은 `:has(.authInlineControl)` 기반 최소 높이를 둬 상태 문구가 나타날 때 전체 폼이 덜 밀리도록 보정했다.
+- Verification run:
+  - Browser smoke on `/templates`: dashboard main y=0, topbar y=18, first panel y=160 after auth mock.
+  - Browser smoke on `/login`: auth panel left/right viewport gap both 736px at 1920px width.
+  - Browser smoke on `/signup`: status messages visible at rgb(18,116,59) and rgb(180,35,24); panel bottom 933px within 1080px viewport.
+  - `pnpm --dir C:\Users\siwon\Desktop\Jungle\Week17~21\SketchCatch harness:check` - passed
+  - `pnpm --dir C:\Users\siwon\Desktop\Jungle\Week17~21\SketchCatch lint` - passed
+  - `pnpm --dir C:\Users\siwon\Desktop\Jungle\Week17~21\SketchCatch typecheck` - passed
+  - `pnpm --dir C:\Users\siwon\Desktop\Jungle\Week17~21\SketchCatch build` - passed
+- Known risks:
+  - Browser verification used auth/API mocks and did not exercise real login, signup, or backend availability checks.
+  - Turbo continued to report the sandbox Git safe.directory warning, but all tasks completed successfully.
+
 ### 2026-07-04 - Terraform highlight and canvas node sizing feedback
 
 - Goal: Terraform 패널을 줄였을 때 선택 리소스 하이라이트가 이전 CloudWatch/EventBridge 블록에 붙는 문제를 고치고, 캔버스 리소스 노드의 아이콘/라벨 반응형 표현을 다듬는다.
@@ -270,6 +401,25 @@
 - Known risks:
   - Browser smoke used auth mocks and manually injected Terraform text for visual inspection; no real backend generation or AWS deployment was executed.
   - Terraform leave guard intentionally blocks canvas clicks while there are unsaved manual Terraform edits, so highlight switching should be evaluated in synced/clean editor state.
+
+### 2026-07-04 - Canvas resource selection spacing feedback
+
+- Goal: 선택 박스와 실제 리소스 아이콘/라벨 사이 여백이 과하게 넓어 보이는 문제를 줄인다.
+- Completed:
+  - 리소스 노드의 container gap/padding을 줄이고, 아이콘 크기 계산을 노드 폭/높이에 더 크게 반응하도록 조정했다.
+  - 큰 노드에서도 선택 영역 안쪽에 리소스가 작게 떠 보이지 않도록 아이콘 상한을 확대했다.
+  - 스크롤 휠 회전이나 빈 캔버스 왼쪽 드래그가 임시 pan 모드를 켜지 않도록 제거하고, 휠 클릭을 누르는 동안만 pan 모드가 되며 버튼을 떼거나 pointer cancel/window blur가 발생하면 선택 모드로 복귀하게 정리했다.
+  - 수동으로 캔버스 이동 모드를 선택한 상태에서는 휠 클릭을 눌렀다 떼도 선택 모드로 돌아가지 않고 고정 pan 모드를 유지하도록 임시/수동 pan 상태를 분리했다.
+  - Deployment 패널 헤더/섹션이 오른쪽 여백을 과하게 남기지 않도록 상시 scrollbar gutter와 헤더 우측 margin을 제거해 좌우 외곽 여백을 맞췄다.
+- Verification run:
+  - `pnpm harness:check` - passed before edit
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web lint` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web typecheck` - passed
+  - Browser smoke on `/workspace`: middle mouse down switched to pan and middle mouse up returned to select.
+  - Browser smoke on `/workspace`: manually selected pan mode stayed pan after middle mouse down/up.
+  - Browser DOM smoke on `/workspace` Deploy tab measured deployment panel side gaps at left 17px and right 16px.
+- Known risks:
+  - CSS-only visual tuning이며, 실제 AWS apply/destroy나 backend contract 변경은 없다.
 
 ### 2026-07-04 - Architecture Board panel/resource polish feedback
 
