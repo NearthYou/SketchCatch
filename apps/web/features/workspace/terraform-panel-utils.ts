@@ -1,4 +1,9 @@
-import type { DiagramJson, DiagramNode, TerraformDiagnostic } from "@sketchcatch/types";
+import type {
+  DiagramJson,
+  DiagramNode,
+  TerraformDiagnostic,
+  TerraformSourceLocation
+} from "@sketchcatch/types";
 import type { DiagramEditorPanelContext } from "../diagram-editor";
 
 export type TerraformSaveBanner =
@@ -167,6 +172,36 @@ export function findTerraformBlockForNode(
   return blocks.find((block) => block.address === address) ?? null;
 }
 
+export function findTerraformSourceLocationForAddress(
+  files: readonly TerraformVirtualFile[],
+  resourceAddress: string | null | undefined
+): TerraformSourceLocation | undefined {
+  const normalizedAddress = normalizeTerraformAddress(resourceAddress);
+
+  if (!normalizedAddress) {
+    return undefined;
+  }
+
+  const block = parseTerraformFiles(files).find(
+    (location) =>
+      location.address === normalizedAddress ||
+      `${location.blockType}.${location.address}` === normalizedAddress
+  );
+
+  if (!block) {
+    return undefined;
+  }
+
+  return {
+    fileName: block.fileName,
+    line: block.startLine,
+    column: 1,
+    resourceAddress: block.address,
+    terraformBlockType: block.blockType,
+    terraformBlockName: block.name
+  };
+}
+
 function toNodeTerraformAddress(node: DiagramNode | null): string | null {
   const parameters = node?.parameters;
   const resourceType = parameters?.resourceType?.trim();
@@ -177,6 +212,16 @@ function toNodeTerraformAddress(node: DiagramNode | null): string | null {
   }
 
   return `${resourceType}.${resourceName}`;
+}
+
+function normalizeTerraformAddress(resourceAddress: string | null | undefined): string | null {
+  const trimmedAddress = resourceAddress?.trim();
+
+  if (!trimmedAddress) {
+    return null;
+  }
+
+  return trimmedAddress.replace(/^(resource|data)\./, "");
 }
 
 function parseTerraformBlocks(fileName: string, terraformCode: string): TerraformBlockLocation[] {

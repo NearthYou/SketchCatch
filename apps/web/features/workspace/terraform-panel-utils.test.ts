@@ -4,6 +4,7 @@ import type { DiagramJson, DiagramNode } from "@sketchcatch/types";
 import {
   createTerraformFilesFromGeneratedCode,
   findTerraformBlockForNode,
+  findTerraformSourceLocationForAddress,
   getTerraformFileOptions,
   parseTerraformFiles,
   toDeploymentBaselineFingerprint,
@@ -67,6 +68,56 @@ data "aws_ami" "ubuntu" {
 
   assert.equal(findTerraformBlockForNode(blocks, makeNode("resource", "aws_instance", "web"))?.blockType, "resource");
   assert.equal(findTerraformBlockForNode(blocks, makeNode("data", "aws_ami", "ubuntu"))?.blockType, "data");
+});
+
+test("findTerraformSourceLocationForAddress returns editor location for resource addresses", () => {
+  const files = [
+    {
+      fileName: "network.tf",
+      code: `resource "aws_vpc" "main" {
+  cidr_block = "10.0.0.0/16"
+}`
+    },
+    {
+      fileName: "compute.tf",
+      code: `resource "aws_security_group" "app" {
+  name = "app"
+}
+
+resource "aws_instance" "web" {
+  ami = data.aws_ami.ubuntu.id
+}`
+    }
+  ];
+
+  assert.deepEqual(findTerraformSourceLocationForAddress(files, "aws_instance.web"), {
+    fileName: "compute.tf",
+    line: 5,
+    column: 1,
+    resourceAddress: "aws_instance.web",
+    terraformBlockType: "resource",
+    terraformBlockName: "web"
+  });
+});
+
+test("findTerraformSourceLocationForAddress accepts resource and data address prefixes", () => {
+  const files = [
+    {
+      fileName: "main.tf",
+      code: `data "aws_ami" "ubuntu" {
+  owners = ["099720109477"]
+}`
+    }
+  ];
+
+  assert.deepEqual(findTerraformSourceLocationForAddress(files, "data.aws_ami.ubuntu"), {
+    fileName: "main.tf",
+    line: 1,
+    column: 1,
+    resourceAddress: "aws_ami.ubuntu",
+    terraformBlockType: "data",
+    terraformBlockName: "ubuntu"
+  });
 });
 
 test("createTerraformFilesFromGeneratedCode routes generated blocks to node file names", () => {
