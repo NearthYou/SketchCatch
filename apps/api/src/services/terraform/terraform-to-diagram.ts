@@ -14,7 +14,7 @@ import {
   createTerraformBlockAddress,
   createTerraformBlockIdentityKey
 } from "./terraform-identity.js";
-import { getTerraformNestedBlockAttributes } from "./terraform-nested-blocks.js";
+import { isTerraformNestedBlockAttribute } from "./terraform-nested-blocks.js";
 
 const DEFAULT_TERRAFORM_BLOCK_TYPE: TerraformBlockType = "resource";
 const BLOCK_HEADER_PATTERN =
@@ -496,11 +496,7 @@ function parseTerraformBlocks(sourceFileName: string, terraformCode: string): Pa
       continue;
     }
 
-    const valuesResult = parseAttributes(
-      bodyResult.bodyLines,
-      address,
-      getTerraformNestedBlockAttributes(resourceType)
-    );
+    const valuesResult = parseAttributes(bodyResult.bodyLines, address, resourceType);
     diagnostics.push(...valuesResult.diagnostics);
 
     blocks.push({
@@ -589,7 +585,8 @@ function collectBlockBody(
 function parseAttributes(
   bodyLines: BodyLine[],
   resourceAddress: string,
-  supportedNestedBlocks?: ReadonlySet<string>
+  resourceType?: string,
+  allowNestedBlocks = false
 ): { values: Record<string, unknown>; diagnostics: TerraformDiagnostic[] } {
   const values: Record<string, unknown> = {};
   const diagnostics: TerraformDiagnostic[] = [];
@@ -621,7 +618,7 @@ function parseAttributes(
       diagnostics.push(...nestedBlock.diagnostics);
       index = nestedBlock.endIndex;
 
-      if (supportedNestedBlocks?.has(nestedBlockName) !== true) {
+      if (!allowNestedBlocks && !isSupportedNestedBlock(resourceType, nestedBlockName)) {
         diagnostics.push({
           severity: "error",
           code: "terraform.sync.nested_block",
@@ -636,7 +633,7 @@ function parseAttributes(
         continue;
       }
 
-      const nestedValues = parseAttributes(nestedBlock.bodyLines, resourceAddress);
+      const nestedValues = parseAttributes(nestedBlock.bodyLines, resourceAddress, undefined, true);
       diagnostics.push(...nestedValues.diagnostics);
       appendNestedBlockValue(values, nestedBlockName, nestedValues.values);
       continue;
@@ -699,6 +696,10 @@ function parseAttributes(
   }
 
   return { values, diagnostics };
+}
+
+function isSupportedNestedBlock(resourceType: string | undefined, nestedBlockName: string): boolean {
+  return resourceType !== undefined && isTerraformNestedBlockAttribute(resourceType, nestedBlockName);
 }
 
 function collectNestedBlockBody(

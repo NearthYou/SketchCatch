@@ -275,6 +275,8 @@ capability의 의미는 아래와 같다.
 - `terraformSync`: Terraform editor에서 발견한 block을 Diagram 변경 후보로 받아들일 수 있는지 나타낸다.
 - `parameterPanel`: web parameter catalog에 사용자 입력 UI가 있는지 나타낸다.
 
+현재 Web catalog에서 생성할 수 있는 shared Terraform resource/data definition은 모두 `terraformPreview: true`와 `terraformSync: true`다. Terraform Sync는 shared definition에 없는 AWS block은 warning 또는 unsupported diagnostic으로 남기고, shared definition 안의 block은 create/delete/rename proposal 또는 동일 identity의 `parameters.values` 갱신 대상으로 다룬다.
+
 새 Terraform 리소스를 추가할 때는 아래 순서를 따른다.
 
 1. `packages/types/src/resource-definitions.ts`에 shared `ResourceDefinition`을 추가하거나 capability를 수정한다.
@@ -496,7 +498,7 @@ type TerraformDiagramChangeProposal =
 
 Terraform editor 저장 sync action에서 `terraformCode`와 모든 `terraformFiles[].terraformCode`가 공백이면 사용자가 Terraform 리소스를 모두 삭제하려는 명시 의도로 본다. 이때 API는 `terraformSync` capability가 `true`인 Diagram-only resource를 `delete_candidate`로 반환하고, Diagram도 이미 비어 있으면 diagnostics 없이 성공한다.
 
-Terraform editor에서 새로 발견한 구조 변경 proposal의 v1 범위는 shared `ResourceDefinition`의 `terraformSync` capability가 `true`인 Terraform block이다. Terraform Preview 렌더링 대상은 `terraformPreview` capability로 따로 판단한다. 현재 Web catalog에서 생성할 수 있는 shared Terraform resource/data definition은 모두 `terraformPreview: true`이며, `terraformSync` 지원 범위는 별도로 확장한다. 이미 같은 identity로 매칭된 block은 parser가 안전하게 해석할 수 있는 경우 `parameters.values` 갱신 대상이 될 수 있다.
+Terraform editor에서 새로 발견한 구조 변경 proposal의 v1 범위는 shared `ResourceDefinition`의 `terraformSync` capability가 `true`인 Terraform block이다. Terraform Preview 렌더링 대상은 `terraformPreview` capability로 따로 판단한다. 현재 shared Terraform definition은 모두 Preview와 Sync 대상이지만, Sync parser는 여전히 안전하게 해석할 수 있는 HCL subset만 `parameters.values`로 받아들인다. top-level nested block은 `terraform-nested-blocks.ts`의 허용 목록에 있을 때만 sync하고, 허용된 nested block 내부의 하위 block은 camelCase 배열 값으로 보존한다. 이미 같은 identity로 매칭된 block은 parser가 안전하게 해석할 수 있는 경우 `parameters.values` 갱신 대상이 될 수 있다.
 
 Parameter panel의 `Advanced Parameters` UI는 내부 노출 정책이 정해질 때까지 숨긴다. 이는 UI 노출 정책이며 저장 정책이 아니다. 기존 `parameters.values`에 남아 있는 optional 또는 catalog 밖 값은 사용자가 명시적으로 삭제하지 않는 한 보존하고, Terraform Preview renderer가 이해할 수 있으면 계속 렌더링 입력으로 사용한다.
 

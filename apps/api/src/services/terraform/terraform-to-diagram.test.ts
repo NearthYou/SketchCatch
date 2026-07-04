@@ -1,7 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { DiagramJson, DiagramNode } from "@sketchcatch/types";
-import { getResourceDefinitionByTerraform } from "@sketchcatch/types/resource-definitions";
+import {
+  getResourceDefinitionByTerraform,
+  resourceDefinitions
+} from "@sketchcatch/types/resource-definitions";
 import { syncTerraformToDiagramJson } from "./terraform-to-diagram.js";
 
 test("updates values for a matching generated resource block", () => {
@@ -238,7 +241,18 @@ test("returns create proposals for resources with terraformSync capability", () 
   assert.equal(result.proposals?.[0]?.identity.resourceType, "aws_cloudfront_distribution");
 });
 
-test("rejects Terraform-only blocks without terraformSync capability", () => {
+test("enables Terraform sync for every shared preview resource definition", () => {
+  const unsupportedPreviewResources = resourceDefinitions
+    .filter(
+      (definition) =>
+        definition.capabilities.terraformPreview && !definition.capabilities.terraformSync
+    )
+    .map((definition) => definition.terraform.resourceType);
+
+  assert.deepEqual(unsupportedPreviewResources, []);
+});
+
+test("returns create proposals for formerly preview-only Terraform resources", () => {
   const result = syncTerraformToDiagramJson(
     {
       nodes: [],
@@ -247,15 +261,22 @@ test("rejects Terraform-only blocks without terraformSync capability", () => {
     },
     `resource "aws_lambda_function" "handler" {
   function_name = "handler"
+
+}
+
+resource "aws_security_group_rule" "ssh" {
+  type = "ingress"
 }`
   );
 
-  assert.equal(result.proposals?.length, 0);
-  assert.equal(result.diagnostics[0]?.code, "terraform.sync.unsupported_resource");
-  assert.equal(result.diagnostics[0]?.resourceAddress, "aws_lambda_function.handler");
+  assert.deepEqual(result.diagnostics, []);
+  assert.equal(result.proposals?.[0]?.kind, "create_candidate");
+  assert.equal(result.proposals?.[0]?.identity.resourceType, "aws_lambda_function");
+  assert.equal(result.proposals?.[1]?.kind, "create_candidate");
+  assert.equal(result.proposals?.[1]?.identity.resourceType, "aws_security_group_rule");
 });
 
-test("keeps security group rule as preview-only and unsupported for Terraform sync proposals", () => {
+test("syncs security group rule create and delete proposals", () => {
   const securityGroupRuleDefinition = getResourceDefinitionByTerraform(
     "resource",
     "aws_security_group_rule"
@@ -295,12 +316,23 @@ test("keeps security group rule as preview-only and unsupported for Terraform sy
   );
 
   assert.equal(securityGroupRuleDefinition?.capabilities.terraformPreview, true);
-  assert.equal(securityGroupRuleDefinition?.capabilities.terraformSync, false);
-  assert.equal(terraformOnlyResult.proposals?.length, 0);
-  assert.equal(terraformOnlyResult.diagnostics[0]?.code, "terraform.sync.unsupported_resource");
-  assert.equal(terraformOnlyResult.diagnostics[0]?.resourceAddress, "aws_security_group_rule.ssh");
+  assert.equal(securityGroupRuleDefinition?.capabilities.terraformSync, true);
+  assert.deepEqual(terraformOnlyResult.diagnostics, []);
+  assert.equal(terraformOnlyResult.proposals?.[0]?.kind, "create_candidate");
+  assert.equal(terraformOnlyResult.proposals?.[0]?.identity.resourceType, "aws_security_group_rule");
   assert.deepEqual(diagramOnlyResult.diagnostics, []);
-  assert.deepEqual(diagramOnlyResult.proposals, []);
+  assert.deepEqual(diagramOnlyResult.proposals, [
+    {
+      kind: "delete_candidate",
+      identity: {
+        terraformBlockType: "resource",
+        resourceType: "aws_security_group_rule",
+        resourceName: "ssh"
+      },
+      nodeId: "sg-rule-1",
+      resourceAddress: "aws_security_group_rule.ssh"
+    }
+  ]);
 });
 
 test("rejects duplicate DiagramJson identities without mutating", () => {
@@ -817,6 +849,92 @@ resource "aws_security_group" "web" {
         fromPort: 80,
         protocol: "tcp",
         cidrBlocks: ["0.0.0.0/0"]
+      }
+    ]
+  });
+});
+
+test("syncs newly supported snake_case nested blocks into camelCase values", () => {
+  const diagramJson: DiagramJson = {
+    nodes: [
+      makeNode({
+        id: "instance-1",
+        type: "aws_instance",
+        kind: "resource",
+        label: "web",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_instance",
+          resourceName: "web",
+          fileName: "compute",
+          values: {
+            ami: "ami-1234567890abcdef0"
+          }
+        }
+      }),
+      makeNode({
+        id: "s3-encryption-1",
+        type: "aws_s3_bucket_server_side_encryption_configuration",
+        kind: "resource",
+        label: "logs_encryption",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_s3_bucket_server_side_encryption_configuration",
+          resourceName: "logs",
+          fileName: "storage",
+          values: {
+            bucket: "aws_s3_bucket.logs.id"
+          }
+        }
+      })
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+
+  const result = syncTerraformToDiagramJson(
+    diagramJson,
+    `resource "aws_instance" "web" {
+  ami = "ami-1234567890abcdef0"
+
+  root_block_device {
+    volume_size = 16
+    volume_type = "gp3"
+  }
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "logs" {
+  bucket = aws_s3_bucket.logs.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "aws:kms"
+      kms_master_key_id = aws_kms_key.logs.arn
+    }
+  }
+}`
+  );
+
+  assert.deepEqual(result.diagnostics, []);
+  assert.deepEqual(result.diagramJson.nodes[0]?.parameters?.values, {
+    ami: "ami-1234567890abcdef0",
+    rootBlockDevice: [
+      {
+        volumeSize: 16,
+        volumeType: "gp3"
+      }
+    ]
+  });
+  assert.deepEqual(result.diagramJson.nodes[1]?.parameters?.values, {
+    bucket: "aws_s3_bucket.logs.id",
+    rule: [
+      {
+        applyServerSideEncryptionByDefault: [
+          {
+            sseAlgorithm: "aws:kms",
+            kmsMasterKeyId: "aws_kms_key.logs.arn"
+          }
+        ]
       }
     ]
   });

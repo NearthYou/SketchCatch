@@ -40,7 +40,9 @@
 - `design_region`, `design_az`, `design_group` 같은 화면 전용 container node는 shared definition에 넣지 않고 web catalog에만 둔다.
 - `terraformPreview` capability가 true인 리소스만 `InfrastructureGraph` preview node로 포함된다.
 - `terraformSync` capability가 true인 리소스만 Terraform editor 구조 변경 proposal 대상이 된다.
-- `aws_cloudfront_distribution`을 포함한 shared Terraform definitions는 현재 모두 `terraformPreview: true`다. 일부 리소스는 여전히 `terraformSync: false`일 수 있다.
+- 현재 Web catalog에서 생성 가능한 shared Terraform definitions는 모두 `terraformPreview: true`와 `terraformSync: true`다.
+- Terraform Sync parser는 provider schema 전체를 재현하지 않는다. shared definition 안의 block이라도 복잡한 expression, dynamic block, count/indexing 등 deterministic subset 밖 입력은 diagnostic으로 막는다.
+- Terraform Sync parser는 top-level nested block을 `terraform-nested-blocks.ts`의 허용 목록으로 판단한다. 허용된 top-level nested block 내부의 하위 nested block은 camelCase 배열 값으로 보존한다.
 - Web catalog의 AWS Terraform 항목과 shared definition/parameter catalog drift 방지 테스트가 있다.
 - InfrastructureGraph 중심 Workspace 동기화 v1 구현이 현재 브랜치에 커밋됐다.
 - Terraform Preview 생성 경로는 `DiagramJson -> InfrastructureGraph -> Terraform`로 정리됐다.
@@ -79,6 +81,11 @@
 
 ## 이번 세션의 변경 사항
 
+- `packages/types/src/resource-definitions.ts`에서 shared AWS resource definition의 `terraformSync` 기본값을 true로 바꿨다.
+- `apps/api/src/services/terraform/terraform-to-diagram.ts`가 sync parser의 top-level nested block 지원 여부를 snake_case Set 직접 조회가 아니라 `isTerraformNestedBlockAttribute` helper로 판정하게 했다.
+- `apps/api/src/services/terraform/terraform-to-diagram.ts`가 허용된 top-level nested block 내부의 하위 nested block을 camelCase 배열 값으로 보존하게 했다.
+- `apps/api/src/services/terraform/terraform-to-diagram.test.ts`에 전체 shared preview definition sync capability, Lambda/Security Group Rule create/delete proposal, 새 snake_case nested block sync 회귀 테스트를 추가했다.
+- `docs/data-models.md`에 shared definition의 Preview/Sync 전체 지원 정책과 parser subset 경계를 기록했다.
 - `apps/api/src/services/terraform/diagram-to-terraform.ts`에 S3 Versioning/Encryption/Lifecycle compact main parameter 정규화를 추가했다.
 - `apps/api/src/services/terraform/diagram-to-terraform.ts`가 top-level nested block object를 단일 block으로 렌더링하게 했다.
 - `apps/api/src/services/terraform/terraform-nested-blocks.ts`의 nested block support list를 현재 catalog main nested-block 입력에 맞게 확장하고, snake_case로 들어온 attribute name도 camelCase helper lookup으로 인식하게 했다.

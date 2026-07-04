@@ -15,6 +15,33 @@
 
 ## 세션 레코드
 
+### 2026-07-04 - Terraform Sync와 diagnostics 호환 범위 확장
+
+- Goal: 현재 Web catalog에서 생성 가능한 shared Terraform resource/data definition을 Terraform editor sync proposal 범위에도 포함하고, 새 nested-block main parameter HCL을 sync parser가 안전하게 읽게 한다.
+- Completed:
+  - shared `ResourceDefinition`의 `terraformSync` 기본값을 true로 바꿔, 현재 shared Terraform definition 전체가 Preview와 Sync capability를 함께 갖게 했다.
+  - `aws_lambda_function`, `aws_security_group_rule`처럼 기존 preview-only였던 Terraform-only block도 create proposal 대상으로 받아들이게 했다.
+  - 빈 Terraform editor 저장 시 `aws_security_group_rule` 같은 기존 preview-only Diagram resource도 delete proposal 대상으로 포함되게 했다.
+  - Terraform sync parser가 top-level nested block 지원 여부를 snake_case Set 직접 조회 대신 `isTerraformNestedBlockAttribute` helper로 판정하게 했다.
+  - 허용된 top-level nested block 내부의 하위 nested block은 camelCase 배열 값으로 보존하게 했다. 예: `root_block_device`, `rule.apply_server_side_encryption_by_default`.
+  - `docs/data-models.md`에 현재 shared definition의 Preview/Sync 전체 지원 정책과 parser subset 경계를 기록했다.
+- Verification run:
+  - Red before fix: `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-to-diagram.test.ts` - failed because 34 preview resources had `terraformSync: false`, Lambda/Security Group Rule proposals were rejected, and new snake_case nested blocks were rejected.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-to-diagram.test.ts` - passed.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-to-diagram.test.ts src/services/terraform/terraform-diagnostics.test.ts src/services/terraform/diagram-to-terraform.test.ts src/services/terraform/terraform-preview.test.ts src/routes/terraform.test.ts && pnpm --filter @sketchcatch/web exec tsx --test features/resource-settings/catalog.test.ts features/parameter-input/parameter-panel-source.test.ts` - passed.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `pnpm build` - passed.
+  - `git diff --check` - passed.
+  - `pnpm harness:check` - passed.
+- Evidence recorded:
+  - 실제 Terraform CLI, apply/destroy, cloud mutation, Git/CI/CD handoff는 실행하지 않았다.
+  - `pnpm build`가 `apps/web/next-env.d.ts`를 prod route type 경로로 바꿨지만, 생성물 변경이라 다시 tracked dev 경로로 원복했다.
+- Known risks:
+  - Terraform Sync parser는 provider schema 전체를 검증하지 않는다. shared definition 안의 block이라도 복잡한 expression, dynamic block, count/indexing 등은 deterministic subset 밖이면 diagnostic으로 막는다.
+- Next best action:
+  - main parameter 정책과 전체 변경 사항을 최종 정리하고 full verification을 한 번 더 수행한다.
+
 ### 2026-07-04 - Terraform Preview main parameter HCL 정규화
 
 - Goal: Parameter panel에서 main parameter로 받은 짧은 입력과 catalog nested-block 값을 Terraform provider가 기대하는 HCL nested block 구조로 렌더링한다.
