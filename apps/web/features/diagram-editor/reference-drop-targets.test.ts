@@ -180,17 +180,17 @@ test("findInnermostReferenceDropTarget treats missing zIndex as zero when areas 
   assert.equal(target?.node.id, "vpc-front");
 });
 
-test("findInnermostVisualDropTarget includes Region, AZ, and Group design areas", () => {
-  const region = makeDesignNode({
+test("findInnermostVisualDropTarget includes Region and AZ resource areas", () => {
+  const region = makeResourceNode({
     id: "region-1",
-    type: "design_region",
+    resourceType: "aws_region",
     position: { x: 0, y: 0 },
     size: { width: 500, height: 400 },
     zIndex: 1
   });
-  const availabilityZone = makeDesignNode({
+  const availabilityZone = makeResourceNode({
     id: "az-1",
-    type: "design_az",
+    resourceType: "aws_availability_zone",
     position: { x: 60, y: 60 },
     size: { width: 360, height: 280 },
     zIndex: 2
@@ -212,6 +212,10 @@ test("findInnermostVisualDropTarget includes Region, AZ, and Group design areas"
   const target = findInnermostVisualDropTarget(bucket, [region, availabilityZone, group, bucket], catalog);
 
   assert.equal(target?.id, "group-1");
+  assert.equal(
+    findInnermostVisualDropTarget(bucket, [region, availabilityZone, bucket], catalog)?.id,
+    "az-1"
+  );
 });
 
 test("findInnermostVisualDropTarget supports legacy sketchcatch area node types", () => {

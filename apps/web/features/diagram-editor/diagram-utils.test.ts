@@ -115,9 +115,40 @@ test("createDiagramNodeFromPayload appends a numeric suffix for duplicate resour
   assert.equal(node.label, "ec2_instance_3");
 });
 
-test("createDiagramNodeFromPayload does not attach parameters to design nodes", () => {
+test("createDiagramNodeFromPayload creates Region and AZ as resource area nodes", () => {
+  const regionNode = createDiagramNodeFromPayload(
+    makeResourceDragPayload(makeResourceItem({ resourceType: "aws_region", label: "Region", id: "aws-region" })),
+    { x: 0, y: 0 },
+    1
+  );
+  const availabilityZoneNode = createDiagramNodeFromPayload(
+    makeResourceDragPayload(
+      makeResourceItem({
+        resourceType: "aws_availability_zone",
+        label: "Availability Zone",
+        id: "aws-availability-zone"
+      })
+    ),
+    { x: 0, y: 0 },
+    1,
+    [regionNode]
+  );
+
+  assert.equal(regionNode.kind, "resource");
+  assert.equal(regionNode.parameters?.resourceType, "aws_region");
+  assert.equal(regionNode.parameters?.resourceName, "region");
+  assert.deepEqual(regionNode.parameters?.values, { awsRegion: "ap-northeast-2" });
+  assert.equal(availabilityZoneNode.kind, "resource");
+  assert.equal(availabilityZoneNode.parameters?.resourceType, "aws_availability_zone");
+  assert.equal(availabilityZoneNode.parameters?.resourceName, "availability_zone");
+  assert.deepEqual(availabilityZoneNode.parameters?.values, {
+    awsAvailabilityZone: "ap-northeast-2a"
+  });
+});
+
+test("createDiagramNodeFromPayload does not attach parameters to generic design nodes", () => {
   const node = createDiagramNodeFromPayload(
-    makeResourceDragPayload(makeResourceItem({ resourceType: "design_region", label: "Region", id: "design-region" })),
+    makeResourceDragPayload(makeResourceItem({ resourceType: "design_group", label: "Group", id: "design-group" })),
     { x: 0, y: 0 },
     1
   );

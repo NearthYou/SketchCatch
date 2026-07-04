@@ -1,35 +1,60 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { DiagramNode } from "../../../../packages/types/src";
+import type { DiagramNode, DiagramNodeParameters } from "../../../../packages/types/src";
 import {
-  createAvailabilityZoneNodeMetadata,
+  createAvailabilityZoneNodeParameters,
   getAvailabilityZoneNodeAwsAvailabilityZone,
   isAvailabilityZoneDesignNode
 } from "./availability-zone-node-metadata";
 
+const baseAvailabilityZoneParameters: DiagramNodeParameters = {
+  resourceType: "aws_availability_zone",
+  resourceName: "availability_zone",
+  fileName: "main",
+  values: {}
+};
+
 const baseAvailabilityZoneNode: DiagramNode = {
   id: "node-az",
-  type: "design_az",
-  kind: "design",
+  type: "aws_availability_zone",
+  kind: "resource",
   position: { x: 0, y: 0 },
   size: { width: 360, height: 240 },
   label: "Availability Zone",
   locked: false,
-  zIndex: 1
+  zIndex: 1,
+  parameters: baseAvailabilityZoneParameters
 };
 
-test("isAvailabilityZoneDesignNode matches supported AZ design node types only", () => {
+test("isAvailabilityZoneDesignNode matches AZ area resource and legacy design node types only", () => {
   assert.equal(isAvailabilityZoneDesignNode(baseAvailabilityZoneNode), true);
   assert.equal(
-    isAvailabilityZoneDesignNode({ ...baseAvailabilityZoneNode, type: "sketchcatch_az" }),
+    isAvailabilityZoneDesignNode({
+      ...baseAvailabilityZoneNode,
+      type: "sketchcatch_az",
+      kind: "design",
+      parameters: undefined
+    }),
     true
   );
   assert.equal(
-    isAvailabilityZoneDesignNode({ ...baseAvailabilityZoneNode, type: "design_region" }),
+    isAvailabilityZoneDesignNode({
+      ...baseAvailabilityZoneNode,
+      type: "design_region",
+      kind: "design",
+      parameters: undefined
+    }),
     false
   );
   assert.equal(
-    isAvailabilityZoneDesignNode({ ...baseAvailabilityZoneNode, kind: "resource" }),
+    isAvailabilityZoneDesignNode({
+      ...baseAvailabilityZoneNode,
+      type: "aws_vpc",
+      parameters: {
+        ...baseAvailabilityZoneParameters,
+        resourceType: "aws_vpc"
+      }
+    }),
     false
   );
 });
@@ -38,14 +63,20 @@ test("getAvailabilityZoneNodeAwsAvailabilityZone reads a valid selected AZ and f
   const persistedNodeWithUnknownAz = JSON.parse(
     JSON.stringify({
       ...baseAvailabilityZoneNode,
-      metadata: { awsAvailabilityZone: "unknown" }
+      parameters: {
+        ...baseAvailabilityZoneParameters,
+        values: { awsAvailabilityZone: "unknown" }
+      }
     })
   ) as DiagramNode;
 
   assert.equal(
     getAvailabilityZoneNodeAwsAvailabilityZone({
       ...baseAvailabilityZoneNode,
-      metadata: { awsAvailabilityZone: "eu-central-1c" }
+      parameters: {
+        ...baseAvailabilityZoneParameters,
+        values: { awsAvailabilityZone: "eu-central-1c" }
+      }
     }),
     "eu-central-1c"
   );
@@ -60,22 +91,14 @@ test("getAvailabilityZoneNodeAwsAvailabilityZone reads a valid selected AZ and f
   );
 });
 
-test("createAvailabilityZoneNodeMetadata preserves existing metadata fields while updating awsAvailabilityZone", () => {
+test("createAvailabilityZoneNodeParameters preserves existing values while updating awsAvailabilityZone", () => {
   assert.deepEqual(
-    createAvailabilityZoneNodeMetadata(
-      {
-        ...baseAvailabilityZoneNode,
-        metadata: {
-          awsRegion: "ap-northeast-2",
-          parentAreaNodeId: "region-1"
-        }
-      },
-      "us-west-2b"
-    ),
+    createAvailabilityZoneNodeParameters(baseAvailabilityZoneNode, "us-west-2b"),
     {
-      awsAvailabilityZone: "us-west-2b",
-      awsRegion: "ap-northeast-2",
-      parentAreaNodeId: "region-1"
+      ...baseAvailabilityZoneParameters,
+      values: {
+        awsAvailabilityZone: "us-west-2b"
+      }
     }
   );
 });

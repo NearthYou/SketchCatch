@@ -13,6 +13,8 @@ import type {
 import { DEFAULT_DIAGRAM_VIEWPORT, RESOURCE_DRAG_MIME_TYPE } from "./constants";
 import { cloneParameterValue } from "./parameter-value-utils";
 import type { DiagramEdgeKind, DiagramNodeMetadataUpdate } from "./types";
+import { defaultAwsAvailabilityZone } from "../parameter-input/availability-zone-options";
+import { defaultAwsRegion } from "../parameter-input/aws-region-options";
 
 let activeResourceDragPayload: ResourceDragPayload | null = null;
 
@@ -445,8 +447,20 @@ function createDefaultNodeParameters(
     resourceType,
     resourceName,
     fileName: "main",
-    values: {}
+    values: getDefaultNodeParameterValues(resourceType)
   };
+}
+
+function getDefaultNodeParameterValues(resourceType: string): Record<string, unknown> {
+  if (resourceType === "aws_region") {
+    return { awsRegion: defaultAwsRegion };
+  }
+
+  if (resourceType === "aws_availability_zone") {
+    return { awsAvailabilityZone: defaultAwsAvailabilityZone };
+  }
+
+  return {};
 }
 
 function createUniqueNumberedResourceName(resourceName: string, usedNames: ReadonlySet<string>) {

@@ -25,26 +25,6 @@ type TerraformResourcePresentation = {
 
 const designCatalogItems: ResourceItem[] = [
   {
-    id: "design-region",
-    name: "Region",
-    cloudProvider: "aws",
-    area: "containers",
-    category: "Containers",
-    iconUrl: `${groupIconPath}/Region_32.svg`,
-    enabled: true,
-    nodeDefaults: { type: "design_region", label: "Region", size: { width: 260, height: 180 } }
-  },
-  {
-    id: "design-az",
-    name: "AZ",
-    cloudProvider: "aws",
-    area: "containers",
-    category: "Containers",
-    iconUrl: `${groupIconPath}/AWS-Cloud_32.svg`,
-    enabled: true,
-    nodeDefaults: { type: "design_az", label: "Availability Zone", size: { width: 220, height: 150 } }
-  },
-  {
     id: "design-group",
     name: "Group",
     cloudProvider: "aws",
@@ -53,6 +33,29 @@ const designCatalogItems: ResourceItem[] = [
     iconUrl: `${groupIconPath}/Auto-Scaling-group_32.svg`,
     enabled: true,
     nodeDefaults: { type: "design_group", label: "Group", size: { width: 200, height: 130 } }
+  }
+];
+
+const areaResourceCatalogItems: ResourceItem[] = [
+  {
+    id: "aws-region",
+    name: "Region",
+    cloudProvider: "aws",
+    area: "containers",
+    category: "Containers",
+    iconUrl: `${groupIconPath}/Region_32.svg`,
+    enabled: true,
+    nodeDefaults: { type: "aws_region", label: "Region", size: { width: 260, height: 180 } }
+  },
+  {
+    id: "aws-availability-zone",
+    name: "AZ",
+    cloudProvider: "aws",
+    area: "containers",
+    category: "Containers",
+    iconUrl: `${groupIconPath}/AWS-Cloud_32.svg`,
+    enabled: true,
+    nodeDefaults: { type: "aws_availability_zone", label: "Availability Zone", size: { width: 220, height: 150 } }
   }
 ];
 
@@ -235,7 +238,7 @@ const terraformResourcePresentations = [
     category: "Compute",
     iconUrl: `${serviceIconPath}/Arch_Compute/64/Arch_Amazon-EC2-Auto-Scaling_64.svg`,
     label: "Auto Scaling Group",
-    size
+    size: { width: 200, height: 130 }
   },
   {
     definitionId: "aws-s3-bucket",
@@ -456,6 +459,7 @@ const terraformResourcePresentations = [
 ] as const satisfies readonly TerraformResourcePresentation[];
 
 export const resourceCatalog: ResourceItem[] = [
+  ...areaResourceCatalogItems,
   ...designCatalogItems,
   ...terraformResourcePresentations.map(createTerraformResourceItem)
 ];

@@ -4,6 +4,23 @@
 
 ## 현재 검증된 것
 
+- 최신 nested block cardinality/AZ client validation 커밋 `2de8ae2`는 `git revert --no-commit`으로 되돌렸다. 이 롤백은 `parameter-value-record` helper와 단일 nested block 저장 정책 테스트를 제거하지만, 이전 단계의 Terraform Preview/Sync 지원 리소스 확장은 유지한다.
+- 현재 Web catalog에서 생성 가능한 shared Terraform resource/data definition은 모두 `terraformPreview: true`와 `terraformSync: true`다. 아이콘은 생성되지만 Terraform Preview 또는 Terraform Sync 변환에서 제외되는 shared Terraform 리소스 목록은 없다.
+- Region/AZ는 더 이상 신규 생성 시 `design_region`/`design_az` metadata node가 아니라 board-only resource area node인 `aws_region`, `aws_availability_zone`으로 생성된다.
+- Region/AZ 영역 선택값은 `parameters.values.awsRegion`, `parameters.values.awsAvailabilityZone`에 저장한다. 기존 `design_region`, `design_az`, `sketchcatch_region`, `sketchcatch_az` metadata는 저장 데이터 호환을 위해 읽을 수 있다.
+- Terraform Preview는 `aws_region` 영역 리소스가 있을 때만 `provider "aws"` block을 생성한다. Region 영역 리소스가 없으면 `ap-northeast-2` 같은 기본 provider region을 자동으로 넣지 않는다.
+- Preview v1은 단일 AWS provider region만 지원한다. 서로 다른 region을 선택한 Region 영역 리소스가 둘 이상이면 `/terraform/generate`가 400 `bad_request`를 반환한다.
+- AZ-aware 리소스(`aws_subnet`, `aws_ebs_volume`)가 `aws_availability_zone` 영역 안에 있고 명시 `availabilityZone` 값이 없으면 영역의 AZ 값을 Terraform Preview config로 상속한다. 리소스 parameter에 AZ가 있으면 그 값을 우선한다.
+- Auto Scaling Group은 Terraform resource projection 대상이면서 visual area node로도 동작한다.
+- `aws_region`, `aws_availability_zone`은 board-only area resource라 Terraform resource/data block과 ArchitectureJson resource로 변환하지 않는다.
+- Branch는 `origin/Feat/jh/149-terraform-지원하지-않는-리소스-추가`를 추적 중이다. staging/commit은 사용자 수동 커밋 요청 때문에 하지 않았다.
+
+## 이전 누적 검증 메모
+
+- `docs/jh/000_AWS리소스목록_JH.md`에 1순위/2순위 AWS Terraform 리소스 후보와 현재 SketchCatch 보유/미보유 목록을 정리했다.
+- 리소스 후보는 1순위 90개, 2순위 22개, 합계 112개다.
+- 현재 SketchCatch 보유 리소스는 `packages/types/src/resource-definitions.ts` 기준 44개이며, 대상 후보 중 미보유 리소스는 68개다.
+- `docs/jh`는 `.gitignore` 대상이므로 이 문서를 커밋하려면 `git add -f docs/jh/000_AWS리소스목록_JH.md`가 필요하다.
 - PR #137 충돌 해결을 위해 현재 feature branch에 `origin/dev`를 병합했다.
 - `apps/api/src/app.ts`, `apps/api/src/routes/terraform.ts`, `apps/api/src/services/terraform/terraform-diagnostics.ts`의 conflict는 static-only Terraform editor validation 정책을 기준으로 해결했다.
 - `origin/dev`의 `terraform-validation.ts`는 `terraform fmt` CLI를 호출하는 경로였으므로, CLI 검증 폐기 정책에 맞춰 병합 결과에서 제거했다.
@@ -42,10 +59,7 @@
 - `terraformSync` capability가 true인 리소스만 Terraform editor 구조 변경 proposal 대상이 된다.
 - 현재 Web catalog에서 생성 가능한 shared Terraform definitions는 모두 `terraformPreview: true`와 `terraformSync: true`다.
 - Terraform Sync parser는 provider schema 전체를 재현하지 않는다. shared definition 안의 block이라도 복잡한 expression, dynamic block, count/indexing 등 deterministic subset 밖 입력은 diagnostic으로 막는다.
-- Terraform Sync parser는 top-level nested block을 `terraform-nested-blocks.ts`의 허용 목록으로 판단한다. single nested block은 object 값으로, repeatable nested block은 배열 값으로 저장한다. single nested block이 중복 선언되면 `terraform.sync.nested_block_cardinality` error diagnostic으로 sync를 중단한다.
-- 허용된 top-level nested block 내부의 하위 nested block은 camelCase 배열 값으로 보존한다.
-- Parameter panel은 기존 저장 데이터의 single nested block 값이 `[object]` 형태로 남아 있어도 첫 번째 object를 읽어 UI 값 유실을 방지한다.
-- AZ metadata 입력은 기존 input UI를 유지하되 invalid Availability Zone code에 client-side error를 표시하고, invalid draft는 metadata에 커밋하지 않는다.
+- Terraform Sync parser는 top-level nested block을 `terraform-nested-blocks.ts`의 허용 목록으로 판단한다. 허용된 top-level nested block 내부의 하위 nested block은 camelCase 배열 값으로 보존한다.
 - Web catalog의 AWS Terraform 항목과 shared definition/parameter catalog drift 방지 테스트가 있다.
 - InfrastructureGraph 중심 Workspace 동기화 v1 구현이 현재 브랜치에 커밋됐다.
 - Terraform Preview 생성 경로는 `DiagramJson -> InfrastructureGraph -> Terraform`로 정리됐다.
@@ -84,12 +98,17 @@
 
 ## 이번 세션의 변경 사항
 
-- `apps/api/src/services/terraform/terraform-nested-blocks.ts`에 nested block cardinality를 추가했다.
-- `apps/api/src/services/terraform/terraform-to-diagram.ts`가 `aws_lambda_function.environment` 같은 single nested block을 배열이 아닌 object로 저장하고, 중복 single block을 diagnostic으로 막게 했다.
-- `apps/web/features/parameter-input/parameter-value-record.ts`를 추가해 Parameter panel이 legacy `[object]` 형태 값을 첫 번째 object로 읽게 했다.
-- `apps/web/features/parameter-input/ParameterInputPanel.tsx`가 AZ metadata raw 입력값에 client-side format error를 표시하고 invalid draft를 metadata에 저장하지 않게 했다.
-- `apps/web/features/parameter-input/availability-zone-options.ts`에 AZ validation error helper를 추가했다.
-- 관련 API/Web regression tests를 추가했고 focused tests, lint, typecheck, build를 통과했다.
+- `apps/web/features/resource-settings/catalog.ts`에서 Region/AZ catalog entry를 resource area node로 바꾸고, ASG를 area node size로 조정했다.
+- `apps/web/features/diagram-editor`의 node creation, area-node 판정, resize bounds, visual drop target 로직이 `aws_region`, `aws_availability_zone`, `aws_autoscaling_group` 영역 처리를 인식하게 했다.
+- `apps/web/features/parameter-input`의 Region/AZ helper와 `ParameterInputPanel`은 resource area node의 선택값을 metadata가 아니라 `parameters.values`에 저장한다. legacy design node metadata 경로는 호환용으로 남겼다.
+- `apps/api/src/services/terraform/terraform-preview.ts`는 Region area resource가 있을 때만 provider block을 만들고, 서로 다른 region이 섞이면 preview validation error를 반환한다.
+- `apps/api/src/services/terraform/infrastructure-graph.ts`는 AZ area resource 값을 AZ-aware resource에 상속하되, 리소스의 명시 AZ 값을 덮어쓰지 않는다.
+- `apps/web/features/workspace/resource-list-summary.ts`와 `workspace-ai-diagram-adapter.ts`는 Region/AZ board-only area resource를 Terraform/Architecture resource로 취급하지 않도록 정리했다.
+- Representative Use Journey server/storage board layout은 신규 Region/AZ를 `aws_region`, `aws_availability_zone` resource area node로 생성한다.
+- `docs/data-models.md`와 이 handoff를 Region/AZ resource area 정책 기준으로 갱신했다.
+
+## 이전 누적 변경 메모
+
 - `docs/data-models.md`에 현재 catalog 기준으로 아이콘은 생성되지만 Terraform Preview 또는 Terraform Sync 변환에서 제외되는 shared Terraform 리소스가 없음을 명시했다.
 - `docs/sw/001_테라폼변환구현가이드_sw.md`에서 diagnostics/sync가 후속 이슈라는 stale 문구를 최신 구현 기준으로 정리했다.
 - `docs/sw/003_테라폼동기화구조설명_sw.md`에 허용 nested block sync, shared definition 전체 Preview/Sync 대상 정책, create/delete/rename proposal 테스트 기준을 반영했다.
@@ -209,6 +228,22 @@
 - 관련 regression tests와 docs/data-models 계약을 갱신했다.
 
 ## 검증
+
+- `pnpm harness:check` - passed before edits.
+- `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-preview.test.ts src/services/terraform/infrastructure-graph.test.ts` - passed.
+- `pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/diagram-utils.test.ts features/resource-settings/catalog.test.ts features/diagram-editor/area-nodes.test.ts features/diagram-editor/node-resize-bounds.test.ts features/diagram-editor/reference-drop-targets.test.ts features/parameter-input/region-node-metadata.test.ts features/parameter-input/availability-zone-node-metadata.test.ts` - passed.
+- `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-preview.test.ts src/services/terraform/infrastructure-graph.test.ts src/services/terraform/diagram-to-terraform.test.ts src/services/terraform/terraform-to-diagram.test.ts src/services/terraform/terraform-diagnostics.test.ts src/routes/terraform.test.ts src/routes/project-draft-schemas.test.ts` - passed.
+- `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/resource-list-summary.test.ts features/workspace/workspace-ai-diagram-adapter.test.ts` - passed.
+- `pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/diagram-utils.test.ts features/diagram-editor/drag-transaction.test.ts features/diagram-editor/reference-drop-targets.test.ts features/diagram-editor/area-nodes.test.ts features/diagram-editor/node-resize-bounds.test.ts features/diagram-editor/area-node-movement.test.ts features/diagram-editor/node-style.test.ts features/resource-settings/catalog.test.ts features/parameter-input/region-node-metadata.test.ts features/parameter-input/availability-zone-node-metadata.test.ts features/parameter-input/aws-region-options.test.ts features/parameter-input/availability-zone-options.test.ts features/parameter-input/parameter-panel-source.test.ts features/parameter-input/validation.test.ts features/workspace/resource-list-summary.test.ts features/workspace/workspace-ai-diagram-adapter.test.ts` - passed.
+- `pnpm --filter @sketchcatch/web exec tsx --test features/parameter-input/region-node-metadata.test.ts features/parameter-input/availability-zone-node-metadata.test.ts` - passed after fixture type cleanup.
+- `pnpm catalog:check` - failed because local root `node_modules` cannot resolve `@sketchcatch/types/resource-definitions` for `scripts/generate-terraform-aws-catalog.mjs`.
+- `pnpm lint` - passed.
+- `pnpm typecheck` - passed.
+- `pnpm build` - passed.
+- `git diff --check` - passed.
+- `pnpm harness:check` - passed.
+
+## 이전 누적 검증 메모
 
 - Red before fix: `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-preview.test.ts src/routes/terraform.test.ts` - failed because provider block was missing and conflicting Region nodes returned 200
 - `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-preview.test.ts src/routes/terraform.test.ts` - passed
@@ -330,6 +365,12 @@
 
 ## 아직 깨졌거나 미검증된 것
 
+- `pnpm catalog:check`는 root workspace package link가 없어 실패한다. 이번 변경의 focused tests, `pnpm lint`, `pnpm typecheck`, `pnpm build`, `git diff --check`, `pnpm harness:check`는 통과했다.
+- 브라우저 수동 smoke와 Representative Use Journey 자동 smoke(`HARNESS-007`)는 아직 남아 있다.
+- 실제 Terraform apply/destroy, cloud mutation, Git/CI/CD handoff는 실행하지 않았다.
+
+## 이전 누적 리스크 메모
+
 - 새 shared definition 변경에 대한 브라우저 수동 smoke는 수행하지 않았다. 자동/타입/빌드 검증으로 확인했다.
 - 전체 `pnpm test`는 deployment lock-file/path separator 기대값 실패 6건으로 통과하지 못했다. 이번 Terraform Preview orchestration focused tests, route tests, `lint`, `typecheck`, `build`, `harness:check`는 통과했다.
 - `parameterPanel` capability는 현재 web parameter catalog 보유 여부와 맞췄다. 새 리소스 추가 시 shared definition, web presentation, parameter catalog를 함께 갱신해야 한다.
@@ -345,6 +386,11 @@
 - `pnpm catalog:check`는 현재 root `node_modules`에 workspace package link가 없어 generator의 `require('@sketchcatch/types/resource-definitions')`에서 실패한다. 이번 코드 변경의 focused tests, lint, typecheck, build, harness는 통과했다.
 
 ## 다음으로 최선의 행동
+
+- 사용자가 수동 커밋한다.
+- 추천 커밋명: `Feat: Region AZ 영역 리소스 처리`
+
+## 이전 누적 다음 행동 메모
 
 - 다음 Terraform 리소스 추가 시 shared definition/capability, web presentation, 필요 시 parameter catalog/`parameterPanel`, `ResourceType` 확장 여부, drift 테스트를 함께 맞춘다.
 - 다음 단계에서는 전체 변경분을 커밋하거나 PR로 묶기 전에 필요하면 브라우저 수동 smoke와 GitHub PR 본문 정리를 수행한다.

@@ -9,7 +9,14 @@ const designAreaNodeTypes = new Set([
   "sketchcatch_group"
 ]);
 
-const resourceAreaNodeTypes = new Set(["aws_vpc", "aws_subnet", "aws_security_group"]);
+const resourceAreaNodeTypes = new Set([
+  "aws_region",
+  "aws_availability_zone",
+  "aws_vpc",
+  "aws_subnet",
+  "aws_security_group",
+  "aws_autoscaling_group"
+]);
 
 export function isAreaNode(node: DiagramNode): boolean {
   return isDesignAreaNode(node) || isResourceAreaNode(node);

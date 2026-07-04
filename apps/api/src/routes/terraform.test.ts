@@ -68,11 +68,7 @@ test("POST /api/terraform/generate returns Terraform code for an active user", a
 
   assert.equal(response.statusCode, 200);
   assert.deepEqual(response.json() as TerraformGenerateResponse, {
-    terraformCode: `provider "aws" {
-  region = "ap-northeast-2"
-}
-
-resource "aws_vpc" "main" {
+    terraformCode: `resource "aws_vpc" "main" {
   cidr_block = "10.0.0.0/16"
 }`
   });
@@ -80,7 +76,7 @@ resource "aws_vpc" "main" {
   await app.close();
 });
 
-test("POST /api/terraform/generate maps conflicting Region design nodes to 400 responses", async () => {
+test("POST /api/terraform/generate maps conflicting Region area resources to 400 responses", async () => {
   const fakeDb = new AuthOnlyFakeDb({
     users: [
       {
@@ -102,20 +98,30 @@ test("POST /api/terraform/generate maps conflicting Region design nodes to 400 r
         nodes: [
           {
             id: "region-1",
-            type: "design_region",
-            kind: "design",
+            type: "aws_region",
+            kind: "resource",
             label: "Region",
-            metadata: {
-              awsRegion: "ap-northeast-2"
+            parameters: {
+              resourceType: "aws_region",
+              resourceName: "region",
+              fileName: "main",
+              values: {
+                awsRegion: "ap-northeast-2"
+              }
             }
           },
           {
             id: "region-2",
-            type: "sketchcatch_region",
-            kind: "design",
+            type: "aws_region",
+            kind: "resource",
             label: "Region",
-            metadata: {
-              awsRegion: "us-east-1"
+            parameters: {
+              resourceType: "aws_region",
+              resourceName: "region_2",
+              fileName: "main",
+              values: {
+                awsRegion: "us-east-1"
+              }
             }
           }
         ],
@@ -135,7 +141,7 @@ test("POST /api/terraform/generate maps conflicting Region design nodes to 400 r
   await app.close();
 });
 
-test("POST /api/terraform/generate renders Availability Zone design metadata", async () => {
+test("POST /api/terraform/generate renders Availability Zone area resource placement", async () => {
   const fakeDb = new AuthOnlyFakeDb({
     users: [
       {
@@ -157,11 +163,16 @@ test("POST /api/terraform/generate renders Availability Zone design metadata", a
         nodes: [
           {
             id: "az-1",
-            type: "design_az",
-            kind: "design",
+            type: "aws_availability_zone",
+            kind: "resource",
             label: "AZ",
-            metadata: {
-              awsAvailabilityZone: "ap-northeast-2c"
+            parameters: {
+              resourceType: "aws_availability_zone",
+              resourceName: "availability_zone",
+              fileName: "main",
+              values: {
+                awsAvailabilityZone: "ap-northeast-2c"
+              }
             }
           },
           {
@@ -194,11 +205,7 @@ test("POST /api/terraform/generate renders Availability Zone design metadata", a
 
   assert.equal(response.statusCode, 200);
   assert.deepEqual(response.json() as TerraformGenerateResponse, {
-    terraformCode: `provider "aws" {
-  region = "ap-northeast-2"
-}
-
-resource "aws_subnet" "public" {
+    terraformCode: `resource "aws_subnet" "public" {
   cidr_block = "10.0.1.0/24"
   availability_zone = "ap-northeast-2c"
 }`

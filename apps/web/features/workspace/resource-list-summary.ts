@@ -9,6 +9,11 @@ import {
   validateParameters
 } from "../parameter-input/validation";
 import type { ParameterCatalog, ParameterCatalogDefinition } from "../parameter-input/catalog";
+import { getAwsAvailabilityZoneLabel } from "../parameter-input/availability-zone-options";
+import {
+  getAvailabilityZoneNodeAwsAvailabilityZone,
+  isAvailabilityZoneDesignNode
+} from "../parameter-input/availability-zone-node-metadata";
 import { getAwsRegionLabel } from "../parameter-input/aws-region-options";
 import {
   getRegionNodeAwsRegion,
@@ -49,18 +54,26 @@ function buildResourceListItem(
   nodes: readonly DiagramNode[],
   catalog: ParameterCatalog
 ): ResourceListItemSummary {
+  if (isAreaSummaryNode(node)) {
+    return buildAreaListItem(node);
+  }
+
   if (node.kind === "resource" || node.parameters?.resourceType) {
     return buildTerraformResourceListItem(node, nodes, catalog);
   }
 
+  return buildAreaListItem(node);
+}
+
+function buildAreaListItem(node: DiagramNode): ResourceListItemSummary {
   return {
-    displayName: node.label,
+    displayName: getAreaDisplayName(node),
     iconUrl: node.iconUrl,
     node,
     nodeId: node.id,
-    rows: buildDesignAreaRows(node),
+    rows: buildAreaRows(node),
     status: "ready",
-    typeLabel: getDesignAreaTypeLabel(node)
+    typeLabel: getAreaTypeLabel(node)
   };
 }
 
@@ -163,19 +176,30 @@ function isReferenceDefinition(definition: ParameterCatalogDefinition): boolean 
   return Boolean(definition.referenceTargetTypes?.length) || definition.inputKind === "reference-picker";
 }
 
-function buildDesignAreaRows(node: DiagramNode): ResourceListSummaryRow[] {
-  if (!isRegionDesignNode(node)) {
-    return [];
+function buildAreaRows(node: DiagramNode): ResourceListSummaryRow[] {
+  if (isRegionDesignNode(node)) {
+    return [
+      {
+        key: "awsRegion",
+        kind: "metadata",
+        label: "Region",
+        value: getAwsRegionLabel(getRegionNodeAwsRegion(node))
+      }
+    ];
   }
 
-  return [
-    {
-      key: "awsRegion",
-      kind: "metadata",
-      label: "Region",
-      value: getAwsRegionLabel(getRegionNodeAwsRegion(node))
-    }
-  ];
+  if (isAvailabilityZoneDesignNode(node)) {
+    return [
+      {
+        key: "awsAvailabilityZone",
+        kind: "metadata",
+        label: "Availability Zone",
+        value: getAwsAvailabilityZoneLabel(getAvailabilityZoneNodeAwsAvailabilityZone(node))
+      }
+    ];
+  }
+
+  return [];
 }
 
 function getTerraformAddress(
@@ -194,16 +218,18 @@ function getTerraformAddress(
   return `${blockPrefix}${resourceType}.${trimmedResourceName}`;
 }
 
-function getDesignAreaTypeLabel(node: DiagramNode): string {
-  if (node.type.includes("region")) {
+function getAreaTypeLabel(node: DiagramNode): string {
+  const areaType = getAreaNodeType(node);
+
+  if (areaType.includes("region")) {
     return "Area / Region";
   }
 
-  if (node.type.includes("az")) {
+  if (areaType.includes("availability_zone") || areaType.includes("az")) {
     return "Area / Availability Zone";
   }
 
-  if (node.type.includes("group")) {
+  if (areaType.includes("group")) {
     return "Area / Group";
   }
 
@@ -212,6 +238,18 @@ function getDesignAreaTypeLabel(node: DiagramNode): string {
 
 function isResourceListNode(node: DiagramNode): boolean {
   return node.kind === "resource" || isDesignAreaNode(node);
+}
+
+function isAreaSummaryNode(node: DiagramNode): boolean {
+  return isRegionDesignNode(node) || isAvailabilityZoneDesignNode(node) || isDesignAreaNode(node);
+}
+
+function getAreaDisplayName(node: DiagramNode): string {
+  return node.parameters?.resourceName?.trim() || node.label;
+}
+
+function getAreaNodeType(node: DiagramNode): string {
+  return node.parameters?.resourceType ?? node.type;
 }
 
 function toSummaryLabel(key: string): string {

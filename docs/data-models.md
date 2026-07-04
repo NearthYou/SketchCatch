@@ -157,7 +157,7 @@ type DiagramJson = {
 ```
 
 보드 전용 node metadata는 `node.metadata`에 둔다. `metadata`는 화면 편집 상태를 복구하기 위한 값이다.
-Terraform Preview v1은 Region 디자인 노드의 `metadata.awsRegion`을 AWS provider block 생성에 사용하고, AZ 디자인 노드의 `metadata.awsAvailabilityZone`을 AZ-aware 리소스 config 보강에 사용한다. 그 외 metadata는 Terraform resource/data block 생성에 사용하지 않는다.
+Terraform Preview v1에서 Region과 Availability Zone은 화면 전용 metadata가 아니라 board-only 영역 리소스로 다룬다. 새로 생성되는 Region/AZ 영역 노드는 각각 `parameters.resourceType = "aws_region"`, `parameters.resourceType = "aws_availability_zone"`을 갖고, 선택 값은 `parameters.values.awsRegion`, `parameters.values.awsAvailabilityZone`에 저장한다. 이 두 타입은 Terraform provider schema의 resource/data block으로 렌더링하지 않고, Provider region과 AZ-aware 리소스 보강에만 사용한다. 기존 `design_region`, `design_az`, `sketchcatch_region`, `sketchcatch_az` metadata는 저장 데이터 호환을 위해 읽을 수 있다.
 
 ```ts
 type AwsRegionCode =
@@ -178,12 +178,12 @@ type DiagramNodeMetadata = {
 };
 ```
 
-Region 디자인 노드의 선택 리전은 `node.metadata.awsRegion`에 region code로 저장한다.
+Region 영역 리소스의 선택 리전은 `node.parameters.values.awsRegion`에 region code로 저장한다.
 예: `ap-northeast-2`. 화면 label은 프론트엔드 option catalog에서 code와 매핑한다.
-Terraform Preview는 `design_region` 또는 `sketchcatch_region` 노드가 있으면 그 값을 `provider "aws"`의 `region`으로 렌더링한다. Region 디자인 노드가 없으면 기본값은 `ap-northeast-2`다. 서로 다른 AWS region을 선택한 Region 디자인 노드가 둘 이상 있으면 Preview 생성 API는 단일 provider region만 지원하는 v1 정책에 따라 `bad_request`를 반환한다.
+Terraform Preview는 `aws_region` 영역 리소스가 있으면 그 값을 `provider "aws"`의 `region`으로 렌더링한다. Region 영역 리소스가 없으면 provider block을 자동 생성하지 않는다. 서로 다른 AWS region을 선택한 Region 영역 리소스가 둘 이상 있으면 Preview 생성 API는 단일 provider region만 지원하는 v1 정책에 따라 `bad_request`를 반환한다.
 
-AZ 디자인 노드의 선택 AZ는 `node.metadata.awsAvailabilityZone`에 Availability Zone code로 저장한다.
-예: `ap-northeast-2a`. 사용자가 Subnet 또는 EBS Volume처럼 AZ-aware 리소스를 `design_az` 또는 `sketchcatch_az` 영역 안에 배치하면 Terraform Preview는 리소스의 `parameters.values.availabilityZone`이 비어 있을 때 AZ metadata 값을 `availability_zone`으로 렌더링한다. AZ 디자인 노드에 유효한 AZ metadata가 없으면 기본값은 `ap-northeast-2a`다. 사용자가 리소스 parameter에 `availabilityZone`을 명시하면 그 값을 우선한다.
+AZ 영역 리소스의 선택 AZ는 `node.parameters.values.awsAvailabilityZone`에 Availability Zone code로 저장한다.
+예: `ap-northeast-2a`. 사용자가 Subnet 또는 EBS Volume처럼 AZ-aware 리소스를 `aws_availability_zone` 영역 안에 배치하면 Terraform Preview는 리소스의 `parameters.values.availabilityZone`이 비어 있을 때 AZ 영역 값을 `availability_zone`으로 렌더링한다. 사용자가 리소스 parameter에 `availabilityZone`을 명시하면 그 값을 우선한다.
 
 영역 노드 안에 명시적으로 배치된 node는 `node.metadata.parentAreaNodeId`에 부모 영역 node id를 저장한다.
 이 값은 영역 이동 시 자식 node를 함께 이동시키기 위한 보드 편집 metadata이며, Terraform resource/data block 생성에는 사용하지 않는다.
@@ -197,9 +197,9 @@ Terraform 변환에 필요한 값은 아래 4개다.
 
 `resourceType`과 `resourceName`은 Terraform block label로 직접 렌더링되므로 Terraform identifier 형식(`^[a-zA-Z_][a-zA-Z0-9_-]*$`)만 허용한다. `parameters.values`의 top-level key와 nested block key도 `camelCase`에서 `snake_case`로 정규화한 뒤 같은 identifier 형식을 만족해야 하며, 형식이 맞지 않으면 Terraform 생성 API는 HCL을 만들기 전에 `bad_request`로 거부한다.
 
-사용자가 보드에서 리소스 아이콘을 직접 추가할 때는 Terraform identity metadata인 `terraformBlockType`, `resourceType`, `resourceName`, `fileName`만 자동 생성하고, `parameters.values`는 `{}`로 시작한다. 같은 `resourceType`의 아이콘을 반복 추가하면 `resourceName`은 `ec2_instance`, `ec2_instance_2`, `ec2_instance_3`처럼 숫자 suffix를 붙여 Terraform address 중복을 피한다. EC2 `instanceType`, VPC `cidrBlock`, `tags.Name` 같은 실제 Terraform parameter 값은 사용자 입력, AI draft config, Terraform editor sync처럼 명시 입력이 있을 때만 채운다.
+사용자가 보드에서 리소스 아이콘을 직접 추가할 때는 Terraform identity metadata인 `terraformBlockType`, `resourceType`, `resourceName`, `fileName`만 자동 생성하고, 일반 Terraform resource의 `parameters.values`는 `{}`로 시작한다. 같은 `resourceType`의 아이콘을 반복 추가하면 `resourceName`은 `ec2_instance`, `ec2_instance_2`, `ec2_instance_3`처럼 숫자 suffix를 붙여 Terraform address 중복을 피한다. EC2 `instanceType`, VPC `cidrBlock`, `tags.Name` 같은 실제 Terraform parameter 값은 사용자 입력, AI draft config, Terraform editor sync처럼 명시 입력이 있을 때만 채운다. 단, board-only 영역 리소스인 `aws_region`과 `aws_availability_zone`은 생성 직후 편집 가능한 기본 선택값을 `parameters.values.awsRegion`, `parameters.values.awsAvailabilityZone`에 넣는다.
 
-신규 일반 리소스 아이콘 node의 기본 `size`는 `56x56`이다. VPC, Subnet, Security Group, Region, AZ, Group처럼 포함 관계를 표현하는 영역 node는 catalog의 별도 영역 크기를 사용하며, 일반 아이콘 축소 때문에 자동으로 절반 축소하지 않는다.
+신규 일반 리소스 아이콘 node의 기본 `size`는 `56x56`이다. VPC, Subnet, Security Group, Auto Scaling Group, Region, AZ, Group처럼 포함 관계를 표현하는 영역 node는 catalog의 별도 영역 크기를 사용하며, 일반 아이콘 축소 때문에 자동으로 절반 축소하지 않는다.
 
 DB에는 refresh token 원문을 저장하지 않고 hash만 저장한다. API 응답 DTO와 프론트 상태에는 refresh token 원문을 넣지 않고, 서버가 `HttpOnly`, `SameSite=Lax` 쿠키로 내려보낸다. access token은 짧은 만료 시간을 가진 표준 JWT로 다루며, 프론트는 access token을 `localStorage`나 `sessionStorage`에 저장하지 않고 런타임 메모리에만 보관한다. 새로고침처럼 메모리가 비면 `/api/auth/refresh`가 refresh cookie로 새 access token을 복구한다. refresh/logout 같은 cookie 기반 인증 요청은 CSRF 방지를 위해 별도 CSRF cookie 값과 `X-CSRF-Token` header 값이 일치해야 한다.
 
@@ -248,7 +248,7 @@ type ResourceType =
 
 ## ResourceDefinition과 Terraform Capability
 
-Terraform IaC 리소스의 지원 여부는 `packages/types/src/resource-definitions.ts`의 `ResourceDefinition`을 단일 출처로 삼는다. 여기에는 `provider`, domain `resourceType`, Terraform block identity, capability만 둔다. 여기서 domain `resourceType`은 AI/Architecture 분석용 분류값이며 Terraform Preview identity 기준이 아니다. `design_region`, `design_az`, `design_group`처럼 화면 배치만 위한 container node는 IaC 리소스가 아니므로 공통 definition에 넣지 않고 web catalog에만 둔다.
+Terraform IaC 리소스의 지원 여부는 `packages/types/src/resource-definitions.ts`의 `ResourceDefinition`을 단일 출처로 삼는다. 여기에는 `provider`, domain `resourceType`, Terraform block identity, capability만 둔다. 여기서 domain `resourceType`은 AI/Architecture 분석용 분류값이며 Terraform Preview identity 기준이 아니다. `aws_region`, `aws_availability_zone`, `design_group`처럼 보드 포함관계와 값 전파를 위한 board-only area node는 Terraform resource/data block이 아니므로 공통 Terraform definition에 넣지 않고 web catalog와 Preview orchestration에서만 다룬다.
 
 ```ts
 type ResourceCapability = {

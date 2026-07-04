@@ -25,6 +25,7 @@ const AREA_CHILD_PADDING = 48;
 const MIN_RESOURCE_AREA_CHILD_FOOTPRINT: DiagramNode["size"] = { width: 112, height: 112 };
 const MAX_AREA_FIT_PASSES = 8;
 const AREA_PARENT_EDGE_LABELS = new Set(["contains", "hosts"]);
+const BOARD_ONLY_AREA_RESOURCE_TYPES = new Set(["aws_region", "aws_availability_zone"]);
 const RESOURCE_TO_TERRAFORM_RESOURCE_TYPE: Record<ResourceType, string> = {
   AMI: "aws_ami",
   CLOUDFRONT: "aws_cloudfront_distribution",
@@ -462,7 +463,12 @@ function getStringParameterValue(node: DiagramNode, key: string): string | undef
 function isConvertibleResourceNode(
   node: DiagramNode
 ): node is DiagramNode & { parameters: DiagramNodeParameters } {
-  return node.kind === "resource" && node.parameters != null && node.parameters.invalid !== true;
+  return (
+    node.kind === "resource" &&
+    node.parameters != null &&
+    node.parameters.invalid !== true &&
+    !BOARD_ONLY_AREA_RESOURCE_TYPES.has(node.parameters.resourceType)
+  );
 }
 
 function createArchitectureConfig(parameters: DiagramNodeParameters): ResourceConfig {

@@ -511,17 +511,17 @@ test("convertArchitectureJsonToDiagramJson lays out server and storage draft as 
     [
       {
         id: "server-storage-region",
-        kind: "design",
+        kind: "resource",
         parentAreaNodeId: undefined,
         position: { x: 40, y: 70 },
-        type: "design_region"
+        type: "aws_region"
       },
       {
         id: "server-storage-az",
-        kind: "design",
+        kind: "resource",
         parentAreaNodeId: "vpc",
         position: { x: 152, y: 430 },
-        type: "design_az"
+        type: "aws_availability_zone"
       },
       {
         id: "vpc",
@@ -599,6 +599,14 @@ test("convertArchitectureJsonToDiagramJson lays out server and storage draft as 
   assert.equal(vpcNode?.size.height, 798);
   assert.equal(azNode?.size.width, 783);
   assert.equal(azNode?.size.height, 620);
+
+  const roundTrippedArchitectureJson = convertDiagramJsonToArchitectureJson(diagramJson);
+  assert.equal(
+    roundTrippedArchitectureJson.nodes.some(
+      (node) => node.id === "server-storage-region" || node.id === "server-storage-az"
+    ),
+    false
+  );
 });
 
 test("convertDiagramJsonToArchitectureJson keeps only valid resource nodes and connected edges", () => {

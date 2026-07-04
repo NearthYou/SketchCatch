@@ -10,16 +10,15 @@ import {
   isResourceAreaNode
 } from "./area-nodes";
 
-test("isAreaNode matches Region, Availability Zone, Group, VPC, Subnet, and Security Group nodes", () => {
-  assert.equal(isAreaNode(makeDesignNode({ type: "design_region" })), true);
-  assert.equal(isAreaNode(makeDesignNode({ type: "design_az" })), true);
+test("isAreaNode matches Region, Availability Zone, Group, VPC, Subnet, Security Group, and ASG nodes", () => {
   assert.equal(isAreaNode(makeDesignNode({ type: "design_group" })), true);
-  assert.equal(isAreaNode(makeDesignNode({ type: "sketchcatch_region" })), true);
-  assert.equal(isAreaNode(makeDesignNode({ type: "sketchcatch_az" })), true);
   assert.equal(isAreaNode(makeDesignNode({ type: "sketchcatch_group" })), true);
+  assert.equal(isAreaNode(makeResourceNode({ resourceType: "aws_region" })), true);
+  assert.equal(isAreaNode(makeResourceNode({ resourceType: "aws_availability_zone" })), true);
   assert.equal(isAreaNode(makeResourceNode({ resourceType: "aws_vpc" })), true);
   assert.equal(isAreaNode(makeResourceNode({ resourceType: "aws_subnet" })), true);
   assert.equal(isAreaNode(makeResourceNode({ resourceType: "aws_security_group" })), true);
+  assert.equal(isAreaNode(makeResourceNode({ resourceType: "aws_autoscaling_group" })), true);
 });
 
 test("isAreaNode excludes regular design and resource nodes", () => {
@@ -29,11 +28,11 @@ test("isAreaNode excludes regular design and resource nodes", () => {
 });
 
 test("area node helpers distinguish design containers from resource containers", () => {
-  const region = makeDesignNode({ type: "design_region" });
+  const region = makeResourceNode({ resourceType: "aws_region" });
   const vpc = makeResourceNode({ resourceType: "aws_vpc" });
 
-  assert.equal(isDesignAreaNode(region), true);
-  assert.equal(isResourceAreaNode(region), false);
+  assert.equal(isDesignAreaNode(region), false);
+  assert.equal(isResourceAreaNode(region), true);
   assert.equal(isDesignAreaNode(vpc), false);
   assert.equal(isResourceAreaNode(vpc), true);
 });
@@ -51,10 +50,14 @@ test("getAreaNodeLabel uses resource name for resource area nodes", () => {
     getAreaNodeLabel(makeResourceNode({ resourceName: "web_sg", resourceType: "aws_security_group" })),
     "web_sg"
   );
+  assert.equal(
+    getAreaNodeLabel(makeResourceNode({ resourceName: "region", resourceType: "aws_region" })),
+    "region"
+  );
 });
 
 test("getAreaNodeLabel falls back to node label for design areas and unnamed resources", () => {
-  assert.equal(getAreaNodeLabel(makeDesignNode({ label: "Asia Pacific", type: "design_region" })), "Asia Pacific");
+  assert.equal(getAreaNodeLabel(makeDesignNode({ label: "Group", type: "design_group" })), "Group");
   assert.equal(
     getAreaNodeLabel(makeResourceNode({ label: "VPC", resourceName: "", resourceType: "aws_vpc" })),
     "VPC"
@@ -75,7 +78,7 @@ test("getAreaNodeIconUrl returns icons for all area nodes", () => {
     "/icons/vpc.svg"
   );
   assert.equal(
-    getAreaNodeIconUrl(makeDesignNode({ iconUrl: "/icons/region.svg", type: "design_region" })),
+    getAreaNodeIconUrl(makeResourceNode({ iconUrl: "/icons/region.svg", resourceType: "aws_region" })),
     "/icons/region.svg"
   );
   assert.equal(
@@ -85,9 +88,9 @@ test("getAreaNodeIconUrl returns icons for all area nodes", () => {
 });
 
 test("findInnermostAreaNodeAtPoint returns the smallest area containing the point", () => {
-  const region = makeDesignNode({
+  const region = makeResourceNode({
     id: "region-1",
-    type: "design_region",
+    resourceType: "aws_region",
     position: { x: 0, y: 0 },
     size: { width: 600, height: 420 },
     zIndex: 1

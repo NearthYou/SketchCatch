@@ -15,33 +15,60 @@
 
 ## 세션 레코드
 
-### 2026-07-04 - Nested block sync cardinality와 AZ 입력 검증 수정
+### 2026-07-04 - Region/AZ 영역 리소스 전환과 nested block/AZ 검증 롤백
 
-- Goal: Terraform Sync가 single nested block 값을 배열로 저장해 Parameter panel에서 값이 유실되는 문제를 고치고, AZ metadata 입력의 클라이언트 포맷 검증을 추가한다.
+- Goal: 최신 nested block sync/AZ 입력 검증 수정은 롤백하되, 이미 구현된 Terraform Preview/Sync 지원 리소스 확장은 유지하고 Region/AZ를 다른 포함 영역처럼 board-only resource area node로 처리한다.
 - Completed:
-  - `aws_lambda_function.environment`, `aws_s3_bucket_versioning.versioningConfiguration`, `aws_s3_bucket_server_side_encryption_configuration.rule`, `aws_api_gateway_rest_api.endpointConfiguration`을 single nested block으로 분류하고 object 값으로 sync 저장하게 했다.
-  - 반복 가능한 nested block은 기존처럼 배열로 유지하고, single nested block이 중복 선언되면 `terraform.sync.nested_block_cardinality` error diagnostic으로 sync를 중단하게 했다.
-  - Parameter panel record 변환 helper가 기존 저장 데이터의 `[object]` 형태 single nested block 값을 첫 번째 object로 방어적으로 읽게 했다.
-  - AZ metadata 입력은 기존 input UI를 유지하되 invalid Availability Zone code에 client-side error를 표시하고, invalid draft는 metadata에 커밋하지 않게 했다.
+  - 최신 커밋 `2de8ae2`의 nested block cardinality, `parameter-value-record`, AZ input validation 변경을 `git revert --no-commit`으로 되돌렸다.
+  - `packages/types/src/resource-definitions.ts` 기반 shared Terraform resource/data 지원 확장과 main parameter HCL 정규화 변경은 롤백하지 않았다.
+  - Web catalog에서 Region/AZ를 `design_region`/`design_az`가 아니라 `aws_region`/`aws_availability_zone` resource area node로 생성하게 했다.
+  - Region/AZ 영역 선택값은 `parameters.values.awsRegion`, `parameters.values.awsAvailabilityZone`에 저장하고, 기존 metadata 기반 design node는 저장 데이터 호환용으로만 읽게 했다.
+  - Terraform Preview는 Region 영역 리소스가 있을 때만 provider block을 생성하고, Region 영역 리소스가 없으면 기본 provider region을 자동 생성하지 않게 했다.
+  - AZ 영역 리소스 안의 AZ-aware 리소스는 명시 `availabilityZone`이 없을 때만 영역의 AZ 값을 상속하게 했다.
+  - Auto Scaling Group은 visual area node로 다룰 수 있게 catalog size, area-node 판정, resize bounds를 맞췄다.
+  - board-only `aws_region`/`aws_availability_zone`은 ArchitectureJson 변환과 Terraform resource projection에서 제외되게 했다.
+  - `docs/data-models.md`와 `session-handoff.md`를 Region/AZ resource area 정책 기준으로 갱신했다.
 - Verification run:
-  - Red before fix: `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-to-diagram.test.ts` - failed because Lambda `environment` synced as an array and duplicate single nested blocks had no diagnostic.
-  - Red before fix: `pnpm --filter @sketchcatch/web exec tsx --test features/parameter-input/availability-zone-options.test.ts features/parameter-input/parameter-panel-source.test.ts features/parameter-input/parameter-value-record.test.ts` - failed because AZ validation/helper wiring and record helper did not exist.
-  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-to-diagram.test.ts` - passed.
-  - `pnpm --filter @sketchcatch/web exec tsx --test features/parameter-input/availability-zone-options.test.ts features/parameter-input/parameter-panel-source.test.ts features/parameter-input/parameter-value-record.test.ts` - passed.
-  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-to-diagram.test.ts src/services/terraform/diagram-to-terraform.test.ts src/services/terraform/terraform-diagnostics.test.ts` - passed.
-  - `pnpm --filter @sketchcatch/web exec tsx --test features/parameter-input/availability-zone-options.test.ts features/parameter-input/availability-zone-node-metadata.test.ts features/parameter-input/parameter-panel-source.test.ts features/parameter-input/parameter-value-record.test.ts features/parameter-input/validation.test.ts` - passed.
+  - `pnpm harness:check` - passed before edits.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-preview.test.ts src/services/terraform/infrastructure-graph.test.ts` - passed.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/diagram-utils.test.ts features/resource-settings/catalog.test.ts features/diagram-editor/area-nodes.test.ts features/diagram-editor/node-resize-bounds.test.ts features/diagram-editor/reference-drop-targets.test.ts features/parameter-input/region-node-metadata.test.ts features/parameter-input/availability-zone-node-metadata.test.ts` - passed.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-preview.test.ts src/services/terraform/infrastructure-graph.test.ts src/services/terraform/diagram-to-terraform.test.ts src/services/terraform/terraform-to-diagram.test.ts src/services/terraform/terraform-diagnostics.test.ts src/routes/terraform.test.ts src/routes/project-draft-schemas.test.ts` - passed.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/resource-list-summary.test.ts features/workspace/workspace-ai-diagram-adapter.test.ts` - passed.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/diagram-utils.test.ts features/diagram-editor/drag-transaction.test.ts features/diagram-editor/reference-drop-targets.test.ts features/diagram-editor/area-nodes.test.ts features/diagram-editor/node-resize-bounds.test.ts features/diagram-editor/area-node-movement.test.ts features/diagram-editor/node-style.test.ts features/resource-settings/catalog.test.ts features/parameter-input/region-node-metadata.test.ts features/parameter-input/availability-zone-node-metadata.test.ts features/parameter-input/aws-region-options.test.ts features/parameter-input/availability-zone-options.test.ts features/parameter-input/parameter-panel-source.test.ts features/parameter-input/validation.test.ts features/workspace/resource-list-summary.test.ts features/workspace/workspace-ai-diagram-adapter.test.ts` - passed.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/parameter-input/region-node-metadata.test.ts features/parameter-input/availability-zone-node-metadata.test.ts` - passed after fixture type cleanup.
+  - `pnpm catalog:check` - failed because local root `node_modules` cannot resolve `@sketchcatch/types/resource-definitions` for `scripts/generate-terraform-aws-catalog.mjs`.
   - `pnpm lint` - passed.
-  - `pnpm typecheck` - passed.
+  - `pnpm typecheck` - passed after fixture type cleanup.
   - `pnpm build` - passed.
   - `git diff --check` - passed.
-  - `pnpm harness:check` - passed.
+  - `pnpm harness:check` - passed after record updates.
 - Evidence recorded:
   - 실제 Terraform CLI, apply/destroy, cloud mutation, Git/CI/CD handoff는 실행하지 않았다.
-  - `pnpm build`가 `apps/web/next-env.d.ts`를 prod route type 경로로 바꿨지만, 생성물 변경이라 tracked dev 경로로 원복했다.
+  - 커밋과 staging은 사용자 수동 커밋 요청에 따라 실행하지 않았다.
 - Known risks:
-  - Region/AZ/ASG를 resource-area node로 재정의하는 큰 설계 변경은 별도 작업으로 남아 있다.
+  - 브라우저 수동 smoke와 Representative Use Journey 자동 smoke(`HARNESS-007`)는 아직 남아 있다.
+  - `pnpm catalog:check`는 이번 변경과 별개로 root workspace package link가 없어 실패한다. shared definition/catalog drift는 focused web/API tests, lint, typecheck, build로 확인했다.
 - Next best action:
-  - 사용자가 수동 커밋 후 Region/AZ/ASG 영역 리소스 플랜 구현으로 넘어간다.
+  - 사용자가 수동 커밋한다.
+
+### 2026-07-04 - docs/jh AWS 리소스 목록 작성
+
+- Goal: 1순위와 2순위 AWS Terraform 리소스 후보를 `docs/jh`에 정리하고, 현재 SketchCatch 보유/미보유 리소스 목록을 분리한다.
+- Completed:
+  - `docs/jh/000_AWS리소스목록_JH.md`를 추가했다.
+  - 문서 제목은 `aws 리소스 목록`으로 작성했다.
+  - 1순위 90개, 2순위 22개 리소스를 Terraform resource/data source 이름 기준으로 정리했다.
+  - `packages/types/src/resource-definitions.ts` 기준 현재 SketchCatch 보유 리소스 44개와 미보유 리소스 68개를 분리했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits.
+  - 문서 count script - passed: status 보유 44개, 미보유 68개, target 합계 112개.
+- Evidence recorded:
+  - 실제 Terraform CLI, apply/destroy, cloud mutation, Git/CI/CD handoff는 실행하지 않았다.
+  - `docs/jh`는 `.gitignore` 대상이므로 커밋하려면 `git add -f docs/jh/000_AWS리소스목록_JH.md`가 필요하다.
+- Known risks:
+  - 이 문서는 구현 계획이 아니라 리소스 후보 목록이다. 실제 구현 시 각 리소스의 Terraform provider schema와 required parameter를 별도로 확인해야 한다.
+- Next best action:
+  - 1순위 미보유 리소스부터 service group 단위로 shared definition, catalog, parameter 입력 범위를 나눈다.
 
 ### 2026-07-04 - Main parameter 정책 문서화와 최종 검증
 

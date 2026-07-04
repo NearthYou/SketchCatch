@@ -22,11 +22,17 @@ const catalog: ParameterCatalog = {
   }
 };
 
-test("buildResourceListItems includes Terraform resources and design area nodes", () => {
+test("buildResourceListItems includes Terraform resources and area resource nodes", () => {
   const items = buildResourceListItems(
     [
       makeResourceNode({ id: "subnet-1", resourceType: "aws_subnet" }),
-      makeDesignNode({ id: "region-1", label: "Region", type: "sketchcatch_region" }),
+      makeResourceNode({
+        id: "region-1",
+        label: "Region",
+        resourceName: "region",
+        resourceType: "aws_region",
+        values: { awsRegion: "ap-northeast-2" }
+      }),
       makeDesignNode({ id: "note-1", label: "Note", type: "sketchcatch_note" })
     ],
     catalog
@@ -38,6 +44,7 @@ test("buildResourceListItems includes Terraform resources and design area nodes"
   );
   assert.equal(items[0]?.typeLabel, "aws_subnet");
   assert.equal(items[1]?.typeLabel, "Area / Region");
+  assert.equal(items[1]?.terraformAddress, undefined);
 });
 
 test("buildResourceListItems orders reference rows before required and active optional values", () => {
@@ -70,17 +77,18 @@ test("buildResourceListItems orders reference rows before required and active op
 test("buildResourceListItems summarizes Region nodes with the selected AWS Region", () => {
   const items = buildResourceListItems(
     [
-      makeDesignNode({
+      makeResourceNode({
         id: "region-1",
         label: "Production Region",
-        metadata: { awsRegion: "ap-northeast-1" },
-        type: "sketchcatch_region"
+        resourceName: "region",
+        resourceType: "aws_region",
+        values: { awsRegion: "ap-northeast-1" }
       })
     ],
     catalog
   );
 
-  assert.equal(items[0]?.displayName, "Production Region");
+  assert.equal(items[0]?.displayName, "region");
   assert.deepEqual(items[0]?.rows, [
     {
       key: "awsRegion",

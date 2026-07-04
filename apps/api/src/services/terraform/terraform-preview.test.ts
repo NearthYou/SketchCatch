@@ -66,7 +66,7 @@ test("generates Terraform code from resource nodes", () => {
 
   assert.equal(
     generateTerraformFromDiagramJson(diagramJson),
-    withAwsProvider(`resource "aws_vpc" "main" {
+    `resource "aws_vpc" "main" {
   cidr_block = "10.0.0.0/16"
   enable_dns_support = true
   enable_dns_hostnames = true
@@ -84,11 +84,11 @@ resource "aws_subnet" "public" {
     Name = "public-subnet"
     "kubernetes.io/cluster/main" = "owned"
   }
-}`)
+}`
   );
 });
 
-test("generates a default AWS provider block when no Region design node is present", () => {
+test("omits the AWS provider block when no Region area resource is present", () => {
   const diagramJson: DiagramJson = {
     nodes: [],
     edges: [],
@@ -99,19 +99,24 @@ test("generates a default AWS provider block when no Region design node is prese
     }
   };
 
-  assert.equal(generateTerraformFromDiagramJson(diagramJson), makeAwsProviderBlock("ap-northeast-2"));
+  assert.equal(generateTerraformFromDiagramJson(diagramJson), "");
 });
 
-test("generates an AWS provider block from the Region design node metadata", () => {
+test("generates an AWS provider block from the Region area resource value", () => {
   const diagramJson: DiagramJson = {
     nodes: [
       makeNode({
         id: "region-1",
-        type: "design_region",
-        kind: "design",
+        type: "aws_region",
+        kind: "resource",
         label: "Region",
-        metadata: {
-          awsRegion: "us-east-1"
+        parameters: {
+          resourceType: "aws_region",
+          resourceName: "region",
+          fileName: "main",
+          values: {
+            awsRegion: "us-east-1"
+          }
         }
       }),
       makeNode({
@@ -148,25 +153,35 @@ test("generates an AWS provider block from the Region design node metadata", () 
   );
 });
 
-test("allows multiple Region design nodes when they select the same AWS region", () => {
+test("allows multiple Region area resources when they select the same AWS region", () => {
   const diagramJson: DiagramJson = {
     nodes: [
       makeNode({
         id: "region-1",
-        type: "design_region",
-        kind: "design",
+        type: "aws_region",
+        kind: "resource",
         label: "Region",
-        metadata: {
-          awsRegion: "eu-west-1"
+        parameters: {
+          resourceType: "aws_region",
+          resourceName: "region",
+          fileName: "main",
+          values: {
+            awsRegion: "eu-west-1"
+          }
         }
       }),
       makeNode({
         id: "region-2",
-        type: "sketchcatch_region",
-        kind: "design",
+        type: "aws_region",
+        kind: "resource",
         label: "Region",
-        metadata: {
-          awsRegion: "eu-west-1"
+        parameters: {
+          resourceType: "aws_region",
+          resourceName: "region_2",
+          fileName: "main",
+          values: {
+            awsRegion: "eu-west-1"
+          }
         }
       })
     ],
@@ -181,25 +196,35 @@ test("allows multiple Region design nodes when they select the same AWS region",
   assert.equal(generateTerraformFromDiagramJson(diagramJson), makeAwsProviderBlock("eu-west-1"));
 });
 
-test("rejects Terraform Preview for conflicting Region design nodes", () => {
+test("rejects Terraform Preview for conflicting Region area resources", () => {
   const diagramJson: DiagramJson = {
     nodes: [
       makeNode({
         id: "region-1",
-        type: "design_region",
-        kind: "design",
+        type: "aws_region",
+        kind: "resource",
         label: "Region",
-        metadata: {
-          awsRegion: "ap-northeast-2"
+        parameters: {
+          resourceType: "aws_region",
+          resourceName: "region",
+          fileName: "main",
+          values: {
+            awsRegion: "ap-northeast-2"
+          }
         }
       }),
       makeNode({
         id: "region-2",
-        type: "sketchcatch_region",
-        kind: "design",
+        type: "aws_region",
+        kind: "resource",
         label: "Region",
-        metadata: {
-          awsRegion: "us-west-2"
+        parameters: {
+          resourceType: "aws_region",
+          resourceName: "region_2",
+          fileName: "main",
+          values: {
+            awsRegion: "us-west-2"
+          }
         }
       })
     ],
@@ -213,7 +238,7 @@ test("rejects Terraform Preview for conflicting Region design nodes", () => {
 
   assert.throws(
     () => generateTerraformFromDiagramJson(diagramJson),
-    /Multiple AWS Region design nodes/
+    /Multiple AWS Region area resources/
   );
 });
 
@@ -324,9 +349,9 @@ test("renders invalid resource nodes so Terraform Preview does not disappear aft
 
   assert.equal(
     generateTerraformFromDiagramJson(diagramJson),
-    withAwsProvider(`resource "aws_vpc" "invalid" {
+    `resource "aws_vpc" "invalid" {
   cidr_block = "10.0.0.0/16"
-}`)
+}`
   );
 });
 
@@ -358,9 +383,9 @@ test("defaults missing terraformBlockType to resource", () => {
 
   assert.equal(
     generateTerraformFromDiagramJson(diagramJson),
-    withAwsProvider(`resource "aws_s3_bucket" "logs" {
+    `resource "aws_s3_bucket" "logs" {
   bucket = "sketchcatch-logs"
-}`)
+}`
   );
 });
 
@@ -474,7 +499,7 @@ test("renders data blocks", () => {
 
   assert.equal(
     generateTerraformFromDiagramJson(diagramJson),
-withAwsProvider(`data "aws_ami" "ubuntu" {
+`data "aws_ami" "ubuntu" {
   most_recent = true
   owners = [
     "099720109477",
@@ -485,7 +510,7 @@ withAwsProvider(`data "aws_ami" "ubuntu" {
       "ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*",
     ]
   }
-}`)
+}`
   );
 });
 
@@ -528,7 +553,7 @@ test("renders arrays, numbers, booleans, null, and references", () => {
 
   assert.equal(
     generateTerraformFromDiagramJson(diagramJson),
-    withAwsProvider(`resource "aws_security_group_rule" "ssh" {
+    `resource "aws_security_group_rule" "ssh" {
   vpc_id = var.vpc_id
   subnet_id = module.vpc.subnet_id
   ami_id = data.aws_ami.ubuntu.id
@@ -543,7 +568,7 @@ test("renders arrays, numbers, booleans, null, and references", () => {
   ]
   description = null
   self = false
-}`)
+}`
   );
 });
 

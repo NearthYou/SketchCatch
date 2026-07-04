@@ -44,7 +44,7 @@ export function addServerStorageAreaNodes(nodes: readonly DiagramNode[]): Diagra
       label: "Region",
       position: { x: 40, y: 70 },
       size: { width: 1160, height: 1080 },
-      type: "design_region",
+      type: "aws_region",
       zIndex: 0
     }),
     createDesignAreaNode({
@@ -53,7 +53,7 @@ export function addServerStorageAreaNodes(nodes: readonly DiagramNode[]): Diagra
       metadata: { parentAreaNodeId: "vpc" },
       position: { x: 155, y: 430 },
       size: { width: 780, height: 620 },
-      type: "design_az",
+      type: "aws_availability_zone",
       zIndex: 2
     }),
     ...nodes.map(applyParentMetadata)

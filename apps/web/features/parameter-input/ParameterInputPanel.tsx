@@ -1,13 +1,12 @@
 "use client";
 
 import { Check, ChevronDown, Plus, Search, Trash2 } from "lucide-react";
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useId, useMemo, useRef, useState } from "react";
 import type {
   FocusEvent as ReactFocusEvent,
   KeyboardEvent as ReactKeyboardEvent
 } from "react";
 import type {
-  AwsAvailabilityZoneCode,
   AwsRegionCode,
   DiagramNode,
   ResourceNodeParameters
@@ -22,18 +21,15 @@ import {
 } from "./aws-region-options";
 import {
   createAvailabilityZoneNodeMetadata,
+  createAvailabilityZoneNodeParameters,
   getAvailabilityZoneNodeAwsAvailabilityZone,
   isAvailabilityZoneDesignNode
 } from "./availability-zone-node-metadata";
-import {
-  getAwsAvailabilityZoneValidationError,
-  isAwsAvailabilityZoneCode
-} from "./availability-zone-options";
 import type { ParameterCatalog, ParameterCatalogDefinition } from "./catalog";
 import { terraformParameterCatalog } from "./catalog";
-import { toParameterRecord, type ParameterRecord } from "./parameter-value-record";
 import {
   createRegionNodeMetadata,
+  createRegionNodeParameters,
   getRegionNodeAwsRegion,
   isRegionDesignNode
 } from "./region-node-metadata";
@@ -51,7 +47,7 @@ import styles from "./ParameterInputPanel.module.css";
 export type ParameterInputPanelProps = DiagramEditorPanelContext;
 
 type ParameterErrors = Record<string, string>;
-type RecordValue = ParameterRecord;
+type RecordValue = Record<string, unknown>;
 type CloseMenuOptions = {
   restoreFocus?: boolean;
 };
@@ -91,9 +87,14 @@ export function ParameterInputPanel({
           <div className={styles.fieldGroup}>
             <RegionField
               onChange={(awsRegion) =>
-                updateNodeMetadata(selectedNode.id, {
-                  metadata: createRegionNodeMetadata(selectedNode, awsRegion)
-                })
+                selectedNode.kind === "resource"
+                  ? updateNodeParameters(
+                      selectedNode.id,
+                      createRegionNodeParameters(selectedNode, awsRegion)
+                    )
+                  : updateNodeMetadata(selectedNode.id, {
+                      metadata: createRegionNodeMetadata(selectedNode, awsRegion)
+                    })
               }
               value={selectedRegion}
             />
@@ -104,10 +105,7 @@ export function ParameterInputPanel({
   }
 
   if (isAvailabilityZoneDesignNode(selectedNode)) {
-    const selectedAvailabilityZone =
-      typeof selectedNode.metadata?.awsAvailabilityZone === "string"
-        ? selectedNode.metadata.awsAvailabilityZone
-        : getAvailabilityZoneNodeAwsAvailabilityZone(selectedNode);
+    const selectedAvailabilityZone = getAvailabilityZoneNodeAwsAvailabilityZone(selectedNode);
 
     return (
       <aside className={styles.panel} aria-label="파라미터 입력 패널">
@@ -115,11 +113,17 @@ export function ParameterInputPanel({
 
         <section className={styles.section} aria-label="Main parameters">
           <div className={styles.fieldGroup}>
-            <AvailabilityZoneField
+            <MetadataField
+              label="Availability Zone"
               onChange={(awsAvailabilityZone) =>
-                updateNodeMetadata(selectedNode.id, {
-                  metadata: createAvailabilityZoneNodeMetadata(selectedNode, awsAvailabilityZone)
-                })
+                selectedNode.kind === "resource"
+                  ? updateNodeParameters(
+                      selectedNode.id,
+                      createAvailabilityZoneNodeParameters(selectedNode, awsAvailabilityZone)
+                    )
+                  : updateNodeMetadata(selectedNode.id, {
+                      metadata: createAvailabilityZoneNodeMetadata(selectedNode, awsAvailabilityZone)
+                    })
               }
               value={selectedAvailabilityZone}
             />
@@ -252,39 +256,6 @@ export function ParameterInputPanel({
       </section>
 
     </aside>
-  );
-}
-
-function AvailabilityZoneField({
-  onChange,
-  value
-}: {
-  onChange: (value: AwsAvailabilityZoneCode) => void;
-  value: string;
-}) {
-  const [draftValue, setDraftValue] = useState(value);
-  const selectedAvailabilityZone = draftValue;
-  const availabilityZoneError = getAwsAvailabilityZoneValidationError(selectedAvailabilityZone);
-
-  useEffect(() => {
-    setDraftValue(value);
-  }, [value]);
-
-  const handleChange = (nextAvailabilityZone: string) => {
-    setDraftValue(nextAvailabilityZone);
-
-    if (isAwsAvailabilityZoneCode(nextAvailabilityZone)) {
-      onChange(nextAvailabilityZone);
-    }
-  };
-
-  return (
-    <MetadataField
-      error={availabilityZoneError}
-      label="Availability Zone"
-      onChange={handleChange}
-      value={selectedAvailabilityZone}
-    />
   );
 }
 
@@ -896,7 +867,7 @@ function ListEditor({
 }
 
 function MapEditor({ onChange, value }: { onChange: (value: unknown) => void; value: unknown }) {
-  const record = toParameterRecord(value);
+  const record = toRecord(value);
   const entries = Object.entries(record);
 
   return (
@@ -976,7 +947,7 @@ function NestedEditor({
   const children = definition.children ?? [];
 
   if (definition.type === "list" || definition.type === "set") {
-    const blocks = Array.isArray(value) ? value.map(toParameterRecord) : [];
+    const blocks = Array.isArray(value) ? value.map(toRecord) : [];
 
     return (
       <div className={styles.nestedEditor}>
@@ -1020,7 +991,7 @@ function NestedEditor({
     );
   }
 
-  const block = toParameterRecord(value);
+  const block = toRecord(value);
 
   return (
     <div className={styles.nestedEditor}>
@@ -1106,6 +1077,14 @@ function toStringArray(value: unknown): string[] {
   }
 
   return value.filter((item): item is string => typeof item === "string");
+}
+
+function toRecord(value: unknown): RecordValue {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return {};
+  }
+
+  return value as RecordValue;
 }
 
 function getInitials(value: string): string {

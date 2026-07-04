@@ -11,7 +11,8 @@ import type {
 
 const DEFAULT_TERRAFORM_BLOCK_TYPE: TerraformBlockType = "resource";
 const defaultAwsAvailabilityZone: AwsAvailabilityZoneCode = "ap-northeast-2a";
-const availabilityZoneDesignNodeTypes = new Set(["design_az", "sketchcatch_az"]);
+const legacyAvailabilityZoneDesignNodeTypes = new Set(["design_az", "sketchcatch_az"]);
+const availabilityZoneResourceNodeTypes = new Set(["aws_availability_zone"]);
 const availabilityZoneAwareResourceTypes = new Set(["aws_subnet", "aws_ebs_volume"]);
 const awsAvailabilityZoneCodePattern = /^[a-z]{2}-[a-z]+-\d[a-z]$/;
 
@@ -116,8 +117,8 @@ function findAncestorAvailabilityZone(
       return null;
     }
 
-    if (isAvailabilityZoneDesignNode(parentNode)) {
-      return getAvailabilityZoneFromDesignNode(parentNode);
+    if (isAvailabilityZoneAreaNode(parentNode)) {
+      return getAvailabilityZoneFromAreaNode(parentNode);
     }
 
     parentAreaNodeId = parentNode.metadata?.parentAreaNodeId;
@@ -126,14 +127,24 @@ function findAncestorAvailabilityZone(
   return null;
 }
 
-function isAvailabilityZoneDesignNode(node: DiagramNode): boolean {
-  return node.kind === "design" && availabilityZoneDesignNodeTypes.has(node.type);
+function isAvailabilityZoneAreaNode(node: DiagramNode): boolean {
+  return (
+    (node.kind === "design" && legacyAvailabilityZoneDesignNodeTypes.has(node.type)) ||
+    (node.kind === "resource" && availabilityZoneResourceNodeTypes.has(getResourceNodeType(node)))
+  );
 }
 
-function getAvailabilityZoneFromDesignNode(node: DiagramNode): AwsAvailabilityZoneCode {
-  const availabilityZone = node.metadata?.awsAvailabilityZone;
+function getAvailabilityZoneFromAreaNode(node: DiagramNode): AwsAvailabilityZoneCode {
+  const availabilityZone =
+    node.parameters?.values.awsAvailabilityZone ??
+    node.parameters?.values.availabilityZone ??
+    node.metadata?.awsAvailabilityZone;
 
   return isAwsAvailabilityZoneCode(availabilityZone) ? availabilityZone : defaultAwsAvailabilityZone;
+}
+
+function getResourceNodeType(node: DiagramNode): string {
+  return node.parameters?.resourceType ?? node.type;
 }
 
 function isAwsAvailabilityZoneCode(value: unknown): value is AwsAvailabilityZoneCode {

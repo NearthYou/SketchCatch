@@ -25,16 +25,6 @@ test("ParameterInputPanel treats list and set nested blocks as repeatable blocks
   assert.match(panelSource, /definition\.type === "list" \|\| definition\.type === "set"/);
 });
 
-test("ParameterInputPanel validates Availability Zone metadata before save", () => {
-  assert.match(panelSource, /getAwsAvailabilityZoneValidationError\(selectedAvailabilityZone\)/);
-  assert.match(panelSource, /error=\{availabilityZoneError\}/);
-});
-
-test("ParameterInputPanel keeps invalid Availability Zone drafts out of metadata", () => {
-  assert.match(panelSource, /function AvailabilityZoneField/);
-  assert.match(panelSource, /isAwsAvailabilityZoneCode\(nextAvailabilityZone\)/);
-});
-
 function readParameterInputFile(fileName: string): string {
   return readFileSync(fileURLToPath(new URL(fileName, import.meta.url)), "utf8");
 }

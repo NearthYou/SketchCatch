@@ -183,16 +183,21 @@ test("buildInfrastructureGraphFromDiagramJson projects formerly unsupported cata
   );
 });
 
-test("buildInfrastructureGraphFromDiagramJson applies AZ metadata to AZ-aware resource config", () => {
+test("buildInfrastructureGraphFromDiagramJson applies AZ area resource value to AZ-aware resource config", () => {
   const graph = buildInfrastructureGraphFromDiagramJson({
     nodes: [
       makeNode({
         id: "az-1",
-        type: "design_az",
-        kind: "design",
+        type: "aws_availability_zone",
+        kind: "resource",
         label: "AZ",
-        metadata: {
-          awsAvailabilityZone: "ap-northeast-2c"
+        parameters: {
+          resourceType: "aws_availability_zone",
+          resourceName: "availability_zone",
+          fileName: "main",
+          values: {
+            awsAvailabilityZone: "ap-northeast-2c"
+          }
         }
       }),
       makeNode({
@@ -223,16 +228,21 @@ test("buildInfrastructureGraphFromDiagramJson applies AZ metadata to AZ-aware re
   });
 });
 
-test("buildInfrastructureGraphFromDiagramJson preserves explicit availabilityZone values", () => {
+test("buildInfrastructureGraphFromDiagramJson preserves explicit availabilityZone values over AZ area resources", () => {
   const graph = buildInfrastructureGraphFromDiagramJson({
     nodes: [
       makeNode({
         id: "az-1",
-        type: "design_az",
-        kind: "design",
+        type: "aws_availability_zone",
+        kind: "resource",
         label: "AZ",
-        metadata: {
-          awsAvailabilityZone: "ap-northeast-2c"
+        parameters: {
+          resourceType: "aws_availability_zone",
+          resourceName: "availability_zone",
+          fileName: "main",
+          values: {
+            awsAvailabilityZone: "ap-northeast-2c"
+          }
         }
       }),
       makeNode({

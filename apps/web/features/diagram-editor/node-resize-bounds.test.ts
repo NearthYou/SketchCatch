@@ -9,14 +9,14 @@ test("getNodeResizeBounds removes area node max limits while keeping minimum siz
     maxHeight: Number.MAX_SAFE_INTEGER
   };
 
-  assert.deepEqual(getNodeResizeBounds(makeDesignNode("design_region")), {
-    minWidth: 96,
-    minHeight: 72,
+  assert.deepEqual(getNodeResizeBounds(makeResourceNode("aws_region")), {
+    minWidth: 260,
+    minHeight: 180,
     ...unrestrictedMax
   });
-  assert.deepEqual(getNodeResizeBounds(makeDesignNode("design_az")), {
-    minWidth: 96,
-    minHeight: 72,
+  assert.deepEqual(getNodeResizeBounds(makeResourceNode("aws_availability_zone")), {
+    minWidth: 220,
+    minHeight: 150,
     ...unrestrictedMax
   });
   assert.deepEqual(getNodeResizeBounds(makeDesignNode("design_group")), {
@@ -37,6 +37,11 @@ test("getNodeResizeBounds removes area node max limits while keeping minimum siz
   assert.deepEqual(getNodeResizeBounds(makeResourceNode("aws_security_group")), {
     minWidth: 144,
     minHeight: 112,
+    ...unrestrictedMax
+  });
+  assert.deepEqual(getNodeResizeBounds(makeResourceNode("aws_autoscaling_group")), {
+    minWidth: 200,
+    minHeight: 130,
     ...unrestrictedMax
   });
 });
