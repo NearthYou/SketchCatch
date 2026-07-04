@@ -14,6 +14,7 @@
 8. Direct Deployment 실패 설명은 [008_배포실패설명가이드_sw.md](./008_배포실패설명가이드_sw.md)를 본다.
 9. Redis Runtime Cache adapter는 [007_레디스런타임캐시어댑터가이드_sw.md](./007_레디스런타임캐시어댑터가이드_sw.md)를 본다.
 10. Git/CI/CD handoff 계약과 API 생명주기는 [007_GitCicdHandoff계약API클론코딩가이드_sw.md](./007_GitCicdHandoff계약API클론코딩가이드_sw.md)를 본다.
+11. GitHub PR handoff v0는 [010_GitHub_PR_Handoff_v0_클론코딩가이드_sw.md](./010_GitHub_PR_Handoff_v0_클론코딩가이드_sw.md)를 본다.
 
 ## 문서 목록
 
@@ -33,6 +34,7 @@
 | [007_레디스런타임캐시어댑터가이드_sw.md](./007_레디스런타임캐시어댑터가이드_sw.md) | Redis Runtime Cache adapter, REDIS_URL 선택 정책, degraded fallback 가이드 |
 | [008_배포실패설명가이드_sw.md](./008_배포실패설명가이드_sw.md) | Direct Deployment 실패 설명 DTO, fallback, UI 표시 가이드 |
 | [009_GitCicdHandoff계약API클론코딩가이드_sw.md](./007_GitCicdHandoff계약API클론코딩가이드_sw.md) | Git/CI/CD handoff 계약과 API 생명주기 클론 코딩 가이드 |
+| [010_GitHub_PR_Handoff_v0_클론코딩가이드_sw.md](./010_GitHub_PR_Handoff_v0_클론코딩가이드_sw.md) | GitHub PR handoff provider payload, PR draft, fake provider test 가이드 |
 
 ## 정리 규칙
 

@@ -1332,3 +1332,27 @@
 - Known risks:
   - 이번 확인은 정적 체크와 테스트 중심이며, 최신 툴바 위치는 브라우저 스크린샷으로 재확인하지 않았다.
   - 실제 AWS apply/destroy나 Git/CI/CD 실행은 수행하지 않았다.
+## 2026-07-05 - Issue #135 GitHub PR handoff v0
+
+- Goal: #134 GitCicdHandoff 계약/API 위에 Terraform artifact를 GitHub PR 생성 요청 payload로 넘기는 두 번째 vertical slice를 구현한다.
+- Completed:
+  - `SourceRepositoryProvider`에 `github` provider를 추가하고 additive enum migration `0022_git_cicd_github_provider.sql`을 만들었다.
+  - `CreateGitCicdHandoffRequest`가 `repositoryProvider`와 optional `planSummary`를 받을 수 있게 확장했다.
+  - Git provider abstraction과 `createGitHubGitCicdHandoffProvider`를 추가해 Terraform artifact metadata, source/target branch, commit message, PR title/body draft, review checklist를 fake provider payload로 전달한다.
+  - provider 결과 PR URL/source branch/commit SHA를 handoff record의 `pr_created` status, PR URL, source branch, status message에 반영한다.
+  - provider mismatch를 409로 막아 실제 GitHub provider가 주입되지 않은 상태에서 `github` 요청이 조용히 draft로 저장되지 않게 했다.
+  - `docs/sw/010_GitHub_PR_Handoff_v0_클론코딩가이드_sw.md`와 data model/docs index를 보강했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/routes/git-cicd-handoffs.test.ts src/db/schema-contract.test.ts` - passed
+  - `pnpm --filter @sketchcatch/api typecheck` - passed
+  - `pnpm --filter @sketchcatch/types typecheck` - passed
+  - `pnpm --filter @sketchcatch/api lint` - passed
+  - `pnpm lint` - passed
+  - `pnpm typecheck` - passed
+  - `pnpm build` - passed
+  - `pnpm harness:check` - passed
+  - `git diff --check` - passed
+- Known risks:
+  - 실제 GitHub API 호출, GitHub token 사용, pipeline polling/cache 연동, Runtime Cache 신규 작업, AWS apply/destroy는 수행하지 않았다.
+  - full `pnpm test`는 시간 범위상 실행하지 않았고, #135 targeted API tests와 lint/typecheck/build로 검증했다.
