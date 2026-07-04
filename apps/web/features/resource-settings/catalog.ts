@@ -4,7 +4,7 @@ import {
 } from "@sketchcatch/types/resource-definitions";
 import type { ResourceArea, ResourceItem } from "@sketchcatch/types";
 
-const size = { width: 56, height: 56 };
+const size = { width: 124, height: 96 };
 const vpcAreaSize = { width: 240, height: 160 };
 const subnetAreaSize = { width: 180, height: 120 };
 const securityGroupAreaSize = subnetAreaSize;
@@ -42,7 +42,7 @@ const designCatalogItems: ResourceItem[] = [
     category: "Containers",
     iconUrl: `${groupIconPath}/AWS-Cloud_32.svg`,
     enabled: true,
-    nodeDefaults: { type: "design_az", label: "Availability Zone", size: { width: 220, height: 150 } }
+    nodeDefaults: { type: "design_az", label: "AZ", size: { width: 220, height: 150 } }
   },
   {
     id: "design-group",

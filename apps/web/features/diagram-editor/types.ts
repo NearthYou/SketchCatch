@@ -76,6 +76,7 @@ export type DiagramFlowNodeData = Record<string, unknown> & {
   node: DiagramNode;
   selectedNodeCount: number;
   isDimmed: boolean;
+  isConnectionActive: boolean;
   isPreview: boolean;
   previewState?: DiagramPreviewState | undefined;
   isReferenceDropTarget: boolean;

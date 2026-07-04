@@ -402,11 +402,11 @@ test("terraform editor renders syntax colors and squiggly error underlines", () 
   assert.match(highlightedLineErrorRule, /\btext-decoration-color:\s*#ef4444;/);
   assert.match(textareaRule, /\bcolor:\s*transparent;/);
   assert.match(textareaRule, /\bcaret-color:\s*#d7e4f7;/);
-  assert.match(keywordRule, /\bcolor:\s*#2dd4bf;/);
-  assert.match(identifierRule, /\bcolor:\s*#74bdf8;/);
-  assert.match(referenceRule, /\bcolor:\s*#74bdf8;/);
-  assert.match(stringRule, /\bcolor:\s*#d99a7b;/);
-  assert.match(braceRule, /\bcolor:\s*#facc15;/);
+  assert.match(keywordRule, /\bcolor:\s*#f6c85f;/);
+  assert.match(identifierRule, /\bcolor:\s*#7fd2ff;/);
+  assert.match(referenceRule, /\bcolor:\s*#5fe0c1;/);
+  assert.match(stringRule, /\bcolor:\s*#f0a77d;/);
+  assert.match(braceRule, /\bcolor:\s*#9bd7ff;/);
   assert.match(lineNumberErrorRule, /\bcolor:\s*#fca5a5;/);
 });
 
@@ -428,9 +428,10 @@ test("terraform preview explanation is triggered from the terraform code panel",
   assert.match(previewExplanationRule, /\boverflow:\s*auto;/);
 });
 
-test("terraform resource code mode keeps validation and explanation but omits deployment actions", () => {
+test("terraform resource code mode keeps explanation but omits validation and deployment actions", () => {
   assert.match(terraformPanelSource, /renderTerraformPreviewExplanationButton\(\)/);
-  assert.match(terraformPanelSource, /Validate/);
+  assert.doesNotMatch(terraformPanelSource, /<span>Validate<\/span>/);
+  assert.doesNotMatch(terraformPanelSource, />\s*Validate\s*<\/button>/);
   assert.doesNotMatch(terraformPanelSource, /리소스 단위 plan API 연결 예정/);
   assert.doesNotMatch(terraformPanelSource, /리소스 단위 apply API 연결 예정/);
   assert.doesNotMatch(terraformPanelSource, /리소스 단위 destroy API 연결 예정/);

@@ -11,7 +11,7 @@ import type {
   DesignSimulationResult
 } from "@sketchcatch/types";
 import type { FormEvent, KeyboardEvent as ReactKeyboardEvent } from "react";
-import { Send, Sparkles, X } from "lucide-react";
+import { Send, Sparkles, Trash2, X } from "lucide-react";
 import { getApiErrorMessage } from "../../lib/api-client";
 import type { DiagramEditorPanelContext } from "../diagram-editor";
 import {
@@ -64,6 +64,7 @@ export type WorkspaceAiChatDockProps = {
 type WorkspaceAiChatMessageRole = "assistant" | "user";
 type WorkspaceAiChatMessageKind = "draft" | "error" | "patch" | "question" | "simulation" | "status";
 type WorkspaceAiChatSelectionMode = "single" | "multiple";
+type WorkspaceAiChatScope = "draft" | "simulation";
 
 type WorkspaceAiChatMessage = {
   readonly id: string;
@@ -71,6 +72,7 @@ type WorkspaceAiChatMessage = {
   readonly createdAt: string;
   readonly kind: WorkspaceAiChatMessageKind;
   readonly role: WorkspaceAiChatMessageRole;
+  readonly scope?: WorkspaceAiChatScope;
   readonly selectionMode?: WorkspaceAiChatSelectionMode;
   readonly suggestions?: readonly string[];
 };
@@ -84,6 +86,7 @@ const DESIGN_SIMULATION_DEFAULTS = {
 
 export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockProps) {
   const [isOpen, setOpen] = useState(false);
+  const [activeChatTab, setActiveChatTab] = useState<WorkspaceAiChatScope>("draft");
   const [composerValue, setComposerValue] = useState("");
   const [messages, setMessages] = useState<WorkspaceAiChatMessage[]>(() =>
     readStoredChatMessages(projectId)
@@ -122,6 +125,14 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
     () => createDraftSafetyWarnings(draft, boardSnapshot.hasResources),
     [boardSnapshot.hasResources, draft]
   );
+  const visibleMessages = useMemo(
+    () => messages.filter((message) => getChatMessageScope(message) === activeChatTab),
+    [activeChatTab, messages]
+  );
+  const hasActiveChatHistory =
+    visibleMessages.length > 0 ||
+    (activeChatTab === "draft" && draft !== null) ||
+    (activeChatTab === "simulation" && designSimulation !== null);
 
   useEffect(() => {
     if (loadedProjectIdRef.current !== projectId) {
@@ -142,17 +153,18 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
       behavior: "smooth",
       top: transcriptRef.current.scrollHeight
     });
-  }, [messages, draft, patchPreviewModel, designSimulation]);
+  }, [activeChatTab, visibleMessages, draft, patchPreviewModel, designSimulation]);
 
   function appendAssistantMessage(
     kind: WorkspaceAiChatMessageKind,
     content: string,
     suggestions: readonly string[] = [],
-    selectionMode: WorkspaceAiChatSelectionMode = "single"
+    selectionMode: WorkspaceAiChatSelectionMode = "single",
+    scope: WorkspaceAiChatScope = activeChatTab
   ): void {
     setMessages((currentMessages) => trimChatMessages([
       ...currentMessages,
-      createChatMessage("assistant", kind, content, suggestions, selectionMode)
+      createChatMessage("assistant", kind, content, suggestions, selectionMode, scope)
     ]));
   }
 
@@ -162,6 +174,33 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
     await submitUserMessage(composerValue);
   }
 
+  function clearActiveChatHistory(): void {
+    setSelectedSuggestionLabelsByMessageId({});
+
+    if (activeChatTab === "simulation") {
+      setMessages((currentMessages) =>
+        currentMessages.filter((message) => getChatMessageScope(message) !== "simulation")
+      );
+      setDesignSimulation(null);
+      setSimulationFingerprint(null);
+      setSimulationErrorMessage("");
+      setSimulationState("idle");
+      return;
+    }
+
+    setMessages((currentMessages) => [
+      ...currentMessages.filter((message) => getChatMessageScope(message) !== "draft"),
+      ...createInitialChatMessages()
+    ]);
+    setComposerValue("");
+    setDraft(null);
+    setClarificationSession(null);
+    setDraftFollowUpSession(null);
+    setDraftErrorMessage("");
+    setDraftState("idle");
+    context.setPreviewDiagram(null);
+  }
+
   async function submitUserMessage(value: string): Promise<void> {
     const trimmedPrompt = value.trim();
 
@@ -169,7 +208,7 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
       return;
     }
 
-    const userMessage = createChatMessage("user", "status", trimmedPrompt);
+    const userMessage = createChatMessage("user", "status", trimmedPrompt, [], "single", "draft");
     const nextMessages = trimChatMessages([...messages, userMessage]);
 
     setComposerValue("");
@@ -534,6 +573,8 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
   }
 
   async function runDesignSimulation(): Promise<void> {
+    setActiveChatTab("simulation");
+
     if (context.isPreviewActive) {
       setSimulationState("error");
       setSimulationErrorMessage("AI 초안 미리보기 중에는 현재 보드 시뮬레이션을 실행할 수 없습니다.");
@@ -603,6 +644,7 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
     <section
       aria-label="AI 채팅"
       className={styles.aiChatDock}
+      data-chat-tab={activeChatTab}
       data-right-panel-open={context.isRightPanelOpen}
     >
       <header className={styles.aiChatHeader}>
@@ -621,6 +663,38 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
         </button>
       </header>
 
+      <div className={styles.aiChatTabBar} aria-label="AI 채팅 기능">
+        <div className={styles.aiChatTabs} role="tablist" aria-label="AI 기능">
+          <button
+            aria-selected={activeChatTab === "draft"}
+            className={styles.aiChatTabButton}
+            onClick={() => setActiveChatTab("draft")}
+            role="tab"
+            type="button"
+          >
+            초안 제안
+          </button>
+          <button
+            aria-selected={activeChatTab === "simulation"}
+            className={styles.aiChatTabButton}
+            onClick={() => setActiveChatTab("simulation")}
+            role="tab"
+            type="button"
+          >
+            시뮬레이션
+          </button>
+        </div>
+        <button
+          className={styles.aiChatClearButton}
+          disabled={!hasActiveChatHistory}
+          onClick={clearActiveChatHistory}
+          type="button"
+        >
+          <Trash2 size={14} aria-hidden="true" />
+          내역 지우기
+        </button>
+      </div>
+
       <div className={styles.aiChatControls} aria-label="AI 설정">
         <button
           className={styles.aiSecondaryButton}
@@ -633,7 +707,21 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
       </div>
 
       <div className={styles.aiChatTranscript} ref={transcriptRef}>
-        {messages.map((message) => {
+        {activeChatTab === "simulation" ? (
+          <div className={styles.aiChatSimulationIntro}>
+            <strong>현재 보드 기준으로 흐름, 병목, 장애, 비용 압박을 봅니다.</strong>
+            <button
+              className={styles.aiPrimaryButton}
+              disabled={simulationState === "loading" || context.isPreviewActive}
+              onClick={() => void runDesignSimulation()}
+              type="button"
+            >
+              {simulationState === "loading" ? "계산 중" : "시뮬레이션 실행"}
+            </button>
+          </div>
+        ) : null}
+
+        {visibleMessages.map((message) => {
           const isMultiSelect = message.selectionMode === "multiple";
           const selectedSuggestions = selectedSuggestionLabelsByMessageId[message.id] ?? [];
 
@@ -688,10 +776,14 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
           );
         })}
 
-        <WorkspaceAiRequestMessage state={draftState} message={draftErrorMessage} />
-        <WorkspaceAiRequestMessage state={simulationState} message={simulationErrorMessage} />
+        {activeChatTab === "draft" ? (
+          <WorkspaceAiRequestMessage state={draftState} message={draftErrorMessage} />
+        ) : null}
+        {activeChatTab === "simulation" ? (
+          <WorkspaceAiRequestMessage state={simulationState} message={simulationErrorMessage} />
+        ) : null}
 
-        {draft !== null ? (
+        {activeChatTab === "draft" && draft !== null ? (
           <article className={styles.aiChatDraftCard}>
             <div className={styles.aiResultHeader}>
               <h3>{draft.title}</h3>
@@ -749,10 +841,10 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
           </article>
         ) : null}
 
-        {hasStaleDesignSimulation ? (
+        {activeChatTab === "simulation" && hasStaleDesignSimulation ? (
           <p className={styles.aiStaleNotice}>보드 변경됨 · 다시 실행 필요</p>
         ) : null}
-        {designSimulation !== null ? (
+        {activeChatTab === "simulation" && designSimulation !== null ? (
           <WorkspaceAiDesignSimulationResult simulation={designSimulation} />
         ) : null}
       </div>
@@ -920,7 +1012,8 @@ function createChatMessage(
   kind: WorkspaceAiChatMessageKind,
   content: string,
   suggestions: readonly string[] = [],
-  selectionMode: WorkspaceAiChatSelectionMode = "single"
+  selectionMode: WorkspaceAiChatSelectionMode = "single",
+  scope: WorkspaceAiChatScope = "draft"
 ): WorkspaceAiChatMessage {
   const message: WorkspaceAiChatMessage = {
     id: createChatMessageId(),
@@ -928,6 +1021,7 @@ function createChatMessage(
     createdAt: new Date().toISOString(),
     kind,
     role,
+    scope,
     selectionMode
   };
 
@@ -939,6 +1033,14 @@ function createChatMessage(
   }
 
   return message;
+}
+
+function getChatMessageScope(message: WorkspaceAiChatMessage): WorkspaceAiChatScope {
+  if (message.scope === "draft" || message.scope === "simulation") {
+    return message.scope;
+  }
+
+  return message.kind === "simulation" ? "simulation" : "draft";
 }
 
 function createChatMessageId(): string {
@@ -965,6 +1067,9 @@ function isWorkspaceAiChatMessage(value: unknown): value is WorkspaceAiChatMessa
     typeof candidate.content === "string" &&
     typeof candidate.createdAt === "string" &&
     typeof candidate.id === "string" &&
+    (candidate.scope === undefined ||
+      candidate.scope === "draft" ||
+      candidate.scope === "simulation") &&
     (candidate.selectionMode === undefined ||
       candidate.selectionMode === "single" ||
       candidate.selectionMode === "multiple") &&

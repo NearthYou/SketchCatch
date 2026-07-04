@@ -22,10 +22,10 @@ test("resourceCatalog sizes area defaults below the Region hierarchy root", () =
   assert.deepEqual(getResourceSize("aws_security_group"), { width: 180, height: 120 });
 });
 
-test("resourceCatalog keeps regular network resources at compact icon node size", () => {
-  assert.deepEqual(getResourceSize("aws_internet_gateway"), { width: 56, height: 56 });
-  assert.deepEqual(getResourceSize("aws_cloudfront_distribution"), { width: 56, height: 56 });
-  assert.deepEqual(getResourceSize("aws_route_table_association"), { width: 56, height: 56 });
+test("resourceCatalog keeps regular network resources at icon node size", () => {
+  assert.deepEqual(getResourceSize("aws_internet_gateway"), { width: 124, height: 96 });
+  assert.deepEqual(getResourceSize("aws_route_table_association"), { width: 124, height: 96 });
+  assert.deepEqual(getResourceSize("aws_cloudfront_distribution"), { width: 124, height: 96 });
 });
 
 test("resourceCatalog provides a CloudFront icon for converted drafts and Terraform proposals", () => {

@@ -10,6 +10,7 @@ import type {
   CheckFinding,
   DeployedResource,
   Deployment,
+  DeploymentFailureExplanation,
   DiagramJson,
   DeploymentLog,
   TerraformDiagnostic,
@@ -23,6 +24,7 @@ import {
   approveDeploymentPlan,
   cancelDeployment as cancelDeploymentRun,
   createDeployment,
+  getDeploymentFailureExplanation,
   listAwsConnections,
   listDeploymentResources,
   listDeploymentLogs,
@@ -111,6 +113,10 @@ export function DeploymentPanel({
   const [preDeploymentState, setPreDeploymentState] = useState<AiRequestState>("idle");
   const [preDeploymentErrorMessage, setPreDeploymentErrorMessage] = useState("");
   const [preDeploymentFingerprint, setPreDeploymentFingerprint] = useState<string | null>(null);
+  const [failureExplanation, setFailureExplanation] =
+    useState<DeploymentFailureExplanation | null>(null);
+  const [failureExplanationState, setFailureExplanationState] = useState<RequestState>("idle");
+  const [failureExplanationErrorMessage, setFailureExplanationErrorMessage] = useState("");
   const deploymentExpandedGridRef = useRef<HTMLDivElement | null>(null);
   const deploymentResizeCleanupRef = useRef<(() => void) | null>(null);
 
@@ -307,6 +313,9 @@ export function DeploymentPanel({
       setDeploymentLogs([]);
       setDeploymentResources([]);
       setTerraformOutputs([]);
+      setFailureExplanation(null);
+      setFailureExplanationState("idle");
+      setFailureExplanationErrorMessage("");
       setShowApplyConfirmation(false);
       setShowDestroyConfirmation(false);
       return;
@@ -338,6 +347,51 @@ export function DeploymentPanel({
       cancelled = true;
     };
   }, [selectedDeploymentId]);
+
+  useEffect(() => {
+    if (!selectedDeployment || selectedDeployment.status !== "FAILED") {
+      setFailureExplanation(null);
+      setFailureExplanationState("idle");
+      setFailureExplanationErrorMessage("");
+      return;
+    }
+
+    let cancelled = false;
+    const deploymentIdForExplanation = selectedDeployment.id;
+
+    async function loadFailureExplanation(): Promise<void> {
+      setFailureExplanationState("loading");
+      setFailureExplanationErrorMessage("");
+
+      try {
+        const explanation = await getDeploymentFailureExplanation(deploymentIdForExplanation);
+
+        if (!cancelled) {
+          setFailureExplanation(explanation);
+          setFailureExplanationState("idle");
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setFailureExplanation(null);
+          setFailureExplanationState("error");
+          setFailureExplanationErrorMessage(
+            getApiErrorMessage(error, "Deployment 실패 설명을 불러오지 못했습니다.")
+          );
+        }
+      }
+    }
+
+    void loadFailureExplanation();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    selectedDeployment?.errorSummary,
+    selectedDeployment?.failureStage,
+    selectedDeployment?.id,
+    selectedDeployment?.status
+  ]);
 
   useEffect(() => {
     if (!selectedDeploymentId || selectedDeployment?.status !== "RUNNING") {
@@ -816,66 +870,77 @@ export function DeploymentPanel({
       </div>
 
       {selectedDeployment ? (
-        <div className={styles.deploymentSummary}>
-          <InfoRow label="Status" value={selectedDeployment.status} />
-          <OptionalInfoRow label="Active stage" value={selectedDeployment.activeStage} />
-          <OptionalInfoRow
-            label="Started at"
-            value={formatOptionalDate(selectedDeployment.startedAt)}
-          />
-          <OptionalInfoRow
-            label="Completed at"
-            value={formatOptionalDate(selectedDeployment.completedAt)}
-          />
-          <OptionalInfoRow label="Failed at" value={formatOptionalDate(selectedDeployment.failedAt)} />
-          <OptionalInfoRow
-            label="Cancel requested"
-            value={formatOptionalDate(selectedDeployment.cancelRequestedAt)}
-          />
-          <OptionalInfoRow
-            label="Cancelled at"
-            value={formatOptionalDate(selectedDeployment.cancelledAt)}
-          />
-          <OptionalInfoRow label="Current plan" value={selectedDeployment.currentPlanArtifactId} />
-          <InfoRow label="Blocked" value={selectedDeployment.isBlocked ? "yes" : "no"} />
-          <OptionalInfoRow label="Blocked by" value={selectedDeployment.blockedBy} />
-          <OptionalInfoRow label="Reason" value={selectedDeployment.blockedReason} />
-          <InfoRow label="Approval" value={formatApprovalState(selectedDeployment)} />
-          {selectedDeployment.planSummary ? (
-            <PlanSummaryRows deployment={selectedDeployment} />
-          ) : null}
-          {selectedDeployment.approvedAt ? (
-            <>
-              <InfoRow label="Approved at" value={formatDate(selectedDeployment.approvedAt)} />
-              <OptionalInfoRow
-                label="Approved plan"
-                value={selectedDeployment.approvedPlanArtifactId}
-              />
-              <OptionalInfoRow
-                label="tfplan hash"
-                value={formatShortHash(selectedDeployment.approvedTfplanHash)}
-              />
-              <OptionalInfoRow
-                label="Artifact hash"
-                value={formatShortHash(selectedDeployment.approvedTerraformArtifactHash)}
-              />
-              <OptionalInfoRow
-                label="AWS account"
-                value={selectedDeployment.approvedAwsAccountId}
-              />
-              <OptionalInfoRow
-                label="AWS region"
-                value={selectedDeployment.approvedAwsRegion}
-              />
-            </>
-          ) : null}
-          <OptionalInfoRow label="State object" value={selectedDeployment.stateObjectKey} />
-          <OptionalInfoRow
-            label="Result warning"
-            value={selectedDeployment.resultWarningSummary}
-          />
-          <OptionalInfoRow label="Error" value={selectedDeployment.errorSummary} />
-        </div>
+        <>
+          <DeploymentGateCard deployment={selectedDeployment} />
+          <div className={styles.deploymentSummary}>
+            <InfoRow label="Status" value={selectedDeployment.status} />
+            <OptionalInfoRow label="Active stage" value={selectedDeployment.activeStage} />
+            <OptionalInfoRow
+              label="Started at"
+              value={formatOptionalDate(selectedDeployment.startedAt)}
+            />
+            <OptionalInfoRow
+              label="Completed at"
+              value={formatOptionalDate(selectedDeployment.completedAt)}
+            />
+            <OptionalInfoRow label="Failed at" value={formatOptionalDate(selectedDeployment.failedAt)} />
+            <OptionalInfoRow
+              label="Cancel requested"
+              value={formatOptionalDate(selectedDeployment.cancelRequestedAt)}
+            />
+            <OptionalInfoRow
+              label="Cancelled at"
+              value={formatOptionalDate(selectedDeployment.cancelledAt)}
+            />
+            <OptionalInfoRow label="Current plan" value={selectedDeployment.currentPlanArtifactId} />
+            <InfoRow label="Blocked" value={selectedDeployment.isBlocked ? "yes" : "no"} />
+            <OptionalInfoRow label="Blocked by" value={selectedDeployment.blockedBy} />
+            <OptionalInfoRow label="Reason" value={selectedDeployment.blockedReason} />
+            <InfoRow label="Approval" value={formatApprovalState(selectedDeployment)} />
+            {selectedDeployment.planSummary ? (
+              <PlanSummaryRows deployment={selectedDeployment} />
+            ) : null}
+            {selectedDeployment.approvedAt ? (
+              <>
+                <InfoRow label="Approved at" value={formatDate(selectedDeployment.approvedAt)} />
+                <OptionalInfoRow
+                  label="Approved plan"
+                  value={selectedDeployment.approvedPlanArtifactId}
+                />
+                <OptionalInfoRow
+                  label="tfplan hash"
+                  value={formatShortHash(selectedDeployment.approvedTfplanHash)}
+                />
+                <OptionalInfoRow
+                  label="Artifact hash"
+                  value={formatShortHash(selectedDeployment.approvedTerraformArtifactHash)}
+                />
+                <OptionalInfoRow
+                  label="AWS account"
+                  value={selectedDeployment.approvedAwsAccountId}
+                />
+                <OptionalInfoRow
+                  label="AWS region"
+                  value={selectedDeployment.approvedAwsRegion}
+                />
+              </>
+            ) : null}
+            <OptionalInfoRow label="State object" value={selectedDeployment.stateObjectKey} />
+            <OptionalInfoRow
+              label="Result warning"
+              value={selectedDeployment.resultWarningSummary}
+            />
+            <OptionalInfoRow label="Error" value={selectedDeployment.errorSummary} />
+          </div>
+        </>
+      ) : null}
+
+      {selectedDeployment?.status === "FAILED" ? (
+        <DeploymentFailureExplanationCard
+          errorMessage={failureExplanationErrorMessage}
+          explanation={failureExplanation}
+          state={failureExplanationState}
+        />
       ) : null}
 
       {shouldShowApprovePlanButton ? (
@@ -1214,11 +1279,16 @@ function DeploymentPreDeploymentSummary({
 }) {
   const failCount = countChecklistItems(analysis, "fail");
   const warningCount = countChecklistItems(analysis, "warning");
+  const gateLevel = getPreDeploymentGateLevel(analysis);
   const visibleFindings = analysis.findings.slice(0, 3);
   const hiddenFindingCount = Math.max(0, analysis.findings.length - visibleFindings.length);
 
   return (
-    <div className={styles.deploymentPreflightSummary}>
+    <div className={styles.deploymentPreflightSummary} data-level={gateLevel}>
+      <div className={styles.deploymentGateHeader}>
+        <span className={styles.deploymentGateBadge}>{gateLevel.toUpperCase()}</span>
+        <strong>Pre-Deployment Gate</strong>
+      </div>
       <p>{analysis.summary}</p>
       <div className={styles.deploymentPreflightStats} aria-label="배포 전 검사 요약">
         <span>
@@ -1252,11 +1322,103 @@ function DeploymentPreDeploymentSummary({
 
 function DeploymentPreDeploymentFindingItem({ finding }: { readonly finding: CheckFinding }) {
   return (
-    <li>
+    <li data-severity={finding.severity}>
       <span>{finding.severity.toUpperCase()}</span>
       <strong>{finding.title}</strong>
       {finding.resourceId ? <em>{finding.resourceId}</em> : null}
     </li>
+  );
+}
+
+function DeploymentGateCard({ deployment }: { readonly deployment: Deployment }) {
+  const gate = getDeploymentGateMeta(deployment);
+
+  return (
+    <div className={styles.deploymentGateCard} data-level={gate.level}>
+      <div className={styles.deploymentGateHeader}>
+        <span className={styles.deploymentGateBadge}>{gate.level.toUpperCase()}</span>
+        <strong>{gate.title}</strong>
+      </div>
+      <p>{gate.description}</p>
+      <dl className={styles.deploymentGateFacts}>
+        <div>
+          <dt>Blocked by</dt>
+          <dd>{deployment.blockedBy ?? "none"}</dd>
+        </div>
+        <div>
+          <dt>Approval</dt>
+          <dd>{formatApprovalState(deployment)}</dd>
+        </div>
+        <div>
+          <dt>Warnings</dt>
+          <dd>{deployment.planSummary?.warnings.length ?? 0}</dd>
+        </div>
+      </dl>
+    </div>
+    )
+}
+
+function DeploymentFailureExplanationCard({
+  errorMessage,
+  explanation,
+  state
+}: {
+  readonly errorMessage: string;
+  readonly explanation: DeploymentFailureExplanation | null;
+  readonly state: RequestState;
+}) {
+  if (state === "loading") {
+    return <p className={styles.deploymentNotice}>실패 설명을 생성하는 중입니다.</p>;
+  }
+
+  if (state === "error") {
+    return (
+      <p className={styles.deploymentError} role="alert">
+        {errorMessage}
+      </p>
+    );
+  }
+
+  if (!explanation) {
+    return null;
+  }
+
+  return (
+    <article className={styles.deploymentFailureExplanation}>
+      <div className={styles.deploymentFailureHeader}>
+        <span>{explanation.severity.toUpperCase()}</span>
+        <strong>실패 요약</strong>
+      </div>
+      <p>{explanation.summary}</p>
+      <div className={styles.deploymentFailureMeta}>
+        <InfoRow label="Failure stage" value={explanation.stage ?? "unknown"} />
+        <InfoRow label="Cleanup" value={explanation.cleanupRequired ? "필요" : "현재 필수 아님"} />
+        {explanation.llmExplanation?.fallbackUsed ? (
+          <InfoRow
+            label="AI fallback"
+            value={explanation.llmExplanation.fallbackReason ?? "rule_based"}
+          />
+        ) : null}
+      </div>
+      <div className={styles.deploymentFailureBody}>
+        <strong>원인 후보</strong>
+        <p>{explanation.likelyCause}</p>
+      </div>
+      {explanation.firstErrorLog ? (
+        <div className={styles.deploymentFailureBody}>
+          <strong>첫 오류 로그</strong>
+          <code>{explanation.firstErrorLog}</code>
+        </div>
+      ) : null}
+      <div className={styles.deploymentFailureBody}>
+        <strong>다음 행동</strong>
+        <ul>
+          {explanation.nextActions.map((action) => (
+            <li key={action}>{action}</li>
+          ))}
+        </ul>
+      </div>
+    </article>
   );
 }
 
@@ -1308,7 +1470,7 @@ function PlanSummaryRows({ deployment }: { readonly deployment: Deployment }) {
           <span>Warnings</span>
           <ul>
             {summary.warnings.map((warning, index) => (
-              <li key={`${warning.level}-${index}`}>
+              <li data-level={getWarningLevel(String(warning.level))} key={`${warning.level}-${index}`}>
                 <strong>{warning.level}</strong>
                 <p>{warning.message}</p>
               </li>
@@ -1318,6 +1480,60 @@ function PlanSummaryRows({ deployment }: { readonly deployment: Deployment }) {
       ) : null}
     </>
   );
+}
+
+function getDeploymentGateMeta(deployment: Deployment): {
+  readonly description: string;
+  readonly level: "high" | "medium" | "low";
+  readonly title: string;
+} {
+  if (deployment.isBlocked) {
+    return {
+      description:
+        deployment.blockedReason ??
+        "Plan approval, risk analysis, or cost analysis must be resolved before execution.",
+      level: "high",
+      title: "Deployment intentionally locked"
+    };
+  }
+
+  if ((deployment.planSummary?.warnings.length ?? 0) > 0) {
+    return {
+      description: "Plan warnings are present. Review the summary before running Apply or Destroy.",
+      level: "medium",
+      title: "Review required"
+    };
+  }
+
+  return {
+    description: "No blocking deployment gate is currently reported for this plan.",
+    level: "low",
+    title: "Gate clear"
+  };
+}
+
+function getPreDeploymentGateLevel(analysis: AiPreDeploymentAnalysisResult): "high" | "medium" | "low" {
+  if (analysis.findings.some((finding) => finding.severity === "high")) {
+    return "high";
+  }
+
+  if (
+    analysis.findings.some((finding) => finding.severity === "medium") ||
+    countChecklistItems(analysis, "fail") > 0 ||
+    countChecklistItems(analysis, "warning") > 0
+  ) {
+    return "medium";
+  }
+
+  return "low";
+}
+
+function getWarningLevel(level: string): "high" | "medium" | "low" {
+  if (level === "high" || level === "medium" || level === "low") {
+    return level;
+  }
+
+  return "medium";
 }
 
 function formatApprovalState(deployment: Deployment): string {

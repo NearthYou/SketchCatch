@@ -17,7 +17,8 @@ export default async function PasswordResetConfirmPage({
     <main className="authPage">
       <section className="authPanel" aria-labelledby="password-reset-confirm-title">
         <Link className="authBrand" href="/">
-          SketchCatch
+          <img className="brandLogoImage" src="/sketchcatch-logo.svg" alt="" />
+          <span>SketchCatch</span>
         </Link>
         <div className="authIntro">
           <p className="eyebrow">Password reset</p>

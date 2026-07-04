@@ -73,6 +73,26 @@ data "aws_ami" "ubuntu" {
   assert.equal(findTerraformBlockForNode(blocks, makeNode("data", "aws_ami", "ubuntu"))?.blockType, "data");
 });
 
+test("findTerraformBlockForNode prefers the visible node identity over stale parameters", () => {
+  const blocks = parseTerraformFiles([
+    {
+      fileName: "main.tf",
+      code: `resource "aws_cloudwatch_event_rule" "event_rule" {
+}
+
+resource "aws_instance" "ec2_instance" {
+}`
+    }
+  ]);
+  const ec2NodeWithStaleParameters: DiagramNode = {
+    ...makeNode("resource", "aws_cloudwatch_event_rule", "event_rule"),
+    type: "aws_instance",
+    label: "EC2 Instance"
+  };
+
+  assert.equal(findTerraformBlockForNode(blocks, ec2NodeWithStaleParameters)?.address, "aws_instance.ec2_instance");
+});
+
 test("findTerraformBlockForNode keeps resource and data blocks with the same type and name separate", () => {
   const blocks = parseTerraformFiles([
     {
