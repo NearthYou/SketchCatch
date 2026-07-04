@@ -13,6 +13,23 @@
 - Highest priority unfinished harness feature: `HARNESS-007`
 - Current blocker: none
 
+### 2026-07-05 - 생성 다이어그램 운영형 기본 구조 보강
+- Goal: 자연어로 생성되는 AWS Practice Architecture가 운영형 피드백을 반영해 진입 경로, private app, S3 접근, DB, HA, IAM, 모니터링을 더 명확히 보여주게 한다.
+- Completed:
+  - Route 53, WAF, ALB/Listener, VPC Endpoint, DB Subnet Group, Secrets Manager ResourceType과 카탈로그 매핑을 추가했다.
+  - EC2 초안은 public subnet 직접 배치 대신 ALB 뒤 private app subnet 2개 AZ에 배치되게 했다.
+  - S3 접근은 서버에서 VPC Endpoint와 IAM policy를 거쳐 bucket으로 가는 흐름으로 바꿨다.
+  - RDS는 DB subnet group, 2개 private DB subnet, backup/encryption, Secrets Manager, CloudWatch alarm 연결을 포함한다.
+  - 기존 exact test를 운영형 핵심 리소스/config/edge 검증으로 갱신했다.
+- Verification run:
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api exec tsx --test src/routes/ai.test.ts` - passed, 34 tests
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web exec tsx --test features/resource-settings/catalog.test.ts features/workspace/workspace-ai-diagram-adapter.test.ts` - passed, 23 tests
+  - `npm exec --package=pnpm@11.8.0 -- pnpm typecheck` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api lint` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web lint` - passed
+- Known risks:
+  - 전체 `pnpm build`는 실행하지 않았다. 변경 검증은 관련 API/Web 테스트, 전체 typecheck, API/Web lint 중심으로 수행했다.
+
 ### 2026-07-05 - 자연어 생성 전 확인 범위 확장
 - Goal: 사용자가 자연어로 새 다이어그램을 요청할 때 부족한 운영 기준을 먼저 확인하고, API/서버/DB 같은 자연어 인프라 요청도 같은 체크리스트를 타게 한다.
 - Completed:

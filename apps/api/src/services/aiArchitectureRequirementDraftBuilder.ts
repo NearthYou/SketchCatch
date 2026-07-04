@@ -61,11 +61,12 @@ type DraftBuildContext = {
 };
 
 function addStaticWebsiteDelivery(context: DraftBuildContext): void {
+  addUserEntryNodes(context);
   addNode(context, {
     id: "web-assets-bucket",
     type: "S3",
     label: "Static Website Bucket",
-    positionX: 120,
+    positionX: 900,
     positionY: 160,
     config: {
       bucketPurpose: "static_website_origin",
@@ -76,17 +77,20 @@ function addStaticWebsiteDelivery(context: DraftBuildContext): void {
     id: "cloudfront-distribution",
     type: "CLOUDFRONT",
     label: "CloudFront CDN",
-    positionX: 420,
+    positionX: 620,
     positionY: 160,
     config: {
+      webAclId: "aws_wafv2_web_acl.edge_web_acl.arn",
       originResourceId: "web-assets-bucket"
     }
   });
+  addEdge(context, "edge-web-acl-to-cloudfront-distribution", "edge-web-acl", "cloudfront-distribution", "protects");
   addEdge(context, "cloudfront-to-web-assets-bucket", "cloudfront-distribution", "web-assets-bucket", "origin");
 }
 
 function addEc2ApplicationRuntime(context: DraftBuildContext): void {
   addNetworkBoundary(context);
+  addApplicationLoadBalancer(context);
   const appServerIds = createNumberedIds("app-server", context.resourceQuantities.ec2Instances);
 
   addNode(context, {
@@ -101,7 +105,7 @@ function addEc2ApplicationRuntime(context: DraftBuildContext): void {
         {
           protocol: "tcp",
           port: 80,
-          cidr: "0.0.0.0/0"
+          securityGroups: ["aws_security_group.alb_security_group.id"]
         }
       ],
       egress: [
@@ -126,10 +130,15 @@ function addEc2ApplicationRuntime(context: DraftBuildContext): void {
     const position = getRepeatedNodePosition(index, {
       columns: 3,
       startX: appServerIds.length === 1 ? 370 : 300,
-      startY: 620,
+      startY: 700,
       xGap: 140,
       yGap: 130
     });
+    const subnetId =
+      index % 2 === 0
+        ? "aws_subnet.private_app_subnet_a.id"
+        : "aws_subnet.private_app_subnet_b.id";
+    const subnetNodeId = index % 2 === 0 ? "private-app-subnet-a" : "private-app-subnet-b";
 
     addNode(context, {
       id: appServerId,
@@ -139,10 +148,10 @@ function addEc2ApplicationRuntime(context: DraftBuildContext): void {
       positionY: position.y,
       config: {
         ami: "data.aws_ami.app_ami.id",
-        associatePublicIpAddress: true,
+        associatePublicIpAddress: false,
         iamInstanceProfile: "aws_iam_instance_profile.app_instance_profile.name",
         instanceType: "t3.micro",
-        subnetId: "aws_subnet.public_subnet.id",
+        subnetId,
         vpcSecurityGroupIds: ["aws_security_group.app_security_group.id"]
       }
     });
@@ -150,9 +159,97 @@ function addEc2ApplicationRuntime(context: DraftBuildContext): void {
     addEdge(context, `app-instance-profile-to-${appServerId}`, "app-instance-profile", appServerId, "attaches role");
     addEdge(context, `${appServerId}-to-app-log-group`, appServerId, "app-log-group", "writes logs");
     addEdge(context, `app-cpu-alarm-to-${appServerId}`, "app-cpu-alarm", appServerId, "monitors CPU");
-    addEdge(context, `public-subnet-to-${appServerId}`, "public-subnet", appServerId, "hosts");
+    addEdge(context, `${subnetNodeId}-to-${appServerId}`, subnetNodeId, appServerId, "hosts private app");
     addEdge(context, `app-security-group-to-${appServerId}`, "app-security-group", appServerId, "allows traffic");
+    addEdge(context, `app-load-balancer-to-${appServerId}`, "app-load-balancer", appServerId, "routes private traffic");
   });
+}
+
+function addUserEntryNodes(context: DraftBuildContext): void {
+  addNode(context, {
+    id: "route53-record",
+    type: "ROUTE53_RECORD",
+    label: "Route 53 DNS Entry",
+    positionX: 80,
+    positionY: 160,
+    config: {
+      name: "app.example.com",
+      type: "A"
+    }
+  });
+  addNode(context, {
+    id: "edge-web-acl",
+    type: "WAF_WEB_ACL",
+    label: "Edge WAF Web ACL",
+    positionX: 340,
+    positionY: 160,
+    config: {
+      defaultAction: "allow",
+      scope: "REGIONAL"
+    }
+  });
+  addEdge(context, "route53-record-to-edge-web-acl", "route53-record", "edge-web-acl", "user traffic");
+}
+
+function addApplicationLoadBalancer(context: DraftBuildContext): void {
+  addUserEntryNodes(context);
+  addNode(context, {
+    id: "alb-security-group",
+    type: "SECURITY_GROUP",
+    label: "ALB Security Group",
+    positionX: 220,
+    positionY: 430,
+    config: {
+      vpcId: "aws_vpc.vpc_main.id",
+      ingress: [
+        {
+          protocol: "tcp",
+          port: 443,
+          cidr: "0.0.0.0/0"
+        }
+      ],
+      egress: [
+        {
+          protocol: "-1",
+          cidr: "0.0.0.0/0"
+        }
+      ]
+    }
+  });
+  addNode(context, {
+    id: "app-load-balancer",
+    type: "LOAD_BALANCER",
+    label: "Application Load Balancer",
+    positionX: 500,
+    positionY: 430,
+    config: {
+      internal: false,
+      loadBalancerType: "application",
+      securityGroups: ["aws_security_group.alb_security_group.id"],
+      subnets: ["aws_subnet.public_subnet_a.id", "aws_subnet.public_subnet_b.id"]
+    }
+  });
+  addNode(context, {
+    id: "app-alb-listener",
+    type: "LOAD_BALANCER_LISTENER",
+    label: "HTTPS Listener",
+    positionX: 760,
+    positionY: 430,
+    config: {
+      loadBalancerArn: "aws_lb.app_load_balancer.arn",
+      port: 443,
+      protocol: "HTTPS"
+    }
+  });
+  addEdge(context, "alb-security-group-to-app-load-balancer", "alb-security-group", "app-load-balancer", "allows HTTPS");
+  addEdge(context, "app-alb-listener-to-app-load-balancer", "app-alb-listener", "app-load-balancer", "listens on");
+
+  if (hasNode(context, "cloudfront-distribution")) {
+    addEdge(context, "cloudfront-to-app-alb-listener", "cloudfront-distribution", "app-alb-listener", "forwards app requests");
+    return;
+  }
+
+  addEdge(context, "edge-web-acl-to-app-alb-listener", "edge-web-acl", "app-alb-listener", "protects app entry");
 }
 
 function addNetworkBoundary(context: DraftBuildContext): void {
@@ -167,13 +264,54 @@ function addNetworkBoundary(context: DraftBuildContext): void {
     }
   });
   addNode(context, {
-    id: "public-subnet",
+    id: "public-subnet-a",
     type: "SUBNET",
-    label: "Public Subnet",
+    label: "Public Subnet A",
     positionX: 150,
-    positionY: 490,
+    positionY: 320,
     config: {
       cidrBlock: "10.0.1.0/24",
+      availabilityZone: "ap-northeast-2a",
+      mapPublicIpOnLaunch: true,
+      vpcId: "aws_vpc.vpc_main.id"
+    }
+  });
+  addNode(context, {
+    id: "public-subnet-b",
+    type: "SUBNET",
+    label: "Public Subnet B",
+    positionX: 370,
+    positionY: 320,
+    config: {
+      cidrBlock: "10.0.2.0/24",
+      availabilityZone: "ap-northeast-2b",
+      mapPublicIpOnLaunch: true,
+      vpcId: "aws_vpc.vpc_main.id"
+    }
+  });
+  addNode(context, {
+    id: "private-app-subnet-a",
+    type: "SUBNET",
+    label: "Private App Subnet A",
+    positionX: 150,
+    positionY: 650,
+    config: {
+      cidrBlock: "10.0.11.0/24",
+      availabilityZone: "ap-northeast-2a",
+      mapPublicIpOnLaunch: false,
+      vpcId: "aws_vpc.vpc_main.id"
+    }
+  });
+  addNode(context, {
+    id: "private-app-subnet-b",
+    type: "SUBNET",
+    label: "Private App Subnet B",
+    positionX: 370,
+    positionY: 650,
+    config: {
+      cidrBlock: "10.0.12.0/24",
+      availabilityZone: "ap-northeast-2b",
+      mapPublicIpOnLaunch: false,
       vpcId: "aws_vpc.vpc_main.id"
     }
   });
@@ -206,21 +344,74 @@ function addNetworkBoundary(context: DraftBuildContext): void {
   addNode(context, {
     id: "public-route-table-association",
     type: "ROUTE_TABLE_ASSOCIATION",
-    label: "Public Route Association",
-    positionX: 420,
+    label: "Public Route Association A",
+    positionX: 520,
     positionY: 520,
     config: {
       routeTableId: "aws_route_table.public_route_table.id",
-      subnetId: "aws_subnet.public_subnet.id"
+      subnetId: "aws_subnet.public_subnet_a.id"
     }
   });
-  addEdge(context, "vpc-main-to-public-subnet", "vpc-main", "public-subnet", "contains");
+  addNode(context, {
+    id: "public-route-table-association-b",
+    type: "ROUTE_TABLE_ASSOCIATION",
+    label: "Public Route Association B",
+    positionX: 520,
+    positionY: 650,
+    config: {
+      routeTableId: "aws_route_table.public_route_table.id",
+      subnetId: "aws_subnet.public_subnet_b.id"
+    }
+  });
+  addNode(context, {
+    id: "private-app-route-table",
+    type: "ROUTE_TABLE",
+    label: "Private App Route Table",
+    positionX: 650,
+    positionY: 780,
+    config: {
+      vpcId: "aws_vpc.vpc_main.id"
+    }
+  });
+  addNode(context, {
+    id: "private-app-route-association-a",
+    type: "ROUTE_TABLE_ASSOCIATION",
+    label: "Private App Route Association A",
+    positionX: 420,
+    positionY: 780,
+    config: {
+      routeTableId: "aws_route_table.private_app_route_table.id",
+      subnetId: "aws_subnet.private_app_subnet_a.id"
+    }
+  });
+  addNode(context, {
+    id: "private-app-route-association-b",
+    type: "ROUTE_TABLE_ASSOCIATION",
+    label: "Private App Route Association B",
+    positionX: 420,
+    positionY: 900,
+    config: {
+      routeTableId: "aws_route_table.private_app_route_table.id",
+      subnetId: "aws_subnet.private_app_subnet_b.id"
+    }
+  });
+  addEdge(context, "vpc-main-to-public-subnet-a", "vpc-main", "public-subnet-a", "contains");
+  addEdge(context, "vpc-main-to-public-subnet-b", "vpc-main", "public-subnet-b", "contains");
+  addEdge(context, "vpc-main-to-private-app-subnet-a", "vpc-main", "private-app-subnet-a", "contains");
+  addEdge(context, "vpc-main-to-private-app-subnet-b", "vpc-main", "private-app-subnet-b", "contains");
   addEdge(context, "public-route-table-to-internet-gateway", "public-route-table", "internet-gateway", "routes");
   addEdge(
     context,
-    "public-subnet-to-public-route-table-association",
-    "public-subnet",
+    "public-subnet-a-to-public-route-table-association",
+    "public-subnet-a",
     "public-route-table-association",
+    "uses"
+  );
+  addEdge(
+    context,
+    "public-subnet-b-to-public-route-table-association-b",
+    "public-subnet-b",
+    "public-route-table-association-b",
     "uses"
   );
   addEdge(
@@ -228,6 +419,41 @@ function addNetworkBoundary(context: DraftBuildContext): void {
     "public-route-table-association-to-public-route-table",
     "public-route-table-association",
     "public-route-table",
+    "uses"
+  );
+  addEdge(
+    context,
+    "public-route-table-association-b-to-public-route-table",
+    "public-route-table-association-b",
+    "public-route-table",
+    "uses"
+  );
+  addEdge(
+    context,
+    "private-app-subnet-a-to-private-app-route-association-a",
+    "private-app-subnet-a",
+    "private-app-route-association-a",
+    "uses"
+  );
+  addEdge(
+    context,
+    "private-app-subnet-b-to-private-app-route-association-b",
+    "private-app-subnet-b",
+    "private-app-route-association-b",
+    "uses"
+  );
+  addEdge(
+    context,
+    "private-app-route-association-a-to-private-app-route-table",
+    "private-app-route-association-a",
+    "private-app-route-table",
+    "uses"
+  );
+  addEdge(
+    context,
+    "private-app-route-association-b-to-private-app-route-table",
+    "private-app-route-association-b",
+    "private-app-route-table",
     "uses"
   );
 }
@@ -271,8 +497,8 @@ function addIamRuntimeNodes(context: DraftBuildContext): void {
       role: "aws_iam_role.app_runtime_role.name"
     }
   });
-  addEdge(context, "app-runtime-policy-to-app-runtime-role", "app-runtime-policy", "app-runtime-role", "grants permissions");
-  addEdge(context, "app-runtime-role-to-app-instance-profile", "app-runtime-role", "app-instance-profile", "uses");
+  addEdge(context, "app-instance-profile-to-app-runtime-role", "app-instance-profile", "app-runtime-role", "uses role");
+  addEdge(context, "app-runtime-role-to-app-runtime-policy", "app-runtime-role", "app-runtime-policy", "attaches policy");
 }
 
 function addObservabilityNodes(context: DraftBuildContext): void {
@@ -303,19 +529,45 @@ function addObservabilityNodes(context: DraftBuildContext): void {
       threshold: 80
     })
   });
+  addEdge(context, "app-runtime-policy-to-app-log-group", "app-runtime-policy", "app-log-group", "allows log writes");
 }
 
 function addDatabase(context: DraftBuildContext): void {
   addNetworkBoundary(context);
   addNode(context, {
-    id: "private-db-subnet",
+    id: "private-db-subnet-a",
     type: "SUBNET",
-    label: "Private DB Subnet",
+    label: "Private DB Subnet A",
     positionX: 150,
     positionY: 820,
     config: {
-      cidrBlock: "10.0.2.0/24",
+      availabilityZone: "ap-northeast-2a",
+      cidrBlock: "10.0.21.0/24",
+      mapPublicIpOnLaunch: false,
       vpcId: "aws_vpc.vpc_main.id"
+    }
+  });
+  addNode(context, {
+    id: "private-db-subnet-b",
+    type: "SUBNET",
+    label: "Private DB Subnet B",
+    positionX: 370,
+    positionY: 820,
+    config: {
+      availabilityZone: "ap-northeast-2b",
+      cidrBlock: "10.0.22.0/24",
+      mapPublicIpOnLaunch: false,
+      vpcId: "aws_vpc.vpc_main.id"
+    }
+  });
+  addNode(context, {
+    id: "db-subnet-group",
+    type: "DB_SUBNET_GROUP",
+    label: "DB Subnet Group",
+    positionX: 610,
+    positionY: 900,
+    config: {
+      subnetIds: ["aws_subnet.private_db_subnet_a.id", "aws_subnet.private_db_subnet_b.id"]
     }
   });
   addNode(context, {
@@ -347,6 +599,17 @@ function addDatabase(context: DraftBuildContext): void {
     }
   });
   addNode(context, {
+    id: "db-credentials-secret",
+    type: "SECRETS_MANAGER_SECRET",
+    label: "DB Credentials Secret",
+    positionX: 900,
+    positionY: 1000,
+    config: {
+      kmsKeyId: "aws_kms_key.data_encryption_key.arn",
+      name: "practice/db/credentials"
+    }
+  });
+  addNode(context, {
     id: "db-cpu-alarm",
     type: "CLOUDWATCH_METRIC_ALARM",
     label: "Database CPU Alarm",
@@ -370,26 +633,40 @@ function addDatabase(context: DraftBuildContext): void {
     positionY: 920,
     config: {
       backupRetentionPeriod: 7,
+      backupWindow: "18:00-19:00",
+      dbSubnetGroupName: "aws_db_subnet_group.db_subnet_group.name",
       engine: "postgres",
       instanceClass: "db.t4g.micro",
       kmsKeyId: "aws_kms_key.data_encryption_key.arn",
+      multiAz: true,
+      passwordSecretArn: "aws_secretsmanager_secret.db_credentials_secret.arn",
       publiclyAccessible: false,
       skipFinalSnapshot: true,
       storageEncrypted: true,
-      subnetId: "aws_subnet.private_db_subnet.id",
       vpcSecurityGroupIds: ["aws_security_group.db_security_group.id"]
     }
   });
-  addEdge(context, "vpc-main-to-private-db-subnet", "vpc-main", "private-db-subnet", "contains");
-  addEdge(context, "private-db-subnet-to-app-database", "private-db-subnet", "app-database", "hosts");
+  addEdge(context, "vpc-main-to-private-db-subnet-a", "vpc-main", "private-db-subnet-a", "contains");
+  addEdge(context, "vpc-main-to-private-db-subnet-b", "vpc-main", "private-db-subnet-b", "contains");
+  addEdge(context, "private-db-subnet-a-to-db-subnet-group", "private-db-subnet-a", "db-subnet-group", "member");
+  addEdge(context, "private-db-subnet-b-to-db-subnet-group", "private-db-subnet-b", "db-subnet-group", "member");
+  addEdge(context, "db-subnet-group-to-app-database", "db-subnet-group", "app-database", "places DB");
   addEdge(context, "db-security-group-to-app-database", "db-security-group", "app-database", "allows traffic");
   addEdge(context, "app-security-group-to-db-security-group", "app-security-group", "db-security-group", "allows PostgreSQL");
   addEdge(context, "data-encryption-key-to-app-database", "data-encryption-key", "app-database", "encrypts storage");
+  addEdge(context, "app-runtime-policy-to-data-encryption-key", "app-runtime-policy", "data-encryption-key", "allows key use");
+  addEdge(context, "data-encryption-key-to-db-credentials-secret", "data-encryption-key", "db-credentials-secret", "encrypts secret");
+  addEdge(context, "db-credentials-secret-to-app-server", "db-credentials-secret", "app-server", "provides credentials");
+  addEdge(context, "db-credentials-secret-to-app-database", "db-credentials-secret", "app-database", "stores credentials");
   addEdge(context, "db-cpu-alarm-to-app-database", "db-cpu-alarm", "app-database", "monitors CPU");
 }
 
 function addUploadBucket(context: DraftBuildContext): void {
   const uploadBucketIds = createNumberedIds("upload-bucket", context.resourceQuantities.s3Buckets);
+
+  if (context.factSet.has("server_runtime")) {
+    addS3VpcEndpoint(context);
+  }
 
   uploadBucketIds.forEach((uploadBucketId, index) => {
     const position = getRepeatedNodePosition(index, {
@@ -412,6 +689,24 @@ function addUploadBucket(context: DraftBuildContext): void {
       }
     });
   });
+}
+
+function addS3VpcEndpoint(context: DraftBuildContext): void {
+  addNetworkBoundary(context);
+  addNode(context, {
+    id: "s3-vpc-endpoint",
+    type: "VPC_ENDPOINT",
+    label: "S3 VPC Endpoint",
+    positionX: 900,
+    positionY: 620,
+    config: {
+      routeTableIds: ["aws_route_table.private_app_route_table.id"],
+      serviceName: "com.amazonaws.ap-northeast-2.s3",
+      vpcEndpointType: "Gateway",
+      vpcId: "aws_vpc.vpc_main.id"
+    }
+  });
+  addEdge(context, "private-app-route-table-to-s3-vpc-endpoint", "private-app-route-table", "s3-vpc-endpoint", "routes S3 privately");
 }
 
 function addServerlessRuntime(context: DraftBuildContext): void {
@@ -531,15 +826,19 @@ function addCrossResourceEdges(context: DraftBuildContext): void {
   const appServerIds = getNodeIdsByTypePrefix(context, "EC2", "app-server");
   const uploadBucketIds = getNodeIdsByTypePrefix(context, "S3", "upload-bucket");
 
-  for (const appServerId of appServerIds) {
-    if (hasNode(context, "cloudfront-distribution")) {
-      addEdge(context, `cloudfront-to-${appServerId}`, "cloudfront-distribution", appServerId, "forwards app requests");
-    }
+  if (hasNode(context, "cloudfront-distribution") && hasNode(context, "app-alb-listener")) {
+    addEdge(context, "cloudfront-to-app-alb-listener", "cloudfront-distribution", "app-alb-listener", "forwards app requests");
   }
 
   for (const appServerId of appServerIds) {
     for (const uploadBucketId of uploadBucketIds) {
-      addEdge(context, `${appServerId}-to-${uploadBucketId}`, appServerId, uploadBucketId, "stores files");
+      if (hasNode(context, "s3-vpc-endpoint")) {
+        addEdge(context, `${appServerId}-to-s3-vpc-endpoint`, appServerId, "s3-vpc-endpoint", "uses private S3 path");
+        addEdge(context, `s3-vpc-endpoint-to-${uploadBucketId}`, "s3-vpc-endpoint", uploadBucketId, "reaches bucket");
+      } else {
+        addEdge(context, `${appServerId}-to-${uploadBucketId}`, appServerId, uploadBucketId, "stores files");
+      }
+      addEdge(context, `app-runtime-policy-to-${uploadBucketId}`, "app-runtime-policy", uploadBucketId, "allows S3 actions");
     }
   }
 

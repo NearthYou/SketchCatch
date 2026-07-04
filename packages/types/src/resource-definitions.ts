@@ -19,6 +19,7 @@ export type ResourceDefinition = {
 
 type AwsResourceDefinitionInput = {
   readonly id: string;
+  readonly parameterPanel?: boolean | undefined;
   readonly resourceType?: ResourceType | undefined;
   readonly terraformBlockType?: TerraformBlockType | undefined;
   readonly terraformPreview?: boolean | undefined;
@@ -72,11 +73,36 @@ export const resourceDefinitions = [
     terraformSync: true
   }),
   createAwsResourceDefinition({
+    id: "aws-route53-record",
+    parameterPanel: false,
+    resourceType: "ROUTE53_RECORD",
+    terraformResourceType: "aws_route53_record"
+  }),
+  createAwsResourceDefinition({
+    id: "aws-wafv2-web-acl",
+    parameterPanel: false,
+    resourceType: "WAF_WEB_ACL",
+    terraformResourceType: "aws_wafv2_web_acl"
+  }),
+  createAwsResourceDefinition({
+    id: "aws-lb",
+    parameterPanel: false,
+    resourceType: "LOAD_BALANCER",
+    terraformResourceType: "aws_lb"
+  }),
+  createAwsResourceDefinition({
+    id: "aws-lb-listener",
+    parameterPanel: false,
+    resourceType: "LOAD_BALANCER_LISTENER",
+    terraformResourceType: "aws_lb_listener"
+  }),
+  createAwsResourceDefinition({
     id: "aws-nat-gateway",
     terraformResourceType: "aws_nat_gateway"
   }),
   createAwsResourceDefinition({
     id: "aws-vpc-endpoint",
+    resourceType: "VPC_ENDPOINT",
     terraformResourceType: "aws_vpc_endpoint"
   }),
   createAwsResourceDefinition({
@@ -181,7 +207,7 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-db-subnet-group",
-    resourceType: "RDS",
+    resourceType: "DB_SUBNET_GROUP",
     terraformResourceType: "aws_db_subnet_group"
   }),
   createAwsResourceDefinition({
@@ -202,6 +228,12 @@ export const resourceDefinitions = [
   createAwsResourceDefinition({
     id: "aws-dynamodb-table",
     terraformResourceType: "aws_dynamodb_table"
+  }),
+  createAwsResourceDefinition({
+    id: "aws-secretsmanager-secret",
+    parameterPanel: false,
+    resourceType: "SECRETS_MANAGER_SECRET",
+    terraformResourceType: "aws_secretsmanager_secret"
   }),
   createAwsResourceDefinition({
     id: "aws-lambda-function",
@@ -302,6 +334,7 @@ function createDefaultResourceDefinitionByResourceType(): Map<ResourceType, Reso
 
 function createAwsResourceDefinition({
   id,
+  parameterPanel = true,
   resourceType = DEFAULT_RESOURCE_TYPE,
   terraformBlockType = DEFAULT_TERRAFORM_BLOCK_TYPE,
   terraformPreview = false,
@@ -317,7 +350,7 @@ function createAwsResourceDefinition({
       resourceType: terraformResourceType
     },
     capabilities: {
-      parameterPanel: true,
+      parameterPanel,
       terraformPreview,
       terraformSync
     }

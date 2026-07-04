@@ -336,8 +336,13 @@ test("POST /api/ai/architecture-draft composes resources from natural language f
   assert.ok(findDraftNode(body, "upload-bucket"), "Expected a separate upload bucket");
   assert.ok(findDraftNode(body, "app-database"), "Expected a database for login/user data");
   assertDraftHasEdge(body, {
-    id: "app-server-to-upload-bucket",
+    id: "app-server-to-s3-vpc-endpoint",
     sourceId: "app-server",
+    targetId: "s3-vpc-endpoint"
+  });
+  assertDraftHasEdge(body, {
+    id: "s3-vpc-endpoint-to-upload-bucket",
+    sourceId: "s3-vpc-endpoint",
     targetId: "upload-bucket"
   });
   assertDraftHasEdge(body, {
@@ -613,12 +618,19 @@ test("POST /api/ai/architecture-draft generates only supported ResourceType valu
     "S3",
     "SECURITY_GROUP",
     "CLOUDFRONT",
+    "ROUTE53_RECORD",
+    "WAF_WEB_ACL",
+    "LOAD_BALANCER",
+    "LOAD_BALANCER_LISTENER",
     "LAMBDA",
     "AMI",
     "IAM_ROLE",
     "IAM_POLICY",
     "IAM_INSTANCE_PROFILE",
     "KMS_KEY",
+    "DB_SUBNET_GROUP",
+    "SECRETS_MANAGER_SECRET",
+    "VPC_ENDPOINT",
     "CLOUDWATCH_LOG_GROUP",
     "CLOUDWATCH_METRIC_ALARM",
     "API_GATEWAY_REST_API",
@@ -736,9 +748,23 @@ test("POST /api/ai/architecture-draft uses readable resource ids in nodes, edges
   const staticSiteNodeIds = staticSiteBody.architectureJson.nodes.map((node) => node.id);
   const cloudfrontNode = staticSiteBody.architectureJson.nodes.find((node) => node.id === "cloudfront-distribution");
 
-  assert.deepEqual(staticSiteNodeIds, ["web-assets-bucket", "cloudfront-distribution"]);
+  assert.ok(staticSiteNodeIds.includes("route53-record"));
+  assert.ok(staticSiteNodeIds.includes("edge-web-acl"));
+  assert.ok(staticSiteNodeIds.includes("web-assets-bucket"));
+  assert.ok(staticSiteNodeIds.includes("cloudfront-distribution"));
   assert.equal(cloudfrontNode?.config.originResourceId, "web-assets-bucket");
-  assert.deepEqual(staticSiteBody.architectureJson.edges[0], {
+  assert.equal(cloudfrontNode?.config.webAclId, "aws_wafv2_web_acl.edge_web_acl.arn");
+  assertDraftHasEdge(staticSiteBody, {
+    id: "route53-record-to-edge-web-acl",
+    sourceId: "route53-record",
+    targetId: "edge-web-acl"
+  });
+  assertDraftHasEdge(staticSiteBody, {
+    id: "edge-web-acl-to-cloudfront-distribution",
+    sourceId: "edge-web-acl",
+    targetId: "cloudfront-distribution"
+  });
+  assertDraftHasEdge(staticSiteBody, {
     id: "cloudfront-to-web-assets-bucket",
     sourceId: "cloudfront-distribution",
     targetId: "web-assets-bucket"
@@ -759,37 +785,32 @@ test("POST /api/ai/architecture-draft uses readable resource ids in nodes, edges
   const apiServerEdgeIds = apiServerBody.architectureJson.edges.map((edge) => edge.id);
   const apiServerNode = apiServerBody.architectureJson.nodes.find((node) => node.id === "app-server");
 
-  assert.deepEqual(apiServerNodeIds, [
-    "vpc-main",
-    "public-subnet",
-    "internet-gateway",
-    "public-route-table",
-    "public-route-table-association",
-    "app-security-group",
-    "app-ami",
-    "app-runtime-role",
-    "app-runtime-policy",
-    "app-instance-profile",
-    "app-log-group",
-    "app-cpu-alarm",
+  for (const expectedNodeId of [
+    "route53-record",
+    "edge-web-acl",
+    "public-subnet-a",
+    "public-subnet-b",
+    "private-app-subnet-a",
+    "private-app-subnet-b",
+    "app-load-balancer",
+    "app-alb-listener",
     "app-server"
-  ]);
-  assert.deepEqual(apiServerEdgeIds, [
-    "vpc-main-to-public-subnet",
-    "public-route-table-to-internet-gateway",
-    "public-subnet-to-public-route-table-association",
-    "public-route-table-association-to-public-route-table",
-    "app-runtime-policy-to-app-runtime-role",
-    "app-runtime-role-to-app-instance-profile",
-    "app-ami-to-app-server",
-    "app-instance-profile-to-app-server",
-    "app-server-to-app-log-group",
-    "app-cpu-alarm-to-app-server",
-    "public-subnet-to-app-server",
-    "app-security-group-to-app-server"
-  ]);
+  ]) {
+    assert.ok(apiServerNodeIds.includes(expectedNodeId), `Expected ${expectedNodeId}`);
+  }
+  for (const expectedEdgeId of [
+    "route53-record-to-edge-web-acl",
+    "edge-web-acl-to-app-alb-listener",
+    "app-load-balancer-to-app-server",
+    "private-app-subnet-a-to-app-server",
+    "app-instance-profile-to-app-runtime-role",
+    "app-runtime-role-to-app-runtime-policy"
+  ]) {
+    assert.ok(apiServerEdgeIds.includes(expectedEdgeId), `Expected ${expectedEdgeId}`);
+  }
   assert.equal(apiServerNode?.config.ami, "data.aws_ami.app_ami.id");
-  assert.equal(apiServerNode?.config.subnetId, "aws_subnet.public_subnet.id");
+  assert.equal(apiServerNode?.config.associatePublicIpAddress, false);
+  assert.equal(apiServerNode?.config.subnetId, "aws_subnet.private_app_subnet_a.id");
   assert.deepEqual(apiServerNode?.config.vpcSecurityGroupIds, ["aws_security_group.app_security_group.id"]);
   assert.equal(apiServerNode?.config.iamInstanceProfile, "aws_iam_instance_profile.app_instance_profile.name");
 
@@ -810,52 +831,28 @@ test("POST /api/ai/architecture-draft uses readable resource ids in nodes, edges
   const databaseNode = databaseBackendBody.architectureJson.nodes.find((node) => node.id === "app-database");
   const databaseEdge = databaseBackendBody.architectureJson.edges.find((edge) => edge.id === "app-server-to-app-database");
 
-  assert.deepEqual(databaseBackendNodeIds, [
-    "vpc-main",
-    "public-subnet",
-    "internet-gateway",
-    "public-route-table",
-    "public-route-table-association",
-    "app-security-group",
-    "app-ami",
-    "app-runtime-role",
-    "app-runtime-policy",
-    "app-instance-profile",
-    "app-log-group",
-    "app-cpu-alarm",
-    "app-server",
-    "private-db-subnet",
-    "db-security-group",
-    "data-encryption-key",
-    "db-cpu-alarm",
+  for (const expectedNodeId of [
+    "db-subnet-group",
+    "db-credentials-secret",
+    "private-db-subnet-a",
+    "private-db-subnet-b",
     "app-database"
-  ]);
-  assert.deepEqual(databaseBackendEdgeIds, [
-    "vpc-main-to-public-subnet",
-    "public-route-table-to-internet-gateway",
-    "public-subnet-to-public-route-table-association",
-    "public-route-table-association-to-public-route-table",
-    "app-runtime-policy-to-app-runtime-role",
-    "app-runtime-role-to-app-instance-profile",
-    "app-ami-to-app-server",
-    "app-instance-profile-to-app-server",
-    "app-server-to-app-log-group",
-    "app-cpu-alarm-to-app-server",
-    "public-subnet-to-app-server",
-    "app-security-group-to-app-server",
-    "vpc-main-to-private-db-subnet",
-    "private-db-subnet-to-app-database",
-    "db-security-group-to-app-database",
-    "app-security-group-to-db-security-group",
-    "data-encryption-key-to-app-database",
+  ]) {
+    assert.ok(databaseBackendNodeIds.includes(expectedNodeId), `Expected ${expectedNodeId}`);
+  }
+  for (const expectedEdgeId of [
+    "db-subnet-group-to-app-database",
+    "db-credentials-secret-to-app-database",
     "db-cpu-alarm-to-app-database",
     "app-server-to-app-database"
-  ]);
+  ]) {
+    assert.ok(databaseBackendEdgeIds.includes(expectedEdgeId), `Expected ${expectedEdgeId}`);
+  }
   assert.equal(backendNode?.config.ami, "data.aws_ami.app_ami.id");
-  assert.equal(backendNode?.config.subnetId, "aws_subnet.public_subnet.id");
+  assert.equal(backendNode?.config.subnetId, "aws_subnet.private_app_subnet_a.id");
   assert.deepEqual(backendNode?.config.vpcSecurityGroupIds, ["aws_security_group.app_security_group.id"]);
   assert.equal(backendNode?.config.iamInstanceProfile, "aws_iam_instance_profile.app_instance_profile.name");
-  assert.equal(databaseNode?.config.subnetId, "aws_subnet.private_db_subnet.id");
+  assert.equal(databaseNode?.config.dbSubnetGroupName, "aws_db_subnet_group.db_subnet_group.name");
   assert.deepEqual(databaseNode?.config.vpcSecurityGroupIds, ["aws_security_group.db_security_group.id"]);
   assert.deepEqual(databaseEdge, {
     id: "app-server-to-app-database",
@@ -890,14 +887,18 @@ test("POST /api/ai/architecture-draft creates a server and storage draft", async
   assert.equal(body.title, "서버+스토리지 Practice Architecture");
   assert.equal(body.metadata.selectedDraftPattern, "server_storage");
   assert.ok(nodeIds.includes("vpc-main"));
-  assert.ok(nodeIds.includes("public-subnet"));
+  assert.ok(nodeIds.includes("public-subnet-a"));
+  assert.ok(nodeIds.includes("public-subnet-b"));
+  assert.ok(nodeIds.includes("private-app-subnet-a"));
   assert.ok(nodeIds.includes("app-server"));
   assert.ok(nodeIds.includes("upload-bucket"));
+  assert.ok(nodeIds.includes("s3-vpc-endpoint"));
   assert.ok(nodeTypes.includes("EC2"));
   assert.ok(nodeTypes.includes("S3"));
   assert.equal(nodeTypes.includes("RDS"), false);
   assert.ok(edgeIds.includes("app-ami-to-app-server"));
-  assert.ok(edgeIds.includes("app-server-to-upload-bucket"));
+  assert.ok(edgeIds.includes("app-server-to-s3-vpc-endpoint"));
+  assert.ok(edgeIds.includes("s3-vpc-endpoint-to-upload-bucket"));
   assert.ok(edgeIds.includes("public-route-table-to-internet-gateway"));
   assert.deepEqual(internetRouteEdge, {
     id: "public-route-table-to-internet-gateway",
@@ -905,7 +906,8 @@ test("POST /api/ai/architecture-draft creates a server and storage draft", async
     targetId: "internet-gateway"
   });
   assert.equal(instanceNode?.config.ami, "data.aws_ami.app_ami.id");
-  assert.equal(instanceNode?.config.subnetId, "aws_subnet.public_subnet.id");
+  assert.equal(instanceNode?.config.associatePublicIpAddress, false);
+  assert.equal(instanceNode?.config.subnetId, "aws_subnet.private_app_subnet_a.id");
   assert.deepEqual(instanceNode?.config.vpcSecurityGroupIds, ["aws_security_group.app_security_group.id"]);
   assert.deepEqual(routeTableNode?.config.route, [
     {
@@ -945,8 +947,10 @@ test("POST /api/ai/architecture-draft honors requested EC2 and S3 counts", async
     s3Nodes.map((node) => node.id),
     ["upload-bucket", "upload-bucket-2", "upload-bucket-3", "upload-bucket-4", "upload-bucket-5"]
   );
-  assert.ok(edgeIds.includes("app-server-to-upload-bucket"));
-  assert.ok(edgeIds.includes("app-server-3-to-upload-bucket-5"));
+  assert.ok(edgeIds.includes("app-server-to-s3-vpc-endpoint"));
+  assert.ok(edgeIds.includes("s3-vpc-endpoint-to-upload-bucket"));
+  assert.ok(edgeIds.includes("app-server-3-to-s3-vpc-endpoint"));
+  assert.ok(edgeIds.includes("s3-vpc-endpoint-to-upload-bucket-5"));
 
   await app.close();
 });
@@ -1033,6 +1037,57 @@ test("POST /api/ai/architecture-draft changes backend parameters from natural la
   assert.equal(normalDatabaseNode?.config.deletionProtection, true);
   assert.equal(lowLogNode?.config.retentionInDays, 30);
   assert.equal(normalLogNode?.config.retentionInDays, 30);
+
+  await app.close();
+});
+
+test("POST /api/ai/architecture-draft uses production-shaped entry, private app, S3, and DB paths", async () => {
+  const app = buildApp();
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/ai/architecture-draft",
+    payload: {
+      prompt: "로그인과 파일 업로드가 있는 백엔드 웹서비스를 개인정보 보호 우선으로 만들어줘"
+    }
+  });
+
+  assert.equal(response.statusCode, 200);
+
+  const body = architectureDraftResponseSchema.parse(response.json());
+  const appServer = findDraftNode(body, "app-server");
+  const appLoadBalancer = findDraftNode(body, "app-load-balancer");
+  const appDatabase = findDraftNode(body, "app-database");
+  const edgeIds = new Set(body.architectureJson.edges.map((edge) => edge.id));
+
+  assertDraftHasNodeTypes(body, [
+    "ROUTE53_RECORD",
+    "WAF_WEB_ACL",
+    "CLOUDFRONT",
+    "LOAD_BALANCER",
+    "VPC_ENDPOINT",
+    "DB_SUBNET_GROUP",
+    "SECRETS_MANAGER_SECRET",
+    "RDS"
+  ]);
+  assert.equal(appServer?.config.associatePublicIpAddress, false);
+  assert.match(String(appServer?.config.subnetId), /private_app_subnet/);
+  assert.deepEqual(appLoadBalancer?.config.subnets, [
+    "aws_subnet.public_subnet_a.id",
+    "aws_subnet.public_subnet_b.id"
+  ]);
+  assert.equal(appDatabase?.config.multiAz, true);
+  assert.equal(appDatabase?.config.dbSubnetGroupName, "aws_db_subnet_group.db_subnet_group.name");
+  assert.equal(appDatabase?.config.storageEncrypted, true);
+  assert.ok(edgeIds.has("route53-record-to-edge-web-acl"));
+  assert.ok(edgeIds.has("edge-web-acl-to-cloudfront-distribution"));
+  assert.ok(edgeIds.has("cloudfront-to-app-alb-listener"));
+  assert.ok(edgeIds.has("app-load-balancer-to-app-server"));
+  assert.ok(edgeIds.has("app-server-to-s3-vpc-endpoint"));
+  assert.ok(edgeIds.has("s3-vpc-endpoint-to-upload-bucket"));
+  assert.ok(edgeIds.has("app-runtime-policy-to-upload-bucket"));
+  assert.ok(edgeIds.has("db-subnet-group-to-app-database"));
+  assert.ok(edgeIds.has("db-credentials-secret-to-app-database"));
 
   await app.close();
 });

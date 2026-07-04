@@ -103,6 +103,7 @@ const REQUIREMENT_FACT_KEYWORD_RULES: readonly RequirementFactKeywordRule[] = [
       "홈페이지",
       "사이트",
       "웹서비스",
+      "웹 서비스",
       "프론트엔드",
       "리액트",
       "랜딩",
@@ -135,7 +136,10 @@ const REQUIREMENT_FACT_KEYWORD_RULES: readonly RequirementFactKeywordRule[] = [
       "예약",
       "신청",
       "접수",
-      "관리"
+      "관리",
+      "alb",
+      "load balancer",
+      "로드밸런서"
     ]
   },
   {
@@ -230,8 +234,8 @@ const UNSUPPORTED_REQUIREMENT_RULES: readonly UnsupportedRequirementRule[] = [
     keywords: ["sqs", "sns", "eventbridge", "step functions", "stepfunctions", "스텝펑션", "메시지 큐", "이벤트브리지"]
   },
   {
-    label: "ALB/Auto Scaling",
-    keywords: ["alb", "load balancer", "로드밸런서", "auto scaling", "autoscaling", "오토스케일링"],
+    label: "Auto Scaling",
+    keywords: ["auto scaling", "autoscaling", "오토스케일링"],
     substitution: {
       label: "단일 EC2 서버",
       facts: ["server_runtime", "network_boundary", "iam_permissions", "observability"]
