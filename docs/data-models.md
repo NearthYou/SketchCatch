@@ -859,6 +859,14 @@ Git/CI/CD handoff도 `UserAcceptedChange` 이후에만 생성한다. v0 API는 `
 PR URL을 저장한다. 실제 GitHub token, deploy key, CI secret 원문은 DB, shared type, 응답, 로그에 저장하지 않는다.
 pipeline polling/cache 연동은 별도 slice에서 다룬다.
 
+### Git/CI/CD pipeline status cache
+
+#136 slice부터 pipeline status 조회는 `GitCicdHandoffPipelineStatus` DTO로 분리한다. 이 DTO는 handoff record의
+`status`, `pullRequestUrl`, `pipelineRunUrl`, `statusMessage`, `updatedAt`만 노출하고, `source: "runtime_cache" | "rds"`로
+Runtime Cache hit 여부를 알려준다. `GET /api/git-cicd-handoffs/:handoffId/pipeline-status`는 Runtime Cache를 먼저 읽고,
+cache miss 또는 invalid snapshot이면 RDS handoff record를 읽어 같은 응답 모양으로 반환한다. `PATCH /api/git-cicd-handoffs/:handoffId/status`는
+RDS record를 갱신한 뒤 best-effort로 Runtime Cache snapshot을 갱신한다.
+
 ## Reverse Engineering Scan
 
 `ReverseEngineeringScan`은 Provider Adapter를 통해 기존 cloud Resource를 읽고 Practice Architecture와 import suggestion을 만드는 작업 단위다. MVP는 AWS adapter부터 구현할 수 있지만 모델은 provider-neutral하게 둔다.

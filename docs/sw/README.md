@@ -17,7 +17,7 @@
 11. Git/CI/CD handoff 계약과 API 생명주기는 [007_GitCicdHandoff계약API클론코딩가이드_sw.md](./007_GitCicdHandoff계약API클론코딩가이드_sw.md)를 본다.
 12. Deployment Runtime Cache 상태와 로그 커서는 [010_Deployment_Runtime_Cache_상태로그커서가이드_sw.md](./010_Deployment_Runtime_Cache_상태로그커서가이드_sw.md)를 본다.
 13. GitHub PR handoff v0는 [010_GitHub_PR_Handoff_v0_클론코딩가이드_sw.md](./010_GitHub_PR_Handoff_v0_클론코딩가이드_sw.md)를 본다.
-14. 
+14. Git/CI/CD pipeline status polling은 [011_GitCicd_Pipeline_Status_클론코딩가이드_sw.md](./011_GitCicd_Pipeline_Status_클론코딩가이드_sw.md)를 본다.
 ## 문서 목록
 
 | 문서 | 책임 |

@@ -1718,3 +1718,31 @@
 - Known risks:
   - 실제 Redis 서버 의존 테스트는 수행하지 않았고 in-memory/fake cache로 검증했다.
   - Runtime Cache는 원천 기록이 아니며 RDS/S3 조회가 계속 기준이다.
+## 2026-07-05 - Issue #136 Git/CI/CD pipeline status UI
+
+- Goal: #134/#135 GitCicdHandoff 계약 위에서 pipeline status 조회, Runtime Cache read-through, DeploymentPanel 표시를 최소 vertical slice로 연결한다.
+- Completed:
+  - `GitCicdHandoffPipelineStatus` shared DTO와 `GET /api/git-cicd-handoffs/:handoffId/pipeline-status`를 추가했다.
+  - `git_ci.pipeline_status` Runtime Cache snapshot helper를 추가해 cache hit 시 Runtime Cache, miss/invalid 시 RDS handoff record를 반환하게 했다.
+  - handoff 생성과 status PATCH 후 best-effort로 pipeline status snapshot을 갱신하게 했다.
+  - DeploymentPanel에 `Git/CI/CD handoff` 섹션을 추가해 Direct Deployment records와 PR/pipeline status를 분리해서 표시했다.
+  - UI polling은 `pr_created`, `pipeline_running` 상태에만 수행하도록 Direct Deployment polling과 분리했다.
+  - `docs/sw/011_GitCicd_Pipeline_Status_클론코딩가이드_sw.md`와 data model 문서를 보강했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/routes/git-cicd-handoffs.test.ts src/db/schema-contract.test.ts` - passed
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/api.test.ts features/workspace/deployment-actions.test.ts` - passed
+  - `pnpm --filter @sketchcatch/api typecheck` - passed
+  - `pnpm --filter @sketchcatch/web typecheck` - passed
+  - `pnpm --filter @sketchcatch/api lint` - passed
+  - `pnpm --filter @sketchcatch/web lint` - passed
+  - `pnpm --filter @sketchcatch/types typecheck` - passed
+  - `pnpm lint` - passed
+  - `pnpm typecheck` - passed
+  - `pnpm build` - passed
+  - `pnpm harness:check` - passed after edits
+  - `git diff --check` - passed
+- Known risks:
+  - 실제 GitHub API 호출, GitHub Actions polling worker, GitHub token 사용은 수행하지 않았다.
+  - 실제 AWS apply/destroy, cloud mutation, real Git/CI/CD handoff execution은 수행하지 않았다.
+  - Runtime Cache는 보조 캐시이며 RDS `git_cicd_handoffs` record가 source of truth다.

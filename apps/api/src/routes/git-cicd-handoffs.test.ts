@@ -10,6 +10,7 @@ import type {
 import { createAccessToken } from "../auth/tokens.js";
 import type { DatabaseClient } from "../db/client.js";
 import { users } from "../db/schema.js";
+import { createInMemoryRuntimeCache, type RuntimeCache } from "../runtime-cache/index.js";
 import {
   createGitHubGitCicdHandoffProvider,
   type CreateGitCicdHandoffRecordInput,
@@ -464,6 +465,41 @@ test("GET /api/git-cicd-handoffs/:handoffId returns one accessible handoff", asy
   await app.close();
 });
 
+test("GET /api/git-cicd-handoffs/:handoffId/pipeline-status uses Runtime Cache after RDS miss", async () => {
+  const repository = new FakeGitCicdHandoffRepository();
+  repository.handoff = createHandoffRecord(handoffId, {
+    status: "pipeline_running",
+    pipelineRunUrl: "https://example.invalid/sketchcatch/infra-live/actions/runs/1",
+    statusMessage: "Pipeline is running"
+  });
+  const runtimeCache = createInMemoryRuntimeCache();
+  const app = await buildGitCicdHandoffTestApp(repository, { runtimeCache });
+
+  const firstResponse = await app.inject({
+    method: "GET",
+    url: `/api/git-cicd-handoffs/${handoffId}/pipeline-status`,
+    headers: await authHeaders()
+  });
+  const secondResponse = await app.inject({
+    method: "GET",
+    url: `/api/git-cicd-handoffs/${handoffId}/pipeline-status`,
+    headers: await authHeaders()
+  });
+
+  assert.equal(firstResponse.statusCode, 200);
+  assert.equal(secondResponse.statusCode, 200);
+  const firstBody = firstResponse.json() as { pipelineStatus: { source: string } };
+  const secondBody = secondResponse.json() as { pipelineStatus: { source: string } };
+  assert.equal(firstBody.pipelineStatus.source, "rds");
+  assert.equal(secondBody.pipelineStatus.source, "runtime_cache");
+  assert.equal(
+    repository.calls.filter((call) => call.name === "findHandoffById").length,
+    1
+  );
+
+  await app.close();
+});
+
 test("GET /api/git-cicd-handoffs/:handoffId hides handoffs from other users", async () => {
   const repository = new FakeGitCicdHandoffRepository();
   repository.project = createProjectRecord({
@@ -522,6 +558,51 @@ test("PATCH /api/git-cicd-handoffs/:handoffId/status updates status metadata", a
   await app.close();
 });
 
+test("PATCH /api/git-cicd-handoffs/:handoffId/status refreshes cached pipeline status", async () => {
+  const repository = new FakeGitCicdHandoffRepository();
+  repository.handoff = createHandoffRecord(handoffId, {
+    status: "pr_created"
+  });
+  const runtimeCache = createInMemoryRuntimeCache();
+  const app = await buildGitCicdHandoffTestApp(repository, { runtimeCache });
+
+  const patchResponse = await app.inject({
+    method: "PATCH",
+    url: `/api/git-cicd-handoffs/${handoffId}/status`,
+    headers: await authHeaders(),
+    payload: {
+      status: "pipeline_running" satisfies GitCicdHandoffStatus,
+      pipelineRunUrl: "https://example.invalid/sketchcatch/infra-live/actions/runs/2",
+      statusMessage: "Pipeline started"
+    }
+  });
+  const statusResponse = await app.inject({
+    method: "GET",
+    url: `/api/git-cicd-handoffs/${handoffId}/pipeline-status`,
+    headers: await authHeaders()
+  });
+
+  assert.equal(patchResponse.statusCode, 200);
+  assert.equal(statusResponse.statusCode, 200);
+  const body = statusResponse.json() as {
+    pipelineStatus: {
+      pipelineRunUrl: string | null;
+      source: string;
+      status: GitCicdHandoffStatus;
+      statusMessage: string | null;
+    };
+  };
+  assert.equal(body.pipelineStatus.source, "runtime_cache");
+  assert.equal(body.pipelineStatus.status, "pipeline_running");
+  assert.equal(
+    body.pipelineStatus.pipelineRunUrl,
+    "https://example.invalid/sketchcatch/infra-live/actions/runs/2"
+  );
+  assert.equal(body.pipelineStatus.statusMessage, "Pipeline started");
+
+  await app.close();
+});
+
 test("PATCH /api/git-cicd-handoffs/:handoffId/status rejects invalid status transitions", async () => {
   const repository = new FakeGitCicdHandoffRepository();
   repository.handoff = createHandoffRecord(handoffId, {
@@ -568,6 +649,7 @@ test("GET /api/projects/:projectId/git-cicd-handoffs requires authentication", a
 
 type GitCicdRouteTestOptions = {
   provider?: GitCicdHandoffProvider;
+  runtimeCache?: RuntimeCache;
   userRows?: UserRecord[];
 };
 
@@ -594,7 +676,8 @@ async function buildGitCicdHandoffTestApp(
     prefix: "/api",
     getDatabaseClient: () => fakeAuthDb.client,
     createGitCicdHandoffRepository: () => repository,
-    ...(routeOptions.provider ? { gitCicdHandoffProvider: routeOptions.provider } : {})
+    ...(routeOptions.provider ? { gitCicdHandoffProvider: routeOptions.provider } : {}),
+    ...(routeOptions.runtimeCache ? { runtimeCache: routeOptions.runtimeCache } : {})
   });
 
   return app;
