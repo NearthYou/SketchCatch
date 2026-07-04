@@ -402,6 +402,15 @@ export type DeploymentPlanWarningCode =
   | "UNKNOWN_TERRAFORM_ACTION"
   | "MISSING_APPROVAL";
 
+export type TerraformSourceLocation = {
+  fileName: string;
+  line: number;
+  column?: number | undefined;
+  resourceAddress?: string | undefined;
+  terraformBlockType?: string | undefined;
+  terraformBlockName?: string | undefined;
+};
+
 export type DeploymentPlanWarning = {
   id: string;
   level: DeploymentWarningLevel;
@@ -411,6 +420,7 @@ export type DeploymentPlanWarning = {
   message: string;
   relatedFindingId?: string;
   relatedResourceId?: string;
+  sourceLocation?: TerraformSourceLocation | undefined;
   requiresAcknowledgement: boolean;
   blocksApproval: boolean;
 };
@@ -862,6 +872,7 @@ export type CheckFinding = {
   category: CheckFindingCategory;
   severity: RiskLevel;
   resourceId?: string | undefined;
+  sourceLocation?: TerraformSourceLocation | undefined;
   title: string;
   description: string;
   recommendation: string;

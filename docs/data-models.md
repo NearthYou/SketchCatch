@@ -578,6 +578,36 @@ API 응답의 `Deployment.currentPlanOperation`은 `current_plan_artifact_id`가
 ## DeploymentPlanSummary
 
 ```ts
+type TerraformSourceLocation = {
+  fileName: string;
+  line: number;
+  column?: number;
+  resourceAddress?: string;
+  terraformBlockType?: string;
+  terraformBlockName?: string;
+};
+
+type DeploymentPlanWarning = {
+  id: string;
+  level: "low" | "medium" | "high";
+  source: "pre_deployment_check" | "terraform_plan" | "cost_risk" | "approval_snapshot";
+  code:
+    | "PUBLIC_RDS"
+    | "PUBLIC_SSH"
+    | "PUBLIC_S3"
+    | "IAM_WILDCARD"
+    | "DESTRUCTIVE_CHANGE"
+    | "UNSUPPORTED_RESOURCE"
+    | "UNKNOWN_TERRAFORM_ACTION"
+    | "MISSING_APPROVAL";
+  message: string;
+  relatedFindingId?: string;
+  relatedResourceId?: string;
+  sourceLocation?: TerraformSourceLocation;
+  requiresAcknowledgement: boolean;
+  blocksApproval: boolean;
+};
+
 type DeploymentPlanSummary = {
   createCount: number;
   updateCount: number;
@@ -587,6 +617,8 @@ type DeploymentPlanSummary = {
   warnings: DeploymentPlanWarning[];
 };
 ```
+
+`DeploymentPlanWarning.sourceLocation`은 Safety Gate warning이 Terraform 코드의 어느 파일/라인/리소스 블록에서 나왔는지 가리키는 선택 필드다. `line`과 `column`은 에디터 이동을 위해 1-based 값으로 저장한다. DB 컬럼을 새로 만들지 않고 기존 `DeploymentPlanSummary.warnings` JSON 안에 보존한다.
 
 Plan summary는 사용자 승인 화면에 필요한 최소 요약이다. 현재 기본 흐름에서는 `terraform plan -out=tfplan` 이후 `terraform show -json tfplan` 결과의 `resource_changes`를 파싱해 생성한다.
 
@@ -865,6 +897,7 @@ type CheckFinding = {
     | "availability";
   severity: "low" | "medium" | "high";
   resourceId?: string;
+  sourceLocation?: TerraformSourceLocation;
   title: string;
   description: string;
   recommendation: string;
@@ -872,6 +905,8 @@ type CheckFinding = {
 ```
 
 `CheckFinding.resourceId`가 있으면 같은 `ArchitectureJson.nodes[].id` 또는 변환된 보드 node id를 가리켜야 한다.
+
+`CheckFinding.sourceLocation`이 있으면 사용자가 finding 카드의 `수정` 버튼을 눌렀을 때 Terraform editor가 해당 파일/라인/리소스 블록으로 이동할 수 있다. 이 필드는 security/cost/configuration finding의 설명 근거로만 사용하며, AI나 UI가 이 값만으로 배포 차단 여부를 바꾸면 안 된다.
 
 ## 팀 작업 규칙
 
