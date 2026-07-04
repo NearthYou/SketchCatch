@@ -157,7 +157,7 @@ type DiagramJson = {
 ```
 
 보드 전용 node metadata는 `node.metadata`에 둔다. `metadata`는 화면 편집 상태를 복구하기 위한 값이다.
-Terraform Preview v1은 Region 디자인 노드의 `metadata.awsRegion`만 AWS provider block 생성에 사용하고, 그 외 metadata는 Terraform resource/data block 생성에 사용하지 않는다.
+Terraform Preview v1은 Region 디자인 노드의 `metadata.awsRegion`을 AWS provider block 생성에 사용하고, AZ 디자인 노드의 `metadata.awsAvailabilityZone`을 AZ-aware 리소스 config 보강에 사용한다. 그 외 metadata는 Terraform resource/data block 생성에 사용하지 않는다.
 
 ```ts
 type AwsRegionCode =
@@ -169,7 +169,10 @@ type AwsRegionCode =
   | "eu-west-1"
   | "eu-central-1";
 
+type AwsAvailabilityZoneCode = string;
+
 type DiagramNodeMetadata = {
+  awsAvailabilityZone?: AwsAvailabilityZoneCode;
   awsRegion?: AwsRegionCode;
   parentAreaNodeId?: string;
 };
@@ -178,6 +181,9 @@ type DiagramNodeMetadata = {
 Region 디자인 노드의 선택 리전은 `node.metadata.awsRegion`에 region code로 저장한다.
 예: `ap-northeast-2`. 화면 label은 프론트엔드 option catalog에서 code와 매핑한다.
 Terraform Preview는 `design_region` 또는 `sketchcatch_region` 노드가 있으면 그 값을 `provider "aws"`의 `region`으로 렌더링한다. Region 디자인 노드가 없으면 기본값은 `ap-northeast-2`다. 서로 다른 AWS region을 선택한 Region 디자인 노드가 둘 이상 있으면 Preview 생성 API는 단일 provider region만 지원하는 v1 정책에 따라 `bad_request`를 반환한다.
+
+AZ 디자인 노드의 선택 AZ는 `node.metadata.awsAvailabilityZone`에 Availability Zone code로 저장한다.
+예: `ap-northeast-2a`. 사용자가 Subnet 또는 EBS Volume처럼 AZ-aware 리소스를 `design_az` 또는 `sketchcatch_az` 영역 안에 배치하면 Terraform Preview는 리소스의 `parameters.values.availabilityZone`이 비어 있을 때 AZ metadata 값을 `availability_zone`으로 렌더링한다. AZ 디자인 노드에 유효한 AZ metadata가 없으면 기본값은 `ap-northeast-2a`다. 사용자가 리소스 parameter에 `availabilityZone`을 명시하면 그 값을 우선한다.
 
 영역 노드 안에 명시적으로 배치된 node는 `node.metadata.parentAreaNodeId`에 부모 영역 node id를 저장한다.
 이 값은 영역 이동 시 자식 node를 함께 이동시키기 위한 보드 편집 metadata이며, Terraform resource/data block 생성에는 사용하지 않는다.
@@ -488,7 +494,7 @@ type TerraformDiagramChangeProposal =
 
 Terraform editor 저장 sync action에서 `terraformCode`와 모든 `terraformFiles[].terraformCode`가 공백이면 사용자가 Terraform 리소스를 모두 삭제하려는 명시 의도로 본다. 이때 API는 `terraformSync` capability가 `true`인 Diagram-only resource를 `delete_candidate`로 반환하고, Diagram도 이미 비어 있으면 diagnostics 없이 성공한다.
 
-Terraform editor에서 새로 발견한 구조 변경 proposal의 v1 범위는 shared `ResourceDefinition`의 `terraformSync` capability가 `true`인 Terraform block이다. Terraform Preview 렌더링 대상은 `terraformPreview` capability로 따로 판단한다. 따라서 `aws_cloudfront_distribution`처럼 sync는 가능하지만 preview는 아직 제외되는 리소스가 있을 수 있다. 이미 같은 identity로 매칭된 block은 parser가 안전하게 해석할 수 있는 경우 `parameters.values` 갱신 대상이 될 수 있다.
+Terraform editor에서 새로 발견한 구조 변경 proposal의 v1 범위는 shared `ResourceDefinition`의 `terraformSync` capability가 `true`인 Terraform block이다. Terraform Preview 렌더링 대상은 `terraformPreview` capability로 따로 판단한다. 현재 Web catalog에서 생성할 수 있는 shared Terraform resource/data definition은 모두 `terraformPreview: true`이며, `terraformSync` 지원 범위는 별도로 확장한다. 이미 같은 identity로 매칭된 block은 parser가 안전하게 해석할 수 있는 경우 `parameters.values` 갱신 대상이 될 수 있다.
 
 Parameter panel의 `Advanced Parameters` UI는 내부 노출 정책이 정해질 때까지 숨긴다. 이는 UI 노출 정책이며 저장 정책이 아니다. 기존 `parameters.values`에 남아 있는 optional 또는 catalog 밖 값은 사용자가 명시적으로 삭제하지 않는 한 보존하고, Terraform Preview renderer가 이해할 수 있으면 계속 렌더링 입력으로 사용한다.
 

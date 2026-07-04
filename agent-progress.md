@@ -15,6 +15,36 @@
 
 ## 세션 레코드
 
+### 2026-07-04 - Terraform Preview AZ placement와 전체 catalog preview 지원
+
+- Goal: AZ 디자인 노드를 Terraform Preview 입력으로 연결하고, 현재 Web catalog에서 생성할 수 있지만 `terraformPreview`가 꺼져 있던 Terraform resource/data 정의를 Preview 대상에 포함한다.
+- Completed:
+  - `DiagramNodeMetadata`에 `awsAvailabilityZone`을 추가하고 API Terraform/project draft Zod schema가 이 값을 보존하게 했다.
+  - Web parameter panel에서 `design_az`/`sketchcatch_az` 선택 시 `awsAvailabilityZone`을 main parameter로 입력할 수 있게 했다.
+  - `buildInfrastructureGraphFromDiagramJson`이 AZ ancestor를 찾아 `aws_subnet`, `aws_ebs_volume`처럼 AZ-aware 리소스의 `availabilityZone` config를 보강하게 했다. 리소스가 이미 `availabilityZone` 또는 `availability_zone`을 명시하면 덮어쓰지 않는다.
+  - shared `ResourceDefinition`의 `terraformPreview` 기본값을 true로 바꿔, catalog에서 생성 가능한 44개 shared Terraform definition 모두 Preview projection 대상이 되게 했다.
+  - `docs/data-models.md`에 AZ metadata와 전체 catalog Preview 지원 정책을 기록했다.
+- Verification run:
+  - Red before fix: `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/infrastructure-graph.test.ts src/routes/terraform.test.ts src/routes/project-draft-schemas.test.ts` - failed because `awsAvailabilityZone` was stripped, AZ metadata did not render `availability_zone`, and 34 shared definitions had `terraformPreview: false`.
+  - Red before fix: `pnpm --filter @sketchcatch/web exec tsx --test features/parameter-input/availability-zone-options.test.ts features/parameter-input/availability-zone-node-metadata.test.ts` - failed because AZ helper modules did not exist.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/infrastructure-graph.test.ts src/routes/terraform.test.ts src/routes/project-draft-schemas.test.ts && pnpm --filter @sketchcatch/web exec tsx --test features/parameter-input/availability-zone-options.test.ts features/parameter-input/availability-zone-node-metadata.test.ts` - passed.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/infrastructure-graph.test.ts src/services/terraform/terraform-preview.test.ts src/services/terraform/diagram-to-terraform.test.ts src/services/terraform/terraform-to-diagram.test.ts src/services/terraform/terraform-diagnostics.test.ts src/routes/terraform.test.ts src/routes/project-draft-schemas.test.ts` - passed.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/parameter-input/availability-zone-options.test.ts features/parameter-input/availability-zone-node-metadata.test.ts features/parameter-input/aws-region-options.test.ts features/parameter-input/region-node-metadata.test.ts features/parameter-input/parameter-panel-source.test.ts features/resource-settings/catalog.test.ts` - passed.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `pnpm build` - passed.
+  - `git diff --check` - passed.
+  - `pnpm harness:check` - passed.
+  - `pnpm catalog:check` - failed before Terraform schema work because local root `node_modules` has no `@sketchcatch/types/resource-definitions` workspace package link for the generator's CommonJS `require`.
+- Evidence recorded:
+  - 실제 Terraform CLI apply/destroy, cloud mutation, Git/CI/CD handoff는 실행하지 않았다.
+  - `pnpm build`가 `apps/web/next-env.d.ts`를 prod route type 경로로 바꿨지만, 생성물 변경이라 다시 tracked dev 경로로 원복했다.
+- Known risks:
+  - `terraformSync` capability는 아직 전체 catalog로 확장하지 않았다. Terraform editor proposal/diagnostics 호환성은 다음 단계에서 별도로 다룬다.
+  - 새 Preview 지원 리소스 중 provider 필수 parameter가 비어 있으면 Preview HCL은 만들 수 있지만 실제 `terraform plan/apply`는 Deployment validation에서 막힐 수 있다.
+- Next best action:
+  - 리소스별 main parameter normalization과 Terraform editor sync/provider compatibility를 단계별로 확장한다.
+
 ### 2026-07-04 - Terraform Preview Region provider 생성
 
 - Goal: Region 디자인 노드가 단순 화면 요소로만 남지 않고 Terraform Preview의 AWS provider region으로 렌더링되게 한다.

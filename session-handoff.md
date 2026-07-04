@@ -25,6 +25,8 @@
 - Terraform Preview API orchestration은 `terraform-preview.ts`가 담당하고, `diagram-to-terraform.ts`는 `InfrastructureGraph -> Terraform HCL` 렌더러로만 동작한다.
 - Terraform Preview는 `design_region`/`sketchcatch_region`의 `metadata.awsRegion`을 `provider "aws"` block으로 렌더링한다. Region 디자인 노드가 없으면 `ap-northeast-2`를 기본 provider region으로 쓴다.
 - Preview v1은 단일 AWS provider region만 지원한다. 서로 다른 region을 선택한 Region 디자인 노드가 둘 이상이면 `/terraform/generate`가 400 `bad_request`를 반환한다.
+- `DiagramNodeMetadata.awsAvailabilityZone`은 AZ 디자인 노드의 선택 AZ code를 저장한다. `design_az`/`sketchcatch_az` 안에 배치된 `aws_subnet`, `aws_ebs_volume`은 명시 `availabilityZone` 값이 없으면 AZ metadata를 Terraform Preview config로 상속한다.
+- 현재 Web catalog에서 생성 가능한 shared Terraform resource/data definition은 모두 `terraformPreview: true`다. `terraformSync` capability는 아직 별도 지원 범위로 남아 있다.
 - `diagram-to-terraform.ts`는 더 이상 `DiagramJson` 또는 `buildInfrastructureGraphFromDiagramJson`를 import하지 않는다.
 - Terraform Preview identity는 `iac.provider + iac.terraformBlockType + iac.resourceType + iac.resourceName` 기준이다.
 - `iac.resourceType`은 `aws_instance`, `aws_vpc`, `aws_s3_bucket` 같은 provider-specific Terraform resource type을 그대로 유지한다.
@@ -35,7 +37,7 @@
 - `design_region`, `design_az`, `design_group` 같은 화면 전용 container node는 shared definition에 넣지 않고 web catalog에만 둔다.
 - `terraformPreview` capability가 true인 리소스만 `InfrastructureGraph` preview node로 포함된다.
 - `terraformSync` capability가 true인 리소스만 Terraform editor 구조 변경 proposal 대상이 된다.
-- `aws_cloudfront_distribution`은 현재 `terraformPreview: false`, `terraformSync: true` 차이를 유지한다.
+- `aws_cloudfront_distribution`을 포함한 shared Terraform definitions는 현재 모두 `terraformPreview: true`다. 일부 리소스는 여전히 `terraformSync: false`일 수 있다.
 - Web catalog의 AWS Terraform 항목과 shared definition/parameter catalog drift 방지 테스트가 있다.
 - InfrastructureGraph 중심 Workspace 동기화 v1 구현이 현재 브랜치에 커밋됐다.
 - Terraform Preview 생성 경로는 `DiagramJson -> InfrastructureGraph -> Terraform`로 정리됐다.
@@ -99,6 +101,11 @@
 - `apps/api/src/services/terraform/terraform-preview.ts`를 추가해 `generateTerraformFromDiagramJson`을 `DiagramJson -> InfrastructureGraph -> Terraform` orchestration 함수로 옮겼다.
 - `apps/api/src/services/terraform/terraform-preview.ts`가 Region 디자인 노드의 `metadata.awsRegion`을 읽어 Terraform AWS provider block을 생성하게 했다.
 - `apps/api/src/routes/terraform.ts`가 Region 충돌 preview validation error를 400 `bad_request`로 매핑하게 했다.
+- `packages/types/src/index.ts`에 `AwsAvailabilityZoneCode`와 `DiagramNodeMetadata.awsAvailabilityZone`을 추가했다.
+- `apps/api/src/routes/terraform.ts`와 `apps/api/src/routes/project-draft-schemas.ts`가 `awsAvailabilityZone` metadata를 검증하고 보존하게 했다.
+- `apps/web/features/parameter-input`에 AZ metadata helper와 option helper를 추가하고, AZ design node 선택 시 Parameter panel에서 Availability Zone main parameter를 입력할 수 있게 했다.
+- `apps/api/src/services/terraform/infrastructure-graph.ts`가 AZ ancestor metadata를 AZ-aware 리소스 config로 보강하게 했다.
+- `packages/types/src/resource-definitions.ts`에서 shared Terraform definition의 `terraformPreview` 기본값을 true로 바꿔 catalog 생성 가능 리소스가 Preview projection 대상이 되게 했다.
 - `apps/api/src/services/terraform/diagram-to-terraform.ts`에서 `DiagramJson`/`buildInfrastructureGraphFromDiagramJson` import와 `generateTerraformFromDiagramJson` export를 제거했다.
 - `/terraform/generate` route가 `generateTerraformFromDiagramJson`을 `terraform-preview.ts`에서 import하도록 변경했다.
 - 기존 `DiagramJson` 기반 Terraform Preview 회귀 테스트를 `terraform-preview.test.ts`로 옮겼고, `diagram-to-terraform.test.ts`는 `InfrastructureGraph` renderer 단위 테스트와 source regression test로 정리했다.
@@ -149,6 +156,7 @@
 - AI Architecture Draft 변환 테스트는 catalog default가 아니라 AI가 명시한 config 값만 유지하도록 조정했다.
 - `docs/data-models.md`에 수동 리소스 아이콘 생성 시 `parameters.values`가 `{}`로 시작한다는 계약을 추가했다.
 - `docs/data-models.md`에 Region metadata가 Terraform Preview provider block 생성에 사용되는 계약과 단일 provider region 정책을 추가했다.
+- `docs/data-models.md`에 AZ metadata placement 계약과 전체 catalog Terraform Preview 지원 정책을 추가했다.
 - 리소스 아이콘 삭제 후 Terraform 코드를 전부 지워 저장할 때 저장이 실패하던 문제를 수정했다.
 - Frontend `saveCodeToDiagram`이 빈 Terraform 코드를 막지 않고 sync API까지 보내도록 변경했다.
 - API `syncTerraformToDiagramJson`이 공백 Terraform 입력을 `terraform.sync.empty` 오류가 아니라 Diagram-only resource 삭제 proposals로 처리하게 했다.
@@ -181,6 +189,17 @@
 - `pnpm build` - passed
 - `git diff --check` - passed
 - `pnpm harness:check` - passed
+- Red before fix: `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/infrastructure-graph.test.ts src/routes/terraform.test.ts src/routes/project-draft-schemas.test.ts` - failed because `awsAvailabilityZone` was stripped, AZ metadata did not render `availability_zone`, and 34 shared definitions had `terraformPreview: false`
+- Red before fix: `pnpm --filter @sketchcatch/web exec tsx --test features/parameter-input/availability-zone-options.test.ts features/parameter-input/availability-zone-node-metadata.test.ts` - failed because AZ helper modules did not exist
+- `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/infrastructure-graph.test.ts src/routes/terraform.test.ts src/routes/project-draft-schemas.test.ts && pnpm --filter @sketchcatch/web exec tsx --test features/parameter-input/availability-zone-options.test.ts features/parameter-input/availability-zone-node-metadata.test.ts` - passed
+- `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/infrastructure-graph.test.ts src/services/terraform/terraform-preview.test.ts src/services/terraform/diagram-to-terraform.test.ts src/services/terraform/terraform-to-diagram.test.ts src/services/terraform/terraform-diagnostics.test.ts src/routes/terraform.test.ts src/routes/project-draft-schemas.test.ts` - passed
+- `pnpm --filter @sketchcatch/web exec tsx --test features/parameter-input/availability-zone-options.test.ts features/parameter-input/availability-zone-node-metadata.test.ts features/parameter-input/aws-region-options.test.ts features/parameter-input/region-node-metadata.test.ts features/parameter-input/parameter-panel-source.test.ts features/resource-settings/catalog.test.ts` - passed
+- `pnpm lint` - passed
+- `pnpm typecheck` - passed
+- `pnpm build` - passed
+- `git diff --check` - passed
+- `pnpm harness:check` - passed
+- `pnpm catalog:check` - failed before Terraform schema work because local root `node_modules` has no `@sketchcatch/types/resource-definitions` workspace package link for the generator's CommonJS `require`
 - Red before fix: focused API/Web tests failed because CLI endpoint/mode/progress UI and missing static diagnostics were still present.
 - `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-diagnostics.test.ts src/routes/terraform.test.ts` - passed
 - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/api.test.ts features/workspace/workspace-deployment-artifacts.test.ts features/workspace/workspace-right-panel-layout.test.ts` - passed
@@ -295,11 +314,12 @@
 - Diagnostics가 있을 때 Issues 탭/shortcut이 leave guard에 막히지 않는 흐름은 자동 테스트로 확인했고, 실제 브라우저 수동 smoke는 아직 수행하지 않았다.
 - 하위 AI가 지적한 deployment safety preflight mismatch와 DeploymentPanel init 실패 후 stale PENDING state는 이번 아이콘/preview/editor 회귀 보강 범위 밖이라 후속 작업 후보로 남았다.
 - `HARNESS-007`: Representative Use Journey의 browser/API smoke는 아직 없다.
+- `pnpm catalog:check`는 현재 root `node_modules`에 workspace package link가 없어 generator의 `require('@sketchcatch/types/resource-definitions')`에서 실패한다. 이번 코드 변경의 focused tests, lint, typecheck, build, harness는 통과했다.
 
 ## 다음으로 최선의 행동
 
 - 다음 Terraform 리소스 추가 시 shared definition/capability, web presentation, 필요 시 parameter catalog/`parameterPanel`, `ResourceType` 확장 여부, drift 테스트를 함께 맞춘다.
-- 다음 단계에서는 AZ placement metadata를 Terraform parameter 변환 흐름에 연결하고, icon catalog에서 생성되지만 Terraform Preview/Sync capability가 없는 리소스 목록을 확장한다.
+- 다음 단계에서는 리소스별 main parameter normalization과 Terraform editor sync/provider compatibility를 이어서 확장한다.
 - 브라우저에서 EC2/S3/CloudFront 같은 일반 resource icon을 새로 추가했을 때 `56x56` 크기로 보이고, VPC/Subnet 같은 영역 node는 기존 크기를 유지하는지 수동 smoke한다.
 - 브라우저에서 EC2/VPC/S3 아이콘을 반복 추가했을 때 Terraform Preview 이름이 순차 suffix로 생성되는지 수동 smoke한다.
 - 브라우저에서 CloudFront AI draft가 `AWS` fallback이 아니라 CloudFront icon으로 보이는지 수동 smoke한다.

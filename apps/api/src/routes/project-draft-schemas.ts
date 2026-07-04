@@ -25,8 +25,10 @@ const awsRegionCodeSchema = z.enum([
   "eu-west-1",
   "eu-central-1"
 ]);
+const awsAvailabilityZoneCodeSchema = z.string().min(1).regex(/^[a-z]{2}-[a-z]+-\d[a-z]$/);
 
 const diagramNodeMetadataSchema: z.ZodType<DiagramNodeMetadata> = z.object({
+  awsAvailabilityZone: awsAvailabilityZoneCodeSchema.optional(),
   awsRegion: awsRegionCodeSchema.optional(),
   parentAreaNodeId: z.string().min(1).optional()
 });

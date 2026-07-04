@@ -19,6 +19,11 @@ import {
   getAwsRegionLabel,
   getNextAwsRegionOptionIndex
 } from "./aws-region-options";
+import {
+  createAvailabilityZoneNodeMetadata,
+  getAvailabilityZoneNodeAwsAvailabilityZone,
+  isAvailabilityZoneDesignNode
+} from "./availability-zone-node-metadata";
 import type { ParameterCatalog, ParameterCatalogDefinition } from "./catalog";
 import { terraformParameterCatalog } from "./catalog";
 import {
@@ -85,6 +90,30 @@ export function ParameterInputPanel({
                 })
               }
               value={selectedRegion}
+            />
+          </div>
+        </section>
+      </aside>
+    );
+  }
+
+  if (isAvailabilityZoneDesignNode(selectedNode)) {
+    const selectedAvailabilityZone = getAvailabilityZoneNodeAwsAvailabilityZone(selectedNode);
+
+    return (
+      <aside className={styles.panel} aria-label="파라미터 입력 패널">
+        <PanelHeader node={selectedNode} parameters={null} />
+
+        <section className={styles.section} aria-label="Main parameters">
+          <div className={styles.fieldGroup}>
+            <MetadataField
+              label="Availability Zone"
+              onChange={(awsAvailabilityZone) =>
+                updateNodeMetadata(selectedNode.id, {
+                  metadata: createAvailabilityZoneNodeMetadata(selectedNode, awsAvailabilityZone)
+                })
+              }
+              value={selectedAvailabilityZone}
             />
           </div>
         </section>

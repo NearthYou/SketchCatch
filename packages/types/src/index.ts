@@ -1022,7 +1022,10 @@ export type AwsRegionCode =
   | "eu-west-1"
   | "eu-central-1";
 
+export type AwsAvailabilityZoneCode = string;
+
 export type DiagramNodeMetadata = {
+  awsAvailabilityZone?: AwsAvailabilityZoneCode | undefined;
   awsRegion?: AwsRegionCode | undefined;
   parentAreaNodeId?: string | undefined;
 };

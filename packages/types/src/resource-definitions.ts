@@ -276,7 +276,7 @@ function createAwsResourceDefinition({
   id,
   resourceType = DEFAULT_RESOURCE_TYPE,
   terraformBlockType = DEFAULT_TERRAFORM_BLOCK_TYPE,
-  terraformPreview = false,
+  terraformPreview = true,
   terraformResourceType,
   terraformSync = false
 }: AwsResourceDefinitionInput): ResourceDefinition {

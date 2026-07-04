@@ -1,5 +1,6 @@
 import { getResourceDefinitionByTerraform } from "@sketchcatch/types/resource-definitions";
 import type {
+  AwsAvailabilityZoneCode,
   DiagramJson,
   DiagramNode,
   InfrastructureGraph,
@@ -9,10 +10,15 @@ import type {
 } from "@sketchcatch/types";
 
 const DEFAULT_TERRAFORM_BLOCK_TYPE: TerraformBlockType = "resource";
+const defaultAwsAvailabilityZone: AwsAvailabilityZoneCode = "ap-northeast-2a";
+const availabilityZoneDesignNodeTypes = new Set(["design_az", "sketchcatch_az"]);
+const availabilityZoneAwareResourceTypes = new Set(["aws_subnet", "aws_ebs_volume"]);
+const awsAvailabilityZoneCodePattern = /^[a-z]{2}-[a-z]+-\d[a-z]$/;
 
 export function buildInfrastructureGraphFromDiagramJson(diagramJson: DiagramJson): InfrastructureGraph {
+  const nodeById = new Map(diagramJson.nodes.map((node) => [node.id, node]));
   const nodes = diagramJson.nodes.flatMap((node) => {
-    const graphNode = toInfrastructureGraphNode(node);
+    const graphNode = toInfrastructureGraphNode(node, nodeById);
 
     return graphNode ? [graphNode] : [];
   });
@@ -37,7 +43,10 @@ export function buildInfrastructureGraphFromDiagramJson(diagramJson: DiagramJson
   };
 }
 
-function toInfrastructureGraphNode(node: DiagramNode): InfrastructureGraphNode | null {
+function toInfrastructureGraphNode(
+  node: DiagramNode,
+  nodeById: ReadonlyMap<string, DiagramNode>
+): InfrastructureGraphNode | null {
   if (node.kind !== "resource" || !node.parameters) {
     return null;
   }
@@ -62,6 +71,71 @@ function toInfrastructureGraphNode(node: DiagramNode): InfrastructureGraphNode |
       resourceName: node.parameters.resourceName,
       fileName: node.parameters.fileName
     },
-    config: node.parameters.values
+    config: applyAvailabilityZonePlacement(node, node.parameters.values, nodeById)
   };
+}
+
+function applyAvailabilityZonePlacement(
+  node: DiagramNode,
+  values: Record<string, unknown>,
+  nodeById: ReadonlyMap<string, DiagramNode>
+): Record<string, unknown> {
+  const resourceType = node.parameters?.resourceType;
+
+  if (
+    !resourceType ||
+    !availabilityZoneAwareResourceTypes.has(resourceType) ||
+    values["availabilityZone"] !== undefined ||
+    values["availability_zone"] !== undefined
+  ) {
+    return values;
+  }
+
+  const availabilityZone = findAncestorAvailabilityZone(node, nodeById);
+
+  return availabilityZone ? { ...values, availabilityZone } : values;
+}
+
+function findAncestorAvailabilityZone(
+  node: DiagramNode,
+  nodeById: ReadonlyMap<string, DiagramNode>
+): AwsAvailabilityZoneCode | null {
+  const visitedNodeIds = new Set<string>();
+  let parentAreaNodeId = node.metadata?.parentAreaNodeId;
+
+  while (parentAreaNodeId) {
+    if (visitedNodeIds.has(parentAreaNodeId)) {
+      return null;
+    }
+
+    visitedNodeIds.add(parentAreaNodeId);
+
+    const parentNode = nodeById.get(parentAreaNodeId);
+
+    if (!parentNode) {
+      return null;
+    }
+
+    if (isAvailabilityZoneDesignNode(parentNode)) {
+      return getAvailabilityZoneFromDesignNode(parentNode);
+    }
+
+    parentAreaNodeId = parentNode.metadata?.parentAreaNodeId;
+  }
+
+  return null;
+}
+
+function isAvailabilityZoneDesignNode(node: DiagramNode): boolean {
+  return node.kind === "design" && availabilityZoneDesignNodeTypes.has(node.type);
+}
+
+function getAvailabilityZoneFromDesignNode(node: DiagramNode): AwsAvailabilityZoneCode {
+  const availabilityZone = node.metadata?.awsAvailabilityZone;
+
+  return isAwsAvailabilityZoneCode(availabilityZone) ? availabilityZone : defaultAwsAvailabilityZone;
+}
+
+function isAwsAvailabilityZoneCode(value: unknown): value is AwsAvailabilityZoneCode {
+  return typeof value === "string" && awsAvailabilityZoneCodePattern.test(value);
 }

@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import type { DiagramNode } from "@sketchcatch/types";
+import { resourceDefinitions } from "@sketchcatch/types/resource-definitions";
 import { buildInfrastructureGraphFromDiagramJson } from "./infrastructure-graph.js";
 
 test("buildInfrastructureGraphFromDiagramJson projects renderable resource nodes", () => {
@@ -117,12 +118,12 @@ test("buildInfrastructureGraphFromDiagramJson excludes design, parameterless, an
       }),
       makeNode({
         id: "unsupported-1",
-        type: "aws_lambda_function",
+        type: "aws_unknown_service",
         kind: "resource",
-        label: "lambda",
+        label: "unknown",
         parameters: {
-          resourceType: "aws_lambda_function",
-          resourceName: "handler",
+          resourceType: "aws_unknown_service",
+          resourceName: "unknown",
           fileName: "main",
           values: {}
         }
@@ -135,7 +136,16 @@ test("buildInfrastructureGraphFromDiagramJson excludes design, parameterless, an
   assert.deepEqual(graph.nodes, []);
 });
 
-test("buildInfrastructureGraphFromDiagramJson excludes resources without terraformPreview capability", () => {
+test("all shared Terraform resource definitions are supported by Terraform Preview", () => {
+  assert.deepEqual(
+    resourceDefinitions
+      .filter((definition) => !definition.capabilities.terraformPreview)
+      .map((definition) => `${definition.terraform.blockType}/${definition.terraform.resourceType}`),
+    []
+  );
+});
+
+test("buildInfrastructureGraphFromDiagramJson projects formerly unsupported catalog resources", () => {
   const graph = buildInfrastructureGraphFromDiagramJson({
     nodes: [
       makeNode({
@@ -149,13 +159,109 @@ test("buildInfrastructureGraphFromDiagramJson excludes resources without terrafo
           fileName: "network",
           values: {}
         }
+      }),
+      makeNode({
+        id: "lambda-1",
+        type: "aws_lambda_function",
+        kind: "resource",
+        label: "handler",
+        parameters: {
+          resourceType: "aws_lambda_function",
+          resourceName: "handler",
+          fileName: "application",
+          values: {}
+        }
       })
     ],
     edges: [],
     viewport: { x: 0, y: 0, zoom: 1 }
   });
 
-  assert.deepEqual(graph.nodes, []);
+  assert.deepEqual(
+    graph.nodes.map((node) => node.iac.resourceType),
+    ["aws_cloudfront_distribution", "aws_lambda_function"]
+  );
+});
+
+test("buildInfrastructureGraphFromDiagramJson applies AZ metadata to AZ-aware resource config", () => {
+  const graph = buildInfrastructureGraphFromDiagramJson({
+    nodes: [
+      makeNode({
+        id: "az-1",
+        type: "design_az",
+        kind: "design",
+        label: "AZ",
+        metadata: {
+          awsAvailabilityZone: "ap-northeast-2c"
+        }
+      }),
+      makeNode({
+        id: "subnet-1",
+        type: "aws_subnet",
+        kind: "resource",
+        label: "public",
+        metadata: {
+          parentAreaNodeId: "az-1"
+        },
+        parameters: {
+          resourceType: "aws_subnet",
+          resourceName: "public",
+          fileName: "network",
+          values: {
+            cidrBlock: "10.0.1.0/24"
+          }
+        }
+      })
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  });
+
+  assert.deepEqual(graph.nodes[0]?.config, {
+    cidrBlock: "10.0.1.0/24",
+    availabilityZone: "ap-northeast-2c"
+  });
+});
+
+test("buildInfrastructureGraphFromDiagramJson preserves explicit availabilityZone values", () => {
+  const graph = buildInfrastructureGraphFromDiagramJson({
+    nodes: [
+      makeNode({
+        id: "az-1",
+        type: "design_az",
+        kind: "design",
+        label: "AZ",
+        metadata: {
+          awsAvailabilityZone: "ap-northeast-2c"
+        }
+      }),
+      makeNode({
+        id: "subnet-1",
+        type: "aws_subnet",
+        kind: "resource",
+        label: "public",
+        metadata: {
+          parentAreaNodeId: "az-1"
+        },
+        parameters: {
+          resourceType: "aws_subnet",
+          resourceName: "public",
+          fileName: "network",
+          values: {
+            availabilityZone: "ap-northeast-2a",
+            cidrBlock: "10.0.1.0/24"
+          }
+        }
+      })
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  });
+
+  assert.deepEqual(graph.nodes[0]?.config, {
+    availabilityZone: "ap-northeast-2a",
+    cidrBlock: "10.0.1.0/24"
+  });
 });
 
 test("buildInfrastructureGraphFromDiagramJson keeps edges only between projected nodes", () => {
@@ -187,12 +293,12 @@ test("buildInfrastructureGraphFromDiagramJson keeps edges only between projected
       }),
       makeNode({
         id: "unsupported-1",
-        type: "aws_lambda_function",
+        type: "aws_unknown_service",
         kind: "resource",
-        label: "lambda",
+        label: "unknown",
         parameters: {
-          resourceType: "aws_lambda_function",
-          resourceName: "handler",
+          resourceType: "aws_unknown_service",
+          resourceName: "unknown",
           fileName: "main",
           values: {}
         }

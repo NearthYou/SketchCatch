@@ -42,6 +42,7 @@ test("POST /api/terraform/generate returns Terraform code for an active user", a
             kind: "resource",
             label: "main_vpc",
             metadata: {
+              awsAvailabilityZone: "ap-northeast-2a",
               awsRegion: "ap-northeast-2",
               parentAreaNodeId: "area-1"
             },
@@ -130,6 +131,78 @@ test("POST /api/terraform/generate maps conflicting Region design nodes to 400 r
 
   assert.equal(response.statusCode, 400);
   assertErrorResponse(response.json() as ApiErrorResponse, "bad_request");
+
+  await app.close();
+});
+
+test("POST /api/terraform/generate renders Availability Zone design metadata", async () => {
+  const fakeDb = new AuthOnlyFakeDb({
+    users: [
+      {
+        id: ACTIVE_USER_ID,
+        deletedAt: null
+      }
+    ]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/terraform/generate",
+    headers: await authHeaders(ACTIVE_USER_ID),
+    payload: {
+      diagramJson: {
+        nodes: [
+          {
+            id: "az-1",
+            type: "design_az",
+            kind: "design",
+            label: "AZ",
+            metadata: {
+              awsAvailabilityZone: "ap-northeast-2c"
+            }
+          },
+          {
+            id: "subnet-1",
+            type: "aws_subnet",
+            kind: "resource",
+            label: "public",
+            metadata: {
+              parentAreaNodeId: "az-1"
+            },
+            parameters: {
+              resourceType: "aws_subnet",
+              resourceName: "public",
+              fileName: "main",
+              values: {
+                cidrBlock: "10.0.1.0/24"
+              }
+            }
+          }
+        ],
+        edges: [],
+        viewport: {
+          x: 0,
+          y: 0,
+          zoom: 1
+        }
+      }
+    }
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(response.json() as TerraformGenerateResponse, {
+    terraformCode: `provider "aws" {
+  region = "ap-northeast-2"
+}
+
+resource "aws_subnet" "public" {
+  cidr_block = "10.0.1.0/24"
+  availability_zone = "ap-northeast-2c"
+}`
+  });
 
   await app.close();
 });
@@ -552,6 +625,7 @@ test("POST /api/terraform/sync-to-diagram updates matching DiagramJson values", 
             kind: "resource",
             label: "main_vpc",
             metadata: {
+              awsAvailabilityZone: "ap-northeast-2a",
               awsRegion: "ap-northeast-2",
               parentAreaNodeId: "area-1"
             },
@@ -592,6 +666,7 @@ test("POST /api/terraform/sync-to-diagram updates matching DiagramJson values", 
     cidrBlock: "10.1.0.0/16"
   });
   assert.deepEqual(body.diagramJson.nodes[0]?.metadata, {
+    awsAvailabilityZone: "ap-northeast-2a",
     awsRegion: "ap-northeast-2",
     parentAreaNodeId: "area-1"
   });

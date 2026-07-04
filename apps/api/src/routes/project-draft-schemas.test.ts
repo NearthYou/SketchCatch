@@ -71,6 +71,7 @@ test("save project draft body preserves diagram node metadata", () => {
         {
           ...validDiagram.nodes[0]!,
           metadata: {
+            awsAvailabilityZone: "ap-northeast-2a",
             awsRegion: "ap-northeast-2",
             parentAreaNodeId: "area-1"
           }
@@ -80,6 +81,7 @@ test("save project draft body preserves diagram node metadata", () => {
   });
 
   assert.deepEqual(parsed.diagramJson.nodes[0]?.metadata, {
+    awsAvailabilityZone: "ap-northeast-2a",
     awsRegion: "ap-northeast-2",
     parentAreaNodeId: "area-1"
   });
