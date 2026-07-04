@@ -536,9 +536,7 @@ export function DeploymentPanel({
         }
       } catch (error) {
         if (!cancelled) {
-          setErrorMessage(
-            getApiErrorMessage(error, "Git/CI/CD pipeline status refresh failed.")
-          );
+          console.error("Git/CI/CD pipeline status refresh failed:", error);
         }
       } finally {
         isRefreshing = false;
