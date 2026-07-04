@@ -4,17 +4,21 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 const workspaceAiChatDockSource = readWorkspaceFile("WorkspaceAiChatDock.tsx");
+const workspaceAiDraftFollowUpSource = readWorkspaceFile("workspace-ai-draft-follow-up.ts");
 const workspaceAiPanelPiecesSource = readWorkspaceFile("WorkspaceAiPanelPieces.tsx");
 const workspaceAiPanelOptionsSource = readWorkspaceFile("workspace-ai-panel-options.ts");
 const stylesSource = readWorkspaceFile("workspace.module.css");
 
 test("workspace AI chat asks follow-up questions instead of showing fixable guardrail warnings", () => {
-  assert.match(workspaceAiChatDockSource, /createFollowUpQuestionFromWarnings/);
+  assert.match(workspaceAiChatDockSource, /draftFollowUpSession/);
+  assert.match(workspaceAiChatDockSource, /planArchitectureDraftPreview/);
+  assert.match(workspaceAiChatDockSource, /resolveArchitectureDraftFollowUpAnswer/);
   assert.match(workspaceAiChatDockSource, /createQuestionFromDraftError/);
+  assert.match(workspaceAiDraftFollowUpSource, /ask_follow_up/);
   assert.match(workspaceAiChatDockSource, /질문/);
   assert.match(workspaceAiChatDockSource, /명확한 아키텍처 단서/);
-  assert.match(workspaceAiChatDockSource, /unsupported_resource_omitted/);
-  assert.match(workspaceAiChatDockSource, /unsupported_requirement_substituted/);
+  assert.match(workspaceAiDraftFollowUpSource, /unsupported_resource_omitted/);
+  assert.match(workspaceAiDraftFollowUpSource, /unsupported_requirement_substituted/);
   assert.doesNotMatch(workspaceAiChatDockSource, /WorkspaceAiGuardrailWarnings/);
   assert.match(workspaceAiPanelPiecesSource, /unsupported_resource_omitted/);
   assert.match(workspaceAiPanelPiecesSource, /unsupported_requirement_substituted/);

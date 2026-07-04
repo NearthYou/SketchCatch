@@ -43,6 +43,11 @@ import {
   type ArchitectureClarificationSession
 } from "./workspace-ai-clarification";
 import {
+  planArchitectureDraftPreview,
+  resolveArchitectureDraftFollowUpAnswer,
+  type ArchitectureDraftFollowUpSession
+} from "./workspace-ai-draft-follow-up";
+import {
   budgetOptions,
   DEFAULT_REQUIREMENT_PROMPT,
   promptGuideExamples,
@@ -86,6 +91,8 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
   const [draft, setDraft] = useState<AiArchitectureDraftResult | null>(null);
   const [clarificationSession, setClarificationSession] =
     useState<ArchitectureClarificationSession | null>(null);
+  const [draftFollowUpSession, setDraftFollowUpSession] =
+    useState<ArchitectureDraftFollowUpSession | null>(null);
   const [lastDraftRequest, setLastDraftRequest] = useState<CreateArchitectureDraftRequest | null>(
     null
   );
@@ -159,6 +166,11 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
     trimmedPrompt: string,
     nextMessages: readonly WorkspaceAiChatMessage[]
   ): Promise<void> {
+    if (draftFollowUpSession !== null) {
+      await handleDraftFollowUpMessage(trimmedPrompt);
+      return;
+    }
+
     if (clarificationSession !== null) {
       await handleClarificationMessage(trimmedPrompt);
       return;
@@ -173,6 +185,33 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
     }
 
     await createDraftFromConversation(nextMessages);
+  }
+
+  async function handleDraftFollowUpMessage(trimmedPrompt: string): Promise<void> {
+    if (draftFollowUpSession === null) {
+      return;
+    }
+
+    const resolution = resolveArchitectureDraftFollowUpAnswer(
+      draftFollowUpSession,
+      trimmedPrompt
+    );
+
+    if (resolution.action === "show_pending_draft") {
+      const pendingDraft = draftFollowUpSession.pendingDraft;
+
+      setDraftFollowUpSession(null);
+      showDraftPreview(pendingDraft);
+      return;
+    }
+
+    if (resolution.action === "regenerate") {
+      setDraftFollowUpSession(null);
+      await createDraftFromRequest(resolution.request);
+      return;
+    }
+
+    appendAssistantMessage("question", resolution.question, resolution.suggestions);
   }
 
   async function handleClarificationMessage(trimmedPrompt: string): Promise<void> {
@@ -244,24 +283,25 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
     setDraftState("loading");
     setDraftErrorMessage("");
     setDraft(null);
+    setDraftFollowUpSession(null);
     setLastDraftRequest(draftRequest);
     context.setPreviewDiagram(null);
 
     try {
       const result = await createAiArchitectureDraft(draftRequest);
-      const previewDiagram = convertArchitectureJsonToDiagramJson(result.architectureJson);
-      const followUpQuestion = createFollowUpQuestionFromWarnings(
-        result.metadata.guardrailWarnings
-      );
+      const previewDecision = planArchitectureDraftPreview(draftRequest, result);
+      if (previewDecision.action === "ask_follow_up") {
+        setDraftFollowUpSession(previewDecision.session);
+        setDraftState("idle");
+        appendAssistantMessage(
+          "question",
+          previewDecision.session.question,
+          previewDecision.session.suggestions
+        );
+        return;
+      }
 
-      setDraft(result);
-      context.setPreviewDiagram(previewDiagram);
-      setDraftState("idle");
-      appendAssistantMessage(
-        followUpQuestion ? "question" : "draft",
-        followUpQuestion ??
-          `${result.title} 초안을 보드에 반투명 미리보기로 띄웠습니다. 생성할까요?`
-      );
+      showDraftPreview(previewDecision.result);
     } catch (error) {
       const message = getApiErrorMessage(error, "Architecture Draft 생성 중 오류가 발생했습니다.");
       const question = createQuestionFromDraftError(message);
@@ -280,6 +320,18 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
       setDraftErrorMessage(message);
       appendAssistantMessage("error", message);
     }
+  }
+
+  function showDraftPreview(result: AiArchitectureDraftResult): void {
+    const previewDiagram = convertArchitectureJsonToDiagramJson(result.architectureJson);
+
+    setDraft(result);
+    context.setPreviewDiagram(previewDiagram);
+    setDraftState("idle");
+    appendAssistantMessage(
+      "draft",
+      `${result.title} 초안을 보드에 반투명 미리보기로 띄웠습니다. 생성할까요?`
+    );
   }
 
   function appendClarificationQuestion(session: ArchitectureClarificationSession): void {
@@ -303,6 +355,7 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
       context.previewDiagram ?? convertArchitectureJsonToDiagramJson(draft.architectureJson)
     );
     setDraft(null);
+    setDraftFollowUpSession(null);
     setDesignSimulation(null);
     setSimulationFingerprint(null);
     appendAssistantMessage("status", "생성했습니다. 현재 보드가 AI 초안으로 전체 교체되었습니다.");
@@ -311,6 +364,7 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
   function cancelDraftPreview(): void {
     context.setPreviewDiagram(null);
     setDraft(null);
+    setDraftFollowUpSession(null);
     setDraftErrorMessage("");
     setDraftState("idle");
     appendAssistantMessage("status", "초안 미리보기를 취소했습니다.");
@@ -587,38 +641,6 @@ function createRequirementPromptFromMessages(
     .map((message) => message.content.trim())
     .filter(Boolean)
     .join("\n");
-}
-
-function createFollowUpQuestionFromWarnings(
-  warnings: readonly ArchitectureGuardrailWarning[] | undefined
-): string | null {
-  if (!warnings || warnings.length === 0) {
-    return null;
-  }
-
-  if (warnings.some((warning) => warning.code === "unsupported_requirement_substituted")) {
-    return "질문: 요청한 일부 요구사항은 아직 직접 지원하지 않아서 지원 가능한 구조로 대체한 초안을 미리보기로 띄웠습니다. 이대로 생성할까요, 아니면 원하는 조건을 더 알려줄까요?";
-  }
-
-  if (
-    warnings.some(
-      (warning) =>
-        warning.code === "unsupported_resource_omitted" ||
-        warning.code === "partial_generation"
-    )
-  ) {
-    return "질문: 지원 가능한 부분만 초안으로 띄웠습니다. 제외된 요구사항을 다른 방식으로 대체할까요?";
-  }
-
-  if (warnings.some((warning) => warning.code === "scenario_conflict")) {
-    return "질문: 자연어 요구사항과 보조 선택이 달라 보입니다. 자연어 기준으로 만든 초안이 맞을까요?";
-  }
-
-  if (warnings.some((warning) => warning.code === "low_budget_rds_cost")) {
-    return "질문: DB가 포함되면 비용이 늘 수 있습니다. 낮은 예산을 우선해서 DB 없는 구조로 바꿀까요?";
-  }
-
-  return null;
 }
 
 function createQuestionFromDraftError(message: string): string | null {
