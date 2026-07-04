@@ -21,6 +21,33 @@
 
 ## 현재 검증된 것
 
+- #134 GitCicdHandoff 계약/API 구현 후 `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`가 통과했다.
+- `pnpm --filter @sketchcatch/api exec tsx --test src/routes/git-cicd-handoffs.test.ts src/db/schema-contract.test.ts`가 통과했다.
+- `pnpm --filter @sketchcatch/api lint`, `pnpm --filter @sketchcatch/types lint`, `pnpm --filter @sketchcatch/api typecheck`, `pnpm --filter @sketchcatch/types typecheck`가 통과했다.
+- `git diff --check`가 통과했다. Git line-ending warning만 출력되었다.
+- `GitCicdHandoff` API는 fake/internal provider boundary만 사용하며 실제 GitHub PR, commit push, pipeline 호출을 구현하거나 실행하지 않았다.
+- Request/response/shared type/DB schema에 raw token, private key, deploy key, CI secret 필드를 추가하지 않았다.
+
+## 이번 세션의 변경 사항
+
+- `packages/types/src/index.ts`에 `SourceRepository`, `GitCicdHandoffStatus`, `GitCicdHandoff`, create/list/get/status request/response type을 추가했다.
+- `apps/api/src/db/schema.ts`에 `git_cicd_handoffs` table과 provider/status enum, relations를 추가했다.
+- `apps/api/drizzle/0021_git_cicd_handoffs.sql`, `apps/api/drizzle/meta/0021_snapshot.json`, `apps/api/drizzle/meta/_journal.json`을 추가/갱신했다.
+- `apps/api/src/git-cicd/git-cicd-handoff-service.ts`에 project access, architecture, uploaded Terraform artifact 검증과 internal provider boundary를 구현했다.
+- `apps/api/src/routes/git-cicd-handoffs.ts`와 `apps/api/src/app.ts` route registration을 추가했다.
+- `apps/api/src/routes/git-cicd-handoffs.test.ts`와 `apps/api/src/db/schema-contract.test.ts`를 추가/갱신했다.
+- `docs/data-models.md`, `docs/sw/005_GitCicdHandoff계약API클론코딩가이드_sw.md`, `docs/sw/README.md`, `agent-progress.md`, `session-handoff.md`를 갱신했다.
+
+## 아직 깨졌거나 미검증된 것
+
+- `drizzle-kit generate`는 기존 `0008_snapshot.json`, `0015_snapshot.json` parent snapshot collision 때문에 실패했다. 이번 변경은 명시적 SQL migration과 수동 snapshot/journal update로 처리했다.
+- #135가 실제 GitHub/provider 구현을 이어받아야 한다.
+
+## 다음으로 최선의 행동
+
+- parent agent가 #134 diff를 리뷰한다. 특히 수동 Drizzle snapshot과 migration SQL을 확인한다.
+- #135는 `GitCicdHandoffProvider` 구현을 실제 GitHub/CI provider로 교체하되, secret 원문을 DB/로그/응답에 저장하지 않는다.
+- #136은 frontend UI를 이 API contract에 맞춰 연결한다.
 - Issue #129 worktree `feature/sw/129-direct-deployment-failure-ai`는 `origin/dev` 기준으로 fast-forward된 뒤 Direct Deployment 실패 설명 slice를 구현했다.
 - `GET /api/deployments/:deploymentId/failure-explanation`은 `FAILED` deployment만 허용하며, 첫 `ERROR` 로그 또는 `errorSummary`를 마스킹해 실패 stage, 첫 오류 로그, cleanup 필요 여부, nextActions를 반환한다.
 - `DeploymentPanel`은 실패한 deployment가 선택됐을 때 실패 요약 카드와 다음 행동을 표시한다.
@@ -374,14 +401,15 @@
 ## 건드리지 말아야 할 것
 
 - `.env`, private key, AWS credential, DB password, real access token
-- 사용자 승인 없는 Terraform apply/destroy, cloud mutation, Git/CI/CD handoff
+- 사용자 승인 없는 Terraform apply/destroy, cloud mutation, 실제 GitHub PR/CI/CD handoff 실행
 - 사용자 확인 없는 Voice Requirement Input 또는 AI 제안의 Practice Architecture 반영
 - frontend UI component 안의 Terraform 실행, AWS SDK 호출, deployment mutation logic
 
 ## 참고 명령
 
-```bash
+```powershell
 pnpm harness:check
+pnpm --filter @sketchcatch/api exec tsx --test src/routes/git-cicd-handoffs.test.ts src/db/schema-contract.test.ts
 pnpm lint
 pnpm typecheck
 pnpm build
@@ -457,3 +485,9 @@ pnpm build
 - final `pnpm harness:check`를 다시 실행한다.
 - diff 자체 리뷰 후 #132 범위만 commit/push/PR 생성한다.
 - 다른 이슈(#129~#136)는 이 branch에서 건드리지 않는다.
+## 2026-07-05 - Issue #133 Deployment Runtime Cache handoff
+
+- Branch/worktree: `feature/sw/133-deployment-runtime-cache-status` at `C:\Users\siwon\Desktop\Jungle\Week17~21\SketchCatch-worktrees\133-deployment-runtime-cache-status`.
+- Scope completed: Deployment repository mutation wrapper writes `deployment.status`, log creation/SSE stream writes `deployment.log_cursor`, stream cursor read falls back to RDS on cache miss/failure, `buildApp` wires `createRuntimeCacheFromEnv`, and docs/sw has key/TTL/future reverse scan/pipeline convention.
+- Verification completed: targeted deployment route tests, API lint/typecheck, workspace lint/typecheck/build, `git diff --check`; final harness still needs to be rerun after this handoff note.
+- Remaining risk: no real Redis server or AWS apply/destroy was run.

@@ -14,6 +14,8 @@
 8. Direct Deployment 실패 설명은 [008_배포실패설명가이드_sw.md](./008_배포실패설명가이드_sw.md)를 본다.
 9. Redis Runtime Cache adapter는 [007_레디스런타임캐시어댑터가이드_sw.md](./007_레디스런타임캐시어댑터가이드_sw.md)를 본다.
 10. Direct Deployment 신뢰도 UX는 [009_Direct_Deployment_신뢰도_UX_클론코딩가이드_sw.md](./009_Direct_Deployment_신뢰도_UX_클론코딩가이드_sw.md)를 본다.
+11. Git/CI/CD handoff 계약과 API 생명주기는 [007_GitCicdHandoff계약API클론코딩가이드_sw.md](./007_GitCicdHandoff계약API클론코딩가이드_sw.md)를 본다.
+12. Deployment Runtime Cache 상태와 로그 커서는 [010_Deployment_Runtime_Cache_상태로그커서가이드_sw.md](./010_Deployment_Runtime_Cache_상태로그커서가이드_sw.md)를 본다.
 
 ## 문서 목록
 
@@ -33,6 +35,8 @@
 | [007_레디스런타임캐시어댑터가이드_sw.md](./007_레디스런타임캐시어댑터가이드_sw.md) | Redis Runtime Cache adapter, REDIS_URL 선택 정책, degraded fallback 가이드 |
 | [008_배포실패설명가이드_sw.md](./008_배포실패설명가이드_sw.md) | Direct Deployment 실패 설명 DTO, fallback, UI 표시 가이드 |
 | [009_Direct_Deployment_신뢰도_UX_클론코딩가이드_sw.md](./009_Direct_Deployment_신뢰도_UX_클론코딩가이드_sw.md) | Direct Deployment 승인 snapshot mismatch UX와 실패 상태 일관성 가이드 |
+| [010_GitCicdHandoff계약API클론코딩가이드_sw.md](./007_GitCicdHandoff계약API클론코딩가이드_sw.md) | Git/CI/CD handoff 계약과 API 생명주기 클론 코딩 가이드 |
+| [011_Deployment_Runtime_Cache_상태로그커서가이드_sw.md](./010_Deployment_Runtime_Cache_상태로그커서가이드_sw.md) | Deployment status snapshot, log stream cursor, Runtime Cache key/TTL 정책 가이드 |
 
 ## 정리 규칙
 
