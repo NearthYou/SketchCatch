@@ -1570,6 +1570,12 @@ function getDeploymentActionHint(deployment: Deployment): string {
     return "Cleanup destroy가 완료되었습니다. Deployment 결과와 state pointer가 정리되었습니다.";
   }
 
+  if (deployment.approvedAt && !hasCompleteDeploymentApprovalSnapshot(deployment)) {
+    const actionLabel = deployment.currentPlanOperation === "destroy" ? "Destroy" : "Apply";
+
+    return `승인 스냅샷이 불완전합니다. Terraform Plan을 다시 실행하고 승인한 뒤 ${actionLabel}를 진행하세요.`;
+  }
+
   if (deployment.currentPlanOperation === "destroy" && deployment.approvedAt) {
     return "승인된 Destroy Plan이 준비되었습니다. 실제 삭제 전 AWS 계정과 삭제 변경 내용을 다시 확인하세요.";
   }
@@ -1591,10 +1597,6 @@ function getDeploymentActionHint(deployment: Deployment): string {
   }
 
   if (deployment.approvedAt) {
-    if (!hasCompleteDeploymentApprovalSnapshot(deployment)) {
-      return "승인 스냅샷이 불완전합니다. Terraform Plan을 다시 실행하고 승인한 뒤 Apply를 진행하세요.";
-    }
-
     if (deployment.status === "SUCCESS") {
       return "Apply가 완료되었습니다. 생성된 리소스와 Terraform output을 아래에서 확인할 수 있습니다.";
     }
