@@ -421,13 +421,14 @@ function loadTsModule(filePath) {
   }).outputText;
   const module = { exports: {} };
   const dirname = path.dirname(filePath);
+  const moduleRequire = createRequire(filePath);
 
   vm.runInNewContext(compiled, {
     __dirname: dirname,
     __filename: filePath,
     exports: module.exports,
     module,
-    require,
+    require: moduleRequire,
     console
   });
 
