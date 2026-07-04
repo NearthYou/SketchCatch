@@ -302,6 +302,10 @@ test("POST /api/projects/:projectId/git-cicd-handoffs creates GitHub PR handoff 
   assert.match(gitProviderCalls[0]?.pullRequest.body ?? "", /Create 2, update 1, delete 0, replace 0/);
   assert.match(gitProviderCalls[0]?.pullRequest.body ?? "", /Pre-Deployment Check/);
   assert.equal(gitProviderCalls[0]?.pullRequest.reviewChecklist.length, 4);
+  assert.equal(
+    gitProviderCalls[0]?.pullRequest.planSummary?.warnings[0]?.relatedResourceId,
+    "aws_instance.web"
+  );
   assertResponseHasNoSecretFields(body.handoff);
 
   await app.close();
@@ -713,7 +717,8 @@ function createPlanSummary() {
     warnings: [
       {
         level: "medium",
-        message: "Confirm destination repository variables before merge."
+        message: "Confirm destination repository variables before merge.",
+        relatedResourceId: "aws_instance.web"
       }
     ]
   };

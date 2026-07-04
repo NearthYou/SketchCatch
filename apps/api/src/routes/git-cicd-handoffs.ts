@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type {
+  DeploymentPlanSummary,
   GitCicdHandoff,
   GitCicdHandoffListResponse,
   GitCicdHandoffResponse
@@ -54,7 +55,8 @@ const deploymentPlanSummarySchema = z
       z
         .object({
           level: z.enum(["low", "medium", "high"]),
-          message: z.string().trim().min(1).max(500)
+          message: z.string().trim().min(1).max(500),
+          relatedResourceId: z.string().trim().min(1).max(128).optional()
         })
         .strict()
     )
@@ -101,6 +103,25 @@ type GitCicdHandoffRequestContext = {
   provider: GitCicdHandoffProvider;
 };
 
+type GitCicdHandoffBody = z.infer<typeof createGitCicdHandoffBodySchema>;
+
+function toDeploymentPlanSummary(
+  planSummary: GitCicdHandoffBody["planSummary"]
+): DeploymentPlanSummary | undefined {
+  if (!planSummary) {
+    return undefined;
+  }
+
+  return {
+    ...planSummary,
+    warnings: planSummary.warnings.map((warning) => ({
+      level: warning.level,
+      message: warning.message,
+      ...(warning.relatedResourceId ? { relatedResourceId: warning.relatedResourceId } : {})
+    }))
+  };
+}
+
 export async function registerGitCicdHandoffRoutes(
   app: FastifyInstance,
   options?: GitCicdHandoffRouteOptions
@@ -131,7 +152,7 @@ export async function registerGitCicdHandoffRoutes(
           sourceBranch: body.sourceBranch,
           commitMessage: body.commitMessage,
           pullRequestTitle: body.pullRequestTitle,
-          planSummary: body.planSummary,
+          planSummary: toDeploymentPlanSummary(body.planSummary),
           userAcceptedChangeId: body.userAcceptedChangeId
         },
         repository,

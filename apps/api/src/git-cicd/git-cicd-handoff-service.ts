@@ -302,7 +302,7 @@ export function createGitCicdPullRequestDraft(input: {
     ? `Create ${input.planSummary.createCount}, update ${input.planSummary.updateCount}, delete ${input.planSummary.deleteCount}, replace ${input.planSummary.replaceCount}. Blocked: ${input.planSummary.blocked ? "yes" : "no"}.`
     : "Plan summary was not attached to this handoff request.";
   const warningLines =
-    input.planSummary?.warnings.map((warning) => `- ${warning.level}: ${warning.message}`) ?? [];
+    input.planSummary?.warnings?.map((warning) => `- ${warning.level}: ${warning.message}`) ?? [];
   const body = [
     "## IaC Preview",
     "",
