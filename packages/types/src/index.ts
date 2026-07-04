@@ -421,12 +421,27 @@ export type UpdateGitCicdHandoffStatusRequest = {
   statusMessage?: string | null | undefined;
 };
 
+export type GitCicdHandoffPipelineStatus = {
+  id: string;
+  projectId: string;
+  status: GitCicdHandoffStatus;
+  pullRequestUrl: string | null;
+  pipelineRunUrl: string | null;
+  statusMessage: string | null;
+  updatedAt: IsoDateTimeString;
+  source: "runtime_cache" | "rds";
+};
+
 export type GitCicdHandoffResponse = {
   handoff: GitCicdHandoff;
 };
 
 export type GitCicdHandoffListResponse = {
   handoffs: GitCicdHandoff[];
+};
+
+export type GitCicdHandoffPipelineStatusResponse = {
+  pipelineStatus: GitCicdHandoffPipelineStatus;
 };
 
 export type DeploymentStatus =

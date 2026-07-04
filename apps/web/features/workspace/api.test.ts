@@ -12,10 +12,12 @@ import {
   deleteProject,
   getAwsConnectionCloudFormationTemplate,
   getDeploymentFailureExplanation,
+  getGitCicdHandoffPipelineStatus,
   getProjectDeletePreview,
   listDeploymentResources,
   listAwsConnections,
   listDeployments,
+  listGitCicdHandoffs,
   listTerraformOutputs,
   listProjects,
   runDeploymentDestroy,
@@ -1193,6 +1195,78 @@ test("deployment helpers list records, start plan, approve plan, apply, destroy,
   assert.equal(failureExplanation.cleanupRequired, true);
 });
 
+test("Git/CI/CD handoff helpers list handoffs and read pipeline status", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    restoreWindow(originalWindowDescriptor);
+  });
+
+  installAuthSession();
+
+  globalThis.fetch = async (input, init) => {
+    requests.push({ input, init });
+
+    if (String(input).endsWith("/pipeline-status")) {
+      return new Response(
+        JSON.stringify({
+          pipelineStatus: {
+            id: "44444444-4444-4444-8444-444444444444",
+            projectId: project.id,
+            status: "pipeline_running",
+            pullRequestUrl: "https://github.com/sketchcatch/infra-live/pull/42",
+            pipelineRunUrl: "https://github.com/sketchcatch/infra-live/actions/runs/1",
+            statusMessage: "Pipeline is running",
+            updatedAt: "2026-06-26T00:00:00.000Z",
+            source: "runtime_cache"
+          }
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json"
+          },
+          status: 200
+        }
+      );
+    }
+
+    return new Response(
+      JSON.stringify({
+        handoffs: [
+          createGitCicdHandoffPayload({
+            id: "44444444-4444-4444-8444-444444444444",
+            projectId: project.id
+          })
+        ]
+      }),
+      {
+        headers: {
+          "Content-Type": "application/json"
+        },
+        status: 200
+      }
+    );
+  };
+
+  const handoffs = await listGitCicdHandoffs(project.id);
+  const pipelineStatus = await getGitCicdHandoffPipelineStatus(
+    "44444444-4444-4444-8444-444444444444"
+  );
+
+  assert.equal(String(requests[0]?.input), `/api/projects/${project.id}/git-cicd-handoffs`);
+  assert.equal(
+    String(requests[1]?.input),
+    "/api/git-cicd-handoffs/44444444-4444-4444-8444-444444444444/pipeline-status"
+  );
+  assert.equal(new Headers(requests[0]?.init?.headers).get("authorization"), "Bearer access-token");
+  assert.equal(handoffs[0]?.repositoryProvider, "github");
+  assert.equal(pipelineStatus.status, "pipeline_running");
+  assert.equal(pipelineStatus.source, "runtime_cache");
+});
+
 function createDeploymentPayload(input: {
   id: string;
   projectId: string;
@@ -1225,6 +1299,31 @@ function createDeploymentPayload(input: {
     approvedTfplanHash: input.approved ? "b".repeat(64) : null,
     approvedAwsAccountId: input.approved ? "123456789012" : null,
     approvedAwsRegion: input.approved ? "ap-northeast-2" : null,
+    createdAt: "2026-06-26T00:00:00.000Z",
+    updatedAt: "2026-06-26T00:00:00.000Z"
+  };
+}
+
+function createGitCicdHandoffPayload(input: { id: string; projectId: string }) {
+  return {
+    id: input.id,
+    projectId: input.projectId,
+    architectureId: "55555555-5555-4555-8555-555555555555",
+    terraformArtifactId: "66666666-6666-4666-8666-666666666666",
+    sourceRepositoryId: "repo-1",
+    repositoryProvider: "github",
+    repositoryOwner: "sketchcatch",
+    repositoryName: "infra-live",
+    targetBranch: "main",
+    sourceBranch: "sketchcatch/iac-preview",
+    commitMessage: "Add SketchCatch Terraform preview",
+    pullRequestTitle: "SketchCatch IaC preview",
+    pullRequestUrl: "https://github.com/sketchcatch/infra-live/pull/42",
+    pipelineRunUrl: null,
+    status: "pr_created",
+    statusMessage: "GitHub PR created",
+    userAcceptedChangeId: "accepted-change-1",
+    createdByUserId: "22222222-2222-4222-8222-222222222222",
     createdAt: "2026-06-26T00:00:00.000Z",
     updatedAt: "2026-06-26T00:00:00.000Z"
   };

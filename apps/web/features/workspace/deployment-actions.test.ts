@@ -1,13 +1,15 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { Deployment } from "@sketchcatch/types";
+import type { Deployment, GitCicdHandoff } from "@sketchcatch/types";
 import {
+  getGitCicdHandoffStatusLabel,
   getDefaultDeploymentPanelMode,
   getDeploymentActionState,
   getDeploymentLogMessageTokens,
   getDeploymentLogTone,
   hasCompleteDeploymentApprovalSnapshot,
   shouldAutoRefreshDeployment,
+  shouldAutoRefreshGitCicdHandoff,
   shouldShowDeploymentInfoValue
 } from "./deployment-actions";
 
@@ -187,6 +189,26 @@ test("stops auto-refreshing after Terraform work reaches a stable state", () => 
   }
 });
 
+test("auto-refreshes Git/CI/CD handoffs while PR or pipeline work can still change", () => {
+  assert.equal(shouldAutoRefreshGitCicdHandoff(createGitCicdHandoff("pr_created")), true);
+  assert.equal(shouldAutoRefreshGitCicdHandoff(createGitCicdHandoff("pipeline_running")), true);
+});
+
+test("stops auto-refreshing Git/CI/CD handoffs after terminal states", () => {
+  for (const status of ["draft", "pipeline_success", "pipeline_failed", "cancelled"] as const) {
+    assert.equal(shouldAutoRefreshGitCicdHandoff(createGitCicdHandoff(status)), false);
+  }
+});
+
+test("labels Git/CI/CD handoff status separately from Direct Deployment status", () => {
+  assert.equal(getGitCicdHandoffStatusLabel(createGitCicdHandoff("pr_created")), "PR created");
+  assert.equal(
+    getGitCicdHandoffStatusLabel(createGitCicdHandoff("pipeline_running")),
+    "Pipeline running"
+  );
+  assert.equal(getGitCicdHandoffStatusLabel(null), "No Git/CI/CD handoff");
+});
+
 test("hides empty deployment info values from the detail list", () => {
   assert.equal(shouldShowDeploymentInfoValue(null), false);
   assert.equal(shouldShowDeploymentInfoValue(undefined), false);
@@ -274,6 +296,34 @@ function createDeployment(
     createdAt: "2026-06-26T00:00:00.000Z",
     updatedAt: "2026-06-26T00:00:00.000Z",
     ...overrides
+  };
+}
+
+function createGitCicdHandoff(status: GitCicdHandoff["status"]): GitCicdHandoff {
+  return {
+    id: "77777777-7777-4777-8777-777777777777",
+    projectId: "11111111-1111-4111-8111-111111111111",
+    architectureId: "55555555-5555-4555-8555-555555555555",
+    terraformArtifactId: "66666666-6666-4666-8666-666666666666",
+    sourceRepositoryId: "repo-1",
+    repositoryProvider: "github",
+    repositoryOwner: "sketchcatch",
+    repositoryName: "infra-live",
+    targetBranch: "main",
+    sourceBranch: "sketchcatch/iac-preview",
+    commitMessage: "Add SketchCatch Terraform preview",
+    pullRequestTitle: "SketchCatch IaC preview",
+    pullRequestUrl: "https://github.com/sketchcatch/infra-live/pull/42",
+    pipelineRunUrl:
+      status === "pipeline_running"
+        ? "https://github.com/sketchcatch/infra-live/actions/runs/1"
+        : null,
+    status,
+    statusMessage: null,
+    userAcceptedChangeId: "accepted-change-1",
+    createdByUserId: "22222222-2222-4222-8222-222222222222",
+    createdAt: "2026-06-26T00:00:00.000Z",
+    updatedAt: "2026-06-26T00:00:00.000Z"
   };
 }
 
