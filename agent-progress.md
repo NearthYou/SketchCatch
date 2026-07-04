@@ -13,6 +13,25 @@
 - Highest priority unfinished harness feature: `HARNESS-007`
 - Current blocker: none
 
+### 2026-07-05 - AI 다이어그램 생성/수정 확인 질문 복구
+- Goal: 막연한 자연어 수정 요청은 구체적인 패치 질문으로 되묻고, 신규 서비스 생성은 생성 전 체크리스트에서 빠진 정보만 확인하게 한다.
+- Completed:
+  - 패치 preview가 `manual_review`를 막연한 변경 미리보기로 넘기지 않고, 추가/삭제/교체/설정 변경 선택지를 포함한 clarification으로 반환하게 했다.
+  - 추가 의도는 있지만 리소스 종류가 빠진 경우 데이터베이스/스토리지/서버 등 리소스 종류 선택지를 먼저 묻게 했다.
+  - AI 채팅 패널이 patch clarification의 `suggestions`를 표시하고, 사용자의 선택/답변을 원래 요청과 합쳐 다시 패치 의도로 해석하게 했다.
+  - 신규 생성 질문 흐름에 체크리스트 추론을 추가해 로그인/회원/예약/주문 등 이미 주어진 정보는 채우고, 운영 기준처럼 빠진 항목만 질문하게 했다.
+  - `ArchitecturePatchClarification.suggestions` 계약을 공유 타입과 데이터 모델 문서에 반영했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edit and after edit
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api exec tsx --test src/services/aiArchitecturePatchPreview.test.ts` - passed, 11 tests
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-ai-clarification.test.ts` - passed, 9 tests
+  - `npm exec --package=pnpm@11.8.0 -- pnpm lint` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm typecheck` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm build` - passed
+- Known risks:
+  - 이번 검증은 단위 테스트와 정적/빌드 체크 중심이며, 실제 브라우저에서 채팅 버튼 클릭 흐름은 별도 스모크로 확인하지 않았다.
+  - 실제 Terraform apply/destroy, cloud mutation, Git/CI/CD handoff는 수행하지 않았다.
+
 ### 2026-07-05 - EC2 초안 컨테이너 기반 다이어그램 보강
 - Goal: 자연어로 EC2 다이어그램을 생성했을 때 EC2가 단독 노드처럼 보이지 않고 Region/VPC/AZ/Subnet/Security Group 컨테이너 계층 안에 배치되게 한다.
 - Completed:

@@ -57,6 +57,49 @@ export type ArchitectureClarificationMessage = {
 
 const GENERIC_WEBSITE_KEYWORDS = ["웹사이트", "홈페이지", "웹서비스", "사이트"] as const;
 
+const SERVICE_DRAFT_KEYWORDS = [
+  "서비스",
+  "앱",
+  "로그인",
+  "회원",
+  "계정",
+  "마이페이지",
+  "개인정보",
+  "예약",
+  "신청",
+  "문의",
+  "게시글",
+  "상품",
+  "주문",
+  "결제",
+  "관리자",
+  "운영자",
+  "사용자별",
+  "저장"
+] as const;
+
+const EXPLICIT_INFRASTRUCTURE_KEYWORDS = [
+  "ec2",
+  "s3",
+  "rds",
+  "vpc",
+  "subnet",
+  "lambda",
+  "cloudfront",
+  "cdn",
+  "api gateway",
+  "route table",
+  "security group",
+  "ami",
+  "kms",
+  "iam",
+  "버킷",
+  "서브넷",
+  "보안 그룹",
+  "클라우드프론트",
+  "람다"
+] as const;
+
 const CONCRETE_WEBSITE_KEYWORDS = [
   "정적",
   "랜딩",
@@ -215,6 +258,14 @@ const CLARIFICATION_QUESTIONS: readonly ArchitectureClarificationQuestion[] = [
 
 export function needsArchitectureClarification(prompt: string): boolean {
   const normalizedPrompt = normalizeText(prompt);
+  const hasExplicitInfrastructureKeyword = EXPLICIT_INFRASTRUCTURE_KEYWORDS.some((keyword) =>
+    normalizedPrompt.includes(keyword)
+  );
+
+  if (hasExplicitInfrastructureKeyword) {
+    return false;
+  }
+
   const hasGenericWebsiteKeyword = GENERIC_WEBSITE_KEYWORDS.some((keyword) =>
     normalizedPrompt.includes(keyword)
   );
@@ -222,17 +273,29 @@ export function needsArchitectureClarification(prompt: string): boolean {
     normalizedPrompt.includes(keyword.toLowerCase())
   );
 
-  return hasGenericWebsiteKeyword && !hasConcreteWebsiteKeyword;
+  if (hasGenericWebsiteKeyword && !hasConcreteWebsiteKeyword) {
+    return true;
+  }
+
+  const hasServiceDraftKeyword = SERVICE_DRAFT_KEYWORDS.some((keyword) =>
+    normalizedPrompt.includes(keyword)
+  );
+
+  return hasServiceDraftKeyword && findFirstMissingClarificationStep(inferClarificationAnswers(prompt)) !== null;
 }
 
 export function createArchitectureClarificationSession(
   originalPrompt: string
 ): ArchitectureClarificationSession {
+  const answers = inferClarificationAnswers(originalPrompt);
+  const firstMissingStep = findFirstMissingClarificationStep(answers);
+  const stepIndex = firstMissingStep ?? CLARIFICATION_QUESTIONS.length;
+
   return {
-    answers: [],
-    awaitingConfirmation: false,
+    answers,
+    awaitingConfirmation: firstMissingStep === null,
     originalPrompt,
-    stepIndex: 0
+    stepIndex
   };
 }
 
@@ -329,6 +392,128 @@ export function createClarifiedDraftRequest(
   return {
     prompt: createClarifiedPrompt(session)
   };
+}
+
+function inferClarificationAnswers(prompt: string): ArchitectureClarificationAnswer[] {
+  const normalizedPrompt = normalizeText(prompt);
+  const answers: ArchitectureClarificationAnswer[] = [];
+
+  if (includesAny(normalizedPrompt, ["로그인", "회원", "계정", "마이페이지", "개인정보", "사용자별"])) {
+    addInferredAnswer(answers, "sitePurpose", "memberService");
+  }
+
+  if (includesAny(normalizedPrompt, ["문의", "예약", "신청", "접수"])) {
+    addInferredAnswer(answers, "sitePurpose", "form");
+  }
+
+  if (includesAny(normalizedPrompt, ["상품", "판매", "결제", "주문"])) {
+    addInferredAnswer(answers, "sitePurpose", "commerceService");
+  }
+
+  if (includesAny(normalizedPrompt, ["관리자", "운영자", "관리 화면", "어드민"])) {
+    addInferredAnswer(answers, "sitePurpose", "adminConsole");
+  }
+
+  if (includesAny(normalizedPrompt, ["블로그", "게시글", "콘텐츠", "소식"])) {
+    addInferredAnswer(answers, "sitePurpose", "contentSite");
+  }
+
+  if (includesAny(normalizedPrompt, ["소개", "랜딩", "포트폴리오", "회사"])) {
+    addInferredAnswer(answers, "sitePurpose", "landing");
+  }
+
+  if (includesAny(normalizedPrompt, ["검색", "필터", "목록"])) {
+    addInferredAnswer(answers, "visitorAction", "searchFilter");
+  }
+
+  if (includesAny(normalizedPrompt, ["파일", "이미지", "업로드", "첨부"])) {
+    addInferredAnswer(answers, "visitorAction", "uploadFiles");
+  }
+
+  if (includesAny(normalizedPrompt, ["로그인", "회원", "계정", "마이페이지", "개인정보", "게시글", "예약", "신청", "문의", "저장"])) {
+    addInferredAnswer(answers, "visitorAction", "storeData");
+  }
+
+  if (includesAny(normalizedPrompt, ["주문", "결제", "상품"])) {
+    addInferredAnswer(answers, "visitorAction", "ordersPayments");
+  }
+
+  if (includesAny(normalizedPrompt, ["관리자", "운영자", "관리 화면", "어드민", "승인", "검토"])) {
+    addInferredAnswer(answers, "visitorAction", "adminReview");
+  }
+
+  if (
+    includesAny(normalizedPrompt, ["소개", "랜딩", "포트폴리오", "회사"]) &&
+    !hasAnswerForQuestion(answers, "visitorAction")
+  ) {
+    addInferredAnswer(answers, "visitorAction", "readOnly");
+  }
+
+  if (includesAny(normalizedPrompt, ["개인정보", "보안", "보호", "민감", "암호화"])) {
+    addInferredAnswer(answers, "operationPreference", "protectData");
+  }
+
+  if (includesAny(normalizedPrompt, ["방문자 증가", "트래픽", "확장", "성장", "홍보"])) {
+    addInferredAnswer(answers, "operationPreference", "growthReady");
+  }
+
+  if (includesAny(normalizedPrompt, ["장애", "알림", "운영 로그", "로그 확인", "로그 수집", "모니터링", "운영자가 빨리"])) {
+    addInferredAnswer(answers, "operationPreference", "fastTroubleshoot");
+  }
+
+  if (includesAny(normalizedPrompt, ["저렴", "비용", "예산", "처음엔", "싸게"])) {
+    addInferredAnswer(answers, "operationPreference", "lowCost");
+  }
+
+  return answers;
+}
+
+function addInferredAnswer(
+  answers: ArchitectureClarificationAnswer[],
+  questionId: ClarificationQuestionId,
+  value: ClarificationAnswerValue
+): void {
+  if (answers.some((answer) => answer.questionId === questionId && answer.value === value)) {
+    return;
+  }
+
+  const option = getClarificationOption(questionId, value);
+
+  if (option === undefined) {
+    return;
+  }
+
+  answers.push(createClarificationAnswerFromOption(questionId, option));
+}
+
+function getClarificationOption(
+  questionId: ClarificationQuestionId,
+  value: ClarificationAnswerValue
+): ArchitectureClarificationOption | undefined {
+  return CLARIFICATION_QUESTIONS.find((question) => question.id === questionId)?.options.find(
+    (option) => option.value === value
+  );
+}
+
+function findFirstMissingClarificationStep(
+  answers: readonly ArchitectureClarificationAnswer[]
+): number | null {
+  const firstMissingIndex = CLARIFICATION_QUESTIONS.findIndex(
+    (question) => !hasAnswerForQuestion(answers, question.id)
+  );
+
+  return firstMissingIndex === -1 ? null : firstMissingIndex;
+}
+
+function hasAnswerForQuestion(
+  answers: readonly ArchitectureClarificationAnswer[],
+  questionId: ClarificationQuestionId
+): boolean {
+  return answers.some((answer) => answer.questionId === questionId);
+}
+
+function includesAny(value: string, keywords: readonly string[]): boolean {
+  return keywords.some((keyword) => value.includes(keyword));
 }
 
 function createClarificationAnswers(

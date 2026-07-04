@@ -273,15 +273,25 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
     const selectedCandidate = findPatchClarificationCandidate(patchClarification, trimmedPrompt);
 
     if (!selectedCandidate) {
+      const selectedSuggestion = findPatchClarificationSuggestion(patchClarification, trimmedPrompt);
+
+      if (selectedSuggestion) {
+        const originalInstruction = patchClarification.intent.instruction;
+
+        setPatchClarification(null);
+        await createPatchPreviewFromPrompt(`${originalInstruction}\n${selectedSuggestion}`);
+        return;
+      }
+
       appendAssistantMessage(
         "question",
         patchClarification.question,
-        patchClarification.candidates.map(formatPatchCandidateSuggestion)
+        getPatchClarificationSuggestions(patchClarification)
       );
       return;
     }
 
-    const originalInstruction = patchClarification.intent.instruction;
+    const originalInstruction = `${patchClarification.intent.instruction}\n${trimmedPrompt}`;
 
     setPatchClarification(null);
     await createPatchPreviewFromPrompt(originalInstruction, selectedCandidate.resourceId);
@@ -312,7 +322,7 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
         appendAssistantMessage(
           "question",
           response.question,
-          response.candidates.map(formatPatchCandidateSuggestion)
+          getPatchClarificationSuggestions(response)
         );
         return;
       }
@@ -923,6 +933,35 @@ function findPatchClarificationCandidate(
       normalizedAnswer.includes(candidate.label.toLowerCase())
     );
   });
+}
+
+function findPatchClarificationSuggestion(
+  clarification: ArchitecturePatchClarification,
+  answer: string
+): string | undefined {
+  const normalizedAnswer = normalizePatchClarificationAnswer(answer);
+
+  return clarification.suggestions?.find((suggestion) => {
+    const normalizedSuggestion = normalizePatchClarificationAnswer(suggestion);
+
+    return (
+      normalizedAnswer === normalizedSuggestion ||
+      normalizedAnswer.includes(normalizedSuggestion) ||
+      (normalizedAnswer.length > 1 && normalizedSuggestion.includes(normalizedAnswer))
+    );
+  });
+}
+
+function getPatchClarificationSuggestions(
+  clarification: ArchitecturePatchClarification
+): readonly string[] {
+  return clarification.suggestions && clarification.suggestions.length > 0
+    ? clarification.suggestions
+    : clarification.candidates.map(formatPatchCandidateSuggestion);
+}
+
+function normalizePatchClarificationAnswer(value: string): string {
+  return value.trim().toLowerCase();
 }
 
 function formatPatchCandidateSuggestion(candidate: ArchitecturePatchClarificationCandidate): string {

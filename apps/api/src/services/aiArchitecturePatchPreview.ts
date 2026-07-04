@@ -145,6 +145,22 @@ const ADD_ACTION_KEYWORDS = [
   "배치"
 ];
 
+const MANUAL_REVIEW_PATCH_SUGGESTIONS = [
+  "리소스를 하나 추가해줘",
+  "특정 리소스를 삭제해줘",
+  "특정 리소스를 다른 리소스로 교체해줘",
+  "특정 리소스 설정을 바꿔줘"
+] as const;
+
+const RESOURCE_TYPE_PATCH_SUGGESTIONS = [
+  "데이터베이스 추가",
+  "스토리지 버킷 추가",
+  "서버 인스턴스 추가",
+  "보안 그룹 추가",
+  "서브넷 추가",
+  "API Gateway 추가"
+] as const;
+
 type ReplacementPatchIntent = {
   readonly sourceResourceType?: ResourceType | undefined;
   readonly replacementResourceType: ResourceType;
@@ -169,6 +185,7 @@ export function createArchitecturePatchPreview(
     return createClarificationResponse({
       candidates: targetResolution.candidates,
       intent: resolvedIntent,
+      suggestions: targetResolution.suggestions,
       providerMetadata
     });
   }
@@ -356,13 +373,30 @@ type TargetResolution =
   | {
       readonly status: "needs_clarification";
       readonly candidates: ArchitecturePatchClarificationCandidate[];
+      readonly suggestions?: readonly string[] | undefined;
     };
 
 function resolveTarget(
   architectureJson: ArchitectureJson,
   intent: ArchitecturePatchIntent
 ): TargetResolution {
-  if (intent.requestedAction === "add_resource" || intent.requestedAction === "manual_review") {
+  if (intent.requestedAction === "manual_review") {
+    return {
+      status: "needs_clarification",
+      candidates: architectureJson.nodes.map(toClarificationCandidate),
+      suggestions: MANUAL_REVIEW_PATCH_SUGGESTIONS
+    };
+  }
+
+  if (intent.requestedAction === "add_resource" && intent.resourceType === undefined) {
+    return {
+      status: "needs_clarification",
+      candidates: [],
+      suggestions: RESOURCE_TYPE_PATCH_SUGGESTIONS
+    };
+  }
+
+  if (intent.requestedAction === "add_resource") {
     return {
       status: "resolved",
       targetNode: null
@@ -442,21 +476,39 @@ function nodeSearchAliases(node: ResourceNode): string[] {
 function createClarificationResponse(input: {
   readonly candidates: readonly ArchitecturePatchClarificationCandidate[];
   readonly intent: ArchitecturePatchIntent;
+  readonly suggestions?: readonly string[] | undefined;
   readonly providerMetadata: AiProviderMetadata;
 }): ArchitecturePatchClarification {
-  return {
+  const response: ArchitecturePatchClarification = {
     status: "needs_clarification",
     intent: input.intent,
     question: createClarificationQuestion(input.intent, input.candidates),
     candidates: [...input.candidates],
     providerMetadata: input.providerMetadata
   };
+
+  if (input.suggestions !== undefined && input.suggestions.length > 0) {
+    return {
+      ...response,
+      suggestions: [...input.suggestions]
+    };
+  }
+
+  return response;
 }
 
 function createClarificationQuestion(
   intent: ArchitecturePatchIntent,
   candidates: readonly ArchitecturePatchClarificationCandidate[]
 ): string {
+  if (intent.requestedAction === "manual_review") {
+    return "요청을 다이어그램 패치로 만들기 전에 무엇을 바꿀지 더 알려주세요. 추가, 삭제, 교체, 설정 변경 중 어디에 가까운가요?";
+  }
+
+  if (intent.requestedAction === "add_resource" && intent.resourceType === undefined) {
+    return "어떤 리소스를 추가할까요? 필요한 리소스 종류를 하나 골라주거나 직접 적어주세요.";
+  }
+
   if (candidates.length === 0) {
     return "현재 다이어그램에서 일치하는 리소스를 찾지 못했습니다. 대상 리소스를 조금 더 구체적으로 알려주세요.";
   }

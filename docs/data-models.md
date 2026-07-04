@@ -1011,6 +1011,7 @@ type ArchitecturePatchClarification = {
     resourceType: ResourceType;
     label: string;
   }[];
+  suggestions?: string[];
   providerMetadata: AiProviderMetadata;
 };
 

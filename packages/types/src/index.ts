@@ -836,6 +836,7 @@ export type ArchitecturePatchClarification = {
   intent: ArchitecturePatchIntent;
   question: string;
   candidates: ArchitecturePatchClarificationCandidate[];
+  suggestions?: string[] | undefined;
   providerMetadata: AiProviderMetadata;
 };
 

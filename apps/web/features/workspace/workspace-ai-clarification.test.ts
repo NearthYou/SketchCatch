@@ -44,6 +44,24 @@ test("generic website prompts start a beginner-friendly clarification flow", () 
   assert.doesNotMatch(message.content, /S3|CloudFront|EC2|버킷|보안 그룹/);
 });
 
+test("simple login service prompts ask the missing generation checklist before drafting", () => {
+  assert.equal(needsArchitectureClarification("간단하게 로그인 있는 서비스 만들어줘"), true);
+
+  const session = createArchitectureClarificationSession("간단하게 로그인 있는 서비스 만들어줘");
+  const question = getCurrentArchitectureClarificationQuestion(session);
+
+  assert.ok(question);
+  assert.equal(question.id, "operationPreference");
+  assert.match(question.question, /운영|기준|처음/);
+});
+
+test("login service prompts with an operating preference can generate without clarification", () => {
+  assert.equal(
+    needsArchitectureClarification("로그인 있고 개인정보 보호가 중요한 서비스를 만들어줘"),
+    false
+  );
+});
+
 test("clarification keeps visitor actions separate from multi-select site purpose", () => {
   const started = createArchitectureClarificationSession("웹사이트 하나 배포하고 싶어");
   const purposeAnswered = answerArchitectureClarification(

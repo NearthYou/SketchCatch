@@ -24,6 +24,33 @@ test("createArchitecturePatchPreview asks for a target when multiple resources m
   assert.match(response.question, /어떤 리소스/);
 });
 
+test("createArchitecturePatchPreview asks what manual-review instructions should change", () => {
+  const response = createArchitecturePatchPreview({
+    architectureJson: {
+      nodes: [
+        makeNode({ id: "app-server", type: "EC2", label: "App Server" }),
+        makeNode({ id: "assets-bucket", type: "S3", label: "Assets Bucket" })
+      ],
+      edges: []
+    },
+    instruction: "make it better"
+  });
+
+  assert.equal(response.status, "needs_clarification");
+  assert.equal(response.intent.requestedAction, "manual_review");
+  assert.deepEqual(response.suggestions, [
+    "리소스를 하나 추가해줘",
+    "특정 리소스를 삭제해줘",
+    "특정 리소스를 다른 리소스로 교체해줘",
+    "특정 리소스 설정을 바꿔줘"
+  ]);
+  assert.match(response.question, /무엇을 바꿀지/);
+  assert.deepEqual(
+    response.candidates.map((candidate) => candidate.resourceId),
+    ["app-server", "assets-bucket"]
+  );
+});
+
 test("createArchitecturePatchPreview removes the selected target and connected edges in the proposed preview", () => {
   const response = createArchitecturePatchPreview({
     architectureJson: {
@@ -113,6 +140,28 @@ test("createArchitecturePatchPreview recognizes broad natural-language add reque
     assert.equal(response.changes[0]?.resourceType, addCase.resourceType, addCase.instruction);
     assert.equal(response.proposedArchitectureJson.nodes.at(-1)?.type, addCase.resourceType, addCase.instruction);
   }
+});
+
+test("createArchitecturePatchPreview asks for the resource type when add requests are incomplete", () => {
+  const response = createArchitecturePatchPreview({
+    architectureJson: {
+      nodes: [makeNode({ id: "app-server", type: "EC2", label: "App Server" })],
+      edges: []
+    },
+    instruction: "리소스를 하나 추가해줘"
+  });
+
+  assert.equal(response.status, "needs_clarification");
+  assert.equal(response.intent.requestedAction, "add_resource");
+  assert.match(response.question, /어떤 리소스/);
+  assert.deepEqual(response.suggestions, [
+    "데이터베이스 추가",
+    "스토리지 버킷 추가",
+    "서버 인스턴스 추가",
+    "보안 그룹 추가",
+    "서브넷 추가",
+    "API Gateway 추가"
+  ]);
 });
 
 test("createArchitecturePatchPreview resolves label-mentioned targets before asking a clarification", () => {
