@@ -38,6 +38,7 @@ const AREA_CHILD_PADDING = 48;
 const MIN_RESOURCE_AREA_CHILD_FOOTPRINT: DiagramNode["size"] = { width: 112, height: 112 };
 const MAX_AREA_FIT_PASSES = 8;
 const AREA_PARENT_EDGE_LABELS = new Set(["contains", "hosts"]);
+const TERRAFORM_REFERENCE_ATTRIBUTE_SUFFIXES = ["id", "arn", "name", "execution_arn"] as const;
 const SECURITY_GROUP_REFERENCE_KEYS = ["securityGroupIds", "vpcSecurityGroupIds", "securityGroupId"] as const;
 const RESOURCE_ITEMS_BY_TERRAFORM_TYPE = new Map<string, ResourceItem>(
   resourceCatalog.map((item) => [item.nodeDefaults.type, item])
@@ -554,13 +555,19 @@ function matchesTerraformNodeReference(referenceValue: string, node: DiagramNode
     return false;
   }
 
-  const referenceNames = new Set([parameters.resourceName, node.id]);
+  const referenceNames = new Set(
+    [parameters.resourceName, node.id].filter(
+      (referenceName): referenceName is string => typeof referenceName === "string" && referenceName.length > 0
+    )
+  );
   const references = [...referenceNames].flatMap((resourceName) => {
-    const resourceReference = `${parameters.resourceType}.${resourceName}.id`;
+    const resourceReferences = TERRAFORM_REFERENCE_ATTRIBUTE_SUFFIXES.map(
+      (suffix) => `${parameters.resourceType}.${resourceName}.${suffix}`
+    );
 
     return parameters.terraformBlockType === "data"
-      ? [resourceReference, `data.${resourceReference}`]
-      : [resourceReference];
+      ? [...resourceReferences, ...resourceReferences.map((resourceReference) => `data.${resourceReference}`)]
+      : resourceReferences;
   });
 
   return references.includes(referenceValue);

@@ -13,6 +13,24 @@
 - Highest priority unfinished harness feature: `HARNESS-007`
 - Current blocker: none
 
+### 2026-07-04 - PR #151 리뷰 대응
+
+- Goal: PR #151에 남은 review thread를 반영해 프로젝트별 AI 채팅 기록 저장과 Terraform 참조 기반 area 부모 추론을 보정한다.
+- Completed:
+  - `WorkspaceAiChatDock`에서 `projectId` 전환 직후 이전 프로젝트 메시지가 새 프로젝트 저장소 키로 덮어써지지 않도록, 로드 완료 프로젝트를 ref로 추적하고 저장 effect를 guard 처리했다.
+  - `workspace-ai-diagram-adapter`의 Terraform 참조 매칭을 `.id`뿐 아니라 `.arn`, `.name`, `.execution_arn`까지 인식하도록 확장했다.
+  - 프로젝트 전환 저장 guard와 Terraform 참조 suffix 매칭 회귀 테스트를 추가했다.
+- Verification run:
+  - `.\apps\web\node_modules\.bin\tsx.CMD --test apps\web\features\workspace\workspace-ai-guardrail-warning.test.ts --test-name-pattern "storage skips"` - passed.
+  - `.\apps\web\node_modules\.bin\tsx.CMD --test apps\web\features\workspace\workspace-ai-diagram-adapter.test.ts --test-name-pattern "common Terraform reference attributes"` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm lint` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm typecheck` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm build` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm harness:check` - passed.
+- Known risks:
+  - `next build` temporarily changed `apps/web/next-env.d.ts`; the route type import was restored before commit.
+  - GitHub review thread에는 별도 resolve/comment를 남기지 않았다.
+
 ### 2026-07-04 - AI 채팅 입력 보조 문구 제거
 
 - Goal: AI 채팅 입력 영역에서 `정보가 부족하면 질문부터 할게요`, `더 정확히: 공개 여부...`, `메시지` 라벨, 입력칸 placeholder를 제거하고, 채팅 패널 폭은 이전 floating dock 크기로 되돌린다.

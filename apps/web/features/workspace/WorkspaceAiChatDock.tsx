@@ -97,6 +97,7 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
   const [simulationErrorMessage, setSimulationErrorMessage] = useState("");
   const [simulationFingerprint, setSimulationFingerprint] = useState<string | null>(null);
   const transcriptRef = useRef<HTMLDivElement | null>(null);
+  const loadedProjectIdRef = useRef(projectId);
   const boardSnapshot = useMemo(
     () => createWorkspaceAiBoardSnapshot(context.diagram),
     [context.diagram]
@@ -110,13 +111,18 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
   );
 
   useEffect(() => {
-    setMessages(readStoredChatMessages(projectId));
-    setSelectedSuggestionLabelsByMessageId({});
-  }, [projectId]);
+    if (loadedProjectIdRef.current !== projectId) {
+      return;
+    }
 
-  useEffect(() => {
     storeChatMessages(projectId, messages);
   }, [messages, projectId]);
+
+  useEffect(() => {
+    setMessages(readStoredChatMessages(projectId));
+    setSelectedSuggestionLabelsByMessageId({});
+    loadedProjectIdRef.current = projectId;
+  }, [projectId]);
 
   useEffect(() => {
     transcriptRef.current?.scrollTo({

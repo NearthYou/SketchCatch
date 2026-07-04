@@ -77,6 +77,20 @@ test("workspace AI chat history is persisted per project", () => {
   assert.match(workspaceAiChatDockSource, /messages/);
 });
 
+test("workspace AI chat storage skips project changes until matching messages are loaded", () => {
+  const storeEffectIndex = workspaceAiChatDockSource.indexOf("storeChatMessages(projectId, messages)");
+  const projectLoadEffectIndex = workspaceAiChatDockSource.indexOf("setMessages(readStoredChatMessages(projectId))");
+
+  assert.match(workspaceAiChatDockSource, /loadedProjectIdRef/);
+  assert.match(workspaceAiChatDockSource, /loadedProjectIdRef\.current !== projectId/);
+  assert.ok(storeEffectIndex >= 0);
+  assert.ok(projectLoadEffectIndex >= 0);
+  assert.ok(
+    storeEffectIndex < projectLoadEffectIndex,
+    "Storage guard effect must run before the project load effect so old messages are not written to the new project key"
+  );
+});
+
 test("workspace AI clarification supports multi-select suggestion chips", () => {
   assert.match(workspaceAiChatDockSource, /selectedSuggestionLabelsByMessageId/);
   assert.match(workspaceAiChatDockSource, /toggleSuggestionSelection/);

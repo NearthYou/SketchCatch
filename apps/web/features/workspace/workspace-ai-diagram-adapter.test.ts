@@ -304,6 +304,51 @@ test("convertArchitectureJsonToDiagramJson resolves Terraform references to area
   assert.equal(parentByNodeId.get("web-server"), "public-a");
 });
 
+test("convertArchitectureJsonToDiagramJson resolves common Terraform reference attributes", () => {
+  const architectureJson: ArchitectureJson = {
+    nodes: [
+      {
+        id: "network-main",
+        type: "VPC",
+        label: "Main VPC",
+        positionX: 100,
+        positionY: 100,
+        config: {
+          terraformResourceName: "main"
+        }
+      },
+      {
+        id: "public-a",
+        type: "SUBNET",
+        label: "Public Subnet",
+        positionX: 160,
+        positionY: 180,
+        config: {
+          terraformResourceName: "public",
+          vpcId: "aws_vpc.main.arn"
+        }
+      },
+      {
+        id: "web-server",
+        type: "EC2",
+        label: "Web Server",
+        positionX: 220,
+        positionY: 260,
+        config: {
+          subnetId: "aws_subnet.public.name"
+        }
+      }
+    ],
+    edges: []
+  };
+
+  const diagramJson = convertArchitectureJsonToDiagramJson(architectureJson);
+  const parentByNodeId = new Map(diagramJson.nodes.map((node) => [node.id, node.metadata?.parentAreaNodeId]));
+
+  assert.equal(parentByNodeId.get("public-a"), "network-main");
+  assert.equal(parentByNodeId.get("web-server"), "public-a");
+});
+
 test("convertArchitectureJsonToDiagramJson marks VPC and Subnet containment for board area nodes", () => {
   const architectureJson: ArchitectureJson = {
     nodes: [
