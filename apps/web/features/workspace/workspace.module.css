@@ -1610,40 +1610,6 @@
   outline-offset: 3px;
 }
 
-.terraformValidationProgressBar {
-  align-items: stretch;
-  display: flex;
-  min-height: 28px;
-  padding: 0 12px;
-}
-
-.terraformValidationProgressBar span {
-  align-items: center;
-  color: #ffffff;
-  display: flex;
-  flex: 1 1 auto;
-  font-size: 12px;
-  font-weight: 900;
-  line-height: 1.2;
-  min-width: 0;
-  overflow: hidden;
-  padding: 0 4px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.terraformValidationProgressWorking {
-  background: #2563eb;
-}
-
-.terraformValidationProgressDone {
-  background: #2fa36b;
-}
-
-.terraformValidationProgressError {
-  background: #f1434a;
-}
-
 .serverSaveToast {
   animation: serverSaveToastIn 180ms ease-out;
   background: #ecfdf5;

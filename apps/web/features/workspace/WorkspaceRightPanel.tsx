@@ -496,7 +496,6 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
             setResourceWorkspaceView("settings");
             setActiveView("resource");
           }}
-          projectId={projectId}
         />
       </div>
       <div className={styles.rightPanelView} hidden={activeView !== "issues"}>

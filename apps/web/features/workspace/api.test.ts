@@ -22,7 +22,6 @@ import {
   runDeploymentPlan,
   runDeploymentApply,
   saveProjectDraft,
-  prepareTerraformValidationWorkspace,
   testAwsConnection,
   uploadProjectAsset,
   validateTerraformCode,
@@ -123,7 +122,7 @@ test("saveProjectDraft sends authenticated PUT request with diagram json", async
   });
 });
 
-test("validateTerraformCode sends full validation mode, files, and project id", async (context) => {
+test("validateTerraformCode sends static validation files only", async (context) => {
   const originalFetch = globalThis.fetch;
   const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
   const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
@@ -140,10 +139,7 @@ test("validateTerraformCode sends full validation mode, files, and project id", 
 
     return new Response(
       JSON.stringify({
-        diagnostics: [],
-        mode: "full",
-        stage: "cli_validate",
-        status: "passed"
+        diagnostics: []
       }),
       {
         headers: {
@@ -155,8 +151,6 @@ test("validateTerraformCode sends full validation mode, files, and project id", 
   };
 
   const response = await validateTerraformCode({
-    mode: "full",
-    projectId: project.id,
     terraformCode: "",
     terraformFiles: [
       {
@@ -167,16 +161,11 @@ test("validateTerraformCode sends full validation mode, files, and project id", 
   });
 
   assert.deepEqual(response, {
-    diagnostics: [],
-    mode: "full",
-    stage: "cli_validate",
-    status: "passed"
+    diagnostics: []
   });
   assert.equal(String(requests[0]?.input), "/api/terraform/validate");
   assert.equal(requests[0]?.init?.method, "POST");
   assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), {
-    mode: "full",
-    projectId: project.id,
     terraformCode: "",
     terraformFiles: [
       {
@@ -184,54 +173,6 @@ test("validateTerraformCode sends full validation mode, files, and project id", 
         terraformCode: `resource "aws_vpc" "main" {}`
       }
     ]
-  });
-});
-
-test("prepareTerraformValidationWorkspace posts project scoped prepare request", async (context) => {
-  const originalFetch = globalThis.fetch;
-  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
-  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
-
-  context.after(() => {
-    globalThis.fetch = originalFetch;
-    restoreWindow(originalWindowDescriptor);
-  });
-
-  installAuthSession();
-
-  globalThis.fetch = async (input, init) => {
-    requests.push({ input, init });
-
-    return new Response(
-      JSON.stringify({
-        diagnostics: [],
-        stage: "cli_prepare",
-        status: "passed"
-      }),
-      {
-        headers: {
-          "Content-Type": "application/json"
-        },
-        status: 200
-      }
-    );
-  };
-
-  const response = await prepareTerraformValidationWorkspace({
-    projectId: project.id,
-    provider: "aws"
-  });
-
-  assert.deepEqual(response, {
-    diagnostics: [],
-    stage: "cli_prepare",
-    status: "passed"
-  });
-  assert.equal(String(requests[0]?.input), "/api/terraform/validate/prepare");
-  assert.equal(requests[0]?.init?.method, "POST");
-  assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), {
-    projectId: project.id,
-    provider: "aws"
   });
 });
 

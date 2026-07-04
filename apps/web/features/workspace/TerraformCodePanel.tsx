@@ -5,8 +5,7 @@ import type {
   AiTerraformPreviewExplanationResult,
   DiagramJson,
   TerraformDiagnostic,
-  TerraformSyncFileInput,
-  TerraformValidationMode
+  TerraformSyncFileInput
 } from "@sketchcatch/types";
 import {
   AlertCircle,
@@ -23,7 +22,6 @@ import { getApiErrorMessage } from "../../lib/api-client";
 import type { DiagramEditorPanelContext } from "../diagram-editor";
 import {
   generateTerraformCode,
-  prepareTerraformValidationWorkspace,
   runAiTerraformErrorExplanation,
   runAiTerraformPreviewExplanation,
   syncTerraformToDiagram,
@@ -80,15 +78,6 @@ type TerraformErrorExplanationEntry = {
   readonly message: string;
   readonly state: RequestState;
 };
-
-type TerraformValidationProgress =
-  | { readonly kind: "idle" }
-  | { readonly kind: "preparing"; readonly message: string }
-  | { readonly kind: "static"; readonly message: string }
-  | { readonly kind: "cli"; readonly message: string }
-  | { readonly kind: "syncing"; readonly message: string }
-  | { readonly kind: "complete"; readonly message: "완료" }
-  | { readonly kind: "error"; readonly message: string };
 
 function createTerraformDiagnosticKey(diagnostic: TerraformDiagnostic | null): string {
   if (!diagnostic) {
@@ -153,19 +142,13 @@ function createTerraformPreviewExplanationScopeValue(
 
 async function validateTerraformVirtualFiles({
   combinedTerraformCode,
-  files,
-  mode,
-  projectId
+  files
 }: {
   readonly combinedTerraformCode: string;
   readonly files: readonly TerraformVirtualFile[];
-  readonly mode: TerraformValidationMode;
-  readonly projectId: string;
 }): Promise<TerraformDiagnostic[]> {
   const terraformFiles = toTerraformValidationFiles(files);
   const validationResult = await validateTerraformCode({
-    mode,
-    projectId,
     terraformCode: terraformFiles.length > 0 ? "" : combinedTerraformCode,
     terraformFiles
   });
@@ -190,40 +173,12 @@ function hasBlockingTerraformDiagnostic(diagnostics: readonly TerraformDiagnosti
   return diagnostics.some((diagnostic) => diagnostic.severity === "error");
 }
 
-function createTerraformValidationErrorMessage(diagnostics: readonly TerraformDiagnostic[]): string {
-  const errorDiagnostic = diagnostics.find((diagnostic) => diagnostic.severity === "error");
-
-  if (!errorDiagnostic) {
-    return "Terraform 검증을 통과하지 못했습니다.";
-  }
-
-  if (!errorDiagnostic.line) {
-    return "Unable to save. There is an issue.";
-  }
-
-  return `Unable to save. There is an issue on line ${errorDiagnostic.line}.`;
-}
-
 function createStaleTerraformValidationDiagnostic(): TerraformDiagnostic {
   return {
     severity: "error",
     code: "terraform.validation.stale",
     message: "Terraform 코드가 변경되어 다시 검증이 필요합니다."
   };
-}
-
-function getTerraformValidationProgressClassName(
-  progress: TerraformValidationProgress
-): string {
-  if (progress.kind === "complete") {
-    return styles.terraformValidationProgressDone ?? "";
-  }
-
-  if (progress.kind === "error") {
-    return styles.terraformValidationProgressError ?? "";
-  }
-
-  return styles.terraformValidationProgressWorking ?? "";
 }
 
 function addTerraformDiagnosticSource(
@@ -266,7 +221,6 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
   readonly onExternalSaveComplete: (saved: boolean, requestId: number) => void;
   readonly onOpenIssues: () => void;
   readonly onOpenResourceSettings: () => void;
-  readonly projectId: string;
 }>(function TerraformCodePanel({
   context,
   externalDiscardRequestId,
@@ -276,8 +230,7 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
   onDirtyChange,
   onExternalSaveComplete,
   onOpenIssues,
-  onOpenResourceSettings,
-  projectId
+  onOpenResourceSettings
 }, ref) {
   const [terraformFiles, setTerraformFiles] = useState<TerraformVirtualFile[]>(() =>
     createTerraformFilesFromGeneratedCode(context.diagram, "")
@@ -291,9 +244,6 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
   const [statusMessage, setStatusMessage] = useState("main.tf");
   const [hasLocalEdits, setHasLocalEdits] = useState(false);
   const [saveBanner, setSaveBanner] = useState<TerraformSaveBanner | null>(null);
-  const [validationProgress, setValidationProgress] = useState<TerraformValidationProgress>({
-    kind: "idle"
-  });
   const [terraformPreviewExplanation, setTerraformPreviewExplanation] =
     useState<AiTerraformPreviewExplanationResult | null>(null);
   const [terraformPreviewExplanationState, setTerraformPreviewExplanationState] =
@@ -307,7 +257,6 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
   const codeRequestIdRef = useRef(0);
   const codeVersionRef = useRef(0);
   const isPreparingTerraformArtifactRef = useRef(false);
-  const preparedValidationProjectIdsRef = useRef<Set<string>>(new Set());
   const latestDiagramFingerprintRef = useRef("");
   const latestDiagramResourceAddressesRef = useRef<Set<string> | null>(null);
   const latestExternalDiscardRequestIdRef = useRef(externalDiscardRequestId);
@@ -546,7 +495,6 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
         onDiagnosticsChange([]);
         setHasLocalEdits(false);
         setSaveBanner(null);
-        setValidationProgress({ kind: "idle" });
         setTerraformPreviewExplanation(null);
         setTerraformPreviewExplanationMessage("");
         setTerraformPreviewExplanationState("idle");
@@ -564,18 +512,15 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
     if (!combinedTerraformCode.trim()) {
       setDiagnostics([]);
       onDiagnosticsChange([]);
-      setValidationProgress({ kind: "idle" });
       return [];
     }
 
     const requestCodeVersion = codeVersionRef.current;
-    setValidationProgress({ kind: "static", message: "기본 문법 확인 중" });
+    setStatusMessage("기본 문법 확인 중");
 
-    const staticDiagnostics = await validateTerraformVirtualFiles({
+    const validationDiagnostics = await validateTerraformVirtualFiles({
       combinedTerraformCode,
-      files: terraformFiles,
-      mode: "static",
-      projectId
+      files: terraformFiles
     });
 
     if (requestCodeVersion !== codeVersionRef.current) {
@@ -584,67 +529,22 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
       setDiagnostics(staleDiagnostics);
       onDiagnosticsChange(staleDiagnostics);
       setStatusMessage("검증 재시도 필요");
-      setValidationProgress({
-        kind: "error",
-        message: createTerraformValidationErrorMessage(staleDiagnostics)
-      });
       return staleDiagnostics;
     }
-
-    if (hasBlockingTerraformDiagnostic(staticDiagnostics)) {
-      setDiagnostics(staticDiagnostics);
-      onDiagnosticsChange(staticDiagnostics);
-      setStatusMessage("진단 확인 필요");
-      setValidationProgress({
-        kind: "error",
-        message: createTerraformValidationErrorMessage(staticDiagnostics)
-      });
-      return staticDiagnostics;
-    }
-
-    setValidationProgress({ kind: "cli", message: "Terraform CLI 검증 중" });
-
-    const cliDiagnostics = await validateTerraformVirtualFiles({
-      combinedTerraformCode,
-      files: terraformFiles,
-      mode: "full",
-      projectId
-    });
-
-    if (requestCodeVersion !== codeVersionRef.current) {
-      const staleDiagnostics = [createStaleTerraformValidationDiagnostic()];
-
-      setDiagnostics(staleDiagnostics);
-      onDiagnosticsChange(staleDiagnostics);
-      setStatusMessage("검증 재시도 필요");
-      setValidationProgress({
-        kind: "error",
-        message: createTerraformValidationErrorMessage(staleDiagnostics)
-      });
-      return staleDiagnostics;
-    }
-
-    const validationDiagnostics = cliDiagnostics;
 
     setDiagnostics(validationDiagnostics);
     onDiagnosticsChange(validationDiagnostics);
 
     if (hasBlockingTerraformDiagnostic(validationDiagnostics)) {
       setStatusMessage("진단 확인 필요");
-      setValidationProgress({
-        kind: "error",
-        message: createTerraformValidationErrorMessage(validationDiagnostics)
-      });
       return validationDiagnostics;
     }
 
     setStatusMessage(validationDiagnostics.length === 0 ? "검증 완료" : "진단 확인 필요");
-    setValidationProgress({ kind: "complete", message: "완료" });
     return validationDiagnostics;
   }, [
     combinedTerraformCode,
     onDiagnosticsChange,
-    projectId,
     terraformFiles
   ]);
 
@@ -673,7 +573,7 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
       return null;
     }
 
-    setValidationProgress({ kind: "syncing", message: "Terraform 변경사항 저장 중" });
+    setStatusMessage("Terraform 변경사항 저장 중");
 
     const syncResult = await syncTerraformToDiagram({
       diagramJson: context.diagram,
@@ -693,10 +593,6 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
     if (syncError) {
       setSaveBanner(null);
       setStatusMessage("저장 실패");
-      setValidationProgress({
-        kind: "error",
-        message: createTerraformValidationErrorMessage(syncResult.diagnostics)
-      });
       return null;
     }
 
@@ -710,7 +606,6 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
     setHasLocalEdits(false);
     setSaveBanner(null);
     setStatusMessage("저장됨");
-    setValidationProgress({ kind: "complete", message: "완료" });
     onDirtyChange(false);
 
     return {
@@ -744,7 +639,6 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
     if (!hasTerraformCode) {
       setDiagnostics([]);
       onDiagnosticsChange([]);
-      setValidationProgress({ kind: "idle" });
       return [];
     }
 
@@ -762,10 +656,6 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
     } catch (error) {
       setRequestState("error");
       setErrorMessage(getApiErrorMessage(error, "Terraform 코드를 검증하지 못했습니다."));
-      setValidationProgress({
-        kind: "error",
-        message: "Terraform 코드를 검증하지 못했습니다."
-      });
       throw error;
     }
   }, [
@@ -828,67 +718,6 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
   }, [currentDiagramFingerprint, externalDiscardRequestId, refreshTerraformCode]);
 
   useEffect(() => {
-    if (!isVisible) {
-      return;
-    }
-
-    if (preparedValidationProjectIdsRef.current.has(projectId)) {
-      return;
-    }
-
-    preparedValidationProjectIdsRef.current.add(projectId);
-    let isCancelled = false;
-
-    setValidationProgress((currentProgress) =>
-      currentProgress.kind === "idle"
-        ? { kind: "preparing", message: "Terraform 검증 준비 중" }
-        : currentProgress
-    );
-
-    void prepareTerraformValidationWorkspace({
-      projectId,
-      provider: "aws"
-    })
-      .then((result) => {
-        if (isCancelled) {
-          return;
-        }
-
-        if (result.status === "failed") {
-          setValidationProgress((currentProgress) =>
-            currentProgress.kind === "preparing"
-              ? {
-                  kind: "error",
-                  message: result.diagnostics[0]?.message ?? "Terraform 검증 준비에 실패했습니다."
-                }
-              : currentProgress
-          );
-          return;
-        }
-
-        setValidationProgress((currentProgress) =>
-          currentProgress.kind === "preparing" ? { kind: "idle" } : currentProgress
-        );
-      })
-      .catch(() => {
-        if (!isCancelled) {
-          setValidationProgress((currentProgress) =>
-            currentProgress.kind === "preparing"
-              ? {
-                  kind: "error",
-                  message: "Terraform 검증 준비에 실패했습니다."
-                }
-              : currentProgress
-          );
-        }
-      });
-
-    return () => {
-      isCancelled = true;
-    };
-  }, [isVisible, projectId]);
-
-  useEffect(() => {
     const previousAddresses = latestDiagramResourceAddressesRef.current;
     latestDiagramResourceAddressesRef.current = currentDiagramResourceAddresses;
 
@@ -918,7 +747,6 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
     onDiagnosticsChange([]);
     setHasLocalEdits(hasRemainingTerraformCode);
     setSaveBanner(hasRemainingTerraformCode ? { kind: "dirty" } : null);
-    setValidationProgress({ kind: "idle" });
     setTerraformPreviewExplanation(null);
     setTerraformPreviewExplanationMessage("");
     setTerraformPreviewExplanationState("idle");
@@ -1076,7 +904,6 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
     setTerraformErrorExplanationsByKey({});
     setDiagnostics([]);
     onDiagnosticsChange([]);
-    setValidationProgress({ kind: "idle" });
     setStatusMessage("수정 중");
   }
 
@@ -1255,14 +1082,6 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
           <button onClick={handleSeeMore} type="button">
             See more
           </button>
-        </div>
-      ) : null}
-
-      {validationProgress.kind !== "idle" ? (
-        <div className={styles.terraformValidationProgressBar} aria-live="polite">
-          <span className={getTerraformValidationProgressClassName(validationProgress)}>
-            {validationProgress.message}
-          </span>
         </div>
       ) : null}
 

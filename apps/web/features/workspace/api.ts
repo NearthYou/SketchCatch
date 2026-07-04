@@ -44,8 +44,6 @@ import type {
   TestAwsConnectionRequest,
   TestAwsConnectionResponse,
   TerraformGenerateResponse,
-  TerraformValidationPrepareRequest,
-  TerraformValidationPrepareResponse,
   TerraformSyncFileInput,
   TerraformSyncToDiagramResponse,
   TerraformValidateRequest,
@@ -249,16 +247,6 @@ export async function validateTerraformCode(
     auth: true,
     method: "POST",
     body
-  });
-}
-
-export async function prepareTerraformValidationWorkspace(
-  input: TerraformValidationPrepareRequest
-): Promise<TerraformValidationPrepareResponse> {
-  return apiFetch<TerraformValidationPrepareResponse>("/terraform/validate/prepare", {
-    auth: true,
-    method: "POST",
-    body: input
   });
 }
 

@@ -1043,35 +1043,13 @@ export type TerraformDiagnostic = {
   nodeId?: string | undefined;
 };
 
-export type TerraformValidationMode = "static" | "full";
-
-export type TerraformValidationStage = "static" | "cli_prepare" | "cli_validate";
-
-export type TerraformValidationStatus = "passed" | "failed";
-
 export type TerraformValidateRequest = {
   terraformCode: string;
   terraformFiles?: TerraformSyncFileInput[] | undefined;
-  mode?: TerraformValidationMode | undefined;
-  projectId?: string | undefined;
 };
 
 export type TerraformValidateResponse = {
   diagnostics: TerraformDiagnostic[];
-  mode: TerraformValidationMode;
-  stage: TerraformValidationStage;
-  status: TerraformValidationStatus;
-};
-
-export type TerraformValidationPrepareRequest = {
-  projectId?: string | undefined;
-  provider?: CloudProvider | undefined;
-};
-
-export type TerraformValidationPrepareResponse = {
-  diagnostics: TerraformDiagnostic[];
-  stage: "cli_prepare";
-  status: TerraformValidationStatus;
 };
 
 export type TerraformSyncToDiagramRequest = {

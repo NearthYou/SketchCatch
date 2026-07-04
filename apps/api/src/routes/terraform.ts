@@ -5,7 +5,6 @@ import type {
   DiagramJson,
   DiagramNodeMetadata,
   TerraformGenerateResponse,
-  TerraformValidationPrepareResponse,
   TerraformSyncToDiagramResponse,
   TerraformValidateRequest,
   TerraformValidateResponse
@@ -18,15 +17,11 @@ import {
 } from "../services/terraform/diagram-to-terraform.js";
 import { generateTerraformFromDiagramJson } from "../services/terraform/terraform-preview.js";
 import { syncTerraformToDiagramJson } from "../services/terraform/terraform-to-diagram.js";
-import {
-  prepareTerraformValidationWorkspace as prepareTerraformValidationWorkspaceService,
-  validateTerraformPreviewCode as validateTerraformPreviewCodeService
-} from "../services/terraform/terraform-validation.js";
+import { createTerraformValidationDiagnostics } from "../services/terraform/terraform-diagnostics.js";
 
 const terraformValidationMaxCharacters = 1024 * 1024;
 const terraformValidationMaxFileCount = 64;
 const terraformValidationMaxFileNameLength = 120;
-const terraformValidationMaxProjectIdLength = 128;
 
 const terraformValidateBodySchema = z.object({
   terraformCode: z.string().max(terraformValidationMaxCharacters),
@@ -38,15 +33,8 @@ const terraformValidateBodySchema = z.object({
       })
     )
     .max(terraformValidationMaxFileCount)
-    .optional(),
-  mode: z.enum(["static", "full"]).optional(),
-  projectId: z.string().min(1).max(terraformValidationMaxProjectIdLength).optional()
-});
-
-const terraformValidationPrepareBodySchema = z.object({
-  projectId: z.string().min(1).max(terraformValidationMaxProjectIdLength).optional(),
-  provider: z.enum(["aws"]).optional()
-});
+    .optional()
+}).strict();
 
 const terraformBlockTypeSchema = z.enum(["resource", "data"]);
 const terraformIdentifierSchema = z.string().min(1).regex(TERRAFORM_IDENTIFIER_PATTERN);
@@ -154,9 +142,6 @@ export type TerraformRouteOptions = {
   validateTerraformPreviewCode?: (
     input: TerraformValidateRequest
   ) => Promise<TerraformValidateResponse>;
-  prepareTerraformValidationWorkspace?: (
-    input: z.infer<typeof terraformValidationPrepareBodySchema>
-  ) => Promise<TerraformValidationPrepareResponse>;
 };
 
 export async function registerTerraformRoutes(
@@ -165,9 +150,7 @@ export async function registerTerraformRoutes(
 ): Promise<void> {
   const getTerraformDatabaseClient = options.getDatabaseClient ?? getDatabaseClient;
   const validateTerraformPreviewCode =
-    options.validateTerraformPreviewCode ?? validateTerraformPreviewCodeService;
-  const prepareTerraformValidationWorkspace =
-    options.prepareTerraformValidationWorkspace ?? prepareTerraformValidationWorkspaceService;
+    options.validateTerraformPreviewCode ?? validateTerraformPreviewCodeStatic;
 
   app.post("/terraform/generate", async (request, reply): Promise<TerraformGenerateResponse | void> => {
     await requireActiveUserId(request, getTerraformDatabaseClient);
@@ -201,14 +184,6 @@ export async function registerTerraformRoutes(
     return validateTerraformPreviewCode(body);
   });
 
-  app.post("/terraform/validate/prepare", async (request): Promise<TerraformValidationPrepareResponse> => {
-    await requireActiveUserId(request, getTerraformDatabaseClient);
-
-    const body = terraformValidationPrepareBodySchema.parse(request.body);
-
-    return prepareTerraformValidationWorkspace(body);
-  });
-
   app.post(
     "/terraform/sync-to-diagram",
     async (request): Promise<TerraformSyncToDiagramResponse> => {
@@ -222,4 +197,12 @@ export async function registerTerraformRoutes(
       });
     }
   );
+}
+
+async function validateTerraformPreviewCodeStatic(
+  input: TerraformValidateRequest
+): Promise<TerraformValidateResponse> {
+  return {
+    diagnostics: createTerraformValidationDiagnostics(input)
+  };
 }

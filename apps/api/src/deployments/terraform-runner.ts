@@ -6,7 +6,6 @@ import { performance } from "node:perf_hooks";
 
 const terraformInitArgs = ["init", "-backend=false", "-input=false", "-no-color"] as const;
 const terraformValidateArgs = ["validate", "-no-color"] as const;
-const terraformValidateJsonArgs = ["validate", "-json"] as const;
 const defaultTerraformPlanFileName = "tfplan";
 const defaultTerraformPluginCacheDir = join(tmpdir(), "sketchcatch-terraform-plugin-cache");
 const defaultTerraformOutputMaxBytes = 512 * 1024;
@@ -61,13 +60,6 @@ export async function runTerraformValidate(
   options: RunTerraformCommandOptions = {}
 ): Promise<TerraformRunResult> {
   return runTerraformCommand(workdir, [...terraformValidateArgs], options);
-}
-
-export async function runTerraformValidateJson(
-  workdir: string,
-  options: RunTerraformCommandOptions = {}
-): Promise<TerraformRunResult> {
-  return runTerraformCommand(workdir, [...terraformValidateJsonArgs], options);
 }
 
 export async function runTerraformPlan(

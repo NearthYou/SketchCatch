@@ -35,7 +35,6 @@ export type BuildAppOptions = {
   projectAssetStorage?: ProjectAssetStorage;
   projectDeletionStorage?: ProjectDeletionStorage;
   validateTerraformPreviewCode?: TerraformRouteOptions["validateTerraformPreviewCode"];
-  prepareTerraformValidationWorkspace?: TerraformRouteOptions["prepareTerraformValidationWorkspace"];
 };
 
 // 테스트와 서버가 같은 앱을 쓰되, LLM 호출 계층은 옵션으로만 주입합니다.
@@ -172,9 +171,6 @@ function createTerraformRouteOptions(
     getDatabaseClient,
     ...(options.validateTerraformPreviewCode !== undefined
       ? { validateTerraformPreviewCode: options.validateTerraformPreviewCode }
-      : {}),
-    ...(options.prepareTerraformValidationWorkspace !== undefined
-      ? { prepareTerraformValidationWorkspace: options.prepareTerraformValidationWorkspace }
       : {})
   };
 }

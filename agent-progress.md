@@ -15,38 +15,37 @@
 
 ## 세션 레코드
 
-### 2026-07-03 - Terraform editor 2단계 검증과 CLI 진행 상태
+### 2026-07-04 - Terraform editor CLI 검증 폐기와 정적 diagnostics 강화
 
-- Goal: Terraform editor 저장/manual Validate에서 빠른 정적 검증을 먼저 수행하고, 통과한 경우에만 backend Terraform CLI 검증을 실행하며, CLI 검증 진행 상태를 editor 상단 bar로 표시한다.
+- Goal: Terraform editor 검증에서 CLI 실행 경로를 제거하고, 기존 1차 정적 diagnostics를 저장 전 선행 검사로 강화한다.
 - Completed:
-  - `TerraformValidateRequest`/`TerraformValidateResponse`에 `mode`, `stage`, `status`, `terraformFiles`, `projectId` 계약을 추가했다.
-  - API에 `terraform-validation.ts`를 추가해 `static -> cli_prepare -> cli_validate` 검증 흐름을 분리했다.
-  - `terraform validate -json` runner를 추가하고, CLI diagnostics를 `TerraformDiagnostic`으로 변환하게 했다.
-  - `full` mode는 정적 오류를 먼저 fail-fast로 반환하고, 정적 오류가 없을 때만 임시 workdir에서 `terraform init -backend=false`와 `terraform validate -json`을 실행한다.
-  - Editor validation은 `module`, `provider`, 사용자 정의 `terraform` root block을 CLI 실행 전에 막고, 파일명/파일 수/입력 크기 제한과 격리된 HOME/TF_DATA_DIR/TF_CLI_CONFIG_FILE 환경을 사용한다.
-  - Terraform panel 진입 시 `/terraform/validate/prepare`로 provider plugin cache warmup을 요청하고, 저장/manual Validate 시에는 code editor 위 progress bar에 준비/정적검증/CLI검증/완료/오류 상태를 표시한다.
-  - 검증 중 코드가 바뀐 경우 이전 결과를 성공처럼 반영하지 않고 재검증 필요 diagnostics를 남기게 했다.
-  - Terraform leave modal에서 저장 취소/폐기 뒤 오래된 save completion이 나중에 도착해도 현재 모달 상태를 덮지 않도록 request id를 무효화했다.
-  - 배포 준비 저장은 Terraform panel에서 이미 full validation을 통과한 source를 다시 combined-code로 중복 검증하지 않도록 `skipValidation` 경로를 추가했다.
-  - `docs/data-models.md`와 `docs/sw/003_테라폼동기화구조설명_sw.md`에 editor validation 경계와 CLI 제한 범위를 기록했다.
+  - `/terraform/validate/prepare` endpoint와 editor validation prepare/warmup 흐름을 제거했다.
+  - `TerraformValidateRequest`/`TerraformValidateResponse`에서 `mode`, `stage`, `status`, `projectId`, prepare DTO를 제거하고 `diagnostics` 중심 static-only 계약으로 되돌렸다.
+  - editor validation 전용 `terraform-validation.ts`와 테스트를 제거했다.
+  - `runTerraformValidateJson` helper를 제거하고, Deployment 실행 경계에서 쓰는 기존 Terraform runner 함수는 유지했다.
+  - Terraform code panel의 검증 progress bar와 prepare 상태를 제거하고, 기존 status bar/diagnostics/Issues 흐름으로 검증 결과를 보여주게 했다.
+  - 정적 diagnostics가 `()`, 잘못된 attribute line, duplicate address error, nested block assignment, 선언되지 않은 local reference, shared definition 밖 AWS block, virtual file source metadata를 검사하게 했다.
+  - `docs/data-models.md`, `docs/sw/001_테라폼변환구현가이드_sw.md`, `docs/sw/003_테라폼동기화구조설명_sw.md`를 static-only 기준으로 갱신했다.
 - Verification run:
-  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-diagnostics.test.ts src/services/terraform/terraform-validation.test.ts src/routes/terraform.test.ts src/deployments/terraform-runner.test.ts src/deployments/terraform-plugin-cache-warmup.test.ts` - passed.
-  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/api.test.ts features/workspace/workspace-right-panel-layout.test.ts features/workspace/workspace-deployment-artifacts.test.ts features/workspace/terraform-diagnostic-line-highlights.test.ts features/workspace/pre-deployment-diagnostics.test.ts` - passed.
+  - Red before fix: focused API/Web tests failed because CLI endpoint/mode/progress UI and missing static diagnostics were still present.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-diagnostics.test.ts src/routes/terraform.test.ts` - passed.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/api.test.ts features/workspace/workspace-deployment-artifacts.test.ts features/workspace/workspace-right-panel-layout.test.ts` - passed.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-diagnostics.test.ts src/routes/terraform.test.ts src/deployments/terraform-runner.test.ts src/services/terraform/terraform-to-diagram.test.ts` - passed.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/api.test.ts features/workspace/workspace-deployment-artifacts.test.ts features/workspace/workspace-right-panel-layout.test.ts features/workspace/terraform-diagnostic-line-highlights.test.ts features/workspace/pre-deployment-diagnostics.test.ts` - passed.
   - `pnpm --filter @sketchcatch/types typecheck` - passed.
-  - `pnpm --filter @sketchcatch/api typecheck` - passed.
-  - `pnpm --filter @sketchcatch/web typecheck` - passed.
   - `git diff --check` - passed.
   - `pnpm lint` - passed.
   - `pnpm typecheck` - passed.
   - `pnpm build` - passed.
+  - `pnpm harness:check` - passed.
 - Evidence recorded:
-  - 실제 Terraform cloud mutation은 실행하지 않았다. CLI 검증 경로는 `init -backend=false`와 `validate -json`만 사용한다.
+  - 실제 Terraform apply/destroy, cloud mutation, Git/CI/CD handoff는 실행하지 않았다.
+  - editor validation은 Terraform CLI를 실행하지 않는 static-only 문자열 검사다.
   - `pnpm build`가 `apps/web/next-env.d.ts`를 prod route type 경로로 바꿨지만, 생성물 변경이라 다시 tracked dev 경로로 원복했다.
 - Known risks:
-  - 브라우저 수동 smoke는 아직 수행하지 않았다. 자동 source/layout 테스트와 build로 progress bar 위치/계약을 확인했다.
-  - 전체 `pnpm test`는 이전 세션에서 deployment lock-file/path expectation 실패가 알려져 있어 이번 마무리에서는 focused tests와 필수 게이트를 기준으로 검증했다.
+  - 브라우저 수동 smoke는 아직 수행하지 않았다.
 - Next best action:
-  - Terraform editor에서 실제로 저장 버튼을 눌렀을 때 progress bar 문구와 오류 line squiggle이 사용자가 기대하는 속도로 보이는지 브라우저 smoke를 한 번 확인한다.
+  - Terraform editor에서 static diagnostics 빨간줄과 Issues 표시를 수동 smoke한다.
 
 ### 2026-07-03 - Terraform Preview 오케스트레이션 분리
 

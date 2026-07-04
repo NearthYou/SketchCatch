@@ -123,10 +123,7 @@ test("saveWorkspaceTerraformArtifact validates, snapshots, uploads, and links te
 
     if (String(input).endsWith("/terraform/validate")) {
       return jsonResponse({
-        diagnostics: [],
-        mode: "full",
-        stage: "cli_validate",
-        status: "passed"
+        diagnostics: []
       });
     }
 
@@ -204,6 +201,9 @@ test("saveWorkspaceTerraformArtifact validates, snapshots, uploads, and links te
   const uploadBody = JSON.parse(String(requests[2]?.init?.body));
 
   assert.equal(String(requests[0]?.input), "/api/terraform/validate");
+  assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), {
+    terraformCode
+  });
   assert.equal(String(requests[1]?.input), `/api/projects/${project.id}/architectures`);
   assert.equal(String(requests[2]?.input), `/api/projects/${project.id}/assets/presigned-upload`);
   assert.deepEqual(uploadBody, {
@@ -248,10 +248,7 @@ test("saveWorkspaceTerraformArtifact aborts a pending asset when S3 upload fails
 
     if (String(input).endsWith("/terraform/validate")) {
       return jsonResponse({
-        diagnostics: [],
-        mode: "full",
-        stage: "cli_validate",
-        status: "passed"
+        diagnostics: []
       });
     }
 
@@ -352,10 +349,7 @@ test("saveWorkspaceTerraformArtifact stops before snapshot when terraform valida
           message: "block header가 올바르지 않습니다.",
           line: 3
         }
-      ],
-      mode: "full",
-      stage: "static",
-      status: "failed"
+      ]
     });
   };
 
@@ -370,6 +364,9 @@ test("saveWorkspaceTerraformArtifact stops before snapshot when terraform valida
   );
   assert.equal(requests.length, 1);
   assert.equal(String(requests[0]?.input), "/api/terraform/validate");
+  assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), {
+    terraformCode: "broken"
+  });
 });
 
 test("saveWorkspaceTerraformArtifact can skip validation after Terraform panel already validated", async (context) => {

@@ -4,17 +4,14 @@
 
 ## 현재 검증된 것
 
-- Terraform editor validation은 `static`과 `full` mode를 가진다.
-- `static` mode는 Terraform CLI 없이 문자열 구조, block header, 괄호, quoted reference 같은 빠른 diagnostics를 반환한다.
-- `full` mode는 static 오류를 먼저 fail-fast로 반환하고, 통과한 경우에만 API 임시 workdir에서 `terraform init -backend=false`와 `terraform validate -json`을 실행한다.
-- Editor validation CLI 경로는 `plan`, `apply`, `destroy`, backend/state mutation을 실행하지 않는다.
-- Editor validation CLI 경로는 사용자 HCL의 `module`, `provider`, 사용자 정의 `terraform` root block을 실행 전에 막는다.
-- Editor validation CLI 경로는 파일명/파일 수/입력 크기 제한, 격리된 HOME/TF_DATA_DIR/TF_CLI_CONFIG_FILE, `AWS_EC2_METADATA_DISABLED=true`를 사용한다.
-- Terraform panel 진입 시 `/terraform/validate/prepare`로 provider plugin cache warmup을 시도하고, 저장/manual Validate 때 full validation이 다시 실제 검증을 수행한다.
-- Terraform editor는 CLI 검증 중 code editor 바로 위에 진행 bar를 표시하고, 완료 시 `완료`를 표시한다.
+- Terraform editor validation은 static-only diagnostics다.
+- `/terraform/validate`는 `TerraformValidateResponse = { diagnostics }`만 반환한다.
+- `/terraform/validate/prepare`, editor validation prepare/warmup, `mode`, `stage`, `status`, `projectId` DTO는 제거됐다.
+- Editor validation은 Terraform CLI를 실행하지 않는다. `terraform init`, `terraform validate`, provider download, backend/state mutation은 editor 저장 검증 범위가 아니다.
+- 정적 diagnostics는 빈 코드, `{}`/`[]`/`()` 균형, 닫히지 않은 문자열, block header, duplicate address, 잘못된 attribute line, nested block assignment, quoted reference, undefined local reference, shared definition 밖 AWS block을 검사한다.
 - 검증 중 코드가 바뀌면 오래된 검증 결과를 성공처럼 반영하지 않고 재검증 필요 diagnostics를 남긴다.
 - Terraform leave modal에서 사용자가 계속 편집/폐기한 뒤 도착한 오래된 save completion은 현재 modal 상태를 덮지 않는다.
-- Deployment artifact 저장은 Terraform panel에서 이미 full validation을 통과한 source에 대해 중복 combined-code 검증을 건너뛸 수 있다.
+- Deployment artifact 저장은 Terraform panel에서 이미 검증한 source에 대해 중복 combined-code 검증을 건너뛸 수 있다.
 - `InfrastructureGraphNode`는 더 이상 내부 `ResourceType` `type` 필드를 갖지 않는다.
 - Terraform Preview API orchestration은 `terraform-preview.ts`가 담당하고, `diagram-to-terraform.ts`는 `InfrastructureGraph -> Terraform HCL` 렌더러로만 동작한다.
 - `diagram-to-terraform.ts`는 더 이상 `DiagramJson` 또는 `buildInfrastructureGraphFromDiagramJson`를 import하지 않는다.
@@ -66,15 +63,15 @@
 
 ## 이번 세션의 변경 사항
 
-- `packages/types/src/index.ts`에 `TerraformValidationMode`, `TerraformValidationStage`, `TerraformValidationStatus`와 확장된 validate/prepare DTO를 추가했다.
-- `apps/api/src/services/terraform/terraform-validation.ts`를 추가해 static diagnostics, Terraform CLI prepare/validate, fail-fast 응답, CLI JSON diagnostics 변환을 담당하게 했다.
-- `apps/api/src/deployments/terraform-runner.ts`에 `runTerraformValidateJson`을 추가했다.
-- `apps/api/src/routes/terraform.ts`에 `/terraform/validate` mode/files/project 입력과 `/terraform/validate/prepare` endpoint를 연결했다.
-- `apps/web/features/workspace/TerraformCodePanel.tsx`가 virtual file set 전체를 static/full 순서로 검증하고, CLI 진행 bar와 `완료` 상태를 editor 위에 표시하게 했다.
-- `apps/web/features/workspace/WorkspaceRightPanel.tsx`가 stale external save completion을 무시하고, 배포 준비 artifact 저장 시 이미 검증된 source를 중복 검증하지 않도록 연결했다.
-- `apps/web/features/workspace/workspace-deployment-artifacts.ts`에 `skipValidation` 옵션을 추가했다.
-- API/Web tests에 static fail-fast, CLI JSON first error, unsafe CLI block 차단, static warning 보존, prepare warmup, progress bar, stale save completion, skip validation 회귀 케이스를 추가했다.
-- `docs/data-models.md`와 `docs/sw/003_테라폼동기화구조설명_sw.md`에 editor validation contract와 CLI 제한 범위를 기록했다.
+- `packages/types/src/index.ts`에서 editor validation CLI mode/stage/status/prepare DTO를 제거하고 validate 계약을 `diagnostics` 중심으로 단순화했다.
+- `apps/api/src/services/terraform/terraform-validation.ts`와 관련 테스트를 제거했다.
+- `apps/api/src/deployments/terraform-runner.ts`에서 editor validation 전용 `runTerraformValidateJson` helper를 제거했다.
+- `apps/api/src/routes/terraform.ts`에서 `/terraform/validate/prepare` endpoint와 `mode`/`projectId` 입력을 제거하고 static diagnostics만 반환하게 했다.
+- `apps/api/src/services/terraform/terraform-diagnostics.ts`가 virtual file source metadata와 정적 diagnostics v1 강화 규칙을 담당하게 했다.
+- `apps/web/features/workspace/TerraformCodePanel.tsx`에서 CLI 진행 bar, prepare 상태, full validation 호출을 제거하고 static validation만 호출하게 했다.
+- `apps/web/features/workspace/workspace-deployment-artifacts.ts`가 artifact 저장 전 static validation만 요청하게 했다.
+- API/Web tests에 CLI endpoint/mode 제거, static validation response, progress UI 제거, nested block assignment, duplicate address error, undefined reference warning 회귀 케이스를 추가했다.
+- `docs/data-models.md`, `docs/sw/001_테라폼변환구현가이드_sw.md`, `docs/sw/003_테라폼동기화구조설명_sw.md`를 static-only editor validation 기준으로 갱신했다.
 - `apps/api/src/services/terraform/terraform-preview.ts`를 추가해 `generateTerraformFromDiagramJson`을 `DiagramJson -> InfrastructureGraph -> Terraform` orchestration 함수로 옮겼다.
 - `apps/api/src/services/terraform/diagram-to-terraform.ts`에서 `DiagramJson`/`buildInfrastructureGraphFromDiagramJson` import와 `generateTerraformFromDiagramJson` export를 제거했다.
 - `/terraform/generate` route가 `generateTerraformFromDiagramJson`을 `terraform-preview.ts`에서 import하도록 변경했다.
@@ -150,7 +147,17 @@
 
 ## 검증
 
-- `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-diagnostics.test.ts src/services/terraform/terraform-validation.test.ts src/routes/terraform.test.ts src/deployments/terraform-runner.test.ts src/deployments/terraform-plugin-cache-warmup.test.ts` - passed
+- Red before fix: focused API/Web tests failed because CLI endpoint/mode/progress UI and missing static diagnostics were still present.
+- `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-diagnostics.test.ts src/routes/terraform.test.ts` - passed
+- `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/api.test.ts features/workspace/workspace-deployment-artifacts.test.ts features/workspace/workspace-right-panel-layout.test.ts` - passed
+- `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-diagnostics.test.ts src/routes/terraform.test.ts src/deployments/terraform-runner.test.ts src/services/terraform/terraform-to-diagram.test.ts` - passed
+- `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/api.test.ts features/workspace/workspace-deployment-artifacts.test.ts features/workspace/workspace-right-panel-layout.test.ts features/workspace/terraform-diagnostic-line-highlights.test.ts features/workspace/pre-deployment-diagnostics.test.ts` - passed
+- `pnpm --filter @sketchcatch/types typecheck` - passed
+- `git diff --check` - passed
+- `pnpm lint` - passed
+- `pnpm typecheck` - passed
+- `pnpm build` - passed
+- `pnpm harness:check` - passed
 - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/api.test.ts features/workspace/workspace-right-panel-layout.test.ts features/workspace/workspace-deployment-artifacts.test.ts features/workspace/terraform-diagnostic-line-highlights.test.ts features/workspace/pre-deployment-diagnostics.test.ts` - passed
 - `pnpm --filter @sketchcatch/types typecheck` - passed
 - `pnpm --filter @sketchcatch/api typecheck` - passed

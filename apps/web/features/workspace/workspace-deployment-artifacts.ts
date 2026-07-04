@@ -66,8 +66,6 @@ export async function saveWorkspaceTerraformArtifact({
 
   if (!skipValidation) {
     const validationResult = await validateTerraformCode({
-      mode: "full",
-      projectId,
       terraformCode
     });
     const validationError = validationResult.diagnostics.find(

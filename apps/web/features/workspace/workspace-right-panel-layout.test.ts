@@ -431,50 +431,34 @@ test("terraform artifact preparation marks the terraform panel as loading", () =
   assert.match(terraformPanelSource, /isPreparingTerraformArtifactRef/);
 });
 
-test("terraform validation progress bar sits directly above the code editor", () => {
-  const progressIndex = terraformPanelSource.indexOf("className={styles.terraformValidationProgressBar");
-  const editorIndex = terraformPanelSource.indexOf("className={styles.terraformEditorFrame}");
+test("terraform editor no longer renders CLI validation progress UI", () => {
   const topBarRule = getCssRule(stylesSource, "terraformTopBar");
   const topActionsRule = getCssRule(stylesSource, "terraformTopActions");
-  const progressRule = getCssRule(stylesSource, "terraformValidationProgressBar");
-  const progressSpanRule = getElementDescendantCssRule(
-    stylesSource,
-    "terraformValidationProgressBar",
-    "span"
-  );
-  const progressWorkingRule = getCssRule(stylesSource, "terraformValidationProgressWorking");
-  const progressDoneRule = getCssRule(stylesSource, "terraformValidationProgressDone");
-  const progressErrorRule = getCssRule(stylesSource, "terraformValidationProgressError");
 
-  assert.ok(progressIndex > -1);
-  assert.ok(editorIndex > progressIndex);
-  assert.match(terraformPanelSource, /aria-live="polite"/);
-  assert.match(terraformPanelSource, /완료/);
+  assert.doesNotMatch(terraformPanelSource, /terraformValidationProgressBar/);
+  assert.doesNotMatch(terraformPanelSource, /TerraformValidationProgress/);
+  assert.doesNotMatch(terraformPanelSource, /Terraform CLI 검증 중/);
+  assert.doesNotMatch(terraformPanelSource, /Terraform 검증 준비 중/);
+  assert.doesNotMatch(stylesSource, /\.terraformValidationProgressBar\s*\{/);
+  assert.doesNotMatch(stylesSource, /\.terraformValidationProgressWorking\s*\{/);
+  assert.doesNotMatch(stylesSource, /\.terraformValidationProgressDone\s*\{/);
+  assert.doesNotMatch(stylesSource, /\.terraformValidationProgressError\s*\{/);
   assert.match(topBarRule, /\bflex-wrap:\s*wrap;/);
   assert.match(topActionsRule, /\bflex-wrap:\s*wrap;/);
-  assert.match(progressRule, /\bmin-height:\s*28px;/);
-  assert.match(progressRule, /\bpadding:\s*0 12px;/);
-  assert.match(progressSpanRule, /\boverflow:\s*hidden;/);
-  assert.match(progressSpanRule, /\btext-overflow:\s*ellipsis;/);
-  assert.match(progressWorkingRule, /\bbackground:\s*#2563eb;/);
-  assert.match(progressDoneRule, /\bbackground:\s*#2fa36b;/);
-  assert.match(progressErrorRule, /\bbackground:\s*#f1434a;/);
 });
 
-test("terraform panel warms CLI validation when the panel becomes visible", () => {
-  assert.match(terraformPanelSource, /prepareTerraformValidationWorkspace/);
-  assert.match(terraformPanelSource, /preparedValidationProjectIdsRef/);
-  assert.match(terraformPanelSource, /if \(!isVisible\)/);
-  assert.match(terraformPanelSource, /projectId/);
-  assert.match(terraformPanelSource, /currentProgress\.kind === "idle"/);
-  assert.match(terraformPanelSource, /currentProgress\.kind === "preparing"/);
+test("terraform panel does not warm CLI validation when the panel becomes visible", () => {
+  assert.doesNotMatch(terraformPanelSource, /prepareTerraformValidationWorkspace/);
+  assert.doesNotMatch(terraformPanelSource, /preparedValidationProjectIdsRef/);
+  assert.doesNotMatch(terraformPanelSource, /Terraform 검증 준비 중/);
 });
 
-test("terraform save and manual validate use full validation for the whole virtual file set", () => {
-  assert.match(terraformPanelSource, /validateTerraformVirtualFiles\(\{[\s\S]*?mode: "full"/);
+test("terraform save and manual validate use static validation for the whole virtual file set", () => {
+  assert.doesNotMatch(terraformPanelSource, /mode: "full"/);
+  assert.doesNotMatch(terraformPanelSource, /mode: "static"/);
+  assert.doesNotMatch(terraformPanelSource, /TerraformValidationMode/);
   assert.match(terraformPanelSource, /terraformFiles:\s*toTerraformValidationFiles\(terraformFiles\)/);
   assert.match(terraformPanelSource, /terraformCode:\s*terraformFiles\.length > 0 \? "" : combinedTerraformCode/);
-  assert.match(terraformPanelSource, /projectId/);
   assert.doesNotMatch(terraformPanelSource, /validateTerraformCode\(displayedTerraformCode\)/);
 });
 
@@ -561,19 +545,6 @@ function getDescendantCssRule(source: string, parentClassName: string, childClas
   assert.ok(
     match?.groups?.body,
     `Expected .${parentClassName} .${childClassName} CSS rule to exist`
-  );
-
-  return match.groups.body;
-}
-
-function getElementDescendantCssRule(source: string, parentClassName: string, elementName: string): string {
-  const match = new RegExp(
-    `\\.${parentClassName}\\s+${elementName}\\s*\\{(?<body>[^}]*)\\}`
-  ).exec(source);
-
-  assert.ok(
-    match?.groups?.body,
-    `Expected .${parentClassName} ${elementName} CSS rule to exist`
   );
 
   return match.groups.body;
