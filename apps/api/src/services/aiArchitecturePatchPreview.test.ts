@@ -39,16 +39,13 @@ test("createArchitecturePatchPreview asks what manual-review instructions should
   assert.equal(response.status, "needs_clarification");
   assert.equal(response.intent.requestedAction, "manual_review");
   assert.deepEqual(response.suggestions, [
-    "리소스를 하나 추가해줘",
-    "특정 리소스를 삭제해줘",
-    "특정 리소스를 다른 리소스로 교체해줘",
-    "특정 리소스 설정을 바꿔줘"
+    "로그인 있는 작은 웹서비스로 확장해줘",
+    "파일 업로드가 되는 서비스로 확장해줘",
+    "예약이나 신청을 받는 서비스로 확장해줘",
+    "정적 소개 웹사이트로 정리해줘"
   ]);
-  assert.match(response.question, /무엇을 바꿀지/);
-  assert.deepEqual(
-    response.candidates.map((candidate) => candidate.resourceId),
-    ["app-server", "assets-bucket"]
-  );
+  assert.match(response.question, /어떤 서비스/);
+  assert.deepEqual(response.candidates, []);
 });
 
 test("createArchitecturePatchPreview removes the selected target and connected edges in the proposed preview", () => {
@@ -147,7 +144,7 @@ test("createArchitecturePatchPreview recognizes broad natural-language add reque
   }
 });
 
-test("createArchitecturePatchPreview asks where to connect a new resource before previewing it", () => {
+test("createArchitecturePatchPreview asks how to use a new resource before previewing it", () => {
   const response = createArchitecturePatchPreview({
     architectureJson: {
       nodes: [
@@ -162,12 +159,62 @@ test("createArchitecturePatchPreview asks where to connect a new resource before
   assert.equal(response.status, "needs_clarification");
   assert.equal(response.intent.requestedAction, "add_resource");
   assert.equal(response.intent.resourceType, "RDS");
-  assert.match(response.question, /어디에 연결/);
-  assert.deepEqual(
-    response.candidates.map((candidate) => candidate.resourceId),
-    ["app-server", "assets-bucket"]
-  );
-  assert.deepEqual(response.suggestions, ["연결하지 않기"]);
+  assert.match(response.question, /어떤 용도/);
+  assert.deepEqual(response.candidates, []);
+  assert.deepEqual(response.suggestions, [
+    "로그인/회원 데이터를 저장할래",
+    "주문이나 예약 데이터를 저장할래",
+    "기존 서버가 읽고 쓰는 서비스 DB로 쓸래"
+  ]);
+});
+
+test("createArchitecturePatchPreview auto-connects a purposeful storage addition to the app server", () => {
+  const response = createArchitecturePatchPreview({
+    architectureJson: {
+      nodes: [
+        makeNode({ id: "app-server", type: "EC2", label: "App Server" }),
+        makeNode({ id: "app-db", type: "RDS", label: "App Database" })
+      ],
+      edges: []
+    },
+    instruction: "스토리지 버킷도 넣어줘\n사용자 업로드 파일을 저장할래"
+  });
+
+  assert.equal(response.status, "preview");
+  assert.equal(response.changes[0]?.action, "add_resource");
+  assert.equal(response.changes[0]?.resourceType, "S3");
+  assert.equal(response.proposedArchitectureJson.nodes.at(-1)?.label, "S3 Bucket");
+  assert.deepEqual(response.proposedArchitectureJson.edges, [
+    {
+      id: "app-server-to-s3-3",
+      sourceId: "app-server",
+      targetId: "s3-3",
+      label: "uses S3 Bucket"
+    }
+  ]);
+});
+
+test("createArchitecturePatchPreview turns a service-purpose answer into a concrete resource patch", () => {
+  const response = createArchitecturePatchPreview({
+    architectureJson: {
+      nodes: [makeNode({ id: "app-server", type: "EC2", label: "App Server" })],
+      edges: []
+    },
+    instruction: "로그인 있는 작은 웹서비스로 확장해줘"
+  });
+
+  assert.equal(response.status, "preview");
+  assert.equal(response.intent.requestedAction, "add_resource");
+  assert.equal(response.intent.resourceType, "RDS");
+  assert.equal(response.proposedArchitectureJson.nodes.at(-1)?.label, "RDS Database");
+  assert.deepEqual(response.proposedArchitectureJson.edges, [
+    {
+      id: "app-server-to-rds-2",
+      sourceId: "app-server",
+      targetId: "rds-2",
+      label: "uses RDS Database"
+    }
+  ]);
 });
 
 test("createArchitecturePatchPreview adds connected resources with English labels", () => {
@@ -298,7 +345,14 @@ test("createArchitecturePatchPreview replaces a targeted resource as remove plus
     response.proposedArchitectureJson.nodes.map((node) => node.id),
     ["app-server", "logs-bucket", "rds-3"]
   );
-  assert.deepEqual(response.proposedArchitectureJson.edges, []);
+  assert.deepEqual(response.proposedArchitectureJson.edges, [
+    {
+      id: "app-server-to-rds-3",
+      sourceId: "app-server",
+      targetId: "rds-3",
+      label: "uses RDS Database"
+    }
+  ]);
 });
 
 test("createArchitecturePatchPreview replaces a label-only target when the source text has no resource type keyword", () => {

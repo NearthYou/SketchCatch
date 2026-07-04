@@ -136,20 +136,22 @@ const ADD_ACTION_KEYWORDS = [
   "include",
   "provision",
   "deploy",
+  "expand",
   "추가",
   "생성",
   "만들",
   "붙여",
   "넣",
   "구성",
-  "배치"
+  "배치",
+  "확장"
 ];
 
-const MANUAL_REVIEW_PATCH_SUGGESTIONS = [
-  "리소스를 하나 추가해줘",
-  "특정 리소스를 삭제해줘",
-  "특정 리소스를 다른 리소스로 교체해줘",
-  "특정 리소스 설정을 바꿔줘"
+const SERVICE_PURPOSE_PATCH_SUGGESTIONS = [
+  "로그인 있는 작은 웹서비스로 확장해줘",
+  "파일 업로드가 되는 서비스로 확장해줘",
+  "예약이나 신청을 받는 서비스로 확장해줘",
+  "정적 소개 웹사이트로 정리해줘"
 ] as const;
 
 const RESOURCE_TYPE_PATCH_SUGGESTIONS = [
@@ -161,7 +163,21 @@ const RESOURCE_TYPE_PATCH_SUGGESTIONS = [
   "API 입구"
 ] as const;
 
-const SKIP_CONNECTION_SUGGESTION = "연결하지 않기";
+const ADD_RESOURCE_PURPOSE_SUGGESTIONS: Partial<Record<ResourceType, readonly string[]>> = {
+  RDS: ["로그인/회원 데이터를 저장할래", "주문이나 예약 데이터를 저장할래", "기존 서버가 읽고 쓰는 서비스 DB로 쓸래"],
+  S3: ["사용자 업로드 파일을 저장할래", "정적 웹사이트 파일을 배포할래", "로그나 백업을 보관할래"],
+  EC2: ["웹/API 서버를 실행할래", "백그라운드 작업을 처리할래", "관리용 서버로 쓸래"],
+  SECURITY_GROUP: ["웹 서버 접근을 제한할래", "DB 접근을 앱에서만 허용할래", "관리자 접속만 열어둘래"],
+  SUBNET: ["외부 진입용 public subnet으로 쓸래", "앱 서버용 private subnet으로 쓸래", "DB용 private subnet으로 쓸래"],
+  API_GATEWAY_REST_API: ["외부 API 입구로 쓸래", "Lambda 앞단 API로 쓸래", "앱 서버 앞단 API로 쓸래"],
+  CLOUDFRONT: ["정적 웹사이트를 빠르게 배포할래", "S3 파일을 CDN으로 배포할래", "웹서비스 앞단 캐시로 쓸래"]
+};
+
+const GENERIC_ADD_RESOURCE_PURPOSE_SUGGESTIONS = [
+  "서비스가 이 리소스를 직접 사용하게 할래",
+  "운영 보조 리소스로 쓸래",
+  "지금은 연결 없이 따로 둘래"
+] as const;
 
 const ENGLISH_RESOURCE_LABELS: Record<ResourceType, string> = {
   VPC: "VPC",
@@ -264,12 +280,20 @@ function resolvePatchIntent(
   const instruction = input.instruction;
   const normalizedInstruction = normalizeSearchText(instruction);
   const replacementIntent = resolveReplacementPatchIntent(normalizedInstruction);
+  const explicitResourceType = findResourceType(normalizedInstruction);
+  const serviceExpansionResourceType =
+    explicitResourceType === undefined
+      ? inferServiceExpansionResourceType(normalizedInstruction, input.architectureJson.nodes)
+      : undefined;
   const resourceType = replacementIntent
     ? replacementIntent.sourceResourceType
-    : findResourceType(normalizedInstruction);
+    : explicitResourceType ?? serviceExpansionResourceType;
+  const naturalLanguageAction = resolvePatchActionFromNaturalLanguage(normalizedInstruction);
   const requestedAction = replacementIntent
     ? "modify_resource"
-    : resolvePatchActionFromNaturalLanguage(normalizedInstruction);
+    : naturalLanguageAction === "manual_review" && serviceExpansionResourceType !== undefined
+      ? "add_resource"
+      : naturalLanguageAction;
 
   return {
     instruction,
@@ -382,6 +406,36 @@ function findResourceType(normalizedInstruction: string): ResourceType | undefin
   ).sort((left, right) => right.score - left.score || left.resourceIndex - right.resourceIndex)[0]?.resourceType;
 }
 
+function inferServiceExpansionResourceType(
+  normalizedInstruction: string,
+  existingNodes: readonly ResourceNode[]
+): ResourceType | undefined {
+  const hasResourceType = (resourceType: ResourceType) => existingNodes.some((node) => node.type === resourceType);
+
+  if (
+    includesAnyPhrase(normalizedInstruction, ["로그인", "회원", "사용자", "계정", "예약", "신청", "주문", "결제"]) &&
+    !hasResourceType("RDS")
+  ) {
+    return "RDS";
+  }
+
+  if (
+    includesAnyPhrase(normalizedInstruction, ["파일 업로드", "업로드", "이미지", "첨부", "정적", "웹사이트", "사이트"]) &&
+    !hasResourceType("S3")
+  ) {
+    return "S3";
+  }
+
+  if (
+    includesAnyPhrase(normalizedInstruction, ["api", "웹서비스", "서비스", "앱", "백엔드"]) &&
+    !hasResourceType("EC2")
+  ) {
+    return "EC2";
+  }
+
+  return undefined;
+}
+
 function includesAnyPhrase(value: string, candidates: readonly string[]): boolean {
   return candidates.some((candidate) => includesPhrase(value, candidate));
 }
@@ -421,8 +475,8 @@ function resolveTarget(
   if (intent.requestedAction === "manual_review") {
     return {
       status: "needs_clarification",
-      candidates: architectureJson.nodes.map(toClarificationCandidate),
-      suggestions: MANUAL_REVIEW_PATCH_SUGGESTIONS
+      candidates: [],
+      suggestions: SERVICE_PURPOSE_PATCH_SUGGESTIONS
     };
   }
 
@@ -442,8 +496,8 @@ function resolveTarget(
   ) {
     return {
       status: "needs_clarification",
-      candidates: architectureJson.nodes.map(toClarificationCandidate),
-      suggestions: [SKIP_CONNECTION_SUGGESTION]
+      candidates: [],
+      suggestions: getAddResourcePurposeSuggestions(intent.resourceType)
     };
   }
 
@@ -452,12 +506,13 @@ function resolveTarget(
     intent.resourceType !== undefined &&
     intent.connectionTargetResourceId === undefined &&
     intent.skipConnection !== true &&
-    architectureJson.nodes.length > 0
+    architectureJson.nodes.length > 0 &&
+    !hasAddResourcePurpose(intent)
   ) {
     return {
       status: "needs_clarification",
-      candidates: architectureJson.nodes.map(toClarificationCandidate),
-      suggestions: [SKIP_CONNECTION_SUGGESTION]
+      candidates: [],
+      suggestions: getAddResourcePurposeSuggestions(intent.resourceType)
     };
   }
 
@@ -538,6 +593,55 @@ function nodeSearchAliases(node: ResourceNode): string[] {
   return [node.id, node.label].filter((alias): alias is string => alias !== undefined && alias.trim().length > 0);
 }
 
+function getAddResourcePurposeSuggestions(resourceType: ResourceType): readonly string[] {
+  return ADD_RESOURCE_PURPOSE_SUGGESTIONS[resourceType] ?? GENERIC_ADD_RESOURCE_PURPOSE_SUGGESTIONS;
+}
+
+function hasAddResourcePurpose(intent: ArchitecturePatchIntent): boolean {
+  if (intent.connectionTargetResourceId !== undefined || intent.skipConnection === true) {
+    return true;
+  }
+
+  const normalizedInstruction = normalizeSearchText(intent.instruction);
+
+  if (
+    includesAnyPhrase(normalizedInstruction, [
+      "용도",
+      "쓸래",
+      "사용",
+      "운영",
+      "서비스",
+      "웹서비스",
+      "로그인",
+      "회원",
+      "사용자",
+      "계정",
+      "예약",
+      "신청",
+      "주문",
+      "결제",
+      "업로드",
+      "이미지",
+      "첨부",
+      "정적",
+      "웹사이트",
+      "사이트",
+      "로그",
+      "백업",
+      "배포",
+      "api",
+      "백엔드",
+      "관리"
+    ])
+  ) {
+    return true;
+  }
+
+  return getAddResourcePurposeSuggestions(intent.resourceType ?? "UNKNOWN").some((suggestion) =>
+    includesPhrase(normalizedInstruction, suggestion)
+  );
+}
+
 function createClarificationResponse(input: {
   readonly candidates: readonly ArchitecturePatchClarificationCandidate[];
   readonly intent: ArchitecturePatchIntent;
@@ -567,7 +671,7 @@ function createClarificationQuestion(
   candidates: readonly ArchitecturePatchClarificationCandidate[]
 ): string {
   if (intent.requestedAction === "manual_review") {
-    return "요청을 다이어그램 패치로 만들기 전에 무엇을 바꿀지 더 알려주세요. 추가, 삭제, 교체, 설정 변경 중 어디에 가까운가요?";
+    return "어떤 서비스로 만들거나 고치고 싶은지 알려주세요. 용도를 말해주면 필요한 리소스와 연결은 제가 잡겠습니다.";
   }
 
   if (intent.requestedAction === "add_resource" && intent.resourceType === undefined) {
@@ -575,7 +679,7 @@ function createClarificationQuestion(
   }
 
   if (intent.requestedAction === "add_resource" && intent.resourceType !== undefined) {
-    return `새 ${formatPatchResourceType(intent.resourceType)}을 어디에 연결할까요? 연결하지 않아도 됩니다.`;
+    return `새 ${formatPatchResourceType(intent.resourceType)}을 어떤 용도로 쓸까요? 용도를 알려주면 제가 어울리는 연결까지 잡겠습니다.`;
   }
 
   if (candidates.length === 0) {
@@ -764,27 +868,98 @@ function addConnectionEdge(
   newNode: ResourceNode,
   intent: ArchitecturePatchIntent
 ): ArchitectureJson["edges"] {
-  if (intent.connectionTargetResourceId === undefined || intent.skipConnection === true) {
+  if (intent.skipConnection === true) {
     return edges;
   }
 
-  const sourceNode = existingNodes.find((node) => node.id === intent.connectionTargetResourceId);
+  const inferredConnection = inferConnection(existingNodes, newNode, intent);
+  const sourceNode = inferredConnection?.sourceNode;
+  const targetNode = inferredConnection?.targetNode;
 
-  if (sourceNode === undefined) {
+  if (sourceNode === undefined || targetNode === undefined) {
     return edges;
   }
 
-  const edgeId = createUniqueEdgeId(`${sourceNode.id}-to-${newNode.id}`, edges);
+  const edgeId = createUniqueEdgeId(`${sourceNode.id}-to-${targetNode.id}`, edges);
 
   return [
     ...edges,
     {
       id: edgeId,
       sourceId: sourceNode.id,
-      targetId: newNode.id,
-      label: createConnectionLabel(sourceNode, newNode)
+      targetId: targetNode.id,
+      label: createConnectionLabel(sourceNode, targetNode)
     }
   ];
+}
+
+function inferConnection(
+  existingNodes: readonly ResourceNode[],
+  newNode: ResourceNode,
+  intent: ArchitecturePatchIntent
+): { readonly sourceNode: ResourceNode; readonly targetNode: ResourceNode } | undefined {
+  if (includesAnyPhrase(normalizeSearchText(intent.instruction), ["연결 없이", "연결하지", "따로 둘"])) {
+    return undefined;
+  }
+
+  if (intent.connectionTargetResourceId !== undefined) {
+    const sourceNode = existingNodes.find((node) => node.id === intent.connectionTargetResourceId);
+
+    return sourceNode ? { sourceNode, targetNode: newNode } : undefined;
+  }
+
+  if (isExternallyEnteredResource(newNode.type)) {
+    const targetNode = findBestNode(existingNodes, ["LOAD_BALANCER", "API_GATEWAY_REST_API", "CLOUDFRONT", "EC2", "LAMBDA"]);
+
+    return targetNode ? { sourceNode: newNode, targetNode } : undefined;
+  }
+
+  if (newNode.type === "S3" && includesAnyPhrase(normalizeSearchText(intent.instruction), ["정적", "웹사이트", "cdn", "배포"])) {
+    const sourceNode = findBestNode(existingNodes, ["CLOUDFRONT", "API_GATEWAY_REST_API", "LOAD_BALANCER", "EC2", "LAMBDA"]);
+
+    return sourceNode ? { sourceNode, targetNode: newNode } : undefined;
+  }
+
+  if (["RDS", "S3", "CLOUDWATCH_LOG_GROUP", "SECRETS_MANAGER_SECRET", "KMS_KEY"].includes(newNode.type)) {
+    const sourceNode = findBestNode(existingNodes, ["EC2", "LAMBDA", "API_GATEWAY_REST_API", "LOAD_BALANCER"]);
+
+    return sourceNode ? { sourceNode, targetNode: newNode } : undefined;
+  }
+
+  if (newNode.type === "SECURITY_GROUP") {
+    const targetNode = findBestNode(existingNodes, ["EC2", "RDS", "LOAD_BALANCER", "LAMBDA"]);
+
+    return targetNode ? { sourceNode: newNode, targetNode } : undefined;
+  }
+
+  if (newNode.type === "VPC_ENDPOINT") {
+    const sourceNode = findBestNode(existingNodes, ["EC2", "LAMBDA", "RDS"]);
+
+    return sourceNode ? { sourceNode, targetNode: newNode } : undefined;
+  }
+
+  const sourceNode = findBestNode(existingNodes, ["EC2", "LAMBDA", "API_GATEWAY_REST_API", "LOAD_BALANCER"]);
+
+  return sourceNode ? { sourceNode, targetNode: newNode } : undefined;
+}
+
+function isExternallyEnteredResource(resourceType: ResourceType): boolean {
+  return ["ROUTE53_RECORD", "WAF_WEB_ACL", "CLOUDFRONT", "LOAD_BALANCER", "API_GATEWAY_REST_API"].includes(resourceType);
+}
+
+function findBestNode(
+  nodes: readonly ResourceNode[],
+  preferredTypes: readonly ResourceType[]
+): ResourceNode | undefined {
+  for (const resourceType of preferredTypes) {
+    const matchingNode = nodes.find((node) => node.type === resourceType);
+
+    if (matchingNode !== undefined) {
+      return matchingNode;
+    }
+  }
+
+  return undefined;
 }
 
 function createConnectionLabel(_sourceNode: ResourceNode, targetNode: ResourceNode): string {

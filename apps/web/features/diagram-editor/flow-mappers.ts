@@ -167,8 +167,8 @@ function toReactFlowHandleId(handleId: string, handleType: "source" | "target"):
 }
 
 const CONTAINMENT_Z_STEP = 100;
-const AREA_Z_OFFSET = 80;
-const RESOURCE_Z_OFFSET = 40;
+const AREA_Z_BASE = 0;
+const RESOURCE_Z_BASE = 100_000;
 const AUTHORED_Z_INDEX_MAX = 20;
 
 function getFlowNodeZIndex(node: DiagramNode, nodeById: ReadonlyMap<string, DiagramNode>): number {
@@ -176,8 +176,9 @@ function getFlowNodeZIndex(node: DiagramNode, nodeById: ReadonlyMap<string, Diag
   const authoredZIndex = Number.isFinite(node.zIndex)
     ? Math.max(0, Math.min(AUTHORED_Z_INDEX_MAX, node.zIndex))
     : 0;
+  const layerBase = isAreaNode(node) ? AREA_Z_BASE : RESOURCE_Z_BASE;
 
-  return depth * CONTAINMENT_Z_STEP + (isAreaNode(node) ? AREA_Z_OFFSET : RESOURCE_Z_OFFSET) + authoredZIndex;
+  return layerBase + depth * CONTAINMENT_Z_STEP + authoredZIndex;
 }
 
 function getFlowEdgeZIndex(

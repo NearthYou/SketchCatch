@@ -30,6 +30,25 @@
 - Known risks:
   - 전체 `pnpm build`는 실행하지 않았다. 변경 검증은 관련 API/Web 테스트, 전체 typecheck, API/Web lint 중심으로 수행했다.
 
+### 2026-07-05 - AI 패치 질문과 area 레이어 보정
+- Goal: 기존 다이어그램 수정 중 내부 리소스 목록을 그대로 묻지 않고 서비스/용도를 물은 뒤, 새 리소스 연결과 area/resource 레이어를 자연스럽게 처리한다.
+- Completed:
+  - 막연한 수정 요청은 추가/삭제/교체 버튼 대신 어떤 서비스로 만들거나 고칠지 묻는 질문과 서비스 목적 선택지로 바꿨다.
+  - 새 리소스 추가는 기존 리소스 후보 전체를 보여주지 않고 리소스 용도를 먼저 묻고, 용도 답변이 있으면 앱 서버 등 적절한 기존 리소스로 자동 연결한다.
+  - 로그인/업로드/정적 사이트 같은 서비스 목적 답변은 RDS/S3/EC2 패치로 구체화되게 했다.
+  - React Flow z-index 계산에서 area와 resource 대역을 분리해 area가 항상 resource 아래에 렌더링되게 했다.
+- Verification run:
+  - `npm exec --package=pnpm@11.8.0 -- pnpm harness:check` - passed before edit
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api exec tsx --test src/services/aiArchitecturePatchPreview.test.ts` - passed, 16 tests
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/flow-mappers.test.ts` - passed, 12 tests
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api typecheck` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web typecheck` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api lint` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web lint` - passed
+- Known risks:
+  - 변경 폭 대비 과한 전체 `pnpm build`는 실행하지 않았다.
+  - 브라우저 클릭 스모크는 수행하지 않았고, API/Web 단위 테스트와 타입/lint 중심으로 검증했다.
+
 ### 2026-07-05 - 자연어 생성 전 확인 범위 확장
 - Goal: 사용자가 자연어로 새 다이어그램을 요청할 때 부족한 운영 기준을 먼저 확인하고, API/서버/DB 같은 자연어 인프라 요청도 같은 체크리스트를 타게 한다.
 - Completed:

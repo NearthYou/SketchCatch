@@ -87,7 +87,7 @@ test("toFlowNodes keeps locked area node bodies from falling through to pane sel
   assert.equal(flowNode?.connectable, false);
 });
 
-test("toFlowNodes stacks sibling child areas above resources that belong only to the parent area", () => {
+test("toFlowNodes keeps every area below resources even when the area is nested", () => {
   const region = makeDesignAreaNode({ id: "region-1", type: "sketchcatch_region" });
   const instance = makeNode({
     id: "instance-1",
@@ -107,7 +107,8 @@ test("toFlowNodes stacks sibling child areas above resources that belong only to
   const availabilityZoneZIndex = getFlowNodeZIndex(flowNodes, "az-1");
 
   assert.ok(regionZIndex < instanceZIndex);
-  assert.ok(instanceZIndex < availabilityZoneZIndex);
+  assert.ok(regionZIndex < availabilityZoneZIndex);
+  assert.ok(availabilityZoneZIndex < instanceZIndex);
 });
 
 test("toFlowNodes stacks resources above the nested area they belong to", () => {
