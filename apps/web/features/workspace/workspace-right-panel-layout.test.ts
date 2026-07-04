@@ -268,6 +268,23 @@ test("pre-deployment check is owned by the deployment tab", () => {
   assert.match(preflightSummaryRule, /\bgap:\s*8px;/);
 });
 
+test("pre-deployment finding severity colors keep medium as the default warning tone", () => {
+  assert.match(deploymentPanelSource, /<li data-severity=\{finding\.severity\}>/);
+  assert.match(stylesSource, /\.deploymentPreflightFindings li\s*\{/);
+  assert.match(
+    stylesSource,
+    /\.deploymentPreflightFindings li\s*\{[^}]*border-left:\s*4px solid #f59e0b;/s
+  );
+  assert.match(
+    stylesSource,
+    /\.deploymentPreflightFindings li\[data-severity="high"\]\s*\{[^}]*border-left-color:\s*#dc2626;/s
+  );
+  assert.match(
+    stylesSource,
+    /\.deploymentPreflightFindings li\[data-severity="low"\]\s*\{[^}]*border-left-color:\s*#16a34a;/s
+  );
+});
+
 test("terraform error explanation lives in the terraform code panel only when errors exist", () => {
   const errorExplanationRule = getCssRule(stylesSource, "terraformErrorExplanationPanel");
   const errorExplanationListRule = getCssRule(stylesSource, "terraformErrorExplanationList");

@@ -1294,7 +1294,7 @@ function DeploymentPreDeploymentSummary({
 
 function DeploymentPreDeploymentFindingItem({ finding }: { readonly finding: CheckFinding }) {
   return (
-    <li>
+    <li data-severity={finding.severity}>
       <span>{finding.severity.toUpperCase()}</span>
       <strong>{finding.title}</strong>
       {finding.resourceId ? <em>{finding.resourceId}</em> : null}

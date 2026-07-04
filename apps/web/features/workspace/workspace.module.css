@@ -2339,11 +2339,27 @@
   padding: 7px 8px;
 }
 
+.deploymentPreflightFindings li[data-severity="high"] {
+  border-left-color: #dc2626;
+}
+
+.deploymentPreflightFindings li[data-severity="low"] {
+  border-left-color: #16a34a;
+}
+
 .deploymentPreflightFindings span {
   color: #9a3412;
   font-size: 10px;
   font-weight: 950;
   line-height: 1.4;
+}
+
+.deploymentPreflightFindings li[data-severity="high"] span {
+  color: #b91c1c;
+}
+
+.deploymentPreflightFindings li[data-severity="low"] span {
+  color: #15803d;
 }
 
 .deploymentPreflightFindings strong {
