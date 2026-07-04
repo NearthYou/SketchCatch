@@ -361,6 +361,20 @@ test("pre-deployment findings can jump to Terraform source locations", () => {
   assert.match(sourceHighlightRule, /\bz-index:\s*3;/);
 });
 
+test("high risk deployment block banner points users back to fixes and plan rerun", () => {
+  const safetyBlockRule = getCssRule(stylesSource, "deploymentSafetyBlock");
+
+  assert.match(deploymentPanelSource, /DeploymentSafetyBlockBanner/);
+  assert.match(deploymentPanelSource, /blockedBy === "missing_approval"/);
+  assert.match(deploymentPanelSource, /High risk는 승인으로 해제할 수 없습니다/);
+  assert.match(deploymentPanelSource, /수정 또는 AI 창/);
+  assert.match(deploymentPanelSource, /Terraform Plan을 다시 실행/);
+  assert.match(deploymentPanelSource, /warning\.blocksApproval/);
+  assert.match(safetyBlockRule, /\bbackground:\s*#fef2f2;/);
+  assert.match(stylesSource, /\.deploymentSafetyBlock\s+ul\s*\{[^}]*list-style:\s*none;/s);
+  assert.match(stylesSource, /\.deploymentSafetyBlock\s+li\s*\{[^}]*color:\s*#991b1b;/s);
+});
+
 test("terraform error explanation lives in the terraform code panel only when errors exist", () => {
   const errorExplanationRule = getCssRule(stylesSource, "terraformErrorExplanationPanel");
   const errorExplanationListRule = getCssRule(stylesSource, "terraformErrorExplanationList");

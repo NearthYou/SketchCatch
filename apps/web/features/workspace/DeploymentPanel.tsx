@@ -875,12 +875,7 @@ export function DeploymentPanel({
           <OptionalInfoRow label="Blocked by" value={selectedDeployment.blockedBy} />
           <OptionalInfoRow label="Reason" value={selectedDeployment.blockedReason} />
           <InfoRow label="Approval" value={formatApprovalState(selectedDeployment)} />
-          {selectedDeployment.isBlocked && selectedDeployment.blockedBy !== "missing_approval" ? (
-            <div className={styles.deploymentSafetyBlock} role="alert">
-              <strong>High risk block</strong>
-              <p>{selectedDeployment.blockedReason ?? "Safety Gate blocked this deployment."}</p>
-            </div>
-          ) : null}
+          <DeploymentSafetyBlockBanner deployment={selectedDeployment} />
           {selectedDeployment.planSummary ? (
             <PlanSummaryRows
               acknowledgedWarningIds={acknowledgedWarningIds}
@@ -1394,6 +1389,36 @@ function OptionalInfoRow({
   }
 
   return <InfoRow label={label} value={value} />;
+}
+
+function DeploymentSafetyBlockBanner({ deployment }: { readonly deployment: Deployment }) {
+  if (!deployment.isBlocked || deployment.blockedBy === "missing_approval") {
+    return null;
+  }
+
+  const blockingWarnings =
+    deployment.planSummary?.warnings.filter((warning) => warning.blocksApproval) ?? [];
+
+  return (
+    <div className={styles.deploymentSafetyBlock} role="alert">
+      <strong>Deployment Safety Gate 차단</strong>
+      <p>{deployment.blockedReason ?? "Safety Gate blocked this deployment."}</p>
+      <p>
+        High risk는 승인으로 해제할 수 없습니다. 위의 Security Risk finding에서 수정 또는 AI 창을 열어
+        Terraform 코드를 고친 뒤 Terraform Plan을 다시 실행하세요.
+      </p>
+      {blockingWarnings.length > 0 ? (
+        <ul>
+          {blockingWarnings.slice(0, 3).map((warning) => (
+            <li key={warning.id}>
+              {warning.level.toUpperCase()} · {warning.code}
+              {warning.relatedResourceId ? ` · ${warning.relatedResourceId}` : ""}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
 }
 
 function PlanSummaryRows({
