@@ -122,7 +122,9 @@ const terraformPreviewExplanationBodySchema = z.object({
 const architecturePatchPreviewBodySchema: z.ZodType<CreateArchitecturePatchPreviewRequest> = z.object({
   architectureJson: architectureJsonSchema,
   instruction: z.string().trim().min(1),
-  selectedTargetResourceId: z.string().trim().min(1).optional()
+  selectedTargetResourceId: z.string().trim().min(1).optional(),
+  connectionTargetResourceId: z.string().trim().min(1).optional(),
+  skipConnection: z.boolean().optional()
 });
 
 const voiceRequirementInputBodySchema: z.ZodType<VoiceRequirementInput> = z.object({

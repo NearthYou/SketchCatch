@@ -13,6 +13,25 @@
 - Highest priority unfinished harness feature: `HARNESS-007`
 - Current blocker: none
 
+### 2026-07-05 - 수정 패치 리소스 추가 연결 질문 보강
+- Goal: 기존 다이어그램 수정 중 새 리소스를 추가할 때 영어 리소스 이름을 쓰고, 연결 대상 또는 연결하지 않기 선택 후 preview에 edge까지 반영한다.
+- Completed:
+  - patch preview 요청/의도에 `connectionTargetResourceId`, `skipConnection`을 추가하고 API validation/client body에 반영했다.
+  - add_resource 요청이 리소스 종류까지 정해졌지만 연결 선택이 없으면 기존 리소스 후보와 “연결하지 않기”를 먼저 질문하게 했다.
+  - 연결 대상을 고르면 새 리소스가 영어 label로 생성되고 선택한 기존 리소스에서 새 리소스로 edge가 추가되게 했다.
+  - “연결하지 않기”를 고르면 영어 label 리소스만 추가하고 edge는 만들지 않게 했다.
+  - AI 채팅 패널이 연결 대상 후보와 연결하지 않기 선택을 구분해 patch preview API에 전달하게 했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edit and after edit
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api exec tsx --test src/services/aiArchitecturePatchPreview.test.ts` - passed, 14 tests
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web exec tsx --test features/workspace/api.test.ts` - passed, 19 tests
+  - `npm exec --package=pnpm@11.8.0 -- pnpm typecheck` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api lint` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web lint` - passed
+- Known risks:
+  - 변경 폭 대비 과한 검증을 피하려고 전체 `pnpm build`는 실행하지 않았다.
+  - 실제 브라우저 채팅 클릭 흐름은 별도 스모크로 확인하지 않았고, 서비스/API client/type/lint 중심으로 검증했다.
+
 ### 2026-07-05 - 새 서비스 요청 라우팅 질문 보정
 - Goal: 기존 보드가 있어도 사용자가 새 웹서비스/사이트/앱을 만들고 싶다고 말하면 리소스 선택 질문이 아니라 기존 beginner-friendly 생성 확인 질문으로 안내한다.
 - Completed:

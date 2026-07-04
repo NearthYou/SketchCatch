@@ -161,6 +161,32 @@ const RESOURCE_TYPE_PATCH_SUGGESTIONS = [
   "API Gateway 추가"
 ] as const;
 
+const SKIP_CONNECTION_SUGGESTION = "연결하지 않기";
+
+const ENGLISH_RESOURCE_LABELS: Record<ResourceType, string> = {
+  VPC: "VPC",
+  SUBNET: "Subnet",
+  INTERNET_GATEWAY: "Internet Gateway",
+  ROUTE_TABLE: "Route Table",
+  ROUTE_TABLE_ASSOCIATION: "Route Table Association",
+  EC2: "EC2 Instance",
+  RDS: "RDS Database",
+  S3: "S3 Bucket",
+  SECURITY_GROUP: "Security Group",
+  CLOUDFRONT: "CloudFront CDN",
+  LAMBDA: "Lambda Function",
+  AMI: "AMI",
+  API_GATEWAY_REST_API: "API Gateway",
+  IAM_ROLE: "IAM Role",
+  IAM_POLICY: "IAM Policy",
+  IAM_INSTANCE_PROFILE: "IAM Instance Profile",
+  KMS_KEY: "KMS Key",
+  CLOUDWATCH_LOG_GROUP: "CloudWatch Log Group",
+  CLOUDWATCH_METRIC_ALARM: "CloudWatch Alarm",
+  LAMBDA_PERMISSION: "Lambda Permission",
+  UNKNOWN: "Unknown Resource"
+};
+
 type ReplacementPatchIntent = {
   readonly sourceResourceType?: ResourceType | undefined;
   readonly replacementResourceType: ResourceType;
@@ -170,8 +196,11 @@ export function createArchitecturePatchPreview(
   input: CreateArchitecturePatchPreviewInput
 ): ArchitecturePatchPreviewResponse {
   const providerMetadata = createPatchFallbackMetadata(input.instruction);
-  const intent = resolvePatchIntent(input.instruction, input.selectedTargetResourceId);
-  const selectedTargetNode = getSelectedTargetNode(input.architectureJson, input.selectedTargetResourceId);
+  const intent = resolvePatchIntent(input);
+  const selectedTargetNode =
+    intent.requestedAction === "add_resource"
+      ? undefined
+      : getSelectedTargetNode(input.architectureJson, input.selectedTargetResourceId);
   const resolvedIntent = selectedTargetNode
     ? {
         ...intent,
@@ -223,9 +252,9 @@ export function withArchitecturePatchProviderMetadata(
 }
 
 function resolvePatchIntent(
-  instruction: string,
-  selectedTargetResourceId: string | undefined
+  input: CreateArchitecturePatchPreviewInput
 ): ArchitecturePatchIntent {
+  const instruction = input.instruction;
   const normalizedInstruction = normalizeSearchText(instruction);
   const replacementIntent = resolveReplacementPatchIntent(normalizedInstruction);
   const resourceType = replacementIntent
@@ -238,7 +267,9 @@ function resolvePatchIntent(
   return {
     instruction,
     requestedAction,
-    ...(selectedTargetResourceId ? { targetResourceId: selectedTargetResourceId } : {}),
+    ...(input.selectedTargetResourceId ? { targetResourceId: input.selectedTargetResourceId } : {}),
+    ...(input.connectionTargetResourceId ? { connectionTargetResourceId: input.connectionTargetResourceId } : {}),
+    ...(input.skipConnection === true ? { skipConnection: true } : {}),
     ...(resourceType ? { resourceType } : {})
   };
 }
@@ -396,6 +427,33 @@ function resolveTarget(
     };
   }
 
+  if (
+    intent.requestedAction === "add_resource" &&
+    intent.resourceType !== undefined &&
+    intent.connectionTargetResourceId !== undefined &&
+    !architectureJson.nodes.some((node) => node.id === intent.connectionTargetResourceId)
+  ) {
+    return {
+      status: "needs_clarification",
+      candidates: architectureJson.nodes.map(toClarificationCandidate),
+      suggestions: [SKIP_CONNECTION_SUGGESTION]
+    };
+  }
+
+  if (
+    intent.requestedAction === "add_resource" &&
+    intent.resourceType !== undefined &&
+    intent.connectionTargetResourceId === undefined &&
+    intent.skipConnection !== true &&
+    architectureJson.nodes.length > 0
+  ) {
+    return {
+      status: "needs_clarification",
+      candidates: architectureJson.nodes.map(toClarificationCandidate),
+      suggestions: [SKIP_CONNECTION_SUGGESTION]
+    };
+  }
+
   if (intent.requestedAction === "add_resource") {
     return {
       status: "resolved",
@@ -509,6 +567,10 @@ function createClarificationQuestion(
     return "어떤 리소스를 추가할까요? 필요한 리소스 종류를 하나 골라주거나 직접 적어주세요.";
   }
 
+  if (intent.requestedAction === "add_resource" && intent.resourceType !== undefined) {
+    return `새 ${formatPatchResourceType(intent.resourceType)}을 어디에 연결할까요? 연결하지 않아도 됩니다.`;
+  }
+
   if (candidates.length === 0) {
     return "현재 다이어그램에서 일치하는 리소스를 찾지 못했습니다. 대상 리소스를 조금 더 구체적으로 알려주세요.";
   }
@@ -618,7 +680,7 @@ function createResolvedPatchChanges(
 }
 
 function formatPatchResourceType(resourceType: ResourceType): string {
-  return RESOURCE_KEYWORDS.find((item) => item.resourceType === resourceType)?.label ?? resourceType;
+  return ENGLISH_RESOURCE_LABELS[resourceType] ?? resourceType;
 }
 
 function formatPatchAction(action: ArchitecturePatchAction): string {
@@ -652,7 +714,7 @@ function applyResolvedPreviewChanges(
 
   for (const change of changes) {
     if (change.action === "add_resource" && change.resourceType !== undefined) {
-      nextArchitectureJson = addResource(nextArchitectureJson, change.resourceType);
+      nextArchitectureJson = addResource(nextArchitectureJson, change.resourceType, intent);
     }
 
     if (change.action === "remove_resource" && change.resourceId !== undefined) {
@@ -667,21 +729,59 @@ function applyResolvedPreviewChanges(
   return nextArchitectureJson;
 }
 
-function addResource(architectureJson: ArchitectureJson, resourceType: ResourceType): ArchitectureJson {
+function addResource(
+  architectureJson: ArchitectureJson,
+  resourceType: ResourceType,
+  intent: ArchitecturePatchIntent
+): ArchitectureJson {
   const nextNodes = [...architectureJson.nodes];
-
-  nextNodes.push({
+  const newNode: ResourceNode = {
     id: createUniqueResourceId(resourceType, nextNodes),
     type: resourceType,
-    label: RESOURCE_KEYWORDS.find((item) => item.resourceType === resourceType)?.label ?? resourceType,
+    label: formatPatchResourceType(resourceType),
     ...getNewResourcePosition(nextNodes),
     config: {}
-  });
+  };
+
+  nextNodes.push(newNode);
 
   return {
     nodes: nextNodes,
-    edges: architectureJson.edges
+    edges: addConnectionEdge(architectureJson.edges, architectureJson.nodes, newNode, intent)
   };
+}
+
+function addConnectionEdge(
+  edges: ArchitectureJson["edges"],
+  existingNodes: readonly ResourceNode[],
+  newNode: ResourceNode,
+  intent: ArchitecturePatchIntent
+): ArchitectureJson["edges"] {
+  if (intent.connectionTargetResourceId === undefined || intent.skipConnection === true) {
+    return edges;
+  }
+
+  const sourceNode = existingNodes.find((node) => node.id === intent.connectionTargetResourceId);
+
+  if (sourceNode === undefined) {
+    return edges;
+  }
+
+  const edgeId = createUniqueEdgeId(`${sourceNode.id}-to-${newNode.id}`, edges);
+
+  return [
+    ...edges,
+    {
+      id: edgeId,
+      sourceId: sourceNode.id,
+      targetId: newNode.id,
+      label: createConnectionLabel(sourceNode, newNode)
+    }
+  ];
+}
+
+function createConnectionLabel(_sourceNode: ResourceNode, targetNode: ResourceNode): string {
+  return `uses ${targetNode.label ?? formatPatchResourceType(targetNode.type)}`;
 }
 
 function removeResource(architectureJson: ArchitectureJson, resourceId: string): ArchitectureJson {
@@ -770,6 +870,24 @@ function createUniqueResourceId(resourceType: ResourceType, nodes: readonly Reso
 
 function createPreviewResourceId(baseId: string, sequence: number): string {
   return `${baseId}-${sequence}`;
+}
+
+function createUniqueEdgeId(baseId: string, edges: readonly ArchitectureJson["edges"][number][]): string {
+  const existingIds = new Set(edges.map((edge) => edge.id));
+
+  if (!existingIds.has(baseId)) {
+    return baseId;
+  }
+
+  let sequence = 2;
+  let nextId = `${baseId}-${sequence}`;
+
+  while (existingIds.has(nextId)) {
+    sequence += 1;
+    nextId = `${baseId}-${sequence}`;
+  }
+
+  return nextId;
 }
 
 function _createPatchChanges(

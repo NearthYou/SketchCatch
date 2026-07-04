@@ -132,7 +132,8 @@ test("createArchitecturePatchPreview recognizes broad natural-language add reque
         nodes: [makeNode({ id: "app-server", type: "EC2", label: "App Server" })],
         edges: []
       },
-      instruction: addCase.instruction
+      instruction: addCase.instruction,
+      skipConnection: true
     });
 
     assert.equal(response.status, "preview", addCase.instruction);
@@ -140,6 +141,66 @@ test("createArchitecturePatchPreview recognizes broad natural-language add reque
     assert.equal(response.changes[0]?.resourceType, addCase.resourceType, addCase.instruction);
     assert.equal(response.proposedArchitectureJson.nodes.at(-1)?.type, addCase.resourceType, addCase.instruction);
   }
+});
+
+test("createArchitecturePatchPreview asks where to connect a new resource before previewing it", () => {
+  const response = createArchitecturePatchPreview({
+    architectureJson: {
+      nodes: [
+        makeNode({ id: "app-server", type: "EC2", label: "App Server" }),
+        makeNode({ id: "assets-bucket", type: "S3", label: "Assets Bucket" })
+      ],
+      edges: []
+    },
+    instruction: "데이터베이스 하나 추가해줘"
+  });
+
+  assert.equal(response.status, "needs_clarification");
+  assert.equal(response.intent.requestedAction, "add_resource");
+  assert.equal(response.intent.resourceType, "RDS");
+  assert.match(response.question, /어디에 연결/);
+  assert.deepEqual(
+    response.candidates.map((candidate) => candidate.resourceId),
+    ["app-server", "assets-bucket"]
+  );
+  assert.deepEqual(response.suggestions, ["연결하지 않기"]);
+});
+
+test("createArchitecturePatchPreview adds connected resources with English labels", () => {
+  const response = createArchitecturePatchPreview({
+    architectureJson: {
+      nodes: [makeNode({ id: "app-server", type: "EC2", label: "App Server" })],
+      edges: []
+    },
+    instruction: "데이터베이스 하나 추가해줘",
+    connectionTargetResourceId: "app-server"
+  });
+
+  assert.equal(response.status, "preview");
+  assert.equal(response.proposedArchitectureJson.nodes.at(-1)?.label, "RDS Database");
+  assert.deepEqual(response.proposedArchitectureJson.edges, [
+    {
+      id: "app-server-to-rds-2",
+      sourceId: "app-server",
+      targetId: "rds-2",
+      label: "uses RDS Database"
+    }
+  ]);
+});
+
+test("createArchitecturePatchPreview can add an unconnected resource with an English label", () => {
+  const response = createArchitecturePatchPreview({
+    architectureJson: {
+      nodes: [makeNode({ id: "app-server", type: "EC2", label: "App Server" })],
+      edges: []
+    },
+    instruction: "스토리지 버킷도 넣어줘",
+    skipConnection: true
+  });
+
+  assert.equal(response.status, "preview");
+  assert.equal(response.proposedArchitectureJson.nodes.at(-1)?.label, "S3 Bucket");
+  assert.deepEqual(response.proposedArchitectureJson.edges, []);
 });
 
 test("createArchitecturePatchPreview asks for the resource type when add requests are incomplete", () => {

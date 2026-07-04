@@ -291,7 +291,11 @@ export async function createAiArchitecturePatchPreview(
     instruction: input.instruction,
     ...(input.selectedTargetResourceId !== undefined
       ? { selectedTargetResourceId: input.selectedTargetResourceId }
-      : {})
+      : {}),
+    ...(input.connectionTargetResourceId !== undefined
+      ? { connectionTargetResourceId: input.connectionTargetResourceId }
+      : {}),
+    ...(input.skipConnection === true ? { skipConnection: true } : {})
   });
 }
 

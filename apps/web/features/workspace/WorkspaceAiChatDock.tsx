@@ -279,7 +279,12 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
         const originalInstruction = patchClarification.intent.instruction;
 
         setPatchClarification(null);
-        await createPatchPreviewFromPrompt(`${originalInstruction}\n${selectedSuggestion}`);
+        await createPatchPreviewFromPrompt(
+          isSkipConnectionSuggestion(selectedSuggestion)
+            ? originalInstruction
+            : `${originalInstruction}\n${selectedSuggestion}`,
+          isSkipConnectionSuggestion(selectedSuggestion) ? { skipConnection: true } : undefined
+        );
         return;
       }
 
@@ -291,15 +296,26 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
       return;
     }
 
-    const originalInstruction = `${patchClarification.intent.instruction}\n${trimmedPrompt}`;
+    const originalInstruction = isAddResourceConnectionClarification(patchClarification)
+      ? patchClarification.intent.instruction
+      : `${patchClarification.intent.instruction}\n${trimmedPrompt}`;
 
     setPatchClarification(null);
-    await createPatchPreviewFromPrompt(originalInstruction, selectedCandidate.resourceId);
+    await createPatchPreviewFromPrompt(
+      originalInstruction,
+      isAddResourceConnectionClarification(patchClarification)
+        ? { connectionTargetResourceId: selectedCandidate.resourceId }
+        : { selectedTargetResourceId: selectedCandidate.resourceId }
+    );
   }
 
   async function createPatchPreviewFromPrompt(
     instruction: string,
-    selectedTargetResourceId?: string | undefined
+    options: {
+      readonly selectedTargetResourceId?: string | undefined;
+      readonly connectionTargetResourceId?: string | undefined;
+      readonly skipConnection?: boolean | undefined;
+    } = {}
   ): Promise<void> {
     setDraftState("loading");
     setDraftErrorMessage("");
@@ -313,7 +329,13 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
       const response = await createAiArchitecturePatchPreview({
         architectureJson: boardSnapshot.architectureJson,
         instruction,
-        ...(selectedTargetResourceId !== undefined ? { selectedTargetResourceId } : {})
+        ...(options.selectedTargetResourceId !== undefined
+          ? { selectedTargetResourceId: options.selectedTargetResourceId }
+          : {}),
+        ...(options.connectionTargetResourceId !== undefined
+          ? { connectionTargetResourceId: options.connectionTargetResourceId }
+          : {}),
+        ...(options.skipConnection === true ? { skipConnection: true } : {})
       });
 
       if (response.status === "needs_clarification") {
@@ -952,9 +974,30 @@ function findPatchClarificationSuggestion(
   });
 }
 
+function isAddResourceConnectionClarification(
+  clarification: ArchitecturePatchClarification
+): boolean {
+  return (
+    clarification.intent.requestedAction === "add_resource" &&
+    clarification.intent.resourceType !== undefined &&
+    clarification.candidates.length > 0
+  );
+}
+
+function isSkipConnectionSuggestion(suggestion: string): boolean {
+  return normalizePatchClarificationAnswer(suggestion) === normalizePatchClarificationAnswer("연결하지 않기");
+}
+
 function getPatchClarificationSuggestions(
   clarification: ArchitecturePatchClarification
 ): readonly string[] {
+  if (isAddResourceConnectionClarification(clarification)) {
+    return [
+      ...clarification.candidates.map(formatPatchCandidateSuggestion),
+      ...(clarification.suggestions ?? [])
+    ];
+  }
+
   return clarification.suggestions && clarification.suggestions.length > 0
     ? clarification.suggestions
     : clarification.candidates.map(formatPatchCandidateSuggestion);

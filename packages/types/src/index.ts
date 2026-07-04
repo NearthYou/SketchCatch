@@ -816,6 +816,8 @@ export type ArchitecturePatchIntent = {
   requestedAction: ArchitecturePatchAction;
   targetResourceId?: string | undefined;
   resourceType?: ResourceType | undefined;
+  connectionTargetResourceId?: string | undefined;
+  skipConnection?: boolean | undefined;
 };
 
 export type ArchitecturePatchPreviewChange = {
@@ -860,6 +862,8 @@ export type CreateArchitecturePatchPreviewRequest = {
   architectureJson: ArchitectureJson;
   instruction: string;
   selectedTargetResourceId?: string | undefined;
+  connectionTargetResourceId?: string | undefined;
+  skipConnection?: boolean | undefined;
 };
 
 export type CreateArchitectureDraftRequest = {

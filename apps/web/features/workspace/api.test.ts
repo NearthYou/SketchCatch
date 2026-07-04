@@ -289,7 +289,9 @@ test("createAiArchitecturePatchPreview posts natural language edit requests to t
       edges: []
     },
     instruction: "delete bucket",
-    selectedTargetResourceId: "assets-bucket"
+    selectedTargetResourceId: "assets-bucket",
+    connectionTargetResourceId: "app-server",
+    skipConnection: true
   });
 
   assert.equal(String(requests[0]?.input), "/api/ai/architecture-patch-preview");
@@ -300,7 +302,9 @@ test("createAiArchitecturePatchPreview posts natural language edit requests to t
       edges: []
     },
     instruction: "delete bucket",
-    selectedTargetResourceId: "assets-bucket"
+    selectedTargetResourceId: "assets-bucket",
+    connectionTargetResourceId: "app-server",
+    skipConnection: true
   });
   assert.equal(response.status, "preview");
 });

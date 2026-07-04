@@ -1000,6 +1000,8 @@ type ArchitecturePatchIntent = {
   requestedAction: "add_resource" | "remove_resource" | "modify_resource" | "manual_review";
   targetResourceId?: string;
   resourceType?: ResourceType;
+  connectionTargetResourceId?: string;
+  skipConnection?: boolean;
 };
 
 type ArchitecturePatchClarification = {
