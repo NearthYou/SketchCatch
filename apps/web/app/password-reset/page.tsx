@@ -7,7 +7,8 @@ export default function PasswordResetPage() {
       <div className="authBlueprintShell authBlueprintShellSingle">
         <section className="authPanel" aria-labelledby="password-reset-title">
           <Link className="authBrand" href="/">
-            SketchCatch
+            <img className="brandLogoImage" src="/sketchcatch-logo.svg" alt="" />
+            <span>SketchCatch</span>
           </Link>
           <div className="authIntro">
             <p className="eyebrow">Password reset</p>

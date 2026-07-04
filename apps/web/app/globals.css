@@ -172,7 +172,8 @@ select {
   align-items: center;
   display: grid;
   gap: 24px;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: auto auto;
+  justify-content: space-between;
   left: 0;
   padding: 24px 56px;
   position: fixed;
@@ -220,6 +221,12 @@ select {
   width: 25px;
 }
 
+.brandLogoImage {
+  display: block;
+  height: 42px;
+  width: 42px;
+}
+
 .siteNav {
   align-items: center;
   color: rgba(247, 248, 251, 0.7);
@@ -245,6 +252,7 @@ select {
   align-items: center;
   display: flex;
   gap: 10px;
+  justify-self: end;
 }
 
 .navButton,
@@ -3728,6 +3736,12 @@ nextjs-portal {
   width: 23px;
 }
 
+.dashboardBrandLogo {
+  display: block;
+  height: 32px;
+  width: 32px;
+}
+
 .dashboardNav {
   display: grid;
   gap: 3px;
@@ -5619,8 +5633,7 @@ nextjs-portal {
     font-size: 1rem;
   }
 
-  .siteNav,
-  .navButtonSolid {
+  .siteNav {
     display: none;
   }
 
@@ -5713,6 +5726,16 @@ nextjs-portal {
   border-bottom: 1px solid var(--bp-line);
   padding: 16px 36px;
   position: sticky;
+}
+
+.brandLogoImage {
+  height: 44px;
+  width: 44px;
+}
+
+.dashboardBrandLogo {
+  height: 34px;
+  width: 34px;
 }
 
 .brandLockup,
@@ -6592,6 +6615,145 @@ nextjs-portal {
   opacity: 1;
 }
 
+/* Feedback polish: keep auth cards compact and aligned. */
+.authPage {
+  padding: clamp(16px, 2.4vh, 24px) 28px;
+}
+
+.authBlueprintShellSingle {
+  grid-template-columns: minmax(0, 448px);
+  width: min(100%, 448px);
+}
+
+.authBlueprintShellSingle.authBlueprintShellWide {
+  grid-template-columns: minmax(0, 584px);
+  width: min(100%, 584px);
+}
+
+.authPanel,
+.authPanelWide {
+  max-width: none;
+  width: 100%;
+}
+
+.authPanel {
+  padding: 24px 26px;
+}
+
+.authPanelWide {
+  padding: 20px 26px 18px;
+}
+
+.authBrand {
+  margin-bottom: 20px;
+}
+
+.authIntro h1 {
+  font-size: clamp(2rem, 4.2vw, 2.8rem);
+  line-height: 0.98;
+}
+
+.authPanelWide .authIntro h1 {
+  font-size: clamp(2rem, 3.2vw, 2.45rem);
+}
+
+.authForm {
+  gap: 11px;
+  margin-top: 18px;
+}
+
+.authSocialStack {
+  gap: 8px;
+}
+
+.authSocialButton {
+  min-height: 42px;
+}
+
+.authDivider {
+  gap: 10px;
+}
+
+.authField,
+.authForm label {
+  gap: 6px;
+}
+
+.authField:has(.authInlineControl) {
+  min-height: 88px;
+}
+
+.authForm input,
+.authCheckButton {
+  min-height: 40px;
+}
+
+.authForm input {
+  padding: 0 12px;
+}
+
+.authCheckButton {
+  font-size: 0.82rem;
+  gap: 7px;
+  padding: 0 12px;
+}
+
+.authHelpText {
+  color: #4f6177;
+  font-size: 0.74rem;
+  font-weight: 850;
+  line-height: 1.28;
+}
+
+.authFieldStatus {
+  font-size: 0.76rem;
+  font-weight: 950;
+  line-height: 1.25;
+}
+
+.authFieldStatusSuccess {
+  color: #12743b;
+}
+
+.authFieldStatusError,
+.authErrorText {
+  color: #b42318;
+}
+
+.authFieldStatusNeutral {
+  color: #315f85;
+}
+
+.authPasswordToggle {
+  height: 34px;
+  right: 3px;
+  top: 3px;
+  width: 34px;
+}
+
+.authConsentGroup {
+  gap: 7px;
+}
+
+.authConsentRow {
+  gap: 10px;
+  min-height: 34px;
+}
+
+.authConsentViewButton {
+  min-height: 31px;
+  padding: 0 10px;
+}
+
+.authSubmit {
+  min-height: 42px;
+  margin-top: 2px;
+}
+
+.authSwitch {
+  margin-top: 14px;
+}
+
 .dashboardShell {
   --dashboard-bg: var(--bp-page);
   --dashboard-surface: var(--bp-paper);
@@ -6720,23 +6882,29 @@ nextjs-portal {
     linear-gradient(90deg, var(--bp-grid) 1px, transparent 1px);
   background-size: 98px 98px;
   color: var(--bp-ink);
+  overflow-x: hidden;
 }
 
 .dashboardMain {
-  gap: 20px;
+  align-content: start;
+  gap: 16px;
+  grid-auto-rows: max-content;
   margin-left: 228px;
-  padding: 24px 28px 48px;
+  min-height: 100dvh;
+  padding: 18px 28px 44px;
 }
 
 .dashboardTopbar {
+  align-self: start;
   background: var(--bp-paper);
   border: 1px solid var(--bp-line);
   border-radius: var(--bp-r);
-  min-height: 56px;
-  padding: 8px;
+  min-height: 44px;
+  padding: 6px;
 }
 
 .dashboardPageHeader {
+  align-items: end;
   background: transparent;
   margin: 0;
   min-height: auto;
@@ -6761,6 +6929,7 @@ nextjs-portal {
 }
 
 .dashboardPanel {
+  gap: 16px;
   box-shadow: none;
   padding: 22px;
 }
@@ -7071,6 +7240,28 @@ nextjs-portal {
   box-shadow: none !important;
 }
 
+.dashboardSidebar {
+  bottom: 0;
+  height: 100dvh;
+  left: 0;
+  position: fixed;
+  top: 0;
+}
+
+@media (max-width: 860px) {
+  .dashboardSidebar {
+    bottom: auto;
+    height: auto;
+    position: static;
+    width: auto;
+  }
+
+  .dashboardMain {
+    margin-left: 0;
+    padding: 18px 16px 36px;
+  }
+}
+
 @media (max-width: 980px) {
   .landingHero,
   .blueprintSafetyBand,
@@ -7129,5 +7320,395 @@ nextjs-portal {
 
   .authPage {
     padding: 16px;
+  }
+}
+
+/* Landing identity refresh */
+.landingHeroIdentity {
+  grid-template-columns: minmax(360px, 0.9fr) minmax(440px, 1.1fr);
+  min-height: min(650px, calc(100vh - 56px));
+  overflow: visible;
+  padding-block: clamp(34px, 5vw, 58px) clamp(30px, 4vw, 46px);
+}
+
+.landingHeroIdentity .heroCopy {
+  align-content: center;
+  display: grid;
+  gap: clamp(16px, 2vw, 24px);
+  max-width: min(860px, 100%);
+}
+
+.landingHeroIdentity h1 {
+  font-size: clamp(2.65rem, 4.4vw, 4.6rem);
+  line-height: 1.06;
+  margin: 0;
+  max-width: 12.5ch;
+}
+
+.landingHeroIdentity .heroLead {
+  line-height: 1.58;
+  margin: 0;
+  max-width: 780px;
+  white-space: nowrap;
+}
+
+.landingHeroIdentity .heroActions {
+  justify-content: flex-start;
+  margin-top: 4px;
+}
+
+.landingHeroIdentity .primaryCta {
+  font-size: 1.06rem;
+  min-height: 58px;
+  min-width: 178px;
+  padding-inline: 28px;
+}
+
+.heroPainBridge {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 0;
+  max-width: 690px;
+}
+
+.heroPainBridge span,
+.heroPainBridge strong {
+  align-items: center;
+  color: var(--bp-muted);
+  display: inline-flex;
+  font-family: var(--bp-head);
+  font-size: 0.92rem;
+  font-weight: 700;
+  min-height: 0;
+  padding: 0;
+}
+
+.heroPainBridge span::after {
+  color: var(--bp-blue);
+  content: "→";
+  font-family: var(--bp-mono);
+  font-size: 0.9rem;
+  margin-left: 9px;
+}
+
+.heroPainBridge strong {
+  color: var(--bp-blue);
+}
+
+.blueprintHeroInteractive {
+  min-height: 390px;
+  overflow: visible;
+  position: relative;
+}
+
+.blueprintHeroInteractive .blueprintProductFrame {
+  align-self: center;
+  animation: landingFrameBreath 7s ease-in-out infinite;
+  height: 420px;
+  margin: 18px 24px 0;
+  min-height: 0;
+  padding: clamp(14px, 2.2vw, 24px);
+  z-index: 2;
+}
+
+.blueprintHeroInteractive .blueprintPipeline {
+  padding-inline: 8px;
+}
+
+.blueprintHeroInteractive .blueprintProductBoard {
+  min-height: 235px;
+}
+
+.landingFloatCard {
+  animation: floatingObject var(--float-duration, 6.5s) ease-in-out infinite;
+  animation-delay: var(--float-delay, -1.5s);
+  background: color-mix(in srgb, var(--bp-paper) 92%, #ffffff);
+  border: 1px solid var(--bp-line);
+  border-radius: var(--bp-r);
+  box-shadow: 0 20px 44px color-mix(in srgb, var(--bp-ink) 12%, transparent);
+  color: var(--bp-ink);
+  display: grid;
+  gap: 7px;
+  padding: 13px 15px;
+  position: absolute;
+  z-index: 4;
+}
+
+.landingFloatCard span {
+  color: var(--bp-muted);
+  font-family: var(--bp-mono);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.landingFloatCard strong {
+  font-family: var(--bp-head);
+  font-size: 0.96rem;
+  line-height: 1.25;
+}
+
+.landingFloatCard img {
+  height: 34px;
+  width: 34px;
+}
+
+.landingFloatPrompt {
+  left: -4%;
+  max-width: 250px;
+  top: 10%;
+  --float-delay: -2.2s;
+  --float-duration: 6.6s;
+  --float-rotate: -1.5deg;
+}
+
+.landingFloatPlan {
+  align-items: center;
+  grid-template-columns: auto 1fr;
+  right: clamp(24px, 4vw, 52px);
+  top: 8px;
+  transform-origin: center;
+  --float-delay: -4.1s;
+  --float-duration: 7.2s;
+  --float-rotate: 0.4deg;
+}
+
+.landingFloatAws {
+  align-items: center;
+  bottom: 18%;
+  grid-template-columns: auto 1fr;
+  left: 1%;
+  --float-delay: -3.2s;
+  --float-duration: 5.8s;
+  --float-rotate: 1.8deg;
+}
+
+.landingFloatGate {
+  background: var(--bp-high-tint);
+  border-color: var(--bp-high);
+  bottom: auto;
+  right: 1%;
+  top: 56%;
+  --float-delay: -1.1s;
+  --float-duration: 6.2s;
+  --float-rotate: -1deg;
+}
+
+.landingFloatGate span {
+  color: var(--bp-high);
+}
+
+.blueprintBoardZone {
+  align-items: flex-start;
+  background: color-mix(in srgb, var(--bp-blue-tint) 42%, transparent);
+  border: 1.5px dashed var(--bp-blue);
+  border-radius: var(--bp-r);
+  color: var(--bp-blue);
+  display: flex;
+  font-family: var(--bp-mono);
+  font-size: 11px;
+  font-weight: 800;
+  height: 62%;
+  left: 9%;
+  padding: 12px;
+  position: absolute;
+  top: 18%;
+  width: 58%;
+}
+
+.blueprintIconNode {
+  align-items: center;
+  background: var(--bp-paper);
+  border: 1.5px solid var(--bp-blue);
+  border-radius: var(--bp-r);
+  box-shadow: 0 10px 22px color-mix(in srgb, var(--bp-ink) 10%, transparent);
+  display: flex;
+  height: 72px;
+  justify-content: center;
+  position: absolute;
+  width: 72px;
+  z-index: 2;
+}
+
+.blueprintBoardWire {
+  background: var(--bp-blue);
+  height: 2px;
+  opacity: 0.68;
+  pointer-events: none;
+  position: absolute;
+  transform-origin: left center;
+  z-index: 1;
+}
+
+.blueprintBoardWirePrimary {
+  left: calc(27% + 72px);
+  top: calc(40% + 36px);
+  width: calc(21% - 72px);
+}
+
+.blueprintBoardWireWatch {
+  left: calc(48% + 72px);
+  top: calc(40% + 36px);
+  transform: rotate(-26deg);
+  width: calc(24% - 72px);
+}
+
+.blueprintIconNode img {
+  height: 48px;
+  width: 48px;
+}
+
+.blueprintIconNodeEc2 {
+  left: 27%;
+  top: 40%;
+}
+
+.blueprintIconNodeS3 {
+  left: 48%;
+  top: 40%;
+}
+
+.blueprintIconNodeWatch {
+  left: 68%;
+  top: 24%;
+}
+
+.blueprintHeroInteractive .blueprintMiniConnector,
+.blueprintHeroInteractive .blueprintMiniConnectorOne,
+.blueprintHeroInteractive .blueprintMiniConnectorTwo {
+  display: none;
+}
+
+.blueprintHeroInteractive .blueprintMiniConnectorOne {
+  left: 42%;
+  top: 55%;
+  width: 12%;
+}
+
+.blueprintHeroInteractive .blueprintMiniConnectorTwo {
+  display: none;
+  left: 63%;
+  top: 40%;
+  transform: rotate(-18deg);
+  width: 10%;
+}
+
+.blueprintHeroInteractive .blueprintHeroStatus {
+  background: color-mix(in srgb, #f6e6bd 72%, var(--bp-paper));
+  border-color: #aa6a13;
+  color: #8a4a00;
+  min-height: 52px;
+  padding: 12px 14px;
+  position: relative;
+  z-index: 3;
+}
+
+.blueprintHeroInteractive .blueprintHeroStatus strong {
+  font-size: 0.98rem;
+}
+
+.blueprintHeroInteractive .blueprintHeroStatus span {
+  border-color: currentColor;
+  color: #8a4a00;
+}
+
+.blueprintSafetyBand {
+  grid-template-columns: minmax(0, 0.8fr) minmax(260px, 0.38fr);
+  padding-block: 30px;
+}
+
+.blueprintGatePreview {
+  background: color-mix(in srgb, var(--bp-blue-tint) 55%, var(--bp-paper));
+  border-color: var(--bp-blue);
+  color: var(--bp-blue);
+  gap: 10px;
+  padding: 18px 20px;
+}
+
+.blueprintGatePreview strong {
+  color: var(--bp-ink);
+}
+
+.blueprintGatePreview p {
+  margin: 0;
+}
+
+.blueprintJourneyCard p {
+  margin-top: 12px;
+}
+
+@keyframes landingFrameBreath {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+@media (max-width: 980px) {
+  .landingHeroIdentity {
+    grid-template-columns: 1fr;
+  }
+
+  .landingHeroIdentity h1 {
+    max-width: 100%;
+  }
+
+  .landingHeroIdentity .heroLead {
+    white-space: normal;
+  }
+
+  .blueprintHeroInteractive {
+    min-height: 500px;
+  }
+
+  .landingFloatPrompt {
+    left: 2%;
+  }
+
+  .landingFloatGate {
+    right: 2%;
+  }
+}
+
+@media (max-width: 720px) {
+  .landingHeroIdentity {
+    padding: 34px 18px 34px;
+  }
+
+  .landingHeroIdentity .heroCopy {
+    align-items: flex-start;
+  }
+
+  .landingHeroIdentity h1 {
+    font-size: clamp(2.55rem, 12vw, 3.25rem);
+  }
+
+  .heroPainBridge {
+    align-items: stretch;
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .heroPainBridge span,
+  .heroPainBridge strong {
+    justify-content: space-between;
+  }
+
+  .blueprintHeroInteractive {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .blueprintHeroInteractive .blueprintProductFrame,
+  .landingFloatCard,
+  .blueprintIconNode {
+    animation: none;
   }
 }

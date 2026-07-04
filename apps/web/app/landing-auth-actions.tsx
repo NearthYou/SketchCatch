@@ -16,23 +16,10 @@ export function LandingHeaderActionsView({ status }: { readonly status: LandingA
     return <div aria-hidden="true" className="headerActions" />;
   }
 
-  if (status === "authenticated") {
-    return (
-      <div className="headerActions">
-        <Link className="navButton navButtonGhost" href="/mypage">
-          마이페이지
-        </Link>
-      </div>
-    );
-  }
-
   return (
     <div className="headerActions">
-      <Link className="navButton navButtonGhost" href="/login">
-        로그인
-      </Link>
-      <Link className="navButton navButtonSolid" href="/signup">
-        회원가입
+      <Link className="navButton navButtonSolid" href="/workspace/new">
+        새 작업 시작
       </Link>
     </div>
   );

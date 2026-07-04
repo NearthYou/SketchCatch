@@ -7,7 +7,8 @@ export default function LoginPage() {
       <div className="authBlueprintShell authBlueprintShellSingle">
         <section className="authPanel" aria-labelledby="login-title">
           <Link className="authBrand" href="/">
-            SketchCatch
+            <img className="brandLogoImage" src="/sketchcatch-logo.svg" alt="" />
+            <span>SketchCatch</span>
           </Link>
           <div className="authIntro">
             <p className="eyebrow">Welcome back</p>

@@ -7,7 +7,8 @@ export default function SignupPage() {
       <div className="authBlueprintShell authBlueprintShellSingle authBlueprintShellWide">
         <section className="authPanel authPanelWide" aria-labelledby="signup-title">
           <Link className="authBrand" href="/">
-            SketchCatch
+            <img className="brandLogoImage" src="/sketchcatch-logo.svg" alt="" />
+            <span>SketchCatch</span>
           </Link>
           <div className="authIntro">
             <p className="eyebrow">Create account</p>

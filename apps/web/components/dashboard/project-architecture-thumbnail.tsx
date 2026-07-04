@@ -14,7 +14,6 @@ type DraftThumbnailResult = {
 type ThumbnailNode = {
   readonly id: string;
   readonly kind: DiagramNode["kind"];
-  readonly label: string;
   readonly iconUrl: string | undefined;
   readonly x: number;
   readonly y: number;
@@ -22,12 +21,10 @@ type ThumbnailNode = {
   readonly height: number;
   readonly zIndex: number;
   readonly borderColor: string | undefined;
-  readonly textColor: string | undefined;
 };
 
 type ScaledThumbnailNode = ThumbnailNode & {
-  readonly fontSize: number;
-  readonly showLabel: boolean;
+  readonly iconSize: number;
 };
 
 type ThumbnailEdge = {
@@ -140,24 +137,13 @@ export function ProjectArchitectureThumbnail({
                   />
                   {node.iconUrl ? (
                     <image
-                      height={Math.min(22, Math.max(14, node.height * 0.34))}
+                      height={node.iconSize}
                       href={node.iconUrl}
                       preserveAspectRatio="xMidYMid meet"
-                      width={Math.min(22, Math.max(14, node.width * 0.24))}
-                      x={node.x + 8}
-                      y={node.y + node.height / 2 - Math.min(22, Math.max(14, node.height * 0.34)) / 2 + 4}
+                      width={node.iconSize}
+                      x={node.x + node.width / 2 - node.iconSize / 2}
+                      y={node.y + node.height / 2 - node.iconSize / 2 + 4}
                     />
-                  ) : null}
-                  {node.showLabel ? (
-                    <text
-                      className="projectArchitectureNodeText"
-                      fill={node.textColor}
-                      fontSize={node.fontSize}
-                      x={node.iconUrl ? node.x + 30 + (node.width - 36) / 2 : node.x + node.width / 2}
-                      y={node.y + node.height / 2 + node.fontSize / 3 + 4}
-                    >
-                      {node.label}
-                    </text>
                   ) : null}
                 </>
               ) : null}
@@ -211,15 +197,13 @@ function toThumbnailNode(node: DiagramNode): ThumbnailNode {
   return {
     id: node.id,
     kind: node.kind,
-    label: node.label || node.parameters?.resourceName || node.type,
     iconUrl: node.iconUrl,
     x: node.position.x,
     y: node.position.y,
     width: Math.max(node.size.width, 1),
     height: Math.max(node.size.height, 1),
     zIndex: node.zIndex,
-    borderColor: node.style?.borderColor,
-    textColor: node.style?.textColor
+    borderColor: node.style?.borderColor
   };
 }
 
@@ -232,34 +216,16 @@ function scaleNode(
 ): ScaledThumbnailNode {
   const width = Math.max(node.width * scale, node.kind === "design" ? 72 : 78);
   const height = Math.max(node.height * scale, node.kind === "design" ? 46 : 50);
-  const fontSize = Math.max(10, Math.min(14, height * 0.3));
-  const availableTextWidth = width - (node.iconUrl ? 46 : 18);
-  const label = trimThumbnailLabel(node.label, Math.max(3, Math.floor(availableTextWidth / (fontSize * 0.58))));
+  const iconSize = node.iconUrl ? Math.min(56, Math.max(24, Math.min(width, height) * 0.72)) : 0;
 
   return {
     ...node,
-    label,
     x: (node.x - bounds.x) * scale + offsetX,
     y: (node.y - bounds.y) * scale + offsetY,
     width,
     height,
-    fontSize,
-    showLabel: label.trim().length > 0 && width >= 64 && height >= 38
+    iconSize
   };
-}
-
-function trimThumbnailLabel(label: string, maxLength: number): string {
-  const normalized = label.trim();
-
-  if (normalized.length <= maxLength) {
-    return normalized;
-  }
-
-  if (maxLength <= 3) {
-    return normalized.slice(0, Math.max(maxLength, 0));
-  }
-
-  return `${normalized.slice(0, maxLength - 3)}...`;
 }
 
 function toThumbnailEdge(
