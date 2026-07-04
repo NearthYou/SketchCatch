@@ -1,5 +1,5 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
-import type { KeyboardEvent as ReactKeyboardEvent, UIEvent } from "react";
+import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, ReactNode, UIEvent } from "react";
 import type {
   AiTerraformErrorExplanationResult,
   AiTerraformPreviewExplanationResult,
@@ -42,8 +42,8 @@ import {
 import type { RequestState } from "./workspace-right-panel.types";
 import styles from "./workspace.module.css";
 
-const TERRAFORM_EDITOR_LINE_HEIGHT = 19.2;
-const TERRAFORM_EDITOR_VERTICAL_PADDING = 12;
+const TERRAFORM_TOKEN_PATTERN =
+  /(#.*$|\/\/.*$|"(?:\\.|[^"\\])*"|(?:\b(?:resource|data|module|provider|variable|output|locals|terraform)\b)|(?:\b(?:true|false|null)\b)|(?:\b\d+(?:\.\d+)?\b)|[{}()[\]=.,]|[A-Za-z_][A-Za-z0-9_-]*)/gu;
 
 type TerraformPreviewExplanationScope = {
   readonly code: string;
@@ -74,6 +74,122 @@ function createTerraformDiagnosticKey(diagnostic: TerraformDiagnostic | null): s
 
 function formatTerraformErrorRawMessage(diagnostic: TerraformDiagnostic): string {
   return `${formatTerraformDiagnosticTitle(diagnostic)}\n${diagnostic.message}`;
+}
+
+function renderTerraformHighlightedCode(
+  code: string,
+  highlightedBlock: { readonly endLine: number; readonly startLine: number } | null
+): ReactNode[] {
+  const lines = code.split(/\r\n|\r|\n/);
+
+  return lines.map((line, lineIndex) => {
+    const lineNumber = lineIndex + 1;
+    const isSelectedLine =
+      highlightedBlock !== null &&
+      lineNumber >= highlightedBlock.startLine &&
+      lineNumber <= highlightedBlock.endLine;
+
+    return (
+      <span
+        className={[
+          styles.terraformHighlightLine,
+          isSelectedLine ? styles.terraformHighlightLineSelected : undefined
+        ]
+          .filter(Boolean)
+          .join(" ")}
+        key={`${lineIndex}-${line}`}
+      >
+        {renderTerraformHighlightedLine(line)}
+      </span>
+    );
+  });
+}
+
+function renderTerraformHighlightedLine(line: string): ReactNode[] {
+  const tokens: ReactNode[] = [];
+  let lastIndex = 0;
+
+  for (const match of line.matchAll(TERRAFORM_TOKEN_PATTERN)) {
+    const value = match[0];
+    const index = match.index ?? 0;
+
+    if (index > lastIndex) {
+      tokens.push(line.slice(lastIndex, index));
+    }
+
+    tokens.push(
+      <span
+        className={getTerraformTokenClassName(value)}
+        key={`${index}-${value}`}
+        style={getTerraformTokenStyle(value)}
+      >
+        {value}
+      </span>
+    );
+    lastIndex = index + value.length;
+  }
+
+  if (lastIndex < line.length) {
+    tokens.push(line.slice(lastIndex));
+  }
+
+  return tokens;
+}
+
+function getTerraformTokenClassName(value: string): string {
+  if (value.startsWith("#") || value.startsWith("//")) {
+    return styles.terraformTokenComment!;
+  }
+
+  if (value.startsWith("\"")) {
+    return styles.terraformTokenString!;
+  }
+
+  if (/^(resource|data|module|provider|variable|output|locals|terraform)$/u.test(value)) {
+    return styles.terraformTokenKeyword!;
+  }
+
+  if (/^(true|false|null)$/u.test(value)) {
+    return styles.terraformTokenConstant!;
+  }
+
+  if (/^\d/u.test(value)) {
+    return styles.terraformTokenNumber!;
+  }
+
+  if (/^[{}()[\]=.,]$/u.test(value)) {
+    return styles.terraformTokenOperator!;
+  }
+
+  return styles.terraformTokenIdentifier!;
+}
+
+function getTerraformTokenStyle(value: string): CSSProperties {
+  if (value.startsWith("#") || value.startsWith("//")) {
+    return { color: "#7892a5", fontStyle: "italic" };
+  }
+
+  if (value.startsWith("\"")) {
+    return { color: "#7ee7c4" };
+  }
+
+  if (/^(resource|data|module|provider|variable|output|locals|terraform)$/u.test(value)) {
+    return { color: "#ffcc66", fontWeight: 900 };
+  }
+
+  if (/^(true|false|null)$/u.test(value)) {
+    return { color: "#ff8ba7", fontWeight: 800 };
+  }
+
+  if (/^\d/u.test(value)) {
+    return { color: "#f7a8ff" };
+  }
+
+  if (/^[{}()[\]=.,]$/u.test(value)) {
+    return { color: "#8bd3ff", fontWeight: 800 };
+  }
+
+  return { color: "#dce8f3" };
 }
 
 function createTerraformPreviewExplanationScope({
@@ -168,6 +284,7 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
   const [explainedTerraformPreviewKey, setExplainedTerraformPreviewKey] = useState("");
   const [terraformErrorExplanationsByKey, setTerraformErrorExplanationsByKey] =
     useState<Record<string, TerraformErrorExplanationEntry>>({});
+  const [codeScrollLeft, setCodeScrollLeft] = useState(0);
   const [codeScrollTop, setCodeScrollTop] = useState(0);
   const codeRequestIdRef = useRef(0);
   const isPreparingTerraformArtifactRef = useRef(false);
@@ -250,12 +367,6 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
     () => Array.from({ length: Math.max(1, displayedTerraformCode.split(/\r\n|\r|\n/).length) }, (_, index) => index + 1),
     [displayedTerraformCode]
   );
-  const highlightedBlockStyle = highlightedBlock
-    ? {
-        height: `${Math.max(1, highlightedBlock.endLine - highlightedBlock.startLine + 1) * TERRAFORM_EDITOR_LINE_HEIGHT}px`,
-        top: `${TERRAFORM_EDITOR_VERTICAL_PADDING + (highlightedBlock.startLine - 1) * TERRAFORM_EDITOR_LINE_HEIGHT - codeScrollTop}px`
-      }
-    : null;
 
   const runRequest = useCallback(async (request: () => Promise<void>, fallbackMessage: string) => {
     setRequestState("loading");
@@ -634,6 +745,7 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
   }, [inspectedBlock]);
 
   function handleCodeScroll(event: UIEvent<HTMLTextAreaElement>): void {
+    setCodeScrollLeft(event.currentTarget.scrollLeft);
     setCodeScrollTop(event.currentTarget.scrollTop);
 
     if (lineNumberRef.current) {
@@ -854,7 +966,15 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
             <li key={lineNumber}>{lineNumber}</li>
           ))}
         </ol>
-        <textarea
+        <div className={styles.terraformCodeViewport}>
+          <pre
+            aria-hidden="true"
+            className={styles.terraformHighlightLayer}
+            style={{ transform: `translate(${-codeScrollLeft}px, ${-codeScrollTop}px)` }}
+          >
+            {renderTerraformHighlightedCode(displayedTerraformCode, highlightedBlock)}
+          </pre>
+          <textarea
           ref={textareaRef}
           autoCapitalize="off"
           autoComplete="off"
@@ -869,16 +989,11 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
 }`}
           spellCheck={false}
           value={displayedTerraformCode}
-          wrap="off"
-        />
-        {highlightedBlock && highlightedBlockStyle ? (
-          <div
-            aria-label={`${highlightedBlock.address} code block`}
-            className={styles.terraformBlockHighlightBox}
-            style={highlightedBlockStyle}
-          >
+            wrap="soft"
+          />
+          {highlightedBlock ? (
             <button
-              aria-label="Open resource settings"
+              aria-label={`Open ${highlightedBlock.address} resource settings`}
               className={styles.terraformBlockSettingsButton}
               onClick={onOpenResourceSettings}
               title="Resource settings"
@@ -886,8 +1001,8 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
             >
               <Settings size={15} aria-hidden="true" />
             </button>
-          </div>
-        ) : null}
+          ) : null}
+        </div>
       </div>
 
       {terraformPreviewExplanationState !== "idle" || activeTerraformPreviewExplanation ? (

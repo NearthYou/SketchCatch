@@ -87,6 +87,7 @@ export function DiagramNodeView({ data, id, isConnectable, selected }: NodeProps
   const nodeShellStyle = getNodeShellStyle(isArea, isResourceNode, borderColor);
   const areaNodeIconUrl = isArea ? getAreaNodeIconUrl(node) : undefined;
   const areaNodeLabel = isArea ? getAreaNodeLabel(node) : "";
+  const resourceNodeLabelStyle = getResourceNodeLabelStyle(node.label, node.size.width, textColor);
   const handleResizePointerDown = useCallback(
     (event: ReactPointerEvent<HTMLButtonElement>, handlePosition: NodeResizeHandlePosition) => {
       if (node.locked) {
@@ -233,7 +234,7 @@ export function DiagramNodeView({ data, id, isConnectable, selected }: NodeProps
                 </div>
               )}
             </div>
-            <div className={styles.resourceNodeLabel} style={{ color: textColor }}>
+            <div className={styles.resourceNodeLabel} style={resourceNodeLabelStyle}>
               {node.label}
             </div>
             <div className={styles.resourceNodeType}>{node.type}</div>
@@ -302,6 +303,17 @@ function getNodeShellStyle(isArea: boolean, isResourceNode: boolean, borderColor
   }
 
   return { borderColor };
+}
+
+function getResourceNodeLabelStyle(label: string, nodeWidth: number, textColor: string): CSSProperties {
+  const usableWidth = Math.max(42, nodeWidth - 12);
+  const estimatedTextWidth = Math.max(1, label.length) * 7.1;
+  const fittedFontSize = Math.min(12.5, Math.max(8, (usableWidth / estimatedTextWidth) * 12.5));
+
+  return {
+    color: textColor,
+    fontSize: `${fittedFontSize.toFixed(2)}px`
+  };
 }
 
 type ColorMenuProps = {

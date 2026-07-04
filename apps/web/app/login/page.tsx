@@ -1,11 +1,10 @@
 import Link from "next/link";
-import { AuthBlueprintAside } from "../auth-blueprint-aside";
 import { LoginForm } from "./login-form";
 
 export default function LoginPage() {
   return (
     <main className="authPage">
-      <div className="authBlueprintShell">
+      <div className="authBlueprintShell authBlueprintShellSingle">
         <section className="authPanel" aria-labelledby="login-title">
           <Link className="authBrand" href="/">
             SketchCatch
@@ -13,7 +12,6 @@ export default function LoginPage() {
           <div className="authIntro">
             <p className="eyebrow">Welcome back</p>
             <h1 id="login-title">로그인</h1>
-            <p>저장된 Practice Architecture와 Terraform 검토 흐름으로 돌아갑니다.</p>
           </div>
 
           <LoginForm />
@@ -22,7 +20,6 @@ export default function LoginPage() {
             계정이 없나요? <Link href="/signup">회원가입</Link>
           </p>
         </section>
-        <AuthBlueprintAside mode="login" />
       </div>
     </main>
   );

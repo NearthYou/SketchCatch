@@ -158,13 +158,21 @@ export function findTerraformBlockForNode(
   blocks: readonly TerraformBlockLocation[],
   node: DiagramNode | null
 ): TerraformBlockLocation | null {
-  const address = toNodeTerraformAddress(node);
+  const candidateAddresses = getNodeTerraformAddressCandidates(node);
 
-  if (!address) {
+  if (candidateAddresses.length === 0) {
     return null;
   }
 
-  return blocks.find((block) => block.address === address) ?? null;
+  for (const address of candidateAddresses) {
+    const block = blocks.find((candidateBlock) => candidateBlock.address === address);
+
+    if (block) {
+      return block;
+    }
+  }
+
+  return null;
 }
 
 function toNodeTerraformAddress(node: DiagramNode | null): string | null {
@@ -177,6 +185,62 @@ function toNodeTerraformAddress(node: DiagramNode | null): string | null {
   }
 
   return `${resourceType}.${resourceName}`;
+}
+
+function getNodeTerraformAddressCandidates(node: DiagramNode | null): string[] {
+  if (!node) {
+    return [];
+  }
+
+  const candidates = [
+    toNodeDisplayTerraformAddress(node),
+    toNodeTerraformAddress(node),
+    toNodeTypeAndParameterNameTerraformAddress(node),
+    toParameterTypeAndDisplayNameTerraformAddress(node)
+  ];
+
+  return Array.from(new Set(candidates.filter((address): address is string => Boolean(address))));
+}
+
+function toNodeDisplayTerraformAddress(node: DiagramNode): string | null {
+  const resourceType = node.type.trim();
+  const resourceName = toTerraformLocalName(node.label);
+
+  if (!resourceType || !resourceName) {
+    return null;
+  }
+
+  return `${resourceType}.${resourceName}`;
+}
+
+function toNodeTypeAndParameterNameTerraformAddress(node: DiagramNode): string | null {
+  const resourceType = node.type.trim();
+  const resourceName = node.parameters?.resourceName?.trim();
+
+  if (!resourceType || !resourceName) {
+    return null;
+  }
+
+  return `${resourceType}.${resourceName}`;
+}
+
+function toParameterTypeAndDisplayNameTerraformAddress(node: DiagramNode): string | null {
+  const resourceType = node.parameters?.resourceType?.trim();
+  const resourceName = toTerraformLocalName(node.label);
+
+  if (!resourceType || !resourceName) {
+    return null;
+  }
+
+  return `${resourceType}.${resourceName}`;
+}
+
+function toTerraformLocalName(label: string): string {
+  return label
+    .trim()
+    .toLocaleLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
 }
 
 function parseTerraformBlocks(fileName: string, terraformCode: string): TerraformBlockLocation[] {

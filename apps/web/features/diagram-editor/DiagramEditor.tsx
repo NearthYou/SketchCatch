@@ -173,6 +173,7 @@ function DiagramEditorInner({
   const [interactionMode, setInteractionMode] = useState<"select" | "pan">("select");
   const [isFlowReady, setFlowReady] = useState(false);
   const temporaryPanPreviousModeRef = useRef<"select" | "pan" | null>(null);
+  const temporaryPanRestoreTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const clipboardRef = useRef<DiagramNode[]>([]);
   const canvasPanelRef = useRef<HTMLDivElement | null>(null);
   const directNodeDragIdsRef = useRef<Set<string> | null>(null);
@@ -332,6 +333,34 @@ function DiagramEditorInner({
   const focusEditorShell = useCallback(() => {
     editorShellRef.current?.focus({ preventScroll: true });
   }, []);
+
+  const restoreTemporaryPanMode = useCallback(() => {
+    if (temporaryPanRestoreTimeoutRef.current !== null) {
+      clearTimeout(temporaryPanRestoreTimeoutRef.current);
+      temporaryPanRestoreTimeoutRef.current = null;
+    }
+
+    const previousMode = temporaryPanPreviousModeRef.current;
+    temporaryPanPreviousModeRef.current = null;
+
+    if (previousMode) {
+      setInteractionMode(previousMode);
+    }
+  }, []);
+
+  const startTemporaryPanMode = useCallback(() => {
+    if (temporaryPanRestoreTimeoutRef.current !== null) {
+      clearTimeout(temporaryPanRestoreTimeoutRef.current);
+      temporaryPanRestoreTimeoutRef.current = null;
+    }
+
+    if (interactionMode !== "pan" && temporaryPanPreviousModeRef.current === null) {
+      temporaryPanPreviousModeRef.current = interactionMode;
+    }
+
+    setInteractionMode("pan");
+    focusEditorShell();
+  }, [focusEditorShell, interactionMode]);
 
   const updateLeftPanelWidth = useCallback((nextWidth: number) => {
     setLeftPanelWidth(() => {
@@ -843,19 +872,29 @@ function DiagramEditorInner({
 
   const handleCanvasMouseDown = useCallback(
     (event: ReactMouseEvent<HTMLDivElement>) => {
-      if (event.button !== 1) {
+      const target = event.target;
+      const isPaneDrag =
+        event.button === 0 &&
+        target instanceof Element &&
+        target.classList.contains("react-flow__pane");
+
+      if (event.button !== 1 && !isPaneDrag) {
         return;
       }
 
       event.preventDefault();
-      if (interactionMode !== "pan" && temporaryPanPreviousModeRef.current === null) {
-        temporaryPanPreviousModeRef.current = interactionMode;
-      }
-      setInteractionMode("pan");
-      focusEditorShell();
+      startTemporaryPanMode();
     },
-    [focusEditorShell, interactionMode]
+    [startTemporaryPanMode]
   );
+
+  const handleCanvasWheel = useCallback(() => {
+    startTemporaryPanMode();
+
+    temporaryPanRestoreTimeoutRef.current = setTimeout(() => {
+      restoreTemporaryPanMode();
+    }, 180);
+  }, [restoreTemporaryPanMode, startTemporaryPanMode]);
 
   const handleCanvasAuxClick = useCallback((event: ReactMouseEvent<HTMLDivElement>) => {
     if (event.button === 1) {
@@ -1706,22 +1745,18 @@ function DiagramEditorInner({
 
   useEffect(() => {
     function handleWindowMouseUp(event: MouseEvent): void {
-      if (event.button !== 1) {
+      if (temporaryPanPreviousModeRef.current === null) {
         return;
       }
 
-      const previousMode = temporaryPanPreviousModeRef.current;
-      temporaryPanPreviousModeRef.current = null;
-
-      if (previousMode) {
-        setInteractionMode(previousMode);
-      }
+      event.preventDefault();
+      restoreTemporaryPanMode();
     }
 
     window.addEventListener("mouseup", handleWindowMouseUp);
 
     return () => window.removeEventListener("mouseup", handleWindowMouseUp);
-  }, []);
+  }, [restoreTemporaryPanMode]);
 
   useEffect(() => {
     function handleWindowResize(): void {
@@ -1903,6 +1938,7 @@ function DiagramEditorInner({
           onPointerDownCapture={handleCanvasPointerDown}
           onPointerMoveCapture={handleCanvasPointerMove}
           onPointerUpCapture={handleCanvasPointerUp}
+          onWheelCapture={handleCanvasWheel}
           ref={canvasPanelRef}
         >
           {selectedEdge ? (

@@ -228,3 +228,67 @@
   - Real authenticated `/mypage` and `/workspace/new` content still depends on a running backend/session; unauthenticated smoke correctly redirected to `/login`.
 - Next best action:
   - Review the Blueprint visual diff on the running dev server and decide whether to add a stable visual smoke script later.
+
+### 2026-07-04 - Landing/Auth Blueprint polish feedback
+
+- Goal: 메인 페이지의 장황한 문구와 딱딱한 블록감을 줄이고, Auth 오른쪽 Blueprint aside의 의미와 시각 완성도를 개선한다.
+- Completed:
+  - `/` 랜딩 문구를 핵심 메시지 중심으로 줄이고 Journey/Operations 설명 블록을 3개 proof point와 Safety Gate 섹션으로 정리했다.
+  - 랜딩 오른쪽 비주얼을 Prompt -> Board -> Plan -> Gate 흐름과 연결된 미니 보드로 다시 구성하고, 겹치거나 끝점 없는 선을 제거했다.
+  - `/login`, `/signup`, `/password-reset`의 오른쪽 aside를 도면/타이틀블록 장식에서 Architecture Board -> Terraform Preview -> Safety Gate 흐름 패널로 교체했다.
+  - 후속 피드백에 따라 Auth 오른쪽 aside 블록을 완전히 제거하고, Auth 상단 설명 문구를 삭제했다.
+  - 회원가입의 `중복 확인`/약관 `보기` 버튼 대비를 높여 비활성 상태에서도 버튼 형태와 텍스트가 보이게 조정했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web lint` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web typecheck` - passed
+  - Browser screenshot smoke: `/`, `/login`, and `/signup` on desktop/mobile - passed visual review
+- Evidence recorded:
+  - Desktop home now has shorter hero copy, clear 3-card meaning, and no disconnected board line.
+  - Auth screens now use a single centered form without the confusing right-side block.
+  - Signup duplicate-check and legal-view buttons are visible with stronger border/text contrast.
+- Known risks:
+  - This pass is visual polish only; backend/auth/session behavior was not changed.
+- Next best action:
+  - Run final full checks and commit the feedback polish.
+
+### 2026-07-04 - Terraform highlight and canvas node sizing feedback
+
+- Goal: Terraform 패널을 줄였을 때 선택 리소스 하이라이트가 이전 CloudWatch/EventBridge 블록에 붙는 문제를 고치고, 캔버스 리소스 노드의 아이콘/라벨 반응형 표현을 다듬는다.
+- Completed:
+  - Terraform 코드 하이라이트를 고정 좌표 박스에서 실제 파싱된 블록 라인 클래스 방식으로 바꿔 패널 폭/줄바꿈에 끌려가지 않게 정리했다.
+  - `findTerraformBlockForNode`가 stale `parameters`만 믿지 않고 노드의 실제 `type`과 보이는 `label` 기반 address 후보를 먼저 교차 확인하도록 보강했다.
+  - EC2처럼 보이는 노드가 이전 CloudWatch/EventBridge parameters를 갖고 있어도 `aws_instance.ec2_instance` 블록을 선택하는 회귀 테스트를 추가했다.
+  - Terraform editor의 가로 스크롤을 숨기고 soft wrap/syntax highlight 계층을 패널 폭에 맞춰 움직이도록 조정했다.
+  - 캔버스 리소스 노드는 아이콘 상단, 라벨 하단 구조로 유지하고 아이콘은 노드 크기에 비례해 커지며 라벨은 한 줄 유지와 최소 폰트 보정을 적용했다.
+  - 휠/빈 캔버스 드래그 중 임시 pan 모드로 전환하고 동작 종료 후 기존 선택 모드로 돌아오도록 보강했다.
+- Verification run:
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web test -- terraform-panel-utils.test.ts` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web lint` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web typecheck` - passed
+  - Browser smoke on `/workspace`: EC2/EventBridge node drop and canvas selected class switching passed; Terraform textarea `overflow-x` computed as `hidden`.
+- Known risks:
+  - Browser smoke used auth mocks and manually injected Terraform text for visual inspection; no real backend generation or AWS deployment was executed.
+  - Terraform leave guard intentionally blocks canvas clicks while there are unsaved manual Terraform edits, so highlight switching should be evaluated in synced/clean editor state.
+
+### 2026-07-04 - Architecture Board panel/resource polish feedback
+
+- Goal: Architecture Board의 AI, Terraform, Resource, Templates, Issues, Deployment 패널을 같은 Blueprint 디자인 언어로 통일하고, 리소스 팔레트를 카드형 박스가 아닌 아이콘 중심 타일로 정리한다.
+- Completed:
+  - Resource/Template 패널의 탭, provider controls, search, accordion header, section body를 Blueprint paper/line/grid 규칙으로 맞췄다.
+  - Compute 등 일반 리소스 타일에서 흰 카드 박스와 그림자를 제거하고, dotted blueprint field 위에 AWS 아이콘과 굵은 라벨만 보이도록 조정했다.
+  - 오른쪽 AI, Terraform, Issues, Deployment 패널의 toolbar, mode button, section, notice, input, action button 스타일을 같은 Blueprint 변수 기반으로 정리했다.
+  - `/costs` 화면의 큰 공백과 흐릿한 본문 문제를 dashboard shell/panel/table/summary contrast override로 보정했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web lint` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web typecheck` - passed
+  - Browser screenshot smoke with installed Chrome: `/workspace`, `/workspace` Compute open, Terraform/Issues/AI/Deploy tabs, `/workspace/new`, `/costs` - passed visual review
+- Evidence recorded:
+  - Compute resources now render as icon+label tiles without rectangular resource cards.
+  - `/costs` now shows readable dashboard panels and table content without the broken top spacing from the user screenshot.
+  - Auth mocks were used only for visual dashboard smoke; no real AWS apply/destroy, cloud mutation, Git/CI/CD handoff, backend contract change, or `feature_list.json` update was performed.
+- Known risks:
+  - This pass is visual/CSS polish only; Resource/Template tab behavior remains the existing implementation.
+- Next best action:
+  - Run final full checks and commit the feedback polish.
