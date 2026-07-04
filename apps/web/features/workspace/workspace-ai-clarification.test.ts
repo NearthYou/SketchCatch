@@ -7,6 +7,7 @@ import {
   createArchitectureClarificationSummaryMessage,
   createClarifiedDraftRequest,
   getCurrentArchitectureClarificationQuestion,
+  isCompleteArchitectureClarificationAnswer,
   isArchitectureClarificationProceedCommand,
   needsArchitectureClarification
 } from "./workspace-ai-clarification";
@@ -108,6 +109,27 @@ test("clarification records multiple selected options from one answer", () => {
     ["문의/예약/신청을 받는 사이트", "로그인/마이페이지가 있는 서비스"]
   );
   assert.equal(purposeAnswered.stepIndex, 1);
+});
+
+test("clarification treats a static intro website answer as a complete beginner answer", () => {
+  assert.equal(needsArchitectureClarification("정적 소개 웹사이트로 정리해줘"), false);
+  assert.equal(isCompleteArchitectureClarificationAnswer("정적 소개 웹사이트로 정리해줘"), true);
+  assert.equal(isCompleteArchitectureClarificationAnswer("수정할래"), false);
+
+  const started = createArchitectureClarificationSession("웹사이트 하나 배포하고 싶어");
+  const completed = answerArchitectureClarification(started, "정적 소개 웹사이트로 정리해줘");
+
+  assert.equal(completed.awaitingConfirmation, true);
+  assert.equal(getCurrentArchitectureClarificationQuestion(completed), null);
+
+  const summary = createArchitectureClarificationSummaryMessage(completed);
+  const draftRequest = createClarifiedDraftRequest(completed);
+
+  assert.match(summary.content, /소개\/랜딩 페이지/);
+  assert.match(summary.content, /글\/이미지 보기만 하면 돼요/);
+  assert.match(summary.content, /처음엔 저렴하게 시작/);
+  assert.match(draftRequest.prompt, /소개용 랜딩 정적 웹사이트/);
+  assert.match(draftRequest.prompt, /처음엔 저렴하게 시작/);
 });
 
 test("clarification answers produce an implementation list before draft generation", () => {

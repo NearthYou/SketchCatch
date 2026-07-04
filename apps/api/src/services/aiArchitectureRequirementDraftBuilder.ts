@@ -898,7 +898,11 @@ function addCrossResourceEdges(context: DraftBuildContext): void {
 }
 
 function needsUploadBucket(factSet: ReadonlySet<ArchitectureRequirementFact>): boolean {
-  return factSet.has("object_storage") && (factSet.has("server_runtime") || factSet.has("serverless_runtime"));
+  return (
+    factSet.has("object_storage") &&
+    (factSet.has("server_runtime") || factSet.has("serverless_runtime")) &&
+    (factSet.has("file_upload") || !factSet.has("static_delivery"))
+  );
 }
 
 function createDraftTitle(factSet: ReadonlySet<ArchitectureRequirementFact>): string {

@@ -38,6 +38,7 @@ import {
   createClarifiedDraftRequest,
   getCurrentArchitectureClarificationQuestion,
   isArchitectureClarificationProceedCommand,
+  isCompleteArchitectureClarificationAnswer,
   needsArchitectureClarification,
   type ArchitectureClarificationSession
 } from "./workspace-ai-clarification";
@@ -463,6 +464,14 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
 
         setClarificationSession(null);
         await createDraftFromRequest(draftRequest);
+        return;
+      }
+
+      if (isCompleteArchitectureClarificationAnswer(trimmedPrompt)) {
+        setClarificationSession(null);
+        await createDraftFromRequest({
+          prompt: trimmedPrompt
+        });
         return;
       }
 

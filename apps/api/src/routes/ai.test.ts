@@ -577,6 +577,70 @@ test("POST /api/ai/architecture-draft understands beginner-friendly prompt wordi
   await app.close();
 });
 
+test("POST /api/ai/architecture-draft keeps purpose-specific diagrams distinct", async () => {
+  const app = buildApp();
+  const prompts = [
+    {
+      prompt: "정적 소개 웹사이트를 만들고 싶어",
+      expectedPattern: "static_site",
+      expectedNodes: ["cloudfront-distribution", "web-assets-bucket"],
+      forbiddenNodes: ["app-server", "upload-bucket", "app-database"]
+    },
+    {
+      prompt: "파일 업로드 페이지가 필요해",
+      expectedPattern: "server_storage",
+      expectedNodes: ["app-server", "upload-bucket"],
+      forbiddenNodes: ["app-database"]
+    },
+    {
+      prompt: "로그인 있는 작은 웹서비스가 필요해",
+      expectedPattern: "backend_with_db",
+      expectedNodes: ["app-server", "app-database"],
+      forbiddenNodes: ["upload-bucket"]
+    },
+    {
+      prompt: "API 서버를 만들고 싶어",
+      expectedPattern: "api_server",
+      expectedNodes: ["app-server"],
+      forbiddenNodes: ["cloudfront-distribution", "upload-bucket", "app-database"]
+    }
+  ] as const;
+  const nodeIdSignatures: string[] = [];
+
+  for (const promptCase of prompts) {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/ai/architecture-draft",
+      payload: {
+        prompt: promptCase.prompt
+      }
+    });
+
+    assert.equal(response.statusCode, 200);
+
+    const body = architectureDraftResponseSchema.parse(response.json());
+    const nodeIds = body.architectureJson.nodes.map((node) => node.id);
+
+    assert.equal(body.metadata.selectedDraftPattern, promptCase.expectedPattern);
+    for (const expectedNode of promptCase.expectedNodes) {
+      assert.ok(nodeIds.includes(expectedNode), `${promptCase.prompt} should include ${expectedNode}`);
+    }
+    for (const forbiddenNode of promptCase.forbiddenNodes) {
+      assert.equal(
+        nodeIds.includes(forbiddenNode),
+        false,
+        `${promptCase.prompt} should not include ${forbiddenNode}`
+      );
+    }
+
+    nodeIdSignatures.push(nodeIds.join("|"));
+  }
+
+  assert.equal(new Set(nodeIdSignatures).size, prompts.length);
+
+  await app.close();
+});
+
 test("POST /api/ai/architecture-draft rejects generic website prompts until clarified", async () => {
   const app = buildApp();
 

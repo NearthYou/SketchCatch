@@ -360,14 +360,18 @@ export function answerArchitectureClarification(
     return session;
   }
 
-  const answers = [...session.answers, ...createClarificationAnswers(question, answerText)];
-  const nextStepIndex = session.stepIndex + 1;
+  const directAnswers = createClarificationAnswers(question, answerText);
+  const inferredAnswers = isCompleteArchitectureClarificationAnswer(answerText)
+    ? inferClarificationAnswers(answerText)
+    : [];
+  const answers = mergeClarificationAnswers(session.answers, directAnswers, inferredAnswers);
+  const firstMissingStep = findFirstMissingClarificationStep(answers);
 
   return {
     ...session,
     answers,
-    awaitingConfirmation: nextStepIndex >= CLARIFICATION_QUESTIONS.length,
-    stepIndex: nextStepIndex
+    awaitingConfirmation: firstMissingStep === null,
+    stepIndex: firstMissingStep ?? CLARIFICATION_QUESTIONS.length
   };
 }
 
@@ -424,6 +428,14 @@ export function isArchitectureClarificationProceedCommand(text: string): boolean
 
   return ["그대로 진행", "진행", "생성", "만들어", "이대로", "좋아"].some((keyword) =>
     normalizedText.includes(keyword)
+  );
+}
+
+export function isCompleteArchitectureClarificationAnswer(text: string): boolean {
+  return (
+    hasGenericWebsiteKeyword(normalizeText(text)) &&
+    !needsArchitectureClarification(text) &&
+    inferClarificationAnswers(text).length > 0
   );
 }
 
@@ -524,7 +536,44 @@ function inferClarificationAnswers(prompt: string): ArchitectureClarificationAns
     addInferredAnswer(answers, "operationPreference", "lowCost");
   }
 
+  if (
+    includesAny(normalizedPrompt, ["정적", "소개", "랜딩", "포트폴리오", "회사"]) &&
+    !hasAnswerForQuestion(answers, "operationPreference")
+  ) {
+    addInferredAnswer(answers, "operationPreference", "lowCost");
+  }
+
   return answers;
+}
+
+function mergeClarificationAnswers(
+  existingAnswers: readonly ArchitectureClarificationAnswer[],
+  directAnswers: readonly ArchitectureClarificationAnswer[],
+  inferredAnswers: readonly ArchitectureClarificationAnswer[]
+): ArchitectureClarificationAnswer[] {
+  const nextAnswers = [...existingAnswers];
+  const nextDirectAnswers = directAnswers.filter(
+    (directAnswer) =>
+      directAnswer.value !== "custom" ||
+      !inferredAnswers.some((inferredAnswer) => inferredAnswer.questionId === directAnswer.questionId)
+  );
+
+  for (const answer of [...nextDirectAnswers, ...inferredAnswers]) {
+    if (
+      nextAnswers.some(
+        (existingAnswer) =>
+          existingAnswer.questionId === answer.questionId &&
+          existingAnswer.value === answer.value &&
+          existingAnswer.label === answer.label
+      )
+    ) {
+      continue;
+    }
+
+    nextAnswers.push(answer);
+  }
+
+  return nextAnswers;
 }
 
 function addInferredAnswer(
@@ -585,6 +634,10 @@ function hasAnswerForQuestion(
   questionId: ClarificationQuestionId
 ): boolean {
   return answers.some((answer) => answer.questionId === questionId);
+}
+
+function hasGenericWebsiteKeyword(normalizedPrompt: string): boolean {
+  return GENERIC_WEBSITE_KEYWORDS.some((keyword) => normalizedPrompt.includes(keyword));
 }
 
 function includesAny(value: string, keywords: readonly string[]): boolean {

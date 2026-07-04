@@ -13,6 +13,26 @@
 - Highest priority unfinished harness feature: `HARNESS-007`
 - Current blocker: none
 
+### 2026-07-05 - AI 채팅 정적 소개 답변과 용도별 초안 구분 보정
+- Goal: AI 채팅 질문 흐름에서 `정적 소개 웹사이트로 정리해줘` 같은 완성된 답변을 반복 질문으로 돌리지 않고, AI 생성 초안이 용도별로 다른 다이어그램을 만들도록 보정한다.
+- Completed:
+  - `정적 소개 웹사이트로 정리해줘`가 독립적으로 충분한 웹사이트 답변이면 clarification 세션에서 소개/랜딩, 읽기 전용, 저비용 시작 의도로 바로 정리되게 했다.
+  - confirmation 단계에서도 같은 문장을 단순 수정 재시작으로 보지 않고 새 초안 요청으로 처리하게 했다.
+  - 서버가 있는 웹서비스에서 `web_frontend`의 정적 asset bucket을 사용자 업로드 버킷으로 오해하지 않게 했다.
+  - 정적 소개 사이트, 파일 업로드 페이지, 로그인 웹서비스, API 서버가 서로 다른 node signature와 draft pattern을 갖는 회귀 테스트를 추가했다.
+- Verification run:
+  - `npm exec --package=pnpm@11.8.0 -- pnpm harness:check` - passed before edits
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-ai-clarification.test.ts` - red before fix, passed after fix, 11 tests
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api exec tsx --test src/routes/ai.test.ts` - red before fix, passed after fix, 36 tests
+  - `npm exec --package=pnpm@11.8.0 -- pnpm harness:check` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm lint` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm typecheck` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm build` - first run timed out at 304s without failure output; rerun with longer timeout passed
+  - `git diff --check` - passed
+- Known risks:
+  - 실제 브라우저 클릭 스모크는 수행하지 않았고 helper/API 회귀 테스트와 전체 정적 검증으로 확인했다.
+  - 실제 cloud apply/destroy, Git/CI/CD handoff, AWS mutation은 수행하지 않았다.
+
 ### 2026-07-05 - AI 다이어그램 브랜치 수정 내용 문서화
 - Goal: 현재 브랜치에서 수정한 AI 다이어그램 생성/수정/preview/채팅 UX 흐름을 기존 `docs/ck/ai` 문서 형식으로 정리한다.
 - Completed:
