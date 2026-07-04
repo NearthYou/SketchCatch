@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import type { CheckFinding, DeploymentPlanSummary } from "@sketchcatch/types";
+import type { CheckFinding, DeploymentPlanSummary, DeploymentPlanWarning } from "@sketchcatch/types";
 import { evaluateDeploymentSafetyGate } from "./deployment-safety-gate.js";
 
 test("evaluateDeploymentSafetyGate blocks high risk findings and destructive apply plans", () => {
@@ -91,6 +91,68 @@ test("evaluateDeploymentSafetyGate creates stable ids for unsupported resource w
   assert.deepEqual(first.summary.warnings, second.summary.warnings);
 });
 
+test("evaluateDeploymentSafetyGate reserves cost risk blocking as cost_analysis", () => {
+  const result = evaluateDeploymentSafetyGate({
+    operation: "apply",
+    planSummary: createPlanSummary(),
+    warnings: [
+      createWarning({
+        id: "cost_risk:expensive-resource",
+        level: "high",
+        source: "cost_risk",
+        code: "UNSUPPORTED_RESOURCE",
+        message: "Monthly estimate is above the allowed budget",
+        blocksApproval: true,
+        requiresAcknowledgement: false
+      })
+    ]
+  });
+
+  assert.equal(result.block.blockedBy, "cost_analysis");
+  assert.equal(
+    result.block.blockedReason,
+    "Deployment Safety Gate blocked apply because of UNSUPPORTED_RESOURCE"
+  );
+  assert.deepEqual(result.requiredAcknowledgementWarningIds, []);
+});
+
+test("evaluateDeploymentSafetyGate deduplicates warnings by stable id", () => {
+  const result = evaluateDeploymentSafetyGate({
+    operation: "apply",
+    planSummary: createPlanSummary({
+      warnings: [
+        createWarning({
+          id: "pre_deployment_check:configuration-review-subnet-1",
+          level: "medium",
+          code: "UNKNOWN_TERRAFORM_ACTION",
+          message: "Existing stale warning",
+          blocksApproval: false,
+          requiresAcknowledgement: true
+        })
+      ]
+    }),
+    findings: [
+      createFinding({
+        id: "configuration-review-subnet-1",
+        category: "configuration",
+        severity: "medium",
+        title: "Subnet review",
+        recommendation: "Review generated subnet CIDR"
+      })
+    ]
+  });
+
+  assert.equal(result.block.blockedBy, "missing_approval");
+  assert.deepEqual(
+    result.summary.warnings.map((warning) => warning.id),
+    ["pre_deployment_check:configuration-review-subnet-1"]
+  );
+  assert.equal(result.summary.warnings[0]?.message, "Subnet review: Review generated subnet CIDR");
+  assert.deepEqual(result.requiredAcknowledgementWarningIds, [
+    "pre_deployment_check:configuration-review-subnet-1"
+  ]);
+});
+
 function createPlanSummary(
   overrides: Partial<DeploymentPlanSummary> = {}
 ): DeploymentPlanSummary {
@@ -114,6 +176,20 @@ function createFinding(overrides: Partial<CheckFinding> = {}): CheckFinding {
     title: "Public SSH",
     description: "0.0.0.0/0",
     recommendation: "Restrict CIDR",
+    ...overrides
+  };
+}
+
+function createWarning(overrides: Partial<DeploymentPlanWarning> = {}): DeploymentPlanWarning {
+  return {
+    id: "pre_deployment_check:warning-1",
+    level: "medium",
+    category: "configuration",
+    source: "pre_deployment_check",
+    code: "UNKNOWN_TERRAFORM_ACTION",
+    message: "Review warning",
+    requiresAcknowledgement: true,
+    blocksApproval: false,
     ...overrides
   };
 }
