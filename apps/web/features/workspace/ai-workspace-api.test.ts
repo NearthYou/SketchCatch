@@ -5,10 +5,12 @@ import {
   requestTerraformErrorExplanation
 } from "../../app/workspace/workspace-api-client";
 import {
+  createAiArchitectureDraft,
   runAiTerraformErrorExplanation,
   runAiTerraformPreviewExplanation
 } from "./api";
 import type { ArchitectureJson } from "../../../../packages/types/src";
+import { getApiErrorMessage } from "../../lib/api-client";
 
 const architectureJson: ArchitectureJson = {
   nodes: [
@@ -156,6 +158,42 @@ test("runAiTerraformPreviewExplanation posts Terraform code from the real worksp
     terraformCode: 'resource "aws_vpc" "main" {}'
   });
   assert.equal(result.summary, "VPC와 EC2가 감지되었습니다.");
+});
+
+test("createAiArchitectureDraft preserves API rejection message for non-architecture prompts", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const rejectionMessage =
+    "자연어 요구사항에서 명확한 아키텍처 단서를 찾지 못해 초안을 생성하지 않았습니다.";
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  globalThis.fetch = async () =>
+    new Response(
+      JSON.stringify({
+        error: "bad_request",
+        message: rejectionMessage
+      }),
+      {
+        headers: {
+          "Content-Type": "application/json"
+        },
+        status: 400
+      }
+    );
+
+  try {
+    await createAiArchitectureDraft({
+      prompt: "된장찌개 레시피 알려줘"
+    });
+    assert.fail("expected createAiArchitectureDraft to reject");
+  } catch (error) {
+    assert.equal(
+      getApiErrorMessage(error, "Architecture Draft 생성 중 오류가 발생했습니다."),
+      rejectionMessage
+    );
+  }
 });
 
 test("runAiTerraformErrorExplanation posts Terraform stage and raw message from the real workspace panel", async (context) => {

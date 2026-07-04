@@ -42,7 +42,7 @@ export function WorkspaceAiSelect<Value extends string>({
       <span>{label}</span>
       <SelectMenu
         ariaLabel={`${label} 선택`}
-        emptyLabel="Select a value"
+        emptyLabel="값 선택"
         onChange={handleChange}
         options={options}
         value={value}
@@ -162,8 +162,11 @@ export function WorkspaceAiGuardrailWarnings({
 function getGuardrailWarningLabel(code: ArchitectureGuardrailWarning["code"]): string {
   const warningLabels = {
     low_budget_rds_cost: "예산 확인",
-    scenario_conflict: "선택값 확인",
-    unsupported_requirement: "MVP 범위 밖"
+    unsupported_resource_omitted: "일부 제외",
+    unsupported_requirement_substituted: "대체 생성",
+    partial_generation: "부분 생성",
+    guardrail_adjusted_config: "설정 조정",
+    board_replacement_required: "전체 교체"
   } satisfies Record<ArchitectureGuardrailWarning["code"], string>;
 
   return warningLabels[code];
@@ -195,25 +198,54 @@ export function WorkspaceAiDesignSimulationResult({
   readonly simulation: DesignSimulationResult;
 }) {
   return (
-    <div className={styles.aiResultStack}>
+    <div className={`${styles.aiResultStack} ${styles.aiSimulationResult}`}>
       <p className={styles.aiResultSummary}>{simulation.summary}</p>
+      <div className={styles.aiSimulationGrid}>
+        <section className={styles.aiSimulationCard}>
+          <strong>요청 흐름</strong>
+          <ul>
+            {simulation.requestFlow.map((step, index) => (
+              <li key={`flow-${index}-${step.fromResourceId}-${step.toResourceId}`}>
+                <span>{step.fromResourceId} -&gt; {step.toResourceId}</span>
+                <p>{step.description}</p>
+              </li>
+            ))}
+          </ul>
+        </section>
+        <section className={styles.aiSimulationCard}>
+          <strong>병목 후보</strong>
+          <ul>
+            {simulation.bottlenecks.map((item, index) => (
+              <li key={`bottleneck-${index}-${item.title}`}>
+                <span>{item.severity.toUpperCase()}</span>
+                <p>{item.title}</p>
+              </li>
+            ))}
+          </ul>
+        </section>
+        <section className={styles.aiSimulationCard}>
+          <strong>장애 대응</strong>
+          <ul>
+            {simulation.failureScenarios.map((item, index) => (
+              <li key={`failure-${index}-${item.title}`}>
+                <span>{item.title}</span>
+                <p>{item.mitigation}</p>
+              </li>
+            ))}
+          </ul>
+        </section>
+        <section className={styles.aiSimulationCard}>
+          <strong>비용·다음 검토</strong>
+          <ul>
+            {[...simulation.costPressure, ...simulation.recommendations].map((item, index) => (
+              <li key={`cost-${index}-${item}`}>
+                <p>{item}</p>
+              </li>
+            ))}
+          </ul>
+        </section>
+      </div>
       <WorkspaceAiExplanation explanation={simulation.llmExplanation} />
-      <WorkspaceAiTextList
-        title="요청 흐름"
-        items={simulation.requestFlow.map((step) => `${step.fromResourceId} -> ${step.toResourceId}: ${step.description}`)}
-      />
-      <WorkspaceAiTextList
-        title="병목 후보"
-        items={simulation.bottlenecks.map((item) => `${item.severity.toUpperCase()} · ${item.title}`)}
-      />
-      <WorkspaceAiTextList
-        title="장애 시나리오"
-        items={simulation.failureScenarios.map((item) => `${item.title}: ${item.mitigation}`)}
-      />
-      <WorkspaceAiTextList
-        title="비용과 다음 검토"
-        items={[...simulation.costPressure, ...simulation.recommendations]}
-      />
     </div>
   );
 }

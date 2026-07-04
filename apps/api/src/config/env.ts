@@ -34,6 +34,11 @@ export type RuntimeEnv = {
 };
 
 const AUTH_TOKEN_SECRET_PLACEHOLDER = "replace-with-a-local-secret-of-at-least-32-characters";
+const staticAwsCredentialEnvKeys = [
+  "AWS_ACCESS_KEY_ID",
+  "AWS_SECRET_ACCESS_KEY",
+  "AWS_SESSION_TOKEN"
+] as const;
 
 export function getRuntimeEnv(): RuntimeEnv {
   return {
@@ -134,4 +139,22 @@ export function requireSketchCatchAwsCallerPrincipalArn(): string {
   }
 
   return callerPrincipalArn;
+}
+
+export function assertNoStaticAwsCredentialsForApiServer(
+  env: NodeJS.ProcessEnv = process.env
+): void {
+  const configuredKeys = staticAwsCredentialEnvKeys.filter((key) => env[key]?.trim());
+
+  if (configuredKeys.length === 0) {
+    return;
+  }
+
+  throw new Error(
+    [
+      "Static AWS credentials are not allowed in the SketchCatch API process.",
+      `Remove ${configuredKeys.join(", ")} and use AWS_PROFILE with IAM Identity Center locally,`,
+      "or an IAM role on deployed runtime infrastructure."
+    ].join(" ")
+  );
 }

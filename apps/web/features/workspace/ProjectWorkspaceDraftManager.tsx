@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { DiagramJson } from "../../../../packages/types/src";
 import { DiagramEditor } from "../diagram-editor";
 import { EMPTY_DIAGRAM } from "../diagram-editor/constants";
+import { WorkspaceAiChatDock } from "./WorkspaceAiChatDock";
 import { WorkspaceRightPanel } from "./WorkspaceRightPanel";
 import type { LocalProjectDraft } from "./project-draft-persistence";
 import { shouldFlushProjectDraftBeforePageExit } from "./project-draft-page-exit";
@@ -399,6 +400,9 @@ export function ProjectWorkspaceDraftManager({
   return (
     <>
       <DiagramEditor
+        floatingPanel={(context) => (
+          <WorkspaceAiChatDock context={context} projectId={projectId} />
+        )}
         initialDiagram={initialDiagram}
         onDiagramChange={handleDiagramChange}
         projectName={projectName}

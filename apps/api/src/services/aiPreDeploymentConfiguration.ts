@@ -2,7 +2,7 @@ import type { CheckFinding, ResourceConfig, ResourceNode } from "@sketchcatch/ty
 
 // Resource가 Terraform 생성에 필요한 기본 설정값을 가지고 있는지 확인합니다.
 export function createConfigurationFindings(node: ResourceNode): CheckFinding[] {
-  const missingKeys = getRequiredConfigKeys(node).filter((key) => !hasConfigValue(node.config, key));
+  const missingKeys = getRequiredConfigKeys(node).filter((key) => !hasRequiredConfigValue(node, key));
 
   if (missingKeys.length === 0) {
     return [];
@@ -44,12 +44,42 @@ function getRequiredConfigKeys(node: ResourceNode): readonly string[] {
     case "CLOUDFRONT":
     case "LAMBDA":
     case "AMI":
+    case "KMS_KEY":
+    case "CLOUDWATCH_LOG_GROUP":
+    case "API_GATEWAY_REST_API":
+      return [];
+    case "IAM_ROLE":
+      return ["assumeRolePolicy"];
+    case "IAM_POLICY":
+      return ["policy"];
+    case "IAM_INSTANCE_PROFILE":
+      return ["role"];
+    case "CLOUDWATCH_METRIC_ALARM":
+      return [
+        "alarmName",
+        "namespace",
+        "metricName",
+        "comparisonOperator",
+        "threshold",
+        "evaluationPeriods",
+        "period"
+      ];
+    case "LAMBDA_PERMISSION":
+      return ["action", "functionName", "principal"];
     case "UNKNOWN":
       return [];
   }
 }
 
 // 빈 문자열이나 빈 배열은 "입력 안 됨"으로 봅니다.
+function hasRequiredConfigValue(node: ResourceNode, key: string): boolean {
+  if (node.type === "EC2" && key === "securityGroupIds") {
+    return hasConfigValue(node.config, "securityGroupIds") || hasConfigValue(node.config, "vpcSecurityGroupIds");
+  }
+
+  return hasConfigValue(node.config, key);
+}
+
 function hasConfigValue(config: ResourceConfig, key: string): boolean {
   const value = config[key];
 

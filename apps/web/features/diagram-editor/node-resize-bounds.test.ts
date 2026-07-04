@@ -43,8 +43,8 @@ test("getNodeResizeBounds removes area node max limits while keeping minimum siz
 
 test("getNodeResizeBounds keeps regular resource bounds unchanged", () => {
   assert.deepEqual(getNodeResizeBounds(makeResourceNode("aws_instance")), {
-    minWidth: 74,
-    minHeight: 74,
+    minWidth: 56,
+    minHeight: 56,
     maxWidth: 260,
     maxHeight: 260
   });

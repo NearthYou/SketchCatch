@@ -69,14 +69,18 @@ test("getAreaNodeLabel falls back to node label when legacy resource data is mis
   assert.equal(getAreaNodeLabel(legacyVpc), "VPC");
 });
 
-test("getAreaNodeIconUrl returns icons only for resource area nodes", () => {
+test("getAreaNodeIconUrl returns resource and design area icons", () => {
   assert.equal(
     getAreaNodeIconUrl(makeResourceNode({ iconUrl: "/icons/vpc.svg", resourceType: "aws_vpc" })),
     "/icons/vpc.svg"
   );
   assert.equal(
     getAreaNodeIconUrl(makeDesignNode({ iconUrl: "/icons/region.svg", type: "design_region" })),
-    undefined
+    "/icons/region.svg"
+  );
+  assert.equal(
+    getAreaNodeIconUrl(makeDesignNode({ type: "sketchcatch_group" })),
+    "/Architecture-Group-Icons_07312025/Auto-Scaling-group_32.svg"
   );
   assert.equal(
     getAreaNodeIconUrl(makeResourceNode({ iconUrl: "/icons/ec2.svg", resourceType: "aws_instance" })),

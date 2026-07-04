@@ -11,6 +11,7 @@ import styles from "./diagram-editor.module.css";
 export type DiagramEdgeToolbarProps = {
   edge: DiagramEdge;
   onDelete: (edgeId: string) => void;
+  onLabelChange: (edgeId: string, label: string) => void;
   onStyleChange: (edgeId: string, style: DiagramEdgeStyle) => void;
   onTypeChange: (edgeId: string, type: DiagramEdgeKind) => void;
 };
@@ -23,14 +24,15 @@ const EDGE_TYPES: readonly { label: string; value: DiagramEdgeKind }[] = [
 ];
 
 const EDGE_WIDTHS: readonly { label: string; value: DiagramEdgeStyle["width"] }[] = [
-  { label: "얇게", value: "thin" },
-  { label: "보통", value: "medium" },
-  { label: "굵게", value: "thick" }
+  { label: "Thin", value: "thin" },
+  { label: "Med", value: "medium" },
+  { label: "Bold", value: "thick" }
 ];
 
 export function DiagramEdgeToolbar({
   edge,
   onDelete,
+  onLabelChange,
   onStyleChange,
   onTypeChange
 }: DiagramEdgeToolbarProps) {
@@ -40,17 +42,27 @@ export function DiagramEdgeToolbar({
   return (
     <div aria-label="연결선 도구" className={styles.edgeToolbar}>
       <SelectMenu
-        ariaLabel="연결선 타입"
+        ariaLabel="연결선 모양"
         className={styles.edgeSelect}
         emptyLabel="Smooth"
         onChange={(nextValue) => onTypeChange(edge.id, nextValue as DiagramEdgeKind)}
         options={EDGE_TYPES}
         size="compact"
         style={{ minWidth: 96 }}
-        tone="purple"
+        tone="default"
         value={(edge.type as DiagramEdgeKind | undefined) ?? "smoothstep"}
         width="content"
       />
+
+      <label className={styles.edgeLabelField}>
+        <span>Label</span>
+        <input
+          aria-label="연결선 의미"
+          onChange={(event) => onLabelChange(edge.id, event.target.value)}
+          placeholder="예: writes logs"
+          value={edge.label ?? ""}
+        />
+      </label>
 
       <div aria-label="연결선 색상" className={styles.edgeSwatches}>
         {EDGE_COLOR_SWATCHES.map((swatchColor) => (
@@ -65,7 +77,7 @@ export function DiagramEdgeToolbar({
           />
         ))}
         <input
-          aria-label="연결선 색상"
+          aria-label="연결선 색상 직접 선택"
           className={styles.colorInput}
           onChange={(event) => onStyleChange(edge.id, { ...edge.style, color: event.target.value })}
           type="color"

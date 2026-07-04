@@ -1,14 +1,14 @@
-import type {
-  ArchitectureDraftBudgetLevel,
-  ArchitectureDraftScenarioHint,
-  ArchitectureDraftSecurityPriority,
-  ArchitectureDraftTrafficLevel,
-  AiTerraformStage
-} from "@sketchcatch/types";
+import type { AiTerraformStage } from "@sketchcatch/types";
 import type { ChoiceOption } from "./WorkspaceAiPanelPieces";
 
 export const DEFAULT_REQUIREMENT_PROMPT =
-  "작은 트래픽의 백엔드 API 서버와 PostgreSQL 데이터베이스를 연습용으로 설계해주세요.";
+  "웹사이트 하나 배포하고 싶어. 업로드한 파일도 저장할 수 있으면 좋겠어.";
+
+export const promptGuideExamples = [
+  "웹사이트 하나 배포하고 싶어",
+  "파일 업로드 페이지가 필요해",
+  "로그인 있는 작은 웹서비스가 필요해"
+] as const;
 
 export const DEFAULT_TERRAFORM_PREVIEW_CODE = `resource "aws_instance" "web" {
   ami           = "ami-12345678"
@@ -23,29 +23,6 @@ resource "aws_security_group_rule" "ssh" {
 }`;
 
 export const DEFAULT_TERRAFORM_ERROR_MESSAGE = "Error: Missing required argument on generated variables.tf";
-
-export const scenarioOptions: readonly ChoiceOption<ArchitectureDraftScenarioHint>[] = [
-  { label: "자동", value: "auto" },
-  { label: "백엔드+DB", value: "backend_with_db" },
-  { label: "서버+스토리지", value: "server_storage" },
-  { label: "정적 웹", value: "static_site" },
-  { label: "API 서버", value: "api_server" }
-];
-
-export const budgetOptions: readonly ChoiceOption<ArchitectureDraftBudgetLevel>[] = [
-  { label: "낮음", value: "low" },
-  { label: "보통", value: "normal" }
-];
-
-export const trafficOptions: readonly ChoiceOption<ArchitectureDraftTrafficLevel>[] = [
-  { label: "작음", value: "small" },
-  { label: "보통", value: "normal" }
-];
-
-export const securityOptions: readonly ChoiceOption<ArchitectureDraftSecurityPriority>[] = [
-  { label: "기본", value: "basic" },
-  { label: "높음", value: "high" }
-];
 
 export const terraformStageOptions: readonly ChoiceOption<AiTerraformStage>[] = [
   { label: "validate", value: "validate" },
