@@ -15,15 +15,47 @@ test("resolveWorkspaceAiChatMode keeps empty boards on the draft generation flow
   );
 });
 
-test("resolveWorkspaceAiChatAction keeps existing-board prompts on patch even when draft clarification matches", () => {
-  assert.equal(
-    resolveWorkspaceAiChatAction({
-      boardHasResources: true,
-      needsDraftClarification: true,
-      prompt: "build a website"
-    }),
-    "patch"
-  );
+test("resolveWorkspaceAiChatAction asks beginner-friendly draft questions for new service requests on existing boards", () => {
+  const prompts = [
+    "로그인 있는 작은 웹서비스 하나 만들고 싶어",
+    "예약 신청 받는 사이트 만들어줘",
+    "상품 판매하는 앱 하나 만들고 싶어",
+    "관리자 페이지 있는 서비스 구축하고 싶어",
+    "웹사이트 하나 배포하고 싶어"
+  ];
+
+  for (const prompt of prompts) {
+    assert.equal(
+      resolveWorkspaceAiChatAction({
+        boardHasResources: true,
+        needsDraftClarification: true,
+        prompt
+      }),
+      "draft_clarification",
+      prompt
+    );
+  }
+});
+
+test("resolveWorkspaceAiChatAction keeps existing-board edit prompts on patch", () => {
+  const cases = [
+    { needsDraftClarification: true, prompt: "여기에 로그인 기능 추가해줘" },
+    { needsDraftClarification: false, prompt: "데이터베이스 하나 추가해줘" },
+    { needsDraftClarification: false, prompt: "기존 서버 삭제해줘" },
+    { needsDraftClarification: false, prompt: "스토리지 버킷도 넣어줘" }
+  ];
+
+  for (const item of cases) {
+    assert.equal(
+      resolveWorkspaceAiChatAction({
+        boardHasResources: true,
+        needsDraftClarification: item.needsDraftClarification,
+        prompt: item.prompt
+      }),
+      "patch",
+      item.prompt
+    );
+  }
 });
 
 test("resolveWorkspaceAiChatAction asks draft clarification only on draft generation", () => {

@@ -17,6 +17,14 @@ export function resolveWorkspaceAiChatAction(input: {
   readonly needsDraftClarification: boolean;
   readonly prompt: string;
 }): WorkspaceAiChatAction {
+  if (
+    input.boardHasResources &&
+    input.needsDraftClarification &&
+    isNewServiceDraftRequest(input.prompt)
+  ) {
+    return "draft_clarification";
+  }
+
   const mode = resolveWorkspaceAiChatMode(input);
 
   if (mode === "patch") {
@@ -24,6 +32,58 @@ export function resolveWorkspaceAiChatAction(input: {
   }
 
   return input.needsDraftClarification ? "draft_clarification" : "draft";
+}
+
+function isNewServiceDraftRequest(prompt: string): boolean {
+  const normalizedPrompt = prompt.toLowerCase();
+
+  if (
+    [
+      "여기에",
+      "기존",
+      "현재",
+      "추가",
+      "넣",
+      "붙",
+      "삭제",
+      "제거",
+      "지워",
+      "교체",
+      "대체",
+      "바꿔",
+      "바꾸",
+      "수정",
+      "변경",
+      "add",
+      "remove",
+      "delete",
+      "replace",
+      "modify",
+      "change"
+    ].some((keyword) => normalizedPrompt.includes(keyword))
+  ) {
+    return false;
+  }
+
+  return [
+    "만들고 싶",
+    "만들어줘",
+    "만들어 줘",
+    "하나 만들",
+    "구축하고 싶",
+    "배포하고 싶",
+    "새 서비스",
+    "새 웹서비스",
+    "새 웹사이트",
+    "서비스 하나",
+    "웹서비스 하나",
+    "웹사이트 하나",
+    "앱 하나",
+    "build a service",
+    "build a website",
+    "create a service",
+    "create a website"
+  ].some((keyword) => normalizedPrompt.includes(keyword));
 }
 
 function isFreshArchitectureRequest(prompt: string): boolean {

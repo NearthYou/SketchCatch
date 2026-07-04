@@ -13,6 +13,23 @@
 - Highest priority unfinished harness feature: `HARNESS-007`
 - Current blocker: none
 
+### 2026-07-05 - 새 서비스 요청 라우팅 질문 보정
+- Goal: 기존 보드가 있어도 사용자가 새 웹서비스/사이트/앱을 만들고 싶다고 말하면 리소스 선택 질문이 아니라 기존 beginner-friendly 생성 확인 질문으로 안내한다.
+- Completed:
+  - 기존 보드 라우팅에서 `needsDraftClarification`이면서 새 서비스 생성 의도가 분명한 요청은 `draft_clarification`으로 보내게 했다.
+  - “추가/삭제/교체/수정/여기에/기존”처럼 기존 다이어그램 편집 의도가 있는 말은 계속 patch preview로 유지했다.
+  - 로그인 웹서비스, 예약 사이트, 상품 판매 앱, 관리자 서비스, 웹사이트 배포 요청을 생성 질문으로 보내는 회귀 테스트를 추가했다.
+  - 로그인 기능 추가, 데이터베이스 추가, 서버 삭제, 스토리지 추가 요청은 patch로 남는 회귀 테스트를 추가했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edit and after edit
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-ai-chat-routing.test.ts` - passed, 6 tests
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-ai-clarification.test.ts` - passed, 9 tests
+  - `npm exec --package=pnpm@11.8.0 -- pnpm lint` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm typecheck` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm build` - passed
+- Known risks:
+  - 이번 검증은 라우팅 단위 테스트 중심이며, 브라우저에서 실제 채팅 UI 클릭 흐름은 별도 스모크로 확인하지 않았다.
+
 ### 2026-07-05 - AI 다이어그램 생성/수정 확인 질문 복구
 - Goal: 막연한 자연어 수정 요청은 구체적인 패치 질문으로 되묻고, 신규 서비스 생성은 생성 전 체크리스트에서 빠진 정보만 확인하게 한다.
 - Completed:
