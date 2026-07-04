@@ -150,6 +150,7 @@ const REQUIREMENT_FACT_KEYWORD_RULES: readonly RequirementFactKeywordRule[] = [
       "mariadb",
       "데이터베이스",
       "디비",
+      "데베",
       "게시글",
       "회원 정보",
       "사용자 정보",
