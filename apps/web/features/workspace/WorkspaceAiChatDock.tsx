@@ -3,10 +3,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   AiArchitectureDraftResult,
-  ArchitectureDraftBudgetLevel,
-  ArchitectureDraftScenarioHint,
-  ArchitectureDraftSecurityPriority,
-  ArchitectureDraftTrafficLevel,
   ArchitectureGuardrailWarning,
   CreateArchitectureDraftRequest,
   DesignSimulationResult
@@ -27,8 +23,7 @@ import {
 import {
   WorkspaceAiDesignSimulationResult,
   WorkspaceAiExplanation,
-  WorkspaceAiRequestMessage,
-  WorkspaceAiSelect
+  WorkspaceAiRequestMessage
 } from "./WorkspaceAiPanelPieces";
 import type { AiRequestState } from "./WorkspaceAiPanelPieces";
 import {
@@ -48,12 +43,8 @@ import {
   type ArchitectureDraftFollowUpSession
 } from "./workspace-ai-draft-follow-up";
 import {
-  budgetOptions,
   DEFAULT_REQUIREMENT_PROMPT,
-  promptGuideExamples,
-  scenarioOptions,
-  securityOptions,
-  trafficOptions
+  promptGuideExamples
 } from "./workspace-ai-panel-options";
 import styles from "./workspace.module.css";
 
@@ -76,6 +67,10 @@ type WorkspaceAiChatMessage = {
 
 const MAX_CHAT_MESSAGES = 80;
 const STORAGE_KEY_PREFIX = "sketchcatch.workspaceAiChat";
+const DESIGN_SIMULATION_DEFAULTS = {
+  budgetLevel: "normal",
+  trafficLevel: "normal"
+} as const;
 
 export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockProps) {
   const [isOpen, setOpen] = useState(false);
@@ -83,11 +78,6 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
   const [messages, setMessages] = useState<WorkspaceAiChatMessage[]>(() =>
     readStoredChatMessages(projectId)
   );
-  const [scenarioHint, setScenarioHint] = useState<ArchitectureDraftScenarioHint>("auto");
-  const [budgetLevel, setBudgetLevel] = useState<ArchitectureDraftBudgetLevel>("normal");
-  const [trafficLevel, setTrafficLevel] = useState<ArchitectureDraftTrafficLevel>("small");
-  const [securityPriority, setSecurityPriority] =
-    useState<ArchitectureDraftSecurityPriority>("basic");
   const [draft, setDraft] = useState<AiArchitectureDraftResult | null>(null);
   const [clarificationSession, setClarificationSession] =
     useState<ArchitectureClarificationSession | null>(null);
@@ -176,7 +166,7 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
       return;
     }
 
-    if (needsArchitectureClarification(trimmedPrompt, scenarioHint)) {
+    if (needsArchitectureClarification(trimmedPrompt)) {
       const session = createArchitectureClarificationSession(trimmedPrompt);
 
       setClarificationSession(session);
@@ -224,10 +214,6 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
         const draftRequest = createClarifiedDraftRequest(clarificationSession);
 
         setClarificationSession(null);
-        setScenarioHint(draftRequest.scenarioHint);
-        setBudgetLevel(draftRequest.budgetLevel);
-        setTrafficLevel(draftRequest.trafficLevel);
-        setSecurityPriority(draftRequest.securityPriority);
         await createDraftFromRequest(draftRequest);
         return;
       }
@@ -271,11 +257,7 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
     }
 
     await createDraftFromRequest({
-      budgetLevel,
-      prompt: requirementPrompt,
-      scenarioHint,
-      securityPriority,
-      trafficLevel
+      prompt: requirementPrompt
     });
   }
 
@@ -406,8 +388,7 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
     try {
       const result = await runAiDesignSimulation({
         architectureJson: boardSnapshot.architectureJson,
-        budgetLevel,
-        trafficLevel
+        ...DESIGN_SIMULATION_DEFAULTS
       });
       setDesignSimulation(result);
       setSimulationFingerprint(boardSnapshot.fingerprint);
@@ -469,30 +450,6 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
       </header>
 
       <div className={styles.aiChatControls} aria-label="AI 설정">
-        <WorkspaceAiSelect
-          label="보조 선택"
-          onChange={setScenarioHint}
-          options={scenarioOptions}
-          value={scenarioHint}
-        />
-        <WorkspaceAiSelect
-          label="예산"
-          onChange={setBudgetLevel}
-          options={budgetOptions}
-          value={budgetLevel}
-        />
-        <WorkspaceAiSelect
-          label="방문자"
-          onChange={setTrafficLevel}
-          options={trafficOptions}
-          value={trafficLevel}
-        />
-        <WorkspaceAiSelect
-          label="보호 기준"
-          onChange={setSecurityPriority}
-          options={securityOptions}
-          value={securityPriority}
-        />
         <button
           className={styles.aiSecondaryButton}
           disabled={simulationState === "loading" || context.isPreviewActive}

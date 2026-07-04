@@ -74,10 +74,7 @@ export function resolveArchitectureDraftFollowUpAnswer(
     return {
       action: "regenerate",
       request: {
-        ...session.originalRequest,
-        budgetLevel: "low",
-        prompt: "Build a low budget single API server practice architecture",
-        scenarioHint: "api_server"
+        prompt: `${session.originalRequest.prompt}\n처음엔 저렴하게 시작하고 싶어. DB 없이 단일 API 서버 구조로 다시 만들어줘.`
       }
     };
   }
@@ -146,7 +143,7 @@ function createFollowUpCopy(
     case "scenario_conflict":
       return {
         question:
-          "질문: 자연어 요구사항과 보조 선택이 서로 달라 보입니다. 자연어 기준으로 만든 초안으로 진행할까요?",
+          "질문: 요구사항 안의 조건이 서로 달라 보입니다. 자연어 기준으로 만든 초안으로 진행할까요?",
         suggestions: ["자연어 기준으로 진행", "조건 다시 정리"]
       };
     case "low_budget_rds_cost":

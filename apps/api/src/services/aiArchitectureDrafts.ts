@@ -1,6 +1,6 @@
 import type { AiArchitectureDraftResult, CreateArchitectureDraftRequest } from "@sketchcatch/types";
 import { applyGuardrailMetadata } from "./aiArchitectureDraftMetadata.js";
-import { createDraftByScenario } from "./aiArchitectureDraftTemplates.js";
+import { createDraftFromRequirementFacts } from "./aiArchitectureRequirementDraftBuilder.js";
 import { applyOperatingConditionConfig } from "./aiArchitectureOperatingConditions.js";
 import { resolveScenario } from "./aiArchitectureScenarioResolution.js";
 
@@ -8,8 +8,8 @@ import { resolveScenario } from "./aiArchitectureScenarioResolution.js";
 export function createArchitectureDraft(input: string | CreateArchitectureDraftRequest): AiArchitectureDraftResult {
   const request = normalizeArchitectureDraftRequest(input);
   const resolution = resolveScenario(request);
-  const draft = createDraftByScenario(resolution.selectedScenario);
-  const configuredDraft = applyOperatingConditionConfig(draft, request);
+  const draft = createDraftFromRequirementFacts(resolution);
+  const configuredDraft = applyOperatingConditionConfig(draft, resolution.operatingProfile);
 
   return applyGuardrailMetadata(configuredDraft, request, resolution);
 }
@@ -35,18 +35,13 @@ export function createArchitectureDraftFromRepositoryEvidence(
   };
 }
 
-// 문자열 입력과 선택지 입력을 같은 요청 형태로 맞춰 draft 생성 흐름을 단순하게 만듭니다.
+// 문자열 입력과 요청 객체를 자연어 prompt 전용 계약으로 맞춥니다.
 function normalizeArchitectureDraftRequest(input: string | CreateArchitectureDraftRequest): CreateArchitectureDraftRequest {
   if (typeof input !== "string") {
     return input;
   }
 
-  // GitHub 초안 생성처럼 문자열만 넘기는 기존 흐름도 같은 기본 선택값을 쓰게 맞춥니다.
   return {
-    prompt: input,
-    scenarioHint: "auto",
-    budgetLevel: "normal",
-    trafficLevel: "normal",
-    securityPriority: "basic"
+    prompt: input
   };
 }

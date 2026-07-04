@@ -13,8 +13,6 @@ import {
 
 test("generic website prompts start a beginner-friendly clarification flow", () => {
   assert.equal(needsArchitectureClarification("웹사이트 하나 배포하고 싶어"), true);
-  assert.equal(needsArchitectureClarification("웹사이트 하나 배포하고 싶어", "backend_with_db"), false);
-  assert.equal(needsArchitectureClarification("웹사이트 하나 배포하고 싶어", "api_server"), false);
   assert.equal(needsArchitectureClarification("소개용 랜딩 웹사이트를 배포하고 싶어"), false);
   assert.equal(needsArchitectureClarification("파일 업로드 페이지가 필요해"), false);
 
@@ -53,17 +51,15 @@ test("clarification answers produce an implementation list before draft generati
   assert.deepEqual(summary.suggestions, ["그대로 진행", "수정할래"]);
 });
 
-test("confirmed clarification maps beginner answers to deterministic draft request options", () => {
+test("confirmed clarification maps beginner answers to a natural-language-only draft request", () => {
   const started = createArchitectureClarificationSession("웹사이트 하나 배포하고 싶어");
   const purposeAnswered = answerArchitectureClarification(started, "소개/랜딩 페이지");
   const actionAnswered = answerArchitectureClarification(purposeAnswered, "파일이나 이미지를 올려야 해요");
   const completed = answerArchitectureClarification(actionAnswered, "처음엔 저렴하게 시작");
   const draftRequest = createClarifiedDraftRequest(completed);
 
-  assert.equal(draftRequest.scenarioHint, "server_storage");
-  assert.equal(draftRequest.budgetLevel, "low");
-  assert.equal(draftRequest.trafficLevel, "small");
-  assert.equal(draftRequest.securityPriority, "basic");
+  assert.deepEqual(Object.keys(draftRequest), ["prompt"]);
   assert.match(draftRequest.prompt, /파일 업로드/);
   assert.match(draftRequest.prompt, /웹사이트/);
+  assert.match(draftRequest.prompt, /처음엔 저렴하게 시작/);
 });

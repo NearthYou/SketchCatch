@@ -7,11 +7,7 @@ import {
 } from "./workspace-ai-draft-follow-up";
 
 const baseRequest: CreateArchitectureDraftRequest = {
-  budgetLevel: "low",
-  prompt: "웹사이트 하나 배포하고 싶어",
-  scenarioHint: "backend_with_db",
-  securityPriority: "basic",
-  trafficLevel: "small"
+  prompt: "로그인 있는 웹사이트를 처음엔 저렴하게 배포하고 싶어"
 };
 
 const backendDraft: AiArchitectureDraftResult = {
@@ -89,9 +85,10 @@ test("database removal answers regenerate with a non-database draft request", ()
     return;
   }
 
-  assert.equal(resolution.request.budgetLevel, "low");
-  assert.equal(resolution.request.scenarioHint, "api_server");
-  assert.doesNotMatch(resolution.request.prompt, /\bdb\b|database/i);
+  assert.deepEqual(Object.keys(resolution.request), ["prompt"]);
+  assert.match(resolution.request.prompt, /DB 없이/);
+  assert.match(resolution.request.prompt, /API 서버/);
+  assert.doesNotMatch(resolution.request.prompt, /database/i);
 });
 
 test("accepting the pending draft does not regenerate or repeat the question", () => {

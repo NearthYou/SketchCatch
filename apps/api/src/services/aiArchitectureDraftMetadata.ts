@@ -9,12 +9,12 @@ import type { ScenarioResolution } from "./aiArchitectureScenarioResolution.js";
 
 export function applyGuardrailMetadata(
   draft: AiArchitectureDraftResult,
-  request: CreateArchitectureDraftRequest,
+  _request: CreateArchitectureDraftRequest,
   resolution: ScenarioResolution
 ): AiArchitectureDraftResult {
   const guardrailWarnings = [
     ...resolution.guardrailWarnings,
-    ...createOperatingConditionWarnings(request, resolution.selectedScenario)
+    ...createOperatingConditionWarnings(resolution)
   ];
 
   return {
@@ -23,27 +23,26 @@ export function applyGuardrailMetadata(
       ...draft.metadata,
       selectedScenario: resolution.selectedScenario,
       scenarioScores: resolution.scenarioScores,
+      requirementFacts: resolution.requirementFacts,
+      operatingProfile: resolution.operatingProfile,
       guardrailWarnings,
-      assumptions: [...draft.metadata.assumptions, ...createGuardrailAssumptions(request)],
-      explanations: [...draft.metadata.explanations, ...createGuardrailExplanations(request, resolution, guardrailWarnings)]
+      assumptions: [...draft.metadata.assumptions, ...createGuardrailAssumptions(resolution)],
+      explanations: [...draft.metadata.explanations, ...createGuardrailExplanations(resolution, guardrailWarnings)]
     }
   };
 }
 
-function createOperatingConditionWarnings(
-  request: CreateArchitectureDraftRequest,
-  selectedScenario: ArchitectureScenario
-): ArchitectureGuardrailWarning[] {
+function createOperatingConditionWarnings(resolution: ScenarioResolution): ArchitectureGuardrailWarning[] {
   const warnings: ArchitectureGuardrailWarning[] = [];
 
-  if (request.budgetLevel === "low" && selectedScenario === "backend_with_db") {
+  if (resolution.operatingProfile.budgetLevel === "low" && resolution.requirementFacts.includes("database")) {
     warnings.push({
       code: "low_budget_rds_cost",
       message: "낮은 예산을 선택했지만 RDS가 포함되어 비용이 발생할 수 있습니다. 배포 전에 비용 추정을 확인해야 합니다."
     });
   }
 
-  if (request.securityPriority === "high") {
+  if (resolution.operatingProfile.securityPriority === "high") {
     warnings.push({
       code: "guardrail_adjusted_config",
       message: "보안 우선 조건에 맞춰 지원 가능한 리소스 config만 안전한 기본값으로 조정했습니다."
@@ -53,18 +52,18 @@ function createOperatingConditionWarnings(
   return warnings;
 }
 
-function createGuardrailAssumptions(request: CreateArchitectureDraftRequest): string[] {
+function createGuardrailAssumptions(resolution: ScenarioResolution): string[] {
   const assumptions: string[] = [];
 
-  if (request.budgetLevel === "low") {
+  if (resolution.operatingProfile.budgetLevel === "low") {
     assumptions.push("낮은 예산을 우선해 작은 Practice Resource 기준으로 초안을 만들었습니다.");
   }
 
-  if (request.trafficLevel === "small") {
+  if (resolution.operatingProfile.trafficLevel === "small") {
     assumptions.push("작은 트래픽을 기준으로 단순한 구조부터 시작합니다.");
   }
 
-  if (request.securityPriority === "high") {
+  if (resolution.operatingProfile.securityPriority === "high") {
     assumptions.push("보안 우선순위가 높으므로 배포 전 Security Finding을 반드시 확인해야 합니다.");
   }
 
@@ -72,17 +71,18 @@ function createGuardrailAssumptions(request: CreateArchitectureDraftRequest): st
 }
 
 function createGuardrailExplanations(
-  request: CreateArchitectureDraftRequest,
   resolution: ScenarioResolution,
   guardrailWarnings: readonly ArchitectureGuardrailWarning[]
 ): string[] {
-  const explanations = [`최종 초안 유형은 ${getScenarioLabel(resolution.selectedScenario)}입니다.`];
+  const explanations = [
+    `대표 초안 유형은 ${getScenarioLabel(resolution.selectedScenario)}이지만, 실제 리소스는 자연어 단서 조합으로 생성했습니다.`
+  ];
 
-  if (request.trafficLevel === "normal") {
+  if (resolution.operatingProfile.trafficLevel === "normal") {
     explanations.push("트래픽이 보통 이상이면 ALB나 Auto Scaling을 검토할 수 있지만, 이번 MVP 초안에는 자동 추가하지 않습니다.");
   }
 
-  if (request.securityPriority === "high") {
+  if (resolution.operatingProfile.securityPriority === "high") {
     explanations.push("보안 우선순위가 높아 공개 접근을 줄이는 기본 config만 반영했습니다. 실제 보안 적합성을 보장하지는 않습니다.");
   }
 

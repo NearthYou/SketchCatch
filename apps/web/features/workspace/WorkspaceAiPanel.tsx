@@ -3,10 +3,6 @@
 import { useMemo, useState } from "react";
 import type {
   AiArchitectureDraftResult,
-  ArchitectureDraftBudgetLevel,
-  ArchitectureDraftScenarioHint,
-  ArchitectureDraftSecurityPriority,
-  ArchitectureDraftTrafficLevel,
   ArchitectureGuardrailWarning,
   DesignSimulationResult
 } from "@sketchcatch/types";
@@ -26,17 +22,12 @@ import {
   WorkspaceAiDesignSimulationResult,
   WorkspaceAiExplanation,
   WorkspaceAiGuardrailWarnings,
-  WorkspaceAiRequestMessage,
-  WorkspaceAiSelect
+  WorkspaceAiRequestMessage
 } from "./WorkspaceAiPanelPieces";
 import type { AiRequestState } from "./WorkspaceAiPanelPieces";
 import {
-  budgetOptions,
   DEFAULT_REQUIREMENT_PROMPT,
-  promptGuideExamples,
-  scenarioOptions,
-  securityOptions,
-  trafficOptions
+  promptGuideExamples
 } from "./workspace-ai-panel-options";
 import styles from "./workspace.module.css";
 
@@ -44,13 +35,14 @@ export type WorkspaceAiPanelProps = {
   readonly context: DiagramEditorPanelContext;
 };
 
+const DESIGN_SIMULATION_DEFAULTS = {
+  budgetLevel: "normal",
+  trafficLevel: "normal"
+} as const;
+
 // 실제 Architecture Board 오른쪽 패널에서 gg AI MVP 흐름을 실행합니다.
 export function WorkspaceAiPanel({ context }: WorkspaceAiPanelProps) {
   const [prompt, setPrompt] = useState(DEFAULT_REQUIREMENT_PROMPT);
-  const [scenarioHint, setScenarioHint] = useState<ArchitectureDraftScenarioHint>("auto");
-  const [budgetLevel, setBudgetLevel] = useState<ArchitectureDraftBudgetLevel>("normal");
-  const [trafficLevel, setTrafficLevel] = useState<ArchitectureDraftTrafficLevel>("small");
-  const [securityPriority, setSecurityPriority] = useState<ArchitectureDraftSecurityPriority>("basic");
   const [draft, setDraft] = useState<AiArchitectureDraftResult | null>(null);
   const [designSimulation, setDesignSimulation] = useState<DesignSimulationResult | null>(null);
   const [draftState, setDraftState] = useState<AiRequestState>("idle");
@@ -84,11 +76,7 @@ export function WorkspaceAiPanel({ context }: WorkspaceAiPanelProps) {
 
     try {
       const result = await createAiArchitectureDraft({
-        budgetLevel,
-        prompt,
-        scenarioHint,
-        securityPriority,
-        trafficLevel
+        prompt
       });
       const previewDiagram = convertArchitectureJsonToDiagramJson(result.architectureJson);
 
@@ -138,8 +126,7 @@ export function WorkspaceAiPanel({ context }: WorkspaceAiPanelProps) {
     try {
       const result = await runAiDesignSimulation({
         architectureJson: boardSnapshot.architectureJson,
-        budgetLevel,
-        trafficLevel
+        ...DESIGN_SIMULATION_DEFAULTS
       });
       setDesignSimulation(result);
       setSimulationFingerprint(boardSnapshot.fingerprint);
@@ -185,32 +172,6 @@ export function WorkspaceAiPanel({ context }: WorkspaceAiPanelProps) {
           </div>
           <p className={styles.aiPromptTinyHint}>더 정확히: 공개 여부 · 파일/데이터 · 비용 영향 · 보호 범위</p>
         </div>
-        <WorkspaceAiSelect
-          label="보조 선택"
-          onChange={setScenarioHint}
-          options={scenarioOptions}
-          value={scenarioHint}
-        />
-        <div className={styles.aiInlineFields}>
-          <WorkspaceAiSelect
-            label="예산"
-            onChange={setBudgetLevel}
-            options={budgetOptions}
-            value={budgetLevel}
-          />
-          <WorkspaceAiSelect
-            label="방문자"
-            onChange={setTrafficLevel}
-            options={trafficOptions}
-            value={trafficLevel}
-          />
-        </div>
-        <WorkspaceAiSelect
-          label="보호 기준"
-          onChange={setSecurityPriority}
-          options={securityOptions}
-          value={securityPriority}
-        />
         {draft === null ? (
           <button
             className={styles.aiPrimaryButton}

@@ -1,10 +1,4 @@
-import type {
-  ArchitectureDraftBudgetLevel,
-  ArchitectureDraftScenarioHint,
-  ArchitectureDraftSecurityPriority,
-  ArchitectureDraftTrafficLevel,
-  CreateArchitectureDraftRequest
-} from "@sketchcatch/types";
+import type { CreateArchitectureDraftRequest } from "@sketchcatch/types";
 
 type ClarificationQuestionId = "sitePurpose" | "visitorAction" | "operationPreference";
 
@@ -154,14 +148,7 @@ const CLARIFICATION_QUESTIONS: readonly ArchitectureClarificationQuestion[] = [
   }
 ];
 
-export function needsArchitectureClarification(
-  prompt: string,
-  scenarioHint: ArchitectureDraftScenarioHint = "auto"
-): boolean {
-  if (scenarioHint !== "auto") {
-    return false;
-  }
-
+export function needsArchitectureClarification(prompt: string): boolean {
   const normalizedPrompt = normalizeText(prompt);
   const hasGenericWebsiteKeyword = GENERIC_WEBSITE_KEYWORDS.some((keyword) =>
     normalizedPrompt.includes(keyword)
@@ -234,8 +221,7 @@ export function createArchitectureClarificationQuestionMessage(
 export function createArchitectureClarificationSummaryMessage(
   session: ArchitectureClarificationSession
 ): ArchitectureClarificationMessage {
-  const draftRequest = createClarifiedDraftRequest(session);
-  const implementationItems = createImplementationList(draftRequest.scenarioHint);
+  const implementationItems = createImplementationList(session.answers);
   const answerLines = session.answers.map((answer) => `- ${getQuestionLabel(answer.questionId)}: ${answer.label}`);
   const implementationLines = implementationItems.map((item) => `- ${item}`);
 
@@ -266,15 +252,8 @@ export function isArchitectureClarificationProceedCommand(text: string): boolean
 export function createClarifiedDraftRequest(
   session: ArchitectureClarificationSession
 ): CreateArchitectureDraftRequest {
-  const scenarioHint = selectScenarioHint(session.answers);
-  const operationPreference = getAnswerValue(session.answers, "operationPreference");
-
   return {
-    budgetLevel: selectBudgetLevel(operationPreference),
-    prompt: createClarifiedPrompt(session, scenarioHint),
-    scenarioHint,
-    securityPriority: selectSecurityPriority(operationPreference),
-    trafficLevel: selectTrafficLevel(operationPreference)
+    prompt: createClarifiedPrompt(session)
   };
 }
 
@@ -303,107 +282,78 @@ function createClarificationAnswer(
   };
 }
 
-function selectScenarioHint(
-  answers: readonly ArchitectureClarificationAnswer[]
-): ArchitectureDraftScenarioHint {
-  const purpose = getAnswerValue(answers, "sitePurpose");
-  const visitorAction = getAnswerValue(answers, "visitorAction");
-
-  if (visitorAction === "uploadFiles") {
-    return "server_storage";
-  }
-
-  if (
-    purpose === "form" ||
-    purpose === "memberService" ||
-    visitorAction === "storeData"
-  ) {
-    return "backend_with_db";
-  }
-
-  return "static_site";
-}
-
-function selectBudgetLevel(
-  operationPreference: ClarificationAnswerValue | "custom" | undefined
-): ArchitectureDraftBudgetLevel {
-  return operationPreference === "lowCost" ? "low" : "normal";
-}
-
-function selectTrafficLevel(
-  operationPreference: ClarificationAnswerValue | "custom" | undefined
-): ArchitectureDraftTrafficLevel {
-  return operationPreference === "growthReady" ? "normal" : "small";
-}
-
-function selectSecurityPriority(
-  operationPreference: ClarificationAnswerValue | "custom" | undefined
-): ArchitectureDraftSecurityPriority {
-  return operationPreference === "protectData" ? "high" : "basic";
-}
-
-function createClarifiedPrompt(
-  session: ArchitectureClarificationSession,
-  scenarioHint: ArchitectureDraftScenarioHint
-): string {
+function createClarifiedPrompt(session: ArchitectureClarificationSession): string {
+  const purposeValue = getAnswerValue(session.answers, "sitePurpose");
+  const visitorActionValue = getAnswerValue(session.answers, "visitorAction");
+  const operationPreferenceValue = getAnswerValue(session.answers, "operationPreference");
   const purpose = getAnswerLabel(session.answers, "sitePurpose");
   const visitorAction = getAnswerLabel(session.answers, "visitorAction");
   const operationPreference = getAnswerLabel(session.answers, "operationPreference");
-
-  if (scenarioHint === "server_storage") {
-    return [
-      `${session.originalPrompt} 파일 업로드가 있는 웹사이트를 만들고 싶어.`,
-      `방문자 기능: ${visitorAction}.`,
-      `사이트 성격: ${purpose}.`,
-      `운영 기준: ${operationPreference}.`,
-      "서버가 업로드를 받고 파일과 이미지를 저장하는 구조로 설계해줘."
-    ].join(" ");
-  }
-
-  if (scenarioHint === "backend_with_db") {
-    return [
-      `${session.originalPrompt} 로그인이나 사용자 입력 데이터를 저장하는 웹서비스를 만들고 싶어.`,
-      `방문자 기능: ${visitorAction}.`,
-      `사이트 성격: ${purpose}.`,
-      `운영 기준: ${operationPreference}.`,
-      "서버와 데이터베이스가 있는 구조로 설계해줘."
-    ].join(" ");
-  }
-
-  return [
-    `${session.originalPrompt} 소개용 랜딩 정적 웹사이트를 배포하고 싶어.`,
-    `방문자 기능: ${visitorAction}.`,
+  const promptParts = [
+    session.originalPrompt,
     `사이트 성격: ${purpose}.`,
-    `운영 기준: ${operationPreference}.`,
-    "방문자는 글과 이미지만 보는 공개 웹사이트 구조로 설계해줘."
-  ].join(" ");
+    `방문자 기능: ${visitorAction}.`,
+    `운영 기준: ${operationPreference}.`
+  ];
+
+  if (purposeValue === "landing" && visitorActionValue === "readOnly") {
+    promptParts.push("소개용 랜딩 정적 웹사이트를 배포하고 싶어.");
+    promptParts.push("방문자는 글과 이미지만 보는 공개 웹사이트 구조로 설계해줘.");
+  }
+
+  if (visitorActionValue === "uploadFiles") {
+    promptParts.push("파일 업로드가 있는 웹사이트를 만들고 싶어.");
+    promptParts.push("서버가 업로드를 받고 파일과 이미지를 저장하는 구조로 설계해줘.");
+  }
+
+  if (purposeValue === "form" || purposeValue === "memberService" || visitorActionValue === "storeData") {
+    promptParts.push("로그인이나 사용자 입력 데이터를 저장하는 웹서비스를 만들고 싶어.");
+    promptParts.push("서버와 데이터 보관 공간이 있는 구조로 설계해줘.");
+  }
+
+  if (operationPreferenceValue === "lowCost") {
+    promptParts.push("처음엔 저렴하게 시작하고 싶어.");
+  }
+
+  if (operationPreferenceValue === "protectData") {
+    promptParts.push("로그인/개인정보 보호를 우선해줘.");
+  }
+
+  if (operationPreferenceValue === "growthReady") {
+    promptParts.push("홍보 후 방문자 증가에 대비하고 싶어.");
+  }
+
+  return promptParts.join(" ");
 }
 
-function createImplementationList(scenarioHint: ArchitectureDraftScenarioHint): string[] {
-  if (scenarioHint === "server_storage") {
-    return [
-      "웹 요청을 받는 실행 공간",
-      "파일과 이미지를 보관하는 공간",
-      "외부 접속과 파일 접근을 조절하는 기본 규칙",
-      "접근 기록과 기본 알림"
-    ];
+function createImplementationList(answers: readonly ArchitectureClarificationAnswer[]): string[] {
+  const purpose = getAnswerValue(answers, "sitePurpose");
+  const visitorAction = getAnswerValue(answers, "visitorAction");
+  const operationPreference = getAnswerValue(answers, "operationPreference");
+  const items: string[] = [];
+
+  items.push("웹페이지를 올리고 방문자에게 전달하는 앞단");
+
+  if (visitorAction === "uploadFiles" || purpose === "form" || purpose === "memberService" || visitorAction === "storeData") {
+    items.push("웹 요청을 받는 실행 공간");
   }
 
-  if (scenarioHint === "backend_with_db") {
-    return [
-      "웹 요청을 받는 실행 공간",
-      "데이터를 보관하는 공간",
-      "외부 접속과 내부 저장 공간을 나누는 경계",
-      "접근 기록과 기본 알림"
-    ];
+  if (visitorAction === "uploadFiles") {
+    items.push("파일과 이미지를 보관하는 공간");
   }
 
-  return [
-    "웹페이지를 올릴 공개 공간",
-    "방문자에게 빠르게 전달하는 앞단",
-    "기본 접근 기록",
-    "낮은 비용으로 시작하는 공개 웹사이트 구성"
-  ];
+  if (purpose === "form" || purpose === "memberService" || visitorAction === "storeData") {
+    items.push("데이터를 보관하는 공간");
+    items.push("외부 접속과 내부 저장 공간을 나누는 경계");
+  }
+
+  if (operationPreference === "protectData") {
+    items.push("접근 제한과 민감한 정보 보호 기본값");
+  }
+
+  items.push("접근 기록과 기본 알림");
+
+  return Array.from(new Set(items));
 }
 
 function getAnswerValue(

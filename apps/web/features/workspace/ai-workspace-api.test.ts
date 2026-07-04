@@ -185,11 +185,7 @@ test("createAiArchitectureDraft preserves API rejection message for non-architec
 
   try {
     await createAiArchitectureDraft({
-      budgetLevel: "normal",
-      prompt: "된장찌개 레시피 알려줘",
-      scenarioHint: "auto",
-      securityPriority: "basic",
-      trafficLevel: "small"
+      prompt: "된장찌개 레시피 알려줘"
     });
     assert.fail("expected createAiArchitectureDraft to reject");
   } catch (error) {

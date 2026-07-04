@@ -655,6 +655,8 @@ export type AiResultMetadata = {
   explanations: string[];
   selectedScenario?: ArchitectureScenario;
   scenarioScores?: ArchitectureScenarioScore[];
+  requirementFacts?: ArchitectureRequirementFact[];
+  operatingProfile?: ArchitectureDraftOperatingProfile;
   guardrailWarnings?: ArchitectureGuardrailWarning[];
 };
 
@@ -686,15 +688,33 @@ export type ArchitectureGuardrailWarning = {
   message: string;
 };
 
-export type ArchitectureDraftScenarioHint = "auto" | ArchitectureScenario;
-
 export type ArchitectureDraftBudgetLevel = "low" | "normal";
 
 export type ArchitectureDraftTrafficLevel = "small" | "normal";
 
 export type ArchitectureDraftSecurityPriority = "basic" | "high";
 
-// Architecture Draft를 만들 때 AI가 자유롭게 해석하지 않도록 입력 선택지를 좁힌 계약입니다.
+export type ArchitectureRequirementFact =
+  | "web_frontend"
+  | "static_delivery"
+  | "server_runtime"
+  | "database"
+  | "object_storage"
+  | "file_upload"
+  | "auth_or_user_data"
+  | "serverless_runtime"
+  | "network_boundary"
+  | "iam_permissions"
+  | "observability"
+  | "encryption";
+
+export type ArchitectureDraftOperatingProfile = {
+  budgetLevel: ArchitectureDraftBudgetLevel;
+  trafficLevel: ArchitectureDraftTrafficLevel;
+  securityPriority: ArchitectureDraftSecurityPriority;
+};
+
+// Architecture Draft는 자연어 요구사항과 확인 질문 답변을 기준으로 결정적으로 생성한다.
 export type RequirementInputMode = "text" | "voice";
 
 export type RequirementInput = {
@@ -806,10 +826,6 @@ export type ArchitecturePatchPreview = {
 
 export type CreateArchitectureDraftRequest = {
   prompt: string;
-  scenarioHint: ArchitectureDraftScenarioHint;
-  budgetLevel: ArchitectureDraftBudgetLevel;
-  trafficLevel: ArchitectureDraftTrafficLevel;
-  securityPriority: ArchitectureDraftSecurityPriority;
 };
 
 export type AiArchitectureDraftResult = {

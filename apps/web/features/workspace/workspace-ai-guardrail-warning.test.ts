@@ -8,6 +8,9 @@ const workspaceAiDraftFollowUpSource = readWorkspaceFile("workspace-ai-draft-fol
 const workspaceAiPanelPiecesSource = readWorkspaceFile("WorkspaceAiPanelPieces.tsx");
 const workspaceAiPanelOptionsSource = readWorkspaceFile("workspace-ai-panel-options.ts");
 const stylesSource = readWorkspaceFile("workspace.module.css");
+const appAiWorkspaceClientSource = readAppWorkspaceFile("AiWorkspaceClient.tsx");
+const appArchitectureDraftPanelSource = readAppWorkspaceFile("ArchitectureDraftPanel.tsx");
+const appWorkspaceOptionsSource = readAppWorkspaceFile("workspace-options.ts");
 
 test("workspace AI chat asks follow-up questions instead of showing fixable guardrail warnings", () => {
   assert.match(workspaceAiChatDockSource, /draftFollowUpSession/);
@@ -32,10 +35,24 @@ test("workspace AI draft preview exposes only apply, cancel, and regenerate acti
   assert.doesNotMatch(workspaceAiChatDockSource, /초안 미리보기 생성/);
 });
 
-test("workspace AI scenario helper labels keep prompt-first wording", () => {
-  assert.match(workspaceAiPanelOptionsSource, /자연어 기준으로 자동 판단/);
-  assert.match(workspaceAiPanelOptionsSource, /serverless_function/);
-  assert.match(workspaceAiChatDockSource, /useState<ArchitectureDraftScenarioHint>\("auto"\)/);
+test("workspace AI chat does not expose auxiliary draft selectors", () => {
+  assert.doesNotMatch(workspaceAiChatDockSource, /WorkspaceAiSelect/);
+  assert.doesNotMatch(workspaceAiChatDockSource, /scenarioOptions/);
+  assert.doesNotMatch(workspaceAiChatDockSource, /budgetOptions/);
+  assert.doesNotMatch(workspaceAiChatDockSource, /trafficOptions/);
+  assert.doesNotMatch(workspaceAiChatDockSource, /securityOptions/);
+  assert.doesNotMatch(workspaceAiChatDockSource, /label="보조 선택"/);
+  assert.doesNotMatch(workspaceAiChatDockSource, /label="예산"/);
+  assert.doesNotMatch(workspaceAiChatDockSource, /label="방문자"/);
+  assert.doesNotMatch(workspaceAiChatDockSource, /label="보호 기준"/);
+  assert.doesNotMatch(workspaceAiPanelOptionsSource, /scenarioOptions/);
+  assert.doesNotMatch(appAiWorkspaceClientSource, /scenarioHint/);
+  assert.doesNotMatch(appAiWorkspaceClientSource, /securityPriority/);
+  assert.doesNotMatch(appArchitectureDraftPanelSource, /scenarioOptions/);
+  assert.doesNotMatch(appArchitectureDraftPanelSource, /budgetOptions/);
+  assert.doesNotMatch(appArchitectureDraftPanelSource, /trafficOptions/);
+  assert.doesNotMatch(appArchitectureDraftPanelSource, /securityOptions/);
+  assert.doesNotMatch(appWorkspaceOptionsSource, /scenarioOptions/);
 });
 
 test("workspace AI prompt guide uses beginner-friendly examples", () => {
@@ -59,4 +76,8 @@ test("workspace AI chat history is persisted per project", () => {
 
 function readWorkspaceFile(fileName: string): string {
   return readFileSync(fileURLToPath(new URL(fileName, import.meta.url)), "utf8");
+}
+
+function readAppWorkspaceFile(fileName: string): string {
+  return readFileSync(fileURLToPath(new URL(`../../app/workspace/${fileName}`, import.meta.url)), "utf8");
 }

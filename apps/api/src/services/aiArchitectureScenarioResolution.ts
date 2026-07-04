@@ -1,5 +1,7 @@
 import type {
+  ArchitectureDraftOperatingProfile,
   ArchitectureGuardrailWarning,
+  ArchitectureRequirementFact,
   ArchitectureScenario,
   ArchitectureScenarioScore,
   CreateArchitectureDraftRequest
@@ -9,6 +11,8 @@ import type {
 export type ScenarioResolution = {
   readonly selectedScenario: ArchitectureScenario;
   readonly scenarioScores: ArchitectureScenarioScore[];
+  readonly requirementFacts: ArchitectureRequirementFact[];
+  readonly operatingProfile: ArchitectureDraftOperatingProfile;
   readonly guardrailWarnings: ArchitectureGuardrailWarning[];
 };
 
@@ -139,6 +143,92 @@ const CONCRETE_WEBSITE_KEYWORDS = [
   "디비"
 ] as const;
 
+type RequirementFactKeywordRule = {
+  readonly fact: ArchitectureRequirementFact;
+  readonly keywords: readonly string[];
+};
+
+const REQUIREMENT_FACT_KEYWORD_RULES: readonly RequirementFactKeywordRule[] = [
+  {
+    fact: "web_frontend",
+    keywords: [
+      "static",
+      "frontend",
+      "react",
+      "next",
+      "next.js",
+      "정적",
+      "웹사이트",
+      "홈페이지",
+      "사이트",
+      "웹서비스",
+      "프론트엔드",
+      "리액트",
+      "랜딩",
+      "소개",
+      "포트폴리오",
+      "회사"
+    ]
+  },
+  {
+    fact: "static_delivery",
+    keywords: ["cloudfront", "cdn", "정적", "랜딩", "전 세계", "전세계", "빠르게"]
+  },
+  {
+    fact: "server_runtime",
+    keywords: [
+      "api",
+      "server",
+      "ec2",
+      "express",
+      "spring",
+      "fastapi",
+      "nestjs",
+      "node",
+      "서버",
+      "백엔드",
+      "애플리케이션",
+      "앱",
+      "처리"
+    ]
+  },
+  {
+    fact: "database",
+    keywords: [
+      "db",
+      "database",
+      "rds",
+      "postgres",
+      "postgresql",
+      "mysql",
+      "mariadb",
+      "데이터베이스",
+      "디비",
+      "게시글",
+      "회원 정보",
+      "사용자 정보",
+      "주문",
+      "결제 내역"
+    ]
+  },
+  {
+    fact: "object_storage",
+    keywords: ["s3", "storage", "bucket", "object storage", "스토리지", "버킷", "파일", "이미지", "업로드"]
+  },
+  {
+    fact: "file_upload",
+    keywords: ["upload", "업로드", "올려야", "올리는", "파일", "이미지"]
+  },
+  {
+    fact: "auth_or_user_data",
+    keywords: ["로그인", "회원", "계정", "사용자 정보", "개인정보", "마이페이지", "사용자별"]
+  },
+  {
+    fact: "serverless_runtime",
+    keywords: ["lambda", "serverless", "람다", "서버리스", "함수"]
+  }
+];
+
 const UNSUPPORTED_REQUIREMENT_RULES: readonly UnsupportedRequirementRule[] = [
   {
     label: "EKS/Kubernetes",
@@ -203,21 +293,12 @@ const UNSUPPORTED_REQUIREMENT_RULES: readonly UnsupportedRequirementRule[] = [
 
 export function resolveScenario(request: CreateArchitectureDraftRequest): ScenarioResolution {
   const scenarioScores = scorePromptScenarios(request.prompt);
-  const promptScenario = selectScenarioFromScores(scenarioScores);
-  const hasPromptSignal = hasPromptScenarioSignal(scenarioScores);
   const unsupportedRequirementMatches = findUnsupportedRequirementMatches(request.prompt);
-  const substituteScenario = selectSubstituteScenario(unsupportedRequirementMatches);
+  const requirementFacts = createRequirementFacts(request.prompt, unsupportedRequirementMatches);
+  const hasPromptSignal = requirementFacts.length > 0;
   const unsupportedWarnings = createUnsupportedRequirementWarnings(unsupportedRequirementMatches);
 
   if (isGenericWebsitePromptWithoutConcreteArchitecture(request.prompt, scenarioScores)) {
-    if (request.scenarioHint !== "auto") {
-      return {
-        selectedScenario: request.scenarioHint,
-        scenarioScores,
-        guardrailWarnings: unsupportedWarnings
-      };
-    }
-
     throw new AmbiguousArchitecturePromptError(
       "웹사이트라고만 하면 화면만 보여주는 사이트인지, 방문자가 파일을 올리는 서비스인지, 로그인이나 데이터 저장이 필요한 서비스인지 먼저 확인해야 합니다."
     );
@@ -225,23 +306,13 @@ export function resolveScenario(request: CreateArchitectureDraftRequest): Scenar
 
   if (hasPromptSignal) {
     return {
-      selectedScenario: promptScenario,
+      selectedScenario: selectRepresentativeScenario(requirementFacts, scenarioScores),
       scenarioScores,
+      requirementFacts,
+      operatingProfile: createOperatingProfile(request.prompt, requirementFacts),
       guardrailWarnings: [
         ...unsupportedWarnings,
-        ...createPromptOverrideWarnings(request.scenarioHint, promptScenario),
         ...createPartialGenerationWarnings(unsupportedWarnings, hasPromptSignal)
-      ]
-    };
-  }
-
-  if (substituteScenario !== undefined) {
-    return {
-      selectedScenario: substituteScenario,
-      scenarioScores,
-      guardrailWarnings: [
-        ...unsupportedWarnings,
-        ...createPromptOverrideWarnings(request.scenarioHint, substituteScenario)
       ]
     };
   }
@@ -263,29 +334,33 @@ function scorePromptScenarios(prompt: string): ArchitectureScenarioScore[] {
   });
 }
 
-function selectScenarioFromScores(scenarioScores: readonly ArchitectureScenarioScore[]): ArchitectureScenario {
-  const backendScore = findPromptScenarioScore(scenarioScores, "backend_with_db");
-  const apiScore = findPromptScenarioScore(scenarioScores, "api_server");
-  const serverStorageScore = findPromptScenarioScore(scenarioScores, "server_storage");
-  const staticSiteScore = findPromptScenarioScore(scenarioScores, "static_site");
+function selectRepresentativeScenario(
+  requirementFacts: readonly ArchitectureRequirementFact[],
+  scenarioScores: readonly ArchitectureScenarioScore[]
+): ArchitectureScenario {
+  const factSet = new Set(requirementFacts);
 
-  if (backendScore > 0 && apiScore > 0) {
+  if (factSet.has("serverless_runtime")) {
+    return "serverless_function";
+  }
+
+  if (factSet.has("database")) {
     return "backend_with_db";
   }
 
-  if (serverStorageScore > 0 && apiScore > 0) {
+  if (factSet.has("server_runtime") && factSet.has("object_storage")) {
     return "server_storage";
   }
 
-  if (staticSiteScore > 0 && serverStorageScore > 0 && staticSiteScore >= serverStorageScore) {
+  if (factSet.has("server_runtime")) {
+    return "api_server";
+  }
+
+  if (factSet.has("web_frontend") || factSet.has("static_delivery")) {
     return "static_site";
   }
 
   const highestScore = Math.max(...scenarioScores.map((scenarioScore) => scenarioScore.score));
-
-  if (highestScore === 0) {
-    return "api_server";
-  }
 
   return (
     PROMPT_SCENARIO_PRIORITY.find((scenario) => findPromptScenarioScore(scenarioScores, scenario) === highestScore) ??
@@ -298,10 +373,6 @@ function findPromptScenarioScore(
   scenario: ArchitectureScenario
 ): number {
   return scenarioScores.find((scenarioScore) => scenarioScore.scenario === scenario)?.score ?? 0;
-}
-
-function hasPromptScenarioSignal(scenarioScores: readonly ArchitectureScenarioScore[]): boolean {
-  return scenarioScores.some((scenarioScore) => scenarioScore.score > 0);
 }
 
 function isGenericWebsitePromptWithoutConcreteArchitecture(
@@ -323,20 +394,142 @@ function isGenericWebsitePromptWithoutConcreteArchitecture(
   return staticSiteScore > 0 && nonStaticScore === 0 && hasGenericWebsiteKeyword && !hasConcreteWebsiteKeyword;
 }
 
-function createPromptOverrideWarnings(
-  scenarioHint: CreateArchitectureDraftRequest["scenarioHint"],
-  promptScenario: ArchitectureScenario
-): ArchitectureGuardrailWarning[] {
-  if (scenarioHint === "auto" || scenarioHint === promptScenario) {
-    return [];
+function createRequirementFacts(
+  prompt: string,
+  unsupportedRequirementMatches: readonly UnsupportedRequirementRule[]
+): ArchitectureRequirementFact[] {
+  const normalizedPrompt = normalizePrompt(prompt);
+  const facts = new Set<ArchitectureRequirementFact>();
+
+  for (const rule of REQUIREMENT_FACT_KEYWORD_RULES) {
+    if (rule.keywords.some((keyword) => normalizedPrompt.includes(keyword.toLowerCase()))) {
+      facts.add(rule.fact);
+    }
   }
 
-  return [
-    {
-      code: "selection_overridden_by_prompt",
-      message: "자연어 요구사항이 선택한 옵션보다 구체적이어서 프롬프트 기준으로 초안을 생성했습니다."
+  for (const rule of unsupportedRequirementMatches) {
+    if (rule.substitution?.scenario === "api_server") {
+      facts.add("server_runtime");
+      facts.add("network_boundary");
+      facts.add("iam_permissions");
+      facts.add("observability");
     }
+
+    if (rule.substitution?.scenario === "backend_with_db") {
+      facts.add("server_runtime");
+      facts.add("database");
+      facts.add("network_boundary");
+      facts.add("iam_permissions");
+      facts.add("observability");
+      facts.add("encryption");
+    }
+  }
+
+  addDerivedRequirementFacts(facts);
+
+  if (prefersNoDatabase(normalizedPrompt)) {
+    facts.delete("database");
+    facts.delete("auth_or_user_data");
+    facts.delete("encryption");
+  }
+
+  return sortRequirementFacts(facts);
+}
+
+function addDerivedRequirementFacts(facts: Set<ArchitectureRequirementFact>): void {
+  if (facts.has("auth_or_user_data")) {
+    facts.add("database");
+    facts.add("server_runtime");
+    facts.add("encryption");
+  }
+
+  if (facts.has("file_upload")) {
+    facts.add("object_storage");
+    facts.add("server_runtime");
+  }
+
+  if (facts.has("database")) {
+    facts.add("server_runtime");
+    facts.add("network_boundary");
+    facts.add("encryption");
+  }
+
+  if (facts.has("server_runtime")) {
+    facts.add("network_boundary");
+    facts.add("iam_permissions");
+    facts.add("observability");
+  }
+
+  if (facts.has("serverless_runtime")) {
+    facts.add("iam_permissions");
+    facts.add("observability");
+  }
+
+  if (facts.has("web_frontend")) {
+    facts.add("static_delivery");
+    facts.add("object_storage");
+  }
+
+  if (facts.has("object_storage")) {
+    facts.add("iam_permissions");
+  }
+}
+
+function sortRequirementFacts(facts: ReadonlySet<ArchitectureRequirementFact>): ArchitectureRequirementFact[] {
+  const factOrder: readonly ArchitectureRequirementFact[] = [
+    "web_frontend",
+    "static_delivery",
+    "server_runtime",
+    "serverless_runtime",
+    "database",
+    "object_storage",
+    "file_upload",
+    "auth_or_user_data",
+    "network_boundary",
+    "iam_permissions",
+    "observability",
+    "encryption"
   ];
+
+  return factOrder.filter((fact) => facts.has(fact));
+}
+
+function createOperatingProfile(
+  prompt: string,
+  requirementFacts: readonly ArchitectureRequirementFact[]
+): ArchitectureDraftOperatingProfile {
+  const normalizedPrompt = normalizePrompt(prompt);
+  const factSet = new Set(requirementFacts);
+  const lowBudgetKeywords = ["저렴", "낮은 예산", "비용 낮", "low budget", "연습용", "소수", "처음엔"];
+  const growthKeywords = ["방문자 증가", "홍보", "공개 서비스", "트래픽", "growth", "여러 사람", "많은 사용자"];
+  const highSecurityKeywords = ["보호", "보안", "개인정보", "로그인", "회원", "계정", "private", "암호화"];
+
+  return {
+    budgetLevel: lowBudgetKeywords.some((keyword) => normalizedPrompt.includes(keyword)) ? "low" : "normal",
+    trafficLevel: growthKeywords.some((keyword) => normalizedPrompt.includes(keyword.toLowerCase()))
+      ? "normal"
+      : "small",
+    securityPriority:
+      factSet.has("auth_or_user_data") ||
+      factSet.has("database") ||
+      highSecurityKeywords.some((keyword) => normalizedPrompt.includes(keyword.toLowerCase()))
+        ? "high"
+        : "basic"
+  };
+}
+
+function prefersNoDatabase(normalizedPrompt: string): boolean {
+  return (
+    normalizedPrompt.includes("db 없는") ||
+    normalizedPrompt.includes("db 없이") ||
+    normalizedPrompt.includes("db없이") ||
+    normalizedPrompt.includes("db 빼") ||
+    normalizedPrompt.includes("db 제외") ||
+    normalizedPrompt.includes("database 없는") ||
+    normalizedPrompt.includes("database 없이") ||
+    normalizedPrompt.includes("데이터베이스 없는") ||
+    normalizedPrompt.includes("데이터베이스 없이")
+  );
 }
 
 function findUnsupportedRequirementMatches(prompt: string): UnsupportedRequirementRule[] {
@@ -345,14 +538,6 @@ function findUnsupportedRequirementMatches(prompt: string): UnsupportedRequireme
   return UNSUPPORTED_REQUIREMENT_RULES.filter((rule) =>
     rule.keywords.some((keyword) => normalizedPrompt.includes(keyword.toLowerCase()))
   );
-}
-
-function selectSubstituteScenario(
-  unsupportedRequirementMatches: readonly UnsupportedRequirementRule[]
-): ArchitectureScenario | undefined {
-  const substituteMatch = unsupportedRequirementMatches.find((rule) => rule.substitution?.scenario !== undefined);
-
-  return substituteMatch?.substitution?.scenario;
 }
 
 function createUnsupportedRequirementWarnings(

@@ -109,11 +109,7 @@ test("createAiProviderBackedLlmExplanation sends the Requirement Prompt context 
   });
   const requirementPromptText = "S3와 CloudFront로 정적 사이트를 만들어줘";
   const draft = createArchitectureDraft({
-    prompt: requirementPromptText,
-    scenarioHint: "auto",
-    budgetLevel: "normal",
-    trafficLevel: "normal",
-    securityPriority: "basic"
+    prompt: requirementPromptText
   });
 
   await createLlmExplanation({
