@@ -13,6 +13,17 @@
 - Highest priority unfinished harness feature: `HARNESS-007`
 - Current blocker: none
 
+### 2026-07-05 - AI 다이어그램 브랜치 수정 내용 문서화
+- Goal: 현재 브랜치에서 수정한 AI 다이어그램 생성/수정/preview/채팅 UX 흐름을 기존 `docs/ck/ai` 문서 형식으로 정리한다.
+- Completed:
+  - `docs/ck/ai/004_브랜치AI다이어그램수정내용정리.md`를 추가했다.
+  - 자연어 생성, 생성 전 질문, 최소 API 서버, EC2 컨테이너 배치, patch preview, area 레이어, 즉시 저장, 채팅 UX 변경을 코드 기준으로 정리했다.
+  - 관련 파일, 테스트, 수동 확인 예시, 남은 지원 타입 주의점을 함께 기록했다.
+- Verification run:
+  - `npm exec --package=pnpm@11.8.0 -- pnpm harness:check` - passed
+- Known risks:
+  - 문서 변경이라 lint/typecheck/build는 실행하지 않는다.
+
 ### 2026-07-05 - AI 채팅창 초기 스크롤 보정
 - Goal: AI 채팅창을 열었을 때 과거 대화 맨 위가 아니라 최신 메시지 위치가 보이게 한다.
 - Completed:
