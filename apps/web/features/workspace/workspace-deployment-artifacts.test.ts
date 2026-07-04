@@ -123,9 +123,7 @@ test("saveWorkspaceTerraformArtifact validates, snapshots, uploads, and links te
 
     if (String(input).endsWith("/terraform/validate")) {
       return jsonResponse({
-        ok: true,
-        diagnostics: [],
-        summary: { errorCount: 0, warningCount: 0 }
+        diagnostics: []
       });
     }
 
@@ -203,6 +201,9 @@ test("saveWorkspaceTerraformArtifact validates, snapshots, uploads, and links te
   const uploadBody = JSON.parse(String(requests[2]?.init?.body));
 
   assert.equal(String(requests[0]?.input), "/api/terraform/validate");
+  assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), {
+    terraformCode
+  });
   assert.equal(String(requests[1]?.input), `/api/projects/${project.id}/architectures`);
   assert.equal(String(requests[2]?.input), `/api/projects/${project.id}/assets/presigned-upload`);
   assert.deepEqual(uploadBody, {
@@ -247,9 +248,7 @@ test("saveWorkspaceTerraformArtifact aborts a pending asset when S3 upload fails
 
     if (String(input).endsWith("/terraform/validate")) {
       return jsonResponse({
-        ok: true,
-        diagnostics: [],
-        summary: { errorCount: 0, warningCount: 0 }
+        diagnostics: []
       });
     }
 
@@ -344,15 +343,13 @@ test("saveWorkspaceTerraformArtifact stops before snapshot when terraform valida
     requests.push({ input, init });
 
     return jsonResponse({
-      ok: false,
       diagnostics: [
         {
           severity: "error",
           message: "block header가 올바르지 않습니다.",
           line: 3
         }
-      ],
-      summary: { errorCount: 1, warningCount: 0 }
+      ]
     });
   };
 
@@ -367,6 +364,109 @@ test("saveWorkspaceTerraformArtifact stops before snapshot when terraform valida
   );
   assert.equal(requests.length, 1);
   assert.equal(String(requests[0]?.input), "/api/terraform/validate");
+  assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), {
+    terraformCode: "broken"
+  });
+});
+
+test("saveWorkspaceTerraformArtifact can skip validation after Terraform panel already validated", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
+  const terraformCode = 'resource "aws_instance" "web" {}\n';
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    restoreWindow(originalWindowDescriptor);
+  });
+
+  installAuthSession();
+
+  globalThis.fetch = async (input, init) => {
+    requests.push({ input, init });
+
+    if (String(input).endsWith("/terraform/validate")) {
+      return new Response(null, { status: 500 });
+    }
+
+    if (String(input).endsWith(`/projects/${project.id}/architectures`)) {
+      return jsonResponse(
+        {
+          architecture: {
+            id: "55555555-5555-4555-8555-555555555555",
+            projectId: project.id,
+            version: 1,
+            source: "manual",
+            architectureJson: { nodes: [], edges: [] },
+            createdAt: "2026-06-26T00:00:00.000Z"
+          }
+        },
+        201
+      );
+    }
+
+    if (String(input).endsWith(`/projects/${project.id}/assets/presigned-upload`)) {
+      return jsonResponse(
+        {
+          asset: {
+            id: "66666666-6666-4666-8666-666666666666",
+            projectId: project.id,
+            architectureId: "55555555-5555-4555-8555-555555555555",
+            assetType: "terraform_file",
+            objectKey: "projects/project/assets/terraform_file/main.tf",
+            fileName: "main.tf",
+            contentType: "text/plain",
+            byteSize: new TextEncoder().encode(terraformCode).byteLength,
+            uploadStatus: "pending",
+            createdAt: "2026-06-26T00:00:00.000Z"
+          },
+          upload: {
+            method: "PUT",
+            url: "https://s3.example.test/upload",
+            headers: { "Content-Type": "text/plain" },
+            expiresInSeconds: 900
+          }
+        },
+        201
+      );
+    }
+
+    if (
+      String(input).endsWith(
+        `/projects/${project.id}/assets/66666666-6666-4666-8666-666666666666/confirm-upload`
+      )
+    ) {
+      return jsonResponse({
+        asset: {
+          id: "66666666-6666-4666-8666-666666666666",
+          projectId: project.id,
+          architectureId: "55555555-5555-4555-8555-555555555555",
+          assetType: "terraform_file",
+          objectKey: "projects/project/assets/terraform_file/main.tf",
+          fileName: "main.tf",
+          contentType: "text/plain",
+          byteSize: new TextEncoder().encode(terraformCode).byteLength,
+          uploadStatus: "uploaded",
+          createdAt: "2026-06-26T00:00:00.000Z"
+        }
+      });
+    }
+
+    return new Response(null, { status: 200 });
+  };
+
+  await saveWorkspaceTerraformArtifact({
+    diagramJson,
+    projectId: project.id,
+    skipValidation: true,
+    terraformCode
+  });
+
+  assert.equal(
+    requests.some((request) => String(request.input).endsWith("/terraform/validate")),
+    false
+  );
+  assert.equal(String(requests[0]?.input), `/api/projects/${project.id}/architectures`);
 });
 
 function jsonResponse(body: unknown, status = 200): Response {

@@ -22,8 +22,8 @@ const designAreaMinResizeBounds = {
 const resourceNodeResizeBounds: NodeResizeBounds = {
   maxHeight: 260,
   maxWidth: 260,
-  minHeight: 74,
-  minWidth: 74
+  minHeight: 56,
+  minWidth: 56
 };
 
 const areaNodeMaxResizeBounds = {

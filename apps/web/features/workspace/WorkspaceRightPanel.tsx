@@ -31,6 +31,12 @@ import {
   saveWorkspaceTerraformArtifact,
   type SavedWorkspaceTerraformArtifact
 } from "./workspace-deployment-artifacts";
+import {
+  createTerraformLeaveSaveStartFeedback,
+  resolveTerraformLeaveSaveCompletion,
+  type TerraformLeaveSaveFeedback,
+  type TerraformLeaveSaveState
+} from "./terraform-leave-save-state";
 import { toDeploymentBaselineFingerprint } from "./terraform-panel-utils";
 import type { ResourceWorkspaceView, WorkspaceRightPanelView } from "./workspace-right-panel.types";
 import styles from "./workspace.module.css";
@@ -52,6 +58,8 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
   const terraformViewRef = useRef<HTMLDivElement | null>(null);
   const pendingTerraformLeaveActionRef = useRef<PendingTerraformLeaveAction | null>(null);
   const skipTerraformLeaveGuardRef = useRef(false);
+  const latestTerraformDiagnosticsRef = useRef<TerraformDiagnostic[]>([]);
+  const latestTerraformSaveRequestIdRef = useRef(0);
   const [activeView, setActiveView] = useState<WorkspaceRightPanelView>("resource");
   const [resourceWorkspaceView, setResourceWorkspaceView] = useState<ResourceWorkspaceView>(
     defaultResourceWorkspaceView
@@ -61,11 +69,15 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
   const [lastSavedDeploymentBaselineFingerprint, setLastSavedDeploymentBaselineFingerprint] =
     useState<string | null>(null);
   const [showTerraformLeaveDialog, setShowTerraformLeaveDialog] = useState(false);
+  const [terraformLeaveSaveState, setTerraformLeaveSaveState] =
+    useState<TerraformLeaveSaveState>("idle");
+  const [terraformLeaveSaveMessage, setTerraformLeaveSaveMessage] = useState("");
   const [terraformSaveRequestId, setTerraformSaveRequestId] = useState(0);
   const [terraformDiscardRequestId, setTerraformDiscardRequestId] = useState(0);
   const [terraformDiagnostics, setTerraformDiagnostics] = useState<TerraformDiagnostic[]>([]);
   const [selectedAiSafetyFinding, setSelectedAiSafetyFinding] = useState<CheckFinding | null>(null);
   const hasTerraformIssueErrors = terraformDiagnostics.some((diagnostic) => diagnostic.severity === "error");
+  const canOpenTerraformIssuesDuringEdit = terraformDiagnostics.length > 0;
   const currentDeploymentBaselineFingerprint = useMemo(
     () => toDeploymentBaselineFingerprint(context.diagram),
     [context.diagram]
@@ -82,12 +94,19 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
     }
   }, []);
 
+  const handleTerraformDiagnosticsChange = useCallback((diagnostics: TerraformDiagnostic[]): void => {
+    latestTerraformDiagnosticsRef.current = diagnostics;
+    setTerraformDiagnostics(diagnostics);
+  }, []);
+
   const requestTerraformLeave = useCallback((action: PendingTerraformLeaveAction): boolean => {
     if (!hasUnsavedTerraformChanges || skipTerraformLeaveGuardRef.current) {
       return true;
     }
 
     pendingTerraformLeaveActionRef.current = action;
+    setTerraformLeaveSaveState("idle");
+    setTerraformLeaveSaveMessage("");
     setShowTerraformLeaveDialog(true);
     return false;
   }, [hasUnsavedTerraformChanges]);
@@ -132,40 +151,100 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
       return;
     }
 
+    if (nextView === "issues" && canOpenTerraformIssuesDuringEdit) {
+      setActiveView("issues");
+      return;
+    }
+
     if (!requestTerraformLeave({ kind: "view", view: nextView })) {
       return;
     }
 
     setActiveView(nextView);
-  }, [activeView, requestTerraformLeave]);
+  }, [activeView, canOpenTerraformIssuesDuringEdit, requestTerraformLeave]);
+
+  const applyTerraformLeaveSaveFeedback = useCallback((feedback: TerraformLeaveSaveFeedback): void => {
+    setTerraformLeaveSaveState(feedback.state);
+    setTerraformLeaveSaveMessage(feedback.message);
+  }, []);
+
+  const resetTerraformLeaveSaveFeedback = useCallback((): void => {
+    setTerraformLeaveSaveState("idle");
+    setTerraformLeaveSaveMessage("");
+  }, []);
+
+  function invalidatePendingTerraformSaveCompletion(): void {
+    latestTerraformSaveRequestIdRef.current += 1;
+  }
 
   function continueTerraformEditing(): void {
+    invalidatePendingTerraformSaveCompletion();
     pendingTerraformLeaveActionRef.current = null;
+    resetTerraformLeaveSaveFeedback();
     setShowTerraformLeaveDialog(false);
   }
 
   function discardTerraformChanges(): void {
+    invalidatePendingTerraformSaveCompletion();
     setTerraformDiscardRequestId((requestId) => requestId + 1);
     setHasUnsavedTerraformChanges(false);
+    resetTerraformLeaveSaveFeedback();
     setShowTerraformLeaveDialog(false);
     runPendingTerraformLeaveAction();
   }
 
   function saveTerraformBeforeLeaving(): void {
-    setTerraformSaveRequestId((requestId) => requestId + 1);
+    if (terraformLeaveSaveState === "saving") {
+      return;
+    }
+
+    applyTerraformLeaveSaveFeedback(createTerraformLeaveSaveStartFeedback());
+    setTerraformSaveRequestId((requestId) => {
+      const nextRequestId = requestId + 1;
+      latestTerraformSaveRequestIdRef.current = nextRequestId;
+      return nextRequestId;
+    });
   }
 
-  function handleTerraformExternalSaveComplete(saved: boolean): void {
-    if (!saved || !showTerraformLeaveDialog) {
+  function handleTerraformExternalSaveComplete(saved: boolean, requestId: number): void {
+    if (requestId !== latestTerraformSaveRequestIdRef.current) {
+      return;
+    }
+
+    if (!showTerraformLeaveDialog) {
+      return;
+    }
+
+    const hasBlockingDiagnostics = latestTerraformDiagnosticsRef.current.some(
+      (diagnostic) => diagnostic.severity === "error"
+    );
+    const feedback = resolveTerraformLeaveSaveCompletion(saved, { hasBlockingDiagnostics });
+    applyTerraformLeaveSaveFeedback(feedback);
+
+    if (feedback.shouldRevealTerraformPanel) {
+      pendingTerraformLeaveActionRef.current = null;
+      context.setRightPanelOpen(true);
+      setActiveView("terraform");
+      setShowTerraformLeaveDialog(false);
+      return;
+    }
+
+    if (!feedback.canRunPendingAction) {
       return;
     }
 
     setHasUnsavedTerraformChanges(false);
-    setShowTerraformLeaveDialog(false);
+    setShowTerraformLeaveDialog(feedback.shouldKeepDialogOpen);
     runPendingTerraformLeaveAction();
   }
 
   function openCollapsedView(nextView: WorkspaceRightPanelView): void {
+    if (nextView === "issues" && canOpenTerraformIssuesDuringEdit) {
+      context.setRightPanelOpen(true);
+      setActiveView("issues");
+      return;
+    }
+
     if (!requestTerraformLeave({ kind: "view", view: nextView })) {
       return;
     }
@@ -187,6 +266,7 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
       return saveWorkspaceTerraformArtifact({
         diagramJson: source.diagramJson,
         projectId,
+        skipValidation: true,
         source: "manual",
         terraformCode: source.terraformCode
       });
@@ -258,6 +338,10 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
         return;
       }
 
+      if (canOpenTerraformIssuesDuringEdit && isTerraformIssuesNavigationTarget(target)) {
+        return;
+      }
+
       const replayTarget = getTerraformLeaveReplayTarget(target);
 
       if (!replayTarget) {
@@ -268,12 +352,13 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
       event.stopPropagation();
       event.stopImmediatePropagation();
       pendingTerraformLeaveActionRef.current = { kind: "replay-click", target: replayTarget };
+      resetTerraformLeaveSaveFeedback();
       setShowTerraformLeaveDialog(true);
     }
 
     document.addEventListener("click", handleDocumentClick, true);
     return () => document.removeEventListener("click", handleDocumentClick, true);
-  }, [hasUnsavedTerraformChanges]);
+  }, [canOpenTerraformIssuesDuringEdit, hasUnsavedTerraformChanges, resetTerraformLeaveSaveFeedback]);
 
   useEffect(() => {
     if (!hasUnsavedTerraformChanges) {
@@ -318,6 +403,7 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
         </button>
         <button
           className={styles.collapsedPanelButton}
+          data-terraform-issues-navigation
           onClick={() => openCollapsedView("issues")}
           title="Issues"
           type="button"
@@ -380,6 +466,7 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
           <button
             aria-pressed={activeView === "issues"}
             className={activeView === "issues" ? styles.panelModeButtonActive : styles.panelModeButton}
+            data-terraform-issues-navigation
             onClick={() => requestView("issues")}
             title="Issues"
             type="button"
@@ -427,7 +514,7 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
           externalDiscardRequestId={terraformDiscardRequestId}
           externalSaveRequestId={terraformSaveRequestId}
           isVisible={activeView === "terraform"}
-          onDiagnosticsChange={setTerraformDiagnostics}
+          onDiagnosticsChange={handleTerraformDiagnosticsChange}
           onDirtyChange={handleTerraformDirtyChange}
           onExternalSaveComplete={handleTerraformExternalSaveComplete}
           onOpenIssues={() => requestView("issues")}
@@ -468,6 +555,8 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
           onContinue={continueTerraformEditing}
           onDiscard={discardTerraformChanges}
           onSave={saveTerraformBeforeLeaving}
+          saveMessage={terraformLeaveSaveMessage}
+          saveState={terraformLeaveSaveState}
         />
       ) : null}
     </aside>
@@ -496,4 +585,8 @@ function getTerraformLeaveReplayTarget(target: EventTarget | null): HTMLElement 
 
 function isInsideTerraformLeaveDialog(target: Node): boolean {
   return target instanceof Element && Boolean(target.closest("[data-terraform-leave-dialog]"));
+}
+
+function isTerraformIssuesNavigationTarget(target: Node): boolean {
+  return target instanceof Element && Boolean(target.closest("[data-terraform-issues-navigation]"));
 }

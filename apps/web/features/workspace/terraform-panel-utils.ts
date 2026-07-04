@@ -71,6 +71,20 @@ export function createTerraformFilesFromGeneratedCode(
   }));
 }
 
+export function getDiagramTerraformAddresses(diagramJson: DiagramEditorPanelContext["diagram"]): Set<string> {
+  const addresses = new Set<string>();
+
+  for (const node of diagramJson.nodes) {
+    const address = toNodeTerraformAddress(node);
+
+    if (address) {
+      addresses.add(address);
+    }
+  }
+
+  return addresses;
+}
+
 export function getTerraformFileOptions(
   diagramJson: DiagramEditorPanelContext["diagram"],
   files: readonly TerraformVirtualFile[]
@@ -131,6 +145,10 @@ function appendTerraformBlock(currentCode: string, blockCode: string): string {
   return `${currentCode.trimEnd()}\n\n${trimmedBlock}`;
 }
 
+function normalizeTerraformCodeAfterBlockRemoval(terraformCode: string): string {
+  return terraformCode.replace(/(?:\r?\n){3,}/g, "\n\n").trim();
+}
+
 export function getTerraformFileCode(files: readonly TerraformVirtualFile[], fileName: string): string {
   return files.find((file) => file.fileName === fileName)?.code ?? "";
 }
@@ -144,6 +162,51 @@ export function combineTerraformFiles(files: readonly TerraformVirtualFile[]): s
 
 export function parseTerraformFiles(files: readonly TerraformVirtualFile[]): TerraformBlockLocation[] {
   return files.flatMap((file) => parseTerraformBlocks(file.fileName, file.code));
+}
+
+export function removeTerraformBlocksByAddress(
+  files: readonly TerraformVirtualFile[],
+  addresses: Iterable<string>
+): TerraformVirtualFile[] {
+  const addressSet = new Set(addresses);
+
+  if (addressSet.size === 0) {
+    return [...files];
+  }
+
+  let didRemoveBlock = false;
+
+  const nextFiles = files.map((file) => {
+    const removableBlocks = parseTerraformBlocks(file.fileName, file.code)
+      .filter((block) => addressSet.has(block.address))
+      .sort((left, right) => right.startOffset - left.startOffset);
+
+    if (removableBlocks.length === 0) {
+      return file;
+    }
+
+    didRemoveBlock = true;
+    let nextCode = file.code;
+
+    for (const block of removableBlocks) {
+      let removeEndOffset = block.endOffset;
+
+      if (nextCode.slice(removeEndOffset, removeEndOffset + 2) === "\r\n") {
+        removeEndOffset += 2;
+      } else if (nextCode[removeEndOffset] === "\n") {
+        removeEndOffset += 1;
+      }
+
+      nextCode = `${nextCode.slice(0, block.startOffset)}${nextCode.slice(removeEndOffset)}`;
+    }
+
+    return {
+      ...file,
+      code: normalizeTerraformCodeAfterBlockRemoval(nextCode)
+    };
+  });
+
+  return didRemoveBlock ? nextFiles : [...files];
 }
 
 export type TerraformBlockLocation = {
@@ -206,12 +269,15 @@ function toNodeTerraformAddress(node: DiagramNode | null): string | null {
   const parameters = node?.parameters;
   const resourceType = parameters?.resourceType?.trim();
   const resourceName = parameters?.resourceName?.trim();
+  const terraformBlockType = parameters?.terraformBlockType === "data" ? "data" : "resource";
 
   if (!resourceType || !resourceName) {
     return null;
   }
 
-  return `${resourceType}.${resourceName}`;
+  return terraformBlockType === "data"
+    ? `data.${resourceType}.${resourceName}`
+    : `${resourceType}.${resourceName}`;
 }
 
 function normalizeTerraformAddress(resourceAddress: string | null | undefined): string | null {
@@ -262,7 +328,7 @@ function parseTerraformBlocks(fileName: string, terraformCode: string): Terrafor
     const name = headerMatch[3] ?? "";
 
     blocks.push({
-      address: `${terraformType}.${name}`,
+      address: blockType === "data" ? `data.${terraformType}.${name}` : `${terraformType}.${name}`,
       blockType,
       code: terraformCode.slice(startOffset, endOffset),
       endLine: endIndex + 1,
@@ -326,7 +392,11 @@ function countBraceDelta(line: string): number {
 }
 
 export function formatTerraformDiagnosticTitle(diagnostic: TerraformDiagnostic): string {
-  const location = diagnostic.line ? `line ${diagnostic.line}` : "Terraform";
+  const location = diagnostic.line
+    ? diagnostic.sourceFileName
+      ? `${diagnostic.sourceFileName}:${diagnostic.line}`
+      : `line ${diagnostic.line}`
+    : "Terraform";
   const resource = diagnostic.resourceAddress ? ` | ${diagnostic.resourceAddress}` : "";
   return `${diagnostic.severity.toUpperCase()} | ${location}${resource}`;
 }

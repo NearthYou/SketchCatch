@@ -24,6 +24,7 @@ import {
   saveProjectDraft,
   testAwsConnection,
   uploadProjectAsset,
+  validateTerraformCode,
   verifyAwsConnection
 } from "./api";
 import type { Project } from "../../../../packages/types/src";
@@ -118,6 +119,60 @@ test("saveProjectDraft sends authenticated PUT request with diagram json", async
         zoom: 1
       }
     }
+  });
+});
+
+test("validateTerraformCode sends static validation files only", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    restoreWindow(originalWindowDescriptor);
+  });
+
+  installAuthSession();
+
+  globalThis.fetch = async (input, init) => {
+    requests.push({ input, init });
+
+    return new Response(
+      JSON.stringify({
+        diagnostics: []
+      }),
+      {
+        headers: {
+          "Content-Type": "application/json"
+        },
+        status: 200
+      }
+    );
+  };
+
+  const response = await validateTerraformCode({
+    terraformCode: "",
+    terraformFiles: [
+      {
+        fileName: "main.tf",
+        terraformCode: `resource "aws_vpc" "main" {}`
+      }
+    ]
+  });
+
+  assert.deepEqual(response, {
+    diagnostics: []
+  });
+  assert.equal(String(requests[0]?.input), "/api/terraform/validate");
+  assert.equal(requests[0]?.init?.method, "POST");
+  assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), {
+    terraformCode: "",
+    terraformFiles: [
+      {
+        fileName: "main.tf",
+        terraformCode: `resource "aws_vpc" "main" {}`
+      }
+    ]
   });
 });
 

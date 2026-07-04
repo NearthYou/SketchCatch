@@ -47,7 +47,7 @@ export function getAreaNodeLabel(node: DiagramNode): string {
 }
 
 export function getAreaNodeIconUrl(node: DiagramNode): string | undefined {
-  return isResourceAreaNode(node) ? node.iconUrl : undefined;
+  return isAreaNode(node) ? node.iconUrl : undefined;
 }
 
 export function isDesignAreaNode(node: DiagramNode): boolean {

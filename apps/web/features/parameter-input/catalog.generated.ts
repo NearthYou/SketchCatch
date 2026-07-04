@@ -289,6 +289,20 @@ export const terraformAwsParameterCatalog = {
         ]
       }
     ],
+    "aws_cloudfront_distribution": [
+      {
+        "name": "tags",
+        "terraformName": "tags",
+        "label": "Tags",
+        "type": "map",
+        "required": false,
+        "optional": true,
+        "computed": false,
+        "sensitive": false,
+        "description": "AWS 콘솔과 비용 추적에서 리소스를 구분하기 위한 key-value 태그입니다.",
+        "inputKind": "key-value"
+      }
+    ],
     "aws_nat_gateway": [
       {
         "name": "subnetId",
@@ -1207,30 +1221,44 @@ export const terraformAwsParameterCatalog = {
         "inputKind": "checkbox"
       },
       {
-        "name": "filterName",
-        "terraformName": "filter.name",
-        "label": "Filter name",
-        "type": "string",
-        "required": true,
-        "optional": false,
-        "computed": false,
-        "sensitive": false,
-        "description": "AMI 조회 filter 이름입니다.",
-        "inputKind": "text",
-        "placeholder": "name"
-      },
-      {
-        "name": "filterValues",
-        "terraformName": "filter.values",
-        "label": "Filter values",
+        "name": "filter",
+        "terraformName": "filter",
+        "label": "Filter",
         "type": "set",
         "required": true,
         "optional": false,
         "computed": false,
         "sensitive": false,
-        "description": "AMI 조회 filter 값 목록입니다.",
-        "inputKind": "text",
-        "placeholder": "amzn2-ami-hvm-*-x86_64-gp2"
+        "description": "AMI 조회 filter 조건입니다.",
+        "inputKind": "nested-block",
+        "children": [
+          {
+            "name": "name",
+            "terraformName": "name",
+            "label": "Name",
+            "type": "string",
+            "required": true,
+            "optional": false,
+            "computed": false,
+            "sensitive": false,
+            "description": "AMI 조회 filter 이름입니다.",
+            "inputKind": "text",
+            "placeholder": "name"
+          },
+          {
+            "name": "values",
+            "terraformName": "values",
+            "label": "Values",
+            "type": "set",
+            "required": true,
+            "optional": false,
+            "computed": false,
+            "sensitive": false,
+            "description": "AMI 조회 filter 값 목록입니다.",
+            "inputKind": "text",
+            "placeholder": "amzn2-ami-hvm-*-x86_64-gp2"
+          }
+        ]
       }
     ],
     "aws_key_pair": [

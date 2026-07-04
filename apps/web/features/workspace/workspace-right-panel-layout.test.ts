@@ -111,6 +111,15 @@ test("terraform leave guard covers workspace escape actions while editing", () =
   assert.doesNotMatch(componentSource, /activeView === "terraform" \|\| activeView === "issues"/);
 });
 
+test("terraform issues navigation stays reachable while diagnostics are visible", () => {
+  assert.match(componentSource, /canOpenTerraformIssuesDuringEdit/);
+  assert.match(componentSource, /nextView === "issues" && canOpenTerraformIssuesDuringEdit/);
+  assert.match(componentSource, /data-terraform-issues-navigation/);
+  assert.match(componentSource, /isTerraformIssuesNavigationTarget/);
+  assert.match(componentSource, /canOpenTerraformIssuesDuringEdit && isTerraformIssuesNavigationTarget\(target\)/);
+  assert.match(componentSource, /openCollapsedView\("issues"\)/);
+});
+
 test("discarding terraform edits resets the terraform code panel dirty state", () => {
   assert.match(componentSource, /terraformDiscardRequestId/);
   assert.match(componentSource, /setTerraformDiscardRequestId\(\(requestId\) => requestId \+ 1\)/);
@@ -119,6 +128,11 @@ test("discarding terraform edits resets the terraform code panel dirty state", (
   assert.match(terraformPanelSource, /latestExternalDiscardRequestIdRef/);
   assert.match(terraformPanelSource, /latestExternalDiscardRequestIdRef\.current === externalDiscardRequestId/);
   assert.match(terraformPanelSource, /void refreshTerraformCode\(currentDiagramFingerprint\)/);
+});
+
+test("terraform preview refreshes when the last diagram icon is deleted", () => {
+  assert.match(terraformPanelSource, /void refreshTerraformCode\(currentDiagramFingerprint\)/);
+  assert.doesNotMatch(terraformPanelSource, /context\.nodes\.length === 0/);
 });
 
 test("terraform leave dialog uses Korean copy", () => {
@@ -130,6 +144,43 @@ test("terraform leave dialog uses Korean copy", () => {
   assert.match(terraformLeaveDialogSource, /저장하고 나가기/);
   assert.doesNotMatch(terraformLeaveDialogSource, /Save changes before leaving\?/);
   assert.doesNotMatch(terraformLeaveDialogSource, /Discard Changes/);
+});
+
+test("terraform leave dialog exposes blocked save feedback instead of ignoring failed saves", () => {
+  assert.match(componentSource, /terraformLeaveSaveState/);
+  assert.match(componentSource, /terraformLeaveSaveMessage/);
+  assert.match(componentSource, /createTerraformLeaveSaveStartFeedback/);
+  assert.match(componentSource, /resolveTerraformLeaveSaveCompletion/);
+  assert.match(componentSource, /setTerraformLeaveSaveState\(feedback\.state\)/);
+  assert.match(componentSource, /setTerraformLeaveSaveMessage\(feedback\.message\)/);
+  assert.match(componentSource, /saveState=\{terraformLeaveSaveState\}/);
+  assert.match(componentSource, /saveMessage=\{terraformLeaveSaveMessage\}/);
+  assert.match(terraformLeaveDialogSource, /saveState === "saving"/);
+  assert.match(terraformLeaveDialogSource, /saveState === "blocked"/);
+  assert.match(terraformLeaveDialogSource, /role=\{saveState === "blocked" \? "alert" : "status"\}/);
+  assert.match(terraformLeaveDialogSource, /저장 중/);
+  assert.match(terraformLeaveDialogSource, /disabled=\{isSaving\}/);
+});
+
+test("blocked terraform leave save reveals the terraform panel when diagnostics explain the failure", () => {
+  assert.match(componentSource, /latestTerraformDiagnosticsRef/);
+  assert.match(componentSource, /handleTerraformDiagnosticsChange/);
+  assert.match(componentSource, /latestTerraformDiagnosticsRef\.current = diagnostics/);
+  assert.match(componentSource, /onDiagnosticsChange=\{handleTerraformDiagnosticsChange\}/);
+  assert.match(componentSource, /hasBlockingDiagnostics/);
+  assert.match(componentSource, /shouldRevealTerraformPanel/);
+  assert.match(componentSource, /pendingTerraformLeaveActionRef\.current = null/);
+  assert.match(componentSource, /context\.setRightPanelOpen\(true\)/);
+  assert.match(componentSource, /setActiveView\("terraform"\)/);
+  assert.match(componentSource, /setShowTerraformLeaveDialog\(false\)/);
+});
+
+test("terraform leave save ignores stale external save completions", () => {
+  assert.match(componentSource, /latestTerraformSaveRequestIdRef/);
+  assert.match(componentSource, /latestTerraformSaveRequestIdRef\.current = nextRequestId/);
+  assert.match(componentSource, /handleTerraformExternalSaveComplete\(saved: boolean, requestId: number\)/);
+  assert.match(componentSource, /requestId !== latestTerraformSaveRequestIdRef\.current/);
+  assert.match(terraformPanelSource, /onExternalSaveComplete\(saved, externalSaveRequestId\)/);
 });
 
 test("deployment expanded logs use a single terminal scrollbar", () => {
@@ -402,6 +453,42 @@ test("terraform error explanation lives in the terraform code panel only when er
   assert.match(errorExplanationResultRule, /\bgrid-column:\s*1 \/ -1;/);
 });
 
+test("terraform editor renders syntax colors and squiggly error underlines", () => {
+  const syntaxHighlightLayerRule = getCssRule(stylesSource, "terraformSyntaxHighlightLayer");
+  const highlightedLineErrorRule = getCssRule(stylesSource, "terraformHighlightedLineError");
+  const lineNumberErrorRule = getCssRule(stylesSource, "terraformLineNumberError");
+  const textareaRule = getCssRule(stylesSource, "terraformTextarea");
+  const keywordRule = getCssRule(stylesSource, "terraformTokenKeyword");
+  const identifierRule = getCssRule(stylesSource, "terraformTokenIdentifier");
+  const referenceRule = getCssRule(stylesSource, "terraformTokenReference");
+  const stringRule = getCssRule(stylesSource, "terraformTokenString");
+  const braceRule = getCssRule(stylesSource, "terraformTokenBrace");
+
+  assert.match(terraformPanelSource, /createTerraformDiagnosticLineNumbers/);
+  assert.match(terraformPanelSource, /createTerraformHighlightedLines/);
+  assert.match(terraformPanelSource, /diagnosticLineNumbers/);
+  assert.match(terraformPanelSource, /terraformSyntaxHighlightLayer/);
+  assert.match(terraformPanelSource, /terraformHighlightedLineError/);
+  assert.match(terraformPanelSource, /terraformTokenKeyword/);
+  assert.match(terraformPanelSource, /terraformLineNumberError/);
+  assert.match(terraformPanelSource, /diagnosticLineNumberSet\.has\(lineNumber\)/);
+  assert.doesNotMatch(terraformPanelSource, /lineHeight:\s*TERRAFORM_EDITOR_LINE_HEIGHT/);
+  assert.doesNotMatch(terraformPanelSource, /verticalPadding:\s*TERRAFORM_EDITOR_VERTICAL_PADDING/);
+  assert.doesNotMatch(terraformPanelSource, /terraformDiagnosticLineLayer/);
+  assert.match(syntaxHighlightLayerRule, /\bpointer-events:\s*none;/);
+  assert.match(syntaxHighlightLayerRule, /\bposition:\s*absolute;/);
+  assert.match(highlightedLineErrorRule, /\btext-decoration-style:\s*wavy;/);
+  assert.match(highlightedLineErrorRule, /\btext-decoration-color:\s*#ef4444;/);
+  assert.match(textareaRule, /\bcolor:\s*transparent;/);
+  assert.match(textareaRule, /\bcaret-color:\s*#d7e4f7;/);
+  assert.match(keywordRule, /\bcolor:\s*#2dd4bf;/);
+  assert.match(identifierRule, /\bcolor:\s*#74bdf8;/);
+  assert.match(referenceRule, /\bcolor:\s*#74bdf8;/);
+  assert.match(stringRule, /\bcolor:\s*#d99a7b;/);
+  assert.match(braceRule, /\bcolor:\s*#facc15;/);
+  assert.match(lineNumberErrorRule, /\bcolor:\s*#fca5a5;/);
+});
+
 test("terraform preview explanation is triggered from the terraform code panel", () => {
   const previewExplanationRule = getCssRule(stylesSource, "terraformPreviewExplanationPanel");
 
@@ -450,6 +537,96 @@ test("terraform artifact preparation marks the terraform panel as loading", () =
   assert.ok(terraformPanelSource.indexOf('setRequestState("idle")', prepareIndex) > prepareIndex);
   assert.ok(terraformPanelSource.indexOf('setRequestState("error")', prepareIndex) > prepareIndex);
   assert.match(terraformPanelSource, /isPreparingTerraformArtifactRef/);
+});
+
+test("terraform editor no longer renders CLI validation progress UI", () => {
+  const topBarRule = getCssRule(stylesSource, "terraformTopBar");
+  const topActionsRule = getCssRule(stylesSource, "terraformTopActions");
+
+  assert.doesNotMatch(terraformPanelSource, /terraformValidationProgressBar/);
+  assert.doesNotMatch(terraformPanelSource, /TerraformValidationProgress/);
+  assert.doesNotMatch(terraformPanelSource, /Terraform CLI 검증 중/);
+  assert.doesNotMatch(terraformPanelSource, /Terraform 검증 준비 중/);
+  assert.doesNotMatch(stylesSource, /\.terraformValidationProgressBar\s*\{/);
+  assert.doesNotMatch(stylesSource, /\.terraformValidationProgressWorking\s*\{/);
+  assert.doesNotMatch(stylesSource, /\.terraformValidationProgressDone\s*\{/);
+  assert.doesNotMatch(stylesSource, /\.terraformValidationProgressError\s*\{/);
+  assert.match(topBarRule, /\bflex-wrap:\s*wrap;/);
+  assert.match(topActionsRule, /\bflex-wrap:\s*wrap;/);
+});
+
+test("terraform panel does not warm CLI validation when the panel becomes visible", () => {
+  assert.doesNotMatch(terraformPanelSource, /prepareTerraformValidationWorkspace/);
+  assert.doesNotMatch(terraformPanelSource, /preparedValidationProjectIdsRef/);
+  assert.doesNotMatch(terraformPanelSource, /Terraform 검증 준비 중/);
+});
+
+test("terraform save and manual validate use static validation for the whole virtual file set", () => {
+  assert.doesNotMatch(terraformPanelSource, /mode: "full"/);
+  assert.doesNotMatch(terraformPanelSource, /mode: "static"/);
+  assert.doesNotMatch(terraformPanelSource, /TerraformValidationMode/);
+  assert.match(terraformPanelSource, /terraformFiles:\s*toTerraformValidationFiles\(terraformFiles\)/);
+  assert.match(terraformPanelSource, /terraformCode:\s*terraformFiles\.length > 0 \? "" : combinedTerraformCode/);
+  assert.doesNotMatch(terraformPanelSource, /validateTerraformCode\(displayedTerraformCode\)/);
+});
+
+test("terraform save modal invalidates stale external save completions when user continues or discards", () => {
+  const continueIndex = componentSource.indexOf("function continueTerraformEditing");
+  const discardIndex = componentSource.indexOf("function discardTerraformChanges");
+  const saveCompleteIndex = componentSource.indexOf("function handleTerraformExternalSaveComplete");
+
+  assert.ok(continueIndex > -1);
+  assert.ok(discardIndex > -1);
+  assert.ok(saveCompleteIndex > -1);
+  assert.ok(
+    componentSource.indexOf("invalidatePendingTerraformSaveCompletion()", continueIndex) >
+      continueIndex
+  );
+  assert.ok(
+    componentSource.indexOf("invalidatePendingTerraformSaveCompletion()", discardIndex) >
+      discardIndex
+  );
+  assert.match(componentSource, /requestId !== latestTerraformSaveRequestIdRef\.current/);
+});
+
+test("terraform sync proposals are auto-applied on explicit save without asking again", () => {
+  assert.match(terraformPanelSource, /terraformFiles:\s*toTerraformValidationFiles\(terraformFiles\)/);
+  assert.match(terraformPanelSource, /applyAllTerraformSyncProposals/);
+  assert.match(terraformPanelSource, /syncResult\.proposals && syncResult\.proposals\.length > 0/);
+  assert.match(terraformPanelSource, /context\.applyDiagramJson\(nextDiagramJson\)/);
+  assert.doesNotMatch(terraformPanelSource, /pendingTerraformSync/);
+  assert.doesNotMatch(terraformPanelSource, /Terraform 변경 제안/);
+  assert.doesNotMatch(terraformPanelSource, /선택 반영/);
+  assert.doesNotMatch(terraformPanelSource, /제안 무시/);
+  assert.doesNotMatch(stylesSource, /\.terraformSyncProposalPanel\s*\{/);
+  assert.doesNotMatch(stylesSource, /\.terraformSyncProposalList\s*\{/);
+  assert.doesNotMatch(stylesSource, /\.terraformSyncProposalActions/);
+});
+
+test("terraform editor save allows intentionally empty terraform code", () => {
+  const saveStartIndex = terraformPanelSource.indexOf("const saveCodeToDiagram = useCallback");
+  const saveEndIndex = terraformPanelSource.indexOf("const validateCurrentTerraform", saveStartIndex);
+  const saveSource = terraformPanelSource.slice(saveStartIndex, saveEndIndex);
+
+  assert.ok(saveStartIndex > -1);
+  assert.ok(saveEndIndex > saveStartIndex);
+  assert.match(saveSource, /syncTerraformCodeToDiagram/);
+  assert.doesNotMatch(saveSource, /!hasTerraformCode/);
+});
+
+test("terraform virtual file validation avoids request bursts and combined-code empty checks", () => {
+  assert.doesNotMatch(terraformPanelSource, /Promise\.all\(\s*files/);
+  assert.match(terraformPanelSource, /nextFiles\.some\(\(file\) => file\.code\.trim\(\)\.length > 0\)/);
+  assert.doesNotMatch(terraformPanelSource, /combineTerraformFiles\(nextFiles\)\.trim\(\)\.length > 0/);
+});
+
+test("terraform editor clears stale diagnostics after local edits", () => {
+  const handleCodeChangeIndex = terraformPanelSource.indexOf("function handleCodeChange");
+
+  assert.ok(handleCodeChangeIndex > -1);
+  assert.ok(terraformPanelSource.indexOf("codeVersionRef.current += 1", handleCodeChangeIndex) > handleCodeChangeIndex);
+  assert.ok(terraformPanelSource.indexOf("setDiagnostics([])", handleCodeChangeIndex) > handleCodeChangeIndex);
+  assert.ok(terraformPanelSource.indexOf("onDiagnosticsChange([])", handleCodeChangeIndex) > handleCodeChangeIndex);
 });
 
 function readWorkspaceFile(fileName: string): string {
