@@ -13,6 +13,18 @@
 - Highest priority unfinished harness feature: `HARNESS-007`
 - Current blocker: none
 
+### 2026-07-05 - 자연어 생성 전 확인 범위 확장
+- Goal: 사용자가 자연어로 새 다이어그램을 요청할 때 부족한 운영 기준을 먼저 확인하고, API/서버/DB 같은 자연어 인프라 요청도 같은 체크리스트를 타게 한다.
+- Completed:
+  - `API 서버`, `EC2 서버`, `DB 백엔드`처럼 기술 단어가 섞인 생성 요청도 운영 기준이 없으면 생성 전 질문으로 보낸다.
+  - 서버/API 요청은 목적과 방문자 동작을 내부에서 추론하고, 사용자에게는 빠진 운영 기준만 묻게 했다.
+  - S3+CloudFront처럼 정적 배포 구성이 충분히 명확한 요청은 기존처럼 바로 생성할 수 있게 유지했다.
+- Verification run:
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-ai-clarification.test.ts features/workspace/workspace-ai-chat-routing.test.ts` - passed, 17 tests
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web typecheck` - passed
+- Known risks:
+  - 이번 변경은 생성 전 라우팅/질문 로직에 한정해 전체 build는 실행하지 않았다.
+
 ### 2026-07-05 - AI 다이어그램 적용 직후 저장 연결
 - Goal: AI가 생성/수정한 다이어그램을 사용자가 보드에 적용하면 debounce나 체크포인트를 기다리지 않고 즉시 저장한다.
 - Completed:

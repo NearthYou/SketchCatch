@@ -100,6 +100,32 @@ const EXPLICIT_INFRASTRUCTURE_KEYWORDS = [
   "람다"
 ] as const;
 
+const SERVER_INFRASTRUCTURE_KEYWORDS = [
+  "api",
+  "backend",
+  "server",
+  "ec2",
+  "lambda",
+  "서버",
+  "백엔드",
+  "애플리케이션",
+  "앱",
+  "람다",
+  "서버리스"
+] as const;
+
+const DATA_INFRASTRUCTURE_KEYWORDS = [
+  "db",
+  "database",
+  "rds",
+  "postgres",
+  "postgresql",
+  "mysql",
+  "데이터베이스",
+  "디비",
+  "데베"
+] as const;
+
 const CONCRETE_WEBSITE_KEYWORDS = [
   "정적",
   "랜딩",
@@ -261,8 +287,19 @@ export function needsArchitectureClarification(prompt: string): boolean {
   const hasExplicitInfrastructureKeyword = EXPLICIT_INFRASTRUCTURE_KEYWORDS.some((keyword) =>
     normalizedPrompt.includes(keyword)
   );
+  const hasServerInfrastructureKeyword = SERVER_INFRASTRUCTURE_KEYWORDS.some((keyword) =>
+    normalizedPrompt.includes(keyword)
+  );
+  const hasDataInfrastructureKeyword = DATA_INFRASTRUCTURE_KEYWORDS.some((keyword) =>
+    normalizedPrompt.includes(keyword)
+  );
 
-  if (hasExplicitInfrastructureKeyword) {
+  if (
+    hasExplicitInfrastructureKeyword &&
+    !hasServerInfrastructureKeyword &&
+    !hasDataInfrastructureKeyword &&
+    isCompleteStaticDeliveryPrompt(normalizedPrompt)
+  ) {
     return false;
   }
 
@@ -275,6 +312,10 @@ export function needsArchitectureClarification(prompt: string): boolean {
 
   if (hasGenericWebsiteKeyword && !hasConcreteWebsiteKeyword) {
     return true;
+  }
+
+  if (hasExplicitInfrastructureKeyword || hasServerInfrastructureKeyword || hasDataInfrastructureKeyword) {
+    return findFirstMissingClarificationStep(inferClarificationAnswers(prompt)) !== null;
   }
 
   const hasServiceDraftKeyword = SERVICE_DRAFT_KEYWORDS.some((keyword) =>
@@ -422,6 +463,13 @@ function inferClarificationAnswers(prompt: string): ArchitectureClarificationAns
     addInferredAnswer(answers, "sitePurpose", "landing");
   }
 
+  if (
+    includesAny(normalizedPrompt, SERVER_INFRASTRUCTURE_KEYWORDS) &&
+    !hasAnswerForQuestion(answers, "sitePurpose")
+  ) {
+    addCustomInferredAnswer(answers, "sitePurpose", "서버/API 서비스");
+  }
+
   if (includesAny(normalizedPrompt, ["검색", "필터", "목록"])) {
     addInferredAnswer(answers, "visitorAction", "searchFilter");
   }
@@ -431,6 +479,10 @@ function inferClarificationAnswers(prompt: string): ArchitectureClarificationAns
   }
 
   if (includesAny(normalizedPrompt, ["로그인", "회원", "계정", "마이페이지", "개인정보", "게시글", "예약", "신청", "문의", "저장"])) {
+    addInferredAnswer(answers, "visitorAction", "storeData");
+  }
+
+  if (includesAny(normalizedPrompt, DATA_INFRASTRUCTURE_KEYWORDS)) {
     addInferredAnswer(answers, "visitorAction", "storeData");
   }
 
@@ -447,6 +499,13 @@ function inferClarificationAnswers(prompt: string): ArchitectureClarificationAns
     !hasAnswerForQuestion(answers, "visitorAction")
   ) {
     addInferredAnswer(answers, "visitorAction", "readOnly");
+  }
+
+  if (
+    includesAny(normalizedPrompt, SERVER_INFRASTRUCTURE_KEYWORDS) &&
+    !hasAnswerForQuestion(answers, "visitorAction")
+  ) {
+    addCustomInferredAnswer(answers, "visitorAction", "웹 요청 처리");
   }
 
   if (includesAny(normalizedPrompt, ["개인정보", "보안", "보호", "민감", "암호화"])) {
@@ -486,6 +545,22 @@ function addInferredAnswer(
   answers.push(createClarificationAnswerFromOption(questionId, option));
 }
 
+function addCustomInferredAnswer(
+  answers: ArchitectureClarificationAnswer[],
+  questionId: ClarificationQuestionId,
+  label: string
+): void {
+  if (hasAnswerForQuestion(answers, questionId)) {
+    return;
+  }
+
+  answers.push({
+    label,
+    questionId,
+    value: "custom"
+  });
+}
+
 function getClarificationOption(
   questionId: ClarificationQuestionId,
   value: ClarificationAnswerValue
@@ -514,6 +589,13 @@ function hasAnswerForQuestion(
 
 function includesAny(value: string, keywords: readonly string[]): boolean {
   return keywords.some((keyword) => value.includes(keyword));
+}
+
+function isCompleteStaticDeliveryPrompt(normalizedPrompt: string): boolean {
+  const hasStorageOrigin = includesAny(normalizedPrompt, ["s3", "bucket", "버킷", "스토리지"]);
+  const hasDelivery = includesAny(normalizedPrompt, ["cloudfront", "cdn", "클라우드프론트"]);
+
+  return hasStorageOrigin && hasDelivery;
 }
 
 function createClarificationAnswers(

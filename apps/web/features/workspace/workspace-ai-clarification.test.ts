@@ -62,6 +62,19 @@ test("login service prompts with an operating preference can generate without cl
   );
 });
 
+test("natural-language infrastructure prompts ask for missing operating context", () => {
+  assert.equal(needsArchitectureClarification("API 서버를 만들어줘"), true);
+  assert.equal(needsArchitectureClarification("EC2 서버와 S3 버킷을 쓰는 서비스 만들어줘"), true);
+  assert.equal(needsArchitectureClarification("웹사이트를 S3와 CloudFront로 배포하고 싶어"), false);
+
+  const session = createArchitectureClarificationSession("API 서버를 만들어줘");
+  const question = getCurrentArchitectureClarificationQuestion(session);
+
+  assert.ok(question);
+  assert.equal(question.id, "operationPreference");
+  assert.match(question.question, /운영|기준|처음/);
+});
+
 test("clarification keeps visitor actions separate from multi-select site purpose", () => {
   const started = createArchitectureClarificationSession("웹사이트 하나 배포하고 싶어");
   const purposeAnswered = answerArchitectureClarification(
