@@ -91,6 +91,14 @@ test("workspace AI chat storage skips project changes until matching messages ar
   );
 });
 
+test("workspace AI chat scrolls to the latest message when the dock opens", () => {
+  assert.match(workspaceAiChatDockSource, /lastVisibleMessageId/);
+  assert.match(workspaceAiChatDockSource, /scrollChatTranscriptToBottom/);
+  assert.match(workspaceAiChatDockSource, /window\.requestAnimationFrame/);
+  assert.match(workspaceAiChatDockSource, /isOpen/);
+  assert.match(workspaceAiChatDockSource, /top:\s*transcript\.scrollHeight/);
+});
+
 test("workspace AI clarification supports multi-select suggestion chips", () => {
   assert.match(workspaceAiChatDockSource, /selectedSuggestionLabelsByMessageId/);
   assert.match(workspaceAiChatDockSource, /toggleSuggestionSelection/);

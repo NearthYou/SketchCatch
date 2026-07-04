@@ -13,6 +13,20 @@
 - Highest priority unfinished harness feature: `HARNESS-007`
 - Current blocker: none
 
+### 2026-07-05 - AI 채팅창 초기 스크롤 보정
+- Goal: AI 채팅창을 열었을 때 과거 대화 맨 위가 아니라 최신 메시지 위치가 보이게 한다.
+- Completed:
+  - `WorkspaceAiChatDock`의 transcript scroll effect가 `isOpen`과 마지막 visible message를 기준으로 다시 실행되게 했다.
+  - dock이 열린 직후 DOM 높이가 반영된 뒤에도 `requestAnimationFrame`으로 한 번 더 하단 스크롤을 맞추게 했다.
+  - 열린 탭, 메시지, draft/patch/simulation 상태 변화에도 최신 내용으로 스크롤되게 했다.
+- Verification run:
+  - `npm exec --package=pnpm@11.8.0 -- pnpm harness:check` - passed before edit
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-ai-guardrail-warning.test.ts` - passed, 8 tests
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web typecheck` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web lint` - passed
+- Known risks:
+  - 실제 브라우저 스크롤 스모크는 수행하지 않았고, 컴포넌트 계약 테스트와 정적 검증 중심으로 확인했다.
+
 ### 2026-07-05 - 지원 타입 기반 생성 다이어그램 구조 보정
 - Goal: 자연어 생성 다이어그램이 현재 지원되는 ResourceType만 쓰면서 운영형 피드백을 가능한 범위에서 반영하게 한다.
 - Completed:

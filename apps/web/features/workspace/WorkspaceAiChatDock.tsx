@@ -116,6 +116,7 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
   const [simulationErrorMessage, setSimulationErrorMessage] = useState("");
   const [simulationFingerprint, setSimulationFingerprint] = useState<string | null>(null);
   const transcriptRef = useRef<HTMLDivElement | null>(null);
+  const transcriptScrollFrameRef = useRef<number | null>(null);
   const loadedProjectIdRef = useRef(projectId);
   const boardSnapshot = useMemo(
     () => createWorkspaceAiBoardSnapshot(context.diagram),
@@ -132,6 +133,7 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
     () => messages.filter((message) => getChatMessageScope(message) === activeChatTab),
     [activeChatTab, messages]
   );
+  const lastVisibleMessageId = visibleMessages.at(-1)?.id ?? null;
   const hasActiveChatHistory =
     visibleMessages.length > 0 ||
     (activeChatTab === "draft" && draft !== null) ||
@@ -152,11 +154,46 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
   }, [projectId]);
 
   useEffect(() => {
-    transcriptRef.current?.scrollTo({
-      behavior: "smooth",
-      top: transcriptRef.current.scrollHeight
+    if (!isOpen) {
+      return undefined;
+    }
+
+    scrollChatTranscriptToBottom();
+    transcriptScrollFrameRef.current = window.requestAnimationFrame(() => {
+      scrollChatTranscriptToBottom();
+      transcriptScrollFrameRef.current = null;
     });
-  }, [activeChatTab, visibleMessages, draft, patchPreviewModel, designSimulation]);
+
+    return () => {
+      if (transcriptScrollFrameRef.current !== null) {
+        window.cancelAnimationFrame(transcriptScrollFrameRef.current);
+        transcriptScrollFrameRef.current = null;
+      }
+    };
+  }, [
+    activeChatTab,
+    designSimulation,
+    draft,
+    draftState,
+    isOpen,
+    lastVisibleMessageId,
+    patchPreviewModel,
+    simulationState,
+    visibleMessages.length
+  ]);
+
+  function scrollChatTranscriptToBottom(): void {
+    const transcript = transcriptRef.current;
+
+    if (transcript === null) {
+      return;
+    }
+
+    transcript.scrollTo({
+      behavior: "auto",
+      top: transcript.scrollHeight
+    });
+  }
 
   function appendAssistantMessage(
     kind: WorkspaceAiChatMessageKind,
