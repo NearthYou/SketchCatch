@@ -77,6 +77,11 @@ import {
   pruneProjectDeploymentStorage as defaultPruneProjectDeploymentStorage,
   type PruneProjectDeploymentStorageResult
 } from "../deployments/deployment-retention.js";
+import {
+  createRuntimeCachedDeploymentRepository,
+  writeDeploymentLogStreamCursor
+} from "../deployments/deployment-runtime-cache.js";
+import type { RuntimeCache } from "../runtime-cache/index.js";
 
 type DeploymentRow = DeploymentRecord & {
   readonly currentPlanOperation?: Deployment["currentPlanOperation"];
@@ -141,6 +146,7 @@ type DeploymentRouteOptions = {
     repository: DeploymentRepository
   ) => Promise<RunDeploymentDestroyResult>;
   createLlmExplanation?: CreateLlmExplanation;
+  runtimeCache?: RuntimeCache;
 };
 
 type DeploymentRequestContext = {
@@ -188,12 +194,19 @@ async function getDeploymentRequestContext(
   const client = getDeploymentDatabaseClient();
   const currentUserId = await requireActiveUserId(request, () => client);
 
+  const repository =
+    options?.createDeploymentRepository?.(client.db) ??
+    createPostgresDeploymentRepository(client.db);
+
   return {
     accessContext: createUserProjectAccessContext(currentUserId),
     db: client.db,
-    repository:
-      options?.createDeploymentRepository?.(client.db) ??
-      createPostgresDeploymentRepository(client.db)
+    repository: options?.runtimeCache
+      ? createRuntimeCachedDeploymentRepository({
+          repository,
+          runtimeCache: options.runtimeCache
+        })
+      : repository
   };
 }
 
@@ -867,6 +880,7 @@ export async function registerDeploymentRoutes(
         once: query.once === "true",
         repository,
         reply,
+        runtimeCache: options?.runtimeCache,
         request
       });
     } catch (error) {
@@ -944,6 +958,7 @@ async function streamDeploymentLogs(input: {
   once: boolean;
   repository: DeploymentRepository;
   reply: FastifyReply;
+  runtimeCache?: RuntimeCache | undefined;
   request: FastifyRequest;
 }): Promise<void> {
   let lastSequence = input.sinceSequence;
@@ -1030,6 +1045,14 @@ async function streamDeploymentLogs(input: {
           closeStream();
           return;
         }
+      }
+
+      if (nextLogs.length > 0 && input.runtimeCache) {
+        await writeDeploymentLogStreamCursor({
+          deploymentId: input.deploymentId,
+          lastSequence,
+          runtimeCache: input.runtimeCache
+        });
       }
     } finally {
       polling = false;

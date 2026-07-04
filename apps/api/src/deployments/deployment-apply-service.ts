@@ -10,7 +10,10 @@ import {
   createAwsSdkStsGateway,
   type AwsConnectionStsGateway
 } from "../aws-connections/aws-connection-test-service.js";
-import { assertDeploymentApplyPreconditions } from "./deployment-approval-service.js";
+import {
+  assertDeploymentApplyPreconditions,
+  DeploymentApplyPreconditionError
+} from "./deployment-approval-service.js";
 import {
   createS3DeploymentApplyArtifactStorage,
   type DeploymentApplyArtifactStorage
@@ -426,10 +429,21 @@ export async function runDeploymentApply(
     };
   } catch (error) {
     if (deploymentId && !applySucceeded && !failureRecorded) {
+      const errorSummary = summarizeUnexpectedApplyFailure(error);
+
+      if (error instanceof DeploymentApplyPreconditionError) {
+        await appendApplyPreconditionFailureLog({
+          deploymentId,
+          accessContext: input.accessContext,
+          errorSummary,
+          repository
+        }).catch(() => undefined);
+      }
+
       await repository
         .failDeployment(deploymentId, {
-          failureStage: "apply",
-          errorSummary: summarizeUnexpectedApplyFailure(error)
+          failureStage: error instanceof DeploymentApplyPreconditionError ? "approval" : "apply",
+          errorSummary
         })
         .catch(() => undefined);
     }
@@ -636,6 +650,32 @@ async function uploadPartialStateAfterFailedApply(input: {
       warningSummary
     };
   }
+}
+
+async function appendApplyPreconditionFailureLog(input: {
+  deploymentId: string;
+  accessContext: ProjectAccessContext;
+  errorSummary: string;
+  repository: DeploymentRepository;
+}): Promise<void> {
+  const sequence = await input.repository.getNextDeploymentLogSequence(input.deploymentId);
+
+  await appendDeploymentLogs(
+    {
+      deploymentId: input.deploymentId,
+      accessContext: input.accessContext,
+      logs: [
+        {
+          sequence,
+          stage: "apply",
+          level: "ERROR",
+          message: `Apply blocked before Terraform apply: ${input.errorSummary}`,
+          relatedResourceId: null
+        }
+      ]
+    },
+    input.repository
+  );
 }
 
 async function appendTerraformApplyOutput(input: {

@@ -21,6 +21,10 @@ import {
   createInMemoryRateLimiter,
   type RateLimiter
 } from "./rate-limit/in-memory-rate-limiter.js";
+import {
+  createRuntimeCacheFromEnv,
+  type RuntimeCache
+} from "./runtime-cache/index.js";
 
 const allowedCorsOrigins = new Set(["http://localhost:3000", "http://127.0.0.1:3000"]);
 const corsAllowedMethods = "GET,POST,PUT,DELETE,OPTIONS";
@@ -35,6 +39,7 @@ export type BuildAppOptions = {
   passwordResetRequestIpRateLimiter?: RateLimiter;
   projectAssetStorage?: ProjectAssetStorage;
   projectDeletionStorage?: ProjectDeletionStorage;
+  runtimeCache?: RuntimeCache;
   validateTerraformPreviewCode?: TerraformRouteOptions["validateTerraformPreviewCode"];
 };
 
@@ -69,6 +74,13 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     logger: process.env.NODE_ENV !== "test",
     trustProxy: true
   });
+  const runtimeCache =
+    options.runtimeCache ??
+    createRuntimeCacheFromEnv({
+      onDegraded: (error) => {
+        app.log.warn({ error }, "Runtime Cache degraded; continuing with fallback state");
+      }
+    });
   const stopRefreshTokenCleanupJob =
     process.env.NODE_ENV === "test"
       ? undefined
@@ -140,7 +152,8 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   });
   app.register(registerDeploymentRoutes, {
     prefix: "/api",
-    getDatabaseClient: getAppDatabaseClient
+    getDatabaseClient: getAppDatabaseClient,
+    runtimeCache
   });
   app.register(registerGitCicdHandoffRoutes, {
     prefix: "/api",

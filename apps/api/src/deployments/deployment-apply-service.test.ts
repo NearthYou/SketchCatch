@@ -687,8 +687,15 @@ test("runDeploymentApply rejects approval snapshot drift before credentials or T
     assert.equal(terraformRan, false, testCase.name);
     assert.equal(planWritten, false, testCase.name);
     assert.equal(repository.deployment?.status, "FAILED", testCase.name);
-    assert.equal(repository.failedInput?.failureStage, "apply", testCase.name);
+    assert.equal(repository.failedInput?.failureStage, "approval", testCase.name);
     assert.match(repository.failedInput?.errorSummary ?? "", testCase.expectedError, testCase.name);
+    assert.equal(
+      repository.logs.some((log) =>
+        log.message.includes("Apply blocked before Terraform apply")
+      ),
+      true,
+      testCase.name
+    );
   }
 });
 
