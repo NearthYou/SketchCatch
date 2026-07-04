@@ -117,6 +117,38 @@ const terraformPreviewExplanationResponseSchema = z.object({
   )
 });
 
+type ArchitectureDraftResponse = z.infer<typeof architectureDraftResponseSchema>;
+
+function findDraftNode(body: ArchitectureDraftResponse, nodeId: string) {
+  return body.architectureJson.nodes.find((node) => node.id === nodeId);
+}
+
+function assertDraftHasNodeTypes(
+  body: ArchitectureDraftResponse,
+  expectedNodeTypes: readonly string[]
+): void {
+  const nodeTypes = new Set(body.architectureJson.nodes.map((node) => node.type));
+
+  for (const expectedNodeType of expectedNodeTypes) {
+    assert.ok(nodeTypes.has(expectedNodeType), `Expected draft to include ${expectedNodeType}`);
+  }
+}
+
+function assertDraftHasEdge(
+  body: ArchitectureDraftResponse,
+  expectedEdge: { readonly id: string; readonly sourceId: string; readonly targetId: string }
+): void {
+  assert.ok(
+    body.architectureJson.edges.some(
+      (edge) =>
+        edge.id === expectedEdge.id &&
+        edge.sourceId === expectedEdge.sourceId &&
+        edge.targetId === expectedEdge.targetId
+    ),
+    `Expected edge ${expectedEdge.id} from ${expectedEdge.sourceId} to ${expectedEdge.targetId}`
+  );
+}
+
 test("POST /api/ai/architecture-draft returns a board-ready ArchitectureJson for a static website request", async () => {
   const app = buildApp();
 
@@ -160,8 +192,29 @@ test("POST /api/ai/architecture-draft selects API server and database backend te
   assert.equal(apiServerBody.title, "API 서버 Practice Architecture");
   assert.ok(apiServerNodeTypes.includes("VPC"));
   assert.ok(apiServerNodeTypes.includes("SUBNET"));
-  assert.ok(apiServerNodeTypes.includes("EC2"));
-  assert.ok(apiServerNodeTypes.includes("SECURITY_GROUP"));
+  assertDraftHasNodeTypes(apiServerBody, [
+    "INTERNET_GATEWAY",
+    "ROUTE_TABLE",
+    "ROUTE_TABLE_ASSOCIATION",
+    "AMI",
+    "SECURITY_GROUP",
+    "IAM_ROLE",
+    "IAM_POLICY",
+    "IAM_INSTANCE_PROFILE",
+    "CLOUDWATCH_LOG_GROUP",
+    "CLOUDWATCH_METRIC_ALARM",
+    "EC2"
+  ]);
+  assertDraftHasEdge(apiServerBody, {
+    id: "ami-api-to-ec2-api",
+    sourceId: "ami-api",
+    targetId: "ec2-api"
+  });
+  assertDraftHasEdge(apiServerBody, {
+    id: "route-table-api-to-internet-gateway-api",
+    sourceId: "route-table-api",
+    targetId: "internet-gateway-api"
+  });
 
   const databaseBackendResponse = await app.inject({
     method: "POST",
@@ -179,7 +232,27 @@ test("POST /api/ai/architecture-draft selects API server and database backend te
   assert.equal(databaseBackendBody.title, "DB 포함 백엔드 Practice Architecture");
   assert.ok(databaseBackendNodeTypes.includes("EC2"));
   assert.ok(databaseBackendNodeTypes.includes("RDS"));
-  assert.ok(databaseBackendNodeTypes.includes("SECURITY_GROUP"));
+  assertDraftHasNodeTypes(databaseBackendBody, [
+    "AMI",
+    "IAM_ROLE",
+    "IAM_POLICY",
+    "IAM_INSTANCE_PROFILE",
+    "KMS_KEY",
+    "CLOUDWATCH_LOG_GROUP",
+    "CLOUDWATCH_METRIC_ALARM",
+    "SECURITY_GROUP"
+  ]);
+
+  const databaseNode = findDraftNode(databaseBackendBody, "rds-primary");
+
+  assert.equal(databaseNode?.config.storageEncrypted, true);
+  assert.equal(databaseNode?.config.backupRetentionPeriod, 7);
+  assert.equal(databaseNode?.config.kmsKeyId, "aws_kms_key.db_encryption_key.arn");
+  assertDraftHasEdge(databaseBackendBody, {
+    id: "db-encryption-key-to-rds-primary",
+    sourceId: "db-encryption-key",
+    targetId: "rds-primary"
+  });
 
   await app.close();
 });
@@ -199,11 +272,34 @@ test("POST /api/ai/architecture-draft selects a Lambda draft from serverless pro
   assert.equal(response.statusCode, 200);
 
   const body = architectureDraftResponseSchema.parse(response.json());
-  const nodeTypes = body.architectureJson.nodes.map((node) => node.type);
 
   assert.equal(body.title, "Lambda 함수 Practice Architecture");
   assert.equal(body.metadata.selectedScenario, "serverless_function");
-  assert.deepEqual(nodeTypes, ["LAMBDA"]);
+  assertDraftHasNodeTypes(body, [
+    "API_GATEWAY_REST_API",
+    "IAM_ROLE",
+    "IAM_POLICY",
+    "KMS_KEY",
+    "CLOUDWATCH_LOG_GROUP",
+    "CLOUDWATCH_METRIC_ALARM",
+    "LAMBDA_PERMISSION",
+    "LAMBDA"
+  ]);
+  assertDraftHasEdge(body, {
+    id: "api-gateway-to-lambda-function",
+    sourceId: "api-gateway",
+    targetId: "lambda-function"
+  });
+  assertDraftHasEdge(body, {
+    id: "lambda-execution-role-to-lambda-function",
+    sourceId: "lambda-execution-role",
+    targetId: "lambda-function"
+  });
+  assertDraftHasEdge(body, {
+    id: "lambda-function-to-lambda-log-group",
+    sourceId: "lambda-function",
+    targetId: "lambda-log-group"
+  });
 
   await app.close();
 });
@@ -444,7 +540,15 @@ test("POST /api/ai/architecture-draft generates only supported ResourceType valu
     "SECURITY_GROUP",
     "CLOUDFRONT",
     "LAMBDA",
-    "AMI"
+    "AMI",
+    "IAM_ROLE",
+    "IAM_POLICY",
+    "IAM_INSTANCE_PROFILE",
+    "KMS_KEY",
+    "CLOUDWATCH_LOG_GROUP",
+    "CLOUDWATCH_METRIC_ALARM",
+    "API_GATEWAY_REST_API",
+    "LAMBDA_PERMISSION"
   ]);
   const payloads = [
     { prompt: "정적 웹사이트를 만들어줘", scenarioHint: "auto" },
@@ -550,10 +654,39 @@ test("POST /api/ai/architecture-draft uses readable resource ids in nodes, edges
   const apiServerEdgeIds = apiServerBody.architectureJson.edges.map((edge) => edge.id);
   const apiServerNode = apiServerBody.architectureJson.nodes.find((node) => node.id === "ec2-api");
 
-  assert.deepEqual(apiServerNodeIds, ["vpc-main", "subnet-public", "sg-api", "ec2-api"]);
-  assert.deepEqual(apiServerEdgeIds, ["vpc-to-subnet-public", "subnet-public-to-ec2-api", "sg-api-to-ec2-api"]);
-  assert.equal(apiServerNode?.config.subnetId, "subnet-public");
-  assert.deepEqual(apiServerNode?.config.securityGroupIds, ["sg-api"]);
+  assert.deepEqual(apiServerNodeIds, [
+    "vpc-main",
+    "subnet-public",
+    "internet-gateway-api",
+    "route-table-api",
+    "route-table-association-api",
+    "ami-api",
+    "sg-api",
+    "api-runtime-role",
+    "api-runtime-policy",
+    "api-instance-profile",
+    "api-log-group",
+    "api-cpu-alarm",
+    "ec2-api"
+  ]);
+  assert.deepEqual(apiServerEdgeIds, [
+    "vpc-to-subnet-public",
+    "route-table-api-to-internet-gateway-api",
+    "subnet-public-to-route-table-association-api",
+    "route-table-association-api-to-route-table-api",
+    "ami-api-to-ec2-api",
+    "api-runtime-policy-to-api-runtime-role",
+    "api-runtime-role-to-api-instance-profile",
+    "api-instance-profile-to-ec2-api",
+    "ec2-api-to-api-log-group",
+    "api-cpu-alarm-to-ec2-api",
+    "subnet-public-to-ec2-api",
+    "sg-api-to-ec2-api"
+  ]);
+  assert.equal(apiServerNode?.config.ami, "data.aws_ami.ami_api.id");
+  assert.equal(apiServerNode?.config.subnetId, "aws_subnet.subnet_public.id");
+  assert.deepEqual(apiServerNode?.config.vpcSecurityGroupIds, ["aws_security_group.sg_api.id"]);
+  assert.equal(apiServerNode?.config.iamInstanceProfile, "aws_iam_instance_profile.api_instance_profile.name");
 
   const databaseBackendResponse = await app.inject({
     method: "POST",
@@ -577,22 +710,41 @@ test("POST /api/ai/architecture-draft uses readable resource ids in nodes, edges
     "vpc-main",
     "subnet-app",
     "subnet-db",
+    "ami-backend",
     "sg-app",
     "sg-db",
+    "backend-runtime-role",
+    "backend-runtime-policy",
+    "backend-instance-profile",
+    "db-encryption-key",
+    "backend-log-group",
+    "db-cpu-alarm",
     "ec2-backend",
     "rds-primary"
   ]);
   assert.deepEqual(databaseBackendEdgeIds, [
     "vpc-to-subnet-app",
     "vpc-to-subnet-db",
+    "ami-backend-to-ec2-backend",
+    "backend-runtime-policy-to-backend-runtime-role",
+    "backend-runtime-role-to-backend-instance-profile",
+    "backend-instance-profile-to-ec2-backend",
+    "db-encryption-key-to-rds-primary",
+    "ec2-backend-to-backend-log-group",
+    "db-cpu-alarm-to-rds-primary",
     "subnet-app-to-ec2-backend",
     "subnet-db-to-rds-primary",
+    "sg-app-to-ec2-backend",
+    "sg-db-to-rds-primary",
+    "sg-app-to-sg-db",
     "backend-to-database"
   ]);
-  assert.equal(backendNode?.config.subnetId, "subnet-app");
-  assert.deepEqual(backendNode?.config.securityGroupIds, ["sg-app"]);
-  assert.equal(databaseNode?.config.subnetId, "subnet-db");
-  assert.deepEqual(databaseNode?.config.securityGroupIds, ["sg-db"]);
+  assert.equal(backendNode?.config.ami, "data.aws_ami.ami_backend.id");
+  assert.equal(backendNode?.config.subnetId, "aws_subnet.subnet_app.id");
+  assert.deepEqual(backendNode?.config.vpcSecurityGroupIds, ["aws_security_group.sg_app.id"]);
+  assert.equal(backendNode?.config.iamInstanceProfile, "aws_iam_instance_profile.backend_instance_profile.name");
+  assert.equal(databaseNode?.config.subnetId, "aws_subnet.subnet_db.id");
+  assert.deepEqual(databaseNode?.config.vpcSecurityGroupIds, ["aws_security_group.sg_db.id"]);
   assert.deepEqual(databaseEdge, {
     id: "backend-to-database",
     sourceId: "ec2-backend",

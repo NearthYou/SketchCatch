@@ -378,6 +378,98 @@ test("convertArchitectureJsonToDiagramJson maps Lambda draft resources to Terraf
   );
 });
 
+test("convertArchitectureJsonToDiagramJson maps operations and permission draft resources", () => {
+  const architectureJson = {
+    nodes: [
+      {
+        id: "api-gateway",
+        type: "API_GATEWAY_REST_API",
+        label: "Practice API",
+        positionX: 80,
+        positionY: 80,
+        config: { name: "practice-api" }
+      },
+      {
+        id: "lambda-execution-role",
+        type: "IAM_ROLE",
+        label: "Lambda Execution Role",
+        positionX: 220,
+        positionY: 80,
+        config: { assumeRolePolicy: "policy-json" }
+      },
+      {
+        id: "lambda-execution-policy",
+        type: "IAM_POLICY",
+        label: "Lambda Execution Policy",
+        positionX: 360,
+        positionY: 80,
+        config: { policy: "policy-json" }
+      },
+      {
+        id: "api-instance-profile",
+        type: "IAM_INSTANCE_PROFILE",
+        label: "API Instance Profile",
+        positionX: 500,
+        positionY: 80,
+        config: { role: "aws_iam_role.api_runtime_role.name" }
+      },
+      {
+        id: "db-encryption-key",
+        type: "KMS_KEY",
+        label: "DB Encryption Key",
+        positionX: 640,
+        positionY: 80,
+        config: { enableKeyRotation: true }
+      },
+      {
+        id: "lambda-log-group",
+        type: "CLOUDWATCH_LOG_GROUP",
+        label: "Lambda Logs",
+        positionX: 780,
+        positionY: 80,
+        config: { retentionInDays: 14 }
+      },
+      {
+        id: "lambda-error-alarm",
+        type: "CLOUDWATCH_METRIC_ALARM",
+        label: "Lambda Error Alarm",
+        positionX: 920,
+        positionY: 80,
+        config: { alarmName: "lambda-errors", namespace: "AWS/Lambda", metricName: "Errors" }
+      },
+      {
+        id: "lambda-invoke-permission",
+        type: "LAMBDA_PERMISSION",
+        label: "API Invoke Permission",
+        positionX: 1060,
+        positionY: 80,
+        config: { action: "lambda:InvokeFunction", principal: "apigateway.amazonaws.com" }
+      }
+    ],
+    edges: []
+  } as ArchitectureJson;
+
+  const diagramJson = convertArchitectureJsonToDiagramJson(architectureJson);
+
+  assert.deepEqual(
+    diagramJson.nodes.map((node) => ({
+      id: node.id,
+      resourceType: node.parameters?.resourceType,
+      terraformBlockType: node.parameters?.terraformBlockType
+    })),
+    [
+      { id: "api-gateway", resourceType: "aws_api_gateway_rest_api", terraformBlockType: "resource" },
+      { id: "lambda-execution-role", resourceType: "aws_iam_role", terraformBlockType: "resource" },
+      { id: "lambda-execution-policy", resourceType: "aws_iam_policy", terraformBlockType: "resource" },
+      { id: "api-instance-profile", resourceType: "aws_iam_instance_profile", terraformBlockType: "resource" },
+      { id: "db-encryption-key", resourceType: "aws_kms_key", terraformBlockType: "resource" },
+      { id: "lambda-log-group", resourceType: "aws_cloudwatch_log_group", terraformBlockType: "resource" },
+      { id: "lambda-error-alarm", resourceType: "aws_cloudwatch_metric_alarm", terraformBlockType: "resource" },
+      { id: "lambda-invoke-permission", resourceType: "aws_lambda_permission", terraformBlockType: "resource" }
+    ]
+  );
+});
+
 test("convertArchitectureJsonToDiagramJson lays out server and storage draft as nested cloud areas", () => {
   const architectureJson: ArchitectureJson = {
     nodes: [

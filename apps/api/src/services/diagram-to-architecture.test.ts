@@ -46,6 +46,72 @@ test("converts supported DiagramJson resource nodes to ArchitectureJson nodes", 
         parameters: makeParameters("aws_s3_bucket", "assets", {
           bucket: "sketchcatch-assets"
         })
+      }),
+      makeNode({
+        id: "role-1",
+        type: "aws_iam_role",
+        label: "runtime-role",
+        parameters: makeParameters("aws_iam_role", "runtime", {
+          assumeRolePolicy: "policy-json"
+        })
+      }),
+      makeNode({
+        id: "policy-1",
+        type: "aws_iam_policy",
+        label: "runtime-policy",
+        parameters: makeParameters("aws_iam_policy", "runtime", {
+          policy: "policy-json"
+        })
+      }),
+      makeNode({
+        id: "profile-1",
+        type: "aws_iam_instance_profile",
+        label: "runtime-profile",
+        parameters: makeParameters("aws_iam_instance_profile", "runtime", {
+          role: "aws_iam_role.runtime.name"
+        })
+      }),
+      makeNode({
+        id: "kms-1",
+        type: "aws_kms_key",
+        label: "encryption-key",
+        parameters: makeParameters("aws_kms_key", "main", {
+          enableKeyRotation: true
+        })
+      }),
+      makeNode({
+        id: "logs-1",
+        type: "aws_cloudwatch_log_group",
+        label: "logs",
+        parameters: makeParameters("aws_cloudwatch_log_group", "main", {
+          retentionInDays: 14
+        })
+      }),
+      makeNode({
+        id: "alarm-1",
+        type: "aws_cloudwatch_metric_alarm",
+        label: "alarm",
+        parameters: makeParameters("aws_cloudwatch_metric_alarm", "high_cpu", {
+          alarmName: "high-cpu"
+        })
+      }),
+      makeNode({
+        id: "api-1",
+        type: "aws_api_gateway_rest_api",
+        label: "api",
+        parameters: makeParameters("aws_api_gateway_rest_api", "practice", {
+          name: "practice-api"
+        })
+      }),
+      makeNode({
+        id: "lambda-permission-1",
+        type: "aws_lambda_permission",
+        label: "lambda-permission",
+        parameters: makeParameters("aws_lambda_permission", "allow_api", {
+          action: "lambda:InvokeFunction",
+          functionName: "aws_lambda_function.handler.function_name",
+          principal: "apigateway.amazonaws.com"
+        })
       })
     ],
     edges: [],
@@ -54,7 +120,21 @@ test("converts supported DiagramJson resource nodes to ArchitectureJson nodes", 
 
   assert.deepEqual(
     architectureJson.nodes.map((node) => node.type),
-    ["VPC", "SUBNET", "EC2", "RDS", "S3"]
+    [
+      "VPC",
+      "SUBNET",
+      "EC2",
+      "RDS",
+      "S3",
+      "IAM_ROLE",
+      "IAM_POLICY",
+      "IAM_INSTANCE_PROFILE",
+      "KMS_KEY",
+      "CLOUDWATCH_LOG_GROUP",
+      "CLOUDWATCH_METRIC_ALARM",
+      "API_GATEWAY_REST_API",
+      "LAMBDA_PERMISSION"
+    ]
   );
   assert.deepEqual(architectureJson.nodes[0], {
     id: "vpc-1",

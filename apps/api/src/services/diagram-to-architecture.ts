@@ -8,12 +8,20 @@ import type {
 } from "@sketchcatch/types";
 
 const TERRAFORM_RESOURCE_TYPE_TO_RESOURCE_TYPE: Record<string, ResourceType> = {
+  aws_api_gateway_rest_api: "API_GATEWAY_REST_API",
   aws_ami: "AMI",
+  aws_cloudwatch_log_group: "CLOUDWATCH_LOG_GROUP",
+  aws_cloudwatch_metric_alarm: "CLOUDWATCH_METRIC_ALARM",
   aws_cloudfront_distribution: "CLOUDFRONT",
   aws_db_instance: "RDS",
+  aws_iam_instance_profile: "IAM_INSTANCE_PROFILE",
+  aws_iam_policy: "IAM_POLICY",
+  aws_iam_role: "IAM_ROLE",
   aws_internet_gateway: "INTERNET_GATEWAY",
   aws_instance: "EC2",
+  aws_kms_key: "KMS_KEY",
   aws_lambda_function: "LAMBDA",
+  aws_lambda_permission: "LAMBDA_PERMISSION",
   aws_route_table: "ROUTE_TABLE",
   aws_route_table_association: "ROUTE_TABLE_ASSOCIATION",
   aws_s3_bucket: "S3",

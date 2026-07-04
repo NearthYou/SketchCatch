@@ -49,6 +49,14 @@ const resourceTypeSchema = z.enum([
   "CLOUDFRONT",
   "LAMBDA",
   "AMI",
+  "IAM_ROLE",
+  "IAM_POLICY",
+  "IAM_INSTANCE_PROFILE",
+  "KMS_KEY",
+  "CLOUDWATCH_LOG_GROUP",
+  "CLOUDWATCH_METRIC_ALARM",
+  "API_GATEWAY_REST_API",
+  "LAMBDA_PERMISSION",
   "UNKNOWN"
 ]);
 

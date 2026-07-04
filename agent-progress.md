@@ -13,6 +13,31 @@
 - Highest priority unfinished harness feature: `HARNESS-007`
 - Current blocker: none
 
+### 2026-07-04 - Architecture Draft 검수 맥락 보강
+
+- Goal: 자연어 Architecture Draft가 API 서버, DB 포함 백엔드, Lambda 구조를 만들 때 진입점, AMI, 라우팅, IAM 권한, KMS, Logs, Metric Alarm, RDS backup 같은 검수 맥락을 빠뜨리지 않게 한다.
+- Completed:
+  - `ResourceType`과 API/Zod/프로젝트 저장 스키마에 IAM Role/Policy/Instance Profile, KMS Key, CloudWatch Log Group/Metric Alarm, API Gateway REST API, Lambda Permission을 추가했다.
+  - API 서버 초안에 Internet Gateway, Route Table, Route Table Association, AMI, IAM Role/Policy/Instance Profile, CloudWatch Logs/Alarm을 연결했다.
+  - DB 백엔드 초안에 앱/DB 보안그룹 경계, AMI, runtime role/policy/profile, KMS 암호화, CloudWatch Logs/Alarm, RDS backup retention을 반영했다.
+  - Lambda 초안에 API Gateway 트리거, execution role/policy, Lambda permission, KMS-backed log group, error alarm을 반영했다.
+  - ArchitectureJson/DiagramJson 변환과 backend DiagramJson 분석 매핑, ResourceType 라벨, `docs/data-models.md` 지원 목록을 갱신했다.
+- Verification run:
+  - `npm exec --package=pnpm@11.8.0 -- pnpm harness:check` - passed.
+  - `.\apps\api\node_modules\.bin\tsx.CMD apps/api/src/routes/ai.test.ts` - passed with 26 tests after RED failures confirmed.
+  - `.\apps\web\node_modules\.bin\tsx.CMD apps/web/features/workspace/workspace-ai-diagram-adapter.test.ts` - passed with 10 tests after RED failure confirmed.
+  - `.\apps\api\node_modules\.bin\tsx.CMD apps/api/src/services/diagram-to-architecture.test.ts` - passed with 4 tests after RED failure confirmed.
+  - `.\apps\web\node_modules\.bin\tsx.CMD apps/web/app/workspace/resource-type-labels.test.ts` - passed with 1 test.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm lint` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm typecheck` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm build` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm test` - passed.
+  - `git diff --check` - passed with line-ending warnings only.
+- Known risks:
+  - 새 IAM/KMS/CloudWatch/API Gateway 계열 리소스는 Architecture Board와 IaC Preview에 반영되지만 MVP live apply 허용 목록은 넓히지 않았다. 실제 apply 단계에서는 기존 안전 게이트가 계속 unsupported resource로 차단할 수 있다.
+  - `next build`가 `apps/web/next-env.d.ts`를 일시 변경했으나 원래 dev route reference로 복구했다.
+  - Existing unrelated worktree change remains in `docs/ck/ai/002_아키텍처다이어그램검수가이드.md` and is intentionally excluded from this commit.
+
 ### 2026-07-04 - Workspace AI 채팅 dock 전환
 
 - Goal: 오른쪽 패널의 AI 탭을 제거하고, 워크스페이스 오른쪽 하단의 GPT형 채팅 dock에서 AI 초안 생성, 미리보기, 적용, 대화 기록을 처리하게 한다.
