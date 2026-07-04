@@ -1,4 +1,4 @@
-import type { Deployment, DeploymentLog } from "@sketchcatch/types";
+import type { Deployment, DeploymentLog, GitCicdHandoff } from "@sketchcatch/types";
 
 type DeploymentRequestState = "idle" | "loading" | "error";
 export type DeploymentPanelMode = "setup" | "records";
@@ -134,6 +134,31 @@ export function hasCompleteDeploymentApprovalSnapshot(deployment: Deployment): b
 
 export function shouldAutoRefreshDeployment(deployment: Deployment | null): boolean {
   return deployment?.status === "RUNNING";
+}
+
+export function shouldAutoRefreshGitCicdHandoff(handoff: GitCicdHandoff | null): boolean {
+  return handoff?.status === "pr_created" || handoff?.status === "pipeline_running";
+}
+
+export function getGitCicdHandoffStatusLabel(handoff: GitCicdHandoff | null): string {
+  if (!handoff) {
+    return "No Git/CI/CD handoff";
+  }
+
+  switch (handoff.status) {
+    case "draft":
+      return "Handoff draft";
+    case "pr_created":
+      return "PR created";
+    case "pipeline_running":
+      return "Pipeline running";
+    case "pipeline_success":
+      return "Pipeline success";
+    case "pipeline_failed":
+      return "Pipeline failed";
+    case "cancelled":
+      return "Handoff cancelled";
+  }
 }
 
 export function getDefaultDeploymentPanelMode(

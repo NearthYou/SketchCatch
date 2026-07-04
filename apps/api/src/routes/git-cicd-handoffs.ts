@@ -3,10 +3,17 @@ import type {
   DeploymentPlanSummary,
   GitCicdHandoff,
   GitCicdHandoffListResponse,
+  GitCicdHandoffPipelineStatus,
+  GitCicdHandoffPipelineStatusResponse,
   GitCicdHandoffResponse
 } from "@sketchcatch/types";
 import { requireActiveUserId } from "../auth/current-user.js";
 import { getDatabaseClient, type DatabaseClient } from "../db/client.js";
+import {
+  readGitCicdPipelineStatusSnapshot,
+  toGitCicdPipelineStatusFromRecord,
+  writeGitCicdPipelineStatusSnapshot
+} from "../git-cicd/git-cicd-handoff-runtime-cache.js";
 import {
   createGitCicdHandoff,
   createInternalGitCicdHandoffProvider,
@@ -22,6 +29,7 @@ import {
   type GitCicdHandoffRepository,
   type ProjectAccessContext
 } from "../git-cicd/git-cicd-handoff-service.js";
+import { createRuntimeCacheFromEnv, type RuntimeCache } from "../runtime-cache/index.js";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 
 const gitCicdHandoffStatusSchema = z.enum([
@@ -95,6 +103,7 @@ type GitCicdHandoffRouteOptions = {
     db: DatabaseClient["db"]
   ) => GitCicdHandoffRepository;
   gitCicdHandoffProvider?: GitCicdHandoffProvider;
+  runtimeCache?: RuntimeCache;
 };
 
 type GitCicdHandoffRequestContext = {
@@ -127,6 +136,7 @@ export async function registerGitCicdHandoffRoutes(
   options?: GitCicdHandoffRouteOptions
 ): Promise<void> {
   const getGitCicdDatabaseClient = options?.getDatabaseClient ?? getDatabaseClient;
+  const runtimeCache = options?.runtimeCache ?? createRuntimeCacheFromEnv();
 
   app.post("/projects/:projectId/git-cicd-handoffs", async (request, reply) => {
     const params = projectHandoffParamsSchema.parse(request.params);
@@ -161,6 +171,8 @@ export async function registerGitCicdHandoffRoutes(
       const response: GitCicdHandoffResponse = {
         handoff: toGitCicdHandoff(handoff)
       };
+
+      await writeGitCicdPipelineStatusSnapshot({ handoff, runtimeCache });
 
       return reply.status(201).send(response);
     } catch (error) {
@@ -220,6 +232,33 @@ export async function registerGitCicdHandoffRoutes(
     }
   });
 
+  app.get("/git-cicd-handoffs/:handoffId/pipeline-status", async (request, reply) => {
+    const params = handoffParamsSchema.parse(request.params);
+    const { accessContext, repository } = await getGitCicdHandoffRequestContext(
+      request,
+      options,
+      getGitCicdDatabaseClient
+    );
+
+    try {
+      const pipelineStatus = await getGitCicdPipelineStatus(
+        {
+          handoffId: params.handoffId,
+          accessContext
+        },
+        repository,
+        runtimeCache
+      );
+      const response: GitCicdHandoffPipelineStatusResponse = {
+        pipelineStatus
+      };
+
+      return reply.status(200).send(response);
+    } catch (error) {
+      return handleGitCicdHandoffError(error, reply);
+    }
+  });
+
   app.patch("/git-cicd-handoffs/:handoffId/status", async (request, reply) => {
     const params = handoffParamsSchema.parse(request.params);
     const body = updateGitCicdHandoffStatusBodySchema.parse(request.body);
@@ -244,6 +283,8 @@ export async function registerGitCicdHandoffRoutes(
       const response: GitCicdHandoffResponse = {
         handoff: toGitCicdHandoff(handoff)
       };
+
+      await writeGitCicdPipelineStatusSnapshot({ handoff, runtimeCache });
 
       return reply.status(200).send(response);
     } catch (error) {
@@ -275,6 +316,37 @@ function toGitCicdHandoff(row: GitCicdHandoffRecord): GitCicdHandoff {
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString()
   };
+}
+
+async function getGitCicdPipelineStatus(
+  input: {
+    readonly handoffId: string;
+    readonly accessContext: ProjectAccessContext;
+  },
+  repository: GitCicdHandoffRepository,
+  runtimeCache: RuntimeCache
+): Promise<GitCicdHandoffPipelineStatus> {
+  const cachedStatus = await readGitCicdPipelineStatusSnapshot({
+    handoffId: input.handoffId,
+    runtimeCache
+  });
+
+  if (cachedStatus) {
+    const project = await repository.findAccessibleProject(
+      cachedStatus.projectId,
+      input.accessContext
+    );
+
+    if (project) {
+      return cachedStatus;
+    }
+  }
+
+  const handoff = await getGitCicdHandoff(input, repository);
+
+  await writeGitCicdPipelineStatusSnapshot({ handoff, runtimeCache });
+
+  return toGitCicdPipelineStatusFromRecord(handoff);
 }
 
 async function getGitCicdHandoffRequestContext(

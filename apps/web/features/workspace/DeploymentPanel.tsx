@@ -13,6 +13,8 @@ import type {
   DeploymentFailureExplanation,
   DiagramJson,
   DeploymentLog,
+  GitCicdHandoff,
+  GitCicdHandoffPipelineStatus,
   TerraformDiagnostic,
   TerraformOutput
 } from "@sketchcatch/types";
@@ -24,11 +26,13 @@ import {
   approveDeploymentPlan,
   cancelDeployment as cancelDeploymentRun,
   createDeployment,
+  getGitCicdHandoffPipelineStatus,
   getDeploymentFailureExplanation,
   listAwsConnections,
   listDeploymentResources,
   listDeploymentLogs,
   listDeployments,
+  listGitCicdHandoffs,
   listTerraformOutputs,
   runDeploymentInit,
   runDeploymentApply,
@@ -41,10 +45,12 @@ import {
 import {
   getDefaultDeploymentPanelMode,
   getDeploymentActionState,
+  getGitCicdHandoffStatusLabel,
   getDeploymentLogMessageTokens,
   getDeploymentLogTone,
   hasCompleteDeploymentApprovalSnapshot,
   shouldAutoRefreshDeployment,
+  shouldAutoRefreshGitCicdHandoff,
   shouldShowDeploymentInfoValue,
   type DeploymentLogMessageToken,
   type DeploymentPanelMode
@@ -61,6 +67,7 @@ import styles from "./workspace.module.css";
 
 type DeploymentRuntimeSnapshot = {
   readonly deployments: Deployment[];
+  readonly gitCicdHandoffs: GitCicdHandoff[];
   readonly logs: DeploymentLog[];
   readonly resources: DeployedResource[];
   readonly outputs: TerraformOutput[];
@@ -95,11 +102,15 @@ export function DeploymentPanel({
 }) {
   const [awsConnections, setAwsConnections] = useState<AwsConnection[]>([]);
   const [deployments, setDeployments] = useState<Deployment[]>([]);
+  const [gitCicdHandoffs, setGitCicdHandoffs] = useState<GitCicdHandoff[]>([]);
   const [deploymentLogs, setDeploymentLogs] = useState<DeploymentLog[]>([]);
   const [deploymentResources, setDeploymentResources] = useState<DeployedResource[]>([]);
   const [terraformOutputs, setTerraformOutputs] = useState<TerraformOutput[]>([]);
   const [selectedAwsConnectionId, setSelectedAwsConnectionId] = useState("");
   const [selectedDeploymentId, setSelectedDeploymentId] = useState("");
+  const [selectedGitCicdHandoffId, setSelectedGitCicdHandoffId] = useState("");
+  const [gitCicdPipelineStatusSource, setGitCicdPipelineStatusSource] =
+    useState<GitCicdHandoffPipelineStatus["source"] | null>(null);
   const [showApplyConfirmation, setShowApplyConfirmation] = useState(false);
   const [showDestroyConfirmation, setShowDestroyConfirmation] = useState(false);
   const [requestState, setRequestState] = useState<RequestState>("idle");
@@ -143,11 +154,25 @@ export function DeploymentPanel({
       })),
     [deployments]
   );
+  const gitCicdHandoffOptions = useMemo<SelectMenuOption[]>(
+    () =>
+      gitCicdHandoffs.map((handoff) => ({
+        detail: `${handoff.repositoryOwner}/${handoff.repositoryName}`,
+        label: getGitCicdHandoffStatusLabel(handoff),
+        value: handoff.id
+      })),
+    [gitCicdHandoffs]
+  );
   const selectedDeployment = useMemo(
     () => deployments.find((deployment) => deployment.id === selectedDeploymentId) ?? null,
     [deployments, selectedDeploymentId]
   );
+  const selectedGitCicdHandoff = useMemo(
+    () => gitCicdHandoffs.find((handoff) => handoff.id === selectedGitCicdHandoffId) ?? null,
+    [gitCicdHandoffs, selectedGitCicdHandoffId]
+  );
   const hasDeploymentRecords = deployments.length > 0;
+  const hasGitCicdHandoffs = gitCicdHandoffs.length > 0;
   const compactDeploymentPanelMode = hasDeploymentRecords ? deploymentPanelMode : "setup";
   const canStartDeploymentReview =
     selectedAwsConnectionId.length > 0 &&
@@ -170,6 +195,8 @@ export function DeploymentPanel({
     : "";
   const DeploymentBaselineIcon = hasUnsavedDeploymentBaseline ? Clipboard : ClipboardCheck;
   const shouldAutoRefreshSelectedDeployment = shouldAutoRefreshDeployment(selectedDeployment);
+  const shouldAutoRefreshSelectedGitCicdHandoff =
+    shouldAutoRefreshGitCicdHandoff(selectedGitCicdHandoff);
   const boardSnapshot = useMemo(
     () => createWorkspaceAiBoardSnapshot(diagramJson),
     [diagramJson]
@@ -210,8 +237,10 @@ export function DeploymentPanel({
   }, []);
 
   const loadDeploymentRuntimeSnapshot = useCallback(async (): Promise<DeploymentRuntimeSnapshot> => {
-    const [nextDeployments, nextLogs, nextResources, nextOutputs] = await Promise.all([
+    const [nextDeployments, nextGitCicdHandoffs, nextLogs, nextResources, nextOutputs] =
+      await Promise.all([
       listDeployments(projectId),
+      listGitCicdHandoffs(projectId),
       selectedDeploymentId ? listDeploymentLogs(selectedDeploymentId) : Promise.resolve([]),
       selectedDeploymentId ? listDeploymentResources(selectedDeploymentId) : Promise.resolve([]),
       selectedDeploymentId ? listTerraformOutputs(selectedDeploymentId) : Promise.resolve([])
@@ -219,6 +248,7 @@ export function DeploymentPanel({
 
     return {
       deployments: nextDeployments,
+      gitCicdHandoffs: nextGitCicdHandoffs,
       logs: nextLogs,
       resources: nextResources,
       outputs: nextOutputs
@@ -227,9 +257,15 @@ export function DeploymentPanel({
 
   const applyDeploymentRuntimeSnapshot = useCallback((snapshot: DeploymentRuntimeSnapshot): void => {
     setDeployments(snapshot.deployments);
+    setGitCicdHandoffs(snapshot.gitCicdHandoffs);
     setDeploymentLogs(snapshot.logs);
     setDeploymentResources(snapshot.resources);
     setTerraformOutputs(snapshot.outputs);
+    setSelectedGitCicdHandoffId((currentId) =>
+      snapshot.gitCicdHandoffs.some((handoff) => handoff.id === currentId)
+        ? currentId
+        : snapshot.gitCicdHandoffs[0]?.id ?? ""
+    );
   }, []);
 
   const loadDeploymentPanelSnapshot = useCallback(async (): Promise<DeploymentPanelSnapshot> => {
@@ -263,26 +299,24 @@ export function DeploymentPanel({
 
     async function loadDeploymentData(): Promise<void> {
       await runRequest(async () => {
-        const [nextConnections, nextDeployments] = await Promise.all([
-          listAwsConnections(),
-          listDeployments(projectId)
-        ]);
+        const snapshot = await loadDeploymentPanelSnapshot();
 
         if (cancelled) {
           return;
         }
 
-        setAwsConnections(nextConnections);
-        setDeployments(nextDeployments);
+        applyDeploymentPanelSnapshot(snapshot);
 
-        const latestVerifiedConnection = nextConnections.find(
+        const latestVerifiedConnection = snapshot.awsConnections.find(
           (connection) => connection.status === "verified"
         );
-        const latestDeployment = nextDeployments[0];
+        const latestDeployment = snapshot.deployments[0];
+        const latestGitCicdHandoff = snapshot.gitCicdHandoffs[0];
 
         setSelectedAwsConnectionId((currentId) => currentId || latestVerifiedConnection?.id || "");
         setSelectedDeploymentId((currentId) => currentId || latestDeployment?.id || "");
-        setDeploymentPanelMode(getDefaultDeploymentPanelMode(nextDeployments));
+        setSelectedGitCicdHandoffId((currentId) => currentId || latestGitCicdHandoff?.id || "");
+        setDeploymentPanelMode(getDefaultDeploymentPanelMode(snapshot.deployments));
       }, "배포 정보를 불러오지 못했습니다.");
     }
 
@@ -291,7 +325,7 @@ export function DeploymentPanel({
     return () => {
       cancelled = true;
     };
-  }, [projectId]);
+  }, [applyDeploymentPanelSnapshot, loadDeploymentPanelSnapshot]);
 
   useEffect(() => {
     if (deployments.length > 0) {
@@ -463,6 +497,67 @@ export function DeploymentPanel({
     applyDeploymentRuntimeSnapshot,
     loadDeploymentRuntimeSnapshot,
     shouldAutoRefreshSelectedDeployment
+  ]);
+
+  useEffect(() => {
+    if (!selectedGitCicdHandoffId || !shouldAutoRefreshSelectedGitCicdHandoff) {
+      return;
+    }
+
+    let cancelled = false;
+    let isRefreshing = false;
+
+    async function refreshPipelineStatus(): Promise<void> {
+      if (isRefreshing) {
+        return;
+      }
+
+      isRefreshing = true;
+
+      try {
+        const pipelineStatus = await getGitCicdHandoffPipelineStatus(selectedGitCicdHandoffId);
+
+        if (!cancelled) {
+          setGitCicdPipelineStatusSource(pipelineStatus.source);
+          setGitCicdHandoffs((currentHandoffs) =>
+            currentHandoffs.map((handoff) =>
+              handoff.id === pipelineStatus.id
+                ? {
+                    ...handoff,
+                    status: pipelineStatus.status,
+                    pullRequestUrl: pipelineStatus.pullRequestUrl,
+                    pipelineRunUrl: pipelineStatus.pipelineRunUrl,
+                    statusMessage: pipelineStatus.statusMessage,
+                    updatedAt: pipelineStatus.updatedAt
+                  }
+                : handoff
+            )
+          );
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setErrorMessage(
+            getApiErrorMessage(error, "Git/CI/CD pipeline status refresh failed.")
+          );
+        }
+      } finally {
+        isRefreshing = false;
+      }
+    }
+
+    const intervalId = window.setInterval(() => {
+      void refreshPipelineStatus();
+    }, 5000);
+
+    void refreshPipelineStatus();
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [
+    selectedGitCicdHandoffId,
+    shouldAutoRefreshSelectedGitCicdHandoff
   ]);
 
   async function runRequest(request: () => Promise<void>, fallbackMessage: string): Promise<void> {
@@ -843,10 +938,80 @@ export function DeploymentPanel({
     </section>
   );
 
+  const renderGitCicdHandoffSection = () => (
+    <section className={styles.deploymentSection}>
+      <div className={styles.deploymentSectionHeader}>
+        <h3>Git/CI/CD handoff</h3>
+        <button
+          className={`${styles.deploymentSecondaryButton} ${styles.deploymentRefreshButton}`}
+          disabled={requestState === "loading"}
+          onClick={refreshDeploymentPanel}
+          type="button"
+        >
+          Refresh
+        </button>
+      </div>
+
+      {hasGitCicdHandoffs ? (
+        <>
+          <div className={styles.deploymentField}>
+            Handoff record
+            <SelectMenu
+              ariaLabel="Git/CI/CD handoff record select"
+              disabled={gitCicdHandoffOptions.length === 0}
+              emptyLabel="No Git/CI/CD handoff"
+              onChange={(handoffId) => {
+                setSelectedGitCicdHandoffId(handoffId);
+                setGitCicdPipelineStatusSource(null);
+              }}
+              options={gitCicdHandoffOptions}
+              size={isDeploymentExpanded ? "large" : "regular"}
+              value={selectedGitCicdHandoffId}
+            />
+          </div>
+
+          {selectedGitCicdHandoff ? (
+            <div className={styles.deploymentSummary}>
+              <InfoRow label="Path" value="Git/CI/CD handoff" />
+              <InfoRow
+                label="Status"
+                value={getGitCicdHandoffStatusLabel(selectedGitCicdHandoff)}
+              />
+              <InfoRow
+                label="Repository"
+                value={`${selectedGitCicdHandoff.repositoryOwner}/${selectedGitCicdHandoff.repositoryName}`}
+              />
+              <OptionalInfoRow label="Target branch" value={selectedGitCicdHandoff.targetBranch} />
+              <OptionalInfoRow label="Source branch" value={selectedGitCicdHandoff.sourceBranch} />
+              <OptionalInfoRow label="PR URL" value={selectedGitCicdHandoff.pullRequestUrl} />
+              <OptionalInfoRow
+                label="Pipeline URL"
+                value={selectedGitCicdHandoff.pipelineRunUrl}
+              />
+              <OptionalInfoRow
+                label="Pipeline message"
+                value={selectedGitCicdHandoff.statusMessage}
+              />
+              <InfoRow label="Updated" value={formatDate(selectedGitCicdHandoff.updatedAt)} />
+              <OptionalInfoRow
+                label="Status source"
+                value={gitCicdPipelineStatusSource ?? "rds"}
+              />
+            </div>
+          ) : null}
+        </>
+      ) : (
+        <p className={styles.deploymentHint}>
+          No Git/CI/CD handoff records yet. Direct Deployment records stay separate below.
+        </p>
+      )}
+    </section>
+  );
+
   const renderRecordsSection = () => (
     <section className={styles.deploymentSection}>
       <div className={styles.deploymentSectionHeader}>
-        <h3>Deployment records</h3>
+        <h3>Direct Deployment records</h3>
         <button
           className={`${styles.deploymentSecondaryButton} ${styles.deploymentRefreshButton}`}
           disabled={requestState === "loading"}
@@ -1197,6 +1362,7 @@ export function DeploymentPanel({
           </>
         ) : null}
 
+        {renderGitCicdHandoffSection()}
         {renderStatusMessages()}
       </div>
 
@@ -1256,6 +1422,7 @@ export function DeploymentPanel({
                 {renderSetupSection()}
                 {renderRecordsSection()}
                 {renderResultsSection()}
+                {renderGitCicdHandoffSection()}
                 {renderStatusMessages()}
               </div>
               <div
