@@ -8,6 +8,7 @@ import type {
   ArchitectureDraftSecurityPriority,
   ArchitectureDraftTrafficLevel,
   ArchitectureGuardrailWarning,
+  CreateArchitectureDraftRequest,
   DesignSimulationResult
 } from "@sketchcatch/types";
 import type { FormEvent, KeyboardEvent as ReactKeyboardEvent } from "react";
@@ -30,6 +31,17 @@ import {
   WorkspaceAiSelect
 } from "./WorkspaceAiPanelPieces";
 import type { AiRequestState } from "./WorkspaceAiPanelPieces";
+import {
+  answerArchitectureClarification,
+  createArchitectureClarificationQuestionMessage,
+  createArchitectureClarificationSession,
+  createArchitectureClarificationSummaryMessage,
+  createClarifiedDraftRequest,
+  getCurrentArchitectureClarificationQuestion,
+  isArchitectureClarificationProceedCommand,
+  needsArchitectureClarification,
+  type ArchitectureClarificationSession
+} from "./workspace-ai-clarification";
 import {
   budgetOptions,
   DEFAULT_REQUIREMENT_PROMPT,
@@ -54,6 +66,7 @@ type WorkspaceAiChatMessage = {
   readonly createdAt: string;
   readonly kind: WorkspaceAiChatMessageKind;
   readonly role: WorkspaceAiChatMessageRole;
+  readonly suggestions?: readonly string[];
 };
 
 const MAX_CHAT_MESSAGES = 80;
@@ -71,6 +84,11 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
   const [securityPriority, setSecurityPriority] =
     useState<ArchitectureDraftSecurityPriority>("basic");
   const [draft, setDraft] = useState<AiArchitectureDraftResult | null>(null);
+  const [clarificationSession, setClarificationSession] =
+    useState<ArchitectureClarificationSession | null>(null);
+  const [lastDraftRequest, setLastDraftRequest] = useState<CreateArchitectureDraftRequest | null>(
+    null
+  );
   const [designSimulation, setDesignSimulation] = useState<DesignSimulationResult | null>(null);
   const [draftState, setDraftState] = useState<AiRequestState>("idle");
   const [simulationState, setSimulationState] = useState<AiRequestState>("idle");
@@ -105,17 +123,25 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
     });
   }, [messages, draft, designSimulation]);
 
-  function appendAssistantMessage(kind: WorkspaceAiChatMessageKind, content: string): void {
+  function appendAssistantMessage(
+    kind: WorkspaceAiChatMessageKind,
+    content: string,
+    suggestions: readonly string[] = []
+  ): void {
     setMessages((currentMessages) => trimChatMessages([
       ...currentMessages,
-      createChatMessage("assistant", kind, content)
+      createChatMessage("assistant", kind, content, suggestions)
     ]));
   }
 
   async function submitChatPrompt(event?: FormEvent<HTMLFormElement>): Promise<void> {
     event?.preventDefault();
 
-    const trimmedPrompt = composerValue.trim();
+    await submitUserMessage(composerValue);
+  }
+
+  async function submitUserMessage(value: string): Promise<void> {
+    const trimmedPrompt = value.trim();
 
     if (trimmedPrompt.length === 0 || draftState === "loading") {
       return;
@@ -126,7 +152,72 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
 
     setComposerValue("");
     setMessages(nextMessages);
+    await handleUserMessage(trimmedPrompt, nextMessages);
+  }
+
+  async function handleUserMessage(
+    trimmedPrompt: string,
+    nextMessages: readonly WorkspaceAiChatMessage[]
+  ): Promise<void> {
+    if (clarificationSession !== null) {
+      await handleClarificationMessage(trimmedPrompt);
+      return;
+    }
+
+    if (needsArchitectureClarification(trimmedPrompt)) {
+      const session = createArchitectureClarificationSession(trimmedPrompt);
+
+      setClarificationSession(session);
+      appendClarificationQuestion(session);
+      return;
+    }
+
     await createDraftFromConversation(nextMessages);
+  }
+
+  async function handleClarificationMessage(trimmedPrompt: string): Promise<void> {
+    if (clarificationSession === null) {
+      return;
+    }
+
+    if (clarificationSession.awaitingConfirmation) {
+      if (isArchitectureClarificationProceedCommand(trimmedPrompt)) {
+        const draftRequest = createClarifiedDraftRequest(clarificationSession);
+
+        setClarificationSession(null);
+        setScenarioHint(draftRequest.scenarioHint);
+        setBudgetLevel(draftRequest.budgetLevel);
+        setTrafficLevel(draftRequest.trafficLevel);
+        setSecurityPriority(draftRequest.securityPriority);
+        await createDraftFromRequest(draftRequest);
+        return;
+      }
+
+      const restartedSession = createArchitectureClarificationSession(
+        `${clarificationSession.originalPrompt}\n${trimmedPrompt}`
+      );
+
+      setClarificationSession(restartedSession);
+      appendAssistantMessage(
+        "question",
+        "좋아요. 조건을 다시 정리할게요. 아래 질문부터 다시 골라주세요."
+      );
+      appendClarificationQuestion(restartedSession);
+      return;
+    }
+
+    const nextSession = answerArchitectureClarification(clarificationSession, trimmedPrompt);
+
+    setClarificationSession(nextSession);
+
+    if (nextSession.awaitingConfirmation) {
+      const summary = createArchitectureClarificationSummaryMessage(nextSession);
+
+      appendAssistantMessage("question", summary.content, summary.suggestions);
+      return;
+    }
+
+    appendClarificationQuestion(nextSession);
   }
 
   async function createDraftFromConversation(conversation: readonly WorkspaceAiChatMessage[]): Promise<void> {
@@ -140,19 +231,24 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
       return;
     }
 
+    await createDraftFromRequest({
+      budgetLevel,
+      prompt: requirementPrompt,
+      scenarioHint,
+      securityPriority,
+      trafficLevel
+    });
+  }
+
+  async function createDraftFromRequest(draftRequest: CreateArchitectureDraftRequest): Promise<void> {
     setDraftState("loading");
     setDraftErrorMessage("");
     setDraft(null);
+    setLastDraftRequest(draftRequest);
     context.setPreviewDiagram(null);
 
     try {
-      const result = await createAiArchitectureDraft({
-        budgetLevel,
-        prompt: requirementPrompt,
-        scenarioHint,
-        securityPriority,
-        trafficLevel
-      });
+      const result = await createAiArchitectureDraft(draftRequest);
       const previewDiagram = convertArchitectureJsonToDiagramJson(result.architectureJson);
       const followUpQuestion = createFollowUpQuestionFromWarnings(
         result.metadata.guardrailWarnings
@@ -171,8 +267,12 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
       const question = createQuestionFromDraftError(message);
 
       if (question) {
+        const session = createArchitectureClarificationSession(draftRequest.prompt);
+
+        setClarificationSession(session);
         setDraftState("idle");
         appendAssistantMessage("question", question);
+        appendClarificationQuestion(session);
         return;
       }
 
@@ -180,6 +280,18 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
       setDraftErrorMessage(message);
       appendAssistantMessage("error", message);
     }
+  }
+
+  function appendClarificationQuestion(session: ArchitectureClarificationSession): void {
+    const question = getCurrentArchitectureClarificationQuestion(session);
+
+    if (!question) {
+      return;
+    }
+
+    const message = createArchitectureClarificationQuestionMessage(question);
+
+    appendAssistantMessage("question", message.content, message.suggestions);
   }
 
   function applyDraftToBoard(): void {
@@ -205,6 +317,11 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
   }
 
   async function regenerateDraft(): Promise<void> {
+    if (lastDraftRequest !== null) {
+      await createDraftFromRequest(lastDraftRequest);
+      return;
+    }
+
     await createDraftFromConversation(messages);
   }
 
@@ -311,13 +428,13 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
           value={budgetLevel}
         />
         <WorkspaceAiSelect
-          label="트래픽"
+          label="방문자"
           onChange={setTrafficLevel}
           options={trafficOptions}
           value={trafficLevel}
         />
         <WorkspaceAiSelect
-          label="보안"
+          label="보호 기준"
           onChange={setSecurityPriority}
           options={securityOptions}
           value={securityPriority}
@@ -343,6 +460,21 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
           >
             <span>{message.role === "user" ? "나" : message.kind === "question" ? "질문" : "AI"}</span>
             <p>{message.content}</p>
+            {message.role === "assistant" && message.suggestions && message.suggestions.length > 0 ? (
+              <div className={styles.aiChatSuggestions} aria-label="추천 답안">
+                {message.suggestions.map((suggestion) => (
+                  <button
+                    className={styles.aiChatSuggestionButton}
+                    disabled={draftState === "loading"}
+                    key={suggestion}
+                    onClick={() => void submitUserMessage(suggestion)}
+                    type="button"
+                  >
+                    {suggestion}
+                  </button>
+                ))}
+              </div>
+            ) : null}
           </article>
         ))}
 
@@ -394,7 +526,7 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
         <div className={styles.aiPromptGuide} aria-label="프롬프트 작성 가이드">
           <div className={styles.aiPromptGuideHeader}>
             <strong>그냥 이렇게 시작해도 돼요</strong>
-            <span>원하는 서비스만 적어도 초안을 만듭니다.</span>
+            <span>정보가 부족하면 질문부터 할게요.</span>
           </div>
           <div className={styles.aiPromptChips}>
             {promptGuideExamples.map((example) => (
@@ -408,7 +540,7 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
               </button>
             ))}
           </div>
-          <p className={styles.aiPromptTinyHint}>더 정확히: 공개 여부 · 파일/데이터 · 비용/보안</p>
+          <p className={styles.aiPromptTinyHint}>더 정확히: 공개 여부 · 파일/데이터 · 비용 영향 · 보호 범위</p>
         </div>
         <label className={styles.aiChatInput}>
           <span>메시지</span>
@@ -551,15 +683,25 @@ function storeChatMessages(projectId: string, messages: readonly WorkspaceAiChat
 function createChatMessage(
   role: WorkspaceAiChatMessageRole,
   kind: WorkspaceAiChatMessageKind,
-  content: string
+  content: string,
+  suggestions: readonly string[] = []
 ): WorkspaceAiChatMessage {
-  return {
+  const message: WorkspaceAiChatMessage = {
     id: createChatMessageId(),
     content,
     createdAt: new Date().toISOString(),
     kind,
     role
   };
+
+  if (suggestions.length > 0) {
+    return {
+      ...message,
+      suggestions
+    };
+  }
+
+  return message;
 }
 
 function createChatMessageId(): string {
@@ -586,6 +728,9 @@ function isWorkspaceAiChatMessage(value: unknown): value is WorkspaceAiChatMessa
     typeof candidate.content === "string" &&
     typeof candidate.createdAt === "string" &&
     typeof candidate.id === "string" &&
+    (candidate.suggestions === undefined ||
+      (Array.isArray(candidate.suggestions) &&
+        candidate.suggestions.every((suggestion) => typeof suggestion === "string"))) &&
     (candidate.kind === "draft" ||
       candidate.kind === "error" ||
       candidate.kind === "question" ||

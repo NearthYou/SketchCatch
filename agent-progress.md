@@ -13,6 +13,32 @@
 - Highest priority unfinished harness feature: `HARNESS-007`
 - Current blocker: none
 
+### 2026-07-04 - 웹사이트 요구사항 질문 흐름 추가
+
+- Goal: `웹사이트 하나 배포하고 싶어`처럼 아키텍처 단서가 부족한 입력을 정적 사이트로 바로 생성하지 않고, 초보자도 답할 수 있는 질문 흐름으로 필요한 조건을 먼저 모은다.
+- Completed:
+  - API Architecture Draft 시나리오 결정에서 일반적인 웹사이트 요청은 화면만 필요한지, 파일 업로드가 필요한지, 로그인/데이터 저장이 필요한지 확인하기 전까지 `400 bad_request`로 차단하도록 했다.
+  - Workspace AI 채팅 dock에 3단계 질문 세션을 추가해 사이트 목적, 방문자 행동, 운영 기준을 추천 답안 버튼으로 차례로 묻고, 마지막에 구현 리스트를 확인받도록 했다.
+  - 사용자가 `그대로 진행` 등으로 승인하면 모은 답변을 결정적인 `CreateArchitectureDraftRequest`로 변환해 초안을 생성하고, 다시 생성도 같은 요청을 재사용하도록 했다.
+  - 선택지/라벨에서 `트래픽`, `보안`, `기본`, `높게`처럼 모호한 표현을 `방문자`, `보호 기준`, `공개 자료 중심`, `로그인/개인정보 보호 우선`처럼 사용자 언어로 바꿨다.
+  - `docs/data-models.md`에 부족한 웹사이트 요구사항은 질문과 구현 리스트 확인을 거친 뒤 초안을 요청해야 한다는 계약을 기록했다.
+- Verification run:
+  - `.\node_modules\.bin\eslint.CMD apps/api/src/services/aiArchitectureScenarioResolution.ts apps/api/src/routes/ai.test.ts apps/web/features/workspace/WorkspaceAiChatDock.tsx apps/web/features/workspace/workspace-ai-clarification.ts apps/web/features/workspace/workspace-ai-clarification.test.ts apps/web/features/workspace/workspace-ai-guardrail-warning.test.ts apps/web/features/workspace/workspace-ai-panel-options.ts apps/web/features/workspace/WorkspaceAiPanel.tsx apps/web/app/workspace/workspace-options.ts apps/web/app/workspace/ArchitectureDraftPanel.tsx` - passed.
+  - `.\node_modules\.bin\tsc.CMD --noEmit -p apps/api/tsconfig.json` - passed.
+  - `.\node_modules\.bin\tsc.CMD --noEmit -p apps/web/tsconfig.json` - passed after fixing optional `suggestions` property creation.
+  - `.\apps\web\node_modules\.bin\tsx.CMD apps/web/features/workspace/workspace-ai-clarification.test.ts` - passed with 3 tests.
+  - `.\apps\web\node_modules\.bin\tsx.CMD apps/web/features/workspace/workspace-ai-guardrail-warning.test.ts` - passed with 5 tests.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm harness:check` - passed after non-escalated cache-only `ENOTCACHED`.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm lint` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm typecheck` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm test` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm build` - passed.
+  - `git diff --check` - passed with line-ending warnings only.
+- Known risks:
+  - 질문 흐름은 현재 `WorkspaceAiChatDock` 중심으로 동작하며, 이전 패널 컴포넌트는 문구/선택지만 맞췄다.
+  - `next build`가 `apps/web/next-env.d.ts`를 일시 변경했지만 원래 dev route reference로 복구했다.
+  - Existing unrelated worktree change remains in `docs/ck/ai/002_아키텍처다이어그램검수가이드.md` and is intentionally excluded from this commit.
+
 ### 2026-07-04 - Terraform AWS catalog check 줄바꿈 보정
 
 - Goal: Windows checkout 줄바꿈 때문에 `apps/web/features/parameter-input/catalog.generated.ts`가 Terraform AWS catalog 생성 기준과 맞지 않는 것으로 판정되는 문제를 막는다.

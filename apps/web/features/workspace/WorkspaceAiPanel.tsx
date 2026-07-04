@@ -169,7 +169,7 @@ export function WorkspaceAiPanel({ context }: WorkspaceAiPanelProps) {
         <div className={styles.aiPromptGuide} aria-label="프롬프트 작성 가이드">
           <div className={styles.aiPromptGuideHeader}>
             <strong>그냥 이렇게 시작해도 돼요</strong>
-            <span>원하는 서비스만 적어도 초안을 만듭니다.</span>
+            <span>정보가 부족하면 질문부터 할게요.</span>
           </div>
           <div className={styles.aiPromptChips}>
             {promptGuideExamples.map((example) => (
@@ -183,7 +183,7 @@ export function WorkspaceAiPanel({ context }: WorkspaceAiPanelProps) {
               </button>
             ))}
           </div>
-          <p className={styles.aiPromptTinyHint}>더 정확히: 공개 여부 · 파일/데이터 · 비용/보안</p>
+          <p className={styles.aiPromptTinyHint}>더 정확히: 공개 여부 · 파일/데이터 · 비용 영향 · 보호 범위</p>
         </div>
         <WorkspaceAiSelect
           label="보조 선택"
@@ -199,14 +199,14 @@ export function WorkspaceAiPanel({ context }: WorkspaceAiPanelProps) {
             value={budgetLevel}
           />
           <WorkspaceAiSelect
-            label="트래픽"
+            label="방문자"
             onChange={setTrafficLevel}
             options={trafficOptions}
             value={trafficLevel}
           />
         </div>
         <WorkspaceAiSelect
-          label="보안"
+          label="보호 기준"
           onChange={setSecurityPriority}
           options={securityOptions}
           value={securityPriority}

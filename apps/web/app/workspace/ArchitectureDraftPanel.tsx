@@ -84,7 +84,7 @@ export function ArchitectureDraftPanel({
         ))}
       </div>
 
-      <span className="fieldLabel">트래픽</span>
+      <span className="fieldLabel">방문자 규모</span>
       <div className="choiceGrid choiceGridCompact">
         {trafficOptions.map((option) => (
           <button
@@ -98,7 +98,7 @@ export function ArchitectureDraftPanel({
         ))}
       </div>
 
-      <span className="fieldLabel">보안 우선순위</span>
+      <span className="fieldLabel">보호 기준</span>
       <div className="choiceGrid choiceGridCompact">
         {securityOptions.map((option) => (
           <button

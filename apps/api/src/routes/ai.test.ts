@@ -444,7 +444,7 @@ test("POST /api/ai/architecture-draft understands beginner-friendly prompt wordi
   const app = buildApp();
   const promptCases = [
     {
-      prompt: "웹사이트 하나 배포하고 싶어",
+      prompt: "소개용 랜딩 웹사이트를 배포하고 싶어",
       scenario: "static_site"
     },
     {
@@ -477,6 +477,33 @@ test("POST /api/ai/architecture-draft understands beginner-friendly prompt wordi
     assert.equal(body.metadata.selectedScenario, promptCase.scenario);
     assert.ok(body.metadata.scenarioScores?.some((score) => score.scenario === promptCase.scenario && score.score > 0));
   }
+
+  await app.close();
+});
+
+test("POST /api/ai/architecture-draft rejects generic website prompts until clarified", async () => {
+  const app = buildApp();
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/ai/architecture-draft",
+    payload: {
+      prompt: "웹사이트 하나 배포하고 싶어",
+      scenarioHint: "auto",
+      budgetLevel: "normal",
+      trafficLevel: "normal",
+      securityPriority: "basic"
+    }
+  });
+
+  assert.equal(response.statusCode, 400);
+
+  const body = apiErrorResponseSchema.parse(response.json());
+
+  assert.equal(body.error, "bad_request");
+  assert.match(body.message, /웹사이트/);
+  assert.match(body.message, /파일|로그인|방문자/);
+  assert.match(body.message, /먼저|확인/);
 
   await app.close();
 });

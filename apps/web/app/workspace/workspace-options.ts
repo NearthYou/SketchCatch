@@ -56,16 +56,16 @@ export const scenarioOptions: readonly ChoiceOption<ArchitectureDraftScenarioHin
 ];
 
 export const budgetOptions: readonly ChoiceOption<ArchitectureDraftBudgetLevel>[] = [
-  { label: "낮게", value: "low" },
-  { label: "보통", value: "normal" }
+  { label: "저렴하게 시작", value: "low" },
+  { label: "기능 여유 우선", value: "normal" }
 ];
 
 export const trafficOptions: readonly ChoiceOption<ArchitectureDraftTrafficLevel>[] = [
-  { label: "작음", value: "small" },
-  { label: "보통", value: "normal" }
+  { label: "처음엔 적은 방문자", value: "small" },
+  { label: "방문자 증가 대비", value: "normal" }
 ];
 
 export const securityOptions: readonly ChoiceOption<ArchitectureDraftSecurityPriority>[] = [
-  { label: "기본", value: "basic" },
-  { label: "높음", value: "high" }
+  { label: "공개 자료 중심", value: "basic" },
+  { label: "로그인/개인정보 보호 우선", value: "high" }
 ];

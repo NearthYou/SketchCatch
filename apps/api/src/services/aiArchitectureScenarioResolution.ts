@@ -15,9 +15,11 @@ export type ScenarioResolution = {
 export class AmbiguousArchitecturePromptError extends Error {
   readonly statusCode = 400;
 
-  constructor() {
+  constructor(
+    message = "자연어 요구사항에서 명확한 아키텍처 단서를 찾지 못해 초안을 생성하지 않았습니다. 예: 소개용 랜딩 웹사이트가 필요해, 파일 업로드 페이지가 필요해, 로그인 있는 작은 웹서비스가 필요해"
+  ) {
     super(
-      "자연어 요구사항에서 명확한 아키텍처 단서를 찾지 못해 초안을 생성하지 않았습니다. 예: 웹사이트 하나 배포하고 싶어, 파일 업로드 페이지가 필요해, 로그인 있는 작은 웹서비스가 필요해"
+      message
     );
   }
 }
@@ -101,6 +103,42 @@ const PROMPT_SCENARIO_PRIORITY: readonly ArchitectureScenario[] = [
   "static_site"
 ];
 
+const GENERIC_WEBSITE_KEYWORDS = ["웹사이트", "홈페이지", "웹서비스", "사이트"] as const;
+
+const CONCRETE_WEBSITE_KEYWORDS = [
+  "static",
+  "frontend",
+  "react",
+  "next",
+  "next.js",
+  "정적",
+  "프론트엔드",
+  "리액트",
+  "랜딩",
+  "소개",
+  "포트폴리오",
+  "회사",
+  "문의",
+  "예약",
+  "신청",
+  "게시판",
+  "마이페이지",
+  "로그인",
+  "회원",
+  "계정",
+  "사용자 정보",
+  "파일",
+  "이미지",
+  "업로드",
+  "서버",
+  "백엔드",
+  "api",
+  "db",
+  "database",
+  "데이터베이스",
+  "디비"
+] as const;
+
 const UNSUPPORTED_REQUIREMENT_RULES: readonly UnsupportedRequirementRule[] = [
   {
     label: "EKS/Kubernetes",
@@ -170,6 +208,12 @@ export function resolveScenario(request: CreateArchitectureDraftRequest): Scenar
   const unsupportedRequirementMatches = findUnsupportedRequirementMatches(request.prompt);
   const substituteScenario = selectSubstituteScenario(unsupportedRequirementMatches);
   const unsupportedWarnings = createUnsupportedRequirementWarnings(unsupportedRequirementMatches);
+
+  if (needsGenericWebsiteClarification(request.prompt, scenarioScores)) {
+    throw new AmbiguousArchitecturePromptError(
+      "웹사이트라고만 하면 화면만 보여주는 사이트인지, 방문자가 파일을 올리는 서비스인지, 로그인이나 데이터 저장이 필요한 서비스인지 먼저 확인해야 합니다."
+    );
+  }
 
   if (hasPromptSignal) {
     return {
@@ -250,6 +294,25 @@ function findPromptScenarioScore(
 
 function hasPromptScenarioSignal(scenarioScores: readonly ArchitectureScenarioScore[]): boolean {
   return scenarioScores.some((scenarioScore) => scenarioScore.score > 0);
+}
+
+function needsGenericWebsiteClarification(
+  prompt: string,
+  scenarioScores: readonly ArchitectureScenarioScore[]
+): boolean {
+  const normalizedPrompt = normalizePrompt(prompt);
+  const staticSiteScore = findPromptScenarioScore(scenarioScores, "static_site");
+  const nonStaticScore = scenarioScores
+    .filter((scenarioScore) => scenarioScore.scenario !== "static_site")
+    .reduce((sum, scenarioScore) => sum + scenarioScore.score, 0);
+  const hasGenericWebsiteKeyword = GENERIC_WEBSITE_KEYWORDS.some((keyword) =>
+    normalizedPrompt.includes(keyword)
+  );
+  const hasConcreteWebsiteKeyword = CONCRETE_WEBSITE_KEYWORDS.some((keyword) =>
+    normalizedPrompt.includes(keyword.toLowerCase())
+  );
+
+  return staticSiteScore > 0 && nonStaticScore === 0 && hasGenericWebsiteKeyword && !hasConcreteWebsiteKeyword;
 }
 
 function createPromptOverrideWarnings(

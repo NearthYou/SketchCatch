@@ -2342,6 +2342,7 @@
 .aiChatAssistantMessage[data-kind="question"] p {
   border-color: #bfdbfe;
   box-shadow: inset 3px 0 0 #2f6db3;
+  white-space: pre-line;
 }
 
 .aiChatAssistantMessage[data-kind="error"] p {
@@ -2354,6 +2355,41 @@
   background: #6f4cf6;
   border-color: #6f4cf6;
   color: #ffffff;
+}
+
+.aiChatSuggestions {
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+}
+
+.aiChatSuggestionButton {
+  background: #ffffff;
+  border: 1px solid #bfdbfe;
+  border-radius: 7px;
+  color: #1d4ed8;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 850;
+  line-height: 1.35;
+  max-width: 100%;
+  min-height: 32px;
+  overflow-wrap: anywhere;
+  padding: 7px 9px;
+  text-align: left;
+}
+
+.aiChatSuggestionButton:hover,
+.aiChatSuggestionButton:focus-visible {
+  background: #eff6ff;
+  border-color: #60a5fa;
+  outline: none;
+}
+
+.aiChatSuggestionButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .aiChatDraftCard {
