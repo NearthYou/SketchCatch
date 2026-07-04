@@ -34,7 +34,6 @@ export function createRuntimeCachedDeploymentRepository(input: {
   const now = input.now ?? (() => new Date());
   const repository = input.repository;
   const runtimeCache = input.runtimeCache;
-  const cachedRepository = Object.create(repository) as DeploymentRepository;
 
   async function cacheStatus(deployment: DeploymentRecord | undefined): Promise<void> {
     if (!deployment) {
@@ -48,112 +47,120 @@ export function createRuntimeCachedDeploymentRepository(input: {
     });
   }
 
-  cachedRepository.createDeployment = async (createInput) => {
+  const overrides: Partial<DeploymentRepository> = {
+    createDeployment: async (createInput) => {
       const deployment = await repository.createDeployment(createInput);
 
       await cacheStatus(deployment);
 
       return deployment;
-    };
-  cachedRepository.updateDeploymentStatus = async (deploymentId, status) => {
+    },
+    updateDeploymentStatus: async (deploymentId, status) => {
       const deployment = await repository.updateDeploymentStatus(deploymentId, status);
 
       await cacheStatus(deployment);
 
       return deployment;
-    };
-  cachedRepository.markDeploymentInitRunning = async (deploymentId) => {
+    },
+    markDeploymentInitRunning: async (deploymentId) => {
       const deployment = await repository.markDeploymentInitRunning(deploymentId);
 
       await cacheStatus(deployment);
 
       return deployment;
-    };
-  cachedRepository.markDeploymentPlanRunning = async (deploymentId) => {
+    },
+    markDeploymentPlanRunning: async (deploymentId) => {
       const deployment = await repository.markDeploymentPlanRunning(deploymentId);
 
       await cacheStatus(deployment);
 
       return deployment;
-    };
-  cachedRepository.markDeploymentApplyRunning = async (deploymentId) => {
+    },
+    markDeploymentApplyRunning: async (deploymentId) => {
       const deployment = await repository.markDeploymentApplyRunning(deploymentId);
 
       await cacheStatus(deployment);
 
       return deployment;
-    };
-  cachedRepository.markDeploymentDestroyRunning = async (deploymentId) => {
+    },
+    markDeploymentDestroyRunning: async (deploymentId) => {
       const deployment = await repository.markDeploymentDestroyRunning(deploymentId);
 
       await cacheStatus(deployment);
 
       return deployment;
-    };
-  cachedRepository.markDeploymentInitSucceeded = async (deploymentId) => {
+    },
+    markDeploymentInitSucceeded: async (deploymentId) => {
       const deployment = await repository.markDeploymentInitSucceeded(deploymentId);
 
       await cacheStatus(deployment);
 
       return deployment;
-    };
-  cachedRepository.updateDeploymentPlan = async (deploymentId, updateInput) => {
+    },
+    updateDeploymentPlan: async (deploymentId, updateInput) => {
       const deployment = await repository.updateDeploymentPlan(deploymentId, updateInput);
 
       await cacheStatus(deployment);
 
       return deployment;
-    };
-  cachedRepository.saveDeploymentPlan = async (saveInput) => {
+    },
+    saveDeploymentPlan: async (saveInput) => {
       const deployment = await repository.saveDeploymentPlan(saveInput);
 
       await cacheStatus(deployment);
 
       return deployment;
-    };
-  cachedRepository.approveDeployment = async (deploymentId, approveInput) => {
+    },
+    approveDeployment: async (deploymentId, approveInput) => {
       const deployment = await repository.approveDeployment(deploymentId, approveInput);
 
       await cacheStatus(deployment);
 
       return deployment;
-    };
-  cachedRepository.completeDeploymentApply = async (deploymentId, completeInput) => {
+    },
+    completeDeploymentApply: async (deploymentId, completeInput) => {
       const deployment = await repository.completeDeploymentApply(deploymentId, completeInput);
 
       await cacheStatus(deployment);
 
       return deployment;
-    };
-  cachedRepository.completeDeploymentDestroy = async (deploymentId, completeInput) => {
+    },
+    completeDeploymentDestroy: async (deploymentId, completeInput) => {
       const deployment = await repository.completeDeploymentDestroy(deploymentId, completeInput);
 
       await cacheStatus(deployment);
 
       return deployment;
-    };
-  cachedRepository.failDeployment = async (deploymentId, failInput) => {
+    },
+    failDeployment: async (deploymentId, failInput) => {
       const deployment = await repository.failDeployment(deploymentId, failInput);
 
       await cacheStatus(deployment);
 
       return deployment;
-    };
-  cachedRepository.requestDeploymentCancellation = async (deploymentId) => {
+    },
+    requestDeploymentCancellation: async (deploymentId) => {
       const deployment = await repository.requestDeploymentCancellation(deploymentId);
 
       await cacheStatus(deployment);
 
       return deployment;
-    };
-  cachedRepository.cancelDeployment = async (deploymentId, cancelInput) => {
+    },
+    cancelDeployment: async (deploymentId, cancelInput) => {
       const deployment = await repository.cancelDeployment(deploymentId, cancelInput);
 
       await cacheStatus(deployment);
 
       return deployment;
-    };
-  cachedRepository.createDeploymentLog = async (logInput) => {
+    },
+    recoverInterruptedDeployments: async () => {
+      const deployments = await repository.recoverInterruptedDeployments();
+
+      await Promise.all(deployments.map((deployment) => cacheStatus(deployment)));
+
+      return deployments;
+    },
+    createDeploymentLog: async (logInput) => {
       const log = await repository.createDeploymentLog(logInput);
 
       await writeDeploymentLogStreamCursor({
@@ -164,8 +171,8 @@ export function createRuntimeCachedDeploymentRepository(input: {
       });
 
       return log;
-    };
-  cachedRepository.createDeploymentLogs = async (logInputs) => {
+    },
+    createDeploymentLogs: async (logInputs) => {
       const logs = await repository.createDeploymentLogs(logInputs);
       const lastLog = getLastDeploymentLog(logs);
 
@@ -179,9 +186,20 @@ export function createRuntimeCachedDeploymentRepository(input: {
       }
 
       return logs;
-    };
+    }
+  };
 
-  return cachedRepository;
+  return new Proxy(repository, {
+    get(target, property, receiver) {
+      if (property in overrides) {
+        return overrides[property as keyof DeploymentRepository];
+      }
+
+      const value = Reflect.get(target, property, receiver);
+
+      return typeof value === "function" ? value.bind(target) : value;
+    }
+  }) as DeploymentRepository;
 }
 
 export async function writeDeploymentRuntimeStatusSnapshot(input: {

@@ -52,21 +52,18 @@ key에는 raw user text를 직접 붙이지 않는다. workflow id처럼 이미 
 - `failDeployment`
 - `requestDeploymentCancellation`
 - `cancelDeployment`
+- `recoverInterruptedDeployments`
 
 cache write가 실패해도 mutation 결과는 그대로 반환한다. 즉 Redis 장애는 Deployment 상태 전이를 막지 않는다.
+API 재시작 시 중단된 실행을 RDS에서 `FAILED`로 복구한 경우에도 반환된 Deployment 목록을 즉시 cache에 다시 써서, 오래 남은 `RUNNING` snapshot이 다음 polling 응답을 흐리지 않게 한다.
 
 ## 로그 커서 정책
 
 `createDeploymentLog`와 `createDeploymentLogs`는 저장된 로그 중 가장 큰 `sequence`를 `deployment.log_cursor`에 기록한다. SSE log stream도 새 로그를 전송하면 같은 cursor를 갱신한다.
 
-stream 시작 시에는 다음 순서로 동작한다.
+stream 시작 시에는 요청의 `sinceSequence`만 조회 시작점으로 사용한다. `deployment.log_cursor`는 deployment 단위의 공유 cache라서 사용자, 탭, 새로고침 세션을 구분하지 못한다. 따라서 cached cursor로 `sinceSequence`를 덮어쓰면 다른 클라이언트가 아직 보지 못한 초기 로그를 건너뛸 수 있다.
 
-1. 요청의 `sinceSequence`를 기본값으로 사용한다.
-2. long-running SSE stream이고 Runtime Cache cursor가 있으면 `max(sinceSequence, cachedCursor.lastSequence)`부터 조회한다.
-3. cache miss나 cache failure가 있으면 기존처럼 RDS `deployment_logs`를 `sinceSequence` 기준으로 조회한다.
-4. `once=true` 요청은 테스트와 명시 조회의 결정성을 위해 cursor start override를 적용하지 않는다.
-
-프론트엔드는 stream 시작 전에 `GET /logs`로 기존 기록을 로드하므로, stream cursor는 주로 이미 전송한 로그를 반복 전송하지 않는 보조 힌트로만 사용한다.
+프론트엔드는 stream 시작 전에 `GET /logs`로 기존 기록을 로드하므로, stream cursor는 현재 slice에서 "마지막으로 전송/기록된 sequence"를 관찰하는 보조 힌트로만 사용한다. 이후 per-client 또는 per-session cursor key가 도입되기 전까지는 RDS `deployment_logs` 조회의 기준을 바꾸지 않는다.
 
 ## 테스트 포인트
 

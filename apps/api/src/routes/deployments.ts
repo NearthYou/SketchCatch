@@ -79,7 +79,6 @@ import {
 } from "../deployments/deployment-retention.js";
 import {
   createRuntimeCachedDeploymentRepository,
-  readDeploymentLogStreamCursor,
   writeDeploymentLogStreamCursor
 } from "../deployments/deployment-runtime-cache.js";
 import type { RuntimeCache } from "../runtime-cache/index.js";
@@ -962,12 +961,7 @@ async function streamDeploymentLogs(input: {
   runtimeCache?: RuntimeCache | undefined;
   request: FastifyRequest;
 }): Promise<void> {
-  let lastSequence = await getDeploymentLogStreamStartSequence({
-    deploymentId: input.deploymentId,
-    once: input.once,
-    runtimeCache: input.runtimeCache,
-    sinceSequence: input.sinceSequence
-  });
+  let lastSequence = input.sinceSequence;
   let polling = false;
   let closed = false;
 
@@ -1119,24 +1113,6 @@ async function streamDeploymentLogs(input: {
   input.request.raw.on("close", () => {
     closeStream();
   });
-}
-
-async function getDeploymentLogStreamStartSequence(input: {
-  deploymentId: string;
-  once: boolean;
-  runtimeCache?: RuntimeCache | undefined;
-  sinceSequence: number;
-}): Promise<number> {
-  if (input.once || !input.runtimeCache) {
-    return input.sinceSequence;
-  }
-
-  const cursor = await readDeploymentLogStreamCursor({
-    deploymentId: input.deploymentId,
-    runtimeCache: input.runtimeCache
-  });
-
-  return Math.max(input.sinceSequence, cursor?.lastSequence ?? 0);
 }
 
 async function requireDeploymentInitArtifact(
