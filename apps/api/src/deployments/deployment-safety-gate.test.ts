@@ -13,7 +13,15 @@ test("evaluateDeploymentSafetyGate blocks high risk findings and destructive app
       createFinding({
         id: "security-open-ssh-sg-1",
         resourceId: "sg-1",
-        severity: "high"
+        severity: "high",
+        sourceLocation: {
+          fileName: "main.tf",
+          line: 15,
+          column: 1,
+          resourceAddress: "aws_security_group.sg_app",
+          terraformBlockType: "resource",
+          terraformBlockName: "sg_app"
+        }
       })
     ]
   });
@@ -28,6 +36,14 @@ test("evaluateDeploymentSafetyGate blocks high risk findings and destructive app
     ]
   );
   assert.equal(result.summary.warnings[0]?.blocksApproval, true);
+  assert.deepEqual(result.summary.warnings[0]?.sourceLocation, {
+    fileName: "main.tf",
+    line: 15,
+    column: 1,
+    resourceAddress: "aws_security_group.sg_app",
+    terraformBlockType: "resource",
+    terraformBlockName: "sg_app"
+  });
   assert.equal(result.summary.warnings[1]?.code, "DESTRUCTIVE_CHANGE");
 });
 

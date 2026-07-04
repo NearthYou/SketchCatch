@@ -23,6 +23,10 @@ export function createPreDeploymentCheckWarning(finding: CheckFinding): Deployme
     warning.relatedResourceId = finding.resourceId;
   }
 
+  if (finding.sourceLocation) {
+    warning.sourceLocation = finding.sourceLocation;
+  }
+
   return warning;
 }
 
