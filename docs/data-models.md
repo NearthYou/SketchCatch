@@ -885,6 +885,27 @@ type TranscribeConfirmation = {
 ```
 
 ```ts
+type AiSafetyExplanation = {
+  riskSummary: string;
+  whyDangerous: string;
+  recommendedFix: string;
+  terraformHint?: string;
+  verificationSteps: string[];
+  fallbackUsed: boolean;
+  fallbackReason?:
+    | "missing_api_key"
+    | "timeout"
+    | "rate_limited"
+    | "invalid_request"
+    | "auth_error"
+    | "provider_error"
+    | "invalid_response"
+    | "provider_not_configured"
+    | "credit_not_confirmed"
+    | "daily_limit_exceeded";
+  providerMetadata?: AiProviderMetadata;
+};
+
 type CheckFinding = {
   id: string;
   category:
@@ -898,6 +919,7 @@ type CheckFinding = {
   severity: "low" | "medium" | "high";
   resourceId?: string;
   sourceLocation?: TerraformSourceLocation;
+  aiSafetyExplanation?: AiSafetyExplanation;
   title: string;
   description: string;
   recommendation: string;
@@ -907,6 +929,8 @@ type CheckFinding = {
 `CheckFinding.resourceId`가 있으면 같은 `ArchitectureJson.nodes[].id` 또는 변환된 보드 node id를 가리켜야 한다.
 
 `CheckFinding.sourceLocation`이 있으면 사용자가 finding 카드의 `수정` 버튼을 눌렀을 때 Terraform editor가 해당 파일/라인/리소스 블록으로 이동할 수 있다. 이 필드는 security/cost/configuration finding의 설명 근거로만 사용하며, AI나 UI가 이 값만으로 배포 차단 여부를 바꾸면 안 된다.
+
+`CheckFinding.aiSafetyExplanation`은 finding별 사용자 설명 계층이다. AI는 `riskSummary`, `whyDangerous`, `recommendedFix`, `terraformHint`, `verificationSteps`만 생성할 수 있고, `severity`, `blocked`, `blocksApproval`, `requiresAcknowledgement` 같은 Safety Gate 판정은 변경할 수 없다. OpenAI GPT 호출이 실패하거나 API key가 없으면 `fallbackUsed: true`인 rule fallback 설명을 사용한다.
 
 ## 팀 작업 규칙
 

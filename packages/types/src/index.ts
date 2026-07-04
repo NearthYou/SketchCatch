@@ -867,12 +867,24 @@ export type CheckFindingCategory =
   | "performance"
   | "availability";
 
+export type AiSafetyExplanation = {
+  riskSummary: string;
+  whyDangerous: string;
+  recommendedFix: string;
+  terraformHint?: string | undefined;
+  verificationSteps: string[];
+  fallbackUsed: boolean;
+  fallbackReason?: LlmExplanationFallbackReason | undefined;
+  providerMetadata?: AiProviderMetadata | undefined;
+};
+
 export type CheckFinding = {
   id: string;
   category: CheckFindingCategory;
   severity: RiskLevel;
   resourceId?: string | undefined;
   sourceLocation?: TerraformSourceLocation | undefined;
+  aiSafetyExplanation?: AiSafetyExplanation | undefined;
   title: string;
   description: string;
   recommendation: string;
