@@ -1095,6 +1095,226 @@
   box-shadow: 0 1px 3px rgba(23, 32, 51, 0.12);
 }
 
+/* Blueprint board skin */
+.editorShell {
+  background: var(--bp-page);
+  color: var(--bp-ink);
+  font-family: var(--bp-body);
+}
+
+.leftRail,
+.rightRail,
+.collapsedLeftPanel,
+.canvasToolbar,
+.toolbarGroup,
+.panelHeader,
+.paletteItem,
+.nodeToolbar,
+.edgeToolbar,
+.segmentedControl {
+  background: var(--bp-paper);
+  border-color: var(--bp-line);
+  border-radius: var(--bp-r);
+  box-shadow: none;
+}
+
+.workspace,
+.canvasPanel,
+.canvasPanel :global(.react-flow) {
+  background-color: var(--bp-page);
+  background-image:
+    linear-gradient(var(--bp-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--bp-grid) 1px, transparent 1px);
+  background-size: 26px 26px;
+}
+
+.canvasPanel :global(.react-flow) {
+  --xy-edge-stroke-selected-default: var(--bp-blue);
+  --xy-handle-background-color-default: var(--bp-blue);
+  --xy-handle-border-color-default: var(--bp-paper-2);
+}
+
+.canvasToolbar {
+  border: 1.5px solid var(--bp-blue);
+  color: var(--bp-ink);
+}
+
+.toolbarHomeLink,
+.collapsedLeftPanelButton,
+.iconButton,
+.iconButtonSelected,
+.iconButtonDanger,
+.segmentButton {
+  border-radius: var(--bp-r);
+}
+
+.toolbarTitle,
+.panelTitle,
+.paletteItemName {
+  color: var(--bp-ink);
+  font-family: var(--bp-head);
+}
+
+.panelKicker,
+.paletteItemType,
+.nodeType,
+.resourceNodeType,
+.toolbarStatus,
+.paletteSectionTitle {
+  color: var(--bp-muted);
+  font-family: var(--bp-mono);
+  letter-spacing: 0;
+}
+
+.paletteItem {
+  grid-template-columns: 30px minmax(0, 1fr) 16px;
+  min-height: 48px;
+}
+
+.paletteItem:hover,
+.paletteItem:focus-visible,
+.toolbarHomeLink:hover,
+.toolbarHomeLink:focus-visible,
+.collapsedLeftPanelButton:hover,
+.collapsedLeftPanelButton:focus-visible,
+.iconButton:hover,
+.iconButton:focus-visible,
+.iconButtonSelected,
+.segmentButtonActive {
+  background: var(--bp-blue-tint);
+  border-color: var(--bp-blue);
+  color: var(--bp-ink);
+}
+
+.nodeShell {
+  border-radius: var(--bp-r);
+}
+
+.nodeShellResource {
+  background: var(--bp-paper-2);
+  border: 1.5px solid var(--bp-blue);
+  box-shadow: none;
+  display: grid;
+  gap: 4px;
+  grid-template-rows: 28px minmax(0, 1fr) auto;
+  justify-items: center;
+  overflow: hidden;
+  padding: 8px;
+}
+
+.nodeShellResource::before,
+.nodeShellResource::after,
+.nodeShellArea::before,
+.nodeShellArea::after {
+  border: 1.5px solid var(--bp-blue);
+  content: "";
+  height: 8px;
+  pointer-events: none;
+  position: absolute;
+  width: 8px;
+}
+
+.nodeShellResource::before,
+.nodeShellArea::before {
+  border-bottom: 0;
+  border-right: 0;
+  left: -1px;
+  top: -1px;
+}
+
+.nodeShellResource::after,
+.nodeShellArea::after {
+  border-left: 0;
+  border-top: 0;
+  bottom: -1px;
+  right: -1px;
+}
+
+.nodeShellResource.nodeShellSelected {
+  border-color: var(--bp-blue);
+  box-shadow: 0 0 0 3px var(--bp-blue-tint);
+}
+
+.resourceNodeIconFrame {
+  height: 28px;
+  margin: 0;
+  min-height: 28px;
+  min-width: 28px;
+  width: 28px;
+}
+
+.resourceNodeLabel {
+  color: var(--bp-ink);
+  font-family: var(--bp-head);
+  font-size: 12px;
+  line-height: 1.2;
+  max-width: 100%;
+  overflow: hidden;
+  overflow-wrap: break-word;
+  text-overflow: ellipsis;
+  width: 100%;
+}
+
+.resourceNodeType {
+  color: var(--bp-blue-2);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1.1;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.resourceNodeBadge {
+  background: var(--bp-blue-tint);
+  border-color: var(--bp-line);
+  border-radius: 2px;
+  color: var(--bp-blue);
+  font-family: var(--bp-mono);
+}
+
+.nodeShellArea {
+  background:
+    linear-gradient(color-mix(in srgb, var(--bp-blue-tint) 20%, transparent), color-mix(in srgb, var(--bp-blue-tint) 20%, transparent)),
+    transparent;
+  border-color: var(--node-border-color, var(--bp-blue));
+  border-style: dashed;
+  border-width: 1.5px;
+}
+
+.areaNodeHeader {
+  background: var(--bp-paper-2);
+  border-color: var(--bp-line);
+  border-radius: var(--bp-r);
+  box-shadow: none;
+  color: var(--bp-ink);
+  font-family: var(--bp-mono);
+}
+
+.connectionHandle {
+  background: var(--bp-blue);
+  border-color: var(--bp-paper-2);
+}
+
+.manualResizeHandle,
+.resizeHandle {
+  background: var(--bp-paper-2);
+  border-color: var(--bp-blue);
+  border-radius: 2px;
+}
+
+.leftRailResizeHandle:hover::after,
+.leftRailResizeHandle:focus-visible::after,
+.leftRailResizeHandle:active::after,
+.rightRailResizeHandle:hover::after,
+.rightRailResizeHandle:focus-visible::after,
+.rightRailResizeHandle:active::after {
+  background: var(--bp-blue);
+  box-shadow: 0 0 0 3px var(--bp-blue-tint);
+}
+
 @keyframes diagramEdgeDash {
   from {
     stroke-dashoffset: 12;

@@ -19,8 +19,8 @@ export const BORDER_COLOR_SWATCHES = ["#8b98aa", "#2f6db3", "#2f8c55", "#d76613"
 export const EDGE_COLOR_SWATCHES = ["#506176", "#1f6feb", "#287d3c", "#d76613", "#b42318"] as const;
 
 const DEFAULT_RESOURCE_SIZE = {
-  width: 112,
-  height: 112
+  width: 124,
+  height: 96
 } as const;
 
 const DEFAULT_CONTAINER_SIZE = {

@@ -2878,3 +2878,295 @@
     grid-column: 1 / -1;
   }
 }
+
+/* Blueprint deployment gate skin */
+.deploymentPanel,
+.deploymentExpandedShell {
+  background: var(--bp-paper);
+  color: var(--bp-text);
+  font-family: var(--bp-body);
+}
+
+.deploymentHeader,
+.deploymentExpandedHeader,
+.deploymentSection {
+  border-color: var(--bp-line);
+}
+
+.projectEyebrow,
+.deploymentField,
+.deploymentSummary span,
+.deploymentApplyConfirm span,
+.deploymentDestroyConfirm span,
+.deploymentPreflightFindings span,
+.deploymentGateBadge,
+.deploymentGateFacts dt,
+.deploymentLogList {
+  font-family: var(--bp-mono);
+  letter-spacing: 0;
+}
+
+.deploymentHeader h2,
+.deploymentExpandedHeader h2,
+.deploymentSection h3,
+.deploymentGateHeader strong {
+  color: var(--bp-ink);
+  font-family: var(--bp-head);
+}
+
+.deploymentPrimaryButton,
+.deploymentSecondaryButton,
+.deploymentDangerButton,
+.deploymentExpandButton,
+.deploymentModeSwitch,
+.deploymentModeButton,
+.deploymentSummary,
+.deploymentPreflightSummary,
+.deploymentApplyConfirm,
+.deploymentDestroyConfirm,
+.deploymentResultRows,
+.deploymentResultRow,
+.deploymentGateCard {
+  border-radius: var(--bp-r);
+}
+
+.deploymentPrimaryButton {
+  background: var(--bp-blue);
+  border-color: var(--bp-blue);
+}
+
+.deploymentSecondaryButton,
+.deploymentExpandButton {
+  background: var(--bp-paper-2);
+  border-color: var(--bp-line);
+  color: var(--bp-ink);
+}
+
+.deploymentDangerButton {
+  background: var(--bp-high);
+  border-color: var(--bp-high);
+}
+
+.deploymentSecondaryButton:hover,
+.deploymentSecondaryButton:focus-visible,
+.deploymentExpandButton:hover,
+.deploymentExpandButton:focus-visible {
+  background: var(--bp-blue-tint);
+  border-color: var(--bp-blue);
+}
+
+.deploymentGateCard,
+.deploymentPreflightSummary {
+  background: var(--bp-paper-2);
+  border: 1.5px solid var(--bp-line);
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  position: relative;
+}
+
+.deploymentGateCard::before,
+.deploymentGateCard::after,
+.deploymentPreflightSummary::before,
+.deploymentPreflightSummary::after {
+  border: 1.5px solid var(--bp-blue);
+  content: "";
+  height: 9px;
+  pointer-events: none;
+  position: absolute;
+  width: 9px;
+}
+
+.deploymentGateCard::before,
+.deploymentPreflightSummary::before {
+  border-bottom: 0;
+  border-right: 0;
+  left: -1px;
+  top: -1px;
+}
+
+.deploymentGateCard::after,
+.deploymentPreflightSummary::after {
+  border-left: 0;
+  border-top: 0;
+  bottom: -1px;
+  right: -1px;
+}
+
+.deploymentGateCard[data-level="high"],
+.deploymentPreflightSummary[data-level="high"] {
+  background: var(--bp-high-tint);
+  border-color: var(--bp-high);
+  border-width: 2px;
+}
+
+.deploymentGateCard[data-level="medium"],
+.deploymentPreflightSummary[data-level="medium"] {
+  background: var(--bp-med-tint);
+  border-color: color-mix(in srgb, var(--bp-med) 42%, var(--bp-line));
+}
+
+.deploymentGateCard[data-level="low"],
+.deploymentPreflightSummary[data-level="low"] {
+  background: var(--bp-low-tint);
+  border-color: color-mix(in srgb, var(--bp-low) 42%, var(--bp-line));
+}
+
+.deploymentGateHeader {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+}
+
+.deploymentGateBadge {
+  border-radius: 2px;
+  display: inline-flex;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  padding: 4px 7px;
+}
+
+.deploymentGateCard[data-level="high"] .deploymentGateBadge,
+.deploymentPreflightSummary[data-level="high"] .deploymentGateBadge {
+  background: var(--bp-high);
+  color: #fff8f6;
+}
+
+.deploymentGateCard[data-level="medium"] .deploymentGateBadge,
+.deploymentPreflightSummary[data-level="medium"] .deploymentGateBadge {
+  background: var(--bp-med);
+  color: #fffaf0;
+}
+
+.deploymentGateCard[data-level="low"] .deploymentGateBadge,
+.deploymentPreflightSummary[data-level="low"] .deploymentGateBadge {
+  background: var(--bp-low);
+  color: #f5fff8;
+}
+
+.deploymentGateCard p,
+.deploymentPreflightSummary p {
+  color: var(--bp-text);
+}
+
+.deploymentGateFacts {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+}
+
+.deploymentGateFacts div:first-child {
+  grid-column: 1 / -1;
+}
+
+.deploymentGateFacts div,
+.deploymentPreflightStats span,
+.deploymentSummary,
+.deploymentApplyConfirm,
+.deploymentDestroyConfirm {
+  background: var(--bp-paper);
+  border-color: var(--bp-line);
+}
+
+.deploymentGateFacts dt,
+.deploymentGateFacts dd {
+  margin: 0;
+}
+
+.deploymentGateFacts div {
+  border: 1px solid var(--bp-line);
+  border-radius: var(--bp-r);
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding: 7px 8px;
+}
+
+.deploymentGateFacts dt {
+  color: var(--bp-faint);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.deploymentGateFacts dd {
+  color: var(--bp-ink);
+  font-size: 12px;
+  font-weight: 800;
+  overflow-wrap: normal;
+  word-break: keep-all;
+}
+
+.deploymentPreflightFindings li,
+.deploymentWarnings li {
+  border-left-width: 4px;
+  border-radius: var(--bp-r);
+}
+
+.deploymentPreflightFindings li[data-severity="high"],
+.deploymentWarnings li[data-level="high"] {
+  border-left-color: var(--bp-high);
+}
+
+.deploymentPreflightFindings li[data-severity="medium"],
+.deploymentWarnings li[data-level="medium"] {
+  border-left-color: var(--bp-med);
+}
+
+.deploymentPreflightFindings li[data-severity="low"],
+.deploymentWarnings li[data-level="low"] {
+  border-left-color: var(--bp-low);
+}
+
+.deploymentWarnings li {
+  background: var(--bp-paper-2);
+  border: 1px solid var(--bp-line);
+  padding: 7px 8px;
+}
+
+.deploymentModeSwitch {
+  background: var(--bp-paper-2);
+  border-color: var(--bp-line);
+}
+
+.deploymentModeButtonActive {
+  background: var(--bp-paper);
+  box-shadow: none;
+  color: var(--bp-blue);
+}
+
+.deploymentExpandedLogs,
+.deploymentLogList {
+  background: #18232c;
+}
+
+.deploymentLogList {
+  border-color: #3d5264;
+  border-radius: var(--bp-r);
+  color: #dce8ef;
+}
+
+.deploymentLogTokenResource {
+  color: #9bd2ff;
+}
+
+.deploymentLogTokenString {
+  color: #b7dfc5;
+}
+
+.deploymentLogTokenMetadata,
+.deploymentLogTokenOperation {
+  color: #f2cf86;
+}
+
+.deploymentLogTokenOutput {
+  color: #c9d8ff;
+}
+
+@media (max-width: 640px) {
+  .deploymentGateFacts {
+    grid-template-columns: 1fr;
+  }
+}

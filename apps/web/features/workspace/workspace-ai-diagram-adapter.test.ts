@@ -73,7 +73,7 @@ test("convertArchitectureJsonToDiagramJson creates board nodes and edges from an
           }
         },
         position: { x: 120, y: 80 },
-        size: { width: 400, height: 300 },
+        size: { width: 412, height: 284 },
         style: {
           borderColor: "#2f6db3",
           textColor: "#172033"
@@ -95,7 +95,7 @@ test("convertArchitectureJsonToDiagramJson creates board nodes and edges from an
           }
         },
         position: { x: 360, y: 220 },
-        size: { width: 112, height: 112 },
+        size: { width: 124, height: 96 },
         style: {
           borderColor: "#2f6db3",
           textColor: "#172033"
@@ -463,7 +463,7 @@ test("convertArchitectureJsonToDiagramJson lays out server and storage draft as 
   const azNode = nodeById.get("server-storage-az");
   assert.equal(regionNode?.size.width, 1160);
   assert.equal(regionNode?.size.height, 1080);
-  assert.equal(vpcNode?.size.width, 1000);
+  assert.equal(vpcNode?.size.width, 1012);
   assert.equal(vpcNode?.size.height, 798);
   assert.equal(azNode?.size.width, 780);
   assert.equal(azNode?.size.height, 620);

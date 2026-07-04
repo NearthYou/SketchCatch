@@ -26,12 +26,14 @@ export function ApiProjectCard({
   const href = getWorkspaceHref(project);
   const className =
     variant === "wide" ? "projectCard projectCardWide projectCardLink" : "projectCard projectCardLink";
+  const uiStatus = getProjectUiStatus(project, timestampLabel);
   const cardContent = (
     <>
       <ProjectArchitectureThumbnail projectId={project.id} projectName={project.name} />
 
       <div className="projectCardBody">
         <div className="projectCardTitle">
+          <span className={`projectStatusBadge projectStatusBadge${uiStatus}`}>{uiStatus}</span>
           <h3>{project.name}</h3>
         </div>
         {project.description?.trim() ? <p>{project.description}</p> : null}
@@ -79,6 +81,14 @@ export function ApiProjectCard({
       {cardContent}
     </Link>
   );
+}
+
+function getProjectUiStatus(project: Project, timestampLabel: string): "DEPLOYED" | "DRAFT" | "READY" {
+  if (timestampLabel.includes("배포")) {
+    return "DEPLOYED";
+  }
+
+  return project.description?.trim() ? "READY" : "DRAFT";
 }
 
 export function getWorkspaceHref(project: Project): string {

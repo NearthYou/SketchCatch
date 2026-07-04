@@ -2,6 +2,14 @@ import Link from "next/link";
 import { LandingHeaderActions } from "./landing-auth-actions";
 
 export default function HomePage() {
+  const journey = [
+    ["01", "Requirement Input"],
+    ["02", "Architecture Board"],
+    ["03", "IaC Preview"],
+    ["04", "Safety Gate"],
+    ["05", "Deployment History"]
+  ] as const;
+
   return (
     <main className="landingPage">
       <header className="siteHeader" aria-label="SketchCatch navigation">
@@ -15,70 +23,104 @@ export default function HomePage() {
         </Link>
 
         <nav className="siteNav" aria-label="Primary navigation">
-          <a href="#workspace">Workspace</a>
-          <a href="#safety">Safety</a>
-          <a href="#templates">Templates</a>
+          <a href="#journey">Journey</a>
+          <a href="#safety">Safety Gate</a>
+          <a href="#operations">Operations</a>
         </nav>
 
         <LandingHeaderActions />
       </header>
 
       <section className="landingHero" aria-labelledby="hero-title">
-        <div className="heroCanvas" aria-hidden="true">
-          <div className="gridPlane" />
-          <div className="floatingNote noteTerraform">
-            <strong>Terraform</strong>
-            <span>plan reviewed</span>
+        <div className="blueprintHeroDrawing" aria-hidden="true">
+          <div className="blueprintBoardFrame">
+            <div className="blueprintNode blueprintNodeInput">REQ</div>
+            <div className="blueprintNode blueprintNodeVpc">VPC</div>
+            <div className="blueprintNode blueprintNodeEc2">EC2</div>
+            <div className="blueprintNode blueprintNodeS3">S3</div>
+            <div className="blueprintNode blueprintNodeGate">HIGH GATE</div>
+            <span className="blueprintTrace blueprintTraceOne" />
+            <span className="blueprintTrace blueprintTraceTwo" />
+            <span className="blueprintTrace blueprintTraceThree" />
           </div>
-          <div className="floatingNote noteVpc">
-            <strong>VPC</strong>
-            <span>3 resources</span>
+          <div className="blueprintTitleblock">
+            <div>
+              <span>PRODUCT</span>
+              <strong>SketchCatch</strong>
+            </div>
+            <div>
+              <span>DIRECTION</span>
+              <strong>Terraform-first · multi-cloud-ready</strong>
+            </div>
+            <div>
+              <span>MVP ADAPTER</span>
+              <strong>AWS-first</strong>
+            </div>
+            <div>
+              <span>DEPLOYMENT</span>
+              <strong>Direct / Git-CI-CD</strong>
+            </div>
           </div>
-          <div className="selectionFrame">
-            <span className="selectionHandle selectionHandleTopLeft" />
-            <span className="selectionHandle selectionHandleTopRight" />
-            <span className="selectionHandle selectionHandleBottomLeft" />
-            <span className="selectionHandle selectionHandleBottomRight" />
-            <span className="resourceChip chipEc2">EC2</span>
-            <span className="resourceChip chipRds">RDS</span>
-            <span className="resourceChip chipS3">S3</span>
-          </div>
-          <div className="providerTile providerAws">AWS</div>
-          <div className="providerTile providerCost">$24</div>
-          <div className="commentBubble commentBuilder">Yoon | Builder</div>
-          <div className="commentBubble commentReviewer">AI safety check</div>
         </div>
 
         <div className="heroCopy">
-          <p className="eyebrow">Terraform-first AWS learning workspace</p>
+          <p className="eyebrow">Terraform-first, multi-cloud-ready IaC operations</p>
           <h1 id="hero-title">SketchCatch</h1>
           <p className="heroLead">
-            클라우드 인프라를 캔버스에 그리듯 설계하고, Terraform 구조와 비용/보안 위험을
-            배포 전에 함께 확인하는 안전한 IaC 학습 플랫폼입니다.
+            요구사항을 Practice Architecture로 정리하고 Terraform IaC Preview와 배포 전
+            안전 게이트를 거쳐 운영 기록까지 연결하는 IaC 운영 서비스입니다.
           </p>
           <div className="heroActions">
-            <Link className="primaryCta" href="/login">
-              시작하기
+            <Link className="primaryCta" href="/workspace/new">
+              새 아키텍처 시작
+            </Link>
+            <Link className="navButton navButtonGhost" href="/login">
+              로그인
             </Link>
           </div>
         </div>
       </section>
 
-      <section className="landingHighlights" aria-label="SketchCatch highlights">
-        <article className="highlightCard" id="workspace">
-          <span className="highlightKicker">01</span>
-          <h2>시각적 설계</h2>
-          <p>AWS 리소스 관계를 보드에서 빠르게 잡고 프로젝트로 저장합니다.</p>
+      <section className="landingHighlights blueprintJourney" id="journey" aria-label="SketchCatch service journey">
+        {journey.map(([step, label]) => (
+          <article className="highlightCard blueprintJourneyCard" key={label}>
+            <span className="highlightKicker">{step}</span>
+            <h2>{label}</h2>
+          </article>
+        ))}
+      </section>
+
+      <section className="blueprintSafetyBand" id="safety" aria-labelledby="safety-title">
+        <div>
+          <p className="eyebrow">Pre-Deployment Check</p>
+          <h2 id="safety-title">잠긴 상태가 의도된 상태로 보이는 Safety Gate</h2>
+          <p>
+            차단 사유, plan warning, pre-deployment finding을 HIGH/MED/LOW로 정리해
+            Apply와 Destroy 전 사용자가 멈춰야 하는 이유를 먼저 이해하게 합니다.
+          </p>
+        </div>
+        <div className="blueprintGatePreview" aria-hidden="true">
+          <span className="gateBadge gateBadgeHigh">HIGH</span>
+          <strong>missing_approval</strong>
+          <p>Plan approval required before direct deployment.</p>
+        </div>
+      </section>
+
+      <section className="landingHighlights blueprintOps" id="operations" aria-label="SketchCatch operations">
+        <article className="highlightCard">
+          <span className="highlightKicker">AWS-first</span>
+          <h2>Provider Adapter</h2>
+          <p>MVP는 AWS 연결과 Direct Deployment가 전면에 드러나지만 도메인은 공급자 중립으로 유지합니다.</p>
         </article>
-        <article className="highlightCard" id="safety">
-          <span className="highlightKicker">02</span>
-          <h2>사전 검토</h2>
-          <p>비용 사고와 공개 접근 위험을 배포 전에 확인하는 흐름을 둡니다.</p>
+        <article className="highlightCard">
+          <span className="highlightKicker">Terraform</span>
+          <h2>IaC Preview</h2>
+          <p>Board 변경을 Terraform 산출물과 비교하고 배포 기준 저장 후 실행 단계로 넘깁니다.</p>
         </article>
-        <article className="highlightCard" id="templates">
-          <span className="highlightKicker">03</span>
-          <h2>재사용 템플릿</h2>
-          <p>검토된 실습 구조를 템플릿으로 저장해 반복 학습에 활용합니다.</p>
+        <article className="highlightCard">
+          <span className="highlightKicker">History</span>
+          <h2>Deployment Records</h2>
+          <p>실행 결과, 로그, 출력, 정리 상태를 같은 운영 화면 안에서 확인합니다.</p>
         </article>
       </section>
     </main>

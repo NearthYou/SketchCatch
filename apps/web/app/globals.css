@@ -1,4 +1,97 @@
+@font-face {
+  font-display: swap;
+  font-family: "Spoqa Han Sans Neo";
+  font-style: normal;
+  font-weight: 300;
+  src: url("/fonts/spoqa/SpoqaHanSansNeo-Light.woff2") format("woff2");
+}
+
+@font-face {
+  font-display: swap;
+  font-family: "Spoqa Han Sans Neo";
+  font-style: normal;
+  font-weight: 400;
+  src: url("/fonts/spoqa/SpoqaHanSansNeo-Regular.woff2") format("woff2");
+}
+
+@font-face {
+  font-display: swap;
+  font-family: "Spoqa Han Sans Neo";
+  font-style: normal;
+  font-weight: 500;
+  src: url("/fonts/spoqa/SpoqaHanSansNeo-Medium.woff2") format("woff2");
+}
+
+@font-face {
+  font-display: swap;
+  font-family: "Spoqa Han Sans Neo";
+  font-style: normal;
+  font-weight: 700;
+  src: url("/fonts/spoqa/SpoqaHanSansNeo-Bold.woff2") format("woff2");
+}
+
+@font-face {
+  font-display: swap;
+  font-family: "Space Grotesk";
+  font-style: normal;
+  font-weight: 400 700;
+  src: url("/fonts/space-grotesk/SpaceGrotesk-01.woff2") format("woff2");
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+
+@font-face {
+  font-display: swap;
+  font-family: "Space Grotesk";
+  font-style: normal;
+  font-weight: 400 700;
+  src: url("/fonts/space-grotesk/SpaceGrotesk-02.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+  font-display: swap;
+  font-family: "Space Grotesk";
+  font-style: normal;
+  font-weight: 400 700;
+  src: url("/fonts/space-grotesk/SpaceGrotesk-03.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-display: swap;
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 400 700;
+  src: url("/fonts/jetbrains-mono/JetBrainsMono-06.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
 :root {
+  --bp-paper: #eceff1;
+  --bp-page: #dde2e6;
+  --bp-paper-2: #f7f9fa;
+  --bp-grid: #d3dde2;
+  --bp-grid-bold: #c3d0d7;
+  --bp-line: #b7c3cc;
+  --bp-line-2: #cdd7dd;
+  --bp-ink: #1a2b38;
+  --bp-text: #33505f;
+  --bp-muted: #5c7383;
+  --bp-faint: #8697a3;
+  --bp-blue: #21455f;
+  --bp-blue-2: #2f6088;
+  --bp-blue-tint: #dbe6ee;
+  --bp-high: #a02f26;
+  --bp-high-tint: #f1dcd8;
+  --bp-med: #8a6a1c;
+  --bp-med-tint: #efe6cd;
+  --bp-low: #3f6b57;
+  --bp-low-tint: #dde9e2;
+  --bp-head: "Space Grotesk", "Spoqa Han Sans Neo", sans-serif;
+  --bp-body: "Spoqa Han Sans Neo", ui-sans-serif, system-ui, sans-serif;
+  --bp-kr: "Spoqa Han Sans Neo", ui-sans-serif, system-ui, sans-serif;
+  --bp-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  --bp-r: 3px;
   --surface-primary: #f7f9fc;
   --surface-secondary: #ffffff;
   --surface-elevated: #eef4fb;
@@ -24,14 +117,7 @@
   --space-12: 48px;
   color: var(--text-primary);
   background: var(--surface-primary);
-  font-family:
-    Inter,
-    ui-sans-serif,
-    system-ui,
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    sans-serif;
+  font-family: var(--bp-body);
   letter-spacing: 0;
 }
 
@@ -40,12 +126,27 @@
 }
 
 html {
-  background: #07080d;
+  background: var(--bp-page);
 }
 
 body {
+  background: var(--bp-page);
+  color: var(--bp-text);
+  font-family: var(--bp-body);
+  overflow-wrap: break-word;
+  text-rendering: optimizeLegibility;
+  word-break: keep-all;
   margin: 0;
   min-width: 320px;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--bp-head);
+  letter-spacing: 0;
+  text-wrap: balance;
 }
 
 a {
@@ -5591,5 +5692,714 @@ nextjs-portal {
   .selectionFrame,
   .resourceChip {
     animation: none;
+  }
+}
+
+/* Blueprint redesign overrides */
+.landingPage,
+.authPage,
+.dashboardShell {
+  background-color: var(--bp-page);
+  background-image:
+    linear-gradient(var(--bp-grid-bold) 1px, transparent 1px),
+    linear-gradient(90deg, var(--bp-grid-bold) 1px, transparent 1px);
+  background-size: 130px 130px;
+  color: var(--bp-text);
+  font-family: var(--bp-body);
+}
+
+.siteHeader {
+  background: color-mix(in srgb, var(--bp-page) 86%, transparent);
+  border-bottom: 1px solid var(--bp-line);
+  padding: 16px 36px;
+  position: sticky;
+}
+
+.brandLockup,
+.authBrand,
+.dashboardBrand {
+  color: var(--bp-ink);
+  font-family: var(--bp-head);
+  font-weight: 700;
+}
+
+.brandMark span,
+.dashboardBrandMark span {
+  border-radius: var(--bp-r);
+}
+
+.brandMark span:nth-child(1),
+.dashboardBrandMark span:nth-child(1),
+.brandMark span:nth-child(2),
+.dashboardBrandMark span:nth-child(2),
+.brandMark span:nth-child(3),
+.dashboardBrandMark span:nth-child(3) {
+  background: var(--bp-blue);
+}
+
+.siteNav {
+  color: var(--bp-muted);
+}
+
+.navButton,
+.primaryCta,
+.authSubmit,
+.dashboardSidebarAction,
+.dashboardTopbarAction,
+.dashboardSecondaryButton,
+.dashboardDangerButton {
+  border-radius: var(--bp-r);
+  font-family: var(--bp-head);
+  font-weight: 600;
+  min-width: 0;
+}
+
+.navButtonGhost,
+.dashboardSecondaryButton {
+  background: var(--bp-paper-2);
+  border-color: var(--bp-line);
+  color: var(--bp-ink);
+}
+
+.navButtonSolid,
+.primaryCta,
+.authSubmit,
+.dashboardSidebarAction,
+.dashboardTopbarAction {
+  background: var(--bp-blue);
+  border-color: var(--bp-blue);
+  color: #eef4f8;
+}
+
+.dashboardDangerButton {
+  background: var(--bp-high);
+  border-color: var(--bp-high);
+  color: #fff8f6;
+}
+
+.landingHero {
+  align-items: center;
+  display: grid;
+  grid-template-columns: minmax(0, 0.92fr) minmax(360px, 1.08fr);
+  min-height: min(760px, calc(100vh - 56px));
+  overflow: hidden;
+  padding: 42px clamp(20px, 4vw, 56px) 40px;
+}
+
+.heroCopy {
+  align-items: flex-start;
+  max-width: 780px;
+  text-align: left;
+}
+
+.eyebrow,
+.dashboardEyebrow,
+.dashboardPanelKicker {
+  color: var(--bp-blue);
+  font-family: var(--bp-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.landingHero h1 {
+  color: var(--bp-ink);
+  font-size: clamp(3.8rem, 7vw, 6.8rem);
+  line-height: 0.88;
+}
+
+.heroLead {
+  color: var(--bp-text);
+  font-size: clamp(1.04rem, 1.6vw, 1.24rem);
+  line-height: 1.7;
+}
+
+.heroActions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 26px;
+}
+
+.blueprintHeroDrawing {
+  align-self: stretch;
+  display: grid;
+  gap: 16px;
+  grid-template-rows: minmax(360px, 1fr) auto;
+  min-height: 520px;
+  position: relative;
+}
+
+.blueprintBoardFrame,
+.authAsideSchematic {
+  background-color: var(--bp-paper);
+  background-image:
+    linear-gradient(var(--bp-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--bp-grid) 1px, transparent 1px);
+  background-size: 26px 26px;
+  border: 1px solid var(--bp-line);
+  border-radius: var(--bp-r);
+  position: relative;
+}
+
+.blueprintBoardFrame::before,
+.blueprintBoardFrame::after,
+.authAsideSchematic::before,
+.authAsideSchematic::after,
+.dashboardPanel::before,
+.projectCard::before {
+  border: 1.5px solid var(--bp-blue);
+  content: "";
+  height: 10px;
+  pointer-events: none;
+  position: absolute;
+  width: 10px;
+}
+
+.blueprintBoardFrame::before,
+.authAsideSchematic::before,
+.dashboardPanel::before,
+.projectCard::before {
+  border-bottom: 0;
+  border-right: 0;
+  left: -1px;
+  top: -1px;
+}
+
+.blueprintBoardFrame::after,
+.authAsideSchematic::after,
+.dashboardPanel::after,
+.projectCard::after {
+  border-left: 0;
+  border-top: 0;
+  bottom: -1px;
+  right: -1px;
+}
+
+.blueprintNode,
+.authAsideNode {
+  align-items: center;
+  background: var(--bp-paper-2);
+  border: 1.5px solid var(--bp-blue);
+  border-radius: var(--bp-r);
+  color: var(--bp-ink);
+  display: inline-flex;
+  font-family: var(--bp-mono);
+  font-size: 12px;
+  font-weight: 700;
+  justify-content: center;
+  min-height: 42px;
+  padding: 8px 12px;
+  position: absolute;
+}
+
+.blueprintNodeInput {
+  left: 9%;
+  top: 16%;
+}
+
+.blueprintNodeVpc {
+  height: 174px;
+  left: 27%;
+  top: 25%;
+  width: 42%;
+}
+
+.blueprintNodeEc2 {
+  left: 37%;
+  top: 40%;
+}
+
+.blueprintNodeS3 {
+  left: 54%;
+  top: 55%;
+}
+
+.blueprintNodeGate {
+  border-color: var(--bp-high);
+  border-width: 2px;
+  color: var(--bp-high);
+  right: 9%;
+  top: 30%;
+}
+
+.blueprintTrace,
+.authAsideLine {
+  background: var(--bp-blue);
+  height: 1.5px;
+  opacity: 0.7;
+  position: absolute;
+}
+
+.blueprintTraceOne {
+  left: 18%;
+  top: 23%;
+  width: 13%;
+}
+
+.blueprintTraceTwo {
+  left: 48%;
+  top: 48%;
+  width: 22%;
+}
+
+.blueprintTraceThree {
+  right: 18%;
+  top: 38%;
+  width: 12%;
+}
+
+.blueprintTitleblock,
+.authAsideTitleblock {
+  background: var(--bp-paper-2);
+  border: 1.5px solid var(--bp-blue);
+  display: grid;
+  font-family: var(--bp-mono);
+}
+
+.blueprintTitleblock {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.blueprintTitleblock div,
+.authAsideTitleblock div {
+  border-bottom: 1px solid var(--bp-line-2);
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding: 8px 10px;
+}
+
+.blueprintTitleblock div:nth-last-child(-n + 2) {
+  border-bottom: 0;
+}
+
+.blueprintTitleblock span,
+.authAsideTitleblock span {
+  color: var(--bp-faint);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.blueprintTitleblock strong,
+.authAsideTitleblock strong {
+  color: var(--bp-ink);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.landingHighlights {
+  gap: 12px;
+  max-width: 1180px;
+  padding: 10px 36px 42px;
+}
+
+.highlightCard {
+  background: var(--bp-paper);
+  border: 1px solid var(--bp-line);
+  border-radius: var(--bp-r);
+  box-shadow: none;
+  color: var(--bp-text);
+  min-height: 132px;
+  position: relative;
+}
+
+.highlightKicker {
+  color: var(--bp-blue);
+  font-family: var(--bp-mono);
+  letter-spacing: 0;
+}
+
+.highlightCard h2,
+.blueprintSafetyBand h2 {
+  color: var(--bp-ink);
+  font-family: var(--bp-head);
+}
+
+.highlightCard p,
+.blueprintSafetyBand p {
+  color: var(--bp-muted);
+}
+
+.blueprintJourney {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.blueprintJourneyCard {
+  min-height: 108px;
+}
+
+.blueprintSafetyBand {
+  align-items: center;
+  background: var(--bp-paper);
+  border-block: 1px solid var(--bp-line);
+  display: grid;
+  gap: 24px;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.42fr);
+  margin: 0;
+  padding: 36px clamp(20px, 5vw, 72px);
+}
+
+.blueprintGatePreview {
+  background: var(--bp-high-tint);
+  border: 2px solid var(--bp-high);
+  border-radius: var(--bp-r);
+  color: var(--bp-high);
+  display: grid;
+  gap: 8px;
+  padding: 18px;
+}
+
+.gateBadge {
+  border-radius: 2px;
+  display: inline-flex;
+  font-family: var(--bp-mono);
+  font-size: 11px;
+  font-weight: 700;
+  width: fit-content;
+}
+
+.authPage {
+  align-items: center;
+  display: flex;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 28px;
+}
+
+.authBlueprintShell {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(320px, 440px) minmax(300px, 440px);
+  width: min(100%, 940px);
+}
+
+.authBlueprintShellWide {
+  grid-template-columns: minmax(340px, 560px) minmax(300px, 420px);
+  width: min(100%, 1060px);
+}
+
+.authPanel,
+.authPanelWide,
+.authBlueprintAside {
+  background: var(--bp-paper);
+  border: 1px solid var(--bp-line);
+  border-radius: var(--bp-r);
+  box-shadow: none;
+}
+
+.authPanel {
+  color: var(--bp-text);
+  padding: 26px;
+}
+
+.authBlueprintAside {
+  align-content: space-between;
+  display: grid;
+  gap: 18px;
+  min-height: 520px;
+  overflow: hidden;
+  padding: 18px;
+}
+
+.authAsideSchematic {
+  min-height: 270px;
+}
+
+.authAsideNodeInput {
+  left: 10%;
+  top: 18%;
+}
+
+.authAsideNodeBoard {
+  height: 118px;
+  left: 32%;
+  top: 28%;
+  width: 44%;
+}
+
+.authAsideNodePlan {
+  left: 18%;
+  top: 68%;
+}
+
+.authAsideNodeGate {
+  border-color: var(--bp-high);
+  color: var(--bp-high);
+  right: 10%;
+  top: 58%;
+}
+
+.authAsideLineOne {
+  left: 23%;
+  top: 26%;
+  width: 18%;
+}
+
+.authAsideLineTwo {
+  left: 45%;
+  top: 70%;
+  width: 18%;
+}
+
+.authAsideLineThree {
+  right: 23%;
+  top: 66%;
+  width: 14%;
+}
+
+.authBlueprintAside p {
+  color: var(--bp-ink);
+  font-family: var(--bp-head);
+  font-size: 1.25rem;
+  font-weight: 700;
+  line-height: 1.35;
+  margin: 0;
+}
+
+.authIntro h1 {
+  color: var(--bp-ink);
+}
+
+.authIntro p,
+.authSwitch,
+.authForm label,
+.authHelpText {
+  color: var(--bp-muted);
+}
+
+.authIntro p:not(.eyebrow) {
+  color: var(--bp-text);
+}
+
+.authDivider {
+  color: var(--bp-muted);
+}
+
+.authDivider::before,
+.authDivider::after {
+  background: var(--bp-line);
+}
+
+.authForm .authCheckboxLabel,
+.authForm .authCheckboxLabel span,
+.authFormActions a,
+.authSwitch a {
+  color: var(--bp-blue);
+}
+
+.authForm input {
+  background: var(--bp-paper-2);
+  border-color: var(--bp-line);
+  border-radius: var(--bp-r);
+  color: var(--bp-ink);
+}
+
+.authSocialButton {
+  background: var(--bp-paper-2);
+  border-color: var(--bp-line);
+  border-radius: var(--bp-r);
+  color: var(--bp-ink);
+}
+
+.authSocialButtonNaver,
+.authSocialButtonKakao,
+.authSocialButtonGithub {
+  background: var(--bp-paper-2);
+}
+
+.authMessageError {
+  background: var(--bp-high-tint);
+  border-color: color-mix(in srgb, var(--bp-high) 34%, var(--bp-line));
+  color: var(--bp-high);
+}
+
+.authMessageSuccess {
+  background: var(--bp-low-tint);
+  border-color: color-mix(in srgb, var(--bp-low) 34%, var(--bp-line));
+  color: var(--bp-low);
+}
+
+.dashboardShell {
+  --dashboard-bg: var(--bp-page);
+  --dashboard-surface: var(--bp-paper);
+  --dashboard-surface-strong: var(--bp-paper-2);
+  --dashboard-surface-soft: color-mix(in srgb, var(--bp-blue-tint) 42%, transparent);
+  --dashboard-border: var(--bp-line);
+  --dashboard-border-strong: var(--bp-blue);
+  --dashboard-text: var(--bp-ink);
+  --dashboard-muted: var(--bp-muted);
+  --dashboard-subtle: var(--bp-faint);
+  --dashboard-blue: var(--bp-blue);
+  --dashboard-purple: var(--bp-blue);
+  --dashboard-teal: var(--bp-low);
+  --dashboard-orange: var(--bp-med);
+}
+
+.dashboardSidebar,
+.dashboardTopbar,
+.dashboardPanel,
+.projectCard,
+.dashboardTable,
+.projectCardActionMenu {
+  background: var(--bp-paper);
+  border-color: var(--bp-line);
+  border-radius: var(--bp-r);
+  box-shadow: none;
+  color: var(--bp-text);
+  position: relative;
+}
+
+.dashboardSidebar {
+  border-right: 1px solid var(--bp-line);
+}
+
+.dashboardNavItem {
+  border-radius: var(--bp-r);
+  color: var(--bp-muted);
+}
+
+.dashboardNavItem:hover,
+.dashboardNavItemActive {
+  background: var(--bp-blue-tint);
+  border-color: var(--bp-blue);
+  color: var(--bp-ink);
+}
+
+.dashboardPageHeader h1,
+.dashboardPanelHeader h2,
+.projectCardTitle h3 {
+  color: var(--bp-ink);
+  font-family: var(--bp-head);
+}
+
+.projectCardTitle {
+  align-items: flex-start;
+  display: grid;
+  gap: 6px;
+}
+
+.projectStatusBadge {
+  border-radius: 2px;
+  display: inline-flex;
+  font-family: var(--bp-mono);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 4px 7px;
+  width: fit-content;
+}
+
+.projectStatusBadgeDRAFT {
+  background: var(--bp-blue-tint);
+  color: var(--bp-blue);
+}
+
+.projectStatusBadgeREADY,
+.projectStatusBadgeDEPLOYED {
+  background: var(--bp-low-tint);
+  color: var(--bp-low);
+}
+
+.projectArchitecturePreview {
+  background-color: var(--bp-paper-2);
+  background-image:
+    linear-gradient(var(--bp-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--bp-grid) 1px, transparent 1px);
+  background-size: 18px 18px;
+  border-color: var(--bp-line);
+  border-radius: var(--bp-r);
+}
+
+.projectArchitectureNodeBox {
+  fill: var(--bp-paper);
+  stroke: var(--bp-blue);
+}
+
+.projectArchitectureNodeFrame {
+  fill: color-mix(in srgb, var(--bp-blue-tint) 44%, transparent);
+  stroke: var(--bp-blue);
+  stroke-dasharray: 8 5;
+}
+
+.projectArchitectureNodeAccent {
+  fill: var(--bp-blue);
+}
+
+.projectArchitectureEdge {
+  stroke: var(--bp-blue);
+}
+
+.dashboardShell .textInput,
+.dashboardShell .selectInput,
+.dashboardShell .textArea,
+.dashboardShell .codeArea,
+.dashboardSearch {
+  background: var(--bp-paper-2);
+  border-color: var(--bp-line);
+  border-radius: var(--bp-r);
+  color: var(--bp-ink);
+}
+
+@media (max-width: 980px) {
+  .landingHero,
+  .blueprintSafetyBand,
+  .authBlueprintShell,
+  .authBlueprintShellWide {
+    grid-template-columns: 1fr;
+  }
+
+  .blueprintHeroDrawing {
+    min-height: 420px;
+    order: 2;
+  }
+
+  .heroCopy {
+    max-width: 100%;
+  }
+
+  .authBlueprintAside {
+    min-height: 420px;
+  }
+
+  .blueprintJourney {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .siteHeader {
+    grid-template-columns: auto auto;
+    padding: 14px 18px;
+  }
+
+  .landingHero {
+    padding: 28px 18px 26px;
+  }
+
+  .landingHero h1 {
+    font-size: clamp(2.8rem, 13vw, 3.35rem);
+  }
+
+  .blueprintHeroDrawing,
+  .authBlueprintAside {
+    display: none;
+  }
+
+  .landingHighlights,
+  .blueprintJourney,
+  .blueprintOps {
+    grid-template-columns: 1fr;
+    padding-inline: 18px;
+  }
+
+  .blueprintSafetyBand {
+    padding: 26px 18px;
+  }
+
+  .authPage {
+    padding: 16px;
   }
 }

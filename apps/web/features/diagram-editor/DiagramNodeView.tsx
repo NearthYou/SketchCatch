@@ -236,6 +236,7 @@ export function DiagramNodeView({ data, id, isConnectable, selected }: NodeProps
             <div className={styles.resourceNodeLabel} style={{ color: textColor }}>
               {node.label}
             </div>
+            <div className={styles.resourceNodeType}>{node.type}</div>
             {isDataNode ? <div className={styles.resourceNodeBadge}>Data</div> : null}
           </>
         ) : (

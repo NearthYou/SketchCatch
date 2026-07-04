@@ -558,3 +558,93 @@ div.resourceIcon,
     grid-row: 2;
   }
 }
+
+/* Blueprint inspector skin */
+.panel {
+  background: var(--bp-paper);
+  border-left: 1px solid var(--bp-line);
+  color: var(--bp-text);
+  font-family: var(--bp-body);
+}
+
+.resourceIcon,
+.emptyIcon,
+.input,
+.readonlyValue,
+.optionPill,
+.advancedOptionButton,
+.regionControl,
+.addButton,
+.removeBlockButton,
+.iconButton,
+.nestedBlock {
+  border-radius: var(--bp-r);
+}
+
+div.resourceIcon,
+.emptyIcon {
+  background: var(--bp-blue-tint);
+  border-color: var(--bp-line);
+  color: var(--bp-blue);
+}
+
+.headerText h2,
+.emptyState h2,
+.sectionHeader h3,
+.fieldLabel,
+.advancedOptionLabel,
+.regionOptionLabel {
+  color: var(--bp-ink);
+  font-family: var(--bp-head);
+}
+
+.section {
+  border-top-color: var(--bp-line);
+}
+
+.input,
+.readonlyValue,
+.optionPill,
+.advancedOptionButton,
+.regionControl,
+.nestedBlock {
+  background: var(--bp-paper-2);
+  border-color: var(--bp-line);
+  color: var(--bp-text);
+}
+
+.input:focus,
+.advancedOptionButton:hover,
+.advancedOptionButton:focus-visible,
+.regionControl:focus-visible {
+  border-color: var(--bp-blue);
+  box-shadow: 0 0 0 3px var(--bp-blue-tint);
+}
+
+.addButton {
+  background: var(--bp-blue-tint);
+  border-color: var(--bp-line);
+  color: var(--bp-blue);
+}
+
+.removeBlockButton,
+.iconButtonDanger,
+.errorText,
+.requiredMark {
+  color: var(--bp-high);
+}
+
+.removeBlockButton,
+.iconButtonDanger {
+  background: var(--bp-high-tint);
+  border-color: color-mix(in srgb, var(--bp-high) 30%, var(--bp-line));
+}
+
+.inlineEmpty,
+.advancedOptionMeta,
+.advancedOptionDescription,
+.checkboxRow span,
+.regionOptionCode,
+.emptyState p {
+  color: var(--bp-muted);
+}

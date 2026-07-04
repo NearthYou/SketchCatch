@@ -12,8 +12,8 @@ test("resourceCatalog sizes area defaults below the Region hierarchy root", () =
 });
 
 test("resourceCatalog keeps regular network resources at icon node size", () => {
-  assert.deepEqual(getResourceSize("aws_internet_gateway"), { width: 112, height: 112 });
-  assert.deepEqual(getResourceSize("aws_route_table_association"), { width: 112, height: 112 });
+  assert.deepEqual(getResourceSize("aws_internet_gateway"), { width: 124, height: 96 });
+  assert.deepEqual(getResourceSize("aws_route_table_association"), { width: 124, height: 96 });
 });
 
 function getResourceSize(resourceType: string) {

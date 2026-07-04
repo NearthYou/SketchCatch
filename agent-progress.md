@@ -15,6 +15,29 @@
 
 ## 세션 레코드
 
+### 2026-07-04 - Blueprint 리디자인 스펙 문서화
+
+- Goal: grill-me로 확정한 Blueprint 리디자인 계획을 `docs/sw` 구현 기준 문서로 저장한다.
+- Completed:
+  - `docs/sw/spec2.md`에 전체 Blueprint 리디자인 스펙을 작성했다.
+  - `docs/sw/plan2.md`에 우선순위 기반 구현 마일스톤을 작성했다.
+  - `docs/sw/agents2.md`에 작업 규범을 30줄 이내로 작성했다.
+  - `docs/sw/README.md`에 새 문서 3종의 빠른 읽기 링크와 담당 문서 표 항목을 추가했다.
+- Verification run:
+  - `node scripts/check-harness.mjs` - passed before editing
+  - `pnpm harness:check` - passed after editing
+  - `git diff --check` - passed after editing, with LF-to-CRLF working-copy warnings for `agent-progress.md` and `docs/sw/README.md`
+  - `docs/sw/agents2.md` line count check - passed with 30 lines
+- Evidence recorded:
+  - 문서 변경만 수행했으며 code/infrastructure 파일은 수정하지 않았다.
+  - 실제 Terraform apply/destroy, cloud mutation, Git/CI/CD handoff는 실행하지 않았다.
+  - `feature_list.json`의 `HARNESS-007` 상태는 변경하지 않았다.
+- Known risks:
+  - 구현 작업은 아직 시작하지 않았다.
+  - 폰트 자산 다운로드, Board/Safety Gate UI 적용, 브라우저 스모크는 `docs/sw/plan2.md`의 후속 마일스톤이다.
+- Next best action:
+  - `docs/sw/plan2.md`의 마일스톤 1부터 구현을 시작한다.
+
 ### 2026-07-02 - 중복 상세 기획 문서 정리
 
 - Goal: 별도 재구성본을 제거하고 상세 기획서는 canonical 상세 기획서 하나로 유지한다.
@@ -173,3 +196,35 @@
   - The broad `pnpm build` temporarily touched `apps/web/next-env.d.ts`; the generated content change was restored and the final dirty list is scoped to #128 files.
 - Next best action:
   - Parent agent should review the focused diff and open the PR. Worker 1-1 should not expand into issue 1-2 or 1-3 from this branch.
+
+### 2026-07-04 - Blueprint 전체 리디자인 적용
+
+- Goal: `docs/sw/spec2.md`와 `docs/sw/plan2.md` 기준으로 SketchCatch 웹 화면 전체를 Blueprint 언어로 맞추고, Architecture Board와 Deployment Safety Gate 완성도를 우선 보강한다.
+- Completed:
+  - `docs/sw/spec2.md`, `docs/sw/plan2.md`, `docs/sw/agents2.md`를 작성하고 `docs/sw/README.md`에 연결했다.
+  - Spoqa Han Sans Neo를 프로젝트 기본 폰트로 self-hosting하고, Space Grotesk/JetBrains Mono도 로컬 폰트 자산으로 추가했다. 런타임 Google Fonts fetch는 사용하지 않는다.
+  - `/` 랜딩을 Requirement Input -> Architecture Board -> IaC Preview -> Safety Gate -> Deployment History 여정 중심 Blueprint 화면으로 재구성했다.
+  - `/login`, `/signup`, `/password-reset`의 라우트와 검증 흐름은 유지하고 좌측 폼 + 우측 Blueprint aside 구조로 통일했다.
+  - Dashboard 카드 썸네일과 상태 배지를 Blueprint 미니 도면/비파괴 UI 상태로 정리했다. 새 API 계약은 추가하지 않았다.
+  - Architecture Board의 팔레트, 캔버스, 툴바, 노드, Parameter panel을 Blueprint 스타일로 맞추고 새 일반 리소스 기본 크기를 124x96으로 조정했다. 영역 컨테이너 크기와 기존 저장 size는 유지한다.
+  - Deployment Panel에 `isBlocked`, `blockedBy`, `blockedReason`, `planSummary.warnings`, Pre-Deployment findings 기반 HIGH/MED/LOW gate UI를 추가했다. `getDeploymentActionState`는 변경하지 않았다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web lint` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web typecheck` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web test` - passed
+  - `pnpm harness:check` - passed after implementation before browser smoke
+  - `pnpm lint` - passed
+  - `pnpm typecheck` - passed
+  - `pnpm build` - passed
+  - Browser smoke with Playwright temp install: `/`, `/login`, `/signup`, `/mypage`, `/workspace/new`, `/workspace`, EC2 node drop, and mocked Deployment Gate record passed on desktop/mobile checks.
+- Evidence recorded:
+  - Browser screenshots confirmed no clipped landing H1, readable auth forms, EC2 node render at the new tile size, and a HIGH deployment gate card without broken `missing_approval` wrapping.
+  - Local dev server remained available at `http://localhost:3000` during visual verification.
+  - Known local API noise during browser smoke was limited to missing local backend endpoints such as `/api/auth/refresh` and `/api/terraform/generate`; mocked responses were used only for visual Safety Gate verification.
+  - No real AWS apply/destroy, cloud mutation, Git/CI/CD handoff, dependency lockfile rewrite, or `feature_list.json` update was performed.
+- Known risks:
+  - Browser smoke used a temporary Playwright install under `%TEMP%` because the bundled package lacked `playwright-core`.
+  - Real authenticated `/mypage` and `/workspace/new` content still depends on a running backend/session; unauthenticated smoke correctly redirected to `/login`.
+- Next best action:
+  - Review the Blueprint visual diff on the running dev server and decide whether to add a stable visual smoke script later.
