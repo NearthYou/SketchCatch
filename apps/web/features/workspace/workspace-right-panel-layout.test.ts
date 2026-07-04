@@ -4,10 +4,13 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 const componentSource = readWorkspaceFile("WorkspaceRightPanel.tsx");
-const aiPanelSource = readWorkspaceFile("WorkspaceAiPanel.tsx");
+const aiChatDockSource = readWorkspaceFile("WorkspaceAiChatDock.tsx");
 const deploymentPanelSource = readWorkspaceFile("DeploymentPanel.tsx");
+const diagramEditorSource = readFeatureFile("../diagram-editor/DiagramEditor.tsx");
 const terraformLeaveDialogSource = readWorkspaceFile("TerraformLeaveDialog.tsx");
 const terraformPanelSource = readWorkspaceFile("TerraformCodePanel.tsx");
+const projectDraftManagerSource = readWorkspaceFile("ProjectWorkspaceDraftManager.tsx");
+const workspaceDraftManagerSource = readWorkspaceFile("WorkspaceDraftManager.tsx");
 const stylesSource = readWorkspaceFile("workspace.module.css");
 const diagramEditorStylesSource = readFeatureFile(
   "../diagram-editor/diagram-editor.module.css"
@@ -81,19 +84,45 @@ test("deployment mode switch is pinned after the scrollable content area", () =>
 test("deployment toolbar action is grouped with the other panel mode buttons", () => {
   const toolbarIndex = componentSource.indexOf("className={styles.rightPanelToolbar}");
   const modeToggleIndex = componentSource.indexOf("className={styles.panelModeToggle}", toolbarIndex);
-  const aiButtonIndex = componentSource.indexOf('title="AI"', modeToggleIndex);
-  const deployButtonIndex = componentSource.indexOf('title="Deploy"', aiButtonIndex);
+  const deployButtonIndex = componentSource.indexOf('title="Deploy"', modeToggleIndex);
   const toolbarContentEndIndex = componentSource.indexOf(
     "<div className={styles.rightPanelView}",
     modeToggleIndex
   );
 
   assert.ok(modeToggleIndex > toolbarIndex);
-  assert.ok(deployButtonIndex > aiButtonIndex);
+  assert.ok(deployButtonIndex > modeToggleIndex);
   assert.ok(deployButtonIndex < toolbarContentEndIndex);
   assert.match(componentSource, /activeView === "deployment" \? styles\.panelModeButtonActive : styles\.panelModeButton/);
+  assert.doesNotMatch(componentSource, /title="AI"/);
+  assert.doesNotMatch(componentSource, /activeView === "ai"/);
+  assert.doesNotMatch(componentSource, /WorkspaceAiPanel/);
   assert.doesNotMatch(componentSource, /panelDeployButton/);
   assert.doesNotMatch(stylesSource, /\.panelDeployButton\s*\{/);
+});
+
+test("workspace AI opens from a floating chat dock instead of the right panel", () => {
+  assert.match(diagramEditorSource, /floatingPanel\?\.\(panelContext\)/);
+  assert.match(projectDraftManagerSource, /floatingPanel=\{\(context\) => \(/);
+  assert.match(workspaceDraftManagerSource, /floatingPanel=\{\(context\) => \(/);
+  assert.match(projectDraftManagerSource, /<WorkspaceAiChatDock/);
+  assert.match(workspaceDraftManagerSource, /<WorkspaceAiChatDock/);
+  assert.match(aiChatDockSource, /className=\{styles\.aiChatLauncher/);
+  assert.match(aiChatDockSource, /className=\{styles\.aiChatDock/);
+  assert.match(stylesSource, /\.aiChatLauncher\s*\{/);
+  assert.match(stylesSource, /\.aiChatDock\s*\{/);
+});
+
+test("workspace AI chat keeps the floating dock width with compact prompt guide", () => {
+  const dockRule = getCssRule(stylesSource, "aiChatDock");
+  const composerRule = getCssRule(stylesSource, "aiChatComposer");
+  const promptGuideRule = getCssRule(stylesSource, "aiChatPromptGuide");
+
+  assert.match(aiChatDockSource, /styles\.aiChatPromptGuide/);
+  assert.match(dockRule, /right:\s*24px/);
+  assert.match(dockRule, /width:\s*min\(860px,\s*calc\(100vw - 48px\)\)/);
+  assert.match(composerRule, /grid-template-columns:\s*minmax\(0,\s*1fr\)\s*auto/);
+  assert.match(promptGuideRule, /grid-column:\s*1\s*\/\s*-1/);
 });
 
 test("terraform leave guard covers workspace escape actions while editing", () => {
@@ -314,8 +343,8 @@ test("pre-deployment check is owned by the deployment tab", () => {
   assert.match(componentSource, /validateTerraformForPreDeployment/);
   assert.match(componentSource, /validateCurrentTerraform/);
   assert.match(terraformPanelSource, /validateCurrentTerraform/);
-  assert.doesNotMatch(aiPanelSource, /runAiPreDeploymentCheck/);
-  assert.doesNotMatch(aiPanelSource, /WorkspaceAiPreDeploymentResult/);
+  assert.doesNotMatch(aiChatDockSource, /runAiPreDeploymentCheck/);
+  assert.doesNotMatch(aiChatDockSource, /WorkspaceAiPreDeploymentResult/);
   assert.match(preflightSummaryRule, /\bgap:\s*8px;/);
 });
 
@@ -336,8 +365,8 @@ test("terraform error explanation lives in the terraform code panel only when er
   assert.match(terraformPanelSource, /className=\{styles\.terraformErrorExplanationList\}/);
   assert.doesNotMatch(terraformPanelSource, /diagnosticToast/);
   assert.doesNotMatch(terraformPanelSource, /showDiagnosticToast/);
-  assert.doesNotMatch(aiPanelSource, /runAiTerraformErrorExplanation/);
-  assert.doesNotMatch(aiPanelSource, /Terraform 오류 설명/);
+  assert.doesNotMatch(aiChatDockSource, /runAiTerraformErrorExplanation/);
+  assert.doesNotMatch(aiChatDockSource, /Terraform 오류 설명/);
   assert.doesNotMatch(stylesSource, /\.terraformDiagnosticToast\s*\{/);
   assert.match(errorExplanationRule, /\bmax-height:\s*240px;/);
   assert.match(errorExplanationRule, /\boverflow:\s*auto;/);
@@ -392,8 +421,8 @@ test("terraform preview explanation is triggered from the terraform code panel",
   assert.match(terraformPanelSource, /Terraform Preview 설명 닫기/);
   assert.match(terraformPanelSource, /className=\{styles\.terraformPreviewExplanationPanel\}/);
   assert.match(terraformPanelSource, /className=\{styles\.terraformPreviewExplanationActions\}/);
-  assert.doesNotMatch(aiPanelSource, /WorkspaceAiTerraformPanel/);
-  assert.doesNotMatch(aiPanelSource, /Terraform Preview 설명/);
+  assert.doesNotMatch(aiChatDockSource, /WorkspaceAiTerraformPanel/);
+  assert.doesNotMatch(aiChatDockSource, /Terraform Preview 설명/);
   assert.doesNotMatch(terraformPanelSource, /checklist\.length\} Checks/);
   assert.match(previewExplanationRule, /\bmax-height:\s*180px;/);
   assert.match(previewExplanationRule, /\boverflow:\s*auto;/);

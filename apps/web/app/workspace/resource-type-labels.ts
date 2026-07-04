@@ -13,6 +13,14 @@ const resourceTypeLabels: Record<ResourceType, string> = {
 	CLOUDFRONT: "CloudFront",
 	LAMBDA: "Lambda",
 	AMI: "AMI",
+	IAM_ROLE: "IAM Role",
+	IAM_POLICY: "IAM Policy",
+	IAM_INSTANCE_PROFILE: "IAM Instance Profile",
+	KMS_KEY: "KMS Key",
+	CLOUDWATCH_LOG_GROUP: "CloudWatch Log Group",
+	CLOUDWATCH_METRIC_ALARM: "CloudWatch Metric Alarm",
+	API_GATEWAY_REST_API: "API Gateway REST API",
+	LAMBDA_PERMISSION: "Lambda Permission",
 	UNKNOWN: "Unknown"
 };
 

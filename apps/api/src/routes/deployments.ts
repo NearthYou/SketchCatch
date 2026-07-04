@@ -5,6 +5,7 @@ import { getDatabaseClient } from "../db/client.js";
 import type {
   DeployedResource,
   Deployment,
+  DeploymentFailureExplanationResponse,
   DeploymentLog,
   Project,
   RecentSuccessfulDeploymentProject,
@@ -62,10 +63,15 @@ import {
   type DeploymentLogRecord,
   type ProjectAccessContext
 } from "../deployments/deployment-service.js";
+import { createDeploymentFailureExplanation } from "../deployments/deployment-failure-explanation.js";
 import {
   cancelTrackedDeploymentRun,
   startTrackedDeploymentRun
 } from "../deployments/deployment-run-registry.js";
+import type {
+  CreateLlmExplanation,
+  LlmExplanationInput
+} from "../services/aiLlmExplanationTypes.js";
 import {
   createS3DeploymentRetentionStorage,
   pruneProjectDeploymentStorage as defaultPruneProjectDeploymentStorage,
@@ -134,6 +140,7 @@ type DeploymentRouteOptions = {
     input: RunDeploymentDestroyInput,
     repository: DeploymentRepository
   ) => Promise<RunDeploymentDestroyResult>;
+  createLlmExplanation?: CreateLlmExplanation;
 };
 
 type DeploymentRequestContext = {
@@ -325,6 +332,8 @@ export async function registerDeploymentRoutes(
 ): Promise<void> {
   const getDeploymentDatabaseClient = options?.getDatabaseClient ?? getDatabaseClient;
   const pruneProjectDeploymentStorage = createDefaultProjectDeploymentStoragePruner(options);
+  const createLlmExplanation =
+    options?.createLlmExplanation ?? createDefaultDeploymentFailureLlmExplanation;
 
   app.post("/projects/:projectId/deployments", async (request, reply) => {
     const params = createDeploymentParamsSchema.parse(request.params);
@@ -444,6 +453,52 @@ export async function registerDeploymentRoutes(
       return handleDeploymentError(error, reply);
     }
   });
+
+  app.get(
+    "/deployments/:deploymentId/failure-explanation",
+    async (request, reply): Promise<DeploymentFailureExplanationResponse | FastifyReply> => {
+      const params = deploymentParamsSchema.parse(request.params);
+      const { accessContext, repository } = await getDeploymentRequestContext(
+        request,
+        options,
+        getDeploymentDatabaseClient
+      );
+
+      try {
+        const deployment = await getDeployment(
+          {
+            deploymentId: params.deploymentId,
+            accessContext
+          },
+          repository
+        );
+
+        if (deployment.status !== "FAILED") {
+          throw new DeploymentConflictError(
+            "Deployment failure explanation is only available for failed deployments"
+          );
+        }
+
+        const logs = await listDeploymentLogs(
+          {
+            deploymentId: params.deploymentId,
+            accessContext
+          },
+          repository
+        );
+
+        return reply.status(200).send({
+          explanation: await createDeploymentFailureExplanation({
+            deployment,
+            logs,
+            createLlmExplanation
+          })
+        });
+      } catch (error) {
+        return handleDeploymentError(error, reply);
+      }
+    }
+  );
 
   app.post("/deployments/:deploymentId/init", async (request, reply) => {
     const params = deploymentParamsSchema.parse(request.params);
@@ -868,6 +923,12 @@ export async function registerDeploymentRoutes(
       return handleDeploymentError(error, reply);
     }
   });
+}
+
+async function createDefaultDeploymentFailureLlmExplanation(input: LlmExplanationInput) {
+  const { createConfiguredOpenAiExplanation } = await import("../services/aiLlmExplanation.js");
+
+  return createConfiguredOpenAiExplanation()(input);
 }
 
 function createUserProjectAccessContext(userId: string): ProjectAccessContext {

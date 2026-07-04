@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { DiagramNode } from "../../../../packages/types/src";
-import { toFlowNodes } from "./flow-mappers";
+import { toFlowEdges, toFlowNodes } from "./flow-mappers";
 import type { DiagramFlowNodeHandlers } from "./types";
 
 const handlers: DiagramFlowNodeHandlers = {
@@ -85,6 +85,35 @@ test("toFlowNodes keeps locked area node bodies from falling through to pane sel
   assert.equal(flowNode?.style?.pointerEvents, undefined);
   assert.equal(flowNode?.draggable, false);
   assert.equal(flowNode?.connectable, false);
+});
+
+test("flow mappers make AI preview nodes and edges read-only", () => {
+  const instance = makeNode({ id: "instance-1", resourceType: "aws_instance" });
+  const flowNodes = toFlowNodes([instance], ["instance-1"], "instance-1", handlers, { isPreview: true });
+  const flowEdges = toFlowEdges(
+    [
+      {
+        id: "edge-1",
+        sourceNodeId: "instance-1",
+        targetNodeId: "bucket-1",
+        style: { animated: true }
+      }
+    ],
+    ["edge-1"],
+    { isPreview: true }
+  );
+
+  assert.equal(flowNodes[0]?.data.isPreview, true);
+  assert.equal(flowNodes[0]?.selected, false);
+  assert.equal(flowNodes[0]?.draggable, false);
+  assert.equal(flowNodes[0]?.selectable, false);
+  assert.equal(flowNodes[0]?.connectable, false);
+  assert.equal(flowNodes[0]?.deletable, false);
+  assert.equal(flowEdges[0]?.selected, false);
+  assert.equal(flowEdges[0]?.animated, false);
+  assert.equal(flowEdges[0]?.selectable, false);
+  assert.equal(flowEdges[0]?.deletable, false);
+  assert.equal(flowEdges[0]?.style?.strokeOpacity, 0.48);
 });
 
 function makeNode({
