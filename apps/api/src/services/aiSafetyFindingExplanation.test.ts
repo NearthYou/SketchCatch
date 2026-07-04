@@ -1,7 +1,139 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { CheckFinding } from "@sketchcatch/types";
-import { createFallbackSafetyFindingExplanation } from "./aiSafetyFindingExplanation.js";
+import {
+  createConfiguredOpenAiSafetyFindingExplanation,
+  createFallbackSafetyFindingExplanation,
+  createOpenAiSafetyFindingExplanation,
+  type OpenAiSafetyResponsesClient
+} from "./aiSafetyFindingExplanation.js";
+
+process.env.NODE_ENV = "test";
+
+test("createOpenAiSafetyFindingExplanation returns parsed OpenAI guidance with provider metadata", async () => {
+  const parseRequests: unknown[] = [];
+  const client: OpenAiSafetyResponsesClient = {
+    responses: {
+      parse: async (request) => {
+        parseRequests.push(request);
+
+        return {
+          output_parsed: {
+            riskSummary: "SSH가 인터넷에 공개되어 있습니다.",
+            whyDangerous: "전체 인터넷에서 로그인 시도가 가능해 서버 장악 위험이 커집니다.",
+            recommendedFix: "관리자 CIDR만 허용하거나 SSM Session Manager를 사용하세요.",
+            terraformHint: "cidr_blocks 값을 관리자 CIDR로 바꾸세요.",
+            verificationSteps: ["22번 포트가 0.0.0.0/0이 아닌지 확인", "검사를 다시 실행"],
+            fallbackUsed: false
+          }
+        };
+      }
+    }
+  };
+
+  const explain = createOpenAiSafetyFindingExplanation({
+    apiKey: "test-openai-api-key",
+    client,
+    model: "test-gpt"
+  });
+  const result = await explain(createFinding());
+
+  assert.equal(result.fallbackUsed, false);
+  assert.equal(result.riskSummary, "SSH가 인터넷에 공개되어 있습니다.");
+  assert.equal(result.providerMetadata?.provider, "openai");
+  assert.equal(result.providerMetadata?.service, "openai_responses");
+  assert.equal(result.providerMetadata?.model, "test-gpt");
+  assert.equal(parseRequests.length, 1);
+  assert.match(JSON.stringify(parseRequests[0]), /test-gpt/);
+  assert.match(JSON.stringify(parseRequests[0]), /Do not decide severity/);
+  assert.match(JSON.stringify(parseRequests[0]), /security-open-ssh-sg-app/);
+});
+
+test("createConfiguredOpenAiSafetyFindingExplanation creates client with timeout and model", async () => {
+  const clientOptions: unknown[] = [];
+  const parseRequests: unknown[] = [];
+  const explain = createConfiguredOpenAiSafetyFindingExplanation({
+    apiKey: "test-openai-api-key",
+    model: "configured-gpt",
+    createClient: (options) => {
+      clientOptions.push(options);
+
+      return {
+        responses: {
+          parse: async (request) => {
+            parseRequests.push(request);
+
+            return {
+              output_parsed: {
+                riskSummary: "RDS가 public으로 열려 있습니다.",
+                whyDangerous: "DB endpoint가 외부 공격면이 됩니다.",
+                recommendedFix: "public 접근을 끄고 private subnet에 둡니다.",
+                terraformHint: null,
+                verificationSteps: ["publicly_accessible false 확인"],
+                fallbackUsed: false
+              }
+            };
+          }
+        }
+      };
+    }
+  });
+
+  const result = await explain(createFinding({ id: "security-public-rds-db", title: "public RDS" }));
+
+  assert.equal(result.fallbackUsed, false);
+  assert.deepEqual(clientOptions, [
+    {
+      apiKey: "test-openai-api-key",
+      timeout: 10_000,
+      maxRetries: 0
+    }
+  ]);
+  assert.match(JSON.stringify(parseRequests[0]), /configured-gpt/);
+});
+
+test("createOpenAiSafetyFindingExplanation falls back when OpenAI response is invalid", async () => {
+  const explain = createOpenAiSafetyFindingExplanation({
+    apiKey: "test-openai-api-key",
+    client: {
+      responses: {
+        parse: async () => ({ output_parsed: { riskSummary: "safe to deploy", fallbackUsed: false } })
+      }
+    }
+  });
+
+  const result = await explain(createFinding());
+
+  assert.equal(result.fallbackUsed, true);
+  assert.equal(result.fallbackReason, "invalid_response");
+});
+
+test("createOpenAiSafetyFindingExplanation falls back without exposing provider errors", async () => {
+  const explain = createOpenAiSafetyFindingExplanation({
+    apiKey: "test-openai-api-key",
+    client: {
+      responses: {
+        parse: async () => {
+          throw new Error("raw provider message must not leak");
+        }
+      }
+    }
+  });
+
+  const result = await explain(createFinding());
+
+  assert.equal(result.fallbackUsed, true);
+  assert.equal(result.fallbackReason, "provider_error");
+  assert.doesNotMatch(JSON.stringify(result), /raw provider message/);
+});
+
+test("createConfiguredOpenAiSafetyFindingExplanation uses fallback when key is missing", async () => {
+  const explain = createConfiguredOpenAiSafetyFindingExplanation({ apiKey: "" });
+  const result = await explain(createFinding());
+
+  assert.equal(result.fallbackUsed, true);
+  assert.equal(result.fallbackReason, "missing_api_key");
+});
 
 test("createFallbackSafetyFindingExplanation explains public SSH with deterministic guidance", () => {
   const explanation = createFallbackSafetyFindingExplanation(
