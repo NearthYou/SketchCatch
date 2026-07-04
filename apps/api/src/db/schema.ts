@@ -35,7 +35,10 @@ export const deploymentStatusEnum = pgEnum("deployment_status", [
   "DESTROYED"
 ]);
 
-export const gitCicdRepositoryProviderEnum = pgEnum("git_cicd_repository_provider", ["internal"]);
+export const gitCicdRepositoryProviderEnum = pgEnum("git_cicd_repository_provider", [
+  "internal",
+  "github"
+]);
 
 export const gitCicdHandoffStatusEnum = pgEnum("git_cicd_handoff_status", [
   "draft",

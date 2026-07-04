@@ -126,7 +126,7 @@ test("Git/CI/CD handoffs store repository metadata without raw provider secrets"
   const config = getTableConfig(gitCicdHandoffs);
 
   assert.equal(gitCicdRepositoryProviderEnum.enumName, "git_cicd_repository_provider");
-  assert.deepEqual(gitCicdRepositoryProviderEnum.enumValues, ["internal"]);
+  assert.deepEqual(gitCicdRepositoryProviderEnum.enumValues, ["internal", "github"]);
   assert.equal(gitCicdHandoffStatusEnum.enumName, "git_cicd_handoff_status");
   assert.deepEqual(gitCicdHandoffStatusEnum.enumValues, [
     "draft",

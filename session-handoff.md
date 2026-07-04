@@ -485,6 +485,12 @@ pnpm build
 - final `pnpm harness:check`를 다시 실행한다.
 - diff 자체 리뷰 후 #132 범위만 commit/push/PR 생성한다.
 - 다른 이슈(#129~#136)는 이 branch에서 건드리지 않는다.
+## 2026-07-05 - Issue #135 GitHub PR handoff v0 handoff
+
+- Branch/worktree: `feature/sw/135-github-pr-handoff-v0` at `C:\Users\siwon\Desktop\Jungle\Week17~21\SketchCatch-worktrees\135-github-pr-handoff-v0`.
+- Scope completed: `github` SourceRepository provider, provider payload abstraction, GitHub PR handoff provider wrapper, PR title/body draft with plan summary and review checklist, fake provider tests, additive enum migration, docs/sw guide.
+- Verification completed: targeted API tests, API/types typecheck, API lint, full `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm harness:check`, `git diff --check`.
+- Remaining risk: no real GitHub API call, GitHub token, pipeline polling/cache, Runtime Cache new work, or AWS apply/destroy was run.
 ## 2026-07-05 - Issue #133 Deployment Runtime Cache handoff
 
 - Branch/worktree: `feature/sw/133-deployment-runtime-cache-status` at `C:\Users\siwon\Desktop\Jungle\Week17~21\SketchCatch-worktrees\133-deployment-runtime-cache-status`.
