@@ -17,7 +17,7 @@ import type {
   TerraformSourceLocation,
   TerraformOutput
 } from "@sketchcatch/types";
-import { Clipboard, ClipboardCheck, FileCode2, Maximize2, ShieldCheck, Sparkles, Trash2, X } from "lucide-react";
+import { Clipboard, ClipboardCheck, FileCode2, Maximize2, ShieldCheck, Trash2, X } from "lucide-react";
 import { DashboardIcon } from "../../components/dashboard/dashboard-icons";
 import { SelectMenu, type SelectMenuOption } from "../../components/ui/SelectMenu";
 import { getApiErrorMessage } from "../../lib/api-client";
@@ -54,7 +54,6 @@ import {
   isWorkspaceAiResultStale
 } from "./workspace-ai-panel-state";
 import { addTerraformDiagnosticsToPreDeploymentAnalysis } from "./pre-deployment-diagnostics";
-import { dispatchWorkspaceSafetyFindingAiEvent } from "./safety-finding-ai-event";
 import type { TerraformVirtualFile } from "./terraform-panel-utils";
 import type { AiRequestState } from "./WorkspaceAiPanelPieces";
 import type { SavedWorkspaceTerraformArtifact } from "./workspace-deployment-artifacts";
@@ -1345,18 +1344,9 @@ function DeploymentPreDeploymentFindingItem({
           type="button"
         >
           <FileCode2 size={13} aria-hidden="true" />
-          수정
+          Terraform 코드로 이동
         </button>
       ) : null}
-      <button
-        className={styles.deploymentFindingAiButton}
-        onClick={() => dispatchWorkspaceSafetyFindingAiEvent(finding)}
-        title="AI 창으로 설명 보기"
-        type="button"
-      >
-        <Sparkles size={13} aria-hidden="true" />
-        AI 창
-      </button>
     </li>
   );
 }
@@ -1404,8 +1394,8 @@ function DeploymentSafetyBlockBanner({ deployment }: { readonly deployment: Depl
       <strong>Deployment Safety Gate 차단</strong>
       <p>{deployment.blockedReason ?? "Safety Gate blocked this deployment."}</p>
       <p>
-        High risk는 승인으로 해제할 수 없습니다. 위의 Security Risk finding에서 수정 또는 AI 창을 열어
-        Terraform 코드를 고친 뒤 Terraform Plan을 다시 실행하세요.
+        High risk는 승인으로 해제할 수 없습니다. 위의 Security Risk finding에서 Terraform 코드로 이동해
+        해당 line을 고친 뒤 Terraform Plan을 다시 실행하세요.
       </p>
       {blockingWarnings.length > 0 ? (
         <ul>
