@@ -2073,6 +2073,10 @@
   border-left-color: #dc2626;
 }
 
+.aiSafetyFindingCard[data-severity="medium"] {
+  border-left-color: #f59e0b;
+}
+
 .aiSafetyFindingCard[data-severity="low"] {
   border-left-color: #16a34a;
 }
@@ -2093,6 +2097,10 @@
 
 .aiSafetyFindingCard[data-severity="high"] .aiSafetyFindingHeader span {
   color: #b91c1c;
+}
+
+.aiSafetyFindingCard[data-severity="medium"] .aiSafetyFindingHeader span {
+  color: #9a3412;
 }
 
 .aiSafetyFindingCard[data-severity="low"] .aiSafetyFindingHeader span {
@@ -2458,6 +2466,10 @@
   border-left-color: #dc2626;
 }
 
+.deploymentPreflightFindings > li[data-severity="medium"] {
+  border-left-color: #f59e0b;
+}
+
 .deploymentPreflightFindings > li[data-severity="low"] {
   border-left-color: #16a34a;
 }
@@ -2471,6 +2483,10 @@
 
 .deploymentPreflightFindings > li[data-severity="high"] > span {
   color: #b91c1c;
+}
+
+.deploymentPreflightFindings > li[data-severity="medium"] > span {
+  color: #9a3412;
 }
 
 .deploymentPreflightFindings > li[data-severity="low"] > span {

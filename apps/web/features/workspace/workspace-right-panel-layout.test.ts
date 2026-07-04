@@ -281,7 +281,15 @@ test("pre-deployment finding severity colors keep medium as the default warning 
   );
   assert.match(
     stylesSource,
+    /\.deploymentPreflightFindings > li\[data-severity="medium"\]\s*\{[^}]*border-left-color:\s*#f59e0b;/s
+  );
+  assert.match(
+    stylesSource,
     /\.deploymentPreflightFindings > li\[data-severity="low"\]\s*\{[^}]*border-left-color:\s*#16a34a;/s
+  );
+  assert.match(
+    stylesSource,
+    /\.deploymentPreflightFindings > li\[data-severity="medium"\] > span\s*\{[^}]*color:\s*#9a3412;/s
   );
 });
 
@@ -322,6 +330,14 @@ test("safety finding AI event opens the AI panel with the selected finding", () 
   assert.match(
     stylesSource,
     /\.aiSafetyFindingCard\[data-severity="high"\]\s*\{[^}]*border-left-color:\s*#dc2626;/s
+  );
+  assert.match(
+    stylesSource,
+    /\.aiSafetyFindingCard\[data-severity="medium"\]\s*\{[^}]*border-left-color:\s*#f59e0b;/s
+  );
+  assert.match(
+    stylesSource,
+    /\.aiSafetyFindingCard\[data-severity="low"\]\s*\{[^}]*border-left-color:\s*#16a34a;/s
   );
 });
 
