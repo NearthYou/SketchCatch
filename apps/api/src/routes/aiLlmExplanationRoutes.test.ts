@@ -96,6 +96,82 @@ test("POST /api/ai/safety-finding-explanation explains one deterministic finding
   }
 });
 
+test("POST /api/ai/pre-deployment-check includes per-finding safety explanations", async () => {
+  const explainedFindingIds: string[] = [];
+  const app = buildApp({
+    createLlmExplanation: async (input) => ({
+      target: input.target,
+      summary: "전체 결과 설명",
+      highlights: ["finding별 설명은 별도 필드에 있습니다."],
+      nextActions: ["finding을 확인하세요."],
+      fallbackUsed: true,
+      fallbackReason: "provider_not_configured"
+    }),
+    createSafetyFindingExplanation: async (finding) => {
+      explainedFindingIds.push(finding.id);
+
+      return {
+        riskSummary: `${finding.id} risk`,
+        whyDangerous: "위험 설명",
+        recommendedFix: "수정 제안",
+        verificationSteps: ["다시 검사"],
+        fallbackUsed: true,
+        fallbackReason: "missing_api_key"
+      };
+    }
+  });
+
+  try {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/ai/pre-deployment-check",
+      payload: {
+        architectureJson: {
+          nodes: [
+            {
+              id: "sg-public-ssh",
+              type: "SECURITY_GROUP",
+              label: "Public SSH",
+              positionX: 120,
+              positionY: 180,
+              config: {
+                ingress: [
+                  {
+                    protocol: "tcp",
+                    port: 22,
+                    cidr: "0.0.0.0/0"
+                  }
+                ]
+              }
+            }
+          ],
+          edges: []
+        }
+      }
+    });
+
+    assert.equal(response.statusCode, 200);
+
+    const body = z
+      .object({
+        findings: z.array(
+          z.object({
+            id: z.string(),
+            aiSafetyExplanation: aiSafetyExplanationSchema
+          })
+        ),
+        llmExplanation: llmExplanationSchema
+      })
+      .parse(response.json());
+
+    assert.equal(body.findings[0]?.aiSafetyExplanation.riskSummary, `${body.findings[0]?.id} risk`);
+    assert.equal(body.llmExplanation.target, "pre_deployment_check");
+    assert.deepEqual(explainedFindingIds, body.findings.map((finding) => finding.id));
+  } finally {
+    await app.close();
+  }
+});
+
 test("POST /api/ai/pre-deployment-check returns fallback llmExplanation when Bedrock credit is not confirmed", async () => {
   const restoreAiEnv = forceAwsAiCreditBlocked();
   const app = buildApp();

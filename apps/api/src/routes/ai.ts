@@ -199,12 +199,16 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
   app.post("/ai/pre-deployment-check", async (request): Promise<AiPreDeploymentAnalysisResult> => {
     const body = preDeploymentCheckBodySchema.parse(request.body);
     const result = analyzePreDeployment(body.architectureJson);
+    const resultWithSafetyExplanations = await addSafetyFindingExplanations(
+      result,
+      createSafetyFindingExplanation
+    );
 
     return {
-      ...result,
+      ...resultWithSafetyExplanations,
       llmExplanation: await createLlmExplanation({
         target: "pre_deployment_check",
-        result
+        result: resultWithSafetyExplanations
       })
     };
   });
@@ -226,7 +230,10 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
     const body = preDeploymentCheckFromDiagramBodySchema.parse(request.body);
     const architectureJson = convertDiagramJsonToArchitectureJson(body.diagramJson);
 
-    return analyzePreDeployment(architectureJson);
+    return addSafetyFindingExplanations(
+      analyzePreDeployment(architectureJson),
+      createSafetyFindingExplanation
+    );
   });
 
   app.post(
@@ -322,6 +329,26 @@ async function addArchitectureDraftLlmExplanation(
       result,
       requirementPromptText
     })
+  };
+}
+
+async function addSafetyFindingExplanations(
+  result: AiPreDeploymentAnalysisResult,
+  createSafetyFindingExplanation: CreateSafetyFindingExplanation
+): Promise<AiPreDeploymentAnalysisResult> {
+  if (result.findings.length === 0) {
+    return result;
+  }
+
+  return {
+    ...result,
+    findings: await Promise.all(
+      result.findings.map(async (finding) => ({
+        ...finding,
+        aiSafetyExplanation:
+          finding.aiSafetyExplanation ?? (await createSafetyFindingExplanation(finding))
+      }))
+    )
   };
 }
 
