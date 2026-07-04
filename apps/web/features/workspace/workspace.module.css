@@ -1045,36 +1045,36 @@
 }
 
 .terraformTokenKeyword {
-  color: #2dd4bf;
+  color: #f6c85f;
 }
 
 .terraformTokenIdentifier {
-  color: #74bdf8;
+  color: #7fd2ff;
 }
 
 .terraformTokenReference {
-  color: #74bdf8;
+  color: #5fe0c1;
 }
 
 .terraformTokenString {
-  color: #d99a7b;
+  color: #f0a77d;
 }
 
 .terraformTokenBrace {
-  color: #facc15;
+  color: #9bd7ff;
 }
 
 .terraformTokenOperator,
 .terraformTokenPlain {
-  color: #cbd5e1;
+  color: #d6e3ee;
 }
 
 .terraformTokenNumber {
-  color: #f4bf75;
+  color: #ff8ec7;
 }
 
 .terraformTokenComment {
-  color: #7a8797;
+  color: #73879a;
 }
 
 .terraformTextarea {
@@ -2931,5 +2931,448 @@
 
   .deploymentResultValue {
     grid-column: 1 / -1;
+  }
+}
+
+/* Blueprint panel polish pass */
+.rightPanelShell,
+.resourceWorkspacePanel,
+.terraformPanel,
+.issuesPanel,
+.aiPanel,
+.deploymentPanel {
+  background: var(--bp-paper);
+  color: var(--bp-ink);
+  font-family: var(--bp-head);
+}
+
+.rightPanelToolbar,
+.resourceSectionToolbar,
+.terraformTopBar,
+.terraformDiagnostics,
+.deploymentHeader,
+.aiPanelHeader {
+  background: var(--bp-paper);
+  border-color: var(--bp-line);
+}
+
+.rightPanelToolbar {
+  min-height: 48px;
+  padding: 7px 10px;
+}
+
+.panelModeToggle,
+.resourceSectionTabs,
+.deploymentModeSwitch {
+  background: var(--bp-paper-2);
+  border: 1px solid var(--bp-line);
+  border-radius: var(--bp-r);
+  box-shadow: none;
+}
+
+.terraformTopActions {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0;
+}
+
+.panelModeButton,
+.panelModeButtonActive,
+.panelIconButton,
+.panelIconButtonActive,
+.panelCollapseButton,
+.collapsedPanelButton,
+.collapsedPanelButtonActive,
+.resourceSectionButton,
+.resourceSectionButtonActive,
+.terraformFileButton,
+.deploymentExpandButton {
+  border-radius: var(--bp-r);
+  color: var(--bp-text);
+  font-family: var(--bp-head);
+  font-weight: 850;
+}
+
+.panelModeButtonActive,
+.panelIconButtonActive,
+.collapsedPanelButtonActive,
+.resourceSectionButtonActive {
+  background: var(--bp-blue-tint);
+  border-color: color-mix(in srgb, var(--bp-blue) 46%, transparent);
+  box-shadow: none;
+  color: var(--bp-blue);
+}
+
+.panelModeButton:hover,
+.panelModeButton:focus-visible,
+.panelIconButton:hover,
+.panelIconButton:focus-visible,
+.panelCollapseButton:hover,
+.panelCollapseButton:focus-visible,
+.collapsedPanelButton:hover,
+.collapsedPanelButton:focus-visible,
+.resourceSectionButton:hover,
+.resourceSectionButton:focus-visible,
+.terraformFileButton:hover,
+.terraformFileButton:focus-visible,
+.deploymentExpandButton:hover,
+.deploymentExpandButton:focus-visible {
+  background: var(--bp-blue-tint);
+  border-color: var(--bp-blue);
+  color: var(--bp-blue);
+  outline: none;
+}
+
+.resourceWorkspacePanel {
+  padding-top: 0;
+}
+
+.resourceSectionToolbar {
+  min-height: 48px;
+  padding: 7px 10px;
+}
+
+.resourceSectionButton,
+.resourceSectionButtonActive {
+  min-height: 30px;
+  padding: 0 10px;
+}
+
+.terraformPanel,
+.issuesPanel,
+.aiPanel,
+.deploymentPanel {
+  background:
+    linear-gradient(var(--bp-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--bp-grid) 1px, transparent 1px), var(--bp-page);
+  background-size: 52px 52px;
+}
+
+.terraformTopBar,
+.terraformDiagnostics,
+.issuesPanel .terraformDiagnostics,
+.aiPanel,
+.deploymentPanel {
+  border-left: 1px solid var(--bp-line);
+}
+
+.terraformFileButton,
+.terraformFileMenu,
+.terraformFileSearch,
+.terraformEmpty,
+.terraformNotice,
+.terraformError,
+.terraformDiagnosticList li,
+.aiField textarea,
+.aiField input,
+.aiResultCard,
+.aiExplanation,
+.aiWarning,
+.deploymentSection,
+.deploymentPreflightSummary,
+.deploymentSummary,
+.deploymentApplyConfirm,
+.deploymentDestroyConfirm,
+.deploymentField input,
+.deploymentField select,
+.deploymentField textarea {
+  background: var(--bp-paper);
+  border-color: var(--bp-line);
+  border-radius: var(--bp-r);
+  box-shadow: none;
+  color: var(--bp-text);
+}
+
+.terraformFileMenu {
+  box-shadow: 0 16px 34px rgb(7 36 60 / 14%);
+}
+
+.terraformFileSearch:focus,
+.aiField textarea:focus,
+.aiField input:focus,
+.deploymentField input:focus,
+.deploymentField select:focus,
+.deploymentField textarea:focus {
+  border-color: var(--bp-blue);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--bp-blue) 18%, transparent);
+}
+
+.terraformDiagnosticsHeader h3,
+.aiPanelHeader h2,
+.deploymentHeader h2,
+.deploymentSection h3 {
+  color: var(--bp-ink);
+  font-family: var(--bp-head);
+  letter-spacing: 0;
+}
+
+.terraformDiagnosticsHeader,
+.aiPanelHeader span,
+.deploymentHeader span,
+.deploymentHint,
+.terraformDiagnosticList span {
+  color: var(--bp-text);
+}
+
+.terraformIssueCount,
+.panelIssueBadge {
+  background: var(--bp-blue-tint);
+  color: var(--bp-blue);
+}
+
+.terraformIssueCountError,
+.panelIssueBadgeError {
+  background: var(--bp-high-tint);
+  color: var(--bp-high);
+}
+
+.terraformDiagnosticList li,
+.deploymentWarnings li,
+.deploymentPreflightFindings li {
+  background: var(--bp-paper);
+}
+
+.terraformEmpty {
+  background: var(--bp-paper-2);
+  color: var(--bp-muted);
+}
+
+.terraformNotice {
+  background: var(--bp-blue-tint);
+  border-color: color-mix(in srgb, var(--bp-blue) 42%, var(--bp-line));
+  color: var(--bp-blue);
+}
+
+.terraformError,
+.deploymentStaleNotice,
+.aiWarning {
+  background: var(--bp-med-tint);
+  border-color: color-mix(in srgb, var(--bp-med) 54%, var(--bp-line));
+  color: #7a4d00;
+}
+
+.aiPrimaryButton,
+.deploymentPrimaryButton {
+  background: var(--bp-blue);
+  border-color: var(--bp-blue);
+  color: #ffffff;
+}
+
+.aiSecondaryButton,
+.deploymentSecondaryButton {
+  background: var(--bp-paper);
+  border-color: var(--bp-line);
+  color: var(--bp-blue);
+}
+
+.deploymentDangerButton {
+  background: var(--bp-high);
+  border-color: var(--bp-high);
+  color: #ffffff;
+}
+
+.aiPrimaryButton:hover,
+.aiPrimaryButton:focus-visible,
+.deploymentPrimaryButton:not(:disabled):hover,
+.deploymentPrimaryButton:not(:disabled):focus-visible {
+  background: color-mix(in srgb, var(--bp-blue) 86%, #000000);
+  border-color: color-mix(in srgb, var(--bp-blue) 86%, #000000);
+  outline: none;
+}
+
+.aiSecondaryButton:hover,
+.aiSecondaryButton:focus-visible,
+.deploymentSecondaryButton:not(:disabled):hover,
+.deploymentSecondaryButton:not(:disabled):focus-visible {
+  background: var(--bp-blue-tint);
+  border-color: var(--bp-blue);
+  color: var(--bp-blue);
+  outline: none;
+}
+
+.deploymentPrimaryButton:disabled,
+.deploymentSecondaryButton:disabled,
+.deploymentDangerButton:disabled {
+  opacity: 0.62;
+}
+
+.aiPanel,
+.deploymentPanel {
+  gap: 14px;
+  padding: 16px;
+}
+
+.aiPanelHeader,
+.deploymentHeader {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--bp-paper) 92%, #ffffff), var(--bp-paper-2));
+  border: 1.5px solid var(--bp-line);
+  border-radius: var(--bp-r);
+  padding: 14px;
+  position: relative;
+}
+
+.aiPanelHeader::before,
+.aiPanelHeader::after,
+.deploymentHeader::before,
+.deploymentHeader::after,
+.aiSection::before,
+.deploymentSection::before {
+  border: 1.5px solid var(--bp-blue);
+  content: "";
+  height: 10px;
+  pointer-events: none;
+  position: absolute;
+  width: 10px;
+}
+
+.aiPanelHeader::before,
+.deploymentHeader::before,
+.aiSection::before,
+.deploymentSection::before {
+  border-bottom: 0;
+  border-right: 0;
+  left: -1px;
+  top: -1px;
+}
+
+.aiPanelHeader::after,
+.deploymentHeader::after {
+  border-left: 0;
+  border-top: 0;
+  bottom: -1px;
+  right: -1px;
+}
+
+.aiPanelHeader span,
+.deploymentHeader > span,
+.deploymentHeaderTop span {
+  color: var(--bp-blue);
+  font-family: var(--bp-mono);
+  font-size: 10px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.aiPanelHeader h2,
+.deploymentHeader h2 {
+  font-size: 20px;
+  line-height: 1.1;
+}
+
+.aiSection,
+.deploymentSection {
+  background: color-mix(in srgb, var(--bp-paper) 94%, transparent);
+  border: 1px solid var(--bp-line);
+  border-radius: var(--bp-r);
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  position: relative;
+}
+
+.aiSection {
+  border-top: 1px solid var(--bp-line);
+}
+
+.aiSection:first-of-type {
+  border-top: 1px solid var(--bp-line);
+}
+
+.aiField {
+  color: var(--bp-blue);
+  font-family: var(--bp-head);
+  font-size: 12px;
+}
+
+.aiField textarea,
+.aiField input,
+.aiField select,
+.deploymentField input,
+.deploymentField select,
+.deploymentField textarea {
+  background: #f8fbfd;
+  border: 1.5px solid var(--bp-line);
+  color: var(--bp-ink);
+  font-size: 13px;
+}
+
+.aiField textarea {
+  min-height: 124px;
+}
+
+.aiInlineFields {
+  gap: 12px;
+}
+
+.aiPrimaryButton,
+.deploymentPrimaryButton,
+.deploymentDangerButton {
+  min-height: 42px;
+}
+
+.aiSecondaryButton,
+.deploymentSecondaryButton,
+.deploymentExpandButton,
+.terraformPreviewButton {
+  border-color: color-mix(in srgb, var(--bp-blue) 38%, var(--bp-line));
+}
+
+.terraformPreviewButton {
+  background: var(--bp-paper);
+  color: var(--bp-blue);
+}
+
+.deploymentPanelContent {
+  gap: 14px;
+  padding-right: 0;
+  scrollbar-gutter: auto;
+}
+
+.deploymentHeader {
+  margin-right: 0;
+}
+
+.deploymentPanel .deploymentSection:first-of-type {
+  background: color-mix(in srgb, var(--bp-blue-tint) 38%, var(--bp-paper));
+}
+
+.deploymentSectionHeader {
+  align-items: center;
+}
+
+.deploymentPreflightSummary,
+.deploymentGateCard {
+  border-radius: var(--bp-r);
+}
+
+.deploymentExpandedLogs {
+  background: #101923;
+  border-left: 1px solid #2d4255;
+  padding: 16px;
+}
+
+.deploymentExpandedLogs h3,
+.deploymentExpandedLogs span,
+.deploymentExpandedLogs p {
+  color: #cfe1ef;
+}
+
+.deploymentLogList {
+  background: linear-gradient(rgba(126, 167, 198, 0.08) 1px, transparent 1px), #0e151d;
+  background-size: 100% 28px;
+  border: 1px solid #33495c;
+  min-height: calc(100vh - 174px);
+  padding: 14px;
+}
+
+.deploymentLogPrefix {
+  color: #7ea7c6;
+}
+
+@media (max-width: 640px) {
+  .deploymentGateFacts {
+    grid-template-columns: 1fr;
   }
 }

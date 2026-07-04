@@ -442,3 +442,26 @@
   - This pass is visual/CSS polish only; Resource/Template tab behavior remains the existing implementation.
 - Next best action:
   - Run final full checks and commit the feedback polish.
+# 2026-07-04 - 오른쪽 패널 Blueprint 스킨 복구
+
+- Goal: 최신 `dev` 병합에서 유지한 오른쪽 패널 로직 위에 빠진 Blueprint 디자인 톤을 다시 적용한다.
+- Completed:
+  - `workspace.module.css`에 원래 작업했던 Blueprint panel polish pass를 현재 dev class 구조에 맞춰 복구했다.
+  - Resource, Terraform, Diagnostics, AI, Deployment 패널의 배경, 테두리, 버튼, 상태 배지 톤을 Blueprint 언어로 맞췄다.
+  - Terraform editor는 레이아웃/하이라이트 레이어를 유지하고 token 색상만 Blueprint 팔레트에 맞게 조정했다.
+  - `terraformTopActions` wrapper가 빈 블럭처럼 보이지 않도록 wrapper styling을 제거하고 버튼만 Blueprint 버튼으로 유지했다.
+  - Terraform panel의 최신 dev 기능은 유지했다: virtual file save, leave guard, diagnostics line mapping, sync proposal auto-apply, syntax token utility, deployment-owned preflight flow.
+  - 버려진 기능 정리: 예전 디자인 커밋의 `TerraformCodePanel.tsx` 전체 구현, inline highlighter, detached artifact save/action UI, advanced parameter picker UI, old deployment layout은 복구하지 않았다.
+- Verification run:
+  - `pnpm harness:check` - passed before editing
+  - `pnpm --dir . --filter @sketchcatch/web test -- area-nodes.test.ts flow-mappers.test.ts catalog.test.ts terraform-panel-utils.test.ts workspace-ai-diagram-adapter.test.ts terraform-code-highlighting.test.ts terraform-diagnostic-line-highlights.test.ts` - passed, 334 tests
+  - `pnpm --dir . typecheck` - passed
+  - `pnpm --dir . --filter @sketchcatch/web test -- workspace-right-panel-layout.test.ts terraform-code-highlighting.test.ts terraform-diagnostic-line-highlights.test.ts` - passed, 334 tests
+  - `pnpm --dir . harness:check` - passed after editing
+  - `pnpm --dir . lint` - passed
+  - `pnpm --dir . build` - passed
+- Known risks:
+  - 이번 변경은 CSS skin 복구라 실제 브라우저 스크린샷 검증은 아직 남아 있다.
+  - 최신 dev의 오른쪽 패널 기능을 우선했기 때문에, 과거 디자인 커밋에서만 있던 중복 UI는 의도적으로 되살리지 않았다.
+- Next best action:
+  - 오른쪽 패널 브라우저 스모크에서 탭별 시각 일관성과 Terraform editor resize 상태를 확인한다.
