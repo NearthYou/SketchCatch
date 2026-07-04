@@ -128,7 +128,11 @@ function formatDiagnosticTitle(diagnostic: TerraformDiagnostic): string {
   const parts = [diagnostic.severity.toUpperCase()];
 
   if (diagnostic.line !== undefined) {
-    parts.push(`${diagnostic.line}행`);
+    parts.push(
+      diagnostic.sourceFileName
+        ? `${diagnostic.sourceFileName}:${diagnostic.line}`
+        : `${diagnostic.line}행`
+    );
   }
 
   if (diagnostic.resourceAddress !== undefined) {

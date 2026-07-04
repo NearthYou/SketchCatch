@@ -1,31 +1,48 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type {
+  ApiErrorResponse,
   DiagramJson,
   DiagramNodeMetadata,
   TerraformGenerateResponse,
   TerraformSyncToDiagramResponse,
+  TerraformValidateRequest,
   TerraformValidateResponse
 } from "@sketchcatch/types";
 import { requireActiveUserId } from "../auth/current-user.js";
 import { getDatabaseClient, type DatabaseClient } from "../db/client.js";
-import { generateTerraformFromDiagramJson } from "../services/terraform/diagram-to-terraform.js";
-import { syncTerraformToDiagramJson } from "../services/terraform/terraform-to-diagram.js";
 import {
-  createTerraformValidationDiagnostics as defaultCreateTerraformValidationDiagnostics,
-  type CreateTerraformValidationDiagnostics
-} from "../services/terraform/terraform-validation.js";
+  TERRAFORM_IDENTIFIER_PATTERN,
+  TerraformDiagramValidationError
+} from "../services/terraform/diagram-to-terraform.js";
+import { generateTerraformFromDiagramJson } from "../services/terraform/terraform-preview.js";
+import { syncTerraformToDiagramJson } from "../services/terraform/terraform-to-diagram.js";
+import { createTerraformValidationDiagnostics } from "../services/terraform/terraform-diagnostics.js";
+
+const terraformValidationMaxCharacters = 1024 * 1024;
+const terraformValidationMaxFileCount = 64;
+const terraformValidationMaxFileNameLength = 120;
 
 const terraformValidateBodySchema = z.object({
-  terraformCode: z.string()
-});
+  terraformCode: z.string().max(terraformValidationMaxCharacters),
+  terraformFiles: z
+    .array(
+      z.object({
+        fileName: z.string().min(1).max(terraformValidationMaxFileNameLength),
+        terraformCode: z.string().max(terraformValidationMaxCharacters)
+      })
+    )
+    .max(terraformValidationMaxFileCount)
+    .optional()
+}).strict();
 
 const terraformBlockTypeSchema = z.enum(["resource", "data"]);
+const terraformIdentifierSchema = z.string().min(1).regex(TERRAFORM_IDENTIFIER_PATTERN);
 
 const diagramNodeParametersSchema = z.object({
   terraformBlockType: terraformBlockTypeSchema.optional(),
-  resourceType: z.string().min(1),
-  resourceName: z.string().min(1),
+  resourceType: terraformIdentifierSchema,
+  resourceName: terraformIdentifierSchema,
   fileName: z.string().min(1),
   values: z.record(z.string(), z.unknown()),
   invalid: z.boolean().optional()
@@ -109,12 +126,22 @@ const terraformGenerateBodySchema = z.object({
 
 const terraformSyncToDiagramBodySchema = z.object({
   diagramJson: diagramJsonSchema,
-  terraformCode: z.string()
+  terraformCode: z.string(),
+  terraformFiles: z
+    .array(
+      z.object({
+        fileName: z.string().min(1),
+        terraformCode: z.string()
+      })
+    )
+    .optional()
 });
 
-type TerraformRouteOptions = {
+export type TerraformRouteOptions = {
   getDatabaseClient?: () => DatabaseClient;
-  createTerraformValidationDiagnostics?: CreateTerraformValidationDiagnostics;
+  validateTerraformPreviewCode?: (
+    input: TerraformValidateRequest
+  ) => Promise<TerraformValidateResponse>;
 };
 
 export async function registerTerraformRoutes(
@@ -122,17 +149,31 @@ export async function registerTerraformRoutes(
   options: TerraformRouteOptions = {}
 ): Promise<void> {
   const getTerraformDatabaseClient = options.getDatabaseClient ?? getDatabaseClient;
-  const createTerraformValidationDiagnostics =
-    options.createTerraformValidationDiagnostics ?? defaultCreateTerraformValidationDiagnostics;
+  const validateTerraformPreviewCode =
+    options.validateTerraformPreviewCode ?? validateTerraformPreviewCodeStatic;
 
-  app.post("/terraform/generate", async (request): Promise<TerraformGenerateResponse> => {
+  app.post("/terraform/generate", async (request, reply): Promise<TerraformGenerateResponse | void> => {
     await requireActiveUserId(request, getTerraformDatabaseClient);
 
     const body = terraformGenerateBodySchema.parse(request.body);
 
-    return {
-      terraformCode: generateTerraformFromDiagramJson(body.diagramJson)
-    };
+    try {
+      return {
+        terraformCode: generateTerraformFromDiagramJson(body.diagramJson)
+      };
+    } catch (error) {
+      if (error instanceof TerraformDiagramValidationError) {
+        const response: ApiErrorResponse = {
+          error: "bad_request",
+          message: error.message
+        };
+
+        reply.status(400).send(response);
+        return;
+      }
+
+      throw error;
+    }
   });
 
   app.post("/terraform/validate", async (request): Promise<TerraformValidateResponse> => {
@@ -140,9 +181,7 @@ export async function registerTerraformRoutes(
 
     const body = terraformValidateBodySchema.parse(request.body);
 
-    return {
-      diagnostics: await createTerraformValidationDiagnostics(body.terraformCode)
-    };
+    return validateTerraformPreviewCode(body);
   });
 
   app.post(
@@ -152,7 +191,18 @@ export async function registerTerraformRoutes(
 
       const body = terraformSyncToDiagramBodySchema.parse(request.body);
 
-      return syncTerraformToDiagramJson(body.diagramJson, body.terraformCode);
+      return syncTerraformToDiagramJson(body.diagramJson, {
+        terraformCode: body.terraformCode,
+        terraformFiles: body.terraformFiles
+      });
     }
   );
+}
+
+async function validateTerraformPreviewCodeStatic(
+  input: TerraformValidateRequest
+): Promise<TerraformValidateResponse> {
+  return {
+    diagnostics: createTerraformValidationDiagnostics(input)
+  };
 }

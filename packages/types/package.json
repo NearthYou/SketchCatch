@@ -9,6 +9,10 @@
     ".": {
       "types": "./src/index.ts",
       "default": "./src/index.ts"
+    },
+    "./resource-definitions": {
+      "types": "./src/resource-definitions.ts",
+      "default": "./src/resource-definitions.ts"
     }
   },
   "scripts": {
