@@ -107,6 +107,20 @@ export const DEFAULT_PALETTE_ITEMS: readonly ResourceItem[] = [
     }
   },
   {
+    id: "design-az",
+    name: "AZ",
+    cloudProvider: "aws",
+    area: "containers",
+    category: "Design",
+    iconUrl: `${groupIconPath}/AWS-Cloud_32.svg`,
+    enabled: true,
+    nodeDefaults: {
+      type: "sketchcatch_az",
+      label: "AZ",
+      size: DEFAULT_CONTAINER_SIZE
+    }
+  },
+  {
     id: "design-group",
     name: "Group",
     cloudProvider: "aws",

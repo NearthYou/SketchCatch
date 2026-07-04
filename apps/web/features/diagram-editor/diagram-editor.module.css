@@ -372,11 +372,18 @@
   border: 2px solid #ffffff;
   border-radius: 999px;
   box-shadow: 0 4px 10px rgba(111, 76, 246, 0.22);
-  height: 11px;
-  min-height: 11px;
-  min-width: 11px;
+  height: 18px;
+  min-height: 18px;
+  min-width: 18px;
   position: absolute;
-  width: 11px;
+  width: 18px;
+  z-index: 8;
+}
+
+.canvasPanel :global(.react-flow__handle)::before {
+  content: "";
+  inset: -10px;
+  position: absolute;
 }
 
 .canvasPanel :global(.react-flow__handle-left) {
@@ -594,7 +601,11 @@
 }
 
 .nodeShellDimmed {
-  opacity: 0.38;
+  opacity: 0.72;
+}
+
+.nodeShellResource.nodeShellDimmed {
+  opacity: 0.9;
 }
 
 .nodeShellReferenceDropTarget {
@@ -643,9 +654,12 @@
 
 .nodeShellArea {
   align-items: flex-start;
-  background: rgba(255, 255, 255, 0.14);
-  border-color: var(--node-border-color, #8b98aa);
-  box-shadow: 0 10px 24px rgba(33, 41, 69, 0.06);
+  background: rgba(255, 255, 255, 0.82);
+  border-color: color-mix(in srgb, var(--node-border-color, #4c6f8e) 68%, #133b56);
+  border-width: 2.5px;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.72),
+    0 14px 32px rgba(33, 41, 69, 0.11);
   display: block;
   justify-content: flex-start;
   overflow: visible;
@@ -655,45 +669,49 @@
 }
 
 .nodeShellArea.nodeShellSelected {
-  border-color: var(--node-border-color, #6f4cf6);
+  border-color: color-mix(in srgb, var(--node-border-color, #6f4cf6) 72%, #22156c);
   box-shadow:
-    0 0 0 3px rgba(111, 76, 246, 0.14),
-    0 14px 28px rgba(33, 41, 69, 0.08);
+    inset 0 0 0 1px rgba(255, 255, 255, 0.52),
+    0 0 0 3px rgba(111, 76, 246, 0.2),
+    0 16px 30px rgba(33, 41, 69, 0.12);
 }
 
 .nodeShellArea.nodeShellReferenceDropTarget {
-  background: rgba(47, 140, 85, 0.1);
+  background:
+    linear-gradient(0deg, rgba(47, 140, 85, 0.1), rgba(47, 140, 85, 0.1)),
+    rgba(255, 255, 255, 0.88);
   border-color: #2f8c55;
   box-shadow:
-    inset 0 0 0 999px rgba(47, 140, 85, 0.06),
+    inset 0 0 0 999px rgba(47, 140, 85, 0.08),
     0 0 0 4px rgba(47, 140, 85, 0.16),
     0 16px 30px rgba(33, 41, 69, 0.1);
 }
 
 .nodeShellArea.nodeShellLocked {
-  background: rgba(248, 249, 253, 0.28);
+  background: rgba(248, 249, 253, 0.86);
 }
 
 .areaNodeHeader {
-  align-items: flex-start;
-  background: rgba(255, 255, 255, 0.92);
-  border: 1px solid color-mix(in srgb, var(--node-border-color, #8b98aa) 45%, #ffffff);
-  border-radius: 999px;
-  box-shadow: 0 8px 18px rgba(33, 41, 69, 0.1);
+  align-items: center;
+  background: rgba(255, 255, 255, 0.98);
+  border: 1.5px solid color-mix(in srgb, var(--node-border-color, #4c6f8e) 74%, #133b56);
+  border-radius: 6px;
+  box-shadow: 0 10px 22px rgba(33, 41, 69, 0.14);
   display: inline-flex;
   font-size: 0.72rem;
   font-weight: 850;
   gap: 6px;
   left: -2px;
   line-height: 1.15;
-  max-width: max(260px, calc(100% + 4px));
+  max-width: max(320px, calc(100% + 4px));
   min-width: 0;
   overflow: visible;
-  padding: 5px 9px;
+  padding: 6px 10px;
   pointer-events: all;
   position: absolute;
-  top: -30px;
-  white-space: normal;
+  bottom: calc(100% + 8px);
+  top: auto;
+  white-space: nowrap;
   z-index: 2;
 }
 
@@ -743,9 +761,21 @@
 .areaNodeHeaderText {
   min-width: 0;
   overflow: visible;
-  overflow-wrap: anywhere;
   text-overflow: clip;
-  white-space: normal;
+  white-space: nowrap;
+}
+
+.areaNodeHeaderMeta {
+  background: color-mix(in srgb, var(--bp-blue-tint) 62%, #ffffff);
+  border: 1px solid color-mix(in srgb, var(--bp-blue) 32%, transparent);
+  border-radius: var(--bp-r);
+  color: var(--bp-blue);
+  flex: 0 0 auto;
+  font-size: 0.64rem;
+  font-weight: 850;
+  line-height: 1;
+  padding: 4px 6px;
+  white-space: nowrap;
 }
 
 .nodeGlyph {
@@ -885,10 +915,31 @@
   transition: opacity 120ms ease;
 }
 
+.connectionHandleSource {
+  z-index: 11;
+}
+
+.connectionHandleTarget {
+  z-index: 10;
+}
+
 .nodeShell:hover ~ .connectionHandle,
-.nodeShellSelected ~ .connectionHandle {
+.nodeShellSelected ~ .connectionHandle,
+.connectionHandleActive {
   opacity: 1;
   pointer-events: all;
+}
+
+.connectionHandleTarget:not(.connectionHandleActive) {
+  pointer-events: none;
+}
+
+.connectionHandleTarget.connectionHandleActive {
+  z-index: 12;
+}
+
+.connectionHandleSource.connectionHandleActive {
+  z-index: 11;
 }
 
 .nodeToolbar,
@@ -905,6 +956,10 @@
 
 .nodeToolbar {
   pointer-events: all;
+}
+
+.nodeToolbarArea {
+  margin-top: 8px;
 }
 
 .edgeToolbar {
@@ -1278,19 +1333,20 @@
 }
 
 .nodeShellArea {
-  background:
-    linear-gradient(color-mix(in srgb, var(--bp-blue-tint) 20%, transparent), color-mix(in srgb, var(--bp-blue-tint) 20%, transparent)),
-    transparent;
-  border-color: var(--node-border-color, var(--bp-blue));
+  background: rgba(255, 255, 255, 0.88);
+  border-color: color-mix(in srgb, var(--node-border-color, var(--bp-blue)) 76%, #173a52);
   border-style: dashed;
-  border-width: 1.5px;
+  border-width: 2.5px;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.72),
+    0 14px 32px rgba(17, 38, 58, 0.12);
 }
 
 .areaNodeHeader {
-  background: var(--bp-paper-2);
-  border-color: var(--bp-line);
+  background: #ffffff;
+  border-color: color-mix(in srgb, var(--node-border-color, var(--bp-blue)) 64%, #173a52);
   border-radius: var(--bp-r);
-  box-shadow: none;
+  box-shadow: 0 10px 22px rgba(17, 38, 58, 0.14);
   color: var(--bp-ink);
   font-family: var(--bp-mono);
 }
@@ -1300,7 +1356,7 @@
   border-color: var(--bp-paper-2);
 }
 
-/* Compact canvas resource tokens: fixed icon slot + label slot */
+/* Compact canvas resource tokens: icon and label fill the selected node bounds closely. */
 .nodeShellResource {
   align-items: center;
   background: transparent;
@@ -1309,7 +1365,7 @@
   box-sizing: border-box;
   container-type: size;
   display: grid;
-  gap: clamp(3px, 4cqh, 8px);
+  gap: clamp(2px, 1.5cqh, 6px);
   grid-template-columns: 1fr;
   grid-template-rows: auto auto;
   height: 100%;
@@ -1317,7 +1373,7 @@
   justify-items: center;
   min-width: 0;
   overflow: visible;
-  padding: 8px 6px 6px;
+  padding: clamp(2px, 1.5cqw, 8px);
   text-align: center;
   width: 100%;
 }
@@ -1373,7 +1429,7 @@
   aspect-ratio: 1;
   display: flex;
   filter: none;
-  --resource-icon-size: clamp(30px, min(58cqw, calc(100cqh - 34px)), 180px);
+  --resource-icon-size: clamp(34px, min(82cqw, calc(100cqh - 34px)), 640px);
   flex: 0 1 auto;
   grid-column: 1;
   grid-row: 1;
@@ -1423,6 +1479,47 @@
 
 .resourceNodeType {
   display: none;
+}
+
+.nodeShellArea {
+  align-items: flex-start;
+  background: rgba(255, 255, 255, 0.92);
+  border-color: color-mix(in srgb, var(--node-border-color, var(--bp-blue)) 76%, #173a52);
+  border-style: dashed;
+  border-width: 2.5px;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.84),
+    0 14px 32px rgba(17, 38, 58, 0.13);
+  display: block;
+  justify-content: flex-start;
+  overflow: visible;
+  padding: 0;
+  pointer-events: none;
+  text-align: left;
+}
+
+.nodeShellArea.nodeShellSelected {
+  background: rgba(255, 255, 255, 0.96);
+}
+
+.nodeShellArea.nodeShellReferenceDropTarget {
+  background:
+    linear-gradient(0deg, rgba(24, 148, 86, 0.18), rgba(24, 148, 86, 0.18)),
+    rgba(255, 255, 255, 0.98);
+  border-color: #16824c;
+  border-style: solid;
+  box-shadow:
+    inset 0 0 0 999px rgba(24, 148, 86, 0.08),
+    inset 0 0 0 2px rgba(24, 148, 86, 0.2),
+    0 0 0 5px rgba(24, 148, 86, 0.18),
+    0 18px 38px rgba(17, 38, 58, 0.18);
+}
+
+.nodeShellArea.nodeShellReferenceDropTarget .areaNodeHeader {
+  border-color: #16824c;
+  box-shadow:
+    0 0 0 4px rgba(24, 148, 86, 0.14),
+    0 12px 24px rgba(17, 38, 58, 0.16);
 }
 
 .manualResizeHandle,
