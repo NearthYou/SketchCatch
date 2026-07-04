@@ -54,7 +54,7 @@ function main() {
       ? fs.readFileSync(generatedCatalogPath, "utf8")
       : "";
 
-    if (currentOutput !== output) {
+    if (normalizeLineEndings(currentOutput) !== normalizeLineEndings(output)) {
       fail(
         [
           "Generated catalog is out of date.",
@@ -403,6 +403,10 @@ function renderGeneratedCatalog(catalog) {
     'export type { ParameterCatalog, ParameterCatalogDefinition } from "./catalog-overrides";',
     ""
   ].join("\n");
+}
+
+function normalizeLineEndings(value) {
+  return value.replace(/\r\n/g, "\n");
 }
 
 function loadTsModule(filePath) {

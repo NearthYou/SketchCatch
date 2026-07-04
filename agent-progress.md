@@ -13,6 +13,27 @@
 - Highest priority unfinished harness feature: `HARNESS-007`
 - Current blocker: none
 
+### 2026-07-04 - Terraform AWS catalog check 줄바꿈 보정
+
+- Goal: Windows checkout 줄바꿈 때문에 `apps/web/features/parameter-input/catalog.generated.ts`가 Terraform AWS catalog 생성 기준과 맞지 않는 것으로 판정되는 문제를 막는다.
+- Completed:
+  - `scripts/generate-terraform-aws-catalog.mjs`의 `--check` 비교에서 CRLF를 LF로 정규화해 실제 catalog 내용 drift만 실패하도록 수정했다.
+  - `pnpm catalog:generate`로 현재 generated catalog를 다시 만들고, `catalog.generated.ts`는 Git blob 기준 변경이 없음을 확인했다.
+  - 기존 사용자 변경인 `docs/ck/ai/002_아키텍처다이어그램검수가이드.md`는 이번 커밋 범위에서 제외한다.
+- Verification run:
+  - `npm exec --package=pnpm@11.8.0 -- pnpm catalog:check` - failed before fix with "Generated catalog is out of date."
+  - `npm exec --package=pnpm@11.8.0 -- pnpm catalog:generate` - regenerated `catalog.generated.ts`.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm catalog:check` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm harness:check` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm lint` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm typecheck` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm build` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm test` - passed.
+  - `git diff --check` - passed with line-ending warnings only.
+- Known risks:
+  - `next build` temporarily changed `apps/web/next-env.d.ts`; the generated route type path was restored and left out of the final diff.
+  - Existing unrelated worktree change remains in `docs/ck/ai/002_아키텍처다이어그램검수가이드.md` and is intentionally excluded from this commit.
+
 ### 2026-07-04 - Architecture Draft 검수 맥락 보강
 
 - Goal: 자연어 Architecture Draft가 API 서버, DB 포함 백엔드, Lambda 구조를 만들 때 진입점, AMI, 라우팅, IAM 권한, KMS, Logs, Metric Alarm, RDS backup 같은 검수 맥락을 빠뜨리지 않게 한다.
