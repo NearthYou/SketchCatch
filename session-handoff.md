@@ -420,3 +420,10 @@ pnpm build
 
 - 이 worker branch를 #128 Worker 1-2 또는 1-3 범위로 확장하지 않는다. Parent agent가 이 focused diff를 review하고 PR을 연다.
 - 실제 AWS apply/destroy, cloud mutation, Git/CI/CD handoff, secret access는 수행하지 않았다.
+## 2026-07-05 - Issue #130 Direct Deployment 신뢰도 UX handoff
+
+- Branch/worktree: `feature/sw/130-direct-deployment-safety-ux-docs` at `C:\Users\siwon\Desktop\Jungle\Week17~21\SketchCatch-worktrees\130-direct-deployment-safety-ux-docs`.
+- Scope completed: apply precondition mismatch messages now include approved/current snapshot values, mismatch failure is recorded as `failureStage: "approval"`, deployment log says `Apply blocked before Terraform apply`, Apply UI shows approved account/region/tfplan/artifact hash, and incomplete approval snapshot disables execution.
+- Docs completed: `docs/sw/009_Direct_Deployment_신뢰도_UX_클론코딩가이드_sw.md` plus docs/sw README link.
+- Verification completed: targeted API tests, targeted web action-state test, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and final `pnpm harness:check` passed.
+- Remaining risk: no real AWS apply/destroy was run; full `pnpm test` was not run.

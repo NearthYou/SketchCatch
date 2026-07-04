@@ -43,6 +43,7 @@ import {
   getDeploymentActionState,
   getDeploymentLogMessageTokens,
   getDeploymentLogTone,
+  hasCompleteDeploymentApprovalSnapshot,
   shouldAutoRefreshDeployment,
   shouldShowDeploymentInfoValue,
   type DeploymentLogMessageToken,
@@ -1024,6 +1025,14 @@ export function DeploymentPanel({
             value={selectedDeployment.approvedAwsAccountId ?? "없음"}
           />
           <InfoRow label="AWS region" value={selectedDeployment.approvedAwsRegion ?? "없음"} />
+          <InfoRow
+            label="tfplan hash"
+            value={formatShortHash(selectedDeployment.approvedTfplanHash)}
+          />
+          <InfoRow
+            label="Artifact hash"
+            value={formatShortHash(selectedDeployment.approvedTerraformArtifactHash)}
+          />
           {selectedDeployment.planSummary ? (
             <InfoRow
               label="Plan changes"
@@ -1582,6 +1591,10 @@ function getDeploymentActionHint(deployment: Deployment): string {
   }
 
   if (deployment.approvedAt) {
+    if (!hasCompleteDeploymentApprovalSnapshot(deployment)) {
+      return "승인 스냅샷이 불완전합니다. Terraform Plan을 다시 실행하고 승인한 뒤 Apply를 진행하세요.";
+    }
+
     if (deployment.status === "SUCCESS") {
       return "Apply가 완료되었습니다. 생성된 리소스와 Terraform output을 아래에서 확인할 수 있습니다.";
     }

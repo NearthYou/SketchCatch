@@ -1272,3 +1272,22 @@
 - Known risks:
   - 이번 확인은 정적 체크와 테스트 중심이며, 최신 툴바 위치는 브라우저 스크린샷으로 재확인하지 않았다.
   - 실제 AWS apply/destroy나 Git/CI/CD 실행은 수행하지 않았다.
+## 2026-07-05 - Issue #130 Direct Deployment 신뢰도 UX
+
+- Goal: Direct Deployment apply 직전 승인된 Terraform artifact/tfplan/AWS account/region snapshot과 실제 apply 입력 불일치를 사용자에게 명확히 보여주고, API 상태/로그/UI/docs가 같은 의미를 말하도록 정리한다.
+- Completed:
+  - apply precondition 전용 `DeploymentApplyPreconditionError`를 추가하고 artifact id, plan id, artifact hash, tfplan hash, AWS account, AWS region mismatch 메시지에 승인값/current 값을 포함했다.
+  - apply job catch 흐름에서 precondition mismatch를 `failureStage: "approval"`로 저장하고 `Apply blocked before Terraform apply: ...` 로그를 남기도록 했다.
+  - UI action state가 완성된 approval snapshot이 있을 때만 apply/destroy 실행을 허용하도록 보강하고, Apply 확인 UI에 승인된 tfplan/artifact hash를 표시했다.
+  - `docs/sw/009_Direct_Deployment_신뢰도_UX_클론코딩가이드_sw.md`를 추가하고 docs/sw README에 연결했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/deployments/deployment-approval-service.test.ts src/deployments/deployment-apply-service.test.ts` - passed
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/deployment-actions.test.ts` - passed
+  - `pnpm lint` - passed
+  - `pnpm typecheck` - passed
+  - `pnpm build` - passed
+  - `pnpm harness:check` - passed after edits
+- Known risks:
+  - 실제 AWS apply/destroy는 실행하지 않았다.
+  - full `pnpm test`는 시간 범위상 실행하지 않았고, #130 관련 targeted tests와 lint/typecheck/build로 검증했다.

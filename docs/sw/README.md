@@ -12,6 +12,7 @@
 6. Runtime Cache 추상화와 메모리 fallback은 [005_런타임캐시추상화가이드_sw.md](./005_런타임캐시추상화가이드_sw.md)를 본다.
 7. Direct Deployment 승인 스냅샷 재검증은 [005_승인스냅샷재검증클론코딩가이드_sw.md](./005_승인스냅샷재검증클론코딩가이드_sw.md)를 본다.
 8. Direct Deployment 실패 설명은 [008_배포실패설명가이드_sw.md](./008_배포실패설명가이드_sw.md)를 본다.
+9. Direct Deployment 신뢰도 UX는 [009_Direct_Deployment_신뢰도_UX_클론코딩가이드_sw.md](./009_Direct_Deployment_신뢰도_UX_클론코딩가이드_sw.md)를 본다.
 
 ## 문서 목록
 
@@ -29,6 +30,7 @@
 | [005_런타임캐시추상화가이드_sw.md](./005_런타임캐시추상화가이드_sw.md) | Runtime Cache 추상화, 메모리 fallback, Redis adapter 준비 가이드 |
 | [006_승인스냅샷재검증클론코딩가이드_sw.md](./005_승인스냅샷재검증클론코딩가이드_sw.md) | Direct Deployment 승인 스냅샷 재검증 클론 코딩 가이드 |
 | [008_배포실패설명가이드_sw.md](./008_배포실패설명가이드_sw.md) | Direct Deployment 실패 설명 DTO, fallback, UI 표시 가이드 |
+| [009_Direct_Deployment_신뢰도_UX_클론코딩가이드_sw.md](./009_Direct_Deployment_신뢰도_UX_클론코딩가이드_sw.md) | Direct Deployment 승인 snapshot mismatch UX와 실패 상태 일관성 가이드 |
 
 ## 정리 규칙
 
