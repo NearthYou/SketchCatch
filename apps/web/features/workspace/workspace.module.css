@@ -2258,13 +2258,15 @@
   min-width: 0;
   overflow: hidden;
   position: fixed;
+  left: 24px;
   right: 24px;
-  width: min(860px, calc(100vw - 48px));
+  width: auto;
 }
 
 .aiChatDock[data-right-panel-open="true"] {
+  left: 24px;
   right: calc(var(--right-panel-width) + 24px);
-  width: min(860px, calc(100vw - var(--right-panel-width) - 48px));
+  width: auto;
 }
 
 .aiChatHeader {
@@ -2506,13 +2508,42 @@
 }
 
 .aiChatComposer {
-  align-items: end;
   background: #ffffff;
   border-top: 1px solid #e3e9f2;
   display: grid;
-  gap: 10px;
-  grid-template-columns: minmax(210px, 0.76fr) minmax(0, 1fr) auto;
-  padding: 12px 14px 14px;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 10px 14px 14px;
+}
+
+.aiChatPromptGuide {
+  align-items: start;
+  background: #f8fafc;
+  display: grid;
+  gap: 6px;
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(180px, auto) minmax(0, 1fr) auto;
+  padding: 8px 10px;
+}
+
+.aiChatPromptGuide .aiPromptGuideHeader {
+  gap: 1px;
+}
+
+.aiChatPromptGuide .aiPromptChips {
+  align-content: start;
+  gap: 5px;
+  min-width: 0;
+}
+
+.aiChatPromptGuide .aiPromptChip {
+  font-size: 10.5px;
+  padding: 5px 7px;
+}
+
+.aiChatPromptGuide .aiPromptTinyHint {
+  align-self: center;
+  max-width: 260px;
 }
 
 .aiChatInput {
@@ -3391,6 +3422,14 @@
   .aiChatControls,
   .aiChatComposer {
     grid-template-columns: 1fr;
+  }
+
+  .aiChatPromptGuide {
+    grid-template-columns: 1fr;
+  }
+
+  .aiChatPromptGuide .aiPromptTinyHint {
+    max-width: none;
   }
 
   .aiChatAssistantMessage,
