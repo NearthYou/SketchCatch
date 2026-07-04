@@ -9,6 +9,11 @@
 - `/terraform/validate/prepare`, editor validation prepare/warmup, `mode`, `stage`, `status`, `projectId` DTO는 제거됐다.
 - Editor validation은 Terraform CLI를 실행하지 않는다. `terraform init`, `terraform validate`, provider download, backend/state mutation은 editor 저장 검증 범위가 아니다.
 - 정적 diagnostics는 빈 코드, `{}`/`[]`/`()` 균형, 닫히지 않은 문자열, block header, duplicate address, 잘못된 attribute line, nested block assignment, quoted reference, undefined local reference, shared definition 밖 AWS block을 검사한다.
+- 일반 quoted string은 줄을 넘지 않는다. 닫히지 않은 문자열은 해당 줄에서 오류로 확정되고, 뒤쪽 resource header의 따옴표 때문에 오류 line이 밀리지 않는다.
+- 닫히지 않은 문자열 때문에 뒤쪽 brace stack은 신뢰할 수 없으므로 `{}` 중괄호 오류를 연쇄로 함께 표시하지 않는다.
+- `{}`/`[]`/`()`/문자열 balance 단계에서 error가 있으면 body/reference 검사를 중단한다. 단, 그보다 앞선 block header error는 함께 반환한다. 닫히지 않은 block 때문에 다음 resource header가 이전 block body 오류처럼 표시되지 않아야 한다.
+- `/* ... */` block comment 안의 quote, brace, reference는 static diagnostics 대상이 아니다.
+- Multi-file editor에서 `sourceFileName` 없는 diagnostic은 특정 파일 line highlight로 보정하지 않는다.
 - 검증 중 코드가 바뀌면 오래된 검증 결과를 성공처럼 반영하지 않고 재검증 필요 diagnostics를 남긴다.
 - Terraform leave modal에서 사용자가 계속 편집/폐기한 뒤 도착한 오래된 save completion은 현재 modal 상태를 덮지 않는다.
 - Deployment artifact 저장은 Terraform panel에서 이미 검증한 source에 대해 중복 combined-code 검증을 건너뛸 수 있다.
@@ -63,6 +68,15 @@
 
 ## 이번 세션의 변경 사항
 
+- `apps/api/src/services/terraform/terraform-diagnostics.ts`에서 일반 quoted string이 줄을 넘지 않도록 처리해, line 20의 누락 quote가 line 24 resource header로 밀려 표시되지 않게 했다.
+- `apps/api/src/services/terraform/terraform-diagnostics.ts`에서 balance error가 있으면 뒤쪽 body/reference 검사를 중단해, line 17의 누락 `}`가 line 23 다음 resource에 파생 오류를 만들지 않게 했다.
+- `apps/api/src/services/terraform/terraform-diagnostics.ts`가 block comment를 줄 보존 공백으로 처리하고, token error보다 앞선 block header error는 유지하게 했다.
+- `apps/api/src/services/terraform/terraform-nested-blocks.ts`를 추가해 renderer/sync/parser/diagnostics가 공유하는 nested block support list를 단일화했다.
+- `apps/api/src/services/terraform/terraform-diagnostics.test.ts`에 따옴표 하나 누락 시 `{}` 오류가 같이 뜨지 않는 케이스, line 20 누락 quote가 line 20으로 남는 케이스, virtual file source metadata 유지 케이스를 추가했다.
+- `apps/api/src/services/terraform/terraform-diagnostics.test.ts`에 line 17 누락 `}` 때문에 line 23 다음 resource에 `terraform.attribute_syntax`가 같이 뜨지 않는 회귀 케이스를 추가했다.
+- `apps/web/features/workspace/TerraformCodePanel.tsx`에서 숨겨진 Issues 복사본과 multi-file diagnostic source fallback을 정리했다.
+- `apps/web/features/workspace/workspace.module.css`에서 사용하지 않는 Terraform editor CSS rule을 제거했다.
+- `apps/web/features/workspace/terraform-diagnostic-line-highlights.test.ts`에 unclosed string diagnostic이 source line과 resource code offset에 맞게 표시되는 회귀 테스트를 추가했다.
 - `packages/types/src/index.ts`에서 editor validation CLI mode/stage/status/prepare DTO를 제거하고 validate 계약을 `diagnostics` 중심으로 단순화했다.
 - `apps/api/src/services/terraform/terraform-validation.ts`와 관련 테스트를 제거했다.
 - `apps/api/src/deployments/terraform-runner.ts`에서 editor validation 전용 `runTerraformValidateJson` helper를 제거했다.

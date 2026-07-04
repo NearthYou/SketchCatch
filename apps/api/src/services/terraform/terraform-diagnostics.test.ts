@@ -56,6 +56,21 @@ resource "aws_subnet" {
   assert.equal(diagnostic?.line, 5);
 });
 
+test("returns an earlier block diagnostic before a later token diagnostic", () => {
+  const diagnostic = createFirstBlockingTerraformDiagnostic(`resource "aws_vpc" "main" {
+  cidr_block = "10.0.0.0/16"
+}
+
+resource "aws_subnet" {
+}
+
+resource "aws_route" "internet" {
+  route_table_id = aws_route_table.public.id`);
+
+  assert.equal(diagnostic?.code, "terraform.block_header");
+  assert.equal(diagnostic?.line, 5);
+});
+
 test("detects invalid block headers", () => {
   const diagnostics = createTerraformDiagnostics(`resource "aws_vpc" {
 }`);
@@ -125,6 +140,19 @@ test("ignores quoted Terraform references inside comments", () => {
   assert.equal(diagnostics.some((diagnostic) => diagnostic.code === "terraform.quoted_reference"), false);
 });
 
+test("ignores braces and quotes inside block comments", () => {
+  const diagnostics = createTerraformDiagnostics(`resource "aws_vpc" "main" {
+  /*
+    ignored " quote {
+    ignored aws_vpc.missing.id
+  */
+  cidr_block = "10.0.0.0/16"
+}`);
+
+  assert.equal(diagnostics.some((diagnostic) => diagnostic.severity === "error"), false);
+  assert.equal(diagnostics.some((diagnostic) => diagnostic.code === "terraform.undefined_reference"), false);
+});
+
 test("detects unbalanced parentheses", () => {
   const diagnostics = createTerraformDiagnostics(`resource "aws_vpc" "main" {
   tags = merge(var.tags, {
@@ -134,6 +162,91 @@ test("detects unbalanced parentheses", () => {
 
   assert.equal(diagnostics[0]?.code, "terraform.unbalanced");
   assert.equal(diagnostics[0]?.line, 2);
+});
+
+test("does not cascade brace errors after an unclosed string", () => {
+  const diagnostics = createTerraformDiagnostics(`resource "aws_vpc" "main" {
+  cidr_block = "10.0.0.0/16"
+  tags = {
+    Name = "demo-vpc
+  }
+}`);
+
+  assert.deepEqual(
+    diagnostics.filter((diagnostic) => diagnostic.severity === "error"),
+    [
+      {
+        severity: "error",
+        code: "terraform.unbalanced",
+        line: 4,
+        message: "문자열 따옴표가 닫히지 않았습니다."
+      }
+    ]
+  );
+});
+
+test("reports an unclosed string on its own line before the next resource header", () => {
+  const diagnostics = createTerraformDiagnostics(createTerraformWithLine20UnclosedString());
+
+  assert.deepEqual(
+    diagnostics.filter((diagnostic) => diagnostic.severity === "error"),
+    [
+      {
+        severity: "error",
+        code: "terraform.unbalanced",
+        line: 20,
+        message: "문자열 따옴표가 닫히지 않았습니다."
+      }
+    ]
+  );
+});
+
+test("does not cascade body syntax errors after an unclosed block", () => {
+  const diagnostics = createTerraformDiagnostics(createTerraformWithLine17UnclosedBlock());
+
+  assert.deepEqual(
+    diagnostics.filter((diagnostic) => diagnostic.severity === "error"),
+    [
+      {
+        severity: "error",
+        code: "terraform.unbalanced",
+        line: 17,
+        message: "{에 대응하는 닫는 기호가 없습니다."
+      }
+    ]
+  );
+});
+
+test("handles escaped quotes when detecting unclosed strings", () => {
+  const validDiagnostics = createTerraformDiagnostics(`resource "aws_vpc" "main" {
+  tags = { Name = "demo \\"vpc\\"" }
+}`);
+
+  assert.equal(
+    validDiagnostics.some((diagnostic) => diagnostic.code === "terraform.unbalanced"),
+    false
+  );
+
+  const invalidDiagnostics = createTerraformDiagnostics(`resource "aws_vpc" "main" {
+  tags = { Name = "demo \\"vpc
+  }
+}
+
+resource "aws_subnet" "public" {
+  vpc_id = aws_vpc.main.id
+}`);
+
+  assert.deepEqual(
+    invalidDiagnostics.filter((diagnostic) => diagnostic.severity === "error"),
+    [
+      {
+        severity: "error",
+        code: "terraform.unbalanced",
+        line: 2,
+        message: "문자열 따옴표가 닫히지 않았습니다."
+      }
+    ]
+  );
 });
 
 test("detects malformed attribute lines inside resource blocks", () => {
@@ -268,3 +381,92 @@ test("adds source file names while validating virtual Terraform files", () => {
     }
   );
 });
+
+test("keeps unclosed string lines and source files during virtual file validation", () => {
+  const diagnostics = createTerraformValidationDiagnostics({
+    terraformCode: "",
+    terraformFiles: [
+      {
+        fileName: "main.tf",
+        terraformCode: `resource "aws_s3_bucket" "assets" {
+  bucket = "demo-assets"
+}`
+      },
+      {
+        fileName: "network.tf",
+        terraformCode: createTerraformWithLine20UnclosedString()
+      }
+    ]
+  });
+
+  assert.deepEqual(
+    diagnostics.filter((diagnostic) => diagnostic.severity === "error"),
+    [
+      {
+        severity: "error",
+        code: "terraform.unbalanced",
+        line: 20,
+        sourceFileName: "network.tf",
+        message: "문자열 따옴표가 닫히지 않았습니다."
+      }
+    ]
+  );
+});
+
+function createTerraformWithLine20UnclosedString(): string {
+  return `resource "aws_vpc" "main" {
+  cidr_block = "10.0.0.0/16"
+  tags = {
+    Name = "demo-vpc"
+  }
+}
+
+resource "aws_subnet" "private" {
+  vpc_id = aws_vpc.main.id
+  cidr_block = "10.0.2.0/24"
+  availability_zone = "ap-northeast-2a"
+}
+
+resource "aws_route_table" "public" {
+  vpc_id = aws_vpc.main.id
+}
+
+resource "aws_subnet" "public" {
+  vpc_id = aws_vpc.main.id
+  cidr_block = "10.0.1.0/24
+  availability_zone = "ap-northeast-2a"
+}
+
+resource "aws_internet_gateway" "igw" {
+  vpc_id = aws_vpc.main.id
+}`;
+}
+
+function createTerraformWithLine17UnclosedBlock(): string {
+  return `resource "aws_vpc" "main" {
+  cidr_block = "10.0.0.0/16"
+}
+
+resource "aws_internet_gateway" "igw" {
+  vpc_id = aws_vpc.main.id
+}
+
+resource "aws_route_table" "public" {
+  vpc_id = aws_vpc.main.id
+}
+
+resource "aws_subnet" "private" {
+  vpc_id     = aws_vpc.main.id
+  cidr_block = "10.0.2.0/24"
+}
+resource "aws_route" "internet" {
+  route_table_id         = aws_route_table.public.id
+  gateway_id             = aws_internet_gateway.igw.id
+  destination_cidr_block = "0.0.0.0/0"
+  region                 = "ap-northeast-2"
+
+resource "aws_subnet" "public" {
+  vpc_id     = aws_vpc.main.id
+  cidr_block = "10.0.1.0/24"
+}`;
+}

@@ -8,12 +8,10 @@ import type {
   TerraformSyncFileInput
 } from "@sketchcatch/types";
 import {
-  AlertCircle,
   ArrowLeft,
   ChevronDown,
   ClipboardCheck,
   FileCode2,
-  GitBranch,
   Settings,
   Sparkles,
   X
@@ -152,9 +150,10 @@ async function validateTerraformVirtualFiles({
     terraformCode: terraformFiles.length > 0 ? "" : combinedTerraformCode,
     terraformFiles
   });
+  const shouldAddFallbackSource = terraformFiles.length <= 1;
 
   return validationResult.diagnostics.map((diagnostic) =>
-    diagnostic.sourceFileName
+    diagnostic.sourceFileName || !shouldAddFallbackSource
       ? diagnostic
       : addTerraformDiagnosticSource(diagnostic, files[0]?.fileName ?? "main.tf")
   );
@@ -240,7 +239,6 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
   const [fileSearchQuery, setFileSearchQuery] = useState("");
   const [diagnostics, setDiagnostics] = useState<TerraformDiagnostic[]>([]);
   const [requestState, setRequestState] = useState<RequestState>("idle");
-  const [errorMessage, setErrorMessage] = useState("");
   const [statusMessage, setStatusMessage] = useState("main.tf");
   const [hasLocalEdits, setHasLocalEdits] = useState(false);
   const [saveBanner, setSaveBanner] = useState<TerraformSaveBanner | null>(null);
@@ -279,7 +277,6 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
     () => new Set(errorDiagnostics.map((diagnostic) => createTerraformDiagnosticKey(diagnostic))),
     [errorDiagnostics]
   );
-  const hasErrorDiagnostics = errorDiagnostics.length > 0;
   const currentDiagramFingerprint = useMemo(
     () => toTerraformRefreshFingerprint(context.diagram),
     [context.diagram]
@@ -373,16 +370,14 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
     [codeScrollLeft, codeScrollTop]
   );
 
-  const runRequest = useCallback(async (request: () => Promise<void>, fallbackMessage: string) => {
+  const runRequest = useCallback(async (request: () => Promise<void>) => {
     setRequestState("loading");
-    setErrorMessage("");
 
     try {
       await request();
       setRequestState("idle");
-    } catch (error) {
+    } catch {
       setRequestState("error");
-      setErrorMessage(getApiErrorMessage(error, fallbackMessage));
     }
   }, []);
 
@@ -503,7 +498,7 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
         setStatusMessage("그래프 기준으로 동기화됨");
         latestDiagramFingerprintRef.current = diagramFingerprint;
         onDirtyChange(false);
-      }, "Terraform 코드를 생성하지 못했습니다.");
+      });
     },
     [context.diagram, onDiagnosticsChange, onDirtyChange, runRequest]
   );
@@ -630,7 +625,7 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
 
     await runRequest(async () => {
       saved = Boolean(await syncTerraformCodeToDiagram());
-    }, "Terraform 코드를 저장하지 못했습니다.");
+    });
 
     return saved;
   }, [requestState, runRequest, syncTerraformCodeToDiagram]);
@@ -647,7 +642,6 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
     }
 
     setRequestState("loading");
-    setErrorMessage("");
 
     try {
       const validationDiagnostics = await runTerraformModuleValidation();
@@ -655,7 +649,6 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
       return validationDiagnostics;
     } catch (error) {
       setRequestState("error");
-      setErrorMessage(getApiErrorMessage(error, "Terraform 코드를 검증하지 못했습니다."));
       throw error;
     }
   }, [
@@ -677,7 +670,6 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
 
       isPreparingTerraformArtifactRef.current = true;
       setRequestState("loading");
-      setErrorMessage("");
 
       try {
         const preparedSource = await syncTerraformCodeToDiagram();
@@ -690,7 +682,6 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
         return preparedSource;
       } catch (error) {
         setRequestState("error");
-        setErrorMessage(getApiErrorMessage(error, "Terraform 패널을 준비하지 못했습니다."));
         throw error;
       } finally {
         isPreparingTerraformArtifactRef.current = false;
@@ -1273,39 +1264,6 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
         </section>
       ) : null}
 
-      <section className={styles.terraformDiagnosticsHidden} aria-live="polite" id="terraform-issues">
-        <div className={styles.terraformDiagnosticsHeader}>
-          {hasErrorDiagnostics ? (
-            <AlertCircle size={15} aria-hidden="true" />
-          ) : (
-            <GitBranch size={15} aria-hidden="true" />
-          )}
-          <h3>Issues</h3>
-          <span className={hasErrorDiagnostics ? styles.terraformIssueCountError : styles.terraformIssueCount}>
-            {diagnostics.length}
-          </span>
-        </div>
-
-        {requestState === "loading" ? <p className={styles.terraformNotice}>저장 중입니다.</p> : null}
-        {requestState === "error" ? (
-          <p className={styles.terraformError} role="alert">
-            {errorMessage}
-          </p>
-        ) : null}
-        {diagnostics.length === 0 && requestState !== "loading" && requestState !== "error" ? (
-          <p className={styles.terraformEmpty}>표시할 진단이 없습니다.</p>
-        ) : null}
-        {diagnostics.length > 0 ? (
-          <ol className={styles.terraformDiagnosticList}>
-            {diagnostics.map((diagnostic, index) => (
-              <li key={`${diagnostic.code ?? diagnostic.message}-${index}`} data-severity={diagnostic.severity}>
-                <strong>{formatTerraformDiagnosticTitle(diagnostic)}</strong>
-                <span>{diagnostic.message}</span>
-              </li>
-            ))}
-          </ol>
-        ) : null}
-      </section>
     </div>
   );
 });

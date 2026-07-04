@@ -14,6 +14,7 @@ import {
   createTerraformBlockAddress,
   createTerraformBlockIdentityKey
 } from "./terraform-identity.js";
+import { getTerraformNestedBlockAttributes } from "./terraform-nested-blocks.js";
 
 const DEFAULT_TERRAFORM_BLOCK_TYPE: TerraformBlockType = "resource";
 const BLOCK_HEADER_PATTERN =
@@ -24,11 +25,6 @@ const ATTRIBUTE_PATTERN = /^\s*([A-Za-z_][A-Za-z0-9_-]*)\s*=\s*(.*)$/;
 const IDENTIFIER_PATTERN = /^[A-Za-z_][A-Za-z0-9_-]*$/;
 const REFERENCE_PATTERN =
   /^(?:var|local|each|count|path|terraform)\.[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)*$|^module\.[A-Za-z0-9_]+\.[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*$|^aws_[A-Za-z0-9_]+\.[A-Za-z0-9_]+\.[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*$|^data\.aws_[A-Za-z0-9_]+\.[A-Za-z0-9_]+\.[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*$/;
-const TERRAFORM_NESTED_BLOCK_ATTRIBUTES: Record<string, ReadonlySet<string>> = {
-  aws_ami: new Set(["filter"]),
-  aws_route_table: new Set(["route"]),
-  aws_security_group: new Set(["egress", "ingress"])
-};
 type ParsedBlock = {
   blockType: TerraformBlockType;
   resourceType: string;
@@ -503,7 +499,7 @@ function parseTerraformBlocks(sourceFileName: string, terraformCode: string): Pa
     const valuesResult = parseAttributes(
       bodyResult.bodyLines,
       address,
-      TERRAFORM_NESTED_BLOCK_ATTRIBUTES[resourceType]
+      getTerraformNestedBlockAttributes(resourceType)
     );
     diagnostics.push(...valuesResult.diagnostics);
 

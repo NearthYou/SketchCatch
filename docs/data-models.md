@@ -485,13 +485,15 @@ type TerraformDiagramChangeProposal =
 
 `proposals`는 Terraform editor 저장 또는 배포 준비처럼 사용자가 명시적으로 실행한 Terraform sync action 안에서 반영된다. 프론트엔드는 별도 변경 제안 확인 UI를 띄우지 않고, 해당 명시 action을 사용자 승인 경계로 삼아 create/delete/rename 후보를 `DiagramJson`에 자동 반영할 수 있다.
 
-Terraform editor 저장 sync action에서 `terraformCode`와 모든 `terraformFiles[].terraformCode`가 공백이면 사용자가 Terraform 리소스를 모두 삭제하려는 명시 의도로 본다. 이때 API는 지원 범위 안의 Diagram-only resource를 `delete_candidate`로 반환하고, Diagram도 이미 비어 있으면 diagnostics 없이 성공한다.
+Terraform editor 저장 sync action에서 `terraformCode`와 모든 `terraformFiles[].terraformCode`가 공백이면 사용자가 Terraform 리소스를 모두 삭제하려는 명시 의도로 본다. 이때 API는 `terraformSync` capability가 `true`인 Diagram-only resource를 `delete_candidate`로 반환하고, Diagram도 이미 비어 있으면 diagnostics 없이 성공한다.
 
 Terraform editor에서 새로 발견한 구조 변경 proposal의 v1 범위는 shared `ResourceDefinition`의 `terraformSync` capability가 `true`인 Terraform block이다. Terraform Preview 렌더링 대상은 `terraformPreview` capability로 따로 판단한다. 따라서 `aws_cloudfront_distribution`처럼 sync는 가능하지만 preview는 아직 제외되는 리소스가 있을 수 있다. 이미 같은 identity로 매칭된 block은 parser가 안전하게 해석할 수 있는 경우 `parameters.values` 갱신 대상이 될 수 있다.
 
 Parameter panel의 `Advanced Parameters` UI는 내부 노출 정책이 정해질 때까지 숨긴다. 이는 UI 노출 정책이며 저장 정책이 아니다. 기존 `parameters.values`에 남아 있는 optional 또는 catalog 밖 값은 사용자가 명시적으로 삭제하지 않는 한 보존하고, Terraform Preview renderer가 이해할 수 있으면 계속 렌더링 입력으로 사용한다.
 
 Terraform editor 검증은 static-only 선행 검사다. API는 Terraform CLI를 실행하지 않고 문자열만 분석해 빠른 diagnostics를 반환한다. 검사 범위는 빈 코드, 괄호/대괄호/소괄호 짝, 닫히지 않은 문자열, `resource`/`data` block header, 중복 block address, 잘못된 attribute 라인, nested block을 attribute처럼 쓴 경우, 따옴표로 감싼 Terraform reference, 선언되지 않은 local resource reference, shared `ResourceDefinition`에 없는 AWS Terraform block이다.
+
+구조 토큰 검사에서 error가 나오면 같은 파일의 body/reference 검사는 중단한다. 닫히지 않은 문자열이나 `{}` 때문에 depth 계산이 깨진 상태에서 뒤쪽 `resource` header를 이전 block body 오류처럼 표시하지 않기 위해서다. 이 경우 사용자는 먼저 가장 앞쪽 구조 오류를 고친 뒤 다시 검증한다.
 
 Workspace가 여러 Terraform 파일을 들고 있으면 `terraformFiles`를 함께 보내고, API는 파일별 문자열을 독립적으로 검사해 `sourceFileName`을 diagnostics에 붙인다. `terraformCode`는 단일 파일 호환용 입력이자 빈 코드 저장 의도 판별용 입력이다. Editor validation은 provider schema 전체를 재현하지 않으며, 실제 `terraform init`, `terraform validate`, `plan`, `apply`, `destroy`, backend/state mutation은 Deployment 실행 경계에서만 다룬다.
 

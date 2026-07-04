@@ -4,6 +4,7 @@ import type {
   TerraformValidateRequest
 } from "@sketchcatch/types";
 import { getResourceDefinitionByTerraform } from "@sketchcatch/types/resource-definitions";
+import { isTerraformNestedBlockAttribute } from "./terraform-nested-blocks.js";
 
 const BLOCK_HEADER_PATTERN =
   /^\s*(resource|data)\s+"([^"]+)"\s+"([^"]+)"\s*\{\s*(?:\}\s*)?$/;
@@ -16,12 +17,6 @@ const QUOTED_REFERENCE_PATTERN =
   /"((?:aws_[A-Za-z0-9_]+|data\.aws_[A-Za-z0-9_]+)\.[A-Za-z0-9_]+\.[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*)"/g;
 const TERRAFORM_REFERENCE_PATTERN =
   /\b(?:data\.aws_[A-Za-z0-9_]+\.[A-Za-z0-9_]+|aws_[A-Za-z0-9_]+\.[A-Za-z0-9_]+)(?:\.[A-Za-z0-9_]+)+\b/g;
-const TERRAFORM_NESTED_BLOCK_ATTRIBUTES: Record<string, ReadonlySet<string>> = {
-  aws_ami: new Set(["filter"]),
-  aws_route_table: new Set(["route"]),
-  aws_security_group: new Set(["egress", "ingress"])
-};
-
 type TerraformValidationFile = {
   readonly fileName: string;
   readonly terraformCode: string;
@@ -53,12 +48,20 @@ export function createTerraformDiagnostics(terraformCode: string): TerraformDiag
     ];
   }
 
+  const commentStrippedCode = stripBlockCommentsPreservingLines(terraformCode);
+  const tokenDiagnostics = checkBalancedTokens(commentStrippedCode);
+  const blockDiagnostics = checkBlocks(commentStrippedCode);
+
+  if (hasBlockingTokenDiagnostics(tokenDiagnostics)) {
+    return mergeBlockErrorsAroundTokenDiagnostics(tokenDiagnostics, blockDiagnostics);
+  }
+
   return [
-    ...checkBalancedTokens(terraformCode),
-    ...checkBlocks(terraformCode),
-    ...checkBodySyntax(terraformCode),
-    ...checkUndefinedReferences(terraformCode),
-    ...checkQuotedReferences(terraformCode)
+    ...tokenDiagnostics,
+    ...blockDiagnostics,
+    ...checkBodySyntax(commentStrippedCode),
+    ...checkUndefinedReferences(commentStrippedCode),
+    ...checkQuotedReferences(commentStrippedCode)
   ];
 }
 
@@ -105,11 +108,47 @@ function getDiagnosticSortLine(diagnostic: TerraformDiagnostic): number {
   return diagnostic.line ?? Number.MAX_SAFE_INTEGER;
 }
 
+function sortDiagnosticsBySourceOrder(
+  diagnostics: readonly TerraformDiagnostic[]
+): TerraformDiagnostic[] {
+  return [...diagnostics].sort(
+    (left, right) => getDiagnosticSortLine(left) - getDiagnosticSortLine(right)
+  );
+}
+
+function mergeBlockErrorsAroundTokenDiagnostics(
+  tokenDiagnostics: readonly TerraformDiagnostic[],
+  blockDiagnostics: readonly TerraformDiagnostic[]
+): TerraformDiagnostic[] {
+  const [firstTokenDiagnostic] = tokenDiagnostics;
+  const firstTokenLine = firstTokenDiagnostic
+    ? getDiagnosticSortLine(firstTokenDiagnostic)
+    : Number.MAX_SAFE_INTEGER;
+  const blockErrors = blockDiagnostics.filter((diagnostic) => diagnostic.severity === "error");
+  const earlierBlockErrors = blockErrors.filter(
+    (diagnostic) => getDiagnosticSortLine(diagnostic) < firstTokenLine
+  );
+  const laterBlockErrors = blockErrors.filter(
+    (diagnostic) => getDiagnosticSortLine(diagnostic) >= firstTokenLine
+  );
+
+  return [
+    ...sortDiagnosticsBySourceOrder(earlierBlockErrors),
+    ...tokenDiagnostics,
+    ...sortDiagnosticsBySourceOrder(laterBlockErrors)
+  ];
+}
+
+function hasBlockingTokenDiagnostics(diagnostics: readonly TerraformDiagnostic[]): boolean {
+  return diagnostics.some((diagnostic) => diagnostic.severity === "error");
+}
+
 function checkBalancedTokens(terraformCode: string): TerraformDiagnostic[] {
   const diagnostics: TerraformDiagnostic[] = [];
   const stack: Array<{ token: "{" | "[" | "("; line: number }> = [];
   let inString = false;
   let escaped = false;
+  let stringStartLine: number | null = null;
 
   splitTerraformLines(terraformCode).forEach((lineText, lineIndex) => {
     for (let index = 0; index < lineText.length; index += 1) {
@@ -127,6 +166,13 @@ function checkBalancedTokens(terraformCode: string): TerraformDiagnostic[] {
 
       if (char === "\"") {
         inString = !inString;
+
+        if (inString) {
+          stringStartLine = lineIndex + 1;
+        } else {
+          stringStartLine = null;
+        }
+
         continue;
       }
 
@@ -167,15 +213,20 @@ function checkBalancedTokens(terraformCode: string): TerraformDiagnostic[] {
         }
       }
     }
-  });
 
-  if (inString) {
-    diagnostics.push({
-      severity: "error",
-      code: "terraform.unbalanced",
-      message: "문자열 따옴표가 닫히지 않았습니다."
-    });
-  }
+    if (inString) {
+      diagnostics.push({
+        severity: "error",
+        code: "terraform.unbalanced",
+        line: stringStartLine ?? lineIndex + 1,
+        message: "문자열 따옴표가 닫히지 않았습니다."
+      });
+    }
+
+    inString = false;
+    escaped = false;
+    stringStartLine = null;
+  });
 
   for (const item of stack) {
     diagnostics.push({
@@ -494,6 +545,59 @@ function splitTerraformLines(terraformCode: string): string[] {
   return terraformCode.split(/\r?\n/);
 }
 
+function stripBlockCommentsPreservingLines(terraformCode: string): string {
+  let result = "";
+  let inString = false;
+  let inBlockComment = false;
+  let escaped = false;
+
+  for (let index = 0; index < terraformCode.length; index += 1) {
+    const char = terraformCode[index] ?? "";
+    const nextChar = terraformCode[index + 1];
+
+    if (inBlockComment) {
+      if (char === "*" && nextChar === "/") {
+        result += "  ";
+        inBlockComment = false;
+        index += 1;
+        continue;
+      }
+
+      result += char === "\n" || char === "\r" ? char : " ";
+      continue;
+    }
+
+    if (escaped) {
+      result += char;
+      escaped = false;
+      continue;
+    }
+
+    if (char === "\\") {
+      result += char;
+      escaped = true;
+      continue;
+    }
+
+    if (char === "\"") {
+      result += char;
+      inString = !inString;
+      continue;
+    }
+
+    if (!inString && char === "/" && nextChar === "*") {
+      result += "  ";
+      inBlockComment = true;
+      index += 1;
+      continue;
+    }
+
+    result += char;
+  }
+
+  return result;
+}
+
 function toValidationFiles(input: TerraformValidateRequest): TerraformValidationFile[] {
   if (input.terraformFiles && input.terraformFiles.length > 0) {
     return input.terraformFiles.map((file) => ({
@@ -612,7 +716,7 @@ function getBraceDelta(lineText: string): number {
 }
 
 function isNestedBlockAttribute(resourceType: string, attributeName: string): boolean {
-  return TERRAFORM_NESTED_BLOCK_ATTRIBUTES[resourceType]?.has(attributeName) === true;
+  return isTerraformNestedBlockAttribute(resourceType, attributeName);
 }
 
 function isAwsTerraformType(resourceType: string, blockType: TerraformBlockType): boolean {

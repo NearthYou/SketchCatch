@@ -52,6 +52,19 @@ test("createTerraformDiagnosticLineNumbers filters diagnostics by displayed sour
   );
 });
 
+test("createTerraformDiagnosticLineNumbers ignores source-less diagnostics for a selected file", () => {
+  assert.deepEqual(
+    createTerraformDiagnosticLineNumbers(
+      [{ line: 1, message: "missing source", severity: "error" }],
+      {
+        codeLineCount: 2,
+        sourceFileName: "network.tf"
+      }
+    ),
+    []
+  );
+});
+
 test("createTerraformDiagnosticLineNumbers maps source file lines to resource code lines", () => {
   assert.deepEqual(
     createTerraformDiagnosticLineNumbers(
@@ -66,5 +79,48 @@ test("createTerraformDiagnosticLineNumbers maps source file lines to resource co
       }
     ),
     [2]
+  );
+});
+
+test("createTerraformDiagnosticLineNumbers keeps unclosed string errors on their source line", () => {
+  assert.deepEqual(
+    createTerraformDiagnosticLineNumbers(
+      [
+        {
+          code: "terraform.unbalanced",
+          line: 20,
+          message: "문자열 따옴표가 닫히지 않았습니다.",
+          severity: "error",
+          sourceFileName: "main.tf"
+        }
+      ],
+      {
+        codeLineCount: 26,
+        sourceFileName: "main.tf"
+      }
+    ),
+    [20]
+  );
+});
+
+test("createTerraformDiagnosticLineNumbers maps unclosed string errors inside resource code mode", () => {
+  assert.deepEqual(
+    createTerraformDiagnosticLineNumbers(
+      [
+        {
+          code: "terraform.unbalanced",
+          line: 20,
+          message: "문자열 따옴표가 닫히지 않았습니다.",
+          severity: "error",
+          sourceFileName: "network.tf"
+        }
+      ],
+      {
+        codeLineCount: 8,
+        sourceFileName: "network.tf",
+        sourceLineOffset: 17
+      }
+    ),
+    [3]
   );
 });

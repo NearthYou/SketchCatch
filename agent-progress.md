@@ -15,6 +15,47 @@
 
 ## 세션 레코드
 
+### 2026-07-04 - Terraform diagnostics 구조 오류 연쇄 표시 수정
+
+- Goal: 닫히지 않은 문자열 따옴표나 `{}` 같은 구조 오류 하나 때문에 뒤쪽 Terraform resource까지 오류로 표시되는 diagnostics 연쇄 오류를 줄인다.
+- Root cause:
+  - `checkBalancedTokens`가 문자열이 열린 상태를 EOF까지 유지하면 뒤쪽 닫는 `}`를 문자열 내부로 보고 무시했다.
+  - 그 결과 실제로는 닫힌 `{` stack이 남아, 따옴표 오류와 관계없는 중괄호 오류가 함께 생성됐다.
+  - `{}` 균형이 이미 깨진 상태에서도 `checkBodySyntax`가 계속 실행되면, 다음 `resource` header를 이전 block 내부의 잘못된 body line처럼 해석해 파생 `attribute_syntax` 오류를 만들었다.
+  - Completed:
+    - 문자열 시작 line을 추적해 닫히지 않은 문자열 diagnostic에 line number를 붙였다.
+    - 일반 quoted string은 줄을 넘지 않는 HCL 규칙에 맞춰, 줄 끝에서 문자열이 닫히지 않으면 그 줄을 즉시 오류로 확정하고 다음 줄 quote가 해당 문자열을 닫은 것처럼 처리하지 않게 했다.
+    - 닫히지 않은 문자열 때문에 `{}` 중괄호 오류가 연쇄로 함께 뜨지 않도록 했다.
+    - `{}`/`[]`/`()`/문자열 balance 단계에서 error가 나오면 body/reference/quoted-reference 검사를 실행하지 않아, 깨진 depth 기반 파생 오류가 다음 resource에 표시되지 않게 했다.
+    - 구조 오류가 있어도 그보다 앞선 block header error는 함께 반환해 first blocking diagnostic이 뒤쪽 token error로 밀리지 않게 했다.
+    - `/* ... */` block comment 내부의 quote, brace, reference를 실제 Terraform 코드처럼 검사하지 않게 했다.
+    - line 20에서 누락된 quote가 다음 `resource` header인 line 24로 밀려 표시되는 회귀 케이스를 추가했다.
+    - line 17에서 닫히지 않은 resource block 때문에 다음 `resource` header인 line 23에 body syntax 오류가 같이 뜨는 회귀 케이스를 추가했다.
+    - 하위 AI 6개 축 감사에서 나온 cleanup 피드백을 반영해 Web의 숨겨진 Issues 복사본/unused CSS를 제거하고, source 없는 multi-file diagnostic이 특정 파일에 잘못 밑줄을 만들지 않게 했다.
+    - Terraform nested block 지원 목록을 API Terraform service helper로 단일화했다.
+    - `docs/data-models.md`, `docs/sw/001_테라폼변환구현가이드_sw.md`, `docs/sw/003_테라폼동기화구조설명_sw.md`의 stale 설명과 문서 찌꺼기를 정리했다.
+    - virtual file validation에서도 `sourceFileName`과 원래 line number가 유지되는 회귀 테스트를 추가했다.
+    - Web diagnostic line helper가 닫히지 않은 문자열 diagnostic을 해당 source line과 resource code 부분보기 offset에 맞게 표시하는 회귀 테스트를 추가했다.
+  - Verification run:
+    - Red before fix: `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-diagnostics.test.ts` - failed because unclosed string produced extra `{` diagnostics.
+    - Red before fix: `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-diagnostics.test.ts` - failed because a missing quote on line 20 reported line 24.
+    - Red before fix: `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-diagnostics.test.ts` - failed because a missing `}` on line 17 also produced `terraform.attribute_syntax` on line 23.
+    - Red before fix: `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-diagnostics.test.ts` - failed because a later token error hid an earlier block header error.
+    - Red before fix: `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/terraform-diagnostic-line-highlights.test.ts` - failed because a source-less diagnostic highlighted the selected file line.
+    - `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-diagnostics.test.ts` - passed.
+    - `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-diagnostics.test.ts src/services/terraform/diagram-to-terraform.test.ts src/services/terraform/terraform-to-diagram.test.ts src/routes/terraform.test.ts` - passed.
+    - `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-diagnostics.test.ts src/routes/terraform.test.ts` - passed.
+    - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/terraform-diagnostic-line-highlights.test.ts` - passed.
+    - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/terraform-diagnostic-line-highlights.test.ts features/workspace/terraform-code-highlighting.test.ts features/workspace/workspace-right-panel-layout.test.ts` - passed.
+    - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/terraform-diagnostic-line-highlights.test.ts features/workspace/terraform-code-highlighting.test.ts features/workspace/workspace-right-panel-layout.test.ts features/workspace/workspace-deployment-artifacts.test.ts` - passed.
+    - `pnpm lint` - passed.
+    - `pnpm typecheck` - passed.
+    - `pnpm build` - passed.
+    - `git diff --check` - passed.
+    - `pnpm harness:check` - passed.
+- Evidence recorded:
+  - 실제 Terraform CLI, apply/destroy, cloud mutation은 실행하지 않았다.
+
 ### 2026-07-04 - Terraform editor CLI 검증 폐기와 정적 diagnostics 강화
 
 - Goal: Terraform editor 검증에서 CLI 실행 경로를 제거하고, 기존 1차 정적 diagnostics를 저장 전 선행 검사로 강화한다.

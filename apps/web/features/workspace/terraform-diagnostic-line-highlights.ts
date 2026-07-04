@@ -23,11 +23,7 @@ export function createTerraformDiagnosticLineNumbers(
       continue;
     }
 
-    if (
-      diagnostic.sourceFileName &&
-      sourceFileName &&
-      diagnostic.sourceFileName !== sourceFileName
-    ) {
+    if (sourceFileName && diagnostic.sourceFileName !== sourceFileName) {
       continue;
     }
 
