@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { TerraformDiagnostic, TerraformSourceLocation } from "@sketchcatch/types";
+import type { CheckFinding, TerraformDiagnostic, TerraformSourceLocation } from "@sketchcatch/types";
 import {
   AlertCircle,
   Code2,
@@ -23,6 +23,10 @@ import { TerraformIssuesPanel } from "./TerraformIssuesPanel";
 import { TerraformLeaveDialog } from "./TerraformLeaveDialog";
 import { WorkspaceAiPanel } from "./WorkspaceAiPanel";
 import { defaultResourceWorkspaceView } from "./resource-workspace-view";
+import {
+  WORKSPACE_SAFETY_FINDING_AI_EVENT,
+  type WorkspaceSafetyFindingAiEventDetail
+} from "./safety-finding-ai-event";
 import {
   saveWorkspaceTerraformArtifact,
   type SavedWorkspaceTerraformArtifact
@@ -60,6 +64,7 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
   const [terraformSaveRequestId, setTerraformSaveRequestId] = useState(0);
   const [terraformDiscardRequestId, setTerraformDiscardRequestId] = useState(0);
   const [terraformDiagnostics, setTerraformDiagnostics] = useState<TerraformDiagnostic[]>([]);
+  const [selectedAiSafetyFinding, setSelectedAiSafetyFinding] = useState<CheckFinding | null>(null);
   const hasTerraformIssueErrors = terraformDiagnostics.some((diagnostic) => diagnostic.severity === "error");
   const currentDeploymentBaselineFingerprint = useMemo(
     () => toDeploymentBaselineFingerprint(context.diagram),
@@ -214,6 +219,23 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
     window.setTimeout(() => {
       terraformPanelRef.current?.openTerraformSourceLocation(sourceLocation);
     }, 0);
+  }, [context]);
+
+  useEffect(() => {
+    function handleSafetyFindingAiOpen(event: Event): void {
+      const detail = (event as CustomEvent<WorkspaceSafetyFindingAiEventDetail>).detail;
+
+      if (!detail?.finding) {
+        return;
+      }
+
+      setSelectedAiSafetyFinding(detail.finding);
+      context.setRightPanelOpen(true);
+      setActiveView("ai");
+    }
+
+    window.addEventListener(WORKSPACE_SAFETY_FINDING_AI_EVENT, handleSafetyFindingAiOpen);
+    return () => window.removeEventListener(WORKSPACE_SAFETY_FINDING_AI_EVENT, handleSafetyFindingAiOpen);
   }, [context]);
 
   useEffect(() => {
@@ -423,7 +445,7 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
         <TerraformIssuesPanel diagnostics={terraformDiagnostics} />
       </div>
       <div className={styles.rightPanelView} hidden={activeView !== "ai"}>
-        <WorkspaceAiPanel context={context} />
+        <WorkspaceAiPanel context={context} selectedSafetyFinding={selectedAiSafetyFinding} />
       </div>
       <div className={styles.rightPanelView} hidden={activeView !== "deployment"}>
         {activeView === "deployment" ? (

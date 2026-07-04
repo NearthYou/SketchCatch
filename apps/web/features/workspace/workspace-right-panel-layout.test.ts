@@ -306,6 +306,25 @@ test("pre-deployment findings expose an AI window open event", () => {
   assert.match(aiButtonRule, /\bcolor:\s*#6f4cf6;/);
 });
 
+test("safety finding AI event opens the AI panel with the selected finding", () => {
+  const aiSafetyFindingRule = getCssRule(stylesSource, "aiSafetyFindingCard");
+
+  assert.match(componentSource, /WORKSPACE_SAFETY_FINDING_AI_EVENT/);
+  assert.match(componentSource, /handleSafetyFindingAiOpen/);
+  assert.match(componentSource, /setSelectedAiSafetyFinding\(detail\.finding\)/);
+  assert.match(componentSource, /setActiveView\("ai"\)/);
+  assert.match(componentSource, /selectedSafetyFinding=\{selectedAiSafetyFinding\}/);
+  assert.match(aiPanelSource, /selectedSafetyFinding/);
+  assert.match(aiPanelSource, /WorkspaceAiSafetyFinding/);
+  assert.match(aiPanelSource, /finding\.aiSafetyExplanation/);
+  assert.match(aiPanelSource, /formatSafetyFindingSourceLocation/);
+  assert.match(aiSafetyFindingRule, /\bborder-left:\s*4px solid #f59e0b;/);
+  assert.match(
+    stylesSource,
+    /\.aiSafetyFindingCard\[data-severity="high"\]\s*\{[^}]*border-left-color:\s*#dc2626;/s
+  );
+});
+
 test("pre-deployment findings can jump to Terraform source locations", () => {
   const fixButtonRule = getCssRule(stylesSource, "deploymentFindingFixButton");
   const sourceHighlightRule = getCssRule(stylesSource, "terraformSourceLineHighlight");

@@ -2058,6 +2058,110 @@
   margin: 0;
 }
 
+.aiSafetyFindingCard {
+  background: #ffffff;
+  border: 1px solid #e3e9f2;
+  border-left: 4px solid #f59e0b;
+  border-radius: 7px;
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 11px;
+}
+
+.aiSafetyFindingCard[data-severity="high"] {
+  border-left-color: #dc2626;
+}
+
+.aiSafetyFindingCard[data-severity="low"] {
+  border-left-color: #16a34a;
+}
+
+.aiSafetyFindingHeader {
+  align-items: start;
+  display: grid;
+  gap: 5px;
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+.aiSafetyFindingHeader span {
+  color: #9a3412;
+  font-size: 10px;
+  font-weight: 950;
+  line-height: 1.4;
+}
+
+.aiSafetyFindingCard[data-severity="high"] .aiSafetyFindingHeader span {
+  color: #b91c1c;
+}
+
+.aiSafetyFindingCard[data-severity="low"] .aiSafetyFindingHeader span {
+  color: #15803d;
+}
+
+.aiSafetyFindingHeader h3 {
+  color: #172033;
+  font-size: 13px;
+  line-height: 1.35;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.aiSafetyFindingMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.aiSafetyFindingMeta span {
+  background: #f4f7fb;
+  border: 1px solid #dce3ee;
+  border-radius: 999px;
+  color: #526174;
+  font-size: 10.5px;
+  font-weight: 850;
+  padding: 4px 7px;
+}
+
+.aiSafetyFindingDetails {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.aiSafetyFindingDetails div {
+  display: grid;
+  gap: 3px;
+}
+
+.aiSafetyFindingDetails dt {
+  color: #475569;
+  font-size: 10px;
+  font-weight: 950;
+}
+
+.aiSafetyFindingDetails dd {
+  color: #172033;
+  font-size: 11.5px;
+  line-height: 1.45;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.aiSafetyFindingSteps {
+  display: grid;
+  gap: 4px;
+  list-style: disc;
+  margin: 0;
+  padding-left: 16px;
+}
+
+.aiSafetyFindingSteps li {
+  color: #475569;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
 .aiListBlock {
   display: grid;
   gap: 5px;

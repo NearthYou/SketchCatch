@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import type {
   AiArchitectureDraftResult,
+  CheckFinding,
   ArchitectureDraftBudgetLevel,
   ArchitectureDraftScenarioHint,
   ArchitectureDraftSecurityPriority,
@@ -40,10 +41,11 @@ import styles from "./workspace.module.css";
 
 export type WorkspaceAiPanelProps = {
   readonly context: DiagramEditorPanelContext;
+  readonly selectedSafetyFinding?: CheckFinding | null;
 };
 
 // 실제 Architecture Board 오른쪽 패널에서 gg AI MVP 흐름을 실행합니다.
-export function WorkspaceAiPanel({ context }: WorkspaceAiPanelProps) {
+export function WorkspaceAiPanel({ context, selectedSafetyFinding = null }: WorkspaceAiPanelProps) {
   const [prompt, setPrompt] = useState(DEFAULT_REQUIREMENT_PROMPT);
   const [scenarioHint, setScenarioHint] = useState<ArchitectureDraftScenarioHint>("backend_with_db");
   const [budgetLevel, setBudgetLevel] = useState<ArchitectureDraftBudgetLevel>("low");
@@ -132,6 +134,8 @@ export function WorkspaceAiPanel({ context }: WorkspaceAiPanelProps) {
         <h2>Workspace AI</h2>
       </header>
 
+      <WorkspaceAiSafetyFinding finding={selectedSafetyFinding} />
+
       <section className={styles.aiSection}>
         <label className={styles.aiField}>
           <span>Requirement Prompt</span>
@@ -208,4 +212,62 @@ export function WorkspaceAiPanel({ context }: WorkspaceAiPanelProps) {
       </section>
     </div>
   );
+}
+
+function WorkspaceAiSafetyFinding({ finding }: { readonly finding: CheckFinding | null }) {
+  if (!finding) {
+    return null;
+  }
+
+  const explanation = finding.aiSafetyExplanation;
+  const sourceLocationText = formatSafetyFindingSourceLocation(finding);
+
+  return (
+    <section className={styles.aiSection}>
+      <article className={styles.aiSafetyFindingCard} data-severity={finding.severity}>
+        <div className={styles.aiSafetyFindingHeader}>
+          <span>{finding.severity.toUpperCase()}</span>
+          <h3>{finding.title}</h3>
+        </div>
+        <div className={styles.aiSafetyFindingMeta}>
+          <span>{finding.category}</span>
+          {finding.resourceId ? <span>{finding.resourceId}</span> : null}
+          {sourceLocationText ? <span>{sourceLocationText}</span> : null}
+        </div>
+        <dl className={styles.aiSafetyFindingDetails}>
+          <div>
+            <dt>왜 위험한가</dt>
+            <dd>{explanation?.whyDangerous ?? finding.description}</dd>
+          </div>
+          <div>
+            <dt>권장 수정</dt>
+            <dd>{explanation?.recommendedFix ?? finding.recommendation}</dd>
+          </div>
+          {explanation?.terraformHint ? (
+            <div>
+              <dt>Terraform hint</dt>
+              <dd>{explanation.terraformHint}</dd>
+            </div>
+          ) : null}
+        </dl>
+        {explanation?.verificationSteps.length ? (
+          <ul className={styles.aiSafetyFindingSteps}>
+            {explanation.verificationSteps.slice(0, 4).map((step, index) => (
+              <li key={`${finding.id}-ai-step-${index}`}>{step}</li>
+            ))}
+          </ul>
+        ) : null}
+      </article>
+    </section>
+  );
+}
+
+function formatSafetyFindingSourceLocation(finding: CheckFinding): string | null {
+  const sourceLocation = finding.sourceLocation;
+
+  if (!sourceLocation) {
+    return null;
+  }
+
+  return `${sourceLocation.fileName}:${sourceLocation.line}`;
 }
