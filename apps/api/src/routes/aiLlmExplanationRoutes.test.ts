@@ -14,6 +14,88 @@ const llmExplanationSchema = z.object({
   fallbackReason: z.string().optional()
 });
 
+const aiSafetyExplanationSchema = z.object({
+  riskSummary: z.string(),
+  whyDangerous: z.string(),
+  recommendedFix: z.string(),
+  terraformHint: z.string().optional(),
+  verificationSteps: z.array(z.string()),
+  fallbackUsed: z.boolean(),
+  providerMetadata: z
+    .object({
+      provider: z.string(),
+      service: z.string(),
+      routeTarget: z.string()
+    })
+    .optional()
+});
+
+test("POST /api/ai/safety-finding-explanation explains one deterministic finding", async () => {
+  const receivedFindingIds: string[] = [];
+  const app = buildApp({
+    createSafetyFindingExplanation: async (finding) => {
+      receivedFindingIds.push(finding.id);
+
+      return {
+        riskSummary: `${finding.id} summary`,
+        whyDangerous: "위험 설명",
+        recommendedFix: "수정 제안",
+        terraformHint: "Terraform hint",
+        verificationSteps: ["검사를 다시 실행"],
+        fallbackUsed: false,
+        providerMetadata: {
+          provider: "openai",
+          service: "openai_responses",
+          model: "test-gpt",
+          routeTarget: "safety_finding_explanation",
+          cacheHit: false,
+          cacheKey: "test-cache-key",
+          estimatedUsage: {
+            inputCharacters: 10,
+            inputTokensEstimate: 3
+          },
+          billingMode: "standard",
+          generatedAt: new Date().toISOString()
+        }
+      };
+    }
+  });
+
+  try {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/ai/safety-finding-explanation",
+      payload: {
+        finding: {
+          id: "security-open-ssh-sg-app",
+          category: "security",
+          severity: "high",
+          resourceId: "sg-app",
+          sourceLocation: {
+            fileName: "main.tf",
+            line: 15,
+            resourceAddress: "aws_security_group.sg_app"
+          },
+          title: "SSH가 전체 인터넷에 열려 있습니다",
+          description: "22번 포트가 0.0.0.0/0에 열려 있습니다.",
+          recommendation: "관리자 CIDR만 허용하세요."
+        }
+      }
+    });
+
+    assert.equal(response.statusCode, 200);
+
+    const body = aiSafetyExplanationSchema.parse(response.json());
+
+    assert.equal(body.riskSummary, "security-open-ssh-sg-app summary");
+    assert.equal(body.fallbackUsed, false);
+    assert.equal(body.providerMetadata?.routeTarget, "safety_finding_explanation");
+    assert.deepEqual(receivedFindingIds, ["security-open-ssh-sg-app"]);
+  } finally {
+    await app.close();
+  }
+});
+
 test("POST /api/ai/pre-deployment-check returns fallback llmExplanation when Bedrock credit is not confirmed", async () => {
   const restoreAiEnv = forceAwsAiCreditBlocked();
   const app = buildApp();
