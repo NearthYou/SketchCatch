@@ -25,6 +25,8 @@ import type {
   DesignSimulationResult,
   DeployedResource,
   Deployment,
+  DeploymentFailureExplanation,
+  DeploymentFailureExplanationResponse,
   DeploymentListResponse,
   DeploymentLog,
   DeploymentLogListResponse,
@@ -618,6 +620,19 @@ export async function listDeploymentLogs(deploymentId: string): Promise<Deployme
   );
 
   return response.logs;
+}
+
+export async function getDeploymentFailureExplanation(
+  deploymentId: string
+): Promise<DeploymentFailureExplanation> {
+  const response = await apiFetch<DeploymentFailureExplanationResponse>(
+    `/deployments/${encodeURIComponent(deploymentId)}/failure-explanation`,
+    {
+      auth: true
+    }
+  );
+
+  return response.explanation;
 }
 
 export async function streamDeploymentLogs(input: {
