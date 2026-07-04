@@ -623,6 +623,7 @@
   flex-direction: column;
   gap: 4px;
   justify-content: center;
+  min-height: 0;
   overflow: visible;
   padding: 0;
   text-align: center;
@@ -798,8 +799,8 @@
   margin: 0 auto;
   max-height: calc(100% - 22px);
   max-width: 100%;
-  min-height: 44px;
-  min-width: 44px;
+  min-height: 22px;
+  min-width: 22px;
   pointer-events: none;
   width: auto;
 }
