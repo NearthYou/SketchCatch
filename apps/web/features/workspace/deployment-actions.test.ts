@@ -6,6 +6,7 @@ import {
   getDeploymentActionState,
   getDeploymentLogMessageTokens,
   getDeploymentLogTone,
+  hasCompleteDeploymentApprovalSnapshot,
   shouldAutoRefreshDeployment,
   shouldShowDeploymentInfoValue
 } from "./deployment-actions";
@@ -129,6 +130,22 @@ test("approved destroy plan enables destroy and keeps apply hidden", () => {
   assert.equal(state.canApply, false);
   assert.equal(state.shouldShowDestroyButton, true);
   assert.equal(state.canDestroy, true);
+});
+
+test("approved apply waits for a complete approval snapshot", () => {
+  const deployment = createDeployment({
+    approved: true,
+    approvedTfplanHash: null,
+    currentPlanArtifactId: "99999999-9999-4999-8999-999999999999",
+    currentPlanOperation: "apply",
+    isBlocked: false,
+    status: "PENDING"
+  });
+  const state = getDeploymentActionState(deployment, "idle");
+
+  assert.equal(hasCompleteDeploymentApprovalSnapshot(deployment), false);
+  assert.equal(state.shouldShowApplyButton, true);
+  assert.equal(state.canApply, false);
 });
 
 test("failed apply with partial state offers cleanup planning", () => {

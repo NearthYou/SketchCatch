@@ -43,6 +43,7 @@ import {
   getDeploymentActionState,
   getDeploymentLogMessageTokens,
   getDeploymentLogTone,
+  hasCompleteDeploymentApprovalSnapshot,
   shouldAutoRefreshDeployment,
   shouldShowDeploymentInfoValue,
   type DeploymentLogMessageToken,
@@ -1024,6 +1025,14 @@ export function DeploymentPanel({
             value={selectedDeployment.approvedAwsAccountId ?? "없음"}
           />
           <InfoRow label="AWS region" value={selectedDeployment.approvedAwsRegion ?? "없음"} />
+          <InfoRow
+            label="tfplan hash"
+            value={formatShortHash(selectedDeployment.approvedTfplanHash)}
+          />
+          <InfoRow
+            label="Artifact hash"
+            value={formatShortHash(selectedDeployment.approvedTerraformArtifactHash)}
+          />
           {selectedDeployment.planSummary ? (
             <InfoRow
               label="Plan changes"
@@ -1559,6 +1568,12 @@ function formatApprovalState(deployment: Deployment): string {
 function getDeploymentActionHint(deployment: Deployment): string {
   if (deployment.status === "DESTROYED") {
     return "Cleanup destroy가 완료되었습니다. Deployment 결과와 state pointer가 정리되었습니다.";
+  }
+
+  if (deployment.approvedAt && !hasCompleteDeploymentApprovalSnapshot(deployment)) {
+    const actionLabel = deployment.currentPlanOperation === "destroy" ? "Destroy" : "Apply";
+
+    return `승인 스냅샷이 불완전합니다. Terraform Plan을 다시 실행하고 승인한 뒤 ${actionLabel}를 진행하세요.`;
   }
 
   if (deployment.currentPlanOperation === "destroy" && deployment.approvedAt) {

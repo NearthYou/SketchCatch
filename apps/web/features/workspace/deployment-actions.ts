@@ -38,6 +38,9 @@ export function getDeploymentActionState(
   const isLoading = requestState === "loading";
   const hasCurrentPlan = Boolean(deployment?.currentPlanArtifactId);
   const isPlanApproved = Boolean(deployment?.approvedAt && deployment.approvedPlanArtifactId);
+  const hasCompleteApprovalSnapshot = deployment
+    ? hasCompleteDeploymentApprovalSnapshot(deployment)
+    : false;
   const isDestroyable = Boolean(deployment && isCleanupDestroyCandidate(deployment));
   const isDestroyPlan = deployment?.currentPlanOperation === "destroy";
   const isApplyPlan = deployment?.currentPlanOperation === "apply";
@@ -76,6 +79,7 @@ export function getDeploymentActionState(
       deployment.status !== "SUCCESS" &&
       deployment.status !== "DESTROYED" &&
       deployment.isBlocked === false &&
+      hasCompleteApprovalSnapshot &&
       !isLoading
   );
   const canRunDestroyPlan = canShowDestroyPlanAction && !isLoading;
@@ -86,6 +90,7 @@ export function getDeploymentActionState(
       isPlanApproved &&
       deployment.status !== "RUNNING" &&
       deployment.isBlocked === false &&
+      hasCompleteApprovalSnapshot &&
       !isLoading
   );
   const canCancelDeployment = Boolean(
@@ -112,6 +117,19 @@ export function getDeploymentActionState(
     shouldShowDestroyButton: Boolean(deployment && isDestroyPlan && isPlanApproved),
     approvePlanLabel: isDestroyPlan ? "Destroy Plan 승인" : "Plan 승인"
   };
+}
+
+export function hasCompleteDeploymentApprovalSnapshot(deployment: Deployment): boolean {
+  return Boolean(
+    deployment.approvedAt &&
+      deployment.approvedByUserId &&
+      deployment.approvedTerraformArtifactId &&
+      deployment.approvedPlanArtifactId &&
+      deployment.approvedTerraformArtifactHash &&
+      deployment.approvedTfplanHash &&
+      deployment.approvedAwsAccountId &&
+      deployment.approvedAwsRegion
+  );
 }
 
 export function shouldAutoRefreshDeployment(deployment: Deployment | null): boolean {
