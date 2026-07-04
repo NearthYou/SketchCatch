@@ -78,13 +78,14 @@ export function createDiagramNodeFromPayload(
 ): DiagramNode {
   const item = payload.item;
   const kind = getNodeKind(item);
+  const parameters = kind === "resource" ? createDefaultNodeParameters(item, currentNodes) : undefined;
   const nodeBase = {
     id: createDiagramId("node"),
     type: item.nodeDefaults.type,
     kind,
     position,
     size: { ...item.nodeDefaults.size },
-    label: item.nodeDefaults.label,
+    label: parameters?.resourceName ?? item.nodeDefaults.label,
     iconUrl: item.iconUrl,
     locked: false,
     zIndex,
@@ -97,7 +98,7 @@ export function createDiagramNodeFromPayload(
 
   return {
     ...nodeBase,
-    parameters: createDefaultNodeParameters(item, currentNodes)
+    parameters
   };
 }
 

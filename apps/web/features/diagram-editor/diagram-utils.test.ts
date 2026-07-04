@@ -112,7 +112,7 @@ test("createDiagramNodeFromPayload appends a numeric suffix for duplicate resour
   );
 
   assert.equal(node.parameters?.resourceName, "ec2_instance_3");
-  assert.equal(node.label, "EC2 Instance");
+  assert.equal(node.label, "ec2_instance_3");
 });
 
 test("createDiagramNodeFromPayload does not attach parameters to design nodes", () => {
