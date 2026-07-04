@@ -13,6 +13,25 @@
 - Highest priority unfinished harness feature: `HARNESS-007`
 - Current blocker: none
 
+### 2026-07-05 - EC2 초안 컨테이너 기반 다이어그램 보강
+- Goal: 자연어로 EC2 다이어그램을 생성했을 때 EC2가 단독 노드처럼 보이지 않고 Region/VPC/AZ/Subnet/Security Group 컨테이너 계층 안에 배치되게 한다.
+- Completed:
+  - `ArchitectureJson`에 VPC/Subnet/EC2가 함께 있으면 프론트 변환 단계에서 Region/AZ 보조 영역을 일반적으로 추가하도록 확장했다.
+  - 기존 고정 MVP 템플릿 ID가 없는 생성 초안에서 `internet-gateway`가 잘못된 `vpc` 부모를 물지 않도록, 고정 부모 ID는 실제 노드가 있을 때만 적용하게 했다.
+  - 생성형 EC2 초안 ID(`vpc-main`, `public-subnet`, `app-security-group`, `app-server`)가 Region > VPC > AZ > Subnet > Security Group > EC2 계층으로 변환되는 회귀 테스트를 추가했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edit and after edit
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-ai-diagram-adapter.test.ts` - passed, 17 tests
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web lint` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web typecheck` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm lint` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm typecheck` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm build` - passed
+- Evidence recorded:
+  - 실제 `EC2 다이어그램 만들어줘` 초안 변환 결과가 `server-storage-region > vpc-main > server-storage-az > public-subnet > app-security-group > app-server` 구조로 확인됐다.
+- Known risks:
+  - 브라우저 스크린샷 검증은 아직 하지 않았다. 이번 변경은 변환 모델과 테스트 중심 검증이다.
+
 ### 2026-07-04 - 자연어 다이어그램 수정 미리보기
 - Goal: 빈 보드는 기존 자연어 생성 미리보기를 유지하고, 기존 보드는 자연어 수정 요청을 patch preview/후보 선택/사용자 적용 흐름으로 처리한다.
 - Completed:

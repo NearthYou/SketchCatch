@@ -300,7 +300,9 @@ test("convertArchitectureJsonToDiagramJson resolves Terraform references to area
   const diagramJson = convertArchitectureJsonToDiagramJson(architectureJson);
   const parentByNodeId = new Map(diagramJson.nodes.map((node) => [node.id, node.metadata?.parentAreaNodeId]));
 
-  assert.equal(parentByNodeId.get("public-a"), "network-main");
+  assert.equal(parentByNodeId.get("server-storage-az"), "network-main");
+  assert.equal(parentByNodeId.get("network-main"), "server-storage-region");
+  assert.equal(parentByNodeId.get("public-a"), "server-storage-az");
   assert.equal(parentByNodeId.get("web-server"), "public-a");
 });
 
@@ -345,7 +347,9 @@ test("convertArchitectureJsonToDiagramJson resolves common Terraform reference a
   const diagramJson = convertArchitectureJsonToDiagramJson(architectureJson);
   const parentByNodeId = new Map(diagramJson.nodes.map((node) => [node.id, node.metadata?.parentAreaNodeId]));
 
-  assert.equal(parentByNodeId.get("public-a"), "network-main");
+  assert.equal(parentByNodeId.get("server-storage-az"), "network-main");
+  assert.equal(parentByNodeId.get("network-main"), "server-storage-region");
+  assert.equal(parentByNodeId.get("public-a"), "server-storage-az");
   assert.equal(parentByNodeId.get("web-server"), "public-a");
 });
 
@@ -406,15 +410,20 @@ test("convertArchitectureJsonToDiagramJson marks VPC and Subnet containment for 
   assert.deepEqual(
     diagramJson.nodes.map((node) => ({ id: node.id, parentAreaNodeId: node.metadata?.parentAreaNodeId })),
     [
-      { id: "vpc-main", parentAreaNodeId: undefined },
-      { id: "subnet-app", parentAreaNodeId: "vpc-main" },
+      { id: "server-storage-region", parentAreaNodeId: undefined },
+      { id: "server-storage-az", parentAreaNodeId: "vpc-main" },
+      { id: "vpc-main", parentAreaNodeId: "server-storage-region" },
+      { id: "subnet-app", parentAreaNodeId: "server-storage-az" },
       { id: "sg-app", parentAreaNodeId: "subnet-app" },
       { id: "ec2-api", parentAreaNodeId: "sg-app" }
     ]
   );
 
   const nodeById = new Map(diagramJson.nodes.map((node) => [node.id, node]));
+  assertContainsNode(nodeById.get("server-storage-region"), nodeById.get("vpc-main"));
   assertContainsNode(nodeById.get("vpc-main"), nodeById.get("subnet-app"));
+  assertContainsNode(nodeById.get("vpc-main"), nodeById.get("server-storage-az"));
+  assertContainsNode(nodeById.get("server-storage-az"), nodeById.get("subnet-app"));
   assertContainsNode(nodeById.get("subnet-app"), nodeById.get("sg-app"));
   assertContainsNode(nodeById.get("sg-app"), nodeById.get("ec2-api"));
   assert.deepEqual(diagramJson.edges, []);
@@ -843,6 +852,99 @@ test("convertArchitectureJsonToDiagramJson lays out server and storage draft as 
   assert.equal(vpcNode?.size.height, 798);
   assert.equal(azNode?.size.width, 831);
   assert.equal(azNode?.size.height, 626);
+});
+
+test("convertArchitectureJsonToDiagramJson lays out generated EC2 drafts inside cloud container areas", () => {
+  const architectureJson: ArchitectureJson = {
+    nodes: [
+      {
+        id: "vpc-main",
+        type: "VPC",
+        label: "Main VPC",
+        positionX: 70,
+        positionY: 320,
+        config: { cidrBlock: "10.0.0.0/16" }
+      },
+      {
+        id: "public-subnet",
+        type: "SUBNET",
+        label: "Public Subnet",
+        positionX: 150,
+        positionY: 490,
+        config: { cidrBlock: "10.0.1.0/24", vpcId: "aws_vpc.vpc_main.id" }
+      },
+      {
+        id: "app-security-group",
+        type: "SECURITY_GROUP",
+        label: "App Security Group",
+        positionX: 220,
+        positionY: 560,
+        config: { vpcId: "aws_vpc.vpc_main.id" }
+      },
+      {
+        id: "internet-gateway",
+        type: "INTERNET_GATEWAY",
+        label: "Internet Gateway",
+        positionX: 650,
+        positionY: 360,
+        config: { vpcId: "aws_vpc.vpc_main.id" }
+      },
+      {
+        id: "app-server",
+        type: "EC2",
+        label: "Application Server",
+        positionX: 370,
+        positionY: 620,
+        config: {
+          instanceType: "t3.micro",
+          subnetId: "aws_subnet.public_subnet.id",
+          vpcSecurityGroupIds: ["aws_security_group.app_security_group.id"]
+        }
+      }
+    ],
+    edges: [
+      {
+        id: "vpc-main-to-public-subnet",
+        sourceId: "vpc-main",
+        targetId: "public-subnet",
+        label: "contains"
+      },
+      {
+        id: "public-subnet-to-app-server",
+        sourceId: "public-subnet",
+        targetId: "app-server",
+        label: "hosts"
+      }
+    ]
+  };
+
+  const diagramJson = convertArchitectureJsonToDiagramJson(architectureJson);
+
+  assert.deepEqual(
+    diagramJson.nodes.map((node) => ({
+      id: node.id,
+      parentAreaNodeId: node.metadata?.parentAreaNodeId,
+      type: node.type
+    })),
+    [
+      { id: "server-storage-region", parentAreaNodeId: undefined, type: "design_region" },
+      { id: "server-storage-az", parentAreaNodeId: "vpc-main", type: "design_az" },
+      { id: "vpc-main", parentAreaNodeId: "server-storage-region", type: "aws_vpc" },
+      { id: "public-subnet", parentAreaNodeId: "server-storage-az", type: "aws_subnet" },
+      { id: "app-security-group", parentAreaNodeId: "public-subnet", type: "aws_security_group" },
+      { id: "internet-gateway", parentAreaNodeId: "vpc-main", type: "aws_internet_gateway" },
+      { id: "app-server", parentAreaNodeId: "app-security-group", type: "aws_instance" }
+    ]
+  );
+
+  const nodeById = new Map(diagramJson.nodes.map((node) => [node.id, node]));
+
+  assertContainsNode(nodeById.get("server-storage-region"), nodeById.get("vpc-main"));
+  assertContainsNode(nodeById.get("vpc-main"), nodeById.get("server-storage-az"));
+  assertContainsNode(nodeById.get("server-storage-az"), nodeById.get("public-subnet"));
+  assertContainsNode(nodeById.get("public-subnet"), nodeById.get("app-security-group"));
+  assertContainsNode(nodeById.get("vpc-main"), nodeById.get("internet-gateway"));
+  assertContainsNode(nodeById.get("app-security-group"), nodeById.get("app-server"));
 });
 
 test("convertArchitectureJsonToDiagramJson keeps server-storage usage arrows visible", () => {
