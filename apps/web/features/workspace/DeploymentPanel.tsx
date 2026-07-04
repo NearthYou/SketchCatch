@@ -17,7 +17,7 @@ import type {
   TerraformSourceLocation,
   TerraformOutput
 } from "@sketchcatch/types";
-import { Clipboard, ClipboardCheck, FileCode2, Maximize2, ShieldCheck, Trash2, X } from "lucide-react";
+import { Clipboard, ClipboardCheck, FileCode2, Maximize2, ShieldCheck, Sparkles, Trash2, X } from "lucide-react";
 import { DashboardIcon } from "../../components/dashboard/dashboard-icons";
 import { SelectMenu, type SelectMenuOption } from "../../components/ui/SelectMenu";
 import { getApiErrorMessage } from "../../lib/api-client";
@@ -53,6 +53,7 @@ import {
   isWorkspaceAiResultStale
 } from "./workspace-ai-panel-state";
 import { addTerraformDiagnosticsToPreDeploymentAnalysis } from "./pre-deployment-diagnostics";
+import { dispatchWorkspaceSafetyFindingAiEvent } from "./safety-finding-ai-event";
 import type { TerraformVirtualFile } from "./terraform-panel-utils";
 import type { AiRequestState } from "./WorkspaceAiPanelPieces";
 import type { SavedWorkspaceTerraformArtifact } from "./workspace-deployment-artifacts";
@@ -1361,6 +1362,15 @@ function DeploymentPreDeploymentFindingItem({
           수정
         </button>
       ) : null}
+      <button
+        className={styles.deploymentFindingAiButton}
+        onClick={() => dispatchWorkspaceSafetyFindingAiEvent(finding)}
+        title="AI 창으로 설명 보기"
+        type="button"
+      >
+        <Sparkles size={13} aria-hidden="true" />
+        AI 창
+      </button>
     </li>
   );
 }

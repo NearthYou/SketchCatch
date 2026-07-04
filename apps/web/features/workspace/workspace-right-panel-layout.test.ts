@@ -297,6 +297,15 @@ test("pre-deployment findings render AI safety explanations inside the finding c
   assert.match(explanationRule, /\bgap:\s*7px;/);
 });
 
+test("pre-deployment findings expose an AI window open event", () => {
+  const aiButtonRule = getCssRule(stylesSource, "deploymentFindingAiButton");
+
+  assert.match(deploymentPanelSource, /dispatchWorkspaceSafetyFindingAiEvent/);
+  assert.match(deploymentPanelSource, /AI 창/);
+  assert.match(stylesSource, /deploymentFindingAiButton/);
+  assert.match(aiButtonRule, /\bcolor:\s*#6f4cf6;/);
+});
+
 test("pre-deployment findings can jump to Terraform source locations", () => {
   const fixButtonRule = getCssRule(stylesSource, "deploymentFindingFixButton");
   const sourceHighlightRule = getCssRule(stylesSource, "terraformSourceLineHighlight");
