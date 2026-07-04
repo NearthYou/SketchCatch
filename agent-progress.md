@@ -13,6 +13,28 @@
 - Highest priority unfinished harness feature: `HARNESS-007`
 - Current blocker: none
 
+### 2026-07-05 - AI 패치 추가 안 함 선택지와 dev 병합 정리
+- Goal: 현재 AI 다이어그램 브랜치에 최신 `origin/dev`를 병합하고, 리소스 추가 질문에 `추가 안 함` 선택지를 추가하며, 자연어/선택지 답변 모두 불필요 리소스를 만들지 않게 확인한다.
+- Completed:
+  - 기존 완료분을 `6863377 Fix: AI 채팅 답변과 용도별 초안 보정`으로 커밋했다.
+  - `origin/dev`를 fetch한 뒤 현재 브랜치에 병합했고, 로컬 `dev`도 `origin/dev`로 fast-forward했다. 병합 충돌은 없었다.
+  - 리소스 종류 질문의 선택지에 `추가 안 함`을 추가했다.
+  - `추가 안 함`, `아무것도 추가하지 마` 답변은 새 리소스를 만들지 않고 현재 다이어그램을 유지하는 no-op으로 처리한다.
+  - 웹 채팅에서 `추가 안 함` 선택지를 누르면 불필요한 0-change preview 적용 단계 없이 현재 다이어그램 유지 응답으로 닫히게 했다.
+- Verification run:
+  - `npm exec --package=pnpm@11.8.0 -- pnpm harness:check` - passed before edits and after merge
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api exec tsx --test src/services/aiArchitecturePatchPreview.test.ts` - red before fix, passed after fix, 17 tests
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api exec tsx --test src/routes/ai.test.ts` - passed, 36 tests
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-ai-clarification.test.ts` - passed, 11 tests
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-ai-guardrail-warning.test.ts` - passed, 9 tests
+  - `npm exec --package=pnpm@11.8.0 -- pnpm lint` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm typecheck` - failed because unrelated dirty #161 Terraform Issues files reference missing/incomplete modules and expanded `AiTerraformErrorExplanationResult` fixture fields
+  - `npm exec --package=pnpm@11.8.0 -- pnpm build` - failed for the same unrelated dirty #161 Terraform Issues changes after rerunning with network escalation
+  - `git diff --check` - passed
+- Known risks:
+  - 전체 `pnpm typecheck`/`pnpm build`는 현재 작업트리에 남아 있는 미완성 #161 Terraform Issues/AI 해결 변경 때문에 통과하지 못했다.
+  - 실제 브라우저 클릭 스모크, Terraform apply/destroy, cloud mutation, Git/CI/CD handoff는 수행하지 않았다.
+
 ### 2026-07-05 - AI 채팅 정적 소개 답변과 용도별 초안 구분 보정
 - Goal: AI 채팅 질문 흐름에서 `정적 소개 웹사이트로 정리해줘` 같은 완성된 답변을 반복 질문으로 돌리지 않고, AI 생성 초안이 용도별로 다른 다이어그램을 만들도록 보정한다.
 - Completed:
