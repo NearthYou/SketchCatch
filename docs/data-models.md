@@ -156,8 +156,8 @@ type DiagramJson = {
 };
 ```
 
-보드 전용 node metadata는 `node.metadata`에 둔다. `metadata`는 화면 편집 상태를 복구하기 위한 값이며,
-Terraform resource/data block 생성에는 사용하지 않는다.
+보드 전용 node metadata는 `node.metadata`에 둔다. `metadata`는 화면 편집 상태를 복구하기 위한 값이다.
+Terraform Preview v1은 Region 디자인 노드의 `metadata.awsRegion`만 AWS provider block 생성에 사용하고, 그 외 metadata는 Terraform resource/data block 생성에 사용하지 않는다.
 
 ```ts
 type AwsRegionCode =
@@ -177,6 +177,7 @@ type DiagramNodeMetadata = {
 
 Region 디자인 노드의 선택 리전은 `node.metadata.awsRegion`에 region code로 저장한다.
 예: `ap-northeast-2`. 화면 label은 프론트엔드 option catalog에서 code와 매핑한다.
+Terraform Preview는 `design_region` 또는 `sketchcatch_region` 노드가 있으면 그 값을 `provider "aws"`의 `region`으로 렌더링한다. Region 디자인 노드가 없으면 기본값은 `ap-northeast-2`다. 서로 다른 AWS region을 선택한 Region 디자인 노드가 둘 이상 있으면 Preview 생성 API는 단일 provider region만 지원하는 v1 정책에 따라 `bad_request`를 반환한다.
 
 영역 노드 안에 명시적으로 배치된 node는 `node.metadata.parentAreaNodeId`에 부모 영역 node id를 저장한다.
 이 값은 영역 이동 시 자식 node를 함께 이동시키기 위한 보드 편집 metadata이며, Terraform resource/data block 생성에는 사용하지 않는다.

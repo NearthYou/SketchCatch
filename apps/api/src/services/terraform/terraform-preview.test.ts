@@ -66,7 +66,7 @@ test("generates Terraform code from resource nodes", () => {
 
   assert.equal(
     generateTerraformFromDiagramJson(diagramJson),
-    `resource "aws_vpc" "main" {
+    withAwsProvider(`resource "aws_vpc" "main" {
   cidr_block = "10.0.0.0/16"
   enable_dns_support = true
   enable_dns_hostnames = true
@@ -84,7 +84,136 @@ resource "aws_subnet" "public" {
     Name = "public-subnet"
     "kubernetes.io/cluster/main" = "owned"
   }
-}`
+}`)
+  );
+});
+
+test("generates a default AWS provider block when no Region design node is present", () => {
+  const diagramJson: DiagramJson = {
+    nodes: [],
+    edges: [],
+    viewport: {
+      x: 0,
+      y: 0,
+      zoom: 1
+    }
+  };
+
+  assert.equal(generateTerraformFromDiagramJson(diagramJson), makeAwsProviderBlock("ap-northeast-2"));
+});
+
+test("generates an AWS provider block from the Region design node metadata", () => {
+  const diagramJson: DiagramJson = {
+    nodes: [
+      makeNode({
+        id: "region-1",
+        type: "design_region",
+        kind: "design",
+        label: "Region",
+        metadata: {
+          awsRegion: "us-east-1"
+        }
+      }),
+      makeNode({
+        id: "node-1",
+        type: "aws_s3_bucket",
+        kind: "resource",
+        label: "logs",
+        parameters: {
+          resourceType: "aws_s3_bucket",
+          resourceName: "logs",
+          fileName: "main",
+          values: {
+            bucket: "sketchcatch-logs"
+          }
+        }
+      })
+    ],
+    edges: [],
+    viewport: {
+      x: 0,
+      y: 0,
+      zoom: 1
+    }
+  };
+
+  assert.equal(
+    generateTerraformFromDiagramJson(diagramJson),
+    withAwsProvider(
+      `resource "aws_s3_bucket" "logs" {
+  bucket = "sketchcatch-logs"
+}`,
+      "us-east-1"
+    )
+  );
+});
+
+test("allows multiple Region design nodes when they select the same AWS region", () => {
+  const diagramJson: DiagramJson = {
+    nodes: [
+      makeNode({
+        id: "region-1",
+        type: "design_region",
+        kind: "design",
+        label: "Region",
+        metadata: {
+          awsRegion: "eu-west-1"
+        }
+      }),
+      makeNode({
+        id: "region-2",
+        type: "sketchcatch_region",
+        kind: "design",
+        label: "Region",
+        metadata: {
+          awsRegion: "eu-west-1"
+        }
+      })
+    ],
+    edges: [],
+    viewport: {
+      x: 0,
+      y: 0,
+      zoom: 1
+    }
+  };
+
+  assert.equal(generateTerraformFromDiagramJson(diagramJson), makeAwsProviderBlock("eu-west-1"));
+});
+
+test("rejects Terraform Preview for conflicting Region design nodes", () => {
+  const diagramJson: DiagramJson = {
+    nodes: [
+      makeNode({
+        id: "region-1",
+        type: "design_region",
+        kind: "design",
+        label: "Region",
+        metadata: {
+          awsRegion: "ap-northeast-2"
+        }
+      }),
+      makeNode({
+        id: "region-2",
+        type: "sketchcatch_region",
+        kind: "design",
+        label: "Region",
+        metadata: {
+          awsRegion: "us-west-2"
+        }
+      })
+    ],
+    edges: [],
+    viewport: {
+      x: 0,
+      y: 0,
+      zoom: 1
+    }
+  };
+
+  assert.throws(
+    () => generateTerraformFromDiagramJson(diagramJson),
+    /Multiple AWS Region design nodes/
   );
 });
 
@@ -195,9 +324,9 @@ test("renders invalid resource nodes so Terraform Preview does not disappear aft
 
   assert.equal(
     generateTerraformFromDiagramJson(diagramJson),
-    `resource "aws_vpc" "invalid" {
+    withAwsProvider(`resource "aws_vpc" "invalid" {
   cidr_block = "10.0.0.0/16"
-}`
+}`)
   );
 });
 
@@ -229,9 +358,9 @@ test("defaults missing terraformBlockType to resource", () => {
 
   assert.equal(
     generateTerraformFromDiagramJson(diagramJson),
-    `resource "aws_s3_bucket" "logs" {
+    withAwsProvider(`resource "aws_s3_bucket" "logs" {
   bucket = "sketchcatch-logs"
-}`
+}`)
   );
 });
 
@@ -345,7 +474,7 @@ test("renders data blocks", () => {
 
   assert.equal(
     generateTerraformFromDiagramJson(diagramJson),
-`data "aws_ami" "ubuntu" {
+withAwsProvider(`data "aws_ami" "ubuntu" {
   most_recent = true
   owners = [
     "099720109477",
@@ -356,7 +485,7 @@ test("renders data blocks", () => {
       "ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*",
     ]
   }
-}`
+}`)
   );
 });
 
@@ -399,7 +528,7 @@ test("renders arrays, numbers, booleans, null, and references", () => {
 
   assert.equal(
     generateTerraformFromDiagramJson(diagramJson),
-    `resource "aws_security_group_rule" "ssh" {
+    withAwsProvider(`resource "aws_security_group_rule" "ssh" {
   vpc_id = var.vpc_id
   subnet_id = module.vpc.subnet_id
   ami_id = data.aws_ami.ubuntu.id
@@ -414,7 +543,7 @@ test("renders arrays, numbers, booleans, null, and references", () => {
   ]
   description = null
   self = false
-}`
+}`)
   );
 });
 
@@ -715,4 +844,16 @@ function makeNode(
     zIndex: 0,
     ...node
   };
+}
+
+function makeAwsProviderBlock(region: string): string {
+  return `provider "aws" {
+  region = "${region}"
+}`;
+}
+
+function withAwsProvider(terraformBlocks: string, region = "ap-northeast-2"): string {
+  return `${makeAwsProviderBlock(region)}
+
+${terraformBlocks}`;
 }

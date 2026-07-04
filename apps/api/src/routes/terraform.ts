@@ -15,7 +15,10 @@ import {
   TERRAFORM_IDENTIFIER_PATTERN,
   TerraformDiagramValidationError
 } from "../services/terraform/diagram-to-terraform.js";
-import { generateTerraformFromDiagramJson } from "../services/terraform/terraform-preview.js";
+import {
+  generateTerraformFromDiagramJson,
+  TerraformPreviewValidationError
+} from "../services/terraform/terraform-preview.js";
 import { syncTerraformToDiagramJson } from "../services/terraform/terraform-to-diagram.js";
 import { createTerraformValidationDiagnostics } from "../services/terraform/terraform-diagnostics.js";
 
@@ -162,7 +165,10 @@ export async function registerTerraformRoutes(
         terraformCode: generateTerraformFromDiagramJson(body.diagramJson)
       };
     } catch (error) {
-      if (error instanceof TerraformDiagramValidationError) {
+      if (
+        error instanceof TerraformDiagramValidationError ||
+        error instanceof TerraformPreviewValidationError
+      ) {
         const response: ApiErrorResponse = {
           error: "bad_request",
           message: error.message

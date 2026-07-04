@@ -15,6 +15,31 @@
 
 ## 세션 레코드
 
+### 2026-07-04 - Terraform Preview Region provider 생성
+
+- Goal: Region 디자인 노드가 단순 화면 요소로만 남지 않고 Terraform Preview의 AWS provider region으로 렌더링되게 한다.
+- Completed:
+  - `terraform-preview.ts`가 `design_region`/`sketchcatch_region` 노드의 `metadata.awsRegion`을 읽어 `provider "aws"` block을 먼저 생성하게 했다.
+  - Region 디자인 노드가 없으면 기본 provider region은 `ap-northeast-2`로 둔다.
+  - 같은 region을 고른 Region 디자인 노드는 여러 개 허용하고, 서로 다른 region이 섞이면 `TerraformPreviewValidationError`를 던진다.
+  - `/terraform/generate` route가 Region 충돌 preview validation error를 400 `bad_request`로 매핑하게 했다.
+  - `docs/data-models.md`에 Region metadata의 Terraform Preview provider block 사용 계약을 기록했다.
+- Verification run:
+  - Red before fix: `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-preview.test.ts src/routes/terraform.test.ts` - failed because provider block was missing and conflicting Region nodes returned 200.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-preview.test.ts src/routes/terraform.test.ts` - passed.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `pnpm build` - passed.
+  - `git diff --check` - passed.
+  - `pnpm harness:check` - passed.
+- Evidence recorded:
+  - 실제 Terraform CLI, apply/destroy, cloud mutation, Git/CI/CD handoff는 실행하지 않았다.
+  - `pnpm build`가 `apps/web/next-env.d.ts`를 prod route type 경로로 바꿨지만, 생성물 변경이라 다시 tracked dev 경로로 원복했다.
+- Known risks:
+  - 멀티 리전 Terraform provider alias는 아직 지원하지 않는다. Preview v1은 단일 AWS provider region만 생성한다.
+- Next best action:
+  - 다음 단계에서 AZ placement metadata를 Terraform parameter 변환 흐름에 연결하고, 현재 icon catalog에서 생성되지만 Terraform Preview/Sync capability가 없는 리소스 목록을 확장한다.
+
 ### 2026-07-04 - PR #137 dev 병합 충돌 해결
 
 - Goal: PR 브랜치가 `origin/dev`와 충돌해 병합 불가 상태가 된 `apps/api/src/app.ts`, `apps/api/src/routes/terraform.ts`, `apps/api/src/services/terraform/terraform-diagnostics.ts`를 정리한다.

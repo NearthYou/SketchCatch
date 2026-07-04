@@ -67,10 +67,69 @@ test("POST /api/terraform/generate returns Terraform code for an active user", a
 
   assert.equal(response.statusCode, 200);
   assert.deepEqual(response.json() as TerraformGenerateResponse, {
-    terraformCode: `resource "aws_vpc" "main" {
+    terraformCode: `provider "aws" {
+  region = "ap-northeast-2"
+}
+
+resource "aws_vpc" "main" {
   cidr_block = "10.0.0.0/16"
 }`
   });
+
+  await app.close();
+});
+
+test("POST /api/terraform/generate maps conflicting Region design nodes to 400 responses", async () => {
+  const fakeDb = new AuthOnlyFakeDb({
+    users: [
+      {
+        id: ACTIVE_USER_ID,
+        deletedAt: null
+      }
+    ]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/terraform/generate",
+    headers: await authHeaders(ACTIVE_USER_ID),
+    payload: {
+      diagramJson: {
+        nodes: [
+          {
+            id: "region-1",
+            type: "design_region",
+            kind: "design",
+            label: "Region",
+            metadata: {
+              awsRegion: "ap-northeast-2"
+            }
+          },
+          {
+            id: "region-2",
+            type: "sketchcatch_region",
+            kind: "design",
+            label: "Region",
+            metadata: {
+              awsRegion: "us-east-1"
+            }
+          }
+        ],
+        edges: [],
+        viewport: {
+          x: 0,
+          y: 0,
+          zoom: 1
+        }
+      }
+    }
+  });
+
+  assert.equal(response.statusCode, 400);
+  assertErrorResponse(response.json() as ApiErrorResponse, "bad_request");
 
   await app.close();
 });

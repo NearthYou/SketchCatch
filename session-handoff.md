@@ -23,6 +23,8 @@
 - Deployment artifact 저장은 Terraform panel에서 이미 검증한 source에 대해 중복 combined-code 검증을 건너뛸 수 있다.
 - `InfrastructureGraphNode`는 더 이상 내부 `ResourceType` `type` 필드를 갖지 않는다.
 - Terraform Preview API orchestration은 `terraform-preview.ts`가 담당하고, `diagram-to-terraform.ts`는 `InfrastructureGraph -> Terraform HCL` 렌더러로만 동작한다.
+- Terraform Preview는 `design_region`/`sketchcatch_region`의 `metadata.awsRegion`을 `provider "aws"` block으로 렌더링한다. Region 디자인 노드가 없으면 `ap-northeast-2`를 기본 provider region으로 쓴다.
+- Preview v1은 단일 AWS provider region만 지원한다. 서로 다른 region을 선택한 Region 디자인 노드가 둘 이상이면 `/terraform/generate`가 400 `bad_request`를 반환한다.
 - `diagram-to-terraform.ts`는 더 이상 `DiagramJson` 또는 `buildInfrastructureGraphFromDiagramJson`를 import하지 않는다.
 - Terraform Preview identity는 `iac.provider + iac.terraformBlockType + iac.resourceType + iac.resourceName` 기준이다.
 - `iac.resourceType`은 `aws_instance`, `aws_vpc`, `aws_s3_bucket` 같은 provider-specific Terraform resource type을 그대로 유지한다.
@@ -95,6 +97,8 @@
 - API/Web tests에 CLI endpoint/mode 제거, static validation response, progress UI 제거, nested block assignment, duplicate address error, undefined reference warning 회귀 케이스를 추가했다.
 - `docs/data-models.md`, `docs/sw/001_테라폼변환구현가이드_sw.md`, `docs/sw/003_테라폼동기화구조설명_sw.md`를 static-only editor validation 기준으로 갱신했다.
 - `apps/api/src/services/terraform/terraform-preview.ts`를 추가해 `generateTerraformFromDiagramJson`을 `DiagramJson -> InfrastructureGraph -> Terraform` orchestration 함수로 옮겼다.
+- `apps/api/src/services/terraform/terraform-preview.ts`가 Region 디자인 노드의 `metadata.awsRegion`을 읽어 Terraform AWS provider block을 생성하게 했다.
+- `apps/api/src/routes/terraform.ts`가 Region 충돌 preview validation error를 400 `bad_request`로 매핑하게 했다.
 - `apps/api/src/services/terraform/diagram-to-terraform.ts`에서 `DiagramJson`/`buildInfrastructureGraphFromDiagramJson` import와 `generateTerraformFromDiagramJson` export를 제거했다.
 - `/terraform/generate` route가 `generateTerraformFromDiagramJson`을 `terraform-preview.ts`에서 import하도록 변경했다.
 - 기존 `DiagramJson` 기반 Terraform Preview 회귀 테스트를 `terraform-preview.test.ts`로 옮겼고, `diagram-to-terraform.test.ts`는 `InfrastructureGraph` renderer 단위 테스트와 source regression test로 정리했다.
@@ -144,6 +148,7 @@
 - VPC/Subnet/Security Group/EC2/S3에 들어가던 Terraform Preview skeleton default helper를 삭제했다.
 - AI Architecture Draft 변환 테스트는 catalog default가 아니라 AI가 명시한 config 값만 유지하도록 조정했다.
 - `docs/data-models.md`에 수동 리소스 아이콘 생성 시 `parameters.values`가 `{}`로 시작한다는 계약을 추가했다.
+- `docs/data-models.md`에 Region metadata가 Terraform Preview provider block 생성에 사용되는 계약과 단일 provider region 정책을 추가했다.
 - 리소스 아이콘 삭제 후 Terraform 코드를 전부 지워 저장할 때 저장이 실패하던 문제를 수정했다.
 - Frontend `saveCodeToDiagram`이 빈 Terraform 코드를 막지 않고 sync API까지 보내도록 변경했다.
 - API `syncTerraformToDiagramJson`이 공백 Terraform 입력을 `terraform.sync.empty` 오류가 아니라 Diagram-only resource 삭제 proposals로 처리하게 했다.
@@ -169,6 +174,13 @@
 
 ## 검증
 
+- Red before fix: `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-preview.test.ts src/routes/terraform.test.ts` - failed because provider block was missing and conflicting Region nodes returned 200
+- `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-preview.test.ts src/routes/terraform.test.ts` - passed
+- `pnpm lint` - passed
+- `pnpm typecheck` - passed
+- `pnpm build` - passed
+- `git diff --check` - passed
+- `pnpm harness:check` - passed
 - Red before fix: focused API/Web tests failed because CLI endpoint/mode/progress UI and missing static diagnostics were still present.
 - `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-diagnostics.test.ts src/routes/terraform.test.ts` - passed
 - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/api.test.ts features/workspace/workspace-deployment-artifacts.test.ts features/workspace/workspace-right-panel-layout.test.ts` - passed
@@ -275,8 +287,8 @@
 - 전체 `pnpm test`는 deployment lock-file/path separator 기대값 실패 6건으로 통과하지 못했다. 이번 Terraform Preview orchestration focused tests, route tests, `lint`, `typecheck`, `build`, `harness:check`는 통과했다.
 - `parameterPanel` capability는 현재 web parameter catalog 보유 여부와 맞췄다. 새 리소스 추가 시 shared definition, web presentation, parameter catalog를 함께 갱신해야 한다.
 - `apps/web/next-env.d.ts`는 `pnpm build`가 일시적으로 바꿨지만 이번 작업 범위가 아니라 tracked 상태로 되돌렸다.
-- 로컬 브랜치는 upstream보다 1 commit behind 상태다. upstream에는 `docs/jh` 추적 해제 관련 삭제 commit이 하나 있다.
-- tracked 상태로 남아 있는 `docs/jh` 파일은 PR 정리 전 ignore 정책에 맞게 제거해야 한다.
+- 로컬 브랜치는 upstream을 정상 추적하고 있으며, 1단계 수동 커밋 때문에 원격보다 1 commit ahead 상태에서 2단계 미커밋 변경이 있다.
+- `pnpm build`가 `apps/web/next-env.d.ts`를 prod route type 경로로 일시 변경했지만, 생성물 변경이라 tracked dev 경로로 원복했다.
 - 실제 Terraform apply/destroy, cloud mutation, Git/CI/CD handoff는 실행하지 않았다.
 - 브라우저 수동 smoke는 수행하지 않았다. 자동/단위/타입/빌드 검증으로 이번 구현 범위를 확인했다.
 - Terraform leave save diagnostics 실패 모달 UX는 자동 테스트로 확인했고, 실제 브라우저 수동 smoke는 아직 수행하지 않았다.
@@ -287,6 +299,7 @@
 ## 다음으로 최선의 행동
 
 - 다음 Terraform 리소스 추가 시 shared definition/capability, web presentation, 필요 시 parameter catalog/`parameterPanel`, `ResourceType` 확장 여부, drift 테스트를 함께 맞춘다.
+- 다음 단계에서는 AZ placement metadata를 Terraform parameter 변환 흐름에 연결하고, icon catalog에서 생성되지만 Terraform Preview/Sync capability가 없는 리소스 목록을 확장한다.
 - 브라우저에서 EC2/S3/CloudFront 같은 일반 resource icon을 새로 추가했을 때 `56x56` 크기로 보이고, VPC/Subnet 같은 영역 node는 기존 크기를 유지하는지 수동 smoke한다.
 - 브라우저에서 EC2/VPC/S3 아이콘을 반복 추가했을 때 Terraform Preview 이름이 순차 suffix로 생성되는지 수동 smoke한다.
 - 브라우저에서 CloudFront AI draft가 `AWS` fallback이 아니라 CloudFront icon으로 보이는지 수동 smoke한다.
