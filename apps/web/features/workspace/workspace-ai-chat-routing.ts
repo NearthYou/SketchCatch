@@ -9,7 +9,9 @@ export function resolveWorkspaceAiChatMode(input: {
     return "draft";
   }
 
-  return isFreshArchitectureRequest(input.prompt) ? "draft" : "patch";
+  return isFreshArchitectureRequest(input.prompt) || isNewServiceDraftRequest(input.prompt)
+    ? "draft"
+    : "patch";
 }
 
 export function resolveWorkspaceAiChatAction(input: {
@@ -91,7 +93,13 @@ function isNewServiceDraftRequest(prompt: string): boolean {
     "build a service",
     "build a website",
     "create a service",
-    "create a website"
+    "create a website",
+    "정리해줘",
+    "정리해 줘",
+    "구성해줘",
+    "구성해 줘",
+    "설계해줘",
+    "설계해 줘"
   ].some((keyword) => normalizedPrompt.includes(keyword));
 }
 

@@ -110,3 +110,22 @@ test("resolveWorkspaceAiChatMode lets explicit fresh-start requests replace an e
     "draft"
   );
 });
+
+test("resolveWorkspaceAiChatAction treats complete new service requests as fresh drafts on existing boards", () => {
+  const prompts = [
+    "정적 소개 웹사이트로 정리해줘",
+    "로그인 있고 개인정보 보호가 중요한 서비스를 만들어줘"
+  ];
+
+  for (const prompt of prompts) {
+    assert.equal(
+      resolveWorkspaceAiChatAction({
+        boardHasResources: true,
+        needsDraftClarification: false,
+        prompt
+      }),
+      "draft",
+      prompt
+    );
+  }
+});

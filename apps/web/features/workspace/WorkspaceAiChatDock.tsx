@@ -84,7 +84,7 @@ type WorkspaceAiChatMessage = {
 const MAX_CHAT_MESSAGES = 80;
 const STORAGE_KEY_PREFIX = "sketchcatch.workspaceAiChat";
 const NO_RESOURCE_ADDITION_SUGGESTION = "추가 안 함";
-const NO_RESOURCE_ADDITION_MESSAGE = "추가하지 않고 현재 다이어그램을 유지합니다.";
+const NO_RESOURCE_ADDITION_MESSAGE = "추가 없이 지금까지의 요청으로 새 초안을 생성합니다.";
 const DESIGN_SIMULATION_DEFAULTS = {
   budgetLevel: "normal",
   trafficLevel: "normal"
@@ -282,7 +282,7 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
         return;
       }
 
-      await handlePatchClarificationMessage(trimmedPrompt);
+      await handlePatchClarificationMessage(trimmedPrompt, nextMessages);
       return;
     }
 
@@ -325,7 +325,10 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
     await createDraftFromConversation(nextMessages);
   }
 
-  async function handlePatchClarificationMessage(trimmedPrompt: string): Promise<void> {
+  async function handlePatchClarificationMessage(
+    trimmedPrompt: string,
+    nextMessages: readonly WorkspaceAiChatMessage[]
+  ): Promise<void> {
     if (patchClarification === null) {
       return;
     }
@@ -341,11 +344,12 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
         setPatchClarification(null);
 
         if (isNoResourceAdditionSuggestion(selectedSuggestion)) {
-          setDraftState("idle");
-          setDraftErrorMessage("");
-          setPatchPreviewModel(null);
-          context.setPreviewDiagram(null);
+          const fallbackPrompt = createRequirementPromptWithoutNoResourceAddition(nextMessages);
+
           appendAssistantMessage("status", NO_RESOURCE_ADDITION_MESSAGE);
+          await createDraftFromRequest({
+            prompt: fallbackPrompt || originalInstruction
+          });
           return;
         }
 
@@ -1126,6 +1130,17 @@ function createRequirementPromptFromMessages(
     .filter((message) => message.role === "user")
     .map((message) => message.content.trim())
     .filter(Boolean)
+    .join("\n");
+}
+
+function createRequirementPromptWithoutNoResourceAddition(
+  messages: readonly WorkspaceAiChatMessage[]
+): string {
+  return messages
+    .filter((message) => message.role === "user")
+    .map((message) => message.content.trim())
+    .filter((content) => content.length > 0)
+    .filter((content) => !isNoResourceAdditionSuggestion(content))
     .join("\n");
 }
 
