@@ -18,6 +18,7 @@ import {
 } from "../db/schema.js";
 import type { ProjectAccessContext, ProjectRecord } from "../deployments/deployment-service.js";
 import { createAwsProviderAdapter, type AwsProviderAdapter } from "./aws-provider-adapter.js";
+import { createAwsReverseEngineeringGateway } from "./aws-reverse-engineering-gateway.js";
 
 export type ReverseEngineeringScanRecord = typeof reverseEngineeringScans.$inferSelect;
 export type ReverseEngineeringScanLogRecord = typeof reverseEngineeringScanLogs.$inferSelect;
@@ -159,7 +160,9 @@ export async function createReverseEngineeringScan(
   });
 
   try {
-    const adapter = options.adapter ?? createAwsProviderAdapter(createUnavailableGateway());
+    const adapter =
+      options.adapter ??
+      createAwsProviderAdapter(createAwsReverseEngineeringGateway(awsConnection));
     const adapterResult = await adapter.scan({
       provider: "aws",
       region: input.region,
@@ -441,12 +444,4 @@ function appendUserFacingLog(
     message,
     createdAt: options.now()
   });
-}
-
-function createUnavailableGateway() {
-  return {
-    async discoverResources(): Promise<never> {
-      throw new Error("AWS Reverse Engineering gateway is not configured");
-    }
-  };
 }
