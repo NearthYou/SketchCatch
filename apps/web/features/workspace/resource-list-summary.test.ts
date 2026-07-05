@@ -26,7 +26,7 @@ test("buildResourceListItems includes Terraform resources and design area nodes"
   const items = buildResourceListItems(
     [
       makeResourceNode({ id: "subnet-1", resourceType: "aws_subnet" }),
-      makeDesignNode({ id: "region-1", label: "Region", type: "sketchcatch_region" }),
+      makeResourceNode({ id: "region-1", label: "Region", resourceType: "aws_region" }),
       makeDesignNode({ id: "note-1", label: "Note", type: "sketchcatch_note" })
     ],
     catalog
@@ -38,6 +38,7 @@ test("buildResourceListItems includes Terraform resources and design area nodes"
   );
   assert.equal(items[0]?.typeLabel, "aws_subnet");
   assert.equal(items[1]?.typeLabel, "Area / Region");
+  assert.equal(items[1]?.terraformAddress, undefined);
 });
 
 test("buildResourceListItems orders reference rows before required and active optional values", () => {
@@ -68,21 +69,17 @@ test("buildResourceListItems orders reference rows before required and active op
 });
 
 test("buildResourceListItems summarizes Region nodes with the selected AWS Region", () => {
-  const regionNode = makeDesignNode({
+  const regionNode = makeResourceNode({
     id: "region-1",
     label: "Production Region",
-    type: "sketchcatch_region"
+    resourceName: "primary",
+    resourceType: "aws_region",
+    values: {
+      awsRegion: "ap-northeast-1"
+    }
   });
-  const persistedRegionNode = JSON.parse(
-    JSON.stringify(
-      {
-        ...regionNode,
-        metadata: { awsRegion: "ap-northeast-1" }
-      }
-    )
-  ) as DiagramNode;
   const items = buildResourceListItems(
-    [persistedRegionNode],
+    [regionNode],
     catalog
   );
 
@@ -93,6 +90,34 @@ test("buildResourceListItems summarizes Region nodes with the selected AWS Regio
       kind: "metadata",
       label: "Region",
       value: "Asia Pacific (Tokyo)"
+    }
+  ]);
+});
+
+test("buildResourceListItems summarizes AZ nodes with the selected availability zone", () => {
+  const items = buildResourceListItems(
+    [
+      makeResourceNode({
+        id: "az-1",
+        label: "Public AZ",
+        resourceName: "public_a",
+        resourceType: "aws_availability_zone",
+        values: {
+          awsAvailabilityZone: "us-east-1c"
+        }
+      })
+    ],
+    catalog
+  );
+
+  assert.equal(items[0]?.displayName, "Public AZ");
+  assert.equal(items[0]?.terraformAddress, undefined);
+  assert.deepEqual(items[0]?.rows, [
+    {
+      key: "awsAvailabilityZone",
+      kind: "metadata",
+      label: "Availability Zone",
+      value: "US East (N. Virginia) / us-east-1c"
     }
   ]);
 });

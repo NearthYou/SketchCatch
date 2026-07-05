@@ -15,6 +15,22 @@ import { cloneParameterValue } from "./parameter-value-utils";
 import type { DiagramEdgeKind, DiagramNodeMetadataUpdate } from "./types";
 
 let activeResourceDragPayload: ResourceDragPayload | null = null;
+const areaResourceParameterDefaults: Readonly<
+  Record<string, { readonly resourceName: string; readonly values: Record<string, unknown> }>
+> = {
+  aws_availability_zone: {
+    resourceName: "ap_northeast_2a",
+    values: {
+      awsAvailabilityZone: "ap-northeast-2a"
+    }
+  },
+  aws_region: {
+    resourceName: "ap_northeast_2",
+    values: {
+      awsRegion: "ap-northeast-2"
+    }
+  }
+};
 
 export function cloneDiagram(diagram: DiagramJson): DiagramJson {
   return {
@@ -433,7 +449,8 @@ function createDefaultNodeParameters(
   currentNodes: readonly DiagramNode[]
 ): DiagramNodeParameters {
   const resourceType = item.nodeDefaults.type;
-  const baseResourceName = toTerraformName(item.nodeDefaults.label);
+  const areaDefaults = areaResourceParameterDefaults[resourceType];
+  const baseResourceName = areaDefaults?.resourceName ?? toTerraformName(item.nodeDefaults.label);
   const usedNames = getResourceNamesByType(currentNodes).get(resourceType) ?? new Set<string>();
   const resourceName = createUniqueNumberedResourceName(baseResourceName, usedNames);
 
@@ -444,7 +461,7 @@ function createDefaultNodeParameters(
     resourceType,
     resourceName,
     fileName: "main",
-    values: {}
+    values: areaDefaults ? { ...areaDefaults.values } : {}
   };
 }
 

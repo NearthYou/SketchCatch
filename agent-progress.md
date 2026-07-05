@@ -13,6 +13,37 @@
 - Highest priority unfinished harness feature: `HARNESS-007`
 - Current blocker: none
 
+### 2026-07-05 - Terraform 영역 리소스 계약 Ticket 2
+
+- Goal: `docs/jh/001_테라폼영역리소스동기화티켓계획_JH.md`의 Ticket 2 범위에 맞춰 Web에서 Region/AZ를 `design_region`/`design_az`가 아니라 `aws_region`/`aws_availability_zone` resource area node로 생성하고, 선택값을 `parameters.values`로 읽고 쓰게 한다.
+- Completed:
+  - Resource catalog의 Region/AZ item을 `aws_region`, `aws_availability_zone` 타입으로 바꾸고, drag 생성 시 `kind: "resource"`가 되도록 catalog id를 `aws-region`, `aws-availability-zone`으로 전환했다.
+  - Region/AZ drag 생성 기본 `parameters`를 추가했다. Region은 `resourceName: "ap_northeast_2"`, `values.awsRegion: "ap-northeast-2"`이고 AZ는 `resourceName: "ap_northeast_2a"`, `values.awsAvailabilityZone: "ap-northeast-2a"`다.
+  - `area-nodes`, resize bounds, Resource List summary가 `aws_region`과 `aws_availability_zone`을 board area node로 인식하게 했다.
+  - Parameter panel에서 Region/AZ selector가 `metadata` 대신 `parameters.values["awsRegion"]`, `parameters.values["awsAvailabilityZone"]`만 갱신하게 했다.
+  - AZ 선택용 정적 option helper와 테스트를 추가했다.
+  - server-storage sample layout이 더 이상 `design_region`/`design_az`를 생성하지 않고, catalog 기반 `aws_region`/`aws_availability_zone` area resource를 생성하게 했다.
+  - `docs/data-models.md`의 ResourceDefinition 설명에서 Region/AZ area resource가 shared Terraform definition 대상이 아님을 최신 계약에 맞게 보정했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/resource-settings/catalog.test.ts` - passed.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/parameter-input/region-node-metadata.test.ts features/parameter-input/aws-availability-zone-options.test.ts` - passed.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/area-nodes.test.ts features/diagram-editor/diagram-utils.test.ts features/diagram-editor/node-resize-bounds.test.ts` - passed.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/resource-list-summary.test.ts features/workspace/workspace-ai-diagram-adapter.test.ts` - passed.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/area-node-movement.test.ts features/diagram-editor/reference-drop-targets.test.ts features/diagram-editor/flow-mappers.test.ts` - passed.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/routes/terraform.test.ts --test-name-pattern "Region and AZ area resource parameters"` - passed; Node test runner still executed the whole file.
+  - `pnpm --filter @sketchcatch/web typecheck` - passed.
+  - `pnpm --filter @sketchcatch/api typecheck` - passed.
+  - `pnpm --filter @sketchcatch/types typecheck` - passed.
+  - `pnpm --filter @sketchcatch/web lint` - passed.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `pnpm build` - passed.
+- Known risks:
+  - Ticket 3에서 ASG를 visual area node로 추가할 때 `area-nodes`, resize bounds, flow/reference movement 회귀 범위를 이어서 확인해야 한다.
+  - Legacy `design_region`/`design_az`는 기존 저장 데이터와 테스트 호환을 위해 area 판정에서만 남아 있다. 신규 catalog/sample 생성 경로에서는 제거했다.
+  - 커밋은 사용자 요청에 따라 만들지 않았다.
+
 ### 2026-07-05 - Terraform 영역 리소스 Ticket 1 리뷰 보강
 
 - Goal: Ticket 1 리뷰 피드백에 따라 Region 조회 helper와 `Record<string, unknown>` 접근 방식을 더 타입 안전하게 보강한다.
