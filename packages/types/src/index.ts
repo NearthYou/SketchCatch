@@ -545,12 +545,6 @@ export type ApproveDeploymentPlanRequest = {
   acknowledgedWarningIds: string[];
 };
 
-export type DeploymentSafetyGateResult = {
-  summary: DeploymentPlanSummary;
-  block: DeploymentBlock;
-  requiredAcknowledgementWarningIds: string[];
-};
-
 export type DeploymentStage = "init" | "validate" | "plan" | "apply" | "destroy";
 
 export type Template = {

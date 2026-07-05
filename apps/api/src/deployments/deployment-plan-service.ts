@@ -320,13 +320,12 @@ export async function runDeploymentPlan(
     const unsupportedResourceTypes = findUnsupportedLiveApplyResourceTypesFromTerraformShowJson(
       terraform.showJson.stdout
     );
-    const safetyGate = evaluateDeploymentSafetyGate({
+    const planSummary = evaluateDeploymentSafetyGate({
       operation: "apply",
       planSummary: createDeploymentPlanSummaryFromTerraformShowJson(terraform.showJson.stdout),
       findings: preDeploymentAnalysis.findings,
       unsupportedResourceTypes
     });
-    const planSummary = safetyGate.summary;
     const planArtifactId = generatePlanArtifactId();
     let uploadedPlanArtifact: Awaited<
       ReturnType<DeploymentPlanArtifactStorage["uploadDeploymentPlanArtifact"]>

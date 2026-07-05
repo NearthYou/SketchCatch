@@ -4,7 +4,7 @@ import type { CheckFinding, DeploymentPlanSummary, DeploymentPlanWarning } from 
 import { evaluateDeploymentSafetyGate } from "./deployment-safety-gate.js";
 
 test("evaluateDeploymentSafetyGate records high risk findings without blocking plan state", () => {
-  const result = evaluateDeploymentSafetyGate({
+  const summary = evaluateDeploymentSafetyGate({
     operation: "apply",
     planSummary: createPlanSummary({
       deleteCount: 1
@@ -26,22 +26,16 @@ test("evaluateDeploymentSafetyGate records high risk findings without blocking p
     ]
   });
 
-  assert.deepEqual(result.block, {
-    isBlocked: false,
-    blockedBy: null,
-    blockedReason: null
-  });
-  assert.equal(result.summary.blocked, false);
-  assert.equal(result.requiredAcknowledgementWarningIds.length, 0);
+  assert.equal(summary.blocked, false);
   assert.deepEqual(
-    result.summary.warnings.map((warning) => warning.id),
+    summary.warnings.map((warning) => warning.id),
     [
       "pre_deployment_check:security-open-ssh-sg-1",
       "terraform_plan:DESTRUCTIVE_CHANGE:apply"
     ]
   );
-  assert.equal(result.summary.warnings[0]?.blocksApproval, true);
-  assert.deepEqual(result.summary.warnings[0]?.sourceLocation, {
+  assert.equal(summary.warnings[0]?.blocksApproval, true);
+  assert.deepEqual(summary.warnings[0]?.sourceLocation, {
     fileName: "main.tf",
     line: 15,
     column: 1,
@@ -49,11 +43,11 @@ test("evaluateDeploymentSafetyGate records high risk findings without blocking p
     terraformBlockType: "resource",
     terraformBlockName: "sg_app"
   });
-  assert.equal(result.summary.warnings[1]?.code, "DESTRUCTIVE_CHANGE");
+  assert.equal(summary.warnings[1]?.code, "DESTRUCTIVE_CHANGE");
 });
 
 test("evaluateDeploymentSafetyGate leaves medium and low warnings approvable after acknowledgement", () => {
-  const result = evaluateDeploymentSafetyGate({
+  const summary = evaluateDeploymentSafetyGate({
     operation: "apply",
     planSummary: createPlanSummary(),
     findings: [
@@ -69,18 +63,9 @@ test("evaluateDeploymentSafetyGate leaves medium and low warnings approvable aft
     ]
   });
 
-  assert.deepEqual(result.block, {
-    isBlocked: false,
-    blockedBy: null,
-    blockedReason: null
-  });
-  assert.equal(result.summary.blocked, false);
-  assert.deepEqual(result.requiredAcknowledgementWarningIds, [
-    "pre_deployment_check:configuration-review-subnet-1",
-    "pre_deployment_check:security-review-s3-1"
-  ]);
-  assert.equal(result.summary.warnings.every((warning) => !warning.blocksApproval), true);
-  assert.equal(result.summary.warnings.every((warning) => warning.requiresAcknowledgement), true);
+  assert.equal(summary.blocked, false);
+  assert.equal(summary.warnings.every((warning) => !warning.blocksApproval), true);
+  assert.equal(summary.warnings.every((warning) => warning.requiresAcknowledgement), true);
 });
 
 test("evaluateDeploymentSafetyGate creates stable ids for unsupported resource warnings", () => {
@@ -93,16 +78,15 @@ test("evaluateDeploymentSafetyGate creates stable ids for unsupported resource w
   const first = evaluateDeploymentSafetyGate(input);
   const second = evaluateDeploymentSafetyGate(input);
 
-  assert.equal(first.block.isBlocked, false);
   assert.equal(
-    first.summary.warnings[0]?.id,
+    first.warnings[0]?.id,
     "terraform_plan:UNSUPPORTED_RESOURCE:destroy:aws_lambda_function"
   );
-  assert.deepEqual(first.summary.warnings, second.summary.warnings);
+  assert.deepEqual(first.warnings, second.warnings);
 });
 
 test("evaluateDeploymentSafetyGate keeps cost risk warnings without blocking plan state", () => {
-  const result = evaluateDeploymentSafetyGate({
+  const summary = evaluateDeploymentSafetyGate({
     operation: "apply",
     planSummary: createPlanSummary(),
     warnings: [
@@ -118,13 +102,13 @@ test("evaluateDeploymentSafetyGate keeps cost risk warnings without blocking pla
     ]
   });
 
-  assert.equal(result.block.isBlocked, false);
-  assert.equal(result.summary.blocked, false);
-  assert.deepEqual(result.requiredAcknowledgementWarningIds, []);
+  assert.equal(summary.blocked, false);
+  assert.equal(summary.warnings[0]?.blocksApproval, true);
+  assert.equal(summary.warnings[0]?.source, "cost_risk");
 });
 
 test("evaluateDeploymentSafetyGate deduplicates warnings by stable id", () => {
-  const result = evaluateDeploymentSafetyGate({
+  const summary = evaluateDeploymentSafetyGate({
     operation: "apply",
     planSummary: createPlanSummary({
       warnings: [
@@ -149,15 +133,11 @@ test("evaluateDeploymentSafetyGate deduplicates warnings by stable id", () => {
     ]
   });
 
-  assert.equal(result.block.isBlocked, false);
   assert.deepEqual(
-    result.summary.warnings.map((warning) => warning.id),
+    summary.warnings.map((warning) => warning.id),
     ["pre_deployment_check:configuration-review-subnet-1"]
   );
-  assert.equal(result.summary.warnings[0]?.message, "Subnet review: Review generated subnet CIDR");
-  assert.deepEqual(result.requiredAcknowledgementWarningIds, [
-    "pre_deployment_check:configuration-review-subnet-1"
-  ]);
+  assert.equal(summary.warnings[0]?.message, "Subnet review: Review generated subnet CIDR");
 });
 
 function createPlanSummary(

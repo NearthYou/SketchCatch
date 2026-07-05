@@ -22,12 +22,15 @@
   - Plan 재사용 조건에서 예전 `isBlocked` 의존을 제거하고, 미승인 current plan이면 재사용할 수 있게 했다.
   - Plan 승인 로직에서 `missing_approval` block 상태 요구와 high-risk warning 승인 거절을 제거했다.
   - Apply/Destroy 실행 직전 precondition에 추가했던 `blocksApproval` warning 차단 로직은 사용자 요청에 따라 제거했다.
+  - Deployment Safety Gate 반환값에서 더 이상 쓰지 않는 `block`과 `requiredAcknowledgementWarningIds` 포장 객체를 제거하고, `DeploymentPlanSummary`만 반환하도록 정리했다.
   - Deployment UI의 승인 버튼/문구를 current plan 기준으로 표시하도록 정리했다.
   - `docs/data-models.md`, `docs/deployment.md`에 Plan은 warning만 보존하고 Plan record 자체를 block하지 않는다는 계약을 반영했다.
 - Verification run:
   - `pnpm harness:check` - passed before edits.
   - `pnpm --filter @sketchcatch/api exec tsx --test src/deployments/deployment-safety-gate.test.ts src/deployments/deployment-plan-service.test.ts src/deployments/deployment-approval-service.test.ts src/deployments/deployment-destroy-plan-service.test.ts src/deployments/deployment-apply-service.test.ts src/deployments/deployment-destroy-service.test.ts` - passed.
   - `pnpm --filter @sketchcatch/api exec tsx --test src/deployments/deployment-safety-gate.test.ts src/deployments/deployment-approval-service.test.ts src/deployments/deployment-plan-service.test.ts src/deployments/deployment-destroy-plan-service.test.ts src/deployments/deployment-apply-service.test.ts src/deployments/deployment-destroy-service.test.ts` - passed after removing the Apply/Destroy `blocksApproval` precondition block.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/deployments/deployment-safety-gate.test.ts src/deployments/deployment-plan-service.test.ts src/deployments/deployment-destroy-plan-service.test.ts src/deployments/deployment-approval-service.test.ts` - passed after Safety Gate return-shape cleanup.
+  - `pnpm --filter @sketchcatch/api typecheck`, `pnpm --filter @sketchcatch/types typecheck` - passed after Safety Gate return-shape cleanup.
   - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/deployment-actions.test.ts` - passed.
   - `pnpm --filter @sketchcatch/api exec tsx --test src/routes/deployments.test.ts` - passed.
   - `pnpm --filter @sketchcatch/api exec tsx --test src/deployments/deployment-service.test.ts` - passed.

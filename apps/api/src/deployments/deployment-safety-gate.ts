@@ -1,8 +1,7 @@
 import type {
   CheckFinding,
   DeploymentPlanSummary,
-  DeploymentPlanWarning,
-  DeploymentSafetyGateResult
+  DeploymentPlanWarning
 } from "@sketchcatch/types";
 import {
   createPreDeploymentCheckWarning,
@@ -22,7 +21,7 @@ export type EvaluateDeploymentSafetyGateInput = {
 
 export function evaluateDeploymentSafetyGate(
   input: EvaluateDeploymentSafetyGateInput
-): DeploymentSafetyGateResult {
+): DeploymentPlanSummary {
   const warnings = deduplicateDeploymentPlanWarnings([
     ...input.planSummary.warnings,
     ...(input.findings ?? []).map(createPreDeploymentCheckWarning),
@@ -34,21 +33,9 @@ export function evaluateDeploymentSafetyGate(
     ...(input.warnings ?? [])
   ]);
 
-  const summary: DeploymentPlanSummary = {
+  return {
     ...input.planSummary,
     blocked: false,
     warnings
-  };
-
-  return {
-    summary,
-    block: {
-      isBlocked: false,
-      blockedBy: null,
-      blockedReason: null
-    },
-    requiredAcknowledgementWarningIds: warnings
-      .filter((warning) => warning.requiresAcknowledgement && !warning.blocksApproval)
-      .map((warning) => warning.id)
   };
 }

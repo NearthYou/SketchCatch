@@ -323,7 +323,7 @@ export async function runDeploymentDestroyPlan(
     const basePlanSummary = createDeploymentPlanSummaryFromTerraformShowJson(
       terraform.showJson.stdout
     );
-    const safetyGate = evaluateDeploymentSafetyGate({
+    const planSummary = evaluateDeploymentSafetyGate({
       operation: "destroy",
       planSummary: basePlanSummary,
       unsupportedResourceTypes,
@@ -332,7 +332,6 @@ export async function runDeploymentDestroyPlan(
           ? [createDestroyNoOpWarning()]
           : []
     });
-    const planSummary = safetyGate.summary;
     const planArtifactId = generatePlanArtifactId();
     let uploadedPlanArtifact: Awaited<
       ReturnType<DeploymentPlanArtifactStorage["uploadDeploymentPlanArtifact"]>
