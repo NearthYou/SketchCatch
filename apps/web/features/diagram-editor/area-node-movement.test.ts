@@ -438,7 +438,7 @@ test("clearDeletedAreaParentAssignments removes only deleted direct parent refer
   assert.equal(getNodeById(result, instance.id)?.metadata?.parentAreaNodeId, subnet.id);
 });
 
-test("clearDeletedAreaParentAssignments preserves unrelated metadata when clearing parent", () => {
+test("clearDeletedAreaParentAssignments removes metadata when clearing the only parent field", () => {
   const region = makeDesignNode({
     id: "region-1",
     type: "design_region",
@@ -452,17 +452,10 @@ test("clearDeletedAreaParentAssignments preserves unrelated metadata when cleari
     position: { x: 140, y: 130 },
     size: { width: 96, height: 72 }
   });
-  const nodeWithRegion = {
-    ...instance,
-    metadata: {
-      ...instance.metadata,
-      awsRegion: "ap-northeast-2" as const
-    }
-  };
 
-  const result = clearDeletedAreaParentAssignments([nodeWithRegion], new Set([region.id]));
+  const result = clearDeletedAreaParentAssignments([instance], new Set([region.id]));
 
-  assert.deepEqual(getNodeById(result, instance.id)?.metadata, { awsRegion: "ap-northeast-2" });
+  assert.equal(getNodeById(result, instance.id)?.metadata, undefined);
 });
 
 test("clearOutOfBoundsAreaParentAssignments removes children outside a resized parent area", () => {

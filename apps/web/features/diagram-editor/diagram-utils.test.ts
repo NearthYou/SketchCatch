@@ -132,14 +132,13 @@ test("createPastedNodes clears stale parent area metadata from copied nodes", ()
     resourceName: "web",
     resourceType: "aws_instance",
     metadata: {
-      awsRegion: "ap-northeast-2",
       parentAreaNodeId: "old-area-1"
     }
   });
   const pastedNode = createPastedNodes([childNode], [childNode])[0];
 
   assert.equal(pastedNode?.metadata?.parentAreaNodeId, undefined);
-  assert.equal(pastedNode?.metadata?.awsRegion, "ap-northeast-2");
+  assert.equal(pastedNode?.metadata, undefined);
 });
 
 test("createPastedNodes deep clones nested parameter values", () => {

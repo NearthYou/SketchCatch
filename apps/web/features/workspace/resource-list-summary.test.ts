@@ -68,15 +68,21 @@ test("buildResourceListItems orders reference rows before required and active op
 });
 
 test("buildResourceListItems summarizes Region nodes with the selected AWS Region", () => {
+  const regionNode = makeDesignNode({
+    id: "region-1",
+    label: "Production Region",
+    type: "sketchcatch_region"
+  });
+  const persistedRegionNode = JSON.parse(
+    JSON.stringify(
+      {
+        ...regionNode,
+        metadata: { awsRegion: "ap-northeast-1" }
+      }
+    )
+  ) as DiagramNode;
   const items = buildResourceListItems(
-    [
-      makeDesignNode({
-        id: "region-1",
-        label: "Production Region",
-        metadata: { awsRegion: "ap-northeast-1" },
-        type: "sketchcatch_region"
-      })
-    ],
+    [persistedRegionNode],
     catalog
   );
 

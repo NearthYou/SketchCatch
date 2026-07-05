@@ -1158,7 +1158,6 @@ export type AwsRegionCode =
   | "eu-central-1";
 
 export type DiagramNodeMetadata = {
-  awsRegion?: AwsRegionCode | undefined;
   parentAreaNodeId?: string | undefined;
 };
 
@@ -1348,8 +1347,11 @@ export type TerraformDiagramChangeProposal =
   | {
       kind: "create_candidate";
       identity: TerraformBlockIdentity;
+      nodeId?: string | undefined;
       sourceFileName?: string | undefined;
       line?: number | undefined;
+      metadata?: DiagramNodeMetadata | undefined;
+      position?: DiagramNode["position"] | undefined;
       parameters: DiagramNodeParameters;
     }
   | {

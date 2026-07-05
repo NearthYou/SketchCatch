@@ -26,6 +26,12 @@ test("isRegionDesignNode matches supported Region design node types only", () =>
 });
 
 test("getRegionNodeAwsRegion reads a valid selected region and falls back to Seoul", () => {
+  const persistedNodeWithSelectedRegion = JSON.parse(
+    JSON.stringify({
+      ...baseRegionNode,
+      metadata: { awsRegion: "eu-central-1" }
+    })
+  ) as DiagramNode;
   const persistedNodeWithUnknownRegion = JSON.parse(
     JSON.stringify({
       ...baseRegionNode,
@@ -34,10 +40,7 @@ test("getRegionNodeAwsRegion reads a valid selected region and falls back to Seo
   ) as DiagramNode;
 
   assert.equal(
-    getRegionNodeAwsRegion({
-      ...baseRegionNode,
-      metadata: { awsRegion: "eu-central-1" }
-    }),
+    getRegionNodeAwsRegion(persistedNodeWithSelectedRegion),
     "eu-central-1"
   );
 
@@ -45,15 +48,37 @@ test("getRegionNodeAwsRegion reads a valid selected region and falls back to Seo
   assert.equal(getRegionNodeAwsRegion(baseRegionNode), "ap-northeast-2");
 });
 
-test("createRegionNodeMetadata preserves existing metadata fields while updating awsRegion", () => {
+test("getRegionNodeAwsRegion reads parameters values before legacy metadata", () => {
+  const regionResourceNode = JSON.parse(
+    JSON.stringify({
+      ...baseRegionNode,
+      kind: "resource",
+      metadata: { awsRegion: "eu-central-1" },
+      parameters: {
+        terraformBlockType: "resource",
+        resourceType: "aws_region",
+        resourceName: "primary",
+        fileName: "main.tf",
+        values: {
+          awsRegion: "us-west-2"
+        }
+      },
+      type: "aws_region"
+    })
+  ) as DiagramNode;
+
+  assert.equal(getRegionNodeAwsRegion(regionResourceNode), "us-west-2");
+});
+
+test("createRegionNodeMetadata no longer writes awsRegion metadata", () => {
   assert.deepEqual(
     createRegionNodeMetadata(
       {
         ...baseRegionNode,
-        metadata: { awsRegion: "ap-northeast-2" }
+        metadata: { parentAreaNodeId: "parent-1" }
       },
       "us-west-2"
     ),
-    { awsRegion: "us-west-2" }
+    { parentAreaNodeId: "parent-1" }
   );
 });
