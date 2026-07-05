@@ -1470,3 +1470,32 @@
   - 실제 GitHub API 호출, GitHub Actions polling worker, GitHub token 사용은 수행하지 않았다.
   - 실제 AWS apply/destroy, cloud mutation, real Git/CI/CD handoff execution은 수행하지 않았다.
   - Runtime Cache는 보조 캐시이며 RDS `git_cicd_handoffs` record가 source of truth다.
+## 2026-07-05 - Spec3 Deployment/GitHub App/Runtime Cache 운영 검증
+
+- Goal: `docs/sw/spec3.md`, `docs/sw/plan3.md`를 기준으로 GitHub App repository 연결, 실제 GitHub PR handoff provider, GitHub Actions pipeline polling, Redis 운영 연결 준비, live S3 deployment smoke runner를 구현한다.
+- Completed:
+  - `docs/sw/spec3.md`, `docs/sw/plan3.md`를 추가하고 `docs/sw/README.md`에 링크를 추가했다.
+  - `source_repositories` DB schema/migration을 추가하고 `status`, `disconnected_at`, GitHub installation/repository metadata, active partial unique index를 추가했다.
+  - GitHub App signed short-lived state, App JWT, installation repository 조회, repository 선택 저장 API를 구현했다.
+  - Web에서 `GitHub 연결` 버튼이 API 발급 install URL로 redirect하고, `/integrations/github/callback`에서 repository 1개를 선택해 저장하도록 구현했다.
+  - Git/CI/CD handoff 생성 body에서 repository owner/name/provider 입력을 제거하고, DB active source repository 기준으로 PR branch/file/PR을 생성하도록 변경했다.
+  - PR file path를 `sketchcatch/<project-slug>/terraform/<artifact-file-name>`로 변경하고 PR head SHA 저장 및 GitHub Actions 최신 run 상태 매핑을 추가했다.
+  - Redis를 내부 Runtime Cache로만 유지하고, local docker compose Redis 및 운영 ElastiCache CloudFormation template을 추가했다.
+  - `scripts/smoke/live-s3-deployment.ps1`를 추가해 AWS connection만 사전 준비하면 project/snapshot/artifact/deployment init/plan/approve/apply/resources/outputs/logs/destroy-plan/approve/destroy/report 흐름을 API로 자동화할 수 있게 했다.
+  - `.env.example`, `docs/data-models.md`, `docs/deployment.md`에 GitHub App/Source Repository/Redis/Live S3 smoke 계약을 반영했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits
+  - `pnpm --filter @sketchcatch/api typecheck` - passed
+  - `pnpm --filter @sketchcatch/web typecheck` - passed
+  - `pnpm --filter @sketchcatch/api test -- git-cicd-handoffs` - passed, 543 tests
+  - `pnpm --filter @sketchcatch/web test -- workspace` - passed, 367 tests
+  - `pnpm lint` - passed
+  - `pnpm typecheck` - passed
+  - `pnpm build` - passed
+  - `pnpm harness:check` - passed after edits
+- Known risks:
+  - 실제 AWS apply/destroy smoke는 실행 가능한 runner까지 구현했지만, 이 세션에서는 실제 AWS credential/AWS connection을 사용해 실행하지 않았다.
+  - 실제 GitHub App 설치와 실제 repository PR 생성은 구현했지만, 이 세션에서는 GitHub App private key/installation이 없어 외부 API 실호출 검증을 수행하지 않았다.
+  - 실제 ElastiCache `REDIS_URL` 운영 연결은 template/docs/env 경로까지 준비했지만, 운영 Redis endpoint에 붙여 확인하지 않았다.
+- Next best action:
+  - 운영/스테이징 API에 `GITHUB_APP_*`, `REDIS_URL`, verified `AWS_CONNECTION_ID`를 주입한 뒤 `scripts/smoke/live-s3-deployment.ps1`와 GitHub App install/PR handoff를 실제로 실행한다.

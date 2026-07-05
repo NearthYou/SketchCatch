@@ -352,20 +352,64 @@ export type TerraformArtifact = ProjectAsset & {
 
 export type SourceRepositoryProvider = "internal" | "github";
 
+export type SourceRepositoryStatus = "active" | "inactive";
+
 export type SourceRepository = {
   id: string;
   projectId: string;
   provider: SourceRepositoryProvider;
+  status: SourceRepositoryStatus;
+  githubInstallationId: string | null;
+  githubRepositoryId: string | null;
   owner: string;
   name: string;
   defaultBranch: string;
   repositoryUrl: string | null;
+  visibility: "public" | "private" | "internal" | null;
+  archived: boolean;
+  disconnectedAt: IsoDateTimeString | null;
   createdAt: IsoDateTimeString;
   updatedAt: IsoDateTimeString;
 };
 
 export type SourceRepositoryListResponse = {
   repositories: SourceRepository[];
+};
+
+export type GitHubAppInstallUrlResponse = {
+  installUrl: string;
+  expiresAt: IsoDateTimeString;
+};
+
+export type GitHubRepositoryCandidate = {
+  githubRepositoryId: string;
+  owner: string;
+  name: string;
+  fullName: string;
+  defaultBranch: string;
+  repositoryUrl: string | null;
+  visibility: "public" | "private" | "internal";
+  archived: boolean;
+};
+
+export type ListGitHubInstallationRepositoriesRequest = {
+  installationId: string;
+  state: string;
+};
+
+export type ListGitHubInstallationRepositoriesResponse = {
+  projectId: string;
+  repositories: GitHubRepositoryCandidate[];
+};
+
+export type ConnectGitHubSourceRepositoryRequest = {
+  installationId: string;
+  githubRepositoryId: string;
+  state: string;
+};
+
+export type SourceRepositoryResponse = {
+  repository: SourceRepository;
 };
 
 export type GitCicdHandoffStatus =
@@ -390,6 +434,7 @@ export type GitCicdHandoff = {
   commitMessage: string | null;
   pullRequestTitle: string | null;
   pullRequestUrl: string | null;
+  pullRequestHeadSha: string | null;
   pipelineRunUrl: string | null;
   status: GitCicdHandoffStatus;
   statusMessage: string | null;
@@ -403,10 +448,7 @@ export type CreateGitCicdHandoffRequest = {
   architectureId: string;
   terraformArtifactId: string;
   sourceRepositoryId: string;
-  repositoryProvider?: SourceRepositoryProvider | undefined;
-  repositoryOwner: string;
-  repositoryName: string;
-  targetBranch: string;
+  targetBranch?: string | undefined;
   sourceBranch?: string | undefined;
   commitMessage?: string | undefined;
   pullRequestTitle?: string | undefined;
@@ -418,6 +460,7 @@ export type UpdateGitCicdHandoffStatusRequest = {
   status: GitCicdHandoffStatus;
   pullRequestUrl?: string | null | undefined;
   pipelineRunUrl?: string | null | undefined;
+  pullRequestHeadSha?: string | null | undefined;
   statusMessage?: string | null | undefined;
 };
 

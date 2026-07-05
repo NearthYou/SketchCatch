@@ -19,6 +19,7 @@ import {
   type GitCicdHandoffProvider,
   type GitCicdHandoffRecord,
   type GitCicdHandoffRepository,
+  type GitCicdHandoffSourceRepositoryRecord,
   type GitCicdHandoffTerraformArtifactRecord,
   type GitCicdProviderCreateInput,
   type ProjectAccessContext,
@@ -58,6 +59,16 @@ type RepositoryCall =
       architectureId: string;
     }
   | {
+      name: "findActiveSourceRepository";
+      sourceRepositoryId: string;
+      projectId: string;
+    }
+  | {
+      name: "findSourceRepositoryById";
+      sourceRepositoryId: string;
+      projectId: string;
+    }
+  | {
       name: "createHandoff";
       input: CreateGitCicdHandoffRecordInput;
     }
@@ -81,6 +92,8 @@ class FakeGitCicdHandoffRepository implements GitCicdHandoffRepository {
   architecture: GitCicdHandoffArchitectureRecord | undefined = createArchitectureRecord();
   terraformArtifact: GitCicdHandoffTerraformArtifactRecord | undefined =
     createTerraformArtifactRecord();
+  sourceRepository: GitCicdHandoffSourceRepositoryRecord | undefined =
+    createSourceRepositoryRecord();
   handoff: GitCicdHandoffRecord | undefined = createHandoffRecord();
   handoffs: GitCicdHandoffRecord[] = [createHandoffRecord()];
 
@@ -144,6 +157,49 @@ class FakeGitCicdHandoffRepository implements GitCicdHandoffRepository {
     return this.terraformArtifact;
   }
 
+  async findActiveSourceRepository(
+    candidateSourceRepositoryId: string,
+    candidateProjectId: string
+  ) {
+    this.calls.push({
+      name: "findActiveSourceRepository",
+      sourceRepositoryId: candidateSourceRepositoryId,
+      projectId: candidateProjectId
+    });
+
+    if (
+      !this.sourceRepository ||
+      this.sourceRepository.id !== candidateSourceRepositoryId ||
+      this.sourceRepository.projectId !== candidateProjectId ||
+      this.sourceRepository.status !== "active"
+    ) {
+      return undefined;
+    }
+
+    return this.sourceRepository;
+  }
+
+  async findSourceRepositoryById(
+    candidateSourceRepositoryId: string,
+    candidateProjectId: string
+  ) {
+    this.calls.push({
+      name: "findSourceRepositoryById",
+      sourceRepositoryId: candidateSourceRepositoryId,
+      projectId: candidateProjectId
+    });
+
+    if (
+      !this.sourceRepository ||
+      this.sourceRepository.id !== candidateSourceRepositoryId ||
+      this.sourceRepository.projectId !== candidateProjectId
+    ) {
+      return undefined;
+    }
+
+    return this.sourceRepository;
+  }
+
   async createHandoff(input: CreateGitCicdHandoffRecordInput) {
     this.calls.push({
       name: "createHandoff",
@@ -195,6 +251,10 @@ class FakeGitCicdHandoffRepository implements GitCicdHandoffRepository {
         input.pullRequestUrl === undefined ? this.handoff.pullRequestUrl : input.pullRequestUrl,
       pipelineRunUrl:
         input.pipelineRunUrl === undefined ? this.handoff.pipelineRunUrl : input.pipelineRunUrl,
+      pullRequestHeadSha:
+        input.pullRequestHeadSha === undefined
+          ? this.handoff.pullRequestHeadSha
+          : input.pullRequestHeadSha,
       statusMessage:
         input.statusMessage === undefined ? this.handoff.statusMessage : input.statusMessage,
       updatedAt: fixedNow
@@ -238,7 +298,9 @@ test("POST /api/projects/:projectId/git-cicd-handoffs creates an internal metada
     provider: "internal",
     owner: "sketchcatch",
     name: "infra-live",
-    defaultBranch: "main"
+    defaultBranch: "main",
+    githubInstallationId: null,
+    githubRepositoryId: null
   });
   assert.equal(providerCall?.sourceBranch, "sketchcatch/iac-preview");
   assert.equal(providerCall?.commitMessage, "Add SketchCatch Terraform preview");
@@ -255,6 +317,11 @@ test("POST /api/projects/:projectId/git-cicd-handoffs creates an internal metada
 
 test("POST /api/projects/:projectId/git-cicd-handoffs creates GitHub PR handoff through fake provider", async () => {
   const repository = new FakeGitCicdHandoffRepository();
+  repository.sourceRepository = createSourceRepositoryRecord({
+    provider: "github",
+    githubInstallationId: "123456",
+    githubRepositoryId: "987654"
+  });
   const gitProviderCalls: GitProviderCreatePullRequestInput[] = [];
   const provider = createGitHubGitCicdHandoffProvider({
     async createPullRequest(input) {
@@ -263,7 +330,8 @@ test("POST /api/projects/:projectId/git-cicd-handoffs creates GitHub PR handoff 
       return {
         pullRequestUrl: "https://github.com/sketchcatch/infra-live/pull/42",
         sourceBranch: input.sourceBranch,
-        commitSha: "abc1234"
+        commitSha: "abc1234",
+        pullRequestHeadSha: "abc1234"
       };
     }
   });
@@ -275,7 +343,6 @@ test("POST /api/projects/:projectId/git-cicd-handoffs creates GitHub PR handoff 
     headers: await authHeaders(),
     payload: {
       ...createHandoffBody(),
-      repositoryProvider: "github",
       sourceBranch: undefined,
       planSummary: createPlanSummary()
     }
@@ -286,16 +353,18 @@ test("POST /api/projects/:projectId/git-cicd-handoffs creates GitHub PR handoff 
   assert.equal(body.handoff.repositoryProvider, "github");
   assert.equal(body.handoff.status, "pr_created");
   assert.equal(body.handoff.pullRequestUrl, "https://github.com/sketchcatch/infra-live/pull/42");
-  assert.equal(body.handoff.sourceBranch, `sketchcatch/iac-${terraformArtifactId.slice(0, 8)}`);
+  assert.equal(body.handoff.pullRequestHeadSha, "abc1234");
+  assert.match(body.handoff.sourceBranch ?? "", /^sketchcatch\/test-project\/iac-[a-f0-9]{8}$/);
   assert.match(body.handoff.statusMessage ?? "", /GitHub PR created/);
   assert.equal(gitProviderCalls.length, 1);
   assert.deepEqual(gitProviderCalls[0]?.repository, {
     provider: "github",
+    installationId: "123456",
     owner: "sketchcatch",
     name: "infra-live"
   });
   assert.equal(gitProviderCalls[0]?.targetBranch, "main");
-  assert.equal(gitProviderCalls[0]?.files[0]?.path, "terraform/main.tf");
+  assert.equal(gitProviderCalls[0]?.files[0]?.path, "sketchcatch/test-project/terraform/main.tf");
   assert.equal(
     gitProviderCalls[0]?.files[0]?.artifactObjectKey,
     "projects/project-id/terraform/main.tf"
@@ -314,6 +383,11 @@ test("POST /api/projects/:projectId/git-cicd-handoffs creates GitHub PR handoff 
 
 test("POST /api/projects/:projectId/git-cicd-handoffs rejects provider mismatch", async () => {
   const repository = new FakeGitCicdHandoffRepository();
+  repository.sourceRepository = createSourceRepositoryRecord({
+    provider: "github",
+    githubInstallationId: "123456",
+    githubRepositoryId: "987654"
+  });
   const providerCalls: GitCicdProviderCreateInput[] = [];
   const app = await buildGitCicdHandoffTestApp(repository, {
     provider: createProviderSpy(providerCalls)
@@ -323,10 +397,7 @@ test("POST /api/projects/:projectId/git-cicd-handoffs rejects provider mismatch"
     method: "POST",
     url: `/api/projects/${projectId}/git-cicd-handoffs`,
     headers: await authHeaders(),
-    payload: {
-      ...createHandoffBody(),
-      repositoryProvider: "github"
-    }
+    payload: createHandoffBody()
   });
 
   assert.equal(response.statusCode, 409);
@@ -717,6 +788,7 @@ function createHandoffRecord(
     commitMessage: "Add SketchCatch Terraform preview",
     pullRequestTitle: "SketchCatch IaC preview",
     pullRequestUrl: null,
+    pullRequestHeadSha: null,
     pipelineRunUrl: null,
     status: "draft",
     statusMessage: null,
@@ -775,13 +847,29 @@ function createTerraformArtifactRecord(
   };
 }
 
+function createSourceRepositoryRecord(
+  overrides: Partial<GitCicdHandoffSourceRepositoryRecord> = {}
+): GitCicdHandoffSourceRepositoryRecord {
+  return {
+    id: sourceRepositoryId,
+    projectId,
+    provider: "internal",
+    status: "active",
+    githubInstallationId: null,
+    githubRepositoryId: null,
+    owner: "sketchcatch",
+    name: "infra-live",
+    defaultBranch: "main",
+    repositoryUrl: "https://example.invalid/sketchcatch/infra-live",
+    ...overrides
+  };
+}
+
 function createHandoffBody() {
   return {
     architectureId,
     terraformArtifactId,
     sourceRepositoryId,
-    repositoryOwner: "sketchcatch",
-    repositoryName: "infra-live",
     targetBranch: "main",
     sourceBranch: "sketchcatch/iac-preview",
     commitMessage: "Add SketchCatch Terraform preview",

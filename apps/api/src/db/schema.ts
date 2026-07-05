@@ -40,6 +40,11 @@ export const gitCicdRepositoryProviderEnum = pgEnum("git_cicd_repository_provide
   "github"
 ]);
 
+export const sourceRepositoryStatusEnum = pgEnum("source_repository_status", [
+  "active",
+  "inactive"
+]);
+
 export const gitCicdHandoffStatusEnum = pgEnum("git_cicd_handoff_status", [
   "draft",
   "pr_created",
@@ -257,6 +262,43 @@ export const projectAssets = pgTable("project_assets", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
 });
 
+export const sourceRepositories = pgTable(
+  "source_repositories",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    projectId: varchar("project_id", { length: 36 })
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    createdByUserId: varchar("created_by_user_id", { length: 36 })
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    provider: gitCicdRepositoryProviderEnum("provider").notNull(),
+    status: sourceRepositoryStatusEnum("status").notNull().default("active"),
+    githubInstallationId: varchar("github_installation_id", { length: 128 }),
+    githubRepositoryId: varchar("github_repository_id", { length: 128 }),
+    owner: varchar("owner", { length: 120 }).notNull(),
+    name: varchar("name", { length: 120 }).notNull(),
+    defaultBranch: varchar("default_branch", { length: 255 }).notNull(),
+    repositoryUrl: text("repository_url"),
+    visibility: varchar("visibility", { length: 20 }),
+    archived: boolean("archived").notNull().default(false),
+    disconnectedAt: timestamp("disconnected_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [
+    index("source_repositories_project_id_idx").on(table.projectId),
+    index("source_repositories_created_by_user_id_idx").on(table.createdByUserId),
+    index("source_repositories_provider_status_idx").on(table.provider, table.status),
+    uniqueIndex("source_repositories_active_project_provider_unique")
+      .on(table.projectId, table.provider)
+      .where(sql`${table.status} = 'active'`),
+    uniqueIndex("source_repositories_github_repository_unique")
+      .on(table.projectId, table.provider, table.githubRepositoryId)
+      .where(sql`${table.status} = 'active' AND ${table.githubRepositoryId} IS NOT NULL`)
+  ]
+);
+
 export const awsConnections = pgTable(
   "aws_connections",
   {
@@ -364,6 +406,7 @@ export const gitCicdHandoffs = pgTable(
     commitMessage: text("commit_message"),
     pullRequestTitle: text("pull_request_title"),
     pullRequestUrl: text("pull_request_url"),
+    pullRequestHeadSha: varchar("pull_request_head_sha", { length: 64 }),
     pipelineRunUrl: text("pipeline_run_url"),
     status: gitCicdHandoffStatusEnum("status").notNull().default("draft"),
     statusMessage: text("status_message"),
@@ -474,6 +517,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   loginAttempts: many(loginAttempts),
   oauthAccounts: many(oauthAccounts),
   awsConnections: many(awsConnections),
+  sourceRepositories: many(sourceRepositories),
   gitCicdHandoffs: many(gitCicdHandoffs)
 }));
 
@@ -513,6 +557,7 @@ export const projectsRelations = relations(projects, ({ many, one }) => ({
   draft: one(projectDrafts),
   architectures: many(architectures),
   assets: many(projectAssets),
+  sourceRepositories: many(sourceRepositories),
   deployments: many(deployments),
   gitCicdHandoffs: many(gitCicdHandoffs)
 }));
@@ -568,6 +613,18 @@ export const deploymentsRelations = relations(deployments, ({ one, many }) => ({
   outputs: many(terraformOutputs)
 }));
 
+export const sourceRepositoriesRelations = relations(sourceRepositories, ({ one, many }) => ({
+  project: one(projects, {
+    fields: [sourceRepositories.projectId],
+    references: [projects.id]
+  }),
+  createdBy: one(users, {
+    fields: [sourceRepositories.createdByUserId],
+    references: [users.id]
+  }),
+  gitCicdHandoffs: many(gitCicdHandoffs)
+}));
+
 export const gitCicdHandoffsRelations = relations(gitCicdHandoffs, ({ one }) => ({
   project: one(projects, {
     fields: [gitCicdHandoffs.projectId],
@@ -580,6 +637,10 @@ export const gitCicdHandoffsRelations = relations(gitCicdHandoffs, ({ one }) => 
   terraformArtifact: one(projectAssets, {
     fields: [gitCicdHandoffs.terraformArtifactId],
     references: [projectAssets.id]
+  }),
+  sourceRepository: one(sourceRepositories, {
+    fields: [gitCicdHandoffs.sourceRepositoryId],
+    references: [sourceRepositories.id]
   }),
   createdBy: one(users, {
     fields: [gitCicdHandoffs.createdByUserId],

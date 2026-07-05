@@ -534,3 +534,26 @@ pnpm build
 - Scope completed: Deployment repository mutation wrapper writes `deployment.status`, log creation/SSE stream writes `deployment.log_cursor`, stream cursor read falls back to RDS on cache miss/failure, `buildApp` wires `createRuntimeCacheFromEnv`, and docs/sw has key/TTL/future reverse scan/pipeline convention.
 - Verification completed: targeted deployment route tests, API lint/typecheck, workspace lint/typecheck/build, `git diff --check`; final harness still needs to be rerun after this handoff note.
 - Remaining risk: no real Redis server or AWS apply/destroy was run.
+## 2026-07-05 - Spec3 Deployment/GitHub App/Runtime Cache handoff
+
+- Current branch/worktree: main workspace at `C:\Users\siwon\Desktop\Jungle\Week17~21\SketchCatch`.
+- Scope completed:
+  - Planned and documented spec/milestones in `docs/sw/spec3.md` and `docs/sw/plan3.md`.
+  - Added `source_repositories` persistence with soft deactivate active GitHub repo replacement.
+  - Added GitHub App install URL/state, callback exchange repository listing, repository selection save API.
+  - Added Web GitHub connection button and `/integrations/github/callback` selection screen.
+  - Changed Git/CI/CD handoff creation to read repository identity from active DB source repository, not request body.
+  - Added GitHub App-backed PR commit/PR provider, target branch conflict behavior, SketchCatch source path convention, PR head SHA storage, and Actions latest-run status polling.
+  - Added local Redis compose service, internal ElastiCache CloudFormation template, and live S3 deployment smoke runner.
+- Verification completed:
+  - `pnpm --filter @sketchcatch/api test -- git-cicd-handoffs` - passed
+  - `pnpm --filter @sketchcatch/web test -- workspace` - passed
+  - `pnpm lint` - passed
+  - `pnpm typecheck` - passed
+  - `pnpm build` - passed
+  - `pnpm harness:check` - passed
+- Remaining external validation:
+  - Run actual GitHub App install flow with `GITHUB_APP_ID`, `GITHUB_APP_SLUG`, `GITHUB_APP_PRIVATE_KEY_BASE64`, `GITHUB_APP_CALLBACK_URL`.
+  - Run actual GitHub PR handoff against a connected repo and confirm Actions polling.
+  - Attach actual ElastiCache `REDIS_URL` to API runtime and verify deployment log cursor / Git pipeline status cache goes through Redis.
+  - Run `scripts/smoke/live-s3-deployment.ps1` with `API_BASE_URL`, `ACCESS_TOKEN` or smoke login env, `AWS_CONNECTION_ID`, `SMOKE_ACCOUNT_ID`, `AWS_REGION`.
