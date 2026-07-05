@@ -2,7 +2,9 @@
 
 import { useCallback, useMemo, useState } from "react";
 import type {
+  DiagramJson,
   ResourceType,
+  ReverseEngineeringScan,
   ReverseEngineeringScanLogLine,
   ReverseEngineeringScanResponse
 } from "../../../../packages/types/src";
@@ -99,6 +101,15 @@ export function ReverseEngineeringPanel({ context, projectId }: ReverseEngineeri
       result: scanResponse.result
     });
   }, [context.diagram, scanResponse]);
+  const hasDeletedSourceScan = useMemo(
+    () =>
+      hasDeletedReverseEngineeringSourceScan(
+        context.diagram,
+        scanHistory,
+        scanHistoryState
+      ),
+    [context.diagram, scanHistory, scanHistoryState]
+  );
   // 사용자가 가져올 AWS 리소스 종류를 켜고 끕니다.
   function toggleResourceType(resourceType: ResourceType): void {
     setSelectedResourceTypes((currentResourceTypes) =>
@@ -292,6 +303,11 @@ export function ReverseEngineeringPanel({ context, projectId }: ReverseEngineeri
           selectedResourceTypes={selectedResourceTypes}
         />
         {errorMessage ? <p className={styles.deploymentError}>{errorMessage}</p> : null}
+        {hasDeletedSourceScan ? (
+          <p className={styles.deploymentNotice}>
+            이 보드는 Reverse Engineering scan에서 시작됐습니다. 하지만 원본 scan 기록은 삭제됐습니다.
+          </p>
+        ) : null}
 
         <ReverseEngineeringScanHistoryPanel
           activeScanId={activeScanId}
@@ -354,4 +370,38 @@ async function pollReverseEngineeringScan(
 
 function delay(milliseconds: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+}
+
+// 보드에는 출처 scan id가 남아 있는데 scan 기록 목록에는 없으면 삭제된 원본으로 봅니다.
+function hasDeletedReverseEngineeringSourceScan(
+  diagram: DiagramJson,
+  scanHistory: ReverseEngineeringScan[],
+  scanHistoryState: RequestState
+): boolean {
+  if (scanHistoryState !== "idle") {
+    return false;
+  }
+
+  const sourceScanIds = getReverseEngineeringSourceScanIds(diagram);
+
+  if (sourceScanIds.length === 0) {
+    return false;
+  }
+
+  const existingScanIds = new Set(scanHistory.map((scan) => scan.id));
+
+  return sourceScanIds.some((sourceScanId) => !existingScanIds.has(sourceScanId));
+}
+
+// Architecture Snapshot에 남겨둔 Reverse Engineering 출처 scan id만 모읍니다.
+function getReverseEngineeringSourceScanIds(diagram: DiagramJson): string[] {
+  return [
+    ...new Set(
+      diagram.nodes.flatMap((node) => {
+        const value = node.parameters?.values["reverseEngineeringSourceScanId"];
+
+        return typeof value === "string" && value.length > 0 ? [value] : [];
+      })
+    )
+  ];
 }

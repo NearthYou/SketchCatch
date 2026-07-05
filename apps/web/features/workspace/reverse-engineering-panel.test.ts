@@ -73,6 +73,11 @@ test("Reverse Engineering panel exposes cancel and delete scan actions", () => {
   assert.match(scanHistoryPanelSource, /삭제/);
 });
 
+test("Reverse Engineering panel explains when the source scan was deleted but the board remains", () => {
+  assert.match(panelSource, /hasDeletedReverseEngineeringSourceScan/);
+  assert.match(panelSource, /원본 scan 기록은 삭제됐습니다/);
+});
+
 function readWorkspaceFile(fileName: string): string {
   return readFileSync(fileURLToPath(new URL(fileName, import.meta.url)), "utf8");
 }
