@@ -39,7 +39,9 @@ export function CostsClient() {
   const [state, setState] = useState<CostPageState>("loading");
   const [errorMessage, setErrorMessage] = useState("");
   const [formErrorMessage, setFormErrorMessage] = useState("");
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(() =>
+    readSelectedProjectIdFromLocation()
+  );
   const selectedProject = useMemo(
     () => costData?.projects.find((item) => item.project.id === selectedProjectId) ?? costData?.projects[0] ?? null,
     [costData, selectedProjectId]
@@ -64,11 +66,19 @@ export function CostsClient() {
 
         setCostData(result);
         setState("idle");
-        setSelectedProjectId((currentProjectId) =>
-          currentProjectId !== null && result.projects.some((item) => item.project.id === currentProjectId)
-            ? currentProjectId
-            : result.projects[0]?.project.id ?? null
-        );
+        setSelectedProjectId((currentProjectId) => {
+          const urlProjectId = readSelectedProjectIdFromLocation();
+          const candidateProjectId = currentProjectId ?? urlProjectId;
+          const nextProjectId =
+            candidateProjectId !== null &&
+            result.projects.some((item) => item.project.id === candidateProjectId)
+              ? candidateProjectId
+              : result.projects[0]?.project.id ?? null;
+
+          writeSelectedProjectIdToLocation(nextProjectId);
+
+          return nextProjectId;
+        });
       } catch (error) {
         if (ignore) {
           return;
@@ -85,6 +95,16 @@ export function CostsClient() {
       ignore = true;
     };
   }, [appliedQuery]);
+
+  useEffect(() => {
+    function handlePopState(): void {
+      setSelectedProjectId(readSelectedProjectIdFromLocation());
+    }
+
+    window.addEventListener("popstate", handlePopState);
+
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
 
   function applyCostQuery(): void {
     const expectedUserCount = parseExpectedUserCount(expectedUserCountInput);
@@ -206,7 +226,7 @@ export function CostsClient() {
                 aria-pressed={selectedProject?.project.id === item.project.id}
                 className="dashboardTableRow costProjectRow"
                 key={item.project.id}
-                onClick={() => setSelectedProjectId(item.project.id)}
+                onClick={() => selectProject(item.project.id, setSelectedProjectId)}
                 type="button"
               >
                 <strong>{item.project.name}</strong>
@@ -292,6 +312,38 @@ function parseExpectedUserCount(value: string): number | null {
   }
 
   return parsedValue;
+}
+
+function readSelectedProjectIdFromLocation(): string | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  return new URLSearchParams(window.location.search).get("projectId");
+}
+
+function selectProject(
+  projectId: string,
+  setSelectedProjectId: (projectId: string) => void
+): void {
+  setSelectedProjectId(projectId);
+  writeSelectedProjectIdToLocation(projectId);
+}
+
+function writeSelectedProjectIdToLocation(projectId: string | null): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  const url = new URL(window.location.href);
+
+  if (projectId === null) {
+    url.searchParams.delete("projectId");
+  } else {
+    url.searchParams.set("projectId", projectId);
+  }
+
+  window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
 }
 
 function formatResourceTypes(resources: readonly ResourceCostEstimate[]): string {
