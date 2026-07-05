@@ -1,3 +1,28 @@
+# 2026-07-05 - AI 다이어그램 신규 생성 라우팅 보정
+
+- Goal: 기존 다이어그램이 있는 상태에서도 새 서비스/웹사이트 요청은 기존 보드 patch가 아니라 새 Architecture Draft 생성으로 흘러가게 하고, patch 질문 상태에서 `추가 안 함` 또는 서비스 목적 추천 답변을 눌렀을 때 같은 질문/no-op으로 갇히지 않게 한다.
+- Completed:
+  - 기존 보드가 있어도 `정적 소개 웹사이트로 정리해줘`, `로그인 있고 개인정보 보호가 중요한 서비스를 만들어줘` 같은 완성된 새 서비스 요청은 `draft` 경로로 분기하게 했다.
+  - `정리해줘`, `구성해줘`, `설계해줘` 계열 표현을 새 초안 생성 의도로 인식하게 했다.
+  - patch clarification에서 `추가 안 함`을 선택하면 `현재 다이어그램을 유지합니다`로 끝내지 않고, 지금까지의 사용자 입력에서 `추가 안 함`만 제외한 prompt로 새 초안 생성을 재시도하게 했다.
+  - patch clarification의 서비스 목적 추천 답변은 기존 리소스 patch가 아니라 새 초안 생성 요청으로 연결했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-ai-chat-routing.test.ts` - red before fix, passed after fix
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-ai-chat-routing.test.ts features/workspace/workspace-ai-clarification.test.ts` - passed, 19 tests
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web typecheck` - passed
+  - `pnpm harness:check` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm lint` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm typecheck` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm build` - passed
+  - `pnpm harness:check` - passed after build
+- Commits:
+  - `3cd67c6 Fix: AI 다이어그램 신규 생성 흐름 보정`
+  - `e9bc298 Fix: AI 질문 답변 초안 생성 연결`
+- Known risks:
+  - 실제 브라우저 클릭 smoke는 수행하지 않았다. 라우팅/clarification 단위 테스트와 workspace/web/typecheck, 전체 lint/typecheck/build로 검증했다.
+  - 기존 워크트리에 Terraform Issues/AI 해결 관련 미커밋 변경이 남아 있으며, 이번 세션 커밋에는 AI 다이어그램 라우팅/질문 복구 hunk만 선별 포함했다.
+
 # 에이전트 진행 로그
 
 이 파일은 새 세션이 이전 대화 기억 없이도 저장소의 현재 작업 상태를 복구하기 위한 지속 상태다. 제품 범위의 정답은 `docs/product.md`, 계약의 정답은 `docs/data-models.md`, 실행 경계의 정답은 `docs/architecture.md`에 둔다. 이 파일은 "지금 에이전트 작업이 어디까지 검증되었는가"만 기록한다.
