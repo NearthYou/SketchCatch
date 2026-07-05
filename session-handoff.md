@@ -2,6 +2,49 @@
 
 이 파일은 최신 세션 하나를 다음 세션이 빠르게 이어받기 위한 압축본이다. 누적 이력은 `agent-progress.md`에 남긴다.
 
+## 2026-07-05 최신 핸드오프 - Terraform 영역 리소스 계약 Ticket 2
+
+### 현재 상태
+
+- 현재 브랜치: `Feat/jh/165-regionaz를-resource-node로-생성`
+- 사용자 요청: `docs/jh/001_테라폼영역리소스동기화티켓계획_JH.md`의 Ticket 2를 진행하고, 커밋은 만들지 않는다.
+- Ticket 2 범위는 Web에서 새 Region/AZ 생성 경로를 `aws_region`, `aws_availability_zone` resource area node로 바꾸는 것이다.
+- 신규 catalog/sample 생성 경로는 더 이상 `design_region`, `design_az`를 만들지 않는다. Legacy 저장 데이터 호환을 위해 area 판정과 일부 테스트에서는 기존 design/sketchcatch 타입을 계속 인식한다.
+
+### 완료된 것
+
+- Resource catalog의 Region/AZ item을 `aws-region`, `aws-availability-zone` id와 `aws_region`, `aws_availability_zone` type으로 전환했다.
+- `createDiagramNodeFromPayload`가 Region/AZ drag 생성 시 `kind: "resource"`와 기본 `parameters`를 만든다.
+- Region 기본값: `resourceName: "ap_northeast_2"`, `values.awsRegion: "ap-northeast-2"`.
+- AZ 기본값: `resourceName: "ap_northeast_2a"`, `values.awsAvailabilityZone: "ap-northeast-2a"`.
+- `area-nodes`, resize bounds, Resource List summary가 `aws_region`, `aws_availability_zone`을 board area node로 인식한다.
+- Parameter panel의 Region/AZ selector는 `metadata`가 아니라 `parameters.values["awsRegion"]`, `parameters.values["awsAvailabilityZone"]`만 갱신한다.
+- 리뷰 보강으로 Region/AZ reader는 `parameters.values`가 누락되거나 null이어도 기본값으로 fallback한다.
+- Region/AZ update helper는 legacy `values: undefined | null`에서도 새 values 객체를 만들어 저장한다.
+- AZ 선택용 정적 option helper를 추가했다.
+- server-storage sample layout이 catalog 기반 `aws_region`, `aws_availability_zone` area resource를 생성한다.
+- `docs/data-models.md`에서 Region/AZ area resource가 shared Terraform `ResourceDefinition` 대상이 아님을 최신 계약에 맞게 보정했다.
+
+### 검증된 것
+
+- `pnpm harness:check` - passed before edits.
+- `pnpm --filter @sketchcatch/web exec tsx --test features/resource-settings/catalog.test.ts` - passed.
+- `pnpm --filter @sketchcatch/web exec tsx --test features/parameter-input/region-node-metadata.test.ts features/parameter-input/aws-availability-zone-options.test.ts` - passed.
+- `pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/area-nodes.test.ts features/diagram-editor/diagram-utils.test.ts features/diagram-editor/node-resize-bounds.test.ts` - passed.
+- `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/resource-list-summary.test.ts features/workspace/workspace-ai-diagram-adapter.test.ts` - passed.
+- `pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/area-node-movement.test.ts features/diagram-editor/reference-drop-targets.test.ts features/diagram-editor/flow-mappers.test.ts` - passed.
+- `pnpm --filter @sketchcatch/api exec tsx --test src/routes/terraform.test.ts --test-name-pattern "Region and AZ area resource parameters"` - passed; Node test runner still executed the whole file.
+- `pnpm --filter @sketchcatch/web typecheck`, `pnpm --filter @sketchcatch/api typecheck`, `pnpm --filter @sketchcatch/types typecheck` - passed.
+- `pnpm --filter @sketchcatch/web lint` - passed.
+- `pnpm lint`, `pnpm typecheck`, `pnpm build` - passed.
+- 리뷰 보강 후 `pnpm --filter @sketchcatch/web exec tsx --test features/parameter-input/region-node-metadata.test.ts`, `pnpm --filter @sketchcatch/web typecheck`, `pnpm --filter @sketchcatch/web lint`, `pnpm lint`, `pnpm typecheck`, `pnpm build`가 통과했다.
+
+### 다음 행동
+
+- Ticket 3에서 `aws_autoscaling_group`을 Terraform resource이면서 visual area node로 동작하게 만든다.
+- Ticket 3에서는 `area-nodes`, resize bounds, flow mapper, reference/drop target, area movement 테스트를 이어서 확인한다.
+- 이번 세션은 사용자 요청에 따라 커밋하지 않았다.
+
 ## 2026-07-05 최신 핸드오프 - Terraform 영역 리소스 계약 Ticket 1
 
 ### 현재 상태

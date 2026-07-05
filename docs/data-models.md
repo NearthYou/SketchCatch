@@ -257,7 +257,7 @@ type ResourceType =
 
 ## ResourceDefinition과 Terraform Capability
 
-Terraform IaC 리소스의 지원 여부는 `packages/types/src/resource-definitions.ts`의 `ResourceDefinition`을 단일 출처로 삼는다. 여기에는 `provider`, domain `resourceType`, Terraform block identity, capability만 둔다. 여기서 domain `resourceType`은 AI/Architecture 분석용 분류값이며 Terraform Preview identity 기준이 아니다. `design_region`, `design_az`, `design_group`처럼 화면 배치만 위한 container node는 IaC 리소스가 아니므로 공통 definition에 넣지 않고 web catalog에만 둔다.
+Terraform IaC 리소스의 지원 여부는 `packages/types/src/resource-definitions.ts`의 `ResourceDefinition`을 단일 출처로 삼는다. 여기에는 `provider`, domain `resourceType`, Terraform block identity, capability만 둔다. 여기서 domain `resourceType`은 AI/Architecture 분석용 분류값이며 Terraform Preview identity 기준이 아니다. `aws_region`, `aws_availability_zone`, `design_group`처럼 보드 포함 관계를 위한 area node는 Terraform HCL block으로 직접 렌더링되는 IaC 리소스가 아니므로 공통 definition에 넣지 않고 web catalog에만 둔다.
 
 ```ts
 type ResourceCapability = {
