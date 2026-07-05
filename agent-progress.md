@@ -1926,3 +1926,22 @@
 - Known risks:
   - 실제 브라우저 스크린샷 검증은 수행하지 않았다. 소스 검색과 frontend 타입체크/lint로 표시 제거 경로를 확인했다.
   - `pnpm build`가 `apps/web/next-env.d.ts`를 일시적으로 build route import로 바꿨고, 원래 dev route import로 복구했다.
+
+## 2026-07-06 - 시뮬레이션 조건 입력 제거
+
+- Goal: Workspace AI 시뮬레이션 실행 영역에서 기간 선택과 예상 사용자 수 입력을 제거한다.
+- Completed:
+  - 시뮬레이션 탭 상단에서 `기간`, `예상 사용자 수` 입력 UI를 제거하고 실행 버튼만 남겼다.
+  - 시뮬레이션 요청은 내부 기본값 `period: "month"`, `expectedUserCount: 1000`으로 계속 호출하게 했다.
+  - 제거된 입력 state, validation helper, 조건 grid CSS를 정리했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits
+  - `pnpm --filter @sketchcatch/web typecheck` - passed
+  - `pnpm --filter @sketchcatch/web lint` - passed
+  - `pnpm harness:check` - passed after edits
+  - `pnpm lint` - passed with `.turbo/cache` rename warnings
+  - `pnpm typecheck` - passed with `.turbo/cache` rename warnings
+  - `pnpm build` - passed
+- Known risks:
+  - 실제 브라우저 스크린샷 검증은 수행하지 않았다. 소스 검색과 frontend 타입체크/lint로 입력 제거 경로를 확인했다.
+  - `pnpm build`가 `apps/web/next-env.d.ts`를 일시적으로 build route import로 바꿨고, 원래 dev route import로 복구했다.

@@ -2610,9 +2610,9 @@
   border: 1px solid var(--bp-line);
   border-radius: var(--bp-r);
   box-shadow: 0 10px 24px rgba(31, 61, 88, 0.08);
-  display: grid;
+  display: flex;
   gap: 12px;
-  grid-template-columns: minmax(180px, 0.75fr) minmax(0, 1.25fr);
+  justify-content: space-between;
   padding: 12px;
 }
 
@@ -2622,19 +2622,8 @@
   line-height: 1.45;
 }
 
-.aiSimulationConditionGrid {
-  align-items: end;
-  display: grid;
-  gap: 8px;
-  grid-template-columns: minmax(110px, 0.8fr) minmax(128px, 1fr) auto;
-  min-width: 0;
-}
-
-.aiSimulationConditionGrid .aiField {
-  min-width: 0;
-}
-
-.aiSimulationConditionGrid .aiPrimaryButton {
+.aiChatSimulationIntro .aiPrimaryButton {
+  flex: 0 0 auto;
   min-width: 132px;
   white-space: nowrap;
 }
@@ -4076,12 +4065,12 @@
     grid-column: 1 / -1;
   }
 
-  .aiChatSimulationIntro,
-  .aiSimulationConditionGrid {
-    grid-template-columns: 1fr;
+  .aiChatSimulationIntro {
+    align-items: stretch;
+    flex-direction: column;
   }
 
-  .aiSimulationConditionGrid .aiPrimaryButton {
+  .aiChatSimulationIntro .aiPrimaryButton {
     min-width: 0;
     width: 100%;
   }
