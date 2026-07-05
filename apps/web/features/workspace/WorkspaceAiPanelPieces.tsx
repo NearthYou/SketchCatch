@@ -5,7 +5,6 @@ import type {
   AiTerraformErrorExplanationResult,
   AiTerraformPreviewExplanationResult,
   CheckFinding,
-  CostEstimatePeriod,
   DesignSimulationResult,
   LlmExplanation
 } from "@sketchcatch/types";
@@ -245,8 +244,6 @@ export function WorkspaceAiDesignSimulationResult({
           {simulation.costEstimate !== undefined ? (
             <div className={styles.aiSimulationCostMeta}>
               <span>${formatMoney(simulation.costEstimate.totalEstimate.amount)}</span>
-              <span>{getSimulationPeriodLabel(simulation.costEstimate.period)}</span>
-              <span>{formatInteger(simulation.costEstimate.expectedUserCount)}명</span>
             </div>
           ) : null}
           <ul>
@@ -351,19 +348,4 @@ function WorkspaceAiFindingList({ findings }: { readonly findings: readonly Chec
 
 function formatMoney(amount: number): string {
   return amount.toFixed(2);
-}
-
-function formatInteger(amount: number): string {
-  return Math.round(amount).toLocaleString("en-US");
-}
-
-function getSimulationPeriodLabel(period: CostEstimatePeriod): string {
-  switch (period) {
-    case "day":
-      return "day";
-    case "week":
-      return "week";
-    case "month":
-      return "month";
-  }
 }

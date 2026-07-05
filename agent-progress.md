@@ -1945,3 +1945,22 @@
 - Known risks:
   - 실제 브라우저 스크린샷 검증은 수행하지 않았다. 소스 검색과 frontend 타입체크/lint로 입력 제거 경로를 확인했다.
   - `pnpm build`가 `apps/web/next-env.d.ts`를 일시적으로 build route import로 바꿨고, 원래 dev route import로 복구했다.
+
+## 2026-07-06 - 시뮬레이션 비용 표시 코드 정리
+
+- Goal: 시뮬레이션 조건 입력 제거 후 결과 카드에 남아 있던 불필요한 조건 표시 코드와 helper를 정리한다.
+- Completed:
+  - Workspace AI 시뮬레이션 결과의 `비용·다음 검토` 카드에서 기간과 예상 사용자 수 badge를 제거하고 총 예상 비용만 남겼다.
+  - `CostEstimatePeriod` import, `formatInteger`, `getSimulationPeriodLabel`처럼 화면 표시용으로만 남아 있던 코드를 삭제했다.
+  - 시뮬레이션 API 요청 기본값은 비용 계산 계약에 필요하므로 유지했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits
+  - `pnpm --filter @sketchcatch/web typecheck` - passed
+  - `pnpm --filter @sketchcatch/web lint` - passed
+  - `pnpm harness:check` - passed after edits
+  - `pnpm lint` - passed with `.turbo/cache` rename warnings
+  - `pnpm typecheck` - passed with `.turbo/cache` rename warnings
+  - `pnpm build` - passed
+- Known risks:
+  - 실제 브라우저 스크린샷 검증은 수행하지 않았다. 변경 범위가 결과 카드의 badge 제거와 helper 삭제라 타입체크/lint/build로 검증했다.
+  - `pnpm build`가 `apps/web/next-env.d.ts`를 일시적으로 build route import로 바꿨고, 원래 dev route import로 복구했다.
