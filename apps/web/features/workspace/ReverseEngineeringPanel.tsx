@@ -249,6 +249,10 @@ export function ReverseEngineeringPanel({ context, projectId }: ReverseEngineeri
       await createArchitectureSnapshot({
         projectId,
         source: "imported",
+        reverseEngineering: {
+          sourceScanId: result.scan.id,
+          draftId: result.reverseEngineeringDraft.id
+        },
         architectureJson: convertDiagramJsonToArchitectureJson(application.diagram)
       });
       setApplyState("saved");

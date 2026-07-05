@@ -177,7 +177,13 @@ export async function createReverseEngineeringScan(
     });
     const result: ReverseEngineeringScanResult = {
       ...adapterResult,
-      scan: completedScan
+      scan: completedScan,
+      reverseEngineeringDraft: {
+        ...adapterResult.reverseEngineeringDraft,
+        id: `draft-${completedScan.id}`,
+        scanId: completedScan.id,
+        createdAt: completedScan.completedAt ?? completedScan.updatedAt
+      }
     };
     const savedScan = await repository.completeScan(scan.id, result, completedAt);
 

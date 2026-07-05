@@ -33,6 +33,14 @@ test("createReverseEngineeringScan stores a scan, logs progress, and saves adapt
           return {
             scan: makeScan({ id: "not-yet-persisted" }),
             discoveredResources: [],
+            reverseEngineeringDraft: {
+              id: "draft-not-yet-persisted",
+              scanId: "not-yet-persisted",
+              architectureJson: { nodes: [], edges: [] },
+              protectedValueKeys: [],
+              editableValueKeys: [],
+              createdAt: fixedNow.toISOString()
+            },
             architectureJson: { nodes: [], edges: [] },
             findings: [],
             analysisExclusions: [],
@@ -47,6 +55,8 @@ test("createReverseEngineeringScan stores a scan, logs progress, and saves adapt
   );
 
   assert.equal(result.scan.status, "completed");
+  assert.equal(result.result.reverseEngineeringDraft.scanId, result.scan.id);
+  assert.equal(result.result.reverseEngineeringDraft.id, `draft-${result.scan.id}`);
   assert.equal(repository.scanRows[0]?.awsConnectionId, awsConnectionId);
   assert.equal(repository.scanRows[0]?.result?.scan.id, result.scan.id);
   assert.deepEqual(

@@ -132,6 +132,51 @@ test("GET /api/projects/:id returns 404 for another user's project", async () =>
   await app.close();
 });
 
+test("POST /api/projects/:id/architectures keeps Reverse Engineering scan and draft source", async () => {
+  const fakeDb = new ProjectRouteFakeDb({
+    activeUserId: ACTIVE_USER_ID,
+    users: [makeUser({ id: ACTIVE_USER_ID })],
+    projects: [makeProject({ id: ACTIVE_PROJECT_ID, userId: ACTIVE_USER_ID })]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/projects/${ACTIVE_PROJECT_ID}/architectures`,
+    headers: await authHeaders(ACTIVE_USER_ID),
+    payload: {
+      source: "imported",
+      reverseEngineering: {
+        sourceScanId: "scan-1",
+        draftId: "draft-scan-1"
+      },
+      architectureJson: {
+        nodes: [
+          {
+            id: "resource-vpc-main",
+            type: "VPC",
+            label: "Main VPC",
+            positionX: 0,
+            positionY: 0,
+            config: {}
+          }
+        ],
+        edges: []
+      }
+    }
+  });
+  const savedArchitecture = fakeDb.architectureRows[0];
+  const savedNode = savedArchitecture?.architectureJson.nodes[0];
+
+  assert.equal(response.statusCode, 201);
+  assert.equal(savedNode?.config["reverseEngineeringSourceScanId"], "scan-1");
+  assert.equal(savedNode?.config["reverseEngineeringDraftId"], "draft-scan-1");
+
+  await app.close();
+});
+
 test("DELETE /api/projects/:id deletes a project owned by the active user", async () => {
   const fakeDb = new ProjectRouteFakeDb({
     activeUserId: ACTIVE_USER_ID,
@@ -836,13 +881,20 @@ class ProjectRouteFakeDb {
         from: (table: unknown) => new SelectQuery(() => this.selectRows(table, selection))
       }),
       insert: (table: unknown) => ({
-        values: (values: Partial<ProjectAssetRow> | Partial<ProjectRow>) => ({
+        values: (values: Partial<ArchitectureRow> | Partial<ProjectAssetRow> | Partial<ProjectRow>) => ({
           returning: async () => {
             if (table === projects) {
               const project = makeProject(values as Partial<ProjectRow>);
               this.projectRows.push(project);
 
               return [project];
+            }
+
+            if (table === architectures) {
+              const architecture = makeArchitecture(values as Partial<ArchitectureRow>);
+              this.architectureRows.push(architecture);
+
+              return [architecture];
             }
 
             if (table === projectAssets) {

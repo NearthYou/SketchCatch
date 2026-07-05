@@ -71,6 +71,15 @@ const terraformResourceTypeMap: ReadonlyMap<ResourceType, string> = new Map([
   ["RDS", "aws_db_instance"],
   ["S3", "aws_s3_bucket"]
 ]);
+const REVERSE_ENGINEERING_PROTECTED_VALUE_KEYS = [
+  "providerResourceId",
+  "providerResourceType",
+  "region",
+  "accountId",
+  "terraformResourceName",
+  "terraformResourceType"
+];
+const REVERSE_ENGINEERING_EDITABLE_VALUE_KEYS = ["displayName", "description"];
 
 // Provider Adapter의 공개 진입점입니다. AWS 원본 목록을 보드 설계도와 분석 재료로 바꿉니다.
 export function createAwsProviderAdapter(gateway: AwsProviderScanGateway): AwsProviderAdapter {
@@ -81,10 +90,12 @@ export function createAwsProviderAdapter(gateway: AwsProviderScanGateway): AwsPr
       const idMap = createResourceIdMap(records);
       const discoveredResources = records.map((record) => toDiscoveredResource(record, idMap));
       const architectureJson = toArchitectureJson(discoveredResources);
+      const scan = createEmptyScan(input);
 
       return {
-        scan: createEmptyScan(input),
+        scan,
         discoveredResources,
+        reverseEngineeringDraft: createReverseEngineeringDraft(scan, architectureJson),
         architectureJson,
         findings: createReverseEngineeringFindings(discoveredResources),
         analysisExclusions: createAnalysisExclusions(discoveredResources),
@@ -92,6 +103,21 @@ export function createAwsProviderAdapter(gateway: AwsProviderScanGateway): AwsPr
         scanErrors: discoveryResult.scanErrors
       };
     }
+  };
+}
+
+// Scan 결과를 바로 최종 보드로 저장하지 않고, 사용자가 확인할 후보 설계로 분리합니다.
+function createReverseEngineeringDraft(
+  scan: ReverseEngineeringScanResult["scan"],
+  architectureJson: ArchitectureJson
+): ReverseEngineeringScanResult["reverseEngineeringDraft"] {
+  return {
+    id: `draft-${scan.id}`,
+    scanId: scan.id,
+    architectureJson,
+    protectedValueKeys: [...REVERSE_ENGINEERING_PROTECTED_VALUE_KEYS],
+    editableValueKeys: [...REVERSE_ENGINEERING_EDITABLE_VALUE_KEYS],
+    createdAt: scan.createdAt
   };
 }
 

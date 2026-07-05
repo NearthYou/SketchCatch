@@ -317,6 +317,10 @@ export type ProjectDetailsResponse = {
 export type CreateArchitectureSnapshotRequest = {
   version?: number | undefined;
   source?: string | undefined;
+  reverseEngineering?: {
+    sourceScanId: string;
+    draftId: string;
+  } | undefined;
   architectureJson: ArchitectureJson;
 };
 
@@ -625,6 +629,15 @@ export type ReverseEngineeringAnalysisExclusion = {
   message: string;
 };
 
+export type ReverseEngineeringDraft = {
+  id: string;
+  scanId: string;
+  architectureJson: ArchitectureJson;
+  protectedValueKeys: string[];
+  editableValueKeys: string[];
+  createdAt: IsoDateTimeString;
+};
+
 export type ReverseEngineeringImportSuggestion = {
   id: string;
   resourceId: string;
@@ -666,6 +679,7 @@ export type ReverseEngineeringScanLogLine = {
 export type ReverseEngineeringScanResult = {
   scan: ReverseEngineeringScan;
   discoveredResources: DiscoveredResource[];
+  reverseEngineeringDraft: ReverseEngineeringDraft;
   architectureJson: ArchitectureJson;
   findings: CheckFinding[];
   analysisExclusions: ReverseEngineeringAnalysisExclusion[];

@@ -76,6 +76,14 @@ test("Reverse Engineering shared result separates scan metadata from restored ar
         importSuggestionStatus: "unsupported_resource_type"
       }
     ],
+    reverseEngineeringDraft: {
+      id: "draft-scan-1",
+      scanId: "scan-1",
+      architectureJson,
+      protectedValueKeys: ["providerResourceId", "providerResourceType"],
+      editableValueKeys: ["displayName", "description"],
+      createdAt: "2026-07-05T00:01:00.000Z"
+    },
     architectureJson,
     findings: [],
     analysisExclusions: [

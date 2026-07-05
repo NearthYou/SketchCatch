@@ -166,6 +166,45 @@ test("createReverseEngineeringBoardApplication dims unsupported unknown resource
 function createScanResult(
   input: Partial<ReverseEngineeringScanResult["architectureJson"]> = {}
 ): ReverseEngineeringScanResult {
+  const architectureJson = {
+    nodes: input.nodes ?? [
+      {
+        id: "resource-vpc-1234",
+        type: "VPC",
+        label: "Main VPC",
+        positionX: 120,
+        positionY: 100,
+        config: {
+          cidrBlock: "10.0.0.0/16",
+          providerResourceId: "vpc-1234",
+          providerResourceType: "AWS::EC2::VPC",
+          terraformResourceName: "main"
+        }
+      },
+      {
+        id: "resource-subnet-1234",
+        type: "SUBNET",
+        label: "Public Subnet",
+        positionX: 220,
+        positionY: 180,
+        config: {
+          providerResourceId: "subnet-1234",
+          providerResourceType: "AWS::EC2::Subnet",
+          terraformResourceName: "public",
+          vpcId: "vpc-1234"
+        }
+      }
+    ],
+    edges: input.edges ?? [
+      {
+        id: "edge-vpc-subnet",
+        sourceId: "resource-vpc-1234",
+        targetId: "resource-subnet-1234",
+        label: "contains"
+      }
+    ]
+  };
+
   return {
     scan: {
       id: "scan-1",
@@ -184,44 +223,15 @@ function createScanResult(
       errorSummary: null
     },
     discoveredResources: [],
-    architectureJson: {
-      nodes: input.nodes ?? [
-        {
-          id: "resource-vpc-1234",
-          type: "VPC",
-          label: "Main VPC",
-          positionX: 120,
-          positionY: 100,
-          config: {
-            cidrBlock: "10.0.0.0/16",
-            providerResourceId: "vpc-1234",
-            providerResourceType: "AWS::EC2::VPC",
-            terraformResourceName: "main"
-          }
-        },
-        {
-          id: "resource-subnet-1234",
-          type: "SUBNET",
-          label: "Public Subnet",
-          positionX: 220,
-          positionY: 180,
-          config: {
-            providerResourceId: "subnet-1234",
-            providerResourceType: "AWS::EC2::Subnet",
-            terraformResourceName: "public",
-            vpcId: "vpc-1234"
-          }
-        }
-      ],
-      edges: input.edges ?? [
-        {
-          id: "edge-vpc-subnet",
-          sourceId: "resource-vpc-1234",
-          targetId: "resource-subnet-1234",
-          label: "contains"
-        }
-      ]
+    reverseEngineeringDraft: {
+      id: "draft-scan-1",
+      scanId: "scan-1",
+      architectureJson,
+      protectedValueKeys: ["providerResourceId", "providerResourceType"],
+      editableValueKeys: ["displayName", "description"],
+      createdAt: "2026-07-05T00:01:00.000Z"
     },
+    architectureJson,
     findings: [],
     analysisExclusions: [],
     importSuggestions: [],
