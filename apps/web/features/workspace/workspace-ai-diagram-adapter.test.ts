@@ -947,6 +947,67 @@ test("convertArchitectureJsonToDiagramJson lays out generated EC2 drafts inside 
   assertContainsNode(nodeById.get("app-security-group"), nodeById.get("app-server"));
 });
 
+test("convertArchitectureJsonToDiagramJson keeps route table associations out of subnet child layout", () => {
+  const architectureJson: ArchitectureJson = {
+    nodes: [
+      {
+        id: "vpc-main",
+        type: "VPC",
+        label: "Main VPC",
+        positionX: 70,
+        positionY: 320,
+        config: { cidrBlock: "10.0.0.0/16" }
+      },
+      {
+        id: "public-subnet-a",
+        type: "SUBNET",
+        label: "Public Subnet A",
+        positionX: 150,
+        positionY: 320,
+        config: {
+          cidrBlock: "10.0.1.0/24",
+          vpcId: "aws_vpc.vpc_main.id"
+        }
+      },
+      {
+        id: "public-route-table",
+        type: "ROUTE_TABLE",
+        label: "Public Route Table",
+        positionX: 650,
+        positionY: 520,
+        config: {
+          vpcId: "aws_vpc.vpc_main.id"
+        }
+      },
+      {
+        id: "public-route-table-association",
+        type: "ROUTE_TABLE_ASSOCIATION",
+        label: "Public Route Association A",
+        positionX: 520,
+        positionY: 720,
+        config: {
+          routeTableId: "aws_route_table.public_route_table.id",
+          subnetId: "aws_subnet.public_subnet_a.id"
+        }
+      }
+    ],
+    edges: []
+  };
+
+  const diagramJson = convertArchitectureJsonToDiagramJson(architectureJson);
+  const nodeById = new Map(diagramJson.nodes.map((node) => [node.id, node]));
+  const subnetNode = nodeById.get("public-subnet-a");
+  const associationNode = nodeById.get("public-route-table-association");
+
+  assert.equal(associationNode?.metadata?.parentAreaNodeId, "vpc-main");
+  assert.ok(subnetNode, "Expected subnet node");
+  assert.ok(associationNode, "Expected route table association node");
+  assert.ok(
+    associationNode.position.y > subnetNode.position.y + subnetNode.size.height,
+    "Route table association should not stretch the subnet area downward"
+  );
+});
+
 test("convertArchitectureJsonToDiagramJson keeps server-storage usage arrows visible", () => {
   const architectureJson: ArchitectureJson = {
     nodes: [

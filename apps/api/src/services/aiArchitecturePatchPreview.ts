@@ -709,12 +709,24 @@ function inferServiceExpansionResourceType(
   existingNodes: readonly ResourceNode[]
 ): ResourceType | undefined {
   const hasResourceType = (resourceType: ResourceType) => existingNodes.some((node) => node.type === resourceType);
+  const hasStaticWebsiteIntent = includesAnyPhrase(normalizedInstruction, [
+    "정적",
+    "소개",
+    "웹사이트",
+    "사이트",
+    "cdn",
+    "배포"
+  ]);
 
   if (
     includesAnyPhrase(normalizedInstruction, ["로그인", "회원", "사용자", "계정", "예약", "신청", "주문", "결제"]) &&
     !hasResourceType("RDS")
   ) {
     return "RDS";
+  }
+
+  if (hasStaticWebsiteIntent && hasResourceType("S3") && !hasResourceType("CLOUDFRONT")) {
+    return "CLOUDFRONT";
   }
 
   if (
@@ -897,6 +909,10 @@ function getAddResourcePurposeSuggestions(resourceType: ResourceType): readonly 
 
 function hasAddResourcePurpose(intent: ArchitecturePatchIntent): boolean {
   if (intent.connectionTargetResourceId !== undefined || intent.skipConnection === true) {
+    return true;
+  }
+
+  if (intent.resourceType === "EC2") {
     return true;
   }
 
@@ -1143,13 +1159,17 @@ function addResource(
   resourceType: ResourceType,
   intent: ArchitecturePatchIntent
 ): ArchitectureJson {
+  if (resourceType === "EC2") {
+    return addEc2RuntimeBundle(architectureJson, intent);
+  }
+
   const nextNodes = [...architectureJson.nodes];
   const newNode: ResourceNode = {
     id: createUniqueResourceId(resourceType, nextNodes),
     type: resourceType,
     label: formatPatchResourceType(resourceType),
     ...getNewResourcePosition(nextNodes),
-    config: {}
+    config: createNewResourceConfig(resourceType, nextNodes)
   };
 
   nextNodes.push(newNode);
@@ -1158,6 +1178,163 @@ function addResource(
     nodes: nextNodes,
     edges: addConnectionEdge(architectureJson.edges, architectureJson.nodes, newNode, intent)
   };
+}
+
+function addEc2RuntimeBundle(
+  architectureJson: ArchitectureJson,
+  intent: ArchitecturePatchIntent
+): ArchitectureJson {
+  const nextNodes = [...architectureJson.nodes];
+  const basePosition = getNewResourcePosition(nextNodes);
+  const vpcNode = findBestNode(nextNodes, ["VPC"]) ?? createBundleNode("VPC", nextNodes, {
+    label: "VPC",
+    positionX: basePosition.positionX,
+    positionY: basePosition.positionY,
+    config: {
+      cidrBlock: "10.0.0.0/16"
+    }
+  });
+  addNodeIfMissing(nextNodes, vpcNode);
+
+  const subnetNode = findBestNode(nextNodes, ["SUBNET"]) ?? createBundleNode("SUBNET", nextNodes, {
+    label: "Public Subnet",
+    positionX: vpcNode.positionX + 90,
+    positionY: vpcNode.positionY + 160,
+    config: {
+      cidrBlock: "10.0.1.0/24",
+      mapPublicIpOnLaunch: true,
+      vpcId: createTerraformReference(vpcNode, "aws_vpc")
+    }
+  });
+  addNodeIfMissing(nextNodes, subnetNode);
+
+  const securityGroupNode =
+    findBestNode(nextNodes, ["SECURITY_GROUP"]) ??
+    createBundleNode("SECURITY_GROUP", nextNodes, {
+      label: "App Security Group",
+      positionX: subnetNode.positionX,
+      positionY: subnetNode.positionY + 140,
+      config: {
+        egress: [{ protocol: "-1", cidr: "0.0.0.0/0" }],
+        ingress: [{ protocol: "tcp", port: 80, cidr: "0.0.0.0/0" }],
+        vpcId: createTerraformReference(vpcNode, "aws_vpc")
+      }
+    });
+  addNodeIfMissing(nextNodes, securityGroupNode);
+
+  const amiNode = findBestNode(nextNodes, ["AMI"]) ?? createBundleNode("AMI", nextNodes, {
+    label: "Amazon Linux AMI",
+    positionX: subnetNode.positionX - 160,
+    positionY: subnetNode.positionY + 140,
+    config: {
+      mostRecent: true,
+      nameRegex: "^al2023-ami-2023.*-x86_64$",
+      owners: ["amazon"]
+    }
+  });
+  addNodeIfMissing(nextNodes, amiNode);
+
+  const ec2Node = createBundleNode("EC2", nextNodes, {
+    label: "EC2 Instance",
+    positionX: subnetNode.positionX + 180,
+    positionY: subnetNode.positionY + 140,
+    config: {
+      ami: createTerraformReference(amiNode, "aws_ami", "id", "data"),
+      associatePublicIpAddress: true,
+      instanceType: "t3.micro",
+      subnetId: createTerraformReference(subnetNode, "aws_subnet"),
+      vpcSecurityGroupIds: [createTerraformReference(securityGroupNode, "aws_security_group")]
+    }
+  });
+  nextNodes.push(ec2Node);
+
+  let nextEdges = architectureJson.edges;
+  nextEdges = addSpecificConnectionEdge(nextEdges, vpcNode, subnetNode, "contains");
+  nextEdges = addSpecificConnectionEdge(nextEdges, securityGroupNode, ec2Node, "allows traffic");
+  nextEdges = addSpecificConnectionEdge(nextEdges, amiNode, ec2Node, "launch image");
+  nextEdges = addSpecificConnectionEdge(nextEdges, subnetNode, ec2Node, "hosts runtime");
+  nextEdges = addRuntimeDataEdges(nextEdges, nextNodes, ec2Node, intent);
+
+  return {
+    nodes: nextNodes,
+    edges: nextEdges
+  };
+}
+
+function createBundleNode(
+  resourceType: ResourceType,
+  existingNodes: readonly ResourceNode[],
+  node: Pick<ResourceNode, "config" | "label" | "positionX" | "positionY">
+): ResourceNode {
+  return {
+    id: createUniqueResourceId(resourceType, existingNodes),
+    type: resourceType,
+    ...node
+  };
+}
+
+function addNodeIfMissing(nodes: ResourceNode[], node: ResourceNode): void {
+  if (!nodes.some((existingNode) => existingNode.id === node.id)) {
+    nodes.push(node);
+  }
+}
+
+function addRuntimeDataEdges(
+  edges: ArchitectureJson["edges"],
+  nodes: readonly ResourceNode[],
+  ec2Node: ResourceNode,
+  intent: ArchitecturePatchIntent
+): ArchitectureJson["edges"] {
+  if (intent.skipConnection === true) {
+    return edges;
+  }
+
+  return nodes
+    .filter((node) => node.id !== ec2Node.id && ["S3", "RDS"].includes(node.type))
+    .reduce(
+      (nextEdges, targetNode) =>
+        addSpecificConnectionEdge(
+          nextEdges,
+          ec2Node,
+          targetNode,
+          createConnectionLabel(ec2Node, targetNode)
+        ),
+      edges
+    );
+}
+
+function createNewResourceConfig(
+  resourceType: ResourceType,
+  existingNodes: readonly ResourceNode[]
+): ResourceNode["config"] {
+  if (resourceType === "CLOUDFRONT") {
+    const originNode = findBestNode(existingNodes, ["S3", "EC2", "LOAD_BALANCER", "API_GATEWAY_REST_API"]);
+
+    return originNode ? { originResourceId: originNode.id } : {};
+  }
+
+  return {};
+}
+
+function createTerraformReference(
+  node: ResourceNode,
+  terraformResourceType: string,
+  attribute = "id",
+  terraformBlockType?: "data"
+): string {
+  const reference = `${terraformResourceType}.${toTerraformResourceName(node.id)}.${attribute}`;
+
+  return terraformBlockType === "data" ? `data.${reference}` : reference;
+}
+
+function toTerraformResourceName(value: string): string {
+  const name = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+
+  return name.length > 0 ? name : "resource";
 }
 
 function addConnectionEdge(
@@ -1204,6 +1381,21 @@ function inferConnection(
     const sourceNode = existingNodes.find((node) => node.id === intent.connectionTargetResourceId);
 
     return sourceNode ? { sourceNode, targetNode: newNode } : undefined;
+  }
+
+  if (
+    newNode.type === "CLOUDFRONT" &&
+    includesAnyPhrase(normalizeSearchText(intent.instruction), [
+      "정적",
+      "웹사이트",
+      "사이트",
+      "cdn",
+      "배포"
+    ])
+  ) {
+    const targetNode = findBestNode(existingNodes, ["S3"]);
+
+    return targetNode ? { sourceNode: newNode, targetNode } : undefined;
   }
 
   if (isExternallyEnteredResource(newNode.type)) {
@@ -1259,6 +1451,31 @@ function inferConnection(
   const sourceNode = findBestNode(existingNodes, ["EC2", "LAMBDA", "API_GATEWAY_REST_API", "LOAD_BALANCER"]);
 
   return sourceNode ? { sourceNode, targetNode: newNode } : undefined;
+}
+
+function addSpecificConnectionEdge(
+  edges: ArchitectureJson["edges"],
+  sourceNode: ResourceNode,
+  targetNode: ResourceNode,
+  label: string
+): ArchitectureJson["edges"] {
+  if (
+    edges.some((edge) => edge.sourceId === sourceNode.id && edge.targetId === targetNode.id)
+  ) {
+    return edges;
+  }
+
+  const edgeId = createUniqueEdgeId(`${sourceNode.id}-to-${targetNode.id}`, edges);
+
+  return [
+    ...edges,
+    {
+      id: edgeId,
+      sourceId: sourceNode.id,
+      targetId: targetNode.id,
+      label
+    }
+  ];
 }
 
 function isExternallyEnteredResource(resourceType: ResourceType): boolean {

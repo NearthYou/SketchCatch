@@ -31,6 +31,8 @@ export function createDraftFromRequirementFacts(
   if (factSet.has("server_runtime")) {
     if (isMinimalEc2ApiServer(context)) {
       addMinimalEc2ApiServer(context);
+    } else if (isMinimalEc2StorageServer(context)) {
+      addMinimalEc2ApiServer(context);
     } else {
       addEc2ApplicationRuntime(context);
     }
@@ -79,6 +81,23 @@ function isMinimalEc2ApiServer(context: DraftBuildContext): boolean {
     !context.factSet.has("static_delivery") &&
     !context.factSet.has("database") &&
     !context.factSet.has("object_storage") &&
+    !context.factSet.has("serverless_runtime") &&
+    context.operatingProfile.trafficLevel === "small" &&
+    context.operatingProfile.securityPriority === "basic"
+  );
+}
+
+function isMinimalEc2StorageServer(context: DraftBuildContext): boolean {
+  return (
+    context.factSet.has("server_runtime") &&
+    context.factSet.has("object_storage") &&
+    !context.factSet.has("web_frontend") &&
+    !context.factSet.has("static_delivery") &&
+    !context.factSet.has("database") &&
+    !context.factSet.has("file_upload") &&
+    !context.factSet.has("auth_or_user_data") &&
+    !context.factSet.has("iam_permissions") &&
+    !context.factSet.has("observability") &&
     !context.factSet.has("serverless_runtime") &&
     context.operatingProfile.trafficLevel === "small" &&
     context.operatingProfile.securityPriority === "basic"

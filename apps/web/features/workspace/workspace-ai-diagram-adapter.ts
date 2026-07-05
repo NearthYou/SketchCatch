@@ -506,6 +506,12 @@ function findConfigParentAreaNodeId(
   node: DiagramNode,
   nodeById: ReadonlyMap<string, DiagramNode>
 ): string | undefined {
+  const routeTableAssociationParentAreaNodeId = findRouteTableAssociationParentAreaNodeId(node, nodeById);
+
+  if (routeTableAssociationParentAreaNodeId) {
+    return routeTableAssociationParentAreaNodeId;
+  }
+
   const subnetNode = findConfigAreaNodeByParameter(node, "subnetId", nodeById);
 
   if (subnetNode && subnetNode.id !== node.id) {
@@ -517,15 +523,40 @@ function findConfigParentAreaNodeId(
   return vpcNode && vpcNode.id !== node.id ? vpcNode.id : undefined;
 }
 
+function findRouteTableAssociationParentAreaNodeId(
+  node: DiagramNode,
+  nodeById: ReadonlyMap<string, DiagramNode>
+): string | undefined {
+  if ((node.parameters?.resourceType ?? node.type) !== "aws_route_table_association") {
+    return undefined;
+  }
+
+  const routeTableNode = findConfigNodeByParameter(node, "routeTableId", nodeById);
+  const vpcNode = routeTableNode
+    ? findConfigAreaNodeByParameter(routeTableNode, "vpcId", nodeById)
+    : undefined;
+
+  return vpcNode && vpcNode.id !== node.id ? vpcNode.id : undefined;
+}
+
 function findConfigAreaNodeByParameter(
   node: DiagramNode,
   parameterName: string,
   nodeById: ReadonlyMap<string, DiagramNode>
 ): DiagramNode | undefined {
-  const referenceValue = getStringParameterValue(node, parameterName);
-  const referencedNode = referenceValue ? findReferencedNode(referenceValue, nodeById) : undefined;
+  const referencedNode = findConfigNodeByParameter(node, parameterName, nodeById);
 
   return referencedNode && isAreaDiagramNode(referencedNode) ? referencedNode : undefined;
+}
+
+function findConfigNodeByParameter(
+  node: DiagramNode,
+  parameterName: string,
+  nodeById: ReadonlyMap<string, DiagramNode>
+): DiagramNode | undefined {
+  const referenceValue = getStringParameterValue(node, parameterName);
+
+  return referenceValue ? findReferencedNode(referenceValue, nodeById) : undefined;
 }
 
 function findReferencedNode(

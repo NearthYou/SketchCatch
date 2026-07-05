@@ -217,6 +217,74 @@ test("createArchitecturePatchPreview turns a service-purpose answer into a concr
   ]);
 });
 
+test("createArchitecturePatchPreview adds EC2 as a container-based runtime bundle", () => {
+  const response = createArchitecturePatchPreview({
+    architectureJson: {
+      nodes: [makeNode({ id: "assets-bucket", type: "S3", label: "Assets Bucket" })],
+      edges: []
+    },
+    instruction: "ec2 \uCD94\uAC00\uD574\uC918"
+  });
+
+  assert.equal(response.status, "preview");
+  assert.deepEqual(
+    response.proposedArchitectureJson.nodes.map((node) => node.type),
+    ["S3", "VPC", "SUBNET", "SECURITY_GROUP", "AMI", "EC2"]
+  );
+  assert.deepEqual(
+    response.proposedArchitectureJson.edges.map((edge) => ({
+      label: edge.label,
+      sourceId: edge.sourceId,
+      targetId: edge.targetId
+    })),
+    [
+      { label: "contains", sourceId: "vpc-2", targetId: "subnet-3" },
+      { label: "allows traffic", sourceId: "security-group-4", targetId: "ec2-6" },
+      { label: "launch image", sourceId: "ami-5", targetId: "ec2-6" },
+      { label: "hosts runtime", sourceId: "subnet-3", targetId: "ec2-6" },
+      { label: "uses Assets Bucket", sourceId: "ec2-6", targetId: "assets-bucket" }
+    ]
+  );
+  assert.deepEqual(response.proposedArchitectureJson.nodes.at(-1)?.config, {
+    ami: "data.aws_ami.ami_5.id",
+    associatePublicIpAddress: true,
+    instanceType: "t3.micro",
+    subnetId: "aws_subnet.subnet_3.id",
+    vpcSecurityGroupIds: ["aws_security_group.security_group_4.id"]
+  });
+});
+
+test("createArchitecturePatchPreview preserves existing S3 and EC2 when reorganizing as a static intro site", () => {
+  const response = createArchitecturePatchPreview({
+    architectureJson: {
+      nodes: [
+        makeNode({ id: "assets-bucket", type: "S3", label: "Assets Bucket" }),
+        makeNode({ id: "app-server", type: "EC2", label: "App Server" })
+      ],
+      edges: []
+    },
+    instruction: "\uC815\uC801 \uC18C\uAC1C \uC6F9\uC0AC\uC774\uD2B8\uB85C \uC815\uB9AC\uD574\uC918"
+  });
+
+  assert.equal(response.status, "preview");
+  assert.deepEqual(
+    response.proposedArchitectureJson.nodes.map((node) => ({ id: node.id, type: node.type })),
+    [
+      { id: "assets-bucket", type: "S3" },
+      { id: "app-server", type: "EC2" },
+      { id: "cloudfront-3", type: "CLOUDFRONT" }
+    ]
+  );
+  assert.deepEqual(response.proposedArchitectureJson.edges, [
+    {
+      id: "cloudfront-3-to-assets-bucket",
+      sourceId: "cloudfront-3",
+      targetId: "assets-bucket",
+      label: "uses Assets Bucket"
+    }
+  ]);
+});
+
 test("createArchitecturePatchPreview adds connected resources with English labels", () => {
   const response = createArchitecturePatchPreview({
     architectureJson: {
@@ -416,11 +484,19 @@ test("createArchitecturePatchPreview can replace a whole VPC boundary with multi
   );
   assert.deepEqual(
     response.proposedArchitectureJson.nodes.map((node) => node.id),
-    ["assets-bucket", "vpc-2", "subnet-3", "security-group-4", "ec2-5", "rds-6"]
+    ["assets-bucket", "vpc-2", "subnet-3", "security-group-4", "ami-5", "ec2-6", "rds-7"]
   );
   assert.deepEqual(
     response.proposedArchitectureJson.edges.map((edge) => edge.id),
-    ["vpc-2-to-subnet-3", "vpc-2-to-security-group-4", "subnet-3-to-ec2-5", "ec2-5-to-rds-6"]
+    [
+      "vpc-2-to-subnet-3",
+      "vpc-2-to-security-group-4",
+      "security-group-4-to-ec2-6",
+      "ami-5-to-ec2-6",
+      "subnet-3-to-ec2-6",
+      "ec2-6-to-assets-bucket",
+      "ec2-6-to-rds-7"
+    ]
   );
 });
 

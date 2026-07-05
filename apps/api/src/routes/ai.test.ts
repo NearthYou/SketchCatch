@@ -793,6 +793,28 @@ test("POST /api/ai/architecture-draft rejects ambiguous prompts instead of creat
   await app.close();
 });
 
+test("POST /api/ai/architecture-draft cuts off clearly unrelated prompts", async () => {
+  const app = buildApp();
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/ai/architecture-draft",
+    payload: {
+      prompt: "\uB41C\uC7A5\uCC0C\uAC1C \uB808\uC2DC\uD53C \uC54C\uB824\uC918"
+    }
+  });
+
+  assert.equal(response.statusCode, 400);
+
+  const body = apiErrorResponseSchema.parse(response.json());
+
+  assert.equal(body.error, "bad_request");
+  assert.match(body.message, /IaC|아키텍처|인프라/);
+  assert.match(body.message, /레시피|관련 없는 요청/);
+
+  await app.close();
+});
+
 test("POST /api/ai/architecture-draft generates only supported ResourceType values", async () => {
   const app = buildApp();
   const supportedResourceTypes = new Set([
@@ -1137,6 +1159,38 @@ test("POST /api/ai/architecture-draft creates a server and storage draft", async
       gatewayId: "aws_internet_gateway.internet_gateway.id"
     }
   ]);
+
+  await app.close();
+});
+
+test("POST /api/ai/architecture-draft keeps explicit EC2 and S3 only requests minimal", async () => {
+  const app = buildApp();
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/ai/architecture-draft",
+    payload: {
+      prompt: "S3 버킷이랑 EC2 만 있는 다이어그램 그려줘"
+    }
+  });
+
+  assert.equal(response.statusCode, 200);
+
+  const body = architectureDraftResponseSchema.parse(response.json());
+  const nodeTypes = body.architectureJson.nodes.map((node) => node.type);
+  const edgeIds = body.architectureJson.edges.map((edge) => edge.id);
+  const appServer = findDraftNode(body, "app-server");
+
+  assert.equal(body.metadata.selectedDraftPattern, "server_storage");
+  assertDraftHasNodeTypes(body, ["VPC", "SUBNET", "SECURITY_GROUP", "AMI", "EC2", "S3"]);
+  assert.equal(nodeTypes.includes("CLOUDFRONT"), false);
+  assert.equal(nodeTypes.includes("IAM_ROLE"), false);
+  assert.equal(nodeTypes.includes("IAM_POLICY"), false);
+  assert.equal(nodeTypes.includes("CLOUDWATCH_LOG_GROUP"), false);
+  assert.equal(nodeTypes.includes("RDS"), false);
+  assert.equal(appServer?.config.associatePublicIpAddress, true);
+  assert.equal(appServer?.config.subnetId, "aws_subnet.public_subnet_a.id");
+  assert.ok(edgeIds.includes("app-server-to-upload-bucket"));
 
   await app.close();
 });

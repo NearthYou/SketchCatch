@@ -76,6 +76,10 @@ function isNewServiceDraftRequest(prompt: string): boolean {
     return false;
   }
 
+  if (isExistingBoardReorganizationRequest(normalizedPrompt)) {
+    return false;
+  }
+
   return [
     "만들고 싶",
     "만들어줘",
@@ -101,6 +105,17 @@ function isNewServiceDraftRequest(prompt: string): boolean {
     "설계해줘",
     "설계해 줘"
   ].some((keyword) => normalizedPrompt.includes(keyword));
+}
+
+function isExistingBoardReorganizationRequest(normalizedPrompt: string): boolean {
+  return (
+    ["정리해줘", "정리해 줘", "정리해", "구성해줘", "구성해 줘", "설계해줘", "설계해 줘"].some((keyword) =>
+      normalizedPrompt.includes(keyword)
+    ) &&
+    !["하나", "새로", "처음부터", "만들", "배포하고 싶", "create", "build", "from scratch"].some((keyword) =>
+      normalizedPrompt.includes(keyword)
+    )
+  );
 }
 
 function isFreshArchitectureRequest(prompt: string): boolean {

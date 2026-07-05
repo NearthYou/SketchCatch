@@ -1814,3 +1814,24 @@
 - Known risks:
   - Browser click smoke for the chat UI was not run; API and Web unit tests cover the prompt isolation and generation mapping.
   - Real AWS apply/destroy, cloud mutation, and Git/CI/CD handoff were not run.
+
+# 2026-07-05 - AI 다이어그램 의도 반영 및 레이아웃 보정
+
+- Goal: 서로 다른 사용자 요구가 같은 다이어그램으로 수렴하지 않게 하고, 기존 보드 수정 흐름에서 명시된 리소스를 보존하며, EC2 추가/정적 사이트 재정리/무관 질문 차단/포함 레이아웃 문제를 보정한다.
+- Completed:
+  - 레시피처럼 IaC 아키텍처와 무관한 요청은 초안을 생성하지 않고 안내 문구와 함께 400 응답으로 차단하게 했다.
+  - `S3 버킷이랑 EC2 만 있는 다이어그램`처럼 명시 범위가 있는 요청은 CloudFront/IAM/CloudWatch/RDS를 끼워 넣지 않고 VPC, public subnet, route, security group, AMI, EC2, S3 중심의 최소 구성으로 생성하게 했다.
+  - 수정 흐름에서 `EC2 추가` 요청은 질문 반복 없이 VPC/Subnet/Security Group/AMI/EC2를 함께 추가하고, 기존 S3/RDS가 있으면 용도 기반 연결을 자동 생성하게 했다.
+  - 기존 S3와 EC2가 있는 보드에서 `정적 소개 웹사이트로 정리해줘` 같은 재정리 요청은 전체 교체가 아니라 기존 EC2/S3를 보존한 patch 흐름으로 처리하고 CloudFront만 필요한 보강으로 추가하게 했다.
+  - route table association이 subnet 내부 자식으로 배치되어 레이어와 이름이 겹치던 문제를 VPC 범위 배치로 보정했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits
+  - `.\\apps\\api\\node_modules\\.bin\\tsx.cmd --test apps\\api\\src\\routes\\ai.test.ts apps\\api\\src\\services\\aiArchitecturePatchPreview.test.ts` - sandbox spawn EPERM, rerun outside sandbox passed, 61 tests
+  - `.\\apps\\web\\node_modules\\.bin\\tsx.cmd --test apps\\web\\features\\workspace\\workspace-ai-chat-routing.test.ts apps\\web\\features\\workspace\\workspace-ai-diagram-adapter.test.ts apps\\web\\features\\workspace\\workspace-ai-chat-history.test.ts apps\\web\\features\\workspace\\workspace-ai-clarification.test.ts apps\\web\\features\\workspace\\ai-workspace-api.test.ts` - sandbox spawn EPERM, rerun outside sandbox passed, 44 tests
+  - `pnpm lint` - passed
+  - `pnpm typecheck` - passed
+  - `pnpm build` - sandbox `.next` unlink EPERM, rerun outside sandbox passed
+  - `pnpm harness:check` - passed after build
+- Known risks:
+  - 실제 브라우저 클릭 smoke는 이번 세션에서 별도로 수행하지 않았고, API/web helper tests 및 전체 lint/typecheck/build로 검증했다.
+  - Next.js build가 `apps/web/next-env.d.ts`를 자동 갱신했으나 이번 변경 범위가 아니어서 내용 변경은 제외했다.

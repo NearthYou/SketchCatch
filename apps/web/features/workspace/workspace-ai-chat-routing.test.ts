@@ -45,7 +45,8 @@ test("resolveWorkspaceAiChatAction keeps existing-board edit prompts on patch", 
     { needsDraftClarification: true, prompt: "여기에 로그인 기능 추가해줘" },
     { needsDraftClarification: false, prompt: "데이터베이스 하나 추가해줘" },
     { needsDraftClarification: false, prompt: "기존 서버 삭제해줘" },
-    { needsDraftClarification: false, prompt: "스토리지 버킷도 넣어줘" }
+    { needsDraftClarification: false, prompt: "스토리지 버킷도 넣어줘" },
+    { needsDraftClarification: false, prompt: "정적 소개 웹사이트로 정리해줘" }
   ];
 
   for (const item of cases) {
@@ -113,7 +114,7 @@ test("resolveWorkspaceAiChatMode lets explicit fresh-start requests replace an e
 
 test("resolveWorkspaceAiChatAction treats complete new service requests as fresh drafts on existing boards", () => {
   const prompts = [
-    "정적 소개 웹사이트로 정리해줘",
+    "정적 소개 웹사이트 하나 배포하고 싶어",
     "로그인 있고 개인정보 보호가 중요한 서비스를 만들어줘"
   ];
 

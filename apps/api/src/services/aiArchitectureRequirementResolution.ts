@@ -288,6 +288,12 @@ export function resolveArchitectureRequirement(
     };
   }
 
+  if (isClearlyUnrelatedPrompt(request.prompt)) {
+    throw new AmbiguousArchitecturePromptError(
+      "SketchCatch는 IaC 아키텍처와 인프라 구성 요청만 다룹니다. 레시피처럼 관련 없는 요청은 초안을 생성하지 않았습니다."
+    );
+  }
+
   throw new AmbiguousArchitecturePromptError();
 }
 
@@ -446,6 +452,18 @@ function applyExplicitRequirementConstraints(
     facts.delete("auth_or_user_data");
     facts.delete("observability");
   }
+
+  if (prefersOnlyServerAndObjectStorage(normalizedPrompt, facts)) {
+    facts.delete("web_frontend");
+    facts.delete("static_delivery");
+    facts.delete("serverless_runtime");
+    facts.delete("database");
+    facts.delete("file_upload");
+    facts.delete("auth_or_user_data");
+    facts.delete("iam_permissions");
+    facts.delete("observability");
+    facts.delete("encryption");
+  }
 }
 
 function addDerivedRequirementFacts(facts: Set<ArchitectureRequirementFact>): void {
@@ -553,8 +571,31 @@ function prefersOnlyDataStorage(
   return (
     facts.has("database") &&
     facts.has("object_storage") &&
-    includesAny(normalizedPrompt, ["만", "only", "just"]) &&
+    hasOnlyScopeKeyword(normalizedPrompt) &&
     !includesAny(normalizedPrompt, ["서버", "api", "백엔드", "웹", "로그인", "회원", "계정", "업로드"])
+  );
+}
+
+function prefersOnlyServerAndObjectStorage(
+  normalizedPrompt: string,
+  facts: ReadonlySet<ArchitectureRequirementFact>
+): boolean {
+  return (
+    facts.has("server_runtime") &&
+    facts.has("object_storage") &&
+    hasOnlyScopeKeyword(normalizedPrompt) &&
+    includesAny(normalizedPrompt, ["ec2", "서버", "인스턴스"]) &&
+    includesAny(normalizedPrompt, ["s3", "버킷", "스토리지"]) &&
+    !includesAny(normalizedPrompt, ["데이터베이스", "db", "rds", "로그인", "회원", "계정", "업로드"])
+  );
+}
+
+function hasOnlyScopeKeyword(normalizedPrompt: string): boolean {
+  return (
+    /\b(?:only|just)\b/u.test(normalizedPrompt) ||
+    /(?:^|\s)만(?:\s|$)/u.test(normalizedPrompt) ||
+    normalizedPrompt.includes("만 있는") ||
+    normalizedPrompt.includes("만있는")
   );
 }
 
@@ -570,6 +611,21 @@ function prefersNoDatabase(normalizedPrompt: string): boolean {
     normalizedPrompt.includes("데이터베이스 없는") ||
     normalizedPrompt.includes("데이터베이스 없이")
   );
+}
+
+function isClearlyUnrelatedPrompt(prompt: string): boolean {
+  const normalizedPrompt = normalizePrompt(prompt);
+
+  return includesAny(normalizedPrompt, [
+    "레시피",
+    "요리",
+    "찌개",
+    "된장찌개",
+    "김치찌개",
+    "음식",
+    "날씨",
+    "운세"
+  ]);
 }
 
 function findUnsupportedRequirementMatches(prompt: string): UnsupportedRequirementRule[] {
