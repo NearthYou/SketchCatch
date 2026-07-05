@@ -641,32 +641,99 @@ test("POST /api/ai/architecture-draft keeps purpose-specific diagrams distinct",
   await app.close();
 });
 
+test("POST /api/ai/architecture-draft keeps equivalent requests stable and different intents divergent", async () => {
+  const app = buildApp();
+  const intentCases = [
+    {
+      intent: "static_delivery",
+      prompts: ["정적 웹사이트를 배포하고 싶어", "정적 웹사이트를 만들고 싶어"],
+      expectedPattern: "static_site",
+      requiredNodes: ["web-assets-bucket", "cloudfront-distribution"],
+      forbiddenNodes: ["app-server", "app-database"]
+    },
+    {
+      intent: "minimal_api",
+      prompts: ["최소한의 api만 넣은 거 하나 만들어줘", "간단한 API 서버만 만들어줘"],
+      expectedPattern: "api_server",
+      requiredNodes: ["app-server"],
+      forbiddenNodes: ["web-assets-bucket", "cloudfront-distribution", "app-database", "upload-bucket"]
+    },
+    {
+      intent: "login_service",
+      prompts: ["로그인이 있는 서비스를 만들고 싶어", "회원 계정이 있는 작은 서비스 만들어줘"],
+      expectedPattern: "backend_with_db",
+      requiredNodes: ["app-server", "app-database"],
+      forbiddenNodes: ["upload-bucket"]
+    }
+  ] as const;
+  const signatureByIntent = new Map<string, string>();
+
+  for (const intentCase of intentCases) {
+    const signatures: string[] = [];
+
+    for (const prompt of intentCase.prompts) {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/ai/architecture-draft",
+        payload: { prompt }
+      });
+
+      assert.equal(response.statusCode, 200, prompt);
+
+      const body = architectureDraftResponseSchema.parse(response.json());
+      const nodeIds = body.architectureJson.nodes.map((node) => node.id);
+      const signature = nodeIds.join("|");
+
+      assert.equal(body.metadata.selectedDraftPattern, intentCase.expectedPattern, prompt);
+      for (const requiredNode of intentCase.requiredNodes) {
+        assert.ok(nodeIds.includes(requiredNode), `${prompt} should include ${requiredNode}`);
+      }
+      for (const forbiddenNode of intentCase.forbiddenNodes) {
+        assert.equal(nodeIds.includes(forbiddenNode), false, `${prompt} should not include ${forbiddenNode}`);
+      }
+
+      signatures.push(signature);
+    }
+
+    assert.equal(
+      new Set(signatures).size,
+      1,
+      `${intentCase.intent} prompt variants should produce a stable architecture signature`
+    );
+    signatureByIntent.set(intentCase.intent, signatures[0] ?? "");
+  }
+
+  assert.equal(new Set(signatureByIntent.values()).size, intentCases.length);
+
+  await app.close();
+});
+
 test("POST /api/ai/architecture-draft rejects generic website prompts until clarified", async () => {
   const app = buildApp();
 
-  const response = await app.inject({
-    method: "POST",
-    url: "/api/ai/architecture-draft",
-    payload: {
-      prompt: "웹사이트 하나 배포하고 싶어"
-    }
-  });
+  for (const prompt of ["웹사이트 하나 만들고 싶어", "웹사이트 하나 배포하고 싶어"]) {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/ai/architecture-draft",
+      payload: { prompt }
+    });
 
-  assert.equal(response.statusCode, 400);
+    assert.equal(response.statusCode, 400, prompt);
 
-  const body = apiErrorResponseSchema.parse(response.json());
+    const body = apiErrorResponseSchema.parse(response.json());
 
-  assert.equal(body.error, "bad_request");
-  assert.match(body.message, /웹사이트/);
-  assert.match(body.message, /파일|로그인|방문자/);
-  assert.match(body.message, /먼저|확인/);
+    assert.equal(body.error, "bad_request", prompt);
+    assert.match(body.message, /웹사이트/, prompt);
+    assert.match(body.message, /파일|로그인|방문자/, prompt);
+    assert.match(body.message, /먼저|확인/, prompt);
+  }
 
   await app.close();
 });
 
 test("POST /api/ai/architecture-draft ignores legacy helper fields for generic website prompts", async () => {
   const app = buildApp();
-  const prompt = "웹사이트 하나 배포하고 싶어";
+  const prompt = "웹사이트 하나 만들고 싶어";
 
   const response = await app.inject({
     method: "POST",

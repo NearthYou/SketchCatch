@@ -13,12 +13,13 @@ import {
 } from "./workspace-ai-clarification";
 
 test("generic website prompts start a beginner-friendly clarification flow", () => {
+  assert.equal(needsArchitectureClarification("웹사이트 하나 만들고 싶어"), true);
   assert.equal(needsArchitectureClarification("웹사이트 하나 배포하고 싶어"), true);
   assert.equal(needsArchitectureClarification("소개용 랜딩 웹사이트를 배포하고 싶어"), false);
   assert.equal(needsArchitectureClarification("파일 업로드 페이지가 필요해"), false);
   assert.equal(needsArchitectureClarification("웹사이트를 S3와 CloudFront로 배포하고 싶어"), false);
 
-  const session = createArchitectureClarificationSession("웹사이트 하나 배포하고 싶어");
+  const session = createArchitectureClarificationSession("웹사이트 하나 만들고 싶어");
   const question = getCurrentArchitectureClarificationQuestion(session);
 
   assert.ok(question);

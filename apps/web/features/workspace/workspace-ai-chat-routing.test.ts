@@ -22,7 +22,9 @@ test("resolveWorkspaceAiChatAction asks beginner-friendly draft questions for ne
     "예약 신청 받는 사이트 만들어줘",
     "상품 판매하는 앱 하나 만들고 싶어",
     "관리자 페이지 있는 서비스 구축하고 싶어",
-    "웹사이트 하나 배포하고 싶어"
+    "웹사이트 하나 배포하고 싶어",
+    "최소한의 api만 넣은 거 하나 만들어줘",
+    "로그인이 있는 서비스를 만들고 싶어"
   ];
 
   for (const prompt of prompts) {
