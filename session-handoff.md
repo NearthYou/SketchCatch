@@ -596,7 +596,7 @@ pnpm build
   - `pnpm build` - passed
   - `pnpm harness:check` - passed
 - Remaining external validation:
-  - Run actual GitHub App install flow with `SKETCHCATCH_APP_ID`, `SKETCHCATCH_APP_SLUG`, `SKETCHCATCH_APP_PRIVATE_KEY_BASE64`, `SKETCHCATCH_APP_CALLBACK_URL`.
+  - Run actual GitHub App install flow with `GIT_APP_ID`, `GIT_APP_SLUG`, `GIT_APP_PRIVATE_KEY_BASE64`, `GIT_APP_CALLBACK_URL`.
   - Run actual GitHub PR handoff against a connected repo and confirm Actions polling.
   - Attach actual ElastiCache `REDIS_URL` to API runtime and verify deployment log cursor / Git pipeline status cache goes through Redis.
   - Run `scripts/smoke/live-s3-deployment.ps1` with `API_BASE_URL`, `ACCESS_TOKEN` or smoke login env, `AWS_CONNECTION_ID`, `SMOKE_ACCOUNT_ID`, `AWS_REGION`.
@@ -626,3 +626,28 @@ pnpm build
   - PowerShell script parse check for `scripts/smoke/live-s3-deployment.ps1` - passed
 - Remaining external validation:
   - Real GitHub App install/PR creation, real AWS apply/destroy smoke, and real ElastiCache `REDIS_URL` validation still require credentials and a prepared environment.
+
+## 2026-07-05 - Spec3 최신화/운영 준비 재판단 handoff
+
+- Current branch/worktree: `codex/spec3-deployment-github-runtime-cache` at `C:\Users\siwon\Desktop\Jungle\Week17~21\SketchCatch`.
+- Branch update:
+  - Fetched origin and merged `origin/dev` into the current branch.
+  - Preserved pre-existing dirty changes with stash and reapplied them without conflicts.
+  - Current branch is ahead of `origin/codex/spec3-deployment-github-runtime-cache`; push is still needed for remote review/deploy usage.
+- Current readiness:
+  - Working tree code/docs use `GIT_APP_*` and `GIT_OAUTH_*`, matching GitHub Actions allowed secret/variable names.
+  - GitHub repo-level values now include `GIT_APP_ID`, `GIT_APP_SLUG`, `GIT_APP_CALLBACK_URL`, `GIT_APP_PRIVATE_KEY_BASE64`, `GIT_APP_STATE_SECRET`, and `REDIS_URL`.
+  - GitHub `production` Environment has no separate values, but current workflow reads repo-level values.
+  - Latest production deploy observed was 2026-07-03, so 2026-07-05 GitHub App/Redis updates are not yet deployed to the running service.
+- Verification completed:
+  - `pnpm harness:check` - passed
+  - API GitHub App env load smoke - passed
+  - `pnpm --filter @sketchcatch/api typecheck` - passed
+  - `pnpm --filter @sketchcatch/api test` - passed, 562 tests
+  - `pnpm lint` - passed
+  - `pnpm typecheck` - passed
+  - `pnpm build` - passed
+- Next action:
+  - Commit and push the `GIT_APP_*` / `GIT_OAUTH_*` prefix update plus merge.
+  - Run a fresh deploy workflow so operating containers receive the new env values.
+  - Then execute GitHub App install/repo selection/PR handoff and `scripts/smoke/live-s3-deployment.ps1` with prepared smoke env.

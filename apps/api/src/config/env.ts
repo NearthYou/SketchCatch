@@ -62,13 +62,13 @@ export function getRuntimeEnv(): RuntimeEnv {
     cloudFormationTemplateTokenSecret: process.env.CLOUDFORMATION_TEMPLATE_TOKEN_SECRET,
     databaseUrl: process.env.DATABASE_URL,
     databaseSsl: process.env.DATABASE_SSL === "true",
-    githubOauthClientId: process.env.GITHUB_OAUTH_CLIENT_ID,
-    githubOauthClientSecret: process.env.GITHUB_OAUTH_CLIENT_SECRET,
-    githubAppId: process.env.SKETCHCATCH_APP_ID,
-    githubAppSlug: process.env.SKETCHCATCH_APP_SLUG,
-    githubAppPrivateKeyBase64: process.env.SKETCHCATCH_APP_PRIVATE_KEY_BASE64,
-    githubAppCallbackUrl: process.env.SKETCHCATCH_APP_CALLBACK_URL,
-    githubAppStateSecret: process.env.SKETCHCATCH_APP_STATE_SECRET,
+    githubOauthClientId: process.env.GIT_OAUTH_CLIENT_ID,
+    githubOauthClientSecret: process.env.GIT_OAUTH_CLIENT_SECRET,
+    githubAppId: process.env.GIT_APP_ID,
+    githubAppSlug: process.env.GIT_APP_SLUG,
+    githubAppPrivateKeyBase64: process.env.GIT_APP_PRIVATE_KEY_BASE64,
+    githubAppCallbackUrl: process.env.GIT_APP_CALLBACK_URL,
+    githubAppStateSecret: process.env.GIT_APP_STATE_SECRET,
     kakaoOauthClientId: process.env.KAKAO_OAUTH_CLIENT_ID,
     kakaoOauthClientSecret: process.env.KAKAO_OAUTH_CLIENT_SECRET,
     naverOauthClientId: process.env.NAVER_OAUTH_CLIENT_ID,
@@ -109,25 +109,25 @@ export function requireGitHubAppConfig(): {
   privateKey: string;
   callbackUrl: string;
 } {
-  const appId = process.env.SKETCHCATCH_APP_ID?.trim();
-  const appSlug = process.env.SKETCHCATCH_APP_SLUG?.trim();
-  const privateKeyBase64 = process.env.SKETCHCATCH_APP_PRIVATE_KEY_BASE64?.trim();
-  const callbackUrl = process.env.SKETCHCATCH_APP_CALLBACK_URL?.trim();
+  const appId = process.env.GIT_APP_ID?.trim();
+  const appSlug = process.env.GIT_APP_SLUG?.trim();
+  const privateKeyBase64 = process.env.GIT_APP_PRIVATE_KEY_BASE64?.trim();
+  const callbackUrl = process.env.GIT_APP_CALLBACK_URL?.trim();
 
   if (!appId) {
-    throw new Error("SKETCHCATCH_APP_ID is required");
+    throw new Error("GIT_APP_ID is required");
   }
 
   if (!appSlug) {
-    throw new Error("SKETCHCATCH_APP_SLUG is required");
+    throw new Error("GIT_APP_SLUG is required");
   }
 
   if (!privateKeyBase64) {
-    throw new Error("SKETCHCATCH_APP_PRIVATE_KEY_BASE64 is required");
+    throw new Error("GIT_APP_PRIVATE_KEY_BASE64 is required");
   }
 
   if (!callbackUrl) {
-    throw new Error("SKETCHCATCH_APP_CALLBACK_URL is required");
+    throw new Error("GIT_APP_CALLBACK_URL is required");
   }
 
   let privateKey: string;
@@ -135,21 +135,21 @@ export function requireGitHubAppConfig(): {
   try {
     privateKey = Buffer.from(privateKeyBase64, "base64").toString("utf8");
   } catch {
-    throw new Error("SKETCHCATCH_APP_PRIVATE_KEY_BASE64 must be valid base64");
+    throw new Error("GIT_APP_PRIVATE_KEY_BASE64 must be valid base64");
   }
 
   if (!privateKey.includes("BEGIN") || !privateKey.includes("PRIVATE KEY")) {
-    throw new Error("SKETCHCATCH_APP_PRIVATE_KEY_BASE64 must decode to a PEM private key");
+    throw new Error("GIT_APP_PRIVATE_KEY_BASE64 must decode to a PEM private key");
   }
 
   return { appId, appSlug, privateKey, callbackUrl };
 }
 
 export function requireGitHubAppStateSecret(): string {
-  const stateSecret = process.env.SKETCHCATCH_APP_STATE_SECRET?.trim() || requireAuthTokenSecret();
+  const stateSecret = process.env.GIT_APP_STATE_SECRET?.trim() || requireAuthTokenSecret();
 
   if (stateSecret.length < 32) {
-    throw new Error("SKETCHCATCH_APP_STATE_SECRET must be at least 32 characters");
+    throw new Error("GIT_APP_STATE_SECRET must be at least 32 characters");
   }
 
   return stateSecret;

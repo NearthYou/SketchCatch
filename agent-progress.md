@@ -1547,7 +1547,7 @@
   - 실제 GitHub App 설치와 실제 repository PR 생성은 구현했지만, 이 세션에서는 GitHub App private key/installation이 없어 외부 API 실호출 검증을 수행하지 않았다.
   - 실제 ElastiCache `REDIS_URL` 운영 연결은 template/docs/env 경로까지 준비했지만, 운영 Redis endpoint에 붙여 확인하지 않았다.
 - Next best action:
-  - 운영/스테이징 API에 `SKETCHCATCH_APP_*`, `REDIS_URL`, verified `AWS_CONNECTION_ID`를 주입한 뒤 `scripts/smoke/live-s3-deployment.ps1`와 GitHub App install/PR handoff를 실제로 실행한다.
+  - 운영/스테이징 API에 `GIT_APP_*`, `REDIS_URL`, verified `AWS_CONNECTION_ID`를 주입한 뒤 `scripts/smoke/live-s3-deployment.ps1`와 GitHub App install/PR handoff를 실제로 실행한다.
 ## 2026-07-05 - Spec3 plan3 회귀 테스트 증거 보강
 
 - Goal: `docs/sw/plan3.md` 완료 기준 중 GitHub App source repository 연결, target branch 보호, source branch retry/update, Actions polling 상태 매핑을 전용 테스트로 증명한다.
@@ -1575,3 +1575,26 @@
   - PowerShell script parse check for `scripts/smoke/live-s3-deployment.ps1` - passed
 - Known risks:
   - live S3 smoke 자체는 실제 API host, access token, verified AWS connection, AWS account/region이 필요해 아직 실행하지 못했다.
+
+## 2026-07-05 - Spec3 branch 최신화 및 운영 준비 재판단
+
+- Goal: `codex/spec3-deployment-github-runtime-cache` 브랜치를 `origin/dev` 최신 기준으로 맞추고, GitHub App/Redis/live smoke 운영 실행 준비 상태를 다시 판단한다.
+- Completed:
+  - `git fetch origin` 후 `origin/dev`를 현재 브랜치에 머지했다.
+  - 머지 전 미커밋 변경은 stash로 보존한 뒤 충돌 없이 다시 적용했다.
+  - 현재 작업트리 변경은 GitHub Actions 예약 prefix를 피하기 위한 `GIT_APP_*` / `GIT_OAUTH_*` env prefix 정리와 관련 문서 갱신으로 확인했다.
+  - GitHub repo-level Secrets/Variables 이름 목록을 확인했고, `GIT_APP_ID`, `GIT_APP_SLUG`, `GIT_APP_CALLBACK_URL`, `GIT_APP_PRIVATE_KEY_BASE64`, `GIT_APP_STATE_SECRET`, `REDIS_URL`가 준비된 것을 확인했다.
+  - production Environment에는 별도 secret/variable이 없지만, 현재 `deploy.yml`은 repo-level values를 참조하므로 구조상 문제는 없다.
+  - 마지막 `Deploy Production` run은 2026-07-03 실행분이라, 2026-07-05에 갱신된 GitHub App/Redis 값은 아직 운영 서버에 반영된 deploy가 아니다.
+- Verification run:
+  - `pnpm harness:check` - passed
+  - `pnpm --filter @sketchcatch/api exec tsx -e "import { requireGitHubAppConfig, requireGitHubAppStateSecret } from './src/config/env.ts'; requireGitHubAppConfig(); requireGitHubAppStateSecret(); console.log('github app config ok');"` - passed
+  - `pnpm --filter @sketchcatch/api typecheck` - passed
+  - `pnpm --filter @sketchcatch/api test` - passed, 562 tests
+  - `pnpm lint` - passed
+  - `pnpm typecheck` - passed
+  - `pnpm build` - passed
+- Known risks:
+  - `GIT_APP_*` / `GIT_OAUTH_*` prefix 정리 변경은 아직 커밋/푸시 전이므로 운영 배포 workflow에는 반영되지 않았다.
+  - 운영 API가 새 env를 읽으려면 이 변경을 커밋/푸시하고 새 production deploy run을 실행해야 한다.
+  - live S3 smoke는 여전히 `API_BASE_URL`, `ACCESS_TOKEN` 또는 smoke login env, verified `AWS_CONNECTION_ID`, `SMOKE_ACCOUNT_ID`가 필요하다.

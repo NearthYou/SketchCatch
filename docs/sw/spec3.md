@@ -44,7 +44,7 @@
 ### GitHub App state
 
 - state는 DB에 저장하지 않는 signed short-lived token이다.
-- state 서명 secret은 `SKETCHCATCH_APP_STATE_SECRET`이 있으면 사용하고, 없으면 `AUTH_TOKEN_SECRET`을 사용한다.
+- state 서명 secret은 `GIT_APP_STATE_SECRET`이 있으면 사용하고, 없으면 `AUTH_TOKEN_SECRET`을 사용한다.
 - state payload에는 다음 값만 둔다.
   - `userId`
   - `projectId`
@@ -97,15 +97,15 @@
 ## 필수 환경 변수
 
 ```bash
-SKETCHCATCH_APP_ID=
-SKETCHCATCH_APP_SLUG=
-SKETCHCATCH_APP_PRIVATE_KEY_BASE64=
-SKETCHCATCH_APP_CALLBACK_URL=
-SKETCHCATCH_APP_STATE_SECRET=
+GIT_APP_ID=
+GIT_APP_SLUG=
+GIT_APP_PRIVATE_KEY_BASE64=
+GIT_APP_CALLBACK_URL=
+GIT_APP_STATE_SECRET=
 REDIS_URL=
 ```
 
-`SKETCHCATCH_APP_STATE_SECRET`은 선택값이다. 없으면 `AUTH_TOKEN_SECRET`을 사용한다.
+`GIT_APP_STATE_SECRET`은 선택값이다. 없으면 `AUTH_TOKEN_SECRET`을 사용한다.
 
 ## API 계약
 

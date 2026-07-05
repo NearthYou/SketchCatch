@@ -61,12 +61,12 @@ test("assertNoStaticAwsCredentialsForApiServer rejects static AWS credential env
   );
 });
 
-test("requireGitHubAppConfig reads SKETCHCATCH_APP configuration", () => {
+test("requireGitHubAppConfig reads GIT_APP configuration", () => {
   const originalValues = saveEnvValues([
-    "SKETCHCATCH_APP_ID",
-    "SKETCHCATCH_APP_SLUG",
-    "SKETCHCATCH_APP_PRIVATE_KEY_BASE64",
-    "SKETCHCATCH_APP_CALLBACK_URL"
+    "GIT_APP_ID",
+    "GIT_APP_SLUG",
+    "GIT_APP_PRIVATE_KEY_BASE64",
+    "GIT_APP_CALLBACK_URL"
   ]);
   const privateKeyBase64 = Buffer.from(
     "-----BEGIN PRIVATE KEY-----\ntest\n-----END PRIVATE KEY-----\n",
@@ -74,10 +74,10 @@ test("requireGitHubAppConfig reads SKETCHCATCH_APP configuration", () => {
   ).toString("base64");
 
   try {
-    process.env.SKETCHCATCH_APP_ID = "12345";
-    process.env.SKETCHCATCH_APP_SLUG = "sketchcatch-local";
-    process.env.SKETCHCATCH_APP_PRIVATE_KEY_BASE64 = privateKeyBase64;
-    process.env.SKETCHCATCH_APP_CALLBACK_URL =
+    process.env.GIT_APP_ID = "12345";
+    process.env.GIT_APP_SLUG = "sketchcatch-local";
+    process.env.GIT_APP_PRIVATE_KEY_BASE64 = privateKeyBase64;
+    process.env.GIT_APP_CALLBACK_URL =
       "http://localhost:3000/integrations/github/callback";
 
     const config = requireGitHubAppConfig();
@@ -92,12 +92,12 @@ test("requireGitHubAppConfig reads SKETCHCATCH_APP configuration", () => {
   }
 });
 
-test("requireGitHubAppStateSecret accepts SKETCHCATCH_APP_STATE_SECRET", () => {
-  const originalValues = saveEnvValues(["AUTH_TOKEN_SECRET", "SKETCHCATCH_APP_STATE_SECRET"]);
+test("requireGitHubAppStateSecret accepts GIT_APP_STATE_SECRET", () => {
+  const originalValues = saveEnvValues(["AUTH_TOKEN_SECRET", "GIT_APP_STATE_SECRET"]);
 
   try {
     process.env.AUTH_TOKEN_SECRET = "auth-token-secret-with-at-least-32-characters";
-    process.env.SKETCHCATCH_APP_STATE_SECRET =
+    process.env.GIT_APP_STATE_SECRET =
       "sketchcatch-app-state-secret-with-at-least-32-characters";
 
     assert.equal(
