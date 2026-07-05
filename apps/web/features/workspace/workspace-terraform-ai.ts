@@ -1,10 +1,11 @@
 import type { AiTerraformErrorExplanationResult, TerraformDiagnostic } from "@sketchcatch/types";
 import type { TerraformIssueRecord } from "./terraform-issues-state";
-import { getTerraformSafeFix } from "./terraform-safe-fixes";
+import { applyTerraformSafeFix, getTerraformSafeFix } from "./terraform-safe-fixes";
 
 export type TerraformIssueAiRequest = {
   readonly id: number;
   readonly issue: TerraformIssueRecord;
+  readonly terraformCode: string;
 };
 
 export type TerraformSafeFixApplyRequest = {
@@ -20,10 +21,17 @@ export type TerraformSafeFixApplyResult = {
 
 export type TerraformIssueFixPlan = {
   readonly canApply: boolean;
+  readonly codePreview?: TerraformIssueCodePreview | undefined;
   readonly providerLabel: string;
   readonly providerNotice?: string | undefined;
   readonly summary: string;
   readonly steps: readonly string[];
+};
+
+export type TerraformIssueCodePreview = {
+  readonly currentCode: string;
+  readonly nextCode: string;
+  readonly sourceLine: number;
 };
 
 export function createTerraformIssueChatSummary(
@@ -34,32 +42,80 @@ export function createTerraformIssueChatSummary(
 
 export function createTerraformIssueFixPlan({
   diagnostic,
-  explanation
+  explanation,
+  terraformCode = ""
 }: {
   readonly diagnostic: TerraformDiagnostic;
   readonly explanation: AiTerraformErrorExplanationResult;
+  readonly terraformCode?: string | undefined;
 }): TerraformIssueFixPlan {
   const safeFix = getTerraformSafeFix(diagnostic);
   const location = formatTerraformDiagnosticLocation(diagnostic);
   const providerLabel = "Amazon Q Assistance";
+  const codePreview = createTerraformIssueCodePreview({
+    diagnostic,
+    safeFixApplicable: safeFix.applicable,
+    terraformCode
+  });
 
   return {
-    canApply: safeFix.applicable,
+    canApply: codePreview !== undefined,
+    codePreview,
     providerLabel,
     providerNotice: createTerraformIssueProviderNotice(explanation),
     summary: createTerraformIssueChatSummary(explanation),
-    steps: safeFix.applicable
+    steps: codePreview
       ? [
-          `${location}의 Terraform 진단 위치를 확인합니다.`,
+          `${location}의 현재 코드와 수정할 코드를 비교합니다.`,
           `${safeFix.label}: ${safeFix.description}`,
-          "수정안을 적용한 뒤 Terraform 재검증, 저장, 다이어그램 동기화를 다시 실행합니다."
+          "수정 버튼을 누르면 표시된 수정할 코드가 적용되고 Terraform 재검증과 저장을 다시 실행합니다."
         ]
       : [
           `${location}의 원본 Terraform 코드를 확인합니다.`,
           explanation.likelyCause,
-          "자동 적용 대신 코드를 직접 수정한 뒤 Terraform 재검증과 저장을 다시 실행합니다."
+          "자동 수정안이 없으면 코드를 직접 수정한 뒤 Terraform 재검증과 저장을 다시 실행합니다."
         ]
   };
+}
+
+function createTerraformIssueCodePreview({
+  diagnostic,
+  safeFixApplicable,
+  terraformCode
+}: {
+  readonly diagnostic: TerraformDiagnostic;
+  readonly safeFixApplicable: boolean;
+  readonly terraformCode: string;
+}): TerraformIssueCodePreview | undefined {
+  if (!safeFixApplicable || terraformCode.trim().length === 0 || diagnostic.line === undefined) {
+    return undefined;
+  }
+
+  const fixedCode = applyTerraformSafeFix({
+    code: terraformCode,
+    diagnostic
+  });
+
+  if (!fixedCode.applied) {
+    return undefined;
+  }
+
+  const currentCode = extractTerraformLine(terraformCode, diagnostic.line);
+  const nextCode = extractTerraformLine(fixedCode.code, diagnostic.line);
+
+  if (currentCode === undefined || nextCode === undefined || currentCode === nextCode) {
+    return undefined;
+  }
+
+  return {
+    currentCode,
+    nextCode,
+    sourceLine: diagnostic.line
+  };
+}
+
+function extractTerraformLine(code: string, lineNumber: number): string | undefined {
+  return code.split(/\r?\n/)[lineNumber - 1];
 }
 
 function formatTerraformDiagnosticLocation(diagnostic: TerraformDiagnostic): string {

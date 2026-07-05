@@ -179,6 +179,7 @@ export type PreparedTerraformArtifactSource = {
 
 export type TerraformCodePanelHandle = {
   readonly applyTerraformSafeFix: (diagnostic: TerraformDiagnostic) => Promise<TerraformSafeFixResult>;
+  readonly getCurrentTerraformCode: () => string;
   readonly prepareTerraformArtifact: () => Promise<PreparedTerraformArtifactSource>;
   readonly validateCurrentTerraform: () => Promise<TerraformDiagnostic[]>;
 };
@@ -704,6 +705,7 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
 
   useImperativeHandle(ref, () => ({
     applyTerraformSafeFix: applyTerraformSafeFixToCode,
+    getCurrentTerraformCode: () => combinedTerraformCode,
     prepareTerraformArtifact: async () => {
       if (!hasTerraformCode) {
         throw new Error("저장할 Terraform 코드가 없습니다.");
@@ -735,6 +737,7 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
     validateCurrentTerraform
   }), [
     applyTerraformSafeFixToCode,
+    combinedTerraformCode,
     hasTerraformCode,
     requestState,
     syncTerraformCodeToDiagram,

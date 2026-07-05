@@ -14,6 +14,14 @@ const unexpectedTokenDiagnostic: TerraformDiagnostic = {
   sourceFileName: "main.tf"
 };
 
+const trailingCommaDiagnostic: TerraformDiagnostic = {
+  code: "terraform.trailing_comma",
+  line: 2,
+  message: "Trailing comma is not valid Terraform syntax.",
+  severity: "error",
+  sourceFileName: "main.tf"
+};
+
 test("createTerraformIssueChatSummary shows Amazon Q instead of deterministic fallback wording", () => {
   const explanation = createExplanation({
     summary: "Terraform 오류를 기본 fallback 설명으로 분류했습니다.",
@@ -39,6 +47,42 @@ test("createTerraformIssueFixPlan labels Terraform issue plans as Amazon Q Assis
 
   assert.equal(fixPlan.providerLabel, "Amazon Q Assistance");
   assert.doesNotMatch(fixPlan.summary, /fallback/);
+});
+
+test("createTerraformIssueFixPlan shows current and next code before enabling fixes", () => {
+  const explanation = createExplanation({
+    summary: "Terraform trailing comma를 수정해야 합니다.",
+    llmSummary: "Trailing comma를 제거하면 됩니다."
+  });
+
+  const fixPlan = createTerraformIssueFixPlan({
+    diagnostic: trailingCommaDiagnostic,
+    explanation,
+    terraformCode: 'resource "aws_s3_bucket" "logs" {\n  bucket = "logs",\n}'
+  });
+
+  assert.equal(fixPlan.canApply, true);
+  assert.deepEqual(fixPlan.codePreview, {
+    currentCode: '  bucket = "logs",',
+    nextCode: '  bucket = "logs"',
+    sourceLine: 2
+  });
+});
+
+test("createTerraformIssueFixPlan requires a code preview before enabling fixes", () => {
+  const explanation = createExplanation({
+    summary: "Terraform 진단을 확인해야 합니다.",
+    llmSummary: "원본 Terraform 위치를 확인해야 합니다."
+  });
+
+  const fixPlan = createTerraformIssueFixPlan({
+    diagnostic: unexpectedTokenDiagnostic,
+    explanation,
+    terraformCode: 'resource "aws_s3_bucket" "logs" {\n  bucket = "logs"\n}'
+  });
+
+  assert.equal(fixPlan.canApply, false);
+  assert.equal(fixPlan.codePreview, undefined);
 });
 
 test("createTerraformIssueFixPlan explains why Amazon Q used fallback", () => {

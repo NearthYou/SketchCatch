@@ -384,9 +384,14 @@ test("terraform issue AI resolution shows a fix plan before apply", () => {
   assert.match(aiChatDockSource, /terraformIssueFixPlan/);
   assert.match(aiChatDockSource, /수정 계획/);
   assert.match(aiChatDockSource, /fixPlan\.steps\.map/);
-  assert.match(aiChatDockSource, /!fixPlan\.canApply/);
+  assert.match(aiChatDockSource, /fixPlan\.canApply/);
   assert.match(aiChatDockSource, /fixPlan\.providerNotice/);
   assert.match(aiChatDockSource, /terraformIssueFixPlanNotice/);
+  assert.match(aiChatDockSource, /fixPlan\.codePreview/);
+  assert.match(aiChatDockSource, /현재 코드/);
+  assert.match(aiChatDockSource, /수정할 코드/);
+  assert.match(aiChatDockSource, /수정 중/);
+  assert.match(componentSource, /getCurrentTerraformCode/);
 });
 
 test("terraform editor renders syntax colors and squiggly error underlines", () => {

@@ -143,7 +143,8 @@ export function WorkspaceRightPanel({
   const handleTerraformIssueAiClick = useCallback((issue: TerraformIssueRecord): void => {
     onTerraformIssueAiRequest({
       id: Date.now(),
-      issue
+      issue,
+      terraformCode: terraformPanelRef.current?.getCurrentTerraformCode() ?? ""
     });
   }, [onTerraformIssueAiRequest]);
 

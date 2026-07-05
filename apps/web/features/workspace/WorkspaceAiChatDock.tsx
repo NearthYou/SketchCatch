@@ -798,6 +798,7 @@ export function WorkspaceAiChatDock({
               <TerraformIssueExplanationCard
                 diagnostic={terraformIssueResolution.request.issue.diagnostic}
                 explanation={terraformIssueResolution.explanation}
+                terraformCode={terraformIssueResolution.request.terraformCode}
               />
             ) : null}
             <div className={styles.aiActionRow}>
@@ -805,27 +806,27 @@ export function WorkspaceAiChatDock({
                 ? (() => {
                     const fixPlan = createTerraformIssueFixPlan({
                       diagnostic: terraformIssueResolution.request.issue.diagnostic,
-                      explanation: terraformIssueResolution.explanation
+                      explanation: terraformIssueResolution.explanation,
+                      terraformCode: terraformIssueResolution.request.terraformCode
                     });
 
                     return (
                       <>
-                        <button
-                          className={styles.aiPrimaryButton}
-                          disabled={
-                            !fixPlan.canApply ||
-                            applyingTerraformFixRequestId === terraformIssueResolution.request.id
-                          }
-                          onClick={() => {
-                            setApplyingTerraformFixRequestId(terraformIssueResolution.request.id);
-                            onApplyTerraformIssueFix(terraformIssueResolution.request.issue.diagnostic);
-                          }}
-                          type="button"
-                        >
-                          {applyingTerraformFixRequestId === terraformIssueResolution.request.id ? "적용 중" : "적용"}
-                        </button>
+                        {fixPlan.canApply ? (
+                          <button
+                            className={styles.aiPrimaryButton}
+                            disabled={applyingTerraformFixRequestId === terraformIssueResolution.request.id}
+                            onClick={() => {
+                              setApplyingTerraformFixRequestId(terraformIssueResolution.request.id);
+                              onApplyTerraformIssueFix(terraformIssueResolution.request.issue.diagnostic);
+                            }}
+                            type="button"
+                          >
+                            {applyingTerraformFixRequestId === terraformIssueResolution.request.id ? "수정 중" : "수정"}
+                          </button>
+                        ) : null}
                         <button className={styles.aiSecondaryButton} disabled type="button">
-                          {fixPlan.canApply ? "자동 적용 가능" : "수동 수정 필요"}
+                          {fixPlan.canApply ? "자동 수정 가능" : "자동 수정안 없음"}
                         </button>
                       </>
                     );
@@ -929,12 +930,14 @@ export function createWorkspaceAiChatStorageKey(projectId: string): string {
 
 function TerraformIssueExplanationCard({
   diagnostic,
-  explanation
+  explanation,
+  terraformCode
 }: {
   readonly diagnostic: TerraformDiagnostic;
   readonly explanation: AiTerraformErrorExplanationResult;
+  readonly terraformCode: string;
 }) {
-  const fixPlan = createTerraformIssueFixPlan({ diagnostic, explanation });
+  const fixPlan = createTerraformIssueFixPlan({ diagnostic, explanation, terraformCode });
 
   return (
     <div>
@@ -946,6 +949,22 @@ function TerraformIssueExplanationCard({
         <p>{fixPlan.summary}</p>
         {fixPlan.providerNotice ? (
           <p className={styles.terraformIssueFixPlanNotice}>{fixPlan.providerNotice}</p>
+        ) : null}
+        {fixPlan.codePreview ? (
+          <div className={styles.terraformIssueCodePreview}>
+            <section>
+              <strong>현재 코드</strong>
+              <pre>
+                <code>{fixPlan.codePreview.currentCode}</code>
+              </pre>
+            </section>
+            <section>
+              <strong>수정할 코드</strong>
+              <pre>
+                <code>{fixPlan.codePreview.nextCode}</code>
+              </pre>
+            </section>
+          </div>
         ) : null}
         <ol>
           {fixPlan.steps.map((step) => (
