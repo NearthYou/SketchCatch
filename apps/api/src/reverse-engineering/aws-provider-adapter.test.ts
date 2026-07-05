@@ -21,6 +21,9 @@ test("AWS Provider Adapter turns discovered AWS resources into ArchitectureJson 
   assert(result.architectureJson.edges.some((edge) => edge.label === "contains"));
   assert(result.architectureJson.edges.some((edge) => edge.label === "attached_to"));
   assert.equal(result.discoveredResources[0]?.providerResourceId, "vpc-1234");
+  assert.equal(result.importSuggestions[0]?.status, "ready");
+  assert.equal(result.importSuggestions[0]?.terraformAddress, "aws_vpc.vpc_1234");
+  assert.equal(result.importSuggestions[0]?.importCommand, "terraform import aws_vpc.vpc_1234 vpc-1234");
 });
 
 test("AWS Provider Adapter keeps unsupported AWS resources as UNKNOWN instead of dropping them", async () => {
@@ -48,6 +51,8 @@ test("AWS Provider Adapter keeps unsupported AWS resources as UNKNOWN instead of
   assert.equal(result.architectureJson.nodes[0]?.type, "UNKNOWN");
   assert.equal(result.discoveredResources[0]?.analysisExcluded, true);
   assert.equal(result.analysisExclusions[0]?.reason, "unsupported_resource_type");
+  assert.equal(result.importSuggestions[0]?.status, "unsupported_resource_type");
+  assert.equal(result.importSuggestions[0]?.handoffReady, false);
 });
 
 function createFakeGateway(): AwsProviderScanGateway {

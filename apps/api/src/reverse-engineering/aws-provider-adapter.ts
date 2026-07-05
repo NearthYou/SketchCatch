@@ -7,6 +7,7 @@ import type {
   ResourceNode,
   ResourceType,
   ReverseEngineeringAnalysisExclusion,
+  ReverseEngineeringImportSuggestion,
   ReverseEngineeringScanError,
   ReverseEngineeringScanResult
 } from "@sketchcatch/types";
@@ -50,6 +51,15 @@ const awsResourceTypeMap: ReadonlyMap<string, ResourceType> = new Map([
   ["AWS::S3::Bucket", "S3"]
 ]);
 
+const terraformResourceTypeMap: ReadonlyMap<ResourceType, string> = new Map([
+  ["VPC", "aws_vpc"],
+  ["SUBNET", "aws_subnet"],
+  ["SECURITY_GROUP", "aws_security_group"],
+  ["EC2", "aws_instance"],
+  ["RDS", "aws_db_instance"],
+  ["S3", "aws_s3_bucket"]
+]);
+
 // Provider Adapter의 공개 진입점입니다. AWS 원본 목록을 보드 설계도와 분석 재료로 바꿉니다.
 export function createAwsProviderAdapter(gateway: AwsProviderScanGateway): AwsProviderAdapter {
   return {
@@ -65,7 +75,7 @@ export function createAwsProviderAdapter(gateway: AwsProviderScanGateway): AwsPr
         architectureJson,
         findings: [],
         analysisExclusions: createAnalysisExclusions(discoveredResources),
-        importSuggestions: [],
+        importSuggestions: createImportSuggestions(discoveredResources),
         scanErrors: [] satisfies ReverseEngineeringScanError[]
       };
     }
@@ -192,8 +202,43 @@ function createAnalysisExclusions(
     }));
 }
 
+function createImportSuggestions(
+  discoveredResources: DiscoveredResource[]
+): ReverseEngineeringImportSuggestion[] {
+  return discoveredResources.map((resource) => {
+    const terraformResourceType = terraformResourceTypeMap.get(resource.resourceType);
+
+    if (!terraformResourceType) {
+      return {
+        id: `import-${resource.id}`,
+        resourceId: resource.id,
+        status: "unsupported_resource_type",
+        reason: "아직 정식 ResourceType으로 매핑되지 않았습니다.",
+        handoffReady: false
+      };
+    }
+
+    const terraformResourceName = createTerraformResourceName(resource.providerResourceId);
+    const terraformAddress = `${terraformResourceType}.${terraformResourceName}`;
+
+    return {
+      id: `import-${resource.id}`,
+      resourceId: resource.id,
+      status: "ready",
+      terraformAddress,
+      importCommand: `terraform import ${terraformAddress} ${resource.providerResourceId}`,
+      terraformBlockDraft: `resource "${terraformResourceType}" "${terraformResourceName}" {}`,
+      handoffReady: true
+    };
+  });
+}
+
 function createNodeId(record: AwsDiscoveredResourceRecord): string {
   return `resource-${sanitizeIdPart(record.providerResourceId)}`;
+}
+
+function createTerraformResourceName(providerResourceId: string): string {
+  return sanitizeIdPart(providerResourceId).replaceAll("-", "_");
 }
 
 // AWS ARN처럼 긴 ID를 보드 node id에 넣을 수 있는 안전한 문자열로 정리합니다.
