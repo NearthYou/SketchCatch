@@ -1,0 +1,187 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import type { DiagramJson, ReverseEngineeringScanResult } from "@sketchcatch/types";
+import {
+  createReverseEngineeringBoardApplication,
+  createReverseEngineeringBoardComparison
+} from "./reverse-engineering-board-application";
+
+test("createReverseEngineeringBoardComparison separates new scan resources from existing board resources", () => {
+  const currentDiagram = createDiagram({
+    nodes: [
+      createDiagramNode({
+        id: "existing-vpc",
+        providerResourceId: "vpc-1234",
+        resourceName: "main",
+        resourceType: "aws_vpc"
+      })
+    ]
+  });
+  const result = createScanResult();
+
+  const comparison = createReverseEngineeringBoardComparison({
+    currentDiagram,
+    result
+  });
+
+  assert.deepEqual(
+    comparison.additions.map((item) => item.nodeId),
+    ["resource-subnet-1234"]
+  );
+  assert.deepEqual(
+    comparison.duplicates.map((item) => item.nodeId),
+    ["resource-vpc-1234"]
+  );
+  assert.equal(comparison.manualReviews.length, 0);
+});
+
+test("createReverseEngineeringBoardApplication can open scan result as a new board", () => {
+  const currentDiagram = createDiagram({
+    nodes: [
+      createDiagramNode({
+        id: "existing-vpc",
+        providerResourceId: "vpc-9999",
+        resourceName: "old",
+        resourceType: "aws_vpc"
+      })
+    ],
+    viewport: { x: 20, y: 30, zoom: 0.8 }
+  });
+
+  const application = createReverseEngineeringBoardApplication({
+    currentDiagram,
+    mode: "replace",
+    result: createScanResult()
+  });
+
+  assert.deepEqual(
+    application.diagram.nodes.map((node) => node.id),
+    ["resource-vpc-1234", "resource-subnet-1234"]
+  );
+  assert.deepEqual(application.diagram.viewport, { x: 0, y: 0, zoom: 1 });
+});
+
+test("createReverseEngineeringBoardApplication appends only providerResourceId-safe new resources", () => {
+  const currentDiagram = createDiagram({
+    nodes: [
+      createDiagramNode({
+        id: "existing-vpc",
+        providerResourceId: "vpc-1234",
+        resourceName: "main",
+        resourceType: "aws_vpc"
+      })
+    ],
+    viewport: { x: 20, y: 30, zoom: 0.8 }
+  });
+
+  const application = createReverseEngineeringBoardApplication({
+    currentDiagram,
+    mode: "append",
+    result: createScanResult()
+  });
+
+  assert.deepEqual(
+    application.diagram.nodes.map((node) => node.id),
+    ["existing-vpc", "resource-subnet-1234"]
+  );
+  assert.deepEqual(application.diagram.edges, []);
+  assert.deepEqual(application.diagram.viewport, currentDiagram.viewport);
+});
+
+function createScanResult(): ReverseEngineeringScanResult {
+  return {
+    scan: {
+      id: "scan-1",
+      projectId: "project-1",
+      awsConnectionId: "aws-connection-1",
+      provider: "aws",
+      region: "ap-northeast-2",
+      resourceTypes: ["VPC", "SUBNET"],
+      status: "completed",
+      createdAt: "2026-07-05T00:00:00.000Z",
+      updatedAt: "2026-07-05T00:01:00.000Z",
+      startedAt: "2026-07-05T00:00:00.000Z",
+      completedAt: "2026-07-05T00:01:00.000Z",
+      cancelRequestedAt: null,
+      deletedAt: null,
+      errorSummary: null
+    },
+    discoveredResources: [],
+    architectureJson: {
+      nodes: [
+        {
+          id: "resource-vpc-1234",
+          type: "VPC",
+          label: "Main VPC",
+          positionX: 120,
+          positionY: 100,
+          config: {
+            providerResourceId: "vpc-1234",
+            providerResourceType: "AWS::EC2::VPC",
+            terraformResourceName: "main"
+          }
+        },
+        {
+          id: "resource-subnet-1234",
+          type: "SUBNET",
+          label: "Public Subnet",
+          positionX: 220,
+          positionY: 180,
+          config: {
+            providerResourceId: "subnet-1234",
+            providerResourceType: "AWS::EC2::Subnet",
+            terraformResourceName: "public",
+            vpcId: "vpc-1234"
+          }
+        }
+      ],
+      edges: [
+        {
+          id: "edge-vpc-subnet",
+          sourceId: "resource-vpc-1234",
+          targetId: "resource-subnet-1234",
+          label: "contains"
+        }
+      ]
+    },
+    findings: [],
+    analysisExclusions: [],
+    importSuggestions: [],
+    scanErrors: []
+  };
+}
+
+function createDiagram(input: Partial<DiagramJson> = {}): DiagramJson {
+  return {
+    edges: input.edges ?? [],
+    nodes: input.nodes ?? [],
+    viewport: input.viewport ?? { x: 0, y: 0, zoom: 1 }
+  };
+}
+
+function createDiagramNode(input: {
+  id: string;
+  providerResourceId: string;
+  resourceName: string;
+  resourceType: string;
+}): DiagramJson["nodes"][number] {
+  return {
+    id: input.id,
+    kind: "resource",
+    label: input.id,
+    locked: false,
+    parameters: {
+      fileName: "main",
+      resourceName: input.resourceName,
+      resourceType: input.resourceType,
+      terraformBlockType: "resource",
+      values: {
+        providerResourceId: input.providerResourceId
+      }
+    },
+    position: { x: 0, y: 0 },
+    size: { width: 56, height: 56 },
+    type: input.resourceType,
+    zIndex: 1
+  };
+}
