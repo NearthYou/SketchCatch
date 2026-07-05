@@ -186,6 +186,31 @@ const NO_RESOURCE_ADDITION_KEYWORDS = [
 
 const NO_RESOURCE_ADDITION_ALTERNATIVE_KEYWORDS = ["말고", "대신", "but add", "instead"] as const;
 
+const VPC_SCOPED_RESOURCE_TYPES: ReadonlySet<ResourceType> = new Set([
+  "SUBNET",
+  "INTERNET_GATEWAY",
+  "ROUTE_TABLE",
+  "ROUTE_TABLE_ASSOCIATION",
+  "SECURITY_GROUP",
+  "EC2",
+  "RDS",
+  "LOAD_BALANCER",
+  "LAMBDA"
+]);
+
+const WHOLE_SCOPE_PATCH_KEYWORDS = [
+  "안의",
+  "안에",
+  "내부",
+  "전체",
+  "통째",
+  "모두",
+  "전부",
+  "whole",
+  "inside",
+  "entire"
+] as const;
+
 const ADD_RESOURCE_PURPOSE_SUGGESTIONS: Partial<Record<ResourceType, readonly string[]>> = {
   RDS: ["로그인/회원 데이터를 저장할래", "주문이나 예약 데이터를 저장할래", "기존 서버가 읽고 쓰는 서비스 DB로 쓸래"],
   S3: ["사용자 업로드 파일을 저장할래", "정적 웹사이트 파일을 배포할래", "로그나 백업을 보관할래"],
@@ -580,7 +605,7 @@ function findResourceTypes(normalizedInstruction: string): ResourceType[] {
 
 function splitPatchOperationClauses(instruction: string): string[] {
   return normalizeSearchText(instruction)
-    .split(/(?:\n|,|;|\.|그리고|그 다음|다음으로|한 다음|후에|하고|하며|하면서)/u)
+    .split(/(?:\n|;|\.|그리고|그 다음|다음으로|한 다음|후에|하고|하며|하면서)/u)
     .map((clause) => clause.trim())
     .filter(Boolean);
 }
@@ -592,16 +617,91 @@ function findRemovableNodesForClause(
   const mentionedNodes = findMentionedNodes(nodes, normalizedClause);
 
   if (mentionedNodes.length > 0) {
-    return mentionedNodes;
+    return expandWholeScopeRemovals(nodes, mentionedNodes, normalizedClause);
   }
 
   const resourceTypes = findResourceTypes(normalizedClause);
 
-  return resourceTypes.flatMap((resourceType) => {
+  const matchingNodes = resourceTypes.flatMap((resourceType) => {
     const matchingNodes = nodes.filter((node) => node.type === resourceType);
 
     return matchingNodes.length === 1 ? matchingNodes : [];
   });
+
+  return expandWholeScopeRemovals(nodes, matchingNodes, normalizedClause);
+}
+
+function expandWholeScopeRemovals(
+  nodes: readonly ResourceNode[],
+  rootNodes: readonly ResourceNode[],
+  normalizedClause: string
+): ResourceNode[] {
+  if (!includesAnyPhrase(normalizedClause, WHOLE_SCOPE_PATCH_KEYWORDS)) {
+    return [...rootNodes];
+  }
+
+  const resultById = new Map(rootNodes.map((node) => [node.id, node]));
+  let changed = true;
+
+  while (changed) {
+    changed = false;
+
+    for (const node of nodes) {
+      if (resultById.has(node.id) || !isScopedDependentCandidate(node)) {
+        continue;
+      }
+
+      if (Array.from(resultById.values()).some((rootNode) => isNodeDependentOn(node, rootNode))) {
+        resultById.set(node.id, node);
+        changed = true;
+      }
+    }
+  }
+
+  return nodes.filter((node) => resultById.has(node.id));
+}
+
+function isScopedDependentCandidate(node: ResourceNode): boolean {
+  return VPC_SCOPED_RESOURCE_TYPES.has(node.type);
+}
+
+function isNodeDependentOn(node: ResourceNode, rootNode: ResourceNode): boolean {
+  if (rootNode.type === "VPC" && VPC_SCOPED_RESOURCE_TYPES.has(node.type)) {
+    return (
+      doesConfigReferenceNode(node.config, rootNode) ||
+      (node.type === "SUBNET" && includesAnyPhrase(normalizeSearchText(node.id), ["subnet"])) ||
+      (node.type === "SECURITY_GROUP" && includesAnyPhrase(normalizeSearchText(node.id), ["security", "sg"]))
+    );
+  }
+
+  return doesConfigReferenceNode(node.config, rootNode);
+}
+
+function doesConfigReferenceNode(value: unknown, node: ResourceNode): boolean {
+  const normalizedNeedles = nodeReferenceNeedles(node);
+
+  if (typeof value === "string") {
+    const normalizedValue = compactSearchText(value.replace(/[._]/g, "-"));
+
+    return normalizedNeedles.some((needle) => normalizedValue.includes(needle));
+  }
+
+  if (Array.isArray(value)) {
+    return value.some((item) => doesConfigReferenceNode(item, node));
+  }
+
+  if (value !== null && typeof value === "object") {
+    return Object.values(value).some((item) => doesConfigReferenceNode(item, node));
+  }
+
+  return false;
+}
+
+function nodeReferenceNeedles(node: ResourceNode): string[] {
+  const idNeedle = compactSearchText(node.id);
+  const terraformNameNeedle = compactSearchText(node.id.replace(/-/g, "_"));
+
+  return Array.from(new Set([idNeedle, terraformNameNeedle]));
 }
 
 function inferServiceExpansionResourceType(
@@ -1110,6 +1210,26 @@ function inferConnection(
     const targetNode = findBestNode(existingNodes, ["LOAD_BALANCER", "API_GATEWAY_REST_API", "CLOUDFRONT", "EC2", "LAMBDA"]);
 
     return targetNode ? { sourceNode: newNode, targetNode } : undefined;
+  }
+
+  if (newNode.type === "SUBNET") {
+    const sourceNode = findBestNode(existingNodes, ["VPC"]);
+
+    return sourceNode ? { sourceNode, targetNode: newNode } : undefined;
+  }
+
+  if (newNode.type === "SECURITY_GROUP") {
+    const sourceNode = findBestNode(existingNodes, ["VPC"]);
+
+    if (sourceNode !== undefined) {
+      return { sourceNode, targetNode: newNode };
+    }
+  }
+
+  if (newNode.type === "EC2") {
+    const sourceNode = findBestNode(existingNodes, ["SUBNET", "SECURITY_GROUP"]);
+
+    return sourceNode ? { sourceNode, targetNode: newNode } : undefined;
   }
 
   if (newNode.type === "S3" && includesAnyPhrase(normalizeSearchText(intent.instruction), ["정적", "웹사이트", "cdn", "배포"])) {

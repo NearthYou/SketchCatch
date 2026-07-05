@@ -326,6 +326,104 @@ test("createArchitecturePatchPreview can add and remove multiple resources in on
   );
 });
 
+test("createArchitecturePatchPreview can replace a whole VPC boundary with multiple new resources", () => {
+  const response = createArchitecturePatchPreview({
+    architectureJson: {
+      nodes: [
+        makeNode({ id: "vpc-main", type: "VPC", label: "Main VPC" }),
+        makeNode({
+          id: "public-subnet-a",
+          type: "SUBNET",
+          label: "Public Subnet A",
+          config: { vpcId: "aws_vpc.vpc_main.id" }
+        }),
+        makeNode({
+          id: "app-security-group",
+          type: "SECURITY_GROUP",
+          label: "App Security Group",
+          config: { vpcId: "aws_vpc.vpc_main.id" }
+        }),
+        makeNode({
+          id: "app-server",
+          type: "EC2",
+          label: "App Server",
+          config: {
+            subnetId: "aws_subnet.public_subnet_a.id",
+            vpcSecurityGroupIds: ["aws_security_group.app_security_group.id"]
+          }
+        }),
+        makeNode({
+          id: "app-database",
+          type: "RDS",
+          label: "App Database",
+          config: {
+            subnetIds: ["aws_subnet.public_subnet_a.id"],
+            vpcSecurityGroupIds: ["aws_security_group.app_security_group.id"]
+          }
+        }),
+        makeNode({ id: "assets-bucket", type: "S3", label: "Assets Bucket" })
+      ],
+      edges: [
+        {
+          id: "vpc-to-subnet",
+          sourceId: "vpc-main",
+          targetId: "public-subnet-a"
+        },
+        {
+          id: "subnet-to-app",
+          sourceId: "public-subnet-a",
+          targetId: "app-server"
+        },
+        {
+          id: "sg-to-app",
+          sourceId: "app-security-group",
+          targetId: "app-server"
+        },
+        {
+          id: "sg-to-db",
+          sourceId: "app-security-group",
+          targetId: "app-database"
+        },
+        {
+          id: "app-to-assets",
+          sourceId: "app-server",
+          targetId: "assets-bucket"
+        }
+      ]
+    },
+    instruction: "Main VPC 안의 리소스를 통째로 삭제하고 새 VPC, 서브넷, 보안 설정, 서버, 데이터베이스를 추가해줘"
+  });
+
+  assert.equal(response.status, "preview");
+  assert.deepEqual(
+    response.changes.map((change) => ({
+      action: change.action,
+      resourceId: change.resourceId,
+      resourceType: change.resourceType
+    })),
+    [
+      { action: "remove_resource", resourceId: "vpc-main", resourceType: "VPC" },
+      { action: "remove_resource", resourceId: "public-subnet-a", resourceType: "SUBNET" },
+      { action: "remove_resource", resourceId: "app-security-group", resourceType: "SECURITY_GROUP" },
+      { action: "remove_resource", resourceId: "app-server", resourceType: "EC2" },
+      { action: "remove_resource", resourceId: "app-database", resourceType: "RDS" },
+      { action: "add_resource", resourceId: undefined, resourceType: "VPC" },
+      { action: "add_resource", resourceId: undefined, resourceType: "SUBNET" },
+      { action: "add_resource", resourceId: undefined, resourceType: "SECURITY_GROUP" },
+      { action: "add_resource", resourceId: undefined, resourceType: "EC2" },
+      { action: "add_resource", resourceId: undefined, resourceType: "RDS" }
+    ]
+  );
+  assert.deepEqual(
+    response.proposedArchitectureJson.nodes.map((node) => node.id),
+    ["assets-bucket", "vpc-2", "subnet-3", "security-group-4", "ec2-5", "rds-6"]
+  );
+  assert.deepEqual(
+    response.proposedArchitectureJson.edges.map((edge) => edge.id),
+    ["vpc-2-to-subnet-3", "vpc-2-to-security-group-4", "subnet-3-to-ec2-5", "ec2-5-to-rds-6"]
+  );
+});
+
 test("createArchitecturePatchPreview asks for the resource type when add requests are incomplete", () => {
   const response = createArchitecturePatchPreview({
     architectureJson: {
