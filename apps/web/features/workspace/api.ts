@@ -20,6 +20,7 @@ import type {
   CreateDesignSimulationRequest,
   CreateProjectAssetUploadRequest,
   CreateProjectRequest,
+  CreateReverseEngineeringScanRequest,
   DeleteProjectRequest,
   DeleteProjectResponse,
   DesignSimulationResult,
@@ -46,6 +47,11 @@ import type {
   ProjectResponse,
   RecentSuccessfulDeploymentProject,
   RecentSuccessfulDeploymentProjectListResponse,
+  ReverseEngineeringScan,
+  ReverseEngineeringScanListResponse,
+  ReverseEngineeringScanLogLine,
+  ReverseEngineeringScanLogListResponse,
+  ReverseEngineeringScanResponse,
   SaveProjectDraftRequest,
   TerraformOutput,
   TerraformOutputListResponse,
@@ -476,6 +482,65 @@ export async function getAwsConnectionCloudFormationTemplate({
       auth: true
     }
   );
+}
+
+export async function createReverseEngineeringScan({
+  projectId,
+  ...input
+}: {
+  projectId: string;
+} & CreateReverseEngineeringScanRequest): Promise<ReverseEngineeringScanResponse> {
+  return apiFetch<ReverseEngineeringScanResponse>(
+    `/projects/${encodeURIComponent(projectId)}/reverse-engineering/scans`,
+    {
+      auth: true,
+      method: "POST",
+      body: input
+    }
+  );
+}
+
+export async function listReverseEngineeringScans(projectId: string): Promise<ReverseEngineeringScan[]> {
+  const response = await apiFetch<ReverseEngineeringScanListResponse>(
+    `/projects/${encodeURIComponent(projectId)}/reverse-engineering/scans`,
+    {
+      auth: true
+    }
+  );
+
+  return response.scans;
+}
+
+export async function getReverseEngineeringScan({
+  projectId,
+  scanId
+}: {
+  projectId: string;
+  scanId: string;
+}): Promise<ReverseEngineeringScanResponse> {
+  return apiFetch<ReverseEngineeringScanResponse>(
+    `/projects/${encodeURIComponent(projectId)}/reverse-engineering/scans/${encodeURIComponent(scanId)}`,
+    {
+      auth: true
+    }
+  );
+}
+
+export async function listReverseEngineeringScanLogs({
+  projectId,
+  scanId
+}: {
+  projectId: string;
+  scanId: string;
+}): Promise<ReverseEngineeringScanLogLine[]> {
+  const response = await apiFetch<ReverseEngineeringScanLogListResponse>(
+    `/projects/${encodeURIComponent(projectId)}/reverse-engineering/scans/${encodeURIComponent(scanId)}/logs`,
+    {
+      auth: true
+    }
+  );
+
+  return response.logs;
 }
 
 export async function createDeployment({

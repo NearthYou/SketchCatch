@@ -8,10 +8,12 @@ import {
   GalleryVerticalEnd,
   PanelRightClose,
   PanelRightOpen,
-  Rocket
+  Rocket,
+  Search
 } from "lucide-react";
 import type { DiagramEditorPanelContext } from "../diagram-editor";
 import { DeploymentPanel } from "./DeploymentPanel";
+import { ReverseEngineeringPanel } from "./ReverseEngineeringPanel";
 import { ResourceWorkspacePanel } from "./ResourceWorkspacePanel";
 import {
   TerraformCodePanel,
@@ -389,6 +391,14 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
         >
           <Rocket size={18} aria-hidden="true" />
         </button>
+        <button
+          className={styles.collapsedPanelButton}
+          onClick={() => openCollapsedView("reverse")}
+          title="Reverse Engineering"
+          type="button"
+        >
+          <Search size={18} aria-hidden="true" />
+        </button>
       </aside>
     );
   }
@@ -448,6 +458,15 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
           >
             <Rocket size={18} aria-hidden="true" />
           </button>
+          <button
+            aria-pressed={activeView === "reverse"}
+            className={activeView === "reverse" ? styles.panelModeButtonActive : styles.panelModeButton}
+            onClick={() => requestView("reverse")}
+            title="Reverse Engineering"
+            type="button"
+          >
+            <Search size={18} aria-hidden="true" />
+          </button>
         </div>
       </div>
 
@@ -494,6 +513,9 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
             projectName={projectName}
           />
         ) : null}
+      </div>
+      <div className={styles.rightPanelView} hidden={activeView !== "reverse"}>
+        {activeView === "reverse" ? <ReverseEngineeringPanel projectId={projectId} /> : null}
       </div>
 
       {showTerraformLeaveDialog ? (
