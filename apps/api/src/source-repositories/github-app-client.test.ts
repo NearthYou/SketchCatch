@@ -1,0 +1,251 @@
+import assert from "node:assert/strict";
+import { generateKeyPairSync } from "node:crypto";
+import test from "node:test";
+import { createGitHubAppClient } from "./github-app-client.js";
+
+const privateKey = generateKeyPairSync("rsa", {
+  modulusLength: 2048,
+  privateKeyEncoding: {
+    type: "pkcs8",
+    format: "pem"
+  },
+  publicKeyEncoding: {
+    type: "spki",
+    format: "pem"
+  }
+}).privateKey;
+
+test("createPullRequest blocks when the target branch already contains the SketchCatch artifact path", async () => {
+  const calls: GitHubApiCall[] = [];
+  const client = createGitHubAppClient({
+    appId: "12345",
+    privateKey,
+    fetch: createGitHubFetchStub(calls, ({ method, pathname, search }) => {
+      if (pathname === "/app/installations/42/access_tokens") {
+        return jsonResponse({ token: "installation-token" });
+      }
+
+      if (method === "GET" && pathname === "/repos/owner/repo/git/ref/heads/main") {
+        return jsonResponse({ object: { sha: "target-sha" } });
+      }
+
+      if (
+        method === "GET" &&
+        pathname === "/repos/owner/repo/contents/sketchcatch/project/terraform/main.tf" &&
+        search === "?ref=main"
+      ) {
+        return jsonResponse({ sha: "existing-target-file-sha" });
+      }
+
+      return jsonResponse({ message: "not found" }, 404);
+    })
+  });
+
+  await assert.rejects(
+    () =>
+      client.createPullRequest({
+        installationId: "42",
+        owner: "owner",
+        name: "repo",
+        targetBranch: "main",
+        sourceBranch: "sketchcatch/project/iac-12345678",
+        commitMessage: "Add Terraform artifact",
+        pullRequestTitle: "Add Terraform artifact",
+        pullRequestBody: "Review generated Terraform.",
+        files: [
+          {
+            path: "sketchcatch/project/terraform/main.tf",
+            content: "resource \"aws_s3_bucket\" \"smoke\" {}"
+          }
+        ]
+      }),
+    (error: unknown) =>
+      typeof error === "object" &&
+      error !== null &&
+      "statusCode" in error &&
+      error.statusCode === 409
+  );
+  assert.equal(
+    calls.some((call) => call.method === "PUT" || call.pathname.endsWith("/pulls")),
+    false
+  );
+});
+
+test("createPullRequest updates a file on an existing SketchCatch source branch", async () => {
+  const calls: GitHubApiCall[] = [];
+  const client = createGitHubAppClient({
+    appId: "12345",
+    privateKey,
+    fetch: createGitHubFetchStub(calls, ({ method, pathname, search, body }) => {
+      if (pathname === "/app/installations/42/access_tokens") {
+        return jsonResponse({ token: "installation-token" });
+      }
+
+      if (method === "GET" && pathname === "/repos/owner/repo/git/ref/heads/main") {
+        return jsonResponse({ object: { sha: "target-sha" } });
+      }
+
+      if (
+        method === "GET" &&
+        pathname === "/repos/owner/repo/contents/sketchcatch/project/terraform/main.tf" &&
+        search === "?ref=main"
+      ) {
+        return jsonResponse({ message: "not found" }, 404);
+      }
+
+      if (method === "POST" && pathname === "/repos/owner/repo/git/refs") {
+        return jsonResponse({ message: "reference already exists" }, 422);
+      }
+
+      if (
+        method === "GET" &&
+        pathname === "/repos/owner/repo/contents/sketchcatch/project/terraform/main.tf" &&
+        search === "?ref=sketchcatch%2Fproject%2Fiac-12345678"
+      ) {
+        return jsonResponse({ sha: "source-file-sha" });
+      }
+
+      if (
+        method === "PUT" &&
+        pathname === "/repos/owner/repo/contents/sketchcatch/project/terraform/main.tf"
+      ) {
+        assert.equal(body.branch, "sketchcatch/project/iac-12345678");
+        assert.equal(body.sha, "source-file-sha");
+        return jsonResponse({ commit: { sha: "new-commit-sha" } });
+      }
+
+      if (method === "POST" && pathname === "/repos/owner/repo/pulls") {
+        return jsonResponse({
+          html_url: "https://github.com/owner/repo/pull/7",
+          head: { sha: "new-head-sha" }
+        });
+      }
+
+      return jsonResponse({ message: "not found" }, 404);
+    })
+  });
+
+  const result = await client.createPullRequest({
+    installationId: "42",
+    owner: "owner",
+    name: "repo",
+    targetBranch: "main",
+    sourceBranch: "sketchcatch/project/iac-12345678",
+    commitMessage: "Add Terraform artifact",
+    pullRequestTitle: "Add Terraform artifact",
+    pullRequestBody: "Review generated Terraform.",
+    files: [
+      {
+        path: "sketchcatch/project/terraform/main.tf",
+        content: "resource \"aws_s3_bucket\" \"smoke\" {}"
+      }
+    ]
+  });
+
+  assert.equal(result.pullRequestUrl, "https://github.com/owner/repo/pull/7");
+  assert.equal(result.pullRequestHeadSha, "new-head-sha");
+  assert.equal(result.commitSha, "new-commit-sha");
+  assert.equal(calls.some((call) => call.method === "PUT"), true);
+});
+
+test("getLatestWorkflowRunForHeadSha maps the latest GitHub Actions run status", async () => {
+  const client = createGitHubAppClient({
+    appId: "12345",
+    privateKey,
+    fetch: createGitHubFetchStub([], ({ pathname }) => {
+      if (pathname === "/app/installations/42/access_tokens") {
+        return jsonResponse({ token: "installation-token" });
+      }
+
+      return jsonResponse({
+        workflow_runs: [
+          {
+            html_url: "https://github.com/owner/repo/actions/runs/1",
+            status: "completed",
+            conclusion: "success",
+            updated_at: "2026-07-05T00:00:00.000Z"
+          },
+          {
+            html_url: "https://github.com/owner/repo/actions/runs/2",
+            status: "completed",
+            conclusion: "failure",
+            updated_at: "2026-07-05T00:05:00.000Z"
+          }
+        ]
+      });
+    })
+  });
+
+  const status = await client.getLatestWorkflowRunForHeadSha({
+    installationId: "42",
+    owner: "owner",
+    name: "repo",
+    headSha: "new-head-sha"
+  });
+
+  assert.equal(status.status, "pipeline_failed");
+  assert.equal(status.pipelineRunUrl, "https://github.com/owner/repo/actions/runs/2");
+});
+
+test("getLatestWorkflowRunForHeadSha keeps pr_created when no Actions run exists", async () => {
+  const client = createGitHubAppClient({
+    appId: "12345",
+    privateKey,
+    fetch: createGitHubFetchStub([], ({ pathname }) => {
+      if (pathname === "/app/installations/42/access_tokens") {
+        return jsonResponse({ token: "installation-token" });
+      }
+
+      return jsonResponse({ workflow_runs: [] });
+    })
+  });
+
+  const status = await client.getLatestWorkflowRunForHeadSha({
+    installationId: "42",
+    owner: "owner",
+    name: "repo",
+    headSha: "new-head-sha"
+  });
+
+  assert.equal(status.status, "pr_created");
+  assert.equal(status.pipelineRunUrl, null);
+});
+
+type GitHubApiCall = {
+  method: string;
+  pathname: string;
+  search: string;
+  body: Record<string, unknown>;
+};
+
+function createGitHubFetchStub(
+  calls: GitHubApiCall[],
+  handler: (call: GitHubApiCall) => Response | Promise<Response>
+): typeof fetch {
+  return (async (input: string | URL | Request, init?: RequestInit) => {
+    const url = new URL(input.toString());
+    const body =
+      typeof init?.body === "string" && init.body
+        ? (JSON.parse(init.body) as Record<string, unknown>)
+        : {};
+    const call: GitHubApiCall = {
+      method: init?.method ?? "GET",
+      pathname: url.pathname,
+      search: url.search,
+      body
+    };
+
+    calls.push(call);
+
+    return handler(call);
+  }) as typeof fetch;
+}
+
+function jsonResponse(body: Record<string, unknown>, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: {
+      "Content-Type": "application/json"
+    }
+  });
+}

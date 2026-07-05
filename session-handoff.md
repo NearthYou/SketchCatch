@@ -557,3 +557,16 @@ pnpm build
   - Run actual GitHub PR handoff against a connected repo and confirm Actions polling.
   - Attach actual ElastiCache `REDIS_URL` to API runtime and verify deployment log cursor / Git pipeline status cache goes through Redis.
   - Run `scripts/smoke/live-s3-deployment.ps1` with `API_BASE_URL`, `ACCESS_TOKEN` or smoke login env, `AWS_CONNECTION_ID`, `SMOKE_ACCOUNT_ID`, `AWS_REGION`.
+## 2026-07-05 - Spec3 plan3 회귀 테스트 보강 handoff
+
+- Current branch/worktree: `codex/spec3-deployment-github-runtime-cache` at `C:\Users\siwon\Desktop\Jungle\Week17~21\SketchCatch`.
+- Scope completed:
+  - Added source repository service tests for signed state exchange, installation repository list non-persistence, selected repo-only persistence, active GitHub repo soft deactivate, archived repo rejection, and inaccessible project/state rejection.
+  - Added GitHub App client tests for target branch path conflict, same SketchCatch source branch update commit retry, latest Actions run status mapping, and no-run `pr_created` fallback.
+- Verification completed:
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/source-repositories/source-repository-service.test.ts src/source-repositories/github-app-client.test.ts` - passed, 9 tests
+  - `pnpm --filter @sketchcatch/api typecheck` - passed
+  - `pnpm --filter @sketchcatch/api test -- source-repositories` - passed, 552 tests
+  - `pnpm --filter @sketchcatch/api test -- git-cicd` - passed, 552 tests
+- Remaining external validation:
+  - Real GitHub App install/PR creation, real AWS apply/destroy smoke, and real ElastiCache `REDIS_URL` runtime validation still require credentials and a prepared environment.

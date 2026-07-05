@@ -1499,3 +1499,17 @@
   - 실제 ElastiCache `REDIS_URL` 운영 연결은 template/docs/env 경로까지 준비했지만, 운영 Redis endpoint에 붙여 확인하지 않았다.
 - Next best action:
   - 운영/스테이징 API에 `GITHUB_APP_*`, `REDIS_URL`, verified `AWS_CONNECTION_ID`를 주입한 뒤 `scripts/smoke/live-s3-deployment.ps1`와 GitHub App install/PR handoff를 실제로 실행한다.
+## 2026-07-05 - Spec3 plan3 회귀 테스트 증거 보강
+
+- Goal: `docs/sw/plan3.md` 완료 기준 중 GitHub App source repository 연결, target branch 보호, source branch retry/update, Actions polling 상태 매핑을 전용 테스트로 증명한다.
+- Completed:
+  - `apps/api/src/source-repositories/source-repository-service.test.ts`를 추가해 installation repository 목록이 DB에 저장되지 않는지, 선택한 repository 1개만 active로 저장되는지, 기존 active row가 inactive/disconnectedAt으로 soft deactivate되는지 검증했다.
+  - state 만료, inaccessible project/user mismatch, archived repository 연결 거부를 테스트했다.
+  - `apps/api/src/source-repositories/github-app-client.test.ts`를 추가해 target branch 기존 파일 409 conflict, 기존 SketchCatch source branch의 같은 path update commit 허용, PR head SHA 기반 최신 GitHub Actions run 상태 매핑, run 없음 -> `pr_created` 유지를 검증했다.
+- Verification run:
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/source-repositories/source-repository-service.test.ts src/source-repositories/github-app-client.test.ts` - passed, 9 tests
+  - `pnpm --filter @sketchcatch/api typecheck` - passed
+  - `pnpm --filter @sketchcatch/api test -- source-repositories` - passed, 552 tests
+  - `pnpm --filter @sketchcatch/api test -- git-cicd` - passed, 552 tests
+- Known risks:
+  - 실제 GitHub App 설치, 실제 GitHub PR 생성/API 호출, 실제 AWS apply/destroy, 실제 ElastiCache Redis 연결 검증은 자격값과 운영/스테이징 환경 주입이 필요해 아직 로컬 자동 테스트로 대체했다.
