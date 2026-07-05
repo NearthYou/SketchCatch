@@ -1999,6 +1999,7 @@
   font: inherit;
   font-size: 12px;
   font-weight: 850;
+  gap: 6px;
   justify-content: center;
   min-height: 34px;
   padding: 0 10px;
@@ -2383,6 +2384,42 @@
   margin: 0;
 }
 
+.aiSimulationCostMeta {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.aiSimulationCostMeta span {
+  background: #eef6ff;
+  border: 1px solid #c9ddf3;
+  border-radius: 999px;
+  color: var(--bp-blue);
+  font-size: 11px;
+  font-weight: 900;
+  padding: 4px 7px;
+}
+
+.aiSimulationCostDetails {
+  border-top: 1px solid #e3e9f2;
+  display: grid;
+  gap: 8px;
+  padding-top: 8px;
+}
+
+.aiSimulationCostDetails summary {
+  color: var(--bp-blue);
+  cursor: pointer;
+  font-size: 11.5px;
+  font-weight: 900;
+}
+
+.aiSimulationCostDetails summary:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--bp-blue) 45%, transparent);
+  outline-offset: 2px;
+}
+
 .aiChatLauncher {
   align-items: center;
   background: var(--bp-blue);
@@ -2592,9 +2629,9 @@
   border: 1px solid var(--bp-line);
   border-radius: var(--bp-r);
   box-shadow: 0 10px 24px rgba(31, 61, 88, 0.08);
-  display: flex;
+  display: grid;
   gap: 12px;
-  justify-content: space-between;
+  grid-template-columns: minmax(180px, 0.75fr) minmax(0, 1.25fr);
   padding: 12px;
 }
 
@@ -2602,6 +2639,23 @@
   color: var(--bp-ink);
   font-size: 13px;
   line-height: 1.45;
+}
+
+.aiSimulationConditionGrid {
+  align-items: end;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(110px, 0.8fr) minmax(128px, 1fr) auto;
+  min-width: 0;
+}
+
+.aiSimulationConditionGrid .aiField {
+  min-width: 0;
+}
+
+.aiSimulationConditionGrid .aiPrimaryButton {
+  min-width: 132px;
+  white-space: nowrap;
 }
 
 .aiChatAssistantMessage,
@@ -4039,6 +4093,16 @@
   .aiChatInput,
   .aiChatVoiceStatus {
     grid-column: 1 / -1;
+  }
+
+  .aiChatSimulationIntro,
+  .aiSimulationConditionGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .aiSimulationConditionGrid .aiPrimaryButton {
+    min-width: 0;
+    width: 100%;
   }
 
   .aiChatAssistantMessage,

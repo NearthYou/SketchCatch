@@ -197,6 +197,13 @@ export function WorkspaceAiDesignSimulationResult({
 }: {
   readonly simulation: DesignSimulationResult;
 }) {
+  const costReviewItems = simulation.costEstimate?.reviewMessages ?? simulation.costPressure;
+  const costRecommendationItems = simulation.recommendations.filter(
+    (item) => !costReviewItems.includes(item)
+  );
+  const costResources =
+    simulation.costEstimate?.resources.filter((resource) => resource.monthlyEstimate.amount > 0) ?? [];
+
   return (
     <div className={`${styles.aiResultStack} ${styles.aiSimulationResult}`}>
       <p className={styles.aiResultSummary}>{simulation.summary}</p>
@@ -236,13 +243,35 @@ export function WorkspaceAiDesignSimulationResult({
         </section>
         <section className={styles.aiSimulationCard}>
           <strong>비용·다음 검토</strong>
+          {simulation.costEstimate !== undefined ? (
+            <div className={styles.aiSimulationCostMeta}>
+              <span>${formatMoney(simulation.costEstimate.totalEstimate.amount)}</span>
+              <span>{simulation.costEstimate.period}</span>
+              <span>{formatInteger(simulation.costEstimate.expectedUserCount)}명</span>
+            </div>
+          ) : null}
           <ul>
-            {[...simulation.costPressure, ...simulation.recommendations].map((item, index) => (
+            {[...costReviewItems, ...costRecommendationItems].map((item, index) => (
               <li key={`cost-${index}-${item}`}>
                 <p>{item}</p>
               </li>
             ))}
           </ul>
+          {costResources.length > 0 ? (
+            <details className={styles.aiSimulationCostDetails}>
+              <summary>리소스별 근거</summary>
+              <ul>
+                {costResources.map((resource) => (
+                  <li key={`resource-cost-${resource.resourceId}`}>
+                    <span>
+                      {resource.name} · ${formatMoney(resource.monthlyEstimate.amount)} / month
+                    </span>
+                    <p>{resource.explanation}</p>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          ) : null}
         </section>
       </div>
       <WorkspaceAiExplanation explanation={simulation.llmExplanation} />
@@ -334,4 +363,12 @@ function WorkspaceAiFindingList({ findings }: { readonly findings: readonly Chec
       </ul>
     </div>
   );
+}
+
+function formatMoney(amount: number): string {
+  return amount.toFixed(2);
+}
+
+function formatInteger(amount: number): string {
+  return Math.round(amount).toLocaleString("en-US");
 }

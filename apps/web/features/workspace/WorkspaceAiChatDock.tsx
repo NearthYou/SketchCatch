@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   AiArchitectureDraftResult,
   ArchitectureGuardrailWarning,
+  CostEstimatePeriod,
   CreateArchitectureDraftRequest,
   DesignSimulationResult
 } from "@sketchcatch/types";
@@ -23,7 +24,8 @@ import {
 import {
   WorkspaceAiDesignSimulationResult,
   WorkspaceAiExplanation,
-  WorkspaceAiRequestMessage
+  WorkspaceAiRequestMessage,
+  WorkspaceAiSelect
 } from "./WorkspaceAiPanelPieces";
 import type { AiRequestState } from "./WorkspaceAiPanelPieces";
 import {
@@ -72,8 +74,14 @@ const MAX_CHAT_MESSAGES = 80;
 const STORAGE_KEY_PREFIX = "sketchcatch.workspaceAiChat";
 const DESIGN_SIMULATION_DEFAULTS = {
   budgetLevel: "normal",
+  region: "ap-northeast-2",
   trafficLevel: "normal"
 } as const;
+const DESIGN_SIMULATION_PERIOD_OPTIONS = [
+  { label: "하루", value: "day" },
+  { label: "일주일", value: "week" },
+  { label: "1개월", value: "month" }
+] as const satisfies readonly { readonly label: string; readonly value: CostEstimatePeriod }[];
 const VOICE_NO_SPEECH_TIMEOUT_MS = 8000;
 
 type BrowserSpeechRecognitionAlternative = {
@@ -142,6 +150,8 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
   const [draftErrorMessage, setDraftErrorMessage] = useState("");
   const [simulationErrorMessage, setSimulationErrorMessage] = useState("");
   const [simulationFingerprint, setSimulationFingerprint] = useState<string | null>(null);
+  const [simulationPeriod, setSimulationPeriod] = useState<CostEstimatePeriod>("month");
+  const [simulationExpectedUserCount, setSimulationExpectedUserCount] = useState("1000");
   const transcriptRef = useRef<HTMLDivElement | null>(null);
   const speechRecognitionRef = useRef<BrowserSpeechRecognition | null>(null);
   const voiceInputBaseRef = useRef("");
@@ -496,6 +506,13 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
 
   async function runDesignSimulation(): Promise<void> {
     setActiveChatTab("simulation");
+    const expectedUserCount = parseSimulationExpectedUserCount(simulationExpectedUserCount);
+
+    if (expectedUserCount === null) {
+      setSimulationState("error");
+      setSimulationErrorMessage("예상 사용자 수는 1명 이상 1,000,000명 이하로 입력해주세요.");
+      return;
+    }
 
     if (context.isPreviewActive) {
       setSimulationState("error");
@@ -523,12 +540,14 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
     try {
       const result = await runAiDesignSimulation({
         architectureJson: boardSnapshot.architectureJson,
-        ...DESIGN_SIMULATION_DEFAULTS
+        ...DESIGN_SIMULATION_DEFAULTS,
+        expectedUserCount,
+        period: simulationPeriod
       });
       setDesignSimulation(result);
       setSimulationFingerprint(boardSnapshot.fingerprint);
       setSimulationState("idle");
-      appendAssistantMessage("simulation", `현재 보드 시뮬레이션 결과: ${result.summary}`);
+      appendAssistantMessage("simulation", createSimulationResultMessage(result));
     } catch (error) {
       const message = getApiErrorMessage(error, "Design Simulation 중 오류가 발생했습니다.");
 
@@ -719,29 +738,38 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
         </button>
       </div>
 
-      <div className={styles.aiChatControls} aria-label="AI 설정">
-        <button
-          className={styles.aiSecondaryButton}
-          disabled={simulationState === "loading" || context.isPreviewActive}
-          onClick={() => void runDesignSimulation()}
-          type="button"
-        >
-          {simulationState === "loading" ? "계산 중" : "시뮬레이션"}
-        </button>
-      </div>
-
       <div className={styles.aiChatTranscript} ref={transcriptRef}>
         {activeChatTab === "simulation" ? (
           <div className={styles.aiChatSimulationIntro}>
-            <strong>현재 보드 기준으로 흐름, 병목, 장애, 비용 압박을 봅니다.</strong>
-            <button
-              className={styles.aiPrimaryButton}
-              disabled={simulationState === "loading" || context.isPreviewActive}
-              onClick={() => void runDesignSimulation()}
-              type="button"
-            >
-              {simulationState === "loading" ? "계산 중" : "시뮬레이션 실행"}
-            </button>
+            <strong>현재 보드 기준으로 흐름, 병목, 장애, 예상 비용을 봅니다.</strong>
+            <div className={styles.aiSimulationConditionGrid}>
+              <WorkspaceAiSelect
+                label="기간"
+                onChange={setSimulationPeriod}
+                options={DESIGN_SIMULATION_PERIOD_OPTIONS}
+                value={simulationPeriod}
+              />
+              <label className={styles.aiField}>
+                <span>예상 사용자 수</span>
+                <input
+                  inputMode="numeric"
+                  max={1_000_000}
+                  min={1}
+                  onChange={(event) => setSimulationExpectedUserCount(event.target.value)}
+                  type="number"
+                  value={simulationExpectedUserCount}
+                />
+              </label>
+              <button
+                className={styles.aiPrimaryButton}
+                disabled={simulationState === "loading" || context.isPreviewActive}
+                onClick={() => void runDesignSimulation()}
+                type="button"
+              >
+                <Sparkles size={14} aria-hidden="true" />
+                {simulationState === "loading" ? "계산 중" : "시뮬레이션 실행"}
+              </button>
+            </div>
           </div>
         ) : null}
 
@@ -1008,6 +1036,24 @@ function createQuestionFromDraftError(message: string): string | null {
   }
 
   return null;
+}
+
+function parseSimulationExpectedUserCount(value: string): number | null {
+  const parsedValue = Number.parseInt(value.replace(/,/g, ""), 10);
+
+  if (!Number.isFinite(parsedValue) || parsedValue < 1 || parsedValue > 1_000_000) {
+    return null;
+  }
+
+  return parsedValue;
+}
+
+function createSimulationResultMessage(result: DesignSimulationResult): string {
+  const costHeadline = result.costEstimate?.reviewMessages[0];
+
+  return costHeadline === undefined
+    ? `현재 보드 시뮬레이션 결과: ${result.summary}`
+    : `현재 보드 시뮬레이션 결과: ${result.summary} ${costHeadline}`;
 }
 
 function createDraftSafetyWarnings(
