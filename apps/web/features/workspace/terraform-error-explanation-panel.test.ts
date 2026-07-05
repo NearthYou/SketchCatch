@@ -10,7 +10,9 @@ test("createTerraformErrorExplanationItems keeps duplicate next actions render-s
     rawMessage: "AccessDenied",
     summary: "권한이 부족합니다.",
     likelyCause: "현재 권한으로 실행할 수 없습니다.",
-    nextActions: ["권한을 확인하세요.", "권한을 확인하세요."]
+    nextActions: ["권한을 확인하세요.", "권한을 확인하세요."],
+    wellArchitectedGuidance: [],
+    consensusRecommendation: "권한을 확인한 뒤 재검증하세요."
   });
 
   assert.deepEqual(

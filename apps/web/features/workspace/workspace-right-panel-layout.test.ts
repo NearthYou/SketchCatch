@@ -348,30 +348,26 @@ test("pre-deployment check is owned by the deployment tab", () => {
   assert.match(preflightSummaryRule, /\bgap:\s*8px;/);
 });
 
-test("terraform error explanation lives in the terraform code panel only when errors exist", () => {
-  const errorExplanationRule = getCssRule(stylesSource, "terraformErrorExplanationPanel");
-  const errorExplanationListRule = getCssRule(stylesSource, "terraformErrorExplanationList");
-  const errorExplanationResultRule = getCssRule(stylesSource, "terraformErrorExplanationResult");
+test("terraform errors surface as an issues banner and AI resolution lives in the chat dock", () => {
+  const issueBannerRule = getCssRule(stylesSource, "terraformIssueBanner");
+  const aiButtonRule = getCssRule(stylesSource, "terraformDiagnosticAiButton");
 
-  assert.match(terraformPanelSource, /runAiTerraformErrorExplanation/);
-  assert.match(terraformPanelSource, /errorDiagnostics\.length > 0 \? \(/);
-  assert.match(terraformPanelSource, /errorDiagnostics\.map/);
-  assert.match(terraformPanelSource, /terraformErrorExplanationsByKey/);
-  assert.match(terraformPanelSource, /diagnosticExplanation = explanationEntry\?\.explanation/);
-  assert.match(terraformPanelSource, /disabled=\{isExplanationLoading \|\| requestState === "loading"\}/);
-  assert.doesNotMatch(terraformPanelSource, /explainedTerraformErrorKey/);
-  assert.match(terraformPanelSource, /오류를 해석하는 중입니다/);
-  assert.match(terraformPanelSource, /className=\{styles\.terraformErrorExplanationPanel\}/);
-  assert.match(terraformPanelSource, /className=\{styles\.terraformErrorExplanationList\}/);
-  assert.doesNotMatch(terraformPanelSource, /diagnosticToast/);
-  assert.doesNotMatch(terraformPanelSource, /showDiagnosticToast/);
-  assert.doesNotMatch(aiChatDockSource, /runAiTerraformErrorExplanation/);
-  assert.doesNotMatch(aiChatDockSource, /Terraform 오류 설명/);
-  assert.doesNotMatch(stylesSource, /\.terraformDiagnosticToast\s*\{/);
-  assert.match(errorExplanationRule, /\bmax-height:\s*240px;/);
-  assert.match(errorExplanationRule, /\boverflow:\s*auto;/);
-  assert.match(errorExplanationListRule, /\blist-style:\s*none;/);
-  assert.match(errorExplanationResultRule, /\bgrid-column:\s*1 \/ -1;/);
+  assert.doesNotMatch(terraformPanelSource, /runAiTerraformErrorExplanation/);
+  assert.doesNotMatch(terraformPanelSource, /terraformErrorExplanationsByKey/);
+  assert.doesNotMatch(terraformPanelSource, /className=\{styles\.terraformErrorExplanationPanel\}/);
+  assert.match(terraformPanelSource, /className=\{styles\.terraformIssueBanner\}/);
+  assert.match(terraformPanelSource, /Issues 탭으로 이동/);
+  assert.match(componentSource, /readStoredTerraformIssues/);
+  assert.match(componentSource, /markTerraformIssuesStale/);
+  assert.match(componentSource, /mergeTerraformValidationDiagnostics/);
+  assert.match(componentSource, /storeTerraformIssues/);
+  assert.match(componentSource, /<TerraformIssuesPanel issues=\{terraformIssues\}/);
+  assert.match(aiChatDockSource, /runAiTerraformErrorExplanation/);
+  assert.match(aiChatDockSource, /terraform_issue/);
+  assert.match(aiChatDockSource, /wellArchitectedGuidance/);
+  assert.match(aiChatDockSource, /onApplyTerraformIssueFix/);
+  assert.match(issueBannerRule, /\bbackground:\s*#fff7ed;/);
+  assert.match(aiButtonRule, /\bbackground:\s*var\(--bp-blue\);/);
 });
 
 test("terraform editor renders syntax colors and squiggly error underlines", () => {
@@ -542,13 +538,17 @@ test("terraform virtual file validation avoids request bursts and combined-code 
   assert.doesNotMatch(terraformPanelSource, /combineTerraformFiles\(nextFiles\)\.trim\(\)\.length > 0/);
 });
 
-test("terraform editor clears stale diagnostics after local edits", () => {
+test("terraform editor keeps diagnostics visible after local edits", () => {
   const handleCodeChangeIndex = terraformPanelSource.indexOf("function handleCodeChange");
+  const handleCodeChangeEndIndex = terraformPanelSource.indexOf("function handleCodeKeyDown", handleCodeChangeIndex);
+  const handleCodeChangeSource = terraformPanelSource.slice(handleCodeChangeIndex, handleCodeChangeEndIndex);
 
   assert.ok(handleCodeChangeIndex > -1);
-  assert.ok(terraformPanelSource.indexOf("codeVersionRef.current += 1", handleCodeChangeIndex) > handleCodeChangeIndex);
-  assert.ok(terraformPanelSource.indexOf("setDiagnostics([])", handleCodeChangeIndex) > handleCodeChangeIndex);
-  assert.ok(terraformPanelSource.indexOf("onDiagnosticsChange([])", handleCodeChangeIndex) > handleCodeChangeIndex);
+  assert.ok(handleCodeChangeEndIndex > handleCodeChangeIndex);
+  assert.match(handleCodeChangeSource, /codeVersionRef\.current \+= 1/);
+  assert.doesNotMatch(handleCodeChangeSource, /setDiagnostics\(\[\]\)/);
+  assert.doesNotMatch(handleCodeChangeSource, /onDiagnosticsChange\(\[\]\)/);
+  assert.match(componentSource, /markTerraformIssuesStale/);
 });
 
 function readWorkspaceFile(fileName: string): string {

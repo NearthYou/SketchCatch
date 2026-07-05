@@ -32,13 +32,28 @@ import {
   type TerraformLeaveSaveState
 } from "./terraform-leave-save-state";
 import { toDeploymentBaselineFingerprint } from "./terraform-panel-utils";
+import {
+  markTerraformIssuesStale,
+  mergeTerraformValidationDiagnostics,
+  readStoredTerraformIssues,
+  storeTerraformIssues,
+  type TerraformIssueRecord
+} from "./terraform-issues-state";
+import type {
+  TerraformIssueAiRequest,
+  TerraformSafeFixApplyRequest,
+  TerraformSafeFixApplyResult
+} from "./workspace-terraform-ai";
 import type { ResourceWorkspaceView, WorkspaceRightPanelView } from "./workspace-right-panel.types";
 import styles from "./workspace.module.css";
 
 export type WorkspaceRightPanelProps = {
   readonly context: DiagramEditorPanelContext;
+  readonly onTerraformIssueAiRequest: (request: TerraformIssueAiRequest) => void;
+  readonly onTerraformSafeFixApplyResult: (result: TerraformSafeFixApplyResult) => void;
   readonly projectId: string;
   readonly projectName: string;
+  readonly terraformSafeFixApplyRequest: TerraformSafeFixApplyRequest | null;
 };
 
 type PendingTerraformLeaveAction =
@@ -47,7 +62,14 @@ type PendingTerraformLeaveAction =
   | { readonly kind: "resource-settings" }
   | { readonly kind: "replay-click"; readonly target: HTMLElement };
 
-export function WorkspaceRightPanel({ context, projectId, projectName }: WorkspaceRightPanelProps) {
+export function WorkspaceRightPanel({
+  context,
+  onTerraformIssueAiRequest,
+  onTerraformSafeFixApplyResult,
+  projectId,
+  projectName,
+  terraformSafeFixApplyRequest
+}: WorkspaceRightPanelProps) {
   const terraformPanelRef = useRef<TerraformCodePanelHandle | null>(null);
   const terraformViewRef = useRef<HTMLDivElement | null>(null);
   const pendingTerraformLeaveActionRef = useRef<PendingTerraformLeaveAction | null>(null);
@@ -68,7 +90,12 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
   const [terraformLeaveSaveMessage, setTerraformLeaveSaveMessage] = useState("");
   const [terraformSaveRequestId, setTerraformSaveRequestId] = useState(0);
   const [terraformDiscardRequestId, setTerraformDiscardRequestId] = useState(0);
-  const [terraformDiagnostics, setTerraformDiagnostics] = useState<TerraformDiagnostic[]>([]);
+  const [terraformIssues, setTerraformIssues] = useState<TerraformIssueRecord[]>([]);
+  const latestTerraformSafeFixApplyRequestIdRef = useRef<number | null>(null);
+  const terraformDiagnostics = useMemo(
+    () => terraformIssues.map((issue) => issue.diagnostic),
+    [terraformIssues]
+  );
   const hasTerraformIssueErrors = terraformDiagnostics.some((diagnostic) => diagnostic.severity === "error");
   const canOpenTerraformIssuesDuringEdit = terraformDiagnostics.length > 0;
   const currentDeploymentBaselineFingerprint = useMemo(
@@ -84,13 +111,77 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
 
     if (isDirty) {
       setIsDeploymentBaselineDirty(true);
+      setTerraformIssues((currentIssues) => {
+        const nextIssues = markTerraformIssuesStale(currentIssues);
+
+        if (typeof window !== "undefined") {
+          storeTerraformIssues(window.localStorage, projectId, nextIssues);
+        }
+
+        return nextIssues;
+      });
     }
-  }, []);
+  }, [projectId]);
 
   const handleTerraformDiagnosticsChange = useCallback((diagnostics: TerraformDiagnostic[]): void => {
     latestTerraformDiagnosticsRef.current = diagnostics;
-    setTerraformDiagnostics(diagnostics);
-  }, []);
+    setTerraformIssues((currentIssues) => {
+      const nextIssues = mergeTerraformValidationDiagnostics(
+        currentIssues,
+        diagnostics,
+        new Date().toISOString()
+      );
+
+      if (typeof window !== "undefined") {
+        storeTerraformIssues(window.localStorage, projectId, nextIssues);
+      }
+
+      return nextIssues;
+    });
+  }, [projectId]);
+
+  const handleTerraformIssueAiClick = useCallback((issue: TerraformIssueRecord): void => {
+    onTerraformIssueAiRequest({
+      id: Date.now(),
+      issue
+    });
+  }, [onTerraformIssueAiRequest]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const storedIssues = readStoredTerraformIssues(window.localStorage, projectId);
+    latestTerraformDiagnosticsRef.current = storedIssues.map((issue) => issue.diagnostic);
+    setTerraformIssues(storedIssues);
+  }, [projectId]);
+
+  useEffect(() => {
+    if (!terraformSafeFixApplyRequest) {
+      return;
+    }
+
+    const request = terraformSafeFixApplyRequest;
+
+    if (latestTerraformSafeFixApplyRequestIdRef.current === request.id) {
+      return;
+    }
+
+    latestTerraformSafeFixApplyRequestIdRef.current = request.id;
+
+    async function applySafeFix(): Promise<void> {
+      const result = await terraformPanelRef.current?.applyTerraformSafeFix(request.diagnostic);
+
+      onTerraformSafeFixApplyResult({
+        requestId: request.id,
+        applied: result?.applied ?? false,
+        message: result?.message ?? "Terraform 패널이 준비되지 않아 적용하지 못했습니다."
+      });
+    }
+
+    void applySafeFix();
+  }, [onTerraformSafeFixApplyResult, terraformSafeFixApplyRequest]);
 
   const requestTerraformLeave = useCallback((action: PendingTerraformLeaveAction): boolean => {
     if (!hasUnsavedTerraformChanges || skipTerraformLeaveGuardRef.current) {
@@ -480,7 +571,7 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
         />
       </div>
       <div className={styles.rightPanelView} hidden={activeView !== "issues"}>
-        <TerraformIssuesPanel diagnostics={terraformDiagnostics} />
+        <TerraformIssuesPanel issues={terraformIssues} onResolveWithAi={handleTerraformIssueAiClick} />
       </div>
       <div className={styles.rightPanelView} hidden={activeView !== "deployment"}>
         {activeView === "deployment" ? (

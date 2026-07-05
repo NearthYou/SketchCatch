@@ -6,6 +6,11 @@ import { DiagramEditor } from "../diagram-editor";
 import { EMPTY_DIAGRAM } from "../diagram-editor/constants";
 import { WorkspaceAiChatDock } from "./WorkspaceAiChatDock";
 import { WorkspaceRightPanel } from "./WorkspaceRightPanel";
+import type {
+  TerraformIssueAiRequest,
+  TerraformSafeFixApplyRequest,
+  TerraformSafeFixApplyResult
+} from "./workspace-terraform-ai";
 import type { LocalProjectDraft } from "./project-draft-persistence";
 import { shouldFlushProjectDraftBeforePageExit } from "./project-draft-page-exit";
 import {
@@ -74,6 +79,12 @@ export function ProjectWorkspaceDraftManager({
   const [serverSaveState, setServerSaveState] = useState<ProjectServerSaveState>("server-idle");
   const [serverSaveToastVisible, setServerSaveToastVisible] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [terraformIssueAiRequest, setTerraformIssueAiRequest] =
+    useState<TerraformIssueAiRequest | null>(null);
+  const [terraformSafeFixApplyRequest, setTerraformSafeFixApplyRequest] =
+    useState<TerraformSafeFixApplyRequest | null>(null);
+  const [terraformSafeFixApplyResult, setTerraformSafeFixApplyResult] =
+    useState<TerraformSafeFixApplyResult | null>(null);
   const latestDiagramRef = useRef<DiagramJson>(EMPTY_DIAGRAM);
   const localDraftRef = useRef<LocalProjectDraft | null>(null);
   const localSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -384,6 +395,17 @@ export function ProjectWorkspaceDraftManager({
     [clearLocalSaveTimer, localSaveDebounceMs, persistLocalDraftNow]
   );
 
+  const requestTerraformIssueAi = useCallback((request: TerraformIssueAiRequest): void => {
+    setTerraformIssueAiRequest(request);
+  }, []);
+
+  const requestTerraformSafeFixApply = useCallback((diagnostic: TerraformSafeFixApplyRequest["diagnostic"]): void => {
+    setTerraformSafeFixApplyRequest({
+      diagnostic,
+      id: Date.now()
+    });
+  }, []);
+
   if (loadState === "loading") {
     return <WorkspaceNotice title="Project loading" body="DB에 저장된 프로젝트 draft를 불러오는 중입니다." />;
   }
@@ -401,13 +423,26 @@ export function ProjectWorkspaceDraftManager({
     <>
       <DiagramEditor
         floatingPanel={(context) => (
-          <WorkspaceAiChatDock context={context} projectId={projectId} />
+          <WorkspaceAiChatDock
+            context={context}
+            onApplyTerraformIssueFix={requestTerraformSafeFixApply}
+            projectId={projectId}
+            terraformIssueRequest={terraformIssueAiRequest}
+            terraformSafeFixApplyResult={terraformSafeFixApplyResult}
+          />
         )}
         initialDiagram={initialDiagram}
         onDiagramChange={handleDiagramChange}
         projectName={projectName}
         rightPanel={(context) => (
-          <WorkspaceRightPanel context={context} projectId={projectId} projectName={projectName} />
+          <WorkspaceRightPanel
+            context={context}
+            onTerraformIssueAiRequest={requestTerraformIssueAi}
+            onTerraformSafeFixApplyResult={setTerraformSafeFixApplyResult}
+            projectId={projectId}
+            projectName={projectName}
+            terraformSafeFixApplyRequest={terraformSafeFixApplyRequest}
+          />
         )}
         saveStatus={getProjectSaveStatus(localSaveState, serverSaveState)}
       />

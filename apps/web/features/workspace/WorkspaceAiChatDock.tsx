@@ -3,9 +3,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   AiArchitectureDraftResult,
+  AiTerraformErrorExplanationResult,
   ArchitectureGuardrailWarning,
   CreateArchitectureDraftRequest,
-  DesignSimulationResult
+  DesignSimulationResult,
+  TerraformDiagnostic
 } from "@sketchcatch/types";
 import type { FormEvent, KeyboardEvent as ReactKeyboardEvent } from "react";
 import { Send, Sparkles, Trash2, X } from "lucide-react";
@@ -13,6 +15,7 @@ import { getApiErrorMessage } from "../../lib/api-client";
 import type { DiagramEditorPanelContext } from "../diagram-editor";
 import {
   createAiArchitectureDraft,
+  runAiTerraformErrorExplanation,
   runAiDesignSimulation
 } from "./api";
 import { convertArchitectureJsonToDiagramJson } from "./workspace-ai-diagram-adapter";
@@ -45,15 +48,30 @@ import {
 import {
   promptGuideExamples
 } from "./workspace-ai-panel-options";
+import { formatTerraformDiagnosticTitle } from "./terraform-panel-utils";
+import { getTerraformSafeFix } from "./terraform-safe-fixes";
+import type {
+  TerraformIssueAiRequest,
+  TerraformSafeFixApplyResult
+} from "./workspace-terraform-ai";
 import styles from "./workspace.module.css";
 
 export type WorkspaceAiChatDockProps = {
   readonly context: DiagramEditorPanelContext;
+  readonly onApplyTerraformIssueFix: (diagnostic: TerraformDiagnostic) => void;
   readonly projectId: string;
+  readonly terraformIssueRequest: TerraformIssueAiRequest | null;
+  readonly terraformSafeFixApplyResult: TerraformSafeFixApplyResult | null;
 };
 
 type WorkspaceAiChatMessageRole = "assistant" | "user";
-type WorkspaceAiChatMessageKind = "draft" | "error" | "question" | "simulation" | "status";
+type WorkspaceAiChatMessageKind =
+  | "draft"
+  | "error"
+  | "question"
+  | "simulation"
+  | "status"
+  | "terraform_issue";
 type WorkspaceAiChatSelectionMode = "single" | "multiple";
 type WorkspaceAiChatScope = "draft" | "simulation";
 
@@ -68,6 +86,13 @@ type WorkspaceAiChatMessage = {
   readonly suggestions?: readonly string[];
 };
 
+type TerraformIssueResolutionState = {
+  readonly explanation: AiTerraformErrorExplanationResult | null;
+  readonly message: string;
+  readonly request: TerraformIssueAiRequest;
+  readonly state: AiRequestState;
+};
+
 const MAX_CHAT_MESSAGES = 80;
 const STORAGE_KEY_PREFIX = "sketchcatch.workspaceAiChat";
 const DESIGN_SIMULATION_DEFAULTS = {
@@ -75,7 +100,13 @@ const DESIGN_SIMULATION_DEFAULTS = {
   trafficLevel: "normal"
 } as const;
 
-export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockProps) {
+export function WorkspaceAiChatDock({
+  context,
+  onApplyTerraformIssueFix,
+  projectId,
+  terraformIssueRequest,
+  terraformSafeFixApplyResult
+}: WorkspaceAiChatDockProps) {
   const [isOpen, setOpen] = useState(false);
   const [activeChatTab, setActiveChatTab] = useState<WorkspaceAiChatScope>("draft");
   const [composerValue, setComposerValue] = useState("");
@@ -94,6 +125,11 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
     null
   );
   const [designSimulation, setDesignSimulation] = useState<DesignSimulationResult | null>(null);
+  const [terraformIssueResolution, setTerraformIssueResolution] =
+    useState<TerraformIssueResolutionState | null>(null);
+  const [applyingTerraformFixRequestId, setApplyingTerraformFixRequestId] = useState<number | null>(
+    null
+  );
   const [draftState, setDraftState] = useState<AiRequestState>("idle");
   const [simulationState, setSimulationState] = useState<AiRequestState>("idle");
   const [draftErrorMessage, setDraftErrorMessage] = useState("");
@@ -101,6 +137,8 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
   const [simulationFingerprint, setSimulationFingerprint] = useState<string | null>(null);
   const transcriptRef = useRef<HTMLDivElement | null>(null);
   const loadedProjectIdRef = useRef(projectId);
+  const latestTerraformIssueRequestIdRef = useRef<number | null>(null);
+  const latestTerraformSafeFixResultRequestIdRef = useRef<number | null>(null);
   const boardSnapshot = useMemo(
     () => createWorkspaceAiBoardSnapshot(context.diagram),
     [context.diagram]
@@ -141,6 +179,93 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
       top: transcriptRef.current.scrollHeight
     });
   }, [activeChatTab, visibleMessages, draft, designSimulation]);
+
+  useEffect(() => {
+    if (!terraformIssueRequest) {
+      return;
+    }
+
+    const request = terraformIssueRequest;
+
+    if (latestTerraformIssueRequestIdRef.current === request.id) {
+      return;
+    }
+
+    latestTerraformIssueRequestIdRef.current = request.id;
+    setOpen(true);
+    setActiveChatTab("draft");
+    setTerraformIssueResolution({
+      explanation: null,
+      message: "",
+      request,
+      state: "loading"
+    });
+    appendAssistantMessage(
+      "terraform_issue",
+      `Terraform 이슈를 분석합니다: ${formatTerraformDiagnosticTitle(request.issue.diagnostic)}`,
+      [],
+      "single",
+      "draft"
+    );
+
+    async function explainIssue(): Promise<void> {
+      const { diagnostic } = request.issue;
+
+      try {
+        const explanation = await runAiTerraformErrorExplanation({
+          rawMessage: formatTerraformIssueRawMessage(diagnostic),
+          relatedResourceId: diagnostic.resourceAddress,
+          stage: "validate"
+        });
+
+        setTerraformIssueResolution({
+          explanation,
+          message: "",
+          request,
+          state: "idle"
+        });
+        appendAssistantMessage(
+          "terraform_issue",
+          `Terraform 이슈 원인: ${explanation.summary}`,
+          [],
+          "single",
+          "draft"
+        );
+      } catch (error) {
+        const message = getApiErrorMessage(error, "Terraform 이슈 AI 해결 가이드를 불러오지 못했습니다.");
+
+        setTerraformIssueResolution({
+          explanation: null,
+          message,
+          request,
+          state: "error"
+        });
+        appendAssistantMessage("error", message, [], "single", "draft");
+      }
+    }
+
+    void explainIssue();
+  }, [terraformIssueRequest]);
+
+  useEffect(() => {
+    if (!terraformSafeFixApplyResult) {
+      return;
+    }
+
+    if (latestTerraformSafeFixResultRequestIdRef.current === terraformSafeFixApplyResult.requestId) {
+      return;
+    }
+
+    latestTerraformSafeFixResultRequestIdRef.current = terraformSafeFixApplyResult.requestId;
+    setApplyingTerraformFixRequestId(null);
+    appendAssistantMessage(
+      terraformSafeFixApplyResult.applied ? "terraform_issue" : "error",
+      terraformSafeFixApplyResult.message,
+      [],
+      "single",
+      "draft"
+    );
+  }, [terraformSafeFixApplyResult]);
 
   function appendAssistantMessage(
     kind: WorkspaceAiChatMessageKind,
@@ -185,6 +310,8 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
     setDraftFollowUpSession(null);
     setDraftErrorMessage("");
     setDraftState("idle");
+    setTerraformIssueResolution(null);
+    setApplyingTerraformFixRequestId(null);
     context.setPreviewDiagram(null);
   }
 
@@ -648,6 +775,51 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
           <WorkspaceAiRequestMessage state={simulationState} message={simulationErrorMessage} />
         ) : null}
 
+        {activeChatTab === "draft" && terraformIssueResolution !== null ? (
+          <article className={styles.aiChatDraftCard}>
+            <div className={styles.aiResultHeader}>
+              <h3>{formatTerraformDiagnosticTitle(terraformIssueResolution.request.issue.diagnostic)}</h3>
+              <span>Terraform Issue</span>
+            </div>
+            <p className={styles.terraformIssueRawMessage}>
+              {terraformIssueResolution.request.issue.diagnostic.message}
+            </p>
+            {terraformIssueResolution.request.issue.isStale ? (
+              <p className={styles.aiStaleNotice}>Terraform 코드가 편집되어 재검증이 필요합니다.</p>
+            ) : null}
+            {terraformIssueResolution.state === "loading" ? (
+              <WorkspaceAiRequestMessage state="loading" message="" />
+            ) : null}
+            {terraformIssueResolution.state === "error" ? (
+              <WorkspaceAiRequestMessage state="error" message={terraformIssueResolution.message} />
+            ) : null}
+            {terraformIssueResolution.explanation ? (
+              <TerraformIssueExplanationCard explanation={terraformIssueResolution.explanation} />
+            ) : null}
+            <div className={styles.aiActionRow}>
+              <button
+                className={styles.aiPrimaryButton}
+                disabled={
+                  !getTerraformSafeFix(terraformIssueResolution.request.issue.diagnostic).applicable ||
+                  applyingTerraformFixRequestId === terraformIssueResolution.request.id
+                }
+                onClick={() => {
+                  setApplyingTerraformFixRequestId(terraformIssueResolution.request.id);
+                  onApplyTerraformIssueFix(terraformIssueResolution.request.issue.diagnostic);
+                }}
+                type="button"
+              >
+                {applyingTerraformFixRequestId === terraformIssueResolution.request.id ? "적용 중" : "적용"}
+              </button>
+              <button className={styles.aiSecondaryButton} disabled type="button">
+                {getTerraformSafeFix(terraformIssueResolution.request.issue.diagnostic).applicable
+                  ? "자동 적용 가능"
+                  : "수동 수정 필요"}
+              </button>
+            </div>
+          </article>
+        ) : null}
+
         {activeChatTab === "draft" && draft !== null ? (
           <article className={styles.aiChatDraftCard}>
             <div className={styles.aiResultHeader}>
@@ -736,6 +908,41 @@ export function createWorkspaceAiChatStorageKey(projectId: string): string {
   return `${STORAGE_KEY_PREFIX}.${projectId}`;
 }
 
+function TerraformIssueExplanationCard({
+  explanation
+}: {
+  readonly explanation: AiTerraformErrorExplanationResult;
+}) {
+  return (
+    <div>
+      <dl className={styles.terraformIssueGuidanceList}>
+        <div>
+          <dt>원인</dt>
+          <dd>{explanation.likelyCause}</dd>
+        </div>
+        <div>
+          <dt>권고</dt>
+          <dd>{explanation.consensusRecommendation}</dd>
+        </div>
+      </dl>
+      <div className={styles.terraformIssuePillars}>
+        {explanation.wellArchitectedGuidance.map((guidance) => (
+          <section key={guidance.pillar}>
+            <strong>{guidance.title}</strong>
+            <p>{guidance.observation}</p>
+            <span>{guidance.recommendation}</span>
+          </section>
+        ))}
+      </div>
+      <ul className={styles.terraformIssueActions}>
+        {explanation.nextActions.map((action) => (
+          <li key={action}>{action}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function createInitialChatMessages(): WorkspaceAiChatMessage[] {
   return [
     createChatMessage(
@@ -762,6 +969,10 @@ function createQuestionFromDraftError(message: string): string | null {
   }
 
   return null;
+}
+
+function formatTerraformIssueRawMessage(diagnostic: TerraformDiagnostic): string {
+  return `${diagnostic.code ?? "terraform.unknown"}\n${formatTerraformDiagnosticTitle(diagnostic)}\n${diagnostic.message}`;
 }
 
 function createDraftSafetyWarnings(
@@ -888,6 +1099,7 @@ function isWorkspaceAiChatMessage(value: unknown): value is WorkspaceAiChatMessa
       candidate.kind === "error" ||
       candidate.kind === "question" ||
       candidate.kind === "simulation" ||
-      candidate.kind === "status")
+      candidate.kind === "status" ||
+      candidate.kind === "terraform_issue")
   );
 }
