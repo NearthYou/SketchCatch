@@ -146,7 +146,6 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
   const speechRecognitionRef = useRef<BrowserSpeechRecognition | null>(null);
   const voiceInputBaseRef = useRef("");
   const voiceNoSpeechTimerRef = useRef<number | null>(null);
-  const ignoreNextVoiceAbortErrorRef = useRef(false);
   const loadedProjectIdRef = useRef(projectId);
   const boardSnapshot = useMemo(
     () => createWorkspaceAiBoardSnapshot(context.diagram),
@@ -194,8 +193,7 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
 
     return () => {
       clearVoiceNoSpeechTimer();
-      speechRecognitionRef.current?.abort();
-      speechRecognitionRef.current = null;
+      releaseSpeechRecognition("abort");
     };
   }, []);
 
@@ -573,10 +571,9 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
     }
 
     clearVoiceNoSpeechTimer();
-    speechRecognitionRef.current?.abort();
+    releaseSpeechRecognition("abort");
 
     const recognition = new SpeechRecognitionConstructor();
-    ignoreNextVoiceAbortErrorRef.current = false;
     voiceInputBaseRef.current = composerValue;
     recognition.lang = "ko-KR";
     recognition.continuous = false;
@@ -595,12 +592,7 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
     recognition.onerror = (event) => {
       clearVoiceNoSpeechTimer();
       setVoiceListening(false);
-
-      if (event.error === "aborted" && ignoreNextVoiceAbortErrorRef.current) {
-        ignoreNextVoiceAbortErrorRef.current = false;
-        return;
-      }
-
+      speechRecognitionRef.current = null;
       setVoiceStatusMessage(getVoiceRecognitionErrorMessage(event.error));
     };
     recognition.onend = () => {
@@ -618,9 +610,7 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
       setVoiceStatusMessage("음성 인식 중입니다.");
       recognition.start();
       voiceNoSpeechTimerRef.current = window.setTimeout(() => {
-        ignoreNextVoiceAbortErrorRef.current = true;
-        speechRecognitionRef.current?.abort();
-        speechRecognitionRef.current = null;
+        releaseSpeechRecognition("abort");
         setVoiceListening(false);
         setVoiceStatusMessage("8초 동안 음성이 들리지 않아 음성 인식을 중지했습니다.");
       }, VOICE_NO_SPEECH_TIMEOUT_MS);
@@ -633,10 +623,21 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
 
   function stopVoiceRecognition(): void {
     clearVoiceNoSpeechTimer();
-    speechRecognitionRef.current?.stop();
-    speechRecognitionRef.current = null;
+    releaseSpeechRecognition("stop");
     setVoiceListening(false);
     setVoiceStatusMessage("");
+  }
+
+  function releaseSpeechRecognition(action: "abort" | "stop"): void {
+    const recognition = speechRecognitionRef.current;
+
+    if (recognition === null) {
+      return;
+    }
+
+    clearSpeechRecognitionHandlers(recognition);
+    recognition[action]();
+    speechRecognitionRef.current = null;
   }
 
   function clearVoiceNoSpeechTimer(): void {
@@ -939,6 +940,13 @@ function getBrowserSpeechRecognitionConstructor(): BrowserSpeechRecognitionConst
   const speechWindow = window as SpeechRecognitionWindow;
 
   return speechWindow.SpeechRecognition ?? speechWindow.webkitSpeechRecognition;
+}
+
+function clearSpeechRecognitionHandlers(recognition: BrowserSpeechRecognition): void {
+  recognition.onend = null;
+  recognition.onerror = null;
+  recognition.onresult = null;
+  recognition.onspeechstart = null;
 }
 
 function getSpeechRecognitionTranscript(event: BrowserSpeechRecognitionEvent): string {

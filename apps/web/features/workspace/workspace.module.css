@@ -3708,6 +3708,10 @@
     grid-template-columns: minmax(0, 1fr) auto;
   }
 
+  .aiChatVoiceButton {
+    justify-self: end;
+  }
+
   .aiChatPromptGuide {
     grid-template-columns: 1fr;
   }
