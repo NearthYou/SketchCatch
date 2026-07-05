@@ -13,6 +13,25 @@
 - Highest priority unfinished harness feature: `HARNESS-007`
 - Current blocker: none
 
+### 2026-07-05 - Terraform 영역 리소스 Ticket 3 리뷰 보강
+
+- Goal: ASG area endpoint edge z-index 리뷰 피드백에 따라 선택된 edge가 비선택 area endpoint edge보다 위에 표시되게 한다.
+- Completed:
+  - `toFlowEdges`가 area endpoint를 가진 edge를 area background 위에 올리되, 선택된 edge에는 더 높은 z-index 가중치를 주도록 보정했다.
+  - 같은 ASG area endpoint를 공유하는 edge 중 선택된 edge가 비선택 edge보다 높은 z-index를 갖는 회귀 테스트를 추가했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits.
+  - Red before fix: `pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/flow-mappers.test.ts` failed because selected and unselected area endpoint edges had the same z-index.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/flow-mappers.test.ts` - passed.
+  - `pnpm --filter @sketchcatch/web typecheck` - passed.
+  - `pnpm --filter @sketchcatch/web lint` - passed.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `pnpm build` - passed.
+- Known risks:
+  - `next build` changed `apps/web/next-env.d.ts`; the generated import was restored before finishing.
+  - 커밋은 사용자 요청에 따라 만들지 않았다.
+
 ### 2026-07-05 - Terraform 영역 리소스 Ticket 3
 
 - Goal: `docs/jh/001_테라폼영역리소스동기화티켓계획_JH.md`의 Ticket 3 범위에 맞춰 `aws_autoscaling_group`을 Terraform resource identity를 유지한 visual area node로 동작하게 한다.
