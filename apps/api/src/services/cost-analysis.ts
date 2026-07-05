@@ -143,6 +143,10 @@ async function estimateResourceCost(
   }
 
   if (node.type === "RDS") {
+    if (getTerraformResourceType(node) === "aws_db_snapshot") {
+      return createZeroCostEstimate(node);
+    }
+
     return estimateRdsCost(node, input, options);
   }
 
@@ -543,6 +547,7 @@ function isApplicationLoadBalancer(node: ResourceNode): boolean {
   const serviceName = readServiceName(node.config);
 
   return (
+    serviceName === "aws_lb" ||
     serviceName.includes("application_load_balancer") ||
     serviceName.includes("load_balancer") ||
     serviceName.includes("alb")
@@ -559,7 +564,8 @@ function isLoadBalancerEstimate(resource: ResourceCostEstimate): boolean {
 
 function readServiceName(config: ResourceConfig): string {
   return (
-    getTextConfig(config, ["service", "terraformType", "resourceType", "type"])?.toLowerCase() ?? ""
+    getTextConfig(config, ["service", "terraformResourceType", "terraformType", "resourceType", "type"])?.toLowerCase() ??
+    ""
   );
 }
 
