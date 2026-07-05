@@ -2,6 +2,40 @@
 
 이 파일은 최신 세션 하나를 다음 세션이 빠르게 이어받기 위한 압축본이다. 누적 이력은 `agent-progress.md`에 남긴다.
 
+## 2026-07-05 최신 핸드오프 - Terraform 영역 리소스 Ticket 4 범위 축소
+
+### 현재 상태
+
+- 현재 브랜치: `Feat/jh/171-legacy-diagramjson-호환-마이그레이션과-terraform-preview-stale-방어`
+- 사용자 요청: 기존 draft 보존 전제의 legacy migration 구현은 과하므로, Ticket 4를 기존 DB draft/IndexedDB 초기화와 Terraform Preview stale 최소 방어로 줄인다.
+- tracked diff는 `apps/web/features/workspace/TerraformCodePanel.tsx`, `apps/web/features/workspace/workspace-right-panel-layout.test.ts`, `agent-progress.md`, `session-handoff.md` 중심이다.
+- `docs/jh/001_테라폼영역리소스동기화티켓계획_JH.md`도 수정됐지만 `docs/jh/`가 `.gitignore`에 포함되어 tracked diff에는 나오지 않는다.
+
+### 완료된 것
+
+- `metadata.awsRegion` canonical rollback, shared/API legacy normalization helper, DB migration, Web IndexedDB migration 구현을 범위 밖으로 정리했다.
+- Terraform panel이 마지막 성공 Preview fingerprint와 현재 Diagram fingerprint를 비교해 stale 상태를 표시하게 했다.
+- Preview 생성 실패 시 이전 Terraform code가 현재 Diagram과 동기화된 것처럼 보이지 않도록 실패 메시지와 snapshot summary를 분리했다.
+- 수동 편집 중 자동 refresh가 스킵되어도 Diagram 변경이 Preview에 반영되지 않았음을 표시하게 했다.
+- Ticket 4 문서를 "기존 DB draft 초기화 + IndexedDB `sketchcatch-drafts` 초기화 + stale 방어"로 갱신했다.
+
+### 검증된 것
+
+- `pnpm harness:check` - passed before edits.
+- `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-right-panel-layout.test.ts --test-name-pattern "terraform preview failures|terraform status counts"` - passed.
+- `pnpm --filter @sketchcatch/web exec tsx --test features/parameter-input/region-node-metadata.test.ts` - passed.
+- `pnpm harness:check` - passed after edits.
+- `pnpm lint` - passed.
+- `pnpm typecheck` - passed after reverting generated `apps/web/next-env.d.ts`.
+- `pnpm build` - passed; Next.js generated `apps/web/next-env.d.ts` was reverted afterward.
+- `git diff --check` - passed.
+
+### 다음 행동
+
+- 실제 대상 project의 DB draft를 초기화한다.
+- 테스트 브라우저 profile의 IndexedDB `sketchcatch-drafts`를 초기화한다. DB만 비우면 local draft가 다시 복원될 수 있다.
+- 필요하면 브랜치명을 현재 축소 scope에 맞춰 새로 파거나 rename한다. 현재 브랜치명에는 legacy migration 문구가 남아 있다.
+
 ## 2026-07-05 최신 핸드오프 - Terraform 영역 리소스 Ticket 3 리뷰 보강
 
 ### 현재 상태
