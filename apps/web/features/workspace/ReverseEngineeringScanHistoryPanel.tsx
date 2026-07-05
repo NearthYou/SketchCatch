@@ -6,6 +6,7 @@ export type ReverseEngineeringScanHistoryPanelProps = {
   readonly canRescan: boolean;
   readonly isLoading: boolean;
   readonly isStaleResult: boolean;
+  readonly onCancelScan: (scanId: string) => void;
   readonly onDeleteScan: (scanId: string) => void;
   readonly onOpenScan: (scanId: string) => void;
   readonly onRescan: () => void;
@@ -18,6 +19,7 @@ export function ReverseEngineeringScanHistoryPanel({
   canRescan,
   isLoading,
   isStaleResult,
+  onCancelScan,
   onDeleteScan,
   onOpenScan,
   onRescan,
@@ -49,6 +51,16 @@ export function ReverseEngineeringScanHistoryPanel({
               <span>
                 {scan.status} · {scan.region} · {scan.resourceTypes.join(", ")}
               </span>
+              {scan.status === "running" ? (
+                <button
+                  className={styles.deploymentSecondaryButton}
+                  disabled={isLoading}
+                  onClick={() => onCancelScan(scan.id)}
+                  type="button"
+                >
+                  취소
+                </button>
+              ) : null}
               <button
                 className={styles.deploymentSecondaryButton}
                 disabled={isLoading || activeScanId === scan.id}

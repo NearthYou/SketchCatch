@@ -59,6 +59,8 @@ test("Reverse Engineering panel exposes cancel and delete scan actions", () => {
   assert.match(panelSource, /cancelReverseEngineeringScan/);
   assert.match(panelSource, /취소 요청을 보냈습니다/);
   assert.match(scanHistoryPanelSource, /onDeleteScan/);
+  assert.match(scanHistoryPanelSource, /onCancelScan/);
+  assert.match(scanHistoryPanelSource, /scan\.status === "running"/);
   assert.match(scanHistoryPanelSource, /삭제/);
 });
 

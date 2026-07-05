@@ -152,15 +152,15 @@ export function ReverseEngineeringPanel({ context, projectId }: ReverseEngineeri
   }
 
   // 사용자가 실행 중인 scan을 멈추고 싶을 때 서버에 안전한 취소 요청만 보냅니다.
-  async function cancelActiveScan(): Promise<void> {
-    if (!activeScanId || !selectedProjectId) {
+  async function cancelActiveScan(scanId = activeScanId): Promise<void> {
+    if (!scanId || !selectedProjectId) {
       return;
     }
 
     try {
       const scan = await cancelReverseEngineeringScan({
         projectId: selectedProjectId,
-        scanId: activeScanId
+        scanId
       });
 
       rememberCompletedScan(scan);
@@ -286,6 +286,7 @@ export function ReverseEngineeringPanel({ context, projectId }: ReverseEngineeri
           canRescan={canStartScan}
           isLoading={scanHistoryState === "loading" || scanState === "loading"}
           isStaleResult={isStaleScanResult}
+          onCancelScan={(scanId) => void cancelActiveScan(scanId)}
           onDeleteScan={(scanId) => void deleteSavedScan(scanId)}
           onOpenScan={(scanId) => void openHistoricalScan(scanId)}
           onRescan={() => void runScan()}
