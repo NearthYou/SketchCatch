@@ -1,9 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import type {
-  AwsConnection,
-  Project,
   ResourceType,
   ReverseEngineeringScanLogLine,
   ReverseEngineeringScanResponse
@@ -12,8 +10,7 @@ import type { DiagramEditorPanelContext } from "../diagram-editor";
 import {
   createArchitectureSnapshot,
   createReverseEngineeringScan,
-  listAwsConnections,
-  listProjects,
+  getReverseEngineeringScan,
   listReverseEngineeringScanLogs
 } from "./api";
 import {
@@ -21,53 +18,61 @@ import {
   createReverseEngineeringBoardComparison,
   type ReverseEngineeringBoardApplicationMode
 } from "./reverse-engineering-board-application";
+import { REVERSE_ENGINEERING_RESOURCE_TYPES } from "./reverse-engineering-resource-types";
 import {
   ReverseEngineeringResultPanel,
   type ReverseEngineeringApplyState
 } from "./ReverseEngineeringResultPanel";
 import { ReverseEngineeringScanCriteriaForm } from "./ReverseEngineeringScanCriteriaForm";
+import { ReverseEngineeringScanHistoryPanel } from "./ReverseEngineeringScanHistoryPanel";
+import { useReverseEngineeringOptions } from "./useReverseEngineeringOptions";
+import { useReverseEngineeringScanHistory } from "./useReverseEngineeringScanHistory";
 import { convertDiagramJsonToArchitectureJson } from "./workspace-ai-diagram-adapter";
 import styles from "./workspace.module.css";
 
-export type ReverseEngineeringPanelProps = {
-  readonly context: DiagramEditorPanelContext;
-  readonly projectId: string;
-};
+export type ReverseEngineeringPanelProps = { readonly context: DiagramEditorPanelContext; readonly projectId: string };
 
 type RequestState = "idle" | "loading" | "error";
 
-const REVERSE_ENGINEERING_RESOURCE_TYPES: ResourceType[] = [
-  "VPC",
-  "SUBNET",
-  "INTERNET_GATEWAY",
-  "ROUTE_TABLE",
-  "SECURITY_GROUP",
-  "EC2",
-  "RDS",
-  "S3"
-];
-
 // 기존 AWS 읽어오기 화면의 상태와 버튼 흐름을 관리합니다.
 export function ReverseEngineeringPanel({ context, projectId }: ReverseEngineeringPanelProps) {
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [awsConnections, setAwsConnections] = useState<AwsConnection[]>([]);
-  const [selectedProjectId, setSelectedProjectId] = useState(projectId);
-  const [selectedAwsConnectionId, setSelectedAwsConnectionId] = useState("");
   const [selectedResourceTypes, setSelectedResourceTypes] = useState<ResourceType[]>(
     REVERSE_ENGINEERING_RESOURCE_TYPES
   );
-  const [loadState, setLoadState] = useState<RequestState>("loading");
   const [scanState, setScanState] = useState<RequestState>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [scanResponse, setScanResponse] = useState<ReverseEngineeringScanResponse | null>(null);
   const [logs, setLogs] = useState<ReverseEngineeringScanLogLine[]>([]);
   const [applyState, setApplyState] = useState<ReverseEngineeringApplyState>("idle");
   const [applyMessage, setApplyMessage] = useState<string | null>(null);
-
-  const verifiedAwsConnections = useMemo(
-    () => awsConnections.filter((connection) => connection.status === "verified"),
-    [awsConnections]
-  );
+  const handleRequestError = useCallback((error: unknown) => {
+    setErrorMessage(toErrorMessage(error));
+  }, []);
+  const {
+    loadOptions,
+    loadState,
+    projects,
+    selectedAwsConnectionId,
+    selectedProjectId,
+    setSelectedAwsConnectionId,
+    setSelectedProjectId,
+    verifiedAwsConnections
+  } = useReverseEngineeringOptions({
+    initialProjectId: projectId,
+    onError: handleRequestError
+  });
+  const {
+    activeScanId,
+    isStaleScanResult,
+    rememberCompletedScan,
+    scanHistory,
+    scanHistoryState,
+    setActiveScanId
+  } = useReverseEngineeringScanHistory({
+    onError: handleRequestError,
+    scanResponse,
+    selectedProjectId
+  });
 
   const selectedProject = projects.find((project) => project.id === selectedProjectId);
   const selectedAwsConnection = verifiedAwsConnections.find(
@@ -89,47 +94,6 @@ export function ReverseEngineeringPanel({ context, projectId }: ReverseEngineeri
       result: scanResponse.result
     });
   }, [context.diagram, scanResponse]);
-
-  // 프로젝트와 검증된 AWS 연결 목록을 불러와 스캔 선택지를 채웁니다.
-  const loadOptions = useCallback(async () => {
-    setLoadState("loading");
-    setErrorMessage(null);
-
-    try {
-      const [nextProjects, nextAwsConnections] = await Promise.all([
-        listProjects(),
-        listAwsConnections()
-      ]);
-      const nextVerifiedAwsConnections = nextAwsConnections.filter(
-        (connection) => connection.status === "verified"
-      );
-
-      setProjects(nextProjects);
-      setAwsConnections(nextAwsConnections);
-      setSelectedProjectId((currentProjectId) => {
-        const projectStillExists = nextProjects.some((project) => project.id === currentProjectId);
-        return projectStillExists ? currentProjectId : nextProjects[0]?.id ?? projectId;
-      });
-      setSelectedAwsConnectionId((currentAwsConnectionId) => {
-        const connectionStillExists = nextVerifiedAwsConnections.some(
-          (connection) => connection.id === currentAwsConnectionId
-        );
-
-        return connectionStillExists
-          ? currentAwsConnectionId
-          : nextVerifiedAwsConnections[0]?.id ?? "";
-      });
-      setLoadState("idle");
-    } catch (error) {
-      setLoadState("error");
-      setErrorMessage(toErrorMessage(error));
-    }
-  }, [projectId]);
-
-  useEffect(() => {
-    void loadOptions();
-  }, [loadOptions]);
-
   // 사용자가 가져올 AWS 리소스 종류를 켜고 끕니다.
   function toggleResourceType(resourceType: ResourceType): void {
     setSelectedResourceTypes((currentResourceTypes) =>
@@ -166,6 +130,7 @@ export function ReverseEngineeringPanel({ context, projectId }: ReverseEngineeri
       });
 
       setScanResponse(response);
+      rememberCompletedScan(response.scan);
       setLogs(nextLogs);
       if (response.result) {
         const application = createReverseEngineeringBoardApplication({
@@ -175,6 +140,44 @@ export function ReverseEngineeringPanel({ context, projectId }: ReverseEngineeri
         });
 
         context.setPreviewDiagram(application.previewDiagram);
+      }
+      setScanState("idle");
+    } catch (error) {
+      setScanState("error");
+      setErrorMessage(toErrorMessage(error));
+    }
+  }
+
+  // 저장된 스캔 기록을 다시 열고, 보드에는 실제 적용이 아닌 미리보기만 띄웁니다.
+  async function openHistoricalScan(scanId: string): Promise<void> {
+    setScanState("loading");
+    setErrorMessage(null);
+    setApplyMessage(null);
+    setApplyState("idle");
+
+    try {
+      const response = await getReverseEngineeringScan({
+        projectId: selectedProjectId,
+        scanId
+      });
+      const nextLogs = await listReverseEngineeringScanLogs({
+        projectId: selectedProjectId,
+        scanId
+      });
+
+      setScanResponse(response);
+      setActiveScanId(response.scan.id);
+      setLogs(nextLogs);
+      if (response.result) {
+        const application = createReverseEngineeringBoardApplication({
+          currentDiagram: context.diagram,
+          mode: "replace",
+          result: response.result
+        });
+
+        context.setPreviewDiagram(application.previewDiagram);
+      } else {
+        context.setPreviewDiagram(null);
       }
       setScanState("idle");
     } catch (error) {
@@ -235,6 +238,16 @@ export function ReverseEngineeringPanel({ context, projectId }: ReverseEngineeri
           selectedResourceTypes={selectedResourceTypes}
         />
         {errorMessage ? <p className={styles.deploymentError}>{errorMessage}</p> : null}
+
+        <ReverseEngineeringScanHistoryPanel
+          activeScanId={activeScanId}
+          canRescan={canStartScan}
+          isLoading={scanHistoryState === "loading" || scanState === "loading"}
+          isStaleResult={isStaleScanResult}
+          onOpenScan={(scanId) => void openHistoricalScan(scanId)}
+          onRescan={() => void runScan()}
+          scans={scanHistory}
+        />
 
         {scanResponse?.result && comparison ? (
           <ReverseEngineeringResultPanel

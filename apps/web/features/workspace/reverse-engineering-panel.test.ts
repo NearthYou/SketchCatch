@@ -7,17 +7,20 @@ const panelSource = readWorkspaceFile("ReverseEngineeringPanel.tsx");
 const findingsPanelSource = readWorkspaceFile("ReverseEngineeringFindingsPanel.tsx");
 const importPanelSource = readWorkspaceFile("ReverseEngineeringImportSuggestionsPanel.tsx");
 const resultPanelSource = readWorkspaceFile("ReverseEngineeringResultPanel.tsx");
+const resourceTypesSource = readWorkspaceFile("reverse-engineering-resource-types.ts");
+const scanHistoryPanelSource = readWorkspaceFile("ReverseEngineeringScanHistoryPanel.tsx");
+const scanHistoryHookSource = readWorkspaceFile("useReverseEngineeringScanHistory.ts");
 const rightPanelSource = readWorkspaceFile("WorkspaceRightPanel.tsx");
 
 test("Reverse Engineering panel exposes all grilling resource filters by default", () => {
-  assert.match(panelSource, /"VPC"/);
-  assert.match(panelSource, /"SUBNET"/);
-  assert.match(panelSource, /"INTERNET_GATEWAY"/);
-  assert.match(panelSource, /"ROUTE_TABLE"/);
-  assert.match(panelSource, /"SECURITY_GROUP"/);
-  assert.match(panelSource, /"EC2"/);
-  assert.match(panelSource, /"RDS"/);
-  assert.match(panelSource, /"S3"/);
+  assert.match(resourceTypesSource, /"VPC"/);
+  assert.match(resourceTypesSource, /"SUBNET"/);
+  assert.match(resourceTypesSource, /"INTERNET_GATEWAY"/);
+  assert.match(resourceTypesSource, /"ROUTE_TABLE"/);
+  assert.match(resourceTypesSource, /"SECURITY_GROUP"/);
+  assert.match(resourceTypesSource, /"EC2"/);
+  assert.match(resourceTypesSource, /"RDS"/);
+  assert.match(resourceTypesSource, /"S3"/);
 });
 
 test("Reverse Engineering result stays preview-only until the user applies it", () => {
@@ -40,6 +43,14 @@ test("Reverse Engineering result shows risks, partial scan errors, and import ha
   assert.match(importPanelSource, /전체 복사/);
   assert.match(importPanelSource, /Git\/CI\/CD handoff 준비/);
   assert.match(resultPanelSource, /analysisExclusions/);
+});
+
+test("Reverse Engineering panel exposes scan history, stale warning, and rescan action", () => {
+  assert.match(scanHistoryHookSource, /listReverseEngineeringScans/);
+  assert.match(panelSource, /getReverseEngineeringScan/);
+  assert.match(scanHistoryPanelSource, /스캔 기록/);
+  assert.match(scanHistoryPanelSource, /이전 스캔 결과입니다/);
+  assert.match(scanHistoryPanelSource, /다시 스캔/);
 });
 
 function readWorkspaceFile(fileName: string): string {
