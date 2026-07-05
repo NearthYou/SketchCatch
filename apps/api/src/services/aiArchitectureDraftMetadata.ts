@@ -22,6 +22,9 @@ export function applyGuardrailMetadata(
     metadata: {
       ...draft.metadata,
       selectedDraftPattern: resolution.selectedDraftPattern,
+      architectureIntent: resolution.intent,
+      servicePurpose: resolution.servicePurpose,
+      capabilities: resolution.capabilities,
       requirementFacts: resolution.requirementFacts,
       operatingProfile: resolution.operatingProfile,
       guardrailWarnings,

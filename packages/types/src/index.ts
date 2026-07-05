@@ -776,6 +776,9 @@ export type AiResultMetadata = {
   assumptions: string[];
   explanations: string[];
   selectedDraftPattern?: ArchitectureDraftPattern;
+  architectureIntent?: ArchitectureIntent;
+  servicePurpose?: ArchitectureServicePurpose;
+  capabilities?: ArchitectureCapability[];
   requirementFacts?: ArchitectureRequirementFact[];
   operatingProfile?: ArchitectureDraftOperatingProfile;
   guardrailWarnings?: ArchitectureGuardrailWarning[];
@@ -787,6 +790,41 @@ export type ArchitectureDraftPattern =
   | "backend_with_db"
   | "server_storage"
   | "serverless_function";
+
+export type ArchitectureServicePurpose =
+  | "landing_page"
+  | "file_upload_service"
+  | "auth_web_service"
+  | "reservation_service"
+  | "content_board"
+  | "api_backend"
+  | "data_storage"
+  | "unknown";
+
+export type ArchitectureCapability =
+  | "static_delivery"
+  | "file_upload"
+  | "authentication"
+  | "relational_data"
+  | "admin_workflow"
+  | "public_api"
+  | "private_user_data"
+  | "media_storage";
+
+export type ArchitectureIntentConstraints = {
+  budget?: ArchitectureDraftBudgetLevel;
+  traffic?: "small" | "growth";
+  security?: "basic" | "sensitive";
+  computePreference?: "ec2" | "serverless" | "unspecified";
+};
+
+export type ArchitectureIntent = {
+  servicePurpose: ArchitectureServicePurpose;
+  capabilities: ArchitectureCapability[];
+  constraints: ArchitectureIntentConstraints;
+  confidence: number;
+  missingQuestions: string[];
+};
 
 export type ArchitectureGuardrailWarningCode =
   | "low_budget_rds_cost"

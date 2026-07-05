@@ -94,7 +94,7 @@ export function WorkspaceAiPanel({ context }: WorkspaceAiPanelProps) {
       return;
     }
 
-    context.applyDiagramJson(context.previewDiagram ?? convertArchitectureJsonToDiagramJson(draft.architectureJson));
+    context.applyDiagramJson(convertArchitectureJsonToDiagramJson(draft.architectureJson));
     requestImmediateDiagramSave();
     setDraft(null);
     setDesignSimulation(null);

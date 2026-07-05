@@ -1,3 +1,57 @@
+# 2026-07-05 - AI 초안 네트워크 리소스 가지치기와 레이아웃 겹침 보정
+
+- Goal: 예약/로그인/게시판 같은 단일 EC2 백엔드 초안에서 실제 workload가 없는 public subnet, 두 번째 app subnet, route/IGW 노드를 만들지 않고, subnet/security group/database 카드가 겹치지 않게 한다.
+- Completed:
+  - backend network boundary를 VPC + 실제 필요한 private app subnet만 생성하도록 줄였다.
+  - 단일 EC2 백엔드에서는 `public-subnet-a/b`, `private-app-subnet-b`, `internet-gateway`, public route table/association을 생성하지 않는다.
+  - DB-only/DB 포함 경로에서 app subnet 수를 명시적으로 제어해 DB-only 초안에 app subnet이 생기지 않게 했다.
+  - app subnet, app security group, app server, DB subnet, DB security group, RDS 좌표를 벌려 기본 카드 크기 기준 겹침을 제거했다.
+  - API 테스트 응답 schema에 `positionX`/`positionY`를 포함하고, 주요 네트워크 노드 overlap을 검증하는 회귀 테스트를 추가했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits
+  - `apps/api/.\\node_modules\\.bin\\tsx.CMD --test src\\routes\\ai.test.ts --test-name-pattern "unused network nodes"` - red before fix, passed after fix
+  - `apps/api/.\\node_modules\\.bin\\tsx.CMD --test src\\routes\\ai.test.ts` - passed, 44 tests
+  - Running API smoke against `http://localhost:4000/api/ai/architecture-draft` for reservation prompt:
+    - title `Reservation Service Practice Architecture`, 19 nodes
+    - `public-subnet-a/b`, `private-app-subnet-b`, `internet-gateway` all absent
+    - key layout positions: app subnet `(150,620)`, app SG `(220,460)`, app server `(430,620)`, DB subnets `(150,940)/(370,940)`, DB SG `(620,940)`, RDS `(850,940)`
+  - `pnpm lint` - passed, with non-fatal Turbo cache rename warnings
+  - `pnpm typecheck` - passed, with non-fatal Turbo cache rename warnings
+  - `git diff --check` - passed, with line-ending warnings only
+  - `pnpm build` - first sandbox run failed on `.next` unlink `EPERM`; rerun with elevated permissions passed
+- Known risks:
+  - Minimal public API server path still intentionally creates public subnet/IGW/route resources because that path hosts the EC2 in a public subnet.
+  - CloudFront-to-private-EC2 remains a simplified Practice Architecture edge until an ALB/reverse-proxy resource is added to the supported resource set.
+
+# 2026-07-05 - AI 요구사항 해석과 목적별 다이어그램 실제 검증
+
+- Goal: 자연어 요구사항에서 서비스 목적/제약을 추출해 랜딩, 로그인, 예약, 게시판 요청이 실제 API와 워크스페이스 UI에서 서로 다른 Architecture Draft로 생성되게 한다.
+- Completed:
+  - `ArchitectureIntent` metadata와 `interpretRequirement -> planPracticeArchitecture` 흐름을 추가했다.
+  - `landing_page`, `auth_web_service`, `reservation_service`, `content_board` 목적별 capability, title, label, config, 추가 리소스를 분리했다.
+  - `서버나 DB는 필요 없어`, `no server/no database` 같은 부정 제약이 `server_runtime`/`database` fact를 제거하게 했다.
+  - `PostgreSQL`의 `post`를 게시판 의도로 오인하지 않도록 영어 content-board 키워드는 token 단위로만 잡게 했다.
+  - AI draft 적용 시 stale preview가 아니라 현재 draft의 `architectureJson`을 보드에 적용하도록 웹 패널/채팅 적용 경로를 고쳤다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits
+  - `apps/api/.\\node_modules\\.bin\\tsx.CMD --test src\\routes\\ai.test.ts` - red before title/constraint fixes, passed after fixes, 43 tests
+  - `apps/web/.\\node_modules\\.bin\\tsx.CMD --test features\\workspace\\workspace-right-panel-layout.test.ts --test-name-pattern "accepted AI drafts apply"` - red before stale-preview fix, passed after fix
+  - Running API smoke against `http://localhost:4000/api/ai/architecture-draft`:
+    - landing prompt -> `정적 웹사이트 Practice Architecture`, `landing_page`, `static_site`, 2 nodes: CloudFront + S3
+    - auth prompt -> `Auth Web Service Practice Architecture`, `auth_web_service`, 29 nodes including `auth-audit-log-group`
+    - reservation prompt -> `Reservation Service Practice Architecture`, `reservation_service`, 29 nodes including `reservation-attachments-bucket`
+    - board prompt -> `Content Board Practice Architecture`, `content_board`, 30 nodes including `upload-bucket` and `content-media-bucket`
+  - Browser smoke on `http://localhost:3000/workspace`:
+    - landing prompt applied to board with CloudFront + Landing Page Assets Bucket only
+    - reservation prompt followed clarification choices, previewed 29 resources, then applied board with `Reservation Application Server`, `Reservation Request Database`, `Reservation Attachment Bucket`, and `Service Purpose reservation_service`
+  - `pnpm lint` - passed, with non-fatal Turbo cache rename warnings
+  - `pnpm typecheck` - passed, with non-fatal Turbo cache rename warnings
+  - `git diff --check` - passed, with line-ending warnings only
+  - `pnpm build` - first sandbox run failed on `.next` unlink `EPERM`; rerun with elevated permissions passed
+- Known risks:
+  - Bedrock currently explains deterministic draft results through `llmExplanation`; it does not yet perform `ArchitectureIntent` extraction for `/api/ai/architecture-draft`.
+  - Reservation low-budget flow still asks cost/DB clarification before generation, which is intentional guardrail behavior but adds clicks in the UI path.
+
 # 2026-07-05 - AI 다이어그램 신규 생성 라우팅 보정
 
 - Goal: 기존 다이어그램이 있는 상태에서도 새 서비스/웹사이트 요청은 기존 보드 patch가 아니라 새 Architecture Draft 생성으로 흘러가게 하고, patch 질문 상태에서 `추가 안 함` 또는 서비스 목적 추천 답변을 눌렀을 때 같은 질문/no-op으로 갇히지 않게 한다.
@@ -1881,3 +1935,69 @@
 - Known risks:
   - 실제 브라우저 클릭 smoke는 이번 세션에서 별도로 수행하지 않았고, API/web helper tests 및 전체 lint/typecheck/build로 검증했다.
   - Next.js build가 `apps/web/next-env.d.ts`를 자동 갱신했으나 이번 변경 범위가 아니어서 내용 변경은 제외했다.
+# 2026-07-05 - AI 다이어그램 서비스 목적 추론 반영
+
+- Goal: 사용자가 프롬프트를 정해진 형식으로 쓰지 않아도 로그인, 예약 신청, 게시판처럼 같은 `backend_with_db` 조합 안의 서비스 목적을 AI draft가 구분해서 서로 다른 다이어그램 의미를 드러내게 한다.
+- Completed:
+  - `ArchitectureServicePurpose`와 `ArchitectureCapability` shared type을 추가하고 `AiResultMetadata`에 `servicePurpose`, `capabilities`를 싣도록 확장했다.
+  - 요구사항 해석 단계에서 `예약/신청`, `게시판/게시글`, `로그인/회원`, `업로드/파일`, `랜딩/소개` 같은 자유 문장 단서를 목적과 capability로 승격하도록 추가했다.
+  - draft builder가 기존 지원 리소스 범위 안에서 목적별 app server/database/bucket/log/alarm label과 config를 다르게 생성하도록 연결했다. node id와 기존 title 계약은 회귀를 피하기 위해 안정적으로 유지했다.
+  - API route 테스트에 로그인/예약/게시판 프롬프트가 각각 `auth_web_service`, `reservation_service`, `content_board`로 해석되고 label/config signature가 달라지는 회귀 테스트를 추가했다.
+  - `docs/data-models.md`의 AI 결과 DTO 계약에 `servicePurpose`와 `capabilities`를 반영했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits.
+  - `.\\node_modules\\.bin\\tsx.CMD --test src\\routes\\ai.test.ts --test-name-pattern "extracts service purpose"` - sandbox spawn EPERM, rerun outside sandbox failed red before implementation, passed after implementation.
+  - `.\\node_modules\\.bin\\tsx.CMD --test src\\routes\\ai.test.ts` in `apps/api` - passed outside sandbox, 41 tests.
+  - `pnpm typecheck` - passed with Turbo cache rename warnings only.
+  - `pnpm lint` - passed with Turbo cache rename warnings only.
+  - `pnpm build` - sandbox run failed on `.next` unlink EPERM, first elevated retry timed out, longer elevated retry passed.
+  - `pnpm harness:check` - passed after final checks.
+- Known risks:
+  - Browser visual smoke was not run; this change is API/shared-type centered and verified through API tests plus workspace lint/typecheck/build.
+  - Real AWS apply/destroy, cloud mutation, Git/CI/CD handoff, and provider calls were not run.
+
+# 2026-07-05 - AI 다이어그램 목적별 실제 리소스 구성 분기 보정
+
+- Goal: 이전 수정이 label/config만 바꿔 실제 보드에서는 같은 아이콘 배열로 보이는 문제를 고치고, 로그인/예약/게시판 목적별로 node id set 자체가 달라지게 한다.
+- Completed:
+  - `backend_with_db` 안에서도 `auth_web_service`는 `auth-audit-log-group`, `reservation_service`는 `reservation-attachments-bucket`, `content_board`는 `content-media-bucket`을 추가하도록 보정했다.
+  - 새 목적별 노드는 보드 변환 뒤에도 눈에 보이는 위치에 남도록 배치하고, app server 및 runtime policy와 연결선을 만든다.
+  - API route 테스트가 label/config signature뿐 아니라 node id signature도 목적별로 달라져야 한다고 검증하도록 강화했다.
+  - 실제 smoke로 `ArchitectureJson -> DiagramJson` 변환 뒤 추가 노드가 유지되는 것을 확인했다.
+- Verification run:
+  - `pnpm harness:check` - passed before debugging.
+  - `.\\node_modules\\.bin\\tsx.CMD --test src\\routes\\ai.test.ts --test-name-pattern "extracts service purpose"` - failed red with `1 !== 3` node id signature count before fix, passed after fix.
+  - `.\\node_modules\\.bin\\tsx.CMD --test src\\routes\\ai.test.ts` in `apps/api` - passed outside sandbox, 41 tests.
+  - `.\\node_modules\\.bin\\tsx.CMD --test features\\workspace\\workspace-ai-diagram-adapter.test.ts features\\workspace\\workspace-ai-chat-routing.test.ts` in `apps/web` - passed outside sandbox, 27 tests.
+  - `pnpm typecheck` - passed with Turbo cache rename warnings only.
+  - `pnpm lint` - passed with Turbo cache rename warnings only.
+  - `pnpm build` - sandbox run failed on `.next` unlink EPERM, elevated retry passed.
+  - `pnpm harness:check` - passed after final checks.
+- Known risks:
+  - Browser click smoke was not run; API draft and web DiagramJson conversion were verified by tests and a direct smoke command.
+  - Real AWS apply/destroy, cloud mutation, Git/CI/CD handoff, and provider calls were not run.
+# 2026-07-05 - AI 다이어그램 intent 해석 및 stale preview 적용 버그 수정
+
+- Goal: 거친 자연어를 deterministic planner에 바로 넘기지 않고 `ArchitectureIntent`로 해석한 뒤 설계하도록 정리하고, AI 초안 적용 시 남아 있는 이전 preview가 아니라 현재 draft를 보드에 넣게 한다.
+- Completed:
+  - 공유 타입에 `ArchitectureIntent` metadata를 추가해 service purpose, capability, constraints, confidence, missing questions를 담게 했다.
+  - `interpretRequirement(prompt)`를 추가하고 `resolveArchitectureRequirement`가 deterministic planning 전에 intent를 metadata로 전달하게 했다.
+  - deterministic draft 조립 진입점을 `planPracticeArchitecture(...)`로 분리하고 기존 함수는 호환 wrapper로 남겼다.
+  - AI 초안 적용 경로 두 곳 모두 `context.previewDiagram ?? ...` 대신 `convertArchitectureJsonToDiagramJson(draft.architectureJson)`를 직접 적용하게 고쳤다.
+  - 현재 draft 적용 경로가 stale preview를 쓰지 않는지, API 응답이 interpreted intent를 노출하는지 회귀 테스트를 추가했다.
+  - 직접 smoke로 landing/auth/reservation/board 요청이 서로 다른 node signature를 만드는 것을 확인했다. 결과는 `uniqueSignatures=4/4`.
+- Verification run:
+  - `pnpm harness:check` - 수정 전 통과.
+  - `apps/web/.\\node_modules\\.bin\\tsx.CMD --test features\\workspace\\workspace-right-panel-layout.test.ts --test-name-pattern "accepted AI drafts apply"` - 수정 전 red, 수정 후 통과.
+  - `apps/api/.\\node_modules\\.bin\\tsx.CMD --test src\\routes\\ai.test.ts --test-name-pattern "ArchitectureIntent metadata"` - 수정 전 red, 수정 후 통과.
+  - `apps/api/.\\node_modules\\.bin\\tsx.CMD -e "...createArchitectureDraft smoke..."` - 통과, landing/auth/reservation/board node signature가 모두 다름.
+  - `apps/api/.\\node_modules\\.bin\\tsx.CMD --test src\\routes\\ai.test.ts` - 통과, 42 tests.
+  - `apps/web/.\\node_modules\\.bin\\tsx.CMD --test features\\workspace\\workspace-right-panel-layout.test.ts features\\workspace\\workspace-ai-diagram-adapter.test.ts features\\workspace\\workspace-ai-chat-routing.test.ts` - 통과, 69 tests.
+  - `pnpm typecheck` - 통과, Turbo cache rename warning만 있음.
+  - `pnpm lint` - 통과, Turbo cache rename warning만 있음.
+  - `pnpm build` - sandbox에서는 `.next` unlink EPERM으로 실패했고, elevated retry는 통과.
+  - `pnpm harness:check` - build 후 통과.
+  - `git diff --check` - 통과, line-ending warning만 있음.
+- Known risks:
+  - 브라우저 클릭 smoke는 별도로 실행하지 않았다. 이번 수정은 API draft 생성, Web draft 적용 source test, diagram adapter test, lint/typecheck/build, 직접 smoke로 검증했다.
+  - 실제 AWS apply/destroy, cloud mutation, Git/CI/CD handoff는 실행하지 않았다.

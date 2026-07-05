@@ -1,6 +1,6 @@
 import type { AiArchitectureDraftResult, CreateArchitectureDraftRequest } from "@sketchcatch/types";
 import { applyGuardrailMetadata } from "./aiArchitectureDraftMetadata.js";
-import { createDraftFromRequirementFacts } from "./aiArchitectureRequirementDraftBuilder.js";
+import { planPracticeArchitecture } from "./aiArchitectureRequirementDraftBuilder.js";
 import { applyOperatingConditionConfig } from "./aiArchitectureOperatingConditions.js";
 import { resolveArchitectureResourceQuantities } from "./aiArchitectureResourceQuantities.js";
 import { resolveArchitectureRequirement } from "./aiArchitectureRequirementResolution.js";
@@ -10,7 +10,7 @@ export function createArchitectureDraft(input: string | CreateArchitectureDraftR
   const request = normalizeArchitectureDraftRequest(input);
   const resolution = resolveArchitectureRequirement(request);
   const resourceQuantities = resolveArchitectureResourceQuantities(request.prompt);
-  const draft = createDraftFromRequirementFacts(resolution, resourceQuantities);
+  const draft = planPracticeArchitecture(resolution, resourceQuantities);
   const configuredDraft = applyOperatingConditionConfig(draft, resolution.operatingProfile);
 
   return applyGuardrailMetadata(configuredDraft, request, resolution);

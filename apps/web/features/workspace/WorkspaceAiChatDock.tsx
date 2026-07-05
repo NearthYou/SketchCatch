@@ -677,9 +677,7 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
       return;
     }
 
-    context.applyDiagramJson(
-      context.previewDiagram ?? convertArchitectureJsonToDiagramJson(draft.architectureJson)
-    );
+    context.applyDiagramJson(convertArchitectureJsonToDiagramJson(draft.architectureJson));
     context.requestTerraformRefresh();
     requestImmediateDiagramSave();
     setDraft(null);

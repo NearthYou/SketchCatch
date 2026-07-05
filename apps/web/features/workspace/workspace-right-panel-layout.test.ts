@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 
 const componentSource = readWorkspaceFile("WorkspaceRightPanel.tsx");
 const aiChatDockSource = readWorkspaceFile("WorkspaceAiChatDock.tsx");
+const aiPanelSource = readWorkspaceFile("WorkspaceAiPanel.tsx");
 const deploymentPanelSource = readWorkspaceFile("DeploymentPanel.tsx");
 const diagramEditorSource = readFeatureFile("../diagram-editor/DiagramEditor.tsx");
 const diagramEditorTypesSource = readFeatureFile("../diagram-editor/types.ts");
@@ -119,6 +120,22 @@ test("workspace AI saves accepted generated and patched diagrams immediately", (
   assert.match(workspaceDraftManagerSource, /onDiagramSaveRequest=\{saveCurrentDraftLocally\}/);
   assert.match(diagramEditorSource, /saveDiagramNow:\s*onDiagramSaveRequest/);
   assert.match(aiChatDockSource, /context\.saveDiagramNow\?\.\(\)/);
+});
+
+test("accepted AI drafts apply the current draft instead of a stale preview diagram", () => {
+  const stalePreviewFallbackPattern =
+    /context\.previewDiagram\s*\?\?\s*convertArchitectureJsonToDiagramJson\(draft\.architectureJson\)/;
+
+  assert.doesNotMatch(aiChatDockSource, stalePreviewFallbackPattern);
+  assert.doesNotMatch(aiPanelSource, stalePreviewFallbackPattern);
+  assert.match(
+    aiChatDockSource,
+    /context\.applyDiagramJson\(\s*convertArchitectureJsonToDiagramJson\(draft\.architectureJson\)\s*\)/s
+  );
+  assert.match(
+    aiPanelSource,
+    /context\.applyDiagramJson\(\s*convertArchitectureJsonToDiagramJson\(draft\.architectureJson\)\s*\)/s
+  );
 });
 
 test("workspace AI refines a pending draft preview instead of replacing it from an empty board", () => {

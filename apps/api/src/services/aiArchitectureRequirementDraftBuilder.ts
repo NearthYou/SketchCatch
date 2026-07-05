@@ -2,14 +2,15 @@ import type {
   AiArchitectureDraftResult,
   ArchitectureJson,
   ArchitectureDraftOperatingProfile,
-  ArchitectureRequirementFact
+  ArchitectureRequirementFact,
+  ArchitectureServicePurpose
 } from "@sketchcatch/types";
 import type { ArchitectureRequirementResolution } from "./aiArchitectureRequirementResolution.js";
 import type { ArchitectureResourceQuantities } from "./aiArchitectureResourceQuantities.js";
 import { DEFAULT_ARCHITECTURE_RESOURCE_QUANTITIES } from "./aiArchitectureResourceQuantities.js";
 
 // Requirement fact 조합을 지원 가능한 ResourceType만 포함한 ArchitectureJson으로 조립합니다.
-export function createDraftFromRequirementFacts(
+export function planPracticeArchitecture(
   resolution: ArchitectureRequirementResolution,
   resourceQuantities: ArchitectureResourceQuantities = DEFAULT_ARCHITECTURE_RESOURCE_QUANTITIES
 ): AiArchitectureDraftResult {
@@ -21,7 +22,8 @@ export function createDraftFromRequirementFacts(
     factSet,
     nodes,
     operatingProfile: resolution.operatingProfile,
-    resourceQuantities
+    resourceQuantities,
+    servicePurpose: resolution.servicePurpose
   };
 
   if (factSet.has("web_frontend") || factSet.has("static_delivery")) {
@@ -50,6 +52,7 @@ export function createDraftFromRequirementFacts(
     addUploadBucket(context);
   }
 
+  addPurposeSpecificResources(context);
   addCrossResourceEdges(context);
 
   return {
@@ -62,8 +65,15 @@ export function createDraftFromRequirementFacts(
         `요구사항 단서: ${resolution.requirementFacts.map(getRequirementFactLabel).join(", ")}`
       ]
     },
-    title: createDraftTitle(factSet)
+    title: createDraftTitle(context)
   };
+}
+
+export function createDraftFromRequirementFacts(
+  resolution: ArchitectureRequirementResolution,
+  resourceQuantities: ArchitectureResourceQuantities = DEFAULT_ARCHITECTURE_RESOURCE_QUANTITIES
+): AiArchitectureDraftResult {
+  return planPracticeArchitecture(resolution, resourceQuantities);
 }
 
 type DraftBuildContext = {
@@ -72,7 +82,148 @@ type DraftBuildContext = {
   readonly nodes: ArchitectureJson["nodes"];
   readonly operatingProfile: ArchitectureDraftOperatingProfile;
   readonly resourceQuantities: ArchitectureResourceQuantities;
+  readonly servicePurpose: ArchitectureServicePurpose;
 };
+
+type DraftPurposeProfile = {
+  readonly title: string;
+  readonly appServerLabel: string;
+  readonly appServerPurpose: string;
+  readonly databaseLabel: string;
+  readonly dataPurpose: string;
+  readonly dataKeyDescription: string;
+  readonly logGroupName: string;
+  readonly appCpuAlarmName: string;
+  readonly dbCpuAlarmName: string;
+  readonly uploadBucketLabel: string;
+  readonly uploadBucketPurpose: string;
+  readonly staticBucketLabel: string;
+};
+
+function getPurposeProfile(servicePurpose: ArchitectureServicePurpose): DraftPurposeProfile {
+  switch (servicePurpose) {
+    case "auth_web_service":
+      return {
+        title: "Auth Web Service Practice Architecture",
+        appServerLabel: "Auth Application Server",
+        appServerPurpose: "auth_application",
+        databaseLabel: "User Account Database",
+        dataPurpose: "auth_user_accounts",
+        dataKeyDescription: "Authentication and user profile data encryption key",
+        logGroupName: "/sketchcatch/practice/auth",
+        appCpuAlarmName: "auth-application-high-cpu",
+        dbCpuAlarmName: "auth-database-high-cpu",
+        uploadBucketLabel: "User Upload Bucket",
+        uploadBucketPurpose: "user_private_uploads",
+        staticBucketLabel: "Auth Web Assets Bucket"
+      };
+    case "reservation_service":
+      return {
+        title: "Reservation Service Practice Architecture",
+        appServerLabel: "Reservation Application Server",
+        appServerPurpose: "reservation_workflow",
+        databaseLabel: "Reservation Request Database",
+        dataPurpose: "reservation_requests",
+        dataKeyDescription: "Reservation request and customer contact data encryption key",
+        logGroupName: "/sketchcatch/practice/reservation",
+        appCpuAlarmName: "reservation-application-high-cpu",
+        dbCpuAlarmName: "reservation-database-high-cpu",
+        uploadBucketLabel: "Reservation Attachment Bucket",
+        uploadBucketPurpose: "reservation_attachments",
+        staticBucketLabel: "Reservation Web Assets Bucket"
+      };
+    case "content_board":
+      return {
+        title: "Content Board Practice Architecture",
+        appServerLabel: "Content Board Server",
+        appServerPurpose: "content_board",
+        databaseLabel: "Post Content Database",
+        dataPurpose: "content_posts",
+        dataKeyDescription: "Post, comment, and board metadata encryption key",
+        logGroupName: "/sketchcatch/practice/content-board",
+        appCpuAlarmName: "content-board-high-cpu",
+        dbCpuAlarmName: "content-database-high-cpu",
+        uploadBucketLabel: "Content Media Bucket",
+        uploadBucketPurpose: "content_media",
+        staticBucketLabel: "Content Board Assets Bucket"
+      };
+    case "file_upload_service":
+      return {
+        title: "File Upload Service Practice Architecture",
+        appServerLabel: "Upload Application Server",
+        appServerPurpose: "file_upload",
+        databaseLabel: "Upload Metadata Database",
+        dataPurpose: "upload_metadata",
+        dataKeyDescription: "Upload metadata encryption key",
+        logGroupName: "/sketchcatch/practice/upload",
+        appCpuAlarmName: "upload-application-high-cpu",
+        dbCpuAlarmName: "upload-database-high-cpu",
+        uploadBucketLabel: "Upload Storage Bucket",
+        uploadBucketPurpose: "user_uploads",
+        staticBucketLabel: "Upload Web Assets Bucket"
+      };
+    case "landing_page":
+      return {
+        title: "Landing Page Practice Architecture",
+        appServerLabel: "Landing Page Server",
+        appServerPurpose: "landing_page",
+        databaseLabel: "Landing Page Database",
+        dataPurpose: "landing_page_data",
+        dataKeyDescription: "Landing page data encryption key",
+        logGroupName: "/sketchcatch/practice/landing",
+        appCpuAlarmName: "landing-page-high-cpu",
+        dbCpuAlarmName: "landing-database-high-cpu",
+        uploadBucketLabel: "Landing Upload Bucket",
+        uploadBucketPurpose: "landing_uploads",
+        staticBucketLabel: "Landing Page Assets Bucket"
+      };
+    case "api_backend":
+      return {
+        title: "API Backend Practice Architecture",
+        appServerLabel: "API Application Server",
+        appServerPurpose: "api_backend",
+        databaseLabel: "API Database",
+        dataPurpose: "api_data",
+        dataKeyDescription: "API data encryption key",
+        logGroupName: "/sketchcatch/practice/api",
+        appCpuAlarmName: "api-application-high-cpu",
+        dbCpuAlarmName: "api-database-high-cpu",
+        uploadBucketLabel: "API Object Bucket",
+        uploadBucketPurpose: "api_objects",
+        staticBucketLabel: "API Web Assets Bucket"
+      };
+    case "data_storage":
+      return {
+        title: "Data Storage Practice Architecture",
+        appServerLabel: "Data Access Server",
+        appServerPurpose: "data_access",
+        databaseLabel: "Data Storage Database",
+        dataPurpose: "data_storage",
+        dataKeyDescription: "Data storage encryption key",
+        logGroupName: "/sketchcatch/practice/data-storage",
+        appCpuAlarmName: "data-access-high-cpu",
+        dbCpuAlarmName: "data-storage-high-cpu",
+        uploadBucketLabel: "Data Object Bucket",
+        uploadBucketPurpose: "data_objects",
+        staticBucketLabel: "Data Portal Assets Bucket"
+      };
+    case "unknown":
+      return {
+        title: "Practice Architecture",
+        appServerLabel: "Application Server",
+        appServerPurpose: "application",
+        databaseLabel: "Application Database",
+        dataPurpose: "application_data",
+        dataKeyDescription: "Practice data storage encryption key",
+        logGroupName: "/sketchcatch/practice/application",
+        appCpuAlarmName: "application-high-cpu",
+        dbCpuAlarmName: "database-high-cpu",
+        uploadBucketLabel: "Upload Storage Bucket",
+        uploadBucketPurpose: "user_uploads",
+        staticBucketLabel: "Static Website Bucket"
+      };
+  }
+}
 
 function isMinimalEc2ApiServer(context: DraftBuildContext): boolean {
   return (
@@ -249,16 +400,19 @@ function addMinimalNetworkBoundary(context: DraftBuildContext): void {
 }
 
 function addStaticWebsiteDelivery(context: DraftBuildContext): void {
+  const purposeProfile = getPurposeProfile(context.servicePurpose);
+
   addCloudFrontPublicEntry(context, "web-assets-bucket");
   addNode(context, {
     id: "web-assets-bucket",
     type: "S3",
-    label: "Static Website Bucket",
+    label: purposeProfile.staticBucketLabel,
     positionX: 900,
     positionY: 160,
     config: {
       bucketPurpose: "static_website_origin",
-      publicAccessBlock: true
+      publicAccessBlock: true,
+      servicePurpose: context.servicePurpose
     }
   });
   addNode(context, {
@@ -275,16 +429,18 @@ function addStaticWebsiteDelivery(context: DraftBuildContext): void {
 }
 
 function addEc2ApplicationRuntime(context: DraftBuildContext): void {
-  addNetworkBoundary(context);
-  addCloudFrontPublicEntry(context, "app-server");
+  const purposeProfile = getPurposeProfile(context.servicePurpose);
   const appServerIds = createNumberedIds("app-server", context.resourceQuantities.ec2Instances);
+
+  addNetworkBoundary(context, { appSubnetCount: Math.min(appServerIds.length, 2) });
+  addCloudFrontPublicEntry(context, "app-server");
 
   addNode(context, {
     id: "app-security-group",
     type: "SECURITY_GROUP",
     label: "App Security Group",
     positionX: 220,
-    positionY: 560,
+    positionY: 460,
     config: {
       vpcId: "aws_vpc.vpc_main.id",
       ingress: [
@@ -306,8 +462,8 @@ function addEc2ApplicationRuntime(context: DraftBuildContext): void {
     id: "app-ami",
     type: "AMI",
     label: "Amazon Linux AMI",
-    positionX: 120,
-    positionY: 730,
+    positionX: 430,
+    positionY: 460,
     config: createAmazonLinuxAmiConfig()
   });
   addIamRuntimeNodes(context);
@@ -315,9 +471,9 @@ function addEc2ApplicationRuntime(context: DraftBuildContext): void {
   appServerIds.forEach((appServerId, index) => {
     const position = getRepeatedNodePosition(index, {
       columns: 3,
-      startX: appServerIds.length === 1 ? 370 : 300,
-      startY: 700,
-      xGap: 140,
+      startX: appServerIds.length === 1 ? 430 : 430,
+      startY: 620,
+      xGap: 180,
       yGap: 130
     });
     const subnetId =
@@ -329,14 +485,16 @@ function addEc2ApplicationRuntime(context: DraftBuildContext): void {
     addNode(context, {
       id: appServerId,
       type: "EC2",
-      label: appServerIds.length === 1 ? "Application Server" : `Application Server ${index + 1}`,
+      label: appServerIds.length === 1 ? purposeProfile.appServerLabel : `${purposeProfile.appServerLabel} ${index + 1}`,
       positionX: position.x,
       positionY: position.y,
       config: {
         ami: "data.aws_ami.app_ami.id",
         associatePublicIpAddress: false,
+        applicationPurpose: purposeProfile.appServerPurpose,
         iamInstanceProfile: "aws_iam_instance_profile.app_instance_profile.name",
         instanceType: "t3.micro",
+        servicePurpose: context.servicePurpose,
         subnetId,
         vpcSecurityGroupIds: ["aws_security_group.app_security_group.id"]
       }
@@ -364,7 +522,10 @@ function addCloudFrontPublicEntry(context: DraftBuildContext, originResourceId: 
   });
 }
 
-function addNetworkBoundary(context: DraftBuildContext): void {
+function addNetworkBoundary(
+  context: DraftBuildContext,
+  input: { readonly appSubnetCount: number } = { appSubnetCount: 2 }
+): void {
   addNode(context, {
     id: "vpc-main",
     type: "VPC",
@@ -375,199 +536,40 @@ function addNetworkBoundary(context: DraftBuildContext): void {
       cidrBlock: "10.0.0.0/16"
     }
   });
-  addNode(context, {
-    id: "public-subnet-a",
-    type: "SUBNET",
-    label: "Public Subnet A",
-    positionX: 150,
-    positionY: 320,
-    config: {
-      cidrBlock: "10.0.1.0/24",
-      availabilityZone: "ap-northeast-2a",
-      mapPublicIpOnLaunch: true,
-      vpcId: "aws_vpc.vpc_main.id"
-    }
-  });
-  addNode(context, {
-    id: "public-subnet-b",
-    type: "SUBNET",
-    label: "Public Subnet B",
-    positionX: 370,
-    positionY: 320,
-    config: {
-      cidrBlock: "10.0.2.0/24",
-      availabilityZone: "ap-northeast-2b",
-      mapPublicIpOnLaunch: true,
-      vpcId: "aws_vpc.vpc_main.id"
-    }
-  });
-  addNode(context, {
-    id: "private-app-subnet-a",
-    type: "SUBNET",
-    label: "Private App Subnet A",
-    positionX: 150,
-    positionY: 650,
-    config: {
-      cidrBlock: "10.0.11.0/24",
-      availabilityZone: "ap-northeast-2a",
-      mapPublicIpOnLaunch: false,
-      vpcId: "aws_vpc.vpc_main.id"
-    }
-  });
-  addNode(context, {
-    id: "private-app-subnet-b",
-    type: "SUBNET",
-    label: "Private App Subnet B",
-    positionX: 370,
-    positionY: 650,
-    config: {
-      cidrBlock: "10.0.12.0/24",
-      availabilityZone: "ap-northeast-2b",
-      mapPublicIpOnLaunch: false,
-      vpcId: "aws_vpc.vpc_main.id"
-    }
-  });
-  addNode(context, {
-    id: "internet-gateway",
-    type: "INTERNET_GATEWAY",
-    label: "Internet Gateway",
-    positionX: 650,
-    positionY: 360,
-    config: {
-      vpcId: "aws_vpc.vpc_main.id"
-    }
-  });
-  addNode(context, {
-    id: "public-route-table",
-    type: "ROUTE_TABLE",
-    label: "Public Route Table",
-    positionX: 650,
-    positionY: 520,
-    config: {
-      route: [
-        {
-          cidrBlock: "0.0.0.0/0",
-          gatewayId: "aws_internet_gateway.internet_gateway.id"
-        }
-      ],
-      vpcId: "aws_vpc.vpc_main.id"
-    }
-  });
-  addNode(context, {
-    id: "public-route-table-association",
-    type: "ROUTE_TABLE_ASSOCIATION",
-    label: "Public Route Association A",
-    positionX: 520,
-    positionY: 520,
-    config: {
-      routeTableId: "aws_route_table.public_route_table.id",
-      subnetId: "aws_subnet.public_subnet_a.id"
-    }
-  });
-  addNode(context, {
-    id: "public-route-table-association-b",
-    type: "ROUTE_TABLE_ASSOCIATION",
-    label: "Public Route Association B",
-    positionX: 520,
-    positionY: 650,
-    config: {
-      routeTableId: "aws_route_table.public_route_table.id",
-      subnetId: "aws_subnet.public_subnet_b.id"
-    }
-  });
-  addNode(context, {
-    id: "private-app-route-table",
-    type: "ROUTE_TABLE",
-    label: "Private App Route Table",
-    positionX: 650,
-    positionY: 780,
-    config: {
-      vpcId: "aws_vpc.vpc_main.id"
-    }
-  });
-  addNode(context, {
-    id: "private-app-route-association-a",
-    type: "ROUTE_TABLE_ASSOCIATION",
-    label: "Private App Route Association A",
-    positionX: 420,
-    positionY: 780,
-    config: {
-      routeTableId: "aws_route_table.private_app_route_table.id",
-      subnetId: "aws_subnet.private_app_subnet_a.id"
-    }
-  });
-  addNode(context, {
-    id: "private-app-route-association-b",
-    type: "ROUTE_TABLE_ASSOCIATION",
-    label: "Private App Route Association B",
-    positionX: 420,
-    positionY: 900,
-    config: {
-      routeTableId: "aws_route_table.private_app_route_table.id",
-      subnetId: "aws_subnet.private_app_subnet_b.id"
-    }
-  });
-  addEdge(context, "vpc-main-to-public-subnet-a", "vpc-main", "public-subnet-a", "contains");
-  addEdge(context, "vpc-main-to-public-subnet-b", "vpc-main", "public-subnet-b", "contains");
-  addEdge(context, "vpc-main-to-private-app-subnet-a", "vpc-main", "private-app-subnet-a", "contains");
-  addEdge(context, "vpc-main-to-private-app-subnet-b", "vpc-main", "private-app-subnet-b", "contains");
-  addEdge(context, "public-route-table-to-internet-gateway", "public-route-table", "internet-gateway", "routes");
-  addEdge(
-    context,
-    "public-subnet-a-to-public-route-table-association",
-    "public-subnet-a",
-    "public-route-table-association",
-    "uses"
-  );
-  addEdge(
-    context,
-    "public-subnet-b-to-public-route-table-association-b",
-    "public-subnet-b",
-    "public-route-table-association-b",
-    "uses"
-  );
-  addEdge(
-    context,
-    "public-route-table-association-to-public-route-table",
-    "public-route-table-association",
-    "public-route-table",
-    "uses"
-  );
-  addEdge(
-    context,
-    "public-route-table-association-b-to-public-route-table",
-    "public-route-table-association-b",
-    "public-route-table",
-    "uses"
-  );
-  addEdge(
-    context,
-    "private-app-subnet-a-to-private-app-route-association-a",
-    "private-app-subnet-a",
-    "private-app-route-association-a",
-    "uses"
-  );
-  addEdge(
-    context,
-    "private-app-subnet-b-to-private-app-route-association-b",
-    "private-app-subnet-b",
-    "private-app-route-association-b",
-    "uses"
-  );
-  addEdge(
-    context,
-    "private-app-route-association-a-to-private-app-route-table",
-    "private-app-route-association-a",
-    "private-app-route-table",
-    "uses"
-  );
-  addEdge(
-    context,
-    "private-app-route-association-b-to-private-app-route-table",
-    "private-app-route-association-b",
-    "private-app-route-table",
-    "uses"
-  );
+
+  if (input.appSubnetCount >= 1) {
+    addNode(context, {
+      id: "private-app-subnet-a",
+      type: "SUBNET",
+      label: "Private App Subnet A",
+      positionX: 150,
+      positionY: 620,
+      config: {
+        cidrBlock: "10.0.11.0/24",
+        availabilityZone: "ap-northeast-2a",
+        mapPublicIpOnLaunch: false,
+        vpcId: "aws_vpc.vpc_main.id"
+      }
+    });
+    addEdge(context, "vpc-main-to-private-app-subnet-a", "vpc-main", "private-app-subnet-a", "contains");
+  }
+
+  if (input.appSubnetCount >= 2) {
+    addNode(context, {
+      id: "private-app-subnet-b",
+      type: "SUBNET",
+      label: "Private App Subnet B",
+      positionX: 150,
+      positionY: 760,
+      config: {
+        cidrBlock: "10.0.12.0/24",
+        availabilityZone: "ap-northeast-2b",
+        mapPublicIpOnLaunch: false,
+        vpcId: "aws_vpc.vpc_main.id"
+      }
+    });
+    addEdge(context, "vpc-main-to-private-app-subnet-b", "vpc-main", "private-app-subnet-b", "contains");
+  }
 }
 
 function addIamRuntimeNodes(context: DraftBuildContext): void {
@@ -614,6 +616,8 @@ function addIamRuntimeNodes(context: DraftBuildContext): void {
 }
 
 function addObservabilityNodes(context: DraftBuildContext): void {
+  const purposeProfile = getPurposeProfile(context.servicePurpose);
+
   addNode(context, {
     id: "app-log-group",
     type: "CLOUDWATCH_LOG_GROUP",
@@ -621,7 +625,7 @@ function addObservabilityNodes(context: DraftBuildContext): void {
     positionX: 1110,
     positionY: 520,
     config: {
-      name: "/sketchcatch/practice/application",
+      name: purposeProfile.logGroupName,
       retentionInDays: 14
     }
   });
@@ -632,7 +636,7 @@ function addObservabilityNodes(context: DraftBuildContext): void {
     positionX: 1110,
     positionY: 680,
     config: createMetricAlarmConfig({
-      alarmName: "application-high-cpu",
+      alarmName: purposeProfile.appCpuAlarmName,
       namespace: "AWS/EC2",
       metricName: "CPUUtilization",
       dimensions: {
@@ -645,16 +649,20 @@ function addObservabilityNodes(context: DraftBuildContext): void {
 }
 
 function addDatabase(context: DraftBuildContext): void {
-  addNetworkBoundary(context);
+  const purposeProfile = getPurposeProfile(context.servicePurpose);
   const hasServerRuntime = context.factSet.has("server_runtime");
   const hasObservability = context.factSet.has("observability");
+
+  addNetworkBoundary(context, {
+    appSubnetCount: hasServerRuntime ? Math.min(context.resourceQuantities.ec2Instances, 2) : 0
+  });
 
   addNode(context, {
     id: "private-db-subnet-a",
     type: "SUBNET",
     label: "Private DB Subnet A",
     positionX: 150,
-    positionY: 820,
+    positionY: 940,
     config: {
       availabilityZone: "ap-northeast-2a",
       cidrBlock: "10.0.21.0/24",
@@ -667,7 +675,7 @@ function addDatabase(context: DraftBuildContext): void {
     type: "SUBNET",
     label: "Private DB Subnet B",
     positionX: 370,
-    positionY: 820,
+    positionY: 940,
     config: {
       availabilityZone: "ap-northeast-2b",
       cidrBlock: "10.0.22.0/24",
@@ -679,8 +687,8 @@ function addDatabase(context: DraftBuildContext): void {
     id: "db-security-group",
     type: "SECURITY_GROUP",
     label: "Database Security Group",
-    positionX: 220,
-    positionY: 960,
+    positionX: 620,
+    positionY: 940,
     config: {
       vpcId: "aws_vpc.vpc_main.id",
       ingress: hasServerRuntime
@@ -698,10 +706,10 @@ function addDatabase(context: DraftBuildContext): void {
     id: "data-encryption-key",
     type: "KMS_KEY",
     label: "Data Encryption Key",
-    positionX: 900,
-    positionY: 840,
+    positionX: 850,
+    positionY: 760,
     config: {
-      description: "Practice data storage encryption key",
+      description: purposeProfile.dataKeyDescription,
       enableKeyRotation: true
     }
   });
@@ -711,9 +719,9 @@ function addDatabase(context: DraftBuildContext): void {
       type: "CLOUDWATCH_METRIC_ALARM",
       label: "Database CPU Alarm",
       positionX: 1110,
-      positionY: 840,
+      positionY: 940,
       config: createMetricAlarmConfig({
-        alarmName: "database-high-cpu",
+        alarmName: purposeProfile.dbCpuAlarmName,
         namespace: "AWS/RDS",
         metricName: "CPUUtilization",
         dimensions: {
@@ -726,17 +734,19 @@ function addDatabase(context: DraftBuildContext): void {
   addNode(context, {
     id: "app-database",
     type: "RDS",
-    label: "Application Database",
-    positionX: 370,
-    positionY: 920,
+    label: purposeProfile.databaseLabel,
+    positionX: 850,
+    positionY: 940,
     config: {
       backupRetentionPeriod: 7,
       backupWindow: "18:00-19:00",
+      dataPurpose: purposeProfile.dataPurpose,
       engine: "postgres",
       instanceClass: "db.t4g.micro",
       kmsKeyId: "aws_kms_key.data_encryption_key.arn",
       multiAz: true,
       publiclyAccessible: false,
+      servicePurpose: context.servicePurpose,
       skipFinalSnapshot: true,
       storageEncrypted: true,
       subnetIds: ["aws_subnet.private_db_subnet_a.id", "aws_subnet.private_db_subnet_b.id"],
@@ -757,6 +767,7 @@ function addDatabase(context: DraftBuildContext): void {
 }
 
 function addUploadBucket(context: DraftBuildContext): void {
+  const purposeProfile = getPurposeProfile(context.servicePurpose);
   const uploadBucketIds = createNumberedIds("upload-bucket", context.resourceQuantities.s3Buckets);
 
   uploadBucketIds.forEach((uploadBucketId, index) => {
@@ -771,15 +782,123 @@ function addUploadBucket(context: DraftBuildContext): void {
     addNode(context, {
       id: uploadBucketId,
       type: "S3",
-      label: uploadBucketIds.length === 1 ? "Upload Storage Bucket" : `Upload Storage Bucket ${index + 1}`,
+      label: uploadBucketIds.length === 1 ? purposeProfile.uploadBucketLabel : `${purposeProfile.uploadBucketLabel} ${index + 1}`,
       positionX: position.x,
       positionY: position.y,
       config: {
-        bucketPurpose: "user_uploads",
-        publicAccessBlock: true
+        bucketPurpose: purposeProfile.uploadBucketPurpose,
+        publicAccessBlock: true,
+        servicePurpose: context.servicePurpose
       }
     });
   });
+}
+
+function addPurposeSpecificResources(context: DraftBuildContext): void {
+  if (!context.factSet.has("server_runtime")) {
+    return;
+  }
+
+  switch (context.servicePurpose) {
+    case "auth_web_service":
+      addPurposeLogGroup(context, {
+        id: "auth-audit-log-group",
+        label: "Auth Audit Logs",
+        name: "/sketchcatch/practice/auth/audit",
+        positionX: 900,
+        positionY: 680,
+        retentionInDays: 30
+      });
+      return;
+    case "reservation_service":
+      addPurposeBucket(context, {
+        id: "reservation-attachments-bucket",
+        label: "Reservation Attachment Bucket",
+        bucketPurpose: "reservation_attachments",
+        edgeLabel: "stores request attachments",
+        positionX: 1110,
+        positionY: 160
+      });
+      return;
+    case "content_board":
+      addPurposeBucket(context, {
+        id: "content-media-bucket",
+        label: "Content Media Bucket",
+        bucketPurpose: "content_media",
+        edgeLabel: "stores post media",
+        positionX: 1110,
+        positionY: 160
+      });
+      return;
+    case "api_backend":
+    case "data_storage":
+    case "file_upload_service":
+    case "landing_page":
+    case "unknown":
+      return;
+  }
+}
+
+function addPurposeLogGroup(
+  context: DraftBuildContext,
+  input: {
+    readonly id: string;
+    readonly label: string;
+    readonly name: string;
+    readonly positionX: number;
+    readonly positionY: number;
+    readonly retentionInDays: number;
+  }
+): void {
+  addNode(context, {
+    id: input.id,
+    type: "CLOUDWATCH_LOG_GROUP",
+    label: input.label,
+    positionX: input.positionX,
+    positionY: input.positionY,
+    config: {
+      name: input.name,
+      retentionInDays: input.retentionInDays,
+      servicePurpose: context.servicePurpose
+    }
+  });
+
+  for (const appServerId of getNodeIdsByTypePrefix(context, "EC2", "app-server")) {
+    addEdge(context, `${appServerId}-to-${input.id}`, appServerId, input.id, "writes audit events");
+  }
+
+  addEdge(context, `app-runtime-policy-to-${input.id}`, "app-runtime-policy", input.id, "allows log writes");
+}
+
+function addPurposeBucket(
+  context: DraftBuildContext,
+  input: {
+    readonly id: string;
+    readonly label: string;
+    readonly bucketPurpose: string;
+    readonly edgeLabel: string;
+    readonly positionX: number;
+    readonly positionY: number;
+  }
+): void {
+  addNode(context, {
+    id: input.id,
+    type: "S3",
+    label: input.label,
+    positionX: input.positionX,
+    positionY: input.positionY,
+    config: {
+      bucketPurpose: input.bucketPurpose,
+      publicAccessBlock: true,
+      servicePurpose: context.servicePurpose
+    }
+  });
+
+  for (const appServerId of getNodeIdsByTypePrefix(context, "EC2", "app-server")) {
+    addEdge(context, `${appServerId}-to-${input.id}`, appServerId, input.id, input.edgeLabel);
+  }
+
+  addEdge(context, `app-runtime-policy-to-${input.id}`, "app-runtime-policy", input.id, "allows S3 actions");
 }
 
 function addServerlessRuntime(context: DraftBuildContext): void {
@@ -932,17 +1051,28 @@ function needsUploadBucket(factSet: ReadonlySet<ArchitectureRequirementFact>): b
   );
 }
 
-function createDraftTitle(factSet: ReadonlySet<ArchitectureRequirementFact>): string {
+function createDraftTitle(context: DraftBuildContext): string {
+  const factSet = context.factSet;
+
+  if (
+    context.servicePurpose === "auth_web_service" ||
+    context.servicePurpose === "reservation_service" ||
+    context.servicePurpose === "content_board" ||
+    context.servicePurpose === "file_upload_service"
+  ) {
+    return getPurposeProfile(context.servicePurpose).title;
+  }
+
   if (factSet.has("serverless_runtime")) {
     return "Lambda 함수 Practice Architecture";
   }
 
-  if (factSet.has("web_frontend") && factSet.has("server_runtime")) {
-    return "웹서비스 Practice Architecture";
-  }
-
   if (factSet.has("database")) {
     return "DB 포함 백엔드 Practice Architecture";
+  }
+
+  if (factSet.has("web_frontend") && factSet.has("server_runtime")) {
+    return "웹서비스 Practice Architecture";
   }
 
   if (factSet.has("server_runtime") && factSet.has("object_storage")) {
