@@ -236,9 +236,16 @@ function shouldRead(input: AwsProviderScanInput, resourceType: ResourceType): bo
   return input.resourceTypes.includes(resourceType);
 }
 
+// 화면과 로그에 AWS 계정 ID가 그대로 나가지 않도록 12자리 계정 번호를 가립니다.
+export function maskReverseEngineeringSensitiveText(text: string): string {
+  return text.replace(/\b(\d{4})\d{8}\b/g, "$1********");
+}
+
 // AWS 오류 메시지를 화면에 보여줄 수 있는 scanErrors reason으로 줄입니다.
 function toScanError(resourceType: ResourceType, error: unknown): ReverseEngineeringScanError {
-  const message = error instanceof Error ? error.message : "AWS 리소스를 읽지 못했습니다.";
+  const message = maskReverseEngineeringSensitiveText(
+    error instanceof Error ? error.message : "AWS 리소스를 읽지 못했습니다."
+  );
   const reason = classifyScanErrorReason(message);
 
   return {

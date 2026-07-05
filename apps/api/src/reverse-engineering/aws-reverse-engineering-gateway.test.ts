@@ -6,6 +6,7 @@ import {
   parseRouteTablesFromXml,
   parseSecurityGroupsFromXml
 } from "./aws-reverse-engineering-parsers.js";
+import { maskReverseEngineeringSensitiveText as maskGatewaySensitiveText } from "./aws-reverse-engineering-gateway.js";
 
 test("extractSetItems returns only direct AWS set items when child item tags are nested", () => {
   const xml = `
@@ -131,4 +132,16 @@ test("parseSecurityGroupsFromXml keeps open ingress rules for risk findings", ()
   const [securityGroup] = parseSecurityGroupsFromXml(xml, "ap-northeast-2");
 
   assert.deepEqual(securityGroup?.config["ingress"], [{ port: 22, cidr: "0.0.0.0/0" }]);
+});
+
+test("maskReverseEngineeringSensitiveText hides account ids inside AWS error text", () => {
+  const message =
+    "User: arn:aws:sts::316875069960:assumed-role/SketchCatchTerraformExecutionRole/session is not authorized for account 316875069960";
+
+  const maskedMessage = maskGatewaySensitiveText(message);
+
+  assert.equal(
+    maskedMessage,
+    "User: arn:aws:sts::3168********:assumed-role/SketchCatchTerraformExecutionRole/session is not authorized for account 3168********"
+  );
 });

@@ -134,6 +134,11 @@ export function ReverseEngineeringScanCriteriaForm({
 
 // AWS 연결 선택 박스에 보여줄 짧은 이름을 만듭니다.
 function formatAwsConnectionLabel(connection: AwsConnection): string {
-  const accountLabel = connection.accountId ?? "계정 미확인";
+  const accountLabel = connection.accountId ? maskAwsAccountId(connection.accountId) : "계정 미확인";
   return `${accountLabel} · ${connection.region}`;
+}
+
+// Reverse Engineering 화면에 계정 ID 전체가 바로 보이지 않게 가립니다.
+function maskAwsAccountId(accountId: string): string {
+  return accountId.replace(/\b(\d{4})\d{8}\b/g, "$1********");
 }

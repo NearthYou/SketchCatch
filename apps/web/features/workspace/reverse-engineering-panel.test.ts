@@ -8,6 +8,7 @@ const findingsPanelSource = readWorkspaceFile("ReverseEngineeringFindingsPanel.t
 const importPanelSource = readWorkspaceFile("ReverseEngineeringImportSuggestionsPanel.tsx");
 const resultPanelSource = readWorkspaceFile("ReverseEngineeringResultPanel.tsx");
 const resourceTypesSource = readWorkspaceFile("reverse-engineering-resource-types.ts");
+const scanCriteriaFormSource = readWorkspaceFile("ReverseEngineeringScanCriteriaForm.tsx");
 const scanHistoryPanelSource = readWorkspaceFile("ReverseEngineeringScanHistoryPanel.tsx");
 const scanHistoryHookSource = readWorkspaceFile("useReverseEngineeringScanHistory.ts");
 const rightPanelSource = readWorkspaceFile("WorkspaceRightPanel.tsx");
@@ -47,6 +48,11 @@ test("Reverse Engineering result shows risks, partial scan errors, and import ha
   assert.match(importPanelSource, /전체 복사/);
   assert.match(importPanelSource, /Git\/CI\/CD handoff 준비/);
   assert.match(resultPanelSource, /analysisExclusions/);
+});
+
+test("Reverse Engineering panel masks AWS account ids shown in scan controls", () => {
+  assert.match(scanCriteriaFormSource, /maskAwsAccountId/);
+  assert.match(scanCriteriaFormSource, /\$1\*\*\*\*\*\*\*\*/);
 });
 
 test("Reverse Engineering panel exposes scan history, stale warning, and rescan action", () => {
