@@ -7,13 +7,16 @@ import type {
 import { defaultAwsRegion, isAwsRegionCode } from "./aws-region-options";
 
 const regionNodeTypes = new Set(["sketchcatch_region", "design_region"]);
+type LegacyRegionMetadata = DiagramNodeMetadata & {
+  awsRegion?: unknown;
+};
 
 export function isRegionDesignNode(node: DiagramNode): boolean {
   return node.kind === "design" && regionNodeTypes.has(node.type);
 }
 
 export function getRegionNodeAwsRegion(node: DiagramNode): AwsRegionCode {
-  const awsRegion = node.metadata?.awsRegion;
+  const awsRegion = (node.metadata as LegacyRegionMetadata | undefined)?.awsRegion;
 
   return isAwsRegionCode(awsRegion) ? awsRegion : defaultAwsRegion;
 }
@@ -22,8 +25,8 @@ export function createRegionNodeMetadata(
   node: DiagramNode,
   awsRegion: AwsRegionCode
 ): DiagramNodeMetadata {
+  void awsRegion;
   return {
-    ...node.metadata,
-    awsRegion
+    ...node.metadata
   };
 }

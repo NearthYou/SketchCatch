@@ -42,7 +42,6 @@ test("POST /api/terraform/generate returns Terraform code for an active user", a
             kind: "resource",
             label: "main_vpc",
             metadata: {
-              awsRegion: "ap-northeast-2",
               parentAreaNodeId: "area-1"
             },
             parameters: {
@@ -71,6 +70,130 @@ test("POST /api/terraform/generate returns Terraform code for an active user", a
   cidr_block = "10.0.0.0/16"
 }`
   });
+
+  await app.close();
+});
+
+test("POST /api/terraform/generate accepts Region and AZ area resource parameters", async () => {
+  const fakeDb = new AuthOnlyFakeDb({
+    users: [
+      {
+        id: ACTIVE_USER_ID,
+        deletedAt: null
+      }
+    ]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/terraform/generate",
+    headers: await authHeaders(ACTIVE_USER_ID),
+    payload: {
+      diagramJson: {
+        nodes: [
+          {
+            id: "region-1",
+            type: "aws_region",
+            kind: "resource",
+            label: "Region",
+            parameters: {
+              resourceType: "aws_region",
+              resourceName: "ap_northeast_2",
+              fileName: "main",
+              values: {
+                awsRegion: "ap-northeast-2"
+              }
+            }
+          },
+          {
+            id: "az-1",
+            type: "aws_availability_zone",
+            kind: "resource",
+            label: "AZ",
+            metadata: {
+              parentAreaNodeId: "region-1"
+            },
+            parameters: {
+              resourceType: "aws_availability_zone",
+              resourceName: "ap_northeast_2a",
+              fileName: "main",
+              values: {
+                awsAvailabilityZone: "ap-northeast-2a"
+              }
+            }
+          }
+        ],
+        edges: [],
+        viewport: {
+          x: 0,
+          y: 0,
+          zoom: 1
+        }
+      }
+    }
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(response.json() as TerraformGenerateResponse, {
+    terraformCode: ""
+  });
+
+  await app.close();
+});
+
+test("POST /api/terraform/generate rejects legacy awsRegion metadata", async () => {
+  const fakeDb = new AuthOnlyFakeDb({
+    users: [
+      {
+        id: ACTIVE_USER_ID,
+        deletedAt: null
+      }
+    ]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/terraform/generate",
+    headers: await authHeaders(ACTIVE_USER_ID),
+    payload: {
+      diagramJson: {
+        nodes: [
+          {
+            id: "node-1",
+            type: "aws_vpc",
+            kind: "resource",
+            label: "main_vpc",
+            metadata: {
+              awsRegion: "ap-northeast-2"
+            },
+            parameters: {
+              resourceType: "aws_vpc",
+              resourceName: "main",
+              fileName: "main",
+              values: {
+                cidrBlock: "10.0.0.0/16"
+              }
+            }
+          }
+        ],
+        edges: [],
+        viewport: {
+          x: 0,
+          y: 0,
+          zoom: 1
+        }
+      }
+    }
+  });
+
+  assert.equal(response.statusCode, 400);
+  assertErrorResponse(response.json() as ApiErrorResponse, "bad_request");
 
   await app.close();
 });
@@ -493,7 +616,6 @@ test("POST /api/terraform/sync-to-diagram updates matching DiagramJson values", 
             kind: "resource",
             label: "main_vpc",
             metadata: {
-              awsRegion: "ap-northeast-2",
               parentAreaNodeId: "area-1"
             },
             parameters: {
@@ -533,7 +655,6 @@ test("POST /api/terraform/sync-to-diagram updates matching DiagramJson values", 
     cidrBlock: "10.1.0.0/16"
   });
   assert.deepEqual(body.diagramJson.nodes[0]?.metadata, {
-    awsRegion: "ap-northeast-2",
     parentAreaNodeId: "area-1"
   });
   assert.deepEqual(body.diagramJson.edges, [

@@ -26,6 +26,12 @@ test("isRegionDesignNode matches supported Region design node types only", () =>
 });
 
 test("getRegionNodeAwsRegion reads a valid selected region and falls back to Seoul", () => {
+  const persistedNodeWithSelectedRegion = JSON.parse(
+    JSON.stringify({
+      ...baseRegionNode,
+      metadata: { awsRegion: "eu-central-1" }
+    })
+  ) as DiagramNode;
   const persistedNodeWithUnknownRegion = JSON.parse(
     JSON.stringify({
       ...baseRegionNode,
@@ -34,10 +40,7 @@ test("getRegionNodeAwsRegion reads a valid selected region and falls back to Seo
   ) as DiagramNode;
 
   assert.equal(
-    getRegionNodeAwsRegion({
-      ...baseRegionNode,
-      metadata: { awsRegion: "eu-central-1" }
-    }),
+    getRegionNodeAwsRegion(persistedNodeWithSelectedRegion),
     "eu-central-1"
   );
 
@@ -45,15 +48,15 @@ test("getRegionNodeAwsRegion reads a valid selected region and falls back to Seo
   assert.equal(getRegionNodeAwsRegion(baseRegionNode), "ap-northeast-2");
 });
 
-test("createRegionNodeMetadata preserves existing metadata fields while updating awsRegion", () => {
+test("createRegionNodeMetadata no longer writes awsRegion metadata", () => {
   assert.deepEqual(
     createRegionNodeMetadata(
       {
         ...baseRegionNode,
-        metadata: { awsRegion: "ap-northeast-2" }
+        metadata: { parentAreaNodeId: "parent-1" }
       },
       "us-west-2"
     ),
-    { awsRegion: "us-west-2" }
+    { parentAreaNodeId: "parent-1" }
   );
 });

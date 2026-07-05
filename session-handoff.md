@@ -2,6 +2,40 @@
 
 이 파일은 최신 세션 하나를 다음 세션이 빠르게 이어받기 위한 압축본이다. 누적 이력은 `agent-progress.md`에 남긴다.
 
+## 2026-07-05 최신 핸드오프 - Terraform 영역 리소스 계약 Ticket 1
+
+### 현재 상태
+
+- 현재 브랜치: `Feat/jh/163-영역-리소스와-terraform-sync-계약-정리`
+- 사용자 요청: `docs/jh/001_테라폼영역리소스동기화티켓계획_JH.md`의 Ticket 1을 진행하고, 커밋은 만들지 않는다.
+- Ticket 1 범위는 계약 정리다. Web catalog/Preview/Sync parsing 실제 동작 확장은 다음 티켓으로 남긴다.
+- `docs/data-models.md`, `packages/types/src/index.ts`, API schema/test, Web legacy compatibility test/source, `agent-progress.md`, `session-handoff.md`가 수정됐다.
+
+### 완료된 것
+
+- `DiagramNodeMetadata`에서 `awsRegion`을 제거하고 `parentAreaNodeId`만 남겼다.
+- Region/AZ 선택값은 `parameters.values.awsRegion`, `parameters.values.awsAvailabilityZone`에 저장한다는 계약을 문서화했다.
+- `aws_region`, `aws_availability_zone`은 Terraform HCL block이 아니라 SketchCatch 보드 영역 리소스라고 명시했다.
+- Terraform Sync `create_candidate` proposal에 `nodeId`, `metadata`, `position`을 담을 수 있도록 shared type과 문서 계약을 확장했다.
+- API `diagramNodeMetadataSchema`를 strict하게 바꿔 legacy `metadata.awsRegion`을 거부한다.
+- Web은 legacy persisted `metadata.awsRegion` 읽기만 helper 안에 격리하고, 새 metadata 작성은 더 이상 `awsRegion`을 쓰지 않는다.
+
+### 검증된 것
+
+- `pnpm harness:check` - passed before edits and after edits.
+- `pnpm --filter @sketchcatch/api exec tsx --test src/routes/project-draft-schemas.test.ts` - passed.
+- `pnpm --filter @sketchcatch/api exec tsx --test src/routes/terraform.test.ts` - passed.
+- `pnpm --filter @sketchcatch/web exec tsx --test features/parameter-input/region-node-metadata.test.ts features/diagram-editor/area-node-movement.test.ts features/diagram-editor/diagram-utils.test.ts features/workspace/resource-list-summary.test.ts` - passed.
+- `pnpm --filter @sketchcatch/types typecheck`, `pnpm --filter @sketchcatch/api typecheck`, `pnpm --filter @sketchcatch/web typecheck` - passed.
+- `pnpm lint`, `pnpm typecheck`, `pnpm build` - passed.
+- `git diff --check` - passed.
+
+### 다음 행동
+
+- Ticket 2에서 Region/AZ 영역 노드 생성과 parameter panel 저장 경로를 실제 `parameters.values` 기반으로 옮긴다.
+- Ticket 2 이후에는 Web helper에 남은 legacy `metadata.awsRegion` 읽기 호환을 언제 제거할지 결정한다.
+- 이번 세션은 사용자 요청에 따라 커밋하지 않았다.
+
 ## 2026-07-04 최신 핸드오프 - Natural Language Diagramming 브랜치 dev 최신화
 
 ### 현재 상태

@@ -16,20 +16,9 @@ const diagramNodeStyleSchema = z.object({
   borderColor: z.string().min(1).optional()
 });
 
-const awsRegionCodeSchema = z.enum([
-  "ap-northeast-2",
-  "ap-northeast-1",
-  "ap-southeast-1",
-  "us-east-1",
-  "us-west-2",
-  "eu-west-1",
-  "eu-central-1"
-]);
-
 const diagramNodeMetadataSchema: z.ZodType<DiagramNodeMetadata> = z.object({
-  awsRegion: awsRegionCodeSchema.optional(),
   parentAreaNodeId: z.string().min(1).optional()
-});
+}).strict();
 
 const diagramNodeParametersSchema = z.object({
   terraformBlockType: z.enum(["resource", "data"]).optional(),
