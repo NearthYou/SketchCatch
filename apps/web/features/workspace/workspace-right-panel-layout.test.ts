@@ -149,6 +149,38 @@ test("terraform issues navigation stays reachable while diagnostics are visible"
   assert.match(componentSource, /openCollapsedView\("issues"\)/);
 });
 
+test("terraform code navigation stays reachable from issues after a blocked save", () => {
+  const requestViewIndex = componentSource.indexOf("const requestView = useCallback");
+  const requestViewEditorBypassIndex = componentSource.indexOf('if (nextView === "terraform")', requestViewIndex);
+  const requestViewLeaveGuardIndex = componentSource.indexOf(
+    'requestTerraformLeave({ kind: "view", view: nextView })',
+    requestViewIndex
+  );
+  const collapsedViewIndex = componentSource.indexOf("function openCollapsedView");
+  const collapsedViewEditorBypassIndex = componentSource.indexOf('if (nextView === "terraform")', collapsedViewIndex);
+  const collapsedViewLeaveGuardIndex = componentSource.indexOf(
+    'requestTerraformLeave({ kind: "view", view: nextView })',
+    collapsedViewIndex
+  );
+  const documentClickIndex = componentSource.indexOf("function handleDocumentClick");
+  const editorNavigationTargetIndex = componentSource.indexOf(
+    "isTerraformEditorNavigationTarget(target)",
+    documentClickIndex
+  );
+  const replayTargetIndex = componentSource.indexOf("getTerraformLeaveReplayTarget(target)", documentClickIndex);
+
+  assert.ok(requestViewIndex > -1);
+  assert.ok(requestViewEditorBypassIndex > requestViewIndex);
+  assert.ok(requestViewEditorBypassIndex < requestViewLeaveGuardIndex);
+  assert.ok(collapsedViewIndex > -1);
+  assert.ok(collapsedViewEditorBypassIndex > collapsedViewIndex);
+  assert.ok(collapsedViewEditorBypassIndex < collapsedViewLeaveGuardIndex);
+  assert.ok(editorNavigationTargetIndex > documentClickIndex);
+  assert.ok(editorNavigationTargetIndex < replayTargetIndex);
+  assert.match(componentSource, /data-terraform-editor-navigation/);
+  assert.match(componentSource, /isTerraformEditorNavigationTarget/);
+});
+
 test("discarding terraform edits resets the terraform code panel dirty state", () => {
   assert.match(componentSource, /terraformDiscardRequestId/);
   assert.match(componentSource, /setTerraformDiscardRequestId\(\(requestId\) => requestId \+ 1\)/);

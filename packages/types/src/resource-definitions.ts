@@ -33,43 +33,32 @@ export const resourceDefinitions = [
   createAwsResourceDefinition({
     id: "aws-vpc",
     resourceType: "VPC",
-    terraformPreview: true,
-    terraformResourceType: "aws_vpc",
-    terraformSync: true
+    terraformResourceType: "aws_vpc"
   }),
   createAwsResourceDefinition({
     id: "aws-subnet",
     resourceType: "SUBNET",
-    terraformPreview: true,
-    terraformResourceType: "aws_subnet",
-    terraformSync: true
+    terraformResourceType: "aws_subnet"
   }),
   createAwsResourceDefinition({
     id: "aws-internet-gateway",
     resourceType: "INTERNET_GATEWAY",
-    terraformPreview: true,
-    terraformResourceType: "aws_internet_gateway",
-    terraformSync: true
+    terraformResourceType: "aws_internet_gateway"
   }),
   createAwsResourceDefinition({
     id: "aws-route-table",
     resourceType: "ROUTE_TABLE",
-    terraformPreview: true,
-    terraformResourceType: "aws_route_table",
-    terraformSync: true
+    terraformResourceType: "aws_route_table"
   }),
   createAwsResourceDefinition({
     id: "aws-route-table-association",
     resourceType: "ROUTE_TABLE_ASSOCIATION",
-    terraformPreview: true,
-    terraformResourceType: "aws_route_table_association",
-    terraformSync: true
+    terraformResourceType: "aws_route_table_association"
   }),
   createAwsResourceDefinition({
     id: "aws-cloudfront-distribution",
     resourceType: "CLOUDFRONT",
-    terraformResourceType: "aws_cloudfront_distribution",
-    terraformSync: true
+    terraformResourceType: "aws_cloudfront_distribution"
   }),
   createAwsResourceDefinition({
     id: "aws-nat-gateway",
@@ -82,14 +71,11 @@ export const resourceDefinitions = [
   createAwsResourceDefinition({
     id: "aws-security-group",
     resourceType: "SECURITY_GROUP",
-    terraformPreview: true,
-    terraformResourceType: "aws_security_group",
-    terraformSync: true
+    terraformResourceType: "aws_security_group"
   }),
   createAwsResourceDefinition({
     id: "aws-security-group-rule",
     resourceType: "SECURITY_GROUP",
-    terraformPreview: true,
     terraformResourceType: "aws_security_group_rule"
   }),
   createAwsResourceDefinition({
@@ -115,17 +101,13 @@ export const resourceDefinitions = [
   createAwsResourceDefinition({
     id: "aws-ec2-instance",
     resourceType: "EC2",
-    terraformPreview: true,
-    terraformResourceType: "aws_instance",
-    terraformSync: true
+    terraformResourceType: "aws_instance"
   }),
   createAwsResourceDefinition({
     id: "aws-ami",
     resourceType: "AMI",
     terraformBlockType: "data",
-    terraformPreview: true,
-    terraformResourceType: "aws_ami",
-    terraformSync: true
+    terraformResourceType: "aws_ami"
   }),
   createAwsResourceDefinition({
     id: "aws-key-pair",
@@ -146,9 +128,7 @@ export const resourceDefinitions = [
   createAwsResourceDefinition({
     id: "aws-s3-bucket",
     resourceType: "S3",
-    terraformPreview: true,
-    terraformResourceType: "aws_s3_bucket",
-    terraformSync: true
+    terraformResourceType: "aws_s3_bucket"
   }),
   createAwsResourceDefinition({
     id: "aws-s3-public-access-block",
@@ -304,9 +284,9 @@ function createAwsResourceDefinition({
   id,
   resourceType = DEFAULT_RESOURCE_TYPE,
   terraformBlockType = DEFAULT_TERRAFORM_BLOCK_TYPE,
-  terraformPreview = false,
+  terraformPreview = true,
   terraformResourceType,
-  terraformSync = false
+  terraformSync = true
 }: AwsResourceDefinitionInput): ResourceDefinition {
   return {
     id,

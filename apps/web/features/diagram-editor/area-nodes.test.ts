@@ -109,7 +109,7 @@ test("getAreaNodeIconUrl returns resource and design area icons", () => {
   );
 });
 
-test("getAreaNodeMetaLabel summarizes Region and AZ area parameters", () => {
+test("getAreaNodeMetaLabel summarizes Region area parameters without cluttering AZ headers", () => {
   assert.equal(
     getAreaNodeMetaLabel(
       makeResourceNode({
@@ -130,7 +130,7 @@ test("getAreaNodeMetaLabel summarizes Region and AZ area parameters", () => {
         }
       })
     ),
-    "US East (N. Virginia) / us-east-1b"
+    undefined
   );
 });
 

@@ -14,11 +14,12 @@ import {
   createTerraformBlockAddress,
   createTerraformBlockIdentityKey
 } from "./terraform-identity.js";
-import { getTerraformNestedBlockAttributes } from "./terraform-nested-blocks.js";
+import { isTerraformNestedBlockAttribute } from "./terraform-nested-blocks.js";
 
 const DEFAULT_TERRAFORM_BLOCK_TYPE: TerraformBlockType = "resource";
 const BLOCK_HEADER_PATTERN =
   /^\s*(resource|data)\s+"([^"]+)"\s+"([^"]+)"\s*\{\s*$/;
+const PROVIDER_BLOCK_HEADER_PATTERN = /^\s*provider\s+"([^"]+)"\s*\{\s*(?:\}\s*)?$/;
 const TOP_LEVEL_BLOCK_PATTERN = /^\s*([A-Za-z_][A-Za-z0-9_-]*)\b.*\{\s*$/;
 const NESTED_BLOCK_PATTERN = /^\s*([A-Za-z_][A-Za-z0-9_-]*)\s*\{\s*$/;
 const ATTRIBUTE_PATTERN = /^\s*([A-Za-z_][A-Za-z0-9_-]*)\s*=\s*(.*)$/;
@@ -39,6 +40,7 @@ type ParsedBlock = {
 type ParseResult = {
   blocks: ParsedBlock[];
   diagnostics: TerraformDiagnostic[];
+  ignoredProviderBlockCount: number;
 };
 
 type BodyLine = {
@@ -52,6 +54,16 @@ type TerraformSyncInput =
       terraformCode: string;
       terraformFiles?: TerraformSyncFileInput[] | undefined;
     };
+
+type CreateCandidateProposal = Extract<
+  TerraformDiagramChangeProposal,
+  { kind: "create_candidate" }
+>;
+
+type AvailabilityZoneProposalPlan = {
+  azCreateProposals: CreateCandidateProposal[];
+  parentAreaNodeIdByBlockKey: Map<string, string>;
+};
 
 export function syncTerraformToDiagramJson(
   diagramJson: DiagramJson,
@@ -73,6 +85,14 @@ export function syncTerraformToDiagramJson(
         diagramJson,
         diagnostics: [],
         proposals: createChangeProposals(createDiagramOnlyNodes(diagramJson.nodes, new Map()), [])
+      };
+    }
+
+    if (parseResult.ignoredProviderBlockCount > 0) {
+      return {
+        diagramJson,
+        diagnostics: [],
+        proposals: []
       };
     }
 
@@ -103,12 +123,18 @@ export function syncTerraformToDiagramJson(
   const blockByIdentityKey = new Map(
     parseResult.blocks.map((block) => [createTerraformBlockIdentityKey(block.identity), block])
   );
+  const availabilityZoneProposalPlan = createAvailabilityZoneProposalPlan(
+    diagramJson.nodes,
+    parseResult.blocks
+  );
   const diagnostics: TerraformDiagnostic[] = [];
   const valuesByNodeId = new Map<string, Record<string, unknown>>();
+  const metadataByNodeId = new Map<string, DiagramNode["metadata"]>();
   const terraformOnlyBlocks: ParsedBlock[] = [];
 
   for (const block of parseResult.blocks) {
-    const node = nodeByIdentityKey.get(createTerraformBlockIdentityKey(block.identity));
+    const blockKey = createTerraformBlockIdentityKey(block.identity);
+    const node = nodeByIdentityKey.get(blockKey);
 
     if (!node) {
       if (isProposalSupportedBlock(block.identity)) {
@@ -127,6 +153,15 @@ export function syncTerraformToDiagramJson(
     }
 
     valuesByNodeId.set(node.id, block.values);
+
+    const parentAreaNodeId = availabilityZoneProposalPlan.parentAreaNodeIdByBlockKey.get(blockKey);
+
+    if (parentAreaNodeId) {
+      metadataByNodeId.set(node.id, {
+        ...node.metadata,
+        parentAreaNodeId
+      });
+    }
   }
 
   if (diagnostics.length > 0) {
@@ -138,24 +173,34 @@ export function syncTerraformToDiagramJson(
   }
 
   const diagramOnlyNodes = createDiagramOnlyNodes(diagramJson.nodes, blockByIdentityKey);
-  const proposals = createChangeProposals(diagramOnlyNodes, terraformOnlyBlocks);
+  const proposals = createChangeProposals(
+    diagramOnlyNodes,
+    terraformOnlyBlocks,
+    availabilityZoneProposalPlan
+  );
 
   return {
     diagramJson: {
       ...diagramJson,
       nodes: diagramJson.nodes.map((node) => {
         const values = valuesByNodeId.get(node.id);
+        const metadata = metadataByNodeId.get(node.id);
 
-        if (!values || !node.parameters) {
+        if (!values && !metadata) {
           return node;
         }
 
         return {
           ...node,
-          parameters: {
-            ...node.parameters,
-            values
-          }
+          ...(metadata ? { metadata } : {}),
+          ...(values && node.parameters
+            ? {
+                parameters: {
+                  ...node.parameters,
+                  values
+                }
+              }
+            : {})
         };
       }),
       edges: diagramJson.edges.map((edge) => ({ ...edge })),
@@ -197,6 +242,11 @@ function createNodeIdentityMap(nodes: DiagramNode[]): {
     }
 
     const identity = toNodeIdentity(node);
+
+    if (!isProposalSupportedBlock(identity)) {
+      continue;
+    }
+
     const key = createTerraformBlockIdentityKey(identity);
 
     if (nodeByIdentityKey.has(key)) {
@@ -218,7 +268,11 @@ function createNodeIdentityMap(nodes: DiagramNode[]): {
 
 function createChangeProposals(
   diagramOnlyNodes: DiagramNode[],
-  terraformOnlyBlocks: ParsedBlock[]
+  terraformOnlyBlocks: ParsedBlock[],
+  availabilityZoneProposalPlan: AvailabilityZoneProposalPlan = {
+    azCreateProposals: [],
+    parentAreaNodeIdByBlockKey: new Map()
+  }
 ): TerraformDiagramChangeProposal[] {
   const proposals: TerraformDiagramChangeProposal[] = [];
   const usedTerraformBlockKeys = new Set<string>();
@@ -247,16 +301,23 @@ function createChangeProposals(
     });
   }
 
+  proposals.push(...availabilityZoneProposalPlan.azCreateProposals);
+
   for (const block of terraformOnlyBlocks) {
-    if (usedTerraformBlockKeys.has(createTerraformBlockIdentityKey(block.identity))) {
+    const blockKey = createTerraformBlockIdentityKey(block.identity);
+
+    if (usedTerraformBlockKeys.has(blockKey)) {
       continue;
     }
+
+    const parentAreaNodeId = availabilityZoneProposalPlan.parentAreaNodeIdByBlockKey.get(blockKey);
 
     proposals.push({
       kind: "create_candidate",
       identity: block.identity,
       sourceFileName: block.sourceFileName,
       line: block.line,
+      ...(parentAreaNodeId ? { metadata: { parentAreaNodeId } } : {}),
       parameters: toDiagramNodeParameters(block)
     });
   }
@@ -277,6 +338,125 @@ function createChangeProposals(
   }
 
   return proposals;
+}
+
+function createAvailabilityZoneProposalPlan(
+  nodes: readonly DiagramNode[],
+  blocks: readonly ParsedBlock[]
+): AvailabilityZoneProposalPlan {
+  const usedNodeIds = new Set(nodes.map((node) => node.id));
+  const azNodeIdByValue = createExistingAvailabilityZoneNodeIdByValue(nodes);
+  const azCreateProposalByValue = new Map<string, CreateCandidateProposal>();
+  const parentAreaNodeIdByBlockKey = new Map<string, string>();
+
+  for (const block of blocks) {
+    const availabilityZone = getBlockAvailabilityZone(block);
+
+    if (!availabilityZone) {
+      continue;
+    }
+
+    let azNodeId = azNodeIdByValue.get(availabilityZone);
+
+    if (!azNodeId) {
+      azNodeId = createUniqueNodeId(`terraform-az-${availabilityZone}`, usedNodeIds);
+      usedNodeIds.add(azNodeId);
+      azNodeIdByValue.set(availabilityZone, azNodeId);
+      azCreateProposalByValue.set(
+        availabilityZone,
+        createAvailabilityZoneProposal(availabilityZone, azNodeId, block.sourceFileName)
+      );
+    }
+
+    parentAreaNodeIdByBlockKey.set(createTerraformBlockIdentityKey(block.identity), azNodeId);
+  }
+
+  return {
+    azCreateProposals: [...azCreateProposalByValue.values()],
+    parentAreaNodeIdByBlockKey
+  };
+}
+
+function createExistingAvailabilityZoneNodeIdByValue(
+  nodes: readonly DiagramNode[]
+): Map<string, string> {
+  const nodeIdByValue = new Map<string, string>();
+
+  for (const node of nodes) {
+    if (node.kind !== "resource" || getNodeResourceType(node) !== "aws_availability_zone") {
+      continue;
+    }
+
+    const availabilityZone = node.parameters?.values["awsAvailabilityZone"];
+
+    if (typeof availabilityZone === "string" && availabilityZone.trim().length > 0) {
+      nodeIdByValue.set(availabilityZone, node.id);
+    }
+  }
+
+  return nodeIdByValue;
+}
+
+function createAvailabilityZoneProposal(
+  availabilityZone: string,
+  nodeId: string,
+  fileName: string
+): CreateCandidateProposal {
+  const resourceName = toTerraformLocalName(availabilityZone);
+
+  return {
+    kind: "create_candidate",
+    identity: {
+      terraformBlockType: "resource",
+      resourceType: "aws_availability_zone",
+      resourceName
+    },
+    nodeId,
+    parameters: {
+      resourceType: "aws_availability_zone",
+      resourceName,
+      fileName,
+      values: {
+        awsAvailabilityZone: availabilityZone
+      }
+    }
+  };
+}
+
+function getBlockAvailabilityZone(block: ParsedBlock): string | null {
+  if (block.resourceType !== "aws_subnet" && block.resourceType !== "aws_ebs_volume") {
+    return null;
+  }
+
+  const availabilityZone = block.values["availabilityZone"];
+
+  return typeof availabilityZone === "string" && availabilityZone.trim().length > 0
+    ? availabilityZone
+    : null;
+}
+
+function getNodeResourceType(node: DiagramNode): string {
+  return node.parameters?.resourceType ?? node.type;
+}
+
+function createUniqueNodeId(baseId: string, usedNodeIds: ReadonlySet<string>): string {
+  const normalizedBaseId = baseId.replace(/[^A-Za-z0-9_-]+/g, "-");
+
+  if (!usedNodeIds.has(normalizedBaseId)) {
+    return normalizedBaseId;
+  }
+
+  for (let index = 2; ; index += 1) {
+    const candidate = `${normalizedBaseId}-${index}`;
+
+    if (!usedNodeIds.has(candidate)) {
+      return candidate;
+    }
+  }
+}
+
+function toTerraformLocalName(value: string): string {
+  return value.replace(/[^A-Za-z0-9_]+/g, "_");
 }
 
 function createRenameCandidateGroups(
@@ -397,6 +577,7 @@ function parseTerraformInput(input: TerraformSyncInput): ParseResult {
   const blocks: ParsedBlock[] = [];
   const diagnostics: TerraformDiagnostic[] = [];
   const identityKeys = new Set<string>();
+  let ignoredProviderBlockCount = 0;
 
   for (const file of files) {
     const parseResult = parseTerraformBlocks(file.fileName, file.terraformCode);
@@ -425,9 +606,10 @@ function parseTerraformInput(input: TerraformSyncInput): ParseResult {
         sourceFileName: diagnostic.sourceFileName ?? file.fileName
       }))
     );
+    ignoredProviderBlockCount += parseResult.ignoredProviderBlockCount;
   }
 
-  return { blocks, diagnostics };
+  return { blocks, diagnostics, ignoredProviderBlockCount };
 }
 
 function isTerraformSyncInputBlank(input: TerraformSyncInput): boolean {
@@ -443,6 +625,7 @@ function parseTerraformBlocks(sourceFileName: string, terraformCode: string): Pa
   const lines = splitTerraformLines(terraformCode);
   const blocks: ParsedBlock[] = [];
   const diagnostics: TerraformDiagnostic[] = [];
+  let ignoredProviderBlockCount = 0;
 
   for (let index = 0; index < lines.length; index += 1) {
     const lineText = lines[index] ?? "";
@@ -450,6 +633,26 @@ function parseTerraformBlocks(sourceFileName: string, terraformCode: string): Pa
     const trimmedLine = codeLine.trim();
 
     if (!trimmedLine) {
+      continue;
+    }
+
+    const providerHeaderMatch = PROVIDER_BLOCK_HEADER_PATTERN.exec(codeLine);
+
+    if (providerHeaderMatch) {
+      ignoredProviderBlockCount += 1;
+
+      if (!isInlineEmptyBlock(codeLine)) {
+        const bodyResult = collectBlockBody(lines, index + 1, index + 1, "provider");
+        diagnostics.push(...bodyResult.diagnostics);
+
+        if (!bodyResult.closed) {
+          index = lines.length;
+          continue;
+        }
+
+        index = bodyResult.endIndex;
+      }
+
       continue;
     }
 
@@ -499,7 +702,7 @@ function parseTerraformBlocks(sourceFileName: string, terraformCode: string): Pa
     const valuesResult = parseAttributes(
       bodyResult.bodyLines,
       address,
-      getTerraformNestedBlockAttributes(resourceType)
+      resourceType
     );
     diagnostics.push(...valuesResult.diagnostics);
 
@@ -517,11 +720,15 @@ function parseTerraformBlocks(sourceFileName: string, terraformCode: string): Pa
     index = bodyResult.endIndex;
   }
 
-  return { blocks, diagnostics };
+  return { blocks, diagnostics, ignoredProviderBlockCount };
 }
 
 function splitTerraformLines(terraformCode: string): string[] {
   return terraformCode.split(/\r?\n/);
+}
+
+function isInlineEmptyBlock(lineText: string): boolean {
+  return /\{\s*\}\s*$/.test(stripLineComment(lineText));
 }
 
 function collectBlockBody(
@@ -589,7 +796,7 @@ function collectBlockBody(
 function parseAttributes(
   bodyLines: BodyLine[],
   resourceAddress: string,
-  supportedNestedBlocks?: ReadonlySet<string>
+  resourceType?: string
 ): { values: Record<string, unknown>; diagnostics: TerraformDiagnostic[] } {
   const values: Record<string, unknown> = {};
   const diagnostics: TerraformDiagnostic[] = [];
@@ -621,7 +828,7 @@ function parseAttributes(
       diagnostics.push(...nestedBlock.diagnostics);
       index = nestedBlock.endIndex;
 
-      if (supportedNestedBlocks?.has(nestedBlockName) !== true) {
+      if (!resourceType || !isTerraformNestedBlockAttribute(resourceType, nestedBlockName)) {
         diagnostics.push({
           severity: "error",
           code: "terraform.sync.nested_block",
