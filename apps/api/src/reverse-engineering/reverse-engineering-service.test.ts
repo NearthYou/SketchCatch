@@ -117,6 +117,105 @@ test("createReverseEngineeringScanJob returns a running scan before the adapter 
   assert.equal(repository.scanRows[0]?.status, "completed");
 });
 
+test("createReverseEngineeringScanJob keeps a cancelled scan from becoming completed", async () => {
+  const repository = new FakeReverseEngineeringRepository();
+  const job = await createReverseEngineeringScanJob(
+    {
+      projectId,
+      accessContext: { kind: "user", userId },
+      awsConnectionId,
+      region: "ap-northeast-2",
+      resourceTypes: ["VPC"]
+    },
+    repository,
+    {
+      adapter: {
+        async scan() {
+          const scan = repository.scanRows[0];
+
+          if (scan) {
+            scan.status = "cancelled";
+            scan.cancelRequestedAt = fixedNow;
+          }
+
+          return {
+            scan: makeScan({ id: "not-yet-persisted" }),
+            discoveredResources: [],
+            reverseEngineeringDraft: {
+              id: "draft-not-yet-persisted",
+              scanId: "not-yet-persisted",
+              architectureJson: { nodes: [], edges: [] },
+              protectedValueKeys: [],
+              editableValueKeys: [],
+              createdAt: fixedNow.toISOString()
+            },
+            architectureJson: { nodes: [], edges: [] },
+            findings: [],
+            analysisExclusions: [],
+            importSuggestions: [],
+            scanErrors: []
+          };
+        }
+      },
+      generateId: () => "44444444-4444-4444-8444-444444444444",
+      now: () => fixedNow
+    }
+  );
+
+  await assert.rejects(() => job.run(), /취소/);
+
+  assert.equal(repository.scanRows[0]?.status, "cancelled");
+  assert.equal(repository.scanRows[0]?.result, null);
+});
+
+test("softDeleteScan removes the saved scan result and logs without deleting the applied board", async () => {
+  const repository = new FakeReverseEngineeringRepository();
+  const scan = await repository.createScan({
+    id: "44444444-4444-4444-8444-444444444444",
+    projectId,
+    awsConnectionId,
+    provider: "aws",
+    region: "ap-northeast-2",
+    resourceTypes: ["VPC"],
+    status: "running",
+    startedAt: fixedNow,
+    createdAt: fixedNow,
+    updatedAt: fixedNow
+  });
+  scan.result = {
+    scan: makeScan({ id: scan.id }),
+    discoveredResources: [],
+    reverseEngineeringDraft: {
+      id: `draft-${scan.id}`,
+      scanId: scan.id,
+      architectureJson: { nodes: [], edges: [] },
+      protectedValueKeys: [],
+      editableValueKeys: [],
+      createdAt: fixedNow.toISOString()
+    },
+    architectureJson: { nodes: [], edges: [] },
+    findings: [],
+    analysisExclusions: [],
+    importSuggestions: [],
+    scanErrors: []
+  };
+  await repository.appendScanLog({
+    id: "55555555-5555-4555-8555-555555555555",
+    scanId: scan.id,
+    sequence: 1,
+    stage: "provider_api",
+    level: "INFO",
+    message: "Reverse Engineering 스캔이 완료됐습니다.",
+    createdAt: fixedNow
+  });
+
+  await repository.softDeleteScan(projectId, scan.id, { kind: "user", userId }, fixedNow);
+
+  assert.equal(repository.scanRows[0]?.deletedAt, fixedNow);
+  assert.equal(repository.scanRows[0]?.result, null);
+  assert.equal(repository.logRows.length, 0);
+});
+
 test("createReverseEngineeringScan fails before scanning when the project is not accessible", async () => {
   const repository = new FakeReverseEngineeringRepository();
   repository.project = undefined;
@@ -161,7 +260,7 @@ class FakeReverseEngineeringRepository implements ReverseEngineeringRepository {
     updatedAt: fixedNow.toISOString()
   };
   scanRows: ReverseEngineeringScanRecord[] = [];
-  logRows: Array<{ message: string }> = [];
+  logRows: ReverseEngineeringScanLogRecord[] = [];
 
   async findAccessibleProject() {
     return this.project;
@@ -191,7 +290,7 @@ class FakeReverseEngineeringRepository implements ReverseEngineeringRepository {
   async completeScan(scanId: string, result: ReverseEngineeringScanRecord["result"], completedAt: Date) {
     const scan = this.scanRows.find((row) => row.id === scanId);
 
-    if (!scan) {
+    if (!scan || scan.status === "cancelled") {
       return undefined;
     }
 
@@ -218,15 +317,29 @@ class FakeReverseEngineeringRepository implements ReverseEngineeringRepository {
     return this.scanRows[0];
   }
 
-  async softDeleteScan() {
-    return this.scanRows[0];
+  async softDeleteScan(
+    _projectId: string,
+    scanId: string,
+    _accessContext: { kind: "user"; userId: string },
+    deletedAt: Date
+  ) {
+    const scan = this.scanRows[0];
+
+    if (!scan || scan.id !== scanId) {
+      return undefined;
+    }
+
+    scan.deletedAt = deletedAt;
+    scan.updatedAt = deletedAt;
+    scan.result = null;
+    this.logRows = this.logRows.filter((log) => log.scanId !== scan.id);
+    return scan;
   }
 
   async appendScanLog(
     input: AppendReverseEngineeringScanLogInput
   ): Promise<ReverseEngineeringScanLogRecord> {
-    this.logRows.push({ message: input.message });
-    return {
+    const log = {
       id: input.id,
       scanId: input.scanId,
       sequence: input.sequence,
@@ -235,6 +348,9 @@ class FakeReverseEngineeringRepository implements ReverseEngineeringRepository {
       message: input.message,
       createdAt: input.createdAt
     };
+
+    this.logRows.push(log);
+    return log;
   }
 
   async listScanLogs() {

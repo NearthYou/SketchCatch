@@ -121,6 +121,13 @@ export class ReverseEngineeringNotFoundError extends Error {
   }
 }
 
+class ReverseEngineeringScanCancelledError extends Error {
+  constructor() {
+    super("Reverse Engineering 스캔이 취소됐습니다.");
+    this.name = "ReverseEngineeringScanCancelledError";
+  }
+}
+
 // 스캔 생성부터 결과 저장까지 한 번에 처리하는 서비스 진입점입니다.
 export async function createReverseEngineeringScan(
   input: CreateReverseEngineeringScanInput,
@@ -240,6 +247,11 @@ async function runReverseEngineeringScanJob({
     };
     const savedScan = await repository.completeScan(scan.id, result, completedAt);
 
+    if (!savedScan) {
+      await throwIfScanWasCancelled(repository, input, scan.id, generateId, now);
+      throw new ReverseEngineeringNotFoundError("Reverse Engineering scan not found");
+    }
+
     await appendUserFacingLog(repository, scan.id, "Reverse Engineering 스캔이 완료됐습니다.", {
       generateId,
       now,
@@ -248,9 +260,13 @@ async function runReverseEngineeringScanJob({
 
     return {
       ...result,
-      scan: toReverseEngineeringScan(savedScan ?? { ...scan, status: "completed", completedAt })
+      scan: toReverseEngineeringScan(savedScan)
     };
   } catch (error) {
+    if (error instanceof ReverseEngineeringScanCancelledError) {
+      throw error;
+    }
+
     const failedAt = now();
     const errorSummary = error instanceof Error ? error.message : "Reverse Engineering scan failed";
     const failedScan = await repository.failScan(scan.id, errorSummary, failedAt);
@@ -315,7 +331,7 @@ export function createPostgresReverseEngineeringRepository(
           completedAt,
           updatedAt: completedAt
         })
-        .where(eq(reverseEngineeringScans.id, scanId))
+        .where(and(eq(reverseEngineeringScans.id, scanId), eq(reverseEngineeringScans.status, "running")))
         .returning();
 
       return scan;
@@ -397,10 +413,14 @@ export function createPostgresReverseEngineeringRepository(
         return undefined;
       }
 
+      await db.delete(reverseEngineeringScanLogs).where(eq(reverseEngineeringScanLogs.scanId, existingScan.id));
+
       const [scan] = await db
         .update(reverseEngineeringScans)
         .set({
           deletedAt,
+          errorSummary: null,
+          result: null,
           updatedAt: deletedAt
         })
         .where(eq(reverseEngineeringScans.id, existingScan.id))
@@ -433,6 +453,29 @@ export function createPostgresReverseEngineeringRepository(
         .orderBy(asc(reverseEngineeringScanLogs.sequence));
     }
   };
+}
+
+// 취소 요청이 들어온 scan은 완료 결과로 저장하지 않고 cancelled 상태를 유지합니다.
+async function throwIfScanWasCancelled(
+  repository: ReverseEngineeringRepository,
+  input: CreateReverseEngineeringScanInput,
+  scanId: string,
+  generateId: () => string,
+  now: () => Date
+): Promise<void> {
+  const latestScan = await repository.findAccessibleScan(input.projectId, scanId, input.accessContext);
+
+  if (latestScan?.status !== "cancelled") {
+    return;
+  }
+
+  await appendUserFacingLog(repository, scanId, "Reverse Engineering 스캔이 취소됐습니다.", {
+    generateId,
+    now,
+    sequence: 2,
+    level: "WARN"
+  });
+  throw new ReverseEngineeringScanCancelledError();
 }
 
 export function toReverseEngineeringScan(row: ReverseEngineeringScanRecord): ReverseEngineeringScan {
