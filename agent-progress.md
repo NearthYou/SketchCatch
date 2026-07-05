@@ -13,6 +13,25 @@
 - Highest priority unfinished harness feature: `HARNESS-007`
 - Current blocker: none
 
+### 2026-07-05 - Issue #161 Terraform 오류 AI 해결 변경 이동
+
+- Goal: `feat/ck/152-ai-diagram-editing`에 섞여 있던 Terraform 오류 Issues/AI 해결 변경을 `feature/ck/161-terraform-issue-ai-fix` worktree로 옮기고, AI 다이어그램 수정 흐름과 분리해 커밋 가능한 상태로 만든다.
+- Completed:
+  - Terraform 오류 AI 설명 타입/API/테스트, Issues 상태 저장, safe fix, Issues 패널/AI chat dock 연결, 관련 문서를 #161 worktree로 이동했다.
+  - `WorkspaceAiChatDock` 충돌은 #161의 기존 초안/시뮬레이션 흐름을 기준으로 해소하고 Terraform Issue AI 요청/결과 표시만 추가했다.
+  - #152 AI 다이어그램 브랜치의 patch preview 및 `saveDiagramNow` 의존성은 #161 범위가 아니므로 가져오지 않았다.
+- Verification run:
+  - `pnpm harness:check` - sandbox EPERM 후 권한 재실행으로 passed before conflict resolution.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/aiTerraformErrorExplanation.test.ts src/services/aiProviderRouter.test.ts` - passed, 12 tests.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/terraform-safe-fixes.test.ts features/workspace/terraform-issues-state.test.ts features/workspace/workspace-right-panel-layout.test.ts features/workspace/terraform-error-explanation-panel.test.ts` - passed, 47 tests.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - failed once on AI diagram branch-only `context.saveDiagramNow`, then passed after removing that dependency.
+  - `pnpm build` - passed.
+  - `git diff --check` - passed with line-ending warnings only.
+- Known risks:
+  - 실제 AWS apply/destroy, cloud mutation, Git/CI/CD handoff는 실행하지 않았다.
+  - 실제 Amazon Q 인증/환경 연동은 기존 AI provider/fallback 계약 안에서만 테스트했다.
+
 ### 2026-07-04 - PR #151 리뷰 대응
 
 - Goal: PR #151에 남은 review thread를 반영해 프로젝트별 AI 채팅 기록 저장과 Terraform 참조 기반 area 부모 추론을 보정한다.
