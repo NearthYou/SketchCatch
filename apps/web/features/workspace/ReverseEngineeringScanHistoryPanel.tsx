@@ -6,6 +6,7 @@ export type ReverseEngineeringScanHistoryPanelProps = {
   readonly canRescan: boolean;
   readonly isLoading: boolean;
   readonly isStaleResult: boolean;
+  readonly onDeleteScan: (scanId: string) => void;
   readonly onOpenScan: (scanId: string) => void;
   readonly onRescan: () => void;
   readonly scans: ReverseEngineeringScan[];
@@ -17,6 +18,7 @@ export function ReverseEngineeringScanHistoryPanel({
   canRescan,
   isLoading,
   isStaleResult,
+  onDeleteScan,
   onOpenScan,
   onRescan,
   scans
@@ -54,6 +56,14 @@ export function ReverseEngineeringScanHistoryPanel({
                 type="button"
               >
                 열기
+              </button>
+              <button
+                className={styles.deploymentSecondaryButton}
+                disabled={isLoading}
+                onClick={() => onDeleteScan(scan.id)}
+                type="button"
+              >
+                삭제
               </button>
             </li>
           ))}

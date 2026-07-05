@@ -51,8 +51,15 @@ export function useReverseEngineeringScanHistory({
     ]);
   }
 
+  // 삭제된 스캔은 기록 목록과 현재 선택 상태에서 함께 빼냅니다.
+  function forgetScan(scanId: string): void {
+    setScanHistory((currentScans) => currentScans.filter((scan) => scan.id !== scanId));
+    setActiveScanId((currentScanId) => (currentScanId === scanId ? null : currentScanId));
+  }
+
   return {
     activeScanId,
+    forgetScan,
     isStaleScanResult,
     rememberCompletedScan,
     scanHistory,

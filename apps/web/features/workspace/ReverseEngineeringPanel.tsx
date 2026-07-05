@@ -8,8 +8,10 @@ import type {
 } from "../../../../packages/types/src";
 import type { DiagramEditorPanelContext } from "../diagram-editor";
 import {
+  cancelReverseEngineeringScan,
   createArchitectureSnapshot,
   createReverseEngineeringScan,
+  deleteReverseEngineeringScan,
   getReverseEngineeringScan,
   listReverseEngineeringScanLogs
 } from "./api";
@@ -63,6 +65,7 @@ export function ReverseEngineeringPanel({ context, projectId }: ReverseEngineeri
   });
   const {
     activeScanId,
+    forgetScan,
     isStaleScanResult,
     rememberCompletedScan,
     scanHistory,
@@ -148,6 +151,44 @@ export function ReverseEngineeringPanel({ context, projectId }: ReverseEngineeri
     }
   }
 
+  // 사용자가 실행 중인 scan을 멈추고 싶을 때 서버에 안전한 취소 요청만 보냅니다.
+  async function cancelActiveScan(): Promise<void> {
+    if (!activeScanId || !selectedProjectId) {
+      return;
+    }
+
+    try {
+      const scan = await cancelReverseEngineeringScan({
+        projectId: selectedProjectId,
+        scanId: activeScanId
+      });
+
+      rememberCompletedScan(scan);
+      setApplyMessage("취소 요청을 보냈습니다. 현재 단계가 끝나면 scan이 중단됩니다.");
+    } catch (error) {
+      setErrorMessage(toErrorMessage(error));
+    }
+  }
+
+  // scan 원본 기록만 삭제하고, 이미 적용된 보드 상태는 그대로 둡니다.
+  async function deleteSavedScan(scanId: string): Promise<void> {
+    try {
+      await deleteReverseEngineeringScan({
+        projectId: selectedProjectId,
+        scanId
+      });
+
+      forgetScan(scanId);
+      if (scanResponse?.scan.id === scanId) {
+        setScanResponse(null);
+        setLogs([]);
+        context.setPreviewDiagram(null);
+      }
+    } catch (error) {
+      setErrorMessage(toErrorMessage(error));
+    }
+  }
+
   // 저장된 스캔 기록을 다시 열고, 보드에는 실제 적용이 아닌 미리보기만 띄웁니다.
   async function openHistoricalScan(scanId: string): Promise<void> {
     setScanState("loading");
@@ -228,6 +269,7 @@ export function ReverseEngineeringPanel({ context, projectId }: ReverseEngineeri
           isScanning={scanState === "loading"}
           onRefresh={() => void loadOptions()}
           onResourceTypeToggle={toggleResourceType}
+          onScanCancel={() => void cancelActiveScan()}
           onScanStart={() => void runScan()}
           onSelectedAwsConnectionChange={setSelectedAwsConnectionId}
           onSelectedProjectChange={setSelectedProjectId}
@@ -244,6 +286,7 @@ export function ReverseEngineeringPanel({ context, projectId }: ReverseEngineeri
           canRescan={canStartScan}
           isLoading={scanHistoryState === "loading" || scanState === "loading"}
           isStaleResult={isStaleScanResult}
+          onDeleteScan={(scanId) => void deleteSavedScan(scanId)}
           onOpenScan={(scanId) => void openHistoricalScan(scanId)}
           onRescan={() => void runScan()}
           scans={scanHistory}

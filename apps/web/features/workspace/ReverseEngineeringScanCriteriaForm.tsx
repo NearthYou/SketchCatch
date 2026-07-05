@@ -9,6 +9,7 @@ type ReverseEngineeringScanCriteriaFormProps = {
   readonly isScanning: boolean;
   readonly onRefresh: () => void;
   readonly onResourceTypeToggle: (resourceType: ResourceType) => void;
+  readonly onScanCancel: () => void;
   readonly onScanStart: () => void;
   readonly onSelectedAwsConnectionChange: (awsConnectionId: string) => void;
   readonly onSelectedProjectChange: (projectId: string) => void;
@@ -27,6 +28,7 @@ export function ReverseEngineeringScanCriteriaForm({
   isScanning,
   onRefresh,
   onResourceTypeToggle,
+  onScanCancel,
   onScanStart,
   onSelectedAwsConnectionChange,
   onSelectedProjectChange,
@@ -116,6 +118,15 @@ export function ReverseEngineeringScanCriteriaForm({
         >
           <span className={styles.deploymentButtonText}>{isScanning ? "스캔 중" : "AWS 스캔 시작"}</span>
         </button>
+        {isScanning ? (
+          <button
+            className={styles.deploymentSecondaryButton}
+            onClick={onScanCancel}
+            type="button"
+          >
+            취소
+          </button>
+        ) : null}
       </section>
     </>
   );

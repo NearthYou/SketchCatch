@@ -8,9 +8,11 @@ import {
   createAwsConnectionSetup,
   createDeployment,
   createProjectAssetUpload,
+  cancelReverseEngineeringScan,
   createReverseEngineeringScan,
   deleteAwsConnection,
   deleteProject,
+  deleteReverseEngineeringScan,
   getAwsConnectionCloudFormationTemplate,
   getDeploymentFailureExplanation,
   getGitCicdHandoffPipelineStatus,
@@ -1017,6 +1019,65 @@ test("reverseEngineering helpers list scans and logs", async (context) => {
   assert.equal(logs[0]?.stage, "provider_api");
 });
 
+test("reverseEngineering helpers cancel and delete scans", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    restoreWindow(originalWindowDescriptor);
+  });
+
+  installAuthSession();
+
+  globalThis.fetch = async (input, init) => {
+    requests.push({ input, init });
+
+    if (init?.method === "DELETE") {
+      return new Response(null, { status: 204 });
+    }
+
+    return new Response(
+      JSON.stringify({
+        scan: createReverseEngineeringScanPayload({
+          id: "77777777-7777-4777-8777-777777777777",
+          projectId: project.id,
+          status: "cancelled"
+        })
+      }),
+      {
+        headers: {
+          "Content-Type": "application/json"
+        },
+        status: 200
+      }
+    );
+  };
+
+  const cancelledScan = await cancelReverseEngineeringScan({
+    projectId: project.id,
+    scanId: "77777777-7777-4777-8777-777777777777"
+  });
+  await deleteReverseEngineeringScan({
+    projectId: project.id,
+    scanId: "77777777-7777-4777-8777-777777777777"
+  });
+
+  assert.equal(
+    String(requests[0]?.input),
+    `/api/projects/${project.id}/reverse-engineering/scans/77777777-7777-4777-8777-777777777777/cancel`
+  );
+  assert.equal(requests[0]?.init?.method, "POST");
+  assert.equal(
+    String(requests[1]?.input),
+    `/api/projects/${project.id}/reverse-engineering/scans/77777777-7777-4777-8777-777777777777`
+  );
+  assert.equal(requests[1]?.init?.method, "DELETE");
+  assert.equal(new Headers(requests[0]?.init?.headers).get("authorization"), "Bearer access-token");
+  assert.equal(cancelledScan.status, "cancelled");
+});
+
 test("createDeployment posts selected artifact and verified AWS connection", async (context) => {
   const originalFetch = globalThis.fetch;
   const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
@@ -1447,7 +1508,11 @@ function createDeploymentPayload(input: {
   };
 }
 
-function createReverseEngineeringScanPayload(input: { id: string; projectId: string }) {
+function createReverseEngineeringScanPayload(input: {
+  id: string;
+  projectId: string;
+  status?: "completed" | "cancelled";
+}) {
   return {
     id: input.id,
     projectId: input.projectId,
@@ -1455,7 +1520,7 @@ function createReverseEngineeringScanPayload(input: { id: string; projectId: str
     provider: "aws",
     region: "ap-northeast-2",
     resourceTypes: ["VPC", "SUBNET", "EC2", "RDS", "S3", "SECURITY_GROUP"],
-    status: "completed",
+    status: input.status ?? "completed",
     createdAt: "2026-07-05T00:00:00.000Z",
     updatedAt: "2026-07-05T00:00:01.000Z",
     startedAt: "2026-07-05T00:00:00.000Z",

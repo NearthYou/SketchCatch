@@ -526,6 +526,42 @@ export async function getReverseEngineeringScan({
   );
 }
 
+// 실행 중인 스캔에 취소 요청을 보내고, 서버가 기록한 최신 상태를 받습니다.
+export async function cancelReverseEngineeringScan({
+  projectId,
+  scanId
+}: {
+  projectId: string;
+  scanId: string;
+}): Promise<ReverseEngineeringScan> {
+  const response = await apiFetch<ReverseEngineeringScanResponse>(
+    `/projects/${encodeURIComponent(projectId)}/reverse-engineering/scans/${encodeURIComponent(scanId)}/cancel`,
+    {
+      auth: true,
+      method: "POST"
+    }
+  );
+
+  return response.scan;
+}
+
+// 저장된 스캔 기록만 지우고, 사용자가 적용한 보드 저장본은 건드리지 않습니다.
+export async function deleteReverseEngineeringScan({
+  projectId,
+  scanId
+}: {
+  projectId: string;
+  scanId: string;
+}): Promise<void> {
+  await apiFetch<void>(
+    `/projects/${encodeURIComponent(projectId)}/reverse-engineering/scans/${encodeURIComponent(scanId)}`,
+    {
+      auth: true,
+      method: "DELETE"
+    }
+  );
+}
+
 export async function listReverseEngineeringScanLogs({
   projectId,
   scanId

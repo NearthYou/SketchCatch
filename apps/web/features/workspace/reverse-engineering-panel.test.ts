@@ -53,6 +53,13 @@ test("Reverse Engineering panel exposes scan history, stale warning, and rescan 
   assert.match(scanHistoryPanelSource, /다시 스캔/);
 });
 
+test("Reverse Engineering panel exposes cancel and delete scan actions", () => {
+  assert.match(panelSource, /cancelReverseEngineeringScan/);
+  assert.match(panelSource, /취소 요청을 보냈습니다/);
+  assert.match(scanHistoryPanelSource, /onDeleteScan/);
+  assert.match(scanHistoryPanelSource, /삭제/);
+});
+
 function readWorkspaceFile(fileName: string): string {
   return readFileSync(fileURLToPath(new URL(fileName, import.meta.url)), "utf8");
 }
