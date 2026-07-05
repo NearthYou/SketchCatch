@@ -25,24 +25,24 @@ type TerraformResourcePresentation = {
 
 const designCatalogItems: ResourceItem[] = [
   {
-    id: "design-region",
+    id: "aws-region",
     name: "Region",
     cloudProvider: "aws",
     area: "containers",
     category: "Containers",
     iconUrl: `${groupIconPath}/Region_32.svg`,
     enabled: true,
-    nodeDefaults: { type: "design_region", label: "Region", size: { width: 260, height: 180 } }
+    nodeDefaults: { type: "aws_region", label: "Region", size: { width: 260, height: 180 } }
   },
   {
-    id: "design-az",
+    id: "aws-availability-zone",
     name: "AZ",
     cloudProvider: "aws",
     area: "containers",
     category: "Containers",
     iconUrl: `${groupIconPath}/AWS-Cloud_32.svg`,
     enabled: true,
-    nodeDefaults: { type: "design_az", label: "AZ", size: { width: 220, height: 150 } }
+    nodeDefaults: { type: "aws_availability_zone", label: "AZ", size: { width: 220, height: 150 } }
   },
   {
     id: "design-group",

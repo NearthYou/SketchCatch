@@ -15,6 +15,10 @@ import type {
 import { SelectMenu } from "../../components/ui/SelectMenu";
 import type { DiagramEditorPanelContext } from "../diagram-editor/types";
 import {
+  getAwsAvailabilityZoneLabel,
+  awsAvailabilityZoneOptions
+} from "./aws-availability-zone-options";
+import {
   filterAwsRegionOptions,
   getAwsRegionLabel,
   getNextAwsRegionOptionIndex
@@ -22,9 +26,12 @@ import {
 import type { ParameterCatalog, ParameterCatalogDefinition } from "./catalog";
 import { terraformParameterCatalog } from "./catalog";
 import {
-  createRegionNodeMetadata,
+  getAvailabilityZoneNodeValue,
   getRegionNodeAwsRegion,
-  isRegionDesignNode
+  isAvailabilityZoneResourceNode,
+  isRegionResourceNode,
+  updateAvailabilityZoneNodeParameters,
+  updateRegionNodeParameters
 } from "./region-node-metadata";
 import { buildResourceMetadataRows } from "./resource-metadata-rows";
 import {
@@ -69,7 +76,7 @@ export function ParameterInputPanel({
     );
   }
 
-  if (isRegionDesignNode(selectedNode)) {
+  if (isRegionResourceNode(selectedNode) && selectedNode.parameters) {
     const selectedRegion = getRegionNodeAwsRegion(selectedNode);
 
     return (
@@ -88,11 +95,44 @@ export function ParameterInputPanel({
           <div className={styles.fieldGroup}>
             <RegionField
               onChange={(awsRegion) =>
-                updateNodeMetadata(selectedNode.id, {
-                  metadata: createRegionNodeMetadata(selectedNode, awsRegion)
-                })
+                updateNodeParameters(selectedNode.id, (parameters) =>
+                  parameters ? updateRegionNodeParameters(parameters, awsRegion) : parameters
+                )
               }
               value={selectedRegion}
+            />
+          </div>
+        </section>
+      </aside>
+    );
+  }
+
+  if (isAvailabilityZoneResourceNode(selectedNode) && selectedNode.parameters) {
+    const selectedAvailabilityZone = getAvailabilityZoneNodeValue(selectedNode);
+
+    return (
+      <aside className={styles.panel} aria-label="파라미터 입력 패널">
+        <PanelHeader node={selectedNode} parameters={null} />
+
+        <DesignAreaNameSection
+          node={selectedNode}
+          onChange={(label) => updateNodeMetadata(selectedNode.id, { label })}
+        />
+
+        <section className={styles.section} aria-label="Main parameters">
+          <div className={styles.sectionHeader}>
+            <h3>Availability Zone</h3>
+          </div>
+          <div className={styles.fieldGroup}>
+            <AvailabilityZoneField
+              onChange={(awsAvailabilityZone) =>
+                updateNodeParameters(selectedNode.id, (parameters) =>
+                  parameters
+                    ? updateAvailabilityZoneNodeParameters(parameters, awsAvailabilityZone)
+                    : parameters
+                )
+              }
+              value={selectedAvailabilityZone}
             />
           </div>
         </section>
@@ -437,6 +477,29 @@ function RegionField({
           </div>
         ) : null}
       </div>
+    </div>
+  );
+}
+
+function AvailabilityZoneField({
+  onChange,
+  value
+}: {
+  onChange: (value: string) => void;
+  value: string;
+}) {
+  return (
+    <div className={styles.field}>
+      <div className={styles.fieldHeader}>
+        <span className={styles.fieldLabel}>Availability Zone</span>
+      </div>
+      <SelectMenu
+        ariaLabel={`가용 영역 선택: ${getAwsAvailabilityZoneLabel(value)}`}
+        emptyLabel="Availability Zone"
+        onChange={onChange}
+        options={awsAvailabilityZoneOptions}
+        value={value}
+      />
     </div>
   );
 }

@@ -2,9 +2,14 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { DiagramNode } from "../../../../packages/types/src";
 import {
-  createRegionNodeMetadata,
+  getAvailabilityZoneNodeValue,
   getRegionNodeAwsRegion,
-  isRegionDesignNode
+  isAvailabilityZoneAreaNode,
+  isAvailabilityZoneResourceNode,
+  isRegionAreaNode,
+  isRegionResourceNode,
+  updateAvailabilityZoneNodeParameters,
+  updateRegionNodeParameters
 } from "./region-node-metadata";
 
 const baseRegionNode: DiagramNode = {
@@ -18,11 +23,19 @@ const baseRegionNode: DiagramNode = {
   zIndex: 1
 };
 
-test("isRegionDesignNode matches supported Region design node types only", () => {
-  assert.equal(isRegionDesignNode(baseRegionNode), true);
-  assert.equal(isRegionDesignNode({ ...baseRegionNode, type: "design_region" }), true);
-  assert.equal(isRegionDesignNode({ ...baseRegionNode, type: "sketchcatch_group" }), false);
-  assert.equal(isRegionDesignNode({ ...baseRegionNode, kind: "resource" }), false);
+test("area node predicates match Region and AZ resource nodes with legacy design support", () => {
+  const regionResourceNode = makeAreaResourceNode("aws_region");
+  const availabilityZoneResourceNode = makeAreaResourceNode("aws_availability_zone");
+
+  assert.equal(isRegionAreaNode(regionResourceNode), true);
+  assert.equal(isRegionResourceNode(regionResourceNode), true);
+  assert.equal(isRegionAreaNode({ ...baseRegionNode, type: "design_region" }), true);
+  assert.equal(isRegionAreaNode({ ...baseRegionNode, type: "sketchcatch_group" }), false);
+
+  assert.equal(isAvailabilityZoneAreaNode(availabilityZoneResourceNode), true);
+  assert.equal(isAvailabilityZoneResourceNode(availabilityZoneResourceNode), true);
+  assert.equal(isAvailabilityZoneAreaNode({ ...baseRegionNode, type: "design_az" }), true);
+  assert.equal(isAvailabilityZoneAreaNode(regionResourceNode), false);
 });
 
 test("getRegionNodeAwsRegion reads a valid selected region and falls back to Seoul", () => {
@@ -70,15 +83,108 @@ test("getRegionNodeAwsRegion reads parameters values before legacy metadata", ()
   assert.equal(getRegionNodeAwsRegion(regionResourceNode), "us-west-2");
 });
 
-test("createRegionNodeMetadata no longer writes awsRegion metadata", () => {
+test("getAvailabilityZoneNodeValue reads parameters values and falls back to Seoul AZ", () => {
+  const availabilityZoneNode = makeAreaResourceNode("aws_availability_zone", {
+    awsAvailabilityZone: "us-east-1b"
+  });
+  const invalidAvailabilityZoneNode = makeAreaResourceNode("aws_availability_zone", {
+    awsAvailabilityZone: "unknown-1a"
+  });
+
+  assert.equal(getAvailabilityZoneNodeValue(availabilityZoneNode), "us-east-1b");
+  assert.equal(getAvailabilityZoneNodeValue(invalidAvailabilityZoneNode), "ap-northeast-2a");
+});
+
+test("area parameter readers tolerate legacy nodes without values", () => {
+  const regionNodeWithoutValues = JSON.parse(
+    JSON.stringify({
+      ...makeAreaResourceNode("aws_region"),
+      parameters: {
+        terraformBlockType: "resource",
+        resourceType: "aws_region",
+        resourceName: "primary",
+        fileName: "main"
+      }
+    })
+  ) as DiagramNode;
+  const availabilityZoneNodeWithNullValues = JSON.parse(
+    JSON.stringify({
+      ...makeAreaResourceNode("aws_availability_zone"),
+      parameters: {
+        terraformBlockType: "resource",
+        resourceType: "aws_availability_zone",
+        resourceName: "primary_a",
+        fileName: "main",
+        values: null
+      }
+    })
+  ) as DiagramNode;
+
+  assert.equal(getRegionNodeAwsRegion(regionNodeWithoutValues), "ap-northeast-2");
+  assert.equal(getAvailabilityZoneNodeValue(availabilityZoneNodeWithNullValues), "ap-northeast-2a");
+});
+
+test("parameter update helpers change only Region and AZ values", () => {
+  const regionParameters = makeAreaResourceNode("aws_region").parameters;
+  const availabilityZoneParameters = makeAreaResourceNode("aws_availability_zone").parameters;
+
+  assert(regionParameters);
+  assert(availabilityZoneParameters);
+
+  assert.deepEqual(updateRegionNodeParameters(regionParameters, "eu-west-1"), {
+    ...regionParameters,
+    values: {
+      ...regionParameters.values,
+      awsRegion: "eu-west-1"
+    }
+  });
   assert.deepEqual(
-    createRegionNodeMetadata(
-      {
-        ...baseRegionNode,
-        metadata: { parentAreaNodeId: "parent-1" }
-      },
-      "us-west-2"
-    ),
-    { parentAreaNodeId: "parent-1" }
+    updateAvailabilityZoneNodeParameters(availabilityZoneParameters, "eu-central-1b"),
+    {
+      ...availabilityZoneParameters,
+      values: {
+        ...availabilityZoneParameters.values,
+        awsAvailabilityZone: "eu-central-1b"
+      }
+    }
   );
 });
+
+test("parameter update helpers tolerate legacy parameters without values", () => {
+  const legacyRegionParameters = {
+    ...makeAreaResourceNode("aws_region").parameters,
+    values: undefined
+  } as unknown as NonNullable<DiagramNode["parameters"]>;
+  const legacyAvailabilityZoneParameters = {
+    ...makeAreaResourceNode("aws_availability_zone").parameters,
+    values: null
+  } as unknown as NonNullable<DiagramNode["parameters"]>;
+
+  assert.deepEqual(updateRegionNodeParameters(legacyRegionParameters, "us-east-1").values, {
+    awsRegion: "us-east-1"
+  });
+  assert.deepEqual(
+    updateAvailabilityZoneNodeParameters(legacyAvailabilityZoneParameters, "us-east-1a").values,
+    {
+      awsAvailabilityZone: "us-east-1a"
+    }
+  );
+});
+
+function makeAreaResourceNode(
+  resourceType: "aws_availability_zone" | "aws_region",
+  values: Record<string, unknown> = {}
+): DiagramNode {
+  return {
+    ...baseRegionNode,
+    kind: "resource",
+    parameters: {
+      terraformBlockType: "resource",
+      resourceType,
+      resourceName: resourceType === "aws_region" ? "ap_northeast_2" : "ap_northeast_2a",
+      fileName: "main",
+      values
+    },
+    type: resourceType
+  };
+}
