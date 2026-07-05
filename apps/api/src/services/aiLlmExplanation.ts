@@ -311,10 +311,14 @@ export function createAiProviderBackedLlmExplanation(
 
     if (input.target === "terraform_error_explanation") {
       if (options.amazonQProvider === undefined) {
-        primaryProviderFallback = createFallbackExplanationWithMetadata(
+        return createFallbackExplanationWithProviderMetadata(
           input,
           resolveAmazonQUnavailableFallbackReason(creditPolicy),
-          creditPolicy.billingMode
+          creditPolicy.billingMode,
+          {
+            provider: "amazon_q",
+            service: "amazon_q_business"
+          }
         );
       }
 
@@ -482,6 +486,22 @@ async function tryProvider(input: {
   const creditFallbackReason = getCreditFallbackReason(input.provider.provider, input.creditPolicy);
 
   if (creditFallbackReason !== null) {
+    if (
+      input.input.target === "terraform_error_explanation" &&
+      input.provider.provider === "amazon_q"
+    ) {
+      return createFallbackExplanationWithProviderMetadata(
+        input.input,
+        creditFallbackReason,
+        input.creditPolicy.billingMode,
+        {
+          provider: input.provider.provider,
+          service: input.provider.service,
+          model: input.provider.model
+        }
+      );
+    }
+
     return createFallbackExplanationWithMetadata(
       input.input,
       creditFallbackReason,
@@ -572,15 +592,33 @@ function createFallbackExplanationWithMetadata(
   fallbackReason: LlmExplanationFallbackReason,
   billingMode: AiBillingMode
 ): LlmExplanation {
+  return createFallbackExplanationWithProviderMetadata(input, fallbackReason, billingMode, {
+    provider: "fallback",
+    service: "rule_fallback"
+  });
+}
+
+function createFallbackExplanationWithProviderMetadata(
+  input: LlmExplanationInput,
+  fallbackReason: LlmExplanationFallbackReason,
+  billingMode: AiBillingMode,
+  provider: {
+    readonly provider: AiProvider;
+    readonly service: AiProviderService;
+    readonly model?: string | undefined;
+  }
+): LlmExplanation {
   const payload = maskSecretsForAi(createSummaryPayload(input));
 
   return withProviderMetadata(createFallbackExplanation(input, fallbackReason), {
-    provider: "fallback",
-    service: "rule_fallback",
+    provider: provider.provider,
+    service: provider.service,
+    model: provider.model,
     routeTarget: input.target,
     cacheHit: false,
     cacheKey: createNormalizedAiCacheKey({
-      provider: "fallback",
+      provider: provider.provider,
+      model: provider.model,
       routeTarget: input.target,
       payload
     }),

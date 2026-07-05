@@ -22,7 +22,13 @@
   - #152 AI 다이어그램 브랜치의 patch preview 및 `saveDiagramNow` 의존성은 #161 범위가 아니므로 가져오지 않았다.
   - Terraform Issue AI 결과 카드에 `수정 계획`을 먼저 보여주고, 자동 적용 가능한 safe fix 진단일 때만 `적용` 버튼이 활성화되게 정리했다.
   - `terraform.unexpected_token` 설명 템플릿을 추가하고 unknown 설명에서 내부 fallback 문구가 사용자에게 노출되지 않게 바꿨다.
+  - Terraform Issue AI 설명 경로를 Amazon Q Assistance로 고정하고, Q credit/config/응답 문제로 fallback이 쓰인 경우 `Amazon Q 호출 상태`를 수정 계획에 표시하게 했다.
 - Verification run:
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-terraform-ai.test.ts` - passed, 4 tests.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api exec tsx --test src/services/aiProviderRouter.test.ts --test-name-pattern "Amazon Q"` - passed, 11 tests.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-right-panel-layout.test.ts --test-name-pattern "terraform issue AI resolution shows"` - passed, 40 source-layout tests.
+  - `git diff --check` - passed with line-ending warnings only.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm harness:check` - passed after the Amazon Q provider routing fix.
   - `npm exec --package=pnpm@11.8.0 -- pnpm harness:check` - passed before the latest UI/API fix.
   - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api exec tsx --test src/services/aiTerraformErrorExplanation.test.ts` - passed, 3 tests.
   - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-right-panel-layout.test.ts --test-name-pattern "terraform issue AI resolution shows"` - passed, 40 source-layout tests.

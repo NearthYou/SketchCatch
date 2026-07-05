@@ -317,7 +317,42 @@ test("createAiProviderBackedLlmExplanation returns Amazon Q fallback without let
   assert.equal(bedrockCalls.length, 0);
 });
 
-test("createAiProviderBackedLlmExplanation reports missing Amazon Q configuration before Bedrock fallback errors", async () => {
+test("createAiProviderBackedLlmExplanation keeps Amazon Q metadata when Terraform error Q credits are blocked", async () => {
+  const qCalls: unknown[] = [];
+  const createLlmExplanation = createAiProviderBackedLlmExplanation({
+    amazonQProvider: createProvider(
+      "amazon_q",
+      {
+        target: "terraform_error_explanation",
+        summary: "should not be used",
+        highlights: ["should not be used"],
+        nextActions: ["should not be used"],
+        fallbackUsed: false
+      },
+      qCalls
+    ),
+    fallbackProvider: createFallbackOnlyLlmExplanation,
+    creditPolicy: {
+      bedrock: true,
+      amazonQ: false,
+      transcribe: false,
+      billingMode: "aws_credit_only"
+    },
+    limits: { dailyCallLimit: 10, windowCallLimit: 10, windowMs: 60_000 }
+  });
+
+  const result = await createLlmExplanation({
+    target: "terraform_error_explanation",
+    result: createTerraformErrorResult()
+  });
+
+  assert.equal(result.fallbackUsed, true);
+  assert.equal(result.fallbackReason, "credit_not_confirmed");
+  assert.equal(result.providerMetadata?.provider, "amazon_q");
+  assert.equal(qCalls.length, 0);
+});
+
+test("createAiProviderBackedLlmExplanation reports missing Amazon Q configuration without using Bedrock for Terraform errors", async () => {
   const bedrockCalls: unknown[] = [];
   const createLlmExplanation = createAiProviderBackedLlmExplanation({
     amazonQProvider: undefined,
@@ -351,8 +386,8 @@ test("createAiProviderBackedLlmExplanation reports missing Amazon Q configuratio
 
   assert.equal(result.fallbackUsed, true);
   assert.equal(result.fallbackReason, "provider_not_configured");
-  assert.equal(result.providerMetadata?.provider, "fallback");
-  assert.equal(bedrockCalls.length, 1);
+  assert.equal(result.providerMetadata?.provider, "amazon_q");
+  assert.equal(bedrockCalls.length, 0);
 });
 
 test("createAmazonQBusinessTextProvider omits userId for anonymous identity applications", async () => {

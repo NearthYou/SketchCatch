@@ -2260,6 +2260,11 @@
   margin: 0;
 }
 
+.terraformIssueFixPlan .terraformIssueFixPlanNotice {
+  color: #9a3412;
+  font-weight: 850;
+}
+
 .terraformIssueFixPlan ol {
   display: grid;
   gap: 4px;

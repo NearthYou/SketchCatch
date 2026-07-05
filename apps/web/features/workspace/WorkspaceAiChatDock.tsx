@@ -944,6 +944,9 @@ function TerraformIssueExplanationCard({
           <span>{fixPlan.providerLabel}</span>
         </div>
         <p>{fixPlan.summary}</p>
+        {fixPlan.providerNotice ? (
+          <p className={styles.terraformIssueFixPlanNotice}>{fixPlan.providerNotice}</p>
+        ) : null}
         <ol>
           {fixPlan.steps.map((step) => (
             <li key={step}>{step}</li>
