@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { RefreshCw } from "lucide-react";
 import type {
   AwsConnection,
   Project,
@@ -9,15 +8,29 @@ import type {
   ReverseEngineeringScanLogLine,
   ReverseEngineeringScanResponse
 } from "../../../../packages/types/src";
+import type { DiagramEditorPanelContext } from "../diagram-editor";
 import {
+  createArchitectureSnapshot,
   createReverseEngineeringScan,
   listAwsConnections,
   listProjects,
   listReverseEngineeringScanLogs
 } from "./api";
+import {
+  createReverseEngineeringBoardApplication,
+  createReverseEngineeringBoardComparison,
+  type ReverseEngineeringBoardApplicationMode
+} from "./reverse-engineering-board-application";
+import {
+  ReverseEngineeringResultPanel,
+  type ReverseEngineeringApplyState
+} from "./ReverseEngineeringResultPanel";
+import { ReverseEngineeringScanCriteriaForm } from "./ReverseEngineeringScanCriteriaForm";
+import { convertDiagramJsonToArchitectureJson } from "./workspace-ai-diagram-adapter";
 import styles from "./workspace.module.css";
 
 export type ReverseEngineeringPanelProps = {
+  readonly context: DiagramEditorPanelContext;
   readonly projectId: string;
 };
 
@@ -26,13 +39,16 @@ type RequestState = "idle" | "loading" | "error";
 const REVERSE_ENGINEERING_RESOURCE_TYPES: ResourceType[] = [
   "VPC",
   "SUBNET",
+  "INTERNET_GATEWAY",
+  "ROUTE_TABLE",
+  "SECURITY_GROUP",
   "EC2",
   "RDS",
-  "S3",
-  "SECURITY_GROUP"
+  "S3"
 ];
 
-export function ReverseEngineeringPanel({ projectId }: ReverseEngineeringPanelProps) {
+// 기존 AWS 읽어오기 화면의 상태와 버튼 흐름을 관리합니다.
+export function ReverseEngineeringPanel({ context, projectId }: ReverseEngineeringPanelProps) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [awsConnections, setAwsConnections] = useState<AwsConnection[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState(projectId);
@@ -45,6 +61,8 @@ export function ReverseEngineeringPanel({ projectId }: ReverseEngineeringPanelPr
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [scanResponse, setScanResponse] = useState<ReverseEngineeringScanResponse | null>(null);
   const [logs, setLogs] = useState<ReverseEngineeringScanLogLine[]>([]);
+  const [applyState, setApplyState] = useState<ReverseEngineeringApplyState>("idle");
+  const [applyMessage, setApplyMessage] = useState<string | null>(null);
 
   const verifiedAwsConnections = useMemo(
     () => awsConnections.filter((connection) => connection.status === "verified"),
@@ -61,7 +79,18 @@ export function ReverseEngineeringPanel({ projectId }: ReverseEngineeringPanelPr
     selectedResourceTypes.length > 0 &&
     loadState !== "loading" &&
     scanState !== "loading";
+  const comparison = useMemo(() => {
+    if (!scanResponse?.result) {
+      return null;
+    }
 
+    return createReverseEngineeringBoardComparison({
+      currentDiagram: context.diagram,
+      result: scanResponse.result
+    });
+  }, [context.diagram, scanResponse]);
+
+  // 프로젝트와 검증된 AWS 연결 목록을 불러와 스캔 선택지를 채웁니다.
   const loadOptions = useCallback(async () => {
     setLoadState("loading");
     setErrorMessage(null);
@@ -101,6 +130,7 @@ export function ReverseEngineeringPanel({ projectId }: ReverseEngineeringPanelPr
     void loadOptions();
   }, [loadOptions]);
 
+  // 사용자가 가져올 AWS 리소스 종류를 켜고 끕니다.
   function toggleResourceType(resourceType: ResourceType): void {
     setSelectedResourceTypes((currentResourceTypes) =>
       currentResourceTypes.includes(resourceType)
@@ -109,6 +139,7 @@ export function ReverseEngineeringPanel({ projectId }: ReverseEngineeringPanelPr
     );
   }
 
+  // 사용자가 스캔을 다시 시작하면 이전 미리보기와 적용 메시지를 지웁니다.
   async function runScan(): Promise<void> {
     if (!canStartScan || !selectedAwsConnection) {
       return;
@@ -116,8 +147,11 @@ export function ReverseEngineeringPanel({ projectId }: ReverseEngineeringPanelPr
 
     setScanState("loading");
     setErrorMessage(null);
+    setApplyMessage(null);
+    setApplyState("idle");
     setScanResponse(null);
     setLogs([]);
+    context.setPreviewDiagram(null);
 
     try {
       const response = await createReverseEngineeringScan({
@@ -133,6 +167,15 @@ export function ReverseEngineeringPanel({ projectId }: ReverseEngineeringPanelPr
 
       setScanResponse(response);
       setLogs(nextLogs);
+      if (response.result) {
+        const application = createReverseEngineeringBoardApplication({
+          currentDiagram: context.diagram,
+          mode: "replace",
+          result: response.result
+        });
+
+        context.setPreviewDiagram(application.previewDiagram);
+      }
       setScanState("idle");
     } catch (error) {
       setScanState("error");
@@ -140,97 +183,70 @@ export function ReverseEngineeringPanel({ projectId }: ReverseEngineeringPanelPr
     }
   }
 
+  // 사용자가 명시적으로 고른 방식으로만 스캔 후보를 실제 보드에 반영합니다.
+  async function applyScanResult(mode: ReverseEngineeringBoardApplicationMode): Promise<void> {
+    const result = scanResponse?.result;
+
+    if (!result || applyState === "saving") {
+      return;
+    }
+
+    const application = createReverseEngineeringBoardApplication({
+      currentDiagram: context.diagram,
+      mode,
+      result
+    });
+
+    setApplyState("saving");
+    setApplyMessage(null);
+    context.applyDiagramJson(application.diagram);
+
+    try {
+      await createArchitectureSnapshot({
+        projectId,
+        source: "imported",
+        architectureJson: convertDiagramJsonToArchitectureJson(application.diagram)
+      });
+      setApplyState("saved");
+      setApplyMessage("보드에 반영했고, imported Architecture Snapshot도 저장했습니다.");
+    } catch (error) {
+      setApplyState("error");
+      setApplyMessage(toErrorMessage(error));
+    }
+  }
+
   return (
     <section className={styles.deploymentPanel} aria-label="Reverse Engineering">
       <div className={styles.deploymentPanelContent}>
-        <header className={styles.deploymentHeader}>
-          <div className={styles.deploymentHeaderTop}>
-            <div>
-              <span>Reverse Engineering</span>
-              <h2>기존 AWS 읽어오기</h2>
-            </div>
-            <button
-              className={styles.deploymentSecondaryButton}
-              disabled={loadState === "loading"}
-              onClick={() => void loadOptions()}
-              type="button"
-            >
-              <RefreshCw size={14} aria-hidden="true" />
-              <span className={styles.deploymentButtonText}>새로고침</span>
-            </button>
-          </div>
-          <p className={styles.deploymentHint}>
-            연결된 AWS에서 리소스를 읽고, 보드가 열 수 있는 설계 후보를 만듭니다.
-          </p>
-        </header>
+        <ReverseEngineeringScanCriteriaForm
+          awsConnections={verifiedAwsConnections}
+          canStartScan={canStartScan}
+          isLoadingOptions={loadState === "loading"}
+          isScanning={scanState === "loading"}
+          onRefresh={() => void loadOptions()}
+          onResourceTypeToggle={toggleResourceType}
+          onScanStart={() => void runScan()}
+          onSelectedAwsConnectionChange={setSelectedAwsConnectionId}
+          onSelectedProjectChange={setSelectedProjectId}
+          projects={projects}
+          resourceTypes={REVERSE_ENGINEERING_RESOURCE_TYPES}
+          selectedAwsConnectionId={selectedAwsConnectionId}
+          selectedProjectId={selectedProjectId}
+          selectedResourceTypes={selectedResourceTypes}
+        />
+        {errorMessage ? <p className={styles.deploymentError}>{errorMessage}</p> : null}
 
-        <section className={styles.deploymentSection}>
-          <h3>스캔 기준</h3>
-          <label className={styles.deploymentField}>
-            프로젝트
-            <select
-              disabled={loadState === "loading"}
-              onChange={(event) => setSelectedProjectId(event.currentTarget.value)}
-              value={selectedProjectId}
-            >
-              {projects.map((project) => (
-                <option key={project.id} value={project.id}>
-                  {project.name}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className={styles.deploymentField}>
-            AWS 연결
-            <select
-              disabled={loadState === "loading" || verifiedAwsConnections.length === 0}
-              onChange={(event) => setSelectedAwsConnectionId(event.currentTarget.value)}
-              value={selectedAwsConnectionId}
-            >
-              {verifiedAwsConnections.length === 0 ? (
-                <option value="">검증된 AWS 연결 없음</option>
-              ) : null}
-              {verifiedAwsConnections.map((connection) => (
-                <option key={connection.id} value={connection.id}>
-                  {formatAwsConnectionLabel(connection)}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <div className={styles.deploymentField}>
-            가져올 리소스
-            <div className={styles.reverseResourceGrid}>
-              {REVERSE_ENGINEERING_RESOURCE_TYPES.map((resourceType) => (
-                <label key={resourceType} className={styles.reverseResourceToggle}>
-                  <input
-                    checked={selectedResourceTypes.includes(resourceType)}
-                    onChange={() => toggleResourceType(resourceType)}
-                    type="checkbox"
-                  />
-                  <span>{resourceType}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-
-          <button
-            className={styles.deploymentPrimaryButton}
-            disabled={!canStartScan}
-            onClick={() => void runScan()}
-            type="button"
-          >
-            <span className={styles.deploymentButtonText}>
-              {scanState === "loading" ? "스캔 중" : "AWS 스캔 시작"}
-            </span>
-          </button>
-
-          {errorMessage ? <p className={styles.deploymentError}>{errorMessage}</p> : null}
-        </section>
-
-        {scanResponse?.result ? (
-          <ReverseEngineeringResult response={scanResponse} logs={logs} />
+        {scanResponse?.result && comparison ? (
+          <ReverseEngineeringResultPanel
+            applyMessage={applyMessage}
+            applyState={applyState}
+            comparison={comparison}
+            hasCurrentBoardResources={context.nodes.length > 0}
+            logs={logs}
+            onAppendToCurrentBoard={() => void applyScanResult("append")}
+            onOpenAsNewBoard={() => void applyScanResult("replace")}
+            response={scanResponse}
+          />
         ) : (
           <section className={styles.deploymentSection}>
             <h3>결과</h3>
@@ -244,97 +260,7 @@ export function ReverseEngineeringPanel({ projectId }: ReverseEngineeringPanelPr
   );
 }
 
-function ReverseEngineeringResult({
-  logs,
-  response
-}: {
-  logs: ReverseEngineeringScanLogLine[];
-  response: ReverseEngineeringScanResponse;
-}) {
-  const result = response.result;
-
-  if (!result) {
-    return null;
-  }
-
-  return (
-    <>
-      <section className={styles.deploymentSection}>
-        <h3>스캔 결과</h3>
-        <div className={styles.deploymentPreflightStats}>
-          <span>
-            찾은 리소스
-            <strong>{result.discoveredResources.length}</strong>
-          </span>
-          <span>
-            보드 노드
-            <strong>{result.architectureJson.nodes.length}</strong>
-          </span>
-          <span>
-            연결선
-            <strong>{result.architectureJson.edges.length}</strong>
-          </span>
-        </div>
-      </section>
-
-      <section className={styles.deploymentSection}>
-        <h3>발견한 리소스</h3>
-        {result.discoveredResources.length === 0 ? (
-          <p className={styles.deploymentHint}>아직 발견한 리소스가 없습니다.</p>
-        ) : (
-          <ul className={styles.reverseResultList}>
-            {result.discoveredResources.slice(0, 8).map((resource) => (
-              <li key={resource.id} className={styles.reverseResultItem}>
-                <strong>{resource.displayName}</strong>
-                <span>
-                  {resource.resourceType} · {resource.providerResourceId}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      <section className={styles.deploymentSection}>
-        <h3>Terraform import 제안</h3>
-        {result.importSuggestions.length === 0 ? (
-          <p className={styles.deploymentHint}>가져오기 제안이 없습니다.</p>
-        ) : (
-          <ul className={styles.reverseResultList}>
-            {result.importSuggestions.slice(0, 5).map((suggestion) => (
-              <li key={suggestion.id} className={styles.reverseResultItem}>
-                <strong>{suggestion.terraformAddress ?? suggestion.status}</strong>
-                <span>{suggestion.importCommand ?? suggestion.reason ?? "수동 확인 필요"}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      <section className={styles.deploymentSection}>
-        <h3>스캔 로그</h3>
-        {logs.length === 0 ? (
-          <p className={styles.deploymentHint}>표시할 로그가 없습니다.</p>
-        ) : (
-          <ul className={styles.reverseLogList}>
-            {logs.map((log) => (
-              <li key={log.id} data-level={log.level}>
-                <strong>{log.stage}</strong>
-                <span>{log.message}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-    </>
-  );
-}
-
-function formatAwsConnectionLabel(connection: AwsConnection): string {
-  const accountLabel = connection.accountId ?? "계정 미확인";
-  return `${accountLabel} · ${connection.region}`;
-}
-
+// 알 수 없는 오류도 화면에 보여줄 수 있는 문장으로 바꿉니다.
 function toErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "요청을 처리하지 못했습니다.";
 }

@@ -515,7 +515,9 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
         ) : null}
       </div>
       <div className={styles.rightPanelView} hidden={activeView !== "reverse"}>
-        {activeView === "reverse" ? <ReverseEngineeringPanel projectId={projectId} /> : null}
+        {activeView === "reverse" ? (
+          <ReverseEngineeringPanel context={context} projectId={projectId} />
+        ) : null}
       </div>
 
       {showTerraformLeaveDialog ? (
