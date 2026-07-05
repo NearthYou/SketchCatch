@@ -121,7 +121,7 @@ test("workspace AI chat keeps the floating dock width with compact prompt guide"
   assert.match(aiChatDockSource, /styles\.aiChatPromptGuide/);
   assert.match(dockRule, /right:\s*24px/);
   assert.match(dockRule, /width:\s*min\(860px,\s*calc\(100vw - 48px\)\)/);
-  assert.match(composerRule, /grid-template-columns:\s*minmax\(0,\s*1fr\)\s*auto/);
+  assert.match(composerRule, /grid-template-columns:\s*minmax\(0,\s*1fr\)\s*auto\s*auto/);
   assert.match(promptGuideRule, /grid-column:\s*1\s*\/\s*-1/);
 });
 

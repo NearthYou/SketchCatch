@@ -2643,7 +2643,7 @@
   border-top: 1px solid #e3e9f2;
   display: grid;
   gap: 10px;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   padding: 12px 16px 16px;
 }
 
@@ -2711,6 +2711,40 @@
   outline: none;
 }
 
+.aiChatVoiceButton {
+  align-items: center;
+  align-self: end;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: var(--bp-r);
+  color: #1d4f86;
+  cursor: pointer;
+  display: inline-flex;
+  justify-content: center;
+  min-height: 68px;
+  min-width: 48px;
+  padding: 0 12px;
+}
+
+.aiChatVoiceButton[data-listening="true"] {
+  background: #eaf2fc;
+  border-color: #2f6db3;
+  box-shadow: 0 0 0 3px rgb(47 109 179 / 14%);
+  color: #1d4f86;
+}
+
+.aiChatVoiceButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.aiChatVoiceButton:not(:disabled):hover,
+.aiChatVoiceButton:not(:disabled):focus-visible {
+  background: #f2f7fd;
+  border-color: #2f6db3;
+  outline: none;
+}
+
 .aiChatSendButton {
   align-items: center;
   align-self: end;
@@ -2740,6 +2774,15 @@
   background: color-mix(in srgb, var(--bp-blue) 88%, #000000);
   border-color: color-mix(in srgb, var(--bp-blue) 88%, #000000);
   outline: none;
+}
+
+.aiChatVoiceStatus {
+  color: #475569;
+  font-size: 11.5px;
+  font-weight: 800;
+  grid-column: 1 / -1;
+  line-height: 1.35;
+  margin: -2px 0 0;
 }
 
 .deploymentPanel {
@@ -3662,11 +3705,17 @@
 
   .aiChatControls,
   .aiChatComposer {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr) auto;
   }
 
   .aiChatPromptGuide {
     grid-template-columns: 1fr;
+  }
+
+  .aiChatPromptGuide,
+  .aiChatInput,
+  .aiChatVoiceStatus {
+    grid-column: 1 / -1;
   }
 
   .aiChatAssistantMessage,

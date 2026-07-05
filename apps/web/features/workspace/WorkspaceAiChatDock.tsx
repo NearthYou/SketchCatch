@@ -8,7 +8,7 @@ import type {
   DesignSimulationResult
 } from "@sketchcatch/types";
 import type { FormEvent, KeyboardEvent as ReactKeyboardEvent } from "react";
-import { Send, Sparkles, Trash2, X } from "lucide-react";
+import { Mic, Send, Sparkles, Trash2, X } from "lucide-react";
 import { getApiErrorMessage } from "../../lib/api-client";
 import type { DiagramEditorPanelContext } from "../diagram-editor";
 import {
@@ -75,10 +75,51 @@ const DESIGN_SIMULATION_DEFAULTS = {
   trafficLevel: "normal"
 } as const;
 
+type BrowserSpeechRecognitionAlternative = {
+  readonly transcript: string;
+};
+
+type BrowserSpeechRecognitionResult = {
+  readonly [index: number]: BrowserSpeechRecognitionAlternative | undefined;
+};
+
+type BrowserSpeechRecognitionEvent = {
+  readonly results: {
+    readonly length: number;
+    readonly [index: number]: BrowserSpeechRecognitionResult | undefined;
+  };
+};
+
+type BrowserSpeechRecognitionErrorEvent = {
+  readonly error: string;
+};
+
+type BrowserSpeechRecognition = {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  onend: (() => void) | null;
+  onerror: ((event: BrowserSpeechRecognitionErrorEvent) => void) | null;
+  onresult: ((event: BrowserSpeechRecognitionEvent) => void) | null;
+  abort: () => void;
+  start: () => void;
+  stop: () => void;
+};
+
+type BrowserSpeechRecognitionConstructor = new () => BrowserSpeechRecognition;
+
+type SpeechRecognitionWindow = Window & {
+  readonly SpeechRecognition?: BrowserSpeechRecognitionConstructor;
+  readonly webkitSpeechRecognition?: BrowserSpeechRecognitionConstructor;
+};
+
 export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockProps) {
   const [isOpen, setOpen] = useState(false);
   const [activeChatTab, setActiveChatTab] = useState<WorkspaceAiChatScope>("draft");
   const [composerValue, setComposerValue] = useState("");
+  const [isVoiceListening, setVoiceListening] = useState(false);
+  const [isVoiceInputSupported, setVoiceInputSupported] = useState(true);
+  const [voiceStatusMessage, setVoiceStatusMessage] = useState("");
   const [messages, setMessages] = useState<WorkspaceAiChatMessage[]>(() =>
     readStoredChatMessages(projectId)
   );
@@ -100,6 +141,8 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
   const [simulationErrorMessage, setSimulationErrorMessage] = useState("");
   const [simulationFingerprint, setSimulationFingerprint] = useState<string | null>(null);
   const transcriptRef = useRef<HTMLDivElement | null>(null);
+  const speechRecognitionRef = useRef<BrowserSpeechRecognition | null>(null);
+  const voiceInputBaseRef = useRef("");
   const loadedProjectIdRef = useRef(projectId);
   const boardSnapshot = useMemo(
     () => createWorkspaceAiBoardSnapshot(context.diagram),
@@ -142,6 +185,15 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
     });
   }, [activeChatTab, visibleMessages, draft, designSimulation]);
 
+  useEffect(() => {
+    setVoiceInputSupported(getBrowserSpeechRecognitionConstructor() !== undefined);
+
+    return () => {
+      speechRecognitionRef.current?.abort();
+      speechRecognitionRef.current = null;
+    };
+  }, []);
+
   function appendAssistantMessage(
     kind: WorkspaceAiChatMessageKind,
     content: string,
@@ -163,6 +215,8 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
 
   function clearActiveChatHistory(): void {
     setSelectedSuggestionLabelsByMessageId({});
+    stopVoiceRecognition();
+    setVoiceStatusMessage("");
 
     if (activeChatTab === "simulation") {
       setMessages((currentMessages) =>
@@ -490,6 +544,68 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
     void submitChatPrompt();
   }
 
+  function toggleVoiceRecognition(): void {
+    if (isVoiceListening) {
+      stopVoiceRecognition();
+      return;
+    }
+
+    startVoiceRecognition();
+  }
+
+  function startVoiceRecognition(): void {
+    const SpeechRecognitionConstructor = getBrowserSpeechRecognitionConstructor();
+
+    if (SpeechRecognitionConstructor === undefined) {
+      setVoiceInputSupported(false);
+      setVoiceStatusMessage("이 브라우저는 음성 인식을 지원하지 않습니다.");
+      return;
+    }
+
+    speechRecognitionRef.current?.abort();
+
+    const recognition = new SpeechRecognitionConstructor();
+    voiceInputBaseRef.current = composerValue;
+    recognition.lang = "ko-KR";
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    recognition.onresult = (event) => {
+      const transcript = getSpeechRecognitionTranscript(event);
+
+      if (transcript.length > 0) {
+        setComposerValue(mergeVoiceTranscript(voiceInputBaseRef.current, transcript));
+      }
+    };
+    recognition.onerror = (event) => {
+      setVoiceStatusMessage(getVoiceRecognitionErrorMessage(event.error));
+    };
+    recognition.onend = () => {
+      setVoiceListening(false);
+      speechRecognitionRef.current = null;
+      setVoiceStatusMessage((currentMessage) =>
+        currentMessage === "음성 인식 중입니다." ? "" : currentMessage
+      );
+    };
+
+    try {
+      speechRecognitionRef.current = recognition;
+      setVoiceListening(true);
+      setVoiceStatusMessage("음성 인식 중입니다.");
+      recognition.start();
+    } catch {
+      speechRecognitionRef.current = null;
+      setVoiceListening(false);
+      setVoiceStatusMessage("음성 인식을 시작하지 못했습니다.");
+    }
+  }
+
+  function stopVoiceRecognition(): void {
+    speechRecognitionRef.current?.stop();
+    speechRecognitionRef.current = null;
+    setVoiceListening(false);
+    setVoiceStatusMessage("");
+  }
+
   if (!isOpen) {
     return (
       <button
@@ -720,6 +836,18 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
           />
         </label>
         <button
+          aria-label={isVoiceListening ? "음성 인식 중지" : "음성 인식 시작"}
+          aria-pressed={isVoiceListening}
+          className={styles.aiChatVoiceButton}
+          data-listening={isVoiceListening}
+          disabled={!isVoiceInputSupported || draftState === "loading"}
+          onClick={toggleVoiceRecognition}
+          title={isVoiceListening ? "음성 인식 중지" : "음성 인식 시작"}
+          type="button"
+        >
+          <Mic size={17} aria-hidden="true" />
+        </button>
+        <button
           className={styles.aiChatSendButton}
           disabled={composerValue.trim().length === 0 || draftState === "loading"}
           type="submit"
@@ -727,6 +855,11 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
           <Send size={16} aria-hidden="true" />
           보내기
         </button>
+        {voiceStatusMessage.length > 0 ? (
+          <p className={styles.aiChatVoiceStatus} role="status">
+            {voiceStatusMessage}
+          </p>
+        ) : null}
       </form>
     </section>
   );
@@ -754,6 +887,53 @@ function createRequirementPromptFromMessages(
     .map((message) => message.content.trim())
     .filter(Boolean)
     .join("\n");
+}
+
+function getBrowserSpeechRecognitionConstructor(): BrowserSpeechRecognitionConstructor | undefined {
+  if (typeof window === "undefined") {
+    return undefined;
+  }
+
+  const speechWindow = window as SpeechRecognitionWindow;
+
+  return speechWindow.SpeechRecognition ?? speechWindow.webkitSpeechRecognition;
+}
+
+function getSpeechRecognitionTranscript(event: BrowserSpeechRecognitionEvent): string {
+  const transcriptParts: string[] = [];
+
+  for (let resultIndex = 0; resultIndex < event.results.length; resultIndex += 1) {
+    const result = event.results[resultIndex];
+    const transcript = result?.[0]?.transcript.trim();
+
+    if (transcript) {
+      transcriptParts.push(transcript);
+    }
+  }
+
+  return transcriptParts.join(" ").trim();
+}
+
+function mergeVoiceTranscript(baseValue: string, transcript: string): string {
+  const trimmedBaseValue = baseValue.trim();
+
+  if (trimmedBaseValue.length === 0) {
+    return transcript;
+  }
+
+  return `${trimmedBaseValue}\n${transcript}`;
+}
+
+function getVoiceRecognitionErrorMessage(error: string): string {
+  if (error === "not-allowed" || error === "service-not-allowed") {
+    return "마이크 권한을 허용해야 음성 인식을 사용할 수 있습니다.";
+  }
+
+  if (error === "no-speech") {
+    return "음성이 감지되지 않았습니다. 다시 눌러 말해주세요.";
+  }
+
+  return "음성 인식 중 오류가 발생했습니다.";
 }
 
 function createQuestionFromDraftError(message: string): string | null {
