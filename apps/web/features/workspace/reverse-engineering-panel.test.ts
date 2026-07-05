@@ -4,6 +4,7 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 const panelSource = readWorkspaceFile("ReverseEngineeringPanel.tsx");
+const draftEditsSource = readWorkspaceFile("reverse-engineering-draft-edits.ts");
 const findingsPanelSource = readWorkspaceFile("ReverseEngineeringFindingsPanel.tsx");
 const importPanelSource = readWorkspaceFile("ReverseEngineeringImportSuggestionsPanel.tsx");
 const resultPanelSource = readWorkspaceFile("ReverseEngineeringResultPanel.tsx");
@@ -36,6 +37,17 @@ test("Reverse Engineering result stays preview-only until the user applies it", 
   assert.match(panelSource, /context\.applyDiagramJson\(diagramWithReverseEngineeringSource\)/);
   assert.match(resultPanelSource, /새 보드로 열기/);
   assert.match(resultPanelSource, /현재 보드에 추가/);
+});
+
+test("Reverse Engineering draft edits update only the candidate architecture", () => {
+  assert.match(panelSource, /updateReverseEngineeringDraftNode/);
+  assert.match(panelSource, /context\.setPreviewDiagram\(application\.previewDiagram\)/);
+  assert.match(resultPanelSource, /Draft 수정/);
+  assert.match(resultPanelSource, /표시 이름/);
+  assert.match(resultPanelSource, /설명/);
+  assert.match(resultPanelSource, /positionX/);
+  assert.match(draftEditsSource, /discoveredResources/);
+  assert.match(draftEditsSource, /reverseEngineeringDraft/);
 });
 
 test("Reverse Engineering result shows risks, partial scan errors, and import handoff data", () => {

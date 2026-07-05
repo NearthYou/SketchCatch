@@ -1,8 +1,10 @@
 import type {
+  ArchitectureJson,
   DiscoveredResource,
   ReverseEngineeringScanLogLine,
   ReverseEngineeringScanResponse
 } from "@sketchcatch/types";
+import type { ReverseEngineeringDraftNodeUpdate } from "./reverse-engineering-draft-edits";
 import type { ReverseEngineeringBoardComparison } from "./reverse-engineering-board-application";
 import { ReverseEngineeringFindingsPanel } from "./ReverseEngineeringFindingsPanel";
 import { ReverseEngineeringImportSuggestionsPanel } from "./ReverseEngineeringImportSuggestionsPanel";
@@ -17,6 +19,7 @@ export type ReverseEngineeringResultPanelProps = {
   readonly hasCurrentBoardResources: boolean;
   readonly logs: ReverseEngineeringScanLogLine[];
   readonly onAppendToCurrentBoard: () => void;
+  readonly onDraftNodeEdit: (nodeId: string, update: ReverseEngineeringDraftNodeUpdate) => void;
   readonly onOpenAsNewBoard: () => void;
   readonly response: ReverseEngineeringScanResponse;
 };
@@ -29,6 +32,7 @@ export function ReverseEngineeringResultPanel({
   hasCurrentBoardResources,
   logs,
   onAppendToCurrentBoard,
+  onDraftNodeEdit,
   onOpenAsNewBoard,
   response
 }: ReverseEngineeringResultPanelProps) {
@@ -65,6 +69,11 @@ export function ReverseEngineeringResultPanel({
           스캔 결과는 지금 보드에 미리보기로만 표시됩니다. 아래 적용 버튼을 누르기 전에는 현재 보드를 바꾸지 않습니다.
         </p>
       </section>
+
+      <ReverseEngineeringDraftEditor
+        architectureJson={result.architectureJson}
+        onDraftNodeEdit={onDraftNodeEdit}
+      />
 
       <section className={styles.deploymentSection}>
         <h3>현재 보드와 비교</h3>
@@ -168,6 +177,72 @@ export function ReverseEngineeringResultPanel({
         )}
       </section>
     </>
+  );
+}
+
+// 원본 AWS 값은 그대로 두고, 사용자가 적용할 후보 설계의 안전한 표시값만 수정합니다.
+function ReverseEngineeringDraftEditor({
+  architectureJson,
+  onDraftNodeEdit
+}: {
+  readonly architectureJson: ArchitectureJson;
+  readonly onDraftNodeEdit: (nodeId: string, update: ReverseEngineeringDraftNodeUpdate) => void;
+}) {
+  if (architectureJson.nodes.length === 0) {
+    return null;
+  }
+
+  return (
+    <section className={styles.deploymentSection}>
+      <h3>Draft 수정</h3>
+      <ul className={styles.reverseResultList}>
+        {architectureJson.nodes.map((node) => (
+          <li key={node.id} className={styles.reverseResultItem}>
+            <label className={styles.deploymentField}>
+              표시 이름
+              <input
+                onChange={(event) => onDraftNodeEdit(node.id, { label: event.currentTarget.value })}
+                value={node.label}
+              />
+            </label>
+            <label className={styles.deploymentField}>
+              설명
+              <input
+                onChange={(event) =>
+                  onDraftNodeEdit(node.id, { description: event.currentTarget.value })
+                }
+                value={typeof node.config["description"] === "string" ? node.config["description"] : ""}
+              />
+            </label>
+            <div className={styles.deploymentApplyActions}>
+              <label className={styles.deploymentField}>
+                X
+                <input
+                  onChange={(event) =>
+                    onDraftNodeEdit(node.id, { positionX: Number(event.currentTarget.value) })
+                  }
+                  type="number"
+                  value={node.positionX}
+                />
+              </label>
+              <label className={styles.deploymentField}>
+                Y
+                <input
+                  onChange={(event) =>
+                    onDraftNodeEdit(node.id, { positionY: Number(event.currentTarget.value) })
+                  }
+                  type="number"
+                  value={node.positionY}
+                />
+              </label>
+            </div>
+            <span>
+              {node.type} · {String(node.config["providerResourceId"] ?? "providerResourceId 없음")}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 

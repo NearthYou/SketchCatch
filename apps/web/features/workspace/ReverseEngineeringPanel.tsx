@@ -22,6 +22,10 @@ import {
   createReverseEngineeringBoardComparison,
   type ReverseEngineeringBoardApplicationMode
 } from "./reverse-engineering-board-application";
+import {
+  updateReverseEngineeringDraftNode,
+  type ReverseEngineeringDraftNodeUpdate
+} from "./reverse-engineering-draft-edits";
 import { REVERSE_ENGINEERING_RESOURCE_TYPES } from "./reverse-engineering-resource-types";
 import {
   ReverseEngineeringResultPanel,
@@ -287,6 +291,29 @@ export function ReverseEngineeringPanel({ context, projectId }: ReverseEngineeri
     }
   }
 
+  // 사용자가 적용 전에 바꾼 표시값을 preview와 저장될 후보 설계에만 반영합니다.
+  function updateDraftNode(nodeId: string, update: ReverseEngineeringDraftNodeUpdate): void {
+    const result = scanResponse?.result;
+
+    if (!result) {
+      return;
+    }
+
+    const nextResult = updateReverseEngineeringDraftNode(result, nodeId, update);
+    const nextResponse = {
+      ...scanResponse,
+      result: nextResult
+    };
+    const application = createReverseEngineeringBoardApplication({
+      currentDiagram: context.diagram,
+      mode: "replace",
+      result: nextResult
+    });
+
+    setScanResponse(nextResponse);
+    context.setPreviewDiagram(application.previewDiagram);
+  }
+
   return (
     <section className={styles.deploymentPanel} aria-label="Reverse Engineering">
       <div className={styles.deploymentPanelContent}>
@@ -334,6 +361,7 @@ export function ReverseEngineeringPanel({ context, projectId }: ReverseEngineeri
             hasCurrentBoardResources={context.nodes.length > 0}
             logs={logs}
             onAppendToCurrentBoard={() => void applyScanResult("append")}
+            onDraftNodeEdit={updateDraftNode}
             onOpenAsNewBoard={() => void applyScanResult("replace")}
             response={scanResponse}
           />
