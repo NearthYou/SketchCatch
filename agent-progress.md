@@ -38,6 +38,29 @@
   - `next build` temporarily changed `apps/web/next-env.d.ts`; the generated change was restored.
   - 실제 Terraform apply/destroy, cloud mutation, Git/CI/CD handoff는 수행하지 않았다.
 
+### 2026-07-05 - Auth refresh 401 콘솔 노이즈 완화
+
+- Goal: 브라우저에 인증 세션 쿠키가 없는 상태에서도 앱 부팅 시 `/api/auth/refresh`를 무조건 호출해 401 콘솔 오류가 보이는 문제를 줄인다.
+- Completed:
+  - `api-client`에 readable CSRF cookie 기반 `hasRefreshSessionCookieHint` helper를 추가했다.
+  - `AuthProvider.reloadUser`가 메모리 access token이 없더라도 refresh session cookie 힌트가 없으면 `/auth/refresh` 호출을 생략하게 했다.
+  - cookie hint helper와 AuthProvider refresh guard 회귀 테스트를 추가했다.
+  - 중복으로 남아 있던 API watch wrapper를 정리하고, 수정 반영을 위해 web production build를 새로 만들고 `localhost:3000`을 재시작했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits.
+  - `pnpm --filter @sketchcatch/web exec tsx --test components/auth/auth-provider.test.ts features/workspace/api-client-auth-session.test.ts` - passed.
+  - `pnpm --filter @sketchcatch/web typecheck` - passed.
+  - `pnpm --filter @sketchcatch/web lint` - passed.
+  - `pnpm --filter @sketchcatch/web build` - passed.
+  - `pnpm harness:check` - passed.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `pnpm build` - passed.
+  - Runtime check: `http://localhost:3000` returned 200, `http://localhost:4000/health/db` returned 200.
+- Known risks:
+  - 이미 브라우저에 stale/invalid refresh cookie가 남아 있는 경우에는 한 번의 refresh 401 후 cookie clear가 발생할 수 있다.
+  - 실제 브라우저 DevTools 콘솔 캡처 기반 smoke는 사용자가 보는 Chrome 프로필에서 직접 재확인이 필요하다.
+
 ### 2026-07-04 - PR #151 리뷰 대응
 
 - Goal: PR #151에 남은 review thread를 반영해 프로젝트별 AI 채팅 기록 저장과 Terraform 참조 기반 area 부모 추론을 보정한다.

@@ -11,6 +11,7 @@ import {
 } from "react";
 import type { AuthResponse, LoginRequest, SignupRequest, User } from "@sketchcatch/types";
 import {
+  hasRefreshSessionHint,
   requestCurrentUser,
   requestLogin,
   requestLogout,
@@ -44,7 +45,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setStatus("loading");
 
     try {
-      const session = readStoredAuthSession() ?? (await requestRefreshSession());
+      const storedSession = readStoredAuthSession();
+      const session =
+        storedSession ?? (hasRefreshSessionHint() ? await requestRefreshSession() : null);
 
       if (!session) {
         setUser(null);
