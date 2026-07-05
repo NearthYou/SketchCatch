@@ -180,7 +180,7 @@ export function CostsClient() {
       <section className="dashboardPanel costSummaryPanel" aria-labelledby="cost-summary-title">
         <div>
           <p className="dashboardPanelKicker">Running deployments</p>
-          <h2 id="cost-summary-title">켜둔 배포 프로젝트 예상 비용 합계</h2>
+          <h2 id="cost-summary-title">켜둔 프로젝트 예상 비용 합계</h2>
         </div>
         <div className="costSummaryAmount">
           <span>{getPeriodLabel(appliedQuery.period)} 예상 비용</span>
@@ -195,7 +195,7 @@ export function CostsClient() {
         <div className="dashboardPanelHeader">
           <div>
             <p className="dashboardPanelKicker">Active costs</p>
-            <h2 id="active-deployment-cost-title">실행 중 배포 프로젝트</h2>
+            <h2 id="active-deployment-cost-title">실행 중 프로젝트</h2>
           </div>
           <span className="dashboardCountBadge">{costData?.projects.length ?? 0}개</span>
         </div>
@@ -212,7 +212,7 @@ export function CostsClient() {
           />
         ) : null}
         {state === "idle" && costData !== null && costData.projects.length === 0 ? (
-          <CostStatus message="실행 중인 배포 프로젝트가 없습니다." />
+          <CostStatus message="실행 중인 프로젝트가 없습니다." />
         ) : null}
         {state === "idle" && costData !== null && costData.projects.length > 0 ? (
           <div className="dashboardTable">
