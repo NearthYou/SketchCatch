@@ -55,6 +55,42 @@ test("AWS Provider Adapter keeps unsupported AWS resources as UNKNOWN instead of
   assert.equal(result.importSuggestions[0]?.handoffReady, false);
 });
 
+test("AWS Provider Adapter maps routing resources and prepares safe import suggestions", async () => {
+  const adapter = createAwsProviderAdapter({
+    async discoverResources() {
+      return [
+        createRecord({
+          providerResourceType: "AWS::EC2::InternetGateway",
+          providerResourceId: "igw-1234",
+          displayName: "Main Internet Gateway",
+          relationships: [{ type: "attached_to", targetProviderResourceId: "vpc-1234" }]
+        }),
+        createRecord({
+          providerResourceType: "AWS::EC2::RouteTable",
+          providerResourceId: "rtb-1234",
+          displayName: "Public Route Table",
+          relationships: [{ type: "contains", targetProviderResourceId: "vpc-1234" }]
+        })
+      ];
+    }
+  });
+
+  const result = await adapter.scan({
+    provider: "aws",
+    region: "ap-northeast-2",
+    resourceTypes: ["INTERNET_GATEWAY", "ROUTE_TABLE"]
+  });
+
+  assert.deepEqual(
+    result.architectureJson.nodes.map((node) => node.type),
+    ["INTERNET_GATEWAY", "ROUTE_TABLE"]
+  );
+  assert.deepEqual(
+    result.importSuggestions.map((suggestion) => suggestion.terraformAddress),
+    ["aws_internet_gateway.igw_1234", "aws_route_table.rtb_1234"]
+  );
+});
+
 function createFakeGateway(): AwsProviderScanGateway {
   return {
     async discoverResources() {

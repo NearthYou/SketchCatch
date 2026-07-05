@@ -45,6 +45,8 @@ export type AwsProviderAdapter = {
 const awsResourceTypeMap: ReadonlyMap<string, ResourceType> = new Map([
   ["AWS::EC2::VPC", "VPC"],
   ["AWS::EC2::Subnet", "SUBNET"],
+  ["AWS::EC2::InternetGateway", "INTERNET_GATEWAY"],
+  ["AWS::EC2::RouteTable", "ROUTE_TABLE"],
   ["AWS::EC2::SecurityGroup", "SECURITY_GROUP"],
   ["AWS::EC2::Instance", "EC2"],
   ["AWS::RDS::DBInstance", "RDS"],
@@ -54,6 +56,8 @@ const awsResourceTypeMap: ReadonlyMap<string, ResourceType> = new Map([
 const terraformResourceTypeMap: ReadonlyMap<ResourceType, string> = new Map([
   ["VPC", "aws_vpc"],
   ["SUBNET", "aws_subnet"],
+  ["INTERNET_GATEWAY", "aws_internet_gateway"],
+  ["ROUTE_TABLE", "aws_route_table"],
   ["SECURITY_GROUP", "aws_security_group"],
   ["EC2", "aws_instance"],
   ["RDS", "aws_db_instance"],
