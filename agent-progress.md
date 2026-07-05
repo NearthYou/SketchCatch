@@ -1840,3 +1840,28 @@
 - Known risks:
   - 실제 브라우저 스크린샷 검증은 이번 변경에서 수행하지 않았다. API 라우트 테스트, 타입체크, lint, production build로 계약과 렌더링 경로를 검증했다.
   - `.turbo/cache` rename 경고가 있었지만 각 명령은 exit code 0으로 완료됐다.
+
+## 2026-07-06 - 비용 산정 fallback 문구 노출 제거
+
+- Goal: 비용관리/시뮬레이션 화면에서 `AWS Pricing API 조회 실패`, `SketchCatch fallback 단가` 같은 내부 구현 문구가 사용자에게 노출되지 않게 한다.
+- Completed:
+  - 비용 산정 서비스의 fallback/조회 단가 설명을 `추정 단가` 중심의 짧은 문구로 바꿨다.
+  - 비용관리 리소스 상세와 Workspace AI 시뮬레이션 리소스 상세에서 `aws_pricing_api`, `fallback_estimate`의 support reason 문장을 숨기고, 직접 비용 없음/산정 미지원 사유만 표시하게 했다.
+  - 비용관리와 시뮬레이션의 fallback badge 라벨을 `Fallback estimate`에서 `추정`으로 바꿨다.
+  - Pre-Deployment cost helper와 비용 문서의 fallback 표현도 같은 톤으로 정리했다.
+  - 비용 산정 테스트에 fallback 문구가 `AWS Pricing API 조회`, `SketchCatch fallback`을 포함하지 않는지 검증을 추가했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/cost-analysis.test.ts` - passed
+  - `pnpm --filter @sketchcatch/api lint` - passed
+  - `pnpm --filter @sketchcatch/web lint` - passed
+  - `pnpm --filter @sketchcatch/api typecheck` - passed
+  - `pnpm --filter @sketchcatch/web typecheck` - passed
+  - `pnpm harness:check` - passed after edits
+  - `pnpm lint` - passed with `.turbo/cache` rename warnings
+  - `pnpm typecheck` - passed with `.turbo/cache` rename warnings
+  - `pnpm build` - passed
+  - `git diff --check` - passed
+- Known risks:
+  - 실제 브라우저 스크린샷 검증은 수행하지 않았다. 소스 검색, API 테스트, lint/typecheck/build로 문구 제거와 렌더링 경로를 검증했다.
+  - `.turbo/cache` rename 경고가 있었지만 각 명령은 exit code 0으로 완료됐다.

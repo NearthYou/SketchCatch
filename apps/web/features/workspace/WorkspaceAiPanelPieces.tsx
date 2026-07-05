@@ -280,7 +280,9 @@ export function WorkspaceAiDesignSimulationResult({
                       )}
                     </strong>
                     <p>{resource.explanation}</p>
-                    <p>{resource.supportReason}</p>
+                    {shouldShowSimulationCostSupportReason(resource) ? (
+                      <p>{resource.supportReason}</p>
+                    ) : null}
                   </li>
                 ))}
               </ul>
@@ -418,12 +420,16 @@ function getSimulationCostSupportLabel(supportLevel: CostEstimateSupportLevel): 
     case "aws_pricing_api":
       return "AWS Pricing API";
     case "fallback_estimate":
-      return "Fallback estimate";
+      return "추정";
     case "no_direct_cost":
       return "직접 비용 없음";
     case "not_estimated":
       return "산정 미지원";
   }
+}
+
+function shouldShowSimulationCostSupportReason(resource: ResourceCostEstimate): boolean {
+  return resource.supportLevel === "no_direct_cost" || resource.supportLevel === "not_estimated";
 }
 
 function getSimulationCostSupportClassName(supportLevel: CostEstimateSupportLevel): string {

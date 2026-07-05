@@ -47,6 +47,25 @@ test("analyzeCost returns resource estimates for the requested period", async ()
   assert.equal(ec2?.periodEstimate.amount, 1.98);
 });
 
+test("analyzeCost keeps fallback pricing wording user-facing", async () => {
+  const result = await analyzeCost(
+    createCostEstimateRequest({
+      architectureJson: createArchitectureJson([
+        { id: "ec2", type: "UNKNOWN", terraformResourceType: "aws_instance" }
+      ]),
+      expectedUserCount: 1000,
+      period: "month",
+      region: "ap-northeast-2"
+    })
+  );
+  const ec2 = result.resources.find((resource) => resource.resourceId === "ec2");
+
+  assert.equal(result.pricingAssumption, "일부 항목은 추정 단가로 계산했습니다.");
+  assert.equal(ec2?.supportReason, "추정 단가로 계산했습니다.");
+  assert.doesNotMatch(result.pricingAssumption, /AWS Pricing API 조회|SketchCatch fallback/);
+  assert.doesNotMatch(ec2?.supportReason ?? "", /AWS Pricing API 조회|SketchCatch fallback/);
+});
+
 test("analyzeCost scales capacity and usage estimates by expected user count", async () => {
   const baseResult = await analyzeCost(
     createCostEstimateRequest({

@@ -280,7 +280,9 @@ export function CostsClient() {
                   </span>
                 </summary>
                 <p>{resource.explanation}</p>
-                <p className="costResourceSupportReason">{resource.supportReason}</p>
+                {shouldShowCostSupportReason(resource) ? (
+                  <p className="costResourceSupportReason">{resource.supportReason}</p>
+                ) : null}
                 <ul>
                   {resource.costDrivers.map((driver) => (
                     <li key={`${resource.resourceId}-${driver}`}>{driver}</li>
@@ -415,12 +417,16 @@ function getCostSupportLabel(supportLevel: CostEstimateSupportLevel): string {
     case "aws_pricing_api":
       return "AWS Pricing API";
     case "fallback_estimate":
-      return "Fallback estimate";
+      return "추정";
     case "no_direct_cost":
       return "직접 비용 없음";
     case "not_estimated":
       return "산정 미지원";
   }
+}
+
+function shouldShowCostSupportReason(resource: ResourceCostEstimate): boolean {
+  return resource.supportLevel === "no_direct_cost" || resource.supportLevel === "not_estimated";
 }
 
 function getCostSupportBadgeClassName(supportLevel: CostEstimateSupportLevel): string {

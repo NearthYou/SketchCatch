@@ -1564,10 +1564,10 @@ function createReviewMessages(
 
 function createPricingAssumption(fallbackUsed: boolean, pricingSource: CostPricingSource): string {
   if (pricingSource === "aws_pricing_api" && !fallbackUsed) {
-    return "AWS Pricing API에서 조회한 단가를 기준으로 계산했습니다.";
+    return "조회 단가를 기준으로 계산했습니다.";
   }
 
-  return "AWS Pricing API로 조회하지 못한 항목은 SketchCatch fallback 단가로 계산했습니다.";
+  return "일부 항목은 추정 단가로 계산했습니다.";
 }
 
 function getSupportLevel(pricingSource: CostPricingSource): CostEstimateSupportLevel {
@@ -1576,10 +1576,10 @@ function getSupportLevel(pricingSource: CostPricingSource): CostEstimateSupportL
 
 function getSupportReason(pricingSource: CostPricingSource): string {
   if (pricingSource === "aws_pricing_api") {
-    return "AWS Pricing API에서 조회한 단가로 계산했습니다.";
+    return "조회 단가로 계산했습니다.";
   }
 
-  return "AWS Pricing API 조회가 꺼져 있거나 실패해 SketchCatch fallback 단가로 계산했습니다.";
+  return "추정 단가로 계산했습니다.";
 }
 
 function mergePricingSources(pricingSources: readonly CostPricingSource[]): CostPricingSource {

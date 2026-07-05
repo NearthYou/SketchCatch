@@ -49,7 +49,7 @@ export function createResourceCostEstimate(node: ResourceNode): ResourceCostEsti
         currency: "USD"
       },
       supportLevel: "fallback_estimate",
-      supportReason: "Pre-Deployment Check fallback 단가로 계산했습니다.",
+      supportReason: "추정 단가로 계산했습니다.",
       costDrivers: ["DB instance runtime", "allocated storage"],
       explanation: "1차 제공 fallback은 작은 RDS 인스턴스 기준의 보수적 월 예상 비용을 제공합니다."
     };
@@ -70,7 +70,7 @@ export function createResourceCostEstimate(node: ResourceNode): ResourceCostEsti
         currency: "USD"
       },
       supportLevel: "fallback_estimate",
-      supportReason: "Pre-Deployment Check fallback 단가로 계산했습니다.",
+      supportReason: "추정 단가로 계산했습니다.",
       costDrivers: ["NAT Gateway hourly runtime", "data processing"],
       explanation: "공통 ResourceType 확정 전에는 service=nat_gateway 설정을 비용 추정 fallback으로 사용합니다."
     };
@@ -89,7 +89,7 @@ export function createResourceCostEstimate(node: ResourceNode): ResourceCostEsti
       currency: "USD"
     },
     supportLevel: "not_estimated",
-    supportReason: "Pre-Deployment Check fallback 비용 규칙이 없는 Resource입니다.",
+    supportReason: "비용 산정 규칙이 없는 Resource입니다.",
     costDrivers: [],
     explanation: "외부 가격 API 연동 전 fallback 비용 추정입니다."
   };
