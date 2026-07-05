@@ -35,7 +35,7 @@ export function isAvailabilityZoneResourceNode(node: DiagramNode): boolean {
 }
 
 export function getRegionNodeAwsRegion(node: DiagramNode): AwsRegionCode {
-  const awsRegion = node.parameters?.values["awsRegion"];
+  const awsRegion = node.parameters?.values?.["awsRegion"];
   const legacyAwsRegion = (node.metadata as LegacyRegionMetadata | undefined)?.awsRegion;
 
   if (isAwsRegionCode(awsRegion)) {
@@ -46,7 +46,7 @@ export function getRegionNodeAwsRegion(node: DiagramNode): AwsRegionCode {
 }
 
 export function getAvailabilityZoneNodeValue(node: DiagramNode): string {
-  const awsAvailabilityZone = node.parameters?.values["awsAvailabilityZone"];
+  const awsAvailabilityZone = node.parameters?.values?.["awsAvailabilityZone"];
 
   return isAwsAvailabilityZoneCode(awsAvailabilityZone)
     ? awsAvailabilityZone
@@ -60,7 +60,7 @@ export function updateRegionNodeParameters(
   return {
     ...parameters,
     values: {
-      ...parameters.values,
+      ...(parameters.values ?? {}),
       awsRegion
     }
   };
@@ -73,7 +73,7 @@ export function updateAvailabilityZoneNodeParameters(
   return {
     ...parameters,
     values: {
-      ...parameters.values,
+      ...(parameters.values ?? {}),
       awsAvailabilityZone
     }
   };

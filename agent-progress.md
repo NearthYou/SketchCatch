@@ -13,6 +13,24 @@
 - Highest priority unfinished harness feature: `HARNESS-007`
 - Current blocker: none
 
+### 2026-07-05 - Terraform 영역 리소스 Ticket 2 리뷰 보강
+
+- Goal: Ticket 2 리뷰 피드백에 따라 Region/AZ parameter reader가 legacy 또는 깨진 Diagram node에서 `parameters.values` 누락/null을 안전하게 처리하게 한다.
+- Completed:
+  - `getRegionNodeAwsRegion`, `getAvailabilityZoneNodeValue`에서 `node.parameters?.values?.[...]`로 조회하도록 보강했다.
+  - Region/AZ parameter update helper가 legacy `values: undefined | null`에서도 `{}` 기반으로 값을 쓸 수 있게 했다.
+  - `values` 누락/null 회귀 테스트를 추가했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/parameter-input/region-node-metadata.test.ts` - passed.
+  - `pnpm --filter @sketchcatch/web typecheck` - passed.
+  - `pnpm --filter @sketchcatch/web lint` - passed.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `pnpm build` - passed.
+- Known risks:
+  - 커밋은 만들지 않았다.
+
 ### 2026-07-05 - Terraform 영역 리소스 계약 Ticket 2
 
 - Goal: `docs/jh/001_테라폼영역리소스동기화티켓계획_JH.md`의 Ticket 2 범위에 맞춰 Web에서 Region/AZ를 `design_region`/`design_az`가 아니라 `aws_region`/`aws_availability_zone` resource area node로 생성하고, 선택값을 `parameters.values`로 읽고 쓰게 한다.

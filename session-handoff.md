@@ -19,6 +19,8 @@
 - AZ 기본값: `resourceName: "ap_northeast_2a"`, `values.awsAvailabilityZone: "ap-northeast-2a"`.
 - `area-nodes`, resize bounds, Resource List summary가 `aws_region`, `aws_availability_zone`을 board area node로 인식한다.
 - Parameter panel의 Region/AZ selector는 `metadata`가 아니라 `parameters.values["awsRegion"]`, `parameters.values["awsAvailabilityZone"]`만 갱신한다.
+- 리뷰 보강으로 Region/AZ reader는 `parameters.values`가 누락되거나 null이어도 기본값으로 fallback한다.
+- Region/AZ update helper는 legacy `values: undefined | null`에서도 새 values 객체를 만들어 저장한다.
 - AZ 선택용 정적 option helper를 추가했다.
 - server-storage sample layout이 catalog 기반 `aws_region`, `aws_availability_zone` area resource를 생성한다.
 - `docs/data-models.md`에서 Region/AZ area resource가 shared Terraform `ResourceDefinition` 대상이 아님을 최신 계약에 맞게 보정했다.
@@ -35,6 +37,7 @@
 - `pnpm --filter @sketchcatch/web typecheck`, `pnpm --filter @sketchcatch/api typecheck`, `pnpm --filter @sketchcatch/types typecheck` - passed.
 - `pnpm --filter @sketchcatch/web lint` - passed.
 - `pnpm lint`, `pnpm typecheck`, `pnpm build` - passed.
+- 리뷰 보강 후 `pnpm --filter @sketchcatch/web exec tsx --test features/parameter-input/region-node-metadata.test.ts`, `pnpm --filter @sketchcatch/web typecheck`, `pnpm --filter @sketchcatch/web lint`, `pnpm lint`, `pnpm typecheck`, `pnpm build`가 통과했다.
 
 ### 다음 행동
 

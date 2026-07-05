@@ -95,6 +95,35 @@ test("getAvailabilityZoneNodeValue reads parameters values and falls back to Seo
   assert.equal(getAvailabilityZoneNodeValue(invalidAvailabilityZoneNode), "ap-northeast-2a");
 });
 
+test("area parameter readers tolerate legacy nodes without values", () => {
+  const regionNodeWithoutValues = JSON.parse(
+    JSON.stringify({
+      ...makeAreaResourceNode("aws_region"),
+      parameters: {
+        terraformBlockType: "resource",
+        resourceType: "aws_region",
+        resourceName: "primary",
+        fileName: "main"
+      }
+    })
+  ) as DiagramNode;
+  const availabilityZoneNodeWithNullValues = JSON.parse(
+    JSON.stringify({
+      ...makeAreaResourceNode("aws_availability_zone"),
+      parameters: {
+        terraformBlockType: "resource",
+        resourceType: "aws_availability_zone",
+        resourceName: "primary_a",
+        fileName: "main",
+        values: null
+      }
+    })
+  ) as DiagramNode;
+
+  assert.equal(getRegionNodeAwsRegion(regionNodeWithoutValues), "ap-northeast-2");
+  assert.equal(getAvailabilityZoneNodeValue(availabilityZoneNodeWithNullValues), "ap-northeast-2a");
+});
+
 test("parameter update helpers change only Region and AZ values", () => {
   const regionParameters = makeAreaResourceNode("aws_region").parameters;
   const availabilityZoneParameters = makeAreaResourceNode("aws_availability_zone").parameters;
@@ -117,6 +146,27 @@ test("parameter update helpers change only Region and AZ values", () => {
         ...availabilityZoneParameters.values,
         awsAvailabilityZone: "eu-central-1b"
       }
+    }
+  );
+});
+
+test("parameter update helpers tolerate legacy parameters without values", () => {
+  const legacyRegionParameters = {
+    ...makeAreaResourceNode("aws_region").parameters,
+    values: undefined
+  } as unknown as NonNullable<DiagramNode["parameters"]>;
+  const legacyAvailabilityZoneParameters = {
+    ...makeAreaResourceNode("aws_availability_zone").parameters,
+    values: null
+  } as unknown as NonNullable<DiagramNode["parameters"]>;
+
+  assert.deepEqual(updateRegionNodeParameters(legacyRegionParameters, "us-east-1").values, {
+    awsRegion: "us-east-1"
+  });
+  assert.deepEqual(
+    updateAvailabilityZoneNodeParameters(legacyAvailabilityZoneParameters, "us-east-1a").values,
+    {
+      awsAvailabilityZone: "us-east-1a"
     }
   );
 });
