@@ -74,6 +74,7 @@ const DESIGN_SIMULATION_DEFAULTS = {
   budgetLevel: "normal",
   trafficLevel: "normal"
 } as const;
+const VOICE_NO_SPEECH_TIMEOUT_MS = 8000;
 
 type BrowserSpeechRecognitionAlternative = {
   readonly transcript: string;
@@ -101,6 +102,7 @@ type BrowserSpeechRecognition = {
   onend: (() => void) | null;
   onerror: ((event: BrowserSpeechRecognitionErrorEvent) => void) | null;
   onresult: ((event: BrowserSpeechRecognitionEvent) => void) | null;
+  onspeechstart: (() => void) | null;
   abort: () => void;
   start: () => void;
   stop: () => void;
@@ -143,6 +145,8 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
   const transcriptRef = useRef<HTMLDivElement | null>(null);
   const speechRecognitionRef = useRef<BrowserSpeechRecognition | null>(null);
   const voiceInputBaseRef = useRef("");
+  const voiceNoSpeechTimerRef = useRef<number | null>(null);
+  const ignoreNextVoiceAbortErrorRef = useRef(false);
   const loadedProjectIdRef = useRef(projectId);
   const boardSnapshot = useMemo(
     () => createWorkspaceAiBoardSnapshot(context.diagram),
@@ -189,6 +193,7 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
     setVoiceInputSupported(getBrowserSpeechRecognitionConstructor() !== undefined);
 
     return () => {
+      clearVoiceNoSpeechTimer();
       speechRecognitionRef.current?.abort();
       speechRecognitionRef.current = null;
     };
@@ -562,24 +567,44 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
       return;
     }
 
+    if (!window.isSecureContext) {
+      setVoiceStatusMessage("음성 인식은 HTTPS 또는 localhost 주소에서만 사용할 수 있습니다.");
+      return;
+    }
+
+    clearVoiceNoSpeechTimer();
     speechRecognitionRef.current?.abort();
 
     const recognition = new SpeechRecognitionConstructor();
+    ignoreNextVoiceAbortErrorRef.current = false;
     voiceInputBaseRef.current = composerValue;
     recognition.lang = "ko-KR";
     recognition.continuous = false;
     recognition.interimResults = true;
     recognition.onresult = (event) => {
+      clearVoiceNoSpeechTimer();
       const transcript = getSpeechRecognitionTranscript(event);
 
       if (transcript.length > 0) {
         setComposerValue(mergeVoiceTranscript(voiceInputBaseRef.current, transcript));
       }
     };
+    recognition.onspeechstart = () => {
+      clearVoiceNoSpeechTimer();
+    };
     recognition.onerror = (event) => {
+      clearVoiceNoSpeechTimer();
+      setVoiceListening(false);
+
+      if (event.error === "aborted" && ignoreNextVoiceAbortErrorRef.current) {
+        ignoreNextVoiceAbortErrorRef.current = false;
+        return;
+      }
+
       setVoiceStatusMessage(getVoiceRecognitionErrorMessage(event.error));
     };
     recognition.onend = () => {
+      clearVoiceNoSpeechTimer();
       setVoiceListening(false);
       speechRecognitionRef.current = null;
       setVoiceStatusMessage((currentMessage) =>
@@ -592,6 +617,13 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
       setVoiceListening(true);
       setVoiceStatusMessage("음성 인식 중입니다.");
       recognition.start();
+      voiceNoSpeechTimerRef.current = window.setTimeout(() => {
+        ignoreNextVoiceAbortErrorRef.current = true;
+        speechRecognitionRef.current?.abort();
+        speechRecognitionRef.current = null;
+        setVoiceListening(false);
+        setVoiceStatusMessage("8초 동안 음성이 들리지 않아 음성 인식을 중지했습니다.");
+      }, VOICE_NO_SPEECH_TIMEOUT_MS);
     } catch {
       speechRecognitionRef.current = null;
       setVoiceListening(false);
@@ -600,10 +632,20 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
   }
 
   function stopVoiceRecognition(): void {
+    clearVoiceNoSpeechTimer();
     speechRecognitionRef.current?.stop();
     speechRecognitionRef.current = null;
     setVoiceListening(false);
     setVoiceStatusMessage("");
+  }
+
+  function clearVoiceNoSpeechTimer(): void {
+    if (voiceNoSpeechTimerRef.current === null) {
+      return;
+    }
+
+    window.clearTimeout(voiceNoSpeechTimerRef.current);
+    voiceNoSpeechTimerRef.current = null;
   }
 
   if (!isOpen) {
@@ -929,11 +971,27 @@ function getVoiceRecognitionErrorMessage(error: string): string {
     return "마이크 권한을 허용해야 음성 인식을 사용할 수 있습니다.";
   }
 
+  if (error === "network") {
+    return "브라우저 음성 인식 서비스에 연결하지 못했습니다. Chrome에서 localhost/HTTPS로 열고 인터넷 연결을 확인해주세요.";
+  }
+
+  if (error === "audio-capture") {
+    return "마이크 장치를 찾지 못했습니다. OS와 브라우저의 마이크 입력 장치를 확인해주세요.";
+  }
+
+  if (error === "language-not-supported") {
+    return "현재 브라우저가 한국어 음성 인식을 지원하지 않습니다.";
+  }
+
   if (error === "no-speech") {
     return "음성이 감지되지 않았습니다. 다시 눌러 말해주세요.";
   }
 
-  return "음성 인식 중 오류가 발생했습니다.";
+  if (error === "aborted") {
+    return "음성 인식이 취소되었습니다.";
+  }
+
+  return `음성 인식 중 오류가 발생했습니다. (${error})`;
 }
 
 function createQuestionFromDraftError(message: string): string | null {
