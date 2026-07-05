@@ -7957,3 +7957,144 @@ nextjs-portal {
     animation: none;
   }
 }
+
+/* Cost management readability */
+.costHeroGrid {
+  align-items: stretch;
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
+}
+
+.costHeroGrid .dashboardPanel {
+  min-height: 0;
+}
+
+.costControlPanel,
+.costSummaryPanel,
+.costProjectPanel,
+.costNoticePanel {
+  padding: 18px 20px;
+}
+
+.costControlPanel,
+.costSummaryPanel {
+  align-content: start;
+  gap: 14px;
+}
+
+.costPanelTitle {
+  min-width: 0;
+}
+
+.costPanelTitle h2 {
+  color: var(--bp-ink);
+  font-size: 1.08rem;
+  line-height: 1.2;
+  margin: 0;
+}
+
+.costControlGrid {
+  align-items: end;
+  gap: 12px;
+  grid-template-columns: minmax(150px, 0.5fr) minmax(220px, 1fr) auto;
+}
+
+.costField {
+  gap: 7px;
+}
+
+.costField input,
+.costField select {
+  background: var(--bp-paper-2);
+  border-color: var(--bp-line);
+  min-height: 42px;
+}
+
+.costApplyButton {
+  min-height: 42px;
+  padding-inline: 18px;
+}
+
+.costSummaryPanel {
+  grid-template-columns: 1fr;
+}
+
+.costSummaryAmount {
+  align-content: center;
+  border-radius: var(--bp-r);
+  gap: 6px;
+  min-height: 120px;
+  min-width: 0;
+  padding: 18px 20px;
+}
+
+.costSummaryAmount strong {
+  font-size: 2rem;
+  line-height: 1;
+}
+
+.costProjectPanel {
+  gap: 14px;
+}
+
+.costProjectPanel .dashboardPanelHeader {
+  border-bottom: 1px solid var(--bp-line);
+  padding-bottom: 12px;
+}
+
+.costProjectPanel .dashboardTableHeader,
+.costProjectPanel .dashboardTableRow {
+  min-width: 680px;
+  padding-block: 11px;
+}
+
+.costProjectPanel .costStatus {
+  background: var(--bp-paper-2);
+  min-height: 52px;
+}
+
+.costNoticePanel {
+  gap: 14px;
+}
+
+.costNoticePanel > .dashboardIcon {
+  background: var(--bp-low-tint);
+  border: 1px solid color-mix(in srgb, var(--bp-low) 36%, var(--bp-line));
+  border-radius: var(--bp-r);
+  height: 42px;
+  padding: 8px;
+  width: 42px;
+}
+
+.costNoticePanel h2 {
+  font-size: 1.02rem;
+}
+
+.costNoticePanel p {
+  margin: 4px 0 0;
+}
+
+@media (max-width: 1180px) {
+  .costHeroGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .costControlGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .costControlPanel,
+  .costSummaryPanel,
+  .costProjectPanel,
+  .costNoticePanel {
+    padding: 16px;
+  }
+
+  .costProjectPanel .dashboardPanelHeader {
+    align-items: flex-start;
+    flex-direction: row;
+  }
+}

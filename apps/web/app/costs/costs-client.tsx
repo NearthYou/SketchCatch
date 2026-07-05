@@ -135,63 +135,65 @@ export function CostsClient() {
         </div>
       </div>
 
-      <section className="dashboardPanel costControlPanel" aria-labelledby="cost-control-title">
-        <div>
-          <p className="dashboardPanelKicker">Estimate settings</p>
-          <h2 id="cost-control-title">예상 비용 조건</h2>
-        </div>
-        <div className="costControlGrid">
-          <label className="costField">
-            <span>기간</span>
-            <select
-              onChange={(event) => setPeriodInput(event.target.value as CostEstimatePeriod)}
-              value={periodInput}
-            >
-              {COST_PERIOD_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="costField">
-            <span>예상 사용자 수</span>
-            <input
-              inputMode="numeric"
-              max={1_000_000}
-              min={1}
-              onChange={(event) => setExpectedUserCountInput(event.target.value)}
-              type="number"
-              value={expectedUserCountInput}
-            />
-          </label>
-          <button className="primaryButton costApplyButton" onClick={applyCostQuery} type="button">
-            <Calculator size={16} aria-hidden="true" />
-            적용
-          </button>
-        </div>
-        {formErrorMessage.length > 0 ? (
-          <p className="costErrorMessage" role="alert">
-            {formErrorMessage}
-          </p>
-        ) : null}
-      </section>
+      <div className="costHeroGrid">
+        <section className="dashboardPanel costControlPanel" aria-labelledby="cost-control-title">
+          <div className="costPanelTitle">
+            <p className="dashboardPanelKicker">Estimate settings</p>
+            <h2 id="cost-control-title">예상 비용 조건</h2>
+          </div>
+          <div className="costControlGrid">
+            <label className="costField">
+              <span>기간</span>
+              <select
+                onChange={(event) => setPeriodInput(event.target.value as CostEstimatePeriod)}
+                value={periodInput}
+              >
+                {COST_PERIOD_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="costField">
+              <span>예상 사용자 수</span>
+              <input
+                inputMode="numeric"
+                max={1_000_000}
+                min={1}
+                onChange={(event) => setExpectedUserCountInput(event.target.value)}
+                type="number"
+                value={expectedUserCountInput}
+              />
+            </label>
+            <button className="primaryButton costApplyButton" onClick={applyCostQuery} type="button">
+              <Calculator size={16} aria-hidden="true" />
+              적용
+            </button>
+          </div>
+          {formErrorMessage.length > 0 ? (
+            <p className="costErrorMessage" role="alert">
+              {formErrorMessage}
+            </p>
+          ) : null}
+        </section>
 
-      <section className="dashboardPanel costSummaryPanel" aria-labelledby="cost-summary-title">
-        <div>
-          <p className="dashboardPanelKicker">Running deployments</p>
-          <h2 id="cost-summary-title">켜둔 프로젝트 예상 비용 합계</h2>
-        </div>
-        <div className="costSummaryAmount">
-          <span>{getPeriodLabel(appliedQuery.period)} 예상 비용</span>
-          <strong>{formatUsd(totalEstimateAmount)}</strong>
-          <p>
-            월 환산 {formatUsd(totalMonthlyAmount)} · 일 평균 약 {formatUsd(dailyAverageAmount)}
-          </p>
-        </div>
-      </section>
+        <section className="dashboardPanel costSummaryPanel" aria-labelledby="cost-summary-title">
+          <div className="costPanelTitle">
+            <p className="dashboardPanelKicker">Cost overview</p>
+            <h2 id="cost-summary-title">켜둔 프로젝트 예상 비용 합계</h2>
+          </div>
+          <div className="costSummaryAmount">
+            <span>{getPeriodLabel(appliedQuery.period)} 예상 비용</span>
+            <strong>{formatUsd(totalEstimateAmount)}</strong>
+            <p>
+              월 환산 {formatUsd(totalMonthlyAmount)} · 일 평균 약 {formatUsd(dailyAverageAmount)}
+            </p>
+          </div>
+        </section>
+      </div>
 
-      <section className="dashboardPanel" aria-labelledby="active-deployment-cost-title">
+      <section className="dashboardPanel costProjectPanel" aria-labelledby="active-deployment-cost-title">
         <div className="dashboardPanelHeader">
           <div>
             <p className="dashboardPanelKicker">Active costs</p>

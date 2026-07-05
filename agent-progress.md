@@ -1797,3 +1797,22 @@
 - Known risks:
   - 로컬에서 실제 AWS SSO credential 기반 AWS Pricing API 조회는 수행하지 않았고, fallback 및 fake pricing provider 경로로 검증했다.
   - 사용자 수 배율은 실제 사용량 집계가 아니라 예상 사용자 수 기반 용량 가정치다. Route53 hosted zone, CloudWatch alarm/dashboard, CodePipeline처럼 사용자 수와 직접 비례하지 않는 개수 고정비는 배율을 적용하지 않는다.
+
+## 2026-07-06 - Cost Management UI readability polish
+
+- Goal: 비용관리 페이지의 상단 조건/요약/목록 영역을 더 읽기 쉽게 정리한다.
+- Completed:
+  - 예상 비용 조건과 비용 합계를 `costHeroGrid`로 묶어 첫 화면에서 같은 맥락으로 읽히게 했다.
+  - 비용관리 전용 패널 여백, 입력 높이, 합계 카드, 실행 중 프로젝트 목록, 빈 상태, 안내 패널 스타일을 조정했다.
+  - 비용관리 페이지 전용 클래스만 사용해 다른 대시보드 화면 영향 범위를 줄였다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits
+  - `pnpm --filter @sketchcatch/web lint` - passed
+  - `pnpm --filter @sketchcatch/web typecheck` - passed
+  - `pnpm lint` - passed
+  - `pnpm typecheck` - passed
+  - `pnpm build` - passed
+  - `pnpm harness:check` - passed after edits
+  - `git diff --check` - passed
+- Known risks:
+  - Playwright bundled browser가 설치되어 있지 않고 sandbox에서 local Chrome launch가 `spawn EPERM`으로 막혀 브라우저 스크린샷 검증은 완료하지 못했다. `/costs` HTTP 응답과 Next build로 기본 렌더링 경로는 확인했다.
