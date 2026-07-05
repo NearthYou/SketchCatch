@@ -149,6 +149,15 @@ test("terraform issues navigation stays reachable while diagnostics are visible"
   assert.match(componentSource, /openCollapsedView\("issues"\)/);
 });
 
+test("terraform issue AI resolution bypasses the leave guard while editing", () => {
+  const issuesPanelSource = readWorkspaceFile("TerraformIssuesPanel.tsx");
+
+  assert.match(issuesPanelSource, /data-terraform-issue-ai-resolution/);
+  assert.match(componentSource, /isTerraformIssueAiResolutionTarget/);
+  assert.match(componentSource, /isTerraformIssueAiResolutionTarget\(target\)/);
+  assert.match(issuesPanelSource, /onResolveWithAi\(issue\)/);
+});
+
 test("discarding terraform edits resets the terraform code panel dirty state", () => {
   assert.match(componentSource, /terraformDiscardRequestId/);
   assert.match(componentSource, /setTerraformDiscardRequestId\(\(requestId\) => requestId \+ 1\)/);

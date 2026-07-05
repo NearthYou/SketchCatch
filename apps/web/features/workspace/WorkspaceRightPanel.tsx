@@ -401,6 +401,10 @@ export function WorkspaceRightPanel({
         return;
       }
 
+      if (isTerraformIssueAiResolutionTarget(target)) {
+        return;
+      }
+
       const replayTarget = getTerraformLeaveReplayTarget(target);
 
       if (!replayTarget) {
@@ -626,4 +630,8 @@ function isInsideTerraformLeaveDialog(target: Node): boolean {
 
 function isTerraformIssuesNavigationTarget(target: Node): boolean {
   return target instanceof Element && Boolean(target.closest("[data-terraform-issues-navigation]"));
+}
+
+function isTerraformIssueAiResolutionTarget(target: Node): boolean {
+  return target instanceof Element && Boolean(target.closest("[data-terraform-issue-ai-resolution]"));
 }

@@ -51,6 +51,7 @@ export function TerraformIssuesPanel({
                 </div>
                 <button
                   className={styles.terraformDiagnosticAiButton}
+                  data-terraform-issue-ai-resolution
                   onClick={() => onResolveWithAi(issue)}
                   type="button"
                 >
