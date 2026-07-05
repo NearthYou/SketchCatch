@@ -13,6 +13,55 @@
 - Highest priority unfinished harness feature: `HARNESS-007`
 - Current blocker: none
 
+### 2026-07-05 - Workspace F5 초기 401 보정
+
+- Goal: `/mypage` 프로젝트 카드에서 `/workspace?projectId=...`로 들어간 직후 F5를 누를 때 auth 복구 전 workspace API가 먼저 호출되어 401 콘솔 오류가 뜨는 문제를 막는다.
+- Root cause:
+  - `/mypage`, `/projects` 계열은 `DashboardShell`이 `AuthProvider`의 `status === "loading"` 동안 children을 렌더링하지 않아 API 호출이 auth 복구 뒤에 시작된다.
+  - `/workspace?projectId=...`는 `ProjectWorkspaceDraftManager`를 바로 렌더링했고, 이 manager가 mount되자마자 project draft/deployment API를 호출할 수 있었다.
+  - F5 후 access token은 메모리에 없고 refresh bootstrap이 아직 끝나기 전이라, workspace API의 첫 요청이 authorization 없이 나가 401이 콘솔에 남을 수 있었다.
+- Completed:
+  - `apps/web/app/workspace/workspace-auth-gate.tsx`를 추가해 workspace route가 auth `loading`/`unauthenticated` 상태에서는 board manager children을 mount하지 않게 했다.
+  - `apps/web/app/workspace/page.tsx`에서 `ProjectWorkspaceDraftManager`와 `WorkspaceDraftManager`를 모두 `WorkspaceAuthGate`로 감쌌다.
+  - source regression test를 추가해 workspace page가 다시 manager를 직접 렌더링하지 않고 gate 뒤에서 렌더링하도록 고정했다.
+- Verification run:
+  - `pnpm --filter @sketchcatch/web exec tsx --test app/workspace/workspace-auth-gate.test.ts components/auth/auth-provider.test.ts features/workspace/api-client-auth-session.test.ts` - passed.
+  - `pnpm --filter @sketchcatch/web typecheck` - passed.
+  - `pnpm --filter @sketchcatch/web lint` - passed.
+  - `pnpm harness:check` - passed.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `pnpm build` - passed.
+  - Runtime check: web restarted on `localhost:3000` and returned 200. API `localhost:4000/health` and `/health/db` returned 200.
+- Known risks:
+  - Playwright package was not available in repo `node_modules`, and temporary `npx/npm exec --package=playwright` did not expose the module for a one-off network-order smoke in this PowerShell environment.
+  - If a browser already holds a stale invalid refresh cookie from an earlier failed session, the user may still need to log in once to replace it.
+
+### 2026-07-05 - Project detail F5 refresh 401 보정
+
+- Goal: `/mypage`에서 프로젝트 상세로 들어간 뒤 F5를 누를 때 `/api/auth/refresh` 401이 세션을 깨뜨리는 문제를 막는다.
+- Root cause:
+  - access token은 브라우저 메모리에만 있으므로 F5 후 `AuthProvider`가 refresh cookie로 세션을 복구한다.
+  - 기존 API는 refresh token rotation 직후 같은 old refresh token 요청이 한 번 더 도착하면 탈취 토큰 재사용으로 판단해 active session 전체를 revoke하고, `Set-Cookie: Max-Age=0`로 방금 발급된 새 쿠키까지 지울 수 있었다.
+- Completed:
+  - `POST /api/auth/refresh`에서 10초 이내에 방금 revoke된 refresh token 재시도는 stale duplicate request로 보고 401만 반환하되 cookie clear와 active session revoke를 하지 않도록 분리했다.
+  - 오래 전에 revoke된 refresh token 재사용은 기존처럼 active session revoke로 처리해 보안 동작을 유지했다.
+  - 즉시 재시도된 rotated token이 새 session cookie를 지우지 않는 회귀 테스트를 추가했다.
+- Verification run:
+  - Red before fix: `pnpm --filter @sketchcatch/api exec tsx --test src/routes/auth.scenarios.test.ts --test-name-pattern "immediately retried rotated token"` - failed because the stale retry cleared auth cookies.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/routes/auth.scenarios.test.ts --test-name-pattern "immediately retried rotated token|revokes active sessions when a revoked token is reused|rotates the cookie refresh token"` - passed.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/routes/auth.scenarios.test.ts` - passed.
+  - `pnpm --filter @sketchcatch/api typecheck` - passed.
+  - `pnpm --filter @sketchcatch/api lint` - passed.
+  - `pnpm harness:check` - passed.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `pnpm build` - passed.
+  - Runtime check: API restarted on `localhost:4000`; `/health` and `/health/db` returned 200. Web `localhost:3000` returned 200.
+- Known risks:
+  - If the browser already holds a long-stale invalid refresh cookie from before this fix, one login or cookie clear may still be needed to replace it.
+  - API startup currently waits for Terraform plugin cache warm-up timeout before listening when warm-up cannot complete, so local API restart can take about 60 seconds.
+
 ### 2026-07-05 - Pre-Deployment Check 항목별 설명/수정 버튼 복구
 
 - Goal: Deployment 탭의 배포 전 검사 결과에서 파란색 전체 AI 설명 박스를 제거하고, 각 문제점별 설명과 Terraform 해당 라인으로 이동하는 수정 버튼을 복구한다.
