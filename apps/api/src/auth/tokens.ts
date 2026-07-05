@@ -2,7 +2,7 @@ import { createHmac, randomBytes } from "node:crypto";
 import { jwtVerify, SignJWT } from "jose";
 import { requireAuthTokenSecret } from "../config/env.js";
 
-export const ACCESS_TOKEN_TTL_SECONDS = 15 * 60;
+export const ACCESS_TOKEN_TTL_SECONDS = 6 * 60 * 60;
 export const REFRESH_TOKEN_TTL_DAYS = 30;
 
 export async function createAccessToken(userId: string): Promise<string> {
