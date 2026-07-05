@@ -5,7 +5,7 @@ import { requireActiveUserId } from "../auth/current-user.js";
 import { getDatabaseClient, type DatabaseClient } from "../db/client.js";
 import {
   createPostgresReverseEngineeringRepository,
-  createReverseEngineeringScan,
+  createReverseEngineeringScanJob,
   ReverseEngineeringNotFoundError,
   toReverseEngineeringScan,
   toReverseEngineeringScanLogLine,
@@ -75,7 +75,7 @@ export async function registerReverseEngineeringRoutes(
     const repository = createRepository(options, getReverseEngineeringDatabaseClient);
 
     try {
-      const result = await createReverseEngineeringScan(
+      const job = await createReverseEngineeringScanJob(
         {
           projectId: params.projectId,
           accessContext: { kind: "user", userId: currentUserId },
@@ -87,7 +87,13 @@ export async function registerReverseEngineeringRoutes(
         options.serviceOptions
       );
 
-      return reply.status(202).send(result);
+      void job.run().catch((error: unknown) => {
+        request.log.error({ error, scanId: job.scan.id }, "Reverse Engineering background scan failed");
+      });
+
+      return reply.status(202).send({
+        scan: job.scan
+      });
     } catch (error) {
       return handleReverseEngineeringError(error, reply);
     }

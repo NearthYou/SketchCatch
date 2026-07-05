@@ -109,6 +109,11 @@ export type ReverseEngineeringServiceOptions = {
   now?: () => Date;
 };
 
+export type ReverseEngineeringScanJob = {
+  scan: ReverseEngineeringScan;
+  run(): Promise<ReverseEngineeringScanResult>;
+};
+
 export class ReverseEngineeringNotFoundError extends Error {
   constructor(message: string) {
     super(message);
@@ -122,6 +127,21 @@ export async function createReverseEngineeringScan(
   repository: ReverseEngineeringRepository,
   options: ReverseEngineeringServiceOptions = {}
 ): Promise<{ scan: ReverseEngineeringScan; result: ReverseEngineeringScanResult }> {
+  const job = await createReverseEngineeringScanJob(input, repository, options);
+  const result = await job.run();
+
+  return {
+    scan: result.scan,
+    result
+  };
+}
+
+// API가 먼저 running scanId를 돌려주고, 실제 AWS 조회는 별도 작업으로 이어가게 나눕니다.
+export async function createReverseEngineeringScanJob(
+  input: CreateReverseEngineeringScanInput,
+  repository: ReverseEngineeringRepository,
+  options: ReverseEngineeringServiceOptions = {}
+): Promise<ReverseEngineeringScanJob> {
   const project = await repository.findAccessibleProject(input.projectId, input.accessContext);
 
   if (!project) {
@@ -159,6 +179,39 @@ export async function createReverseEngineeringScan(
     sequence: 1
   });
 
+  return {
+    scan: toReverseEngineeringScan(scan),
+    run: () =>
+      runReverseEngineeringScanJob({
+        awsConnection,
+        generateId,
+        input,
+        now,
+        options,
+        repository,
+        scan
+      })
+  };
+}
+
+// running 상태로 만들어둔 scan을 실제 Provider Adapter로 완료 또는 실패 처리합니다.
+async function runReverseEngineeringScanJob({
+  awsConnection,
+  generateId,
+  input,
+  now,
+  options,
+  repository,
+  scan
+}: {
+  awsConnection: AwsConnection;
+  generateId: () => string;
+  input: CreateReverseEngineeringScanInput;
+  now: () => Date;
+  options: ReverseEngineeringServiceOptions;
+  repository: ReverseEngineeringRepository;
+  scan: ReverseEngineeringScanRecord;
+}): Promise<ReverseEngineeringScanResult> {
   try {
     const adapter =
       options.adapter ??
@@ -194,8 +247,8 @@ export async function createReverseEngineeringScan(
     });
 
     return {
-      scan: toReverseEngineeringScan(savedScan ?? { ...scan, status: "completed", completedAt }),
-      result
+      ...result,
+      scan: toReverseEngineeringScan(savedScan ?? { ...scan, status: "completed", completedAt })
     };
   } catch (error) {
     const failedAt = now();

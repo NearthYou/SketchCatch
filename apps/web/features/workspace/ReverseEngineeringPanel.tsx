@@ -35,6 +35,8 @@ import styles from "./workspace.module.css";
 export type ReverseEngineeringPanelProps = { readonly context: DiagramEditorPanelContext; readonly projectId: string };
 
 type RequestState = "idle" | "loading" | "error";
+const SCAN_POLL_INTERVAL_MS = 1000;
+const SCAN_POLL_ATTEMPT_COUNT = 30;
 
 // 기존 AWS 읽어오기 화면의 상태와 버튼 흐름을 관리합니다.
 export function ReverseEngineeringPanel({ context, projectId }: ReverseEngineeringPanelProps) {
@@ -121,12 +123,18 @@ export function ReverseEngineeringPanel({ context, projectId }: ReverseEngineeri
     context.setPreviewDiagram(null);
 
     try {
-      const response = await createReverseEngineeringScan({
+      const startedResponse = await createReverseEngineeringScan({
         projectId: selectedProjectId,
         awsConnectionId: selectedAwsConnection.id,
         region: selectedAwsConnection.region,
         resourceTypes: selectedResourceTypes
       });
+      setScanResponse(startedResponse);
+      rememberCompletedScan(startedResponse.scan);
+
+      const response = startedResponse.result
+        ? startedResponse
+        : await pollReverseEngineeringScan(selectedProjectId, startedResponse.scan.id);
       const nextLogs = await listReverseEngineeringScanLogs({
         projectId: selectedProjectId,
         scanId: response.scan.id
@@ -324,4 +332,26 @@ export function ReverseEngineeringPanel({ context, projectId }: ReverseEngineeri
 // 알 수 없는 오류도 화면에 보여줄 수 있는 문장으로 바꿉니다.
 function toErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "요청을 처리하지 못했습니다.";
+}
+
+// scan 시작 API는 scanId만 먼저 주기 때문에, 완료 결과가 생길 때까지 상태 조회를 반복합니다.
+async function pollReverseEngineeringScan(
+  projectId: string,
+  scanId: string
+): Promise<ReverseEngineeringScanResponse> {
+  for (let attempt = 0; attempt < SCAN_POLL_ATTEMPT_COUNT; attempt += 1) {
+    const response = await getReverseEngineeringScan({ projectId, scanId });
+
+    if (response.result || response.scan.status === "failed" || response.scan.status === "cancelled") {
+      return response;
+    }
+
+    await delay(SCAN_POLL_INTERVAL_MS);
+  }
+
+  throw new Error("스캔 결과를 아직 받지 못했습니다. 잠시 후 스캔 기록에서 다시 열어주세요.");
+}
+
+function delay(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
 }

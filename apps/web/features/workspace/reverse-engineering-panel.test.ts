@@ -52,6 +52,7 @@ test("Reverse Engineering result shows risks, partial scan errors, and import ha
 test("Reverse Engineering panel exposes scan history, stale warning, and rescan action", () => {
   assert.match(scanHistoryHookSource, /listReverseEngineeringScans/);
   assert.match(panelSource, /getReverseEngineeringScan/);
+  assert.match(panelSource, /pollReverseEngineeringScan/);
   assert.match(scanHistoryPanelSource, /스캔 기록/);
   assert.match(scanHistoryPanelSource, /이전 스캔 결과입니다/);
   assert.match(scanHistoryPanelSource, /다시 스캔/);

@@ -898,20 +898,9 @@ test("createReverseEngineeringScan starts an authenticated AWS scan", async (con
       JSON.stringify({
         scan: createReverseEngineeringScanPayload({
           id: "77777777-7777-4777-8777-777777777777",
-          projectId: project.id
-        }),
-        result: {
-          scan: createReverseEngineeringScanPayload({
-            id: "77777777-7777-4777-8777-777777777777",
-            projectId: project.id
-          }),
-          discoveredResources: [],
-          architectureJson: { nodes: [], edges: [] },
-          findings: [],
-          analysisExclusions: [],
-          importSuggestions: [],
-          scanErrors: []
-        }
+          projectId: project.id,
+          status: "running"
+        })
       }),
       {
         headers: {
@@ -940,7 +929,8 @@ test("createReverseEngineeringScan starts an authenticated AWS scan", async (con
     region: "ap-northeast-2",
     resourceTypes: ["VPC", "SUBNET", "EC2", "RDS", "S3", "SECURITY_GROUP"]
   });
-  assert.equal(response.scan.status, "completed");
+  assert.equal(response.scan.status, "running");
+  assert.equal(response.result, undefined);
 });
 
 test("reverseEngineering helpers list scans and logs", async (context) => {
@@ -1511,7 +1501,7 @@ function createDeploymentPayload(input: {
 function createReverseEngineeringScanPayload(input: {
   id: string;
   projectId: string;
-  status?: "completed" | "cancelled";
+  status?: "running" | "completed" | "cancelled";
 }) {
   return {
     id: input.id,

@@ -9,7 +9,10 @@ import type {
   ReverseEngineeringScanLogRecord,
   ReverseEngineeringScanRecord
 } from "./reverse-engineering-service.js";
-import { createReverseEngineeringScan } from "./reverse-engineering-service.js";
+import {
+  createReverseEngineeringScan,
+  createReverseEngineeringScanJob
+} from "./reverse-engineering-service.js";
 
 const projectId = "11111111-1111-4111-8111-111111111111";
 const userId = "22222222-2222-4222-8222-222222222222";
@@ -63,6 +66,55 @@ test("createReverseEngineeringScan stores a scan, logs progress, and saves adapt
     repository.logRows.map((log) => log.message),
     ["Reverse Engineering 스캔을 시작했습니다.", "Reverse Engineering 스캔이 완료됐습니다."]
   );
+});
+
+test("createReverseEngineeringScanJob returns a running scan before the adapter finishes", async () => {
+  const repository = new FakeReverseEngineeringRepository();
+  let adapterStarted = false;
+  const job = await createReverseEngineeringScanJob(
+    {
+      projectId,
+      accessContext: { kind: "user", userId },
+      awsConnectionId,
+      region: "ap-northeast-2",
+      resourceTypes: ["VPC"]
+    },
+    repository,
+    {
+      adapter: {
+        async scan() {
+          adapterStarted = true;
+          return {
+            scan: makeScan({ id: "not-yet-persisted" }),
+            discoveredResources: [],
+            reverseEngineeringDraft: {
+              id: "draft-not-yet-persisted",
+              scanId: "not-yet-persisted",
+              architectureJson: { nodes: [], edges: [] },
+              protectedValueKeys: [],
+              editableValueKeys: [],
+              createdAt: fixedNow.toISOString()
+            },
+            architectureJson: { nodes: [], edges: [] },
+            findings: [],
+            analysisExclusions: [],
+            importSuggestions: [],
+            scanErrors: []
+          };
+        }
+      },
+      generateId: () => "44444444-4444-4444-8444-444444444444",
+      now: () => fixedNow
+    }
+  );
+
+  assert.equal(job.scan.status, "running");
+  assert.equal(adapterStarted, false);
+
+  await job.run();
+
+  assert.equal(adapterStarted, true);
+  assert.equal(repository.scanRows[0]?.status, "completed");
 });
 
 test("createReverseEngineeringScan fails before scanning when the project is not accessible", async () => {
