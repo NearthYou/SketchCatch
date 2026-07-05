@@ -254,6 +254,78 @@ test("createArchitecturePatchPreview can add an unconnected resource with an Eng
   assert.deepEqual(response.proposedArchitectureJson.edges, []);
 });
 
+test("createArchitecturePatchPreview can add and remove multiple resources in one request", () => {
+  const response = createArchitecturePatchPreview({
+    architectureJson: {
+      nodes: [
+        makeNode({ id: "app-server", type: "EC2", label: "App Server" }),
+        makeNode({ id: "legacy-cache", type: "CLOUDWATCH_LOG_GROUP", label: "Legacy Logs" }),
+        makeNode({ id: "old-uploads", type: "S3", label: "Old Uploads" })
+      ],
+      edges: [
+        {
+          id: "app-to-old-uploads",
+          sourceId: "app-server",
+          targetId: "old-uploads",
+          label: "stores old uploads"
+        },
+        {
+          id: "app-to-legacy-cache",
+          sourceId: "app-server",
+          targetId: "legacy-cache",
+          label: "writes old logs"
+        }
+      ]
+    },
+    instruction: "Legacy Logs와 Old Uploads는 삭제하고 데이터베이스와 파일 저장 공간을 추가해줘"
+  });
+
+  assert.equal(response.status, "preview");
+  assert.deepEqual(
+    response.changes.map((change) => ({
+      action: change.action,
+      resourceId: change.resourceId,
+      resourceType: change.resourceType
+    })),
+    [
+      {
+        action: "remove_resource",
+        resourceId: "legacy-cache",
+        resourceType: "CLOUDWATCH_LOG_GROUP"
+      },
+      {
+        action: "remove_resource",
+        resourceId: "old-uploads",
+        resourceType: "S3"
+      },
+      {
+        action: "add_resource",
+        resourceId: undefined,
+        resourceType: "RDS"
+      },
+      {
+        action: "add_resource",
+        resourceId: undefined,
+        resourceType: "S3"
+      }
+    ]
+  );
+  assert.deepEqual(
+    response.proposedArchitectureJson.nodes.map((node) => node.id),
+    ["app-server", "rds-2", "s3-3"]
+  );
+  assert.deepEqual(
+    response.proposedArchitectureJson.edges.map((edge) => ({
+      sourceId: edge.sourceId,
+      targetId: edge.targetId
+    })),
+    [
+      { sourceId: "app-server", targetId: "rds-2" },
+      { sourceId: "app-server", targetId: "s3-3" }
+    ]
+  );
+});
+
 test("createArchitecturePatchPreview asks for the resource type when add requests are incomplete", () => {
   const response = createArchitecturePatchPreview({
     architectureJson: {

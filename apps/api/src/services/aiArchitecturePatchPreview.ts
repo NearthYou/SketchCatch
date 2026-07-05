@@ -247,6 +247,28 @@ export function createArchitecturePatchPreview(
     return createNoResourceAdditionPreview(input, providerMetadata);
   }
 
+  const compoundChanges = createCompoundPatchChanges(input);
+
+  if (compoundChanges !== undefined) {
+    const intent: ArchitecturePatchIntent = {
+      instruction: input.instruction,
+      requestedAction: "manual_review",
+      ...(input.skipConnection === true ? { skipConnection: true } : {}),
+      ...(input.connectionTargetResourceId ? { connectionTargetResourceId: input.connectionTargetResourceId } : {})
+    };
+
+    return {
+      status: "preview",
+      intent,
+      baseArchitectureJson: input.architectureJson,
+      proposedArchitectureJson: applyResolvedPreviewChanges(input.architectureJson, compoundChanges, intent),
+      changes: compoundChanges,
+      requiresUserAcceptance: true,
+      userAcceptedChange: null,
+      providerMetadata
+    };
+  }
+
   const intent = resolvePatchIntent(input);
   const selectedTargetNode =
     intent.requestedAction === "add_resource"
@@ -302,6 +324,61 @@ function createNoResourceAdditionPreview(
     userAcceptedChange: null,
     providerMetadata
   };
+}
+
+function createCompoundPatchChanges(
+  input: CreateArchitecturePatchPreviewInput
+): ArchitecturePatchPreviewChange[] | undefined {
+  const normalizedInstruction = normalizeSearchText(input.instruction);
+
+  if (
+    !includesAnyPhrase(normalizedInstruction, ADD_ACTION_KEYWORDS) &&
+    !includesAnyPhrase(normalizedInstruction, REMOVE_ACTION_KEYWORDS)
+  ) {
+    return undefined;
+  }
+
+  const clauses = splitPatchOperationClauses(input.instruction);
+  const changes: ArchitecturePatchPreviewChange[] = [];
+  const removedResourceIds = new Set<string>();
+  const addedResourceTypes = new Set<ResourceType>();
+
+  for (const clause of clauses) {
+    const normalizedClause = normalizeSearchText(clause);
+
+    if (includesAnyPhrase(normalizedClause, REMOVE_ACTION_KEYWORDS)) {
+      for (const node of findRemovableNodesForClause(input.architectureJson.nodes, normalizedClause)) {
+        if (removedResourceIds.has(node.id)) {
+          continue;
+        }
+
+        removedResourceIds.add(node.id);
+        changes.push({
+          action: "remove_resource",
+          resourceId: node.id,
+          resourceType: node.type,
+          summary: `${node.label ?? node.id} 리소스를 삭제합니다.`
+        });
+      }
+    }
+
+    if (includesAnyPhrase(normalizedClause, ADD_ACTION_KEYWORDS)) {
+      for (const resourceType of findResourceTypes(normalizedClause)) {
+        if (addedResourceTypes.has(resourceType)) {
+          continue;
+        }
+
+        addedResourceTypes.add(resourceType);
+        changes.push({
+          action: "add_resource",
+          resourceType,
+          summary: `${formatPatchResourceType(resourceType)} 리소스를 미리보기에 추가합니다.`
+        });
+      }
+    }
+  }
+
+  return changes.length > 1 ? changes : undefined;
 }
 
 export function withArchitecturePatchProviderMetadata(
@@ -460,6 +537,71 @@ function findResourceType(normalizedInstruction: string): ResourceType | undefin
         score: compactSearchText(keyword).length
       }))
   ).sort((left, right) => right.score - left.score || left.resourceIndex - right.resourceIndex)[0]?.resourceType;
+}
+
+function findResourceTypes(normalizedInstruction: string): ResourceType[] {
+  const matches = RESOURCE_KEYWORDS.flatMap((item, resourceIndex) =>
+    item.keywords
+      .filter((keyword) => includesPhrase(normalizedInstruction, keyword))
+      .map((keyword) => {
+        const normalizedKeyword = normalizeSearchText(keyword);
+
+        return {
+          resourceIndex,
+          resourceType: item.resourceType,
+          keyword: normalizedKeyword,
+          score: compactSearchText(normalizedKeyword).length,
+          textIndex: normalizedInstruction.indexOf(normalizedKeyword)
+        };
+      })
+  ).sort((left, right) => right.score - left.score || left.resourceIndex - right.resourceIndex);
+  const selectedMatches: typeof matches = [];
+
+  for (const match of matches) {
+    if (selectedMatches.some((selectedMatch) => selectedMatch.resourceType === match.resourceType)) {
+      continue;
+    }
+
+    if (
+      selectedMatches.some((selectedMatch) =>
+        compactSearchText(selectedMatch.keyword).includes(compactSearchText(match.keyword))
+      )
+    ) {
+      continue;
+    }
+
+    selectedMatches.push(match);
+  }
+
+  return selectedMatches
+    .sort((left, right) => left.textIndex - right.textIndex || left.resourceIndex - right.resourceIndex)
+    .map((match) => match.resourceType);
+}
+
+function splitPatchOperationClauses(instruction: string): string[] {
+  return normalizeSearchText(instruction)
+    .split(/(?:\n|,|;|\.|그리고|그 다음|다음으로|한 다음|후에|하고|하며|하면서)/u)
+    .map((clause) => clause.trim())
+    .filter(Boolean);
+}
+
+function findRemovableNodesForClause(
+  nodes: readonly ResourceNode[],
+  normalizedClause: string
+): ResourceNode[] {
+  const mentionedNodes = findMentionedNodes(nodes, normalizedClause);
+
+  if (mentionedNodes.length > 0) {
+    return mentionedNodes;
+  }
+
+  const resourceTypes = findResourceTypes(normalizedClause);
+
+  return resourceTypes.flatMap((resourceType) => {
+    const matchingNodes = nodes.filter((node) => node.type === resourceType);
+
+    return matchingNodes.length === 1 ? matchingNodes : [];
+  });
 }
 
 function inferServiceExpansionResourceType(
