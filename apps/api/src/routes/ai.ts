@@ -4,10 +4,12 @@ import type {
   AiArchitectureDraftResult,
   AiPreDeploymentCheckFromDiagramRequest,
   AiPreDeploymentAnalysisResult,
+  AiSafetyExplanation,
   AiTerraformErrorExplanationResult,
   AiTerraformPreviewExplanationResult,
   ArchitecturePatchPreview,
   ArchitectureJson,
+  CheckFinding,
   ConfirmTranscribeResponse,
   CreateArchitectureDraftRequest,
   CreateDesignSimulationRequest,
@@ -28,6 +30,10 @@ import { createArchitecturePatchPreview } from "../services/aiArchitecturePatchP
 import { analyzePreDeployment } from "../services/aiPreDeploymentAnalysis.js";
 import { explainTerraformError } from "../services/aiTerraformErrorExplanation.js";
 import { explainTerraformPreview } from "../services/aiTerraformPreviewExplanation.js";
+import {
+  createConfiguredOpenAiSafetyFindingExplanation,
+  type CreateSafetyFindingExplanation
+} from "../services/aiSafetyFindingExplanation.js";
 import { sanitizeTerraformErrorForAi } from "../services/aiProviderSafety.js";
 import {
   createConfiguredTranscribeRequirementService,
@@ -118,6 +124,30 @@ const terraformPreviewExplanationBodySchema = z.object({
   terraformCode: z.string().trim().min(1)
 });
 
+const terraformSourceLocationSchema = z.object({
+  fileName: z.string().trim().min(1),
+  line: z.number().int().positive(),
+  column: z.number().int().positive().optional(),
+  resourceAddress: z.string().trim().min(1).optional(),
+  terraformBlockType: z.string().trim().min(1).optional(),
+  terraformBlockName: z.string().trim().min(1).optional()
+});
+
+const checkFindingSchema: z.ZodType<CheckFinding> = z.object({
+  id: z.string().trim().min(1),
+  category: z.enum(["cost", "security", "configuration", "permission", "network", "performance", "availability"]),
+  severity: z.enum(["low", "medium", "high"]),
+  resourceId: z.string().trim().min(1).optional(),
+  sourceLocation: terraformSourceLocationSchema.optional(),
+  title: z.string().trim().min(1),
+  description: z.string().trim().min(1),
+  recommendation: z.string().trim().min(1)
+});
+
+const safetyFindingExplanationBodySchema = z.object({
+  finding: checkFindingSchema
+});
+
 const architecturePatchPreviewBodySchema = z.object({
   architectureJson: architectureJsonSchema,
   instruction: z.string().trim().min(1)
@@ -141,12 +171,15 @@ const confirmTranscribeBodySchema = z.object({
 
 export type AiRouteOptions = {
   readonly createLlmExplanation?: CreateLlmExplanation;
+  readonly createSafetyFindingExplanation?: CreateSafetyFindingExplanation;
   readonly transcribeRequirementService?: TranscribeRequirementService;
 };
 
 // AI MVP API의 입구입니다. 요청 모양은 여기서 확인하고, 실제 판단은 service 함수에 맡깁니다.
 export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOptions = {}): Promise<void> {
   const createLlmExplanation = options.createLlmExplanation ?? createConfiguredAiExplanation();
+  const createSafetyFindingExplanation =
+    options.createSafetyFindingExplanation ?? createConfiguredOpenAiSafetyFindingExplanation();
   const transcribeRequirementService =
     options.transcribeRequirementService ?? createConfiguredTranscribeRequirementService();
 
@@ -169,12 +202,16 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
   app.post("/ai/pre-deployment-check", async (request): Promise<AiPreDeploymentAnalysisResult> => {
     const body = preDeploymentCheckBodySchema.parse(request.body);
     const result = analyzePreDeployment(body.architectureJson);
+    const resultWithSafetyExplanations = await addSafetyFindingExplanations(
+      result,
+      createSafetyFindingExplanation
+    );
 
     return {
-      ...result,
+      ...resultWithSafetyExplanations,
       llmExplanation: await createLlmExplanation({
         target: "pre_deployment_check",
-        result
+        result: resultWithSafetyExplanations
       })
     };
   });
@@ -196,7 +233,10 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
     const body = preDeploymentCheckFromDiagramBodySchema.parse(request.body);
     const architectureJson = convertDiagramJsonToArchitectureJson(body.diagramJson);
 
-    return analyzePreDeployment(architectureJson);
+    return addSafetyFindingExplanations(
+      analyzePreDeployment(architectureJson),
+      createSafetyFindingExplanation
+    );
   });
 
   app.post(
@@ -233,6 +273,15 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
           result
         })
       };
+    }
+  );
+
+  app.post(
+    "/ai/safety-finding-explanation",
+    async (request): Promise<AiSafetyExplanation> => {
+      const body = safetyFindingExplanationBodySchema.parse(request.body);
+
+      return createSafetyFindingExplanation(body.finding);
     }
   );
 
@@ -283,6 +332,26 @@ async function addArchitectureDraftLlmExplanation(
       result,
       requirementPromptText
     })
+  };
+}
+
+async function addSafetyFindingExplanations(
+  result: AiPreDeploymentAnalysisResult,
+  createSafetyFindingExplanation: CreateSafetyFindingExplanation
+): Promise<AiPreDeploymentAnalysisResult> {
+  if (result.findings.length === 0) {
+    return result;
+  }
+
+  return {
+    ...result,
+    findings: await Promise.all(
+      result.findings.map(async (finding) => ({
+        ...finding,
+        aiSafetyExplanation:
+          finding.aiSafetyExplanation ?? (await createSafetyFindingExplanation(finding))
+      }))
+    )
   };
 }
 

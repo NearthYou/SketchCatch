@@ -706,6 +706,36 @@ API 응답의 `Deployment.currentPlanOperation`은 `current_plan_artifact_id`가
 ## DeploymentPlanSummary
 
 ```ts
+type TerraformSourceLocation = {
+  fileName: string;
+  line: number;
+  column?: number;
+  resourceAddress?: string;
+  terraformBlockType?: string;
+  terraformBlockName?: string;
+};
+
+type DeploymentPlanWarning = {
+  id: string;
+  level: "low" | "medium" | "high";
+  source: "pre_deployment_check" | "terraform_plan" | "cost_risk" | "approval_snapshot";
+  code:
+    | "PUBLIC_RDS"
+    | "PUBLIC_SSH"
+    | "PUBLIC_S3"
+    | "IAM_WILDCARD"
+    | "DESTRUCTIVE_CHANGE"
+    | "UNSUPPORTED_RESOURCE"
+    | "UNKNOWN_TERRAFORM_ACTION"
+    | "MISSING_APPROVAL";
+  message: string;
+  relatedFindingId?: string;
+  relatedResourceId?: string;
+  sourceLocation?: TerraformSourceLocation;
+  requiresAcknowledgement: boolean;
+  blocksApproval: boolean;
+};
+
 type DeploymentPlanSummary = {
   createCount: number;
   updateCount: number;
@@ -716,12 +746,14 @@ type DeploymentPlanSummary = {
 };
 ```
 
+`DeploymentPlanWarning.sourceLocation`은 Safety Gate warning이 Terraform 코드의 어느 파일/라인/리소스 블록에서 나왔는지 가리키는 선택 필드다. `line`과 `column`은 에디터 이동을 위해 1-based 값으로 저장한다. DB 컬럼을 새로 만들지 않고 기존 `DeploymentPlanSummary.warnings` JSON 안에 보존한다.
+
 Plan summary는 사용자 승인 화면에 필요한 최소 요약이다. 현재 기본 흐름에서는 `terraform plan -out=tfplan` 이후 `terraform show -json tfplan` 결과의 `resource_changes`를 파싱해 생성한다.
 
-사용자가 승인한 plan과 apply 대상 plan은 같은 artifact/hash 기준이어야 한다.
+Plan 단계의 Safety Gate는 최종 실행 전 점검 결과를 `warnings`에 보존한다. Plan 저장 자체는 `deployments.isBlocked`를 세우지 않으며, 사용자가 승인한 plan과 apply 대상 plan은 같은 artifact/hash 기준이어야 한다.
 
 MVP Direct Deployment Path live apply는 안전 범위를 위해 아래 Terraform resource type만 허용한다.
-이외 resource type이 변경 대상에 포함되면 Plan은 `risk_analysis`로 block된다.
+이외 resource type이 변경 대상에 포함되면 warning의 `blocksApproval`을 `true` metadata로 남겨 승인 화면과 수정 안내에서 high-risk로 표시한다.
 
 - `aws_vpc`
 - `aws_subnet`
@@ -1097,6 +1129,27 @@ type TranscribeConfirmation = {
 ```
 
 ```ts
+type AiSafetyExplanation = {
+  riskSummary: string;
+  whyDangerous: string;
+  recommendedFix: string;
+  terraformHint?: string;
+  verificationSteps: string[];
+  fallbackUsed: boolean;
+  fallbackReason?:
+    | "missing_api_key"
+    | "timeout"
+    | "rate_limited"
+    | "invalid_request"
+    | "auth_error"
+    | "provider_error"
+    | "invalid_response"
+    | "provider_not_configured"
+    | "credit_not_confirmed"
+    | "daily_limit_exceeded";
+  providerMetadata?: AiProviderMetadata;
+};
+
 type CheckFinding = {
   id: string;
   category:
@@ -1109,6 +1162,8 @@ type CheckFinding = {
     | "availability";
   severity: "low" | "medium" | "high";
   resourceId?: string;
+  sourceLocation?: TerraformSourceLocation;
+  aiSafetyExplanation?: AiSafetyExplanation;
   title: string;
   description: string;
   recommendation: string;
@@ -1116,6 +1171,10 @@ type CheckFinding = {
 ```
 
 `CheckFinding.resourceId`가 있으면 같은 `ArchitectureJson.nodes[].id` 또는 변환된 보드 node id를 가리켜야 한다.
+
+`CheckFinding.sourceLocation`이 있으면 사용자가 finding 카드의 `수정` 버튼을 눌렀을 때 Terraform editor가 해당 파일/라인/리소스 블록으로 이동할 수 있다. 이 필드는 security/cost/configuration finding의 설명 근거로만 사용하며, AI나 UI가 이 값만으로 배포 차단 여부를 바꾸면 안 된다.
+
+`CheckFinding.aiSafetyExplanation`은 finding별 사용자 설명 계층이다. AI는 `riskSummary`, `whyDangerous`, `recommendedFix`, `terraformHint`, `verificationSteps`만 생성할 수 있고, `severity`, `blocked`, `blocksApproval`, `requiresAcknowledgement` 같은 Safety Gate 판정은 변경할 수 없다. OpenAI GPT 호출이 실패하거나 API key가 없으면 `fallbackUsed: true`인 rule fallback 설명을 사용한다.
 
 ## 팀 작업 규칙
 

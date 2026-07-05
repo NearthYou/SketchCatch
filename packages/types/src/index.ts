@@ -493,10 +493,43 @@ export type DeploymentBlock = {
 export type DeploymentWarningLevel = "low" | "medium" | "high";
 export type DeploymentBlockedBy = "risk_analysis" | "cost_analysis" | "missing_approval";
 
+export type DeploymentPlanWarningSource =
+  | "pre_deployment_check"
+  | "terraform_plan"
+  | "cost_risk"
+  | "approval_snapshot";
+
+export type DeploymentPlanWarningCode =
+  | "PUBLIC_RDS"
+  | "PUBLIC_SSH"
+  | "PUBLIC_S3"
+  | "IAM_WILDCARD"
+  | "DESTRUCTIVE_CHANGE"
+  | "UNSUPPORTED_RESOURCE"
+  | "UNKNOWN_TERRAFORM_ACTION"
+  | "MISSING_APPROVAL";
+
+export type TerraformSourceLocation = {
+  fileName: string;
+  line: number;
+  column?: number | undefined;
+  resourceAddress?: string | undefined;
+  terraformBlockType?: string | undefined;
+  terraformBlockName?: string | undefined;
+};
+
 export type DeploymentPlanWarning = {
+  id: string;
   level: DeploymentWarningLevel;
+  category?: CheckFindingCategory;
+  source: DeploymentPlanWarningSource;
+  code: DeploymentPlanWarningCode;
   message: string;
+  relatedFindingId?: string;
   relatedResourceId?: string;
+  sourceLocation?: TerraformSourceLocation | undefined;
+  requiresAcknowledgement: boolean;
+  blocksApproval: boolean;
 };
 
 export type DeploymentPlanSummary = {
@@ -506,6 +539,10 @@ export type DeploymentPlanSummary = {
   replaceCount: number;
   blocked: boolean;
   warnings: DeploymentPlanWarning[];
+};
+
+export type ApproveDeploymentPlanRequest = {
+  acknowledgedWarningIds: string[];
 };
 
 export type DeploymentStage = "init" | "validate" | "plan" | "apply" | "destroy";
@@ -964,11 +1001,24 @@ export type CheckFindingCategory =
   | "performance"
   | "availability";
 
+export type AiSafetyExplanation = {
+  riskSummary: string;
+  whyDangerous: string;
+  recommendedFix: string;
+  terraformHint?: string | undefined;
+  verificationSteps: string[];
+  fallbackUsed: boolean;
+  fallbackReason?: LlmExplanationFallbackReason | undefined;
+  providerMetadata?: AiProviderMetadata | undefined;
+};
+
 export type CheckFinding = {
   id: string;
   category: CheckFindingCategory;
   severity: RiskLevel;
   resourceId?: string | undefined;
+  sourceLocation?: TerraformSourceLocation | undefined;
+  aiSafetyExplanation?: AiSafetyExplanation | undefined;
   title: string;
   description: string;
   recommendation: string;

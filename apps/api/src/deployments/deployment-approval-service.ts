@@ -1,5 +1,10 @@
 import { createHash } from "node:crypto";
-import type { AwsConnection, DeploymentFailureStage, DeploymentStatus } from "@sketchcatch/types";
+import type {
+  ApproveDeploymentPlanRequest,
+  AwsConnection,
+  DeploymentFailureStage,
+  DeploymentStatus
+} from "@sketchcatch/types";
 import {
   defaultTerraformArtifactMaxBytes,
   downloadTerraformArtifactFromS3
@@ -18,6 +23,7 @@ import {
 export type ApproveDeploymentPlanInput = {
   deploymentId: string;
   accessContext: ProjectAccessContext;
+  acknowledgedWarningIds?: ApproveDeploymentPlanRequest["acknowledgedWarningIds"];
 };
 
 export type ApproveDeploymentPlanOptions = {
@@ -69,6 +75,7 @@ export async function approveDeploymentPlan(
   const deployment = await getDeployment(input, repository);
 
   assertDeploymentCanBeApproved(deployment);
+  assertDeploymentWarningsCanBeApproved(deployment, input.acknowledgedWarningIds ?? []);
 
   const currentPlanArtifact = await repository.findDeploymentPlanArtifactById(
     deployment.currentPlanArtifactId
@@ -163,6 +170,10 @@ export function assertDeploymentApplyPreconditions(
       "plan_operation",
       `Terraform apply plan is required before apply: current plan operation is ${input.currentPlanArtifact.operation}`
     );
+  }
+
+  if (deployment.isBlocked) {
+    throw new DeploymentConflictError("Blocked deployment cannot be applied");
   }
 
   if (deployment.approvedTerraformArtifactId !== deployment.terraformArtifactId) {
@@ -294,9 +305,24 @@ function assertDeploymentCanBeApproved(
   if (!deployment.currentPlanArtifactId || !deployment.planSummary) {
     throw new DeploymentConflictError("Terraform Plan must be completed before approval");
   }
+}
 
-  if (!deployment.isBlocked || deployment.blockedBy !== "missing_approval") {
-    throw new DeploymentConflictError("Blocked deployment cannot be approved");
+function assertDeploymentWarningsCanBeApproved(
+  deployment: DeploymentRecord & {
+    planSummary: NonNullable<DeploymentRecord["planSummary"]>;
+  },
+  acknowledgedWarningIds: readonly string[]
+): void {
+  const acknowledged = new Set(acknowledgedWarningIds);
+  const missingAcknowledgements = deployment.planSummary.warnings
+    .filter((warning) => warning.requiresAcknowledgement)
+    .map((warning) => warning.id)
+    .filter((warningId) => !acknowledged.has(warningId));
+
+  if (missingAcknowledgements.length > 0) {
+    throw new DeploymentConflictError(
+      `Deployment warnings must be acknowledged before approval: ${missingAcknowledgements.join(", ")}`
+    );
   }
 }
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { TerraformDiagnostic } from "@sketchcatch/types";
+import type { CheckFinding, TerraformDiagnostic, TerraformSourceLocation } from "@sketchcatch/types";
 import {
   AlertCircle,
   Code2,
@@ -21,6 +21,7 @@ import {
 import { TerraformIssuesPanel } from "./TerraformIssuesPanel";
 import { TerraformLeaveDialog } from "./TerraformLeaveDialog";
 import { defaultResourceWorkspaceView } from "./resource-workspace-view";
+import { getPreDeploymentFindingTerraformSourceLocation } from "./pre-deployment-finding-source";
 import {
   saveWorkspaceTerraformArtifact,
   type SavedWorkspaceTerraformArtifact
@@ -286,6 +287,24 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
     return terraformPanelRef.current?.validateCurrentTerraform() ?? terraformDiagnostics;
   }, [terraformDiagnostics]);
 
+  const openPreDeploymentFindingTerraformSource = useCallback((finding: CheckFinding): TerraformSourceLocation | null => {
+    const sourceLocation = getPreDeploymentFindingTerraformSourceLocation({
+      diagramJson: context.diagram,
+      files: terraformPanelRef.current?.getTerraformFiles() ?? [],
+      finding
+    });
+
+    if (!sourceLocation) {
+      return null;
+    }
+
+    context.setRightPanelOpen(true);
+    setActiveView("terraform");
+    terraformPanelRef.current?.openTerraformSourceLocation(sourceLocation);
+
+    return sourceLocation;
+  }, [context]);
+
   useEffect(() => {
     if (!hasUnsavedTerraformChanges) {
       return;
@@ -488,6 +507,7 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
             currentNodeCount={context.nodes.length}
             diagramJson={context.diagram}
             hasUnsavedDeploymentBaseline={hasUnsavedDeploymentBaseline}
+            onOpenFindingTerraformSource={openPreDeploymentFindingTerraformSource}
             onPrepareDeploymentArtifacts={prepareDeploymentArtifacts}
             onValidateTerraformDiagnostics={validateTerraformForPreDeployment}
             projectId={projectId}

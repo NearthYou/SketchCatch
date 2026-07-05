@@ -5,6 +5,7 @@ import type {
   AiTerraformPreviewExplanationResult,
   DiagramJson,
   TerraformDiagnostic,
+  TerraformSourceLocation,
   TerraformSyncFileInput
 } from "@sketchcatch/types";
 import {
@@ -137,6 +138,28 @@ function createTerraformPreviewExplanationScopeValue(
   };
 }
 
+function getTerraformLineStartOffset(code: string, line: number): number {
+  if (line <= 1) {
+    return 0;
+  }
+
+  let currentLine = 1;
+
+  for (let index = 0; index < code.length; index += 1) {
+    const character = code[index];
+
+    if (character === "\n") {
+      currentLine += 1;
+
+      if (currentLine === line) {
+        return index + 1;
+      }
+    }
+  }
+
+  return code.length;
+}
+
 async function validateTerraformVirtualFiles({
   combinedTerraformCode,
   files
@@ -205,6 +228,8 @@ export type PreparedTerraformArtifactSource = {
 };
 
 export type TerraformCodePanelHandle = {
+  readonly getTerraformFiles: () => readonly TerraformVirtualFile[];
+  readonly openTerraformSourceLocation: (sourceLocation: TerraformSourceLocation) => void;
   readonly prepareTerraformArtifact: () => Promise<PreparedTerraformArtifactSource>;
   readonly validateCurrentTerraform: () => Promise<TerraformDiagnostic[]>;
 };
@@ -237,6 +262,8 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
   const [isFileMenuOpen, setIsFileMenuOpen] = useState(false);
   const [fileSearchQuery, setFileSearchQuery] = useState("");
   const [diagnostics, setDiagnostics] = useState<TerraformDiagnostic[]>([]);
+  const [pendingSourceLocation, setPendingSourceLocation] = useState<TerraformSourceLocation | null>(null);
+  const [activeSourceHighlightLine, setActiveSourceHighlightLine] = useState<number | null>(null);
   const [requestState, setRequestState] = useState<RequestState>("idle");
   const [statusMessage, setStatusMessage] = useState("main.tf");
   const [hasLocalEdits, setHasLocalEdits] = useState(false);
@@ -345,6 +372,20 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
         top: `${TERRAFORM_EDITOR_VERTICAL_PADDING + (highlightedBlock.startLine - 1) * TERRAFORM_EDITOR_LINE_HEIGHT - codeScrollTop}px`
       }
     : null;
+  const sourceLineHighlightStyle =
+    activeSourceHighlightLine !== null
+      ? {
+          height: `${TERRAFORM_EDITOR_LINE_HEIGHT}px`,
+          top: `${TERRAFORM_EDITOR_VERTICAL_PADDING + (activeSourceHighlightLine - 1) * TERRAFORM_EDITOR_LINE_HEIGHT - codeScrollTop}px`
+        }
+      : null;
+
+  const openTerraformSourceLocation = useCallback((sourceLocation: TerraformSourceLocation): void => {
+    context.closeInspectedNode();
+    setActiveFileName(sourceLocation.fileName);
+    setPendingSourceLocation(sourceLocation);
+    setStatusMessage(`${sourceLocation.fileName}:${sourceLocation.line}`);
+  }, [context]);
   const diagnosticLineNumbers = useMemo(
     () =>
       createTerraformDiagnosticLineNumbers(diagnostics, {
@@ -658,6 +699,8 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
   ]);
 
   useImperativeHandle(ref, () => ({
+    getTerraformFiles: () => terraformFiles,
+    openTerraformSourceLocation,
     prepareTerraformArtifact: async () => {
       if (!hasTerraformCode) {
         throw new Error("저장할 Terraform 코드가 없습니다.");
@@ -687,7 +730,14 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
       }
     },
     validateCurrentTerraform
-  }), [hasTerraformCode, requestState, syncTerraformCodeToDiagram, validateCurrentTerraform]);
+  }), [
+    hasTerraformCode,
+    openTerraformSourceLocation,
+    requestState,
+    syncTerraformCodeToDiagram,
+    terraformFiles,
+    validateCurrentTerraform
+  ]);
 
   useEffect(() => {
     if (latestExternalSaveRequestIdRef.current === externalSaveRequestId) {
@@ -845,6 +895,57 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
   }, [activeFileName, isResourceCodeMode, isVisible, selectedBlock]);
 
   useEffect(() => {
+    if (!pendingSourceLocation || !isVisible || isResourceCodeMode) {
+      return;
+    }
+
+    if (pendingSourceLocation.fileName !== activeFileName) {
+      setActiveFileName(pendingSourceLocation.fileName);
+      return;
+    }
+
+    const textarea = textareaRef.current;
+
+    if (!textarea) {
+      return;
+    }
+
+    const targetLine = Math.max(1, Math.min(pendingSourceLocation.line, lineNumbers.length));
+    const lineHeight = Number.parseFloat(window.getComputedStyle(textarea).lineHeight) || TERRAFORM_EDITOR_LINE_HEIGHT;
+    textarea.scrollTop = Math.max(0, (targetLine - 2) * lineHeight);
+    setCodeScrollTop(textarea.scrollTop);
+
+    if (lineNumberRef.current) {
+      lineNumberRef.current.scrollTop = textarea.scrollTop;
+    }
+
+    const cursorOffset = getTerraformLineStartOffset(displayedTerraformCode, targetLine);
+    textarea.focus();
+    textarea.setSelectionRange(cursorOffset, cursorOffset);
+    setActiveSourceHighlightLine(targetLine);
+    setPendingSourceLocation(null);
+  }, [
+    activeFileName,
+    displayedTerraformCode,
+    isResourceCodeMode,
+    isVisible,
+    lineNumbers.length,
+    pendingSourceLocation
+  ]);
+
+  useEffect(() => {
+    if (activeSourceHighlightLine === null) {
+      return;
+    }
+
+    const timerId = window.setTimeout(() => {
+      setActiveSourceHighlightLine(null);
+    }, 2500);
+
+    return () => window.clearTimeout(timerId);
+  }, [activeSourceHighlightLine]);
+
+  useEffect(() => {
     if (!inspectedBlock) {
       return;
     }
@@ -892,6 +993,7 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
     setTerraformPreviewExplanationState("idle");
     setExplainedTerraformPreviewKey("");
     setTerraformErrorExplanationsByKey({});
+    setActiveSourceHighlightLine(null);
     setDiagnostics([]);
     onDiagnosticsChange([]);
     setStatusMessage("수정 중");
@@ -936,6 +1038,7 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
           )
     );
     setActiveFileName(fileName);
+    setActiveSourceHighlightLine(null);
     setIsFileMenuOpen(false);
     setFileSearchQuery("");
     context.closeInspectedNode();
@@ -1093,6 +1196,13 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
           value={displayedTerraformCode}
           wrap="off"
         />
+        {sourceLineHighlightStyle ? (
+          <div
+            aria-hidden="true"
+            className={styles.terraformSourceLineHighlight}
+            style={sourceLineHighlightStyle}
+          />
+        ) : null}
         {highlightedBlock && highlightedBlockStyle ? (
           <div
             aria-label={`${highlightedBlock.address} code block`}

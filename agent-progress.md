@@ -13,6 +13,136 @@
 - Highest priority unfinished harness feature: `HARNESS-007`
 - Current blocker: none
 
+### 2026-07-05 - Deployment Safety Gate Plan block 제거
+
+- Goal: Deployment Safety Gate를 Plan 단계에서 Deployment record를 block하는 로직이 아니라, 최종 실행 전 점검 warning을 보존하는 로직으로 바꾼다.
+- Completed:
+  - `evaluateDeploymentSafetyGate`가 Plan summary에 warning을 붙이되 `summary.blocked`, `deployment.isBlocked`, `blockedBy`, `blockedReason`을 세우지 않게 했다.
+  - Apply Plan과 Destroy Plan 저장 시 항상 `isBlocked: false`, `blockedBy: null`, `blockedReason: null`로 저장하게 했다.
+  - Plan 재사용 조건에서 예전 `isBlocked` 의존을 제거하고, 미승인 current plan이면 재사용할 수 있게 했다.
+  - Plan 승인 로직에서 `missing_approval` block 상태 요구와 high-risk warning 승인 거절을 제거했다.
+  - Apply/Destroy 실행 직전 precondition에 추가했던 `blocksApproval` warning 차단 로직은 사용자 요청에 따라 제거했다.
+  - Deployment Safety Gate 반환값에서 더 이상 쓰지 않는 `block`과 `requiredAcknowledgementWarningIds` 포장 객체를 제거하고, `DeploymentPlanSummary`만 반환하도록 정리했다.
+  - Deployment UI의 승인 버튼/문구를 current plan 기준으로 표시하도록 정리했다.
+  - `docs/data-models.md`, `docs/deployment.md`에 Plan은 warning만 보존하고 Plan record 자체를 block하지 않는다는 계약을 반영했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/deployments/deployment-safety-gate.test.ts src/deployments/deployment-plan-service.test.ts src/deployments/deployment-approval-service.test.ts src/deployments/deployment-destroy-plan-service.test.ts src/deployments/deployment-apply-service.test.ts src/deployments/deployment-destroy-service.test.ts` - passed.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/deployments/deployment-safety-gate.test.ts src/deployments/deployment-approval-service.test.ts src/deployments/deployment-plan-service.test.ts src/deployments/deployment-destroy-plan-service.test.ts src/deployments/deployment-apply-service.test.ts src/deployments/deployment-destroy-service.test.ts` - passed after removing the Apply/Destroy `blocksApproval` precondition block.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/deployments/deployment-safety-gate.test.ts src/deployments/deployment-plan-service.test.ts src/deployments/deployment-destroy-plan-service.test.ts src/deployments/deployment-approval-service.test.ts` - passed after Safety Gate return-shape cleanup.
+  - `pnpm --filter @sketchcatch/api typecheck`, `pnpm --filter @sketchcatch/types typecheck` - passed after Safety Gate return-shape cleanup.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/deployment-actions.test.ts` - passed.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/routes/deployments.test.ts` - passed.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/deployments/deployment-service.test.ts` - passed.
+  - `pnpm --filter @sketchcatch/api typecheck`, `pnpm --filter @sketchcatch/web typecheck` - passed.
+  - `pnpm --filter @sketchcatch/api lint`, `pnpm --filter @sketchcatch/web lint` - passed.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/deployment-actions.test.ts features/workspace/workspace-right-panel-layout.test.ts` - passed.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `pnpm build` - passed.
+  - `pnpm harness:check` - passed after edits and after the Apply/Destroy precondition cleanup.
+  - `git diff --check` - passed with line-ending warnings only.
+- Known risks:
+  - 실제 Terraform apply/destroy, cloud mutation, Git/CI/CD handoff는 수행하지 않았다.
+  - 브라우저 수동 smoke는 수행하지 않았고, API/Web 단위/route/source tests와 full lint/typecheck/build로 검증했다.
+
+### 2026-07-05 - Workspace F5 초기 401 보정
+
+- Goal: `/mypage` 프로젝트 카드에서 `/workspace?projectId=...`로 들어간 직후 F5를 누를 때 auth 복구 전 workspace API가 먼저 호출되어 401 콘솔 오류가 뜨는 문제를 막는다.
+- Root cause:
+  - `/mypage`, `/projects` 계열은 `DashboardShell`이 `AuthProvider`의 `status === "loading"` 동안 children을 렌더링하지 않아 API 호출이 auth 복구 뒤에 시작된다.
+  - `/workspace?projectId=...`는 `ProjectWorkspaceDraftManager`를 바로 렌더링했고, 이 manager가 mount되자마자 project draft/deployment API를 호출할 수 있었다.
+  - F5 후 access token은 메모리에 없고 refresh bootstrap이 아직 끝나기 전이라, workspace API의 첫 요청이 authorization 없이 나가 401이 콘솔에 남을 수 있었다.
+- Completed:
+  - `apps/web/app/workspace/workspace-auth-gate.tsx`를 추가해 workspace route가 auth `loading`/`unauthenticated` 상태에서는 board manager children을 mount하지 않게 했다.
+  - `apps/web/app/workspace/page.tsx`에서 `ProjectWorkspaceDraftManager`와 `WorkspaceDraftManager`를 모두 `WorkspaceAuthGate`로 감쌌다.
+  - source regression test를 추가해 workspace page가 다시 manager를 직접 렌더링하지 않고 gate 뒤에서 렌더링하도록 고정했다.
+- Verification run:
+  - `pnpm --filter @sketchcatch/web exec tsx --test app/workspace/workspace-auth-gate.test.ts components/auth/auth-provider.test.ts features/workspace/api-client-auth-session.test.ts` - passed.
+  - `pnpm --filter @sketchcatch/web typecheck` - passed.
+  - `pnpm --filter @sketchcatch/web lint` - passed.
+  - `pnpm harness:check` - passed.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `pnpm build` - passed.
+  - Runtime check: web restarted on `localhost:3000` and returned 200. API `localhost:4000/health` and `/health/db` returned 200.
+- Known risks:
+  - Playwright package was not available in repo `node_modules`, and temporary `npx/npm exec --package=playwright` did not expose the module for a one-off network-order smoke in this PowerShell environment.
+  - If a browser already holds a stale invalid refresh cookie from an earlier failed session, the user may still need to log in once to replace it.
+
+### 2026-07-05 - Project detail F5 refresh 401 보정
+
+- Goal: `/mypage`에서 프로젝트 상세로 들어간 뒤 F5를 누를 때 `/api/auth/refresh` 401이 세션을 깨뜨리는 문제를 막는다.
+- Root cause:
+  - access token은 브라우저 메모리에만 있으므로 F5 후 `AuthProvider`가 refresh cookie로 세션을 복구한다.
+  - 기존 API는 refresh token rotation 직후 같은 old refresh token 요청이 한 번 더 도착하면 탈취 토큰 재사용으로 판단해 active session 전체를 revoke하고, `Set-Cookie: Max-Age=0`로 방금 발급된 새 쿠키까지 지울 수 있었다.
+- Completed:
+  - `POST /api/auth/refresh`에서 10초 이내에 방금 revoke된 refresh token 재시도는 stale duplicate request로 보고 401만 반환하되 cookie clear와 active session revoke를 하지 않도록 분리했다.
+  - 오래 전에 revoke된 refresh token 재사용은 기존처럼 active session revoke로 처리해 보안 동작을 유지했다.
+  - 즉시 재시도된 rotated token이 새 session cookie를 지우지 않는 회귀 테스트를 추가했다.
+- Verification run:
+  - Red before fix: `pnpm --filter @sketchcatch/api exec tsx --test src/routes/auth.scenarios.test.ts --test-name-pattern "immediately retried rotated token"` - failed because the stale retry cleared auth cookies.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/routes/auth.scenarios.test.ts --test-name-pattern "immediately retried rotated token|revokes active sessions when a revoked token is reused|rotates the cookie refresh token"` - passed.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/routes/auth.scenarios.test.ts` - passed.
+  - `pnpm --filter @sketchcatch/api typecheck` - passed.
+  - `pnpm --filter @sketchcatch/api lint` - passed.
+  - `pnpm harness:check` - passed.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `pnpm build` - passed.
+  - Runtime check: API restarted on `localhost:4000`; `/health` and `/health/db` returned 200. Web `localhost:3000` returned 200.
+- Known risks:
+  - If the browser already holds a long-stale invalid refresh cookie from before this fix, one login or cookie clear may still be needed to replace it.
+  - API startup currently waits for Terraform plugin cache warm-up timeout before listening when warm-up cannot complete, so local API restart can take about 60 seconds.
+
+### 2026-07-05 - Pre-Deployment Check 항목별 설명/수정 버튼 복구
+
+- Goal: Deployment 탭의 배포 전 검사 결과에서 파란색 전체 AI 설명 박스를 제거하고, 각 문제점별 설명과 Terraform 해당 라인으로 이동하는 수정 버튼을 복구한다.
+- Completed:
+  - `DeploymentPanel`의 Pre-Deployment Gate 하단 파란색 `llmExplanation` 요약 박스를 제거했다.
+  - 각 Check Finding 아래에 finding별 `aiSafetyExplanation`의 위험 요약, 위험 이유, 권장 수정, Terraform 힌트, 확인 방법을 inline으로 표시했다.
+  - 각 finding에 `수정` 버튼을 다시 추가하고, 기존 `TerraformCodePanel.openTerraformSourceLocation` 흐름으로 연결했다.
+  - finding의 `sourceLocation`을 우선 사용하고, 없으면 현재 Terraform 파일/다이어그램에서 리소스 블록과 위험 라인을 추정하는 helper를 추가했다.
+  - Terraform diagnostic finding 생성 시 원본 diagnostic line/resource address를 `sourceLocation`으로 보존하게 했다.
+  - source-based 회귀 테스트와 source-location helper 테스트를 추가해 파란색 전체 설명 제거, 항목별 설명 유지, 수정 버튼의 Terraform 라인 이동 연결을 확인한다.
+- Verification run:
+  - Red before fix: `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-right-panel-layout.test.ts` - failed because finding-level inline AI explanation was not rendered.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/pre-deployment-finding-source.test.ts features/workspace/pre-deployment-diagnostics.test.ts features/workspace/workspace-right-panel-layout.test.ts` - passed.
+  - `pnpm --filter @sketchcatch/web typecheck` - passed.
+  - `pnpm --filter @sketchcatch/web lint` - passed.
+  - `pnpm harness:check` - passed.
+  - `pnpm lint` - passed with Turbo cache rename warnings only.
+  - `pnpm typecheck` - passed with Turbo cache rename warnings only.
+  - `pnpm build` - passed.
+  - `git diff --check` - passed with line-ending warnings only.
+- Known risks:
+  - Browser screenshot smoke was not captured in this turn.
+  - `next build` temporarily changed `apps/web/next-env.d.ts`; the generated change was restored.
+  - 실제 Terraform apply/destroy, cloud mutation, Git/CI/CD handoff는 수행하지 않았다.
+
+### 2026-07-05 - Auth refresh 401 콘솔 노이즈 완화
+
+- Goal: 브라우저에 인증 세션 쿠키가 없는 상태에서도 앱 부팅 시 `/api/auth/refresh`를 무조건 호출해 401 콘솔 오류가 보이는 문제를 줄인다.
+- Completed:
+  - `api-client`에 readable CSRF cookie 기반 `hasRefreshSessionCookieHint` helper를 추가했다.
+  - `AuthProvider.reloadUser`가 메모리 access token이 없더라도 refresh session cookie 힌트가 없으면 `/auth/refresh` 호출을 생략하게 했다.
+  - cookie hint helper와 AuthProvider refresh guard 회귀 테스트를 추가했다.
+  - 중복으로 남아 있던 API watch wrapper를 정리하고, 수정 반영을 위해 web production build를 새로 만들고 `localhost:3000`을 재시작했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits.
+  - `pnpm --filter @sketchcatch/web exec tsx --test components/auth/auth-provider.test.ts features/workspace/api-client-auth-session.test.ts` - passed.
+  - `pnpm --filter @sketchcatch/web typecheck` - passed.
+  - `pnpm --filter @sketchcatch/web lint` - passed.
+  - `pnpm --filter @sketchcatch/web build` - passed.
+  - `pnpm harness:check` - passed.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `pnpm build` - passed.
+  - Runtime check: `http://localhost:3000` returned 200, `http://localhost:4000/health/db` returned 200.
+- Known risks:
+  - 이미 브라우저에 stale/invalid refresh cookie가 남아 있는 경우에는 한 번의 refresh 401 후 cookie clear가 발생할 수 있다.
+  - 실제 브라우저 DevTools 콘솔 캡처 기반 smoke는 사용자가 보는 Chrome 프로필에서 직접 재확인이 필요하다.
+  
 ### 2026-07-05 - Terraform 영역 리소스 Ticket 3 리뷰 보강
 
 - Goal: ASG area endpoint edge z-index 리뷰 피드백에 따라 선택된 edge가 비선택 area endpoint edge보다 위에 표시되게 한다.
@@ -1429,6 +1559,7 @@
   - This pass is visual/CSS polish only; Resource/Template tab behavior remains the existing implementation.
 - Next best action:
   - Run final full checks and commit the feedback polish.
+
 # 2026-07-04 - 오른쪽 패널 Blueprint 스킨 복구
 
 - Goal: 최신 `dev` 병합에서 유지한 오른쪽 패널 로직 위에 빠진 Blueprint 디자인 톤을 다시 적용한다.
@@ -1473,6 +1604,7 @@
 - Known risks:
   - 이번 확인은 정적 체크와 테스트 중심이며, 최신 툴바 위치는 브라우저 스크린샷으로 재확인하지 않았다.
   - 실제 AWS apply/destroy나 Git/CI/CD 실행은 수행하지 않았다.
+
 ## 2026-07-05 - Issue #135 GitHub PR handoff v0
 
 - Goal: #134 GitCicdHandoff 계약/API 위에 Terraform artifact를 GitHub PR 생성 요청 payload로 넘기는 두 번째 vertical slice를 구현한다.
@@ -1537,6 +1669,7 @@
 - Known risks:
   - 실제 Redis 서버 의존 테스트는 수행하지 않았고 in-memory/fake cache로 검증했다.
   - Runtime Cache는 원천 기록이 아니며 RDS/S3 조회가 계속 기준이다.
+  
 ## 2026-07-05 - Issue #136 Git/CI/CD pipeline status UI
 
 - Goal: #134/#135 GitCicdHandoff 계약 위에서 pipeline status 조회, Runtime Cache read-through, DeploymentPanel 표시를 최소 vertical slice로 연결한다.

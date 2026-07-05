@@ -5,6 +5,7 @@ import { startRefreshTokenCleanupJob } from "./auth/cleanup.js";
 import { type DatabaseClient, getDatabaseClient } from "./db/client.js";
 import { registerAiRoutes } from "./routes/ai.js";
 import type { CreateLlmExplanation } from "./services/aiLlmExplanation.js";
+import type { CreateSafetyFindingExplanation } from "./services/aiSafetyFindingExplanation.js";
 import { registerHealthRoutes } from "./routes/health.js";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { registerOAuthRoutes } from "./routes/oauth.js";
@@ -33,6 +34,7 @@ const fallbackCorsAllowedHeaders = "content-type,authorization";
 export type BuildAppOptions = {
   getDatabaseClient?: () => DatabaseClient;
   createLlmExplanation?: CreateLlmExplanation;
+  createSafetyFindingExplanation?: CreateSafetyFindingExplanation;
   oauthCallbackRateLimiter?: RateLimiter;
   oauthStartRateLimiter?: RateLimiter;
   passwordResetRequestEmailRateLimiter?: RateLimiter;
@@ -172,14 +174,21 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
 }
 
 // AI route 옵션은 undefined 필드를 넘기지 않게 분리해 exact optional 타입을 지킵니다.
-function createAiRouteOptions(options: BuildAppOptions): { readonly prefix: "/api"; readonly createLlmExplanation?: CreateLlmExplanation } {
-  if (options.createLlmExplanation === undefined) {
+function createAiRouteOptions(options: BuildAppOptions): {
+  readonly prefix: "/api";
+  readonly createLlmExplanation?: CreateLlmExplanation;
+  readonly createSafetyFindingExplanation?: CreateSafetyFindingExplanation;
+} {
+  if (options.createLlmExplanation === undefined && options.createSafetyFindingExplanation === undefined) {
     return { prefix: "/api" };
   }
 
   return {
     prefix: "/api",
-    createLlmExplanation: options.createLlmExplanation
+    ...(options.createLlmExplanation === undefined ? {} : { createLlmExplanation: options.createLlmExplanation }),
+    ...(options.createSafetyFindingExplanation === undefined
+      ? {}
+      : { createSafetyFindingExplanation: options.createSafetyFindingExplanation })
   };
 }
 

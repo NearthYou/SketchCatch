@@ -348,6 +348,29 @@ test("pre-deployment check is owned by the deployment tab", () => {
   assert.match(preflightSummaryRule, /\bgap:\s*8px;/);
 });
 
+test("pre-deployment check renders per-finding explanations without the blue summary block", () => {
+  assert.doesNotMatch(deploymentPanelSource, /DeploymentPreDeploymentAiExplanation/);
+  assert.doesNotMatch(deploymentPanelSource, /deploymentPreflightAiExplanation/);
+  assert.doesNotMatch(stylesSource, /\.deploymentPreflightAiExplanation\s*\{/);
+  assert.match(deploymentPanelSource, /DeploymentFindingAiExplanation/);
+  assert.match(deploymentPanelSource, /finding\.aiSafetyExplanation/);
+  assert.match(deploymentPanelSource, /className=\{styles\.deploymentFindingAiExplanation\}/);
+  assert.doesNotMatch(deploymentPanelSource, /deploymentFindingAiButton/);
+  assert.doesNotMatch(aiChatDockSource, /preDeploymentAnalysis/);
+});
+
+test("pre-deployment finding fix buttons open the existing terraform source location handler", () => {
+  assert.match(deploymentPanelSource, /onOpenFindingTerraformSource/);
+  assert.match(deploymentPanelSource, /className=\{styles\.deploymentFindingFixButton\}/);
+  assert.match(deploymentPanelSource, /<Code2 size=\{13\} aria-hidden="true" \/>/);
+  assert.match(componentSource, /getPreDeploymentFindingTerraformSourceLocation/);
+  assert.match(componentSource, /openPreDeploymentFindingTerraformSource/);
+  assert.match(componentSource, /terraformPanelRef\.current\?\.getTerraformFiles\(\)/);
+  assert.match(componentSource, /setActiveView\("terraform"\)/);
+  assert.match(componentSource, /terraformPanelRef\.current\?\.openTerraformSourceLocation\(sourceLocation\)/);
+  assert.match(componentSource, /onOpenFindingTerraformSource=\{openPreDeploymentFindingTerraformSource\}/);
+});
+
 test("terraform error explanation lives in the terraform code panel only when errors exist", () => {
   const errorExplanationRule = getCssRule(stylesSource, "terraformErrorExplanationPanel");
   const errorExplanationListRule = getCssRule(stylesSource, "terraformErrorExplanationList");

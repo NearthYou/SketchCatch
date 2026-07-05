@@ -104,6 +104,7 @@ type AuthRouteOptions = {
 
 const PASSWORD_RESET_REQUEST_RATE_LIMIT_MESSAGE =
   "비밀번호 재설정 요청이 너무 많습니다. 잠시 후 다시 시도해주세요.";
+const RECENT_REFRESH_TOKEN_RETRY_GRACE_MS = 10_000;
 
 export async function registerAuthRoutes(
   app: FastifyInstance,
@@ -305,6 +306,18 @@ export async function registerAuthRoutes(
     }
 
     if (storedToken.revokedAt) {
+      if (isRecentlyRotatedRefreshToken(storedToken.revokedAt, now)) {
+        request.log.info(
+          {
+            refreshTokenId: storedToken.id,
+            userId: storedToken.userId
+          },
+          "Ignored immediately retried rotated refresh token"
+        );
+
+        return sendUnauthorized(reply, "로그인 세션이 만료되었습니다. 다시 로그인해주세요.");
+      }
+
       clearRefreshTokenCookie(reply);
       await revokeActiveRefreshTokensForUser(db, storedToken.userId, now);
       request.log.warn(
@@ -598,6 +611,12 @@ async function revokeActiveRefreshTokensForUser(
       revokedAt
     })
     .where(and(eq(refreshTokens.userId, userId), isNull(refreshTokens.revokedAt)));
+}
+
+function isRecentlyRotatedRefreshToken(revokedAt: Date, now: Date): boolean {
+  const elapsedMs = now.getTime() - revokedAt.getTime();
+
+  return elapsedMs >= 0 && elapsedMs <= RECENT_REFRESH_TOKEN_RETRY_GRACE_MS;
 }
 
 async function expireActivePasswordResetTokensForUser(

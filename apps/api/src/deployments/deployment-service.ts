@@ -659,9 +659,7 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
           and(
             eq(deployments.id, deploymentId),
             eq(deployments.currentPlanArtifactId, input.approvedPlanArtifactId),
-            inArray(deployments.status, ["PENDING", "SUCCESS", "FAILED"]),
-            eq(deployments.isBlocked, true),
-            eq(deployments.blockedBy, "missing_approval")
+            inArray(deployments.status, ["PENDING", "SUCCESS", "FAILED"])
           )
         )
         .returning();
