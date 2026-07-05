@@ -1032,6 +1032,49 @@ type LlmExplanation = {
 
 `AiArchitectureDraftResult`, `AiPreDeploymentAnalysisResult`, `DesignSimulationResult`, `AiTerraformErrorExplanationResult`는 필요할 때 `llmExplanation?: LlmExplanation`를 포함할 수 있다.
 
+Terraform 오류 설명은 Issues 탭에서 해결 전까지 유지되는 진단을 사용자가 이해하고 승인 기반으로 고치기 위한 설명 DTO다. 이 결과는 Well-Architected 6개 관점과 최종 권고를 포함한다. 자동 적용 가능한 수정은 deterministic safe fix metadata로만 표현하며, 실제 Terraform 코드 변경은 사용자가 `적용`을 누른 뒤에만 가능하다.
+
+```ts
+type WellArchitectedPillar =
+  | "operational_excellence"
+  | "security"
+  | "reliability"
+  | "performance_efficiency"
+  | "cost_optimization"
+  | "sustainability";
+
+type AiWellArchitectedGuidance = {
+  pillar: WellArchitectedPillar;
+  title: string;
+  observation: string;
+  recommendation: string;
+};
+
+type AiTerraformSafeFix = {
+  applicable: boolean;
+  code: string;
+  label: string;
+  description: string;
+};
+
+type AiTerraformErrorExplanationResult = {
+  stage: AiTerraformStage;
+  category: AiTerraformErrorCategory;
+  severity: RiskLevel;
+  rawMessage: string;
+  summary: string;
+  likelyCause: string;
+  nextActions: string[];
+  wellArchitectedGuidance: AiWellArchitectedGuidance[];
+  consensusRecommendation: string;
+  safeFix?: AiTerraformSafeFix;
+  relatedResourceId?: string;
+  llmExplanation?: LlmExplanation;
+};
+```
+
+v1에서 `safeFix.applicable: true`가 될 수 있는 진단은 `terraform.trailing_comma`, `terraform.quoted_reference`뿐이다. 그 외 진단은 `safeFix.applicable: false`로 내려가며 Issues 탭과 AI chat dock은 수동 수정 필요 상태로 표시한다.
+
 자연어 Architecture 수정 요청은 `ArchitecturePatchPreview`로만 반환한다. 이 preview는 `proposedArchitectureJson`과 diff 성격의 `changes`를 보여줄 뿐이며, `requiresUserAcceptance: true`와 `userAcceptedChange: null` 상태로 내려간다. 실제 Architecture Board 반영은 별도 적용 버튼에서 `UserAcceptedChange`를 기록한 뒤에만 가능하다.
 
 ```ts

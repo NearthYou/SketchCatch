@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { ChatSyncCommand, ChatSyncCommandInput } from "@aws-sdk/client-qbusiness";
-import type { DesignSimulationResult, LlmExplanation } from "@sketchcatch/types";
+import type {
+  AiTerraformErrorExplanationResult,
+  DesignSimulationResult,
+  LlmExplanation
+} from "@sketchcatch/types";
 import {
   createAiProviderBackedLlmExplanation,
   createAmazonQBusinessTextProvider,
@@ -22,6 +26,60 @@ const designSimulationResult: DesignSimulationResult = {
   costPressure: [],
   recommendations: ["Architecture Board에서 연결을 확인하세요."]
 };
+
+function createTerraformErrorResult(
+  input: Partial<AiTerraformErrorExplanationResult> = {}
+): AiTerraformErrorExplanationResult {
+  return {
+    stage: "plan",
+    category: "permission",
+    severity: "high",
+    rawMessage: "AccessDenied",
+    summary: "Terraform plan failed because AWS permissions are missing.",
+    likelyCause: "The execution role does not include the required IAM action.",
+    nextActions: ["Review the IAM policy attached to the execution role."],
+    wellArchitectedGuidance: [
+      {
+        pillar: "operational_excellence",
+        title: "운영 우수성",
+        observation: "Keep the issue visible until validation passes.",
+        recommendation: "Fix the Terraform input and rerun validation."
+      },
+      {
+        pillar: "security",
+        title: "보안",
+        observation: "Do not expose credentials in error messages.",
+        recommendation: "Mask secrets before AI explanation."
+      },
+      {
+        pillar: "reliability",
+        title: "신뢰성",
+        observation: "Failed validation blocks unsafe deployment.",
+        recommendation: "Revalidate before deployment."
+      },
+      {
+        pillar: "performance_efficiency",
+        title: "성능 효율성",
+        observation: "Static validation avoids expensive retries.",
+        recommendation: "Resolve syntax and policy issues before plan."
+      },
+      {
+        pillar: "cost_optimization",
+        title: "비용 최적화",
+        observation: "Early failure reduces wasted execution time.",
+        recommendation: "Apply only deterministic fixes automatically."
+      },
+      {
+        pillar: "sustainability",
+        title: "지속 가능성",
+        observation: "Fewer failed runs reduce waste.",
+        recommendation: "Keep validation local where possible."
+      }
+    ],
+    consensusRecommendation: "Fix the Terraform issue, rerun validation, and continue only after it is resolved.",
+    ...input
+  };
+}
 
 test("resolveAiProviderRegions allows Amazon Q Business to use a different region", () => {
   const regions = resolveAiProviderRegions({
@@ -182,16 +240,12 @@ test("createAiProviderBackedLlmExplanation uses Amazon Q first for Terraform err
   });
   const input = {
     target: "terraform_error_explanation" as const,
-    result: {
-      stage: "plan" as const,
-      category: "permission" as const,
-      severity: "high" as const,
-      rawMessage: "AccessDenied",
+    result: createTerraformErrorResult({
       summary: "권한 부족으로 plan이 실패했습니다.",
       likelyCause: "Role에 권한이 없습니다.",
       nextActions: ["IAM policy를 확인하세요."],
       relatedResourceId: "ec2-web"
-    }
+    })
   };
 
   const first = await createLlmExplanation(input);
@@ -249,15 +303,11 @@ test("createAiProviderBackedLlmExplanation returns Amazon Q fallback without let
 
   const result = await createLlmExplanation({
     target: "terraform_error_explanation",
-    result: {
-      stage: "plan",
-      category: "permission",
-      severity: "high",
-      rawMessage: "AccessDenied",
+    result: createTerraformErrorResult({
       summary: "권한 부족으로 plan이 실패했습니다.",
       likelyCause: "실행 Role에 필요한 권한이 없습니다.",
       nextActions: ["IAM policy를 확인하세요."]
-    }
+    })
   });
 
   assert.equal(result.fallbackUsed, true);
@@ -292,15 +342,11 @@ test("createAiProviderBackedLlmExplanation reports missing Amazon Q configuratio
 
   const result = await createLlmExplanation({
     target: "terraform_error_explanation",
-    result: {
-      stage: "plan",
-      category: "permission",
-      severity: "high",
-      rawMessage: "AccessDenied",
+    result: createTerraformErrorResult({
       summary: "권한 부족으로 plan이 실패했습니다.",
       likelyCause: "실행 Role에 필요한 권한이 없습니다.",
       nextActions: ["IAM policy를 확인하세요."]
-    }
+    })
   });
 
   assert.equal(result.fallbackUsed, true);

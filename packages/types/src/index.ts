@@ -1105,6 +1105,28 @@ export type AiTerraformErrorCategory =
   | "dependency"
   | "unknown";
 
+export type WellArchitectedPillar =
+  | "operational_excellence"
+  | "security"
+  | "reliability"
+  | "performance_efficiency"
+  | "cost_optimization"
+  | "sustainability";
+
+export type AiWellArchitectedGuidance = {
+  pillar: WellArchitectedPillar;
+  title: string;
+  observation: string;
+  recommendation: string;
+};
+
+export type AiTerraformSafeFix = {
+  applicable: boolean;
+  code: string;
+  label: string;
+  description: string;
+};
+
 export type AiTerraformErrorExplanationResult = {
   stage: AiTerraformStage;
   category: AiTerraformErrorCategory;
@@ -1113,6 +1135,9 @@ export type AiTerraformErrorExplanationResult = {
   summary: string;
   likelyCause: string;
   nextActions: string[];
+  wellArchitectedGuidance: AiWellArchitectedGuidance[];
+  consensusRecommendation: string;
+  safeFix?: AiTerraformSafeFix | undefined;
   relatedResourceId?: string | undefined;
   llmExplanation?: LlmExplanation | undefined;
 };
