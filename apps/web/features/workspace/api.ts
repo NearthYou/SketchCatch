@@ -11,6 +11,8 @@ import type {
   AwsConnectionCloudFormationTemplateResponse,
   AwsConnection,
   AwsConnectionListResponse,
+  CostEstimatePeriod,
+  CostProjectEstimateListResponse,
   CreateArchitectureSnapshotRequest,
   CreateArchitectureDraftRequest,
   CreateAwsConnectionRequest,
@@ -548,6 +550,22 @@ export async function listRecentSuccessfulDeploymentProjects(): Promise<
   );
 
   return response.items;
+}
+
+export async function listCostProjectEstimates(input: {
+  expectedUserCount: number;
+  period: CostEstimatePeriod;
+  region?: string | undefined;
+}): Promise<CostProjectEstimateListResponse> {
+  const params = new URLSearchParams({
+    expectedUserCount: String(input.expectedUserCount),
+    period: input.period,
+    region: input.region ?? "ap-northeast-2"
+  });
+
+  return apiFetch<CostProjectEstimateListResponse>(`/costs/projects?${params.toString()}`, {
+    auth: true
+  });
 }
 
 export async function runDeploymentInit(deploymentId: string): Promise<Deployment> {

@@ -5123,6 +5123,59 @@ nextjs-portal {
   grid-template-columns: minmax(0, 1fr) auto;
 }
 
+.costControlPanel {
+  gap: 14px;
+}
+
+.costControlGrid {
+  align-items: end;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(140px, 0.6fr) minmax(160px, 0.8fr) auto;
+}
+
+.costField {
+  color: var(--dashboard-muted);
+  display: grid;
+  font-size: 0.78rem;
+  font-weight: 900;
+  gap: 6px;
+}
+
+.costField input,
+.costField select {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--dashboard-border);
+  border-radius: 6px;
+  color: var(--dashboard-text);
+  font: inherit;
+  min-height: 38px;
+  min-width: 0;
+  padding: 0 10px;
+  width: 100%;
+}
+
+.costField input:focus,
+.costField select:focus {
+  border-color: var(--dashboard-blue);
+  outline: 2px solid rgba(56, 189, 248, 0.14);
+}
+
+.costApplyButton {
+  align-items: center;
+  display: inline-flex;
+  gap: 7px;
+  min-height: 38px;
+  white-space: nowrap;
+}
+
+.costErrorMessage {
+  color: #fca5a5;
+  font-size: 0.82rem;
+  font-weight: 850;
+  margin: 0;
+}
+
 .costSummaryAmount {
   background: linear-gradient(135deg, rgba(124, 92, 255, 0.3), rgba(20, 184, 166, 0.2)), #0a0d14;
   border: 1px solid var(--dashboard-border);
@@ -5153,6 +5206,122 @@ nextjs-portal {
   color: var(--dashboard-teal);
   height: 32px;
   width: 32px;
+}
+
+.costProjectRow {
+  background: transparent;
+  border-left: 0;
+  border-right: 0;
+  border-bottom: 0;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  width: 100%;
+}
+
+.costProjectRow:hover,
+.costProjectRow:focus-visible,
+.costProjectRow[aria-pressed="true"] {
+  background: rgba(56, 189, 248, 0.08);
+  outline: none;
+}
+
+.costStatus {
+  align-items: center;
+  border: 1px dashed var(--dashboard-border);
+  border-radius: 6px;
+  color: var(--dashboard-muted);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.86rem;
+  gap: 10px;
+  justify-content: space-between;
+  padding: 14px;
+}
+
+.costStatus p {
+  margin: 0;
+}
+
+.costStatus .dashboardSecondaryButton {
+  align-items: center;
+  display: inline-flex;
+  gap: 6px;
+}
+
+.costDetailPanel {
+  gap: 14px;
+}
+
+.costReviewMessages {
+  background: rgba(56, 189, 248, 0.06);
+  border: 1px solid rgba(56, 189, 248, 0.18);
+  border-radius: 6px;
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+}
+
+.costReviewMessages p {
+  color: var(--dashboard-text);
+  font-size: 0.86rem;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.costResourceList {
+  display: grid;
+  gap: 8px;
+}
+
+.costResourceDetails {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--dashboard-border);
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+
+.costResourceDetails summary {
+  align-items: center;
+  color: var(--dashboard-text);
+  cursor: pointer;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.costResourceDetails summary span {
+  font-weight: 900;
+}
+
+.costResourceDetails summary strong {
+  color: var(--dashboard-teal);
+  font-size: 0.84rem;
+}
+
+.costResourceDetails p {
+  color: var(--dashboard-muted);
+  font-size: 0.84rem;
+  line-height: 1.5;
+  margin: 10px 0 0;
+}
+
+.costResourceDetails ul {
+  color: var(--dashboard-muted);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.78rem;
+  gap: 6px;
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+}
+
+.costResourceDetails li {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--dashboard-border);
+  border-radius: 999px;
+  padding: 4px 7px;
 }
 
 .integrationHeader {
@@ -5202,6 +5371,7 @@ nextjs-portal {
   .dashboardTwoColumn,
   .settingsGrid,
   .costSummaryPanel,
+  .costControlGrid,
   .projectDetailHero,
   .dashboardPageHeader {
     grid-template-columns: 1fr;
@@ -5279,12 +5449,18 @@ nextjs-portal {
 
   .dashboardTopbarAction,
   .dashboardSecondaryButton,
-  .dashboardDangerButton {
+  .dashboardDangerButton,
+  .costApplyButton {
     width: 100%;
   }
 
   .costSummaryAmount {
     min-width: 0;
+  }
+
+  .costResourceDetails summary {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
 

@@ -13,6 +13,7 @@ import { registerOAuthRoutes } from "./routes/oauth.js";
 import { registerProjectRoutes, type ProjectAssetStorage } from "./routes/projects.js";
 import { registerDeploymentRoutes } from "./routes/deployments.js";
 import { registerGitCicdHandoffRoutes } from "./routes/git-cicd-handoffs.js";
+import { registerCostRoutes } from "./routes/costs.js";
 import {
   registerTerraformRoutes,
   type TerraformRouteOptions
@@ -163,6 +164,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     prefix: "/api",
     getDatabaseClient: getAppDatabaseClient
   });
+  app.register(registerCostRoutes, createCostRouteOptions(options, getAppDatabaseClient));
   app.register(
     registerTerraformRoutes,
     createTerraformRouteOptions(options, getAppDatabaseClient)
@@ -196,6 +198,21 @@ function createAiRouteOptions(options: BuildAppOptions): {
     ...(options.createSafetyFindingExplanation === undefined
       ? {}
       : { createSafetyFindingExplanation: options.createSafetyFindingExplanation }),
+    ...(options.pricingRateProvider === undefined ? {} : { pricingRateProvider: options.pricingRateProvider })
+  };
+}
+
+function createCostRouteOptions(
+  options: BuildAppOptions,
+  getDatabaseClient: () => DatabaseClient
+): {
+  readonly prefix: "/api";
+  readonly getDatabaseClient: () => DatabaseClient;
+  readonly pricingRateProvider?: CostPricingRateProvider;
+} {
+  return {
+    prefix: "/api",
+    getDatabaseClient,
     ...(options.pricingRateProvider === undefined ? {} : { pricingRateProvider: options.pricingRateProvider })
   };
 }
