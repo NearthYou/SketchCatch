@@ -140,6 +140,7 @@ export function WorkspaceAiChatDock({
   const loadedProjectIdRef = useRef(projectId);
   const latestTerraformIssueRequestIdRef = useRef<number | null>(null);
   const latestTerraformSafeFixResultRequestIdRef = useRef<number | null>(null);
+  const dismissedTerraformIssueRequestIdRef = useRef<number | null>(null);
   const boardSnapshot = useMemo(
     () => createWorkspaceAiBoardSnapshot(context.diagram),
     [context.diagram]
@@ -193,6 +194,7 @@ export function WorkspaceAiChatDock({
     }
 
     latestTerraformIssueRequestIdRef.current = request.id;
+    dismissedTerraformIssueRequestIdRef.current = null;
     setOpen(true);
     setActiveChatTab("draft");
     setTerraformIssueResolution({
@@ -219,6 +221,10 @@ export function WorkspaceAiChatDock({
           stage: "validate"
         });
 
+        if (dismissedTerraformIssueRequestIdRef.current === request.id) {
+          return;
+        }
+
         setTerraformIssueResolution({
           explanation,
           message: "",
@@ -234,6 +240,10 @@ export function WorkspaceAiChatDock({
         );
       } catch (error) {
         const message = getApiErrorMessage(error, "Terraform 이슈 AI 해결 가이드를 불러오지 못했습니다.");
+
+        if (dismissedTerraformIssueRequestIdRef.current === request.id) {
+          return;
+        }
 
         setTerraformIssueResolution({
           explanation: null,
@@ -484,6 +494,14 @@ export function WorkspaceAiChatDock({
     }
   }
 
+  function closeChatDock(): void {
+    dismissedTerraformIssueRequestIdRef.current =
+      terraformIssueResolution?.request.id ?? terraformIssueRequest?.id ?? null;
+    setOpen(false);
+    setTerraformIssueResolution(null);
+    setApplyingTerraformFixRequestId(null);
+  }
+
   function showDraftPreview(result: AiArchitectureDraftResult): void {
     const previewDiagram = convertArchitectureJsonToDiagramJson(result.architectureJson);
 
@@ -648,7 +666,7 @@ export function WorkspaceAiChatDock({
         <button
           aria-label="AI 채팅 닫기"
           className={styles.aiChatCloseButton}
-          onClick={() => setOpen(false)}
+          onClick={closeChatDock}
           title="닫기"
           type="button"
         >

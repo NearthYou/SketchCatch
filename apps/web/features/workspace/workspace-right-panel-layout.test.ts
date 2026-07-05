@@ -394,6 +394,13 @@ test("terraform issue AI resolution shows a fix plan before apply", () => {
   assert.match(componentSource, /getCurrentTerraformCode/);
 });
 
+test("terraform issue AI resolution can close the chat dock without trapping the issue card", () => {
+  assert.match(aiChatDockSource, /function closeChatDock/);
+  assert.match(aiChatDockSource, /setTerraformIssueResolution\(null\)/);
+  assert.match(aiChatDockSource, /setApplyingTerraformFixRequestId\(null\)/);
+  assert.match(aiChatDockSource, /onClick=\{closeChatDock\}/);
+});
+
 test("terraform editor renders syntax colors and squiggly error underlines", () => {
   const syntaxHighlightLayerRule = getCssRule(stylesSource, "terraformSyntaxHighlightLayer");
   const highlightedLineErrorRule = getCssRule(stylesSource, "terraformHighlightedLineError");

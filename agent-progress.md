@@ -24,7 +24,11 @@
   - `terraform.unexpected_token` 설명 템플릿을 추가하고 unknown 설명에서 내부 fallback 문구가 사용자에게 노출되지 않게 바꿨다.
   - Terraform Issue AI 설명 경로를 Amazon Q Assistance로 고정하고, Q credit/config/응답 문제로 fallback이 쓰인 경우 `Amazon Q 호출 상태`를 수정 계획에 표시하게 했다.
   - Terraform Issue AI 수정 계획을 문장형 계획 대신 현재 코드/수정할 코드 preview 중심으로 바꾸고, preview가 있는 safe fix에만 `수정` 버튼을 표시하게 했다.
+  - Terraform Issue AI 카드가 열린 상태에서 AI 채팅 닫기 버튼을 누르면 issue resolution/applying 상태를 함께 비우고, 닫은 뒤 늦게 도착한 AI 응답이 카드를 되살리지 않게 했다.
 - Verification run:
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-right-panel-layout.test.ts --test-name-pattern "terraform issue AI resolution can close"` - passed, 41 source-layout tests.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web typecheck` - passed.
+  - `git diff --check` - passed with line-ending warnings only.
   - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-terraform-ai.test.ts` - passed, 6 tests.
   - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-right-panel-layout.test.ts --test-name-pattern "terraform issue AI resolution shows"` - passed, 40 source-layout tests.
   - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web typecheck` - passed.
