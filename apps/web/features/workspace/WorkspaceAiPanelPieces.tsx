@@ -5,8 +5,10 @@ import type {
   AiTerraformErrorExplanationResult,
   AiTerraformPreviewExplanationResult,
   CheckFinding,
+  CostEstimateSupportLevel,
   DesignSimulationResult,
-  LlmExplanation
+  LlmExplanation,
+  ResourceCostEstimate
 } from "@sketchcatch/types";
 import { SelectMenu } from "../../components/ui/SelectMenu";
 import styles from "./workspace.module.css";
@@ -201,8 +203,7 @@ export function WorkspaceAiDesignSimulationResult({
   const costRecommendationItems = simulation.recommendations.filter(
     (item) => !costReviewItems.includes(item)
   );
-  const costResources =
-    simulation.costEstimate?.resources.filter((resource) => resource.monthlyEstimate.amount > 0) ?? [];
+  const costResources = simulation.costEstimate?.resources ?? [];
 
   return (
     <div className={`${styles.aiResultStack} ${styles.aiSimulationResult}`}>
@@ -263,10 +264,17 @@ export function WorkspaceAiDesignSimulationResult({
               <ul>
                 {costResources.map((resource) => (
                   <li key={`resource-cost-${resource.resourceId}`}>
-                    <span>
-                      {resource.name} · ${formatMoney(resource.monthlyEstimate.amount)} / month
-                    </span>
+                    <div className={styles.aiSimulationCostResourceHeader}>
+                      <span>
+                        {resource.name} · {getSimulationResourceDisplayType(resource)}
+                      </span>
+                      <span className={getSimulationCostSupportClassName(resource.supportLevel)}>
+                        {getSimulationCostSupportLabel(resource.supportLevel)}
+                      </span>
+                    </div>
+                    <strong>{formatSimulationResourceMonthlyAmount(resource)}</strong>
                     <p>{resource.explanation}</p>
+                    <p>{resource.supportReason}</p>
                   </li>
                 ))}
               </ul>
@@ -371,4 +379,40 @@ function formatMoney(amount: number): string {
 
 function formatInteger(amount: number): string {
   return Math.round(amount).toLocaleString("en-US");
+}
+
+function getSimulationResourceDisplayType(resource: ResourceCostEstimate): string {
+  return resource.terraformResourceType ?? resource.resourceType;
+}
+
+function formatSimulationResourceMonthlyAmount(resource: ResourceCostEstimate): string {
+  if (resource.supportLevel === "not_estimated") {
+    return "산정 미지원";
+  }
+
+  return `$${formatMoney(resource.monthlyEstimate.amount)} / month`;
+}
+
+function getSimulationCostSupportLabel(supportLevel: CostEstimateSupportLevel): string {
+  switch (supportLevel) {
+    case "aws_pricing_api":
+      return "AWS Pricing API";
+    case "fallback_estimate":
+      return "Fallback estimate";
+    case "no_direct_cost":
+      return "직접 비용 없음";
+    case "not_estimated":
+      return "산정 미지원";
+  }
+}
+
+function getSimulationCostSupportClassName(supportLevel: CostEstimateSupportLevel): string {
+  const supportClassNames = {
+    aws_pricing_api: `${styles.aiSimulationCostSupportBadge} ${styles.aiSimulationCostSupportAwsPricingApi}`,
+    fallback_estimate: `${styles.aiSimulationCostSupportBadge} ${styles.aiSimulationCostSupportFallbackEstimate}`,
+    no_direct_cost: `${styles.aiSimulationCostSupportBadge} ${styles.aiSimulationCostSupportNoDirectCost}`,
+    not_estimated: `${styles.aiSimulationCostSupportBadge} ${styles.aiSimulationCostSupportNotEstimated}`
+  } satisfies Record<CostEstimateSupportLevel, string>;
+
+  return supportClassNames[supportLevel];
 }

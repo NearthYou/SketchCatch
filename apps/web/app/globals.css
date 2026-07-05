@@ -5299,11 +5299,74 @@ nextjs-portal {
   font-size: 0.84rem;
 }
 
+.costResourceSummaryTitle {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.costResourceSummaryTitle small {
+  color: var(--dashboard-muted);
+  font-family: var(--bp-mono);
+  font-size: 0.7rem;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.costResourceSummaryMeta {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+  min-width: min(100%, 260px);
+}
+
+.costSupportBadge {
+  border: 1px solid var(--dashboard-border);
+  border-radius: 999px;
+  font-family: var(--bp-mono);
+  font-size: 0.68rem;
+  font-weight: 900;
+  line-height: 1.2;
+  padding: 3px 6px;
+  white-space: nowrap;
+}
+
+.costSupportBadgeAwsPricingApi {
+  background: var(--bp-low-tint);
+  border-color: color-mix(in srgb, var(--bp-low) 38%, var(--dashboard-border));
+  color: var(--bp-low);
+}
+
+.costSupportBadgeFallbackEstimate {
+  background: var(--bp-med-tint);
+  border-color: color-mix(in srgb, var(--bp-med) 42%, var(--dashboard-border));
+  color: var(--bp-med);
+}
+
+.costSupportBadgeNoDirectCost {
+  background: var(--bp-blue-tint);
+  border-color: color-mix(in srgb, var(--bp-blue) 34%, var(--dashboard-border));
+  color: var(--bp-blue);
+}
+
+.costSupportBadgeNotEstimated {
+  background: var(--bp-high-tint);
+  border-color: color-mix(in srgb, var(--bp-high) 42%, var(--dashboard-border));
+  color: var(--bp-high);
+}
+
 .costResourceDetails p {
   color: var(--dashboard-muted);
   font-size: 0.84rem;
   line-height: 1.5;
   margin: 10px 0 0;
+}
+
+.costResourceDetails .costResourceSupportReason {
+  color: var(--dashboard-text);
+  font-weight: 700;
 }
 
 .costResourceDetails ul {
@@ -5461,6 +5524,12 @@ nextjs-portal {
   .costResourceDetails summary {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .costResourceSummaryMeta {
+    justify-content: flex-start;
+    min-width: 0;
+    width: 100%;
   }
 }
 

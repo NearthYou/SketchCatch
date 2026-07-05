@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type {
+  CostEstimateSupportLevel,
   CostEstimatePeriod,
   CostProjectEstimateListResponse,
   ResourceCostEstimate
@@ -256,22 +257,29 @@ export function CostsClient() {
             ))}
           </div>
           <div className="costResourceList">
-            {selectedProject.costEstimate.resources
-              .filter((resource) => resource.monthlyEstimate.amount > 0)
-              .map((resource, index) => (
-                <details className="costResourceDetails" key={resource.resourceId} open={index === 0}>
-                  <summary>
+            {selectedProject.costEstimate.resources.map((resource, index) => (
+              <details className="costResourceDetails" key={resource.resourceId} open={index === 0}>
+                <summary>
+                  <span className="costResourceSummaryTitle">
                     <span>{resource.name}</span>
-                    <strong>{formatUsd(resource.monthlyEstimate.amount)} / month</strong>
-                  </summary>
-                  <p>{resource.explanation}</p>
-                  <ul>
-                    {resource.costDrivers.map((driver) => (
-                      <li key={`${resource.resourceId}-${driver}`}>{driver}</li>
-                    ))}
-                  </ul>
-                </details>
-              ))}
+                    <small>{getResourceDisplayType(resource)}</small>
+                  </span>
+                  <span className="costResourceSummaryMeta">
+                    <span className={getCostSupportBadgeClassName(resource.supportLevel)}>
+                      {getCostSupportLabel(resource.supportLevel)}
+                    </span>
+                    <strong>{formatResourceMonthlyAmount(resource)}</strong>
+                  </span>
+                </summary>
+                <p>{resource.explanation}</p>
+                <p className="costResourceSupportReason">{resource.supportReason}</p>
+                <ul>
+                  {resource.costDrivers.map((driver) => (
+                    <li key={`${resource.resourceId}-${driver}`}>{driver}</li>
+                  ))}
+                </ul>
+              </details>
+            ))}
           </div>
         </section>
       ) : null}
@@ -347,12 +355,51 @@ function writeSelectedProjectIdToLocation(projectId: string | null): void {
 }
 
 function formatResourceTypes(resources: readonly ResourceCostEstimate[]): string {
-  const billableTypes = resources
-    .filter((resource) => resource.monthlyEstimate.amount > 0)
-    .map((resource) => resource.resourceType);
-  const uniqueTypes = [...new Set(billableTypes)];
+  const uniqueTypes = [...new Set(resources.map((resource) => getResourceDisplayType(resource)))];
 
-  return uniqueTypes.length > 0 ? uniqueTypes.join(", ") : "산정 대상 없음";
+  if (uniqueTypes.length === 0) {
+    return "리소스 없음";
+  }
+
+  const visibleTypes = uniqueTypes.slice(0, 3).join(", ");
+
+  return uniqueTypes.length > 3 ? `${visibleTypes} 외 ${uniqueTypes.length - 3}개` : visibleTypes;
+}
+
+function getResourceDisplayType(resource: ResourceCostEstimate): string {
+  return resource.terraformResourceType ?? resource.resourceType;
+}
+
+function formatResourceMonthlyAmount(resource: ResourceCostEstimate): string {
+  if (resource.supportLevel === "not_estimated") {
+    return "산정 미지원";
+  }
+
+  return `${formatUsd(resource.monthlyEstimate.amount)} / month`;
+}
+
+function getCostSupportLabel(supportLevel: CostEstimateSupportLevel): string {
+  switch (supportLevel) {
+    case "aws_pricing_api":
+      return "AWS Pricing API";
+    case "fallback_estimate":
+      return "Fallback estimate";
+    case "no_direct_cost":
+      return "직접 비용 없음";
+    case "not_estimated":
+      return "산정 미지원";
+  }
+}
+
+function getCostSupportBadgeClassName(supportLevel: CostEstimateSupportLevel): string {
+  const supportClassNames = {
+    aws_pricing_api: "costSupportBadge costSupportBadgeAwsPricingApi",
+    fallback_estimate: "costSupportBadge costSupportBadgeFallbackEstimate",
+    no_direct_cost: "costSupportBadge costSupportBadgeNoDirectCost",
+    not_estimated: "costSupportBadge costSupportBadgeNotEstimated"
+  } satisfies Record<CostEstimateSupportLevel, string>;
+
+  return supportClassNames[supportLevel];
 }
 
 function getPeriodLabel(period: CostEstimatePeriod): string {
