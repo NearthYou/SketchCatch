@@ -353,6 +353,13 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
           return;
         }
 
+        if (isServicePurposePatchClarification(patchClarification)) {
+          await createDraftFromRequest({
+            prompt: selectedSuggestion
+          });
+          return;
+        }
+
         await createPatchPreviewFromPrompt(
           isSkipConnectionSuggestion(selectedSuggestion)
             ? originalInstruction
@@ -1074,6 +1081,12 @@ function isAddResourceConnectionClarification(
     clarification.intent.resourceType !== undefined &&
     clarification.candidates.length > 0
   );
+}
+
+function isServicePurposePatchClarification(
+  clarification: ArchitecturePatchClarification
+): boolean {
+  return clarification.intent.requestedAction === "manual_review" && clarification.candidates.length === 0;
 }
 
 function isSkipConnectionSuggestion(suggestion: string): boolean {
