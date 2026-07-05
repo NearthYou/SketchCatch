@@ -26,6 +26,7 @@
   - `GET /api/costs/projects`를 추가해 실행 중 배포 프로젝트의 architecture snapshot 기준 비용을 계산한다.
   - `/costs` 페이지를 정적 `dashboard-data.ts` 비용에서 API 기반 비용관리 client 화면으로 전환하고, 기간/예상 사용자 수 적용 및 프로젝트별 상세 비용 토글을 추가했다.
   - `/costs` 프로젝트 행 선택을 `projectId` URL query와 동기화해 `/costs?projectId=...` 상태로 상세 비용을 다시 열 수 있게 했다.
+  - RDS storage도 AWS Pricing API의 `Database Storage`/`General Purpose-GP3` 상품으로 조회되게 adapter를 보강했다.
   - `docs/data-models.md`에 Cost Estimate DTO와 비용관리/시뮬레이션 계약을 기록했다.
 - Commits:
   - `5212684 Feat: 비용 산정 타입 확장`
@@ -33,6 +34,7 @@
   - `7bf8cac Feat: 시뮬레이션 비용 조건 UI 연결`
   - `b3350d7 Feat: 비용관리 API 기반 전환`
   - `df13897 Fix: 비용관리 프로젝트 선택 URL 반영`
+  - `de5971f Fix: RDS 스토리지 Pricing API 조회 추가`
 - Verification run so far:
   - `pnpm harness:check` - passed before edits.
   - `pnpm --filter @sketchcatch/types typecheck` - passed.
@@ -46,8 +48,11 @@
   - `pnpm typecheck` - passed.
   - `pnpm build` - passed.
   - `git diff --check` - passed.
+  - `AWS_PROFILE=sketchcatch-dev AWS_PRICING_API_ENABLED=true` 로 AWS Pricing API 실제 조회를 검증했다. EC2, RDS instance, RDS storage, S3가 `aws_pricing_api` source로 계산된다.
+  - `pnpm --filter @sketchcatch/api test -- src/services/awsPricingRateProvider.test.ts` - package script executed the full API test set; 566 tests passed.
+  - `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, `git diff --check` - passed after RDS storage fix.
 - Known risks:
-  - 실제 AWS Pricing API 조회는 credentials/환경변수 의존이 있어 로컬 검증에서는 fallback 경로로 확인했다.
+  - 실제 AWS Pricing API 경로는 `AWS_PRICING_API_ENABLED=true`와 유효한 AWS credential/profile이 있어야 동작한다. 기본/test 환경은 fallback 경로로 유지한다.
   - 실제 AWS apply/destroy, cloud mutation, Git/CI/CD handoff는 실행하지 않았다.
 
 ### 2026-07-05 - Deployment Safety Gate Plan block 제거

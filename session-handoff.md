@@ -8,12 +8,13 @@
 
 - 현재 브랜치: `feat/ys/142-cost-risk-분석-구현`
 - 사용자 요청: 매 단계마다 구현하고 검증되면 커밋한다.
-- 구현은 5개 기능/fix 커밋과 기록 커밋으로 나뉘어 있다.
+- 구현은 6개 기능/fix 커밋과 기록 커밋으로 나뉘어 있다.
   - `5212684 Feat: 비용 산정 타입 확장`
   - `0e550f1 Feat: 시뮬레이션 비용 산정 연결`
   - `7bf8cac Feat: 시뮬레이션 비용 조건 UI 연결`
   - `b3350d7 Feat: 비용관리 API 기반 전환`
   - `df13897 Fix: 비용관리 프로젝트 선택 URL 반영`
+  - `de5971f Fix: RDS 스토리지 Pricing API 조회 추가`
 
 ### 완료된 것
 
@@ -23,6 +24,7 @@
 - Workspace AI 시뮬레이션 탭에 기간/예상 사용자 수 입력을 추가하고, 비용 카드에 총 예상 비용과 리소스별 근거를 표시한다.
 - `GET /api/costs/projects`와 `/costs` client 화면을 연결해 실행 중 배포 프로젝트의 예상 비용 합계와 상세를 보여준다.
 - `/costs` 프로젝트 행 선택을 `projectId` URL query와 동기화해 상세 비용 상태를 주소로 다시 열 수 있게 했다.
+- RDS storage도 AWS Pricing API의 `Database Storage`/`General Purpose-GP3` 상품으로 조회되게 adapter를 보강했다.
 - `docs/data-models.md`, `agent-progress.md`, `session-handoff.md`를 갱신했다.
 
 ### 검증된 것
@@ -39,6 +41,9 @@
 - `pnpm typecheck` - passed.
 - `pnpm build` - passed.
 - `git diff --check` - passed.
+- `AWS_PROFILE=sketchcatch-dev AWS_PRICING_API_ENABLED=true` 로 AWS Pricing API 실제 조회를 검증했다. EC2, RDS instance, RDS storage, S3가 `aws_pricing_api` source로 계산된다.
+- `pnpm --filter @sketchcatch/api test -- src/services/awsPricingRateProvider.test.ts` - package script executed the full API test set; 566 tests passed.
+- `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, `git diff --check` - passed after RDS storage fix.
 
 ### 다음 행동
 
