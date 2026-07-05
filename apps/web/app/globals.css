@@ -5230,12 +5230,60 @@ nextjs-portal {
   min-width: 0;
 }
 
+.costProjectHeaderCell {
+  color: var(--dashboard-muted);
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.costProjectHeaderCell .costProjectCheckbox {
+  height: 16px;
+  width: 16px;
+}
+
 .costProjectCheckbox {
-  accent-color: var(--dashboard-teal);
+  appearance: none;
+  background: var(--bp-paper-2);
+  border: 1px solid color-mix(in srgb, var(--dashboard-muted) 42%, var(--bp-line));
+  border-radius: 4px;
+  display: grid;
   flex: 0 0 auto;
   height: 18px;
   margin: 0;
+  place-content: center;
   width: 18px;
+}
+
+.costProjectCheckbox::before {
+  background: white;
+  clip-path: polygon(14% 44%, 0 58%, 38% 96%, 100% 18%, 86% 4%, 36% 66%);
+  content: "";
+  height: 10px;
+  transform: scale(0);
+  transition: transform 120ms ease;
+  width: 10px;
+}
+
+.costProjectCheckbox:checked,
+.costProjectCheckbox:indeterminate {
+  background: var(--dashboard-teal);
+  border-color: color-mix(in srgb, var(--dashboard-teal) 72%, black);
+}
+
+.costProjectCheckbox:checked::before,
+.costProjectCheckbox:indeterminate::before {
+  transform: scale(1);
+}
+
+.costProjectCheckbox:indeterminate::before {
+  clip-path: none;
+  height: 2px;
+  width: 10px;
+}
+
+.costProjectCheckbox:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--dashboard-teal) 54%, transparent);
+  outline-offset: 3px;
 }
 
 .costProjectNameButton {
@@ -7993,28 +8041,24 @@ nextjs-portal {
 }
 
 /* Cost management readability */
-.costHeroGrid {
+.costOverviewPanel {
   align-items: stretch;
   display: grid;
+  gap: 20px;
+  grid-template-columns: minmax(520px, 1fr) minmax(340px, 420px);
+  padding: 20px;
+}
+
+.costOverviewSettings {
+  align-content: start;
+  display: grid;
   gap: 18px;
-  grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
+  min-width: 0;
 }
 
-.costHeroGrid .dashboardPanel {
-  min-height: 0;
-}
-
-.costControlPanel,
-.costSummaryPanel,
 .costProjectPanel,
 .costNoticePanel {
   padding: 18px 20px;
-}
-
-.costControlPanel,
-.costSummaryPanel {
-  align-content: start;
-  gap: 14px;
 }
 
 .costPanelTitle {
@@ -8031,7 +8075,8 @@ nextjs-portal {
 .costControlGrid {
   align-items: end;
   gap: 12px;
-  grid-template-columns: minmax(150px, 0.5fr) minmax(220px, 1fr) auto;
+  grid-template-columns: minmax(180px, 220px) minmax(220px, 320px) auto;
+  max-width: 760px;
 }
 
 .costField {
@@ -8050,20 +8095,43 @@ nextjs-portal {
   padding-inline: 18px;
 }
 
-.costSummaryPanel {
-  grid-template-columns: 1fr;
+.costSummaryCard {
+  background: var(--dashboard-blue);
+  border: 1px solid color-mix(in srgb, var(--dashboard-blue) 72%, white);
+  border-radius: var(--bp-r);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  color: white;
+  display: grid;
+  gap: 14px;
+  min-height: 100%;
+  padding: 20px;
+}
+
+.costSummaryCard .dashboardPanelKicker {
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.costSummaryCard h2 {
+  color: white;
 }
 
 .costSummaryAmount {
   align-content: center;
-  border-radius: var(--bp-r);
+  background: transparent;
+  border: 0;
   gap: 6px;
-  min-height: 120px;
+  min-height: auto;
   min-width: 0;
-  padding: 18px 20px;
+  padding: 0;
+}
+
+.costSummaryAmount span,
+.costSummaryAmount p {
+  color: rgba(255, 255, 255, 0.78);
 }
 
 .costSummaryAmount strong {
+  color: white;
   font-size: 2rem;
   line-height: 1;
 }
@@ -8110,8 +8178,12 @@ nextjs-portal {
 }
 
 @media (max-width: 1180px) {
-  .costHeroGrid {
+  .costOverviewPanel {
     grid-template-columns: 1fr;
+  }
+
+  .costControlGrid {
+    max-width: none;
   }
 }
 
@@ -8120,8 +8192,7 @@ nextjs-portal {
     grid-template-columns: 1fr;
   }
 
-  .costControlPanel,
-  .costSummaryPanel,
+  .costOverviewPanel,
   .costProjectPanel,
   .costNoticePanel {
     padding: 16px;

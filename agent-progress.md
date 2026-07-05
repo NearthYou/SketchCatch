@@ -1885,3 +1885,25 @@
 - Known risks:
   - 실제 브라우저 스크린샷 검증은 수행하지 않았다. 타입체크, lint, production build로 렌더링 경로를 검증했다.
   - `.turbo/cache` rename 경고가 있었지만 각 명령은 exit code 0으로 완료됐다.
+
+## 2026-07-06 - 비용관리 상단 UI 재정리
+
+- Goal: 비용관리 페이지 상단의 조건 입력과 선택 합계 영역이 과하게 넓고 어색하게 보이는 문제를 줄인다.
+- Completed:
+  - 예상 비용 조건과 선택 합계를 하나의 상단 패널로 통합해 큰 빈 영역과 따로 노는 우측 요약 박스를 줄였다.
+  - 기간/예상 사용자 수 입력 폭을 제한하고, 합계 카드는 `선택 합계` 중심의 짧은 KPI 카드로 재정리했다.
+  - 프로젝트 목록 헤더의 프로젝트명 옆에도 전체 선택 체크박스를 추가해 체크한 프로젝트 합계 흐름을 더 명확하게 했다.
+  - 프로젝트 체크박스를 비용관리 테이블 톤에 맞춘 커스텀 스타일로 정리했다.
+  - 일부 프로젝트만 선택된 상태는 전체 선택 체크박스에 가로 막대로 표시하게 했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits
+  - `pnpm --filter @sketchcatch/web typecheck` - passed
+  - `pnpm --filter @sketchcatch/web lint` - passed
+  - `git diff --check` - passed with line-ending warnings only
+  - `pnpm harness:check` - passed after edits
+  - `pnpm lint` - passed with `.turbo/cache` rename warnings
+  - `pnpm typecheck` - passed with `.turbo/cache` rename warnings
+  - `pnpm build` - passed
+- Known risks:
+  - 인앱 브라우저에서 `/costs`는 로그인 화면으로 막혔고, 문서의 데모 계정은 현재 로컬 DB와 맞지 않아 실제 비용관리 화면 스크린샷은 확인하지 못했다.
+  - `pnpm build`가 `apps/web/next-env.d.ts`를 일시적으로 build route import로 바꿨고, 원래 dev route import로 복구했다.

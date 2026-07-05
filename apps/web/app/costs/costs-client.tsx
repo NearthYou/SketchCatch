@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type {
   CostProjectEstimate,
   CostEstimateSupportLevel,
@@ -45,18 +45,28 @@ export function CostsClient() {
     readSelectedProjectIdFromLocation()
   );
   const [includedProjectIds, setIncludedProjectIds] = useState<readonly string[] | null>(null);
+  const selectAllCheckboxRef = useRef<HTMLInputElement>(null);
   const selectedProject = useMemo(
     () => costData?.projects.find((item) => item.project.id === selectedProjectId) ?? costData?.projects[0] ?? null,
     [costData, selectedProjectId]
   );
+  const projectIds = useMemo(
+    () => costData?.projects.map((item) => item.project.id) ?? [],
+    [costData]
+  );
   const includedProjectIdSet = useMemo(
-    () => new Set(includedProjectIds ?? costData?.projects.map((item) => item.project.id) ?? []),
-    [costData, includedProjectIds]
+    () => new Set(includedProjectIds ?? projectIds),
+    [includedProjectIds, projectIds]
   );
   const selectedCostTotals = useMemo(
     () => calculateSelectedCostTotals(costData?.projects ?? [], includedProjectIdSet),
     [costData, includedProjectIdSet]
   );
+  const includedVisibleProjectCount = projectIds.filter((projectId) =>
+    includedProjectIdSet.has(projectId)
+  ).length;
+  const allProjectsIncluded = projectIds.length > 0 && includedVisibleProjectCount === projectIds.length;
+  const someProjectsIncluded = includedVisibleProjectCount > 0 && !allProjectsIncluded;
 
   useEffect(() => {
     let ignore = false;
@@ -128,6 +138,14 @@ export function CostsClient() {
     return () => window.removeEventListener("popstate", handlePopState);
   }, []);
 
+  useEffect(() => {
+    if (selectAllCheckboxRef.current === null) {
+      return;
+    }
+
+    selectAllCheckboxRef.current.indeterminate = someProjectsIncluded;
+  }, [someProjectsIncluded]);
+
   function applyCostQuery(): void {
     const expectedUserCount = parseExpectedUserCount(expectedUserCountInput);
 
@@ -145,7 +163,7 @@ export function CostsClient() {
 
   function toggleIncludedProject(projectId: string): void {
     setIncludedProjectIds((currentProjectIds) => {
-      const includedIds = new Set(currentProjectIds ?? []);
+      const includedIds = new Set(currentProjectIds ?? projectIds);
 
       if (includedIds.has(projectId)) {
         includedIds.delete(projectId);
@@ -155,6 +173,10 @@ export function CostsClient() {
 
       return [...includedIds];
     });
+  }
+
+  function toggleAllIncludedProjects(): void {
+    setIncludedProjectIds(allProjectsIncluded ? [] : projectIds);
   }
 
   const totalEstimateAmount = selectedCostTotals.totalEstimateAmount;
@@ -170,8 +192,8 @@ export function CostsClient() {
         </div>
       </div>
 
-      <div className="costHeroGrid">
-        <section className="dashboardPanel costControlPanel" aria-labelledby="cost-control-title">
+      <section className="dashboardPanel costOverviewPanel" aria-labelledby="cost-control-title">
+        <div className="costOverviewSettings">
           <div className="costPanelTitle">
             <p className="dashboardPanelKicker">Estimate settings</p>
             <h2 id="cost-control-title">예상 비용 조건</h2>
@@ -211,12 +233,12 @@ export function CostsClient() {
               {formErrorMessage}
             </p>
           ) : null}
-        </section>
+        </div>
 
-        <section className="dashboardPanel costSummaryPanel" aria-labelledby="cost-summary-title">
+        <div className="costSummaryCard" aria-labelledby="cost-summary-title">
           <div className="costPanelTitle">
             <p className="dashboardPanelKicker">Cost overview</p>
-            <h2 id="cost-summary-title">선택한 프로젝트 예상 비용 합계</h2>
+            <h2 id="cost-summary-title">선택 합계</h2>
           </div>
           <div className="costSummaryAmount">
             <span>{getPeriodLabel(appliedQuery.period)} 예상 비용</span>
@@ -226,8 +248,8 @@ export function CostsClient() {
               {formatUsd(dailyAverageAmount)}
             </p>
           </div>
-        </section>
-      </div>
+        </div>
+      </section>
 
       <section className="dashboardPanel costProjectPanel" aria-labelledby="cost-project-title">
         <div className="dashboardPanelHeader">
@@ -255,7 +277,17 @@ export function CostsClient() {
         {state === "idle" && costData !== null && costData.projects.length > 0 ? (
           <div className="dashboardTable">
             <div className="dashboardTableHeader">
-              <span>프로젝트</span>
+              <label className="costProjectNameCell costProjectHeaderCell">
+                <input
+                  ref={selectAllCheckboxRef}
+                  aria-label="전체 프로젝트 합계에 포함"
+                  checked={allProjectsIncluded}
+                  className="costProjectCheckbox"
+                  onChange={toggleAllIncludedProjects}
+                  type="checkbox"
+                />
+                <span>프로젝트</span>
+              </label>
               <span>클라우드</span>
               <span>리소스</span>
               <span>{getPeriodLabel(appliedQuery.period)} 예상 비용</span>
