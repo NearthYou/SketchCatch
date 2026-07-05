@@ -1,10 +1,7 @@
 import type { DiagramNode } from "../../../../packages/types/src";
-import { getAwsAvailabilityZoneLabel } from "../parameter-input/aws-availability-zone-options";
 import { getAwsRegionLabel } from "../parameter-input/aws-region-options";
 import {
-  getAvailabilityZoneNodeValue,
   getRegionNodeAwsRegion,
-  isAvailabilityZoneAreaNode,
   isRegionAreaNode
 } from "../parameter-input/region-node-metadata";
 
@@ -82,10 +79,6 @@ export function getAreaNodeIconUrl(node: DiagramNode): string | undefined {
 export function getAreaNodeMetaLabel(node: DiagramNode): string | undefined {
   if (isRegionAreaNode(node)) {
     return getAwsRegionLabel(getRegionNodeAwsRegion(node));
-  }
-
-  if (isAvailabilityZoneAreaNode(node)) {
-    return getAwsAvailabilityZoneLabel(getAvailabilityZoneNodeValue(node));
   }
 
   return undefined;

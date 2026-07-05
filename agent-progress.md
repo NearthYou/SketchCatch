@@ -13,6 +13,89 @@
 - Highest priority unfinished harness feature: `HARNESS-007`
 - Current blocker: none
 
+### 2026-07-05 - 누락 후보 영역 리소스 승격 롤백
+
+- Goal: S3 Bucket처럼 실제 child 리소스가 내부 배치되는 영역이 아닌 리소스를 visual area node로 승격한 변경을 되돌린다.
+- Completed:
+  - `aws_s3_bucket`, `aws_db_subnet_group`, `aws_api_gateway_rest_api`, `aws_api_gateway_resource`, `aws_cloudwatch_event_rule`을 resource area node 판정에서 제거했다.
+  - 위 5개 리소스의 catalog 기본 크기와 resize bounds를 일반 리소스 아이콘 기준으로 되돌렸다.
+  - mixed lasso 선택, border color 변경 가능 여부, Terraform Sync proposal 생성 크기 테스트를 일반 리소스 기준으로 되돌렸다.
+  - `docs/data-models.md`와 `docs/jh/002_현재지원AWS리소스설명서_JH.md`에서 Terraform resource 겸 visual area node 목록을 `aws_vpc`, `aws_subnet`, `aws_security_group`, `aws_autoscaling_group` 4개로 정리했다.
+- Verification run:
+  - Red before fix: `pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/area-nodes.test.ts features/resource-settings/catalog.test.ts features/diagram-editor/node-resize-bounds.test.ts features/diagram-editor/flow-mappers.test.ts features/diagram-editor/node-style.test.ts features/diagram-editor/selection-utils.test.ts features/workspace/terraform-sync-proposals.test.ts` failed while S3 was still treated as an area node and area-sized catalog resource.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/area-nodes.test.ts features/resource-settings/catalog.test.ts features/diagram-editor/node-resize-bounds.test.ts features/diagram-editor/flow-mappers.test.ts features/diagram-editor/node-style.test.ts features/diagram-editor/selection-utils.test.ts features/workspace/terraform-sync-proposals.test.ts` - passed.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/area-node-movement.test.ts features/diagram-editor/reference-drop-targets.test.ts features/diagram-editor/diagram-utils.test.ts` - passed.
+  - `pnpm harness:check` - passed.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `pnpm build` - passed.
+  - `git diff --check` - passed.
+- Known risks:
+  - 브라우저 screenshot 기반 수동 smoke는 수행하지 않았다.
+  - `next build`가 `apps/web/next-env.d.ts`를 일시 변경했으나 생성 파일 변경은 원래 dev route import로 복구했다.
+  - 실제 Terraform CLI, AWS SDK, plan/apply/destroy, cloud mutation은 실행하지 않았다.
+
+### 2026-07-05 - Terraform Preview/Sync 리뷰 피드백 보정
+
+- Goal: Terraform Preview/Sync 리뷰에서 지적된 optional `parameters.values` 접근과 provider header 판정 오탐을 보정한다.
+- Completed:
+  - AZ parent 상속 경로에서 parent node의 legacy `parameters.values` 누락 시 TypeError가 나지 않도록 `parentNode.parameters?.values?.["awsAvailabilityZone"]`로 보정했다.
+  - Terraform Sync AZ proposal plan에서 기존 AZ node의 legacy `parameters.values` 누락 시 TypeError가 나지 않도록 `node.parameters?.values?.["awsAvailabilityZone"]`로 보정했다.
+  - Terraform diagnostics에서 `provider_region = ...`처럼 `provider`로 시작하는 attribute를 provider block header로 오인하지 않도록 provider 감지를 `^provider\b` 정규식으로 제한했다.
+  - 세 케이스에 대한 API 회귀 테스트를 추가했다.
+- Verification run:
+  - Red before fix: `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/infrastructure-graph.test.ts src/services/terraform/terraform-to-diagram.test.ts src/services/terraform/terraform-diagnostics.test.ts` failed with the two `awsAvailabilityZone` TypeErrors and provider-prefixed attribute block-header false positive.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/infrastructure-graph.test.ts src/services/terraform/terraform-to-diagram.test.ts src/services/terraform/terraform-diagnostics.test.ts` - passed.
+  - `pnpm --filter @sketchcatch/api typecheck` - passed.
+  - `pnpm harness:check` - passed.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `pnpm build` - passed.
+  - `git diff --check` - passed.
+- Known risks:
+  - 실제 Terraform CLI, AWS SDK, plan/apply/destroy, cloud mutation은 실행하지 않았다.
+  - 브라우저 수동 smoke는 수행하지 않았다. 변경 범위는 API Terraform Preview/Sync/diagnostics helper와 테스트다.
+
+### 2026-07-05 - 공식 문서 기반 누락 후보 영역 리소스 승격
+
+- Goal: 공식 문서상 여러 하위/연관 리소스를 시각적으로 담는 것이 타당한 AWS 리소스를 SketchCatch visual area node로 승격한다.
+- Completed:
+  - `aws_s3_bucket`, `aws_db_subnet_group`, `aws_api_gateway_rest_api`, `aws_api_gateway_resource`, `aws_cloudwatch_event_rule`을 resource area node 판정에 추가했다.
+  - 새 영역 리소스들이 catalog에서 일반 아이콘 크기가 아니라 영역 기본 크기로 생성되게 했다.
+  - 새 영역 리소스들의 resize max 제한을 제거하고 최소 영역 크기를 부여했다.
+  - S3 Bucket이 영역 노드가 되면서 mixed lasso 선택과 Terraform Sync proposal 생성 크기 기대값을 새 계약에 맞췄다.
+  - `docs/data-models.md`에 실제 Terraform resource identity를 유지하면서 Web diagram editor에서만 visual area behavior를 갖는 리소스 목록을 갱신했다.
+- Verification run:
+  - Red before fix: `pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/area-nodes.test.ts features/resource-settings/catalog.test.ts features/diagram-editor/node-resize-bounds.test.ts features/diagram-editor/flow-mappers.test.ts features/diagram-editor/node-style.test.ts features/diagram-editor/selection-utils.test.ts` failed because the five promoted candidates were still regular resource nodes.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/area-nodes.test.ts features/resource-settings/catalog.test.ts features/diagram-editor/node-resize-bounds.test.ts features/diagram-editor/flow-mappers.test.ts features/diagram-editor/node-style.test.ts features/diagram-editor/selection-utils.test.ts` - passed.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/area-node-movement.test.ts features/diagram-editor/reference-drop-targets.test.ts features/diagram-editor/diagram-utils.test.ts features/workspace/terraform-sync-proposals.test.ts` - passed after updating the S3 catalog-size expectation.
+  - `pnpm harness:check` - passed.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `pnpm build` - passed.
+  - `git diff --check` - passed.
+- Known risks:
+  - 브라우저 screenshot 기반 수동 smoke는 수행하지 않았다.
+  - 실제 Terraform CLI, AWS SDK, plan/apply/destroy, cloud mutation은 실행하지 않았다.
+  - `next build`가 `apps/web/next-env.d.ts`를 일시 변경했으나 생성 파일 변경은 원래 dev route import로 복구했다.
+
+### 2026-07-05 - 현재 지원 AWS 리소스 설명서 분리 작성
+
+- Goal: 누군가 SketchCatch의 현재 지원 리소스가 무엇인지 물었을 때 답할 수 있도록 `docs/jh` 안의 AWS 리소스 문서를 갱신한다.
+- Completed:
+  - `docs/jh/000_AWS리소스목록_JH.md`에 추가했던 현재 지원 리소스 설명 블록을 롤백해 기존 후보 조사 문서 구조로 복원했다.
+  - `docs/jh/002_현재지원AWS리소스설명서_JH.md`를 별도로 만들었다.
+  - 현재 Terraform IaC 지원 44개 리소스, 보드 전용 영역 리소스 3개, Terraform resource 겸 visual area node 4개를 분리해 설명했다.
+  - 각 리소스가 뜻하는 AWS 개념, SketchCatch에서의 기능, 답변 포인트, Terraform Preview/Sync와 실제 live apply 범위 차이를 정리했다.
+  - Region/AZ는 Terraform block이 아니라 보드 영역 리소스이고, visual area behavior와 Terraform resource identity의 차이를 명시했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits.
+  - `pnpm harness:check` - passed after edits.
+  - `git diff --check` - passed after edits.
+- Known risks:
+  - 문서 전용 변경이라 `pnpm lint`, `pnpm typecheck`, `pnpm build`는 실행하지 않았다.
+  - `docs/jh/`는 `.gitignore` 대상이므로 이 문서 변경은 tracked diff에는 표시되지 않는다.
+
 ### 2026-07-05 - Terraform 영역 리소스 Ticket 4 범위 축소
 
 - Goal: 기존 draft 보존을 전제한 legacy migration 구현을 제거하고, 새 `DiagramJson` 계약 유지와 draft 초기화, Terraform Preview stale 표시 최소 방어로 Ticket 4 범위를 줄인다.
@@ -1720,3 +1803,95 @@
   - 실제 GitHub API 호출, GitHub Actions polling worker, GitHub token 사용은 수행하지 않았다.
   - 실제 AWS apply/destroy, cloud mutation, real Git/CI/CD handoff execution은 수행하지 않았다.
   - Runtime Cache는 보조 캐시이며 RDS `git_cicd_handoffs` record가 source of truth다.
+
+## 2026-07-05 - Terraform Preview/Sync 44개 리소스 및 AZ 영역 동기화 통합
+
+- Goal: shared 44개 Terraform resource/data definition을 Preview/Sync 대상으로 맞추고, Region/AZ area node는 실행 환경/배치 정보로만 다루며 Subnet/EBS AZ 동기화를 Preview/Sync/Web 적용까지 연결한다.
+- Completed:
+  - 44개 `resourceDefinitions`가 기본적으로 `terraformPreview`/`terraformSync` capability를 갖도록 정리했고, `aws_region`/`aws_availability_zone` shared definition은 추가하지 않았다.
+  - Preview graph에서 `aws_region`/`aws_availability_zone` area node를 HCL 대상으로 렌더링하지 않고, direct parent AZ의 `awsAvailabilityZone`을 `aws_subnet`/`aws_ebs_volume`의 `availabilityZone`으로 비파괴 상속하게 했다.
+  - Terraform nested block registry와 renderer/parser를 확장해 route, security group ingress/egress, instance root block device, AMI filter, ASG launch template/tag, S3 lifecycle rule, DB parameter group parameter, DynamoDB attribute, Lambda environment, API Gateway endpoint configuration을 block syntax로 처리한다.
+  - Sync parser/diagnostics에서 `provider "aws"` block을 실행 환경 설정으로 취급해 provider-only 입력은 no-op, provider+resource/data 입력은 provider를 무시하고 resource/data만 sync하게 했다.
+  - Sync proposal 생성 시 Subnet/EBS `availability_zone` 값에 맞는 기존 AZ area를 찾고, 없으면 `aws_availability_zone` `create_candidate`를 child proposal보다 먼저 만들며 child proposal metadata에 `parentAreaNodeId`를 연결했다.
+  - Web proposal apply가 API-provided `nodeId`, `metadata`, `position`, `parameters`를 보존하고, position 없는 child proposal은 현재 diagram 또는 같은 batch에서 생성된 parent area 내부에 배치하게 했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits and after implementation checks
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/infrastructure-graph.test.ts src/services/terraform/terraform-preview.test.ts src/services/terraform/terraform-to-diagram.test.ts src/services/terraform/terraform-diagnostics.test.ts src/routes/terraform.test.ts` - passed, 108 tests
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/diagram-to-terraform.test.ts` - passed, 3 tests
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/terraform-sync-proposals.test.ts` - passed, 11 tests
+  - `pnpm lint` - passed
+  - `pnpm typecheck` - passed
+  - `pnpm build` - passed
+  - `git diff --check` - passed
+- Known risks:
+  - 실제 Terraform CLI, AWS SDK, plan/apply/destroy, cloud mutation은 실행하지 않았다.
+  - 브라우저 캔버스에서 proposal 적용 후 시각적 위치를 수동/스크린샷으로 확인하지는 않았고, Web helper unit test로 부모 영역 내부 배치를 검증했다.
+  - full `pnpm test`는 실행하지 않았고, Terraform Preview/Sync 관련 targeted tests와 lint/typecheck/build로 검증했다.
+
+## 2026-07-05 - Terraform Preview/Sync 정리 리팩터링
+
+- Goal: 44개 리소스/AZ 동기화 구현의 동작은 유지하면서 중복 선언, 과한 helper, 큰 테스트 fixture를 줄이고 기존 child + 신규 AZ proposal metadata 연결 빈틈을 보강한다.
+- Completed:
+  - shared resource definition에서 기본값과 중복되는 `terraformPreview: true`, `terraformSync: true` 선언을 제거했다.
+  - nested block registry를 camelCase canonical key로 정리하고, parser/renderer가 snake_case 입력을 normalize해 같은 registry를 쓰게 했다.
+  - existing Subnet/EBS node가 Terraform `availability_zone`으로 신규 AZ proposal을 만들 때도 child metadata가 신규 AZ `nodeId`를 가리키게 보강했다.
+  - Web proposal fallback placement를 부모 영역 안쪽 기본 offset 계산으로 단순화했다.
+  - Sync-only capability 중복 테스트를 제거하고, 큰 nested block fixture를 registry 검증과 list/object 대표 렌더링 테스트로 나눴다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits and after implementation checks
+  - Red before fix: `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-to-diagram.test.ts` failed for existing child + new AZ proposal metadata
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-to-diagram.test.ts` - passed, 35 tests
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-preview.test.ts` - passed, 16 tests
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/terraform-sync-proposals.test.ts` - passed, 11 tests
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/infrastructure-graph.test.ts src/services/terraform/terraform-preview.test.ts src/services/terraform/terraform-to-diagram.test.ts src/services/terraform/terraform-diagnostics.test.ts src/routes/terraform.test.ts` - passed, 109 tests
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/diagram-to-terraform.test.ts` - passed, 3 tests
+  - `pnpm lint` - passed
+  - `pnpm typecheck` - passed
+  - `pnpm build` - passed
+  - `git diff --check` - passed
+- Known risks:
+  - 실제 Terraform CLI, AWS SDK, plan/apply/destroy, cloud mutation은 실행하지 않았다.
+  - full `pnpm test`는 실행하지 않았고, Terraform Preview/Sync 관련 targeted tests와 lint/typecheck/build로 검증했다.
+
+## 2026-07-05 - Terraform 저장 실패 후 Issues에서 Code 탭 복귀 가드 수정
+
+- Goal: 오류가 있는 Terraform 코드를 저장해 저장이 막힌 뒤 Issues 화면으로 이동한 상태에서도 Code 탭으로 돌아가 코드를 수정할 수 있게 한다.
+- Completed:
+  - Terraform editor 탭 버튼에 별도 navigation marker를 추가하고, document click leave guard가 해당 클릭을 저장 확인 대상으로 가로채지 않게 했다.
+  - `requestView("terraform")`와 collapsed panel의 Terraform 진입 경로는 저장/나가기 확인 없이 편집 화면으로 복귀하게 했다.
+  - 저장 실패 후 Issues -> Code 복귀 경로가 leave dialog보다 먼저 처리되는지 확인하는 회귀 테스트를 추가했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits
+  - Red before fix: `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-right-panel-layout.test.ts --test-name-pattern "terraform code navigation stays reachable"` failed for missing Code tab bypass
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-right-panel-layout.test.ts --test-name-pattern "terraform code navigation stays reachable"` - passed, 43 tests
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-right-panel-layout.test.ts` - passed, 43 tests
+  - `pnpm harness:check` - passed after edits
+  - `pnpm lint` - passed
+  - `pnpm typecheck` - passed
+  - `pnpm build` - passed
+  - `git diff --check` - passed
+- Known risks:
+  - 실제 브라우저에서 클릭 시나리오를 수동으로 재현하지는 않았고, 기존 source-level UI guard 테스트로 회귀를 고정했다.
+  - 실제 Terraform CLI, AWS SDK, plan/apply/destroy, cloud mutation은 실행하지 않았다.
+
+## 2026-07-05 - Region/AZ 영역 리소스 UI 라벨 겹침 수정
+
+- Goal: Region 설정 패널의 중복 Region 라벨과 AZ area node 헤더에서 긴 부연설명이 resourceName을 가리는 문제를 정리한다.
+- Completed:
+  - Region/AZ 전용 parameter panel에서 단일 selector의 중복 section title과 visible field label을 숨기고, control aria-label은 유지했다.
+  - AZ area node는 보드 헤더에 긴 `Asia Pacific ... / az-code` inline meta label을 렌더링하지 않게 했다.
+  - area node header text가 inline meta 아래로 흘러 들어가지 않도록 `overflow: hidden`과 `text-overflow: ellipsis`를 적용했다.
+  - Region/AZ panel label 중복, AZ meta 생략, area header overflow 방지를 회귀 테스트로 고정했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits
+  - Red before fix: `pnpm --filter @sketchcatch/web exec tsx --test features/parameter-input/parameter-panel-source.test.ts features/diagram-editor/area-nodes.test.ts features/diagram-editor/diagram-editor-layout.test.ts` failed for duplicate Region title, AZ inline meta, and visible header overflow
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/parameter-input/parameter-panel-source.test.ts features/diagram-editor/area-nodes.test.ts features/diagram-editor/diagram-editor-layout.test.ts` - passed, 19 tests
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/parameter-input/region-node-metadata.test.ts features/parameter-input/aws-region-options.test.ts features/parameter-input/aws-availability-zone-options.test.ts features/resource-settings/catalog.test.ts features/diagram-editor/area-nodes.test.ts features/diagram-editor/diagram-editor-layout.test.ts features/parameter-input/parameter-panel-source.test.ts` - passed, 45 tests
+  - `pnpm harness:check` - passed after edits
+  - `pnpm lint` - passed
+  - `pnpm typecheck` - passed
+  - `pnpm build` - passed
+  - `git diff --check` - passed
+- Known risks:
+  - 실제 브라우저에서 스크린샷 기반 수동 확인은 하지 않았고, source/helper/CSS 테스트로 회귀를 고정했다.
+  - 실제 Terraform CLI, AWS SDK, plan/apply/destroy, cloud mutation은 실행하지 않았다.
