@@ -1106,6 +1106,69 @@ type ArchitecturePatchPreview = {
 };
 ```
 
+Cost Estimate는 실제 청구 데이터를 읽지 않고, `ArchitectureJson`과 사용자가 입력한 추정 조건을 기준으로 계산한다. AWS Pricing API 연동은 `apps/api`의 서버 서비스 안에만 두며, UI 컴포넌트나 `apps/web`은 AWS SDK를 직접 호출하지 않는다. AWS Pricing API 조회가 꺼져 있거나 실패한 리소스는 `pricingSource: "fallback"`으로 표시하고, 계산 자체는 계속 성공해야 한다.
+
+```ts
+type CostEstimatePeriod = "day" | "week" | "month";
+
+type CostPricingSource = "aws_pricing_api" | "fallback";
+
+type CostEstimateRequest = {
+  architectureJson: ArchitectureJson;
+  period: CostEstimatePeriod;
+  expectedUserCount: number;
+  region: AwsRegionCode | string;
+};
+
+type ResourceCostEstimate = {
+  resourceId: string;
+  resourceType: ResourceType;
+  name: string;
+  monthlyEstimate: MoneyEstimate;
+  costDrivers: string[];
+  explanation: string;
+  pricingSource?: CostPricingSource;
+  usageAssumptions?: { label: string; value: string }[];
+  recommendation?: string;
+};
+
+type CostEstimateResult = {
+  totalEstimate: MoneyEstimate;
+  totalMonthlyEstimate: MoneyEstimate;
+  period: CostEstimatePeriod;
+  expectedUserCount: number;
+  region: AwsRegionCode | string;
+  pricingSource: CostPricingSource;
+  fallbackUsed: boolean;
+  assumptions: string[];
+  resources: ResourceCostEstimate[];
+  reviewMessages: string[];
+  pricingAssumption: string;
+};
+```
+
+`DesignSimulationResult.costEstimate`는 같은 비용 산정 결과를 담는다. 기존 `costPressure: string[]`는 유지하되, 이제 `costEstimate.reviewMessages`와 같은 금액 기반 문장을 포함해야 한다. 예를 들어 월 기준 결과는 `현재 상황에서의 총 예상 비용은 $47.30 / month입니다.`처럼 사용자가 바로 읽을 수 있는 문장으로 내려간다.
+
+홈 화면의 비용관리 페이지는 `GET /api/costs/projects?period=month&expectedUserCount=1000` 응답을 사용한다. 이 응답은 실행 중인 배포 프로젝트의 `deployment.architectureId -> architectures.architectureJson`을 기준으로 프로젝트별 `CostEstimateResult`를 계산하고, 전체 합계를 함께 반환한다.
+
+```ts
+type CostProjectEstimate = {
+  project: Project;
+  deployment?: Deployment;
+  deployedAt?: IsoDateTimeString;
+  costEstimate: CostEstimateResult | null;
+};
+
+type CostProjectEstimateListResponse = {
+  period: CostEstimatePeriod;
+  expectedUserCount: number;
+  region: AwsRegionCode | string;
+  totalEstimate: MoneyEstimate;
+  totalMonthlyEstimate: MoneyEstimate;
+  projects: CostProjectEstimate[];
+};
+```
+
 Voice Requirement Input은 Amazon Transcribe 작업 결과가 나온 뒤에도 곧바로 `RequirementPrompt`가 되지 않는다. 전사 결과는 `TranscribeConfirmation`으로 내려가고, 사용자가 확인/수정/확정한 뒤에만 `RequirementPrompt`가 생성된다.
 
 ```ts

@@ -13,6 +13,41 @@
 - Highest priority unfinished harness feature: `HARNESS-007`
 - Current blocker: none
 
+### 2026-07-05 - Cost Risk 분석 예상 비용 구현
+
+- Goal: 홈 화면 비용관리 페이지와 Workspace AI 시뮬레이션 화면에 실제 사용량이 아닌 예상 조건 기반 비용 산정을 연결한다.
+- Completed:
+  - `packages/types`에 `CostEstimateRequest`, `CostEstimateResult`, `ResourceCostEstimate` 확장, `CostProjectEstimateListResponse`, `DesignSimulationResult.costEstimate` 계약을 추가했다.
+  - `apps/api/src/services/cost-analysis.ts`에 `ArchitectureJson` 기반 예상 비용 산정 서비스를 추가했다. EC2/RDS/NAT/S3/Lambda/API Gateway/CloudFront 계열은 예상 사용자 수와 기간 조건을 사용하고, AWS Pricing API 조회 실패 시 fallback 단가를 사용한다.
+  - `apps/api/src/services/awsPricingRateProvider.ts`에 서버 전용 AWS Pricing API adapter를 추가했다. `AWS_PRICING_API_ENABLED=true`일 때만 실제 조회를 시도하고 test/default는 fallback으로 동작한다.
+  - `simulateDesign()`이 비용 분석 서비스를 호출해 기존 `costPressure`를 금액 기반 문장으로 보강하고 `costEstimate` 객체를 함께 반환하게 했다.
+  - Workspace AI 시뮬레이션 탭에 기간 선택, 예상 사용자 수 입력, 실행 버튼을 추가했다.
+  - 시뮬레이션 결과의 `비용·다음 검토` 카드가 `현재 상황에서의 총 예상 비용은 $47.30 / month입니다.` 같은 문장과 리소스별 비용 근거를 표시하게 했다.
+  - `GET /api/costs/projects`를 추가해 실행 중 배포 프로젝트의 architecture snapshot 기준 비용을 계산한다.
+  - `/costs` 페이지를 정적 `dashboard-data.ts` 비용에서 API 기반 비용관리 client 화면으로 전환하고, 기간/예상 사용자 수 적용 및 프로젝트별 상세 비용 토글을 추가했다.
+  - `docs/data-models.md`에 Cost Estimate DTO와 비용관리/시뮬레이션 계약을 기록했다.
+- Commits:
+  - `5212684 Feat: 비용 산정 타입 확장`
+  - `0e550f1 Feat: 시뮬레이션 비용 산정 연결`
+  - `7bf8cac Feat: 시뮬레이션 비용 조건 UI 연결`
+  - `b3350d7 Feat: 비용관리 API 기반 전환`
+- Verification run so far:
+  - `pnpm harness:check` - passed before edits.
+  - `pnpm --filter @sketchcatch/types typecheck` - passed.
+  - `pnpm --filter @sketchcatch/api typecheck` - passed.
+  - `pnpm --filter @sketchcatch/api lint` - passed.
+  - `pnpm --filter @sketchcatch/web typecheck` - passed.
+  - `pnpm --filter @sketchcatch/web lint` - passed.
+  - `pnpm --filter @sketchcatch/api test -- src/routes/aiDesignSimulation.test.ts` - package script executed the full API test set; 565 tests passed.
+  - `pnpm harness:check` - final check passed.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `pnpm build` - passed.
+  - `git diff --check` - passed.
+- Known risks:
+  - 실제 AWS Pricing API 조회는 credentials/환경변수 의존이 있어 로컬 검증에서는 fallback 경로로 확인했다.
+  - 실제 AWS apply/destroy, cloud mutation, Git/CI/CD handoff는 실행하지 않았다.
+
 ### 2026-07-05 - Deployment Safety Gate Plan block 제거
 
 - Goal: Deployment Safety Gate를 Plan 단계에서 Deployment record를 block하는 로직이 아니라, 최종 실행 전 점검 warning을 보존하는 로직으로 바꾼다.

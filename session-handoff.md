@@ -2,6 +2,46 @@
 
 이 파일은 최신 세션 하나를 다음 세션이 빠르게 이어받기 위한 압축본이다. 누적 이력은 `agent-progress.md`에 남긴다.
 
+## 2026-07-05 최신 핸드오프 - Cost Risk 분석 예상 비용 구현
+
+### 현재 상태
+
+- 현재 브랜치: `feat/ys/142-cost-risk-분석-구현`
+- 사용자 요청: 매 단계마다 구현하고 검증되면 커밋한다.
+- 구현은 4개 기능 커밋으로 나뉘어 있다.
+  - `5212684 Feat: 비용 산정 타입 확장`
+  - `0e550f1 Feat: 시뮬레이션 비용 산정 연결`
+  - `7bf8cac Feat: 시뮬레이션 비용 조건 UI 연결`
+  - `b3350d7 Feat: 비용관리 API 기반 전환`
+
+### 완료된 것
+
+- shared type에 `CostEstimateRequest`, `CostEstimateResult`, `CostProjectEstimateListResponse`, `DesignSimulationResult.costEstimate`를 추가했다.
+- API 서버에 `cost-analysis` 서비스와 AWS Pricing API adapter를 추가했다. 실제 조회는 `AWS_PRICING_API_ENABLED=true`일 때만 시도하고, 기본/테스트는 fallback 단가를 사용한다.
+- `simulateDesign()`이 비용 산정 서비스를 호출하고 기존 `costPressure`에 금액 기반 문장을 담는다.
+- Workspace AI 시뮬레이션 탭에 기간/예상 사용자 수 입력을 추가하고, 비용 카드에 총 예상 비용과 리소스별 근거를 표시한다.
+- `GET /api/costs/projects`와 `/costs` client 화면을 연결해 실행 중 배포 프로젝트의 예상 비용 합계와 상세를 보여준다.
+- `docs/data-models.md`, `agent-progress.md`, `session-handoff.md`를 갱신했다.
+
+### 검증된 것
+
+- `pnpm harness:check` - passed before edits.
+- `pnpm --filter @sketchcatch/types typecheck` - passed.
+- `pnpm --filter @sketchcatch/api typecheck` - passed.
+- `pnpm --filter @sketchcatch/api lint` - passed.
+- `pnpm --filter @sketchcatch/web typecheck` - passed.
+- `pnpm --filter @sketchcatch/web lint` - passed.
+- `pnpm --filter @sketchcatch/api test -- src/routes/aiDesignSimulation.test.ts` - package script executed the full API test set; 565 tests passed.
+- `pnpm harness:check` - final check passed.
+- `pnpm lint` - passed.
+- `pnpm typecheck` - passed.
+- `pnpm build` - passed.
+- `git diff --check` - passed.
+
+### 다음 행동
+
+- 사용자에게 커밋별 구현 내용과 화면 노출 방식을 보고한다.
+
 ## 2026-07-05 최신 핸드오프 - Terraform 영역 리소스 Ticket 3 리뷰 보강
 
 ### 현재 상태
