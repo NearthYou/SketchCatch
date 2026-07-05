@@ -13,6 +13,28 @@
 - Highest priority unfinished harness feature: `HARNESS-007`
 - Current blocker: none
 
+### 2026-07-05 - 누락 후보 영역 리소스 승격 롤백
+
+- Goal: S3 Bucket처럼 실제 child 리소스가 내부 배치되는 영역이 아닌 리소스를 visual area node로 승격한 변경을 되돌린다.
+- Completed:
+  - `aws_s3_bucket`, `aws_db_subnet_group`, `aws_api_gateway_rest_api`, `aws_api_gateway_resource`, `aws_cloudwatch_event_rule`을 resource area node 판정에서 제거했다.
+  - 위 5개 리소스의 catalog 기본 크기와 resize bounds를 일반 리소스 아이콘 기준으로 되돌렸다.
+  - mixed lasso 선택, border color 변경 가능 여부, Terraform Sync proposal 생성 크기 테스트를 일반 리소스 기준으로 되돌렸다.
+  - `docs/data-models.md`와 `docs/jh/002_현재지원AWS리소스설명서_JH.md`에서 Terraform resource 겸 visual area node 목록을 `aws_vpc`, `aws_subnet`, `aws_security_group`, `aws_autoscaling_group` 4개로 정리했다.
+- Verification run:
+  - Red before fix: `pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/area-nodes.test.ts features/resource-settings/catalog.test.ts features/diagram-editor/node-resize-bounds.test.ts features/diagram-editor/flow-mappers.test.ts features/diagram-editor/node-style.test.ts features/diagram-editor/selection-utils.test.ts features/workspace/terraform-sync-proposals.test.ts` failed while S3 was still treated as an area node and area-sized catalog resource.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/area-nodes.test.ts features/resource-settings/catalog.test.ts features/diagram-editor/node-resize-bounds.test.ts features/diagram-editor/flow-mappers.test.ts features/diagram-editor/node-style.test.ts features/diagram-editor/selection-utils.test.ts features/workspace/terraform-sync-proposals.test.ts` - passed.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/area-node-movement.test.ts features/diagram-editor/reference-drop-targets.test.ts features/diagram-editor/diagram-utils.test.ts` - passed.
+  - `pnpm harness:check` - passed.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `pnpm build` - passed.
+  - `git diff --check` - passed.
+- Known risks:
+  - 브라우저 screenshot 기반 수동 smoke는 수행하지 않았다.
+  - `next build`가 `apps/web/next-env.d.ts`를 일시 변경했으나 생성 파일 변경은 원래 dev route import로 복구했다.
+  - 실제 Terraform CLI, AWS SDK, plan/apply/destroy, cloud mutation은 실행하지 않았다.
+
 ### 2026-07-05 - Terraform Preview/Sync 리뷰 피드백 보정
 
 - Goal: Terraform Preview/Sync 리뷰에서 지적된 optional `parameters.values` 접근과 provider header 판정 오탐을 보정한다.
@@ -57,17 +79,19 @@
   - 실제 Terraform CLI, AWS SDK, plan/apply/destroy, cloud mutation은 실행하지 않았다.
   - `next build`가 `apps/web/next-env.d.ts`를 일시 변경했으나 생성 파일 변경은 원래 dev route import로 복구했다.
 
-### 2026-07-05 - 현재 지원 AWS 리소스 설명서 정리
+### 2026-07-05 - 현재 지원 AWS 리소스 설명서 분리 작성
 
 - Goal: 누군가 SketchCatch의 현재 지원 리소스가 무엇인지 물었을 때 답할 수 있도록 `docs/jh` 안의 AWS 리소스 문서를 갱신한다.
 - Completed:
-  - `docs/jh/000_AWS리소스목록_JH.md` 맨 앞을 현재 지원 리소스 설명서로 재구성했다.
-  - 현재 Terraform IaC 지원 44개 리소스와 보드 전용 영역 리소스 3개를 분리해 설명했다.
+  - `docs/jh/000_AWS리소스목록_JH.md`에 추가했던 현재 지원 리소스 설명 블록을 롤백해 기존 후보 조사 문서 구조로 복원했다.
+  - `docs/jh/002_현재지원AWS리소스설명서_JH.md`를 별도로 만들었다.
+  - 현재 Terraform IaC 지원 44개 리소스, 보드 전용 영역 리소스 3개, Terraform resource 겸 visual area node 4개를 분리해 설명했다.
   - 각 리소스가 뜻하는 AWS 개념, SketchCatch에서의 기능, 답변 포인트, Terraform Preview/Sync와 실제 live apply 범위 차이를 정리했다.
-  - Region/AZ는 Terraform block이 아니라 보드 영역 리소스이고, ASG는 실제 Terraform resource이면서 visual area node라는 예외를 명시했다.
+  - Region/AZ는 Terraform block이 아니라 보드 영역 리소스이고, visual area behavior와 Terraform resource identity의 차이를 명시했다.
 - Verification run:
   - `pnpm harness:check` - passed before edits.
   - `pnpm harness:check` - passed after edits.
+  - `git diff --check` - passed after edits.
 - Known risks:
   - 문서 전용 변경이라 `pnpm lint`, `pnpm typecheck`, `pnpm build`는 실행하지 않았다.
   - `docs/jh/`는 `.gitignore` 대상이므로 이 문서 변경은 tracked diff에는 표시되지 않는다.

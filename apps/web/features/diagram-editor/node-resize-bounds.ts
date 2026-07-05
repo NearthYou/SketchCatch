@@ -79,31 +79,6 @@ const resourceAreaResizeBoundsByType: Record<string, NodeResizeBounds> = {
     ...areaNodeMaxResizeBounds,
     minHeight: 130,
     minWidth: 200
-  },
-  aws_s3_bucket: {
-    ...areaNodeMaxResizeBounds,
-    minHeight: 130,
-    minWidth: 200
-  },
-  aws_api_gateway_resource: {
-    ...areaNodeMaxResizeBounds,
-    minHeight: 130,
-    minWidth: 200
-  },
-  aws_cloudwatch_event_rule: {
-    ...areaNodeMaxResizeBounds,
-    minHeight: 130,
-    minWidth: 200
-  },
-  aws_db_subnet_group: {
-    ...areaNodeMaxResizeBounds,
-    minHeight: 150,
-    minWidth: 220
-  },
-  aws_api_gateway_rest_api: {
-    ...areaNodeMaxResizeBounds,
-    minHeight: 160,
-    minWidth: 240
   }
 };
 

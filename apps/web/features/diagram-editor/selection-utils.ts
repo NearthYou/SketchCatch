@@ -14,7 +14,7 @@ export function getSingleSelectedEdgeForToolbar(
   return edges.find((edge) => edge.id === selectedEdgeIds[0]) ?? null;
 }
 
-// 영역 노드는 일반 리소스 다중 선택에서 분리한다.
+// VPC/Subnet 같은 영역 노드는 일반 리소스 다중 선택에서 분리한다.
 export function normalizeSelectedNodeIds(
   nodes: readonly DiagramNode[],
   selectedNodeIds: readonly string[]

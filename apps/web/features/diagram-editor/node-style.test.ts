@@ -12,20 +12,19 @@ import {
 test("getNodeDisplayBorderColor keeps area border colors independent from resource borders", () => {
   assert.equal(getNodeDisplayBorderColor(makeResourceNode("aws_vpc")), AREA_NODE_DEFAULT_BORDER_COLOR);
   assert.equal(getNodeDisplayBorderColor(makeResourceNode("aws_vpc", "#2f8c55")), "#2f8c55");
-  assert.equal(getNodeDisplayBorderColor(makeResourceNode("aws_s3_bucket", "#2f8c55")), "#2f8c55");
   assert.equal(getNodeDisplayBorderColor(makeResourceNode("aws_instance", "#c9473d")), RESOURCE_NODE_BORDER_COLOR);
 });
 
 test("canChangeNodeBorderColor allows border color changes only for area nodes", () => {
   assert.equal(canChangeNodeBorderColor(makeResourceNode("aws_vpc")), true);
   assert.equal(canChangeNodeBorderColor(makeResourceNode("aws_security_group")), true);
-  assert.equal(canChangeNodeBorderColor(makeResourceNode("aws_s3_bucket")), true);
-  assert.equal(canChangeNodeBorderColor(makeResourceNode("aws_db_subnet_group")), true);
-  assert.equal(canChangeNodeBorderColor(makeResourceNode("aws_api_gateway_rest_api")), true);
-  assert.equal(canChangeNodeBorderColor(makeResourceNode("aws_api_gateway_resource")), true);
-  assert.equal(canChangeNodeBorderColor(makeResourceNode("aws_cloudwatch_event_rule")), true);
   assert.equal(canChangeNodeBorderColor(makeDesignNode("design_region")), true);
   assert.equal(canChangeNodeBorderColor(makeResourceNode("aws_instance")), false);
+  assert.equal(canChangeNodeBorderColor(makeResourceNode("aws_s3_bucket")), false);
+  assert.equal(canChangeNodeBorderColor(makeResourceNode("aws_db_subnet_group")), false);
+  assert.equal(canChangeNodeBorderColor(makeResourceNode("aws_api_gateway_rest_api")), false);
+  assert.equal(canChangeNodeBorderColor(makeResourceNode("aws_api_gateway_resource")), false);
+  assert.equal(canChangeNodeBorderColor(makeResourceNode("aws_cloudwatch_event_rule")), false);
 });
 
 function makeResourceNode(resourceType: string, borderColor?: string): DiagramNode {

@@ -17,12 +17,7 @@ const designAreaNodeTypes = new Set([
 const resourceAreaNodeTypes = new Set([
   "aws_availability_zone",
   "aws_region",
-  "aws_api_gateway_resource",
-  "aws_api_gateway_rest_api",
   "aws_autoscaling_group",
-  "aws_cloudwatch_event_rule",
-  "aws_db_subnet_group",
-  "aws_s3_bucket",
   "aws_vpc",
   "aws_subnet",
   "aws_security_group"
