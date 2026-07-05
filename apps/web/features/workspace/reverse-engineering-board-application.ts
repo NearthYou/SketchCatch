@@ -28,6 +28,10 @@ const REVERSE_ENGINEERING_PROTECTED_VALUE_KEYS = [
   "terraformResourceType"
 ] as const;
 const REVERSE_ENGINEERING_EDITABLE_VALUE_KEYS = ["displayName", "description"] as const;
+const UNKNOWN_RESOURCE_STYLE = {
+  borderColor: "#94a3b8",
+  textColor: "#64748b"
+} as const;
 
 export type ReverseEngineeringBoardApplication = {
   readonly comparison: ReverseEngineeringBoardComparison;
@@ -90,8 +94,13 @@ function markReverseEngineeringDiagram(diagram: DiagramJson): DiagramJson {
 
 // providerResourceId 같은 원본 식별자는 수정 대상이 아니라 추적용 metadata로 표시합니다.
 function markReverseEngineeringNode(node: DiagramNode): DiagramNode {
+  const nextStyle = isUnsupportedUnknownNode(node)
+    ? { ...node.style, ...UNKNOWN_RESOURCE_STYLE }
+    : node.style;
+
   return {
     ...node,
+    ...(nextStyle ? { style: nextStyle } : {}),
     metadata: {
       ...node.metadata,
       reverseEngineering: {
@@ -101,6 +110,11 @@ function markReverseEngineeringNode(node: DiagramNode): DiagramNode {
       }
     }
   };
+}
+
+function isUnsupportedUnknownNode(node: DiagramNode): boolean {
+  const values = node.parameters?.values;
+  return node.type === "UNKNOWN" || values?.["analysisExcluded"] === true;
 }
 
 function compareDiagrams(

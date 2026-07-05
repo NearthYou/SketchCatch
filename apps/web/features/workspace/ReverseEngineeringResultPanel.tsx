@@ -1,4 +1,5 @@
 import type {
+  DiscoveredResource,
   ReverseEngineeringScanLogLine,
   ReverseEngineeringScanResponse
 } from "@sketchcatch/types";
@@ -38,6 +39,9 @@ export function ReverseEngineeringResultPanel({
   }
 
   const isApplying = applyState === "saving";
+  const unsupportedResources = result.discoveredResources.filter(
+    (resource) => resource.resourceType === "UNKNOWN"
+  );
 
   return (
     <>
@@ -144,6 +148,8 @@ export function ReverseEngineeringResultPanel({
         scanErrors={result.scanErrors}
       />
 
+      <UnsupportedResourceList resources={unsupportedResources} />
+
       <ReverseEngineeringImportSuggestionsPanel importSuggestions={result.importSuggestions} />
 
       <section className={styles.deploymentSection}>
@@ -162,5 +168,32 @@ export function ReverseEngineeringResultPanel({
         )}
       </section>
     </>
+  );
+}
+
+function UnsupportedResourceList({ resources }: { readonly resources: DiscoveredResource[] }) {
+  if (resources.length === 0) {
+    return null;
+  }
+
+  return (
+    <section className={styles.deploymentSection}>
+      <h3>미지원 Resource</h3>
+      <p className={styles.deploymentHint}>
+        AWS에서 발견했지만 아직 SketchCatch 정식 ResourceType으로 매핑하지 못한 항목입니다.
+      </p>
+      <ul className={styles.reverseResultList}>
+        {resources.map((resource) => (
+          <li key={resource.id} className={styles.reverseResultItem}>
+            <strong>{resource.displayName}</strong>
+            <span>{resource.providerResourceType}</span>
+            <span>
+              {resource.providerResourceId} · {resource.region}
+            </span>
+            <span>Terraform 생성, 배포, 확정 비용/보안 판단에서는 제외됩니다.</span>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }

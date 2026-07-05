@@ -137,7 +137,35 @@ test("createReverseEngineeringBoardApplication appends only providerResourceId-s
   assert.deepEqual(application.diagram.viewport, currentDiagram.viewport);
 });
 
-function createScanResult(): ReverseEngineeringScanResult {
+test("createReverseEngineeringBoardApplication dims unsupported unknown resources", () => {
+  const application = createReverseEngineeringBoardApplication({
+    currentDiagram: createDiagram(),
+    mode: "replace",
+    result: createScanResult({
+      nodes: [
+        {
+          id: "resource-unknown-alb",
+          type: "UNKNOWN",
+          label: "Unknown ALB",
+          positionX: 120,
+          positionY: 100,
+          config: {
+            analysisExcluded: true,
+            providerResourceId: "arn:aws:elasticloadbalancing:ap-northeast-2:1234:loadbalancer/app/demo",
+            providerResourceType: "AWS::ElasticLoadBalancingV2::LoadBalancer"
+          }
+        }
+      ]
+    })
+  });
+
+  assert.equal(application.diagram.nodes[0]?.style?.borderColor, "#94a3b8");
+  assert.equal(application.diagram.nodes[0]?.style?.textColor, "#64748b");
+});
+
+function createScanResult(
+  input: Partial<ReverseEngineeringScanResult["architectureJson"]> = {}
+): ReverseEngineeringScanResult {
   return {
     scan: {
       id: "scan-1",
@@ -157,7 +185,7 @@ function createScanResult(): ReverseEngineeringScanResult {
     },
     discoveredResources: [],
     architectureJson: {
-      nodes: [
+      nodes: input.nodes ?? [
         {
           id: "resource-vpc-1234",
           type: "VPC",
@@ -185,7 +213,7 @@ function createScanResult(): ReverseEngineeringScanResult {
           }
         }
       ],
-      edges: [
+      edges: input.edges ?? [
         {
           id: "edge-vpc-subnet",
           sourceId: "resource-vpc-1234",
