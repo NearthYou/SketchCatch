@@ -1,6 +1,5 @@
 import type {
   CheckFinding,
-  DeploymentBlockedBy,
   DeploymentPlanSummary,
   DeploymentPlanWarning,
   DeploymentSafetyGateResult
@@ -37,45 +36,19 @@ export function evaluateDeploymentSafetyGate(
 
   const summary: DeploymentPlanSummary = {
     ...input.planSummary,
-    blocked: true,
+    blocked: false,
     warnings
   };
-
-  const blockingWarnings = warnings.filter((warning) => warning.blocksApproval);
 
   return {
     summary,
     block: {
-      isBlocked: true,
-      blockedBy: resolveBlockedBy(blockingWarnings),
-      blockedReason: createBlockedReason(input.operation, blockingWarnings)
+      isBlocked: false,
+      blockedBy: null,
+      blockedReason: null
     },
     requiredAcknowledgementWarningIds: warnings
       .filter((warning) => warning.requiresAcknowledgement && !warning.blocksApproval)
       .map((warning) => warning.id)
   };
-}
-
-function resolveBlockedBy(blockingWarnings: readonly DeploymentPlanWarning[]): DeploymentBlockedBy {
-  if (blockingWarnings.some((warning) => warning.source === "cost_risk")) {
-    return "cost_analysis";
-  }
-
-  if (blockingWarnings.length > 0) {
-    return "risk_analysis";
-  }
-
-  return "missing_approval";
-}
-
-function createBlockedReason(
-  operation: DeploymentSafetyGateOperation,
-  blockingWarnings: readonly DeploymentPlanWarning[]
-): string {
-  if (blockingWarnings.length === 0) {
-    return `Terraform ${operation} plan requires user approval before ${operation}`;
-  }
-
-  const blockingCodes = [...new Set(blockingWarnings.map((warning) => warning.code))].join(", ");
-  return `Deployment Safety Gate blocked ${operation} because of ${blockingCodes}`;
 }

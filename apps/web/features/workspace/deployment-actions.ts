@@ -58,9 +58,7 @@ export function getDeploymentActionState(
     deployment &&
       hasCurrentPlan &&
       !isPlanApproved &&
-      deployment.status !== "RUNNING" &&
-      deployment.isBlocked === true &&
-      deployment.blockedBy === "missing_approval"
+      deployment.status !== "RUNNING"
   );
   const canShowDestroyPlanAction = Boolean(
     deployment &&

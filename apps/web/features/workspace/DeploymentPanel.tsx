@@ -1804,15 +1804,7 @@ function formatApprovalState(deployment: Deployment): string {
     return "Plan 필요";
   }
 
-  if (deployment.isBlocked && deployment.blockedBy === "missing_approval") {
-    return "승인 가능";
-  }
-
-  if (deployment.isBlocked) {
-    return "승인 불가";
-  }
-
-  return "승인 필요 없음";
+  return "승인 가능";
 }
 
 function getDeploymentActionHint(deployment: Deployment): string {
@@ -1830,11 +1822,7 @@ function getDeploymentActionHint(deployment: Deployment): string {
     return "승인된 Destroy Plan이 준비되었습니다. 실제 삭제 전 AWS 계정과 삭제 변경 내용을 다시 확인하세요.";
   }
 
-  if (
-    deployment.currentPlanOperation === "destroy" &&
-    deployment.isBlocked &&
-    deployment.blockedBy === "missing_approval"
-  ) {
+  if (deployment.currentPlanOperation === "destroy" && deployment.currentPlanArtifactId) {
     return "Destroy Plan 내용을 확인한 뒤 승인할 수 있습니다. 승인 전에는 AWS 리소스를 삭제하지 않습니다.";
   }
 
@@ -1858,12 +1846,8 @@ function getDeploymentActionHint(deployment: Deployment): string {
     return "Terraform Plan을 먼저 실행하면 승인 버튼이 표시됩니다.";
   }
 
-  if (deployment.isBlocked && deployment.blockedBy === "missing_approval") {
+  if (deployment.currentPlanArtifactId) {
     return "Plan 내용을 확인한 뒤 승인할 수 있습니다.";
-  }
-
-  if (deployment.isBlocked) {
-    return "현재 Plan은 승인 전에 차단 사유를 해결해야 합니다.";
   }
 
   return "";

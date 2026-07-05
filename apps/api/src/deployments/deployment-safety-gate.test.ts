@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import type { CheckFinding, DeploymentPlanSummary, DeploymentPlanWarning } from "@sketchcatch/types";
 import { evaluateDeploymentSafetyGate } from "./deployment-safety-gate.js";
 
-test("evaluateDeploymentSafetyGate blocks high risk findings and destructive apply plans", () => {
+test("evaluateDeploymentSafetyGate records high risk findings without blocking plan state", () => {
   const result = evaluateDeploymentSafetyGate({
     operation: "apply",
     planSummary: createPlanSummary({
@@ -26,7 +26,12 @@ test("evaluateDeploymentSafetyGate blocks high risk findings and destructive app
     ]
   });
 
-  assert.equal(result.block.blockedBy, "risk_analysis");
+  assert.deepEqual(result.block, {
+    isBlocked: false,
+    blockedBy: null,
+    blockedReason: null
+  });
+  assert.equal(result.summary.blocked, false);
   assert.equal(result.requiredAcknowledgementWarningIds.length, 0);
   assert.deepEqual(
     result.summary.warnings.map((warning) => warning.id),
@@ -64,7 +69,12 @@ test("evaluateDeploymentSafetyGate leaves medium and low warnings approvable aft
     ]
   });
 
-  assert.equal(result.block.blockedBy, "missing_approval");
+  assert.deepEqual(result.block, {
+    isBlocked: false,
+    blockedBy: null,
+    blockedReason: null
+  });
+  assert.equal(result.summary.blocked, false);
   assert.deepEqual(result.requiredAcknowledgementWarningIds, [
     "pre_deployment_check:configuration-review-subnet-1",
     "pre_deployment_check:security-review-s3-1"
@@ -83,7 +93,7 @@ test("evaluateDeploymentSafetyGate creates stable ids for unsupported resource w
   const first = evaluateDeploymentSafetyGate(input);
   const second = evaluateDeploymentSafetyGate(input);
 
-  assert.equal(first.block.blockedBy, "risk_analysis");
+  assert.equal(first.block.isBlocked, false);
   assert.equal(
     first.summary.warnings[0]?.id,
     "terraform_plan:UNSUPPORTED_RESOURCE:destroy:aws_lambda_function"
@@ -91,7 +101,7 @@ test("evaluateDeploymentSafetyGate creates stable ids for unsupported resource w
   assert.deepEqual(first.summary.warnings, second.summary.warnings);
 });
 
-test("evaluateDeploymentSafetyGate reserves cost risk blocking as cost_analysis", () => {
+test("evaluateDeploymentSafetyGate keeps cost risk warnings without blocking plan state", () => {
   const result = evaluateDeploymentSafetyGate({
     operation: "apply",
     planSummary: createPlanSummary(),
@@ -108,11 +118,8 @@ test("evaluateDeploymentSafetyGate reserves cost risk blocking as cost_analysis"
     ]
   });
 
-  assert.equal(result.block.blockedBy, "cost_analysis");
-  assert.equal(
-    result.block.blockedReason,
-    "Deployment Safety Gate blocked apply because of UNSUPPORTED_RESOURCE"
-  );
+  assert.equal(result.block.isBlocked, false);
+  assert.equal(result.summary.blocked, false);
   assert.deepEqual(result.requiredAcknowledgementWarningIds, []);
 });
 
@@ -142,7 +149,7 @@ test("evaluateDeploymentSafetyGate deduplicates warnings by stable id", () => {
     ]
   });
 
-  assert.equal(result.block.blockedBy, "missing_approval");
+  assert.equal(result.block.isBlocked, false);
   assert.deepEqual(
     result.summary.warnings.map((warning) => warning.id),
     ["pre_deployment_check:configuration-review-subnet-1"]

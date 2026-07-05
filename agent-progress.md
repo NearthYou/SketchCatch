@@ -13,6 +13,36 @@
 - Highest priority unfinished harness feature: `HARNESS-007`
 - Current blocker: none
 
+### 2026-07-05 - Deployment Safety Gate Plan block 제거
+
+- Goal: Deployment Safety Gate를 Plan 단계에서 Deployment record를 block하는 로직이 아니라, 최종 실행 전 점검 warning을 보존하는 로직으로 바꾼다.
+- Completed:
+  - `evaluateDeploymentSafetyGate`가 Plan summary에 warning을 붙이되 `summary.blocked`, `deployment.isBlocked`, `blockedBy`, `blockedReason`을 세우지 않게 했다.
+  - Apply Plan과 Destroy Plan 저장 시 항상 `isBlocked: false`, `blockedBy: null`, `blockedReason: null`로 저장하게 했다.
+  - Plan 재사용 조건에서 예전 `isBlocked` 의존을 제거하고, 미승인 current plan이면 재사용할 수 있게 했다.
+  - Plan 승인 로직에서 `missing_approval` block 상태 요구와 high-risk warning 승인 거절을 제거했다.
+  - Apply/Destroy 실행 직전 precondition에 추가했던 `blocksApproval` warning 차단 로직은 사용자 요청에 따라 제거했다.
+  - Deployment UI의 승인 버튼/문구를 current plan 기준으로 표시하도록 정리했다.
+  - `docs/data-models.md`, `docs/deployment.md`에 Plan은 warning만 보존하고 Plan record 자체를 block하지 않는다는 계약을 반영했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/deployments/deployment-safety-gate.test.ts src/deployments/deployment-plan-service.test.ts src/deployments/deployment-approval-service.test.ts src/deployments/deployment-destroy-plan-service.test.ts src/deployments/deployment-apply-service.test.ts src/deployments/deployment-destroy-service.test.ts` - passed.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/deployments/deployment-safety-gate.test.ts src/deployments/deployment-approval-service.test.ts src/deployments/deployment-plan-service.test.ts src/deployments/deployment-destroy-plan-service.test.ts src/deployments/deployment-apply-service.test.ts src/deployments/deployment-destroy-service.test.ts` - passed after removing the Apply/Destroy `blocksApproval` precondition block.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/deployment-actions.test.ts` - passed.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/routes/deployments.test.ts` - passed.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/deployments/deployment-service.test.ts` - passed.
+  - `pnpm --filter @sketchcatch/api typecheck`, `pnpm --filter @sketchcatch/web typecheck` - passed.
+  - `pnpm --filter @sketchcatch/api lint`, `pnpm --filter @sketchcatch/web lint` - passed.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/deployment-actions.test.ts features/workspace/workspace-right-panel-layout.test.ts` - passed.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `pnpm build` - passed.
+  - `pnpm harness:check` - passed after edits and after the Apply/Destroy precondition cleanup.
+  - `git diff --check` - passed with line-ending warnings only.
+- Known risks:
+  - 실제 Terraform apply/destroy, cloud mutation, Git/CI/CD handoff는 수행하지 않았다.
+  - 브라우저 수동 smoke는 수행하지 않았고, API/Web 단위/route/source tests와 full lint/typecheck/build로 검증했다.
+
 ### 2026-07-05 - Workspace F5 초기 401 보정
 
 - Goal: `/mypage` 프로젝트 카드에서 `/workspace?projectId=...`로 들어간 직후 F5를 누를 때 auth 복구 전 workspace API가 먼저 호출되어 401 콘솔 오류가 뜨는 문제를 막는다.

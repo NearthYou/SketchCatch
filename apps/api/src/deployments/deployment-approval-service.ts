@@ -305,10 +305,6 @@ function assertDeploymentCanBeApproved(
   if (!deployment.currentPlanArtifactId || !deployment.planSummary) {
     throw new DeploymentConflictError("Terraform Plan must be completed before approval");
   }
-
-  if (!deployment.isBlocked || deployment.blockedBy !== "missing_approval") {
-    throw new DeploymentConflictError("Blocked deployment cannot be approved");
-  }
 }
 
 function assertDeploymentWarningsCanBeApproved(
@@ -317,14 +313,6 @@ function assertDeploymentWarningsCanBeApproved(
   },
   acknowledgedWarningIds: readonly string[]
 ): void {
-  const blockingWarning = deployment.planSummary.warnings.find(
-    (warning) => warning.blocksApproval
-  );
-
-  if (blockingWarning) {
-    throw new DeploymentConflictError("High risk deployment warnings cannot be approved");
-  }
-
   const acknowledged = new Set(acknowledgedWarningIds);
   const missingAcknowledgements = deployment.planSummary.warnings
     .filter((warning) => warning.requiresAcknowledgement)

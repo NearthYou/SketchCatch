@@ -333,7 +333,6 @@ export async function runDeploymentDestroyPlan(
           : []
     });
     const planSummary = safetyGate.summary;
-    const block = safetyGate.block;
     const planArtifactId = generatePlanArtifactId();
     let uploadedPlanArtifact: Awaited<
       ReturnType<DeploymentPlanArtifactStorage["uploadDeploymentPlanArtifact"]>
@@ -380,9 +379,9 @@ export async function runDeploymentDestroyPlan(
               region: awsCredentials.region
             },
             planSummary,
-            isBlocked: block.isBlocked,
-            blockedBy: block.blockedBy,
-            blockedReason: block.blockedReason,
+            isBlocked: false,
+            blockedBy: null,
+            blockedReason: null,
             terminalStatus: sourceStatus === "FAILED" ? "FAILED" : "SUCCESS",
             failureStage: sourceStatus === "FAILED" ? sourceFailureStage : null,
             errorSummary: sourceStatus === "FAILED" ? sourceErrorSummary : null

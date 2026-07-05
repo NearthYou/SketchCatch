@@ -746,10 +746,10 @@ type DeploymentPlanSummary = {
 
 Plan summary는 사용자 승인 화면에 필요한 최소 요약이다. 현재 기본 흐름에서는 `terraform plan -out=tfplan` 이후 `terraform show -json tfplan` 결과의 `resource_changes`를 파싱해 생성한다.
 
-사용자가 승인한 plan과 apply 대상 plan은 같은 artifact/hash 기준이어야 한다.
+Plan 단계의 Safety Gate는 최종 실행 전 점검 결과를 `warnings`에 보존한다. Plan 저장 자체는 `deployments.isBlocked`를 세우지 않으며, 사용자가 승인한 plan과 apply 대상 plan은 같은 artifact/hash 기준이어야 한다.
 
 MVP Direct Deployment Path live apply는 안전 범위를 위해 아래 Terraform resource type만 허용한다.
-이외 resource type이 변경 대상에 포함되면 Plan은 `risk_analysis`로 block된다.
+이외 resource type이 변경 대상에 포함되면 warning의 `blocksApproval`을 `true` metadata로 남겨 승인 화면과 수정 안내에서 high-risk로 표시한다.
 
 - `aws_vpc`
 - `aws_subnet`

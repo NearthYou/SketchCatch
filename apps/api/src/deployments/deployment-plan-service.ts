@@ -327,7 +327,6 @@ export async function runDeploymentPlan(
       unsupportedResourceTypes
     });
     const planSummary = safetyGate.summary;
-    const block = safetyGate.block;
     const planArtifactId = generatePlanArtifactId();
     let uploadedPlanArtifact: Awaited<
       ReturnType<DeploymentPlanArtifactStorage["uploadDeploymentPlanArtifact"]>
@@ -374,9 +373,9 @@ export async function runDeploymentPlan(
               region: awsCredentials.region
             },
             planSummary,
-            isBlocked: block.isBlocked,
-            blockedBy: block.blockedBy,
-            blockedReason: block.blockedReason
+            isBlocked: false,
+            blockedBy: null,
+            blockedReason: null
           })
       });
       const updatedDeployment = planSave.result;
@@ -441,7 +440,7 @@ async function canReuseDeploymentPlanArtifact(input: {
   if (
     !input.deployment.currentPlanArtifactId ||
     !input.deployment.planSummary ||
-    !input.deployment.isBlocked
+    input.deployment.approvedAt
   ) {
     return false;
   }
