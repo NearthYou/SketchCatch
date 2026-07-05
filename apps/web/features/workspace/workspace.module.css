@@ -3178,6 +3178,25 @@
   overflow-wrap: anywhere;
 }
 
+.deploymentPreflightAiList {
+  display: grid;
+  gap: 4px;
+}
+
+.deploymentPreflightAiList ul {
+  display: grid;
+  gap: 4px;
+  list-style: disc;
+  margin: 0;
+  padding-left: 16px;
+}
+
+.deploymentPreflightAiList li {
+  color: #475569;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
 .deploymentFindingAiExplanation {
   background: #f8fafc;
   border: 1px solid #dce3ee;
@@ -3253,37 +3272,11 @@
   padding: 0 8px;
 }
 
-.deploymentFindingAiButton {
-  align-items: center;
-  background: #ffffff;
-  border: 1px solid #d8ceff;
-  border-radius: 5px;
-  color: #6f4cf6;
-  cursor: pointer;
-  display: inline-flex;
-  font: inherit;
-  font-size: 11px;
-  font-weight: 850;
-  gap: 4px;
-  grid-column: 2;
-  justify-self: start;
-  min-height: 26px;
-  padding: 0 8px;
-}
-
 .deploymentFindingFixButton:hover,
 .deploymentFindingFixButton:focus-visible {
   background: #eff6ff;
   border-color: #93c5fd;
   color: #1d4ed8;
-  outline: none;
-}
-
-.deploymentFindingAiButton:hover,
-.deploymentFindingAiButton:focus-visible {
-  background: #f6f3ff;
-  border-color: #b9a9ff;
-  color: #5f3de8;
   outline: none;
 }
 

@@ -13,6 +13,31 @@
 - Highest priority unfinished harness feature: `HARNESS-007`
 - Current blocker: none
 
+### 2026-07-05 - Pre-Deployment Check 항목별 설명/수정 버튼 복구
+
+- Goal: Deployment 탭의 배포 전 검사 결과에서 파란색 전체 AI 설명 박스를 제거하고, 각 문제점별 설명과 Terraform 해당 라인으로 이동하는 수정 버튼을 복구한다.
+- Completed:
+  - `DeploymentPanel`의 Pre-Deployment Gate 하단 파란색 `llmExplanation` 요약 박스를 제거했다.
+  - 각 Check Finding 아래에 finding별 `aiSafetyExplanation`의 위험 요약, 위험 이유, 권장 수정, Terraform 힌트, 확인 방법을 inline으로 표시했다.
+  - 각 finding에 `수정` 버튼을 다시 추가하고, 기존 `TerraformCodePanel.openTerraformSourceLocation` 흐름으로 연결했다.
+  - finding의 `sourceLocation`을 우선 사용하고, 없으면 현재 Terraform 파일/다이어그램에서 리소스 블록과 위험 라인을 추정하는 helper를 추가했다.
+  - Terraform diagnostic finding 생성 시 원본 diagnostic line/resource address를 `sourceLocation`으로 보존하게 했다.
+  - source-based 회귀 테스트와 source-location helper 테스트를 추가해 파란색 전체 설명 제거, 항목별 설명 유지, 수정 버튼의 Terraform 라인 이동 연결을 확인한다.
+- Verification run:
+  - Red before fix: `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-right-panel-layout.test.ts` - failed because finding-level inline AI explanation was not rendered.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/pre-deployment-finding-source.test.ts features/workspace/pre-deployment-diagnostics.test.ts features/workspace/workspace-right-panel-layout.test.ts` - passed.
+  - `pnpm --filter @sketchcatch/web typecheck` - passed.
+  - `pnpm --filter @sketchcatch/web lint` - passed.
+  - `pnpm harness:check` - passed.
+  - `pnpm lint` - passed with Turbo cache rename warnings only.
+  - `pnpm typecheck` - passed with Turbo cache rename warnings only.
+  - `pnpm build` - passed.
+  - `git diff --check` - passed with line-ending warnings only.
+- Known risks:
+  - Browser screenshot smoke was not captured in this turn.
+  - `next build` temporarily changed `apps/web/next-env.d.ts`; the generated change was restored.
+  - 실제 Terraform apply/destroy, cloud mutation, Git/CI/CD handoff는 수행하지 않았다.
+
 ### 2026-07-04 - PR #151 리뷰 대응
 
 - Goal: PR #151에 남은 review thread를 반영해 프로젝트별 AI 채팅 기록 저장과 Terraform 참조 기반 area 부모 추론을 보정한다.
