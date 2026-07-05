@@ -11,6 +11,7 @@ import type {
   ReverseEngineeringScanError,
   ReverseEngineeringScanResult
 } from "@sketchcatch/types";
+import { createReverseEngineeringFindings } from "./aws-reverse-engineering-findings.js";
 
 export type AwsProviderScanInput = {
   provider: CloudProvider;
@@ -85,7 +86,7 @@ export function createAwsProviderAdapter(gateway: AwsProviderScanGateway): AwsPr
         scan: createEmptyScan(input),
         discoveredResources,
         architectureJson,
-        findings: [],
+        findings: createReverseEngineeringFindings(discoveredResources),
         analysisExclusions: createAnalysisExclusions(discoveredResources),
         importSuggestions: createImportSuggestions(discoveredResources),
         scanErrors: discoveryResult.scanErrors

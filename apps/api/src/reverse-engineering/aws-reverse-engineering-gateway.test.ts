@@ -3,7 +3,8 @@ import { test } from "node:test";
 import {
   extractSetItems,
   parseInternetGatewaysFromXml,
-  parseRouteTablesFromXml
+  parseRouteTablesFromXml,
+  parseSecurityGroupsFromXml
 } from "./aws-reverse-engineering-parsers.js";
 
 test("extractSetItems returns only direct AWS set items when child item tags are nested", () => {
@@ -102,4 +103,32 @@ test("parseRouteTablesFromXml maps VPC and gateway routes to discovered resource
     { type: "contains", targetProviderResourceId: "vpc-1234" },
     { type: "depends_on", targetProviderResourceId: "igw-1234" }
   ]);
+});
+
+test("parseSecurityGroupsFromXml keeps open ingress rules for risk findings", () => {
+  const xml = `
+    <DescribeSecurityGroupsResponse>
+      <securityGroupInfo>
+        <item>
+          <groupId>sg-open</groupId>
+          <groupName>open-ssh</groupName>
+          <vpcId>vpc-1234</vpcId>
+          <ipPermissions>
+            <item>
+              <fromPort>22</fromPort>
+              <ipRanges>
+                <item>
+                  <cidrIp>0.0.0.0/0</cidrIp>
+                </item>
+              </ipRanges>
+            </item>
+          </ipPermissions>
+        </item>
+      </securityGroupInfo>
+    </DescribeSecurityGroupsResponse>
+  `;
+
+  const [securityGroup] = parseSecurityGroupsFromXml(xml, "ap-northeast-2");
+
+  assert.deepEqual(securityGroup?.config["ingress"], [{ port: 22, cidr: "0.0.0.0/0" }]);
 });

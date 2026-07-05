@@ -127,6 +127,43 @@ test("AWS Provider Adapter keeps partial read errors without dropping successful
   assert.equal(result.scanErrors[0]?.reason, "permission_denied");
 });
 
+test("AWS Provider Adapter creates visible risk findings without blocking import suggestions", async () => {
+  const adapter = createAwsProviderAdapter({
+    async discoverResources() {
+      return [
+        createRecord({
+          providerResourceType: "AWS::EC2::SecurityGroup",
+          providerResourceId: "sg-open",
+          displayName: "Open SSH Security Group",
+          config: {
+            ingress: [{ port: 22, cidr: "0.0.0.0/0" }]
+          }
+        }),
+        createRecord({
+          providerResourceType: "AWS::RDS::DBInstance",
+          providerResourceId: "db-public",
+          displayName: "Public DB",
+          config: {
+            publiclyAccessible: true
+          }
+        })
+      ];
+    }
+  });
+
+  const result = await adapter.scan({
+    provider: "aws",
+    region: "ap-northeast-2",
+    resourceTypes: ["SECURITY_GROUP", "RDS"]
+  });
+
+  assert.deepEqual(
+    result.findings.map((finding) => finding.severity),
+    ["high", "high", "medium"]
+  );
+  assert.equal(result.importSuggestions.every((suggestion) => suggestion.handoffReady), true);
+});
+
 function createFakeGateway(): AwsProviderScanGateway {
   return {
     async discoverResources() {
@@ -180,6 +217,7 @@ function createRecord(input: {
   providerResourceType: string;
   providerResourceId: string;
   displayName: string;
+  config?: AwsDiscoveredResourceRecord["config"];
   relationships?: AwsDiscoveredResourceRecord["relationships"];
 }): AwsDiscoveredResourceRecord {
   return {
@@ -187,7 +225,7 @@ function createRecord(input: {
     providerResourceId: input.providerResourceId,
     displayName: input.displayName,
     region: "ap-northeast-2",
-    config: {},
+    config: input.config ?? {},
     relationships: input.relationships ?? []
   };
 }

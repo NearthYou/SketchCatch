@@ -3,6 +3,8 @@ import type {
   ReverseEngineeringScanResponse
 } from "@sketchcatch/types";
 import type { ReverseEngineeringBoardComparison } from "./reverse-engineering-board-application";
+import { ReverseEngineeringFindingsPanel } from "./ReverseEngineeringFindingsPanel";
+import { ReverseEngineeringImportSuggestionsPanel } from "./ReverseEngineeringImportSuggestionsPanel";
 import styles from "./workspace.module.css";
 
 export type ReverseEngineeringApplyState = "idle" | "saving" | "saved" | "error";
@@ -128,21 +130,13 @@ export function ReverseEngineeringResultPanel({
         )}
       </section>
 
-      <section className={styles.deploymentSection}>
-        <h3>Terraform import 제안</h3>
-        {result.importSuggestions.length === 0 ? (
-          <p className={styles.deploymentHint}>가져오기 제안이 없습니다.</p>
-        ) : (
-          <ul className={styles.reverseResultList}>
-            {result.importSuggestions.slice(0, 5).map((suggestion) => (
-              <li key={suggestion.id} className={styles.reverseResultItem}>
-                <strong>{suggestion.terraformAddress ?? suggestion.status}</strong>
-                <span>{suggestion.importCommand ?? suggestion.reason ?? "수동 확인 필요"}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      <ReverseEngineeringFindingsPanel
+        analysisExclusions={result.analysisExclusions}
+        findings={result.findings}
+        scanErrors={result.scanErrors}
+      />
+
+      <ReverseEngineeringImportSuggestionsPanel importSuggestions={result.importSuggestions} />
 
       <section className={styles.deploymentSection}>
         <h3>스캔 로그</h3>

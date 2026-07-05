@@ -1,5 +1,10 @@
 import type { AwsDiscoveredRelationship, AwsDiscoveredResourceRecord } from "./aws-provider-adapter.js";
 
+type SecurityGroupIngressRule = {
+  port: number;
+  cidr: string;
+};
+
 // AWS VPC XML을 내부 Resource 후보로 바꿉니다.
 export function parseVpcsFromXml(xml: string, region: string): AwsDiscoveredResourceRecord[] {
   return extractSetItems(xml, "vpcSet").map((item) => {
@@ -100,7 +105,8 @@ export function parseSecurityGroupsFromXml(
       displayName: extractTag(item, "groupName") ?? groupId,
       region,
       config: {
-        description: extractTag(item, "groupDescription")
+        description: extractTag(item, "groupDescription"),
+        ingress: extractSecurityGroupIngressRules(item)
       },
       relationships: vpcId ? [createRelationship("depends_on", vpcId)] : []
     };
@@ -148,10 +154,24 @@ export function parseRdsInstancesFromXml(
       region,
       config: {
         engine: extractTag(item, "Engine"),
-        dbInstanceClass: extractTag(item, "DBInstanceClass")
+        dbInstanceClass: extractTag(item, "DBInstanceClass"),
+        publiclyAccessible: extractTag(item, "PubliclyAccessible") === "true"
       },
       relationships: securityGroupIds.map((groupId) => createRelationship("attached_to", groupId))
     };
+  });
+}
+
+// Security Group ingress XML에서 포트와 CIDR만 추려 위험 분석 입력으로 씁니다.
+function extractSecurityGroupIngressRules(xml: string): SecurityGroupIngressRule[] {
+  return extractSetItems(xml, "ipPermissions").flatMap((permission) => {
+    const port = Number.parseInt(extractTag(permission, "fromPort") ?? "", 10);
+
+    if (!Number.isFinite(port)) {
+      return [];
+    }
+
+    return extractRepeatedTags(permission, "cidrIp").map((cidr) => ({ port, cidr }));
   });
 }
 
