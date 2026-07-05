@@ -1108,6 +1108,15 @@ type ArchitecturePatchPreview = {
 
 Cost Estimate는 실제 청구 데이터를 읽지 않고, `ArchitectureJson`과 사용자가 입력한 추정 조건을 기준으로 계산한다. AWS Pricing API 연동은 `apps/api`의 서버 서비스 안에만 두며, UI 컴포넌트나 `apps/web`은 AWS SDK를 직접 호출하지 않는다. AWS Pricing API 조회가 꺼져 있거나 실패한 리소스는 `pricingSource: "fallback"`으로 표시하고, 계산 자체는 계속 성공해야 한다.
 
+비용 산정은 `ResourceType`보다 `terraformResourceType`을 우선한다. 같은 보드 노드가 `ResourceType.RDS`처럼 넓은 분류를 갖더라도 `terraformResourceType: "aws_db_snapshot"`이면 실행 중인 DB instance가 아니라 snapshot storage 비용으로 계산해야 한다. billable 리소스는 먼저 AWS Pricing API 단가 조회를 시도하고, API가 비활성화되었거나 credentials/product filter 문제로 조회하지 못하면 fallback 단가를 사용한다. `supportLevel`은 화면에서 산정 상태를 설명하기 위한 필드다.
+
+- `aws_pricing_api`: 해당 리소스의 단가가 AWS Pricing API에서 조회되어 계산됨.
+- `fallback_estimate`: AWS Pricing API 조회가 실패했거나 꺼져 있어 내부 보수적 단가로 계산됨.
+- `no_direct_cost`: 리소스 자체의 직접 비용은 없고 연결된 하위 리소스가 비용을 만든다고 판단됨. 예: `aws_autoscaling_group`, public `aws_acm_certificate`, `aws_sns_topic_subscription`.
+- `not_estimated`: 현재 산정 로직이 직접 계산하지 못하는 리소스. 새 Terraform resource를 추가할 때 이 상태가 사용자에게 보이면 `apps/api/src/services/cost-analysis.ts`와 `awsPricingRateProvider.ts`를 함께 확장해야 한다.
+
+현재 산정 대상은 AWS MVP resource catalog의 주요 Terraform resource를 기준으로 한다. Networking은 NAT Gateway, VPC Endpoint, VPC Peering, EIP, Load Balancer를 계산한다. Compute는 EC2, Auto Scaling Group의 직접 비용 없음, EBS를 계산한다. Storage/Database는 S3, EFS, RDS instance/snapshot/cluster/cluster instance, DynamoDB, ElastiCache를 계산한다. Serverless/App, Messaging/Events, Edge/CDN, Observability, Containers, CI/CD, Governance/Config, WAF/Protection 계열은 AWS Pricing API 조회를 우선하고 fallback 단가를 둔다.
+
 ```ts
 type CostEstimatePeriod = "day" | "week" | "month";
 

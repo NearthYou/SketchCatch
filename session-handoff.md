@@ -2,6 +2,48 @@
 
 이 파일은 최신 세션 하나를 다음 세션이 빠르게 이어받기 위한 압축본이다. 누적 이력은 `agent-progress.md`에 남긴다.
 
+## 2026-07-06 최신 핸드오프 - Cost Risk 리소스 지원과 Pricing API 확장
+
+### 현재 상태
+
+- 현재 브랜치: `feat/ys/142-cost-risk-분석-구현`
+- 사용자 요청: 비용 산정에서 애매하거나 버그인 부분을 고치고, 미지원/fallback-only 리소스를 최대한 AWS Pricing API 조회로 연결한다.
+- 이번 세션 커밋:
+  - `01c5aed Feat: 비용 산정 지원 상태 계약 추가`
+  - `5cdac8d Fix: 비용 산정 Terraform 리소스 감지 보정`
+  - `e828988 Feat: 비용 산정 리소스와 Pricing API 확장`
+  - `1db8022 Feat: 비용 산정 상태 UI 표시`
+
+### 완료된 것
+
+- `ResourceCostEstimate`에 `terraformResourceType`, `supportLevel`, `supportReason`을 추가했다.
+- `cost-analysis`가 `ResourceType`보다 `config.terraformResourceType`을 우선해 NAT Gateway, ALB, DB snapshot 같은 리소스를 정확히 산정한다.
+- 사용자 지정 resource 목록을 Networking, Compute, Storage, Database, IAM/Security, Serverless/App, Messaging/Events, Edge/CDN, Observability, Containers, CI/CD, Governance/Config, WAF/Protection 범위로 확장했다.
+- billable 리소스는 AWS Pricing API rate provider를 먼저 호출하고, 실패하면 fallback 단가로 계산한다.
+- 직접 비용이 없는 `aws_autoscaling_group`, public `aws_acm_certificate`, `aws_sns_topic_subscription`은 `no_direct_cost`로 화면에 표시한다.
+- `/costs`와 Workspace AI 시뮬레이션 결과는 더 이상 월 예상 비용이 0인 리소스를 숨기지 않고 산정 상태 배지와 이유를 보여준다.
+
+### 검증된 것
+
+- `pnpm harness:check` - passed before edits.
+- `pnpm --filter @sketchcatch/types typecheck` - passed.
+- `pnpm --filter @sketchcatch/api exec tsx --test src/services/cost-analysis.test.ts src/services/awsPricingRateProvider.test.ts` - passed.
+- `pnpm --filter @sketchcatch/api typecheck` - passed.
+- `pnpm --filter @sketchcatch/api lint` - passed.
+- `pnpm --filter @sketchcatch/web typecheck` - passed.
+- `pnpm --filter @sketchcatch/web lint` - passed.
+- 실제 AWS Pricing API 샘플 조회는 `sketchcatch-dev` SSO token 만료로 실패했다. 재검증 전 `aws sso login --profile sketchcatch-dev`가 필요하다.
+- `pnpm harness:check` - passed after docs/progress updates.
+- `pnpm lint` - passed with Turbo cache rename warnings only.
+- `pnpm typecheck` - passed with Turbo cache rename warnings only.
+- `pnpm build` - passed.
+- `git diff --check` - passed with line-ending warnings only.
+
+### 다음 행동
+
+- 실제 AWS Pricing API 라이브 조회를 다시 확인하려면 `aws sso login --profile sketchcatch-dev` 후 `AWS_PRICING_API_ENABLED=true` 샘플 조회를 재실행한다.
+- 이번 세션에서 실제 AWS apply/destroy, cloud mutation, Git/CI/CD handoff는 실행하지 않았다.
+
 ## 2026-07-05 최신 핸드오프 - Cost Risk 분석 예상 비용 구현
 
 ### 현재 상태

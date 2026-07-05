@@ -13,6 +13,40 @@
 - Highest priority unfinished harness feature: `HARNESS-007`
 - Current blocker: none
 
+### 2026-07-06 - Cost Risk 리소스 지원과 Pricing API 확장
+
+- Goal: 사용자 지정 Terraform resource 목록의 비용 산정 누락, fallback-only 경로, 모호한 0달러 표시를 줄이고 최대한 AWS Pricing API 우선 조회로 연결한다.
+- Completed:
+  - `ResourceCostEstimate`에 `terraformResourceType`, `supportLevel`, `supportReason`을 추가해 화면과 API가 산정 상태를 설명할 수 있게 했다.
+  - `cost-analysis`가 `ResourceType`보다 `config.terraformResourceType`을 우선해 `aws_nat_gateway`, `aws_lb`, `aws_db_snapshot` 같은 리소스를 정확히 분기하게 했다.
+  - 사용자 목록의 Networking, Compute, Storage, Database, IAM/Security, Serverless/App, Messaging/Events, Edge/CDN, Observability, Containers, CI/CD, Governance/Config, WAF/Protection 리소스를 산정 대상으로 확장했다.
+  - 직접 비용이 없는 `aws_autoscaling_group`, public `aws_acm_certificate`, `aws_sns_topic_subscription`은 `no_direct_cost`로 명시한다.
+  - billable 리소스는 AWS Pricing API rate provider를 먼저 호출하고, 조회 실패/비활성화 시 fallback 단가로 계산하게 했다.
+  - `/costs`와 Workspace AI 시뮬레이션 비용 상세에서 0달러 리소스를 숨기지 않고 `AWS Pricing API`, `Fallback estimate`, `직접 비용 없음`, `산정 미지원` 배지를 표시하게 했다.
+- Commits:
+  - `01c5aed Feat: 비용 산정 지원 상태 계약 추가`
+  - `5cdac8d Fix: 비용 산정 Terraform 리소스 감지 보정`
+  - `e828988 Feat: 비용 산정 리소스와 Pricing API 확장`
+  - `1db8022 Feat: 비용 산정 상태 UI 표시`
+- Verification run so far:
+  - `pnpm harness:check` - passed before edits.
+  - `pnpm --filter @sketchcatch/types typecheck` - passed.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/cost-analysis.test.ts src/services/awsPricingRateProvider.test.ts` - passed.
+  - `pnpm --filter @sketchcatch/api typecheck` - passed.
+  - `pnpm --filter @sketchcatch/api lint` - passed.
+  - `pnpm --filter @sketchcatch/web typecheck` - passed.
+  - `pnpm --filter @sketchcatch/web lint` - passed.
+  - `AWS_PROFILE=sketchcatch-dev AWS_PRICING_API_ENABLED=true` 실제 AWS Pricing API 샘플 조회는 SSO token 만료로 실패했다. 오류는 `CredentialsProviderError: Token is expired. To refresh this SSO session run 'aws sso login' with the corresponding profile.`였다.
+  - `pnpm harness:check` - passed after docs/progress updates.
+  - `pnpm lint` - passed with Turbo cache rename warnings only.
+  - `pnpm typecheck` - passed with Turbo cache rename warnings only.
+  - `pnpm build` - passed.
+  - `git diff --check` - passed with line-ending warnings only.
+- Known risks:
+  - 실제 AWS Pricing API 라이브 조회는 `aws sso login --profile sketchcatch-dev` 이후 다시 확인해야 한다.
+  - `pnpm build`가 `apps/web/next-env.d.ts`를 일시적으로 변경했지만 원래 dev route import로 복구했다.
+  - 실제 AWS apply/destroy, cloud mutation, Git/CI/CD handoff는 실행하지 않았다.
+
 ### 2026-07-05 - Cost Risk 분석 예상 비용 구현
 
 - Goal: 홈 화면 비용관리 페이지와 Workspace AI 시뮬레이션 화면에 실제 사용량이 아닌 예상 조건 기반 비용 산정을 연결한다.
