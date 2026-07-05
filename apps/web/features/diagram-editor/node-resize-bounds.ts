@@ -74,6 +74,11 @@ const resourceAreaResizeBoundsByType: Record<string, NodeResizeBounds> = {
     ...areaNodeMaxResizeBounds,
     minHeight: 112,
     minWidth: 144
+  },
+  aws_autoscaling_group: {
+    ...areaNodeMaxResizeBounds,
+    minHeight: 130,
+    minWidth: 200
   }
 };
 

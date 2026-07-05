@@ -44,12 +44,14 @@ test("toFlowNodes keeps dimmed nodes interactive when another node is selected",
 test("toFlowNodes marks area nodes for click-through body hit testing", () => {
   const vpc = makeNode({ id: "vpc-1", resourceType: "aws_vpc" });
   const securityGroup = makeNode({ id: "security-group-1", resourceType: "aws_security_group" });
+  const autoscalingGroup = makeNode({ id: "asg-1", resourceType: "aws_autoscaling_group" });
   const instance = makeNode({ id: "instance-1", resourceType: "aws_instance" });
 
-  const flowNodes = toFlowNodes([vpc, securityGroup, instance], [], null, false, handlers);
+  const flowNodes = toFlowNodes([vpc, securityGroup, autoscalingGroup, instance], [], null, false, handlers);
 
   assert.equal(flowNodes.find((node) => node.id === "vpc-1")?.className, "diagramAreaFlowNode");
   assert.equal(flowNodes.find((node) => node.id === "security-group-1")?.className, "diagramAreaFlowNode");
+  assert.equal(flowNodes.find((node) => node.id === "asg-1")?.className, "diagramAreaFlowNode");
   assert.equal(flowNodes.find((node) => node.id === "instance-1")?.className, undefined);
 });
 
@@ -133,7 +135,7 @@ test("toFlowNodes stacks resources above the nested area they belong to", () => 
   assert.ok(availabilityZoneZIndex < instanceZIndex);
 });
 
-test("toFlowEdges stacks resource connections above the containing area background", () => {
+test("toFlowEdges stacks ASG resource connections above containing area backgrounds", () => {
   const region = makeDesignAreaNode({ id: "region-1", type: "sketchcatch_region" });
   const instance = makeNode({
     id: "instance-1",
@@ -149,11 +151,39 @@ test("toFlowEdges stacks resource connections above the containing area backgrou
   const flowEdges = toFlowEdges([makeEdge("instance-1", "asg-1")], [], [region, instance, autoscalingGroup]);
 
   const regionZIndex = getFlowNodeZIndex(flowNodes, "region-1");
-  const instanceZIndex = getFlowNodeZIndex(flowNodes, "instance-1");
+  const autoscalingGroupZIndex = getFlowNodeZIndex(flowNodes, "asg-1");
   const edgeZIndex = getFlowEdgeZIndex(flowEdges, "instance-1-to-asg-1");
 
   assert.ok(regionZIndex < edgeZIndex);
-  assert.ok(edgeZIndex < instanceZIndex);
+  assert.ok(autoscalingGroupZIndex < edgeZIndex);
+});
+
+test("toFlowEdges stacks selected area endpoint edges above unselected area endpoint edges", () => {
+  const region = makeDesignAreaNode({ id: "region-1", type: "sketchcatch_region" });
+  const instance = makeNode({
+    id: "instance-1",
+    parentAreaNodeId: "region-1",
+    resourceType: "aws_instance"
+  });
+  const launchTemplate = makeNode({
+    id: "launch-template-1",
+    parentAreaNodeId: "region-1",
+    resourceType: "aws_launch_template"
+  });
+  const autoscalingGroup = makeNode({
+    id: "asg-1",
+    parentAreaNodeId: "region-1",
+    resourceType: "aws_autoscaling_group"
+  });
+  const selectedEdge = makeEdge("launch-template-1", "asg-1");
+  const unselectedEdge = makeEdge("instance-1", "asg-1");
+  const flowEdges = toFlowEdges(
+    [unselectedEdge, selectedEdge],
+    [selectedEdge.id],
+    [region, instance, launchTemplate, autoscalingGroup]
+  );
+
+  assert.ok(getFlowEdgeZIndex(flowEdges, selectedEdge.id) > getFlowEdgeZIndex(flowEdges, unselectedEdge.id));
 });
 
 test("toFlowEdges maps logical handle ids to real source and target handles", () => {

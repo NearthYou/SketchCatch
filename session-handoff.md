@@ -2,6 +2,69 @@
 
 이 파일은 최신 세션 하나를 다음 세션이 빠르게 이어받기 위한 압축본이다. 누적 이력은 `agent-progress.md`에 남긴다.
 
+## 2026-07-05 최신 핸드오프 - Terraform 영역 리소스 Ticket 3 리뷰 보강
+
+### 현재 상태
+
+- 현재 브랜치: `Feat/jh/167-asg를-visual-area-node로-동작`
+- 사용자 요청: ASG area endpoint edge z-index 리뷰 피드백을 반영하고, 커밋은 만들지 않는다.
+- 기존 Ticket 3 diff는 정리된 상태였고, 이번 변경은 `flow-mappers.ts`와 `flow-mappers.test.ts` 중심이다.
+
+### 완료된 것
+
+- `toFlowEdges`의 z-index 계산에서 selected edge를 area endpoint 가중치보다 더 높게 올리도록 보정했다.
+- ASG area endpoint를 공유하는 selected/unselected edge를 만들어 selected edge가 더 높은 z-index를 갖는 회귀 테스트를 추가했다.
+
+### 검증된 것
+
+- `pnpm harness:check` - passed before edits.
+- Red before fix: `pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/flow-mappers.test.ts` failed because selected and unselected area endpoint edges had the same z-index.
+- `pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/flow-mappers.test.ts` - passed.
+- `pnpm --filter @sketchcatch/web typecheck` - passed.
+- `pnpm --filter @sketchcatch/web lint` - passed.
+- `pnpm lint`, `pnpm typecheck`, `pnpm build` - passed.
+
+### 다음 행동
+
+- 최종 `pnpm harness:check`, `git diff --check`를 확인한 뒤 사용자에게 결과를 보고한다.
+- `next build`가 바꾼 `apps/web/next-env.d.ts`는 원래 dev route import로 되돌렸다.
+- 이번 세션은 사용자 요청에 따라 커밋하지 않았다.
+
+## 2026-07-05 최신 핸드오프 - Terraform 영역 리소스 Ticket 3
+
+### 현재 상태
+
+- 현재 브랜치: `Feat/jh/167-asg를-visual-area-node로-동작`
+- 브랜치 최신화 확인: 작업 시작 시 `HEAD`, upstream, `origin/dev`가 모두 `799b69e`였고 `0 ahead / 0 behind`였다.
+- 사용자 요청: 현재 브랜치가 최신이면 Ticket 3을 진행하고, 커밋은 만들지 않는다.
+- Ticket 3 범위는 `aws_autoscaling_group`을 Terraform resource identity는 유지하면서 Web visual area node로 동작하게 만드는 것이다.
+
+### 완료된 것
+
+- `area-nodes.ts`의 resource area node type에 `aws_autoscaling_group`을 추가했다.
+- Resource catalog에서 ASG 기본 size를 `200x130`으로 바꿔 area node로 생성되게 했다.
+- `node-resize-bounds.ts`에서 ASG resize bounds를 area node minimum `200x130`, max unlimited로 바꿨다.
+- ASG inside child movement/parent assignment를 area-node movement와 drag finalize 경로에서 검증했다.
+- ASG가 area endpoint인 edge가 ASG background 위에 표시되도록 `flow-mappers.ts` edge z-index 계산을 보정했다.
+- `docs/data-models.md`에 ASG가 Terraform resource이면서 Web visual area node라는 계약을 기록했다.
+
+### 검증된 것
+
+- `pnpm harness:check` - passed before edits.
+- Red before fix: ASG area/click-through/movement/catalog/resize 기대 테스트가 실패했다.
+- `pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/area-nodes.test.ts features/diagram-editor/node-resize-bounds.test.ts features/resource-settings/catalog.test.ts features/diagram-editor/flow-mappers.test.ts features/diagram-editor/area-node-movement.test.ts features/diagram-editor/diagram-utils.test.ts features/diagram-editor/drag-transaction.test.ts` - passed.
+- `pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/reference-drop-targets.test.ts` - passed.
+- `pnpm --filter @sketchcatch/web typecheck` - passed.
+- `pnpm --filter @sketchcatch/web lint` - passed.
+- `pnpm lint`, `pnpm typecheck`, `pnpm build` - passed.
+- `pnpm harness:check` - passed after build.
+
+### 다음 행동
+
+- Ticket 4에서 Terraform Preview 지원 리소스를 확장한다. `aws_autoscaling_group`의 backend Preview capability 확장은 여기서 함께 다루는 것이 현재 티켓 계획과 맞다.
+- `next build`가 바꾼 `apps/web/next-env.d.ts`는 원래 dev route import로 되돌렸다.
+- 이번 세션은 사용자 요청에 따라 커밋하지 않았다.
+
 ## 2026-07-05 최신 핸드오프 - Terraform 영역 리소스 계약 Ticket 2
 
 ### 현재 상태
