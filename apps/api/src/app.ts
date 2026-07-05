@@ -4,6 +4,7 @@ import type { ApiErrorCode } from "@sketchcatch/types";
 import { startRefreshTokenCleanupJob } from "./auth/cleanup.js";
 import { type DatabaseClient, getDatabaseClient } from "./db/client.js";
 import { registerAiRoutes } from "./routes/ai.js";
+import type { CostPricingRateProvider } from "./services/cost-analysis.js";
 import type { CreateLlmExplanation } from "./services/aiLlmExplanation.js";
 import type { CreateSafetyFindingExplanation } from "./services/aiSafetyFindingExplanation.js";
 import { registerHealthRoutes } from "./routes/health.js";
@@ -35,6 +36,7 @@ export type BuildAppOptions = {
   getDatabaseClient?: () => DatabaseClient;
   createLlmExplanation?: CreateLlmExplanation;
   createSafetyFindingExplanation?: CreateSafetyFindingExplanation;
+  pricingRateProvider?: CostPricingRateProvider;
   oauthCallbackRateLimiter?: RateLimiter;
   oauthStartRateLimiter?: RateLimiter;
   passwordResetRequestEmailRateLimiter?: RateLimiter;
@@ -178,8 +180,13 @@ function createAiRouteOptions(options: BuildAppOptions): {
   readonly prefix: "/api";
   readonly createLlmExplanation?: CreateLlmExplanation;
   readonly createSafetyFindingExplanation?: CreateSafetyFindingExplanation;
+  readonly pricingRateProvider?: CostPricingRateProvider;
 } {
-  if (options.createLlmExplanation === undefined && options.createSafetyFindingExplanation === undefined) {
+  if (
+    options.createLlmExplanation === undefined &&
+    options.createSafetyFindingExplanation === undefined &&
+    options.pricingRateProvider === undefined
+  ) {
     return { prefix: "/api" };
   }
 
@@ -188,7 +195,8 @@ function createAiRouteOptions(options: BuildAppOptions): {
     ...(options.createLlmExplanation === undefined ? {} : { createLlmExplanation: options.createLlmExplanation }),
     ...(options.createSafetyFindingExplanation === undefined
       ? {}
-      : { createSafetyFindingExplanation: options.createSafetyFindingExplanation })
+      : { createSafetyFindingExplanation: options.createSafetyFindingExplanation }),
+    ...(options.pricingRateProvider === undefined ? {} : { pricingRateProvider: options.pricingRateProvider })
   };
 }
 

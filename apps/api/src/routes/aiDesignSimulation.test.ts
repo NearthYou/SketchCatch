@@ -5,6 +5,37 @@ import { buildApp } from "../app.js";
 
 process.env.NODE_ENV = "test";
 
+const moneyEstimateSchema = z.object({
+  amount: z.number(),
+  currency: z.literal("USD")
+});
+
+const costEstimateSchema = z.object({
+  totalEstimate: moneyEstimateSchema,
+  totalMonthlyEstimate: moneyEstimateSchema,
+  period: z.enum(["day", "week", "month"]),
+  expectedUserCount: z.number(),
+  region: z.string(),
+  pricingSource: z.enum(["aws_pricing_api", "fallback"]),
+  fallbackUsed: z.boolean(),
+  assumptions: z.array(z.string()),
+  resources: z.array(
+    z.object({
+      resourceId: z.string(),
+      resourceType: z.string(),
+      name: z.string(),
+      monthlyEstimate: moneyEstimateSchema,
+      costDrivers: z.array(z.string()),
+      explanation: z.string(),
+      pricingSource: z.enum(["aws_pricing_api", "fallback"]).optional(),
+      usageAssumptions: z.array(z.object({ label: z.string(), value: z.string() })).optional(),
+      recommendation: z.string().optional()
+    })
+  ),
+  reviewMessages: z.array(z.string()),
+  pricingAssumption: z.string()
+});
+
 const designSimulationResponseSchema = z.object({
   summary: z.string(),
   assumptions: z.array(z.string()),
@@ -34,6 +65,7 @@ const designSimulationResponseSchema = z.object({
     })
   ),
   costPressure: z.array(z.string()),
+  costEstimate: costEstimateSchema,
   recommendations: z.array(z.string())
 });
 
@@ -59,6 +91,9 @@ test("POST /api/ai/design-simulation estimates flow, bottlenecks, failures, and 
     payload: {
       trafficLevel: "normal",
       budgetLevel: "low",
+      period: "month",
+      expectedUserCount: 1000,
+      region: "ap-northeast-2",
       architectureJson: {
         nodes: [
           {
@@ -122,6 +157,29 @@ test("POST /api/ai/design-simulation estimates flow, bottlenecks, failures, and 
   assert.ok(body.failureScenarios.some((item) => item.affectedResourceIds.includes("rds-primary")));
   assert.ok(body.costPressure.some((item) => item.includes("RDS")));
   assert.ok(body.recommendations.some((item) => item.includes("EC2")));
+  assert.equal(body.costEstimate.totalEstimate.amount, 47.3);
+  assert.equal(body.costEstimate.totalMonthlyEstimate.amount, 47.3);
+  assert.equal(body.costEstimate.period, "month");
+  assert.equal(body.costEstimate.expectedUserCount, 1000);
+  assert.equal(body.costEstimate.region, "ap-northeast-2");
+  assert.equal(body.costEstimate.pricingSource, "fallback");
+  assert.equal(body.costEstimate.fallbackUsed, true);
+  assert.ok(
+    body.costEstimate.resources.some(
+      (item) => item.resourceId === "ec2-backend" && item.monthlyEstimate.amount === 8.5
+    )
+  );
+  assert.ok(
+    body.costEstimate.resources.some(
+      (item) => item.resourceId === "rds-primary" && item.monthlyEstimate.amount === 38.8
+    )
+  );
+  assert.ok(
+    body.costEstimate.reviewMessages.some(
+      (item) => item === "현재 상황에서의 총 예상 비용은 $47.30 / month입니다."
+    )
+  );
+  assert.ok(body.costPressure.some((item) => item === "EC2는 인스턴스 크기와 실행 시간이 비용에 직접 영향을 줍니다."));
 
   await app.close();
 });

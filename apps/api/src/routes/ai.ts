@@ -41,6 +41,8 @@ import {
 } from "../services/aiTranscribe.js";
 import { convertDiagramJsonToArchitectureJson } from "../services/diagram-to-architecture.js";
 import { diagramJsonSchema } from "./project-draft-schemas.js";
+import { createConfiguredAwsPricingRateProvider } from "../services/awsPricingRateProvider.js";
+import type { CostPricingRateProvider } from "../services/cost-analysis.js";
 
 const resourceTypeSchema = z.enum([
   "VPC",
@@ -107,7 +109,10 @@ const preDeploymentCheckBodySchema = z.object({
 const designSimulationBodySchema: z.ZodType<CreateDesignSimulationRequest> = z.object({
   architectureJson: architectureJsonSchema,
   trafficLevel: z.enum(["small", "normal"]).default("normal"),
-  budgetLevel: z.enum(["low", "normal"]).default("normal")
+  budgetLevel: z.enum(["low", "normal"]).default("normal"),
+  period: z.enum(["day", "week", "month"]).default("month"),
+  expectedUserCount: z.coerce.number().int().min(1).max(1_000_000).default(1000),
+  region: z.string().trim().min(1).default("ap-northeast-2")
 });
 
 const preDeploymentCheckFromDiagramBodySchema: z.ZodType<AiPreDeploymentCheckFromDiagramRequest> = z.object({
@@ -172,6 +177,7 @@ const confirmTranscribeBodySchema = z.object({
 export type AiRouteOptions = {
   readonly createLlmExplanation?: CreateLlmExplanation;
   readonly createSafetyFindingExplanation?: CreateSafetyFindingExplanation;
+  readonly pricingRateProvider?: CostPricingRateProvider;
   readonly transcribeRequirementService?: TranscribeRequirementService;
 };
 
@@ -182,6 +188,7 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
     options.createSafetyFindingExplanation ?? createConfiguredOpenAiSafetyFindingExplanation();
   const transcribeRequirementService =
     options.transcribeRequirementService ?? createConfiguredTranscribeRequirementService();
+  const pricingRateProvider = options.pricingRateProvider ?? createConfiguredAwsPricingRateProvider();
 
   app.post("/ai/architecture-draft", async (request): Promise<AiArchitectureDraftResult> => {
     const body = architectureDraftBodySchema.parse(request.body);
@@ -218,7 +225,7 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
 
   app.post("/ai/design-simulation", async (request): Promise<DesignSimulationResult> => {
     const body = designSimulationBodySchema.parse(request.body);
-    const result = simulateDesign(body);
+    const result = await simulateDesign(body, { pricingRateProvider });
 
     return {
       ...result,
