@@ -1907,3 +1907,22 @@
 - Known risks:
   - 인앱 브라우저에서 `/costs`는 로그인 화면으로 막혔고, 문서의 데모 계정은 현재 로컬 DB와 맞지 않아 실제 비용관리 화면 스크린샷은 확인하지 못했다.
   - `pnpm build`가 `apps/web/next-env.d.ts`를 일시적으로 build route import로 바꿨고, 원래 dev route import로 복구했다.
+
+## 2026-07-06 - 시뮬레이션 리소스별 근거 제거
+
+- Goal: Workspace AI 시뮬레이션 결과의 `비용·다음 검토` 카드에서 리소스별 근거 상세 섹션을 숨긴다.
+- Completed:
+  - `WorkspaceAiDesignSimulationResult`에서 `리소스별 근거` details 블록을 제거했다.
+  - 총 예상 비용, 기간, 예상 사용자 수, 비용 검토 문장 목록은 그대로 유지했다.
+  - 리소스별 근거 전용 helper와 CSS 클래스를 함께 제거했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits
+  - `pnpm --filter @sketchcatch/web typecheck` - passed
+  - `pnpm --filter @sketchcatch/web lint` - passed
+  - `pnpm harness:check` - passed after edits
+  - `pnpm lint` - passed with `.turbo/cache` rename warnings
+  - `pnpm typecheck` - passed with `.turbo/cache` rename warnings
+  - `pnpm build` - passed
+- Known risks:
+  - 실제 브라우저 스크린샷 검증은 수행하지 않았다. 소스 검색과 frontend 타입체크/lint로 표시 제거 경로를 확인했다.
+  - `pnpm build`가 `apps/web/next-env.d.ts`를 일시적으로 build route import로 바꿨고, 원래 dev route import로 복구했다.

@@ -6,10 +6,8 @@ import type {
   AiTerraformPreviewExplanationResult,
   CheckFinding,
   CostEstimatePeriod,
-  CostEstimateSupportLevel,
   DesignSimulationResult,
-  LlmExplanation,
-  ResourceCostEstimate
+  LlmExplanation
 } from "@sketchcatch/types";
 import { SelectMenu } from "../../components/ui/SelectMenu";
 import styles from "./workspace.module.css";
@@ -204,7 +202,6 @@ export function WorkspaceAiDesignSimulationResult({
   const costRecommendationItems = simulation.recommendations.filter(
     (item) => !costReviewItems.includes(item)
   );
-  const costResources = simulation.costEstimate?.resources ?? [];
 
   return (
     <div className={`${styles.aiResultStack} ${styles.aiSimulationResult}`}>
@@ -259,35 +256,6 @@ export function WorkspaceAiDesignSimulationResult({
               </li>
             ))}
           </ul>
-          {costResources.length > 0 ? (
-            <details className={styles.aiSimulationCostDetails}>
-              <summary>리소스별 근거</summary>
-              <ul>
-                {costResources.map((resource) => (
-                  <li key={`resource-cost-${resource.resourceId}`}>
-                    <div className={styles.aiSimulationCostResourceHeader}>
-                      <span>
-                        {resource.name} · {getSimulationResourceDisplayType(resource)}
-                      </span>
-                      <span className={getSimulationCostSupportClassName(resource.supportLevel)}>
-                        {getSimulationCostSupportLabel(resource.supportLevel)}
-                      </span>
-                    </div>
-                    <strong>
-                      {formatSimulationResourceEstimateAmount(
-                        resource,
-                        simulation.costEstimate?.period ?? "month"
-                      )}
-                    </strong>
-                    <p>{resource.explanation}</p>
-                    {shouldShowSimulationCostSupportReason(resource) ? (
-                      <p>{resource.supportReason}</p>
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
-            </details>
-          ) : null}
         </section>
       </div>
       <WorkspaceAiExplanation explanation={simulation.llmExplanation} />
@@ -389,21 +357,6 @@ function formatInteger(amount: number): string {
   return Math.round(amount).toLocaleString("en-US");
 }
 
-function getSimulationResourceDisplayType(resource: ResourceCostEstimate): string {
-  return resource.terraformResourceType ?? resource.resourceType;
-}
-
-function formatSimulationResourceEstimateAmount(
-  resource: ResourceCostEstimate,
-  period: CostEstimatePeriod
-): string {
-  if (resource.supportLevel === "not_estimated") {
-    return "산정 미지원";
-  }
-
-  return `$${formatMoney(resource.periodEstimate.amount)} / ${getSimulationPeriodLabel(period)}`;
-}
-
 function getSimulationPeriodLabel(period: CostEstimatePeriod): string {
   switch (period) {
     case "day":
@@ -413,32 +366,4 @@ function getSimulationPeriodLabel(period: CostEstimatePeriod): string {
     case "month":
       return "month";
   }
-}
-
-function getSimulationCostSupportLabel(supportLevel: CostEstimateSupportLevel): string {
-  switch (supportLevel) {
-    case "aws_pricing_api":
-      return "AWS Pricing API";
-    case "fallback_estimate":
-      return "추정";
-    case "no_direct_cost":
-      return "직접 비용 없음";
-    case "not_estimated":
-      return "산정 미지원";
-  }
-}
-
-function shouldShowSimulationCostSupportReason(resource: ResourceCostEstimate): boolean {
-  return resource.supportLevel === "no_direct_cost" || resource.supportLevel === "not_estimated";
-}
-
-function getSimulationCostSupportClassName(supportLevel: CostEstimateSupportLevel): string {
-  const supportClassNames = {
-    aws_pricing_api: `${styles.aiSimulationCostSupportBadge} ${styles.aiSimulationCostSupportAwsPricingApi}`,
-    fallback_estimate: `${styles.aiSimulationCostSupportBadge} ${styles.aiSimulationCostSupportFallbackEstimate}`,
-    no_direct_cost: `${styles.aiSimulationCostSupportBadge} ${styles.aiSimulationCostSupportNoDirectCost}`,
-    not_estimated: `${styles.aiSimulationCostSupportBadge} ${styles.aiSimulationCostSupportNotEstimated}`
-  } satisfies Record<CostEstimateSupportLevel, string>;
-
-  return supportClassNames[supportLevel];
 }
