@@ -5,6 +5,7 @@ import type {
   AiTerraformErrorExplanationResult,
   AiTerraformPreviewExplanationResult,
   CheckFinding,
+  CostEstimatePeriod,
   CostEstimateSupportLevel,
   DesignSimulationResult,
   LlmExplanation,
@@ -247,7 +248,7 @@ export function WorkspaceAiDesignSimulationResult({
           {simulation.costEstimate !== undefined ? (
             <div className={styles.aiSimulationCostMeta}>
               <span>${formatMoney(simulation.costEstimate.totalEstimate.amount)}</span>
-              <span>{simulation.costEstimate.period}</span>
+              <span>{getSimulationPeriodLabel(simulation.costEstimate.period)}</span>
               <span>{formatInteger(simulation.costEstimate.expectedUserCount)}명</span>
             </div>
           ) : null}
@@ -272,7 +273,12 @@ export function WorkspaceAiDesignSimulationResult({
                         {getSimulationCostSupportLabel(resource.supportLevel)}
                       </span>
                     </div>
-                    <strong>{formatSimulationResourceMonthlyAmount(resource)}</strong>
+                    <strong>
+                      {formatSimulationResourceEstimateAmount(
+                        resource,
+                        simulation.costEstimate?.period ?? "month"
+                      )}
+                    </strong>
                     <p>{resource.explanation}</p>
                     <p>{resource.supportReason}</p>
                   </li>
@@ -385,12 +391,26 @@ function getSimulationResourceDisplayType(resource: ResourceCostEstimate): strin
   return resource.terraformResourceType ?? resource.resourceType;
 }
 
-function formatSimulationResourceMonthlyAmount(resource: ResourceCostEstimate): string {
+function formatSimulationResourceEstimateAmount(
+  resource: ResourceCostEstimate,
+  period: CostEstimatePeriod
+): string {
   if (resource.supportLevel === "not_estimated") {
     return "산정 미지원";
   }
 
-  return `$${formatMoney(resource.monthlyEstimate.amount)} / month`;
+  return `$${formatMoney(resource.periodEstimate.amount)} / ${getSimulationPeriodLabel(period)}`;
+}
+
+function getSimulationPeriodLabel(period: CostEstimatePeriod): string {
+  switch (period) {
+    case "day":
+      return "day";
+    case "week":
+      return "week";
+    case "month":
+      return "month";
+  }
 }
 
 function getSimulationCostSupportLabel(supportLevel: CostEstimateSupportLevel): string {

@@ -268,7 +268,12 @@ export function CostsClient() {
                     <span className={getCostSupportBadgeClassName(resource.supportLevel)}>
                       {getCostSupportLabel(resource.supportLevel)}
                     </span>
-                    <strong>{formatResourceMonthlyAmount(resource)}</strong>
+                    <strong>
+                      {formatResourceEstimateAmount(
+                        resource,
+                        selectedProject.costEstimate?.period ?? appliedQuery.period
+                      )}
+                    </strong>
                   </span>
                 </summary>
                 <p>{resource.explanation}</p>
@@ -370,12 +375,15 @@ function getResourceDisplayType(resource: ResourceCostEstimate): string {
   return resource.terraformResourceType ?? resource.resourceType;
 }
 
-function formatResourceMonthlyAmount(resource: ResourceCostEstimate): string {
+function formatResourceEstimateAmount(
+  resource: ResourceCostEstimate,
+  period: CostEstimatePeriod
+): string {
   if (resource.supportLevel === "not_estimated") {
     return "산정 미지원";
   }
 
-  return `${formatUsd(resource.monthlyEstimate.amount)} / month`;
+  return `${formatUsd(resource.periodEstimate.amount)} / ${getPeriodLabel(period)}`;
 }
 
 function getCostSupportLabel(supportLevel: CostEstimateSupportLevel): string {
