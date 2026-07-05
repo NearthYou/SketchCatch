@@ -28,11 +28,12 @@ test("Reverse Engineering result stays preview-only until the user applies it", 
   assert.match(rightPanelSource, /<ReverseEngineeringPanel context=\{context\} projectId=\{projectId\} \/>/);
   assert.match(panelSource, /readonly context: DiagramEditorPanelContext/);
   assert.match(panelSource, /context\.setPreviewDiagram\(application\.previewDiagram\)/);
-  assert.match(panelSource, /context\.applyDiagramJson\(application\.diagram\)/);
   assert.match(panelSource, /createArchitectureSnapshot/);
   assert.match(panelSource, /source: "imported"/);
   assert.match(panelSource, /sourceScanId: result\.scan\.id/);
   assert.match(panelSource, /draftId: result\.reverseEngineeringDraft\.id/);
+  assert.match(panelSource, /attachReverseEngineeringSourceToDiagram/);
+  assert.match(panelSource, /context\.applyDiagramJson\(diagramWithReverseEngineeringSource\)/);
   assert.match(resultPanelSource, /새 보드로 열기/);
   assert.match(resultPanelSource, /현재 보드에 추가/);
 });

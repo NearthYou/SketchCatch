@@ -259,10 +259,15 @@ export function ReverseEngineeringPanel({ context, projectId }: ReverseEngineeri
       mode,
       result
     });
+    const diagramWithReverseEngineeringSource = attachReverseEngineeringSourceToDiagram(
+      application.diagram,
+      result.scan.id,
+      result.reverseEngineeringDraft.id
+    );
 
     setApplyState("saving");
     setApplyMessage(null);
-    context.applyDiagramJson(application.diagram);
+    context.applyDiagramJson(diagramWithReverseEngineeringSource);
 
     try {
       await createArchitectureSnapshot({
@@ -272,7 +277,7 @@ export function ReverseEngineeringPanel({ context, projectId }: ReverseEngineeri
           sourceScanId: result.scan.id,
           draftId: result.reverseEngineeringDraft.id
         },
-        architectureJson: convertDiagramJsonToArchitectureJson(application.diagram)
+        architectureJson: convertDiagramJsonToArchitectureJson(diagramWithReverseEngineeringSource)
       });
       setApplyState("saved");
       setApplyMessage("보드에 반영했고, imported Architecture Snapshot도 저장했습니다.");
@@ -370,6 +375,34 @@ async function pollReverseEngineeringScan(
 
 function delay(milliseconds: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+}
+
+// 사용자가 적용한 보드에도 Reverse Engineering 출처를 남겨 삭제 안내와 추적이 가능하게 합니다.
+function attachReverseEngineeringSourceToDiagram(
+  diagram: DiagramJson,
+  sourceScanId: string,
+  draftId: string
+): DiagramJson {
+  return {
+    ...diagram,
+    nodes: diagram.nodes.map((node) => {
+      if (!node.parameters) {
+        return node;
+      }
+
+      return {
+        ...node,
+        parameters: {
+          ...node.parameters,
+          values: {
+            ...node.parameters.values,
+            reverseEngineeringSourceScanId: sourceScanId,
+            reverseEngineeringDraftId: draftId
+          }
+        }
+      };
+    })
+  };
 }
 
 // 보드에는 출처 scan id가 남아 있는데 scan 기록 목록에는 없으면 삭제된 원본으로 봅니다.
