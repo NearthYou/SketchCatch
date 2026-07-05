@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { desc, eq, inArray } from "drizzle-orm";
 import type {
   CostEstimatePeriod,
   CostProjectEstimate,
@@ -9,7 +9,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireActiveUserId } from "../auth/current-user.js";
 import { getDatabaseClient, type DatabaseClient } from "../db/client.js";
-import { architectures, deployments, projects } from "../db/schema.js";
+import { architectures, projects } from "../db/schema.js";
 import { createConfiguredAwsPricingRateProvider } from "../services/awsPricingRateProvider.js";
 import {
   analyzeCost,
@@ -31,10 +31,9 @@ const costProjectsQuerySchema = z.object({
   region: z.string().trim().min(1).default(DEFAULT_COST_REGION)
 });
 
-type RunningCostProjectRow = {
+type CostProjectRow = {
   readonly project: typeof projects.$inferSelect;
-  readonly deployment: typeof deployments.$inferSelect;
-  readonly architecture: typeof architectures.$inferSelect;
+  readonly architecture: typeof architectures.$inferSelect | undefined;
 };
 
 export async function registerCostRoutes(
@@ -48,17 +47,32 @@ export async function registerCostRoutes(
     const currentUserId = await requireActiveUserId(request, getCostDatabaseClient);
     const query = costProjectsQuerySchema.parse(request.query);
     const { db } = getCostDatabaseClient();
-    const rows = await db
-      .select({
-        project: projects,
-        deployment: deployments,
-        architecture: architectures
-      })
-      .from(deployments)
-      .innerJoin(projects, eq(deployments.projectId, projects.id))
-      .innerJoin(architectures, eq(deployments.architectureId, architectures.id))
-      .where(and(eq(projects.userId, currentUserId), eq(deployments.status, "RUNNING")))
-      .orderBy(desc(deployments.startedAt), desc(deployments.updatedAt), desc(deployments.createdAt));
+    const projectRows = await db
+      .select()
+      .from(projects)
+      .where(eq(projects.userId, currentUserId))
+      .orderBy(desc(projects.updatedAt), desc(projects.createdAt));
+    const projectIds = projectRows.map((project) => project.id);
+    const architectureRows =
+      projectIds.length === 0
+        ? []
+        : await db
+            .select()
+            .from(architectures)
+            .where(inArray(architectures.projectId, projectIds))
+            .orderBy(desc(architectures.createdAt));
+    const latestArchitectureByProjectId = new Map<string, typeof architectures.$inferSelect>();
+
+    for (const architecture of architectureRows) {
+      if (!latestArchitectureByProjectId.has(architecture.projectId)) {
+        latestArchitectureByProjectId.set(architecture.projectId, architecture);
+      }
+    }
+
+    const rows = projectRows.map((project) => ({
+      architecture: latestArchitectureByProjectId.get(project.id),
+      project
+    }));
     const projectEstimates = await Promise.all(
       rows.map((row) => createCostProjectEstimate(row, query, pricingRateProvider))
     );
@@ -93,7 +107,7 @@ export async function registerCostRoutes(
 }
 
 async function createCostProjectEstimate(
-  row: RunningCostProjectRow,
+  row: CostProjectRow,
   query: {
     expectedUserCount: number;
     period: CostEstimatePeriod;
@@ -101,6 +115,13 @@ async function createCostProjectEstimate(
   },
   pricingRateProvider: CostPricingRateProvider
 ): Promise<CostProjectEstimate> {
+  if (row.architecture === undefined) {
+    return {
+      project: toProject(row.project),
+      costEstimate: null
+    };
+  }
+
   const costEstimate = await analyzeCost(
     createCostEstimateRequest({
       architectureJson: row.architecture.architectureJson,
@@ -113,7 +134,6 @@ async function createCostProjectEstimate(
 
   return {
     project: toProject(row.project),
-    deployedAt: getDeploymentDate(row.deployment).toISOString(),
     costEstimate
   };
 }
@@ -127,10 +147,6 @@ function toProject(row: typeof projects.$inferSelect): Project {
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString()
   };
-}
-
-function getDeploymentDate(row: typeof deployments.$inferSelect): Date {
-  return row.startedAt ?? row.updatedAt ?? row.createdAt;
 }
 
 function roundUsd(amount: number): number {

@@ -615,8 +615,6 @@ export type RecentSuccessfulDeploymentProjectListResponse = {
 
 export type CostProjectEstimate = {
   project: Project;
-  deployment?: Deployment | undefined;
-  deployedAt?: IsoDateTimeString | undefined;
   costEstimate: CostEstimateResult | null;
 };
 

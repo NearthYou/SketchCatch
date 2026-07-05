@@ -1816,3 +1816,27 @@
   - `git diff --check` - passed
 - Known risks:
   - Playwright bundled browser가 설치되어 있지 않고 sandbox에서 local Chrome launch가 `spawn EPERM`으로 막혀 브라우저 스크린샷 검증은 완료하지 못했다. `/costs` HTTP 응답과 Next build로 기본 렌더링 경로는 확인했다.
+
+## 2026-07-06 - Cost Management 전체 프로젝트 목록 전환
+
+- Goal: 비용관리 페이지를 실행 중인 배포 프로젝트 목록이 아니라 현재 사용자의 전체 프로젝트 비용 목록으로 바꾼다.
+- Completed:
+  - `GET /api/costs/projects`가 현재 사용자의 모든 프로젝트를 반환하고, 프로젝트별 최신 `architectures.architectureJson`이 있을 때만 비용을 산정하도록 변경했다.
+  - 아키텍처 스냅샷이 없는 프로젝트는 `costEstimate: null`로 내려주고, 화면에서는 `산정 준비 필요`로 표시하게 했다.
+  - 비용관리 화면의 문구를 `내 프로젝트`, `내 프로젝트 예상 비용 합계`로 바꾸고 배포/실행 중 프로젝트 표현을 제거했다.
+  - `CostProjectEstimate` shared type과 `docs/data-models.md` 계약 설명에서 deployment/deployedAt 기준을 제거했다.
+  - 비용관리 API 라우트 테스트를 추가해 소유 프로젝트 전체 반환, 다른 사용자 프로젝트 제외, 최신 아키텍처 기준 산정을 검증했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/routes/costs.test.ts` - passed
+  - `pnpm --filter @sketchcatch/api typecheck` - passed
+  - `pnpm --filter @sketchcatch/web typecheck` - passed
+  - `pnpm --filter @sketchcatch/api lint` - passed
+  - `pnpm --filter @sketchcatch/web lint` - passed
+  - `pnpm harness:check` - passed after edits
+  - `pnpm lint` - passed with `.turbo/cache` rename warnings
+  - `pnpm typecheck` - passed with `.turbo/cache` rename warnings
+  - `pnpm build` - passed
+- Known risks:
+  - 실제 브라우저 스크린샷 검증은 이번 변경에서 수행하지 않았다. API 라우트 테스트, 타입체크, lint, production build로 계약과 렌더링 경로를 검증했다.
+  - `.turbo/cache` rename 경고가 있었지만 각 명령은 exit code 0으로 완료됐다.

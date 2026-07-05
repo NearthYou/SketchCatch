@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type {
+  CostProjectEstimate,
   CostEstimateSupportLevel,
   CostEstimatePeriod,
   CostProjectEstimateListResponse,
@@ -181,7 +182,7 @@ export function CostsClient() {
         <section className="dashboardPanel costSummaryPanel" aria-labelledby="cost-summary-title">
           <div className="costPanelTitle">
             <p className="dashboardPanelKicker">Cost overview</p>
-            <h2 id="cost-summary-title">켜둔 프로젝트 예상 비용 합계</h2>
+            <h2 id="cost-summary-title">내 프로젝트 예상 비용 합계</h2>
           </div>
           <div className="costSummaryAmount">
             <span>{getPeriodLabel(appliedQuery.period)} 예상 비용</span>
@@ -193,11 +194,11 @@ export function CostsClient() {
         </section>
       </div>
 
-      <section className="dashboardPanel costProjectPanel" aria-labelledby="active-deployment-cost-title">
+      <section className="dashboardPanel costProjectPanel" aria-labelledby="cost-project-title">
         <div className="dashboardPanelHeader">
           <div>
-            <p className="dashboardPanelKicker">Active costs</p>
-            <h2 id="active-deployment-cost-title">실행 중 프로젝트</h2>
+            <p className="dashboardPanelKicker">Project costs</p>
+            <h2 id="cost-project-title">내 프로젝트</h2>
           </div>
           <span className="dashboardCountBadge">{costData?.projects.length ?? 0}개</span>
         </div>
@@ -214,7 +215,7 @@ export function CostsClient() {
           />
         ) : null}
         {state === "idle" && costData !== null && costData.projects.length === 0 ? (
-          <CostStatus message="실행 중인 프로젝트가 없습니다." />
+          <CostStatus message="프로젝트가 없습니다." />
         ) : null}
         {state === "idle" && costData !== null && costData.projects.length > 0 ? (
           <div className="dashboardTable">
@@ -233,9 +234,9 @@ export function CostsClient() {
                 type="button"
               >
                 <strong>{item.project.name}</strong>
-                <span>AWS</span>
+                <span>{item.costEstimate === null ? "-" : "AWS"}</span>
                 <span>{formatResourceTypes(item.costEstimate?.resources ?? [])}</span>
-                <span>{formatUsd(item.costEstimate?.totalEstimate.amount ?? 0)}</span>
+                <span>{formatProjectCostAmount(item.costEstimate)}</span>
               </button>
             ))}
           </div>
@@ -288,6 +289,19 @@ export function CostsClient() {
               </details>
             ))}
           </div>
+        </section>
+      ) : null}
+
+      {selectedProject !== null && selectedProject.costEstimate === null ? (
+        <section className="dashboardPanel costDetailPanel" aria-labelledby="cost-detail-title">
+          <div className="dashboardPanelHeader">
+            <div>
+              <p className="dashboardPanelKicker">Resource details</p>
+              <h2 id="cost-detail-title">{selectedProject.project.name} 비용 근거</h2>
+            </div>
+            <span className="dashboardCountBadge">준비 필요</span>
+          </div>
+          <CostStatus message="아직 비용을 산정할 아키텍처 스냅샷이 없습니다." />
         </section>
       ) : null}
 
@@ -365,12 +379,20 @@ function formatResourceTypes(resources: readonly ResourceCostEstimate[]): string
   const uniqueTypes = [...new Set(resources.map((resource) => getResourceDisplayType(resource)))];
 
   if (uniqueTypes.length === 0) {
-    return "리소스 없음";
+    return "산정 준비 필요";
   }
 
   const visibleTypes = uniqueTypes.slice(0, 3).join(", ");
 
   return uniqueTypes.length > 3 ? `${visibleTypes} 외 ${uniqueTypes.length - 3}개` : visibleTypes;
+}
+
+function formatProjectCostAmount(costEstimate: CostProjectEstimate["costEstimate"]): string {
+  if (costEstimate === null) {
+    return "산정 준비 필요";
+  }
+
+  return formatUsd(costEstimate.totalEstimate.amount);
 }
 
 function getResourceDisplayType(resource: ResourceCostEstimate): string {

@@ -1172,13 +1172,11 @@ type CostEstimateResult = {
 
 `DesignSimulationResult.costEstimate`는 같은 비용 산정 결과를 담는다. 기존 `costPressure: string[]`는 유지하되, 이제 `costEstimate.reviewMessages`와 같은 금액 기반 문장을 포함해야 한다. 예를 들어 월 기준 결과는 `현재 상황에서의 총 예상 비용은 $47.30 / month입니다.`처럼 사용자가 바로 읽을 수 있는 문장으로 내려간다.
 
-홈 화면의 비용관리 페이지는 `GET /api/costs/projects?period=month&expectedUserCount=1000` 응답을 사용한다. 이 응답은 실행 중인 배포 프로젝트의 `deployment.architectureId -> architectures.architectureJson`을 기준으로 프로젝트별 `CostEstimateResult`를 계산하고, 전체 합계를 함께 반환한다.
+홈 화면의 비용관리 페이지는 `GET /api/costs/projects?period=month&expectedUserCount=1000` 응답을 사용한다. 이 응답은 현재 사용자의 모든 프로젝트를 내려주고, 프로젝트별 최신 `architectures.architectureJson`이 있으면 `CostEstimateResult`를 계산한다. 아직 아키텍처 스냅샷이 없는 프로젝트는 `costEstimate: null`로 내려주며, 전체 합계는 비용 산정이 가능한 프로젝트만 더한다.
 
 ```ts
 type CostProjectEstimate = {
   project: Project;
-  deployment?: Deployment;
-  deployedAt?: IsoDateTimeString;
   costEstimate: CostEstimateResult | null;
 };
 
