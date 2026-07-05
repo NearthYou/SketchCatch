@@ -32,6 +32,21 @@ export function resolveWorkspaceAiChatAction(input: {
   return input.needsDraftClarification ? "draft_clarification" : "draft";
 }
 
+export function resolvePendingPreviewChatAction(input: {
+  readonly needsDraftClarification: boolean;
+  readonly prompt: string;
+}): WorkspaceAiChatAction {
+  if (isPendingPreviewFreshDraftRequest(input.prompt)) {
+    return input.needsDraftClarification ? "draft_clarification" : "draft";
+  }
+
+  return resolveWorkspaceAiChatAction({
+    boardHasResources: true,
+    needsDraftClarification: input.needsDraftClarification,
+    prompt: input.prompt
+  });
+}
+
 export function shouldInterruptPatchClarificationForDraft(input: {
   readonly boardHasResources: boolean;
   readonly needsDraftClarification: boolean;
@@ -104,6 +119,61 @@ function isNewServiceDraftRequest(prompt: string): boolean {
     "구성해 줘",
     "설계해줘",
     "설계해 줘"
+  ].some((keyword) => normalizedPrompt.includes(keyword));
+}
+
+function isPendingPreviewFreshDraftRequest(prompt: string): boolean {
+  const normalizedPrompt = prompt.toLowerCase();
+
+  if (isExistingBoardReorganizationRequest(normalizedPrompt)) {
+    return false;
+  }
+
+  const hasFreshRequestVerb = [
+    "필요해",
+    "필요",
+    "만들고 싶",
+    "만들어줘",
+    "만들어 줘",
+    "그려줘",
+    "그려 줘",
+    "배포하고 싶",
+    "구성해줘",
+    "구성해 줘",
+    "설계해줘",
+    "설계해 줘",
+    "create",
+    "build",
+    "draw"
+  ].some((keyword) => normalizedPrompt.includes(keyword));
+
+  if (!hasFreshRequestVerb) {
+    return false;
+  }
+
+  return [
+    "페이지",
+    "웹서비스",
+    "서비스",
+    "웹사이트",
+    "사이트",
+    "api",
+    "서버",
+    "데이터베이스",
+    "db",
+    "s3",
+    "ec2",
+    "다이어그램",
+    "버킷",
+    "로그인",
+    "업로드",
+    "website",
+    "service",
+    "server",
+    "diagram",
+    "bucket",
+    "login",
+    "upload"
   ].some((keyword) => normalizedPrompt.includes(keyword));
 }
 

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  resolvePendingPreviewChatAction,
   resolveWorkspaceAiChatAction,
   resolveWorkspaceAiChatMode,
   shouldInterruptPatchClarificationForDraft
@@ -129,4 +130,35 @@ test("resolveWorkspaceAiChatAction treats complete new service requests as fresh
       prompt
     );
   }
+});
+
+test("resolvePendingPreviewChatAction keeps new prompts as fresh drafts while refinements patch the preview", () => {
+  assert.equal(
+    resolvePendingPreviewChatAction({
+      needsDraftClarification: false,
+      prompt: "파일 업로드 페이지가 필요해"
+    }),
+    "draft"
+  );
+  assert.equal(
+    resolvePendingPreviewChatAction({
+      needsDraftClarification: false,
+      prompt: "로그인 있는 작은 웹서비스가 필요해"
+    }),
+    "draft"
+  );
+  assert.equal(
+    resolvePendingPreviewChatAction({
+      needsDraftClarification: false,
+      prompt: "ec2 없는 간단한 api 서버 하나 만들어줘"
+    }),
+    "draft"
+  );
+  assert.equal(
+    resolvePendingPreviewChatAction({
+      needsDraftClarification: false,
+      prompt: "정적 소개 웹사이트로 정리해줘"
+    }),
+    "patch"
+  );
 });

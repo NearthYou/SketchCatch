@@ -123,7 +123,11 @@ test("workspace AI saves accepted generated and patched diagrams immediately", (
 
 test("workspace AI refines a pending draft preview instead of replacing it from an empty board", () => {
   assert.match(aiChatDockSource, /convertDiagramJsonToArchitectureJson/);
-  assert.match(aiChatDockSource, /draft !== null && context\.previewDiagram !== null/);
+  assert.match(aiChatDockSource, /resolvePendingPreviewChatAction/);
+  assert.match(aiChatDockSource, /pendingPreviewAction === "patch"/);
+  assert.match(aiChatDockSource, /pendingPreviewAction === "draft"/);
+  assert.match(aiChatDockSource, /draft !== null/);
+  assert.match(aiChatDockSource, /context\.previewDiagram !== null/);
   assert.match(
     aiChatDockSource,
     /baseArchitectureJson:\s*convertDiagramJsonToArchitectureJson\(context\.previewDiagram\)/

@@ -60,6 +60,7 @@ import {
   createLatestUserRequirementPromptExcluding
 } from "./workspace-ai-chat-history";
 import {
+  resolvePendingPreviewChatAction,
   resolveWorkspaceAiChatAction,
   shouldInterruptPatchClarificationForDraft
 } from "./workspace-ai-chat-routing";
@@ -305,7 +306,19 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
       return;
     }
 
-    if (draft !== null && context.previewDiagram !== null) {
+    const pendingPreviewAction =
+      draft !== null || patchPreviewModel !== null
+        ? resolvePendingPreviewChatAction({
+            needsDraftClarification,
+            prompt: trimmedPrompt
+          })
+        : null;
+
+    if (
+      draft !== null &&
+      context.previewDiagram !== null &&
+      pendingPreviewAction === "patch"
+    ) {
       await createPatchPreviewFromPrompt(trimmedPrompt, {
         baseArchitectureJson: convertDiagramJsonToArchitectureJson(context.previewDiagram),
         baseDiagram: context.previewDiagram
@@ -313,11 +326,24 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
       return;
     }
 
-    if (patchPreviewModel !== null) {
+    if (patchPreviewModel !== null && pendingPreviewAction === "patch") {
       await createPatchPreviewFromPrompt(trimmedPrompt, {
         baseArchitectureJson: patchPreviewModel.preview.proposedArchitectureJson,
         baseDiagram: patchPreviewModel.proposedDiagram
       });
+      return;
+    }
+
+    if (pendingPreviewAction === "draft_clarification") {
+      const session = createArchitectureClarificationSession(trimmedPrompt);
+
+      setClarificationSession(session);
+      appendClarificationQuestion(session);
+      return;
+    }
+
+    if (pendingPreviewAction === "draft") {
+      await createDraftFromConversation(nextMessages);
       return;
     }
 

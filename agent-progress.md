@@ -1838,6 +1838,29 @@
   - Browser click smoke는 이번 세션에서 별도로 실행하지 않았고, API/web 회귀 테스트와 전체 lint/typecheck/build로 검증했다.
   - 실제 AWS apply/destroy, cloud mutation, Git/CI/CD handoff는 실행하지 않았다.
 
+# 2026-07-05 - AI 미리보기 상태 새 프롬프트 라우팅 보정
+
+- Goal: AI 초안/패치 미리보기가 떠 있는 상태에서 새 프롬프트를 넣으면 이전 미리보기를 계속 patch해서 모든 주문이 같은 다이어그램으로 수렴하는 문제를 고친다.
+- Completed:
+  - `resolvePendingPreviewChatAction`을 추가해 미리보기 상태의 입력을 새 초안 생성과 기존 미리보기 수정으로 분리했다.
+  - `파일 업로드 페이지가 필요해`, `로그인 있는 작은 웹서비스가 필요해`, `ec2 없는 간단한 api 서버 하나 만들어줘` 같은 새 요구사항은 기존 미리보기를 버리고 새 draft로 생성하게 했다.
+  - `정적 소개 웹사이트로 정리해줘`처럼 기존 미리보기를 정리/수정하는 표현은 preview patch로 유지했다.
+  - `WorkspaceAiChatDock`이 pending preview 상태에서 새 라우팅 결과를 사용하도록 연결했다.
+  - 같은 채팅창에서 여러 새 주문을 넣는 경로를 회귀 테스트로 고정했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits
+  - `pnpm --dir apps/api exec tsx -e "...createArchitectureDraft smoke..."` - read-only smoke showed API already produced distinct node sets for static site, upload page, login service, no-EC2 API, DB+S3-only, and EC2+S3-only prompts
+  - `pnpm --dir apps/web exec tsx --test features/workspace/workspace-ai-chat-routing.test.ts` - red before fix, passed after fix
+  - `pnpm --dir apps/web exec tsx --test features/workspace/workspace-ai-chat-routing.test.ts features/workspace/workspace-right-panel-layout.test.ts` - passed
+  - `pnpm harness:check` - passed
+  - `pnpm lint` - passed with Turbo cache rename warnings only
+  - `pnpm typecheck` - passed with Turbo cache rename warnings only
+  - `pnpm build` - sandbox run failed on `.next` unlink EPERM, elevated retry passed
+  - `pnpm harness:check` - passed after build
+- Known risks:
+  - Browser click smoke는 이번 세션에서 별도로 실행하지 않았고, routing/source tests와 전체 lint/typecheck/build로 검증했다.
+  - 실제 AWS apply/destroy, cloud mutation, Git/CI/CD handoff는 실행하지 않았다.
+
 # 2026-07-05 - AI 다이어그램 의도 반영 및 레이아웃 보정
 
 - Goal: 서로 다른 사용자 요구가 같은 다이어그램으로 수렴하지 않게 하고, 기존 보드 수정 흐름에서 명시된 리소스를 보존하며, EC2 추가/정적 사이트 재정리/무관 질문 차단/포함 레이아웃 문제를 보정한다.
