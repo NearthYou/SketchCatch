@@ -97,6 +97,18 @@ const TERRAFORM_ERROR_TEMPLATES: readonly TerraformErrorExplanationTemplate[] = 
   {
     category: "syntax",
     severity: "medium",
+    keywords: ["terraform.unexpected_token", "closed block", "닫힌 block", "unexpected token"],
+    summary: "닫힌 block 뒤에 Terraform 코드가 이어져 문법 오류가 발생했습니다.",
+    likelyCause: "리소스 block을 닫은 뒤 남은 attribute나 중첩 block이 바깥에 붙어 있을 가능성이 큽니다.",
+    nextActions: [
+      "오류가 표시된 파일과 줄 번호를 기준으로 닫는 중괄호 위치를 확인하세요.",
+      "block 밖에 남은 attribute가 있다면 올바른 resource, module, provider block 안으로 옮기세요.",
+      "수정 후 Terraform 재검증을 실행해 같은 진단이 사라졌는지 확인하세요."
+    ]
+  },
+  {
+    category: "syntax",
+    severity: "medium",
     keywords: ["invalid expression", "unsupported argument", "missing required argument", "syntax"],
     summary: "Terraform 코드 문법이나 argument 이름이 맞지 않습니다.",
     likelyCause: "IaC Preview에 잘못된 Terraform 표현식, 빠진 값, 또는 지원하지 않는 argument가 들어갔습니다.",
@@ -124,8 +136,8 @@ const UNKNOWN_TERRAFORM_ERROR_TEMPLATE: TerraformErrorExplanationTemplate = {
   category: "unknown",
   severity: "medium",
   keywords: [],
-  summary: "Terraform 오류를 기본 fallback 설명으로 분류했습니다.",
-  likelyCause: "아직 1차 제공 fallback 규칙에 등록되지 않은 오류입니다.",
+  summary: "Terraform 진단을 바탕으로 수정 위치를 먼저 확인해야 합니다.",
+  likelyCause: "오류 메시지가 알려준 파일과 줄에서 block 경계, 문법, 참조 형식을 확인해야 합니다.",
   nextActions: ["원본 오류 메시지를 확인하고 권한, region, quota, 문법 문제를 차례대로 점검하세요."]
 };
 

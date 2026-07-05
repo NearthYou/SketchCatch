@@ -49,10 +49,11 @@ import {
   promptGuideExamples
 } from "./workspace-ai-panel-options";
 import { formatTerraformDiagnosticTitle } from "./terraform-panel-utils";
-import { getTerraformSafeFix } from "./terraform-safe-fixes";
-import type {
-  TerraformIssueAiRequest,
-  TerraformSafeFixApplyResult
+import {
+  createTerraformIssueChatSummary,
+  createTerraformIssueFixPlan,
+  type TerraformIssueAiRequest,
+  type TerraformSafeFixApplyResult
 } from "./workspace-terraform-ai";
 import styles from "./workspace.module.css";
 
@@ -226,7 +227,7 @@ export function WorkspaceAiChatDock({
         });
         appendAssistantMessage(
           "terraform_issue",
-          `Terraform 이슈 원인: ${explanation.summary}`,
+          `Terraform 이슈 원인: ${createTerraformIssueChatSummary(explanation)}`,
           [],
           "single",
           "draft"
@@ -794,28 +795,42 @@ export function WorkspaceAiChatDock({
               <WorkspaceAiRequestMessage state="error" message={terraformIssueResolution.message} />
             ) : null}
             {terraformIssueResolution.explanation ? (
-              <TerraformIssueExplanationCard explanation={terraformIssueResolution.explanation} />
+              <TerraformIssueExplanationCard
+                diagnostic={terraformIssueResolution.request.issue.diagnostic}
+                explanation={terraformIssueResolution.explanation}
+              />
             ) : null}
             <div className={styles.aiActionRow}>
-              <button
-                className={styles.aiPrimaryButton}
-                disabled={
-                  !getTerraformSafeFix(terraformIssueResolution.request.issue.diagnostic).applicable ||
-                  applyingTerraformFixRequestId === terraformIssueResolution.request.id
-                }
-                onClick={() => {
-                  setApplyingTerraformFixRequestId(terraformIssueResolution.request.id);
-                  onApplyTerraformIssueFix(terraformIssueResolution.request.issue.diagnostic);
-                }}
-                type="button"
-              >
-                {applyingTerraformFixRequestId === terraformIssueResolution.request.id ? "적용 중" : "적용"}
-              </button>
-              <button className={styles.aiSecondaryButton} disabled type="button">
-                {getTerraformSafeFix(terraformIssueResolution.request.issue.diagnostic).applicable
-                  ? "자동 적용 가능"
-                  : "수동 수정 필요"}
-              </button>
+              {terraformIssueResolution.explanation
+                ? (() => {
+                    const fixPlan = createTerraformIssueFixPlan({
+                      diagnostic: terraformIssueResolution.request.issue.diagnostic,
+                      explanation: terraformIssueResolution.explanation
+                    });
+
+                    return (
+                      <>
+                        <button
+                          className={styles.aiPrimaryButton}
+                          disabled={
+                            !fixPlan.canApply ||
+                            applyingTerraformFixRequestId === terraformIssueResolution.request.id
+                          }
+                          onClick={() => {
+                            setApplyingTerraformFixRequestId(terraformIssueResolution.request.id);
+                            onApplyTerraformIssueFix(terraformIssueResolution.request.issue.diagnostic);
+                          }}
+                          type="button"
+                        >
+                          {applyingTerraformFixRequestId === terraformIssueResolution.request.id ? "적용 중" : "적용"}
+                        </button>
+                        <button className={styles.aiSecondaryButton} disabled type="button">
+                          {fixPlan.canApply ? "자동 적용 가능" : "수동 수정 필요"}
+                        </button>
+                      </>
+                    );
+                  })()
+                : null}
             </div>
           </article>
         ) : null}
@@ -828,7 +843,11 @@ export function WorkspaceAiChatDock({
             </div>
             <WorkspaceAiExplanation explanation={draft.llmExplanation} />
             <div className={styles.aiActionRow}>
-              <button className={styles.aiPrimaryButton} onClick={applyDraftToBoard} type="button">
+              <button
+                className={styles.aiPrimaryButton}
+                onClick={applyDraftToBoard}
+                type="button"
+              >
                 생성
               </button>
               <button className={styles.aiSecondaryButton} onClick={cancelDraftPreview} type="button">
@@ -909,12 +928,28 @@ export function createWorkspaceAiChatStorageKey(projectId: string): string {
 }
 
 function TerraformIssueExplanationCard({
+  diagnostic,
   explanation
 }: {
+  readonly diagnostic: TerraformDiagnostic;
   readonly explanation: AiTerraformErrorExplanationResult;
 }) {
+  const fixPlan = createTerraformIssueFixPlan({ diagnostic, explanation });
+
   return (
     <div>
+      <section className={styles.terraformIssueFixPlan}>
+        <div className={styles.terraformIssueFixPlanHeader}>
+          <strong>수정 계획</strong>
+          <span>{fixPlan.providerLabel}</span>
+        </div>
+        <p>{fixPlan.summary}</p>
+        <ol>
+          {fixPlan.steps.map((step) => (
+            <li key={step}>{step}</li>
+          ))}
+        </ol>
+      </section>
       <dl className={styles.terraformIssueGuidanceList}>
         <div>
           <dt>원인</dt>

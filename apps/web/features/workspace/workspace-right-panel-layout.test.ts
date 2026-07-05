@@ -379,6 +379,14 @@ test("terraform errors surface as an issues banner and AI resolution lives in th
   assert.match(aiButtonRule, /\bbackground:\s*var\(--bp-blue\);/);
 });
 
+test("terraform issue AI resolution shows a fix plan before apply", () => {
+  assert.match(aiChatDockSource, /createTerraformIssueFixPlan/);
+  assert.match(aiChatDockSource, /terraformIssueFixPlan/);
+  assert.match(aiChatDockSource, /수정 계획/);
+  assert.match(aiChatDockSource, /fixPlan\.steps\.map/);
+  assert.match(aiChatDockSource, /!fixPlan\.canApply/);
+});
+
 test("terraform editor renders syntax colors and squiggly error underlines", () => {
   const syntaxHighlightLayerRule = getCssRule(stylesSource, "terraformSyntaxHighlightLayer");
   const highlightedLineErrorRule = getCssRule(stylesSource, "terraformHighlightedLineError");

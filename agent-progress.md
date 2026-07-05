@@ -20,7 +20,14 @@
   - Terraform 오류 AI 설명 타입/API/테스트, Issues 상태 저장, safe fix, Issues 패널/AI chat dock 연결, 관련 문서를 #161 worktree로 이동했다.
   - `WorkspaceAiChatDock` 충돌은 #161의 기존 초안/시뮬레이션 흐름을 기준으로 해소하고 Terraform Issue AI 요청/결과 표시만 추가했다.
   - #152 AI 다이어그램 브랜치의 patch preview 및 `saveDiagramNow` 의존성은 #161 범위가 아니므로 가져오지 않았다.
+  - Terraform Issue AI 결과 카드에 `수정 계획`을 먼저 보여주고, 자동 적용 가능한 safe fix 진단일 때만 `적용` 버튼이 활성화되게 정리했다.
+  - `terraform.unexpected_token` 설명 템플릿을 추가하고 unknown 설명에서 내부 fallback 문구가 사용자에게 노출되지 않게 바꿨다.
 - Verification run:
+  - `npm exec --package=pnpm@11.8.0 -- pnpm harness:check` - passed before the latest UI/API fix.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api exec tsx --test src/services/aiTerraformErrorExplanation.test.ts` - passed, 3 tests.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-right-panel-layout.test.ts --test-name-pattern "terraform issue AI resolution shows"` - passed, 40 source-layout tests.
+  - `git diff --check` - passed with line-ending warnings only.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm harness:check` - passed after the latest UI/API fix.
   - `pnpm harness:check` - sandbox EPERM 후 권한 재실행으로 passed before conflict resolution.
   - `pnpm --filter @sketchcatch/api exec tsx --test src/services/aiTerraformErrorExplanation.test.ts src/services/aiProviderRouter.test.ts` - passed, 12 tests.
   - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/terraform-safe-fixes.test.ts features/workspace/terraform-issues-state.test.ts features/workspace/workspace-right-panel-layout.test.ts features/workspace/terraform-error-explanation-panel.test.ts` - passed, 47 tests.
