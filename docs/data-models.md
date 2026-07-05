@@ -170,16 +170,24 @@ type AwsRegionCode =
   | "eu-central-1";
 
 type DiagramNodeMetadata = {
-  awsRegion?: AwsRegionCode;
   parentAreaNodeId?: string;
 };
 ```
 
-Region 디자인 노드의 선택 리전은 `node.metadata.awsRegion`에 region code로 저장한다.
-예: `ap-northeast-2`. 화면 label은 프론트엔드 option catalog에서 code와 매핑한다.
+새 기준에서 `node.metadata`에는 보드 편집/복구에 필요한 containment 정보만 저장한다.
+Region/AZ 선택값처럼 Terraform 동기화와 의미를 공유해야 하는 값은 `node.parameters.values`에 둔다.
 
 영역 노드 안에 명시적으로 배치된 node는 `node.metadata.parentAreaNodeId`에 부모 영역 node id를 저장한다.
 이 값은 영역 이동 시 자식 node를 함께 이동시키기 위한 보드 편집 metadata이며, Terraform resource/data block 생성에는 사용하지 않는다.
+
+Region과 AZ는 `design_region`, `design_az`가 아니라 보드 영역 리소스인 `aws_region`,
+`aws_availability_zone` resource node로 표현한다. 이 두 node는 Architecture Board containment와
+Terraform Sync proposal 정렬을 위한 SketchCatch 영역 리소스이며, Terraform HCL `resource`, `data`,
+또는 `provider "aws"` block으로 직접 렌더링하지 않는다.
+
+Region 선택값은 `node.parameters.values.awsRegion`에 region code로 저장한다. 예: `ap-northeast-2`.
+AZ 선택값은 `node.parameters.values.awsAvailabilityZone`에 AZ code로 저장한다. 예: `ap-northeast-2a`.
+화면 label은 프론트엔드 option catalog에서 code와 매핑한다.
 
 Terraform 변환에 필요한 값은 아래 4개다.
 
@@ -249,7 +257,7 @@ type ResourceType =
 
 ## ResourceDefinition과 Terraform Capability
 
-Terraform IaC 리소스의 지원 여부는 `packages/types/src/resource-definitions.ts`의 `ResourceDefinition`을 단일 출처로 삼는다. 여기에는 `provider`, domain `resourceType`, Terraform block identity, capability만 둔다. 여기서 domain `resourceType`은 AI/Architecture 분석용 분류값이며 Terraform Preview identity 기준이 아니다. `design_region`, `design_az`, `design_group`처럼 화면 배치만 위한 container node는 IaC 리소스가 아니므로 공통 definition에 넣지 않고 web catalog에만 둔다.
+Terraform IaC 리소스의 지원 여부는 `packages/types/src/resource-definitions.ts`의 `ResourceDefinition`을 단일 출처로 삼는다. 여기에는 `provider`, domain `resourceType`, Terraform block identity, capability만 둔다. 여기서 domain `resourceType`은 AI/Architecture 분석용 분류값이며 Terraform Preview identity 기준이 아니다. `aws_region`, `aws_availability_zone`, `design_group`처럼 보드 포함 관계를 위한 area node는 Terraform HCL block으로 직접 렌더링되는 IaC 리소스가 아니므로 공통 definition에 넣지 않고 web catalog에만 둔다.
 
 ```ts
 type ResourceCapability = {
@@ -470,8 +478,11 @@ type TerraformDiagramChangeProposal =
   | {
       kind: "create_candidate";
       identity: TerraformBlockIdentity;
+      nodeId?: string;
       sourceFileName?: string;
       line?: number;
+      metadata?: DiagramNodeMetadata;
+      position?: DiagramNode["position"];
       parameters: DiagramNodeParameters;
     }
   | {
@@ -494,6 +505,11 @@ type TerraformDiagramChangeProposal =
 `proposals`는 Terraform editor 저장 또는 배포 준비처럼 사용자가 명시적으로 실행한 Terraform sync action 안에서 반영된다. 프론트엔드는 별도 변경 제안 확인 UI를 띄우지 않고, 해당 명시 action을 사용자 승인 경계로 삼아 create/delete/rename 후보를 `DiagramJson`에 자동 반영할 수 있다.
 
 Terraform editor 저장 sync action에서 `terraformCode`와 모든 `terraformFiles[].terraformCode`가 공백이면 사용자가 Terraform 리소스를 모두 삭제하려는 명시 의도로 본다. 이때 API는 `terraformSync` capability가 `true`인 Diagram-only resource를 `delete_candidate`로 반환하고, Diagram도 이미 비어 있으면 diagnostics 없이 성공한다.
+
+Terraform Sync에서 `provider "aws"` block은 Diagram resource가 아니므로 create/delete/rename proposal 대상이 아니다.
+입력 Terraform이 `provider "aws"` block만 포함하면 기존 Diagram resource 삭제 의도가 아니므로 `diagnostics: []`,
+`proposals: []`인 no-op으로 처리한다. Region 영역 리소스는 `provider "aws"` block으로 생성하지 않고,
+`aws_region` node의 `parameters.values.awsRegion`으로만 저장한다.
 
 Terraform editor에서 새로 발견한 구조 변경 proposal의 v1 범위는 shared `ResourceDefinition`의 `terraformSync` capability가 `true`인 Terraform block이다. Terraform Preview 렌더링 대상은 `terraformPreview` capability로 따로 판단한다. 따라서 `aws_cloudfront_distribution`처럼 sync는 가능하지만 preview는 아직 제외되는 리소스가 있을 수 있다. 이미 같은 identity로 매칭된 block은 parser가 안전하게 해석할 수 있는 경우 `parameters.values` 갱신 대상이 될 수 있다.
 

@@ -109,6 +109,101 @@
 - Known risks:
   - 이미 브라우저에 stale/invalid refresh cookie가 남아 있는 경우에는 한 번의 refresh 401 후 cookie clear가 발생할 수 있다.
   - 실제 브라우저 DevTools 콘솔 캡처 기반 smoke는 사용자가 보는 Chrome 프로필에서 직접 재확인이 필요하다.
+  
+### 2026-07-05 - Terraform 영역 리소스 Ticket 2 리뷰 보강
+
+- Goal: Ticket 2 리뷰 피드백에 따라 Region/AZ parameter reader가 legacy 또는 깨진 Diagram node에서 `parameters.values` 누락/null을 안전하게 처리하게 한다.
+- Completed:
+  - `getRegionNodeAwsRegion`, `getAvailabilityZoneNodeValue`에서 `node.parameters?.values?.[...]`로 조회하도록 보강했다.
+  - Region/AZ parameter update helper가 legacy `values: undefined | null`에서도 `{}` 기반으로 값을 쓸 수 있게 했다.
+  - `values` 누락/null 회귀 테스트를 추가했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/parameter-input/region-node-metadata.test.ts` - passed.
+  - `pnpm --filter @sketchcatch/web typecheck` - passed.
+  - `pnpm --filter @sketchcatch/web lint` - passed.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `pnpm build` - passed.
+- Known risks:
+  - 커밋은 만들지 않았다.
+
+### 2026-07-05 - Terraform 영역 리소스 계약 Ticket 2
+
+- Goal: `docs/jh/001_테라폼영역리소스동기화티켓계획_JH.md`의 Ticket 2 범위에 맞춰 Web에서 Region/AZ를 `design_region`/`design_az`가 아니라 `aws_region`/`aws_availability_zone` resource area node로 생성하고, 선택값을 `parameters.values`로 읽고 쓰게 한다.
+- Completed:
+  - Resource catalog의 Region/AZ item을 `aws_region`, `aws_availability_zone` 타입으로 바꾸고, drag 생성 시 `kind: "resource"`가 되도록 catalog id를 `aws-region`, `aws-availability-zone`으로 전환했다.
+  - Region/AZ drag 생성 기본 `parameters`를 추가했다. Region은 `resourceName: "ap_northeast_2"`, `values.awsRegion: "ap-northeast-2"`이고 AZ는 `resourceName: "ap_northeast_2a"`, `values.awsAvailabilityZone: "ap-northeast-2a"`다.
+  - `area-nodes`, resize bounds, Resource List summary가 `aws_region`과 `aws_availability_zone`을 board area node로 인식하게 했다.
+  - Parameter panel에서 Region/AZ selector가 `metadata` 대신 `parameters.values["awsRegion"]`, `parameters.values["awsAvailabilityZone"]`만 갱신하게 했다.
+  - AZ 선택용 정적 option helper와 테스트를 추가했다.
+  - server-storage sample layout이 더 이상 `design_region`/`design_az`를 생성하지 않고, catalog 기반 `aws_region`/`aws_availability_zone` area resource를 생성하게 했다.
+  - `docs/data-models.md`의 ResourceDefinition 설명에서 Region/AZ area resource가 shared Terraform definition 대상이 아님을 최신 계약에 맞게 보정했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/resource-settings/catalog.test.ts` - passed.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/parameter-input/region-node-metadata.test.ts features/parameter-input/aws-availability-zone-options.test.ts` - passed.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/area-nodes.test.ts features/diagram-editor/diagram-utils.test.ts features/diagram-editor/node-resize-bounds.test.ts` - passed.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/resource-list-summary.test.ts features/workspace/workspace-ai-diagram-adapter.test.ts` - passed.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/area-node-movement.test.ts features/diagram-editor/reference-drop-targets.test.ts features/diagram-editor/flow-mappers.test.ts` - passed.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/routes/terraform.test.ts --test-name-pattern "Region and AZ area resource parameters"` - passed; Node test runner still executed the whole file.
+  - `pnpm --filter @sketchcatch/web typecheck` - passed.
+  - `pnpm --filter @sketchcatch/api typecheck` - passed.
+  - `pnpm --filter @sketchcatch/types typecheck` - passed.
+  - `pnpm --filter @sketchcatch/web lint` - passed.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `pnpm build` - passed.
+- Known risks:
+  - Ticket 3에서 ASG를 visual area node로 추가할 때 `area-nodes`, resize bounds, flow/reference movement 회귀 범위를 이어서 확인해야 한다.
+  - Legacy `design_region`/`design_az`는 기존 저장 데이터와 테스트 호환을 위해 area 판정에서만 남아 있다. 신규 catalog/sample 생성 경로에서는 제거했다.
+  - 커밋은 사용자 요청에 따라 만들지 않았다.
+
+### 2026-07-05 - Terraform 영역 리소스 Ticket 1 리뷰 보강
+
+- Goal: Ticket 1 리뷰 피드백에 따라 Region 조회 helper와 `Record<string, unknown>` 접근 방식을 더 타입 안전하게 보강한다.
+- Completed:
+  - `getRegionNodeAwsRegion`이 새 계약 위치인 `node.parameters?.values["awsRegion"]`을 먼저 읽고, 기존 저장 데이터의 `metadata.awsRegion`은 fallback으로만 읽게 했다.
+  - `Record<string, unknown>`인 `parameters.values` 조회 테스트를 dot notation에서 bracket notation으로 바꿨다.
+  - 새 `parameters.values["awsRegion"]` 값이 legacy metadata보다 우선되는 회귀 테스트를 추가했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/parameter-input/region-node-metadata.test.ts features/workspace/resource-list-summary.test.ts` - passed.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/routes/project-draft-schemas.test.ts` - passed.
+  - `pnpm --filter @sketchcatch/web typecheck` - passed.
+  - `pnpm --filter @sketchcatch/api typecheck` - passed.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `pnpm build` - passed.
+- Known risks:
+  - `createRegionNodeMetadata(node, awsRegion)`는 Ticket 2에서 parameter write path로 옮길 때 signature와 호출부를 함께 정리해야 한다.
+
+### 2026-07-05 - Terraform 영역 리소스 계약 Ticket 1
+
+- Goal: `docs/jh/001_테라폼영역리소스동기화티켓계획_JH.md`의 Ticket 1 범위에 맞춰 Region/AZ 영역 리소스와 Terraform Sync 계약을 문서, shared type, API schema 수준에서 고정한다.
+- Completed:
+  - `docs/data-models.md`에서 `DiagramNodeMetadata`를 containment 전용 metadata로 정리하고, Region/AZ 선택값은 `parameters.values.awsRegion`, `parameters.values.awsAvailabilityZone`에 저장한다는 계약을 명시했다.
+  - `aws_region`, `aws_availability_zone`은 Terraform HCL `resource`, `data`, `provider "aws"` block이 아니라 SketchCatch 보드 영역 리소스라는 정책을 문서화했다.
+  - Terraform Sync proposal의 `create_candidate`에 `nodeId`, `metadata`, `position`을 실을 수 있도록 shared type과 문서 계약을 확장했다.
+  - API draft/generate schema에서 legacy `metadata.awsRegion`을 제거하고 `parentAreaNodeId` 외 metadata key를 strict하게 거부하도록 바꿨다.
+  - API 테스트에 legacy metadata 거부, Region/AZ `parameters.values` 허용, Sync proposal metadata 보존 회귀 케이스를 추가했다.
+  - Web 컴파일 호환을 위해 legacy persisted Region metadata 읽기는 좁은 helper 안에 격리하고, 새 metadata 작성 경로는 더 이상 `awsRegion`을 쓰지 않게 정리했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits and after edits.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/routes/project-draft-schemas.test.ts` - passed.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/routes/terraform.test.ts` - passed.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/parameter-input/region-node-metadata.test.ts features/diagram-editor/area-node-movement.test.ts features/diagram-editor/diagram-utils.test.ts features/workspace/resource-list-summary.test.ts` - passed.
+  - `pnpm --filter @sketchcatch/types typecheck` - passed.
+  - `pnpm --filter @sketchcatch/api typecheck` - passed.
+  - `pnpm --filter @sketchcatch/web typecheck` - passed.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `pnpm build` - passed.
+  - `git diff --check` - passed.
+- Known risks:
+  - Ticket 2에서 Region/AZ 영역 노드 생성과 selector 저장 경로를 실제 `parameters.values` 기반으로 옮겨야 한다. 현재 Ticket 1은 계약 고정과 schema guard가 중심이다.
+  - Legacy persisted Region node의 `metadata.awsRegion` 읽기는 Web helper에만 임시 호환으로 남아 있다.
+  - 커밋은 사용자 요청에 따라 만들지 않았다.
 
 ### 2026-07-04 - PR #151 리뷰 대응
 
@@ -1385,6 +1480,7 @@
   - This pass is visual/CSS polish only; Resource/Template tab behavior remains the existing implementation.
 - Next best action:
   - Run final full checks and commit the feedback polish.
+
 # 2026-07-04 - 오른쪽 패널 Blueprint 스킨 복구
 
 - Goal: 최신 `dev` 병합에서 유지한 오른쪽 패널 로직 위에 빠진 Blueprint 디자인 톤을 다시 적용한다.
@@ -1429,6 +1525,7 @@
 - Known risks:
   - 이번 확인은 정적 체크와 테스트 중심이며, 최신 툴바 위치는 브라우저 스크린샷으로 재확인하지 않았다.
   - 실제 AWS apply/destroy나 Git/CI/CD 실행은 수행하지 않았다.
+
 ## 2026-07-05 - Issue #135 GitHub PR handoff v0
 
 - Goal: #134 GitCicdHandoff 계약/API 위에 Terraform artifact를 GitHub PR 생성 요청 payload로 넘기는 두 번째 vertical slice를 구현한다.
@@ -1493,6 +1590,7 @@
 - Known risks:
   - 실제 Redis 서버 의존 테스트는 수행하지 않았고 in-memory/fake cache로 검증했다.
   - Runtime Cache는 원천 기록이 아니며 RDS/S3 조회가 계속 기준이다.
+  
 ## 2026-07-05 - Issue #136 Git/CI/CD pipeline status UI
 
 - Goal: #134/#135 GitCicdHandoff 계약 위에서 pipeline status 조회, Runtime Cache read-through, DeploymentPanel 표시를 최소 vertical slice로 연결한다.

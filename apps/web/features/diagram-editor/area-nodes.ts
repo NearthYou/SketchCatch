@@ -1,8 +1,11 @@
 import type { DiagramNode } from "../../../../packages/types/src";
+import { getAwsAvailabilityZoneLabel } from "../parameter-input/aws-availability-zone-options";
 import { getAwsRegionLabel } from "../parameter-input/aws-region-options";
 import {
+  getAvailabilityZoneNodeValue,
   getRegionNodeAwsRegion,
-  isRegionDesignNode
+  isAvailabilityZoneAreaNode,
+  isRegionAreaNode
 } from "../parameter-input/region-node-metadata";
 
 const designAreaNodeTypes = new Set([
@@ -14,7 +17,13 @@ const designAreaNodeTypes = new Set([
   "sketchcatch_group"
 ]);
 
-const resourceAreaNodeTypes = new Set(["aws_vpc", "aws_subnet", "aws_security_group"]);
+const resourceAreaNodeTypes = new Set([
+  "aws_availability_zone",
+  "aws_region",
+  "aws_vpc",
+  "aws_subnet",
+  "aws_security_group"
+]);
 const groupIconPath = "/Architecture-Group-Icons_07312025";
 
 const designAreaNodeIconByType: Record<string, string> = {
@@ -70,11 +79,15 @@ export function getAreaNodeIconUrl(node: DiagramNode): string | undefined {
 }
 
 export function getAreaNodeMetaLabel(node: DiagramNode): string | undefined {
-  if (!isRegionDesignNode(node)) {
-    return undefined;
+  if (isRegionAreaNode(node)) {
+    return getAwsRegionLabel(getRegionNodeAwsRegion(node));
   }
 
-  return getAwsRegionLabel(getRegionNodeAwsRegion(node));
+  if (isAvailabilityZoneAreaNode(node)) {
+    return getAwsAvailabilityZoneLabel(getAvailabilityZoneNodeValue(node));
+  }
+
+  return undefined;
 }
 
 export function isDesignAreaNode(node: DiagramNode): boolean {
