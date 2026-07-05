@@ -343,14 +343,65 @@ function createRelationship(
   };
 }
 
-function extractSetItems(xml: string, setTag: string): string[] {
+export function extractSetItems(xml: string, setTag: string): string[] {
   const setBody = extractTag(xml, setTag);
 
   if (!setBody) {
     return [];
   }
 
-  return [...setBody.matchAll(/<item>([\s\S]*?)<\/item>/g)].map((match) => match[1] ?? "");
+  return extractDirectItemBodies(setBody);
+}
+
+// AWS Query XML은 바깥 목록과 안쪽 하위 목록이 모두 <item>을 쓰기 때문에 깊이를 세야 합니다.
+function extractDirectItemBodies(xml: string): string[] {
+  const items: string[] = [];
+  let searchIndex = 0;
+
+  while (searchIndex < xml.length) {
+    const itemStartIndex = xml.indexOf("<item>", searchIndex);
+
+    if (itemStartIndex === -1) {
+      return items;
+    }
+
+    const itemBodyStartIndex = itemStartIndex + "<item>".length;
+    const itemEndIndex = findMatchingItemEndIndex(xml, itemBodyStartIndex);
+    items.push(xml.slice(itemBodyStartIndex, itemEndIndex));
+    searchIndex = itemEndIndex + "</item>".length;
+  }
+
+  return items;
+}
+
+function findMatchingItemEndIndex(xml: string, startIndex: number): number {
+  let depth = 1;
+  let searchIndex = startIndex;
+
+  while (depth > 0) {
+    const nextItemStartIndex = xml.indexOf("<item>", searchIndex);
+    const nextItemEndIndex = xml.indexOf("</item>", searchIndex);
+
+    if (nextItemEndIndex === -1) {
+      throw new Error("AWS response item tag is not closed");
+    }
+
+    if (nextItemStartIndex !== -1 && nextItemStartIndex < nextItemEndIndex) {
+      depth += 1;
+      searchIndex = nextItemStartIndex + "<item>".length;
+      continue;
+    }
+
+    depth -= 1;
+
+    if (depth === 0) {
+      return nextItemEndIndex;
+    }
+
+    searchIndex = nextItemEndIndex + "</item>".length;
+  }
+
+  return searchIndex;
 }
 
 function extractNameTag(xml: string): string | null {
