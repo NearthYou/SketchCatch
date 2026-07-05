@@ -1774,3 +1774,26 @@
   - 실제 GitHub API 호출, GitHub Actions polling worker, GitHub token 사용은 수행하지 않았다.
   - 실제 AWS apply/destroy, cloud mutation, real Git/CI/CD handoff execution은 수행하지 않았다.
   - Runtime Cache는 보조 캐시이며 RDS `git_cicd_handoffs` record가 source of truth다.
+
+## 2026-07-06 - Cost Estimate 기간/사용자 배율 보강
+
+- Goal: 비용관리와 AI 시뮬레이션의 예상 비용이 하루/일주일/한 달 단위로 조회되고, 예상 사용자 수와 인스턴스 타입 차이를 더 명확히 반영하도록 비용 산정 모델을 보강한다.
+- Completed:
+  - `ResourceCostEstimate.periodEstimate`를 추가해 월 환산 금액(`monthlyEstimate`)과 선택 기간 금액(`periodEstimate`)을 분리했다.
+  - EC2/RDS/ElastiCache fallback 인스턴스 타입 목록을 확장하고, 알 수 없는 패밀리/사이즈도 family + size multiplier로 추정하도록 보강했다.
+  - 기본 1,000명 기준 `expectedUserCount / 1000` 용량 배율을 EC2/RDS/EBS/RDS snapshot/ElastiCache/ECS/NAT Gateway/VPC Endpoint/ALB에 반영했다.
+  - S3/EFS/DynamoDB/Lambda/API Gateway/SQS/SNS/EventBridge/CloudFront/CloudWatch Logs/CloudTrail/X-Ray/Config/WAF/GuardDuty는 예상 사용자 수에서 파생한 저장량, 요청 수, 이벤트 수, 전송량으로 계산하도록 유지했다.
+  - 비용관리 리소스 상세와 워크스페이스 AI 시뮬레이션 리소스 상세가 월 고정 금액이 아니라 선택 기간의 `periodEstimate`를 표시하도록 수정했다.
+  - `docs/data-models.md`에 월 환산값과 기간값의 의미, 사용자 수 배율 적용 범위를 기록했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/cost-analysis.test.ts src/routes/aiDesignSimulation.test.ts` - passed
+  - `pnpm --filter @sketchcatch/api typecheck` - passed
+  - `pnpm --filter @sketchcatch/web typecheck` - passed
+  - `pnpm lint` - passed
+  - `pnpm typecheck` - passed
+  - `pnpm build` - passed
+  - `git diff --check` - passed
+- Known risks:
+  - 로컬에서 실제 AWS SSO credential 기반 AWS Pricing API 조회는 수행하지 않았고, fallback 및 fake pricing provider 경로로 검증했다.
+  - 사용자 수 배율은 실제 사용량 집계가 아니라 예상 사용자 수 기반 용량 가정치다. Route53 hosted zone, CloudWatch alarm/dashboard, CodePipeline처럼 사용자 수와 직접 비례하지 않는 개수 고정비는 배율을 적용하지 않는다.

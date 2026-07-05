@@ -729,3 +729,11 @@ pnpm build
 - Scope completed: Deployment repository mutation wrapper writes `deployment.status`, log creation/SSE stream writes `deployment.log_cursor`, stream cursor read falls back to RDS on cache miss/failure, `buildApp` wires `createRuntimeCacheFromEnv`, and docs/sw has key/TTL/future reverse scan/pipeline convention.
 - Verification completed: targeted deployment route tests, API lint/typecheck, workspace lint/typecheck/build, `git diff --check`; final harness still needs to be rerun after this handoff note.
 - Remaining risk: no real Redis server or AWS apply/destroy was run.
+
+## 2026-07-06 - Cost Estimate 기간/사용자 배율 handoff
+
+- Branch/worktree: `feat/ys/142-cost-risk-분석-구현` at `C:\krafton_jungle\SketchCatch`.
+- Scope completed: 비용 산정 DTO에 `ResourceCostEstimate.periodEstimate`를 추가했고, API는 월 환산 금액과 요청 기간 금액을 함께 반환한다. 예상 사용자 수는 기본 1,000명 대비 배율로 EC2/RDS/EBS/RDS snapshot/ElastiCache/ECS/NAT Gateway/VPC Endpoint/ALB 용량 산정에 반영한다. 요청량/저장량/전송량 기반 리소스는 기존 파생량 모델을 유지했다.
+- UI completed: 비용관리 프로젝트 상세와 워크스페이스 AI 시뮬레이션 리소스 상세가 `monthlyEstimate` 대신 선택 기간의 `periodEstimate`를 표시한다.
+- Verification completed: focused API tests, API/web typecheck, `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, `git diff --check`.
+- Remaining risk: 실제 AWS SSO credential 기반 AWS Pricing API 호출은 검증하지 않았다. 현재 검증은 fallback 경로와 fake pricing provider 기반이다.
