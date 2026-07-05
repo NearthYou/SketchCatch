@@ -402,6 +402,44 @@ test("uses an existing AZ area node instead of creating a duplicate AZ proposal"
   });
 });
 
+test("ignores existing AZ area nodes without values when planning AZ proposals", () => {
+  const availabilityZoneNode = makeNode({
+    id: "az-legacy",
+    type: "aws_availability_zone",
+    kind: "resource",
+    label: "AZ",
+    parameters: {
+      resourceType: "aws_availability_zone",
+      resourceName: "ap_northeast_2a",
+      fileName: "main",
+      values: {}
+    }
+  });
+
+  Object.assign(availabilityZoneNode.parameters ?? {}, { values: undefined });
+
+  const result = syncTerraformToDiagramJson(
+    {
+      nodes: [availabilityZoneNode],
+      edges: [],
+      viewport: { x: 0, y: 0, zoom: 1 }
+    },
+    `resource "aws_subnet" "public" {
+  cidr_block = "10.0.1.0/24"
+  availability_zone = "ap-northeast-2a"
+}`
+  );
+
+  assert.deepEqual(result.diagnostics, []);
+  assert.equal(result.proposals?.[0]?.kind, "create_candidate");
+  assert.equal(result.proposals?.[0]?.identity.resourceType, "aws_availability_zone");
+  assert.equal(result.proposals?.[0]?.nodeId, "terraform-az-ap-northeast-2a");
+  assert.equal(result.proposals?.[1]?.kind, "create_candidate");
+  assert.deepEqual(result.proposals?.[1]?.metadata, {
+    parentAreaNodeId: "terraform-az-ap-northeast-2a"
+  });
+});
+
 test("updates matched child metadata when Terraform availability_zone matches an existing AZ area", () => {
   const diagramJson: DiagramJson = {
     nodes: [

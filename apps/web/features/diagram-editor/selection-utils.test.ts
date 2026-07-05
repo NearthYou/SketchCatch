@@ -77,7 +77,7 @@ test("normalizeSelectedNodeIds removes area nodes from mixed lasso selection", (
 
   assert.deepEqual(
     normalizeSelectedNodeIds(nodes, ["vpc", "ec2-instance", "s3-site"]),
-    ["ec2-instance", "s3-site"]
+    ["ec2-instance"]
   );
 });
 

@@ -99,6 +99,19 @@ test("allows provider blocks as execution environment configuration", () => {
   );
 });
 
+test("does not treat provider-prefixed attributes as provider block headers", () => {
+  const diagnostics = createTerraformDiagnostics(`resource "aws_vpc" "main" {
+  cidr_block = "10.0.0.0/16"
+}
+
+provider_region = "ap-northeast-2"`);
+
+  assert.equal(
+    diagnostics.some((diagnostic) => diagnostic.code === "terraform.block_header"),
+    false
+  );
+});
+
 test("keeps unbalanced provider blocks as blocking diagnostics", () => {
   const diagnostics = createTerraformDiagnostics(`provider "aws" {
   region = "ap-northeast-2"`);

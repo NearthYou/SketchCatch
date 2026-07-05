@@ -54,6 +54,31 @@ test("getNodeResizeBounds removes area node max limits while keeping minimum siz
     minHeight: 130,
     ...unrestrictedMax
   });
+  assert.deepEqual(getNodeResizeBounds(makeResourceNode("aws_s3_bucket")), {
+    minWidth: 200,
+    minHeight: 130,
+    ...unrestrictedMax
+  });
+  assert.deepEqual(getNodeResizeBounds(makeResourceNode("aws_api_gateway_resource")), {
+    minWidth: 200,
+    minHeight: 130,
+    ...unrestrictedMax
+  });
+  assert.deepEqual(getNodeResizeBounds(makeResourceNode("aws_cloudwatch_event_rule")), {
+    minWidth: 200,
+    minHeight: 130,
+    ...unrestrictedMax
+  });
+  assert.deepEqual(getNodeResizeBounds(makeResourceNode("aws_db_subnet_group")), {
+    minWidth: 220,
+    minHeight: 150,
+    ...unrestrictedMax
+  });
+  assert.deepEqual(getNodeResizeBounds(makeResourceNode("aws_api_gateway_rest_api")), {
+    minWidth: 240,
+    minHeight: 160,
+    ...unrestrictedMax
+  });
 });
 
 test("getNodeResizeBounds keeps regular resource bounds unchanged", () => {

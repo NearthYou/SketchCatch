@@ -9,6 +9,11 @@ const vpcAreaSize = { width: 240, height: 160 };
 const subnetAreaSize = { width: 180, height: 120 };
 const securityGroupAreaSize = subnetAreaSize;
 const autoscalingGroupAreaSize = { width: 200, height: 130 };
+const s3BucketAreaSize = autoscalingGroupAreaSize;
+const apiGatewayResourceAreaSize = autoscalingGroupAreaSize;
+const eventBridgeRuleAreaSize = autoscalingGroupAreaSize;
+const dbSubnetGroupAreaSize = { width: 220, height: 150 };
+const apiGatewayRestApiAreaSize = { width: 240, height: 160 };
 
 const groupIconPath = "/Architecture-Group-Icons_07312025";
 const serviceIconPath = "/Architecture-Service-Icons_07312025";
@@ -245,7 +250,7 @@ const terraformResourcePresentations = [
     category: "Storage",
     iconUrl: `${resourceIconPath}/Res_Storage/Res_Amazon-Simple-Storage-Service_Bucket_48.svg`,
     label: "S3 Bucket",
-    size
+    size: s3BucketAreaSize
   },
   {
     definitionId: "aws-s3-public-access-block",
@@ -308,7 +313,7 @@ const terraformResourcePresentations = [
     category: "Database",
     iconUrl: `${serviceIconPath}/Arch_Database/64/Arch_Amazon-RDS_64.svg`,
     label: "DB Subnet Group",
-    size
+    size: dbSubnetGroupAreaSize
   },
   {
     definitionId: "aws-db-parameter-group",
@@ -371,7 +376,7 @@ const terraformResourcePresentations = [
     category: "Serverless / Application",
     iconUrl: `${serviceIconPath}/Arch_Networking-Content-Delivery/64/Arch_Amazon-API-Gateway_64.svg`,
     label: "REST API",
-    size
+    size: apiGatewayRestApiAreaSize
   },
   {
     definitionId: "aws-api-gateway-resource",
@@ -380,7 +385,7 @@ const terraformResourcePresentations = [
     category: "Serverless / Application",
     iconUrl: `${resourceIconPath}/Res_Networking-Content-Delivery/Res_Amazon-API-Gateway_Endpoint_48.svg`,
     label: "API Resource",
-    size
+    size: apiGatewayResourceAreaSize
   },
   {
     definitionId: "aws-api-gateway-method",
@@ -434,7 +439,7 @@ const terraformResourcePresentations = [
     category: "Observability / Operations",
     iconUrl: `${resourceIconPath}/Res_Application-Integration/Res_Amazon-EventBridge_Rule_48.svg`,
     label: "Event Rule",
-    size
+    size: eventBridgeRuleAreaSize
   },
   {
     definitionId: "aws-eventbridge-target",

@@ -45,13 +45,29 @@ test("toFlowNodes marks area nodes for click-through body hit testing", () => {
   const vpc = makeNode({ id: "vpc-1", resourceType: "aws_vpc" });
   const securityGroup = makeNode({ id: "security-group-1", resourceType: "aws_security_group" });
   const autoscalingGroup = makeNode({ id: "asg-1", resourceType: "aws_autoscaling_group" });
+  const bucket = makeNode({ id: "bucket-1", resourceType: "aws_s3_bucket" });
+  const dbSubnetGroup = makeNode({ id: "db-subnet-group-1", resourceType: "aws_db_subnet_group" });
+  const api = makeNode({ id: "api-1", resourceType: "aws_api_gateway_rest_api" });
+  const apiResource = makeNode({ id: "api-resource-1", resourceType: "aws_api_gateway_resource" });
+  const eventRule = makeNode({ id: "event-rule-1", resourceType: "aws_cloudwatch_event_rule" });
   const instance = makeNode({ id: "instance-1", resourceType: "aws_instance" });
 
-  const flowNodes = toFlowNodes([vpc, securityGroup, autoscalingGroup, instance], [], null, false, handlers);
+  const flowNodes = toFlowNodes(
+    [vpc, securityGroup, autoscalingGroup, bucket, dbSubnetGroup, api, apiResource, eventRule, instance],
+    [],
+    null,
+    false,
+    handlers
+  );
 
   assert.equal(flowNodes.find((node) => node.id === "vpc-1")?.className, "diagramAreaFlowNode");
   assert.equal(flowNodes.find((node) => node.id === "security-group-1")?.className, "diagramAreaFlowNode");
   assert.equal(flowNodes.find((node) => node.id === "asg-1")?.className, "diagramAreaFlowNode");
+  assert.equal(flowNodes.find((node) => node.id === "bucket-1")?.className, "diagramAreaFlowNode");
+  assert.equal(flowNodes.find((node) => node.id === "db-subnet-group-1")?.className, "diagramAreaFlowNode");
+  assert.equal(flowNodes.find((node) => node.id === "api-1")?.className, "diagramAreaFlowNode");
+  assert.equal(flowNodes.find((node) => node.id === "api-resource-1")?.className, "diagramAreaFlowNode");
+  assert.equal(flowNodes.find((node) => node.id === "event-rule-1")?.className, "diagramAreaFlowNode");
   assert.equal(flowNodes.find((node) => node.id === "instance-1")?.className, undefined);
 });
 

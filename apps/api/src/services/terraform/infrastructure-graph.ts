@@ -102,7 +102,7 @@ function getInheritedAvailabilityZone(
     return null;
   }
 
-  const availabilityZone = parentNode.parameters?.values["awsAvailabilityZone"];
+  const availabilityZone = parentNode.parameters?.values?.["awsAvailabilityZone"];
 
   return typeof availabilityZone === "string" && availabilityZone.trim().length > 0
     ? availabilityZone

@@ -273,6 +273,52 @@ test("buildInfrastructureGraphFromDiagramJson inherits availability_zone from di
   });
 });
 
+test("buildInfrastructureGraphFromDiagramJson ignores legacy AZ parents without values", () => {
+  const availabilityZoneNode = makeNode({
+    id: "az-1",
+    type: "aws_availability_zone",
+    kind: "resource",
+    label: "AZ",
+    parameters: {
+      resourceType: "aws_availability_zone",
+      resourceName: "ap_northeast_2a",
+      fileName: "main",
+      values: {}
+    }
+  });
+
+  Object.assign(availabilityZoneNode.parameters ?? {}, { values: undefined });
+
+  const graph = buildInfrastructureGraphFromDiagramJson({
+    nodes: [
+      availabilityZoneNode,
+      makeNode({
+        id: "subnet-1",
+        type: "aws_subnet",
+        kind: "resource",
+        label: "public",
+        metadata: {
+          parentAreaNodeId: "az-1"
+        },
+        parameters: {
+          resourceType: "aws_subnet",
+          resourceName: "public",
+          fileName: "main",
+          values: {
+            cidrBlock: "10.0.1.0/24"
+          }
+        }
+      })
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  });
+
+  assert.deepEqual(graph.nodes[0]?.config, {
+    cidrBlock: "10.0.1.0/24"
+  });
+});
+
 test("buildInfrastructureGraphFromDiagramJson keeps child availabilityZone before parent AZ inheritance", () => {
   const graph = buildInfrastructureGraphFromDiagramJson({
     nodes: [

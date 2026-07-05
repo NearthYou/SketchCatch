@@ -11,7 +11,7 @@ import {
   isResourceAreaNode
 } from "./area-nodes";
 
-test("isAreaNode matches Region, Availability Zone, Group, VPC, Subnet, Security Group, and ASG nodes", () => {
+test("isAreaNode matches board and Terraform resource area nodes", () => {
   assert.equal(isAreaNode(makeDesignNode({ type: "design_region" })), true);
   assert.equal(isAreaNode(makeDesignNode({ type: "design_az" })), true);
   assert.equal(isAreaNode(makeDesignNode({ type: "design_group" })), true);
@@ -24,6 +24,11 @@ test("isAreaNode matches Region, Availability Zone, Group, VPC, Subnet, Security
   assert.equal(isAreaNode(makeResourceNode({ resourceType: "aws_subnet" })), true);
   assert.equal(isAreaNode(makeResourceNode({ resourceType: "aws_security_group" })), true);
   assert.equal(isAreaNode(makeResourceNode({ resourceType: "aws_autoscaling_group" })), true);
+  assert.equal(isAreaNode(makeResourceNode({ resourceType: "aws_s3_bucket" })), true);
+  assert.equal(isAreaNode(makeResourceNode({ resourceType: "aws_db_subnet_group" })), true);
+  assert.equal(isAreaNode(makeResourceNode({ resourceType: "aws_api_gateway_rest_api" })), true);
+  assert.equal(isAreaNode(makeResourceNode({ resourceType: "aws_api_gateway_resource" })), true);
+  assert.equal(isAreaNode(makeResourceNode({ resourceType: "aws_cloudwatch_event_rule" })), true);
 });
 
 test("isAreaNode excludes regular design and resource nodes", () => {
@@ -63,6 +68,10 @@ test("getAreaNodeLabel uses resource name for resource area nodes", () => {
       makeResourceNode({ resourceName: "auto_scaling_group", resourceType: "aws_autoscaling_group" })
     ),
     "auto_scaling_group"
+  );
+  assert.equal(
+    getAreaNodeLabel(makeResourceNode({ resourceName: "assets_bucket", resourceType: "aws_s3_bucket" })),
+    "assets_bucket"
   );
   assert.equal(
     getAreaNodeLabel(makeResourceNode({ resourceName: "ap_northeast_2", resourceType: "aws_region" })),

@@ -387,7 +387,7 @@ function createExistingAvailabilityZoneNodeIdByValue(
       continue;
     }
 
-    const availabilityZone = node.parameters?.values["awsAvailabilityZone"];
+    const availabilityZone = node.parameters?.values?.["awsAvailabilityZone"];
 
     if (typeof availabilityZone === "string" && availabilityZone.trim().length > 0) {
       nodeIdByValue.set(availabilityZone, node.id);

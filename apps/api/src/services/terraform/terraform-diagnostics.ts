@@ -9,6 +9,7 @@ import { isTerraformNestedBlockAttribute } from "./terraform-nested-blocks.js";
 const BLOCK_HEADER_PATTERN =
   /^\s*(resource|data)\s+"([^"]+)"\s+"([^"]+)"\s*\{\s*(?:\}\s*)?$/;
 const PROVIDER_BLOCK_HEADER_PATTERN = /^\s*provider\s+"([^"]+)"\s*\{\s*(?:\}\s*)?$/;
+const PROVIDER_BLOCK_PREFIX_PATTERN = /^provider\b/;
 const TOP_LEVEL_BLOCK_PATTERN = /^\s*([A-Za-z_][A-Za-z0-9_]*)\b/;
 const ATTRIBUTE_ASSIGNMENT_PATTERN = /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/;
 const ATTRIBUTE_DOUBLE_EQUALS_PATTERN = /^\s*[A-Za-z_][A-Za-z0-9_]*\s*==/;
@@ -277,7 +278,7 @@ function checkBlocks(terraformCode: string): TerraformDiagnostic[] {
       });
     }
 
-    if (currentDepth === 0 && trimmedLine.startsWith("provider")) {
+    if (currentDepth === 0 && PROVIDER_BLOCK_PREFIX_PATTERN.test(trimmedLine)) {
       const match = PROVIDER_BLOCK_HEADER_PATTERN.exec(codeLine);
 
       if (!match) {
