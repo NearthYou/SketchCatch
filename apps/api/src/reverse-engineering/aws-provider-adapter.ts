@@ -34,8 +34,15 @@ export type AwsDiscoveredResourceRecord = {
   relationships: AwsDiscoveredRelationship[];
 };
 
+export type AwsProviderDiscoveryResult = {
+  records: AwsDiscoveredResourceRecord[];
+  scanErrors: ReverseEngineeringScanError[];
+};
+
 export type AwsProviderScanGateway = {
-  discoverResources(input: AwsProviderScanInput): Promise<AwsDiscoveredResourceRecord[]>;
+  discoverResources(
+    input: AwsProviderScanInput
+  ): Promise<AwsDiscoveredResourceRecord[] | AwsProviderDiscoveryResult>;
 };
 
 export type AwsProviderAdapter = {
@@ -68,7 +75,8 @@ const terraformResourceTypeMap: ReadonlyMap<ResourceType, string> = new Map([
 export function createAwsProviderAdapter(gateway: AwsProviderScanGateway): AwsProviderAdapter {
   return {
     async scan(input) {
-      const records = await gateway.discoverResources(input);
+      const discoveryResult = normalizeDiscoveryResult(await gateway.discoverResources(input));
+      const records = discoveryResult.records;
       const idMap = createResourceIdMap(records);
       const discoveredResources = records.map((record) => toDiscoveredResource(record, idMap));
       const architectureJson = toArchitectureJson(discoveredResources);
@@ -80,10 +88,19 @@ export function createAwsProviderAdapter(gateway: AwsProviderScanGateway): AwsPr
         findings: [],
         analysisExclusions: createAnalysisExclusions(discoveredResources),
         importSuggestions: createImportSuggestions(discoveredResources),
-        scanErrors: [] satisfies ReverseEngineeringScanError[]
+        scanErrors: discoveryResult.scanErrors
       };
     }
   };
+}
+
+// 예전 gateway 배열 응답과 새 부분 실패 응답을 같은 모양으로 맞춥니다.
+function normalizeDiscoveryResult(
+  discoveryResult: AwsDiscoveredResourceRecord[] | AwsProviderDiscoveryResult
+): AwsProviderDiscoveryResult {
+  return Array.isArray(discoveryResult)
+    ? { records: discoveryResult, scanErrors: [] }
+    : discoveryResult;
 }
 
 function createEmptyScan(input: AwsProviderScanInput): ReverseEngineeringScanResult["scan"] {

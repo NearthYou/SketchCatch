@@ -91,6 +91,42 @@ test("AWS Provider Adapter maps routing resources and prepares safe import sugge
   );
 });
 
+test("AWS Provider Adapter keeps partial read errors without dropping successful resources", async () => {
+  const adapter = createAwsProviderAdapter({
+    async discoverResources() {
+      return {
+        records: [
+          createRecord({
+            providerResourceType: "AWS::EC2::VPC",
+            providerResourceId: "vpc-1234",
+            displayName: "Main VPC"
+          })
+        ],
+        scanErrors: [
+          {
+            id: "scan-error-rds",
+            resourceType: "RDS",
+            stage: "provider_api",
+            reason: "permission_denied",
+            message: "RDS 읽기 권한이 없습니다.",
+            retryable: false
+          }
+        ]
+      };
+    }
+  });
+
+  const result = await adapter.scan({
+    provider: "aws",
+    region: "ap-northeast-2",
+    resourceTypes: ["VPC", "RDS"]
+  });
+
+  assert.equal(result.discoveredResources.length, 1);
+  assert.equal(result.scanErrors[0]?.resourceType, "RDS");
+  assert.equal(result.scanErrors[0]?.reason, "permission_denied");
+});
+
 function createFakeGateway(): AwsProviderScanGateway {
   return {
     async discoverResources() {
