@@ -16,9 +16,14 @@ export function isRegionDesignNode(node: DiagramNode): boolean {
 }
 
 export function getRegionNodeAwsRegion(node: DiagramNode): AwsRegionCode {
-  const awsRegion = (node.metadata as LegacyRegionMetadata | undefined)?.awsRegion;
+  const awsRegion = node.parameters?.values["awsRegion"];
+  const legacyAwsRegion = (node.metadata as LegacyRegionMetadata | undefined)?.awsRegion;
 
-  return isAwsRegionCode(awsRegion) ? awsRegion : defaultAwsRegion;
+  if (isAwsRegionCode(awsRegion)) {
+    return awsRegion;
+  }
+
+  return isAwsRegionCode(legacyAwsRegion) ? legacyAwsRegion : defaultAwsRegion;
 }
 
 export function createRegionNodeMetadata(

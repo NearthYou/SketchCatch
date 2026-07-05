@@ -48,6 +48,28 @@ test("getRegionNodeAwsRegion reads a valid selected region and falls back to Seo
   assert.equal(getRegionNodeAwsRegion(baseRegionNode), "ap-northeast-2");
 });
 
+test("getRegionNodeAwsRegion reads parameters values before legacy metadata", () => {
+  const regionResourceNode = JSON.parse(
+    JSON.stringify({
+      ...baseRegionNode,
+      kind: "resource",
+      metadata: { awsRegion: "eu-central-1" },
+      parameters: {
+        terraformBlockType: "resource",
+        resourceType: "aws_region",
+        resourceName: "primary",
+        fileName: "main.tf",
+        values: {
+          awsRegion: "us-west-2"
+        }
+      },
+      type: "aws_region"
+    })
+  ) as DiagramNode;
+
+  assert.equal(getRegionNodeAwsRegion(regionResourceNode), "us-west-2");
+});
+
 test("createRegionNodeMetadata no longer writes awsRegion metadata", () => {
   assert.deepEqual(
     createRegionNodeMetadata(

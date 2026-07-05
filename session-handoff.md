@@ -19,6 +19,8 @@
 - Terraform Sync `create_candidate` proposal에 `nodeId`, `metadata`, `position`을 담을 수 있도록 shared type과 문서 계약을 확장했다.
 - API `diagramNodeMetadataSchema`를 strict하게 바꿔 legacy `metadata.awsRegion`을 거부한다.
 - Web은 legacy persisted `metadata.awsRegion` 읽기만 helper 안에 격리하고, 새 metadata 작성은 더 이상 `awsRegion`을 쓰지 않는다.
+- 리뷰 보강으로 `getRegionNodeAwsRegion`은 `parameters.values["awsRegion"]`을 먼저 읽고 legacy metadata를 fallback으로만 읽는다.
+- `Record<string, unknown>`인 `parameters.values` 조회 테스트는 bracket notation으로 정리했다.
 
 ### 검증된 것
 
@@ -33,6 +35,7 @@
 ### 다음 행동
 
 - Ticket 2에서 Region/AZ 영역 노드 생성과 parameter panel 저장 경로를 실제 `parameters.values` 기반으로 옮긴다.
+- Ticket 2에서 `createRegionNodeMetadata(node, awsRegion)`의 미사용 `awsRegion` 매개변수를 제거하거나 parameter write helper로 대체하고 호출부/테스트를 함께 정리한다.
 - Ticket 2 이후에는 Web helper에 남은 legacy `metadata.awsRegion` 읽기 호환을 언제 제거할지 결정한다.
 - 이번 세션은 사용자 요청에 따라 커밋하지 않았다.
 

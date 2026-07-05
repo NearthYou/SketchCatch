@@ -141,9 +141,9 @@ test("save project draft body accepts Region and AZ values in parameters", () =>
     }
   });
 
-  assert.equal(parsed.diagramJson.nodes[0]?.parameters?.values.awsRegion, "ap-northeast-2");
+  assert.equal(parsed.diagramJson.nodes[0]?.parameters?.values["awsRegion"], "ap-northeast-2");
   assert.equal(
-    parsed.diagramJson.nodes[1]?.parameters?.values.awsAvailabilityZone,
+    parsed.diagramJson.nodes[1]?.parameters?.values["awsAvailabilityZone"],
     "ap-northeast-2a"
   );
   assert.deepEqual(parsed.diagramJson.nodes[1]?.metadata, {

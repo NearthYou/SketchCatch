@@ -13,6 +13,25 @@
 - Highest priority unfinished harness feature: `HARNESS-007`
 - Current blocker: none
 
+### 2026-07-05 - Terraform 영역 리소스 Ticket 1 리뷰 보강
+
+- Goal: Ticket 1 리뷰 피드백에 따라 Region 조회 helper와 `Record<string, unknown>` 접근 방식을 더 타입 안전하게 보강한다.
+- Completed:
+  - `getRegionNodeAwsRegion`이 새 계약 위치인 `node.parameters?.values["awsRegion"]`을 먼저 읽고, 기존 저장 데이터의 `metadata.awsRegion`은 fallback으로만 읽게 했다.
+  - `Record<string, unknown>`인 `parameters.values` 조회 테스트를 dot notation에서 bracket notation으로 바꿨다.
+  - 새 `parameters.values["awsRegion"]` 값이 legacy metadata보다 우선되는 회귀 테스트를 추가했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/parameter-input/region-node-metadata.test.ts features/workspace/resource-list-summary.test.ts` - passed.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/routes/project-draft-schemas.test.ts` - passed.
+  - `pnpm --filter @sketchcatch/web typecheck` - passed.
+  - `pnpm --filter @sketchcatch/api typecheck` - passed.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `pnpm build` - passed.
+- Known risks:
+  - `createRegionNodeMetadata(node, awsRegion)`는 Ticket 2에서 parameter write path로 옮길 때 signature와 호출부를 함께 정리해야 한다.
+
 ### 2026-07-05 - Terraform 영역 리소스 계약 Ticket 1
 
 - Goal: `docs/jh/001_테라폼영역리소스동기화티켓계획_JH.md`의 Ticket 1 범위에 맞춰 Region/AZ 영역 리소스와 Terraform Sync 계약을 문서, shared type, API schema 수준에서 고정한다.
