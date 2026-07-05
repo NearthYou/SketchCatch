@@ -268,7 +268,7 @@ $resourcesResponse = Invoke-SketchCatchApi -Method GET -Path "/deployments/$($de
 $outputsResponse = Invoke-SketchCatchApi -Method GET -Path "/deployments/$($deployment.id)/outputs"
 $logsResponse = Invoke-SketchCatchApi -Method GET -Path "/deployments/$($deployment.id)/logs"
 
-Invoke-SketchCatchApi -Method POST -Path "/deployments/$($deployment.id)/destroy-plan" | Out-Null
+Invoke-SketchCatchApi -Method POST -Path "/deployments/$($deployment.id)/destroy/plan" | Out-Null
 $deployment = Wait-DeploymentStatus -DeploymentId $deployment.id -TerminalStatuses @("SUCCESS", "FAILED", "CANCELLED") -Label "destroy plan"
 if ($deployment.status -ne "SUCCESS") {
   throw "destroy plan failed with status $($deployment.status): $($deployment.errorSummary)"
@@ -282,18 +282,10 @@ if ($deployment.status -ne "DESTROYED") {
 }
 
 $report = [ordered]@{
-  runId = $shortRunId
   bucketName = $bucketName
-  projectId = $project.id
-  architectureId = $architecture.id
-  terraformArtifactId = $terraformAsset.id
   deploymentId = $deployment.id
   applyStatus = "SUCCESS"
   destroyStatus = $deployment.status
-  resourceCount = @($resourcesResponse.resources).Count
-  outputCount = @($outputsResponse.outputs).Count
-  logCount = @($logsResponse.logs).Count
-  completedAt = (Get-Date).ToUniversalTime().ToString("o")
 }
 
 $reportJson = $report | ConvertTo-Json -Depth 10

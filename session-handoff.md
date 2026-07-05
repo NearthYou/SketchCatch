@@ -570,3 +570,16 @@ pnpm build
   - `pnpm --filter @sketchcatch/api test -- git-cicd` - passed, 552 tests
 - Remaining external validation:
   - Real GitHub App install/PR creation, real AWS apply/destroy smoke, and real ElastiCache `REDIS_URL` runtime validation still require credentials and a prepared environment.
+
+## 2026-07-05 - Spec3 plan3 route/smoke 실행성 보강 handoff
+
+- Current branch/worktree: `codex/spec3-deployment-github-runtime-cache` at `C:\Users\siwon\Desktop\Jungle\Week17~21\SketchCatch`.
+- Scope completed:
+  - Added source repository API route tests for install URL issuance, callback repository exchange, selected active repo persistence, previous active repo soft deactivation, archived repo rejection, and strict body rejection of client-supplied owner/name/provider.
+  - Fixed live S3 smoke runner destroy plan endpoint from `/destroy-plan` to `/destroy/plan`.
+  - Reduced live S3 smoke report to the plan3-approved fields: `bucketName`, `deploymentId`, `applyStatus`, `destroyStatus`.
+- Verification completed:
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/routes/source-repositories.test.ts src/source-repositories/source-repository-service.test.ts src/source-repositories/github-app-client.test.ts` - passed, 13 tests
+  - PowerShell script parse check for `scripts/smoke/live-s3-deployment.ps1` - passed
+- Remaining external validation:
+  - Real GitHub App install/PR creation, real AWS apply/destroy smoke, and real ElastiCache `REDIS_URL` validation still require credentials and a prepared environment.

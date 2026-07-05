@@ -1513,3 +1513,16 @@
   - `pnpm --filter @sketchcatch/api test -- git-cicd` - passed, 552 tests
 - Known risks:
   - 실제 GitHub App 설치, 실제 GitHub PR 생성/API 호출, 실제 AWS apply/destroy, 실제 ElastiCache Redis 연결 검증은 자격값과 운영/스테이징 환경 주입이 필요해 아직 로컬 자동 테스트로 대체했다.
+
+## 2026-07-05 - Spec3 plan3 route/smoke 실행성 보강
+
+- Goal: `docs/sw/plan3.md`의 API route와 live S3 smoke runner가 문서 흐름 그대로 실행 가능한지 다시 감사하고, 로컬에서 검증 가능한 불일치를 제거한다.
+- Completed:
+  - `apps/api/src/routes/source-repositories.test.ts`를 추가해 install URL 발급, callback repository exchange, selected repo 저장, active repo soft deactivate, archived repo 거부, client-supplied owner/name/provider 거부를 route 수준에서 검증했다.
+  - `scripts/smoke/live-s3-deployment.ps1`의 destroy plan API 경로를 실제 route인 `/deployments/:deploymentId/destroy/plan`으로 수정했다.
+  - smoke report payload를 plan3 기준에 맞춰 `bucketName`, `deploymentId`, `applyStatus`, `destroyStatus`만 남기도록 줄였다.
+- Verification run:
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/routes/source-repositories.test.ts src/source-repositories/source-repository-service.test.ts src/source-repositories/github-app-client.test.ts` - passed, 13 tests
+  - PowerShell script parse check for `scripts/smoke/live-s3-deployment.ps1` - passed
+- Known risks:
+  - live S3 smoke 자체는 실제 API host, access token, verified AWS connection, AWS account/region이 필요해 아직 실행하지 못했다.
