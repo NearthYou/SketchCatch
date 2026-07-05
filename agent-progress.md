@@ -25,12 +25,14 @@
   - 시뮬레이션 결과의 `비용·다음 검토` 카드가 `현재 상황에서의 총 예상 비용은 $47.30 / month입니다.` 같은 문장과 리소스별 비용 근거를 표시하게 했다.
   - `GET /api/costs/projects`를 추가해 실행 중 배포 프로젝트의 architecture snapshot 기준 비용을 계산한다.
   - `/costs` 페이지를 정적 `dashboard-data.ts` 비용에서 API 기반 비용관리 client 화면으로 전환하고, 기간/예상 사용자 수 적용 및 프로젝트별 상세 비용 토글을 추가했다.
+  - `/costs` 프로젝트 행 선택을 `projectId` URL query와 동기화해 `/costs?projectId=...` 상태로 상세 비용을 다시 열 수 있게 했다.
   - `docs/data-models.md`에 Cost Estimate DTO와 비용관리/시뮬레이션 계약을 기록했다.
 - Commits:
   - `5212684 Feat: 비용 산정 타입 확장`
   - `0e550f1 Feat: 시뮬레이션 비용 산정 연결`
   - `7bf8cac Feat: 시뮬레이션 비용 조건 UI 연결`
   - `b3350d7 Feat: 비용관리 API 기반 전환`
+  - `df13897 Fix: 비용관리 프로젝트 선택 URL 반영`
 - Verification run so far:
   - `pnpm harness:check` - passed before edits.
   - `pnpm --filter @sketchcatch/types typecheck` - passed.
