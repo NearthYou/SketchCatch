@@ -1793,3 +1793,24 @@
   - 실제 GitHub API 호출, GitHub Actions polling worker, GitHub token 사용은 수행하지 않았다.
   - 실제 AWS apply/destroy, cloud mutation, real Git/CI/CD handoff execution은 수행하지 않았다.
   - Runtime Cache는 보조 캐시이며 RDS `git_cicd_handoffs` record가 source of truth다.
+# 2026-07-05 - AI 다이어그램 생성 prompt 오염 및 intent 반영 보정
+
+- Goal: AI 채팅에서 이전 사용자 명령이 새 초안 생성 prompt에 계속 누적되어 어떤 명령을 넣어도 같은 다이어그램처럼 보이는 문제를 고치고, `EC2 없는`, `데이터베이스랑 S3만` 같은 명시적 intent가 생성 결과에 반영되게 한다.
+- Completed:
+  - `WorkspaceAiChatDock`의 새 draft 생성 경로가 전체 user chat history를 합치지 않고 최신 사용자 명령만 API prompt로 보내도록 분리했다.
+  - `추가 안 함` fallback도 누적 전체가 아니라 `추가 안 함`을 제외한 최신 사용자 명령을 기준으로 새 초안을 만들게 했다.
+  - 한국어 prompt fact 보강을 별도 helper로 추가하고, `EC2 없는/없이`는 serverless draft로, `데이터베이스랑 S3만`은 server runtime/static delivery를 제거한 data/storage draft로 해석하게 했다.
+  - DB-only/storage-only 조합에서 app server/IAM/CloudWatch runtime edge가 끌려오지 않도록 builder 조건을 좁혔다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits.
+  - `apps/api/.\\node_modules\\.bin\\tsx.cmd --test apps\\api\\src\\routes\\ai.test.ts --test-name-pattern "honors distinct Korean generation commands"` - red before fix, then passed after fix.
+  - `apps/api/.\\node_modules\\.bin\\tsx.cmd --test apps\\api\\src\\routes\\ai.test.ts --test-name-pattern "honors distinct Korean generation commands|returns the same ArchitectureJson for equivalent wording|keeps purpose-specific diagrams distinct|production-shaped entry|composes resources|rejects generic website"` - passed, 38 tests.
+  - `apps/web/.\\node_modules\\.bin\\tsx.cmd --test apps\\web\\features\\workspace\\workspace-ai-chat-history.test.ts apps\\web\\features\\workspace\\workspace-ai-chat-routing.test.ts apps\\web\\features\\workspace\\workspace-ai-clarification.test.ts` - passed, 21 tests.
+  - Manual API smoke with the user prompts showed distinct node sets for static site, login web service, no-EC2 API, and DB+S3-only requests.
+  - `pnpm lint` - passed with Turbo cache rename warnings only.
+  - `pnpm typecheck` - passed with Turbo cache rename warnings only.
+  - `git diff --check` - passed with line-ending warnings only.
+  - `pnpm build` - sandbox run failed on `.next` unlink EPERM, elevated retry timed out once, longer elevated retry passed.
+- Known risks:
+  - Browser click smoke for the chat UI was not run; API and Web unit tests cover the prompt isolation and generation mapping.
+  - Real AWS apply/destroy, cloud mutation, and Git/CI/CD handoff were not run.

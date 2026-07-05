@@ -51,6 +51,10 @@ import {
   promptGuideExamples
 } from "./workspace-ai-panel-options";
 import {
+  createLatestUserRequirementPrompt,
+  createLatestUserRequirementPromptExcluding
+} from "./workspace-ai-chat-history";
+import {
   resolveWorkspaceAiChatAction,
   shouldInterruptPatchClarificationForDraft
 } from "./workspace-ai-chat-routing";
@@ -1139,22 +1143,13 @@ function createPatchPreviewSummary(preview: ArchitecturePatchPreview): string {
 function createRequirementPromptFromMessages(
   messages: readonly WorkspaceAiChatMessage[]
 ): string {
-  return messages
-    .filter((message) => message.role === "user")
-    .map((message) => message.content.trim())
-    .filter(Boolean)
-    .join("\n");
+  return createLatestUserRequirementPrompt(messages);
 }
 
 function createRequirementPromptWithoutNoResourceAddition(
   messages: readonly WorkspaceAiChatMessage[]
 ): string {
-  return messages
-    .filter((message) => message.role === "user")
-    .map((message) => message.content.trim())
-    .filter((content) => content.length > 0)
-    .filter((content) => !isNoResourceAdditionSuggestion(content))
-    .join("\n");
+  return createLatestUserRequirementPromptExcluding(messages, NO_RESOURCE_ADDITION_SUGGESTION);
 }
 
 function createQuestionFromDraftError(message: string): string | null {

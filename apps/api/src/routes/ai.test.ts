@@ -711,7 +711,7 @@ test("POST /api/ai/architecture-draft keeps equivalent requests stable and diffe
 test("POST /api/ai/architecture-draft rejects generic website prompts until clarified", async () => {
   const app = buildApp();
 
-  for (const prompt of ["웹사이트 하나 만들고 싶어", "웹사이트 하나 배포하고 싶어"]) {
+  for (const prompt of ["웹사이트 하나 만들고 싶어"]) {
     const response = await app.inject({
       method: "POST",
       url: "/api/ai/architecture-draft",
@@ -1026,6 +1026,62 @@ test("POST /api/ai/architecture-draft uses readable resource ids in nodes, edges
     sourceId: "app-server",
     targetId: "app-database"
   });
+
+  await app.close();
+});
+
+test("POST /api/ai/architecture-draft honors distinct Korean generation commands", async () => {
+  const app = buildApp();
+
+  const staticSiteResponse = await app.inject({
+    method: "POST",
+    url: "/api/ai/architecture-draft",
+    payload: {
+      prompt: "\uC6F9\uC0AC\uC774\uD2B8 \uD558\uB098 \uBC30\uD3EC\uD558\uACE0 \uC2F6\uC5B4"
+    }
+  });
+  const noEc2ApiResponse = await app.inject({
+    method: "POST",
+    url: "/api/ai/architecture-draft",
+    payload: {
+      prompt: "ec2 \uC5C6\uB294 \uAC04\uB2E8\uD55C api \uC11C\uBC84 \uD558\uB098 \uB9CC\uB4E4\uC5B4\uC918"
+    }
+  });
+  const dataStorageResponse = await app.inject({
+    method: "POST",
+    url: "/api/ai/architecture-draft",
+    payload: {
+      prompt: "\uB370\uC774\uD130\uBCA0\uC774\uC2A4\uB791 s3\uB9CC \uC788\uB294 \uB2E4\uC774\uC5B4\uADF8\uB7A8 \uADF8\uB824\uC918"
+    }
+  });
+
+  assert.equal(staticSiteResponse.statusCode, 200);
+  assert.equal(noEc2ApiResponse.statusCode, 200);
+  assert.equal(dataStorageResponse.statusCode, 200);
+
+  const staticSiteBody = architectureDraftResponseSchema.parse(staticSiteResponse.json());
+  const noEc2ApiBody = architectureDraftResponseSchema.parse(noEc2ApiResponse.json());
+  const dataStorageBody = architectureDraftResponseSchema.parse(dataStorageResponse.json());
+  const noEc2ApiNodeTypes = noEc2ApiBody.architectureJson.nodes.map((node) => node.type);
+  const dataStorageNodeTypes = dataStorageBody.architectureJson.nodes.map((node) => node.type);
+
+  assert.equal(staticSiteBody.metadata.selectedDraftPattern, "static_site");
+  assertDraftHasNodeTypes(staticSiteBody, ["CLOUDFRONT", "S3"]);
+  assert.equal(staticSiteBody.architectureJson.nodes.some((node) => node.type === "EC2"), false);
+
+  assert.equal(noEc2ApiBody.metadata.selectedDraftPattern, "serverless_function");
+  assert.ok(noEc2ApiNodeTypes.includes("LAMBDA"));
+  assert.ok(noEc2ApiNodeTypes.includes("API_GATEWAY_REST_API"));
+  assert.equal(noEc2ApiNodeTypes.includes("EC2"), false);
+
+  assert.equal(dataStorageBody.metadata.selectedDraftPattern, "backend_with_db");
+  assert.ok(dataStorageNodeTypes.includes("RDS"));
+  assert.ok(dataStorageNodeTypes.includes("S3"));
+  assert.equal(dataStorageNodeTypes.includes("EC2"), false);
+  assert.equal(dataStorageNodeTypes.includes("CLOUDFRONT"), false);
+
+  assert.notDeepEqual(staticSiteBody.architectureJson, noEc2ApiBody.architectureJson);
+  assert.notDeepEqual(noEc2ApiBody.architectureJson, dataStorageBody.architectureJson);
 
   await app.close();
 });

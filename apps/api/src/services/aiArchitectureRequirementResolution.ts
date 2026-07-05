@@ -323,12 +323,25 @@ function isGenericWebsitePromptWithoutConcreteArchitecture(
 ): boolean {
   const normalizedPrompt = normalizePrompt(prompt);
   const factSet = new Set(requirementFacts);
-  const hasGenericWebsiteKeyword = GENERIC_WEBSITE_KEYWORDS.some((keyword) =>
-    normalizedPrompt.includes(keyword)
-  );
-  const hasConcreteWebsiteKeyword = CONCRETE_WEBSITE_KEYWORDS.some((keyword) =>
-    normalizedPrompt.includes(keyword.toLowerCase())
-  );
+  const hasGenericWebsiteKeyword =
+    includesAny(normalizedPrompt, GENERIC_WEBSITE_KEYWORDS) ||
+    includesAny(normalizedPrompt, ["웹사이트", "웹서비스", "사이트"]);
+  const hasConcreteWebsiteKeyword =
+    includesAny(normalizedPrompt, CONCRETE_WEBSITE_KEYWORDS) ||
+    includesAny(normalizedPrompt, [
+      "api",
+      "s3",
+      "db",
+      "로그인",
+      "회원",
+      "계정",
+      "데이터베이스",
+      "배포",
+      "호스팅",
+      "정적",
+      "업로드",
+      "파일"
+    ]);
 
   return (
     hasGenericWebsiteKeyword &&
@@ -351,13 +364,20 @@ function createRequirementFacts(
     }
   }
 
+  addKoreanRequirementFacts(normalizedPrompt, facts);
+
   for (const rule of unsupportedRequirementMatches) {
     for (const fact of rule.substitution?.facts ?? []) {
       facts.add(fact);
     }
   }
 
+  if (prefersNoEc2Compute(normalizedPrompt) && (facts.has("server_runtime") || includesAny(normalizedPrompt, ["api", "서버"]))) {
+    facts.add("serverless_runtime");
+  }
+
   addDerivedRequirementFacts(facts);
+  applyExplicitRequirementConstraints(normalizedPrompt, facts);
 
   if (prefersNoDatabase(normalizedPrompt)) {
     facts.delete("database");
@@ -366,6 +386,66 @@ function createRequirementFacts(
   }
 
   return sortRequirementFacts(facts);
+}
+
+function addKoreanRequirementFacts(
+  normalizedPrompt: string,
+  facts: Set<ArchitectureRequirementFact>
+): void {
+  if (includesAny(normalizedPrompt, ["웹사이트", "웹서비스", "사이트", "프론트엔드", "화면"])) {
+    facts.add("web_frontend");
+  }
+
+  if (includesAny(normalizedPrompt, ["배포", "호스팅", "정적", "cdn"])) {
+    facts.add("static_delivery");
+  }
+
+  if (includesAny(normalizedPrompt, ["api", "서버", "백엔드", "처리"])) {
+    facts.add("server_runtime");
+  }
+
+  if (includesAny(normalizedPrompt, ["데이터베이스", "디비", "db", "rds"])) {
+    facts.add("database");
+  }
+
+  if (includesAny(normalizedPrompt, ["s3", "스토리지", "버킷", "파일", "이미지", "업로드"])) {
+    facts.add("object_storage");
+  }
+
+  if (includesAny(normalizedPrompt, ["업로드", "파일 올리", "파일을 받", "이미지 올리"])) {
+    facts.add("file_upload");
+  }
+
+  if (includesAny(normalizedPrompt, ["로그인", "회원", "계정", "개인정보"])) {
+    facts.add("auth_or_user_data");
+  }
+
+  if (includesAny(normalizedPrompt, ["lambda", "람다", "serverless", "서버리스"])) {
+    facts.add("serverless_runtime");
+  }
+}
+
+function applyExplicitRequirementConstraints(
+  normalizedPrompt: string,
+  facts: Set<ArchitectureRequirementFact>
+): void {
+  if (prefersNoEc2Compute(normalizedPrompt)) {
+    facts.delete("server_runtime");
+
+    if (!facts.has("database")) {
+      facts.delete("network_boundary");
+    }
+  }
+
+  if (prefersOnlyDataStorage(normalizedPrompt, facts)) {
+    facts.delete("web_frontend");
+    facts.delete("static_delivery");
+    facts.delete("server_runtime");
+    facts.delete("serverless_runtime");
+    facts.delete("file_upload");
+    facts.delete("auth_or_user_data");
+    facts.delete("observability");
+  }
 }
 
 function addDerivedRequirementFacts(facts: Set<ArchitectureRequirementFact>): void {
@@ -448,6 +528,34 @@ function createOperatingProfile(
         ? "high"
         : "basic"
   };
+}
+
+function includesAny(normalizedPrompt: string, keywords: readonly string[]): boolean {
+  return keywords.some((keyword) => normalizedPrompt.includes(keyword.toLowerCase()));
+}
+
+function prefersNoEc2Compute(normalizedPrompt: string): boolean {
+  return includesAny(normalizedPrompt, [
+    "without ec2",
+    "no ec2",
+    "ec2 없는",
+    "ec2 없이",
+    "ec2 빼고",
+    "ec2 제외",
+    "ec2 말고"
+  ]);
+}
+
+function prefersOnlyDataStorage(
+  normalizedPrompt: string,
+  facts: ReadonlySet<ArchitectureRequirementFact>
+): boolean {
+  return (
+    facts.has("database") &&
+    facts.has("object_storage") &&
+    includesAny(normalizedPrompt, ["만", "only", "just"]) &&
+    !includesAny(normalizedPrompt, ["서버", "api", "백엔드", "웹", "로그인", "회원", "계정", "업로드"])
+  );
 }
 
 function prefersNoDatabase(normalizedPrompt: string): boolean {

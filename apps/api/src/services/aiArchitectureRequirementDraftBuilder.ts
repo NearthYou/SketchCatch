@@ -627,6 +627,9 @@ function addObservabilityNodes(context: DraftBuildContext): void {
 
 function addDatabase(context: DraftBuildContext): void {
   addNetworkBoundary(context);
+  const hasServerRuntime = context.factSet.has("server_runtime");
+  const hasObservability = context.factSet.has("observability");
+
   addNode(context, {
     id: "private-db-subnet-a",
     type: "SUBNET",
@@ -661,13 +664,15 @@ function addDatabase(context: DraftBuildContext): void {
     positionY: 960,
     config: {
       vpcId: "aws_vpc.vpc_main.id",
-      ingress: [
-        {
-          protocol: "tcp",
-          port: 5432,
-          securityGroups: ["aws_security_group.app_security_group.id"]
-        }
-      ]
+      ingress: hasServerRuntime
+        ? [
+            {
+              protocol: "tcp",
+              port: 5432,
+              securityGroups: ["aws_security_group.app_security_group.id"]
+            }
+          ]
+        : []
     }
   });
   addNode(context, {
@@ -681,22 +686,24 @@ function addDatabase(context: DraftBuildContext): void {
       enableKeyRotation: true
     }
   });
-  addNode(context, {
-    id: "db-cpu-alarm",
-    type: "CLOUDWATCH_METRIC_ALARM",
-    label: "Database CPU Alarm",
-    positionX: 1110,
-    positionY: 840,
-    config: createMetricAlarmConfig({
-      alarmName: "database-high-cpu",
-      namespace: "AWS/RDS",
-      metricName: "CPUUtilization",
-      dimensions: {
-        DBInstanceIdentifier: "aws_db_instance.app_database.id"
-      },
-      threshold: 80
-    })
-  });
+  if (hasObservability) {
+    addNode(context, {
+      id: "db-cpu-alarm",
+      type: "CLOUDWATCH_METRIC_ALARM",
+      label: "Database CPU Alarm",
+      positionX: 1110,
+      positionY: 840,
+      config: createMetricAlarmConfig({
+        alarmName: "database-high-cpu",
+        namespace: "AWS/RDS",
+        metricName: "CPUUtilization",
+        dimensions: {
+          DBInstanceIdentifier: "aws_db_instance.app_database.id"
+        },
+        threshold: 80
+      })
+    });
+  }
   addNode(context, {
     id: "app-database",
     type: "RDS",
@@ -722,7 +729,9 @@ function addDatabase(context: DraftBuildContext): void {
   addEdge(context, "private-db-subnet-a-to-app-database", "private-db-subnet-a", "app-database", "primary subnet");
   addEdge(context, "private-db-subnet-b-to-app-database", "private-db-subnet-b", "app-database", "standby subnet");
   addEdge(context, "db-security-group-to-app-database", "db-security-group", "app-database", "allows traffic");
-  addEdge(context, "app-security-group-to-db-security-group", "app-security-group", "db-security-group", "allows PostgreSQL");
+  if (hasServerRuntime) {
+    addEdge(context, "app-security-group-to-db-security-group", "app-security-group", "db-security-group", "allows PostgreSQL");
+  }
   addEdge(context, "data-encryption-key-to-app-database", "data-encryption-key", "app-database", "encrypts storage");
   addEdge(context, "app-runtime-policy-to-data-encryption-key", "app-runtime-policy", "data-encryption-key", "allows key use");
   addEdge(context, "db-cpu-alarm-to-app-database", "db-cpu-alarm", "app-database", "monitors CPU");
@@ -900,8 +909,7 @@ function addCrossResourceEdges(context: DraftBuildContext): void {
 function needsUploadBucket(factSet: ReadonlySet<ArchitectureRequirementFact>): boolean {
   return (
     factSet.has("object_storage") &&
-    (factSet.has("server_runtime") || factSet.has("serverless_runtime")) &&
-    (factSet.has("file_upload") || !factSet.has("static_delivery"))
+    (!factSet.has("static_delivery") || factSet.has("file_upload"))
   );
 }
 
