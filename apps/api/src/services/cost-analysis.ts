@@ -81,6 +81,8 @@ export type AnalyzeCostOptions = {
   pricingRateProvider?: CostPricingRateProvider | undefined;
 };
 
+type ResourceMonthlyCostEstimate = Omit<ResourceCostEstimate, "periodEstimate">;
+
 export const DEFAULT_COST_ESTIMATE_PERIOD: CostEstimatePeriod = "month";
 export const DEFAULT_EXPECTED_USER_COUNT = 1000;
 export const DEFAULT_COST_REGION = "ap-northeast-2";
@@ -94,16 +96,126 @@ const PERIOD_MONTH_FACTOR: Record<CostEstimatePeriod, number> = {
 
 const FALLBACK_EC2_MONTHLY_USD: Record<string, number> = {
   "t2.micro": 8.5,
+  "t2.small": 17.0,
+  "t2.medium": 34.0,
+  "t3.nano": 2.13,
   "t3.micro": 8.5,
   "t3.small": 17.0,
-  "t3.medium": 34.0
+  "t3.medium": 34.0,
+  "t3.large": 68.0,
+  "t3.xlarge": 136.0,
+  "t3.2xlarge": 272.0,
+  "t3a.nano": 1.91,
+  "t3a.micro": 7.65,
+  "t3a.small": 15.3,
+  "t3a.medium": 30.6,
+  "t3a.large": 61.2,
+  "t4g.nano": 1.7,
+  "t4g.micro": 6.8,
+  "t4g.small": 13.6,
+  "t4g.medium": 27.2,
+  "t4g.large": 54.4,
+  "m5.large": 70.0,
+  "m5.xlarge": 140.0,
+  "m5.2xlarge": 280.0,
+  "m6i.large": 70.0,
+  "m6i.xlarge": 140.0,
+  "m6i.2xlarge": 280.0,
+  "c5.large": 62.0,
+  "c5.xlarge": 124.0,
+  "c5.2xlarge": 248.0,
+  "c6i.large": 62.0,
+  "c6i.xlarge": 124.0,
+  "c6i.2xlarge": 248.0,
+  "r5.large": 91.0,
+  "r5.xlarge": 182.0,
+  "r5.2xlarge": 364.0,
+  "r6i.large": 91.0,
+  "r6i.xlarge": 182.0,
+  "r6i.2xlarge": 364.0
 };
 
 const FALLBACK_RDS_INSTANCE_MONTHLY_USD: Record<string, number> = {
   "db.t3.micro": 36.5,
-  "db.t4g.micro": 36.5,
   "db.t3.small": 62.0,
-  "db.t4g.small": 62.0
+  "db.t3.medium": 124.0,
+  "db.t3.large": 248.0,
+  "db.t3.xlarge": 496.0,
+  "db.t4g.micro": 36.5,
+  "db.t4g.small": 62.0,
+  "db.t4g.medium": 124.0,
+  "db.t4g.large": 248.0,
+  "db.t4g.xlarge": 496.0,
+  "db.m5.large": 250.0,
+  "db.m5.xlarge": 500.0,
+  "db.m5.2xlarge": 1000.0,
+  "db.m6i.large": 250.0,
+  "db.m6i.xlarge": 500.0,
+  "db.m6i.2xlarge": 1000.0,
+  "db.r5.large": 330.0,
+  "db.r5.xlarge": 660.0,
+  "db.r5.2xlarge": 1320.0,
+  "db.r6i.large": 330.0,
+  "db.r6i.xlarge": 660.0,
+  "db.r6i.2xlarge": 1320.0
+};
+
+const FALLBACK_ELASTICACHE_MONTHLY_USD: Record<string, number> = {
+  "cache.t3.micro": 13.0,
+  "cache.t3.small": 26.0,
+  "cache.t3.medium": 52.0,
+  "cache.t4g.micro": 13.0,
+  "cache.t4g.small": 26.0,
+  "cache.t4g.medium": 52.0,
+  "cache.m6g.large": 110.0,
+  "cache.m6g.xlarge": 220.0,
+  "cache.r6g.large": 145.0,
+  "cache.r6g.xlarge": 290.0
+};
+
+const FALLBACK_EC2_FAMILY_MICRO_MONTHLY_USD: Record<string, number> = {
+  t2: 8.5,
+  t3: 8.5,
+  t3a: 7.65,
+  t4g: 6.8,
+  m5: 8.75,
+  m6i: 8.75,
+  c5: 7.75,
+  c6i: 7.75,
+  r5: 11.375,
+  r6i: 11.375
+};
+
+const FALLBACK_RDS_FAMILY_MICRO_MONTHLY_USD: Record<string, number> = {
+  t3: 36.5,
+  t4g: 36.5,
+  m5: 31.25,
+  m6i: 31.25,
+  r5: 41.25,
+  r6i: 41.25
+};
+
+const FALLBACK_ELASTICACHE_FAMILY_MICRO_MONTHLY_USD: Record<string, number> = {
+  t3: 13.0,
+  t4g: 13.0,
+  m6g: 13.75,
+  r6g: 18.125
+};
+
+const INSTANCE_SIZE_MULTIPLIER: Record<string, number> = {
+  nano: 0.25,
+  micro: 1,
+  small: 2,
+  medium: 4,
+  large: 8,
+  xlarge: 16,
+  "2xlarge": 32,
+  "4xlarge": 64,
+  "8xlarge": 128,
+  "12xlarge": 192,
+  "16xlarge": 256,
+  "24xlarge": 384,
+  "32xlarge": 512
 };
 
 const FALLBACK_RDS_STORAGE_GB_MONTH_USD = 0.115;
@@ -118,7 +230,7 @@ const FALLBACK_EBS_STORAGE_GB_MONTH_USD = 0.08;
 const FALLBACK_EFS_STORAGE_GB_MONTH_USD = 0.3;
 const FALLBACK_DYNAMODB_STORAGE_GB_MONTH_USD = 0.25;
 const FALLBACK_DYNAMODB_REQUEST_USD = 0.00000125;
-const FALLBACK_ELASTICACHE_MONTHLY_USD = 13.0;
+const FALLBACK_ELASTICACHE_DEFAULT_MONTHLY_USD = 13.0;
 const FALLBACK_KMS_KEY_MONTHLY_USD = 1.0;
 const FALLBACK_KMS_REQUEST_USD = 0.000003;
 const FALLBACK_SECRETSMANAGER_SECRET_MONTHLY_USD = 0.4;
@@ -168,9 +280,10 @@ export async function analyzeCost(
   options: AnalyzeCostOptions = {}
 ): Promise<CostEstimateResult> {
   const input = createCostEstimateRequest(rawInput);
-  const resources = await Promise.all(
+  const monthlyResources = await Promise.all(
     input.architectureJson.nodes.map((node) => estimateResourceCost(node, input, options))
   );
+  const resources = monthlyResources.map((resource) => withPeriodEstimate(resource, input.period));
   const totalMonthlyAmount = roundUsd(
     resources.reduce((sum, resource) => sum + resource.monthlyEstimate.amount, 0)
   );
@@ -203,36 +316,68 @@ export async function analyzeCost(
   };
 }
 
+function withPeriodEstimate(
+  resource: ResourceMonthlyCostEstimate,
+  period: CostEstimatePeriod
+): ResourceCostEstimate {
+  return {
+    ...resource,
+    periodEstimate: {
+      amount: roundUsd(resource.monthlyEstimate.amount * PERIOD_MONTH_FACTOR[period]),
+      currency: resource.monthlyEstimate.currency
+    }
+  };
+}
+
 async function estimateResourceCost(
   node: ResourceNode,
   input: CostEstimateRequest,
   options: AnalyzeCostOptions
-): Promise<ResourceCostEstimate> {
+): Promise<ResourceMonthlyCostEstimate> {
   const terraformResourceType = getTerraformResourceType(node);
 
   switch (terraformResourceType) {
     case "aws_nat_gateway":
       return estimateRateBasedCost(node, input, options, {
         usageType: "nat_gateway_hour",
-        quantity: MONTH_HOURS,
-        fallbackMonthlyAmount: FALLBACK_NAT_GATEWAY_MONTHLY_USD,
-        costDrivers: ["NAT Gateway hourly runtime", "data processing"],
+        quantity: MONTH_HOURS * estimateUserScaleFactor(input.expectedUserCount),
+        fallbackMonthlyAmount: roundUsd(
+          FALLBACK_NAT_GATEWAY_MONTHLY_USD * estimateUserScaleFactor(input.expectedUserCount)
+        ),
+        costDrivers: [
+          "NAT Gateway hourly runtime",
+          "data processing",
+          `expected capacity x${formatNumber(estimateUserScaleFactor(input.expectedUserCount))}`
+        ],
         explanation: "NAT Gateway는 켜져 있는 시간과 데이터 처리량에 따라 비용이 계속 발생합니다.",
         recommendation: "NAT Gateway가 꼭 필요한 구조인지 먼저 확인해보시는 걸 권장드립니다.",
         usageAssumptions: [
           { label: "runtime", value: `${MONTH_HOURS}h/month` },
+          {
+            label: "expected capacity factor",
+            value: `x${formatNumber(estimateUserScaleFactor(input.expectedUserCount))}`
+          },
           { label: "region", value: input.region }
         ]
       });
     case "aws_vpc_endpoint":
       return estimateRateBasedCost(node, input, options, {
         usageType: "vpc_endpoint_hour",
-        quantity: MONTH_HOURS,
-        fallbackMonthlyAmount: FALLBACK_VPC_ENDPOINT_MONTHLY_USD,
-        costDrivers: ["VPC endpoint hourly runtime"],
+        quantity: MONTH_HOURS * estimateUserScaleFactor(input.expectedUserCount),
+        fallbackMonthlyAmount: roundUsd(
+          FALLBACK_VPC_ENDPOINT_MONTHLY_USD * estimateUserScaleFactor(input.expectedUserCount)
+        ),
+        costDrivers: [
+          "VPC endpoint hourly runtime",
+          `expected capacity x${formatNumber(estimateUserScaleFactor(input.expectedUserCount))}`
+        ],
         explanation: "VPC Endpoint는 endpoint가 켜져 있는 시간과 데이터 처리량에 따라 비용이 발생할 수 있습니다.",
         usageAssumptions: [
           { label: "runtime", value: `${MONTH_HOURS}h/month` },
+          {
+            label: "expected capacity factor",
+            value: `x${formatNumber(estimateUserScaleFactor(input.expectedUserCount))}`
+          },
           { label: "region", value: input.region }
         ]
       });
@@ -455,13 +600,23 @@ async function estimateResourceCost(
   if (isNatGateway(node)) {
     return estimateRateBasedCost(node, input, options, {
       usageType: "nat_gateway_hour",
-      quantity: MONTH_HOURS,
-      fallbackMonthlyAmount: FALLBACK_NAT_GATEWAY_MONTHLY_USD,
-      costDrivers: ["NAT Gateway hourly runtime", "data processing"],
+      quantity: MONTH_HOURS * estimateUserScaleFactor(input.expectedUserCount),
+      fallbackMonthlyAmount: roundUsd(
+        FALLBACK_NAT_GATEWAY_MONTHLY_USD * estimateUserScaleFactor(input.expectedUserCount)
+      ),
+      costDrivers: [
+        "NAT Gateway hourly runtime",
+        "data processing",
+        `expected capacity x${formatNumber(estimateUserScaleFactor(input.expectedUserCount))}`
+      ],
       explanation: "NAT Gateway는 켜져 있는 시간과 데이터 처리량에 따라 비용이 계속 발생합니다.",
       recommendation: "NAT Gateway가 꼭 필요한 구조인지 먼저 확인해보시는 걸 권장드립니다.",
       usageAssumptions: [
         { label: "runtime", value: `${MONTH_HOURS}h/month` },
+        {
+          label: "expected capacity factor",
+          value: `x${formatNumber(estimateUserScaleFactor(input.expectedUserCount))}`
+        },
         { label: "region", value: input.region }
       ]
     });
@@ -490,8 +645,9 @@ async function estimateEc2Cost(
   node: ResourceNode,
   input: CostEstimateRequest,
   options: AnalyzeCostOptions
-): Promise<ResourceCostEstimate> {
+): Promise<ResourceMonthlyCostEstimate> {
   const instanceType = getTextConfig(node.config, ["instanceType", "instance_type"]) ?? "t3.micro";
+  const userScaleFactor = estimateUserScaleFactor(input.expectedUserCount);
   const priced = await estimateMonthlyAmountFromRate(
     options.pricingRateProvider,
     {
@@ -500,8 +656,8 @@ async function estimateEc2Cost(
       region: input.region,
       instanceType
     },
-    MONTH_HOURS,
-    FALLBACK_EC2_MONTHLY_USD[instanceType] ?? FALLBACK_EC2_MONTHLY_USD["t3.micro"] ?? 8.5
+    MONTH_HOURS * userScaleFactor,
+    getFallbackEc2MonthlyAmount(instanceType) * userScaleFactor
   );
 
   return {
@@ -515,12 +671,13 @@ async function estimateEc2Cost(
     },
     supportLevel: getSupportLevel(priced.pricingSource),
     supportReason: getSupportReason(priced.pricingSource),
-    costDrivers: [`${instanceType} instance`, `${MONTH_HOURS}h/month runtime`],
+    costDrivers: [`${instanceType} instance`, `${MONTH_HOURS}h/month runtime`, `expected capacity x${formatNumber(userScaleFactor)}`],
     explanation: "EC2는 인스턴스 크기와 실행 시간이 비용에 직접 영향을 줍니다.",
     pricingSource: priced.pricingSource,
     usageAssumptions: [
       { label: "instance type", value: instanceType },
       { label: "runtime", value: `${MONTH_HOURS}h/month` },
+      { label: "expected capacity factor", value: `x${formatNumber(userScaleFactor)}` },
       { label: "region", value: input.region }
     ],
     recommendation: "이 리소스의 인스턴스 크기를 줄여보시는 걸 권장드립니다."
@@ -531,10 +688,11 @@ async function estimateRdsCost(
   node: ResourceNode,
   input: CostEstimateRequest,
   options: AnalyzeCostOptions
-): Promise<ResourceCostEstimate> {
+): Promise<ResourceMonthlyCostEstimate> {
   const instanceClass = getTextConfig(node.config, ["instanceClass", "instance_class"]) ?? "db.t4g.micro";
   const engine = getTextConfig(node.config, ["engine"]) ?? "postgres";
-  const storageGb = getNumberConfig(node.config, ["allocatedStorage", "allocated_storage"], 20);
+  const userScaleFactor = estimateUserScaleFactor(input.expectedUserCount);
+  const storageGb = getNumberConfig(node.config, ["allocatedStorage", "allocated_storage"], 20) * userScaleFactor;
   const instancePriced = await estimateMonthlyAmountFromRate(
     options.pricingRateProvider,
     {
@@ -544,10 +702,8 @@ async function estimateRdsCost(
       instanceType: instanceClass,
       databaseEngine: engine
     },
-    MONTH_HOURS,
-    FALLBACK_RDS_INSTANCE_MONTHLY_USD[instanceClass] ??
-      FALLBACK_RDS_INSTANCE_MONTHLY_USD["db.t4g.micro"] ??
-      36.5
+    MONTH_HOURS * userScaleFactor,
+    getFallbackRdsMonthlyAmount(instanceClass) * userScaleFactor
   );
   const storagePriced = await estimateMonthlyAmountFromRate(
     options.pricingRateProvider,
@@ -580,13 +736,19 @@ async function estimateRdsCost(
     },
     supportLevel: getSupportLevel(pricingSource),
     supportReason: getSupportReason(pricingSource),
-    costDrivers: [`${instanceClass} DB instance`, `${storageGb}GB storage`, `${MONTH_HOURS}h/month runtime`],
+    costDrivers: [
+      `${instanceClass} DB instance`,
+      `${formatNumber(storageGb)}GB storage`,
+      `${MONTH_HOURS}h/month runtime`,
+      `expected capacity x${formatNumber(userScaleFactor)}`
+    ],
     explanation: "RDS는 실행 시간과 스토리지 비용이 함께 발생합니다.",
     pricingSource,
     usageAssumptions: [
       { label: "instance class", value: instanceClass },
-      { label: "storage", value: `${storageGb}GB` },
+      { label: "storage", value: `${formatNumber(storageGb)}GB` },
       { label: "runtime", value: `${MONTH_HOURS}h/month` },
+      { label: "expected capacity factor", value: `x${formatNumber(userScaleFactor)}` },
       { label: "region", value: input.region }
     ],
     recommendation: "이 리소스의 인스턴스 크기를 줄여보시는 걸 권장드립니다."
@@ -597,16 +759,26 @@ async function estimateLoadBalancerCost(
   node: ResourceNode,
   input: CostEstimateRequest,
   options: AnalyzeCostOptions
-): Promise<ResourceCostEstimate> {
+): Promise<ResourceMonthlyCostEstimate> {
   return estimateRateBasedCost(node, input, options, {
     usageType: "alb_hour",
-    quantity: MONTH_HOURS,
-    fallbackMonthlyAmount: FALLBACK_ALB_MONTHLY_USD,
-    costDrivers: ["ALB hourly runtime", "load balancer capacity"],
+    quantity: MONTH_HOURS * estimateUserScaleFactor(input.expectedUserCount),
+    fallbackMonthlyAmount: roundUsd(
+      FALLBACK_ALB_MONTHLY_USD * estimateUserScaleFactor(input.expectedUserCount)
+    ),
+    costDrivers: [
+      "ALB hourly runtime",
+      "load balancer capacity",
+      `expected capacity x${formatNumber(estimateUserScaleFactor(input.expectedUserCount))}`
+    ],
     explanation: "Load Balancer는 트래픽이 적어도 시간 기준 비용이 발생합니다.",
     recommendation: "단일 EC2 실습이면 Load Balancer 필요성을 먼저 확인해보시는 걸 권장드립니다.",
     usageAssumptions: [
       { label: "runtime", value: `${MONTH_HOURS}h/month` },
+      {
+        label: "expected capacity factor",
+        value: `x${formatNumber(estimateUserScaleFactor(input.expectedUserCount))}`
+      },
       { label: "region", value: input.region }
     ]
   });
@@ -616,8 +788,9 @@ async function estimateEbsVolumeCost(
   node: ResourceNode,
   input: CostEstimateRequest,
   options: AnalyzeCostOptions
-): Promise<ResourceCostEstimate> {
-  const storageGb = getNumberConfig(node.config, ["size", "sizeGb", "volumeSize"], 20);
+): Promise<ResourceMonthlyCostEstimate> {
+  const userScaleFactor = estimateUserScaleFactor(input.expectedUserCount);
+  const storageGb = getNumberConfig(node.config, ["size", "sizeGb", "volumeSize"], 20) * userScaleFactor;
   const volumeType = getTextConfig(node.config, ["type", "volumeType", "volume_type"]) ?? "gp3";
 
   return estimateRateBasedCost(node, input, options, {
@@ -625,10 +798,11 @@ async function estimateEbsVolumeCost(
     quantity: storageGb,
     fallbackMonthlyAmount: roundUsd(storageGb * FALLBACK_EBS_STORAGE_GB_MONTH_USD),
     storageClass: volumeType,
-    costDrivers: [`${storageGb}GB EBS storage`],
+    costDrivers: [`${formatNumber(storageGb)}GB EBS storage`],
     explanation: "EBS Volume은 provisioned storage 용량 기준 월 비용이 발생합니다.",
     usageAssumptions: [
-      { label: "storage", value: `${storageGb}GB` },
+      { label: "storage", value: `${formatNumber(storageGb)}GB` },
+      { label: "expected capacity factor", value: `x${formatNumber(userScaleFactor)}` },
       { label: "volume type", value: volumeType },
       { label: "region", value: input.region }
     ]
@@ -639,7 +813,7 @@ async function estimateEfsCost(
   node: ResourceNode,
   input: CostEstimateRequest,
   options: AnalyzeCostOptions
-): Promise<ResourceCostEstimate> {
+): Promise<ResourceMonthlyCostEstimate> {
   const storageGb = Math.max(5, estimateObjectStorageGb(input.expectedUserCount));
 
   return estimateRateBasedCost(node, input, options, {
@@ -659,17 +833,19 @@ async function estimateRdsSnapshotCost(
   node: ResourceNode,
   input: CostEstimateRequest,
   options: AnalyzeCostOptions
-): Promise<ResourceCostEstimate> {
-  const storageGb = getNumberConfig(node.config, ["allocatedStorage", "allocated_storage", "storageGb"], 20);
+): Promise<ResourceMonthlyCostEstimate> {
+  const userScaleFactor = estimateUserScaleFactor(input.expectedUserCount);
+  const storageGb = getNumberConfig(node.config, ["allocatedStorage", "allocated_storage", "storageGb"], 20) * userScaleFactor;
 
   return estimateRateBasedCost(node, input, options, {
     usageType: "rds_snapshot_gb_month",
     quantity: storageGb,
     fallbackMonthlyAmount: roundUsd(storageGb * FALLBACK_RDS_SNAPSHOT_GB_MONTH_USD),
-    costDrivers: [`${storageGb}GB snapshot storage`],
+    costDrivers: [`${formatNumber(storageGb)}GB snapshot storage`],
     explanation: "RDS snapshot은 보관 중인 snapshot storage 용량 기준 비용이 발생할 수 있습니다.",
     usageAssumptions: [
-      { label: "snapshot storage", value: `${storageGb}GB` },
+      { label: "snapshot storage", value: `${formatNumber(storageGb)}GB` },
+      { label: "expected capacity factor", value: `x${formatNumber(userScaleFactor)}` },
       { label: "region", value: input.region }
     ]
   });
@@ -679,20 +855,26 @@ async function estimateRdsClusterCost(
   node: ResourceNode,
   input: CostEstimateRequest,
   options: AnalyzeCostOptions
-): Promise<ResourceCostEstimate> {
+): Promise<ResourceMonthlyCostEstimate> {
   const instanceClass = getTextConfig(node.config, ["instanceClass", "instance_class"]) ?? "db.t4g.medium";
+  const userScaleFactor = estimateUserScaleFactor(input.expectedUserCount);
 
   return estimateRateBasedCost(node, input, options, {
     usageType: "rds_instance_hour",
-    quantity: MONTH_HOURS,
-    fallbackMonthlyAmount: 45,
+    quantity: MONTH_HOURS * userScaleFactor,
+    fallbackMonthlyAmount: getFallbackRdsMonthlyAmount(instanceClass) * userScaleFactor,
     databaseEngine: getTextConfig(node.config, ["engine"]) ?? "aurora-postgresql",
     instanceType: instanceClass,
-    costDrivers: [`${instanceClass} compatible cluster runtime`, `${MONTH_HOURS}h/month runtime`],
+    costDrivers: [
+      `${instanceClass} compatible cluster runtime`,
+      `${MONTH_HOURS}h/month runtime`,
+      `expected capacity x${formatNumber(userScaleFactor)}`
+    ],
     explanation: "RDS/Aurora cluster는 cluster 구성, instance, storage, I/O에 따라 비용이 달라집니다.",
     usageAssumptions: [
       { label: "instance class assumption", value: instanceClass },
       { label: "runtime", value: `${MONTH_HOURS}h/month` },
+      { label: "expected capacity factor", value: `x${formatNumber(userScaleFactor)}` },
       { label: "region", value: input.region }
     ]
   });
@@ -702,7 +884,7 @@ async function estimateDynamoDbCost(
   node: ResourceNode,
   input: CostEstimateRequest,
   options: AnalyzeCostOptions
-): Promise<ResourceCostEstimate> {
+): Promise<ResourceMonthlyCostEstimate> {
   const storageGb = estimateObjectStorageGb(input.expectedUserCount);
   const requestCount = estimateMonthlyRequests(input.expectedUserCount);
   const storagePriced = await estimateMonthlyAmountFromRate(
@@ -753,19 +935,21 @@ async function estimateElastiCacheCost(
   node: ResourceNode,
   input: CostEstimateRequest,
   options: AnalyzeCostOptions
-): Promise<ResourceCostEstimate> {
+): Promise<ResourceMonthlyCostEstimate> {
   const nodeType = getTextConfig(node.config, ["nodeType", "node_type", "instanceType"]) ?? "cache.t4g.micro";
+  const userScaleFactor = estimateUserScaleFactor(input.expectedUserCount);
 
   return estimateRateBasedCost(node, input, options, {
     usageType: "elasticache_node_hour",
-    quantity: MONTH_HOURS,
-    fallbackMonthlyAmount: FALLBACK_ELASTICACHE_MONTHLY_USD,
+    quantity: MONTH_HOURS * userScaleFactor,
+    fallbackMonthlyAmount: getFallbackElastiCacheMonthlyAmount(nodeType) * userScaleFactor,
     instanceType: nodeType,
-    costDrivers: [`${nodeType} cache node`, `${MONTH_HOURS}h/month runtime`],
+    costDrivers: [`${nodeType} cache node`, `${MONTH_HOURS}h/month runtime`, `expected capacity x${formatNumber(userScaleFactor)}`],
     explanation: "ElastiCache는 cache node 타입과 실행 시간이 비용에 직접 영향을 줍니다.",
     usageAssumptions: [
       { label: "node type", value: nodeType },
       { label: "runtime", value: `${MONTH_HOURS}h/month` },
+      { label: "expected capacity factor", value: `x${formatNumber(userScaleFactor)}` },
       { label: "region", value: input.region }
     ]
   });
@@ -775,7 +959,7 @@ async function estimateKmsCost(
   node: ResourceNode,
   input: CostEstimateRequest,
   options: AnalyzeCostOptions
-): Promise<ResourceCostEstimate> {
+): Promise<ResourceMonthlyCostEstimate> {
   const requestCount = estimateMonthlyRequests(input.expectedUserCount);
   const keyPriced = await estimateMonthlyAmountFromRate(
     options.pricingRateProvider,
@@ -824,7 +1008,7 @@ async function estimateSecretsManagerCost(
   node: ResourceNode,
   input: CostEstimateRequest,
   options: AnalyzeCostOptions
-): Promise<ResourceCostEstimate> {
+): Promise<ResourceMonthlyCostEstimate> {
   return estimateRateBasedCost(node, input, options, {
     usageType: "secretsmanager_secret_month",
     quantity: 1,
@@ -842,7 +1026,7 @@ async function estimateLambdaCost(
   node: ResourceNode,
   input: CostEstimateRequest,
   options: AnalyzeCostOptions
-): Promise<ResourceCostEstimate> {
+): Promise<ResourceMonthlyCostEstimate> {
   return estimateRequestBasedCost(node, input, options, {
     usageType: "lambda_request",
     requestCount: estimateMonthlyRequests(input.expectedUserCount),
@@ -856,7 +1040,7 @@ async function estimateApiGatewayCost(
   node: ResourceNode,
   input: CostEstimateRequest,
   options: AnalyzeCostOptions
-): Promise<ResourceCostEstimate> {
+): Promise<ResourceMonthlyCostEstimate> {
   return estimateRequestBasedCost(node, input, options, {
     usageType: "api_gateway_request",
     requestCount: estimateMonthlyRequests(input.expectedUserCount),
@@ -870,7 +1054,7 @@ async function estimateCloudFrontCost(
   node: ResourceNode,
   input: CostEstimateRequest,
   options: AnalyzeCostOptions
-): Promise<ResourceCostEstimate> {
+): Promise<ResourceMonthlyCostEstimate> {
   const dataGb = estimateDataTransferGb(input.expectedUserCount);
 
   return estimateRateBasedCost(node, input, options, {
@@ -887,7 +1071,7 @@ async function estimateCloudWatchLogCost(
   node: ResourceNode,
   input: CostEstimateRequest,
   options: AnalyzeCostOptions
-): Promise<ResourceCostEstimate> {
+): Promise<ResourceMonthlyCostEstimate> {
   const logGb = estimateMonitoringDataGb(input.expectedUserCount);
   const ingestPriced = await estimateMonthlyAmountFromRate(
     options.pricingRateProvider,
@@ -936,11 +1120,12 @@ async function estimateEcsServiceCost(
   node: ResourceNode,
   input: CostEstimateRequest,
   options: AnalyzeCostOptions
-): Promise<ResourceCostEstimate> {
+): Promise<ResourceMonthlyCostEstimate> {
+  const userScaleFactor = estimateUserScaleFactor(input.expectedUserCount);
   const vcpu = getNumberConfig(node.config, ["vcpu", "cpu"], 0.25);
   const memoryGb = getNumberConfig(node.config, ["memoryGb", "memory"], 0.5);
-  const vcpuHours = vcpu * MONTH_HOURS;
-  const memoryGbHours = memoryGb * MONTH_HOURS;
+  const vcpuHours = vcpu * MONTH_HOURS * userScaleFactor;
+  const memoryGbHours = memoryGb * MONTH_HOURS * userScaleFactor;
   const vcpuPriced = await estimateMonthlyAmountFromRate(
     options.pricingRateProvider,
     {
@@ -974,13 +1159,18 @@ async function estimateEcsServiceCost(
     },
     supportLevel: getSupportLevel(pricingSource),
     supportReason: getSupportReason(pricingSource),
-    costDrivers: ["estimated Fargate vCPU hours", "estimated Fargate memory GB hours"],
+    costDrivers: [
+      "estimated Fargate vCPU hours",
+      "estimated Fargate memory GB hours",
+      `expected capacity x${formatNumber(userScaleFactor)}`
+    ],
     explanation: "ECS Service는 launch type에 따라 Fargate vCPU/memory 또는 EC2 하위 리소스 비용이 발생합니다.",
     pricingSource,
     usageAssumptions: [
       { label: "vCPU", value: `${formatNumber(vcpu)}` },
       { label: "memory", value: `${formatNumber(memoryGb)}GB` },
-      { label: "runtime", value: `${MONTH_HOURS}h/month` }
+      { label: "runtime", value: `${MONTH_HOURS}h/month` },
+      { label: "expected capacity factor", value: `x${formatNumber(userScaleFactor)}` }
     ]
   };
 }
@@ -989,7 +1179,7 @@ async function estimateEcrCost(
   node: ResourceNode,
   input: CostEstimateRequest,
   options: AnalyzeCostOptions
-): Promise<ResourceCostEstimate> {
+): Promise<ResourceMonthlyCostEstimate> {
   const storageGb = Math.max(1, roundOneDecimal(input.expectedUserCount * 0.005));
 
   return estimateRateBasedCost(node, input, options, {
@@ -1009,7 +1199,7 @@ async function estimateCodeBuildCost(
   node: ResourceNode,
   input: CostEstimateRequest,
   options: AnalyzeCostOptions
-): Promise<ResourceCostEstimate> {
+): Promise<ResourceMonthlyCostEstimate> {
   const buildMinutes = getNumberConfig(node.config, ["buildMinutes", "monthlyBuildMinutes"], 100);
 
   return estimateRateBasedCost(node, input, options, {
@@ -1029,7 +1219,7 @@ async function estimateConfigRecorderCost(
   node: ResourceNode,
   input: CostEstimateRequest,
   options: AnalyzeCostOptions
-): Promise<ResourceCostEstimate> {
+): Promise<ResourceMonthlyCostEstimate> {
   const itemCount = Math.max(100, input.expectedUserCount);
 
   return estimateRateBasedCost(node, input, options, {
@@ -1049,7 +1239,7 @@ async function estimateConfigRuleCost(
   node: ResourceNode,
   input: CostEstimateRequest,
   options: AnalyzeCostOptions
-): Promise<ResourceCostEstimate> {
+): Promise<ResourceMonthlyCostEstimate> {
   const evaluationCount = Math.max(100, input.expectedUserCount);
 
   return estimateRateBasedCost(node, input, options, {
@@ -1069,7 +1259,7 @@ async function estimateWafCost(
   node: ResourceNode,
   input: CostEstimateRequest,
   options: AnalyzeCostOptions
-): Promise<ResourceCostEstimate> {
+): Promise<ResourceMonthlyCostEstimate> {
   const requestCount = estimateMonthlyRequests(input.expectedUserCount);
   const webAclPriced = await estimateMonthlyAmountFromRate(
     options.pricingRateProvider,
@@ -1118,7 +1308,7 @@ async function estimateS3Cost(
   node: ResourceNode,
   input: CostEstimateRequest,
   options: AnalyzeCostOptions
-): Promise<ResourceCostEstimate> {
+): Promise<ResourceMonthlyCostEstimate> {
   const storageGb = estimateObjectStorageGb(input.expectedUserCount);
   const priced = await estimateMonthlyAmountFromRate(
     options.pricingRateProvider,
@@ -1165,7 +1355,7 @@ async function estimateRequestBasedCost(
     costDrivers: string[];
     explanation: string;
   }
-): Promise<ResourceCostEstimate> {
+): Promise<ResourceMonthlyCostEstimate> {
   return estimateRateBasedCost(node, input, options, {
     usageType: estimate.usageType,
     quantity: estimate.requestCount,
@@ -1190,7 +1380,7 @@ async function estimateEventBasedCost(
     costDrivers: string[];
     explanation: string;
   }
-): Promise<ResourceCostEstimate> {
+): Promise<ResourceMonthlyCostEstimate> {
   return estimateRateBasedCost(node, input, options, {
     usageType: estimate.usageType,
     quantity: estimate.eventCount,
@@ -1220,7 +1410,7 @@ async function estimateRateBasedCost(
     usageAssumptions: CostUsageAssumption[];
     recommendation?: string | undefined;
   }
-): Promise<ResourceCostEstimate> {
+): Promise<ResourceMonthlyCostEstimate> {
   const priced = await estimateMonthlyAmountFromRate(
     options.pricingRateProvider,
     {
@@ -1254,7 +1444,7 @@ async function estimateRateBasedCost(
   };
 }
 
-function createNoDirectCostEstimate(node: ResourceNode, explanation: string): ResourceCostEstimate {
+function createNoDirectCostEstimate(node: ResourceNode, explanation: string): ResourceMonthlyCostEstimate {
   return {
     resourceId: node.id,
     resourceType: node.type,
@@ -1272,7 +1462,7 @@ function createNoDirectCostEstimate(node: ResourceNode, explanation: string): Re
   };
 }
 
-function createZeroCostEstimate(node: ResourceNode): ResourceCostEstimate {
+function createZeroCostEstimate(node: ResourceNode): ResourceMonthlyCostEstimate {
   return {
     resourceId: node.id,
     resourceType: node.type,
@@ -1464,6 +1654,69 @@ function getNumberConfig(config: ResourceConfig, keys: readonly string[], fallba
   return fallback;
 }
 
+function getFallbackEc2MonthlyAmount(instanceType: string): number {
+  return getFallbackInstanceMonthlyAmount({
+    defaultAmount: FALLBACK_EC2_MONTHLY_USD["t3.micro"] ?? 8.5,
+    explicitAmounts: FALLBACK_EC2_MONTHLY_USD,
+    familyBaseAmounts: FALLBACK_EC2_FAMILY_MICRO_MONTHLY_USD,
+    instanceType,
+    prefixes: []
+  });
+}
+
+function getFallbackRdsMonthlyAmount(instanceClass: string): number {
+  return getFallbackInstanceMonthlyAmount({
+    defaultAmount: FALLBACK_RDS_INSTANCE_MONTHLY_USD["db.t4g.micro"] ?? 36.5,
+    explicitAmounts: FALLBACK_RDS_INSTANCE_MONTHLY_USD,
+    familyBaseAmounts: FALLBACK_RDS_FAMILY_MICRO_MONTHLY_USD,
+    instanceType: instanceClass,
+    prefixes: ["db."]
+  });
+}
+
+function getFallbackElastiCacheMonthlyAmount(nodeType: string): number {
+  return getFallbackInstanceMonthlyAmount({
+    defaultAmount: FALLBACK_ELASTICACHE_MONTHLY_USD["cache.t4g.micro"] ?? FALLBACK_ELASTICACHE_DEFAULT_MONTHLY_USD,
+    explicitAmounts: FALLBACK_ELASTICACHE_MONTHLY_USD,
+    familyBaseAmounts: FALLBACK_ELASTICACHE_FAMILY_MICRO_MONTHLY_USD,
+    instanceType: nodeType,
+    prefixes: ["cache."]
+  });
+}
+
+function getFallbackInstanceMonthlyAmount(input: {
+  defaultAmount: number;
+  explicitAmounts: Record<string, number>;
+  familyBaseAmounts: Record<string, number>;
+  instanceType: string;
+  prefixes: readonly string[];
+}): number {
+  const explicitAmount = input.explicitAmounts[input.instanceType];
+
+  if (explicitAmount !== undefined) {
+    return explicitAmount;
+  }
+
+  const normalizedType = input.prefixes.reduce(
+    (currentType, prefix) => currentType.startsWith(prefix) ? currentType.slice(prefix.length) : currentType,
+    input.instanceType
+  );
+  const [family, ...sizeParts] = normalizedType.split(".");
+  const size = sizeParts.join(".");
+  const familyBaseAmount = family === undefined ? undefined : input.familyBaseAmounts[family];
+  const sizeMultiplier = INSTANCE_SIZE_MULTIPLIER[size];
+
+  if (familyBaseAmount === undefined || sizeMultiplier === undefined) {
+    return input.defaultAmount;
+  }
+
+  return roundUsd(familyBaseAmount * sizeMultiplier);
+}
+
+function estimateUserScaleFactor(expectedUserCount: number): number {
+  return Math.max(0.01, roundUsd(expectedUserCount / DEFAULT_EXPECTED_USER_COUNT));
+}
+
 function normalizeExpectedUserCount(expectedUserCount: number | undefined): number {
   if (expectedUserCount === undefined || !Number.isFinite(expectedUserCount)) {
     return DEFAULT_EXPECTED_USER_COUNT;
@@ -1507,6 +1760,10 @@ function formatMoney(amount: number): string {
 }
 
 function formatNumber(amount: number): string {
+  if (amount > 0 && amount < 1) {
+    return amount.toFixed(2);
+  }
+
   return Number.isInteger(amount) ? String(amount) : amount.toFixed(1);
 }
 

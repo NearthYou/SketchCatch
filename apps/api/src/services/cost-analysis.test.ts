@@ -27,6 +27,101 @@ test("analyzeCost estimates NAT Gateway and ALB from Terraform resource type met
   assert.equal(alb.supportLevel, "fallback_estimate");
 });
 
+test("analyzeCost returns resource estimates for the requested period", async () => {
+  const result = await analyzeCost(
+    createCostEstimateRequest({
+      architectureJson: createArchitectureJson([
+        { id: "ec2", type: "UNKNOWN", terraformResourceType: "aws_instance" }
+      ]),
+      expectedUserCount: 1000,
+      period: "week",
+      region: "ap-northeast-2"
+    })
+  );
+
+  const ec2 = result.resources.find((resource) => resource.resourceId === "ec2");
+
+  assert.equal(result.totalMonthlyEstimate.amount, 8.5);
+  assert.equal(result.totalEstimate.amount, 1.98);
+  assert.equal(ec2?.monthlyEstimate.amount, 8.5);
+  assert.equal(ec2?.periodEstimate.amount, 1.98);
+});
+
+test("analyzeCost scales capacity and usage estimates by expected user count", async () => {
+  const baseResult = await analyzeCost(
+    createCostEstimateRequest({
+      architectureJson: createArchitectureJson([
+        { id: "ec2", type: "UNKNOWN", terraformResourceType: "aws_instance" },
+        { id: "s3", type: "UNKNOWN", terraformResourceType: "aws_s3_bucket" },
+        { id: "alb", type: "UNKNOWN", terraformResourceType: "aws_lb" }
+      ]),
+      expectedUserCount: 1000,
+      period: "month",
+      region: "ap-northeast-2"
+    })
+  );
+  const doubleResult = await analyzeCost(
+    createCostEstimateRequest({
+      architectureJson: createArchitectureJson([
+        { id: "ec2", type: "UNKNOWN", terraformResourceType: "aws_instance" },
+        { id: "s3", type: "UNKNOWN", terraformResourceType: "aws_s3_bucket" },
+        { id: "alb", type: "UNKNOWN", terraformResourceType: "aws_lb" }
+      ]),
+      expectedUserCount: 2000,
+      period: "month",
+      region: "ap-northeast-2"
+    })
+  );
+
+  const baseEc2 = baseResult.resources.find((resource) => resource.resourceId === "ec2");
+  const doubleEc2 = doubleResult.resources.find((resource) => resource.resourceId === "ec2");
+  const baseS3 = baseResult.resources.find((resource) => resource.resourceId === "s3");
+  const doubleS3 = doubleResult.resources.find((resource) => resource.resourceId === "s3");
+  const baseAlb = baseResult.resources.find((resource) => resource.resourceId === "alb");
+  const doubleAlb = doubleResult.resources.find((resource) => resource.resourceId === "alb");
+
+  assert.equal(baseEc2?.monthlyEstimate.amount, 8.5);
+  assert.equal(doubleEc2?.monthlyEstimate.amount, 17);
+  assert.equal(baseS3?.monthlyEstimate.amount, 0.46);
+  assert.equal(doubleS3?.monthlyEstimate.amount, 0.92);
+  assert.equal(baseAlb?.monthlyEstimate.amount, 16.2);
+  assert.equal(doubleAlb?.monthlyEstimate.amount, 32.4);
+});
+
+test("analyzeCost uses expanded instance fallback amounts when Pricing API is unavailable", async () => {
+  const result = await analyzeCost(
+    createCostEstimateRequest({
+      architectureJson: createArchitectureJson([
+        {
+          config: { instanceType: "m6i.large" },
+          id: "ec2-large",
+          type: "UNKNOWN",
+          terraformResourceType: "aws_instance"
+        },
+        {
+          config: { instanceClass: "db.r6i.xlarge" },
+          id: "rds-large",
+          type: "UNKNOWN",
+          terraformResourceType: "aws_db_instance"
+        },
+        {
+          config: { nodeType: "cache.r6g.large" },
+          id: "cache-large",
+          type: "UNKNOWN",
+          terraformResourceType: "aws_elasticache_replication_group"
+        }
+      ]),
+      expectedUserCount: 1000,
+      period: "month",
+      region: "ap-northeast-2"
+    })
+  );
+
+  assert.equal(result.resources.find((resource) => resource.resourceId === "ec2-large")?.monthlyEstimate.amount, 70);
+  assert.equal(result.resources.find((resource) => resource.resourceId === "rds-large")?.monthlyEstimate.amount, 662.3);
+  assert.equal(result.resources.find((resource) => resource.resourceId === "cache-large")?.monthlyEstimate.amount, 145);
+});
+
 test("analyzeCost prices an RDS snapshot as snapshot storage instead of a running DB instance", async () => {
   const result = await analyzeCost(
     createCostEstimateRequest({
@@ -152,6 +247,7 @@ const REQUESTED_TERRAFORM_RESOURCE_TYPES = [
 
 function createArchitectureJson(
   resources: readonly {
+    readonly config?: Record<string, string> | undefined;
     readonly id: string;
     readonly terraformResourceType: string;
     readonly type: ResourceType;
@@ -166,6 +262,7 @@ function createArchitectureJson(
       positionX: index,
       positionY: 0,
       config: {
+        ...(resource.config ?? {}),
         terraformResourceType: resource.terraformResourceType,
         terraformResourceName: resource.id
       }

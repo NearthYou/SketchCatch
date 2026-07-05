@@ -1020,6 +1020,7 @@ export type ResourceCostEstimate = {
   terraformResourceType?: string | undefined;
   name: string;
   monthlyEstimate: MoneyEstimate;
+  periodEstimate: MoneyEstimate;
   supportLevel: CostEstimateSupportLevel;
   supportReason: string;
   costDrivers: string[];

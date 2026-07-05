@@ -44,6 +44,10 @@ export function createResourceCostEstimate(node: ResourceNode): ResourceCostEsti
         amount: 15,
         currency: "USD"
       },
+      periodEstimate: {
+        amount: 15,
+        currency: "USD"
+      },
       supportLevel: "fallback_estimate",
       supportReason: "Pre-Deployment Check fallback 단가로 계산했습니다.",
       costDrivers: ["DB instance runtime", "allocated storage"],
@@ -61,6 +65,10 @@ export function createResourceCostEstimate(node: ResourceNode): ResourceCostEsti
         amount: 32,
         currency: "USD"
       },
+      periodEstimate: {
+        amount: 32,
+        currency: "USD"
+      },
       supportLevel: "fallback_estimate",
       supportReason: "Pre-Deployment Check fallback 단가로 계산했습니다.",
       costDrivers: ["NAT Gateway hourly runtime", "data processing"],
@@ -73,6 +81,10 @@ export function createResourceCostEstimate(node: ResourceNode): ResourceCostEsti
     resourceType: node.type,
     name: node.label ?? node.id,
     monthlyEstimate: {
+      amount: 0,
+      currency: "USD"
+    },
+    periodEstimate: {
       amount: 0,
       currency: "USD"
     },

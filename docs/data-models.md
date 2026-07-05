@@ -1141,6 +1141,7 @@ type ResourceCostEstimate = {
   terraformResourceType?: string;
   name: string;
   monthlyEstimate: MoneyEstimate;
+  periodEstimate: MoneyEstimate;
   supportLevel: CostEstimateSupportLevel;
   supportReason: string;
   costDrivers: string[];
@@ -1164,6 +1165,10 @@ type CostEstimateResult = {
   pricingAssumption: string;
 };
 ```
+
+`totalMonthlyEstimate`와 `ResourceCostEstimate.monthlyEstimate`는 항상 월 환산 기준이다. `totalEstimate`와 `ResourceCostEstimate.periodEstimate`는 요청한 `period` 기준 금액이며, `day = month / 30`, `week = month / 4.345`, `month = month`로 계산한다.
+
+`expectedUserCount`는 실제 사용량 집계값이 아니라 예상 사용자 수 가정치다. 비용 산정기는 기본 1,000명을 기준으로 `expectedUserCount / 1000` 용량 배율을 만들고, EC2/RDS/EBS/RDS snapshot/ElastiCache/ECS/NAT Gateway/VPC Endpoint/ALB처럼 용량을 늘려 잡을 수 있는 리소스에 이 배율을 반영한다. S3/EFS/DynamoDB/Lambda/API Gateway/SQS/SNS/EventBridge/CloudFront/CloudWatch Logs/CloudTrail/X-Ray/Config/WAF/GuardDuty처럼 요청량, 저장량, 전송량 기반 리소스는 예상 사용자 수에서 파생한 요청 수, GB, 이벤트 수로 계산한다.
 
 `DesignSimulationResult.costEstimate`는 같은 비용 산정 결과를 담는다. 기존 `costPressure: string[]`는 유지하되, 이제 `costEstimate.reviewMessages`와 같은 금액 기반 문장을 포함해야 한다. 예를 들어 월 기준 결과는 `현재 상황에서의 총 예상 비용은 $47.30 / month입니다.`처럼 사용자가 바로 읽을 수 있는 문장으로 내려간다.
 

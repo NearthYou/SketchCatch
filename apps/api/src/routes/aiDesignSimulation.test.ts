@@ -25,6 +25,7 @@ const costEstimateSchema = z.object({
       resourceType: z.string(),
       name: z.string(),
       monthlyEstimate: moneyEstimateSchema,
+      periodEstimate: moneyEstimateSchema,
       costDrivers: z.array(z.string()),
       explanation: z.string(),
       pricingSource: z.enum(["aws_pricing_api", "fallback"]).optional(),
@@ -166,12 +167,18 @@ test("POST /api/ai/design-simulation estimates flow, bottlenecks, failures, and 
   assert.equal(body.costEstimate.fallbackUsed, true);
   assert.ok(
     body.costEstimate.resources.some(
-      (item) => item.resourceId === "ec2-backend" && item.monthlyEstimate.amount === 8.5
+      (item) =>
+        item.resourceId === "ec2-backend" &&
+        item.monthlyEstimate.amount === 8.5 &&
+        item.periodEstimate.amount === 8.5
     )
   );
   assert.ok(
     body.costEstimate.resources.some(
-      (item) => item.resourceId === "rds-primary" && item.monthlyEstimate.amount === 38.8
+      (item) =>
+        item.resourceId === "rds-primary" &&
+        item.monthlyEstimate.amount === 38.8 &&
+        item.periodEstimate.amount === 38.8
     )
   );
   assert.ok(
