@@ -90,6 +90,20 @@ function createGetProductsInput(query: CostPricingQuery): GetProductsCommandInpu
     };
   }
 
+  if (query.usageType === "rds_storage_gb_month") {
+    return {
+      ServiceCode: "AmazonRDS",
+      MaxResults: 1,
+      Filters: [
+        { Type: "TERM_MATCH", Field: "regionCode", Value: query.region },
+        { Type: "TERM_MATCH", Field: "databaseEngine", Value: normalizeDatabaseEngine(query.databaseEngine) },
+        { Type: "TERM_MATCH", Field: "productFamily", Value: "Database Storage" },
+        { Type: "TERM_MATCH", Field: "deploymentOption", Value: "Single-AZ" },
+        { Type: "TERM_MATCH", Field: "volumeType", Value: "General Purpose-GP3" }
+      ]
+    };
+  }
+
   if (query.usageType === "s3_storage_gb_month") {
     return {
       ServiceCode: "AmazonS3",
