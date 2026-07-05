@@ -115,6 +115,40 @@ test("createDiagramNodeFromPayload appends a numeric suffix for duplicate resour
   assert.equal(node.label, "EC2 Instance");
 });
 
+test("createDiagramNodeFromPayload appends numeric suffixes for duplicate ASG resource names", () => {
+  const existingNodes = [
+    makeResourceNode({
+      id: "asg-1",
+      resourceName: "auto_scaling_group",
+      resourceType: "aws_autoscaling_group"
+    }),
+    makeResourceNode({
+      id: "asg-2",
+      resourceName: "auto_scaling_group_2",
+      resourceType: "aws_autoscaling_group"
+    })
+  ];
+
+  const node = createDiagramNodeFromPayload(
+    makeResourceDragPayload(
+      makeResourceItem({
+        resourceType: "aws_autoscaling_group",
+        label: "Auto Scaling Group",
+        size: { width: 200, height: 130 }
+      })
+    ),
+    { x: 0, y: 0 },
+    1,
+    existingNodes
+  );
+
+  assert.equal(node.kind, "resource");
+  assert.equal(node.parameters?.resourceType, "aws_autoscaling_group");
+  assert.equal(node.parameters?.resourceName, "auto_scaling_group_3");
+  assert.deepEqual(node.size, { width: 200, height: 130 });
+  assert.deepEqual(node.parameters?.values, {});
+});
+
 test("createDiagramNodeFromPayload creates Region and AZ as resource area nodes", () => {
   const regionNode = createDiagramNodeFromPayload(
     makeResourceDragPayload(makeResourceItem({ id: "aws-region", resourceType: "aws_region", label: "Region" })),
@@ -347,11 +381,13 @@ function makeResourceItem({
   id,
   label,
   resourceType,
+  size = { width: 168, height: 96 },
   terraformBlockType
 }: {
   id?: string;
   label: string;
   resourceType: string;
+  size?: ResourceItem["nodeDefaults"]["size"];
   terraformBlockType?: ResourceItem["nodeDefaults"]["terraformBlockType"];
 }): ResourceItem {
   return {
@@ -366,10 +402,7 @@ function makeResourceItem({
       ...(terraformBlockType ? { terraformBlockType } : {}),
       type: resourceType,
       label,
-      size: {
-        width: 168,
-        height: 96
-      }
+      size
     }
   };
 }
