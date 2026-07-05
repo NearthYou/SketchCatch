@@ -93,6 +93,29 @@ test("AWS Provider Adapter maps routing resources and prepares safe import sugge
   );
 });
 
+test("AWS Provider Adapter prefixes Terraform names that start with a digit", async () => {
+  const adapter = createAwsProviderAdapter({
+    async discoverResources() {
+      return [
+        createRecord({
+          providerResourceType: "AWS::S3::Bucket",
+          providerResourceId: "123-demo-bucket",
+          displayName: "123-demo-bucket"
+        })
+      ];
+    }
+  });
+
+  const result = await adapter.scan({
+    provider: "aws",
+    region: "ap-northeast-2",
+    resourceTypes: ["S3"]
+  });
+
+  assert.equal(result.importSuggestions[0]?.terraformAddress, "aws_s3_bucket.res_123_demo_bucket");
+  assert.equal(result.importSuggestions[0]?.terraformBlockDraft, 'resource "aws_s3_bucket" "res_123_demo_bucket" {}');
+});
+
 test("AWS Provider Adapter keeps partial read errors without dropping successful resources", async () => {
   const adapter = createAwsProviderAdapter({
     async discoverResources() {

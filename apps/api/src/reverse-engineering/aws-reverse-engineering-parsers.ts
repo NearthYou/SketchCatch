@@ -143,7 +143,7 @@ export function parseRdsInstancesFromXml(
   xml: string,
   region: string
 ): AwsDiscoveredResourceRecord[] {
-  return extractSetItems(xml, "DBInstances").map((item) => {
+  return extractSetItems(xml, "DBInstances", "DBInstance").map((item) => {
     const dbInstanceId = extractRequiredTag(item, "DBInstanceIdentifier");
     const securityGroupIds = extractRepeatedTags(item, "VpcSecurityGroupId");
 
@@ -175,54 +175,57 @@ function extractSecurityGroupIngressRules(xml: string): SecurityGroupIngressRule
   });
 }
 
-// AWS 목록 XML에서 바로 아래 <item>들만 꺼냅니다.
-export function extractSetItems(xml: string, setTag: string): string[] {
-  const setBody = extractTag(xml, setTag);
-
-  if (!setBody) {
-    return [];
-  }
-
-  return extractDirectItemBodies(setBody);
+// AWS 목록 XML에서 각 set 바로 아래 있는 항목 태그만 꺼냅니다.
+export function extractSetItems(xml: string, setTag: string, itemTag = "item"): string[] {
+  return extractTagBodies(xml, setTag).flatMap((setBody) =>
+    extractDirectElementBodies(setBody, itemTag)
+  );
 }
 
-// AWS Query XML은 바깥 목록과 안쪽 하위 목록이 모두 <item>을 쓰기 때문에 깊이를 세야 합니다.
-function extractDirectItemBodies(xml: string): string[] {
+// AWS Query XML은 바깥 목록과 안쪽 하위 목록이 같은 태그를 쓸 수 있어서 깊이를 세야 합니다.
+function extractDirectElementBodies(xml: string, itemTag: string): string[] {
   const items: string[] = [];
   let searchIndex = 0;
+  const openTag = `<${itemTag}>`;
+  const closeTag = `</${itemTag}>`;
 
   while (searchIndex < xml.length) {
-    const itemStartIndex = xml.indexOf("<item>", searchIndex);
+    const itemStartIndex = xml.indexOf(openTag, searchIndex);
 
     if (itemStartIndex === -1) {
       return items;
     }
 
-    const itemBodyStartIndex = itemStartIndex + "<item>".length;
-    const itemEndIndex = findMatchingItemEndIndex(xml, itemBodyStartIndex);
+    const itemBodyStartIndex = itemStartIndex + openTag.length;
+    const itemEndIndex = findMatchingElementEndIndex(xml, itemBodyStartIndex, openTag, closeTag);
     items.push(xml.slice(itemBodyStartIndex, itemEndIndex));
-    searchIndex = itemEndIndex + "</item>".length;
+    searchIndex = itemEndIndex + closeTag.length;
   }
 
   return items;
 }
 
-// 중첩된 <item> 구조에서 현재 item이 끝나는 위치를 찾습니다.
-function findMatchingItemEndIndex(xml: string, startIndex: number): number {
+// 중첩된 AWS 목록 구조에서 현재 항목 태그가 끝나는 위치를 찾습니다.
+function findMatchingElementEndIndex(
+  xml: string,
+  startIndex: number,
+  openTag: string,
+  closeTag: string
+): number {
   let depth = 1;
   let searchIndex = startIndex;
 
   while (depth > 0) {
-    const nextItemStartIndex = xml.indexOf("<item>", searchIndex);
-    const nextItemEndIndex = xml.indexOf("</item>", searchIndex);
+    const nextItemStartIndex = xml.indexOf(openTag, searchIndex);
+    const nextItemEndIndex = xml.indexOf(closeTag, searchIndex);
 
     if (nextItemEndIndex === -1) {
-      throw new Error("AWS response item tag is not closed");
+      throw new Error(`AWS response ${openTag} tag is not closed`);
     }
 
     if (nextItemStartIndex !== -1 && nextItemStartIndex < nextItemEndIndex) {
       depth += 1;
-      searchIndex = nextItemStartIndex + "<item>".length;
+      searchIndex = nextItemStartIndex + openTag.length;
       continue;
     }
 
@@ -232,7 +235,7 @@ function findMatchingItemEndIndex(xml: string, startIndex: number): number {
       return nextItemEndIndex;
     }
 
-    searchIndex = nextItemEndIndex + "</item>".length;
+    searchIndex = nextItemEndIndex + closeTag.length;
   }
 
   return searchIndex;
@@ -266,10 +269,16 @@ function extractRepeatedTags(xml: string, tagName: string): string[] {
 
 // XML에서 태그 하나의 문자열 값을 꺼냅니다.
 function extractTag(xml: string, tagName: string): string | null {
-  const pattern = new RegExp(`<${tagName}>([\\s\\S]*?)<\\/${tagName}>`);
-  const value = pattern.exec(xml)?.[1];
+  const value = extractTagBodies(xml, tagName)[0];
 
   return value ? unescapeXml(value) : null;
+}
+
+// 같은 이름의 XML 블록이 여러 번 나올 때 원본 body를 전부 꺼냅니다.
+function extractTagBodies(xml: string, tagName: string): string[] {
+  const pattern = new RegExp(`<${tagName}>([\\s\\S]*?)<\\/${tagName}>`, "g");
+
+  return [...xml.matchAll(pattern)].map((match) => match[1] ?? "");
 }
 
 // AWS 원본 리소스 ID 사이의 관계를 내부 관계 모양으로 만듭니다.

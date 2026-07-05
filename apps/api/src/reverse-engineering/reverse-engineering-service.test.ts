@@ -11,7 +11,8 @@ import type {
 } from "./reverse-engineering-service.js";
 import {
   createReverseEngineeringScan,
-  createReverseEngineeringScanJob
+  createReverseEngineeringScanJob,
+  ReverseEngineeringScanFailedError
 } from "./reverse-engineering-service.js";
 
 const projectId = "11111111-1111-4111-8111-111111111111";
@@ -168,6 +169,38 @@ test("createReverseEngineeringScanJob keeps a cancelled scan from becoming compl
   assert.equal(repository.scanRows[0]?.result, null);
 });
 
+test("createReverseEngineeringScan stores adapter failures without reporting them as not found", async () => {
+  const repository = new FakeReverseEngineeringRepository();
+
+  await assert.rejects(
+    () =>
+      createReverseEngineeringScan(
+        {
+          projectId,
+          accessContext: { kind: "user", userId },
+          awsConnectionId,
+          region: "ap-northeast-2",
+          resourceTypes: ["VPC"]
+        },
+        repository,
+        {
+          adapter: {
+            async scan() {
+              throw new Error("AWS DescribeVpcs failed");
+            }
+          },
+          generateId: () => "44444444-4444-4444-8444-444444444444",
+          now: () => fixedNow
+        }
+      ),
+    ReverseEngineeringScanFailedError
+  );
+
+  assert.equal(repository.scanRows[0]?.status, "failed");
+  assert.equal(repository.scanRows[0]?.errorSummary, "AWS DescribeVpcs failed");
+  assert.equal(repository.logRows[1]?.level, "ERROR");
+});
+
 test("softDeleteScan removes the saved scan result and logs without deleting the applied board", async () => {
   const repository = new FakeReverseEngineeringRepository();
   const scan = await repository.createScan({
@@ -301,8 +334,17 @@ class FakeReverseEngineeringRepository implements ReverseEngineeringRepository {
     return scan;
   }
 
-  async failScan() {
-    return undefined;
+  async failScan(scanId: string, errorSummary: string, failedAt: Date) {
+    const scan = this.scanRows.find((row) => row.id === scanId);
+
+    if (!scan || scan.status === "cancelled") {
+      return undefined;
+    }
+
+    scan.status = "failed";
+    scan.errorSummary = errorSummary;
+    scan.updatedAt = failedAt;
+    return scan;
   }
 
   async findAccessibleScan() {

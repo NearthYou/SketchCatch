@@ -121,6 +121,14 @@ export class ReverseEngineeringNotFoundError extends Error {
   }
 }
 
+// 스캔 row는 있지만 Provider 호출이 실패한 경우 404와 구분하기 위해 따로 던집니다.
+export class ReverseEngineeringScanFailedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ReverseEngineeringScanFailedError";
+  }
+}
+
 class ReverseEngineeringScanCancelledError extends Error {
   constructor() {
     super("Reverse Engineering 스캔이 취소됐습니다.");
@@ -278,9 +286,11 @@ async function runReverseEngineeringScanJob({
       level: "ERROR"
     });
 
-    throw new ReverseEngineeringNotFoundError(
-      failedScan ? errorSummary : "Reverse Engineering scan not found"
-    );
+    if (!failedScan) {
+      throw new ReverseEngineeringNotFoundError("Reverse Engineering scan not found");
+    }
+
+    throw new ReverseEngineeringScanFailedError(errorSummary);
   }
 }
 

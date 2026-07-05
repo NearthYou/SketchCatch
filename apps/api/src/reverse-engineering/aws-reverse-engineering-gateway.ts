@@ -198,17 +198,24 @@ async function describeRdsInstances(
   return parseRdsInstancesFromXml(xml, region);
 }
 
+// S3는 Query XML API가 아니라 SDK로 읽기 때문에 같은 AWS 자격 증명을 SDK 형태로 바꿉니다.
 async function listBuckets(
   region: string,
   credentials: TerraformAwsCredentialEnv
 ): Promise<AwsDiscoveredResourceRecord[]> {
+  const sdkCredentials = credentials.AWS_SESSION_TOKEN
+    ? {
+        accessKeyId: credentials.AWS_ACCESS_KEY_ID,
+        secretAccessKey: credentials.AWS_SECRET_ACCESS_KEY,
+        sessionToken: credentials.AWS_SESSION_TOKEN
+      }
+    : {
+        accessKeyId: credentials.AWS_ACCESS_KEY_ID,
+        secretAccessKey: credentials.AWS_SECRET_ACCESS_KEY
+      };
   const client = new S3Client({
     region,
-    credentials: {
-      accessKeyId: credentials.AWS_ACCESS_KEY_ID,
-      secretAccessKey: credentials.AWS_SECRET_ACCESS_KEY,
-      sessionToken: credentials.AWS_SESSION_TOKEN
-    }
+    credentials: sdkCredentials
   });
   const response = await client.send(new ListBucketsCommand({}));
 

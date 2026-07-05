@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   extractSetItems,
+  parseInstancesFromXml,
   parseInternetGatewaysFromXml,
+  parseRdsInstancesFromXml,
   parseRouteTablesFromXml,
   parseSecurityGroupsFromXml
 } from "./aws-reverse-engineering-parsers.js";
@@ -132,6 +134,95 @@ test("parseSecurityGroupsFromXml keeps open ingress rules for risk findings", ()
   const [securityGroup] = parseSecurityGroupsFromXml(xml, "ap-northeast-2");
 
   assert.deepEqual(securityGroup?.config["ingress"], [{ port: 22, cidr: "0.0.0.0/0" }]);
+});
+
+test("parseInstancesFromXml keeps instances from every reservation block", () => {
+  const xml = `
+    <DescribeInstancesResponse>
+      <reservationSet>
+        <item>
+          <instancesSet>
+            <item>
+              <instanceId>i-first</instanceId>
+              <instanceType>t3.micro</instanceType>
+              <imageId>ami-first</imageId>
+              <subnetId>subnet-first</subnetId>
+              <groupSet>
+                <item>
+                  <groupId>sg-first</groupId>
+                </item>
+              </groupSet>
+              <tagSet>
+                <item>
+                  <key>Name</key>
+                  <value>First Backend</value>
+                </item>
+              </tagSet>
+            </item>
+          </instancesSet>
+        </item>
+        <item>
+          <instancesSet>
+            <item>
+              <instanceId>i-second</instanceId>
+              <instanceType>t3.small</instanceType>
+              <imageId>ami-second</imageId>
+              <subnetId>subnet-second</subnetId>
+              <groupSet>
+                <item>
+                  <groupId>sg-second</groupId>
+                </item>
+              </groupSet>
+            </item>
+          </instancesSet>
+        </item>
+      </reservationSet>
+    </DescribeInstancesResponse>
+  `;
+
+  const instances = parseInstancesFromXml(xml, "ap-northeast-2");
+
+  assert.deepEqual(
+    instances.map((instance) => instance.providerResourceId),
+    ["i-first", "i-second"]
+  );
+  assert.equal(instances[0]?.displayName, "First Backend");
+  assert.deepEqual(instances[1]?.relationships, [
+    { type: "contains", targetProviderResourceId: "subnet-second" },
+    { type: "attached_to", targetProviderResourceId: "sg-second" }
+  ]);
+});
+
+test("parseRdsInstancesFromXml reads DBInstance entries from AWS RDS responses", () => {
+  const xml = `
+    <DescribeDBInstancesResponse>
+      <DescribeDBInstancesResult>
+        <DBInstances>
+          <DBInstance>
+            <DBInstanceIdentifier>app-db</DBInstanceIdentifier>
+            <Engine>postgres</Engine>
+            <DBInstanceClass>db.t4g.micro</DBInstanceClass>
+            <PubliclyAccessible>true</PubliclyAccessible>
+            <VpcSecurityGroups>
+              <VpcSecurityGroupMembership>
+                <VpcSecurityGroupId>sg-db</VpcSecurityGroupId>
+              </VpcSecurityGroupMembership>
+            </VpcSecurityGroups>
+          </DBInstance>
+        </DBInstances>
+      </DescribeDBInstancesResult>
+    </DescribeDBInstancesResponse>
+  `;
+
+  const [database] = parseRdsInstancesFromXml(xml, "ap-northeast-2");
+
+  assert.equal(database?.providerResourceType, "AWS::RDS::DBInstance");
+  assert.equal(database?.providerResourceId, "app-db");
+  assert.equal(database?.config["engine"], "postgres");
+  assert.equal(database?.config["publiclyAccessible"], true);
+  assert.deepEqual(database?.relationships, [
+    { type: "attached_to", targetProviderResourceId: "sg-db" }
+  ]);
 });
 
 test("maskReverseEngineeringSensitiveText hides account ids inside AWS error text", () => {

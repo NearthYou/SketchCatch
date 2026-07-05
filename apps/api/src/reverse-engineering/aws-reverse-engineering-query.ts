@@ -46,13 +46,19 @@ function signAwsQueryRequest(input: SignedAwsQueryInput & { endpoint: string; bo
   const dateStamp = amzDate.slice(0, 8);
   const credentialScope = `${dateStamp}/${input.region}/${input.service}/aws4_request`;
   const payloadHash = sha256Hex(input.body);
-  const canonicalHeaders = [
-    "content-type:application/x-www-form-urlencoded; charset=utf-8",
-    `host:${endpointUrl.host}`,
-    `x-amz-date:${amzDate}`,
-    `x-amz-security-token:${input.credentials.AWS_SESSION_TOKEN}`
-  ].join("\n");
-  const signedHeaders = "content-type;host;x-amz-date;x-amz-security-token";
+  const headers: Record<string, string> = {
+    "content-type": "application/x-www-form-urlencoded; charset=utf-8",
+    host: endpointUrl.host,
+    "x-amz-date": amzDate
+  };
+
+  if (input.credentials.AWS_SESSION_TOKEN) {
+    headers["x-amz-security-token"] = input.credentials.AWS_SESSION_TOKEN;
+  }
+
+  const sortedHeaders = Object.entries(headers).sort(([left], [right]) => left.localeCompare(right));
+  const canonicalHeaders = sortedHeaders.map(([key, value]) => `${key}:${value}`).join("\n");
+  const signedHeaders = sortedHeaders.map(([key]) => key).join(";");
   const canonicalRequest = [
     "POST",
     "/",
@@ -76,10 +82,7 @@ function signAwsQueryRequest(input: SignedAwsQueryInput & { endpoint: string; bo
   const signature = hmacHex(signingKey, stringToSign);
 
   return {
-    "content-type": "application/x-www-form-urlencoded; charset=utf-8",
-    host: endpointUrl.host,
-    "x-amz-date": amzDate,
-    "x-amz-security-token": input.credentials.AWS_SESSION_TOKEN,
+    ...headers,
     authorization:
       `AWS4-HMAC-SHA256 Credential=${input.credentials.AWS_ACCESS_KEY_ID}/${credentialScope}, ` +
       `SignedHeaders=${signedHeaders}, Signature=${signature}`

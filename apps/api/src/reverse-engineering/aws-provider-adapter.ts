@@ -286,7 +286,9 @@ function createNodeId(record: AwsDiscoveredResourceRecord): string {
 }
 
 function createTerraformResourceName(providerResourceId: string): string {
-  return sanitizeIdPart(providerResourceId).replaceAll("-", "_");
+  const sanitizedName = sanitizeIdPart(providerResourceId).replaceAll("-", "_");
+
+  return /^[a-z_]/.test(sanitizedName) ? sanitizedName : `res_${sanitizedName}`;
 }
 
 // AWS ARN처럼 긴 ID를 보드 node id에 넣을 수 있는 안전한 문자열로 정리합니다.
