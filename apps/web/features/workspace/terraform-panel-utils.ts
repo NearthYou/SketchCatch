@@ -1,9 +1,4 @@
-import type {
-  DiagramJson,
-  DiagramNode,
-  TerraformDiagnostic,
-  TerraformSourceLocation
-} from "@sketchcatch/types";
+import type { DiagramJson, DiagramNode, TerraformDiagnostic } from "@sketchcatch/types";
 import type { DiagramEditorPanelContext } from "../diagram-editor";
 
 export type TerraformSaveBanner =
@@ -226,43 +221,21 @@ export function findTerraformBlockForNode(
   blocks: readonly TerraformBlockLocation[],
   node: DiagramNode | null
 ): TerraformBlockLocation | null {
-  const address = toNodeTerraformAddress(node);
+  const candidateAddresses = getNodeTerraformAddressCandidates(node);
 
-  if (!address) {
+  if (candidateAddresses.length === 0) {
     return null;
   }
 
-  return blocks.find((block) => block.address === address) ?? null;
-}
+  for (const address of candidateAddresses) {
+    const block = blocks.find((candidateBlock) => candidateBlock.address === address);
 
-export function findTerraformSourceLocationForAddress(
-  files: readonly TerraformVirtualFile[],
-  resourceAddress: string | null | undefined
-): TerraformSourceLocation | undefined {
-  const normalizedAddress = normalizeTerraformAddress(resourceAddress);
-
-  if (!normalizedAddress) {
-    return undefined;
+    if (block) {
+      return block;
+    }
   }
 
-  const block = parseTerraformFiles(files).find(
-    (location) =>
-      location.address === normalizedAddress ||
-      `${location.blockType}.${location.address}` === normalizedAddress
-  );
-
-  if (!block) {
-    return undefined;
-  }
-
-  return {
-    fileName: block.fileName,
-    line: block.startLine,
-    column: 1,
-    resourceAddress: block.address,
-    terraformBlockType: block.blockType,
-    terraformBlockName: block.name
-  };
+  return null;
 }
 
 function toNodeTerraformAddress(node: DiagramNode | null): string | null {
@@ -280,14 +253,70 @@ function toNodeTerraformAddress(node: DiagramNode | null): string | null {
     : `${resourceType}.${resourceName}`;
 }
 
-function normalizeTerraformAddress(resourceAddress: string | null | undefined): string | null {
-  const trimmedAddress = resourceAddress?.trim();
+function getNodeTerraformAddressCandidates(node: DiagramNode | null): string[] {
+  if (!node) {
+    return [];
+  }
 
-  if (!trimmedAddress) {
+  const parameterAddress = toNodeTerraformAddress(node);
+  const displayAddress = toNodeDisplayTerraformAddress(node);
+  const candidates =
+    node.parameters?.terraformBlockType === "data"
+      ? [
+          parameterAddress,
+          displayAddress,
+          toNodeTypeAndParameterNameTerraformAddress(node),
+          toParameterTypeAndDisplayNameTerraformAddress(node)
+        ]
+      : [
+          displayAddress,
+          parameterAddress,
+          toNodeTypeAndParameterNameTerraformAddress(node),
+          toParameterTypeAndDisplayNameTerraformAddress(node)
+        ];
+
+  return Array.from(new Set(candidates.filter((address): address is string => Boolean(address))));
+}
+
+function toNodeDisplayTerraformAddress(node: DiagramNode): string | null {
+  const resourceType = node.type.trim();
+  const resourceName = toTerraformLocalName(node.label);
+
+  if (!resourceType || !resourceName) {
     return null;
   }
 
-  return trimmedAddress.replace(/^(resource|data)\./, "");
+  return `${resourceType}.${resourceName}`;
+}
+
+function toNodeTypeAndParameterNameTerraformAddress(node: DiagramNode): string | null {
+  const resourceType = node.type.trim();
+  const resourceName = node.parameters?.resourceName?.trim();
+
+  if (!resourceType || !resourceName) {
+    return null;
+  }
+
+  return `${resourceType}.${resourceName}`;
+}
+
+function toParameterTypeAndDisplayNameTerraformAddress(node: DiagramNode): string | null {
+  const resourceType = node.parameters?.resourceType?.trim();
+  const resourceName = toTerraformLocalName(node.label);
+
+  if (!resourceType || !resourceName) {
+    return null;
+  }
+
+  return `${resourceType}.${resourceName}`;
+}
+
+function toTerraformLocalName(label: string): string {
+  return label
+    .trim()
+    .toLocaleLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
 }
 
 function parseTerraformBlocks(fileName: string, terraformCode: string): TerraformBlockLocation[] {

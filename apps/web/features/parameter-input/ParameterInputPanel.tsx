@@ -76,7 +76,15 @@ export function ParameterInputPanel({
       <aside className={styles.panel} aria-label="파라미터 입력 패널">
         <PanelHeader node={selectedNode} parameters={null} />
 
+        <DesignAreaNameSection
+          node={selectedNode}
+          onChange={(label) => updateNodeMetadata(selectedNode.id, { label })}
+        />
+
         <section className={styles.section} aria-label="Main parameters">
+          <div className={styles.sectionHeader}>
+            <h3>Region</h3>
+          </div>
           <div className={styles.fieldGroup}>
             <RegionField
               onChange={(awsRegion) =>
@@ -96,6 +104,10 @@ export function ParameterInputPanel({
     return (
       <aside className={styles.panel} aria-label="파라미터 입력 패널">
         <PanelHeader node={selectedNode} parameters={null} />
+        <DesignAreaNameSection
+          node={selectedNode}
+          onChange={(label) => updateNodeMetadata(selectedNode.id, { label })}
+        />
         <EmptyPanel
           title="디자인 타입"
           description="Region, AZ, Group 같은 디자인 타입은 Terraform 리소스 파라미터를 가지지 않습니다."
@@ -215,6 +227,25 @@ export function ParameterInputPanel({
       </section>
 
     </aside>
+  );
+}
+
+function DesignAreaNameSection({
+  node,
+  onChange
+}: {
+  node: DiagramNode;
+  onChange: (label: string) => void;
+}) {
+  return (
+    <section className={styles.section} aria-label="Area metadata">
+      <div className={styles.sectionHeader}>
+        <h3>Metadata</h3>
+      </div>
+      <div className={styles.fieldGroup}>
+        <MetadataField label="Name" onChange={onChange} value={node.label} />
+      </div>
+    </section>
   );
 }
 

@@ -10,15 +10,15 @@ import type {
   CheckFinding,
   DeployedResource,
   Deployment,
-  DeploymentPlanWarning,
   DeploymentFailureExplanation,
   DiagramJson,
   DeploymentLog,
+  GitCicdHandoff,
+  GitCicdHandoffPipelineStatus,
   TerraformDiagnostic,
-  TerraformSourceLocation,
   TerraformOutput
 } from "@sketchcatch/types";
-import { Clipboard, ClipboardCheck, FileCode2, Maximize2, ShieldCheck, Sparkles, Trash2, X } from "lucide-react";
+import { Clipboard, ClipboardCheck, Maximize2, ShieldCheck, Trash2, X } from "lucide-react";
 import { DashboardIcon } from "../../components/dashboard/dashboard-icons";
 import { SelectMenu, type SelectMenuOption } from "../../components/ui/SelectMenu";
 import { getApiErrorMessage } from "../../lib/api-client";
@@ -26,11 +26,13 @@ import {
   approveDeploymentPlan,
   cancelDeployment as cancelDeploymentRun,
   createDeployment,
+  getGitCicdHandoffPipelineStatus,
   getDeploymentFailureExplanation,
   listAwsConnections,
   listDeploymentResources,
   listDeploymentLogs,
   listDeployments,
+  listGitCicdHandoffs,
   listTerraformOutputs,
   runDeploymentInit,
   runDeploymentApply,
@@ -41,12 +43,14 @@ import {
   streamDeploymentLogs
 } from "./api";
 import {
-  canApproveDeploymentPlanWithAcknowledgements,
   getDefaultDeploymentPanelMode,
   getDeploymentActionState,
+  getGitCicdHandoffStatusLabel,
   getDeploymentLogMessageTokens,
   getDeploymentLogTone,
+  hasCompleteDeploymentApprovalSnapshot,
   shouldAutoRefreshDeployment,
+  shouldAutoRefreshGitCicdHandoff,
   shouldShowDeploymentInfoValue,
   type DeploymentLogMessageToken,
   type DeploymentPanelMode
@@ -56,8 +60,6 @@ import {
   isWorkspaceAiResultStale
 } from "./workspace-ai-panel-state";
 import { addTerraformDiagnosticsToPreDeploymentAnalysis } from "./pre-deployment-diagnostics";
-import { dispatchWorkspaceSafetyFindingAiEvent } from "./safety-finding-ai-event";
-import type { TerraformVirtualFile } from "./terraform-panel-utils";
 import type { AiRequestState } from "./WorkspaceAiPanelPieces";
 import type { SavedWorkspaceTerraformArtifact } from "./workspace-deployment-artifacts";
 import type { RequestState } from "./workspace-right-panel.types";
@@ -65,6 +67,7 @@ import styles from "./workspace.module.css";
 
 type DeploymentRuntimeSnapshot = {
   readonly deployments: Deployment[];
+  readonly gitCicdHandoffs: GitCicdHandoff[];
   readonly logs: DeploymentLog[];
   readonly resources: DeployedResource[];
   readonly outputs: TerraformOutput[];
@@ -84,9 +87,7 @@ export function DeploymentPanel({
   currentNodeCount,
   diagramJson,
   hasUnsavedDeploymentBaseline,
-  onOpenTerraformSourceLocation,
   onPrepareDeploymentArtifacts,
-  onReadTerraformSourceFiles,
   onValidateTerraformDiagnostics,
   projectId,
   projectName
@@ -94,23 +95,24 @@ export function DeploymentPanel({
   readonly currentNodeCount: number;
   readonly diagramJson: DiagramJson;
   readonly hasUnsavedDeploymentBaseline: boolean;
-  readonly onOpenTerraformSourceLocation: (sourceLocation: TerraformSourceLocation) => void;
   readonly onPrepareDeploymentArtifacts: () => Promise<SavedWorkspaceTerraformArtifact>;
-  readonly onReadTerraformSourceFiles: () => readonly TerraformVirtualFile[];
   readonly onValidateTerraformDiagnostics: () => Promise<TerraformDiagnostic[]>;
   readonly projectId: string;
   readonly projectName: string;
 }) {
   const [awsConnections, setAwsConnections] = useState<AwsConnection[]>([]);
   const [deployments, setDeployments] = useState<Deployment[]>([]);
+  const [gitCicdHandoffs, setGitCicdHandoffs] = useState<GitCicdHandoff[]>([]);
   const [deploymentLogs, setDeploymentLogs] = useState<DeploymentLog[]>([]);
   const [deploymentResources, setDeploymentResources] = useState<DeployedResource[]>([]);
   const [terraformOutputs, setTerraformOutputs] = useState<TerraformOutput[]>([]);
   const [selectedAwsConnectionId, setSelectedAwsConnectionId] = useState("");
   const [selectedDeploymentId, setSelectedDeploymentId] = useState("");
+  const [selectedGitCicdHandoffId, setSelectedGitCicdHandoffId] = useState("");
+  const [gitCicdPipelineStatusSource, setGitCicdPipelineStatusSource] =
+    useState<GitCicdHandoffPipelineStatus["source"] | null>(null);
   const [showApplyConfirmation, setShowApplyConfirmation] = useState(false);
   const [showDestroyConfirmation, setShowDestroyConfirmation] = useState(false);
-  const [acknowledgedWarningIds, setAcknowledgedWarningIds] = useState<string[]>([]);
   const [requestState, setRequestState] = useState<RequestState>("idle");
   const [errorMessage, setErrorMessage] = useState("");
   const [deploymentPanelMode, setDeploymentPanelMode] = useState<DeploymentPanelMode>("setup");
@@ -152,11 +154,25 @@ export function DeploymentPanel({
       })),
     [deployments]
   );
+  const gitCicdHandoffOptions = useMemo<SelectMenuOption[]>(
+    () =>
+      gitCicdHandoffs.map((handoff) => ({
+        detail: `${handoff.repositoryOwner}/${handoff.repositoryName}`,
+        label: getGitCicdHandoffStatusLabel(handoff),
+        value: handoff.id
+      })),
+    [gitCicdHandoffs]
+  );
   const selectedDeployment = useMemo(
     () => deployments.find((deployment) => deployment.id === selectedDeploymentId) ?? null,
     [deployments, selectedDeploymentId]
   );
+  const selectedGitCicdHandoff = useMemo(
+    () => gitCicdHandoffs.find((handoff) => handoff.id === selectedGitCicdHandoffId) ?? null,
+    [gitCicdHandoffs, selectedGitCicdHandoffId]
+  );
   const hasDeploymentRecords = deployments.length > 0;
+  const hasGitCicdHandoffs = gitCicdHandoffs.length > 0;
   const compactDeploymentPanelMode = hasDeploymentRecords ? deploymentPanelMode : "setup";
   const canStartDeploymentReview =
     selectedAwsConnectionId.length > 0 &&
@@ -164,11 +180,7 @@ export function DeploymentPanel({
   const hasCurrentPlan = Boolean(selectedDeployment?.currentPlanArtifactId);
   const deploymentActions = getDeploymentActionState(selectedDeployment, requestState);
   const canRunPlan = deploymentActions.canRunApplyPlan;
-  const canApprovePlan = canApproveDeploymentPlanWithAcknowledgements(
-    selectedDeployment,
-    requestState,
-    acknowledgedWarningIds
-  );
+  const canApprovePlan = deploymentActions.canApprovePlan;
   const canApply = deploymentActions.canApply;
   const canRunDestroyPlan = deploymentActions.canRunDestroyPlan;
   const canDestroy = deploymentActions.canDestroy;
@@ -183,6 +195,8 @@ export function DeploymentPanel({
     : "";
   const DeploymentBaselineIcon = hasUnsavedDeploymentBaseline ? Clipboard : ClipboardCheck;
   const shouldAutoRefreshSelectedDeployment = shouldAutoRefreshDeployment(selectedDeployment);
+  const shouldAutoRefreshSelectedGitCicdHandoff =
+    shouldAutoRefreshGitCicdHandoff(selectedGitCicdHandoff);
   const boardSnapshot = useMemo(
     () => createWorkspaceAiBoardSnapshot(diagramJson),
     [diagramJson]
@@ -197,10 +211,6 @@ export function DeploymentPanel({
       }) as CSSProperties,
     [deploymentDetailsWidthPercent]
   );
-
-  useEffect(() => {
-    setAcknowledgedWarningIds([]);
-  }, [selectedDeployment?.id, selectedDeployment?.currentPlanArtifactId]);
 
   const updateDeploymentDetailsWidthFromClientX = useCallback((clientX: number): void => {
     const grid = deploymentExpandedGridRef.current;
@@ -227,8 +237,10 @@ export function DeploymentPanel({
   }, []);
 
   const loadDeploymentRuntimeSnapshot = useCallback(async (): Promise<DeploymentRuntimeSnapshot> => {
-    const [nextDeployments, nextLogs, nextResources, nextOutputs] = await Promise.all([
+    const [nextDeployments, nextGitCicdHandoffs, nextLogs, nextResources, nextOutputs] =
+      await Promise.all([
       listDeployments(projectId),
+      listGitCicdHandoffs(projectId),
       selectedDeploymentId ? listDeploymentLogs(selectedDeploymentId) : Promise.resolve([]),
       selectedDeploymentId ? listDeploymentResources(selectedDeploymentId) : Promise.resolve([]),
       selectedDeploymentId ? listTerraformOutputs(selectedDeploymentId) : Promise.resolve([])
@@ -236,6 +248,7 @@ export function DeploymentPanel({
 
     return {
       deployments: nextDeployments,
+      gitCicdHandoffs: nextGitCicdHandoffs,
       logs: nextLogs,
       resources: nextResources,
       outputs: nextOutputs
@@ -244,9 +257,15 @@ export function DeploymentPanel({
 
   const applyDeploymentRuntimeSnapshot = useCallback((snapshot: DeploymentRuntimeSnapshot): void => {
     setDeployments(snapshot.deployments);
+    setGitCicdHandoffs(snapshot.gitCicdHandoffs);
     setDeploymentLogs(snapshot.logs);
     setDeploymentResources(snapshot.resources);
     setTerraformOutputs(snapshot.outputs);
+    setSelectedGitCicdHandoffId((currentId) =>
+      snapshot.gitCicdHandoffs.some((handoff) => handoff.id === currentId)
+        ? currentId
+        : snapshot.gitCicdHandoffs[0]?.id ?? ""
+    );
   }, []);
 
   const loadDeploymentPanelSnapshot = useCallback(async (): Promise<DeploymentPanelSnapshot> => {
@@ -280,26 +299,24 @@ export function DeploymentPanel({
 
     async function loadDeploymentData(): Promise<void> {
       await runRequest(async () => {
-        const [nextConnections, nextDeployments] = await Promise.all([
-          listAwsConnections(),
-          listDeployments(projectId)
-        ]);
+        const snapshot = await loadDeploymentPanelSnapshot();
 
         if (cancelled) {
           return;
         }
 
-        setAwsConnections(nextConnections);
-        setDeployments(nextDeployments);
+        applyDeploymentPanelSnapshot(snapshot);
 
-        const latestVerifiedConnection = nextConnections.find(
+        const latestVerifiedConnection = snapshot.awsConnections.find(
           (connection) => connection.status === "verified"
         );
-        const latestDeployment = nextDeployments[0];
+        const latestDeployment = snapshot.deployments[0];
+        const latestGitCicdHandoff = snapshot.gitCicdHandoffs[0];
 
         setSelectedAwsConnectionId((currentId) => currentId || latestVerifiedConnection?.id || "");
         setSelectedDeploymentId((currentId) => currentId || latestDeployment?.id || "");
-        setDeploymentPanelMode(getDefaultDeploymentPanelMode(nextDeployments));
+        setSelectedGitCicdHandoffId((currentId) => currentId || latestGitCicdHandoff?.id || "");
+        setDeploymentPanelMode(getDefaultDeploymentPanelMode(snapshot.deployments));
       }, "배포 정보를 불러오지 못했습니다.");
     }
 
@@ -308,7 +325,7 @@ export function DeploymentPanel({
     return () => {
       cancelled = true;
     };
-  }, [projectId]);
+  }, [applyDeploymentPanelSnapshot, loadDeploymentPanelSnapshot]);
 
   useEffect(() => {
     if (deployments.length > 0) {
@@ -482,6 +499,65 @@ export function DeploymentPanel({
     shouldAutoRefreshSelectedDeployment
   ]);
 
+  useEffect(() => {
+    if (!selectedGitCicdHandoffId || !shouldAutoRefreshSelectedGitCicdHandoff) {
+      return;
+    }
+
+    let cancelled = false;
+    let isRefreshing = false;
+
+    async function refreshPipelineStatus(): Promise<void> {
+      if (isRefreshing) {
+        return;
+      }
+
+      isRefreshing = true;
+
+      try {
+        const pipelineStatus = await getGitCicdHandoffPipelineStatus(selectedGitCicdHandoffId);
+
+        if (!cancelled) {
+          setGitCicdPipelineStatusSource(pipelineStatus.source);
+          setGitCicdHandoffs((currentHandoffs) =>
+            currentHandoffs.map((handoff) =>
+              handoff.id === pipelineStatus.id
+                ? {
+                    ...handoff,
+                    status: pipelineStatus.status,
+                    pullRequestUrl: pipelineStatus.pullRequestUrl,
+                    pipelineRunUrl: pipelineStatus.pipelineRunUrl,
+                    statusMessage: pipelineStatus.statusMessage,
+                    updatedAt: pipelineStatus.updatedAt
+                  }
+                : handoff
+            )
+          );
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.error("Git/CI/CD pipeline status refresh failed:", error);
+        }
+      } finally {
+        isRefreshing = false;
+      }
+    }
+
+    const intervalId = window.setInterval(() => {
+      void refreshPipelineStatus();
+    }, 5000);
+
+    void refreshPipelineStatus();
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [
+    selectedGitCicdHandoffId,
+    shouldAutoRefreshSelectedGitCicdHandoff
+  ]);
+
   async function runRequest(request: () => Promise<void>, fallbackMessage: string): Promise<void> {
     setRequestState("loading");
     setErrorMessage("");
@@ -509,9 +585,7 @@ export function DeploymentPanel({
       const currentTerraformDiagnostics = await onValidateTerraformDiagnostics();
       const result = addTerraformDiagnosticsToPreDeploymentAnalysis(
         await runAiPreDeploymentCheck(boardSnapshot.architectureJson),
-        currentTerraformDiagnostics,
-        onReadTerraformSourceFiles(),
-        boardSnapshot.architectureJson
+        currentTerraformDiagnostics
       );
       setPreDeploymentAnalysis(result);
       setPreDeploymentFingerprint(boardSnapshot.fingerprint);
@@ -597,9 +671,7 @@ export function DeploymentPanel({
     }
 
     await runRequest(async () => {
-      const deployment = await approveDeploymentPlan(selectedDeployment.id, {
-        acknowledgedWarningIds
-      });
+      const deployment = await approveDeploymentPlan(selectedDeployment.id);
       setDeployments((currentDeployments) =>
         currentDeployments.map((currentDeployment) =>
           currentDeployment.id === deployment.id ? deployment : currentDeployment
@@ -615,16 +687,6 @@ export function DeploymentPanel({
       setDeploymentResources(resources);
       setTerraformOutputs(outputs);
     }, "Terraform Plan을 승인하지 못했습니다.");
-  }
-
-  function toggleWarningAcknowledgement(warningId: string, checked: boolean): void {
-    setAcknowledgedWarningIds((currentIds) => {
-      if (checked) {
-        return currentIds.includes(warningId) ? currentIds : [...currentIds, warningId];
-      }
-
-      return currentIds.filter((currentId) => currentId !== warningId);
-    });
   }
 
   async function startTerraformApply(): Promise<void> {
@@ -830,10 +892,7 @@ export function DeploymentPanel({
         <p className={styles.deploymentStaleNotice}>보드 변경됨 · 다시 실행 필요</p>
       ) : null}
       {preDeploymentAnalysis !== null ? (
-        <DeploymentPreDeploymentSummary
-          analysis={preDeploymentAnalysis}
-          onOpenTerraformSourceLocation={onOpenTerraformSourceLocation}
-        />
+        <DeploymentPreDeploymentSummary analysis={preDeploymentAnalysis} />
       ) : (
         <p className={styles.deploymentHint}>현재 보드 기준으로 비용, 보안, 설정 위험을 확인합니다.</p>
       )}
@@ -877,10 +936,80 @@ export function DeploymentPanel({
     </section>
   );
 
+  const renderGitCicdHandoffSection = () => (
+    <section className={styles.deploymentSection}>
+      <div className={styles.deploymentSectionHeader}>
+        <h3>Git/CI/CD handoff</h3>
+        <button
+          className={`${styles.deploymentSecondaryButton} ${styles.deploymentRefreshButton}`}
+          disabled={requestState === "loading"}
+          onClick={refreshDeploymentPanel}
+          type="button"
+        >
+          Refresh
+        </button>
+      </div>
+
+      {hasGitCicdHandoffs ? (
+        <>
+          <div className={styles.deploymentField}>
+            Handoff record
+            <SelectMenu
+              ariaLabel="Git/CI/CD handoff record select"
+              disabled={gitCicdHandoffOptions.length === 0}
+              emptyLabel="No Git/CI/CD handoff"
+              onChange={(handoffId) => {
+                setSelectedGitCicdHandoffId(handoffId);
+                setGitCicdPipelineStatusSource(null);
+              }}
+              options={gitCicdHandoffOptions}
+              size={isDeploymentExpanded ? "large" : "regular"}
+              value={selectedGitCicdHandoffId}
+            />
+          </div>
+
+          {selectedGitCicdHandoff ? (
+            <div className={styles.deploymentSummary}>
+              <InfoRow label="Path" value="Git/CI/CD handoff" />
+              <InfoRow
+                label="Status"
+                value={getGitCicdHandoffStatusLabel(selectedGitCicdHandoff)}
+              />
+              <InfoRow
+                label="Repository"
+                value={`${selectedGitCicdHandoff.repositoryOwner}/${selectedGitCicdHandoff.repositoryName}`}
+              />
+              <OptionalInfoRow label="Target branch" value={selectedGitCicdHandoff.targetBranch} />
+              <OptionalInfoRow label="Source branch" value={selectedGitCicdHandoff.sourceBranch} />
+              <OptionalInfoRow label="PR URL" value={selectedGitCicdHandoff.pullRequestUrl} />
+              <OptionalInfoRow
+                label="Pipeline URL"
+                value={selectedGitCicdHandoff.pipelineRunUrl}
+              />
+              <OptionalInfoRow
+                label="Pipeline message"
+                value={selectedGitCicdHandoff.statusMessage}
+              />
+              <InfoRow label="Updated" value={formatDate(selectedGitCicdHandoff.updatedAt)} />
+              <OptionalInfoRow
+                label="Status source"
+                value={gitCicdPipelineStatusSource ?? "rds"}
+              />
+            </div>
+          ) : null}
+        </>
+      ) : (
+        <p className={styles.deploymentHint}>
+          No Git/CI/CD handoff records yet. Direct Deployment records stay separate below.
+        </p>
+      )}
+    </section>
+  );
+
   const renderRecordsSection = () => (
     <section className={styles.deploymentSection}>
       <div className={styles.deploymentSectionHeader}>
-        <h3>Deployment records</h3>
+        <h3>Direct Deployment records</h3>
         <button
           className={`${styles.deploymentSecondaryButton} ${styles.deploymentRefreshButton}`}
           disabled={requestState === "loading"}
@@ -905,71 +1034,69 @@ export function DeploymentPanel({
       </div>
 
       {selectedDeployment ? (
-        <div className={styles.deploymentSummary}>
-          <InfoRow label="Status" value={selectedDeployment.status} />
-          <OptionalInfoRow label="Active stage" value={selectedDeployment.activeStage} />
-          <OptionalInfoRow
-            label="Started at"
-            value={formatOptionalDate(selectedDeployment.startedAt)}
-          />
-          <OptionalInfoRow
-            label="Completed at"
-            value={formatOptionalDate(selectedDeployment.completedAt)}
-          />
-          <OptionalInfoRow label="Failed at" value={formatOptionalDate(selectedDeployment.failedAt)} />
-          <OptionalInfoRow
-            label="Cancel requested"
-            value={formatOptionalDate(selectedDeployment.cancelRequestedAt)}
-          />
-          <OptionalInfoRow
-            label="Cancelled at"
-            value={formatOptionalDate(selectedDeployment.cancelledAt)}
-          />
-          <OptionalInfoRow label="Current plan" value={selectedDeployment.currentPlanArtifactId} />
-          <InfoRow label="Blocked" value={selectedDeployment.isBlocked ? "yes" : "no"} />
-          <OptionalInfoRow label="Blocked by" value={selectedDeployment.blockedBy} />
-          <OptionalInfoRow label="Reason" value={selectedDeployment.blockedReason} />
-          <InfoRow label="Approval" value={formatApprovalState(selectedDeployment)} />
-          <DeploymentSafetyBlockBanner deployment={selectedDeployment} />
-          {selectedDeployment.planSummary ? (
-            <PlanSummaryRows
-              acknowledgedWarningIds={acknowledgedWarningIds}
-              deployment={selectedDeployment}
-              onToggleWarningAcknowledgement={toggleWarningAcknowledgement}
+        <>
+          <DeploymentGateCard deployment={selectedDeployment} />
+          <div className={styles.deploymentSummary}>
+            <InfoRow label="Status" value={selectedDeployment.status} />
+            <OptionalInfoRow label="Active stage" value={selectedDeployment.activeStage} />
+            <OptionalInfoRow
+              label="Started at"
+              value={formatOptionalDate(selectedDeployment.startedAt)}
             />
-          ) : null}
-          {selectedDeployment.approvedAt ? (
-            <>
-              <InfoRow label="Approved at" value={formatDate(selectedDeployment.approvedAt)} />
-              <OptionalInfoRow
-                label="Approved plan"
-                value={selectedDeployment.approvedPlanArtifactId}
-              />
-              <OptionalInfoRow
-                label="tfplan hash"
-                value={formatShortHash(selectedDeployment.approvedTfplanHash)}
-              />
-              <OptionalInfoRow
-                label="Artifact hash"
-                value={formatShortHash(selectedDeployment.approvedTerraformArtifactHash)}
-              />
-              <OptionalInfoRow
-                label="AWS account"
-                value={selectedDeployment.approvedAwsAccountId}
-              />
-              <OptionalInfoRow
-                label="AWS region"
-                value={selectedDeployment.approvedAwsRegion}
-              />
-            </>
-          ) : null}
-          <OptionalInfoRow label="State object" value={selectedDeployment.stateObjectKey} />
-          <OptionalInfoRow
-            label="Result warning"
-            value={selectedDeployment.resultWarningSummary}
-          />
-          <OptionalInfoRow label="Error" value={selectedDeployment.errorSummary} />
-        </div>
+            <OptionalInfoRow
+              label="Completed at"
+              value={formatOptionalDate(selectedDeployment.completedAt)}
+            />
+            <OptionalInfoRow label="Failed at" value={formatOptionalDate(selectedDeployment.failedAt)} />
+            <OptionalInfoRow
+              label="Cancel requested"
+              value={formatOptionalDate(selectedDeployment.cancelRequestedAt)}
+            />
+            <OptionalInfoRow
+              label="Cancelled at"
+              value={formatOptionalDate(selectedDeployment.cancelledAt)}
+            />
+            <OptionalInfoRow label="Current plan" value={selectedDeployment.currentPlanArtifactId} />
+            <InfoRow label="Blocked" value={selectedDeployment.isBlocked ? "yes" : "no"} />
+            <OptionalInfoRow label="Blocked by" value={selectedDeployment.blockedBy} />
+            <OptionalInfoRow label="Reason" value={selectedDeployment.blockedReason} />
+            <InfoRow label="Approval" value={formatApprovalState(selectedDeployment)} />
+            {selectedDeployment.planSummary ? (
+              <PlanSummaryRows deployment={selectedDeployment} />
+            ) : null}
+            {selectedDeployment.approvedAt ? (
+              <>
+                <InfoRow label="Approved at" value={formatDate(selectedDeployment.approvedAt)} />
+                <OptionalInfoRow
+                  label="Approved plan"
+                  value={selectedDeployment.approvedPlanArtifactId}
+                />
+                <OptionalInfoRow
+                  label="tfplan hash"
+                  value={formatShortHash(selectedDeployment.approvedTfplanHash)}
+                />
+                <OptionalInfoRow
+                  label="Artifact hash"
+                  value={formatShortHash(selectedDeployment.approvedTerraformArtifactHash)}
+                />
+                <OptionalInfoRow
+                  label="AWS account"
+                  value={selectedDeployment.approvedAwsAccountId}
+                />
+                <OptionalInfoRow
+                  label="AWS region"
+                  value={selectedDeployment.approvedAwsRegion}
+                />
+              </>
+            ) : null}
+            <OptionalInfoRow label="State object" value={selectedDeployment.stateObjectKey} />
+            <OptionalInfoRow
+              label="Result warning"
+              value={selectedDeployment.resultWarningSummary}
+            />
+            <OptionalInfoRow label="Error" value={selectedDeployment.errorSummary} />
+          </div>
+        </>
       ) : null}
 
       {selectedDeployment?.status === "FAILED" ? (
@@ -1061,6 +1188,14 @@ export function DeploymentPanel({
             value={selectedDeployment.approvedAwsAccountId ?? "없음"}
           />
           <InfoRow label="AWS region" value={selectedDeployment.approvedAwsRegion ?? "없음"} />
+          <InfoRow
+            label="tfplan hash"
+            value={formatShortHash(selectedDeployment.approvedTfplanHash)}
+          />
+          <InfoRow
+            label="Artifact hash"
+            value={formatShortHash(selectedDeployment.approvedTerraformArtifactHash)}
+          />
           {selectedDeployment.planSummary ? (
             <InfoRow
               label="Plan changes"
@@ -1225,6 +1360,7 @@ export function DeploymentPanel({
           </>
         ) : null}
 
+        {renderGitCicdHandoffSection()}
         {renderStatusMessages()}
       </div>
 
@@ -1284,6 +1420,7 @@ export function DeploymentPanel({
                 {renderSetupSection()}
                 {renderRecordsSection()}
                 {renderResultsSection()}
+                {renderGitCicdHandoffSection()}
                 {renderStatusMessages()}
               </div>
               <div
@@ -1310,19 +1447,22 @@ export function DeploymentPanel({
 }
 
 function DeploymentPreDeploymentSummary({
-  analysis,
-  onOpenTerraformSourceLocation
+  analysis
 }: {
   readonly analysis: AiPreDeploymentAnalysisResult;
-  readonly onOpenTerraformSourceLocation: (sourceLocation: TerraformSourceLocation) => void;
 }) {
   const failCount = countChecklistItems(analysis, "fail");
   const warningCount = countChecklistItems(analysis, "warning");
+  const gateLevel = getPreDeploymentGateLevel(analysis);
   const visibleFindings = analysis.findings.slice(0, 3);
   const hiddenFindingCount = Math.max(0, analysis.findings.length - visibleFindings.length);
 
   return (
-    <div className={styles.deploymentPreflightSummary}>
+    <div className={styles.deploymentPreflightSummary} data-level={gateLevel}>
+      <div className={styles.deploymentGateHeader}>
+        <span className={styles.deploymentGateBadge}>{gateLevel.toUpperCase()}</span>
+        <strong>Pre-Deployment Gate</strong>
+      </div>
       <p>{analysis.summary}</p>
       <div className={styles.deploymentPreflightStats} aria-label="배포 전 검사 요약">
         <span>
@@ -1341,11 +1481,7 @@ function DeploymentPreDeploymentSummary({
       {visibleFindings.length > 0 ? (
         <ul className={styles.deploymentPreflightFindings}>
           {visibleFindings.map((finding) => (
-            <DeploymentPreDeploymentFindingItem
-              finding={finding}
-              key={finding.id}
-              onOpenTerraformSourceLocation={onOpenTerraformSourceLocation}
-            />
+            <DeploymentPreDeploymentFindingItem finding={finding} key={finding.id} />
           ))}
         </ul>
       ) : (
@@ -1358,70 +1494,42 @@ function DeploymentPreDeploymentSummary({
   );
 }
 
-function DeploymentPreDeploymentFindingItem({
-  finding,
-  onOpenTerraformSourceLocation
-}: {
-  readonly finding: CheckFinding;
-  readonly onOpenTerraformSourceLocation: (sourceLocation: TerraformSourceLocation) => void;
-}) {
-  const sourceLocation = finding.sourceLocation;
-  const aiSafetyExplanation = finding.aiSafetyExplanation;
-
+function DeploymentPreDeploymentFindingItem({ finding }: { readonly finding: CheckFinding }) {
   return (
     <li data-severity={finding.severity}>
       <span>{finding.severity.toUpperCase()}</span>
       <strong>{finding.title}</strong>
       {finding.resourceId ? <em>{finding.resourceId}</em> : null}
-      {aiSafetyExplanation ? (
-        <div className={styles.deploymentFindingAiExplanation}>
-          <p>{aiSafetyExplanation.riskSummary}</p>
-          <dl>
-            <div>
-              <dt>왜 위험한가</dt>
-              <dd>{aiSafetyExplanation.whyDangerous}</dd>
-            </div>
-            <div>
-              <dt>권장 수정</dt>
-              <dd>{aiSafetyExplanation.recommendedFix}</dd>
-            </div>
-            {aiSafetyExplanation.terraformHint ? (
-              <div>
-                <dt>Terraform</dt>
-                <dd>{aiSafetyExplanation.terraformHint}</dd>
-              </div>
-            ) : null}
-          </dl>
-          {aiSafetyExplanation.verificationSteps.length > 0 ? (
-            <ul>
-              {aiSafetyExplanation.verificationSteps.slice(0, 3).map((step, index) => (
-                <li key={`${finding.id}-verification-${index}`}>{step}</li>
-              ))}
-            </ul>
-          ) : null}
-        </div>
-      ) : null}
-      {sourceLocation ? (
-        <button
-          className={styles.deploymentFindingFixButton}
-          onClick={() => onOpenTerraformSourceLocation(sourceLocation)}
-          type="button"
-        >
-          <FileCode2 size={13} aria-hidden="true" />
-          수정
-        </button>
-      ) : null}
-      <button
-        className={styles.deploymentFindingAiButton}
-        onClick={() => dispatchWorkspaceSafetyFindingAiEvent(finding)}
-        title="AI 창으로 설명 보기"
-        type="button"
-      >
-        <Sparkles size={13} aria-hidden="true" />
-        AI 창
-      </button>
     </li>
   );
+}
+
+function DeploymentGateCard({ deployment }: { readonly deployment: Deployment }) {
+  const gate = getDeploymentGateMeta(deployment);
+
+  return (
+    <div className={styles.deploymentGateCard} data-level={gate.level}>
+      <div className={styles.deploymentGateHeader}>
+        <span className={styles.deploymentGateBadge}>{gate.level.toUpperCase()}</span>
+        <strong>{gate.title}</strong>
+      </div>
+      <p>{gate.description}</p>
+      <dl className={styles.deploymentGateFacts}>
+        <div>
+          <dt>Blocked by</dt>
+          <dd>{deployment.blockedBy ?? "none"}</dd>
+        </div>
+        <div>
+          <dt>Approval</dt>
+          <dd>{formatApprovalState(deployment)}</dd>
+        </div>
+        <div>
+          <dt>Warnings</dt>
+          <dd>{deployment.planSummary?.warnings.length ?? 0}</dd>
+        </div>
+      </dl>
+    </div>
+    )
 }
 
 function DeploymentFailureExplanationCard({
@@ -1518,52 +1626,12 @@ function OptionalInfoRow({
   return <InfoRow label={label} value={value} />;
 }
 
-function DeploymentSafetyBlockBanner({ deployment }: { readonly deployment: Deployment }) {
-  if (!deployment.isBlocked || deployment.blockedBy === "missing_approval") {
-    return null;
-  }
-
-  const blockingWarnings =
-    deployment.planSummary?.warnings.filter((warning) => warning.blocksApproval) ?? [];
-
-  return (
-    <div className={styles.deploymentSafetyBlock} role="alert">
-      <strong>Deployment Safety Gate 차단</strong>
-      <p>{deployment.blockedReason ?? "Safety Gate blocked this deployment."}</p>
-      <p>
-        High risk는 승인으로 해제할 수 없습니다. 위의 Security Risk finding에서 수정 또는 AI 창을 열어
-        Terraform 코드를 고친 뒤 Terraform Plan을 다시 실행하세요.
-      </p>
-      {blockingWarnings.length > 0 ? (
-        <ul>
-          {blockingWarnings.slice(0, 3).map((warning) => (
-            <li key={warning.id}>
-              {warning.level.toUpperCase()} · {warning.code}
-              {warning.relatedResourceId ? ` · ${warning.relatedResourceId}` : ""}
-            </li>
-          ))}
-        </ul>
-      ) : null}
-    </div>
-  );
-}
-
-function PlanSummaryRows({
-  acknowledgedWarningIds,
-  deployment,
-  onToggleWarningAcknowledgement
-}: {
-  readonly acknowledgedWarningIds: readonly string[];
-  readonly deployment: Deployment;
-  readonly onToggleWarningAcknowledgement: (warningId: string, checked: boolean) => void;
-}) {
+function PlanSummaryRows({ deployment }: { readonly deployment: Deployment }) {
   const summary = deployment.planSummary;
 
   if (!summary) {
     return null;
   }
-
-  const acknowledgedWarningIdSet = new Set(acknowledgedWarningIds);
 
   return (
     <>
@@ -1575,27 +1643,10 @@ function PlanSummaryRows({
         <div className={styles.deploymentWarnings}>
           <span>Warnings</span>
           <ul>
-            {summary.warnings.map((warning) => (
-              <li key={warning.id} data-level={warning.level}>
-                <strong>
-                  {formatDeploymentWarningLabel(warning)}
-                </strong>
+            {summary.warnings.map((warning, index) => (
+              <li data-level={getWarningLevel(String(warning.level))} key={`${warning.level}-${index}`}>
+                <strong>{warning.level}</strong>
                 <p>{warning.message}</p>
-                {warning.blocksApproval ? (
-                  <em>승인으로 해제할 수 없는 High risk입니다.</em>
-                ) : null}
-                {warning.requiresAcknowledgement && !warning.blocksApproval ? (
-                  <label className={styles.deploymentWarningAcknowledgement}>
-                    <input
-                      checked={acknowledgedWarningIdSet.has(warning.id)}
-                      onChange={(event) =>
-                        onToggleWarningAcknowledgement(warning.id, event.currentTarget.checked)
-                      }
-                      type="checkbox"
-                    />
-                    <span>이 finding을 확인했습니다</span>
-                  </label>
-                ) : null}
               </li>
             ))}
           </ul>
@@ -1605,8 +1656,58 @@ function PlanSummaryRows({
   );
 }
 
-function formatDeploymentWarningLabel(warning: DeploymentPlanWarning): string {
-  return `${warning.level.toUpperCase()} · ${warning.code} · ${warning.source}`;
+function getDeploymentGateMeta(deployment: Deployment): {
+  readonly description: string;
+  readonly level: "high" | "medium" | "low";
+  readonly title: string;
+} {
+  if (deployment.isBlocked) {
+    return {
+      description:
+        deployment.blockedReason ??
+        "Plan approval, risk analysis, or cost analysis must be resolved before execution.",
+      level: "high",
+      title: "Deployment intentionally locked"
+    };
+  }
+
+  if ((deployment.planSummary?.warnings.length ?? 0) > 0) {
+    return {
+      description: "Plan warnings are present. Review the summary before running Apply or Destroy.",
+      level: "medium",
+      title: "Review required"
+    };
+  }
+
+  return {
+    description: "No blocking deployment gate is currently reported for this plan.",
+    level: "low",
+    title: "Gate clear"
+  };
+}
+
+function getPreDeploymentGateLevel(analysis: AiPreDeploymentAnalysisResult): "high" | "medium" | "low" {
+  if (analysis.findings.some((finding) => finding.severity === "high")) {
+    return "high";
+  }
+
+  if (
+    analysis.findings.some((finding) => finding.severity === "medium") ||
+    countChecklistItems(analysis, "fail") > 0 ||
+    countChecklistItems(analysis, "warning") > 0
+  ) {
+    return "medium";
+  }
+
+  return "low";
+}
+
+function getWarningLevel(level: string): "high" | "medium" | "low" {
+  if (level === "high" || level === "medium" || level === "low") {
+    return level;
+  }
+
+  return "medium";
 }
 
 function formatApprovalState(deployment: Deployment): string {
@@ -1632,6 +1733,12 @@ function formatApprovalState(deployment: Deployment): string {
 function getDeploymentActionHint(deployment: Deployment): string {
   if (deployment.status === "DESTROYED") {
     return "Cleanup destroy가 완료되었습니다. Deployment 결과와 state pointer가 정리되었습니다.";
+  }
+
+  if (deployment.approvedAt && !hasCompleteDeploymentApprovalSnapshot(deployment)) {
+    const actionLabel = deployment.currentPlanOperation === "destroy" ? "Destroy" : "Apply";
+
+    return `승인 스냅샷이 불완전합니다. Terraform Plan을 다시 실행하고 승인한 뒤 ${actionLabel}를 진행하세요.`;
   }
 
   if (deployment.currentPlanOperation === "destroy" && deployment.approvedAt) {

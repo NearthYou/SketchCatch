@@ -6,7 +6,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "SketchCatch",
-  description: "Terraform-first AWS infrastructure learning workspace",
+  description: "Terraform-first, multi-cloud-ready IaC operations service",
   icons: {
     icon: "/favicon.svg"
   }

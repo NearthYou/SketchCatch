@@ -4,7 +4,6 @@ import type {
   AiTerraformErrorExplanationResult,
   AiTerraformPreviewExplanationResult,
   AiTerraformStage,
-  ApproveDeploymentPlanRequest,
   ApiErrorCode,
   ApiErrorResponse,
   ArchitectureJson,
@@ -34,6 +33,10 @@ import type {
   DeploymentResourceListResponse,
   DeploymentResponse,
   DiagramJson,
+  GitCicdHandoff,
+  GitCicdHandoffListResponse,
+  GitCicdHandoffPipelineStatus,
+  GitCicdHandoffPipelineStatusResponse,
   Project,
   ProjectAssetUploadResponse,
   ProjectDetailsResponse,
@@ -510,6 +513,30 @@ export async function listDeployments(projectId: string): Promise<Deployment[]> 
   return response.deployments;
 }
 
+export async function listGitCicdHandoffs(projectId: string): Promise<GitCicdHandoff[]> {
+  const response = await apiFetch<GitCicdHandoffListResponse>(
+    `/projects/${encodeURIComponent(projectId)}/git-cicd-handoffs`,
+    {
+      auth: true
+    }
+  );
+
+  return response.handoffs;
+}
+
+export async function getGitCicdHandoffPipelineStatus(
+  handoffId: string
+): Promise<GitCicdHandoffPipelineStatus> {
+  const response = await apiFetch<GitCicdHandoffPipelineStatusResponse>(
+    `/git-cicd-handoffs/${encodeURIComponent(handoffId)}/pipeline-status`,
+    {
+      auth: true
+    }
+  );
+
+  return response.pipelineStatus;
+}
+
 export async function listRecentSuccessfulDeploymentProjects(): Promise<
   RecentSuccessfulDeploymentProject[]
 > {
@@ -547,16 +574,13 @@ export async function runDeploymentPlan(deploymentId: string): Promise<Deploymen
   return response.deployment;
 }
 
-export async function approveDeploymentPlan(
-  deploymentId: string,
-  request: ApproveDeploymentPlanRequest = { acknowledgedWarningIds: [] }
-): Promise<Deployment> {
+export async function approveDeploymentPlan(deploymentId: string): Promise<Deployment> {
   const response = await apiFetch<DeploymentResponse>(
     `/deployments/${encodeURIComponent(deploymentId)}/approve`,
     {
       auth: true,
       method: "POST",
-      body: request
+      body: {}
     }
   );
 

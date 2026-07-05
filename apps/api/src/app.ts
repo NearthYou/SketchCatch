@@ -11,6 +11,7 @@ import { registerAuthRoutes } from "./routes/auth.js";
 import { registerOAuthRoutes } from "./routes/oauth.js";
 import { registerProjectRoutes, type ProjectAssetStorage } from "./routes/projects.js";
 import { registerDeploymentRoutes } from "./routes/deployments.js";
+import { registerGitCicdHandoffRoutes } from "./routes/git-cicd-handoffs.js";
 import {
   registerTerraformRoutes,
   type TerraformRouteOptions
@@ -21,6 +22,10 @@ import {
   createInMemoryRateLimiter,
   type RateLimiter
 } from "./rate-limit/in-memory-rate-limiter.js";
+import {
+  createRuntimeCacheFromEnv,
+  type RuntimeCache
+} from "./runtime-cache/index.js";
 
 const allowedCorsOrigins = new Set(["http://localhost:3000", "http://127.0.0.1:3000"]);
 const corsAllowedMethods = "GET,POST,PUT,DELETE,OPTIONS";
@@ -36,6 +41,7 @@ export type BuildAppOptions = {
   passwordResetRequestIpRateLimiter?: RateLimiter;
   projectAssetStorage?: ProjectAssetStorage;
   projectDeletionStorage?: ProjectDeletionStorage;
+  runtimeCache?: RuntimeCache;
   validateTerraformPreviewCode?: TerraformRouteOptions["validateTerraformPreviewCode"];
 };
 
@@ -70,6 +76,13 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     logger: process.env.NODE_ENV !== "test",
     trustProxy: true
   });
+  const runtimeCache =
+    options.runtimeCache ??
+    createRuntimeCacheFromEnv({
+      onDegraded: (error) => {
+        app.log.warn({ error }, "Runtime Cache degraded; continuing with fallback state");
+      }
+    });
   const stopRefreshTokenCleanupJob =
     process.env.NODE_ENV === "test"
       ? undefined
@@ -140,6 +153,11 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     projectDeletionStorage: options.projectDeletionStorage
   });
   app.register(registerDeploymentRoutes, {
+    prefix: "/api",
+    getDatabaseClient: getAppDatabaseClient,
+    runtimeCache
+  });
+  app.register(registerGitCicdHandoffRoutes, {
     prefix: "/api",
     getDatabaseClient: getAppDatabaseClient
   });

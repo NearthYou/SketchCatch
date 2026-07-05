@@ -837,6 +837,20 @@ type DeploymentFailureExplanation = {
 `GitCicdHandoff`는 `IaC Preview`를 Source Repository와 외부 pipeline으로 넘기는 팀 운영 배포 경로의 metadata다. Direct Deployment Path를 대체하는 것이 아니라 운영 배포용 별도 경로다.
 
 ```ts
+type SourceRepositoryProvider = "internal" | "github";
+
+type SourceRepository = {
+  id: string;
+  projectId: string;
+  provider: SourceRepositoryProvider;
+  owner: string;
+  name: string;
+  defaultBranch: string;
+  repositoryUrl: string | null;
+  createdAt: IsoDateTimeString;
+  updatedAt: IsoDateTimeString;
+};
+
 type GitCicdHandoffStatus =
   | "draft"
   | "pr_created"
@@ -851,15 +865,39 @@ type GitCicdHandoff = {
   architectureId: string;
   terraformArtifactId: string;
   sourceRepositoryId: string;
+  repositoryProvider: SourceRepositoryProvider;
+  repositoryOwner: string;
+  repositoryName: string;
+  targetBranch: string;
+  sourceBranch: string | null;
+  commitMessage: string | null;
+  pullRequestTitle: string | null;
   pullRequestUrl: string | null;
   pipelineRunUrl: string | null;
   status: GitCicdHandoffStatus;
+  statusMessage: string | null;
+  userAcceptedChangeId: string;
+  createdByUserId: string;
   createdAt: IsoDateTimeString;
   updatedAt: IsoDateTimeString;
 };
 ```
 
-Git/CI/CD handoff도 `UserAcceptedChange` 이후에만 생성한다. 저장소 토큰, private key, CI secret 원문은 shared type, DB, 로그에 저장하지 않는다.
+Git/CI/CD handoff도 `UserAcceptedChange` 이후에만 생성한다. v0 API는 `internal` provider boundary만 사용하며 실제 GitHub PR 생성은 별도 provider 구현에서 담당한다. 저장소 토큰, private key, deploy key, CI secret 원문은 shared type, DB, 응답, 로그에 저장하지 않는다.
+
+`github` provider slice에서는 Terraform artifact metadata를 provider boundary로 넘겨 Source Repository PR 생성 요청 payload를 만든다.
+이 payload에는 PR title/body 초안, IaC Preview artifact 경로, plan summary, Pre-Deployment Check 확인 문구,
+리뷰 체크리스트 초안이 포함된다. provider 결과로 `pullRequestUrl`이 돌아오면 handoff record는 `status: "pr_created"`와
+PR URL을 저장한다. 실제 GitHub token, deploy key, CI secret 원문은 DB, shared type, 응답, 로그에 저장하지 않는다.
+pipeline polling/cache 연동은 별도 slice에서 다룬다.
+
+### Git/CI/CD pipeline status cache
+
+#136 slice부터 pipeline status 조회는 `GitCicdHandoffPipelineStatus` DTO로 분리한다. 이 DTO는 handoff record의
+`status`, `pullRequestUrl`, `pipelineRunUrl`, `statusMessage`, `updatedAt`만 노출하고, `source: "runtime_cache" | "rds"`로
+Runtime Cache hit 여부를 알려준다. `GET /api/git-cicd-handoffs/:handoffId/pipeline-status`는 Runtime Cache를 먼저 읽고,
+cache miss 또는 invalid snapshot이면 RDS handoff record를 읽어 같은 응답 모양으로 반환한다. `PATCH /api/git-cicd-handoffs/:handoffId/status`는
+RDS record를 갱신한 뒤 best-effort로 Runtime Cache snapshot을 갱신한다.
 
 ## Reverse Engineering Scan
 
@@ -894,6 +932,8 @@ type ReverseEngineeringScan = {
 Redis 기반 Runtime Cache는 Deployment, Reverse Engineering, Git/CI/CD Integration 같은 long-running workflow의 status/cache/log streaming 보조에 사용한다. Runtime Cache 데이터는 원천 기록이 아니며, 최종 기록은 RDS/S3에 저장한다.
 
 Runtime Cache는 사용자 Practice Architecture Resource가 아니므로 `ResourceType`에 Redis를 추가하지 않는다. AI 결과 캐싱은 2순위이며, 캐시된 결과가 deterministic validation이나 Deployment Safety Gate를 대체할 수 없다.
+
+API runtime은 `REDIS_URL`이 있고 `NODE_ENV !== "test"`일 때 Redis adapter를 사용한다. `REDIS_URL`이 없거나 테스트 환경이면 in-memory fallback을 사용한다. Redis 연결이나 명령이 실패해도 API workflow의 원천 기록은 RDS/S3 기준으로 유지되어야 하며, Runtime Cache adapter는 같은 process 안에서 가능한 fallback cache를 사용해 요청을 실패시키지 않는다.
 
 ## AI 결과 DTO
 

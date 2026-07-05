@@ -335,7 +335,6 @@ test("pre-deployment check is owned by the deployment tab", () => {
 
   assert.match(deploymentPanelSource, /runAiPreDeploymentCheck/);
   assert.match(deploymentPanelSource, /addTerraformDiagnosticsToPreDeploymentAnalysis/);
-  assert.match(deploymentPanelSource, /onReadTerraformSourceFiles\(\),\s*boardSnapshot\.architectureJson/s);
   assert.match(deploymentPanelSource, /onValidateTerraformDiagnostics/);
   assert.match(deploymentPanelSource, /await onValidateTerraformDiagnostics\(\)/);
   assert.match(deploymentPanelSource, /currentTerraformDiagnostics/);
@@ -347,113 +346,6 @@ test("pre-deployment check is owned by the deployment tab", () => {
   assert.doesNotMatch(aiChatDockSource, /runAiPreDeploymentCheck/);
   assert.doesNotMatch(aiChatDockSource, /WorkspaceAiPreDeploymentResult/);
   assert.match(preflightSummaryRule, /\bgap:\s*8px;/);
-});
-
-test("pre-deployment finding severity colors keep medium as the default warning tone", () => {
-  assert.match(deploymentPanelSource, /<li data-severity=\{finding\.severity\}>/);
-  assert.match(stylesSource, /\.deploymentPreflightFindings > li\s*\{/);
-  assert.match(
-    stylesSource,
-    /\.deploymentPreflightFindings > li\s*\{[^}]*border-left:\s*4px solid #f59e0b;/s
-  );
-  assert.match(
-    stylesSource,
-    /\.deploymentPreflightFindings > li\[data-severity="high"\]\s*\{[^}]*border-left-color:\s*#dc2626;/s
-  );
-  assert.match(
-    stylesSource,
-    /\.deploymentPreflightFindings > li\[data-severity="medium"\]\s*\{[^}]*border-left-color:\s*#f59e0b;/s
-  );
-  assert.match(
-    stylesSource,
-    /\.deploymentPreflightFindings > li\[data-severity="low"\]\s*\{[^}]*border-left-color:\s*#16a34a;/s
-  );
-  assert.match(
-    stylesSource,
-    /\.deploymentPreflightFindings > li\[data-severity="medium"\] > span\s*\{[^}]*color:\s*#9a3412;/s
-  );
-});
-
-test("pre-deployment findings render AI safety explanations inside the finding card", () => {
-  const explanationRule = getCssRule(stylesSource, "deploymentFindingAiExplanation");
-
-  assert.match(deploymentPanelSource, /finding\.aiSafetyExplanation/);
-  assert.match(deploymentPanelSource, /aiSafetyExplanation\.riskSummary/);
-  assert.match(deploymentPanelSource, /aiSafetyExplanation\.whyDangerous/);
-  assert.match(deploymentPanelSource, /aiSafetyExplanation\.recommendedFix/);
-  assert.match(deploymentPanelSource, /aiSafetyExplanation\.verificationSteps/);
-  assert.match(explanationRule, /\bgrid-column:\s*1 \/ -1;/);
-  assert.match(explanationRule, /\bgap:\s*7px;/);
-});
-
-test("pre-deployment findings expose an AI window open event", () => {
-  const aiButtonRule = getCssRule(stylesSource, "deploymentFindingAiButton");
-
-  assert.match(deploymentPanelSource, /dispatchWorkspaceSafetyFindingAiEvent/);
-  assert.match(deploymentPanelSource, /AI 창/);
-  assert.match(stylesSource, /deploymentFindingAiButton/);
-  assert.match(aiButtonRule, /\bcolor:\s*#6f4cf6;/);
-});
-
-test("safety finding AI event opens the AI panel with the selected finding", () => {
-  const aiSafetyFindingRule = getCssRule(stylesSource, "aiSafetyFindingCard");
-
-  assert.match(componentSource, /WORKSPACE_SAFETY_FINDING_AI_EVENT/);
-  assert.match(componentSource, /handleSafetyFindingAiOpen/);
-  assert.match(componentSource, /setSelectedAiSafetyFinding\(detail\.finding\)/);
-  assert.match(componentSource, /setActiveView\("ai"\)/);
-  assert.match(componentSource, /selectedSafetyFinding=\{selectedAiSafetyFinding\}/);
-  assert.match(aiPanelSource, /selectedSafetyFinding/);
-  assert.match(aiPanelSource, /WorkspaceAiSafetyFinding/);
-  assert.match(aiPanelSource, /finding\.aiSafetyExplanation/);
-  assert.match(aiPanelSource, /formatSafetyFindingSourceLocation/);
-  assert.match(aiSafetyFindingRule, /\bborder-left:\s*4px solid #f59e0b;/);
-  assert.match(
-    stylesSource,
-    /\.aiSafetyFindingCard\[data-severity="high"\]\s*\{[^}]*border-left-color:\s*#dc2626;/s
-  );
-  assert.match(
-    stylesSource,
-    /\.aiSafetyFindingCard\[data-severity="medium"\]\s*\{[^}]*border-left-color:\s*#f59e0b;/s
-  );
-  assert.match(
-    stylesSource,
-    /\.aiSafetyFindingCard\[data-severity="low"\]\s*\{[^}]*border-left-color:\s*#16a34a;/s
-  );
-});
-
-test("pre-deployment findings can jump to Terraform source locations", () => {
-  const fixButtonRule = getCssRule(stylesSource, "deploymentFindingFixButton");
-  const sourceHighlightRule = getCssRule(stylesSource, "terraformSourceLineHighlight");
-
-  assert.match(componentSource, /openTerraformSourceLocation/);
-  assert.match(componentSource, /openTerraformSourceLocation\(sourceLocation\)/);
-  assert.match(deploymentPanelSource, /onOpenTerraformSourceLocation/);
-  assert.match(deploymentPanelSource, /finding\.sourceLocation/);
-  assert.match(deploymentPanelSource, /deploymentFindingFixButton/);
-  assert.match(terraformPanelSource, /openTerraformSourceLocation/);
-  assert.match(terraformPanelSource, /setPendingSourceLocation/);
-  assert.match(terraformPanelSource, /setActiveSourceHighlightLine/);
-  assert.match(terraformPanelSource, /setSelectionRange/);
-  assert.match(terraformPanelSource, /terraformSourceLineHighlight/);
-  assert.match(fixButtonRule, /\bgrid-column:\s*2;/);
-  assert.match(fixButtonRule, /\bjustify-self:\s*start;/);
-  assert.match(sourceHighlightRule, /\bpointer-events:\s*none;/);
-  assert.match(sourceHighlightRule, /\bz-index:\s*3;/);
-});
-
-test("high risk deployment block banner points users back to fixes and plan rerun", () => {
-  const safetyBlockRule = getCssRule(stylesSource, "deploymentSafetyBlock");
-
-  assert.match(deploymentPanelSource, /DeploymentSafetyBlockBanner/);
-  assert.match(deploymentPanelSource, /blockedBy === "missing_approval"/);
-  assert.match(deploymentPanelSource, /High risk는 승인으로 해제할 수 없습니다/);
-  assert.match(deploymentPanelSource, /수정 또는 AI 창/);
-  assert.match(deploymentPanelSource, /Terraform Plan을 다시 실행/);
-  assert.match(deploymentPanelSource, /warning\.blocksApproval/);
-  assert.match(safetyBlockRule, /\bbackground:\s*#fef2f2;/);
-  assert.match(stylesSource, /\.deploymentSafetyBlock\s+ul\s*\{[^}]*list-style:\s*none;/s);
-  assert.match(stylesSource, /\.deploymentSafetyBlock\s+li\s*\{[^}]*color:\s*#991b1b;/s);
 });
 
 test("terraform error explanation lives in the terraform code panel only when errors exist", () => {
@@ -510,11 +402,11 @@ test("terraform editor renders syntax colors and squiggly error underlines", () 
   assert.match(highlightedLineErrorRule, /\btext-decoration-color:\s*#ef4444;/);
   assert.match(textareaRule, /\bcolor:\s*transparent;/);
   assert.match(textareaRule, /\bcaret-color:\s*#d7e4f7;/);
-  assert.match(keywordRule, /\bcolor:\s*#2dd4bf;/);
-  assert.match(identifierRule, /\bcolor:\s*#74bdf8;/);
-  assert.match(referenceRule, /\bcolor:\s*#74bdf8;/);
-  assert.match(stringRule, /\bcolor:\s*#d99a7b;/);
-  assert.match(braceRule, /\bcolor:\s*#facc15;/);
+  assert.match(keywordRule, /\bcolor:\s*#f6c85f;/);
+  assert.match(identifierRule, /\bcolor:\s*#7fd2ff;/);
+  assert.match(referenceRule, /\bcolor:\s*#5fe0c1;/);
+  assert.match(stringRule, /\bcolor:\s*#f0a77d;/);
+  assert.match(braceRule, /\bcolor:\s*#9bd7ff;/);
   assert.match(lineNumberErrorRule, /\bcolor:\s*#fca5a5;/);
 });
 
@@ -536,9 +428,10 @@ test("terraform preview explanation is triggered from the terraform code panel",
   assert.match(previewExplanationRule, /\boverflow:\s*auto;/);
 });
 
-test("terraform resource code mode keeps validation and explanation but omits deployment actions", () => {
+test("terraform resource code mode keeps explanation but omits validation and deployment actions", () => {
   assert.match(terraformPanelSource, /renderTerraformPreviewExplanationButton\(\)/);
-  assert.match(terraformPanelSource, /Validate/);
+  assert.doesNotMatch(terraformPanelSource, /<span>Validate<\/span>/);
+  assert.doesNotMatch(terraformPanelSource, />\s*Validate\s*<\/button>/);
   assert.doesNotMatch(terraformPanelSource, /리소스 단위 plan API 연결 예정/);
   assert.doesNotMatch(terraformPanelSource, /리소스 단위 apply API 연결 예정/);
   assert.doesNotMatch(terraformPanelSource, /리소스 단위 destroy API 연결 예정/);

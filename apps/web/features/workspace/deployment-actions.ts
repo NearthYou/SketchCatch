@@ -1,4 +1,4 @@
-import type { Deployment, DeploymentLog } from "@sketchcatch/types";
+import type { Deployment, DeploymentLog, GitCicdHandoff } from "@sketchcatch/types";
 
 type DeploymentRequestState = "idle" | "loading" | "error";
 export type DeploymentPanelMode = "setup" | "records";
@@ -38,6 +38,9 @@ export function getDeploymentActionState(
   const isLoading = requestState === "loading";
   const hasCurrentPlan = Boolean(deployment?.currentPlanArtifactId);
   const isPlanApproved = Boolean(deployment?.approvedAt && deployment.approvedPlanArtifactId);
+  const hasCompleteApprovalSnapshot = deployment
+    ? hasCompleteDeploymentApprovalSnapshot(deployment)
+    : false;
   const isDestroyable = Boolean(deployment && isCleanupDestroyCandidate(deployment));
   const isDestroyPlan = deployment?.currentPlanOperation === "destroy";
   const isApplyPlan = deployment?.currentPlanOperation === "apply";
@@ -76,6 +79,7 @@ export function getDeploymentActionState(
       deployment.status !== "SUCCESS" &&
       deployment.status !== "DESTROYED" &&
       deployment.isBlocked === false &&
+      hasCompleteApprovalSnapshot &&
       !isLoading
   );
   const canRunDestroyPlan = canShowDestroyPlanAction && !isLoading;
@@ -86,6 +90,7 @@ export function getDeploymentActionState(
       isPlanApproved &&
       deployment.status !== "RUNNING" &&
       deployment.isBlocked === false &&
+      hasCompleteApprovalSnapshot &&
       !isLoading
   );
   const canCancelDeployment = Boolean(
@@ -114,47 +119,46 @@ export function getDeploymentActionState(
   };
 }
 
-export function getRequiredDeploymentWarningAcknowledgementIds(
-  deployment: Deployment | null
-): string[] {
-  return (
-    deployment?.planSummary?.warnings
-      .filter((warning) => warning.requiresAcknowledgement && !warning.blocksApproval)
-      .map((warning) => warning.id) ?? []
-  );
-}
-
-export function hasBlockingDeploymentPlanWarning(deployment: Deployment | null): boolean {
-  return Boolean(deployment?.planSummary?.warnings.some((warning) => warning.blocksApproval));
-}
-
-export function hasAcknowledgedRequiredDeploymentWarnings(
-  deployment: Deployment | null,
-  acknowledgedWarningIds: readonly string[]
-): boolean {
-  const acknowledgedWarningIdSet = new Set(acknowledgedWarningIds);
-
-  return getRequiredDeploymentWarningAcknowledgementIds(deployment).every((warningId) =>
-    acknowledgedWarningIdSet.has(warningId)
-  );
-}
-
-export function canApproveDeploymentPlanWithAcknowledgements(
-  deployment: Deployment | null,
-  requestState: DeploymentRequestState,
-  acknowledgedWarningIds: readonly string[]
-): boolean {
-  const actionState = getDeploymentActionState(deployment, requestState);
-
-  return (
-    actionState.canApprovePlan &&
-    !hasBlockingDeploymentPlanWarning(deployment) &&
-    hasAcknowledgedRequiredDeploymentWarnings(deployment, acknowledgedWarningIds)
+export function hasCompleteDeploymentApprovalSnapshot(deployment: Deployment): boolean {
+  return Boolean(
+    deployment.approvedAt &&
+      deployment.approvedByUserId &&
+      deployment.approvedTerraformArtifactId &&
+      deployment.approvedPlanArtifactId &&
+      deployment.approvedTerraformArtifactHash &&
+      deployment.approvedTfplanHash &&
+      deployment.approvedAwsAccountId &&
+      deployment.approvedAwsRegion
   );
 }
 
 export function shouldAutoRefreshDeployment(deployment: Deployment | null): boolean {
   return deployment?.status === "RUNNING";
+}
+
+export function shouldAutoRefreshGitCicdHandoff(handoff: GitCicdHandoff | null): boolean {
+  return handoff?.status === "pr_created" || handoff?.status === "pipeline_running";
+}
+
+export function getGitCicdHandoffStatusLabel(handoff: GitCicdHandoff | null): string {
+  if (!handoff) {
+    return "No Git/CI/CD handoff";
+  }
+
+  switch (handoff.status) {
+    case "draft":
+      return "Handoff draft";
+    case "pr_created":
+      return "PR created";
+    case "pipeline_running":
+      return "Pipeline running";
+    case "pipeline_success":
+      return "Pipeline success";
+    case "pipeline_failed":
+      return "Pipeline failed";
+    case "cancelled":
+      return "Handoff cancelled";
+  }
 }
 
 export function getDefaultDeploymentPanelMode(

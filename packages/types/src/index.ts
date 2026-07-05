@@ -350,6 +350,100 @@ export type TerraformArtifact = ProjectAsset & {
   uploadStatus: "uploaded";
 };
 
+export type SourceRepositoryProvider = "internal" | "github";
+
+export type SourceRepository = {
+  id: string;
+  projectId: string;
+  provider: SourceRepositoryProvider;
+  owner: string;
+  name: string;
+  defaultBranch: string;
+  repositoryUrl: string | null;
+  createdAt: IsoDateTimeString;
+  updatedAt: IsoDateTimeString;
+};
+
+export type SourceRepositoryListResponse = {
+  repositories: SourceRepository[];
+};
+
+export type GitCicdHandoffStatus =
+  | "draft"
+  | "pr_created"
+  | "pipeline_running"
+  | "pipeline_success"
+  | "pipeline_failed"
+  | "cancelled";
+
+export type GitCicdHandoff = {
+  id: string;
+  projectId: string;
+  architectureId: string;
+  terraformArtifactId: string;
+  sourceRepositoryId: string;
+  repositoryProvider: SourceRepositoryProvider;
+  repositoryOwner: string;
+  repositoryName: string;
+  targetBranch: string;
+  sourceBranch: string | null;
+  commitMessage: string | null;
+  pullRequestTitle: string | null;
+  pullRequestUrl: string | null;
+  pipelineRunUrl: string | null;
+  status: GitCicdHandoffStatus;
+  statusMessage: string | null;
+  userAcceptedChangeId: string;
+  createdByUserId: string;
+  createdAt: IsoDateTimeString;
+  updatedAt: IsoDateTimeString;
+};
+
+export type CreateGitCicdHandoffRequest = {
+  architectureId: string;
+  terraformArtifactId: string;
+  sourceRepositoryId: string;
+  repositoryProvider?: SourceRepositoryProvider | undefined;
+  repositoryOwner: string;
+  repositoryName: string;
+  targetBranch: string;
+  sourceBranch?: string | undefined;
+  commitMessage?: string | undefined;
+  pullRequestTitle?: string | undefined;
+  planSummary?: DeploymentPlanSummary | undefined;
+  userAcceptedChangeId: string;
+};
+
+export type UpdateGitCicdHandoffStatusRequest = {
+  status: GitCicdHandoffStatus;
+  pullRequestUrl?: string | null | undefined;
+  pipelineRunUrl?: string | null | undefined;
+  statusMessage?: string | null | undefined;
+};
+
+export type GitCicdHandoffPipelineStatus = {
+  id: string;
+  projectId: string;
+  status: GitCicdHandoffStatus;
+  pullRequestUrl: string | null;
+  pipelineRunUrl: string | null;
+  statusMessage: string | null;
+  updatedAt: IsoDateTimeString;
+  source: "runtime_cache" | "rds";
+};
+
+export type GitCicdHandoffResponse = {
+  handoff: GitCicdHandoff;
+};
+
+export type GitCicdHandoffListResponse = {
+  handoffs: GitCicdHandoff[];
+};
+
+export type GitCicdHandoffPipelineStatusResponse = {
+  pipelineStatus: GitCicdHandoffPipelineStatus;
+};
+
 export type DeploymentStatus =
   | "PENDING"
   | "RUNNING"

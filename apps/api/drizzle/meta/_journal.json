@@ -148,6 +148,20 @@
       "when": 1782950400000,
       "tag": "0020_project_asset_upload_status",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1783036800000,
+      "tag": "0021_git_cicd_handoffs",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1783123200000,
+      "tag": "0022_git_cicd_github_provider",
+      "breakpoints": true
     }
   ]
 }

@@ -4,7 +4,6 @@ import type { DiagramJson, DiagramNode } from "@sketchcatch/types";
 import {
   createTerraformFilesFromGeneratedCode,
   findTerraformBlockForNode,
-  findTerraformSourceLocationForAddress,
   getDiagramTerraformAddresses,
   getTerraformFileOptions,
   parseTerraformFiles,
@@ -74,54 +73,24 @@ data "aws_ami" "ubuntu" {
   assert.equal(findTerraformBlockForNode(blocks, makeNode("data", "aws_ami", "ubuntu"))?.blockType, "data");
 });
 
-test("findTerraformSourceLocationForAddress returns editor location for resource addresses", () => {
-  const files = [
-    {
-      fileName: "network.tf",
-      code: `resource "aws_vpc" "main" {
-  cidr_block = "10.0.0.0/16"
-}`
-    },
-    {
-      fileName: "compute.tf",
-      code: `resource "aws_security_group" "app" {
-  name = "app"
-}
-
-resource "aws_instance" "web" {
-  ami = data.aws_ami.ubuntu.id
-}`
-    }
-  ];
-
-  assert.deepEqual(findTerraformSourceLocationForAddress(files, "aws_instance.web"), {
-    fileName: "compute.tf",
-    line: 5,
-    column: 1,
-    resourceAddress: "aws_instance.web",
-    terraformBlockType: "resource",
-    terraformBlockName: "web"
-  });
-});
-
-test("findTerraformSourceLocationForAddress accepts resource and data address prefixes", () => {
-  const files = [
+test("findTerraformBlockForNode prefers the visible node identity over stale parameters", () => {
+  const blocks = parseTerraformFiles([
     {
       fileName: "main.tf",
-      code: `data "aws_ami" "ubuntu" {
-  owners = ["099720109477"]
+      code: `resource "aws_cloudwatch_event_rule" "event_rule" {
+}
+
+resource "aws_instance" "ec2_instance" {
 }`
     }
-  ];
+  ]);
+  const ec2NodeWithStaleParameters: DiagramNode = {
+    ...makeNode("resource", "aws_cloudwatch_event_rule", "event_rule"),
+    type: "aws_instance",
+    label: "EC2 Instance"
+  };
 
-  assert.deepEqual(findTerraformSourceLocationForAddress(files, "data.aws_ami.ubuntu"), {
-    fileName: "main.tf",
-    line: 1,
-    column: 1,
-    resourceAddress: "aws_ami.ubuntu",
-    terraformBlockType: "data",
-    terraformBlockName: "ubuntu"
-  });
+  assert.equal(findTerraformBlockForNode(blocks, ec2NodeWithStaleParameters)?.address, "aws_instance.ec2_instance");
 });
 
 test("findTerraformBlockForNode keeps resource and data blocks with the same type and name separate", () => {

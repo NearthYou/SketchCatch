@@ -50,6 +50,15 @@ import {
   type TerraformArtifactRecord
 } from "../deployments/deployment-service.js";
 import { registerDeploymentRoutes, writeDeploymentLogStreamChunk } from "./deployments.js";
+import { createInMemoryRuntimeCache } from "../runtime-cache/index.js";
+import type { RuntimeCache } from "../runtime-cache/index.js";
+import {
+  createDeploymentRuntimeCacheKey,
+  deploymentLogCursorCacheNamespace,
+  deploymentStatusCacheNamespace,
+  type DeploymentLogStreamCursorSnapshot,
+  type DeploymentRuntimeStatusSnapshot
+} from "../deployments/deployment-runtime-cache.js";
 
 process.env.NODE_ENV = "test";
 process.env.AUTH_TOKEN_SECRET = "test-auth-token-secret-with-at-least-32-characters";
@@ -830,6 +839,7 @@ type DeploymentRouteTestOptions = {
     repository: DeploymentRepository
   ) => Promise<RunDeploymentDestroyResult>;
   createLlmExplanation?: CreateLlmExplanation;
+  runtimeCache?: RuntimeCache;
   userRows?: UserRecord[];
 };
 
@@ -867,7 +877,8 @@ async function buildDeploymentTestApp(
       : {}),
     ...(routeOptions.createLlmExplanation
       ? { createLlmExplanation: routeOptions.createLlmExplanation }
-      : {})
+      : {}),
+    ...(routeOptions.runtimeCache ? { runtimeCache: routeOptions.runtimeCache } : {})
   });
 
   return app;
@@ -1062,6 +1073,20 @@ function createUserRecord(overrides: Partial<UserRecord> = {}): UserRecord {
     updatedAt: fixedNow,
     deletedAt: null,
     ...overrides
+  };
+}
+
+function createThrowingRuntimeCache(): RuntimeCache {
+  return {
+    async get() {
+      throw new Error("runtime cache get failed");
+    },
+    async set() {
+      throw new Error("runtime cache set failed");
+    },
+    async delete() {
+      throw new Error("runtime cache delete failed");
+    }
   };
 }
 
@@ -1686,6 +1711,46 @@ test("POST /api/deployments/:deploymentId/plan starts Terraform plan in the back
       userId
     }
   });
+
+  await app.close();
+});
+
+test("POST /api/deployments/:deploymentId/plan writes a runtime cache status snapshot", async () => {
+  const repository = new FakeDeploymentRepository();
+  const runtimeCache = createInMemoryRuntimeCache({ cleanupIntervalMs: null });
+  const app = await buildDeploymentTestApp(repository, {
+    runtimeCache,
+    runDeploymentPlan: async (input) => ({
+      deployment: createDeploymentRecord(input.deploymentId, {
+        status: "PENDING"
+      }),
+      terraform: {
+        init: null,
+        validate: null,
+        plan: null,
+        showJson: null
+      }
+    })
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/deployments/${deploymentId}/plan`,
+    headers: await authHeaders()
+  });
+
+  assert.equal(response.statusCode, 202);
+  const snapshot = await runtimeCache.get<DeploymentRuntimeStatusSnapshot>({
+    namespace: deploymentStatusCacheNamespace,
+    key: createDeploymentRuntimeCacheKey(deploymentId)
+  });
+
+  assert.equal(snapshot?.kind, "deployment_status");
+  assert.equal(snapshot?.deploymentId, deploymentId);
+  assert.equal(snapshot?.projectId, projectId);
+  assert.equal(snapshot?.status, "RUNNING");
+  assert.equal(snapshot?.activeStage, "plan");
+  assert.equal(typeof snapshot?.cachedAt, "string");
 
   await app.close();
 });
@@ -2359,6 +2424,84 @@ test("GET /api/deployments/:deploymentId/logs/stream returns uncached SSE log ev
   assert.match(response.body, /event: log/);
   assert.match(response.body, /"sequence":2/);
   assert.doesNotMatch(response.body, /"sequence":1/);
+
+  await app.close();
+});
+
+test("GET /api/deployments/:deploymentId/logs/stream writes a runtime cache cursor", async () => {
+  const repository = new FakeDeploymentRepository();
+  const runtimeCache = createInMemoryRuntimeCache({ cleanupIntervalMs: null });
+  repository.logs = [
+    {
+      id: "log-1",
+      deploymentId,
+      sequence: 1,
+      stage: "plan",
+      level: "INFO",
+      message: "old log",
+      relatedResourceId: null,
+      createdAt: fixedNow
+    },
+    {
+      id: "log-2",
+      deploymentId,
+      sequence: 2,
+      stage: "apply",
+      level: "WARN",
+      message: "new log",
+      relatedResourceId: null,
+      createdAt: fixedNow
+    }
+  ];
+  const app = await buildDeploymentTestApp(repository, { runtimeCache });
+
+  const response = await app.inject({
+    method: "GET",
+    url: `/api/deployments/${deploymentId}/logs/stream?sinceSequence=1&once=true`,
+    headers: await authHeaders()
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.match(response.body, /"sequence":2/);
+  const cursor = await runtimeCache.get<DeploymentLogStreamCursorSnapshot>({
+    namespace: deploymentLogCursorCacheNamespace,
+    key: createDeploymentRuntimeCacheKey(deploymentId)
+  });
+
+  assert.equal(cursor?.kind, "deployment_log_cursor");
+  assert.equal(cursor?.deploymentId, deploymentId);
+  assert.equal(cursor?.lastSequence, 2);
+
+  await app.close();
+});
+
+test("GET /api/deployments/:deploymentId/logs/stream falls back to RDS when cursor cache fails", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.logs = [
+    {
+      id: "log-1",
+      deploymentId,
+      sequence: 1,
+      stage: "plan",
+      level: "INFO",
+      message: "old log",
+      relatedResourceId: null,
+      createdAt: fixedNow
+    }
+  ];
+  const app = await buildDeploymentTestApp(repository, {
+    runtimeCache: createThrowingRuntimeCache()
+  });
+
+  const response = await app.inject({
+    method: "GET",
+    url: `/api/deployments/${deploymentId}/logs/stream?sinceSequence=0&once=true`,
+    headers: await authHeaders()
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.match(response.body, /"sequence":1/);
+  assert(repository.calls.some((call) => call.name === "listDeploymentLogs"));
 
   await app.close();
 });

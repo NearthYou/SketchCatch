@@ -5,7 +5,7 @@ import type { AwsConnection, DeploymentPlanSummary } from "@sketchcatch/types";
 import {
   approveDeploymentPlan,
   assertDeploymentApplyPreconditions,
-  assertDeploymentDestroyPreconditions
+  DeploymentApplyPreconditionError
 } from "./deployment-approval-service.js";
 import {
   DeploymentConflictError,
@@ -426,97 +426,6 @@ test("approveDeploymentPlan rejects risk blocked deployments", async () => {
   assert.equal(repository.approvals.length, 0);
 });
 
-test("approveDeploymentPlan requires acknowledgement for medium and low warnings", async () => {
-  const repository = new FakeDeploymentRepository();
-  repository.deployment = createDeploymentRecord(undefined, {
-    planSummary: {
-      ...createPlanSummary(),
-      warnings: [
-        {
-          id: "pre_deployment_check:configuration-review-subnet-1",
-          level: "medium",
-          category: "configuration",
-          source: "pre_deployment_check",
-          code: "UNKNOWN_TERRAFORM_ACTION",
-          message: "Review subnet setting",
-          requiresAcknowledgement: true,
-          blocksApproval: false
-        }
-      ]
-    }
-  });
-
-  await assert.rejects(
-    () =>
-      approveDeploymentPlan(
-        {
-          deploymentId,
-          accessContext: createAccessContext()
-        },
-        repository,
-        {
-          downloadTerraformArtifact: async () => artifactContent,
-          now: () => fixedNow
-        }
-      ),
-    /Deployment warnings must be acknowledged before approval/
-  );
-
-  const deployment = await approveDeploymentPlan(
-    {
-      deploymentId,
-      accessContext: createAccessContext(),
-      acknowledgedWarningIds: ["pre_deployment_check:configuration-review-subnet-1"]
-    },
-    repository,
-    {
-      downloadTerraformArtifact: async () => artifactContent,
-      now: () => fixedNow
-    }
-  );
-
-  assert.equal(deployment.isBlocked, false);
-});
-
-test("approveDeploymentPlan rejects blocking warnings even if blockedBy is missing_approval", async () => {
-  const repository = new FakeDeploymentRepository();
-  repository.deployment = createDeploymentRecord(undefined, {
-    planSummary: {
-      ...createPlanSummary(),
-      warnings: [
-        {
-          id: "pre_deployment_check:security-open-ssh-sg-1",
-          level: "high",
-          category: "security",
-          source: "pre_deployment_check",
-          code: "PUBLIC_SSH",
-          message: "Public SSH",
-          requiresAcknowledgement: false,
-          blocksApproval: true
-        }
-      ]
-    }
-  });
-
-  await assert.rejects(
-    () =>
-      approveDeploymentPlan(
-        {
-          deploymentId,
-          accessContext: createAccessContext(),
-          acknowledgedWarningIds: ["pre_deployment_check:security-open-ssh-sg-1"]
-        },
-        repository,
-        {
-          downloadTerraformArtifact: async () => artifactContent,
-          now: () => fixedNow
-        }
-      ),
-    /High risk deployment warnings cannot be approved/
-  );
-  assert.equal(repository.approvals.length, 0);
-});
-
 test("approveDeploymentPlan rejects unsafe Terraform artifacts before approval", async () => {
   const repository = new FakeDeploymentRepository();
 
@@ -659,121 +568,6 @@ test("assertDeploymentApplyPreconditions blocks artifact plan and AWS drift", ()
       }),
     /AWS account changed before apply/
   );
-
-  assert.throws(
-    () =>
-      assertDeploymentApplyPreconditions({
-        deployment: {
-          ...approvedDeployment,
-          isBlocked: true,
-          blockedBy: "missing_approval",
-          blockedReason: "approval required"
-        },
-        currentPlanArtifact,
-        currentTerraformArtifactHash: artifactHash,
-        currentTfplanHash: tfplanHash,
-        currentAwsConnection
-      }),
-    /Blocked deployment cannot be applied/
-  );
-});
-
-test("assertDeploymentDestroyPreconditions blocks artifact plan and AWS drift", () => {
-  const approvedDeployment = createApprovedDeploymentRecord({
-    status: "SUCCESS",
-    stateObjectKey
-  });
-  const currentPlanArtifact = createPlanArtifactRecord({
-    operation: "destroy"
-  });
-  const currentAwsConnection = createVerifiedAwsConnection();
-
-  assert.doesNotThrow(() =>
-    assertDeploymentDestroyPreconditions({
-      deployment: approvedDeployment,
-      currentPlanArtifact,
-      currentTerraformArtifactHash: artifactHash,
-      currentTfplanHash: tfplanHash,
-      currentAwsConnection,
-      sourceStatus: "SUCCESS",
-      sourceFailureStage: null
-    })
-  );
-
-  assert.throws(
-    () =>
-      assertDeploymentDestroyPreconditions({
-        deployment: approvedDeployment,
-        currentPlanArtifact: createPlanArtifactRecord({ operation: "apply" }),
-        currentTerraformArtifactHash: artifactHash,
-        currentTfplanHash: tfplanHash,
-        currentAwsConnection,
-        sourceStatus: "SUCCESS",
-        sourceFailureStage: null
-      }),
-    /Terraform destroy plan is required before destroy/
-  );
-
-  assert.throws(
-    () =>
-      assertDeploymentDestroyPreconditions({
-        deployment: {
-          ...approvedDeployment,
-          isBlocked: true,
-          blockedBy: "missing_approval",
-          blockedReason: "approval required"
-        },
-        currentPlanArtifact,
-        currentTerraformArtifactHash: artifactHash,
-        currentTfplanHash: tfplanHash,
-        currentAwsConnection,
-        sourceStatus: "SUCCESS",
-        sourceFailureStage: null
-      }),
-    /Blocked deployment cannot be destroyed/
-  );
-
-  assert.throws(
-    () =>
-      assertDeploymentDestroyPreconditions({
-        deployment: approvedDeployment,
-        currentPlanArtifact,
-        currentTerraformArtifactHash: "changed-artifact-hash",
-        currentTfplanHash: tfplanHash,
-        currentAwsConnection,
-        sourceStatus: "SUCCESS",
-        sourceFailureStage: null
-      }),
-    /Terraform artifact content changed after approval/
-  );
-
-  assert.throws(
-    () =>
-      assertDeploymentDestroyPreconditions({
-        deployment: approvedDeployment,
-        currentPlanArtifact,
-        currentTerraformArtifactHash: artifactHash,
-        currentTfplanHash: "b".repeat(64),
-        currentAwsConnection,
-        sourceStatus: "SUCCESS",
-        sourceFailureStage: null
-      }),
-    /Terraform plan changed before destroy/
-  );
-
-  assert.throws(
-    () =>
-      assertDeploymentDestroyPreconditions({
-        deployment: approvedDeployment,
-        currentPlanArtifact,
-        currentTerraformArtifactHash: artifactHash,
-        currentTfplanHash: tfplanHash,
-        currentAwsConnection: createVerifiedAwsConnection({ region: "us-east-1" }),
-        sourceStatus: "SUCCESS",
-        sourceFailureStage: null
-      }),
-    /AWS region changed before destroy/
-  );
 });
 
 test("assertDeploymentApplyPreconditions rejects AWS region drift before apply", () => {
@@ -815,7 +609,16 @@ test("assertDeploymentApplyPreconditions rejects missing approval snapshot field
           currentTfplanHash: tfplanHash,
           currentAwsConnection: createVerifiedAwsConnection()
         }),
-      /Deployment approval is required before apply/,
+      (error) => {
+        assert.equal(error instanceof DeploymentApplyPreconditionError, true, String(field));
+        assert.match(
+          (error as Error).message,
+          new RegExp(`Deployment approval snapshot is incomplete before apply: missing ${String(field)}`),
+          String(field)
+        );
+
+        return true;
+      },
       String(field)
     );
   }

@@ -1,16 +1,15 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { Deployment } from "@sketchcatch/types";
+import type { Deployment, GitCicdHandoff } from "@sketchcatch/types";
 import {
-  canApproveDeploymentPlanWithAcknowledgements,
+  getGitCicdHandoffStatusLabel,
   getDefaultDeploymentPanelMode,
   getDeploymentActionState,
   getDeploymentLogMessageTokens,
   getDeploymentLogTone,
-  getRequiredDeploymentWarningAcknowledgementIds,
-  hasAcknowledgedRequiredDeploymentWarnings,
-  hasBlockingDeploymentPlanWarning,
+  hasCompleteDeploymentApprovalSnapshot,
   shouldAutoRefreshDeployment,
+  shouldAutoRefreshGitCicdHandoff,
   shouldShowDeploymentInfoValue
 } from "./deployment-actions";
 
@@ -85,93 +84,6 @@ test("destroy plan never falls back to the Terraform apply plan action", () => {
   assert.equal(state.shouldShowApprovePlanButton, true);
 });
 
-test("risk blocked deployments do not offer approval action", () => {
-  const state = getDeploymentActionState(
-    createDeployment({
-      blockedBy: "risk_analysis",
-      currentPlanArtifactId: "99999999-9999-4999-8999-999999999999",
-      currentPlanOperation: "apply",
-      isBlocked: true,
-      status: "PENDING"
-    }),
-    "idle"
-  );
-
-  assert.equal(state.shouldShowApprovePlanButton, false);
-  assert.equal(state.canApprovePlan, false);
-});
-
-test("medium and low deployment warnings require explicit acknowledgement before approval", () => {
-  const deployment = createDeployment({
-    blockedBy: "missing_approval",
-    currentPlanArtifactId: "99999999-9999-4999-8999-999999999999",
-    currentPlanOperation: "apply",
-    isBlocked: true,
-    planSummary: createPlanSummaryWithWarnings([
-      {
-        id: "pre_deployment_check:medium-warning",
-        level: "medium",
-        code: "UNKNOWN_TERRAFORM_ACTION",
-        message: "Review generated subnet settings",
-        requiresAcknowledgement: true
-      },
-      {
-        id: "cost_risk:low-warning",
-        level: "low",
-        code: "UNSUPPORTED_RESOURCE",
-        message: "Fallback estimate was used",
-        requiresAcknowledgement: true
-      }
-    ])
-  });
-
-  assert.deepEqual(getRequiredDeploymentWarningAcknowledgementIds(deployment), [
-    "pre_deployment_check:medium-warning",
-    "cost_risk:low-warning"
-  ]);
-  assert.equal(hasAcknowledgedRequiredDeploymentWarnings(deployment, []), false);
-  assert.equal(
-    canApproveDeploymentPlanWithAcknowledgements(deployment, "idle", [
-      "pre_deployment_check:medium-warning"
-    ]),
-    false
-  );
-  assert.equal(
-    canApproveDeploymentPlanWithAcknowledgements(deployment, "idle", [
-      "pre_deployment_check:medium-warning",
-      "cost_risk:low-warning"
-    ]),
-    true
-  );
-});
-
-test("blocking deployment warnings keep approval disabled even when acknowledged", () => {
-  const deployment = createDeployment({
-    blockedBy: "missing_approval",
-    currentPlanArtifactId: "99999999-9999-4999-8999-999999999999",
-    currentPlanOperation: "apply",
-    isBlocked: true,
-    planSummary: createPlanSummaryWithWarnings([
-      {
-        id: "pre_deployment_check:high-warning",
-        level: "high",
-        code: "PUBLIC_SSH",
-        message: "Public SSH",
-        requiresAcknowledgement: false,
-        blocksApproval: true
-      }
-    ])
-  });
-
-  assert.equal(hasBlockingDeploymentPlanWarning(deployment), true);
-  assert.equal(
-    canApproveDeploymentPlanWithAcknowledgements(deployment, "idle", [
-      "pre_deployment_check:high-warning"
-    ]),
-    false
-  );
-});
-
 test("current plan without an operation does not fall back to a Terraform plan rerun", () => {
   const state = getDeploymentActionState(
     createDeployment({
@@ -222,6 +134,22 @@ test("approved destroy plan enables destroy and keeps apply hidden", () => {
   assert.equal(state.canDestroy, true);
 });
 
+test("approved apply waits for a complete approval snapshot", () => {
+  const deployment = createDeployment({
+    approved: true,
+    approvedTfplanHash: null,
+    currentPlanArtifactId: "99999999-9999-4999-8999-999999999999",
+    currentPlanOperation: "apply",
+    isBlocked: false,
+    status: "PENDING"
+  });
+  const state = getDeploymentActionState(deployment, "idle");
+
+  assert.equal(hasCompleteDeploymentApprovalSnapshot(deployment), false);
+  assert.equal(state.shouldShowApplyButton, true);
+  assert.equal(state.canApply, false);
+});
+
 test("failed apply with partial state offers cleanup planning", () => {
   const state = getDeploymentActionState(
     createDeployment({
@@ -259,6 +187,26 @@ test("stops auto-refreshing after Terraform work reaches a stable state", () => 
       false
     );
   }
+});
+
+test("auto-refreshes Git/CI/CD handoffs while PR or pipeline work can still change", () => {
+  assert.equal(shouldAutoRefreshGitCicdHandoff(createGitCicdHandoff("pr_created")), true);
+  assert.equal(shouldAutoRefreshGitCicdHandoff(createGitCicdHandoff("pipeline_running")), true);
+});
+
+test("stops auto-refreshing Git/CI/CD handoffs after terminal states", () => {
+  for (const status of ["draft", "pipeline_success", "pipeline_failed", "cancelled"] as const) {
+    assert.equal(shouldAutoRefreshGitCicdHandoff(createGitCicdHandoff(status)), false);
+  }
+});
+
+test("labels Git/CI/CD handoff status separately from Direct Deployment status", () => {
+  assert.equal(getGitCicdHandoffStatusLabel(createGitCicdHandoff("pr_created")), "PR created");
+  assert.equal(
+    getGitCicdHandoffStatusLabel(createGitCicdHandoff("pipeline_running")),
+    "Pipeline running"
+  );
+  assert.equal(getGitCicdHandoffStatusLabel(null), "No Git/CI/CD handoff");
 });
 
 test("hides empty deployment info values from the detail list", () => {
@@ -351,27 +299,31 @@ function createDeployment(
   };
 }
 
-function createPlanSummaryWithWarnings(
-  warnings: Array<
-    Pick<
-      NonNullable<Deployment["planSummary"]>["warnings"][number],
-      "code" | "id" | "level" | "message" | "requiresAcknowledgement"
-    > &
-      Partial<NonNullable<Deployment["planSummary"]>["warnings"][number]>
-  >
-): NonNullable<Deployment["planSummary"]> {
+function createGitCicdHandoff(status: GitCicdHandoff["status"]): GitCicdHandoff {
   return {
-    blocked: true,
-    createCount: 1,
-    deleteCount: 0,
-    replaceCount: 0,
-    updateCount: 0,
-    warnings: warnings.map((warning) => ({
-      blocksApproval: false,
-      category: "configuration",
-      source: "pre_deployment_check",
-      ...warning
-    }))
+    id: "77777777-7777-4777-8777-777777777777",
+    projectId: "11111111-1111-4111-8111-111111111111",
+    architectureId: "55555555-5555-4555-8555-555555555555",
+    terraformArtifactId: "66666666-6666-4666-8666-666666666666",
+    sourceRepositoryId: "repo-1",
+    repositoryProvider: "github",
+    repositoryOwner: "sketchcatch",
+    repositoryName: "infra-live",
+    targetBranch: "main",
+    sourceBranch: "sketchcatch/iac-preview",
+    commitMessage: "Add SketchCatch Terraform preview",
+    pullRequestTitle: "SketchCatch IaC preview",
+    pullRequestUrl: "https://github.com/sketchcatch/infra-live/pull/42",
+    pipelineRunUrl:
+      status === "pipeline_running"
+        ? "https://github.com/sketchcatch/infra-live/actions/runs/1"
+        : null,
+    status,
+    statusMessage: null,
+    userAcceptedChangeId: "accepted-change-1",
+    createdByUserId: "22222222-2222-4222-8222-222222222222",
+    createdAt: "2026-06-26T00:00:00.000Z",
+    updatedAt: "2026-06-26T00:00:00.000Z"
   };
 }
 

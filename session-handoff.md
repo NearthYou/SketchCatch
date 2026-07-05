@@ -21,6 +21,33 @@
 
 ## 현재 검증된 것
 
+- #134 GitCicdHandoff 계약/API 구현 후 `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`가 통과했다.
+- `pnpm --filter @sketchcatch/api exec tsx --test src/routes/git-cicd-handoffs.test.ts src/db/schema-contract.test.ts`가 통과했다.
+- `pnpm --filter @sketchcatch/api lint`, `pnpm --filter @sketchcatch/types lint`, `pnpm --filter @sketchcatch/api typecheck`, `pnpm --filter @sketchcatch/types typecheck`가 통과했다.
+- `git diff --check`가 통과했다. Git line-ending warning만 출력되었다.
+- `GitCicdHandoff` API는 fake/internal provider boundary만 사용하며 실제 GitHub PR, commit push, pipeline 호출을 구현하거나 실행하지 않았다.
+- Request/response/shared type/DB schema에 raw token, private key, deploy key, CI secret 필드를 추가하지 않았다.
+
+## 이번 세션의 변경 사항
+
+- `packages/types/src/index.ts`에 `SourceRepository`, `GitCicdHandoffStatus`, `GitCicdHandoff`, create/list/get/status request/response type을 추가했다.
+- `apps/api/src/db/schema.ts`에 `git_cicd_handoffs` table과 provider/status enum, relations를 추가했다.
+- `apps/api/drizzle/0021_git_cicd_handoffs.sql`, `apps/api/drizzle/meta/0021_snapshot.json`, `apps/api/drizzle/meta/_journal.json`을 추가/갱신했다.
+- `apps/api/src/git-cicd/git-cicd-handoff-service.ts`에 project access, architecture, uploaded Terraform artifact 검증과 internal provider boundary를 구현했다.
+- `apps/api/src/routes/git-cicd-handoffs.ts`와 `apps/api/src/app.ts` route registration을 추가했다.
+- `apps/api/src/routes/git-cicd-handoffs.test.ts`와 `apps/api/src/db/schema-contract.test.ts`를 추가/갱신했다.
+- `docs/data-models.md`, `docs/sw/005_GitCicdHandoff계약API클론코딩가이드_sw.md`, `docs/sw/README.md`, `agent-progress.md`, `session-handoff.md`를 갱신했다.
+
+## 아직 깨졌거나 미검증된 것
+
+- `drizzle-kit generate`는 기존 `0008_snapshot.json`, `0015_snapshot.json` parent snapshot collision 때문에 실패했다. 이번 변경은 명시적 SQL migration과 수동 snapshot/journal update로 처리했다.
+- #135가 실제 GitHub/provider 구현을 이어받아야 한다.
+
+## 다음으로 최선의 행동
+
+- parent agent가 #134 diff를 리뷰한다. 특히 수동 Drizzle snapshot과 migration SQL을 확인한다.
+- #135는 `GitCicdHandoffProvider` 구현을 실제 GitHub/CI provider로 교체하되, secret 원문을 DB/로그/응답에 저장하지 않는다.
+- #136은 frontend UI를 이 API contract에 맞춰 연결한다.
 - Issue #129 worktree `feature/sw/129-direct-deployment-failure-ai`는 `origin/dev` 기준으로 fast-forward된 뒤 Direct Deployment 실패 설명 slice를 구현했다.
 - `GET /api/deployments/:deploymentId/failure-explanation`은 `FAILED` deployment만 허용하며, 첫 `ERROR` 로그 또는 `errorSummary`를 마스킹해 실패 stage, 첫 오류 로그, cleanup 필요 여부, nextActions를 반환한다.
 - `DeploymentPanel`은 실패한 deployment가 선택됐을 때 실패 요약 카드와 다음 행동을 표시한다.
@@ -374,26 +401,19 @@
 ## 건드리지 말아야 할 것
 
 - `.env`, private key, AWS credential, DB password, real access token
-- 사용자 승인 없는 Terraform apply/destroy, cloud mutation, Git/CI/CD handoff
+- 사용자 승인 없는 Terraform apply/destroy, cloud mutation, 실제 GitHub PR/CI/CD handoff 실행
 - 사용자 확인 없는 Voice Requirement Input 또는 AI 제안의 Practice Architecture 반영
 - frontend UI component 안의 Terraform 실행, AWS SDK 호출, deployment mutation logic
 
 ## 참고 명령
 
-```bash
+```powershell
 pnpm harness:check
+pnpm --filter @sketchcatch/api exec tsx --test src/routes/git-cicd-handoffs.test.ts src/db/schema-contract.test.ts
 pnpm lint
 pnpm typecheck
 pnpm build
 ```
-
-## 최신 핸드오프 - 2026-07-03 Deployment Safety Gate
-
-- 완료: `docs/ys/009_배포안전게이트구현계획_ys.md` 기준 작업 0~12 구현 및 단계별 커밋 완료.
-- 핵심 변경: shared warning 계약 확장, `deployment-safety-gate.ts`, warning factory, public RDS/SSH/S3/IAM wildcard security rule, apply/destroy plan Safety Gate 연결, approval `acknowledgedWarningIds`, apply/destroy final guard, UI acknowledgement checkbox.
-- 검증 완료: `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm test`, `git diff --check`.
-- 현재 작업 트리: 최종 검증 시점 기준 깨끗해야 한다.
-- 주의: 실제 Terraform apply/destroy와 AWS mutation은 수행하지 않았다.
 
 ## 2026-07-03 - Issue #128 Worker 1-1 핸드오프
 
@@ -429,32 +449,51 @@ pnpm build
 - 이 worker branch를 #128 Worker 1-2 또는 1-3 범위로 확장하지 않는다. Parent agent가 이 focused diff를 review하고 PR을 연다.
 - 실제 AWS apply/destroy, cloud mutation, Git/CI/CD handoff, secret access는 수행하지 않았다.
 
-## 최신 핸드오프 - 2026-07-04 Deployment Safety Gate 수정 UX와 AI 설명
+## 2026-07-05 - Issue #130 Direct Deployment 신뢰도 UX handoff
+
+- Branch/worktree: `feature/sw/130-direct-deployment-safety-ux-docs` at `C:\Users\siwon\Desktop\Jungle\Week17~21\SketchCatch-worktrees\130-direct-deployment-safety-ux-docs`.
+- Scope completed: apply precondition mismatch messages now include approved/current snapshot values, mismatch failure is recorded as `failureStage: "approval"`, deployment log says `Apply blocked before Terraform apply`, Apply UI shows approved account/region/tfplan/artifact hash, and incomplete approval snapshot disables execution.
+- Docs completed: `docs/sw/009_Direct_Deployment_신뢰도_UX_클론코딩가이드_sw.md` plus docs/sw README link.
+- Verification completed: targeted API tests, targeted web action-state test, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and final `pnpm harness:check` passed.
+- Remaining risk: no real AWS apply/destroy was run; full `pnpm test` was not run.
+
+## 2026-07-04 - Issue #132 Redis Runtime Cache adapter handoff
 
 ### 현재 검증된 것
 
-- `pnpm lint` - passed; Turbo cache rename warning only.
-- `pnpm typecheck` - passed; Turbo cache rename warning only.
-- `pnpm build` - passed.
-- `pnpm test` - passed; API reported 470 passing tests and Turbo reported 5 successful test tasks.
-- `pnpm harness:check` - passed before the final record update.
-- `git diff --check` - passed before the final record update.
+- #131의 `RuntimeCache` abstraction 위에 Redis adapter slice를 추가했다.
+- `REDIS_URL`이 없거나 `NODE_ENV=test`이면 Redis client를 만들지 않고 in-memory Runtime Cache를 사용한다.
+- Redis adapter는 lazy connection을 사용하고, `set`은 Redis `PX` TTL과 local fallback을 함께 기록한다.
+- Redis connect 실패나 command 실패는 API 요청을 깨지 않고 `onDegraded` callback 후 local fallback으로 돌아간다.
+- `redis` dependency 추가 때문에 `apps/api/package.json`과 `pnpm-lock.yaml`이 변경되었다.
+- `.env.example`, `docs/data-models.md`, `docs/deployment.md`, `docs/sw/007_레디스런타임캐시어댑터가이드_sw.md`, `docs/sw/README.md`에 설정/설계/학습 문서를 반영했다.
 
-### 이번 작업 변경 사항
+### 실행한 검증
 
-- Finding `sourceLocation`을 `CheckFinding`/`DeploymentPlanWarning`에 연결했다.
-- Deployment finding 카드의 `수정` 버튼이 Terraform 탭으로 이동하고 해당 line을 highlight한다.
-- OpenAI GPT API 기반 safety finding 설명 service와 deterministic fallback을 추가했다.
-- Pre-deployment check 결과에 finding별 `aiSafetyExplanation`을 포함했다.
-- `AI 창` 버튼이 `sketchcatch:safety-finding-ai-open` 이벤트를 발생시키고, `WorkspaceAiPanel` 임시 설명 패널이 선택된 finding을 표시한다.
-- High는 빨간색, Medium은 기존 노란색, Low는 초록색으로 명시했다.
-- Medium/Low required warning acknowledgement를 모두 체크해야 승인 버튼이 활성화된다.
-- High risk block banner는 승인 불가, `수정`/`AI 창`, Terraform Plan 재실행 경로를 안내한다.
-- Safety Gate cost/risk warning 통합과 stable id dedupe 테스트를 보강했다.
-- `docs/ys/009_배포안전게이트구현계획_ys.md`에 구현 확인 경로와 검증 명령을 추가했다.
+- `pnpm harness:check` - passed before edits
+- `pnpm --filter @sketchcatch/api exec tsx --test src/runtime-cache/in-memory-runtime-cache.test.ts src/runtime-cache/redis-runtime-cache.test.ts src/runtime-cache/runtime-cache-factory.test.ts` - passed
+- `pnpm --filter @sketchcatch/api lint` - passed
+- `pnpm --filter @sketchcatch/api typecheck` - passed
+- `pnpm lint` - passed
+- `pnpm typecheck` - passed
+- `pnpm build` - passed
+- `$env:S3_BUCKET_NAME='sketchcatch-test-bucket'; pnpm --filter @sketchcatch/api test` - passed
+- `git diff --check` - passed
 
-### 주의와 다음 행동
+### 남은 행동
 
-- 실제 Terraform apply/destroy, AWS mutation, Git/CI/CD handoff, secret access는 수행하지 않았다.
-- Browser visual smoke는 아직 수동으로 해야 한다.
-- 다음에는 안전한 public SSH 예시로 `검사 실행` -> 빨간 High finding -> `수정` 이동 -> `AI 창` 설명 -> Plan 단계 High block을 확인하면 된다.
+- final `pnpm harness:check`를 다시 실행한다.
+- diff 자체 리뷰 후 #132 범위만 commit/push/PR 생성한다.
+- 다른 이슈(#129~#136)는 이 branch에서 건드리지 않는다.
+## 2026-07-05 - Issue #135 GitHub PR handoff v0 handoff
+
+- Branch/worktree: `feature/sw/135-github-pr-handoff-v0` at `C:\Users\siwon\Desktop\Jungle\Week17~21\SketchCatch-worktrees\135-github-pr-handoff-v0`.
+- Scope completed: `github` SourceRepository provider, provider payload abstraction, GitHub PR handoff provider wrapper, PR title/body draft with plan summary and review checklist, fake provider tests, additive enum migration, docs/sw guide.
+- Verification completed: targeted API tests, API/types typecheck, API lint, full `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm harness:check`, `git diff --check`.
+- Remaining risk: no real GitHub API call, GitHub token, pipeline polling/cache, Runtime Cache new work, or AWS apply/destroy was run.
+## 2026-07-05 - Issue #133 Deployment Runtime Cache handoff
+
+- Branch/worktree: `feature/sw/133-deployment-runtime-cache-status` at `C:\Users\siwon\Desktop\Jungle\Week17~21\SketchCatch-worktrees\133-deployment-runtime-cache-status`.
+- Scope completed: Deployment repository mutation wrapper writes `deployment.status`, log creation/SSE stream writes `deployment.log_cursor`, stream cursor read falls back to RDS on cache miss/failure, `buildApp` wires `createRuntimeCacheFromEnv`, and docs/sw has key/TTL/future reverse scan/pipeline convention.
+- Verification completed: targeted deployment route tests, API lint/typecheck, workspace lint/typecheck/build, `git diff --check`; final harness still needs to be rerun after this handoff note.
+- Remaining risk: no real Redis server or AWS apply/destroy was run.
