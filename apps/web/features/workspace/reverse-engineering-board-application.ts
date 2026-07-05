@@ -19,6 +19,15 @@ export type ReverseEngineeringBoardComparison = {
 };
 
 const IGNORED_COMPARISON_VALUE_KEYS = new Set(["providerResourceId", "providerResourceType"]);
+const REVERSE_ENGINEERING_PROTECTED_VALUE_KEYS = [
+  "providerResourceId",
+  "providerResourceType",
+  "region",
+  "accountId",
+  "terraformResourceName",
+  "terraformResourceType"
+] as const;
+const REVERSE_ENGINEERING_EDITABLE_VALUE_KEYS = ["displayName", "description"] as const;
 
 export type ReverseEngineeringBoardApplication = {
   readonly comparison: ReverseEngineeringBoardComparison;
@@ -41,7 +50,9 @@ export type CreateReverseEngineeringBoardComparisonInput = {
 export function createReverseEngineeringBoardApplication(
   input: CreateReverseEngineeringBoardApplicationInput
 ): ReverseEngineeringBoardApplication {
-  const previewDiagram = convertArchitectureJsonToDiagramJson(input.result.architectureJson);
+  const previewDiagram = markReverseEngineeringDiagram(
+    convertArchitectureJsonToDiagramJson(input.result.architectureJson)
+  );
   const comparison = compareDiagrams(input.currentDiagram, previewDiagram);
 
   if (input.mode === "replace") {
@@ -65,8 +76,31 @@ export function createReverseEngineeringBoardComparison(
 ): ReverseEngineeringBoardComparison {
   return compareDiagrams(
     input.currentDiagram,
-    convertArchitectureJsonToDiagramJson(input.result.architectureJson)
+    markReverseEngineeringDiagram(convertArchitectureJsonToDiagramJson(input.result.architectureJson))
   );
+}
+
+// AWS에서 가져온 노드에 보호해야 하는 원본 값 목록을 남깁니다.
+function markReverseEngineeringDiagram(diagram: DiagramJson): DiagramJson {
+  return {
+    ...diagram,
+    nodes: diagram.nodes.map(markReverseEngineeringNode)
+  };
+}
+
+// providerResourceId 같은 원본 식별자는 수정 대상이 아니라 추적용 metadata로 표시합니다.
+function markReverseEngineeringNode(node: DiagramNode): DiagramNode {
+  return {
+    ...node,
+    metadata: {
+      ...node.metadata,
+      reverseEngineering: {
+        source: "aws_scan",
+        protectedValueKeys: [...REVERSE_ENGINEERING_PROTECTED_VALUE_KEYS],
+        editableValueKeys: [...REVERSE_ENGINEERING_EDITABLE_VALUE_KEYS]
+      }
+    }
+  };
 }
 
 function compareDiagrams(

@@ -96,6 +96,18 @@ test("createReverseEngineeringBoardApplication can open scan result as a new boa
     ["resource-vpc-1234", "resource-subnet-1234"]
   );
   assert.deepEqual(application.diagram.viewport, { x: 0, y: 0, zoom: 1 });
+  assert.deepEqual(application.diagram.nodes[0]?.metadata?.reverseEngineering?.protectedValueKeys, [
+    "providerResourceId",
+    "providerResourceType",
+    "region",
+    "accountId",
+    "terraformResourceName",
+    "terraformResourceType"
+  ]);
+  assert.deepEqual(application.diagram.nodes[0]?.metadata?.reverseEngineering?.editableValueKeys, [
+    "displayName",
+    "description"
+  ]);
 });
 
 test("createReverseEngineeringBoardApplication appends only providerResourceId-safe new resources", () => {

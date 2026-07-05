@@ -1299,6 +1299,11 @@ export type AwsRegionCode =
 
 export type DiagramNodeMetadata = {
   parentAreaNodeId?: string | undefined;
+  reverseEngineering?: {
+    source: "aws_scan";
+    protectedValueKeys: string[];
+    editableValueKeys: string[];
+  } | undefined;
 };
 
 export type DiagramNodeParameters = {
