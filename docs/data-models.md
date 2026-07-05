@@ -1113,6 +1113,12 @@ type CostEstimatePeriod = "day" | "week" | "month";
 
 type CostPricingSource = "aws_pricing_api" | "fallback";
 
+type CostEstimateSupportLevel =
+  | "aws_pricing_api"
+  | "fallback_estimate"
+  | "no_direct_cost"
+  | "not_estimated";
+
 type CostEstimateRequest = {
   architectureJson: ArchitectureJson;
   period: CostEstimatePeriod;
@@ -1123,8 +1129,11 @@ type CostEstimateRequest = {
 type ResourceCostEstimate = {
   resourceId: string;
   resourceType: ResourceType;
+  terraformResourceType?: string;
   name: string;
   monthlyEstimate: MoneyEstimate;
+  supportLevel: CostEstimateSupportLevel;
+  supportReason: string;
   costDrivers: string[];
   explanation: string;
   pricingSource?: CostPricingSource;

@@ -1003,6 +1003,12 @@ export type CostEstimatePeriod = "day" | "week" | "month";
 
 export type CostPricingSource = "aws_pricing_api" | "fallback";
 
+export type CostEstimateSupportLevel =
+  | "aws_pricing_api"
+  | "fallback_estimate"
+  | "no_direct_cost"
+  | "not_estimated";
+
 export type CostUsageAssumption = {
   label: string;
   value: string;
@@ -1011,8 +1017,11 @@ export type CostUsageAssumption = {
 export type ResourceCostEstimate = {
   resourceId: string;
   resourceType: ResourceType;
+  terraformResourceType?: string | undefined;
   name: string;
   monthlyEstimate: MoneyEstimate;
+  supportLevel: CostEstimateSupportLevel;
+  supportReason: string;
   costDrivers: string[];
   explanation: string;
   pricingSource?: CostPricingSource | undefined;

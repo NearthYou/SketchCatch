@@ -3,6 +3,7 @@ import type {
   CostEstimatePeriod,
   CostEstimateRequest,
   CostEstimateResult,
+  CostEstimateSupportLevel,
   CostPricingSource,
   CostUsageAssumption,
   ResourceConfig,
@@ -232,11 +233,14 @@ async function estimateEc2Cost(
   return {
     resourceId: node.id,
     resourceType: node.type,
+    terraformResourceType: getTerraformResourceType(node),
     name: node.label ?? node.id,
     monthlyEstimate: {
       amount: priced.amount,
       currency: "USD"
     },
+    supportLevel: getSupportLevel(priced.pricingSource),
+    supportReason: getSupportReason(priced.pricingSource),
     costDrivers: [`${instanceType} instance`, `${MONTH_HOURS}h/month runtime`],
     explanation: "EC2는 인스턴스 크기와 실행 시간이 비용에 직접 영향을 줍니다.",
     pricingSource: priced.pricingSource,
@@ -294,11 +298,14 @@ async function estimateRdsCost(
   return {
     resourceId: node.id,
     resourceType: node.type,
+    terraformResourceType: getTerraformResourceType(node),
     name: node.label ?? node.id,
     monthlyEstimate: {
       amount: roundUsd(instancePriced.amount + fallbackStorageAmount),
       currency: "USD"
     },
+    supportLevel: getSupportLevel(pricingSource),
+    supportReason: getSupportReason(pricingSource),
     costDrivers: [`${instanceClass} DB instance`, `${storageGb}GB storage`, `${MONTH_HOURS}h/month runtime`],
     explanation: "RDS는 실행 시간과 스토리지 비용이 함께 발생합니다.",
     pricingSource,
@@ -333,11 +340,14 @@ async function estimateS3Cost(
   return {
     resourceId: node.id,
     resourceType: node.type,
+    terraformResourceType: getTerraformResourceType(node),
     name: node.label ?? node.id,
     monthlyEstimate: {
       amount: priced.amount,
       currency: "USD"
     },
+    supportLevel: getSupportLevel(priced.pricingSource),
+    supportReason: getSupportReason(priced.pricingSource),
     costDrivers: ["estimated object storage"],
     explanation: "S3는 예상 저장 용량과 요청 수에 따라 비용이 달라집니다.",
     pricingSource: priced.pricingSource,
@@ -362,11 +372,14 @@ function estimateAlwaysOnServiceCost(
   return {
     resourceId: node.id,
     resourceType: node.type,
+    terraformResourceType: getTerraformResourceType(node),
     name: node.label ?? node.id,
     monthlyEstimate: {
       amount: roundUsd(estimate.monthlyAmount),
       currency: "USD"
     },
+    supportLevel: "fallback_estimate",
+    supportReason: "AWS Pricing API 조회가 아직 연결되지 않아 SketchCatch fallback 단가로 계산했습니다.",
     costDrivers: estimate.costDrivers,
     explanation: estimate.explanation,
     pricingSource: "fallback",
@@ -387,11 +400,14 @@ function estimateUsageBasedCost(
   return {
     resourceId: node.id,
     resourceType: node.type,
+    terraformResourceType: getTerraformResourceType(node),
     name: node.label ?? node.id,
     monthlyEstimate: {
       amount: roundUsd(estimate.monthlyAmount),
       currency: "USD"
     },
+    supportLevel: "fallback_estimate",
+    supportReason: "AWS Pricing API 조회가 아직 연결되지 않아 SketchCatch fallback 단가로 계산했습니다.",
     costDrivers: estimate.costDrivers,
     explanation: estimate.explanation,
     pricingSource: "fallback",
@@ -403,11 +419,14 @@ function createZeroCostEstimate(node: ResourceNode): ResourceCostEstimate {
   return {
     resourceId: node.id,
     resourceType: node.type,
+    terraformResourceType: getTerraformResourceType(node),
     name: node.label ?? node.id,
     monthlyEstimate: {
       amount: 0,
       currency: "USD"
     },
+    supportLevel: "not_estimated",
+    supportReason: "이 Resource는 아직 비용 산정 규칙이 없어 합계에 포함하지 않았습니다.",
     costDrivers: [],
     explanation: "이 Resource는 현재 비용 산정 대상이 아니거나 다른 Resource 비용에 포함됩니다.",
     pricingSource: "fallback",
@@ -504,6 +523,18 @@ function createPricingAssumption(fallbackUsed: boolean, pricingSource: CostPrici
   return "AWS Pricing API로 조회하지 못한 항목은 SketchCatch fallback 단가로 계산했습니다.";
 }
 
+function getSupportLevel(pricingSource: CostPricingSource): CostEstimateSupportLevel {
+  return pricingSource === "aws_pricing_api" ? "aws_pricing_api" : "fallback_estimate";
+}
+
+function getSupportReason(pricingSource: CostPricingSource): string {
+  if (pricingSource === "aws_pricing_api") {
+    return "AWS Pricing API에서 조회한 단가로 계산했습니다.";
+  }
+
+  return "AWS Pricing API 조회가 꺼져 있거나 실패해 SketchCatch fallback 단가로 계산했습니다.";
+}
+
 function isNatGateway(node: ResourceNode): boolean {
   return readServiceName(node.config).includes("nat_gateway") || readServiceName(node.config).includes("nat-gateway");
 }
@@ -530,6 +561,10 @@ function readServiceName(config: ResourceConfig): string {
   return (
     getTextConfig(config, ["service", "terraformType", "resourceType", "type"])?.toLowerCase() ?? ""
   );
+}
+
+function getTerraformResourceType(node: ResourceNode): string | undefined {
+  return getTextConfig(node.config, ["terraformResourceType", "terraformType", "resourceType", "type"]);
 }
 
 function getTextConfig(config: ResourceConfig, keys: readonly string[]): string | undefined {
