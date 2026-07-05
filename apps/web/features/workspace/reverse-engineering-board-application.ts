@@ -12,9 +12,13 @@ export type ReverseEngineeringBoardComparisonItem = {
 
 export type ReverseEngineeringBoardComparison = {
   readonly additions: ReverseEngineeringBoardComparisonItem[];
+  readonly changes: ReverseEngineeringBoardComparisonItem[];
+  readonly deletions: ReverseEngineeringBoardComparisonItem[];
   readonly duplicates: ReverseEngineeringBoardComparisonItem[];
   readonly manualReviews: ReverseEngineeringBoardComparisonItem[];
 };
+
+const IGNORED_COMPARISON_VALUE_KEYS = new Set(["providerResourceId", "providerResourceType"]);
 
 export type ReverseEngineeringBoardApplication = {
   readonly comparison: ReverseEngineeringBoardComparison;
@@ -70,8 +74,16 @@ function compareDiagrams(
   previewDiagram: DiagramJson
 ): ReverseEngineeringBoardComparison {
   const currentProviderResourceIds = new Set(currentDiagram.nodes.flatMap(getProviderResourceId));
+  const currentNodeByProviderResourceId = new Map(
+    currentDiagram.nodes.flatMap((node) =>
+      getProviderResourceId(node).map((providerResourceId) => [providerResourceId, node])
+    )
+  );
+  const previewProviderResourceIds = new Set(previewDiagram.nodes.flatMap(getProviderResourceId));
   const currentTerraformIdentities = new Set(currentDiagram.nodes.flatMap(getTerraformIdentity));
   const additions: ReverseEngineeringBoardComparisonItem[] = [];
+  const changes: ReverseEngineeringBoardComparisonItem[] = [];
+  const deletions: ReverseEngineeringBoardComparisonItem[] = [];
   const duplicates: ReverseEngineeringBoardComparisonItem[] = [];
   const manualReviews: ReverseEngineeringBoardComparisonItem[] = [];
 
@@ -81,6 +93,13 @@ function compareDiagrams(
     const terraformIdentity = item.terraformIdentity;
 
     if (providerResourceId && currentProviderResourceIds.has(providerResourceId)) {
+      const currentNode = currentNodeByProviderResourceId.get(providerResourceId);
+
+      if (currentNode && hasSharedValueDifference(currentNode, node)) {
+        changes.push(item);
+        continue;
+      }
+
       duplicates.push(item);
       continue;
     }
@@ -103,11 +122,15 @@ function compareDiagrams(
     additions.push(item);
   }
 
-  return {
-    additions,
-    duplicates,
-    manualReviews
-  };
+  for (const node of currentDiagram.nodes) {
+    const providerResourceId = getProviderResourceId(node)[0];
+
+    if (providerResourceId && !previewProviderResourceIds.has(providerResourceId)) {
+      deletions.push(toComparisonItem(node));
+    }
+  }
+
+  return { additions, changes, deletions, duplicates, manualReviews };
 }
 
 // 현재 보드에 없는 안전한 추가 후보만 골라 붙이고, 기존 viewport는 그대로 둡니다.
@@ -162,6 +185,20 @@ function getProviderResourceId(node: DiagramNode): string[] {
   const value = node.parameters?.values["providerResourceId"];
 
   return typeof value === "string" && value.trim().length > 0 ? [value] : [];
+}
+
+// 양쪽에 모두 있는 설정값만 비교해서 과한 변경 후보를 만들지 않습니다.
+function hasSharedValueDifference(currentNode: DiagramNode, previewNode: DiagramNode): boolean {
+  const currentValues = currentNode.parameters?.values ?? {};
+  const previewValues = previewNode.parameters?.values ?? {};
+
+  return Object.keys(currentValues).some((key) => {
+    if (IGNORED_COMPARISON_VALUE_KEYS.has(key) || !(key in previewValues)) {
+      return false;
+    }
+
+    return JSON.stringify(currentValues[key]) !== JSON.stringify(previewValues[key]);
+  });
 }
 
 // AWS 원본 ID가 없을 때 보조 기준으로 쓸 Terraform 주소 비슷한 이름표를 만듭니다.

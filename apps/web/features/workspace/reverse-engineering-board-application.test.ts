@@ -35,6 +35,43 @@ test("createReverseEngineeringBoardComparison separates new scan resources from 
   assert.equal(comparison.manualReviews.length, 0);
 });
 
+test("createReverseEngineeringBoardComparison reports conservative change and deletion candidates", () => {
+  const currentDiagram = createDiagram({
+    nodes: [
+      createDiagramNode({
+        id: "existing-vpc",
+        providerResourceId: "vpc-1234",
+        resourceName: "main",
+        resourceType: "aws_vpc",
+        values: {
+          cidrBlock: "10.1.0.0/16"
+        }
+      }),
+      createDiagramNode({
+        id: "old-security-group",
+        providerResourceId: "sg-9999",
+        resourceName: "old",
+        resourceType: "aws_security_group"
+      })
+    ]
+  });
+
+  const comparison = createReverseEngineeringBoardComparison({
+    currentDiagram,
+    result: createScanResult()
+  });
+
+  assert.deepEqual(
+    comparison.changes.map((item) => item.nodeId),
+    ["resource-vpc-1234"]
+  );
+  assert.deepEqual(
+    comparison.deletions.map((item) => item.nodeId),
+    ["old-security-group"]
+  );
+});
+
+
 test("createReverseEngineeringBoardApplication can open scan result as a new board", () => {
   const currentDiagram = createDiagram({
     nodes: [
@@ -116,6 +153,7 @@ function createScanResult(): ReverseEngineeringScanResult {
           positionX: 120,
           positionY: 100,
           config: {
+            cidrBlock: "10.0.0.0/16",
             providerResourceId: "vpc-1234",
             providerResourceType: "AWS::EC2::VPC",
             terraformResourceName: "main"
@@ -164,6 +202,7 @@ function createDiagramNode(input: {
   providerResourceId: string;
   resourceName: string;
   resourceType: string;
+  values?: Record<string, unknown>;
 }): DiagramJson["nodes"][number] {
   return {
     id: input.id,
@@ -176,7 +215,8 @@ function createDiagramNode(input: {
       resourceType: input.resourceType,
       terraformBlockType: "resource",
       values: {
-        providerResourceId: input.providerResourceId
+        providerResourceId: input.providerResourceId,
+        ...input.values
       }
     },
     position: { x: 0, y: 0 },

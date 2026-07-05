@@ -70,6 +70,14 @@ export function ReverseEngineeringResultPanel({
             <strong>{comparison.additions.length}</strong>
           </span>
           <span>
+            변경 후보
+            <strong>{comparison.changes.length}</strong>
+          </span>
+          <span>
+            삭제 후보
+            <strong>{comparison.deletions.length}</strong>
+          </span>
+          <span>
             중복 후보
             <strong>{comparison.duplicates.length}</strong>
           </span>
