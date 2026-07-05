@@ -553,7 +553,7 @@ pnpm build
   - `pnpm build` - passed
   - `pnpm harness:check` - passed
 - Remaining external validation:
-  - Run actual GitHub App install flow with `GITHUB_APP_ID`, `GITHUB_APP_SLUG`, `GITHUB_APP_PRIVATE_KEY_BASE64`, `GITHUB_APP_CALLBACK_URL`.
+  - Run actual GitHub App install flow with `SKETCHCATCH_APP_ID`, `SKETCHCATCH_APP_SLUG`, `SKETCHCATCH_APP_PRIVATE_KEY_BASE64`, `SKETCHCATCH_APP_CALLBACK_URL`.
   - Run actual GitHub PR handoff against a connected repo and confirm Actions polling.
   - Attach actual ElastiCache `REDIS_URL` to API runtime and verify deployment log cursor / Git pipeline status cache goes through Redis.
   - Run `scripts/smoke/live-s3-deployment.ps1` with `API_BASE_URL`, `ACCESS_TOKEN` or smoke login env, `AWS_CONNECTION_ID`, `SMOKE_ACCOUNT_ID`, `AWS_REGION`.

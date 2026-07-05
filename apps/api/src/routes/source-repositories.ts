@@ -284,7 +284,7 @@ function handleSourceRepositoryError(error: unknown, reply: FastifyReply) {
     });
   }
 
-  if (error instanceof Error && error.message.startsWith("GITHUB_APP_")) {
+  if (error instanceof Error && error.message.startsWith("SKETCHCATCH_APP_")) {
     return reply.status(409).send({
       error: "conflict",
       message: error.message

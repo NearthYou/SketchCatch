@@ -2,6 +2,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   assertNoStaticAwsCredentialsForApiServer,
+  getRuntimeEnv,
+  requireGitHubAppConfig,
+  requireGitHubAppStateSecret,
   requireSketchCatchAwsCallerPrincipalArn
 } from "./env.js";
 
@@ -58,6 +61,54 @@ test("assertNoStaticAwsCredentialsForApiServer rejects static AWS credential env
   );
 });
 
+test("requireGitHubAppConfig reads SKETCHCATCH_APP configuration", () => {
+  const originalValues = saveEnvValues([
+    "SKETCHCATCH_APP_ID",
+    "SKETCHCATCH_APP_SLUG",
+    "SKETCHCATCH_APP_PRIVATE_KEY_BASE64",
+    "SKETCHCATCH_APP_CALLBACK_URL"
+  ]);
+  const privateKeyBase64 = Buffer.from(
+    "-----BEGIN PRIVATE KEY-----\ntest\n-----END PRIVATE KEY-----\n",
+    "utf8"
+  ).toString("base64");
+
+  try {
+    process.env.SKETCHCATCH_APP_ID = "12345";
+    process.env.SKETCHCATCH_APP_SLUG = "sketchcatch-local";
+    process.env.SKETCHCATCH_APP_PRIVATE_KEY_BASE64 = privateKeyBase64;
+    process.env.SKETCHCATCH_APP_CALLBACK_URL =
+      "http://localhost:3000/integrations/github/callback";
+
+    const config = requireGitHubAppConfig();
+
+    assert.equal(config.appId, "12345");
+    assert.equal(config.appSlug, "sketchcatch-local");
+    assert.match(config.privateKey, /BEGIN PRIVATE KEY/);
+    assert.equal(config.callbackUrl, "http://localhost:3000/integrations/github/callback");
+    assert.equal(getRuntimeEnv().githubAppId, "12345");
+  } finally {
+    restoreEnvValues(originalValues);
+  }
+});
+
+test("requireGitHubAppStateSecret accepts SKETCHCATCH_APP_STATE_SECRET", () => {
+  const originalValues = saveEnvValues(["AUTH_TOKEN_SECRET", "SKETCHCATCH_APP_STATE_SECRET"]);
+
+  try {
+    process.env.AUTH_TOKEN_SECRET = "auth-token-secret-with-at-least-32-characters";
+    process.env.SKETCHCATCH_APP_STATE_SECRET =
+      "sketchcatch-app-state-secret-with-at-least-32-characters";
+
+    assert.equal(
+      requireGitHubAppStateSecret(),
+      "sketchcatch-app-state-secret-with-at-least-32-characters"
+    );
+  } finally {
+    restoreEnvValues(originalValues);
+  }
+});
+
 function restoreEnvValue(key: string, value: string | undefined): void {
   if (value === undefined) {
     delete process.env[key];
@@ -65,4 +116,14 @@ function restoreEnvValue(key: string, value: string | undefined): void {
   }
 
   process.env[key] = value;
+}
+
+function saveEnvValues(keys: string[]): Map<string, string | undefined> {
+  return new Map(keys.map((key) => [key, process.env[key]]));
+}
+
+function restoreEnvValues(values: Map<string, string | undefined>): void {
+  for (const [key, value] of values) {
+    restoreEnvValue(key, value);
+  }
 }

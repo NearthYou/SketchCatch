@@ -1498,7 +1498,7 @@
   - 실제 GitHub App 설치와 실제 repository PR 생성은 구현했지만, 이 세션에서는 GitHub App private key/installation이 없어 외부 API 실호출 검증을 수행하지 않았다.
   - 실제 ElastiCache `REDIS_URL` 운영 연결은 template/docs/env 경로까지 준비했지만, 운영 Redis endpoint에 붙여 확인하지 않았다.
 - Next best action:
-  - 운영/스테이징 API에 `GITHUB_APP_*`, `REDIS_URL`, verified `AWS_CONNECTION_ID`를 주입한 뒤 `scripts/smoke/live-s3-deployment.ps1`와 GitHub App install/PR handoff를 실제로 실행한다.
+  - 운영/스테이징 API에 `SKETCHCATCH_APP_*`, `REDIS_URL`, verified `AWS_CONNECTION_ID`를 주입한 뒤 `scripts/smoke/live-s3-deployment.ps1`와 GitHub App install/PR handoff를 실제로 실행한다.
 ## 2026-07-05 - Spec3 plan3 회귀 테스트 증거 보강
 
 - Goal: `docs/sw/plan3.md` 완료 기준 중 GitHub App source repository 연결, target branch 보호, source branch retry/update, Actions polling 상태 매핑을 전용 테스트로 증명한다.

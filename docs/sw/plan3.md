@@ -43,7 +43,7 @@
 
 - signed short-lived state 발급/검증 helper 구현
 - GitHub App JWT 생성 helper 구현
-- `GITHUB_APP_PRIVATE_KEY_BASE64` decode 처리
+- `SKETCHCATCH_APP_PRIVATE_KEY_BASE64` decode 처리
 - installation access token 발급 client 구현
 - installation repository 목록 조회 client 구현
 - source repository service 구현
