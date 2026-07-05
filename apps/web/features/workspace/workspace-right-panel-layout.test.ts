@@ -164,6 +164,22 @@ test("terraform preview refreshes when the last diagram icon is deleted", () => 
   assert.doesNotMatch(terraformPanelSource, /context\.nodes\.length === 0/);
 });
 
+test("terraform preview failures mark previous files stale instead of synced", () => {
+  assert.match(terraformPanelSource, /latestSuccessfulTerraformPreviewFingerprintRef/);
+  assert.match(terraformPanelSource, /isTerraformPreviewStale/);
+  assert.match(terraformPanelSource, /Terraform Preview 생성 실패/);
+  assert.match(terraformPanelSource, /이전 Preview 표시 중/);
+  assert.match(terraformPanelSource, /setIsTerraformPreviewStale\(true\)/);
+  assert.doesNotMatch(terraformPanelSource, /setStatusMessage\("그래프 기준으로 동기화됨"\);\s*latestDiagramFingerprintRef\.current = diagramFingerprint;\s*[\s\S]*catch/);
+});
+
+test("terraform status counts only the synced preview snapshot", () => {
+  assert.match(terraformPanelSource, /previewSnapshotSummary/);
+  assert.match(terraformPanelSource, /isTerraformPreviewSynced/);
+  assert.match(terraformPanelSource, /다이어그램 변경 미반영/);
+  assert.match(terraformPanelSource, /previewSnapshotSummary/);
+});
+
 test("terraform leave dialog uses Korean copy", () => {
   assert.match(terraformLeaveDialogSource, /나가기 전에 변경사항을 저장할까요\?/);
   assert.match(terraformLeaveDialogSource, /저장하지 않은 Terraform 변경사항이 있습니다/);

@@ -13,6 +13,28 @@
 - Highest priority unfinished harness feature: `HARNESS-007`
 - Current blocker: none
 
+### 2026-07-05 - Terraform 영역 리소스 Ticket 4 범위 축소
+
+- Goal: 기존 draft 보존을 전제한 legacy migration 구현을 제거하고, 새 `DiagramJson` 계약 유지와 draft 초기화, Terraform Preview stale 표시 최소 방어로 Ticket 4 범위를 줄인다.
+- Completed:
+  - `metadata.awsRegion` 롤백, shared/API legacy normalization helper, DB/Web migration 구현을 모두 범위 밖으로 정리했다.
+  - Terraform panel이 마지막 성공 Preview fingerprint를 추적하고, 현재 Diagram fingerprint와 다르면 stale 상태로 표시하게 했다.
+  - `generateTerraformCode` 실패 시 이전 Terraform code가 현재 Diagram과 "그래프 기준으로 동기화됨"처럼 보이지 않게 상태 메시지와 summary를 분리했다.
+  - `hasLocalEdits`로 자동 refresh가 스킵될 때도 현재 Diagram 변경이 Preview에 반영되지 않았음을 표시하게 했다.
+  - `docs/jh/001_테라폼영역리소스동기화티켓계획_JH.md`의 Ticket 4를 "기존 DB draft 초기화 + IndexedDB `sketchcatch-drafts` 초기화 + stale 방어"로 줄였다. 이 문서는 `.gitignore`의 `docs/jh/` 아래에 있어 tracked diff에는 포함되지 않는다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-right-panel-layout.test.ts --test-name-pattern "terraform preview failures|terraform status counts"` - passed.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/parameter-input/region-node-metadata.test.ts` - passed.
+  - `pnpm harness:check` - passed after edits.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed after reverting generated `apps/web/next-env.d.ts`.
+  - `pnpm build` - passed; Next.js rewrote `apps/web/next-env.d.ts`, and that generated change was reverted because it is outside this scope.
+  - `git diff --check` - passed.
+- Known risks:
+  - 실제 DB draft 삭제와 브라우저 IndexedDB `sketchcatch-drafts` 초기화는 운영 데이터 삭제 작업이라 임의 실행하지 않았다. 적용 시 대상 DB/project/browser profile을 확인하고 별도로 수행해야 한다.
+  - scope 축소 전 실행한 API full test는 기존 `terraform-lock-file-workspace.test.ts`의 Windows path separator 기대값 문제로 실패했으며, 이번 Ticket 4 변경과 무관해 수정하지 않았다.
+
 ### 2026-07-05 - Deployment Safety Gate Plan block 제거
 
 - Goal: Deployment Safety Gate를 Plan 단계에서 Deployment record를 block하는 로직이 아니라, 최종 실행 전 점검 warning을 보존하는 로직으로 바꾼다.
