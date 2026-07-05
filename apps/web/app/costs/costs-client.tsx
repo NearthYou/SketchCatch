@@ -44,9 +44,18 @@ export function CostsClient() {
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(() =>
     readSelectedProjectIdFromLocation()
   );
+  const [includedProjectIds, setIncludedProjectIds] = useState<readonly string[] | null>(null);
   const selectedProject = useMemo(
     () => costData?.projects.find((item) => item.project.id === selectedProjectId) ?? costData?.projects[0] ?? null,
     [costData, selectedProjectId]
+  );
+  const includedProjectIdSet = useMemo(
+    () => new Set(includedProjectIds ?? costData?.projects.map((item) => item.project.id) ?? []),
+    [costData, includedProjectIds]
+  );
+  const selectedCostTotals = useMemo(
+    () => calculateSelectedCostTotals(costData?.projects ?? [], includedProjectIdSet),
+    [costData, includedProjectIdSet]
   );
 
   useEffect(() => {
@@ -68,6 +77,17 @@ export function CostsClient() {
 
         setCostData(result);
         setState("idle");
+        setIncludedProjectIds((currentProjectIds) => {
+          const projectIds = result.projects.map((item) => item.project.id);
+
+          if (currentProjectIds === null) {
+            return projectIds;
+          }
+
+          const nextProjectIds = new Set(projectIds);
+
+          return currentProjectIds.filter((projectId) => nextProjectIds.has(projectId));
+        });
         setSelectedProjectId((currentProjectId) => {
           const urlProjectId = readSelectedProjectIdFromLocation();
           const candidateProjectId = currentProjectId ?? urlProjectId;
@@ -123,8 +143,22 @@ export function CostsClient() {
     });
   }
 
-  const totalEstimateAmount = costData?.totalEstimate.amount ?? 0;
-  const totalMonthlyAmount = costData?.totalMonthlyEstimate.amount ?? 0;
+  function toggleIncludedProject(projectId: string): void {
+    setIncludedProjectIds((currentProjectIds) => {
+      const includedIds = new Set(currentProjectIds ?? []);
+
+      if (includedIds.has(projectId)) {
+        includedIds.delete(projectId);
+      } else {
+        includedIds.add(projectId);
+      }
+
+      return [...includedIds];
+    });
+  }
+
+  const totalEstimateAmount = selectedCostTotals.totalEstimateAmount;
+  const totalMonthlyAmount = selectedCostTotals.totalMonthlyAmount;
   const dailyAverageAmount = totalMonthlyAmount / 30;
 
   return (
@@ -182,13 +216,14 @@ export function CostsClient() {
         <section className="dashboardPanel costSummaryPanel" aria-labelledby="cost-summary-title">
           <div className="costPanelTitle">
             <p className="dashboardPanelKicker">Cost overview</p>
-            <h2 id="cost-summary-title">내 프로젝트 예상 비용 합계</h2>
+            <h2 id="cost-summary-title">선택한 프로젝트 예상 비용 합계</h2>
           </div>
           <div className="costSummaryAmount">
             <span>{getPeriodLabel(appliedQuery.period)} 예상 비용</span>
             <strong>{formatUsd(totalEstimateAmount)}</strong>
             <p>
-              월 환산 {formatUsd(totalMonthlyAmount)} · 일 평균 약 {formatUsd(dailyAverageAmount)}
+              {selectedCostTotals.selectedProjectCount}개 선택 · 월 환산 {formatUsd(totalMonthlyAmount)} · 일 평균 약{" "}
+              {formatUsd(dailyAverageAmount)}
             </p>
           </div>
         </section>
@@ -226,18 +261,32 @@ export function CostsClient() {
               <span>{getPeriodLabel(appliedQuery.period)} 예상 비용</span>
             </div>
             {costData.projects.map((item) => (
-              <button
-                aria-pressed={selectedProject?.project.id === item.project.id}
+              <div
+                data-selected={selectedProject?.project.id === item.project.id ? "true" : undefined}
                 className="dashboardTableRow costProjectRow"
                 key={item.project.id}
-                onClick={() => selectProject(item.project.id, setSelectedProjectId)}
-                type="button"
               >
-                <strong>{item.project.name}</strong>
+                <div className="costProjectNameCell">
+                  <input
+                    aria-label={`${item.project.name} 합계에 포함`}
+                    checked={includedProjectIdSet.has(item.project.id)}
+                    className="costProjectCheckbox"
+                    onChange={() => toggleIncludedProject(item.project.id)}
+                    type="checkbox"
+                  />
+                  <button
+                    aria-pressed={selectedProject?.project.id === item.project.id}
+                    className="costProjectNameButton"
+                    onClick={() => selectProject(item.project.id, setSelectedProjectId)}
+                    type="button"
+                  >
+                    <strong>{item.project.name}</strong>
+                  </button>
+                </div>
                 <span>{item.costEstimate === null ? "-" : "AWS"}</span>
                 <span>{formatResourceTypes(item.costEstimate?.resources ?? [])}</span>
                 <span>{formatProjectCostAmount(item.costEstimate)}</span>
-              </button>
+              </div>
             ))}
           </div>
         ) : null}
@@ -333,6 +382,27 @@ function CostStatus({
       {action}
     </div>
   );
+}
+
+function calculateSelectedCostTotals(
+  projects: readonly CostProjectEstimate[],
+  includedProjectIdSet: ReadonlySet<string>
+): {
+  readonly selectedProjectCount: number;
+  readonly totalEstimateAmount: number;
+  readonly totalMonthlyAmount: number;
+} {
+  const selectedProjects = projects.filter((item) => includedProjectIdSet.has(item.project.id));
+
+  return {
+    selectedProjectCount: selectedProjects.length,
+    totalEstimateAmount: roundUsd(
+      selectedProjects.reduce((sum, item) => sum + (item.costEstimate?.totalEstimate.amount ?? 0), 0)
+    ),
+    totalMonthlyAmount: roundUsd(
+      selectedProjects.reduce((sum, item) => sum + (item.costEstimate?.totalMonthlyEstimate.amount ?? 0), 0)
+    )
+  };
 }
 
 function parseExpectedUserCount(value: string): number | null {
@@ -453,4 +523,8 @@ function getPeriodLabel(period: CostEstimatePeriod): string {
 
 function formatUsd(amount: number): string {
   return `$${amount.toFixed(2)}`;
+}
+
+function roundUsd(amount: number): number {
+  return Math.round((amount + Number.EPSILON) * 100) / 100;
 }

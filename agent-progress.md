@@ -1865,3 +1865,23 @@
 - Known risks:
   - 실제 브라우저 스크린샷 검증은 수행하지 않았다. 소스 검색, API 테스트, lint/typecheck/build로 문구 제거와 렌더링 경로를 검증했다.
   - `.turbo/cache` rename 경고가 있었지만 각 명령은 exit code 0으로 완료됐다.
+
+## 2026-07-06 - 비용관리 선택 프로젝트 합계
+
+- Goal: 비용관리 페이지에서 체크한 프로젝트만 합산한 예상 비용을 볼 수 있게 한다.
+- Completed:
+  - 비용관리 프로젝트 목록의 프로젝트명 옆에 합계 포함 체크박스를 추가했다.
+  - 프로젝트명 클릭은 기존처럼 상세 비용 근거 선택으로 유지하고, 체크박스는 상단 합계 포함 여부만 바꾸도록 분리했다.
+  - 첫 로드 시에는 모든 프로젝트가 체크되어 기존 전체 합계와 같은 값으로 시작하게 했다.
+  - 상단 비용 합계 카드를 `선택한 프로젝트 예상 비용 합계`로 바꾸고, 선택한 프로젝트 수와 선택 합계 기준 월 환산/일 평균을 표시하게 했다.
+  - 체크된 프로젝트 합계는 클라이언트에서 `CostProjectEstimate` 응답을 기준으로 계산하며 API 계약은 변경하지 않았다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits
+  - `pnpm --filter @sketchcatch/web typecheck` - passed
+  - `pnpm --filter @sketchcatch/web lint` - passed
+  - `pnpm build` - passed
+  - `pnpm lint` - passed with `.turbo/cache` rename warnings
+  - `pnpm typecheck` - passed with `.turbo/cache` rename warnings
+- Known risks:
+  - 실제 브라우저 스크린샷 검증은 수행하지 않았다. 타입체크, lint, production build로 렌더링 경로를 검증했다.
+  - `.turbo/cache` rename 경고가 있었지만 각 명령은 exit code 0으로 완료됐다.

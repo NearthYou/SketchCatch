@@ -5213,17 +5213,51 @@ nextjs-portal {
   border-left: 0;
   border-right: 0;
   border-bottom: 0;
-  cursor: pointer;
-  font: inherit;
-  text-align: left;
   width: 100%;
 }
 
 .costProjectRow:hover,
-.costProjectRow:focus-visible,
-.costProjectRow[aria-pressed="true"] {
+.costProjectRow:focus-within,
+.costProjectRow[data-selected="true"] {
   background: rgba(56, 189, 248, 0.08);
   outline: none;
+}
+
+.costProjectNameCell {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  min-width: 0;
+}
+
+.costProjectCheckbox {
+  accent-color: var(--dashboard-teal);
+  flex: 0 0 auto;
+  height: 18px;
+  margin: 0;
+  width: 18px;
+}
+
+.costProjectNameButton {
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  min-width: 0;
+  padding: 0;
+  text-align: left;
+}
+
+.costProjectNameButton strong {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.costProjectNameButton:focus-visible {
+  border-radius: 4px;
+  outline: 2px solid color-mix(in srgb, var(--dashboard-teal) 54%, transparent);
+  outline-offset: 3px;
 }
 
 .costStatus {
