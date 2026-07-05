@@ -23,11 +23,13 @@ export type DiagramEditorPanelContext = {
   previewAnnotations: DiagramPreviewAnnotations | null;
   previewDiagram: DiagramJson | null;
   selectedNodeId: string | null;
+  terraformRefreshRequestId: number;
   nodes: readonly DiagramNode[];
   edges: readonly DiagramEdge[];
   applyDiagramJson: (diagram: DiagramJson) => void;
   closeInspectedNode: () => void;
   focusResourceNode: (nodeId: string) => void;
+  requestTerraformRefresh: () => void;
   selectResourceNode: (nodeId: string) => void;
   setPreviewDiagram: (
     diagram: DiagramJson | null,

@@ -1815,6 +1815,29 @@
   - Browser click smoke for the chat UI was not run; API and Web unit tests cover the prompt isolation and generation mapping.
   - Real AWS apply/destroy, cloud mutation, and Git/CI/CD handoff were not run.
 
+# 2026-07-05 - AI 다이어그램 후속 수정 맥락 보존 및 Terraform 자동 갱신
+
+- Goal: 빈 보드의 AI 초안 미리보기 상태에서 후속 요청이 이전 용도를 지워 같은 정적 사이트 다이어그램으로 수렴하는 문제를 고치고, AI 생성/수정 적용 후 Terraform 코드가 자동으로 다시 생성되게 한다.
+- Completed:
+  - 초안/패치 미리보기가 떠 있는 동안 추가 지시가 들어오면 현재 보드 스냅샷이 아니라 미리보기 다이어그램을 기준으로 patch preview를 만들도록 수정했다.
+  - 확인 단계에서 완성형 답변을 입력할 때 원래 prompt와 답변을 병합해 `파일 업로드 페이지 -> 정적 소개 웹사이트`, `로그인 웹서비스 -> 정적 소개 웹사이트`의 앞선 용도가 사라지지 않게 했다.
+  - API patch preview에서 정적 소개 웹사이트 재구성 요청은 기존 EC2/RDS/S3를 제거하지 않고, 누락된 S3/CloudFront만 추가하도록 보정했다.
+  - AI 초안/패치 적용 시 `requestTerraformRefresh()`를 호출하고 Terraform 패널이 해당 신호를 받아 로컬 편집 보호와 별개로 코드를 다시 생성하도록 연결했다.
+  - 업로드 런타임과 로그인 런타임이 정적 소개 웹사이트 후속 요청 후에도 서로 다른 리소스 구성을 유지하는 회귀 테스트를 추가했다.
+- Verification run:
+  - `pnpm harness:check` - passed before final checks
+  - `pnpm --dir apps/api exec tsx --test src/services/aiArchitecturePatchPreview.test.ts` - passed outside sandbox after Node test runner hit sandbox `spawn EPERM`
+  - `pnpm --dir apps/web exec tsx --test features/workspace/workspace-right-panel-layout.test.ts` - passed outside sandbox after Node test runner hit sandbox `spawn EPERM`
+  - `pnpm harness:check` - passed
+  - `pnpm lint` - passed with Turbo cache rename warnings only
+  - `pnpm typecheck` - passed with Turbo cache rename warnings only
+  - `pnpm build` - sandbox run failed on `.next` unlink EPERM, elevated retry passed
+  - `pnpm harness:check` - passed after build
+  - `git diff --check` - passed with line-ending warnings only
+- Known risks:
+  - Browser click smoke는 이번 세션에서 별도로 실행하지 않았고, API/web 회귀 테스트와 전체 lint/typecheck/build로 검증했다.
+  - 실제 AWS apply/destroy, cloud mutation, Git/CI/CD handoff는 실행하지 않았다.
+
 # 2026-07-05 - AI 다이어그램 의도 반영 및 레이아웃 보정
 
 - Goal: 서로 다른 사용자 요구가 같은 다이어그램으로 수렴하지 않게 하고, 기존 보드 수정 흐름에서 명시된 리소스를 보존하며, EC2 추가/정적 사이트 재정리/무관 질문 차단/포함 레이아웃 문제를 보정한다.

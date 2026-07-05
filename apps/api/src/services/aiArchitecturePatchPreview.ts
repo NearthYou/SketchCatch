@@ -227,6 +227,17 @@ const GENERIC_ADD_RESOURCE_PURPOSE_SUGGESTIONS = [
   "지금은 연결 없이 따로 둘래"
 ] as const;
 
+const STATIC_SITE_INTENT_PHRASES = [
+  "\uC815\uC801",
+  "\uC18C\uAC1C",
+  "\uC6F9\uC0AC\uC774\uD2B8",
+  "\uC0AC\uC774\uD2B8",
+  "static",
+  "website",
+  "landing",
+  "intro"
+] as const;
+
 const ENGLISH_RESOURCE_LABELS: Record<ResourceType, string> = {
   VPC: "VPC",
   SUBNET: "Subnet",
@@ -317,7 +328,7 @@ export function createArchitecturePatchPreview(
     });
   }
 
-  const changes = createResolvedPatchChanges(resolvedIntent, targetResolution.targetNode);
+  const changes = createResolvedPatchChanges(input.architectureJson, resolvedIntent, targetResolution.targetNode);
   const proposedArchitectureJson = applyResolvedPreviewChanges(input.architectureJson, changes, resolvedIntent);
 
   return {
@@ -709,14 +720,7 @@ function inferServiceExpansionResourceType(
   existingNodes: readonly ResourceNode[]
 ): ResourceType | undefined {
   const hasResourceType = (resourceType: ResourceType) => existingNodes.some((node) => node.type === resourceType);
-  const hasStaticWebsiteIntent = includesAnyPhrase(normalizedInstruction, [
-    "정적",
-    "소개",
-    "웹사이트",
-    "사이트",
-    "cdn",
-    "배포"
-  ]);
+  const hasStaticWebsiteIntent = isStaticSiteIntent(normalizedInstruction);
 
   if (
     includesAnyPhrase(normalizedInstruction, ["로그인", "회원", "사용자", "계정", "예약", "신청", "주문", "결제"]) &&
@@ -1034,6 +1038,7 @@ function getSelectedTargetNode(
 }
 
 function createResolvedPatchChanges(
+  architectureJson: ArchitectureJson,
   intent: ArchitecturePatchIntent,
   targetNode: ResourceNode | null
 ): ArchitecturePatchPreviewChange[] {
@@ -1075,6 +1080,12 @@ function createResolvedPatchChanges(
   }
 
   if (intent.requestedAction === "add_resource") {
+    const staticSiteChanges = createStaticSiteReorganizationChanges(architectureJson, intent);
+
+    if (staticSiteChanges.length > 0) {
+      return staticSiteChanges;
+    }
+
     return [
       {
         action: "add_resource",
@@ -1102,6 +1113,37 @@ function createResolvedPatchChanges(
       summary: `${targetNode.label ?? targetNode.id} 리소스를 ${formatPatchAction(intent.requestedAction)}합니다.`
     }
   ];
+}
+
+function createStaticSiteReorganizationChanges(
+  architectureJson: ArchitectureJson,
+  intent: ArchitecturePatchIntent
+): ArchitecturePatchPreviewChange[] {
+  if (!isStaticSiteIntent(normalizeSearchText(intent.instruction))) {
+    return [];
+  }
+
+  const hasS3 = architectureJson.nodes.some((node) => node.type === "S3");
+  const hasCloudFront = architectureJson.nodes.some((node) => node.type === "CLOUDFRONT");
+  const changes: ArchitecturePatchPreviewChange[] = [];
+
+  if (!hasS3) {
+    changes.push({
+      action: "add_resource",
+      resourceType: "S3",
+      summary: `${formatPatchResourceType("S3")} \uB9AC\uC18C\uC2A4\uB97C \uC815\uC801 \uC6F9\uC0AC\uC774\uD2B8 \uD30C\uC77C \uC800\uC7A5\uC18C\uB85C \uCD94\uAC00\uD569\uB2C8\uB2E4.`
+    });
+  }
+
+  if (!hasCloudFront) {
+    changes.push({
+      action: "add_resource",
+      resourceType: "CLOUDFRONT",
+      summary: `${formatPatchResourceType("CLOUDFRONT")} \uB9AC\uC18C\uC2A4\uB97C \uC815\uC801 \uC6F9\uC0AC\uC774\uD2B8 \uACF5\uAC1C \uC9C4\uC785\uC810\uC73C\uB85C \uCD94\uAC00\uD569\uB2C8\uB2E4.`
+    });
+  }
+
+  return changes;
 }
 
 function formatPatchResourceType(resourceType: ResourceType): string {
@@ -1385,13 +1427,7 @@ function inferConnection(
 
   if (
     newNode.type === "CLOUDFRONT" &&
-    includesAnyPhrase(normalizeSearchText(intent.instruction), [
-      "정적",
-      "웹사이트",
-      "사이트",
-      "cdn",
-      "배포"
-    ])
+    isStaticSiteIntent(normalizeSearchText(intent.instruction))
   ) {
     const targetNode = findBestNode(existingNodes, ["S3"]);
 
@@ -1476,6 +1512,10 @@ function addSpecificConnectionEdge(
       label
     }
   ];
+}
+
+function isStaticSiteIntent(normalizedInstruction: string): boolean {
+  return includesAnyPhrase(normalizedInstruction, STATIC_SITE_INTENT_PHRASES);
 }
 
 function isExternallyEnteredResource(resourceType: ResourceType): boolean {

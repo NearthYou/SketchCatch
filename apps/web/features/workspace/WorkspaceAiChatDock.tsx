@@ -7,7 +7,9 @@ import type {
   ArchitecturePatchClarificationCandidate,
   ArchitecturePatchPreview,
   ArchitectureGuardrailWarning,
+  ArchitectureJson,
   CreateArchitectureDraftRequest,
+  DiagramJson,
   DesignSimulationResult
 } from "@sketchcatch/types";
 import type { FormEvent, KeyboardEvent as ReactKeyboardEvent } from "react";
@@ -19,7 +21,10 @@ import {
   createAiArchitectureDraft,
   runAiDesignSimulation
 } from "./api";
-import { convertArchitectureJsonToDiagramJson } from "./workspace-ai-diagram-adapter";
+import {
+  convertArchitectureJsonToDiagramJson,
+  convertDiagramJsonToArchitectureJson
+} from "./workspace-ai-diagram-adapter";
 import {
   createWorkspaceAiBoardSnapshot,
   isWorkspaceAiResultStale
@@ -300,6 +305,22 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
       return;
     }
 
+    if (draft !== null && context.previewDiagram !== null) {
+      await createPatchPreviewFromPrompt(trimmedPrompt, {
+        baseArchitectureJson: convertDiagramJsonToArchitectureJson(context.previewDiagram),
+        baseDiagram: context.previewDiagram
+      });
+      return;
+    }
+
+    if (patchPreviewModel !== null) {
+      await createPatchPreviewFromPrompt(trimmedPrompt, {
+        baseArchitectureJson: patchPreviewModel.preview.proposedArchitectureJson,
+        baseDiagram: patchPreviewModel.proposedDiagram
+      });
+      return;
+    }
+
     const chatAction = resolveWorkspaceAiChatAction({
       boardHasResources: boardSnapshot.hasResources,
       needsDraftClarification,
@@ -397,6 +418,8 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
   async function createPatchPreviewFromPrompt(
     instruction: string,
     options: {
+      readonly baseArchitectureJson?: ArchitectureJson | undefined;
+      readonly baseDiagram?: DiagramJson | undefined;
       readonly selectedTargetResourceId?: string | undefined;
       readonly connectionTargetResourceId?: string | undefined;
       readonly skipConnection?: boolean | undefined;
@@ -411,8 +434,9 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
     context.setPreviewDiagram(null);
 
     try {
+      const baseArchitectureJson = options.baseArchitectureJson ?? boardSnapshot.architectureJson;
       const response = await createAiArchitecturePatchPreview({
-        architectureJson: boardSnapshot.architectureJson,
+        architectureJson: baseArchitectureJson,
         instruction,
         ...(options.selectedTargetResourceId !== undefined
           ? { selectedTargetResourceId: options.selectedTargetResourceId }
@@ -434,7 +458,7 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
         return;
       }
 
-      showPatchPreview(response);
+      showPatchPreview(response, options.baseDiagram);
     } catch (error) {
       const message = getApiErrorMessage(error, "수정 미리보기 생성 중 오류가 발생했습니다.");
 
@@ -444,8 +468,8 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
     }
   }
 
-  function showPatchPreview(preview: ArchitecturePatchPreview): void {
-    const model = createWorkspaceAiPatchPreviewModel(context.diagram, preview);
+  function showPatchPreview(preview: ArchitecturePatchPreview, baseDiagram = context.diagram): void {
+    const model = createWorkspaceAiPatchPreviewModel(baseDiagram, preview);
 
     setPatchPreviewModel(model);
     context.setPreviewDiagram(model.visualPreviewDiagram, model.annotations);
@@ -495,10 +519,18 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
       }
 
       if (isCompleteArchitectureClarificationAnswer(trimmedPrompt)) {
+        const mergedSession = createArchitectureClarificationSession(
+          `${clarificationSession.originalPrompt}\n${trimmedPrompt}`
+        );
+
+        if (!mergedSession.awaitingConfirmation) {
+          setClarificationSession(mergedSession);
+          appendClarificationQuestion(mergedSession);
+          return;
+        }
+
         setClarificationSession(null);
-        await createDraftFromRequest({
-          prompt: trimmedPrompt
-        });
+        await createDraftFromRequest(createClarifiedDraftRequest(mergedSession));
         return;
       }
 
@@ -622,6 +654,7 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
     context.applyDiagramJson(
       context.previewDiagram ?? convertArchitectureJsonToDiagramJson(draft.architectureJson)
     );
+    context.requestTerraformRefresh();
     requestImmediateDiagramSave();
     setDraft(null);
     setPatchPreviewModel(null);
@@ -638,6 +671,7 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
     }
 
     context.applyDiagramJson(patchPreviewModel.proposedDiagram);
+    context.requestTerraformRefresh();
     requestImmediateDiagramSave();
     setPatchPreviewModel(null);
     setPatchClarification(null);

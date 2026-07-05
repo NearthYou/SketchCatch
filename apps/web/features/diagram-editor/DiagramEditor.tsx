@@ -165,6 +165,7 @@ function DiagramEditorInner({
   const diagramRef = useRef(diagram);
   const [previewDiagram, setPreviewDiagramState] = useState<DiagramJson | null>(null);
   const [previewAnnotations, setPreviewAnnotations] = useState<DiagramPreviewAnnotations | null>(null);
+  const [terraformRefreshRequestId, setTerraformRefreshRequestId] = useState(0);
   const [history, setHistory] = useState<DiagramHistoryState>({ past: [], future: [] });
   const [inspectedNodeId, setInspectedNodeId] = useState<string | null>(null);
   const [isLeftPanelOpen, setLeftPanelOpen] = useState(true);
@@ -575,6 +576,10 @@ function DiagramEditorInner({
     [commitDiagramUpdate]
   );
 
+  const requestTerraformRefresh = useCallback(() => {
+    setTerraformRefreshRequestId((requestId) => requestId + 1);
+  }, []);
+
   const focusResourceNode = useCallback<DiagramEditorPanelContext["focusResourceNode"]>(
     (nodeId) => {
       const targetNode = diagramRef.current.nodes.find((node) => node.id === nodeId);
@@ -641,11 +646,13 @@ function DiagramEditorInner({
       previewAnnotations,
       previewDiagram,
       selectedNodeId,
+      terraformRefreshRequestId,
       nodes: diagram.nodes,
       edges: diagram.edges,
       applyDiagramJson,
       closeInspectedNode: () => setInspectedNodeId(null),
       focusResourceNode,
+      requestTerraformRefresh,
       selectResourceNode,
       saveDiagramNow: onDiagramSaveRequest,
       setPreviewDiagram,
@@ -663,9 +670,11 @@ function DiagramEditorInner({
       onDiagramSaveRequest,
       previewAnnotations,
       previewDiagram,
+      requestTerraformRefresh,
       setPreviewDiagram,
       selectResourceNode,
       selectedNodeId,
+      terraformRefreshRequestId,
       updateNodeMetadata,
       updateNodeParameters
     ]

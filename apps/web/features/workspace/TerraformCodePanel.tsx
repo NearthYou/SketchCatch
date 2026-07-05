@@ -258,6 +258,7 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
   const latestDiagramResourceAddressesRef = useRef<Set<string> | null>(null);
   const latestExternalDiscardRequestIdRef = useRef(externalDiscardRequestId);
   const latestExternalSaveRequestIdRef = useRef(externalSaveRequestId);
+  const latestTerraformRefreshRequestIdRef = useRef(context.terraformRefreshRequestId);
   const lineNumberRef = useRef<HTMLOListElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const terraformPreviewExplanationRequestIdRef = useRef(0);
@@ -706,6 +707,15 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
     latestExternalDiscardRequestIdRef.current = externalDiscardRequestId;
     void refreshTerraformCode(currentDiagramFingerprint);
   }, [currentDiagramFingerprint, externalDiscardRequestId, refreshTerraformCode]);
+
+  useEffect(() => {
+    if (latestTerraformRefreshRequestIdRef.current === context.terraformRefreshRequestId) {
+      return;
+    }
+
+    latestTerraformRefreshRequestIdRef.current = context.terraformRefreshRequestId;
+    void refreshTerraformCode(currentDiagramFingerprint);
+  }, [context.terraformRefreshRequestId, currentDiagramFingerprint, refreshTerraformCode]);
 
   useEffect(() => {
     const previousAddresses = latestDiagramResourceAddressesRef.current;

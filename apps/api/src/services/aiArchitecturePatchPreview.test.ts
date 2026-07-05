@@ -285,6 +285,101 @@ test("createArchitecturePatchPreview preserves existing S3 and EC2 when reorgani
   ]);
 });
 
+test("createArchitecturePatchPreview keeps upload runtime resources when adding static site delivery", () => {
+  const response = createArchitecturePatchPreview({
+    architectureJson: {
+      nodes: [
+        makeNode({ id: "upload-server", type: "EC2", label: "Upload Server" }),
+        makeNode({ id: "upload-bucket", type: "S3", label: "Upload Bucket" })
+      ],
+      edges: [
+        {
+          id: "upload-server-to-upload-bucket",
+          sourceId: "upload-server",
+          targetId: "upload-bucket",
+          label: "stores uploads"
+        }
+      ]
+    },
+    instruction: "\uC815\uC801 \uC18C\uAC1C \uC6F9\uC0AC\uC774\uD2B8\uB85C \uC815\uB9AC\uD574\uC918"
+  });
+
+  assert.equal(response.status, "preview");
+  assert.deepEqual(
+    response.proposedArchitectureJson.nodes.map((node) => ({ id: node.id, type: node.type })),
+    [
+      { id: "upload-server", type: "EC2" },
+      { id: "upload-bucket", type: "S3" },
+      { id: "cloudfront-3", type: "CLOUDFRONT" }
+    ]
+  );
+  assert.deepEqual(response.proposedArchitectureJson.edges, [
+    {
+      id: "upload-server-to-upload-bucket",
+      sourceId: "upload-server",
+      targetId: "upload-bucket",
+      label: "stores uploads"
+    },
+    {
+      id: "cloudfront-3-to-upload-bucket",
+      sourceId: "cloudfront-3",
+      targetId: "upload-bucket",
+      label: "uses Upload Bucket"
+    }
+  ]);
+});
+
+test("createArchitecturePatchPreview keeps login runtime resources when adding static site delivery", () => {
+  const response = createArchitecturePatchPreview({
+    architectureJson: {
+      nodes: [
+        makeNode({ id: "app-server", type: "EC2", label: "App Server" }),
+        makeNode({ id: "app-database", type: "RDS", label: "App Database" })
+      ],
+      edges: [
+        {
+          id: "app-server-to-app-database",
+          sourceId: "app-server",
+          targetId: "app-database",
+          label: "uses database"
+        }
+      ]
+    },
+    instruction: "\uC815\uC801 \uC18C\uAC1C \uC6F9\uC0AC\uC774\uD2B8\uB85C \uC815\uB9AC\uD574\uC918"
+  });
+
+  assert.equal(response.status, "preview");
+  assert.deepEqual(
+    response.proposedArchitectureJson.nodes.map((node) => ({ id: node.id, type: node.type })),
+    [
+      { id: "app-server", type: "EC2" },
+      { id: "app-database", type: "RDS" },
+      { id: "s3-3", type: "S3" },
+      { id: "cloudfront-4", type: "CLOUDFRONT" }
+    ]
+  );
+  assert.deepEqual(response.proposedArchitectureJson.edges, [
+    {
+      id: "app-server-to-app-database",
+      sourceId: "app-server",
+      targetId: "app-database",
+      label: "uses database"
+    },
+    {
+      id: "app-server-to-s3-3",
+      sourceId: "app-server",
+      targetId: "s3-3",
+      label: "uses S3 Bucket"
+    },
+    {
+      id: "cloudfront-4-to-s3-3",
+      sourceId: "cloudfront-4",
+      targetId: "s3-3",
+      label: "uses S3 Bucket"
+    }
+  ]);
+});
+
 test("createArchitecturePatchPreview adds connected resources with English labels", () => {
   const response = createArchitecturePatchPreview({
     architectureJson: {

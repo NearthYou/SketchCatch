@@ -7,6 +7,7 @@ const componentSource = readWorkspaceFile("WorkspaceRightPanel.tsx");
 const aiChatDockSource = readWorkspaceFile("WorkspaceAiChatDock.tsx");
 const deploymentPanelSource = readWorkspaceFile("DeploymentPanel.tsx");
 const diagramEditorSource = readFeatureFile("../diagram-editor/DiagramEditor.tsx");
+const diagramEditorTypesSource = readFeatureFile("../diagram-editor/types.ts");
 const terraformLeaveDialogSource = readWorkspaceFile("TerraformLeaveDialog.tsx");
 const terraformPanelSource = readWorkspaceFile("TerraformCodePanel.tsx");
 const projectDraftManagerSource = readWorkspaceFile("ProjectWorkspaceDraftManager.tsx");
@@ -118,6 +119,27 @@ test("workspace AI saves accepted generated and patched diagrams immediately", (
   assert.match(workspaceDraftManagerSource, /onDiagramSaveRequest=\{saveCurrentDraftLocally\}/);
   assert.match(diagramEditorSource, /saveDiagramNow:\s*onDiagramSaveRequest/);
   assert.match(aiChatDockSource, /context\.saveDiagramNow\?\.\(\)/);
+});
+
+test("workspace AI refines a pending draft preview instead of replacing it from an empty board", () => {
+  assert.match(aiChatDockSource, /convertDiagramJsonToArchitectureJson/);
+  assert.match(aiChatDockSource, /draft !== null && context\.previewDiagram !== null/);
+  assert.match(
+    aiChatDockSource,
+    /baseArchitectureJson:\s*convertDiagramJsonToArchitectureJson\(context\.previewDiagram\)/
+  );
+  assert.match(aiChatDockSource, /const mergedSession = createArchitectureClarificationSession/);
+  assert.match(aiChatDockSource, /createDraftFromRequest\(createClarifiedDraftRequest\(mergedSession\)\)/);
+});
+
+test("accepted AI diagrams explicitly request terraform code regeneration", () => {
+  assert.match(diagramEditorTypesSource, /terraformRefreshRequestId:\s*number/);
+  assert.match(diagramEditorTypesSource, /requestTerraformRefresh:\s*\(\) => void/);
+  assert.match(diagramEditorSource, /terraformRefreshRequestId/);
+  assert.match(diagramEditorSource, /requestTerraformRefresh/);
+  assert.match(aiChatDockSource, /context\.requestTerraformRefresh\(\)/);
+  assert.match(terraformPanelSource, /context\.terraformRefreshRequestId/);
+  assert.match(terraformPanelSource, /latestTerraformRefreshRequestIdRef/);
 });
 
 test("workspace AI chat keeps the floating dock width with compact prompt guide", () => {
