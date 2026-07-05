@@ -963,7 +963,7 @@ function mergeVoiceTranscript(baseValue: string, transcript: string): string {
     return transcript;
   }
 
-  return `${trimmedBaseValue}\n${transcript}`;
+  return `${trimmedBaseValue} ${transcript}`;
 }
 
 function getVoiceRecognitionErrorMessage(error: string): string {
