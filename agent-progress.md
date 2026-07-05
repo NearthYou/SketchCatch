@@ -13,6 +13,33 @@
 - Highest priority unfinished harness feature: `HARNESS-007`
 - Current blocker: none
 
+### 2026-07-05 - Terraform 영역 리소스 Ticket 3
+
+- Goal: `docs/jh/001_테라폼영역리소스동기화티켓계획_JH.md`의 Ticket 3 범위에 맞춰 `aws_autoscaling_group`을 Terraform resource identity를 유지한 visual area node로 동작하게 한다.
+- Completed:
+  - `aws_autoscaling_group`을 Web diagram editor의 resource area node type에 추가했다.
+  - ASG catalog 기본 크기를 일반 아이콘 `124x96`에서 area 크기 `200x130`으로 바꿨다.
+  - ASG resize bounds를 area node처럼 무제한 max와 `200x130` minimum으로 맞췄다.
+  - ASG 안에 child를 드롭하면 child `metadata.parentAreaNodeId`가 ASG id로 저장되고, ASG 이동 시 child도 같은 delta로 이동하는 회귀 테스트를 추가했다.
+  - ASG가 area endpoint인 edge가 ASG area background 위에 보이도록 flow edge z-index 계산을 보정했다.
+  - `docs/data-models.md`에 ASG가 Terraform resource이면서 Web visual area node로 동작한다는 계약을 추가했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits.
+  - Red before fix: `pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/area-nodes.test.ts features/diagram-editor/node-resize-bounds.test.ts features/resource-settings/catalog.test.ts features/diagram-editor/flow-mappers.test.ts features/diagram-editor/area-node-movement.test.ts features/diagram-editor/diagram-utils.test.ts` failed because ASG was not an area node and still used regular icon resize/catalog sizing.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/area-nodes.test.ts features/diagram-editor/node-resize-bounds.test.ts features/resource-settings/catalog.test.ts features/diagram-editor/flow-mappers.test.ts features/diagram-editor/area-node-movement.test.ts features/diagram-editor/diagram-utils.test.ts features/diagram-editor/drag-transaction.test.ts` - passed.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/reference-drop-targets.test.ts` - passed.
+  - `pnpm --filter @sketchcatch/web typecheck` - passed.
+  - `pnpm --filter @sketchcatch/web lint` - passed.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `pnpm build` - passed.
+  - `pnpm harness:check` - passed after build.
+  - `git diff --check` - passed before progress log update.
+- Known risks:
+  - `aws_autoscaling_group` Terraform Preview capability expansion is still Ticket 4 scope. This Ticket 3 change does not remove the shared Terraform definition or change backend Preview/Sync capability.
+  - `next build` changed `apps/web/next-env.d.ts`; the generated import was restored before finishing.
+  - 커밋은 사용자 요청에 따라 만들지 않았다.
+
 ### 2026-07-05 - Terraform 영역 리소스 Ticket 2 리뷰 보강
 
 - Goal: Ticket 2 리뷰 피드백에 따라 Region/AZ parameter reader가 legacy 또는 깨진 Diagram node에서 `parameters.values` 누락/null을 안전하게 처리하게 한다.
