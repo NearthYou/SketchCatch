@@ -47,6 +47,7 @@ type TerraformErrorExplanationSummaryPayload = {
   readonly summary: string;
   readonly likelyCause: string;
   readonly nextActions: readonly string[];
+  readonly diagnosticExplanation: AiTerraformErrorExplanationResult["diagnosticExplanation"] | null;
   readonly relatedResourceId: string | null;
   readonly terraformCodeContext: string | null;
 };
@@ -163,6 +164,7 @@ function createTerraformErrorExplanationSummaryPayload(
     summary: result.summary,
     likelyCause: result.likelyCause,
     nextActions: result.nextActions,
+    diagnosticExplanation: result.diagnosticExplanation ?? null,
     relatedResourceId: result.relatedResourceId ?? null,
     terraformCodeContext: input.terraformCodeContext?.trim() ? input.terraformCodeContext : null
   };

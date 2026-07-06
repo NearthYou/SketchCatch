@@ -1,16 +1,19 @@
 import type {
   AiTerraformErrorCategory,
+  AiTerraformDiagnosticExplanation,
   AiTerraformErrorExplanationResult,
   AiTerraformSafeFix,
-  AiWellArchitectedGuidance,
   AiTerraformStage,
-  RiskLevel
+  RiskLevel,
+  TerraformDiagnostic
 } from "@sketchcatch/types";
 
 export type TerraformErrorExplanationInput = {
   readonly stage: AiTerraformStage;
   readonly rawMessage: string;
+  readonly diagnostic?: TerraformDiagnostic | undefined;
   readonly relatedResourceId?: string | undefined;
+  readonly terraformCodeContext?: string | undefined;
 };
 
 // Terraform 원본 오류를 사용자가 이해하기 쉬운 원인과 다음 행동으로 바꿉니다.
@@ -19,6 +22,13 @@ export function explainTerraformError(
 ): AiTerraformErrorExplanationResult {
   const explanation = classifyTerraformError(input.rawMessage);
   const safeFix = createTerraformSafeFix(input.rawMessage);
+  const diagnosticExplanation = createDiagnosticExplanation({
+    diagnostic: input.diagnostic,
+    explanation,
+    rawMessage: input.rawMessage,
+    safeFix,
+    terraformCodeContext: input.terraformCodeContext
+  });
 
   return {
     stage: input.stage,
@@ -29,9 +39,10 @@ export function explainTerraformError(
     summary: explanation.summary,
     likelyCause: explanation.likelyCause,
     nextActions: [...explanation.nextActions],
-    wellArchitectedGuidance: createWellArchitectedGuidance(explanation, safeFix),
+    wellArchitectedGuidance: [],
     consensusRecommendation: createConsensusRecommendation(explanation, safeFix),
-    safeFix
+    safeFix,
+    diagnosticExplanation
   };
 }
 
@@ -141,6 +152,164 @@ const UNKNOWN_TERRAFORM_ERROR_TEMPLATE: TerraformErrorExplanationTemplate = {
   nextActions: ["원본 오류 메시지를 확인하고 권한, region, quota, 문법 문제를 차례대로 점검하세요."]
 };
 
+type DiagnosticExplanationInput = {
+  readonly diagnostic?: TerraformDiagnostic | undefined;
+  readonly explanation: TerraformErrorExplanationTemplate;
+  readonly rawMessage: string;
+  readonly safeFix: AiTerraformSafeFix;
+  readonly terraformCodeContext?: string | undefined;
+};
+
+function createDiagnosticExplanation({
+  diagnostic,
+  explanation,
+  rawMessage,
+  safeFix,
+  terraformCodeContext
+}: DiagnosticExplanationInput): AiTerraformDiagnosticExplanation {
+  const errorType = diagnostic?.code ?? safeFix.code ?? extractDiagnosticCode(rawMessage);
+  const line = diagnostic?.line;
+  const sourceFileName = diagnostic?.sourceFileName ?? "main.tf";
+  const codeFrame =
+    terraformCodeContext && line !== undefined ? createCodeFrame(terraformCodeContext, line) : [];
+  const ruleSuggestion =
+    terraformCodeContext && line !== undefined
+      ? createRuleCodeSuggestion(terraformCodeContext, line, errorType)
+      : undefined;
+  const plainExplanation = createPlainDiagnosticExplanation(errorType, explanation.summary);
+  const fixExplanation = createFixExplanation(errorType, safeFix);
+
+  return {
+    errorType,
+    plainExplanation,
+    fixExplanation,
+    codeFrame,
+    canApply: ruleSuggestion !== undefined,
+    ...(ruleSuggestion === undefined ? {} : { codeSuggestion: ruleSuggestion }),
+    ...(line === undefined ? {} : { line }),
+    ...(sourceFileName === undefined ? {} : { sourceFileName })
+  };
+}
+
+function createPlainDiagnosticExplanation(errorType: string, fallback: string): string {
+  switch (errorType) {
+    case "terraform.trailing_comma":
+      return "Terraform attribute assignment line ends with a comma, but HCL attributes do not use trailing commas.";
+    case "terraform.quoted_reference":
+      return "A Terraform reference is wrapped in quotes, so Terraform reads it as plain text instead of an expression.";
+    case "terraform.unexpected_token":
+      return "Terraform code appears after a block has already been closed, so the parser sees unexpected code outside the expected structure.";
+    case "terraform.attribute_empty":
+      return "An attribute assignment is missing the value after the equals sign.";
+    case "terraform.attribute_syntax":
+      return "A resource body line does not match the expected attribute = value or nested_block { syntax.";
+    case "terraform.nested_block_assignment":
+      return "This field should be written as a nested block, not as a top-level attribute assignment.";
+    case "terraform.block_header":
+      return "The Terraform block header does not match resource/data \"type\" \"name\" { syntax.";
+    case "terraform.unbalanced":
+      return "A quote, brace, bracket, or parenthesis is not balanced.";
+    case "terraform.undefined_reference":
+      return "The code references a local Terraform resource that is not declared in the current Terraform files.";
+    case "terraform.duplicate_address":
+      return "Two Terraform blocks use the same address, so Terraform cannot distinguish them.";
+    default:
+      return fallback;
+  }
+}
+
+function createFixExplanation(errorType: string, safeFix: AiTerraformSafeFix): string {
+  switch (errorType) {
+    case "terraform.trailing_comma":
+      return "Remove the comma at the end of the highlighted attribute line, then run Terraform validation again.";
+    case "terraform.quoted_reference":
+      return "Remove the surrounding quotes so the reference is evaluated as a Terraform expression.";
+    case "terraform.unexpected_token":
+      return "Move the extra attribute or block back inside the correct resource block, or remove it if it was pasted after the closing brace.";
+    case "terraform.attribute_empty":
+      return "Add a value after the equals sign, or remove the incomplete attribute line.";
+    case "terraform.attribute_syntax":
+      return "Rewrite the line as attribute = value, or use nested_block { ... } when the provider expects a block.";
+    case "terraform.nested_block_assignment":
+      return "Convert the assignment into the nested block shape expected by the resource.";
+    case "terraform.block_header":
+      return "Rewrite the header as resource/data \"terraform_type\" \"local_name\" {.";
+    case "terraform.unbalanced":
+      return "Close the missing quote or matching delimiter near the highlighted line.";
+    case "terraform.undefined_reference":
+      return "Declare the referenced resource, correct the reference name, or choose an existing Terraform address.";
+    case "terraform.duplicate_address":
+      return "Rename one of the duplicate Terraform local names so each block address is unique.";
+    default:
+      return safeFix.applicable
+        ? safeFix.description
+        : "Review the highlighted Terraform code and update it manually before validating again.";
+  }
+}
+
+function createCodeFrame(terraformCode: string, lineNumber: number): AiTerraformDiagnosticExplanation["codeFrame"] {
+  const lines = terraformCode.split(/\r?\n/);
+  const startLine = Math.max(1, lineNumber - 2);
+  const endLine = Math.min(lines.length, lineNumber + 2);
+
+  return Array.from({ length: endLine - startLine + 1 }, (_, offset) => {
+    const currentLineNumber = startLine + offset;
+
+    return {
+      lineNumber: currentLineNumber,
+      text: lines[currentLineNumber - 1] ?? "",
+      isErrorLine: currentLineNumber === lineNumber
+    };
+  });
+}
+
+function createRuleCodeSuggestion(
+  terraformCode: string,
+  lineNumber: number,
+  errorType: string
+): AiTerraformDiagnosticExplanation["codeSuggestion"] | undefined {
+  const currentCode = terraformCode.split(/\r?\n/)[lineNumber - 1];
+
+  if (currentCode === undefined) {
+    return undefined;
+  }
+
+  if (errorType === "terraform.trailing_comma") {
+    const suggestedCode = currentCode.replace(/,\s*$/, "");
+
+    if (suggestedCode !== currentCode) {
+      return {
+        currentCode,
+        suggestedCode,
+        rationale: "The highlighted Terraform attribute can be fixed deterministically by removing the trailing comma.",
+        source: "rule"
+      };
+    }
+  }
+
+  if (errorType === "terraform.quoted_reference") {
+    const suggestedCode = currentCode.replace(
+      /(=\s*)"((?:data\.)?[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)+)"/,
+      "$1$2"
+    );
+
+    if (suggestedCode !== currentCode) {
+      return {
+        currentCode,
+        suggestedCode,
+        rationale: "The quoted Terraform reference can be fixed deterministically by removing the surrounding quotes.",
+        source: "rule"
+      };
+    }
+  }
+
+  return undefined;
+}
+
+function extractDiagnosticCode(rawMessage: string): string {
+  return rawMessage.match(/terraform\.[a-z0-9_.-]+/i)?.[0] ?? "terraform.unknown";
+}
+
 // 원본 오류 문장에 포함된 단어를 보고 가장 가까운 설명 템플릿을 고릅니다.
 function classifyTerraformError(rawMessage: string): TerraformErrorExplanationTemplate {
   const normalizedMessage = rawMessage.toLowerCase();
@@ -181,56 +350,6 @@ function createTerraformSafeFix(rawMessage: string): AiTerraformSafeFix {
     label: "수동 수정 필요",
     description: "이 Terraform 진단은 의미 판단이 필요해 자동 적용하지 않습니다."
   };
-}
-
-function createWellArchitectedGuidance(
-  explanation: TerraformErrorExplanationTemplate,
-  safeFix: AiTerraformSafeFix
-): AiWellArchitectedGuidance[] {
-  const fixRecommendation = safeFix.applicable
-    ? `${safeFix.label}를 사용자 승인 후 적용하고 재검증합니다.`
-    : "AI 가이드를 참고해 사용자가 Terraform 코드를 직접 수정한 뒤 재검증합니다.";
-
-  return [
-    {
-      pillar: "operational_excellence",
-      title: "운영 우수성",
-      observation: "검증 오류를 Issues 탭에서 추적하면 수정 전까지 작업 상태를 잃지 않습니다.",
-      recommendation: fixRecommendation
-    },
-    {
-      pillar: "security",
-      title: "보안",
-      observation: explanation.category === "credential" || explanation.category === "permission"
-        ? "권한 또는 인증 오류는 민감 정보 노출 없이 원인만 확인해야 합니다."
-        : "Terraform 원문과 오류 메시지에는 credential 값을 포함하지 않아야 합니다.",
-      recommendation: "오류 메시지를 공유하거나 AI에 보낼 때 secret 원문을 마스킹한 상태를 유지합니다."
-    },
-    {
-      pillar: "reliability",
-      title: "신뢰성",
-      observation: "오류가 해결되기 전까지 진단을 유지해야 배포 전 검증 흐름이 흔들리지 않습니다.",
-      recommendation: "수정 후 Terraform validate 또는 SketchCatch 검증을 다시 실행해 같은 진단이 사라졌는지 확인합니다."
-    },
-    {
-      pillar: "performance_efficiency",
-      title: "성능 효율성",
-      observation: "문법/참조 오류는 실제 plan/apply 전에 빠르게 차단할 수 있는 저비용 문제입니다.",
-      recommendation: "로컬 정적 검증 단계에서 먼저 해결하고 무거운 Terraform 실행은 통과 후 진행합니다."
-    },
-    {
-      pillar: "cost_optimization",
-      title: "비용 최적화",
-      observation: "검증 오류를 plan/apply 전에 해결하면 실패한 배포 재시도와 불필요한 실행 시간을 줄입니다.",
-      recommendation: "자동 적용 가능한 오류만 즉시 수정하고, 의미 판단이 필요한 변경은 수동 검토로 비용 리스크를 낮춥니다."
-    },
-    {
-      pillar: "sustainability",
-      title: "지속 가능성",
-      observation: "불필요한 재실행과 실패한 배포 시도를 줄이면 컴퓨팅 낭비를 줄일 수 있습니다.",
-      recommendation: "작은 deterministic fix부터 적용하고 재검증 결과로 다음 행동을 결정합니다."
-    }
-  ];
 }
 
 function createConsensusRecommendation(

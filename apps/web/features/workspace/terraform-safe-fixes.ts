@@ -20,6 +20,7 @@ export type TerraformSafeFixResult =
 export type TerraformCodeReplacementPreview = {
   readonly currentCode: string;
   readonly nextCode: string;
+  readonly source?: "safe_fix" | "amazon_q" | undefined;
 };
 
 export function getTerraformSafeFix(diagnostic: TerraformDiagnostic): AiTerraformSafeFix {

@@ -2,20 +2,32 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { explainTerraformError } from "./aiTerraformErrorExplanation.js";
 
-test("explainTerraformError includes Well-Architected guidance and safe fix metadata", () => {
+test("explainTerraformError includes diagnostic explanation and safe fix metadata", () => {
   const result = explainTerraformError({
+    diagnostic: {
+      code: "terraform.trailing_comma",
+      line: 2,
+      message: "Trailing comma is not valid Terraform syntax",
+      severity: "error",
+      sourceFileName: "main.tf"
+    },
     rawMessage: "terraform.trailing_comma\nTrailing comma is not valid Terraform syntax",
-    stage: "validate"
+    stage: "validate",
+    terraformCodeContext: 'resource "aws_s3_bucket" "logs" {\n  bucket = "logs",\n}'
   });
 
-  assert.equal(result.wellArchitectedGuidance.length, 6);
-  assert.deepEqual(
-    result.wellArchitectedGuidance.map((guidance) => guidance.pillar),
-    ["operational_excellence", "security", "reliability", "performance_efficiency", "cost_optimization", "sustainability"]
-  );
+  assert.equal(result.wellArchitectedGuidance.length, 0);
   assert.match(result.consensusRecommendation, /Terraform/);
   assert.equal(result.safeFix?.applicable, true);
   assert.equal(result.safeFix?.code, "terraform.trailing_comma");
+  assert.equal(result.diagnosticExplanation?.sourceFileName, "main.tf");
+  assert.equal(result.diagnosticExplanation?.line, 2);
+  assert.equal(result.diagnosticExplanation?.errorType, "terraform.trailing_comma");
+  assert.equal(result.diagnosticExplanation?.canApply, true);
+  assert.equal(result.diagnosticExplanation?.codeSuggestion?.source, "rule");
+  assert.equal(result.diagnosticExplanation?.codeSuggestion?.currentCode, '  bucket = "logs",');
+  assert.equal(result.diagnosticExplanation?.codeSuggestion?.suggestedCode, '  bucket = "logs"');
+  assert.deepEqual(result.diagnosticExplanation?.codeFrame.map((line) => line.lineNumber), [1, 2, 3]);
 });
 
 test("explainTerraformError disables safe fixes for semantic diagnostics", () => {

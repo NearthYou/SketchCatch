@@ -60,6 +60,7 @@ export function validateLlmExplanation(value: LlmExplanation | null, fallback: L
   const nextActions = validateTextItems(parsed.data.nextActions, fallback.nextActions);
   const codeSuggestion = validateCodeSuggestion(parsed.data.codeSuggestion ?? undefined);
   const wellArchitectedConclusion = validateOptionalLongText(parsed.data.wellArchitectedConclusion ?? undefined);
+  const includeWellArchitectedConclusion = parsed.data.target !== "terraform_error_explanation";
   const fallbackUsed = summary.fallbackUsed || highlights.fallbackUsed || nextActions.fallbackUsed;
 
   if (!fallbackUsed) {
@@ -70,7 +71,9 @@ export function validateLlmExplanation(value: LlmExplanation | null, fallback: L
       nextActions: nextActions.value,
       fallbackUsed: false,
       ...(codeSuggestion === undefined ? {} : { codeSuggestion }),
-      ...(wellArchitectedConclusion === undefined ? {} : { wellArchitectedConclusion })
+      ...(!includeWellArchitectedConclusion || wellArchitectedConclusion === undefined
+        ? {}
+        : { wellArchitectedConclusion })
     };
   }
 

@@ -47,6 +47,7 @@ import type {
   RecentSuccessfulDeploymentProject,
   RecentSuccessfulDeploymentProjectListResponse,
   SaveProjectDraftRequest,
+  TerraformDiagnostic,
   TerraformOutput,
   TerraformOutputListResponse,
   TestAwsConnectionRequest,
@@ -68,6 +69,7 @@ const AI_API_BASE_URL = (
 ).replace(/\/+$/, "");
 
 type AiTerraformErrorExplanationRequest = {
+  readonly diagnostic?: TerraformDiagnostic | undefined;
   readonly stage: AiTerraformStage;
   readonly rawMessage: string;
   readonly relatedResourceId?: string | undefined;
@@ -319,6 +321,7 @@ export async function runAiTerraformErrorExplanation(
   input: AiTerraformErrorExplanationRequest
 ): Promise<AiTerraformErrorExplanationResult> {
   return postPublicAiJson<AiTerraformErrorExplanationResult>("/ai/terraform-error-explanation", {
+    diagnostic: input.diagnostic,
     rawMessage: input.rawMessage,
     relatedResourceId: input.relatedResourceId,
     stage: input.stage,

@@ -373,7 +373,8 @@ test("terraform errors surface as an issues banner and AI resolution lives in th
   assert.match(componentSource, /<TerraformIssuesPanel issues=\{terraformIssues\}/);
   assert.match(aiChatDockSource, /runAiTerraformErrorExplanation/);
   assert.match(aiChatDockSource, /terraform_issue/);
-  assert.match(aiChatDockSource, /selectTerraformIssueWellArchitectedConclusion/);
+  assert.doesNotMatch(aiChatDockSource, /selectTerraformIssueWellArchitectedConclusion/);
+  assert.doesNotMatch(aiChatDockSource, /Well-Architected/);
   assert.match(aiChatDockSource, /onApplyTerraformIssueFix/);
   assert.match(issueBannerRule, /\bbackground:\s*#fff7ed;/);
   assert.match(aiButtonRule, /\bbackground:\s*var\(--bp-blue\);/);
@@ -387,11 +388,16 @@ test("terraform issue AI resolution shows a fix plan before apply", () => {
   assert.match(aiChatDockSource, /fixPlan\.canApply/);
   assert.match(aiChatDockSource, /fixPlan\.providerNotice/);
   assert.match(aiChatDockSource, /terraformIssueFixPlanNotice/);
+  assert.match(aiChatDockSource, /fixPlan\.codeFrame/);
+  assert.match(aiChatDockSource, /fixPlan\.plainExplanation/);
+  assert.match(aiChatDockSource, /fixPlan\.fixExplanation/);
+  assert.match(aiChatDockSource, /terraformIssueCodeFrame/);
   assert.match(aiChatDockSource, /fixPlan\.codePreview/);
   assert.match(aiChatDockSource, /현재 코드/);
   assert.match(aiChatDockSource, /수정할 코드/);
   assert.match(aiChatDockSource, /수정 중/);
   assert.match(componentSource, /getCurrentTerraformCode/);
+  assert.match(terraformPanelSource, /codePreview\.source === "safe_fix"/);
 });
 
 test("terraform issue AI resolution can close the chat dock without trapping the issue card", () => {

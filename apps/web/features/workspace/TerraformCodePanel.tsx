@@ -611,7 +611,7 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
     }
 
     const fixResult =
-      codePreview === undefined
+      codePreview === undefined || codePreview.source === "safe_fix"
         ? applyTerraformSafeFix({
             code: targetFile.code,
             diagnostic

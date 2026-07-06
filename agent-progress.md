@@ -1,5 +1,33 @@
 # 에이전트 진행 로그
 
+### 2026-07-06 - Terraform 오류 해결 Rule-first 전환
+
+- Goal: Terraform 코드 오류 해결 화면에서 Well-Architected 판단을 제거하고, 오류 위치와 코드 프레임, 오류 설명, 수정 방법, 적용 가능 여부를 rule-first 흐름으로 보여준다.
+- Completed:
+  - `AiTerraformDiagnosticExplanation`, 코드 프레임, rule/Amazon Q 코드 제안 metadata를 공유 타입과 API 응답에 추가했다.
+  - Terraform 오류 설명 API가 `diagnostic`과 `terraformCodeContext`를 받아 오류 줄, 오류 유형, 사용자용 설명, 수정 설명, deterministic code suggestion을 구성하도록 했다.
+  - `terraform.trailing_comma`, `terraform.quoted_reference`는 rule 기반 적용 후보로 만들고, 그 외 진단은 수동 수정 필요 상태로 유지했다.
+  - Amazon Q 프롬프트와 응답 검증에서 Terraform syntax/validation 오류의 Well-Architected guidance와 conclusion을 제외하고, Q는 fallback/설명 보강/정확히 매칭되는 코드 제안에만 쓰도록 했다.
+  - AI chat dock의 Terraform issue card가 오류 위치, 현재 코드 프레임, 오류 해석, 수정 방법, 현재/수정 코드 비교, 적용 버튼을 보여주도록 바꿨다.
+  - rule suggestion은 진단 줄의 현재 코드와 정확히 매칭될 때만 적용 가능하게 하고, `safe_fix` preview 적용은 snippet replacement가 아니라 줄 번호 기반 deterministic fixer를 타도록 보강했다.
+  - `docs/data-models.md`에 Terraform 오류 설명 DTO의 책임을 `진단 -> 코드 위치 -> 수정 방법 -> 적용 가능 여부`로 갱신했다.
+- Verification run:
+  - `npm exec --package=pnpm@11.8.0 -- pnpm harness:check` - passed before edits and after edits.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/types typecheck` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api typecheck` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web typecheck` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api exec tsx --test src/services/aiTerraformErrorExplanation.test.ts src/services/aiProviderRouter.test.ts` - passed, 15 tests.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-terraform-ai.test.ts features/workspace/terraform-safe-fixes.test.ts features/workspace/workspace-right-panel-layout.test.ts` - passed, 54 tests.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm lint` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm typecheck` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm build` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm test` - passed.
+  - `git diff --check` - passed.
+- Known risks:
+  - 실제 Amazon Q 호출은 하지 않았고 provider는 테스트 double로 검증했다.
+  - 실제 Terraform apply/destroy 또는 cloud mutation은 수행하지 않았다.
+  - `pnpm` 직접 실행은 로컬 PATH에서 찾지 못해 `npm exec --package=pnpm@11.8.0 -- pnpm ...` 경로로 검증했다.
+
 ### 2026-07-06 - Issue #161 Amazon Q Terraform 수정 계획 고도화
 
 - Goal: Terraform 이슈 AI 해결 창에서 현재 Terraform 코드와 Amazon Q가 제안한 수정 코드를 함께 보여주고, Well-Architected 6개 기준 평가를 종합한 결론을 기준으로 사용자가 수정 버튼을 누를 수 있게 한다.

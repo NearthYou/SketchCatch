@@ -2271,6 +2271,36 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.terraformIssueCodeFrame {
+  background: #ffffff;
+  border: 1px solid #d7e3f3;
+  border-radius: 6px;
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 8px;
+}
+
+.terraformIssueCodeFrame strong {
+  color: #172033;
+  font-size: 11px;
+  font-weight: 950;
+}
+
+.terraformIssueCodeFrame pre {
+  background: #0f172a;
+  border-radius: 4px;
+  color: #e2e8f0;
+  font-family: var(--font-geist-mono), ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  margin: 0;
+  min-width: 0;
+  overflow-x: auto;
+  padding: 8px;
+  white-space: pre;
+}
+
 .terraformIssueCodePreview section {
   background: #ffffff;
   border: 1px solid #d7e3f3;

@@ -259,7 +259,7 @@ test("createAiProviderBackedLlmExplanation uses Amazon Q first for Terraform err
   assert.equal(bedrockCalls.length, 0);
 });
 
-test("createAiProviderBackedLlmExplanation preserves Amazon Q code suggestions and synthesized Well-Architected conclusions", async () => {
+test("createAiProviderBackedLlmExplanation preserves Amazon Q code suggestions without Well-Architected guidance", async () => {
   const qCalls: unknown[] = [];
   const bedrockCalls: unknown[] = [];
   const qExplanation: LlmExplanation = {
@@ -273,8 +273,7 @@ test("createAiProviderBackedLlmExplanation preserves Amazon Q code suggestions a
       suggestedCode: '  bucket = "logs"',
       rationale: "Removing the comma resolves the syntax error."
     },
-    wellArchitectedConclusion:
-      "Across the six criteria, the best path is a minimal syntax replacement followed by validation."
+    wellArchitectedConclusion: "This Terraform syntax fix does not need a Well-Architected review."
   };
   const createLlmExplanation = createAiProviderBackedLlmExplanation({
     amazonQProvider: createProvider("amazon_q", qExplanation, qCalls),
@@ -297,10 +296,11 @@ test("createAiProviderBackedLlmExplanation preserves Amazon Q code suggestions a
 
   assert.equal(result.providerMetadata?.provider, "amazon_q");
   assert.equal(result.codeSuggestion?.suggestedCode, '  bucket = "logs"');
-  assert.match(result.wellArchitectedConclusion ?? "", /best path/);
+  assert.equal(result.wellArchitectedConclusion, undefined);
   assert.equal(qCalls.length, 1);
   assert.equal(bedrockCalls.length, 0);
-  assert.match(String((qCalls[0] as { prompt?: unknown }).prompt), /six criteria/);
+  assert.doesNotMatch(String((qCalls[0] as { prompt?: unknown }).prompt), /six criteria/);
+  assert.match(String((qCalls[0] as { prompt?: unknown }).prompt), /Do not provide Well-Architected guidance/);
   assert.match(String((qCalls[0] as { prompt?: unknown }).prompt), /terraformCodeContext/);
 });
 

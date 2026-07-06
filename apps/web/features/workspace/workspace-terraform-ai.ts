@@ -1,4 +1,8 @@
-import type { AiTerraformErrorExplanationResult, TerraformDiagnostic } from "@sketchcatch/types";
+import type {
+  AiTerraformCodeFrameLine,
+  AiTerraformErrorExplanationResult,
+  TerraformDiagnostic
+} from "@sketchcatch/types";
 import type { TerraformIssueRecord } from "./terraform-issues-state";
 import { applyTerraformSafeFix, getTerraformSafeFix } from "./terraform-safe-fixes";
 
@@ -23,6 +27,11 @@ export type TerraformSafeFixApplyResult = {
 export type TerraformIssueFixPlan = {
   readonly canApply: boolean;
   readonly codePreview?: TerraformIssueCodePreview | undefined;
+  readonly codeFrame: readonly AiTerraformCodeFrameLine[];
+  readonly errorType: string;
+  readonly fixExplanation: string;
+  readonly location: string;
+  readonly plainExplanation: string;
   readonly providerLabel: string;
   readonly providerNotice?: string | undefined;
   readonly summary: string;
@@ -39,7 +48,7 @@ export type TerraformIssueCodePreview = {
 export function createTerraformIssueChatSummary(
   explanation: AiTerraformErrorExplanationResult
 ): string {
-  return `Amazon Q Assistance: ${selectTerraformIssueSummary(explanation)}`;
+  return `Terraform 진단: ${selectTerraformIssueSummary(explanation)}`;
 }
 
 export function createTerraformIssueFixPlan({
@@ -53,7 +62,8 @@ export function createTerraformIssueFixPlan({
 }): TerraformIssueFixPlan {
   const safeFix = getTerraformSafeFix(diagnostic);
   const location = formatTerraformDiagnosticLocation(diagnostic);
-  const providerLabel = "Amazon Q Assistance";
+  const diagnosticExplanation = explanation.diagnosticExplanation;
+  const providerLabel = "Rule-first diagnosis";
   const codePreview = createTerraformIssueCodePreview({
     diagnostic,
     explanation,
@@ -64,6 +74,16 @@ export function createTerraformIssueFixPlan({
   return {
     canApply: codePreview !== undefined,
     codePreview,
+    codeFrame: diagnosticExplanation?.codeFrame ?? [],
+    errorType: diagnosticExplanation?.errorType ?? diagnostic.code ?? "terraform.unknown",
+    fixExplanation:
+      diagnosticExplanation?.fixExplanation ??
+      (safeFix.applicable ? safeFix.description : explanation.consensusRecommendation),
+    location,
+    plainExplanation:
+      diagnosticExplanation?.plainExplanation ??
+      explanation.llmExplanation?.summary ??
+      explanation.summary,
     providerLabel,
     providerNotice: createTerraformIssueProviderNotice(explanation),
     summary: createTerraformIssueChatSummary(explanation),
@@ -94,14 +114,47 @@ function createTerraformIssueCodePreview({
   readonly safeFixApplicable: boolean;
   readonly terraformCode: string;
 }): TerraformIssueCodePreview | undefined {
-  const amazonQPreview = createAmazonQTerraformIssueCodePreview({
+  const rulePreview = createRuleTerraformIssueCodePreview({
     diagnostic,
     explanation,
+    safeFixApplicable,
     terraformCode
   });
 
-  if (amazonQPreview !== undefined) {
-    return amazonQPreview;
+  return (
+    rulePreview ??
+    createAmazonQTerraformIssueCodePreview({
+      diagnostic,
+      explanation,
+      terraformCode
+    })
+  );
+}
+
+function createRuleTerraformIssueCodePreview({
+  diagnostic,
+  explanation,
+  safeFixApplicable,
+  terraformCode
+}: {
+  readonly diagnostic: TerraformDiagnostic;
+  readonly explanation: AiTerraformErrorExplanationResult;
+  readonly safeFixApplicable: boolean;
+  readonly terraformCode: string;
+}): TerraformIssueCodePreview | undefined {
+  const diagnosticSuggestion = explanation.diagnosticExplanation?.codeSuggestion;
+  const suggestionLine = explanation.diagnosticExplanation?.line ?? diagnostic.line ?? 1;
+
+  if (
+    diagnosticSuggestion?.source === "rule" &&
+    extractTerraformLine(terraformCode, suggestionLine) === diagnosticSuggestion.currentCode
+  ) {
+    return {
+      currentCode: diagnosticSuggestion.currentCode,
+      nextCode: diagnosticSuggestion.suggestedCode,
+      sourceLine: suggestionLine,
+      source: "safe_fix"
+    };
   }
 
   if (!safeFixApplicable || terraformCode.trim().length === 0 || diagnostic.line === undefined) {
@@ -185,12 +238,6 @@ function selectTerraformIssueSummary(explanation: AiTerraformErrorExplanationRes
     candidates.find((candidate) => candidate !== undefined && !includesInternalFallbackWording(candidate)) ??
     "Terraform 진단을 바탕으로 수정 위치와 적용 가능 여부를 검토했습니다."
   );
-}
-
-export function selectTerraformIssueWellArchitectedConclusion(
-  explanation: AiTerraformErrorExplanationResult
-): string {
-  return explanation.llmExplanation?.wellArchitectedConclusion ?? explanation.consensusRecommendation;
 }
 
 function includesInternalFallbackWording(value: string): boolean {

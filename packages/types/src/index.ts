@@ -1135,6 +1135,32 @@ export type AiTerraformSafeFix = {
   description: string;
 };
 
+export type AiTerraformCodeFrameLine = {
+  lineNumber: number;
+  text: string;
+  isErrorLine: boolean;
+};
+
+export type AiTerraformCodeSuggestionSource = "rule" | "amazon_q";
+
+export type AiTerraformCodeSuggestion = {
+  currentCode: string;
+  suggestedCode: string;
+  rationale: string;
+  source: AiTerraformCodeSuggestionSource;
+};
+
+export type AiTerraformDiagnosticExplanation = {
+  errorType: string;
+  plainExplanation: string;
+  fixExplanation: string;
+  codeFrame: AiTerraformCodeFrameLine[];
+  canApply: boolean;
+  codeSuggestion?: AiTerraformCodeSuggestion | undefined;
+  line?: number | undefined;
+  sourceFileName?: string | undefined;
+};
+
 export type AiTerraformErrorExplanationResult = {
   stage: AiTerraformStage;
   category: AiTerraformErrorCategory;
@@ -1146,6 +1172,7 @@ export type AiTerraformErrorExplanationResult = {
   wellArchitectedGuidance: AiWellArchitectedGuidance[];
   consensusRecommendation: string;
   safeFix?: AiTerraformSafeFix | undefined;
+  diagnosticExplanation?: AiTerraformDiagnosticExplanation | undefined;
   relatedResourceId?: string | undefined;
   llmExplanation?: LlmExplanation | undefined;
 };

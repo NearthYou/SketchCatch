@@ -22,7 +22,7 @@ const trailingCommaDiagnostic: TerraformDiagnostic = {
   sourceFileName: "main.tf"
 };
 
-test("createTerraformIssueChatSummary shows Amazon Q instead of deterministic fallback wording", () => {
+test("createTerraformIssueChatSummary shows Terraform diagnosis instead of deterministic fallback wording", () => {
   const explanation = createExplanation({
     summary: "Terraform 오류를 기본 fallback 설명으로 분류했습니다.",
     llmSummary: "닫힌 block 뒤의 Terraform 코드를 확인해야 합니다."
@@ -30,11 +30,11 @@ test("createTerraformIssueChatSummary shows Amazon Q instead of deterministic fa
 
   assert.equal(
     createTerraformIssueChatSummary(explanation),
-    "Amazon Q Assistance: 닫힌 block 뒤의 Terraform 코드를 확인해야 합니다."
+    "Terraform 진단: 닫힌 block 뒤의 Terraform 코드를 확인해야 합니다."
   );
 });
 
-test("createTerraformIssueFixPlan labels Terraform issue plans as Amazon Q Assistance", () => {
+test("createTerraformIssueFixPlan labels Terraform issue plans as rule-first diagnosis", () => {
   const explanation = createExplanation({
     summary: "Terraform 오류를 기본 fallback 설명으로 분류했습니다.",
     llmSummary: "닫힌 block 뒤의 Terraform 코드를 확인해야 합니다."
@@ -45,7 +45,7 @@ test("createTerraformIssueFixPlan labels Terraform issue plans as Amazon Q Assis
     explanation
   });
 
-  assert.equal(fixPlan.providerLabel, "Amazon Q Assistance");
+  assert.equal(fixPlan.providerLabel, "Rule-first diagnosis");
   assert.doesNotMatch(fixPlan.summary, /fallback/);
 });
 
@@ -68,6 +68,39 @@ test("createTerraformIssueFixPlan shows current and next code before enabling fi
     sourceLine: 2,
     source: "safe_fix"
   });
+});
+
+test("createTerraformIssueFixPlan requires rule suggestions to match the diagnostic line", () => {
+  const explanation = {
+    ...createExplanation({
+      summary: "Terraform trailing comma瑜??섏젙?댁빞 ?⑸땲??",
+      llmSummary: "Trailing comma瑜??쒓굅?섎㈃ ?⑸땲??"
+    }),
+    diagnosticExplanation: {
+      errorType: "terraform.trailing_comma",
+      plainExplanation: "The highlighted line has a trailing comma.",
+      fixExplanation: "Remove the comma on the highlighted line.",
+      codeFrame: [],
+      canApply: true,
+      line: 2,
+      sourceFileName: "main.tf",
+      codeSuggestion: {
+        currentCode: '  bucket = "logs",',
+        suggestedCode: '  bucket = "logs"',
+        rationale: "Remove the trailing comma.",
+        source: "rule" as const
+      }
+    }
+  };
+
+  const fixPlan = createTerraformIssueFixPlan({
+    diagnostic: trailingCommaDiagnostic,
+    explanation,
+    terraformCode: 'resource "aws_s3_bucket" "logs" {\n  bucket = "logs"\n  bucket = "logs",\n}'
+  });
+
+  assert.equal(fixPlan.canApply, false);
+  assert.equal(fixPlan.codePreview, undefined);
 });
 
 test("createTerraformIssueFixPlan prefers Amazon Q suggested code when it matches current Terraform", () => {
@@ -134,7 +167,7 @@ test("createTerraformIssueFixPlan explains why Amazon Q used fallback", () => {
     }
   });
 
-  assert.equal(fixPlan.providerLabel, "Amazon Q Assistance");
+  assert.equal(fixPlan.providerLabel, "Rule-first diagnosis");
   assert.equal(fixPlan.providerNotice, "Amazon Q 호출 상태: AWS AI credit 확인 필요");
 });
 

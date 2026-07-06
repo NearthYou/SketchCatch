@@ -307,7 +307,7 @@ export function createAiProviderBackedLlmExplanation(
   const limits = options.limits ?? readAiProviderLimitsFromEnv();
 
   return async (input) => {
-    let primaryProviderFallback: LlmExplanation | null = null;
+    const primaryProviderFallback: LlmExplanation | null = null;
 
     if (input.target === "terraform_error_explanation") {
       if (options.amazonQProvider === undefined) {
@@ -582,12 +582,11 @@ function createProviderPrompt(target: LlmExplanationTarget, payload: unknown): s
   const terraformErrorInstructions =
     target === "terraform_error_explanation"
       ? [
-          "For Terraform errors, inspect terraformCodeContext when it is present.",
+          "For Terraform errors, inspect terraformCodeContext and diagnosticExplanation when they are present.",
+          "Explain the failing line, the Terraform error type, why it fails, and how the user should fix it.",
           "If you can identify a safe local replacement, include codeSuggestion with currentCode as an exact snippet from terraformCodeContext, suggestedCode as the replacement snippet, and rationale.",
           "If no exact local replacement is safe, omit codeSuggestion.",
-          "Evaluate the candidate fix separately against these six criteria: operational excellence, security, reliability, performance efficiency, cost optimization, and sustainability.",
-          "After the six-criteria evaluation, synthesize the tradeoffs and choose the best fix path.",
-          "Return only the synthesized best-path conclusion in wellArchitectedConclusion instead of returning six separate pillar cards."
+          "Do not provide Well-Architected guidance for Terraform syntax or validation errors."
         ]
       : [];
 
@@ -595,7 +594,7 @@ function createProviderPrompt(target: LlmExplanationTarget, payload: unknown): s
     "Return JSON only. Do not wrap the response in markdown.",
     "The JSON shape must be:",
     '{"target":"TARGET","summary":"short summary","highlights":["item"],"nextActions":["item"],"fallbackUsed":false,"codeSuggestion":null,"wellArchitectedConclusion":null}',
-    "For Terraform errors, codeSuggestion may be an object with currentCode, suggestedCode, and rationale. For other cases, keep it null.",
+    "For Terraform errors, codeSuggestion may be an object with currentCode, suggestedCode, and rationale, and wellArchitectedConclusion must stay null. For other cases, keep codeSuggestion null.",
     `TARGET must be "${target}".`,
     target === "architecture_patch_preview"
       ? "This is a preview only. Do not claim the Architecture Board changed."

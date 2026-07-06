@@ -52,7 +52,6 @@ import { formatTerraformDiagnosticTitle } from "./terraform-panel-utils";
 import {
   createTerraformIssueChatSummary,
   createTerraformIssueFixPlan,
-  selectTerraformIssueWellArchitectedConclusion,
   type TerraformIssueAiRequest,
   type TerraformIssueCodePreview,
   type TerraformSafeFixApplyResult
@@ -221,6 +220,7 @@ export function WorkspaceAiChatDock({
 
       try {
         const explanation = await runAiTerraformErrorExplanation({
+          diagnostic,
           rawMessage: formatTerraformIssueRawMessage(diagnostic),
           relatedResourceId: diagnostic.resourceAddress,
           stage: "validate",
@@ -977,6 +977,39 @@ function TerraformIssueExplanationCard({
         {fixPlan.providerNotice ? (
           <p className={styles.terraformIssueFixPlanNotice}>{fixPlan.providerNotice}</p>
         ) : null}
+        <dl className={styles.terraformIssueGuidanceList}>
+          <div>
+            <dt>오류 위치</dt>
+            <dd>{fixPlan.location}</dd>
+          </div>
+          <div>
+            <dt>오류 유형</dt>
+            <dd>{fixPlan.errorType}</dd>
+          </div>
+          <div>
+            <dt>어떤 오류인가</dt>
+            <dd>{fixPlan.plainExplanation}</dd>
+          </div>
+          <div>
+            <dt>어떻게 고칠까</dt>
+            <dd>{fixPlan.fixExplanation}</dd>
+          </div>
+        </dl>
+        {fixPlan.codeFrame.length > 0 ? (
+          <div className={styles.terraformIssueCodeFrame}>
+            <strong>오류 주변 코드</strong>
+            <pre>
+              <code>
+                {fixPlan.codeFrame
+                  .map((line) => {
+                    const marker = line.isErrorLine ? ">" : " ";
+                    return `${marker} ${String(line.lineNumber).padStart(3, " ")} | ${line.text}`;
+                  })
+                  .join("\n")}
+              </code>
+            </pre>
+          </div>
+        ) : null}
         {fixPlan.codePreview ? (
           <div className={styles.terraformIssueCodePreview}>
             <section>
@@ -1003,10 +1036,6 @@ function TerraformIssueExplanationCard({
         <div>
           <dt>원인</dt>
           <dd>{explanation.likelyCause}</dd>
-        </div>
-        <div>
-          <dt>Well-Architected 결론</dt>
-          <dd>{selectTerraformIssueWellArchitectedConclusion(explanation)}</dd>
         </div>
       </dl>
       <ul className={styles.terraformIssueActions}>
