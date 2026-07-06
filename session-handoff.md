@@ -2,6 +2,8 @@
 
 ## 현재 검증된 것
 
+- PR #178 review comments were fetched with the GitHub comment handler flow. Five unresolved actionable threads were all performance/API optimization comments around GitHub App client creation, private-key parsing, and duplicate target branch ref lookup.
+- Review fixes are applied on top of the latest `origin/feature/sw/deployment-github-runtime-cache`, which already includes the `dev` merge commit `eb2fa505`.
 - Settings page renders `SettingsIntegrationsClient`; the visible GitHub tab button has been removed so Settings exposes only the AWS tab.
 - Production Deploy workflow latest successful run still points at `15ce4684`; local commit `73c2460` with the AWS CloudFormation policy collision fix has not been pushed/deployed yet.
 - Workspace Direct Deployment only lists AWS connections with `status === "verified"`. If the AWS connection Stack failed, no verified connection is selectable and the deployment review button remains disabled.
@@ -14,6 +16,9 @@
 
 ## 이번 세션의 변경 사항
 
+- Cached the GitHub App private-key import promise inside `createGitHubAppClient`.
+- Added lazy `GitHubAppClient` reuse in source repository route runtime, GitHub Actions pipeline status provider, and GitHub App git provider.
+- Removed the duplicate target branch ref lookup before GitHub PR creation.
 - Removed the Settings GitHub tab button from `apps/web/app/settings/settings-integrations-client.tsx`.
 - Confirmed the current deployment blocker is not GitHub source repository selection. It is the missing verified AWS connection caused by the AWS connection Stack failure, plus the fact that the CloudFormation fix is still local and not deployed.
 - Changed GitHub App install URL generation from `/installations/new` to `/installations/select_target`.
@@ -33,6 +38,7 @@
 
 ## 다음으로 최선의 행동
 
+- Complete full checks, commit the PR review fix, and push directly to `dev` as explicitly requested by the user.
 - Run full checks, commit/push, deploy the branch, retest AWS connection Stack creation with a fresh/cleaned failed Stack, and confirm Workspace GitHub `Repo 변경` versus `다른 설치` behavior in Chrome.
 - After deployment, delete or clean the failed AWS CloudFormation Stack/retained `SketchCatchTerraformExecutionRole` or old `SketchCatchMvpTerraformApply` inline policy before creating a new verified AWS connection.
 # ?몄뀡 ?몃뱶?ㅽ봽

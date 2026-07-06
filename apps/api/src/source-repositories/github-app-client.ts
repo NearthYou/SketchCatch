@@ -115,9 +115,10 @@ type GitHubWorkflowRunApiResponse = {
 export function createGitHubAppClient(options: GitHubAppClientOptions): GitHubAppClient {
   const fetchImpl = options.fetch ?? fetch;
   const now = options.now ?? (() => new Date());
+  const keyPromise = importPKCS8(toPkcs8PrivateKey(options.privateKey), "RS256");
 
   async function createAppJwt(): Promise<string> {
-    const key = await importPKCS8(toPkcs8PrivateKey(options.privateKey), "RS256");
+    const key = await keyPromise;
     const issuedAt = Math.floor(now().getTime() / 1000) - 60;
 
     return new SignJWT({})
@@ -180,11 +181,6 @@ export function createGitHubAppClient(options: GitHubAppClientOptions): GitHubAp
     },
 
     async createPullRequest(input) {
-      await requestWithInstallationToken<GitHubRefResponse>(
-        input.installationId,
-        createRepositoryPath(input, `/git/ref/heads/${encodeURIComponent(input.targetBranch)}`)
-      );
-
       await assertTargetBranchDoesNotContainFiles(input, requestWithInstallationToken);
 
       const targetRef = await requestWithInstallationToken<GitHubRefResponse>(

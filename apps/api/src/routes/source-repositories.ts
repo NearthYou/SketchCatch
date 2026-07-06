@@ -65,6 +65,15 @@ type SourceRepositoryRequestContext = {
   repository: SourceRepositoryRepository;
 };
 
+type GitHubAppRouteRuntime = {
+  appSlug: string;
+  callbackUrl: string;
+  stateSecret: string;
+  githubAppClient: GitHubAppClient;
+};
+
+let cachedDefaultGitHubAppRouteRuntime: GitHubAppRouteRuntime | null = null;
+
 export async function registerSourceRepositoryRoutes(
   app: FastifyInstance,
   options?: SourceRepositoryRouteOptions
@@ -222,12 +231,9 @@ export async function registerSourceRepositoryRoutes(
   });
 }
 
-function getGitHubAppRouteRuntime(options: SourceRepositoryRouteOptions | undefined): {
-  appSlug: string;
-  callbackUrl: string;
-  stateSecret: string;
-  githubAppClient: GitHubAppClient;
-} {
+function getGitHubAppRouteRuntime(
+  options: SourceRepositoryRouteOptions | undefined
+): GitHubAppRouteRuntime {
   if (
     options?.githubAppClient &&
     options.githubAppSlug &&
@@ -242,18 +248,27 @@ function getGitHubAppRouteRuntime(options: SourceRepositoryRouteOptions | undefi
     };
   }
 
-  const config = requireGitHubAppConfig();
+  if (!cachedDefaultGitHubAppRouteRuntime) {
+    const config = requireGitHubAppConfig();
 
-  return {
-    appSlug: options?.githubAppSlug ?? config.appSlug,
-    callbackUrl: options?.githubAppCallbackUrl ?? config.callbackUrl,
-    stateSecret: options?.githubAppStateSecret ?? requireGitHubAppStateSecret(),
-    githubAppClient:
-      options?.githubAppClient ??
-      createGitHubAppClient({
+    cachedDefaultGitHubAppRouteRuntime = {
+      appSlug: config.appSlug,
+      callbackUrl: config.callbackUrl,
+      stateSecret: requireGitHubAppStateSecret(),
+      githubAppClient: createGitHubAppClient({
         appId: config.appId,
         privateKey: config.privateKey
       })
+    };
+  }
+
+  return {
+    appSlug: options?.githubAppSlug ?? cachedDefaultGitHubAppRouteRuntime.appSlug,
+    callbackUrl: options?.githubAppCallbackUrl ?? cachedDefaultGitHubAppRouteRuntime.callbackUrl,
+    stateSecret:
+      options?.githubAppStateSecret ?? cachedDefaultGitHubAppRouteRuntime.stateSecret,
+    githubAppClient:
+      options?.githubAppClient ?? cachedDefaultGitHubAppRouteRuntime.githubAppClient
   };
 }
 

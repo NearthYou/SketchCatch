@@ -23,6 +23,8 @@ export type CreateGitHubActionsPipelineStatusProviderOptions = {
 export function createGitHubActionsPipelineStatusProvider(
   options: CreateGitHubActionsPipelineStatusProviderOptions = {}
 ): GitCicdPipelineStatusProvider {
+  let cachedClient: GitHubAppClient | null = null;
+
   return {
     async refreshPipelineStatus({ handoff, sourceRepository }) {
       if (
@@ -33,8 +35,8 @@ export function createGitHubActionsPipelineStatusProvider(
         return null;
       }
 
-      const githubAppClient = options.githubAppClient ?? createGitHubAppClientFromEnv();
-      const status = await githubAppClient.getLatestWorkflowRunForHeadSha({
+      cachedClient = cachedClient ?? options.githubAppClient ?? createGitHubAppClientFromEnv();
+      const status = await cachedClient.getLatestWorkflowRunForHeadSha({
         installationId: sourceRepository.githubInstallationId,
         owner: sourceRepository.owner,
         name: sourceRepository.name,

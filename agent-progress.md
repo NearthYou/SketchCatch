@@ -216,6 +216,20 @@
 
 ## 세션 레코드
 
+### 2026-07-06 - PR #178 리뷰 코멘트 반영
+
+- Goal: PR #178에 달린 GitHub App 성능 리뷰 코멘트를 반영하고, 사용자의 명시 승인에 따라 변경을 `dev`에 직접 반영한다.
+- Findings:
+  - 미해결 review thread 5개는 모두 `GitHubAppClient` 반복 생성/private key 반복 파싱/target branch 중복 조회 최적화 요청이었다.
+  - 원격 feature 브랜치가 `dev` 최신 merge로 로컬보다 앞서 있어, 리뷰 반영 변경을 stash한 뒤 원격 feature로 fast-forward하고 다시 적용했다.
+- Completed:
+  - `GitHubAppClient`가 private key PKCS#8 import promise를 client 생성 시점에 만들고 JWT 생성마다 재사용하도록 변경했다.
+  - source repository route runtime, GitHub Actions pipeline status provider, GitHub App git provider에서 기본 `GitHubAppClient`를 lazy cache로 재사용하도록 변경했다.
+  - GitHub PR 생성 중 target branch ref 중복 조회를 제거했다.
+- Verified so far:
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/source-repositories/github-app-client.test.ts src/routes/source-repositories.test.ts src/git-cicd/github-actions-pipeline-status-provider.test.ts src/routes/git-cicd-handoffs.test.ts`
+  - `pnpm --filter @sketchcatch/api typecheck`
+
 ### 2026-07-06 - Settings GitHub 탭 제거 및 Direct Deployment 차단 원인 확인
 
 - Goal: Settings 화면의 기능 없는 GitHub 탭을 제거하고, 현재 배포가 수행되지 않는 원인을 확인한다.

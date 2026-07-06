@@ -20,16 +20,18 @@ export type CreateGitHubAppGitProviderOptions = {
 export function createGitHubAppGitProvider(
   options: CreateGitHubAppGitProviderOptions = {}
 ): GitProvider {
+  let cachedClient: GitHubAppClient | null = null;
+
   return {
     async createPullRequest(input) {
-      const githubAppClient = options.githubAppClient ?? createGitHubAppClientFromEnv();
+      cachedClient = cachedClient ?? options.githubAppClient ?? createGitHubAppClientFromEnv();
       const files = await Promise.all(
         input.files.map(async (file) => ({
           path: file.path,
           content: await downloadTerraformArtifactText(file, options.downloadTerraformArtifact)
         }))
       );
-      const result = await githubAppClient.createPullRequest({
+      const result = await cachedClient.createPullRequest({
         installationId: input.repository.installationId,
         owner: input.repository.owner,
         name: input.repository.name,
