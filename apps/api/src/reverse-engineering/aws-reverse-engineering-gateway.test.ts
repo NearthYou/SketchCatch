@@ -9,9 +9,16 @@ import {
   parseSecurityGroupsFromXml
 } from "./aws-reverse-engineering-parsers.js";
 import {
+  listBucketsWithDetails,
   maskReverseEngineeringSensitiveText as maskGatewaySensitiveText,
   shouldReadResourceGroup
 } from "./aws-reverse-engineering-gateway.js";
+
+const TEST_AWS_CREDENTIALS = {
+  AWS_ACCESS_KEY_ID: "access-key",
+  AWS_SECRET_ACCESS_KEY: "secret-key",
+  AWS_REGION: "ap-northeast-2"
+};
 
 test("shouldReadResourceGroup reads every supported group when ALL is selected", () => {
   const input = {
@@ -34,6 +41,66 @@ test("shouldReadResourceGroup keeps individual resource filters when ALL is not 
 
   assert.equal(shouldReadResourceGroup(input, "EC2"), true);
   assert.equal(shouldReadResourceGroup(input, "RDS"), false);
+});
+
+test("listBucketsWithDetails keeps S3 bucket read-only settings in config", async () => {
+  const sentCommandNames: string[] = [];
+  const fakeS3Client = {
+    async send(command: { constructor: { name: string }; input?: { Bucket?: string } }) {
+      sentCommandNames.push(command.constructor.name);
+
+      switch (command.constructor.name) {
+        case "ListBucketsCommand":
+          return { Buckets: [{ Name: "demo-bucket", CreationDate: new Date("2026-07-06T00:00:00.000Z") }] };
+        case "GetBucketLocationCommand":
+          return { LocationConstraint: "ap-northeast-2" };
+        case "GetBucketVersioningCommand":
+          return { Status: "Enabled", MFADelete: "Disabled" };
+        case "GetPublicAccessBlockCommand":
+          return {
+            PublicAccessBlockConfiguration: {
+              BlockPublicAcls: true,
+              IgnorePublicAcls: true,
+              BlockPublicPolicy: true,
+              RestrictPublicBuckets: true
+            }
+          };
+        case "GetBucketEncryptionCommand":
+          return {
+            ServerSideEncryptionConfiguration: {
+              Rules: [{ ApplyServerSideEncryptionByDefault: { SSEAlgorithm: "AES256" }, BucketKeyEnabled: true }]
+            }
+          };
+        case "GetBucketWebsiteCommand":
+          return { IndexDocument: { Suffix: "index.html" }, ErrorDocument: { Key: "error.html" } };
+        case "GetBucketTaggingCommand":
+          return { TagSet: [{ Key: "env", Value: "dev" }] };
+        case "GetBucketPolicyStatusCommand":
+          return { PolicyStatus: { IsPublic: false } };
+        default:
+          throw new Error(`Unexpected command ${command.constructor.name}`);
+      }
+    }
+  };
+
+  const [bucket] = await listBucketsWithDetails("ap-northeast-2", TEST_AWS_CREDENTIALS, () => fakeS3Client);
+
+  assert.deepEqual(sentCommandNames, [
+    "ListBucketsCommand",
+    "GetBucketLocationCommand",
+    "GetBucketVersioningCommand",
+    "GetPublicAccessBlockCommand",
+    "GetBucketEncryptionCommand",
+    "GetBucketWebsiteCommand",
+    "GetBucketTaggingCommand",
+    "GetBucketPolicyStatusCommand"
+  ]);
+  assert.equal(bucket?.providerResourceType, "AWS::S3::Bucket");
+  assert.equal(bucket?.providerResourceId, "demo-bucket");
+  assert.equal(bucket?.region, "ap-northeast-2");
+  assert.equal(bucket?.config["versioningStatus"], "Enabled");
+  assert.equal(bucket?.config["policyStatusIsPublic"], false);
+  assert.deepEqual(bucket?.config["tags"], [{ key: "env", value: "dev" }]);
 });
 
 test("extractSetItems returns only direct AWS set items when child item tags are nested", () => {

@@ -1,4 +1,22 @@
-import { ListBucketsCommand, S3Client } from "@aws-sdk/client-s3";
+import {
+  GetBucketEncryptionCommand,
+  GetBucketLocationCommand,
+  GetBucketPolicyStatusCommand,
+  GetBucketTaggingCommand,
+  GetBucketVersioningCommand,
+  GetBucketWebsiteCommand,
+  GetPublicAccessBlockCommand,
+  ListBucketsCommand,
+  S3Client,
+  type GetBucketEncryptionCommandOutput,
+  type GetBucketLocationCommandOutput,
+  type GetBucketPolicyStatusCommandOutput,
+  type GetBucketTaggingCommandOutput,
+  type GetBucketVersioningCommandOutput,
+  type GetBucketWebsiteCommandOutput,
+  type GetPublicAccessBlockCommandOutput,
+  type ListBucketsCommandOutput
+} from "@aws-sdk/client-s3";
 import type { AwsConnection, ResourceType, ReverseEngineeringScanError } from "@sketchcatch/types";
 import { createAwsSdkStsGateway } from "../aws-connections/aws-connection-test-service.js";
 import {
@@ -25,6 +43,15 @@ import { sendAwsQuery } from "./aws-reverse-engineering-query.js";
 export type AwsReverseEngineeringGatewayOptions = {
   fetchXml?: typeof fetch;
 };
+
+export type AwsS3ReadClient = {
+  send(command: object): Promise<unknown>;
+};
+
+export type AwsS3ReadClientFactory = (
+  region: string,
+  credentials: TerraformAwsCredentialEnv
+) => AwsS3ReadClient;
 
 // 검증된 AWS 연결로 실제 read-only 조회를 수행하는 gateway를 만듭니다.
 export function createAwsReverseEngineeringGateway(
@@ -53,7 +80,7 @@ export function createAwsReverseEngineeringGateway(
         ),
         readResourceGroup(input, "EC2", () => describeInstances(input.region, credentials, fetchXml)),
         readResourceGroup(input, "RDS", () => describeRdsInstances(input.region, credentials, fetchXml)),
-        readResourceGroup(input, "S3", () => listBuckets(input.region, credentials))
+        readResourceGroup(input, "S3", () => listBucketsWithDetails(input.region, credentials))
       ]);
 
       return {
@@ -198,11 +225,25 @@ async function describeRdsInstances(
   return parseRdsInstancesFromXml(xml, region);
 }
 
-// S3는 Query XML API가 아니라 SDK로 읽기 때문에 같은 AWS 자격 증명을 SDK 형태로 바꿉니다.
-async function listBuckets(
+// S3는 bucket 목록만으로 설정을 알 수 없어서 read-only 세부 조회를 추가로 실행합니다.
+export async function listBucketsWithDetails(
+  region: string,
+  credentials: TerraformAwsCredentialEnv,
+  createClient: AwsS3ReadClientFactory = createDefaultS3ReadClient
+): Promise<AwsDiscoveredResourceRecord[]> {
+  const client = createClient(region, credentials);
+  const response = await sendS3Command<ListBucketsCommandOutput>(client, new ListBucketsCommand({}));
+  const bucketRecords = await Promise.all(
+    (response.Buckets ?? []).map((bucket) => createS3BucketRecord(bucket.Name, bucket.CreationDate, region, client))
+  );
+
+  return bucketRecords.filter((record): record is AwsDiscoveredResourceRecord => record !== null);
+}
+
+function createDefaultS3ReadClient(
   region: string,
   credentials: TerraformAwsCredentialEnv
-): Promise<AwsDiscoveredResourceRecord[]> {
+): AwsS3ReadClient {
   const sdkCredentials = credentials.AWS_SESSION_TOKEN
     ? {
         accessKeyId: credentials.AWS_ACCESS_KEY_ID,
@@ -213,30 +254,93 @@ async function listBuckets(
         accessKeyId: credentials.AWS_ACCESS_KEY_ID,
         secretAccessKey: credentials.AWS_SECRET_ACCESS_KEY
       };
-  const client = new S3Client({
-    region,
-    credentials: sdkCredentials
-  });
-  const response = await client.send(new ListBucketsCommand({}));
+  const client = new S3Client({ region, credentials: sdkCredentials });
 
-  return (response.Buckets ?? []).flatMap((bucket) => {
-    if (!bucket.Name) {
-      return [];
-    }
+  return {
+    send: (command) => client.send(command as Parameters<S3Client["send"]>[0])
+  };
+}
 
-    return [
-      {
-        providerResourceType: "AWS::S3::Bucket",
-        providerResourceId: bucket.Name,
-        displayName: bucket.Name,
-        region,
-        config: {
-          createdAt: bucket.CreationDate?.toISOString()
-        },
-        relationships: []
-      }
-    ];
-  });
+async function createS3BucketRecord(
+  bucketName: string | undefined,
+  createdAt: Date | undefined,
+  fallbackRegion: string,
+  client: AwsS3ReadClient
+): Promise<AwsDiscoveredResourceRecord | null> {
+  if (!bucketName) {
+    return null;
+  }
+
+  const [location, versioning, publicAccessBlock, encryption, website, tagging, policyStatus] =
+    await Promise.all([
+      readOptionalS3Detail(() =>
+        sendS3Command<GetBucketLocationCommandOutput>(client, new GetBucketLocationCommand({ Bucket: bucketName }))
+      ),
+      readOptionalS3Detail(() =>
+        sendS3Command<GetBucketVersioningCommandOutput>(client, new GetBucketVersioningCommand({ Bucket: bucketName }))
+      ),
+      readOptionalS3Detail(() =>
+        sendS3Command<GetPublicAccessBlockCommandOutput>(
+          client,
+          new GetPublicAccessBlockCommand({ Bucket: bucketName })
+        )
+      ),
+      readOptionalS3Detail(() =>
+        sendS3Command<GetBucketEncryptionCommandOutput>(client, new GetBucketEncryptionCommand({ Bucket: bucketName }))
+      ),
+      readOptionalS3Detail(() =>
+        sendS3Command<GetBucketWebsiteCommandOutput>(client, new GetBucketWebsiteCommand({ Bucket: bucketName }))
+      ),
+      readOptionalS3Detail(() =>
+        sendS3Command<GetBucketTaggingCommandOutput>(client, new GetBucketTaggingCommand({ Bucket: bucketName }))
+      ),
+      readOptionalS3Detail(() =>
+        sendS3Command<GetBucketPolicyStatusCommandOutput>(
+          client,
+          new GetBucketPolicyStatusCommand({ Bucket: bucketName })
+        )
+      )
+    ]);
+  const bucketRegion = normalizeS3BucketRegion(location?.LocationConstraint, fallbackRegion);
+
+  return {
+    providerResourceType: "AWS::S3::Bucket",
+    providerResourceId: bucketName,
+    displayName: bucketName,
+    region: bucketRegion,
+    config: {
+      createdAt: createdAt?.toISOString(),
+      bucketRegion,
+      versioningStatus: versioning?.Status,
+      mfaDelete: versioning?.MFADelete,
+      publicAccessBlock: publicAccessBlock?.PublicAccessBlockConfiguration,
+      encryptionRules: encryption?.ServerSideEncryptionConfiguration?.Rules,
+      websiteIndexDocument: website?.IndexDocument?.Suffix,
+      websiteErrorDocument: website?.ErrorDocument?.Key,
+      tags: tagging?.TagSet?.map((tag) => ({ key: tag.Key, value: tag.Value })),
+      policyStatusIsPublic: policyStatus?.PolicyStatus?.IsPublic
+    },
+    relationships: []
+  };
+}
+
+async function sendS3Command<TOutput>(client: AwsS3ReadClient, command: object): Promise<TOutput> {
+  return (await client.send(command)) as TOutput;
+}
+
+async function readOptionalS3Detail<TOutput>(read: () => Promise<TOutput>): Promise<TOutput | null> {
+  try {
+    return await read();
+  } catch {
+    return null;
+  }
+}
+
+function normalizeS3BucketRegion(
+  locationConstraint: GetBucketLocationCommandOutput["LocationConstraint"],
+  fallbackRegion: string
+): string {
+  return locationConstraint && locationConstraint.length > 0 ? locationConstraint : fallbackRegion;
 }
 
 // `ALL`은 화면 선택값일 뿐 실제 AWS 리소스가 아니어서, 각 지원 리소스 조회로 풀어서 처리합니다.
