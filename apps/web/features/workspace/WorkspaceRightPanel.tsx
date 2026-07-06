@@ -398,6 +398,10 @@ export function WorkspaceRightPanel({
         return;
       }
 
+      if (isTerraformLeaveGuardIgnoredTarget(target)) {
+        return;
+      }
+
       if (canOpenTerraformIssuesDuringEdit && isTerraformIssuesNavigationTarget(target)) {
         return;
       }
@@ -627,6 +631,10 @@ function getTerraformLeaveReplayTarget(target: EventTarget | null): HTMLElement 
 
 function isInsideTerraformLeaveDialog(target: Node): boolean {
   return target instanceof Element && Boolean(target.closest("[data-terraform-leave-dialog]"));
+}
+
+function isTerraformLeaveGuardIgnoredTarget(target: Node): boolean {
+  return target instanceof Element && Boolean(target.closest("[data-terraform-leave-guard-ignore]"));
 }
 
 function isTerraformIssuesNavigationTarget(target: Node): boolean {

@@ -102,6 +102,8 @@ test("deployment toolbar action is grouped with the other panel mode buttons", (
 });
 
 test("workspace AI opens from a floating chat dock instead of the right panel", () => {
+  const floatingPanelSlotRule = getCssRule(diagramEditorStylesSource, "floatingPanelSlot");
+
   assert.match(diagramEditorSource, /floatingPanel\?\.\(panelContext\)/);
   assert.match(projectDraftManagerSource, /floatingPanel=\{\(context\) => \(/);
   assert.match(workspaceDraftManagerSource, /floatingPanel=\{\(context\) => \(/);
@@ -109,8 +111,24 @@ test("workspace AI opens from a floating chat dock instead of the right panel", 
   assert.match(workspaceDraftManagerSource, /<WorkspaceAiChatDock/);
   assert.match(aiChatDockSource, /className=\{styles\.aiChatLauncher/);
   assert.match(aiChatDockSource, /className=\{styles\.aiChatDock/);
+  assert.match(aiChatDockSource, /data-terraform-leave-guard-ignore/);
   assert.match(stylesSource, /\.aiChatLauncher\s*\{/);
   assert.match(stylesSource, /\.aiChatDock\s*\{/);
+  assert.match(floatingPanelSlotRule, /pointer-events:\s*none/);
+  assert.match(floatingPanelSlotRule, /z-index:\s*90/);
+});
+
+test("workspace AI has a dedicated error tab for Terraform issue resolution", () => {
+  assert.match(aiChatDockSource, /type WorkspaceAiChatScope = "draft" \| "errors" \| "simulation"/);
+  assert.match(aiChatDockSource, /setActiveChatTab\("errors"\)/);
+  assert.match(aiChatDockSource, /activeChatTab === "errors" && terraformIssueResolution !== null/);
+  assert.match(aiChatDockSource, /AI 오류/);
+  assert.match(stylesSource, /\.aiChatDock\[data-chat-tab="errors"\] \.aiChatComposer/);
+});
+
+test("terraform issue fix cards omit procedural apply steps", () => {
+  assert.doesNotMatch(aiChatDockSource, /fixPlan\.steps\.map/);
+  assert.doesNotMatch(aiChatDockSource, /<ol>/);
 });
 
 test("workspace AI chat keeps the floating dock width with compact prompt guide", () => {
@@ -155,6 +173,8 @@ test("terraform issue AI resolution bypasses the leave guard while editing", () 
   assert.match(issuesPanelSource, /data-terraform-issue-ai-resolution/);
   assert.match(componentSource, /isTerraformIssueAiResolutionTarget/);
   assert.match(componentSource, /isTerraformIssueAiResolutionTarget\(target\)/);
+  assert.match(componentSource, /isTerraformLeaveGuardIgnoredTarget/);
+  assert.match(aiChatDockSource, /data-terraform-leave-guard-ignore/);
   assert.match(issuesPanelSource, /onResolveWithAi\(issue\)/);
 });
 
@@ -384,7 +404,6 @@ test("terraform issue AI resolution shows a fix plan before apply", () => {
   assert.match(aiChatDockSource, /createTerraformIssueFixPlan/);
   assert.match(aiChatDockSource, /terraformIssueFixPlan/);
   assert.match(aiChatDockSource, /수정 계획/);
-  assert.match(aiChatDockSource, /fixPlan\.steps\.map/);
   assert.match(aiChatDockSource, /fixPlan\.canApply/);
   assert.match(aiChatDockSource, /fixPlan\.providerNotice/);
   assert.match(aiChatDockSource, /terraformIssueFixPlanNotice/);

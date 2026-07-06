@@ -2946,6 +2946,7 @@
   padding: 12px 16px 16px;
 }
 
+.aiChatDock[data-chat-tab="errors"] .aiChatComposer,
 .aiChatDock[data-chat-tab="simulation"] .aiChatComposer {
   display: none;
 }

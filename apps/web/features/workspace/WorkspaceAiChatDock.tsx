@@ -78,7 +78,7 @@ type WorkspaceAiChatMessageKind =
   | "status"
   | "terraform_issue";
 type WorkspaceAiChatSelectionMode = "single" | "multiple";
-type WorkspaceAiChatScope = "draft" | "simulation";
+type WorkspaceAiChatScope = "draft" | "errors" | "simulation";
 
 type WorkspaceAiChatMessage = {
   readonly id: string;
@@ -163,6 +163,7 @@ export function WorkspaceAiChatDock({
   const hasActiveChatHistory =
     visibleMessages.length > 0 ||
     (activeChatTab === "draft" && draft !== null) ||
+    (activeChatTab === "errors" && terraformIssueResolution !== null) ||
     (activeChatTab === "simulation" && designSimulation !== null);
 
   useEffect(() => {
@@ -200,7 +201,7 @@ export function WorkspaceAiChatDock({
     latestTerraformIssueRequestIdRef.current = request.id;
     dismissedTerraformIssueRequestIdRef.current = null;
     setOpen(true);
-    setActiveChatTab("draft");
+    setActiveChatTab("errors");
     setTerraformIssueResolution({
       explanation: null,
       message: "",
@@ -212,7 +213,7 @@ export function WorkspaceAiChatDock({
       `Terraform 이슈를 분석합니다: ${formatTerraformDiagnosticTitle(request.issue.diagnostic)}`,
       [],
       "single",
-      "draft"
+      "errors"
     );
 
     async function explainIssue(): Promise<void> {
@@ -242,7 +243,7 @@ export function WorkspaceAiChatDock({
           `Terraform 이슈 원인: ${createTerraformIssueChatSummary(explanation)}`,
           [],
           "single",
-          "draft"
+          "errors"
         );
       } catch (error) {
         const message = getApiErrorMessage(error, "Terraform 이슈 AI 해결 가이드를 불러오지 못했습니다.");
@@ -257,7 +258,7 @@ export function WorkspaceAiChatDock({
           request,
           state: "error"
         });
-        appendAssistantMessage("error", message, [], "single", "draft");
+        appendAssistantMessage("error", message, [], "single", "errors");
       }
     }
 
@@ -314,6 +315,15 @@ export function WorkspaceAiChatDock({
       setSimulationFingerprint(null);
       setSimulationErrorMessage("");
       setSimulationState("idle");
+      return;
+    }
+
+    if (activeChatTab === "errors") {
+      setMessages((currentMessages) =>
+        currentMessages.filter((message) => getChatMessageScope(message) !== "errors")
+      );
+      setTerraformIssueResolution(null);
+      setApplyingTerraformFixRequestId(null);
       return;
     }
 
@@ -648,6 +658,7 @@ export function WorkspaceAiChatDock({
         aria-label="AI 채팅 열기"
         className={styles.aiChatLauncher}
         data-right-panel-open={context.isRightPanelOpen}
+        data-terraform-leave-guard-ignore
         onClick={() => setOpen(true)}
         title="AI 채팅"
         type="button"
@@ -663,6 +674,7 @@ export function WorkspaceAiChatDock({
       className={styles.aiChatDock}
       data-chat-tab={activeChatTab}
       data-right-panel-open={context.isRightPanelOpen}
+      data-terraform-leave-guard-ignore
     >
       <header className={styles.aiChatHeader}>
         <div>
@@ -690,6 +702,15 @@ export function WorkspaceAiChatDock({
             type="button"
           >
             초안 제안
+          </button>
+          <button
+            aria-selected={activeChatTab === "errors"}
+            className={styles.aiChatTabButton}
+            onClick={() => setActiveChatTab("errors")}
+            role="tab"
+            type="button"
+          >
+            AI 오류
           </button>
           <button
             aria-selected={activeChatTab === "simulation"}
@@ -800,7 +821,7 @@ export function WorkspaceAiChatDock({
           <WorkspaceAiRequestMessage state={simulationState} message={simulationErrorMessage} />
         ) : null}
 
-        {activeChatTab === "draft" && terraformIssueResolution !== null ? (
+        {activeChatTab === "errors" && terraformIssueResolution !== null ? (
           <article className={styles.aiChatDraftCard}>
             <div className={styles.aiResultHeader}>
               <h3>{formatTerraformDiagnosticTitle(terraformIssueResolution.request.issue.diagnostic)}</h3>
@@ -1026,11 +1047,6 @@ function TerraformIssueExplanationCard({
             </section>
           </div>
         ) : null}
-        <ol>
-          {fixPlan.steps.map((step) => (
-            <li key={step}>{step}</li>
-          ))}
-        </ol>
       </section>
       <dl className={styles.terraformIssueGuidanceList}>
         <div>
@@ -1163,11 +1179,19 @@ function createChatMessage(
 }
 
 function getChatMessageScope(message: WorkspaceAiChatMessage): WorkspaceAiChatScope {
-  if (message.scope === "draft" || message.scope === "simulation") {
+  if (message.scope === "draft" || message.scope === "errors" || message.scope === "simulation") {
     return message.scope;
   }
 
-  return message.kind === "simulation" ? "simulation" : "draft";
+  if (message.kind === "simulation") {
+    return "simulation";
+  }
+
+  if (message.kind === "terraform_issue") {
+    return "errors";
+  }
+
+  return "draft";
 }
 
 function createChatMessageId(): string {
@@ -1196,6 +1220,7 @@ function isWorkspaceAiChatMessage(value: unknown): value is WorkspaceAiChatMessa
     typeof candidate.id === "string" &&
     (candidate.scope === undefined ||
       candidate.scope === "draft" ||
+      candidate.scope === "errors" ||
       candidate.scope === "simulation") &&
     (candidate.selectionMode === undefined ||
       candidate.selectionMode === "single" ||
