@@ -5,6 +5,18 @@ import {
   type ResourceTagMapping
 } from "@aws-sdk/client-resource-groups-tagging-api";
 import {
+  DescribeLoadBalancersCommand,
+  ElasticLoadBalancingV2Client,
+  type DescribeLoadBalancersCommandOutput,
+  type LoadBalancer
+} from "@aws-sdk/client-elastic-load-balancing-v2";
+import {
+  LambdaClient,
+  ListFunctionsCommand,
+  type FunctionConfiguration,
+  type ListFunctionsCommandOutput
+} from "@aws-sdk/client-lambda";
+import {
   GetBucketEncryptionCommand,
   GetBucketLocationCommand,
   GetBucketPolicyStatusCommand,
@@ -67,6 +79,20 @@ export type AwsTaggingReadClientFactory = (
   region: string,
   credentials: TerraformAwsCredentialEnv
 ) => AwsTaggingReadClient;
+export type AwsElbReadClient = {
+  send(command: object): Promise<unknown>;
+};
+export type AwsElbReadClientFactory = (
+  region: string,
+  credentials: TerraformAwsCredentialEnv
+) => AwsElbReadClient;
+export type AwsLambdaReadClient = {
+  send(command: object): Promise<unknown>;
+};
+export type AwsLambdaReadClientFactory = (
+  region: string,
+  credentials: TerraformAwsCredentialEnv
+) => AwsLambdaReadClient;
 
 // 검증된 AWS 연결로 실제 read-only 조회를 수행하는 gateway를 만듭니다.
 export function createAwsReverseEngineeringGateway(
@@ -96,7 +122,7 @@ export function createAwsReverseEngineeringGateway(
         readResourceGroup(input, "EC2", () => describeInstances(input.region, credentials, fetchXml)),
         readResourceGroup(input, "RDS", () => describeRdsInstances(input.region, credentials, fetchXml)),
         readResourceGroup(input, "S3", () => listBucketsWithDetails(input.region, credentials)),
-        readResourceGroup(input, "UNKNOWN", () => listTaggedUnknownResources(input.region, credentials))
+        readUnknownResourceGroup(input, credentials)
       ]);
 
       return {
@@ -123,6 +149,24 @@ async function readResourceGroup(
     return {
       records: [],
       scanErrors: [toScanError(resourceType, error)]
+    };
+  }
+}
+
+async function readUnknownResourceGroup(
+  input: AwsProviderScanInput,
+  credentials: TerraformAwsCredentialEnv
+): Promise<AwsProviderDiscoveryResult> {
+  if (!shouldReadUnknownResourceGroup(input)) {
+    return { records: [], scanErrors: [] };
+  }
+
+  try {
+    return { records: await listUnknownResources(input, credentials), scanErrors: [] };
+  } catch (error) {
+    return {
+      records: [],
+      scanErrors: [toScanError("UNKNOWN", error)]
     };
   }
 }
@@ -260,17 +304,7 @@ function createDefaultS3ReadClient(
   region: string,
   credentials: TerraformAwsCredentialEnv
 ): AwsS3ReadClient {
-  const sdkCredentials = credentials.AWS_SESSION_TOKEN
-    ? {
-        accessKeyId: credentials.AWS_ACCESS_KEY_ID,
-        secretAccessKey: credentials.AWS_SECRET_ACCESS_KEY,
-        sessionToken: credentials.AWS_SESSION_TOKEN
-      }
-    : {
-        accessKeyId: credentials.AWS_ACCESS_KEY_ID,
-        secretAccessKey: credentials.AWS_SECRET_ACCESS_KEY
-      };
-  const client = new S3Client({ region, credentials: sdkCredentials });
+  const client = new S3Client({ region, credentials: toAwsSdkCredentials(credentials) });
 
   return {
     send: (command) => client.send(command as Parameters<S3Client["send"]>[0])
@@ -386,24 +420,122 @@ export async function listTaggedUnknownResources(
   return records;
 }
 
+// 지금 정식 지원하지 않는 AWS 리소스도 숨기지 않기 위해 여러 read-only 조회 결과를 UNKNOWN으로 모읍니다.
+async function listUnknownResources(
+  input: AwsProviderScanInput,
+  credentials: TerraformAwsCredentialEnv
+): Promise<AwsDiscoveredResourceRecord[]> {
+  const reads: Array<Promise<AwsDiscoveredResourceRecord[]>> = [];
+
+  if (input.resourceTypes.includes("ALL") || input.resourceTypes.includes("UNKNOWN")) {
+    reads.push(
+      listTaggedUnknownResources(input.region, credentials),
+      listApplicationLoadBalancersAsUnknown(input.region, credentials)
+    );
+  }
+
+  if (
+    input.resourceTypes.includes("ALL") ||
+    input.resourceTypes.includes("UNKNOWN") ||
+    input.resourceTypes.includes("LAMBDA")
+  ) {
+    reads.push(listLambdaFunctionsAsUnknown(input.region, credentials));
+  }
+
+  const unknownGroups = await Promise.all(reads);
+
+  return uniqueDiscoveredRecordsByProviderId(unknownGroups.flat());
+}
+
+// ALB는 태그가 없어도 자주 쓰이기 때문에 ELBv2 API로 직접 읽어 UNKNOWN 후보로 남깁니다.
+export async function listApplicationLoadBalancersAsUnknown(
+  region: string,
+  credentials: TerraformAwsCredentialEnv,
+  createClient: AwsElbReadClientFactory = createDefaultElbReadClient
+): Promise<AwsDiscoveredResourceRecord[]> {
+  const client = createClient(region, credentials);
+  const records: AwsDiscoveredResourceRecord[] = [];
+  let marker: string | undefined;
+
+  do {
+    const response = await sendElbCommand<DescribeLoadBalancersCommandOutput>(
+      client,
+      new DescribeLoadBalancersCommand({ Marker: marker })
+    );
+
+    records.push(...(response.LoadBalancers ?? []).flatMap((loadBalancer) =>
+      toUnknownLoadBalancerRecord(loadBalancer, region)
+    ));
+    marker = response.NextMarker && response.NextMarker.length > 0 ? response.NextMarker : undefined;
+  } while (marker);
+
+  return records;
+}
+
+// Lambda도 태그 없이 쓰이는 경우가 많아서 ListFunctions 결과를 UNKNOWN 후보로 남깁니다.
+export async function listLambdaFunctionsAsUnknown(
+  region: string,
+  credentials: TerraformAwsCredentialEnv,
+  createClient: AwsLambdaReadClientFactory = createDefaultLambdaReadClient
+): Promise<AwsDiscoveredResourceRecord[]> {
+  const client = createClient(region, credentials);
+  const records: AwsDiscoveredResourceRecord[] = [];
+  let marker: string | undefined;
+
+  do {
+    const response = await sendLambdaCommand<ListFunctionsCommandOutput>(
+      client,
+      new ListFunctionsCommand({ Marker: marker })
+    );
+
+    records.push(...(response.Functions ?? []).flatMap((lambdaFunction) =>
+      toUnknownLambdaFunctionRecord(lambdaFunction, region)
+    ));
+    marker = response.NextMarker && response.NextMarker.length > 0 ? response.NextMarker : undefined;
+  } while (marker);
+
+  return records;
+}
+
 function createDefaultTaggingReadClient(
   region: string,
   credentials: TerraformAwsCredentialEnv
 ): AwsTaggingReadClient {
-  const sdkCredentials = credentials.AWS_SESSION_TOKEN
-    ? {
-        accessKeyId: credentials.AWS_ACCESS_KEY_ID,
-        secretAccessKey: credentials.AWS_SECRET_ACCESS_KEY,
-        sessionToken: credentials.AWS_SESSION_TOKEN
-      }
-    : {
-        accessKeyId: credentials.AWS_ACCESS_KEY_ID,
-        secretAccessKey: credentials.AWS_SECRET_ACCESS_KEY
-      };
-  const client = new ResourceGroupsTaggingAPIClient({ region, credentials: sdkCredentials });
+  const client = new ResourceGroupsTaggingAPIClient({
+    region,
+    credentials: toAwsSdkCredentials(credentials)
+  });
 
   return {
     send: (command) => client.send(command as Parameters<ResourceGroupsTaggingAPIClient["send"]>[0])
+  };
+}
+
+function createDefaultElbReadClient(
+  region: string,
+  credentials: TerraformAwsCredentialEnv
+): AwsElbReadClient {
+  const client = new ElasticLoadBalancingV2Client({
+    region,
+    credentials: toAwsSdkCredentials(credentials)
+  });
+
+  return {
+    send: (command) => client.send(command as Parameters<ElasticLoadBalancingV2Client["send"]>[0])
+  };
+}
+
+function createDefaultLambdaReadClient(
+  region: string,
+  credentials: TerraformAwsCredentialEnv
+): AwsLambdaReadClient {
+  const client = new LambdaClient({
+    region,
+    credentials: toAwsSdkCredentials(credentials)
+  });
+
+  return {
+    send: (command) => client.send(command as Parameters<LambdaClient["send"]>[0])
   };
 }
 
@@ -412,6 +544,124 @@ async function sendTaggingCommand<TOutput>(
   command: object
 ): Promise<TOutput> {
   return (await client.send(command)) as TOutput;
+}
+
+async function sendElbCommand<TOutput>(client: AwsElbReadClient, command: object): Promise<TOutput> {
+  return (await client.send(command)) as TOutput;
+}
+
+async function sendLambdaCommand<TOutput>(
+  client: AwsLambdaReadClient,
+  command: object
+): Promise<TOutput> {
+  return (await client.send(command)) as TOutput;
+}
+
+function toUnknownLoadBalancerRecord(
+  loadBalancer: LoadBalancer,
+  fallbackRegion: string
+): AwsDiscoveredResourceRecord[] {
+  const arn = loadBalancer.LoadBalancerArn;
+
+  if (!arn) {
+    return [];
+  }
+
+  const vpcId = loadBalancer.VpcId;
+  const securityGroupIds = loadBalancer.SecurityGroups ?? [];
+  const relationships = [
+    ...(vpcId ? [{ type: "depends_on" as const, targetProviderResourceId: vpcId }] : []),
+    ...securityGroupIds.map((securityGroupId) => ({
+      type: "attached_to" as const,
+      targetProviderResourceId: securityGroupId
+    }))
+  ];
+
+  return [
+    {
+      providerResourceType: "AWS::ElasticLoadBalancingV2::LoadBalancer",
+      providerResourceId: arn,
+      displayName: loadBalancer.LoadBalancerName ?? arn,
+      region: fallbackRegion,
+      config: {
+        arn,
+        availabilityZones: loadBalancer.AvailabilityZones,
+        canonicalHostedZoneId: loadBalancer.CanonicalHostedZoneId,
+        createdTime: loadBalancer.CreatedTime?.toISOString(),
+        customerOwnedIpv4Pool: loadBalancer.CustomerOwnedIpv4Pool,
+        dnsName: loadBalancer.DNSName,
+        ipAddressType: loadBalancer.IpAddressType,
+        name: loadBalancer.LoadBalancerName,
+        scheme: loadBalancer.Scheme,
+        securityGroupIds,
+        state: loadBalancer.State,
+        type: loadBalancer.Type,
+        vpcId
+      },
+      relationships
+    }
+  ];
+}
+
+function toUnknownLambdaFunctionRecord(
+  lambdaFunction: FunctionConfiguration,
+  fallbackRegion: string
+): AwsDiscoveredResourceRecord[] {
+  const arn = lambdaFunction.FunctionArn;
+
+  if (!arn) {
+    return [];
+  }
+
+  const vpcId = lambdaFunction.VpcConfig?.VpcId;
+  const subnetIds = lambdaFunction.VpcConfig?.SubnetIds ?? [];
+  const securityGroupIds = lambdaFunction.VpcConfig?.SecurityGroupIds ?? [];
+  const relationships = [
+    ...(vpcId ? [{ type: "depends_on" as const, targetProviderResourceId: vpcId }] : []),
+    ...subnetIds.map((subnetId) => ({ type: "attached_to" as const, targetProviderResourceId: subnetId })),
+    ...securityGroupIds.map((securityGroupId) => ({
+      type: "attached_to" as const,
+      targetProviderResourceId: securityGroupId
+    }))
+  ];
+
+  return [
+    {
+      providerResourceType: "AWS::Lambda::Function",
+      providerResourceId: arn,
+      displayName: lambdaFunction.FunctionName ?? arn,
+      region: parseAwsArn(arn).region || fallbackRegion,
+      config: {
+        architectures: lambdaFunction.Architectures,
+        codeSha256: lambdaFunction.CodeSha256,
+        codeSize: lambdaFunction.CodeSize,
+        description: lambdaFunction.Description,
+        ephemeralStorage: lambdaFunction.EphemeralStorage,
+        functionArn: arn,
+        functionName: lambdaFunction.FunctionName,
+        handler: lambdaFunction.Handler,
+        kmsKeyArn: lambdaFunction.KMSKeyArn,
+        lastModified: lambdaFunction.LastModified,
+        lastUpdateStatus: lambdaFunction.LastUpdateStatus,
+        layers: lambdaFunction.Layers,
+        memorySize: lambdaFunction.MemorySize,
+        packageType: lambdaFunction.PackageType,
+        role: lambdaFunction.Role,
+        runtime: lambdaFunction.Runtime,
+        signingJobArn: lambdaFunction.SigningJobArn,
+        signingProfileVersionArn: lambdaFunction.SigningProfileVersionArn,
+        state: lambdaFunction.State,
+        stateReason: lambdaFunction.StateReason,
+        subnetIds,
+        timeout: lambdaFunction.Timeout,
+        tracingConfig: lambdaFunction.TracingConfig,
+        version: lambdaFunction.Version,
+        vpcConfig: lambdaFunction.VpcConfig,
+        vpcId
+      },
+      relationships
+    }
+  ];
 }
 
 function toUnknownTaggedResourceRecord(
@@ -489,9 +739,45 @@ function isKnownTaggedResourceArn(arn: string): boolean {
   );
 }
 
+function uniqueDiscoveredRecordsByProviderId(
+  records: AwsDiscoveredResourceRecord[]
+): AwsDiscoveredResourceRecord[] {
+  const seenProviderResourceIds = new Set<string>();
+
+  return records.filter((record) => {
+    if (seenProviderResourceIds.has(record.providerResourceId)) {
+      return false;
+    }
+
+    seenProviderResourceIds.add(record.providerResourceId);
+    return true;
+  });
+}
+
+function toAwsSdkCredentials(credentials: TerraformAwsCredentialEnv) {
+  return credentials.AWS_SESSION_TOKEN
+    ? {
+        accessKeyId: credentials.AWS_ACCESS_KEY_ID,
+        secretAccessKey: credentials.AWS_SECRET_ACCESS_KEY,
+        sessionToken: credentials.AWS_SESSION_TOKEN
+      }
+    : {
+        accessKeyId: credentials.AWS_ACCESS_KEY_ID,
+        secretAccessKey: credentials.AWS_SECRET_ACCESS_KEY
+      };
+}
+
 // `ALL`은 화면 선택값일 뿐 실제 AWS 리소스가 아니어서, 각 지원 리소스 조회로 풀어서 처리합니다.
 export function shouldReadResourceGroup(input: AwsProviderScanInput, resourceType: ResourceType): boolean {
   return input.resourceTypes.includes("ALL") || input.resourceTypes.includes(resourceType);
+}
+
+export function shouldReadUnknownResourceGroup(input: AwsProviderScanInput): boolean {
+  return (
+    input.resourceTypes.includes("ALL") ||
+    input.resourceTypes.includes("UNKNOWN") ||
+    input.resourceTypes.includes("LAMBDA")
+  );
 }
 
 // 화면과 로그에 AWS 계정 ID가 그대로 나가지 않도록 12자리 계정 번호를 가립니다.

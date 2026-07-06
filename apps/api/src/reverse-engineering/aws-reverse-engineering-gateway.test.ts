@@ -9,9 +9,12 @@ import {
   parseSecurityGroupsFromXml
 } from "./aws-reverse-engineering-parsers.js";
 import {
+  listApplicationLoadBalancersAsUnknown,
   listBucketsWithDetails,
+  listLambdaFunctionsAsUnknown,
   listTaggedUnknownResources,
   maskReverseEngineeringSensitiveText as maskGatewaySensitiveText,
+  shouldReadUnknownResourceGroup,
   shouldReadResourceGroup
 } from "./aws-reverse-engineering-gateway.js";
 
@@ -42,6 +45,29 @@ test("shouldReadResourceGroup keeps individual resource filters when ALL is not 
 
   assert.equal(shouldReadResourceGroup(input, "EC2"), true);
   assert.equal(shouldReadResourceGroup(input, "RDS"), false);
+});
+
+test("shouldReadUnknownResourceGroup reads UNKNOWN family only for ALL, UNKNOWN, or Lambda filters", () => {
+  assert.equal(shouldReadUnknownResourceGroup({
+    provider: "aws",
+    region: "ap-northeast-2",
+    resourceTypes: ["ALL"]
+  }), true);
+  assert.equal(shouldReadUnknownResourceGroup({
+    provider: "aws",
+    region: "ap-northeast-2",
+    resourceTypes: ["UNKNOWN"]
+  }), true);
+  assert.equal(shouldReadUnknownResourceGroup({
+    provider: "aws",
+    region: "ap-northeast-2",
+    resourceTypes: ["LAMBDA"]
+  }), true);
+  assert.equal(shouldReadUnknownResourceGroup({
+    provider: "aws",
+    region: "ap-northeast-2",
+    resourceTypes: ["EC2"]
+  }), false);
 });
 
 test("listBucketsWithDetails keeps S3 bucket read-only settings in config", async () => {
@@ -135,6 +161,93 @@ test("listTaggedUnknownResources keeps unsupported tagged AWS resources as UNKNO
   assert.equal(records[0]?.providerResourceId, "arn:aws:lambda:ap-northeast-2:316875069960:function:demo-fn");
   assert.equal(records[0]?.displayName, "Demo Lambda");
   assert.equal(records[0]?.config["service"], "lambda");
+});
+
+test("listApplicationLoadBalancersAsUnknown keeps untagged ALB resources as UNKNOWN candidates", async () => {
+  const fakeElbClient = {
+    async send(command: { constructor: { name: string } }) {
+      assert.equal(command.constructor.name, "DescribeLoadBalancersCommand");
+
+      return {
+        LoadBalancers: [
+          {
+            LoadBalancerArn: "arn:aws:elasticloadbalancing:ap-northeast-2:316875069960:loadbalancer/app/demo-alb/abc123",
+            LoadBalancerName: "demo-alb",
+            Scheme: "internet-facing",
+            Type: "application",
+            VpcId: "vpc-1234",
+            State: { Code: "active" },
+            AvailabilityZones: [{ ZoneName: "ap-northeast-2a", SubnetId: "subnet-1234" }],
+            SecurityGroups: ["sg-1234"],
+            DNSName: "demo-alb.ap-northeast-2.elb.amazonaws.com"
+          }
+        ]
+      };
+    }
+  };
+
+  const records = await listApplicationLoadBalancersAsUnknown(
+    "ap-northeast-2",
+    TEST_AWS_CREDENTIALS,
+    () => fakeElbClient
+  );
+
+  assert.equal(records.length, 1);
+  assert.equal(records[0]?.providerResourceType, "AWS::ElasticLoadBalancingV2::LoadBalancer");
+  assert.equal(records[0]?.providerResourceId, "arn:aws:elasticloadbalancing:ap-northeast-2:316875069960:loadbalancer/app/demo-alb/abc123");
+  assert.equal(records[0]?.displayName, "demo-alb");
+  assert.equal(records[0]?.config["scheme"], "internet-facing");
+  assert.deepEqual(records[0]?.relationships, [
+    { type: "depends_on", targetProviderResourceId: "vpc-1234" },
+    { type: "attached_to", targetProviderResourceId: "sg-1234" }
+  ]);
+});
+
+test("listLambdaFunctionsAsUnknown keeps untagged Lambda functions as UNKNOWN candidates", async () => {
+  const fakeLambdaClient = {
+    async send(command: { constructor: { name: string } }) {
+      assert.equal(command.constructor.name, "ListFunctionsCommand");
+
+      return {
+        Functions: [
+          {
+            FunctionArn: "arn:aws:lambda:ap-northeast-2:316875069960:function:demo-fn",
+            FunctionName: "demo-fn",
+            Runtime: "nodejs22.x",
+            Handler: "index.handler",
+            MemorySize: 256,
+            Timeout: 10,
+            LastModified: "2026-07-06T00:00:00.000+0000",
+            State: "Active",
+            PackageType: "Zip",
+            Architectures: ["arm64"],
+            VpcConfig: {
+              VpcId: "vpc-1234",
+              SubnetIds: ["subnet-1234"],
+              SecurityGroupIds: ["sg-1234"]
+            }
+          }
+        ]
+      };
+    }
+  };
+
+  const records = await listLambdaFunctionsAsUnknown(
+    "ap-northeast-2",
+    TEST_AWS_CREDENTIALS,
+    () => fakeLambdaClient
+  );
+
+  assert.equal(records.length, 1);
+  assert.equal(records[0]?.providerResourceType, "AWS::Lambda::Function");
+  assert.equal(records[0]?.providerResourceId, "arn:aws:lambda:ap-northeast-2:316875069960:function:demo-fn");
+  assert.equal(records[0]?.displayName, "demo-fn");
+  assert.equal(records[0]?.config["runtime"], "nodejs22.x");
+  assert.deepEqual(records[0]?.relationships, [
+    { type: "depends_on", targetProviderResourceId: "vpc-1234" },
+    { type: "attached_to", targetProviderResourceId: "subnet-1234" },
+    { type: "attached_to", targetProviderResourceId: "sg-1234" }
+  ]);
 });
 
 test("extractSetItems returns only direct AWS set items when child item tags are nested", () => {
