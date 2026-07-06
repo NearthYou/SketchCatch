@@ -3,6 +3,7 @@ import { test } from "node:test";
 import type { ChatSyncCommand, ChatSyncCommandInput } from "@aws-sdk/client-qbusiness";
 import type {
   AiTerraformErrorExplanationResult,
+  AiTerraformPreviewExplanationResult,
   DesignSimulationResult,
   LlmExplanation
 } from "@sketchcatch/types";
@@ -77,6 +78,18 @@ function createTerraformErrorResult(
       }
     ],
     consensusRecommendation: "Fix the Terraform issue, rerun validation, and continue only after it is resolved.",
+    ...input
+  };
+}
+
+function createTerraformPreviewResult(
+  input: Partial<AiTerraformPreviewExplanationResult> = {}
+): AiTerraformPreviewExplanationResult {
+  return {
+    summary: "Terraform preview is ready.",
+    detectedResources: [],
+    findings: [],
+    checklist: [],
     ...input
   };
 }
@@ -255,6 +268,49 @@ test("createAiProviderBackedLlmExplanation uses Amazon Q first for Terraform err
   assert.equal(first.providerMetadata?.cacheHit, false);
   assert.equal(second.providerMetadata?.provider, "amazon_q");
   assert.equal(second.providerMetadata?.cacheHit, true);
+  assert.equal(qCalls.length, 1);
+  assert.equal(bedrockCalls.length, 0);
+});
+
+test("createAiProviderBackedLlmExplanation uses Amazon Q for Terraform preview explanations without Bedrock fallback", async () => {
+  const qCalls: unknown[] = [];
+  const bedrockCalls: unknown[] = [];
+  const qExplanation: LlmExplanation = {
+    target: "terraform_preview_explanation",
+    summary: "Amazon Q reviewed the Terraform preview.",
+    highlights: [
+      "운영 우수성 원칙: 변경 추적을 확인하세요.",
+      "보안 원칙: 권한과 암호화를 확인하세요.",
+      "신뢰성 원칙: 복구 경로를 확인하세요.",
+      "성능 효율성 원칙: 리소스 크기를 확인하세요.",
+      "비용 최적화 원칙: 과한 용량을 줄이세요.",
+      "지속 가능성 원칙: cleanup 경로를 확인하세요."
+    ],
+    nextActions: ["Review the preview before accepting it."],
+    fallbackUsed: false,
+    wellArchitectedConclusion: "종합 평가: 배포 전 보안, 신뢰성, 비용을 함께 확인하세요."
+  };
+  const createLlmExplanation = createAiProviderBackedLlmExplanation({
+    amazonQProvider: createProvider("amazon_q", qExplanation, qCalls),
+    bedrockProvider: createProvider("bedrock", qExplanation, bedrockCalls),
+    fallbackProvider: createFallbackOnlyLlmExplanation,
+    creditPolicy: {
+      bedrock: true,
+      amazonQ: true,
+      transcribe: false,
+      billingMode: "aws_credit_only"
+    },
+    limits: { dailyCallLimit: 10, windowCallLimit: 10, windowMs: 60_000 }
+  });
+
+  const result = await createLlmExplanation({
+    target: "terraform_preview_explanation",
+    result: createTerraformPreviewResult()
+  });
+
+  assert.equal(result.providerMetadata?.provider, "amazon_q");
+  assert.equal(result.highlights.length, 6);
+  assert.match(result.wellArchitectedConclusion ?? "", /종합 평가/);
   assert.equal(qCalls.length, 1);
   assert.equal(bedrockCalls.length, 0);
 });

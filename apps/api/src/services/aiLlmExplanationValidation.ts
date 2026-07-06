@@ -4,7 +4,7 @@ import type { LlmExplanation } from "@sketchcatch/types";
 
 const SUMMARY_MAX_LENGTH = 300;
 const ITEM_MAX_LENGTH = 120;
-const ITEM_MAX_COUNT = 5;
+const ITEM_MAX_COUNT = 6;
 const CODE_SNIPPET_MAX_LENGTH = 8_000;
 const CONCLUSION_MAX_LENGTH = 600;
 const BLOCKED_GUARANTEE_PHRASES = ["배포 가능 보장", "비용 없음", "보안 안전"] as const;

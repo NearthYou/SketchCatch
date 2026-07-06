@@ -310,7 +310,7 @@ export function createAiProviderBackedLlmExplanation(
   return async (input) => {
     let primaryProviderFallback: LlmExplanation | null = null;
 
-    if (input.target === "terraform_error_explanation") {
+    if (isAmazonQPrimaryTarget(input.target)) {
       if (options.amazonQProvider === undefined) {
         return createFallbackExplanationWithProviderMetadata(
           input,
@@ -333,7 +333,10 @@ export function createAiProviderBackedLlmExplanation(
       });
 
       if (qResult !== null) {
-        if (shouldTrySecondaryProviderAfterAmazonQ(qResult)) {
+        if (
+          input.target === "terraform_error_explanation" &&
+          shouldTrySecondaryProviderAfterAmazonQ(qResult)
+        ) {
           primaryProviderFallback = qResult;
         } else {
           return qResult;
@@ -385,6 +388,10 @@ export function createAiProviderBackedLlmExplanation(
 
 function shouldTrySecondaryProviderAfterAmazonQ(explanation: LlmExplanation): boolean {
   return explanation.fallbackUsed && explanation.fallbackReason === "invalid_response";
+}
+
+function isAmazonQPrimaryTarget(target: LlmExplanationTarget): boolean {
+  return target === "terraform_error_explanation" || target === "terraform_preview_explanation";
 }
 
 function createBedrockTextProvider(input: { readonly region: string; readonly modelId: string }): AiTextProvider {
@@ -496,7 +503,7 @@ async function tryProvider(input: {
 
   if (creditFallbackReason !== null) {
     if (
-      input.input.target === "terraform_error_explanation" &&
+      isAmazonQPrimaryTarget(input.input.target) &&
       input.provider.provider === "amazon_q"
     ) {
       return createFallbackExplanationWithProviderMetadata(
@@ -606,17 +613,30 @@ function createProviderPrompt(target: LlmExplanationTarget, payload: unknown): s
           "Do not provide Well-Architected guidance for Terraform syntax or validation errors."
         ]
       : [];
+  const terraformPreviewInstructions =
+    target === "terraform_preview_explanation"
+      ? [
+          "For Terraform preview explanations, review the Terraform code and deterministic preview result as IaC evidence.",
+          "Use the AWS Well-Architected Framework pillars to evaluate the preview: operational excellence, security, reliability, performance efficiency, cost optimization, and sustainability.",
+          "Return exactly six highlights, in this order: operational excellence, security, reliability, performance efficiency, cost optimization, sustainability.",
+          "Each highlight must name the pillar in Korean and include both an observation and a recommendation.",
+          "Set wellArchitectedConclusion to an overall Korean evaluation that synthesizes the six pillar reviews.",
+          "Do not include codeSuggestion for Terraform preview explanations."
+        ]
+      : [];
 
   return [
     "Return JSON only. Do not wrap the response in markdown.",
     "The JSON shape must be:",
     '{"target":"TARGET","summary":"short summary","highlights":["item"],"nextActions":["item"],"fallbackUsed":false,"codeSuggestion":null,"wellArchitectedConclusion":null}',
-    "For Terraform errors, codeSuggestion may be an object with currentCode, suggestedCode, and rationale, and wellArchitectedConclusion must stay null. For other cases, keep codeSuggestion null.",
+    "For Terraform errors, codeSuggestion may be an object with currentCode, suggestedCode, and rationale, and wellArchitectedConclusion must stay null.",
+    "For Terraform preview explanations, highlights must contain the six Well-Architected pillar reviews and wellArchitectedConclusion must contain the overall evaluation. For other cases, keep codeSuggestion null.",
     `TARGET must be "${target}".`,
     target === "architecture_patch_preview"
       ? "This is a preview only. Do not claim the Architecture Board changed."
       : "Use the deterministic result as the source of truth. Do not invent resources or guarantees.",
     ...terraformErrorInstructions,
+    ...terraformPreviewInstructions,
     "Provider input:",
     JSON.stringify(payload)
   ].join("\n");
@@ -926,8 +946,8 @@ function resolveFallbackReasonForMissingProvider(
   creditPolicy: AiCreditPolicy
 ): LlmExplanationFallbackReason {
   if (
-    (target === "terraform_error_explanation" && !creditPolicy.amazonQ && !creditPolicy.bedrock) ||
-    (target !== "terraform_error_explanation" && !creditPolicy.bedrock)
+    (isAmazonQPrimaryTarget(target) && !creditPolicy.amazonQ && !creditPolicy.bedrock) ||
+    (!isAmazonQPrimaryTarget(target) && !creditPolicy.bedrock)
   ) {
     return "credit_not_confirmed";
   }
