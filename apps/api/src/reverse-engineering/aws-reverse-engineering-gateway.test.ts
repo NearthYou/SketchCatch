@@ -9,8 +9,13 @@ import {
   parseSecurityGroupsFromXml
 } from "./aws-reverse-engineering-parsers.js";
 import {
+  listApiGatewayRestApisAsUnknown,
   listApplicationLoadBalancersAsUnknown,
   listBucketsWithDetails,
+  listCloudFrontDistributionsAsUnknown,
+  listCloudWatchLogGroupsAsUnknown,
+  listIamRolesAsUnknown,
+  listKmsKeysAsUnknown,
   listLambdaFunctionsAsUnknown,
   listTaggedUnknownResources,
   maskReverseEngineeringSensitiveText as maskGatewaySensitiveText,
@@ -62,6 +67,31 @@ test("shouldReadUnknownResourceGroup reads UNKNOWN family only for ALL, UNKNOWN,
     provider: "aws",
     region: "ap-northeast-2",
     resourceTypes: ["LAMBDA"]
+  }), true);
+  assert.equal(shouldReadUnknownResourceGroup({
+    provider: "aws",
+    region: "ap-northeast-2",
+    resourceTypes: ["CLOUDFRONT"]
+  }), true);
+  assert.equal(shouldReadUnknownResourceGroup({
+    provider: "aws",
+    region: "ap-northeast-2",
+    resourceTypes: ["IAM_ROLE"]
+  }), true);
+  assert.equal(shouldReadUnknownResourceGroup({
+    provider: "aws",
+    region: "ap-northeast-2",
+    resourceTypes: ["KMS_KEY"]
+  }), true);
+  assert.equal(shouldReadUnknownResourceGroup({
+    provider: "aws",
+    region: "ap-northeast-2",
+    resourceTypes: ["CLOUDWATCH_LOG_GROUP"]
+  }), true);
+  assert.equal(shouldReadUnknownResourceGroup({
+    provider: "aws",
+    region: "ap-northeast-2",
+    resourceTypes: ["API_GATEWAY_REST_API"]
   }), true);
   assert.equal(shouldReadUnknownResourceGroup({
     provider: "aws",
@@ -297,6 +327,181 @@ test("listLambdaFunctionsAsUnknown keeps untagged Lambda functions as UNKNOWN ca
     { type: "attached_to", targetProviderResourceId: "subnet-1234" },
     { type: "attached_to", targetProviderResourceId: "sg-1234" }
   ]);
+});
+
+test("listCloudFrontDistributionsAsUnknown keeps CloudFront distributions as UNKNOWN candidates", async () => {
+  const fakeCloudFrontClient = {
+    async send(command: { constructor: { name: string } }) {
+      assert.equal(command.constructor.name, "ListDistributionsCommand");
+
+      return {
+        DistributionList: {
+          Items: [
+            {
+              Id: "E123456789",
+              ARN: "arn:aws:cloudfront::316875069960:distribution/E123456789",
+              DomainName: "demo.cloudfront.net",
+              Status: "Deployed",
+              Enabled: true,
+              Comment: "demo distribution"
+            }
+          ]
+        }
+      };
+    }
+  };
+
+  const records = await listCloudFrontDistributionsAsUnknown(
+    "ap-northeast-2",
+    TEST_AWS_CREDENTIALS,
+    () => fakeCloudFrontClient
+  );
+
+  assert.equal(records.length, 1);
+  assert.equal(records[0]?.providerResourceType, "AWS::CloudFront::Distribution");
+  assert.equal(records[0]?.providerResourceId, "arn:aws:cloudfront::316875069960:distribution/E123456789");
+  assert.equal(records[0]?.displayName, "demo.cloudfront.net");
+  assert.equal(records[0]?.config["status"], "Deployed");
+  assert.deepEqual(records[0]?.config["rawProviderData"], {
+    Id: "E123456789",
+    ARN: "arn:aws:cloudfront::316875069960:distribution/E123456789",
+    DomainName: "demo.cloudfront.net",
+    Status: "Deployed",
+    Enabled: true,
+    Comment: "demo distribution"
+  });
+});
+
+test("listIamRolesAsUnknown keeps IAM roles as UNKNOWN candidates", async () => {
+  const fakeIamClient = {
+    async send(command: { constructor: { name: string } }) {
+      assert.equal(command.constructor.name, "ListRolesCommand");
+
+      return {
+        Roles: [
+          {
+            Arn: "arn:aws:iam::316875069960:role/demo-role",
+            RoleName: "demo-role",
+            RoleId: "AROATEST",
+            Path: "/",
+            CreateDate: new Date("2026-07-06T00:00:00.000Z")
+          }
+        ]
+      };
+    }
+  };
+
+  const records = await listIamRolesAsUnknown(
+    "ap-northeast-2",
+    TEST_AWS_CREDENTIALS,
+    () => fakeIamClient
+  );
+
+  assert.equal(records.length, 1);
+  assert.equal(records[0]?.providerResourceType, "AWS::IAM::Role");
+  assert.equal(records[0]?.providerResourceId, "arn:aws:iam::316875069960:role/demo-role");
+  assert.equal(records[0]?.displayName, "demo-role");
+  assert.equal(records[0]?.config["roleId"], "AROATEST");
+});
+
+test("listKmsKeysAsUnknown keeps KMS key metadata as UNKNOWN candidates", async () => {
+  const fakeKmsClient = {
+    async send(command: { constructor: { name: string }; input?: { KeyId?: string } }) {
+      switch (command.constructor.name) {
+        case "ListKeysCommand":
+          return { Keys: [{ KeyId: "key-1234", KeyArn: "arn:aws:kms:ap-northeast-2:316875069960:key/key-1234" }] };
+        case "DescribeKeyCommand":
+          assert.equal(command.input?.KeyId, "key-1234");
+          return {
+            KeyMetadata: {
+              Arn: "arn:aws:kms:ap-northeast-2:316875069960:key/key-1234",
+              KeyId: "key-1234",
+              Description: "demo key",
+              Enabled: true,
+              KeyState: "Enabled",
+              KeyUsage: "ENCRYPT_DECRYPT"
+            }
+          };
+        default:
+          throw new Error(`Unexpected command ${command.constructor.name}`);
+      }
+    }
+  };
+
+  const records = await listKmsKeysAsUnknown(
+    "ap-northeast-2",
+    TEST_AWS_CREDENTIALS,
+    () => fakeKmsClient
+  );
+
+  assert.equal(records.length, 1);
+  assert.equal(records[0]?.providerResourceType, "AWS::KMS::Key");
+  assert.equal(records[0]?.providerResourceId, "arn:aws:kms:ap-northeast-2:316875069960:key/key-1234");
+  assert.equal(records[0]?.displayName, "demo key");
+  assert.equal(records[0]?.config["keyState"], "Enabled");
+});
+
+test("listCloudWatchLogGroupsAsUnknown keeps log groups as UNKNOWN candidates", async () => {
+  const fakeLogsClient = {
+    async send(command: { constructor: { name: string } }) {
+      assert.equal(command.constructor.name, "DescribeLogGroupsCommand");
+
+      return {
+        logGroups: [
+          {
+            logGroupName: "/aws/lambda/demo-fn",
+            arn: "arn:aws:logs:ap-northeast-2:316875069960:log-group:/aws/lambda/demo-fn",
+            retentionInDays: 7,
+            storedBytes: 1024
+          }
+        ]
+      };
+    }
+  };
+
+  const records = await listCloudWatchLogGroupsAsUnknown(
+    "ap-northeast-2",
+    TEST_AWS_CREDENTIALS,
+    () => fakeLogsClient
+  );
+
+  assert.equal(records.length, 1);
+  assert.equal(records[0]?.providerResourceType, "AWS::Logs::LogGroup");
+  assert.equal(records[0]?.providerResourceId, "arn:aws:logs:ap-northeast-2:316875069960:log-group:/aws/lambda/demo-fn");
+  assert.equal(records[0]?.displayName, "/aws/lambda/demo-fn");
+  assert.equal(records[0]?.config["retentionInDays"], 7);
+});
+
+test("listApiGatewayRestApisAsUnknown keeps REST APIs as UNKNOWN candidates", async () => {
+  const fakeApiGatewayClient = {
+    async send(command: { constructor: { name: string } }) {
+      assert.equal(command.constructor.name, "GetRestApisCommand");
+
+      return {
+        items: [
+          {
+            id: "api123",
+            name: "demo-api",
+            description: "demo REST API",
+            createdDate: new Date("2026-07-06T00:00:00.000Z"),
+            endpointConfiguration: { types: ["REGIONAL"] }
+          }
+        ]
+      };
+    }
+  };
+
+  const records = await listApiGatewayRestApisAsUnknown(
+    "ap-northeast-2",
+    TEST_AWS_CREDENTIALS,
+    () => fakeApiGatewayClient
+  );
+
+  assert.equal(records.length, 1);
+  assert.equal(records[0]?.providerResourceType, "AWS::ApiGateway::RestApi");
+  assert.equal(records[0]?.providerResourceId, "api123");
+  assert.equal(records[0]?.displayName, "demo-api");
+  assert.equal(records[0]?.config["description"], "demo REST API");
 });
 
 test("extractSetItems returns only direct AWS set items when child item tags are nested", () => {

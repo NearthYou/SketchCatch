@@ -5,17 +5,49 @@ import {
   type ResourceTagMapping
 } from "@aws-sdk/client-resource-groups-tagging-api";
 import {
+  CloudFrontClient,
+  ListDistributionsCommand,
+  type DistributionSummary,
+  type ListDistributionsCommandOutput
+} from "@aws-sdk/client-cloudfront";
+import {
   DescribeLoadBalancersCommand,
   ElasticLoadBalancingV2Client,
   type DescribeLoadBalancersCommandOutput,
   type LoadBalancer
 } from "@aws-sdk/client-elastic-load-balancing-v2";
 import {
+  IAMClient,
+  ListRolesCommand,
+  type ListRolesCommandOutput,
+  type Role
+} from "@aws-sdk/client-iam";
+import {
+  DescribeKeyCommand,
+  KMSClient,
+  ListKeysCommand,
+  type DescribeKeyCommandOutput,
+  type KeyMetadata,
+  type ListKeysCommandOutput
+} from "@aws-sdk/client-kms";
+import {
   LambdaClient,
   ListFunctionsCommand,
   type FunctionConfiguration,
   type ListFunctionsCommandOutput
 } from "@aws-sdk/client-lambda";
+import {
+  CloudWatchLogsClient,
+  DescribeLogGroupsCommand,
+  type DescribeLogGroupsCommandOutput,
+  type LogGroup
+} from "@aws-sdk/client-cloudwatch-logs";
+import {
+  APIGatewayClient,
+  GetRestApisCommand,
+  type GetRestApisCommandOutput,
+  type RestApi
+} from "@aws-sdk/client-api-gateway";
 import {
   GetBucketEncryptionCommand,
   GetBucketLocationCommand,
@@ -93,6 +125,41 @@ export type AwsLambdaReadClientFactory = (
   region: string,
   credentials: TerraformAwsCredentialEnv
 ) => AwsLambdaReadClient;
+export type AwsCloudFrontReadClient = {
+  send(command: object): Promise<unknown>;
+};
+export type AwsCloudFrontReadClientFactory = (
+  region: string,
+  credentials: TerraformAwsCredentialEnv
+) => AwsCloudFrontReadClient;
+export type AwsIamReadClient = {
+  send(command: object): Promise<unknown>;
+};
+export type AwsIamReadClientFactory = (
+  region: string,
+  credentials: TerraformAwsCredentialEnv
+) => AwsIamReadClient;
+export type AwsKmsReadClient = {
+  send(command: object): Promise<unknown>;
+};
+export type AwsKmsReadClientFactory = (
+  region: string,
+  credentials: TerraformAwsCredentialEnv
+) => AwsKmsReadClient;
+export type AwsCloudWatchLogsReadClient = {
+  send(command: object): Promise<unknown>;
+};
+export type AwsCloudWatchLogsReadClientFactory = (
+  region: string,
+  credentials: TerraformAwsCredentialEnv
+) => AwsCloudWatchLogsReadClient;
+export type AwsApiGatewayReadClient = {
+  send(command: object): Promise<unknown>;
+};
+export type AwsApiGatewayReadClientFactory = (
+  region: string,
+  credentials: TerraformAwsCredentialEnv
+) => AwsApiGatewayReadClient;
 
 // 검증된 AWS 연결로 실제 read-only 조회를 수행하는 gateway를 만듭니다.
 export function createAwsReverseEngineeringGateway(
@@ -443,8 +510,33 @@ async function listUnknownResources(
   if (input.resourceTypes.includes("ALL") || input.resourceTypes.includes("UNKNOWN")) {
     reads.push(
       listTaggedUnknownResources(input.region, credentials),
-      listApplicationLoadBalancersAsUnknown(input.region, credentials)
+      listApplicationLoadBalancersAsUnknown(input.region, credentials),
+      listCloudFrontDistributionsAsUnknown(input.region, credentials),
+      listIamRolesAsUnknown(input.region, credentials),
+      listKmsKeysAsUnknown(input.region, credentials),
+      listCloudWatchLogGroupsAsUnknown(input.region, credentials),
+      listApiGatewayRestApisAsUnknown(input.region, credentials)
     );
+  }
+
+  if (input.resourceTypes.includes("CLOUDFRONT")) {
+    reads.push(listCloudFrontDistributionsAsUnknown(input.region, credentials));
+  }
+
+  if (input.resourceTypes.includes("IAM_ROLE")) {
+    reads.push(listIamRolesAsUnknown(input.region, credentials));
+  }
+
+  if (input.resourceTypes.includes("KMS_KEY")) {
+    reads.push(listKmsKeysAsUnknown(input.region, credentials));
+  }
+
+  if (input.resourceTypes.includes("CLOUDWATCH_LOG_GROUP")) {
+    reads.push(listCloudWatchLogGroupsAsUnknown(input.region, credentials));
+  }
+
+  if (input.resourceTypes.includes("API_GATEWAY_REST_API")) {
+    reads.push(listApiGatewayRestApisAsUnknown(input.region, credentials));
   }
 
   if (
@@ -510,6 +602,119 @@ export async function listLambdaFunctionsAsUnknown(
   return records;
 }
 
+export async function listCloudFrontDistributionsAsUnknown(
+  region: string,
+  credentials: TerraformAwsCredentialEnv,
+  createClient: AwsCloudFrontReadClientFactory = createDefaultCloudFrontReadClient
+): Promise<AwsDiscoveredResourceRecord[]> {
+  const client = createClient(region, credentials);
+  const records: AwsDiscoveredResourceRecord[] = [];
+  let marker: string | undefined;
+
+  do {
+    const response = await sendCloudFrontCommand<ListDistributionsCommandOutput>(
+      client,
+      new ListDistributionsCommand({ Marker: marker })
+    );
+
+    records.push(...(response.DistributionList?.Items ?? []).flatMap(toUnknownCloudFrontDistributionRecord));
+    marker = response.DistributionList?.NextMarker;
+  } while (marker);
+
+  return records;
+}
+
+export async function listIamRolesAsUnknown(
+  region: string,
+  credentials: TerraformAwsCredentialEnv,
+  createClient: AwsIamReadClientFactory = createDefaultIamReadClient
+): Promise<AwsDiscoveredResourceRecord[]> {
+  const client = createClient(region, credentials);
+  const records: AwsDiscoveredResourceRecord[] = [];
+  let marker: string | undefined;
+
+  do {
+    const response = await sendIamCommand<ListRolesCommandOutput>(
+      client,
+      new ListRolesCommand({ Marker: marker })
+    );
+
+    records.push(...(response.Roles ?? []).flatMap((role) => toUnknownIamRoleRecord(role, region)));
+    marker = response.Marker;
+  } while (marker);
+
+  return records;
+}
+
+export async function listKmsKeysAsUnknown(
+  region: string,
+  credentials: TerraformAwsCredentialEnv,
+  createClient: AwsKmsReadClientFactory = createDefaultKmsReadClient
+): Promise<AwsDiscoveredResourceRecord[]> {
+  const client = createClient(region, credentials);
+  const records: AwsDiscoveredResourceRecord[] = [];
+  let marker: string | undefined;
+
+  do {
+    const response = await sendKmsCommand<ListKeysCommandOutput>(
+      client,
+      new ListKeysCommand({ Marker: marker })
+    );
+    const keyRecords = await Promise.all(
+      (response.Keys ?? []).map((key) => createKmsKeyRecord(key.KeyId, key.KeyArn, region, client))
+    );
+
+    records.push(...keyRecords.filter((record): record is AwsDiscoveredResourceRecord => record !== null));
+    marker = response.NextMarker;
+  } while (marker);
+
+  return records;
+}
+
+export async function listCloudWatchLogGroupsAsUnknown(
+  region: string,
+  credentials: TerraformAwsCredentialEnv,
+  createClient: AwsCloudWatchLogsReadClientFactory = createDefaultCloudWatchLogsReadClient
+): Promise<AwsDiscoveredResourceRecord[]> {
+  const client = createClient(region, credentials);
+  const records: AwsDiscoveredResourceRecord[] = [];
+  let nextToken: string | undefined;
+
+  do {
+    const response = await sendCloudWatchLogsCommand<DescribeLogGroupsCommandOutput>(
+      client,
+      new DescribeLogGroupsCommand({ nextToken })
+    );
+
+    records.push(...(response.logGroups ?? []).flatMap((logGroup) => toUnknownLogGroupRecord(logGroup, region)));
+    nextToken = response.nextToken;
+  } while (nextToken);
+
+  return records;
+}
+
+export async function listApiGatewayRestApisAsUnknown(
+  region: string,
+  credentials: TerraformAwsCredentialEnv,
+  createClient: AwsApiGatewayReadClientFactory = createDefaultApiGatewayReadClient
+): Promise<AwsDiscoveredResourceRecord[]> {
+  const client = createClient(region, credentials);
+  const records: AwsDiscoveredResourceRecord[] = [];
+  let position: string | undefined;
+
+  do {
+    const response = await sendApiGatewayCommand<GetRestApisCommandOutput>(
+      client,
+      new GetRestApisCommand({ position })
+    );
+
+    records.push(...(response.items ?? []).flatMap((restApi) => toUnknownRestApiRecord(restApi, region)));
+    position = response.position;
+  } while (position);
+
+  return records;
+}
+
 function createDefaultTaggingReadClient(
   region: string,
   credentials: TerraformAwsCredentialEnv
@@ -552,6 +757,76 @@ function createDefaultLambdaReadClient(
   };
 }
 
+function createDefaultCloudFrontReadClient(
+  region: string,
+  credentials: TerraformAwsCredentialEnv
+): AwsCloudFrontReadClient {
+  const client = new CloudFrontClient({
+    region,
+    credentials: toAwsSdkCredentials(credentials)
+  });
+
+  return {
+    send: (command) => client.send(command as Parameters<CloudFrontClient["send"]>[0])
+  };
+}
+
+function createDefaultIamReadClient(
+  region: string,
+  credentials: TerraformAwsCredentialEnv
+): AwsIamReadClient {
+  const client = new IAMClient({
+    region,
+    credentials: toAwsSdkCredentials(credentials)
+  });
+
+  return {
+    send: (command) => client.send(command as Parameters<IAMClient["send"]>[0])
+  };
+}
+
+function createDefaultKmsReadClient(
+  region: string,
+  credentials: TerraformAwsCredentialEnv
+): AwsKmsReadClient {
+  const client = new KMSClient({
+    region,
+    credentials: toAwsSdkCredentials(credentials)
+  });
+
+  return {
+    send: (command) => client.send(command as Parameters<KMSClient["send"]>[0])
+  };
+}
+
+function createDefaultCloudWatchLogsReadClient(
+  region: string,
+  credentials: TerraformAwsCredentialEnv
+): AwsCloudWatchLogsReadClient {
+  const client = new CloudWatchLogsClient({
+    region,
+    credentials: toAwsSdkCredentials(credentials)
+  });
+
+  return {
+    send: (command) => client.send(command as Parameters<CloudWatchLogsClient["send"]>[0])
+  };
+}
+
+function createDefaultApiGatewayReadClient(
+  region: string,
+  credentials: TerraformAwsCredentialEnv
+): AwsApiGatewayReadClient {
+  const client = new APIGatewayClient({
+    region,
+    credentials: toAwsSdkCredentials(credentials)
+  });
+
+  return {
+    send: (command) => client.send(command as Parameters<APIGatewayClient["send"]>[0])
+  };
+}
+
 async function sendTaggingCommand<TOutput>(
   client: AwsTaggingReadClient,
   command: object
@@ -565,6 +840,35 @@ async function sendElbCommand<TOutput>(client: AwsElbReadClient, command: object
 
 async function sendLambdaCommand<TOutput>(
   client: AwsLambdaReadClient,
+  command: object
+): Promise<TOutput> {
+  return (await client.send(command)) as TOutput;
+}
+
+async function sendCloudFrontCommand<TOutput>(
+  client: AwsCloudFrontReadClient,
+  command: object
+): Promise<TOutput> {
+  return (await client.send(command)) as TOutput;
+}
+
+async function sendIamCommand<TOutput>(client: AwsIamReadClient, command: object): Promise<TOutput> {
+  return (await client.send(command)) as TOutput;
+}
+
+async function sendKmsCommand<TOutput>(client: AwsKmsReadClient, command: object): Promise<TOutput> {
+  return (await client.send(command)) as TOutput;
+}
+
+async function sendCloudWatchLogsCommand<TOutput>(
+  client: AwsCloudWatchLogsReadClient,
+  command: object
+): Promise<TOutput> {
+  return (await client.send(command)) as TOutput;
+}
+
+async function sendApiGatewayCommand<TOutput>(
+  client: AwsApiGatewayReadClient,
   command: object
 ): Promise<TOutput> {
   return (await client.send(command)) as TOutput;
@@ -675,6 +979,188 @@ function toUnknownLambdaFunctionRecord(
         vpcId
       },
       relationships
+    }
+  ];
+}
+
+function toUnknownCloudFrontDistributionRecord(
+  distribution: DistributionSummary
+): AwsDiscoveredResourceRecord[] {
+  const arn = distribution.ARN;
+
+  if (!arn) {
+    return [];
+  }
+
+  return [
+    {
+      providerResourceType: "AWS::CloudFront::Distribution",
+      providerResourceId: arn,
+      displayName: distribution.DomainName ?? distribution.Id ?? arn,
+      region: "global",
+      config: {
+        arn,
+        comment: distribution.Comment,
+        domainName: distribution.DomainName,
+        enabled: distribution.Enabled,
+        id: distribution.Id,
+        rawProviderData: distribution,
+        status: distribution.Status
+      },
+      relationships: []
+    }
+  ];
+}
+
+function toUnknownIamRoleRecord(role: Role, fallbackRegion: string): AwsDiscoveredResourceRecord[] {
+  const arn = role.Arn;
+
+  if (!arn) {
+    return [];
+  }
+
+  return [
+    {
+      providerResourceType: "AWS::IAM::Role",
+      providerResourceId: arn,
+      displayName: role.RoleName ?? arn,
+      region: "global",
+      config: {
+        arn,
+        assumeRolePolicyDocument: role.AssumeRolePolicyDocument,
+        createdAt: role.CreateDate?.toISOString(),
+        description: role.Description,
+        maxSessionDuration: role.MaxSessionDuration,
+        path: role.Path,
+        permissionsBoundary: role.PermissionsBoundary,
+        rawProviderData: role,
+        roleId: role.RoleId,
+        roleLastUsed: role.RoleLastUsed,
+        roleName: role.RoleName,
+        scanRegion: fallbackRegion,
+        tags: role.Tags
+      },
+      relationships: []
+    }
+  ];
+}
+
+async function createKmsKeyRecord(
+  keyId: string | undefined,
+  keyArn: string | undefined,
+  fallbackRegion: string,
+  client: AwsKmsReadClient
+): Promise<AwsDiscoveredResourceRecord | null> {
+  if (!keyId && !keyArn) {
+    return null;
+  }
+
+  const keyMetadata = await readOptionalS3Detail(() =>
+    sendKmsCommand<DescribeKeyCommandOutput>(client, new DescribeKeyCommand({ KeyId: keyId ?? keyArn }))
+  );
+
+  return toUnknownKmsKeyRecord(keyMetadata?.KeyMetadata, keyId, keyArn, fallbackRegion);
+}
+
+function toUnknownKmsKeyRecord(
+  keyMetadata: KeyMetadata | undefined,
+  fallbackKeyId: string | undefined,
+  fallbackKeyArn: string | undefined,
+  fallbackRegion: string
+): AwsDiscoveredResourceRecord | null {
+  const providerResourceId = keyMetadata?.Arn ?? fallbackKeyArn ?? fallbackKeyId;
+
+  if (!providerResourceId) {
+    return null;
+  }
+
+  return {
+    providerResourceType: "AWS::KMS::Key",
+    providerResourceId,
+    displayName: keyMetadata?.Description ?? keyMetadata?.KeyId ?? fallbackKeyId ?? providerResourceId,
+    region: fallbackRegion,
+    config: {
+      arn: keyMetadata?.Arn ?? fallbackKeyArn,
+      cloudHsmClusterId: keyMetadata?.CloudHsmClusterId,
+      createdAt: keyMetadata?.CreationDate?.toISOString(),
+      customerMasterKeySpec: keyMetadata?.CustomerMasterKeySpec,
+      deletionDate: keyMetadata?.DeletionDate?.toISOString(),
+      description: keyMetadata?.Description,
+      enabled: keyMetadata?.Enabled,
+      expirationModel: keyMetadata?.ExpirationModel,
+      keyId: keyMetadata?.KeyId ?? fallbackKeyId,
+      keyManager: keyMetadata?.KeyManager,
+      keySpec: keyMetadata?.KeySpec,
+      keyState: keyMetadata?.KeyState,
+      keyUsage: keyMetadata?.KeyUsage,
+      multiRegion: keyMetadata?.MultiRegion,
+      origin: keyMetadata?.Origin,
+      rawProviderData: keyMetadata ?? { KeyId: fallbackKeyId, KeyArn: fallbackKeyArn },
+      scanRegion: fallbackRegion
+    },
+    relationships: []
+  };
+}
+
+function toUnknownLogGroupRecord(
+  logGroup: LogGroup,
+  fallbackRegion: string
+): AwsDiscoveredResourceRecord[] {
+  const providerResourceId = logGroup.arn ?? logGroup.logGroupName;
+
+  if (!providerResourceId) {
+    return [];
+  }
+
+  return [
+    {
+      providerResourceType: "AWS::Logs::LogGroup",
+      providerResourceId,
+      displayName: logGroup.logGroupName ?? providerResourceId,
+      region: fallbackRegion,
+      config: {
+        arn: logGroup.arn,
+        createdAt: logGroup.creationTime,
+        kmsKeyId: logGroup.kmsKeyId,
+        logGroupClass: logGroup.logGroupClass,
+        logGroupName: logGroup.logGroupName,
+        metricFilterCount: logGroup.metricFilterCount,
+        rawProviderData: logGroup,
+        retentionInDays: logGroup.retentionInDays,
+        storedBytes: logGroup.storedBytes
+      },
+      relationships: []
+    }
+  ];
+}
+
+function toUnknownRestApiRecord(restApi: RestApi, fallbackRegion: string): AwsDiscoveredResourceRecord[] {
+  if (!restApi.id) {
+    return [];
+  }
+
+  return [
+    {
+      providerResourceType: "AWS::ApiGateway::RestApi",
+      providerResourceId: restApi.id,
+      displayName: restApi.name ?? restApi.id,
+      region: fallbackRegion,
+      config: {
+        apiKeySource: restApi.apiKeySource,
+        binaryMediaTypes: restApi.binaryMediaTypes,
+        createdAt: restApi.createdDate?.toISOString(),
+        description: restApi.description,
+        disableExecuteApiEndpoint: restApi.disableExecuteApiEndpoint,
+        endpointConfiguration: restApi.endpointConfiguration,
+        id: restApi.id,
+        name: restApi.name,
+        rawProviderData: restApi,
+        rootResourceId: restApi.rootResourceId,
+        tags: restApi.tags,
+        version: restApi.version,
+        warnings: restApi.warnings
+      },
+      relationships: []
     }
   ];
 }
@@ -792,7 +1278,12 @@ export function shouldReadUnknownResourceGroup(input: AwsProviderScanInput): boo
   return (
     input.resourceTypes.includes("ALL") ||
     input.resourceTypes.includes("UNKNOWN") ||
-    input.resourceTypes.includes("LAMBDA")
+    input.resourceTypes.includes("LAMBDA") ||
+    input.resourceTypes.includes("CLOUDFRONT") ||
+    input.resourceTypes.includes("IAM_ROLE") ||
+    input.resourceTypes.includes("KMS_KEY") ||
+    input.resourceTypes.includes("CLOUDWATCH_LOG_GROUP") ||
+    input.resourceTypes.includes("API_GATEWAY_REST_API")
   );
 }
 
