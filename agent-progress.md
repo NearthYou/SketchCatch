@@ -1598,3 +1598,23 @@
   - `GIT_APP_*` / `GIT_OAUTH_*` prefix 정리 변경은 아직 커밋/푸시 전이므로 운영 배포 workflow에는 반영되지 않았다.
   - 운영 API가 새 env를 읽으려면 이 변경을 커밋/푸시하고 새 production deploy run을 실행해야 한다.
   - live S3 smoke는 여전히 `API_BASE_URL`, `ACCESS_TOKEN` 또는 smoke login env, verified `AWS_CONNECTION_ID`, `SMOKE_ACCOUNT_ID`가 필요하다.
+
+## 2026-07-06 - GitHub App source repository 운영 검증
+
+- Goal: Chrome에서 GitHub 연결 후 source repository가 표시되지 않는 운영 문제를 재현하고 원인을 분리한다.
+- Completed:
+  - Chrome으로 `https://sketchcatch.net/workspace?projectId=680c0fa9-e290-4855-b7fa-ab609225f617&projectName=asdf`를 확인했다.
+  - `Run Database Migrations` workflow run `28762508588`을 실행해 운영 DB migration을 성공시켰고, 이후 Deployment panel의 source repository 조회 500 alert가 사라진 것을 확인했다.
+  - GitHub App callback을 수동으로 열어 repository 목록 조회 단계에서 서버 오류가 나는 것을 확인했다.
+  - 로컬에서 같은 `GIT_APP_*` 설정으로 installation repository 조회를 호출했고, 기존에는 `jose.importPKCS8`가 GitHub App private key 형식을 처리하지 못해 실패하는 것을 확인했다.
+  - GitHub App client가 PKCS#1 private key를 PKCS#8로 정규화해 JWT를 만들도록 수정했다.
+  - 현재 GitHub repo variable `GIT_APP_ID=4219854`와 secret private key가 `SketchCatch Local` App을 가리키지만, production slug `sketchcatch`의 public App ID는 `4219941`임을 확인했다.
+- Verification run:
+  - `pnpm harness:check` - passed
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/source-repositories/github-app-client.test.ts` - passed, 5 tests
+  - `pnpm --filter @sketchcatch/api typecheck` - passed
+  - `pnpm lint` - passed
+  - `pnpm typecheck` - passed
+  - `pnpm build` - passed
+- Known risks:
+  - 운영 GitHub App 연결을 완료하려면 `GIT_APP_ID`와 `GIT_APP_PRIVATE_KEY_BASE64`를 production App `sketchcatch` 값으로 교체해야 한다. `GIT_APP_SLUG=sketchcatch`는 유지한다.

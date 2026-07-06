@@ -15,6 +15,65 @@ const privateKey = generateKeyPairSync("rsa", {
   }
 }).privateKey;
 
+const pkcs1PrivateKey = generateKeyPairSync("rsa", {
+  modulusLength: 2048,
+  privateKeyEncoding: {
+    type: "pkcs1",
+    format: "pem"
+  },
+  publicKeyEncoding: {
+    type: "spki",
+    format: "pem"
+  }
+}).privateKey;
+
+test("listInstallationRepositories accepts GitHub PKCS#1 private keys", async () => {
+  const client = createGitHubAppClient({
+    appId: "12345",
+    privateKey: pkcs1PrivateKey,
+    fetch: createGitHubFetchStub([], ({ pathname }) => {
+      if (pathname === "/app/installations/42/access_tokens") {
+        return jsonResponse({ token: "installation-token" });
+      }
+
+      if (pathname === "/installation/repositories") {
+        return jsonResponse({
+          repositories: [
+            {
+              id: 1001,
+              name: "repo",
+              full_name: "owner/repo",
+              html_url: "https://github.com/owner/repo",
+              default_branch: "main",
+              private: true,
+              visibility: "private",
+              archived: false,
+              owner: { login: "owner" }
+            }
+          ]
+        });
+      }
+
+      return jsonResponse({ message: "not found" }, 404);
+    })
+  });
+
+  const repositories = await client.listInstallationRepositories("42");
+
+  assert.deepEqual(repositories, [
+    {
+      githubRepositoryId: "1001",
+      owner: "owner",
+      name: "repo",
+      fullName: "owner/repo",
+      defaultBranch: "main",
+      repositoryUrl: "https://github.com/owner/repo",
+      visibility: "private",
+      archived: false
+    }
+  ]);
+});
+
 test("createPullRequest blocks when the target branch already contains the SketchCatch artifact path", async () => {
   const calls: GitHubApiCall[] = [];
   const client = createGitHubAppClient({

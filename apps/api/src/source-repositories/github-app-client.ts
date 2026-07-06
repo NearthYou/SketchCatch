@@ -1,3 +1,4 @@
+import { createPrivateKey } from "node:crypto";
 import { importPKCS8, SignJWT } from "jose";
 import type { GitHubRepositoryCandidate, GitCicdHandoffStatus } from "@sketchcatch/types";
 
@@ -116,7 +117,7 @@ export function createGitHubAppClient(options: GitHubAppClientOptions): GitHubAp
   const now = options.now ?? (() => new Date());
 
   async function createAppJwt(): Promise<string> {
-    const key = await importPKCS8(options.privateKey, "RS256");
+    const key = await importPKCS8(toPkcs8PrivateKey(options.privateKey), "RS256");
     const issuedAt = Math.floor(now().getTime() / 1000) - 60;
 
     return new SignJWT({})
@@ -259,6 +260,20 @@ export function createGitHubAppClient(options: GitHubAppClientOptions): GitHubAp
       return mapWorkflowRunStatus(latestRun);
     }
   };
+}
+
+function toPkcs8PrivateKey(privateKey: string): string {
+  const key = createPrivateKey(privateKey);
+  const exported = key.export({
+    format: "pem",
+    type: "pkcs8"
+  });
+
+  if (typeof exported !== "string") {
+    throw new Error("GitHub App private key could not be exported as PEM");
+  }
+
+  return exported;
 }
 
 type GitHubRequestInit = {

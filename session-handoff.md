@@ -651,3 +651,25 @@ pnpm build
   - Commit and push the `GIT_APP_*` / `GIT_OAUTH_*` prefix update plus merge.
   - Run a fresh deploy workflow so operating containers receive the new env values.
   - Then execute GitHub App install/repo selection/PR handoff and `scripts/smoke/live-s3-deployment.ps1` with prepared smoke env.
+
+## 2026-07-06 - GitHub App source repository 운영 검증 handoff
+
+- Current branch/worktree: `feature/sw/deployment-github-runtime-cache` at `C:\Users\siwon\Desktop\Jungle\Week17~21\SketchCatch`.
+- Completed:
+  - Ran production DB migration workflow `28762508588`; it completed successfully.
+  - Verified in Chrome that the Deployment panel source repository list no longer shows the generic server error after migration.
+  - Verified GitHub install page opens for `sketchcatch`, but already-installed `NearthYou` points to GitHub settings without preserving SketchCatch state.
+  - Manually opened SketchCatch callback with the observed installation id/state and reproduced a repository-list server error.
+  - Local GitHub App API probe showed the configured `GIT_APP_PRIVATE_KEY_BASE64`/`GIT_APP_ID` identify `SketchCatch Local` (`id=4219854`) while the production slug `sketchcatch` public App ID is `4219941`.
+  - Patched GitHub App client to normalize PKCS#1 private keys to PKCS#8 before signing JWTs.
+- Verification completed:
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/source-repositories/github-app-client.test.ts` - passed, 5 tests
+  - `pnpm --filter @sketchcatch/api typecheck` - passed
+  - `pnpm lint` - passed
+  - `pnpm typecheck` - passed
+  - `pnpm build` - passed
+- Next action:
+  - Keep `GIT_APP_SLUG=sketchcatch`.
+  - Replace repo variable `GIT_APP_ID` with `4219941`.
+  - Replace repo secret `GIT_APP_PRIVATE_KEY_BASE64` with the production `sketchcatch` GitHub App private key, base64 encoded.
+  - Deploy the PKCS#1 compatibility patch, then retest GitHub App callback/repo selection.
