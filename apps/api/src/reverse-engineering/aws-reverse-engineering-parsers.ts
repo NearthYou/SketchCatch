@@ -7,6 +7,7 @@ type SecurityGroupIngressRule = {
   port: number;
   cidr: string;
 };
+type ProviderParameterValue = string | ProviderParameterValue[] | { [key: string]: ProviderParameterValue };
 type ConfigRecord = Record<string, string | number | boolean>;
 
 // AWS VPC XML을 내부 Resource 후보로 바꿉니다.
@@ -25,7 +26,7 @@ export function parseVpcsFromXml(xml: string, region: string): AwsDiscoveredReso
         dhcpOptionsId: extractTag(item, "dhcpOptionsId"),
         instanceTenancy: extractTag(item, "instanceTenancy"),
         isDefault: extractBooleanTag(item, "isDefault"),
-        rawProviderXml: item,
+        providerParameters: createXmlParameterSnapshot(item),
         state: extractTag(item, "state")
       },
       relationships: []
@@ -51,7 +52,7 @@ export function parseSubnetsFromXml(xml: string, region: string): AwsDiscoveredR
         defaultForAz: extractBooleanTag(item, "defaultForAz"),
         ipv6CidrBlockAssociationSet: extractIpv6CidrBlockAssociations(item),
         mapPublicIpOnLaunch: extractBooleanTag(item, "mapPublicIpOnLaunch"),
-        rawProviderXml: item,
+        providerParameters: createXmlParameterSnapshot(item),
         state: extractTag(item, "state"),
         subnetArn: extractTag(item, "subnetArn"),
         vpcId,
@@ -79,7 +80,7 @@ export function parseInternetGatewaysFromXml(
       region,
       config: {
         attachments: extractInternetGatewayAttachments(item),
-        rawProviderXml: item
+        providerParameters: createXmlParameterSnapshot(item)
       },
       relationships: vpcIds.map((vpcId) => createRelationship("attached_to", vpcId))
     };
@@ -109,7 +110,7 @@ export function parseRouteTablesFromXml(
       region,
       config: {
         associations: extractRouteTableAssociations(item),
-        rawProviderXml: item,
+        providerParameters: createXmlParameterSnapshot(item),
         routes: extractRouteTableRoutes(item),
         vpcId
       },
@@ -136,7 +137,7 @@ export function parseSecurityGroupsFromXml(
         groupName: extractTag(item, "groupName"),
         description: extractTag(item, "groupDescription"),
         ownerId: extractTag(item, "ownerId"),
-        rawProviderXml: item,
+        providerParameters: createXmlParameterSnapshot(item),
         vpcId,
         egress: extractSecurityGroupEgressRules(item),
         ingress: extractSecurityGroupIngressRules(item)
@@ -176,7 +177,7 @@ export function parseInstancesFromXml(xml: string, region: string): AwsDiscovere
         privateIpAddress: extractTag(item, "privateIpAddress"),
         publicDnsName: extractTag(item, "dnsName"),
         publicIpAddress: extractTag(item, "ipAddress"),
-        rawProviderXml: item,
+        providerParameters: createXmlParameterSnapshot(item),
         rootDeviceName: extractTag(item, "rootDeviceName"),
         rootDeviceType: extractTag(item, "rootDeviceType"),
         securityGroupIds: groupIds,
@@ -218,7 +219,7 @@ export function parseRdsInstancesFromXml(
         engineVersion: extractTag(item, "EngineVersion"),
         multiAz: extractBooleanTag(item, "MultiAZ"),
         publiclyAccessible: extractBooleanTag(item, "PubliclyAccessible") === true,
-        rawProviderXml: item,
+        providerParameters: createXmlParameterSnapshot(item),
         storageEncrypted: extractBooleanTag(item, "StorageEncrypted"),
         storageType: extractTag(item, "StorageType"),
         vpcSecurityGroupIds: securityGroupIds
@@ -312,6 +313,50 @@ function compactConfigRecord<T extends Record<string, string | number | boolean 
   return Object.fromEntries(
     Object.entries(record).filter(([, value]) => value !== null)
   ) as ConfigRecord;
+}
+
+// AWS XML 원본을 그대로 내보내지 않고, key/value 객체로 정리해서 전체 설정 확인용으로 보관합니다.
+function createXmlParameterSnapshot(xml: string): Record<string, ProviderParameterValue> {
+  return parseXmlChildren(xml);
+}
+
+// XML 하위 태그를 같은 이름끼리 모아 일반 객체 값으로 바꿉니다.
+function parseXmlChildren(xml: string): Record<string, ProviderParameterValue> {
+  const result: Record<string, ProviderParameterValue[]> = {};
+  let searchIndex = 0;
+
+  while (searchIndex < xml.length) {
+    const openTagMatch = /<([A-Za-z0-9_.:-]+)>/g;
+    openTagMatch.lastIndex = searchIndex;
+    const match = openTagMatch.exec(xml);
+
+    if (!match?.[1]) {
+      break;
+    }
+
+    const tagName = match[1];
+    const openTag = `<${tagName}>`;
+    const closeTag = `</${tagName}>`;
+    const bodyStartIndex = match.index + openTag.length;
+    const bodyEndIndex = findMatchingElementEndIndex(xml, bodyStartIndex, openTag, closeTag);
+    const body = xml.slice(bodyStartIndex, bodyEndIndex);
+    const value = hasDirectXmlChildren(body) ? parseXmlChildren(body) : unescapeXml(body);
+    result[tagName] = [...(result[tagName] ?? []), value];
+    searchIndex = bodyEndIndex + closeTag.length;
+  }
+
+  return Object.entries(result).reduce<Record<string, ProviderParameterValue>>(
+    (snapshot, [key, values]) => ({
+      ...snapshot,
+      [key]: values.length === 1 ? values[0] ?? "" : values
+    }),
+    {}
+  );
+}
+
+// 문자열 안에 바로 읽을 수 있는 XML 자식 태그가 있는지 확인합니다.
+function hasDirectXmlChildren(xml: string): boolean {
+  return /<[A-Za-z0-9_.:-]+>/.test(xml);
 }
 
 // AWS 목록 XML에서 각 set 바로 아래 있는 항목 태그만 꺼냅니다.

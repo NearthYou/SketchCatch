@@ -482,7 +482,7 @@ async function createS3BucketRecord(
       websiteErrorDocument: website?.ErrorDocument?.Key,
       tags: tagging?.TagSet?.map((tag) => ({ key: tag.Key, value: tag.Value })),
       policyStatusIsPublic: policyStatus?.PolicyStatus?.IsPublic,
-      rawProviderData: {
+      providerParameters: toProviderParameterSnapshot({
         bucket: {
           name: bucketName,
           createdAt: createdAt?.toISOString()
@@ -494,7 +494,7 @@ async function createS3BucketRecord(
         website,
         tagging,
         policyStatus
-      }
+      })
     },
     relationships: []
   };
@@ -1128,7 +1128,7 @@ function toUnknownLoadBalancerRecord(
         dnsName: loadBalancer.DNSName,
         ipAddressType: loadBalancer.IpAddressType,
         name: loadBalancer.LoadBalancerName,
-        rawProviderData: loadBalancer,
+        providerParameters: toProviderParameterSnapshot(loadBalancer),
         scheme: loadBalancer.Scheme,
         securityGroupIds,
         state: loadBalancer.State,
@@ -1183,7 +1183,7 @@ function toUnknownLambdaFunctionRecord(
         layers: lambdaFunction.Layers,
         memorySize: lambdaFunction.MemorySize,
         packageType: lambdaFunction.PackageType,
-        rawProviderData: lambdaFunction,
+        providerParameters: toProviderParameterSnapshot(lambdaFunction),
         role: lambdaFunction.Role,
         runtime: lambdaFunction.Runtime,
         signingJobArn: lambdaFunction.SigningJobArn,
@@ -1264,7 +1264,7 @@ function toUnknownLambdaPermissionRecord(
       functionArn,
       functionName: lambdaFunction.FunctionName,
       principal: statement.Principal,
-      rawProviderData: statement,
+      providerParameters: toProviderParameterSnapshot(statement),
       resource: statement.Resource,
       sid
     },
@@ -1293,7 +1293,7 @@ function toUnknownCloudFrontDistributionRecord(
         domainName: distribution.DomainName,
         enabled: distribution.Enabled,
         id: distribution.Id,
-        rawProviderData: distribution,
+        providerParameters: toProviderParameterSnapshot(distribution),
         status: distribution.Status
       },
       relationships: []
@@ -1327,7 +1327,7 @@ function toUnknownAmiImageRecord(image: Image, fallbackRegion: string): AwsDisco
         platform: image.Platform,
         platformDetails: image.PlatformDetails,
         public: image.Public,
-        rawProviderData: image,
+        providerParameters: toProviderParameterSnapshot(image),
         rootDeviceName: image.RootDeviceName,
         rootDeviceType: image.RootDeviceType,
         state: image.State,
@@ -1360,7 +1360,7 @@ function toUnknownIamRoleRecord(role: Role, fallbackRegion: string): AwsDiscover
         maxSessionDuration: role.MaxSessionDuration,
         path: role.Path,
         permissionsBoundary: role.PermissionsBoundary,
-        rawProviderData: role,
+        providerParameters: toProviderParameterSnapshot(role),
         roleId: role.RoleId,
         roleLastUsed: role.RoleLastUsed,
         roleName: role.RoleName,
@@ -1399,7 +1399,7 @@ function toUnknownIamPolicyRecord(
         permissionsBoundaryUsageCount: policy.PermissionsBoundaryUsageCount,
         policyId: policy.PolicyId,
         policyName: policy.PolicyName,
-        rawProviderData: policy,
+        providerParameters: toProviderParameterSnapshot(policy),
         scanRegion: fallbackRegion,
         tags: policy.Tags,
         updatedAt: policy.UpdateDate?.toISOString()
@@ -1431,7 +1431,7 @@ function toUnknownIamInstanceProfileRecord(
         instanceProfileId: profile.InstanceProfileId,
         instanceProfileName: profile.InstanceProfileName,
         path: profile.Path,
-        rawProviderData: profile,
+        providerParameters: toProviderParameterSnapshot(profile),
         roles: profile.Roles,
         scanRegion: fallbackRegion,
         tags: profile.Tags
@@ -1493,7 +1493,9 @@ function toUnknownKmsKeyRecord(
       keyUsage: keyMetadata?.KeyUsage,
       multiRegion: keyMetadata?.MultiRegion,
       origin: keyMetadata?.Origin,
-      rawProviderData: keyMetadata ?? { KeyId: fallbackKeyId, KeyArn: fallbackKeyArn },
+      providerParameters: toProviderParameterSnapshot(
+        keyMetadata ?? { KeyId: fallbackKeyId, KeyArn: fallbackKeyArn }
+      ),
       scanRegion: fallbackRegion
     },
     relationships: []
@@ -1523,7 +1525,7 @@ function toUnknownLogGroupRecord(
         logGroupClass: logGroup.logGroupClass,
         logGroupName: logGroup.logGroupName,
         metricFilterCount: logGroup.metricFilterCount,
-        rawProviderData: logGroup,
+        providerParameters: toProviderParameterSnapshot(logGroup),
         retentionInDays: logGroup.retentionInDays,
         storedBytes: logGroup.storedBytes
       },
@@ -1565,7 +1567,7 @@ function toUnknownMetricAlarmRecord(
         namespace: alarm.Namespace,
         okActions: alarm.OKActions,
         period: alarm.Period,
-        rawProviderData: alarm,
+        providerParameters: toProviderParameterSnapshot(alarm),
         stateReason: alarm.StateReason,
         stateUpdatedAt: alarm.StateUpdatedTimestamp?.toISOString(),
         stateValue: alarm.StateValue,
@@ -1599,7 +1601,7 @@ function toUnknownRestApiRecord(restApi: RestApi, fallbackRegion: string): AwsDi
         endpointConfiguration: restApi.endpointConfiguration,
         id: restApi.id,
         name: restApi.name,
-        rawProviderData: restApi,
+        providerParameters: toProviderParameterSnapshot(restApi),
         rootResourceId: restApi.rootResourceId,
         tags: restApi.tags,
         version: restApi.version,
@@ -1634,7 +1636,7 @@ function toUnknownTaggedResourceRecord(
         arn,
         accountId: arnParts.accountId,
         resourceKind: arnParts.resourceKind,
-        rawProviderData: resource,
+        providerParameters: toProviderParameterSnapshot(resource),
         service: arnParts.service,
         tags
       },
@@ -1712,6 +1714,41 @@ function toAwsSdkCredentials(credentials: TerraformAwsCredentialEnv) {
         accessKeyId: credentials.AWS_ACCESS_KEY_ID,
         secretAccessKey: credentials.AWS_SECRET_ACCESS_KEY
       };
+}
+
+// AWS SDK 응답을 그대로 내보내지 않고, 화면에서 볼 수 있는 JSON 값만 남깁니다.
+function toProviderParameterSnapshot(value: unknown): unknown {
+  if (
+    value === null ||
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean"
+  ) {
+    return value;
+  }
+
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => {
+      const normalizedItem = toProviderParameterSnapshot(item);
+
+      return normalizedItem === undefined ? [] : [normalizedItem];
+    });
+  }
+
+  if (typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value)
+        .filter(([key, entryValue]) => key !== "$metadata" && entryValue !== undefined)
+        .map(([key, entryValue]) => [key, toProviderParameterSnapshot(entryValue)])
+        .filter(([, entryValue]) => entryValue !== undefined)
+    );
+  }
+
+  return undefined;
 }
 
 // `ALL`은 화면 선택값일 뿐 실제 AWS 리소스가 아니어서, 각 지원 리소스 조회로 풀어서 처리합니다.
