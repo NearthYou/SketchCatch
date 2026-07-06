@@ -1,0 +1,75 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  SketchCatch internal Runtime Cache Redis for deployment log cursors and Git/CI/CD pipeline
+  status polling. This template creates cost-bearing ElastiCache resources and must not be used
+  as a user Practice Architecture resource.
+
+Parameters:
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC where the SketchCatch API runtime runs.
+  SubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: Private subnet IDs for the ElastiCache subnet group.
+  ApiSecurityGroupId:
+    Type: AWS::EC2::SecurityGroup::Id
+    Description: Security group attached to the SketchCatch API runtime.
+  CacheNodeType:
+    Type: String
+    Default: cache.t4g.micro
+    Description: ElastiCache node type. Increase only after observing Runtime Cache pressure.
+  RedisPort:
+    Type: Number
+    Default: 6379
+    MinValue: 1024
+    MaxValue: 65535
+
+Resources:
+  RuntimeCacheSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow SketchCatch API runtime to access internal Redis Runtime Cache
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: !Ref RedisPort
+          ToPort: !Ref RedisPort
+          SourceSecurityGroupId: !Ref ApiSecurityGroupId
+      SecurityGroupEgress: []
+      Tags:
+        - Key: Name
+          Value: sketchcatch-runtime-cache
+        - Key: SketchCatchComponent
+          Value: runtime-cache
+
+  RuntimeCacheSubnetGroup:
+    Type: AWS::ElastiCache::SubnetGroup
+    Properties:
+      Description: Private subnets for SketchCatch internal Runtime Cache
+      SubnetIds: !Ref SubnetIds
+
+  RuntimeCacheReplicationGroup:
+    Type: AWS::ElastiCache::ReplicationGroup
+    Properties:
+      ReplicationGroupDescription: SketchCatch internal Runtime Cache Redis
+      Engine: redis
+      CacheNodeType: !Ref CacheNodeType
+      NumCacheClusters: 1
+      AutomaticFailoverEnabled: false
+      AtRestEncryptionEnabled: true
+      TransitEncryptionEnabled: true
+      CacheSubnetGroupName: !Ref RuntimeCacheSubnetGroup
+      SecurityGroupIds:
+        - !Ref RuntimeCacheSecurityGroup
+      Port: !Ref RedisPort
+      Tags:
+        - Key: SketchCatchComponent
+          Value: runtime-cache
+
+Outputs:
+  RedisUrl:
+    Description: Set this value as REDIS_URL on the SketchCatch API runtime.
+    Value: !Sub "rediss://${RuntimeCacheReplicationGroup.PrimaryEndPoint.Address}:${RedisPort}"
+  SecurityGroupId:
+    Description: Security group for the internal Runtime Cache.
+    Value: !Ref RuntimeCacheSecurityGroup

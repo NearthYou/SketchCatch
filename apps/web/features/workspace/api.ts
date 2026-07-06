@@ -11,6 +11,8 @@ import type {
   AwsConnectionCloudFormationTemplateResponse,
   AwsConnection,
   AwsConnectionListResponse,
+  CostEstimatePeriod,
+  CostProjectEstimateListResponse,
   CreateArchitectureSnapshotRequest,
   CreateArchitectureDraftRequest,
   CreateArchitectureDraftResponse,
@@ -22,6 +24,7 @@ import type {
   CreateDesignSimulationRequest,
   CreateProjectAssetUploadRequest,
   CreateProjectRequest,
+  CreateReverseEngineeringScanRequest,
   DeleteProjectRequest,
   DeleteProjectResponse,
   DesignSimulationResult,
@@ -39,6 +42,10 @@ import type {
   GitCicdHandoffListResponse,
   GitCicdHandoffPipelineStatus,
   GitCicdHandoffPipelineStatusResponse,
+  GitHubAppExistingInstallationCallbackUrlResponse,
+  GitHubAppInstallUrlResponse,
+  ListGitHubInstallationRepositoriesRequest,
+  ListGitHubInstallationRepositoriesResponse,
   Project,
   ProjectAssetUploadResponse,
   ProjectDetailsResponse,
@@ -48,7 +55,17 @@ import type {
   ProjectResponse,
   RecentSuccessfulDeploymentProject,
   RecentSuccessfulDeploymentProjectListResponse,
+  SourceRepository,
+  SourceRepositoryListResponse,
+  SourceRepositoryResponse,
+  ConnectGitHubSourceRepositoryRequest,
+  ReverseEngineeringScan,
+  ReverseEngineeringScanListResponse,
+  ReverseEngineeringScanLogLine,
+  ReverseEngineeringScanLogListResponse,
+  ReverseEngineeringScanResponse,
   SaveProjectDraftRequest,
+  TerraformDiagnostic,
   TerraformOutput,
   TerraformOutputListResponse,
   TestAwsConnectionRequest,
@@ -70,9 +87,11 @@ const AI_API_BASE_URL = (
 ).replace(/\/+$/, "");
 
 type AiTerraformErrorExplanationRequest = {
+  readonly diagnostic?: TerraformDiagnostic | undefined;
   readonly stage: AiTerraformStage;
   readonly rawMessage: string;
   readonly relatedResourceId?: string | undefined;
+  readonly terraformCodeContext?: string | undefined;
 };
 
 type ArchitectureSnapshotResponse = {
@@ -336,9 +355,11 @@ export async function runAiTerraformErrorExplanation(
   input: AiTerraformErrorExplanationRequest
 ): Promise<AiTerraformErrorExplanationResult> {
   return postPublicAiJson<AiTerraformErrorExplanationResult>("/ai/terraform-error-explanation", {
+    diagnostic: input.diagnostic,
     rawMessage: input.rawMessage,
     relatedResourceId: input.relatedResourceId,
-    stage: input.stage
+    stage: input.stage,
+    terraformCodeContext: input.terraformCodeContext
   });
 }
 
@@ -496,6 +517,101 @@ export async function getAwsConnectionCloudFormationTemplate({
   );
 }
 
+export async function createReverseEngineeringScan({
+  projectId,
+  ...input
+}: {
+  projectId: string;
+} & CreateReverseEngineeringScanRequest): Promise<ReverseEngineeringScanResponse> {
+  return apiFetch<ReverseEngineeringScanResponse>(
+    `/projects/${encodeURIComponent(projectId)}/reverse-engineering/scans`,
+    {
+      auth: true,
+      method: "POST",
+      body: input
+    }
+  );
+}
+
+export async function listReverseEngineeringScans(projectId: string): Promise<ReverseEngineeringScan[]> {
+  const response = await apiFetch<ReverseEngineeringScanListResponse>(
+    `/projects/${encodeURIComponent(projectId)}/reverse-engineering/scans`,
+    {
+      auth: true
+    }
+  );
+
+  return response.scans;
+}
+
+export async function getReverseEngineeringScan({
+  projectId,
+  scanId
+}: {
+  projectId: string;
+  scanId: string;
+}): Promise<ReverseEngineeringScanResponse> {
+  return apiFetch<ReverseEngineeringScanResponse>(
+    `/projects/${encodeURIComponent(projectId)}/reverse-engineering/scans/${encodeURIComponent(scanId)}`,
+    {
+      auth: true
+    }
+  );
+}
+
+// 실행 중인 스캔에 취소 요청을 보내고, 서버가 기록한 최신 상태를 받습니다.
+export async function cancelReverseEngineeringScan({
+  projectId,
+  scanId
+}: {
+  projectId: string;
+  scanId: string;
+}): Promise<ReverseEngineeringScan> {
+  const response = await apiFetch<ReverseEngineeringScanResponse>(
+    `/projects/${encodeURIComponent(projectId)}/reverse-engineering/scans/${encodeURIComponent(scanId)}/cancel`,
+    {
+      auth: true,
+      method: "POST"
+    }
+  );
+
+  return response.scan;
+}
+
+// 저장된 스캔 기록만 지우고, 사용자가 적용한 보드 저장본은 건드리지 않습니다.
+export async function deleteReverseEngineeringScan({
+  projectId,
+  scanId
+}: {
+  projectId: string;
+  scanId: string;
+}): Promise<void> {
+  await apiFetch<void>(
+    `/projects/${encodeURIComponent(projectId)}/reverse-engineering/scans/${encodeURIComponent(scanId)}`,
+    {
+      auth: true,
+      method: "DELETE"
+    }
+  );
+}
+
+export async function listReverseEngineeringScanLogs({
+  projectId,
+  scanId
+}: {
+  projectId: string;
+  scanId: string;
+}): Promise<ReverseEngineeringScanLogLine[]> {
+  const response = await apiFetch<ReverseEngineeringScanLogListResponse>(
+    `/projects/${encodeURIComponent(projectId)}/reverse-engineering/scans/${encodeURIComponent(scanId)}/logs`,
+    {
+      auth: true
+    }
+  );
+
+  return response.logs;
+}
+
 export async function createDeployment({
   projectId,
   architectureId,
@@ -542,6 +658,72 @@ export async function listGitCicdHandoffs(projectId: string): Promise<GitCicdHan
   return response.handoffs;
 }
 
+export async function listSourceRepositories(projectId: string): Promise<SourceRepository[]> {
+  const response = await apiFetch<SourceRepositoryListResponse>(
+    `/projects/${encodeURIComponent(projectId)}/source-repositories`,
+    {
+      auth: true
+    }
+  );
+
+  return response.repositories;
+}
+
+export async function createGitHubSourceRepositoryInstallUrl(
+  projectId: string
+): Promise<GitHubAppInstallUrlResponse> {
+  return apiFetch<GitHubAppInstallUrlResponse>(
+    `/projects/${encodeURIComponent(projectId)}/source-repositories/github/install-url`,
+    {
+      auth: true,
+      method: "POST"
+    }
+  );
+}
+
+export async function createGitHubExistingInstallationCallbackUrl(
+  projectId: string
+): Promise<GitHubAppExistingInstallationCallbackUrlResponse> {
+  return apiFetch<GitHubAppExistingInstallationCallbackUrlResponse>(
+    `/projects/${encodeURIComponent(projectId)}/source-repositories/github/existing-installation-callback-url`,
+    {
+      auth: true,
+      method: "POST"
+    }
+  );
+}
+
+export async function listGitHubInstallationRepositories(
+  input: ListGitHubInstallationRepositoriesRequest
+): Promise<ListGitHubInstallationRepositoriesResponse> {
+  return apiFetch<ListGitHubInstallationRepositoriesResponse>(
+    "/source-repositories/github/installation-repositories",
+    {
+      auth: true,
+      method: "POST",
+      body: input
+    }
+  );
+}
+
+export async function connectGitHubSourceRepository({
+  projectId,
+  ...input
+}: {
+  projectId: string;
+} & ConnectGitHubSourceRepositoryRequest): Promise<SourceRepository> {
+  const response = await apiFetch<SourceRepositoryResponse>(
+    `/projects/${encodeURIComponent(projectId)}/source-repositories/github`,
+    {
+      auth: true,
+      method: "POST",
+      body: input
+    }
+  );
+
+  return response.repository;
+}
+
 export async function getGitCicdHandoffPipelineStatus(
   handoffId: string
 ): Promise<GitCicdHandoffPipelineStatus> {
@@ -566,6 +748,22 @@ export async function listRecentSuccessfulDeploymentProjects(): Promise<
   );
 
   return response.items;
+}
+
+export async function listCostProjectEstimates(input: {
+  expectedUserCount: number;
+  period: CostEstimatePeriod;
+  region?: string | undefined;
+}): Promise<CostProjectEstimateListResponse> {
+  const params = new URLSearchParams({
+    expectedUserCount: String(input.expectedUserCount),
+    period: input.period,
+    region: input.region ?? "ap-northeast-2"
+  });
+
+  return apiFetch<CostProjectEstimateListResponse>(`/costs/projects?${params.toString()}`, {
+    auth: true
+  });
 }
 
 export async function runDeploymentInit(deploymentId: string): Promise<Deployment> {

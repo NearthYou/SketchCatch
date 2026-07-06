@@ -48,20 +48,9 @@ const diagramNodeParametersSchema = z.object({
   invalid: z.boolean().optional()
 });
 
-const awsRegionCodeSchema = z.enum([
-  "ap-northeast-2",
-  "ap-northeast-1",
-  "ap-southeast-1",
-  "us-east-1",
-  "us-west-2",
-  "eu-west-1",
-  "eu-central-1"
-]);
-
 const diagramNodeMetadataSchema: z.ZodType<DiagramNodeMetadata> = z.object({
-  awsRegion: awsRegionCodeSchema.optional(),
   parentAreaNodeId: z.string().min(1).optional()
-});
+}).strict();
 
 const diagramNodeSchema = z.object({
   id: z.string().min(1),
@@ -150,7 +139,7 @@ export async function registerTerraformRoutes(
 ): Promise<void> {
   const getTerraformDatabaseClient = options.getDatabaseClient ?? getDatabaseClient;
   const validateTerraformPreviewCode =
-    options.validateTerraformPreviewCode ?? validateTerraformPreviewCodeStatic;
+    options.validateTerraformPreviewCode ?? validateTerraformPreviewCodeDefault;
 
   app.post("/terraform/generate", async (request, reply): Promise<TerraformGenerateResponse | void> => {
     await requireActiveUserId(request, getTerraformDatabaseClient);
@@ -199,7 +188,7 @@ export async function registerTerraformRoutes(
   );
 }
 
-async function validateTerraformPreviewCodeStatic(
+async function validateTerraformPreviewCodeDefault(
   input: TerraformValidateRequest
 ): Promise<TerraformValidateResponse> {
   return {

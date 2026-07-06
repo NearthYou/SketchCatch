@@ -229,14 +229,16 @@ test("runAiTerraformErrorExplanation posts Terraform stage and raw message from 
   const result = await runAiTerraformErrorExplanation({
     rawMessage: "AccessDenied",
     relatedResourceId: "ec2-backend",
-    stage: "plan"
+    stage: "plan",
+    terraformCodeContext: 'resource "aws_instance" "backend" {}'
   });
 
   assert.equal(String(requests[0]?.input), "/api/ai/terraform-error-explanation");
   assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), {
     rawMessage: "AccessDenied",
     relatedResourceId: "ec2-backend",
-    stage: "plan"
+    stage: "plan",
+    terraformCodeContext: 'resource "aws_instance" "backend" {}'
   });
   assert.equal(result.category, "permission");
 });

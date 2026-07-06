@@ -1,4 +1,4 @@
-import { relations, sql } from "drizzle-orm";
+﻿import { relations, sql } from "drizzle-orm";
 import {
   boolean,
   index,
@@ -11,7 +11,13 @@ import {
   uniqueIndex,
   varchar
 } from "drizzle-orm/pg-core";
-import type { ArchitectureJson, DeploymentPlanSummary, DiagramJson } from "@sketchcatch/types";
+import type {
+  ArchitectureJson,
+  DeploymentPlanSummary,
+  DiagramJson,
+  ReverseEngineeringResourceSelection,
+  ReverseEngineeringScanResult
+} from "@sketchcatch/types";
 
 export const assetTypeEnum = pgEnum("asset_type", [
   "diagram_png",
@@ -38,6 +44,11 @@ export const deploymentStatusEnum = pgEnum("deployment_status", [
 export const gitCicdRepositoryProviderEnum = pgEnum("git_cicd_repository_provider", [
   "internal",
   "github"
+]);
+
+export const sourceRepositoryStatusEnum = pgEnum("source_repository_status", [
+  "active",
+  "inactive"
 ]);
 
 export const gitCicdHandoffStatusEnum = pgEnum("git_cicd_handoff_status", [
@@ -80,6 +91,30 @@ export const deploymentPlanOperationEnum = pgEnum("deployment_plan_operation", [
 ]);
 
 export const deploymentLogLevelEnum = pgEnum("deployment_log_level", ["INFO", "WARN", "ERROR"]);
+
+export const reverseEngineeringScanStatusEnum = pgEnum("reverse_engineering_scan_status", [
+  "queued",
+  "running",
+  "completed",
+  "failed",
+  "cancelled"
+]);
+
+export const reverseEngineeringScanStageEnum = pgEnum("reverse_engineering_scan_stage", [
+  "credential",
+  "region",
+  "provider_api",
+  "normalize",
+  "draft",
+  "analysis",
+  "import_suggestion"
+]);
+
+export const reverseEngineeringScanLogLevelEnum = pgEnum("reverse_engineering_scan_log_level", [
+  "INFO",
+  "WARN",
+  "ERROR"
+]);
 
 export const awsConnectionStatusEnum = pgEnum("aws_connection_status", [
   "pending",
@@ -257,6 +292,43 @@ export const projectAssets = pgTable("project_assets", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
 });
 
+export const sourceRepositories = pgTable(
+  "source_repositories",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    projectId: varchar("project_id", { length: 36 })
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    createdByUserId: varchar("created_by_user_id", { length: 36 })
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    provider: gitCicdRepositoryProviderEnum("provider").notNull(),
+    status: sourceRepositoryStatusEnum("status").notNull().default("active"),
+    githubInstallationId: varchar("github_installation_id", { length: 128 }),
+    githubRepositoryId: varchar("github_repository_id", { length: 128 }),
+    owner: varchar("owner", { length: 120 }).notNull(),
+    name: varchar("name", { length: 120 }).notNull(),
+    defaultBranch: varchar("default_branch", { length: 255 }).notNull(),
+    repositoryUrl: text("repository_url"),
+    visibility: varchar("visibility", { length: 20 }),
+    archived: boolean("archived").notNull().default(false),
+    disconnectedAt: timestamp("disconnected_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [
+    index("source_repositories_project_id_idx").on(table.projectId),
+    index("source_repositories_created_by_user_id_idx").on(table.createdByUserId),
+    index("source_repositories_provider_status_idx").on(table.provider, table.status),
+    uniqueIndex("source_repositories_active_project_provider_unique")
+      .on(table.projectId, table.provider)
+      .where(sql`${table.status} = 'active'`),
+    uniqueIndex("source_repositories_github_repository_unique")
+      .on(table.projectId, table.provider, table.githubRepositoryId)
+      .where(sql`${table.status} = 'active' AND ${table.githubRepositoryId} IS NOT NULL`)
+  ]
+);
+
 export const awsConnections = pgTable(
   "aws_connections",
   {
@@ -279,6 +351,58 @@ export const awsConnections = pgTable(
       .on(table.userId, table.accountId)
       .where(sql`${table.status} = 'verified' AND ${table.accountId} IS NOT NULL`),
     uniqueIndex("aws_connections_external_id_unique").on(table.externalId)
+  ]
+);
+
+export const reverseEngineeringScans = pgTable(
+  "reverse_engineering_scans",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    projectId: varchar("project_id", { length: 36 })
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    awsConnectionId: varchar("aws_connection_id", { length: 36 })
+      .notNull()
+      .references(() => awsConnections.id, { onDelete: "restrict" }),
+    provider: varchar("provider", { length: 32 }).notNull().default("aws"),
+    region: varchar("region", { length: 32 }).notNull(),
+    resourceTypes: jsonb("resource_types").$type<ReverseEngineeringResourceSelection[]>().notNull(),
+    status: reverseEngineeringScanStatusEnum("status").notNull().default("queued"),
+    result: jsonb("result").$type<ReverseEngineeringScanResult>(),
+    errorSummary: text("error_summary"),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    cancelRequestedAt: timestamp("cancel_requested_at", { withTimezone: true }),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [
+    index("reverse_engineering_scans_project_id_idx").on(table.projectId),
+    index("reverse_engineering_scans_status_idx").on(table.status),
+    index("reverse_engineering_scans_aws_connection_id_idx").on(table.awsConnectionId)
+  ]
+);
+
+export const reverseEngineeringScanLogs = pgTable(
+  "reverse_engineering_scan_logs",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    scanId: varchar("scan_id", { length: 36 })
+      .notNull()
+      .references(() => reverseEngineeringScans.id, { onDelete: "cascade" }),
+    sequence: integer("sequence").notNull(),
+    stage: reverseEngineeringScanStageEnum("stage").notNull(),
+    level: reverseEngineeringScanLogLevelEnum("level").notNull(),
+    message: text("message").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [
+    index("reverse_engineering_scan_logs_scan_id_idx").on(table.scanId),
+    uniqueIndex("reverse_engineering_scan_logs_scan_sequence_unique").on(
+      table.scanId,
+      table.sequence
+    )
   ]
 );
 
@@ -364,6 +488,7 @@ export const gitCicdHandoffs = pgTable(
     commitMessage: text("commit_message"),
     pullRequestTitle: text("pull_request_title"),
     pullRequestUrl: text("pull_request_url"),
+    pullRequestHeadSha: varchar("pull_request_head_sha", { length: 64 }),
     pipelineRunUrl: text("pipeline_run_url"),
     status: gitCicdHandoffStatusEnum("status").notNull().default("draft"),
     statusMessage: text("status_message"),
@@ -474,6 +599,8 @@ export const usersRelations = relations(users, ({ many }) => ({
   loginAttempts: many(loginAttempts),
   oauthAccounts: many(oauthAccounts),
   awsConnections: many(awsConnections),
+  sourceRepositories: many(sourceRepositories),
+  reverseEngineeringScans: many(reverseEngineeringScans),
   gitCicdHandoffs: many(gitCicdHandoffs)
 }));
 
@@ -513,7 +640,9 @@ export const projectsRelations = relations(projects, ({ many, one }) => ({
   draft: one(projectDrafts),
   architectures: many(architectures),
   assets: many(projectAssets),
+  sourceRepositories: many(sourceRepositories),
   deployments: many(deployments),
+  reverseEngineeringScans: many(reverseEngineeringScans),
   gitCicdHandoffs: many(gitCicdHandoffs)
 }));
 
@@ -568,6 +697,18 @@ export const deploymentsRelations = relations(deployments, ({ one, many }) => ({
   outputs: many(terraformOutputs)
 }));
 
+export const sourceRepositoriesRelations = relations(sourceRepositories, ({ one, many }) => ({
+  project: one(projects, {
+    fields: [sourceRepositories.projectId],
+    references: [projects.id]
+  }),
+  createdBy: one(users, {
+    fields: [sourceRepositories.createdByUserId],
+    references: [users.id]
+  }),
+  gitCicdHandoffs: many(gitCicdHandoffs)
+}));
+
 export const gitCicdHandoffsRelations = relations(gitCicdHandoffs, ({ one }) => ({
   project: one(projects, {
     fields: [gitCicdHandoffs.projectId],
@@ -580,6 +721,10 @@ export const gitCicdHandoffsRelations = relations(gitCicdHandoffs, ({ one }) => 
   terraformArtifact: one(projectAssets, {
     fields: [gitCicdHandoffs.terraformArtifactId],
     references: [projectAssets.id]
+  }),
+  sourceRepository: one(sourceRepositories, {
+    fields: [gitCicdHandoffs.sourceRepositoryId],
+    references: [sourceRepositories.id]
   }),
   createdBy: one(users, {
     fields: [gitCicdHandoffs.createdByUserId],
@@ -619,12 +764,38 @@ export const terraformOutputsRelations = relations(terraformOutputs, ({ one }) =
   })
 }));
 
-export const awsConnectionsRelations = relations(awsConnections, ({ one }) => ({
+export const awsConnectionsRelations = relations(awsConnections, ({ one, many }) => ({
   user: one(users, {
     fields: [awsConnections.userId],
     references: [users.id]
-  })
+  }),
+  reverseEngineeringScans: many(reverseEngineeringScans)
 }));
+
+export const reverseEngineeringScansRelations = relations(
+  reverseEngineeringScans,
+  ({ many, one }) => ({
+    project: one(projects, {
+      fields: [reverseEngineeringScans.projectId],
+      references: [projects.id]
+    }),
+    awsConnection: one(awsConnections, {
+      fields: [reverseEngineeringScans.awsConnectionId],
+      references: [awsConnections.id]
+    }),
+    logs: many(reverseEngineeringScanLogs)
+  })
+);
+
+export const reverseEngineeringScanLogsRelations = relations(
+  reverseEngineeringScanLogs,
+  ({ one }) => ({
+    scan: one(reverseEngineeringScans, {
+      fields: [reverseEngineeringScanLogs.scanId],
+      references: [reverseEngineeringScans.id]
+    })
+  })
+);
 
 export const touchUpdatedAt = {
   updatedAt: sql`now()`

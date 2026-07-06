@@ -11,6 +11,7 @@ import {
   gitCicdHandoffs,
   projectAssets,
   projects,
+  sourceRepositories,
   touchUpdatedAt
 } from "../db/schema.js";
 
@@ -31,6 +32,19 @@ export type GitCicdHandoffTerraformArtifactRecord = Pick<
   assetType: "terraform_file";
   uploadStatus: "uploaded";
 };
+export type GitCicdHandoffSourceRepositoryRecord = Pick<
+  typeof sourceRepositories.$inferSelect,
+  | "id"
+  | "projectId"
+  | "provider"
+  | "status"
+  | "githubInstallationId"
+  | "githubRepositoryId"
+  | "owner"
+  | "name"
+  | "defaultBranch"
+  | "repositoryUrl"
+>;
 
 export type CreateGitCicdHandoffInput = {
   projectId: string;
@@ -38,10 +52,7 @@ export type CreateGitCicdHandoffInput = {
   architectureId: string;
   terraformArtifactId: string;
   sourceRepositoryId: string;
-  repositoryProvider?: SourceRepositoryProvider | undefined;
-  repositoryOwner: string;
-  repositoryName: string;
-  targetBranch: string;
+  targetBranch?: string | undefined;
   sourceBranch?: string | undefined;
   commitMessage?: string | undefined;
   pullRequestTitle?: string | undefined;
@@ -63,6 +74,7 @@ export type CreateGitCicdHandoffRecordInput = {
   commitMessage: string | null;
   pullRequestTitle: string | null;
   pullRequestUrl: string | null;
+  pullRequestHeadSha: string | null;
   pipelineRunUrl: string | null;
   status: GitCicdHandoffStatus;
   statusMessage: string | null;
@@ -76,6 +88,7 @@ export type UpdateGitCicdHandoffStatusInput = {
   status: GitCicdHandoffStatus;
   pullRequestUrl?: string | null | undefined;
   pipelineRunUrl?: string | null | undefined;
+  pullRequestHeadSha?: string | null | undefined;
   statusMessage?: string | null | undefined;
 };
 
@@ -83,13 +96,17 @@ export type UpdateGitCicdHandoffStatusRecordInput = {
   status: GitCicdHandoffStatus;
   pullRequestUrl?: string | null | undefined;
   pipelineRunUrl?: string | null | undefined;
+  pullRequestHeadSha?: string | null | undefined;
   statusMessage?: string | null | undefined;
 };
 
 export type GitCicdProviderCreateInput = {
+  handoffId: string;
   projectId: string;
   architectureId: string;
   terraformArtifactId: string;
+  targetBranch: string;
+  projectSlug: string;
   terraformArtifact: {
     id: string;
     objectKey: string;
@@ -102,6 +119,8 @@ export type GitCicdProviderCreateInput = {
     owner: string;
     name: string;
     defaultBranch: string;
+    githubInstallationId: string | null;
+    githubRepositoryId: string | null;
   };
   sourceBranch: string | null;
   commitMessage: string | null;
@@ -115,6 +134,7 @@ export type GitCicdProviderCreateResult = {
   sourceBranch?: string | null | undefined;
   pullRequestUrl: string | null;
   pipelineRunUrl: string | null;
+  pullRequestHeadSha?: string | null | undefined;
   status: GitCicdHandoffStatus;
   statusMessage: string | null;
 };
@@ -145,6 +165,7 @@ export type GitProviderPullRequestFile = {
 export type GitProviderCreatePullRequestInput = {
   repository: {
     provider: "github";
+    installationId: string;
     owner: string;
     name: string;
   };
@@ -160,6 +181,7 @@ export type GitProviderCreatePullRequestResult = {
   pullRequestUrl: string;
   sourceBranch: string;
   commitSha: string;
+  pullRequestHeadSha: string;
 };
 
 export type GitProvider = {
@@ -182,6 +204,14 @@ export type GitCicdHandoffRepository = {
     projectId: string,
     architectureId: string
   ): Promise<GitCicdHandoffTerraformArtifactRecord | undefined>;
+  findActiveSourceRepository(
+    sourceRepositoryId: string,
+    projectId: string
+  ): Promise<GitCicdHandoffSourceRepositoryRecord | undefined>;
+  findSourceRepositoryById(
+    sourceRepositoryId: string,
+    projectId: string
+  ): Promise<GitCicdHandoffSourceRepositoryRecord | undefined>;
   createHandoff(input: CreateGitCicdHandoffRecordInput): Promise<GitCicdHandoffRecord>;
   findHandoffById(handoffId: string): Promise<GitCicdHandoffRecord | undefined>;
   listHandoffsByProject(projectId: string): Promise<GitCicdHandoffRecord[]>;
@@ -229,7 +259,7 @@ const allowedGitCicdHandoffStatusTransitions: Record<
   pipeline_failed: ["pipeline_running", "cancelled"],
   pipeline_running: ["pipeline_success", "pipeline_failed", "cancelled"],
   pipeline_success: [],
-  pr_created: ["pipeline_running", "cancelled"]
+  pr_created: ["pipeline_running", "pipeline_success", "pipeline_failed", "cancelled"]
 };
 
 export function createInternalGitCicdHandoffProvider(): GitCicdHandoffProvider {
@@ -246,27 +276,51 @@ export function createInternalGitCicdHandoffProvider(): GitCicdHandoffProvider {
   };
 }
 
+export function createDelegatingGitCicdHandoffProvider(input: {
+  internalProvider?: GitCicdHandoffProvider | undefined;
+  githubProvider: GitCicdHandoffProvider;
+}): GitCicdHandoffProvider {
+  const internalProvider = input.internalProvider ?? createInternalGitCicdHandoffProvider();
+
+  return {
+    createHandoff(handoffInput) {
+      if (handoffInput.sourceRepository.provider === "github") {
+        return input.githubProvider.createHandoff(handoffInput);
+      }
+
+      return internalProvider.createHandoff(handoffInput);
+    }
+  };
+}
+
 export function createGitHubGitCicdHandoffProvider(
   gitProvider: GitProvider
 ): GitCicdHandoffProvider {
   return {
     async createHandoff(input) {
       const sourceBranch =
-        input.sourceBranch ?? createDefaultSourceBranch(input.terraformArtifactId);
+        input.sourceBranch ?? createDefaultSourceBranch(input.projectSlug, input.handoffId);
       const commitMessage =
         input.commitMessage ?? `Add SketchCatch Terraform artifact ${input.terraformArtifact.fileName}`;
+      const githubInstallationId = input.sourceRepository.githubInstallationId;
+
+      if (!githubInstallationId) {
+        throw new Error("GitHub source repository installation id is required");
+      }
+
       const result = await gitProvider.createPullRequest({
         repository: {
           provider: "github",
+          installationId: githubInstallationId,
           owner: input.sourceRepository.owner,
           name: input.sourceRepository.name
         },
-        targetBranch: input.sourceRepository.defaultBranch,
+        targetBranch: input.targetBranch,
         sourceBranch,
         commitMessage,
         files: [
           {
-            path: `terraform/${input.terraformArtifact.fileName}`,
+            path: `sketchcatch/${input.projectSlug}/terraform/${input.terraformArtifact.fileName}`,
             artifactObjectKey: input.terraformArtifact.objectKey,
             contentType: input.terraformArtifact.contentType
           }
@@ -280,6 +334,7 @@ export function createGitHubGitCicdHandoffProvider(
         sourceBranch: result.sourceBranch,
         pullRequestUrl: result.pullRequestUrl,
         pipelineRunUrl: null,
+        pullRequestHeadSha: result.pullRequestHeadSha,
         status: "pr_created",
         statusMessage: `GitHub PR created from ${result.sourceBranch} at ${result.commitSha}`
       };
@@ -358,8 +413,19 @@ function createDefaultReviewChecklist(): GitCicdReviewChecklistItem[] {
   ];
 }
 
-function createDefaultSourceBranch(terraformArtifactId: string): string {
-  return `sketchcatch/iac-${terraformArtifactId.slice(0, 8)}`;
+function createDefaultSourceBranch(projectSlug: string, handoffId: string): string {
+  return `sketchcatch/${projectSlug}/iac-${handoffId.slice(0, 8)}`;
+}
+
+function createProjectSlug(projectName: string): string {
+  const slug = projectName
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48);
+
+  return slug || "project";
 }
 
 export function createPostgresGitCicdHandoffRepository(
@@ -410,6 +476,57 @@ export function createPostgresGitCicdHandoffRepository(
       };
     },
 
+    async findActiveSourceRepository(sourceRepositoryId, projectId) {
+      const [sourceRepository] = await db
+        .select({
+          id: sourceRepositories.id,
+          projectId: sourceRepositories.projectId,
+          provider: sourceRepositories.provider,
+          status: sourceRepositories.status,
+          githubInstallationId: sourceRepositories.githubInstallationId,
+          githubRepositoryId: sourceRepositories.githubRepositoryId,
+          owner: sourceRepositories.owner,
+          name: sourceRepositories.name,
+          defaultBranch: sourceRepositories.defaultBranch,
+          repositoryUrl: sourceRepositories.repositoryUrl
+        })
+        .from(sourceRepositories)
+        .where(
+          and(
+            eq(sourceRepositories.id, sourceRepositoryId),
+            eq(sourceRepositories.projectId, projectId),
+            eq(sourceRepositories.status, "active")
+          )
+        );
+
+      return sourceRepository;
+    },
+
+    async findSourceRepositoryById(sourceRepositoryId, projectId) {
+      const [sourceRepository] = await db
+        .select({
+          id: sourceRepositories.id,
+          projectId: sourceRepositories.projectId,
+          provider: sourceRepositories.provider,
+          status: sourceRepositories.status,
+          githubInstallationId: sourceRepositories.githubInstallationId,
+          githubRepositoryId: sourceRepositories.githubRepositoryId,
+          owner: sourceRepositories.owner,
+          name: sourceRepositories.name,
+          defaultBranch: sourceRepositories.defaultBranch,
+          repositoryUrl: sourceRepositories.repositoryUrl
+        })
+        .from(sourceRepositories)
+        .where(
+          and(
+            eq(sourceRepositories.id, sourceRepositoryId),
+            eq(sourceRepositories.projectId, projectId)
+          )
+        );
+
+      return sourceRepository;
+    },
+
     async createHandoff(input) {
       const [handoff] = await db.insert(gitCicdHandoffs).values(input).returning();
 
@@ -451,6 +568,10 @@ export function createPostgresGitCicdHandoffRepository(
         Object.assign(values, { pipelineRunUrl: input.pipelineRunUrl });
       }
 
+      if (input.pullRequestHeadSha !== undefined) {
+        Object.assign(values, { pullRequestHeadSha: input.pullRequestHeadSha });
+      }
+
       if (input.statusMessage !== undefined) {
         Object.assign(values, { statusMessage: input.statusMessage });
       }
@@ -472,7 +593,7 @@ export async function createGitCicdHandoff(
   provider: GitCicdHandoffProvider = createInternalGitCicdHandoffProvider(),
   generateId: () => string = randomUUID
 ): Promise<GitCicdHandoffRecord> {
-  await requireAccessibleProject(
+  const project = await requireAccessibleProject(
     input.projectId,
     input.accessContext,
     repository,
@@ -500,21 +621,36 @@ export async function createGitCicdHandoff(
     );
   }
 
+  const sourceRepository = await repository.findActiveSourceRepository(
+    input.sourceRepositoryId,
+    input.projectId
+  );
+
+  if (!sourceRepository) {
+    throw new GitCicdHandoffNotFoundError("Active source repository not found for project");
+  }
+
+  const handoffId = generateId();
+  const projectSlug = createProjectSlug(project.name);
+  const targetBranch = input.targetBranch ?? sourceRepository.defaultBranch;
   const sourceBranch = input.sourceBranch ?? null;
   const commitMessage = input.commitMessage ?? null;
   const pullRequestDraft = createGitCicdPullRequestDraft({
-    repositoryOwner: input.repositoryOwner,
-    repositoryName: input.repositoryName,
+    repositoryOwner: sourceRepository.owner,
+    repositoryName: sourceRepository.name,
     terraformArtifact,
     planSummary: input.planSummary ?? null,
     title: input.pullRequestTitle ?? null
   });
   const pullRequestTitle = input.pullRequestTitle ?? pullRequestDraft.title;
-  const repositoryProvider = input.repositoryProvider ?? "internal";
+  const repositoryProvider = sourceRepository.provider;
   const providerResult = await provider.createHandoff({
+    handoffId,
     projectId: input.projectId,
     architectureId: input.architectureId,
     terraformArtifactId: input.terraformArtifactId,
+    targetBranch,
+    projectSlug,
     terraformArtifact: {
       id: terraformArtifact.id,
       objectKey: terraformArtifact.objectKey,
@@ -524,9 +660,11 @@ export async function createGitCicdHandoff(
     sourceRepository: {
       id: input.sourceRepositoryId,
       provider: repositoryProvider,
-      owner: input.repositoryOwner,
-      name: input.repositoryName,
-      defaultBranch: input.targetBranch
+      owner: sourceRepository.owner,
+      name: sourceRepository.name,
+      defaultBranch: sourceRepository.defaultBranch,
+      githubInstallationId: sourceRepository.githubInstallationId,
+      githubRepositoryId: sourceRepository.githubRepositoryId
     },
     sourceBranch,
     commitMessage,
@@ -543,19 +681,20 @@ export async function createGitCicdHandoff(
   }
 
   return repository.createHandoff({
-    id: generateId(),
+    id: handoffId,
     projectId: input.projectId,
     architectureId: input.architectureId,
     terraformArtifactId: input.terraformArtifactId,
     sourceRepositoryId: input.sourceRepositoryId,
     repositoryProvider: providerResult.repositoryProvider,
-    repositoryOwner: input.repositoryOwner,
-    repositoryName: input.repositoryName,
-    targetBranch: input.targetBranch,
+    repositoryOwner: sourceRepository.owner,
+    repositoryName: sourceRepository.name,
+    targetBranch,
     sourceBranch: providerResult.sourceBranch ?? sourceBranch,
     commitMessage,
     pullRequestTitle,
     pullRequestUrl: providerResult.pullRequestUrl,
+    pullRequestHeadSha: providerResult.pullRequestHeadSha ?? null,
     pipelineRunUrl: providerResult.pipelineRunUrl,
     status: providerResult.status,
     statusMessage: providerResult.statusMessage,
@@ -616,6 +755,7 @@ export async function updateGitCicdHandoffStatus(
     status: input.status,
     pullRequestUrl: input.pullRequestUrl,
     pipelineRunUrl: input.pipelineRunUrl,
+    pullRequestHeadSha: input.pullRequestHeadSha,
     statusMessage: input.statusMessage
   });
 

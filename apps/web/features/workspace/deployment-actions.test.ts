@@ -50,10 +50,10 @@ test("deployment panel starts on records when deployments exist", () => {
 test("destroy plan waits for approval before showing destroy execution", () => {
   const state = getDeploymentActionState(
     createDeployment({
-      blockedBy: "missing_approval",
+      blockedBy: null,
       currentPlanArtifactId: "99999999-9999-4999-8999-999999999999",
       currentPlanOperation: "destroy",
-      isBlocked: true,
+      isBlocked: false,
       stateObjectKey: "deployments/deployment-id/state/terraform.tfstate",
       status: "SUCCESS"
     }),
@@ -70,10 +70,10 @@ test("destroy plan waits for approval before showing destroy execution", () => {
 test("destroy plan never falls back to the Terraform apply plan action", () => {
   const state = getDeploymentActionState(
     createDeployment({
-      blockedBy: "missing_approval",
+      blockedBy: null,
       currentPlanArtifactId: "99999999-9999-4999-8999-999999999999",
       currentPlanOperation: "destroy",
-      isBlocked: true,
+      isBlocked: false,
       status: "PENDING"
     }),
     "idle"
@@ -87,10 +87,10 @@ test("destroy plan never falls back to the Terraform apply plan action", () => {
 test("current plan without an operation does not fall back to a Terraform plan rerun", () => {
   const state = getDeploymentActionState(
     createDeployment({
-      blockedBy: "missing_approval",
+      blockedBy: null,
       currentPlanArtifactId: "99999999-9999-4999-8999-999999999999",
       currentPlanOperation: null,
-      isBlocked: true,
+      isBlocked: false,
       status: "PENDING"
     }),
     "idle"
@@ -314,6 +314,7 @@ function createGitCicdHandoff(status: GitCicdHandoff["status"]): GitCicdHandoff 
     commitMessage: "Add SketchCatch Terraform preview",
     pullRequestTitle: "SketchCatch IaC preview",
     pullRequestUrl: "https://github.com/sketchcatch/infra-live/pull/42",
+    pullRequestHeadSha: "abc1234",
     pipelineRunUrl:
       status === "pipeline_running"
         ? "https://github.com/sketchcatch/infra-live/actions/runs/1"

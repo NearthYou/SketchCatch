@@ -24,6 +24,16 @@ test("getNodeResizeBounds removes area node max limits while keeping minimum siz
     minHeight: 72,
     ...unrestrictedMax
   });
+  assert.deepEqual(getNodeResizeBounds(makeResourceNode("aws_region")), {
+    minWidth: 260,
+    minHeight: 180,
+    ...unrestrictedMax
+  });
+  assert.deepEqual(getNodeResizeBounds(makeResourceNode("aws_availability_zone")), {
+    minWidth: 220,
+    minHeight: 150,
+    ...unrestrictedMax
+  });
   assert.deepEqual(getNodeResizeBounds(makeResourceNode("aws_vpc")), {
     minWidth: 240,
     minHeight: 160,
@@ -39,15 +49,27 @@ test("getNodeResizeBounds removes area node max limits while keeping minimum siz
     minHeight: 112,
     ...unrestrictedMax
   });
+  assert.deepEqual(getNodeResizeBounds(makeResourceNode("aws_autoscaling_group")), {
+    minWidth: 200,
+    minHeight: 130,
+    ...unrestrictedMax
+  });
 });
 
 test("getNodeResizeBounds keeps regular resource bounds unchanged", () => {
-  assert.deepEqual(getNodeResizeBounds(makeResourceNode("aws_instance")), {
+  const regularBounds = {
     minWidth: 56,
     minHeight: 56,
     maxWidth: 260,
     maxHeight: 260
-  });
+  };
+
+  assert.deepEqual(getNodeResizeBounds(makeResourceNode("aws_instance")), regularBounds);
+  assert.deepEqual(getNodeResizeBounds(makeResourceNode("aws_s3_bucket")), regularBounds);
+  assert.deepEqual(getNodeResizeBounds(makeResourceNode("aws_db_subnet_group")), regularBounds);
+  assert.deepEqual(getNodeResizeBounds(makeResourceNode("aws_api_gateway_rest_api")), regularBounds);
+  assert.deepEqual(getNodeResizeBounds(makeResourceNode("aws_api_gateway_resource")), regularBounds);
+  assert.deepEqual(getNodeResizeBounds(makeResourceNode("aws_cloudwatch_event_rule")), regularBounds);
 });
 
 function makeResourceNode(resourceType: string): Pick<DiagramNode, "kind" | "parameters" | "type"> {

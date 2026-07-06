@@ -33,6 +33,8 @@
 | [ai/001_AIProvider실행흐름정리.md](./ai/001_AIProvider실행흐름정리.md) | AI Provider 실행 흐름과 승인 경계 |
 | [ai/002_아키텍처다이어그램검수가이드.md](./ai/002_아키텍처다이어그램검수가이드.md) | 일반 클라우드 아키텍처 다이어그램 검수 기준 |
 | [ai/003_자연어다이어그램생성구현정리.md](./ai/003_자연어다이어그램생성구현정리.md) | 자연어 다이어그램 생성 브랜치 실행 흐름과 코드 읽는 순서 |
+| [ai/spec_1.md](./ai/spec_1.md) | Terraform 오류 Issues 고정 및 AI 해결 적용 스펙 |
+| [ai/plan_1.md](./ai/plan_1.md) | Terraform 오류 Issues 고정 및 AI 해결 적용 구현 마일스톤 |
 
 ## 정리 규칙
 

@@ -640,6 +640,36 @@ test("POST /api/auth/refresh revokes active sessions when a revoked token is reu
   await app.close();
 });
 
+test("POST /api/auth/refresh ignores an immediately retried rotated token", async () => {
+  const retriedRefreshToken = "recently-rotated-refresh-token";
+  const fakeDb = new AuthScenarioFakeDb({
+    selectResults: [
+      [
+        makeRefreshToken({
+          tokenHash: hashToken(retriedRefreshToken),
+          revokedAt: new Date()
+        })
+      ]
+    ]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/auth/refresh",
+    headers: authCookieHeaders(retriedRefreshToken)
+  });
+
+  assert.equal(response.statusCode, 401);
+  assertErrorResponse(response.json() as ApiErrorResponse, "unauthorized");
+  assert.equal(response.headers["set-cookie"], undefined);
+  assert.equal(fakeDb.updateCalls.length, 0);
+
+  await app.close();
+});
+
 test("POST /api/auth/refresh rotates the cookie refresh token and returns a new session", async () => {
   const refreshToken = "valid-refresh-token";
   const fakeDb = new AuthScenarioFakeDb({

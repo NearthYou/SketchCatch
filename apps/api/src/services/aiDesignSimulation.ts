@@ -1,4 +1,5 @@
 import type {
+  CostEstimateResult,
   CreateDesignSimulationRequest,
   DesignSimulationBottleneck,
   DesignSimulationFailureScenario,
@@ -7,26 +8,49 @@ import type {
   ResourceEdge,
   ResourceNode
 } from "@sketchcatch/types";
+import {
+  analyzeCost,
+  createCostEstimateRequest,
+  type CostPricingRateProvider
+} from "./cost-analysis.js";
+
+export type DesignSimulationOptions = {
+  pricingRateProvider?: CostPricingRateProvider | undefined;
+};
 
 // ArchitectureJson만 근거로 삼아 실제 부하 테스트처럼 보이지 않는 설계 추정을 만듭니다.
-export function simulateDesign(input: CreateDesignSimulationRequest): DesignSimulationResult {
+export async function simulateDesign(
+  input: CreateDesignSimulationRequest,
+  options: DesignSimulationOptions = {}
+): Promise<DesignSimulationResult> {
   const resourceById = createResourceLookup(input.architectureJson.nodes);
   const requestFlow = createRequestFlow(input.architectureJson.edges, resourceById);
   const bottlenecks = createBottlenecks(input.architectureJson.nodes, input.trafficLevel);
   const failureScenarios = createFailureScenarios(input.architectureJson.nodes);
-  const costPressure = createCostPressure(input.architectureJson.nodes, input.budgetLevel);
+  const costEstimate = await analyzeCost(
+    createCostEstimateRequest({
+      architectureJson: input.architectureJson,
+      period: input.period,
+      expectedUserCount: input.expectedUserCount,
+      region: input.region
+    }),
+    options
+  );
+  const costPressure = createCostPressure(costEstimate, input.budgetLevel);
 
   return {
     summary: `${input.architectureJson.nodes.length}개 Resource와 ${input.architectureJson.edges.length}개 연결을 기준으로 Design Simulation을 만들었습니다.`,
     assumptions: [
       "실제 부하 테스트가 아닌 ArchitectureJson 기반 추정입니다.",
       `트래픽은 ${input.trafficLevel === "normal" ? "보통" : "작음"} 수준으로 가정합니다.`,
-      `예산은 ${input.budgetLevel === "low" ? "낮음" : "보통"} 수준으로 가정합니다.`
+      `예산은 ${input.budgetLevel === "low" ? "낮음" : "보통"} 수준으로 가정합니다.`,
+      ...costEstimate.assumptions
     ],
     requestFlow,
     bottlenecks,
     failureScenarios,
     costPressure,
+    costEstimate,
     recommendations: createRecommendations(bottlenecks, failureScenarios, costPressure)
   };
 }
@@ -176,24 +200,16 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 // 낮은 예산에서 비용 압박이 생기기 쉬운 Resource를 별도 문장으로 분리합니다.
 function createCostPressure(
-  nodes: readonly ResourceNode[],
+  costEstimate: CostEstimateResult,
   budgetLevel: CreateDesignSimulationRequest["budgetLevel"]
 ): string[] {
-  const pressure: string[] = [];
+  const pressure = [...costEstimate.reviewMessages];
 
-  if (nodes.some((node) => node.type === "RDS")) {
-    pressure.push(
-      budgetLevel === "low"
-        ? "RDS는 낮은 예산에서 가장 먼저 비용 압박을 만들 수 있습니다."
-        : "RDS는 실행 시간과 스토리지 비용을 함께 확인해야 합니다."
-    );
+  if (budgetLevel === "low" && costEstimate.totalEstimate.amount >= 30) {
+    pressure.push("낮은 예산 기준에서는 현재 Resource 조합이 비용 압박을 만들 수 있습니다.");
   }
 
-  if (nodes.some((node) => node.type === "EC2")) {
-    pressure.push("EC2는 인스턴스 크기와 실행 시간이 비용에 직접 영향을 줍니다.");
-  }
-
-  return pressure;
+  return [...new Set(pressure)];
 }
 
 // 병목, 장애, 비용 압박을 사용자가 다음 설계 행동으로 옮길 수 있는 문장으로 줄입니다.

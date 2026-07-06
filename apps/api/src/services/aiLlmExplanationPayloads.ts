@@ -44,10 +44,13 @@ type TerraformErrorExplanationSummaryPayload = {
   readonly stage: string;
   readonly category: string;
   readonly severity: string;
+  readonly rawMessage: string;
   readonly summary: string;
   readonly likelyCause: string;
   readonly nextActions: readonly string[];
+  readonly diagnosticExplanation: AiTerraformErrorExplanationResult["diagnosticExplanation"] | null;
   readonly relatedResourceId: string | null;
+  readonly terraformCodeContext: string | null;
 };
 
 type TerraformPreviewExplanationSummaryPayload = {
@@ -95,7 +98,7 @@ export function createSummaryPayload(
     case "pre_deployment_check":
       return createPreDeploymentCheckSummaryPayload(input.result);
     case "terraform_error_explanation":
-      return createTerraformErrorExplanationSummaryPayload(input.result);
+      return createTerraformErrorExplanationSummaryPayload(input);
     case "terraform_preview_explanation":
       return createTerraformPreviewExplanationSummaryPayload(input.result);
     case "architecture_patch_preview":
@@ -150,17 +153,22 @@ function createPreDeploymentCheckSummaryPayload(result: AiPreDeploymentAnalysisR
 
 // Terraform 오류 설명은 원본 전체 대신 rule이 정리한 stage, 원인, 다음 행동만 전달합니다.
 function createTerraformErrorExplanationSummaryPayload(
-  result: AiTerraformErrorExplanationResult
+  input: Extract<LlmExplanationInput, { readonly target: "terraform_error_explanation" }>
 ): TerraformErrorExplanationSummaryPayload {
+  const result = input.result;
+
   return {
     target: "terraform_error_explanation",
     stage: result.stage,
     category: result.category,
     severity: result.severity,
+    rawMessage: result.rawMessage,
     summary: result.summary,
     likelyCause: result.likelyCause,
     nextActions: result.nextActions,
-    relatedResourceId: result.relatedResourceId ?? null
+    diagnosticExplanation: result.diagnosticExplanation ?? null,
+    relatedResourceId: result.relatedResourceId ?? null,
+    terraformCodeContext: input.terraformCodeContext?.trim() ? input.terraformCodeContext : null
   };
 }
 

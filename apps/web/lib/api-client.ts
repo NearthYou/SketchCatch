@@ -168,6 +168,10 @@ export async function refreshAuthSession(): Promise<AuthSession | null> {
   return refreshStoredSessionOnce();
 }
 
+export function hasRefreshSessionCookieHint(): boolean {
+  return readCookie(CSRF_TOKEN_COOKIE_NAME) !== null;
+}
+
 async function refreshStoredSessionOnce(): Promise<AuthSession | null> {
   refreshSessionPromise ??= refreshStoredSession().finally(() => {
     refreshSessionPromise = null;

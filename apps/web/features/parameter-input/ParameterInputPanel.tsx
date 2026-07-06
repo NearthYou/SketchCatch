@@ -15,6 +15,10 @@ import type {
 import { SelectMenu } from "../../components/ui/SelectMenu";
 import type { DiagramEditorPanelContext } from "../diagram-editor/types";
 import {
+  getAwsAvailabilityZoneLabel,
+  awsAvailabilityZoneOptions
+} from "./aws-availability-zone-options";
+import {
   filterAwsRegionOptions,
   getAwsRegionLabel,
   getNextAwsRegionOptionIndex
@@ -22,9 +26,12 @@ import {
 import type { ParameterCatalog, ParameterCatalogDefinition } from "./catalog";
 import { terraformParameterCatalog } from "./catalog";
 import {
-  createRegionNodeMetadata,
+  getAvailabilityZoneNodeValue,
   getRegionNodeAwsRegion,
-  isRegionDesignNode
+  isAvailabilityZoneResourceNode,
+  isRegionResourceNode,
+  updateAvailabilityZoneNodeParameters,
+  updateRegionNodeParameters
 } from "./region-node-metadata";
 import { buildResourceMetadataRows } from "./resource-metadata-rows";
 import {
@@ -69,7 +76,7 @@ export function ParameterInputPanel({
     );
   }
 
-  if (isRegionDesignNode(selectedNode)) {
+  if (isRegionResourceNode(selectedNode) && selectedNode.parameters) {
     const selectedRegion = getRegionNodeAwsRegion(selectedNode);
 
     return (
@@ -81,18 +88,47 @@ export function ParameterInputPanel({
           onChange={(label) => updateNodeMetadata(selectedNode.id, { label })}
         />
 
-        <section className={styles.section} aria-label="Main parameters">
-          <div className={styles.sectionHeader}>
-            <h3>Region</h3>
-          </div>
+        <section className={styles.section} aria-label="Region settings">
           <div className={styles.fieldGroup}>
             <RegionField
               onChange={(awsRegion) =>
-                updateNodeMetadata(selectedNode.id, {
-                  metadata: createRegionNodeMetadata(selectedNode, awsRegion)
-                })
+                updateNodeParameters(selectedNode.id, (parameters) =>
+                  parameters ? updateRegionNodeParameters(parameters, awsRegion) : parameters
+                )
               }
+              showLabel={false}
               value={selectedRegion}
+            />
+          </div>
+        </section>
+      </aside>
+    );
+  }
+
+  if (isAvailabilityZoneResourceNode(selectedNode) && selectedNode.parameters) {
+    const selectedAvailabilityZone = getAvailabilityZoneNodeValue(selectedNode);
+
+    return (
+      <aside className={styles.panel} aria-label="파라미터 입력 패널">
+        <PanelHeader node={selectedNode} parameters={null} />
+
+        <DesignAreaNameSection
+          node={selectedNode}
+          onChange={(label) => updateNodeMetadata(selectedNode.id, { label })}
+        />
+
+        <section className={styles.section} aria-label="Availability Zone settings">
+          <div className={styles.fieldGroup}>
+            <AvailabilityZoneField
+              onChange={(awsAvailabilityZone) =>
+                updateNodeParameters(selectedNode.id, (parameters) =>
+                  parameters
+                    ? updateAvailabilityZoneNodeParameters(parameters, awsAvailabilityZone)
+                    : parameters
+                )
+              }
+              showLabel={false}
+              value={selectedAvailabilityZone}
             />
           </div>
         </section>
@@ -251,9 +287,11 @@ function DesignAreaNameSection({
 
 function RegionField({
   onChange,
+  showLabel = true,
   value
 }: {
   onChange: (value: AwsRegionCode) => void;
+  showLabel?: boolean;
   value: AwsRegionCode;
 }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -352,9 +390,11 @@ function RegionField({
 
   return (
     <div className={styles.field}>
-      <div className={styles.fieldHeader}>
-        <span className={styles.fieldLabel}>Region</span>
-      </div>
+      {showLabel ? (
+        <div className={styles.fieldHeader}>
+          <span className={styles.fieldLabel}>Region</span>
+        </div>
+      ) : null}
 
       <div
         className={styles.regionCombobox}
@@ -437,6 +477,33 @@ function RegionField({
           </div>
         ) : null}
       </div>
+    </div>
+  );
+}
+
+function AvailabilityZoneField({
+  onChange,
+  showLabel = true,
+  value
+}: {
+  onChange: (value: string) => void;
+  showLabel?: boolean;
+  value: string;
+}) {
+  return (
+    <div className={styles.field}>
+      {showLabel ? (
+        <div className={styles.fieldHeader}>
+          <span className={styles.fieldLabel}>Availability Zone</span>
+        </div>
+      ) : null}
+      <SelectMenu
+        ariaLabel={`가용 영역 선택: ${getAwsAvailabilityZoneLabel(value)}`}
+        emptyLabel="Availability Zone"
+        onChange={onChange}
+        options={awsAvailabilityZoneOptions}
+        value={value}
+      />
     </div>
   );
 }

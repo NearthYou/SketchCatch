@@ -25,6 +25,7 @@ export type LlmExplanationInput =
   | {
       readonly target: "terraform_error_explanation";
       readonly result: AiTerraformErrorExplanationResult;
+      readonly terraformCodeContext?: string | undefined;
     }
   | {
       readonly target: "terraform_preview_explanation";

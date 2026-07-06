@@ -4,10 +4,12 @@ import type {
   AiArchitectureDraftResult,
   AiPreDeploymentCheckFromDiagramRequest,
   AiPreDeploymentAnalysisResult,
+  AiSafetyExplanation,
   AiTerraformErrorExplanationResult,
   AiTerraformPreviewExplanationResult,
   ArchitecturePatchPreviewResponse,
   ArchitectureJson,
+  CheckFinding,
   ConfirmTranscribeResponse,
   CreateArchitectureDraftRequest,
   CreateArchitectureDraftResponse,
@@ -31,6 +33,10 @@ import { createArchitecturePatchPreview } from "../services/aiArchitecturePatchP
 import { analyzePreDeployment } from "../services/aiPreDeploymentAnalysis.js";
 import { explainTerraformError } from "../services/aiTerraformErrorExplanation.js";
 import { explainTerraformPreview } from "../services/aiTerraformPreviewExplanation.js";
+import {
+  createConfiguredOpenAiSafetyFindingExplanation,
+  type CreateSafetyFindingExplanation
+} from "../services/aiSafetyFindingExplanation.js";
 import { sanitizeTerraformErrorForAi } from "../services/aiProviderSafety.js";
 import {
   createConfiguredTranscribeRequirementService,
@@ -38,6 +44,8 @@ import {
 } from "../services/aiTranscribe.js";
 import { convertDiagramJsonToArchitectureJson } from "../services/diagram-to-architecture.js";
 import { diagramJsonSchema } from "./project-draft-schemas.js";
+import { createConfiguredAwsPricingRateProvider } from "../services/awsPricingRateProvider.js";
+import type { CostPricingRateProvider } from "../services/cost-analysis.js";
 
 const resourceTypeSchema = z.enum([
   "VPC",
@@ -104,7 +112,10 @@ const preDeploymentCheckBodySchema = z.object({
 const designSimulationBodySchema: z.ZodType<CreateDesignSimulationRequest> = z.object({
   architectureJson: architectureJsonSchema,
   trafficLevel: z.enum(["small", "normal"]).default("normal"),
-  budgetLevel: z.enum(["low", "normal"]).default("normal")
+  budgetLevel: z.enum(["low", "normal"]).default("normal"),
+  period: z.enum(["day", "week", "month"]).default("month"),
+  expectedUserCount: z.coerce.number().int().min(1).max(1_000_000).default(1000),
+  region: z.string().trim().min(1).default("ap-northeast-2")
 });
 
 const preDeploymentCheckFromDiagramBodySchema: z.ZodType<AiPreDeploymentCheckFromDiagramRequest> = z.object({
@@ -114,11 +125,47 @@ const preDeploymentCheckFromDiagramBodySchema: z.ZodType<AiPreDeploymentCheckFro
 const terraformErrorExplanationBodySchema = z.object({
   stage: z.enum(["validate", "export", "plan", "apply"]),
   rawMessage: z.string().trim().min(1),
-  relatedResourceId: z.string().min(1).optional()
+  diagnostic: z
+    .object({
+      severity: z.enum(["info", "warning", "error"]),
+      message: z.string(),
+      code: z.string().optional(),
+      line: z.number().int().positive().optional(),
+      sourceFileName: z.string().optional(),
+      resourceAddress: z.string().optional(),
+      nodeId: z.string().optional()
+    })
+    .optional(),
+  relatedResourceId: z.string().min(1).optional(),
+  terraformCodeContext: z.string().max(20_000).optional()
 });
 
 const terraformPreviewExplanationBodySchema = z.object({
   terraformCode: z.string().trim().min(1)
+});
+
+const terraformSourceLocationSchema = z.object({
+  fileName: z.string().trim().min(1),
+  line: z.number().int().positive(),
+  column: z.number().int().positive().optional(),
+  resourceAddress: z.string().trim().min(1).optional(),
+  terraformBlockType: z.string().trim().min(1).optional(),
+  terraformBlockName: z.string().trim().min(1).optional()
+});
+
+const checkFindingSchema: z.ZodType<CheckFinding> = z.object({
+  id: z.string().trim().min(1),
+  category: z.enum(["cost", "security", "configuration", "permission", "network", "performance", "availability"]),
+  severity: z.enum(["low", "medium", "high"]),
+  resourceId: z.string().trim().min(1).optional(),
+  sourceLocation: terraformSourceLocationSchema.optional(),
+  title: z.string().trim().min(1),
+  description: z.string().trim().min(1),
+  recommendation: z.string().trim().min(1)
+});
+
+const safetyFindingExplanationBodySchema = z.object({
+  finding: checkFindingSchema
 });
 
 const architecturePatchPreviewBodySchema: z.ZodType<CreateArchitecturePatchPreviewRequest> = z.object({
@@ -148,6 +195,8 @@ const confirmTranscribeBodySchema = z.object({
 export type AiRouteOptions = {
   readonly createArchitectureDraftResponse?: CreateArchitectureDraftResponseFactory;
   readonly createLlmExplanation?: CreateLlmExplanation;
+  readonly createSafetyFindingExplanation?: CreateSafetyFindingExplanation;
+  readonly pricingRateProvider?: CostPricingRateProvider;
   readonly transcribeRequirementService?: TranscribeRequirementService;
 };
 
@@ -156,8 +205,11 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
   const createLlmExplanation = options.createLlmExplanation ?? createConfiguredAiExplanation();
   const createArchitectureDraftResponse =
     options.createArchitectureDraftResponse ?? createConfiguredAmazonQArchitectureDraftResponse();
+  const createSafetyFindingExplanation =
+    options.createSafetyFindingExplanation ?? createConfiguredOpenAiSafetyFindingExplanation();
   const transcribeRequirementService =
     options.transcribeRequirementService ?? createConfiguredTranscribeRequirementService();
+  const pricingRateProvider = options.pricingRateProvider ?? createConfiguredAwsPricingRateProvider();
 
   app.post("/ai/architecture-draft", async (request): Promise<CreateArchitectureDraftResponse> => {
     const body = architectureDraftBodySchema.parse(request.body);
@@ -177,19 +229,23 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
   app.post("/ai/pre-deployment-check", async (request): Promise<AiPreDeploymentAnalysisResult> => {
     const body = preDeploymentCheckBodySchema.parse(request.body);
     const result = analyzePreDeployment(body.architectureJson);
+    const resultWithSafetyExplanations = await addSafetyFindingExplanations(
+      result,
+      createSafetyFindingExplanation
+    );
 
     return {
-      ...result,
+      ...resultWithSafetyExplanations,
       llmExplanation: await createLlmExplanation({
         target: "pre_deployment_check",
-        result
+        result: resultWithSafetyExplanations
       })
     };
   });
 
   app.post("/ai/design-simulation", async (request): Promise<DesignSimulationResult> => {
     const body = designSimulationBodySchema.parse(request.body);
-    const result = simulateDesign(body);
+    const result = await simulateDesign(body, { pricingRateProvider });
 
     return {
       ...result,
@@ -204,7 +260,10 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
     const body = preDeploymentCheckFromDiagramBodySchema.parse(request.body);
     const architectureJson = convertDiagramJsonToArchitectureJson(body.diagramJson);
 
-    return analyzePreDeployment(architectureJson);
+    return addSafetyFindingExplanations(
+      analyzePreDeployment(architectureJson),
+      createSafetyFindingExplanation
+    );
   });
 
   app.post(
@@ -213,16 +272,19 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
       const body = terraformErrorExplanationBodySchema.parse(request.body);
       const sanitizedError = sanitizeTerraformErrorForAi(body);
       const result = explainTerraformError({
+        diagnostic: body.diagnostic,
         stage: body.stage,
         rawMessage: sanitizedError.sanitizedMessage,
-        relatedResourceId: body.relatedResourceId
+        relatedResourceId: body.relatedResourceId,
+        terraformCodeContext: body.terraformCodeContext
       });
 
       return {
         ...result,
         llmExplanation: await createLlmExplanation({
           target: "terraform_error_explanation",
-          result
+          result,
+          terraformCodeContext: body.terraformCodeContext
         })
       };
     }
@@ -241,6 +303,15 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
           result
         })
       };
+    }
+  );
+
+  app.post(
+    "/ai/safety-finding-explanation",
+    async (request): Promise<AiSafetyExplanation> => {
+      const body = safetyFindingExplanationBodySchema.parse(request.body);
+
+      return createSafetyFindingExplanation(body.finding);
     }
   );
 
@@ -296,6 +367,26 @@ async function addArchitectureDraftLlmExplanation(
       result,
       requirementPromptText
     })
+  };
+}
+
+async function addSafetyFindingExplanations(
+  result: AiPreDeploymentAnalysisResult,
+  createSafetyFindingExplanation: CreateSafetyFindingExplanation
+): Promise<AiPreDeploymentAnalysisResult> {
+  if (result.findings.length === 0) {
+    return result;
+  }
+
+  return {
+    ...result,
+    findings: await Promise.all(
+      result.findings.map(async (finding) => ({
+        ...finding,
+        aiSafetyExplanation:
+          finding.aiSafetyExplanation ?? (await createSafetyFindingExplanation(finding))
+      }))
+    )
   };
 }
 

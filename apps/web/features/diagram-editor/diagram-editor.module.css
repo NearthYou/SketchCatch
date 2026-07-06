@@ -93,7 +93,7 @@
   inset: 0;
   pointer-events: none;
   position: fixed;
-  z-index: 42;
+  z-index: 90;
 }
 
 .floatingPanelSlot > * {
@@ -825,9 +825,10 @@
 }
 
 .areaNodeHeaderText {
+  max-width: 100%;
   min-width: 0;
-  overflow: visible;
-  text-overflow: clip;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 

@@ -395,35 +395,41 @@ test("approveDeploymentPlan preserves failed cleanup state for destroy approvals
   });
 });
 
-test("approveDeploymentPlan rejects risk blocked deployments", async () => {
+test("approveDeploymentPlan approves legacy risk-blocked plans while preserving safety warnings", async () => {
   const repository = new FakeDeploymentRepository();
+  const warning = createBlockingWarning();
   repository.deployment = createDeploymentRecord(undefined, {
     isBlocked: true,
     blockedBy: "risk_analysis",
-    blockedReason: "Plan includes delete or replace changes"
+    blockedReason: "Plan includes delete or replace changes",
+    planSummary: {
+      ...createPlanSummary(),
+      blocked: true,
+      warnings: [warning]
+    }
   });
 
-  await assert.rejects(
-    () =>
-      approveDeploymentPlan(
-        {
-          deploymentId,
-          accessContext: createAccessContext()
-        },
-        repository,
-        {
-          downloadTerraformArtifact: async () => artifactContent,
-          now: () => fixedNow
-        }
-      ),
-    (error) => {
-      assert.equal(error instanceof DeploymentConflictError, true);
-      assert.equal((error as Error).message, "Blocked deployment cannot be approved");
-
-      return true;
+  const deployment = await approveDeploymentPlan(
+    {
+      deploymentId,
+      accessContext: createAccessContext()
+    },
+    repository,
+    {
+      downloadTerraformArtifact: async () => artifactContent,
+      now: () => fixedNow
     }
   );
-  assert.equal(repository.approvals.length, 0);
+
+  assert.equal(deployment.isBlocked, false);
+  assert.equal(deployment.blockedBy, null);
+  assert.equal(deployment.planSummary?.blocked, false);
+  assert.deepEqual(deployment.planSummary?.warnings, [warning]);
+  assert.deepEqual(repository.approvals[0]?.input.planSummary, {
+    ...createPlanSummary(),
+    blocked: false,
+    warnings: [warning]
+  });
 });
 
 test("approveDeploymentPlan rejects unsafe Terraform artifacts before approval", async () => {
@@ -702,6 +708,21 @@ function createPlanSummary(): DeploymentPlanSummary {
     replaceCount: 0,
     blocked: true,
     warnings: []
+  };
+}
+
+function createBlockingWarning(): DeploymentPlanSummary["warnings"][number] {
+  return {
+    id: "pre_deployment_check:security-open-ssh",
+    level: "high",
+    category: "security",
+    source: "pre_deployment_check",
+    code: "PUBLIC_SSH",
+    message: "Public SSH: Restrict CIDR",
+    relatedFindingId: "security-open-ssh",
+    relatedResourceId: "sg-app",
+    requiresAcknowledgement: false,
+    blocksApproval: true
   };
 }
 

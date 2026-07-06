@@ -9,8 +9,11 @@ import {
   createAwsConnectionSetup,
   createDeployment,
   createProjectAssetUpload,
+  cancelReverseEngineeringScan,
+  createReverseEngineeringScan,
   deleteAwsConnection,
   deleteProject,
+  deleteReverseEngineeringScan,
   getAwsConnectionCloudFormationTemplate,
   getDeploymentFailureExplanation,
   getGitCicdHandoffPipelineStatus,
@@ -21,6 +24,8 @@ import {
   listGitCicdHandoffs,
   listTerraformOutputs,
   listProjects,
+  listReverseEngineeringScanLogs,
+  listReverseEngineeringScans,
   runDeploymentDestroy,
   runDeploymentDestroyPlan,
   runDeploymentPlan,
@@ -126,7 +131,7 @@ test("saveProjectDraft sends authenticated PUT request with diagram json", async
   });
 });
 
-test("validateTerraformCode sends static validation files only", async (context) => {
+test("validateTerraformCode sends Terraform validation files only", async (context) => {
   const originalFetch = globalThis.fetch;
   const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
   const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
@@ -955,6 +960,195 @@ test("getAwsConnectionCloudFormationTemplate fetches the launch stack setup", as
   assert.match(response.launchStackUrl ?? "", /cloudformation\/home/);
 });
 
+test("createReverseEngineeringScan starts an authenticated AWS scan", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    restoreWindow(originalWindowDescriptor);
+  });
+
+  installAuthSession();
+
+  globalThis.fetch = async (input, init) => {
+    requests.push({ input, init });
+
+    return new Response(
+      JSON.stringify({
+        scan: createReverseEngineeringScanPayload({
+          id: "77777777-7777-4777-8777-777777777777",
+          projectId: project.id,
+          status: "running"
+        })
+      }),
+      {
+        headers: {
+          "Content-Type": "application/json"
+        },
+        status: 202
+      }
+    );
+  };
+
+  const response = await createReverseEngineeringScan({
+    projectId: project.id,
+    awsConnectionId: "33333333-3333-4333-8333-333333333333",
+    region: "ap-northeast-2",
+    resourceTypes: ["VPC", "SUBNET", "EC2", "RDS", "S3", "SECURITY_GROUP"]
+  });
+
+  assert.equal(
+    String(requests[0]?.input),
+    `/api/projects/${project.id}/reverse-engineering/scans`
+  );
+  assert.equal(requests[0]?.init?.method, "POST");
+  assert.equal(new Headers(requests[0]?.init?.headers).get("authorization"), "Bearer access-token");
+  assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), {
+    awsConnectionId: "33333333-3333-4333-8333-333333333333",
+    region: "ap-northeast-2",
+    resourceTypes: ["VPC", "SUBNET", "EC2", "RDS", "S3", "SECURITY_GROUP"]
+  });
+  assert.equal(response.scan.status, "running");
+  assert.equal(response.result, undefined);
+});
+
+test("reverseEngineering helpers list scans and logs", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    restoreWindow(originalWindowDescriptor);
+  });
+
+  installAuthSession();
+
+  globalThis.fetch = async (input, init) => {
+    requests.push({ input, init });
+
+    if (String(input).endsWith("/logs")) {
+      return new Response(
+        JSON.stringify({
+          logs: [
+            {
+              id: "log-1",
+              scanId: "77777777-7777-4777-8777-777777777777",
+              sequence: 1,
+              stage: "provider_api",
+              level: "INFO",
+              message: "VPC 목록을 읽었습니다.",
+              createdAt: "2026-07-05T00:00:00.000Z"
+            }
+          ]
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json"
+          },
+          status: 200
+        }
+      );
+    }
+
+    return new Response(
+      JSON.stringify({
+        scans: [
+          createReverseEngineeringScanPayload({
+            id: "77777777-7777-4777-8777-777777777777",
+            projectId: project.id
+          })
+        ]
+      }),
+      {
+        headers: {
+          "Content-Type": "application/json"
+        },
+        status: 200
+      }
+    );
+  };
+
+  const scans = await listReverseEngineeringScans(project.id);
+  const logs = await listReverseEngineeringScanLogs({
+    projectId: project.id,
+    scanId: "77777777-7777-4777-8777-777777777777"
+  });
+
+  assert.equal(
+    String(requests[0]?.input),
+    `/api/projects/${project.id}/reverse-engineering/scans`
+  );
+  assert.equal(
+    String(requests[1]?.input),
+    `/api/projects/${project.id}/reverse-engineering/scans/77777777-7777-4777-8777-777777777777/logs`
+  );
+  assert.equal(new Headers(requests[0]?.init?.headers).get("authorization"), "Bearer access-token");
+  assert.equal(scans[0]?.status, "completed");
+  assert.equal(logs[0]?.stage, "provider_api");
+});
+
+test("reverseEngineering helpers cancel and delete scans", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    restoreWindow(originalWindowDescriptor);
+  });
+
+  installAuthSession();
+
+  globalThis.fetch = async (input, init) => {
+    requests.push({ input, init });
+
+    if (init?.method === "DELETE") {
+      return new Response(null, { status: 204 });
+    }
+
+    return new Response(
+      JSON.stringify({
+        scan: createReverseEngineeringScanPayload({
+          id: "77777777-7777-4777-8777-777777777777",
+          projectId: project.id,
+          status: "cancelled"
+        })
+      }),
+      {
+        headers: {
+          "Content-Type": "application/json"
+        },
+        status: 200
+      }
+    );
+  };
+
+  const cancelledScan = await cancelReverseEngineeringScan({
+    projectId: project.id,
+    scanId: "77777777-7777-4777-8777-777777777777"
+  });
+  await deleteReverseEngineeringScan({
+    projectId: project.id,
+    scanId: "77777777-7777-4777-8777-777777777777"
+  });
+
+  assert.equal(
+    String(requests[0]?.input),
+    `/api/projects/${project.id}/reverse-engineering/scans/77777777-7777-4777-8777-777777777777/cancel`
+  );
+  assert.equal(requests[0]?.init?.method, "POST");
+  assert.equal(
+    String(requests[1]?.input),
+    `/api/projects/${project.id}/reverse-engineering/scans/77777777-7777-4777-8777-777777777777`
+  );
+  assert.equal(requests[1]?.init?.method, "DELETE");
+  assert.equal(new Headers(requests[0]?.init?.headers).get("authorization"), "Bearer access-token");
+  assert.equal(cancelledScan.status, "cancelled");
+});
+
 test("createDeployment posts selected artifact and verified AWS connection", async (context) => {
   const originalFetch = globalThis.fetch;
   const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
@@ -1382,6 +1576,29 @@ function createDeploymentPayload(input: {
     approvedAwsRegion: input.approved ? "ap-northeast-2" : null,
     createdAt: "2026-06-26T00:00:00.000Z",
     updatedAt: "2026-06-26T00:00:00.000Z"
+  };
+}
+
+function createReverseEngineeringScanPayload(input: {
+  id: string;
+  projectId: string;
+  status?: "running" | "completed" | "cancelled";
+}) {
+  return {
+    id: input.id,
+    projectId: input.projectId,
+    awsConnectionId: "33333333-3333-4333-8333-333333333333",
+    provider: "aws",
+    region: "ap-northeast-2",
+    resourceTypes: ["VPC", "SUBNET", "EC2", "RDS", "S3", "SECURITY_GROUP"],
+    status: input.status ?? "completed",
+    createdAt: "2026-07-05T00:00:00.000Z",
+    updatedAt: "2026-07-05T00:00:01.000Z",
+    startedAt: "2026-07-05T00:00:00.000Z",
+    completedAt: "2026-07-05T00:00:01.000Z",
+    cancelRequestedAt: null,
+    deletedAt: null,
+    errorSummary: null
   };
 }
 

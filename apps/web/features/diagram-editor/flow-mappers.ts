@@ -197,8 +197,13 @@ function getFlowEdgeZIndex(
     getFlowNodeZIndex(sourceNode, nodeById),
     getFlowNodeZIndex(targetNode, nodeById)
   );
+  const hasAreaEndpoint = isAreaNode(sourceNode) || isAreaNode(targetNode);
 
-  return endpointZIndex + (selected ? 8 : -8);
+  if (selected) {
+    return endpointZIndex + 16;
+  }
+
+  return endpointZIndex + (hasAreaEndpoint ? 8 : -8);
 }
 
 function getAreaAncestorDepth(node: DiagramNode, nodeById: ReadonlyMap<string, DiagramNode>): number {

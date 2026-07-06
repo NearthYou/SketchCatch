@@ -2,6 +2,10 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { DiagramJson, DiagramNode } from "@sketchcatch/types";
 import { TerraformDiagramValidationError } from "./diagram-to-terraform.js";
+import {
+  getTerraformNestedBlockAttributes,
+  isTerraformNestedBlockAttribute
+} from "./terraform-nested-blocks.js";
 import { generateTerraformFromDiagramJson } from "./terraform-preview.js";
 
 test("generates Terraform code from resource nodes", () => {
@@ -152,6 +156,148 @@ test("generates stable Terraform code repeatedly from the same DiagramJson", () 
     generateTerraformFromDiagramJson(diagramJson),
     generateTerraformFromDiagramJson(diagramJson)
   );
+});
+
+test("inherits AZ area values into Subnet and EBS Preview without rendering Region or AZ blocks", () => {
+  const diagramJson: DiagramJson = {
+    nodes: [
+      makeNode({
+        id: "region-1",
+        type: "aws_region",
+        kind: "resource",
+        label: "Region",
+        parameters: {
+          resourceType: "aws_region",
+          resourceName: "ap_northeast_2",
+          fileName: "main",
+          values: {
+            awsRegion: "ap-northeast-2"
+          }
+        }
+      }),
+      makeNode({
+        id: "az-1",
+        type: "aws_availability_zone",
+        kind: "resource",
+        label: "AZ",
+        metadata: {
+          parentAreaNodeId: "region-1"
+        },
+        parameters: {
+          resourceType: "aws_availability_zone",
+          resourceName: "ap_northeast_2a",
+          fileName: "main",
+          values: {
+            awsAvailabilityZone: "ap-northeast-2a"
+          }
+        }
+      }),
+      makeNode({
+        id: "subnet-1",
+        type: "aws_subnet",
+        kind: "resource",
+        label: "public",
+        metadata: {
+          parentAreaNodeId: "az-1"
+        },
+        parameters: {
+          resourceType: "aws_subnet",
+          resourceName: "public",
+          fileName: "main",
+          values: {
+            cidrBlock: "10.0.1.0/24"
+          }
+        }
+      }),
+      makeNode({
+        id: "ebs-1",
+        type: "aws_ebs_volume",
+        kind: "resource",
+        label: "data",
+        metadata: {
+          parentAreaNodeId: "az-1"
+        },
+        parameters: {
+          resourceType: "aws_ebs_volume",
+          resourceName: "data",
+          fileName: "main",
+          values: {
+            size: 20
+          }
+        }
+      })
+    ],
+    edges: [],
+    viewport: {
+      x: 0,
+      y: 0,
+      zoom: 1
+    }
+  };
+
+  const terraformCode = generateTerraformFromDiagramJson(diagramJson);
+
+  assert.match(
+    terraformCode,
+    /resource "aws_subnet" "public" \{[\s\S]*availability_zone = "ap-northeast-2a"/
+  );
+  assert.match(
+    terraformCode,
+    /resource "aws_ebs_volume" "data" \{[\s\S]*availability_zone = "ap-northeast-2a"/
+  );
+  assert.doesNotMatch(terraformCode, /provider "aws"/);
+  assert.doesNotMatch(terraformCode, /resource "aws_region"/);
+  assert.doesNotMatch(terraformCode, /resource "aws_availability_zone"/);
+});
+
+test("keeps explicit child availabilityZone before inherited parent AZ value", () => {
+  const diagramJson: DiagramJson = {
+    nodes: [
+      makeNode({
+        id: "az-1",
+        type: "aws_availability_zone",
+        kind: "resource",
+        label: "AZ",
+        parameters: {
+          resourceType: "aws_availability_zone",
+          resourceName: "ap_northeast_2a",
+          fileName: "main",
+          values: {
+            awsAvailabilityZone: "ap-northeast-2a"
+          }
+        }
+      }),
+      makeNode({
+        id: "subnet-1",
+        type: "aws_subnet",
+        kind: "resource",
+        label: "public",
+        metadata: {
+          parentAreaNodeId: "az-1"
+        },
+        parameters: {
+          resourceType: "aws_subnet",
+          resourceName: "public",
+          fileName: "main",
+          values: {
+            cidrBlock: "10.0.1.0/24",
+            availabilityZone: "ap-northeast-2c"
+          }
+        }
+      })
+    ],
+    edges: [],
+    viewport: {
+      x: 0,
+      y: 0,
+      zoom: 1
+    }
+  };
+
+  const terraformCode = generateTerraformFromDiagramJson(diagramJson);
+
+  assert.match(terraformCode, /availability_zone = "ap-northeast-2c"/);
+  assert.doesNotMatch(terraformCode, /availability_zone = "ap-northeast-2a"/);
 });
 
 test("renders invalid resource nodes so Terraform Preview does not disappear after parameter edits", () => {
@@ -617,6 +763,93 @@ test("renders AWS nested block lists as Terraform blocks with snake_case attribu
   assert.doesNotMatch(terraformCode, /ingress = \[/);
   assert.doesNotMatch(terraformCode, /egress = \[/);
   assert.doesNotMatch(terraformCode, /cidrBlock|gatewayId|cidrBlocks|fromPort|toPort/);
+});
+
+test("tracks curated nested block parameters as canonical camelCase keys", () => {
+  const expectedNestedBlockAttributes: Record<string, string[]> = {
+    aws_ami: ["filter"],
+    aws_api_gateway_rest_api: ["endpointConfiguration"],
+    aws_autoscaling_group: ["launchTemplate", "tag"],
+    aws_db_parameter_group: ["parameter"],
+    aws_dynamodb_table: ["attribute"],
+    aws_instance: ["rootBlockDevice"],
+    aws_lambda_function: ["environment"],
+    aws_route_table: ["route"],
+    aws_s3_bucket_lifecycle_configuration: ["rule"],
+    aws_security_group: ["egress", "ingress"]
+  };
+
+  for (const [resourceType, expectedAttributes] of Object.entries(expectedNestedBlockAttributes)) {
+    assert.deepEqual(
+      [...(getTerraformNestedBlockAttributes(resourceType) ?? [])].sort(),
+      [...expectedAttributes].sort()
+    );
+  }
+
+  assert.equal(isTerraformNestedBlockAttribute("aws_instance", "rootBlockDevice"), true);
+  assert.equal(isTerraformNestedBlockAttribute("aws_instance", "root_block_device"), true);
+  assert.equal(isTerraformNestedBlockAttribute("aws_api_gateway_rest_api", "endpoint_configuration"), true);
+});
+
+test("renders object-valued nested block parameters as Terraform nested blocks", () => {
+  const diagramJson: DiagramJson = {
+    nodes: [
+      makeNode({
+        id: "lambda-1",
+        type: "aws_lambda_function",
+        kind: "resource",
+        label: "handler",
+        parameters: {
+          resourceType: "aws_lambda_function",
+          resourceName: "handler",
+          fileName: "application",
+          values: {
+            functionName: "handler",
+            role: "aws_iam_role.lambda.arn",
+            handler: "index.handler",
+            runtime: "nodejs20.x",
+            environment: {
+              variables: {
+                LOG_LEVEL: "info"
+              }
+            }
+          }
+        }
+      }),
+      makeNode({
+        id: "rest-api-1",
+        type: "aws_api_gateway_rest_api",
+        kind: "resource",
+        label: "api",
+        parameters: {
+          resourceType: "aws_api_gateway_rest_api",
+          resourceName: "api",
+          fileName: "application",
+          values: {
+            name: "api",
+            endpointConfiguration: {
+              types: ["REGIONAL"]
+            }
+          }
+        }
+      })
+    ],
+    edges: [],
+    viewport: {
+      x: 0,
+      y: 0,
+      zoom: 1
+    }
+  };
+
+  const terraformCode = generateTerraformFromDiagramJson(diagramJson);
+
+  assert.match(terraformCode, /\benvironment \{/);
+  assert.match(terraformCode, /\bendpoint_configuration \{/);
+  assert.match(terraformCode, /variables = \{[\s\S]*LOG_LEVEL = "info"[\s\S]*\}/);
+  assert.match(terraformCode, /types = \[[\s\S]*"REGIONAL",[\s\S]*\]/);
+  assert.doesNotMatch(terraformCode, /environment =/);
+  assert.doesNotMatch(terraformCode, /endpoint_configuration =/);
 });
 
 test("normalizes compact security group ingress rules before rendering Terraform blocks", () => {

@@ -94,9 +94,15 @@ const architectureJsonSchema: z.ZodType<ArchitectureJson> = z.object({
   edges: z.array(resourceEdgeSchema)
 });
 
+const reverseEngineeringSourceSchema = z.object({
+  sourceScanId: z.string().min(1),
+  draftId: z.string().min(1)
+});
+
 const createArchitectureBodySchema = z.object({
   version: z.number().int().positive().optional(),
   source: z.string().min(1).max(64).default("manual"),
+  reverseEngineering: reverseEngineeringSourceSchema.optional(),
   architectureJson: architectureJsonSchema
 });
 
@@ -324,7 +330,10 @@ export async function registerProjectRoutes(
         projectId: params.id,
         version,
         source: body.source,
-        architectureJson: body.architectureJson
+        architectureJson: attachReverseEngineeringSource(
+          body.architectureJson,
+          body.reverseEngineering
+        )
       })
       .returning();
 
@@ -590,6 +599,28 @@ export async function registerProjectRoutes(
 
     return reply.status(204).send();
   });
+}
+
+// Reverse Engineering으로 적용한 보드가 어떤 scan/draft에서 왔는지 node마다 남깁니다.
+function attachReverseEngineeringSource(
+  architectureJson: ArchitectureJson,
+  reverseEngineering: z.infer<typeof reverseEngineeringSourceSchema> | undefined
+): ArchitectureJson {
+  if (!reverseEngineering) {
+    return architectureJson;
+  }
+
+  return {
+    ...architectureJson,
+    nodes: architectureJson.nodes.map((node) => ({
+      ...node,
+      config: {
+        ...node.config,
+        reverseEngineeringSourceScanId: reverseEngineering.sourceScanId,
+        reverseEngineeringDraftId: reverseEngineering.draftId
+      }
+    }))
+  };
 }
 
 function sendNotFound(reply: FastifyReply, message: string): FastifyReply {

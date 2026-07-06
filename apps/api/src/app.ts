@@ -4,18 +4,35 @@ import type { ApiErrorCode } from "@sketchcatch/types";
 import { startRefreshTokenCleanupJob } from "./auth/cleanup.js";
 import { type DatabaseClient, getDatabaseClient } from "./db/client.js";
 import { registerAiRoutes, type AiRouteOptions } from "./routes/ai.js";
+import type { CostPricingRateProvider } from "./services/cost-analysis.js";
 import type { CreateLlmExplanation } from "./services/aiLlmExplanation.js";
+import type { CreateSafetyFindingExplanation } from "./services/aiSafetyFindingExplanation.js";
 import { registerHealthRoutes } from "./routes/health.js";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { registerOAuthRoutes } from "./routes/oauth.js";
 import { registerProjectRoutes, type ProjectAssetStorage } from "./routes/projects.js";
+import {
+  registerSourceRepositoryRoutes,
+  type SourceRepositoryRouteOptions
+} from "./routes/source-repositories.js";
 import { registerDeploymentRoutes } from "./routes/deployments.js";
 import { registerGitCicdHandoffRoutes } from "./routes/git-cicd-handoffs.js";
+import { registerCostRoutes } from "./routes/costs.js";
+import {
+  createDelegatingGitCicdHandoffProvider,
+  createGitHubGitCicdHandoffProvider
+} from "./git-cicd/git-cicd-handoff-service.js";
+import { createGitHubAppGitProvider } from "./git-cicd/github-app-git-provider.js";
+import { createGitHubActionsPipelineStatusProvider } from "./git-cicd/github-actions-pipeline-status-provider.js";
 import {
   registerTerraformRoutes,
   type TerraformRouteOptions
 } from "./routes/terraform.js";
 import { registerAwsConnectionRoutes } from "./routes/aws-connections.js";
+import {
+  registerReverseEngineeringRoutes,
+  type ReverseEngineeringRouteOptions
+} from "./routes/reverse-engineering.js";
 import type { ProjectDeletionStorage } from "./projects/project-deletion-service.js";
 import {
   createInMemoryRateLimiter,
@@ -34,14 +51,21 @@ export type BuildAppOptions = {
   getDatabaseClient?: () => DatabaseClient;
   createArchitectureDraftResponse?: AiRouteOptions["createArchitectureDraftResponse"];
   createLlmExplanation?: CreateLlmExplanation;
+  createSafetyFindingExplanation?: CreateSafetyFindingExplanation;
+  pricingRateProvider?: CostPricingRateProvider;
   oauthCallbackRateLimiter?: RateLimiter;
   oauthStartRateLimiter?: RateLimiter;
   passwordResetRequestEmailRateLimiter?: RateLimiter;
   passwordResetRequestIpRateLimiter?: RateLimiter;
   projectAssetStorage?: ProjectAssetStorage;
   projectDeletionStorage?: ProjectDeletionStorage;
+  sourceRepositoryRoutes?: Pick<
+    SourceRepositoryRouteOptions,
+    "createSourceRepositoryRepository" | "githubAppClient" | "githubAppSlug" | "githubAppStateSecret"
+  >;
   runtimeCache?: RuntimeCache;
   validateTerraformPreviewCode?: TerraformRouteOptions["validateTerraformPreviewCode"];
+  reverseEngineeringServiceOptions?: ReverseEngineeringRouteOptions["serviceOptions"];
 };
 
 // 테스트와 서버가 같은 앱을 쓰되, LLM 호출 계층은 옵션으로만 주입합니다.
@@ -151,6 +175,11 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     projectAssetStorage: options.projectAssetStorage,
     projectDeletionStorage: options.projectDeletionStorage
   });
+  app.register(registerSourceRepositoryRoutes, {
+    prefix: "/api",
+    getDatabaseClient: getAppDatabaseClient,
+    ...options.sourceRepositoryRoutes
+  });
   app.register(registerDeploymentRoutes, {
     prefix: "/api",
     getDatabaseClient: getAppDatabaseClient,
@@ -158,8 +187,14 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   });
   app.register(registerGitCicdHandoffRoutes, {
     prefix: "/api",
-    getDatabaseClient: getAppDatabaseClient
+    getDatabaseClient: getAppDatabaseClient,
+    gitCicdHandoffProvider: createDelegatingGitCicdHandoffProvider({
+      githubProvider: createGitHubGitCicdHandoffProvider(createGitHubAppGitProvider())
+    }),
+    gitCicdPipelineStatusProvider: createGitHubActionsPipelineStatusProvider(),
+    runtimeCache
   });
+  app.register(registerCostRoutes, createCostRouteOptions(options, getAppDatabaseClient));
   app.register(
     registerTerraformRoutes,
     createTerraformRouteOptions(options, getAppDatabaseClient)
@@ -168,13 +203,23 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     prefix: "/api",
     getDatabaseClient: getAppDatabaseClient
   });
+  app.register(registerReverseEngineeringRoutes, {
+    prefix: "/api",
+    getDatabaseClient: getAppDatabaseClient,
+    serviceOptions: options.reverseEngineeringServiceOptions
+  });
 
   return app;
 }
 
 // AI route 옵션은 undefined 필드를 넘기지 않게 분리해 exact optional 타입을 지킵니다.
 function createAiRouteOptions(options: BuildAppOptions): AiRouteOptions & { readonly prefix: "/api" } {
-  if (options.createLlmExplanation === undefined && options.createArchitectureDraftResponse === undefined) {
+  if (
+    options.createArchitectureDraftResponse === undefined &&
+    options.createLlmExplanation === undefined &&
+    options.createSafetyFindingExplanation === undefined &&
+    options.pricingRateProvider === undefined
+  ) {
     return { prefix: "/api" };
   }
 
@@ -183,7 +228,26 @@ function createAiRouteOptions(options: BuildAppOptions): AiRouteOptions & { read
     ...(options.createArchitectureDraftResponse !== undefined
       ? { createArchitectureDraftResponse: options.createArchitectureDraftResponse }
       : {}),
-    ...(options.createLlmExplanation !== undefined ? { createLlmExplanation: options.createLlmExplanation } : {})
+    ...(options.createLlmExplanation === undefined ? {} : { createLlmExplanation: options.createLlmExplanation }),
+    ...(options.createSafetyFindingExplanation === undefined
+      ? {}
+      : { createSafetyFindingExplanation: options.createSafetyFindingExplanation }),
+    ...(options.pricingRateProvider === undefined ? {} : { pricingRateProvider: options.pricingRateProvider })
+  };
+}
+
+function createCostRouteOptions(
+  options: BuildAppOptions,
+  getDatabaseClient: () => DatabaseClient
+): {
+  readonly prefix: "/api";
+  readonly getDatabaseClient: () => DatabaseClient;
+  readonly pricingRateProvider?: CostPricingRateProvider;
+} {
+  return {
+    prefix: "/api",
+    getDatabaseClient,
+    ...(options.pricingRateProvider === undefined ? {} : { pricingRateProvider: options.pricingRateProvider })
   };
 }
 

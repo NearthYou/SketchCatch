@@ -39,6 +39,9 @@ export type WorkspaceAiPanelProps = {
 
 const DESIGN_SIMULATION_DEFAULTS = {
   budgetLevel: "normal",
+  expectedUserCount: 1000,
+  period: "month",
+  region: "ap-northeast-2",
   trafficLevel: "normal"
 } as const;
 

@@ -82,8 +82,8 @@ function getOAuthProviderCredentials(
       };
     case "github":
       return {
-        clientId: requireEnvValue("GITHUB_OAUTH_CLIENT_ID", env.githubOauthClientId),
-        clientSecret: requireEnvValue("GITHUB_OAUTH_CLIENT_SECRET", env.githubOauthClientSecret)
+        clientId: requireEnvValue("GIT_OAUTH_CLIENT_ID", env.githubOauthClientId),
+        clientSecret: requireEnvValue("GIT_OAUTH_CLIENT_SECRET", env.githubOauthClientSecret)
       };
   }
 }

@@ -109,6 +109,9 @@ export function WorkspaceAiExplanation({ explanation }: { readonly explanation: 
         <span>{explanation.fallbackUsed ? "기본 설명" : getWorkspaceAiProviderLabel(explanation.providerMetadata?.provider)}</span>
       </div>
       <p>{explanation.summary}</p>
+      {explanation.wellArchitectedConclusion ? (
+        <WorkspaceAiTextList title="종합 평가" items={[explanation.wellArchitectedConclusion]} />
+      ) : null}
       {explanation.highlights.length > 0 ? <WorkspaceAiTextList title="핵심" items={explanation.highlights} /> : null}
       {explanation.nextActions.length > 0 ? (
         <WorkspaceAiTextList title="다음 행동" items={explanation.nextActions} />
@@ -197,6 +200,11 @@ export function WorkspaceAiDesignSimulationResult({
 }: {
   readonly simulation: DesignSimulationResult;
 }) {
+  const costReviewItems = simulation.costEstimate?.reviewMessages ?? simulation.costPressure;
+  const costRecommendationItems = simulation.recommendations.filter(
+    (item) => !costReviewItems.includes(item)
+  );
+
   return (
     <div className={`${styles.aiResultStack} ${styles.aiSimulationResult}`}>
       <p className={styles.aiResultSummary}>{simulation.summary}</p>
@@ -236,8 +244,13 @@ export function WorkspaceAiDesignSimulationResult({
         </section>
         <section className={styles.aiSimulationCard}>
           <strong>비용·다음 검토</strong>
+          {simulation.costEstimate !== undefined ? (
+            <div className={styles.aiSimulationCostMeta}>
+              <span>${formatMoney(simulation.costEstimate.totalEstimate.amount)}</span>
+            </div>
+          ) : null}
           <ul>
-            {[...simulation.costPressure, ...simulation.recommendations].map((item, index) => (
+            {[...costReviewItems, ...costRecommendationItems].map((item, index) => (
               <li key={`cost-${index}-${item}`}>
                 <p>{item}</p>
               </li>
@@ -259,6 +272,7 @@ export function WorkspaceAiTerraformPreviewResult({
   return (
     <div className={styles.aiResultStack}>
       <p className={styles.aiResultSummary}>{preview.summary}</p>
+      <WorkspaceAiExplanation explanation={preview.llmExplanation} />
       <WorkspaceAiTextList
         title="감지된 리소스"
         items={preview.detectedResources.map(
@@ -356,4 +370,8 @@ function WorkspaceAiFindingList({ findings }: { readonly findings: readonly Chec
       </ul>
     </div>
   );
+}
+
+function formatMoney(amount: number): string {
+  return amount.toFixed(2);
 }
