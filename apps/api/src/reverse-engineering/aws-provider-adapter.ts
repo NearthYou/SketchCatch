@@ -3,8 +3,6 @@ import type {
   CloudProvider,
   DiscoveredResource,
   DiscoveredResourceRelationship,
-  ResourceEdge,
-  ResourceNode,
   ResourceType,
   ReverseEngineeringResourceSelection,
   ReverseEngineeringAnalysisExclusion,
@@ -12,6 +10,7 @@ import type {
   ReverseEngineeringScanError,
   ReverseEngineeringScanResult
 } from "@sketchcatch/types";
+import { createReverseEngineeringArchitectureJson } from "./aws-provider-architecture-layout.js";
 import { createReverseEngineeringFindings } from "./aws-reverse-engineering-findings.js";
 
 export type AwsProviderScanInput = {
@@ -90,7 +89,7 @@ export function createAwsProviderAdapter(gateway: AwsProviderScanGateway): AwsPr
       const records = discoveryResult.records;
       const idMap = createResourceIdMap(records);
       const discoveredResources = records.map((record) => toDiscoveredResource(record, idMap));
-      const architectureJson = toArchitectureJson(discoveredResources);
+      const architectureJson = createReverseEngineeringArchitectureJson(discoveredResources);
       const scan = createEmptyScan(input);
 
       return {
@@ -204,38 +203,6 @@ function toDiscoveredRelationship(
       label: relationship.type
     }
   ];
-}
-
-function toArchitectureJson(discoveredResources: DiscoveredResource[]): ArchitectureJson {
-  return {
-    nodes: discoveredResources.map(toResourceNode),
-    edges: discoveredResources.flatMap(toResourceEdges)
-  };
-}
-
-function toResourceNode(resource: DiscoveredResource, index: number): ResourceNode {
-  return {
-    id: resource.id,
-    type: resource.resourceType,
-    label: resource.displayName,
-    positionX: 120 + (index % 3) * 280,
-    positionY: 120 + Math.floor(index / 3) * 180,
-    config: {
-      ...resource.config,
-      providerResourceType: resource.providerResourceType,
-      providerResourceId: resource.providerResourceId,
-      analysisExcluded: resource.analysisExcluded ?? false
-    }
-  };
-}
-
-function toResourceEdges(resource: DiscoveredResource): ResourceEdge[] {
-  return (resource.relationships ?? []).map((relationship) => ({
-    id: `edge-${resource.id}-${relationship.targetResourceId}-${relationship.label ?? relationship.type}`,
-    sourceId: relationship.targetResourceId,
-    targetId: resource.id,
-    label: relationship.label ?? relationship.type
-  }));
 }
 
 function createAnalysisExclusions(

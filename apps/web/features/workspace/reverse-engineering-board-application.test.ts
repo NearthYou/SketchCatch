@@ -137,7 +137,7 @@ test("createReverseEngineeringBoardApplication appends only providerResourceId-s
   assert.deepEqual(application.diagram.viewport, currentDiagram.viewport);
 });
 
-test("createReverseEngineeringBoardApplication highlights unsupported unknown resources for manual review", () => {
+test("createReverseEngineeringBoardApplication separates unsupported unknown resources from board nodes", () => {
   const application = createReverseEngineeringBoardApplication({
     currentDiagram: createDiagram(),
     mode: "replace",
@@ -159,9 +159,8 @@ test("createReverseEngineeringBoardApplication highlights unsupported unknown re
     })
   });
 
-  assert.equal(application.diagram.nodes[0]?.label, "확인 필요 · Unknown ALB");
-  assert.equal(application.diagram.nodes[0]?.style?.borderColor, "#f97316");
-  assert.equal(application.diagram.nodes[0]?.style?.textColor, "#9a3412");
+  assert.deepEqual(application.diagram.nodes, []);
+  assert.deepEqual(application.comparison.additions, []);
 });
 
 function createScanResult(
