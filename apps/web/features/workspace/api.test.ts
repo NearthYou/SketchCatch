@@ -130,7 +130,7 @@ test("saveProjectDraft sends authenticated PUT request with diagram json", async
   });
 });
 
-test("validateTerraformCode sends static validation files only", async (context) => {
+test("validateTerraformCode sends Terraform validation files only", async (context) => {
   const originalFetch = globalThis.fetch;
   const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
   const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];

@@ -607,7 +607,7 @@ test("terraform panel does not warm CLI validation when the panel becomes visibl
   assert.doesNotMatch(terraformPanelSource, /Terraform 검증 준비 중/);
 });
 
-test("terraform save and manual validate use static validation for the whole virtual file set", () => {
+test("terraform save and manual validate send the whole virtual file set", () => {
   assert.doesNotMatch(terraformPanelSource, /mode: "full"/);
   assert.doesNotMatch(terraformPanelSource, /mode: "static"/);
   assert.doesNotMatch(terraformPanelSource, /TerraformValidationMode/);
