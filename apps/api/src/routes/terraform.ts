@@ -17,10 +17,7 @@ import {
 } from "../services/terraform/diagram-to-terraform.js";
 import { generateTerraformFromDiagramJson } from "../services/terraform/terraform-preview.js";
 import { syncTerraformToDiagramJson } from "../services/terraform/terraform-to-diagram.js";
-import {
-  validateTerraformPreviewCodeWithCli,
-  type RunTerraformCliValidationCommand
-} from "../services/terraform/terraform-cli-validation.js";
+import { createTerraformValidationDiagnostics } from "../services/terraform/terraform-diagnostics.js";
 
 const terraformValidationMaxCharacters = 1024 * 1024;
 const terraformValidationMaxFileCount = 64;
@@ -134,7 +131,6 @@ export type TerraformRouteOptions = {
   validateTerraformPreviewCode?: (
     input: TerraformValidateRequest
   ) => Promise<TerraformValidateResponse>;
-  runTerraformCliValidation?: RunTerraformCliValidationCommand;
 };
 
 export async function registerTerraformRoutes(
@@ -143,9 +139,7 @@ export async function registerTerraformRoutes(
 ): Promise<void> {
   const getTerraformDatabaseClient = options.getDatabaseClient ?? getDatabaseClient;
   const validateTerraformPreviewCode =
-    options.validateTerraformPreviewCode ??
-    ((input: TerraformValidateRequest) =>
-      validateTerraformPreviewCodeDefault(input, options.runTerraformCliValidation));
+    options.validateTerraformPreviewCode ?? validateTerraformPreviewCodeDefault;
 
   app.post("/terraform/generate", async (request, reply): Promise<TerraformGenerateResponse | void> => {
     await requireActiveUserId(request, getTerraformDatabaseClient);
@@ -195,14 +189,9 @@ export async function registerTerraformRoutes(
 }
 
 async function validateTerraformPreviewCodeDefault(
-  input: TerraformValidateRequest,
-  runTerraformCliValidation?: RunTerraformCliValidationCommand
+  input: TerraformValidateRequest
 ): Promise<TerraformValidateResponse> {
-  if (runTerraformCliValidation) {
-    return validateTerraformPreviewCodeWithCli(input, {
-      runCommand: runTerraformCliValidation
-    });
-  }
-
-  return validateTerraformPreviewCodeWithCli(input);
+  return {
+    diagnostics: createTerraformValidationDiagnostics(input)
+  };
 }

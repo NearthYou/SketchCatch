@@ -64,7 +64,6 @@ export type BuildAppOptions = {
   >;
   runtimeCache?: RuntimeCache;
   validateTerraformPreviewCode?: TerraformRouteOptions["validateTerraformPreviewCode"];
-  runTerraformCliValidation?: TerraformRouteOptions["runTerraformCliValidation"];
   reverseEngineeringServiceOptions?: ReverseEngineeringRouteOptions["serviceOptions"];
 };
 
@@ -261,9 +260,6 @@ function createTerraformRouteOptions(
     getDatabaseClient,
     ...(options.validateTerraformPreviewCode !== undefined
       ? { validateTerraformPreviewCode: options.validateTerraformPreviewCode }
-      : {}),
-    ...(options.runTerraformCliValidation !== undefined
-      ? { runTerraformCliValidation: options.runTerraformCliValidation }
       : {})
   };
 }

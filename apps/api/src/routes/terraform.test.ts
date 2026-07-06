@@ -1,7 +1,5 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
 import type {
   ApiErrorResponse,
   TerraformGenerateResponse,
@@ -412,7 +410,7 @@ test("POST /api/terraform/validate forwards validation input to the injected ser
   await app.close();
 });
 
-test("POST /api/terraform/validate returns Terraform CLI diagnostics before static fallback", async () => {
+test("POST /api/terraform/validate returns fast Terraform diagnostics without provider initialization", async () => {
   const fakeDb = new AuthOnlyFakeDb({
     users: [
       {
@@ -421,54 +419,8 @@ test("POST /api/terraform/validate returns Terraform CLI diagnostics before stat
       }
     ]
   });
-  const commands: string[][] = [];
-  const writtenMainFiles: string[] = [];
   const app = buildApp({
-    getDatabaseClient: () => fakeDb.client,
-    runTerraformCliValidation: async (workdir, args) => {
-      commands.push([...args]);
-
-      if (args[0] === "init") {
-        return {
-          exitCode: 0,
-          stdout: "",
-          stderr: "",
-          timedOut: false
-        };
-      }
-
-      const mainFile = await readFile(join(workdir, "main.tf"), "utf8");
-      writtenMainFiles.push(mainFile);
-
-      return {
-        exitCode: 1,
-        stdout: JSON.stringify({
-          valid: false,
-          diagnostics: [
-            {
-              severity: "error",
-              summary: "Unsupported argument",
-              detail: "An argument named \"unknown_argument\" is not expected here.",
-              range: {
-                filename: "main.tf",
-                start: {
-                  line: 2,
-                  column: 3,
-                  byte: 29
-                },
-                end: {
-                  line: 2,
-                  column: 19,
-                  byte: 45
-                }
-              }
-            }
-          ]
-        }),
-        stderr: "",
-        timedOut: false
-      };
-    }
+    getDatabaseClient: () => fakeDb.client
   });
 
   const response = await app.inject({
@@ -479,9 +431,17 @@ test("POST /api/terraform/validate returns Terraform CLI diagnostics before stat
       terraformCode: "",
       terraformFiles: [
         {
-          fileName: "main",
-          terraformCode: `resource "aws_vpc" "main" {
-  unknown_argument = true
+          fileName: "main.tf",
+          terraformCode: `resource "aws_security_group_rule" "web" {
+  from_port = "eighty"
+}
+
+resource "aws_s3_bucket" "assets" {
+  bucket_purpose = "static-site"
+}
+
+resource "aws_instance" "web" {
+  instance_type = "not-real-instance-type"
 }`
         }
       ]
@@ -491,174 +451,30 @@ test("POST /api/terraform/validate returns Terraform CLI diagnostics before stat
   const body = response.json() as TerraformValidateResponse;
 
   assert.equal(response.statusCode, 200);
-  assert.deepEqual(commands, [
-    ["init", "-backend=false", "-input=false", "-no-color"],
-    ["validate", "-json"]
-  ]);
-  assert.deepEqual(writtenMainFiles, [
-    `resource "aws_vpc" "main" {
-  unknown_argument = true
-}`
-  ]);
-  assert.deepEqual(body.diagnostics, [
-    {
-      severity: "error",
-      code: "terraform.cli.validate",
-      message: "Unsupported argument: An argument named \"unknown_argument\" is not expected here.",
-      sourceFileName: "main.tf",
-      line: 2
-    }
-  ]);
-
-  await app.close();
-});
-
-test("POST /api/terraform/validate falls back to static diagnostics when CLI execution fails", async () => {
-  const fakeDb = new AuthOnlyFakeDb({
-    users: [
+  assert.deepEqual(
+    body.diagnostics.map((diagnostic) => ({
+      code: diagnostic.code,
+      line: diagnostic.line,
+      sourceFileName: diagnostic.sourceFileName
+    })),
+    [
       {
-        id: ACTIVE_USER_ID,
-        deletedAt: null
+        code: "terraform.attribute_type",
+        line: 2,
+        sourceFileName: "main.tf"
+      },
+      {
+        code: "terraform.unsupported_argument",
+        line: 6,
+        sourceFileName: "main.tf"
+      },
+      {
+        code: "terraform.invalid_catalog_value",
+        line: 10,
+        sourceFileName: "main.tf"
       }
     ]
-  });
-  const commands: string[][] = [];
-  const app = buildApp({
-    getDatabaseClient: () => fakeDb.client,
-    runTerraformCliValidation: async (_workdir, args) => {
-      commands.push([...args]);
-
-      return {
-        exitCode: 127,
-        stdout: "",
-        stderr: "terraform executable not found",
-        timedOut: false
-      };
-    }
-  });
-
-  const response = await app.inject({
-    method: "POST",
-    url: "/api/terraform/validate",
-    headers: await authHeaders(ACTIVE_USER_ID),
-    payload: {
-      terraformCode: `resource "aws_s3_bucket" "logs" {
-  bucket = "logs",
-}`
-    }
-  });
-
-  const body = response.json() as TerraformValidateResponse;
-
-  assert.equal(response.statusCode, 200);
-  assert.deepEqual(commands, [["init", "-backend=false", "-input=false", "-no-color"]]);
-  assert.equal(body.diagnostics[0]?.code, "terraform.trailing_comma");
-  assert.equal(body.diagnostics[0]?.sourceFileName, "main.tf");
-
-  await app.close();
-});
-
-test("POST /api/terraform/validate falls back to static diagnostics when CLI workspace preparation fails", async () => {
-  const fakeDb = new AuthOnlyFakeDb({
-    users: [
-      {
-        id: ACTIVE_USER_ID,
-        deletedAt: null
-      }
-    ]
-  });
-  const app = buildApp({
-    getDatabaseClient: () => fakeDb.client,
-    runTerraformCliValidation: async () => {
-      throw new Error("runner should not be called");
-    }
-  });
-
-  const response = await app.inject({
-    method: "POST",
-    url: "/api/terraform/validate",
-    headers: await authHeaders(ACTIVE_USER_ID),
-    payload: {
-      terraformCode: "",
-      terraformFiles: [
-        {
-          fileName: "../main",
-          terraformCode: `resource "aws_s3_bucket" "logs" {
-  bucket = "logs",
-}`
-        }
-      ]
-    }
-  });
-
-  const body = response.json() as TerraformValidateResponse;
-
-  assert.equal(response.statusCode, 200);
-  assert.equal(body.diagnostics[0]?.code, "terraform.trailing_comma");
-
-  await app.close();
-});
-
-test("POST /api/terraform/validate masks secret-like Terraform CLI diagnostics", async () => {
-  const fakeDb = new AuthOnlyFakeDb({
-    users: [
-      {
-        id: ACTIVE_USER_ID,
-        deletedAt: null
-      }
-    ]
-  });
-  const app = buildApp({
-    getDatabaseClient: () => fakeDb.client,
-    runTerraformCliValidation: async (_workdir, args) => {
-      if (args[0] === "init") {
-        return {
-          exitCode: 0,
-          stdout: "",
-          stderr: "",
-          timedOut: false
-        };
-      }
-
-      return {
-        exitCode: 1,
-        stdout: JSON.stringify({
-          valid: false,
-          diagnostics: [
-            {
-              severity: "error",
-              summary: "Invalid provider configuration",
-              detail: "AWS_SECRET_ACCESS_KEY=temporary-secret-access-key cannot be used here.",
-              range: {
-                filename: "main.tf",
-                start: {
-                  line: 1
-                }
-              }
-            }
-          ]
-        }),
-        stderr: "",
-        timedOut: false
-      };
-    }
-  });
-
-  const response = await app.inject({
-    method: "POST",
-    url: "/api/terraform/validate",
-    headers: await authHeaders(ACTIVE_USER_ID),
-    payload: {
-      terraformCode: `provider "aws" {}`
-    }
-  });
-
-  const body = response.json() as TerraformValidateResponse;
-  const message = body.diagnostics[0]?.message ?? "";
-
-  assert.equal(response.statusCode, 200);
-  assert.equal(message.includes("temporary-secret-access-key"), false);
-  assert.match(message, /\[REDACTED\]/);
+  );
 
   await app.close();
 });
@@ -765,7 +581,7 @@ class AuthOnlyFakeDb {
   }
 }
 
-test("POST /api/terraform/validate returns CLI validation results for an active user", async () => {
+test("POST /api/terraform/validate returns diagnostics for an active user", async () => {
   const fakeDb = new AuthOnlyFakeDb({
     users: [
       {
@@ -775,27 +591,7 @@ test("POST /api/terraform/validate returns CLI validation results for an active 
     ]
   });
   const app = buildApp({
-    getDatabaseClient: () => fakeDb.client,
-    runTerraformCliValidation: async (_workdir, args) => {
-      if (args[0] === "init") {
-        return {
-          exitCode: 0,
-          stdout: "",
-          stderr: "",
-          timedOut: false
-        };
-      }
-
-      return {
-        exitCode: 0,
-        stdout: JSON.stringify({
-          valid: true,
-          diagnostics: []
-        }),
-        stderr: "",
-        timedOut: false
-      };
-    }
+    getDatabaseClient: () => fakeDb.client
   });
 
   const response = await app.inject({
@@ -810,7 +606,7 @@ test("POST /api/terraform/validate returns CLI validation results for an active 
   });
 
   assert.equal(response.statusCode, 200);
-  assert.deepEqual((response.json() as TerraformValidateResponse).diagnostics, []);
+  assert.equal((response.json() as TerraformValidateResponse).diagnostics[0]?.code, "terraform.quoted_reference");
 
   await app.close();
 });
