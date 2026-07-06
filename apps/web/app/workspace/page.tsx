@@ -1,5 +1,6 @@
 import { ProjectWorkspaceDraftManager, WorkspaceDraftManager } from "../../features/workspace";
 import { isWorkspaceCloudPlatform } from "../../features/workspace/project-draft-persistence";
+import { WorkspaceAuthGate } from "./workspace-auth-gate";
 
 type WorkspacePageProps = {
   readonly searchParams?: Promise<{
@@ -19,15 +20,21 @@ export default async function WorkspacePage({ searchParams }: WorkspacePageProps
     const cloudPlatform = getSingleSearchParam(params?.cloudPlatform);
 
     return (
-      <ProjectWorkspaceDraftManager
-        cloudPlatform={isWorkspaceCloudPlatform(cloudPlatform) ? cloudPlatform : undefined}
-        projectId={projectId}
-        projectName={projectName || "Project workspace"}
-      />
+      <WorkspaceAuthGate>
+        <ProjectWorkspaceDraftManager
+          cloudPlatform={isWorkspaceCloudPlatform(cloudPlatform) ? cloudPlatform : undefined}
+          projectId={projectId}
+          projectName={projectName || "Project workspace"}
+        />
+      </WorkspaceAuthGate>
     );
   }
 
-  return <WorkspaceDraftManager />;
+  return (
+    <WorkspaceAuthGate>
+      <WorkspaceDraftManager />
+    </WorkspaceAuthGate>
+  );
 }
 
 function getSingleSearchParam(value: string | string[] | undefined): string | undefined {

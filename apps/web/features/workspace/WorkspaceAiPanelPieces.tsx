@@ -197,6 +197,11 @@ export function WorkspaceAiDesignSimulationResult({
 }: {
   readonly simulation: DesignSimulationResult;
 }) {
+  const costReviewItems = simulation.costEstimate?.reviewMessages ?? simulation.costPressure;
+  const costRecommendationItems = simulation.recommendations.filter(
+    (item) => !costReviewItems.includes(item)
+  );
+
   return (
     <div className={`${styles.aiResultStack} ${styles.aiSimulationResult}`}>
       <p className={styles.aiResultSummary}>{simulation.summary}</p>
@@ -236,8 +241,13 @@ export function WorkspaceAiDesignSimulationResult({
         </section>
         <section className={styles.aiSimulationCard}>
           <strong>비용·다음 검토</strong>
+          {simulation.costEstimate !== undefined ? (
+            <div className={styles.aiSimulationCostMeta}>
+              <span>${formatMoney(simulation.costEstimate.totalEstimate.amount)}</span>
+            </div>
+          ) : null}
           <ul>
-            {[...simulation.costPressure, ...simulation.recommendations].map((item, index) => (
+            {[...costReviewItems, ...costRecommendationItems].map((item, index) => (
               <li key={`cost-${index}-${item}`}>
                 <p>{item}</p>
               </li>
@@ -334,4 +344,8 @@ function WorkspaceAiFindingList({ findings }: { readonly findings: readonly Chec
       </ul>
     </div>
   );
+}
+
+function formatMoney(amount: number): string {
+  return amount.toFixed(2);
 }

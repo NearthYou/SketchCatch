@@ -1853,6 +1853,7 @@ test("POST /api/deployments/:deploymentId/approve approves the current plan", as
   assert.deepEqual(approveCalls, [
     {
       deploymentId,
+      acknowledgedWarningIds: [],
       accessContext: {
         kind: "user",
         userId

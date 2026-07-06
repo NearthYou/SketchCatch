@@ -9,6 +9,7 @@
 3. 로그인/회원가입은 [005-로그인&회원가입_구현-ys.md](./005-로그인&회원가입_구현-ys.md)를 본다.
 4. 익명 workspace 제거와 사용자 소유권 기준은 [006-로그인&익명로그인_삭제관련.md](./006-로그인&익명로그인_삭제관련.md)를 본다.
 5. JWT와 소셜 로그인은 [007_JWT고도화정리_ys.md](./007_JWT고도화정리_ys.md), [008_소셜로그인구현가이드_ys.md](./008_소셜로그인구현가이드_ys.md)를 본다.
+6. Reverse Engineering / Cost Analysis / Deployment Safety Gate 작업은 [009_배포안전게이트구현계획_ys.md](./009_배포안전게이트구현계획_ys.md), [010_비용위험분석구현계획_ys.md](./010_비용위험분석구현계획_ys.md), [011_ReverseEngineering구현계획_ys.md](./011_ReverseEngineering구현계획_ys.md)를 본다.
 
 ## 문서 목록
 
@@ -22,6 +23,9 @@
 | [006-로그인&익명로그인_삭제관련.md](./006-로그인&익명로그인_삭제관련.md) | 익명 workspace 제거와 로그인 기반 프로젝트 소유권 정리 |
 | [007_JWT고도화정리_ys.md](./007_JWT고도화정리_ys.md) | JWT 고도화 정리 |
 | [008_소셜로그인구현가이드_ys.md](./008_소셜로그인구현가이드_ys.md) | 소셜 로그인 구현 가이드 |
+| [009_배포안전게이트구현계획_ys.md](./009_배포안전게이트구현계획_ys.md) | Deployment Safety Gate 구현 계획 |
+| [010_비용위험분석구현계획_ys.md](./010_비용위험분석구현계획_ys.md) | Cost Risk 분석 구현 계획 |
+| [011_ReverseEngineering구현계획_ys.md](./011_ReverseEngineering구현계획_ys.md) | Provider Adapter 기반 Reverse Engineering 구현 계획 |
 
 ## 정리 규칙
 

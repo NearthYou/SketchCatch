@@ -79,6 +79,47 @@ test("detects invalid block headers", () => {
   assert.equal(diagnostics[0]?.line, 1);
 });
 
+test("allows provider blocks as execution environment configuration", () => {
+  const diagnostics = createTerraformDiagnostics(`provider "aws" {
+  region = "ap-northeast-2"
+  profile = "practice"
+
+  assume_role {
+    role_arn = "arn:aws:iam::123456789012:role/example"
+  }
+}`);
+
+  assert.deepEqual(
+    diagnostics.filter((diagnostic) => diagnostic.severity === "error"),
+    []
+  );
+  assert.equal(
+    diagnostics.some((diagnostic) => diagnostic.code === "terraform.unsupported_block"),
+    false
+  );
+});
+
+test("does not treat provider-prefixed attributes as provider block headers", () => {
+  const diagnostics = createTerraformDiagnostics(`resource "aws_vpc" "main" {
+  cidr_block = "10.0.0.0/16"
+}
+
+provider_region = "ap-northeast-2"`);
+
+  assert.equal(
+    diagnostics.some((diagnostic) => diagnostic.code === "terraform.block_header"),
+    false
+  );
+});
+
+test("keeps unbalanced provider blocks as blocking diagnostics", () => {
+  const diagnostics = createTerraformDiagnostics(`provider "aws" {
+  region = "ap-northeast-2"`);
+
+  assert.equal(diagnostics[0]?.code, "terraform.unbalanced");
+  assert.equal(diagnostics[0]?.severity, "error");
+});
+
 test("detects unexpected tokens after a closed block", () => {
   const diagnostics = createTerraformDiagnostics(`resource "aws_instance" "web" {
   ami = "ami-12345678"

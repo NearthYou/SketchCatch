@@ -51,6 +51,16 @@ const handoffParamsSchema = z.object({
 });
 
 const branchSchema = z.string().trim().min(1).max(255);
+const terraformSourceLocationSchema = z
+  .object({
+    fileName: z.string().trim().min(1).max(255),
+    line: z.number().int().min(1),
+    column: z.number().int().min(1).optional(),
+    resourceAddress: z.string().trim().min(1).max(255).optional(),
+    terraformBlockType: z.string().trim().min(1).max(64).optional(),
+    terraformBlockName: z.string().trim().min(1).max(128).optional()
+  })
+  .strict();
 const deploymentPlanSummarySchema = z
   .object({
     createCount: z.number().int().min(0),
@@ -61,9 +71,41 @@ const deploymentPlanSummarySchema = z
     warnings: z.array(
       z
         .object({
+          id: z.string().trim().min(1).max(128),
           level: z.enum(["low", "medium", "high"]),
+          category: z
+            .enum([
+              "cost",
+              "security",
+              "configuration",
+              "permission",
+              "network",
+              "performance",
+              "availability"
+            ])
+            .optional(),
+          source: z.enum([
+            "pre_deployment_check",
+            "terraform_plan",
+            "cost_risk",
+            "approval_snapshot"
+          ]),
+          code: z.enum([
+            "PUBLIC_RDS",
+            "PUBLIC_SSH",
+            "PUBLIC_S3",
+            "IAM_WILDCARD",
+            "DESTRUCTIVE_CHANGE",
+            "UNSUPPORTED_RESOURCE",
+            "UNKNOWN_TERRAFORM_ACTION",
+            "MISSING_APPROVAL"
+          ]),
           message: z.string().trim().min(1).max(500),
-          relatedResourceId: z.string().trim().min(1).max(128).optional()
+          relatedFindingId: z.string().trim().min(1).max(128).optional(),
+          relatedResourceId: z.string().trim().min(1).max(128).optional(),
+          sourceLocation: terraformSourceLocationSchema.optional(),
+          requiresAcknowledgement: z.boolean(),
+          blocksApproval: z.boolean()
         })
         .strict()
     )
@@ -122,9 +164,38 @@ function toDeploymentPlanSummary(
   return {
     ...planSummary,
     warnings: planSummary.warnings.map((warning) => ({
+      id: warning.id,
       level: warning.level,
+      ...(warning.category !== undefined ? { category: warning.category } : {}),
+      source: warning.source,
+      code: warning.code,
       message: warning.message,
-      ...(warning.relatedResourceId ? { relatedResourceId: warning.relatedResourceId } : {})
+      ...(warning.relatedFindingId !== undefined ? { relatedFindingId: warning.relatedFindingId } : {}),
+      ...(warning.relatedResourceId !== undefined
+        ? { relatedResourceId: warning.relatedResourceId }
+        : {}),
+      ...(warning.sourceLocation !== undefined
+        ? {
+            sourceLocation: {
+              fileName: warning.sourceLocation.fileName,
+              line: warning.sourceLocation.line,
+              ...(warning.sourceLocation.column !== undefined
+                ? { column: warning.sourceLocation.column }
+                : {}),
+              ...(warning.sourceLocation.resourceAddress !== undefined
+                ? { resourceAddress: warning.sourceLocation.resourceAddress }
+                : {}),
+              ...(warning.sourceLocation.terraformBlockType !== undefined
+                ? { terraformBlockType: warning.sourceLocation.terraformBlockType }
+                : {}),
+              ...(warning.sourceLocation.terraformBlockName !== undefined
+                ? { terraformBlockName: warning.sourceLocation.terraformBlockName }
+                : {})
+            }
+          }
+        : {}),
+      requiresAcknowledgement: warning.requiresAcknowledgement,
+      blocksApproval: warning.blocksApproval
     }))
   };
 }

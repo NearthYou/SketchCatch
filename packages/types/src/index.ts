@@ -317,6 +317,10 @@ export type ProjectDetailsResponse = {
 export type CreateArchitectureSnapshotRequest = {
   version?: number | undefined;
   source?: string | undefined;
+  reverseEngineering?: {
+    sourceScanId: string;
+    draftId: string;
+  } | undefined;
   architectureJson: ArchitectureJson;
 };
 
@@ -536,10 +540,43 @@ export type DeploymentBlock = {
 export type DeploymentWarningLevel = "low" | "medium" | "high";
 export type DeploymentBlockedBy = "risk_analysis" | "cost_analysis" | "missing_approval";
 
+export type DeploymentPlanWarningSource =
+  | "pre_deployment_check"
+  | "terraform_plan"
+  | "cost_risk"
+  | "approval_snapshot";
+
+export type DeploymentPlanWarningCode =
+  | "PUBLIC_RDS"
+  | "PUBLIC_SSH"
+  | "PUBLIC_S3"
+  | "IAM_WILDCARD"
+  | "DESTRUCTIVE_CHANGE"
+  | "UNSUPPORTED_RESOURCE"
+  | "UNKNOWN_TERRAFORM_ACTION"
+  | "MISSING_APPROVAL";
+
+export type TerraformSourceLocation = {
+  fileName: string;
+  line: number;
+  column?: number | undefined;
+  resourceAddress?: string | undefined;
+  terraformBlockType?: string | undefined;
+  terraformBlockName?: string | undefined;
+};
+
 export type DeploymentPlanWarning = {
+  id: string;
   level: DeploymentWarningLevel;
+  category?: CheckFindingCategory;
+  source: DeploymentPlanWarningSource;
+  code: DeploymentPlanWarningCode;
   message: string;
+  relatedFindingId?: string;
   relatedResourceId?: string;
+  sourceLocation?: TerraformSourceLocation | undefined;
+  requiresAcknowledgement: boolean;
+  blocksApproval: boolean;
 };
 
 export type DeploymentPlanSummary = {
@@ -549,6 +586,10 @@ export type DeploymentPlanSummary = {
   replaceCount: number;
   blocked: boolean;
   warnings: DeploymentPlanWarning[];
+};
+
+export type ApproveDeploymentPlanRequest = {
+  acknowledgedWarningIds: string[];
 };
 
 export type DeploymentStage = "init" | "validate" | "plan" | "apply" | "destroy";
@@ -595,6 +636,156 @@ export type AwsConnectionListResponse = {
   awsConnections: AwsConnection[];
 };
 
+export type ReverseEngineeringScanStatus =
+  | "queued"
+  | "running"
+  | "completed"
+  | "failed"
+  | "cancelled";
+
+export type ReverseEngineeringScanStage =
+  | "credential"
+  | "region"
+  | "provider_api"
+  | "normalize"
+  | "draft"
+  | "analysis"
+  | "import_suggestion";
+
+export type ReverseEngineeringScanLogLevel = "INFO" | "WARN" | "ERROR";
+
+export type ReverseEngineeringScan = {
+  id: string;
+  projectId: string;
+  awsConnectionId: string;
+  provider: CloudProvider;
+  region: string;
+  resourceTypes: ResourceType[];
+  status: ReverseEngineeringScanStatus;
+  createdAt: IsoDateTimeString;
+  updatedAt: IsoDateTimeString;
+  startedAt: IsoDateTimeString | null;
+  completedAt: IsoDateTimeString | null;
+  cancelRequestedAt: IsoDateTimeString | null;
+  deletedAt: IsoDateTimeString | null;
+  errorSummary: string | null;
+};
+
+export type DiscoveredResourceRelationshipType = "contains" | "connects_to" | "depends_on";
+
+export type DiscoveredResourceRelationship = {
+  type: DiscoveredResourceRelationshipType;
+  targetResourceId: string;
+  label?: string | undefined;
+};
+
+export type ReverseEngineeringImportSuggestionStatus =
+  | "ready"
+  | "unsupported_resource_type"
+  | "manual_review";
+
+export type DiscoveredResource = {
+  id: string;
+  provider: CloudProvider;
+  providerResourceType: string;
+  providerResourceId: string;
+  region: string;
+  displayName: string;
+  resourceType: ResourceType;
+  config: ResourceConfig;
+  relationships?: DiscoveredResourceRelationship[] | undefined;
+  analysisExcluded?: boolean | undefined;
+  importSuggestionStatus?: ReverseEngineeringImportSuggestionStatus | undefined;
+};
+
+export type ReverseEngineeringAnalysisExclusionReason =
+  | "unsupported_resource_type"
+  | "missing_required_data";
+
+export type ReverseEngineeringAnalysisExclusion = {
+  id: string;
+  resourceId: string;
+  reason: ReverseEngineeringAnalysisExclusionReason;
+  message: string;
+};
+
+export type ReverseEngineeringDraft = {
+  id: string;
+  scanId: string;
+  architectureJson: ArchitectureJson;
+  protectedValueKeys: string[];
+  editableValueKeys: string[];
+  createdAt: IsoDateTimeString;
+};
+
+export type ReverseEngineeringImportSuggestion = {
+  id: string;
+  resourceId: string;
+  status: ReverseEngineeringImportSuggestionStatus;
+  handoffReady: boolean;
+  terraformAddress?: string | undefined;
+  importCommand?: string | undefined;
+  terraformBlockDraft?: string | undefined;
+  reason?: string | undefined;
+};
+
+export type ReverseEngineeringScanErrorReason =
+  | "permission_denied"
+  | "invalid_region"
+  | "expired_credential"
+  | "throttled"
+  | "provider_error"
+  | "unknown";
+
+export type ReverseEngineeringScanError = {
+  id: string;
+  resourceType: ResourceType | "UNKNOWN";
+  stage: ReverseEngineeringScanStage;
+  reason: ReverseEngineeringScanErrorReason;
+  message: string;
+  retryable: boolean;
+};
+
+export type ReverseEngineeringScanLogLine = {
+  id: string;
+  scanId: string;
+  sequence: number;
+  stage: ReverseEngineeringScanStage;
+  level: ReverseEngineeringScanLogLevel;
+  message: string;
+  createdAt: IsoDateTimeString;
+};
+
+export type ReverseEngineeringScanResult = {
+  scan: ReverseEngineeringScan;
+  discoveredResources: DiscoveredResource[];
+  reverseEngineeringDraft: ReverseEngineeringDraft;
+  architectureJson: ArchitectureJson;
+  findings: CheckFinding[];
+  analysisExclusions: ReverseEngineeringAnalysisExclusion[];
+  importSuggestions: ReverseEngineeringImportSuggestion[];
+  scanErrors: ReverseEngineeringScanError[];
+};
+
+export type CreateReverseEngineeringScanRequest = {
+  awsConnectionId: string;
+  region: string;
+  resourceTypes: ResourceType[];
+};
+
+export type ReverseEngineeringScanResponse = {
+  scan: ReverseEngineeringScan;
+  result?: ReverseEngineeringScanResult | undefined;
+};
+
+export type ReverseEngineeringScanListResponse = {
+  scans: ReverseEngineeringScan[];
+};
+
+export type ReverseEngineeringScanLogListResponse = {
+  logs: ReverseEngineeringScanLogLine[];
+};
+
 export type CreateDeploymentRequest = {
   architectureId: string;
   terraformArtifactId: string;
@@ -617,6 +808,20 @@ export type RecentSuccessfulDeploymentProject = {
 
 export type RecentSuccessfulDeploymentProjectListResponse = {
   items: RecentSuccessfulDeploymentProject[];
+};
+
+export type CostProjectEstimate = {
+  project: Project;
+  costEstimate: CostEstimateResult | null;
+};
+
+export type CostProjectEstimateListResponse = {
+  period: CostEstimatePeriod;
+  expectedUserCount: number;
+  region: AwsRegionCode | string;
+  totalEstimate: MoneyEstimate;
+  totalMonthlyEstimate: MoneyEstimate;
+  projects: CostProjectEstimate[];
 };
 
 export type DeploymentLogListResponse = {
@@ -989,13 +1194,56 @@ export type MoneyEstimate = {
   currency: "USD" | "KRW";
 };
 
+export type CostEstimatePeriod = "day" | "week" | "month";
+
+export type CostPricingSource = "aws_pricing_api" | "fallback";
+
+export type CostEstimateSupportLevel =
+  | "aws_pricing_api"
+  | "fallback_estimate"
+  | "no_direct_cost"
+  | "not_estimated";
+
+export type CostUsageAssumption = {
+  label: string;
+  value: string;
+};
+
 export type ResourceCostEstimate = {
   resourceId: string;
   resourceType: ResourceType;
+  terraformResourceType?: string | undefined;
   name: string;
   monthlyEstimate: MoneyEstimate;
+  periodEstimate: MoneyEstimate;
+  supportLevel: CostEstimateSupportLevel;
+  supportReason: string;
   costDrivers: string[];
   explanation: string;
+  pricingSource?: CostPricingSource | undefined;
+  usageAssumptions?: CostUsageAssumption[] | undefined;
+  recommendation?: string | undefined;
+};
+
+export type CostEstimateRequest = {
+  architectureJson: ArchitectureJson;
+  period: CostEstimatePeriod;
+  expectedUserCount: number;
+  region: AwsRegionCode | string;
+};
+
+export type CostEstimateResult = {
+  totalEstimate: MoneyEstimate;
+  totalMonthlyEstimate: MoneyEstimate;
+  period: CostEstimatePeriod;
+  expectedUserCount: number;
+  region: AwsRegionCode | string;
+  pricingSource: CostPricingSource;
+  fallbackUsed: boolean;
+  assumptions: string[];
+  resources: ResourceCostEstimate[];
+  reviewMessages: string[];
+  pricingAssumption: string;
 };
 
 export type CheckFindingCategory =
@@ -1007,11 +1255,24 @@ export type CheckFindingCategory =
   | "performance"
   | "availability";
 
+export type AiSafetyExplanation = {
+  riskSummary: string;
+  whyDangerous: string;
+  recommendedFix: string;
+  terraformHint?: string | undefined;
+  verificationSteps: string[];
+  fallbackUsed: boolean;
+  fallbackReason?: LlmExplanationFallbackReason | undefined;
+  providerMetadata?: AiProviderMetadata | undefined;
+};
+
 export type CheckFinding = {
   id: string;
   category: CheckFindingCategory;
   severity: RiskLevel;
   resourceId?: string | undefined;
+  sourceLocation?: TerraformSourceLocation | undefined;
+  aiSafetyExplanation?: AiSafetyExplanation | undefined;
   title: string;
   description: string;
   recommendation: string;
@@ -1098,6 +1359,9 @@ export type CreateDesignSimulationRequest = {
   architectureJson: ArchitectureJson;
   trafficLevel: ArchitectureDraftTrafficLevel;
   budgetLevel: ArchitectureDraftBudgetLevel;
+  period?: CostEstimatePeriod | undefined;
+  expectedUserCount?: number | undefined;
+  region?: AwsRegionCode | string | undefined;
 };
 
 export type DesignSimulationRequestFlowStep = {
@@ -1129,6 +1393,7 @@ export type DesignSimulationResult = {
   bottlenecks: DesignSimulationBottleneck[];
   failureScenarios: DesignSimulationFailureScenario[];
   costPressure: string[];
+  costEstimate?: CostEstimateResult | undefined;
   recommendations: string[];
   llmExplanation?: LlmExplanation | undefined;
 };
@@ -1202,6 +1467,11 @@ export type AwsRegionCode =
 
 export type DiagramNodeMetadata = {
   parentAreaNodeId?: string | undefined;
+  reverseEngineering?: {
+    source: "aws_scan";
+    protectedValueKeys: string[];
+    editableValueKeys: string[];
+  } | undefined;
 };
 
 export type DiagramNodeParameters = {

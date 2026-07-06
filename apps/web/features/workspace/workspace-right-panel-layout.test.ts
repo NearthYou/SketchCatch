@@ -121,7 +121,7 @@ test("workspace AI chat keeps the floating dock width with compact prompt guide"
   assert.match(aiChatDockSource, /styles\.aiChatPromptGuide/);
   assert.match(dockRule, /right:\s*24px/);
   assert.match(dockRule, /width:\s*min\(860px,\s*calc\(100vw - 48px\)\)/);
-  assert.match(composerRule, /grid-template-columns:\s*minmax\(0,\s*1fr\)\s*auto/);
+  assert.match(composerRule, /grid-template-columns:\s*minmax\(0,\s*1fr\)\s*auto\s*auto/);
   assert.match(promptGuideRule, /grid-column:\s*1\s*\/\s*-1/);
 });
 
@@ -149,6 +149,38 @@ test("terraform issues navigation stays reachable while diagnostics are visible"
   assert.match(componentSource, /openCollapsedView\("issues"\)/);
 });
 
+test("terraform code navigation stays reachable from issues after a blocked save", () => {
+  const requestViewIndex = componentSource.indexOf("const requestView = useCallback");
+  const requestViewEditorBypassIndex = componentSource.indexOf('if (nextView === "terraform")', requestViewIndex);
+  const requestViewLeaveGuardIndex = componentSource.indexOf(
+    'requestTerraformLeave({ kind: "view", view: nextView })',
+    requestViewIndex
+  );
+  const collapsedViewIndex = componentSource.indexOf("function openCollapsedView");
+  const collapsedViewEditorBypassIndex = componentSource.indexOf('if (nextView === "terraform")', collapsedViewIndex);
+  const collapsedViewLeaveGuardIndex = componentSource.indexOf(
+    'requestTerraformLeave({ kind: "view", view: nextView })',
+    collapsedViewIndex
+  );
+  const documentClickIndex = componentSource.indexOf("function handleDocumentClick");
+  const editorNavigationTargetIndex = componentSource.indexOf(
+    "isTerraformEditorNavigationTarget(target)",
+    documentClickIndex
+  );
+  const replayTargetIndex = componentSource.indexOf("getTerraformLeaveReplayTarget(target)", documentClickIndex);
+
+  assert.ok(requestViewIndex > -1);
+  assert.ok(requestViewEditorBypassIndex > requestViewIndex);
+  assert.ok(requestViewEditorBypassIndex < requestViewLeaveGuardIndex);
+  assert.ok(collapsedViewIndex > -1);
+  assert.ok(collapsedViewEditorBypassIndex > collapsedViewIndex);
+  assert.ok(collapsedViewEditorBypassIndex < collapsedViewLeaveGuardIndex);
+  assert.ok(editorNavigationTargetIndex > documentClickIndex);
+  assert.ok(editorNavigationTargetIndex < replayTargetIndex);
+  assert.match(componentSource, /data-terraform-editor-navigation/);
+  assert.match(componentSource, /isTerraformEditorNavigationTarget/);
+});
+
 test("discarding terraform edits resets the terraform code panel dirty state", () => {
   assert.match(componentSource, /terraformDiscardRequestId/);
   assert.match(componentSource, /setTerraformDiscardRequestId\(\(requestId\) => requestId \+ 1\)/);
@@ -162,6 +194,22 @@ test("discarding terraform edits resets the terraform code panel dirty state", (
 test("terraform preview refreshes when the last diagram icon is deleted", () => {
   assert.match(terraformPanelSource, /void refreshTerraformCode\(currentDiagramFingerprint\)/);
   assert.doesNotMatch(terraformPanelSource, /context\.nodes\.length === 0/);
+});
+
+test("terraform preview failures mark previous files stale instead of synced", () => {
+  assert.match(terraformPanelSource, /latestSuccessfulTerraformPreviewFingerprintRef/);
+  assert.match(terraformPanelSource, /isTerraformPreviewStale/);
+  assert.match(terraformPanelSource, /Terraform Preview 생성 실패/);
+  assert.match(terraformPanelSource, /이전 Preview 표시 중/);
+  assert.match(terraformPanelSource, /setIsTerraformPreviewStale\(true\)/);
+  assert.doesNotMatch(terraformPanelSource, /setStatusMessage\("그래프 기준으로 동기화됨"\);\s*latestDiagramFingerprintRef\.current = diagramFingerprint;\s*[\s\S]*catch/);
+});
+
+test("terraform status counts only the synced preview snapshot", () => {
+  assert.match(terraformPanelSource, /previewSnapshotSummary/);
+  assert.match(terraformPanelSource, /isTerraformPreviewSynced/);
+  assert.match(terraformPanelSource, /다이어그램 변경 미반영/);
+  assert.match(terraformPanelSource, /previewSnapshotSummary/);
 });
 
 test("terraform leave dialog uses Korean copy", () => {
@@ -346,6 +394,29 @@ test("pre-deployment check is owned by the deployment tab", () => {
   assert.doesNotMatch(aiChatDockSource, /runAiPreDeploymentCheck/);
   assert.doesNotMatch(aiChatDockSource, /WorkspaceAiPreDeploymentResult/);
   assert.match(preflightSummaryRule, /\bgap:\s*8px;/);
+});
+
+test("pre-deployment check renders per-finding explanations without the blue summary block", () => {
+  assert.doesNotMatch(deploymentPanelSource, /DeploymentPreDeploymentAiExplanation/);
+  assert.doesNotMatch(deploymentPanelSource, /deploymentPreflightAiExplanation/);
+  assert.doesNotMatch(stylesSource, /\.deploymentPreflightAiExplanation\s*\{/);
+  assert.match(deploymentPanelSource, /DeploymentFindingAiExplanation/);
+  assert.match(deploymentPanelSource, /finding\.aiSafetyExplanation/);
+  assert.match(deploymentPanelSource, /className=\{styles\.deploymentFindingAiExplanation\}/);
+  assert.doesNotMatch(deploymentPanelSource, /deploymentFindingAiButton/);
+  assert.doesNotMatch(aiChatDockSource, /preDeploymentAnalysis/);
+});
+
+test("pre-deployment finding fix buttons open the existing terraform source location handler", () => {
+  assert.match(deploymentPanelSource, /onOpenFindingTerraformSource/);
+  assert.match(deploymentPanelSource, /className=\{styles\.deploymentFindingFixButton\}/);
+  assert.match(deploymentPanelSource, /<Code2 size=\{13\} aria-hidden="true" \/>/);
+  assert.match(componentSource, /getPreDeploymentFindingTerraformSourceLocation/);
+  assert.match(componentSource, /openPreDeploymentFindingTerraformSource/);
+  assert.match(componentSource, /terraformPanelRef\.current\?\.getTerraformFiles\(\)/);
+  assert.match(componentSource, /setActiveView\("terraform"\)/);
+  assert.match(componentSource, /terraformPanelRef\.current\?\.openTerraformSourceLocation\(sourceLocation\)/);
+  assert.match(componentSource, /onOpenFindingTerraformSource=\{openPreDeploymentFindingTerraformSource\}/);
 });
 
 test("terraform error explanation lives in the terraform code panel only when errors exist", () => {

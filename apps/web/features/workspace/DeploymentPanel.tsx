@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   CSSProperties,
   KeyboardEvent as ReactKeyboardEvent,
@@ -17,9 +17,10 @@ import type {
   GitCicdHandoffPipelineStatus,
   SourceRepository,
   TerraformDiagnostic,
+  TerraformSourceLocation,
   TerraformOutput
 } from "@sketchcatch/types";
-import { Clipboard, ClipboardCheck, GitBranch, Maximize2, ShieldCheck, Trash2, X } from "lucide-react";
+import { Clipboard, ClipboardCheck, Code2, GitBranch, Maximize2, ShieldCheck, Trash2, X } from "lucide-react";
 import { DashboardIcon } from "../../components/dashboard/dashboard-icons";
 import { SelectMenu, type SelectMenuOption } from "../../components/ui/SelectMenu";
 import { getApiErrorMessage } from "../../lib/api-client";
@@ -91,6 +92,7 @@ export function DeploymentPanel({
   currentNodeCount,
   diagramJson,
   hasUnsavedDeploymentBaseline,
+  onOpenFindingTerraformSource,
   onPrepareDeploymentArtifacts,
   onValidateTerraformDiagnostics,
   projectId,
@@ -99,6 +101,7 @@ export function DeploymentPanel({
   readonly currentNodeCount: number;
   readonly diagramJson: DiagramJson;
   readonly hasUnsavedDeploymentBaseline: boolean;
+  readonly onOpenFindingTerraformSource: (finding: CheckFinding) => TerraformSourceLocation | null;
   readonly onPrepareDeploymentArtifacts: () => Promise<SavedWorkspaceTerraformArtifact>;
   readonly onValidateTerraformDiagnostics: () => Promise<TerraformDiagnostic[]>;
   readonly projectId: string;
@@ -922,7 +925,10 @@ export function DeploymentPanel({
         <p className={styles.deploymentStaleNotice}>보드 변경됨 · 다시 실행 필요</p>
       ) : null}
       {preDeploymentAnalysis !== null ? (
-        <DeploymentPreDeploymentSummary analysis={preDeploymentAnalysis} />
+        <DeploymentPreDeploymentSummary
+          analysis={preDeploymentAnalysis}
+          onOpenFindingTerraformSource={onOpenFindingTerraformSource}
+        />
       ) : (
         <p className={styles.deploymentHint}>현재 보드 기준으로 비용, 보안, 설정 위험을 확인합니다.</p>
       )}
@@ -1512,9 +1518,11 @@ export function DeploymentPanel({
 }
 
 function DeploymentPreDeploymentSummary({
-  analysis
+  analysis,
+  onOpenFindingTerraformSource
 }: {
   readonly analysis: AiPreDeploymentAnalysisResult;
+  readonly onOpenFindingTerraformSource: (finding: CheckFinding) => TerraformSourceLocation | null;
 }) {
   const failCount = countChecklistItems(analysis, "fail");
   const warningCount = countChecklistItems(analysis, "warning");
@@ -1546,7 +1554,11 @@ function DeploymentPreDeploymentSummary({
       {visibleFindings.length > 0 ? (
         <ul className={styles.deploymentPreflightFindings}>
           {visibleFindings.map((finding) => (
-            <DeploymentPreDeploymentFindingItem finding={finding} key={finding.id} />
+            <DeploymentPreDeploymentFindingItem
+              finding={finding}
+              key={finding.id}
+              onOpenFindingTerraformSource={onOpenFindingTerraformSource}
+            />
           ))}
         </ul>
       ) : (
@@ -1559,13 +1571,86 @@ function DeploymentPreDeploymentSummary({
   );
 }
 
-function DeploymentPreDeploymentFindingItem({ finding }: { readonly finding: CheckFinding }) {
+function DeploymentPreDeploymentFindingItem({
+  finding,
+  onOpenFindingTerraformSource
+}: {
+  readonly finding: CheckFinding;
+  readonly onOpenFindingTerraformSource: (finding: CheckFinding) => TerraformSourceLocation | null;
+}) {
+  function openTerraformSource(): void {
+    onOpenFindingTerraformSource(finding);
+  }
+
   return (
     <li data-severity={finding.severity}>
       <span>{finding.severity.toUpperCase()}</span>
       <strong>{finding.title}</strong>
       {finding.resourceId ? <em>{finding.resourceId}</em> : null}
+      <button
+        className={styles.deploymentFindingFixButton}
+        onClick={openTerraformSource}
+        type="button"
+      >
+        <Code2 size={13} aria-hidden="true" />
+        수정
+      </button>
+      <DeploymentFindingAiExplanation finding={finding} />
     </li>
+  );
+}
+
+function DeploymentFindingAiExplanation({ finding }: { readonly finding: CheckFinding }) {
+  const explanation = finding.aiSafetyExplanation;
+
+  if (!explanation) {
+    return null;
+  }
+
+  return (
+    <div className={styles.deploymentFindingAiExplanation}>
+      <p>{explanation.riskSummary}</p>
+      <dl>
+        <div>
+          <dt>왜 위험한가</dt>
+          <dd>{explanation.whyDangerous}</dd>
+        </div>
+        <div>
+          <dt>권장 수정</dt>
+          <dd>{explanation.recommendedFix}</dd>
+        </div>
+        {explanation.terraformHint ? (
+          <div>
+            <dt>Terraform 힌트</dt>
+            <dd>{explanation.terraformHint}</dd>
+          </div>
+        ) : null}
+      </dl>
+      <DeploymentPreDeploymentTextList items={explanation.verificationSteps} title="확인 방법" />
+    </div>
+  );
+}
+
+function DeploymentPreDeploymentTextList({
+  items,
+  title
+}: {
+  readonly items: readonly string[];
+  readonly title: string;
+}) {
+  if (items.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className={styles.deploymentPreflightAiList}>
+      <strong>{title}</strong>
+      <ul>
+        {items.map((item, index) => (
+          <li key={`${title}-${index}-${item}`}>{item}</li>
+        ))}
+      </ul>
+    </div>
   );
 }
 

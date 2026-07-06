@@ -1,4 +1,4 @@
-{
+﻿{
   "version": "7",
   "dialect": "postgresql",
   "entries": [
@@ -168,6 +168,13 @@
       "version": "7",
       "when": 1783296000000,
       "tag": "0023_source_repositories",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1783209600000,
+      "tag": "0024_reverse_engineering_scans",
       "breakpoints": true
     }
   ]

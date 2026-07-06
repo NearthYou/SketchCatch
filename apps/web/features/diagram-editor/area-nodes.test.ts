@@ -11,7 +11,7 @@ import {
   isResourceAreaNode
 } from "./area-nodes";
 
-test("isAreaNode matches Region, Availability Zone, Group, VPC, Subnet, and Security Group nodes", () => {
+test("isAreaNode matches Region, Availability Zone, Group, VPC, Subnet, Security Group, and ASG nodes", () => {
   assert.equal(isAreaNode(makeDesignNode({ type: "design_region" })), true);
   assert.equal(isAreaNode(makeDesignNode({ type: "design_az" })), true);
   assert.equal(isAreaNode(makeDesignNode({ type: "design_group" })), true);
@@ -23,12 +23,18 @@ test("isAreaNode matches Region, Availability Zone, Group, VPC, Subnet, and Secu
   assert.equal(isAreaNode(makeResourceNode({ resourceType: "aws_vpc" })), true);
   assert.equal(isAreaNode(makeResourceNode({ resourceType: "aws_subnet" })), true);
   assert.equal(isAreaNode(makeResourceNode({ resourceType: "aws_security_group" })), true);
+  assert.equal(isAreaNode(makeResourceNode({ resourceType: "aws_autoscaling_group" })), true);
 });
 
 test("isAreaNode excludes regular design and resource nodes", () => {
   assert.equal(isAreaNode(makeDesignNode({ type: "design_note" })), false);
   assert.equal(isAreaNode(makeResourceNode({ resourceType: "aws_instance" })), false);
   assert.equal(isAreaNode(makeResourceNode({ resourceType: "aws_internet_gateway" })), false);
+  assert.equal(isAreaNode(makeResourceNode({ resourceType: "aws_s3_bucket" })), false);
+  assert.equal(isAreaNode(makeResourceNode({ resourceType: "aws_db_subnet_group" })), false);
+  assert.equal(isAreaNode(makeResourceNode({ resourceType: "aws_api_gateway_rest_api" })), false);
+  assert.equal(isAreaNode(makeResourceNode({ resourceType: "aws_api_gateway_resource" })), false);
+  assert.equal(isAreaNode(makeResourceNode({ resourceType: "aws_cloudwatch_event_rule" })), false);
 });
 
 test("area node helpers distinguish design containers from resource containers", () => {
@@ -56,6 +62,12 @@ test("getAreaNodeLabel uses resource name for resource area nodes", () => {
   assert.equal(
     getAreaNodeLabel(makeResourceNode({ resourceName: "web_sg", resourceType: "aws_security_group" })),
     "web_sg"
+  );
+  assert.equal(
+    getAreaNodeLabel(
+      makeResourceNode({ resourceName: "auto_scaling_group", resourceType: "aws_autoscaling_group" })
+    ),
+    "auto_scaling_group"
   );
   assert.equal(
     getAreaNodeLabel(makeResourceNode({ resourceName: "ap_northeast_2", resourceType: "aws_region" })),
@@ -102,7 +114,7 @@ test("getAreaNodeIconUrl returns resource and design area icons", () => {
   );
 });
 
-test("getAreaNodeMetaLabel summarizes Region and AZ area parameters", () => {
+test("getAreaNodeMetaLabel summarizes Region area parameters without cluttering AZ headers", () => {
   assert.equal(
     getAreaNodeMetaLabel(
       makeResourceNode({
@@ -123,7 +135,7 @@ test("getAreaNodeMetaLabel summarizes Region and AZ area parameters", () => {
         }
       })
     ),
-    "US East (N. Virginia) / us-east-1b"
+    undefined
   );
 });
 

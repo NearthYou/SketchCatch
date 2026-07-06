@@ -1,31 +1,234 @@
-# 세션 핸드오프
+﻿# 세션 핸드오프
 
-이 파일은 최신 세션 하나를 다음 세션이 빠르게 이어받기 위한 압축본이다. 누적 이력은 `agent-progress.md`에 남긴다.
+## 현재 검증된 것
 
-## 2026-07-05 최신 핸드오프 - Terraform 영역 리소스 계약 Ticket 2
+- `feature/sw/deployment-github-runtime-cache` branch has been updated with `origin/dev`.
+- Source repository/GitHub App operational verification had previously completed.
+- Merge verification passed: `pnpm harness:check`, `pnpm typecheck`, `pnpm lint`, `pnpm build`, and `git diff --check --cached`.
 
-### 현재 상태
+## 이번 세션의 변경 사항
 
-- 현재 브랜치: `Feat/jh/165-regionaz를-resource-node로-생성`
-- 사용자 요청: `docs/jh/001_테라폼영역리소스동기화티켓계획_JH.md`의 Ticket 2를 진행하고, 커밋은 만들지 않는다.
-- Ticket 2 범위는 Web에서 새 Region/AZ 생성 경로를 `aws_region`, `aws_availability_zone` resource area node로 바꾸는 것이다.
-- 신규 catalog/sample 생성 경로는 더 이상 `design_region`, `design_az`를 만들지 않는다. Legacy 저장 데이터 호환을 위해 area 판정과 일부 테스트에서는 기존 design/sketchcatch 타입을 계속 인식한다.
+- Merged `origin/dev` into the feature branch and resolved conflicts.
+- Preserved GitHub App deployment env wiring and source repository runtime config while accepting new reverse engineering/cost work from `dev`.
+- Renamed incoming reverse engineering migration to `0024_reverse_engineering_scans.sql` to keep `0023_source_repositories.sql` as the already-applied migration.
 
-### 완료된 것
+## 아직 깨졌거나 미검증된 것
 
-- Resource catalog의 Region/AZ item을 `aws-region`, `aws-availability-zone` id와 `aws_region`, `aws_availability_zone` type으로 전환했다.
-- `createDiagramNodeFromPayload`가 Region/AZ drag 생성 시 `kind: "resource"`와 기본 `parameters`를 만든다.
-- Region 기본값: `resourceName: "ap_northeast_2"`, `values.awsRegion: "ap-northeast-2"`.
-- AZ 기본값: `resourceName: "ap_northeast_2a"`, `values.awsAvailabilityZone: "ap-northeast-2a"`.
-- `area-nodes`, resize bounds, Resource List summary가 `aws_region`, `aws_availability_zone`을 board area node로 인식한다.
-- Parameter panel의 Region/AZ selector는 `metadata`가 아니라 `parameters.values["awsRegion"]`, `parameters.values["awsAvailabilityZone"]`만 갱신한다.
-- 리뷰 보강으로 Region/AZ reader는 `parameters.values`가 누락되거나 null이어도 기본값으로 fallback한다.
-- Region/AZ update helper는 legacy `values: undefined | null`에서도 새 values 객체를 만들어 저장한다.
-- AZ 선택용 정적 option helper를 추가했다.
-- server-storage sample layout이 catalog 기반 `aws_region`, `aws_availability_zone` area resource를 생성한다.
-- `docs/data-models.md`에서 Region/AZ area resource가 shared Terraform `ResourceDefinition` 대상이 아님을 최신 계약에 맞게 보정했다.
+- Browser-level verification for the existing-installed GitHub App UX is still a follow-up; this session only updated the branch.
 
-### 검증된 것
+## 다음으로 최선의 행동
+
+- Resume the GitHub App existing-install UX fix from the now-updated branch.
+# ?몄뀡 ?몃뱶?ㅽ봽
+
+???뚯씪? 理쒖떊 ?몄뀡 ?섎굹瑜??ㅼ쓬 ?몄뀡??鍮좊Ⅴ寃??댁뼱諛쏄린 ?꾪븳 ?뺤텞蹂몄씠?? ?꾩쟻 ?대젰? `agent-progress.md`???④릿??
+
+## 2026-07-06 理쒖떊 ?몃뱶?ㅽ봽 - Cost Risk 由ъ냼??吏?먭낵 Pricing API ?뺤옣
+
+### ?꾩옱 ?곹깭
+
+- ?꾩옱 釉뚮옖移? `feat/ys/142-cost-risk-遺꾩꽍-援ы쁽`
+- ?ъ슜???붿껌: 鍮꾩슜 ?곗젙?먯꽌 ?좊ℓ?섍굅??踰꾧렇??遺遺꾩쓣 怨좎튂怨? 誘몄???fallback-only 由ъ냼?ㅻ? 理쒕???AWS Pricing API 議고쉶濡??곌껐?쒕떎.
+- ?대쾲 ?몄뀡 而ㅻ컠:
+  - `01c5aed Feat: 鍮꾩슜 ?곗젙 吏???곹깭 怨꾩빟 異붽?`
+  - `5cdac8d Fix: 鍮꾩슜 ?곗젙 Terraform 由ъ냼??媛먯? 蹂댁젙`
+  - `e828988 Feat: 鍮꾩슜 ?곗젙 由ъ냼?ㅼ? Pricing API ?뺤옣`
+  - `1db8022 Feat: 鍮꾩슜 ?곗젙 ?곹깭 UI ?쒖떆`
+
+### ?꾨즺??寃?
+
+- `ResourceCostEstimate`??`terraformResourceType`, `supportLevel`, `supportReason`??異붽??덈떎.
+- `cost-analysis`媛 `ResourceType`蹂대떎 `config.terraformResourceType`???곗꽑??NAT Gateway, ALB, DB snapshot 媛숈? 由ъ냼?ㅻ? ?뺥솗???곗젙?쒕떎.
+- ?ъ슜??吏??resource 紐⑸줉??Networking, Compute, Storage, Database, IAM/Security, Serverless/App, Messaging/Events, Edge/CDN, Observability, Containers, CI/CD, Governance/Config, WAF/Protection 踰붿쐞濡??뺤옣?덈떎.
+- billable 由ъ냼?ㅻ뒗 AWS Pricing API rate provider瑜?癒쇱? ?몄텧?섍퀬, ?ㅽ뙣?섎㈃ fallback ?④?濡?怨꾩궛?쒕떎.
+- 吏곸젒 鍮꾩슜???녿뒗 `aws_autoscaling_group`, public `aws_acm_certificate`, `aws_sns_topic_subscription`? `no_direct_cost`濡??붾㈃???쒖떆?쒕떎.
+- `/costs`? Workspace AI ?쒕??덉씠??寃곌낵?????댁긽 ???덉긽 鍮꾩슜??0??由ъ냼?ㅻ? ?④린吏 ?딄퀬 ?곗젙 ?곹깭 諛곗?? ?댁쑀瑜?蹂댁뿬以??
+
+## 2026-07-05 理쒖떊 ?몃뱶?ㅽ봽 - Terraform ?곸뿭 由ъ냼??Ticket 4 踰붿쐞 異뺤냼
+
+### ?꾩옱 ?곹깭
+
+- ?꾩옱 釉뚮옖移? `Feat/jh/171-legacy-diagramjson-?명솚-留덉씠洹몃젅?댁뀡怨?terraform-preview-stale-諛⑹뼱`
+- ?ъ슜???붿껌: 湲곗〈 draft 蹂댁〈 ?꾩젣??legacy migration 援ы쁽? 怨쇳븯誘濡? Ticket 4瑜?湲곗〈 DB draft/IndexedDB 珥덇린?붿? Terraform Preview stale 理쒖냼 諛⑹뼱濡?以꾩씤??
+- tracked diff??`apps/web/features/workspace/TerraformCodePanel.tsx`, `apps/web/features/workspace/workspace-right-panel-layout.test.ts`, `agent-progress.md`, `session-handoff.md` 以묒떖?대떎.
+- `docs/jh/001_?뚮씪?쇱쁺??━?뚯뒪?숆린?뷀떚耳볤퀎??JH.md`???섏젙?먯?留?`docs/jh/`媛 `.gitignore`???ы븿?섏뼱 tracked diff?먮뒗 ?섏삤吏 ?딅뒗??
+
+### ?꾨즺??寃?
+
+- `metadata.awsRegion` canonical rollback, shared/API legacy normalization helper, DB migration, Web IndexedDB migration 援ы쁽??踰붿쐞 諛뽰쑝濡??뺣━?덈떎.
+- Terraform panel??留덉?留??깃났 Preview fingerprint? ?꾩옱 Diagram fingerprint瑜?鍮꾧탳??stale ?곹깭瑜??쒖떆?섍쾶 ?덈떎.
+- Preview ?앹꽦 ?ㅽ뙣 ???댁쟾 Terraform code媛 ?꾩옱 Diagram怨??숆린?붾맂 寃껋쿂??蹂댁씠吏 ?딅룄濡??ㅽ뙣 硫붿떆吏? snapshot summary瑜?遺꾨━?덈떎.
+- ?섎룞 ?몄쭛 以??먮룞 refresh媛 ?ㅽ궢?섏뼱??Diagram 蹂寃쎌씠 Preview??諛섏쁺?섏? ?딆븯?뚯쓣 ?쒖떆?섍쾶 ?덈떎.
+- Ticket 4 臾몄꽌瑜?"湲곗〈 DB draft 珥덇린??+ IndexedDB `sketchcatch-drafts` 珥덇린??+ stale 諛⑹뼱"濡?媛깆떊?덈떎.
+
+### 寃利앸맂 寃?
+
+- `pnpm harness:check` - passed before edits.
+- `pnpm --filter @sketchcatch/types typecheck` - passed.
+- `pnpm --filter @sketchcatch/api exec tsx --test src/services/cost-analysis.test.ts src/services/awsPricingRateProvider.test.ts` - passed.
+- `pnpm --filter @sketchcatch/api typecheck` - passed.
+- `pnpm --filter @sketchcatch/api lint` - passed.
+- `pnpm --filter @sketchcatch/web typecheck` - passed.
+- `pnpm --filter @sketchcatch/web lint` - passed.
+- ?ㅼ젣 AWS Pricing API ?섑뵆 議고쉶??`sketchcatch-dev` SSO token 留뚮즺濡??ㅽ뙣?덈떎. ?ш?利???`aws sso login --profile sketchcatch-dev`媛 ?꾩슂?섎떎.
+- `pnpm harness:check` - passed after docs/progress updates.
+- `pnpm lint` - passed with Turbo cache rename warnings only.
+- `pnpm typecheck` - passed with Turbo cache rename warnings only.
+- `pnpm build` - passed.
+- `git diff --check` - passed with line-ending warnings only.
+
+### ?ㅼ쓬 ?됰룞
+
+- ?ㅼ젣 AWS Pricing API ?쇱씠釉?議고쉶瑜??ㅼ떆 ?뺤씤?섎젮硫?`aws sso login --profile sketchcatch-dev` ??`AWS_PRICING_API_ENABLED=true` ?섑뵆 議고쉶瑜??ъ떎?됲븳??
+- ?대쾲 ?몄뀡?먯꽌 ?ㅼ젣 AWS apply/destroy, cloud mutation, Git/CI/CD handoff???ㅽ뻾?섏? ?딆븯??
+
+## 2026-07-05 理쒖떊 ?몃뱶?ㅽ봽 - Cost Risk 遺꾩꽍 ?덉긽 鍮꾩슜 援ы쁽
+
+### ?꾩옱 ?곹깭
+
+- ?꾩옱 釉뚮옖移? `feat/ys/142-cost-risk-遺꾩꽍-援ы쁽`
+- ?ъ슜???붿껌: 留??④퀎留덈떎 援ы쁽?섍퀬 寃利앸릺硫?而ㅻ컠?쒕떎.
+- 援ы쁽? 6媛?湲곕뒫/fix 而ㅻ컠怨?湲곕줉 而ㅻ컠?쇰줈 ?섎돇???덈떎.
+  - `5212684 Feat: 鍮꾩슜 ?곗젙 ????뺤옣`
+  - `0e550f1 Feat: ?쒕??덉씠??鍮꾩슜 ?곗젙 ?곌껐`
+  - `7bf8cac Feat: ?쒕??덉씠??鍮꾩슜 議곌굔 UI ?곌껐`
+  - `b3350d7 Feat: 鍮꾩슜愿由?API 湲곕컲 ?꾪솚`
+  - `df13897 Fix: 鍮꾩슜愿由??꾨줈?앺듃 ?좏깮 URL 諛섏쁺`
+  - `de5971f Fix: RDS ?ㅽ넗由ъ? Pricing API 議고쉶 異붽?`
+
+### ?꾨즺??寃?
+
+- shared type??`CostEstimateRequest`, `CostEstimateResult`, `CostProjectEstimateListResponse`, `DesignSimulationResult.costEstimate`瑜?異붽??덈떎.
+- API ?쒕쾭??`cost-analysis` ?쒕퉬?ㅼ? AWS Pricing API adapter瑜?異붽??덈떎. ?ㅼ젣 議고쉶??`AWS_PRICING_API_ENABLED=true`???뚮쭔 ?쒕룄?섍퀬, 湲곕낯/?뚯뒪?몃뒗 fallback ?④?瑜??ъ슜?쒕떎.
+- `simulateDesign()`??鍮꾩슜 ?곗젙 ?쒕퉬?ㅻ? ?몄텧?섍퀬 湲곗〈 `costPressure`??湲덉븸 湲곕컲 臾몄옣???대뒗??
+- Workspace AI ?쒕??덉씠????뿉 湲곌컙/?덉긽 ?ъ슜?????낅젰??異붽??섍퀬, 鍮꾩슜 移대뱶??珥??덉긽 鍮꾩슜怨?由ъ냼?ㅻ퀎 洹쇨굅瑜??쒖떆?쒕떎.
+- `GET /api/costs/projects`? `/costs` client ?붾㈃???곌껐???ㅽ뻾 以?諛고룷 ?꾨줈?앺듃???덉긽 鍮꾩슜 ?⑷퀎? ?곸꽭瑜?蹂댁뿬以??
+- `/costs` ?꾨줈?앺듃 ???좏깮??`projectId` URL query? ?숆린?뷀빐 ?곸꽭 鍮꾩슜 ?곹깭瑜?二쇱냼濡??ㅼ떆 ?????덇쾶 ?덈떎.
+- RDS storage??AWS Pricing API??`Database Storage`/`General Purpose-GP3` ?곹뭹?쇰줈 議고쉶?섍쾶 adapter瑜?蹂닿컯?덈떎.
+- `docs/data-models.md`, `agent-progress.md`, `session-handoff.md`瑜?媛깆떊?덈떎.
+
+### 寃利앸맂 寃?
+
+- `pnpm harness:check` - passed before edits.
+- `pnpm --filter @sketchcatch/types typecheck` - passed.
+- `pnpm --filter @sketchcatch/api typecheck` - passed.
+- `pnpm --filter @sketchcatch/api lint` - passed.
+- `pnpm --filter @sketchcatch/web typecheck` - passed.
+- `pnpm --filter @sketchcatch/web lint` - passed.
+- `pnpm --filter @sketchcatch/api test -- src/routes/aiDesignSimulation.test.ts` - package script executed the full API test set; 565 tests passed.
+- `pnpm harness:check` - final check passed.
+- `pnpm lint` - passed.
+- `pnpm typecheck` - passed.
+- `pnpm build` - passed.
+- `git diff --check` - passed.
+- `AWS_PROFILE=sketchcatch-dev AWS_PRICING_API_ENABLED=true` 濡?AWS Pricing API ?ㅼ젣 議고쉶瑜?寃利앺뻽?? EC2, RDS instance, RDS storage, S3媛 `aws_pricing_api` source濡?怨꾩궛?쒕떎.
+- `pnpm --filter @sketchcatch/api test -- src/services/awsPricingRateProvider.test.ts` - package script executed the full API test set; 566 tests passed.
+- `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, `git diff --check` - passed after RDS storage fix.
+
+### ?ㅼ쓬 ?됰룞
+
+- ?ъ슜?먯뿉寃?而ㅻ컠蹂?援ы쁽 ?댁슜怨??붾㈃ ?몄텧 諛⑹떇??蹂닿퀬?쒕떎.
+- `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-right-panel-layout.test.ts --test-name-pattern "terraform preview failures|terraform status counts"` - passed.
+- `pnpm --filter @sketchcatch/web exec tsx --test features/parameter-input/region-node-metadata.test.ts` - passed.
+- `pnpm harness:check` - passed after edits.
+- `pnpm lint` - passed.
+- `pnpm typecheck` - passed after reverting generated `apps/web/next-env.d.ts`.
+- `pnpm build` - passed; Next.js generated `apps/web/next-env.d.ts` was reverted afterward.
+- `git diff --check` - passed.
+
+### ?ㅼ쓬 ?됰룞
+
+- ?ㅼ젣 ???project??DB draft瑜?珥덇린?뷀븳??
+- ?뚯뒪??釉뚮씪?곗? profile??IndexedDB `sketchcatch-drafts`瑜?珥덇린?뷀븳?? DB留?鍮꾩슦硫?local draft媛 ?ㅼ떆 蹂듭썝?????덈떎.
+- ?꾩슂?섎㈃ 釉뚮옖移섎챸???꾩옱 異뺤냼 scope??留욎떠 ?덈줈 ?뚭굅??rename?쒕떎. ?꾩옱 釉뚮옖移섎챸?먮뒗 legacy migration 臾멸뎄媛 ?⑥븘 ?덈떎.
+
+## 2026-07-05 理쒖떊 ?몃뱶?ㅽ봽 - Terraform ?곸뿭 由ъ냼??Ticket 3 由щ럭 蹂닿컯
+
+### ?꾩옱 ?곹깭
+
+- ?꾩옱 釉뚮옖移? `Feat/jh/167-asg瑜?visual-area-node濡??숈옉`
+- ?ъ슜???붿껌: ASG area endpoint edge z-index 由щ럭 ?쇰뱶諛깆쓣 諛섏쁺?섍퀬, 而ㅻ컠? 留뚮뱾吏 ?딅뒗??
+- 湲곗〈 Ticket 3 diff???뺣━???곹깭?怨? ?대쾲 蹂寃쎌? `flow-mappers.ts`? `flow-mappers.test.ts` 以묒떖?대떎.
+
+### ?꾨즺??寃?
+
+- `toFlowEdges`??z-index 怨꾩궛?먯꽌 selected edge瑜?area endpoint 媛以묒튂蹂대떎 ???믨쾶 ?щ━?꾨줉 蹂댁젙?덈떎.
+- ASG area endpoint瑜?怨듭쑀?섎뒗 selected/unselected edge瑜?留뚮뱾??selected edge媛 ???믪? z-index瑜?媛뽯뒗 ?뚭? ?뚯뒪?몃? 異붽??덈떎.
+
+### 寃利앸맂 寃?
+
+- `pnpm harness:check` - passed before edits.
+- Red before fix: `pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/flow-mappers.test.ts` failed because selected and unselected area endpoint edges had the same z-index.
+- `pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/flow-mappers.test.ts` - passed.
+- `pnpm --filter @sketchcatch/web typecheck` - passed.
+- `pnpm --filter @sketchcatch/web lint` - passed.
+- `pnpm lint`, `pnpm typecheck`, `pnpm build` - passed.
+
+### ?ㅼ쓬 ?됰룞
+
+- 理쒖쥌 `pnpm harness:check`, `git diff --check`瑜??뺤씤?????ъ슜?먯뿉寃?寃곌낵瑜?蹂닿퀬?쒕떎.
+- `next build`媛 諛붽씔 `apps/web/next-env.d.ts`???먮옒 dev route import濡??섎룎?몃떎.
+- ?대쾲 ?몄뀡? ?ъ슜???붿껌???곕씪 而ㅻ컠?섏? ?딆븯??
+
+## 2026-07-05 理쒖떊 ?몃뱶?ㅽ봽 - Terraform ?곸뿭 由ъ냼??Ticket 3
+
+### ?꾩옱 ?곹깭
+
+- ?꾩옱 釉뚮옖移? `Feat/jh/167-asg瑜?visual-area-node濡??숈옉`
+- 釉뚮옖移?理쒖떊???뺤씤: ?묒뾽 ?쒖옉 ??`HEAD`, upstream, `origin/dev`媛 紐⑤몢 `799b69e`?怨?`0 ahead / 0 behind`???
+- ?ъ슜???붿껌: ?꾩옱 釉뚮옖移섍? 理쒖떊?대㈃ Ticket 3??吏꾪뻾?섍퀬, 而ㅻ컠? 留뚮뱾吏 ?딅뒗??
+- Ticket 3 踰붿쐞??`aws_autoscaling_group`??Terraform resource identity???좎??섎㈃??Web visual area node濡??숈옉?섍쾶 留뚮뱶??寃껋씠??
+
+### ?꾨즺??寃?
+
+- `area-nodes.ts`??resource area node type??`aws_autoscaling_group`??異붽??덈떎.
+- Resource catalog?먯꽌 ASG 湲곕낯 size瑜?`200x130`?쇰줈 諛붽퓭 area node濡??앹꽦?섍쾶 ?덈떎.
+- `node-resize-bounds.ts`?먯꽌 ASG resize bounds瑜?area node minimum `200x130`, max unlimited濡?諛붽엥??
+- ASG inside child movement/parent assignment瑜?area-node movement? drag finalize 寃쎈줈?먯꽌 寃利앺뻽??
+- ASG媛 area endpoint??edge媛 ASG background ?꾩뿉 ?쒖떆?섎룄濡?`flow-mappers.ts` edge z-index 怨꾩궛??蹂댁젙?덈떎.
+- `docs/data-models.md`??ASG媛 Terraform resource?대㈃??Web visual area node?쇰뒗 怨꾩빟??湲곕줉?덈떎.
+
+### 寃利앸맂 寃?
+
+- `pnpm harness:check` - passed before edits.
+- Red before fix: ASG area/click-through/movement/catalog/resize 湲곕? ?뚯뒪?멸? ?ㅽ뙣?덈떎.
+- `pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/area-nodes.test.ts features/diagram-editor/node-resize-bounds.test.ts features/resource-settings/catalog.test.ts features/diagram-editor/flow-mappers.test.ts features/diagram-editor/area-node-movement.test.ts features/diagram-editor/diagram-utils.test.ts features/diagram-editor/drag-transaction.test.ts` - passed.
+- `pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/reference-drop-targets.test.ts` - passed.
+- `pnpm --filter @sketchcatch/web typecheck` - passed.
+- `pnpm --filter @sketchcatch/web lint` - passed.
+- `pnpm lint`, `pnpm typecheck`, `pnpm build` - passed.
+- `pnpm harness:check` - passed after build.
+
+### ?ㅼ쓬 ?됰룞
+
+- Ticket 4?먯꽌 Terraform Preview 吏??由ъ냼?ㅻ? ?뺤옣?쒕떎. `aws_autoscaling_group`??backend Preview capability ?뺤옣? ?ш린???④퍡 ?ㅻ（??寃껋씠 ?꾩옱 ?곗폆 怨꾪쉷怨?留욌떎.
+- `next build`媛 諛붽씔 `apps/web/next-env.d.ts`???먮옒 dev route import濡??섎룎?몃떎.
+- ?대쾲 ?몄뀡? ?ъ슜???붿껌???곕씪 而ㅻ컠?섏? ?딆븯??
+
+## 2026-07-05 理쒖떊 ?몃뱶?ㅽ봽 - Terraform ?곸뿭 由ъ냼??怨꾩빟 Ticket 2
+
+### ?꾩옱 ?곹깭
+
+- ?꾩옱 釉뚮옖移? `Feat/jh/165-regionaz瑜?resource-node濡??앹꽦`
+- ?ъ슜???붿껌: `docs/jh/001_?뚮씪?쇱쁺??━?뚯뒪?숆린?뷀떚耳볤퀎??JH.md`??Ticket 2瑜?吏꾪뻾?섍퀬, 而ㅻ컠? 留뚮뱾吏 ?딅뒗??
+- Ticket 2 踰붿쐞??Web?먯꽌 ??Region/AZ ?앹꽦 寃쎈줈瑜?`aws_region`, `aws_availability_zone` resource area node濡?諛붽씀??寃껋씠??
+- ?좉퇋 catalog/sample ?앹꽦 寃쎈줈?????댁긽 `design_region`, `design_az`瑜?留뚮뱾吏 ?딅뒗?? Legacy ????곗씠???명솚???꾪빐 area ?먯젙怨??쇰? ?뚯뒪?몄뿉?쒕뒗 湲곗〈 design/sketchcatch ??낆쓣 怨꾩냽 ?몄떇?쒕떎.
+
+### ?꾨즺??寃?
+
+- Resource catalog??Region/AZ item??`aws-region`, `aws-availability-zone` id? `aws_region`, `aws_availability_zone` type?쇰줈 ?꾪솚?덈떎.
+- `createDiagramNodeFromPayload`媛 Region/AZ drag ?앹꽦 ??`kind: "resource"`? 湲곕낯 `parameters`瑜?留뚮뱺??
+- Region 湲곕낯媛? `resourceName: "ap_northeast_2"`, `values.awsRegion: "ap-northeast-2"`.
+- AZ 湲곕낯媛? `resourceName: "ap_northeast_2a"`, `values.awsAvailabilityZone: "ap-northeast-2a"`.
+- `area-nodes`, resize bounds, Resource List summary媛 `aws_region`, `aws_availability_zone`??board area node濡??몄떇?쒕떎.
+- Parameter panel??Region/AZ selector??`metadata`媛 ?꾨땲??`parameters.values["awsRegion"]`, `parameters.values["awsAvailabilityZone"]`留?媛깆떊?쒕떎.
+- 由щ럭 蹂닿컯?쇰줈 Region/AZ reader??`parameters.values`媛 ?꾨씫?섍굅??null?댁뼱??湲곕낯媛믪쑝濡?fallback?쒕떎.
+- Region/AZ update helper??legacy `values: undefined | null`?먯꽌????values 媛앹껜瑜?留뚮뱾????ν븳??
+- AZ ?좏깮???뺤쟻 option helper瑜?異붽??덈떎.
+- server-storage sample layout??catalog 湲곕컲 `aws_region`, `aws_availability_zone` area resource瑜??앹꽦?쒕떎.
+- `docs/data-models.md`?먯꽌 Region/AZ area resource媛 shared Terraform `ResourceDefinition` ??곸씠 ?꾨떂??理쒖떊 怨꾩빟??留욊쾶 蹂댁젙?덈떎.
+
+### 寃利앸맂 寃?
 
 - `pnpm harness:check` - passed before edits.
 - `pnpm --filter @sketchcatch/web exec tsx --test features/resource-settings/catalog.test.ts` - passed.
@@ -37,35 +240,35 @@
 - `pnpm --filter @sketchcatch/web typecheck`, `pnpm --filter @sketchcatch/api typecheck`, `pnpm --filter @sketchcatch/types typecheck` - passed.
 - `pnpm --filter @sketchcatch/web lint` - passed.
 - `pnpm lint`, `pnpm typecheck`, `pnpm build` - passed.
-- 리뷰 보강 후 `pnpm --filter @sketchcatch/web exec tsx --test features/parameter-input/region-node-metadata.test.ts`, `pnpm --filter @sketchcatch/web typecheck`, `pnpm --filter @sketchcatch/web lint`, `pnpm lint`, `pnpm typecheck`, `pnpm build`가 통과했다.
+- 由щ럭 蹂닿컯 ??`pnpm --filter @sketchcatch/web exec tsx --test features/parameter-input/region-node-metadata.test.ts`, `pnpm --filter @sketchcatch/web typecheck`, `pnpm --filter @sketchcatch/web lint`, `pnpm lint`, `pnpm typecheck`, `pnpm build`媛 ?듦낵?덈떎.
 
-### 다음 행동
+### ?ㅼ쓬 ?됰룞
 
-- Ticket 3에서 `aws_autoscaling_group`을 Terraform resource이면서 visual area node로 동작하게 만든다.
-- Ticket 3에서는 `area-nodes`, resize bounds, flow mapper, reference/drop target, area movement 테스트를 이어서 확인한다.
-- 이번 세션은 사용자 요청에 따라 커밋하지 않았다.
+- Ticket 3?먯꽌 `aws_autoscaling_group`??Terraform resource?대㈃??visual area node濡??숈옉?섍쾶 留뚮뱺??
+- Ticket 3?먯꽌??`area-nodes`, resize bounds, flow mapper, reference/drop target, area movement ?뚯뒪?몃? ?댁뼱???뺤씤?쒕떎.
+- ?대쾲 ?몄뀡? ?ъ슜???붿껌???곕씪 而ㅻ컠?섏? ?딆븯??
 
-## 2026-07-05 최신 핸드오프 - Terraform 영역 리소스 계약 Ticket 1
+## 2026-07-05 理쒖떊 ?몃뱶?ㅽ봽 - Terraform ?곸뿭 由ъ냼??怨꾩빟 Ticket 1
 
-### 현재 상태
+### ?꾩옱 ?곹깭
 
-- 현재 브랜치: `Feat/jh/163-영역-리소스와-terraform-sync-계약-정리`
-- 사용자 요청: `docs/jh/001_테라폼영역리소스동기화티켓계획_JH.md`의 Ticket 1을 진행하고, 커밋은 만들지 않는다.
-- Ticket 1 범위는 계약 정리다. Web catalog/Preview/Sync parsing 실제 동작 확장은 다음 티켓으로 남긴다.
-- `docs/data-models.md`, `packages/types/src/index.ts`, API schema/test, Web legacy compatibility test/source, `agent-progress.md`, `session-handoff.md`가 수정됐다.
+- ?꾩옱 釉뚮옖移? `Feat/jh/163-?곸뿭-由ъ냼?ㅼ?-terraform-sync-怨꾩빟-?뺣━`
+- ?ъ슜???붿껌: `docs/jh/001_?뚮씪?쇱쁺??━?뚯뒪?숆린?뷀떚耳볤퀎??JH.md`??Ticket 1??吏꾪뻾?섍퀬, 而ㅻ컠? 留뚮뱾吏 ?딅뒗??
+- Ticket 1 踰붿쐞??怨꾩빟 ?뺣━?? Web catalog/Preview/Sync parsing ?ㅼ젣 ?숈옉 ?뺤옣? ?ㅼ쓬 ?곗폆?쇰줈 ?④릿??
+- `docs/data-models.md`, `packages/types/src/index.ts`, API schema/test, Web legacy compatibility test/source, `agent-progress.md`, `session-handoff.md`媛 ?섏젙?먮떎.
 
-### 완료된 것
+### ?꾨즺??寃?
 
-- `DiagramNodeMetadata`에서 `awsRegion`을 제거하고 `parentAreaNodeId`만 남겼다.
-- Region/AZ 선택값은 `parameters.values.awsRegion`, `parameters.values.awsAvailabilityZone`에 저장한다는 계약을 문서화했다.
-- `aws_region`, `aws_availability_zone`은 Terraform HCL block이 아니라 SketchCatch 보드 영역 리소스라고 명시했다.
-- Terraform Sync `create_candidate` proposal에 `nodeId`, `metadata`, `position`을 담을 수 있도록 shared type과 문서 계약을 확장했다.
-- API `diagramNodeMetadataSchema`를 strict하게 바꿔 legacy `metadata.awsRegion`을 거부한다.
-- Web은 legacy persisted `metadata.awsRegion` 읽기만 helper 안에 격리하고, 새 metadata 작성은 더 이상 `awsRegion`을 쓰지 않는다.
-- 리뷰 보강으로 `getRegionNodeAwsRegion`은 `parameters.values["awsRegion"]`을 먼저 읽고 legacy metadata를 fallback으로만 읽는다.
-- `Record<string, unknown>`인 `parameters.values` 조회 테스트는 bracket notation으로 정리했다.
+- `DiagramNodeMetadata`?먯꽌 `awsRegion`???쒓굅?섍퀬 `parentAreaNodeId`留??④꼈??
+- Region/AZ ?좏깮媛믪? `parameters.values.awsRegion`, `parameters.values.awsAvailabilityZone`????ν븳?ㅻ뒗 怨꾩빟??臾몄꽌?뷀뻽??
+- `aws_region`, `aws_availability_zone`? Terraform HCL block???꾨땲??SketchCatch 蹂대뱶 ?곸뿭 由ъ냼?ㅻ씪怨?紐낆떆?덈떎.
+- Terraform Sync `create_candidate` proposal??`nodeId`, `metadata`, `position`???댁쓣 ???덈룄濡?shared type怨?臾몄꽌 怨꾩빟???뺤옣?덈떎.
+- API `diagramNodeMetadataSchema`瑜?strict?섍쾶 諛붽퓭 legacy `metadata.awsRegion`??嫄곕??쒕떎.
+- Web? legacy persisted `metadata.awsRegion` ?쎄린留?helper ?덉뿉 寃⑸━?섍퀬, ??metadata ?묒꽦? ???댁긽 `awsRegion`???곗? ?딅뒗??
+- 由щ럭 蹂닿컯?쇰줈 `getRegionNodeAwsRegion`? `parameters.values["awsRegion"]`??癒쇱? ?쎄퀬 legacy metadata瑜?fallback?쇰줈留??쎈뒗??
+- `Record<string, unknown>`??`parameters.values` 議고쉶 ?뚯뒪?몃뒗 bracket notation?쇰줈 ?뺣━?덈떎.
 
-### 검증된 것
+### 寃利앸맂 寃?
 
 - `pnpm harness:check` - passed before edits and after edits.
 - `pnpm --filter @sketchcatch/api exec tsx --test src/routes/project-draft-schemas.test.ts` - passed.
@@ -75,64 +278,64 @@
 - `pnpm lint`, `pnpm typecheck`, `pnpm build` - passed.
 - `git diff --check` - passed.
 
-### 다음 행동
+### ?ㅼ쓬 ?됰룞
 
-- Ticket 2에서 Region/AZ 영역 노드 생성과 parameter panel 저장 경로를 실제 `parameters.values` 기반으로 옮긴다.
-- Ticket 2에서 `createRegionNodeMetadata(node, awsRegion)`의 미사용 `awsRegion` 매개변수를 제거하거나 parameter write helper로 대체하고 호출부/테스트를 함께 정리한다.
-- Ticket 2 이후에는 Web helper에 남은 legacy `metadata.awsRegion` 읽기 호환을 언제 제거할지 결정한다.
-- 이번 세션은 사용자 요청에 따라 커밋하지 않았다.
+- Ticket 2?먯꽌 Region/AZ ?곸뿭 ?몃뱶 ?앹꽦怨?parameter panel ???寃쎈줈瑜??ㅼ젣 `parameters.values` 湲곕컲?쇰줈 ??릿??
+- Ticket 2?먯꽌 `createRegionNodeMetadata(node, awsRegion)`??誘몄궗??`awsRegion` 留ㅺ컻蹂?섎? ?쒓굅?섍굅??parameter write helper濡??泥댄븯怨??몄텧遺/?뚯뒪?몃? ?④퍡 ?뺣━?쒕떎.
+- Ticket 2 ?댄썑?먮뒗 Web helper???⑥? legacy `metadata.awsRegion` ?쎄린 ?명솚???몄젣 ?쒓굅?좎? 寃곗젙?쒕떎.
+- ?대쾲 ?몄뀡? ?ъ슜???붿껌???곕씪 而ㅻ컠?섏? ?딆븯??
 
-## 2026-07-04 최신 핸드오프 - Natural Language Diagramming 브랜치 dev 최신화
+## 2026-07-04 理쒖떊 ?몃뱶?ㅽ봽 - Natural Language Diagramming 釉뚮옖移?dev 理쒖떊??
 
-### 현재 상태
+### ?꾩옱 ?곹깭
 
-- 현재 브랜치: `feat/ck/141-Natural-Language-Diagramming`
-- `origin/dev` fetch 후 현재 브랜치에 merge를 진행했다.
-- 충돌 파일 중 코드 파일은 자연어 다이어그램 preview/area containment 변경과 dev의 Terraform editor/compact resource node 변경을 함께 살리는 방향으로 해결했다.
-- 로그성 문서 `agent-progress.md`, `session-handoff.md`는 dev 최신본을 기준으로 두고 이 병합 기록을 상단에 추가했다.
-- merge 전 기존 미커밋 변경은 `stash@{0}`에 `codex: before merging dev into natural language branch` 이름으로 임시 보관되어 있다.
+- ?꾩옱 釉뚮옖移? `feat/ck/141-Natural-Language-Diagramming`
+- `origin/dev` fetch ???꾩옱 釉뚮옖移섏뿉 merge瑜?吏꾪뻾?덈떎.
+- 異⑸룎 ?뚯씪 以?肄붾뱶 ?뚯씪? ?먯뿰???ㅼ씠?닿렇??preview/area containment 蹂寃쎄낵 dev??Terraform editor/compact resource node 蹂寃쎌쓣 ?④퍡 ?대━??諛⑺뼢?쇰줈 ?닿껐?덈떎.
+- 濡쒓렇??臾몄꽌 `agent-progress.md`, `session-handoff.md`??dev 理쒖떊蹂몄쓣 湲곗??쇰줈 ?먭퀬 ??蹂묓빀 湲곕줉???곷떒??異붽??덈떎.
+- merge ??湲곗〈 誘몄빱諛?蹂寃쎌? `stash@{0}`??`codex: before merging dev into natural language branch` ?대쫫?쇰줈 ?꾩떆 蹂닿??섏뼱 ?덈떎.
 
-### 다음 행동
+### ?ㅼ쓬 ?됰룞
 
-- 충돌 해결 파일을 stage하고 merge commit을 완료한다.
-- merge commit 후 `stash@{0}`을 적용해 기존 미커밋 변경을 복원한다.
-- 복원 중 충돌이 나면 기존 사용자 변경을 보존하면서 해결한다.
-- 최종적으로 `pnpm harness:check`와 필요한 focused test/typecheck를 실행한다.
+- 異⑸룎 ?닿껐 ?뚯씪??stage?섍퀬 merge commit???꾨즺?쒕떎.
+- merge commit ??`stash@{0}`???곸슜??湲곗〈 誘몄빱諛?蹂寃쎌쓣 蹂듭썝?쒕떎.
+- 蹂듭썝 以?異⑸룎???섎㈃ 湲곗〈 ?ъ슜??蹂寃쎌쓣 蹂댁〈?섎㈃???닿껐?쒕떎.
+- 理쒖쥌?곸쑝濡?`pnpm harness:check`? ?꾩슂??focused test/typecheck瑜??ㅽ뻾?쒕떎.
 
-## 현재 검증된 것
+## ?꾩옱 寃利앸맂 寃?
 
-- #134 GitCicdHandoff 계약/API 구현 후 `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`가 통과했다.
-- `pnpm --filter @sketchcatch/api exec tsx --test src/routes/git-cicd-handoffs.test.ts src/db/schema-contract.test.ts`가 통과했다.
-- `pnpm --filter @sketchcatch/api lint`, `pnpm --filter @sketchcatch/types lint`, `pnpm --filter @sketchcatch/api typecheck`, `pnpm --filter @sketchcatch/types typecheck`가 통과했다.
-- `git diff --check`가 통과했다. Git line-ending warning만 출력되었다.
-- `GitCicdHandoff` API는 fake/internal provider boundary만 사용하며 실제 GitHub PR, commit push, pipeline 호출을 구현하거나 실행하지 않았다.
-- Request/response/shared type/DB schema에 raw token, private key, deploy key, CI secret 필드를 추가하지 않았다.
+- #134 GitCicdHandoff 怨꾩빟/API 援ы쁽 ??`pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`媛 ?듦낵?덈떎.
+- `pnpm --filter @sketchcatch/api exec tsx --test src/routes/git-cicd-handoffs.test.ts src/db/schema-contract.test.ts`媛 ?듦낵?덈떎.
+- `pnpm --filter @sketchcatch/api lint`, `pnpm --filter @sketchcatch/types lint`, `pnpm --filter @sketchcatch/api typecheck`, `pnpm --filter @sketchcatch/types typecheck`媛 ?듦낵?덈떎.
+- `git diff --check`媛 ?듦낵?덈떎. Git line-ending warning留?異쒕젰?섏뿀??
+- `GitCicdHandoff` API??fake/internal provider boundary留??ъ슜?섎ŉ ?ㅼ젣 GitHub PR, commit push, pipeline ?몄텧??援ы쁽?섍굅???ㅽ뻾?섏? ?딆븯??
+- Request/response/shared type/DB schema??raw token, private key, deploy key, CI secret ?꾨뱶瑜?異붽??섏? ?딆븯??
 
-## 이번 세션의 변경 사항
+## ?대쾲 ?몄뀡??蹂寃??ы빆
 
-- `packages/types/src/index.ts`에 `SourceRepository`, `GitCicdHandoffStatus`, `GitCicdHandoff`, create/list/get/status request/response type을 추가했다.
-- `apps/api/src/db/schema.ts`에 `git_cicd_handoffs` table과 provider/status enum, relations를 추가했다.
-- `apps/api/drizzle/0021_git_cicd_handoffs.sql`, `apps/api/drizzle/meta/0021_snapshot.json`, `apps/api/drizzle/meta/_journal.json`을 추가/갱신했다.
-- `apps/api/src/git-cicd/git-cicd-handoff-service.ts`에 project access, architecture, uploaded Terraform artifact 검증과 internal provider boundary를 구현했다.
-- `apps/api/src/routes/git-cicd-handoffs.ts`와 `apps/api/src/app.ts` route registration을 추가했다.
-- `apps/api/src/routes/git-cicd-handoffs.test.ts`와 `apps/api/src/db/schema-contract.test.ts`를 추가/갱신했다.
-- `docs/data-models.md`, `docs/sw/005_GitCicdHandoff계약API클론코딩가이드_sw.md`, `docs/sw/README.md`, `agent-progress.md`, `session-handoff.md`를 갱신했다.
+- `packages/types/src/index.ts`??`SourceRepository`, `GitCicdHandoffStatus`, `GitCicdHandoff`, create/list/get/status request/response type??異붽??덈떎.
+- `apps/api/src/db/schema.ts`??`git_cicd_handoffs` table怨?provider/status enum, relations瑜?異붽??덈떎.
+- `apps/api/drizzle/0021_git_cicd_handoffs.sql`, `apps/api/drizzle/meta/0021_snapshot.json`, `apps/api/drizzle/meta/_journal.json`??異붽?/媛깆떊?덈떎.
+- `apps/api/src/git-cicd/git-cicd-handoff-service.ts`??project access, architecture, uploaded Terraform artifact 寃利앷낵 internal provider boundary瑜?援ы쁽?덈떎.
+- `apps/api/src/routes/git-cicd-handoffs.ts`? `apps/api/src/app.ts` route registration??異붽??덈떎.
+- `apps/api/src/routes/git-cicd-handoffs.test.ts`? `apps/api/src/db/schema-contract.test.ts`瑜?異붽?/媛깆떊?덈떎.
+- `docs/data-models.md`, `docs/sw/005_GitCicdHandoff怨꾩빟API?대줎肄붾뵫媛?대뱶_sw.md`, `docs/sw/README.md`, `agent-progress.md`, `session-handoff.md`瑜?媛깆떊?덈떎.
 
-## 아직 깨졌거나 미검증된 것
+## ?꾩쭅 源⑥죱嫄곕굹 誘멸?利앸맂 寃?
 
-- `drizzle-kit generate`는 기존 `0008_snapshot.json`, `0015_snapshot.json` parent snapshot collision 때문에 실패했다. 이번 변경은 명시적 SQL migration과 수동 snapshot/journal update로 처리했다.
-- #135가 실제 GitHub/provider 구현을 이어받아야 한다.
+- `drizzle-kit generate`??湲곗〈 `0008_snapshot.json`, `0015_snapshot.json` parent snapshot collision ?뚮Ц???ㅽ뙣?덈떎. ?대쾲 蹂寃쎌? 紐낆떆??SQL migration怨??섎룞 snapshot/journal update濡?泥섎━?덈떎.
+- #135媛 ?ㅼ젣 GitHub/provider 援ы쁽???댁뼱諛쏆븘???쒕떎.
 
-## 다음으로 최선의 행동
+## ?ㅼ쓬?쇰줈 理쒖꽑???됰룞
 
-- parent agent가 #134 diff를 리뷰한다. 특히 수동 Drizzle snapshot과 migration SQL을 확인한다.
-- #135는 `GitCicdHandoffProvider` 구현을 실제 GitHub/CI provider로 교체하되, secret 원문을 DB/로그/응답에 저장하지 않는다.
-- #136은 frontend UI를 이 API contract에 맞춰 연결한다.
-- Issue #129 worktree `feature/sw/129-direct-deployment-failure-ai`는 `origin/dev` 기준으로 fast-forward된 뒤 Direct Deployment 실패 설명 slice를 구현했다.
-- `GET /api/deployments/:deploymentId/failure-explanation`은 `FAILED` deployment만 허용하며, 첫 `ERROR` 로그 또는 `errorSummary`를 마스킹해 실패 stage, 첫 오류 로그, cleanup 필요 여부, nextActions를 반환한다.
-- `DeploymentPanel`은 실패한 deployment가 선택됐을 때 실패 요약 카드와 다음 행동을 표시한다.
-- `docs/data-models.md`와 `docs/sw/008_배포실패설명가이드_sw.md`에 DTO/흐름/클론 코딩 자료가 반영됐다.
-- #129 검증:
+- parent agent媛 #134 diff瑜?由щ럭?쒕떎. ?뱁엳 ?섎룞 Drizzle snapshot怨?migration SQL???뺤씤?쒕떎.
+- #135??`GitCicdHandoffProvider` 援ы쁽???ㅼ젣 GitHub/CI provider濡?援먯껜?섎릺, secret ?먮Ц??DB/濡쒓렇/?묐떟????ν븯吏 ?딅뒗??
+- #136? frontend UI瑜???API contract??留욎떠 ?곌껐?쒕떎.
+- Issue #129 worktree `feature/sw/129-direct-deployment-failure-ai`??`origin/dev` 湲곗??쇰줈 fast-forward????Direct Deployment ?ㅽ뙣 ?ㅻ챸 slice瑜?援ы쁽?덈떎.
+- `GET /api/deployments/:deploymentId/failure-explanation`? `FAILED` deployment留??덉슜?섎ŉ, 泥?`ERROR` 濡쒓렇 ?먮뒗 `errorSummary`瑜?留덉뒪?뱁빐 ?ㅽ뙣 stage, 泥??ㅻ쪟 濡쒓렇, cleanup ?꾩슂 ?щ?, nextActions瑜?諛섑솚?쒕떎.
+- `DeploymentPanel`? ?ㅽ뙣??deployment媛 ?좏깮?먯쓣 ???ㅽ뙣 ?붿빟 移대뱶? ?ㅼ쓬 ?됰룞???쒖떆?쒕떎.
+- `docs/data-models.md`? `docs/sw/008_諛고룷?ㅽ뙣?ㅻ챸媛?대뱶_sw.md`??DTO/?먮쫫/?대줎 肄붾뵫 ?먮즺媛 諛섏쁺?먮떎.
+- #129 寃利?
   - `pnpm harness:check` - passed before edits
   - `pnpm --filter @sketchcatch/api exec tsx --test src/routes/deployments.test.ts` - passed
   - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/api.test.ts` - passed
@@ -142,213 +345,213 @@
   - `$env:S3_BUCKET_NAME='sketchcatch-test-bucket'; pnpm --filter @sketchcatch/api test` - passed
   - `$env:S3_BUCKET_NAME='sketchcatch-test-bucket'; pnpm exec turbo test --env-mode=loose` - passed
   - `git diff --check` - passed
-- 루트 `pnpm test`는 기존 Turbo strict task env에서 `S3_BUCKET_NAME`이 API task로 전달되지 않아 실패한다. 같은 전체 테스트는 `turbo test --env-mode=loose`로 통과했다.
-- `pnpm harness:check`가 중복 상세 기획 문서 정리 후 통과했다.
-- `git diff --check`가 중복 상세 기획 문서 정리 후 통과했다.
-- 삭제 대상 문서 참조가 repo 전체에서 더 이상 나오지 않는다.
-- `pnpm harness:check`가 방어형 포지셔닝 문장 제거 후 통과했다.
-- `git diff --check`가 방어형 포지셔닝 문장 제거 후 통과했다.
-- 요청받은 방어형 포지셔닝/낮은 숙련도 중심 검색어가 repo 전체에서 더 이상 나오지 않는다.
-- `pnpm harness:check`가 타깃 사용자 표현 보정 후 통과했다.
-- `git diff --check`가 타깃 사용자 표현 보정 후 통과했다.
-- `pnpm harness:check`가 상세 기획서 추가 후 통과했다.
-- `git diff --check`가 상세 기획서 변경 후 통과했다.
-- `scripts/init-harness.ps1` 기본 실행이 통과했다.
-- `pnpm harness:check`가 통과했다.
-- `feature_list.json`은 PowerShell `ConvertFrom-Json`과 Node JSON parse를 통과했다.
-- docs H1 scan에서 H1 없는 markdown 파일이 더 이상 나오지 않았다.
-- `pnpm lint`, `pnpm typecheck`, `pnpm build`가 모두 통과했다.
-- `HARNESS-001`부터 `HARNESS-006`까지 `passing` evidence가 기록되었다.
+- 猷⑦듃 `pnpm test`??湲곗〈 Turbo strict task env?먯꽌 `S3_BUCKET_NAME`??API task濡??꾨떖?섏? ?딆븘 ?ㅽ뙣?쒕떎. 媛숈? ?꾩껜 ?뚯뒪?몃뒗 `turbo test --env-mode=loose`濡??듦낵?덈떎.
+- `pnpm harness:check`媛 以묐났 ?곸꽭 湲고쉷 臾몄꽌 ?뺣━ ???듦낵?덈떎.
+- `git diff --check`媛 以묐났 ?곸꽭 湲고쉷 臾몄꽌 ?뺣━ ???듦낵?덈떎.
+- ??젣 ???臾몄꽌 李몄“媛 repo ?꾩껜?먯꽌 ???댁긽 ?섏삤吏 ?딅뒗??
+- `pnpm harness:check`媛 諛⑹뼱???ъ??붾떇 臾몄옣 ?쒓굅 ???듦낵?덈떎.
+- `git diff --check`媛 諛⑹뼱???ъ??붾떇 臾몄옣 ?쒓굅 ???듦낵?덈떎.
+- ?붿껌諛쏆? 諛⑹뼱???ъ??붾떇/??? ?숇젴??以묒떖 寃?됱뼱媛 repo ?꾩껜?먯꽌 ???댁긽 ?섏삤吏 ?딅뒗??
+- `pnpm harness:check`媛 ?源??ъ슜???쒗쁽 蹂댁젙 ???듦낵?덈떎.
+- `git diff --check`媛 ?源??ъ슜???쒗쁽 蹂댁젙 ???듦낵?덈떎.
+- `pnpm harness:check`媛 ?곸꽭 湲고쉷??異붽? ???듦낵?덈떎.
+- `git diff --check`媛 ?곸꽭 湲고쉷??蹂寃????듦낵?덈떎.
+- `scripts/init-harness.ps1` 湲곕낯 ?ㅽ뻾???듦낵?덈떎.
+- `pnpm harness:check`媛 ?듦낵?덈떎.
+- `feature_list.json`? PowerShell `ConvertFrom-Json`怨?Node JSON parse瑜??듦낵?덈떎.
+- docs H1 scan?먯꽌 H1 ?녿뒗 markdown ?뚯씪?????댁긽 ?섏삤吏 ?딆븯??
+- `pnpm lint`, `pnpm typecheck`, `pnpm build`媛 紐⑤몢 ?듦낵?덈떎.
+- `HARNESS-001`遺??`HARNESS-006`源뚯? `passing` evidence媛 湲곕줉?섏뿀??
 
-## 이번 세션의 변경 사항
+## ?대쾲 ?몄뀡??蹂寃??ы빆
 
-- #129에서 Direct Deployment 실패 설명 DTO/API/UI/docs를 추가했다.
-- `packages/types/src/index.ts`에 `DeploymentFailureExplanation`과 response type을 추가했다.
-- `apps/api/src/deployments/deployment-failure-explanation.ts`를 추가하고 deployment route에 실패 설명 endpoint를 연결했다.
-- `apps/web/features/workspace/DeploymentPanel.tsx`와 API helper에 실패 설명 조회/표시를 추가했다.
-- `docs/sw/008_배포실패설명가이드_sw.md`를 추가했다.
-- 별도 재구성본 파일과 관련 기록을 삭제했다.
-- `docs/README.md`에서 별도 재구성본 링크와 문서 정리 기준을 삭제했다.
-- `docs/product.md`, `docs/000_상세기획서.md`의 대상 사용자 소개에서 부정형/방어형 포지셔닝 문장을 삭제했다.
-- `docs/product.md`, `docs/000_상세기획서.md`의 타깃 사용자 표현을 플랫폼/DevOps 엔지니어와 기술 리드/SRE까지 포함하는 톤으로 바꿨다.
-- `docs/gg/003_기획서.md`의 담당자별 참고 문서 타깃 사용자도 같은 방향으로 조정했다.
-- `docs/sw/003_테라폼동기화구조설명_sw.md`의 사용자 수준을 나누는 표현을 `사용자 관점/구현 관점`으로 바꿨다.
-- `docs/000_상세기획서.md`를 추가했다.
-- 상세 기획서에는 서비스 정의, 문제 정의, 현재 구현 상태, 핵심 서비스 여정, 기능 요구사항, 4인 책임 분배, Representative Use Journey, 보안/운영 정책, 성공 기준, 검증 전략, 리스크, 구현 순서를 담았다.
-- `docs/README.md`에 상세 기획서 링크와 책임 설명을 추가했다.
-- `docs/product.md`에 상세 기획서 참조 링크를 추가했다.
-- `docs/adr`, `docs/ck`, `docs/sw`, `docs/ys`에 README 인덱스를 추가했다.
-- `docs/README.md`의 담당자별 참고 문서 표를 폴더별 인덱스로 연결했다.
-- `docs/AGENTS.md`에 담당자별 참고 문서 추가/변경 시 인덱스 갱신 규칙을 추가했다.
-- H1이 없던 `docs/gg/004_역할분배.md`, `docs/ys/006-로그인&익명로그인_삭제관련.md`에 제목을 추가했다.
-- root `AGENTS.md`에 Harness Operating Loop를 추가했다.
-- 루트에 `agent-progress.md`, `feature_list.json`, `session-handoff.md`, `clean-state-checklist.md`, `evaluator-rubric.md`, `quality-document.md`를 추가했다.
-- `scripts/check-harness.mjs`와 `scripts/init-harness.ps1`를 추가해 시작 기준선과 하네스 규칙을 검사한다.
-- `docs/README.md`에 하네스 파일을 문서 map과 SSOT 우선순위에 추가했다.
-- PR #137 충돌 해결을 위해 현재 feature branch에 `origin/dev`를 병합했다.
-- `apps/api/src/app.ts`, `apps/api/src/routes/terraform.ts`, `apps/api/src/services/terraform/terraform-diagnostics.ts`의 conflict는 static-only Terraform editor validation 정책을 기준으로 해결했다.
-- `origin/dev`의 `terraform-validation.ts`는 `terraform fmt` CLI를 호출하는 경로였으므로, CLI 검증 폐기 정책에 맞춰 병합 결과에서 제거했다.
-- `origin/dev`의 정적 진단 보강 중 `unexpected_token`, `trailing_comma` 검사는 `terraform-diagnostics.ts`에 흡수했다.
-- Terraform editor validation은 static-only diagnostics다.
-- `/terraform/validate`는 `TerraformValidateResponse = { diagnostics }`만 반환한다.
-- `/terraform/validate/prepare`, editor validation prepare/warmup, `mode`, `stage`, `status`, `projectId` DTO는 제거됐다.
-- Editor validation은 Terraform CLI를 실행하지 않는다. `terraform init`, `terraform validate`, provider download, backend/state mutation은 editor 저장 검증 범위가 아니다.
-- 정적 diagnostics는 빈 코드, `{}`/`[]`/`()` 균형, 닫히지 않은 문자열, block header, duplicate address, 잘못된 attribute line, nested block assignment, quoted reference, undefined local reference, shared definition 밖 AWS block을 검사한다.
-- 일반 quoted string은 줄을 넘지 않는다. 닫히지 않은 문자열은 해당 줄에서 오류로 확정되고, 뒤쪽 resource header의 따옴표 때문에 오류 line이 밀리지 않는다.
-- 닫히지 않은 문자열 때문에 뒤쪽 brace stack은 신뢰할 수 없으므로 `{}` 중괄호 오류를 연쇄로 함께 표시하지 않는다.
-- `{}`/`[]`/`()`/문자열 balance 단계에서 error가 있으면 body/reference 검사를 중단한다. 단, 그보다 앞선 block header error는 함께 반환한다. 닫히지 않은 block 때문에 다음 resource header가 이전 block body 오류처럼 표시되지 않아야 한다.
-- `/* ... */` block comment 안의 quote, brace, reference는 static diagnostics 대상이 아니다.
-- Multi-file editor에서 `sourceFileName` 없는 diagnostic은 특정 파일 line highlight로 보정하지 않는다.
-- 검증 중 코드가 바뀌면 오래된 검증 결과를 성공처럼 반영하지 않고 재검증 필요 diagnostics를 남긴다.
-- Terraform leave modal에서 사용자가 계속 편집/폐기한 뒤 도착한 오래된 save completion은 현재 modal 상태를 덮지 않는다.
-- Deployment artifact 저장은 Terraform panel에서 이미 검증한 source에 대해 중복 combined-code 검증을 건너뛸 수 있다.
-- `InfrastructureGraphNode`는 더 이상 내부 `ResourceType` `type` 필드를 갖지 않는다.
-- Terraform Preview API orchestration은 `terraform-preview.ts`가 담당하고, `diagram-to-terraform.ts`는 `InfrastructureGraph -> Terraform HCL` 렌더러로만 동작한다.
-- `diagram-to-terraform.ts`는 더 이상 `DiagramJson` 또는 `buildInfrastructureGraphFromDiagramJson`를 import하지 않는다.
-- Terraform Preview identity는 `iac.provider + iac.terraformBlockType + iac.resourceType + iac.resourceName` 기준이다.
-- `iac.resourceType`은 `aws_instance`, `aws_vpc`, `aws_s3_bucket` 같은 provider-specific Terraform resource type을 그대로 유지한다.
-- `ResourceType`은 AI/Architecture 분석용 domain classification으로 유지되며 Terraform Preview identity 기준이 아니다.
-- Terraform IaC 리소스 지원 여부의 단일 출처는 `packages/types/src/resource-definitions.ts`의 shared `ResourceDefinition`이다.
-- API와 Web은 `@sketchcatch/types/resource-definitions` subpath를 통해 같은 resource definition/capability를 사용한다.
-- API는 web resource catalog를 import하지 않는다. Web catalog는 icon/category/label/size 같은 presentation 정보만 소유한다.
-- `design_region`, `design_az`, `design_group` 같은 화면 전용 container node는 shared definition에 넣지 않고 web catalog에만 둔다.
-- `terraformPreview` capability가 true인 리소스만 `InfrastructureGraph` preview node로 포함된다.
-- `terraformSync` capability가 true인 리소스만 Terraform editor 구조 변경 proposal 대상이 된다.
-- `aws_cloudfront_distribution`은 현재 `terraformPreview: false`, `terraformSync: true` 차이를 유지한다.
-- Web catalog의 AWS Terraform 항목과 shared definition/parameter catalog drift 방지 테스트가 있다.
-- InfrastructureGraph 중심 Workspace 동기화 v1 구현이 현재 브랜치에 커밋됐다.
-- Terraform Preview 생성 경로는 `DiagramJson -> InfrastructureGraph -> Terraform`로 정리됐다.
-- VPC/EC2/S3/AMI 계열 Preview와 Terraform sync 흐름은 focused API/Web 테스트, typecheck, lint, build를 통과했다.
-- Terraform-only create proposal 자동 반영으로 생긴 새 DiagramJson node는 resource catalog의 `iconUrl`과 `nodeDefaults.size`를 사용한다.
-- CloudFront draft/proposal도 `aws_cloudfront_distribution` catalog icon과 size를 사용할 수 있다.
-- 기본 Palette는 `resourceCatalog`를 기본값으로 사용한다.
-- Design area node도 catalog icon을 유지하며 area header에서 iconUrl을 사용할 수 있다.
-- Terraform editor diagnostics는 `sourceFileName`을 가질 수 있고, multi-file validation에서 현재 파일 기준 빨간줄만 표시한다.
-- Resource code 부분보기에서는 원본 파일 line을 부분 코드 line으로 보정해 빨간줄을 표시한다.
-- Terraform 코드를 수정하면 stale diagnostics/Issues 상태가 즉시 비워진다.
-- 오래된 async validation/save 응답은 code version guard로 새 코드 위에 다시 반영되지 않는다.
-- 같은 Terraform identity의 `parameters.values` 변경은 Terraform editor 저장 시 DiagramJson에 반영된다.
-- Create/delete/rename 구조 변경은 별도 변경 제안 확인 UI 없이 Terraform editor 저장 또는 배포 준비 action 안에서 자동 반영된다.
-- Rename proposal 자동 반영 시 source file metadata가 `parameters.fileName`에 보존된다.
-- Route Table/Internet Gateway/CloudFront 같은 sync 가능한 네트워크 리소스는 create/delete proposal 대상에 포함된다.
-- Resource card Duplicate는 같은 resource type 안에서 `web_copy`, `web_copy_2`처럼 유니크한 Terraform resourceName을 만들고, 자동 생성 `tags.Name`도 함께 동기화한다.
-- Diagram icon 삭제는 Terraform Preview에 즉시 반영된다. 마지막 아이콘 삭제도 빈 `main.tf`로 갱신되고, Terraform editor가 dirty 상태여도 삭제된 리소스 주소에 해당하는 block만 제거한다.
-- Terraform editor 저장 sync action은 빈 Terraform 코드를 전체 삭제 의도로 처리한다. 지원 범위 안의 Diagram-only resource는 `delete_candidate`로 자동 반영되고, Diagram도 이미 비어 있으면 diagnostics 없이 저장 성공한다.
-- 사용자가 보드에서 리소스 아이콘을 직접 추가하면 `parameters.values`는 `{}`로 시작한다. EC2 `instanceType`, VPC `cidrBlock`, `tags.Name` 같은 Terraform parameter 값은 사용자 입력, AI draft config, Terraform editor sync처럼 명시 입력이 있을 때만 채운다.
-- 같은 리소스 아이콘을 반복 추가하면 같은 `resourceType` 안에서 `resourceName`이 `ec2_instance`, `ec2_instance_2`, `ec2_instance_3`처럼 숫자 suffix로 유니크하게 생성된다.
-- 새로 생성되는 일반 리소스 icon node의 기본 크기는 `56x56`이다. VPC/Subnet/Security Group/Region/AZ/Group 같은 영역 node는 기존 영역 크기를 유지한다.
-- Compact resource node는 generic `.nodeShell`의 `72px` 최소 높이를 상속하지 않아 `56x56` 아이콘이 빈 박스처럼 커지지 않는다.
-- AI draft 변환은 `vpcId: "aws_vpc.main.id"`, `subnetId: "aws_subnet.public.id"` 같은 Terraform reference 문자열도 `(resourceType, resourceName)`으로 풀어 area parent metadata를 찾는다.
-- Terraform 생성 API는 `resourceType`, `resourceName`, top-level/nested attribute/block key가 Terraform identifier 형식이 아니면 HCL을 만들기 전에 거부한다.
-- Terraform 코드 에디터는 textarea 위에 read-only syntax highlight layer를 겹쳐 HCL keyword/reference/string/brace 색상을 표시하고, validation error line은 빨간 물결 밑줄로 표시한다.
-- Terraform leave dialog에서 `저장하고 나가기`가 Terraform error diagnostics 때문에 실패하면, 모달을 닫고 오른쪽 Terraform 패널을 다시 보여줘 사용자가 물결 오류 표시를 확인할 수 있다.
-- Terraform diagnostics가 있는 동안 Issues 탭/shortcut은 unsaved Terraform leave guard에 막히지 않고 바로 열릴 수 있다.
-- Terraform leave dialog의 `저장하고 나가기` 시작 상태는 별도 status 문구를 띄우지 않고 버튼 disabled/`저장 중` 상태만 보여준다.
-- Terraform generator 서비스는 HTTP 속성 없는 `TerraformDiagramValidationError`를 던지고, `/terraform/generate` 라우터가 이를 400 `bad_request`로 매핑한다.
-- Terraform editor의 virtual file validation은 파일별 validate API를 `Promise.all`로 동시에 호출하지 않고 순차 실행한다.
-- Diagnostic wavy underline helper는 더 이상 absolute `top` style을 계산하지 않고 표시 대상 line number만 반환한다.
-- `cloneParameterValue`는 diagram/workspace 양쪽 중복 정의가 아니라 `apps/web/features/diagram-editor/parameter-value-utils.ts`를 공유한다.
-- `docs/data-models.md`는 diagnostic/proposal source metadata와 proposal 지원 범위를 현재 코드에 맞게 기록한다.
-- `feature_list.json`에는 동시에 `in_progress`인 항목이 없다.
+- #129?먯꽌 Direct Deployment ?ㅽ뙣 ?ㅻ챸 DTO/API/UI/docs瑜?異붽??덈떎.
+- `packages/types/src/index.ts`??`DeploymentFailureExplanation`怨?response type??異붽??덈떎.
+- `apps/api/src/deployments/deployment-failure-explanation.ts`瑜?異붽??섍퀬 deployment route???ㅽ뙣 ?ㅻ챸 endpoint瑜??곌껐?덈떎.
+- `apps/web/features/workspace/DeploymentPanel.tsx`? API helper???ㅽ뙣 ?ㅻ챸 議고쉶/?쒖떆瑜?異붽??덈떎.
+- `docs/sw/008_諛고룷?ㅽ뙣?ㅻ챸媛?대뱶_sw.md`瑜?異붽??덈떎.
+- 蹂꾨룄 ?ш뎄?깅낯 ?뚯씪怨?愿??湲곕줉????젣?덈떎.
+- `docs/README.md`?먯꽌 蹂꾨룄 ?ш뎄?깅낯 留곹겕? 臾몄꽌 ?뺣━ 湲곗?????젣?덈떎.
+- `docs/product.md`, `docs/000_?곸꽭湲고쉷??md`??????ъ슜???뚭컻?먯꽌 遺?뺥삎/諛⑹뼱???ъ??붾떇 臾몄옣????젣?덈떎.
+- `docs/product.md`, `docs/000_?곸꽭湲고쉷??md`???源??ъ슜???쒗쁽???뚮옯??DevOps ?붿??덉뼱? 湲곗닠 由щ뱶/SRE源뚯? ?ы븿?섎뒗 ?ㅼ쑝濡?諛붽엥??
+- `docs/gg/003_湲고쉷??md`???대떦?먮퀎 李멸퀬 臾몄꽌 ?源??ъ슜?먮룄 媛숈? 諛⑺뼢?쇰줈 議곗젙?덈떎.
+- `docs/sw/003_?뚮씪?쇰룞湲고솕援ъ“?ㅻ챸_sw.md`???ъ슜???섏????섎늻???쒗쁽??`?ъ슜??愿??援ы쁽 愿???쇰줈 諛붽엥??
+- `docs/000_?곸꽭湲고쉷??md`瑜?異붽??덈떎.
+- ?곸꽭 湲고쉷?쒖뿉???쒕퉬???뺤쓽, 臾몄젣 ?뺤쓽, ?꾩옱 援ы쁽 ?곹깭, ?듭떖 ?쒕퉬???ъ젙, 湲곕뒫 ?붽뎄?ы빆, 4??梨낆엫 遺꾨같, Representative Use Journey, 蹂댁븞/?댁쁺 ?뺤콉, ?깃났 湲곗?, 寃利??꾨왂, 由ъ뒪?? 援ы쁽 ?쒖꽌瑜??댁븯??
+- `docs/README.md`???곸꽭 湲고쉷??留곹겕? 梨낆엫 ?ㅻ챸??異붽??덈떎.
+- `docs/product.md`???곸꽭 湲고쉷??李몄“ 留곹겕瑜?異붽??덈떎.
+- `docs/adr`, `docs/ck`, `docs/sw`, `docs/ys`??README ?몃뜳?ㅻ? 異붽??덈떎.
+- `docs/README.md`???대떦?먮퀎 李멸퀬 臾몄꽌 ?쒕? ?대뜑蹂??몃뜳?ㅻ줈 ?곌껐?덈떎.
+- `docs/AGENTS.md`???대떦?먮퀎 李멸퀬 臾몄꽌 異붽?/蹂寃????몃뜳??媛깆떊 洹쒖튃??異붽??덈떎.
+- H1???녿뜕 `docs/gg/004_??븷遺꾨같.md`, `docs/ys/006-濡쒓렇???듬챸濡쒓렇????젣愿??md`???쒕ぉ??異붽??덈떎.
+- root `AGENTS.md`??Harness Operating Loop瑜?異붽??덈떎.
+- 猷⑦듃??`agent-progress.md`, `feature_list.json`, `session-handoff.md`, `clean-state-checklist.md`, `evaluator-rubric.md`, `quality-document.md`瑜?異붽??덈떎.
+- `scripts/check-harness.mjs`? `scripts/init-harness.ps1`瑜?異붽????쒖옉 湲곗??좉낵 ?섎꽕??洹쒖튃??寃?ы븳??
+- `docs/README.md`???섎꽕???뚯씪??臾몄꽌 map怨?SSOT ?곗꽑?쒖쐞??異붽??덈떎.
+- PR #137 異⑸룎 ?닿껐???꾪빐 ?꾩옱 feature branch??`origin/dev`瑜?蹂묓빀?덈떎.
+- `apps/api/src/app.ts`, `apps/api/src/routes/terraform.ts`, `apps/api/src/services/terraform/terraform-diagnostics.ts`??conflict??static-only Terraform editor validation ?뺤콉??湲곗??쇰줈 ?닿껐?덈떎.
+- `origin/dev`??`terraform-validation.ts`??`terraform fmt` CLI瑜??몄텧?섎뒗 寃쎈줈??쇰?濡? CLI 寃利??먭린 ?뺤콉??留욎떠 蹂묓빀 寃곌낵?먯꽌 ?쒓굅?덈떎.
+- `origin/dev`???뺤쟻 吏꾨떒 蹂닿컯 以?`unexpected_token`, `trailing_comma` 寃?щ뒗 `terraform-diagnostics.ts`???≪닔?덈떎.
+- Terraform editor validation? static-only diagnostics??
+- `/terraform/validate`??`TerraformValidateResponse = { diagnostics }`留?諛섑솚?쒕떎.
+- `/terraform/validate/prepare`, editor validation prepare/warmup, `mode`, `stage`, `status`, `projectId` DTO???쒓굅?먮떎.
+- Editor validation? Terraform CLI瑜??ㅽ뻾?섏? ?딅뒗?? `terraform init`, `terraform validate`, provider download, backend/state mutation? editor ???寃利?踰붿쐞媛 ?꾨땲??
+- ?뺤쟻 diagnostics??鍮?肄붾뱶, `{}`/`[]`/`()` 洹좏삎, ?ロ엳吏 ?딆? 臾몄옄?? block header, duplicate address, ?섎せ??attribute line, nested block assignment, quoted reference, undefined local reference, shared definition 諛?AWS block??寃?ы븳??
+- ?쇰컲 quoted string? 以꾩쓣 ?섏? ?딅뒗?? ?ロ엳吏 ?딆? 臾몄옄?댁? ?대떦 以꾩뿉???ㅻ쪟濡??뺤젙?섍퀬, ?ㅼそ resource header???곗샂???뚮Ц???ㅻ쪟 line??諛由ъ? ?딅뒗??
+- ?ロ엳吏 ?딆? 臾몄옄???뚮Ц???ㅼそ brace stack? ?좊ː?????놁쑝誘濡?`{}` 以묎큵???ㅻ쪟瑜??곗뇙濡??④퍡 ?쒖떆?섏? ?딅뒗??
+- `{}`/`[]`/`()`/臾몄옄??balance ?④퀎?먯꽌 error媛 ?덉쑝硫?body/reference 寃?щ? 以묐떒?쒕떎. ?? 洹몃낫???욎꽑 block header error???④퍡 諛섑솚?쒕떎. ?ロ엳吏 ?딆? block ?뚮Ц???ㅼ쓬 resource header媛 ?댁쟾 block body ?ㅻ쪟泥섎읆 ?쒖떆?섏? ?딆븘???쒕떎.
+- `/* ... */` block comment ?덉쓽 quote, brace, reference??static diagnostics ??곸씠 ?꾨땲??
+- Multi-file editor?먯꽌 `sourceFileName` ?녿뒗 diagnostic? ?뱀젙 ?뚯씪 line highlight濡?蹂댁젙?섏? ?딅뒗??
+- 寃利?以?肄붾뱶媛 諛붾뚮㈃ ?ㅻ옒??寃利?寃곌낵瑜??깃났泥섎읆 諛섏쁺?섏? ?딄퀬 ?ш?利??꾩슂 diagnostics瑜??④릿??
+- Terraform leave modal?먯꽌 ?ъ슜?먭? 怨꾩냽 ?몄쭛/?먭린?????꾩갑???ㅻ옒??save completion? ?꾩옱 modal ?곹깭瑜???? ?딅뒗??
+- Deployment artifact ??μ? Terraform panel?먯꽌 ?대? 寃利앺븳 source?????以묐났 combined-code 寃利앹쓣 嫄대꼫?????덈떎.
+- `InfrastructureGraphNode`?????댁긽 ?대? `ResourceType` `type` ?꾨뱶瑜?媛뽰? ?딅뒗??
+- Terraform Preview API orchestration? `terraform-preview.ts`媛 ?대떦?섍퀬, `diagram-to-terraform.ts`??`InfrastructureGraph -> Terraform HCL` ?뚮뜑?щ줈留??숈옉?쒕떎.
+- `diagram-to-terraform.ts`?????댁긽 `DiagramJson` ?먮뒗 `buildInfrastructureGraphFromDiagramJson`瑜?import?섏? ?딅뒗??
+- Terraform Preview identity??`iac.provider + iac.terraformBlockType + iac.resourceType + iac.resourceName` 湲곗??대떎.
+- `iac.resourceType`? `aws_instance`, `aws_vpc`, `aws_s3_bucket` 媛숈? provider-specific Terraform resource type??洹몃?濡??좎??쒕떎.
+- `ResourceType`? AI/Architecture 遺꾩꽍??domain classification?쇰줈 ?좎??섎ŉ Terraform Preview identity 湲곗????꾨땲??
+- Terraform IaC 由ъ냼??吏???щ????⑥씪 異쒖쿂??`packages/types/src/resource-definitions.ts`??shared `ResourceDefinition`?대떎.
+- API? Web? `@sketchcatch/types/resource-definitions` subpath瑜??듯빐 媛숈? resource definition/capability瑜??ъ슜?쒕떎.
+- API??web resource catalog瑜?import?섏? ?딅뒗?? Web catalog??icon/category/label/size 媛숈? presentation ?뺣낫留??뚯쑀?쒕떎.
+- `design_region`, `design_az`, `design_group` 媛숈? ?붾㈃ ?꾩슜 container node??shared definition???ｌ? ?딄퀬 web catalog?먮쭔 ?붾떎.
+- `terraformPreview` capability媛 true??由ъ냼?ㅻ쭔 `InfrastructureGraph` preview node濡??ы븿?쒕떎.
+- `terraformSync` capability媛 true??由ъ냼?ㅻ쭔 Terraform editor 援ъ“ 蹂寃?proposal ??곸씠 ?쒕떎.
+- `aws_cloudfront_distribution`? ?꾩옱 `terraformPreview: false`, `terraformSync: true` 李⑥씠瑜??좎??쒕떎.
+- Web catalog??AWS Terraform ??ぉ怨?shared definition/parameter catalog drift 諛⑹? ?뚯뒪?멸? ?덈떎.
+- InfrastructureGraph 以묒떖 Workspace ?숆린??v1 援ы쁽???꾩옱 釉뚮옖移섏뿉 而ㅻ컠?먮떎.
+- Terraform Preview ?앹꽦 寃쎈줈??`DiagramJson -> InfrastructureGraph -> Terraform`濡??뺣━?먮떎.
+- VPC/EC2/S3/AMI 怨꾩뿴 Preview? Terraform sync ?먮쫫? focused API/Web ?뚯뒪?? typecheck, lint, build瑜??듦낵?덈떎.
+- Terraform-only create proposal ?먮룞 諛섏쁺?쇰줈 ?앷릿 ??DiagramJson node??resource catalog??`iconUrl`怨?`nodeDefaults.size`瑜??ъ슜?쒕떎.
+- CloudFront draft/proposal??`aws_cloudfront_distribution` catalog icon怨?size瑜??ъ슜?????덈떎.
+- 湲곕낯 Palette??`resourceCatalog`瑜?湲곕낯媛믪쑝濡??ъ슜?쒕떎.
+- Design area node??catalog icon???좎??섎ŉ area header?먯꽌 iconUrl???ъ슜?????덈떎.
+- Terraform editor diagnostics??`sourceFileName`??媛吏????덇퀬, multi-file validation?먯꽌 ?꾩옱 ?뚯씪 湲곗? 鍮④컙以꾨쭔 ?쒖떆?쒕떎.
+- Resource code 遺遺꾨낫湲곗뿉?쒕뒗 ?먮낯 ?뚯씪 line??遺遺?肄붾뱶 line?쇰줈 蹂댁젙??鍮④컙以꾩쓣 ?쒖떆?쒕떎.
+- Terraform 肄붾뱶瑜??섏젙?섎㈃ stale diagnostics/Issues ?곹깭媛 利됱떆 鍮꾩썙吏꾨떎.
+- ?ㅻ옒??async validation/save ?묐떟? code version guard濡???肄붾뱶 ?꾩뿉 ?ㅼ떆 諛섏쁺?섏? ?딅뒗??
+- 媛숈? Terraform identity??`parameters.values` 蹂寃쎌? Terraform editor ?????DiagramJson??諛섏쁺?쒕떎.
+- Create/delete/rename 援ъ“ 蹂寃쎌? 蹂꾨룄 蹂寃??쒖븞 ?뺤씤 UI ?놁씠 Terraform editor ????먮뒗 諛고룷 以鍮?action ?덉뿉???먮룞 諛섏쁺?쒕떎.
+- Rename proposal ?먮룞 諛섏쁺 ??source file metadata媛 `parameters.fileName`??蹂댁〈?쒕떎.
+- Route Table/Internet Gateway/CloudFront 媛숈? sync 媛?ν븳 ?ㅽ듃?뚰겕 由ъ냼?ㅻ뒗 create/delete proposal ??곸뿉 ?ы븿?쒕떎.
+- Resource card Duplicate??媛숈? resource type ?덉뿉??`web_copy`, `web_copy_2`泥섎읆 ?좊땲?ы븳 Terraform resourceName??留뚮뱾怨? ?먮룞 ?앹꽦 `tags.Name`???④퍡 ?숆린?뷀븳??
+- Diagram icon ??젣??Terraform Preview??利됱떆 諛섏쁺?쒕떎. 留덉?留??꾩씠肄???젣??鍮?`main.tf`濡?媛깆떊?섍퀬, Terraform editor媛 dirty ?곹깭?щ룄 ??젣??由ъ냼??二쇱냼???대떦?섎뒗 block留??쒓굅?쒕떎.
+- Terraform editor ???sync action? 鍮?Terraform 肄붾뱶瑜??꾩껜 ??젣 ?섎룄濡?泥섎━?쒕떎. 吏??踰붿쐞 ?덉쓽 Diagram-only resource??`delete_candidate`濡??먮룞 諛섏쁺?섍퀬, Diagram???대? 鍮꾩뼱 ?덉쑝硫?diagnostics ?놁씠 ????깃났?쒕떎.
+- ?ъ슜?먭? 蹂대뱶?먯꽌 由ъ냼???꾩씠肄섏쓣 吏곸젒 異붽??섎㈃ `parameters.values`??`{}`濡??쒖옉?쒕떎. EC2 `instanceType`, VPC `cidrBlock`, `tags.Name` 媛숈? Terraform parameter 媛믪? ?ъ슜???낅젰, AI draft config, Terraform editor sync泥섎읆 紐낆떆 ?낅젰???덉쓣 ?뚮쭔 梨꾩슫??
+- 媛숈? 由ъ냼???꾩씠肄섏쓣 諛섎났 異붽??섎㈃ 媛숈? `resourceType` ?덉뿉??`resourceName`??`ec2_instance`, `ec2_instance_2`, `ec2_instance_3`泥섎읆 ?レ옄 suffix濡??좊땲?ы븯寃??앹꽦?쒕떎.
+- ?덈줈 ?앹꽦?섎뒗 ?쇰컲 由ъ냼??icon node??湲곕낯 ?ш린??`56x56`?대떎. VPC/Subnet/Security Group/Region/AZ/Group 媛숈? ?곸뿭 node??湲곗〈 ?곸뿭 ?ш린瑜??좎??쒕떎.
+- Compact resource node??generic `.nodeShell`??`72px` 理쒖냼 ?믪씠瑜??곸냽?섏? ?딆븘 `56x56` ?꾩씠肄섏씠 鍮?諛뺤뒪泥섎읆 而ㅼ?吏 ?딅뒗??
+- AI draft 蹂?섏? `vpcId: "aws_vpc.main.id"`, `subnetId: "aws_subnet.public.id"` 媛숈? Terraform reference 臾몄옄?대룄 `(resourceType, resourceName)`?쇰줈 ???area parent metadata瑜?李얜뒗??
+- Terraform ?앹꽦 API??`resourceType`, `resourceName`, top-level/nested attribute/block key媛 Terraform identifier ?뺤떇???꾨땲硫?HCL??留뚮뱾湲??꾩뿉 嫄곕??쒕떎.
+- Terraform 肄붾뱶 ?먮뵒?곕뒗 textarea ?꾩뿉 read-only syntax highlight layer瑜?寃뱀퀜 HCL keyword/reference/string/brace ?됱긽???쒖떆?섍퀬, validation error line? 鍮④컙 臾쇨껐 諛묒쨪濡??쒖떆?쒕떎.
+- Terraform leave dialog?먯꽌 `??ν븯怨??섍?湲?媛 Terraform error diagnostics ?뚮Ц???ㅽ뙣?섎㈃, 紐⑤떖???リ퀬 ?ㅻⅨ履?Terraform ?⑤꼸???ㅼ떆 蹂댁뿬以??ъ슜?먭? 臾쇨껐 ?ㅻ쪟 ?쒖떆瑜??뺤씤?????덈떎.
+- Terraform diagnostics媛 ?덈뒗 ?숈븞 Issues ??shortcut? unsaved Terraform leave guard??留됲엳吏 ?딄퀬 諛붾줈 ?대┫ ???덈떎.
+- Terraform leave dialog??`??ν븯怨??섍?湲? ?쒖옉 ?곹깭??蹂꾨룄 status 臾멸뎄瑜??꾩슦吏 ?딄퀬 踰꾪듉 disabled/`???以? ?곹깭留?蹂댁뿬以??
+- Terraform generator ?쒕퉬?ㅻ뒗 HTTP ?띿꽦 ?녿뒗 `TerraformDiagramValidationError`瑜??섏?怨? `/terraform/generate` ?쇱슦?곌? ?대? 400 `bad_request`濡?留ㅽ븨?쒕떎.
+- Terraform editor??virtual file validation? ?뚯씪蹂?validate API瑜?`Promise.all`濡??숈떆???몄텧?섏? ?딄퀬 ?쒖감 ?ㅽ뻾?쒕떎.
+- Diagnostic wavy underline helper?????댁긽 absolute `top` style??怨꾩궛?섏? ?딄퀬 ?쒖떆 ???line number留?諛섑솚?쒕떎.
+- `cloneParameterValue`??diagram/workspace ?묒そ 以묐났 ?뺤쓽媛 ?꾨땲??`apps/web/features/diagram-editor/parameter-value-utils.ts`瑜?怨듭쑀?쒕떎.
+- `docs/data-models.md`??diagnostic/proposal source metadata? proposal 吏??踰붿쐞瑜??꾩옱 肄붾뱶??留욊쾶 湲곕줉?쒕떎.
+- `feature_list.json`?먮뒗 ?숈떆??`in_progress`????ぉ???녿떎.
 
-## 이번 세션의 변경 사항
+## ?대쾲 ?몄뀡??蹂寃??ы빆
 
-- `origin/dev` merge conflict를 해결했다.
-- `apps/api/src/app.ts`와 `apps/api/src/routes/terraform.ts`는 `validateTerraformPreviewCode` 기반 static-only 검증 주입을 유지한다.
-- `apps/api/src/services/terraform/terraform-diagnostics.ts`는 기존 no-cascade 진단에 `unexpected_token`, `trailing_comma` 정적 검사를 함께 실행한다.
-- `apps/api/src/services/terraform/terraform-validation.ts`와 `terraform-validation.test.ts`는 editor CLI 검증 폐기 정책에 맞춰 제거 상태로 유지한다.
-- `apps/api/src/services/terraform/terraform-diagnostics.ts`에서 일반 quoted string이 줄을 넘지 않도록 처리해, line 20의 누락 quote가 line 24 resource header로 밀려 표시되지 않게 했다.
-- `apps/api/src/services/terraform/terraform-diagnostics.ts`에서 balance error가 있으면 뒤쪽 body/reference 검사를 중단해, line 17의 누락 `}`가 line 23 다음 resource에 파생 오류를 만들지 않게 했다.
-- `apps/api/src/services/terraform/terraform-diagnostics.ts`가 block comment를 줄 보존 공백으로 처리하고, token error보다 앞선 block header error는 유지하게 했다.
-- `apps/api/src/services/terraform/terraform-nested-blocks.ts`를 추가해 renderer/sync/parser/diagnostics가 공유하는 nested block support list를 단일화했다.
-- `apps/api/src/services/terraform/terraform-diagnostics.test.ts`에 따옴표 하나 누락 시 `{}` 오류가 같이 뜨지 않는 케이스, line 20 누락 quote가 line 20으로 남는 케이스, virtual file source metadata 유지 케이스를 추가했다.
-- `apps/api/src/services/terraform/terraform-diagnostics.test.ts`에 line 17 누락 `}` 때문에 line 23 다음 resource에 `terraform.attribute_syntax`가 같이 뜨지 않는 회귀 케이스를 추가했다.
-- `apps/web/features/workspace/TerraformCodePanel.tsx`에서 숨겨진 Issues 복사본과 multi-file diagnostic source fallback을 정리했다.
-- `apps/web/features/workspace/workspace.module.css`에서 사용하지 않는 Terraform editor CSS rule을 제거했다.
-- `apps/web/features/workspace/terraform-diagnostic-line-highlights.test.ts`에 unclosed string diagnostic이 source line과 resource code offset에 맞게 표시되는 회귀 테스트를 추가했다.
-- `packages/types/src/index.ts`에서 editor validation CLI mode/stage/status/prepare DTO를 제거하고 validate 계약을 `diagnostics` 중심으로 단순화했다.
-- `apps/api/src/services/terraform/terraform-validation.ts`와 관련 테스트를 제거했다.
-- `apps/api/src/deployments/terraform-runner.ts`에서 editor validation 전용 `runTerraformValidateJson` helper를 제거했다.
-- `apps/api/src/routes/terraform.ts`에서 `/terraform/validate/prepare` endpoint와 `mode`/`projectId` 입력을 제거하고 static diagnostics만 반환하게 했다.
-- `apps/api/src/services/terraform/terraform-diagnostics.ts`가 virtual file source metadata와 정적 diagnostics v1 강화 규칙을 담당하게 했다.
-- `apps/web/features/workspace/TerraformCodePanel.tsx`에서 CLI 진행 bar, prepare 상태, full validation 호출을 제거하고 static validation만 호출하게 했다.
-- `apps/web/features/workspace/workspace-deployment-artifacts.ts`가 artifact 저장 전 static validation만 요청하게 했다.
-- API/Web tests에 CLI endpoint/mode 제거, static validation response, progress UI 제거, nested block assignment, duplicate address error, undefined reference warning 회귀 케이스를 추가했다.
-- `docs/data-models.md`, `docs/sw/001_테라폼변환구현가이드_sw.md`, `docs/sw/003_테라폼동기화구조설명_sw.md`를 static-only editor validation 기준으로 갱신했다.
-- `apps/api/src/services/terraform/terraform-preview.ts`를 추가해 `generateTerraformFromDiagramJson`을 `DiagramJson -> InfrastructureGraph -> Terraform` orchestration 함수로 옮겼다.
-- `apps/api/src/services/terraform/diagram-to-terraform.ts`에서 `DiagramJson`/`buildInfrastructureGraphFromDiagramJson` import와 `generateTerraformFromDiagramJson` export를 제거했다.
-- `/terraform/generate` route가 `generateTerraformFromDiagramJson`을 `terraform-preview.ts`에서 import하도록 변경했다.
-- 기존 `DiagramJson` 기반 Terraform Preview 회귀 테스트를 `terraform-preview.test.ts`로 옮겼고, `diagram-to-terraform.test.ts`는 `InfrastructureGraph` renderer 단위 테스트와 source regression test로 정리했다.
-- `docs/data-models.md`에 Terraform 생성 API 입력과 내부 pipeline, preview orchestrator와 renderer 책임 차이를 기록했다.
-- `packages/types`의 `InfrastructureGraphNode`에서 `type: ResourceType`를 제거했다.
-- `infrastructure-graph.ts`가 graph node에 `type: resourceDefinition.resourceType`를 넣지 않도록 변경했다.
-- `resourceDefinition` 사용처를 preview capability 확인과 `iac.provider` 설정으로 축소했다.
-- InfrastructureGraph API 테스트에 EC2가 `EC2`로 변환되지 않고 `iac.resourceType: "aws_instance"`를 유지하는 회귀 케이스를 추가했다.
-- `docs/data-models.md`에 Terraform Preview identity와 `ResourceDefinition.resourceType`의 역할 차이를 기록했다.
-- 하위 AI 6개 축 코드리뷰를 실행했고, block type을 무시하던 unused shared lookup helper 제거, `aws_security_group_rule` preview-only/sync-unsupported 테스트 보강, web catalog drift 테스트의 `aws_` prefix 의존 제거, identity 문서 표현 정리를 반영했다.
-- `packages/types/src/resource-definitions.ts`를 추가해 44개 AWS Terraform resource/data 항목의 provider, domain `ResourceType`, Terraform identity, capability를 정의했다.
-- `packages/types/package.json`에 `./resource-definitions` export를 추가했다. root `index.ts` re-export는 Next/Turbopack source resolve 문제 때문에 사용하지 않는다.
-- `infrastructure-graph.ts`에서 `PREVIEW_SUPPORTED_BLOCKS`와 `RESOURCE_TYPE_BY_TERRAFORM_TYPE`를 제거하고 shared definition의 `terraformPreview` capability와 provider를 사용하게 했다.
-- `terraform-to-diagram.ts`에서 `PROPOSAL_SUPPORTED_BLOCKS`를 제거하고 shared definition의 `terraformSync`를 사용하게 했다.
-- Web `resource-settings/catalog.ts`를 shared definition + presentation metadata 구조로 정리했다.
-- API/Web 테스트에 hardcoded support list 제거, preview/sync capability 차이, catalog/definition/parameter panel drift 방지 케이스를 추가했다.
-- `docs/data-models.md`에 ResourceDefinition/capability 의미, 새 리소스 추가 절차, API/Web 의존성 경계를 문서화했다.
-- Terraform HCL tokenizing helper와 회귀 테스트를 추가했다.
-- Terraform editor의 기존 2px 빨간 직선 marker를 제거하고, syntax highlight line에 `text-decoration-style: wavy` 오류 밑줄을 적용했다.
-- Terraform editor textarea 글자를 투명 처리하고 caret은 유지해, 실제 입력은 textarea가 담당하고 보이는 코드는 highlight layer가 담당하게 했다.
-- Playwright로 `/workspace` Terraform 탭에서 syntax color와 mock validation error의 물결 밑줄 표시를 확인했다.
-- Terraform leave save 실패 상태 모델에 `shouldRevealTerraformPanel` 흐름을 추가했다.
-- `WorkspaceRightPanel`이 최신 Terraform diagnostics를 ref로 보관하고, diagnostics 때문에 저장이 막힌 경우 pending leave action을 취소한 뒤 Terraform 탭을 보여주며 모달을 닫게 했다.
-- Diagnostics가 있을 때 Issues 탭과 collapsed Issues shortcut에 Terraform leave guard 예외를 적용했다.
-- `createTerraformLeaveSaveStartFeedback`의 저장 중 메시지를 비워 곧 닫힐 모달 안에 순간적인 status 문구가 뜨지 않게 했다.
-- 코드리뷰 피드백을 반영해 Terraform 서비스 에러와 HTTP 응답 매핑을 분리했다.
-- Terraform virtual file validation을 순차 실행으로 바꿔 파일 수 증가 시 동시 요청 burst를 줄였다.
-- 삭제 sync 후 남은 Terraform 코드 확인을 `combineTerraformFiles(nextFiles)` 병합 대신 `nextFiles.some(...)`으로 바꿨다.
-- `cloneParameterValue` 중복을 공통 helper로 분리했다.
-- wavy underline 전환 후 남아 있던 diagnostic line absolute position 계산 dead code를 제거했다.
-- 하위 AI 6개 축으로 catalog/diagram, Terraform sync/proposal, AI draft layout, CSS/resize, backend API/generator, docs/contracts를 read-only 검증했다.
-- `.nodeShellResource`에서 generic `min-height`를 해소해 compact icon node가 의도한 크기로 렌더링되게 했다.
-- Terraform create proposal fallback과 AI draft fallback unknown resource 크기를 `56x56`으로 통일했다.
-- AI draft area fit이 왼쪽/위쪽 자식까지 포함하도록 position+size를 함께 보정하게 했다.
-- ArchitectureJson config의 Terraform reference 문자열을 Diagram node identity로 역해석해 VPC/Subnet 부모 영역을 찾도록 했다.
-- HCL injection을 막기 위해 Terraform block label과 attribute/block key identifier 검증을 API schema와 generator에 추가했다.
-- Design area icon 테스트와 `docs/data-models.md` 계약을 최신 동작에 맞췄고, 사용하지 않는 `DEFAULT_PALETTE_ITEMS` fallback을 제거했다.
-- 일반 리소스 catalog 기본 icon size를 `112x112`에서 `56x56`으로 줄였다.
-- legacy palette fallback, Terraform create proposal fallback, AI draft fallback 크기도 절반 비율로 낮췄다.
-- 일반 resource resize 최소값과 CSS icon frame 최소값을 새 compact icon 크기에 맞췄다.
-- AI draft area fit은 작은 icon을 배치해도 부모 VPC/Subnet/Region 박스가 같이 절반 압축되지 않도록 기존 112px footprint를 최소 배치 기준으로 유지한다.
-- `docs/data-models.md`에 신규 일반 리소스 icon size와 영역 node 예외를 기록했다.
-- 수동 리소스 아이콘 생성 경로가 현재 Diagram node 목록을 보고 중복 Terraform `resourceName`에 숫자 suffix를 붙이도록 수정했다.
-- 다이어그램 drop 경로에서 `createDiagramNodeFromPayload`에 현재 node 목록을 전달하도록 연결했다.
-- `docs/data-models.md`에 수동 리소스 아이콘의 Terraform identity 중복 회피 계약을 추가했다.
-- EC2 Instance를 포함한 모든 수동 리소스 아이콘 생성에서 Terraform parameter 자동 채움을 제거했다.
-- VPC/Subnet/Security Group/EC2/S3에 들어가던 Terraform Preview skeleton default helper를 삭제했다.
-- AI Architecture Draft 변환 테스트는 catalog default가 아니라 AI가 명시한 config 값만 유지하도록 조정했다.
-- `docs/data-models.md`에 수동 리소스 아이콘 생성 시 `parameters.values`가 `{}`로 시작한다는 계약을 추가했다.
-- 리소스 아이콘 삭제 후 Terraform 코드를 전부 지워 저장할 때 저장이 실패하던 문제를 수정했다.
-- Frontend `saveCodeToDiagram`이 빈 Terraform 코드를 막지 않고 sync API까지 보내도록 변경했다.
-- API `syncTerraformToDiagramJson`이 공백 Terraform 입력을 `terraform.sync.empty` 오류가 아니라 Diagram-only resource 삭제 proposals로 처리하게 했다.
-- 이미 빈 Diagram + 빈 Terraform은 diagnostics 없이 성공하도록 했다.
-- `docs/data-models.md`에 빈 Terraform 저장 sync action의 삭제 의도 계약을 추가했다.
-- Diagram icon 삭제 시 Terraform 코드가 남는 문제를 수정했다.
-- Terraform Preview 자동 refresh에서 빈 다이어그램 차단 조건을 제거했다.
-- Terraform editor 로컬 편집 중에도 삭제된 Diagram resource 주소의 Terraform block만 부분 제거하는 helper와 패널 effect를 추가했다.
-- 삭제 동기화 결과 Terraform 코드가 비면 dirty 상태가 남지 않게 했다.
-- 관련 regression tests를 추가했다.
-- 하위 AI 6개 축으로 API sync/parser, frontend proposal 적용, Terraform editor UX, resource catalog/icon, deployment boundary, docs/contracts를 read-only 검증했다.
-- Terraform 변경 제안 확인 패널을 제거하고 저장 시 proposals를 자동 반영하도록 바꿨다.
-- `TerraformDiagnostic.sourceFileName`을 shared type에 추가했다.
-- `TerraformDiagramChangeProposal.rename_candidate`에 `sourceFileName`과 `line`을 추가했다.
-- API Terraform sync parser가 file별 diagnostics에 source file metadata를 채우도록 수정했다.
-- Frontend Terraform panel이 전체 검증을 file별로 실행하고 diagnostic source metadata를 UI에 보존하게 했다.
-- Diagnostic line highlight helper가 source file filtering과 source line offset을 지원하게 했다.
-- CloudFront catalog, parameter override, generated parameter catalog를 추가했다.
-- Proposal helper의 create/rename 적용 경로에서 icon/size/fileName/deep clone 보존을 강화했고, `applyAllTerraformSyncProposals`를 추가했다.
-- Palette, diagram node creation, area node icon lookup을 catalog 기준으로 정렬했다.
-- Resource Duplicate 중복 identity와 stale auto tag 문제를 수정했다.
-- 관련 regression tests와 docs/data-models 계약을 갱신했다.
+- `origin/dev` merge conflict瑜??닿껐?덈떎.
+- `apps/api/src/app.ts`? `apps/api/src/routes/terraform.ts`??`validateTerraformPreviewCode` 湲곕컲 static-only 寃利?二쇱엯???좎??쒕떎.
+- `apps/api/src/services/terraform/terraform-diagnostics.ts`??湲곗〈 no-cascade 吏꾨떒??`unexpected_token`, `trailing_comma` ?뺤쟻 寃?щ? ?④퍡 ?ㅽ뻾?쒕떎.
+- `apps/api/src/services/terraform/terraform-validation.ts`? `terraform-validation.test.ts`??editor CLI 寃利??먭린 ?뺤콉??留욎떠 ?쒓굅 ?곹깭濡??좎??쒕떎.
+- `apps/api/src/services/terraform/terraform-diagnostics.ts`?먯꽌 ?쇰컲 quoted string??以꾩쓣 ?섏? ?딅룄濡?泥섎━?? line 20???꾨씫 quote媛 line 24 resource header濡?諛???쒖떆?섏? ?딄쾶 ?덈떎.
+- `apps/api/src/services/terraform/terraform-diagnostics.ts`?먯꽌 balance error媛 ?덉쑝硫??ㅼそ body/reference 寃?щ? 以묐떒?? line 17???꾨씫 `}`媛 line 23 ?ㅼ쓬 resource???뚯깮 ?ㅻ쪟瑜?留뚮뱾吏 ?딄쾶 ?덈떎.
+- `apps/api/src/services/terraform/terraform-diagnostics.ts`媛 block comment瑜?以?蹂댁〈 怨듬갚?쇰줈 泥섎━?섍퀬, token error蹂대떎 ?욎꽑 block header error???좎??섍쾶 ?덈떎.
+- `apps/api/src/services/terraform/terraform-nested-blocks.ts`瑜?異붽???renderer/sync/parser/diagnostics媛 怨듭쑀?섎뒗 nested block support list瑜??⑥씪?뷀뻽??
+- `apps/api/src/services/terraform/terraform-diagnostics.test.ts`???곗샂???섎굹 ?꾨씫 ??`{}` ?ㅻ쪟媛 媛숈씠 ?⑥? ?딅뒗 耳?댁뒪, line 20 ?꾨씫 quote媛 line 20?쇰줈 ?⑤뒗 耳?댁뒪, virtual file source metadata ?좎? 耳?댁뒪瑜?異붽??덈떎.
+- `apps/api/src/services/terraform/terraform-diagnostics.test.ts`??line 17 ?꾨씫 `}` ?뚮Ц??line 23 ?ㅼ쓬 resource??`terraform.attribute_syntax`媛 媛숈씠 ?⑥? ?딅뒗 ?뚭? 耳?댁뒪瑜?異붽??덈떎.
+- `apps/web/features/workspace/TerraformCodePanel.tsx`?먯꽌 ?④꺼吏?Issues 蹂듭궗蹂멸낵 multi-file diagnostic source fallback???뺣━?덈떎.
+- `apps/web/features/workspace/workspace.module.css`?먯꽌 ?ъ슜?섏? ?딅뒗 Terraform editor CSS rule???쒓굅?덈떎.
+- `apps/web/features/workspace/terraform-diagnostic-line-highlights.test.ts`??unclosed string diagnostic??source line怨?resource code offset??留욊쾶 ?쒖떆?섎뒗 ?뚭? ?뚯뒪?몃? 異붽??덈떎.
+- `packages/types/src/index.ts`?먯꽌 editor validation CLI mode/stage/status/prepare DTO瑜??쒓굅?섍퀬 validate 怨꾩빟??`diagnostics` 以묒떖?쇰줈 ?⑥닚?뷀뻽??
+- `apps/api/src/services/terraform/terraform-validation.ts`? 愿???뚯뒪?몃? ?쒓굅?덈떎.
+- `apps/api/src/deployments/terraform-runner.ts`?먯꽌 editor validation ?꾩슜 `runTerraformValidateJson` helper瑜??쒓굅?덈떎.
+- `apps/api/src/routes/terraform.ts`?먯꽌 `/terraform/validate/prepare` endpoint? `mode`/`projectId` ?낅젰???쒓굅?섍퀬 static diagnostics留?諛섑솚?섍쾶 ?덈떎.
+- `apps/api/src/services/terraform/terraform-diagnostics.ts`媛 virtual file source metadata? ?뺤쟻 diagnostics v1 媛뺥솕 洹쒖튃???대떦?섍쾶 ?덈떎.
+- `apps/web/features/workspace/TerraformCodePanel.tsx`?먯꽌 CLI 吏꾪뻾 bar, prepare ?곹깭, full validation ?몄텧???쒓굅?섍퀬 static validation留??몄텧?섍쾶 ?덈떎.
+- `apps/web/features/workspace/workspace-deployment-artifacts.ts`媛 artifact ?????static validation留??붿껌?섍쾶 ?덈떎.
+- API/Web tests??CLI endpoint/mode ?쒓굅, static validation response, progress UI ?쒓굅, nested block assignment, duplicate address error, undefined reference warning ?뚭? 耳?댁뒪瑜?異붽??덈떎.
+- `docs/data-models.md`, `docs/sw/001_?뚮씪?쇰??섍뎄?꾧??대뱶_sw.md`, `docs/sw/003_?뚮씪?쇰룞湲고솕援ъ“?ㅻ챸_sw.md`瑜?static-only editor validation 湲곗??쇰줈 媛깆떊?덈떎.
+- `apps/api/src/services/terraform/terraform-preview.ts`瑜?異붽???`generateTerraformFromDiagramJson`??`DiagramJson -> InfrastructureGraph -> Terraform` orchestration ?⑥닔濡???꼈??
+- `apps/api/src/services/terraform/diagram-to-terraform.ts`?먯꽌 `DiagramJson`/`buildInfrastructureGraphFromDiagramJson` import? `generateTerraformFromDiagramJson` export瑜??쒓굅?덈떎.
+- `/terraform/generate` route媛 `generateTerraformFromDiagramJson`??`terraform-preview.ts`?먯꽌 import?섎룄濡?蹂寃쏀뻽??
+- 湲곗〈 `DiagramJson` 湲곕컲 Terraform Preview ?뚭? ?뚯뒪?몃? `terraform-preview.test.ts`濡???꼈怨? `diagram-to-terraform.test.ts`??`InfrastructureGraph` renderer ?⑥쐞 ?뚯뒪?몄? source regression test濡??뺣━?덈떎.
+- `docs/data-models.md`??Terraform ?앹꽦 API ?낅젰怨??대? pipeline, preview orchestrator? renderer 梨낆엫 李⑥씠瑜?湲곕줉?덈떎.
+- `packages/types`??`InfrastructureGraphNode`?먯꽌 `type: ResourceType`瑜??쒓굅?덈떎.
+- `infrastructure-graph.ts`媛 graph node??`type: resourceDefinition.resourceType`瑜??ｌ? ?딅룄濡?蹂寃쏀뻽??
+- `resourceDefinition` ?ъ슜泥섎? preview capability ?뺤씤怨?`iac.provider` ?ㅼ젙?쇰줈 異뺤냼?덈떎.
+- InfrastructureGraph API ?뚯뒪?몄뿉 EC2媛 `EC2`濡?蹂?섎릺吏 ?딄퀬 `iac.resourceType: "aws_instance"`瑜??좎??섎뒗 ?뚭? 耳?댁뒪瑜?異붽??덈떎.
+- `docs/data-models.md`??Terraform Preview identity? `ResourceDefinition.resourceType`????븷 李⑥씠瑜?湲곕줉?덈떎.
+- ?섏쐞 AI 6媛?異?肄붾뱶由щ럭瑜??ㅽ뻾?덇퀬, block type??臾댁떆?섎뜕 unused shared lookup helper ?쒓굅, `aws_security_group_rule` preview-only/sync-unsupported ?뚯뒪??蹂닿컯, web catalog drift ?뚯뒪?몄쓽 `aws_` prefix ?섏〈 ?쒓굅, identity 臾몄꽌 ?쒗쁽 ?뺣━瑜?諛섏쁺?덈떎.
+- `packages/types/src/resource-definitions.ts`瑜?異붽???44媛?AWS Terraform resource/data ??ぉ??provider, domain `ResourceType`, Terraform identity, capability瑜??뺤쓽?덈떎.
+- `packages/types/package.json`??`./resource-definitions` export瑜?異붽??덈떎. root `index.ts` re-export??Next/Turbopack source resolve 臾몄젣 ?뚮Ц???ъ슜?섏? ?딅뒗??
+- `infrastructure-graph.ts`?먯꽌 `PREVIEW_SUPPORTED_BLOCKS`? `RESOURCE_TYPE_BY_TERRAFORM_TYPE`瑜??쒓굅?섍퀬 shared definition??`terraformPreview` capability? provider瑜??ъ슜?섍쾶 ?덈떎.
+- `terraform-to-diagram.ts`?먯꽌 `PROPOSAL_SUPPORTED_BLOCKS`瑜??쒓굅?섍퀬 shared definition??`terraformSync`瑜??ъ슜?섍쾶 ?덈떎.
+- Web `resource-settings/catalog.ts`瑜?shared definition + presentation metadata 援ъ“濡??뺣━?덈떎.
+- API/Web ?뚯뒪?몄뿉 hardcoded support list ?쒓굅, preview/sync capability 李⑥씠, catalog/definition/parameter panel drift 諛⑹? 耳?댁뒪瑜?異붽??덈떎.
+- `docs/data-models.md`??ResourceDefinition/capability ?섎?, ??由ъ냼??異붽? ?덉감, API/Web ?섏〈??寃쎄퀎瑜?臾몄꽌?뷀뻽??
+- Terraform HCL tokenizing helper? ?뚭? ?뚯뒪?몃? 異붽??덈떎.
+- Terraform editor??湲곗〈 2px 鍮④컙 吏곸꽑 marker瑜??쒓굅?섍퀬, syntax highlight line??`text-decoration-style: wavy` ?ㅻ쪟 諛묒쨪???곸슜?덈떎.
+- Terraform editor textarea 湲?먮? ?щ챸 泥섎━?섍퀬 caret? ?좎??? ?ㅼ젣 ?낅젰? textarea媛 ?대떦?섍퀬 蹂댁씠??肄붾뱶??highlight layer媛 ?대떦?섍쾶 ?덈떎.
+- Playwright濡?`/workspace` Terraform ??뿉??syntax color? mock validation error??臾쇨껐 諛묒쨪 ?쒖떆瑜??뺤씤?덈떎.
+- Terraform leave save ?ㅽ뙣 ?곹깭 紐⑤뜽??`shouldRevealTerraformPanel` ?먮쫫??異붽??덈떎.
+- `WorkspaceRightPanel`??理쒖떊 Terraform diagnostics瑜?ref濡?蹂닿??섍퀬, diagnostics ?뚮Ц????μ씠 留됲엺 寃쎌슦 pending leave action??痍⑥냼????Terraform ??쓣 蹂댁뿬二쇰ŉ 紐⑤떖???リ쾶 ?덈떎.
+- Diagnostics媛 ?덉쓣 ??Issues ??낵 collapsed Issues shortcut??Terraform leave guard ?덉쇅瑜??곸슜?덈떎.
+- `createTerraformLeaveSaveStartFeedback`?????以?硫붿떆吏瑜?鍮꾩썙 怨??ロ옄 紐⑤떖 ?덉뿉 ?쒓컙?곸씤 status 臾멸뎄媛 ?⑥? ?딄쾶 ?덈떎.
+- 肄붾뱶由щ럭 ?쇰뱶諛깆쓣 諛섏쁺??Terraform ?쒕퉬???먮윭? HTTP ?묐떟 留ㅽ븨??遺꾨━?덈떎.
+- Terraform virtual file validation???쒖감 ?ㅽ뻾?쇰줈 諛붽퓭 ?뚯씪 ??利앷? ???숈떆 ?붿껌 burst瑜?以꾩???
+- ??젣 sync ???⑥? Terraform 肄붾뱶 ?뺤씤??`combineTerraformFiles(nextFiles)` 蹂묓빀 ???`nextFiles.some(...)`?쇰줈 諛붽엥??
+- `cloneParameterValue` 以묐났??怨듯넻 helper濡?遺꾨━?덈떎.
+- wavy underline ?꾪솚 ???⑥븘 ?덈뜕 diagnostic line absolute position 怨꾩궛 dead code瑜??쒓굅?덈떎.
+- ?섏쐞 AI 6媛?異뺤쑝濡?catalog/diagram, Terraform sync/proposal, AI draft layout, CSS/resize, backend API/generator, docs/contracts瑜?read-only 寃利앺뻽??
+- `.nodeShellResource`?먯꽌 generic `min-height`瑜??댁냼??compact icon node媛 ?섎룄???ш린濡??뚮뜑留곷릺寃??덈떎.
+- Terraform create proposal fallback怨?AI draft fallback unknown resource ?ш린瑜?`56x56`?쇰줈 ?듭씪?덈떎.
+- AI draft area fit???쇱そ/?꾩そ ?먯떇源뚯? ?ы븿?섎룄濡?position+size瑜??④퍡 蹂댁젙?섍쾶 ?덈떎.
+- ArchitectureJson config??Terraform reference 臾몄옄?댁쓣 Diagram node identity濡???빐?앺빐 VPC/Subnet 遺紐??곸뿭??李얜룄濡??덈떎.
+- HCL injection??留됯린 ?꾪빐 Terraform block label怨?attribute/block key identifier 寃利앹쓣 API schema? generator??異붽??덈떎.
+- Design area icon ?뚯뒪?몄? `docs/data-models.md` 怨꾩빟??理쒖떊 ?숈옉??留욎톬怨? ?ъ슜?섏? ?딅뒗 `DEFAULT_PALETTE_ITEMS` fallback???쒓굅?덈떎.
+- ?쇰컲 由ъ냼??catalog 湲곕낯 icon size瑜?`112x112`?먯꽌 `56x56`?쇰줈 以꾩???
+- legacy palette fallback, Terraform create proposal fallback, AI draft fallback ?ш린???덈컲 鍮꾩쑉濡???톬??
+- ?쇰컲 resource resize 理쒖냼媛믨낵 CSS icon frame 理쒖냼媛믪쓣 ??compact icon ?ш린??留욎톬??
+- AI draft area fit? ?묒? icon??諛곗튂?대룄 遺紐?VPC/Subnet/Region 諛뺤뒪媛 媛숈씠 ?덈컲 ?뺤텞?섏? ?딅룄濡?湲곗〈 112px footprint瑜?理쒖냼 諛곗튂 湲곗??쇰줈 ?좎??쒕떎.
+- `docs/data-models.md`???좉퇋 ?쇰컲 由ъ냼??icon size? ?곸뿭 node ?덉쇅瑜?湲곕줉?덈떎.
+- ?섎룞 由ъ냼???꾩씠肄??앹꽦 寃쎈줈媛 ?꾩옱 Diagram node 紐⑸줉??蹂닿퀬 以묐났 Terraform `resourceName`???レ옄 suffix瑜?遺숈씠?꾨줉 ?섏젙?덈떎.
+- ?ㅼ씠?닿렇??drop 寃쎈줈?먯꽌 `createDiagramNodeFromPayload`???꾩옱 node 紐⑸줉???꾨떖?섎룄濡??곌껐?덈떎.
+- `docs/data-models.md`???섎룞 由ъ냼???꾩씠肄섏쓽 Terraform identity 以묐났 ?뚰뵾 怨꾩빟??異붽??덈떎.
+- EC2 Instance瑜??ы븿??紐⑤뱺 ?섎룞 由ъ냼???꾩씠肄??앹꽦?먯꽌 Terraform parameter ?먮룞 梨꾩????쒓굅?덈떎.
+- VPC/Subnet/Security Group/EC2/S3???ㅼ뼱媛??Terraform Preview skeleton default helper瑜???젣?덈떎.
+- AI Architecture Draft 蹂???뚯뒪?몃뒗 catalog default媛 ?꾨땲??AI媛 紐낆떆??config 媛믩쭔 ?좎??섎룄濡?議곗젙?덈떎.
+- `docs/data-models.md`???섎룞 由ъ냼???꾩씠肄??앹꽦 ??`parameters.values`媛 `{}`濡??쒖옉?쒕떎??怨꾩빟??異붽??덈떎.
+- 由ъ냼???꾩씠肄???젣 ??Terraform 肄붾뱶瑜??꾨? 吏????ν븷 ????μ씠 ?ㅽ뙣?섎뜕 臾몄젣瑜??섏젙?덈떎.
+- Frontend `saveCodeToDiagram`??鍮?Terraform 肄붾뱶瑜?留됱? ?딄퀬 sync API源뚯? 蹂대궡?꾨줉 蹂寃쏀뻽??
+- API `syncTerraformToDiagramJson`??怨듬갚 Terraform ?낅젰??`terraform.sync.empty` ?ㅻ쪟媛 ?꾨땲??Diagram-only resource ??젣 proposals濡?泥섎━?섍쾶 ?덈떎.
+- ?대? 鍮?Diagram + 鍮?Terraform? diagnostics ?놁씠 ?깃났?섎룄濡??덈떎.
+- `docs/data-models.md`??鍮?Terraform ???sync action????젣 ?섎룄 怨꾩빟??異붽??덈떎.
+- Diagram icon ??젣 ??Terraform 肄붾뱶媛 ?⑤뒗 臾몄젣瑜??섏젙?덈떎.
+- Terraform Preview ?먮룞 refresh?먯꽌 鍮??ㅼ씠?닿렇??李⑤떒 議곌굔???쒓굅?덈떎.
+- Terraform editor 濡쒖뺄 ?몄쭛 以묒뿉????젣??Diagram resource 二쇱냼??Terraform block留?遺遺??쒓굅?섎뒗 helper? ?⑤꼸 effect瑜?異붽??덈떎.
+- ??젣 ?숆린??寃곌낵 Terraform 肄붾뱶媛 鍮꾨㈃ dirty ?곹깭媛 ?⑥? ?딄쾶 ?덈떎.
+- 愿??regression tests瑜?異붽??덈떎.
+- ?섏쐞 AI 6媛?異뺤쑝濡?API sync/parser, frontend proposal ?곸슜, Terraform editor UX, resource catalog/icon, deployment boundary, docs/contracts瑜?read-only 寃利앺뻽??
+- Terraform 蹂寃??쒖븞 ?뺤씤 ?⑤꼸???쒓굅?섍퀬 ?????proposals瑜??먮룞 諛섏쁺?섎룄濡?諛붽엥??
+- `TerraformDiagnostic.sourceFileName`??shared type??異붽??덈떎.
+- `TerraformDiagramChangeProposal.rename_candidate`??`sourceFileName`怨?`line`??異붽??덈떎.
+- API Terraform sync parser媛 file蹂?diagnostics??source file metadata瑜?梨꾩슦?꾨줉 ?섏젙?덈떎.
+- Frontend Terraform panel???꾩껜 寃利앹쓣 file蹂꾨줈 ?ㅽ뻾?섍퀬 diagnostic source metadata瑜?UI??蹂댁〈?섍쾶 ?덈떎.
+- Diagnostic line highlight helper媛 source file filtering怨?source line offset??吏?먰븯寃??덈떎.
+- CloudFront catalog, parameter override, generated parameter catalog瑜?異붽??덈떎.
+- Proposal helper??create/rename ?곸슜 寃쎈줈?먯꽌 icon/size/fileName/deep clone 蹂댁〈??媛뺥솕?덇퀬, `applyAllTerraformSyncProposals`瑜?異붽??덈떎.
+- Palette, diagram node creation, area node icon lookup??catalog 湲곗??쇰줈 ?뺣젹?덈떎.
+- Resource Duplicate 以묐났 identity? stale auto tag 臾몄젣瑜??섏젙?덈떎.
+- 愿??regression tests? docs/data-models 怨꾩빟??媛깆떊?덈떎.
 
-## 검증
+## 寃利?
 
 - Red before fix: focused API/Web tests failed because CLI endpoint/mode/progress UI and missing static diagnostics were still present.
 - `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-diagnostics.test.ts src/routes/terraform.test.ts` - passed
@@ -450,42 +653,42 @@
 - `pnpm build` - passed
 - `pnpm harness:check` - passed
 
-## 아직 깨졌거나 미검증된 것
+## ?꾩쭅 源⑥죱嫄곕굹 誘멸?利앸맂 寃?
 
-- 새 shared definition 변경에 대한 브라우저 수동 smoke는 수행하지 않았다. 자동/타입/빌드 검증으로 확인했다.
-- 전체 `pnpm test`는 deployment lock-file/path separator 기대값 실패 6건으로 통과하지 못했다. 이번 Terraform Preview orchestration focused tests, route tests, `lint`, `typecheck`, `build`, `harness:check`는 통과했다.
-- `parameterPanel` capability는 현재 web parameter catalog 보유 여부와 맞췄다. 새 리소스 추가 시 shared definition, web presentation, parameter catalog를 함께 갱신해야 한다.
-- `apps/web/next-env.d.ts`는 `pnpm build`가 일시적으로 바꿨지만 이번 작업 범위가 아니라 tracked 상태로 되돌렸다.
-- 로컬 브랜치는 upstream보다 1 commit behind 상태다. upstream에는 `docs/jh` 추적 해제 관련 삭제 commit이 하나 있다.
-- tracked 상태로 남아 있는 `docs/jh` 파일은 PR 정리 전 ignore 정책에 맞게 제거해야 한다.
-- 실제 Terraform apply/destroy, cloud mutation, Git/CI/CD handoff는 실행하지 않았다.
-- 브라우저 수동 smoke는 수행하지 않았다. 자동/단위/타입/빌드 검증으로 이번 구현 범위를 확인했다.
-- Terraform leave save diagnostics 실패 모달 UX는 자동 테스트로 확인했고, 실제 브라우저 수동 smoke는 아직 수행하지 않았다.
-- Diagnostics가 있을 때 Issues 탭/shortcut이 leave guard에 막히지 않는 흐름은 자동 테스트로 확인했고, 실제 브라우저 수동 smoke는 아직 수행하지 않았다.
-- 하위 AI가 지적한 deployment safety preflight mismatch와 DeploymentPanel init 실패 후 stale PENDING state는 이번 아이콘/preview/editor 회귀 보강 범위 밖이라 후속 작업 후보로 남았다.
-- `HARNESS-007`: Representative Use Journey의 browser/API smoke는 아직 없다.
+- ??shared definition 蹂寃쎌뿉 ???釉뚮씪?곗? ?섎룞 smoke???섑뻾?섏? ?딆븯?? ?먮룞/???鍮뚮뱶 寃利앹쑝濡??뺤씤?덈떎.
+- ?꾩껜 `pnpm test`??deployment lock-file/path separator 湲곕?媛??ㅽ뙣 6嫄댁쑝濡??듦낵?섏? 紐삵뻽?? ?대쾲 Terraform Preview orchestration focused tests, route tests, `lint`, `typecheck`, `build`, `harness:check`???듦낵?덈떎.
+- `parameterPanel` capability???꾩옱 web parameter catalog 蹂댁쑀 ?щ?? 留욎톬?? ??由ъ냼??異붽? ??shared definition, web presentation, parameter catalog瑜??④퍡 媛깆떊?댁빞 ?쒕떎.
+- `apps/web/next-env.d.ts`??`pnpm build`媛 ?쇱떆?곸쑝濡?諛붽엥吏留??대쾲 ?묒뾽 踰붿쐞媛 ?꾨땲??tracked ?곹깭濡??섎룎?몃떎.
+- 濡쒖뺄 釉뚮옖移섎뒗 upstream蹂대떎 1 commit behind ?곹깭?? upstream?먮뒗 `docs/jh` 異붿쟻 ?댁젣 愿????젣 commit???섎굹 ?덈떎.
+- tracked ?곹깭濡??⑥븘 ?덈뒗 `docs/jh` ?뚯씪? PR ?뺣━ ??ignore ?뺤콉??留욊쾶 ?쒓굅?댁빞 ?쒕떎.
+- ?ㅼ젣 Terraform apply/destroy, cloud mutation, Git/CI/CD handoff???ㅽ뻾?섏? ?딆븯??
+- 釉뚮씪?곗? ?섎룞 smoke???섑뻾?섏? ?딆븯?? ?먮룞/?⑥쐞/???鍮뚮뱶 寃利앹쑝濡??대쾲 援ы쁽 踰붿쐞瑜??뺤씤?덈떎.
+- Terraform leave save diagnostics ?ㅽ뙣 紐⑤떖 UX???먮룞 ?뚯뒪?몃줈 ?뺤씤?덇퀬, ?ㅼ젣 釉뚮씪?곗? ?섎룞 smoke???꾩쭅 ?섑뻾?섏? ?딆븯??
+- Diagnostics媛 ?덉쓣 ??Issues ??shortcut??leave guard??留됲엳吏 ?딅뒗 ?먮쫫? ?먮룞 ?뚯뒪?몃줈 ?뺤씤?덇퀬, ?ㅼ젣 釉뚮씪?곗? ?섎룞 smoke???꾩쭅 ?섑뻾?섏? ?딆븯??
+- ?섏쐞 AI媛 吏?곹븳 deployment safety preflight mismatch? DeploymentPanel init ?ㅽ뙣 ??stale PENDING state???대쾲 ?꾩씠肄?preview/editor ?뚭? 蹂닿컯 踰붿쐞 諛뽰씠???꾩냽 ?묒뾽 ?꾨낫濡??⑥븯??
+- `HARNESS-007`: Representative Use Journey??browser/API smoke???꾩쭅 ?녿떎.
 
-## 다음으로 최선의 행동
+## ?ㅼ쓬?쇰줈 理쒖꽑???됰룞
 
-- 다음 Terraform 리소스 추가 시 shared definition/capability, web presentation, 필요 시 parameter catalog/`parameterPanel`, `ResourceType` 확장 여부, drift 테스트를 함께 맞춘다.
-- 브라우저에서 EC2/S3/CloudFront 같은 일반 resource icon을 새로 추가했을 때 `56x56` 크기로 보이고, VPC/Subnet 같은 영역 node는 기존 크기를 유지하는지 수동 smoke한다.
-- 브라우저에서 EC2/VPC/S3 아이콘을 반복 추가했을 때 Terraform Preview 이름이 순차 suffix로 생성되는지 수동 smoke한다.
-- 브라우저에서 CloudFront AI draft가 `AWS` fallback이 아니라 CloudFront icon으로 보이는지 수동 smoke한다.
-- Terraform editor에서 `aws_s3_bucket`, `data.aws_ami`, `aws_cloudfront_distribution` create proposal이 저장 시 자동 반영되고 icon/size가 유지되는지 수동 smoke한다.
-- Multi-file Terraform에서 `network.tf` 오류가 `main.tf`에 표시되지 않고 해당 파일에서만 빨간줄로 보이는지 확인한다.
-- 기존 VPC `cidr_block` 같은 same-identity value update가 저장 시 바로 반영되는지 확인한다.
-- Terraform editor에서 syntax error를 만든 뒤 `저장하고 나가기`를 눌렀을 때 모달이 닫히고 Terraform 탭의 물결 오류 표시가 바로 보이는지 확인한다.
-- Terraform diagnostics가 있는 상태에서 Issues 탭을 클릭했을 때 저장 확인 모달 없이 Issues 탭이 열리는지 확인한다.
-- 별도 이슈로 pre-deployment artifact path와 backend artifact safety check 정렬을 검토한다.
+- ?ㅼ쓬 Terraform 由ъ냼??異붽? ??shared definition/capability, web presentation, ?꾩슂 ??parameter catalog/`parameterPanel`, `ResourceType` ?뺤옣 ?щ?, drift ?뚯뒪?몃? ?④퍡 留욎텣??
+- 釉뚮씪?곗??먯꽌 EC2/S3/CloudFront 媛숈? ?쇰컲 resource icon???덈줈 異붽??덉쓣 ??`56x56` ?ш린濡?蹂댁씠怨? VPC/Subnet 媛숈? ?곸뿭 node??湲곗〈 ?ш린瑜??좎??섎뒗吏 ?섎룞 smoke?쒕떎.
+- 釉뚮씪?곗??먯꽌 EC2/VPC/S3 ?꾩씠肄섏쓣 諛섎났 異붽??덉쓣 ??Terraform Preview ?대쫫???쒖감 suffix濡??앹꽦?섎뒗吏 ?섎룞 smoke?쒕떎.
+- 釉뚮씪?곗??먯꽌 CloudFront AI draft媛 `AWS` fallback???꾨땲??CloudFront icon?쇰줈 蹂댁씠?붿? ?섎룞 smoke?쒕떎.
+- Terraform editor?먯꽌 `aws_s3_bucket`, `data.aws_ami`, `aws_cloudfront_distribution` create proposal????????먮룞 諛섏쁺?섍퀬 icon/size媛 ?좎??섎뒗吏 ?섎룞 smoke?쒕떎.
+- Multi-file Terraform?먯꽌 `network.tf` ?ㅻ쪟媛 `main.tf`???쒖떆?섏? ?딄퀬 ?대떦 ?뚯씪?먯꽌留?鍮④컙以꾨줈 蹂댁씠?붿? ?뺤씤?쒕떎.
+- 湲곗〈 VPC `cidr_block` 媛숈? same-identity value update媛 ?????諛붾줈 諛섏쁺?섎뒗吏 ?뺤씤?쒕떎.
+- Terraform editor?먯꽌 syntax error瑜?留뚮뱺 ??`??ν븯怨??섍?湲?瑜??뚮?????紐⑤떖???ロ엳怨?Terraform ??쓽 臾쇨껐 ?ㅻ쪟 ?쒖떆媛 諛붾줈 蹂댁씠?붿? ?뺤씤?쒕떎.
+- Terraform diagnostics媛 ?덈뒗 ?곹깭?먯꽌 Issues ??쓣 ?대┃?덉쓣 ??????뺤씤 紐⑤떖 ?놁씠 Issues ??씠 ?대━?붿? ?뺤씤?쒕떎.
+- 蹂꾨룄 ?댁뒋濡?pre-deployment artifact path? backend artifact safety check ?뺣젹??寃?좏븳??
 
-## 건드리지 말아야 할 것
+## 嫄대뱶由ъ? 留먯븘????寃?
 
 - `.env`, private key, AWS credential, DB password, real access token
-- 사용자 승인 없는 Terraform apply/destroy, cloud mutation, 실제 GitHub PR/CI/CD handoff 실행
-- 사용자 확인 없는 Voice Requirement Input 또는 AI 제안의 Practice Architecture 반영
-- frontend UI component 안의 Terraform 실행, AWS SDK 호출, deployment mutation logic
+- ?ъ슜???뱀씤 ?녿뒗 Terraform apply/destroy, cloud mutation, ?ㅼ젣 GitHub PR/CI/CD handoff ?ㅽ뻾
+- ?ъ슜???뺤씤 ?녿뒗 Voice Requirement Input ?먮뒗 AI ?쒖븞??Practice Architecture 諛섏쁺
+- frontend UI component ?덉쓽 Terraform ?ㅽ뻾, AWS SDK ?몄텧, deployment mutation logic
 
-## 참고 명령
+## 李멸퀬 紐낅졊
 
 ```powershell
 pnpm harness:check
@@ -495,22 +698,22 @@ pnpm typecheck
 pnpm build
 ```
 
-## 2026-07-03 - Issue #128 Worker 1-1 핸드오프
+## 2026-07-03 - Issue #128 Worker 1-1 ?몃뱶?ㅽ봽
 
-### 현재 검증된 것
+### ?꾩옱 寃利앸맂 寃?
 
-- Direct Deployment 승인 스냅샷 재검증 동작은 기존 production code가 이미 만족했다. production 파일은 수정하지 않았다.
-- apply precondition 회귀 테스트를 추가했다.
+- Direct Deployment ?뱀씤 ?ㅻ깄???ш?利??숈옉? 湲곗〈 production code媛 ?대? 留뚯”?덈떎. production ?뚯씪? ?섏젙?섏? ?딆븯??
+- apply precondition ?뚭? ?뚯뒪?몃? 異붽??덈떎.
   - artifact hash drift
   - tfplan hash drift
   - AWS account drift
   - AWS region drift
   - missing approval snapshot fields
-  - drift 감지 시 apply service가 AWS credential 준비, plan file write, Terraform 실행 전에 멈추는지
-- 기존 destroy precondition 동작은 targeted destroy service test run으로 계속 검증했다.
-- `docs/sw/005_승인스냅샷재검증클론코딩가이드_sw.md`를 추가하고 `docs/sw/README.md`에서 연결했다.
+  - drift 媛먯? ??apply service媛 AWS credential 以鍮? plan file write, Terraform ?ㅽ뻾 ?꾩뿉 硫덉텛?붿?
+- 湲곗〈 destroy precondition ?숈옉? targeted destroy service test run?쇰줈 怨꾩냽 寃利앺뻽??
+- `docs/sw/005_?뱀씤?ㅻ깄?룹옱寃利앺겢濡좎퐫?⑷??대뱶_sw.md`瑜?異붽??섍퀬 `docs/sw/README.md`?먯꽌 ?곌껐?덈떎.
 
-### 실행한 검증
+### ?ㅽ뻾??寃利?
 
 - `pnpm harness:check` - passed before edits
 - `pnpm --filter @sketchcatch/api exec tsx --test src/deployments/deployment-approval-service.test.ts src/deployments/deployment-apply-service.test.ts src/deployments/deployment-destroy-service.test.ts` - passed
@@ -524,31 +727,31 @@ pnpm build
 - `git diff --check` - passed
 - `pnpm harness:check` - passed after note update
 
-### 남은 리스크와 다음 행동
+### ?⑥? 由ъ뒪?ъ? ?ㅼ쓬 ?됰룞
 
-- 이 worker branch를 #128 Worker 1-2 또는 1-3 범위로 확장하지 않는다. Parent agent가 이 focused diff를 review하고 PR을 연다.
-- 실제 AWS apply/destroy, cloud mutation, Git/CI/CD handoff, secret access는 수행하지 않았다.
+- ??worker branch瑜?#128 Worker 1-2 ?먮뒗 1-3 踰붿쐞濡??뺤옣?섏? ?딅뒗?? Parent agent媛 ??focused diff瑜?review?섍퀬 PR???곕떎.
+- ?ㅼ젣 AWS apply/destroy, cloud mutation, Git/CI/CD handoff, secret access???섑뻾?섏? ?딆븯??
 
-## 2026-07-05 - Issue #130 Direct Deployment 신뢰도 UX handoff
+## 2026-07-05 - Issue #130 Direct Deployment ?좊ː??UX handoff
 
 - Branch/worktree: `feature/sw/130-direct-deployment-safety-ux-docs` at `C:\Users\siwon\Desktop\Jungle\Week17~21\SketchCatch-worktrees\130-direct-deployment-safety-ux-docs`.
 - Scope completed: apply precondition mismatch messages now include approved/current snapshot values, mismatch failure is recorded as `failureStage: "approval"`, deployment log says `Apply blocked before Terraform apply`, Apply UI shows approved account/region/tfplan/artifact hash, and incomplete approval snapshot disables execution.
-- Docs completed: `docs/sw/009_Direct_Deployment_신뢰도_UX_클론코딩가이드_sw.md` plus docs/sw README link.
+- Docs completed: `docs/sw/009_Direct_Deployment_?좊ː??UX_?대줎肄붾뵫媛?대뱶_sw.md` plus docs/sw README link.
 - Verification completed: targeted API tests, targeted web action-state test, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and final `pnpm harness:check` passed.
 - Remaining risk: no real AWS apply/destroy was run; full `pnpm test` was not run.
 
 ## 2026-07-04 - Issue #132 Redis Runtime Cache adapter handoff
 
-### 현재 검증된 것
+### ?꾩옱 寃利앸맂 寃?
 
-- #131의 `RuntimeCache` abstraction 위에 Redis adapter slice를 추가했다.
-- `REDIS_URL`이 없거나 `NODE_ENV=test`이면 Redis client를 만들지 않고 in-memory Runtime Cache를 사용한다.
-- Redis adapter는 lazy connection을 사용하고, `set`은 Redis `PX` TTL과 local fallback을 함께 기록한다.
-- Redis connect 실패나 command 실패는 API 요청을 깨지 않고 `onDegraded` callback 후 local fallback으로 돌아간다.
-- `redis` dependency 추가 때문에 `apps/api/package.json`과 `pnpm-lock.yaml`이 변경되었다.
-- `.env.example`, `docs/data-models.md`, `docs/deployment.md`, `docs/sw/007_레디스런타임캐시어댑터가이드_sw.md`, `docs/sw/README.md`에 설정/설계/학습 문서를 반영했다.
+- #131??`RuntimeCache` abstraction ?꾩뿉 Redis adapter slice瑜?異붽??덈떎.
+- `REDIS_URL`???녾굅??`NODE_ENV=test`?대㈃ Redis client瑜?留뚮뱾吏 ?딄퀬 in-memory Runtime Cache瑜??ъ슜?쒕떎.
+- Redis adapter??lazy connection???ъ슜?섍퀬, `set`? Redis `PX` TTL怨?local fallback???④퍡 湲곕줉?쒕떎.
+- Redis connect ?ㅽ뙣??command ?ㅽ뙣??API ?붿껌??源⑥? ?딄퀬 `onDegraded` callback ??local fallback?쇰줈 ?뚯븘媛꾨떎.
+- `redis` dependency 異붽? ?뚮Ц??`apps/api/package.json`怨?`pnpm-lock.yaml`??蹂寃쎈릺?덈떎.
+- `.env.example`, `docs/data-models.md`, `docs/deployment.md`, `docs/sw/007_?덈뵒?ㅻ윴??꾩틦?쒖뼱?묓꽣媛?대뱶_sw.md`, `docs/sw/README.md`???ㅼ젙/?ㅺ퀎/?숈뒿 臾몄꽌瑜?諛섏쁺?덈떎.
 
-### 실행한 검증
+### ?ㅽ뻾??寃利?
 
 - `pnpm harness:check` - passed before edits
 - `pnpm --filter @sketchcatch/api exec tsx --test src/runtime-cache/in-memory-runtime-cache.test.ts src/runtime-cache/redis-runtime-cache.test.ts src/runtime-cache/runtime-cache-factory.test.ts` - passed
@@ -560,11 +763,11 @@ pnpm build
 - `$env:S3_BUCKET_NAME='sketchcatch-test-bucket'; pnpm --filter @sketchcatch/api test` - passed
 - `git diff --check` - passed
 
-### 남은 행동
+### ?⑥? ?됰룞
 
-- final `pnpm harness:check`를 다시 실행한다.
-- diff 자체 리뷰 후 #132 범위만 commit/push/PR 생성한다.
-- 다른 이슈(#129~#136)는 이 branch에서 건드리지 않는다.
+- final `pnpm harness:check`瑜??ㅼ떆 ?ㅽ뻾?쒕떎.
+- diff ?먯껜 由щ럭 ??#132 踰붿쐞留?commit/push/PR ?앹꽦?쒕떎.
+- ?ㅻⅨ ?댁뒋(#129~#136)????branch?먯꽌 嫄대뱶由ъ? ?딅뒗??
 ## 2026-07-05 - Issue #135 GitHub PR handoff v0 handoff
 
 - Branch/worktree: `feature/sw/135-github-pr-handoff-v0` at `C:\Users\siwon\Desktop\Jungle\Week17~21\SketchCatch-worktrees\135-github-pr-handoff-v0`.
@@ -600,7 +803,7 @@ pnpm build
   - Run actual GitHub PR handoff against a connected repo and confirm Actions polling.
   - Attach actual ElastiCache `REDIS_URL` to API runtime and verify deployment log cursor / Git pipeline status cache goes through Redis.
   - Run `scripts/smoke/live-s3-deployment.ps1` with `API_BASE_URL`, `ACCESS_TOKEN` or smoke login env, `AWS_CONNECTION_ID`, `SMOKE_ACCOUNT_ID`, `AWS_REGION`.
-## 2026-07-05 - Spec3 plan3 회귀 테스트 보강 handoff
+## 2026-07-05 - Spec3 plan3 ?뚭? ?뚯뒪??蹂닿컯 handoff
 
 - Current branch/worktree: `codex/spec3-deployment-github-runtime-cache` at `C:\Users\siwon\Desktop\Jungle\Week17~21\SketchCatch`.
 - Scope completed:
@@ -614,7 +817,7 @@ pnpm build
 - Remaining external validation:
   - Real GitHub App install/PR creation, real AWS apply/destroy smoke, and real ElastiCache `REDIS_URL` runtime validation still require credentials and a prepared environment.
 
-## 2026-07-05 - Spec3 plan3 route/smoke 실행성 보강 handoff
+## 2026-07-05 - Spec3 plan3 route/smoke ?ㅽ뻾??蹂닿컯 handoff
 
 - Current branch/worktree: `codex/spec3-deployment-github-runtime-cache` at `C:\Users\siwon\Desktop\Jungle\Week17~21\SketchCatch`.
 - Scope completed:
@@ -627,7 +830,7 @@ pnpm build
 - Remaining external validation:
   - Real GitHub App install/PR creation, real AWS apply/destroy smoke, and real ElastiCache `REDIS_URL` validation still require credentials and a prepared environment.
 
-## 2026-07-05 - Spec3 최신화/운영 준비 재판단 handoff
+## 2026-07-05 - Spec3 理쒖떊???댁쁺 以鍮??ы뙋??handoff
 
 - Current branch/worktree: `codex/spec3-deployment-github-runtime-cache` at `C:\Users\siwon\Desktop\Jungle\Week17~21\SketchCatch`.
 - Branch update:
@@ -652,7 +855,7 @@ pnpm build
   - Run a fresh deploy workflow so operating containers receive the new env values.
   - Then execute GitHub App install/repo selection/PR handoff and `scripts/smoke/live-s3-deployment.ps1` with prepared smoke env.
 
-## 2026-07-06 - GitHub App source repository 운영 검증 handoff
+## 2026-07-06 - GitHub App source repository ?댁쁺 寃利?handoff
 
 - Current branch/worktree: `feature/sw/deployment-github-runtime-cache` at `C:\Users\siwon\Desktop\Jungle\Week17~21\SketchCatch`.
 - Completed:
@@ -674,7 +877,7 @@ pnpm build
   - Replace repo secret `GIT_APP_PRIVATE_KEY_BASE64` with the production `sketchcatch` GitHub App private key, base64 encoded.
   - Deploy the PKCS#1 compatibility patch, then retest GitHub App callback/repo selection.
 
-## 2026-07-06 - GitHub App source repository 운영 연결 완료 handoff
+## 2026-07-06 - GitHub App source repository ?댁쁺 ?곌껐 ?꾨즺 handoff
 
 - Current branch/worktree: `feature/sw/deployment-github-runtime-cache` at `C:\Users\siwon\Desktop\Jungle\Week17~21\SketchCatch`.
 - Completed:
@@ -686,3 +889,11 @@ pnpm build
   - Connected `NearthYou/sketchcatch-iac-handoff-test`; production Deployment panel now shows the connected source repository, default branch `main`, and repository URL.
 - Remaining product issue:
   - For an already-installed GitHub App account, GitHub's `Configure` link navigates to `/settings/installations/:id` without preserving SketchCatch state. The API/callback works, but the natural UX for pre-installed accounts needs a follow-up design or implementation.
+
+## 2026-07-06 - Cost Estimate 湲곌컙/?ъ슜??諛곗쑉 handoff
+
+- Branch/worktree: `feat/ys/142-cost-risk-遺꾩꽍-援ы쁽` at `C:\krafton_jungle\SketchCatch`.
+- Scope completed: 鍮꾩슜 ?곗젙 DTO??`ResourceCostEstimate.periodEstimate`瑜?異붽??덇퀬, API?????섏궛 湲덉븸怨??붿껌 湲곌컙 湲덉븸???④퍡 諛섑솚?쒕떎. ?덉긽 ?ъ슜???섎뒗 湲곕낯 1,000紐??鍮?諛곗쑉濡?EC2/RDS/EBS/RDS snapshot/ElastiCache/ECS/NAT Gateway/VPC Endpoint/ALB ?⑸웾 ?곗젙??諛섏쁺?쒕떎. ?붿껌????λ웾/?꾩넚??湲곕컲 由ъ냼?ㅻ뒗 湲곗〈 ?뚯깮??紐⑤뜽???좎??덈떎.
+- UI completed: 鍮꾩슜愿由??꾨줈?앺듃 ?곸꽭? ?뚰겕?ㅽ럹?댁뒪 AI ?쒕??덉씠??由ъ냼???곸꽭媛 `monthlyEstimate` ????좏깮 湲곌컙??`periodEstimate`瑜??쒖떆?쒕떎.
+- Verification completed: focused API tests, API/web typecheck, `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, `git diff --check`.
+- Remaining risk: ?ㅼ젣 AWS SSO credential 湲곕컲 AWS Pricing API ?몄텧? 寃利앺븯吏 ?딆븯?? ?꾩옱 寃利앹? fallback 寃쎈줈? fake pricing provider 湲곕컲?대떎.

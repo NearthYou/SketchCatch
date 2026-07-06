@@ -5,11 +5,7 @@ import type {
   AiPreDeploymentAnalysisResult,
   ArchitectureJson,
   AwsConnection,
-  CheckFinding,
-  DeploymentBlockedBy,
-  DeploymentStatus,
-  DeploymentPlanSummary,
-  DeploymentPlanWarning
+  DeploymentStatus
 } from "@sketchcatch/types";
 import {
   prepareTerraformAwsCredentialEnv as defaultPrepareTerraformAwsCredentialEnv,
@@ -34,6 +30,7 @@ import {
   createS3DeploymentPlanArtifactStorage,
   type DeploymentPlanArtifactStorage
 } from "./deployment-plan-artifact-storage.js";
+import { evaluateDeploymentSafetyGate } from "./deployment-safety-gate.js";
 import {
   appendDeploymentLogs,
   DeploymentConflictError,
@@ -323,12 +320,12 @@ export async function runDeploymentPlan(
     const unsupportedResourceTypes = findUnsupportedLiveApplyResourceTypesFromTerraformShowJson(
       terraform.showJson.stdout
     );
-    const planSummary = createBlockedPlanSummary(
-      createDeploymentPlanSummaryFromTerraformShowJson(terraform.showJson.stdout),
-      preDeploymentAnalysis.findings,
+    const planSummary = evaluateDeploymentSafetyGate({
+      operation: "apply",
+      planSummary: createDeploymentPlanSummaryFromTerraformShowJson(terraform.showJson.stdout),
+      findings: preDeploymentAnalysis.findings,
       unsupportedResourceTypes
-    );
-    const block = createDeploymentPlanBlock(planSummary, unsupportedResourceTypes);
+    });
     const planArtifactId = generatePlanArtifactId();
     let uploadedPlanArtifact: Awaited<
       ReturnType<DeploymentPlanArtifactStorage["uploadDeploymentPlanArtifact"]>
@@ -375,9 +372,9 @@ export async function runDeploymentPlan(
               region: awsCredentials.region
             },
             planSummary,
-            isBlocked: block.isBlocked,
-            blockedBy: block.blockedBy,
-            blockedReason: block.blockedReason
+            isBlocked: false,
+            blockedBy: null,
+            blockedReason: null
           })
       });
       const updatedDeployment = planSave.result;
@@ -442,7 +439,7 @@ async function canReuseDeploymentPlanArtifact(input: {
   if (
     !input.deployment.currentPlanArtifactId ||
     !input.deployment.planSummary ||
-    !input.deployment.isBlocked
+    input.deployment.approvedAt
   ) {
     return false;
   }
@@ -610,90 +607,6 @@ async function failDeployment(
   }
 
   return failedDeployment;
-}
-
-function createBlockedPlanSummary(
-  summary: DeploymentPlanSummary,
-  findings: readonly CheckFinding[],
-  unsupportedResourceTypes: readonly string[] = []
-): DeploymentPlanSummary {
-  const highRiskWarnings = findings
-    .filter((finding) => finding.severity === "high")
-    .map(toPlanWarning);
-  const unsupportedResourceWarnings = unsupportedResourceTypes.map((resourceType) => ({
-    level: "high" as const,
-    message: `MVP live apply does not support Terraform resource type ${resourceType}`
-  }));
-  const warnings = [...summary.warnings, ...highRiskWarnings, ...unsupportedResourceWarnings];
-
-  return {
-    ...summary,
-    blocked: true,
-    warnings
-  };
-}
-
-function createDeploymentPlanBlock(
-  summary: DeploymentPlanSummary,
-  unsupportedResourceTypes: readonly string[] = []
-): {
-  isBlocked: boolean;
-  blockedBy: DeploymentBlockedBy;
-  blockedReason: string;
-} {
-  const hasRiskFinding = summary.warnings.some((warning) => warning.level === "high");
-  const hasDestructiveChange = summary.deleteCount > 0 || summary.replaceCount > 0;
-
-  if (unsupportedResourceTypes.length > 0) {
-    return {
-      isBlocked: true,
-      blockedBy: "risk_analysis",
-      blockedReason: `Unsupported Terraform resource types for MVP live apply: ${unsupportedResourceTypes.join(", ")}`
-    };
-  }
-
-  if (hasRiskFinding && hasDestructiveChange) {
-    return {
-      isBlocked: true,
-      blockedBy: "risk_analysis",
-      blockedReason: "Plan includes destructive changes and high-risk findings"
-    };
-  }
-
-  if (hasDestructiveChange) {
-    return {
-      isBlocked: true,
-      blockedBy: "risk_analysis",
-      blockedReason: "Plan includes delete or replace changes"
-    };
-  }
-
-  if (hasRiskFinding) {
-    return {
-      isBlocked: true,
-      blockedBy: "risk_analysis",
-      blockedReason: "Pre-Deployment Check found high-risk findings"
-    };
-  }
-
-  return {
-    isBlocked: true,
-    blockedBy: "missing_approval",
-    blockedReason: "Terraform Plan requires user approval before apply"
-  };
-}
-
-function toPlanWarning(finding: CheckFinding): DeploymentPlanWarning {
-  const warning: DeploymentPlanWarning = {
-    level: "high",
-    message: `${finding.title}: ${finding.recommendation}`
-  };
-
-  if (finding.resourceId) {
-    warning.relatedResourceId = finding.resourceId;
-  }
-
-  return warning;
 }
 
 async function appendTerraformOutput(input: {

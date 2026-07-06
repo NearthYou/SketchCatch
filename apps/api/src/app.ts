@@ -4,7 +4,9 @@ import type { ApiErrorCode } from "@sketchcatch/types";
 import { startRefreshTokenCleanupJob } from "./auth/cleanup.js";
 import { type DatabaseClient, getDatabaseClient } from "./db/client.js";
 import { registerAiRoutes } from "./routes/ai.js";
+import type { CostPricingRateProvider } from "./services/cost-analysis.js";
 import type { CreateLlmExplanation } from "./services/aiLlmExplanation.js";
+import type { CreateSafetyFindingExplanation } from "./services/aiSafetyFindingExplanation.js";
 import { registerHealthRoutes } from "./routes/health.js";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { registerOAuthRoutes } from "./routes/oauth.js";
@@ -15,6 +17,7 @@ import {
 } from "./routes/source-repositories.js";
 import { registerDeploymentRoutes } from "./routes/deployments.js";
 import { registerGitCicdHandoffRoutes } from "./routes/git-cicd-handoffs.js";
+import { registerCostRoutes } from "./routes/costs.js";
 import {
   createDelegatingGitCicdHandoffProvider,
   createGitHubGitCicdHandoffProvider
@@ -26,6 +29,10 @@ import {
   type TerraformRouteOptions
 } from "./routes/terraform.js";
 import { registerAwsConnectionRoutes } from "./routes/aws-connections.js";
+import {
+  registerReverseEngineeringRoutes,
+  type ReverseEngineeringRouteOptions
+} from "./routes/reverse-engineering.js";
 import type { ProjectDeletionStorage } from "./projects/project-deletion-service.js";
 import {
   createInMemoryRateLimiter,
@@ -43,6 +50,8 @@ const fallbackCorsAllowedHeaders = "content-type,authorization";
 export type BuildAppOptions = {
   getDatabaseClient?: () => DatabaseClient;
   createLlmExplanation?: CreateLlmExplanation;
+  createSafetyFindingExplanation?: CreateSafetyFindingExplanation;
+  pricingRateProvider?: CostPricingRateProvider;
   oauthCallbackRateLimiter?: RateLimiter;
   oauthStartRateLimiter?: RateLimiter;
   passwordResetRequestEmailRateLimiter?: RateLimiter;
@@ -55,6 +64,7 @@ export type BuildAppOptions = {
   >;
   runtimeCache?: RuntimeCache;
   validateTerraformPreviewCode?: TerraformRouteOptions["validateTerraformPreviewCode"];
+  reverseEngineeringServiceOptions?: ReverseEngineeringRouteOptions["serviceOptions"];
 };
 
 // 테스트와 서버가 같은 앱을 쓰되, LLM 호출 계층은 옵션으로만 주입합니다.
@@ -183,6 +193,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     gitCicdPipelineStatusProvider: createGitHubActionsPipelineStatusProvider(),
     runtimeCache
   });
+  app.register(registerCostRoutes, createCostRouteOptions(options, getAppDatabaseClient));
   app.register(
     registerTerraformRoutes,
     createTerraformRouteOptions(options, getAppDatabaseClient)
@@ -191,19 +202,52 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     prefix: "/api",
     getDatabaseClient: getAppDatabaseClient
   });
+  app.register(registerReverseEngineeringRoutes, {
+    prefix: "/api",
+    getDatabaseClient: getAppDatabaseClient,
+    serviceOptions: options.reverseEngineeringServiceOptions
+  });
 
   return app;
 }
 
 // AI route 옵션은 undefined 필드를 넘기지 않게 분리해 exact optional 타입을 지킵니다.
-function createAiRouteOptions(options: BuildAppOptions): { readonly prefix: "/api"; readonly createLlmExplanation?: CreateLlmExplanation } {
-  if (options.createLlmExplanation === undefined) {
+function createAiRouteOptions(options: BuildAppOptions): {
+  readonly prefix: "/api";
+  readonly createLlmExplanation?: CreateLlmExplanation;
+  readonly createSafetyFindingExplanation?: CreateSafetyFindingExplanation;
+  readonly pricingRateProvider?: CostPricingRateProvider;
+} {
+  if (
+    options.createLlmExplanation === undefined &&
+    options.createSafetyFindingExplanation === undefined &&
+    options.pricingRateProvider === undefined
+  ) {
     return { prefix: "/api" };
   }
 
   return {
     prefix: "/api",
-    createLlmExplanation: options.createLlmExplanation
+    ...(options.createLlmExplanation === undefined ? {} : { createLlmExplanation: options.createLlmExplanation }),
+    ...(options.createSafetyFindingExplanation === undefined
+      ? {}
+      : { createSafetyFindingExplanation: options.createSafetyFindingExplanation }),
+    ...(options.pricingRateProvider === undefined ? {} : { pricingRateProvider: options.pricingRateProvider })
+  };
+}
+
+function createCostRouteOptions(
+  options: BuildAppOptions,
+  getDatabaseClient: () => DatabaseClient
+): {
+  readonly prefix: "/api";
+  readonly getDatabaseClient: () => DatabaseClient;
+  readonly pricingRateProvider?: CostPricingRateProvider;
+} {
+  return {
+    prefix: "/api",
+    getDatabaseClient,
+    ...(options.pricingRateProvider === undefined ? {} : { pricingRateProvider: options.pricingRateProvider })
   };
 }
 

@@ -1,4 +1,4 @@
-import { relations, sql } from "drizzle-orm";
+﻿import { relations, sql } from "drizzle-orm";
 import {
   boolean,
   index,
@@ -11,7 +11,13 @@ import {
   uniqueIndex,
   varchar
 } from "drizzle-orm/pg-core";
-import type { ArchitectureJson, DeploymentPlanSummary, DiagramJson } from "@sketchcatch/types";
+import type {
+  ArchitectureJson,
+  DeploymentPlanSummary,
+  DiagramJson,
+  ResourceType,
+  ReverseEngineeringScanResult
+} from "@sketchcatch/types";
 
 export const assetTypeEnum = pgEnum("asset_type", [
   "diagram_png",
@@ -85,6 +91,30 @@ export const deploymentPlanOperationEnum = pgEnum("deployment_plan_operation", [
 ]);
 
 export const deploymentLogLevelEnum = pgEnum("deployment_log_level", ["INFO", "WARN", "ERROR"]);
+
+export const reverseEngineeringScanStatusEnum = pgEnum("reverse_engineering_scan_status", [
+  "queued",
+  "running",
+  "completed",
+  "failed",
+  "cancelled"
+]);
+
+export const reverseEngineeringScanStageEnum = pgEnum("reverse_engineering_scan_stage", [
+  "credential",
+  "region",
+  "provider_api",
+  "normalize",
+  "draft",
+  "analysis",
+  "import_suggestion"
+]);
+
+export const reverseEngineeringScanLogLevelEnum = pgEnum("reverse_engineering_scan_log_level", [
+  "INFO",
+  "WARN",
+  "ERROR"
+]);
 
 export const awsConnectionStatusEnum = pgEnum("aws_connection_status", [
   "pending",
@@ -324,6 +354,58 @@ export const awsConnections = pgTable(
   ]
 );
 
+export const reverseEngineeringScans = pgTable(
+  "reverse_engineering_scans",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    projectId: varchar("project_id", { length: 36 })
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    awsConnectionId: varchar("aws_connection_id", { length: 36 })
+      .notNull()
+      .references(() => awsConnections.id, { onDelete: "restrict" }),
+    provider: varchar("provider", { length: 32 }).notNull().default("aws"),
+    region: varchar("region", { length: 32 }).notNull(),
+    resourceTypes: jsonb("resource_types").$type<ResourceType[]>().notNull(),
+    status: reverseEngineeringScanStatusEnum("status").notNull().default("queued"),
+    result: jsonb("result").$type<ReverseEngineeringScanResult>(),
+    errorSummary: text("error_summary"),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    cancelRequestedAt: timestamp("cancel_requested_at", { withTimezone: true }),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [
+    index("reverse_engineering_scans_project_id_idx").on(table.projectId),
+    index("reverse_engineering_scans_status_idx").on(table.status),
+    index("reverse_engineering_scans_aws_connection_id_idx").on(table.awsConnectionId)
+  ]
+);
+
+export const reverseEngineeringScanLogs = pgTable(
+  "reverse_engineering_scan_logs",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    scanId: varchar("scan_id", { length: 36 })
+      .notNull()
+      .references(() => reverseEngineeringScans.id, { onDelete: "cascade" }),
+    sequence: integer("sequence").notNull(),
+    stage: reverseEngineeringScanStageEnum("stage").notNull(),
+    level: reverseEngineeringScanLogLevelEnum("level").notNull(),
+    message: text("message").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [
+    index("reverse_engineering_scan_logs_scan_id_idx").on(table.scanId),
+    uniqueIndex("reverse_engineering_scan_logs_scan_sequence_unique").on(
+      table.scanId,
+      table.sequence
+    )
+  ]
+);
+
 export const deployments = pgTable(
   "deployments",
   {
@@ -518,6 +600,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   oauthAccounts: many(oauthAccounts),
   awsConnections: many(awsConnections),
   sourceRepositories: many(sourceRepositories),
+  reverseEngineeringScans: many(reverseEngineeringScans),
   gitCicdHandoffs: many(gitCicdHandoffs)
 }));
 
@@ -559,6 +642,7 @@ export const projectsRelations = relations(projects, ({ many, one }) => ({
   assets: many(projectAssets),
   sourceRepositories: many(sourceRepositories),
   deployments: many(deployments),
+  reverseEngineeringScans: many(reverseEngineeringScans),
   gitCicdHandoffs: many(gitCicdHandoffs)
 }));
 
@@ -680,12 +764,38 @@ export const terraformOutputsRelations = relations(terraformOutputs, ({ one }) =
   })
 }));
 
-export const awsConnectionsRelations = relations(awsConnections, ({ one }) => ({
+export const awsConnectionsRelations = relations(awsConnections, ({ one, many }) => ({
   user: one(users, {
     fields: [awsConnections.userId],
     references: [users.id]
-  })
+  }),
+  reverseEngineeringScans: many(reverseEngineeringScans)
 }));
+
+export const reverseEngineeringScansRelations = relations(
+  reverseEngineeringScans,
+  ({ many, one }) => ({
+    project: one(projects, {
+      fields: [reverseEngineeringScans.projectId],
+      references: [projects.id]
+    }),
+    awsConnection: one(awsConnections, {
+      fields: [reverseEngineeringScans.awsConnectionId],
+      references: [awsConnections.id]
+    }),
+    logs: many(reverseEngineeringScanLogs)
+  })
+);
+
+export const reverseEngineeringScanLogsRelations = relations(
+  reverseEngineeringScanLogs,
+  ({ one }) => ({
+    scan: one(reverseEngineeringScans, {
+      fields: [reverseEngineeringScanLogs.scanId],
+      references: [reverseEngineeringScans.id]
+    })
+  })
+);
 
 export const touchUpdatedAt = {
   updatedAt: sql`now()`
