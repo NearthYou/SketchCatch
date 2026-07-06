@@ -30,6 +30,28 @@ export function createTerraformDiagnosticKey(diagnostic: TerraformDiagnostic | n
   });
 }
 
+export function combineTerraformDiagnostics(
+  ...diagnosticGroups: readonly (readonly TerraformDiagnostic[])[]
+): TerraformDiagnostic[] {
+  const seenDiagnosticKeys = new Set<string>();
+  const combinedDiagnostics: TerraformDiagnostic[] = [];
+
+  for (const diagnostics of diagnosticGroups) {
+    for (const diagnostic of diagnostics) {
+      const diagnosticKey = createTerraformDiagnosticKey(diagnostic);
+
+      if (seenDiagnosticKeys.has(diagnosticKey)) {
+        continue;
+      }
+
+      seenDiagnosticKeys.add(diagnosticKey);
+      combinedDiagnostics.push(diagnostic);
+    }
+  }
+
+  return combinedDiagnostics;
+}
+
 export function mergeTerraformValidationDiagnostics(
   _currentIssues: readonly TerraformIssueRecord[],
   diagnostics: readonly TerraformDiagnostic[],

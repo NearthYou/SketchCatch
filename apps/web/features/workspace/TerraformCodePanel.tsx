@@ -48,7 +48,7 @@ import {
   type TerraformCodeReplacementPreview,
   type TerraformSafeFixResult
 } from "./terraform-safe-fixes";
-import { createTerraformDiagnosticKey } from "./terraform-issues-state";
+import { combineTerraformDiagnostics, createTerraformDiagnosticKey } from "./terraform-issues-state";
 import type { TerraformPreviewAiRequest } from "./workspace-terraform-ai";
 import type { RequestState } from "./workspace-right-panel.types";
 import styles from "./workspace.module.css";
@@ -464,7 +464,7 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
     }
 
     const requestCodeVersion = codeVersionRef.current;
-    setStatusMessage("기본 문법 확인 중");
+    setStatusMessage("Terraform 오류 확인 중");
 
     const validationDiagnostics = await validateTerraformVirtualFiles({
       combinedTerraformCode,
@@ -533,10 +533,12 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
       return null;
     }
 
-    setDiagnostics(syncResult.diagnostics);
-    onDiagnosticsChange(syncResult.diagnostics);
+    const nextDiagnostics = combineTerraformDiagnostics(validationDiagnostics, syncResult.diagnostics);
 
-    const syncError = syncResult.diagnostics.find((diagnostic) => diagnostic.severity === "error");
+    setDiagnostics(nextDiagnostics);
+    onDiagnosticsChange(nextDiagnostics);
+
+    const syncError = nextDiagnostics.find((diagnostic) => diagnostic.severity === "error");
 
     if (syncError) {
       setSaveBanner(null);
@@ -688,16 +690,28 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
         };
       }
 
+      if (hasBlockingTerraformDiagnostic(validationDiagnostics)) {
+        setRequestState("idle");
+        setStatusMessage("재검증 필요");
+        return {
+          applied: true,
+          code: nextCombinedTerraformCode,
+          message: "AI 수정안을 적용했습니다. 남아 있는 Terraform 이슈를 Issues 탭에서 확인하세요."
+        };
+      }
+
       const syncResult = await syncTerraformToDiagram({
         diagramJson: context.diagram,
         terraformCode: nextCombinedTerraformCode,
         terraformFiles: toTerraformValidationFiles(nextFiles)
       });
 
-      setDiagnostics(syncResult.diagnostics);
-      onDiagnosticsChange(syncResult.diagnostics);
+      const nextDiagnostics = combineTerraformDiagnostics(validationDiagnostics, syncResult.diagnostics);
 
-      const syncError = syncResult.diagnostics.find((nextDiagnostic) => nextDiagnostic.severity === "error");
+      setDiagnostics(nextDiagnostics);
+      onDiagnosticsChange(nextDiagnostics);
+
+      const syncError = nextDiagnostics.find((nextDiagnostic) => nextDiagnostic.severity === "error");
 
       if (syncError) {
         setRequestState("idle");
