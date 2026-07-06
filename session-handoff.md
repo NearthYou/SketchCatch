@@ -673,3 +673,16 @@ pnpm build
   - Replace repo variable `GIT_APP_ID` with `4219941`.
   - Replace repo secret `GIT_APP_PRIVATE_KEY_BASE64` with the production `sketchcatch` GitHub App private key, base64 encoded.
   - Deploy the PKCS#1 compatibility patch, then retest GitHub App callback/repo selection.
+
+## 2026-07-06 - GitHub App source repository 운영 연결 완료 handoff
+
+- Current branch/worktree: `feature/sw/deployment-github-runtime-cache` at `C:\Users\siwon\Desktop\Jungle\Week17~21\SketchCatch`.
+- Completed:
+  - Confirmed repo variable `GIT_APP_ID=4219941`, `GIT_APP_SLUG=sketchcatch`.
+  - Confirmed repo secret `GIT_APP_PRIVATE_KEY_BASE64` was updated on 2026-07-06.
+  - Ran production deploy workflow `28763336621`; it completed successfully.
+  - Verified production Deployment panel no longer shows source repository server errors.
+  - Verified SketchCatch callback can list installation repositories.
+  - Connected `NearthYou/sketchcatch-iac-handoff-test`; production Deployment panel now shows the connected source repository, default branch `main`, and repository URL.
+- Remaining product issue:
+  - For an already-installed GitHub App account, GitHub's `Configure` link navigates to `/settings/installations/:id` without preserving SketchCatch state. The API/callback works, but the natural UX for pre-installed accounts needs a follow-up design or implementation.

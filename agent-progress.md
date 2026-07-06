@@ -1618,3 +1618,20 @@
   - `pnpm build` - passed
 - Known risks:
   - 운영 GitHub App 연결을 완료하려면 `GIT_APP_ID`와 `GIT_APP_PRIVATE_KEY_BASE64`를 production App `sketchcatch` 값으로 교체해야 한다. `GIT_APP_SLUG=sketchcatch`는 유지한다.
+
+## 2026-07-06 - GitHub App source repository 운영 연결 완료 확인
+
+- Goal: production GitHub App credential 교체와 새 배포 이후 source repository 연결이 실제 운영 UI에서 표시되는지 확인한다.
+- Completed:
+  - GitHub repo variable `GIT_APP_ID=4219941`, `GIT_APP_SLUG=sketchcatch`와 `GIT_APP_PRIVATE_KEY_BASE64` 갱신을 확인했다.
+  - `Deploy Production` workflow run `28763336621`을 실행했고 성공했다.
+  - Chrome에서 운영 workspace의 Deployment panel을 확인했고, source repository 조회 서버 오류가 없는 것을 확인했다.
+  - GitHub App callback repository list가 정상 표시되는 것을 확인했다.
+  - `NearthYou/sketchcatch-iac-handoff-test` repository를 프로젝트에 연결했고, Deployment panel에 source repository, default branch `main`, repository URL이 표시되는 것을 확인했다.
+- Verification run:
+  - `gh variable list --repo NearthYou/SketchCatch` - `GIT_APP_ID=4219941`, `GIT_APP_SLUG=sketchcatch` 확인
+  - `gh secret list --repo NearthYou/SketchCatch` - `GIT_APP_PRIVATE_KEY_BASE64` 갱신 시각 확인
+  - `gh run watch 28763336621 --repo NearthYou/SketchCatch --exit-status` - passed
+  - Chrome verification - connected repository displayed in production UI
+- Known risks:
+  - GitHub에서 이미 설치된 계정의 `Configure` 링크는 state 없이 `/settings/installations/:id`로 이동한다. 새 설치 callback은 정상이나, 기존 설치 계정의 자연 연결 UX는 별도 보완이 필요하다.
