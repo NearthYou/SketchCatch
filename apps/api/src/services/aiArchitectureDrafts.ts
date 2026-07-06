@@ -286,7 +286,7 @@ const REQUIRED_ARCHITECTURE_QUESTIONS: readonly RequiredArchitectureQuestion[] =
       "급변동 (평상시 적지만 이벤트 시 급증)"
     ],
     isAnswered: (prompt) =>
-      /(예상\s*트래픽|트래픽|소규모|중간\s*규모|대규모|급변동|일\s*100명|일\s*1,000명|일\s*1000명|일\s*10,000명|일\s*10000명|동시\s*10명|동시\s*50명|동시\s*500명|daily\s*traffic|concurrent\s*users?)/i.test(
+      /(예상\s*트래픽|트래픽|소규모|중간\s*규모|대규모|급변동|일\s*100명|일\s*1,000명|일\s*1000명|일\s*10,000명|일\s*10000명|동접|동시\s*접속|동시\s*접속자|동시\s*\d[\d,]*\s*명|동시\s*10명|동시\s*50명|동시\s*500명|daily\s*traffic|concurrent\s*users?)/i.test(
         prompt
       )
   },
@@ -486,6 +486,9 @@ function createAmazonQArchitectureDraftInstructions(): string {
     "Do not perform deployment, apply, update, delete, or destroy actions.",
     "All architecture changes must remain user-accepted previews.",
     `Use only these ResourceNode.type values: ${SUPPORTED_RESOURCE_TYPES.join(", ")}.`,
+    "Do not artificially limit the architecture to one resource per type. If traffic, availability, security, or cost requirements justify it, use multiple EC2, SUBNET, S3, or other supported resources.",
+    "When multiple compute instances are needed, prefer multiple Availability Zones and include LOAD_BALANCER plus LOAD_BALANCER_LISTENER when that is the cost- and security-appropriate entry path.",
+    "For high concurrency or high availability requirements such as large concurrent users, 99.9%+ availability, or event traffic spikes, consider horizontally scaled compute across AZs instead of a single EC2 instance.",
     "If required information is missing, return a needs_clarification response with exactly one question.",
     "Do not include secrets, account IDs, credentials, ARNs, or private tokens.",
     "The preview JSON shape is:",

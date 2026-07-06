@@ -1,3 +1,40 @@
+# 2026-07-07 - Amazon Q scale-out 프롬프트 지시 보강
+
+- Goal: 다중 EC2, 다중 AZ, 로드 밸런서 필요 여부를 코드가 임의로 제한하지 않고 Amazon Q가 비용/보안 요구에 맞춰 판단하게 한다.
+- Completed:
+  - Amazon Q 아키텍처 초안 지시에 같은 리소스 타입을 하나로 제한하지 말라는 문구를 추가했다.
+  - 트래픽, 가용성, 보안, 비용 요구가 있으면 여러 EC2/SUBNET/S3 등 지원 리소스를 사용할 수 있게 지시했다.
+  - 다중 compute가 필요하면 여러 AZ와 `LOAD_BALANCER` + `LOAD_BALANCER_LISTENER`를 고려하라고 명시했다.
+  - 고동접, 99.9%+ 가용성, 이벤트성 급증 요구는 단일 EC2 대신 AZ 분산 수평 확장을 고려하라고 Amazon Q 프롬프트에 포함했다.
+  - Amazon Q provider에 전달되는 prompt에 해당 지시가 포함되는지 회귀 테스트를 추가했다.
+- Verification run:
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --dir apps/api exec tsx --test src/services/aiArchitectureDrafts.test.ts` - passed, 4 tests
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --dir apps/api exec tsx --test src/routes/ai.test.ts --test-name-pattern "architecture-draft"` - passed, 44 tests
+  - `pnpm harness:check` - passed
+  - `git diff --check` - passed, with line-ending warnings only
+  - `pnpm lint` - passed, with non-fatal Turbo cache rename warnings
+  - `pnpm typecheck` - passed, with non-fatal Turbo cache rename warnings
+  - `pnpm build` - first sandbox run failed on `.next` unlink `EPERM`; rerun with elevated permissions passed
+- Known risks:
+  - 실제 Amazon Q 서비스 응답은 로컬에서 호출하지 않았다. fake provider로 Amazon Q에 전달되는 prompt 내용을 검증했다.
+
+# 2026-07-07 - 동접자 트래픽 답변 인식 보정
+
+- Goal: 사용자가 `동접자 1000명은 버틸 수 있어야 돼`처럼 동시 접속자 조건을 이미 입력했을 때 예상 트래픽 규모를 다시 묻지 않게 한다.
+- Completed:
+  - 트래픽 답변 판별식이 `동접`, `동시 접속`, `동시 N명` 표현을 인식하도록 보강했다.
+  - `동접자 1000명` 입력 후 다음 질문이 데이터베이스 질문으로 넘어가는 회귀 테스트를 추가했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --dir apps/api exec tsx --test src/services/aiArchitectureDrafts.test.ts` - passed, 4 tests
+  - `pnpm harness:check` - passed after edits
+  - `git diff --check` - passed, with line-ending warnings only
+  - `pnpm lint` - passed, with non-fatal Turbo cache rename warnings
+  - `pnpm typecheck` - passed, with non-fatal Turbo cache rename warnings
+  - `pnpm build` - first sandbox run failed on `.next` unlink `EPERM`; rerun with elevated permissions passed
+- Known risks:
+  - 실제 브라우저 클릭 smoke는 수행하지 않았다. API 회귀 테스트와 전체 lint/typecheck/build로 검증했다.
+
 # 2026-07-07 - Amazon Q 웹사이트 배포 질문 세트 정렬
 
 - Goal: 웹사이트 배포 다이어그램 생성 전 Amazon Q로 넘길 필수 사전 질문을 사용자 제공 15개 질문과 선택지 그대로 순차 표시하게 한다.

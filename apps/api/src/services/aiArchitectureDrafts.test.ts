@@ -42,6 +42,29 @@ test("createAmazonQArchitectureDraftResponse asks the next required website ques
   ]);
 });
 
+test("createAmazonQArchitectureDraftResponse treats concurrent user capacity as traffic information", async () => {
+  const provider = createFakeAmazonQProvider(() => "{}");
+
+  const response = await createAmazonQArchitectureDraftResponse(
+    {
+      prompt: [
+        "동적 웹 애플리케이션 (쇼핑몰, 게시판, 회원 시스템)입니다.",
+        "동접자 1000명은 버틸 수 있어야 돼."
+      ].join("\n")
+    },
+    {
+      provider,
+      creditPolicy: confirmedCreditPolicy
+    }
+  );
+
+  if (!("status" in response)) {
+    assert.fail("Expected a clarification response");
+  }
+
+  assert.equal(response.question, "데이터베이스가 필요한가요?");
+});
+
 test("createAmazonQArchitectureDraftResponse asks clarification questions in the provided priority order", async () => {
   const provider = createFakeAmazonQProvider(() => "{}");
 
@@ -303,6 +326,10 @@ test("createAmazonQArchitectureDraftResponse returns the Amazon Q architecture p
 
   assert.ok(!("status" in response));
   assert.match(requestedPrompt, /정적 사이트/);
+  assert.match(requestedPrompt, /Do not artificially limit the architecture to one resource per type/);
+  assert.match(requestedPrompt, /multiple Availability Zones/);
+  assert.match(requestedPrompt, /LOAD_BALANCER plus LOAD_BALANCER_LISTENER/);
+  assert.match(requestedPrompt, /large concurrent users/);
   assert.equal(response.metadata.source, "amazon_q");
   assert.equal(response.title, "Cost Optimized Static Site");
   assert.equal(response.architectureJson.nodes[0]?.type, "S3");
