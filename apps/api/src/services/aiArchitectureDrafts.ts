@@ -62,12 +62,40 @@ const SUPPORTED_RESOURCE_TYPES = [
 ] satisfies ResourceType[];
 
 const SUPPORTED_RESOURCE_TYPE_SET = new Set<ResourceType>(SUPPORTED_RESOURCE_TYPES);
+const DEFAULT_PREVIEW_NODE_SIZE = { width: 124, height: 96 } as const;
+const PREVIEW_NODE_LAYOUT_SIZES: Partial<Record<ResourceType, LayoutSize>> = {
+  VPC: { width: 240, height: 160 },
+  SUBNET: { width: 180, height: 120 },
+  SECURITY_GROUP: { width: 180, height: 120 }
+};
+const PREVIEW_AREA_RESOURCE_TYPES = new Set<ResourceType>(["VPC", "SUBNET", "SECURITY_GROUP"]);
+const PREVIEW_BOUNDARY_RESOURCE_TYPES = new Set<ResourceType>(["INTERNET_GATEWAY"]);
+const PREVIEW_PARENT_EDGE_LABELS = new Set(["contains", "hosts"]);
+const TERRAFORM_REFERENCE_ATTRIBUTE_SUFFIXES = ["id", "arn", "name", "execution_arn"] as const;
+const RESOURCE_TYPE_TERRAFORM_NAMES: Partial<Record<ResourceType, string>> = {
+  VPC: "aws_vpc",
+  SUBNET: "aws_subnet",
+  SECURITY_GROUP: "aws_security_group"
+};
+const SECURITY_GROUP_REFERENCE_KEYS = ["securityGroupIds", "vpcSecurityGroupIds", "securityGroupId"] as const;
 
 type RequiredArchitectureQuestion = {
   readonly id: string;
   readonly question: string;
   readonly suggestions: string[];
   readonly isAnswered: (prompt: string) => boolean;
+};
+
+type LayoutSize = {
+  readonly width: number;
+  readonly height: number;
+};
+
+type LayoutRect = {
+  readonly left: number;
+  readonly top: number;
+  readonly right: number;
+  readonly bottom: number;
 };
 
 type AmazonQArchitectureDraftPreview = {
@@ -518,6 +546,8 @@ function createAmazonQArchitectureDraftInstructions(): string {
     "Do not artificially limit the architecture to one resource per type. If traffic, availability, security, or cost requirements justify it, use multiple EC2, SUBNET, S3, or other supported resources.",
     "When multiple compute instances are needed, prefer multiple Availability Zones and include LOAD_BALANCER plus LOAD_BALANCER_LISTENER when that is the cost- and security-appropriate entry path.",
     "For high concurrency or high availability requirements such as large concurrent users, 99.9%+ availability, or event traffic spikes, consider horizontally scaled compute across AZs instead of a single EC2 instance.",
+    "Layout rules: VPC, SUBNET, and SECURITY_GROUP nodes are area boxes. Nodes related by contains/hosts edges or config references such as vpcId, subnetId, securityGroupIds, or vpcSecurityGroupIds must be fully inside their parent area box.",
+    "Unrelated area boxes must not overlap. If an area belongs inside another area, place it fully inside and include the containment relationship. Boundary resources such as INTERNET_GATEWAY may sit on an area edge, but must not float half-overlapping unrelated areas.",
     "If required information is missing, return a needs_clarification response with exactly one question.",
     "Do not include secrets, account IDs, credentials, ARNs, or private tokens.",
     "The preview JSON shape is:",
@@ -565,7 +595,351 @@ function findAmazonQPreviewValidationIssues(
     issues.push("The user requested serverless or no EC2, but the preview includes EC2. Regenerate without EC2 and use serverless supported resources such as LAMBDA and API_GATEWAY_REST_API when compute is needed.");
   }
 
+  issues.push(...findArchitectureLayoutValidationIssues(architectureJson));
+
   return issues;
+}
+
+function findArchitectureLayoutValidationIssues(architectureJson: ArchitectureJson): string[] {
+  const nodesById = new Map(architectureJson.nodes.map((node) => [node.id, node]));
+  const rectsByNodeId = new Map(architectureJson.nodes.map((node) => [node.id, createPreviewNodeRect(node)]));
+  const parentAreaNodeIds = new Map<string, string>();
+  const issues: string[] = [];
+
+  for (const node of architectureJson.nodes) {
+    const parentAreaNodeId = findExpectedParentAreaNodeId(node, nodesById, architectureJson.edges);
+
+    if (parentAreaNodeId) {
+      parentAreaNodeIds.set(node.id, parentAreaNodeId);
+    }
+  }
+
+  for (const [nodeId, parentAreaNodeId] of parentAreaNodeIds) {
+    const node = nodesById.get(nodeId);
+    const parentNode = nodesById.get(parentAreaNodeId);
+    const nodeRect = rectsByNodeId.get(nodeId);
+    const parentRect = rectsByNodeId.get(parentAreaNodeId);
+
+    if (!node || !parentNode || !nodeRect || !parentRect || rectContains(parentRect, nodeRect)) {
+      continue;
+    }
+
+    issues.push(
+      `Layout violation: ${node.id} (${node.type}) must be fully inside parent area ${parentNode.id} (${parentNode.type}), but its coordinates are outside or only partially inside.`
+    );
+  }
+
+  const areaNodes = architectureJson.nodes.filter((node) => PREVIEW_AREA_RESOURCE_TYPES.has(node.type));
+
+  for (let leftIndex = 0; leftIndex < areaNodes.length; leftIndex += 1) {
+    for (let rightIndex = leftIndex + 1; rightIndex < areaNodes.length; rightIndex += 1) {
+      const leftNode = areaNodes[leftIndex];
+      const rightNode = areaNodes[rightIndex];
+
+      if (!leftNode || !rightNode) {
+        continue;
+      }
+
+      const leftRect = rectsByNodeId.get(leftNode.id);
+      const rightRect = rectsByNodeId.get(rightNode.id);
+
+      if (!leftRect || !rightRect || !rectsOverlap(leftRect, rightRect)) {
+        continue;
+      }
+
+      if (rectContains(leftRect, rightRect)) {
+        if (!hasAncestorAreaNode(leftNode.id, rightNode.id, parentAreaNodeIds)) {
+          issues.push(
+            `Layout violation: area box ${rightNode.id} (${rightNode.type}) is visually inside ${leftNode.id} (${leftNode.type}) without a containment relationship. Add the correct parent reference or separate the areas.`
+          );
+        }
+
+        continue;
+      }
+
+      if (rectContains(rightRect, leftRect)) {
+        if (!hasAncestorAreaNode(rightNode.id, leftNode.id, parentAreaNodeIds)) {
+          issues.push(
+            `Layout violation: area box ${leftNode.id} (${leftNode.type}) is visually inside ${rightNode.id} (${rightNode.type}) without a containment relationship. Add the correct parent reference or separate the areas.`
+          );
+        }
+
+        continue;
+      }
+
+      issues.push(
+        `Layout violation: area boxes ${leftNode.id} (${leftNode.type}) and ${rightNode.id} (${rightNode.type}) overlap without full containment. Make one fully contain the other only when semantically related, otherwise separate them.`
+      );
+    }
+  }
+
+  for (const node of architectureJson.nodes) {
+    if (PREVIEW_AREA_RESOURCE_TYPES.has(node.type) || PREVIEW_BOUNDARY_RESOURCE_TYPES.has(node.type)) {
+      continue;
+    }
+
+    const nodeRect = rectsByNodeId.get(node.id);
+
+    if (!nodeRect) {
+      continue;
+    }
+
+    for (const areaNode of areaNodes) {
+      if (hasAncestorAreaNode(areaNode.id, node.id, parentAreaNodeIds)) {
+        continue;
+      }
+
+      const areaRect = rectsByNodeId.get(areaNode.id);
+
+      if (!areaRect || !rectsOverlap(areaRect, nodeRect)) {
+        continue;
+      }
+
+      if (rectContains(areaRect, nodeRect)) {
+        issues.push(
+          `Layout violation: ${node.id} (${node.type}) is visually inside area ${areaNode.id} (${areaNode.type}) without a containment reference. Add the correct parent reference or place it outside.`
+        );
+
+        continue;
+      }
+
+      issues.push(
+        `Layout violation: ${node.id} (${node.type}) partially overlaps area ${areaNode.id} (${areaNode.type}) without being contained. Place it fully outside that area or add the correct containment reference.`
+      );
+    }
+  }
+
+  return issues.slice(0, 8);
+}
+
+function hasAncestorAreaNode(
+  ancestorAreaNodeId: string,
+  nodeId: string,
+  parentAreaNodeIds: ReadonlyMap<string, string>
+): boolean {
+  let parentAreaNodeId = parentAreaNodeIds.get(nodeId);
+  const visitedNodeIds = new Set<string>();
+
+  while (parentAreaNodeId) {
+    if (parentAreaNodeId === ancestorAreaNodeId) {
+      return true;
+    }
+
+    if (visitedNodeIds.has(parentAreaNodeId)) {
+      return false;
+    }
+
+    visitedNodeIds.add(parentAreaNodeId);
+    parentAreaNodeId = parentAreaNodeIds.get(parentAreaNodeId);
+  }
+
+  return false;
+}
+
+function findExpectedParentAreaNodeId(
+  node: ArchitectureJson["nodes"][number],
+  nodesById: ReadonlyMap<string, ArchitectureJson["nodes"][number]>,
+  edges: readonly ArchitectureJson["edges"][number][]
+): string | undefined {
+  if (node.type === "SECURITY_GROUP") {
+    const protectedSubnet = findProtectedSubnetAreaNode(node, nodesById);
+
+    if (protectedSubnet) {
+      return protectedSubnet.id;
+    }
+  }
+
+  const securityGroupParent = findReferencedSecurityGroupAreaNodes(node, nodesById)[0];
+
+  if (securityGroupParent) {
+    return securityGroupParent.id;
+  }
+
+  const subnetParent = findConfigAreaNodeByKey(node, "subnetId", nodesById);
+
+  if (subnetParent && subnetParent.id !== node.id) {
+    return subnetParent.id;
+  }
+
+  const vpcParent = findConfigAreaNodeByKey(node, "vpcId", nodesById);
+
+  if (vpcParent && vpcParent.id !== node.id) {
+    return vpcParent.id;
+  }
+
+  return findEdgeParentAreaNode(node, nodesById, edges)?.id;
+}
+
+function findProtectedSubnetAreaNode(
+  securityGroupNode: ArchitectureJson["nodes"][number],
+  nodesById: ReadonlyMap<string, ArchitectureJson["nodes"][number]>
+): ArchitectureJson["nodes"][number] | undefined {
+  for (const node of nodesById.values()) {
+    if (node.id === securityGroupNode.id || !referencesSecurityGroup(node, securityGroupNode, nodesById)) {
+      continue;
+    }
+
+    const subnetNode = findConfigAreaNodeByKey(node, "subnetId", nodesById);
+
+    if (subnetNode) {
+      return subnetNode;
+    }
+  }
+
+  return undefined;
+}
+
+function referencesSecurityGroup(
+  node: ArchitectureJson["nodes"][number],
+  securityGroupNode: ArchitectureJson["nodes"][number],
+  nodesById: ReadonlyMap<string, ArchitectureJson["nodes"][number]>
+): boolean {
+  return SECURITY_GROUP_REFERENCE_KEYS.flatMap((key) => getStringConfigValues(node, key)).some((referenceValue) => {
+    const referencedNode = findReferencedArchitectureNode(referenceValue, nodesById);
+
+    return referencedNode?.id === securityGroupNode.id;
+  });
+}
+
+function findReferencedSecurityGroupAreaNodes(
+  node: ArchitectureJson["nodes"][number],
+  nodesById: ReadonlyMap<string, ArchitectureJson["nodes"][number]>
+): ArchitectureJson["nodes"][number][] {
+  return SECURITY_GROUP_REFERENCE_KEYS.flatMap((key) => getStringConfigValues(node, key))
+    .map((referenceValue) => findReferencedArchitectureNode(referenceValue, nodesById))
+    .filter((referencedNode): referencedNode is ArchitectureJson["nodes"][number] => {
+      return referencedNode !== undefined && referencedNode.type === "SECURITY_GROUP";
+    });
+}
+
+function findConfigAreaNodeByKey(
+  node: ArchitectureJson["nodes"][number],
+  key: string,
+  nodesById: ReadonlyMap<string, ArchitectureJson["nodes"][number]>
+): ArchitectureJson["nodes"][number] | undefined {
+  const referencedNode = findConfigNodeByKey(node, key, nodesById);
+
+  return referencedNode && PREVIEW_AREA_RESOURCE_TYPES.has(referencedNode.type) ? referencedNode : undefined;
+}
+
+function findConfigNodeByKey(
+  node: ArchitectureJson["nodes"][number],
+  key: string,
+  nodesById: ReadonlyMap<string, ArchitectureJson["nodes"][number]>
+): ArchitectureJson["nodes"][number] | undefined {
+  const referenceValue = getStringConfigValue(node, key);
+
+  return referenceValue ? findReferencedArchitectureNode(referenceValue, nodesById) : undefined;
+}
+
+function findReferencedArchitectureNode(
+  rawReferenceValue: string,
+  nodesById: ReadonlyMap<string, ArchitectureJson["nodes"][number]>
+): ArchitectureJson["nodes"][number] | undefined {
+  const referenceValue = normalizeReferenceValue(rawReferenceValue);
+  const directNode = nodesById.get(referenceValue);
+
+  if (directNode) {
+    return directNode;
+  }
+
+  for (const node of nodesById.values()) {
+    if (matchesTerraformArchitectureNodeReference(referenceValue, node)) {
+      return node;
+    }
+  }
+
+  return undefined;
+}
+
+function matchesTerraformArchitectureNodeReference(
+  referenceValue: string,
+  node: ArchitectureJson["nodes"][number]
+): boolean {
+  const terraformResourceType = RESOURCE_TYPE_TERRAFORM_NAMES[node.type];
+
+  if (!terraformResourceType) {
+    return false;
+  }
+
+  const resourceNames = new Set([node.id, getStringConfigValue(node, "terraformResourceName")].filter(Boolean));
+  const references = [...resourceNames].flatMap((resourceName) => {
+    return TERRAFORM_REFERENCE_ATTRIBUTE_SUFFIXES.map((suffix) => `${terraformResourceType}.${resourceName}.${suffix}`);
+  });
+
+  return references.includes(referenceValue);
+}
+
+function findEdgeParentAreaNode(
+  node: ArchitectureJson["nodes"][number],
+  nodesById: ReadonlyMap<string, ArchitectureJson["nodes"][number]>,
+  edges: readonly ArchitectureJson["edges"][number][]
+): ArchitectureJson["nodes"][number] | undefined {
+  for (const edge of edges) {
+    if (edge.targetId !== node.id || !isPreviewParentEdge(edge)) {
+      continue;
+    }
+
+    const sourceNode = nodesById.get(edge.sourceId);
+
+    if (sourceNode && sourceNode.id !== node.id && PREVIEW_AREA_RESOURCE_TYPES.has(sourceNode.type)) {
+      return sourceNode;
+    }
+  }
+
+  return undefined;
+}
+
+function isPreviewParentEdge(edge: ArchitectureJson["edges"][number]): boolean {
+  return typeof edge.label === "string" && PREVIEW_PARENT_EDGE_LABELS.has(edge.label.trim().toLowerCase());
+}
+
+function createPreviewNodeRect(node: ArchitectureJson["nodes"][number]): LayoutRect {
+  const size = PREVIEW_NODE_LAYOUT_SIZES[node.type] ?? DEFAULT_PREVIEW_NODE_SIZE;
+
+  return {
+    left: node.positionX,
+    top: node.positionY,
+    right: node.positionX + size.width,
+    bottom: node.positionY + size.height
+  };
+}
+
+function rectContains(parent: LayoutRect, child: LayoutRect): boolean {
+  return (
+    child.left >= parent.left &&
+    child.top >= parent.top &&
+    child.right <= parent.right &&
+    child.bottom <= parent.bottom
+  );
+}
+
+function rectsOverlap(left: LayoutRect, right: LayoutRect): boolean {
+  return left.left < right.right && left.right > right.left && left.top < right.bottom && left.bottom > right.top;
+}
+
+function normalizeReferenceValue(value: string): string {
+  return value.trim().replace(/^\$\{(.+)\}$/u, "$1");
+}
+
+function getStringConfigValue(node: ArchitectureJson["nodes"][number], key: string): string | undefined {
+  const value = node.config[key];
+
+  return typeof value === "string" && value.trim().length > 0 ? value : undefined;
+}
+
+function getStringConfigValues(node: ArchitectureJson["nodes"][number], key: string): string[] {
+  const value = node.config[key];
+
+  if (typeof value === "string" && value.trim().length > 0) {
+    return [value];
+  }
+
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
 }
 
 function requiresServerlessOnlyArchitecture(normalizedPrompt: string): boolean {

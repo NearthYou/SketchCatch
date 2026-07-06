@@ -3437,3 +3437,23 @@
   - `pnpm build` - sandbox `.next` unlink EPERM 후 elevated 재시도 통과.
 - Known risks:
   - 실제 Amazon Q Business 호출과 브라우저 클릭 smoke는 수행하지 않았다.
+# 2026-07-07 - Amazon Q 다이어그램 area 레이아웃 검증 보강
+
+- Goal: Amazon Q가 만든 다이어그램 초안에서 VPC/Subnet/Security Group 같은 area의 포함 관계와 겹침 규칙이 깨지면 문제 내용을 Amazon Q에 전달해 다시 생성하게 한다.
+- Completed:
+  - Amazon Q architecture draft 지시문에 area box, contains/hosts edge, `vpcId`/`subnetId`/security group reference 기반 완전 포함 규칙을 추가했다.
+  - 관계 없는 area box는 겹치지 않아야 하고, 포함된 것처럼 보이면 containment reference가 있어야 한다는 self-validation을 추가했다.
+  - 일반 리소스가 parent 관계 없이 area 안에 있거나 반쯤 걸치는 경우도 self-validation issue로 잡아 repair prompt에 전달한다.
+  - 잘못된 VPC/Subnet/EC2 좌표를 첫 응답으로 받은 뒤 Amazon Q에 재생성을 요청해 정상 좌표를 채택하는 회귀 테스트를 추가했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --dir apps/api exec tsx --test src/services/aiArchitectureDrafts.test.ts --test-name-pattern "broken area layout"` - red before prompt fixture stabilization, passed after fix
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --dir apps/api exec tsx --test src/services/aiArchitectureDrafts.test.ts` - passed, 6 tests
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api typecheck` - passed
+  - `pnpm harness:check` - passed after edits
+  - `git diff --check` - passed, with line-ending warnings only
+  - `pnpm lint` - passed, with non-fatal Turbo cache rename warnings
+  - `pnpm typecheck` - passed, with non-fatal Turbo cache rename warnings
+  - `pnpm build` - first sandbox run failed on `.next` unlink `EPERM`; rerun with elevated permissions passed, final normal run passed with non-fatal Turbo cache rename warning
+- Known risks:
+  - 실제 Amazon Q 서비스 응답은 로컬에서 호출하지 않았고, fake provider로 self-validation repair loop를 검증했다.

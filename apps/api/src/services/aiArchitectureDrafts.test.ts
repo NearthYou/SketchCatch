@@ -423,13 +423,170 @@ test("createAmazonQArchitectureDraftResponse asks Amazon Q to regenerate preview
     }
   );
 
-  assert.ok(!("status" in response));
+  if ("status" in response) {
+    assert.fail(`Expected preview, got clarification: ${response.question}`);
+  }
+
   assert.equal(requestedPrompts.length, 2);
   assert.match(requestedPrompts[1] ?? "", /failed SketchCatch self-validation/);
   assert.match(requestedPrompts[1] ?? "", /preview includes EC2/);
   assert.equal(response.title, "Serverless Draft");
   assert.equal(response.architectureJson.nodes.some((node) => node.type === "EC2"), false);
   assert.equal(response.architectureJson.nodes.some((node) => node.type === "LAMBDA"), true);
+});
+
+test("createAmazonQArchitectureDraftResponse asks Amazon Q to regenerate previews with broken area layout", async () => {
+  const requestedPrompts: string[] = [];
+  const provider = createFakeAmazonQProvider((request) => {
+    requestedPrompts.push(request.prompt);
+
+    if (requestedPrompts.length === 1) {
+      return JSON.stringify({
+        status: "preview",
+        title: "Broken Area Layout Draft",
+        architectureJson: {
+          nodes: [
+            {
+              id: "vpc-main",
+              type: "VPC",
+              label: "Main VPC",
+              positionX: 100,
+              positionY: 100,
+              config: {}
+            },
+            {
+              id: "public-subnet-a",
+              type: "SUBNET",
+              label: "Public Subnet A",
+              positionX: 260,
+              positionY: 180,
+              config: {
+                vpcId: "vpc-main"
+              }
+            },
+            {
+              id: "private-subnet-a",
+              type: "SUBNET",
+              label: "Private Subnet A",
+              positionX: 320,
+              positionY: 220,
+              config: {
+                vpcId: "vpc-main"
+              }
+            },
+            {
+              id: "web-server",
+              type: "EC2",
+              label: "Web Server",
+              positionX: 420,
+              positionY: 230,
+              config: {
+                subnetId: "public-subnet-a"
+              }
+            }
+          ],
+          edges: [
+            {
+              id: "vpc-main-to-public-subnet-a",
+              sourceId: "vpc-main",
+              targetId: "public-subnet-a",
+              label: "contains"
+            }
+          ]
+        }
+      });
+    }
+
+    return JSON.stringify({
+      status: "preview",
+      title: "Clean Area Layout Draft",
+      architectureJson: {
+        nodes: [
+          {
+            id: "vpc-main",
+            type: "VPC",
+            label: "Main VPC",
+            positionX: 100,
+            positionY: 100,
+            config: {}
+          },
+          {
+            id: "public-subnet-a",
+            type: "SUBNET",
+            label: "Public Subnet A",
+            positionX: 130,
+            positionY: 130,
+            config: {
+              vpcId: "vpc-main"
+            }
+          },
+          {
+            id: "web-server",
+            type: "EC2",
+            label: "Web Server",
+            positionX: 160,
+            positionY: 150,
+            config: {
+              subnetId: "public-subnet-a"
+            }
+          }
+        ],
+        edges: [
+          {
+            id: "vpc-main-to-public-subnet-a",
+            sourceId: "vpc-main",
+            targetId: "public-subnet-a",
+            label: "contains"
+          }
+        ]
+      }
+    });
+  });
+
+  const prompt = [
+    "어떤 종류의 웹사이트인가요? API 서버 (모바일 앱 백엔드)입니다.",
+    "예상 트래픽 규모는 중간 규모 (일 1,000명, 동시 50명)입니다.",
+    "데이터베이스가 필요한가요? 간단한 데이터 (사용자 정보, 게시글 등 < 10GB)입니다.",
+    "프론트엔드 기술은 React/Vue/Angular (SPA 프레임워크)입니다.",
+    "백엔드가 필요한가요? 간단한 API (Node.js, Python Flask 등)입니다.",
+    "주요 사용자 지역은 한국만 (서울 리전)입니다.",
+    "월 예산 범위는 10-50만원 (적당한 성능)입니다.",
+    "SSL 인증서(HTTPS)가 필요한가요? 필수 (보안 중요)입니다.",
+    "파일 업로드 기능이 있나요? 없음 (텍스트만)입니다.",
+    "실시간 기능이 필요한가요? 필요 없음입니다.",
+    "관리 복잡도 선호도는 반관리형 (일부 서버 관리)입니다.",
+    "페이지 로딩 시간 목표는 3초 이내 (적당함)입니다.",
+    "전체 웹사이트 크기는 10MB-100MB (일반적인 사이트)입니다.",
+    "트래픽 패턴은 일정함 (하루 종일 비슷)입니다.",
+    "서비스 중단 허용 시간은 월 1시간 이내 (99.9% 가용성)입니다."
+  ].join("\n");
+
+  const response = await createAmazonQArchitectureDraftResponse(
+    {
+      prompt
+    },
+    {
+      provider,
+      creditPolicy: confirmedCreditPolicy
+    }
+  );
+
+  if ("status" in response) {
+    assert.fail(`Expected preview, got clarification: ${response.question}`);
+  }
+
+  assert.equal(requestedPrompts.length, 2);
+  assert.match(requestedPrompts[0] ?? "", /Layout rules: VPC, SUBNET, and SECURITY_GROUP/);
+  assert.match(requestedPrompts[1] ?? "", /failed SketchCatch self-validation/);
+  assert.match(requestedPrompts[1] ?? "", /fully inside parent area/);
+  assert.match(requestedPrompts[1] ?? "", /overlap without full containment/);
+  assert.equal(response.title, "Clean Area Layout Draft");
+  assert.deepEqual(
+    response.architectureJson.nodes.find((node) => node.id === "web-server")?.config,
+    {
+      subnetId: "public-subnet-a"
+    }
+  );
 });
 
 function createFakeAmazonQProvider(generate: (request: Parameters<AiTextProvider["generate"]>[0]) => string): AiTextProvider {
