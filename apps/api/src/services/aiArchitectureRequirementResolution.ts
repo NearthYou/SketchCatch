@@ -710,7 +710,7 @@ function applyExplicitRequirementConstraints(
   normalizedPrompt: string,
   facts: Set<ArchitectureRequirementFact>
 ): void {
-  if (prefersNoEc2Compute(normalizedPrompt)) {
+  if (prefersServerlessCompute(normalizedPrompt)) {
     facts.delete("server_runtime");
 
     if (!facts.has("database")) {
@@ -841,6 +841,10 @@ function prefersNoEc2Compute(normalizedPrompt: string): boolean {
     "ec2 제외",
     "ec2 말고"
   ]);
+}
+
+function prefersServerlessCompute(normalizedPrompt: string): boolean {
+  return prefersNoEc2Compute(normalizedPrompt) || includesAny(normalizedPrompt, ["serverless", "서버리스", "lambda", "람다"]);
 }
 
 function prefersNoServerRuntime(normalizedPrompt: string): boolean {

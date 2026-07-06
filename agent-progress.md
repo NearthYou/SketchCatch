@@ -1,3 +1,24 @@
+# 2026-07-07 - 서버리스 EC2 혼입 방지와 Amazon Q 재생성 요청
+
+- Goal: 서버리스 또는 no-EC2 요구사항에서 EC2가 포함되지 않게 하고, Amazon Q preview 자체 검증에서 문제가 발견되면 문제 내용을 Amazon Q에 보내 다이어그램을 다시 생성하게 한다.
+- Completed:
+  - `서버리스`, `serverless`, `Lambda`, `람다` 요구는 `server_runtime`을 제거하는 명시 compute 제약으로 처리했다.
+  - 서버리스 route 테스트가 EC2 부재와 `server_runtime` 부재를 함께 검증하도록 보강했다.
+  - Amazon Q preview가 서버리스/no-EC2 요구를 어기고 EC2를 포함하면 self-validation issue를 생성한다.
+  - self-validation issue, 원본 요구사항, 이전 invalid `architectureJson`을 포함해 Amazon Q에 재생성 요청을 1회 보낸다.
+  - Amazon Q 재생성 요청 prompt와 최종 Lambda preview 채택을 검증하는 회귀 테스트를 추가했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --dir apps/api exec tsx --test src/routes/ai.test.ts --test-name-pattern "selects a Lambda draft"` - red before fix, passed after fix
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --dir apps/api exec tsx --test src/services/aiArchitectureDrafts.test.ts` - passed, 5 tests
+  - `pnpm harness:check` - passed after edits
+  - `git diff --check` - passed, with line-ending warnings only
+  - `pnpm lint` - passed, with non-fatal Turbo cache rename warnings
+  - `pnpm typecheck` - passed, with non-fatal Turbo cache rename warnings
+  - `pnpm build` - first sandbox run failed on `.next` unlink `EPERM`; rerun with elevated permissions passed
+- Known risks:
+  - 실제 Amazon Q 서비스 응답은 로컬에서 호출하지 않았다. fake provider로 self-validation retry 동작을 검증했다.
+
 # 2026-07-07 - Amazon Q scale-out 프롬프트 지시 보강
 
 - Goal: 다중 EC2, 다중 AZ, 로드 밸런서 필요 여부를 코드가 임의로 제한하지 않고 Amazon Q가 비용/보안 요구에 맞춰 판단하게 한다.

@@ -176,17 +176,46 @@ export async function createAmazonQArchitectureDraftResponse(
   });
 
   try {
-    const response = await provider.generate({
+    let activePayload = payload;
+    let response = await provider.generate({
       target: ARCHITECTURE_DRAFT_TARGET,
       instructions: createAmazonQArchitectureDraftInstructions(),
       prompt: createAmazonQArchitectureDraftPrompt(request.prompt),
-      payload
+      payload: activePayload
     });
-    const parsedResponse = parseAmazonQArchitectureDraftResponse(response.text);
+    let parsedResponse = parseAmazonQArchitectureDraftResponse(response.text);
+
+    if (parsedResponse.status === "preview") {
+      const validationIssues = findAmazonQPreviewValidationIssues(request.prompt, parsedResponse.architectureJson);
+
+      if (validationIssues.length > 0) {
+        activePayload = maskSecretsForAi({
+          prompt: request.prompt,
+          validationIssues,
+          previousArchitectureJson: parsedResponse.architectureJson,
+          supportedResourceTypes: SUPPORTED_RESOURCE_TYPES
+        });
+        response = await provider.generate({
+          target: ARCHITECTURE_DRAFT_TARGET,
+          instructions: createAmazonQArchitectureDraftInstructions(),
+          prompt: createAmazonQArchitectureDraftRepairPrompt(request.prompt, validationIssues, parsedResponse.architectureJson),
+          payload: activePayload
+        });
+        parsedResponse = parseAmazonQArchitectureDraftResponse(response.text);
+
+        if (
+          parsedResponse.status === "preview" &&
+          findAmazonQPreviewValidationIssues(request.prompt, parsedResponse.architectureJson).length > 0
+        ) {
+          throw new Error("Amazon Q architecture draft failed self-validation after retry");
+        }
+      }
+    }
+
     const providerMetadata = createAiProviderMetadata({
       provider,
       billingMode: creditPolicy.billingMode,
-      payload,
+      payload: activePayload,
       outputCharacters: response.outputCharacters ?? response.text.length
     });
 
@@ -504,6 +533,45 @@ function createAmazonQArchitectureDraftPrompt(prompt: string): string {
     "User requirement prompt:",
     prompt
   ].join("\n\n");
+}
+
+function createAmazonQArchitectureDraftRepairPrompt(
+  prompt: string,
+  validationIssues: readonly string[],
+  previousArchitectureJson: ArchitectureJson
+): string {
+  return [
+    createAmazonQArchitectureDraftInstructions(),
+    "The previous preview failed SketchCatch self-validation.",
+    "Regenerate the full Architecture Draft JSON. Do not patch partially.",
+    "Validation issues:",
+    ...validationIssues.map((issue) => `- ${issue}`),
+    "Original user requirement prompt:",
+    prompt,
+    "Previous invalid architectureJson:",
+    JSON.stringify(previousArchitectureJson)
+  ].join("\n\n");
+}
+
+function findAmazonQPreviewValidationIssues(
+  prompt: string,
+  architectureJson: ArchitectureJson
+): string[] {
+  const normalizedPrompt = prompt.normalize("NFKC").toLowerCase();
+  const nodeTypes = new Set(architectureJson.nodes.map((node) => node.type));
+  const issues: string[] = [];
+
+  if (requiresServerlessOnlyArchitecture(normalizedPrompt) && nodeTypes.has("EC2")) {
+    issues.push("The user requested serverless or no EC2, but the preview includes EC2. Regenerate without EC2 and use serverless supported resources such as LAMBDA and API_GATEWAY_REST_API when compute is needed.");
+  }
+
+  return issues;
+}
+
+function requiresServerlessOnlyArchitecture(normalizedPrompt: string): boolean {
+  return /(serverless|서버리스|lambda|람다|without\s+ec2|no\s+ec2|ec2\s*(없는|없이|빼고|제외|말고)|ec2는\s*쓰지\s*마)/iu.test(
+    normalizedPrompt
+  );
 }
 
 function parseAmazonQArchitectureDraftResponse(text: string): AmazonQArchitectureDraftResponse {

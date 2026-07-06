@@ -364,6 +364,27 @@ test("POST /api/ai/architecture-draft selects a Lambda draft from serverless pro
     sourceId: "lambda-function",
     targetId: "lambda-log-group"
   });
+  assert.equal(body.architectureJson.nodes.some((node) => node.type === "EC2"), false);
+  assert.equal(body.metadata.requirementFacts?.includes("server_runtime"), false);
+
+  const serverlessWebServiceResponse = await app.inject({
+    method: "POST",
+    url: "/api/ai/architecture-draft",
+    payload: {
+      prompt: "로그인 있는 웹서비스를 서버리스로 만들어줘. EC2는 쓰지 마."
+    }
+  });
+
+  assert.equal(serverlessWebServiceResponse.statusCode, 200);
+
+  const serverlessWebServiceBody = architectureDraftResponseSchema.parse(serverlessWebServiceResponse.json());
+  const serverlessWebServiceNodeTypes = serverlessWebServiceBody.architectureJson.nodes.map((node) => node.type);
+
+  assert.equal(serverlessWebServiceBody.metadata.selectedDraftPattern, "serverless_function");
+  assert.ok(serverlessWebServiceNodeTypes.includes("LAMBDA"));
+  assert.equal(serverlessWebServiceNodeTypes.includes("EC2"), false);
+  assert.equal(serverlessWebServiceBody.metadata.requirementFacts?.includes("serverless_runtime"), true);
+  assert.equal(serverlessWebServiceBody.metadata.requirementFacts?.includes("server_runtime"), false);
 
   await app.close();
 });

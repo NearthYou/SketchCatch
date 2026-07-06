@@ -337,6 +337,101 @@ test("createAmazonQArchitectureDraftResponse returns the Amazon Q architecture p
   assert.equal(response.llmExplanation?.providerMetadata?.provider, "amazon_q");
 });
 
+test("createAmazonQArchitectureDraftResponse asks Amazon Q to regenerate previews that fail self-validation", async () => {
+  const requestedPrompts: string[] = [];
+  const provider = createFakeAmazonQProvider((request) => {
+    requestedPrompts.push(request.prompt);
+
+    if (requestedPrompts.length === 1) {
+      return JSON.stringify({
+        status: "preview",
+        title: "Invalid Serverless Draft",
+        architectureJson: {
+          nodes: [
+            {
+              id: "app-server",
+              type: "EC2",
+              label: "Application Server",
+              positionX: 120,
+              positionY: 180,
+              config: {}
+            }
+          ],
+          edges: []
+        }
+      });
+    }
+
+    return JSON.stringify({
+      status: "preview",
+      title: "Serverless Draft",
+      architectureJson: {
+        nodes: [
+          {
+            id: "api-gateway",
+            type: "API_GATEWAY_REST_API",
+            label: "Serverless API",
+            positionX: 120,
+            positionY: 180,
+            config: {}
+          },
+          {
+            id: "lambda-function",
+            type: "LAMBDA",
+            label: "Serverless Function",
+            positionX: 360,
+            positionY: 180,
+            config: {}
+          }
+        ],
+        edges: [
+          {
+            id: "api-gateway-to-lambda-function",
+            sourceId: "api-gateway",
+            targetId: "lambda-function"
+          }
+        ]
+      }
+    });
+  });
+
+  const prompt = [
+    "SPA (Single Page Application) (React/Vue 등)입니다.",
+    "예상 트래픽 규모는 중간 규모 (일 1,000명, 동시 50명)입니다.",
+    "데이터베이스는 필요 없음 (정적 콘텐츠만)입니다.",
+    "프론트엔드 기술은 React/Vue/Angular (SPA 프레임워크)입니다.",
+    "백엔드는 간단한 API (Node.js, Python Flask 등)이지만 서버리스로 만들고 EC2는 쓰지 마.",
+    "주요 사용자 지역은 한국만 (서울 리전)입니다.",
+    "월 예산 범위는 10만원 미만 (최소 비용)입니다.",
+    "SSL 인증서(HTTPS)는 필수 (보안 중요)입니다.",
+    "파일 업로드 기능은 없음 (텍스트만)입니다.",
+    "실시간 기능은 필요 없음입니다.",
+    "관리 복잡도 선호도는 완전 관리형 (서버리스, 관리 최소화)입니다.",
+    "페이지 로딩 시간 목표는 3초 이내 (적당함)입니다.",
+    "전체 웹사이트 크기는 10MB 미만 (간단한 사이트)입니다.",
+    "트래픽 패턴은 일정함 (하루 종일 비슷)입니다.",
+    "서비스 중단 허용 시간은 월 1시간 이내 (99.9% 가용성)입니다."
+  ].join("\n");
+
+  const response = await createAmazonQArchitectureDraftResponse(
+    {
+      prompt
+    },
+    {
+      provider,
+      creditPolicy: confirmedCreditPolicy
+    }
+  );
+
+  assert.ok(!("status" in response));
+  assert.equal(requestedPrompts.length, 2);
+  assert.match(requestedPrompts[1] ?? "", /failed SketchCatch self-validation/);
+  assert.match(requestedPrompts[1] ?? "", /preview includes EC2/);
+  assert.equal(response.title, "Serverless Draft");
+  assert.equal(response.architectureJson.nodes.some((node) => node.type === "EC2"), false);
+  assert.equal(response.architectureJson.nodes.some((node) => node.type === "LAMBDA"), true);
+});
+
 function createFakeAmazonQProvider(generate: (request: Parameters<AiTextProvider["generate"]>[0]) => string): AiTextProvider {
   return {
     provider: "amazon_q",
