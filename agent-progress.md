@@ -3457,3 +3457,27 @@
   - `pnpm build` - first sandbox run failed on `.next` unlink `EPERM`; rerun with elevated permissions passed, final normal run passed with non-fatal Turbo cache rename warning
 - Known risks:
   - 실제 Amazon Q 서비스 응답은 로컬에서 호출하지 않았고, fake provider로 self-validation repair loop를 검증했다.
+# 2026-07-07 - Amazon Q 다이어그램 레이어와 화살표 충돌 검증 보강
+
+- Goal: 다이어그램 생성 결과에서 area/container가 리소스를 덮지 않게 하고, 화살표가 관련 없는 리소스를 가로지르거나 리소스와 겹치는 좌표를 Amazon Q에 다시 생성하게 한다.
+- Completed:
+  - Amazon Q architecture draft 지시문에 layer ordering과 visible arrow routing 규칙을 추가했다.
+  - visible edge 중심 경로가 관련 없는 non-area 리소스 박스를 관통하면 self-validation issue로 잡아 Amazon Q repair prompt에 전달한다.
+  - ArchitectureJson을 DiagramJson으로 변환할 때 parent area depth를 기준으로 area는 낮은 zIndex, 일반 리소스는 높은 zIndex를 부여하도록 보정했다.
+  - Web 어댑터 테스트에 area가 Q 응답 배열 순서와 무관하게 자식 리소스 뒤에 깔리는 회귀 테스트를 추가했다.
+  - Region/AZ 자동 컨테이너 테스트 기대값을 현재 `aws_region`/`aws_availability_zone` 계약에 맞췄다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --dir apps/api exec tsx --test src/services/aiArchitectureDrafts.test.ts --test-name-pattern "arrows crossing"` - red before fix, passed after fix
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-ai-diagram-adapter.test.ts --test-name-pattern "area layers"` - red before fix, passed after fix while surfacing one stale Region/AZ test expectation
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --dir apps/api exec tsx --test src/services/aiArchitectureDrafts.test.ts` - passed, 7 tests
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-ai-diagram-adapter.test.ts` - passed, 19 tests
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api typecheck` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web typecheck` - passed
+  - `pnpm harness:check` - passed after edits
+  - `git diff --check` - passed, with line-ending warnings only
+  - `pnpm lint` - passed, with non-fatal Turbo cache rename warnings
+  - `pnpm typecheck` - passed, with non-fatal Turbo cache rename warnings
+  - `pnpm build` - first sandbox run failed on `.next` unlink `EPERM`; rerun with elevated permissions passed
+- Known risks:
+  - Edge crossing validation approximates visible routing with the source-to-target center line. It catches the current straight-through resource collision class, but React Flow smoothstep routing can still create visually different paths in edge cases.

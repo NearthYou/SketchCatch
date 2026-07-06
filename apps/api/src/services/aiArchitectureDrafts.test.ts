@@ -589,6 +589,135 @@ test("createAmazonQArchitectureDraftResponse asks Amazon Q to regenerate preview
   );
 });
 
+test("createAmazonQArchitectureDraftResponse asks Amazon Q to regenerate previews with arrows crossing unrelated resources", async () => {
+  const requestedPrompts: string[] = [];
+  const provider = createFakeAmazonQProvider((request) => {
+    requestedPrompts.push(request.prompt);
+
+    if (requestedPrompts.length === 1) {
+      return JSON.stringify({
+        status: "preview",
+        title: "Blocked Edge Draft",
+        architectureJson: {
+          nodes: [
+            {
+              id: "app-server",
+              type: "EC2",
+              label: "App Server",
+              positionX: 100,
+              positionY: 100,
+              config: {}
+            },
+            {
+              id: "database",
+              type: "RDS",
+              label: "Database",
+              positionX: 500,
+              positionY: 100,
+              config: {}
+            },
+            {
+              id: "asset-bucket",
+              type: "S3",
+              label: "Asset Bucket",
+              positionX: 300,
+              positionY: 110,
+              config: {}
+            }
+          ],
+          edges: [
+            {
+              id: "app-server-to-database",
+              sourceId: "app-server",
+              targetId: "database",
+              label: "writes"
+            }
+          ]
+        }
+      });
+    }
+
+    return JSON.stringify({
+      status: "preview",
+      title: "Clear Edge Draft",
+      architectureJson: {
+        nodes: [
+          {
+            id: "app-server",
+            type: "EC2",
+            label: "App Server",
+            positionX: 100,
+            positionY: 100,
+            config: {}
+          },
+          {
+            id: "database",
+            type: "RDS",
+            label: "Database",
+            positionX: 500,
+            positionY: 100,
+            config: {}
+          },
+          {
+            id: "asset-bucket",
+            type: "S3",
+            label: "Asset Bucket",
+            positionX: 300,
+            positionY: 260,
+            config: {}
+          }
+        ],
+        edges: [
+          {
+            id: "app-server-to-database",
+            sourceId: "app-server",
+            targetId: "database",
+            label: "writes"
+          }
+        ]
+      }
+    });
+  });
+
+  const prompt = [
+    "?대뼡 醫낅쪟???뱀궗?댄듃?멸??? API ?쒕쾭 (紐⑤컮????諛깆뿏???낅땲??",
+    "?덉긽 ?몃옒??洹쒕え??以묎컙 洹쒕え (??1,000紐? ?숈떆 50紐??낅땲?? daily traffic 1000 concurrent users 50",
+    "?곗씠?곕쿋?댁뒪媛 ?꾩슂?쒓??? 媛꾨떒???곗씠??(?ъ슜???뺣낫, 寃뚯떆湲 ??< 10GB)?낅땲??",
+    "?꾨줎?몄뿏??湲곗닠? React/Vue/Angular (SPA ?꾨젅?꾩썙???낅땲??",
+    "諛깆뿏?쒓? ?꾩슂?쒓??? 媛꾨떒??API (Node.js, Python Flask ???낅땲??",
+    "二쇱슂 ?ъ슜??吏??? ?쒓뎅留?(?쒖슱 由ъ쟾)?낅땲?? korea seoul region",
+    "???덉궛 踰붿쐞??10-50留뚯썝 (?곷떦???깅뒫)?낅땲?? budget cost 100000 KRW",
+    "SSL ?몄쬆??HTTPS)媛 ?꾩슂?쒓??? ?꾩닔 (蹂댁븞 以묒슂)?낅땲??",
+    "?뚯씪 ?낅줈??湲곕뒫???덈굹?? ?놁쓬 (?띿뒪?몃쭔)?낅땲??",
+    "?ㅼ떆媛?湲곕뒫???꾩슂?쒓??? ?꾩슂 ?놁쓬?낅땲?? no realtime chat notification",
+    "愿由?蹂듭옟???좏샇?꾨뒗 諛섍?由ы삎 (?쇰? ?쒕쾭 愿由??낅땲?? managed operations",
+    "?섏씠吏 濡쒕뵫 ?쒓컙 紐⑺몴??3珥??대궡 (?곷떦???낅땲?? loading time 3 seconds",
+    "?꾩껜 ?뱀궗?댄듃 ?ш린??10MB-100MB (?쇰컲?곸씤 ?ъ씠???낅땲??",
+    "?몃옒???⑦꽩? ?쇱젙??(?섎（ 醫낆씪 鍮꾩듂)?낅땲?? traffic pattern steady",
+    "?쒕퉬??以묐떒 ?덉슜 ?쒓컙? ??1?쒓컙 ?대궡 (99.9% 媛?⑹꽦)?낅땲??"
+  ].join("\n");
+
+  const response = await createAmazonQArchitectureDraftResponse(
+    {
+      prompt
+    },
+    {
+      provider,
+      creditPolicy: confirmedCreditPolicy
+    }
+  );
+
+  if ("status" in response) {
+    assert.fail(`Expected preview, got clarification: ${response.question}`);
+  }
+
+  assert.equal(requestedPrompts.length, 2);
+  assert.match(requestedPrompts[0] ?? "", /do not route visible arrows through unrelated resources/);
+  assert.match(requestedPrompts[1] ?? "", /edge path crosses unrelated resource/);
+  assert.equal(response.title, "Clear Edge Draft");
+  assert.equal(response.architectureJson.nodes.find((node) => node.id === "asset-bucket")?.positionY, 260);
+});
+
 function createFakeAmazonQProvider(generate: (request: Parameters<AiTextProvider["generate"]>[0]) => string): AiTextProvider {
   return {
     provider: "amazon_q",

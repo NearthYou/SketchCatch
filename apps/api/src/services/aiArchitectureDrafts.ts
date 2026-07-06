@@ -510,7 +510,19 @@ const REQUIRED_ARCHITECTURE_QUESTIONS: readonly RequiredArchitectureQuestion[] =
 ];
 
 function findMissingRequiredQuestion(prompt: string): RequiredArchitectureQuestion | null {
-  return REQUIRED_ARCHITECTURE_QUESTIONS.find((question) => !question.isAnswered(prompt)) ?? null;
+  return REQUIRED_ARCHITECTURE_QUESTIONS.find((question) => !isRequiredArchitectureQuestionAnswered(question, prompt)) ?? null;
+}
+
+function isRequiredArchitectureQuestionAnswered(question: RequiredArchitectureQuestion, prompt: string): boolean {
+  if (question.isAnswered(prompt)) {
+    return true;
+  }
+
+  if (question.id === "traffic_pattern") {
+    return /(traffic\s*pattern|steady|time\s*of\s*day|event\s*spike|unpredictable)/i.test(prompt);
+  }
+
+  return false;
 }
 
 function createArchitectureDraftClarification(
@@ -548,6 +560,7 @@ function createAmazonQArchitectureDraftInstructions(): string {
     "For high concurrency or high availability requirements such as large concurrent users, 99.9%+ availability, or event traffic spikes, consider horizontally scaled compute across AZs instead of a single EC2 instance.",
     "Layout rules: VPC, SUBNET, and SECURITY_GROUP nodes are area boxes. Nodes related by contains/hosts edges or config references such as vpcId, subnetId, securityGroupIds, or vpcSecurityGroupIds must be fully inside their parent area box.",
     "Unrelated area boxes must not overlap. If an area belongs inside another area, place it fully inside and include the containment relationship. Boundary resources such as INTERNET_GATEWAY may sit on an area edge, but must not float half-overlapping unrelated areas.",
+    "Layering and edge routing rules: list area/container nodes before their children so containers render behind resources, and do not route visible arrows through unrelated resources or place unrelated resources between connected nodes.",
     "If required information is missing, return a needs_clarification response with exactly one question.",
     "Do not include secrets, account IDs, credentials, ARNs, or private tokens.",
     "The preview JSON shape is:",
@@ -705,6 +718,38 @@ function findArchitectureLayoutValidationIssues(architectureJson: ArchitectureJs
 
       issues.push(
         `Layout violation: ${node.id} (${node.type}) partially overlaps area ${areaNode.id} (${areaNode.type}) without being contained. Place it fully outside that area or add the correct containment reference.`
+      );
+    }
+  }
+
+  for (const edge of architectureJson.edges) {
+    if (isPreviewParentEdge(edge)) {
+      continue;
+    }
+
+    const sourceNode = nodesById.get(edge.sourceId);
+    const targetNode = nodesById.get(edge.targetId);
+
+    if (!sourceNode || !targetNode) {
+      continue;
+    }
+
+    const sourceCenter = getPreviewNodeCenter(sourceNode);
+    const targetCenter = getPreviewNodeCenter(targetNode);
+
+    for (const node of architectureJson.nodes) {
+      if (node.id === sourceNode.id || node.id === targetNode.id || PREVIEW_AREA_RESOURCE_TYPES.has(node.type)) {
+        continue;
+      }
+
+      const nodeRect = rectsByNodeId.get(node.id);
+
+      if (!nodeRect || !lineSegmentIntersectsRect(sourceCenter, targetCenter, nodeRect)) {
+        continue;
+      }
+
+      issues.push(
+        `Layout violation: visible edge ${edge.id} from ${sourceNode.id} to ${targetNode.id} has an edge path crosses unrelated resource ${node.id} (${node.type}). Move unrelated resources away from the arrow path or reroute by changing coordinates.`
       );
     }
   }
@@ -905,6 +950,15 @@ function createPreviewNodeRect(node: ArchitectureJson["nodes"][number]): LayoutR
   };
 }
 
+function getPreviewNodeCenter(node: ArchitectureJson["nodes"][number]): { readonly x: number; readonly y: number } {
+  const size = PREVIEW_NODE_LAYOUT_SIZES[node.type] ?? DEFAULT_PREVIEW_NODE_SIZE;
+
+  return {
+    x: node.positionX + size.width / 2,
+    y: node.positionY + size.height / 2
+  };
+}
+
 function rectContains(parent: LayoutRect, child: LayoutRect): boolean {
   return (
     child.left >= parent.left &&
@@ -916,6 +970,50 @@ function rectContains(parent: LayoutRect, child: LayoutRect): boolean {
 
 function rectsOverlap(left: LayoutRect, right: LayoutRect): boolean {
   return left.left < right.right && left.right > right.left && left.top < right.bottom && left.bottom > right.top;
+}
+
+function lineSegmentIntersectsRect(
+  start: { readonly x: number; readonly y: number },
+  end: { readonly x: number; readonly y: number },
+  rect: LayoutRect
+): boolean {
+  if (pointInRect(start, rect) || pointInRect(end, rect)) {
+    return true;
+  }
+
+  return (
+    lineSegmentsIntersect(start, end, { x: rect.left, y: rect.top }, { x: rect.right, y: rect.top }) ||
+    lineSegmentsIntersect(start, end, { x: rect.right, y: rect.top }, { x: rect.right, y: rect.bottom }) ||
+    lineSegmentsIntersect(start, end, { x: rect.right, y: rect.bottom }, { x: rect.left, y: rect.bottom }) ||
+    lineSegmentsIntersect(start, end, { x: rect.left, y: rect.bottom }, { x: rect.left, y: rect.top })
+  );
+}
+
+function pointInRect(point: { readonly x: number; readonly y: number }, rect: LayoutRect): boolean {
+  return point.x >= rect.left && point.x <= rect.right && point.y >= rect.top && point.y <= rect.bottom;
+}
+
+function lineSegmentsIntersect(
+  aStart: { readonly x: number; readonly y: number },
+  aEnd: { readonly x: number; readonly y: number },
+  bStart: { readonly x: number; readonly y: number },
+  bEnd: { readonly x: number; readonly y: number }
+): boolean {
+  const denominator =
+    (aStart.x - aEnd.x) * (bStart.y - bEnd.y) - (aStart.y - aEnd.y) * (bStart.x - bEnd.x);
+
+  if (denominator === 0) {
+    return false;
+  }
+
+  const aNumerator =
+    (aStart.x - bStart.x) * (bStart.y - bEnd.y) - (aStart.y - bStart.y) * (bStart.x - bEnd.x);
+  const bNumerator =
+    (aStart.x - bStart.x) * (aStart.y - aEnd.y) - (aStart.y - bStart.y) * (aStart.x - aEnd.x);
+  const aRatio = aNumerator / denominator;
+  const bRatio = bNumerator / denominator;
+
+  return aRatio >= 0 && aRatio <= 1 && bRatio >= 0 && bRatio <= 1;
 }
 
 function normalizeReferenceValue(value: string): string {

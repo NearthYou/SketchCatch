@@ -48,8 +48,8 @@ const RESOURCE_ITEMS_BY_TERRAFORM_TYPE = new Map<string, ResourceItem>(
 export function convertArchitectureJsonToDiagramJson(architectureJson: ArchitectureJson): DiagramJson {
   const nodeIds = new Set(architectureJson.nodes.map((node) => node.id));
   const convertedNodes = architectureJson.nodes.map(convertArchitectureNodeToDiagramNode);
-  const nodes = fitAreaNodesToChildren(
-    applyAreaParentMetadata(addServerStorageAreaNodes(convertedNodes), architectureJson.edges)
+  const nodes = applyDiagramLayerOrder(
+    fitAreaNodesToChildren(applyAreaParentMetadata(addServerStorageAreaNodes(convertedNodes), architectureJson.edges))
   );
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
 
@@ -346,6 +346,38 @@ function fitAreaNodesToChildren(nodes: readonly DiagramNode[]): DiagramNode[] {
   }
 
   return currentNodes;
+}
+
+function applyDiagramLayerOrder(nodes: readonly DiagramNode[]): DiagramNode[] {
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+
+  return nodes.map((node) => {
+    const depth = getAreaDepth(node, nodeById);
+    const zIndex = isAreaDiagramNode(node) ? 1 + depth : 100 + depth;
+
+    return {
+      ...node,
+      zIndex
+    };
+  });
+}
+
+function getAreaDepth(node: DiagramNode, nodeById: ReadonlyMap<string, DiagramNode>): number {
+  let depth = 0;
+  let parentAreaNodeId = node.metadata?.parentAreaNodeId;
+  const visitedNodeIds = new Set<string>();
+
+  while (parentAreaNodeId) {
+    if (visitedNodeIds.has(parentAreaNodeId)) {
+      return depth;
+    }
+
+    visitedNodeIds.add(parentAreaNodeId);
+    depth += 1;
+    parentAreaNodeId = nodeById.get(parentAreaNodeId)?.metadata?.parentAreaNodeId;
+  }
+
+  return depth;
 }
 
 // 깊게 중첩된 Region/VPC/AZ/SG/Subnet 박스가 안정될 때 반복 계산을 멈춥니다.

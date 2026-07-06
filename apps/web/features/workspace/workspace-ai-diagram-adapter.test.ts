@@ -259,6 +259,50 @@ test("convertArchitectureJsonToDiagramJson expands area nodes to include upper-l
   assert.equal(vpcNode?.size.height, 248);
 });
 
+test("convertArchitectureJsonToDiagramJson keeps area layers behind contained resources", () => {
+  const architectureJson: ArchitectureJson = {
+    nodes: [
+      {
+        id: "web-server",
+        type: "EC2",
+        label: "Web Server",
+        positionX: 220,
+        positionY: 180,
+        config: {
+          subnetId: "public-subnet-a"
+        }
+      },
+      {
+        id: "vpc-main",
+        type: "VPC",
+        label: "Main VPC",
+        positionX: 100,
+        positionY: 100,
+        config: {}
+      },
+      {
+        id: "public-subnet-a",
+        type: "SUBNET",
+        label: "Public Subnet A",
+        positionX: 160,
+        positionY: 140,
+        config: {
+          vpcId: "vpc-main"
+        }
+      }
+    ],
+    edges: []
+  };
+
+  const diagramJson = convertArchitectureJsonToDiagramJson(architectureJson);
+  const vpcNode = diagramJson.nodes.find((node) => node.id === "vpc-main");
+  const subnetNode = diagramJson.nodes.find((node) => node.id === "public-subnet-a");
+  const webServerNode = diagramJson.nodes.find((node) => node.id === "web-server");
+
+  assert.ok((vpcNode?.zIndex ?? 0) < (subnetNode?.zIndex ?? 0));
+  assert.ok((subnetNode?.zIndex ?? 0) < (webServerNode?.zIndex ?? 0));
+});
+
 test("convertArchitectureJsonToDiagramJson resolves Terraform references to area parent nodes", () => {
   const architectureJson: ArchitectureJson = {
     nodes: [
@@ -933,8 +977,8 @@ test("convertArchitectureJsonToDiagramJson lays out generated EC2 drafts inside 
       type: node.type
     })),
     [
-      { id: "server-storage-region", parentAreaNodeId: undefined, type: "design_region" },
-      { id: "server-storage-az", parentAreaNodeId: "vpc-main", type: "design_az" },
+      { id: "server-storage-region", parentAreaNodeId: undefined, type: "aws_region" },
+      { id: "server-storage-az", parentAreaNodeId: "vpc-main", type: "aws_availability_zone" },
       { id: "vpc-main", parentAreaNodeId: "server-storage-region", type: "aws_vpc" },
       { id: "public-subnet", parentAreaNodeId: "server-storage-az", type: "aws_subnet" },
       { id: "app-security-group", parentAreaNodeId: "public-subnet", type: "aws_security_group" },
