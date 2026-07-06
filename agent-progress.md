@@ -11,6 +11,30 @@
 
 ## 세션 레코드
 
+### 2026-07-06 - 기존 GitHub App 설치 repo 선택 화면 직접 연결
+
+- Goal: 이미 active GitHub source repository가 있는 프로젝트에서 `GitHub 연결`을 눌렀을 때 GitHub Configure 화면의 state 누락 때문에 repo 선택 화면으로 돌아오지 못하는 문제를 해결한다.
+- Findings:
+  - Production 배포 후 Chrome으로 확인한 결과, SketchCatch 버튼은 `https://github.com/apps/sketchcatch/installations/select_target?state=...`로 정상 이동했다.
+  - GitHub의 이미 설치된 `NearthYou` Configure 링크는 `/settings/installations/144525513`로 이동하며 `state`를 보존하지 않았다.
+  - `asdf` 프로젝트에는 active source repository `NearthYou/sketchcatch-iac-handoff-test`가 이미 연결되어 있어, DB에 저장된 `githubInstallationId`로 repository selection callback을 직접 열 수 있었다.
+- Completed:
+  - `POST /api/projects/:projectId/source-repositories/github/existing-installation-callback-url`를 추가해 active GitHub source repository의 `githubInstallationId`와 fresh signed state로 SketchCatch callback URL을 발급한다.
+  - Deployment panel의 `GitHub 연결` 버튼이 active GitHub 연결을 발견하면 GitHub Configure로 보내지 않고 callback repository 선택 화면으로 바로 이동하게 했다.
+  - API/service route tests와 shared/web API 타입을 갱신했다.
+  - `docs/sw/spec3.md`에 기존 active installation callback URL 계약을 추가했다.
+- Verified so far:
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/source-repositories/source-repository-service.test.ts src/routes/source-repositories.test.ts`
+  - `pnpm --filter @sketchcatch/api typecheck`
+  - `pnpm --filter @sketchcatch/web typecheck`
+  - `pnpm --filter @sketchcatch/api lint`
+  - `pnpm --filter @sketchcatch/web lint`
+  - `pnpm harness:check`
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm build`
+  - `git diff --check`
+
 ### 2026-07-06 - 기존 설치 GitHub App 연결 UX 보완
 
 - Goal: 이미 GitHub App이 설치된 계정도 SketchCatch의 `GitHub 연결` 버튼에서 시작하면 signed state를 유지한 채 repository 선택 화면으로 돌아오게 한다.

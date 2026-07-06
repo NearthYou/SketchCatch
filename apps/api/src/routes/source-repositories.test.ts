@@ -47,6 +47,31 @@ test("source repository routes issue a GitHub install URL with an API-signed sta
   assert.equal(repository.findAccessibleProjectCalls.length, 1);
 });
 
+test("source repository routes issue a callback URL for an existing active GitHub installation", async (t) => {
+  const repository = new FakeSourceRepositoryRepository([
+    createSourceRepositoryRecord({
+      githubInstallationId: "active-installation"
+    })
+  ]);
+  const app = await buildSourceRepositoryRouteApp({ repository });
+  t.after(() => app.close());
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/projects/${projectId}/source-repositories/github/existing-installation-callback-url`,
+    headers: await authHeaders()
+  });
+
+  assert.equal(response.statusCode, 201);
+  const callbackUrl = new URL(response.json().callbackUrl);
+
+  assert.equal(callbackUrl.origin, "https://sketchcatch.example");
+  assert.equal(callbackUrl.pathname, "/integrations/github/callback");
+  assert.equal(callbackUrl.searchParams.get("installation_id"), "active-installation");
+  assert.ok(callbackUrl.searchParams.get("state"));
+  assert.equal(repository.rows.length, 1);
+});
+
 test("source repository routes exchange callback state for repositories without persisting the installation list", async (t) => {
   const repository = new FakeSourceRepositoryRepository();
   const githubAppClient = createFakeGitHubAppClient([
@@ -178,7 +203,8 @@ async function buildSourceRepositoryRouteApp(input: {
     createSourceRepositoryRepository: () => input.repository,
     githubAppClient: input.githubAppClient ?? createFakeGitHubAppClient([]),
     githubAppSlug: "sketchcatch-test",
-    githubAppStateSecret: stateSecret
+    githubAppStateSecret: stateSecret,
+    githubAppCallbackUrl: "https://sketchcatch.example/integrations/github/callback"
   });
 
   return app;

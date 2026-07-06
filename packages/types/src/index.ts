@@ -385,6 +385,11 @@ export type GitHubAppInstallUrlResponse = {
   expiresAt: IsoDateTimeString;
 };
 
+export type GitHubAppExistingInstallationCallbackUrlResponse = {
+  callbackUrl: string;
+  expiresAt: IsoDateTimeString;
+};
+
 export type GitHubRepositoryCandidate = {
   githubRepositoryId: string;
   owner: string;

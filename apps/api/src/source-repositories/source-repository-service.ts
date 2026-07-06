@@ -40,6 +40,19 @@ export type CreateGitHubInstallUrlResult = {
   expiresAt: Date;
 };
 
+export type CreateGitHubExistingInstallationCallbackUrlInput = {
+  projectId: string;
+  accessContext: ProjectAccessContext;
+  callbackUrl: string;
+  stateSecret: string;
+  now?: () => Date;
+};
+
+export type CreateGitHubExistingInstallationCallbackUrlResult = {
+  callbackUrl: string;
+  expiresAt: Date;
+};
+
 export type ListGitHubInstallationRepositoriesInput = {
   installationId: string;
   state: string;
@@ -179,6 +192,41 @@ export async function createGitHubInstallUrl(
   };
 }
 
+export async function createGitHubExistingInstallationCallbackUrl(
+  input: CreateGitHubExistingInstallationCallbackUrlInput,
+  repository: SourceRepositoryRepository
+): Promise<CreateGitHubExistingInstallationCallbackUrlResult> {
+  await requireAccessibleProject(
+    input.projectId,
+    input.accessContext,
+    repository,
+    "Project not found"
+  );
+
+  const activeRepository = await findActiveGitHubSourceRepository(input.projectId, repository);
+
+  if (!activeRepository?.githubInstallationId) {
+    throw new SourceRepositoryNotFoundError("Active GitHub source repository not found");
+  }
+
+  const stateInput = {
+    userId: input.accessContext.userId,
+    projectId: input.projectId,
+    secret: input.stateSecret,
+    ...(input.now ? { now: input.now } : {})
+  };
+  const { state, expiresAt } = await createGitHubAppState(stateInput);
+  const callbackUrl = new URL(input.callbackUrl);
+
+  callbackUrl.searchParams.set("installation_id", activeRepository.githubInstallationId);
+  callbackUrl.searchParams.set("state", state);
+
+  return {
+    callbackUrl: callbackUrl.toString(),
+    expiresAt
+  };
+}
+
 export async function listGitHubInstallationRepositories(
   input: ListGitHubInstallationRepositoriesInput,
   repository: SourceRepositoryRepository,
@@ -293,4 +341,17 @@ async function requireAccessibleProject(
   }
 
   return project;
+}
+
+async function findActiveGitHubSourceRepository(
+  projectId: string,
+  repository: SourceRepositoryRepository
+): Promise<SourceRepositoryRecord | null> {
+  const repositories = await repository.listProjectSourceRepositories(projectId);
+
+  return (
+    repositories.find(
+      (candidate) => candidate.provider === "github" && candidate.status === "active"
+    ) ?? null
+  );
 }

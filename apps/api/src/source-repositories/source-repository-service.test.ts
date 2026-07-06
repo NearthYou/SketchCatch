@@ -3,8 +3,10 @@ import test from "node:test";
 import type { GitHubRepositoryCandidate } from "@sketchcatch/types";
 import {
   connectGitHubSourceRepository,
+  createGitHubExistingInstallationCallbackUrl,
   createGitHubInstallUrl,
   listGitHubInstallationRepositories,
+  SourceRepositoryNotFoundError,
   SourceRepositoryConflictError,
   SourceRepositoryStateError,
   type CreateActiveGitHubSourceRepositoryInput,
@@ -72,6 +74,51 @@ test("GitHub App install URL starts at target selection so already-installed acc
   assert.equal(installUrl.origin, "https://github.com");
   assert.equal(installUrl.pathname, "/apps/sketchcatch-test/installations/select_target");
   assert.ok(installUrl.searchParams.get("state"));
+});
+
+test("existing active GitHub installation issues a callback URL for the repo selection screen", async () => {
+  const repository = createInMemorySourceRepositoryRepository([
+    createSourceRepositoryRecord({
+      githubInstallationId: "active-installation"
+    })
+  ]);
+  const callback = await createGitHubExistingInstallationCallbackUrl(
+    {
+      projectId,
+      accessContext: createAccessContext(userId),
+      callbackUrl: "https://sketchcatch.net/integrations/github/callback",
+      stateSecret
+    },
+    repository
+  );
+  const callbackUrl = new URL(callback.callbackUrl);
+
+  assert.equal(callbackUrl.origin, "https://sketchcatch.net");
+  assert.equal(callbackUrl.pathname, "/integrations/github/callback");
+  assert.equal(callbackUrl.searchParams.get("installation_id"), "active-installation");
+  assert.ok(callbackUrl.searchParams.get("state"));
+});
+
+test("existing installation callback URL requires an active GitHub source repository", async () => {
+  const repository = createInMemorySourceRepositoryRepository([
+    createSourceRepositoryRecord({
+      status: "inactive"
+    })
+  ]);
+
+  await assert.rejects(
+    () =>
+      createGitHubExistingInstallationCallbackUrl(
+        {
+          projectId,
+          accessContext: createAccessContext(userId),
+          callbackUrl: "https://sketchcatch.net/integrations/github/callback",
+          stateSecret
+        },
+        repository
+      ),
+    SourceRepositoryNotFoundError
+  );
 });
 
 test("connecting a GitHub repository stores only the selected repository and soft deactivates the previous active repo", async () => {

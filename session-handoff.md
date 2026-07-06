@@ -6,6 +6,7 @@
 - Source repository/GitHub App operational verification had previously completed.
 - Merge verification passed: `pnpm harness:check`, `pnpm typecheck`, `pnpm lint`, `pnpm build`, and `git diff --check --cached`.
 - GitHub App install URL now starts at `/installations/select_target` so SketchCatch-owned connection starts with signed `state` even for already-installed accounts.
+- Real Chrome verification showed GitHub still drops `state` from the already-installed account Configure link, so active SketchCatch connections need an internal callback shortcut.
 
 ## 이번 세션의 변경 사항
 
@@ -13,14 +14,17 @@
 - Added API/service tests for the already-installed account URL flow.
 - Cleaned the GitHub callback page state-missing and repository selection Korean messages.
 - Updated `docs/sw/spec3.md` install URL example.
+- Added `POST /api/projects/:projectId/source-repositories/github/existing-installation-callback-url`.
+- Updated the Deployment panel so an already active GitHub connection opens the SketchCatch repository selection callback URL directly instead of sending the user to GitHub Configure.
+- Added focused service and route coverage for the existing installation callback URL.
 
 ## 아직 깨졌거나 미검증된 것
 
-- Browser-level verification against the real GitHub App will need the updated branch deployed.
+- Full repo checks, deploy, and production Chrome verification still need to be run after this latest shortcut change.
 
 ## 다음으로 최선의 행동
 
-- Deploy the branch, then click `GitHub 연결` in SketchCatch on an account where the app is already installed and confirm GitHub returns to `/integrations/github/callback` with `installation_id` and `state`.
+- Run full checks, commit/push, deploy the branch, then click `GitHub 연결` in the already-connected `asdf` project and confirm it opens `/integrations/github/callback?installation_id=...&state=...` and displays repositories.
 # ?몄뀡 ?몃뱶?ㅽ봽
 
 ???뚯씪? 理쒖떊 ?몄뀡 ?섎굹瑜??ㅼ쓬 ?몄뀡??鍮좊Ⅴ寃??댁뼱諛쏄린 ?꾪븳 ?뺤텞蹂몄씠?? ?꾩쟻 ?대젰? `agent-progress.md`???④릿??

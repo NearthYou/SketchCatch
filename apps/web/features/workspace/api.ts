@@ -40,6 +40,7 @@
   GitCicdHandoffListResponse,
   GitCicdHandoffPipelineStatus,
   GitCicdHandoffPipelineStatusResponse,
+  GitHubAppExistingInstallationCallbackUrlResponse,
   GitHubAppInstallUrlResponse,
   ListGitHubInstallationRepositoriesRequest,
   ListGitHubInstallationRepositoriesResponse,
@@ -650,6 +651,18 @@ export async function createGitHubSourceRepositoryInstallUrl(
 ): Promise<GitHubAppInstallUrlResponse> {
   return apiFetch<GitHubAppInstallUrlResponse>(
     `/projects/${encodeURIComponent(projectId)}/source-repositories/github/install-url`,
+    {
+      auth: true,
+      method: "POST"
+    }
+  );
+}
+
+export async function createGitHubExistingInstallationCallbackUrl(
+  projectId: string
+): Promise<GitHubAppExistingInstallationCallbackUrlResponse> {
+  return apiFetch<GitHubAppExistingInstallationCallbackUrlResponse>(
+    `/projects/${encodeURIComponent(projectId)}/source-repositories/github/existing-installation-callback-url`,
     {
       auth: true,
       method: "POST"

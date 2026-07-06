@@ -122,6 +122,21 @@ REDIS_URL=
 }
 ```
 
+### Existing active GitHub installation callback URL
+
+`POST /api/projects/:projectId/source-repositories/github/existing-installation-callback-url`
+
+When a project already has an active GitHub source repository, SketchCatch does not send the user back to GitHub's Configure page. GitHub drops `state` from the Configure link for an already-installed account, so the API uses the active row's stored `githubInstallationId` plus a fresh signed state to open the SketchCatch repository selection callback screen directly.
+
+Response:
+
+```json
+{
+  "callbackUrl": "https://sketchcatch.net/integrations/github/callback?installation_id=123456&state=<signed-state>",
+  "expiresAt": "2026-07-05T00:00:00.000Z"
+}
+```
+
 ### GitHub callback repository 조회
 
 `POST /api/source-repositories/github/installation-repositories`

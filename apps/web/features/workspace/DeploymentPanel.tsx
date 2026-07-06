@@ -28,6 +28,7 @@ import {
   approveDeploymentPlan,
   cancelDeployment as cancelDeploymentRun,
   createDeployment,
+  createGitHubExistingInstallationCallbackUrl,
   createGitHubSourceRepositoryInstallUrl,
   getGitCicdHandoffPipelineStatus,
   getDeploymentFailureExplanation,
@@ -818,6 +819,13 @@ export function DeploymentPanel({
 
   async function startGitHubConnection(): Promise<void> {
     await runRequest(async () => {
+      if (activeGitHubSourceRepository?.githubInstallationId) {
+        const { callbackUrl } = await createGitHubExistingInstallationCallbackUrl(projectId);
+
+        window.location.assign(callbackUrl);
+        return;
+      }
+
       const { installUrl } = await createGitHubSourceRepositoryInstallUrl(projectId);
 
       window.location.assign(installUrl);

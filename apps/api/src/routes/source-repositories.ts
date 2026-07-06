@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type {
+  GitHubAppExistingInstallationCallbackUrlResponse,
   GitHubAppInstallUrlResponse,
   ListGitHubInstallationRepositoriesResponse,
   SourceRepository,
@@ -16,6 +17,7 @@ import {
 import { createGitHubAppClient, type GitHubAppClient } from "../source-repositories/github-app-client.js";
 import {
   connectGitHubSourceRepository,
+  createGitHubExistingInstallationCallbackUrl,
   createGitHubInstallUrl,
   createPostgresSourceRepositoryRepository,
   listGitHubInstallationRepositories,
@@ -55,6 +57,7 @@ export type SourceRepositoryRouteOptions = {
   githubAppClient?: GitHubAppClient;
   githubAppSlug?: string;
   githubAppStateSecret?: string;
+  githubAppCallbackUrl?: string;
 };
 
 type SourceRepositoryRequestContext = {
@@ -124,6 +127,39 @@ export async function registerSourceRepositoryRoutes(
     }
   });
 
+  app.post(
+    "/projects/:projectId/source-repositories/github/existing-installation-callback-url",
+    async (request, reply) => {
+      const params = projectParamsSchema.parse(request.params);
+      const { accessContext, repository } = await getSourceRepositoryRequestContext(
+        request,
+        options,
+        getSourceRepositoryDatabaseClient
+      );
+
+      try {
+        const runtime = getGitHubAppRouteRuntime(options);
+        const result = await createGitHubExistingInstallationCallbackUrl(
+          {
+            projectId: params.projectId,
+            accessContext,
+            callbackUrl: runtime.callbackUrl,
+            stateSecret: runtime.stateSecret
+          },
+          repository
+        );
+        const response: GitHubAppExistingInstallationCallbackUrlResponse = {
+          callbackUrl: result.callbackUrl,
+          expiresAt: result.expiresAt.toISOString()
+        };
+
+        return reply.status(201).send(response);
+      } catch (error) {
+        return handleSourceRepositoryError(error, reply);
+      }
+    }
+  );
+
   app.post("/source-repositories/github/installation-repositories", async (request, reply) => {
     const body = listGitHubInstallationRepositoriesBodySchema.parse(request.body);
     const { accessContext, repository } = await getSourceRepositoryRequestContext(
@@ -188,12 +224,19 @@ export async function registerSourceRepositoryRoutes(
 
 function getGitHubAppRouteRuntime(options: SourceRepositoryRouteOptions | undefined): {
   appSlug: string;
+  callbackUrl: string;
   stateSecret: string;
   githubAppClient: GitHubAppClient;
 } {
-  if (options?.githubAppClient && options.githubAppSlug && options.githubAppStateSecret) {
+  if (
+    options?.githubAppClient &&
+    options.githubAppSlug &&
+    options.githubAppStateSecret &&
+    options.githubAppCallbackUrl
+  ) {
     return {
       appSlug: options.githubAppSlug,
+      callbackUrl: options.githubAppCallbackUrl,
       stateSecret: options.githubAppStateSecret,
       githubAppClient: options.githubAppClient
     };
@@ -203,6 +246,7 @@ function getGitHubAppRouteRuntime(options: SourceRepositoryRouteOptions | undefi
 
   return {
     appSlug: options?.githubAppSlug ?? config.appSlug,
+    callbackUrl: options?.githubAppCallbackUrl ?? config.callbackUrl,
     stateSecret: options?.githubAppStateSecret ?? requireGitHubAppStateSecret(),
     githubAppClient:
       options?.githubAppClient ??
