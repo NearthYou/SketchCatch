@@ -15,7 +15,7 @@ import type {
   ArchitectureJson,
   DeploymentPlanSummary,
   DiagramJson,
-  ResourceType,
+  ReverseEngineeringResourceSelection,
   ReverseEngineeringScanResult
 } from "@sketchcatch/types";
 
@@ -366,7 +366,7 @@ export const reverseEngineeringScans = pgTable(
       .references(() => awsConnections.id, { onDelete: "restrict" }),
     provider: varchar("provider", { length: 32 }).notNull().default("aws"),
     region: varchar("region", { length: 32 }).notNull(),
-    resourceTypes: jsonb("resource_types").$type<ResourceType[]>().notNull(),
+    resourceTypes: jsonb("resource_types").$type<ReverseEngineeringResourceSelection[]>().notNull(),
     status: reverseEngineeringScanStatusEnum("status").notNull().default("queued"),
     result: jsonb("result").$type<ReverseEngineeringScanResult>(),
     errorSummary: text("error_summary"),

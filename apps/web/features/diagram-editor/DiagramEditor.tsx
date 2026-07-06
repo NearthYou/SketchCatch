@@ -2006,7 +2006,7 @@ function DiagramEditorInner({
 
         {isPreviewActive ? (
           <div className={styles.previewNotice} role="status">
-            AI 초안 미리보기입니다. AI 채팅창에서 생성 또는 취소를 선택하세요.
+            미리보기입니다. 오른쪽 패널에서 적용 또는 취소를 선택하세요.
           </div>
         ) : null}
 

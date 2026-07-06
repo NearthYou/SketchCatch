@@ -6,6 +6,7 @@ import type {
   ResourceEdge,
   ResourceNode,
   ResourceType,
+  ReverseEngineeringResourceSelection,
   ReverseEngineeringAnalysisExclusion,
   ReverseEngineeringImportSuggestion,
   ReverseEngineeringScanError,
@@ -16,7 +17,7 @@ import { createReverseEngineeringFindings } from "./aws-reverse-engineering-find
 export type AwsProviderScanInput = {
   provider: CloudProvider;
   region: string;
-  resourceTypes: ResourceType[];
+  resourceTypes: ReverseEngineeringResourceSelection[];
 };
 
 export type AwsDiscoveredRelationshipType = "contains" | "depends_on" | "attached_to";

@@ -29,9 +29,10 @@ const REVERSE_ENGINEERING_PROTECTED_VALUE_KEYS = [
 ] as const;
 const REVERSE_ENGINEERING_EDITABLE_VALUE_KEYS = ["displayName", "description"] as const;
 const UNKNOWN_RESOURCE_STYLE = {
-  borderColor: "#94a3b8",
-  textColor: "#64748b"
+  borderColor: "#f97316",
+  textColor: "#9a3412"
 } as const;
+const UNKNOWN_MANUAL_REVIEW_LABEL_PREFIX = "확인 필요";
 
 export type ReverseEngineeringBoardApplication = {
   readonly comparison: ReverseEngineeringBoardComparison;
@@ -94,12 +95,14 @@ function markReverseEngineeringDiagram(diagram: DiagramJson): DiagramJson {
 
 // providerResourceId 같은 원본 식별자는 수정 대상이 아니라 추적용 metadata로 표시합니다.
 function markReverseEngineeringNode(node: DiagramNode): DiagramNode {
-  const nextStyle = isUnsupportedUnknownNode(node)
+  const isUnsupportedUnknown = isUnsupportedUnknownNode(node);
+  const nextStyle = isUnsupportedUnknown
     ? { ...node.style, ...UNKNOWN_RESOURCE_STYLE }
     : node.style;
 
   return {
     ...node,
+    label: isUnsupportedUnknown ? createUnknownManualReviewLabel(node.label) : node.label,
     ...(nextStyle ? { style: nextStyle } : {}),
     metadata: {
       ...node.metadata,
@@ -110,6 +113,13 @@ function markReverseEngineeringNode(node: DiagramNode): DiagramNode {
       }
     }
   };
+}
+
+// UNKNOWN 노드는 사용자가 직접 확인해야 하므로 보드 이름표 앞에 확인 표시를 붙입니다.
+function createUnknownManualReviewLabel(label: string): string {
+  return label.startsWith(`${UNKNOWN_MANUAL_REVIEW_LABEL_PREFIX} · `)
+    ? label
+    : `${UNKNOWN_MANUAL_REVIEW_LABEL_PREFIX} · ${label}`;
 }
 
 function isUnsupportedUnknownNode(node: DiagramNode): boolean {

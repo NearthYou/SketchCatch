@@ -102,6 +102,8 @@ test("deployment toolbar action is grouped with the other panel mode buttons", (
 });
 
 test("workspace AI opens from a floating chat dock instead of the right panel", () => {
+  const floatingPanelSlotRule = getCssRule(diagramEditorStylesSource, "floatingPanelSlot");
+
   assert.match(diagramEditorSource, /floatingPanel\?\.\(panelContext\)/);
   assert.match(projectDraftManagerSource, /floatingPanel=\{\(context\) => \(/);
   assert.match(workspaceDraftManagerSource, /floatingPanel=\{\(context\) => \(/);
@@ -109,8 +111,24 @@ test("workspace AI opens from a floating chat dock instead of the right panel", 
   assert.match(workspaceDraftManagerSource, /<WorkspaceAiChatDock/);
   assert.match(aiChatDockSource, /className=\{styles\.aiChatLauncher/);
   assert.match(aiChatDockSource, /className=\{styles\.aiChatDock/);
+  assert.match(aiChatDockSource, /data-terraform-leave-guard-ignore/);
   assert.match(stylesSource, /\.aiChatLauncher\s*\{/);
   assert.match(stylesSource, /\.aiChatDock\s*\{/);
+  assert.match(floatingPanelSlotRule, /pointer-events:\s*none/);
+  assert.match(floatingPanelSlotRule, /z-index:\s*90/);
+});
+
+test("workspace AI has a dedicated error tab for Terraform issue resolution", () => {
+  assert.match(aiChatDockSource, /type WorkspaceAiChatScope = "draft" \| "errors" \| "preview" \| "simulation"/);
+  assert.match(aiChatDockSource, /setActiveChatTab\("errors"\)/);
+  assert.match(aiChatDockSource, /activeChatTab === "errors" && terraformIssueResolution !== null/);
+  assert.match(aiChatDockSource, /AI 오류/);
+  assert.match(stylesSource, /\.aiChatDock\[data-chat-tab="errors"\] \.aiChatComposer/);
+});
+
+test("terraform issue fix cards omit procedural apply steps", () => {
+  assert.doesNotMatch(aiChatDockSource, /fixPlan\.steps\.map/);
+  assert.doesNotMatch(aiChatDockSource, /<ol>/);
 });
 
 test("workspace AI chat keeps the floating dock width with compact prompt guide", () => {
@@ -147,6 +165,17 @@ test("terraform issues navigation stays reachable while diagnostics are visible"
   assert.match(componentSource, /isTerraformIssuesNavigationTarget/);
   assert.match(componentSource, /canOpenTerraformIssuesDuringEdit && isTerraformIssuesNavigationTarget\(target\)/);
   assert.match(componentSource, /openCollapsedView\("issues"\)/);
+});
+
+test("terraform issue AI resolution bypasses the leave guard while editing", () => {
+  const issuesPanelSource = readWorkspaceFile("TerraformIssuesPanel.tsx");
+
+  assert.match(issuesPanelSource, /data-terraform-issue-ai-resolution/);
+  assert.match(componentSource, /isTerraformIssueAiResolutionTarget/);
+  assert.match(componentSource, /isTerraformIssueAiResolutionTarget\(target\)/);
+  assert.match(componentSource, /isTerraformLeaveGuardIgnoredTarget/);
+  assert.match(aiChatDockSource, /data-terraform-leave-guard-ignore/);
+  assert.match(issuesPanelSource, /onResolveWithAi\(issue\)/);
 });
 
 test("terraform code navigation stays reachable from issues after a blocked save", () => {
@@ -419,30 +448,55 @@ test("pre-deployment finding fix buttons open the existing terraform source loca
   assert.match(componentSource, /onOpenFindingTerraformSource=\{openPreDeploymentFindingTerraformSource\}/);
 });
 
-test("terraform error explanation lives in the terraform code panel only when errors exist", () => {
-  const errorExplanationRule = getCssRule(stylesSource, "terraformErrorExplanationPanel");
-  const errorExplanationListRule = getCssRule(stylesSource, "terraformErrorExplanationList");
-  const errorExplanationResultRule = getCssRule(stylesSource, "terraformErrorExplanationResult");
+test("terraform errors surface as an issues banner and AI resolution lives in the chat dock", () => {
+  const issueBannerRule = getCssRule(stylesSource, "terraformIssueBanner");
+  const aiButtonRule = getCssRule(stylesSource, "terraformDiagnosticAiButton");
 
-  assert.match(terraformPanelSource, /runAiTerraformErrorExplanation/);
-  assert.match(terraformPanelSource, /errorDiagnostics\.length > 0 \? \(/);
-  assert.match(terraformPanelSource, /errorDiagnostics\.map/);
-  assert.match(terraformPanelSource, /terraformErrorExplanationsByKey/);
-  assert.match(terraformPanelSource, /diagnosticExplanation = explanationEntry\?\.explanation/);
-  assert.match(terraformPanelSource, /disabled=\{isExplanationLoading \|\| requestState === "loading"\}/);
-  assert.doesNotMatch(terraformPanelSource, /explainedTerraformErrorKey/);
-  assert.match(terraformPanelSource, /오류를 해석하는 중입니다/);
-  assert.match(terraformPanelSource, /className=\{styles\.terraformErrorExplanationPanel\}/);
-  assert.match(terraformPanelSource, /className=\{styles\.terraformErrorExplanationList\}/);
-  assert.doesNotMatch(terraformPanelSource, /diagnosticToast/);
-  assert.doesNotMatch(terraformPanelSource, /showDiagnosticToast/);
-  assert.doesNotMatch(aiChatDockSource, /runAiTerraformErrorExplanation/);
-  assert.doesNotMatch(aiChatDockSource, /Terraform 오류 설명/);
-  assert.doesNotMatch(stylesSource, /\.terraformDiagnosticToast\s*\{/);
-  assert.match(errorExplanationRule, /\bmax-height:\s*240px;/);
-  assert.match(errorExplanationRule, /\boverflow:\s*auto;/);
-  assert.match(errorExplanationListRule, /\blist-style:\s*none;/);
-  assert.match(errorExplanationResultRule, /\bgrid-column:\s*1 \/ -1;/);
+  assert.doesNotMatch(terraformPanelSource, /runAiTerraformErrorExplanation/);
+  assert.doesNotMatch(terraformPanelSource, /terraformErrorExplanationsByKey/);
+  assert.doesNotMatch(terraformPanelSource, /className=\{styles\.terraformErrorExplanationPanel\}/);
+  assert.match(terraformPanelSource, /className=\{styles\.terraformIssueBanner\}/);
+  assert.match(terraformPanelSource, /Issues 탭으로 이동/);
+  assert.match(componentSource, /readStoredTerraformIssues/);
+  assert.match(componentSource, /markTerraformIssuesStale/);
+  assert.match(componentSource, /mergeTerraformValidationDiagnostics/);
+  assert.match(componentSource, /storeTerraformIssues/);
+  assert.match(componentSource, /loadedTerraformIssuesProjectId/);
+  assert.match(componentSource, /storeTerraformIssues\(window\.localStorage, projectId, terraformIssues\)/);
+  assert.match(componentSource, /<TerraformIssuesPanel issues=\{terraformIssues\}/);
+  assert.match(aiChatDockSource, /runAiTerraformErrorExplanation/);
+  assert.match(aiChatDockSource, /terraform_issue/);
+  assert.doesNotMatch(aiChatDockSource, /selectTerraformIssueWellArchitectedConclusion/);
+  assert.doesNotMatch(aiChatDockSource, /Well-Architected/);
+  assert.match(aiChatDockSource, /onApplyTerraformIssueFix/);
+  assert.match(issueBannerRule, /\bbackground:\s*#fff7ed;/);
+  assert.match(aiButtonRule, /\bbackground:\s*var\(--bp-blue\);/);
+});
+
+test("terraform issue AI resolution shows a fix plan before apply", () => {
+  assert.match(aiChatDockSource, /createTerraformIssueFixPlan/);
+  assert.match(aiChatDockSource, /terraformIssueFixPlan/);
+  assert.match(aiChatDockSource, /수정 계획/);
+  assert.match(aiChatDockSource, /fixPlan\.canApply/);
+  assert.match(aiChatDockSource, /fixPlan\.providerNotice/);
+  assert.match(aiChatDockSource, /terraformIssueFixPlanNotice/);
+  assert.match(aiChatDockSource, /fixPlan\.codeFrame/);
+  assert.match(aiChatDockSource, /fixPlan\.plainExplanation/);
+  assert.match(aiChatDockSource, /fixPlan\.fixExplanation/);
+  assert.match(aiChatDockSource, /terraformIssueCodeFrame/);
+  assert.match(aiChatDockSource, /fixPlan\.codePreview/);
+  assert.match(aiChatDockSource, /현재 코드/);
+  assert.match(aiChatDockSource, /수정할 코드/);
+  assert.match(aiChatDockSource, /수정 중/);
+  assert.match(componentSource, /getCurrentTerraformCode/);
+  assert.match(terraformPanelSource, /codePreview\.source === "safe_fix"/);
+});
+
+test("terraform issue AI resolution can close the chat dock without trapping the issue card", () => {
+  assert.match(aiChatDockSource, /function closeChatDock/);
+  assert.match(aiChatDockSource, /setTerraformIssueResolution\(null\)/);
+  assert.match(aiChatDockSource, /setApplyingTerraformFixRequestId\(null\)/);
+  assert.match(aiChatDockSource, /onClick=\{closeChatDock\}/);
 });
 
 test("terraform editor renders syntax colors and squiggly error underlines", () => {
@@ -482,21 +536,20 @@ test("terraform editor renders syntax colors and squiggly error underlines", () 
 });
 
 test("terraform preview explanation is triggered from the terraform code panel", () => {
-  const previewExplanationRule = getCssRule(stylesSource, "terraformPreviewExplanationPanel");
-
-  assert.match(terraformPanelSource, /runAiTerraformPreviewExplanation/);
   assert.match(terraformPanelSource, /highlightedBlock\.code/);
   assert.match(terraformPanelSource, /displayedTerraformCode/);
-  assert.match(terraformPanelSource, /resource\.explanation/);
-  assert.match(terraformPanelSource, /closeTerraformPreviewExplanation/);
-  assert.match(terraformPanelSource, /Terraform Preview 설명 닫기/);
-  assert.match(terraformPanelSource, /className=\{styles\.terraformPreviewExplanationPanel\}/);
-  assert.match(terraformPanelSource, /className=\{styles\.terraformPreviewExplanationActions\}/);
+  assert.match(terraformPanelSource, /onTerraformPreviewAiRequest/);
+  assert.match(componentSource, /onTerraformPreviewAiRequest/);
+  assert.match(workspaceDraftManagerSource, /terraformPreviewAiRequest/);
+  assert.match(aiChatDockSource, /runAiTerraformPreviewExplanation/);
+  assert.match(aiChatDockSource, /WorkspaceAiTerraformPreviewResult/);
+  assert.match(aiChatDockSource, /activeChatTab === "preview"/);
+  assert.match(aiChatDockSource, /Preview 설명/);
   assert.doesNotMatch(aiChatDockSource, /WorkspaceAiTerraformPanel/);
-  assert.doesNotMatch(aiChatDockSource, /Terraform Preview 설명/);
+  assert.doesNotMatch(terraformPanelSource, /className=\{styles\.terraformPreviewExplanationPanel\}/);
+  assert.doesNotMatch(terraformPanelSource, /closeTerraformPreviewExplanation/);
+  assert.doesNotMatch(terraformPanelSource, /setTerraformPreviewExplanation/);
   assert.doesNotMatch(terraformPanelSource, /checklist\.length\} Checks/);
-  assert.match(previewExplanationRule, /\bmax-height:\s*180px;/);
-  assert.match(previewExplanationRule, /\boverflow:\s*auto;/);
 });
 
 test("terraform resource code mode keeps explanation but omits validation and deployment actions", () => {
@@ -613,13 +666,17 @@ test("terraform virtual file validation avoids request bursts and combined-code 
   assert.doesNotMatch(terraformPanelSource, /combineTerraformFiles\(nextFiles\)\.trim\(\)\.length > 0/);
 });
 
-test("terraform editor clears stale diagnostics after local edits", () => {
+test("terraform editor keeps diagnostics visible after local edits", () => {
   const handleCodeChangeIndex = terraformPanelSource.indexOf("function handleCodeChange");
+  const handleCodeChangeEndIndex = terraformPanelSource.indexOf("function handleCodeKeyDown", handleCodeChangeIndex);
+  const handleCodeChangeSource = terraformPanelSource.slice(handleCodeChangeIndex, handleCodeChangeEndIndex);
 
   assert.ok(handleCodeChangeIndex > -1);
-  assert.ok(terraformPanelSource.indexOf("codeVersionRef.current += 1", handleCodeChangeIndex) > handleCodeChangeIndex);
-  assert.ok(terraformPanelSource.indexOf("setDiagnostics([])", handleCodeChangeIndex) > handleCodeChangeIndex);
-  assert.ok(terraformPanelSource.indexOf("onDiagnosticsChange([])", handleCodeChangeIndex) > handleCodeChangeIndex);
+  assert.ok(handleCodeChangeEndIndex > handleCodeChangeIndex);
+  assert.match(handleCodeChangeSource, /codeVersionRef\.current \+= 1/);
+  assert.doesNotMatch(handleCodeChangeSource, /setDiagnostics\(\[\]\)/);
+  assert.doesNotMatch(handleCodeChangeSource, /onDiagnosticsChange\(\[\]\)/);
+  assert.match(componentSource, /markTerraformIssuesStale/);
 });
 
 function readWorkspaceFile(fileName: string): string {

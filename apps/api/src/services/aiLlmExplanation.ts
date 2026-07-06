@@ -7,6 +7,7 @@ import type {
   AiProvider,
   AiProviderMetadata,
   AiProviderService,
+  LlmCodeSuggestion,
   LlmExplanation,
   LlmExplanationFallbackReason,
   LlmExplanationTarget
@@ -152,7 +153,7 @@ function createDefaultOpenAiResponsesClient(options: OpenAiClientOptions): OpenA
           store: false
         });
 
-        return { output_parsed: response.output_parsed };
+        return { output_parsed: response.output_parsed as LlmExplanation | null };
       }
     }
   };
@@ -309,12 +310,16 @@ export function createAiProviderBackedLlmExplanation(
   return async (input) => {
     let primaryProviderFallback: LlmExplanation | null = null;
 
-    if (input.target === "terraform_error_explanation") {
+    if (isAmazonQPrimaryTarget(input.target)) {
       if (options.amazonQProvider === undefined) {
-        primaryProviderFallback = createFallbackExplanationWithMetadata(
+        return createFallbackExplanationWithProviderMetadata(
           input,
           resolveAmazonQUnavailableFallbackReason(creditPolicy),
-          creditPolicy.billingMode
+          creditPolicy.billingMode,
+          {
+            provider: "amazon_q",
+            service: "amazon_q_business"
+          }
         );
       }
 
@@ -328,7 +333,14 @@ export function createAiProviderBackedLlmExplanation(
       });
 
       if (qResult !== null) {
-        return qResult;
+        if (
+          input.target === "terraform_error_explanation" &&
+          shouldTrySecondaryProviderAfterAmazonQ(qResult)
+        ) {
+          primaryProviderFallback = qResult;
+        } else {
+          return qResult;
+        }
       }
     }
 
@@ -372,6 +384,14 @@ export function createAiProviderBackedLlmExplanation(
       creditPolicy.billingMode
     );
   };
+}
+
+function shouldTrySecondaryProviderAfterAmazonQ(explanation: LlmExplanation): boolean {
+  return explanation.fallbackUsed && explanation.fallbackReason === "invalid_response";
+}
+
+function isAmazonQPrimaryTarget(target: LlmExplanationTarget): boolean {
+  return target === "terraform_error_explanation" || target === "terraform_preview_explanation";
 }
 
 function createBedrockTextProvider(input: { readonly region: string; readonly modelId: string }): AiTextProvider {
@@ -482,6 +502,22 @@ async function tryProvider(input: {
   const creditFallbackReason = getCreditFallbackReason(input.provider.provider, input.creditPolicy);
 
   if (creditFallbackReason !== null) {
+    if (
+      isAmazonQPrimaryTarget(input.input.target) &&
+      input.provider.provider === "amazon_q"
+    ) {
+      return createFallbackExplanationWithProviderMetadata(
+        input.input,
+        creditFallbackReason,
+        input.creditPolicy.billingMode,
+        {
+          provider: input.provider.provider,
+          service: input.provider.service,
+          model: input.provider.model
+        }
+      );
+    }
+
     return createFallbackExplanationWithMetadata(
       input.input,
       creditFallbackReason,
@@ -526,7 +562,17 @@ async function tryProvider(input: {
       payload
     });
     const fallback = createFallbackExplanation(input.input, "invalid_response");
-    const explanation = parseLlmExplanationText(response.text, fallback);
+    const parsedExplanation = parseProviderExplanationText({
+      fallback,
+      input: input.input,
+      provider: input.provider.provider,
+      text: response.text
+    });
+    const explanation = completeAmazonQTerraformCodeSuggestion({
+      explanation: parsedExplanation,
+      input: input.input,
+      provider: input.provider.provider
+    });
     const explanationWithMetadata = withProviderMetadata(explanation, {
       provider: input.provider.provider,
       service: input.provider.service,
@@ -554,17 +600,189 @@ async function tryProvider(input: {
 }
 
 function createProviderPrompt(target: LlmExplanationTarget, payload: unknown): string {
+  const terraformErrorInstructions =
+    target === "terraform_error_explanation"
+      ? [
+          "For Terraform errors, inspect rawMessage, terraformCodeContext, and diagnosticExplanation when they are present.",
+          "Explain the failing line, the Terraform error type, why it fails, and exactly how the user should fix the Terraform code.",
+          "If you can identify a safe local replacement, include codeSuggestion with currentCode as an exact snippet from terraformCodeContext, suggestedCode as the replacement snippet, and rationale.",
+          "If the correct fix is deleting an invalid standalone snippet, set suggestedCode to an empty string.",
+          "For terraform.sync.block_header or unexpected standalone token lines, you must return a codeSuggestion when terraformCodeContext contains the exact invalid line.",
+          "If no exact local replacement is safe, omit codeSuggestion.",
+          "Do not answer with generic non-answers such as sorry, cannot find relevant information, or not enough information.",
+          "Do not provide Well-Architected guidance for Terraform syntax or validation errors."
+        ]
+      : [];
+  const terraformPreviewInstructions =
+    target === "terraform_preview_explanation"
+      ? [
+          "For Terraform preview explanations, review the Terraform code and deterministic preview result as IaC evidence.",
+          "Use the AWS Well-Architected Framework pillars to evaluate the preview: operational excellence, security, reliability, performance efficiency, cost optimization, and sustainability.",
+          "Return exactly six highlights, in this order: operational excellence, security, reliability, performance efficiency, cost optimization, sustainability.",
+          "Each highlight must name the pillar in Korean and include both an observation and a recommendation.",
+          "Set wellArchitectedConclusion to an overall Korean evaluation that synthesizes the six pillar reviews.",
+          "Do not include codeSuggestion for Terraform preview explanations."
+        ]
+      : [];
+
   return [
     "Return JSON only. Do not wrap the response in markdown.",
     "The JSON shape must be:",
-    '{"target":"TARGET","summary":"short summary","highlights":["item"],"nextActions":["item"],"fallbackUsed":false}',
+    '{"target":"TARGET","summary":"short summary","highlights":["item"],"nextActions":["item"],"fallbackUsed":false,"codeSuggestion":null,"wellArchitectedConclusion":null}',
+    "For Terraform errors, codeSuggestion may be an object with currentCode, suggestedCode, and rationale, and wellArchitectedConclusion must stay null.",
+    "For Terraform preview explanations, highlights must contain the six Well-Architected pillar reviews and wellArchitectedConclusion must contain the overall evaluation. For other cases, keep codeSuggestion null.",
     `TARGET must be "${target}".`,
     target === "architecture_patch_preview"
       ? "This is a preview only. Do not claim the Architecture Board changed."
       : "Use the deterministic result as the source of truth. Do not invent resources or guarantees.",
+    ...terraformErrorInstructions,
+    ...terraformPreviewInstructions,
     "Provider input:",
     JSON.stringify(payload)
   ].join("\n");
+}
+
+function parseProviderExplanationText(input: {
+  readonly fallback: LlmExplanation;
+  readonly input: LlmExplanationInput;
+  readonly provider: AiProvider;
+  readonly text: string;
+}): LlmExplanation {
+  const parsed = parseLlmExplanationText(input.text, input.fallback);
+
+  if (!parsed.fallbackUsed || parsed.fallbackReason !== "invalid_response") {
+    return parsed;
+  }
+
+  if (input.provider === "amazon_q" && input.input.target === "terraform_error_explanation") {
+    return createAmazonQTerraformPlainTextExplanation(input.text, input.fallback);
+  }
+
+  return parsed;
+}
+
+function completeAmazonQTerraformCodeSuggestion(input: {
+  readonly explanation: LlmExplanation;
+  readonly input: LlmExplanationInput;
+  readonly provider: AiProvider;
+}): LlmExplanation {
+  if (
+    input.provider !== "amazon_q" ||
+    input.input.target !== "terraform_error_explanation" ||
+    input.explanation.fallbackUsed ||
+    input.explanation.codeSuggestion !== undefined
+  ) {
+    return input.explanation;
+  }
+
+  const codeSuggestion = createStandaloneTerraformLineDeletionSuggestion(input.input);
+
+  if (codeSuggestion === undefined) {
+    return input.explanation;
+  }
+
+  return {
+    ...input.explanation,
+    codeSuggestion
+  };
+}
+
+function createStandaloneTerraformLineDeletionSuggestion(
+  input: Extract<LlmExplanationInput, { readonly target: "terraform_error_explanation" }>
+): LlmCodeSuggestion | undefined {
+  const diagnostic = input.result.diagnosticExplanation;
+  const lineNumber = diagnostic?.line;
+
+  if (
+    diagnostic === undefined ||
+    lineNumber === undefined ||
+    !isStandaloneTerraformSyntaxError(diagnostic.errorType) ||
+    input.terraformCodeContext === undefined ||
+    input.terraformCodeContext.trim().length === 0
+  ) {
+    return undefined;
+  }
+
+  const line = extractLine(input.terraformCodeContext, lineNumber);
+
+  if (line === undefined || line.trim().length === 0 || isLikelyTerraformBlockOrAttribute(line)) {
+    return undefined;
+  }
+
+  const lineBreak = input.terraformCodeContext.includes("\r\n") ? "\r\n" : "\n";
+  const currentCode = input.terraformCodeContext.includes(`${line}${lineBreak}`) ? `${line}${lineBreak}` : line;
+  const fileName = diagnostic.sourceFileName ?? "Terraform 파일";
+
+  return {
+    currentCode,
+    suggestedCode: "",
+    rationale: `${fileName} ${lineNumber}번째 줄의 \`${line.trim()}\` 코드는 Terraform block header나 attribute가 아니므로 삭제해야 합니다.`
+  };
+}
+
+function isStandaloneTerraformSyntaxError(errorType: string): boolean {
+  return errorType === "terraform.sync.block_header" || errorType === "terraform.unexpected_token";
+}
+
+function extractLine(value: string, lineNumber: number): string | undefined {
+  return value.split(/\r?\n/)[lineNumber - 1];
+}
+
+function isLikelyTerraformBlockOrAttribute(line: string): boolean {
+  const trimmed = line.trim();
+
+  return (
+    trimmed.startsWith("#") ||
+    trimmed.startsWith("//") ||
+    trimmed.endsWith("{") ||
+    /^[A-Za-z_][A-Za-z0-9_]*\s*=/.test(trimmed)
+  );
+}
+
+function createAmazonQTerraformPlainTextExplanation(
+  text: string,
+  fallback: LlmExplanation
+): LlmExplanation {
+  const items = normalizeProviderTextItems(text);
+  const summary = items[0] ?? "";
+
+  if (summary.length === 0 || isUnhelpfulProviderText(summary)) {
+    return fallback;
+  }
+
+  return {
+    target: "terraform_error_explanation",
+    summary: trimProviderText(summary, 300),
+    highlights: items.slice(1, 4).map((item) => trimProviderText(item, 120)),
+    nextActions: fallback.nextActions.slice(0, 5),
+    fallbackUsed: false
+  };
+}
+
+function isUnhelpfulProviderText(value: string): boolean {
+  const normalized = value.toLowerCase();
+
+  return (
+    normalized.includes("could not find relevant information") ||
+    normalized.includes("cannot find relevant information") ||
+    normalized.includes("sorry, i could not") ||
+    normalized.includes("not enough information")
+  );
+}
+
+function normalizeProviderTextItems(text: string): string[] {
+  return text
+    .split(/\r?\n+/)
+    .map((line) => line.replace(/^\s*(?:[-*]|\d+[.)])\s*/, "").trim())
+    .filter((line) => line.length > 0 && !/^```/.test(line));
+}
+
+function trimProviderText(value: string, maxLength: number): string {
+  if (value.length <= maxLength) {
+    return value;
+  }
+
+  return value.slice(0, maxLength).trim();
 }
 
 function createFallbackExplanationWithMetadata(
@@ -572,15 +790,33 @@ function createFallbackExplanationWithMetadata(
   fallbackReason: LlmExplanationFallbackReason,
   billingMode: AiBillingMode
 ): LlmExplanation {
+  return createFallbackExplanationWithProviderMetadata(input, fallbackReason, billingMode, {
+    provider: "fallback",
+    service: "rule_fallback"
+  });
+}
+
+function createFallbackExplanationWithProviderMetadata(
+  input: LlmExplanationInput,
+  fallbackReason: LlmExplanationFallbackReason,
+  billingMode: AiBillingMode,
+  provider: {
+    readonly provider: AiProvider;
+    readonly service: AiProviderService;
+    readonly model?: string | undefined;
+  }
+): LlmExplanation {
   const payload = maskSecretsForAi(createSummaryPayload(input));
 
   return withProviderMetadata(createFallbackExplanation(input, fallbackReason), {
-    provider: "fallback",
-    service: "rule_fallback",
+    provider: provider.provider,
+    service: provider.service,
+    model: provider.model,
     routeTarget: input.target,
     cacheHit: false,
     cacheKey: createNormalizedAiCacheKey({
-      provider: "fallback",
+      provider: provider.provider,
+      model: provider.model,
       routeTarget: input.target,
       payload
     }),
@@ -710,8 +946,8 @@ function resolveFallbackReasonForMissingProvider(
   creditPolicy: AiCreditPolicy
 ): LlmExplanationFallbackReason {
   if (
-    (target === "terraform_error_explanation" && !creditPolicy.amazonQ && !creditPolicy.bedrock) ||
-    (target !== "terraform_error_explanation" && !creditPolicy.bedrock)
+    (isAmazonQPrimaryTarget(target) && !creditPolicy.amazonQ && !creditPolicy.bedrock) ||
+    (!isAmazonQPrimaryTarget(target) && !creditPolicy.bedrock)
   ) {
     return "credit_not_confirmed";
   }

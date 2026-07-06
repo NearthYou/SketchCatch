@@ -1129,6 +1129,76 @@ type LlmExplanation = {
 
 `AiArchitectureDraftResult`, `AiPreDeploymentAnalysisResult`, `DesignSimulationResult`, `AiTerraformErrorExplanationResult`는 필요할 때 `llmExplanation?: LlmExplanation`를 포함할 수 있다.
 
+Terraform 오류 설명은 Issues 탭에서 해결 전까지 유지되는 진단을 사용자가 이해하고 승인 기반으로 고치기 위한 설명 DTO다. 오류 해결 화면은 Well-Architected 리뷰를 다루지 않고 `진단 -> 코드 위치 -> 수정 방법 -> 적용 가능 여부`만 보여준다. Well-Architected 리뷰는 Pre-Deployment Check의 책임이다. 자동 적용 가능한 수정은 deterministic rule metadata로 먼저 표현하고, Amazon Q는 rule로 처리하기 어려운 오류의 설명 보강이나 fallback 제안에만 사용한다. 실제 Terraform 코드 변경은 사용자가 `적용`을 누른 뒤에만 가능하다.
+
+```ts
+type AiTerraformSafeFix = {
+  applicable: boolean;
+  code: string;
+  label: string;
+  description: string;
+};
+
+type WellArchitectedPillar =
+  | "operational_excellence"
+  | "security"
+  | "reliability"
+  | "performance_efficiency"
+  | "cost_optimization"
+  | "sustainability";
+
+type AiWellArchitectedGuidance = {
+  pillar: WellArchitectedPillar;
+  title: string;
+  observation: string;
+  recommendation: string;
+};
+
+type AiTerraformCodeFrameLine = {
+  lineNumber: number;
+  text: string;
+  isErrorLine: boolean;
+};
+
+type AiTerraformCodeSuggestion = {
+  currentCode: string;
+  // 빈 문자열이면 currentCode 조각 삭제를 의미한다.
+  suggestedCode: string;
+  rationale: string;
+  source: "rule" | "amazon_q";
+};
+
+type AiTerraformDiagnosticExplanation = {
+  errorType: string;
+  plainExplanation: string;
+  fixExplanation: string;
+  codeFrame: AiTerraformCodeFrameLine[];
+  canApply: boolean;
+  codeSuggestion?: AiTerraformCodeSuggestion;
+  line?: number;
+  sourceFileName?: string;
+};
+
+type AiTerraformErrorExplanationResult = {
+  stage: AiTerraformStage;
+  category: AiTerraformErrorCategory;
+  severity: RiskLevel;
+  rawMessage: string;
+  summary: string;
+  likelyCause: string;
+  nextActions: string[];
+  diagnosticExplanation?: AiTerraformDiagnosticExplanation;
+  // Legacy compatibility field. Terraform code-error responses return [].
+  wellArchitectedGuidance: AiWellArchitectedGuidance[];
+  consensusRecommendation: string;
+  safeFix?: AiTerraformSafeFix;
+  relatedResourceId?: string;
+  llmExplanation?: LlmExplanation;
+};
+```
+
+v1에서 rule-first 자동 적용 후보가 될 수 있는 진단은 `terraform.trailing_comma`, `terraform.quoted_reference`뿐이다. 그 외 진단은 `safeFix.applicable: false` 또는 `diagnosticExplanation.canApply: false`로 내려가며 Issues 탭과 AI chat dock은 수동 수정 필요 상태로 표시한다. Amazon Q가 `codeSuggestion`을 반환하더라도 현재 코드와 정확히 매칭되는 경우에만 적용 버튼을 활성화한다.
+
 자연어 Architecture 수정 요청은 `ArchitecturePatchPreview`로만 반환한다. 이 preview는 `proposedArchitectureJson`과 diff 성격의 `changes`를 보여줄 뿐이며, `requiresUserAcceptance: true`와 `userAcceptedChange: null` 상태로 내려간다. 실제 Architecture Board 반영은 별도 적용 버튼에서 `UserAcceptedChange`를 기록한 뒤에만 가능하다.
 
 ```ts

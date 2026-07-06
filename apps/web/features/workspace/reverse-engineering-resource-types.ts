@@ -1,4 +1,6 @@
-import type { ResourceType } from "../../../../packages/types/src";
+import type { ResourceType, ReverseEngineeringResourceSelection } from "../../../../packages/types/src";
+
+export const REVERSE_ENGINEERING_ALL_RESOURCE_SELECTION = "ALL" satisfies ReverseEngineeringResourceSelection;
 
 export const REVERSE_ENGINEERING_RESOURCE_TYPES: ResourceType[] = [
   "VPC",
@@ -9,4 +11,9 @@ export const REVERSE_ENGINEERING_RESOURCE_TYPES: ResourceType[] = [
   "EC2",
   "RDS",
   "S3"
+];
+
+export const REVERSE_ENGINEERING_RESOURCE_SELECTIONS: ReverseEngineeringResourceSelection[] = [
+  REVERSE_ENGINEERING_ALL_RESOURCE_SELECTION,
+  ...REVERSE_ENGINEERING_RESOURCE_TYPES
 ];

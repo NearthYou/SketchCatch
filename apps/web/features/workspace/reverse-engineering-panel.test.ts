@@ -7,6 +7,7 @@ const panelSource = readWorkspaceFile("ReverseEngineeringPanel.tsx");
 const draftEditsSource = readWorkspaceFile("reverse-engineering-draft-edits.ts");
 const findingsPanelSource = readWorkspaceFile("ReverseEngineeringFindingsPanel.tsx");
 const importPanelSource = readWorkspaceFile("ReverseEngineeringImportSuggestionsPanel.tsx");
+const parameterPanelSource = readWorkspaceFile("ReverseEngineeringResourceParametersPanel.tsx");
 const resultPanelSource = readWorkspaceFile("ReverseEngineeringResultPanel.tsx");
 const resourceTypesSource = readWorkspaceFile("reverse-engineering-resource-types.ts");
 const scanCriteriaFormSource = readWorkspaceFile("ReverseEngineeringScanCriteriaForm.tsx");
@@ -15,6 +16,8 @@ const scanHistoryHookSource = readWorkspaceFile("useReverseEngineeringScanHistor
 const rightPanelSource = readWorkspaceFile("WorkspaceRightPanel.tsx");
 
 test("Reverse Engineering panel exposes all grilling resource filters by default", () => {
+  assert.match(resourceTypesSource, /REVERSE_ENGINEERING_ALL_RESOURCE_SELECTION = "ALL"/);
+  assert.match(resourceTypesSource, /"ALL"/);
   assert.match(resourceTypesSource, /"VPC"/);
   assert.match(resourceTypesSource, /"SUBNET"/);
   assert.match(resourceTypesSource, /"INTERNET_GATEWAY"/);
@@ -23,6 +26,20 @@ test("Reverse Engineering panel exposes all grilling resource filters by default
   assert.match(resourceTypesSource, /"EC2"/);
   assert.match(resourceTypesSource, /"RDS"/);
   assert.match(resourceTypesSource, /"S3"/);
+  assert.match(panelSource, /useState<ReverseEngineeringResourceSelection\[\]>\(\[/);
+  assert.match(panelSource, /REVERSE_ENGINEERING_ALL_RESOURCE_SELECTION/);
+  assert.match(scanCriteriaFormSource, /formatResourceSelectionLabel/);
+  assert.match(scanCriteriaFormSource, /전체/);
+});
+
+test("Reverse Engineering scan starts from one main import action and keeps filters in advanced settings", () => {
+  assert.match(scanCriteriaFormSource, /기존 AWS 가져오기/);
+  assert.match(scanCriteriaFormSource, /고급 설정/);
+  assert.match(scanCriteriaFormSource, /<details/);
+  assert.match(scanCriteriaFormSource, /전체 스캔/);
+  assert.match(scanCriteriaFormSource, /현재 리전/);
+  assert.match(scanCriteriaFormSource, /getSelectedAwsConnectionRegion/);
+  assert.doesNotMatch(scanCriteriaFormSource, /AWS 스캔 시작/);
 });
 
 test("Reverse Engineering result stays preview-only until the user applies it", () => {
@@ -55,12 +72,32 @@ test("Reverse Engineering result shows risks, partial scan errors, and import ha
   assert.match(findingsPanelSource, /High Risk/);
   assert.match(findingsPanelSource, /어떻게 고치면 되나요/);
   assert.match(findingsPanelSource, /부분 실패/);
+  assert.match(findingsPanelSource, /stage/);
+  assert.match(findingsPanelSource, /reason/);
+  assert.match(findingsPanelSource, /retryable/);
+  assert.match(findingsPanelSource, /다시 시도 가능/);
   assert.match(resultPanelSource, /미지원 Resource/);
   assert.match(resultPanelSource, /providerResourceType/);
   assert.match(importPanelSource, /리소스별 카드/);
   assert.match(importPanelSource, /전체 복사/);
   assert.match(importPanelSource, /Git\/CI\/CD handoff 준비/);
   assert.match(resultPanelSource, /analysisExclusions/);
+});
+
+test("Reverse Engineering result explains scan coverage before users apply the preview", () => {
+  assert.match(resultPanelSource, /스캔 범위/);
+  assert.match(resultPanelSource, /못 읽은 서비스/);
+  assert.match(resultPanelSource, /Resource Explorer/);
+  assert.match(resultPanelSource, /전체 AWS 상태가 아닐 수 있습니다/);
+  assert.match(resultPanelSource, /getScanCoverageNotice/);
+});
+
+test("Reverse Engineering result lets users inspect provider parameters for every discovered resource", () => {
+  assert.match(resultPanelSource, /ReverseEngineeringResourceParametersPanel/);
+  assert.match(parameterPanelSource, /리소스 파라미터/);
+  assert.match(parameterPanelSource, /providerParameters/);
+  assert.match(parameterPanelSource, /JSON\.stringify/);
+  assert.match(parameterPanelSource, /discoveredResources/);
 });
 
 test("Reverse Engineering panel masks AWS account ids shown in scan controls", () => {

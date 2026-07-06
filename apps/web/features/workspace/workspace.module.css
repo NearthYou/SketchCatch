@@ -1568,6 +1568,48 @@
   outline-offset: 3px;
 }
 
+.terraformIssueBanner {
+  align-items: center;
+  background: #fff7ed;
+  border-top: 1px solid #fed7aa;
+  color: #9a3412;
+  display: flex;
+  font-size: 11px;
+  font-weight: 850;
+  gap: 8px;
+  justify-content: space-between;
+  line-height: 1.25;
+  min-height: 32px;
+  padding: 7px 10px;
+}
+
+.terraformIssueBanner span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.terraformIssueBanner button {
+  background: #ffffff;
+  border: 1px solid #fdba74;
+  border-radius: 6px;
+  color: #9a3412;
+  cursor: pointer;
+  flex: 0 0 auto;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 900;
+  min-height: 26px;
+  padding: 0 8px;
+}
+
+.terraformIssueBanner button:hover,
+.terraformIssueBanner button:focus-visible {
+  background: #ffedd5;
+  outline: none;
+}
+
 .serverSaveToast {
   animation: serverSaveToastIn 180ms ease-out;
   background: #ecfdf5;
@@ -1687,7 +1729,7 @@
   border-left: 4px solid #64748b;
   border-radius: 6px;
   display: grid;
-  gap: 4px;
+  gap: 7px;
   padding: 9px 10px;
 }
 
@@ -1708,6 +1750,70 @@
   color: #475569;
   font-size: 12px;
   line-height: 1.45;
+}
+
+.terraformDiagnosticItemHeader {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.terraformDiagnosticSeverity,
+.terraformDiagnosticStale,
+.terraformDiagnosticMeta span {
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 900;
+  padding: 3px 6px;
+  white-space: nowrap;
+}
+
+.terraformDiagnosticSeverity {
+  background: #eef2ff;
+  color: #3730a3;
+}
+
+.terraformDiagnosticStale {
+  background: #fffbeb;
+  color: #92400e;
+}
+
+.terraformDiagnosticMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.terraformDiagnosticMeta span {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  color: #475569;
+}
+
+.terraformDiagnosticAiButton {
+  align-items: center;
+  background: var(--bp-blue);
+  border: 1px solid var(--bp-blue);
+  border-radius: 6px;
+  color: #ffffff;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 900;
+  justify-content: center;
+  justify-self: start;
+  min-height: 28px;
+  padding: 0 9px;
+}
+
+.terraformDiagnosticAiButton:hover,
+.terraformDiagnosticAiButton:focus-visible {
+  background: color-mix(in srgb, var(--bp-blue) 88%, #000000);
+  border-color: color-mix(in srgb, var(--bp-blue) 88%, #000000);
+  outline: none;
 }
 
 .terraformDialogBackdrop {
@@ -2122,6 +2228,199 @@
 .aiExplanation p,
 .aiResultSummary {
   color: #334155;
+}
+
+.terraformIssueGuidanceList {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+}
+
+.terraformIssueFixPlan {
+  background: #f8fbff;
+  border: 1px solid #cfe0f4;
+  border-radius: 6px;
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+}
+
+.terraformIssueFixPlanHeader {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.terraformIssueFixPlanHeader strong {
+  color: #172033;
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.terraformIssueFixPlanHeader span {
+  color: #1f4f82;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.terraformIssueFixPlan p,
+.terraformIssueFixPlan li {
+  color: #334155;
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.terraformIssueFixPlan .terraformIssueFixPlanNotice {
+  color: #9a3412;
+  font-weight: 850;
+}
+
+.terraformIssueCodePreview {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.terraformIssueCodeFrame {
+  background: #ffffff;
+  border: 1px solid #d7e3f3;
+  border-radius: 6px;
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 8px;
+}
+
+.terraformIssueCodeFrame strong {
+  color: #172033;
+  font-size: 11px;
+  font-weight: 950;
+}
+
+.terraformIssueCodeFrame pre {
+  background: #0f172a;
+  border-radius: 4px;
+  color: #e2e8f0;
+  font-family: var(--font-geist-mono), ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  margin: 0;
+  min-width: 0;
+  overflow-x: auto;
+  padding: 8px;
+  white-space: pre;
+}
+
+.terraformIssueCodePreview section {
+  background: #ffffff;
+  border: 1px solid #d7e3f3;
+  border-radius: 6px;
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 8px;
+}
+
+.terraformIssueCodePreview strong {
+  color: #172033;
+  font-size: 11px;
+  font-weight: 950;
+}
+
+.terraformIssueCodePreview pre {
+  background: #0f172a;
+  border-radius: 4px;
+  color: #e2e8f0;
+  font-family: var(--font-geist-mono), ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  margin: 0;
+  min-width: 0;
+  overflow-x: auto;
+  padding: 8px;
+  white-space: pre;
+}
+
+@media (max-width: 720px) {
+  .terraformIssueCodePreview {
+    grid-template-columns: 1fr;
+  }
+}
+
+.terraformIssueFixPlan ol {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.terraformIssueRawMessage {
+  color: rgba(30, 41, 59, 0.78);
+  font-size: 0.85rem;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.terraformIssueGuidanceList div {
+  display: grid;
+  gap: 2px;
+}
+
+.terraformIssueGuidanceList dt {
+  color: #172033;
+  font-size: 11px;
+  font-weight: 950;
+}
+
+.terraformIssueGuidanceList dd {
+  color: #334155;
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.terraformIssuePillars {
+  display: grid;
+  gap: 7px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.terraformIssuePillars section {
+  background: #ffffff;
+  border: 1px solid #dfe7f4;
+  border-radius: 6px;
+  display: grid;
+  gap: 4px;
+  padding: 8px;
+}
+
+.terraformIssuePillars strong {
+  color: #172033;
+  font-size: 11px;
+  font-weight: 950;
+}
+
+.terraformIssuePillars p,
+.terraformIssuePillars span,
+.terraformIssueActions li {
+  color: #475569;
+  font-size: 11px;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.terraformIssuePillars span {
+  color: #1f4f82;
+  font-weight: 850;
+}
+
+.terraformIssueActions {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 16px;
 }
 
 .aiHint {
@@ -2794,6 +3093,7 @@
   padding: 12px 16px 16px;
 }
 
+.aiChatDock[data-chat-tab="errors"] .aiChatComposer,
 .aiChatDock[data-chat-tab="simulation"] .aiChatComposer {
   display: none;
 }
@@ -3364,6 +3664,27 @@
   margin: 0;
 }
 
+.reverseAdvancedSettings {
+  border: 1px solid #dce3ee;
+  border-radius: 6px;
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 8px 10px 10px;
+}
+
+.reverseAdvancedSummary {
+  color: #334155;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1.3;
+}
+
+.reverseAdvancedSettings[open] .reverseAdvancedSummary {
+  margin-bottom: 8px;
+}
+
 .reverseResourceGrid {
   display: grid;
   gap: 7px;
@@ -3429,6 +3750,39 @@
   font-size: 11px;
   line-height: 1.45;
   overflow-wrap: anywhere;
+}
+
+.reverseParameterDetails {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.reverseParameterSummary {
+  cursor: pointer;
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.reverseParameterSummary::marker {
+  color: #64748b;
+}
+
+.reverseParameterCode {
+  background: #0f172a;
+  border: 1px solid #263449;
+  border-radius: 6px;
+  color: #e2e8f0;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 10.5px;
+  line-height: 1.5;
+  margin: 0;
+  max-height: 260px;
+  min-width: 0;
+  overflow: auto;
+  padding: 10px;
+  white-space: pre;
 }
 
 .reverseLogList li[data-level="WARN"] {

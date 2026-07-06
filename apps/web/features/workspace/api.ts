@@ -63,6 +63,7 @@
   ReverseEngineeringScanLogListResponse,
   ReverseEngineeringScanResponse,
   SaveProjectDraftRequest,
+  TerraformDiagnostic,
   TerraformOutput,
   TerraformOutputListResponse,
   TestAwsConnectionRequest,
@@ -84,9 +85,11 @@ const AI_API_BASE_URL = (
 ).replace(/\/+$/, "");
 
 type AiTerraformErrorExplanationRequest = {
+  readonly diagnostic?: TerraformDiagnostic | undefined;
   readonly stage: AiTerraformStage;
   readonly rawMessage: string;
   readonly relatedResourceId?: string | undefined;
+  readonly terraformCodeContext?: string | undefined;
 };
 
 type ArchitectureSnapshotResponse = {
@@ -334,9 +337,11 @@ export async function runAiTerraformErrorExplanation(
   input: AiTerraformErrorExplanationRequest
 ): Promise<AiTerraformErrorExplanationResult> {
   return postPublicAiJson<AiTerraformErrorExplanationResult>("/ai/terraform-error-explanation", {
+    diagnostic: input.diagnostic,
     rawMessage: input.rawMessage,
     relatedResourceId: input.relatedResourceId,
-    stage: input.stage
+    stage: input.stage,
+    terraformCodeContext: input.terraformCodeContext
   });
 }
 

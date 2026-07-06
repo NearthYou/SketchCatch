@@ -1,6 +1,5 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
-import type { ResourceType } from "@sketchcatch/types";
 import { requireActiveUserId } from "../auth/current-user.js";
 import { getDatabaseClient, type DatabaseClient } from "../db/client.js";
 import {
@@ -22,6 +21,7 @@ const scanRouteParamsSchema = routeParamsSchema.extend({
 });
 
 const resourceTypeSchema = z.enum([
+  "ALL",
   "VPC",
   "SUBNET",
   "INTERNET_GATEWAY",
@@ -81,7 +81,7 @@ export async function registerReverseEngineeringRoutes(
           accessContext: { kind: "user", userId: currentUserId },
           awsConnectionId: body.awsConnectionId,
           region: body.region,
-          resourceTypes: body.resourceTypes as ResourceType[]
+          resourceTypes: body.resourceTypes
         },
         repository,
         options.serviceOptions

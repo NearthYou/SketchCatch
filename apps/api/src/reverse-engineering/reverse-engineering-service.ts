@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { and, asc, desc, eq, isNull } from "drizzle-orm";
 import type {
   AwsConnection,
-  ResourceType,
+  ReverseEngineeringResourceSelection,
   ReverseEngineeringScan,
   ReverseEngineeringScanLogLine,
   ReverseEngineeringScanLogLevel,
@@ -28,7 +28,7 @@ export type CreateReverseEngineeringScanInput = {
   accessContext: ProjectAccessContext;
   awsConnectionId: string;
   region: string;
-  resourceTypes: ResourceType[];
+  resourceTypes: ReverseEngineeringResourceSelection[];
 };
 
 export type CreateReverseEngineeringScanRecordInput = {
@@ -37,7 +37,7 @@ export type CreateReverseEngineeringScanRecordInput = {
   awsConnectionId: string;
   provider: "aws";
   region: string;
-  resourceTypes: ResourceType[];
+  resourceTypes: ReverseEngineeringResourceSelection[];
   status: "running";
   startedAt: Date;
   createdAt: Date;
