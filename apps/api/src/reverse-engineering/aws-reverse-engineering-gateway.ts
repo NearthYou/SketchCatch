@@ -11,6 +11,18 @@ import {
   type ListDistributionsCommandOutput
 } from "@aws-sdk/client-cloudfront";
 import {
+  CloudWatchClient,
+  DescribeAlarmsCommand,
+  type DescribeAlarmsCommandOutput,
+  type MetricAlarm
+} from "@aws-sdk/client-cloudwatch";
+import {
+  DescribeImagesCommand,
+  EC2Client,
+  type DescribeImagesCommandOutput,
+  type Image
+} from "@aws-sdk/client-ec2";
+import {
   DescribeLoadBalancersCommand,
   ElasticLoadBalancingV2Client,
   type DescribeLoadBalancersCommandOutput,
@@ -18,8 +30,14 @@ import {
 } from "@aws-sdk/client-elastic-load-balancing-v2";
 import {
   IAMClient,
+  ListInstanceProfilesCommand,
+  ListPoliciesCommand,
   ListRolesCommand,
+  type InstanceProfile,
+  type ListInstanceProfilesCommandOutput,
+  type ListPoliciesCommandOutput,
   type ListRolesCommandOutput,
+  type Policy,
   type Role
 } from "@aws-sdk/client-iam";
 import {
@@ -160,6 +178,20 @@ export type AwsApiGatewayReadClientFactory = (
   region: string,
   credentials: TerraformAwsCredentialEnv
 ) => AwsApiGatewayReadClient;
+export type AwsEc2ReadClient = {
+  send(command: object): Promise<unknown>;
+};
+export type AwsEc2ReadClientFactory = (
+  region: string,
+  credentials: TerraformAwsCredentialEnv
+) => AwsEc2ReadClient;
+export type AwsCloudWatchReadClient = {
+  send(command: object): Promise<unknown>;
+};
+export type AwsCloudWatchReadClientFactory = (
+  region: string,
+  credentials: TerraformAwsCredentialEnv
+) => AwsCloudWatchReadClient;
 
 // 검증된 AWS 연결로 실제 read-only 조회를 수행하는 gateway를 만듭니다.
 export function createAwsReverseEngineeringGateway(
@@ -515,8 +547,16 @@ async function listUnknownResources(
       listIamRolesAsUnknown(input.region, credentials),
       listKmsKeysAsUnknown(input.region, credentials),
       listCloudWatchLogGroupsAsUnknown(input.region, credentials),
-      listApiGatewayRestApisAsUnknown(input.region, credentials)
+      listApiGatewayRestApisAsUnknown(input.region, credentials),
+      listAmiImagesAsUnknown(input.region, credentials),
+      listIamPoliciesAsUnknown(input.region, credentials),
+      listIamInstanceProfilesAsUnknown(input.region, credentials),
+      listCloudWatchMetricAlarmsAsUnknown(input.region, credentials)
     );
+  }
+
+  if (input.resourceTypes.includes("AMI")) {
+    reads.push(listAmiImagesAsUnknown(input.region, credentials));
   }
 
   if (input.resourceTypes.includes("CLOUDFRONT")) {
@@ -527,12 +567,24 @@ async function listUnknownResources(
     reads.push(listIamRolesAsUnknown(input.region, credentials));
   }
 
+  if (input.resourceTypes.includes("IAM_POLICY")) {
+    reads.push(listIamPoliciesAsUnknown(input.region, credentials));
+  }
+
+  if (input.resourceTypes.includes("IAM_INSTANCE_PROFILE")) {
+    reads.push(listIamInstanceProfilesAsUnknown(input.region, credentials));
+  }
+
   if (input.resourceTypes.includes("KMS_KEY")) {
     reads.push(listKmsKeysAsUnknown(input.region, credentials));
   }
 
   if (input.resourceTypes.includes("CLOUDWATCH_LOG_GROUP")) {
     reads.push(listCloudWatchLogGroupsAsUnknown(input.region, credentials));
+  }
+
+  if (input.resourceTypes.includes("CLOUDWATCH_METRIC_ALARM")) {
+    reads.push(listCloudWatchMetricAlarmsAsUnknown(input.region, credentials));
   }
 
   if (input.resourceTypes.includes("API_GATEWAY_REST_API")) {
@@ -624,6 +676,20 @@ export async function listCloudFrontDistributionsAsUnknown(
   return records;
 }
 
+export async function listAmiImagesAsUnknown(
+  region: string,
+  credentials: TerraformAwsCredentialEnv,
+  createClient: AwsEc2ReadClientFactory = createDefaultEc2ReadClient
+): Promise<AwsDiscoveredResourceRecord[]> {
+  const client = createClient(region, credentials);
+  const response = await sendEc2Command<DescribeImagesCommandOutput>(
+    client,
+    new DescribeImagesCommand({ Owners: ["self"] })
+  );
+
+  return (response.Images ?? []).flatMap((image) => toUnknownAmiImageRecord(image, region));
+}
+
 export async function listIamRolesAsUnknown(
   region: string,
   credentials: TerraformAwsCredentialEnv,
@@ -640,6 +706,52 @@ export async function listIamRolesAsUnknown(
     );
 
     records.push(...(response.Roles ?? []).flatMap((role) => toUnknownIamRoleRecord(role, region)));
+    marker = response.Marker;
+  } while (marker);
+
+  return records;
+}
+
+export async function listIamPoliciesAsUnknown(
+  region: string,
+  credentials: TerraformAwsCredentialEnv,
+  createClient: AwsIamReadClientFactory = createDefaultIamReadClient
+): Promise<AwsDiscoveredResourceRecord[]> {
+  const client = createClient(region, credentials);
+  const records: AwsDiscoveredResourceRecord[] = [];
+  let marker: string | undefined;
+
+  do {
+    const response = await sendIamCommand<ListPoliciesCommandOutput>(
+      client,
+      new ListPoliciesCommand({ Marker: marker, Scope: "Local" })
+    );
+
+    records.push(...(response.Policies ?? []).flatMap((policy) => toUnknownIamPolicyRecord(policy, region)));
+    marker = response.Marker;
+  } while (marker);
+
+  return records;
+}
+
+export async function listIamInstanceProfilesAsUnknown(
+  region: string,
+  credentials: TerraformAwsCredentialEnv,
+  createClient: AwsIamReadClientFactory = createDefaultIamReadClient
+): Promise<AwsDiscoveredResourceRecord[]> {
+  const client = createClient(region, credentials);
+  const records: AwsDiscoveredResourceRecord[] = [];
+  let marker: string | undefined;
+
+  do {
+    const response = await sendIamCommand<ListInstanceProfilesCommandOutput>(
+      client,
+      new ListInstanceProfilesCommand({ Marker: marker })
+    );
+
+    records.push(...(response.InstanceProfiles ?? []).flatMap((profile) =>
+      toUnknownIamInstanceProfileRecord(profile, region)
+    ));
     marker = response.Marker;
   } while (marker);
 
@@ -688,6 +800,28 @@ export async function listCloudWatchLogGroupsAsUnknown(
 
     records.push(...(response.logGroups ?? []).flatMap((logGroup) => toUnknownLogGroupRecord(logGroup, region)));
     nextToken = response.nextToken;
+  } while (nextToken);
+
+  return records;
+}
+
+export async function listCloudWatchMetricAlarmsAsUnknown(
+  region: string,
+  credentials: TerraformAwsCredentialEnv,
+  createClient: AwsCloudWatchReadClientFactory = createDefaultCloudWatchReadClient
+): Promise<AwsDiscoveredResourceRecord[]> {
+  const client = createClient(region, credentials);
+  const records: AwsDiscoveredResourceRecord[] = [];
+  let nextToken: string | undefined;
+
+  do {
+    const response = await sendCloudWatchCommand<DescribeAlarmsCommandOutput>(
+      client,
+      new DescribeAlarmsCommand({ NextToken: nextToken })
+    );
+
+    records.push(...(response.MetricAlarms ?? []).flatMap((alarm) => toUnknownMetricAlarmRecord(alarm, region)));
+    nextToken = response.NextToken;
   } while (nextToken);
 
   return records;
@@ -827,6 +961,34 @@ function createDefaultApiGatewayReadClient(
   };
 }
 
+function createDefaultEc2ReadClient(
+  region: string,
+  credentials: TerraformAwsCredentialEnv
+): AwsEc2ReadClient {
+  const client = new EC2Client({
+    region,
+    credentials: toAwsSdkCredentials(credentials)
+  });
+
+  return {
+    send: (command) => client.send(command as Parameters<EC2Client["send"]>[0])
+  };
+}
+
+function createDefaultCloudWatchReadClient(
+  region: string,
+  credentials: TerraformAwsCredentialEnv
+): AwsCloudWatchReadClient {
+  const client = new CloudWatchClient({
+    region,
+    credentials: toAwsSdkCredentials(credentials)
+  });
+
+  return {
+    send: (command) => client.send(command as Parameters<CloudWatchClient["send"]>[0])
+  };
+}
+
 async function sendTaggingCommand<TOutput>(
   client: AwsTaggingReadClient,
   command: object
@@ -869,6 +1031,17 @@ async function sendCloudWatchLogsCommand<TOutput>(
 
 async function sendApiGatewayCommand<TOutput>(
   client: AwsApiGatewayReadClient,
+  command: object
+): Promise<TOutput> {
+  return (await client.send(command)) as TOutput;
+}
+
+async function sendEc2Command<TOutput>(client: AwsEc2ReadClient, command: object): Promise<TOutput> {
+  return (await client.send(command)) as TOutput;
+}
+
+async function sendCloudWatchCommand<TOutput>(
+  client: AwsCloudWatchReadClient,
   command: object
 ): Promise<TOutput> {
   return (await client.send(command)) as TOutput;
@@ -1012,6 +1185,44 @@ function toUnknownCloudFrontDistributionRecord(
   ];
 }
 
+function toUnknownAmiImageRecord(image: Image, fallbackRegion: string): AwsDiscoveredResourceRecord[] {
+  if (!image.ImageId) {
+    return [];
+  }
+
+  return [
+    {
+      providerResourceType: "AWS::EC2::Image",
+      providerResourceId: image.ImageId,
+      displayName: image.Name ?? image.ImageId,
+      region: fallbackRegion,
+      config: {
+        architecture: image.Architecture,
+        blockDeviceMappings: image.BlockDeviceMappings,
+        bootMode: image.BootMode,
+        createdAt: image.CreationDate,
+        description: image.Description,
+        imageId: image.ImageId,
+        imageLocation: image.ImageLocation,
+        imageOwnerAlias: image.ImageOwnerAlias,
+        imageType: image.ImageType,
+        name: image.Name,
+        ownerId: image.OwnerId,
+        platform: image.Platform,
+        platformDetails: image.PlatformDetails,
+        public: image.Public,
+        rawProviderData: image,
+        rootDeviceName: image.RootDeviceName,
+        rootDeviceType: image.RootDeviceType,
+        state: image.State,
+        tags: image.Tags,
+        virtualizationType: image.VirtualizationType
+      },
+      relationships: []
+    }
+  ];
+}
+
 function toUnknownIamRoleRecord(role: Role, fallbackRegion: string): AwsDiscoveredResourceRecord[] {
   const arn = role.Arn;
 
@@ -1041,6 +1252,77 @@ function toUnknownIamRoleRecord(role: Role, fallbackRegion: string): AwsDiscover
         tags: role.Tags
       },
       relationships: []
+    }
+  ];
+}
+
+function toUnknownIamPolicyRecord(
+  policy: Policy,
+  fallbackRegion: string
+): AwsDiscoveredResourceRecord[] {
+  const arn = policy.Arn;
+
+  if (!arn) {
+    return [];
+  }
+
+  return [
+    {
+      providerResourceType: "AWS::IAM::Policy",
+      providerResourceId: arn,
+      displayName: policy.PolicyName ?? arn,
+      region: "global",
+      config: {
+        arn,
+        attachmentCount: policy.AttachmentCount,
+        createdAt: policy.CreateDate?.toISOString(),
+        defaultVersionId: policy.DefaultVersionId,
+        description: policy.Description,
+        isAttachable: policy.IsAttachable,
+        path: policy.Path,
+        permissionsBoundaryUsageCount: policy.PermissionsBoundaryUsageCount,
+        policyId: policy.PolicyId,
+        policyName: policy.PolicyName,
+        rawProviderData: policy,
+        scanRegion: fallbackRegion,
+        tags: policy.Tags,
+        updatedAt: policy.UpdateDate?.toISOString()
+      },
+      relationships: []
+    }
+  ];
+}
+
+function toUnknownIamInstanceProfileRecord(
+  profile: InstanceProfile,
+  fallbackRegion: string
+): AwsDiscoveredResourceRecord[] {
+  const arn = profile.Arn;
+
+  if (!arn) {
+    return [];
+  }
+
+  return [
+    {
+      providerResourceType: "AWS::IAM::InstanceProfile",
+      providerResourceId: arn,
+      displayName: profile.InstanceProfileName ?? arn,
+      region: "global",
+      config: {
+        arn,
+        createdAt: profile.CreateDate?.toISOString(),
+        instanceProfileId: profile.InstanceProfileId,
+        instanceProfileName: profile.InstanceProfileName,
+        path: profile.Path,
+        rawProviderData: profile,
+        roles: profile.Roles,
+        scanRegion: fallbackRegion,
+        tags: profile.Tags
+      },
+      relationships: (profile.Roles ?? []).flatMap((role) =>
+        role.Arn ? [{ type: "depends_on" as const, targetProviderResourceId: role.Arn }] : []
+      )
     }
   ];
 }
@@ -1128,6 +1410,53 @@ function toUnknownLogGroupRecord(
         rawProviderData: logGroup,
         retentionInDays: logGroup.retentionInDays,
         storedBytes: logGroup.storedBytes
+      },
+      relationships: []
+    }
+  ];
+}
+
+function toUnknownMetricAlarmRecord(
+  alarm: MetricAlarm,
+  fallbackRegion: string
+): AwsDiscoveredResourceRecord[] {
+  const providerResourceId = alarm.AlarmArn ?? alarm.AlarmName;
+
+  if (!providerResourceId) {
+    return [];
+  }
+
+  return [
+    {
+      providerResourceType: "AWS::CloudWatch::Alarm",
+      providerResourceId,
+      displayName: alarm.AlarmName ?? providerResourceId,
+      region: fallbackRegion,
+      config: {
+        actionsEnabled: alarm.ActionsEnabled,
+        alarmActions: alarm.AlarmActions,
+        alarmArn: alarm.AlarmArn,
+        alarmConfigurationUpdatedAt: alarm.AlarmConfigurationUpdatedTimestamp?.toISOString(),
+        alarmDescription: alarm.AlarmDescription,
+        alarmName: alarm.AlarmName,
+        comparisonOperator: alarm.ComparisonOperator,
+        datapointsToAlarm: alarm.DatapointsToAlarm,
+        dimensions: alarm.Dimensions,
+        evaluationPeriods: alarm.EvaluationPeriods,
+        insufficientDataActions: alarm.InsufficientDataActions,
+        metricName: alarm.MetricName,
+        metrics: alarm.Metrics,
+        namespace: alarm.Namespace,
+        okActions: alarm.OKActions,
+        period: alarm.Period,
+        rawProviderData: alarm,
+        stateReason: alarm.StateReason,
+        stateUpdatedAt: alarm.StateUpdatedTimestamp?.toISOString(),
+        stateValue: alarm.StateValue,
+        statistic: alarm.Statistic,
+        threshold: alarm.Threshold,
+        treatMissingData: alarm.TreatMissingData,
+        unit: alarm.Unit
       },
       relationships: []
     }
@@ -1278,11 +1607,15 @@ export function shouldReadUnknownResourceGroup(input: AwsProviderScanInput): boo
   return (
     input.resourceTypes.includes("ALL") ||
     input.resourceTypes.includes("UNKNOWN") ||
+    input.resourceTypes.includes("AMI") ||
     input.resourceTypes.includes("LAMBDA") ||
     input.resourceTypes.includes("CLOUDFRONT") ||
     input.resourceTypes.includes("IAM_ROLE") ||
+    input.resourceTypes.includes("IAM_POLICY") ||
+    input.resourceTypes.includes("IAM_INSTANCE_PROFILE") ||
     input.resourceTypes.includes("KMS_KEY") ||
     input.resourceTypes.includes("CLOUDWATCH_LOG_GROUP") ||
+    input.resourceTypes.includes("CLOUDWATCH_METRIC_ALARM") ||
     input.resourceTypes.includes("API_GATEWAY_REST_API")
   );
 }

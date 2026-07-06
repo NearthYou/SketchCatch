@@ -9,11 +9,15 @@ import {
   parseSecurityGroupsFromXml
 } from "./aws-reverse-engineering-parsers.js";
 import {
+  listAmiImagesAsUnknown,
   listApiGatewayRestApisAsUnknown,
   listApplicationLoadBalancersAsUnknown,
   listBucketsWithDetails,
   listCloudFrontDistributionsAsUnknown,
+  listCloudWatchMetricAlarmsAsUnknown,
   listCloudWatchLogGroupsAsUnknown,
+  listIamInstanceProfilesAsUnknown,
+  listIamPoliciesAsUnknown,
   listIamRolesAsUnknown,
   listKmsKeysAsUnknown,
   listLambdaFunctionsAsUnknown,
@@ -76,7 +80,22 @@ test("shouldReadUnknownResourceGroup reads UNKNOWN family only for ALL, UNKNOWN,
   assert.equal(shouldReadUnknownResourceGroup({
     provider: "aws",
     region: "ap-northeast-2",
+    resourceTypes: ["AMI"]
+  }), true);
+  assert.equal(shouldReadUnknownResourceGroup({
+    provider: "aws",
+    region: "ap-northeast-2",
     resourceTypes: ["IAM_ROLE"]
+  }), true);
+  assert.equal(shouldReadUnknownResourceGroup({
+    provider: "aws",
+    region: "ap-northeast-2",
+    resourceTypes: ["IAM_POLICY"]
+  }), true);
+  assert.equal(shouldReadUnknownResourceGroup({
+    provider: "aws",
+    region: "ap-northeast-2",
+    resourceTypes: ["IAM_INSTANCE_PROFILE"]
   }), true);
   assert.equal(shouldReadUnknownResourceGroup({
     provider: "aws",
@@ -87,6 +106,11 @@ test("shouldReadUnknownResourceGroup reads UNKNOWN family only for ALL, UNKNOWN,
     provider: "aws",
     region: "ap-northeast-2",
     resourceTypes: ["CLOUDWATCH_LOG_GROUP"]
+  }), true);
+  assert.equal(shouldReadUnknownResourceGroup({
+    provider: "aws",
+    region: "ap-northeast-2",
+    resourceTypes: ["CLOUDWATCH_METRIC_ALARM"]
   }), true);
   assert.equal(shouldReadUnknownResourceGroup({
     provider: "aws",
@@ -502,6 +526,139 @@ test("listApiGatewayRestApisAsUnknown keeps REST APIs as UNKNOWN candidates", as
   assert.equal(records[0]?.providerResourceId, "api123");
   assert.equal(records[0]?.displayName, "demo-api");
   assert.equal(records[0]?.config["description"], "demo REST API");
+});
+
+test("listAmiImagesAsUnknown keeps owned AMIs as UNKNOWN candidates", async () => {
+  const fakeEc2Client = {
+    async send(command: { constructor: { name: string }; input?: { Owners?: string[] } }) {
+      assert.equal(command.constructor.name, "DescribeImagesCommand");
+      assert.deepEqual(command.input?.Owners, ["self"]);
+
+      return {
+        Images: [
+          {
+            ImageId: "ami-1234",
+            Name: "demo-ami",
+            Architecture: "x86_64",
+            CreationDate: "2026-07-06T00:00:00.000Z",
+            State: "available",
+            RootDeviceType: "ebs"
+          }
+        ]
+      };
+    }
+  };
+
+  const records = await listAmiImagesAsUnknown(
+    "ap-northeast-2",
+    TEST_AWS_CREDENTIALS,
+    () => fakeEc2Client
+  );
+
+  assert.equal(records.length, 1);
+  assert.equal(records[0]?.providerResourceType, "AWS::EC2::Image");
+  assert.equal(records[0]?.providerResourceId, "ami-1234");
+  assert.equal(records[0]?.displayName, "demo-ami");
+  assert.equal(records[0]?.config["state"], "available");
+});
+
+test("listIamPoliciesAsUnknown keeps IAM policies as UNKNOWN candidates", async () => {
+  const fakeIamClient = {
+    async send(command: { constructor: { name: string } }) {
+      assert.equal(command.constructor.name, "ListPoliciesCommand");
+
+      return {
+        Policies: [
+          {
+            Arn: "arn:aws:iam::316875069960:policy/demo-policy",
+            PolicyName: "demo-policy",
+            PolicyId: "ANPATEST",
+            Path: "/",
+            AttachmentCount: 1
+          }
+        ]
+      };
+    }
+  };
+
+  const records = await listIamPoliciesAsUnknown(
+    "ap-northeast-2",
+    TEST_AWS_CREDENTIALS,
+    () => fakeIamClient
+  );
+
+  assert.equal(records.length, 1);
+  assert.equal(records[0]?.providerResourceType, "AWS::IAM::Policy");
+  assert.equal(records[0]?.providerResourceId, "arn:aws:iam::316875069960:policy/demo-policy");
+  assert.equal(records[0]?.displayName, "demo-policy");
+  assert.equal(records[0]?.config["attachmentCount"], 1);
+});
+
+test("listIamInstanceProfilesAsUnknown keeps IAM instance profiles as UNKNOWN candidates", async () => {
+  const fakeIamClient = {
+    async send(command: { constructor: { name: string } }) {
+      assert.equal(command.constructor.name, "ListInstanceProfilesCommand");
+
+      return {
+        InstanceProfiles: [
+          {
+            Arn: "arn:aws:iam::316875069960:instance-profile/demo-profile",
+            InstanceProfileName: "demo-profile",
+            InstanceProfileId: "AIPATEST",
+            Path: "/",
+            Roles: [{ RoleName: "demo-role", Arn: "arn:aws:iam::316875069960:role/demo-role" }]
+          }
+        ]
+      };
+    }
+  };
+
+  const records = await listIamInstanceProfilesAsUnknown(
+    "ap-northeast-2",
+    TEST_AWS_CREDENTIALS,
+    () => fakeIamClient
+  );
+
+  assert.equal(records.length, 1);
+  assert.equal(records[0]?.providerResourceType, "AWS::IAM::InstanceProfile");
+  assert.equal(records[0]?.providerResourceId, "arn:aws:iam::316875069960:instance-profile/demo-profile");
+  assert.equal(records[0]?.displayName, "demo-profile");
+  assert.deepEqual(records[0]?.relationships, [
+    { type: "depends_on", targetProviderResourceId: "arn:aws:iam::316875069960:role/demo-role" }
+  ]);
+});
+
+test("listCloudWatchMetricAlarmsAsUnknown keeps metric alarms as UNKNOWN candidates", async () => {
+  const fakeCloudWatchClient = {
+    async send(command: { constructor: { name: string } }) {
+      assert.equal(command.constructor.name, "DescribeAlarmsCommand");
+
+      return {
+        MetricAlarms: [
+          {
+            AlarmArn: "arn:aws:cloudwatch:ap-northeast-2:316875069960:alarm:demo-alarm",
+            AlarmName: "demo-alarm",
+            StateValue: "OK",
+            MetricName: "CPUUtilization",
+            Namespace: "AWS/EC2",
+            EvaluationPeriods: 1
+          }
+        ]
+      };
+    }
+  };
+
+  const records = await listCloudWatchMetricAlarmsAsUnknown(
+    "ap-northeast-2",
+    TEST_AWS_CREDENTIALS,
+    () => fakeCloudWatchClient
+  );
+
+  assert.equal(records.length, 1);
+  assert.equal(records[0]?.providerResourceType, "AWS::CloudWatch::Alarm");
+  assert.equal(records[0]?.providerResourceId, "arn:aws:cloudwatch:ap-northeast-2:316875069960:alarm:demo-alarm");
+  assert.equal(records[0]?.displayName, "demo-alarm");
+  assert.equal(records[0]?.config["stateValue"], "OK");
 });
 
 test("extractSetItems returns only direct AWS set items when child item tags are nested", () => {
