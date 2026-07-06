@@ -7,6 +7,7 @@ export function createReverseEngineeringFindings(
   return discoveredResources.flatMap((resource) => [
     ...createOpenSshFindings(resource),
     ...createPublicRdsFindings(resource),
+    ...createPublicS3Findings(resource),
     ...createRdsCostFindings(resource)
   ]);
 }
@@ -45,6 +46,25 @@ function createPublicRdsFindings(resource: DiscoveredResource): CheckFinding[] {
       title: "RDS가 public 접근 가능 상태입니다",
       description: "데이터베이스가 인터넷에서 접근 가능한 설정으로 읽혔습니다.",
       recommendation: "RDS를 private subnet에 두고, 필요한 서버 Security Group에서만 접근하게 제한하세요."
+    }
+  ];
+}
+
+// S3 bucket policy가 public 상태면 가져오기 자체는 막지 않고 high risk로 알려줍니다.
+function createPublicS3Findings(resource: DiscoveredResource): CheckFinding[] {
+  if (resource.resourceType !== "S3" || resource.config["policyStatusIsPublic"] !== true) {
+    return [];
+  }
+
+  return [
+    {
+      id: `reverse-security-public-s3-${resource.id}`,
+      category: "security",
+      severity: "high",
+      resourceId: resource.id,
+      title: "S3 버킷이 public 접근 가능 상태입니다",
+      description: "S3 bucket policy가 인터넷 공개 상태로 읽혔습니다.",
+      recommendation: "공개가 꼭 필요한 정적 웹사이트가 아니라면 Public Access Block과 bucket policy를 다시 확인하세요."
     }
   ];
 }

@@ -42,6 +42,8 @@ export type ResourceType =
   | "LAMBDA_PERMISSION"
   | "UNKNOWN";
 
+export type ReverseEngineeringResourceSelection = "ALL" | ResourceType;
+
 export type CloudProvider = "aws";
 
 export type TerraformBlockType = "resource" | "data";
@@ -617,7 +619,7 @@ export type ReverseEngineeringScan = {
   awsConnectionId: string;
   provider: CloudProvider;
   region: string;
-  resourceTypes: ResourceType[];
+  resourceTypes: ReverseEngineeringResourceSelection[];
   status: ReverseEngineeringScanStatus;
   createdAt: IsoDateTimeString;
   updatedAt: IsoDateTimeString;
@@ -727,7 +729,7 @@ export type ReverseEngineeringScanResult = {
 export type CreateReverseEngineeringScanRequest = {
   awsConnectionId: string;
   region: string;
-  resourceTypes: ResourceType[];
+  resourceTypes: ReverseEngineeringResourceSelection[];
 };
 
 export type ReverseEngineeringScanResponse = {
