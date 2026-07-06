@@ -1,4 +1,4 @@
-import type {
+﻿import type {
   AiArchitectureDraftResult,
   AiPreDeploymentAnalysisResult,
   AiTerraformErrorExplanationResult,
@@ -40,6 +40,10 @@ import type {
   GitCicdHandoffListResponse,
   GitCicdHandoffPipelineStatus,
   GitCicdHandoffPipelineStatusResponse,
+  GitHubAppExistingInstallationCallbackUrlResponse,
+  GitHubAppInstallUrlResponse,
+  ListGitHubInstallationRepositoriesRequest,
+  ListGitHubInstallationRepositoriesResponse,
   Project,
   ProjectAssetUploadResponse,
   ProjectDetailsResponse,
@@ -49,6 +53,10 @@ import type {
   ProjectResponse,
   RecentSuccessfulDeploymentProject,
   RecentSuccessfulDeploymentProjectListResponse,
+  SourceRepository,
+  SourceRepositoryListResponse,
+  SourceRepositoryResponse,
+  ConnectGitHubSourceRepositoryRequest,
   ReverseEngineeringScan,
   ReverseEngineeringScanListResponse,
   ReverseEngineeringScanLogLine,
@@ -630,6 +638,72 @@ export async function listGitCicdHandoffs(projectId: string): Promise<GitCicdHan
   );
 
   return response.handoffs;
+}
+
+export async function listSourceRepositories(projectId: string): Promise<SourceRepository[]> {
+  const response = await apiFetch<SourceRepositoryListResponse>(
+    `/projects/${encodeURIComponent(projectId)}/source-repositories`,
+    {
+      auth: true
+    }
+  );
+
+  return response.repositories;
+}
+
+export async function createGitHubSourceRepositoryInstallUrl(
+  projectId: string
+): Promise<GitHubAppInstallUrlResponse> {
+  return apiFetch<GitHubAppInstallUrlResponse>(
+    `/projects/${encodeURIComponent(projectId)}/source-repositories/github/install-url`,
+    {
+      auth: true,
+      method: "POST"
+    }
+  );
+}
+
+export async function createGitHubExistingInstallationCallbackUrl(
+  projectId: string
+): Promise<GitHubAppExistingInstallationCallbackUrlResponse> {
+  return apiFetch<GitHubAppExistingInstallationCallbackUrlResponse>(
+    `/projects/${encodeURIComponent(projectId)}/source-repositories/github/existing-installation-callback-url`,
+    {
+      auth: true,
+      method: "POST"
+    }
+  );
+}
+
+export async function listGitHubInstallationRepositories(
+  input: ListGitHubInstallationRepositoriesRequest
+): Promise<ListGitHubInstallationRepositoriesResponse> {
+  return apiFetch<ListGitHubInstallationRepositoriesResponse>(
+    "/source-repositories/github/installation-repositories",
+    {
+      auth: true,
+      method: "POST",
+      body: input
+    }
+  );
+}
+
+export async function connectGitHubSourceRepository({
+  projectId,
+  ...input
+}: {
+  projectId: string;
+} & ConnectGitHubSourceRepositoryRequest): Promise<SourceRepository> {
+  const response = await apiFetch<SourceRepositoryResponse>(
+    `/projects/${encodeURIComponent(projectId)}/source-repositories/github`,
+    {
+      auth: true,
+      method: "POST",
+      body: input
+    }
+  );
+
+  return response.repository;
 }
 
 export async function getGitCicdHandoffPipelineStatus(

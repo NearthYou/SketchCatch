@@ -29,6 +29,7 @@ import {
   type GitCicdHandoffRepository,
   type ProjectAccessContext
 } from "../git-cicd/git-cicd-handoff-service.js";
+import type { GitCicdPipelineStatusProvider } from "../git-cicd/github-actions-pipeline-status-provider.js";
 import { createRuntimeCacheFromEnv, type RuntimeCache } from "../runtime-cache/index.js";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 
@@ -40,7 +41,6 @@ const gitCicdHandoffStatusSchema = z.enum([
   "pipeline_failed",
   "cancelled"
 ]);
-const sourceRepositoryProviderSchema = z.enum(["internal", "github"]);
 
 const projectHandoffParamsSchema = z.object({
   projectId: z.uuid()
@@ -50,7 +50,6 @@ const handoffParamsSchema = z.object({
   handoffId: z.uuid()
 });
 
-const nameSchema = z.string().trim().min(1).max(120);
 const branchSchema = z.string().trim().min(1).max(255);
 const terraformSourceLocationSchema = z
   .object({
@@ -118,10 +117,7 @@ const createGitCicdHandoffBodySchema = z
     architectureId: z.uuid(),
     terraformArtifactId: z.uuid(),
     sourceRepositoryId: z.string().trim().min(1).max(128),
-    repositoryProvider: sourceRepositoryProviderSchema.optional(),
-    repositoryOwner: nameSchema,
-    repositoryName: nameSchema,
-    targetBranch: branchSchema,
+    targetBranch: branchSchema.optional(),
     sourceBranch: branchSchema.optional(),
     commitMessage: z.string().trim().min(1).max(500).optional(),
     pullRequestTitle: z.string().trim().min(1).max(255).optional(),
@@ -135,6 +131,7 @@ const updateGitCicdHandoffStatusBodySchema = z
     status: gitCicdHandoffStatusSchema,
     pullRequestUrl: z.string().url().nullable().optional(),
     pipelineRunUrl: z.string().url().nullable().optional(),
+    pullRequestHeadSha: z.string().trim().min(1).max(64).nullable().optional(),
     statusMessage: z.string().trim().min(1).max(500).nullable().optional()
   })
   .strict();
@@ -145,6 +142,7 @@ type GitCicdHandoffRouteOptions = {
     db: DatabaseClient["db"]
   ) => GitCicdHandoffRepository;
   gitCicdHandoffProvider?: GitCicdHandoffProvider;
+  gitCicdPipelineStatusProvider?: GitCicdPipelineStatusProvider;
   runtimeCache?: RuntimeCache;
 };
 
@@ -226,9 +224,6 @@ export async function registerGitCicdHandoffRoutes(
           architectureId: body.architectureId,
           terraformArtifactId: body.terraformArtifactId,
           sourceRepositoryId: body.sourceRepositoryId,
-          repositoryProvider: body.repositoryProvider,
-          repositoryOwner: body.repositoryOwner,
-          repositoryName: body.repositoryName,
           targetBranch: body.targetBranch,
           sourceBranch: body.sourceBranch,
           commitMessage: body.commitMessage,
@@ -318,7 +313,8 @@ export async function registerGitCicdHandoffRoutes(
           accessContext
         },
         repository,
-        runtimeCache
+        runtimeCache,
+        options?.gitCicdPipelineStatusProvider
       );
       const response: GitCicdHandoffPipelineStatusResponse = {
         pipelineStatus
@@ -347,6 +343,7 @@ export async function registerGitCicdHandoffRoutes(
           status: body.status,
           pullRequestUrl: body.pullRequestUrl,
           pipelineRunUrl: body.pipelineRunUrl,
+          pullRequestHeadSha: body.pullRequestHeadSha,
           statusMessage: body.statusMessage
         },
         repository
@@ -379,6 +376,7 @@ function toGitCicdHandoff(row: GitCicdHandoffRecord): GitCicdHandoff {
     commitMessage: row.commitMessage,
     pullRequestTitle: row.pullRequestTitle,
     pullRequestUrl: row.pullRequestUrl,
+    pullRequestHeadSha: row.pullRequestHeadSha,
     pipelineRunUrl: row.pipelineRunUrl,
     status: row.status,
     statusMessage: row.statusMessage,
@@ -390,6 +388,72 @@ function toGitCicdHandoff(row: GitCicdHandoffRecord): GitCicdHandoff {
 }
 
 async function getGitCicdPipelineStatus(
+  input: {
+    readonly handoffId: string;
+    readonly accessContext: ProjectAccessContext;
+  },
+  repository: GitCicdHandoffRepository,
+  runtimeCache: RuntimeCache,
+  pipelineStatusProvider: GitCicdPipelineStatusProvider | undefined
+): Promise<GitCicdHandoffPipelineStatus> {
+  if (!pipelineStatusProvider) {
+    return getCachedOrStoredGitCicdPipelineStatus(input, repository, runtimeCache);
+  }
+
+  const handoff = await getGitCicdHandoff(input, repository);
+
+  if (pipelineStatusProvider && shouldRefreshGitHubPipelineStatus(handoff)) {
+    const sourceRepository = await repository.findSourceRepositoryById(
+      handoff.sourceRepositoryId,
+      handoff.projectId
+    );
+    const update =
+      sourceRepository !== undefined
+        ? await pipelineStatusProvider.refreshPipelineStatus({ handoff, sourceRepository })
+        : null;
+
+    if (update) {
+      const updatedHandoff = await updateGitCicdHandoffStatus(
+        {
+          handoffId: handoff.id,
+          accessContext: input.accessContext,
+          status: update.status,
+          pullRequestUrl: update.pullRequestUrl,
+          pipelineRunUrl: update.pipelineRunUrl,
+          pullRequestHeadSha: update.pullRequestHeadSha,
+          statusMessage: update.statusMessage
+        },
+        repository
+      );
+
+      await writeGitCicdPipelineStatusSnapshot({ handoff: updatedHandoff, runtimeCache });
+
+      return toGitCicdPipelineStatusFromRecord(updatedHandoff);
+    }
+  }
+
+  const cachedStatus = await readGitCicdPipelineStatusSnapshot({
+    handoffId: input.handoffId,
+    runtimeCache
+  });
+
+  if (cachedStatus) {
+    const project = await repository.findAccessibleProject(
+      cachedStatus.projectId,
+      input.accessContext
+    );
+
+    if (project) {
+      return cachedStatus;
+    }
+  }
+
+  await writeGitCicdPipelineStatusSnapshot({ handoff, runtimeCache });
+
+  return toGitCicdPipelineStatusFromRecord(handoff);
+}
+
+async function getCachedOrStoredGitCicdPipelineStatus(
   input: {
     readonly handoffId: string;
     readonly accessContext: ProjectAccessContext;
@@ -418,6 +482,13 @@ async function getGitCicdPipelineStatus(
   await writeGitCicdPipelineStatusSnapshot({ handoff, runtimeCache });
 
   return toGitCicdPipelineStatusFromRecord(handoff);
+}
+
+function shouldRefreshGitHubPipelineStatus(handoff: GitCicdHandoffRecord): boolean {
+  return (
+    handoff.repositoryProvider === "github" &&
+    (handoff.status === "pr_created" || handoff.status === "pipeline_running")
+  );
 }
 
 async function getGitCicdHandoffRequestContext(

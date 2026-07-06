@@ -11,9 +11,19 @@ import { registerHealthRoutes } from "./routes/health.js";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { registerOAuthRoutes } from "./routes/oauth.js";
 import { registerProjectRoutes, type ProjectAssetStorage } from "./routes/projects.js";
+import {
+  registerSourceRepositoryRoutes,
+  type SourceRepositoryRouteOptions
+} from "./routes/source-repositories.js";
 import { registerDeploymentRoutes } from "./routes/deployments.js";
 import { registerGitCicdHandoffRoutes } from "./routes/git-cicd-handoffs.js";
 import { registerCostRoutes } from "./routes/costs.js";
+import {
+  createDelegatingGitCicdHandoffProvider,
+  createGitHubGitCicdHandoffProvider
+} from "./git-cicd/git-cicd-handoff-service.js";
+import { createGitHubAppGitProvider } from "./git-cicd/github-app-git-provider.js";
+import { createGitHubActionsPipelineStatusProvider } from "./git-cicd/github-actions-pipeline-status-provider.js";
 import {
   registerTerraformRoutes,
   type TerraformRouteOptions
@@ -48,6 +58,10 @@ export type BuildAppOptions = {
   passwordResetRequestIpRateLimiter?: RateLimiter;
   projectAssetStorage?: ProjectAssetStorage;
   projectDeletionStorage?: ProjectDeletionStorage;
+  sourceRepositoryRoutes?: Pick<
+    SourceRepositoryRouteOptions,
+    "createSourceRepositoryRepository" | "githubAppClient" | "githubAppSlug" | "githubAppStateSecret"
+  >;
   runtimeCache?: RuntimeCache;
   validateTerraformPreviewCode?: TerraformRouteOptions["validateTerraformPreviewCode"];
   reverseEngineeringServiceOptions?: ReverseEngineeringRouteOptions["serviceOptions"];
@@ -160,6 +174,11 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     projectAssetStorage: options.projectAssetStorage,
     projectDeletionStorage: options.projectDeletionStorage
   });
+  app.register(registerSourceRepositoryRoutes, {
+    prefix: "/api",
+    getDatabaseClient: getAppDatabaseClient,
+    ...options.sourceRepositoryRoutes
+  });
   app.register(registerDeploymentRoutes, {
     prefix: "/api",
     getDatabaseClient: getAppDatabaseClient,
@@ -167,7 +186,12 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   });
   app.register(registerGitCicdHandoffRoutes, {
     prefix: "/api",
-    getDatabaseClient: getAppDatabaseClient
+    getDatabaseClient: getAppDatabaseClient,
+    gitCicdHandoffProvider: createDelegatingGitCicdHandoffProvider({
+      githubProvider: createGitHubGitCicdHandoffProvider(createGitHubAppGitProvider())
+    }),
+    gitCicdPipelineStatusProvider: createGitHubActionsPipelineStatusProvider(),
+    runtimeCache
   });
   app.register(registerCostRoutes, createCostRouteOptions(options, getAppDatabaseClient));
   app.register(

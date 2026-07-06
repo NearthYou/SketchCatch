@@ -681,6 +681,10 @@ test("GET /api/aws/connections/:connectionId/cloudformation-template returns lau
   assert.equal(body.region, "ap-northeast-2");
   assert.deepEqual(body.capabilities, ["CAPABILITY_NAMED_IAM"]);
   assert.match(body.templateBody, /Type: AWS::IAM::Role/);
+  assert.doesNotMatch(body.templateBody, /Policies:\n\s+- PolicyName: SketchCatchMvpTerraformApply/);
+  assert.match(body.templateBody, /SketchCatchTerraformApplyPolicy:/);
+  assert.match(body.templateBody, /Type: AWS::IAM::Policy/);
+  assert.match(body.templateBody, /Roles:\n\s+- !Ref SketchCatchTerraformExecutionRole/);
   assert.match(body.templateBody, /Action: ec2:\*/);
   assert.match(body.templateBody, /Action: s3:\*/);
   assert.match(

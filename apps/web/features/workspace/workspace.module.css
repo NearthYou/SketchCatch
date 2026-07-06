@@ -3335,6 +3335,15 @@
   min-width: 0;
 }
 
+.deploymentHeaderActions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
 .deploymentField {
   color: #334155;
   display: grid;

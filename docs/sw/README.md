@@ -46,3 +46,7 @@
 - UI 동작 설명은 이 폴더에 남기되, 실행 책임을 frontend로 옮기는 표현은 쓰지 않는다.
 - 실제 Terraform CLI 실행은 backend/worker 경계로 유지한다.
 - Runtime Cache는 원천 기록이 아니며 Redis를 사용자 Practice Architecture Resource로 설명하지 않는다.
+# 추가 구현 기준
+
+- [spec3.md](./spec3.md): Deployment, GitHub App 연결, Runtime Cache 운영 검증 스펙
+- [plan3.md](./plan3.md): Deployment, GitHub App 연결, Runtime Cache 구현 마일스톤

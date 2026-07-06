@@ -1385,3 +1385,29 @@ type CheckFinding = {
 - 팀장: DB schema, API 응답, shared type 충돌을 최종 조정한다.
 
 새 계약이 필요하면 담당자 문서에만 쓰지 말고, 이 문서와 `packages/types/src/index.ts`에 먼저 반영한다.
+## Source Repository 연결 모델
+
+`source_repositories`는 SketchCatch 프로젝트가 실제 Git provider repository와 연결된 이력을 저장합니다. MVP에서는 같은 `project_id + provider=github` 조합에 대해 active 연결을 하나만 허용합니다.
+
+주요 필드:
+
+| 필드 | 설명 |
+| --- | --- |
+| `id` | Source Repository 식별자 |
+| `project_id` | 연결된 SketchCatch project |
+| `created_by_user_id` | 연결을 만든 사용자 |
+| `provider` | `internal` 또는 `github` |
+| `status` | `active` 또는 `inactive` |
+| `github_installation_id` | GitHub App installation id |
+| `github_repository_id` | GitHub repository id |
+| `owner` | repository owner/login |
+| `name` | repository name |
+| `default_branch` | repository default branch |
+| `repository_url` | repository web URL |
+| `visibility` | `public`, `private`, `internal` 중 하나 |
+| `archived` | archived repository 여부 |
+| `disconnected_at` | soft deactivate 시각 |
+
+GitHub App installation repository 목록은 DB에 저장하지 않습니다. callback 응답은 임시 선택 화면에만 사용하고, 사용자가 선택한 repository 1개만 active source repository로 저장합니다. 새 GitHub repo를 연결하면 기존 active row는 `inactive`으로 바꾸고 `disconnected_at`을 기록한 뒤 새 active row를 생성합니다.
+
+Git/CI/CD handoff 생성 요청은 `sourceRepositoryId`만 받습니다. repository owner/name/provider/default branch는 DB의 active source repository에서 읽습니다. 이 원칙은 클라이언트가 임의 GitHub repository identity를 body로 보내는 위험을 막기 위한 서비스 계약입니다.

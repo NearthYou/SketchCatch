@@ -309,16 +309,6 @@ export function SettingsIntegrationsClient() {
           <DashboardIcon name="cloud" />
           <span>AWS</span>
         </button>
-        <button
-          aria-selected={activeTab === "github"}
-          className={activeTab === "github" ? "settingsTab settingsTabActive" : "settingsTab"}
-          onClick={() => setActiveTab("github")}
-          role="tab"
-          type="button"
-        >
-          <DashboardIcon name="github" />
-          <span>GitHub</span>
-        </button>
       </div>
 
       {activeTab === "github" ? (

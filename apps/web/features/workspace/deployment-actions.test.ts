@@ -314,6 +314,7 @@ function createGitCicdHandoff(status: GitCicdHandoff["status"]): GitCicdHandoff 
     commitMessage: "Add SketchCatch Terraform preview",
     pullRequestTitle: "SketchCatch IaC preview",
     pullRequestUrl: "https://github.com/sketchcatch/infra-live/pull/42",
+    pullRequestHeadSha: "abc1234",
     pipelineRunUrl:
       status === "pipeline_running"
         ? "https://github.com/sketchcatch/infra-live/actions/runs/1"

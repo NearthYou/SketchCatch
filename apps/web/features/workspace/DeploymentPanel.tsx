@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   CSSProperties,
   KeyboardEvent as ReactKeyboardEvent,
@@ -15,11 +15,12 @@ import type {
   DeploymentLog,
   GitCicdHandoff,
   GitCicdHandoffPipelineStatus,
+  SourceRepository,
   TerraformDiagnostic,
   TerraformSourceLocation,
   TerraformOutput
 } from "@sketchcatch/types";
-import { Clipboard, ClipboardCheck, Code2, Maximize2, ShieldCheck, Trash2, X } from "lucide-react";
+import { Clipboard, ClipboardCheck, Code2, GitBranch, Maximize2, ShieldCheck, Trash2, X } from "lucide-react";
 import { DashboardIcon } from "../../components/dashboard/dashboard-icons";
 import { SelectMenu, type SelectMenuOption } from "../../components/ui/SelectMenu";
 import { getApiErrorMessage } from "../../lib/api-client";
@@ -27,6 +28,8 @@ import {
   approveDeploymentPlan,
   cancelDeployment as cancelDeploymentRun,
   createDeployment,
+  createGitHubExistingInstallationCallbackUrl,
+  createGitHubSourceRepositoryInstallUrl,
   getGitCicdHandoffPipelineStatus,
   getDeploymentFailureExplanation,
   listAwsConnections,
@@ -34,6 +37,7 @@ import {
   listDeploymentLogs,
   listDeployments,
   listGitCicdHandoffs,
+  listSourceRepositories,
   listTerraformOutputs,
   runDeploymentInit,
   runDeploymentApply,
@@ -69,6 +73,7 @@ import styles from "./workspace.module.css";
 type DeploymentRuntimeSnapshot = {
   readonly deployments: Deployment[];
   readonly gitCicdHandoffs: GitCicdHandoff[];
+  readonly sourceRepositories: SourceRepository[];
   readonly logs: DeploymentLog[];
   readonly resources: DeployedResource[];
   readonly outputs: TerraformOutput[];
@@ -106,6 +111,7 @@ export function DeploymentPanel({
   const [awsConnections, setAwsConnections] = useState<AwsConnection[]>([]);
   const [deployments, setDeployments] = useState<Deployment[]>([]);
   const [gitCicdHandoffs, setGitCicdHandoffs] = useState<GitCicdHandoff[]>([]);
+  const [sourceRepositories, setSourceRepositories] = useState<SourceRepository[]>([]);
   const [deploymentLogs, setDeploymentLogs] = useState<DeploymentLog[]>([]);
   const [deploymentResources, setDeploymentResources] = useState<DeployedResource[]>([]);
   const [terraformOutputs, setTerraformOutputs] = useState<TerraformOutput[]>([]);
@@ -174,6 +180,13 @@ export function DeploymentPanel({
     () => gitCicdHandoffs.find((handoff) => handoff.id === selectedGitCicdHandoffId) ?? null,
     [gitCicdHandoffs, selectedGitCicdHandoffId]
   );
+  const activeGitHubSourceRepository = useMemo(
+    () =>
+      sourceRepositories.find(
+        (repository) => repository.provider === "github" && repository.status === "active"
+      ) ?? null,
+    [sourceRepositories]
+  );
   const hasDeploymentRecords = deployments.length > 0;
   const hasGitCicdHandoffs = gitCicdHandoffs.length > 0;
   const compactDeploymentPanelMode = hasDeploymentRecords ? deploymentPanelMode : "setup";
@@ -240,10 +253,18 @@ export function DeploymentPanel({
   }, []);
 
   const loadDeploymentRuntimeSnapshot = useCallback(async (): Promise<DeploymentRuntimeSnapshot> => {
-    const [nextDeployments, nextGitCicdHandoffs, nextLogs, nextResources, nextOutputs] =
+    const [
+      nextDeployments,
+      nextGitCicdHandoffs,
+      nextSourceRepositories,
+      nextLogs,
+      nextResources,
+      nextOutputs
+    ] =
       await Promise.all([
       listDeployments(projectId),
       listGitCicdHandoffs(projectId),
+      listSourceRepositories(projectId),
       selectedDeploymentId ? listDeploymentLogs(selectedDeploymentId) : Promise.resolve([]),
       selectedDeploymentId ? listDeploymentResources(selectedDeploymentId) : Promise.resolve([]),
       selectedDeploymentId ? listTerraformOutputs(selectedDeploymentId) : Promise.resolve([])
@@ -252,6 +273,7 @@ export function DeploymentPanel({
     return {
       deployments: nextDeployments,
       gitCicdHandoffs: nextGitCicdHandoffs,
+      sourceRepositories: nextSourceRepositories,
       logs: nextLogs,
       resources: nextResources,
       outputs: nextOutputs
@@ -261,6 +283,7 @@ export function DeploymentPanel({
   const applyDeploymentRuntimeSnapshot = useCallback((snapshot: DeploymentRuntimeSnapshot): void => {
     setDeployments(snapshot.deployments);
     setGitCicdHandoffs(snapshot.gitCicdHandoffs);
+    setSourceRepositories(snapshot.sourceRepositories);
     setDeploymentLogs(snapshot.logs);
     setDeploymentResources(snapshot.resources);
     setTerraformOutputs(snapshot.outputs);
@@ -794,6 +817,29 @@ export function DeploymentPanel({
     }, "배포 상태를 새로고침하지 못했습니다.");
   }
 
+  async function startGitHubConnection(): Promise<void> {
+    await runRequest(async () => {
+      if (activeGitHubSourceRepository?.githubInstallationId) {
+        const { callbackUrl } = await createGitHubExistingInstallationCallbackUrl(projectId);
+
+        window.location.assign(callbackUrl);
+        return;
+      }
+
+      const { installUrl } = await createGitHubSourceRepositoryInstallUrl(projectId);
+
+      window.location.assign(installUrl);
+    }, "GitHub 연결을 시작하지 못했습니다.");
+  }
+
+  async function startNewGitHubInstallation(): Promise<void> {
+    await runRequest(async () => {
+      const { installUrl } = await createGitHubSourceRepositoryInstallUrl(projectId);
+
+      window.location.assign(installUrl);
+    }, "GitHub 설치를 시작하지 못했습니다.");
+  }
+
   function startDeploymentPanelResize(event: ReactPointerEvent<HTMLDivElement>): void {
     if (event.button !== 0) {
       return;
@@ -946,14 +992,61 @@ export function DeploymentPanel({
     <section className={styles.deploymentSection}>
       <div className={styles.deploymentSectionHeader}>
         <h3>Git/CI/CD handoff</h3>
-        <button
-          className={`${styles.deploymentSecondaryButton} ${styles.deploymentRefreshButton}`}
-          disabled={requestState === "loading"}
-          onClick={refreshDeploymentPanel}
-          type="button"
-        >
-          Refresh
-        </button>
+        <div className={styles.deploymentHeaderActions}>
+          <button
+            className={`${styles.deploymentSecondaryButton} ${styles.deploymentRefreshButton}`}
+            disabled={requestState === "loading"}
+            onClick={refreshDeploymentPanel}
+            type="button"
+          >
+            Refresh
+          </button>
+          <button
+            className={styles.deploymentSecondaryButton}
+            disabled={requestState === "loading"}
+            onClick={startGitHubConnection}
+            title="Connect GitHub repository"
+            type="button"
+          >
+            <GitBranch size={16} />
+            {activeGitHubSourceRepository ? "Repo 변경" : "GitHub 연결"}
+          </button>
+          {activeGitHubSourceRepository ? (
+            <button
+              className={styles.deploymentSecondaryButton}
+              disabled={requestState === "loading"}
+              onClick={startNewGitHubInstallation}
+              title="Install GitHub App on another account or organization"
+              type="button"
+            >
+              <GitBranch size={16} />
+              다른 설치
+            </button>
+          ) : null}
+        </div>
+      </div>
+
+      <div className={styles.deploymentSummary}>
+        <InfoRow
+          label="Source repository"
+          value={
+            activeGitHubSourceRepository
+              ? `${activeGitHubSourceRepository.owner}/${activeGitHubSourceRepository.name}`
+              : "Not connected"
+          }
+        />
+        {activeGitHubSourceRepository ? (
+          <>
+            <OptionalInfoRow
+              label="Default branch"
+              value={activeGitHubSourceRepository.defaultBranch}
+            />
+            <OptionalInfoRow
+              label="Repository URL"
+              value={activeGitHubSourceRepository.repositoryUrl}
+            />
+          </>
+        ) : null}
       </div>
 
       {hasGitCicdHandoffs ? (
@@ -1804,7 +1897,15 @@ function formatApprovalState(deployment: Deployment): string {
     return "Plan 필요";
   }
 
-  return "승인 가능";
+  if (deployment.isBlocked && deployment.blockedBy === "missing_approval") {
+    return "승인 가능";
+  }
+
+  if (deployment.isBlocked) {
+    return "승인 불가";
+  }
+
+  return "승인 필요 없음";
 }
 
 function getDeploymentActionHint(deployment: Deployment): string {
@@ -1822,7 +1923,11 @@ function getDeploymentActionHint(deployment: Deployment): string {
     return "승인된 Destroy Plan이 준비되었습니다. 실제 삭제 전 AWS 계정과 삭제 변경 내용을 다시 확인하세요.";
   }
 
-  if (deployment.currentPlanOperation === "destroy" && deployment.currentPlanArtifactId) {
+  if (
+    deployment.currentPlanOperation === "destroy" &&
+    deployment.isBlocked &&
+    deployment.blockedBy === "missing_approval"
+  ) {
     return "Destroy Plan 내용을 확인한 뒤 승인할 수 있습니다. 승인 전에는 AWS 리소스를 삭제하지 않습니다.";
   }
 
@@ -1846,8 +1951,12 @@ function getDeploymentActionHint(deployment: Deployment): string {
     return "Terraform Plan을 먼저 실행하면 승인 버튼이 표시됩니다.";
   }
 
-  if (deployment.currentPlanArtifactId) {
+  if (deployment.isBlocked && deployment.blockedBy === "missing_approval") {
     return "Plan 내용을 확인한 뒤 승인할 수 있습니다.";
+  }
+
+  if (deployment.isBlocked) {
+    return "현재 Plan은 승인 전에 차단 사유를 해결해야 합니다.";
   }
 
   return "";
