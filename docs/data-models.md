@@ -956,6 +956,17 @@ type CreateArchitectureDraftRequest = {
   prompt: string;
 };
 
+type ArchitectureDraftClarification = {
+  status: "needs_clarification";
+  question: string;
+  suggestions: string[];
+  providerMetadata: AiProviderMetadata;
+};
+
+type CreateArchitectureDraftResponse =
+  | AiArchitectureDraftResult
+  | ArchitectureDraftClarification;
+
 type ArchitectureRequirementFact =
   | "web_frontend"
   | "static_delivery"

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   AiArchitectureDraftResult,
+  ArchitectureDraftClarification,
   ArchitecturePatchClarification,
   ArchitecturePatchClarificationCandidate,
   ArchitecturePatchPreview,
@@ -91,6 +92,11 @@ type WorkspaceAiChatMessage = {
   readonly suggestions?: readonly string[];
 };
 
+type PendingArchitectureDraftClarification = {
+  readonly prompt: string;
+  readonly clarification: ArchitectureDraftClarification;
+};
+
 const MAX_CHAT_MESSAGES = 80;
 const STORAGE_KEY_PREFIX = "sketchcatch.workspaceAiChat";
 const NO_RESOURCE_ADDITION_SUGGESTION = "추가 안 함";
@@ -117,6 +123,8 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
     useState<ArchitecturePatchClarification | null>(null);
   const [clarificationSession, setClarificationSession] =
     useState<ArchitectureClarificationSession | null>(null);
+  const [draftClarification, setDraftClarification] =
+    useState<PendingArchitectureDraftClarification | null>(null);
   const [draftFollowUpSession, setDraftFollowUpSession] =
     useState<ArchitectureDraftFollowUpSession | null>(null);
   const [lastDraftRequest, setLastDraftRequest] = useState<CreateArchitectureDraftRequest | null>(
@@ -248,6 +256,7 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
     setComposerValue("");
     setDraft(null);
     setClarificationSession(null);
+    setDraftClarification(null);
     setDraftFollowUpSession(null);
     setDraftErrorMessage("");
     setDraftState("idle");
@@ -298,6 +307,11 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
 
     if (draftFollowUpSession !== null) {
       await handleDraftFollowUpMessage(trimmedPrompt);
+      return;
+    }
+
+    if (draftClarification !== null) {
+      await handleDraftClarificationMessage(trimmedPrompt);
       return;
     }
 
@@ -441,6 +455,20 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
     );
   }
 
+  async function handleDraftClarificationMessage(trimmedPrompt: string): Promise<void> {
+    if (draftClarification === null) {
+      return;
+    }
+
+    const previousPrompt = draftClarification.prompt;
+    const question = draftClarification.clarification.question;
+
+    setDraftClarification(null);
+    await createDraftFromRequest({
+      prompt: `${previousPrompt}\n\n${question}\n${trimmedPrompt}`
+    });
+  }
+
   async function createPatchPreviewFromPrompt(
     instruction: string,
     options: {
@@ -456,6 +484,7 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
     setDraft(null);
     setPatchPreviewModel(null);
     setPatchClarification(null);
+    setDraftClarification(null);
     setDraftFollowUpSession(null);
     context.setPreviewDiagram(null);
 
@@ -615,6 +644,17 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
 
     try {
       const result = await createAiArchitectureDraft(draftRequest);
+
+      if (isArchitectureDraftClarification(result)) {
+        setDraftClarification({
+          prompt: draftRequest.prompt,
+          clarification: result
+        });
+        setDraftState("idle");
+        appendAssistantMessage("question", result.question, result.suggestions);
+        return;
+      }
+
       const previewDecision = planArchitectureDraftPreview(draftRequest, result);
       if (previewDecision.action === "ask_follow_up") {
         setDraftFollowUpSession(previewDecision.session);
@@ -652,6 +692,7 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
     const previewDiagram = convertArchitectureJsonToDiagramJson(result.architectureJson);
 
     setDraft(result);
+    setDraftClarification(null);
     context.setPreviewDiagram(previewDiagram);
     setDraftState("idle");
     appendAssistantMessage(
@@ -683,6 +724,7 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
     setDraft(null);
     setPatchPreviewModel(null);
     setPatchClarification(null);
+    setDraftClarification(null);
     setDraftFollowUpSession(null);
     setDesignSimulation(null);
     setSimulationFingerprint(null);
@@ -1183,6 +1225,12 @@ function normalizePatchClarificationAnswer(value: string): string {
 
 function formatPatchCandidateSuggestion(candidate: ArchitecturePatchClarificationCandidate): string {
   return `${candidate.label} (${candidate.resourceType})`;
+}
+
+function isArchitectureDraftClarification(
+  response: AiArchitectureDraftResult | ArchitectureDraftClarification
+): response is ArchitectureDraftClarification {
+  return "status" in response && response.status === "needs_clarification";
 }
 
 function createPatchPreviewSummary(preview: ArchitecturePatchPreview): string {

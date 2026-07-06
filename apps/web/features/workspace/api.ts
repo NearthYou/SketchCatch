@@ -1,5 +1,4 @@
 import type {
-  AiArchitectureDraftResult,
   AiPreDeploymentAnalysisResult,
   AiTerraformErrorExplanationResult,
   AiTerraformPreviewExplanationResult,
@@ -14,6 +13,7 @@ import type {
   AwsConnectionListResponse,
   CreateArchitectureSnapshotRequest,
   CreateArchitectureDraftRequest,
+  CreateArchitectureDraftResponse,
   CreateAwsConnectionRequest,
   CreateAwsConnectionResponse,
   CreateDeploymentRequest,
@@ -283,8 +283,8 @@ export async function syncTerraformToDiagram({
 // 실제 Workspace AI 패널에서 Requirement Prompt 기반 Architecture Draft를 요청합니다.
 export async function createAiArchitectureDraft(
   input: CreateArchitectureDraftRequest
-): Promise<AiArchitectureDraftResult> {
-  return postPublicAiJson<AiArchitectureDraftResult>("/ai/architecture-draft", input);
+): Promise<CreateArchitectureDraftResponse> {
+  return postPublicAiJson<CreateArchitectureDraftResponse>("/ai/architecture-draft", input);
 }
 
 export async function createAiArchitecturePatchPreview(

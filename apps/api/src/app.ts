@@ -3,7 +3,7 @@ import { ZodError } from "zod";
 import type { ApiErrorCode } from "@sketchcatch/types";
 import { startRefreshTokenCleanupJob } from "./auth/cleanup.js";
 import { type DatabaseClient, getDatabaseClient } from "./db/client.js";
-import { registerAiRoutes } from "./routes/ai.js";
+import { registerAiRoutes, type AiRouteOptions } from "./routes/ai.js";
 import type { CreateLlmExplanation } from "./services/aiLlmExplanation.js";
 import { registerHealthRoutes } from "./routes/health.js";
 import { registerAuthRoutes } from "./routes/auth.js";
@@ -32,6 +32,7 @@ const fallbackCorsAllowedHeaders = "content-type,authorization";
 
 export type BuildAppOptions = {
   getDatabaseClient?: () => DatabaseClient;
+  createArchitectureDraftResponse?: AiRouteOptions["createArchitectureDraftResponse"];
   createLlmExplanation?: CreateLlmExplanation;
   oauthCallbackRateLimiter?: RateLimiter;
   oauthStartRateLimiter?: RateLimiter;
@@ -172,14 +173,17 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
 }
 
 // AI route 옵션은 undefined 필드를 넘기지 않게 분리해 exact optional 타입을 지킵니다.
-function createAiRouteOptions(options: BuildAppOptions): { readonly prefix: "/api"; readonly createLlmExplanation?: CreateLlmExplanation } {
-  if (options.createLlmExplanation === undefined) {
+function createAiRouteOptions(options: BuildAppOptions): AiRouteOptions & { readonly prefix: "/api" } {
+  if (options.createLlmExplanation === undefined && options.createArchitectureDraftResponse === undefined) {
     return { prefix: "/api" };
   }
 
   return {
     prefix: "/api",
-    createLlmExplanation: options.createLlmExplanation
+    ...(options.createArchitectureDraftResponse !== undefined
+      ? { createArchitectureDraftResponse: options.createArchitectureDraftResponse }
+      : {}),
+    ...(options.createLlmExplanation !== undefined ? { createLlmExplanation: options.createLlmExplanation } : {})
   };
 }
 

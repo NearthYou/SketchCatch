@@ -3,7 +3,9 @@
 import { useMemo, useState } from "react";
 import type {
   AiArchitectureDraftResult,
+  ArchitectureDraftClarification,
   ArchitectureGuardrailWarning,
+  CreateArchitectureDraftResponse,
   DesignSimulationResult
 } from "@sketchcatch/types";
 import { getApiErrorMessage } from "../../lib/api-client";
@@ -78,6 +80,13 @@ export function WorkspaceAiPanel({ context }: WorkspaceAiPanelProps) {
       const result = await createAiArchitectureDraft({
         prompt
       });
+
+      if (isArchitectureDraftClarification(result)) {
+        setDraftState("error");
+        setDraftErrorMessage(result.question);
+        return;
+      }
+
       const previewDiagram = convertArchitectureJsonToDiagramJson(result.architectureJson);
 
       setDraft(result);
@@ -255,4 +264,10 @@ function createDraftWarnings(
   }
 
   return warnings;
+}
+
+function isArchitectureDraftClarification(
+  response: CreateArchitectureDraftResponse
+): response is ArchitectureDraftClarification {
+  return "status" in response && response.status === "needs_clarification";
 }

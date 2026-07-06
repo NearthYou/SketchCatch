@@ -2001,3 +2001,30 @@
 - Known risks:
   - 브라우저 클릭 smoke는 별도로 실행하지 않았다. 이번 수정은 API draft 생성, Web draft 적용 source test, diagram adapter test, lint/typecheck/build, 직접 smoke로 검증했다.
   - 실제 AWS apply/destroy, cloud mutation, Git/CI/CD handoff는 실행하지 않았다.
+# 2026-07-07 - Amazon Q 기반 Architecture Draft 질문/생성 흐름 전환
+
+- Goal: Architecture Draft 생성에서 코드가 직접 다이어그램을 결정하는 경로 대신 Amazon Q에 요구사항을 전달하고, 필수 정보가 부족하면 채팅에서 순차 질문 후 Q 응답 기반 다이어그램을 그리도록 전환한다.
+- Completed:
+  - `CreateArchitectureDraftResponse`를 `AiArchitectureDraftResult | ArchitectureDraftClarification` 유니온으로 확장하고 `metadata.source = "amazon_q"` 값을 추가했다.
+  - `/api/ai/architecture-draft`가 Bedrock 설명 보강을 거치지 않고 Amazon Q 기반 draft response factory를 사용하도록 변경했다.
+  - Amazon Q가 활성화되고 credit이 확인된 경우 웹사이트 종류, 트래픽, DB, 프론트엔드, 백엔드, 지역, 예산, SSL/HTTPS, 파일 업로드, 실시간 기능, 운영 관리 선호도 질문을 한 번에 하나씩 확인한 뒤 Q에 전체 prompt를 전달한다.
+  - Amazon Q 응답은 JSON preview 또는 추가 clarification으로 파싱하고, 지원 가능한 `ResourceType`과 edge 참조를 검증한 뒤 ArchitectureJson으로 반환한다.
+  - provider 미설정/credit 미확인/응답 오류 시 기존 deterministic planner를 fallback으로 유지해 로컬 및 테스트 안정성을 보존했다.
+  - Workspace AI 채팅 dock이 Q clarification을 저장하고 사용자 답변을 원래 prompt에 누적해 다시 요청하도록 연결했다.
+  - 보조 workspace UI와 demo workspace는 Q clarification을 안내 메시지로 처리하도록 보강했다.
+  - `docs/data-models.md`에 새 Architecture Draft clarification/response DTO를 반영했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits
+  - `pnpm --dir apps/api exec tsx --test src/services/aiArchitectureDrafts.test.ts` - sandbox `spawn EPERM` after first attempt, elevated rerun passed
+  - `pnpm --filter @sketchcatch/api typecheck` - passed
+  - `pnpm --filter @sketchcatch/web typecheck` - first failed because stale `.next/types/validator.ts` referenced a removed generated route; after deleting generated `apps/web/.next`, passed
+  - `pnpm --filter @sketchcatch/types typecheck` - passed
+  - `pnpm --filter @sketchcatch/api test` - passed outside sandbox after Node test runner hit sandbox `spawn EPERM`, 579 tests
+  - `pnpm harness:check` - passed
+  - `pnpm lint` - passed with non-fatal Turbo cache rename warnings
+  - `pnpm typecheck` - passed with non-fatal Turbo cache rename warnings
+  - `pnpm build` - sandbox run failed on Next `.next` rename `EPERM`, elevated rerun passed
+- Known risks:
+  - Real Amazon Q Business 호출은 fake provider tests로 계약을 검증했으며 실제 AWS provider 호출은 수행하지 않았다.
+  - Browser click smoke는 별도로 수행하지 않았다. 채팅 상태 전환은 typecheck/build와 API provider-contract tests로 검증했다.
+  - 실제 AWS apply/destroy, cloud mutation, Git/CI/CD handoff는 수행하지 않았다.

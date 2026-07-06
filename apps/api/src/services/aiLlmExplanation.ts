@@ -407,7 +407,7 @@ function createBedrockTextProvider(input: { readonly region: string; readonly mo
   };
 }
 
-function createAmazonQBusinessTextProviderFromEnv(input: { readonly region: string }): AiTextProvider | undefined {
+export function createAmazonQBusinessTextProviderFromEnv(input: { readonly region: string }): AiTextProvider | undefined {
   if (process.env.AMAZON_Q_ENABLED !== "true") {
     return undefined;
   }

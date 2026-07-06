@@ -736,7 +736,7 @@ export type BudgetLimit = {
 
 export type RiskLevel = "low" | "medium" | "high";
 
-export type AiResultSource = "prompt" | "github" | "template_fallback" | "llm_fallback";
+export type AiResultSource = "prompt" | "github" | "amazon_q" | "template_fallback" | "llm_fallback";
 
 export type AiConfidence = "low" | "medium" | "high";
 
@@ -1015,6 +1015,17 @@ export type AiArchitectureDraftResult = {
   metadata: AiResultMetadata;
   llmExplanation?: LlmExplanation | undefined;
 };
+
+export type ArchitectureDraftClarification = {
+  status: "needs_clarification";
+  question: string;
+  suggestions: string[];
+  providerMetadata: AiProviderMetadata;
+};
+
+export type CreateArchitectureDraftResponse =
+  | AiArchitectureDraftResult
+  | ArchitectureDraftClarification;
 
 export type MoneyEstimate = {
   amount: number;
