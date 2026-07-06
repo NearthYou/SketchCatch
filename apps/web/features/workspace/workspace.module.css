@@ -3422,6 +3422,39 @@
   overflow-wrap: anywhere;
 }
 
+.reverseParameterDetails {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.reverseParameterSummary {
+  cursor: pointer;
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.reverseParameterSummary::marker {
+  color: #64748b;
+}
+
+.reverseParameterCode {
+  background: #0f172a;
+  border: 1px solid #263449;
+  border-radius: 6px;
+  color: #e2e8f0;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 10.5px;
+  line-height: 1.5;
+  margin: 0;
+  max-height: 260px;
+  min-width: 0;
+  overflow: auto;
+  padding: 10px;
+  white-space: pre;
+}
+
 .reverseLogList li[data-level="WARN"] {
   border-left: 4px solid #f59e0b;
 }

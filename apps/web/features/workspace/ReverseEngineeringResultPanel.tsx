@@ -8,6 +8,7 @@ import type { ReverseEngineeringDraftNodeUpdate } from "./reverse-engineering-dr
 import type { ReverseEngineeringBoardComparison } from "./reverse-engineering-board-application";
 import { ReverseEngineeringFindingsPanel } from "./ReverseEngineeringFindingsPanel";
 import { ReverseEngineeringImportSuggestionsPanel } from "./ReverseEngineeringImportSuggestionsPanel";
+import { ReverseEngineeringResourceParametersPanel } from "./ReverseEngineeringResourceParametersPanel";
 import styles from "./workspace.module.css";
 
 export type ReverseEngineeringApplyState = "idle" | "saving" | "saved" | "error";
@@ -150,6 +151,8 @@ export function ReverseEngineeringResultPanel({
           </ul>
         )}
       </section>
+
+      <ReverseEngineeringResourceParametersPanel discoveredResources={result.discoveredResources} />
 
       <ReverseEngineeringFindingsPanel
         analysisExclusions={result.analysisExclusions}
