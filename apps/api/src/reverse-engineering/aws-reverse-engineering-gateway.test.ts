@@ -21,6 +21,7 @@ import {
   listIamRolesAsUnknown,
   listKmsKeysAsUnknown,
   listLambdaFunctionsAsUnknown,
+  listLambdaPermissionsAsUnknown,
   listTaggedUnknownResources,
   maskReverseEngineeringSensitiveText as maskGatewaySensitiveText,
   shouldReadUnknownResourceGroup,
@@ -56,6 +57,17 @@ test("shouldReadResourceGroup keeps individual resource filters when ALL is not 
   assert.equal(shouldReadResourceGroup(input, "RDS"), false);
 });
 
+test("shouldReadResourceGroup reads route tables when route table associations are selected", () => {
+  const input = {
+    provider: "aws" as const,
+    region: "ap-northeast-2",
+    resourceTypes: ["ROUTE_TABLE_ASSOCIATION" as const]
+  };
+
+  assert.equal(shouldReadResourceGroup(input, "ROUTE_TABLE"), true);
+  assert.equal(shouldReadResourceGroup(input, "VPC"), false);
+});
+
 test("shouldReadUnknownResourceGroup reads UNKNOWN family only for ALL, UNKNOWN, or Lambda filters", () => {
   assert.equal(shouldReadUnknownResourceGroup({
     provider: "aws",
@@ -71,6 +83,11 @@ test("shouldReadUnknownResourceGroup reads UNKNOWN family only for ALL, UNKNOWN,
     provider: "aws",
     region: "ap-northeast-2",
     resourceTypes: ["LAMBDA"]
+  }), true);
+  assert.equal(shouldReadUnknownResourceGroup({
+    provider: "aws",
+    region: "ap-northeast-2",
+    resourceTypes: ["LAMBDA_PERMISSION"]
   }), true);
   assert.equal(shouldReadUnknownResourceGroup({
     provider: "aws",
@@ -350,6 +367,58 @@ test("listLambdaFunctionsAsUnknown keeps untagged Lambda functions as UNKNOWN ca
     { type: "depends_on", targetProviderResourceId: "vpc-1234" },
     { type: "attached_to", targetProviderResourceId: "subnet-1234" },
     { type: "attached_to", targetProviderResourceId: "sg-1234" }
+  ]);
+});
+
+test("listLambdaPermissionsAsUnknown keeps Lambda resource policy statements as UNKNOWN candidates", async () => {
+  const fakeLambdaClient = {
+    async send(command: { constructor: { name: string }; input?: { FunctionName?: string } }) {
+      switch (command.constructor.name) {
+        case "ListFunctionsCommand":
+          return {
+            Functions: [
+              {
+                FunctionArn: "arn:aws:lambda:ap-northeast-2:316875069960:function:demo-fn",
+                FunctionName: "demo-fn"
+              }
+            ]
+          };
+        case "GetPolicyCommand":
+          assert.equal(command.input?.FunctionName, "demo-fn");
+          return {
+            Policy: JSON.stringify({
+              Statement: [
+                {
+                  Sid: "AllowApiGatewayInvoke",
+                  Effect: "Allow",
+                  Principal: { Service: "apigateway.amazonaws.com" },
+                  Action: "lambda:InvokeFunction",
+                  Resource: "arn:aws:lambda:ap-northeast-2:316875069960:function:demo-fn"
+                }
+              ]
+            })
+          };
+        default:
+          throw new Error(`Unexpected command ${command.constructor.name}`);
+      }
+    }
+  };
+
+  const records = await listLambdaPermissionsAsUnknown(
+    "ap-northeast-2",
+    TEST_AWS_CREDENTIALS,
+    () => fakeLambdaClient
+  );
+
+  assert.equal(records.length, 1);
+  assert.equal(records[0]?.providerResourceType, "AWS::Lambda::Permission");
+  assert.equal(records[0]?.providerResourceId, "arn:aws:lambda:ap-northeast-2:316875069960:function:demo-fn:permission:AllowApiGatewayInvoke");
+  assert.equal(records[0]?.displayName, "demo-fn permission AllowApiGatewayInvoke");
+  assert.deepEqual(records[0]?.relationships, [
+    {
+      type: "depends_on",
+      targetProviderResourceId: "arn:aws:lambda:ap-northeast-2:316875069960:function:demo-fn"
+    }
   ]);
 });
 

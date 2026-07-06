@@ -49,9 +49,11 @@ import {
   type ListKeysCommandOutput
 } from "@aws-sdk/client-kms";
 import {
+  GetPolicyCommand,
   LambdaClient,
   ListFunctionsCommand,
   type FunctionConfiguration,
+  type GetPolicyCommandOutput,
   type ListFunctionsCommandOutput
 } from "@aws-sdk/client-lambda";
 import {
@@ -192,6 +194,18 @@ export type AwsCloudWatchReadClientFactory = (
   region: string,
   credentials: TerraformAwsCredentialEnv
 ) => AwsCloudWatchReadClient;
+
+type LambdaPolicyStatement = {
+  readonly Sid?: string;
+  readonly Action?: unknown;
+  readonly Effect?: unknown;
+  readonly Principal?: unknown;
+  readonly Resource?: unknown;
+};
+
+type LambdaPolicyDocument = {
+  readonly Statement?: LambdaPolicyStatement | LambdaPolicyStatement[];
+};
 
 // 검증된 AWS 연결로 실제 read-only 조회를 수행하는 gateway를 만듭니다.
 export function createAwsReverseEngineeringGateway(
@@ -551,7 +565,8 @@ async function listUnknownResources(
       listAmiImagesAsUnknown(input.region, credentials),
       listIamPoliciesAsUnknown(input.region, credentials),
       listIamInstanceProfilesAsUnknown(input.region, credentials),
-      listCloudWatchMetricAlarmsAsUnknown(input.region, credentials)
+      listCloudWatchMetricAlarmsAsUnknown(input.region, credentials),
+      listLambdaPermissionsAsUnknown(input.region, credentials)
     );
   }
 
@@ -597,6 +612,10 @@ async function listUnknownResources(
     input.resourceTypes.includes("LAMBDA")
   ) {
     reads.push(listLambdaFunctionsAsUnknown(input.region, credentials));
+  }
+
+  if (input.resourceTypes.includes("LAMBDA_PERMISSION")) {
+    reads.push(listLambdaPermissionsAsUnknown(input.region, credentials));
   }
 
   const unknownGroups = await Promise.all(reads);
@@ -648,6 +667,33 @@ export async function listLambdaFunctionsAsUnknown(
     records.push(...(response.Functions ?? []).flatMap((lambdaFunction) =>
       toUnknownLambdaFunctionRecord(lambdaFunction, region)
     ));
+    marker = response.NextMarker && response.NextMarker.length > 0 ? response.NextMarker : undefined;
+  } while (marker);
+
+  return records;
+}
+
+export async function listLambdaPermissionsAsUnknown(
+  region: string,
+  credentials: TerraformAwsCredentialEnv,
+  createClient: AwsLambdaReadClientFactory = createDefaultLambdaReadClient
+): Promise<AwsDiscoveredResourceRecord[]> {
+  const client = createClient(region, credentials);
+  const records: AwsDiscoveredResourceRecord[] = [];
+  let marker: string | undefined;
+
+  do {
+    const response = await sendLambdaCommand<ListFunctionsCommandOutput>(
+      client,
+      new ListFunctionsCommand({ Marker: marker })
+    );
+    const permissionGroups = await Promise.all(
+      (response.Functions ?? []).map((lambdaFunction) =>
+        createLambdaPermissionRecords(lambdaFunction, region, client)
+      )
+    );
+
+    records.push(...permissionGroups.flat());
     marker = response.NextMarker && response.NextMarker.length > 0 ? response.NextMarker : undefined;
   } while (marker);
 
@@ -1156,6 +1202,76 @@ function toUnknownLambdaFunctionRecord(
   ];
 }
 
+async function createLambdaPermissionRecords(
+  lambdaFunction: FunctionConfiguration,
+  fallbackRegion: string,
+  client: AwsLambdaReadClient
+): Promise<AwsDiscoveredResourceRecord[]> {
+  if (!lambdaFunction.FunctionName || !lambdaFunction.FunctionArn) {
+    return [];
+  }
+
+  const policy = await readOptionalS3Detail(() =>
+    sendLambdaCommand<GetPolicyCommandOutput>(
+      client,
+      new GetPolicyCommand({ FunctionName: lambdaFunction.FunctionName })
+    )
+  );
+  const statements = parseLambdaPolicyStatements(policy?.Policy);
+
+  return statements.map((statement, index) =>
+    toUnknownLambdaPermissionRecord(lambdaFunction, statement, index, fallbackRegion)
+  );
+}
+
+function parseLambdaPolicyStatements(policyText: string | undefined): LambdaPolicyStatement[] {
+  if (!policyText) {
+    return [];
+  }
+
+  try {
+    const policy = JSON.parse(policyText) as LambdaPolicyDocument;
+    const statements = policy.Statement;
+
+    if (!statements) {
+      return [];
+    }
+
+    return Array.isArray(statements) ? statements : [statements];
+  } catch {
+    return [];
+  }
+}
+
+function toUnknownLambdaPermissionRecord(
+  lambdaFunction: FunctionConfiguration,
+  statement: LambdaPolicyStatement,
+  index: number,
+  fallbackRegion: string
+): AwsDiscoveredResourceRecord {
+  const functionArn = lambdaFunction.FunctionArn ?? lambdaFunction.FunctionName ?? "lambda-function";
+  const sid = statement.Sid && statement.Sid.length > 0 ? statement.Sid : `statement-${index + 1}`;
+  const providerResourceId = `${functionArn}:permission:${sid}`;
+
+  return {
+    providerResourceType: "AWS::Lambda::Permission",
+    providerResourceId,
+    displayName: `${lambdaFunction.FunctionName ?? functionArn} permission ${sid}`,
+    region: parseAwsArn(functionArn).region || fallbackRegion,
+    config: {
+      action: statement.Action,
+      effect: statement.Effect,
+      functionArn,
+      functionName: lambdaFunction.FunctionName,
+      principal: statement.Principal,
+      rawProviderData: statement,
+      resource: statement.Resource,
+      sid
+    },
+    relationships: [{ type: "depends_on", targetProviderResourceId: functionArn }]
+  };
+}
+
 function toUnknownCloudFrontDistributionRecord(
   distribution: DistributionSummary
 ): AwsDiscoveredResourceRecord[] {
@@ -1600,7 +1716,11 @@ function toAwsSdkCredentials(credentials: TerraformAwsCredentialEnv) {
 
 // `ALL`은 화면 선택값일 뿐 실제 AWS 리소스가 아니어서, 각 지원 리소스 조회로 풀어서 처리합니다.
 export function shouldReadResourceGroup(input: AwsProviderScanInput, resourceType: ResourceType): boolean {
-  return input.resourceTypes.includes("ALL") || input.resourceTypes.includes(resourceType);
+  return (
+    input.resourceTypes.includes("ALL") ||
+    input.resourceTypes.includes(resourceType) ||
+    (resourceType === "ROUTE_TABLE" && input.resourceTypes.includes("ROUTE_TABLE_ASSOCIATION"))
+  );
 }
 
 export function shouldReadUnknownResourceGroup(input: AwsProviderScanInput): boolean {
@@ -1609,6 +1729,7 @@ export function shouldReadUnknownResourceGroup(input: AwsProviderScanInput): boo
     input.resourceTypes.includes("UNKNOWN") ||
     input.resourceTypes.includes("AMI") ||
     input.resourceTypes.includes("LAMBDA") ||
+    input.resourceTypes.includes("LAMBDA_PERMISSION") ||
     input.resourceTypes.includes("CLOUDFRONT") ||
     input.resourceTypes.includes("IAM_ROLE") ||
     input.resourceTypes.includes("IAM_POLICY") ||
