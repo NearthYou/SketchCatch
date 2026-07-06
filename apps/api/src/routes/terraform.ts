@@ -139,7 +139,7 @@ export async function registerTerraformRoutes(
 ): Promise<void> {
   const getTerraformDatabaseClient = options.getDatabaseClient ?? getDatabaseClient;
   const validateTerraformPreviewCode =
-    options.validateTerraformPreviewCode ?? validateTerraformPreviewCodeStatic;
+    options.validateTerraformPreviewCode ?? validateTerraformPreviewCodeDefault;
 
   app.post("/terraform/generate", async (request, reply): Promise<TerraformGenerateResponse | void> => {
     await requireActiveUserId(request, getTerraformDatabaseClient);
@@ -188,7 +188,7 @@ export async function registerTerraformRoutes(
   );
 }
 
-async function validateTerraformPreviewCodeStatic(
+async function validateTerraformPreviewCodeDefault(
   input: TerraformValidateRequest
 ): Promise<TerraformValidateResponse> {
   return {

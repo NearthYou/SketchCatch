@@ -18,8 +18,26 @@ const NESTED_BLOCK_PATTERN = /^\s*[A-Za-z_][A-Za-z0-9_]*\s*\{\s*$/;
 const QUOTED_REFERENCE_PATTERN =
   /"((?:aws_[A-Za-z0-9_]+|data\.aws_[A-Za-z0-9_]+)\.[A-Za-z0-9_]+\.[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*)"/g;
 const TERRAFORM_REFERENCE_PATTERN =
-  /\b(?:data\.aws_[A-Za-z0-9_]+\.[A-Za-z0-9_]+|aws_[A-Za-z0-9_]+\.[A-Za-z0-9_]+)(?:\.[A-Za-z0-9_]+)+\b/g;
+  /\b(?:data\.aws_[A-Za-z0-9_]+\.[A-Za-z0-9_]+|aws_[A-Za-z0-9_]+\.[A-Za-z0-9_]+)(?:\.[A-Za-z0-9_]+)*\b/g;
 const TRAILING_ATTRIBUTE_COMMA_PATTERN = /^\s*[A-Za-z_][A-Za-z0-9_]*\s*=.+,\s*$/;
+const HEREDOC_START_PATTERN = /^<<-?\s*([A-Za-z_][A-Za-z0-9_]*)\s*$/;
+const STRING_LITERAL_PATTERN = /^"(?:[^"\\]|\\.)*"$/s;
+const NUMBER_LITERAL_PATTERN = /^-?\d+(?:\.\d+)?$/;
+const EC2_INSTANCE_TYPE_PATTERN =
+  /^(?:t2|t3|t3a|t4g|m5|m5a|m5n|m6i|m6a|m6g|m7i|m7a|m7g|c5|c5a|c5n|c6i|c6a|c6g|c7i|c7a|c7g|r5|r5a|r5n|r6i|r6a|r6g|r7i|r7a|r7g|a1|g4dn|g5|p3|p4d|p5|i3|i4i|d3|x2idn|x2iedn)\.(?:nano|micro|small|medium|large|xlarge|[0-9]+xlarge|metal)$/;
+
+const FAST_AWS_NUMBER_ATTRIBUTES: Record<string, ReadonlySet<string>> = {
+  aws_security_group_rule: new Set(["from_port", "to_port"])
+};
+
+const FAST_AWS_JSON_STRING_ATTRIBUTES: Record<string, ReadonlySet<string>> = {
+  aws_iam_policy: new Set(["policy"]),
+  aws_iam_role: new Set(["assume_role_policy"])
+};
+
+const FAST_AWS_UNSUPPORTED_ARGUMENTS: Record<string, ReadonlySet<string>> = {
+  aws_s3_bucket: new Set(["bucket_purpose", "origin_resource_id", "public_access_block"])
+};
 
 type TerraformValidationFile = {
   readonly fileName: string;
@@ -39,6 +57,17 @@ type ActiveTerraformBlock = {
   readonly resourceType: string;
 };
 
+type TerraformAttribute = {
+  readonly line: number;
+  readonly name: string;
+  readonly rawValue: string;
+  readonly valueKind: "expression" | "number" | "string";
+};
+
+type TerraformResourceBlock = TerraformBlockHeader & {
+  readonly attributes: readonly TerraformAttribute[];
+};
+
 export function createTerraformDiagnostics(terraformCode: string): TerraformDiagnostic[] {
   const trimmedCode = terraformCode.trim();
 
@@ -53,8 +82,9 @@ export function createTerraformDiagnostics(terraformCode: string): TerraformDiag
   }
 
   const commentStrippedCode = stripBlockCommentsPreservingLines(terraformCode);
-  const tokenDiagnostics = checkBalancedTokens(commentStrippedCode);
-  const blockDiagnostics = checkBlocks(commentStrippedCode);
+  const syntaxScannedCode = stripHeredocsPreservingLines(commentStrippedCode);
+  const tokenDiagnostics = checkBalancedTokens(syntaxScannedCode);
+  const blockDiagnostics = checkBlocks(syntaxScannedCode);
 
   if (hasBlockingTokenDiagnostics(tokenDiagnostics)) {
     return mergeBlockErrorsAroundTokenDiagnostics(tokenDiagnostics, blockDiagnostics);
@@ -63,11 +93,12 @@ export function createTerraformDiagnostics(terraformCode: string): TerraformDiag
   return [
     ...tokenDiagnostics,
     ...blockDiagnostics,
-    ...checkBodySyntax(commentStrippedCode),
-    ...checkUnexpectedTokens(commentStrippedCode),
-    ...checkTrailingAttributeCommas(commentStrippedCode),
-    ...checkUndefinedReferences(commentStrippedCode),
-    ...checkQuotedReferences(commentStrippedCode)
+    ...checkBodySyntax(syntaxScannedCode),
+    ...checkUnexpectedTokens(syntaxScannedCode),
+    ...checkTrailingAttributeCommas(syntaxScannedCode),
+    ...checkUndefinedReferences(syntaxScannedCode),
+    ...checkQuotedReferences(syntaxScannedCode),
+    ...checkFastAwsSchemaDiagnostics(commentStrippedCode)
   ];
 }
 
@@ -506,7 +537,7 @@ function checkUndefinedReferences(terraformCode: string): TerraformDiagnostic[] 
 
       reportedReferences.add(referenceAddress);
       diagnostics.push({
-        severity: "warning",
+        severity: "error",
         code: "terraform.undefined_reference",
         line: index + 1,
         resourceAddress: referenceAddress,
@@ -641,6 +672,261 @@ function checkQuotedReferences(terraformCode: string): TerraformDiagnostic[] {
   return diagnostics;
 }
 
+function checkFastAwsSchemaDiagnostics(terraformCode: string): TerraformDiagnostic[] {
+  return collectTerraformResourceBlocks(terraformCode).flatMap((block) => [
+    ...checkFastAwsUnsupportedArguments(block),
+    ...checkFastAwsAttributeTypes(block),
+    ...checkFastAwsJsonStrings(block),
+    ...checkFastAwsCatalogValues(block)
+  ]);
+}
+
+function checkFastAwsUnsupportedArguments(block: TerraformResourceBlock): TerraformDiagnostic[] {
+  const unsupportedAttributes = FAST_AWS_UNSUPPORTED_ARGUMENTS[block.resourceType];
+
+  if (!unsupportedAttributes) {
+    return [];
+  }
+
+  return block.attributes
+    .filter((attribute) => unsupportedAttributes.has(attribute.name))
+    .map((attribute) => ({
+      severity: "error",
+      code: "terraform.unsupported_argument",
+      line: attribute.line,
+      resourceAddress: block.address,
+      message: `${block.resourceType}.${attribute.name} is not supported by the AWS Terraform provider.`
+    }));
+}
+
+function checkFastAwsAttributeTypes(block: TerraformResourceBlock): TerraformDiagnostic[] {
+  const numberAttributes = FAST_AWS_NUMBER_ATTRIBUTES[block.resourceType];
+
+  if (!numberAttributes) {
+    return [];
+  }
+
+  return block.attributes
+    .filter((attribute) => numberAttributes.has(attribute.name) && attribute.valueKind === "string")
+    .map((attribute) => ({
+      severity: "error",
+      code: "terraform.attribute_type",
+      line: attribute.line,
+      resourceAddress: block.address,
+      message: `${block.resourceType}.${attribute.name} must be a number, but received a string.`
+    }));
+}
+
+function checkFastAwsJsonStrings(block: TerraformResourceBlock): TerraformDiagnostic[] {
+  const jsonAttributes = FAST_AWS_JSON_STRING_ATTRIBUTES[block.resourceType];
+
+  if (!jsonAttributes) {
+    return [];
+  }
+
+  return block.attributes.flatMap((attribute) => {
+    if (!jsonAttributes.has(attribute.name) || attribute.valueKind !== "string") {
+      return [];
+    }
+
+    const jsonText = readTerraformStringValue(attribute.rawValue);
+
+    if (!jsonText || isValidJsonString(jsonText)) {
+      return [];
+    }
+
+    return [
+      {
+        severity: "error",
+        code: "terraform.invalid_json",
+        line: attribute.line,
+        resourceAddress: block.address,
+        message: `${block.resourceType}.${attribute.name} must contain valid JSON.`
+      }
+    ];
+  });
+}
+
+function checkFastAwsCatalogValues(block: TerraformResourceBlock): TerraformDiagnostic[] {
+  if (block.resourceType !== "aws_instance") {
+    return [];
+  }
+
+  return block.attributes.flatMap((attribute) => {
+    if (attribute.name !== "instance_type" || attribute.valueKind !== "string") {
+      return [];
+    }
+
+    const instanceType = readTerraformStringValue(attribute.rawValue);
+
+    if (!instanceType || EC2_INSTANCE_TYPE_PATTERN.test(instanceType)) {
+      return [];
+    }
+
+    return [
+      {
+        severity: "error",
+        code: "terraform.invalid_catalog_value",
+        line: attribute.line,
+        resourceAddress: block.address,
+        message: `aws_instance.instance_type is not a known EC2 instance type: ${instanceType}.`
+      }
+    ];
+  });
+}
+
+function collectTerraformResourceBlocks(terraformCode: string): TerraformResourceBlock[] {
+  const blocks: TerraformResourceBlock[] = [];
+  const lines = splitTerraformLines(terraformCode);
+  let activeBlock: (TerraformBlockHeader & { attributes: TerraformAttribute[] }) | null = null;
+  let depth = 0;
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const lineText = lines[index] ?? "";
+    const codeLine = stripLineComment(lineText);
+    const trimmedLine = codeLine.trim();
+    const header = depth === 0 ? toTerraformBlockHeader(codeLine, index + 1) : null;
+
+    if (header) {
+      activeBlock = {
+        ...header,
+        attributes: []
+      };
+      blocks.push(activeBlock);
+      depth += getBraceDelta(codeLine);
+
+      if (depth <= 0) {
+        activeBlock = null;
+        depth = 0;
+      }
+
+      continue;
+    }
+
+    if (activeBlock && depth === 1 && trimmedLine && trimmedLine !== "}") {
+      const attribute = readTerraformAttribute(lines, index, codeLine);
+
+      if (attribute) {
+        activeBlock.attributes.push(attribute.attribute);
+        index = attribute.endIndex;
+      }
+    }
+
+    depth += getBraceDelta(codeLine);
+
+    if (depth <= 0) {
+      activeBlock = null;
+      depth = 0;
+    }
+  }
+
+  return blocks;
+}
+
+function readTerraformAttribute(
+  lines: readonly string[],
+  index: number,
+  codeLine: string
+): { attribute: TerraformAttribute; endIndex: number } | null {
+  const assignmentMatch = ATTRIBUTE_ASSIGNMENT_PATTERN.exec(codeLine.trim());
+
+  if (!assignmentMatch) {
+    return null;
+  }
+
+  const [, attributeName, rawValue] = assignmentMatch;
+
+  if (!attributeName || rawValue === undefined) {
+    return null;
+  }
+
+  const trimmedRawValue = rawValue.trim();
+  const heredocMatch = HEREDOC_START_PATTERN.exec(trimmedRawValue);
+
+  if (heredocMatch?.[1]) {
+    const heredoc = readTerraformHeredoc(lines, index + 1, heredocMatch[1]);
+
+    return {
+      attribute: {
+        line: index + 1,
+        name: attributeName,
+        rawValue: heredoc.value,
+        valueKind: "string"
+      },
+      endIndex: heredoc.endIndex
+    };
+  }
+
+  return {
+    attribute: {
+      line: index + 1,
+      name: attributeName,
+      rawValue: trimmedRawValue,
+      valueKind: classifyTerraformValue(trimmedRawValue)
+    },
+    endIndex: index
+  };
+}
+
+function readTerraformHeredoc(
+  lines: readonly string[],
+  startIndex: number,
+  delimiter: string
+): { value: string; endIndex: number } {
+  const valueLines: string[] = [];
+
+  for (let index = startIndex; index < lines.length; index += 1) {
+    const lineText = lines[index] ?? "";
+
+    if (lineText.trim() === delimiter) {
+      return {
+        value: valueLines.join("\n"),
+        endIndex: index
+      };
+    }
+
+    valueLines.push(lineText);
+  }
+
+  return {
+    value: valueLines.join("\n"),
+    endIndex: lines.length - 1
+  };
+}
+
+function classifyTerraformValue(rawValue: string): TerraformAttribute["valueKind"] {
+  if (STRING_LITERAL_PATTERN.test(rawValue)) {
+    return "string";
+  }
+
+  if (NUMBER_LITERAL_PATTERN.test(rawValue)) {
+    return "number";
+  }
+
+  return "expression";
+}
+
+function readTerraformStringValue(rawValue: string): string | null {
+  if (!STRING_LITERAL_PATTERN.test(rawValue)) {
+    return rawValue;
+  }
+
+  try {
+    return JSON.parse(rawValue) as string;
+  } catch {
+    return rawValue.slice(1, -1);
+  }
+}
+
+function isValidJsonString(value: string): boolean {
+  try {
+    JSON.parse(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function splitTerraformLines(terraformCode: string): string[] {
   return terraformCode.split(/\r?\n/);
 }
@@ -696,6 +982,35 @@ function stripBlockCommentsPreservingLines(terraformCode: string): string {
   }
 
   return result;
+}
+
+function stripHeredocsPreservingLines(terraformCode: string): string {
+  const lines = splitTerraformLines(terraformCode);
+  const strippedLines: string[] = [];
+  let heredocDelimiter: string | null = null;
+
+  for (const lineText of lines) {
+    if (heredocDelimiter) {
+      if (lineText.trim() === heredocDelimiter) {
+        heredocDelimiter = null;
+      }
+
+      strippedLines.push("");
+      continue;
+    }
+
+    strippedLines.push(lineText);
+
+    const assignmentMatch = ATTRIBUTE_ASSIGNMENT_PATTERN.exec(stripLineComment(lineText).trim());
+    const rawValue = assignmentMatch?.[2]?.trim();
+    const heredocMatch = rawValue ? HEREDOC_START_PATTERN.exec(rawValue) : null;
+
+    if (heredocMatch?.[1]) {
+      heredocDelimiter = heredocMatch[1];
+    }
+  }
+
+  return strippedLines.join("\n");
 }
 
 function toValidationFiles(input: TerraformValidateRequest): TerraformValidationFile[] {

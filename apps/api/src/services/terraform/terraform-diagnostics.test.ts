@@ -348,7 +348,15 @@ test("detects nested block attributes written as object assignments", () => {
 });
 
 test("allows nested block syntax inside resource blocks", () => {
-  const diagnostics = createTerraformDiagnostics(`resource "aws_route_table" "public" {
+  const diagnostics = createTerraformDiagnostics(`resource "aws_vpc" "main" {
+  cidr_block = "10.0.0.0/16"
+}
+
+resource "aws_internet_gateway" "main" {
+  vpc_id = aws_vpc.main.id
+}
+
+resource "aws_route_table" "public" {
   vpc_id = aws_vpc.main.id
 
   route {
@@ -376,11 +384,142 @@ test("warns about references to undeclared local Terraform resources", () => {
   assert.deepEqual(
     diagnostics.find((diagnostic) => diagnostic.code === "terraform.undefined_reference"),
     {
-      severity: "warning",
+      severity: "error",
       code: "terraform.undefined_reference",
       line: 2,
       resourceAddress: "aws_vpc.main",
       message: "aws_vpc.main reference가 현재 Terraform 코드에 선언되어 있지 않습니다."
+    }
+  );
+});
+
+test("detects undeclared two-part Terraform references", () => {
+  const diagnostics = createTerraformDiagnostics(`resource "aws_subnet" "public" {
+  vpc_id = aws_vpc.not_existing_vpc
+}`);
+
+  const diagnostic = diagnostics.find(
+    (candidate) => candidate.code === "terraform.undefined_reference"
+  );
+
+  assert.equal(diagnostic?.severity, "error");
+  assert.equal(diagnostic?.line, 2);
+  assert.equal(diagnostic?.resourceAddress, "aws_vpc.not_existing_vpc");
+});
+
+test("keeps collecting resource attributes after object attributes", () => {
+  const diagnostics = createTerraformDiagnostics(`resource "aws_subnet" "public" {
+  cidr_block = "10.0.1.0/24"
+  tags = {
+    Name = "public"
+  }
+  vpc_id = aws_vpc.missing.id
+}`);
+
+  const diagnostic = diagnostics.find(
+    (candidate) => candidate.code === "terraform.undefined_reference"
+  );
+
+  assert.equal(diagnostic?.severity, "error");
+  assert.equal(diagnostic?.line, 6);
+  assert.equal(diagnostic?.resourceAddress, "aws_vpc.missing");
+});
+
+test("detects AWS attribute type mismatches without Terraform init", () => {
+  const diagnostics = createTerraformDiagnostics(`resource "aws_security_group_rule" "web" {
+  type = "ingress"
+  from_port = "eighty"
+  to_port = 80
+  protocol = "tcp"
+  cidr_blocks = ["0.0.0.0/0"]
+}`);
+
+  assert.deepEqual(
+    diagnostics.find((diagnostic) => diagnostic.code === "terraform.attribute_type"),
+    {
+      severity: "error",
+      code: "terraform.attribute_type",
+      line: 3,
+      resourceAddress: "resource.aws_security_group_rule.web",
+      message: "aws_security_group_rule.from_port must be a number, but received a string."
+    }
+  );
+});
+
+test("detects invalid IAM JSON policy strings without Terraform init", () => {
+  const diagnostics = createTerraformDiagnostics(`resource "aws_iam_policy" "bad" {
+  name = "bad-policy"
+  policy = <<POLICY
+{"Version":"2012-10-17","Statement":[}
+POLICY
+}`);
+
+  assert.deepEqual(
+    diagnostics.find((diagnostic) => diagnostic.code === "terraform.invalid_json"),
+    {
+      severity: "error",
+      code: "terraform.invalid_json",
+      line: 3,
+      resourceAddress: "resource.aws_iam_policy.bad",
+      message: "aws_iam_policy.policy must contain valid JSON."
+    }
+  );
+});
+
+test("detects unsupported generated AWS arguments without Terraform init", () => {
+  const diagnostics = createTerraformDiagnostics(`resource "aws_s3_bucket" "assets" {
+  bucket = "demo-assets"
+  bucket_purpose = "static-site"
+  public_access_block = true
+  origin_resource_id = aws_cloudfront_distribution.cdn.id
+}`);
+
+  assert.deepEqual(
+    diagnostics
+      .filter((diagnostic) => diagnostic.code === "terraform.unsupported_argument")
+      .map((diagnostic) => ({
+        line: diagnostic.line,
+        message: diagnostic.message,
+        resourceAddress: diagnostic.resourceAddress,
+        severity: diagnostic.severity
+      })),
+    [
+      {
+        severity: "error",
+        line: 3,
+        resourceAddress: "resource.aws_s3_bucket.assets",
+        message: "aws_s3_bucket.bucket_purpose is not supported by the AWS Terraform provider."
+      },
+      {
+        severity: "error",
+        line: 4,
+        resourceAddress: "resource.aws_s3_bucket.assets",
+        message: "aws_s3_bucket.public_access_block is not supported by the AWS Terraform provider."
+      },
+      {
+        severity: "error",
+        line: 5,
+        resourceAddress: "resource.aws_s3_bucket.assets",
+        message: "aws_s3_bucket.origin_resource_id is not supported by the AWS Terraform provider."
+      }
+    ]
+  );
+});
+
+test("detects unknown EC2 instance types from the fast AWS catalog", () => {
+  const diagnostics = createTerraformDiagnostics(`resource "aws_instance" "web" {
+  ami = "ami-1234567890abcdef0"
+  instance_type = "not-real-instance-type"
+}`);
+
+  assert.deepEqual(
+    diagnostics.find((diagnostic) => diagnostic.code === "terraform.invalid_catalog_value"),
+    {
+      severity: "error",
+      code: "terraform.invalid_catalog_value",
+      line: 3,
+      resourceAddress: "resource.aws_instance.web",
+      message: "aws_instance.instance_type is not a known EC2 instance type: not-real-instance-type."
     }
   );
 });

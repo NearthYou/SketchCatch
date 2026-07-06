@@ -358,7 +358,7 @@ test("POST /api/terraform/generate maps Terraform render errors to 400 responses
   await app.close();
 });
 
-test("POST /api/terraform/validate forwards static validation input to the validation service", async () => {
+test("POST /api/terraform/validate forwards validation input to the injected service", async () => {
   const fakeDb = new AuthOnlyFakeDb({
     users: [
       {
@@ -410,7 +410,76 @@ test("POST /api/terraform/validate forwards static validation input to the valid
   await app.close();
 });
 
-test("POST /api/terraform/validate rejects removed CLI validation fields", async () => {
+test("POST /api/terraform/validate returns fast Terraform diagnostics without provider initialization", async () => {
+  const fakeDb = new AuthOnlyFakeDb({
+    users: [
+      {
+        id: ACTIVE_USER_ID,
+        deletedAt: null
+      }
+    ]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/terraform/validate",
+    headers: await authHeaders(ACTIVE_USER_ID),
+    payload: {
+      terraformCode: "",
+      terraformFiles: [
+        {
+          fileName: "main.tf",
+          terraformCode: `resource "aws_security_group_rule" "web" {
+  from_port = "eighty"
+}
+
+resource "aws_s3_bucket" "assets" {
+  bucket_purpose = "static-site"
+}
+
+resource "aws_instance" "web" {
+  instance_type = "not-real-instance-type"
+}`
+        }
+      ]
+    }
+  });
+
+  const body = response.json() as TerraformValidateResponse;
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(
+    body.diagnostics.map((diagnostic) => ({
+      code: diagnostic.code,
+      line: diagnostic.line,
+      sourceFileName: diagnostic.sourceFileName
+    })),
+    [
+      {
+        code: "terraform.attribute_type",
+        line: 2,
+        sourceFileName: "main.tf"
+      },
+      {
+        code: "terraform.unsupported_argument",
+        line: 6,
+        sourceFileName: "main.tf"
+      },
+      {
+        code: "terraform.invalid_catalog_value",
+        line: 10,
+        sourceFileName: "main.tf"
+      }
+    ]
+  );
+
+  await app.close();
+});
+
+test("POST /api/terraform/validate rejects legacy validation mode fields", async () => {
   const fakeDb = new AuthOnlyFakeDb({
     users: [
       {
@@ -440,7 +509,7 @@ test("POST /api/terraform/validate rejects removed CLI validation fields", async
   await app.close();
 });
 
-test("POST /api/terraform/validate/prepare is removed with CLI validation", async () => {
+test("POST /api/terraform/validate/prepare remains removed", async () => {
   const fakeDb = new AuthOnlyFakeDb({
     users: [
       {

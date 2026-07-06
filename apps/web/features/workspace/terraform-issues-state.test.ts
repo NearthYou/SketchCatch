@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { TerraformDiagnostic } from "@sketchcatch/types";
 import {
+  combineTerraformDiagnostics,
   createTerraformDiagnosticKey,
   createTerraformIssuesStorageKey,
   markTerraformIssuesStale,
@@ -32,6 +33,43 @@ test("mergeTerraformValidationDiagnostics keeps latest diagnostics and removes r
   assert.equal(merged[0]?.diagnostic.code, "terraform.quoted_reference");
   assert.equal(merged[0]?.isStale, false);
   assert.equal(merged[0]?.lastValidatedAt, now);
+});
+
+test("combineTerraformDiagnostics keeps validation issues when sync has no diagnostics", () => {
+  const validationDiagnostic: TerraformDiagnostic = {
+    code: "terraform.quoted_reference",
+    line: 4,
+    message: "Quoted reference",
+    severity: "warning"
+  };
+
+  const combined = combineTerraformDiagnostics([validationDiagnostic], []);
+
+  assert.deepEqual(combined, [validationDiagnostic]);
+});
+
+test("combineTerraformDiagnostics deduplicates diagnostics from validation and sync", () => {
+  const sharedDiagnostic: TerraformDiagnostic = {
+    code: "terraform.reference_missing",
+    line: 7,
+    message: "Missing reference",
+    severity: "error",
+    sourceFileName: "main.tf"
+  };
+  const syncDiagnostic: TerraformDiagnostic = {
+    code: "terraform.sync.block_header",
+    line: 10,
+    message: "Unexpected block header",
+    severity: "error",
+    sourceFileName: "main.tf"
+  };
+
+  const combined = combineTerraformDiagnostics(
+    [sharedDiagnostic],
+    [sharedDiagnostic, syncDiagnostic]
+  );
+
+  assert.deepEqual(combined, [sharedDiagnostic, syncDiagnostic]);
 });
 
 test("markTerraformIssuesStale keeps issues visible while code is edited", () => {

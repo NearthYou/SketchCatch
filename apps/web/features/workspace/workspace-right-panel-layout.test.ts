@@ -492,6 +492,25 @@ test("terraform issue AI resolution shows a fix plan before apply", () => {
   assert.match(terraformPanelSource, /codePreview\.source === "safe_fix"/);
 });
 
+test("terraform issue AI fix keeps remaining diagnostics visible after a partial repair", () => {
+  const safeFixIndex = terraformPanelSource.indexOf("const applyTerraformSafeFixToCode");
+  const originalDiagnosticIndex = terraformPanelSource.indexOf(
+    "stillHasOriginalDiagnostic",
+    safeFixIndex
+  );
+  const remainingDiagnosticsIndex = terraformPanelSource.indexOf(
+    "if (hasBlockingTerraformDiagnostic(validationDiagnostics))",
+    originalDiagnosticIndex
+  );
+  const syncIndex = terraformPanelSource.indexOf("const syncResult = await syncTerraformToDiagram", remainingDiagnosticsIndex);
+
+  assert.ok(safeFixIndex > -1);
+  assert.ok(originalDiagnosticIndex > safeFixIndex);
+  assert.ok(remainingDiagnosticsIndex > originalDiagnosticIndex);
+  assert.ok(syncIndex > remainingDiagnosticsIndex);
+  assert.match(terraformPanelSource, /combineTerraformDiagnostics\(validationDiagnostics, syncResult\.diagnostics\)/);
+});
+
 test("terraform issue AI resolution can close the chat dock without trapping the issue card", () => {
   assert.match(aiChatDockSource, /function closeChatDock/);
   assert.match(aiChatDockSource, /setTerraformIssueResolution\(null\)/);
@@ -585,13 +604,14 @@ test("terraform artifact preparation marks the terraform panel as loading", () =
   assert.match(terraformPanelSource, /isPreparingTerraformArtifactRef/);
 });
 
-test("terraform editor no longer renders CLI validation progress UI", () => {
+test("terraform editor labels inline validation as fast Terraform error checking without progress UI", () => {
   const topBarRule = getCssRule(stylesSource, "terraformTopBar");
   const topActionsRule = getCssRule(stylesSource, "terraformTopActions");
 
   assert.doesNotMatch(terraformPanelSource, /terraformValidationProgressBar/);
   assert.doesNotMatch(terraformPanelSource, /TerraformValidationProgress/);
-  assert.doesNotMatch(terraformPanelSource, /Terraform CLI 검증 중/);
+  assert.doesNotMatch(terraformPanelSource, /기본 문법 확인 중/);
+  assert.match(terraformPanelSource, /Terraform 오류 확인 중/);
   assert.doesNotMatch(terraformPanelSource, /Terraform 검증 준비 중/);
   assert.doesNotMatch(stylesSource, /\.terraformValidationProgressBar\s*\{/);
   assert.doesNotMatch(stylesSource, /\.terraformValidationProgressWorking\s*\{/);
@@ -601,13 +621,13 @@ test("terraform editor no longer renders CLI validation progress UI", () => {
   assert.match(topActionsRule, /\bflex-wrap:\s*wrap;/);
 });
 
-test("terraform panel does not warm CLI validation when the panel becomes visible", () => {
+test("terraform panel does not warm provider validation when the panel becomes visible", () => {
   assert.doesNotMatch(terraformPanelSource, /prepareTerraformValidationWorkspace/);
   assert.doesNotMatch(terraformPanelSource, /preparedValidationProjectIdsRef/);
   assert.doesNotMatch(terraformPanelSource, /Terraform 검증 준비 중/);
 });
 
-test("terraform save and manual validate use static validation for the whole virtual file set", () => {
+test("terraform save and manual validate send the whole virtual file set", () => {
   assert.doesNotMatch(terraformPanelSource, /mode: "full"/);
   assert.doesNotMatch(terraformPanelSource, /mode: "static"/);
   assert.doesNotMatch(terraformPanelSource, /TerraformValidationMode/);

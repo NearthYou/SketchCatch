@@ -1,6 +1,52 @@
 ﻿# 에이전트 진행 로그
 # 에이전트 진행 로그
 
+### 2026-07-06 - Terraform 저장 검증에서 provider init 제거 및 빠른 오류 검출 강화
+
+- Goal: Terraform 편집/저장 검증에서 매번 `terraform init`을 기다리지 않게 하고, 빠른 검증만으로 참조 누락, 타입 오류, IAM JSON 오류, unsupported argument, 잘못된 EC2 instance type을 Issues 진단으로 띄운다.
+- Completed:
+  - `/terraform/validate` 기본 경로에서 Terraform CLI validation 파일과 `runTerraformCliValidation` 주입 경로를 제거하고, 빠른 diagnostics 경로로 되돌렸다.
+  - Terraform 참조 누락을 error 진단으로 올리고, `aws_vpc.not_existing_vpc`처럼 두 부분 주소 참조도 잡도록 확장했다.
+  - AWS 빠른 schema/catalog 검사를 추가해 `from_port = "eighty"`, IAM policy heredoc JSON 오류, `bucket_purpose`/`public_access_block`/`origin_resource_id`, `instance_type = "not-real-instance-type"`을 검출한다.
+  - heredoc JSON 본문은 Terraform brace/token 구조 검사에서 제외해 IAM JSON 자체 오류로 정확히 보고되도록 했다.
+  - UI 진행 문구를 `기본 문법 확인 중`/CLI 중심 표현 대신 `Terraform 오류 확인 중`으로 정리했다.
+- Verification run:
+  - `pnpm harness:check` - failed because `pnpm` is not on PATH in this shell.
+  - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/init-harness.ps1` - failed for the same missing `pnpm` baseline issue.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-diagnostics.test.ts` - failed before implementation, then passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-diagnostics.test.ts src/routes/terraform.test.ts src/services/aiTerraformErrorExplanation.test.ts` - passed, 58 tests.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-right-panel-layout.test.ts features/workspace/api.test.ts` - passed, 70 tests.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api lint` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web lint` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api typecheck` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web typecheck` - passed.
+- Known risks:
+  - 빠른 AWS schema/catalog는 핵심 MVP 리소스와 자주 발생하는 AI 생성 오류를 우선 커버한다. Terraform provider 전체와 100% 동일한 검증은 pre-deployment `validate/plan` 단계가 최종 책임을 가진다.
+
+### 2026-07-06 - Terraform CLI 기반 Preview 검증 전환
+
+- Goal: Terraform 편집/저장 시 정적 진단만으로 오류를 놓치지 않도록 `/terraform/validate` 기본 경로를 Terraform CLI 검증 우선으로 전환하고, 기존 Issues/AI 흐름에는 같은 진단 형태로 연결한다.
+- Completed:
+  - `terraform init -backend=false -input=false -no-color` 후 `terraform validate -json`을 실행하는 CLI 검증 서비스를 추가했다.
+  - CLI JSON diagnostics를 기존 `TerraformDiagnostic` 형태로 변환해 파일명, 줄 번호, 메시지가 기존 Issues/AI 설명 흐름에 그대로 표시되도록 했다.
+  - 빈 코드, Terraform CLI 미설치/타임아웃/JSON 파싱 실패, 안전하지 않은 가상 파일명 같은 CLI 인프라 실패에서는 기존 정적 진단으로 fallback하도록 했다.
+  - 가상 파일명을 temp workspace 내부로 제한하고, `.tf`/`.tfvars` 파일명 정규화와 AWS access key/session token 형태의 비밀 마스킹을 추가했다.
+  - 프론트엔드는 기존처럼 전체 virtual file set을 검증 API에 보내며, CLI 사용 여부는 backend route에서 결정하도록 유지했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api exec tsx --test src/routes/terraform.test.ts` - passed, 21 tests.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-diagnostics.test.ts src/routes/terraform.test.ts src/services/aiTerraformErrorExplanation.test.ts` - passed, 56 tests.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web exec tsx --test features/workspace/api.test.ts features/workspace/workspace-right-panel-layout.test.ts` - passed, 70 tests.
+  - Terraform CLI smoke validation with `terraform validate -json` - passed after sandbox escalation; invalid Terraform returned `Unsupported argument` with `sourceFileName: main.tf` and `line: 2`.
+  - `pnpm harness:check` - passed.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `pnpm build` - passed after sandbox escalation; initial sandbox run hit Next `.next/app-path-routes-manifest.json` `EPERM`.
+  - `git diff --check` - passed with line-ending warnings only.
+- Known risks:
+  - Terraform provider plugin download or provider-specific validation depth still depends on the local Terraform environment and registry/network availability.
+  - `apps/web/next-env.d.ts` may appear stat-dirty after build on Windows, but current content diff is empty.
+
 ### 2026-07-06 - PR #177 리뷰 피드백 반영
 
 - Goal: PR #177의 unresolved 리뷰 코멘트를 반영해 Terraform AI safe-fix 적용 안정성, Terraform issue localStorage 예외 처리, React state updater 부작용을 개선한다.
@@ -2628,3 +2674,43 @@
 - Known risks:
   - ?ㅼ젣 釉뚮씪?곗??먯꽌 ?ㅽ겕由곗꺑 湲곕컲 ?섎룞 ?뺤씤? ?섏? ?딆븯怨? source/helper/CSS ?뚯뒪?몃줈 ?뚭?瑜?怨좎젙?덈떎.
   - ?ㅼ젣 Terraform CLI, AWS SDK, plan/apply/destroy, cloud mutation? ?ㅽ뻾?섏? ?딆븯??
+### 2026-07-06 - Terraform AI 부분 수정 후 Issues 유지
+
+- Goal: Terraform Issues 탭에서 AI 수정으로 한 개 이슈만 해결했을 때, 아직 남아 있는 이슈까지 모두 사라지는 문제를 수정한다.
+- Completed:
+  - AI 수정 적용 직후 validation diagnostics에 다른 blocking error가 남아 있으면 diagram sync로 넘어가지 않고, 남은 diagnostics를 Issues 탭에 유지하도록 변경했다.
+  - validation diagnostics와 sync diagnostics를 합치는 `combineTerraformDiagnostics` helper를 추가해 sync 결과가 비어도 validation warning/error가 덮어써져 사라지지 않게 했다.
+  - AI 부분 수정 후 남은 diagnostics 유지와 diagnostics 중복 제거 회귀 테스트를 추가했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/terraform-issues-state.test.ts` - failed because `tsx` was not found through direct `pnpm exec` in this shell.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-right-panel-layout.test.ts --test-name-pattern "terraform issue AI fix keeps remaining diagnostics"` - failed for the same direct `tsx` lookup issue.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web exec tsx --test features/workspace/terraform-issues-state.test.ts` - passed, 7 tests.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-right-panel-layout.test.ts --test-name-pattern "terraform issue AI fix keeps remaining diagnostics"` - passed, 49 tests.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web lint` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web typecheck` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm lint` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm typecheck` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm build` - passed.
+  - `pnpm harness:check` - passed after edits.
+- Known risks:
+  - 실제 브라우저 수동 클릭 검증은 수행하지 않았고, source/unit regression, lint/typecheck/build로 검증했다.
+
+### 2026-07-06 - PR #182 Terraform diagnostics 리뷰 코멘트 반영
+
+- Goal: PR #182에 남아 있던 Terraform resource block attribute 파싱 리뷰 코멘트를 수정한다.
+- Completed:
+  - `collectTerraformResourceBlocks`가 attribute 파싱 후 같은 줄의 brace depth 계산을 건너뛰지 않도록 수정했다.
+  - `tags = { ... }` 같은 object attribute 뒤에 있는 resource attribute도 계속 수집되는 회귀 테스트를 추가했다.
+- Verification run:
+  - `pnpm harness:check` - passed before review-comment edits and after implementation checks.
+  - `pnpm --dir apps/api exec tsx --test src/services/terraform/terraform-diagnostics.test.ts` - passed, 38 tests.
+  - `pnpm --filter @sketchcatch/api test` - failed in sandbox because Node test runner child process spawn returned EPERM.
+  - `pnpm --dir apps/api test` - timed out after 184s in elevated context.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `pnpm --filter @sketchcatch/api build` - passed.
+  - `pnpm build` - failed once because Next could not unlink `.next/app-path-routes-manifest.json` with EPERM, then an elevated retry was interrupted by the user.
+- Known risks:
+  - 실제 Terraform CLI, AWS SDK, plan/apply/destroy, cloud mutation은 실행하지 않았다.
+  - 전체 API test와 루트 build는 로컬 Windows 권한/시간 문제로 완료하지 못했고, 변경 범위는 targeted regression, lint, typecheck, API build로 검증했다.
