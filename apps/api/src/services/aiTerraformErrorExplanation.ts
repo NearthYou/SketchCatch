@@ -194,25 +194,25 @@ function createDiagnosticExplanation({
 function createPlainDiagnosticExplanation(errorType: string, fallback: string): string {
   switch (errorType) {
     case "terraform.trailing_comma":
-      return "Terraform attribute assignment line ends with a comma, but HCL attributes do not use trailing commas.";
+      return "Terraform attribute 할당 줄 끝에 comma가 있습니다. HCL attribute는 줄 끝 comma를 사용하지 않아 문법 오류가 발생합니다.";
     case "terraform.quoted_reference":
-      return "A Terraform reference is wrapped in quotes, so Terraform reads it as plain text instead of an expression.";
+      return "Terraform reference가 따옴표로 감싸져 있어 expression이 아니라 일반 문자열로 해석됩니다.";
     case "terraform.unexpected_token":
-      return "Terraform code appears after a block has already been closed, so the parser sees unexpected code outside the expected structure.";
+      return "이미 닫힌 block 뒤에 Terraform 코드가 붙어 있어 parser가 예상하지 못한 구조로 읽습니다.";
     case "terraform.attribute_empty":
-      return "An attribute assignment is missing the value after the equals sign.";
+      return "attribute 할당에서 equals sign 뒤에 값이 없습니다.";
     case "terraform.attribute_syntax":
-      return "A resource body line does not match the expected attribute = value or nested_block { syntax.";
+      return "resource body 안의 줄이 `attribute = value` 또는 `nested_block { ... }` 형식과 맞지 않습니다.";
     case "terraform.nested_block_assignment":
-      return "This field should be written as a nested block, not as a top-level attribute assignment.";
+      return "이 항목은 top-level attribute 할당이 아니라 nested block 형태로 작성해야 합니다.";
     case "terraform.block_header":
-      return "The Terraform block header does not match resource/data \"type\" \"name\" { syntax.";
+      return "Terraform block header가 `resource/data \"type\" \"name\" {` 형식과 맞지 않습니다.";
     case "terraform.unbalanced":
-      return "A quote, brace, bracket, or parenthesis is not balanced.";
+      return "quote, brace, bracket, parenthesis 중 하나가 열리고 닫히는 짝이 맞지 않습니다.";
     case "terraform.undefined_reference":
-      return "The code references a local Terraform resource that is not declared in the current Terraform files.";
+      return "현재 Terraform 파일에 선언되지 않은 local Terraform resource를 참조하고 있습니다.";
     case "terraform.duplicate_address":
-      return "Two Terraform blocks use the same address, so Terraform cannot distinguish them.";
+      return "두 Terraform block이 같은 address를 사용해 Terraform이 둘을 구분할 수 없습니다.";
     default:
       return fallback;
   }
@@ -221,29 +221,29 @@ function createPlainDiagnosticExplanation(errorType: string, fallback: string): 
 function createFixExplanation(errorType: string, safeFix: AiTerraformSafeFix): string {
   switch (errorType) {
     case "terraform.trailing_comma":
-      return "Remove the comma at the end of the highlighted attribute line, then run Terraform validation again.";
+      return "강조된 attribute 줄 끝의 comma를 제거한 뒤 Terraform 검증을 다시 실행하세요.";
     case "terraform.quoted_reference":
-      return "Remove the surrounding quotes so the reference is evaluated as a Terraform expression.";
+      return "reference를 감싼 따옴표를 제거해 Terraform expression으로 평가되게 하세요.";
     case "terraform.unexpected_token":
-      return "Move the extra attribute or block back inside the correct resource block, or remove it if it was pasted after the closing brace.";
+      return "닫힌 brace 뒤에 붙은 attribute나 block을 올바른 resource block 안으로 옮기거나, 잘못 붙은 코드라면 제거하세요.";
     case "terraform.attribute_empty":
-      return "Add a value after the equals sign, or remove the incomplete attribute line.";
+      return "equals sign 뒤에 값을 추가하거나 완성되지 않은 attribute 줄을 제거하세요.";
     case "terraform.attribute_syntax":
-      return "Rewrite the line as attribute = value, or use nested_block { ... } when the provider expects a block.";
+      return "해당 줄을 `attribute = value` 형태로 고치거나, provider가 block을 요구한다면 `nested_block { ... }` 형태로 바꾸세요.";
     case "terraform.nested_block_assignment":
-      return "Convert the assignment into the nested block shape expected by the resource.";
+      return "assignment를 resource가 요구하는 nested block 형태로 변환하세요.";
     case "terraform.block_header":
-      return "Rewrite the header as resource/data \"terraform_type\" \"local_name\" {.";
+      return "header를 `resource/data \"terraform_type\" \"local_name\" {` 형태로 다시 작성하세요.";
     case "terraform.unbalanced":
-      return "Close the missing quote or matching delimiter near the highlighted line.";
+      return "강조된 줄 주변에서 빠진 quote 또는 닫는 delimiter를 추가하세요.";
     case "terraform.undefined_reference":
-      return "Declare the referenced resource, correct the reference name, or choose an existing Terraform address.";
+      return "참조한 resource를 선언하거나 reference 이름을 고치거나, 이미 존재하는 Terraform address를 선택하세요.";
     case "terraform.duplicate_address":
-      return "Rename one of the duplicate Terraform local names so each block address is unique.";
+      return "중복된 Terraform local name 중 하나를 바꿔 각 block address가 고유하도록 만드세요.";
     default:
       return safeFix.applicable
         ? safeFix.description
-        : "Review the highlighted Terraform code and update it manually before validating again.";
+        : "강조된 Terraform 코드를 확인해 수동으로 수정한 뒤 다시 검증하세요.";
   }
 }
 

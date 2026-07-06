@@ -23,6 +23,9 @@ test("explainTerraformError includes diagnostic explanation and safe fix metadat
   assert.equal(result.diagnosticExplanation?.sourceFileName, "main.tf");
   assert.equal(result.diagnosticExplanation?.line, 2);
   assert.equal(result.diagnosticExplanation?.errorType, "terraform.trailing_comma");
+  assert.match(result.diagnosticExplanation?.plainExplanation ?? "", /comma/);
+  assert.match(result.diagnosticExplanation?.plainExplanation ?? "", /문법 오류/);
+  assert.match(result.diagnosticExplanation?.fixExplanation ?? "", /comma를 제거/);
   assert.equal(result.diagnosticExplanation?.canApply, true);
   assert.equal(result.diagnosticExplanation?.codeSuggestion?.source, "rule");
   assert.equal(result.diagnosticExplanation?.codeSuggestion?.currentCode, '  bucket = "logs",');
