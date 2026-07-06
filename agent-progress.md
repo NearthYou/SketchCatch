@@ -1,5 +1,26 @@
 # 에이전트 진행 로그
 
+### 2026-07-06 - Terraform 오류 AI 수정 제안 강화
+
+- Goal: rule-first 진단만으로 설명이 부족한 Terraform syntax 오류에서 원본 오류 메시지와 코드 컨텍스트를 AI에 전달하고, AI가 제안한 정확한 코드 치환 또는 삭제안을 화면에 보여준 뒤 사용자가 버튼으로 적용할 수 있게 한다.
+- Completed:
+  - Terraform 오류 AI payload에 `rawMessage`를 포함하고 prompt가 `rawMessage`, `terraformCodeContext`, `diagnosticExplanation`을 함께 보며 구체적인 수정 방법과 정확한 `codeSuggestion`을 반환하도록 강화했다.
+  - Amazon Q가 일반적인 “relevant information을 찾을 수 없다” 응답을 반환하면 사용자 카드에 그대로 노출하지 않고 fallback 처리하도록 막았다.
+  - `suggestedCode: ""`를 유효한 삭제 수정안으로 허용해 `xczxczxczxczxczcx` 같은 standalone invalid token 줄을 AI 제안으로 제거할 수 있게 했다.
+  - Terraform issue card는 AI code suggestion이 매칭될 때 AI rationale을 `어떻게 고칠까`에 우선 표시하고, 삭제 제안은 미리보기에서 `(이 코드 조각 삭제)`로 보여준다.
+  - `docs/data-models.md`에 빈 `suggestedCode`가 `currentCode` 삭제를 의미한다는 계약을 보강했다.
+- Verification run:
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api exec tsx --test src/services/aiProviderRouter.test.ts src/services/aiTerraformErrorExplanation.test.ts` - passed, 17 tests.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-terraform-ai.test.ts features/workspace/terraform-safe-fixes.test.ts features/workspace/workspace-right-panel-layout.test.ts` - passed, 56 tests.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm lint` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm typecheck` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm build` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm harness:check` - passed after edits.
+  - `git diff --check` - passed with line-ending warnings only.
+- Known risks:
+  - 실제 Amazon Q Business 호출은 provider double 기반으로 검증했으며, 실제 AWS 계정/권한/region 연동은 실행하지 않았다.
+  - 실제 Terraform apply/destroy 또는 cloud mutation은 수행하지 않았다.
+
 ### 2026-07-06 - Terraform 오류 해결 Rule-first 전환
 
 - Goal: Terraform 코드 오류 해결 화면에서 Well-Architected 판단을 제거하고, 오류 위치와 코드 프레임, 오류 설명, 수정 방법, 적용 가능 여부를 rule-first 흐름으로 보여준다.

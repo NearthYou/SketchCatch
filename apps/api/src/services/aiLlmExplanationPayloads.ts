@@ -44,6 +44,7 @@ type TerraformErrorExplanationSummaryPayload = {
   readonly stage: string;
   readonly category: string;
   readonly severity: string;
+  readonly rawMessage: string;
   readonly summary: string;
   readonly likelyCause: string;
   readonly nextActions: readonly string[];
@@ -161,6 +162,7 @@ function createTerraformErrorExplanationSummaryPayload(
     stage: result.stage,
     category: result.category,
     severity: result.severity,
+    rawMessage: result.rawMessage,
     summary: result.summary,
     likelyCause: result.likelyCause,
     nextActions: result.nextActions,

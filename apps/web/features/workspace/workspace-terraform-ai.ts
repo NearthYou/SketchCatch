@@ -63,13 +63,16 @@ export function createTerraformIssueFixPlan({
   const safeFix = getTerraformSafeFix(diagnostic);
   const location = formatTerraformDiagnosticLocation(diagnostic);
   const diagnosticExplanation = explanation.diagnosticExplanation;
-  const providerLabel = "Rule-first diagnosis";
   const codePreview = createTerraformIssueCodePreview({
     diagnostic,
     explanation,
     safeFixApplicable: safeFix.applicable,
     terraformCode
   });
+  const aiCodeSuggestion = explanation.llmExplanation?.codeSuggestion;
+  const aiFixExplanation = codePreview?.source === "amazon_q" ? aiCodeSuggestion?.rationale : undefined;
+  const providerLabel = codePreview?.source === "amazon_q" ? "AI suggested fix" : "Rule-first diagnosis";
+  const helpfulLlmSummary = selectHelpfulTerraformIssueLlmSummary(explanation);
 
   return {
     canApply: codePreview !== undefined,
@@ -77,12 +80,13 @@ export function createTerraformIssueFixPlan({
     codeFrame: diagnosticExplanation?.codeFrame ?? [],
     errorType: diagnosticExplanation?.errorType ?? diagnostic.code ?? "terraform.unknown",
     fixExplanation:
+      aiFixExplanation ??
       diagnosticExplanation?.fixExplanation ??
       (safeFix.applicable ? safeFix.description : explanation.consensusRecommendation),
     location,
     plainExplanation:
+      helpfulLlmSummary ??
       diagnosticExplanation?.plainExplanation ??
-      explanation.llmExplanation?.summary ??
       explanation.summary,
     providerLabel,
     providerNotice: createTerraformIssueProviderNotice(explanation),
@@ -240,7 +244,31 @@ function selectTerraformIssueSummary(explanation: AiTerraformErrorExplanationRes
   );
 }
 
+function selectHelpfulTerraformIssueLlmSummary(
+  explanation: AiTerraformErrorExplanationResult
+): string | undefined {
+  const summary = explanation.llmExplanation?.summary;
+
+  if (
+    summary === undefined ||
+    explanation.llmExplanation?.fallbackUsed ||
+    includesInternalFallbackWording(summary)
+  ) {
+    return undefined;
+  }
+
+  return summary;
+}
+
 function includesInternalFallbackWording(value: string): boolean {
+  if (
+    /could not find relevant information|cannot find relevant information|sorry, i could not|not enough information/i.test(
+      value
+    )
+  ) {
+    return true;
+  }
+
   return /fallback|기본 fallback|1차 제공 fallback/i.test(value);
 }
 

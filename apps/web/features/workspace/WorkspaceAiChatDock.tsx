@@ -1021,7 +1021,7 @@ function TerraformIssueExplanationCard({
             <section>
               <strong>수정할 코드</strong>
               <pre>
-                <code>{fixPlan.codePreview.nextCode}</code>
+                <code>{formatTerraformIssuePreviewCode(fixPlan.codePreview.nextCode)}</code>
               </pre>
             </section>
           </div>
@@ -1128,6 +1128,10 @@ function storeChatMessages(projectId: string, messages: readonly WorkspaceAiChat
   } catch {
     // Chat history is helpful UI state, not a blocking persistence contract.
   }
+}
+
+function formatTerraformIssuePreviewCode(code: string): string {
+  return code.length > 0 ? code : "(이 코드 조각 삭제)";
 }
 
 function createChatMessage(

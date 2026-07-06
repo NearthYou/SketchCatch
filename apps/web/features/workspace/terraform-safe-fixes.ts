@@ -100,7 +100,7 @@ export function applyTerraformCodeReplacement({
   readonly code: string;
   readonly preview: TerraformCodeReplacementPreview;
 }): TerraformSafeFixResult {
-  if (preview.currentCode.trim().length === 0 || preview.nextCode.trim().length === 0) {
+  if (preview.currentCode.trim().length === 0) {
     return {
       applied: false,
       code,

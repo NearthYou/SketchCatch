@@ -302,6 +302,49 @@ test("createAiProviderBackedLlmExplanation preserves Amazon Q code suggestions w
   assert.doesNotMatch(String((qCalls[0] as { prompt?: unknown }).prompt), /six criteria/);
   assert.match(String((qCalls[0] as { prompt?: unknown }).prompt), /Do not provide Well-Architected guidance/);
   assert.match(String((qCalls[0] as { prompt?: unknown }).prompt), /terraformCodeContext/);
+  assert.match(String((qCalls[0] as { prompt?: unknown }).prompt), /rawMessage/);
+  assert.match(String((qCalls[0] as { prompt?: unknown }).prompt), /AccessDenied/);
+  assert.match(String((qCalls[0] as { prompt?: unknown }).prompt), /empty string/);
+});
+
+test("createAiProviderBackedLlmExplanation preserves Amazon Q deletion code suggestions", async () => {
+  const qCalls: unknown[] = [];
+  const qExplanation: LlmExplanation = {
+    target: "terraform_error_explanation",
+    summary: "Amazon Q found an invalid standalone Terraform line.",
+    highlights: ["The token is not a block header, attribute, or expression."],
+    nextActions: ["Review the deletion and validate Terraform again."],
+    fallbackUsed: false,
+    codeSuggestion: {
+      currentCode: "xczxczxczxczxczcx\n",
+      suggestedCode: "",
+      rationale: "Delete the invalid standalone token line."
+    }
+  };
+  const createLlmExplanation = createAiProviderBackedLlmExplanation({
+    amazonQProvider: createProvider("amazon_q", qExplanation, qCalls),
+    fallbackProvider: createFallbackOnlyLlmExplanation,
+    creditPolicy: {
+      bedrock: true,
+      amazonQ: true,
+      transcribe: false,
+      billingMode: "aws_credit_only"
+    },
+    limits: { dailyCallLimit: 10, windowCallLimit: 10, windowMs: 60_000 }
+  });
+
+  const result = await createLlmExplanation({
+    target: "terraform_error_explanation",
+    result: createTerraformErrorResult({
+      rawMessage: "Unsupported block type: xczxczxczxczxczcx"
+    }),
+    terraformCodeContext: 'resource "aws_security_group" "web" {\n}\nxczxczxczxczxczcx\nresource "aws_route_table" "public" {\n}'
+  });
+
+  assert.equal(result.providerMetadata?.provider, "amazon_q");
+  assert.equal(result.codeSuggestion?.currentCode, "xczxczxczxczxczcx\n");
+  assert.equal(result.codeSuggestion?.suggestedCode, "");
+  assert.equal(qCalls.length, 1);
 });
 
 test("createAiProviderBackedLlmExplanation accepts unstructured Amazon Q Terraform explanations", async () => {
@@ -368,6 +411,42 @@ test("createAiProviderBackedLlmExplanation accepts unstructured Amazon Q Terrafo
   assert.equal(result.providerMetadata?.provider, "amazon_q");
   assert.equal(qCalls.length, 1);
   assert.equal(bedrockCalls.length, 0);
+});
+
+test("createAiProviderBackedLlmExplanation rejects generic Amazon Q Terraform non-answers", async () => {
+  const qCalls: unknown[] = [];
+  const createLlmExplanation = createAiProviderBackedLlmExplanation({
+    amazonQProvider: {
+      provider: "amazon_q",
+      service: "amazon_q_business",
+      model: "amazon-q-model",
+      generate: async (request) => {
+        qCalls.push(request);
+        return {
+          text: "Sorry, I could not find relevant information to complete your request."
+        };
+      }
+    },
+    fallbackProvider: createFallbackOnlyLlmExplanation,
+    creditPolicy: {
+      bedrock: true,
+      amazonQ: true,
+      transcribe: false,
+      billingMode: "aws_credit_only"
+    },
+    limits: { dailyCallLimit: 10, windowCallLimit: 10, windowMs: 60_000 }
+  });
+
+  const result = await createLlmExplanation({
+    target: "terraform_error_explanation",
+    result: createTerraformErrorResult()
+  });
+
+  assert.equal(result.fallbackUsed, true);
+  assert.equal(result.fallbackReason, "invalid_response");
+  assert.doesNotMatch(result.summary, /could not find relevant information/i);
+  assert.equal(result.providerMetadata?.provider, "amazon_q");
+  assert.equal(qCalls.length, 1);
 });
 
 test("createAiProviderBackedLlmExplanation keeps Amazon Q metadata when Terraform error Q credits are blocked", async () => {

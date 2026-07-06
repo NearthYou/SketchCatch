@@ -131,6 +131,62 @@ test("createTerraformIssueFixPlan prefers Amazon Q suggested code when it matche
   assert.match(fixPlan.steps.join("\n"), /Amazon Q 제안/);
 });
 
+test("createTerraformIssueFixPlan enables AI deletion suggestions for invalid standalone Terraform code", () => {
+  const diagnostic: TerraformDiagnostic = {
+    code: "terraform.sync.block_header",
+    line: 19,
+    message: "Unsupported block type or invalid Terraform syntax.",
+    severity: "error",
+    sourceFileName: "main.tf"
+  };
+  const explanation = {
+    ...createExplanation({
+      summary: "Rule fallback could not explain the invalid Terraform line.",
+      llmSummary: "Line 19 is not valid Terraform syntax because it is a bare token outside any block.",
+      codeSuggestion: {
+        currentCode: "xczxczxczxczxczcx\n",
+        suggestedCode: "",
+        rationale: "Delete the standalone token line. It is not a Terraform block, attribute, or expression, so removing it lets Terraform parse the next resource block."
+      }
+    }),
+    diagnosticExplanation: {
+      errorType: "terraform.sync.block_header",
+      plainExplanation: "Terraform 진단을 바탕으로 수정 위치를 먼저 확인해야 합니다.",
+      fixExplanation: "강조된 Terraform 코드를 확인해 수동으로 수정한 뒤 다시 검증하세요.",
+      codeFrame: [],
+      canApply: false,
+      line: 19,
+      sourceFileName: "main.tf"
+    }
+  };
+
+  const fixPlan = createTerraformIssueFixPlan({
+    diagnostic,
+    explanation,
+    terraformCode: [
+      'resource "aws_security_group" "web" {',
+      "}",
+      "xczxczxczxczxczcx",
+      'resource "aws_route_table" "public" {',
+      "}"
+    ].join("\n")
+  });
+
+  assert.equal(fixPlan.canApply, true);
+  assert.equal(fixPlan.providerLabel, "AI suggested fix");
+  assert.equal(fixPlan.plainExplanation, "Line 19 is not valid Terraform syntax because it is a bare token outside any block.");
+  assert.equal(
+    fixPlan.fixExplanation,
+    "Delete the standalone token line. It is not a Terraform block, attribute, or expression, so removing it lets Terraform parse the next resource block."
+  );
+  assert.deepEqual(fixPlan.codePreview, {
+    currentCode: "xczxczxczxczxczcx\n",
+    nextCode: "",
+    sourceLine: 19,
+    source: "amazon_q"
+  });
+});
+
 test("createTerraformIssueFixPlan requires a code preview before enabling fixes", () => {
   const explanation = createExplanation({
     summary: "Terraform 진단을 확인해야 합니다.",

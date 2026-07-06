@@ -1065,6 +1065,7 @@ type AiTerraformCodeFrameLine = {
 
 type AiTerraformCodeSuggestion = {
   currentCode: string;
+  // 빈 문자열이면 currentCode 조각 삭제를 의미한다.
   suggestedCode: string;
   rationale: string;
   source: "rule" | "amazon_q";

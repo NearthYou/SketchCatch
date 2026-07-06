@@ -69,3 +69,19 @@ test("applyTerraformCodeReplacement applies the reviewed Amazon Q snippet exactl
   assert.equal(result.code, 'resource "aws_s3_bucket" "logs" {\n  bucket = "logs"\n}');
 });
 
+test("applyTerraformCodeReplacement applies an AI deletion suggestion", () => {
+  const result = applyTerraformCodeReplacement({
+    code: 'resource "aws_security_group" "web" {\n}\nxczxczxczxczxczcx\nresource "aws_route_table" "public" {\n}',
+    preview: {
+      currentCode: "xczxczxczxczxczcx\n",
+      nextCode: ""
+    }
+  });
+
+  assert.equal(result.applied, true);
+  assert.equal(
+    result.code,
+    'resource "aws_security_group" "web" {\n}\nresource "aws_route_table" "public" {\n}'
+  );
+});
+

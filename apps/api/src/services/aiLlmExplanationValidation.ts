@@ -162,7 +162,6 @@ function validateCodeSuggestion(value: LlmExplanation["codeSuggestion"]): LlmExp
 
   if (
     currentCode.trim().length === 0 ||
-    suggestedCode.trim().length === 0 ||
     currentCode === suggestedCode ||
     currentCode.length > CODE_SNIPPET_MAX_LENGTH ||
     suggestedCode.length > CODE_SNIPPET_MAX_LENGTH ||

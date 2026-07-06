@@ -582,10 +582,12 @@ function createProviderPrompt(target: LlmExplanationTarget, payload: unknown): s
   const terraformErrorInstructions =
     target === "terraform_error_explanation"
       ? [
-          "For Terraform errors, inspect terraformCodeContext and diagnosticExplanation when they are present.",
-          "Explain the failing line, the Terraform error type, why it fails, and how the user should fix it.",
+          "For Terraform errors, inspect rawMessage, terraformCodeContext, and diagnosticExplanation when they are present.",
+          "Explain the failing line, the Terraform error type, why it fails, and exactly how the user should fix the Terraform code.",
           "If you can identify a safe local replacement, include codeSuggestion with currentCode as an exact snippet from terraformCodeContext, suggestedCode as the replacement snippet, and rationale.",
+          "If the correct fix is deleting an invalid standalone snippet, set suggestedCode to an empty string.",
           "If no exact local replacement is safe, omit codeSuggestion.",
+          "Do not answer with generic non-answers such as sorry, cannot find relevant information, or not enough information.",
           "Do not provide Well-Architected guidance for Terraform syntax or validation errors."
         ]
       : [];
@@ -631,7 +633,7 @@ function createAmazonQTerraformPlainTextExplanation(
   const items = normalizeProviderTextItems(text);
   const summary = items[0] ?? "";
 
-  if (summary.length === 0) {
+  if (summary.length === 0 || isUnhelpfulProviderText(summary)) {
     return fallback;
   }
 
@@ -642,6 +644,17 @@ function createAmazonQTerraformPlainTextExplanation(
     nextActions: fallback.nextActions.slice(0, 5),
     fallbackUsed: false
   };
+}
+
+function isUnhelpfulProviderText(value: string): boolean {
+  const normalized = value.toLowerCase();
+
+  return (
+    normalized.includes("could not find relevant information") ||
+    normalized.includes("cannot find relevant information") ||
+    normalized.includes("sorry, i could not") ||
+    normalized.includes("not enough information")
+  );
 }
 
 function normalizeProviderTextItems(text: string): string[] {
