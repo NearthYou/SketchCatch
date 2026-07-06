@@ -1,3 +1,4 @@
+// allow: SIZE_OK - AWS Query XML parser bundle; splitting every resource parser needs a separate migration.
 import type { AwsDiscoveredRelationship, AwsDiscoveredResourceRecord } from "./aws-provider-adapter.js";
 
 type SecurityGroupIngressRule = {
@@ -191,7 +192,7 @@ export function parseInstancesFromXml(xml: string, region: string): AwsDiscovere
   });
 }
 
-// AWS RDS XML을 Security Group 연결 관계가 있는 Resource 후보로 바꿉니다.
+// AWS RDS XML을 Subnet 포함 관계와 Security Group 연결 관계가 있는 Resource 후보로 바꿉니다.
 export function parseRdsInstancesFromXml(
   xml: string,
   region: string
@@ -199,6 +200,7 @@ export function parseRdsInstancesFromXml(
   return extractSetItems(xml, "DBInstances", "DBInstance").map((item) => {
     const dbInstanceId = extractRequiredTag(item, "DBInstanceIdentifier");
     const securityGroupIds = extractRepeatedTags(item, "VpcSecurityGroupId");
+    const subnetIds = extractRdsSubnetIds(item);
 
     return {
       providerResourceType: "AWS::RDS::DBInstance",
@@ -222,11 +224,22 @@ export function parseRdsInstancesFromXml(
         providerParameters: createXmlParameterSnapshot(item),
         storageEncrypted: extractBooleanTag(item, "StorageEncrypted"),
         storageType: extractTag(item, "StorageType"),
+        subnetIds,
         vpcSecurityGroupIds: securityGroupIds
       },
-      relationships: securityGroupIds.map((groupId) => createRelationship("attached_to", groupId))
+      relationships: [
+        ...subnetIds.map((subnetId) => createRelationship("contains", subnetId)),
+        ...securityGroupIds.map((groupId) => createRelationship("attached_to", groupId))
+      ]
     };
   });
+}
+
+// RDS 응답의 DBSubnetGroup 안쪽 SubnetIdentifier를 보드 포함 관계로 사용합니다.
+function extractRdsSubnetIds(xml: string): string[] {
+  return extractSetItems(xml, "Subnets", "Subnet")
+    .map((subnet) => extractTag(subnet, "SubnetIdentifier"))
+    .filter((subnetId): subnetId is string => subnetId !== null);
 }
 
 // Security Group ingress XML에서 위험 분석과 설정 표시 둘 다에 필요한 규칙 정보를 추립니다.

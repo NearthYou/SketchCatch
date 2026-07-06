@@ -1078,6 +1078,14 @@ test("parseRdsInstancesFromXml reads DBInstance entries from AWS RDS responses",
                 <VpcSecurityGroupId>sg-db</VpcSecurityGroupId>
               </VpcSecurityGroupMembership>
             </VpcSecurityGroups>
+            <DBSubnetGroup>
+              <DBSubnetGroupName>app-db-subnets</DBSubnetGroupName>
+              <Subnets>
+                <Subnet>
+                  <SubnetIdentifier>subnet-db-a</SubnetIdentifier>
+                </Subnet>
+              </Subnets>
+            </DBSubnetGroup>
           </DBInstance>
         </DBInstances>
       </DescribeDBInstancesResult>
@@ -1095,8 +1103,11 @@ test("parseRdsInstancesFromXml reads DBInstance entries from AWS RDS responses",
   assert.equal(database?.config["multiAz"], false);
   assert.equal(database?.config["endpointAddress"], "app-db.demo.ap-northeast-2.rds.amazonaws.com");
   assert.equal(database?.config["endpointPort"], 5432);
+  assert.equal(database?.config["dbSubnetGroupName"], "app-db-subnets");
+  assert.deepEqual(database?.config["subnetIds"], ["subnet-db-a"]);
   assert.match(JSON.stringify(database?.config["providerParameters"]), /"DBInstanceIdentifier":"app-db"/);
   assert.deepEqual(database?.relationships, [
+    { type: "contains", targetProviderResourceId: "subnet-db-a" },
     { type: "attached_to", targetProviderResourceId: "sg-db" }
   ]);
 });
