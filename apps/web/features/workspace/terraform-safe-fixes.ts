@@ -20,6 +20,7 @@ export type TerraformSafeFixResult =
 export type TerraformCodeReplacementPreview = {
   readonly currentCode: string;
   readonly nextCode: string;
+  readonly sourceLine?: number | undefined;
   readonly source?: "safe_fix" | "amazon_q" | undefined;
 };
 
@@ -108,9 +109,9 @@ export function applyTerraformCodeReplacement({
     };
   }
 
-  const matchIndex = code.indexOf(preview.currentCode);
+  const match = findTerraformCodeReplacementMatch(code, preview);
 
-  if (matchIndex < 0) {
+  if (!match) {
     return {
       applied: false,
       code,
@@ -120,9 +121,89 @@ export function applyTerraformCodeReplacement({
 
   return {
     applied: true,
-    code: `${code.slice(0, matchIndex)}${preview.nextCode}${code.slice(matchIndex + preview.currentCode.length)}`,
+    code: `${code.slice(0, match.index)}${preview.nextCode}${code.slice(match.index + match.length)}`,
     message: "Amazon Q 제안 코드 조각을 적용했습니다."
   };
+}
+
+function findTerraformCodeReplacementMatch(
+  code: string,
+  preview: TerraformCodeReplacementPreview
+): { readonly index: number; readonly length: number } | null {
+  if (preview.sourceLine !== undefined && preview.sourceLine > 0) {
+    const sourceLineStartOffset = getLineStartOffset(code, preview.sourceLine);
+
+    if (sourceLineStartOffset !== undefined) {
+      const exactLineMatch = findClosestExactMatch(code, preview.currentCode, sourceLineStartOffset);
+
+      if (exactLineMatch) {
+        return exactLineMatch;
+      }
+
+      const trimmedCurrentCode = preview.currentCode.trim();
+      const sourceLineText = getLineText(code, preview.sourceLine);
+      const trimmedMatchIndex = sourceLineText?.indexOf(trimmedCurrentCode) ?? -1;
+
+      if (trimmedCurrentCode.length > 0 && trimmedMatchIndex >= 0) {
+        return {
+          index: sourceLineStartOffset + trimmedMatchIndex,
+          length: trimmedCurrentCode.length
+        };
+      }
+    }
+  }
+
+  const fallbackIndex = code.indexOf(preview.currentCode);
+
+  return fallbackIndex >= 0
+    ? {
+        index: fallbackIndex,
+        length: preview.currentCode.length
+      }
+    : null;
+}
+
+function findClosestExactMatch(
+  code: string,
+  snippet: string,
+  targetOffset: number
+): { readonly index: number; readonly length: number } | null {
+  let closestIndex = -1;
+  let closestDistance = Number.POSITIVE_INFINITY;
+  let searchIndex = code.indexOf(snippet);
+
+  while (searchIndex >= 0) {
+    const distance = Math.abs(searchIndex - targetOffset);
+
+    if (distance < closestDistance) {
+      closestIndex = searchIndex;
+      closestDistance = distance;
+    }
+
+    searchIndex = code.indexOf(snippet, searchIndex + Math.max(snippet.length, 1));
+  }
+
+  return closestIndex >= 0
+    ? {
+        index: closestIndex,
+        length: snippet.length
+      }
+    : null;
+}
+
+function getLineStartOffset(code: string, lineNumber: number): number | undefined {
+  const lines = code.split(/\r?\n/);
+
+  if (lineNumber < 1 || lineNumber > lines.length) {
+    return undefined;
+  }
+
+  const lineBreak = code.includes("\r\n") ? "\r\n" : "\n";
+  return lines.slice(0, lineNumber - 1).join(lineBreak).length + (lineNumber > 1 ? lineBreak.length : 0);
+}
+
+function getLineText(code: string, lineNumber: number): string | undefined {
+  return code.split(/\r?\n/)[lineNumber - 1];
 }
 
 function applyLineFix(

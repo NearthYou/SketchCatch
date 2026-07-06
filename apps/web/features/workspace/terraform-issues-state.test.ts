@@ -72,6 +72,26 @@ test("readStoredTerraformIssues returns empty state for invalid storage payloads
   assert.deepEqual(readStoredTerraformIssues(storage, "project-123"), []);
 });
 
+test("storeTerraformIssues ignores storage write failures", () => {
+  const originalConsoleError = console.error;
+  console.error = () => undefined;
+
+  try {
+    assert.doesNotThrow(() =>
+      storeTerraformIssues(new ThrowingStorage(), "project-123", [
+        createIssue({
+          code: "terraform.trailing_comma",
+          line: 2,
+          message: "Trailing comma",
+          severity: "error"
+        })
+      ])
+    );
+  } finally {
+    console.error = originalConsoleError;
+  }
+});
+
 function createIssue(diagnostic: TerraformDiagnostic): TerraformIssueRecord {
   return {
     diagnostic,
@@ -112,3 +132,12 @@ class MemoryStorage implements Storage {
   }
 }
 
+class ThrowingStorage implements Pick<Storage, "removeItem" | "setItem"> {
+  removeItem(): void {
+    throw new Error("storage unavailable");
+  }
+
+  setItem(): void {
+    throw new Error("storage unavailable");
+  }
+}

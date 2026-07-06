@@ -461,6 +461,8 @@ test("terraform errors surface as an issues banner and AI resolution lives in th
   assert.match(componentSource, /markTerraformIssuesStale/);
   assert.match(componentSource, /mergeTerraformValidationDiagnostics/);
   assert.match(componentSource, /storeTerraformIssues/);
+  assert.match(componentSource, /loadedTerraformIssuesProjectId/);
+  assert.match(componentSource, /storeTerraformIssues\(window\.localStorage, projectId, terraformIssues\)/);
   assert.match(componentSource, /<TerraformIssuesPanel issues=\{terraformIssues\}/);
   assert.match(aiChatDockSource, /runAiTerraformErrorExplanation/);
   assert.match(aiChatDockSource, /terraform_issue/);

@@ -1,5 +1,24 @@
 # 에이전트 진행 로그
 
+### 2026-07-06 - PR #177 리뷰 피드백 반영
+
+- Goal: PR #177의 unresolved 리뷰 코멘트를 반영해 Terraform AI safe-fix 적용 안정성, Terraform issue localStorage 예외 처리, React state updater 부작용을 개선한다.
+- Completed:
+  - `applyTerraformCodeReplacement`가 `sourceLine`을 기준으로 반복되는 코드 조각 중 진단 줄에 가까운 위치를 우선 치환하도록 변경했다.
+  - `storeTerraformIssues`가 `localStorage` `setItem`/`removeItem` 예외를 잡아 UI가 크래시되지 않도록 보완했다.
+  - `WorkspaceRightPanel`의 `setTerraformIssues` updater 내부 storage write를 제거하고, hydration 완료 후 `useEffect`에서 `terraformIssues` 변경을 동기화하도록 분리했다.
+  - safe-fix 중복 snippet, storage write failure, source-layout 회귀 테스트를 추가/갱신했다.
+- Verification run:
+  - `npm exec --package=pnpm@11.8.0 -- pnpm harness:check` - passed before edits.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web exec tsx --test features/workspace/terraform-safe-fixes.test.ts features/workspace/terraform-issues-state.test.ts features/workspace/workspace-right-panel-layout.test.ts` - passed, 60 tests.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web typecheck` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm lint` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm typecheck` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm build` - passed.
+  - `git diff --check` - passed with line-ending warnings only.
+- Known risks:
+  - GitHub review thread resolve/reply는 사용자가 명시적으로 요청하지 않아 수행하지 않았다.
+
 ### 2026-07-06 - Terraform Preview 설명 AI 패널 이동 및 Amazon Q Well-Architected 리뷰
 
 - Goal: Terraform Preview 설명 결과를 Terraform 패널 하단이 아니라 AI 패널의 `Preview 설명` 탭에 표시하고, Bedrock 대신 Amazon Q 기반으로 Well-Architected 6개 원칙별 리뷰와 종합 평가를 제공한다.

@@ -82,12 +82,16 @@ export function storeTerraformIssues(
 ): void {
   const storageKey = createTerraformIssuesStorageKey(projectId);
 
-  if (issues.length === 0) {
-    storage.removeItem(storageKey);
-    return;
-  }
+  try {
+    if (issues.length === 0) {
+      storage.removeItem(storageKey);
+      return;
+    }
 
-  storage.setItem(storageKey, JSON.stringify(issues));
+    storage.setItem(storageKey, JSON.stringify(issues));
+  } catch (error) {
+    console.error("Failed to store terraform issues in localStorage:", error);
+  }
 }
 
 function isTerraformIssueRecordArray(value: unknown): value is TerraformIssueRecord[] {

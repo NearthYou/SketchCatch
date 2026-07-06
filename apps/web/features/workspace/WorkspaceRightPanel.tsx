@@ -97,6 +97,7 @@ export function WorkspaceRightPanel({
   const [terraformSaveRequestId, setTerraformSaveRequestId] = useState(0);
   const [terraformDiscardRequestId, setTerraformDiscardRequestId] = useState(0);
   const [terraformIssues, setTerraformIssues] = useState<TerraformIssueRecord[]>([]);
+  const [loadedTerraformIssuesProjectId, setLoadedTerraformIssuesProjectId] = useState<string | null>(null);
   const latestTerraformSafeFixApplyRequestIdRef = useRef<number | null>(null);
   const terraformDiagnostics = useMemo(
     () => terraformIssues.map((issue) => issue.diagnostic),
@@ -117,34 +118,21 @@ export function WorkspaceRightPanel({
 
     if (isDirty) {
       setIsDeploymentBaselineDirty(true);
-      setTerraformIssues((currentIssues) => {
-        const nextIssues = markTerraformIssuesStale(currentIssues);
-
-        if (typeof window !== "undefined") {
-          storeTerraformIssues(window.localStorage, projectId, nextIssues);
-        }
-
-        return nextIssues;
-      });
+      setTerraformIssues((currentIssues) => markTerraformIssuesStale(currentIssues));
     }
-  }, [projectId]);
+  }, []);
 
   const handleTerraformDiagnosticsChange = useCallback((diagnostics: TerraformDiagnostic[]): void => {
     latestTerraformDiagnosticsRef.current = diagnostics;
+    const validatedAt = new Date().toISOString();
     setTerraformIssues((currentIssues) => {
-      const nextIssues = mergeTerraformValidationDiagnostics(
+      return mergeTerraformValidationDiagnostics(
         currentIssues,
         diagnostics,
-        new Date().toISOString()
+        validatedAt
       );
-
-      if (typeof window !== "undefined") {
-        storeTerraformIssues(window.localStorage, projectId, nextIssues);
-      }
-
-      return nextIssues;
     });
-  }, [projectId]);
+  }, []);
 
   const handleTerraformIssueAiClick = useCallback((issue: TerraformIssueRecord): void => {
     onTerraformIssueAiRequest({
@@ -162,7 +150,16 @@ export function WorkspaceRightPanel({
     const storedIssues = readStoredTerraformIssues(window.localStorage, projectId);
     latestTerraformDiagnosticsRef.current = storedIssues.map((issue) => issue.diagnostic);
     setTerraformIssues(storedIssues);
+    setLoadedTerraformIssuesProjectId(projectId);
   }, [projectId]);
+
+  useEffect(() => {
+    if (loadedTerraformIssuesProjectId !== projectId || typeof window === "undefined") {
+      return;
+    }
+
+    storeTerraformIssues(window.localStorage, projectId, terraformIssues);
+  }, [loadedTerraformIssuesProjectId, projectId, terraformIssues]);
 
   useEffect(() => {
     if (!terraformSafeFixApplyRequest) {
