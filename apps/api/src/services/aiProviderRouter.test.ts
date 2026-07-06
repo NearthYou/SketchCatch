@@ -259,7 +259,7 @@ test("createAiProviderBackedLlmExplanation uses Amazon Q first for Terraform err
   assert.equal(bedrockCalls.length, 0);
 });
 
-test("createAiProviderBackedLlmExplanation returns Amazon Q fallback without letting Bedrock overwrite it", async () => {
+test("createAiProviderBackedLlmExplanation accepts unstructured Amazon Q Terraform explanations", async () => {
   const qCalls: unknown[] = [];
   const bedrockCalls: unknown[] = [];
   const createLlmExplanation = createAiProviderBackedLlmExplanation({
@@ -270,7 +270,11 @@ test("createAiProviderBackedLlmExplanation returns Amazon Q fallback without let
       generate: async (request) => {
         qCalls.push(request);
         return {
-          text: "Sorry, I could not find relevant information to complete your request."
+          text: [
+            "닫힌 block 뒤에 남은 Terraform attribute가 있어서 validate가 실패했습니다.",
+            "- main.tf 13번째 줄의 중괄호 위치를 확인하세요.",
+            "- 수정 후 Terraform 재검증을 실행하세요."
+          ].join("\n")
         };
       }
     },
@@ -310,8 +314,12 @@ test("createAiProviderBackedLlmExplanation returns Amazon Q fallback without let
     })
   });
 
-  assert.equal(result.fallbackUsed, true);
-  assert.equal(result.fallbackReason, "invalid_response");
+  assert.equal(result.fallbackUsed, false);
+  assert.match(result.summary, /닫힌 block/);
+  assert.deepEqual(result.highlights, [
+    "main.tf 13번째 줄의 중괄호 위치를 확인하세요.",
+    "수정 후 Terraform 재검증을 실행하세요."
+  ]);
   assert.equal(result.providerMetadata?.provider, "amazon_q");
   assert.equal(qCalls.length, 1);
   assert.equal(bedrockCalls.length, 0);

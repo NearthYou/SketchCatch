@@ -546,7 +546,12 @@ async function tryProvider(input: {
       payload
     });
     const fallback = createFallbackExplanation(input.input, "invalid_response");
-    const explanation = parseLlmExplanationText(response.text, fallback);
+    const explanation = parseProviderExplanationText({
+      fallback,
+      input: input.input,
+      provider: input.provider.provider,
+      text: response.text
+    });
     const explanationWithMetadata = withProviderMetadata(explanation, {
       provider: input.provider.provider,
       service: input.provider.service,
@@ -585,6 +590,60 @@ function createProviderPrompt(target: LlmExplanationTarget, payload: unknown): s
     "Provider input:",
     JSON.stringify(payload)
   ].join("\n");
+}
+
+function parseProviderExplanationText(input: {
+  readonly fallback: LlmExplanation;
+  readonly input: LlmExplanationInput;
+  readonly provider: AiProvider;
+  readonly text: string;
+}): LlmExplanation {
+  const parsed = parseLlmExplanationText(input.text, input.fallback);
+
+  if (!parsed.fallbackUsed || parsed.fallbackReason !== "invalid_response") {
+    return parsed;
+  }
+
+  if (input.provider === "amazon_q" && input.input.target === "terraform_error_explanation") {
+    return createAmazonQTerraformPlainTextExplanation(input.text, input.fallback);
+  }
+
+  return parsed;
+}
+
+function createAmazonQTerraformPlainTextExplanation(
+  text: string,
+  fallback: LlmExplanation
+): LlmExplanation {
+  const items = normalizeProviderTextItems(text);
+  const summary = items[0] ?? "";
+
+  if (summary.length === 0) {
+    return fallback;
+  }
+
+  return {
+    target: "terraform_error_explanation",
+    summary: trimProviderText(summary, 300),
+    highlights: items.slice(1, 4).map((item) => trimProviderText(item, 120)),
+    nextActions: fallback.nextActions.slice(0, 5),
+    fallbackUsed: false
+  };
+}
+
+function normalizeProviderTextItems(text: string): string[] {
+  return text
+    .split(/\r?\n+/)
+    .map((line) => line.replace(/^\s*(?:[-*]|\d+[.)])\s*/, "").trim())
+    .filter((line) => line.length > 0 && !/^```/.test(line));
+}
+
+function trimProviderText(value: string, maxLength: number): string {
+  if (value.length <= maxLength) {
+    return value;
+  }
+
+  return value.slice(0, maxLength).trim();
 }
 
 function createFallbackExplanationWithMetadata(

@@ -25,7 +25,11 @@
   - Terraform Issue AI 설명 경로를 Amazon Q Assistance로 고정하고, Q credit/config/응답 문제로 fallback이 쓰인 경우 `Amazon Q 호출 상태`를 수정 계획에 표시하게 했다.
   - Terraform Issue AI 수정 계획을 문장형 계획 대신 현재 코드/수정할 코드 preview 중심으로 바꾸고, preview가 있는 safe fix에만 `수정` 버튼을 표시하게 했다.
   - Terraform Issue AI 카드가 열린 상태에서 AI 채팅 닫기 버튼을 누르면 issue resolution/applying 상태를 함께 비우고, 닫은 뒤 늦게 도착한 AI 응답이 카드를 되살리지 않게 했다.
+  - Amazon Q Business가 Terraform 이슈 설명을 JSON이 아닌 자연어로 반환해도 `invalid_response`로 버리지 않고 요약/핵심 항목으로 변환해 Amazon Q 설명으로 표시하게 했다.
 - Verification run:
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api exec tsx --test src/services/aiProviderRouter.test.ts --test-name-pattern "unstructured Amazon Q"` - passed, 11 tests.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api typecheck` - passed.
+  - `git diff --check` - passed with line-ending warnings only.
   - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-right-panel-layout.test.ts --test-name-pattern "terraform issue AI resolution can close"` - passed, 41 source-layout tests.
   - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web typecheck` - passed.
   - `git diff --check` - passed with line-ending warnings only.
