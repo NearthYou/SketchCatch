@@ -95,7 +95,7 @@ function createReverseEngineeringPreviewDiagram(result: ReverseEngineeringScanRe
 function removeUnsupportedNodes(architectureJson: ArchitectureJson): ArchitectureJson {
   const supportedNodeIds = new Set(
     architectureJson.nodes
-      .filter((node) => node.type !== "UNKNOWN" && node.config["analysisExcluded"] !== true)
+      .filter((node) => node.type !== "UNKNOWN" && node.config?.["analysisExcluded"] !== true)
       .map((node) => node.id)
   );
 

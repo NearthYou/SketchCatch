@@ -123,6 +123,93 @@ test("AWS Provider Adapter lays out supported resources as an architecture map",
   assert(nodeById.get("resource-demo-bucket")!.positionX > nodeById.get("resource-vpc-1234")!.positionX);
 });
 
+test("AWS Provider Adapter keeps multi-subnet resources in their first matched subnet slot", async () => {
+  const adapter = createAwsProviderAdapter({
+    async discoverResources() {
+      return [
+        createRecord({
+          providerResourceType: "AWS::EC2::VPC",
+          providerResourceId: "vpc-1234",
+          displayName: "Main VPC"
+        }),
+        createRecord({
+          providerResourceType: "AWS::EC2::Subnet",
+          providerResourceId: "subnet-a",
+          displayName: "subnet-a",
+          relationships: [{ type: "contains", targetProviderResourceId: "vpc-1234" }]
+        }),
+        createRecord({
+          providerResourceType: "AWS::EC2::Subnet",
+          providerResourceId: "subnet-b",
+          displayName: "subnet-b",
+          relationships: [{ type: "contains", targetProviderResourceId: "vpc-1234" }]
+        }),
+        createRecord({
+          providerResourceType: "AWS::EC2::SecurityGroup",
+          providerResourceId: "sg-db",
+          displayName: "db-sg",
+          config: { vpcId: "vpc-1234" }
+        }),
+        createRecord({
+          providerResourceType: "AWS::RDS::DBInstance",
+          providerResourceId: "app-db",
+          displayName: "app-db",
+          config: {
+            securityGroupIds: ["sg-db"],
+            subnetIds: ["subnet-a", "subnet-b"]
+          }
+        })
+      ];
+    }
+  });
+
+  const result = await adapter.scan({
+    provider: "aws",
+    region: "ap-northeast-2",
+    resourceTypes: ["ALL"]
+  });
+  const nodeById = new Map(result.architectureJson.nodes.map((node) => [node.id, node]));
+
+  assert.equal(nodeById.get("resource-app-db")?.positionX, 360);
+  assert.equal(nodeById.get("resource-app-db")?.positionY, 620);
+  assert.equal(nodeById.get("resource-sg-db")?.positionX, 280);
+  assert.equal(nodeById.get("resource-sg-db")?.positionY, 525);
+});
+
+test("AWS Provider Adapter reads nested config references when grouping VPC children", async () => {
+  const adapter = createAwsProviderAdapter({
+    async discoverResources() {
+      return [
+        createRecord({
+          providerResourceType: "AWS::EC2::VPC",
+          providerResourceId: "vpc-1234",
+          displayName: "Main VPC"
+        }),
+        createRecord({
+          providerResourceType: "AWS::EC2::RouteTable",
+          providerResourceId: "rtb-nested",
+          displayName: "Nested Route Table",
+          config: {
+            routeTable: {
+              vpcId: "vpc-1234"
+            }
+          }
+        })
+      ];
+    }
+  });
+
+  const result = await adapter.scan({
+    provider: "aws",
+    region: "ap-northeast-2",
+    resourceTypes: ["ALL"]
+  });
+  const nodeById = new Map(result.architectureJson.nodes.map((node) => [node.id, node]));
+
+  assert.equal(nodeById.get("resource-rtb-nested")?.positionX, 250);
+  assert.equal(nodeById.get("resource-rtb-nested")?.positionY, 240);
+});
+
 test("AWS Provider Adapter maps routing resources and prepares safe import suggestions", async () => {
   const adapter = createAwsProviderAdapter({
     async discoverResources() {

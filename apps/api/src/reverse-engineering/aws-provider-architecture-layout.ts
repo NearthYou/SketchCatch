@@ -16,10 +16,7 @@ const BOARD_LAYOUT = {
 } as const;
 
 type ArchitectureNodeLayout = Pick<ResourceNode, "label" | "positionX" | "positionY">;
-type LayoutAnchor = {
-  readonly x: number;
-  readonly y: number;
-};
+type LayoutAnchor = Readonly<{ x: number; y: number }>;
 type LayoutVpcChildrenInput = {
   readonly layoutByResourceId: Map<string, ArchitectureNodeLayout>;
   readonly resources: readonly DiscoveredResource[];
@@ -89,16 +86,7 @@ function layoutVpcChildren(input: LayoutVpcChildrenInput): void {
   const vpcChildResources = input.resources.filter((resource) =>
     isVpcChildResource(resource, input.vpc, input.resourcesById)
   );
-  const networkResources = vpcChildResources.filter(isVpcNetworkResource);
   const subnets = vpcChildResources.filter((resource) => resource.resourceType === "SUBNET");
-
-  for (const [index, resource] of networkResources.entries()) {
-    input.layoutByResourceId.set(resource.id, {
-      label: createResourceLabel(resource),
-      positionX: input.vpcAnchor.x + 130 + index * BOARD_LAYOUT.resourceGapX,
-      positionY: input.vpcAnchor.y + 120
-    });
-  }
 
   for (const [index, subnet] of subnets.entries()) {
     const subnetAnchor = getSubnetAnchor(input.vpcAnchor, index);
@@ -109,15 +97,28 @@ function layoutVpcChildren(input: LayoutVpcChildrenInput): void {
     });
     layoutSubnetChildren({ ...input, subnet, subnetAnchor });
   }
+
+  const networkResources = vpcChildResources.filter(
+    (resource) => isVpcNetworkResource(resource) && !input.layoutByResourceId.has(resource.id)
+  );
+
+  for (const [index, resource] of networkResources.entries()) {
+    input.layoutByResourceId.set(resource.id, {
+      label: createResourceLabel(resource),
+      positionX: input.vpcAnchor.x + 130 + index * BOARD_LAYOUT.resourceGapX,
+      positionY: input.vpcAnchor.y + 120
+    });
+  }
 }
 
 // Subnet 안쪽에는 Security Group 경계와 실제 실행 리소스를 같이 읽히게 배치합니다.
 function layoutSubnetChildren(input: LayoutSubnetChildrenInput): void {
-  const protectedResources = input.resources.filter((resource) =>
+  const allSubnetResources = input.resources.filter((resource) =>
     isSubnetChildResource(resource, input.subnet, input.resourcesById)
   );
-  const securityGroups = input.resources.filter((resource) =>
-    protectsSubnetResource(resource, protectedResources)
+  const protectedResources = allSubnetResources.filter((resource) => !input.layoutByResourceId.has(resource.id));
+  const securityGroups = input.resources.filter(
+    (resource) => protectsSubnetResource(resource, allSubnetResources) && !input.layoutByResourceId.has(resource.id)
   );
 
   for (const [index, securityGroup] of securityGroups.entries()) {
@@ -250,7 +251,7 @@ function referencesResource(resource: DiscoveredResource, target: DiscoveredReso
   );
 }
 
-// config 값은 문자열 하나일 수도 있고 ID 배열일 수도 있어서 둘 다 처리합니다.
+// config 값은 문자열, 배열, nested object로 올 수 있어서 안쪽까지 확인합니다.
 function referencesResourceIdValue(value: unknown, target: DiscoveredResource): boolean {
   if (typeof value === "string") {
     return value === target.id || value === target.providerResourceId;
@@ -260,23 +261,26 @@ function referencesResourceIdValue(value: unknown, target: DiscoveredResource): 
     return value.some((item) => referencesResourceIdValue(item, target));
   }
 
+  if (isRecord(value)) {
+    return Object.values(value).some((item) => referencesResourceIdValue(item, target));
+  }
+
   return false;
+}
+
+// AWS SDK 응답 객체처럼 key-value 형태인 값만 재귀 탐색합니다.
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
 
 // VPC별 시작 위치를 고정해서 여러 VPC가 겹치지 않게 합니다.
 function getVpcAnchor(index: number): LayoutAnchor {
-  return {
-    x: BOARD_LAYOUT.vpcStartX + index * BOARD_LAYOUT.vpcGapX,
-    y: BOARD_LAYOUT.vpcStartY
-  };
+  return { x: BOARD_LAYOUT.vpcStartX + index * BOARD_LAYOUT.vpcGapX, y: BOARD_LAYOUT.vpcStartY };
 }
 
 // Subnet은 VPC 안에서 격자로 배치해서 같은 Subnet처럼 보이지 않게 합니다.
 function getSubnetAnchor(vpcAnchor: LayoutAnchor, index: number): LayoutAnchor {
-  return {
-    x: vpcAnchor.x + 90 + (index % 2) * BOARD_LAYOUT.subnetGapX,
-    y: vpcAnchor.y + 310 + Math.floor(index / 2) * BOARD_LAYOUT.subnetGapY
-  };
+  return { x: vpcAnchor.x + 90 + (index % 2) * BOARD_LAYOUT.subnetGapX, y: vpcAnchor.y + 310 + Math.floor(index / 2) * BOARD_LAYOUT.subnetGapY };
 }
 
 // 보드 라벨은 원본 ID만 보여주지 않고 역할, AZ, CIDR을 같이 보여줍니다.
