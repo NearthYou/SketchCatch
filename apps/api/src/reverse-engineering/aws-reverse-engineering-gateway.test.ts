@@ -22,6 +22,7 @@ import {
   listKmsKeysAsUnknown,
   listLambdaFunctionsAsUnknown,
   listLambdaPermissionsAsUnknown,
+  listResourceExplorerResourcesAsUnknown,
   listTaggedUnknownResources,
   maskReverseEngineeringSensitiveText as maskGatewaySensitiveText,
   shouldReadUnknownResourceGroup,
@@ -272,6 +273,64 @@ test("listTaggedUnknownResources keeps unsupported tagged AWS resources as UNKNO
   assert.equal(records[0]?.providerResourceId, "arn:aws:lambda:ap-northeast-2:316875069960:function:demo-fn");
   assert.equal(records[0]?.displayName, "Demo Lambda");
   assert.equal(records[0]?.config["service"], "lambda");
+});
+
+test("listResourceExplorerResourcesAsUnknown keeps broad Resource Explorer results as UNKNOWN candidates", async () => {
+  const sentCommandInputs: unknown[] = [];
+  const fakeResourceExplorerClient = {
+    async send(command: { constructor: { name: string }; input?: unknown }) {
+      assert.equal(command.constructor.name, "SearchCommand");
+      sentCommandInputs.push(command.input);
+
+      return {
+        Resources: [
+          {
+            Arn: "arn:aws:events:ap-northeast-2:316875069960:rule/demo-schedule",
+            OwningAccountId: "316875069960",
+            Region: "ap-northeast-2",
+            ResourceType: "AWS::Events::Rule",
+            Service: "events",
+            LastReportedAt: new Date("2026-07-06T00:00:00.000Z")
+          }
+        ]
+      };
+    }
+  };
+
+  const records = await listResourceExplorerResourcesAsUnknown(
+    "ap-northeast-2",
+    TEST_AWS_CREDENTIALS,
+    () => fakeResourceExplorerClient
+  );
+
+  assert.deepEqual(sentCommandInputs, [{ QueryString: "region:ap-northeast-2", MaxResults: 100 }]);
+  assert.equal(records[0]?.providerResourceType, "AWS::Events::Rule");
+  assert.equal(records[0]?.providerResourceId, "arn:aws:events:ap-northeast-2:316875069960:rule/demo-schedule");
+  assert.equal(records[0]?.displayName, "demo-schedule");
+  assert.deepEqual(records[0]?.config["providerParameters"], {
+    Arn: "arn:aws:events:ap-northeast-2:316875069960:rule/demo-schedule",
+    LastReportedAt: "2026-07-06T00:00:00.000Z",
+    OwningAccountId: "316875069960",
+    Region: "ap-northeast-2",
+    ResourceType: "AWS::Events::Rule",
+    Service: "events"
+  });
+});
+
+test("listResourceExplorerResourcesAsUnknown skips Resource Explorer when the account has no usable index", async () => {
+  const fakeResourceExplorerClient = {
+    async send() {
+      throw new Error("Resource Explorer index is not available");
+    }
+  };
+
+  const records = await listResourceExplorerResourcesAsUnknown(
+    "ap-northeast-2",
+    TEST_AWS_CREDENTIALS,
+    () => fakeResourceExplorerClient
+  );
+
+  assert.deepEqual(records, []);
 });
 
 test("listApplicationLoadBalancersAsUnknown keeps untagged ALB resources as UNKNOWN candidates", async () => {

@@ -5,6 +5,12 @@ import {
   type ResourceTagMapping
 } from "@aws-sdk/client-resource-groups-tagging-api";
 import {
+  ResourceExplorer2Client,
+  SearchCommand,
+  type Resource,
+  type SearchCommandOutput
+} from "@aws-sdk/client-resource-explorer-2";
+import {
   CloudFrontClient,
   ListDistributionsCommand,
   type DistributionSummary,
@@ -131,6 +137,13 @@ export type AwsTaggingReadClientFactory = (
   region: string,
   credentials: TerraformAwsCredentialEnv
 ) => AwsTaggingReadClient;
+export type AwsResourceExplorerReadClient = {
+  send(command: object): Promise<unknown>;
+};
+export type AwsResourceExplorerReadClientFactory = (
+  region: string,
+  credentials: TerraformAwsCredentialEnv
+) => AwsResourceExplorerReadClient;
 export type AwsElbReadClient = {
   send(command: object): Promise<unknown>;
 };
@@ -546,6 +559,39 @@ export async function listTaggedUnknownResources(
   return records;
 }
 
+// Resource Explorer가 켜진 계정에서는 태그 없는 리소스까지 더 넓게 UNKNOWN 후보로 찾습니다.
+export async function listResourceExplorerResourcesAsUnknown(
+  region: string,
+  credentials: TerraformAwsCredentialEnv,
+  createClient: AwsResourceExplorerReadClientFactory = createDefaultResourceExplorerReadClient
+): Promise<AwsDiscoveredResourceRecord[]> {
+  const client = createClient(region, credentials);
+  const records: AwsDiscoveredResourceRecord[] = [];
+  let nextToken: string | undefined;
+
+  try {
+    do {
+      const response = await sendResourceExplorerCommand<SearchCommandOutput>(
+        client,
+        new SearchCommand({
+          QueryString: `region:${region}`,
+          MaxResults: 100,
+          ...(nextToken ? { NextToken: nextToken } : {})
+        })
+      );
+
+      records.push(...(response.Resources ?? []).flatMap((resource) =>
+        toUnknownResourceExplorerRecord(resource, region)
+      ));
+      nextToken = response.NextToken && response.NextToken.length > 0 ? response.NextToken : undefined;
+    } while (nextToken);
+  } catch {
+    return [];
+  }
+
+  return records;
+}
+
 // 지금 정식 지원하지 않는 AWS 리소스도 숨기지 않기 위해 여러 read-only 조회 결과를 UNKNOWN으로 모읍니다.
 async function listUnknownResources(
   input: AwsProviderScanInput,
@@ -555,6 +601,7 @@ async function listUnknownResources(
 
   if (input.resourceTypes.includes("ALL") || input.resourceTypes.includes("UNKNOWN")) {
     reads.push(
+      listResourceExplorerResourcesAsUnknown(input.region, credentials),
       listTaggedUnknownResources(input.region, credentials),
       listApplicationLoadBalancersAsUnknown(input.region, credentials),
       listCloudFrontDistributionsAsUnknown(input.region, credentials),
@@ -909,6 +956,17 @@ function createDefaultTaggingReadClient(
   };
 }
 
+function createDefaultResourceExplorerReadClient(
+  region: string,
+  credentials: TerraformAwsCredentialEnv
+): AwsResourceExplorerReadClient {
+  const client = new ResourceExplorer2Client({ region, credentials: toAwsSdkCredentials(credentials) });
+
+  return {
+    send: (command) => client.send(command as Parameters<ResourceExplorer2Client["send"]>[0])
+  };
+}
+
 function createDefaultElbReadClient(
   region: string,
   credentials: TerraformAwsCredentialEnv
@@ -1037,6 +1095,13 @@ function createDefaultCloudWatchReadClient(
 
 async function sendTaggingCommand<TOutput>(
   client: AwsTaggingReadClient,
+  command: object
+): Promise<TOutput> {
+  return (await client.send(command)) as TOutput;
+}
+
+async function sendResourceExplorerCommand<TOutput>(
+  client: AwsResourceExplorerReadClient,
   command: object
 ): Promise<TOutput> {
   return (await client.send(command)) as TOutput;
@@ -1639,6 +1704,37 @@ function toUnknownTaggedResourceRecord(
         providerParameters: toProviderParameterSnapshot(resource),
         service: arnParts.service,
         tags
+      },
+      relationships: []
+    }
+  ];
+}
+
+function toUnknownResourceExplorerRecord(
+  resource: Resource,
+  fallbackRegion: string
+): AwsDiscoveredResourceRecord[] {
+  const arn = resource.Arn;
+
+  if (!arn || isKnownTaggedResourceArn(arn)) {
+    return [];
+  }
+
+  const arnParts = parseAwsArn(arn);
+
+  return [
+    {
+      providerResourceType: resource.ResourceType ?? arnParts.providerResourceType,
+      providerResourceId: arn,
+      displayName: arnParts.resourceName || arn,
+      region: resource.Region || arnParts.region || fallbackRegion,
+      config: {
+        arn,
+        accountId: resource.OwningAccountId ?? arnParts.accountId,
+        lastReportedAt: resource.LastReportedAt?.toISOString(),
+        providerParameters: toProviderParameterSnapshot(resource),
+        resourceKind: arnParts.resourceKind,
+        service: resource.Service ?? arnParts.service
       },
       relationships: []
     }
