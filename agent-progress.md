@@ -1,6 +1,30 @@
 ﻿# 에이전트 진행 로그
 # 에이전트 진행 로그
 
+### 2026-07-06 - Terraform CLI 기반 Preview 검증 전환
+
+- Goal: Terraform 편집/저장 시 정적 진단만으로 오류를 놓치지 않도록 `/terraform/validate` 기본 경로를 Terraform CLI 검증 우선으로 전환하고, 기존 Issues/AI 흐름에는 같은 진단 형태로 연결한다.
+- Completed:
+  - `terraform init -backend=false -input=false -no-color` 후 `terraform validate -json`을 실행하는 CLI 검증 서비스를 추가했다.
+  - CLI JSON diagnostics를 기존 `TerraformDiagnostic` 형태로 변환해 파일명, 줄 번호, 메시지가 기존 Issues/AI 설명 흐름에 그대로 표시되도록 했다.
+  - 빈 코드, Terraform CLI 미설치/타임아웃/JSON 파싱 실패, 안전하지 않은 가상 파일명 같은 CLI 인프라 실패에서는 기존 정적 진단으로 fallback하도록 했다.
+  - 가상 파일명을 temp workspace 내부로 제한하고, `.tf`/`.tfvars` 파일명 정규화와 AWS access key/session token 형태의 비밀 마스킹을 추가했다.
+  - 프론트엔드는 기존처럼 전체 virtual file set을 검증 API에 보내며, CLI 사용 여부는 backend route에서 결정하도록 유지했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api exec tsx --test src/routes/terraform.test.ts` - passed, 21 tests.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-diagnostics.test.ts src/routes/terraform.test.ts src/services/aiTerraformErrorExplanation.test.ts` - passed, 56 tests.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web exec tsx --test features/workspace/api.test.ts features/workspace/workspace-right-panel-layout.test.ts` - passed, 70 tests.
+  - Terraform CLI smoke validation with `terraform validate -json` - passed after sandbox escalation; invalid Terraform returned `Unsupported argument` with `sourceFileName: main.tf` and `line: 2`.
+  - `pnpm harness:check` - passed.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `pnpm build` - passed after sandbox escalation; initial sandbox run hit Next `.next/app-path-routes-manifest.json` `EPERM`.
+  - `git diff --check` - passed with line-ending warnings only.
+- Known risks:
+  - Terraform provider plugin download or provider-specific validation depth still depends on the local Terraform environment and registry/network availability.
+  - `apps/web/next-env.d.ts` may appear stat-dirty after build on Windows, but current content diff is empty.
+
 ### 2026-07-06 - PR #177 리뷰 피드백 반영
 
 - Goal: PR #177의 unresolved 리뷰 코멘트를 반영해 Terraform AI safe-fix 적용 안정성, Terraform issue localStorage 예외 처리, React state updater 부작용을 개선한다.
