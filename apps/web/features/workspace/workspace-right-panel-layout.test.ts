@@ -119,7 +119,7 @@ test("workspace AI opens from a floating chat dock instead of the right panel", 
 });
 
 test("workspace AI has a dedicated error tab for Terraform issue resolution", () => {
-  assert.match(aiChatDockSource, /type WorkspaceAiChatScope = "draft" \| "errors" \| "simulation"/);
+  assert.match(aiChatDockSource, /type WorkspaceAiChatScope = "draft" \| "errors" \| "preview" \| "simulation"/);
   assert.match(aiChatDockSource, /setActiveChatTab\("errors"\)/);
   assert.match(aiChatDockSource, /activeChatTab === "errors" && terraformIssueResolution !== null/);
   assert.match(aiChatDockSource, /AI 오류/);
@@ -463,21 +463,20 @@ test("terraform editor renders syntax colors and squiggly error underlines", () 
 });
 
 test("terraform preview explanation is triggered from the terraform code panel", () => {
-  const previewExplanationRule = getCssRule(stylesSource, "terraformPreviewExplanationPanel");
-
-  assert.match(terraformPanelSource, /runAiTerraformPreviewExplanation/);
   assert.match(terraformPanelSource, /highlightedBlock\.code/);
   assert.match(terraformPanelSource, /displayedTerraformCode/);
-  assert.match(terraformPanelSource, /resource\.explanation/);
-  assert.match(terraformPanelSource, /closeTerraformPreviewExplanation/);
-  assert.match(terraformPanelSource, /Terraform Preview 설명 닫기/);
-  assert.match(terraformPanelSource, /className=\{styles\.terraformPreviewExplanationPanel\}/);
-  assert.match(terraformPanelSource, /className=\{styles\.terraformPreviewExplanationActions\}/);
+  assert.match(terraformPanelSource, /onTerraformPreviewAiRequest/);
+  assert.match(componentSource, /onTerraformPreviewAiRequest/);
+  assert.match(workspaceDraftManagerSource, /terraformPreviewAiRequest/);
+  assert.match(aiChatDockSource, /runAiTerraformPreviewExplanation/);
+  assert.match(aiChatDockSource, /WorkspaceAiTerraformPreviewResult/);
+  assert.match(aiChatDockSource, /activeChatTab === "preview"/);
+  assert.match(aiChatDockSource, /Preview 설명/);
   assert.doesNotMatch(aiChatDockSource, /WorkspaceAiTerraformPanel/);
-  assert.doesNotMatch(aiChatDockSource, /Terraform Preview 설명/);
+  assert.doesNotMatch(terraformPanelSource, /className=\{styles\.terraformPreviewExplanationPanel\}/);
+  assert.doesNotMatch(terraformPanelSource, /closeTerraformPreviewExplanation/);
+  assert.doesNotMatch(terraformPanelSource, /setTerraformPreviewExplanation/);
   assert.doesNotMatch(terraformPanelSource, /checklist\.length\} Checks/);
-  assert.match(previewExplanationRule, /\bmax-height:\s*180px;/);
-  assert.match(previewExplanationRule, /\boverflow:\s*auto;/);
 });
 
 test("terraform resource code mode keeps explanation but omits validation and deployment actions", () => {

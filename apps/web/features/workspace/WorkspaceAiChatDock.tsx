@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   AiArchitectureDraftResult,
   AiTerraformErrorExplanationResult,
+  AiTerraformPreviewExplanationResult,
   ArchitectureGuardrailWarning,
   CreateArchitectureDraftRequest,
   DesignSimulationResult,
@@ -15,6 +16,7 @@ import { getApiErrorMessage } from "../../lib/api-client";
 import type { DiagramEditorPanelContext } from "../diagram-editor";
 import {
   createAiArchitectureDraft,
+  runAiTerraformPreviewExplanation,
   runAiTerraformErrorExplanation,
   runAiDesignSimulation
 } from "./api";
@@ -26,6 +28,7 @@ import {
 import {
   WorkspaceAiDesignSimulationResult,
   WorkspaceAiExplanation,
+  WorkspaceAiTerraformPreviewResult,
   WorkspaceAiRequestMessage
 } from "./WorkspaceAiPanelPieces";
 import type { AiRequestState } from "./WorkspaceAiPanelPieces";
@@ -54,6 +57,7 @@ import {
   createTerraformIssueFixPlan,
   type TerraformIssueAiRequest,
   type TerraformIssueCodePreview,
+  type TerraformPreviewAiRequest,
   type TerraformSafeFixApplyResult
 } from "./workspace-terraform-ai";
 import styles from "./workspace.module.css";
@@ -66,6 +70,7 @@ export type WorkspaceAiChatDockProps = {
   ) => void;
   readonly projectId: string;
   readonly terraformIssueRequest: TerraformIssueAiRequest | null;
+  readonly terraformPreviewRequest: TerraformPreviewAiRequest | null;
   readonly terraformSafeFixApplyResult: TerraformSafeFixApplyResult | null;
 };
 
@@ -74,11 +79,12 @@ type WorkspaceAiChatMessageKind =
   | "draft"
   | "error"
   | "question"
+  | "preview"
   | "simulation"
   | "status"
   | "terraform_issue";
 type WorkspaceAiChatSelectionMode = "single" | "multiple";
-type WorkspaceAiChatScope = "draft" | "errors" | "simulation";
+type WorkspaceAiChatScope = "draft" | "errors" | "preview" | "simulation";
 
 type WorkspaceAiChatMessage = {
   readonly id: string;
@@ -98,6 +104,13 @@ type TerraformIssueResolutionState = {
   readonly state: AiRequestState;
 };
 
+type TerraformPreviewExplanationState = {
+  readonly explanation: AiTerraformPreviewExplanationResult | null;
+  readonly message: string;
+  readonly request: TerraformPreviewAiRequest;
+  readonly state: AiRequestState;
+};
+
 const MAX_CHAT_MESSAGES = 80;
 const STORAGE_KEY_PREFIX = "sketchcatch.workspaceAiChat";
 const DESIGN_SIMULATION_DEFAULTS = {
@@ -110,6 +123,7 @@ export function WorkspaceAiChatDock({
   onApplyTerraformIssueFix,
   projectId,
   terraformIssueRequest,
+  terraformPreviewRequest,
   terraformSafeFixApplyResult
 }: WorkspaceAiChatDockProps) {
   const [isOpen, setOpen] = useState(false);
@@ -130,6 +144,8 @@ export function WorkspaceAiChatDock({
     null
   );
   const [designSimulation, setDesignSimulation] = useState<DesignSimulationResult | null>(null);
+  const [terraformPreviewExplanation, setTerraformPreviewExplanation] =
+    useState<TerraformPreviewExplanationState | null>(null);
   const [terraformIssueResolution, setTerraformIssueResolution] =
     useState<TerraformIssueResolutionState | null>(null);
   const [applyingTerraformFixRequestId, setApplyingTerraformFixRequestId] = useState<number | null>(
@@ -143,6 +159,7 @@ export function WorkspaceAiChatDock({
   const transcriptRef = useRef<HTMLDivElement | null>(null);
   const loadedProjectIdRef = useRef(projectId);
   const latestTerraformIssueRequestIdRef = useRef<number | null>(null);
+  const latestTerraformPreviewRequestIdRef = useRef<number | null>(null);
   const latestTerraformSafeFixResultRequestIdRef = useRef<number | null>(null);
   const dismissedTerraformIssueRequestIdRef = useRef<number | null>(null);
   const boardSnapshot = useMemo(
@@ -164,6 +181,7 @@ export function WorkspaceAiChatDock({
     visibleMessages.length > 0 ||
     (activeChatTab === "draft" && draft !== null) ||
     (activeChatTab === "errors" && terraformIssueResolution !== null) ||
+    (activeChatTab === "preview" && terraformPreviewExplanation !== null) ||
     (activeChatTab === "simulation" && designSimulation !== null);
 
   useEffect(() => {
@@ -266,6 +284,75 @@ export function WorkspaceAiChatDock({
   }, [terraformIssueRequest]);
 
   useEffect(() => {
+    if (!terraformPreviewRequest) {
+      return;
+    }
+
+    const request = terraformPreviewRequest;
+
+    if (latestTerraformPreviewRequestIdRef.current === request.id) {
+      return;
+    }
+
+    latestTerraformPreviewRequestIdRef.current = request.id;
+    setOpen(true);
+    setActiveChatTab("preview");
+    setTerraformPreviewExplanation({
+      explanation: null,
+      message: "",
+      request,
+      state: "loading"
+    });
+    appendAssistantMessage(
+      "preview",
+      `Preview 설명을 요청했습니다. ${request.label}`,
+      [],
+      "single",
+      "preview"
+    );
+
+    async function explainPreview(): Promise<void> {
+      try {
+        const explanation = await runAiTerraformPreviewExplanation(request.terraformCode);
+
+        if (latestTerraformPreviewRequestIdRef.current !== request.id) {
+          return;
+        }
+
+        setTerraformPreviewExplanation({
+          explanation,
+          message: "",
+          request,
+          state: "idle"
+        });
+        appendAssistantMessage(
+          "preview",
+          `Preview 설명 완료: ${explanation.summary}`,
+          [],
+          "single",
+          "preview"
+        );
+      } catch (error) {
+        const message = getApiErrorMessage(error, "Terraform Preview 설명 중 오류가 발생했습니다.");
+
+        if (latestTerraformPreviewRequestIdRef.current !== request.id) {
+          return;
+        }
+
+        setTerraformPreviewExplanation({
+          explanation: null,
+          message,
+          request,
+          state: "error"
+        });
+        appendAssistantMessage("error", message, [], "single", "preview");
+      }
+    }
+
+    void explainPreview();
+  }, [terraformPreviewRequest]);
+
+  useEffect(() => {
     if (!terraformSafeFixApplyResult) {
       return;
     }
@@ -315,6 +402,14 @@ export function WorkspaceAiChatDock({
       setSimulationFingerprint(null);
       setSimulationErrorMessage("");
       setSimulationState("idle");
+      return;
+    }
+
+    if (activeChatTab === "preview") {
+      setMessages((currentMessages) =>
+        currentMessages.filter((message) => getChatMessageScope(message) !== "preview")
+      );
+      setTerraformPreviewExplanation(null);
       return;
     }
 
@@ -713,6 +808,15 @@ export function WorkspaceAiChatDock({
             AI 오류
           </button>
           <button
+            aria-selected={activeChatTab === "preview"}
+            className={styles.aiChatTabButton}
+            onClick={() => setActiveChatTab("preview")}
+            role="tab"
+            type="button"
+          >
+            Preview 설명
+          </button>
+          <button
             aria-selected={activeChatTab === "simulation"}
             className={styles.aiChatTabButton}
             onClick={() => setActiveChatTab("simulation")}
@@ -819,6 +923,24 @@ export function WorkspaceAiChatDock({
         ) : null}
         {activeChatTab === "simulation" ? (
           <WorkspaceAiRequestMessage state={simulationState} message={simulationErrorMessage} />
+        ) : null}
+
+        {activeChatTab === "preview" && terraformPreviewExplanation !== null ? (
+          <article className={styles.aiChatDraftCard}>
+            <div className={styles.aiResultHeader}>
+              <h3>Preview 설명</h3>
+              <span>{terraformPreviewExplanation.request.label}</span>
+            </div>
+            {terraformPreviewExplanation.state === "loading" ? (
+              <WorkspaceAiRequestMessage state="loading" message="" />
+            ) : null}
+            {terraformPreviewExplanation.state === "error" ? (
+              <WorkspaceAiRequestMessage state="error" message={terraformPreviewExplanation.message} />
+            ) : null}
+            {terraformPreviewExplanation.explanation ? (
+              <WorkspaceAiTerraformPreviewResult preview={terraformPreviewExplanation.explanation} />
+            ) : null}
+          </article>
         ) : null}
 
         {activeChatTab === "errors" && terraformIssueResolution !== null ? (
@@ -1179,8 +1301,17 @@ function createChatMessage(
 }
 
 function getChatMessageScope(message: WorkspaceAiChatMessage): WorkspaceAiChatScope {
-  if (message.scope === "draft" || message.scope === "errors" || message.scope === "simulation") {
+  if (
+    message.scope === "draft" ||
+    message.scope === "errors" ||
+    message.scope === "preview" ||
+    message.scope === "simulation"
+  ) {
     return message.scope;
+  }
+
+  if (message.kind === "preview") {
+    return "preview";
   }
 
   if (message.kind === "simulation") {
@@ -1221,6 +1352,7 @@ function isWorkspaceAiChatMessage(value: unknown): value is WorkspaceAiChatMessa
     (candidate.scope === undefined ||
       candidate.scope === "draft" ||
       candidate.scope === "errors" ||
+      candidate.scope === "preview" ||
       candidate.scope === "simulation") &&
     (candidate.selectionMode === undefined ||
       candidate.selectionMode === "single" ||
@@ -1230,6 +1362,7 @@ function isWorkspaceAiChatMessage(value: unknown): value is WorkspaceAiChatMessa
         candidate.suggestions.every((suggestion) => typeof suggestion === "string"))) &&
     (candidate.kind === "draft" ||
       candidate.kind === "error" ||
+      candidate.kind === "preview" ||
       candidate.kind === "question" ||
       candidate.kind === "simulation" ||
       candidate.kind === "status" ||

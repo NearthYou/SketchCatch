@@ -1,7 +1,6 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent, UIEvent } from "react";
 import type {
-  AiTerraformPreviewExplanationResult,
   DiagramJson,
   TerraformDiagnostic,
   TerraformSyncFileInput
@@ -18,7 +17,6 @@ import { getApiErrorMessage } from "../../lib/api-client";
 import type { DiagramEditorPanelContext } from "../diagram-editor";
 import {
   generateTerraformCode,
-  runAiTerraformPreviewExplanation,
   syncTerraformToDiagram,
   validateTerraformCode
 } from "./api";
@@ -50,6 +48,7 @@ import {
   type TerraformSafeFixResult
 } from "./terraform-safe-fixes";
 import { createTerraformDiagnosticKey } from "./terraform-issues-state";
+import type { TerraformPreviewAiRequest } from "./workspace-terraform-ai";
 import type { RequestState } from "./workspace-right-panel.types";
 import styles from "./workspace.module.css";
 
@@ -202,6 +201,7 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
   readonly onExternalSaveComplete: (saved: boolean, requestId: number) => void;
   readonly onOpenIssues: () => void;
   readonly onOpenResourceSettings: () => void;
+  readonly onTerraformPreviewAiRequest: (request: TerraformPreviewAiRequest) => void;
 }>(function TerraformCodePanel({
   context,
   externalDiscardRequestId,
@@ -211,7 +211,8 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
   onDirtyChange,
   onExternalSaveComplete,
   onOpenIssues,
-  onOpenResourceSettings
+  onOpenResourceSettings,
+  onTerraformPreviewAiRequest
 }, ref) {
   const [terraformFiles, setTerraformFiles] = useState<TerraformVirtualFile[]>(() =>
     createTerraformFilesFromGeneratedCode(context.diagram, "")
@@ -224,12 +225,6 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
   const [statusMessage, setStatusMessage] = useState("main.tf");
   const [hasLocalEdits, setHasLocalEdits] = useState(false);
   const [saveBanner, setSaveBanner] = useState<TerraformSaveBanner | null>(null);
-  const [terraformPreviewExplanation, setTerraformPreviewExplanation] =
-    useState<AiTerraformPreviewExplanationResult | null>(null);
-  const [terraformPreviewExplanationState, setTerraformPreviewExplanationState] =
-    useState<RequestState>("idle");
-  const [terraformPreviewExplanationMessage, setTerraformPreviewExplanationMessage] = useState("");
-  const [explainedTerraformPreviewKey, setExplainedTerraformPreviewKey] = useState("");
   const [codeScrollTop, setCodeScrollTop] = useState(0);
   const [codeScrollLeft, setCodeScrollLeft] = useState(0);
   const codeRequestIdRef = useRef(0);
@@ -241,7 +236,6 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
   const latestExternalSaveRequestIdRef = useRef(externalSaveRequestId);
   const lineNumberRef = useRef<HTMLOListElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const terraformPreviewExplanationRequestIdRef = useRef(0);
 
   const combinedTerraformCode = useMemo(() => combineTerraformFiles(terraformFiles), [terraformFiles]);
   const activeFileCode = useMemo(
@@ -307,11 +301,6 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
       }),
     [activeFileName, displayedTerraformCode, highlightedBlock, inspectedBlock]
   );
-  const activeTerraformPreviewExplanation =
-    terraformPreviewExplanation !== null &&
-    explainedTerraformPreviewKey === terraformPreviewExplanationScope.key
-      ? terraformPreviewExplanation
-      : null;
   const lineNumbers = useMemo(
     () => Array.from({ length: Math.max(1, displayedTerraformCode.split(/\r\n|\r|\n/).length) }, (_, index) => index + 1),
     [displayedTerraformCode]
@@ -357,45 +346,16 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
     }
   }, []);
 
-  async function explainTerraformPreviewScope(): Promise<void> {
-    if (!terraformPreviewExplanationScope.code || terraformPreviewExplanationState === "loading") {
+  function requestTerraformPreviewExplanation(): void {
+    if (!terraformPreviewExplanationScope.code) {
       return;
     }
 
-    const requestId = terraformPreviewExplanationRequestIdRef.current + 1;
-
-    terraformPreviewExplanationRequestIdRef.current = requestId;
-    setTerraformPreviewExplanationState("loading");
-    setTerraformPreviewExplanationMessage("");
-    setTerraformPreviewExplanation(null);
-    setExplainedTerraformPreviewKey("");
-
-    try {
-      const explanation = await runAiTerraformPreviewExplanation(terraformPreviewExplanationScope.code);
-
-      if (terraformPreviewExplanationRequestIdRef.current !== requestId) {
-        return;
-      }
-
-      setTerraformPreviewExplanation(explanation);
-      setExplainedTerraformPreviewKey(terraformPreviewExplanationScope.key);
-      setTerraformPreviewExplanationState("idle");
-    } catch (error) {
-      if (terraformPreviewExplanationRequestIdRef.current !== requestId) {
-        return;
-      }
-
-      setTerraformPreviewExplanationState("error");
-      setTerraformPreviewExplanationMessage(getApiErrorMessage(error, "Terraform Preview 설명 중 오류가 발생했습니다."));
-    }
-  }
-
-  function closeTerraformPreviewExplanation(): void {
-    terraformPreviewExplanationRequestIdRef.current += 1;
-    setTerraformPreviewExplanationState("idle");
-    setTerraformPreviewExplanationMessage("");
-    setTerraformPreviewExplanation(null);
-    setExplainedTerraformPreviewKey("");
+    onTerraformPreviewAiRequest({
+      id: Date.now(),
+      label: terraformPreviewExplanationScope.label,
+      terraformCode: terraformPreviewExplanationScope.code
+    });
   }
 
   const refreshTerraformCode = useCallback(
@@ -420,10 +380,6 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
         onDiagnosticsChange([]);
         setHasLocalEdits(false);
         setSaveBanner(null);
-        setTerraformPreviewExplanation(null);
-        setTerraformPreviewExplanationMessage("");
-        setTerraformPreviewExplanationState("idle");
-        setExplainedTerraformPreviewKey("");
         setStatusMessage("그래프 기준으로 동기화됨");
         latestDiagramFingerprintRef.current = diagramFingerprint;
         onDirtyChange(false);
@@ -809,10 +765,6 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
     onDiagnosticsChange([]);
     setHasLocalEdits(hasRemainingTerraformCode);
     setSaveBanner(hasRemainingTerraformCode ? { kind: "dirty" } : null);
-    setTerraformPreviewExplanation(null);
-    setTerraformPreviewExplanationMessage("");
-    setTerraformPreviewExplanationState("idle");
-    setExplainedTerraformPreviewKey("");
     setStatusMessage("다이어그램 삭제 반영됨");
     if (!hasRemainingTerraformCode) {
       latestDiagramFingerprintRef.current = currentDiagramFingerprint;
@@ -846,30 +798,6 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
   useEffect(() => {
     onDirtyChange(hasLocalEdits);
   }, [hasLocalEdits, onDirtyChange]);
-
-  useEffect(() => {
-    if (!terraformPreviewExplanationScope.code) {
-      setTerraformPreviewExplanation(null);
-      setTerraformPreviewExplanationMessage("");
-      setTerraformPreviewExplanationState("idle");
-      setExplainedTerraformPreviewKey("");
-      return;
-    }
-
-    if (
-      explainedTerraformPreviewKey &&
-      explainedTerraformPreviewKey !== terraformPreviewExplanationScope.key
-    ) {
-      setTerraformPreviewExplanation(null);
-      setTerraformPreviewExplanationMessage("");
-      setTerraformPreviewExplanationState("idle");
-      setExplainedTerraformPreviewKey("");
-    }
-  }, [
-    explainedTerraformPreviewKey,
-    terraformPreviewExplanationScope.code,
-    terraformPreviewExplanationScope.key
-  ]);
 
   useEffect(() => {
     if (!isVisible || isResourceCodeMode || !selectedBlock || !textareaRef.current) {
@@ -936,10 +864,6 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
 
     setHasLocalEdits(true);
     setSaveBanner({ kind: "dirty" });
-    setTerraformPreviewExplanation(null);
-    setTerraformPreviewExplanationMessage("");
-    setTerraformPreviewExplanationState("idle");
-    setExplainedTerraformPreviewKey("");
     setStatusMessage("수정 중");
   }
 
@@ -960,15 +884,14 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
         className={styles.terraformPreviewButton}
         disabled={
           !terraformPreviewExplanationScope.code ||
-          requestState === "loading" ||
-          terraformPreviewExplanationState === "loading"
+          requestState === "loading"
         }
-        onClick={() => void explainTerraformPreviewScope()}
+        onClick={requestTerraformPreviewExplanation}
         title={terraformPreviewExplanationScope.label}
         type="button"
       >
         <Sparkles size={14} aria-hidden="true" />
-        <span>{terraformPreviewExplanationState === "loading" ? "설명 중" : "Preview 설명"}</span>
+        <span>Preview 설명</span>
       </button>
     );
   }
@@ -1166,68 +1089,6 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
           </div>
         ) : null}
       </div>
-
-      {terraformPreviewExplanationState !== "idle" || activeTerraformPreviewExplanation ? (
-        <section className={styles.terraformPreviewExplanationPanel} aria-live="polite">
-          <div className={styles.terraformPreviewExplanationHeader}>
-            <div>
-              <strong>Terraform Preview 설명</strong>
-              <span>{terraformPreviewExplanationScope.label}</span>
-            </div>
-            <div className={styles.terraformPreviewExplanationActions}>
-              <button
-                disabled={
-                  !terraformPreviewExplanationScope.code ||
-                  requestState === "loading" ||
-                  terraformPreviewExplanationState === "loading"
-                }
-                onClick={() => void explainTerraformPreviewScope()}
-                type="button"
-              >
-                <Sparkles size={14} aria-hidden="true" />
-                {terraformPreviewExplanationState === "loading" ? "설명 중" : "다시 설명"}
-              </button>
-              <button
-                aria-label="Terraform Preview 설명 닫기"
-                className={styles.terraformPreviewExplanationCloseButton}
-                onClick={closeTerraformPreviewExplanation}
-                title="닫기"
-                type="button"
-              >
-                <X size={14} aria-hidden="true" />
-              </button>
-            </div>
-          </div>
-          {terraformPreviewExplanationState === "loading" ? (
-            <p className={styles.terraformPreviewExplanationNotice}>코드를 해석하는 중입니다.</p>
-          ) : null}
-          {terraformPreviewExplanationState === "error" ? (
-            <p className={styles.terraformPreviewExplanationError} role="alert">
-              {terraformPreviewExplanationMessage}
-            </p>
-          ) : null}
-          {activeTerraformPreviewExplanation ? (
-            <div className={styles.terraformPreviewExplanationResult}>
-              <p>{activeTerraformPreviewExplanation.summary}</p>
-              {activeTerraformPreviewExplanation.detectedResources.length > 0 ? (
-                <ul>
-                  {activeTerraformPreviewExplanation.detectedResources.slice(0, 3).map((resource) => (
-                    <li key={`${resource.terraformType}-${resource.label}`}>
-                      <strong>{resource.label}</strong>
-                      <span>{resource.explanation}</span>
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-              {activeTerraformPreviewExplanation.findings.length > 0 ? (
-                <div className={styles.terraformPreviewExplanationStats}>
-                  <span>{activeTerraformPreviewExplanation.findings.length} Findings</span>
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-        </section>
-      ) : null}
 
     </div>
   );

@@ -8,6 +8,7 @@ import { WorkspaceAiChatDock } from "./WorkspaceAiChatDock";
 import { WorkspaceRightPanel } from "./WorkspaceRightPanel";
 import type {
   TerraformIssueAiRequest,
+  TerraformPreviewAiRequest,
   TerraformSafeFixApplyRequest,
   TerraformSafeFixApplyResult
 } from "./workspace-terraform-ai";
@@ -81,6 +82,8 @@ export function ProjectWorkspaceDraftManager({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [terraformIssueAiRequest, setTerraformIssueAiRequest] =
     useState<TerraformIssueAiRequest | null>(null);
+  const [terraformPreviewAiRequest, setTerraformPreviewAiRequest] =
+    useState<TerraformPreviewAiRequest | null>(null);
   const [terraformSafeFixApplyRequest, setTerraformSafeFixApplyRequest] =
     useState<TerraformSafeFixApplyRequest | null>(null);
   const [terraformSafeFixApplyResult, setTerraformSafeFixApplyResult] =
@@ -432,6 +435,7 @@ export function ProjectWorkspaceDraftManager({
             onApplyTerraformIssueFix={requestTerraformSafeFixApply}
             projectId={projectId}
             terraformIssueRequest={terraformIssueAiRequest}
+            terraformPreviewRequest={terraformPreviewAiRequest}
             terraformSafeFixApplyResult={terraformSafeFixApplyResult}
           />
         )}
@@ -442,6 +446,7 @@ export function ProjectWorkspaceDraftManager({
           <WorkspaceRightPanel
             context={context}
             onTerraformIssueAiRequest={requestTerraformIssueAi}
+            onTerraformPreviewAiRequest={setTerraformPreviewAiRequest}
             onTerraformSafeFixApplyResult={setTerraformSafeFixApplyResult}
             projectId={projectId}
             projectName={projectName}

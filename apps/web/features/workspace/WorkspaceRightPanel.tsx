@@ -41,6 +41,7 @@ import {
 } from "./terraform-issues-state";
 import type {
   TerraformIssueAiRequest,
+  TerraformPreviewAiRequest,
   TerraformSafeFixApplyRequest,
   TerraformSafeFixApplyResult
 } from "./workspace-terraform-ai";
@@ -50,6 +51,7 @@ import styles from "./workspace.module.css";
 export type WorkspaceRightPanelProps = {
   readonly context: DiagramEditorPanelContext;
   readonly onTerraformIssueAiRequest: (request: TerraformIssueAiRequest) => void;
+  readonly onTerraformPreviewAiRequest: (request: TerraformPreviewAiRequest) => void;
   readonly onTerraformSafeFixApplyResult: (result: TerraformSafeFixApplyResult) => void;
   readonly projectId: string;
   readonly projectName: string;
@@ -65,6 +67,7 @@ type PendingTerraformLeaveAction =
 export function WorkspaceRightPanel({
   context,
   onTerraformIssueAiRequest,
+  onTerraformPreviewAiRequest,
   onTerraformSafeFixApplyResult,
   projectId,
   projectName,
@@ -577,6 +580,7 @@ export function WorkspaceRightPanel({
             setResourceWorkspaceView("settings");
             setActiveView("resource");
           }}
+          onTerraformPreviewAiRequest={onTerraformPreviewAiRequest}
         />
       </div>
       <div className={styles.rightPanelView} hidden={activeView !== "issues"}>

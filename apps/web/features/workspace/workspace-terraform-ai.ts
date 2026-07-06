@@ -12,6 +12,12 @@ export type TerraformIssueAiRequest = {
   readonly terraformCode: string;
 };
 
+export type TerraformPreviewAiRequest = {
+  readonly id: number;
+  readonly label: string;
+  readonly terraformCode: string;
+};
+
 export type TerraformSafeFixApplyRequest = {
   readonly id: number;
   readonly codePreview?: TerraformIssueCodePreview | undefined;
@@ -374,4 +380,3 @@ function getAmazonQFallbackReasonLabel(reason: string | undefined): string {
 
   return "fallback 사유 미상";
 }
-
