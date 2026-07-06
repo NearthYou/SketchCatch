@@ -266,12 +266,13 @@ const REQUIRED_ARCHITECTURE_QUESTIONS: readonly RequiredArchitectureQuestion[] =
     id: "website_type",
     question: "어떤 종류의 웹사이트인가요?",
     suggestions: [
-      "정적 사이트 (블로그, 포트폴리오, 회사 소개)",
-      "동적 웹 애플리케이션 (쇼핑몰, SNS, 게시판)",
-      "SPA (Single Page Application)"
+      "정적 사이트 (블로그, 포트폴리오, 회사 소개페이지)",
+      "동적 웹 애플리케이션 (쇼핑몰, 게시판, 회원 시스템)",
+      "SPA (Single Page Application) (React/Vue 등)",
+      "API 서버 (모바일 앱 백엔드)"
     ],
     isAnswered: (prompt) =>
-      /(정적|블로그|포트폴리오|회사\s*소개|dynamic|동적|쇼핑몰|sns|게시판|spa|single\s*page|react|vue|angular)/i.test(
+      /(정적|블로그|포트폴리오|회사\s*소개|dynamic|동적|쇼핑몰|게시판|회원\s*시스템|spa|single\s*page|api\s*서버)/i.test(
         prompt
       )
   },
@@ -279,77 +280,175 @@ const REQUIRED_ARCHITECTURE_QUESTIONS: readonly RequiredArchitectureQuestion[] =
     id: "traffic",
     question: "예상 트래픽 규모는?",
     suggestions: [
-      "일일 방문자 수 (100명 미만 / 1,000명 / 10,000명 이상)",
-      "동시 접속자 수 예상치"
+      "소규모 (일 100명 미만, 동시 10명 미만)",
+      "중간 규모 (일 1,000명, 동시 50명)",
+      "대규모 (일 10,000명 이상, 동시 500명 이상)",
+      "급변동 (평상시 적지만 이벤트 시 급증)"
     ],
-    isAnswered: (prompt) => /(트래픽|방문자|동시\s*접속|daily|visitor|concurrent|100명|1,000|1000|10,000|10000)/i.test(prompt)
+    isAnswered: (prompt) =>
+      /(예상\s*트래픽|트래픽|소규모|중간\s*규모|대규모|급변동|일\s*100명|일\s*1,000명|일\s*1000명|일\s*10,000명|일\s*10000명|동시\s*10명|동시\s*50명|동시\s*500명|daily\s*traffic|concurrent\s*users?)/i.test(
+        prompt
+      )
   },
   {
     id: "database",
-    question: "데이터베이스가 필요한가요? 필요하다면 어떤 데이터를 저장하나요?",
+    question: "데이터베이스가 필요한가요?",
     suggestions: [
       "필요 없음 (정적 콘텐츠만)",
-      "필요함 → 어떤 데이터를 저장하나요?"
+      "간단한 데이터 (사용자 정보, 게시글 등 < 10GB)",
+      "중간 규모 데이터 (10GB ~ 100GB)",
+      "대용량 데이터 (100GB 이상, 복잡한 쿼리)"
     ],
-    isAnswered: (prompt) => /(데이터베이스|database|\bdb\b|rds|postgres|mysql|dynamodb|저장|필요\s*없음|필요\s*없다)/i.test(prompt)
+    isAnswered: (prompt) =>
+      /(데이터베이스|database|\bdb\b|rds|postgres|mysql|dynamodb|정적\s*콘텐츠|사용자\s*정보|게시글|10gb|100gb|복잡한\s*쿼리)/i.test(
+        prompt
+      )
   },
   {
     id: "frontend",
     question: "프론트엔드 기술은?",
     suggestions: [
-      "HTML/CSS/JS만",
-      "React/Vue/Angular 등 프레임워크",
-      "서버사이드 렌더링 필요 여부"
+      "HTML/CSS/JS만 (순수 웹)",
+      "React/Vue/Angular (SPA 프레임워크)",
+      "Next.js/Nuxt.js (SSR 필요)",
+      "모바일 앱 (웹뷰 또는 네이티브)"
     ],
-    isAnswered: (prompt) => /(프론트|frontend|html|css|javascript|\bjs\b|react|vue|angular|next\.?js|ssr|서버사이드)/i.test(prompt)
+    isAnswered: (prompt) =>
+      /(프론트엔드|프론트|frontend|html|css|javascript|\bjs\b|react|vue|angular|next\.?js|nuxt\.?js|ssr|순수\s*웹|웹뷰|네이티브)/i.test(
+        prompt
+      )
   },
   {
     id: "backend",
-    question: "백엔드가 필요한가요? 필요하다면 Node.js, Python, Java 같은 선호 언어가 있나요?",
+    question: "백엔드가 필요한가요?",
     suggestions: [
-      "필요 없음",
-      "필요함 → Node.js/Python/Java 등 어떤 언어?"
+      "필요 없음 (정적 사이트)",
+      "간단한 API (Node.js, Python Flask 등)",
+      "복잡한 비즈니스 로직 (Spring Boot, Django 등)",
+      "마이크로서비스 (여러 서비스 분리)"
     ],
-    isAnswered: (prompt) => /(백엔드|backend|api|node|python|java|spring|서버|lambda|serverless)/i.test(prompt)
+    isAnswered: (prompt) =>
+      /(백엔드|backend|간단한\s*api|node\.?js|python|flask|복잡한\s*비즈니스|spring\s*boot|django|마이크로서비스|여러\s*서비스)/i.test(
+        prompt
+      )
   },
   {
     id: "region",
-    question: "주요 사용자 지역은 어디인가요?",
-    suggestions: ["한국만", "아시아 전체", "글로벌"],
-    isAnswered: (prompt) => /(한국|서울|아시아|글로벌|global|korea|asia|worldwide|전\s*세계)/i.test(prompt)
+    question: "주요 사용자 지역은?",
+    suggestions: [
+      "한국만 (서울 리전)",
+      "아시아 태평양 (도쿄, 싱가포르 포함)",
+      "글로벌 (미국, 유럽 포함)",
+      "특정 지역 (중국, 일본 등)"
+    ],
+    isAnswered: (prompt) =>
+      /(주요\s*사용자\s*지역|한국|서울|아시아\s*태평양|도쿄|싱가포르|글로벌|미국|유럽|중국|일본|global|korea|asia|worldwide)/i.test(
+        prompt
+      )
   },
   {
     id: "budget",
-    question: "월 예산 범위는 어느 정도인가요?",
-    suggestions: ["월 10만원 미만", "월 10-50만원", "월 50만원 이상"],
-    isAnswered: (prompt) => /(예산|비용|월\s*\d|만원|budget|cost|krw|usd|10만|50만)/i.test(prompt)
+    question: "월 예산 범위는?",
+    suggestions: [
+      "10만원 미만 (최소 비용)",
+      "10-50만원 (적당한 성능)",
+      "50-200만원 (고성능)",
+      "200만원 이상 (엔터프라이즈급)"
+    ],
+    isAnswered: (prompt) => /(예산|비용|월\s*\d|만원|최소\s*비용|적당한\s*성능|고성능|엔터프라이즈|budget|cost|krw|usd)/i.test(prompt)
   },
   {
     id: "ssl",
-    question: "SSL 인증서 필요한가요? (HTTPS)",
-    suggestions: ["필요", "필요 없음", "모르겠음"],
-    isAnswered: (prompt) => /(ssl|https|인증서|도메인|domain)/i.test(prompt)
+    question: "SSL 인증서(HTTPS)가 필요한가요?",
+    suggestions: [
+      "필수 (보안 중요)",
+      "선택사항 (HTTP도 괜찮음)",
+      "모르겠음 (추천해주세요)"
+    ],
+    isAnswered: (prompt) => /(ssl|https|인증서|보안\s*중요|http도\s*괜찮음|추천해주세요|domain|도메인)/i.test(prompt)
   },
   {
     id: "file_upload",
     question: "파일 업로드 기능이 있나요? (이미지, 문서 등)",
-    suggestions: ["있음", "없음", "모르겠음"],
-    isAnswered: (prompt) => /(파일|이미지|문서|사진|업로드|upload|image|document|file)/i.test(prompt)
+    suggestions: [
+      "없음 (텍스트만)",
+      "이미지만 (프로필, 게시글 이미지)",
+      "다양한 파일 (문서, 동영상 포함)",
+      "대용량 파일 (100MB 이상)"
+    ],
+    isAnswered: (prompt) =>
+      /(파일\s*업로드|텍스트만|이미지만|프로필|게시글\s*이미지|다양한\s*파일|문서|동영상|대용량\s*파일|100mb|upload|image|document|file)/i.test(
+        prompt
+      )
   },
   {
     id: "realtime",
     question: "실시간 기능이 필요한가요? (채팅, 알림 등)",
-    suggestions: ["필요", "필요 없음", "모르겠음"],
-    isAnswered: (prompt) => /(실시간|채팅|알림|realtime|real-time|chat|notification|websocket)/i.test(prompt)
+    suggestions: [
+      "필요 없음",
+      "실시간 채팅",
+      "실시간 알림",
+      "실시간 데이터 업데이트 (주식, 게임 등)"
+    ],
+    isAnswered: (prompt) => /(실시간|채팅|알림|데이터\s*업데이트|주식|게임|realtime|real-time|chat|notification|websocket)/i.test(prompt)
   },
   {
     id: "management_preference",
     question: "관리 복잡도 선호도는?",
     suggestions: [
-      "완전 관리형 (서버리스)",
-      "직접 서버 관리"
+      "완전 관리형 (서버리스, 관리 최소화)",
+      "반관리형 (일부 서버 관리)",
+      "직접 관리 (서버 직접 운영)",
+      "모르겠음 (추천해주세요)"
     ],
-    isAnswered: (prompt) => /(관리형|서버리스|serverless|직접\s*서버|서버\s*관리|운영\s*관리|managed|비용\s*우선)/i.test(prompt)
+    isAnswered: (prompt) => /(관리\s*복잡도|완전\s*관리형|반관리형|직접\s*관리|서버리스|serverless|서버\s*직접\s*운영|managed|추천해주세요)/i.test(prompt)
+  },
+  {
+    id: "page_loading_time",
+    question: "페이지 로딩 시간 목표는?",
+    suggestions: [
+      "1초 이내 (매우 빠름)",
+      "3초 이내 (적당함)",
+      "5초 이내 (느려도 괜찮음)",
+      "상관없음"
+    ],
+    isAnswered: (prompt) => /(페이지\s*로딩|로딩\s*시간|1초\s*이내|3초\s*이내|5초\s*이내|느려도\s*괜찮음|상관없음|loading\s*time)/i.test(prompt)
+  },
+  {
+    id: "website_size",
+    question: "전체 웹사이트 크기는?",
+    suggestions: [
+      "10MB 미만 (간단한 사이트)",
+      "10MB-100MB (일반적인 사이트)",
+      "100MB-1GB (이미지 많은 사이트)",
+      "1GB 이상 (동영상 포함)"
+    ],
+    isAnswered: (prompt) =>
+      /(전체\s*웹사이트\s*크기|사이트\s*크기|10mb\s*미만|10mb-100mb|100mb-1gb|1gb\s*이상|간단한\s*사이트|일반적인\s*사이트|이미지\s*많은\s*사이트|동영상\s*포함)/i.test(
+        prompt
+      )
+  },
+  {
+    id: "traffic_pattern",
+    question: "트래픽 패턴은?",
+    suggestions: [
+      "일정함 (하루 종일 비슷)",
+      "시간대별 차이 (낮에 많음)",
+      "이벤트성 급증 (특정 시기에만)",
+      "예측 불가"
+    ],
+    isAnswered: (prompt) => /(트래픽\s*패턴|일정함|하루\s*종일\s*비슷|시간대별\s*차이|낮에\s*많음|이벤트성\s*급증|특정\s*시기|예측\s*불가)/i.test(prompt)
+  },
+  {
+    id: "downtime_tolerance",
+    question: "서비스 중단 허용 시간은?",
+    suggestions: [
+      "절대 안됨 (99.99% 가용성)",
+      "월 1시간 이내 (99.9% 가용성)",
+      "월 8시간 이내 (99% 가용성)",
+      "상관없음"
+    ],
+    isAnswered: (prompt) => /(서비스\s*중단|중단\s*허용|절대\s*안됨|99\.99%|월\s*1시간|99\.9%|월\s*8시간|99%\s*가용성|상관없음)/i.test(prompt)
   }
 ];
 

@@ -1,3 +1,23 @@
+# 2026-07-07 - Amazon Q 웹사이트 배포 질문 세트 정렬
+
+- Goal: 웹사이트 배포 다이어그램 생성 전 Amazon Q로 넘길 필수 사전 질문을 사용자 제공 15개 질문과 선택지 그대로 순차 표시하게 한다.
+- Completed:
+  - API clarification 질문 세트를 1순위 7개, 2순위 4개, 3순위 4개로 확장했다.
+  - 각 질문의 선택지를 A/B/C/D 접두어 없이 사용자 제공 문구 그대로 반영했다.
+  - 기존 초보자 친화형 사전 질문 흐름과 프롬프트 가이드 칩 제거 상태를 유지했다.
+  - 질문 순서 테스트가 15개 질문과 각 선택지 배열까지 검증하도록 보강했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --dir apps/api exec tsx --test src/services/aiArchitectureDrafts.test.ts` - passed, 3 tests
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-ai-chat-routing.test.ts features/workspace/workspace-ai-guardrail-warning.test.ts features/workspace/workspace-right-panel-layout.test.ts` - passed, 68 tests
+  - `pnpm harness:check` - passed after edits
+  - `git diff --check` - passed, with line-ending warnings only
+  - `pnpm lint` - passed, with non-fatal Turbo cache rename warnings
+  - `pnpm typecheck` - passed, with non-fatal Turbo cache rename warnings
+  - `pnpm build` - first sandbox run failed on `.next` unlink `EPERM`; rerun with elevated permissions passed
+- Known risks:
+  - 실제 브라우저 클릭 smoke는 수행하지 않았다. API/web 단위 테스트와 전체 lint/typecheck/build로 검증했다.
+
 # 2026-07-05 - AI 초안 네트워크 리소스 가지치기와 레이아웃 겹침 보정
 
 - Goal: 예약/로그인/게시판 같은 단일 EC2 백엔드 초안에서 실제 workload가 없는 public subnet, 두 번째 app subnet, route/IGW 노드를 만들지 않고, subnet/security group/database 카드가 겹치지 않게 한다.
@@ -3341,3 +3361,21 @@
 - Known risks:
   - 실제 Amazon Q Business, AWS apply/destroy, GitHub API, Git/CI/CD handoff 실행은 수행하지 않았다.
   - Browser click smoke는 수행하지 않았고, merge 안정성은 lint/typecheck/build와 harness로 확인했다.
+### 2026-07-07 - Amazon Q 질문 흐름 단순화
+
+- Goal: Workspace AI의 초보자 친화형 사전 질문 흐름과 예시 프롬프트 칩 UI를 제거하고, 부족 정보 질문은 사용자가 제공한 Amazon Q 필수 질문 리스트 기준으로만 나오게 한다.
+- Completed:
+  - `workspace-ai-clarification` 사전 질문 모듈과 전용 테스트를 제거했다.
+  - Workspace AI chat dock과 오른쪽 AI panel에서 "그냥 이렇게 시작해도 돼요" 예시 칩 영역을 제거했다.
+  - chat routing에서 `draft_clarification` 분기를 제거해 draft 요청이 API/Amazon Q clarification 응답으로 바로 이어지게 했다.
+  - API Architecture Draft clarification 질문 문구를 사용자가 제공한 리스트 문구에 맞췄다.
+- Verification run:
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --dir apps/api exec tsx --test src/services/aiArchitectureDrafts.test.ts` - passed, 3 tests.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-ai-chat-routing.test.ts features/workspace/workspace-ai-guardrail-warning.test.ts features/workspace/workspace-right-panel-layout.test.ts` - passed, 68 tests.
+  - `pnpm harness:check` - passed before and after edits.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `git diff --check` - passed.
+  - `pnpm build` - sandbox `.next` unlink EPERM 후 elevated 재시도 통과.
+- Known risks:
+  - 실제 Amazon Q Business 호출과 브라우저 클릭 smoke는 수행하지 않았다.

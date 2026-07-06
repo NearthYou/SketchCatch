@@ -35,123 +35,177 @@ test("createAmazonQArchitectureDraftResponse asks the next required website ques
   assert.equal(response.status, "needs_clarification");
   assert.equal(response.question, "예상 트래픽 규모는?");
   assert.deepEqual(response.suggestions, [
-    "일일 방문자 수 (100명 미만 / 1,000명 / 10,000명 이상)",
-    "동시 접속자 수 예상치"
+    "소규모 (일 100명 미만, 동시 10명 미만)",
+    "중간 규모 (일 1,000명, 동시 50명)",
+    "대규모 (일 10,000명 이상, 동시 500명 이상)",
+    "급변동 (평상시 적지만 이벤트 시 급증)"
   ]);
 });
 
 test("createAmazonQArchitectureDraftResponse asks clarification questions in the provided priority order", async () => {
   const provider = createFakeAmazonQProvider(() => "{}");
 
-  const promptsAndQuestions = [
+  const answeredRequirements = [
+    "정적 사이트 (블로그, 포트폴리오, 회사 소개페이지)입니다.",
+    "예상 트래픽 규모는 중간 규모 (일 1,000명, 동시 50명)입니다.",
+    "데이터베이스는 필요 없음 (정적 콘텐츠만)입니다.",
+    "프론트엔드 기술은 HTML/CSS/JS만 (순수 웹)입니다.",
+    "백엔드는 간단한 API (Node.js, Python Flask 등)입니다.",
+    "주요 사용자 지역은 한국만 (서울 리전)입니다.",
+    "월 예산 범위는 10만원 미만 (최소 비용)입니다.",
+    "SSL 인증서(HTTPS)는 필수 (보안 중요)입니다.",
+    "파일 업로드 기능은 없음 (텍스트만)입니다.",
+    "실시간 기능은 필요 없음입니다.",
+    "관리 복잡도 선호도는 완전 관리형 (서버리스, 관리 최소화)입니다.",
+    "페이지 로딩 시간 목표는 3초 이내 (적당함)입니다.",
+    "전체 웹사이트 크기는 10MB 미만 (간단한 사이트)입니다.",
+    "트래픽 패턴은 일정함 (하루 종일 비슷)입니다."
+  ] as const;
+
+  const orderedClarifications = [
     {
-      prompt: "웹사이트를 만들고 싶어요.",
-      question: "어떤 종류의 웹사이트인가요?"
+      question: "어떤 종류의 웹사이트인가요?",
+      suggestions: [
+        "정적 사이트 (블로그, 포트폴리오, 회사 소개페이지)",
+        "동적 웹 애플리케이션 (쇼핑몰, 게시판, 회원 시스템)",
+        "SPA (Single Page Application) (React/Vue 등)",
+        "API 서버 (모바일 앱 백엔드)"
+      ]
     },
     {
-      prompt: "정적 사이트 (블로그, 포트폴리오, 회사 소개)입니다.",
-      question: "예상 트래픽 규모는?"
+      question: "예상 트래픽 규모는?",
+      suggestions: [
+        "소규모 (일 100명 미만, 동시 10명 미만)",
+        "중간 규모 (일 1,000명, 동시 50명)",
+        "대규모 (일 10,000명 이상, 동시 500명 이상)",
+        "급변동 (평상시 적지만 이벤트 시 급증)"
+      ]
     },
     {
-      prompt: [
-        "정적 사이트 (블로그, 포트폴리오, 회사 소개)입니다.",
-        "예상 트래픽은 일일 방문자 수 1,000명, 동시 접속자 수 50명입니다."
-      ].join("\n"),
-      question: "데이터베이스가 필요한가요? 필요하다면 어떤 데이터를 저장하나요?"
+      question: "데이터베이스가 필요한가요?",
+      suggestions: [
+        "필요 없음 (정적 콘텐츠만)",
+        "간단한 데이터 (사용자 정보, 게시글 등 < 10GB)",
+        "중간 규모 데이터 (10GB ~ 100GB)",
+        "대용량 데이터 (100GB 이상, 복잡한 쿼리)"
+      ]
     },
     {
-      prompt: [
-        "정적 사이트 (블로그, 포트폴리오, 회사 소개)입니다.",
-        "예상 트래픽은 일일 방문자 수 1,000명, 동시 접속자 수 50명입니다.",
-        "데이터베이스는 필요 없음 (정적 콘텐츠만)."
-      ].join("\n"),
-      question: "프론트엔드 기술은?"
+      question: "프론트엔드 기술은?",
+      suggestions: [
+        "HTML/CSS/JS만 (순수 웹)",
+        "React/Vue/Angular (SPA 프레임워크)",
+        "Next.js/Nuxt.js (SSR 필요)",
+        "모바일 앱 (웹뷰 또는 네이티브)"
+      ]
     },
     {
-      prompt: [
-        "정적 사이트 (블로그, 포트폴리오, 회사 소개)입니다.",
-        "예상 트래픽은 일일 방문자 수 1,000명, 동시 접속자 수 50명입니다.",
-        "데이터베이스는 필요 없음 (정적 콘텐츠만).",
-        "프론트엔드 기술은 HTML/CSS/JS만 사용합니다."
-      ].join("\n"),
-      question: "백엔드가 필요한가요? 필요하다면 Node.js, Python, Java 같은 선호 언어가 있나요?"
+      question: "백엔드가 필요한가요?",
+      suggestions: [
+        "필요 없음 (정적 사이트)",
+        "간단한 API (Node.js, Python Flask 등)",
+        "복잡한 비즈니스 로직 (Spring Boot, Django 등)",
+        "마이크로서비스 (여러 서비스 분리)"
+      ]
     },
     {
-      prompt: [
-        "정적 사이트 (블로그, 포트폴리오, 회사 소개)입니다.",
-        "예상 트래픽은 일일 방문자 수 1,000명, 동시 접속자 수 50명입니다.",
-        "데이터베이스는 필요 없음 (정적 콘텐츠만).",
-        "프론트엔드 기술은 HTML/CSS/JS만 사용합니다.",
-        "백엔드는 필요 없음."
-      ].join("\n"),
-      question: "주요 사용자 지역은 어디인가요?"
+      question: "주요 사용자 지역은?",
+      suggestions: [
+        "한국만 (서울 리전)",
+        "아시아 태평양 (도쿄, 싱가포르 포함)",
+        "글로벌 (미국, 유럽 포함)",
+        "특정 지역 (중국, 일본 등)"
+      ]
     },
     {
-      prompt: [
-        "정적 사이트 (블로그, 포트폴리오, 회사 소개)입니다.",
-        "예상 트래픽은 일일 방문자 수 1,000명, 동시 접속자 수 50명입니다.",
-        "데이터베이스는 필요 없음 (정적 콘텐츠만).",
-        "프론트엔드 기술은 HTML/CSS/JS만 사용합니다.",
-        "백엔드는 필요 없음.",
-        "주요 사용자 지역은 한국만입니다."
-      ].join("\n"),
-      question: "월 예산 범위는 어느 정도인가요?"
+      question: "월 예산 범위는?",
+      suggestions: [
+        "10만원 미만 (최소 비용)",
+        "10-50만원 (적당한 성능)",
+        "50-200만원 (고성능)",
+        "200만원 이상 (엔터프라이즈급)"
+      ]
     },
     {
-      prompt: [
-        "정적 사이트 (블로그, 포트폴리오, 회사 소개)입니다.",
-        "예상 트래픽은 일일 방문자 수 1,000명, 동시 접속자 수 50명입니다.",
-        "데이터베이스는 필요 없음 (정적 콘텐츠만).",
-        "프론트엔드 기술은 HTML/CSS/JS만 사용합니다.",
-        "백엔드는 필요 없음.",
-        "주요 사용자 지역은 한국만입니다.",
-        "예산은 월 10만원 미만입니다."
-      ].join("\n"),
-      question: "SSL 인증서 필요한가요? (HTTPS)"
+      question: "SSL 인증서(HTTPS)가 필요한가요?",
+      suggestions: [
+        "필수 (보안 중요)",
+        "선택사항 (HTTP도 괜찮음)",
+        "모르겠음 (추천해주세요)"
+      ]
     },
     {
-      prompt: [
-        "정적 사이트 (블로그, 포트폴리오, 회사 소개)입니다.",
-        "예상 트래픽은 일일 방문자 수 1,000명, 동시 접속자 수 50명입니다.",
-        "데이터베이스는 필요 없음 (정적 콘텐츠만).",
-        "프론트엔드 기술은 HTML/CSS/JS만 사용합니다.",
-        "백엔드는 필요 없음.",
-        "주요 사용자 지역은 한국만입니다.",
-        "예산은 월 10만원 미만입니다.",
-        "SSL 인증서 필요한가요? (HTTPS) 필요."
-      ].join("\n"),
-      question: "파일 업로드 기능이 있나요? (이미지, 문서 등)"
+      question: "파일 업로드 기능이 있나요? (이미지, 문서 등)",
+      suggestions: [
+        "없음 (텍스트만)",
+        "이미지만 (프로필, 게시글 이미지)",
+        "다양한 파일 (문서, 동영상 포함)",
+        "대용량 파일 (100MB 이상)"
+      ]
     },
     {
-      prompt: [
-        "정적 사이트 (블로그, 포트폴리오, 회사 소개)입니다.",
-        "예상 트래픽은 일일 방문자 수 1,000명, 동시 접속자 수 50명입니다.",
-        "데이터베이스는 필요 없음 (정적 콘텐츠만).",
-        "프론트엔드 기술은 HTML/CSS/JS만 사용합니다.",
-        "백엔드는 필요 없음.",
-        "주요 사용자 지역은 한국만입니다.",
-        "예산은 월 10만원 미만입니다.",
-        "SSL 인증서 필요한가요? (HTTPS) 필요.",
-        "파일 업로드 기능이 있나요? (이미지, 문서 등) 없음."
-      ].join("\n"),
-      question: "실시간 기능이 필요한가요? (채팅, 알림 등)"
+      question: "실시간 기능이 필요한가요? (채팅, 알림 등)",
+      suggestions: [
+        "필요 없음",
+        "실시간 채팅",
+        "실시간 알림",
+        "실시간 데이터 업데이트 (주식, 게임 등)"
+      ]
     },
     {
-      prompt: [
-        "정적 사이트 (블로그, 포트폴리오, 회사 소개)입니다.",
-        "예상 트래픽은 일일 방문자 수 1,000명, 동시 접속자 수 50명입니다.",
-        "데이터베이스는 필요 없음 (정적 콘텐츠만).",
-        "프론트엔드 기술은 HTML/CSS/JS만 사용합니다.",
-        "백엔드는 필요 없음.",
-        "주요 사용자 지역은 한국만입니다.",
-        "예산은 월 10만원 미만입니다.",
-        "SSL 인증서 필요한가요? (HTTPS) 필요.",
-        "파일 업로드 기능이 있나요? (이미지, 문서 등) 없음.",
-        "실시간 기능이 필요한가요? (채팅, 알림 등) 필요 없음."
-      ].join("\n"),
-      question: "관리 복잡도 선호도는?"
+      question: "관리 복잡도 선호도는?",
+      suggestions: [
+        "완전 관리형 (서버리스, 관리 최소화)",
+        "반관리형 (일부 서버 관리)",
+        "직접 관리 (서버 직접 운영)",
+        "모르겠음 (추천해주세요)"
+      ]
+    },
+    {
+      question: "페이지 로딩 시간 목표는?",
+      suggestions: [
+        "1초 이내 (매우 빠름)",
+        "3초 이내 (적당함)",
+        "5초 이내 (느려도 괜찮음)",
+        "상관없음"
+      ]
+    },
+    {
+      question: "전체 웹사이트 크기는?",
+      suggestions: [
+        "10MB 미만 (간단한 사이트)",
+        "10MB-100MB (일반적인 사이트)",
+        "100MB-1GB (이미지 많은 사이트)",
+        "1GB 이상 (동영상 포함)"
+      ]
+    },
+    {
+      question: "트래픽 패턴은?",
+      suggestions: [
+        "일정함 (하루 종일 비슷)",
+        "시간대별 차이 (낮에 많음)",
+        "이벤트성 급증 (특정 시기에만)",
+        "예측 불가"
+      ]
+    },
+    {
+      question: "서비스 중단 허용 시간은?",
+      suggestions: [
+        "절대 안됨 (99.99% 가용성)",
+        "월 1시간 이내 (99.9% 가용성)",
+        "월 8시간 이내 (99% 가용성)",
+        "상관없음"
+      ]
     }
   ] as const;
+
+  const promptsAndQuestions = orderedClarifications.map((clarification, answeredCount) => ({
+    prompt:
+      answeredCount === 0
+        ? "웹사이트를 만들고 싶어요."
+        : answeredRequirements.slice(0, answeredCount).join("\n"),
+    ...clarification
+  }));
 
   for (const scenario of promptsAndQuestions) {
     const response = await createAmazonQArchitectureDraftResponse(
@@ -169,6 +223,7 @@ test("createAmazonQArchitectureDraftResponse asks clarification questions in the
     }
 
     assert.equal(response.question, scenario.question);
+    assert.deepEqual(response.suggestions, scenario.suggestions);
   }
 });
 
@@ -220,17 +275,21 @@ test("createAmazonQArchitectureDraftResponse returns the Amazon Q architecture p
   });
 
   const prompt = [
-    "정적 회사 소개 사이트입니다.",
-    "트래픽은 일일 1,000명, 동시 50명입니다.",
-    "데이터베이스는 필요 없음.",
-    "프론트엔드는 HTML/CSS/JS이고 SSR은 필요 없음.",
-    "백엔드는 필요 없음.",
-    "주요 사용자는 한국입니다.",
-    "예산은 월 10만원 미만입니다.",
-    "HTTPS는 필요합니다.",
-    "파일 업로드는 없습니다.",
-    "실시간 기능은 없습니다.",
-    "운영은 완전 관리형/서버리스 선호입니다."
+    "정적 사이트 (블로그, 포트폴리오, 회사 소개페이지)입니다.",
+    "예상 트래픽 규모는 중간 규모 (일 1,000명, 동시 50명)입니다.",
+    "데이터베이스는 필요 없음 (정적 콘텐츠만)입니다.",
+    "프론트엔드 기술은 HTML/CSS/JS만 (순수 웹)입니다.",
+    "백엔드는 간단한 API (Node.js, Python Flask 등)입니다.",
+    "주요 사용자 지역은 한국만 (서울 리전)입니다.",
+    "월 예산 범위는 10만원 미만 (최소 비용)입니다.",
+    "SSL 인증서(HTTPS)는 필수 (보안 중요)입니다.",
+    "파일 업로드 기능은 없음 (텍스트만)입니다.",
+    "실시간 기능은 필요 없음입니다.",
+    "관리 복잡도 선호도는 완전 관리형 (서버리스, 관리 최소화)입니다.",
+    "페이지 로딩 시간 목표는 3초 이내 (적당함)입니다.",
+    "전체 웹사이트 크기는 10MB 미만 (간단한 사이트)입니다.",
+    "트래픽 패턴은 일정함 (하루 종일 비슷)입니다.",
+    "서비스 중단 허용 시간은 월 1시간 이내 (99.9% 가용성)입니다."
   ].join("\n");
   const response = await createAmazonQArchitectureDraftResponse(
     {
@@ -243,7 +302,7 @@ test("createAmazonQArchitectureDraftResponse returns the Amazon Q architecture p
   );
 
   assert.ok(!("status" in response));
-  assert.match(requestedPrompt, /정적 회사 소개 사이트/);
+  assert.match(requestedPrompt, /정적 사이트/);
   assert.equal(response.metadata.source, "amazon_q");
   assert.equal(response.title, "Cost Optimized Static Site");
   assert.equal(response.architectureJson.nodes[0]?.type, "S3");
