@@ -2695,3 +2695,22 @@
   - `pnpm harness:check` - passed after edits.
 - Known risks:
   - 실제 브라우저 수동 클릭 검증은 수행하지 않았고, source/unit regression, lint/typecheck/build로 검증했다.
+
+### 2026-07-06 - PR #182 Terraform diagnostics 리뷰 코멘트 반영
+
+- Goal: PR #182에 남아 있던 Terraform resource block attribute 파싱 리뷰 코멘트를 수정한다.
+- Completed:
+  - `collectTerraformResourceBlocks`가 attribute 파싱 후 같은 줄의 brace depth 계산을 건너뛰지 않도록 수정했다.
+  - `tags = { ... }` 같은 object attribute 뒤에 있는 resource attribute도 계속 수집되는 회귀 테스트를 추가했다.
+- Verification run:
+  - `pnpm harness:check` - passed before review-comment edits and after implementation checks.
+  - `pnpm --dir apps/api exec tsx --test src/services/terraform/terraform-diagnostics.test.ts` - passed, 38 tests.
+  - `pnpm --filter @sketchcatch/api test` - failed in sandbox because Node test runner child process spawn returned EPERM.
+  - `pnpm --dir apps/api test` - timed out after 184s in elevated context.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `pnpm --filter @sketchcatch/api build` - passed.
+  - `pnpm build` - failed once because Next could not unlink `.next/app-path-routes-manifest.json` with EPERM, then an elevated retry was interrupted by the user.
+- Known risks:
+  - 실제 Terraform CLI, AWS SDK, plan/apply/destroy, cloud mutation은 실행하지 않았다.
+  - 전체 API test와 루트 build는 로컬 Windows 권한/시간 문제로 완료하지 못했고, 변경 범위는 targeted regression, lint, typecheck, API build로 검증했다.

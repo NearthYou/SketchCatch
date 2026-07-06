@@ -407,6 +407,24 @@ test("detects undeclared two-part Terraform references", () => {
   assert.equal(diagnostic?.resourceAddress, "aws_vpc.not_existing_vpc");
 });
 
+test("keeps collecting resource attributes after object attributes", () => {
+  const diagnostics = createTerraformDiagnostics(`resource "aws_subnet" "public" {
+  cidr_block = "10.0.1.0/24"
+  tags = {
+    Name = "public"
+  }
+  vpc_id = aws_vpc.missing.id
+}`);
+
+  const diagnostic = diagnostics.find(
+    (candidate) => candidate.code === "terraform.undefined_reference"
+  );
+
+  assert.equal(diagnostic?.severity, "error");
+  assert.equal(diagnostic?.line, 6);
+  assert.equal(diagnostic?.resourceAddress, "aws_vpc.missing");
+});
+
 test("detects AWS attribute type mismatches without Terraform init", () => {
   const diagnostics = createTerraformDiagnostics(`resource "aws_security_group_rule" "web" {
   type = "ingress"

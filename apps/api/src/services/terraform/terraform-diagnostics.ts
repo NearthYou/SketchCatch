@@ -809,7 +809,6 @@ function collectTerraformResourceBlocks(terraformCode: string): TerraformResourc
       if (attribute) {
         activeBlock.attributes.push(attribute.attribute);
         index = attribute.endIndex;
-        continue;
       }
     }
 
