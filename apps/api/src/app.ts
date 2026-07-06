@@ -19,6 +19,10 @@ import {
   type TerraformRouteOptions
 } from "./routes/terraform.js";
 import { registerAwsConnectionRoutes } from "./routes/aws-connections.js";
+import {
+  registerReverseEngineeringRoutes,
+  type ReverseEngineeringRouteOptions
+} from "./routes/reverse-engineering.js";
 import type { ProjectDeletionStorage } from "./projects/project-deletion-service.js";
 import {
   createInMemoryRateLimiter,
@@ -46,6 +50,7 @@ export type BuildAppOptions = {
   projectDeletionStorage?: ProjectDeletionStorage;
   runtimeCache?: RuntimeCache;
   validateTerraformPreviewCode?: TerraformRouteOptions["validateTerraformPreviewCode"];
+  reverseEngineeringServiceOptions?: ReverseEngineeringRouteOptions["serviceOptions"];
 };
 
 // 테스트와 서버가 같은 앱을 쓰되, LLM 호출 계층은 옵션으로만 주입합니다.
@@ -172,6 +177,11 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   app.register(registerAwsConnectionRoutes, {
     prefix: "/api",
     getDatabaseClient: getAppDatabaseClient
+  });
+  app.register(registerReverseEngineeringRoutes, {
+    prefix: "/api",
+    getDatabaseClient: getAppDatabaseClient,
+    serviceOptions: options.reverseEngineeringServiceOptions
   });
 
   return app;

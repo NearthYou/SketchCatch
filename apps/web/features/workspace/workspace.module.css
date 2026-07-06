@@ -3355,6 +3355,81 @@
   margin: 0;
 }
 
+.reverseResourceGrid {
+  display: grid;
+  gap: 7px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  min-width: 0;
+}
+
+.reverseResourceToggle {
+  align-items: center;
+  background: #f8fafc;
+  border: 1px solid #dce3ee;
+  border-radius: 6px;
+  color: #243044;
+  display: inline-flex;
+  font-size: 11px;
+  font-weight: 900;
+  gap: 7px;
+  min-height: 34px;
+  min-width: 0;
+  padding: 0 9px;
+}
+
+.reverseResourceToggle input {
+  flex: 0 0 auto;
+}
+
+.reverseResourceToggle span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.reverseResultList,
+.reverseLogList {
+  display: grid;
+  gap: 7px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.reverseResultItem,
+.reverseLogList li {
+  background: #ffffff;
+  border: 1px solid #e3e9f2;
+  border-radius: 6px;
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 8px 9px;
+}
+
+.reverseResultItem strong,
+.reverseLogList strong {
+  color: #172033;
+  font-size: 12px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.reverseResultItem span,
+.reverseLogList span {
+  color: #64748b;
+  font-size: 11px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.reverseLogList li[data-level="WARN"] {
+  border-left: 4px solid #f59e0b;
+}
+
+.reverseLogList li[data-level="ERROR"] {
+  border-left: 4px solid #dc2626;
+}
+
 .deploymentSummary {
   background: #f8fafc;
   border: 1px solid #dce3ee;

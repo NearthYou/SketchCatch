@@ -317,6 +317,10 @@ export type ProjectDetailsResponse = {
 export type CreateArchitectureSnapshotRequest = {
   version?: number | undefined;
   source?: string | undefined;
+  reverseEngineering?: {
+    sourceScanId: string;
+    draftId: string;
+  } | undefined;
   architectureJson: ArchitectureJson;
 };
 
@@ -587,6 +591,156 @@ export type DeploymentPlanArtifact = {
 
 export type AwsConnectionListResponse = {
   awsConnections: AwsConnection[];
+};
+
+export type ReverseEngineeringScanStatus =
+  | "queued"
+  | "running"
+  | "completed"
+  | "failed"
+  | "cancelled";
+
+export type ReverseEngineeringScanStage =
+  | "credential"
+  | "region"
+  | "provider_api"
+  | "normalize"
+  | "draft"
+  | "analysis"
+  | "import_suggestion";
+
+export type ReverseEngineeringScanLogLevel = "INFO" | "WARN" | "ERROR";
+
+export type ReverseEngineeringScan = {
+  id: string;
+  projectId: string;
+  awsConnectionId: string;
+  provider: CloudProvider;
+  region: string;
+  resourceTypes: ResourceType[];
+  status: ReverseEngineeringScanStatus;
+  createdAt: IsoDateTimeString;
+  updatedAt: IsoDateTimeString;
+  startedAt: IsoDateTimeString | null;
+  completedAt: IsoDateTimeString | null;
+  cancelRequestedAt: IsoDateTimeString | null;
+  deletedAt: IsoDateTimeString | null;
+  errorSummary: string | null;
+};
+
+export type DiscoveredResourceRelationshipType = "contains" | "connects_to" | "depends_on";
+
+export type DiscoveredResourceRelationship = {
+  type: DiscoveredResourceRelationshipType;
+  targetResourceId: string;
+  label?: string | undefined;
+};
+
+export type ReverseEngineeringImportSuggestionStatus =
+  | "ready"
+  | "unsupported_resource_type"
+  | "manual_review";
+
+export type DiscoveredResource = {
+  id: string;
+  provider: CloudProvider;
+  providerResourceType: string;
+  providerResourceId: string;
+  region: string;
+  displayName: string;
+  resourceType: ResourceType;
+  config: ResourceConfig;
+  relationships?: DiscoveredResourceRelationship[] | undefined;
+  analysisExcluded?: boolean | undefined;
+  importSuggestionStatus?: ReverseEngineeringImportSuggestionStatus | undefined;
+};
+
+export type ReverseEngineeringAnalysisExclusionReason =
+  | "unsupported_resource_type"
+  | "missing_required_data";
+
+export type ReverseEngineeringAnalysisExclusion = {
+  id: string;
+  resourceId: string;
+  reason: ReverseEngineeringAnalysisExclusionReason;
+  message: string;
+};
+
+export type ReverseEngineeringDraft = {
+  id: string;
+  scanId: string;
+  architectureJson: ArchitectureJson;
+  protectedValueKeys: string[];
+  editableValueKeys: string[];
+  createdAt: IsoDateTimeString;
+};
+
+export type ReverseEngineeringImportSuggestion = {
+  id: string;
+  resourceId: string;
+  status: ReverseEngineeringImportSuggestionStatus;
+  handoffReady: boolean;
+  terraformAddress?: string | undefined;
+  importCommand?: string | undefined;
+  terraformBlockDraft?: string | undefined;
+  reason?: string | undefined;
+};
+
+export type ReverseEngineeringScanErrorReason =
+  | "permission_denied"
+  | "invalid_region"
+  | "expired_credential"
+  | "throttled"
+  | "provider_error"
+  | "unknown";
+
+export type ReverseEngineeringScanError = {
+  id: string;
+  resourceType: ResourceType | "UNKNOWN";
+  stage: ReverseEngineeringScanStage;
+  reason: ReverseEngineeringScanErrorReason;
+  message: string;
+  retryable: boolean;
+};
+
+export type ReverseEngineeringScanLogLine = {
+  id: string;
+  scanId: string;
+  sequence: number;
+  stage: ReverseEngineeringScanStage;
+  level: ReverseEngineeringScanLogLevel;
+  message: string;
+  createdAt: IsoDateTimeString;
+};
+
+export type ReverseEngineeringScanResult = {
+  scan: ReverseEngineeringScan;
+  discoveredResources: DiscoveredResource[];
+  reverseEngineeringDraft: ReverseEngineeringDraft;
+  architectureJson: ArchitectureJson;
+  findings: CheckFinding[];
+  analysisExclusions: ReverseEngineeringAnalysisExclusion[];
+  importSuggestions: ReverseEngineeringImportSuggestion[];
+  scanErrors: ReverseEngineeringScanError[];
+};
+
+export type CreateReverseEngineeringScanRequest = {
+  awsConnectionId: string;
+  region: string;
+  resourceTypes: ResourceType[];
+};
+
+export type ReverseEngineeringScanResponse = {
+  scan: ReverseEngineeringScan;
+  result?: ReverseEngineeringScanResult | undefined;
+};
+
+export type ReverseEngineeringScanListResponse = {
+  scans: ReverseEngineeringScan[];
+};
+
+export type ReverseEngineeringScanLogListResponse = {
+  logs: ReverseEngineeringScanLogLine[];
 };
 
 export type CreateDeploymentRequest = {
@@ -1270,6 +1424,11 @@ export type AwsRegionCode =
 
 export type DiagramNodeMetadata = {
   parentAreaNodeId?: string | undefined;
+  reverseEngineering?: {
+    source: "aws_scan";
+    protectedValueKeys: string[];
+    editableValueKeys: string[];
+  } | undefined;
 };
 
 export type DiagramNodeParameters = {
