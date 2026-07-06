@@ -122,7 +122,19 @@ const preDeploymentCheckFromDiagramBodySchema: z.ZodType<AiPreDeploymentCheckFro
 const terraformErrorExplanationBodySchema = z.object({
   stage: z.enum(["validate", "export", "plan", "apply"]),
   rawMessage: z.string().trim().min(1),
-  relatedResourceId: z.string().min(1).optional()
+  diagnostic: z
+    .object({
+      severity: z.enum(["info", "warning", "error"]),
+      message: z.string(),
+      code: z.string().optional(),
+      line: z.number().int().positive().optional(),
+      sourceFileName: z.string().optional(),
+      resourceAddress: z.string().optional(),
+      nodeId: z.string().optional()
+    })
+    .optional(),
+  relatedResourceId: z.string().min(1).optional(),
+  terraformCodeContext: z.string().max(20_000).optional()
 });
 
 const terraformPreviewExplanationBodySchema = z.object({
@@ -252,16 +264,19 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
       const body = terraformErrorExplanationBodySchema.parse(request.body);
       const sanitizedError = sanitizeTerraformErrorForAi(body);
       const result = explainTerraformError({
+        diagnostic: body.diagnostic,
         stage: body.stage,
         rawMessage: sanitizedError.sanitizedMessage,
-        relatedResourceId: body.relatedResourceId
+        relatedResourceId: body.relatedResourceId,
+        terraformCodeContext: body.terraformCodeContext
       });
 
       return {
         ...result,
         llmExplanation: await createLlmExplanation({
           target: "terraform_error_explanation",
-          result
+          result,
+          terraformCodeContext: body.terraformCodeContext
         })
       };
     }

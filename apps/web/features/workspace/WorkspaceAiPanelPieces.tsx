@@ -109,6 +109,9 @@ export function WorkspaceAiExplanation({ explanation }: { readonly explanation: 
         <span>{explanation.fallbackUsed ? "기본 설명" : getWorkspaceAiProviderLabel(explanation.providerMetadata?.provider)}</span>
       </div>
       <p>{explanation.summary}</p>
+      {explanation.wellArchitectedConclusion ? (
+        <WorkspaceAiTextList title="종합 평가" items={[explanation.wellArchitectedConclusion]} />
+      ) : null}
       {explanation.highlights.length > 0 ? <WorkspaceAiTextList title="핵심" items={explanation.highlights} /> : null}
       {explanation.nextActions.length > 0 ? (
         <WorkspaceAiTextList title="다음 행동" items={explanation.nextActions} />
@@ -269,6 +272,7 @@ export function WorkspaceAiTerraformPreviewResult({
   return (
     <div className={styles.aiResultStack}>
       <p className={styles.aiResultSummary}>{preview.summary}</p>
+      <WorkspaceAiExplanation explanation={preview.llmExplanation} />
       <WorkspaceAiTextList
         title="감지된 Resource"
         items={preview.detectedResources.map(

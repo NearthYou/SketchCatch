@@ -16,6 +16,12 @@ import {
 import type { LocalProjectDraft } from "./project-draft-persistence";
 import { WorkspaceAiChatDock } from "./WorkspaceAiChatDock";
 import { WorkspaceRightPanel } from "./WorkspaceRightPanel";
+import type {
+  TerraformIssueAiRequest,
+  TerraformPreviewAiRequest,
+  TerraformSafeFixApplyRequest,
+  TerraformSafeFixApplyResult
+} from "./workspace-terraform-ai";
 import styles from "./workspace.module.css";
 
 const LOCAL_PROJECT_ID = "local-sketchcatch-project";
@@ -39,6 +45,14 @@ export function WorkspaceDraftManager() {
   const [initialDiagram, setInitialDiagram] = useState<DiagramJson | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [terraformIssueAiRequest, setTerraformIssueAiRequest] =
+    useState<TerraformIssueAiRequest | null>(null);
+  const [terraformPreviewAiRequest, setTerraformPreviewAiRequest] =
+    useState<TerraformPreviewAiRequest | null>(null);
+  const [terraformSafeFixApplyRequest, setTerraformSafeFixApplyRequest] =
+    useState<TerraformSafeFixApplyRequest | null>(null);
+  const [terraformSafeFixApplyResult, setTerraformSafeFixApplyResult] =
+    useState<TerraformSafeFixApplyResult | null>(null);
   const latestDiagramRef = useRef<DiagramJson>(EMPTY_DIAGRAM);
   const localDraftRef = useRef<LocalProjectDraft | null>(null);
   const localSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -174,6 +188,17 @@ export function WorkspaceDraftManager() {
     [clearLocalSaveTimer, persistLocalDraftNow, workspaceId]
   );
 
+  const requestTerraformSafeFixApply = useCallback((
+    diagnostic: TerraformSafeFixApplyRequest["diagnostic"],
+    codePreview?: TerraformSafeFixApplyRequest["codePreview"]
+  ): void => {
+    setTerraformSafeFixApplyRequest({
+      codePreview,
+      diagnostic,
+      id: Date.now()
+    });
+  }, []);
+
   if (loadState === "loading") {
     return <WorkspaceNotice title="Workspace loading" body="로컬 저장 정보를 불러오는 중입니다." />;
   }
@@ -190,13 +215,28 @@ export function WorkspaceDraftManager() {
   return (
     <DiagramEditor
       floatingPanel={(context) => (
-        <WorkspaceAiChatDock context={context} projectId={LOCAL_PROJECT_ID} />
+        <WorkspaceAiChatDock
+          context={context}
+          onApplyTerraformIssueFix={requestTerraformSafeFixApply}
+          projectId={LOCAL_PROJECT_ID}
+          terraformIssueRequest={terraformIssueAiRequest}
+          terraformPreviewRequest={terraformPreviewAiRequest}
+          terraformSafeFixApplyResult={terraformSafeFixApplyResult}
+        />
       )}
       initialDiagram={initialDiagram}
       onDiagramChange={handleDiagramChange}
       projectName={projectName}
       rightPanel={(context) => (
-        <WorkspaceRightPanel context={context} projectId={LOCAL_PROJECT_ID} projectName={projectName} />
+        <WorkspaceRightPanel
+          context={context}
+          onTerraformIssueAiRequest={setTerraformIssueAiRequest}
+          onTerraformPreviewAiRequest={setTerraformPreviewAiRequest}
+          onTerraformSafeFixApplyResult={setTerraformSafeFixApplyResult}
+          projectId={LOCAL_PROJECT_ID}
+          projectName={projectName}
+          terraformSafeFixApplyRequest={terraformSafeFixApplyRequest}
+        />
       )}
       saveStatus={saveStatusLabels[saveState]}
     />

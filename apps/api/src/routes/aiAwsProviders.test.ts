@@ -15,11 +15,11 @@ const providerMetadataSchema = z.object({
   })
 });
 
-test("POST /api/ai/terraform-preview-explanation includes Bedrock/fallback provider metadata without changing board state", async () => {
+test("POST /api/ai/terraform-preview-explanation includes Amazon Q/fallback provider metadata without changing board state", async () => {
   const originalBillingMode = process.env.AI_BILLING_MODE;
-  const originalBedrockCredit = process.env.BEDROCK_CREDIT_CONFIRMED;
+  const originalAmazonQCredit = process.env.AMAZON_Q_CREDIT_CONFIRMED;
   process.env.AI_BILLING_MODE = "aws_credit_only";
-  delete process.env.BEDROCK_CREDIT_CONFIRMED;
+  delete process.env.AMAZON_Q_CREDIT_CONFIRMED;
   const app = buildApp();
 
   try {
@@ -45,11 +45,11 @@ test("POST /api/ai/terraform-preview-explanation includes Bedrock/fallback provi
       })
       .parse(response.json());
 
-    assert.equal(body.llmExplanation.providerMetadata.provider, "fallback");
+    assert.equal(body.llmExplanation.providerMetadata.provider, "amazon_q");
     assert.equal(body.llmExplanation.providerMetadata.routeTarget, "terraform_preview_explanation");
   } finally {
     restoreEnvValue("AI_BILLING_MODE", originalBillingMode);
-    restoreEnvValue("BEDROCK_CREDIT_CONFIRMED", originalBedrockCredit);
+    restoreEnvValue("AMAZON_Q_CREDIT_CONFIRMED", originalAmazonQCredit);
     await app.close();
   }
 });

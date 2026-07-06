@@ -4,9 +4,20 @@ import type { LlmExplanation } from "@sketchcatch/types";
 
 const SUMMARY_MAX_LENGTH = 300;
 const ITEM_MAX_LENGTH = 120;
-const ITEM_MAX_COUNT = 5;
+const ITEM_MAX_COUNT = 6;
+const CODE_SNIPPET_MAX_LENGTH = 8_000;
+const CONCLUSION_MAX_LENGTH = 600;
 const BLOCKED_GUARANTEE_PHRASES = ["배포 가능 보장", "비용 없음", "보안 안전"] as const;
-const llmExplanationSchema: z.ZodType<LlmExplanation> = z.object({
+const llmCodeSuggestionSchema = z.object({
+  currentCode: z.string(),
+  suggestedCode: z.string(),
+  rationale: z.string()
+});
+type LlmExplanationCandidate = Omit<LlmExplanation, "codeSuggestion" | "wellArchitectedConclusion"> & {
+  readonly codeSuggestion: LlmExplanation["codeSuggestion"] | null;
+  readonly wellArchitectedConclusion: string | null;
+};
+const llmExplanationSchema: z.ZodType<LlmExplanationCandidate> = z.object({
   target: z.enum([
     "architecture_draft",
     "design_simulation",
@@ -18,7 +29,9 @@ const llmExplanationSchema: z.ZodType<LlmExplanation> = z.object({
   summary: z.string(),
   highlights: z.array(z.string()),
   nextActions: z.array(z.string()),
-  fallbackUsed: z.literal(false)
+  fallbackUsed: z.literal(false),
+  codeSuggestion: llmCodeSuggestionSchema.nullable(),
+  wellArchitectedConclusion: z.string().nullable()
 });
 
 export const llmExplanationTextFormat = zodTextFormat(llmExplanationSchema, "llm_explanation");
@@ -45,6 +58,9 @@ export function validateLlmExplanation(value: LlmExplanation | null, fallback: L
   const summary = validateSummary(parsed.data.summary, fallback.summary);
   const highlights = validateTextItems(parsed.data.highlights, fallback.highlights);
   const nextActions = validateTextItems(parsed.data.nextActions, fallback.nextActions);
+  const codeSuggestion = validateCodeSuggestion(parsed.data.codeSuggestion ?? undefined);
+  const wellArchitectedConclusion = validateOptionalLongText(parsed.data.wellArchitectedConclusion ?? undefined);
+  const includeWellArchitectedConclusion = parsed.data.target !== "terraform_error_explanation";
   const fallbackUsed = summary.fallbackUsed || highlights.fallbackUsed || nextActions.fallbackUsed;
 
   if (!fallbackUsed) {
@@ -53,7 +69,11 @@ export function validateLlmExplanation(value: LlmExplanation | null, fallback: L
       summary: summary.value,
       highlights: highlights.value,
       nextActions: nextActions.value,
-      fallbackUsed: false
+      fallbackUsed: false,
+      ...(codeSuggestion === undefined ? {} : { codeSuggestion }),
+      ...(!includeWellArchitectedConclusion || wellArchitectedConclusion === undefined
+        ? {}
+        : { wellArchitectedConclusion })
     };
   }
 
@@ -131,6 +151,51 @@ function validateTextItems(values: readonly string[], fallbackValues: string[]):
   };
 }
 
+function validateCodeSuggestion(value: LlmExplanation["codeSuggestion"]): LlmExplanation["codeSuggestion"] {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  const currentCode = value.currentCode;
+  const suggestedCode = value.suggestedCode;
+  const rationale = trimTextItem(value.rationale.trim());
+
+  if (
+    currentCode.trim().length === 0 ||
+    currentCode === suggestedCode ||
+    currentCode.length > CODE_SNIPPET_MAX_LENGTH ||
+    suggestedCode.length > CODE_SNIPPET_MAX_LENGTH ||
+    rationale.length === 0 ||
+    containsBlockedGuarantee(rationale)
+  ) {
+    return undefined;
+  }
+
+  return {
+    currentCode,
+    suggestedCode,
+    rationale
+  };
+}
+
+function validateOptionalLongText(value: string | undefined): string | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  const normalized = value.trim();
+
+  if (
+    normalized.length === 0 ||
+    normalized.length > CONCLUSION_MAX_LENGTH ||
+    containsBlockedGuarantee(normalized)
+  ) {
+    return undefined;
+  }
+
+  return normalized;
+}
+
 function trimTextItem(value: string): string {
   if (value.length <= ITEM_MAX_LENGTH) {
     return value;
@@ -182,6 +247,13 @@ function normalizeLlmExplanationCandidate(value: unknown): unknown {
   const nextActions = normalizeTextListCandidate(
     value.nextActions ?? value.next_actions ?? value.nextSteps ?? value.next_steps
   );
+  const codeSuggestion = normalizeCodeSuggestionCandidate(
+    value.codeSuggestion ?? value.code_suggestion ?? value.fixSuggestion ?? value.fix_suggestion
+  );
+  const wellArchitectedConclusion =
+    typeof (value.wellArchitectedConclusion ?? value.well_architected_conclusion) === "string"
+      ? (value.wellArchitectedConclusion ?? value.well_architected_conclusion)
+      : undefined;
 
   if (target === undefined || summary === undefined || highlights.length === 0 || nextActions.length === 0) {
     return value;
@@ -192,7 +264,30 @@ function normalizeLlmExplanationCandidate(value: unknown): unknown {
     summary,
     highlights,
     nextActions,
-    fallbackUsed: false
+    fallbackUsed: false,
+    codeSuggestion: codeSuggestion ?? null,
+    wellArchitectedConclusion: wellArchitectedConclusion ?? null
+  };
+}
+
+function normalizeCodeSuggestionCandidate(value: unknown): LlmExplanation["codeSuggestion"] {
+  if (!isJsonRecord(value)) {
+    return undefined;
+  }
+
+  const currentCode = value.currentCode ?? value.current_code ?? value.originalCode ?? value.original_code;
+  const suggestedCode =
+    value.suggestedCode ?? value.suggested_code ?? value.nextCode ?? value.next_code ?? value.replacementCode;
+  const rationale = value.rationale ?? value.reason ?? value.explanation;
+
+  if (typeof currentCode !== "string" || typeof suggestedCode !== "string" || typeof rationale !== "string") {
+    return undefined;
+  }
+
+  return {
+    currentCode,
+    suggestedCode,
+    rationale
   };
 }
 

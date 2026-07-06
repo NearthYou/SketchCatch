@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { ChatSyncCommand, ChatSyncCommandInput } from "@aws-sdk/client-qbusiness";
-import type { DesignSimulationResult, LlmExplanation } from "@sketchcatch/types";
+import type {
+  AiTerraformErrorExplanationResult,
+  AiTerraformPreviewExplanationResult,
+  DesignSimulationResult,
+  LlmExplanation
+} from "@sketchcatch/types";
 import {
   createAiProviderBackedLlmExplanation,
   createAmazonQBusinessTextProvider,
@@ -22,6 +27,72 @@ const designSimulationResult: DesignSimulationResult = {
   costPressure: [],
   recommendations: ["Architecture Board에서 연결을 확인하세요."]
 };
+
+function createTerraformErrorResult(
+  input: Partial<AiTerraformErrorExplanationResult> = {}
+): AiTerraformErrorExplanationResult {
+  return {
+    stage: "plan",
+    category: "permission",
+    severity: "high",
+    rawMessage: "AccessDenied",
+    summary: "Terraform plan failed because AWS permissions are missing.",
+    likelyCause: "The execution role does not include the required IAM action.",
+    nextActions: ["Review the IAM policy attached to the execution role."],
+    wellArchitectedGuidance: [
+      {
+        pillar: "operational_excellence",
+        title: "운영 우수성",
+        observation: "Keep the issue visible until validation passes.",
+        recommendation: "Fix the Terraform input and rerun validation."
+      },
+      {
+        pillar: "security",
+        title: "보안",
+        observation: "Do not expose credentials in error messages.",
+        recommendation: "Mask secrets before AI explanation."
+      },
+      {
+        pillar: "reliability",
+        title: "신뢰성",
+        observation: "Failed validation blocks unsafe deployment.",
+        recommendation: "Revalidate before deployment."
+      },
+      {
+        pillar: "performance_efficiency",
+        title: "성능 효율성",
+        observation: "Static validation avoids expensive retries.",
+        recommendation: "Resolve syntax and policy issues before plan."
+      },
+      {
+        pillar: "cost_optimization",
+        title: "비용 최적화",
+        observation: "Early failure reduces wasted execution time.",
+        recommendation: "Apply only deterministic fixes automatically."
+      },
+      {
+        pillar: "sustainability",
+        title: "지속 가능성",
+        observation: "Fewer failed runs reduce waste.",
+        recommendation: "Keep validation local where possible."
+      }
+    ],
+    consensusRecommendation: "Fix the Terraform issue, rerun validation, and continue only after it is resolved.",
+    ...input
+  };
+}
+
+function createTerraformPreviewResult(
+  input: Partial<AiTerraformPreviewExplanationResult> = {}
+): AiTerraformPreviewExplanationResult {
+  return {
+    summary: "Terraform preview is ready.",
+    detectedResources: [],
+    findings: [],
+    checklist: [],
+    ...input
+  };
+}
 
 test("resolveAiProviderRegions allows Amazon Q Business to use a different region", () => {
   const regions = resolveAiProviderRegions({
@@ -182,16 +253,12 @@ test("createAiProviderBackedLlmExplanation uses Amazon Q first for Terraform err
   });
   const input = {
     target: "terraform_error_explanation" as const,
-    result: {
-      stage: "plan" as const,
-      category: "permission" as const,
-      severity: "high" as const,
-      rawMessage: "AccessDenied",
+    result: createTerraformErrorResult({
       summary: "권한 부족으로 plan이 실패했습니다.",
       likelyCause: "Role에 권한이 없습니다.",
       nextActions: ["IAM policy를 확인하세요."],
       relatedResourceId: "ec2-web"
-    }
+    })
   };
 
   const first = await createLlmExplanation(input);
@@ -205,7 +272,193 @@ test("createAiProviderBackedLlmExplanation uses Amazon Q first for Terraform err
   assert.equal(bedrockCalls.length, 0);
 });
 
-test("createAiProviderBackedLlmExplanation returns Amazon Q fallback without letting Bedrock overwrite it", async () => {
+test("createAiProviderBackedLlmExplanation uses Amazon Q for Terraform preview explanations without Bedrock fallback", async () => {
+  const qCalls: unknown[] = [];
+  const bedrockCalls: unknown[] = [];
+  const qExplanation: LlmExplanation = {
+    target: "terraform_preview_explanation",
+    summary: "Amazon Q reviewed the Terraform preview.",
+    highlights: [
+      "운영 우수성 원칙: 변경 추적을 확인하세요.",
+      "보안 원칙: 권한과 암호화를 확인하세요.",
+      "신뢰성 원칙: 복구 경로를 확인하세요.",
+      "성능 효율성 원칙: 리소스 크기를 확인하세요.",
+      "비용 최적화 원칙: 과한 용량을 줄이세요.",
+      "지속 가능성 원칙: cleanup 경로를 확인하세요."
+    ],
+    nextActions: ["Review the preview before accepting it."],
+    fallbackUsed: false,
+    wellArchitectedConclusion: "종합 평가: 배포 전 보안, 신뢰성, 비용을 함께 확인하세요."
+  };
+  const createLlmExplanation = createAiProviderBackedLlmExplanation({
+    amazonQProvider: createProvider("amazon_q", qExplanation, qCalls),
+    bedrockProvider: createProvider("bedrock", qExplanation, bedrockCalls),
+    fallbackProvider: createFallbackOnlyLlmExplanation,
+    creditPolicy: {
+      bedrock: true,
+      amazonQ: true,
+      transcribe: false,
+      billingMode: "aws_credit_only"
+    },
+    limits: { dailyCallLimit: 10, windowCallLimit: 10, windowMs: 60_000 }
+  });
+
+  const result = await createLlmExplanation({
+    target: "terraform_preview_explanation",
+    result: createTerraformPreviewResult()
+  });
+
+  assert.equal(result.providerMetadata?.provider, "amazon_q");
+  assert.equal(result.highlights.length, 6);
+  assert.match(result.wellArchitectedConclusion ?? "", /종합 평가/);
+  assert.equal(qCalls.length, 1);
+  assert.equal(bedrockCalls.length, 0);
+});
+
+test("createAiProviderBackedLlmExplanation preserves Amazon Q code suggestions without Well-Architected guidance", async () => {
+  const qCalls: unknown[] = [];
+  const bedrockCalls: unknown[] = [];
+  const qExplanation: LlmExplanation = {
+    target: "terraform_error_explanation",
+    summary: "Amazon Q found a Terraform syntax fix.",
+    highlights: ["The existing line contains a trailing comma."],
+    nextActions: ["Review the replacement and validate Terraform again."],
+    fallbackUsed: false,
+    codeSuggestion: {
+      currentCode: '  bucket = "logs",',
+      suggestedCode: '  bucket = "logs"',
+      rationale: "Removing the comma resolves the syntax error."
+    },
+    wellArchitectedConclusion: "This Terraform syntax fix does not need a Well-Architected review."
+  };
+  const createLlmExplanation = createAiProviderBackedLlmExplanation({
+    amazonQProvider: createProvider("amazon_q", qExplanation, qCalls),
+    bedrockProvider: createProvider("bedrock", qExplanation, bedrockCalls),
+    fallbackProvider: createFallbackOnlyLlmExplanation,
+    creditPolicy: {
+      bedrock: true,
+      amazonQ: true,
+      transcribe: false,
+      billingMode: "aws_credit_only"
+    },
+    limits: { dailyCallLimit: 10, windowCallLimit: 10, windowMs: 60_000 }
+  });
+
+  const result = await createLlmExplanation({
+    target: "terraform_error_explanation",
+    result: createTerraformErrorResult(),
+    terraformCodeContext: 'resource "aws_s3_bucket" "logs" {\n  bucket = "logs",\n}'
+  });
+
+  assert.equal(result.providerMetadata?.provider, "amazon_q");
+  assert.equal(result.codeSuggestion?.suggestedCode, '  bucket = "logs"');
+  assert.equal(result.wellArchitectedConclusion, undefined);
+  assert.equal(qCalls.length, 1);
+  assert.equal(bedrockCalls.length, 0);
+  assert.doesNotMatch(String((qCalls[0] as { prompt?: unknown }).prompt), /six criteria/);
+  assert.match(String((qCalls[0] as { prompt?: unknown }).prompt), /Do not provide Well-Architected guidance/);
+  assert.match(String((qCalls[0] as { prompt?: unknown }).prompt), /terraformCodeContext/);
+  assert.match(String((qCalls[0] as { prompt?: unknown }).prompt), /rawMessage/);
+  assert.match(String((qCalls[0] as { prompt?: unknown }).prompt), /AccessDenied/);
+  assert.match(String((qCalls[0] as { prompt?: unknown }).prompt), /empty string/);
+});
+
+test("createAiProviderBackedLlmExplanation preserves Amazon Q deletion code suggestions", async () => {
+  const qCalls: unknown[] = [];
+  const qExplanation: LlmExplanation = {
+    target: "terraform_error_explanation",
+    summary: "Amazon Q found an invalid standalone Terraform line.",
+    highlights: ["The token is not a block header, attribute, or expression."],
+    nextActions: ["Review the deletion and validate Terraform again."],
+    fallbackUsed: false,
+    codeSuggestion: {
+      currentCode: "xczxczxczxczxczcx\n",
+      suggestedCode: "",
+      rationale: "Delete the invalid standalone token line."
+    }
+  };
+  const createLlmExplanation = createAiProviderBackedLlmExplanation({
+    amazonQProvider: createProvider("amazon_q", qExplanation, qCalls),
+    fallbackProvider: createFallbackOnlyLlmExplanation,
+    creditPolicy: {
+      bedrock: true,
+      amazonQ: true,
+      transcribe: false,
+      billingMode: "aws_credit_only"
+    },
+    limits: { dailyCallLimit: 10, windowCallLimit: 10, windowMs: 60_000 }
+  });
+
+  const result = await createLlmExplanation({
+    target: "terraform_error_explanation",
+    result: createTerraformErrorResult({
+      rawMessage: "Unsupported block type: xczxczxczxczxczcx"
+    }),
+    terraformCodeContext: 'resource "aws_security_group" "web" {\n}\nxczxczxczxczxczcx\nresource "aws_route_table" "public" {\n}'
+  });
+
+  assert.equal(result.providerMetadata?.provider, "amazon_q");
+  assert.equal(result.codeSuggestion?.currentCode, "xczxczxczxczxczcx\n");
+  assert.equal(result.codeSuggestion?.suggestedCode, "");
+  assert.equal(qCalls.length, 1);
+});
+
+test("createAiProviderBackedLlmExplanation completes missing Amazon Q block-header code suggestions", async () => {
+  const qCalls: unknown[] = [];
+  const qExplanation: LlmExplanation = {
+    target: "terraform_error_explanation",
+    summary: "Terraform 코드 파일 main.tf의 4번째 줄은 올바른 형식의 리소스 또는 데이터 블록이 아닙니다.",
+    highlights: ["main.tf 4번째 줄을 확인하세요."],
+    nextActions: ["수정 후 Terraform 검증을 다시 실행하세요."],
+    fallbackUsed: false
+  };
+  const createLlmExplanation = createAiProviderBackedLlmExplanation({
+    amazonQProvider: createProvider("amazon_q", qExplanation, qCalls),
+    fallbackProvider: createFallbackOnlyLlmExplanation,
+    creditPolicy: {
+      bedrock: true,
+      amazonQ: true,
+      transcribe: false,
+      billingMode: "aws_credit_only"
+    },
+    limits: { dailyCallLimit: 10, windowCallLimit: 10, windowMs: 60_000 }
+  });
+
+  const result = await createLlmExplanation({
+    target: "terraform_error_explanation",
+    result: createTerraformErrorResult({
+      rawMessage: "Invalid block header",
+      diagnosticExplanation: {
+        errorType: "terraform.sync.block_header",
+        plainExplanation: "Terraform 코드 파일 main.tf의 4번째 줄에 문제가 있습니다.",
+        fixExplanation: "강조된 Terraform 코드를 확인해 수정하세요.",
+        codeFrame: [],
+        canApply: false,
+        line: 4,
+        sourceFileName: "main.tf"
+      }
+    }),
+    terraformCodeContext: [
+      'resource "aws_vpc" "vpc_main" {',
+      '  cidr_block = "10.0.0.0/16"',
+      "}",
+      "ㄷㄱㅈㄷㄱㅈㄷㄱ",
+      'resource "aws_subnet" "public_subnet" {',
+      "}"
+    ].join("\n")
+  });
+
+  assert.equal(result.providerMetadata?.provider, "amazon_q");
+  assert.equal(result.codeSuggestion?.currentCode, "ㄷㄱㅈㄷㄱㅈㄷㄱ\n");
+  assert.equal(result.codeSuggestion?.suggestedCode, "");
+  assert.equal(
+    result.codeSuggestion?.rationale,
+    "main.tf 4번째 줄의 `ㄷㄱㅈㄷㄱㅈㄷㄱ` 코드는 Terraform block header나 attribute가 아니므로 삭제해야 합니다."
+  );
+  assert.equal(qCalls.length, 1);
+});
+
+test("createAiProviderBackedLlmExplanation accepts unstructured Amazon Q Terraform explanations", async () => {
   const qCalls: unknown[] = [];
   const bedrockCalls: unknown[] = [];
   const createLlmExplanation = createAiProviderBackedLlmExplanation({
@@ -216,7 +469,11 @@ test("createAiProviderBackedLlmExplanation returns Amazon Q fallback without let
       generate: async (request) => {
         qCalls.push(request);
         return {
-          text: "Sorry, I could not find relevant information to complete your request."
+          text: [
+            "닫힌 block 뒤에 남은 Terraform attribute가 있어서 validate가 실패했습니다.",
+            "- main.tf 13번째 줄의 중괄호 위치를 확인하세요.",
+            "- 수정 후 Terraform 재검증을 실행하세요."
+          ].join("\n")
         };
       }
     },
@@ -249,25 +506,124 @@ test("createAiProviderBackedLlmExplanation returns Amazon Q fallback without let
 
   const result = await createLlmExplanation({
     target: "terraform_error_explanation",
-    result: {
-      stage: "plan",
-      category: "permission",
-      severity: "high",
-      rawMessage: "AccessDenied",
+    result: createTerraformErrorResult({
       summary: "권한 부족으로 plan이 실패했습니다.",
       likelyCause: "실행 Role에 필요한 권한이 없습니다.",
       nextActions: ["IAM policy를 확인하세요."]
-    }
+    })
   });
 
-  assert.equal(result.fallbackUsed, true);
-  assert.equal(result.fallbackReason, "invalid_response");
+  assert.equal(result.fallbackUsed, false);
+  assert.match(result.summary, /닫힌 block/);
+  assert.deepEqual(result.highlights, [
+    "main.tf 13번째 줄의 중괄호 위치를 확인하세요.",
+    "수정 후 Terraform 재검증을 실행하세요."
+  ]);
   assert.equal(result.providerMetadata?.provider, "amazon_q");
   assert.equal(qCalls.length, 1);
   assert.equal(bedrockCalls.length, 0);
 });
 
-test("createAiProviderBackedLlmExplanation reports missing Amazon Q configuration before Bedrock fallback errors", async () => {
+test("createAiProviderBackedLlmExplanation falls back to Bedrock when Amazon Q returns a generic Terraform non-answer", async () => {
+  const qCalls: unknown[] = [];
+  const bedrockCalls: unknown[] = [];
+  const createLlmExplanation = createAiProviderBackedLlmExplanation({
+    amazonQProvider: {
+      provider: "amazon_q",
+      service: "amazon_q_business",
+      model: "amazon-q-model",
+      generate: async (request) => {
+        qCalls.push(request);
+        return {
+          text: "Sorry, I could not find relevant information to complete your request."
+        };
+      }
+    },
+    bedrockProvider: {
+      provider: "bedrock",
+      service: "bedrock_runtime",
+      model: "bedrock-model",
+      generate: async (request) => {
+        bedrockCalls.push(request);
+        return {
+          text: JSON.stringify({
+            target: "terraform_error_explanation",
+            summary: "Bedrock identified the invalid Terraform token line.",
+            highlights: ["Delete the standalone token that is outside any Terraform block."],
+            nextActions: ["Review the replacement and run Terraform validation again."],
+            fallbackUsed: false,
+            codeSuggestion: {
+              currentCode: "xczxczxczxczxczcx\n",
+              suggestedCode: "",
+              rationale: "The standalone token is not valid Terraform syntax, so it should be removed."
+            },
+            wellArchitectedConclusion: null
+          })
+        };
+      }
+    },
+    fallbackProvider: createFallbackOnlyLlmExplanation,
+    creditPolicy: {
+      bedrock: true,
+      amazonQ: true,
+      transcribe: false,
+      billingMode: "aws_credit_only"
+    },
+    limits: { dailyCallLimit: 10, windowCallLimit: 10, windowMs: 60_000 }
+  });
+
+  const result = await createLlmExplanation({
+    target: "terraform_error_explanation",
+    result: createTerraformErrorResult({
+      rawMessage: "Unsupported block type: xczxczxczxczxczcx"
+    }),
+    terraformCodeContext: 'resource "aws_security_group" "web" {\n}\nxczxczxczxczxczcx\nresource "aws_route_table" "public" {\n}'
+  });
+
+  assert.equal(result.fallbackUsed, false);
+  assert.equal(result.summary, "Bedrock identified the invalid Terraform token line.");
+  assert.equal(result.codeSuggestion?.suggestedCode, "");
+  assert.equal(result.providerMetadata?.provider, "bedrock");
+  assert.equal(qCalls.length, 1);
+  assert.equal(bedrockCalls.length, 1);
+});
+
+test("createAiProviderBackedLlmExplanation keeps Amazon Q metadata when Terraform error Q credits are blocked", async () => {
+  const qCalls: unknown[] = [];
+  const createLlmExplanation = createAiProviderBackedLlmExplanation({
+    amazonQProvider: createProvider(
+      "amazon_q",
+      {
+        target: "terraform_error_explanation",
+        summary: "should not be used",
+        highlights: ["should not be used"],
+        nextActions: ["should not be used"],
+        fallbackUsed: false
+      },
+      qCalls
+    ),
+    fallbackProvider: createFallbackOnlyLlmExplanation,
+    creditPolicy: {
+      bedrock: true,
+      amazonQ: false,
+      transcribe: false,
+      billingMode: "aws_credit_only"
+    },
+    limits: { dailyCallLimit: 10, windowCallLimit: 10, windowMs: 60_000 }
+  });
+
+  const result = await createLlmExplanation({
+    target: "terraform_error_explanation",
+    result: createTerraformErrorResult()
+  });
+
+  assert.equal(result.fallbackUsed, true);
+  assert.equal(result.fallbackReason, "credit_not_confirmed");
+  assert.equal(result.providerMetadata?.provider, "amazon_q");
+  assert.equal(qCalls.length, 0);
+});
+
+test("createAiProviderBackedLlmExplanation reports missing Amazon Q configuration without using Bedrock for Terraform errors", async () => {
   const bedrockCalls: unknown[] = [];
   const createLlmExplanation = createAiProviderBackedLlmExplanation({
     amazonQProvider: undefined,
@@ -292,21 +648,17 @@ test("createAiProviderBackedLlmExplanation reports missing Amazon Q configuratio
 
   const result = await createLlmExplanation({
     target: "terraform_error_explanation",
-    result: {
-      stage: "plan",
-      category: "permission",
-      severity: "high",
-      rawMessage: "AccessDenied",
+    result: createTerraformErrorResult({
       summary: "권한 부족으로 plan이 실패했습니다.",
       likelyCause: "실행 Role에 필요한 권한이 없습니다.",
       nextActions: ["IAM policy를 확인하세요."]
-    }
+    })
   });
 
   assert.equal(result.fallbackUsed, true);
   assert.equal(result.fallbackReason, "provider_not_configured");
-  assert.equal(result.providerMetadata?.provider, "fallback");
-  assert.equal(bedrockCalls.length, 1);
+  assert.equal(result.providerMetadata?.provider, "amazon_q");
+  assert.equal(bedrockCalls.length, 0);
 });
 
 test("createAmazonQBusinessTextProvider omits userId for anonymous identity applications", async () => {
