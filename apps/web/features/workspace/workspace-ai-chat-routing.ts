@@ -1,5 +1,5 @@
 export type WorkspaceAiChatMode = "draft" | "patch";
-export type WorkspaceAiChatAction = "draft" | "draft_clarification" | "patch";
+export type WorkspaceAiChatAction = "draft" | "patch";
 
 export function resolveWorkspaceAiChatMode(input: {
   readonly boardHasResources: boolean;
@@ -19,17 +19,7 @@ export function resolveWorkspaceAiChatAction(input: {
   readonly needsDraftClarification: boolean;
   readonly prompt: string;
 }): WorkspaceAiChatAction {
-  if (shouldInterruptPatchClarificationForDraft(input)) {
-    return "draft_clarification";
-  }
-
-  const mode = resolveWorkspaceAiChatMode(input);
-
-  if (mode === "patch") {
-    return "patch";
-  }
-
-  return input.needsDraftClarification ? "draft_clarification" : "draft";
+  return resolveWorkspaceAiChatMode(input);
 }
 
 export function resolvePendingPreviewChatAction(input: {
@@ -37,26 +27,14 @@ export function resolvePendingPreviewChatAction(input: {
   readonly prompt: string;
 }): WorkspaceAiChatAction {
   if (isPendingPreviewFreshDraftRequest(input.prompt)) {
-    return input.needsDraftClarification ? "draft_clarification" : "draft";
+    return "draft";
   }
 
   return resolveWorkspaceAiChatAction({
     boardHasResources: true,
-    needsDraftClarification: input.needsDraftClarification,
+    needsDraftClarification: false,
     prompt: input.prompt
   });
-}
-
-export function shouldInterruptPatchClarificationForDraft(input: {
-  readonly boardHasResources: boolean;
-  readonly needsDraftClarification: boolean;
-  readonly prompt: string;
-}): boolean {
-  return (
-    input.boardHasResources &&
-    input.needsDraftClarification &&
-    isNewServiceDraftRequest(input.prompt)
-  );
 }
 
 function isNewServiceDraftRequest(prompt: string): boolean {

@@ -16,10 +16,8 @@ test("workspace AI chat asks follow-up questions instead of showing fixable guar
   assert.match(workspaceAiChatDockSource, /draftFollowUpSession/);
   assert.match(workspaceAiChatDockSource, /planArchitectureDraftPreview/);
   assert.match(workspaceAiChatDockSource, /resolveArchitectureDraftFollowUpAnswer/);
-  assert.match(workspaceAiChatDockSource, /createQuestionFromDraftError/);
   assert.match(workspaceAiDraftFollowUpSource, /ask_follow_up/);
   assert.match(workspaceAiChatDockSource, /질문/);
-  assert.match(workspaceAiChatDockSource, /명확한 아키텍처 단서/);
   assert.match(workspaceAiDraftFollowUpSource, /unsupported_resource_omitted/);
   assert.match(workspaceAiDraftFollowUpSource, /unsupported_requirement_substituted/);
   assert.doesNotMatch(workspaceAiChatDockSource, /WorkspaceAiGuardrailWarnings/);
@@ -55,18 +53,11 @@ test("workspace AI chat does not expose auxiliary draft selectors", () => {
   assert.doesNotMatch(appWorkspaceOptionsSource, /scenarioOptions/);
 });
 
-test("workspace AI prompt guide uses beginner-friendly examples", () => {
-  assert.match(workspaceAiChatDockSource, /프롬프트 작성 가이드/);
-  assert.match(workspaceAiChatDockSource, /그냥 이렇게 시작해도 돼요/);
-  assert.doesNotMatch(workspaceAiChatDockSource, /정보가 부족하면 질문부터 할게요/);
-  assert.doesNotMatch(workspaceAiChatDockSource, /더 정확히/);
-  assert.doesNotMatch(workspaceAiChatDockSource, /DEFAULT_REQUIREMENT_PROMPT/);
-  assert.doesNotMatch(workspaceAiChatDockSource, /<span>메시지<\/span>/);
-  assert.match(workspaceAiPanelOptionsSource, /웹사이트 하나 배포하고 싶어/);
-  assert.match(workspaceAiPanelOptionsSource, /파일 업로드 페이지가 필요해/);
-  assert.match(workspaceAiPanelOptionsSource, /로그인 있는 작은 웹서비스가 필요해/);
-  assert.match(stylesSource, /\.aiPromptGuide\s*{/);
-  assert.match(stylesSource, /\.aiPromptChip\s*{/);
+test("workspace AI chat does not expose beginner prompt guide chips", () => {
+  assert.doesNotMatch(workspaceAiChatDockSource, /프롬프트 작성 가이드/);
+  assert.doesNotMatch(workspaceAiChatDockSource, /그냥 이렇게 시작해도 돼요/);
+  assert.doesNotMatch(workspaceAiChatDockSource, /promptGuideExamples/);
+  assert.doesNotMatch(workspaceAiPanelOptionsSource, /promptGuideExamples/);
 });
 
 test("workspace AI chat history is persisted per project", () => {

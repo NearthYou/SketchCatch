@@ -27,10 +27,7 @@ import {
   WorkspaceAiRequestMessage
 } from "./WorkspaceAiPanelPieces";
 import type { AiRequestState } from "./WorkspaceAiPanelPieces";
-import {
-  DEFAULT_REQUIREMENT_PROMPT,
-  promptGuideExamples
-} from "./workspace-ai-panel-options";
+import { DEFAULT_REQUIREMENT_PROMPT } from "./workspace-ai-panel-options";
 import styles from "./workspace.module.css";
 
 export type WorkspaceAiPanelProps = {
@@ -174,23 +171,6 @@ export function WorkspaceAiPanel({ context }: WorkspaceAiPanelProps) {
             value={prompt}
           />
         </label>
-        <div className={styles.aiPromptGuide} aria-label="프롬프트 작성 가이드">
-          <div className={styles.aiPromptGuideHeader}>
-            <strong>그냥 이렇게 시작해도 돼요</strong>
-          </div>
-          <div className={styles.aiPromptChips}>
-            {promptGuideExamples.map((example) => (
-              <button
-                className={styles.aiPromptChip}
-                key={example}
-                onClick={() => setPrompt(example)}
-                type="button"
-              >
-                {example}
-              </button>
-            ))}
-          </div>
-        </div>
         {draft === null ? (
           <button
             className={styles.aiPrimaryButton}

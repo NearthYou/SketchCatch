@@ -167,8 +167,8 @@ test("workspace AI refines a pending draft preview instead of replacing it from 
     aiChatDockSource,
     /baseArchitectureJson:\s*convertDiagramJsonToArchitectureJson\(context\.previewDiagram\)/
   );
-  assert.match(aiChatDockSource, /const mergedSession = createArchitectureClarificationSession/);
-  assert.match(aiChatDockSource, /createDraftFromRequest\(createClarifiedDraftRequest\(mergedSession\)\)/);
+  assert.doesNotMatch(aiChatDockSource, /createArchitectureClarificationSession/);
+  assert.doesNotMatch(aiChatDockSource, /createClarifiedDraftRequest/);
 });
 
 test("accepted AI diagrams explicitly request terraform code regeneration", () => {
@@ -181,16 +181,14 @@ test("accepted AI diagrams explicitly request terraform code regeneration", () =
   assert.match(terraformPanelSource, /latestTerraformRefreshRequestIdRef/);
 });
 
-test("workspace AI chat keeps the floating dock width with compact prompt guide", () => {
+test("workspace AI chat keeps the floating dock width without prompt guide chips", () => {
   const dockRule = getCssRule(stylesSource, "aiChatDock");
   const composerRule = getCssRule(stylesSource, "aiChatComposer");
-  const promptGuideRule = getCssRule(stylesSource, "aiChatPromptGuide");
 
-  assert.match(aiChatDockSource, /styles\.aiChatPromptGuide/);
+  assert.doesNotMatch(aiChatDockSource, /styles\.aiChatPromptGuide/);
   assert.match(dockRule, /right:\s*24px/);
   assert.match(dockRule, /width:\s*min\(860px,\s*calc\(100vw - 48px\)\)/);
   assert.match(composerRule, /grid-template-columns:\s*minmax\(0,\s*1fr\)\s*auto\s*auto/);
-  assert.match(promptGuideRule, /grid-column:\s*1\s*\/\s*-1/);
 });
 
 test("terraform leave guard covers workspace escape actions while editing", () => {

@@ -43,33 +43,17 @@ import {
 } from "./WorkspaceAiPanelPieces";
 import type { AiRequestState } from "./WorkspaceAiPanelPieces";
 import {
-  answerArchitectureClarification,
-  createArchitectureClarificationQuestionMessage,
-  createArchitectureClarificationSession,
-  createArchitectureClarificationSummaryMessage,
-  createClarifiedDraftRequest,
-  getCurrentArchitectureClarificationQuestion,
-  isArchitectureClarificationProceedCommand,
-  isCompleteArchitectureClarificationAnswer,
-  needsArchitectureClarification,
-  type ArchitectureClarificationSession
-} from "./workspace-ai-clarification";
-import {
   planArchitectureDraftPreview,
   resolveArchitectureDraftFollowUpAnswer,
   type ArchitectureDraftFollowUpSession
 } from "./workspace-ai-draft-follow-up";
-import {
-  promptGuideExamples
-} from "./workspace-ai-panel-options";
 import {
   createLatestUserRequirementPrompt,
   createLatestUserRequirementPromptExcluding
 } from "./workspace-ai-chat-history";
 import {
   resolvePendingPreviewChatAction,
-  resolveWorkspaceAiChatAction,
-  shouldInterruptPatchClarificationForDraft
+  resolveWorkspaceAiChatAction
 } from "./workspace-ai-chat-routing";
 import {
   createWorkspaceAiPatchPreviewModel,
@@ -218,8 +202,6 @@ export function WorkspaceAiChatDock({
     useState<WorkspaceAiPatchPreviewModel | null>(null);
   const [patchClarification, setPatchClarification] =
     useState<ArchitecturePatchClarification | null>(null);
-  const [clarificationSession, setClarificationSession] =
-    useState<ArchitectureClarificationSession | null>(null);
   const [draftClarification, setDraftClarification] =
     useState<PendingArchitectureDraftClarification | null>(null);
   const [draftFollowUpSession, setDraftFollowUpSession] =
@@ -563,7 +545,6 @@ export function WorkspaceAiChatDock({
     ]);
     setComposerValue("");
     setDraft(null);
-    setClarificationSession(null);
     setDraftClarification(null);
     setDraftFollowUpSession(null);
     setDraftErrorMessage("");
@@ -593,24 +574,7 @@ export function WorkspaceAiChatDock({
     trimmedPrompt: string,
     nextMessages: readonly WorkspaceAiChatMessage[]
   ): Promise<void> {
-    const needsDraftClarification = needsArchitectureClarification(trimmedPrompt);
-
     if (patchClarification !== null) {
-      if (
-        shouldInterruptPatchClarificationForDraft({
-          boardHasResources: boardSnapshot.hasResources,
-          needsDraftClarification,
-          prompt: trimmedPrompt
-        })
-      ) {
-        const session = createArchitectureClarificationSession(trimmedPrompt);
-
-        setPatchClarification(null);
-        setClarificationSession(session);
-        appendClarificationQuestion(session);
-        return;
-      }
-
       await handlePatchClarificationMessage(trimmedPrompt, nextMessages);
       return;
     }
@@ -625,15 +589,10 @@ export function WorkspaceAiChatDock({
       return;
     }
 
-    if (clarificationSession !== null) {
-      await handleClarificationMessage(trimmedPrompt);
-      return;
-    }
-
     const pendingPreviewAction =
       draft !== null || patchPreviewModel !== null
         ? resolvePendingPreviewChatAction({
-            needsDraftClarification,
+            needsDraftClarification: false,
             prompt: trimmedPrompt
           })
         : null;
@@ -658,14 +617,6 @@ export function WorkspaceAiChatDock({
       return;
     }
 
-    if (pendingPreviewAction === "draft_clarification") {
-      const session = createArchitectureClarificationSession(trimmedPrompt);
-
-      setClarificationSession(session);
-      appendClarificationQuestion(session);
-      return;
-    }
-
     if (pendingPreviewAction === "draft") {
       await createDraftFromConversation(nextMessages);
       return;
@@ -673,20 +624,12 @@ export function WorkspaceAiChatDock({
 
     const chatAction = resolveWorkspaceAiChatAction({
       boardHasResources: boardSnapshot.hasResources,
-      needsDraftClarification,
+      needsDraftClarification: false,
       prompt: trimmedPrompt
     });
 
     if (chatAction === "patch") {
       await createPatchPreviewFromPrompt(trimmedPrompt);
-      return;
-    }
-
-    if (chatAction === "draft_clarification") {
-      const session = createArchitectureClarificationSession(trimmedPrompt);
-
-      setClarificationSession(session);
-      appendClarificationQuestion(session);
       return;
     }
 
@@ -869,63 +812,6 @@ export function WorkspaceAiChatDock({
     appendAssistantMessage("question", resolution.question, resolution.suggestions);
   }
 
-  async function handleClarificationMessage(trimmedPrompt: string): Promise<void> {
-    if (clarificationSession === null) {
-      return;
-    }
-
-    if (clarificationSession.awaitingConfirmation) {
-      if (isArchitectureClarificationProceedCommand(trimmedPrompt)) {
-        const draftRequest = createClarifiedDraftRequest(clarificationSession);
-
-        setClarificationSession(null);
-        await createDraftFromRequest(draftRequest);
-        return;
-      }
-
-      if (isCompleteArchitectureClarificationAnswer(trimmedPrompt)) {
-        const mergedSession = createArchitectureClarificationSession(
-          `${clarificationSession.originalPrompt}\n${trimmedPrompt}`
-        );
-
-        if (!mergedSession.awaitingConfirmation) {
-          setClarificationSession(mergedSession);
-          appendClarificationQuestion(mergedSession);
-          return;
-        }
-
-        setClarificationSession(null);
-        await createDraftFromRequest(createClarifiedDraftRequest(mergedSession));
-        return;
-      }
-
-      const restartedSession = createArchitectureClarificationSession(
-        `${clarificationSession.originalPrompt}\n${trimmedPrompt}`
-      );
-
-      setClarificationSession(restartedSession);
-      appendAssistantMessage(
-        "question",
-        "좋아요. 조건을 다시 정리할게요. 아래 질문부터 다시 골라주세요."
-      );
-      appendClarificationQuestion(restartedSession);
-      return;
-    }
-
-    const nextSession = answerArchitectureClarification(clarificationSession, trimmedPrompt);
-
-    setClarificationSession(nextSession);
-
-    if (nextSession.awaitingConfirmation) {
-      const summary = createArchitectureClarificationSummaryMessage(nextSession);
-
-      appendAssistantMessage("question", summary.content, summary.suggestions, summary.selectionMode);
-      return;
-    }
-
-    appendClarificationQuestion(nextSession);
-  }
-
   async function createDraftFromConversation(conversation: readonly WorkspaceAiChatMessage[]): Promise<void> {
     const requirementPrompt = createRequirementPromptFromMessages(conversation);
 
@@ -980,17 +866,6 @@ export function WorkspaceAiChatDock({
       showDraftPreview(previewDecision.result);
     } catch (error) {
       const message = getApiErrorMessage(error, "아키텍처 초안 생성 중 오류가 발생했습니다.");
-      const question = createQuestionFromDraftError(message);
-
-      if (question) {
-        const session = createArchitectureClarificationSession(draftRequest.prompt);
-
-        setClarificationSession(session);
-        setDraftState("idle");
-        appendAssistantMessage("question", question);
-        appendClarificationQuestion(session);
-        return;
-      }
 
       setDraftState("error");
       setDraftErrorMessage(message);
@@ -1017,18 +892,6 @@ export function WorkspaceAiChatDock({
       "draft",
       `${result.title} 초안을 보드에 반투명 미리보기로 띄웠습니다. 생성할까요?`
     );
-  }
-
-  function appendClarificationQuestion(session: ArchitectureClarificationSession): void {
-    const question = getCurrentArchitectureClarificationQuestion(session);
-
-    if (!question) {
-      return;
-    }
-
-    const message = createArchitectureClarificationQuestionMessage(question);
-
-    appendAssistantMessage("question", message.content, message.suggestions, message.selectionMode);
   }
 
   function applyDraftToBoard(): void {
@@ -1600,26 +1463,6 @@ export function WorkspaceAiChatDock({
       </div>
 
       <form className={styles.aiChatComposer} onSubmit={(event) => void submitChatPrompt(event)}>
-        <div
-          className={`${styles.aiPromptGuide} ${styles.aiChatPromptGuide}`}
-          aria-label="프롬프트 작성 가이드"
-        >
-          <div className={styles.aiPromptGuideHeader}>
-            <strong>그냥 이렇게 시작해도 돼요</strong>
-          </div>
-          <div className={styles.aiPromptChips}>
-            {promptGuideExamples.map((example) => (
-              <button
-                className={styles.aiPromptChip}
-                key={example}
-                onClick={() => setComposerValue(example)}
-                type="button"
-              >
-                {example}
-              </button>
-            ))}
-          </div>
-        </div>
         <label className={styles.aiChatInput}>
           <textarea
             aria-label="AI 채팅 입력"
@@ -1945,14 +1788,6 @@ function getVoiceRecognitionErrorMessage(error: string): string {
   }
 
   return `음성 인식 중 오류가 발생했습니다. (${error})`;
-}
-
-function createQuestionFromDraftError(message: string): string | null {
-  if (/명확한 아키텍처 단서|초안을 생성하지 않았습니다/.test(message)) {
-    return "질문: 아키텍처 단서가 아직 부족합니다. 정적 홈페이지인지, 서버가 필요한 웹서비스인지, 파일 저장이나 로그인 같은 기능이 필요한지 알려주세요.";
-  }
-
-  return null;
 }
 
 function formatTerraformIssueRawMessage(diagnostic: TerraformDiagnostic): string {
