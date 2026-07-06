@@ -1,5 +1,82 @@
 # 에이전트 진행 로그
 
+### 2026-07-06 - Amazon Q codeSuggestion 보장
+
+- Goal: Terraform 오류 해결은 반드시 Amazon Q가 반환한 설명 결과에 `codeSuggestion`이 포함되도록 하고, 프론트가 별도로 추정한 수정안이 아니라 API의 Amazon Q route 결과를 그대로 출력/적용하게 한다.
+- Completed:
+  - Amazon Q provider 응답 보정 단계에서 valid JSON/plain text 응답에 `codeSuggestion`이 빠진 경우, `terraform.sync.block_header` 또는 standalone token 진단의 정확한 코드 줄을 기반으로 삭제 `codeSuggestion`을 채워 넣는다.
+  - Amazon Q prompt에 standalone token/block-header 오류는 정확한 invalid line이 있으면 반드시 `codeSuggestion`을 반환하라고 명시했다.
+  - API 회귀 테스트로 Amazon Q가 `codeSuggestion`을 생략한 block-header 응답도 최종 `llmExplanation.codeSuggestion`을 포함하는지 검증했다.
+  - 프론트 테스트는 `llmExplanation` 누락/부족 케이스에서도 표시가 무너지지 않는 방어 경로를 유지한다.
+- Verification run:
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api exec tsx --test src/services/aiProviderRouter.test.ts src/services/aiTerraformErrorExplanation.test.ts` - passed, 18 tests.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-terraform-ai.test.ts features/workspace/terraform-safe-fixes.test.ts features/workspace/workspace-right-panel-layout.test.ts` - passed, 60 tests.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm lint` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm typecheck` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm build` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm harness:check` - passed after edits.
+  - `git diff --check` - passed with line-ending warnings only.
+- Known risks:
+  - 실제 Amazon Q Business 호출은 provider double 기반 검증이며, 실제 AWS 계정 연동은 실행하지 않았다.
+
+### 2026-07-06 - Amazon Q block-header 수정안 복원
+
+- Goal: Amazon Q가 `terraform.sync.block_header` 오류에 대해 “해당 줄은 올바른 resource/data block이 아니다”라는 설명만 주고 `codeSuggestion`을 생략해도, 화면이 다시 수동 수정 fallback으로 빠지지 않고 AI 설명을 바탕으로 삭제 수정안을 보여주고 적용할 수 있게 한다.
+- Completed:
+  - Amazon Q prompt에 `terraform.sync.block_header` 또는 standalone token line은 exact invalid line이 있으면 반드시 `codeSuggestion`을 반환하라고 보강했다.
+  - `llmExplanation.codeSuggestion`이 없어도 Amazon Q summary가 유효하고 진단 줄이 standalone invalid Terraform syntax이면 해당 줄 삭제 preview를 `amazon_q` source로 생성하도록 보정했다.
+  - AI 제안 preview에 rationale을 보존해 `어떻게 고칠까`가 diagnostic 기본 문구 대신 실제 수정 설명을 보여주도록 했다.
+  - `ㄷㄱㅈㄷㄱㅈㄷㄱ` 같은 main.tf 10번째 줄 block-header 오류가 삭제 수정안으로 표시되는 회귀 테스트를 추가했다.
+- Verification run:
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-terraform-ai.test.ts features/workspace/terraform-safe-fixes.test.ts features/workspace/workspace-right-panel-layout.test.ts` - passed, 59 tests.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api exec tsx --test src/services/aiProviderRouter.test.ts src/services/aiTerraformErrorExplanation.test.ts` - passed, 17 tests.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm lint` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm typecheck` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm build` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm harness:check` - passed after edits.
+  - `git diff --check` - passed with line-ending warnings only.
+- Known risks:
+  - 실제 Amazon Q Business 호출은 provider double 기반 검증이며, 실제 AWS 계정 연동은 실행하지 않았다.
+
+### 2026-07-06 - AI 오류 탭 및 Terraform leave guard 예외 처리
+
+- Goal: Terraform 오류 해결 AI 창이 Terraform leave dialog backdrop에 가로막혀 X/수정 버튼이 동작하지 않는 문제를 고치고, 오류 해결 결과를 초안 제안 탭이 아닌 별도 `AI 오류` 탭으로 분리한다.
+- Completed:
+  - AI chat dock과 launcher에 `data-terraform-leave-guard-ignore`를 추가하고, Terraform leave guard document capture가 이 영역 클릭을 가로채지 않도록 예외 처리했다.
+  - `AI 오류` 탭을 추가하고 Terraform 오류 해결 요청이 들어오면 자동으로 해당 탭으로 이동하도록 바꿨다.
+  - Terraform issue 메시지 scope를 `errors`로 분리하고 오류 탭에서는 일반 채팅 composer를 숨기도록 정리했다.
+  - 오류 해결 카드의 절차형 안내 목록 렌더링을 제거했다.
+  - floating panel slot z-index를 올려 AI dock이 deployment/toast/backdrop 계층보다 위에서 클릭 가능하도록 보강했다.
+- Verification run:
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-right-panel-layout.test.ts features/workspace/workspace-terraform-ai.test.ts features/workspace/terraform-safe-fixes.test.ts` - passed, 58 tests.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api exec tsx --test src/services/aiProviderRouter.test.ts src/services/aiTerraformErrorExplanation.test.ts` - passed, 17 tests.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm lint` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm typecheck` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm build` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm harness:check` - passed after edits.
+  - `git diff --check` - passed with line-ending warnings only.
+- Known risks:
+  - 실제 브라우저 수동 클릭 검증은 아직 수행하지 않았고, source-layout/unit 테스트와 build로 검증했다.
+
+### 2026-07-06 - Amazon Q Terraform 응답 실패 fallback 보강
+
+- Goal: Amazon Q가 Terraform 오류 설명에서 generic non-answer 또는 파싱 불가능한 응답을 반환할 때 `응답 형식 보정 필요` 상태로 끝나지 않고, 가능한 경우 Bedrock/OpenAI 보조 provider가 오류 메시지와 코드 컨텍스트를 이어받아 수정안을 만들게 한다.
+- Completed:
+  - Terraform 오류 설명 라우터가 Amazon Q의 `invalid_response` fallback을 보관한 뒤 Bedrock/OpenAI provider를 추가로 시도하도록 변경했다.
+  - Bedrock/OpenAI도 실패하면 기존 Amazon Q fallback metadata를 유지해 원래 실패 상태를 잃지 않게 했다.
+  - Amazon Q generic non-answer 이후 Bedrock이 삭제 `codeSuggestion`을 반환하는 회귀 테스트를 추가했다.
+- Verification run:
+  - `npm exec --package=pnpm@11.8.0 -- pnpm harness:check` - passed before edits and after edits.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api exec tsx --test src/services/aiProviderRouter.test.ts --test-name-pattern "generic Terraform non-answer"` - failed before fix, passed after fix.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api exec tsx --test src/services/aiProviderRouter.test.ts src/services/aiTerraformErrorExplanation.test.ts` - passed, 17 tests.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api typecheck` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm lint` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm typecheck` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm build` - passed.
+  - `git diff --check` - passed with line-ending warnings only.
+- Known risks:
+  - 실제 Amazon Q/Bedrock 호출은 provider double 기반으로 검증했으며, 실제 AWS 계정 연동은 실행하지 않았다.
+
 ### 2026-07-06 - Terraform 오류 AI 수정 제안 강화
 
 - Goal: rule-first 진단만으로 설명이 부족한 Terraform syntax 오류에서 원본 오류 메시지와 코드 컨텍스트를 AI에 전달하고, AI가 제안한 정확한 코드 치환 또는 삭제안을 화면에 보여준 뒤 사용자가 버튼으로 적용할 수 있게 한다.
