@@ -16,9 +16,10 @@ import type {
   GitCicdHandoff,
   GitCicdHandoffPipelineStatus,
   TerraformDiagnostic,
+  TerraformSourceLocation,
   TerraformOutput
 } from "@sketchcatch/types";
-import { Clipboard, ClipboardCheck, Maximize2, ShieldCheck, Trash2, X } from "lucide-react";
+import { Clipboard, ClipboardCheck, Code2, Maximize2, ShieldCheck, Trash2, X } from "lucide-react";
 import { DashboardIcon } from "../../components/dashboard/dashboard-icons";
 import { SelectMenu, type SelectMenuOption } from "../../components/ui/SelectMenu";
 import { getApiErrorMessage } from "../../lib/api-client";
@@ -87,6 +88,7 @@ export function DeploymentPanel({
   currentNodeCount,
   diagramJson,
   hasUnsavedDeploymentBaseline,
+  onOpenFindingTerraformSource,
   onPrepareDeploymentArtifacts,
   onValidateTerraformDiagnostics,
   projectId,
@@ -95,6 +97,7 @@ export function DeploymentPanel({
   readonly currentNodeCount: number;
   readonly diagramJson: DiagramJson;
   readonly hasUnsavedDeploymentBaseline: boolean;
+  readonly onOpenFindingTerraformSource: (finding: CheckFinding) => TerraformSourceLocation | null;
   readonly onPrepareDeploymentArtifacts: () => Promise<SavedWorkspaceTerraformArtifact>;
   readonly onValidateTerraformDiagnostics: () => Promise<TerraformDiagnostic[]>;
   readonly projectId: string;
@@ -892,7 +895,10 @@ export function DeploymentPanel({
         <p className={styles.deploymentStaleNotice}>보드 변경됨 · 다시 실행 필요</p>
       ) : null}
       {preDeploymentAnalysis !== null ? (
-        <DeploymentPreDeploymentSummary analysis={preDeploymentAnalysis} />
+        <DeploymentPreDeploymentSummary
+          analysis={preDeploymentAnalysis}
+          onOpenFindingTerraformSource={onOpenFindingTerraformSource}
+        />
       ) : (
         <p className={styles.deploymentHint}>현재 보드 기준으로 비용, 보안, 설정 위험을 확인합니다.</p>
       )}
@@ -1447,9 +1453,11 @@ export function DeploymentPanel({
 }
 
 function DeploymentPreDeploymentSummary({
-  analysis
+  analysis,
+  onOpenFindingTerraformSource
 }: {
   readonly analysis: AiPreDeploymentAnalysisResult;
+  readonly onOpenFindingTerraformSource: (finding: CheckFinding) => TerraformSourceLocation | null;
 }) {
   const failCount = countChecklistItems(analysis, "fail");
   const warningCount = countChecklistItems(analysis, "warning");
@@ -1481,7 +1489,11 @@ function DeploymentPreDeploymentSummary({
       {visibleFindings.length > 0 ? (
         <ul className={styles.deploymentPreflightFindings}>
           {visibleFindings.map((finding) => (
-            <DeploymentPreDeploymentFindingItem finding={finding} key={finding.id} />
+            <DeploymentPreDeploymentFindingItem
+              finding={finding}
+              key={finding.id}
+              onOpenFindingTerraformSource={onOpenFindingTerraformSource}
+            />
           ))}
         </ul>
       ) : (
@@ -1494,13 +1506,86 @@ function DeploymentPreDeploymentSummary({
   );
 }
 
-function DeploymentPreDeploymentFindingItem({ finding }: { readonly finding: CheckFinding }) {
+function DeploymentPreDeploymentFindingItem({
+  finding,
+  onOpenFindingTerraformSource
+}: {
+  readonly finding: CheckFinding;
+  readonly onOpenFindingTerraformSource: (finding: CheckFinding) => TerraformSourceLocation | null;
+}) {
+  function openTerraformSource(): void {
+    onOpenFindingTerraformSource(finding);
+  }
+
   return (
     <li data-severity={finding.severity}>
       <span>{finding.severity.toUpperCase()}</span>
       <strong>{finding.title}</strong>
       {finding.resourceId ? <em>{finding.resourceId}</em> : null}
+      <button
+        className={styles.deploymentFindingFixButton}
+        onClick={openTerraformSource}
+        type="button"
+      >
+        <Code2 size={13} aria-hidden="true" />
+        수정
+      </button>
+      <DeploymentFindingAiExplanation finding={finding} />
     </li>
+  );
+}
+
+function DeploymentFindingAiExplanation({ finding }: { readonly finding: CheckFinding }) {
+  const explanation = finding.aiSafetyExplanation;
+
+  if (!explanation) {
+    return null;
+  }
+
+  return (
+    <div className={styles.deploymentFindingAiExplanation}>
+      <p>{explanation.riskSummary}</p>
+      <dl>
+        <div>
+          <dt>왜 위험한가</dt>
+          <dd>{explanation.whyDangerous}</dd>
+        </div>
+        <div>
+          <dt>권장 수정</dt>
+          <dd>{explanation.recommendedFix}</dd>
+        </div>
+        {explanation.terraformHint ? (
+          <div>
+            <dt>Terraform 힌트</dt>
+            <dd>{explanation.terraformHint}</dd>
+          </div>
+        ) : null}
+      </dl>
+      <DeploymentPreDeploymentTextList items={explanation.verificationSteps} title="확인 방법" />
+    </div>
+  );
+}
+
+function DeploymentPreDeploymentTextList({
+  items,
+  title
+}: {
+  readonly items: readonly string[];
+  readonly title: string;
+}) {
+  if (items.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className={styles.deploymentPreflightAiList}>
+      <strong>{title}</strong>
+      <ul>
+        {items.map((item, index) => (
+          <li key={`${title}-${index}-${item}`}>{item}</li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
@@ -1719,15 +1804,7 @@ function formatApprovalState(deployment: Deployment): string {
     return "Plan 필요";
   }
 
-  if (deployment.isBlocked && deployment.blockedBy === "missing_approval") {
-    return "승인 가능";
-  }
-
-  if (deployment.isBlocked) {
-    return "승인 불가";
-  }
-
-  return "승인 필요 없음";
+  return "승인 가능";
 }
 
 function getDeploymentActionHint(deployment: Deployment): string {
@@ -1745,11 +1822,7 @@ function getDeploymentActionHint(deployment: Deployment): string {
     return "승인된 Destroy Plan이 준비되었습니다. 실제 삭제 전 AWS 계정과 삭제 변경 내용을 다시 확인하세요.";
   }
 
-  if (
-    deployment.currentPlanOperation === "destroy" &&
-    deployment.isBlocked &&
-    deployment.blockedBy === "missing_approval"
-  ) {
+  if (deployment.currentPlanOperation === "destroy" && deployment.currentPlanArtifactId) {
     return "Destroy Plan 내용을 확인한 뒤 승인할 수 있습니다. 승인 전에는 AWS 리소스를 삭제하지 않습니다.";
   }
 
@@ -1773,12 +1846,8 @@ function getDeploymentActionHint(deployment: Deployment): string {
     return "Terraform Plan을 먼저 실행하면 승인 버튼이 표시됩니다.";
   }
 
-  if (deployment.isBlocked && deployment.blockedBy === "missing_approval") {
+  if (deployment.currentPlanArtifactId) {
     return "Plan 내용을 확인한 뒤 승인할 수 있습니다.";
-  }
-
-  if (deployment.isBlocked) {
-    return "현재 Plan은 승인 전에 차단 사유를 해결해야 합니다.";
   }
 
   return "";

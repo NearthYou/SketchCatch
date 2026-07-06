@@ -56,11 +56,20 @@ function createTerraformDiagnosticFinding(
   diagnostic: TerraformDiagnostic,
   index: number
 ): CheckFinding {
+  const sourceLocation = diagnostic.line
+    ? {
+        fileName: diagnostic.sourceFileName ?? "main.tf",
+        line: diagnostic.line,
+        ...(diagnostic.resourceAddress ? { resourceAddress: diagnostic.resourceAddress } : {})
+      }
+    : null;
+
   return {
     id: `terraform-diagnostic-${index}-${diagnostic.code ?? diagnostic.severity}`,
     category: "configuration",
     severity: diagnostic.severity === "error" ? "high" : "medium",
     resourceId: diagnostic.resourceAddress ?? diagnostic.nodeId,
+    ...(sourceLocation ? { sourceLocation } : {}),
     title: diagnostic.line
       ? `Terraform 코드 ${formatTerraformDiagnosticLocation(diagnostic)} 확인 필요`
       : "Terraform 코드 확인 필요",

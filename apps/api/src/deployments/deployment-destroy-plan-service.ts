@@ -4,8 +4,6 @@ import { join } from "node:path";
 import type {
   AwsConnection,
   DeploymentFailureStage,
-  DeploymentPlanSummary,
-  DeploymentPlanWarning,
   DeploymentStatus
 } from "@sketchcatch/types";
 import {
@@ -24,6 +22,8 @@ import {
   createS3DeploymentPlanArtifactStorage,
   type DeploymentPlanArtifactStorage
 } from "./deployment-plan-artifact-storage.js";
+import { evaluateDeploymentSafetyGate } from "./deployment-safety-gate.js";
+import { createDestroyNoOpWarning } from "./deployment-warning-factory.js";
 import {
   createS3DeploymentApplyArtifactStorage,
   type DeploymentApplyArtifactStorage
@@ -320,11 +320,18 @@ export async function runDeploymentDestroyPlan(
     const unsupportedResourceTypes = findUnsupportedLiveApplyResourceTypesFromTerraformShowJson(
       terraform.showJson.stdout
     );
-    const planSummary = createDestroyPlanSummary(
-      createDeploymentPlanSummaryFromTerraformShowJson(terraform.showJson.stdout),
-      unsupportedResourceTypes
+    const basePlanSummary = createDeploymentPlanSummaryFromTerraformShowJson(
+      terraform.showJson.stdout
     );
-    const block = createDestroyPlanBlock(unsupportedResourceTypes);
+    const planSummary = evaluateDeploymentSafetyGate({
+      operation: "destroy",
+      planSummary: basePlanSummary,
+      unsupportedResourceTypes,
+      warnings:
+        basePlanSummary.deleteCount === 0 && basePlanSummary.replaceCount === 0
+          ? [createDestroyNoOpWarning()]
+          : []
+    });
     const planArtifactId = generatePlanArtifactId();
     let uploadedPlanArtifact: Awaited<
       ReturnType<DeploymentPlanArtifactStorage["uploadDeploymentPlanArtifact"]>
@@ -371,9 +378,9 @@ export async function runDeploymentDestroyPlan(
               region: awsCredentials.region
             },
             planSummary,
-            isBlocked: block.isBlocked,
-            blockedBy: block.blockedBy,
-            blockedReason: block.blockedReason,
+            isBlocked: false,
+            blockedBy: null,
+            blockedReason: null,
             terminalStatus: sourceStatus === "FAILED" ? "FAILED" : "SUCCESS",
             failureStage: sourceStatus === "FAILED" ? sourceFailureStage : null,
             errorSummary: sourceStatus === "FAILED" ? sourceErrorSummary : null
@@ -597,52 +604,6 @@ async function failDeploymentDestroyPlan(
   }
 
   return failedDeployment;
-}
-
-function createDestroyPlanSummary(
-  summary: DeploymentPlanSummary,
-  unsupportedResourceTypes: readonly string[]
-): DeploymentPlanSummary {
-  const warnings: DeploymentPlanWarning[] = [
-    ...summary.warnings,
-    ...unsupportedResourceTypes.map((resourceType) => ({
-      level: "high" as const,
-      message: `MVP live destroy does not support Terraform resource type ${resourceType}`
-    }))
-  ];
-
-  if (summary.deleteCount === 0 && summary.replaceCount === 0) {
-    warnings.push({
-      level: "medium",
-      message: "Terraform destroy plan has no resources to delete"
-    });
-  }
-
-  return {
-    ...summary,
-    blocked: true,
-    warnings
-  };
-}
-
-function createDestroyPlanBlock(unsupportedResourceTypes: readonly string[]): {
-  isBlocked: boolean;
-  blockedBy: "missing_approval" | "risk_analysis";
-  blockedReason: string;
-} {
-  if (unsupportedResourceTypes.length > 0) {
-    return {
-      isBlocked: true,
-      blockedBy: "risk_analysis",
-      blockedReason: `Unsupported Terraform resource types for MVP live destroy: ${unsupportedResourceTypes.join(", ")}`
-    };
-  }
-
-  return {
-    isBlocked: true,
-    blockedBy: "missing_approval",
-    blockedReason: "Terraform Destroy Plan requires user approval before destroy"
-  };
 }
 
 async function appendTerraformOutput(input: {

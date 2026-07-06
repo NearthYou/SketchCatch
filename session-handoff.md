@@ -2,6 +2,268 @@
 
 이 파일은 최신 세션 하나를 다음 세션이 빠르게 이어받기 위한 압축본이다. 누적 이력은 `agent-progress.md`에 남긴다.
 
+## 2026-07-06 최신 핸드오프 - Cost Risk 리소스 지원과 Pricing API 확장
+
+### 현재 상태
+
+- 현재 브랜치: `feat/ys/142-cost-risk-분석-구현`
+- 사용자 요청: 비용 산정에서 애매하거나 버그인 부분을 고치고, 미지원/fallback-only 리소스를 최대한 AWS Pricing API 조회로 연결한다.
+- 이번 세션 커밋:
+  - `01c5aed Feat: 비용 산정 지원 상태 계약 추가`
+  - `5cdac8d Fix: 비용 산정 Terraform 리소스 감지 보정`
+  - `e828988 Feat: 비용 산정 리소스와 Pricing API 확장`
+  - `1db8022 Feat: 비용 산정 상태 UI 표시`
+
+### 완료된 것
+
+- `ResourceCostEstimate`에 `terraformResourceType`, `supportLevel`, `supportReason`을 추가했다.
+- `cost-analysis`가 `ResourceType`보다 `config.terraformResourceType`을 우선해 NAT Gateway, ALB, DB snapshot 같은 리소스를 정확히 산정한다.
+- 사용자 지정 resource 목록을 Networking, Compute, Storage, Database, IAM/Security, Serverless/App, Messaging/Events, Edge/CDN, Observability, Containers, CI/CD, Governance/Config, WAF/Protection 범위로 확장했다.
+- billable 리소스는 AWS Pricing API rate provider를 먼저 호출하고, 실패하면 fallback 단가로 계산한다.
+- 직접 비용이 없는 `aws_autoscaling_group`, public `aws_acm_certificate`, `aws_sns_topic_subscription`은 `no_direct_cost`로 화면에 표시한다.
+- `/costs`와 Workspace AI 시뮬레이션 결과는 더 이상 월 예상 비용이 0인 리소스를 숨기지 않고 산정 상태 배지와 이유를 보여준다.
+
+## 2026-07-05 최신 핸드오프 - Terraform 영역 리소스 Ticket 4 범위 축소
+
+### 현재 상태
+
+- 현재 브랜치: `Feat/jh/171-legacy-diagramjson-호환-마이그레이션과-terraform-preview-stale-방어`
+- 사용자 요청: 기존 draft 보존 전제의 legacy migration 구현은 과하므로, Ticket 4를 기존 DB draft/IndexedDB 초기화와 Terraform Preview stale 최소 방어로 줄인다.
+- tracked diff는 `apps/web/features/workspace/TerraformCodePanel.tsx`, `apps/web/features/workspace/workspace-right-panel-layout.test.ts`, `agent-progress.md`, `session-handoff.md` 중심이다.
+- `docs/jh/001_테라폼영역리소스동기화티켓계획_JH.md`도 수정됐지만 `docs/jh/`가 `.gitignore`에 포함되어 tracked diff에는 나오지 않는다.
+
+### 완료된 것
+
+- `metadata.awsRegion` canonical rollback, shared/API legacy normalization helper, DB migration, Web IndexedDB migration 구현을 범위 밖으로 정리했다.
+- Terraform panel이 마지막 성공 Preview fingerprint와 현재 Diagram fingerprint를 비교해 stale 상태를 표시하게 했다.
+- Preview 생성 실패 시 이전 Terraform code가 현재 Diagram과 동기화된 것처럼 보이지 않도록 실패 메시지와 snapshot summary를 분리했다.
+- 수동 편집 중 자동 refresh가 스킵되어도 Diagram 변경이 Preview에 반영되지 않았음을 표시하게 했다.
+- Ticket 4 문서를 "기존 DB draft 초기화 + IndexedDB `sketchcatch-drafts` 초기화 + stale 방어"로 갱신했다.
+
+### 검증된 것
+
+- `pnpm harness:check` - passed before edits.
+- `pnpm --filter @sketchcatch/types typecheck` - passed.
+- `pnpm --filter @sketchcatch/api exec tsx --test src/services/cost-analysis.test.ts src/services/awsPricingRateProvider.test.ts` - passed.
+- `pnpm --filter @sketchcatch/api typecheck` - passed.
+- `pnpm --filter @sketchcatch/api lint` - passed.
+- `pnpm --filter @sketchcatch/web typecheck` - passed.
+- `pnpm --filter @sketchcatch/web lint` - passed.
+- 실제 AWS Pricing API 샘플 조회는 `sketchcatch-dev` SSO token 만료로 실패했다. 재검증 전 `aws sso login --profile sketchcatch-dev`가 필요하다.
+- `pnpm harness:check` - passed after docs/progress updates.
+- `pnpm lint` - passed with Turbo cache rename warnings only.
+- `pnpm typecheck` - passed with Turbo cache rename warnings only.
+- `pnpm build` - passed.
+- `git diff --check` - passed with line-ending warnings only.
+
+### 다음 행동
+
+- 실제 AWS Pricing API 라이브 조회를 다시 확인하려면 `aws sso login --profile sketchcatch-dev` 후 `AWS_PRICING_API_ENABLED=true` 샘플 조회를 재실행한다.
+- 이번 세션에서 실제 AWS apply/destroy, cloud mutation, Git/CI/CD handoff는 실행하지 않았다.
+
+## 2026-07-05 최신 핸드오프 - Cost Risk 분석 예상 비용 구현
+
+### 현재 상태
+
+- 현재 브랜치: `feat/ys/142-cost-risk-분석-구현`
+- 사용자 요청: 매 단계마다 구현하고 검증되면 커밋한다.
+- 구현은 6개 기능/fix 커밋과 기록 커밋으로 나뉘어 있다.
+  - `5212684 Feat: 비용 산정 타입 확장`
+  - `0e550f1 Feat: 시뮬레이션 비용 산정 연결`
+  - `7bf8cac Feat: 시뮬레이션 비용 조건 UI 연결`
+  - `b3350d7 Feat: 비용관리 API 기반 전환`
+  - `df13897 Fix: 비용관리 프로젝트 선택 URL 반영`
+  - `de5971f Fix: RDS 스토리지 Pricing API 조회 추가`
+
+### 완료된 것
+
+- shared type에 `CostEstimateRequest`, `CostEstimateResult`, `CostProjectEstimateListResponse`, `DesignSimulationResult.costEstimate`를 추가했다.
+- API 서버에 `cost-analysis` 서비스와 AWS Pricing API adapter를 추가했다. 실제 조회는 `AWS_PRICING_API_ENABLED=true`일 때만 시도하고, 기본/테스트는 fallback 단가를 사용한다.
+- `simulateDesign()`이 비용 산정 서비스를 호출하고 기존 `costPressure`에 금액 기반 문장을 담는다.
+- Workspace AI 시뮬레이션 탭에 기간/예상 사용자 수 입력을 추가하고, 비용 카드에 총 예상 비용과 리소스별 근거를 표시한다.
+- `GET /api/costs/projects`와 `/costs` client 화면을 연결해 실행 중 배포 프로젝트의 예상 비용 합계와 상세를 보여준다.
+- `/costs` 프로젝트 행 선택을 `projectId` URL query와 동기화해 상세 비용 상태를 주소로 다시 열 수 있게 했다.
+- RDS storage도 AWS Pricing API의 `Database Storage`/`General Purpose-GP3` 상품으로 조회되게 adapter를 보강했다.
+- `docs/data-models.md`, `agent-progress.md`, `session-handoff.md`를 갱신했다.
+
+### 검증된 것
+
+- `pnpm harness:check` - passed before edits.
+- `pnpm --filter @sketchcatch/types typecheck` - passed.
+- `pnpm --filter @sketchcatch/api typecheck` - passed.
+- `pnpm --filter @sketchcatch/api lint` - passed.
+- `pnpm --filter @sketchcatch/web typecheck` - passed.
+- `pnpm --filter @sketchcatch/web lint` - passed.
+- `pnpm --filter @sketchcatch/api test -- src/routes/aiDesignSimulation.test.ts` - package script executed the full API test set; 565 tests passed.
+- `pnpm harness:check` - final check passed.
+- `pnpm lint` - passed.
+- `pnpm typecheck` - passed.
+- `pnpm build` - passed.
+- `git diff --check` - passed.
+- `AWS_PROFILE=sketchcatch-dev AWS_PRICING_API_ENABLED=true` 로 AWS Pricing API 실제 조회를 검증했다. EC2, RDS instance, RDS storage, S3가 `aws_pricing_api` source로 계산된다.
+- `pnpm --filter @sketchcatch/api test -- src/services/awsPricingRateProvider.test.ts` - package script executed the full API test set; 566 tests passed.
+- `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, `git diff --check` - passed after RDS storage fix.
+
+### 다음 행동
+
+- 사용자에게 커밋별 구현 내용과 화면 노출 방식을 보고한다.
+- `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-right-panel-layout.test.ts --test-name-pattern "terraform preview failures|terraform status counts"` - passed.
+- `pnpm --filter @sketchcatch/web exec tsx --test features/parameter-input/region-node-metadata.test.ts` - passed.
+- `pnpm harness:check` - passed after edits.
+- `pnpm lint` - passed.
+- `pnpm typecheck` - passed after reverting generated `apps/web/next-env.d.ts`.
+- `pnpm build` - passed; Next.js generated `apps/web/next-env.d.ts` was reverted afterward.
+- `git diff --check` - passed.
+
+### 다음 행동
+
+- 실제 대상 project의 DB draft를 초기화한다.
+- 테스트 브라우저 profile의 IndexedDB `sketchcatch-drafts`를 초기화한다. DB만 비우면 local draft가 다시 복원될 수 있다.
+- 필요하면 브랜치명을 현재 축소 scope에 맞춰 새로 파거나 rename한다. 현재 브랜치명에는 legacy migration 문구가 남아 있다.
+
+## 2026-07-05 최신 핸드오프 - Terraform 영역 리소스 Ticket 3 리뷰 보강
+
+### 현재 상태
+
+- 현재 브랜치: `Feat/jh/167-asg를-visual-area-node로-동작`
+- 사용자 요청: ASG area endpoint edge z-index 리뷰 피드백을 반영하고, 커밋은 만들지 않는다.
+- 기존 Ticket 3 diff는 정리된 상태였고, 이번 변경은 `flow-mappers.ts`와 `flow-mappers.test.ts` 중심이다.
+
+### 완료된 것
+
+- `toFlowEdges`의 z-index 계산에서 selected edge를 area endpoint 가중치보다 더 높게 올리도록 보정했다.
+- ASG area endpoint를 공유하는 selected/unselected edge를 만들어 selected edge가 더 높은 z-index를 갖는 회귀 테스트를 추가했다.
+
+### 검증된 것
+
+- `pnpm harness:check` - passed before edits.
+- Red before fix: `pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/flow-mappers.test.ts` failed because selected and unselected area endpoint edges had the same z-index.
+- `pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/flow-mappers.test.ts` - passed.
+- `pnpm --filter @sketchcatch/web typecheck` - passed.
+- `pnpm --filter @sketchcatch/web lint` - passed.
+- `pnpm lint`, `pnpm typecheck`, `pnpm build` - passed.
+
+### 다음 행동
+
+- 최종 `pnpm harness:check`, `git diff --check`를 확인한 뒤 사용자에게 결과를 보고한다.
+- `next build`가 바꾼 `apps/web/next-env.d.ts`는 원래 dev route import로 되돌렸다.
+- 이번 세션은 사용자 요청에 따라 커밋하지 않았다.
+
+## 2026-07-05 최신 핸드오프 - Terraform 영역 리소스 Ticket 3
+
+### 현재 상태
+
+- 현재 브랜치: `Feat/jh/167-asg를-visual-area-node로-동작`
+- 브랜치 최신화 확인: 작업 시작 시 `HEAD`, upstream, `origin/dev`가 모두 `799b69e`였고 `0 ahead / 0 behind`였다.
+- 사용자 요청: 현재 브랜치가 최신이면 Ticket 3을 진행하고, 커밋은 만들지 않는다.
+- Ticket 3 범위는 `aws_autoscaling_group`을 Terraform resource identity는 유지하면서 Web visual area node로 동작하게 만드는 것이다.
+
+### 완료된 것
+
+- `area-nodes.ts`의 resource area node type에 `aws_autoscaling_group`을 추가했다.
+- Resource catalog에서 ASG 기본 size를 `200x130`으로 바꿔 area node로 생성되게 했다.
+- `node-resize-bounds.ts`에서 ASG resize bounds를 area node minimum `200x130`, max unlimited로 바꿨다.
+- ASG inside child movement/parent assignment를 area-node movement와 drag finalize 경로에서 검증했다.
+- ASG가 area endpoint인 edge가 ASG background 위에 표시되도록 `flow-mappers.ts` edge z-index 계산을 보정했다.
+- `docs/data-models.md`에 ASG가 Terraform resource이면서 Web visual area node라는 계약을 기록했다.
+
+### 검증된 것
+
+- `pnpm harness:check` - passed before edits.
+- Red before fix: ASG area/click-through/movement/catalog/resize 기대 테스트가 실패했다.
+- `pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/area-nodes.test.ts features/diagram-editor/node-resize-bounds.test.ts features/resource-settings/catalog.test.ts features/diagram-editor/flow-mappers.test.ts features/diagram-editor/area-node-movement.test.ts features/diagram-editor/diagram-utils.test.ts features/diagram-editor/drag-transaction.test.ts` - passed.
+- `pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/reference-drop-targets.test.ts` - passed.
+- `pnpm --filter @sketchcatch/web typecheck` - passed.
+- `pnpm --filter @sketchcatch/web lint` - passed.
+- `pnpm lint`, `pnpm typecheck`, `pnpm build` - passed.
+- `pnpm harness:check` - passed after build.
+
+### 다음 행동
+
+- Ticket 4에서 Terraform Preview 지원 리소스를 확장한다. `aws_autoscaling_group`의 backend Preview capability 확장은 여기서 함께 다루는 것이 현재 티켓 계획과 맞다.
+- `next build`가 바꾼 `apps/web/next-env.d.ts`는 원래 dev route import로 되돌렸다.
+- 이번 세션은 사용자 요청에 따라 커밋하지 않았다.
+
+## 2026-07-05 최신 핸드오프 - Terraform 영역 리소스 계약 Ticket 2
+
+### 현재 상태
+
+- 현재 브랜치: `Feat/jh/165-regionaz를-resource-node로-생성`
+- 사용자 요청: `docs/jh/001_테라폼영역리소스동기화티켓계획_JH.md`의 Ticket 2를 진행하고, 커밋은 만들지 않는다.
+- Ticket 2 범위는 Web에서 새 Region/AZ 생성 경로를 `aws_region`, `aws_availability_zone` resource area node로 바꾸는 것이다.
+- 신규 catalog/sample 생성 경로는 더 이상 `design_region`, `design_az`를 만들지 않는다. Legacy 저장 데이터 호환을 위해 area 판정과 일부 테스트에서는 기존 design/sketchcatch 타입을 계속 인식한다.
+
+### 완료된 것
+
+- Resource catalog의 Region/AZ item을 `aws-region`, `aws-availability-zone` id와 `aws_region`, `aws_availability_zone` type으로 전환했다.
+- `createDiagramNodeFromPayload`가 Region/AZ drag 생성 시 `kind: "resource"`와 기본 `parameters`를 만든다.
+- Region 기본값: `resourceName: "ap_northeast_2"`, `values.awsRegion: "ap-northeast-2"`.
+- AZ 기본값: `resourceName: "ap_northeast_2a"`, `values.awsAvailabilityZone: "ap-northeast-2a"`.
+- `area-nodes`, resize bounds, Resource List summary가 `aws_region`, `aws_availability_zone`을 board area node로 인식한다.
+- Parameter panel의 Region/AZ selector는 `metadata`가 아니라 `parameters.values["awsRegion"]`, `parameters.values["awsAvailabilityZone"]`만 갱신한다.
+- 리뷰 보강으로 Region/AZ reader는 `parameters.values`가 누락되거나 null이어도 기본값으로 fallback한다.
+- Region/AZ update helper는 legacy `values: undefined | null`에서도 새 values 객체를 만들어 저장한다.
+- AZ 선택용 정적 option helper를 추가했다.
+- server-storage sample layout이 catalog 기반 `aws_region`, `aws_availability_zone` area resource를 생성한다.
+- `docs/data-models.md`에서 Region/AZ area resource가 shared Terraform `ResourceDefinition` 대상이 아님을 최신 계약에 맞게 보정했다.
+
+### 검증된 것
+
+- `pnpm harness:check` - passed before edits.
+- `pnpm --filter @sketchcatch/web exec tsx --test features/resource-settings/catalog.test.ts` - passed.
+- `pnpm --filter @sketchcatch/web exec tsx --test features/parameter-input/region-node-metadata.test.ts features/parameter-input/aws-availability-zone-options.test.ts` - passed.
+- `pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/area-nodes.test.ts features/diagram-editor/diagram-utils.test.ts features/diagram-editor/node-resize-bounds.test.ts` - passed.
+- `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/resource-list-summary.test.ts features/workspace/workspace-ai-diagram-adapter.test.ts` - passed.
+- `pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/area-node-movement.test.ts features/diagram-editor/reference-drop-targets.test.ts features/diagram-editor/flow-mappers.test.ts` - passed.
+- `pnpm --filter @sketchcatch/api exec tsx --test src/routes/terraform.test.ts --test-name-pattern "Region and AZ area resource parameters"` - passed; Node test runner still executed the whole file.
+- `pnpm --filter @sketchcatch/web typecheck`, `pnpm --filter @sketchcatch/api typecheck`, `pnpm --filter @sketchcatch/types typecheck` - passed.
+- `pnpm --filter @sketchcatch/web lint` - passed.
+- `pnpm lint`, `pnpm typecheck`, `pnpm build` - passed.
+- 리뷰 보강 후 `pnpm --filter @sketchcatch/web exec tsx --test features/parameter-input/region-node-metadata.test.ts`, `pnpm --filter @sketchcatch/web typecheck`, `pnpm --filter @sketchcatch/web lint`, `pnpm lint`, `pnpm typecheck`, `pnpm build`가 통과했다.
+
+### 다음 행동
+
+- Ticket 3에서 `aws_autoscaling_group`을 Terraform resource이면서 visual area node로 동작하게 만든다.
+- Ticket 3에서는 `area-nodes`, resize bounds, flow mapper, reference/drop target, area movement 테스트를 이어서 확인한다.
+- 이번 세션은 사용자 요청에 따라 커밋하지 않았다.
+
+## 2026-07-05 최신 핸드오프 - Terraform 영역 리소스 계약 Ticket 1
+
+### 현재 상태
+
+- 현재 브랜치: `Feat/jh/163-영역-리소스와-terraform-sync-계약-정리`
+- 사용자 요청: `docs/jh/001_테라폼영역리소스동기화티켓계획_JH.md`의 Ticket 1을 진행하고, 커밋은 만들지 않는다.
+- Ticket 1 범위는 계약 정리다. Web catalog/Preview/Sync parsing 실제 동작 확장은 다음 티켓으로 남긴다.
+- `docs/data-models.md`, `packages/types/src/index.ts`, API schema/test, Web legacy compatibility test/source, `agent-progress.md`, `session-handoff.md`가 수정됐다.
+
+### 완료된 것
+
+- `DiagramNodeMetadata`에서 `awsRegion`을 제거하고 `parentAreaNodeId`만 남겼다.
+- Region/AZ 선택값은 `parameters.values.awsRegion`, `parameters.values.awsAvailabilityZone`에 저장한다는 계약을 문서화했다.
+- `aws_region`, `aws_availability_zone`은 Terraform HCL block이 아니라 SketchCatch 보드 영역 리소스라고 명시했다.
+- Terraform Sync `create_candidate` proposal에 `nodeId`, `metadata`, `position`을 담을 수 있도록 shared type과 문서 계약을 확장했다.
+- API `diagramNodeMetadataSchema`를 strict하게 바꿔 legacy `metadata.awsRegion`을 거부한다.
+- Web은 legacy persisted `metadata.awsRegion` 읽기만 helper 안에 격리하고, 새 metadata 작성은 더 이상 `awsRegion`을 쓰지 않는다.
+- 리뷰 보강으로 `getRegionNodeAwsRegion`은 `parameters.values["awsRegion"]`을 먼저 읽고 legacy metadata를 fallback으로만 읽는다.
+- `Record<string, unknown>`인 `parameters.values` 조회 테스트는 bracket notation으로 정리했다.
+
+### 검증된 것
+
+- `pnpm harness:check` - passed before edits and after edits.
+- `pnpm --filter @sketchcatch/api exec tsx --test src/routes/project-draft-schemas.test.ts` - passed.
+- `pnpm --filter @sketchcatch/api exec tsx --test src/routes/terraform.test.ts` - passed.
+- `pnpm --filter @sketchcatch/web exec tsx --test features/parameter-input/region-node-metadata.test.ts features/diagram-editor/area-node-movement.test.ts features/diagram-editor/diagram-utils.test.ts features/workspace/resource-list-summary.test.ts` - passed.
+- `pnpm --filter @sketchcatch/types typecheck`, `pnpm --filter @sketchcatch/api typecheck`, `pnpm --filter @sketchcatch/web typecheck` - passed.
+- `pnpm lint`, `pnpm typecheck`, `pnpm build` - passed.
+- `git diff --check` - passed.
+
+### 다음 행동
+
+- Ticket 2에서 Region/AZ 영역 노드 생성과 parameter panel 저장 경로를 실제 `parameters.values` 기반으로 옮긴다.
+- Ticket 2에서 `createRegionNodeMetadata(node, awsRegion)`의 미사용 `awsRegion` 매개변수를 제거하거나 parameter write helper로 대체하고 호출부/테스트를 함께 정리한다.
+- Ticket 2 이후에는 Web helper에 남은 legacy `metadata.awsRegion` 읽기 호환을 언제 제거할지 결정한다.
+- 이번 세션은 사용자 요청에 따라 커밋하지 않았다.
+
 ## 2026-07-04 최신 핸드오프 - Natural Language Diagramming 브랜치 dev 최신화
 
 ### 현재 상태
@@ -497,3 +759,11 @@ pnpm build
 - Scope completed: Deployment repository mutation wrapper writes `deployment.status`, log creation/SSE stream writes `deployment.log_cursor`, stream cursor read falls back to RDS on cache miss/failure, `buildApp` wires `createRuntimeCacheFromEnv`, and docs/sw has key/TTL/future reverse scan/pipeline convention.
 - Verification completed: targeted deployment route tests, API lint/typecheck, workspace lint/typecheck/build, `git diff --check`; final harness still needs to be rerun after this handoff note.
 - Remaining risk: no real Redis server or AWS apply/destroy was run.
+
+## 2026-07-06 - Cost Estimate 기간/사용자 배율 handoff
+
+- Branch/worktree: `feat/ys/142-cost-risk-분석-구현` at `C:\krafton_jungle\SketchCatch`.
+- Scope completed: 비용 산정 DTO에 `ResourceCostEstimate.periodEstimate`를 추가했고, API는 월 환산 금액과 요청 기간 금액을 함께 반환한다. 예상 사용자 수는 기본 1,000명 대비 배율로 EC2/RDS/EBS/RDS snapshot/ElastiCache/ECS/NAT Gateway/VPC Endpoint/ALB 용량 산정에 반영한다. 요청량/저장량/전송량 기반 리소스는 기존 파생량 모델을 유지했다.
+- UI completed: 비용관리 프로젝트 상세와 워크스페이스 AI 시뮬레이션 리소스 상세가 `monthlyEstimate` 대신 선택 기간의 `periodEstimate`를 표시한다.
+- Verification completed: focused API tests, API/web typecheck, `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, `git diff --check`.
+- Remaining risk: 실제 AWS SSO credential 기반 AWS Pricing API 호출은 검증하지 않았다. 현재 검증은 fallback 경로와 fake pricing provider 기반이다.

@@ -799,9 +799,15 @@ function createPlanSummary() {
     blocked: false,
     warnings: [
       {
+        id: "repository-variable-warning",
         level: "medium",
+        category: "configuration",
+        source: "pre_deployment_check",
+        code: "UNSUPPORTED_RESOURCE",
         message: "Confirm destination repository variables before merge.",
-        relatedResourceId: "aws_instance.web"
+        relatedResourceId: "aws_instance.web",
+        requiresAcknowledgement: true,
+        blocksApproval: false
       }
     ]
   };

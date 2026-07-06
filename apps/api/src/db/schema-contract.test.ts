@@ -18,6 +18,9 @@ import {
   projectAssets,
   projectDrafts,
   projects,
+  reverseEngineeringScanLogs,
+  reverseEngineeringScanStatusEnum,
+  reverseEngineeringScans,
   users
 } from "./schema.js";
 
@@ -153,6 +156,54 @@ test("Git/CI/CD handoffs store repository metadata without raw provider secrets"
   assert(hasForeignKey(config.foreignKeys, "architecture_id", architectures, "id"));
   assert(hasForeignKey(config.foreignKeys, "terraform_artifact_id", projectAssets, "id"));
   assert(hasForeignKey(config.foreignKeys, "created_by_user_id", users, "id"));
+});
+
+test("Reverse Engineering scans store provider-neutral job metadata without raw credentials", () => {
+  const config = getTableConfig(reverseEngineeringScans);
+
+  assert.equal(reverseEngineeringScanStatusEnum.enumName, "reverse_engineering_scan_status");
+  assert.deepEqual(reverseEngineeringScanStatusEnum.enumValues, [
+    "queued",
+    "running",
+    "completed",
+    "failed",
+    "cancelled"
+  ]);
+  assert(findColumn(config.columns, "aws_connection_id"));
+  assert(findColumn(config.columns, "provider"));
+  assert(findColumn(config.columns, "region"));
+  assert(findColumn(config.columns, "resource_types"));
+  assert(findColumn(config.columns, "status"));
+  assert(findColumn(config.columns, "result"));
+  assert(findColumn(config.columns, "error_summary"));
+  assert(findColumn(config.columns, "cancel_requested_at"));
+  assert(findColumn(config.columns, "deleted_at"));
+  assert.equal(findColumn(config.columns, "access_key_id"), undefined);
+  assert.equal(findColumn(config.columns, "secret_access_key"), undefined);
+  assert.equal(findColumn(config.columns, "session_token"), undefined);
+  assert(hasIndex(config.indexes, "reverse_engineering_scans_project_id_idx", ["project_id"]));
+  assert(hasIndex(config.indexes, "reverse_engineering_scans_status_idx", ["status"]));
+  assert(hasForeignKey(config.foreignKeys, "project_id", projects, "id"));
+  assert(hasForeignKey(config.foreignKeys, "aws_connection_id", awsConnections, "id"));
+});
+
+test("Reverse Engineering scan logs keep ordered masked progress messages", () => {
+  const config = getTableConfig(reverseEngineeringScanLogs);
+
+  assert(findColumn(config.columns, "scan_id"));
+  assert(findColumn(config.columns, "sequence"));
+  assert(findColumn(config.columns, "stage"));
+  assert(findColumn(config.columns, "level"));
+  assert(findColumn(config.columns, "message"));
+  assert.equal(findColumn(config.columns, "raw_message"), undefined);
+  assert(
+    hasUniqueIndex(config.indexes, "reverse_engineering_scan_logs_scan_sequence_unique", [
+      "scan_id",
+      "sequence"
+    ])
+  );
+  assert(hasIndex(config.indexes, "reverse_engineering_scan_logs_scan_id_idx", ["scan_id"]));
+  assert(hasForeignKey(config.foreignKeys, "scan_id", reverseEngineeringScans, "id"));
 });
 
 function findColumn(columns: Array<{ name: string }>, name: string) {

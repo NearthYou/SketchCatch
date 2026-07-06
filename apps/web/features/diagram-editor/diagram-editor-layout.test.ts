@@ -29,6 +29,13 @@ test("compact resource node shell does not keep the generic minimum height", () 
   assert.match(resourceShellRule, /\bmin-height:\s*0;/);
 });
 
+test("area node header text cannot flow under inline metadata", () => {
+  const headerTextRule = getCssRule(diagramEditorStylesSource, "areaNodeHeaderText");
+
+  assert.match(headerTextRule, /\boverflow:\s*hidden;/);
+  assert.match(headerTextRule, /\btext-overflow:\s*ellipsis;/);
+});
+
 function getCssRule(source: string, className: string): string {
   const match = new RegExp(`\\.${className}\\s*\\{(?<body>[^}]*)\\}`).exec(source);
 

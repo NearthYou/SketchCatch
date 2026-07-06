@@ -39,21 +39,21 @@ export function addServerStorageAreaNodes(nodes: readonly DiagramNode[]): Diagra
   }
 
   return [
-    createDesignAreaNode({
+    createAreaNode({
       id: AREA_NODE_IDS.region,
       label: "Region",
       position: { x: 40, y: 70 },
       size: { width: 1160, height: 1080 },
-      type: "design_region",
+      type: "aws_region",
       zIndex: 0
     }),
-    createDesignAreaNode({
+    createAreaNode({
       id: AREA_NODE_IDS.availabilityZone,
       label: "Availability Zone",
       metadata: { parentAreaNodeId: "vpc" },
       position: { x: 155, y: 430 },
       size: { width: 780, height: 620 },
-      type: "design_az",
+      type: "aws_availability_zone",
       zIndex: 2
     }),
     ...nodes.map(applyParentMetadata)
@@ -67,7 +67,7 @@ function isServerStorageDraftNodeSet(nodes: readonly DiagramNode[]): boolean {
   return REQUIRED_RESOURCE_IDS.every((nodeId) => nodeIds.has(nodeId));
 }
 
-type DesignAreaInput = {
+type AreaNodeInput = {
   readonly id: string;
   readonly label: string;
   readonly metadata?: DiagramNode["metadata"] | undefined;
@@ -77,8 +77,8 @@ type DesignAreaInput = {
   readonly zIndex: number;
 };
 
-// 수동으로 놓은 design area와 같은 catalog 스타일을 재사용합니다.
-function createDesignAreaNode(input: DesignAreaInput): DiagramNode {
+// 수동으로 놓은 area node와 같은 catalog 스타일/기본 parameters를 재사용합니다.
+function createAreaNode(input: AreaNodeInput): DiagramNode {
   const resourceItem = RESOURCE_ITEMS_BY_TYPE.get(input.type);
 
   if (!resourceItem) {

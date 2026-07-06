@@ -71,7 +71,6 @@ test("save project draft body preserves diagram node metadata", () => {
         {
           ...validDiagram.nodes[0]!,
           metadata: {
-            awsRegion: "ap-northeast-2",
             parentAreaNodeId: "area-1"
           }
         }
@@ -80,8 +79,75 @@ test("save project draft body preserves diagram node metadata", () => {
   });
 
   assert.deepEqual(parsed.diagramJson.nodes[0]?.metadata, {
-    awsRegion: "ap-northeast-2",
     parentAreaNodeId: "area-1"
+  });
+});
+
+test("save project draft body rejects legacy awsRegion metadata", () => {
+  const result = saveProjectDraftBodySchema.safeParse({
+    diagramJson: {
+      ...validDiagram,
+      nodes: [
+        {
+          ...validDiagram.nodes[0]!,
+          metadata: {
+            awsRegion: "ap-northeast-2"
+          }
+        }
+      ]
+    }
+  });
+
+  assert.equal(result.success, false);
+});
+
+test("save project draft body accepts Region and AZ values in parameters", () => {
+  const parsed = saveProjectDraftBodySchema.parse({
+    diagramJson: {
+      ...validDiagram,
+      nodes: [
+        {
+          ...validDiagram.nodes[0]!,
+          id: "region-1",
+          type: "aws_region",
+          label: "Region",
+          parameters: {
+            resourceType: "aws_region",
+            resourceName: "ap_northeast_2",
+            fileName: "main",
+            values: {
+              awsRegion: "ap-northeast-2"
+            }
+          }
+        },
+        {
+          ...validDiagram.nodes[0]!,
+          id: "az-1",
+          type: "aws_availability_zone",
+          label: "AZ",
+          metadata: {
+            parentAreaNodeId: "region-1"
+          },
+          parameters: {
+            resourceType: "aws_availability_zone",
+            resourceName: "ap_northeast_2a",
+            fileName: "main",
+            values: {
+              awsAvailabilityZone: "ap-northeast-2a"
+            }
+          }
+        }
+      ]
+    }
+  });
+
+  assert.equal(parsed.diagramJson.nodes[0]?.parameters?.values["awsRegion"], "ap-northeast-2");
+  assert.equal(
+    parsed.diagramJson.nodes[1]?.parameters?.values["awsAvailabilityZone"],
+    "ap-northeast-2a"
+  );
+  assert.deepEqual(parsed.diagramJson.nodes[1]?.metadata, {
+    parentAreaNodeId: "region-1"
   });
 });
 

@@ -757,15 +757,15 @@ test("convertArchitectureJsonToDiagramJson lays out server and storage draft as 
     [
       {
         id: "server-storage-region",
-        kind: "design",
+        kind: "resource",
         parentAreaNodeId: undefined,
-        type: "design_region"
+        type: "aws_region"
       },
       {
         id: "server-storage-az",
-        kind: "design",
+        kind: "resource",
         parentAreaNodeId: "vpc",
-        type: "design_az"
+        type: "aws_availability_zone"
       },
       {
         id: "vpc",
@@ -837,6 +837,12 @@ test("convertArchitectureJsonToDiagramJson lays out server and storage draft as 
   assertContainsNode(azNode, subnetNode);
   assertContainsNode(subnetNode, securityGroupNode);
   assertContainsNode(securityGroupNode, instanceNode);
+  assert.deepEqual(regionNode?.parameters?.values, {
+    awsRegion: "ap-northeast-2"
+  });
+  assert.deepEqual(azNode?.parameters?.values, {
+    awsAvailabilityZone: "ap-northeast-2a"
+  });
   assert.equal(regionNode?.size.width, 1192);
   assert.equal(regionNode?.size.height, 1080);
   assert.equal(vpcNode?.size.width, 1056);

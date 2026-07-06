@@ -107,20 +107,21 @@ function shouldRenderNestedBlocks(
   resourceType: string,
   key: string,
   value: unknown
-): value is Record<string, unknown>[] {
+): value is Record<string, unknown> | Record<string, unknown>[] {
   return (
     isTerraformNestedBlockAttribute(resourceType, key) &&
-    Array.isArray(value) &&
-    value.every(isRecord)
+    ((Array.isArray(value) && value.every(isRecord)) || isRecord(value))
   );
 }
 
 function renderNestedBlocks(
   key: string,
-  values: Record<string, unknown>[],
+  value: Record<string, unknown> | Record<string, unknown>[],
   indentLevel: number
 ): string[] {
   const blockName = toSnakeCase(key);
+  const values = Array.isArray(value) ? value : [value];
+
   assertTerraformIdentifier(blockName, "nested block name");
 
   return values.map((value) =>

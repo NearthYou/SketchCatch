@@ -10,7 +10,7 @@ import type {
   SignupAvailabilityResponse,
   SignupRequest
 } from "@sketchcatch/types";
-import { apiFetch, refreshAuthSession } from "./api-client";
+import { apiFetch, hasRefreshSessionCookieHint, refreshAuthSession } from "./api-client";
 
 export function requestLogin(payload: LoginRequest): Promise<AuthResponse> {
   return apiFetch<AuthResponse>("/auth/login", {
@@ -61,6 +61,7 @@ export function requestCurrentUser(): Promise<CurrentUserResponse> {
 }
 
 export const requestRefreshSession = refreshAuthSession;
+export const hasRefreshSessionHint = hasRefreshSessionCookieHint;
 
 export async function requestLogout(): Promise<void> {
   await apiFetch<{ ok: true }>("/auth/logout", {

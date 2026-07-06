@@ -8,6 +8,8 @@ import { isTerraformNestedBlockAttribute } from "./terraform-nested-blocks.js";
 
 const BLOCK_HEADER_PATTERN =
   /^\s*(resource|data)\s+"([^"]+)"\s+"([^"]+)"\s*\{\s*(?:\}\s*)?$/;
+const PROVIDER_BLOCK_HEADER_PATTERN = /^\s*provider\s+"([^"]+)"\s*\{\s*(?:\}\s*)?$/;
+const PROVIDER_BLOCK_PREFIX_PATTERN = /^provider\b/;
 const TOP_LEVEL_BLOCK_PATTERN = /^\s*([A-Za-z_][A-Za-z0-9_]*)\b/;
 const ATTRIBUTE_ASSIGNMENT_PATTERN = /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/;
 const ATTRIBUTE_DOUBLE_EQUALS_PATTERN = /^\s*[A-Za-z_][A-Za-z0-9_]*\s*==/;
@@ -265,8 +267,7 @@ function checkBlocks(terraformCode: string): TerraformDiagnostic[] {
     if (
       currentDepth === 0 &&
       topLevelBlockMatch &&
-      topLevelBlockMatch[1] !== "resource" &&
-      topLevelBlockMatch[1] !== "data" &&
+      !isSupportedTopLevelBlockType(topLevelBlockMatch[1]) &&
       trimmedLine.endsWith("{")
     ) {
       diagnostics.push({
@@ -275,6 +276,19 @@ function checkBlocks(terraformCode: string): TerraformDiagnostic[] {
         line: index + 1,
         message: "Terraform editor 검증은 resource/data block만 지원합니다."
       });
+    }
+
+    if (currentDepth === 0 && PROVIDER_BLOCK_PREFIX_PATTERN.test(trimmedLine)) {
+      const match = PROVIDER_BLOCK_HEADER_PATTERN.exec(codeLine);
+
+      if (!match) {
+        diagnostics.push({
+          severity: "error",
+          code: "terraform.block_header",
+          line: index + 1,
+          message: "provider block header는 provider \"name\" { 형식이어야 합니다."
+        });
+      }
     }
 
     if (
@@ -348,6 +362,10 @@ function checkBlocks(terraformCode: string): TerraformDiagnostic[] {
   }
 
   return diagnostics;
+}
+
+function isSupportedTopLevelBlockType(blockType: string | undefined): boolean {
+  return blockType === "resource" || blockType === "data" || blockType === "provider";
 }
 
 function checkBodySyntax(terraformCode: string): TerraformDiagnostic[] {

@@ -1467,6 +1467,17 @@
   overflow-wrap: anywhere;
 }
 
+.terraformSourceLineHighlight {
+  background: rgba(59, 130, 246, 0.22);
+  border-bottom: 1px solid rgba(147, 197, 253, 0.78);
+  border-top: 1px solid rgba(147, 197, 253, 0.78);
+  left: 42px;
+  pointer-events: none;
+  position: absolute;
+  right: 10px;
+  z-index: 3;
+}
+
 .terraformBlockHighlightBox {
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.44);
@@ -2094,6 +2105,7 @@
   font: inherit;
   font-size: 12px;
   font-weight: 850;
+  gap: 6px;
   justify-content: center;
   min-height: 34px;
   padding: 0 10px;
@@ -2473,6 +2485,118 @@
   margin: 0;
 }
 
+.aiSafetyFindingCard {
+  background: #ffffff;
+  border: 1px solid #e3e9f2;
+  border-left: 4px solid #f59e0b;
+  border-radius: 7px;
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 11px;
+}
+
+.aiSafetyFindingCard[data-severity="high"] {
+  border-left-color: #dc2626;
+}
+
+.aiSafetyFindingCard[data-severity="medium"] {
+  border-left-color: #f59e0b;
+}
+
+.aiSafetyFindingCard[data-severity="low"] {
+  border-left-color: #16a34a;
+}
+
+.aiSafetyFindingHeader {
+  align-items: start;
+  display: grid;
+  gap: 5px;
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+.aiSafetyFindingHeader span {
+  color: #9a3412;
+  font-size: 10px;
+  font-weight: 950;
+  line-height: 1.4;
+}
+
+.aiSafetyFindingCard[data-severity="high"] .aiSafetyFindingHeader span {
+  color: #b91c1c;
+}
+
+.aiSafetyFindingCard[data-severity="medium"] .aiSafetyFindingHeader span {
+  color: #9a3412;
+}
+
+.aiSafetyFindingCard[data-severity="low"] .aiSafetyFindingHeader span {
+  color: #15803d;
+}
+
+.aiSafetyFindingHeader h3 {
+  color: #172033;
+  font-size: 13px;
+  line-height: 1.35;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.aiSafetyFindingMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.aiSafetyFindingMeta span {
+  background: #f4f7fb;
+  border: 1px solid #dce3ee;
+  border-radius: 999px;
+  color: #526174;
+  font-size: 10.5px;
+  font-weight: 850;
+  padding: 4px 7px;
+}
+
+.aiSafetyFindingDetails {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.aiSafetyFindingDetails div {
+  display: grid;
+  gap: 3px;
+}
+
+.aiSafetyFindingDetails dt {
+  color: #475569;
+  font-size: 10px;
+  font-weight: 950;
+}
+
+.aiSafetyFindingDetails dd {
+  color: #172033;
+  font-size: 11.5px;
+  line-height: 1.45;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.aiSafetyFindingSteps {
+  display: grid;
+  gap: 4px;
+  list-style: disc;
+  margin: 0;
+  padding-left: 16px;
+}
+
+.aiSafetyFindingSteps li {
+  color: #475569;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
 .aiListBlock {
   display: grid;
   gap: 5px;
@@ -2557,6 +2681,23 @@
   font-size: 12px;
   line-height: 1.48;
   margin: 0;
+}
+
+.aiSimulationCostMeta {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.aiSimulationCostMeta span {
+  background: #eef6ff;
+  border: 1px solid #c9ddf3;
+  border-radius: 999px;
+  color: var(--bp-blue);
+  font-size: 11px;
+  font-weight: 900;
+  padding: 4px 7px;
 }
 
 .aiChatLauncher {
@@ -2780,6 +2921,12 @@
   line-height: 1.45;
 }
 
+.aiChatSimulationIntro .aiPrimaryButton {
+  flex: 0 0 auto;
+  min-width: 132px;
+  white-space: nowrap;
+}
+
 .aiChatAssistantMessage,
 .aiChatUserMessage {
   display: grid;
@@ -2942,7 +3089,7 @@
   border-top: 1px solid #e3e9f2;
   display: grid;
   gap: 10px;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   padding: 12px 16px 16px;
 }
 
@@ -3011,6 +3158,40 @@
   outline: none;
 }
 
+.aiChatVoiceButton {
+  align-items: center;
+  align-self: end;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: var(--bp-r);
+  color: #1d4f86;
+  cursor: pointer;
+  display: inline-flex;
+  justify-content: center;
+  min-height: 68px;
+  min-width: 48px;
+  padding: 0 12px;
+}
+
+.aiChatVoiceButton[data-listening="true"] {
+  background: #eaf2fc;
+  border-color: #2f6db3;
+  box-shadow: 0 0 0 3px rgb(47 109 179 / 14%);
+  color: #1d4f86;
+}
+
+.aiChatVoiceButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.aiChatVoiceButton:not(:disabled):hover,
+.aiChatVoiceButton:not(:disabled):focus-visible {
+  background: #f2f7fd;
+  border-color: #2f6db3;
+  outline: none;
+}
+
 .aiChatSendButton {
   align-items: center;
   align-self: end;
@@ -3040,6 +3221,15 @@
   background: color-mix(in srgb, var(--bp-blue) 88%, #000000);
   border-color: color-mix(in srgb, var(--bp-blue) 88%, #000000);
   outline: none;
+}
+
+.aiChatVoiceStatus {
+  color: #475569;
+  font-size: 11.5px;
+  font-weight: 800;
+  grid-column: 1 / -1;
+  line-height: 1.35;
+  margin: -2px 0 0;
 }
 
 .deploymentPanel {
@@ -3295,7 +3485,7 @@
   padding: 0;
 }
 
-.deploymentPreflightFindings li {
+.deploymentPreflightFindings > li {
   align-items: start;
   background: #ffffff;
   border: 1px solid #e3e9f2;
@@ -3308,21 +3498,45 @@
   padding: 7px 8px;
 }
 
-.deploymentPreflightFindings span {
+.deploymentPreflightFindings > li[data-severity="high"] {
+  border-left-color: #dc2626;
+}
+
+.deploymentPreflightFindings > li[data-severity="medium"] {
+  border-left-color: #f59e0b;
+}
+
+.deploymentPreflightFindings > li[data-severity="low"] {
+  border-left-color: #16a34a;
+}
+
+.deploymentPreflightFindings > li > span {
   color: #9a3412;
   font-size: 10px;
   font-weight: 950;
   line-height: 1.4;
 }
 
-.deploymentPreflightFindings strong {
+.deploymentPreflightFindings > li[data-severity="high"] > span {
+  color: #b91c1c;
+}
+
+.deploymentPreflightFindings > li[data-severity="medium"] > span {
+  color: #9a3412;
+}
+
+.deploymentPreflightFindings > li[data-severity="low"] > span {
+  color: #15803d;
+}
+
+.deploymentPreflightFindings > li > strong {
   color: #172033;
   font-size: 12px;
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
 
-.deploymentPreflightFindings em {
+.deploymentPreflightFindings > li > em {
   color: #64748b;
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   font-size: 10.5px;
@@ -3331,12 +3545,189 @@
   overflow-wrap: anywhere;
 }
 
+.deploymentPreflightAiList {
+  display: grid;
+  gap: 4px;
+}
+
+.deploymentPreflightAiList ul {
+  display: grid;
+  gap: 4px;
+  list-style: disc;
+  margin: 0;
+  padding-left: 16px;
+}
+
+.deploymentPreflightAiList li {
+  color: #475569;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.deploymentFindingAiExplanation {
+  background: #f8fafc;
+  border: 1px solid #dce3ee;
+  border-radius: 5px;
+  display: grid;
+  gap: 7px;
+  grid-column: 1 / -1;
+  padding: 8px;
+}
+
+.deploymentFindingAiExplanation p {
+  color: #334155;
+  font-size: 11.5px;
+  font-weight: 750;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.deploymentFindingAiExplanation dl {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.deploymentFindingAiExplanation dl div {
+  display: grid;
+  gap: 2px;
+}
+
+.deploymentFindingAiExplanation dt {
+  color: #475569;
+  font-size: 10px;
+  font-weight: 950;
+}
+
+.deploymentFindingAiExplanation dd {
+  color: #172033;
+  font-size: 11.5px;
+  line-height: 1.45;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.deploymentFindingAiExplanation ul {
+  display: grid;
+  gap: 4px;
+  list-style: disc;
+  margin: 0;
+  padding-left: 16px;
+}
+
+.deploymentFindingAiExplanation li {
+  color: #475569;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.deploymentFindingFixButton {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 5px;
+  color: #243044;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 850;
+  gap: 4px;
+  grid-column: 2;
+  justify-self: start;
+  min-height: 26px;
+  padding: 0 8px;
+}
+
+.deploymentFindingFixButton:hover,
+.deploymentFindingFixButton:focus-visible {
+  background: #eff6ff;
+  border-color: #93c5fd;
+  color: #1d4ed8;
+  outline: none;
+}
+
 .deploymentPreflightMore {
   color: #64748b;
   font-size: 11px;
   font-weight: 850;
   line-height: 1.4;
   margin: 0;
+}
+
+.reverseResourceGrid {
+  display: grid;
+  gap: 7px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  min-width: 0;
+}
+
+.reverseResourceToggle {
+  align-items: center;
+  background: #f8fafc;
+  border: 1px solid #dce3ee;
+  border-radius: 6px;
+  color: #243044;
+  display: inline-flex;
+  font-size: 11px;
+  font-weight: 900;
+  gap: 7px;
+  min-height: 34px;
+  min-width: 0;
+  padding: 0 9px;
+}
+
+.reverseResourceToggle input {
+  flex: 0 0 auto;
+}
+
+.reverseResourceToggle span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.reverseResultList,
+.reverseLogList {
+  display: grid;
+  gap: 7px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.reverseResultItem,
+.reverseLogList li {
+  background: #ffffff;
+  border: 1px solid #e3e9f2;
+  border-radius: 6px;
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 8px 9px;
+}
+
+.reverseResultItem strong,
+.reverseLogList strong {
+  color: #172033;
+  font-size: 12px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.reverseResultItem span,
+.reverseLogList span {
+  color: #64748b;
+  font-size: 11px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.reverseLogList li[data-level="WARN"] {
+  border-left: 4px solid #f59e0b;
+}
+
+.reverseLogList li[data-level="ERROR"] {
+  border-left: 4px solid #dc2626;
 }
 
 .deploymentSummary {
@@ -3372,6 +3763,48 @@
   padding-top: 8px;
 }
 
+.deploymentSafetyBlock {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  display: grid;
+  gap: 4px;
+  padding: 8px;
+}
+
+.deploymentSafetyBlock strong {
+  color: #991b1b;
+  font-size: 12px;
+}
+
+.deploymentSafetyBlock p {
+  color: #7f1d1d;
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.deploymentSafetyBlock ul {
+  display: grid;
+  gap: 4px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.deploymentSafetyBlock li {
+  background: #ffffff;
+  border: 1px solid #fecaca;
+  border-radius: 5px;
+  color: #991b1b;
+  font-size: 11px;
+  font-weight: 850;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  padding: 6px 8px;
+}
+
 .deploymentWarnings ul {
   display: grid;
   gap: 6px;
@@ -3385,12 +3818,41 @@
   gap: 3px;
 }
 
+.deploymentWarnings li[data-level="high"] strong {
+  color: #991b1b;
+}
+
+.deploymentWarnings li[data-level="medium"] strong {
+  color: #92400e;
+}
+
+.deploymentWarnings em {
+  color: #991b1b;
+  font-size: 11px;
+  font-style: normal;
+}
+
 .deploymentWarnings p {
   color: #334155;
   font-size: 12px;
   line-height: 1.45;
   margin: 0;
   overflow-wrap: anywhere;
+}
+
+.deploymentWarningAcknowledgement {
+  align-items: center;
+  color: #334155;
+  display: flex;
+  gap: 6px;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.deploymentWarningAcknowledgement input {
+  height: 14px;
+  margin: 0;
+  width: 14px;
 }
 
 .deploymentFailureExplanation {
@@ -3495,7 +3957,6 @@
   display: grid;
   gap: 5px;
   margin: 0;
-  padding-left: 16px;
 }
 
 .deploymentApplyConfirm,
@@ -3962,11 +4423,31 @@
 
   .aiChatControls,
   .aiChatComposer {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .aiChatVoiceButton {
+    justify-self: end;
   }
 
   .aiChatPromptGuide {
     grid-template-columns: 1fr;
+  }
+
+  .aiChatPromptGuide,
+  .aiChatInput,
+  .aiChatVoiceStatus {
+    grid-column: 1 / -1;
+  }
+
+  .aiChatSimulationIntro {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .aiChatSimulationIntro .aiPrimaryButton {
+    min-width: 0;
+    width: 100%;
   }
 
   .aiChatAssistantMessage,

@@ -713,8 +713,8 @@ test("GET /api/auth/oauth/naver/callback rejects callbacks without state", async
 
 function setOAuthEnv(): () => void {
   const previousEnv = {
-    githubOauthClientId: process.env.GITHUB_OAUTH_CLIENT_ID,
-    githubOauthClientSecret: process.env.GITHUB_OAUTH_CLIENT_SECRET,
+    githubOauthClientId: process.env.GIT_OAUTH_CLIENT_ID,
+    githubOauthClientSecret: process.env.GIT_OAUTH_CLIENT_SECRET,
     kakaoOauthClientId: process.env.KAKAO_OAUTH_CLIENT_ID,
     kakaoOauthClientSecret: process.env.KAKAO_OAUTH_CLIENT_SECRET,
     naverOauthClientId: process.env.NAVER_OAUTH_CLIENT_ID,
@@ -722,8 +722,8 @@ function setOAuthEnv(): () => void {
     oauthRedirectBaseUrl: process.env.OAUTH_REDIRECT_BASE_URL
   };
 
-  process.env.GITHUB_OAUTH_CLIENT_ID = "github-client-id";
-  process.env.GITHUB_OAUTH_CLIENT_SECRET = "github-client-secret";
+  process.env.GIT_OAUTH_CLIENT_ID = "github-client-id";
+  process.env.GIT_OAUTH_CLIENT_SECRET = "github-client-secret";
   process.env.KAKAO_OAUTH_CLIENT_ID = "kakao-client-id";
   process.env.KAKAO_OAUTH_CLIENT_SECRET = "";
   process.env.NAVER_OAUTH_CLIENT_ID = "naver-client-id";
@@ -731,8 +731,8 @@ function setOAuthEnv(): () => void {
   process.env.OAUTH_REDIRECT_BASE_URL = "http://localhost:3000";
 
   return () => {
-    restoreEnvValue("GITHUB_OAUTH_CLIENT_ID", previousEnv.githubOauthClientId);
-    restoreEnvValue("GITHUB_OAUTH_CLIENT_SECRET", previousEnv.githubOauthClientSecret);
+    restoreEnvValue("GIT_OAUTH_CLIENT_ID", previousEnv.githubOauthClientId);
+    restoreEnvValue("GIT_OAUTH_CLIENT_SECRET", previousEnv.githubOauthClientSecret);
     restoreEnvValue("KAKAO_OAUTH_CLIENT_ID", previousEnv.kakaoOauthClientId);
     restoreEnvValue("KAKAO_OAUTH_CLIENT_SECRET", previousEnv.kakaoOauthClientSecret);
     restoreEnvValue("NAVER_OAUTH_CLIENT_ID", previousEnv.naverOauthClientId);

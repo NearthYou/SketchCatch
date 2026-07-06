@@ -1,17 +1,19 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { TerraformDiagnostic } from "@sketchcatch/types";
+import type { CheckFinding, TerraformDiagnostic, TerraformSourceLocation } from "@sketchcatch/types";
 import {
   AlertCircle,
   Code2,
   GalleryVerticalEnd,
   PanelRightClose,
   PanelRightOpen,
-  Rocket
+  Rocket,
+  Search
 } from "lucide-react";
 import type { DiagramEditorPanelContext } from "../diagram-editor";
 import { DeploymentPanel } from "./DeploymentPanel";
+import { ReverseEngineeringPanel } from "./ReverseEngineeringPanel";
 import { ResourceWorkspacePanel } from "./ResourceWorkspacePanel";
 import {
   TerraformCodePanel,
@@ -21,6 +23,7 @@ import {
 import { TerraformIssuesPanel } from "./TerraformIssuesPanel";
 import { TerraformLeaveDialog } from "./TerraformLeaveDialog";
 import { defaultResourceWorkspaceView } from "./resource-workspace-view";
+import { getPreDeploymentFindingTerraformSourceLocation } from "./pre-deployment-finding-source";
 import {
   saveWorkspaceTerraformArtifact,
   type SavedWorkspaceTerraformArtifact
@@ -239,6 +242,11 @@ export function WorkspaceRightPanel({
       return;
     }
 
+    if (nextView === "terraform") {
+      setActiveView("terraform");
+      return;
+    }
+
     if (nextView === "issues" && canOpenTerraformIssuesDuringEdit) {
       setActiveView("issues");
       return;
@@ -327,6 +335,12 @@ export function WorkspaceRightPanel({
   }
 
   function openCollapsedView(nextView: WorkspaceRightPanelView): void {
+    if (nextView === "terraform") {
+      context.setRightPanelOpen(true);
+      setActiveView("terraform");
+      return;
+    }
+
     if (nextView === "issues" && canOpenTerraformIssuesDuringEdit) {
       context.setRightPanelOpen(true);
       setActiveView("issues");
@@ -381,6 +395,24 @@ export function WorkspaceRightPanel({
     return terraformPanelRef.current?.validateCurrentTerraform() ?? terraformDiagnostics;
   }, [terraformDiagnostics]);
 
+  const openPreDeploymentFindingTerraformSource = useCallback((finding: CheckFinding): TerraformSourceLocation | null => {
+    const sourceLocation = getPreDeploymentFindingTerraformSourceLocation({
+      diagramJson: context.diagram,
+      files: terraformPanelRef.current?.getTerraformFiles() ?? [],
+      finding
+    });
+
+    if (!sourceLocation) {
+      return null;
+    }
+
+    context.setRightPanelOpen(true);
+    setActiveView("terraform");
+    terraformPanelRef.current?.openTerraformSourceLocation(sourceLocation);
+
+    return sourceLocation;
+  }, [context]);
+
   useEffect(() => {
     if (!hasUnsavedTerraformChanges) {
       return;
@@ -402,6 +434,10 @@ export function WorkspaceRightPanel({
       }
 
       if (isTerraformLeaveGuardIgnoredTarget(target)) {
+        return;
+      }
+
+      if (isTerraformEditorNavigationTarget(target)) {
         return;
       }
 
@@ -466,6 +502,7 @@ export function WorkspaceRightPanel({
         </button>
         <button
           className={styles.collapsedPanelButton}
+          data-terraform-editor-navigation
           onClick={() => openCollapsedView("terraform")}
           title="Terraform"
           type="button"
@@ -491,6 +528,14 @@ export function WorkspaceRightPanel({
           type="button"
         >
           <Rocket size={18} aria-hidden="true" />
+        </button>
+        <button
+          className={styles.collapsedPanelButton}
+          onClick={() => openCollapsedView("reverse")}
+          title="Reverse Engineering"
+          type="button"
+        >
+          <Search size={18} aria-hidden="true" />
         </button>
       </aside>
     );
@@ -520,6 +565,7 @@ export function WorkspaceRightPanel({
           <button
             aria-pressed={activeView === "terraform"}
             className={activeView === "terraform" ? styles.panelModeButtonActive : styles.panelModeButton}
+            data-terraform-editor-navigation
             onClick={() => requestView("terraform")}
             title="Terraform mode"
             type="button"
@@ -550,6 +596,15 @@ export function WorkspaceRightPanel({
             type="button"
           >
             <Rocket size={18} aria-hidden="true" />
+          </button>
+          <button
+            aria-pressed={activeView === "reverse"}
+            className={activeView === "reverse" ? styles.panelModeButtonActive : styles.panelModeButton}
+            onClick={() => requestView("reverse")}
+            title="Reverse Engineering"
+            type="button"
+          >
+            <Search size={18} aria-hidden="true" />
           </button>
         </div>
       </div>
@@ -592,11 +647,17 @@ export function WorkspaceRightPanel({
             currentNodeCount={context.nodes.length}
             diagramJson={context.diagram}
             hasUnsavedDeploymentBaseline={hasUnsavedDeploymentBaseline}
+            onOpenFindingTerraformSource={openPreDeploymentFindingTerraformSource}
             onPrepareDeploymentArtifacts={prepareDeploymentArtifacts}
             onValidateTerraformDiagnostics={validateTerraformForPreDeployment}
             projectId={projectId}
             projectName={projectName}
           />
+        ) : null}
+      </div>
+      <div className={styles.rightPanelView} hidden={activeView !== "reverse"}>
+        {activeView === "reverse" ? (
+          <ReverseEngineeringPanel context={context} projectId={projectId} />
         ) : null}
       </div>
 
@@ -639,6 +700,10 @@ function isInsideTerraformLeaveDialog(target: Node): boolean {
 
 function isTerraformLeaveGuardIgnoredTarget(target: Node): boolean {
   return target instanceof Element && Boolean(target.closest("[data-terraform-leave-guard-ignore]"));
+}
+
+function isTerraformEditorNavigationTarget(target: Node): boolean {
+  return target instanceof Element && Boolean(target.closest("[data-terraform-editor-navigation]"));
 }
 
 function isTerraformIssuesNavigationTarget(target: Node): boolean {

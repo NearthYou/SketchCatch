@@ -5123,6 +5123,59 @@ nextjs-portal {
   grid-template-columns: minmax(0, 1fr) auto;
 }
 
+.costControlPanel {
+  gap: 14px;
+}
+
+.costControlGrid {
+  align-items: end;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(140px, 0.6fr) minmax(160px, 0.8fr) auto;
+}
+
+.costField {
+  color: var(--dashboard-muted);
+  display: grid;
+  font-size: 0.78rem;
+  font-weight: 900;
+  gap: 6px;
+}
+
+.costField input,
+.costField select {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--dashboard-border);
+  border-radius: 6px;
+  color: var(--dashboard-text);
+  font: inherit;
+  min-height: 38px;
+  min-width: 0;
+  padding: 0 10px;
+  width: 100%;
+}
+
+.costField input:focus,
+.costField select:focus {
+  border-color: var(--dashboard-blue);
+  outline: 2px solid rgba(56, 189, 248, 0.14);
+}
+
+.costApplyButton {
+  align-items: center;
+  display: inline-flex;
+  gap: 7px;
+  min-height: 38px;
+  white-space: nowrap;
+}
+
+.costErrorMessage {
+  color: #fca5a5;
+  font-size: 0.82rem;
+  font-weight: 850;
+  margin: 0;
+}
+
 .costSummaryAmount {
   background: linear-gradient(135deg, rgba(124, 92, 255, 0.3), rgba(20, 184, 166, 0.2)), #0a0d14;
   border: 1px solid var(--dashboard-border);
@@ -5153,6 +5206,267 @@ nextjs-portal {
   color: var(--dashboard-teal);
   height: 32px;
   width: 32px;
+}
+
+.costProjectRow {
+  background: transparent;
+  border-left: 0;
+  border-right: 0;
+  border-bottom: 0;
+  width: 100%;
+}
+
+.costProjectRow:hover,
+.costProjectRow:focus-within,
+.costProjectRow[data-selected="true"] {
+  background: rgba(56, 189, 248, 0.08);
+  outline: none;
+}
+
+.costProjectNameCell {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  min-width: 0;
+}
+
+.costProjectHeaderCell {
+  color: var(--dashboard-muted);
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.costProjectHeaderCell .costProjectCheckbox {
+  height: 16px;
+  width: 16px;
+}
+
+.costProjectCheckbox {
+  appearance: none;
+  background: var(--bp-paper-2);
+  border: 1px solid color-mix(in srgb, var(--dashboard-muted) 42%, var(--bp-line));
+  border-radius: 4px;
+  display: grid;
+  flex: 0 0 auto;
+  height: 18px;
+  margin: 0;
+  place-content: center;
+  width: 18px;
+}
+
+.costProjectCheckbox::before {
+  background: white;
+  clip-path: polygon(14% 44%, 0 58%, 38% 96%, 100% 18%, 86% 4%, 36% 66%);
+  content: "";
+  height: 10px;
+  transform: scale(0);
+  transition: transform 120ms ease;
+  width: 10px;
+}
+
+.costProjectCheckbox:checked,
+.costProjectCheckbox:indeterminate {
+  background: var(--dashboard-teal);
+  border-color: color-mix(in srgb, var(--dashboard-teal) 72%, black);
+}
+
+.costProjectCheckbox:checked::before,
+.costProjectCheckbox:indeterminate::before {
+  transform: scale(1);
+}
+
+.costProjectCheckbox:indeterminate::before {
+  clip-path: none;
+  height: 2px;
+  width: 10px;
+}
+
+.costProjectCheckbox:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--dashboard-teal) 54%, transparent);
+  outline-offset: 3px;
+}
+
+.costProjectNameButton {
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  min-width: 0;
+  padding: 0;
+  text-align: left;
+}
+
+.costProjectNameButton strong {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.costProjectNameButton:focus-visible {
+  border-radius: 4px;
+  outline: 2px solid color-mix(in srgb, var(--dashboard-teal) 54%, transparent);
+  outline-offset: 3px;
+}
+
+.costStatus {
+  align-items: center;
+  border: 1px dashed var(--dashboard-border);
+  border-radius: 6px;
+  color: var(--dashboard-muted);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.86rem;
+  gap: 10px;
+  justify-content: space-between;
+  padding: 14px;
+}
+
+.costStatus p {
+  margin: 0;
+}
+
+.costStatus .dashboardSecondaryButton {
+  align-items: center;
+  display: inline-flex;
+  gap: 6px;
+}
+
+.costDetailPanel {
+  gap: 14px;
+}
+
+.costReviewMessages {
+  background: rgba(56, 189, 248, 0.06);
+  border: 1px solid rgba(56, 189, 248, 0.18);
+  border-radius: 6px;
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+}
+
+.costReviewMessages p {
+  color: var(--dashboard-text);
+  font-size: 0.86rem;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.costResourceList {
+  display: grid;
+  gap: 8px;
+}
+
+.costResourceDetails {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--dashboard-border);
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+
+.costResourceDetails summary {
+  align-items: center;
+  color: var(--dashboard-text);
+  cursor: pointer;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.costResourceDetails summary span {
+  font-weight: 900;
+}
+
+.costResourceDetails summary strong {
+  color: var(--dashboard-teal);
+  font-size: 0.84rem;
+}
+
+.costResourceSummaryTitle {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.costResourceSummaryTitle small {
+  color: var(--dashboard-muted);
+  font-family: var(--bp-mono);
+  font-size: 0.7rem;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.costResourceSummaryMeta {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+  min-width: min(100%, 260px);
+}
+
+.costSupportBadge {
+  border: 1px solid var(--dashboard-border);
+  border-radius: 999px;
+  font-family: var(--bp-mono);
+  font-size: 0.68rem;
+  font-weight: 900;
+  line-height: 1.2;
+  padding: 3px 6px;
+  white-space: nowrap;
+}
+
+.costSupportBadgeAwsPricingApi {
+  background: var(--bp-low-tint);
+  border-color: color-mix(in srgb, var(--bp-low) 38%, var(--dashboard-border));
+  color: var(--bp-low);
+}
+
+.costSupportBadgeFallbackEstimate {
+  background: var(--bp-med-tint);
+  border-color: color-mix(in srgb, var(--bp-med) 42%, var(--dashboard-border));
+  color: var(--bp-med);
+}
+
+.costSupportBadgeNoDirectCost {
+  background: var(--bp-blue-tint);
+  border-color: color-mix(in srgb, var(--bp-blue) 34%, var(--dashboard-border));
+  color: var(--bp-blue);
+}
+
+.costSupportBadgeNotEstimated {
+  background: var(--bp-high-tint);
+  border-color: color-mix(in srgb, var(--bp-high) 42%, var(--dashboard-border));
+  color: var(--bp-high);
+}
+
+.costResourceDetails p {
+  color: var(--dashboard-muted);
+  font-size: 0.84rem;
+  line-height: 1.5;
+  margin: 10px 0 0;
+}
+
+.costResourceDetails .costResourceSupportReason {
+  color: var(--dashboard-text);
+  font-weight: 700;
+}
+
+.costResourceDetails ul {
+  color: var(--dashboard-muted);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.78rem;
+  gap: 6px;
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+}
+
+.costResourceDetails li {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--dashboard-border);
+  border-radius: 999px;
+  padding: 4px 7px;
 }
 
 .integrationHeader {
@@ -5202,6 +5516,7 @@ nextjs-portal {
   .dashboardTwoColumn,
   .settingsGrid,
   .costSummaryPanel,
+  .costControlGrid,
   .projectDetailHero,
   .dashboardPageHeader {
     grid-template-columns: 1fr;
@@ -5279,12 +5594,24 @@ nextjs-portal {
 
   .dashboardTopbarAction,
   .dashboardSecondaryButton,
-  .dashboardDangerButton {
+  .dashboardDangerButton,
+  .costApplyButton {
     width: 100%;
   }
 
   .costSummaryAmount {
     min-width: 0;
+  }
+
+  .costResourceDetails summary {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .costResourceSummaryMeta {
+    justify-content: flex-start;
+    min-width: 0;
+    width: 100%;
   }
 }
 
@@ -7710,5 +8037,169 @@ nextjs-portal {
   .landingFloatCard,
   .blueprintIconNode {
     animation: none;
+  }
+}
+
+/* Cost management readability */
+.costOverviewPanel {
+  align-items: stretch;
+  display: grid;
+  gap: 20px;
+  grid-template-columns: minmax(520px, 1fr) minmax(340px, 420px);
+  padding: 20px;
+}
+
+.costOverviewSettings {
+  align-content: start;
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+}
+
+.costProjectPanel,
+.costNoticePanel {
+  padding: 18px 20px;
+}
+
+.costPanelTitle {
+  min-width: 0;
+}
+
+.costPanelTitle h2 {
+  color: var(--bp-ink);
+  font-size: 1.08rem;
+  line-height: 1.2;
+  margin: 0;
+}
+
+.costControlGrid {
+  align-items: end;
+  gap: 12px;
+  grid-template-columns: minmax(180px, 220px) minmax(220px, 320px) auto;
+  max-width: 760px;
+}
+
+.costField {
+  gap: 7px;
+}
+
+.costField input,
+.costField select {
+  background: var(--bp-paper-2);
+  border-color: var(--bp-line);
+  min-height: 42px;
+}
+
+.costApplyButton {
+  min-height: 42px;
+  padding-inline: 18px;
+}
+
+.costSummaryCard {
+  background: var(--dashboard-blue);
+  border: 1px solid color-mix(in srgb, var(--dashboard-blue) 72%, white);
+  border-radius: var(--bp-r);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  color: white;
+  display: grid;
+  gap: 14px;
+  min-height: 100%;
+  padding: 20px;
+}
+
+.costSummaryCard .dashboardPanelKicker {
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.costSummaryCard h2 {
+  color: white;
+}
+
+.costSummaryAmount {
+  align-content: center;
+  background: transparent;
+  border: 0;
+  gap: 6px;
+  min-height: auto;
+  min-width: 0;
+  padding: 0;
+}
+
+.costSummaryAmount span,
+.costSummaryAmount p {
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.costSummaryAmount strong {
+  color: white;
+  font-size: 2rem;
+  line-height: 1;
+}
+
+.costProjectPanel {
+  gap: 14px;
+}
+
+.costProjectPanel .dashboardPanelHeader {
+  border-bottom: 1px solid var(--bp-line);
+  padding-bottom: 12px;
+}
+
+.costProjectPanel .dashboardTableHeader,
+.costProjectPanel .dashboardTableRow {
+  min-width: 680px;
+  padding-block: 11px;
+}
+
+.costProjectPanel .costStatus {
+  background: var(--bp-paper-2);
+  min-height: 52px;
+}
+
+.costNoticePanel {
+  gap: 14px;
+}
+
+.costNoticePanel > .dashboardIcon {
+  background: var(--bp-low-tint);
+  border: 1px solid color-mix(in srgb, var(--bp-low) 36%, var(--bp-line));
+  border-radius: var(--bp-r);
+  height: 42px;
+  padding: 8px;
+  width: 42px;
+}
+
+.costNoticePanel h2 {
+  font-size: 1.02rem;
+}
+
+.costNoticePanel p {
+  margin: 4px 0 0;
+}
+
+@media (max-width: 1180px) {
+  .costOverviewPanel {
+    grid-template-columns: 1fr;
+  }
+
+  .costControlGrid {
+    max-width: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .costControlGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .costOverviewPanel,
+  .costProjectPanel,
+  .costNoticePanel {
+    padding: 16px;
+  }
+
+  .costProjectPanel .dashboardPanelHeader {
+    align-items: flex-start;
+    flex-direction: row;
   }
 }

@@ -115,9 +115,78 @@ test("createDiagramNodeFromPayload appends a numeric suffix for duplicate resour
   assert.equal(node.label, "EC2 Instance");
 });
 
+test("createDiagramNodeFromPayload appends numeric suffixes for duplicate ASG resource names", () => {
+  const existingNodes = [
+    makeResourceNode({
+      id: "asg-1",
+      resourceName: "auto_scaling_group",
+      resourceType: "aws_autoscaling_group"
+    }),
+    makeResourceNode({
+      id: "asg-2",
+      resourceName: "auto_scaling_group_2",
+      resourceType: "aws_autoscaling_group"
+    })
+  ];
+
+  const node = createDiagramNodeFromPayload(
+    makeResourceDragPayload(
+      makeResourceItem({
+        resourceType: "aws_autoscaling_group",
+        label: "Auto Scaling Group",
+        size: { width: 200, height: 130 }
+      })
+    ),
+    { x: 0, y: 0 },
+    1,
+    existingNodes
+  );
+
+  assert.equal(node.kind, "resource");
+  assert.equal(node.parameters?.resourceType, "aws_autoscaling_group");
+  assert.equal(node.parameters?.resourceName, "auto_scaling_group_3");
+  assert.deepEqual(node.size, { width: 200, height: 130 });
+  assert.deepEqual(node.parameters?.values, {});
+});
+
+test("createDiagramNodeFromPayload creates Region and AZ as resource area nodes", () => {
+  const regionNode = createDiagramNodeFromPayload(
+    makeResourceDragPayload(makeResourceItem({ id: "aws-region", resourceType: "aws_region", label: "Region" })),
+    { x: 0, y: 0 },
+    1
+  );
+  const availabilityZoneNode = createDiagramNodeFromPayload(
+    makeResourceDragPayload(
+      makeResourceItem({
+        id: "aws-availability-zone",
+        resourceType: "aws_availability_zone",
+        label: "AZ"
+      })
+    ),
+    { x: 0, y: 0 },
+    1
+  );
+
+  assert.equal(regionNode.kind, "resource");
+  assert.equal(regionNode.type, "aws_region");
+  assert.equal(regionNode.parameters?.resourceType, "aws_region");
+  assert.equal(regionNode.parameters?.resourceName, "ap_northeast_2");
+  assert.deepEqual(regionNode.parameters?.values, {
+    awsRegion: "ap-northeast-2"
+  });
+
+  assert.equal(availabilityZoneNode.kind, "resource");
+  assert.equal(availabilityZoneNode.type, "aws_availability_zone");
+  assert.equal(availabilityZoneNode.parameters?.resourceType, "aws_availability_zone");
+  assert.equal(availabilityZoneNode.parameters?.resourceName, "ap_northeast_2a");
+  assert.deepEqual(availabilityZoneNode.parameters?.values, {
+    awsAvailabilityZone: "ap-northeast-2a"
+  });
+});
+
 test("createDiagramNodeFromPayload does not attach parameters to design nodes", () => {
   const node = createDiagramNodeFromPayload(
-    makeResourceDragPayload(makeResourceItem({ resourceType: "design_region", label: "Region", id: "design-region" })),
+    makeResourceDragPayload(makeResourceItem({ resourceType: "design_group", label: "Group", id: "design-group" })),
     { x: 0, y: 0 },
     1
   );
@@ -132,14 +201,13 @@ test("createPastedNodes clears stale parent area metadata from copied nodes", ()
     resourceName: "web",
     resourceType: "aws_instance",
     metadata: {
-      awsRegion: "ap-northeast-2",
       parentAreaNodeId: "old-area-1"
     }
   });
   const pastedNode = createPastedNodes([childNode], [childNode])[0];
 
   assert.equal(pastedNode?.metadata?.parentAreaNodeId, undefined);
-  assert.equal(pastedNode?.metadata?.awsRegion, "ap-northeast-2");
+  assert.equal(pastedNode?.metadata, undefined);
 });
 
 test("createPastedNodes deep clones nested parameter values", () => {
@@ -313,11 +381,13 @@ function makeResourceItem({
   id,
   label,
   resourceType,
+  size = { width: 168, height: 96 },
   terraformBlockType
 }: {
   id?: string;
   label: string;
   resourceType: string;
+  size?: ResourceItem["nodeDefaults"]["size"];
   terraformBlockType?: ResourceItem["nodeDefaults"]["terraformBlockType"];
 }): ResourceItem {
   return {
@@ -332,10 +402,7 @@ function makeResourceItem({
       ...(terraformBlockType ? { terraformBlockType } : {}),
       type: resourceType,
       label,
-      size: {
-        width: 168,
-        height: 96
-      }
+      size
     }
   };
 }
