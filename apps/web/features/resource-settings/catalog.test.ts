@@ -40,6 +40,11 @@ test("resourceCatalog keeps regular network resources at icon node size", () => 
   assert.deepEqual(getResourceSize("aws_internet_gateway"), { width: 124, height: 96 });
   assert.deepEqual(getResourceSize("aws_route_table_association"), { width: 124, height: 96 });
   assert.deepEqual(getResourceSize("aws_cloudfront_distribution"), { width: 124, height: 96 });
+  assert.deepEqual(getResourceSize("aws_s3_bucket"), { width: 124, height: 96 });
+  assert.deepEqual(getResourceSize("aws_db_subnet_group"), { width: 124, height: 96 });
+  assert.deepEqual(getResourceSize("aws_api_gateway_rest_api"), { width: 124, height: 96 });
+  assert.deepEqual(getResourceSize("aws_api_gateway_resource"), { width: 124, height: 96 });
+  assert.deepEqual(getResourceSize("aws_cloudwatch_event_rule"), { width: 124, height: 96 });
 });
 
 test("resourceCatalog provides a CloudFront icon for converted drafts and Terraform proposals", () => {

@@ -11,8 +11,9 @@ import type {
 const DEFAULT_TERRAFORM_BLOCK_TYPE: TerraformBlockType = "resource";
 
 export function buildInfrastructureGraphFromDiagramJson(diagramJson: DiagramJson): InfrastructureGraph {
+  const nodeById = new Map(diagramJson.nodes.map((node) => [node.id, node]));
   const nodes = diagramJson.nodes.flatMap((node) => {
-    const graphNode = toInfrastructureGraphNode(node);
+    const graphNode = toInfrastructureGraphNode(node, nodeById);
 
     return graphNode ? [graphNode] : [];
   });
@@ -37,7 +38,10 @@ export function buildInfrastructureGraphFromDiagramJson(diagramJson: DiagramJson
   };
 }
 
-function toInfrastructureGraphNode(node: DiagramNode): InfrastructureGraphNode | null {
+function toInfrastructureGraphNode(
+  node: DiagramNode,
+  nodeById: ReadonlyMap<string, DiagramNode>
+): InfrastructureGraphNode | null {
   if (node.kind !== "resource" || !node.parameters) {
     return null;
   }
@@ -62,6 +66,61 @@ function toInfrastructureGraphNode(node: DiagramNode): InfrastructureGraphNode |
       resourceName: node.parameters.resourceName,
       fileName: node.parameters.fileName
     },
-    config: node.parameters.values
+    config: getRenderableConfig(node, nodeById)
   };
+}
+
+function getRenderableConfig(
+  node: DiagramNode,
+  nodeById: ReadonlyMap<string, DiagramNode>
+): Record<string, unknown> {
+  const values = node.parameters?.values ?? {};
+  const inheritedAvailabilityZone = getInheritedAvailabilityZone(node, nodeById);
+
+  if (!inheritedAvailabilityZone || hasOwnAvailabilityZone(values)) {
+    return values;
+  }
+
+  return {
+    ...values,
+    availabilityZone: inheritedAvailabilityZone
+  };
+}
+
+function getInheritedAvailabilityZone(
+  node: DiagramNode,
+  nodeById: ReadonlyMap<string, DiagramNode>
+): string | null {
+  if (!isAvailabilityZoneChildResource(node)) {
+    return null;
+  }
+
+  const parentAreaNodeId = node.metadata?.parentAreaNodeId;
+  const parentNode = parentAreaNodeId ? nodeById.get(parentAreaNodeId) : undefined;
+
+  if (!parentNode || getResourceNodeType(parentNode) !== "aws_availability_zone") {
+    return null;
+  }
+
+  const availabilityZone = parentNode.parameters?.values?.["awsAvailabilityZone"];
+
+  return typeof availabilityZone === "string" && availabilityZone.trim().length > 0
+    ? availabilityZone
+    : null;
+}
+
+function isAvailabilityZoneChildResource(node: DiagramNode): boolean {
+  const resourceType = getResourceNodeType(node);
+
+  return resourceType === "aws_subnet" || resourceType === "aws_ebs_volume";
+}
+
+function getResourceNodeType(node: DiagramNode): string {
+  return node.parameters?.resourceType ?? node.type;
+}
+
+function hasOwnAvailabilityZone(values: Record<string, unknown>): boolean {
+  const availabilityZone = values["availabilityZone"];
+
+  return availabilityZone !== undefined && availabilityZone !== null && availabilityZone !== "";
 }

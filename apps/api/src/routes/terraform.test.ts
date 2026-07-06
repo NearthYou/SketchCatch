@@ -717,6 +717,69 @@ test("POST /api/terraform/sync-to-diagram accepts Terraform file inputs", async 
   await app.close();
 });
 
+test("POST /api/terraform/sync-to-diagram treats provider-only input as no-op", async () => {
+  const fakeDb = new AuthOnlyFakeDb({
+    users: [
+      {
+        id: ACTIVE_USER_ID,
+        deletedAt: null
+      }
+    ]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+  const diagramJson = {
+    nodes: [
+      {
+        id: "node-1",
+        type: "aws_vpc",
+        kind: "resource",
+        label: "main_vpc",
+        position: { x: 0, y: 0 },
+        size: { width: 160, height: 96 },
+        locked: false,
+        zIndex: 0,
+        parameters: {
+          resourceType: "aws_vpc",
+          resourceName: "main",
+          fileName: "main",
+          values: {
+            cidrBlock: "10.0.0.0/16"
+          }
+        }
+      }
+    ],
+    edges: [],
+    viewport: {
+      x: 0,
+      y: 0,
+      zoom: 1
+    }
+  };
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/terraform/sync-to-diagram",
+    headers: await authHeaders(ACTIVE_USER_ID),
+    payload: {
+      diagramJson,
+      terraformCode: `provider "aws" {
+  region = "ap-northeast-2"
+}`
+    }
+  });
+
+  const body = response.json() as TerraformSyncToDiagramResponse;
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(body.diagnostics, []);
+  assert.deepEqual(body.proposals, []);
+  assert.deepEqual(body.diagramJson, diagramJson);
+
+  await app.close();
+});
+
 test("POST /api/terraform/sync-to-diagram returns diagnostics without mutating on unsupported input", async () => {
   const fakeDb = new AuthOnlyFakeDb({
     users: [

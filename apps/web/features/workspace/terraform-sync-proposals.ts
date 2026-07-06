@@ -13,6 +13,8 @@ const DEFAULT_CREATED_NODE_SIZE = {
   width: 56,
   height: 56
 } as const;
+const AREA_CHILD_MARGIN = 24;
+const AREA_CHILD_HEADER_OFFSET = 40;
 
 export function getTerraformSyncProposalId(
   proposal: TerraformDiagramChangeProposal,
@@ -70,26 +72,26 @@ function applyCreateProposal(
   diagramJson: DiagramJson,
   proposal: Extract<TerraformDiagramChangeProposal, { kind: "create_candidate" }>
 ): DiagramJson {
-  const nodeId = createUniqueNodeId(
-    diagramJson.nodes,
-    `terraform-${proposal.identity.resourceType}-${proposal.identity.resourceName}`
-  );
+  const nodeId = resolveCreateProposalNodeId(diagramJson.nodes, proposal);
   const catalogResource = findCatalogResourceForTerraformBlock(
     proposal.identity.resourceType,
     proposal.identity.terraformBlockType
   );
+  const nodeSize = catalogResource
+    ? { ...catalogResource.nodeDefaults.size }
+    : { ...DEFAULT_CREATED_NODE_SIZE };
+  const metadata = proposal.metadata ? { ...proposal.metadata } : undefined;
   const createdNode: DiagramNode = {
     id: nodeId,
     type: proposal.identity.resourceType,
     kind: "resource",
-    position: getNextCreatedNodePosition(diagramJson.nodes.length),
-    size: catalogResource
-      ? { ...catalogResource.nodeDefaults.size }
-      : { ...DEFAULT_CREATED_NODE_SIZE },
+    position: getCreateProposalPosition(diagramJson.nodes, proposal, nodeSize, metadata),
+    size: nodeSize,
     label: proposal.identity.resourceName,
     ...(catalogResource ? { iconUrl: catalogResource.iconUrl } : {}),
     locked: false,
     zIndex: 0,
+    ...(metadata ? { metadata } : {}),
     parameters: {
       ...proposal.parameters,
       terraformBlockType: proposal.identity.terraformBlockType,
@@ -105,6 +107,20 @@ function applyCreateProposal(
     edges: [...diagramJson.edges],
     viewport: { ...diagramJson.viewport }
   };
+}
+
+function resolveCreateProposalNodeId(
+  nodes: readonly DiagramNode[],
+  proposal: Extract<TerraformDiagramChangeProposal, { kind: "create_candidate" }>
+): string {
+  if (proposal.nodeId && !nodes.some((node) => node.id === proposal.nodeId)) {
+    return proposal.nodeId;
+  }
+
+  return createUniqueNodeId(
+    nodes,
+    proposal.nodeId ?? `terraform-${proposal.identity.resourceType}-${proposal.identity.resourceName}`
+  );
 }
 
 function findCatalogResourceForTerraformBlock(
@@ -203,6 +219,40 @@ function createUniqueNodeId(nodes: readonly DiagramNode[], baseId: string): stri
       return candidate;
     }
   }
+}
+
+function getCreateProposalPosition(
+  nodes: readonly DiagramNode[],
+  proposal: Extract<TerraformDiagramChangeProposal, { kind: "create_candidate" }>,
+  nodeSize: DiagramNode["size"],
+  metadata: DiagramNode["metadata"] | undefined
+): DiagramNode["position"] {
+  if (proposal.position) {
+    return { ...proposal.position };
+  }
+
+  const parentAreaNode = metadata?.parentAreaNodeId
+    ? nodes.find((node) => node.id === metadata.parentAreaNodeId)
+    : undefined;
+
+  if (parentAreaNode) {
+    return getPositionInsideParentArea(parentAreaNode, nodeSize);
+  }
+
+  return getNextCreatedNodePosition(nodes.length);
+}
+
+function getPositionInsideParentArea(
+  parentAreaNode: DiagramNode,
+  nodeSize: DiagramNode["size"]
+): DiagramNode["position"] {
+  const maxXOffset = Math.max(0, parentAreaNode.size.width - nodeSize.width);
+  const maxYOffset = Math.max(0, parentAreaNode.size.height - nodeSize.height);
+
+  return {
+    x: parentAreaNode.position.x + Math.min(AREA_CHILD_MARGIN, maxXOffset),
+    y: parentAreaNode.position.y + Math.min(AREA_CHILD_HEADER_OFFSET, maxYOffset)
+  };
 }
 
 function getNextCreatedNodePosition(nodeCount: number): { x: number; y: number } {

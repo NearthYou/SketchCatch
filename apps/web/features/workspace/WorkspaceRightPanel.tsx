@@ -145,6 +145,11 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
       return;
     }
 
+    if (nextView === "terraform") {
+      setActiveView("terraform");
+      return;
+    }
+
     if (nextView === "issues" && canOpenTerraformIssuesDuringEdit) {
       setActiveView("issues");
       return;
@@ -233,6 +238,12 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
   }
 
   function openCollapsedView(nextView: WorkspaceRightPanelView): void {
+    if (nextView === "terraform") {
+      context.setRightPanelOpen(true);
+      setActiveView("terraform");
+      return;
+    }
+
     if (nextView === "issues" && canOpenTerraformIssuesDuringEdit) {
       context.setRightPanelOpen(true);
       setActiveView("issues");
@@ -325,6 +336,10 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
         return;
       }
 
+      if (isTerraformEditorNavigationTarget(target)) {
+        return;
+      }
+
       if (canOpenTerraformIssuesDuringEdit && isTerraformIssuesNavigationTarget(target)) {
         return;
       }
@@ -382,6 +397,7 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
         </button>
         <button
           className={styles.collapsedPanelButton}
+          data-terraform-editor-navigation
           onClick={() => openCollapsedView("terraform")}
           title="Terraform"
           type="button"
@@ -436,6 +452,7 @@ export function WorkspaceRightPanel({ context, projectId, projectName }: Workspa
           <button
             aria-pressed={activeView === "terraform"}
             className={activeView === "terraform" ? styles.panelModeButtonActive : styles.panelModeButton}
+            data-terraform-editor-navigation
             onClick={() => requestView("terraform")}
             title="Terraform mode"
             type="button"
@@ -551,6 +568,10 @@ function getTerraformLeaveReplayTarget(target: EventTarget | null): HTMLElement 
 
 function isInsideTerraformLeaveDialog(target: Node): boolean {
   return target instanceof Element && Boolean(target.closest("[data-terraform-leave-dialog]"));
+}
+
+function isTerraformEditorNavigationTarget(target: Node): boolean {
+  return target instanceof Element && Boolean(target.closest("[data-terraform-editor-navigation]"));
 }
 
 function isTerraformIssuesNavigationTarget(target: Node): boolean {

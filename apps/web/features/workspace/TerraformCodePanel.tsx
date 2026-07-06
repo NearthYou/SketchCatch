@@ -266,6 +266,7 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
   const [activeSourceHighlightLine, setActiveSourceHighlightLine] = useState<number | null>(null);
   const [requestState, setRequestState] = useState<RequestState>("idle");
   const [statusMessage, setStatusMessage] = useState("main.tf");
+  const [isTerraformPreviewStale, setIsTerraformPreviewStale] = useState(true);
   const [hasLocalEdits, setHasLocalEdits] = useState(false);
   const [saveBanner, setSaveBanner] = useState<TerraformSaveBanner | null>(null);
   const [terraformPreviewExplanation, setTerraformPreviewExplanation] =
@@ -282,6 +283,7 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
   const codeVersionRef = useRef(0);
   const isPreparingTerraformArtifactRef = useRef(false);
   const latestDiagramFingerprintRef = useRef("");
+  const latestSuccessfulTerraformPreviewFingerprintRef = useRef("");
   const latestDiagramResourceAddressesRef = useRef<Set<string> | null>(null);
   const latestExternalDiscardRequestIdRef = useRef(externalDiscardRequestId);
   const latestExternalSaveRequestIdRef = useRef(externalSaveRequestId);
@@ -342,6 +344,17 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
     return terraformFileOptions.filter((fileName) => fileName.toLowerCase().includes(query));
   }, [fileSearchQuery, terraformFileOptions]);
   const isResourceCodeMode = Boolean(inspectedNode && inspectedBlock);
+  const isTerraformPreviewSynced =
+    !isTerraformPreviewStale &&
+    latestSuccessfulTerraformPreviewFingerprintRef.current === currentDiagramFingerprint &&
+    !hasLocalEdits;
+  const previewSnapshotSummary = isResourceCodeMode
+    ? `${inspectedBlock?.fileName ?? activeFileName} resource code`
+    : isTerraformPreviewSynced
+      ? `${terraformFileOptions.length} files | ${context.nodes.length} nodes`
+      : isTerraformPreviewStale
+        ? `다이어그램 변경 미반영 | ${context.nodes.length} nodes`
+        : `수정 중 | ${context.nodes.length} nodes`;
   const displayedTerraformCode = inspectedBlock?.code ?? activeFileCode;
   const displayedSourceFileName = inspectedBlock?.fileName ?? activeFileName;
   const displayedSourceLineOffset = inspectedBlock ? inspectedBlock.startLine - 1 : 0;
@@ -513,7 +526,9 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
       const requestId = codeRequestIdRef.current + 1;
       codeRequestIdRef.current = requestId;
 
-      await runRequest(async () => {
+      setRequestState("loading");
+
+      try {
         const generatedCode = await generateTerraformCode(context.diagram);
 
         if (requestId !== codeRequestIdRef.current) {
@@ -536,11 +551,23 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
         setExplainedTerraformPreviewKey("");
         setTerraformErrorExplanationsByKey({});
         setStatusMessage("그래프 기준으로 동기화됨");
+        setIsTerraformPreviewStale(false);
+        latestSuccessfulTerraformPreviewFingerprintRef.current = diagramFingerprint;
         latestDiagramFingerprintRef.current = diagramFingerprint;
+        setRequestState("idle");
         onDirtyChange(false);
-      });
+      } catch {
+        if (requestId !== codeRequestIdRef.current) {
+          return;
+        }
+
+        setIsTerraformPreviewStale(true);
+        setStatusMessage("Terraform Preview 생성 실패: 이전 Preview 표시 중");
+        latestDiagramFingerprintRef.current = "";
+        setRequestState("error");
+      }
     },
-    [context.diagram, onDiagnosticsChange, onDirtyChange, runRequest]
+    [context.diagram, onDiagnosticsChange, onDirtyChange]
   );
 
   const runTerraformModuleValidation = useCallback(async (): Promise<TerraformDiagnostic[]> => {
@@ -637,9 +664,11 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
         : syncResult.diagramJson;
 
     context.applyDiagramJson(nextDiagramJson);
+    latestSuccessfulTerraformPreviewFingerprintRef.current = toTerraformRefreshFingerprint(nextDiagramJson);
     latestDiagramFingerprintRef.current = toTerraformRefreshFingerprint(nextDiagramJson);
     setHasLocalEdits(false);
     setSaveBanner(null);
+    setIsTerraformPreviewStale(false);
     setStatusMessage("저장됨");
     onDirtyChange(false);
 
@@ -794,8 +823,12 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
     setTerraformErrorExplanationsByKey({});
     setStatusMessage("다이어그램 삭제 반영됨");
     if (!hasRemainingTerraformCode) {
+      latestSuccessfulTerraformPreviewFingerprintRef.current = currentDiagramFingerprint;
       latestDiagramFingerprintRef.current = currentDiagramFingerprint;
+      setIsTerraformPreviewStale(false);
       onDirtyChange(false);
+    } else {
+      setIsTerraformPreviewStale(false);
     }
   }, [
     currentDiagramFingerprint,
@@ -808,10 +841,14 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
 
   useEffect(() => {
     if (hasLocalEdits) {
+      if (latestSuccessfulTerraformPreviewFingerprintRef.current !== currentDiagramFingerprint) {
+        setIsTerraformPreviewStale(true);
+        setStatusMessage("다이어그램 변경 미반영");
+      }
       return;
     }
 
-    if (latestDiagramFingerprintRef.current === currentDiagramFingerprint) {
+    if (latestSuccessfulTerraformPreviewFingerprintRef.current === currentDiagramFingerprint) {
       return;
     }
 
@@ -987,6 +1024,9 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
     );
 
     setHasLocalEdits(true);
+    setIsTerraformPreviewStale(
+      latestSuccessfulTerraformPreviewFingerprintRef.current !== currentDiagramFingerprint
+    );
     setSaveBanner({ kind: "dirty" });
     setTerraformPreviewExplanation(null);
     setTerraformPreviewExplanationMessage("");
@@ -1129,14 +1169,10 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
       ) : null}
 
       <div className={styles.terraformStatusBar}>
-        <span className={hasLocalEdits ? styles.terraformStatusEdited : styles.terraformStatusSynced}>
+        <span className={isTerraformPreviewSynced ? styles.terraformStatusSynced : styles.terraformStatusEdited}>
           {statusMessage}
         </span>
-        <span>
-          {isResourceCodeMode
-            ? `${inspectedBlock?.fileName ?? activeFileName} resource code`
-            : `${terraformFileOptions.length} files | ${context.nodes.length} nodes`}
-        </span>
+        <span>{previewSnapshotSummary}</span>
       </div>
 
       {saveBanner ? (
