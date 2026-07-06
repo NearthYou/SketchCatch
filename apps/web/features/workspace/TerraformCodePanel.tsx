@@ -43,7 +43,12 @@ import {
   type TerraformTokenKind
 } from "./terraform-code-highlighting";
 import { applyAllTerraformSyncProposals } from "./terraform-sync-proposals";
-import { applyTerraformSafeFix, type TerraformSafeFixResult } from "./terraform-safe-fixes";
+import {
+  applyTerraformCodeReplacement,
+  applyTerraformSafeFix,
+  type TerraformCodeReplacementPreview,
+  type TerraformSafeFixResult
+} from "./terraform-safe-fixes";
 import { createTerraformDiagnosticKey } from "./terraform-issues-state";
 import type { RequestState } from "./workspace-right-panel.types";
 import styles from "./workspace.module.css";
@@ -178,7 +183,10 @@ export type PreparedTerraformArtifactSource = {
 };
 
 export type TerraformCodePanelHandle = {
-  readonly applyTerraformSafeFix: (diagnostic: TerraformDiagnostic) => Promise<TerraformSafeFixResult>;
+  readonly applyTerraformSafeFix: (
+    diagnostic: TerraformDiagnostic,
+    codePreview?: TerraformCodeReplacementPreview | undefined
+  ) => Promise<TerraformSafeFixResult>;
   readonly getCurrentTerraformCode: () => string;
   readonly prepareTerraformArtifact: () => Promise<PreparedTerraformArtifactSource>;
   readonly validateCurrentTerraform: () => Promise<TerraformDiagnostic[]>;
@@ -579,7 +587,10 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
     runTerraformModuleValidation
   ]);
 
-  const applyTerraformSafeFixToCode = useCallback(async (diagnostic: TerraformDiagnostic): Promise<TerraformSafeFixResult> => {
+  const applyTerraformSafeFixToCode = useCallback(async (
+    diagnostic: TerraformDiagnostic,
+    codePreview?: TerraformCodeReplacementPreview | undefined
+  ): Promise<TerraformSafeFixResult> => {
     if (requestState === "loading" || isPreparingTerraformArtifactRef.current) {
       return {
         applied: false,
@@ -599,10 +610,16 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
       };
     }
 
-    const fixResult = applyTerraformSafeFix({
-      code: targetFile.code,
-      diagnostic
-    });
+    const fixResult =
+      codePreview === undefined
+        ? applyTerraformSafeFix({
+            code: targetFile.code,
+            diagnostic
+          })
+        : applyTerraformCodeReplacement({
+            code: targetFile.code,
+            preview: codePreview
+          });
 
     if (!fixResult.applied) {
       return fixResult;

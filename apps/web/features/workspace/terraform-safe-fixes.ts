@@ -17,6 +17,11 @@ export type TerraformSafeFixResult =
       readonly message: string;
     };
 
+export type TerraformCodeReplacementPreview = {
+  readonly currentCode: string;
+  readonly nextCode: string;
+};
+
 export function getTerraformSafeFix(diagnostic: TerraformDiagnostic): AiTerraformSafeFix {
   const code = diagnostic.code ?? "terraform.unknown";
   const applicable = APPLYABLE_TERRAFORM_SAFE_FIXES.has(code);
@@ -84,6 +89,38 @@ export function applyTerraformSafeFix({
     applied: false,
     code,
     message: fix.description
+  };
+}
+
+export function applyTerraformCodeReplacement({
+  code,
+  preview
+}: {
+  readonly code: string;
+  readonly preview: TerraformCodeReplacementPreview;
+}): TerraformSafeFixResult {
+  if (preview.currentCode.trim().length === 0 || preview.nextCode.trim().length === 0) {
+    return {
+      applied: false,
+      code,
+      message: "AI 제안 코드 조각이 비어 있어 적용하지 않았습니다."
+    };
+  }
+
+  const matchIndex = code.indexOf(preview.currentCode);
+
+  if (matchIndex < 0) {
+    return {
+      applied: false,
+      code,
+      message: "AI가 인용한 기존 코드 조각을 현재 Terraform 파일에서 찾지 못했습니다."
+    };
+  }
+
+  return {
+    applied: true,
+    code: `${code.slice(0, matchIndex)}${preview.nextCode}${code.slice(matchIndex + preview.currentCode.length)}`,
+    message: "Amazon Q 제안 코드 조각을 적용했습니다."
   };
 }
 

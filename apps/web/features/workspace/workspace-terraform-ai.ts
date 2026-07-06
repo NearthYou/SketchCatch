@@ -10,6 +10,7 @@ export type TerraformIssueAiRequest = {
 
 export type TerraformSafeFixApplyRequest = {
   readonly id: number;
+  readonly codePreview?: TerraformIssueCodePreview | undefined;
   readonly diagnostic: TerraformDiagnostic;
 };
 
@@ -32,6 +33,7 @@ export type TerraformIssueCodePreview = {
   readonly currentCode: string;
   readonly nextCode: string;
   readonly sourceLine: number;
+  readonly source: "amazon_q" | "safe_fix";
 };
 
 export function createTerraformIssueChatSummary(
@@ -54,6 +56,7 @@ export function createTerraformIssueFixPlan({
   const providerLabel = "Amazon Q Assistance";
   const codePreview = createTerraformIssueCodePreview({
     diagnostic,
+    explanation,
     safeFixApplicable: safeFix.applicable,
     terraformCode
   });
@@ -67,7 +70,9 @@ export function createTerraformIssueFixPlan({
     steps: codePreview
       ? [
           `${location}의 현재 코드와 수정할 코드를 비교합니다.`,
-          `${safeFix.label}: ${safeFix.description}`,
+          codePreview.source === "amazon_q"
+            ? `Amazon Q 제안: ${explanation.llmExplanation?.codeSuggestion?.rationale ?? "현재 코드 기준으로 수정 코드를 제안했습니다."}`
+            : `${safeFix.label}: ${safeFix.description}`,
           "수정 버튼을 누르면 표시된 수정할 코드가 적용되고 Terraform 재검증과 저장을 다시 실행합니다."
         ]
       : [
@@ -80,13 +85,25 @@ export function createTerraformIssueFixPlan({
 
 function createTerraformIssueCodePreview({
   diagnostic,
+  explanation,
   safeFixApplicable,
   terraformCode
 }: {
   readonly diagnostic: TerraformDiagnostic;
+  readonly explanation: AiTerraformErrorExplanationResult;
   readonly safeFixApplicable: boolean;
   readonly terraformCode: string;
 }): TerraformIssueCodePreview | undefined {
+  const amazonQPreview = createAmazonQTerraformIssueCodePreview({
+    diagnostic,
+    explanation,
+    terraformCode
+  });
+
+  if (amazonQPreview !== undefined) {
+    return amazonQPreview;
+  }
+
   if (!safeFixApplicable || terraformCode.trim().length === 0 || diagnostic.line === undefined) {
     return undefined;
   }
@@ -110,7 +127,35 @@ function createTerraformIssueCodePreview({
   return {
     currentCode,
     nextCode,
-    sourceLine: diagnostic.line
+    sourceLine: diagnostic.line,
+    source: "safe_fix"
+  };
+}
+
+function createAmazonQTerraformIssueCodePreview({
+  diagnostic,
+  explanation,
+  terraformCode
+}: {
+  readonly diagnostic: TerraformDiagnostic;
+  readonly explanation: AiTerraformErrorExplanationResult;
+  readonly terraformCode: string;
+}): TerraformIssueCodePreview | undefined {
+  const codeSuggestion = explanation.llmExplanation?.codeSuggestion;
+
+  if (codeSuggestion === undefined || terraformCode.trim().length === 0) {
+    return undefined;
+  }
+
+  if (!terraformCode.includes(codeSuggestion.currentCode)) {
+    return undefined;
+  }
+
+  return {
+    currentCode: codeSuggestion.currentCode,
+    nextCode: codeSuggestion.suggestedCode,
+    sourceLine: diagnostic.line ?? 1,
+    source: "amazon_q"
   };
 }
 
@@ -140,6 +185,12 @@ function selectTerraformIssueSummary(explanation: AiTerraformErrorExplanationRes
     candidates.find((candidate) => candidate !== undefined && !includesInternalFallbackWording(candidate)) ??
     "Terraform 진단을 바탕으로 수정 위치와 적용 가능 여부를 검토했습니다."
   );
+}
+
+export function selectTerraformIssueWellArchitectedConclusion(
+  explanation: AiTerraformErrorExplanationResult
+): string {
+  return explanation.llmExplanation?.wellArchitectedConclusion ?? explanation.consensusRecommendation;
 }
 
 function includesInternalFallbackWording(value: string): boolean {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { AiTerraformErrorExplanationResult, TerraformDiagnostic } from "@sketchcatch/types";
+import type { AiTerraformErrorExplanationResult, LlmCodeSuggestion, TerraformDiagnostic } from "@sketchcatch/types";
 import {
   createTerraformIssueChatSummary,
   createTerraformIssueFixPlan
@@ -65,8 +65,37 @@ test("createTerraformIssueFixPlan shows current and next code before enabling fi
   assert.deepEqual(fixPlan.codePreview, {
     currentCode: '  bucket = "logs",',
     nextCode: '  bucket = "logs"',
-    sourceLine: 2
+    sourceLine: 2,
+    source: "safe_fix"
   });
+});
+
+test("createTerraformIssueFixPlan prefers Amazon Q suggested code when it matches current Terraform", () => {
+  const explanation = createExplanation({
+    summary: "Terraform 코드를 수정해야 합니다.",
+    llmSummary: "Amazon Q가 현재 코드 기준 수정안을 제안했습니다.",
+    codeSuggestion: {
+      currentCode: '  bucket = "logs",',
+      suggestedCode: '  bucket = "logs"',
+      rationale: "trailing comma를 제거하면 Terraform 문법 오류가 사라집니다."
+    },
+    wellArchitectedConclusion: "6개 기준 평가를 종합하면 작은 문법 수정 후 재검증하는 방식이 최선입니다."
+  });
+
+  const fixPlan = createTerraformIssueFixPlan({
+    diagnostic: unexpectedTokenDiagnostic,
+    explanation,
+    terraformCode: 'resource "aws_s3_bucket" "logs" {\n  bucket = "logs",\n}'
+  });
+
+  assert.equal(fixPlan.canApply, true);
+  assert.deepEqual(fixPlan.codePreview, {
+    currentCode: '  bucket = "logs",',
+    nextCode: '  bucket = "logs"',
+    sourceLine: 13,
+    source: "amazon_q"
+  });
+  assert.match(fixPlan.steps.join("\n"), /Amazon Q 제안/);
 });
 
 test("createTerraformIssueFixPlan requires a code preview before enabling fixes", () => {
@@ -135,6 +164,8 @@ test("createTerraformIssueFixPlan explains missing Amazon Q provider configurati
 function createExplanation(input: {
   readonly summary: string;
   readonly llmSummary: string;
+  readonly codeSuggestion?: LlmCodeSuggestion | undefined;
+  readonly wellArchitectedConclusion?: string | undefined;
 }): AiTerraformErrorExplanationResult {
   return {
     stage: "validate",
@@ -158,6 +189,8 @@ function createExplanation(input: {
       highlights: ["main.tf:13을 확인하세요."],
       nextActions: ["수정 후 Terraform 재검증을 실행하세요."],
       fallbackUsed: false,
+      codeSuggestion: input.codeSuggestion,
+      wellArchitectedConclusion: input.wellArchitectedConclusion,
       providerMetadata: {
         provider: "amazon_q",
         service: "amazon_q_business",

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { TerraformDiagnostic } from "@sketchcatch/types";
 import {
+  applyTerraformCodeReplacement,
   applyTerraformSafeFix,
   getTerraformSafeFix
 } from "./terraform-safe-fixes";
@@ -53,5 +54,18 @@ test("applyTerraformSafeFix refuses fixes without a usable line", () => {
   });
 
   assert.equal(result.applied, false);
+});
+
+test("applyTerraformCodeReplacement applies the reviewed Amazon Q snippet exactly once", () => {
+  const result = applyTerraformCodeReplacement({
+    code: 'resource "aws_s3_bucket" "logs" {\n  bucket = "logs",\n}',
+    preview: {
+      currentCode: 'bucket = "logs",',
+      nextCode: 'bucket = "logs"'
+    }
+  });
+
+  assert.equal(result.applied, true);
+  assert.equal(result.code, 'resource "aws_s3_bucket" "logs" {\n  bucket = "logs"\n}');
 });
 

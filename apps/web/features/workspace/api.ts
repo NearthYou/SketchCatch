@@ -71,6 +71,7 @@ type AiTerraformErrorExplanationRequest = {
   readonly stage: AiTerraformStage;
   readonly rawMessage: string;
   readonly relatedResourceId?: string | undefined;
+  readonly terraformCodeContext?: string | undefined;
 };
 
 type ArchitectureSnapshotResponse = {
@@ -320,7 +321,8 @@ export async function runAiTerraformErrorExplanation(
   return postPublicAiJson<AiTerraformErrorExplanationResult>("/ai/terraform-error-explanation", {
     rawMessage: input.rawMessage,
     relatedResourceId: input.relatedResourceId,
-    stage: input.stage
+    stage: input.stage,
+    terraformCodeContext: input.terraformCodeContext
   });
 }
 

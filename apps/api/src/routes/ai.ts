@@ -111,7 +111,8 @@ const preDeploymentCheckFromDiagramBodySchema: z.ZodType<AiPreDeploymentCheckFro
 const terraformErrorExplanationBodySchema = z.object({
   stage: z.enum(["validate", "export", "plan", "apply"]),
   rawMessage: z.string().trim().min(1),
-  relatedResourceId: z.string().min(1).optional()
+  relatedResourceId: z.string().min(1).optional(),
+  terraformCodeContext: z.string().max(20_000).optional()
 });
 
 const terraformPreviewExplanationBodySchema = z.object({
@@ -214,7 +215,8 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
         ...result,
         llmExplanation: await createLlmExplanation({
           target: "terraform_error_explanation",
-          result
+          result,
+          terraformCodeContext: body.terraformCodeContext
         })
       };
     }

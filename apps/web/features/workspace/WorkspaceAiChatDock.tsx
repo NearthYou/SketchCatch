@@ -52,14 +52,19 @@ import { formatTerraformDiagnosticTitle } from "./terraform-panel-utils";
 import {
   createTerraformIssueChatSummary,
   createTerraformIssueFixPlan,
+  selectTerraformIssueWellArchitectedConclusion,
   type TerraformIssueAiRequest,
+  type TerraformIssueCodePreview,
   type TerraformSafeFixApplyResult
 } from "./workspace-terraform-ai";
 import styles from "./workspace.module.css";
 
 export type WorkspaceAiChatDockProps = {
   readonly context: DiagramEditorPanelContext;
-  readonly onApplyTerraformIssueFix: (diagnostic: TerraformDiagnostic) => void;
+  readonly onApplyTerraformIssueFix: (
+    diagnostic: TerraformDiagnostic,
+    codePreview?: TerraformIssueCodePreview | undefined
+  ) => void;
   readonly projectId: string;
   readonly terraformIssueRequest: TerraformIssueAiRequest | null;
   readonly terraformSafeFixApplyResult: TerraformSafeFixApplyResult | null;
@@ -218,7 +223,8 @@ export function WorkspaceAiChatDock({
         const explanation = await runAiTerraformErrorExplanation({
           rawMessage: formatTerraformIssueRawMessage(diagnostic),
           relatedResourceId: diagnostic.resourceAddress,
-          stage: "validate"
+          stage: "validate",
+          terraformCodeContext: request.terraformCode
         });
 
         if (dismissedTerraformIssueRequestIdRef.current === request.id) {
@@ -836,7 +842,10 @@ export function WorkspaceAiChatDock({
                             disabled={applyingTerraformFixRequestId === terraformIssueResolution.request.id}
                             onClick={() => {
                               setApplyingTerraformFixRequestId(terraformIssueResolution.request.id);
-                              onApplyTerraformIssueFix(terraformIssueResolution.request.issue.diagnostic);
+                              onApplyTerraformIssueFix(
+                                terraformIssueResolution.request.issue.diagnostic,
+                                fixPlan.codePreview
+                              );
                             }}
                             type="button"
                           >
@@ -996,19 +1005,10 @@ function TerraformIssueExplanationCard({
           <dd>{explanation.likelyCause}</dd>
         </div>
         <div>
-          <dt>권고</dt>
-          <dd>{explanation.consensusRecommendation}</dd>
+          <dt>Well-Architected 결론</dt>
+          <dd>{selectTerraformIssueWellArchitectedConclusion(explanation)}</dd>
         </div>
       </dl>
-      <div className={styles.terraformIssuePillars}>
-        {explanation.wellArchitectedGuidance.map((guidance) => (
-          <section key={guidance.pillar}>
-            <strong>{guidance.title}</strong>
-            <p>{guidance.observation}</p>
-            <span>{guidance.recommendation}</span>
-          </section>
-        ))}
-      </div>
       <ul className={styles.terraformIssueActions}>
         {explanation.nextActions.map((action) => (
           <li key={action}>{action}</li>

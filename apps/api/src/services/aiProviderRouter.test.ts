@@ -259,6 +259,51 @@ test("createAiProviderBackedLlmExplanation uses Amazon Q first for Terraform err
   assert.equal(bedrockCalls.length, 0);
 });
 
+test("createAiProviderBackedLlmExplanation preserves Amazon Q code suggestions and synthesized Well-Architected conclusions", async () => {
+  const qCalls: unknown[] = [];
+  const bedrockCalls: unknown[] = [];
+  const qExplanation: LlmExplanation = {
+    target: "terraform_error_explanation",
+    summary: "Amazon Q found a Terraform syntax fix.",
+    highlights: ["The existing line contains a trailing comma."],
+    nextActions: ["Review the replacement and validate Terraform again."],
+    fallbackUsed: false,
+    codeSuggestion: {
+      currentCode: '  bucket = "logs",',
+      suggestedCode: '  bucket = "logs"',
+      rationale: "Removing the comma resolves the syntax error."
+    },
+    wellArchitectedConclusion:
+      "Across the six criteria, the best path is a minimal syntax replacement followed by validation."
+  };
+  const createLlmExplanation = createAiProviderBackedLlmExplanation({
+    amazonQProvider: createProvider("amazon_q", qExplanation, qCalls),
+    bedrockProvider: createProvider("bedrock", qExplanation, bedrockCalls),
+    fallbackProvider: createFallbackOnlyLlmExplanation,
+    creditPolicy: {
+      bedrock: true,
+      amazonQ: true,
+      transcribe: false,
+      billingMode: "aws_credit_only"
+    },
+    limits: { dailyCallLimit: 10, windowCallLimit: 10, windowMs: 60_000 }
+  });
+
+  const result = await createLlmExplanation({
+    target: "terraform_error_explanation",
+    result: createTerraformErrorResult(),
+    terraformCodeContext: 'resource "aws_s3_bucket" "logs" {\n  bucket = "logs",\n}'
+  });
+
+  assert.equal(result.providerMetadata?.provider, "amazon_q");
+  assert.equal(result.codeSuggestion?.suggestedCode, '  bucket = "logs"');
+  assert.match(result.wellArchitectedConclusion ?? "", /best path/);
+  assert.equal(qCalls.length, 1);
+  assert.equal(bedrockCalls.length, 0);
+  assert.match(String((qCalls[0] as { prompt?: unknown }).prompt), /six criteria/);
+  assert.match(String((qCalls[0] as { prompt?: unknown }).prompt), /terraformCodeContext/);
+});
+
 test("createAiProviderBackedLlmExplanation accepts unstructured Amazon Q Terraform explanations", async () => {
   const qCalls: unknown[] = [];
   const bedrockCalls: unknown[] = [];

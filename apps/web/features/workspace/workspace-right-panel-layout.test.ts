@@ -373,7 +373,7 @@ test("terraform errors surface as an issues banner and AI resolution lives in th
   assert.match(componentSource, /<TerraformIssuesPanel issues=\{terraformIssues\}/);
   assert.match(aiChatDockSource, /runAiTerraformErrorExplanation/);
   assert.match(aiChatDockSource, /terraform_issue/);
-  assert.match(aiChatDockSource, /wellArchitectedGuidance/);
+  assert.match(aiChatDockSource, /selectTerraformIssueWellArchitectedConclusion/);
   assert.match(aiChatDockSource, /onApplyTerraformIssueFix/);
   assert.match(issueBannerRule, /\bbackground:\s*#fff7ed;/);
   assert.match(aiButtonRule, /\bbackground:\s*var\(--bp-blue\);/);

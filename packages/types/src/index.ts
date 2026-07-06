@@ -1029,6 +1029,12 @@ export type LlmExplanationFallbackReason =
   | "provider_error"
   | "invalid_response";
 
+export type LlmCodeSuggestion = {
+  currentCode: string;
+  suggestedCode: string;
+  rationale: string;
+};
+
 export type LlmExplanation = {
   target: LlmExplanationTarget;
   summary: string;
@@ -1036,6 +1042,8 @@ export type LlmExplanation = {
   nextActions: string[];
   fallbackUsed: boolean;
   fallbackReason?: LlmExplanationFallbackReason | undefined;
+  codeSuggestion?: LlmCodeSuggestion | undefined;
+  wellArchitectedConclusion?: string | undefined;
   providerMetadata?: AiProviderMetadata | undefined;
 };
 

@@ -1,5 +1,25 @@
 # 에이전트 진행 로그
 
+### 2026-07-06 - Issue #161 Amazon Q Terraform 수정 계획 고도화
+
+- Goal: Terraform 이슈 AI 해결 창에서 현재 Terraform 코드와 Amazon Q가 제안한 수정 코드를 함께 보여주고, Well-Architected 6개 기준 평가를 종합한 결론을 기준으로 사용자가 수정 버튼을 누를 수 있게 한다.
+- Completed:
+  - Terraform 이슈 설명 API 요청에 현재 Terraform 코드 컨텍스트를 전달하고, Amazon Q 프롬프트가 운영 우수성, 보안, 신뢰성, 성능 효율성, 비용 최적화, 지속 가능성 6개 기준을 각각 평가한 뒤 최선의 수정 경로를 종합하도록 바꿨다.
+  - `LlmExplanation`에 `codeSuggestion`과 `wellArchitectedConclusion`을 추가하고, provider 응답 검증이 코드 제안과 종합 결론을 보존하도록 확장했다.
+  - AI 해결 카드에서 6개 pillar 카드를 나열하지 않고 Amazon Q가 종합한 Well-Architected 결론을 보여주도록 바꿨다.
+  - 사용자가 본 Amazon Q 코드 제안이 현재 Terraform 파일에서 정확히 발견될 때만 수정 버튼을 활성화하고, 클릭 시 해당 코드 조각을 교체한 뒤 기존 Terraform 검증/동기화 흐름을 재사용하도록 연결했다.
+- Verification run:
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/types typecheck` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api exec tsx --test src/services/aiProviderRouter.test.ts --test-name-pattern "Amazon Q"` - passed, 12 tests.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api typecheck` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-terraform-ai.test.ts features/workspace/terraform-safe-fixes.test.ts` - passed, 12 tests.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web exec tsx --test features/workspace/ai-workspace-api.test.ts --test-name-pattern "Terraform"` - passed, 5 tests.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web typecheck` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-right-panel-layout.test.ts --test-name-pattern "terraform issue AI resolution"` - passed, 41 source-layout tests.
+- Known risks:
+  - 실제 Amazon Q 호출 품질은 사용자의 Amazon Q Business 앱/리전/권한 설정에 의존한다.
+  - AI 제안은 사용자가 수정 버튼을 누르는 명시적 수락 후에만 Terraform 코드에 반영되며, 실제 cloud apply/destroy는 수행하지 않았다.
+
 이 파일은 새 세션이 이전 대화 기억 없이도 저장소의 현재 작업 상태를 복구하기 위한 지속 상태다. 제품 범위의 정답은 `docs/product.md`, 계약의 정답은 `docs/data-models.md`, 실행 경계의 정답은 `docs/architecture.md`에 둔다. 이 파일은 "지금 에이전트 작업이 어디까지 검증되었는가"만 기록한다.
 
 ## 현재 검증된 상태

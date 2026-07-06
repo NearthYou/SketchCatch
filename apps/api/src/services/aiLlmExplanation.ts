@@ -152,7 +152,7 @@ function createDefaultOpenAiResponsesClient(options: OpenAiClientOptions): OpenA
           store: false
         });
 
-        return { output_parsed: response.output_parsed };
+        return { output_parsed: response.output_parsed as LlmExplanation | null };
       }
     }
   };
@@ -579,14 +579,28 @@ async function tryProvider(input: {
 }
 
 function createProviderPrompt(target: LlmExplanationTarget, payload: unknown): string {
+  const terraformErrorInstructions =
+    target === "terraform_error_explanation"
+      ? [
+          "For Terraform errors, inspect terraformCodeContext when it is present.",
+          "If you can identify a safe local replacement, include codeSuggestion with currentCode as an exact snippet from terraformCodeContext, suggestedCode as the replacement snippet, and rationale.",
+          "If no exact local replacement is safe, omit codeSuggestion.",
+          "Evaluate the candidate fix separately against these six criteria: operational excellence, security, reliability, performance efficiency, cost optimization, and sustainability.",
+          "After the six-criteria evaluation, synthesize the tradeoffs and choose the best fix path.",
+          "Return only the synthesized best-path conclusion in wellArchitectedConclusion instead of returning six separate pillar cards."
+        ]
+      : [];
+
   return [
     "Return JSON only. Do not wrap the response in markdown.",
     "The JSON shape must be:",
-    '{"target":"TARGET","summary":"short summary","highlights":["item"],"nextActions":["item"],"fallbackUsed":false}',
+    '{"target":"TARGET","summary":"short summary","highlights":["item"],"nextActions":["item"],"fallbackUsed":false,"codeSuggestion":null,"wellArchitectedConclusion":null}',
+    "For Terraform errors, codeSuggestion may be an object with currentCode, suggestedCode, and rationale. For other cases, keep it null.",
     `TARGET must be "${target}".`,
     target === "architecture_patch_preview"
       ? "This is a preview only. Do not claim the Architecture Board changed."
       : "Use the deterministic result as the source of truth. Do not invent resources or guarantees.",
+    ...terraformErrorInstructions,
     "Provider input:",
     JSON.stringify(payload)
   ].join("\n");

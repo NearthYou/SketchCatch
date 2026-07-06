@@ -172,7 +172,7 @@ export function WorkspaceRightPanel({
     latestTerraformSafeFixApplyRequestIdRef.current = request.id;
 
     async function applySafeFix(): Promise<void> {
-      const result = await terraformPanelRef.current?.applyTerraformSafeFix(request.diagnostic);
+      const result = await terraformPanelRef.current?.applyTerraformSafeFix(request.diagnostic, request.codePreview);
 
       onTerraformSafeFixApplyResult({
         requestId: request.id,

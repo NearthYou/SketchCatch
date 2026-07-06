@@ -185,8 +185,12 @@ export function WorkspaceDraftManager() {
     [clearLocalSaveTimer, persistLocalDraftNow, workspaceId]
   );
 
-  const requestTerraformSafeFixApply = useCallback((diagnostic: TerraformSafeFixApplyRequest["diagnostic"]): void => {
+  const requestTerraformSafeFixApply = useCallback((
+    diagnostic: TerraformSafeFixApplyRequest["diagnostic"],
+    codePreview?: TerraformSafeFixApplyRequest["codePreview"]
+  ): void => {
     setTerraformSafeFixApplyRequest({
+      codePreview,
       diagnostic,
       id: Date.now()
     });
