@@ -125,6 +125,7 @@ test("createTerraformIssueFixPlan prefers Amazon Q suggested code when it matche
   assert.deepEqual(fixPlan.codePreview, {
     currentCode: '  bucket = "logs",',
     nextCode: '  bucket = "logs"',
+    rationale: "trailing comma를 제거하면 Terraform 문법 오류가 사라집니다.",
     sourceLine: 13,
     source: "amazon_q"
   });
@@ -173,7 +174,7 @@ test("createTerraformIssueFixPlan enables AI deletion suggestions for invalid st
   });
 
   assert.equal(fixPlan.canApply, true);
-  assert.equal(fixPlan.providerLabel, "AI suggested fix");
+  assert.equal(fixPlan.providerLabel, "AI 오류 수정");
   assert.equal(fixPlan.plainExplanation, "Line 19 is not valid Terraform syntax because it is a bare token outside any block.");
   assert.equal(
     fixPlan.fixExplanation,
@@ -182,7 +183,120 @@ test("createTerraformIssueFixPlan enables AI deletion suggestions for invalid st
   assert.deepEqual(fixPlan.codePreview, {
     currentCode: "xczxczxczxczxczcx\n",
     nextCode: "",
+    rationale: "Delete the standalone token line. It is not a Terraform block, attribute, or expression, so removing it lets Terraform parse the next resource block.",
     sourceLine: 19,
+    source: "amazon_q"
+  });
+});
+
+test("createTerraformIssueFixPlan derives an AI deletion preview from a block-header explanation", () => {
+  const diagnostic: TerraformDiagnostic = {
+    code: "terraform.sync.block_header",
+    line: 10,
+    message: "Invalid Terraform block header.",
+    severity: "error",
+    sourceFileName: "main.tf"
+  };
+  const explanation = {
+    ...createExplanation({
+      summary: "Terraform 코드 파일 main.tf의 10번째 줄에 문제가 있습니다.",
+      llmSummary: "Terraform 코드 파일 main.tf의 10번째 줄은 올바른 형식의 리소스 또는 데이터 블록이 아닙니다."
+    }),
+    diagnosticExplanation: {
+      errorType: "terraform.sync.block_header",
+      plainExplanation: "Terraform 코드 파일 main.tf의 10번째 줄에 문제가 있습니다.",
+      fixExplanation: "강조된 Terraform 코드를 확인해 수동으로 수정한 뒤 다시 검증하세요.",
+      codeFrame: [],
+      canApply: false,
+      line: 10,
+      sourceFileName: "main.tf"
+    }
+  };
+
+  const fixPlan = createTerraformIssueFixPlan({
+    diagnostic,
+    explanation,
+    terraformCode: [
+      'resource "aws_vpc" "vpc_main" {',
+      '  cidr_block = "10.0.0.0/16"',
+      "}",
+      'resource "aws_internet_gateway" "internet_gateway" {',
+      "  vpc_id = aws_vpc.vpc_main.id",
+      "}",
+      'resource "aws_route_table" "public_route_table" {',
+      "  vpc_id = aws_vpc.vpc_main.id",
+      "}",
+      "ㄷㄱㅈㄷㄱㅈㄷㄱ",
+      'resource "aws_subnet" "public_subnet" {',
+      "  vpc_id = aws_vpc.vpc_main.id",
+      "}"
+    ].join("\n")
+  });
+
+  assert.equal(fixPlan.canApply, true);
+  assert.equal(fixPlan.providerLabel, "AI 오류 수정");
+  assert.equal(
+    fixPlan.fixExplanation,
+    "main.tf 10번째 줄의 `ㄷㄱㅈㄷㄱㅈㄷㄱ` 줄은 Terraform block header나 attribute가 아니므로 삭제해야 합니다."
+  );
+  assert.deepEqual(fixPlan.codePreview, {
+    currentCode: "ㄷㄱㅈㄷㄱㅈㄷㄱ\n",
+    nextCode: "",
+    rationale: "main.tf 10번째 줄의 `ㄷㄱㅈㄷㄱㅈㄷㄱ` 줄은 Terraform block header나 attribute가 아니므로 삭제해야 합니다.",
+    sourceLine: 10,
+    source: "amazon_q"
+  });
+});
+
+test("createTerraformIssueFixPlan still deletes standalone block-header lines without LLM suggestion metadata", () => {
+  const diagnostic: TerraformDiagnostic = {
+    code: "terraform.sync.block_header",
+    line: 4,
+    message: "Invalid Terraform block header.",
+    severity: "error",
+    sourceFileName: "main.tf"
+  };
+  const explanation = {
+    ...createExplanation({
+      summary: "Terraform 코드 파일 main.tf의 4번째 줄에 문제가 있습니다.",
+      llmSummary: "unused"
+    }),
+    llmExplanation: undefined,
+    diagnosticExplanation: {
+      errorType: "terraform.sync.block_header",
+      plainExplanation: "Terraform 코드 파일 main.tf의 4번째 줄에 문제가 있습니다.",
+      fixExplanation: "강조된 Terraform 코드를 확인해 수동으로 수정한 뒤 다시 검증하세요.",
+      codeFrame: [],
+      canApply: false,
+      line: 4,
+      sourceFileName: "main.tf"
+    }
+  };
+
+  const fixPlan = createTerraformIssueFixPlan({
+    diagnostic,
+    explanation,
+    terraformCode: [
+      'resource "aws_vpc" "vpc_main" {',
+      '  cidr_block = "10.0.0.0/16"',
+      "}",
+      "ㄷㄱㅈㄷㄱㅈㄷㄱ",
+      'resource "aws_subnet" "public_subnet" {',
+      "}"
+    ].join("\n")
+  });
+
+  assert.equal(fixPlan.canApply, true);
+  assert.equal(fixPlan.providerLabel, "AI 오류 수정");
+  assert.equal(
+    fixPlan.fixExplanation,
+    "main.tf 4번째 줄의 `ㄷㄱㅈㄷㄱㅈㄷㄱ` 줄은 Terraform block header나 attribute가 아니므로 삭제해야 합니다."
+  );
+  assert.deepEqual(fixPlan.codePreview, {
+    currentCode: "ㄷㄱㅈㄷㄱㅈㄷㄱ\n",
+    nextCode: "",
+    rationale: "main.tf 4번째 줄의 `ㄷㄱㅈㄷㄱㅈㄷㄱ` 줄은 Terraform block header나 attribute가 아니므로 삭제해야 합니다.",
+    sourceLine: 4,
     source: "amazon_q"
   });
 });

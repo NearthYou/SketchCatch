@@ -347,6 +347,61 @@ test("createAiProviderBackedLlmExplanation preserves Amazon Q deletion code sugg
   assert.equal(qCalls.length, 1);
 });
 
+test("createAiProviderBackedLlmExplanation completes missing Amazon Q block-header code suggestions", async () => {
+  const qCalls: unknown[] = [];
+  const qExplanation: LlmExplanation = {
+    target: "terraform_error_explanation",
+    summary: "Terraform 코드 파일 main.tf의 4번째 줄은 올바른 형식의 리소스 또는 데이터 블록이 아닙니다.",
+    highlights: ["main.tf 4번째 줄을 확인하세요."],
+    nextActions: ["수정 후 Terraform 검증을 다시 실행하세요."],
+    fallbackUsed: false
+  };
+  const createLlmExplanation = createAiProviderBackedLlmExplanation({
+    amazonQProvider: createProvider("amazon_q", qExplanation, qCalls),
+    fallbackProvider: createFallbackOnlyLlmExplanation,
+    creditPolicy: {
+      bedrock: true,
+      amazonQ: true,
+      transcribe: false,
+      billingMode: "aws_credit_only"
+    },
+    limits: { dailyCallLimit: 10, windowCallLimit: 10, windowMs: 60_000 }
+  });
+
+  const result = await createLlmExplanation({
+    target: "terraform_error_explanation",
+    result: createTerraformErrorResult({
+      rawMessage: "Invalid block header",
+      diagnosticExplanation: {
+        errorType: "terraform.sync.block_header",
+        plainExplanation: "Terraform 코드 파일 main.tf의 4번째 줄에 문제가 있습니다.",
+        fixExplanation: "강조된 Terraform 코드를 확인해 수정하세요.",
+        codeFrame: [],
+        canApply: false,
+        line: 4,
+        sourceFileName: "main.tf"
+      }
+    }),
+    terraformCodeContext: [
+      'resource "aws_vpc" "vpc_main" {',
+      '  cidr_block = "10.0.0.0/16"',
+      "}",
+      "ㄷㄱㅈㄷㄱㅈㄷㄱ",
+      'resource "aws_subnet" "public_subnet" {',
+      "}"
+    ].join("\n")
+  });
+
+  assert.equal(result.providerMetadata?.provider, "amazon_q");
+  assert.equal(result.codeSuggestion?.currentCode, "ㄷㄱㅈㄷㄱㅈㄷㄱ\n");
+  assert.equal(result.codeSuggestion?.suggestedCode, "");
+  assert.equal(
+    result.codeSuggestion?.rationale,
+    "main.tf 4번째 줄의 `ㄷㄱㅈㄷㄱㅈㄷㄱ` 코드는 Terraform block header나 attribute가 아니므로 삭제해야 합니다."
+  );
+  assert.equal(qCalls.length, 1);
+});
+
 test("createAiProviderBackedLlmExplanation accepts unstructured Amazon Q Terraform explanations", async () => {
   const qCalls: unknown[] = [];
   const bedrockCalls: unknown[] = [];
@@ -413,8 +468,9 @@ test("createAiProviderBackedLlmExplanation accepts unstructured Amazon Q Terrafo
   assert.equal(bedrockCalls.length, 0);
 });
 
-test("createAiProviderBackedLlmExplanation rejects generic Amazon Q Terraform non-answers", async () => {
+test("createAiProviderBackedLlmExplanation falls back to Bedrock when Amazon Q returns a generic Terraform non-answer", async () => {
   const qCalls: unknown[] = [];
+  const bedrockCalls: unknown[] = [];
   const createLlmExplanation = createAiProviderBackedLlmExplanation({
     amazonQProvider: {
       provider: "amazon_q",
@@ -424,6 +480,29 @@ test("createAiProviderBackedLlmExplanation rejects generic Amazon Q Terraform no
         qCalls.push(request);
         return {
           text: "Sorry, I could not find relevant information to complete your request."
+        };
+      }
+    },
+    bedrockProvider: {
+      provider: "bedrock",
+      service: "bedrock_runtime",
+      model: "bedrock-model",
+      generate: async (request) => {
+        bedrockCalls.push(request);
+        return {
+          text: JSON.stringify({
+            target: "terraform_error_explanation",
+            summary: "Bedrock identified the invalid Terraform token line.",
+            highlights: ["Delete the standalone token that is outside any Terraform block."],
+            nextActions: ["Review the replacement and run Terraform validation again."],
+            fallbackUsed: false,
+            codeSuggestion: {
+              currentCode: "xczxczxczxczxczcx\n",
+              suggestedCode: "",
+              rationale: "The standalone token is not valid Terraform syntax, so it should be removed."
+            },
+            wellArchitectedConclusion: null
+          })
         };
       }
     },
@@ -439,14 +518,18 @@ test("createAiProviderBackedLlmExplanation rejects generic Amazon Q Terraform no
 
   const result = await createLlmExplanation({
     target: "terraform_error_explanation",
-    result: createTerraformErrorResult()
+    result: createTerraformErrorResult({
+      rawMessage: "Unsupported block type: xczxczxczxczxczcx"
+    }),
+    terraformCodeContext: 'resource "aws_security_group" "web" {\n}\nxczxczxczxczxczcx\nresource "aws_route_table" "public" {\n}'
   });
 
-  assert.equal(result.fallbackUsed, true);
-  assert.equal(result.fallbackReason, "invalid_response");
-  assert.doesNotMatch(result.summary, /could not find relevant information/i);
-  assert.equal(result.providerMetadata?.provider, "amazon_q");
+  assert.equal(result.fallbackUsed, false);
+  assert.equal(result.summary, "Bedrock identified the invalid Terraform token line.");
+  assert.equal(result.codeSuggestion?.suggestedCode, "");
+  assert.equal(result.providerMetadata?.provider, "bedrock");
   assert.equal(qCalls.length, 1);
+  assert.equal(bedrockCalls.length, 1);
 });
 
 test("createAiProviderBackedLlmExplanation keeps Amazon Q metadata when Terraform error Q credits are blocked", async () => {

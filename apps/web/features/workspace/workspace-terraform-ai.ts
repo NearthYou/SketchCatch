@@ -43,6 +43,7 @@ export type TerraformIssueCodePreview = {
   readonly nextCode: string;
   readonly sourceLine: number;
   readonly source: "amazon_q" | "safe_fix";
+  readonly rationale?: string | undefined;
 };
 
 export function createTerraformIssueChatSummary(
@@ -70,8 +71,10 @@ export function createTerraformIssueFixPlan({
     terraformCode
   });
   const aiCodeSuggestion = explanation.llmExplanation?.codeSuggestion;
-  const aiFixExplanation = codePreview?.source === "amazon_q" ? aiCodeSuggestion?.rationale : undefined;
-  const providerLabel = codePreview?.source === "amazon_q" ? "AI suggested fix" : "Rule-first diagnosis";
+  const aiFixExplanation = codePreview?.source === "amazon_q"
+    ? codePreview.rationale ?? aiCodeSuggestion?.rationale
+    : undefined;
+  const providerLabel = codePreview?.source === "amazon_q" ? "AI 오류 수정" : "Rule-first diagnosis";
   const helpfulLlmSummary = selectHelpfulTerraformIssueLlmSummary(explanation);
 
   return {
@@ -200,8 +203,15 @@ function createAmazonQTerraformIssueCodePreview({
 }): TerraformIssueCodePreview | undefined {
   const codeSuggestion = explanation.llmExplanation?.codeSuggestion;
 
-  if (codeSuggestion === undefined || terraformCode.trim().length === 0) {
+  if (terraformCode.trim().length === 0) {
     return undefined;
+  }
+
+  if (codeSuggestion === undefined) {
+    return createAmazonQTerraformLineDeletionPreview({
+      diagnostic,
+      terraformCode
+    });
   }
 
   if (!terraformCode.includes(codeSuggestion.currentCode)) {
@@ -211,9 +221,57 @@ function createAmazonQTerraformIssueCodePreview({
   return {
     currentCode: codeSuggestion.currentCode,
     nextCode: codeSuggestion.suggestedCode,
+    rationale: codeSuggestion.rationale,
     sourceLine: diagnostic.line ?? 1,
     source: "amazon_q"
   };
+}
+
+function createAmazonQTerraformLineDeletionPreview({
+  diagnostic,
+  terraformCode
+}: {
+  readonly diagnostic: TerraformDiagnostic;
+  readonly terraformCode: string;
+}): TerraformIssueCodePreview | undefined {
+  if (
+    diagnostic.line === undefined ||
+    !isStandaloneTerraformSyntaxDiagnostic(diagnostic)
+  ) {
+    return undefined;
+  }
+
+  const line = extractTerraformLine(terraformCode, diagnostic.line);
+
+  if (line === undefined || line.trim().length === 0 || isLikelyTerraformBlockOrAttribute(line)) {
+    return undefined;
+  }
+
+  const lineBreak = terraformCode.includes("\r\n") ? "\r\n" : "\n";
+  const currentCode = terraformCode.includes(`${line}${lineBreak}`) ? `${line}${lineBreak}` : line;
+
+  return {
+    currentCode,
+    nextCode: "",
+    rationale: `${formatTerraformDiagnosticLocation(diagnostic)}의 \`${line.trim()}\` 줄은 Terraform block header나 attribute가 아니므로 삭제해야 합니다.`,
+    sourceLine: diagnostic.line,
+    source: "amazon_q"
+  };
+}
+
+function isStandaloneTerraformSyntaxDiagnostic(diagnostic: TerraformDiagnostic): boolean {
+  return diagnostic.code === "terraform.sync.block_header" || diagnostic.code === "terraform.unexpected_token";
+}
+
+function isLikelyTerraformBlockOrAttribute(line: string): boolean {
+  const trimmed = line.trim();
+
+  return (
+    trimmed.startsWith("#") ||
+    trimmed.startsWith("//") ||
+    trimmed.endsWith("{") ||
+    /^[A-Za-z_][A-Za-z0-9_]*\s*=/.test(trimmed)
+  );
 }
 
 function extractTerraformLine(code: string, lineNumber: number): string | undefined {
