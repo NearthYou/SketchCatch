@@ -10,6 +10,7 @@ import {
 } from "./aws-reverse-engineering-parsers.js";
 import {
   listBucketsWithDetails,
+  listTaggedUnknownResources,
   maskReverseEngineeringSensitiveText as maskGatewaySensitiveText,
   shouldReadResourceGroup
 } from "./aws-reverse-engineering-gateway.js";
@@ -101,6 +102,39 @@ test("listBucketsWithDetails keeps S3 bucket read-only settings in config", asyn
   assert.equal(bucket?.config["versioningStatus"], "Enabled");
   assert.equal(bucket?.config["policyStatusIsPublic"], false);
   assert.deepEqual(bucket?.config["tags"], [{ key: "env", value: "dev" }]);
+});
+
+test("listTaggedUnknownResources keeps unsupported tagged AWS resources as UNKNOWN candidates", async () => {
+  const fakeTaggingClient = {
+    async send(command: { constructor: { name: string } }) {
+      assert.equal(command.constructor.name, "GetResourcesCommand");
+
+      return {
+        ResourceTagMappingList: [
+          {
+            ResourceARN: "arn:aws:lambda:ap-northeast-2:316875069960:function:demo-fn",
+            Tags: [{ Key: "Name", Value: "Demo Lambda" }]
+          },
+          {
+            ResourceARN: "arn:aws:ec2:ap-northeast-2:316875069960:instance/i-known",
+            Tags: [{ Key: "Name", Value: "Known EC2" }]
+          }
+        ]
+      };
+    }
+  };
+
+  const records = await listTaggedUnknownResources(
+    "ap-northeast-2",
+    TEST_AWS_CREDENTIALS,
+    () => fakeTaggingClient
+  );
+
+  assert.equal(records.length, 1);
+  assert.equal(records[0]?.providerResourceType, "AWS::Lambda::Function");
+  assert.equal(records[0]?.providerResourceId, "arn:aws:lambda:ap-northeast-2:316875069960:function:demo-fn");
+  assert.equal(records[0]?.displayName, "Demo Lambda");
+  assert.equal(records[0]?.config["service"], "lambda");
 });
 
 test("extractSetItems returns only direct AWS set items when child item tags are nested", () => {

@@ -1,4 +1,10 @@
 import {
+  GetResourcesCommand,
+  ResourceGroupsTaggingAPIClient,
+  type GetResourcesCommandOutput,
+  type ResourceTagMapping
+} from "@aws-sdk/client-resource-groups-tagging-api";
+import {
   GetBucketEncryptionCommand,
   GetBucketLocationCommand,
   GetBucketPolicyStatusCommand,
@@ -53,6 +59,15 @@ export type AwsS3ReadClientFactory = (
   credentials: TerraformAwsCredentialEnv
 ) => AwsS3ReadClient;
 
+export type AwsTaggingReadClient = {
+  send(command: object): Promise<unknown>;
+};
+
+export type AwsTaggingReadClientFactory = (
+  region: string,
+  credentials: TerraformAwsCredentialEnv
+) => AwsTaggingReadClient;
+
 // 검증된 AWS 연결로 실제 read-only 조회를 수행하는 gateway를 만듭니다.
 export function createAwsReverseEngineeringGateway(
   awsConnection: AwsConnection,
@@ -80,7 +95,8 @@ export function createAwsReverseEngineeringGateway(
         ),
         readResourceGroup(input, "EC2", () => describeInstances(input.region, credentials, fetchXml)),
         readResourceGroup(input, "RDS", () => describeRdsInstances(input.region, credentials, fetchXml)),
-        readResourceGroup(input, "S3", () => listBucketsWithDetails(input.region, credentials))
+        readResourceGroup(input, "S3", () => listBucketsWithDetails(input.region, credentials)),
+        readResourceGroup(input, "UNKNOWN", () => listTaggedUnknownResources(input.region, credentials))
       ]);
 
       return {
@@ -341,6 +357,136 @@ function normalizeS3BucketRegion(
   fallbackRegion: string
 ): string {
   return locationConstraint && locationConstraint.length > 0 ? locationConstraint : fallbackRegion;
+}
+
+// `ALL` 선택에서 지원 목록 밖 tagged 리소스를 UNKNOWN 후보로 남겨 사용자가 놓치지 않게 합니다.
+export async function listTaggedUnknownResources(
+  region: string,
+  credentials: TerraformAwsCredentialEnv,
+  createClient: AwsTaggingReadClientFactory = createDefaultTaggingReadClient
+): Promise<AwsDiscoveredResourceRecord[]> {
+  const client = createClient(region, credentials);
+  const records: AwsDiscoveredResourceRecord[] = [];
+  let paginationToken: string | undefined;
+
+  do {
+    const response = await sendTaggingCommand<GetResourcesCommandOutput>(
+      client,
+      new GetResourcesCommand({ PaginationToken: paginationToken })
+    );
+
+    records.push(...(response.ResourceTagMappingList ?? []).flatMap((resource) =>
+      toUnknownTaggedResourceRecord(resource, region)
+    ));
+    paginationToken = response.PaginationToken && response.PaginationToken.length > 0
+      ? response.PaginationToken
+      : undefined;
+  } while (paginationToken);
+
+  return records;
+}
+
+function createDefaultTaggingReadClient(
+  region: string,
+  credentials: TerraformAwsCredentialEnv
+): AwsTaggingReadClient {
+  const sdkCredentials = credentials.AWS_SESSION_TOKEN
+    ? {
+        accessKeyId: credentials.AWS_ACCESS_KEY_ID,
+        secretAccessKey: credentials.AWS_SECRET_ACCESS_KEY,
+        sessionToken: credentials.AWS_SESSION_TOKEN
+      }
+    : {
+        accessKeyId: credentials.AWS_ACCESS_KEY_ID,
+        secretAccessKey: credentials.AWS_SECRET_ACCESS_KEY
+      };
+  const client = new ResourceGroupsTaggingAPIClient({ region, credentials: sdkCredentials });
+
+  return {
+    send: (command) => client.send(command as Parameters<ResourceGroupsTaggingAPIClient["send"]>[0])
+  };
+}
+
+async function sendTaggingCommand<TOutput>(
+  client: AwsTaggingReadClient,
+  command: object
+): Promise<TOutput> {
+  return (await client.send(command)) as TOutput;
+}
+
+function toUnknownTaggedResourceRecord(
+  resource: ResourceTagMapping,
+  fallbackRegion: string
+): AwsDiscoveredResourceRecord[] {
+  const arn = resource.ResourceARN;
+
+  if (!arn || isKnownTaggedResourceArn(arn)) {
+    return [];
+  }
+
+  const arnParts = parseAwsArn(arn);
+  const tags = (resource.Tags ?? []).map((tag) => ({ key: tag.Key, value: tag.Value }));
+  const nameTag = tags.find((tag) => tag.key === "Name")?.value;
+
+  return [
+    {
+      providerResourceType: arnParts.providerResourceType,
+      providerResourceId: arn,
+      displayName: nameTag ?? arnParts.resourceName ?? arn,
+      region: arnParts.region || fallbackRegion,
+      config: {
+        arn,
+        accountId: arnParts.accountId,
+        resourceKind: arnParts.resourceKind,
+        service: arnParts.service,
+        tags
+      },
+      relationships: []
+    }
+  ];
+}
+
+function parseAwsArn(arn: string): {
+  accountId: string;
+  providerResourceType: string;
+  region: string;
+  resourceKind: string;
+  resourceName: string;
+  service: string;
+} {
+  const [, , service = "unknown", region = "", accountId = "", ...resourceParts] = arn.split(":");
+  const resource = resourceParts.join(":");
+  const [resourceKind = "resource", ...nameParts] = resource.split(/[/:]/);
+  const resourceName = nameParts.join("/");
+
+  return {
+    accountId,
+    providerResourceType: toProviderResourceType(service, resourceKind),
+    region,
+    resourceKind,
+    resourceName,
+    service
+  };
+}
+
+function toProviderResourceType(service: string, resourceKind: string): string {
+  return `AWS::${toPascalCase(service)}::${toPascalCase(resourceKind)}`;
+}
+
+function toPascalCase(value: string): string {
+  return value
+    .split(/[^a-zA-Z0-9]+/)
+    .filter(Boolean)
+    .map((part) => `${part[0]?.toUpperCase() ?? ""}${part.slice(1)}`)
+    .join("");
+}
+
+function isKnownTaggedResourceArn(arn: string): boolean {
+  return (
+    /:ec2:[^:]*:[^:]*:(vpc|subnet|internet-gateway|route-table|security-group|instance)\//.test(arn) ||
+    /:rds:[^:]*:[^:]*:db:/.test(arn) ||
+    /^arn:aws:s3:::[^/]+$/.test(arn)
+  );
 }
 
 // `ALL`은 화면 선택값일 뿐 실제 AWS 리소스가 아니어서, 각 지원 리소스 조회로 풀어서 처리합니다.
