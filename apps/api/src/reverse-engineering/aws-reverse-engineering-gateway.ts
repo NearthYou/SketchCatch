@@ -368,7 +368,20 @@ async function createS3BucketRecord(
       websiteIndexDocument: website?.IndexDocument?.Suffix,
       websiteErrorDocument: website?.ErrorDocument?.Key,
       tags: tagging?.TagSet?.map((tag) => ({ key: tag.Key, value: tag.Value })),
-      policyStatusIsPublic: policyStatus?.PolicyStatus?.IsPublic
+      policyStatusIsPublic: policyStatus?.PolicyStatus?.IsPublic,
+      rawProviderData: {
+        bucket: {
+          name: bucketName,
+          createdAt: createdAt?.toISOString()
+        },
+        location,
+        versioning,
+        publicAccessBlock,
+        encryption,
+        website,
+        tagging,
+        policyStatus
+      }
     },
     relationships: []
   };
@@ -592,6 +605,7 @@ function toUnknownLoadBalancerRecord(
         dnsName: loadBalancer.DNSName,
         ipAddressType: loadBalancer.IpAddressType,
         name: loadBalancer.LoadBalancerName,
+        rawProviderData: loadBalancer,
         scheme: loadBalancer.Scheme,
         securityGroupIds,
         state: loadBalancer.State,
@@ -646,6 +660,7 @@ function toUnknownLambdaFunctionRecord(
         layers: lambdaFunction.Layers,
         memorySize: lambdaFunction.MemorySize,
         packageType: lambdaFunction.PackageType,
+        rawProviderData: lambdaFunction,
         role: lambdaFunction.Role,
         runtime: lambdaFunction.Runtime,
         signingJobArn: lambdaFunction.SigningJobArn,
@@ -688,6 +703,7 @@ function toUnknownTaggedResourceRecord(
         arn,
         accountId: arnParts.accountId,
         resourceKind: arnParts.resourceKind,
+        rawProviderData: resource,
         service: arnParts.service,
         tags
       },

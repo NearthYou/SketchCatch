@@ -25,6 +25,7 @@ export function parseVpcsFromXml(xml: string, region: string): AwsDiscoveredReso
         dhcpOptionsId: extractTag(item, "dhcpOptionsId"),
         instanceTenancy: extractTag(item, "instanceTenancy"),
         isDefault: extractBooleanTag(item, "isDefault"),
+        rawProviderXml: item,
         state: extractTag(item, "state")
       },
       relationships: []
@@ -50,6 +51,7 @@ export function parseSubnetsFromXml(xml: string, region: string): AwsDiscoveredR
         defaultForAz: extractBooleanTag(item, "defaultForAz"),
         ipv6CidrBlockAssociationSet: extractIpv6CidrBlockAssociations(item),
         mapPublicIpOnLaunch: extractBooleanTag(item, "mapPublicIpOnLaunch"),
+        rawProviderXml: item,
         state: extractTag(item, "state"),
         subnetArn: extractTag(item, "subnetArn"),
         vpcId,
@@ -76,7 +78,8 @@ export function parseInternetGatewaysFromXml(
       displayName: extractNameTag(item) ?? internetGatewayId,
       region,
       config: {
-        attachments: extractInternetGatewayAttachments(item)
+        attachments: extractInternetGatewayAttachments(item),
+        rawProviderXml: item
       },
       relationships: vpcIds.map((vpcId) => createRelationship("attached_to", vpcId))
     };
@@ -106,6 +109,7 @@ export function parseRouteTablesFromXml(
       region,
       config: {
         associations: extractRouteTableAssociations(item),
+        rawProviderXml: item,
         routes: extractRouteTableRoutes(item),
         vpcId
       },
@@ -132,6 +136,7 @@ export function parseSecurityGroupsFromXml(
         groupName: extractTag(item, "groupName"),
         description: extractTag(item, "groupDescription"),
         ownerId: extractTag(item, "ownerId"),
+        rawProviderXml: item,
         vpcId,
         egress: extractSecurityGroupEgressRules(item),
         ingress: extractSecurityGroupIngressRules(item)
@@ -171,6 +176,7 @@ export function parseInstancesFromXml(xml: string, region: string): AwsDiscovere
         privateIpAddress: extractTag(item, "privateIpAddress"),
         publicDnsName: extractTag(item, "dnsName"),
         publicIpAddress: extractTag(item, "ipAddress"),
+        rawProviderXml: item,
         rootDeviceName: extractTag(item, "rootDeviceName"),
         rootDeviceType: extractTag(item, "rootDeviceType"),
         securityGroupIds: groupIds,
@@ -212,6 +218,7 @@ export function parseRdsInstancesFromXml(
         engineVersion: extractTag(item, "EngineVersion"),
         multiAz: extractBooleanTag(item, "MultiAZ"),
         publiclyAccessible: extractBooleanTag(item, "PubliclyAccessible") === true,
+        rawProviderXml: item,
         storageEncrypted: extractBooleanTag(item, "StorageEncrypted"),
         storageType: extractTag(item, "StorageType"),
         vpcSecurityGroupIds: securityGroupIds

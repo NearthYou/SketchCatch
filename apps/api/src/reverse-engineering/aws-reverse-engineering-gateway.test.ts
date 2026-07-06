@@ -128,6 +128,27 @@ test("listBucketsWithDetails keeps S3 bucket read-only settings in config", asyn
   assert.equal(bucket?.config["versioningStatus"], "Enabled");
   assert.equal(bucket?.config["policyStatusIsPublic"], false);
   assert.deepEqual(bucket?.config["tags"], [{ key: "env", value: "dev" }]);
+  assert.deepEqual(bucket?.config["rawProviderData"], {
+    bucket: { name: "demo-bucket", createdAt: "2026-07-06T00:00:00.000Z" },
+    location: { LocationConstraint: "ap-northeast-2" },
+    versioning: { Status: "Enabled", MFADelete: "Disabled" },
+    publicAccessBlock: {
+      PublicAccessBlockConfiguration: {
+        BlockPublicAcls: true,
+        IgnorePublicAcls: true,
+        BlockPublicPolicy: true,
+        RestrictPublicBuckets: true
+      }
+    },
+    encryption: {
+      ServerSideEncryptionConfiguration: {
+        Rules: [{ ApplyServerSideEncryptionByDefault: { SSEAlgorithm: "AES256" }, BucketKeyEnabled: true }]
+      }
+    },
+    website: { IndexDocument: { Suffix: "index.html" }, ErrorDocument: { Key: "error.html" } },
+    tagging: { TagSet: [{ Key: "env", Value: "dev" }] },
+    policyStatus: { PolicyStatus: { IsPublic: false } }
+  });
 });
 
 test("listTaggedUnknownResources keeps unsupported tagged AWS resources as UNKNOWN candidates", async () => {
@@ -197,6 +218,17 @@ test("listApplicationLoadBalancersAsUnknown keeps untagged ALB resources as UNKN
   assert.equal(records[0]?.providerResourceId, "arn:aws:elasticloadbalancing:ap-northeast-2:316875069960:loadbalancer/app/demo-alb/abc123");
   assert.equal(records[0]?.displayName, "demo-alb");
   assert.equal(records[0]?.config["scheme"], "internet-facing");
+  assert.deepEqual(records[0]?.config["rawProviderData"], {
+    LoadBalancerArn: "arn:aws:elasticloadbalancing:ap-northeast-2:316875069960:loadbalancer/app/demo-alb/abc123",
+    LoadBalancerName: "demo-alb",
+    Scheme: "internet-facing",
+    Type: "application",
+    VpcId: "vpc-1234",
+    State: { Code: "active" },
+    AvailabilityZones: [{ ZoneName: "ap-northeast-2a", SubnetId: "subnet-1234" }],
+    SecurityGroups: ["sg-1234"],
+    DNSName: "demo-alb.ap-northeast-2.elb.amazonaws.com"
+  });
   assert.deepEqual(records[0]?.relationships, [
     { type: "depends_on", targetProviderResourceId: "vpc-1234" },
     { type: "attached_to", targetProviderResourceId: "sg-1234" }
@@ -243,6 +275,23 @@ test("listLambdaFunctionsAsUnknown keeps untagged Lambda functions as UNKNOWN ca
   assert.equal(records[0]?.providerResourceId, "arn:aws:lambda:ap-northeast-2:316875069960:function:demo-fn");
   assert.equal(records[0]?.displayName, "demo-fn");
   assert.equal(records[0]?.config["runtime"], "nodejs22.x");
+  assert.deepEqual(records[0]?.config["rawProviderData"], {
+    FunctionArn: "arn:aws:lambda:ap-northeast-2:316875069960:function:demo-fn",
+    FunctionName: "demo-fn",
+    Runtime: "nodejs22.x",
+    Handler: "index.handler",
+    MemorySize: 256,
+    Timeout: 10,
+    LastModified: "2026-07-06T00:00:00.000+0000",
+    State: "Active",
+    PackageType: "Zip",
+    Architectures: ["arm64"],
+    VpcConfig: {
+      VpcId: "vpc-1234",
+      SubnetIds: ["subnet-1234"],
+      SecurityGroupIds: ["sg-1234"]
+    }
+  });
   assert.deepEqual(records[0]?.relationships, [
     { type: "depends_on", targetProviderResourceId: "vpc-1234" },
     { type: "attached_to", targetProviderResourceId: "subnet-1234" },
@@ -310,6 +359,7 @@ test("parseInternetGatewaysFromXml maps gateway attachments to discovered resour
   assert.equal(gateway?.providerResourceType, "AWS::EC2::InternetGateway");
   assert.equal(gateway?.providerResourceId, "igw-1234");
   assert.equal(gateway?.displayName, "Main Internet Gateway");
+  assert.match(String(gateway?.config["rawProviderXml"]), /<internetGatewayId>igw-1234<\/internetGatewayId>/);
   assert.deepEqual(gateway?.config["attachments"], [{ vpcId: "vpc-1234", state: "available" }]);
   assert.deepEqual(gateway?.relationships, [
     { type: "attached_to", targetProviderResourceId: "vpc-1234" }
@@ -353,6 +403,7 @@ test("parseRouteTablesFromXml maps VPC and gateway routes to discovered resource
   assert.equal(routeTable?.providerResourceType, "AWS::EC2::RouteTable");
   assert.equal(routeTable?.providerResourceId, "rtb-1234");
   assert.equal(routeTable?.displayName, "Public Route Table");
+  assert.match(String(routeTable?.config["rawProviderXml"]), /<routeTableId>rtb-1234<\/routeTableId>/);
   assert.deepEqual(routeTable?.config["routes"], [
     { destinationCidrBlock: "0.0.0.0/0", gatewayId: "igw-1234", state: "active" }
   ]);
@@ -396,6 +447,7 @@ test("parseSecurityGroupsFromXml keeps open ingress rules for risk findings", ()
 
   assert.equal(securityGroup?.config["groupName"], "open-ssh");
   assert.equal(securityGroup?.config["ownerId"], "316875069960");
+  assert.match(String(securityGroup?.config["rawProviderXml"]), /<groupId>sg-open<\/groupId>/);
   assert.deepEqual(securityGroup?.config["ingress"], [
     { ipProtocol: "tcp", fromPort: 22, toPort: 22, port: 22, cidr: "0.0.0.0/0" }
   ]);
@@ -464,6 +516,7 @@ test("parseInstancesFromXml keeps instances from every reservation block", () =>
   assert.equal(instances[0]?.config["publicIpAddress"], "3.34.10.20");
   assert.equal(instances[0]?.config["state"], "running");
   assert.equal(instances[0]?.config["keyName"], "demo-key");
+  assert.match(String(instances[0]?.config["rawProviderXml"]), /<instanceId>i-first<\/instanceId>/);
   assert.deepEqual(instances[1]?.relationships, [
     { type: "contains", targetProviderResourceId: "subnet-second" },
     { type: "attached_to", targetProviderResourceId: "sg-second" }
@@ -510,6 +563,7 @@ test("parseRdsInstancesFromXml reads DBInstance entries from AWS RDS responses",
   assert.equal(database?.config["multiAz"], false);
   assert.equal(database?.config["endpointAddress"], "app-db.demo.ap-northeast-2.rds.amazonaws.com");
   assert.equal(database?.config["endpointPort"], 5432);
+  assert.match(String(database?.config["rawProviderXml"]), /<DBInstanceIdentifier>app-db<\/DBInstanceIdentifier>/);
   assert.deepEqual(database?.relationships, [
     { type: "attached_to", targetProviderResourceId: "sg-db" }
   ]);
