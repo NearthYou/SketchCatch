@@ -117,7 +117,7 @@ REDIS_URL=
 
 ```json
 {
-  "installUrl": "https://github.com/apps/<slug>/installations/new?state=<signed-state>",
+  "installUrl": "https://github.com/apps/<slug>/installations/select_target?state=<signed-state>",
   "expiresAt": "2026-07-05T00:00:00.000Z"
 }
 ```

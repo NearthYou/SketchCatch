@@ -56,6 +56,24 @@ test("GitHub App callback lists installation repositories without storing the in
   assert.equal(repository.rows.length, 0);
 });
 
+test("GitHub App install URL starts at target selection so already-installed accounts keep the signed state", async () => {
+  const repository = createInMemorySourceRepositoryRepository();
+  const install = await createGitHubInstallUrl(
+    {
+      projectId,
+      accessContext: createAccessContext(userId),
+      appSlug: "sketchcatch-test",
+      stateSecret
+    },
+    repository
+  );
+  const installUrl = new URL(install.installUrl);
+
+  assert.equal(installUrl.origin, "https://github.com");
+  assert.equal(installUrl.pathname, "/apps/sketchcatch-test/installations/select_target");
+  assert.ok(installUrl.searchParams.get("state"));
+});
+
 test("connecting a GitHub repository stores only the selected repository and soft deactivates the previous active repo", async () => {
   const repository = createInMemorySourceRepositoryRepository([
     createSourceRepositoryRecord({

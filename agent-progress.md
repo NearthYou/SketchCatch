@@ -11,6 +11,21 @@
 
 ## 세션 레코드
 
+### 2026-07-06 - 기존 설치 GitHub App 연결 UX 보완
+
+- Goal: 이미 GitHub App이 설치된 계정도 SketchCatch의 `GitHub 연결` 버튼에서 시작하면 signed state를 유지한 채 repository 선택 화면으로 돌아오게 한다.
+- Completed:
+  - GitHub App install URL을 `/installations/new`에서 `/installations/select_target`으로 변경했다.
+  - 기존 설치 계정도 SketchCatch 버튼에서 대상 선택/설정 흐름을 시작하도록 API install URL 계약과 테스트를 갱신했다.
+  - `/integrations/github/callback` 화면의 state 누락 안내와 repository 선택 중 한글 오류 문구를 정상화했다.
+  - `docs/sw/spec3.md`의 install URL 예시를 새 흐름에 맞췄다.
+- Verified so far:
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/source-repositories/source-repository-service.test.ts src/routes/source-repositories.test.ts`
+  - `pnpm --filter @sketchcatch/api typecheck`
+  - `pnpm --filter @sketchcatch/web typecheck`
+  - `pnpm --filter @sketchcatch/api lint`
+  - `pnpm --filter @sketchcatch/web lint`
+
 ### 2026-07-06 - feature/sw/deployment-github-runtime-cache 브랜치 최신화
 
 - Goal: `origin/dev`를 현재 Spec3/GitHub App/Runtime Cache 브랜치에 병합하고, 충돌을 해결한 뒤 검증 가능한 상태로 푸시한다.

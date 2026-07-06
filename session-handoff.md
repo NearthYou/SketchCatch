@@ -5,20 +5,22 @@
 - `feature/sw/deployment-github-runtime-cache` branch has been updated with `origin/dev`.
 - Source repository/GitHub App operational verification had previously completed.
 - Merge verification passed: `pnpm harness:check`, `pnpm typecheck`, `pnpm lint`, `pnpm build`, and `git diff --check --cached`.
+- GitHub App install URL now starts at `/installations/select_target` so SketchCatch-owned connection starts with signed `state` even for already-installed accounts.
 
 ## 이번 세션의 변경 사항
 
-- Merged `origin/dev` into the feature branch and resolved conflicts.
-- Preserved GitHub App deployment env wiring and source repository runtime config while accepting new reverse engineering/cost work from `dev`.
-- Renamed incoming reverse engineering migration to `0024_reverse_engineering_scans.sql` to keep `0023_source_repositories.sql` as the already-applied migration.
+- Changed GitHub App install URL generation from `/installations/new` to `/installations/select_target`.
+- Added API/service tests for the already-installed account URL flow.
+- Cleaned the GitHub callback page state-missing and repository selection Korean messages.
+- Updated `docs/sw/spec3.md` install URL example.
 
 ## 아직 깨졌거나 미검증된 것
 
-- Browser-level verification for the existing-installed GitHub App UX is still a follow-up; this session only updated the branch.
+- Browser-level verification against the real GitHub App will need the updated branch deployed.
 
 ## 다음으로 최선의 행동
 
-- Resume the GitHub App existing-install UX fix from the now-updated branch.
+- Deploy the branch, then click `GitHub 연결` in SketchCatch on an account where the app is already installed and confirm GitHub returns to `/integrations/github/callback` with `installation_id` and `state`.
 # ?몄뀡 ?몃뱶?ㅽ봽
 
 ???뚯씪? 理쒖떊 ?몄뀡 ?섎굹瑜??ㅼ쓬 ?몄뀡??鍮좊Ⅴ寃??댁뼱諛쏄린 ?꾪븳 ?뺤텞蹂몄씠?? ?꾩쟻 ?대젰? `agent-progress.md`???④릿??

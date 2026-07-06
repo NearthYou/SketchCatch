@@ -43,7 +43,8 @@ export default function GitHubIntegrationCallbackPage() {
       if (!installationId || !state) {
         setCallbackState({
           status: "error",
-          message: "GitHub callback is missing installation information."
+          message:
+            "GitHub 연결 정보가 없습니다. SketchCatch의 GitHub 연결 버튼에서 다시 시작해주세요."
         });
         return;
       }
@@ -69,7 +70,7 @@ export default function GitHubIntegrationCallbackPage() {
         if (!cancelled) {
           setCallbackState({
             status: "error",
-            message: getApiErrorMessage(error, "GitHub repositories could not be loaded.")
+            message: getApiErrorMessage(error, "GitHub repository 목록을 불러오지 못했습니다.")
           });
         }
       }
@@ -104,7 +105,7 @@ export default function GitHubIntegrationCallbackPage() {
     } catch (error) {
       setCallbackState({
         status: "error",
-        message: getApiErrorMessage(error, "GitHub repository could not be connected.")
+        message: getApiErrorMessage(error, "GitHub repository를 프로젝트에 연결하지 못했습니다.")
       });
     }
   }
@@ -148,8 +149,8 @@ export default function GitHubIntegrationCallbackPage() {
                 >
                   <span style={repoNameStyle}>{repository.fullName}</span>
                   <span style={repoMetaStyle}>
-                    {repository.defaultBranch} · {repository.visibility}
-                    {repository.archived ? " · archived" : ""}
+                    {repository.defaultBranch} / {repository.visibility}
+                    {repository.archived ? " / archived" : ""}
                   </span>
                 </button>
               ))}
