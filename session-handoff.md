@@ -2,6 +2,27 @@
 
 이 파일은 최신 세션 하나를 다음 세션이 빠르게 이어받기 위한 압축본이다. 누적 이력은 `agent-progress.md`에 남긴다.
 
+## 2026-07-06 최신 핸드오프 - Cost Risk 리소스 지원과 Pricing API 확장
+
+### 현재 상태
+
+- 현재 브랜치: `feat/ys/142-cost-risk-분석-구현`
+- 사용자 요청: 비용 산정에서 애매하거나 버그인 부분을 고치고, 미지원/fallback-only 리소스를 최대한 AWS Pricing API 조회로 연결한다.
+- 이번 세션 커밋:
+  - `01c5aed Feat: 비용 산정 지원 상태 계약 추가`
+  - `5cdac8d Fix: 비용 산정 Terraform 리소스 감지 보정`
+  - `e828988 Feat: 비용 산정 리소스와 Pricing API 확장`
+  - `1db8022 Feat: 비용 산정 상태 UI 표시`
+
+### 완료된 것
+
+- `ResourceCostEstimate`에 `terraformResourceType`, `supportLevel`, `supportReason`을 추가했다.
+- `cost-analysis`가 `ResourceType`보다 `config.terraformResourceType`을 우선해 NAT Gateway, ALB, DB snapshot 같은 리소스를 정확히 산정한다.
+- 사용자 지정 resource 목록을 Networking, Compute, Storage, Database, IAM/Security, Serverless/App, Messaging/Events, Edge/CDN, Observability, Containers, CI/CD, Governance/Config, WAF/Protection 범위로 확장했다.
+- billable 리소스는 AWS Pricing API rate provider를 먼저 호출하고, 실패하면 fallback 단가로 계산한다.
+- 직접 비용이 없는 `aws_autoscaling_group`, public `aws_acm_certificate`, `aws_sns_topic_subscription`은 `no_direct_cost`로 화면에 표시한다.
+- `/costs`와 Workspace AI 시뮬레이션 결과는 더 이상 월 예상 비용이 0인 리소스를 숨기지 않고 산정 상태 배지와 이유를 보여준다.
+
 ## 2026-07-05 최신 핸드오프 - Terraform 영역 리소스 Ticket 4 범위 축소
 
 ### 현재 상태
@@ -22,6 +43,70 @@
 ### 검증된 것
 
 - `pnpm harness:check` - passed before edits.
+- `pnpm --filter @sketchcatch/types typecheck` - passed.
+- `pnpm --filter @sketchcatch/api exec tsx --test src/services/cost-analysis.test.ts src/services/awsPricingRateProvider.test.ts` - passed.
+- `pnpm --filter @sketchcatch/api typecheck` - passed.
+- `pnpm --filter @sketchcatch/api lint` - passed.
+- `pnpm --filter @sketchcatch/web typecheck` - passed.
+- `pnpm --filter @sketchcatch/web lint` - passed.
+- 실제 AWS Pricing API 샘플 조회는 `sketchcatch-dev` SSO token 만료로 실패했다. 재검증 전 `aws sso login --profile sketchcatch-dev`가 필요하다.
+- `pnpm harness:check` - passed after docs/progress updates.
+- `pnpm lint` - passed with Turbo cache rename warnings only.
+- `pnpm typecheck` - passed with Turbo cache rename warnings only.
+- `pnpm build` - passed.
+- `git diff --check` - passed with line-ending warnings only.
+
+### 다음 행동
+
+- 실제 AWS Pricing API 라이브 조회를 다시 확인하려면 `aws sso login --profile sketchcatch-dev` 후 `AWS_PRICING_API_ENABLED=true` 샘플 조회를 재실행한다.
+- 이번 세션에서 실제 AWS apply/destroy, cloud mutation, Git/CI/CD handoff는 실행하지 않았다.
+
+## 2026-07-05 최신 핸드오프 - Cost Risk 분석 예상 비용 구현
+
+### 현재 상태
+
+- 현재 브랜치: `feat/ys/142-cost-risk-분석-구현`
+- 사용자 요청: 매 단계마다 구현하고 검증되면 커밋한다.
+- 구현은 6개 기능/fix 커밋과 기록 커밋으로 나뉘어 있다.
+  - `5212684 Feat: 비용 산정 타입 확장`
+  - `0e550f1 Feat: 시뮬레이션 비용 산정 연결`
+  - `7bf8cac Feat: 시뮬레이션 비용 조건 UI 연결`
+  - `b3350d7 Feat: 비용관리 API 기반 전환`
+  - `df13897 Fix: 비용관리 프로젝트 선택 URL 반영`
+  - `de5971f Fix: RDS 스토리지 Pricing API 조회 추가`
+
+### 완료된 것
+
+- shared type에 `CostEstimateRequest`, `CostEstimateResult`, `CostProjectEstimateListResponse`, `DesignSimulationResult.costEstimate`를 추가했다.
+- API 서버에 `cost-analysis` 서비스와 AWS Pricing API adapter를 추가했다. 실제 조회는 `AWS_PRICING_API_ENABLED=true`일 때만 시도하고, 기본/테스트는 fallback 단가를 사용한다.
+- `simulateDesign()`이 비용 산정 서비스를 호출하고 기존 `costPressure`에 금액 기반 문장을 담는다.
+- Workspace AI 시뮬레이션 탭에 기간/예상 사용자 수 입력을 추가하고, 비용 카드에 총 예상 비용과 리소스별 근거를 표시한다.
+- `GET /api/costs/projects`와 `/costs` client 화면을 연결해 실행 중 배포 프로젝트의 예상 비용 합계와 상세를 보여준다.
+- `/costs` 프로젝트 행 선택을 `projectId` URL query와 동기화해 상세 비용 상태를 주소로 다시 열 수 있게 했다.
+- RDS storage도 AWS Pricing API의 `Database Storage`/`General Purpose-GP3` 상품으로 조회되게 adapter를 보강했다.
+- `docs/data-models.md`, `agent-progress.md`, `session-handoff.md`를 갱신했다.
+
+### 검증된 것
+
+- `pnpm harness:check` - passed before edits.
+- `pnpm --filter @sketchcatch/types typecheck` - passed.
+- `pnpm --filter @sketchcatch/api typecheck` - passed.
+- `pnpm --filter @sketchcatch/api lint` - passed.
+- `pnpm --filter @sketchcatch/web typecheck` - passed.
+- `pnpm --filter @sketchcatch/web lint` - passed.
+- `pnpm --filter @sketchcatch/api test -- src/routes/aiDesignSimulation.test.ts` - package script executed the full API test set; 565 tests passed.
+- `pnpm harness:check` - final check passed.
+- `pnpm lint` - passed.
+- `pnpm typecheck` - passed.
+- `pnpm build` - passed.
+- `git diff --check` - passed.
+- `AWS_PROFILE=sketchcatch-dev AWS_PRICING_API_ENABLED=true` 로 AWS Pricing API 실제 조회를 검증했다. EC2, RDS instance, RDS storage, S3가 `aws_pricing_api` source로 계산된다.
+- `pnpm --filter @sketchcatch/api test -- src/services/awsPricingRateProvider.test.ts` - package script executed the full API test set; 566 tests passed.
+- `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, `git diff --check` - passed after RDS storage fix.
+
+### 다음 행동
+
+- 사용자에게 커밋별 구현 내용과 화면 노출 방식을 보고한다.
 - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-right-panel-layout.test.ts --test-name-pattern "terraform preview failures|terraform status counts"` - passed.
 - `pnpm --filter @sketchcatch/web exec tsx --test features/parameter-input/region-node-metadata.test.ts` - passed.
 - `pnpm harness:check` - passed after edits.
@@ -674,3 +759,11 @@ pnpm build
 - Scope completed: Deployment repository mutation wrapper writes `deployment.status`, log creation/SSE stream writes `deployment.log_cursor`, stream cursor read falls back to RDS on cache miss/failure, `buildApp` wires `createRuntimeCacheFromEnv`, and docs/sw has key/TTL/future reverse scan/pipeline convention.
 - Verification completed: targeted deployment route tests, API lint/typecheck, workspace lint/typecheck/build, `git diff --check`; final harness still needs to be rerun after this handoff note.
 - Remaining risk: no real Redis server or AWS apply/destroy was run.
+
+## 2026-07-06 - Cost Estimate 기간/사용자 배율 handoff
+
+- Branch/worktree: `feat/ys/142-cost-risk-분석-구현` at `C:\krafton_jungle\SketchCatch`.
+- Scope completed: 비용 산정 DTO에 `ResourceCostEstimate.periodEstimate`를 추가했고, API는 월 환산 금액과 요청 기간 금액을 함께 반환한다. 예상 사용자 수는 기본 1,000명 대비 배율로 EC2/RDS/EBS/RDS snapshot/ElastiCache/ECS/NAT Gateway/VPC Endpoint/ALB 용량 산정에 반영한다. 요청량/저장량/전송량 기반 리소스는 기존 파생량 모델을 유지했다.
+- UI completed: 비용관리 프로젝트 상세와 워크스페이스 AI 시뮬레이션 리소스 상세가 `monthlyEstimate` 대신 선택 기간의 `periodEstimate`를 표시한다.
+- Verification completed: focused API tests, API/web typecheck, `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, `git diff --check`.
+- Remaining risk: 실제 AWS SSO credential 기반 AWS Pricing API 호출은 검증하지 않았다. 현재 검증은 fallback 경로와 fake pricing provider 기반이다.

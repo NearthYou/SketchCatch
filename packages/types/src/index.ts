@@ -613,6 +613,20 @@ export type RecentSuccessfulDeploymentProjectListResponse = {
   items: RecentSuccessfulDeploymentProject[];
 };
 
+export type CostProjectEstimate = {
+  project: Project;
+  costEstimate: CostEstimateResult | null;
+};
+
+export type CostProjectEstimateListResponse = {
+  period: CostEstimatePeriod;
+  expectedUserCount: number;
+  region: AwsRegionCode | string;
+  totalEstimate: MoneyEstimate;
+  totalMonthlyEstimate: MoneyEstimate;
+  projects: CostProjectEstimate[];
+};
+
 export type DeploymentLogListResponse = {
   logs: DeploymentLog[];
 };
@@ -983,13 +997,56 @@ export type MoneyEstimate = {
   currency: "USD" | "KRW";
 };
 
+export type CostEstimatePeriod = "day" | "week" | "month";
+
+export type CostPricingSource = "aws_pricing_api" | "fallback";
+
+export type CostEstimateSupportLevel =
+  | "aws_pricing_api"
+  | "fallback_estimate"
+  | "no_direct_cost"
+  | "not_estimated";
+
+export type CostUsageAssumption = {
+  label: string;
+  value: string;
+};
+
 export type ResourceCostEstimate = {
   resourceId: string;
   resourceType: ResourceType;
+  terraformResourceType?: string | undefined;
   name: string;
   monthlyEstimate: MoneyEstimate;
+  periodEstimate: MoneyEstimate;
+  supportLevel: CostEstimateSupportLevel;
+  supportReason: string;
   costDrivers: string[];
   explanation: string;
+  pricingSource?: CostPricingSource | undefined;
+  usageAssumptions?: CostUsageAssumption[] | undefined;
+  recommendation?: string | undefined;
+};
+
+export type CostEstimateRequest = {
+  architectureJson: ArchitectureJson;
+  period: CostEstimatePeriod;
+  expectedUserCount: number;
+  region: AwsRegionCode | string;
+};
+
+export type CostEstimateResult = {
+  totalEstimate: MoneyEstimate;
+  totalMonthlyEstimate: MoneyEstimate;
+  period: CostEstimatePeriod;
+  expectedUserCount: number;
+  region: AwsRegionCode | string;
+  pricingSource: CostPricingSource;
+  fallbackUsed: boolean;
+  assumptions: string[];
+  resources: ResourceCostEstimate[];
+  reviewMessages: string[];
+  pricingAssumption: string;
 };
 
 export type CheckFindingCategory =
@@ -1105,6 +1162,9 @@ export type CreateDesignSimulationRequest = {
   architectureJson: ArchitectureJson;
   trafficLevel: ArchitectureDraftTrafficLevel;
   budgetLevel: ArchitectureDraftBudgetLevel;
+  period?: CostEstimatePeriod | undefined;
+  expectedUserCount?: number | undefined;
+  region?: AwsRegionCode | string | undefined;
 };
 
 export type DesignSimulationRequestFlowStep = {
@@ -1136,6 +1196,7 @@ export type DesignSimulationResult = {
   bottlenecks: DesignSimulationBottleneck[];
   failureScenarios: DesignSimulationFailureScenario[];
   costPressure: string[];
+  costEstimate?: CostEstimateResult | undefined;
   recommendations: string[];
   llmExplanation?: LlmExplanation | undefined;
 };

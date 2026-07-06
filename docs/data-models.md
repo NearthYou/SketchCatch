@@ -1106,6 +1106,90 @@ type ArchitecturePatchPreview = {
 };
 ```
 
+Cost Estimate는 실제 청구 데이터를 읽지 않고, `ArchitectureJson`과 사용자가 입력한 추정 조건을 기준으로 계산한다. AWS Pricing API 연동은 `apps/api`의 서버 서비스 안에만 두며, UI 컴포넌트나 `apps/web`은 AWS SDK를 직접 호출하지 않는다. 조회 단가를 쓰지 못한 리소스는 `pricingSource: "fallback"`으로 표시하고, 계산 자체는 계속 성공해야 한다.
+
+비용 산정은 `ResourceType`보다 `terraformResourceType`을 우선한다. 같은 보드 노드가 `ResourceType.RDS`처럼 넓은 분류를 갖더라도 `terraformResourceType: "aws_db_snapshot"`이면 실행 중인 DB instance가 아니라 snapshot storage 비용으로 계산해야 한다. billable 리소스는 먼저 AWS Pricing API 단가 조회를 시도하고, 조회 단가를 쓰지 못하면 추정 단가를 사용한다. `supportLevel`은 화면에서 산정 상태를 설명하기 위한 필드다.
+
+- `aws_pricing_api`: 해당 리소스의 단가가 AWS Pricing API에서 조회되어 계산됨.
+- `fallback_estimate`: 조회 단가 대신 추정 단가로 계산됨.
+- `no_direct_cost`: 리소스 자체의 직접 비용은 없고 연결된 하위 리소스가 비용을 만든다고 판단됨. 예: `aws_autoscaling_group`, public `aws_acm_certificate`, `aws_sns_topic_subscription`.
+- `not_estimated`: 현재 산정 로직이 직접 계산하지 못하는 리소스. 새 Terraform resource를 추가할 때 이 상태가 사용자에게 보이면 `apps/api/src/services/cost-analysis.ts`와 `awsPricingRateProvider.ts`를 함께 확장해야 한다.
+
+현재 산정 대상은 AWS MVP resource catalog의 주요 Terraform resource를 기준으로 한다. Networking은 NAT Gateway, VPC Endpoint, VPC Peering, EIP, Load Balancer를 계산한다. Compute는 EC2, Auto Scaling Group의 직접 비용 없음, EBS를 계산한다. Storage/Database는 S3, EFS, RDS instance/snapshot/cluster/cluster instance, DynamoDB, ElastiCache를 계산한다. Serverless/App, Messaging/Events, Edge/CDN, Observability, Containers, CI/CD, Governance/Config, WAF/Protection 계열은 AWS Pricing API 조회를 우선하고 조회 단가를 쓰지 못하면 추정 단가를 둔다.
+
+```ts
+type CostEstimatePeriod = "day" | "week" | "month";
+
+type CostPricingSource = "aws_pricing_api" | "fallback";
+
+type CostEstimateSupportLevel =
+  | "aws_pricing_api"
+  | "fallback_estimate"
+  | "no_direct_cost"
+  | "not_estimated";
+
+type CostEstimateRequest = {
+  architectureJson: ArchitectureJson;
+  period: CostEstimatePeriod;
+  expectedUserCount: number;
+  region: AwsRegionCode | string;
+};
+
+type ResourceCostEstimate = {
+  resourceId: string;
+  resourceType: ResourceType;
+  terraformResourceType?: string;
+  name: string;
+  monthlyEstimate: MoneyEstimate;
+  periodEstimate: MoneyEstimate;
+  supportLevel: CostEstimateSupportLevel;
+  supportReason: string;
+  costDrivers: string[];
+  explanation: string;
+  pricingSource?: CostPricingSource;
+  usageAssumptions?: { label: string; value: string }[];
+  recommendation?: string;
+};
+
+type CostEstimateResult = {
+  totalEstimate: MoneyEstimate;
+  totalMonthlyEstimate: MoneyEstimate;
+  period: CostEstimatePeriod;
+  expectedUserCount: number;
+  region: AwsRegionCode | string;
+  pricingSource: CostPricingSource;
+  fallbackUsed: boolean;
+  assumptions: string[];
+  resources: ResourceCostEstimate[];
+  reviewMessages: string[];
+  pricingAssumption: string;
+};
+```
+
+`totalMonthlyEstimate`와 `ResourceCostEstimate.monthlyEstimate`는 항상 월 환산 기준이다. `totalEstimate`와 `ResourceCostEstimate.periodEstimate`는 요청한 `period` 기준 금액이며, `day = month / 30`, `week = month / 4.345`, `month = month`로 계산한다.
+
+`expectedUserCount`는 실제 사용량 집계값이 아니라 예상 사용자 수 가정치다. 비용 산정기는 기본 1,000명을 기준으로 `expectedUserCount / 1000` 용량 배율을 만들고, EC2/RDS/EBS/RDS snapshot/ElastiCache/ECS/NAT Gateway/VPC Endpoint/ALB처럼 용량을 늘려 잡을 수 있는 리소스에 이 배율을 반영한다. S3/EFS/DynamoDB/Lambda/API Gateway/SQS/SNS/EventBridge/CloudFront/CloudWatch Logs/CloudTrail/X-Ray/Config/WAF/GuardDuty처럼 요청량, 저장량, 전송량 기반 리소스는 예상 사용자 수에서 파생한 요청 수, GB, 이벤트 수로 계산한다.
+
+`DesignSimulationResult.costEstimate`는 같은 비용 산정 결과를 담는다. 기존 `costPressure: string[]`는 유지하되, 이제 `costEstimate.reviewMessages`와 같은 금액 기반 문장을 포함해야 한다. 예를 들어 월 기준 결과는 `현재 상황에서의 총 예상 비용은 $47.30 / month입니다.`처럼 사용자가 바로 읽을 수 있는 문장으로 내려간다.
+
+홈 화면의 비용관리 페이지는 `GET /api/costs/projects?period=month&expectedUserCount=1000` 응답을 사용한다. 이 응답은 현재 사용자의 모든 프로젝트를 내려주고, 프로젝트별 최신 `architectures.architectureJson`이 있으면 `CostEstimateResult`를 계산한다. 아직 아키텍처 스냅샷이 없는 프로젝트는 `costEstimate: null`로 내려주며, 전체 합계는 비용 산정이 가능한 프로젝트만 더한다.
+
+```ts
+type CostProjectEstimate = {
+  project: Project;
+  costEstimate: CostEstimateResult | null;
+};
+
+type CostProjectEstimateListResponse = {
+  period: CostEstimatePeriod;
+  expectedUserCount: number;
+  region: AwsRegionCode | string;
+  totalEstimate: MoneyEstimate;
+  totalMonthlyEstimate: MoneyEstimate;
+  projects: CostProjectEstimate[];
+};
+```
+
 Voice Requirement Input은 Amazon Transcribe 작업 결과가 나온 뒤에도 곧바로 `RequirementPrompt`가 되지 않는다. 전사 결과는 `TranscribeConfirmation`으로 내려가고, 사용자가 확인/수정/확정한 뒤에만 `RequirementPrompt`가 생성된다.
 
 ```ts

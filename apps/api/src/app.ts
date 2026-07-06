@@ -4,6 +4,7 @@ import type { ApiErrorCode } from "@sketchcatch/types";
 import { startRefreshTokenCleanupJob } from "./auth/cleanup.js";
 import { type DatabaseClient, getDatabaseClient } from "./db/client.js";
 import { registerAiRoutes } from "./routes/ai.js";
+import type { CostPricingRateProvider } from "./services/cost-analysis.js";
 import type { CreateLlmExplanation } from "./services/aiLlmExplanation.js";
 import type { CreateSafetyFindingExplanation } from "./services/aiSafetyFindingExplanation.js";
 import { registerHealthRoutes } from "./routes/health.js";
@@ -12,6 +13,7 @@ import { registerOAuthRoutes } from "./routes/oauth.js";
 import { registerProjectRoutes, type ProjectAssetStorage } from "./routes/projects.js";
 import { registerDeploymentRoutes } from "./routes/deployments.js";
 import { registerGitCicdHandoffRoutes } from "./routes/git-cicd-handoffs.js";
+import { registerCostRoutes } from "./routes/costs.js";
 import {
   registerTerraformRoutes,
   type TerraformRouteOptions
@@ -35,6 +37,7 @@ export type BuildAppOptions = {
   getDatabaseClient?: () => DatabaseClient;
   createLlmExplanation?: CreateLlmExplanation;
   createSafetyFindingExplanation?: CreateSafetyFindingExplanation;
+  pricingRateProvider?: CostPricingRateProvider;
   oauthCallbackRateLimiter?: RateLimiter;
   oauthStartRateLimiter?: RateLimiter;
   passwordResetRequestEmailRateLimiter?: RateLimiter;
@@ -161,6 +164,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     prefix: "/api",
     getDatabaseClient: getAppDatabaseClient
   });
+  app.register(registerCostRoutes, createCostRouteOptions(options, getAppDatabaseClient));
   app.register(
     registerTerraformRoutes,
     createTerraformRouteOptions(options, getAppDatabaseClient)
@@ -178,8 +182,13 @@ function createAiRouteOptions(options: BuildAppOptions): {
   readonly prefix: "/api";
   readonly createLlmExplanation?: CreateLlmExplanation;
   readonly createSafetyFindingExplanation?: CreateSafetyFindingExplanation;
+  readonly pricingRateProvider?: CostPricingRateProvider;
 } {
-  if (options.createLlmExplanation === undefined && options.createSafetyFindingExplanation === undefined) {
+  if (
+    options.createLlmExplanation === undefined &&
+    options.createSafetyFindingExplanation === undefined &&
+    options.pricingRateProvider === undefined
+  ) {
     return { prefix: "/api" };
   }
 
@@ -188,7 +197,23 @@ function createAiRouteOptions(options: BuildAppOptions): {
     ...(options.createLlmExplanation === undefined ? {} : { createLlmExplanation: options.createLlmExplanation }),
     ...(options.createSafetyFindingExplanation === undefined
       ? {}
-      : { createSafetyFindingExplanation: options.createSafetyFindingExplanation })
+      : { createSafetyFindingExplanation: options.createSafetyFindingExplanation }),
+    ...(options.pricingRateProvider === undefined ? {} : { pricingRateProvider: options.pricingRateProvider })
+  };
+}
+
+function createCostRouteOptions(
+  options: BuildAppOptions,
+  getDatabaseClient: () => DatabaseClient
+): {
+  readonly prefix: "/api";
+  readonly getDatabaseClient: () => DatabaseClient;
+  readonly pricingRateProvider?: CostPricingRateProvider;
+} {
+  return {
+    prefix: "/api",
+    getDatabaseClient,
+    ...(options.pricingRateProvider === undefined ? {} : { pricingRateProvider: options.pricingRateProvider })
   };
 }
 

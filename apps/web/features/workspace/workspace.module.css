@@ -1999,6 +1999,7 @@
   font: inherit;
   font-size: 12px;
   font-weight: 850;
+  gap: 6px;
   justify-content: center;
   min-height: 34px;
   padding: 0 10px;
@@ -2383,6 +2384,23 @@
   margin: 0;
 }
 
+.aiSimulationCostMeta {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.aiSimulationCostMeta span {
+  background: #eef6ff;
+  border: 1px solid #c9ddf3;
+  border-radius: 999px;
+  color: var(--bp-blue);
+  font-size: 11px;
+  font-weight: 900;
+  padding: 4px 7px;
+}
+
 .aiChatLauncher {
   align-items: center;
   background: var(--bp-blue);
@@ -2602,6 +2620,12 @@
   color: var(--bp-ink);
   font-size: 13px;
   line-height: 1.45;
+}
+
+.aiChatSimulationIntro .aiPrimaryButton {
+  flex: 0 0 auto;
+  min-width: 132px;
+  white-space: nowrap;
 }
 
 .aiChatAssistantMessage,
@@ -4039,6 +4063,16 @@
   .aiChatInput,
   .aiChatVoiceStatus {
     grid-column: 1 / -1;
+  }
+
+  .aiChatSimulationIntro {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .aiChatSimulationIntro .aiPrimaryButton {
+    min-width: 0;
+    width: 100%;
   }
 
   .aiChatAssistantMessage,

@@ -72,6 +72,9 @@ const MAX_CHAT_MESSAGES = 80;
 const STORAGE_KEY_PREFIX = "sketchcatch.workspaceAiChat";
 const DESIGN_SIMULATION_DEFAULTS = {
   budgetLevel: "normal",
+  expectedUserCount: 1000,
+  period: "month",
+  region: "ap-northeast-2",
   trafficLevel: "normal"
 } as const;
 const VOICE_NO_SPEECH_TIMEOUT_MS = 8000;
@@ -528,7 +531,7 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
       setDesignSimulation(result);
       setSimulationFingerprint(boardSnapshot.fingerprint);
       setSimulationState("idle");
-      appendAssistantMessage("simulation", `현재 보드 시뮬레이션 결과: ${result.summary}`);
+      appendAssistantMessage("simulation", createSimulationResultMessage(result));
     } catch (error) {
       const message = getApiErrorMessage(error, "Design Simulation 중 오류가 발생했습니다.");
 
@@ -719,27 +722,17 @@ export function WorkspaceAiChatDock({ context, projectId }: WorkspaceAiChatDockP
         </button>
       </div>
 
-      <div className={styles.aiChatControls} aria-label="AI 설정">
-        <button
-          className={styles.aiSecondaryButton}
-          disabled={simulationState === "loading" || context.isPreviewActive}
-          onClick={() => void runDesignSimulation()}
-          type="button"
-        >
-          {simulationState === "loading" ? "계산 중" : "시뮬레이션"}
-        </button>
-      </div>
-
       <div className={styles.aiChatTranscript} ref={transcriptRef}>
         {activeChatTab === "simulation" ? (
           <div className={styles.aiChatSimulationIntro}>
-            <strong>현재 보드 기준으로 흐름, 병목, 장애, 비용 압박을 봅니다.</strong>
+            <strong>현재 보드 기준으로 흐름, 병목, 장애, 예상 비용을 봅니다.</strong>
             <button
               className={styles.aiPrimaryButton}
               disabled={simulationState === "loading" || context.isPreviewActive}
               onClick={() => void runDesignSimulation()}
               type="button"
             >
+              <Sparkles size={14} aria-hidden="true" />
               {simulationState === "loading" ? "계산 중" : "시뮬레이션 실행"}
             </button>
           </div>
@@ -1008,6 +1001,14 @@ function createQuestionFromDraftError(message: string): string | null {
   }
 
   return null;
+}
+
+function createSimulationResultMessage(result: DesignSimulationResult): string {
+  const costHeadline = result.costEstimate?.reviewMessages[0];
+
+  return costHeadline === undefined
+    ? `현재 보드 시뮬레이션 결과: ${result.summary}`
+    : `현재 보드 시뮬레이션 결과: ${result.summary} ${costHeadline}`;
 }
 
 function createDraftSafetyWarnings(
