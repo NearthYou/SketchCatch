@@ -23,6 +23,7 @@ import {
   listLambdaFunctionsAsUnknown,
   listLambdaPermissionsAsUnknown,
   listResourceExplorerResourcesAsUnknown,
+  readResourceExplorerResourcesWithDiagnostics,
   listTaggedUnknownResources,
   maskReverseEngineeringSensitiveText as maskGatewaySensitiveText,
   shouldReadUnknownResourceGroup,
@@ -331,6 +332,28 @@ test("listResourceExplorerResourcesAsUnknown skips Resource Explorer when the ac
   );
 
   assert.deepEqual(records, []);
+});
+
+test("readResourceExplorerResourcesWithDiagnostics reports disabled Resource Explorer instead of hiding it", async () => {
+  const fakeResourceExplorerClient = {
+    async send() {
+      throw new Error("Resource Explorer index is not available");
+    }
+  };
+
+  const result = await readResourceExplorerResourcesWithDiagnostics(
+    "ap-northeast-2",
+    TEST_AWS_CREDENTIALS,
+    () => fakeResourceExplorerClient
+  );
+
+  assert.deepEqual(result.records, []);
+  assert.equal(result.scanErrors.length, 1);
+  assert.equal(result.scanErrors[0]?.resourceType, "UNKNOWN");
+  assert.equal(result.scanErrors[0]?.stage, "provider_api");
+  assert.equal(result.scanErrors[0]?.reason, "provider_error");
+  assert.equal(result.scanErrors[0]?.retryable, false);
+  assert.match(result.scanErrors[0]?.message ?? "", /Resource Explorer/);
 });
 
 test("listApplicationLoadBalancersAsUnknown keeps untagged ALB resources as UNKNOWN candidates", async () => {

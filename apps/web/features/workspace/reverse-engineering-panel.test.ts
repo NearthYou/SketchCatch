@@ -32,6 +32,14 @@ test("Reverse Engineering panel exposes all grilling resource filters by default
   assert.match(scanCriteriaFormSource, /전체/);
 });
 
+test("Reverse Engineering scan starts from one main import action and keeps filters in advanced settings", () => {
+  assert.match(scanCriteriaFormSource, /기존 AWS 가져오기/);
+  assert.match(scanCriteriaFormSource, /고급 설정/);
+  assert.match(scanCriteriaFormSource, /<details/);
+  assert.match(scanCriteriaFormSource, /전체 스캔/);
+  assert.doesNotMatch(scanCriteriaFormSource, /AWS 스캔 시작/);
+});
+
 test("Reverse Engineering result stays preview-only until the user applies it", () => {
   assert.match(rightPanelSource, /<ReverseEngineeringPanel context=\{context\} projectId=\{projectId\} \/>/);
   assert.match(panelSource, /readonly context: DiagramEditorPanelContext/);

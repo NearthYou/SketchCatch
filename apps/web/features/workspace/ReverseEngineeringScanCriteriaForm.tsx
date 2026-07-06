@@ -20,7 +20,7 @@ type ReverseEngineeringScanCriteriaFormProps = {
   readonly selectedResourceTypes: ReverseEngineeringResourceSelection[];
 };
 
-// AWS 스캔을 시작하기 전에 사용자가 고르는 조건만 보여줍니다.
+// Reverse Engineering 첫 화면에서 기본 전체 가져오기 흐름을 먼저 보여줍니다.
 export function ReverseEngineeringScanCriteriaForm({
   awsConnections,
   canStartScan,
@@ -44,7 +44,7 @@ export function ReverseEngineeringScanCriteriaForm({
         <div className={styles.deploymentHeaderTop}>
           <div>
             <span>Reverse Engineering</span>
-            <h2>기존 AWS 읽어오기</h2>
+            <h2>기존 AWS 가져오기</h2>
           </div>
           <button
             className={styles.deploymentSecondaryButton}
@@ -57,58 +57,15 @@ export function ReverseEngineeringScanCriteriaForm({
           </button>
         </div>
         <p className={styles.deploymentHint}>
-          연결된 AWS에서 리소스를 읽고, 보드가 열 수 있는 설계 후보를 만듭니다.
+          현재 프로젝트와 검증된 AWS 연결을 기준으로 전체 리소스를 읽고, 보드에 적용하기 전 미리보기를 만듭니다.
         </p>
       </header>
 
       <section className={styles.deploymentSection}>
-        <h3>스캔 기준</h3>
-        <label className={styles.deploymentField}>
-          프로젝트
-          <select
-            disabled={isLoadingOptions}
-            onChange={(event) => onSelectedProjectChange(event.currentTarget.value)}
-            value={selectedProjectId}
-          >
-            {projects.map((project) => (
-              <option key={project.id} value={project.id}>
-                {project.name}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className={styles.deploymentField}>
-          AWS 연결
-          <select
-            disabled={isLoadingOptions || awsConnections.length === 0}
-            onChange={(event) => onSelectedAwsConnectionChange(event.currentTarget.value)}
-            value={selectedAwsConnectionId}
-          >
-            {awsConnections.length === 0 ? <option value="">검증된 AWS 연결 없음</option> : null}
-            {awsConnections.map((connection) => (
-              <option key={connection.id} value={connection.id}>
-                {formatAwsConnectionLabel(connection)}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <div className={styles.deploymentField}>
-          가져올 리소스
-          <div className={styles.reverseResourceGrid}>
-            {resourceTypes.map((resourceType) => (
-              <label key={resourceType} className={styles.reverseResourceToggle}>
-                <input
-                  checked={selectedResourceTypes.includes(resourceType)}
-                  onChange={() => onResourceTypeToggle(resourceType)}
-                  type="checkbox"
-                />
-                <span>{formatResourceSelectionLabel(resourceType)}</span>
-              </label>
-            ))}
-          </div>
-        </div>
+        <h3>전체 스캔</h3>
+        <p className={styles.deploymentHint}>
+          기본값은 현재 프로젝트, 선택된 AWS 연결, 전체 리소스입니다. 스캔 후 바로 반영하지 않고 먼저 확인 화면을 보여줍니다.
+        </p>
 
         <button
           className={styles.deploymentPrimaryButton}
@@ -116,7 +73,7 @@ export function ReverseEngineeringScanCriteriaForm({
           onClick={onScanStart}
           type="button"
         >
-          <span className={styles.deploymentButtonText}>{isScanning ? "스캔 중" : "AWS 스캔 시작"}</span>
+          <span className={styles.deploymentButtonText}>{isScanning ? "가져오는 중" : "기존 AWS 가져오기"}</span>
         </button>
         {isScanning ? (
           <button
@@ -127,6 +84,57 @@ export function ReverseEngineeringScanCriteriaForm({
             취소
           </button>
         ) : null}
+
+        <details className={styles.reverseAdvancedSettings}>
+          <summary className={styles.reverseAdvancedSummary}>고급 설정</summary>
+
+          <label className={styles.deploymentField}>
+            프로젝트
+            <select
+              disabled={isLoadingOptions}
+              onChange={(event) => onSelectedProjectChange(event.currentTarget.value)}
+              value={selectedProjectId}
+            >
+              {projects.map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.name}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className={styles.deploymentField}>
+            AWS 연결
+            <select
+              disabled={isLoadingOptions || awsConnections.length === 0}
+              onChange={(event) => onSelectedAwsConnectionChange(event.currentTarget.value)}
+              value={selectedAwsConnectionId}
+            >
+              {awsConnections.length === 0 ? <option value="">검증된 AWS 연결 없음</option> : null}
+              {awsConnections.map((connection) => (
+                <option key={connection.id} value={connection.id}>
+                  {formatAwsConnectionLabel(connection)}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <div className={styles.deploymentField}>
+            가져올 리소스
+            <div className={styles.reverseResourceGrid}>
+              {resourceTypes.map((resourceType) => (
+                <label key={resourceType} className={styles.reverseResourceToggle}>
+                  <input
+                    checked={selectedResourceTypes.includes(resourceType)}
+                    onChange={() => onResourceTypeToggle(resourceType)}
+                    type="checkbox"
+                  />
+                  <span>{formatResourceSelectionLabel(resourceType)}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        </details>
       </section>
     </>
   );

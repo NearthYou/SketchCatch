@@ -287,14 +287,7 @@ async function readUnknownResourceGroup(
     return { records: [], scanErrors: [] };
   }
 
-  try {
-    return { records: await listUnknownResources(input, credentials), scanErrors: [] };
-  } catch (error) {
-    return {
-      records: [],
-      scanErrors: [toScanError("UNKNOWN", error)]
-    };
-  }
+  return listUnknownResources(input, credentials);
 }
 
 async function describeVpcs(
@@ -565,92 +558,171 @@ export async function listResourceExplorerResourcesAsUnknown(
   credentials: TerraformAwsCredentialEnv,
   createClient: AwsResourceExplorerReadClientFactory = createDefaultResourceExplorerReadClient
 ): Promise<AwsDiscoveredResourceRecord[]> {
+  try {
+    return await listResourceExplorerResourceRecords(region, credentials, createClient);
+  } catch {
+    return [];
+  }
+}
+
+// Resource Explorer Search API를 돌면서 계정/리전 안의 리소스 후보를 끝까지 읽습니다.
+async function listResourceExplorerResourceRecords(
+  region: string,
+  credentials: TerraformAwsCredentialEnv,
+  createClient: AwsResourceExplorerReadClientFactory = createDefaultResourceExplorerReadClient
+): Promise<AwsDiscoveredResourceRecord[]> {
   const client = createClient(region, credentials);
   const records: AwsDiscoveredResourceRecord[] = [];
   let nextToken: string | undefined;
 
-  try {
-    do {
-      const response = await sendResourceExplorerCommand<SearchCommandOutput>(
-        client,
-        new SearchCommand({
-          QueryString: `region:${region}`,
-          MaxResults: 100,
-          ...(nextToken ? { NextToken: nextToken } : {})
-        })
-      );
+  do {
+    const response = await sendResourceExplorerCommand<SearchCommandOutput>(
+      client,
+      new SearchCommand({
+        QueryString: `region:${region}`,
+        MaxResults: 100,
+        ...(nextToken ? { NextToken: nextToken } : {})
+      })
+    );
 
-      records.push(...(response.Resources ?? []).flatMap((resource) =>
-        toUnknownResourceExplorerRecord(resource, region)
-      ));
-      nextToken = response.NextToken && response.NextToken.length > 0 ? response.NextToken : undefined;
-    } while (nextToken);
-  } catch {
-    return [];
-  }
+    records.push(...(response.Resources ?? []).flatMap((resource) =>
+      toUnknownResourceExplorerRecord(resource, region)
+    ));
+    nextToken = response.NextToken && response.NextToken.length > 0 ? response.NextToken : undefined;
+  } while (nextToken);
 
   return records;
+}
+
+// Resource Explorer가 꺼졌거나 권한이 없으면, 조용히 숨기지 않고 scan error로 남깁니다.
+export async function readResourceExplorerResourcesWithDiagnostics(
+  region: string,
+  credentials: TerraformAwsCredentialEnv,
+  createClient: AwsResourceExplorerReadClientFactory = createDefaultResourceExplorerReadClient
+): Promise<AwsProviderDiscoveryResult> {
+  try {
+    return {
+      records: await listResourceExplorerResourceRecords(region, credentials, createClient),
+      scanErrors: []
+    };
+  } catch (error) {
+    return {
+      records: [],
+      scanErrors: [toResourceExplorerScanError(error)]
+    };
+  }
+}
+
+// UNKNOWN 보조 조회 하나가 실패해도 다른 UNKNOWN 조회 결과는 계속 살립니다.
+async function readUnknownResourceRecords(
+  resourceType: ResourceType,
+  read: () => Promise<AwsDiscoveredResourceRecord[]>
+): Promise<AwsProviderDiscoveryResult> {
+  try {
+    return { records: await read(), scanErrors: [] };
+  } catch (error) {
+    return {
+      records: [],
+      scanErrors: [toScanError(resourceType, error)]
+    };
+  }
 }
 
 // 지금 정식 지원하지 않는 AWS 리소스도 숨기지 않기 위해 여러 read-only 조회 결과를 UNKNOWN으로 모읍니다.
 async function listUnknownResources(
   input: AwsProviderScanInput,
   credentials: TerraformAwsCredentialEnv
-): Promise<AwsDiscoveredResourceRecord[]> {
-  const reads: Array<Promise<AwsDiscoveredResourceRecord[]>> = [];
+): Promise<AwsProviderDiscoveryResult> {
+  const reads: Array<Promise<AwsProviderDiscoveryResult>> = [];
 
   if (input.resourceTypes.includes("ALL") || input.resourceTypes.includes("UNKNOWN")) {
     reads.push(
-      listResourceExplorerResourcesAsUnknown(input.region, credentials),
-      listTaggedUnknownResources(input.region, credentials),
-      listApplicationLoadBalancersAsUnknown(input.region, credentials),
-      listCloudFrontDistributionsAsUnknown(input.region, credentials),
-      listIamRolesAsUnknown(input.region, credentials),
-      listKmsKeysAsUnknown(input.region, credentials),
-      listCloudWatchLogGroupsAsUnknown(input.region, credentials),
-      listApiGatewayRestApisAsUnknown(input.region, credentials),
-      listAmiImagesAsUnknown(input.region, credentials),
-      listIamPoliciesAsUnknown(input.region, credentials),
-      listIamInstanceProfilesAsUnknown(input.region, credentials),
-      listCloudWatchMetricAlarmsAsUnknown(input.region, credentials),
-      listLambdaPermissionsAsUnknown(input.region, credentials)
+      readResourceExplorerResourcesWithDiagnostics(input.region, credentials),
+      readUnknownResourceRecords("UNKNOWN", () => listTaggedUnknownResources(input.region, credentials)),
+      readUnknownResourceRecords("UNKNOWN", () =>
+        listApplicationLoadBalancersAsUnknown(input.region, credentials)
+      ),
+      readUnknownResourceRecords("UNKNOWN", () =>
+        listCloudFrontDistributionsAsUnknown(input.region, credentials)
+      ),
+      readUnknownResourceRecords("UNKNOWN", () => listIamRolesAsUnknown(input.region, credentials)),
+      readUnknownResourceRecords("UNKNOWN", () => listKmsKeysAsUnknown(input.region, credentials)),
+      readUnknownResourceRecords("UNKNOWN", () =>
+        listCloudWatchLogGroupsAsUnknown(input.region, credentials)
+      ),
+      readUnknownResourceRecords("UNKNOWN", () =>
+        listApiGatewayRestApisAsUnknown(input.region, credentials)
+      ),
+      readUnknownResourceRecords("UNKNOWN", () => listAmiImagesAsUnknown(input.region, credentials)),
+      readUnknownResourceRecords("UNKNOWN", () => listIamPoliciesAsUnknown(input.region, credentials)),
+      readUnknownResourceRecords("UNKNOWN", () =>
+        listIamInstanceProfilesAsUnknown(input.region, credentials)
+      ),
+      readUnknownResourceRecords("UNKNOWN", () =>
+        listCloudWatchMetricAlarmsAsUnknown(input.region, credentials)
+      ),
+      readUnknownResourceRecords("UNKNOWN", () =>
+        listLambdaPermissionsAsUnknown(input.region, credentials)
+      )
     );
   }
 
   if (input.resourceTypes.includes("AMI")) {
-    reads.push(listAmiImagesAsUnknown(input.region, credentials));
+    reads.push(readUnknownResourceRecords("AMI", () => listAmiImagesAsUnknown(input.region, credentials)));
   }
 
   if (input.resourceTypes.includes("CLOUDFRONT")) {
-    reads.push(listCloudFrontDistributionsAsUnknown(input.region, credentials));
+    reads.push(
+      readUnknownResourceRecords("CLOUDFRONT", () =>
+        listCloudFrontDistributionsAsUnknown(input.region, credentials)
+      )
+    );
   }
 
   if (input.resourceTypes.includes("IAM_ROLE")) {
-    reads.push(listIamRolesAsUnknown(input.region, credentials));
+    reads.push(readUnknownResourceRecords("IAM_ROLE", () => listIamRolesAsUnknown(input.region, credentials)));
   }
 
   if (input.resourceTypes.includes("IAM_POLICY")) {
-    reads.push(listIamPoliciesAsUnknown(input.region, credentials));
+    reads.push(
+      readUnknownResourceRecords("IAM_POLICY", () => listIamPoliciesAsUnknown(input.region, credentials))
+    );
   }
 
   if (input.resourceTypes.includes("IAM_INSTANCE_PROFILE")) {
-    reads.push(listIamInstanceProfilesAsUnknown(input.region, credentials));
+    reads.push(
+      readUnknownResourceRecords("IAM_INSTANCE_PROFILE", () =>
+        listIamInstanceProfilesAsUnknown(input.region, credentials)
+      )
+    );
   }
 
   if (input.resourceTypes.includes("KMS_KEY")) {
-    reads.push(listKmsKeysAsUnknown(input.region, credentials));
+    reads.push(readUnknownResourceRecords("KMS_KEY", () => listKmsKeysAsUnknown(input.region, credentials)));
   }
 
   if (input.resourceTypes.includes("CLOUDWATCH_LOG_GROUP")) {
-    reads.push(listCloudWatchLogGroupsAsUnknown(input.region, credentials));
+    reads.push(
+      readUnknownResourceRecords("CLOUDWATCH_LOG_GROUP", () =>
+        listCloudWatchLogGroupsAsUnknown(input.region, credentials)
+      )
+    );
   }
 
   if (input.resourceTypes.includes("CLOUDWATCH_METRIC_ALARM")) {
-    reads.push(listCloudWatchMetricAlarmsAsUnknown(input.region, credentials));
+    reads.push(
+      readUnknownResourceRecords("CLOUDWATCH_METRIC_ALARM", () =>
+        listCloudWatchMetricAlarmsAsUnknown(input.region, credentials)
+      )
+    );
   }
 
   if (input.resourceTypes.includes("API_GATEWAY_REST_API")) {
-    reads.push(listApiGatewayRestApisAsUnknown(input.region, credentials));
+    reads.push(
+      readUnknownResourceRecords("API_GATEWAY_REST_API", () =>
+        listApiGatewayRestApisAsUnknown(input.region, credentials)
+      )
+    );
   }
 
   if (
@@ -658,16 +730,23 @@ async function listUnknownResources(
     input.resourceTypes.includes("UNKNOWN") ||
     input.resourceTypes.includes("LAMBDA")
   ) {
-    reads.push(listLambdaFunctionsAsUnknown(input.region, credentials));
+    reads.push(readUnknownResourceRecords("LAMBDA", () => listLambdaFunctionsAsUnknown(input.region, credentials)));
   }
 
   if (input.resourceTypes.includes("LAMBDA_PERMISSION")) {
-    reads.push(listLambdaPermissionsAsUnknown(input.region, credentials));
+    reads.push(
+      readUnknownResourceRecords("LAMBDA_PERMISSION", () =>
+        listLambdaPermissionsAsUnknown(input.region, credentials)
+      )
+    );
   }
 
-  const unknownGroups = await Promise.all(reads);
+  const discoveryResults = await Promise.all(reads);
 
-  return uniqueDiscoveredRecordsByProviderId(unknownGroups.flat());
+  return {
+    records: uniqueDiscoveredRecordsByProviderId(discoveryResults.flatMap((result) => result.records)),
+    scanErrors: discoveryResults.flatMap((result) => result.scanErrors)
+  };
 }
 
 // ALB는 태그가 없어도 자주 쓰이기 때문에 ELBv2 API로 직접 읽어 UNKNOWN 후보로 남깁니다.
@@ -1893,6 +1972,18 @@ function toScanError(resourceType: ResourceType, error: unknown): ReverseEnginee
     reason,
     message,
     retryable: reason === "throttled" || reason === "provider_error"
+  };
+}
+
+// Resource Explorer 상태 문제는 전체 가져오기 범위가 줄어든다는 설명을 덧붙입니다.
+function toResourceExplorerScanError(error: unknown): ReverseEngineeringScanError {
+  const baseError = toScanError("UNKNOWN", error);
+
+  return {
+    ...baseError,
+    id: "scan-error-resource-explorer",
+    message: `Resource Explorer 조회 실패: ${baseError.message}. Resource Explorer가 꺼져 있거나 조회 권한이 없으면 전체 가져오기 범위가 줄어듭니다.`,
+    retryable: baseError.reason === "throttled"
   };
 }
 
