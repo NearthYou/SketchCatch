@@ -11,6 +11,24 @@
 
 ## 세션 레코드
 
+### 2026-07-06 - Settings GitHub 탭 제거 및 Direct Deployment 차단 원인 확인
+
+- Goal: Settings 화면의 기능 없는 GitHub 탭을 제거하고, 현재 배포가 수행되지 않는 원인을 확인한다.
+- Findings:
+  - Settings 페이지는 `SettingsIntegrationsClient`를 렌더링하고 있었고, GitHub 탭은 실제 GitHub App/source repository API에 연결되지 않은 placeholder 버튼이었다.
+  - Workspace Direct Deployment는 `status === "verified"`인 AWS 연결만 선택지로 보여준다.
+  - `selectedAwsConnectionId`가 비어 있으면 `배포 검토 시작` 버튼이 비활성화되고 `startDeploymentReview()`도 즉시 반환한다.
+  - 운영 GitHub Actions `Deploy Production`의 최신 성공 배포는 `15ce4684`이고, AWS 연결 CloudFormation policy 충돌 수정 커밋 `73c2460`은 아직 로컬에만 있어 운영에는 반영되지 않았다.
+- Completed:
+  - Settings의 GitHub 탭 버튼을 제거했다. Settings에서는 AWS 연결 탭만 노출된다.
+  - 배포 미수행 원인을 verified AWS connection 부재와 미배포된 AWS CloudFormation template 수정으로 정리했다.
+- Verified so far:
+  - `pnpm harness:check`
+  - `gh run list --repo NearthYou/SketchCatch --workflow "Deploy Production" --limit 5 --json databaseId,headSha,status,conclusion,displayTitle,createdAt,url`
+  - `pnpm --filter @sketchcatch/web typecheck`
+  - `pnpm --filter @sketchcatch/web lint`
+  - `git diff --check`
+
 ### 2026-07-06 - AWS 연결 CloudFormation policy 충돌 진단 및 GitHub 설치 UX 분리
 
 - Goal: AWS 연결 Stack 생성 중 `SketchCatchMvpTerraformApply already exists on the role SketchCatchTerraformExecutionRole`로 실패하는 원인을 진단하고, GitHub App repo 선택 화면에서 다른 계정/조직 설치 경로가 막히지 않게 한다.

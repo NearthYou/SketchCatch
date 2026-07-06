@@ -2,6 +2,9 @@
 
 ## 현재 검증된 것
 
+- Settings page renders `SettingsIntegrationsClient`; the visible GitHub tab button has been removed so Settings exposes only the AWS tab.
+- Production Deploy workflow latest successful run still points at `15ce4684`; local commit `73c2460` with the AWS CloudFormation policy collision fix has not been pushed/deployed yet.
+- Workspace Direct Deployment only lists AWS connections with `status === "verified"`. If the AWS connection Stack failed, no verified connection is selectable and the deployment review button remains disabled.
 - `feature/sw/deployment-github-runtime-cache` branch has been updated with `origin/dev`.
 - Source repository/GitHub App operational verification had previously completed.
 - Merge verification passed: `pnpm harness:check`, `pnpm typecheck`, `pnpm lint`, `pnpm build`, and `git diff --check --cached`.
@@ -11,6 +14,8 @@
 
 ## 이번 세션의 변경 사항
 
+- Removed the Settings GitHub tab button from `apps/web/app/settings/settings-integrations-client.tsx`.
+- Confirmed the current deployment blocker is not GitHub source repository selection. It is the missing verified AWS connection caused by the AWS connection Stack failure, plus the fact that the CloudFormation fix is still local and not deployed.
 - Changed GitHub App install URL generation from `/installations/new` to `/installations/select_target`.
 - Added API/service tests for the already-installed account URL flow.
 - Cleaned the GitHub callback page state-missing and repository selection Korean messages.
@@ -29,6 +34,7 @@
 ## 다음으로 최선의 행동
 
 - Run full checks, commit/push, deploy the branch, retest AWS connection Stack creation with a fresh/cleaned failed Stack, and confirm Workspace GitHub `Repo 변경` versus `다른 설치` behavior in Chrome.
+- After deployment, delete or clean the failed AWS CloudFormation Stack/retained `SketchCatchTerraformExecutionRole` or old `SketchCatchMvpTerraformApply` inline policy before creating a new verified AWS connection.
 # ?몄뀡 ?몃뱶?ㅽ봽
 
 ???뚯씪? 理쒖떊 ?몄뀡 ?섎굹瑜??ㅼ쓬 ?몄뀡??鍮좊Ⅴ寃??댁뼱諛쏄린 ?꾪븳 ?뺤텞蹂몄씠?? ?꾩쟻 ?대젰? `agent-progress.md`???④릿??
