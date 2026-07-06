@@ -159,7 +159,9 @@ export async function runDeploymentApply(
     workspace = preparedWorkspace;
 
     const currentTerraformArtifactContent = await readTerraformArtifactFile(workspace.mainFilePath);
-    assertTerraformArtifactIsSafe(currentTerraformArtifactContent);
+    assertTerraformArtifactIsSafe(currentTerraformArtifactContent, {
+      liveProfile: deployment.liveProfile
+    });
     const currentTerraformArtifactHash = createSha256(currentTerraformArtifactContent);
     const currentTfplanHash = createSha256(planBuffer);
 

@@ -13,8 +13,10 @@ import {
 } from "drizzle-orm/pg-core";
 import type {
   ArchitectureJson,
+  DeploymentLiveProfile,
   DeploymentPlanSummary,
   DiagramJson,
+  GitCicdHandoffKind,
   ReverseEngineeringResourceSelection,
   ReverseEngineeringScanResult
 } from "@sketchcatch/types";
@@ -41,6 +43,12 @@ export const deploymentStatusEnum = pgEnum("deployment_status", [
   "DESTROYED"
 ]);
 
+export const deploymentLiveProfileEnum = pgEnum("deployment_live_profile", [
+  "practice",
+  "demo_web_service",
+  "demo_web_service_with_rds"
+]);
+
 export const gitCicdRepositoryProviderEnum = pgEnum("git_cicd_repository_provider", [
   "internal",
   "github"
@@ -58,6 +66,11 @@ export const gitCicdHandoffStatusEnum = pgEnum("git_cicd_handoff_status", [
   "pipeline_success",
   "pipeline_failed",
   "cancelled"
+]);
+
+export const gitCicdHandoffKindEnum = pgEnum("git_cicd_handoff_kind", [
+  "terraform_iac",
+  "static_site"
 ]);
 
 export const deploymentBlockedEnum = pgEnum("deployment_blocked_by", [
@@ -423,6 +436,10 @@ export const deployments = pgTable(
       () => awsConnections.id,
       { onDelete: "restrict" }
     ),
+    liveProfile: deploymentLiveProfileEnum("live_profile")
+      .$type<DeploymentLiveProfile>()
+      .notNull()
+      .default("practice"),
     currentPlanArtifactId: varchar("current_plan_artifact_id", { length: 36 }),
     stateObjectKey: text("state_object_key"),
     resultWarningSummary: text("result_warning_summary"),
@@ -477,6 +494,10 @@ export const gitCicdHandoffs = pgTable(
     terraformArtifactId: varchar("terraform_artifact_id", { length: 36 })
       .notNull()
       .references(() => projectAssets.id, { onDelete: "restrict" }),
+    handoffKind: gitCicdHandoffKindEnum("handoff_kind")
+      .$type<GitCicdHandoffKind>()
+      .notNull()
+      .default("terraform_iac"),
     sourceRepositoryId: varchar("source_repository_id", { length: 128 }).notNull(),
     repositoryProvider: gitCicdRepositoryProviderEnum("repository_provider")
       .notNull()

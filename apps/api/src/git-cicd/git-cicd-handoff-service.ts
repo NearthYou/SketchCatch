@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { and, desc, eq } from "drizzle-orm";
 import type {
   DeploymentPlanSummary,
+  GitCicdHandoffKind,
   GitCicdHandoffStatus,
   SourceRepositoryProvider
 } from "@sketchcatch/types";
@@ -52,6 +53,7 @@ export type CreateGitCicdHandoffInput = {
   architectureId: string;
   terraformArtifactId: string;
   sourceRepositoryId: string;
+  handoffKind?: GitCicdHandoffKind | undefined;
   targetBranch?: string | undefined;
   sourceBranch?: string | undefined;
   commitMessage?: string | undefined;
@@ -65,6 +67,7 @@ export type CreateGitCicdHandoffRecordInput = {
   projectId: string;
   architectureId: string;
   terraformArtifactId: string;
+  handoffKind: GitCicdHandoffKind;
   sourceRepositoryId: string;
   repositoryProvider: SourceRepositoryProvider;
   repositoryOwner: string;
@@ -105,6 +108,7 @@ export type GitCicdProviderCreateInput = {
   projectId: string;
   architectureId: string;
   terraformArtifactId: string;
+  handoffKind: GitCicdHandoffKind;
   targetBranch: string;
   projectSlug: string;
   terraformArtifact: {
@@ -320,7 +324,11 @@ export function createGitHubGitCicdHandoffProvider(
         commitMessage,
         files: [
           {
-            path: `sketchcatch/${input.projectSlug}/terraform/${input.terraformArtifact.fileName}`,
+            path: createHandoffFilePath({
+              projectSlug: input.projectSlug,
+              handoffKind: input.handoffKind,
+              fileName: input.terraformArtifact.fileName
+            }),
             artifactObjectKey: input.terraformArtifact.objectKey,
             contentType: input.terraformArtifact.contentType
           }
@@ -346,22 +354,27 @@ export function createGitCicdPullRequestDraft(input: {
   repositoryOwner: string;
   repositoryName: string;
   terraformArtifact: GitCicdHandoffTerraformArtifactRecord;
+  handoffKind?: GitCicdHandoffKind | undefined;
   planSummary: DeploymentPlanSummary | null;
   title: string | null;
 }): GitCicdPullRequestDraft {
+  const handoffKind = input.handoffKind ?? "terraform_iac";
   const title =
     input.title ??
-    `SketchCatch IaC preview for ${input.repositoryOwner}/${input.repositoryName}`;
-  const reviewChecklist = createDefaultReviewChecklist();
+    (handoffKind === "static_site"
+      ? `SketchCatch static site update for ${input.repositoryOwner}/${input.repositoryName}`
+      : `SketchCatch IaC preview for ${input.repositoryOwner}/${input.repositoryName}`);
+  const reviewChecklist = createDefaultReviewChecklist(handoffKind);
   const planSummaryText = input.planSummary
     ? `Create ${input.planSummary.createCount}, update ${input.planSummary.updateCount}, delete ${input.planSummary.deleteCount}, replace ${input.planSummary.replaceCount}. Blocked: ${input.planSummary.blocked ? "yes" : "no"}.`
     : "Plan summary was not attached to this handoff request.";
   const warningLines =
     input.planSummary?.warnings?.map((warning) => `- ${warning.level}: ${warning.message}`) ?? [];
   const body = [
-    "## IaC Preview",
+    handoffKind === "static_site" ? "## Static Site CI/CD" : "## IaC Preview",
     "",
-    `- Terraform artifact: ${input.terraformArtifact.fileName}`,
+    `- Artifact: ${input.terraformArtifact.fileName}`,
+    `- Handoff kind: ${handoffKind}`,
     `- Artifact object key: ${input.terraformArtifact.objectKey}`,
     "",
     "## Plan summary",
@@ -388,7 +401,29 @@ export function createGitCicdPullRequestDraft(input: {
   };
 }
 
-function createDefaultReviewChecklist(): GitCicdReviewChecklistItem[] {
+function createDefaultReviewChecklist(
+  handoffKind: GitCicdHandoffKind = "terraform_iac"
+): GitCicdReviewChecklistItem[] {
+  if (handoffKind === "static_site") {
+    return [
+      {
+        id: "static-site-artifact",
+        label: "Static site artifact path and browser-visible content change are reviewed.",
+        required: true
+      },
+      {
+        id: "pipeline-policy",
+        label: "Destination repository pipeline uploads the static site artifact to the approved S3 bucket.",
+        required: true
+      },
+      {
+        id: "manual-deploy-avoidance",
+        label: "No manual S3 console upload is required after the pipeline succeeds.",
+        required: true
+      }
+    ];
+  }
+
   return [
     {
       id: "terraform-artifact",
@@ -415,6 +450,18 @@ function createDefaultReviewChecklist(): GitCicdReviewChecklistItem[] {
 
 function createDefaultSourceBranch(projectSlug: string, handoffId: string): string {
   return `sketchcatch/${projectSlug}/iac-${handoffId.slice(0, 8)}`;
+}
+
+function createHandoffFilePath(input: {
+  projectSlug: string;
+  handoffKind: GitCicdHandoffKind;
+  fileName: string;
+}): string {
+  if (input.handoffKind === "static_site") {
+    return `sketchcatch/${input.projectSlug}/static-site/${input.fileName}`;
+  }
+
+  return `sketchcatch/${input.projectSlug}/terraform/${input.fileName}`;
 }
 
 function createProjectSlug(projectName: string): string {
@@ -635,10 +682,12 @@ export async function createGitCicdHandoff(
   const targetBranch = input.targetBranch ?? sourceRepository.defaultBranch;
   const sourceBranch = input.sourceBranch ?? null;
   const commitMessage = input.commitMessage ?? null;
+  const handoffKind = input.handoffKind ?? "terraform_iac";
   const pullRequestDraft = createGitCicdPullRequestDraft({
     repositoryOwner: sourceRepository.owner,
     repositoryName: sourceRepository.name,
     terraformArtifact,
+    handoffKind,
     planSummary: input.planSummary ?? null,
     title: input.pullRequestTitle ?? null
   });
@@ -649,6 +698,7 @@ export async function createGitCicdHandoff(
     projectId: input.projectId,
     architectureId: input.architectureId,
     terraformArtifactId: input.terraformArtifactId,
+    handoffKind,
     targetBranch,
     projectSlug,
     terraformArtifact: {
@@ -685,6 +735,7 @@ export async function createGitCicdHandoff(
     projectId: input.projectId,
     architectureId: input.architectureId,
     terraformArtifactId: input.terraformArtifactId,
+    handoffKind,
     sourceRepositoryId: input.sourceRepositoryId,
     repositoryProvider: providerResult.repositoryProvider,
     repositoryOwner: sourceRepository.owner,

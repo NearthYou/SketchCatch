@@ -94,7 +94,10 @@ const createDeploymentParamsSchema = z.object({
 const createDeploymentBodySchema = z.object({
   architectureId: z.uuid(),
   terraformArtifactId: z.uuid(),
-  awsConnectionId: z.uuid()
+  awsConnectionId: z.uuid(),
+  liveProfile: z
+    .enum(["practice", "demo_web_service", "demo_web_service_with_rds"])
+    .default("practice")
 });
 
 const deploymentParamsSchema = z.object({
@@ -270,6 +273,7 @@ async function toDeployment(
     architectureId: row.architectureId,
     terraformArtifactId: row.terraformArtifactId,
     awsConnectionId: row.awsConnectionId,
+    liveProfile: row.liveProfile,
     currentPlanArtifactId: row.currentPlanArtifactId,
     currentPlanOperation,
     stateObjectKey: row.stateObjectKey,
@@ -368,7 +372,8 @@ export async function registerDeploymentRoutes(
           accessContext,
           architectureId: body.architectureId,
           terraformArtifactId: body.terraformArtifactId,
-          awsConnectionId: body.awsConnectionId
+          awsConnectionId: body.awsConnectionId,
+          liveProfile: body.liveProfile
         },
         repository
       );

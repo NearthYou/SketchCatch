@@ -18,6 +18,7 @@
   CreateAwsConnectionRequest,
   CreateAwsConnectionResponse,
   CreateDeploymentRequest,
+  CreateGitCicdHandoffRequest,
   ConfirmProjectAssetUploadResponse,
   CreateDesignSimulationRequest,
   CreateProjectAssetUploadRequest,
@@ -40,6 +41,7 @@
   GitCicdHandoffListResponse,
   GitCicdHandoffPipelineStatus,
   GitCicdHandoffPipelineStatusResponse,
+  GitCicdHandoffResponse,
   GitHubAppExistingInstallationCallbackUrlResponse,
   GitHubAppInstallUrlResponse,
   ListGitHubInstallationRepositoriesRequest,
@@ -598,7 +600,8 @@ export async function createDeployment({
   projectId,
   architectureId,
   terraformArtifactId,
-  awsConnectionId
+  awsConnectionId,
+  liveProfile
 }: {
   projectId: string;
 } & CreateDeploymentRequest): Promise<Deployment> {
@@ -610,7 +613,8 @@ export async function createDeployment({
       body: {
         architectureId,
         terraformArtifactId,
-        awsConnectionId
+        awsConnectionId,
+        ...(liveProfile !== undefined ? { liveProfile } : {})
       }
     }
   );
@@ -638,6 +642,24 @@ export async function listGitCicdHandoffs(projectId: string): Promise<GitCicdHan
   );
 
   return response.handoffs;
+}
+
+export async function createGitCicdHandoff({
+  projectId,
+  ...input
+}: {
+  projectId: string;
+} & CreateGitCicdHandoffRequest): Promise<GitCicdHandoff> {
+  const response = await apiFetch<GitCicdHandoffResponse>(
+    `/projects/${encodeURIComponent(projectId)}/git-cicd-handoffs`,
+    {
+      auth: true,
+      method: "POST",
+      body: input
+    }
+  );
+
+  return response.handoff;
 }
 
 export async function listSourceRepositories(projectId: string): Promise<SourceRepository[]> {

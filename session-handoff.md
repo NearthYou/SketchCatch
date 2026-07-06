@@ -1,5 +1,14 @@
 ﻿# 세션 핸드오프
 
+## 2026-07-07 - Demo Web Service E2E handoff
+
+- Branch/worktree: `feature/sw/189-196-demo-web-service-e2e` at `C:\Users\siwon\Desktop\Jungle\Week17~21\SketchCatch-worktrees\demo-web-service-e2e`.
+- Scope completed: `docs/sw/spec5.md`, `docs/sw/plan5.md`, `docs/sw/agents.md`, GitHub Issues #189-#196, demo live profiles, profile-aware safety gates, S3/ALB/ASG resource support, static site handoff kind, Deployment UI traffic simulator, and `scripts/smoke/live-demo-web-service.ps1`.
+- Verification completed: targeted API tests, full web tests, API/web typecheck, root `pnpm lint`, `pnpm typecheck`, and `pnpm build`.
+- Remaining risk: actual AWS live smoke has not been run because it requires credentials, cost-bearing resources, and cleanup approval. HARNESS-007 stays `in_progress` until that evidence exists.
+- Known unrelated failure: full API test with `S3_BUCKET_NAME=sketchcatch-test-bucket` still fails one existing `aiLlmExplanationValidation.test.ts` expectation, 5 expected vs 6 actual.
+- Next action: rerun `pnpm harness:check`, inspect final diff, commit/push the branch, and open a PR to `dev` with the live smoke limitation called out.
+
 ## 현재 검증된 것
 
 - PR #178 review comments were fetched with the GitHub comment handler flow. Five unresolved actionable threads were all performance/API optimization comments around GitHub App client creation, private-key parsing, and duplicate target branch ref lookup.

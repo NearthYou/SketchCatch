@@ -6,7 +6,10 @@ const TERRAFORM_NESTED_BLOCK_ATTRIBUTES: Record<string, ReadonlySet<string>> = {
   aws_dynamodb_table: new Set(["attribute"]),
   aws_instance: new Set(["rootBlockDevice"]),
   aws_lambda_function: new Set(["environment"]),
+  aws_lb_listener: new Set(["defaultAction", "forward"]),
+  aws_lb_target_group: new Set(["healthCheck", "stickiness"]),
   aws_route_table: new Set(["route"]),
+  aws_s3_bucket_website_configuration: new Set(["errorDocument", "indexDocument", "routingRule"]),
   aws_s3_bucket_lifecycle_configuration: new Set(["rule"]),
   aws_security_group: new Set(["egress", "ingress"])
 };

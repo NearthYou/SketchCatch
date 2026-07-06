@@ -802,6 +802,7 @@ function makeDeployment(overrides: Partial<DeploymentRow> = {}): DeploymentRow {
     approvedTfplanHash: null,
     architectureId: "55555555-5555-4555-8555-555555555555",
     awsConnectionId: null,
+    liveProfile: "practice",
     blockedBy: null,
     blockedReason: null,
     cancelRequestedAt: null,

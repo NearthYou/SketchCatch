@@ -431,11 +431,14 @@ export type GitCicdHandoffStatus =
   | "pipeline_failed"
   | "cancelled";
 
+export type GitCicdHandoffKind = "terraform_iac" | "static_site";
+
 export type GitCicdHandoff = {
   id: string;
   projectId: string;
   architectureId: string;
   terraformArtifactId: string;
+  handoffKind: GitCicdHandoffKind;
   sourceRepositoryId: string;
   repositoryProvider: SourceRepositoryProvider;
   repositoryOwner: string;
@@ -458,6 +461,7 @@ export type GitCicdHandoff = {
 export type CreateGitCicdHandoffRequest = {
   architectureId: string;
   terraformArtifactId: string;
+  handoffKind?: GitCicdHandoffKind | undefined;
   sourceRepositoryId: string;
   targetBranch?: string | undefined;
   sourceBranch?: string | undefined;
@@ -512,6 +516,7 @@ export type Deployment = DeploymentBlock & {
   architectureId: string;
   terraformArtifactId: string;
   awsConnectionId: string | null;
+  liveProfile: DeploymentLiveProfile;
   currentPlanArtifactId: string | null;
   currentPlanOperation: "apply" | "destroy" | null;
   stateObjectKey: string | null;
@@ -797,7 +802,13 @@ export type CreateDeploymentRequest = {
   architectureId: string;
   terraformArtifactId: string;
   awsConnectionId: string;
+  liveProfile?: DeploymentLiveProfile | undefined;
 };
+
+export type DeploymentLiveProfile =
+  | "practice"
+  | "demo_web_service"
+  | "demo_web_service_with_rds";
 
 export type DeploymentResponse = {
   deployment: Deployment;
