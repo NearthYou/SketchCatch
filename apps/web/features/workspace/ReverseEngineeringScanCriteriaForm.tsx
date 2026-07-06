@@ -1,5 +1,5 @@
 import { RefreshCw } from "lucide-react";
-import type { AwsConnection, Project, ResourceType } from "@sketchcatch/types";
+import type { AwsConnection, Project, ReverseEngineeringResourceSelection } from "@sketchcatch/types";
 import styles from "./workspace.module.css";
 
 type ReverseEngineeringScanCriteriaFormProps = {
@@ -8,16 +8,16 @@ type ReverseEngineeringScanCriteriaFormProps = {
   readonly isLoadingOptions: boolean;
   readonly isScanning: boolean;
   readonly onRefresh: () => void;
-  readonly onResourceTypeToggle: (resourceType: ResourceType) => void;
+  readonly onResourceTypeToggle: (resourceType: ReverseEngineeringResourceSelection) => void;
   readonly onScanCancel: () => void;
   readonly onScanStart: () => void;
   readonly onSelectedAwsConnectionChange: (awsConnectionId: string) => void;
   readonly onSelectedProjectChange: (projectId: string) => void;
   readonly projects: Project[];
-  readonly resourceTypes: ResourceType[];
+  readonly resourceTypes: ReverseEngineeringResourceSelection[];
   readonly selectedAwsConnectionId: string;
   readonly selectedProjectId: string;
-  readonly selectedResourceTypes: ResourceType[];
+  readonly selectedResourceTypes: ReverseEngineeringResourceSelection[];
 };
 
 // AWS 스캔을 시작하기 전에 사용자가 고르는 조건만 보여줍니다.
@@ -104,7 +104,7 @@ export function ReverseEngineeringScanCriteriaForm({
                   onChange={() => onResourceTypeToggle(resourceType)}
                   type="checkbox"
                 />
-                <span>{resourceType}</span>
+                <span>{formatResourceSelectionLabel(resourceType)}</span>
               </label>
             ))}
           </div>
@@ -130,6 +130,11 @@ export function ReverseEngineeringScanCriteriaForm({
       </section>
     </>
   );
+}
+
+// `ALL`은 사용자가 이해하는 화면 라벨로 보여주고, 실제 리소스 타입 이름은 그대로 둡니다.
+function formatResourceSelectionLabel(resourceType: ReverseEngineeringResourceSelection): string {
+  return resourceType === "ALL" ? "전체" : resourceType;
 }
 
 // AWS 연결 선택 박스에 보여줄 짧은 이름을 만듭니다.

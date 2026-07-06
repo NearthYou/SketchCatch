@@ -8,7 +8,33 @@ import {
   parseRouteTablesFromXml,
   parseSecurityGroupsFromXml
 } from "./aws-reverse-engineering-parsers.js";
-import { maskReverseEngineeringSensitiveText as maskGatewaySensitiveText } from "./aws-reverse-engineering-gateway.js";
+import {
+  maskReverseEngineeringSensitiveText as maskGatewaySensitiveText,
+  shouldReadResourceGroup
+} from "./aws-reverse-engineering-gateway.js";
+
+test("shouldReadResourceGroup reads every supported group when ALL is selected", () => {
+  const input = {
+    provider: "aws" as const,
+    region: "ap-northeast-2",
+    resourceTypes: ["ALL" as const]
+  };
+
+  assert.equal(shouldReadResourceGroup(input, "VPC"), true);
+  assert.equal(shouldReadResourceGroup(input, "EC2"), true);
+  assert.equal(shouldReadResourceGroup(input, "RDS"), true);
+});
+
+test("shouldReadResourceGroup keeps individual resource filters when ALL is not selected", () => {
+  const input = {
+    provider: "aws" as const,
+    region: "ap-northeast-2",
+    resourceTypes: ["EC2" as const]
+  };
+
+  assert.equal(shouldReadResourceGroup(input, "EC2"), true);
+  assert.equal(shouldReadResourceGroup(input, "RDS"), false);
+});
 
 test("extractSetItems returns only direct AWS set items when child item tags are nested", () => {
   const xml = `
@@ -51,6 +77,7 @@ test("parseInternetGatewaysFromXml maps gateway attachments to discovered resour
           <attachmentSet>
             <item>
               <vpcId>vpc-1234</vpcId>
+              <state>available</state>
             </item>
           </attachmentSet>
           <tagSet>
@@ -69,6 +96,7 @@ test("parseInternetGatewaysFromXml maps gateway attachments to discovered resour
   assert.equal(gateway?.providerResourceType, "AWS::EC2::InternetGateway");
   assert.equal(gateway?.providerResourceId, "igw-1234");
   assert.equal(gateway?.displayName, "Main Internet Gateway");
+  assert.deepEqual(gateway?.config["attachments"], [{ vpcId: "vpc-1234", state: "available" }]);
   assert.deepEqual(gateway?.relationships, [
     { type: "attached_to", targetProviderResourceId: "vpc-1234" }
   ]);
@@ -83,9 +111,18 @@ test("parseRouteTablesFromXml maps VPC and gateway routes to discovered resource
           <vpcId>vpc-1234</vpcId>
           <routeSet>
             <item>
+              <destinationCidrBlock>0.0.0.0/0</destinationCidrBlock>
               <gatewayId>igw-1234</gatewayId>
+              <state>active</state>
             </item>
           </routeSet>
+          <associationSet>
+            <item>
+              <routeTableAssociationId>rtbassoc-1234</routeTableAssociationId>
+              <subnetId>subnet-1234</subnetId>
+              <main>false</main>
+            </item>
+          </associationSet>
           <tagSet>
             <item>
               <key>Name</key>
@@ -102,6 +139,12 @@ test("parseRouteTablesFromXml maps VPC and gateway routes to discovered resource
   assert.equal(routeTable?.providerResourceType, "AWS::EC2::RouteTable");
   assert.equal(routeTable?.providerResourceId, "rtb-1234");
   assert.equal(routeTable?.displayName, "Public Route Table");
+  assert.deepEqual(routeTable?.config["routes"], [
+    { destinationCidrBlock: "0.0.0.0/0", gatewayId: "igw-1234", state: "active" }
+  ]);
+  assert.deepEqual(routeTable?.config["associations"], [
+    { routeTableAssociationId: "rtbassoc-1234", subnetId: "subnet-1234", main: false }
+  ]);
   assert.deepEqual(routeTable?.relationships, [
     { type: "contains", targetProviderResourceId: "vpc-1234" },
     { type: "depends_on", targetProviderResourceId: "igw-1234" }
@@ -116,9 +159,13 @@ test("parseSecurityGroupsFromXml keeps open ingress rules for risk findings", ()
           <groupId>sg-open</groupId>
           <groupName>open-ssh</groupName>
           <vpcId>vpc-1234</vpcId>
+          <ownerId>316875069960</ownerId>
+          <groupDescription>SSH access</groupDescription>
           <ipPermissions>
             <item>
+              <ipProtocol>tcp</ipProtocol>
               <fromPort>22</fromPort>
+              <toPort>22</toPort>
               <ipRanges>
                 <item>
                   <cidrIp>0.0.0.0/0</cidrIp>
@@ -133,7 +180,11 @@ test("parseSecurityGroupsFromXml keeps open ingress rules for risk findings", ()
 
   const [securityGroup] = parseSecurityGroupsFromXml(xml, "ap-northeast-2");
 
-  assert.deepEqual(securityGroup?.config["ingress"], [{ port: 22, cidr: "0.0.0.0/0" }]);
+  assert.equal(securityGroup?.config["groupName"], "open-ssh");
+  assert.equal(securityGroup?.config["ownerId"], "316875069960");
+  assert.deepEqual(securityGroup?.config["ingress"], [
+    { ipProtocol: "tcp", fromPort: 22, toPort: 22, port: 22, cidr: "0.0.0.0/0" }
+  ]);
 });
 
 test("parseInstancesFromXml keeps instances from every reservation block", () => {
@@ -146,6 +197,14 @@ test("parseInstancesFromXml keeps instances from every reservation block", () =>
               <instanceId>i-first</instanceId>
               <instanceType>t3.micro</instanceType>
               <imageId>ami-first</imageId>
+              <privateIpAddress>10.0.1.10</privateIpAddress>
+              <ipAddress>3.34.10.20</ipAddress>
+              <keyName>demo-key</keyName>
+              <architecture>x86_64</architecture>
+              <rootDeviceType>ebs</rootDeviceType>
+              <state>
+                <name>running</name>
+              </state>
               <subnetId>subnet-first</subnetId>
               <groupSet>
                 <item>
@@ -187,6 +246,10 @@ test("parseInstancesFromXml keeps instances from every reservation block", () =>
     ["i-first", "i-second"]
   );
   assert.equal(instances[0]?.displayName, "First Backend");
+  assert.equal(instances[0]?.config["privateIpAddress"], "10.0.1.10");
+  assert.equal(instances[0]?.config["publicIpAddress"], "3.34.10.20");
+  assert.equal(instances[0]?.config["state"], "running");
+  assert.equal(instances[0]?.config["keyName"], "demo-key");
   assert.deepEqual(instances[1]?.relationships, [
     { type: "contains", targetProviderResourceId: "subnet-second" },
     { type: "attached_to", targetProviderResourceId: "sg-second" }
@@ -203,6 +266,14 @@ test("parseRdsInstancesFromXml reads DBInstance entries from AWS RDS responses",
             <Engine>postgres</Engine>
             <DBInstanceClass>db.t4g.micro</DBInstanceClass>
             <PubliclyAccessible>true</PubliclyAccessible>
+            <AllocatedStorage>20</AllocatedStorage>
+            <StorageType>gp3</StorageType>
+            <MultiAZ>false</MultiAZ>
+            <AvailabilityZone>ap-northeast-2a</AvailabilityZone>
+            <Endpoint>
+              <Address>app-db.demo.ap-northeast-2.rds.amazonaws.com</Address>
+              <Port>5432</Port>
+            </Endpoint>
             <VpcSecurityGroups>
               <VpcSecurityGroupMembership>
                 <VpcSecurityGroupId>sg-db</VpcSecurityGroupId>
@@ -220,6 +291,11 @@ test("parseRdsInstancesFromXml reads DBInstance entries from AWS RDS responses",
   assert.equal(database?.providerResourceId, "app-db");
   assert.equal(database?.config["engine"], "postgres");
   assert.equal(database?.config["publiclyAccessible"], true);
+  assert.equal(database?.config["allocatedStorage"], 20);
+  assert.equal(database?.config["storageType"], "gp3");
+  assert.equal(database?.config["multiAz"], false);
+  assert.equal(database?.config["endpointAddress"], "app-db.demo.ap-northeast-2.rds.amazonaws.com");
+  assert.equal(database?.config["endpointPort"], 5432);
   assert.deepEqual(database?.relationships, [
     { type: "attached_to", targetProviderResourceId: "sg-db" }
   ]);

@@ -3,7 +3,7 @@
 import { useCallback, useMemo, useState } from "react";
 import type {
   DiagramJson,
-  ResourceType,
+  ReverseEngineeringResourceSelection,
   ReverseEngineeringScan,
   ReverseEngineeringScanLogLine,
   ReverseEngineeringScanResponse
@@ -26,7 +26,10 @@ import {
   updateReverseEngineeringDraftNode,
   type ReverseEngineeringDraftNodeUpdate
 } from "./reverse-engineering-draft-edits";
-import { REVERSE_ENGINEERING_RESOURCE_TYPES } from "./reverse-engineering-resource-types";
+import {
+  REVERSE_ENGINEERING_ALL_RESOURCE_SELECTION,
+  REVERSE_ENGINEERING_RESOURCE_SELECTIONS
+} from "./reverse-engineering-resource-types";
 import {
   ReverseEngineeringResultPanel,
   type ReverseEngineeringApplyState
@@ -46,9 +49,9 @@ const SCAN_POLL_ATTEMPT_COUNT = 30;
 
 // 기존 AWS 읽어오기 화면의 상태와 버튼 흐름을 관리합니다.
 export function ReverseEngineeringPanel({ context, projectId }: ReverseEngineeringPanelProps) {
-  const [selectedResourceTypes, setSelectedResourceTypes] = useState<ResourceType[]>(
-    REVERSE_ENGINEERING_RESOURCE_TYPES
-  );
+  const [selectedResourceTypes, setSelectedResourceTypes] = useState<ReverseEngineeringResourceSelection[]>([
+    REVERSE_ENGINEERING_ALL_RESOURCE_SELECTION
+  ]);
   const [scanState, setScanState] = useState<RequestState>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [scanResponse, setScanResponse] = useState<ReverseEngineeringScanResponse | null>(null);
@@ -115,11 +118,9 @@ export function ReverseEngineeringPanel({ context, projectId }: ReverseEngineeri
     [context.diagram, scanHistory, scanHistoryState]
   );
   // 사용자가 가져올 AWS 리소스 종류를 켜고 끕니다.
-  function toggleResourceType(resourceType: ResourceType): void {
+  function toggleResourceType(resourceType: ReverseEngineeringResourceSelection): void {
     setSelectedResourceTypes((currentResourceTypes) =>
-      currentResourceTypes.includes(resourceType)
-        ? currentResourceTypes.filter((currentResourceType) => currentResourceType !== resourceType)
-        : [...currentResourceTypes, resourceType]
+      getNextSelectedResourceTypes(currentResourceTypes, resourceType)
     );
   }
 
@@ -329,7 +330,7 @@ export function ReverseEngineeringPanel({ context, projectId }: ReverseEngineeri
           onSelectedAwsConnectionChange={setSelectedAwsConnectionId}
           onSelectedProjectChange={setSelectedProjectId}
           projects={projects}
-          resourceTypes={REVERSE_ENGINEERING_RESOURCE_TYPES}
+          resourceTypes={REVERSE_ENGINEERING_RESOURCE_SELECTIONS}
           selectedAwsConnectionId={selectedAwsConnectionId}
           selectedProjectId={selectedProjectId}
           selectedResourceTypes={selectedResourceTypes}
@@ -403,6 +404,29 @@ async function pollReverseEngineeringScan(
 
 function delay(milliseconds: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+}
+
+// `ALL`과 개별 리소스가 동시에 선택되지 않게 해서 scan 요청 의미를 분명하게 합니다.
+function getNextSelectedResourceTypes(
+  currentResourceTypes: ReverseEngineeringResourceSelection[],
+  resourceType: ReverseEngineeringResourceSelection
+): ReverseEngineeringResourceSelection[] {
+  if (resourceType === REVERSE_ENGINEERING_ALL_RESOURCE_SELECTION) {
+    return currentResourceTypes.includes(REVERSE_ENGINEERING_ALL_RESOURCE_SELECTION)
+      ? []
+      : [REVERSE_ENGINEERING_ALL_RESOURCE_SELECTION];
+  }
+
+  if (currentResourceTypes.includes(resourceType)) {
+    return currentResourceTypes.filter((currentResourceType) => currentResourceType !== resourceType);
+  }
+
+  return [
+    ...currentResourceTypes.filter(
+      (currentResourceType) => currentResourceType !== REVERSE_ENGINEERING_ALL_RESOURCE_SELECTION
+    ),
+    resourceType
+  ];
 }
 
 // 사용자가 적용한 보드에도 Reverse Engineering 출처를 남겨 삭제 안내와 추적이 가능하게 합니다.

@@ -15,6 +15,8 @@ const scanHistoryHookSource = readWorkspaceFile("useReverseEngineeringScanHistor
 const rightPanelSource = readWorkspaceFile("WorkspaceRightPanel.tsx");
 
 test("Reverse Engineering panel exposes all grilling resource filters by default", () => {
+  assert.match(resourceTypesSource, /REVERSE_ENGINEERING_ALL_RESOURCE_SELECTION = "ALL"/);
+  assert.match(resourceTypesSource, /"ALL"/);
   assert.match(resourceTypesSource, /"VPC"/);
   assert.match(resourceTypesSource, /"SUBNET"/);
   assert.match(resourceTypesSource, /"INTERNET_GATEWAY"/);
@@ -23,6 +25,10 @@ test("Reverse Engineering panel exposes all grilling resource filters by default
   assert.match(resourceTypesSource, /"EC2"/);
   assert.match(resourceTypesSource, /"RDS"/);
   assert.match(resourceTypesSource, /"S3"/);
+  assert.match(panelSource, /useState<ReverseEngineeringResourceSelection\[\]>\(\[/);
+  assert.match(panelSource, /REVERSE_ENGINEERING_ALL_RESOURCE_SELECTION/);
+  assert.match(scanCriteriaFormSource, /formatResourceSelectionLabel/);
+  assert.match(scanCriteriaFormSource, /전체/);
 });
 
 test("Reverse Engineering result stays preview-only until the user applies it", () => {

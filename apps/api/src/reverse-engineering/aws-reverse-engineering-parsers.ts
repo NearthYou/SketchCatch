@@ -1,9 +1,13 @@
 import type { AwsDiscoveredRelationship, AwsDiscoveredResourceRecord } from "./aws-provider-adapter.js";
 
 type SecurityGroupIngressRule = {
+  ipProtocol: string | null;
+  fromPort: number;
+  toPort: number | null;
   port: number;
   cidr: string;
 };
+type ConfigRecord = Record<string, string | number | boolean>;
 
 // AWS VPC XML을 내부 Resource 후보로 바꿉니다.
 export function parseVpcsFromXml(xml: string, region: string): AwsDiscoveredResourceRecord[] {
@@ -16,7 +20,12 @@ export function parseVpcsFromXml(xml: string, region: string): AwsDiscoveredReso
       displayName: extractNameTag(item) ?? vpcId,
       region,
       config: {
-        cidrBlock: extractTag(item, "cidrBlock")
+        cidrBlock: extractTag(item, "cidrBlock"),
+        cidrBlockAssociationSet: extractCidrBlockAssociations(item),
+        dhcpOptionsId: extractTag(item, "dhcpOptionsId"),
+        instanceTenancy: extractTag(item, "instanceTenancy"),
+        isDefault: extractBooleanTag(item, "isDefault"),
+        state: extractTag(item, "state")
       },
       relationships: []
     };
@@ -35,8 +44,17 @@ export function parseSubnetsFromXml(xml: string, region: string): AwsDiscoveredR
       displayName: extractNameTag(item) ?? subnetId,
       region,
       config: {
+        assignIpv6AddressOnCreation: extractBooleanTag(item, "assignIpv6AddressOnCreation"),
+        availableIpAddressCount: extractIntegerTag(item, "availableIpAddressCount"),
         cidrBlock: extractTag(item, "cidrBlock"),
-        availabilityZone: extractTag(item, "availabilityZone")
+        defaultForAz: extractBooleanTag(item, "defaultForAz"),
+        ipv6CidrBlockAssociationSet: extractIpv6CidrBlockAssociations(item),
+        mapPublicIpOnLaunch: extractBooleanTag(item, "mapPublicIpOnLaunch"),
+        state: extractTag(item, "state"),
+        subnetArn: extractTag(item, "subnetArn"),
+        vpcId,
+        availabilityZone: extractTag(item, "availabilityZone"),
+        availabilityZoneId: extractTag(item, "availabilityZoneId")
       },
       relationships: vpcId ? [createRelationship("contains", vpcId)] : []
     };
@@ -57,7 +75,9 @@ export function parseInternetGatewaysFromXml(
       providerResourceId: internetGatewayId,
       displayName: extractNameTag(item) ?? internetGatewayId,
       region,
-      config: {},
+      config: {
+        attachments: extractInternetGatewayAttachments(item)
+      },
       relationships: vpcIds.map((vpcId) => createRelationship("attached_to", vpcId))
     };
   });
@@ -84,7 +104,11 @@ export function parseRouteTablesFromXml(
       providerResourceId: routeTableId,
       displayName: extractNameTag(item) ?? routeTableId,
       region,
-      config: {},
+      config: {
+        associations: extractRouteTableAssociations(item),
+        routes: extractRouteTableRoutes(item),
+        vpcId
+      },
       relationships
     };
   });
@@ -105,7 +129,11 @@ export function parseSecurityGroupsFromXml(
       displayName: extractTag(item, "groupName") ?? groupId,
       region,
       config: {
+        groupName: extractTag(item, "groupName"),
         description: extractTag(item, "groupDescription"),
+        ownerId: extractTag(item, "ownerId"),
+        vpcId,
+        egress: extractSecurityGroupEgressRules(item),
         ingress: extractSecurityGroupIngressRules(item)
       },
       relationships: vpcId ? [createRelationship("depends_on", vpcId)] : []
@@ -130,8 +158,26 @@ export function parseInstancesFromXml(xml: string, region: string): AwsDiscovere
       displayName: extractNameTag(item) ?? instanceId,
       region,
       config: {
+        architecture: extractTag(item, "architecture"),
+        blockDeviceMappings: extractInstanceBlockDeviceMappings(item),
+        iamInstanceProfileArn: extractTag(item, "arn"),
+        imageId: extractTag(item, "imageId"),
         instanceType: extractTag(item, "instanceType"),
-        imageId: extractTag(item, "imageId")
+        keyName: extractTag(item, "keyName"),
+        launchTime: extractTag(item, "launchTime"),
+        monitoringState: extractNestedTag(item, "monitoring", "state"),
+        placementAvailabilityZone: extractNestedTag(item, "placement", "availabilityZone"),
+        privateDnsName: extractTag(item, "privateDnsName"),
+        privateIpAddress: extractTag(item, "privateIpAddress"),
+        publicDnsName: extractTag(item, "dnsName"),
+        publicIpAddress: extractTag(item, "ipAddress"),
+        rootDeviceName: extractTag(item, "rootDeviceName"),
+        rootDeviceType: extractTag(item, "rootDeviceType"),
+        securityGroupIds: groupIds,
+        state: extractNestedTag(item, "state", "name"),
+        subnetId,
+        virtualizationType: extractTag(item, "virtualizationType"),
+        vpcId: extractTag(item, "vpcId")
       },
       relationships
     };
@@ -153,26 +199,112 @@ export function parseRdsInstancesFromXml(
       displayName: dbInstanceId,
       region,
       config: {
-        engine: extractTag(item, "Engine"),
+        allocatedStorage: extractIntegerTag(item, "AllocatedStorage"),
+        availabilityZone: extractTag(item, "AvailabilityZone"),
+        backupRetentionPeriod: extractIntegerTag(item, "BackupRetentionPeriod"),
         dbInstanceClass: extractTag(item, "DBInstanceClass"),
-        publiclyAccessible: extractTag(item, "PubliclyAccessible") === "true"
+        dbName: extractTag(item, "DBName"),
+        dbSubnetGroupName: extractTag(item, "DBSubnetGroupName"),
+        deletionProtection: extractBooleanTag(item, "DeletionProtection"),
+        endpointAddress: extractNestedTag(item, "Endpoint", "Address"),
+        endpointPort: extractIntegerTag(item, "Port"),
+        engine: extractTag(item, "Engine"),
+        engineVersion: extractTag(item, "EngineVersion"),
+        multiAz: extractBooleanTag(item, "MultiAZ"),
+        publiclyAccessible: extractBooleanTag(item, "PubliclyAccessible") === true,
+        storageEncrypted: extractBooleanTag(item, "StorageEncrypted"),
+        storageType: extractTag(item, "StorageType"),
+        vpcSecurityGroupIds: securityGroupIds
       },
       relationships: securityGroupIds.map((groupId) => createRelationship("attached_to", groupId))
     };
   });
 }
 
-// Security Group ingress XML에서 포트와 CIDR만 추려 위험 분석 입력으로 씁니다.
+// Security Group ingress XML에서 위험 분석과 설정 표시 둘 다에 필요한 규칙 정보를 추립니다.
 function extractSecurityGroupIngressRules(xml: string): SecurityGroupIngressRule[] {
-  return extractSetItems(xml, "ipPermissions").flatMap((permission) => {
-    const port = Number.parseInt(extractTag(permission, "fromPort") ?? "", 10);
+  return extractSecurityGroupRules(xml, "ipPermissions");
+}
 
-    if (!Number.isFinite(port)) {
+function extractSecurityGroupEgressRules(xml: string): SecurityGroupIngressRule[] {
+  return extractSecurityGroupRules(xml, "ipPermissionsEgress");
+}
+
+function extractSecurityGroupRules(xml: string, setTag: string): SecurityGroupIngressRule[] {
+  return extractSetItems(xml, setTag).flatMap((permission) => {
+    const fromPort = extractIntegerTag(permission, "fromPort");
+    const toPort = extractIntegerTag(permission, "toPort");
+
+    if (fromPort === null) {
       return [];
     }
 
-    return extractRepeatedTags(permission, "cidrIp").map((cidr) => ({ port, cidr }));
+    return extractRepeatedTags(permission, "cidrIp").map((cidr) => ({
+      ipProtocol: extractTag(permission, "ipProtocol"),
+      fromPort,
+      toPort,
+      port: fromPort,
+      cidr
+    }));
   });
+}
+
+function extractCidrBlockAssociations(xml: string): ConfigRecord[] {
+  return extractSetItems(xml, "cidrBlockAssociationSet").map((item) => compactConfigRecord({
+    associationId: extractTag(item, "associationId"),
+    cidrBlock: extractTag(item, "cidrBlock"),
+    state: extractNestedTag(item, "cidrBlockState", "state")
+  }));
+}
+
+function extractIpv6CidrBlockAssociations(xml: string): ConfigRecord[] {
+  return extractSetItems(xml, "ipv6CidrBlockAssociationSet").map((item) => compactConfigRecord({
+    associationId: extractTag(item, "associationId"),
+    ipv6CidrBlock: extractTag(item, "ipv6CidrBlock"),
+    state: extractNestedTag(item, "ipv6CidrBlockState", "state")
+  }));
+}
+
+function extractInternetGatewayAttachments(xml: string): ConfigRecord[] {
+  return extractSetItems(xml, "attachmentSet").map((item) => compactConfigRecord({
+    vpcId: extractTag(item, "vpcId"),
+    state: extractTag(item, "state")
+  }));
+}
+
+function extractRouteTableRoutes(xml: string): ConfigRecord[] {
+  return extractSetItems(xml, "routeSet").map((item) => compactConfigRecord({
+    destinationCidrBlock: extractTag(item, "destinationCidrBlock"),
+    gatewayId: extractTag(item, "gatewayId"),
+    instanceId: extractTag(item, "instanceId"),
+    natGatewayId: extractTag(item, "natGatewayId"),
+    networkInterfaceId: extractTag(item, "networkInterfaceId"),
+    state: extractTag(item, "state")
+  }));
+}
+
+function extractRouteTableAssociations(xml: string): ConfigRecord[] {
+  return extractSetItems(xml, "associationSet").map((item) => compactConfigRecord({
+    routeTableAssociationId: extractTag(item, "routeTableAssociationId"),
+    subnetId: extractTag(item, "subnetId"),
+    main: extractBooleanTag(item, "main")
+  }));
+}
+
+function extractInstanceBlockDeviceMappings(xml: string): ConfigRecord[] {
+  return extractSetItems(xml, "blockDeviceMapping").map((item) => compactConfigRecord({
+    deviceName: extractTag(item, "deviceName"),
+    volumeId: extractTag(item, "volumeId"),
+    status: extractTag(item, "status")
+  }));
+}
+
+function compactConfigRecord<T extends Record<string, string | number | boolean | null>>(
+  record: T
+): ConfigRecord {
+  return Object.fromEntries(
+    Object.entries(record).filter(([, value]) => value !== null)
+  ) as ConfigRecord;
 }
 
 // AWS 목록 XML에서 각 set 바로 아래 있는 항목 태그만 꺼냅니다.
@@ -272,6 +404,38 @@ function extractTag(xml: string, tagName: string): string | null {
   const value = extractTagBodies(xml, tagName)[0];
 
   return value ? unescapeXml(value) : null;
+}
+
+function extractNestedTag(xml: string, parentTagName: string, childTagName: string): string | null {
+  const parentBody = extractTagBodies(xml, parentTagName)[0];
+
+  return parentBody ? extractTag(parentBody, childTagName) : null;
+}
+
+function extractBooleanTag(xml: string, tagName: string): boolean | null {
+  const value = extractTag(xml, tagName);
+
+  if (value === "true") {
+    return true;
+  }
+
+  if (value === "false") {
+    return false;
+  }
+
+  return null;
+}
+
+function extractIntegerTag(xml: string, tagName: string): number | null {
+  const value = extractTag(xml, tagName);
+
+  if (!value) {
+    return null;
+  }
+
+  const parsedValue = Number.parseInt(value, 10);
+
+  return Number.isFinite(parsedValue) ? parsedValue : null;
 }
 
 // 같은 이름의 XML 블록이 여러 번 나올 때 원본 body를 전부 꺼냅니다.

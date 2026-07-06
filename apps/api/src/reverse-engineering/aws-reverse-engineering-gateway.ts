@@ -70,7 +70,7 @@ async function readResourceGroup(
   resourceType: ResourceType,
   read: () => Promise<AwsDiscoveredResourceRecord[]>
 ): Promise<AwsProviderDiscoveryResult> {
-  if (!shouldRead(input, resourceType)) {
+  if (!shouldReadResourceGroup(input, resourceType)) {
     return { records: [], scanErrors: [] };
   }
 
@@ -239,8 +239,9 @@ async function listBuckets(
   });
 }
 
-function shouldRead(input: AwsProviderScanInput, resourceType: ResourceType): boolean {
-  return input.resourceTypes.includes(resourceType);
+// `ALL`은 화면 선택값일 뿐 실제 AWS 리소스가 아니어서, 각 지원 리소스 조회로 풀어서 처리합니다.
+export function shouldReadResourceGroup(input: AwsProviderScanInput, resourceType: ResourceType): boolean {
+  return input.resourceTypes.includes("ALL") || input.resourceTypes.includes(resourceType);
 }
 
 // 화면과 로그에 AWS 계정 ID가 그대로 나가지 않도록 12자리 계정 번호를 가립니다.
