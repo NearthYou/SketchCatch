@@ -1,5 +1,42 @@
 # 에이전트 진행 로그
 
+### 2026-07-06 - Terraform Preview 설명 AI 패널 이동 및 Amazon Q Well-Architected 리뷰
+
+- Goal: Terraform Preview 설명 결과를 Terraform 패널 하단이 아니라 AI 패널의 `Preview 설명` 탭에 표시하고, Bedrock 대신 Amazon Q 기반으로 Well-Architected 6개 원칙별 리뷰와 종합 평가를 제공한다.
+- Completed:
+  - Preview 설명 버튼은 선택된 Terraform preview 코드를 AI 패널 요청으로 전달하고, Terraform 패널 하단 결과 영역은 제거했다.
+  - AI 패널에 `Preview 설명` 탭과 결과 렌더링을 추가해 초안 제안, AI 오류, 시뮬레이션과 같은 위치에서 확인할 수 있게 했다.
+  - Terraform Preview 설명의 LLM provider 흐름을 Amazon Q 우선 대상으로 확장하고, preview 설명에 대해서는 Bedrock fallback 없이 Amazon Q 결과 또는 provider fallback 메시지를 반환하도록 조정했다.
+  - Amazon Q prompt와 fallback 결과가 운영 우수성, 보안, 신뢰성, 성능 효율성, 비용 최적화, 지속 가능성 6개 원칙 및 종합 평가를 포함하도록 변경했다.
+  - PowerShell 출력 인코딩으로 한글이 깨졌던 파일은 Git 원본에서 복구한 뒤 변경을 다시 적용했고, 주요 변경 파일에서 UTF-8 대체 문자(`U+FFFD`)가 없음을 확인했다.
+- Verification run:
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api exec tsx --test src/services/aiProviderRouter.test.ts src/routes/aiAwsProviders.test.ts` - passed, 19 tests.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-right-panel-layout.test.ts` - passed, 43 tests.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm harness:check` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm lint` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm typecheck` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm build` - passed.
+- Known risks:
+  - `apps/web/features/workspace/TerraformLeaveDialog.tsx`는 diff가 없지만 Git stat dirty로 표시되는 상태를 확인했다. 파일 내용 변경은 없다.
+
+### 2026-07-06 - Terraform 오류 AI 수정 완료 상태 표시
+
+- Goal: AI 오류 탭에서 Terraform 오류 수정 버튼을 누른 뒤 수정 적용이 성공하면 같은 버튼을 다시 누를 수 없도록 비활성화하고, 버튼 문구를 `수정완료`로 바꿔 사용자가 적용 완료 상태를 바로 알 수 있게 한다.
+- Completed:
+  - `WorkspaceAiChatDock`에 적용 완료 request id 상태를 추가해, `terraformSafeFixApplyResult.applied`가 성공으로 돌아오면 해당 요청의 수정 버튼을 비활성화하고 `수정완료`를 표시하도록 변경했다.
+  - 새 Terraform 오류 요청, 오류 탭 기록 삭제, AI 창 닫기, draft 기록 초기화 시 완료 상태를 초기화하도록 정리했다.
+  - Terraform 수정 적용 결과 메시지가 초안 탭이 아니라 `AI 오류` 탭에 남도록 scope를 바로잡았다.
+  - 레이아웃/상태 소스 테스트에 수정 완료 버튼 상태 계약을 추가했다.
+- Verification run:
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-right-panel-layout.test.ts --test-name-pattern "marks the fix button complete"` - 새 테스트는 통과했으나, 같은 파일의 별도 Terraform Preview AI 변경 검증이 현재 미완성 소스 때문에 함께 실패했다.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-terraform-ai.test.ts features/workspace/terraform-safe-fixes.test.ts` - passed, 17 tests.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web typecheck` - passed before unrelated Terraform Preview AI worktree changes appeared.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm lint` - blocked by current `apps/web/features/workspace/TerraformCodePanel.tsx:399` unterminated string literal from separate Terraform Preview AI changes.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm typecheck` - blocked by the same `TerraformCodePanel.tsx` unterminated string literal cascade.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm build` - blocked by current `TerraformCodePanel.tsx` parse errors.
+- Known risks:
+  - 현재 worktree에는 이번 변경 외에 Terraform Preview AI 관련 미완성 변경이 함께 있으며, 그 변경의 문법 오류가 전체 lint/build를 막고 있다.
+
 ### 2026-07-06 - Amazon Q codeSuggestion 보장
 
 - Goal: Terraform 오류 해결은 반드시 Amazon Q가 반환한 설명 결과에 `codeSuggestion`이 포함되도록 하고, 프론트가 별도로 추정한 수정안이 아니라 API의 Amazon Q route 결과를 그대로 출력/적용하게 한다.
