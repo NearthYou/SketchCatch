@@ -7,6 +7,7 @@
 - Merge verification passed: `pnpm harness:check`, `pnpm typecheck`, `pnpm lint`, `pnpm build`, and `git diff --check --cached`.
 - GitHub App install URL now starts at `/installations/select_target` so SketchCatch-owned connection starts with signed `state` even for already-installed accounts.
 - Real Chrome verification showed GitHub still drops `state` from the already-installed account Configure link, so active SketchCatch connections need an internal callback shortcut.
+- AWS connection CloudFormation template no longer embeds the fixed `SketchCatchMvpTerraformApply` policy under the role; it emits a separate `AWS::IAM::Policy` with Stack-name-scoped policy name.
 
 ## 이번 세션의 변경 사항
 
@@ -17,14 +18,17 @@
 - Added `POST /api/projects/:projectId/source-repositories/github/existing-installation-callback-url`.
 - Updated the Deployment panel so an already active GitHub connection opens the SketchCatch repository selection callback URL directly instead of sending the user to GitHub Configure.
 - Added focused service and route coverage for the existing installation callback URL.
+- Split Workspace GitHub actions: active connections show `Repo 변경` for the existing installation and `다른 설치` for a fresh GitHub App install/select_target flow.
+- Updated the AWS connection CloudFormation template to avoid the fixed embedded inline policy collision seen as `SketchCatchMvpTerraformApply already exists on the role SketchCatchTerraformExecutionRole`.
 
 ## 아직 깨졌거나 미검증된 것
 
-- Full repo checks, deploy, and production Chrome verification still need to be run after this latest shortcut change.
+- Full repo checks, deploy, and production Chrome verification still need to be run after the AWS template/GitHub action split change.
+- If the user's AWS account already has a failed Stack, retained `SketchCatchTerraformExecutionRole`, or retained `SketchCatchMvpTerraformApply` inline policy from the old template, that AWS-side residue may still need to be deleted before a new Stack can create the fixed role cleanly.
 
 ## 다음으로 최선의 행동
 
-- Run full checks, commit/push, deploy the branch, then click `GitHub 연결` in the already-connected `asdf` project and confirm it opens `/integrations/github/callback?installation_id=...&state=...` and displays repositories.
+- Run full checks, commit/push, deploy the branch, retest AWS connection Stack creation with a fresh/cleaned failed Stack, and confirm Workspace GitHub `Repo 변경` versus `다른 설치` behavior in Chrome.
 # ?몄뀡 ?몃뱶?ㅽ봽
 
 ???뚯씪? 理쒖떊 ?몄뀡 ?섎굹瑜??ㅼ쓬 ?몄뀡??鍮좊Ⅴ寃??댁뼱諛쏄린 ?꾪븳 ?뺤텞蹂몄씠?? ?꾩쟻 ?대젰? `agent-progress.md`???④릿??

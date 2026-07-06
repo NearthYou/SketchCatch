@@ -11,6 +11,22 @@
 
 ## 세션 레코드
 
+### 2026-07-06 - AWS 연결 CloudFormation policy 충돌 진단 및 GitHub 설치 UX 분리
+
+- Goal: AWS 연결 Stack 생성 중 `SketchCatchMvpTerraformApply already exists on the role SketchCatchTerraformExecutionRole`로 실패하는 원인을 진단하고, GitHub App repo 선택 화면에서 다른 계정/조직 설치 경로가 막히지 않게 한다.
+- Findings:
+  - AWS 연결 CloudFormation template이 `AWS::IAM::Role`의 embedded `Policies` 속성에 고정 `PolicyName: SketchCatchMvpTerraformApply`를 넣고 있었다.
+  - 실패한 Stack 재시도나 기존 Role/inline policy 잔존 상태에서는 같은 Role에 같은 inline policy 이름을 다시 붙이며 사용자가 본 에러가 발생할 수 있다.
+  - Settings의 GitHub 탭은 현재 실제 GitHub App/source repository API에 연결된 기능이 아니라 placeholder UI다. 실제 연결은 Workspace Deployment 패널에만 구현되어 있다.
+- Completed:
+  - CloudFormation template에서 Role embedded policy를 제거하고 별도 `SketchCatchTerraformApplyPolicy` `AWS::IAM::Policy` 리소스로 분리했다.
+  - IAM policy name은 `SketchCatchMvpTerraformApply-${AWS::StackName}`로 만들어 고정 inline policy 이름 충돌을 줄였다.
+  - Workspace Deployment 패널에서 active GitHub repo가 있으면 `Repo 변경`은 기존 installation repository 선택 화면으로, `다른 설치`는 GitHub App install/select_target flow로 분리했다.
+  - `docs/deployment.md`에 AWS 연결 template policy 생성 방식을 갱신했다.
+- Verified so far:
+  - Red before fix: `pnpm --filter @sketchcatch/api exec tsx --test src/routes/aws-connections.test.ts` failed because the template still embedded fixed `SketchCatchMvpTerraformApply` under the Role.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/routes/aws-connections.test.ts`
+
 ### 2026-07-06 - 기존 GitHub App 설치 repo 선택 화면 직접 연결
 
 - Goal: 이미 active GitHub source repository가 있는 프로젝트에서 `GitHub 연결`을 눌렀을 때 GitHub Configure 화면의 state 누락 때문에 repo 선택 화면으로 돌아오지 못하는 문제를 해결한다.

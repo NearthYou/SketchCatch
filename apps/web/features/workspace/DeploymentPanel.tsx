@@ -832,6 +832,14 @@ export function DeploymentPanel({
     }, "GitHub 연결을 시작하지 못했습니다.");
   }
 
+  async function startNewGitHubInstallation(): Promise<void> {
+    await runRequest(async () => {
+      const { installUrl } = await createGitHubSourceRepositoryInstallUrl(projectId);
+
+      window.location.assign(installUrl);
+    }, "GitHub 설치를 시작하지 못했습니다.");
+  }
+
   function startDeploymentPanelResize(event: ReactPointerEvent<HTMLDivElement>): void {
     if (event.button !== 0) {
       return;
@@ -1001,8 +1009,20 @@ export function DeploymentPanel({
             type="button"
           >
             <GitBranch size={16} />
-            GitHub 연결
+            {activeGitHubSourceRepository ? "Repo 변경" : "GitHub 연결"}
           </button>
+          {activeGitHubSourceRepository ? (
+            <button
+              className={styles.deploymentSecondaryButton}
+              disabled={requestState === "loading"}
+              onClick={startNewGitHubInstallation}
+              title="Install GitHub App on another account or organization"
+              type="button"
+            >
+              <GitBranch size={16} />
+              다른 설치
+            </button>
+          ) : null}
         </div>
       </div>
 
