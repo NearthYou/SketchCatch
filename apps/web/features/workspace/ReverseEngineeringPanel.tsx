@@ -364,6 +364,7 @@ export function ReverseEngineeringPanel({ context, projectId }: ReverseEngineeri
             onAppendToCurrentBoard={() => void applyScanResult("append")}
             onDraftNodeEdit={updateDraftNode}
             onOpenAsNewBoard={() => void applyScanResult("replace")}
+            onRetryScan={() => void runScan()}
             response={scanResponse}
           />
         ) : (

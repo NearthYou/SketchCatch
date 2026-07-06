@@ -22,6 +22,7 @@ export type ReverseEngineeringResultPanelProps = {
   readonly onAppendToCurrentBoard: () => void;
   readonly onDraftNodeEdit: (nodeId: string, update: ReverseEngineeringDraftNodeUpdate) => void;
   readonly onOpenAsNewBoard: () => void;
+  readonly onRetryScan: () => void;
   readonly response: ReverseEngineeringScanResponse;
 };
 
@@ -35,6 +36,7 @@ export function ReverseEngineeringResultPanel({
   onAppendToCurrentBoard,
   onDraftNodeEdit,
   onOpenAsNewBoard,
+  onRetryScan,
   response
 }: ReverseEngineeringResultPanelProps) {
   const result = response.result;
@@ -157,6 +159,7 @@ export function ReverseEngineeringResultPanel({
       <ReverseEngineeringFindingsPanel
         analysisExclusions={result.analysisExclusions}
         findings={result.findings}
+        onRetryScan={onRetryScan}
         scanErrors={result.scanErrors}
       />
 

@@ -8,6 +8,7 @@ import styles from "./workspace.module.css";
 export type ReverseEngineeringFindingsPanelProps = {
   readonly analysisExclusions: ReverseEngineeringAnalysisExclusion[];
   readonly findings: CheckFinding[];
+  readonly onRetryScan: () => void;
   readonly scanErrors: ReverseEngineeringScanError[];
 };
 
@@ -15,9 +16,11 @@ export type ReverseEngineeringFindingsPanelProps = {
 export function ReverseEngineeringFindingsPanel({
   analysisExclusions,
   findings,
+  onRetryScan,
   scanErrors
 }: ReverseEngineeringFindingsPanelProps) {
   const highRiskCount = findings.filter((finding) => finding.severity === "high").length;
+  const hasRetryableScanError = scanErrors.some((scanError) => scanError.retryable);
 
   return (
     <section className={styles.deploymentSection}>
@@ -58,14 +61,26 @@ export function ReverseEngineeringFindingsPanel({
       {scanErrors.length > 0 ? (
         <div className={styles.deploymentNotice}>
           <strong>부분 실패</strong>
+          <p className={styles.deploymentHint}>
+            일부 AWS 리소스를 읽지 못했습니다. 이 결과는 현재 AWS 상태 전체가 아닐 수 있습니다.
+          </p>
           <ul className={styles.reverseResultList}>
             {scanErrors.map((scanError) => (
               <li key={scanError.id} className={styles.reverseResultItem}>
                 <strong>{scanError.resourceType}</strong>
+                <span>
+                  stage: {scanError.stage} · reason: {scanError.reason} · retryable:{" "}
+                  {formatRetryableStatus(scanError.retryable)}
+                </span>
                 <span>{scanError.message}</span>
               </li>
             ))}
           </ul>
+          {hasRetryableScanError ? (
+            <button className={styles.deploymentSecondaryButton} onClick={onRetryScan} type="button">
+              다시 시도 가능 - 다시 스캔
+            </button>
+          ) : null}
         </div>
       ) : null}
 
@@ -84,4 +99,9 @@ export function ReverseEngineeringFindingsPanel({
       ) : null}
     </section>
   );
+}
+
+// retryable 값이 사용자가 바로 이해할 수 있는 말로 보이게 바꿉니다.
+function formatRetryableStatus(retryable: boolean): string {
+  return retryable ? "다시 시도 가능" : "다시 시도 어려움";
 }
