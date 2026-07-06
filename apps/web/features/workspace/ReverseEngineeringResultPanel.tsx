@@ -2,7 +2,8 @@ import type {
   ArchitectureJson,
   DiscoveredResource,
   ReverseEngineeringScanLogLine,
-  ReverseEngineeringScanResponse
+  ReverseEngineeringScanResponse,
+  ReverseEngineeringScanError
 } from "@sketchcatch/types";
 import type { ReverseEngineeringDraftNodeUpdate } from "./reverse-engineering-draft-edits";
 import type { ReverseEngineeringBoardComparison } from "./reverse-engineering-board-application";
@@ -72,6 +73,11 @@ export function ReverseEngineeringResultPanel({
           스캔 결과는 지금 보드에 미리보기로만 표시됩니다. 아래 적용 버튼을 누르기 전에는 현재 보드를 바꾸지 않습니다.
         </p>
       </section>
+
+      <ReverseEngineeringScanCoveragePanel
+        scanErrors={result.scanErrors}
+        unsupportedResourceCount={unsupportedResources.length}
+      />
 
       <ReverseEngineeringDraftEditor
         architectureJson={result.architectureJson}
@@ -184,6 +190,49 @@ export function ReverseEngineeringResultPanel({
       </section>
     </>
   );
+}
+
+// 사용자가 적용하기 전에 이번 스캔이 전체 결과인지 부분 결과인지 먼저 알려줍니다.
+function ReverseEngineeringScanCoveragePanel({
+  scanErrors,
+  unsupportedResourceCount
+}: {
+  readonly scanErrors: ReverseEngineeringScanError[];
+  readonly unsupportedResourceCount: number;
+}) {
+  const notice = getScanCoverageNotice(scanErrors);
+
+  return (
+    <section className={styles.deploymentSection}>
+      <h3>스캔 범위</h3>
+      <div className={styles.deploymentPreflightStats}>
+        <span>
+          못 읽은 서비스
+          <strong>{scanErrors.length}</strong>
+        </span>
+        <span>
+          확인 필요
+          <strong>{unsupportedResourceCount}</strong>
+        </span>
+      </div>
+      <p className={scanErrors.length > 0 ? styles.deploymentNotice : styles.deploymentHint}>
+        {notice}
+      </p>
+    </section>
+  );
+}
+
+// Resource Explorer 실패처럼 전체 스캔 범위에 영향을 주는 상태를 쉬운 말로 바꿉니다.
+function getScanCoverageNotice(scanErrors: ReverseEngineeringScanError[]): string {
+  if (scanErrors.some((scanError) => scanError.id === "scan-error-resource-explorer")) {
+    return "Resource Explorer를 읽지 못했습니다. 가져온 결과가 전체 AWS 상태가 아닐 수 있습니다.";
+  }
+
+  if (scanErrors.length > 0) {
+    return "일부 AWS 서비스를 읽지 못했습니다. 가져온 결과가 전체 AWS 상태가 아닐 수 있습니다.";
+  }
+
+  return "현재 권한으로 읽을 수 있는 범위에서는 부분 실패 없이 스캔했습니다.";
 }
 
 // 원본 AWS 값은 그대로 두고, 사용자가 적용할 후보 설계의 안전한 표시값만 수정합니다.

@@ -38,6 +38,11 @@ export function ReverseEngineeringScanCriteriaForm({
   selectedProjectId,
   selectedResourceTypes
 }: ReverseEngineeringScanCriteriaFormProps) {
+  const selectedAwsConnectionRegion = getSelectedAwsConnectionRegion(
+    awsConnections,
+    selectedAwsConnectionId
+  );
+
   return (
     <>
       <header className={styles.deploymentHeader}>
@@ -119,6 +124,8 @@ export function ReverseEngineeringScanCriteriaForm({
             </select>
           </label>
 
+          <p className={styles.deploymentHint}>현재 리전: {selectedAwsConnectionRegion}</p>
+
           <div className={styles.deploymentField}>
             가져올 리소스
             <div className={styles.reverseResourceGrid}>
@@ -138,6 +145,14 @@ export function ReverseEngineeringScanCriteriaForm({
       </section>
     </>
   );
+}
+
+// 선택된 AWS 연결에서 실제 스캔에 쓰일 리전을 꺼냅니다.
+function getSelectedAwsConnectionRegion(
+  awsConnections: AwsConnection[],
+  selectedAwsConnectionId: string
+): string {
+  return awsConnections.find((connection) => connection.id === selectedAwsConnectionId)?.region ?? "리전 미선택";
 }
 
 // `ALL`은 사용자가 이해하는 화면 라벨로 보여주고, 실제 리소스 타입 이름은 그대로 둡니다.

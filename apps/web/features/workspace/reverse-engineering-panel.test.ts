@@ -37,6 +37,8 @@ test("Reverse Engineering scan starts from one main import action and keeps filt
   assert.match(scanCriteriaFormSource, /고급 설정/);
   assert.match(scanCriteriaFormSource, /<details/);
   assert.match(scanCriteriaFormSource, /전체 스캔/);
+  assert.match(scanCriteriaFormSource, /현재 리전/);
+  assert.match(scanCriteriaFormSource, /getSelectedAwsConnectionRegion/);
   assert.doesNotMatch(scanCriteriaFormSource, /AWS 스캔 시작/);
 });
 
@@ -80,6 +82,14 @@ test("Reverse Engineering result shows risks, partial scan errors, and import ha
   assert.match(importPanelSource, /전체 복사/);
   assert.match(importPanelSource, /Git\/CI\/CD handoff 준비/);
   assert.match(resultPanelSource, /analysisExclusions/);
+});
+
+test("Reverse Engineering result explains scan coverage before users apply the preview", () => {
+  assert.match(resultPanelSource, /스캔 범위/);
+  assert.match(resultPanelSource, /못 읽은 서비스/);
+  assert.match(resultPanelSource, /Resource Explorer/);
+  assert.match(resultPanelSource, /전체 AWS 상태가 아닐 수 있습니다/);
+  assert.match(resultPanelSource, /getScanCoverageNotice/);
 });
 
 test("Reverse Engineering result lets users inspect provider parameters for every discovered resource", () => {
