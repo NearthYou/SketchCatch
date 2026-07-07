@@ -1,6 +1,18 @@
 ﻿# 에이전트 진행 로그
 # 에이전트 진행 로그
 
+### 2026-07-07 - migration workflow quoting hotfix
+
+- Goal: `Run Database Migrations` workflow 28839194349가 SSM 실행 전 GitHub runner bash에서 `syntax error near unexpected token '('`로 실패한 원인을 수정한다.
+- Completed:
+  - `jq '...'` 문자열 안에 중첩 single quote가 들어가 workflow bash가 먼저 깨진 것을 확인했다.
+  - migration docker command를 heredoc 변수로 만들고 `jq --arg migration_command`로 JSON에 주입하도록 바꿔 shell quoting 충돌을 제거했다.
+  - BOM 제거 Node snippet은 base64 payload로 넣어 command 내부 따옴표를 최소화했다.
+- Verification run:
+  - `pnpm harness:check` - passed.
+- Known risks:
+  - 로컬 Windows 환경에 bash가 없어 `bash -n`은 수행하지 못했다. GitHub runner에서 PR checks 후 `migrate.yml` 재실행으로 최종 확인해야 한다.
+
 ### 2026-07-07 - 운영 DB migration BOM 실패 hotfix
 
 - Goal: `Run Database Migrations` workflow 28838004059 실패 원인을 확인하고 운영 migration 재실행이 가능하도록 고친다.
