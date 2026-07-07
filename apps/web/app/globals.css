@@ -5043,7 +5043,7 @@ nextjs-portal {
   border-top: 1px solid var(--bp-line);
   display: grid;
   gap: 10px;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   padding: 14px 16px;
 }
 
@@ -5061,6 +5061,24 @@ nextjs-portal {
 .workspaceAiStartComposer textarea:focus {
   border-color: var(--bp-blue);
   outline: 2px solid color-mix(in srgb, var(--bp-blue) 18%, transparent);
+}
+
+.workspaceAiStartVoiceButton {
+  min-width: 40px;
+  padding: 0;
+}
+
+.workspaceAiStartVoiceButton[data-listening="true"] {
+  background: #b42318;
+  border-color: #b42318;
+}
+
+.workspaceAiStartVoiceStatus {
+  color: var(--bp-muted);
+  font-size: 0.78rem;
+  grid-column: 1 / -1;
+  line-height: 1.35;
+  margin: -2px 0 0;
 }
 
 @media (max-width: 720px) {
@@ -5088,7 +5106,11 @@ nextjs-portal {
 
   .workspaceAiStartComposer {
     align-items: stretch;
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .workspaceAiStartComposer textarea {
+    grid-column: 1 / -1;
   }
 }
 

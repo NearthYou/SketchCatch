@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { ArrowLeft, Check, Maximize2, RefreshCw, Send, X, ZoomIn, ZoomOut } from "lucide-react";
+import { ArrowLeft, Check, Maximize2, Mic, RefreshCw, Send, X, ZoomIn, ZoomOut } from "lucide-react";
 import type {
   AiArchitectureDraftResult,
   ArchitectureDraftClarification,
@@ -29,6 +29,7 @@ import {
   getAreaNodeMetaLabel,
   isAreaNode
 } from "../../../features/diagram-editor/area-nodes";
+import { useBrowserVoiceInput } from "../../../features/workspace/use-browser-voice-input";
 
 const AI_START_DRAFT_STORAGE_KEY = "sketchcatch.newProjectDraft";
 const MAX_CHAT_MESSAGES = 80;
@@ -105,6 +106,15 @@ export function WorkspaceAiStartClient() {
   const [errorMessage, setErrorMessage] = useState("");
   const [createdProjectId, setCreatedProjectId] = useState<string | null>(null);
   const transcriptRef = useRef<HTMLDivElement>(null);
+  const {
+    isListening: isVoiceListening,
+    isSupported: isVoiceInputSupported,
+    statusMessage: voiceStatusMessage,
+    toggle: toggleVoiceRecognition
+  } = useBrowserVoiceInput({
+    onChange: setComposerValue,
+    value: composerValue
+  });
 
   const projectName = projectDraft?.projectName ?? "";
   const canSubmit = composerValue.trim().length > 0 && requestState !== "loading";
@@ -484,10 +494,27 @@ export function WorkspaceAiStartClient() {
             rows={3}
             value={composerValue}
           />
+          <button
+            aria-label={isVoiceListening ? "음성 인식 중지" : "음성 인식 시작"}
+            aria-pressed={isVoiceListening}
+            className="workspaceAiStartVoiceButton"
+            data-listening={isVoiceListening}
+            disabled={!isVoiceInputSupported || requestState === "loading"}
+            onClick={toggleVoiceRecognition}
+            title={isVoiceListening ? "음성 인식 중지" : "음성 인식 시작"}
+            type="button"
+          >
+            <Mic size={17} aria-hidden="true" />
+          </button>
           <button disabled={!canSubmit} type="submit">
             <Send size={16} aria-hidden="true" />
             {COPY.send}
           </button>
+          {voiceStatusMessage.length > 0 ? (
+            <p className="workspaceAiStartVoiceStatus" role="status">
+              {voiceStatusMessage}
+            </p>
+          ) : null}
         </form>
       </section>
     </main>
