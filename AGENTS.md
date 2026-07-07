@@ -2,53 +2,53 @@
 
 This repository is SketchCatch.
 
-SketchCatch is a multi-cloud-ready IaC operations service. It turns text or voice requirements, Source Repository evidence, and existing cloud state into provider-neutral Practice Architectures, strengthens them with AI, Bedrock, and Amazon Q Assistance, and connects them to Terraform IaC Preview, Git/CI/CD Integration, Direct Deployment, Reverse Engineering, Deployment History, and Auto Cleanup. The MVP is AWS-first and Terraform-first, but SketchCatch must not be described as AWS-only.
+SketchCatch is a multi-cloud-ready IaC operations service. It turns text or voice requirements, source repository evidence, and existing cloud state into provider-neutral Practice Architectures, then connects them to Terraform IaC Preview, Git/CI/CD Integration, Direct Deployment, Reverse Engineering, Deployment History, and Auto Cleanup. The MVP is AWS-first and Terraform-first, but SketchCatch must not be described as AWS-only.
 
 ## Product Direction
 
 1. Treat SketchCatch as an IaC operations service, not just a visual cloud diagram tool or a demo script.
 2. Terraform is the primary IaC target for the MVP and the extension point for future cloud providers.
-3. AWS is the first Provider Adapter for the MVP. Keep the domain model provider-neutral and do not describe SketchCatch as AWS-only.
-4. The first MVP goal is a complete service journey: Requirement Input or Source Repository or Reverse Engineering input -> Practice Architecture -> IaC Preview -> Pre-Deployment Check -> approved execution or Git/CI/CD handoff -> Deployment History and Auto Cleanup.
-5. Representative Use Journeys may be used for presentation and rehearsal, but they must prove the real service flow rather than define a separate demo-only scope.
-6. Requirement Input can be text or Voice Requirement Input. Voice must be transcribed, shown back to the user, and confirmed before becoming a Requirement Prompt.
-7. AI, Bedrock, and Amazon Q Assistance may recommend, explain, and review, but Practice Architecture changes, IaC handoff, Git changes, and Deployment actions must be User-Accepted Changes.
-8. SketchCatch supports two execution paths: Direct Deployment Path for fast validation and sandbox/practice runs, and Git/CI/CD Deployment Path for team review and operational delivery.
-9. Reverse Engineering must be provider-adapter based. The MVP can implement AWS first, but the concept is not an AWS-only resource list.
-10. Redis is internal Runtime Cache infrastructure for long-running workflow status, polling, and streaming support. It is not a user Practice Architecture Resource unless a separate product decision changes that.
+3. AWS is the first Provider Adapter for the MVP. Keep the domain model provider-neutral.
+4. The MVP journey is Requirement Input, Source Repository, or Reverse Engineering input -> Practice Architecture -> IaC Preview -> Pre-Deployment Check -> approved execution or Git/CI/CD handoff -> Deployment History and Auto Cleanup.
+5. Demo journeys must prove the real service flow rather than define a separate demo-only scope.
+6. Voice Requirement Input must be transcribed, shown back to the user, and confirmed before becoming a Requirement Prompt.
+7. AI, Bedrock, and Amazon Q Assistance may recommend, explain, and review, but Practice Architecture changes, IaC handoff, Git changes, and deployment actions must be user-accepted changes.
+8. SketchCatch supports two execution paths: Direct Deployment Path and Git/CI/CD Deployment Path.
+9. Reverse Engineering must be provider-adapter based. The MVP can implement AWS first, but the concept is not AWS-only.
+10. Redis is internal Runtime Cache infrastructure, not a user Practice Architecture Resource.
 11. CloudFormation may be used as an AWS reference or future compatibility target, but it is not the default MVP direction.
 12. Real cloud apply, deploy, update, delete, or destroy behavior is allowed only for explicit Deployment work or approved Git/CI/CD handoff with plan, approval, logging, secret masking, and cleanup safeguards.
 
 ## Required Reading
 
-Before making changes, always read the nearest `AGENTS.md` and this root file. Read additional docs only when they are relevant:
+Before making changes, read this file and the nearest `AGENTS.md`. Read additional docs only when relevant:
 
-- If a local `AGENTS.gg.md` exists, read it when working with gg or on the gg AI part.
-- Read `docs/README.md` when working on documentation or when you need the document map.
-- Read `docs/product.md` when changing product scope, MVP behavior, AI/IaC workflows, roadmap, or safety policy.
-- Read `docs/data-models.md` when changing DB models, API DTOs, shared types, frontend state, AI results, Terraform artifacts, or Deployment contracts.
-- Read `docs/architecture.md` when changing stack, storage, API scope, execution boundaries, deployment architecture, or ADR-level decisions.
-- Read `docs/development.md` when working with Git flow, code conventions, team AI collaboration, PR checks, or required checks.
-- Read `docs/deployment.md` when touching operational deployment, Terraform Plan/Apply/Destroy, AWS credentials, RDS, S3, logs, outputs, or cleanup.
+- `docs/README.md` for documentation work or document navigation.
+- `docs/product.md` for product scope, MVP behavior, AI/IaC workflows, roadmap, or safety policy.
+- `docs/data-models.md` for DB models, API DTOs, shared types, frontend state, AI results, Terraform artifacts, or deployment contracts.
+- `docs/architecture.md` for stack, storage, API scope, execution boundaries, deployment architecture, or ADR-level decisions.
+- `docs/development.md` for Git flow, code conventions, team AI collaboration, PR checks, or required checks.
+- `docs/deployment.md` for operational deployment, Terraform Plan/Apply/Destroy, AWS credentials, RDS, S3, logs, outputs, or cleanup.
 
 ## Harness Operating Loop
 
-1. For every non-trivial work session, run `pnpm harness:check` before editing files. If `pnpm` is unavailable, run `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/init-harness.ps1` instead. If the harness check fails, fix or report that baseline before starting feature work.
-2. After the harness check, read `agent-progress.md` and `feature_list.json` after the required `AGENTS.md` files. If the task continues prior work or leaves any risk unfinished, also read `session-handoff.md`.
-3. Use `scripts/init-harness.ps1` as the standard startup helper when you need the repo startup path. Run it without flags for a lightweight baseline, with `-Verify` for lint/typecheck, and with `-Full` before finishing substantial code or infrastructure changes.
-4. Keep `feature_list.json` as the machine-readable agent harness tracker. Product scope still belongs in `docs/product.md`; shared contracts still belong in `docs/data-models.md`.
+1. For every non-trivial work session, run `pnpm harness:check` before editing files. If `pnpm` is unavailable, run `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/init-harness.ps1`.
+2. After the harness check, read `agent-progress.md` and `feature_list.json`. If the task continues prior work or leaves any risk unfinished, also read `session-handoff.md`.
+3. Use `scripts/init-harness.ps1` as the standard startup helper. Run it without flags for a lightweight baseline, with `-Verify` for lint/typecheck, and with `-Full` before finishing substantial code or infrastructure changes.
+4. Keep `feature_list.json` as the machine-readable harness tracker. Product scope belongs in `docs/product.md`; shared contracts belong in `docs/data-models.md`.
 5. Work on at most one active feature/workstream at a time. Do not leave more than one `in_progress` item in `feature_list.json`.
 6. Do not mark a feature `passing` unless `evidence.lastVerified` and concrete verification commands are recorded.
-7. Before finishing, run `pnpm harness:check` again and apply `clean-state-checklist.md`. Update `agent-progress.md` with completed work, verification, known risks, and next action. Update `session-handoff.md` when the next session needs a compressed continuation point.
+7. Before finishing, run `pnpm harness:check` again and apply `clean-state-checklist.md`. Update `agent-progress.md` with completed work, verification, known risks, and next action. Update `session-handoff.md` only when the next session needs a compressed continuation point.
 8. Use `evaluator-rubric.md` for adversarial self-review when a change affects safety, deployment, contracts, or multi-session continuity.
 
 ## Language Rules
 
 1. Write `AGENTS.md` files in English.
-2. Write regular project docs and user-facing explanations in Korean unless the user asks otherwise.
-3. Keep code identifiers, commands, API paths, environment variable names, package names, and AWS service names in their original form.
-4. Write Pull Request titles and bodies in Korean unless the user explicitly asks for another language.
-5. Write Pull Request titles in the `Type: Korean title` format, such as `Feat: 로그인 기능 구현`.
+2. Write `agent-progress.md` and `session-handoff.md` in English only, and keep them concise.
+3. Write regular project docs and user-facing explanations in Korean unless the user asks otherwise.
+4. Keep code identifiers, commands, API paths, environment variable names, package names, and AWS service names in their original form.
+5. Write Pull Request titles and bodies in Korean unless the user explicitly asks for another language.
+6. Write Pull Request titles in the `Type: Korean title` format, such as `Feat: 로그인 기능 구현`.
 
 ## Repository Boundaries
 
@@ -94,7 +94,7 @@ For model, API, or state changes, `docs/data-models.md` is the naming source of 
 ## Code Quality
 
 1. Prefer readable, human-editable code over clever code.
-2. Apply SOLID as practical responsibility separation, not as over-engineering.
+2. Apply SOLID as practical responsibility separation, not over-engineering.
 3. Keep functions, components, services, and modules small enough to understand quickly.
 4. Use clear names that reveal intent.
 5. Follow existing local patterns before introducing new abstractions.
@@ -115,13 +115,6 @@ pnpm typecheck
 pnpm build
 ```
 
-If local `pnpm` is not available, use Corepack or npm:
-
-```bash
-corepack pnpm lint
-npm exec --package=pnpm@11.8.0 -- pnpm lint
-```
-
 For documentation-only changes, full build checks are optional unless package files, source code, or generated artifacts changed.
 
 ## Git And Review
@@ -130,7 +123,7 @@ For documentation-only changes, full build checks are optional unless package fi
 2. Do not push directly to `main`.
 3. Do not push directly to `dev` except for one-time repository administration or explicit user approval.
 4. Use focused branches and PRs small enough to review.
-5. Write Pull Request titles in the `Type: Korean title` format, such as `Feat: 로그인 기능 구현`.
+5. Write Pull Request titles in the `Type: Korean title` format.
 6. Write Pull Request bodies in Korean unless the user explicitly asks for another language.
 7. Follow the Git and PR conventions in `docs/development.md`.
 8. Before asking for review, summarize changed files, checks run, and any checks that could not be run.
