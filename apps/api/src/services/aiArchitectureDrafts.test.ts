@@ -289,6 +289,7 @@ test("createAmazonQArchitectureDraftResponse returns the Amazon Q architecture p
           }
         ]
       },
+      requirementCoverage: sampleRequirementCoverage(["site-bucket", "cdn"]),
       assumptions: ["Korea users and low budget favor Seoul-region AWS services."],
       explanations: ["S3 and CloudFront avoid server management for static content."],
       summary: "Amazon Q recommended a managed static delivery path.",
@@ -327,6 +328,30 @@ test("createAmazonQArchitectureDraftResponse returns the Amazon Q architecture p
   assert.ok(!("status" in response));
   assert.match(requestedPrompt, /정적 사이트/);
   assert.match(requestedPrompt, /Do not artificially limit the architecture to one resource per type/);
+  assert.match(requestedPrompt, /binding architecture constraints/);
+  assert.match(requestedPrompt, /Clarification choice mapping rules/);
+  assert.match(requestedPrompt, /Website type: static website/);
+  assert.match(requestedPrompt, /Traffic scale: small traffic/);
+  assert.match(requestedPrompt, /Database: no database/);
+  assert.match(requestedPrompt, /Frontend: HTML\/CSS\/JS/);
+  assert.match(requestedPrompt, /Backend: none/);
+  assert.match(requestedPrompt, /User region: Korea only/);
+  assert.match(requestedPrompt, /Budget: very low\/minimum budget/);
+  assert.match(requestedPrompt, /HTTPS: required/);
+  assert.match(requestedPrompt, /File upload: none/);
+  assert.match(requestedPrompt, /Realtime: none/);
+  assert.match(requestedPrompt, /Management preference: fully managed\/serverless/);
+  assert.match(requestedPrompt, /Page loading goal: under 1 second/);
+  assert.match(requestedPrompt, /Website size: under 10MB/);
+  assert.match(requestedPrompt, /Traffic pattern: steady/);
+  assert.match(requestedPrompt, /Downtime tolerance: 99\.99%/);
+  assert.match(requestedPrompt, /React\/Vue\/Angular SPA requirements/);
+  assert.match(requestedPrompt, /complex backend\/business-logic requirements/);
+  assert.match(requestedPrompt, /global users, HTTPS-required, or 1-second loading goals/);
+  assert.match(requestedPrompt, /image-upload requirements/);
+  assert.match(requestedPrompt, /real-time notification requirements/);
+  assert.match(requestedPrompt, /99\.99% availability or no-downtime requirements/);
+  assert.match(requestedPrompt, /budget constraints conflict with high availability/);
   assert.match(requestedPrompt, /multiple Availability Zones/);
   assert.match(requestedPrompt, /LOAD_BALANCER plus LOAD_BALANCER_LISTENER/);
   assert.match(requestedPrompt, /large concurrent users/);
@@ -335,6 +360,236 @@ test("createAmazonQArchitectureDraftResponse returns the Amazon Q architecture p
   assert.equal(response.architectureJson.nodes[0]?.type, "S3");
   assert.equal(response.llmExplanation?.fallbackUsed, false);
   assert.equal(response.llmExplanation?.providerMetadata?.provider, "amazon_q");
+});
+
+test("createAmazonQArchitectureDraftResponse sends dynamic global website constraints to Amazon Q", async () => {
+  const requestedPrompts: string[] = [];
+  const provider = createFakeAmazonQProvider((request) => {
+    requestedPrompts.push(request.prompt);
+
+    if (requestedPrompts.length === 1) {
+      return JSON.stringify({
+        status: "preview",
+        title: "Incomplete Dynamic Global Website",
+        architectureJson: {
+          nodes: [
+            {
+              id: "frontend-bucket",
+              type: "S3",
+              label: "SPA Assets Bucket",
+              positionX: 120,
+              positionY: 180,
+              config: {}
+            },
+            {
+              id: "cdn",
+              type: "CLOUDFRONT",
+              label: "CloudFront Public Entry",
+              positionX: 360,
+              positionY: 180,
+              config: {}
+            }
+          ],
+          edges: [
+            {
+              id: "cdn-to-frontend",
+              sourceId: "cdn",
+              targetId: "frontend-bucket",
+              label: "origin"
+            }
+          ]
+        },
+        requirementCoverage: sampleRequirementCoverage(["frontend-bucket", "cdn"])
+      });
+    }
+
+    return JSON.stringify({
+      status: "preview",
+      title: "Dynamic Global Website Practice Architecture",
+      architectureJson: {
+        nodes: [
+          {
+            id: "frontend-bucket",
+            type: "S3",
+            label: "SPA Assets Bucket",
+            positionX: 120,
+            positionY: 180,
+            config: {}
+          },
+          {
+            id: "media-bucket",
+            type: "S3",
+            label: "Image Media Bucket",
+            positionX: 120,
+            positionY: 340,
+            config: {}
+          },
+          {
+            id: "cdn",
+            type: "CLOUDFRONT",
+            label: "CloudFront Public Entry",
+            positionX: 360,
+            positionY: 180,
+            config: {}
+          },
+          {
+            id: "app-load-balancer",
+            type: "LOAD_BALANCER",
+            label: "Application Load Balancer",
+            positionX: 600,
+            positionY: 180,
+            config: {}
+          },
+          {
+            id: "https-listener",
+            type: "LOAD_BALANCER_LISTENER",
+            label: "HTTPS Listener",
+            positionX: 600,
+            positionY: 320,
+            config: {}
+          },
+          {
+            id: "app-server-a",
+            type: "EC2",
+            label: "App Server A",
+            positionX: 840,
+            positionY: 120,
+            config: {}
+          },
+          {
+            id: "app-server-b",
+            type: "EC2",
+            label: "App Server B",
+            positionX: 840,
+            positionY: 280,
+            config: {}
+          },
+          {
+            id: "db-subnet-group",
+            type: "DB_SUBNET_GROUP",
+            label: "Multi-AZ DB Subnet Group",
+            positionX: 1080,
+            positionY: 200,
+            config: {}
+          },
+          {
+            id: "database",
+            type: "RDS",
+            label: "PostgreSQL Multi-AZ Database",
+            positionX: 1320,
+            positionY: 200,
+            config: {
+              multiAz: true
+            }
+          }
+        ],
+        edges: [
+          {
+            id: "cdn-to-frontend",
+            sourceId: "cdn",
+            targetId: "frontend-bucket",
+            label: "origin"
+          },
+          {
+            id: "cdn-to-alb",
+            sourceId: "cdn",
+            targetId: "app-load-balancer",
+            label: "api origin"
+          },
+          {
+            id: "listener-to-alb",
+            sourceId: "https-listener",
+            targetId: "app-load-balancer",
+            label: "listens"
+          },
+          {
+            id: "alb-to-app-a",
+            sourceId: "app-load-balancer",
+            targetId: "app-server-a",
+            label: "routes"
+          },
+          {
+            id: "alb-to-app-b",
+            sourceId: "app-load-balancer",
+            targetId: "app-server-b",
+            label: "routes"
+          }
+        ]
+      },
+      requirementCoverage: [
+        ...sampleRequirementCoverage(["frontend-bucket", "cdn"]),
+        {
+          answer: "complex backend business logic",
+          status: "satisfied",
+          capability: "complex_backend_api",
+          nodes: ["app-load-balancer", "https-listener", "app-server-a", "app-server-b"]
+        },
+        {
+          answer: "PostgreSQL database required",
+          status: "satisfied",
+          capability: "relational_database_multi_az",
+          nodes: ["database", "db-subnet-group"],
+          assumption: "RDS Multi-AZ is required for the 99.99% availability target."
+        },
+        {
+          answer: "image upload only",
+          status: "satisfied",
+          capability: "image_upload",
+          nodes: ["media-bucket"],
+          assumption: "Browser uses presigned upload URLs for direct S3 image upload."
+        },
+        {
+          answer: "real-time notification",
+          status: "satisfied",
+          capability: "realtime_notification",
+          nodes: ["app-load-balancer", "app-server-a", "app-server-b"],
+          assumption: "Realtime notification is represented as an SSE notification path through the backend tier."
+        }
+      ]
+    });
+  });
+
+  const prompt = [
+    "website type: dynamic SPA website",
+    "traffic: daily traffic 1000 concurrent users 50",
+    "database: PostgreSQL database required",
+    "frontend: React/Vue/Angular SPA framework",
+    "backend: complex backend business logic with Spring Boot or Django",
+    "region: global users including US and Europe",
+    "budget cost: 100 monthly",
+    "SSL HTTPS: required",
+    "file upload: image upload only",
+    "realtime: real-time notification",
+    "management preference: semi-managed operations",
+    "loading time: 1 second",
+    "website size: 10MB-100MB",
+    "traffic pattern: time of day daytime peak",
+    "downtime tolerance: 99.99% availability"
+  ].join("\n");
+
+  const response = await createAmazonQArchitectureDraftResponse(
+    {
+      prompt
+    },
+    {
+      provider,
+      creditPolicy: confirmedCreditPolicy
+    }
+  );
+
+  if ("status" in response) {
+    assert.fail(`Expected preview, got clarification: ${response.question}`);
+  }
+
+  assert.equal(requestedPrompts.length, 2);
+  assert.match(requestedPrompts[0] ?? "", /dynamic SPA website/);
+  assert.match(requestedPrompts[0] ?? "", /React\/Vue\/Angular SPA requirements/);
+  assert.match(requestedPrompts[1] ?? "", /Do not return the same topology/);
+  assert.match(requestedPrompts[1] ?? "", /lacks LOAD_BALANCER and LOAD_BALANCER_LISTENER/);
+  assert.match(requestedPrompts[1] ?? "", /image upload/);
+  assert.match(requestedPrompts[1] ?? "", /real-time notification/);
+  assert.match(requestedPrompts[1] ?? "", /RDS Multi-AZ/);
+  assert.equal(response.title, "Dynamic Global Website Practice Architecture");
 });
 
 test("createAmazonQArchitectureDraftResponse asks Amazon Q to regenerate previews that fail self-validation", async () => {
@@ -382,6 +637,22 @@ test("createAmazonQArchitectureDraftResponse asks Amazon Q to regenerate preview
             positionX: 360,
             positionY: 180,
             config: {}
+          },
+          {
+            id: "spa-bucket",
+            type: "S3",
+            label: "SPA Assets Bucket",
+            positionX: 120,
+            positionY: 340,
+            config: {}
+          },
+          {
+            id: "cdn",
+            type: "CLOUDFRONT",
+            label: "CloudFront CDN",
+            positionX: 360,
+            positionY: 340,
+            config: {}
           }
         ],
         edges: [
@@ -389,9 +660,16 @@ test("createAmazonQArchitectureDraftResponse asks Amazon Q to regenerate preview
             id: "api-gateway-to-lambda-function",
             sourceId: "api-gateway",
             targetId: "lambda-function"
+          },
+          {
+            id: "cdn-to-spa-bucket",
+            sourceId: "cdn",
+            targetId: "spa-bucket",
+            label: "origin"
           }
         ]
-      }
+      },
+      requirementCoverage: sampleRequirementCoverage(["api-gateway", "lambda-function", "spa-bucket", "cdn"])
     });
   });
 
@@ -529,6 +807,40 @@ test("createAmazonQArchitectureDraftResponse asks Amazon Q to regenerate preview
             config: {
               subnetId: "public-subnet-a"
             }
+          },
+          {
+            id: "spa-bucket",
+            type: "S3",
+            label: "SPA Assets Bucket",
+            positionX: 420,
+            positionY: 100,
+            config: {}
+          },
+          {
+            id: "cdn",
+            type: "CLOUDFRONT",
+            label: "CloudFront CDN",
+            positionX: 620,
+            positionY: 100,
+            config: {}
+          },
+          {
+            id: "db-subnet-group",
+            type: "DB_SUBNET_GROUP",
+            label: "DB Subnet Group",
+            positionX: 420,
+            positionY: 280,
+            config: {}
+          },
+          {
+            id: "database",
+            type: "RDS",
+            label: "Application Database",
+            positionX: 620,
+            positionY: 280,
+            config: {
+              multiAz: true
+            }
           }
         ],
         edges: [
@@ -537,9 +849,25 @@ test("createAmazonQArchitectureDraftResponse asks Amazon Q to regenerate preview
             sourceId: "vpc-main",
             targetId: "public-subnet-a",
             label: "contains"
+          },
+          {
+            id: "cdn-to-spa-bucket",
+            sourceId: "cdn",
+            targetId: "spa-bucket",
+            label: "origin"
           }
         ]
-      }
+      },
+      requirementCoverage: [
+        ...sampleRequirementCoverage(["web-server", "spa-bucket", "cdn", "database", "db-subnet-group"]),
+        {
+          answer: "database required",
+          status: "satisfied",
+          capability: "relational_database_multi_az",
+          nodes: ["database", "db-subnet-group"],
+          assumption: "RDS Multi-AZ is represented for availability-sensitive database requirements."
+        }
+      ]
     });
   });
 
@@ -665,6 +993,14 @@ test("createAmazonQArchitectureDraftResponse asks Amazon Q to regenerate preview
             positionX: 300,
             positionY: 260,
             config: {}
+          },
+          {
+            id: "cdn",
+            type: "CLOUDFRONT",
+            label: "CloudFront CDN",
+            positionX: 100,
+            positionY: 420,
+            config: {}
           }
         ],
         edges: [
@@ -673,9 +1009,16 @@ test("createAmazonQArchitectureDraftResponse asks Amazon Q to regenerate preview
             sourceId: "app-server",
             targetId: "database",
             label: "writes"
+          },
+          {
+            id: "cdn-to-asset-bucket",
+            sourceId: "cdn",
+            targetId: "asset-bucket",
+            label: "origin"
           }
         ]
-      }
+      },
+      requirementCoverage: sampleRequirementCoverage(["app-server", "database", "asset-bucket", "cdn"])
     });
   });
 
@@ -717,6 +1060,24 @@ test("createAmazonQArchitectureDraftResponse asks Amazon Q to regenerate preview
   assert.equal(response.title, "Clear Edge Draft");
   assert.equal(response.architectureJson.nodes.find((node) => node.id === "asset-bucket")?.positionY, 260);
 });
+
+function sampleRequirementCoverage(nodes: string[] = []): Array<{
+  answer: string;
+  status: string;
+  capability: string;
+  nodes: string[];
+  assumption: string;
+}> {
+  return [
+    {
+      answer: "baseline selected answers",
+      status: "satisfied",
+      capability: "baseline_architecture",
+      nodes,
+      assumption: "Selected answers are represented by the listed topology nodes."
+    }
+  ];
+}
 
 function createFakeAmazonQProvider(generate: (request: Parameters<AiTextProvider["generate"]>[0]) => string): AiTextProvider {
   return {

@@ -78,6 +78,24 @@ const RESOURCE_TYPE_TERRAFORM_NAMES: Partial<Record<ResourceType, string>> = {
   SECURITY_GROUP: "aws_security_group"
 };
 const SECURITY_GROUP_REFERENCE_KEYS = ["securityGroupIds", "vpcSecurityGroupIds", "securityGroupId"] as const;
+const AMAZON_Q_CLARIFICATION_CHOICE_CONSTRAINTS = [
+  "Clarification choice mapping rules:",
+  "Website type: static website => S3 plus CLOUDFRONT only unless another answered choice requires an API; dynamic web application => include frontend delivery, backend compute, data storage when requested, and security boundaries; SPA => S3 plus CLOUDFRONT for static assets and a separate API/backend path when backend is required; API server => focus on API entry, compute, logs, security groups, and database only when requested.",
+  "Traffic scale: small traffic or concurrent users under 10 => prefer minimal resources and avoid unnecessary duplication; medium traffic or about daily 1,000/concurrent 50 => include scalable entry and app tier when backend exists; large traffic or daily 10,000+/concurrent 500+ => include load balancing, multiple app targets, stronger alarms, and scale-out assumptions; bursty traffic => prefer elastic/serverless patterns where suitable or explicit scaling assumptions and alarms.",
+  "Database: no database => do not add RDS or DB_SUBNET_GROUP; simple data => include the lightest suitable storage and explain assumptions; medium relational data or PostgreSQL/MySQL => include RDS and DB_SUBNET_GROUP in private DB subnets; large or complex data => include stronger RDS config, encryption, backups, alarms, and scaling assumptions.",
+  "Frontend: HTML/CSS/JS => S3 plus CLOUDFRONT static delivery; React/Vue/Angular SPA => S3 plus CLOUDFRONT and API origin when backend exists; Next.js/Nuxt.js SSR => include runtime compute or serverless runtime plus static asset delivery; mobile app => emphasize API/backend, auth/security, and media/API entry rather than a website-only frontend.",
+  "Backend: none => do not add EC2, LAMBDA, API_GATEWAY_REST_API, LOAD_BALANCER, or RDS solely for backend; simple API => use the smallest supported API path such as LAMBDA plus API_GATEWAY_REST_API or one small EC2 when explicitly preferred; complex business logic => include backend compute behind LOAD_BALANCER plus LOAD_BALANCER_LISTENER with private app subnets when VPC is present; microservices => represent multiple service components or compute nodes and shared entry/observability without inventing unsupported resource types.",
+  "User region: Korea only => prefer Seoul/ap-northeast-2 assumptions and regional cost efficiency; Asia Pacific => include CLOUDFRONT when frontend/media exists and note regional latency assumptions; global including US/Europe => include CLOUDFRONT and a global entry assumption, and warn when a single-region database/API cannot guarantee global sub-second API latency; specific region => preserve that region in assumptions and resource labels.",
+  "Budget: very low/minimum budget => prefer serverless/static/minimal managed resources and clearly trade off high availability; moderate budget => balance managed services with cost controls; high budget => allow Multi-AZ, load balancing, stronger monitoring, encryption, and backups; enterprise budget => include stronger resilience/security/operations assumptions. Never hide a budget/SLA conflict.",
+  "HTTPS: required => include CLOUDFRONT or LOAD_BALANCER HTTPS path, ROUTE53_RECORD when a domain is implied, and certificate requirements in config/assumptions because ACM is not a supported node type; optional HTTP => keep HTTPS recommendation in nextActions but do not overbuild solely for certificates; unknown => recommend HTTPS in nextActions.",
+  "File upload: none => do not add a media bucket for uploads; image only => include a separate S3 media bucket and presigned upload flow; documents/video/mixed files => include S3 media bucket, IAM policy boundaries, KMS when security matters, and lifecycle/size assumptions; large files over 100MB => use direct-to-S3 upload assumptions and avoid proxying through the app server.",
+  "Realtime: none => do not add realtime-only nodes; realtime chat => include a persistent notification/chat path using supported API/backend resources and explain WebSocket/SSE assumptions; realtime notification => include a lighter notification path and do not omit it; realtime data updates => include stronger scaling/monitoring assumptions for the update stream.",
+  "Management preference: fully managed/serverless => prefer S3, CLOUDFRONT, LAMBDA, API_GATEWAY_REST_API, and managed RDS where data is required, avoiding manually managed EC2 unless explicitly requested; semi-managed => LOAD_BALANCER plus EC2 app tier or managed services with some server responsibility is acceptable; direct/self-managed => EC2 is acceptable but still include security, logs, backups, and alarms; unknown => choose the lowest-operational-burden option that satisfies other answers.",
+  "Page loading goal: under 1 second => use CLOUDFRONT for static/media assets and warn when dynamic API latency is limited by region/database placement; under 3 seconds => use normal CDN/static caching when suitable; under 5 seconds => avoid expensive over-optimization unless required by other answers; no preference => optimize for cost and simplicity.",
+  "Website size: under 10MB => static/CDN-friendly minimal asset assumptions; 10MB-100MB => normal SPA/static asset delivery; 100MB-1GB/image-heavy => media S3 bucket, CloudFront caching, and lifecycle assumptions; 1GB+/video => S3 media storage, CloudFront delivery, and direct upload/lifecycle assumptions.",
+  "Traffic pattern: steady => stable baseline capacity; time-of-day peak => autoscaling/alarms or burst assumptions; event spike => elastic/serverless or explicit scale-out plus alarm assumptions; unpredictable => prefer elastic capacity and stronger monitoring.",
+  "Downtime tolerance: 99.99% or no downtime => no single-AZ/single-EC2 design when backend/database exists, include Multi-AZ app and RDS Multi-AZ where applicable; 99.9% => use at least managed backups/monitoring and consider Multi-AZ for stateful tiers; 99% => cost-optimized single-region/simple redundancy may be acceptable; no preference => choose cost-conscious defaults."
+] as const;
 
 type RequiredArchitectureQuestion = {
   readonly id: string;
@@ -102,11 +120,20 @@ type AmazonQArchitectureDraftPreview = {
   readonly status: "preview";
   readonly title: string;
   readonly architectureJson: ArchitectureJson;
+  readonly requirementCoverage?: readonly AmazonQRequirementCoverage[] | undefined;
   readonly assumptions?: readonly string[] | undefined;
   readonly explanations?: readonly string[] | undefined;
   readonly summary?: string | undefined;
   readonly highlights?: readonly string[] | undefined;
   readonly nextActions?: readonly string[] | undefined;
+};
+
+type AmazonQRequirementCoverage = {
+  readonly answer: string;
+  readonly status: string;
+  readonly capability?: string | undefined;
+  readonly nodes?: readonly string[] | undefined;
+  readonly assumption?: string | undefined;
 };
 
 type AmazonQArchitectureDraftClarification = {
@@ -214,7 +241,7 @@ export async function createAmazonQArchitectureDraftResponse(
     let parsedResponse = parseAmazonQArchitectureDraftResponse(response.text);
 
     if (parsedResponse.status === "preview") {
-      const validationIssues = findAmazonQPreviewValidationIssues(request.prompt, parsedResponse.architectureJson);
+      const validationIssues = findAmazonQPreviewValidationIssues(request.prompt, parsedResponse);
 
       if (validationIssues.length > 0) {
         activePayload = maskSecretsForAi({
@@ -231,10 +258,10 @@ export async function createAmazonQArchitectureDraftResponse(
         });
         parsedResponse = parseAmazonQArchitectureDraftResponse(response.text);
 
-        if (
-          parsedResponse.status === "preview" &&
-          findAmazonQPreviewValidationIssues(request.prompt, parsedResponse.architectureJson).length > 0
-        ) {
+        const retryValidationIssues =
+          parsedResponse.status === "preview" ? findAmazonQPreviewValidationIssues(request.prompt, parsedResponse) : [];
+
+        if (parsedResponse.status === "preview" && retryValidationIssues.length > 0) {
           throw new Error("Amazon Q architecture draft failed self-validation after retry");
         }
       }
@@ -555,6 +582,15 @@ function createAmazonQArchitectureDraftInstructions(): string {
     "Do not perform deployment, apply, update, delete, or destroy actions.",
     "All architecture changes must remain user-accepted previews.",
     `Use only these ResourceNode.type values: ${SUPPORTED_RESOURCE_TYPES.join(", ")}.`,
+    "Treat the user's clarification answers as binding architecture constraints, not loose background context. Convert each answered choice into explicit nodes, edges, config, assumptions, and warnings in the preview.",
+    ...AMAZON_Q_CLARIFICATION_CHOICE_CONSTRAINTS,
+    "For React/Vue/Angular SPA requirements, model frontend delivery as S3 static assets behind CLOUDFRONT unless the user explicitly asks for SSR. Do not serve the SPA only from an application server.",
+    "For complex backend/business-logic requirements, include a backend compute tier behind LOAD_BALANCER and LOAD_BALANCER_LISTENER, with private application subnets and SECURITY_GROUP boundaries when VPC networking is present.",
+    "For global users, HTTPS-required, or 1-second loading goals, include a global entry path with CLOUDFRONT. Include ROUTE53_RECORD when a domain/HTTPS path is needed. Because ACM is not a supported node type, represent certificate requirements in CloudFront or load balancer config, assumptions, or nextActions instead of inventing an unsupported ACM node.",
+    "For image-upload requirements, include a separate S3 media bucket and describe the browser-to-S3 presigned upload flow in explanations, with IAM_ROLE/IAM_POLICY and KMS_KEY when security requirements justify them.",
+    "For real-time notification requirements, do not omit the notification path. If a dedicated WebSocket resource type is unavailable, represent the supported notification entry/channel through the backend tier or API_GATEWAY_REST_API/LAMBDA and explain the WebSocket or SSE implementation detail in assumptions.",
+    "For 99.99% availability or no-downtime requirements, do not return a single-AZ or single-EC2 architecture. Use at least two Availability Zones, multiple app subnets, LOAD_BALANCER plus LOAD_BALANCER_LISTENER, redundant compute nodes when compute is modeled as EC2, DB_SUBNET_GROUP, and RDS Multi-AZ config when a relational database is required.",
+    "If budget constraints conflict with high availability, global latency, or 1-second loading goals, do not silently downgrade the architecture. Return the architecture that satisfies the stated reliability/performance goal and add clear assumptions, warnings, or nextActions about the expected cost trade-off.",
     "Do not artificially limit the architecture to one resource per type. If traffic, availability, security, or cost requirements justify it, use multiple EC2, SUBNET, S3, or other supported resources.",
     "When multiple compute instances are needed, prefer multiple Availability Zones and include LOAD_BALANCER plus LOAD_BALANCER_LISTENER when that is the cost- and security-appropriate entry path.",
     "For high concurrency or high availability requirements such as large concurrent users, 99.9%+ availability, or event traffic spikes, consider horizontally scaled compute across AZs instead of a single EC2 instance.",
@@ -563,8 +599,11 @@ function createAmazonQArchitectureDraftInstructions(): string {
     "Layering and edge routing rules: list area/container nodes before their children so containers render behind resources, and do not route visible arrows through unrelated resources or place unrelated resources between connected nodes.",
     "If required information is missing, return a needs_clarification response with exactly one question.",
     "Do not include secrets, account IDs, credentials, ARNs, or private tokens.",
+    "Before finalizing the diagram, derive selected capabilities from every answered clarification choice. The architectureJson must visibly satisfy those capabilities, not only mention them in prose.",
+    "Every preview response must include requirementCoverage. Each entry must name the selected answer, whether it is satisfied, the capability it drives, the node ids that satisfy it, and any assumption or trade-off.",
+    "If a selected answer cannot be represented with supported ResourceNode.type values, represent the closest supported topology and explain the limitation in requirementCoverage and assumptions.",
     "The preview JSON shape is:",
-    '{"status":"preview","title":"string","architectureJson":{"nodes":[{"id":"string","type":"S3","label":"string","positionX":0,"positionY":0,"config":{}}],"edges":[{"id":"string","sourceId":"string","targetId":"string","label":"string"}]},"assumptions":["string"],"explanations":["string"],"summary":"string","highlights":["string"],"nextActions":["string"]}',
+    '{"status":"preview","title":"string","architectureJson":{"nodes":[{"id":"string","type":"S3","label":"string","positionX":0,"positionY":0,"config":{}}],"edges":[{"id":"string","sourceId":"string","targetId":"string","label":"string"}]},"requirementCoverage":[{"answer":"string","status":"satisfied","capability":"string","nodes":["node-id"],"assumption":"string"}],"assumptions":["string"],"explanations":["string"],"summary":"string","highlights":["string"],"nextActions":["string"]}',
     "The clarification JSON shape is:",
     '{"status":"needs_clarification","question":"string","suggestions":["string"]}'
   ].join("\n");
@@ -587,6 +626,8 @@ function createAmazonQArchitectureDraftRepairPrompt(
     createAmazonQArchitectureDraftInstructions(),
     "The previous preview failed SketchCatch self-validation.",
     "Regenerate the full Architecture Draft JSON. Do not patch partially.",
+    "Do not return the same topology. Add or remove nodes and edges needed to satisfy the failed requirement coverage checks.",
+    "The regenerated response must include requirementCoverage entries proving how every selected answer is represented.",
     "Validation issues:",
     ...validationIssues.map((issue) => `- ${issue}`),
     "Original user requirement prompt:",
@@ -598,9 +639,10 @@ function createAmazonQArchitectureDraftRepairPrompt(
 
 function findAmazonQPreviewValidationIssues(
   prompt: string,
-  architectureJson: ArchitectureJson
+  preview: AmazonQArchitectureDraftPreview
 ): string[] {
   const normalizedPrompt = prompt.normalize("NFKC").toLowerCase();
+  const architectureJson = preview.architectureJson;
   const nodeTypes = new Set(architectureJson.nodes.map((node) => node.type));
   const issues: string[] = [];
 
@@ -608,7 +650,74 @@ function findAmazonQPreviewValidationIssues(
     issues.push("The user requested serverless or no EC2, but the preview includes EC2. Regenerate without EC2 and use serverless supported resources such as LAMBDA and API_GATEWAY_REST_API when compute is needed.");
   }
 
+  issues.push(...findRequirementCoverageValidationIssues(normalizedPrompt, preview));
   issues.push(...findArchitectureLayoutValidationIssues(architectureJson));
+
+  return issues;
+}
+
+function findRequirementCoverageValidationIssues(
+  normalizedPrompt: string,
+  preview: AmazonQArchitectureDraftPreview
+): string[] {
+  const issues: string[] = [];
+  const architectureJson = preview.architectureJson;
+  const nodeTypes = new Set(architectureJson.nodes.map((node) => node.type));
+  const coverageText = createCoverageSearchText(preview);
+
+  if ((preview.requirementCoverage ?? []).length === 0) {
+    issues.push(
+      "Requirement coverage missing: every Amazon Q preview must include requirementCoverage entries that map selected answers to capabilities and node ids."
+    );
+  }
+
+  if (requiresNoDatabase(normalizedPrompt) && nodeTypes.has("RDS")) {
+    issues.push("The user selected no database, but the preview includes RDS. Regenerate without database resources.");
+  }
+
+  if (hasExplicitDatabaseMarker(normalizedPrompt) && requiresDatabase(normalizedPrompt) && !nodeTypes.has("RDS")) {
+    issues.push("The user selected a database requirement, but the preview does not include RDS. Add an RDS database or ask a clarification if no relational database is intended.");
+  }
+
+  if (requiresNoBackend(normalizedPrompt) && hasAnyNodeType(nodeTypes, ["EC2", "LAMBDA", "API_GATEWAY_REST_API", "LOAD_BALANCER", "LOAD_BALANCER_LISTENER"])) {
+    issues.push("The user selected no backend, but the preview includes backend compute or API entry resources. Remove backend-only resources unless another selected answer explicitly requires them.");
+  }
+
+  if (requiresSpaFrontend(normalizedPrompt) && (!nodeTypes.has("S3") || !nodeTypes.has("CLOUDFRONT"))) {
+    issues.push("The user selected an SPA frontend, but the preview does not include S3 static assets behind CloudFront. Add the SPA asset bucket and CloudFront entry.");
+  }
+
+  if (hasExplicitComplexBackendMarker(normalizedPrompt) && requiresComplexBackend(normalizedPrompt)) {
+    if (!nodeTypes.has("LOAD_BALANCER") || !nodeTypes.has("LOAD_BALANCER_LISTENER")) {
+      issues.push("The user selected complex backend/business logic, but the preview lacks LOAD_BALANCER and LOAD_BALANCER_LISTENER. Add an explicit backend entry path instead of a lone app server.");
+    }
+  }
+
+  if (requiresGlobalOrFastFrontend(normalizedPrompt) && !nodeTypes.has("CLOUDFRONT")) {
+    issues.push("The user selected global users, HTTPS-sensitive delivery, or a 1-second loading goal, but the preview lacks CloudFront. Add CloudFront for global/static/media acceleration.");
+  }
+
+  if (requiresImageUpload(normalizedPrompt) && !hasMediaUploadBucket(architectureJson)) {
+    issues.push("The user selected image upload, but the preview lacks a separate S3 media/upload bucket. Add a media bucket and represent the presigned upload flow in edges or explanations.");
+  }
+
+  if (requiresRealtime(normalizedPrompt) && !mentionsRealtimePath(coverageText)) {
+    issues.push("The user selected realtime chat/notification/data updates, but requirementCoverage does not name a WebSocket, SSE, notification, or realtime path. Add a supported backend/API notification path and coverage entry.");
+  }
+
+  if (requiresVeryHighAvailability(normalizedPrompt)) {
+    if (countComputeTargets(architectureJson) === 1) {
+      issues.push("The user selected 99.99% availability/no downtime, but the preview has only one app compute target. Add redundant compute targets in separate availability assumptions behind a load balancer.");
+    }
+
+    if (
+      hasExplicitDatabaseMarker(normalizedPrompt) &&
+      requiresDatabase(normalizedPrompt) &&
+      (!nodeTypes.has("DB_SUBNET_GROUP") || !coverageText.includes("multi-az"))
+    ) {
+      issues.push("The user selected 99.99% availability with a database, but the preview does not prove RDS Multi-AZ with DB_SUBNET_GROUP. Add DB_SUBNET_GROUP and a requirementCoverage/assumption entry that names RDS Multi-AZ.");
+    }
+  }
 
   return issues;
 }
@@ -1020,6 +1129,54 @@ function normalizeReferenceValue(value: string): string {
   return value.trim().replace(/^\$\{(.+)\}$/u, "$1");
 }
 
+function hasAnyNodeType(nodeTypes: ReadonlySet<ResourceType>, expectedTypes: readonly ResourceType[]): boolean {
+  return expectedTypes.some((type) => nodeTypes.has(type));
+}
+
+function countComputeTargets(architectureJson: ArchitectureJson): number {
+  const ec2Count = architectureJson.nodes.filter((node) => node.type === "EC2").length;
+
+  if (ec2Count > 0) {
+    return ec2Count;
+  }
+
+  return architectureJson.nodes.filter((node) => node.type === "LAMBDA").length;
+}
+
+function hasMediaUploadBucket(architectureJson: ArchitectureJson): boolean {
+  const s3Nodes = architectureJson.nodes.filter((node) => node.type === "S3");
+
+  return (
+    s3Nodes.length > 1 ||
+    s3Nodes.some((node) => /upload|media|image|profile|post|attachment|asset|file|이미지|업로드|미디어/iu.test(createNodeSearchText(node)))
+  );
+}
+
+function createCoverageSearchText(preview: AmazonQArchitectureDraftPreview): string {
+  return [
+    ...(preview.requirementCoverage ?? []).flatMap((coverage) => [
+      coverage.answer,
+      coverage.status,
+      coverage.capability ?? "",
+      coverage.assumption ?? "",
+      ...(coverage.nodes ?? [])
+    ]),
+    ...(preview.assumptions ?? []),
+    ...(preview.explanations ?? []),
+    ...(preview.highlights ?? []),
+    ...(preview.nextActions ?? []),
+    preview.summary ?? "",
+    ...preview.architectureJson.nodes.map(createNodeSearchText)
+  ]
+    .join("\n")
+    .normalize("NFKC")
+    .toLowerCase();
+}
+
+function createNodeSearchText(node: ArchitectureJson["nodes"][number]): string {
+  return [node.id, node.label ?? "", node.type, JSON.stringify(node.config)].join(" ").normalize("NFKC").toLowerCase();
+}
+
 function getStringConfigValue(node: ArchitectureJson["nodes"][number], key: string): string | undefined {
   const value = node.config[key];
 
@@ -1042,6 +1199,80 @@ function getStringConfigValues(node: ArchitectureJson["nodes"][number], key: str
 
 function requiresServerlessOnlyArchitecture(normalizedPrompt: string): boolean {
   return /(serverless|서버리스|lambda|람다|without\s+ec2|no\s+ec2|ec2\s*(없는|없이|빼고|제외|말고)|ec2는\s*쓰지\s*마)/iu.test(
+    normalizedPrompt
+  );
+}
+
+function requiresNoDatabase(normalizedPrompt: string): boolean {
+  return /(database:\s*(none|no)|no\s+database|database\s+not\s+required|데이터베이스.*필요\s*없음|필요\s*없음.*데이터베이스|정적\s*콘텐츠만)/iu.test(
+    normalizedPrompt
+  );
+}
+
+function requiresDatabase(normalizedPrompt: string): boolean {
+  if (requiresNoDatabase(normalizedPrompt)) {
+    return false;
+  }
+
+  return /(database|db\b|rds|postgres|postgresql|mysql|dynamodb|데이터베이스|사용자\s*정보|게시글|relational)/iu.test(
+    normalizedPrompt
+  );
+}
+
+function requiresNoBackend(normalizedPrompt: string): boolean {
+  return /(backend:\s*(none|no)|no\s+backend|backend\s+not\s+required|백엔드.*필요\s*없음|필요\s*없음.*정적\s*사이트)/iu.test(
+    normalizedPrompt
+  );
+}
+
+function requiresSpaFrontend(normalizedPrompt: string): boolean {
+  return /(spa|single\s*page|react|vue|angular)/iu.test(normalizedPrompt);
+}
+
+function requiresComplexBackend(normalizedPrompt: string): boolean {
+  return /(complex\s+backend|complex\s+business|business\s+logic|spring\s*boot|django|microservice|복잡|비즈니스\s*로직|마이크로서비스)/iu.test(
+    normalizedPrompt
+  );
+}
+
+function requiresGlobalOrFastFrontend(normalizedPrompt: string): boolean {
+  return /(global|worldwide|united\s+states|europe|글로벌|미국|유럽|1\s*second|1초|https:\s*required|ssl:\s*required|https.*필수|ssl.*필수)/iu.test(
+    normalizedPrompt
+  );
+}
+
+function requiresImageUpload(normalizedPrompt: string): boolean {
+  if (/(file\s*upload:\s*(none|no)|no\s+file\s+upload|upload:\s*none|파일\s*업로드.*없음)/iu.test(normalizedPrompt)) {
+    return false;
+  }
+
+  return /(image\s+upload|images?\s+only|profile\s+image|post\s+image|이미지|사진)/iu.test(normalizedPrompt);
+}
+
+function requiresRealtime(normalizedPrompt: string): boolean {
+  if (/(realtime:\s*(none|no)|real-time:\s*(none|no)|no\s+realtime|no\s+real-time|실시간.*필요\s*없음)/iu.test(normalizedPrompt)) {
+    return false;
+  }
+
+  return /(realtime|real-time|notification|chat|websocket|sse|실시간|알림|채팅)/iu.test(normalizedPrompt);
+}
+
+function requiresVeryHighAvailability(normalizedPrompt: string): boolean {
+  return /(99\.99|no\s+downtime|zero\s+downtime|무중단|절대\s*안됨)/iu.test(normalizedPrompt);
+}
+
+function mentionsRealtimePath(text: string): boolean {
+  return /(realtime|real-time|notification|websocket|sse|notify|실시간|알림|채팅)/iu.test(text);
+}
+
+function hasExplicitDatabaseMarker(normalizedPrompt: string): boolean {
+  return /(database|db\b|rds|postgres|postgresql|mysql|dynamodb|relational|\uB370\uC774\uD130\uBCA0\uC774\uC2A4|\uC0AC\uC6A9\uC790\s*\uC815\uBCF4|\uAC8C\uC2DC\uAE00)/iu.test(
+    normalizedPrompt
+  );
+}
+
+function hasExplicitComplexBackendMarker(normalizedPrompt: string): boolean {
+  return /(complex\s+backend|complex\s+business|business\s+logic|spring\s*boot|django|microservice)/iu.test(
     normalizedPrompt
   );
 }
@@ -1076,12 +1307,35 @@ function parseAmazonQArchitectureDraftResponse(text: string): AmazonQArchitectur
     status: "preview",
     title: typeof parsed.title === "string" && parsed.title.trim().length > 0 ? parsed.title.trim() : "Amazon Q Architecture Draft",
     architectureJson,
+    requirementCoverage: readRequirementCoverage(parsed.requirementCoverage),
     assumptions: readStringArray(parsed.assumptions),
     explanations: readStringArray(parsed.explanations),
     summary: typeof parsed.summary === "string" ? parsed.summary : undefined,
     highlights: readStringArray(parsed.highlights),
     nextActions: readStringArray(parsed.nextActions)
   };
+}
+
+function readRequirementCoverage(value: unknown): AmazonQRequirementCoverage[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((item) => {
+    if (!isObject(item) || typeof item.answer !== "string" || typeof item.status !== "string") {
+      return [];
+    }
+
+    return [
+      {
+        answer: item.answer,
+        status: item.status,
+        ...(typeof item.capability === "string" ? { capability: item.capability } : {}),
+        ...(Array.isArray(item.nodes) ? { nodes: item.nodes.filter((node): node is string => typeof node === "string") } : {}),
+        ...(typeof item.assumption === "string" ? { assumption: item.assumption } : {})
+      }
+    ];
+  });
 }
 
 function parseArchitectureJson(value: unknown): ArchitectureJson {

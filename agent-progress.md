@@ -3481,3 +3481,53 @@
   - `pnpm build` - first sandbox run failed on `.next` unlink `EPERM`; rerun with elevated permissions passed
 - Known risks:
   - Edge crossing validation approximates visible routing with the source-to-target center line. It catches the current straight-through resource collision class, but React Flow smoothstep routing can still create visually different paths in edge cases.
+# 2026-07-07 - Amazon Q all clarification choice prompt constraints
+
+- Goal: Expand the Amazon Q Architecture Draft prompt so every required website clarification option has explicit architecture guidance, not only the dynamic/global/99.99% case.
+- Completed:
+  - Added a full clarification choice mapping section for website type, traffic scale, database, frontend, backend, user region, budget, HTTPS, file upload, realtime, management preference, loading goal, website size, traffic pattern, and downtime tolerance.
+  - Kept Amazon Q as the diagram generator; SketchCatch now sends stronger option-to-architecture guidance while still limiting Q to supported ResourceNode types.
+  - Updated regression coverage to prove the full mapping section is included in the Amazon Q prompt.
+- Verification run:
+  - `pnpm harness:check` - passed before edits.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --dir apps/api exec tsx --test src/services/aiArchitectureDrafts.test.ts` - passed, 8 tests.
+  - `pnpm harness:check` - passed after targeted test.
+  - `pnpm lint` - passed, with non-fatal Turbo cache rename warnings.
+  - `pnpm typecheck` - passed, with non-fatal Turbo cache rename warnings.
+  - `pnpm build` - first sandbox run failed on `.next` unlink `EPERM`; elevated rerun passed.
+- Known risks:
+  - Real Amazon Q Business was not called locally; fake-provider tests verify the complete prompt content reaches the provider call.
+
+# 2026-07-07 - Amazon Q dynamic global website prompt constraint hardening
+
+- Goal: Keep Amazon Q responsible for diagram generation, while making the prompt treat dynamic SPA, complex backend, global users, HTTPS, image upload, realtime notification, and 99.99% availability answers as required architecture constraints.
+- Completed:
+  - Added Amazon Q Architecture Draft instructions that treat clarification answers as binding architecture constraints.
+  - Made the prompt require SPA static delivery through S3 + CloudFront, complex backend entry through LOAD_BALANCER/listener, global/HTTPS/1-second entry handling, image-upload S3 presigned flow, realtime notification path, 99.99% Multi-AZ/RDS Multi-AZ guidance, and explicit cost/SLA trade-off warnings.
+  - Added a regression test for the dynamic global website answer set to prove those constraints are sent to Amazon Q.
+- Verification run:
+  - `pnpm harness:check` - passed before edits.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --dir apps/api exec tsx --test src/services/aiArchitectureDrafts.test.ts` - passed, 8 tests.
+  - `pnpm harness:check` - passed after targeted test.
+  - `pnpm lint` - passed, with non-fatal Turbo cache rename warnings.
+  - `pnpm typecheck` - passed, with non-fatal Turbo cache rename warnings.
+  - `pnpm build` - first sandbox run failed on `.next` unlink `EPERM`; elevated rerun passed.
+- Known risks:
+  - Real Amazon Q Business was not called locally; fake-provider tests verify the prompt and retry plumbing.
+
+# 2026-07-07 - Amazon Q requirement coverage regeneration guard
+
+- Goal: Prevent Amazon Q from returning the same under-specified diagram after prompt hardening by requiring explicit selected-answer coverage and rejecting previews that do not prove the topology satisfies those answers.
+- Completed:
+  - Added `requirementCoverage` to the Amazon Q preview contract and parser.
+  - Added self-validation checks for missing coverage, SPA S3/CloudFront delivery, complex backend load-balancer entry, global/fast CloudFront entry, image-upload media bucket, realtime path coverage, and 99.99% database Multi-AZ proof.
+  - Strengthened the repair prompt so Amazon Q must regenerate the full JSON, avoid the same topology, and include coverage entries for every selected answer.
+  - Updated tests so incomplete dynamic/global diagrams trigger a second Amazon Q call and only pass when the regenerated topology contains the required representative resources.
+- Verification run:
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --dir apps/api exec tsx --test src/services/aiArchitectureDrafts.test.ts` - passed, 8 tests.
+  - `pnpm harness:check` - passed after edits.
+  - `pnpm lint` - passed, with non-fatal Turbo cache rename warnings.
+  - `pnpm typecheck` - passed, with non-fatal Turbo cache rename warnings.
+  - `pnpm build` - sandbox run failed on `.next` unlink `EPERM`; elevated rerun passed.
+- Known risks:
+  - Real Amazon Q Business was not called locally. The fake provider verifies prompt/repair behavior and local topology validation, but live model variability still needs product QA.
