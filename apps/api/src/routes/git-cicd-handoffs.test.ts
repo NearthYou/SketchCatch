@@ -491,6 +491,43 @@ test("POST /api/projects/:projectId/git-cicd-handoffs rejects provider mismatch"
   await app.close();
 });
 
+test("POST /api/projects/:projectId/git-cicd-handoffs maps GitHub permission failures before saving handoff", async () => {
+  const repository = new FakeGitCicdHandoffRepository();
+  repository.sourceRepository = createSourceRepositoryRecord({
+    provider: "github",
+    githubInstallationId: "123456",
+    githubRepositoryId: "987654"
+  });
+  const provider = createGitHubGitCicdHandoffProvider({
+    async createPullRequest() {
+      const error = new Error("Resource not accessible by integration") as Error & {
+        statusCode?: number;
+      };
+
+      error.statusCode = 403;
+      throw error;
+    }
+  });
+  const app = await buildGitCicdHandoffTestApp(repository, { provider });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/projects/${projectId}/git-cicd-handoffs`,
+    headers: await authHeaders(),
+    payload: createHandoffBody()
+  });
+
+  assert.equal(response.statusCode, 409);
+  assert.deepEqual(response.json(), {
+    error: "github_oauth_required",
+    message:
+      "GitHub repository permission is required before Git/CI/CD handoff can be created"
+  });
+  assert.equal(repository.calls.some((call) => call.name === "createHandoff"), false);
+
+  await app.close();
+});
+
 test("POST /api/projects/:projectId/git-cicd-handoffs rejects secret-looking request fields", async () => {
   const repository = new FakeGitCicdHandoffRepository();
   const providerCalls: GitCicdProviderCreateInput[] = [];

@@ -327,6 +327,13 @@ export class GitCicdHandoffProviderMismatchError extends Error {
   }
 }
 
+export class GitCicdHandoffProviderPermissionError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "GitCicdHandoffProviderPermissionError";
+  }
+}
+
 const allowedGitCicdHandoffStatusTransitions: Record<
   GitCicdHandoffStatus,
   readonly GitCicdHandoffStatus[]
@@ -385,44 +392,56 @@ export function createGitHubGitCicdHandoffProvider(
         throw new Error("GitHub source repository installation id is required");
       }
 
-      const result = await gitProvider.createPullRequest({
-        repository: {
-          provider: "github",
-          installationId: githubInstallationId,
-          owner: input.sourceRepository.owner,
-          name: input.sourceRepository.name
-        },
-        targetBranch: input.targetBranch,
-        sourceBranch,
-        commitMessage,
-        files: [
-          {
-            path: createHandoffFilePath({
-              projectSlug: input.projectSlug,
-              handoffKind: input.handoffKind,
-              fileName: input.terraformArtifact.fileName
-            }),
-            artifactObjectKey: input.terraformArtifact.objectKey,
-            contentType: input.terraformArtifact.contentType
+      let result: GitProviderCreatePullRequestResult;
+
+      try {
+        result = await gitProvider.createPullRequest({
+          repository: {
+            provider: "github",
+            installationId: githubInstallationId,
+            owner: input.sourceRepository.owner,
+            name: input.sourceRepository.name
           },
-          ...createGitCicdAutomationFiles({
-            projectSlug: input.projectSlug,
-            repositoryOwner: input.sourceRepository.owner,
-            repositoryName: input.sourceRepository.name,
-            targetBranch: input.targetBranch,
-            environmentName: input.environmentName,
-            awsRegion: input.awsRegion,
-            awsRoleArn: input.awsRoleArn,
-            tfStateBucket: input.tfStateBucket ?? undefined,
-            releaseBucket: input.releaseBucket ?? undefined,
-            rdsEnabled: input.rdsEnabled,
-            staticSiteUrl: input.staticSiteUrl,
-            apiBaseUrl: input.apiBaseUrl
-          })
-        ],
-        pullRequest: input.pullRequestDraft,
-        userAcceptedChangeId: input.userAcceptedChangeId
-      });
+          targetBranch: input.targetBranch,
+          sourceBranch,
+          commitMessage,
+          files: [
+            {
+              path: createHandoffFilePath({
+                projectSlug: input.projectSlug,
+                handoffKind: input.handoffKind,
+                fileName: input.terraformArtifact.fileName
+              }),
+              artifactObjectKey: input.terraformArtifact.objectKey,
+              contentType: input.terraformArtifact.contentType
+            },
+            ...createGitCicdAutomationFiles({
+              projectSlug: input.projectSlug,
+              repositoryOwner: input.sourceRepository.owner,
+              repositoryName: input.sourceRepository.name,
+              targetBranch: input.targetBranch,
+              environmentName: input.environmentName,
+              awsRegion: input.awsRegion,
+              awsRoleArn: input.awsRoleArn,
+              tfStateBucket: input.tfStateBucket ?? undefined,
+              releaseBucket: input.releaseBucket ?? undefined,
+              rdsEnabled: input.rdsEnabled,
+              staticSiteUrl: input.staticSiteUrl,
+              apiBaseUrl: input.apiBaseUrl
+            })
+          ],
+          pullRequest: input.pullRequestDraft,
+          userAcceptedChangeId: input.userAcceptedChangeId
+        });
+      } catch (error) {
+        if (isGitProviderPermissionError(error)) {
+          throw new GitCicdHandoffProviderPermissionError(
+            "GitHub repository permission is required before Git/CI/CD handoff can be created"
+          );
+        }
+
+        throw error;
+      }
 
       return {
         repositoryProvider: "github",
@@ -778,6 +797,16 @@ export function createPostgresGitCicdHandoffRepository(
       return handoff;
     }
   };
+}
+
+function isGitProviderPermissionError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "statusCode" in error &&
+    ((error as { readonly statusCode?: unknown }).statusCode === 401 ||
+      (error as { readonly statusCode?: unknown }).statusCode === 403)
+  );
 }
 
 export async function createGitCicdHandoff(

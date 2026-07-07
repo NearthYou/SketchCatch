@@ -29,6 +29,7 @@ import {
   getGitCicdHandoff,
   GitCicdHandoffInvalidStatusTransitionError,
   GitCicdHandoffNotFoundError,
+  GitCicdHandoffProviderPermissionError,
   GitCicdHandoffProviderMismatchError,
   listProjectGitCicdHandoffs,
   updateGitCicdHandoffStatus,
@@ -670,6 +671,13 @@ function handleGitCicdHandoffError(error: unknown, reply: FastifyReply) {
   if (error instanceof GitCicdHandoffProviderMismatchError) {
     return reply.status(409).send({
       error: "conflict",
+      message: error.message
+    });
+  }
+
+  if (error instanceof GitCicdHandoffProviderPermissionError) {
+    return reply.status(409).send({
+      error: "github_oauth_required",
       message: error.message
     });
   }

@@ -15,6 +15,12 @@
 - Branch: `feature/sw/203-github-oauth-repo-setup`
 - Status: implemented_in_pr_211_for_app_token_repo_settings_apply
 
+Current evidence:
+
+- GitHub App installation token 기반 repository settings writer가 Environment 생성과 Actions variables upsert를 수행한다.
+- GitHub PR 생성 또는 repository settings apply 중 401/403 권한 부족이 발생하면 `github_oauth_required`로 fail-closed 처리한다.
+- Secret 값은 받지 않으며, repository secrets는 preview 이름만 유지한다.
+
 목표:
 
 - GitHub App만으로 부족한 workflow 파일 생성과 Actions 설정 자동화를 위해 user OAuth 추가 승인과 repo 설정 writer를 만든다.
@@ -87,6 +93,12 @@
 - Issue: #205
 - Branch: `feature/sw/205-aws-role-oidc-approval`
 - Status: implemented_in_pr_211_for_approved_trust_policy_apply
+
+Current evidence:
+
+- 승인된 `awsRoleDiff`와 `roleArn`이 있을 때만 IAM trust policy apply route가 실행된다.
+- executor는 GitHub OIDC statement를 적용한 뒤 IAM `GetRole` 재조회로 `verified`를 확인하고 handoff JSON에 기록한다.
+- 실제 AWS 계정 live apply는 별도 smoke 승인 후 수행해야 한다.
 
 목표:
 
@@ -244,6 +256,12 @@
 - Blocked by: #203, #204, #205, #208
 - Status: implemented_in_pr_211_for_core_panel_and_apply_actions
 
+Current evidence:
+
+- Deployment Panel은 `Git/CI/CD handoff 생성`, `Repo settings 적용`, `AWS role diff 적용` 액션을 제공한다.
+- repo settings/IAM diff/Environment approval/OAuth 필요 여부/infra-app-destroy status/static/API URL을 한 handoff detail에서 표시한다.
+- 별도 modal 대신 승인된 diff와 disabled state로 최소 승인 흐름을 유지한다.
+
 목표:
 
 - 사용자가 Deployment Panel에서 repo 설정, AWS role diff, RDS opt-in, PR 생성, pipeline 상태, URL 검증 결과를 한 흐름으로 확인한다.
@@ -283,6 +301,11 @@
 - Branch: `feature/sw/210-cicd-live-smoke-docs`
 - Blocked by: #207, #209
 - Status: smoke_runner_added_live_execution_pending
+
+Current evidence:
+
+- `scripts/smoke/git-cicd-auto-deploy.ps1`이 repo settings apply, AWS role diff apply, pipeline status, static URL marker 확인 report를 출력한다.
+- 실제 PR merge, Environment approval, Terraform apply, app release, ASG refresh, destroy live smoke는 아직 실행 증거가 없다.
 
 목표:
 

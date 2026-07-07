@@ -11,6 +11,7 @@
   - GitHub Actions polling now prefers PR number, checks merge state, then maps merge commit SHA workflow runs by `SketchCatch Infra`, `SketchCatch App`, and `SketchCatch Destroy`.
   - Deployment Panel has a `Git/CI/CD handoff 생성` action and displays OAuth, Environment approval, IAM diff, repo settings, detailed pipeline statuses, and URL verification targets.
   - Repository settings apply route now creates/updates GitHub Environment and Actions variables through the GitHub App token, with `github_oauth_required` fail-closed handling for missing permissions.
+  - GitHub PR creation now maps 401/403 provider failures to `github_oauth_required` before any handoff record is saved.
   - AWS role diff apply route now applies approved GitHub OIDC trust statements to IAM and stores `applied/appliedAt/verified` in `awsRoleDiff`.
   - Deployment Panel exposes `Repo settings 적용` and `AWS role diff 적용`, then refreshes the panel snapshot.
   - Added `scripts/smoke/git-cicd-auto-deploy.ps1` for repository settings apply, role diff apply, pipeline status, and static URL marker report generation.

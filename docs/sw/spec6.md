@@ -53,6 +53,13 @@ SketchCatch Architecture Board
 GitHub App installation token은 repository 선택, contents write, PR 생성, Actions run 조회에 사용한다.
 workflow 파일 생성과 repository Actions 설정 자동화는 GitHub user OAuth 추가 승인으로 처리한다.
 
+2026-07-07 구현 결정:
+
+- MVP 구현은 먼저 GitHub App installation token으로 workflow PR 생성, Environment 생성, Actions variables upsert를 시도한다.
+- GitHub 권한이 부족하면 `github_oauth_required`로 차단하고, handoff record를 저장하지 않거나 apply 결과를 실패로 반환한다.
+- User OAuth 또는 GitHub App permission 보강은 같은 `github_oauth_required` 복구 경로로 이어지며, token 원문은 저장하지 않는다.
+- Repository secrets는 원문 값을 받지 않는 한 실제 mutation하지 않고 preview 이름만 표시한다.
+
 필수 권한:
 
 - GitHub App: Contents read/write, Pull requests read/write, Actions read, Metadata read.

@@ -10,6 +10,7 @@
   - GitHub Actions polling을 PR number -> merge commit SHA -> workflow name 기준으로 확장해 infra/app/destroy 상태를 분리 추적한다.
   - Deployment Panel에 `Git/CI/CD handoff 생성` 버튼과 OAuth 필요, Environment approval, IAM diff, repo settings, infra/app/destroy status, static/API URL 표시를 추가했다.
   - GitHub repository settings apply route를 추가해 Environment 생성과 Actions variables upsert를 GitHub App 권한으로 시도하고, 권한 부족은 `github_oauth_required`로 차단한다.
+  - GitHub PR 생성 중 workflow/repository 권한 부족이 발생하면 handoff record 저장 전에 `github_oauth_required`로 차단하도록 보강했다.
   - AWS role diff apply route를 추가해 승인된 GitHub OIDC trust policy diff만 IAM role에 적용하고 재조회 검증 결과를 handoff JSON에 기록한다.
   - Deployment Panel에 `Repo settings 적용`, `AWS role diff 적용` 버튼을 추가했고, 성공 후 panel snapshot을 다시 로드한다.
   - `scripts/smoke/git-cicd-auto-deploy.ps1`로 repository settings apply, AWS role diff apply, pipeline status, static URL marker 확인 report를 출력할 수 있게 했다.
