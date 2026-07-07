@@ -531,6 +531,42 @@ test("POST /api/projects/:projectId/git-cicd-handoffs maps GitHub permission fai
   await app.close();
 });
 
+test("POST /api/projects/:projectId/git-cicd-handoffs maps GitHub file conflicts before saving handoff", async () => {
+  const repository = new FakeGitCicdHandoffRepository();
+  repository.sourceRepository = createSourceRepositoryRecord({
+    provider: "github",
+    githubInstallationId: "123456",
+    githubRepositoryId: "987654"
+  });
+  const provider = createGitHubGitCicdHandoffProvider({
+    async createPullRequest() {
+      const error = new Error("No Git/CI/CD handoff file changes were needed") as Error & {
+        statusCode?: number;
+      };
+
+      error.statusCode = 409;
+      throw error;
+    }
+  });
+  const app = await buildGitCicdHandoffTestApp(repository, { provider });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/projects/${projectId}/git-cicd-handoffs`,
+    headers: await authHeaders(),
+    payload: createHandoffBody()
+  });
+
+  assert.equal(response.statusCode, 409);
+  assert.deepEqual(response.json(), {
+    error: "conflict",
+    message: "GitHub PR could not be created because the handoff files did not change"
+  });
+  assert.equal(repository.calls.some((call) => call.name === "createHandoff"), false);
+
+  await app.close();
+});
+
 test("POST /api/projects/:projectId/git-cicd-handoffs rejects secret-looking request fields", async () => {
   const repository = new FakeGitCicdHandoffRepository();
   const providerCalls: GitCicdProviderCreateInput[] = [];
