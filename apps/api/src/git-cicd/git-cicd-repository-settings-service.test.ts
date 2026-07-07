@@ -10,6 +10,7 @@ import type {
   GitCicdHandoffRecord,
   GitCicdHandoffSourceRepositoryRecord
 } from "./git-cicd-handoff-service.js";
+import type { GitHubAppClient } from "../source-repositories/github-app-client.js";
 
 test("GitHub OAuth repository settings applier patches existing variables without a GET probe", async () => {
   const requests: Array<{ url: string; method: string }> = [];
@@ -31,7 +32,9 @@ test("GitHub OAuth repository settings applier patches existing variables withou
       repositorySettingsPreview: {
         environmentName: "sketchcatch-production",
         variables: {
-          SKETCHCATCH_AWS_REGION: "ap-northeast-2"
+          SKETCHCATCH_ASG_NAME: "",
+          SKETCHCATCH_AWS_REGION: "ap-northeast-2",
+          SKETCHCATCH_STATIC_SITE_URL: "   "
         },
         secrets: [],
         workflowFiles: []
@@ -46,6 +49,14 @@ test("GitHub OAuth repository settings applier patches existing variables withou
   assert.deepEqual(
     requests.map((request) => request.method),
     ["PUT", "PATCH"]
+  );
+  assert.equal(
+    requests.some((request) => request.url.includes("SKETCHCATCH_ASG_NAME")),
+    false
+  );
+  assert.equal(
+    requests.some((request) => request.url.includes("SKETCHCATCH_STATIC_SITE_URL")),
+    false
   );
   assert.equal(
     requests.some(
@@ -135,6 +146,64 @@ test("GitHub App repository settings applier maps missing shared config to permi
   } finally {
     restoreEnv(previousEnv);
   }
+});
+
+test("GitHub App repository settings applier skips blank variables", async () => {
+  let appliedVariables: Record<string, string> | null = null;
+  const applier = createGitHubRepositorySettingsApplier({
+    async applyRepositorySettings(input) {
+      appliedVariables = input.variables;
+
+      return {
+        environmentName: input.environmentName,
+        variables: Object.keys(input.variables)
+      };
+    },
+    async createPullRequest() {
+      throw new Error("not used");
+    },
+    async getLatestWorkflowRunForHeadSha() {
+      throw new Error("not used");
+    },
+    async getPipelineStatusForPullRequest() {
+      throw new Error("not used");
+    },
+    async listInstallationRepositories() {
+      throw new Error("not used");
+    },
+    async listInstallations() {
+      throw new Error("not used");
+    }
+  } satisfies GitHubAppClient);
+
+  const result = await applier.applyRepositorySettings({
+    handoff: {
+      repositorySettingsPreview: {
+        environmentName: "sketchcatch-production",
+        variables: {
+          SKETCHCATCH_ASG_NAME: "",
+          SKETCHCATCH_AWS_REGION: "ap-northeast-2",
+          SKETCHCATCH_API_BASE_URL: null,
+          SKETCHCATCH_RDS_ENABLED: "false",
+          SKETCHCATCH_RELEASE_BUCKET: undefined,
+          SKETCHCATCH_STATIC_SITE_URL: " "
+        } as unknown as Record<string, string>,
+        secrets: [],
+        workflowFiles: []
+      }
+    } as unknown as GitCicdHandoffRecord,
+    sourceRepository: {
+      githubInstallationId: "123",
+      owner: "NearthYou",
+      name: "SketchCatch"
+    } as unknown as GitCicdHandoffSourceRepositoryRecord
+  });
+
+  assert.deepEqual(appliedVariables, {
+    SKETCHCATCH_AWS_REGION: "ap-northeast-2",
+    SKETCHCATCH_RDS_ENABLED: "false"
+  });
+  assert.deepEqual(result.variables, ["SKETCHCATCH_AWS_REGION", "SKETCHCATCH_RDS_ENABLED"]);
 });
 
 function restoreEnv(previousEnv: Record<string, string | undefined>): void {
