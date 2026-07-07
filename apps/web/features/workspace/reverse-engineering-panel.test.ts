@@ -144,6 +144,22 @@ test("Reverse Engineering result shows multiple structure candidates before appl
   assert.match(resultPanelSource, /candidate\.nodeCount/);
 });
 
+test("Reverse Engineering candidate preview keeps the original board as the comparison base", () => {
+  assert.match(panelSource, /previewBaseDiagram/);
+  assert.match(panelSource, /previewSourceDiagram = previewBaseDiagram \?\? context\.diagram/);
+  assert.match(panelSource, /showFirstCandidatePreview\(response\.response\.result, baseDiagram\)/);
+  assert.match(panelSource, /showFirstCandidatePreview\(response\.result, baseDiagram\)/);
+  assert.match(panelSource, /currentDiagram: previewSourceDiagram/);
+  assert.match(panelSource, /hasCurrentBoardResources=\{previewSourceDiagram\.nodes\.length > 0\}/);
+});
+
+test("Reverse Engineering start page keeps the editor initial diagram stable while previewing", () => {
+  assert.match(reverseWorkspaceClientSource, /initialDiagram=\{EMPTY_DIAGRAM\}/);
+  assert.match(reverseWorkspaceClientSource, /latestDiagramRef\.current = nextDiagram/);
+  assert.doesNotMatch(reverseWorkspaceClientSource, /useState<DiagramJson>/);
+  assert.doesNotMatch(reverseWorkspaceClientSource, /setDiagram\(nextDiagram\)/);
+});
+
 test("Reverse Engineering result lets users inspect provider parameters for every discovered resource", () => {
   assert.match(resultPanelSource, /ReverseEngineeringResourceParametersPanel/);
   assert.match(parameterPanelSource, /리소스 파라미터/);

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useRef } from "react";
 import type { DiagramJson } from "../../../../../packages/types/src";
 import { DiagramEditor } from "../../../features/diagram-editor";
 import { EMPTY_DIAGRAM } from "../../../features/diagram-editor/constants";
@@ -17,12 +17,10 @@ const REVERSE_PREVIEW_PROJECT_ID = "reverse-preview-project";
 export function ReverseWorkspaceClient({ projectName }: ReverseWorkspaceClientProps) {
   const router = useRouter();
   const latestDiagramRef = useRef<DiagramJson>(EMPTY_DIAGRAM);
-  const [diagram, setDiagram] = useState<DiagramJson>(EMPTY_DIAGRAM);
 
-  // DiagramEditor가 미리보기나 적용 결과를 바꾸면 최신 보드 상태를 기억합니다.
+  // DiagramEditor의 initialDiagram을 다시 바꾸면 preview가 초기화되므로 저장용 ref만 갱신합니다.
   const handleDiagramChange = useCallback((nextDiagram: DiagramJson): void => {
     latestDiagramRef.current = nextDiagram;
-    setDiagram(nextDiagram);
   }, []);
 
   // Reverse 시작 화면에서는 아직 저장할 프로젝트가 없어서 저장 버튼을 눌러도 서버에는 쓰지 않습니다.
@@ -36,7 +34,7 @@ export function ReverseWorkspaceClient({ projectName }: ReverseWorkspaceClientPr
 
   return (
     <DiagramEditor
-      initialDiagram={diagram}
+      initialDiagram={EMPTY_DIAGRAM}
       leftPanel={<ReverseStartGuide onChooseAnotherStartMode={chooseAnotherStartMode} />}
       floatingPanel={(context) => (
         <section className="reverseImportPanelShell" aria-label="기존 AWS 가져오기 패널">
