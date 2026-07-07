@@ -471,7 +471,7 @@ test("applyRepositorySettings creates environment and upserts repository variabl
           name: "SKETCHCATCH_AWS_REGION",
           value: "ap-northeast-2"
         });
-        return jsonResponse({});
+        return noContentResponse();
       }
 
       if (
@@ -668,5 +668,11 @@ function jsonResponse(body: unknown, status = 200): Response {
     headers: {
       "Content-Type": "application/json"
     }
+  });
+}
+
+function noContentResponse(): Response {
+  return new Response(null, {
+    status: 204
   });
 }
