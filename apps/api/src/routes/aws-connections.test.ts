@@ -19,6 +19,8 @@ const userId = "22222222-2222-4222-8222-222222222222";
 const awsConnectionId = "33333333-3333-4333-8333-333333333333";
 const callerPrincipalArn = "arn:aws:iam::123456789012:role/SketchCatchRuntimeRole";
 const testRoleArn = "arn:aws:iam::123456789012:role/SketchCatchTerraformExecutionRole";
+const generatedRoleName = "SketchCatchTerraformExecutionRole-33333333";
+const generatedRoleArn = `arn:aws:iam::123456789012:role/${generatedRoleName}`;
 const externalId = "sc_conn_33333333-3333-4333-8333-333333333333_random";
 const fixedNow = new Date("2026-06-26T00:00:00.000Z");
 
@@ -329,7 +331,7 @@ test("POST /api/aws/connections returns caller principal ARN and generated exter
   assert.equal(body.awsConnection.status, "pending");
   assert.equal(body.callerPrincipalArn, callerPrincipalArn);
   assert.deepEqual(body.roleSetup, {
-    roleName: "SketchCatchTerraformExecutionRole",
+    roleName: generatedRoleName,
     trustedPrincipalArn: callerPrincipalArn,
     externalId,
     trustPolicy: {
@@ -358,14 +360,17 @@ test("POST /api/aws/connections returns caller principal ARN and generated exter
   assert.notEqual(body.roleSetup.permissionSetup.terraformPolicyDocument, null);
   assert.deepEqual(body.callerRoleSetup, {
     policyName: "SketchCatchAssumeTerraformExecutionRole",
-    assumableRoleArnPattern: "arn:aws:iam::*:role/SketchCatchTerraformExecutionRole",
+    assumableRoleArnPattern: "arn:aws:iam::*:role/SketchCatchTerraformExecutionRole*",
     policyDocument: {
       Version: "2012-10-17",
       Statement: [
         {
           Effect: "Allow",
           Action: "sts:AssumeRole",
-          Resource: "arn:aws:iam::*:role/SketchCatchTerraformExecutionRole"
+          Resource: [
+            "arn:aws:iam::*:role/SketchCatchTerraformExecutionRole",
+            "arn:aws:iam::*:role/SketchCatchTerraformExecutionRole-*"
+          ]
         }
       ]
     }
@@ -585,10 +590,10 @@ test("POST /api/aws/connections/:connectionId/verify-created-role verifies the C
   const body = response.json() as AwsConnectionVerifyResponse;
   assert.equal(body.ok, true);
   assert.equal(body.awsConnection.status, "verified");
-  assert.equal(body.awsConnection.roleArn, testRoleArn);
+  assert.equal(body.awsConnection.roleArn, generatedRoleArn);
   assert.deepEqual(tester.calls, [
     {
-      roleArn: testRoleArn,
+      roleArn: generatedRoleArn,
       externalId,
       region: "ap-northeast-2"
     }
@@ -676,11 +681,13 @@ test("GET /api/aws/connections/:connectionId/cloudformation-template returns lau
 
   assert.equal(response.statusCode, 200);
   const body = response.json() as AwsConnectionCloudFormationTemplateResponse;
-  assert.equal(body.roleName, "SketchCatchTerraformExecutionRole");
+  assert.equal(body.roleName, generatedRoleName);
   assert.equal(body.stackName, "sketchcatch-aws-connection-33333333");
   assert.equal(body.region, "ap-northeast-2");
   assert.deepEqual(body.capabilities, ["CAPABILITY_NAMED_IAM"]);
   assert.match(body.templateBody, /Type: AWS::IAM::Role/);
+  assert.match(body.templateBody, /RoleName: "SketchCatchTerraformExecutionRole-33333333"/);
+  assert.doesNotMatch(body.templateBody, /RoleName: "SketchCatchTerraformExecutionRole"\n/);
   assert.doesNotMatch(body.templateBody, /Policies:\n\s+- PolicyName: SketchCatchMvpTerraformApply/);
   assert.match(body.templateBody, /SketchCatchTerraformApplyPolicy:/);
   assert.match(body.templateBody, /Type: AWS::IAM::Policy/);
