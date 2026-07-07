@@ -248,7 +248,97 @@ jobs:
             echo "SKETCHCATCH_ASG_NAME is empty; skipping instance refresh."
             exit 0
           fi
-          aws autoscaling start-instance-refresh --auto-scaling-group-name "$ASG_NAME" --preferences MinHealthyPercentage=50
+          RELEASE_ID="\${GITHUB_SHA}"
+          aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names "$ASG_NAME" --query 'AutoScalingGroups[0]' --output json > sketchcatch-asg.json
+          LT_ID=$(python - <<'PY'
+          import json
+          with open("sketchcatch-asg.json", encoding="utf-8") as handle:
+              asg = json.load(handle) or {}
+          spec = asg.get("LaunchTemplate") or ((asg.get("MixedInstancesPolicy") or {}).get("LaunchTemplate") or {}).get("LaunchTemplateSpecification") or {}
+          print(spec.get("LaunchTemplateId") or "")
+          PY
+          )
+          LT_NAME=$(python - <<'PY'
+          import json
+          with open("sketchcatch-asg.json", encoding="utf-8") as handle:
+              asg = json.load(handle) or {}
+          spec = asg.get("LaunchTemplate") or ((asg.get("MixedInstancesPolicy") or {}).get("LaunchTemplate") or {}).get("LaunchTemplateSpecification") or {}
+          print(spec.get("LaunchTemplateName") or "")
+          PY
+          )
+          LT_VERSION=$(python - <<'PY'
+          import json
+          with open("sketchcatch-asg.json", encoding="utf-8") as handle:
+              asg = json.load(handle) or {}
+          spec = asg.get("LaunchTemplate") or ((asg.get("MixedInstancesPolicy") or {}).get("LaunchTemplate") or {}).get("LaunchTemplateSpecification") or {}
+          print(spec.get("Version") or "$Latest")
+          PY
+          )
+          if [ -n "$LT_ID" ]; then
+            LT_LOOKUP_ARGS=(--launch-template-id "$LT_ID")
+            LT_UPDATE_SPEC="LaunchTemplateId=$LT_ID"
+          elif [ -n "$LT_NAME" ]; then
+            LT_LOOKUP_ARGS=(--launch-template-name "$LT_NAME")
+            LT_UPDATE_SPEC="LaunchTemplateName=$LT_NAME"
+          else
+            LT_LOOKUP_ARGS=()
+            LT_UPDATE_SPEC=""
+          fi
+          if [ "\${#LT_LOOKUP_ARGS[@]}" -gt 0 ]; then
+            aws ec2 describe-launch-template-versions "\${LT_LOOKUP_ARGS[@]}" --versions "$LT_VERSION" --query 'LaunchTemplateVersions[0].LaunchTemplateData' --output json > sketchcatch-launch-template-data.json
+            python - "$RELEASE_ID" <<'PY'
+          import base64
+          import json
+          import sys
+
+          release_id = sys.argv[1]
+          with open("sketchcatch-launch-template-data.json", encoding="utf-8") as handle:
+              data = json.load(handle)
+
+          user_data = data.get("UserData") or ""
+          decoded = ""
+          if user_data:
+              decoded = base64.b64decode(user_data).decode("utf-8")
+
+          marker = f"SKETCHCATCH_RELEASE_ID={release_id}"
+          lines = decoded.splitlines()
+          replaced = False
+          next_lines = []
+          for line in lines:
+              if line.startswith("SKETCHCATCH_RELEASE_ID=") or line.startswith("export SKETCHCATCH_RELEASE_ID="):
+                  next_lines.append(f"export {marker}")
+                  replaced = True
+              else:
+                  next_lines.append(line)
+          if not replaced:
+              next_lines.append(f"export {marker}")
+
+          next_user_data = "\\n".join(next_lines).strip() + "\\n"
+          data["UserData"] = base64.b64encode(next_user_data.encode("utf-8")).decode("ascii")
+          with open("sketchcatch-launch-template-data-updated.json", "w", encoding="utf-8") as handle:
+              json.dump(data, handle)
+          PY
+            NEW_LT_VERSION=$(aws ec2 create-launch-template-version "\${LT_LOOKUP_ARGS[@]}" --source-version "$LT_VERSION" --version-description "SketchCatch release $RELEASE_ID" --launch-template-data file://sketchcatch-launch-template-data-updated.json --query 'LaunchTemplateVersion.VersionNumber' --output text)
+            aws autoscaling update-auto-scaling-group --auto-scaling-group-name "$ASG_NAME" --launch-template "$LT_UPDATE_SPEC,Version=$NEW_LT_VERSION"
+          else
+            echo "ASG has no Launch Template; continuing with instance refresh only."
+          fi
+          REFRESH_ID=$(aws autoscaling start-instance-refresh --auto-scaling-group-name "$ASG_NAME" --preferences MinHealthyPercentage=50 --query 'InstanceRefreshId' --output text)
+          for attempt in $(seq 1 40); do
+            STATUS=$(aws autoscaling describe-instance-refreshes --auto-scaling-group-name "$ASG_NAME" --instance-refresh-ids "$REFRESH_ID" --query 'InstanceRefreshes[0].Status' --output text)
+            echo "Instance refresh $REFRESH_ID status: $STATUS"
+            case "$STATUS" in
+              Successful)
+                exit 0
+                ;;
+              Failed|Cancelled|RollbackFailed|RollbackSuccessful)
+                exit 1
+                ;;
+            esac
+            sleep 30
+          done
+          echo "Instance refresh did not finish within the smoke window."
+          exit 1
       - name: Verify URLs
         shell: bash
         run: |

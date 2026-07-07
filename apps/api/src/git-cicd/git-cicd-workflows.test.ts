@@ -35,6 +35,10 @@ test("createGitCicdAutomationFiles renders infra app destroy workflows and manif
   assert.match(files[0]?.content ?? "", /terraform plan/);
   assert.match(files[0]?.content ?? "", /environment: sketchcatch-production/);
   assert.match(files[1]?.content ?? "", /start-instance-refresh/);
+  assert.match(files[1]?.content ?? "", /SKETCHCATCH_RELEASE_ID/);
+  assert.match(files[1]?.content ?? "", /create-launch-template-version/);
+  assert.match(files[1]?.content ?? "", /LaunchTemplateName/);
+  assert.match(files[1]?.content ?? "", /describe-instance-refreshes/);
   assert.match(files[2]?.content ?? "", /terraform destroy/);
 });
 

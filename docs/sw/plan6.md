@@ -179,6 +179,13 @@ Current evidence:
 - Blocked by: #206
 - Status: implemented_in_pr_211_for_workflow_generation
 
+Current evidence:
+
+- App workflow는 S3 release artifact를 업로드하고 release marker 파일을 만든다.
+- `SKETCHCATCH_ASG_NAME`이 있으면 ASG의 Launch Template ID 또는 이름을 찾아 `SKETCHCATCH_RELEASE_ID` user data marker를 새 Launch Template version에 기록한다.
+- ASG는 새 Launch Template version으로 갱신되고 Instance Refresh status를 `Successful` 또는 실패 상태까지 polling한다.
+- 실제 ASG refresh 성공 여부와 URL marker 반영은 live smoke에서 확인해야 한다.
+
 목표:
 
 - app workflow가 runtime release artifact를 S3에 업로드하고 ASG Instance Refresh로 EC2 API와 static content를 롤아웃한다.

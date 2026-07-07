@@ -14,6 +14,7 @@
   - GitHub PR creation now maps 401/403 provider failures to `github_oauth_required` before any handoff record is saved.
   - AWS role diff apply route now applies approved GitHub OIDC trust statements to IAM and stores `applied/appliedAt/verified` in `awsRoleDiff`.
   - Deployment Panel exposes `Repo settings 적용` and `AWS role diff 적용`, then refreshes the panel snapshot.
+  - App workflow now writes `SKETCHCATCH_RELEASE_ID` into a new ASG Launch Template version when `SKETCHCATCH_ASG_NAME` is configured, updates the ASG to that version, and polls Instance Refresh to terminal status.
   - Added `scripts/smoke/git-cicd-auto-deploy.ps1` for repository settings apply, role diff apply, pipeline status, and static URL marker report generation.
 - Verified:
   - `pnpm harness:check` before implementation.
