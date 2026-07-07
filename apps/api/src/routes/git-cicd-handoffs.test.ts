@@ -779,6 +779,7 @@ function createHandoffRecord(
     projectId,
     architectureId,
     terraformArtifactId,
+    handoffKind: "terraform_iac",
     sourceRepositoryId,
     repositoryProvider: "internal",
     repositoryOwner: "sketchcatch",

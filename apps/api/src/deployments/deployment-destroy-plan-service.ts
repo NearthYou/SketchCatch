@@ -164,7 +164,9 @@ export async function runDeploymentDestroyPlan(
     workspace = preparedWorkspace;
 
     const terraformArtifactContent = await readTerraformArtifactFile(workspace.mainFilePath);
-    assertTerraformArtifactIsSafe(terraformArtifactContent);
+    assertTerraformArtifactIsSafe(terraformArtifactContent, {
+      liveProfile: deployment.liveProfile
+    });
     const terraformArtifactSha256 = createSha256(terraformArtifactContent);
 
     assertDestroyCleanupArtifactHasNotDrifted({
@@ -318,7 +320,8 @@ export async function runDeploymentDestroyPlan(
     }
 
     const unsupportedResourceTypes = findUnsupportedLiveApplyResourceTypesFromTerraformShowJson(
-      terraform.showJson.stdout
+      terraform.showJson.stdout,
+      deployment.liveProfile
     );
     const basePlanSummary = createDeploymentPlanSummaryFromTerraformShowJson(
       terraform.showJson.stdout

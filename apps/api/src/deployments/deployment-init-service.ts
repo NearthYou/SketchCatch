@@ -122,7 +122,9 @@ export async function runDeploymentInit(
       objectKey: artifact.objectKey,
       fileName: artifact.fileName
     });
-    assertTerraformArtifactIsSafe(await readTerraformArtifactFile(workspace.mainFilePath));
+    assertTerraformArtifactIsSafe(await readTerraformArtifactFile(workspace.mainFilePath), {
+      liveProfile: deployment.liveProfile
+    });
 
     const awsCredentials = await prepareAwsCredentialsForInit({
       deploymentId: deployment.id,

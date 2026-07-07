@@ -5,6 +5,7 @@ import type {
   DeployedResource,
   DeploymentBlockedBy,
   DeploymentFailureStage,
+  DeploymentLiveProfile,
   DeploymentLogLevel,
   DeploymentPlanSummary,
   DeploymentStage,
@@ -43,6 +44,7 @@ export type CreateDeploymentInput = {
   architectureId: string;
   terraformArtifactId: string;
   awsConnectionId: string;
+  liveProfile?: DeploymentLiveProfile | undefined;
 };
 
 export type CreateDeploymentRecordInput = {
@@ -51,6 +53,7 @@ export type CreateDeploymentRecordInput = {
   architectureId: string;
   terraformArtifactId: string;
   awsConnectionId: string;
+  liveProfile: DeploymentLiveProfile;
   status: "PENDING";
 };
 
@@ -910,6 +913,7 @@ export async function createDeployment(
     architectureId: input.architectureId,
     terraformArtifactId: input.terraformArtifactId,
     awsConnectionId: awsConnection.id,
+    liveProfile: input.liveProfile ?? "practice",
     status: "PENDING"
   });
 }

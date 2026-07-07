@@ -509,6 +509,7 @@ function createDeploymentRecord(
     architectureId,
     terraformArtifactId,
     awsConnectionId,
+    liveProfile: "practice",
     currentPlanArtifactId: null,
     stateObjectKey: null,
     resultWarningSummary: null,

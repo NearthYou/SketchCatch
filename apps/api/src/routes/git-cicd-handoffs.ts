@@ -116,6 +116,7 @@ const createGitCicdHandoffBodySchema = z
   .object({
     architectureId: z.uuid(),
     terraformArtifactId: z.uuid(),
+    handoffKind: z.enum(["terraform_iac", "static_site"]).default("terraform_iac"),
     sourceRepositoryId: z.string().trim().min(1).max(128),
     targetBranch: branchSchema.optional(),
     sourceBranch: branchSchema.optional(),
@@ -223,6 +224,7 @@ export async function registerGitCicdHandoffRoutes(
           accessContext,
           architectureId: body.architectureId,
           terraformArtifactId: body.terraformArtifactId,
+          handoffKind: body.handoffKind,
           sourceRepositoryId: body.sourceRepositoryId,
           targetBranch: body.targetBranch,
           sourceBranch: body.sourceBranch,
@@ -367,6 +369,7 @@ function toGitCicdHandoff(row: GitCicdHandoffRecord): GitCicdHandoff {
     projectId: row.projectId,
     architectureId: row.architectureId,
     terraformArtifactId: row.terraformArtifactId,
+    handoffKind: row.handoffKind,
     sourceRepositoryId: row.sourceRepositoryId,
     repositoryProvider: row.repositoryProvider,
     repositoryOwner: row.repositoryOwner,

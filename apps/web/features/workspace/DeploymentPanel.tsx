@@ -11,6 +11,7 @@ import type {
   DeployedResource,
   Deployment,
   DeploymentFailureExplanation,
+  DeploymentLiveProfile,
   DiagramJson,
   DeploymentLog,
   GitCicdHandoff,
@@ -28,6 +29,7 @@ import {
   approveDeploymentPlan,
   cancelDeployment as cancelDeploymentRun,
   createDeployment,
+  createGitCicdHandoff,
   createGitHubExistingInstallationCallbackUrl,
   createGitHubSourceRepositoryInstallUrl,
   getGitCicdHandoffPipelineStatus,
@@ -116,6 +118,11 @@ export function DeploymentPanel({
   const [deploymentResources, setDeploymentResources] = useState<DeployedResource[]>([]);
   const [terraformOutputs, setTerraformOutputs] = useState<TerraformOutput[]>([]);
   const [selectedAwsConnectionId, setSelectedAwsConnectionId] = useState("");
+  const [selectedLiveProfile, setSelectedLiveProfile] =
+    useState<DeploymentLiveProfile>("practice");
+  const [trafficSimulatorState, setTrafficSimulatorState] =
+    useState<RequestState>("idle");
+  const [trafficSimulatorSummary, setTrafficSimulatorSummary] = useState("");
   const [selectedDeploymentId, setSelectedDeploymentId] = useState("");
   const [selectedGitCicdHandoffId, setSelectedGitCicdHandoffId] = useState("");
   const [gitCicdPipelineStatusSource, setGitCicdPipelineStatusSource] =
@@ -140,6 +147,7 @@ export function DeploymentPanel({
   const [failureExplanationErrorMessage, setFailureExplanationErrorMessage] = useState("");
   const deploymentExpandedGridRef = useRef<HTMLDivElement | null>(null);
   const deploymentResizeCleanupRef = useRef<(() => void) | null>(null);
+  const trafficAbortControllerRef = useRef<AbortController | null>(null);
 
   const verifiedAwsConnections = useMemo(
     () => awsConnections.filter((connection) => connection.status === "verified"),
@@ -153,6 +161,26 @@ export function DeploymentPanel({
         value: connection.id
       })),
     [verifiedAwsConnections]
+  );
+  const liveProfileOptions = useMemo<SelectMenuOption[]>(
+    () => [
+      {
+        detail: "VPC, EC2, S3 bucket 중심의 기본 안전 범위",
+        label: "Practice",
+        value: "practice"
+      },
+      {
+        detail: "S3 website, EC2 API, ALB, ASG demo",
+        label: "Demo web service",
+        value: "demo_web_service"
+      },
+      {
+        detail: "Demo web service plus RDS",
+        label: "Demo web service + RDS",
+        value: "demo_web_service_with_rds"
+      }
+    ],
+    []
   );
   const deploymentOptions = useMemo<SelectMenuOption[]>(
     () =>
@@ -194,6 +222,11 @@ export function DeploymentPanel({
     selectedAwsConnectionId.length > 0 &&
     requestState !== "loading";
   const hasCurrentPlan = Boolean(selectedDeployment?.currentPlanArtifactId);
+  const apiBaseUrlOutput = useMemo(
+    () => terraformOutputs.find((output) => output.name === "api_base_url") ?? null,
+    [terraformOutputs]
+  );
+  const apiBaseUrl = apiBaseUrlOutput ? formatOutputValue(apiBaseUrlOutput) : "";
   const deploymentActions = getDeploymentActionState(selectedDeployment, requestState);
   const canRunPlan = deploymentActions.canRunApplyPlan;
   const canApprovePlan = deploymentActions.canApprovePlan;
@@ -213,6 +246,7 @@ export function DeploymentPanel({
   const shouldAutoRefreshSelectedDeployment = shouldAutoRefreshDeployment(selectedDeployment);
   const shouldAutoRefreshSelectedGitCicdHandoff =
     shouldAutoRefreshGitCicdHandoff(selectedGitCicdHandoff);
+  const canCreateStaticSiteHandoff = Boolean(activeGitHubSourceRepository && selectedDeployment);
   const boardSnapshot = useMemo(
     () => createWorkspaceAiBoardSnapshot(diagramJson),
     [diagramJson]
@@ -362,9 +396,21 @@ export function DeploymentPanel({
     setIsDeploymentExpanded(false);
   }, [deployments.length]);
 
+  useEffect(() => {
+    trafficAbortControllerRef.current?.abort();
+    trafficAbortControllerRef.current = null;
+    setTrafficSimulatorState("idle");
+    setTrafficSimulatorSummary("");
+    return () => {
+      trafficAbortControllerRef.current?.abort();
+      trafficAbortControllerRef.current = null;
+    };
+  }, [selectedDeploymentId]);
+
   useEffect(
     () => () => {
       deploymentResizeCleanupRef.current?.();
+      trafficAbortControllerRef.current?.abort();
     },
     []
   );
@@ -637,7 +683,8 @@ export function DeploymentPanel({
         projectId,
         architectureId: savedArtifacts.architecture.id,
         terraformArtifactId: savedArtifacts.terraformArtifact.id,
-        awsConnectionId: selectedAwsConnectionId
+        awsConnectionId: selectedAwsConnectionId,
+        liveProfile: selectedLiveProfile
       });
       const prewarmedDeployment = await runDeploymentInit(deployment.id).catch(() => deployment);
 
@@ -817,6 +864,58 @@ export function DeploymentPanel({
     }, "배포 상태를 새로고침하지 못했습니다.");
   }
 
+  async function runTrafficSimulator(): Promise<void> {
+    if (!apiBaseUrl || apiBaseUrl === "[sensitive]") {
+      return;
+    }
+
+    trafficAbortControllerRef.current?.abort();
+    const controller = new AbortController();
+    trafficAbortControllerRef.current = controller;
+
+    setTrafficSimulatorState("loading");
+    setTrafficSimulatorSummary("");
+
+    try {
+      const baseUrl = apiBaseUrl.replace(/\/+$/, "");
+      const results = await Promise.allSettled(
+        Array.from({ length: 20 }, (_, index) =>
+          fetch(`${baseUrl}/api/health?source=sketchcatch&request=${index + 1}`, {
+            cache: "no-store",
+            signal: controller.signal
+          }).then((response) => {
+            if (!response.ok) {
+              throw new Error(`HTTP ${response.status}`);
+            }
+
+            return response.text();
+          })
+        )
+      );
+
+      if (controller.signal.aborted) {
+        return;
+      }
+
+      const succeeded = results.filter((result) => result.status === "fulfilled").length;
+      const failed = results.length - succeeded;
+
+      setTrafficSimulatorSummary(
+        `${succeeded}/${results.length} requests succeeded, ${failed} failed`
+      );
+      setTrafficSimulatorState(failed === 0 ? "idle" : "error");
+    } catch {
+      if (!controller.signal.aborted) {
+        setTrafficSimulatorState("error");
+        setTrafficSimulatorSummary("Traffic simulation failed.");
+      }
+    } finally {
+      if (trafficAbortControllerRef.current === controller) {
+        trafficAbortControllerRef.current = null;
+      }
+    }
+  }
+
   async function startGitHubConnection(): Promise<void> {
     await runRequest(async () => {
       if (activeGitHubSourceRepository?.githubInstallationId) {
@@ -830,6 +929,36 @@ export function DeploymentPanel({
 
       window.location.assign(installUrl);
     }, "GitHub 연결을 시작하지 못했습니다.");
+  }
+
+  async function createStaticSiteHandoff(): Promise<void> {
+    if (!activeGitHubSourceRepository || !selectedDeployment) {
+      return;
+    }
+
+    await runRequest(async () => {
+      const handoff = await createGitCicdHandoff({
+        projectId,
+        architectureId: selectedDeployment.architectureId,
+        terraformArtifactId: selectedDeployment.terraformArtifactId,
+        handoffKind: "static_site",
+        sourceRepositoryId: activeGitHubSourceRepository.id,
+        planSummary: selectedDeployment.planSummary ?? undefined,
+        pullRequestTitle: "SketchCatch static site update",
+        commitMessage: "Update SketchCatch static site artifact",
+        userAcceptedChangeId: `static-site-${selectedDeployment.id}`
+      });
+      const snapshot = await loadDeploymentPanelSnapshot();
+
+      applyDeploymentPanelSnapshot({
+        ...snapshot,
+        gitCicdHandoffs: [
+          handoff,
+          ...snapshot.gitCicdHandoffs.filter((item) => item.id !== handoff.id)
+        ]
+      });
+      setSelectedGitCicdHandoffId(handoff.id);
+    }, "Static site Git/CI/CD handoff를 만들지 못했습니다.");
   }
 
   async function startNewGitHubInstallation(): Promise<void> {
@@ -976,6 +1105,18 @@ export function DeploymentPanel({
         />
       </div>
 
+      <div className={styles.deploymentField}>
+        Live profile
+        <SelectMenu
+          ariaLabel="Live deployment profile"
+          emptyLabel="Live profile 없음"
+          onChange={(value) => setSelectedLiveProfile(value as DeploymentLiveProfile)}
+          options={liveProfileOptions}
+          size={isDeploymentExpanded ? "large" : "regular"}
+          value={selectedLiveProfile}
+        />
+      </div>
+
       <button
         className={styles.deploymentPrimaryButton}
         disabled={!canStartDeploymentReview}
@@ -1023,6 +1164,15 @@ export function DeploymentPanel({
               다른 설치
             </button>
           ) : null}
+          <button
+            className={styles.deploymentSecondaryButton}
+            disabled={!canCreateStaticSiteHandoff || requestState === "loading"}
+            onClick={createStaticSiteHandoff}
+            type="button"
+          >
+            <GitBranch size={16} />
+            Static site PR
+          </button>
         </div>
       </div>
 
@@ -1074,6 +1224,7 @@ export function DeploymentPanel({
                 label="Status"
                 value={getGitCicdHandoffStatusLabel(selectedGitCicdHandoff)}
               />
+              <InfoRow label="Kind" value={selectedGitCicdHandoff.handoffKind} />
               <InfoRow
                 label="Repository"
                 value={`${selectedGitCicdHandoff.repositoryOwner}/${selectedGitCicdHandoff.repositoryName}`}
@@ -1137,6 +1288,7 @@ export function DeploymentPanel({
           <DeploymentGateCard deployment={selectedDeployment} />
           <div className={styles.deploymentSummary}>
             <InfoRow label="Status" value={selectedDeployment.status} />
+            <InfoRow label="Live profile" value={selectedDeployment.liveProfile} />
             <OptionalInfoRow label="Active stage" value={selectedDeployment.activeStage} />
             <OptionalInfoRow
               label="Started at"
@@ -1403,6 +1555,32 @@ export function DeploymentPanel({
           ))}
         </div>
       )}
+      <div className={styles.deploymentSummary}>
+        <InfoRow label="Traffic target" value={apiBaseUrl || "api_base_url output 없음"} />
+        <button
+          className={styles.deploymentSecondaryButton}
+          disabled={!apiBaseUrl || trafficSimulatorState === "loading"}
+          onClick={runTrafficSimulator}
+          type="button"
+        >
+          <DashboardIcon name="server" />
+          트래픽 시뮬레이션
+        </button>
+        {trafficSimulatorState === "loading" ? (
+          <p className={styles.deploymentNotice}>트래픽 요청을 보내는 중입니다.</p>
+        ) : null}
+        {trafficSimulatorSummary ? (
+          <p
+            className={
+              trafficSimulatorState === "error"
+                ? styles.deploymentError
+                : styles.deploymentHint
+            }
+          >
+            {trafficSimulatorSummary}
+          </p>
+        ) : null}
+      </div>
     </section>
   );
 

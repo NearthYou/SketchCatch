@@ -6,6 +6,7 @@ import {
   awsConnectionStatusEnum,
   awsConnections,
   deploymentFailureStageEnum,
+  deploymentLiveProfileEnum,
   deploymentLogs,
   deploymentPlanArtifacts,
   deploymentPlanOperationEnum,
@@ -13,6 +14,7 @@ import {
   deploymentStatusEnum,
   deployments,
   gitCicdHandoffStatusEnum,
+  gitCicdHandoffKindEnum,
   gitCicdHandoffs,
   gitCicdRepositoryProviderEnum,
   projectAssets,
@@ -103,6 +105,18 @@ test("deployments explicitly reference the AWS connection selected for execution
   );
 });
 
+test("deployments store the explicit live deployment profile", () => {
+  const config = getTableConfig(deployments);
+
+  assert.equal(deploymentLiveProfileEnum.enumName, "deployment_live_profile");
+  assert.deepEqual(deploymentLiveProfileEnum.enumValues, [
+    "practice",
+    "demo_web_service",
+    "demo_web_service_with_rds"
+  ]);
+  assert(findColumn(config.columns, "live_profile"));
+});
+
 test("AWS connections store generated external ids without raw credentials", () => {
   const config = getTableConfig(awsConnections);
 
@@ -131,6 +145,7 @@ test("Git/CI/CD handoffs store repository metadata without raw provider secrets"
   assert.equal(gitCicdRepositoryProviderEnum.enumName, "git_cicd_repository_provider");
   assert.deepEqual(gitCicdRepositoryProviderEnum.enumValues, ["internal", "github"]);
   assert.equal(gitCicdHandoffStatusEnum.enumName, "git_cicd_handoff_status");
+  assert.equal(gitCicdHandoffKindEnum.enumName, "git_cicd_handoff_kind");
   assert.deepEqual(gitCicdHandoffStatusEnum.enumValues, [
     "draft",
     "pr_created",
@@ -139,7 +154,9 @@ test("Git/CI/CD handoffs store repository metadata without raw provider secrets"
     "pipeline_failed",
     "cancelled"
   ]);
+  assert.deepEqual(gitCicdHandoffKindEnum.enumValues, ["terraform_iac", "static_site"]);
   assert(findColumn(config.columns, "source_repository_id"));
+  assert(findColumn(config.columns, "handoff_kind"));
   assert(findColumn(config.columns, "repository_provider"));
   assert(findColumn(config.columns, "repository_owner"));
   assert(findColumn(config.columns, "repository_name"));

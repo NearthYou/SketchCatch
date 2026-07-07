@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import {
   assertTerraformArtifactIsSafe,
   TerraformArtifactSafetyError
@@ -272,6 +273,61 @@ test("assertTerraformArtifactIsSafe rejects EC2 user_data before live deployment
   );
 });
 
+test("assertTerraformArtifactIsSafe accepts managed demo launch template user data for demo profile", () => {
+  assert.doesNotThrow(() =>
+    assertTerraformArtifactIsSafe(
+      `
+        resource "aws_launch_template" "api" {
+          name_prefix   = "sketchcatch-demo-"
+          image_id      = "ami-1234567890abcdef0"
+          instance_type = "t3.micro"
+          user_data_base64 = "${createManagedDemoUserDataBase64()}"
+        }
+
+        resource "aws_lb" "web" {
+          name               = "sketchcatch-demo"
+          load_balancer_type = "application"
+          subnets            = ["subnet-1", "subnet-2"]
+        }
+      `,
+      { liveProfile: "demo_web_service" }
+    )
+  );
+});
+
+test("assertTerraformArtifactIsSafe rejects demo launch template user data outside the demo profile", () => {
+  assert.throws(
+    () =>
+      assertTerraformArtifactIsSafe(`
+        resource "aws_launch_template" "api" {
+          name_prefix      = "sketchcatch-demo-"
+          image_id         = "ami-1234567890abcdef0"
+          instance_type    = "t3.micro"
+          user_data_base64 = "${createManagedDemoUserDataBase64()}"
+        }
+      `),
+    /launch template user_data_base64 is not allowed for practice/
+  );
+});
+
+test("assertTerraformArtifactIsSafe rejects unmarked demo launch template user data", () => {
+  assert.throws(
+    () =>
+      assertTerraformArtifactIsSafe(
+        `
+          resource "aws_launch_template" "api" {
+            name_prefix      = "sketchcatch-demo-"
+            image_id         = "ami-1234567890abcdef0"
+            instance_type    = "t3.micro"
+            user_data_base64 = "${Buffer.from("#!/bin/bash\necho unsafe\n").toString("base64")}"
+          }
+        `,
+        { liveProfile: "demo_web_service" }
+      ),
+    /missing the SketchCatch managed marker/
+  );
+});
+
 test("assertTerraformArtifactIsSafe rejects public S3 bucket ACLs", () => {
   assert.throws(
     () =>
@@ -336,3 +392,17 @@ test("assertTerraformArtifactIsSafe rejects heredoc values", () => {
     /heredoc values are not allowed/
   );
 });
+
+function createManagedDemoUserDataBase64(): string {
+  const hashPrefix = "sketchcatch-demo-managed-user-data-sha256:";
+  const normalized = [
+    "#!/bin/bash",
+    "# sketchcatch-demo-managed-user-data:v1",
+    `# ${hashPrefix}`,
+    "echo sketchcatch-demo"
+  ].join("\n");
+  const hash = createHash("sha256").update(`${normalized}\n`).digest("hex");
+  const script = normalized.replace(`# ${hashPrefix}`, `# ${hashPrefix}${hash}`);
+
+  return Buffer.from(`${script}\n`, "utf8").toString("base64");
+}

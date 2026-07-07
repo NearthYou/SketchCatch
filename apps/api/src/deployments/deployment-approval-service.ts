@@ -120,7 +120,9 @@ export async function approveDeploymentPlan(
 
   const terraformArtifactContent = await downloadTerraformArtifact(terraformArtifact.objectKey);
 
-  assertTerraformArtifactIsSafe(terraformArtifactContent);
+  assertTerraformArtifactIsSafe(terraformArtifactContent, {
+    liveProfile: deployment.liveProfile
+  });
 
   const terraformArtifactHash = createSha256(terraformArtifactContent);
   const plannedTerraformArtifactSha256 = currentPlanArtifact.terraformArtifactSha256;

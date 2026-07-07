@@ -1,6 +1,45 @@
 ﻿# 에이전트 진행 로그
 # 에이전트 진행 로그
 
+### 2026-07-07 - PR #197 Gemini 리뷰 코멘트 반영
+
+- Goal: PR #197에 달린 Gemini Code Assist 리뷰 코멘트를 확인하고 타당한 개선을 반영한다.
+- Completed:
+  - `scripts/smoke/live-demo-web-service.ps1`의 managed user data 생성 경로에서 hash/base64 인코딩 전에 CRLF/CR 줄바꿈을 LF로 정규화했다.
+  - Deployment Panel 트래픽 시뮬레이터에 `AbortController`를 추가해 새 실행, deployment 변경, component unmount 시 진행 중인 fetch 요청을 취소하도록 했다.
+- Verification run:
+  - PowerShell parser check for `scripts/smoke/live-demo-web-service.ps1` - passed.
+  - `pnpm --filter @sketchcatch/web typecheck` - passed.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/deployment-actions.test.ts` - passed, 20 tests.
+  - `pnpm harness:check` - passed.
+  - `git diff --check` - passed.
+- Known risks:
+  - 실제 AWS live smoke는 아직 실행하지 않았다.
+
+### 2026-07-07 - Demo Web Service E2E 계획 및 구현
+
+- Goal: dev 기준으로 `docs/sw/spec5.md`, `docs/sw/plan5.md`, `docs/sw/agents.md`를 만들고, S3 정적 웹사이트부터 EC2 API, ALB, ASG, RDS 선택 경로, CI/CD handoff, HARNESS-007 smoke까지 이어지는 데모 수행 기반을 구현한다.
+- Completed:
+  - GitHub Issues #189-#196을 만들고 `feature/sw/189-196-demo-web-service-e2e` 브랜치/분리 worktree에서 작업했다.
+  - `demo_web_service`/`demo_web_service_with_rds` live profile을 추가하고 profile별 live apply whitelist, RDS opt-in, managed launch template user data safety gate를 연결했다.
+  - S3 website/object/policy와 ALB/listener/target group 리소스 정의, Terraform nested block, catalog presentation을 확장했다.
+  - Deployment UI에 live profile 선택, `api_base_url` 기반 트래픽 시뮬레이터, static site Git/CI/CD handoff 버튼과 handoff kind 표시를 추가했다.
+  - `scripts/smoke/live-demo-web-service.ps1`로 S3 정적 웹사이트 URL 확인, ALB API health 확인, ASG desired 2 배포, cleanup 경로를 포함한 반자동 live smoke를 추가했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits.
+  - `pnpm --filter @sketchcatch/api typecheck` - passed.
+  - `pnpm --filter @sketchcatch/web typecheck` - passed.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/deployments/deployment-plan-summary.test.ts src/deployments/terraform-artifact-safety.test.ts src/db/schema-contract.test.ts src/services/terraform/infrastructure-graph.test.ts` - passed, 52 tests.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/deployments/deployment-service.test.ts src/routes/deployments.test.ts src/routes/git-cicd-handoffs.test.ts` - passed, 57 tests.
+  - `pnpm --filter @sketchcatch/web test` - passed, 449 tests.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `pnpm build` - passed.
+- Known risks:
+  - 실제 AWS apply/destroy live smoke는 비용과 자격증명이 필요해 아직 실행하지 않았다.
+  - `S3_BUCKET_NAME=sketchcatch-test-bucket pnpm --filter @sketchcatch/api test`는 기존 `aiLlmExplanationValidation.test.ts` 1건에서 기대 개수 5, 실제 6으로 실패했다. 이번 변경 범위와 직접 관련 없는 기존 실패로 보인다.
+  - HARNESS-007은 live smoke 실행 증거 전까지 `in_progress` 상태로 유지한다.
+
 ### 2026-07-06 - Terraform 저장 검증에서 provider init 제거 및 빠른 오류 검출 강화
 
 - Goal: Terraform 편집/저장 검증에서 매번 `terraform init`을 기다리지 않게 하고, 빠른 검증만으로 참조 누락, 타입 오류, IAM JSON 오류, unsupported argument, 잘못된 EC2 instance type을 Issues 진단으로 띄운다.
