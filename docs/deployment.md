@@ -190,11 +190,13 @@ EC2_INSTANCE_ID=i-02a591d2abee94f02
 RDS_ENDPOINT=<RDS 엔드포인트>
 DATABASE_SSL=true
 TF_PLUGIN_CACHE_DIR=/var/cache/sketchcatch/terraform-plugin-cache
+TRIVY_CACHE_DIR=/var/cache/sketchcatch/trivy
 CLOUDWATCH_LOGS_ENABLED=false
 CLOUDWATCH_LOG_GROUP_PREFIX=/sketchcatch/production
 ```
 
 `TF_PLUGIN_CACHE_DIR`은 Terraform provider plugin cache 위치입니다. 운영 배포 스크립트는 EC2 host의 같은 경로를 API 컨테이너에 volume mount하므로, API 컨테이너가 교체되어도 provider cache를 재사용할 수 있습니다.
+`TRIVY_CACHE_DIR`은 Pre-Deployment Check와 Deployment Safety Gate가 사용하는 Trivy misconfiguration rule/cache 위치입니다. API Docker image에는 Terraform binary와 함께 Trivy binary가 포함되며, 운영 배포 스크립트는 EC2 host의 같은 경로를 API 컨테이너에 volume mount합니다.
 
 ## GitHub 비밀값
 

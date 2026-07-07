@@ -121,6 +121,7 @@ jobs:
           DATABASE_URL=${DATABASE_URL}
           DATABASE_SSL=${DATABASE_SSL:-false}
           TF_PLUGIN_CACHE_DIR=${TF_PLUGIN_CACHE_DIR}
+          TRIVY_CACHE_DIR=${TRIVY_CACHE_DIR}
           RDS_ENDPOINT=${RDS_ENDPOINT}
           AWS_REGION=${AWS_REGION}
           S3_BUCKET_NAME=${S3_BUCKET_NAME}
@@ -204,6 +205,7 @@ jobs:
             --arg cloudwatch_logs_enabled "${CLOUDWATCH_LOGS_ENABLED}" \
             --arg cloudwatch_log_group_prefix "${CLOUDWATCH_LOG_GROUP_PREFIX}" \
             --arg terraform_plugin_cache_dir "${TF_PLUGIN_CACHE_DIR}" \
+            --arg trivy_cache_dir "${TRIVY_CACHE_DIR}" \
             '{
               commands: [
                 "set -euo pipefail",
@@ -215,7 +217,7 @@ jobs:
                 "sudo install -d -m 0755 /etc/sketchcatch",
                 "sudo install -m 0600 /tmp/sketchcatch-web.env /etc/sketchcatch/web.env",
                 "sudo install -m 0600 /tmp/sketchcatch-api.env /etc/sketchcatch/api.env",
-                "sudo env AWS_REGION=" + ($aws_region | @sh) + " CLOUDWATCH_LOGS_ENABLED=" + ($cloudwatch_logs_enabled | @sh) + " CLOUDWATCH_LOG_GROUP_PREFIX=" + ($cloudwatch_log_group_prefix | @sh) + " TF_PLUGIN_CACHE_DIR=" + ($terraform_plugin_cache_dir | @sh) + " RELEASE_ID=" + ($release_id | @sh) + " RELEASE_URL=" + ($release_url | @sh) + " bash /tmp/sketchcatch-deploy.sh"
+                "sudo env AWS_REGION=" + ($aws_region | @sh) + " CLOUDWATCH_LOGS_ENABLED=" + ($cloudwatch_logs_enabled | @sh) + " CLOUDWATCH_LOG_GROUP_PREFIX=" + ($cloudwatch_log_group_prefix | @sh) + " TF_PLUGIN_CACHE_DIR=" + ($terraform_plugin_cache_dir | @sh) + " TRIVY_CACHE_DIR=" + ($trivy_cache_dir | @sh) + " RELEASE_ID=" + ($release_id | @sh) + " RELEASE_URL=" + ($release_url | @sh) + " bash /tmp/sketchcatch-deploy.sh"
               ],
               executionTimeout: ["1800"]
             }' > .release/ssm-deploy-parameters.json
@@ -264,6 +266,7 @@ jobs:
           DEPLOY_ARTIFACT_BUCKET: ${{ vars.DEPLOY_ARTIFACT_BUCKET }}
           EC2_INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID || 'i-02a591d2abee94f02' }}
           TF_PLUGIN_CACHE_DIR: ${{ vars.TF_PLUGIN_CACHE_DIR || '/var/cache/sketchcatch/terraform-plugin-cache' }}
+          TRIVY_CACHE_DIR: ${{ vars.TRIVY_CACHE_DIR || '/var/cache/sketchcatch/trivy' }}
           AUTH_TOKEN_SECRET: ${{ secrets.AUTH_TOKEN_SECRET }}
           CLOUDFORMATION_TEMPLATE_TOKEN_SECRET: ${{ secrets.CLOUDFORMATION_TEMPLATE_TOKEN_SECRET }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}

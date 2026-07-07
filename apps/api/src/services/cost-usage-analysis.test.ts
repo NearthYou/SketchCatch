@@ -22,6 +22,10 @@ const projectB = makeProject({
   id: "33333333-3333-4333-8333-333333333333",
   name: "Batch Worker"
 });
+const projectC = makeProject({
+  id: "44444444-4444-4444-8444-444444444444",
+  name: "Admin Console"
+});
 
 test("createSampleCostUsageAnalysis returns deterministic fallback usage data", () => {
   const result = createSampleCostUsageAnalysis({
@@ -45,7 +49,7 @@ test("createSampleCostUsageAnalysis returns deterministic fallback usage data", 
   assert.equal(result.recommendations.length, 2);
 });
 
-test("createSampleCostUsageAnalysis splits no-project fallback cost into sample projects", () => {
+test("createSampleCostUsageAnalysis does not invent project rows when the user has no projects", () => {
   const result = createSampleCostUsageAnalysis({
     awsConnection: null,
     deployedResources: [],
@@ -56,16 +60,44 @@ test("createSampleCostUsageAnalysis splits no-project fallback cost into sample 
     userId
   });
 
+  assert.deepEqual(result.projectCosts, []);
+  assert.deepEqual(result.resourceCosts, []);
+  assert.equal(result.wasteResources.some((resource) => resource.projectId !== undefined), false);
+});
+
+test("createSampleCostUsageAnalysis scopes project rows and resources to the selected project", () => {
+  const result = createSampleCostUsageAnalysis({
+    awsConnection: null,
+    deployedResources: [
+      makeResource({ deploymentId: "deployment-a", id: "resource-a1" }),
+      makeResource({ deploymentId: "deployment-a", id: "resource-a2" }),
+      makeResource({ deploymentId: "deployment-b", id: "resource-b1" })
+    ],
+    deployments: [
+      makeDeployment({
+        id: "deployment-a",
+        projectId: projectA.id
+      }),
+      makeDeployment({
+        id: "deployment-b",
+        projectId: projectB.id
+      })
+    ],
+    now: fixedNow,
+    projectId: projectA.id,
+    projects: [projectA, projectB],
+    range: "7d",
+    userId
+  });
+
   assert.deepEqual(
-    result.projectCosts.map((row) => [row.projectId, row.projectName, row.source]),
-    [
-      ["sample-web-service", "샘플 웹 서비스", "sample"],
-      ["sample-data-platform", "샘플 데이터 플랫폼", "sample"],
-      ["sample-background-worker", "샘플 배치 워커", "sample"]
-    ]
+    result.projectCosts.map((row) => row.projectId),
+    [projectA.id]
   );
+  assert.equal(result.resourceCosts.every((resource) => resource.projectId === projectA.id), true);
+  assert.equal(result.serviceCosts.length > 0, true);
   assert.equal(
-    result.projectCosts.reduce((sum, row) => sum + row.amount, 0).toFixed(2),
+    result.resourceCosts.reduce((sum, resource) => sum + resource.amount, 0).toFixed(2),
     result.totalCost.amount.toFixed(2)
   );
 });
@@ -152,6 +184,23 @@ test("createProjectUsageCosts approximates project costs from latest deployed re
       [projectB.id, 10, 1, "deployed_resource_estimate"]
     ]
   );
+});
+
+test("createProjectUsageCosts keeps fallback project amounts distinct without deployed resources", () => {
+  const result = createProjectUsageCosts({
+    deployedResources: [],
+    deployments: [],
+    projects: [projectA, projectB, projectC],
+    taggedProjectCosts: new Map(),
+    totalCostAmount: 235.2
+  });
+  const amounts = result.map((row) => row.amount);
+  const totalAmount = amounts.reduce((sum, amount) => sum + amount, 0);
+
+  assert.equal(result.length, 3);
+  assert.equal(new Set(amounts).size > 1, true);
+  assert.equal(totalAmount.toFixed(2), "235.20");
+  assert.equal(result.every((row) => row.resourceCount === 0), true);
 });
 
 test("createResourceUsageCosts splits project cost across deployed resources", () => {
@@ -252,6 +301,8 @@ test("createWasteInsightsFromMetricSnapshots detects low EC2 RDS ALB and NAT usa
     recommendations.map((recommendation) => recommendation.severity),
     ["low", "medium", "medium", "low"]
   );
+  assert.equal(wasteResources[0]?.finding.includes("t3.nano"), true);
+  assert.equal(recommendations[0]?.actionLabel.includes("t3.nano"), true);
 });
 
 function makeProject(overrides: Partial<Project> = {}): Project {

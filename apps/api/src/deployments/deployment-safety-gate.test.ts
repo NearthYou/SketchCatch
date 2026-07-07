@@ -68,6 +68,29 @@ test("evaluateDeploymentSafetyGate leaves medium and low warnings approvable aft
   assert.equal(summary.warnings.every((warning) => warning.requiresAcknowledgement), true);
 });
 
+test("evaluateDeploymentSafetyGate preserves generic Trivy warning codes", () => {
+  const summary = evaluateDeploymentSafetyGate({
+    operation: "apply",
+    planSummary: createPlanSummary(),
+    findings: [
+      createFinding({
+        id: "trivy:aws-9999:main.tf:aws_vpc.main:3",
+        category: "security",
+        severity: "medium",
+        resourceId: "aws_vpc.main",
+        title: "VPC flow logs should be enabled",
+        description: "Flow logs are missing.",
+        recommendation: "Enable VPC flow logs."
+      })
+    ]
+  });
+
+  assert.equal(summary.warnings[0]?.code, "TRIVY_MISCONFIGURATION");
+  assert.equal(summary.warnings[0]?.relatedFindingId, "trivy:aws-9999:main.tf:aws_vpc.main:3");
+  assert.equal(summary.warnings[0]?.requiresAcknowledgement, true);
+  assert.equal(summary.warnings[0]?.blocksApproval, false);
+});
+
 test("evaluateDeploymentSafetyGate creates stable ids for unsupported resource warnings", () => {
   const input = {
     operation: "destroy" as const,

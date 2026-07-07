@@ -3,7 +3,6 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type {
   AiPreDeploymentAnalysisResult,
-  ArchitectureJson,
   AwsConnection,
   DeploymentStatus
 } from "@sketchcatch/types";
@@ -15,7 +14,10 @@ import {
   createAwsSdkStsGateway,
   type AwsConnectionStsGateway
 } from "../aws-connections/aws-connection-test-service.js";
-import { analyzePreDeployment as defaultAnalyzePreDeployment } from "../services/aiPreDeploymentAnalysis.js";
+import {
+  analyzePreDeploymentCheck as defaultAnalyzePreDeployment,
+  type AnalyzePreDeploymentCheckInput
+} from "../services/aiPreDeploymentCheck.js";
 import {
   appendTerraformDurationLog,
   runLoggedDeploymentOperation
@@ -74,7 +76,9 @@ export type RunDeploymentPlanOptions = {
     awsConnection: AwsConnection
   ) => Promise<PreparedTerraformAwsCredentialEnv>;
   awsStsGateway?: AwsConnectionStsGateway;
-  analyzePreDeployment?: (architectureJson: ArchitectureJson) => AiPreDeploymentAnalysisResult;
+  analyzePreDeployment?: (
+    input: AnalyzePreDeploymentCheckInput
+  ) => AiPreDeploymentAnalysisResult | Promise<AiPreDeploymentAnalysisResult>;
   planArtifactStorage?: DeploymentPlanArtifactStorage;
   generatePlanArtifactId?: () => string;
   readTerraformArtifactFile?: (filePath: string) => Promise<Buffer | Uint8Array | string>;
@@ -166,12 +170,20 @@ export async function runDeploymentPlan(
       throw new DeploymentNotFoundError("Architecture not found for deployment");
     }
 
-    const preDeploymentAnalysis = analyzePreDeployment(architecture.architectureJson);
     const terraformArtifactContent = await readTerraformArtifactFile(workspace.mainFilePath);
     assertTerraformArtifactIsSafe(terraformArtifactContent, {
       liveProfile: deployment.liveProfile
     });
     const terraformArtifactSha256 = createSha256(terraformArtifactContent);
+    const preDeploymentAnalysis = await analyzePreDeployment({
+      architectureJson: architecture.architectureJson,
+      terraformFiles: [
+        {
+          fileName: artifact.fileName,
+          terraformCode: toTerraformCodeString(terraformArtifactContent)
+        }
+      ]
+    });
 
     const [awsCredentials] = await Promise.all([
       prepareAwsCredentialsForPlan({
@@ -773,4 +785,8 @@ function summarizeUnexpectedPlanFailure(error: unknown): string {
 
 function createSha256(value: Buffer | Uint8Array | string): string {
   return createHash("sha256").update(Buffer.from(value)).digest("hex");
+}
+
+function toTerraformCodeString(value: Buffer | Uint8Array | string): string {
+  return typeof value === "string" ? value : Buffer.from(value).toString("utf8");
 }

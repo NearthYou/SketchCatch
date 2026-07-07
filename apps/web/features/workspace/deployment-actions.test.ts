@@ -101,6 +101,38 @@ test("current plan without an operation does not fall back to a Terraform plan r
   assert.equal(state.shouldShowApprovePlanButton, true);
 });
 
+test("current plan with blocking warnings cannot be approved", () => {
+  const state = getDeploymentActionState(
+    createDeployment({
+      currentPlanArtifactId: "99999999-9999-4999-8999-999999999999",
+      currentPlanOperation: "apply",
+      planSummary: {
+        createCount: 1,
+        updateCount: 0,
+        deleteCount: 0,
+        replaceCount: 0,
+        blocked: false,
+        warnings: [
+          {
+            id: "pre_deployment_check:trivy:aws-0107:main.tf:aws_security_group.open_ssh:13",
+            level: "high",
+            category: "network",
+            source: "pre_deployment_check",
+            code: "PUBLIC_SSH",
+            message: "Public SSH: Restrict CIDR",
+            requiresAcknowledgement: false,
+            blocksApproval: true
+          }
+        ]
+      }
+    }),
+    "idle"
+  );
+
+  assert.equal(state.shouldShowApprovePlanButton, true);
+  assert.equal(state.canApprovePlan, false);
+});
+
 test("running Terraform work hides stale plan rerun actions", () => {
   const state = getDeploymentActionState(
     createDeployment({

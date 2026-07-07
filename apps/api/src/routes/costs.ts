@@ -42,6 +42,7 @@ const costProjectsQuerySchema = z.object({
 
 const costUsageQuerySchema = z.object({
   awsConnectionId: z.uuid().optional(),
+  projectId: z.uuid().optional(),
   range: z.enum(["7d", "30d", "month_to_date"]).default("30d")
 });
 
@@ -162,10 +163,6 @@ export async function registerCostRoutes(
             .orderBy(desc(deployments.completedAt), desc(deployments.updatedAt));
     const latestSuccessfulDeployments = selectLatestSuccessfulDeployments(deploymentRows);
     const deploymentIds = latestSuccessfulDeployments.map((deployment) => deployment.id);
-    const deployedProjectIds = new Set(
-      latestSuccessfulDeployments.map((deployment) => deployment.projectId)
-    );
-    const deployedProjectRows = projectRows.filter((project) => deployedProjectIds.has(project.id));
     const deployedResourceRows =
       deploymentIds.length === 0
         ? []
@@ -179,7 +176,8 @@ export async function registerCostRoutes(
         awsConnection,
         deployedResources: deployedResourceRows.map(toCostUsageDeployedResource),
         deployments: latestSuccessfulDeployments.map(toCostUsageDeployment),
-        projects: deployedProjectRows.map(toProject),
+        projectId: query.projectId,
+        projects: projectRows.map(toProject),
         range: query.range,
         userId: currentUserId
       },

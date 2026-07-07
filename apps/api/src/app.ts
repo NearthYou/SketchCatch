@@ -50,9 +50,11 @@ const fallbackCorsAllowedHeaders = "content-type,authorization";
 
 export type BuildAppOptions = {
   getDatabaseClient?: () => DatabaseClient;
+  analyzePreDeploymentCheck?: AiRouteOptions["analyzePreDeploymentCheck"];
   createArchitectureDraftResponse?: AiRouteOptions["createArchitectureDraftResponse"];
   createLlmExplanation?: CreateLlmExplanation;
   createSafetyFindingExplanation?: CreateSafetyFindingExplanation;
+  safetyExplanationTimeoutMs?: AiRouteOptions["safetyExplanationTimeoutMs"];
   pricingRateProvider?: CostPricingRateProvider;
   costUsageProvider?: CostUsageAnalysisProvider;
   oauthCallbackRateLimiter?: RateLimiter;
@@ -158,7 +160,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   });
 
   app.register(registerHealthRoutes);
-  app.register(registerAiRoutes, createAiRouteOptions(options));
+  app.register(registerAiRoutes, createAiRouteOptions(options, runtimeCache));
   app.register(registerAuthRoutes, {
     prefix: "/api",
     getDatabaseClient: getAppDatabaseClient,
@@ -215,18 +217,27 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
 }
 
 // AI route 옵션은 undefined 필드를 넘기지 않게 분리해 exact optional 타입을 지킵니다.
-function createAiRouteOptions(options: BuildAppOptions): AiRouteOptions & { readonly prefix: "/api" } {
+function createAiRouteOptions(
+  options: BuildAppOptions,
+  runtimeCache: RuntimeCache
+): AiRouteOptions & { readonly prefix: "/api" } {
   if (
+    options.analyzePreDeploymentCheck === undefined &&
     options.createArchitectureDraftResponse === undefined &&
     options.createLlmExplanation === undefined &&
     options.createSafetyFindingExplanation === undefined &&
+    options.safetyExplanationTimeoutMs === undefined &&
     options.pricingRateProvider === undefined
   ) {
-    return { prefix: "/api" };
+    return { prefix: "/api", runtimeCache };
   }
 
   return {
     prefix: "/api",
+    runtimeCache,
+    ...(options.analyzePreDeploymentCheck !== undefined
+      ? { analyzePreDeploymentCheck: options.analyzePreDeploymentCheck }
+      : {}),
     ...(options.createArchitectureDraftResponse !== undefined
       ? { createArchitectureDraftResponse: options.createArchitectureDraftResponse }
       : {}),
@@ -234,6 +245,9 @@ function createAiRouteOptions(options: BuildAppOptions): AiRouteOptions & { read
     ...(options.createSafetyFindingExplanation === undefined
       ? {}
       : { createSafetyFindingExplanation: options.createSafetyFindingExplanation }),
+    ...(options.safetyExplanationTimeoutMs === undefined
+      ? {}
+      : { safetyExplanationTimeoutMs: options.safetyExplanationTimeoutMs }),
     ...(options.pricingRateProvider === undefined ? {} : { pricingRateProvider: options.pricingRateProvider })
   };
 }

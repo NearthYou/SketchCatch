@@ -395,24 +395,70 @@ test("approveDeploymentPlan preserves failed cleanup state for destroy approvals
   });
 });
 
-test("approveDeploymentPlan approves legacy risk-blocked plans while preserving safety warnings", async () => {
+test("approveDeploymentPlan rejects safety warnings that block approval", async () => {
   const repository = new FakeDeploymentRepository();
   const warning = createBlockingWarning();
   repository.deployment = createDeploymentRecord(undefined, {
-    isBlocked: true,
-    blockedBy: "risk_analysis",
-    blockedReason: "Plan includes delete or replace changes",
+    isBlocked: false,
+    blockedBy: null,
+    blockedReason: null,
     planSummary: {
       ...createPlanSummary(),
-      blocked: true,
+      blocked: false,
       warnings: [warning]
     }
   });
 
+  await assert.rejects(
+    () =>
+      approveDeploymentPlan(
+        {
+          deploymentId,
+          accessContext: createAccessContext()
+        },
+        repository,
+        {
+          downloadTerraformArtifact: async () => artifactContent,
+          now: () => fixedNow
+        }
+      ),
+    /Deployment warnings block approval/
+  );
+});
+
+test("approveDeploymentPlan requires acknowledgement for medium safety warnings", async () => {
+  const repository = new FakeDeploymentRepository();
+  const warning = createAcknowledgementWarning();
+  repository.deployment = createDeploymentRecord(undefined, {
+    planSummary: {
+      ...createPlanSummary(),
+      blocked: false,
+      warnings: [warning]
+    }
+  });
+
+  await assert.rejects(
+    () =>
+      approveDeploymentPlan(
+        {
+          deploymentId,
+          accessContext: createAccessContext(),
+          acknowledgedWarningIds: []
+        },
+        repository,
+        {
+          downloadTerraformArtifact: async () => artifactContent,
+          now: () => fixedNow
+        }
+      ),
+    /Deployment warnings must be acknowledged/
+  );
+
   const deployment = await approveDeploymentPlan(
     {
       deploymentId,
-      accessContext: createAccessContext()
+      accessContext: createAccessContext(),
+      acknowledgedWarningIds: [warning.id]
     },
     repository,
     {
@@ -421,15 +467,8 @@ test("approveDeploymentPlan approves legacy risk-blocked plans while preserving 
     }
   );
 
-  assert.equal(deployment.isBlocked, false);
-  assert.equal(deployment.blockedBy, null);
-  assert.equal(deployment.planSummary?.blocked, false);
+  assert.equal(deployment.approvedByUserId, userId);
   assert.deepEqual(deployment.planSummary?.warnings, [warning]);
-  assert.deepEqual(repository.approvals[0]?.input.planSummary, {
-    ...createPlanSummary(),
-    blocked: false,
-    warnings: [warning]
-  });
 });
 
 test("approveDeploymentPlan rejects unsafe Terraform artifacts before approval", async () => {
@@ -724,6 +763,20 @@ function createBlockingWarning(): DeploymentPlanSummary["warnings"][number] {
     relatedResourceId: "sg-app",
     requiresAcknowledgement: false,
     blocksApproval: true
+  };
+}
+
+function createAcknowledgementWarning(): DeploymentPlanSummary["warnings"][number] {
+  return {
+    id: "pre_deployment_check:cost-risk",
+    level: "medium",
+    category: "cost",
+    source: "pre_deployment_check",
+    code: "TRIVY_MISCONFIGURATION",
+    message: "Cost risk: Review before apply",
+    relatedFindingId: "cost-risk",
+    requiresAcknowledgement: true,
+    blocksApproval: false
   };
 }
 

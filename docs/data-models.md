@@ -767,6 +767,7 @@ type DeploymentPlanWarning = {
     | "IAM_WILDCARD"
     | "DESTRUCTIVE_CHANGE"
     | "UNSUPPORTED_RESOURCE"
+    | "TRIVY_MISCONFIGURATION"
     | "UNKNOWN_TERRAFORM_ACTION"
     | "MISSING_APPROVAL";
   message: string;
@@ -792,6 +793,8 @@ type DeploymentPlanSummary = {
 Plan summary는 사용자 승인 화면에 필요한 최소 요약이다. 현재 기본 흐름에서는 `terraform plan -out=tfplan` 이후 `terraform show -json tfplan` 결과의 `resource_changes`를 파싱해 생성한다.
 
 Plan 단계의 Safety Gate는 최종 실행 전 점검 결과를 `warnings`에 보존한다. Plan 저장 자체는 `deployments.isBlocked`를 세우지 않으며, 사용자가 승인한 plan과 apply 대상 plan은 같은 artifact/hash 기준이어야 한다.
+
+Pre-Deployment Check의 보안 finding은 Terraform 파일이 제공되면 Trivy `config` misconfiguration scan 결과를 우선 사용한다. Trivy rule이 기존 `PUBLIC_SSH`, `PUBLIC_RDS`, `PUBLIC_S3`, `IAM_WILDCARD` 코드로 안전하게 분류되지 않으면 `TRIVY_MISCONFIGURATION`으로 보존한다. Trivy 실패는 Safety Gate를 대체하지 않고 해당 scan 결과만 생략하며, deterministic cost/config/product policy finding은 계속 반환한다.
 
 MVP Direct Deployment Path live apply는 안전 범위를 위해 아래 Terraform resource type만 허용한다.
 이외 resource type이 변경 대상에 포함되면 warning의 `blocksApproval`을 `true` metadata로 남겨 승인 화면과 수정 안내에서 high-risk로 표시한다.
@@ -1233,6 +1236,15 @@ type LlmExplanation = {
 
 `AiArchitectureDraftResult`, `AiPreDeploymentAnalysisResult`, `DesignSimulationResult`, `AiTerraformErrorExplanationResult`는 필요할 때 `llmExplanation?: LlmExplanation`를 포함할 수 있다.
 
+Pre-Deployment Check 요청은 현재 Practice Architecture와 선택적으로 현재 Terraform editor 파일 목록을 함께 보낸다. Terraform syntax/schema diagnostics에 `error`가 있으면 프론트는 이 요청을 보내지 않고 diagnostics-only 결과를 즉시 표시한다.
+
+```ts
+type AiPreDeploymentCheckRequest = {
+  architectureJson: ArchitectureJson;
+  terraformFiles?: TerraformSyncFileInput[];
+};
+```
+
 Terraform 오류 설명은 Issues 탭에서 해결 전까지 유지되는 진단을 사용자가 이해하고 승인 기반으로 고치기 위한 설명 DTO다. 오류 해결 화면은 Well-Architected 리뷰를 다루지 않고 `진단 -> 코드 위치 -> 수정 방법 -> 적용 가능 여부`만 보여준다. Well-Architected 리뷰는 Pre-Deployment Check의 책임이다. 자동 적용 가능한 수정은 deterministic rule metadata로 먼저 표현하고, Amazon Q는 rule로 처리하기 어려운 오류의 설명 보강이나 fallback 제안에만 사용한다. 실제 Terraform 코드 변경은 사용자가 `적용`을 누른 뒤에만 가능하다.
 
 ```ts
@@ -1433,7 +1445,7 @@ type CostProjectEstimateListResponse = {
 
 사용량 분석 탭에서 새 AWS 연결을 시작할 때도 브라우저는 장기 AWS credential을 받지 않는다. 화면은 기존 AWS 연결 API를 호출해 CloudFormation Quick Create URL과 External ID를 받고, 사용자가 AWS 콘솔에서 Stack을 만든 뒤 Account ID를 입력하면 `POST /api/aws/connections/:connectionId/verify-created-role`로 backend 검증을 요청한다. 검증된 연결만 Cost Explorer/CloudWatch 실제 조회 대상으로 사용할 수 있다.
 
-실제 비용 데이터 출처는 AWS Cost Explorer와 CloudWatch다. Cost Explorer는 `UnblendedCost` 기준으로 일별 비용, 서비스별 비용, `SketchCatchProjectId` tag 기반 프로젝트별 비용을 조회한다. 사용량 분석의 프로젝트 목록은 최신 성공 `deployments`가 있는 프로젝트를 기준으로 한다. 프로젝트 tag 비용이 있으면 이 값을 우선한다. tag 비용이 없거나 배포 프로젝트와 tag가 맞지 않으면 최신 성공 `deployments`와 `deployed_resources`를 기준으로 프로젝트별 비용을 근사 배분한다. 리소스별 비용은 현재 v1에서 배포 리소스 기준 균등 배분이며, 실제 리소스 단위 Cost Explorer 청구 원장 대체물이 아니다.
+실제 비용 데이터 출처는 AWS Cost Explorer와 CloudWatch다. Cost Explorer는 `UnblendedCost` 기준으로 일별 비용, 서비스별 비용, `SketchCatchProjectId` tag 기반 프로젝트별 비용을 조회한다. 사용량 분석의 프로젝트 목록은 사용자가 실제로 생성한 프로젝트 레코드를 기준으로 한다. 프로젝트 tag 비용이 있으면 이 값을 우선한다. tag 비용이 없거나 프로젝트와 tag가 맞지 않으면 최신 성공 `deployments`와 `deployed_resources`를 기준으로 프로젝트별 비용을 근사 배분한다. 샘플 fallback도 프로젝트 행을 임의 생성하지 않고 실제 프로젝트 이름을 사용한다. 리소스별 비용은 현재 v1에서 배포 리소스 기준 균등 배분이며, 실제 리소스 단위 Cost Explorer 청구 원장 대체물이 아니다. `/api/costs/usage`는 선택적으로 `projectId` query를 받아 전체 계정 비용 배분을 먼저 계산한 뒤 응답을 해당 프로젝트의 비용, 서비스, 리소스, 그래프로 좁힌다.
 
 CloudWatch 기반 낭비 탐지는 v1에서 EC2, RDS, ALB, NAT Gateway를 우선 지원한다. 기준은 EC2/RDS 평균 CPU 5% 미만, RDS 평균 connection 1 미만, ALB 요청량 매우 낮음, NAT Gateway 처리량 낮음이다. 이 결과는 비용 절감 추천으로 표시되지만, 리소스를 자동 중지하거나 삭제하지 않는다.
 

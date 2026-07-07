@@ -10,6 +10,7 @@ import type {
   CostOptimizationRecommendation,
   CostProjectUsage,
   CostResourceUsage,
+  CostServiceUsage,
   CostUsageAnalysisRange,
   CostUsageAnalysisResponse,
   CostUsageTrendPoint,
@@ -59,6 +60,7 @@ export type CostUsageAnalysisProviderInput = {
   readonly deployedResources: readonly CostUsageDeployedResource[];
   readonly deployments: readonly CostUsageDeployment[];
   readonly now?: Date | undefined;
+  readonly projectId?: string | undefined;
   readonly projects: readonly Project[];
   readonly range: CostUsageAnalysisRange;
   readonly userId: string;
@@ -172,8 +174,7 @@ export function createAwsCostUsageAnalysisProvider(
     });
     const wasteResources = createWasteInsightsFromMetricSnapshots(metricSnapshots);
     const recommendations = createRecommendationsFromWaste(wasteResources);
-
-    return {
+    const response: CostUsageAnalysisResponse = {
       currency: "USD",
       dailyTrend,
       dataSource: "aws_cost_explorer",
@@ -193,6 +194,8 @@ export function createAwsCostUsageAnalysisProvider(
       totalCost: createMoneyEstimate(totalCostAmount),
       wasteResources
     };
+
+    return scopeCostUsageAnalysisResponseToProject(response, input.projectId);
   };
 }
 
@@ -211,7 +214,6 @@ export function createSampleCostUsageAnalysis(
   ]);
   const taggedProjectCosts = new Map<string, number>();
   const projectCosts = createProjectUsageCosts({
-    allowSampleProjects: true,
     deployedResources: input.deployedResources,
     deployments: input.deployments,
     projects: input.projects,
@@ -226,13 +228,10 @@ export function createSampleCostUsageAnalysis(
     projects: input.projects,
     totalCostAmount
   });
-  const fallbackProject = input.projects[0] ?? {
-    id: "sample-web-service",
-    name: "샘플 웹 서비스"
-  };
+  const fallbackProject =
+    input.projects.find((project) => project.id === input.projectId) ?? input.projects[0];
   const sampleWasteResources = createSampleWasteResources(fallbackProject);
-
-  return {
+  const response: CostUsageAnalysisResponse = {
     currency: "USD",
     dailyTrend,
     dataSource: "sample",
@@ -252,10 +251,128 @@ export function createSampleCostUsageAnalysis(
     totalCost: createMoneyEstimate(totalCostAmount),
     wasteResources: sampleWasteResources
   };
+
+  return scopeCostUsageAnalysisResponseToProject(response, input.projectId);
+}
+
+function scopeCostUsageAnalysisResponseToProject(
+  response: CostUsageAnalysisResponse,
+  projectId: string | undefined
+): CostUsageAnalysisResponse {
+  if (projectId === undefined) {
+    return response;
+  }
+
+  const projectCost = response.projectCosts.find((row) => row.projectId === projectId);
+  const selectedTotalAmount = projectCost?.amount ?? 0;
+  const resourceCosts = response.resourceCosts
+    .filter((resource) => resource.projectId === projectId)
+    .map((resource) => ({
+      ...resource,
+      percentage: calculatePercentage(resource.amount, selectedTotalAmount)
+    }));
+  const wasteResources = response.wasteResources.filter(
+    (resource) => resource.projectId === projectId
+  );
+  const resourceCostIds = new Set(resourceCosts.map((resource) => resource.id));
+
+  return {
+    ...response,
+    dailyTrend: scaleCostUsageDailyTrend(
+      response.dailyTrend,
+      response.totalCost.amount,
+      selectedTotalAmount
+    ),
+    forecastMonthEndCost: createMoneyEstimate(
+      scaleCostUsageAmount(
+        response.forecastMonthEndCost.amount,
+        response.totalCost.amount,
+        selectedTotalAmount
+      )
+    ),
+    metricSeries: response.metricSeries.filter((series) =>
+      [...resourceCostIds].some((resourceId) => series.id.startsWith(`${resourceId}-`))
+    ),
+    projectCosts: projectCost === undefined ? [] : [projectCost],
+    recommendations: response.recommendations.filter(
+      (recommendation) => recommendation.projectId === projectId
+    ),
+    resourceCosts,
+    serviceCosts: createProjectScopedServiceCosts({
+      accountServiceCosts: response.serviceCosts,
+      accountTotalAmount: response.totalCost.amount,
+      resourceCosts,
+      selectedTotalAmount
+    }),
+    totalCost: createMoneyEstimate(selectedTotalAmount),
+    wasteResources
+  };
+}
+
+function createProjectScopedServiceCosts(input: {
+  readonly accountServiceCosts: readonly CostServiceUsage[];
+  readonly accountTotalAmount: number;
+  readonly resourceCosts: readonly CostResourceUsage[];
+  readonly selectedTotalAmount: number;
+}): CostServiceUsage[] {
+  if (input.selectedTotalAmount <= 0) {
+    return [];
+  }
+
+  if (input.resourceCosts.length > 0) {
+    const serviceCosts = new Map<string, number>();
+
+    for (const resource of input.resourceCosts) {
+      serviceCosts.set(resource.service, (serviceCosts.get(resource.service) ?? 0) + resource.amount);
+    }
+
+    return createServiceCosts([...serviceCosts.entries()]);
+  }
+
+  if (input.accountTotalAmount <= 0) {
+    return [];
+  }
+
+  const scale = input.selectedTotalAmount / input.accountTotalAmount;
+
+  return createServiceCosts(
+    input.accountServiceCosts.map((service) => [service.service, service.amount * scale])
+  );
+}
+
+function scaleCostUsageDailyTrend(
+  dailyTrend: readonly CostUsageTrendPoint[],
+  sourceTotalAmount: number,
+  targetTotalAmount: number
+): CostUsageTrendPoint[] {
+  if (sourceTotalAmount <= 0 || targetTotalAmount <= 0) {
+    return dailyTrend.map((point) => ({
+      amount: 0,
+      date: point.date
+    }));
+  }
+
+  const scale = targetTotalAmount / sourceTotalAmount;
+
+  return dailyTrend.map((point) => ({
+    amount: roundUsd(point.amount * scale),
+    date: point.date
+  }));
+}
+
+function scaleCostUsageAmount(
+  amount: number,
+  sourceTotalAmount: number,
+  targetTotalAmount: number
+): number {
+  if (sourceTotalAmount <= 0 || targetTotalAmount <= 0) {
+    return 0;
+  }
+
+  return roundUsd(amount * (targetTotalAmount / sourceTotalAmount));
 }
 
 export function createProjectUsageCosts(input: {
-  readonly allowSampleProjects?: boolean;
   readonly deployedResources: readonly CostUsageDeployedResource[];
   readonly deployments: readonly CostUsageDeployment[];
   readonly projects: readonly Project[];
@@ -409,16 +526,13 @@ function createTaggedProjectUsageCosts(input: {
 }
 
 function createApproximateProjectUsageCosts(input: {
-  readonly allowSampleProjects?: boolean;
   readonly deployedResources: readonly CostUsageDeployedResource[];
   readonly deployments: readonly CostUsageDeployment[];
   readonly projects: readonly Project[];
   readonly totalCostAmount: number;
 }): CostProjectUsage[] {
   if (input.projects.length === 0) {
-    return input.allowSampleProjects === true
-      ? createNoProjectSampleUsageCosts(input.totalCostAmount)
-      : [];
+    return [];
   }
 
   const deploymentProjectById = new Map(
@@ -438,17 +552,39 @@ function createApproximateProjectUsageCosts(input: {
     (sum, count) => sum + count,
     0
   );
-  const fallbackWeight = totalResourceCount === 0 ? 1 : 0;
-  const denominator = totalResourceCount || input.projects.length;
+  const weightedProjects = input.projects.map((project, index) => {
+    const resourceCount = resourcesByProjectId.get(project.id) ?? 0;
 
-  return input.projects
-    .map((project) => {
-      const resourceCount = resourcesByProjectId.get(project.id) ?? 0;
-      const weight = resourceCount || fallbackWeight;
-      const amount = denominator === 0 ? 0 : (input.totalCostAmount * weight) / denominator;
+    return {
+      project,
+      resourceCount,
+      weight:
+        totalResourceCount === 0
+          ? createProjectFallbackUsageWeight(project, index)
+          : resourceCount
+    };
+  });
+  const billableProjects = weightedProjects.filter((project) => project.weight > 0);
+  const totalWeight = billableProjects.reduce((sum, project) => sum + project.weight, 0);
+  const amountByProjectId = new Map<string, number>();
+  let allocatedAmount = 0;
+
+  billableProjects.forEach((project, index) => {
+    const amount =
+      index === billableProjects.length - 1
+        ? roundUsd(input.totalCostAmount - allocatedAmount)
+        : roundUsd((input.totalCostAmount * project.weight) / totalWeight);
+
+    amountByProjectId.set(project.project.id, amount);
+    allocatedAmount = roundUsd(allocatedAmount + amount);
+  });
+
+  return weightedProjects
+    .map(({ project, resourceCount }) => {
+      const amount = amountByProjectId.get(project.id) ?? 0;
 
       return {
-        amount: roundUsd(amount),
+        amount,
         percentage: calculatePercentage(amount, input.totalCostAmount),
         projectId: project.id,
         projectName: project.name,
@@ -457,39 +593,6 @@ function createApproximateProjectUsageCosts(input: {
       };
     })
     .sort(compareCostProjectUsageRows);
-}
-
-function createNoProjectSampleUsageCosts(totalCostAmount: number): CostProjectUsage[] {
-  const webAmount = roundUsd(totalCostAmount * 0.52);
-  const dataAmount = roundUsd(totalCostAmount * 0.31);
-  const workerAmount = roundUsd(totalCostAmount - webAmount - dataAmount);
-
-  return [
-    {
-      amount: webAmount,
-      percentage: calculatePercentage(webAmount, totalCostAmount),
-      projectId: "sample-web-service",
-      projectName: "샘플 웹 서비스",
-      resourceCount: 4,
-      source: "sample" as const
-    },
-    {
-      amount: dataAmount,
-      percentage: calculatePercentage(dataAmount, totalCostAmount),
-      projectId: "sample-data-platform",
-      projectName: "샘플 데이터 플랫폼",
-      resourceCount: 3,
-      source: "sample" as const
-    },
-    {
-      amount: workerAmount,
-      percentage: calculatePercentage(workerAmount, totalCostAmount),
-      projectId: "sample-background-worker",
-      projectName: "샘플 배치 워커",
-      resourceCount: 2,
-      source: "sample" as const
-    }
-  ].sort(compareCostProjectUsageRows);
 }
 
 function createSampleResourceUsageCosts(
@@ -815,33 +918,35 @@ function createWasteFinding(
   snapshot: CostWasteMetricSnapshot
 ): { readonly estimatedMonthlyWaste: number; readonly message: string } | null {
   if (snapshot.metricName === "CPUUtilization" && snapshot.averageValue < 5) {
-    const estimatedMonthlyWaste =
-      snapshot.resource.terraformType === "aws_db_instance" ? 18 : 7.5;
+    const isDatabase = snapshot.resource.terraformType === "aws_db_instance";
+    const estimatedMonthlyWaste = isDatabase ? 18 : 7.5;
 
     return {
       estimatedMonthlyWaste,
-      message: `평균 CPU ${roundMetric(snapshot.averageValue)}%로 유휴 가능성이 높습니다.`
+      message: isDatabase
+        ? `최근 평균 CPU가 ${roundMetric(snapshot.averageValue)}%라 DB 사용량이 낮습니다. 테스트 DB라면 db.t4g.micro 같은 작은 클래스로 낮추는 것을 먼저 검토하세요.`
+        : `최근 평균 CPU가 ${roundMetric(snapshot.averageValue)}%라 인스턴스 사용량이 낮습니다. 테스트 서버라면 t3.nano 또는 t4g.nano처럼 더 작은 인스턴스로 낮추는 것을 먼저 검토하세요.`
     };
   }
 
   if (snapshot.metricName === "DatabaseConnections" && snapshot.averageValue < 1) {
     return {
       estimatedMonthlyWaste: 18,
-      message: `평균 DB 연결 수가 ${roundMetric(snapshot.averageValue)}개로 매우 낮습니다.`
+      message: `최근 평균 DB 연결 수가 ${roundMetric(snapshot.averageValue)}개라 거의 사용되지 않습니다. 테스트 DB라면 db.t4g.micro로 낮추거나 스냅샷 후 중지를 검토하세요.`
     };
   }
 
   if (snapshot.metricName === "RequestCount" && snapshot.averageValue < 100) {
     return {
       estimatedMonthlyWaste: 16,
-      message: `일 평균 요청량이 ${roundMetric(snapshot.averageValue)}건으로 낮습니다.`
+      message: `일 평균 요청량이 ${roundMetric(snapshot.averageValue)}건으로 낮습니다. 테스트용 진입점이면 ALB를 제거하거나 하나의 공유 ALB로 합치는 편이 비용을 줄일 수 있습니다.`
     };
   }
 
   if (snapshot.metricName === "BytesOutToDestination" && snapshot.averageValue < 1024 * 1024) {
     return {
       estimatedMonthlyWaste: 8,
-      message: `NAT Gateway 일 평균 전송량이 ${formatBytes(snapshot.averageValue)}로 낮습니다.`
+      message: `NAT Gateway 전송량이 하루 평균 ${formatBytes(snapshot.averageValue)} 수준입니다. 프라이빗 서브넷의 외부 호출이 꼭 필요하지 않다면 NAT 제거 또는 사용 시간 축소를 검토하세요.`
     };
   }
 
@@ -930,7 +1035,8 @@ function createSampleWasteResources(
   return [
     {
       estimatedMonthlyWaste: createMoneyEstimate(18),
-      finding: "평균 CPU 3.2%로 유휴 가능성이 높습니다.",
+      finding:
+        "최근 평균 CPU가 3.2%라 DB 사용량이 낮습니다. 테스트 DB라면 db.t4g.micro 같은 작은 클래스로 낮추는 것을 먼저 검토하세요.",
       id: "sample-waste-rds-cpu",
       metricName: "CPUUtilization",
       ...(project === undefined
@@ -948,7 +1054,8 @@ function createSampleWasteResources(
     },
     {
       estimatedMonthlyWaste: createMoneyEstimate(16),
-      finding: "일 평균 요청량이 42건으로 낮습니다.",
+      finding:
+        "일 평균 요청량이 42건으로 낮습니다. 테스트용 진입점이면 ALB를 제거하거나 하나의 공유 ALB로 합치는 편이 비용을 줄일 수 있습니다.",
       id: "sample-waste-alb-requests",
       metricName: "RequestCount",
       ...(project === undefined
@@ -1051,6 +1158,22 @@ function calculatePercentage(amount: number, totalAmount: number): number {
   return Math.round((amount / totalAmount) * 1000) / 10;
 }
 
+function createProjectFallbackUsageWeight(project: Pick<Project, "id" | "name">, index: number): number {
+  const seed = `${project.id}:${project.name}`;
+
+  return 8 + (createStableHash(seed) % 11) + index;
+}
+
+function createStableHash(value: string): number {
+  let hash = 0;
+
+  for (const character of value) {
+    hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
+  }
+
+  return hash;
+}
+
 function compareCostProjectUsageRows(left: CostProjectUsage, right: CostProjectUsage): number {
   return right.amount - left.amount || left.projectName.localeCompare(right.projectName);
 }
@@ -1095,13 +1218,13 @@ function getRecommendationSeverity(amount: number): RiskLevel {
 function getRecommendationActionLabel(resource: CostWasteResourceInsight): string {
   switch (resource.resourceType) {
     case "aws_instance":
-      return "중지 또는 다운사이징 검토";
+      return "t3.nano/t4g.nano로 낮추기 검토";
     case "aws_db_instance":
-      return "스케일 다운 또는 스냅샷 후 중지";
+      return "db.t4g.micro로 낮추기 검토";
     case "aws_lb":
       return "공유 ALB 또는 제거 검토";
     case "aws_nat_gateway":
-      return "NAT Gateway 제거/대체 검토";
+      return "NAT Gateway 제거 검토";
     default:
       return "리소스 사용량 재검토";
   }

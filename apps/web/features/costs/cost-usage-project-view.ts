@@ -54,6 +54,12 @@ export function selectCostUsageProject(
   );
 }
 
+export function getCostUsageProjectIdFromKey(selectedProjectKey: string): string | null {
+  return selectedProjectKey.startsWith("project-id:")
+    ? selectedProjectKey.slice("project-id:".length)
+    : null;
+}
+
 export function createScopedCostUsageDailyTrend(input: {
   readonly dailyTrend: readonly CostUsageTrendPoint[];
   readonly selectedProject: CostProjectUsage | null;

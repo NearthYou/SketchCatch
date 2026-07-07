@@ -1,7 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { CheckFinding, TerraformDiagnostic, TerraformSourceLocation } from "@sketchcatch/types";
+import type {
+  CheckFinding,
+  TerraformDiagnostic,
+  TerraformSourceLocation,
+  TerraformSyncFileInput
+} from "@sketchcatch/types";
 import { createPortal } from "react-dom";
 import {
   AlertCircle,
@@ -12,7 +17,11 @@ import {
   Rocket
 } from "lucide-react";
 import type { DiagramEditorPanelContext } from "../diagram-editor";
-import { DeploymentPanel } from "./DeploymentPanel";
+import {
+  DeploymentPanel,
+  initialPreDeploymentCheckState,
+  type DeploymentPreDeploymentCheckState
+} from "./DeploymentPanel";
 import { ResourceWorkspacePanel } from "./ResourceWorkspacePanel";
 import {
   TerraformCodePanel,
@@ -103,6 +112,8 @@ export function WorkspaceRightPanel({
   const [terraformDiscardRequestId, setTerraformDiscardRequestId] = useState(0);
   const [terraformIssues, setTerraformIssues] = useState<TerraformIssueRecord[]>([]);
   const [loadedTerraformIssuesProjectId, setLoadedTerraformIssuesProjectId] = useState<string | null>(null);
+  const [preDeploymentCheckState, setPreDeploymentCheckState] =
+    useState<DeploymentPreDeploymentCheckState>(initialPreDeploymentCheckState);
   const [isDeploymentConsoleOpen, setIsDeploymentConsoleOpen] = useState(
     initialView === "deployment"
   );
@@ -164,6 +175,10 @@ export function WorkspaceRightPanel({
     latestTerraformDiagnosticsRef.current = storedIssues.map((issue) => issue.diagnostic);
     setTerraformIssues(storedIssues);
     setLoadedTerraformIssuesProjectId(projectId);
+  }, [projectId]);
+
+  useEffect(() => {
+    setPreDeploymentCheckState(initialPreDeploymentCheckState);
   }, [projectId]);
 
   useEffect(() => {
@@ -423,6 +438,13 @@ export function WorkspaceRightPanel({
     return terraformPanelRef.current?.validateCurrentTerraform() ?? terraformDiagnostics;
   }, [terraformDiagnostics]);
 
+  const getTerraformFilesForPreDeployment = useCallback((): readonly TerraformSyncFileInput[] => {
+    return (terraformPanelRef.current?.getTerraformFiles() ?? []).map((file) => ({
+      fileName: file.fileName,
+      terraformCode: file.code
+    }));
+  }, []);
+
   const openPreDeploymentFindingTerraformSource = useCallback((finding: CheckFinding): TerraformSourceLocation | null => {
     const sourceLocation = getPreDeploymentFindingTerraformSourceLocation({
       diagramJson: context.diagram,
@@ -517,6 +539,7 @@ export function WorkspaceRightPanel({
       hasUnsavedDeploymentBaseline={hasUnsavedDeploymentBaseline}
       initialExpanded
       onExpandedClose={() => setIsDeploymentConsoleOpen(false)}
+      onGetTerraformFiles={getTerraformFilesForPreDeployment}
       onOpenFindingTerraformSource={(finding) => {
         const sourceLocation = openPreDeploymentFindingTerraformSource(finding);
 
@@ -527,7 +550,9 @@ export function WorkspaceRightPanel({
         return sourceLocation;
       }}
       onPrepareDeploymentArtifacts={prepareDeploymentArtifacts}
+      onPreDeploymentCheckStateChange={setPreDeploymentCheckState}
       onValidateTerraformDiagnostics={validateTerraformForPreDeployment}
+      preDeploymentCheckState={preDeploymentCheckState}
       projectId={projectId}
       projectName={projectName}
     />

@@ -137,6 +137,7 @@ const deploymentPlanSummarySchema = z
             "IAM_WILDCARD",
             "DESTRUCTIVE_CHANGE",
             "UNSUPPORTED_RESOURCE",
+            "TRIVY_MISCONFIGURATION",
             "UNKNOWN_TERRAFORM_ACTION",
             "MISSING_APPROVAL"
           ]),
