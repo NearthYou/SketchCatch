@@ -71,7 +71,7 @@ test("deploy opens a full-screen console instead of rendering deployment inside 
   assert.match(deploymentPanelRule, /\bheight:\s*100%;/);
   assert.match(deploymentPanelRule, /\bmin-height:\s*0;/);
   assert.match(deploymentPanelRule, /\boverflow:\s*hidden;/);
-  assert.match(deploymentPanelRule, /\bgrid-template-rows:\s*auto minmax\(0,\s*1fr\) auto;/);
+  assert.match(deploymentPanelRule, /\bgrid-template-rows:\s*auto minmax\(0,\s*1fr\);/);
   assert.match(deploymentPanelContentRule, /\bmin-height:\s*0;/);
   assert.match(deploymentPanelContentRule, /\boverflow-y:\s*auto;/);
 });
@@ -104,24 +104,27 @@ test("workspace rails use the Brainboard panel widths", () => {
   assert.match(leftRailRule, /\btop:\s*72px;/);
 });
 
-test("deployment mode switch keeps tabs the same size across modes", () => {
+test("deployment panel uses one primary scroll area without a mode switch", () => {
   const deploymentPanelRule = getCssRule(stylesSource, "deploymentPanel");
-  const modeSwitchRule = getCssRule(stylesSource, "deploymentModeSwitch");
-  const modeButtonRule = getCssRule(stylesSource, "deploymentModeButton");
+  const panelContentRule = getCssRule(stylesSource, "deploymentPanelContent");
 
-  assert.match(deploymentPanelRule, /\bgrid-template-rows:\s*auto minmax\(0,\s*1fr\) auto;/);
-  assert.match(modeSwitchRule, /\bgrid-auto-rows:\s*32px;/);
-  assert.match(modeSwitchRule, /\balign-items:\s*center;/);
-  assert.match(modeButtonRule, /\bheight:\s*32px;/);
+  assert.match(deploymentPanelRule, /\bgrid-template-rows:\s*auto minmax\(0,\s*1fr\);/);
+  assert.match(panelContentRule, /\boverflow-y:\s*auto;/);
+  assert.doesNotMatch(stylesSource, /\.deploymentModeSwitch\s*\{/);
+  assert.doesNotMatch(stylesSource, /\.deploymentModeButton\s*\{/);
 });
 
-test("deployment mode switch is pinned after the scrollable content area", () => {
+test("deployment panel keeps setup, status, and secondary sections in one flow", () => {
   const contentIndex = deploymentPanelSource.indexOf("className={styles.deploymentPanelContent}");
-  const modeSwitchIndex = deploymentPanelSource.indexOf("className={styles.deploymentModeSwitch}");
+  const setupIndex = deploymentPanelSource.indexOf("{renderSetupSection()}", contentIndex);
+  const statusIndex = deploymentPanelSource.indexOf("{renderStatusMessages()}", setupIndex);
+  const secondaryIndex = deploymentPanelSource.indexOf("{renderSecondarySections()}", statusIndex);
 
   assert.notEqual(contentIndex, -1);
-  assert.notEqual(modeSwitchIndex, -1);
-  assert.ok(contentIndex < modeSwitchIndex);
+  assert.ok(setupIndex > contentIndex);
+  assert.ok(statusIndex > setupIndex);
+  assert.ok(secondaryIndex > statusIndex);
+  assert.doesNotMatch(deploymentPanelSource, /className=\{styles\.deploymentModeSwitch\}/);
 });
 
 test("right panel exposes only the persistent Issues and Deploy text actions", () => {
@@ -490,43 +493,43 @@ test("terraform leave save ignores stale external save completions", () => {
   assert.match(terraformPanelSource, /onExternalSaveComplete\(saved, externalSaveRequestId\)/);
 });
 
-test("deployment expanded logs use a single terminal scrollbar", () => {
-  const expandedLogsRule = getCssRule(stylesSource, "deploymentExpandedLogs");
-  const expandedLogSectionRule = getDescendantCssRule(
-    stylesSource,
-    "deploymentExpandedLogs",
-    "deploymentSection"
-  );
+test("deployment screen keeps secondary deployment information collapsed by default", () => {
+  const secondaryPanelRule = getCssRule(stylesSource, "deploymentSecondaryPanel");
+  const disclosureRule = getCssRule(stylesSource, "deploymentDisclosure");
+  const disclosureBodyRule = getCssRule(stylesSource, "deploymentDisclosureBody");
   const logListRule = getCssRule(stylesSource, "deploymentLogList");
 
-  assert.match(expandedLogsRule, /\boverflow:\s*hidden;/);
-  assert.match(expandedLogSectionRule, /\bgrid-template-rows:\s*auto minmax\(0,\s*1fr\);/);
-  assert.match(logListRule, /\boverflow:\s*auto;/);
+  assert.match(deploymentPanelSource, /const renderSecondarySections = \(\) =>/);
+  assert.match(deploymentPanelSource, /<details className=\{styles\.deploymentDisclosure\}>/);
+  assert.match(deploymentPanelSource, /실행 기록과 결과/);
+  assert.match(deploymentPanelSource, /Git\/CI\/CD handoff/);
+  assert.match(deploymentPanelSource, /Logs/);
+  assert.match(secondaryPanelRule, /\bdisplay:\s*grid;/);
+  assert.match(disclosureRule, /\bborder:\s*1px solid #dce3ee;/);
+  assert.match(disclosureBodyRule, /\bpadding:\s*12px;/);
+  assert.match(logListRule, /\boverflow:\s*visible;/);
   assert.doesNotMatch(logListRule, /\bmax-height:/);
 });
 
-test("deployment expanded panel has a resizable split handle", () => {
-  const expandedGridRule = getCssRule(stylesSource, "deploymentExpandedGrid");
-  const resizeHandleRule = getCssRule(stylesSource, "deploymentExpandedResizeHandle");
+test("deployment expanded panel uses one readable body instead of a split pane", () => {
+  const expandedBodyRule = getCssRule(stylesSource, "deploymentExpandedBody");
 
-  assert.match(deploymentPanelSource, /deploymentExpandedGridRef/);
-  assert.match(deploymentPanelSource, /"--deployment-details-width"/);
-  assert.match(deploymentPanelSource, /className=\{styles\.deploymentExpandedResizeHandle\}/);
-  assert.match(deploymentPanelSource, /role="separator"/);
-  assert.match(deploymentPanelSource, /onPointerDown=\{startDeploymentPanelResize\}/);
-  assert.match(deploymentPanelSource, /onKeyDown=\{handleDeploymentPanelResizeKeyDown\}/);
-  assert.match(
-    expandedGridRule,
-    /grid-template-columns:\s*minmax\(0,\s*calc\(var\(--deployment-details-width\) - 6px\)\)\s*12px\s*minmax\(0,\s*calc\(100% - var\(--deployment-details-width\) - 6px\)\);/
-  );
-  assert.match(resizeHandleRule, /\bcursor:\s*col-resize;/);
-  assert.match(resizeHandleRule, /\btouch-action:\s*none;/);
+  assert.match(deploymentPanelSource, /className=\{styles\.deploymentExpandedBody\}/);
+  assert.match(expandedBodyRule, /\boverflow:\s*auto;/);
+  assert.doesNotMatch(deploymentPanelSource, /deploymentExpandedGridRef/);
+  assert.doesNotMatch(deploymentPanelSource, /"--deployment-details-width"/);
+  assert.doesNotMatch(deploymentPanelSource, /className=\{styles\.deploymentExpandedResizeHandle\}/);
+  assert.doesNotMatch(deploymentPanelSource, /role="separator"/);
+  assert.doesNotMatch(deploymentPanelSource, /startDeploymentPanelResize/);
+  assert.doesNotMatch(deploymentPanelSource, /handleDeploymentPanelResizeKeyDown/);
+  assert.doesNotMatch(stylesSource, /\.deploymentExpandedGrid\s*\{/);
+  assert.doesNotMatch(stylesSource, /\.deploymentExpandedResizeHandle\s*\{/);
 });
 
-test("deployment expanded details use larger action and record text", () => {
+test("deployment expanded body uses larger action and record text", () => {
   assert.match(
     stylesSource,
-    /\.deploymentExpandedDetails\s+\.deploymentField\s*\{[\s\S]*?\bfont-size:\s*13px;/
+    /\.deploymentExpandedBody\s+\.deploymentField\s*\{[\s\S]*?\bfont-size:\s*13px;/
   );
   assert.match(
     deploymentPanelSource,
@@ -534,11 +537,11 @@ test("deployment expanded details use larger action and record text", () => {
   );
   assert.match(
     stylesSource,
-    /\.deploymentExpandedDetails\s+\.deploymentPrimaryButton,\s*\.deploymentExpandedDetails\s+\.deploymentSecondaryButton,\s*\.deploymentExpandedDetails\s+\.deploymentDangerButton\s*\{[\s\S]*?\bfont-size:\s*14px;[\s\S]*?\bmin-height:\s*40px;/
+    /\.deploymentExpandedBody\s+\.deploymentPrimaryButton,\s*\.deploymentExpandedBody\s+\.deploymentSecondaryButton,\s*\.deploymentExpandedBody\s+\.deploymentDangerButton\s*\{[\s\S]*?\bfont-size:\s*14px;[\s\S]*?\bmin-height:\s*40px;/
   );
   assert.match(
     stylesSource,
-    /\.deploymentExpandedDetails\s+\.deploymentSummary\s+strong\s*\{[\s\S]*?\bfont-size:\s*13px;/
+    /\.deploymentExpandedBody\s+\.deploymentSummary\s+strong\s*\{[\s\S]*?\bfont-size:\s*13px;/
   );
 });
 
@@ -692,9 +695,9 @@ test("pre-deployment check is owned by the deployment tab", () => {
   assert.doesNotMatch(aiChatDockSource, /runAiPreDeploymentCheck/);
   assert.doesNotMatch(aiChatDockSource, /WorkspaceAiPreDeploymentResult/);
   assert.match(preflightSummaryRule, /\bgap:\s*8px;/);
-  assert.match(preflightFindingsRule, /\bmax-height:\s*min\(68vh,\s*760px\);/);
-  assert.match(preflightFindingsRule, /\boverflow-y:\s*auto;/);
-  assert.match(preflightFindingsRule, /\bscrollbar-gutter:\s*stable;/);
+  assert.doesNotMatch(preflightFindingsRule, /\bmax-height:/);
+  assert.doesNotMatch(preflightFindingsRule, /\boverflow-y:\s*auto;/);
+  assert.doesNotMatch(preflightFindingsRule, /\bscrollbar-gutter:/);
   assert.match(deploymentPanelSource, /analysis\.findings\.map\(\(finding\) =>/);
   assert.doesNotMatch(deploymentPanelSource, /visibleFindings/);
   assert.doesNotMatch(deploymentPanelSource, /hiddenFindingCount/);
@@ -1026,19 +1029,6 @@ function getCssRule(source: string, className: string): string {
   const match = new RegExp(`\\.${className}\\s*\\{(?<body>[^}]*)\\}`).exec(source);
 
   assert.ok(match?.groups?.body, `Expected .${className} CSS rule to exist`);
-
-  return match.groups.body;
-}
-
-function getDescendantCssRule(source: string, parentClassName: string, childClassName: string): string {
-  const match = new RegExp(
-    `\\.${parentClassName}\\s+\\.${childClassName}\\s*\\{(?<body>[^}]*)\\}`
-  ).exec(source);
-
-  assert.ok(
-    match?.groups?.body,
-    `Expected .${parentClassName} .${childClassName} CSS rule to exist`
-  );
 
   return match.groups.body;
 }

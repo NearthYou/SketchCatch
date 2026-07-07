@@ -2,6 +2,27 @@
 
 Short English-only working log for the current agent context.
 
+## 2026-07-08 Deployment Console UX Cleanup
+
+- Branch/worktree: `codex/deployment-ux-cleanup` in `C:\Users\siwon\Desktop\Jungle\Week17~21\SketchCatch-worktrees\deployment-ux-cleanup`.
+- Scope: reduce deployment console clutter and remove nested/split scrolling.
+- Kept the primary deployment screen focused on the three-step flow: save, review, deploy.
+- Moved records, results, Git/CI/CD handoff, and logs into collapsed secondary disclosures.
+- Removed the expanded console split pane, resize handle, and separate logs column.
+- Removed inner scrolling from pre-deployment findings and deployment logs so the console has one main scroll path.
+- Updated layout regression tests to enforce the simplified information architecture.
+
+Verification:
+
+- `pnpm harness:check` - passed before edits.
+- `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-right-panel-layout.test.ts` - passed, 63 tests.
+- `pnpm lint` - passed.
+- `pnpm typecheck` - passed.
+- `pnpm build` - passed.
+- `pnpm harness:check` - passed after build.
+- Local web server returned HTTP 200 on `http://localhost:3000`.
+- Browser screenshot QA was not run because Playwright is not installed in the local REPL environment.
+
 ## 2026-07-08 UI Contrast Fix
 
 - Branch/worktree: `codex/contrast-fix` in `C:\Users\siwon\Desktop\Jungle\Week17~21\SketchCatch-worktrees\contrast-fix`.
