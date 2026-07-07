@@ -860,6 +860,9 @@ type DeploymentFailureExplanation = {
 
 - `POST /api/git-cicd-handoffs/:handoffId/repository-settings/apply`는 handoff의 `repositorySettingsPreview`를 기준으로 GitHub Environment와 Actions variables를 적용한다.
 - 응답 DTO는 `GitCicdRepositorySettingsApplyResponse`이며 적용 여부, environment 이름, 적용된 variable 이름, workflow file 목록, `githubOAuthRequired` 상태를 반환한다.
+- `POST /api/git-cicd-handoffs/:handoffId/github-oauth/start`는 repository settings 적용을 위한 GitHub OAuth 승인 URL을 반환한다.
+- `GET /api/git-cicd-handoffs/github-oauth/callback`은 GitHub OAuth code를 access token으로 교환하고, 토큰 원문을 DB에 저장하지 않고 Runtime Cache에 10분 TTL로만 보관한다.
+- `POST /api/git-cicd-handoffs/:handoffId/repository-settings/apply-with-github-oauth`는 로그인 사용자와 handoff가 일치하는 one-time OAuth token으로 GitHub Environment와 Actions variables를 적용한 뒤 token cache를 삭제한다.
 - `POST /api/git-cicd-handoffs/:handoffId/aws-role-diff/apply`는 승인된 `awsRoleDiff`를 기준으로 IAM trust policy를 적용하고 검증한다.
 - 응답 DTO는 `GitCicdAwsRoleDiffApplyResponse`이며 role ARN, repository, environment, `appliedAt`, `verified`를 반환한다.
 - `GitCicdAwsRoleDiff` JSON에는 적용 후 `applied`, `appliedAt`, `verified`를 기록할 수 있다.

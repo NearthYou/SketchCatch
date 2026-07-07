@@ -75,6 +75,59 @@ export function createGitHubRepositorySettingsApplier(
   };
 }
 
+export function createGitHubOAuthRepositorySettingsApplier(
+  accessToken: string,
+  fetchImpl: typeof fetch = fetch
+): GitCicdRepositorySettingsApplier {
+  return {
+    async applyRepositorySettings({ handoff, sourceRepository }) {
+      const preview = handoff.repositorySettingsPreview;
+
+      if (!preview) {
+        throw new GitCicdHandoffNotFoundError("Git/CI/CD repository settings preview not found");
+      }
+
+      try {
+        await requestGitHubWithOAuth(fetchImpl, accessToken, {
+          method: "PUT",
+          owner: sourceRepository.owner,
+          name: sourceRepository.name,
+          path: `/environments/${encodeURIComponent(preview.environmentName)}`,
+          body: {}
+        });
+
+        const variableNames = Object.keys(preview.variables).sort();
+
+        for (const variableName of variableNames) {
+          await upsertRepositoryVariableWithOAuth(fetchImpl, accessToken, {
+            owner: sourceRepository.owner,
+            name: sourceRepository.name,
+            variableName,
+            value: preview.variables[variableName] ?? ""
+          });
+        }
+
+        return {
+          applied: true,
+          environmentName: preview.environmentName,
+          variables: variableNames,
+          secrets: preview.secrets,
+          workflowFiles: preview.workflowFiles,
+          githubOAuthRequired: false
+        };
+      } catch (error) {
+        if (isGitHubPermissionError(error)) {
+          throw new GitCicdRepositorySettingsPermissionError(
+            "GitHub OAuth token does not have permission to create environments or Actions variables"
+          );
+        }
+
+        throw error;
+      }
+    }
+  };
+}
+
 export async function applyGitCicdRepositorySettings(
   input: {
     handoffId: string;
@@ -132,5 +185,100 @@ function isGitHubPermissionError(error: unknown): boolean {
     "statusCode" in error &&
     ((error as { readonly statusCode?: unknown }).statusCode === 401 ||
       (error as { readonly statusCode?: unknown }).statusCode === 403)
+  );
+}
+
+async function upsertRepositoryVariableWithOAuth(
+  fetchImpl: typeof fetch,
+  accessToken: string,
+  input: {
+    owner: string;
+    name: string;
+    variableName: string;
+    value: string;
+  }
+): Promise<void> {
+  const body = {
+    name: input.variableName,
+    value: input.value
+  };
+
+  try {
+    await requestGitHubWithOAuth(fetchImpl, accessToken, {
+      owner: input.owner,
+      name: input.name,
+      path: `/actions/variables/${encodeURIComponent(input.variableName)}`
+    });
+    await requestGitHubWithOAuth(fetchImpl, accessToken, {
+      method: "PATCH",
+      owner: input.owner,
+      name: input.name,
+      path: `/actions/variables/${encodeURIComponent(input.variableName)}`,
+      body
+    });
+  } catch (error) {
+    if (!isGitHubStatus(error, 404)) {
+      throw error;
+    }
+
+    await requestGitHubWithOAuth(fetchImpl, accessToken, {
+      method: "POST",
+      owner: input.owner,
+      name: input.name,
+      path: "/actions/variables",
+      body
+    });
+  }
+}
+
+async function requestGitHubWithOAuth(
+  fetchImpl: typeof fetch,
+  accessToken: string,
+  input: {
+    owner: string;
+    name: string;
+    path: string;
+    method?: string;
+    body?: Record<string, unknown>;
+  }
+): Promise<unknown> {
+  const response = await fetchImpl(
+    `https://api.github.com/repos/${encodeURIComponent(input.owner)}/${encodeURIComponent(
+      input.name
+    )}${input.path}`,
+    {
+      method: input.method ?? "GET",
+      headers: {
+        Accept: "application/vnd.github+json",
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+        "X-GitHub-Api-Version": "2022-11-28"
+      },
+      ...(input.body ? { body: JSON.stringify(input.body) } : {})
+    }
+  );
+
+  if (!response.ok) {
+    const error = new Error(`GitHub API request failed: ${response.status}`) as Error & {
+      statusCode?: number;
+    };
+
+    error.statusCode = response.status;
+    throw error;
+  }
+
+  if (response.status === 204) {
+    return {};
+  }
+
+  return response.json().catch(() => ({}));
+}
+
+function isGitHubStatus(error: unknown, statusCode: number): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "statusCode" in error &&
+    (error as { readonly statusCode?: unknown }).statusCode === statusCode
   );
 }

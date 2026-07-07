@@ -1,6 +1,26 @@
 ﻿# 에이전트 진행 로그
 # 에이전트 진행 로그
 
+### 2026-07-07 - GitHub OAuth repository settings writer 구현
+
+- Goal: plan6 M1의 GitHub user OAuth 추가 승인과 repository settings writer를 DB token 저장 없이 최소 구현한다.
+- Completed:
+  - PR #213을 dev에 squash merge했고, dev CI run `28848684208`이 성공했다.
+  - `GitCicdGitHubOAuthStartResponse` shared type을 추가했다.
+  - `POST /api/git-cicd-handoffs/:handoffId/github-oauth/start`가 GitHub OAuth `repo workflow` 승인 URL을 발급한다.
+  - `GET /api/git-cicd-handoffs/github-oauth/callback`이 OAuth code를 token으로 교환하고 Runtime Cache에 10분 TTL로만 저장한다.
+  - `POST /api/git-cicd-handoffs/:handoffId/repository-settings/apply-with-github-oauth`가 로그인 사용자와 handoff가 일치하는 one-time token으로 GitHub Environment와 Actions variables를 적용하고 token cache를 삭제한다.
+  - Deployment Panel에 `GitHub OAuth 승인`과 `OAuth 설정 적용` 버튼을 추가했다.
+  - `docs/data-models.md`, `docs/deployment.md`, `docs/sw/spec6.md`, `docs/sw/plan6.md`, `docs/sw/agents3.md`를 갱신했다.
+- Verification run:
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/routes/git-cicd-handoffs.test.ts` - passed, 19 tests.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/api.test.ts features/workspace/deployment-actions.test.ts` - passed, 42 tests.
+  - `pnpm --filter @sketchcatch/api typecheck` - passed.
+  - `pnpm --filter @sketchcatch/web typecheck` - passed.
+- Known risks:
+  - OAuth writer는 현재 모델의 secret 원문을 받지 않으므로 Environment와 Actions variables를 적용하고 secret 이름은 preview로만 유지한다.
+  - 실제 target repository에 대한 OAuth live mutation은 사용자 승인/권한이 있는 세션에서 #210 live smoke로 검증해야 한다.
+
 ### 2026-07-07 - Git/CI/CD live smoke readiness 보강
 
 - Goal: 실제 Git/CI/CD 자동 배포 live smoke 전에 준비 상태와 권한/비용 mutation 승인을 JSON report로 확인할 수 있게 한다.

@@ -13,12 +13,14 @@
 - Priority: P0
 - Issue: #203
 - Branch: `feature/sw/203-github-oauth-repo-setup`
-- Status: implemented_in_pr_211_for_app_token_repo_settings_apply
+- Status: implemented_with_github_app_and_one_time_oauth_writer
 
 Current evidence:
 
 - GitHub App installation token 기반 repository settings writer가 Environment 생성과 Actions variables upsert를 수행한다.
 - GitHub PR 생성 또는 repository settings apply 중 401/403 권한 부족이 발생하면 `github_oauth_required`로 fail-closed 처리한다.
+- GitHub user OAuth one-time grant가 Runtime Cache에 token을 10분 TTL로만 저장하고, `apply-with-github-oauth` 이후 즉시 삭제한다.
+- OAuth writer는 Environment와 Actions variables를 적용한다.
 - Secret 값은 받지 않으며, repository secrets는 preview 이름만 유지한다.
 
 목표:
@@ -41,7 +43,8 @@ Current evidence:
 2026-07-07 진행:
 
 - repository settings preview와 workflow/settings manifest 생성은 구현했다.
-- 실제 GitHub user OAuth token으로 variables/secrets/environment를 적용하는 writer는 후속으로 남았다.
+- 실제 GitHub user OAuth token으로 Environment와 Actions variables를 적용하는 one-time writer를 추가했다.
+- secret 원문 수집/암호화 저장은 현재 모델에 없으므로 적용 대상에서 제외하고 preview 이름만 유지한다.
 
 테스트:
 

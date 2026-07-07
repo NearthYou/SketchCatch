@@ -42,6 +42,7 @@
   GitCicdHandoffPipelineStatus,
   GitCicdHandoffPipelineStatusResponse,
   GitCicdHandoffResponse,
+  GitCicdGitHubOAuthStartResponse,
   GitCicdRepositorySettingsApplyResponse,
   GitCicdAwsRoleDiffApplyResponse,
   GitHubAppExistingInstallationCallbackUrlResponse,
@@ -669,6 +670,34 @@ export async function applyGitCicdRepositorySettings(
 ): Promise<GitCicdRepositorySettingsApplyResponse> {
   return apiFetch<GitCicdRepositorySettingsApplyResponse>(
     `/git-cicd-handoffs/${encodeURIComponent(handoffId)}/repository-settings/apply`,
+    {
+      auth: true,
+      method: "POST",
+      body: {}
+    }
+  );
+}
+
+export async function createGitCicdGitHubOAuthStartUrl(
+  handoffId: string
+): Promise<GitCicdGitHubOAuthStartResponse> {
+  return apiFetch<GitCicdGitHubOAuthStartResponse>(
+    `/git-cicd-handoffs/${encodeURIComponent(handoffId)}/github-oauth/start`,
+    {
+      auth: true,
+      method: "POST",
+      body: {}
+    }
+  );
+}
+
+export async function applyGitCicdRepositorySettingsWithGitHubOAuth(
+  handoffId: string
+): Promise<GitCicdRepositorySettingsApplyResponse> {
+  return apiFetch<GitCicdRepositorySettingsApplyResponse>(
+    `/git-cicd-handoffs/${encodeURIComponent(
+      handoffId
+    )}/repository-settings/apply-with-github-oauth`,
     {
       auth: true,
       method: "POST",
