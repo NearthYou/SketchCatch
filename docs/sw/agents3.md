@@ -5,7 +5,7 @@
 3. Treat this work as Git/CI/CD Deployment Path, not Direct Deployment.
 4. Do not call SketchCatch AWS-only; keep provider boundaries explicit.
 5. GitHub App handles repo selection, PR creation, and Actions run reads.
-6. User OAuth is required for workflow file writes and repo Actions setup.
+6. Repo setup must use approved GitHub permissions and fail closed with an OAuth/permission CTA.
 7. Never store GitHub tokens, AWS credentials, secrets, or private keys in DB/logs/docs.
 8. Existing AWS Connection roles may be changed only after diff review and user approval.
 9. IAM trust must be scoped to repo, branch, environment, and `sts.amazonaws.com`.

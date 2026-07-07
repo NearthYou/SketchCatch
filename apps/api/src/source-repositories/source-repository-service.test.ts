@@ -292,6 +292,9 @@ function createFakeGitHubAppClient(repositories: GitHubRepositoryCandidate[]): G
     async createPullRequest() {
       throw new Error("not used");
     },
+    async applyRepositorySettings() {
+      throw new Error("not used");
+    },
     async getLatestWorkflowRunForHeadSha() {
       throw new Error("not used");
     },

@@ -460,6 +460,9 @@ export type GitCicdAwsRoleDiff = {
   approved: boolean;
   approvedByUserId: string | null;
   approvedAt: IsoDateTimeString | null;
+  applied?: boolean | undefined;
+  appliedAt?: IsoDateTimeString | null | undefined;
+  verified?: boolean | undefined;
 };
 
 export type GitCicdHandoff = {
@@ -568,6 +571,24 @@ export type GitCicdHandoffListResponse = {
 
 export type GitCicdHandoffPipelineStatusResponse = {
   pipelineStatus: GitCicdHandoffPipelineStatus;
+};
+
+export type GitCicdRepositorySettingsApplyResponse = {
+  applied: boolean;
+  environmentName: string;
+  variables: string[];
+  secrets: string[];
+  workflowFiles: string[];
+  githubOAuthRequired: boolean;
+};
+
+export type GitCicdAwsRoleDiffApplyResponse = {
+  applied: boolean;
+  roleArn: string;
+  repository: string;
+  environmentName: string;
+  appliedAt: IsoDateTimeString;
+  verified: boolean;
 };
 
 export type DeploymentStatus =

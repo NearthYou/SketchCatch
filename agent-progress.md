@@ -9,6 +9,10 @@
   - GitHub PR 생성 provider가 Terraform artifact와 함께 `sketchcatch-infra.yml`, `sketchcatch-app.yml`, `sketchcatch-destroy.yml`, repository settings manifest, AWS role diff manifest를 생성한다.
   - GitHub Actions polling을 PR number -> merge commit SHA -> workflow name 기준으로 확장해 infra/app/destroy 상태를 분리 추적한다.
   - Deployment Panel에 `Git/CI/CD handoff 생성` 버튼과 OAuth 필요, Environment approval, IAM diff, repo settings, infra/app/destroy status, static/API URL 표시를 추가했다.
+  - GitHub repository settings apply route를 추가해 Environment 생성과 Actions variables upsert를 GitHub App 권한으로 시도하고, 권한 부족은 `github_oauth_required`로 차단한다.
+  - AWS role diff apply route를 추가해 승인된 GitHub OIDC trust policy diff만 IAM role에 적용하고 재조회 검증 결과를 handoff JSON에 기록한다.
+  - Deployment Panel에 `Repo settings 적용`, `AWS role diff 적용` 버튼을 추가했고, 성공 후 panel snapshot을 다시 로드한다.
+  - `scripts/smoke/git-cicd-auto-deploy.ps1`로 repository settings apply, AWS role diff apply, pipeline status, static URL marker 확인 report를 출력할 수 있게 했다.
   - `docs/data-models.md`, `docs/deployment.md`, `docs/sw/spec6.md`, `docs/sw/plan6.md`, `docs/sw/agents3.md`를 구현 상태에 맞게 갱신했다.
 - Verification run:
   - `pnpm harness:check` - passed before implementation.
@@ -20,7 +24,8 @@
   - `pnpm typecheck` - passed.
   - `pnpm build` - passed.
 - Known risks:
-  - GitHub user OAuth로 repository variables/secrets/environment를 실제 적용하는 writer와 AWS IAM trust/policy update executor는 아직 preview/approval metadata 수준이다.
+  - GitHub repository settings apply는 GitHub App 설치 권한으로 검증했고, 실제 운영 repo 권한 부족 시 OAuth/권한 보강 CTA가 필요하다.
+  - AWS IAM trust policy apply executor는 fake gateway/unit 경로로 검증했고, 실제 AWS 계정 live 실행은 아직 하지 않았다.
   - 실제 PR merge, GitHub Environment approval, Terraform apply, S3 release, ASG Instance Refresh, destroy live smoke는 비용/자격증명/cleanup 승인 후 실행해야 한다.
   - `pnpm --filter @sketchcatch/api test -- git-cicd`와 `pnpm --filter @sketchcatch/web test -- workspace/api.test.ts deployment-actions.test.ts`는 repo script 특성상 전체 테스트를 실행했고, 기존 S3 env/layout unrelated 실패가 섞여 targeted command로 재검증했다.
 

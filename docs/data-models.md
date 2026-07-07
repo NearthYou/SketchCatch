@@ -856,6 +856,14 @@ type DeploymentFailureExplanation = {
 
 `GitCicdHandoff`는 `IaC Preview`를 Source Repository와 외부 pipeline으로 넘기는 팀 운영 배포 경로의 metadata다. Direct Deployment Path를 대체하는 것이 아니라 운영 배포용 별도 경로다.
 
+2026-07-07 추가 계약:
+
+- `POST /api/git-cicd-handoffs/:handoffId/repository-settings/apply`는 handoff의 `repositorySettingsPreview`를 기준으로 GitHub Environment와 Actions variables를 적용한다.
+- 응답 DTO는 `GitCicdRepositorySettingsApplyResponse`이며 적용 여부, environment 이름, 적용된 variable 이름, workflow file 목록, `githubOAuthRequired` 상태를 반환한다.
+- `POST /api/git-cicd-handoffs/:handoffId/aws-role-diff/apply`는 승인된 `awsRoleDiff`를 기준으로 IAM trust policy를 적용하고 검증한다.
+- 응답 DTO는 `GitCicdAwsRoleDiffApplyResponse`이며 role ARN, repository, environment, `appliedAt`, `verified`를 반환한다.
+- `GitCicdAwsRoleDiff` JSON에는 적용 후 `applied`, `appliedAt`, `verified`를 기록할 수 있다.
+
 ```ts
 type SourceRepositoryProvider = "internal" | "github";
 

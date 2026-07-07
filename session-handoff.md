@@ -10,6 +10,10 @@
   - GitHub PR handoff now generates Terraform artifact plus `.github/workflows/sketchcatch-infra.yml`, `sketchcatch-app.yml`, `sketchcatch-destroy.yml`, repository settings manifest, and AWS role diff manifest.
   - GitHub Actions polling now prefers PR number, checks merge state, then maps merge commit SHA workflow runs by `SketchCatch Infra`, `SketchCatch App`, and `SketchCatch Destroy`.
   - Deployment Panel has a `Git/CI/CD handoff 생성` action and displays OAuth, Environment approval, IAM diff, repo settings, detailed pipeline statuses, and URL verification targets.
+  - Repository settings apply route now creates/updates GitHub Environment and Actions variables through the GitHub App token, with `github_oauth_required` fail-closed handling for missing permissions.
+  - AWS role diff apply route now applies approved GitHub OIDC trust statements to IAM and stores `applied/appliedAt/verified` in `awsRoleDiff`.
+  - Deployment Panel exposes `Repo settings 적용` and `AWS role diff 적용`, then refreshes the panel snapshot.
+  - Added `scripts/smoke/git-cicd-auto-deploy.ps1` for repository settings apply, role diff apply, pipeline status, and static URL marker report generation.
 - Verified:
   - `pnpm harness:check` before implementation.
   - `pnpm --filter @sketchcatch/api typecheck`
@@ -17,8 +21,8 @@
   - `pnpm --filter @sketchcatch/api exec tsx --test src/git-cicd/git-cicd-workflows.test.ts src/routes/git-cicd-handoffs.test.ts src/source-repositories/github-app-client.test.ts`
   - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/api.test.ts features/workspace/deployment-actions.test.ts`
 - Not yet complete/live-proven:
-  - GitHub user OAuth writer for actual repository variables/secrets/environment mutation is not implemented beyond preview artifacts.
-  - AWS IAM trust/policy read/update/STS verification executor is not implemented beyond diff/approval metadata.
+  - Repository settings apply has not been exercised against a real target GitHub repository in this session.
+  - AWS IAM trust policy apply has not been exercised against a real AWS account in this session.
   - Real PR merge -> Environment approval -> Terraform apply -> S3 release -> ASG Instance Refresh -> destroy live smoke has not run.
 - Next action: run lint/typecheck/build/harness final checks, fix lint issues, then amend/push PR #211. Do not mark the thread goal complete until live/external mutation gaps are either implemented and verified or explicitly accepted as separate remaining scope.
 

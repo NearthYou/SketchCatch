@@ -40,6 +40,19 @@ export type GitHubAppCreatePullRequestResult = {
   commitSha: string;
 };
 
+export type GitHubRepositorySettingsInput = {
+  installationId: string;
+  owner: string;
+  name: string;
+  environmentName: string;
+  variables: Record<string, string>;
+};
+
+export type GitHubRepositorySettingsResult = {
+  environmentName: string;
+  variables: string[];
+};
+
 export type GitHubActionsPipelineStatus = {
   status: GitCicdHandoffStatus;
   pipelineRunUrl: string | null;
@@ -56,6 +69,9 @@ export type GitHubActionsPipelineStatus = {
 export type GitHubAppClient = {
   listInstallationRepositories(installationId: string): Promise<GitHubRepositoryCandidate[]>;
   createPullRequest(input: GitHubAppCreatePullRequestInput): Promise<GitHubAppCreatePullRequestResult>;
+  applyRepositorySettings(
+    input: GitHubRepositorySettingsInput
+  ): Promise<GitHubRepositorySettingsResult>;
   getLatestWorkflowRunForHeadSha(input: {
     installationId: string;
     owner: string;
@@ -259,6 +275,28 @@ export function createGitHubAppClient(options: GitHubAppClientOptions): GitHubAp
         pullRequestNumber: readRequiredNumber(pullRequest.number, "pull request number"),
         pullRequestHeadSha: readRequiredString(pullRequest.head?.sha, "pull request head sha"),
         commitSha: lastCommitSha
+      };
+    },
+
+    async applyRepositorySettings(input) {
+      await requestWithInstallationToken<Record<string, never>>(
+        input.installationId,
+        createRepositoryPath(input, `/environments/${encodeURIComponent(input.environmentName)}`),
+        {
+          method: "PUT",
+          body: {}
+        }
+      );
+
+      const variableNames = Object.keys(input.variables).sort();
+
+      for (const variableName of variableNames) {
+        await upsertRepositoryVariable(input, variableName, requestWithInstallationToken);
+      }
+
+      return {
+        environmentName: input.environmentName,
+        variables: variableNames
       };
     },
 
@@ -522,6 +560,46 @@ async function getRepositoryContent(
     }
 
     throw error;
+  }
+}
+
+async function upsertRepositoryVariable(
+  input: GitHubRepositorySettingsInput,
+  variableName: string,
+  requestWithInstallationToken: <T>(
+    installationId: string,
+    path: string,
+    init?: Omit<GitHubRequestInit, "token" | "authScheme">
+  ) => Promise<T>
+): Promise<void> {
+  const variablePath = createRepositoryPath(
+    input,
+    `/actions/variables/${encodeURIComponent(variableName)}`
+  );
+  const body = {
+    name: variableName,
+    value: input.variables[variableName] ?? ""
+  };
+
+  try {
+    await requestWithInstallationToken<Record<string, never>>(input.installationId, variablePath);
+    await requestWithInstallationToken<Record<string, never>>(input.installationId, variablePath, {
+      method: "PATCH",
+      body
+    });
+  } catch (error) {
+    if (!isHttpStatus(error, 404)) {
+      throw error;
+    }
+
+    await requestWithInstallationToken<Record<string, never>>(
+      input.installationId,
+      createRepositoryPath(input, "/actions/variables"),
+      {
+        method: "POST",
+        body
+      }
+    );
   }
 }
 

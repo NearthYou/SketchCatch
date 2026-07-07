@@ -42,6 +42,8 @@
   GitCicdHandoffPipelineStatus,
   GitCicdHandoffPipelineStatusResponse,
   GitCicdHandoffResponse,
+  GitCicdRepositorySettingsApplyResponse,
+  GitCicdAwsRoleDiffApplyResponse,
   GitHubAppExistingInstallationCallbackUrlResponse,
   GitHubAppInstallUrlResponse,
   ListGitHubInstallationRepositoriesRequest,
@@ -660,6 +662,32 @@ export async function createGitCicdHandoff({
   );
 
   return response.handoff;
+}
+
+export async function applyGitCicdRepositorySettings(
+  handoffId: string
+): Promise<GitCicdRepositorySettingsApplyResponse> {
+  return apiFetch<GitCicdRepositorySettingsApplyResponse>(
+    `/git-cicd-handoffs/${encodeURIComponent(handoffId)}/repository-settings/apply`,
+    {
+      auth: true,
+      method: "POST",
+      body: {}
+    }
+  );
+}
+
+export async function applyGitCicdAwsRoleDiff(
+  handoffId: string
+): Promise<GitCicdAwsRoleDiffApplyResponse> {
+  return apiFetch<GitCicdAwsRoleDiffApplyResponse>(
+    `/git-cicd-handoffs/${encodeURIComponent(handoffId)}/aws-role-diff/apply`,
+    {
+      auth: true,
+      method: "POST",
+      body: {}
+    }
+  );
 }
 
 export async function listSourceRepositories(projectId: string): Promise<SourceRepository[]> {

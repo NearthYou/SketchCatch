@@ -1,14 +1,22 @@
 import { z } from "zod";
 import type {
   DeploymentPlanSummary,
+  GitCicdAwsRoleDiffApplyResponse,
   GitCicdHandoff,
   GitCicdHandoffListResponse,
   GitCicdHandoffPipelineStatus,
   GitCicdHandoffPipelineStatusResponse,
-  GitCicdHandoffResponse
+  GitCicdHandoffResponse,
+  GitCicdRepositorySettingsApplyResponse
 } from "@sketchcatch/types";
 import { requireActiveUserId } from "../auth/current-user.js";
 import { getDatabaseClient, type DatabaseClient } from "../db/client.js";
+import {
+  applyGitCicdAwsRoleDiff,
+  AwsRoleDiffApplyError,
+  createIamAwsRoleDiffGateway,
+  type AwsRoleDiffGateway
+} from "../git-cicd/aws-role-diff-apply-service.js";
 import {
   readGitCicdPipelineStatusSnapshot,
   toGitCicdPipelineStatusFromRecord,
@@ -29,6 +37,12 @@ import {
   type GitCicdHandoffRepository,
   type ProjectAccessContext
 } from "../git-cicd/git-cicd-handoff-service.js";
+import {
+  applyGitCicdRepositorySettings,
+  createGitHubRepositorySettingsApplier,
+  GitCicdRepositorySettingsPermissionError,
+  type GitCicdRepositorySettingsApplier
+} from "../git-cicd/git-cicd-repository-settings-service.js";
 import type { GitCicdPipelineStatusProvider } from "../git-cicd/github-actions-pipeline-status-provider.js";
 import { createRuntimeCacheFromEnv, type RuntimeCache } from "../runtime-cache/index.js";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
@@ -173,6 +187,8 @@ type GitCicdHandoffRouteOptions = {
   ) => GitCicdHandoffRepository;
   gitCicdHandoffProvider?: GitCicdHandoffProvider;
   gitCicdPipelineStatusProvider?: GitCicdPipelineStatusProvider;
+  gitCicdRepositorySettingsApplier?: GitCicdRepositorySettingsApplier;
+  awsRoleDiffGateway?: AwsRoleDiffGateway;
   runtimeCache?: RuntimeCache;
 };
 
@@ -361,6 +377,55 @@ export async function registerGitCicdHandoffRoutes(
       const response: GitCicdHandoffPipelineStatusResponse = {
         pipelineStatus
       };
+
+      return reply.status(200).send(response);
+    } catch (error) {
+      return handleGitCicdHandoffError(error, reply);
+    }
+  });
+
+  app.post("/git-cicd-handoffs/:handoffId/repository-settings/apply", async (request, reply) => {
+    const params = handoffParamsSchema.parse(request.params);
+    const { accessContext, repository } = await getGitCicdHandoffRequestContext(
+      request,
+      options,
+      getGitCicdDatabaseClient
+    );
+
+    try {
+      const response: GitCicdRepositorySettingsApplyResponse =
+        await applyGitCicdRepositorySettings(
+          {
+            handoffId: params.handoffId,
+            accessContext
+          },
+          repository,
+          options?.gitCicdRepositorySettingsApplier ?? createGitHubRepositorySettingsApplier()
+        );
+
+      return reply.status(200).send(response);
+    } catch (error) {
+      return handleGitCicdHandoffError(error, reply);
+    }
+  });
+
+  app.post("/git-cicd-handoffs/:handoffId/aws-role-diff/apply", async (request, reply) => {
+    const params = handoffParamsSchema.parse(request.params);
+    const { accessContext, repository } = await getGitCicdHandoffRequestContext(
+      request,
+      options,
+      getGitCicdDatabaseClient
+    );
+
+    try {
+      const response: GitCicdAwsRoleDiffApplyResponse = await applyGitCicdAwsRoleDiff(
+        {
+          handoffId: params.handoffId,
+          accessContext
+        },
+        repository,
+        options?.awsRoleDiffGateway ?? createIamAwsRoleDiffGateway()
+      );
 
       return reply.status(200).send(response);
     } catch (error) {
@@ -603,6 +668,20 @@ function handleGitCicdHandoffError(error: unknown, reply: FastifyReply) {
   }
 
   if (error instanceof GitCicdHandoffProviderMismatchError) {
+    return reply.status(409).send({
+      error: "conflict",
+      message: error.message
+    });
+  }
+
+  if (error instanceof GitCicdRepositorySettingsPermissionError) {
+    return reply.status(409).send({
+      error: "github_oauth_required",
+      message: error.message
+    });
+  }
+
+  if (error instanceof AwsRoleDiffApplyError) {
     return reply.status(409).send({
       error: "conflict",
       message: error.message

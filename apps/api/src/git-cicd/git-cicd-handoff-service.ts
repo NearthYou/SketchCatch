@@ -288,6 +288,14 @@ export type GitCicdHandoffRepository = {
     handoffId: string,
     input: UpdateGitCicdHandoffStatusRecordInput
   ): Promise<GitCicdHandoffRecord | undefined>;
+  updateHandoffAutomationMetadata?(
+    handoffId: string,
+    input: {
+      repositorySettingsPreview?: GitCicdRepositorySettingsPreview | null | undefined;
+      awsRoleDiff?: GitCicdAwsRoleDiff | null | undefined;
+      githubOAuthRequired?: boolean | undefined;
+    }
+  ): Promise<GitCicdHandoffRecord | undefined>;
 };
 
 export class GitCicdHandoffNotFoundError extends Error {
@@ -733,6 +741,32 @@ export function createPostgresGitCicdHandoffRepository(
 
       if (input.statusMessage !== undefined) {
         Object.assign(values, { statusMessage: input.statusMessage });
+      }
+
+      const [handoff] = await db
+        .update(gitCicdHandoffs)
+        .set(values)
+        .where(eq(gitCicdHandoffs.id, handoffId))
+        .returning();
+
+      return handoff;
+    },
+
+    async updateHandoffAutomationMetadata(handoffId, input) {
+      const values = {
+        ...touchUpdatedAt
+      };
+
+      if (input.repositorySettingsPreview !== undefined) {
+        Object.assign(values, { repositorySettingsPreview: input.repositorySettingsPreview });
+      }
+
+      if (input.awsRoleDiff !== undefined) {
+        Object.assign(values, { awsRoleDiff: input.awsRoleDiff });
+      }
+
+      if (input.githubOAuthRequired !== undefined) {
+        Object.assign(values, { githubOAuthRequired: input.githubOAuthRequired });
       }
 
       const [handoff] = await db

@@ -27,6 +27,8 @@ import { SelectMenu, type SelectMenuOption } from "../../components/ui/SelectMen
 import { getApiErrorMessage } from "../../lib/api-client";
 import {
   approveDeploymentPlan,
+  applyGitCicdAwsRoleDiff,
+  applyGitCicdRepositorySettings,
   cancelDeployment as cancelDeploymentRun,
   createDeployment,
   createGitCicdHandoff,
@@ -985,6 +987,28 @@ export function DeploymentPanel({
     }, "Git/CI/CD 자동 배포 handoff를 만들지 못했습니다.");
   }
 
+  async function applySelectedRepositorySettings(): Promise<void> {
+    if (!selectedGitCicdHandoff) {
+      return;
+    }
+
+    await runRequest(async () => {
+      await applyGitCicdRepositorySettings(selectedGitCicdHandoff.id);
+      applyDeploymentPanelSnapshot(await loadDeploymentPanelSnapshot());
+    }, "GitHub repository settings를 적용하지 못했습니다.");
+  }
+
+  async function applySelectedAwsRoleDiff(): Promise<void> {
+    if (!selectedGitCicdHandoff) {
+      return;
+    }
+
+    await runRequest(async () => {
+      await applyGitCicdAwsRoleDiff(selectedGitCicdHandoff.id);
+      applyDeploymentPanelSnapshot(await loadDeploymentPanelSnapshot());
+    }, "AWS role diff를 적용하지 못했습니다.");
+  }
+
   async function startNewGitHubInstallation(): Promise<void> {
     await runRequest(async () => {
       const { installUrl } = await createGitHubSourceRepositoryInstallUrl(projectId);
@@ -1242,95 +1266,130 @@ export function DeploymentPanel({
           </div>
 
           {selectedGitCicdHandoff ? (
-            <div className={styles.deploymentSummary}>
-              <InfoRow label="Path" value="Git/CI/CD handoff" />
-              <InfoRow
-                label="Status"
-                value={getGitCicdHandoffStatusLabel(selectedGitCicdHandoff)}
-              />
-              <InfoRow label="Kind" value={selectedGitCicdHandoff.handoffKind} />
-              <InfoRow label="Mode" value={selectedGitCicdHandoff.deploymentMode} />
-              <InfoRow
-                label="Environment"
-                value={selectedGitCicdHandoff.environmentName}
-              />
-              <InfoRow
-                label="Approval"
-                value={
-                  selectedGitCicdHandoff.requiresEnvironmentApproval
-                    ? "GitHub Environment approval required"
-                    : "No environment approval"
-                }
-              />
-              <InfoRow
-                label="GitHub OAuth"
-                value={selectedGitCicdHandoff.githubOAuthRequired ? "Required for workflow/settings" : "Not required"}
-              />
-              <InfoRow
-                label="Repository"
-                value={`${selectedGitCicdHandoff.repositoryOwner}/${selectedGitCicdHandoff.repositoryName}`}
-              />
-              <OptionalInfoRow label="Target branch" value={selectedGitCicdHandoff.targetBranch} />
-              <OptionalInfoRow label="Source branch" value={selectedGitCicdHandoff.sourceBranch} />
-              <OptionalInfoRow label="PR URL" value={selectedGitCicdHandoff.pullRequestUrl} />
-              <OptionalInfoRow
-                label="PR number"
-                value={
-                  selectedGitCicdHandoff.pullRequestNumber
-                    ? `#${selectedGitCicdHandoff.pullRequestNumber}`
-                    : null
-                }
-              />
-              <OptionalInfoRow
-                label="Merge commit"
-                value={selectedGitCicdHandoff.mergeCommitSha}
-              />
-              <OptionalInfoRow
-                label="Pipeline URL"
-                value={selectedGitCicdHandoff.pipelineRunUrl}
-              />
-              <OptionalInfoRow
-                label={`Infra workflow (${selectedGitCicdHandoff.infraPipelineStatus})`}
-                value={selectedGitCicdHandoff.infraPipelineRunUrl}
-              />
-              <OptionalInfoRow
-                label={`App workflow (${selectedGitCicdHandoff.appPipelineStatus})`}
-                value={selectedGitCicdHandoff.appPipelineRunUrl}
-              />
-              <OptionalInfoRow
-                label={`Destroy workflow (${selectedGitCicdHandoff.destroyPipelineStatus})`}
-                value={selectedGitCicdHandoff.destroyPipelineRunUrl}
-              />
-              <OptionalInfoRow label="Static site URL" value={selectedGitCicdHandoff.staticSiteUrl} />
-              <OptionalInfoRow label="API URL" value={selectedGitCicdHandoff.apiBaseUrl} />
-              <OptionalInfoRow
-                label="Repo settings"
-                value={
-                  selectedGitCicdHandoff.repositorySettingsPreview
-                    ? `${Object.keys(selectedGitCicdHandoff.repositorySettingsPreview.variables).length} variables, ${selectedGitCicdHandoff.repositorySettingsPreview.workflowFiles.length} workflows`
-                    : null
-                }
-              />
-              <OptionalInfoRow
-                label="AWS role diff"
-                value={
-                  selectedGitCicdHandoff.awsRoleDiff
-                    ? selectedGitCicdHandoff.awsRoleDiff.approved
-                      ? "approved"
-                      : "approval required"
-                    : null
-                }
-              />
-              <OptionalInfoRow
-                label="Pipeline message"
-                value={selectedGitCicdHandoff.statusMessage}
-              />
-              <InfoRow label="Updated" value={formatDate(selectedGitCicdHandoff.updatedAt)} />
-              <OptionalInfoRow
-                label="Status source"
-                value={gitCicdPipelineStatusSource ?? "rds"}
-              />
-            </div>
+            <>
+              <div className={styles.deploymentHeaderActions}>
+                <button
+                  className={styles.deploymentSecondaryButton}
+                  disabled={
+                    requestState === "loading" ||
+                    !selectedGitCicdHandoff.repositorySettingsPreview
+                  }
+                  onClick={() => void applySelectedRepositorySettings()}
+                  type="button"
+                >
+                  <GitBranch size={16} />
+                  Repo settings 적용
+                </button>
+                <button
+                  className={styles.deploymentSecondaryButton}
+                  disabled={
+                    requestState === "loading" ||
+                    !selectedGitCicdHandoff.awsRoleDiff?.approved ||
+                    selectedGitCicdHandoff.awsRoleDiff.applied === true
+                  }
+                  onClick={() => void applySelectedAwsRoleDiff()}
+                  type="button"
+                >
+                  <ShieldCheck size={16} />
+                  AWS role diff 적용
+                </button>
+              </div>
+              <div className={styles.deploymentSummary}>
+                <InfoRow label="Path" value="Git/CI/CD handoff" />
+                <InfoRow
+                  label="Status"
+                  value={getGitCicdHandoffStatusLabel(selectedGitCicdHandoff)}
+                />
+                <InfoRow label="Kind" value={selectedGitCicdHandoff.handoffKind} />
+                <InfoRow label="Mode" value={selectedGitCicdHandoff.deploymentMode} />
+                <InfoRow
+                  label="Environment"
+                  value={selectedGitCicdHandoff.environmentName}
+                />
+                <InfoRow
+                  label="Approval"
+                  value={
+                    selectedGitCicdHandoff.requiresEnvironmentApproval
+                      ? "GitHub Environment approval required"
+                      : "No environment approval"
+                  }
+                />
+                <InfoRow
+                  label="GitHub OAuth"
+                  value={
+                    selectedGitCicdHandoff.githubOAuthRequired
+                      ? "Required for workflow/settings"
+                      : "Not required"
+                  }
+                />
+                <InfoRow
+                  label="Repository"
+                  value={`${selectedGitCicdHandoff.repositoryOwner}/${selectedGitCicdHandoff.repositoryName}`}
+                />
+                <OptionalInfoRow label="Target branch" value={selectedGitCicdHandoff.targetBranch} />
+                <OptionalInfoRow label="Source branch" value={selectedGitCicdHandoff.sourceBranch} />
+                <OptionalInfoRow label="PR URL" value={selectedGitCicdHandoff.pullRequestUrl} />
+                <OptionalInfoRow
+                  label="PR number"
+                  value={
+                    selectedGitCicdHandoff.pullRequestNumber
+                      ? `#${selectedGitCicdHandoff.pullRequestNumber}`
+                      : null
+                  }
+                />
+                <OptionalInfoRow
+                  label="Merge commit"
+                  value={selectedGitCicdHandoff.mergeCommitSha}
+                />
+                <OptionalInfoRow
+                  label="Pipeline URL"
+                  value={selectedGitCicdHandoff.pipelineRunUrl}
+                />
+                <OptionalInfoRow
+                  label={`Infra workflow (${selectedGitCicdHandoff.infraPipelineStatus})`}
+                  value={selectedGitCicdHandoff.infraPipelineRunUrl}
+                />
+                <OptionalInfoRow
+                  label={`App workflow (${selectedGitCicdHandoff.appPipelineStatus})`}
+                  value={selectedGitCicdHandoff.appPipelineRunUrl}
+                />
+                <OptionalInfoRow
+                  label={`Destroy workflow (${selectedGitCicdHandoff.destroyPipelineStatus})`}
+                  value={selectedGitCicdHandoff.destroyPipelineRunUrl}
+                />
+                <OptionalInfoRow label="Static site URL" value={selectedGitCicdHandoff.staticSiteUrl} />
+                <OptionalInfoRow label="API URL" value={selectedGitCicdHandoff.apiBaseUrl} />
+                <OptionalInfoRow
+                  label="Repo settings"
+                  value={
+                    selectedGitCicdHandoff.repositorySettingsPreview
+                      ? `${Object.keys(selectedGitCicdHandoff.repositorySettingsPreview.variables).length} variables, ${selectedGitCicdHandoff.repositorySettingsPreview.workflowFiles.length} workflows`
+                      : null
+                  }
+                />
+                <OptionalInfoRow
+                  label="AWS role diff"
+                  value={
+                    selectedGitCicdHandoff.awsRoleDiff
+                      ? selectedGitCicdHandoff.awsRoleDiff.applied
+                        ? "applied and verified"
+                        : selectedGitCicdHandoff.awsRoleDiff.approved
+                          ? "approved"
+                          : "approval required"
+                      : null
+                  }
+                />
+                <OptionalInfoRow
+                  label="Pipeline message"
+                  value={selectedGitCicdHandoff.statusMessage}
+                />
+                <InfoRow label="Updated" value={formatDate(selectedGitCicdHandoff.updatedAt)} />
+                <OptionalInfoRow
+                  label="Status source"
+                  value={gitCicdPipelineStatusSource ?? "rds"}
+                />
+              </div>
+            </>
           ) : null}
         </>
       ) : (

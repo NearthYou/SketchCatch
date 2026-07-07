@@ -227,3 +227,13 @@ Deployment Panel은 다음을 보여준다.
 - GitHub user OAuth token으로 repository variables/secrets/environment를 실제 적용하는 mutation path는 아직 preview artifact 중심이다.
 - AWS IAM trust/policy update executor는 아직 diff preview와 승인 metadata 중심이다.
 - 실제 GitHub PR merge 후 workflow run, Environment approval, Terraform apply, S3 release, ASG Instance Refresh, destroy live smoke는 비용/자격증명/cleanup 승인 후 수행해야 한다.
+## 2026-07-07 추가 구현 반영
+
+- GitHub repository settings apply route를 추가했다: `POST /api/git-cicd-handoffs/:handoffId/repository-settings/apply`.
+- 현재 repository settings apply는 GitHub App installation token으로 Environment 생성과 Actions variables upsert를 시도한다.
+- GitHub 권한이 부족하면 `github_oauth_required` 에러로 fail-closed 처리하며, token 값은 저장하거나 응답하지 않는다.
+- AWS role diff apply route를 추가했다: `POST /api/git-cicd-handoffs/:handoffId/aws-role-diff/apply`.
+- AWS role diff apply는 승인된 `awsRoleDiff`와 `roleArn`이 있을 때만 IAM trust policy에 GitHub OIDC statement를 적용하고 다시 읽어 검증한다.
+- Deployment Panel에는 `Repo settings 적용`, `AWS role diff 적용` 액션을 추가했고 성공 후 panel snapshot을 다시 로드한다.
+- `scripts/smoke/git-cicd-auto-deploy.ps1`을 추가해 repository settings apply, role diff apply, pipeline status, static URL marker 확인을 한 report로 남길 수 있게 했다.
+- 실제 PR merge, GitHub Environment approval, Terraform apply, S3 release, ASG Instance Refresh, destroy live smoke는 여전히 비용/자격증명/cleanup 승인 후 실행해야 한다.

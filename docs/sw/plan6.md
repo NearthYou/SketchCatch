@@ -13,7 +13,7 @@
 - Priority: P0
 - Issue: #203
 - Branch: `feature/sw/203-github-oauth-repo-setup`
-- Status: partially_implemented_in_pr_211
+- Status: implemented_in_pr_211_for_app_token_repo_settings_apply
 
 목표:
 
@@ -86,7 +86,7 @@
 - Priority: P0
 - Issue: #205
 - Branch: `feature/sw/205-aws-role-oidc-approval`
-- Status: partially_implemented_in_pr_211
+- Status: implemented_in_pr_211_for_approved_trust_policy_apply
 
 목표:
 
@@ -242,7 +242,7 @@
 - Issue: #209
 - Branch: `feature/sw/209-deployment-panel-cicd-ux`
 - Blocked by: #203, #204, #205, #208
-- Status: implemented_in_pr_211_for_core_panel
+- Status: implemented_in_pr_211_for_core_panel_and_apply_actions
 
 목표:
 
@@ -282,7 +282,7 @@
 - Issue: #210
 - Branch: `feature/sw/210-cicd-live-smoke-docs`
 - Blocked by: #207, #209
-- Status: not_started_live_smoke
+- Status: smoke_runner_added_live_execution_pending
 
 목표:
 
