@@ -5,6 +5,7 @@ import styles from "./workspace.module.css";
 type ReverseEngineeringScanCriteriaFormProps = {
   readonly awsConnections: AwsConnection[];
   readonly canStartScan: boolean;
+  readonly createProjectOnApply?: boolean | undefined;
   readonly isLoadingOptions: boolean;
   readonly isScanning: boolean;
   readonly onRefresh: () => void;
@@ -24,6 +25,7 @@ type ReverseEngineeringScanCriteriaFormProps = {
 export function ReverseEngineeringScanCriteriaForm({
   awsConnections,
   canStartScan,
+  createProjectOnApply = false,
   isLoadingOptions,
   isScanning,
   onRefresh,
@@ -62,14 +64,16 @@ export function ReverseEngineeringScanCriteriaForm({
           </button>
         </div>
         <p className={styles.deploymentHint}>
-          현재 프로젝트와 검증된 AWS 연결을 기준으로 전체 리소스를 읽고, 보드에 적용하기 전 미리보기를 만듭니다.
+          검증된 AWS 연결을 기준으로 전체 리소스를 읽고, 보드에 적용하기 전 미리보기를 만듭니다.
         </p>
       </header>
 
       <section className={styles.deploymentSection}>
         <h3>전체 스캔</h3>
         <p className={styles.deploymentHint}>
-          기본값은 현재 프로젝트, 선택된 AWS 연결, 전체 리소스입니다. 스캔 후 바로 반영하지 않고 먼저 확인 화면을 보여줍니다.
+          {createProjectOnApply
+            ? "프로젝트는 후보를 적용할 때 생성됩니다. 지금은 AWS를 먼저 읽고 보드 후보만 보여줍니다."
+            : "기본값은 현재 프로젝트, 선택된 AWS 연결, 전체 리소스입니다. 스캔 후 바로 반영하지 않고 먼저 확인 화면을 보여줍니다."}
         </p>
 
         <button
@@ -93,20 +97,24 @@ export function ReverseEngineeringScanCriteriaForm({
         <details className={styles.reverseAdvancedSettings}>
           <summary className={styles.reverseAdvancedSummary}>고급 설정</summary>
 
-          <label className={styles.deploymentField}>
-            프로젝트
-            <select
-              disabled={isLoadingOptions}
-              onChange={(event) => onSelectedProjectChange(event.currentTarget.value)}
-              value={selectedProjectId}
-            >
-              {projects.map((project) => (
-                <option key={project.id} value={project.id}>
-                  {project.name}
-                </option>
-              ))}
-            </select>
-          </label>
+          {createProjectOnApply ? (
+            <p className={styles.deploymentHint}>프로젝트는 후보를 적용할 때 생성됩니다.</p>
+          ) : (
+            <label className={styles.deploymentField}>
+              프로젝트
+              <select
+                disabled={isLoadingOptions}
+                onChange={(event) => onSelectedProjectChange(event.currentTarget.value)}
+                value={selectedProjectId}
+              >
+                {projects.map((project) => (
+                  <option key={project.id} value={project.id}>
+                    {project.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
 
           <label className={styles.deploymentField}>
             AWS 연결

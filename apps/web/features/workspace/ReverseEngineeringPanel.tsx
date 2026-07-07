@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 import type {
   DiagramJson,
@@ -7,16 +8,20 @@ import type {
   ReverseEngineeringScan,
   ReverseEngineeringScanLogLine,
   ReverseEngineeringScanResult,
-  ReverseEngineeringScanResponse
+  ReverseEngineeringScanResponse,
+  Project
 } from "../../../../packages/types/src";
 import type { DiagramEditorPanelContext } from "../diagram-editor";
 import {
   cancelReverseEngineeringScan,
   createArchitectureSnapshot,
+  createProject,
+  createReverseEngineeringPreviewScan,
   createReverseEngineeringScan,
   deleteReverseEngineeringScan,
   getReverseEngineeringScan,
-  listReverseEngineeringScanLogs
+  listReverseEngineeringScanLogs,
+  saveProjectDraft
 } from "./api";
 import {
   createReverseEngineeringBoardApplication,
@@ -46,14 +51,25 @@ import { useReverseEngineeringScanHistory } from "./useReverseEngineeringScanHis
 import { convertDiagramJsonToArchitectureJson } from "./workspace-ai-diagram-adapter";
 import styles from "./workspace.module.css";
 
-export type ReverseEngineeringPanelProps = { readonly context: DiagramEditorPanelContext; readonly projectId: string };
+export type ReverseEngineeringPanelProps = {
+  readonly context: DiagramEditorPanelContext;
+  readonly createProjectOnApply?: boolean | undefined;
+  readonly projectId: string;
+  readonly projectName: string;
+};
 
 type RequestState = "idle" | "loading" | "error";
 const SCAN_POLL_INTERVAL_MS = 1000;
 const SCAN_POLL_ATTEMPT_COUNT = 30;
 
 // 기존 AWS 읽어오기 화면의 상태와 버튼 흐름을 관리합니다.
-export function ReverseEngineeringPanel({ context, projectId }: ReverseEngineeringPanelProps) {
+export function ReverseEngineeringPanel({
+  context,
+  createProjectOnApply = false,
+  projectId,
+  projectName
+}: ReverseEngineeringPanelProps) {
+  const router = useRouter();
   const [selectedResourceTypes, setSelectedResourceTypes] = useState<ReverseEngineeringResourceSelection[]>([
     REVERSE_ENGINEERING_ALL_RESOURCE_SELECTION
   ]);
@@ -89,6 +105,7 @@ export function ReverseEngineeringPanel({ context, projectId }: ReverseEngineeri
     scanHistoryState,
     setActiveScanId
   } = useReverseEngineeringScanHistory({
+    enabled: !createProjectOnApply,
     onError: handleRequestError,
     scanResponse,
     selectedProjectId
@@ -99,7 +116,7 @@ export function ReverseEngineeringPanel({ context, projectId }: ReverseEngineeri
     (connection) => connection.id === selectedAwsConnectionId
   );
   const canStartScan =
-    Boolean(selectedProject) &&
+    (createProjectOnApply || Boolean(selectedProject)) &&
     Boolean(selectedAwsConnection) &&
     selectedResourceTypes.length > 0 &&
     loadState !== "loading" &&
@@ -169,28 +186,26 @@ export function ReverseEngineeringPanel({ context, projectId }: ReverseEngineeri
     context.setPreviewDiagram(null);
 
     try {
-      const startedResponse = await createReverseEngineeringScan({
-        projectId: selectedProjectId,
-        awsConnectionId: selectedAwsConnection.id,
-        region: selectedAwsConnection.region,
-        resourceTypes: selectedResourceTypes
-      });
-      setScanResponse(startedResponse);
-      rememberCompletedScan(startedResponse.scan);
+      const response = createProjectOnApply
+        ? await runPreviewScan({
+            awsConnectionId: selectedAwsConnection.id,
+            region: selectedAwsConnection.region,
+            resourceTypes: selectedResourceTypes
+          })
+        : await runSavedScan({
+            awsConnectionId: selectedAwsConnection.id,
+            projectId: selectedProjectId,
+            region: selectedAwsConnection.region,
+            resourceTypes: selectedResourceTypes
+          });
 
-      const response = startedResponse.result
-        ? startedResponse
-        : await pollReverseEngineeringScan(selectedProjectId, startedResponse.scan.id);
-      const nextLogs = await listReverseEngineeringScanLogs({
-        projectId: selectedProjectId,
-        scanId: response.scan.id
-      });
-
-      setScanResponse(response);
-      rememberCompletedScan(response.scan);
-      setLogs(nextLogs);
-      if (response.result) {
-        showFirstCandidatePreview(response.result);
+      setScanResponse(response.response);
+      setLogs(response.logs);
+      if (!createProjectOnApply) {
+        rememberCompletedScan(response.response.scan);
+      }
+      if (response.response.result) {
+        showFirstCandidatePreview(response.response.result);
       }
       setScanState("idle");
     } catch (error) {
@@ -284,27 +299,49 @@ export function ReverseEngineeringPanel({ context, projectId }: ReverseEngineeri
       mode,
       result
     });
-    const diagramWithReverseEngineeringSource = attachReverseEngineeringSourceToDiagram(
-      application.diagram,
-      result.scan.id,
-      result.reverseEngineeringDraft.id
-    );
+    const diagramToApply = createProjectOnApply
+      ? application.diagram
+      : attachReverseEngineeringSourceToDiagram(
+          application.diagram,
+          result.scan.id,
+          result.reverseEngineeringDraft.id
+        );
 
     setApplyState("saving");
     setApplyMessage(null);
-    context.applyDiagramJson(diagramWithReverseEngineeringSource);
+    context.applyDiagramJson(diagramToApply);
 
     try {
+      const targetProject = createProjectOnApply ? await createProject({ name: projectName }) : null;
+      const targetProjectId = targetProject?.id ?? projectId;
+
+      if (createProjectOnApply && targetProject) {
+        await saveProjectDraft({
+          projectId: targetProject.id,
+          diagramJson: diagramToApply
+        });
+      }
+
       await createArchitectureSnapshot({
-        projectId,
+        projectId: targetProjectId,
         source: "imported",
-        reverseEngineering: {
-          sourceScanId: result.scan.id,
-          draftId: result.reverseEngineeringDraft.id
-        },
-        architectureJson: convertDiagramJsonToArchitectureJson(diagramWithReverseEngineeringSource)
+        ...(createProjectOnApply
+          ? {}
+          : {
+              reverseEngineering: {
+                sourceScanId: result.scan.id,
+                draftId: result.reverseEngineeringDraft.id
+              }
+            }),
+        architectureJson: convertDiagramJsonToArchitectureJson(diagramToApply)
       });
       setApplyState("saved");
+      if (createProjectOnApply && targetProject) {
+        router.push(createWorkspaceProjectUrl(targetProject, "reverse"));
+        setApplyMessage("프로젝트를 만들고 선택한 후보를 보드에 저장했습니다.");
+        return;
+      }
+
       setApplyMessage("보드에 반영했고, imported Architecture Snapshot도 저장했습니다.");
     } catch (error) {
       setApplyState("error");
@@ -392,9 +429,10 @@ export function ReverseEngineeringPanel({ context, projectId }: ReverseEngineeri
   return (
     <section className={styles.deploymentPanel} aria-label="Reverse Engineering">
       <div className={styles.deploymentPanelContent}>
-        <ReverseEngineeringScanCriteriaForm
-          awsConnections={verifiedAwsConnections}
-          canStartScan={canStartScan}
+      <ReverseEngineeringScanCriteriaForm
+        awsConnections={verifiedAwsConnections}
+        canStartScan={canStartScan}
+        createProjectOnApply={createProjectOnApply}
           isLoadingOptions={loadState === "loading"}
           isScanning={scanState === "loading"}
           onRefresh={() => void loadOptions()}
@@ -416,17 +454,19 @@ export function ReverseEngineeringPanel({ context, projectId }: ReverseEngineeri
           </p>
         ) : null}
 
-        <ReverseEngineeringScanHistoryPanel
-          activeScanId={activeScanId}
-          canRescan={canStartScan}
-          isLoading={scanHistoryState === "loading" || scanState === "loading"}
-          isStaleResult={isStaleScanResult}
-          onCancelScan={(scanId) => void cancelActiveScan(scanId)}
-          onDeleteScan={(scanId) => void deleteSavedScan(scanId)}
-          onOpenScan={(scanId) => void openHistoricalScan(scanId)}
-          onRescan={() => void runScan()}
-          scans={scanHistory}
-        />
+        {createProjectOnApply ? null : (
+          <ReverseEngineeringScanHistoryPanel
+            activeScanId={activeScanId}
+            canRescan={canStartScan}
+            isLoading={scanHistoryState === "loading" || scanState === "loading"}
+            isStaleResult={isStaleScanResult}
+            onCancelScan={(scanId) => void cancelActiveScan(scanId)}
+            onDeleteScan={(scanId) => void deleteSavedScan(scanId)}
+            onOpenScan={(scanId) => void openHistoricalScan(scanId)}
+            onRescan={() => void runScan()}
+            scans={scanHistory}
+          />
+        )}
 
         {selectedCandidateResponse?.result && comparison && selectedCandidate ? (
           <ReverseEngineeringResultPanel
@@ -457,6 +497,68 @@ export function ReverseEngineeringPanel({ context, projectId }: ReverseEngineeri
   );
 }
 
+type ReverseEngineeringRunInput = {
+  readonly awsConnectionId: string;
+  readonly projectId?: string | undefined;
+  readonly region: string;
+  readonly resourceTypes: ReverseEngineeringResourceSelection[];
+};
+
+type ReverseEngineeringRunOutput = {
+  readonly logs: ReverseEngineeringScanLogLine[];
+  readonly response: ReverseEngineeringScanResponse;
+};
+
+// 새 프로젝트 시작에서는 프로젝트를 만들기 전에 AWS만 읽어서 미리보기 결과를 받습니다.
+async function runPreviewScan({
+  awsConnectionId,
+  region,
+  resourceTypes
+}: ReverseEngineeringRunInput): Promise<ReverseEngineeringRunOutput> {
+  const response = await createReverseEngineeringPreviewScan({
+    awsConnectionId,
+    region,
+    resourceTypes
+  });
+
+  return {
+    logs: [],
+    response
+  };
+}
+
+// 이미 있는 프로젝트에서는 scan 기록과 log를 서버에 남기는 기존 흐름을 사용합니다.
+async function runSavedScan({
+  awsConnectionId,
+  projectId,
+  region,
+  resourceTypes
+}: ReverseEngineeringRunInput): Promise<ReverseEngineeringRunOutput> {
+  if (!projectId) {
+    throw new Error("프로젝트를 찾지 못했습니다.");
+  }
+
+  const startedResponse = await createReverseEngineeringScan({
+    projectId,
+    awsConnectionId,
+    region,
+    resourceTypes
+  });
+  const response =
+    startedResponse.result || startedResponse.scan.status === "failed" || startedResponse.scan.status === "cancelled"
+      ? startedResponse
+      : await pollReverseEngineeringScan(projectId, startedResponse.scan.id);
+  const logs = await listReverseEngineeringScanLogs({
+    projectId,
+    scanId: response.scan.id
+  });
+
+  return {
+    logs,
+    response
+  };
+}
+
 // 알 수 없는 오류도 화면에 보여줄 수 있는 문장으로 바꿉니다.
 function toErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "요청을 처리하지 못했습니다.";
@@ -480,8 +582,20 @@ async function pollReverseEngineeringScan(
   throw new Error("스캔 결과를 아직 받지 못했습니다. 잠시 후 스캔 기록에서 다시 열어주세요.");
 }
 
+// scan polling 사이에 잠깐 기다려서 서버에 과하게 요청하지 않게 합니다.
 function delay(milliseconds: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+}
+
+// 프로젝트 생성 뒤에는 실제 프로젝트 id가 들어간 workspace 주소로 이동합니다.
+function createWorkspaceProjectUrl(project: Project, startMode: "reverse"): string {
+  const params = new URLSearchParams({
+    projectId: project.id,
+    projectName: project.name,
+    startMode
+  });
+
+  return `/workspace?${params.toString()}`;
 }
 
 // `ALL`과 개별 리소스가 동시에 선택되지 않게 해서 scan 요청 의미를 분명하게 합니다.

@@ -9,6 +9,7 @@ import {
   createDeployment,
   createProjectAssetUpload,
   cancelReverseEngineeringScan,
+  createReverseEngineeringPreviewScan,
   createReverseEngineeringScan,
   deleteAwsConnection,
   deleteProject,
@@ -931,6 +932,75 @@ test("createReverseEngineeringScan starts an authenticated AWS scan", async (con
   });
   assert.equal(response.scan.status, "running");
   assert.equal(response.result, undefined);
+});
+
+test("createReverseEngineeringPreviewScan starts an authenticated AWS scan without a project", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    restoreWindow(originalWindowDescriptor);
+  });
+
+  installAuthSession();
+
+  globalThis.fetch = async (input, init) => {
+    requests.push({ input, init });
+
+    const scan = createReverseEngineeringScanPayload({
+      id: "77777777-7777-4777-8777-777777777777",
+      projectId: "00000000-0000-4000-8000-000000000000",
+      status: "completed"
+    });
+
+    return new Response(
+      JSON.stringify({
+        scan,
+        result: {
+          scan,
+          discoveredResources: [],
+          reverseEngineeringDraft: {
+            id: `draft-${scan.id}`,
+            scanId: scan.id,
+            architectureJson: { nodes: [], edges: [] },
+            protectedValueKeys: [],
+            editableValueKeys: [],
+            createdAt: "2026-07-05T00:00:01.000Z"
+          },
+          architectureJson: { nodes: [], edges: [] },
+          findings: [],
+          analysisExclusions: [],
+          importSuggestions: [],
+          scanErrors: []
+        }
+      }),
+      {
+        headers: {
+          "Content-Type": "application/json"
+        },
+        status: 200
+      }
+    );
+  };
+
+  const response = await createReverseEngineeringPreviewScan({
+    awsConnectionId: "33333333-3333-4333-8333-333333333333",
+    region: "ap-northeast-2",
+    resourceTypes: ["ALL"]
+  });
+
+  assert.equal(String(requests[0]?.input), "/api/reverse-engineering/scans/preview");
+  assert.equal(requests[0]?.init?.method, "POST");
+  assert.equal(new Headers(requests[0]?.init?.headers).get("authorization"), "Bearer access-token");
+  assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), {
+    awsConnectionId: "33333333-3333-4333-8333-333333333333",
+    region: "ap-northeast-2",
+    resourceTypes: ["ALL"]
+  });
+  assert.equal(response.scan.status, "completed");
+  assert.equal(response.result?.reverseEngineeringDraft.scanId, response.scan.id);
 });
 
 test("reverseEngineering helpers list scans and logs", async (context) => {

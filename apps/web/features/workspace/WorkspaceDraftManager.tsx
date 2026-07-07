@@ -30,6 +30,7 @@ const LOCAL_PROJECT_NAME = "Local workspace";
 const LOCAL_SAVE_DEBOUNCE_MS = 800;
 
 export type WorkspaceDraftManagerProps = {
+  readonly initialProjectName?: string | undefined;
   readonly initialRightPanelView?: WorkspaceRightPanelView | undefined;
 };
 
@@ -43,10 +44,13 @@ const saveStatusLabels: Record<SaveState, string> = {
   failed: "저장 실패"
 };
 
-export function WorkspaceDraftManager({ initialRightPanelView }: WorkspaceDraftManagerProps) {
+export function WorkspaceDraftManager({
+  initialProjectName,
+  initialRightPanelView
+}: WorkspaceDraftManagerProps) {
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
-  const [projectName, setProjectName] = useState(LOCAL_PROJECT_NAME);
+  const [projectName, setProjectName] = useState(initialProjectName ?? LOCAL_PROJECT_NAME);
   const [initialDiagram, setInitialDiagram] = useState<DiagramJson | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -117,7 +121,7 @@ export function WorkspaceDraftManager({ initialRightPanelView }: WorkspaceDraftM
       try {
         const metadata = await readWorkspaceClientMetadata();
         const nextWorkspaceId = metadata?.workspaceId ?? createWorkspaceId();
-        const nextProjectName = normalizeProjectName(metadata?.activeProjectName);
+        const nextProjectName = initialProjectName ?? normalizeProjectName(metadata?.activeProjectName);
         const nextCloudPlatform = isWorkspaceCloudPlatform(metadata?.cloudPlatform)
           ? metadata.cloudPlatform
           : "aws";
@@ -162,7 +166,7 @@ export function WorkspaceDraftManager({ initialRightPanelView }: WorkspaceDraftM
       cancelled = true;
       clearLocalSaveTimer();
     };
-  }, [clearLocalSaveTimer, setCurrentLocalDraft]);
+  }, [clearLocalSaveTimer, initialProjectName, setCurrentLocalDraft]);
 
   useEffect(() => {
     function handleVisibilityChange() {
@@ -241,6 +245,7 @@ export function WorkspaceDraftManager({ initialRightPanelView }: WorkspaceDraftM
           onTerraformSafeFixApplyResult={setTerraformSafeFixApplyResult}
           projectId={LOCAL_PROJECT_ID}
           projectName={projectName}
+          reverseCreatesProjectOnApply
           terraformSafeFixApplyRequest={terraformSafeFixApplyRequest}
         />
       )}

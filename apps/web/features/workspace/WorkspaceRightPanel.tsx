@@ -59,6 +59,7 @@ export type WorkspaceRightPanelProps = {
   readonly onTerraformSafeFixApplyResult: (result: TerraformSafeFixApplyResult) => void;
   readonly projectId: string;
   readonly projectName: string;
+  readonly reverseCreatesProjectOnApply?: boolean | undefined;
   readonly terraformSafeFixApplyRequest: TerraformSafeFixApplyRequest | null;
 };
 
@@ -76,6 +77,7 @@ export function WorkspaceRightPanel({
   onTerraformSafeFixApplyResult,
   projectId,
   projectName,
+  reverseCreatesProjectOnApply = false,
   terraformSafeFixApplyRequest
 }: WorkspaceRightPanelProps) {
   const terraformPanelRef = useRef<TerraformCodePanelHandle | null>(null);
@@ -656,7 +658,12 @@ export function WorkspaceRightPanel({
       </div>
       <div className={styles.rightPanelView} hidden={activeView !== "reverse"}>
         {activeView === "reverse" ? (
-          <ReverseEngineeringPanel context={context} projectId={projectId} />
+          <ReverseEngineeringPanel
+            context={context}
+            createProjectOnApply={reverseCreatesProjectOnApply}
+            projectId={projectId}
+            projectName={projectName}
+          />
         ) : null}
       </div>
 

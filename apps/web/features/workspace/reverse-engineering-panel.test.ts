@@ -44,7 +44,7 @@ test("Reverse Engineering scan starts from one main import action and keeps filt
 });
 
 test("Reverse Engineering result stays preview-only until the user applies it", () => {
-  assert.match(rightPanelSource, /<ReverseEngineeringPanel context=\{context\} projectId=\{projectId\} \/>/);
+  assert.match(rightPanelSource, /<ReverseEngineeringPanel/);
   assert.match(panelSource, /readonly context: DiagramEditorPanelContext/);
   assert.match(panelSource, /context\.setPreviewDiagram\(application\.previewDiagram\)/);
   assert.match(panelSource, /createArchitectureSnapshot/);
@@ -52,9 +52,20 @@ test("Reverse Engineering result stays preview-only until the user applies it", 
   assert.match(panelSource, /sourceScanId: result\.scan\.id/);
   assert.match(panelSource, /draftId: result\.reverseEngineeringDraft\.id/);
   assert.match(panelSource, /attachReverseEngineeringSourceToDiagram/);
-  assert.match(panelSource, /context\.applyDiagramJson\(diagramWithReverseEngineeringSource\)/);
+  assert.match(panelSource, /context\.applyDiagramJson\(diagramToApply\)/);
   assert.match(resultPanelSource, /새 보드로 열기/);
   assert.match(resultPanelSource, /현재 보드에 추가/);
+});
+
+test("Reverse Engineering can scan before project creation and create the project only on apply", () => {
+  assert.match(panelSource, /createReverseEngineeringPreviewScan/);
+  assert.match(panelSource, /createProjectOnApply/);
+  assert.match(panelSource, /createProject\(\{ name: projectName \}\)/);
+  assert.match(panelSource, /saveProjectDraft/);
+  assert.match(panelSource, /router\.push/);
+  assert.match(scanCriteriaFormSource, /프로젝트는 후보를 적용할 때 생성됩니다/);
+  assert.match(scanHistoryHookSource, /enabled = true/);
+  assert.match(scanHistoryHookSource, /if \(!enabled\)/);
 });
 
 test("Reverse Engineering draft edits update only the candidate architecture", () => {

@@ -36,9 +36,14 @@ export default async function WorkspacePage({ searchParams }: WorkspacePageProps
     );
   }
 
+  const projectName = getSingleSearchParam(params?.projectName)?.trim();
+
   return (
     <WorkspaceAuthGate>
-      <WorkspaceDraftManager initialRightPanelView={initialRightPanelView} />
+      <WorkspaceDraftManager
+        initialProjectName={projectName || undefined}
+        initialRightPanelView={initialRightPanelView}
+      />
     </WorkspaceAuthGate>
   );
 }
