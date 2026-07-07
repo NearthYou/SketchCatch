@@ -72,14 +72,14 @@ export function useBrowserVoiceInput({
   const [statusMessage, setStatusMessage] = useState("");
   const speechRecognitionRef = useRef<BrowserSpeechRecognition | null>(null);
   const voiceInputBaseRef = useRef("");
-  const voiceNoSpeechTimerRef = useRef<number | null>(null);
+  const voiceNoSpeechTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const clearNoSpeechTimer = useCallback(() => {
     if (voiceNoSpeechTimerRef.current === null) {
       return;
     }
 
-    window.clearTimeout(voiceNoSpeechTimerRef.current);
+    clearTimeout(voiceNoSpeechTimerRef.current);
     voiceNoSpeechTimerRef.current = null;
   }, []);
 
@@ -158,10 +158,12 @@ export function useBrowserVoiceInput({
       setListening(true);
       setStatusMessage(LISTENING_STATUS_MESSAGE);
       recognition.start();
-      voiceNoSpeechTimerRef.current = window.setTimeout(() => {
+      voiceNoSpeechTimerRef.current = setTimeout(() => {
         releaseRecognition("abort");
         setListening(false);
-        setStatusMessage("8초 동안 음성이 들리지 않아 음성 인식을 중지했습니다.");
+        setStatusMessage(
+          `${noSpeechTimeoutMs / 1000}초 동안 음성이 들리지 않아 음성 인식을 중지했습니다.`
+        );
       }, noSpeechTimeoutMs);
     } catch {
       speechRecognitionRef.current = null;

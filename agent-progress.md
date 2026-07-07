@@ -172,3 +172,16 @@ Verification:
 - `pnpm lint`
 - `pnpm build`
 - `pnpm typecheck` (first run failed because `.next/types/validator.ts` was absent before build regenerated Next types; rerun passed)
+
+- Addressed PR #252 review feedback for browser voice input timer typing and dynamic no-speech timeout messaging.
+- Updated Terraform diagnostics to report top-level `key = value` attributes as syntax errors instead of ignoring them.
+- Added regression coverage for invalid top-level Terraform attributes.
+
+Verification:
+
+- `pnpm --filter @sketchcatch/api test`
+- `pnpm --filter @sketchcatch/web typecheck`
+- `pnpm harness:check`
+- `pnpm lint`
+- `pnpm typecheck`
+- `pnpm build`

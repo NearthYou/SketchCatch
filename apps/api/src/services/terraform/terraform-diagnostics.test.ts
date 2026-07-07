@@ -149,6 +149,25 @@ test("reports a standalone invalid top-level line as one syntax error", () => {
   );
 });
 
+test("reports top-level attributes as syntax errors", () => {
+  const diagnostics = createTerraformDiagnostics(`resource "aws_vpc" "main" {
+  cidr_block = "10.0.0.0/16"
+}
+cidr_block = "10.0.1.0/24"`);
+
+  assert.deepEqual(
+    diagnostics.filter((diagnostic) => diagnostic.severity === "error"),
+    [
+      {
+        severity: "error",
+        code: "terraform.unexpected_token",
+        line: 4,
+        message: "알 수 없는 Terraform 코드 줄입니다. resource/data block 또는 attribute 형식으로 작성하세요."
+      }
+    ]
+  );
+});
+
 test("reports a non-attribute resource body line as one syntax error", () => {
   const diagnostics = createTerraformDiagnostics(`resource "aws_vpc" "main" {
   cidr_block = "10.0.0.0/16"

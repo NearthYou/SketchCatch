@@ -640,7 +640,6 @@ function checkStandaloneTopLevelTokens(terraformCode: string): TerraformDiagnost
       currentDepth === 0 &&
       trimmedLine &&
       trimmedLine !== "}" &&
-      !trimmedLine.includes("=") &&
       !PROVIDER_BLOCK_HEADER_PATTERN.test(codeLine) &&
       !BLOCK_HEADER_PATTERN.test(codeLine) &&
       !trimmedLine.startsWith("resource") &&
