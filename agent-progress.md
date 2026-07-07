@@ -18,6 +18,37 @@ This file is the short, English-only working log for the current agent context. 
 
 2026-07-08:
 
+- Fixed production AI provider configuration injection so the deploy workflow writes `AI_BILLING_MODE`, Bedrock, and Amazon Q settings into `/etc/sketchcatch/api.env`.
+- Added EC2 runtime IAM permissions for Bedrock Runtime `InvokeModel` and Amazon Q Business `ChatSync`.
+- Added deployment regression tests that assert the production workflow injects AI provider env and the runtime policy keeps the required provider permissions.
+
+Verification:
+
+- `pnpm harness:check`
+- `node --test scripts\deploy-runtime-iam-policy.test.mjs`
+- `pnpm lint`
+- `pnpm typecheck`
+- `pnpm build`
+
+- Reworked Terraform Preview explanation to evaluate the Terraform-backed diagram with six Well-Architected agent-style assessments and a consensus recommendation.
+- Kept detected resources in the API contract for compatibility, but removed them from the primary Preview explanation UI.
+- Increased Preview explanation readability with larger summary/conclusion text and two-column assessment cards in the chat dock and legacy workspace AI panel.
+
+Verification:
+
+- `pnpm --filter @sketchcatch/api exec tsx --test src/services/aiTerraformPreviewExplanation.test.ts src/routes/ai.test.ts`
+- `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/ai-workspace-api.test.ts features/workspace/workspace-right-panel-layout.test.ts`
+- `pnpm --filter @sketchcatch/web typecheck`
+- `pnpm --filter @sketchcatch/types typecheck`
+- `pnpm --filter @sketchcatch/api typecheck`
+- `pnpm --filter @sketchcatch/api lint`
+- `pnpm --filter @sketchcatch/web lint`
+- `pnpm harness:check`
+- `pnpm typecheck`
+- `pnpm lint`
+- `pnpm build`
+- Browser attempt: local `http://localhost:3000/workspace/ai` redirected to `/login`, so visual verification was blocked by missing login state. Dev server was stopped after the check.
+
 - Removed the per-diagnostic AI explanation button from the Terraform error summary in the code panel.
 - Restored the Issues tab to the light workspace panel styling and removed the late dark override that made issue cards hard to read.
 - Treated Terraform Code, Issues, and Terraform issue AI resolution as one internal workflow so the unsaved Terraform leave dialog does not appear while moving between them.
@@ -26,6 +57,36 @@ Verification:
 
 - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-right-panel-layout.test.ts`
 - `pnpm --filter @sketchcatch/web typecheck`
+- `pnpm harness:check`
+- `pnpm lint`
+- `pnpm typecheck`
+- `pnpm build`
+
+- Fixed the Issues tab scroll container by giving the Issues panel a fixed height chain and moving vertical overflow to the Terraform diagnostics body.
+- Added a layout regression assertion so the Issues panel keeps `min-height: 0`, `overflow-y: auto`, and stable scrollbar gutter.
+
+Verification:
+
+- `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-right-panel-layout.test.ts`
+- `pnpm --filter @sketchcatch/web typecheck`
+- `pnpm --filter @sketchcatch/web lint`
+- `pnpm harness:check`
+- `pnpm lint`
+- `pnpm typecheck`
+- `pnpm build`
+
+- Removed the fallback/basic LLM explanation block from the Terraform Preview explanation result so the panel focuses on the six assessment agents and conclusion.
+- Removed the inline Terraform error card list from the code panel, leaving only the compact Issues navigation banner when Terraform errors exist.
+- Fixed fast Terraform diagnostics so standalone invalid top-level lines and non-attribute resource body lines, including Korean random text, produce one blocking syntax diagnostic before sync-to-diagram can cascade extra issues.
+
+Verification:
+
+- `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-diagnostics.test.ts`
+- `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-right-panel-layout.test.ts`
+- `pnpm --filter @sketchcatch/web typecheck`
+- `pnpm --filter @sketchcatch/api typecheck`
+- `pnpm --filter @sketchcatch/web lint`
+- `pnpm --filter @sketchcatch/api lint`
 - `pnpm harness:check`
 - `pnpm lint`
 - `pnpm typecheck`
