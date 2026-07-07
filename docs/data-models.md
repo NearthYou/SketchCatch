@@ -236,24 +236,55 @@ MVP에서 공통으로 사용할 `ResourceType` 값은 아래로 고정한다.
 type ResourceType =
   | "VPC"
   | "SUBNET"
-  | "EC2"
-  | "RDS"
-  | "S3"
-  | "SECURITY_GROUP"
-  | "CLOUDFRONT"
   | "INTERNET_GATEWAY"
   | "ROUTE_TABLE"
   | "ROUTE_TABLE_ASSOCIATION"
-  | "AMI"
+  | "NAT_GATEWAY"
+  | "EC2"
+  | "AUTO_SCALING_GROUP"
+  | "LAUNCH_TEMPLATE"
+  | "KEY_PAIR"
+  | "ELASTIC_IP"
+  | "EBS_VOLUME"
+  | "RDS"
+  | "RDS_READ_REPLICA"
+  | "RDS_CLUSTER"
+  | "S3"
+  | "DYNAMODB_TABLE"
+  | "ELASTICACHE_REDIS"
+  | "SECURITY_GROUP"
+  | "CLOUDFRONT"
+  | "LOAD_BALANCER_TARGET_GROUP"
   | "LAMBDA"
+  | "LAMBDA_EVENT_SOURCE_MAPPING"
+  | "AMI"
   | "IAM_ROLE"
   | "IAM_POLICY"
   | "IAM_INSTANCE_PROFILE"
   | "KMS_KEY"
+  | "ACM_CERTIFICATE"
+  | "COGNITO_USER_POOL"
+  | "COGNITO_USER_POOL_CLIENT"
   | "CLOUDWATCH_LOG_GROUP"
   | "CLOUDWATCH_METRIC_ALARM"
+  | "CLOUDWATCH_DASHBOARD"
   | "API_GATEWAY_REST_API"
+  | "API_GATEWAY_WEBSOCKET_API"
+  | "API_GATEWAY_RESOURCE"
+  | "API_GATEWAY_METHOD"
+  | "API_GATEWAY_INTEGRATION"
+  | "API_GATEWAY_STAGE"
   | "LAMBDA_PERMISSION"
+  | "SNS_TOPIC"
+  | "SQS_QUEUE"
+  | "EVENTBRIDGE_RULE"
+  | "EVENTBRIDGE_TARGET"
+  | "STEP_FUNCTIONS_STATE_MACHINE"
+  | "ECR_REPOSITORY"
+  | "ECS_CLUSTER"
+  | "ECS_SERVICE"
+  | "ECS_TASK_DEFINITION"
+  | "EKS_CLUSTER"
   | "UNKNOWN";
 ```
 
@@ -586,6 +617,11 @@ API 경로:
 - `POST /api/aws/connections/:connectionId/verify-created-role`
 - `DELETE /api/aws/connections/:connectionId`
 - `GET /api/aws/connections/:connectionId/cloudformation-template`
+
+2026-07-07 기준 새 AWS 연결의 CloudFormation Role 이름은
+`SketchCatchTerraformExecutionRole-<connection-prefix>`입니다. `verify-created-role`은 Account ID와
+connection ID로 이 ARN을 계산해 저장합니다. 기존에 저장됐거나 사용자가 직접 검증한
+`SketchCatchTerraformExecutionRole` 고정 이름 Role ARN은 하위 호환을 위해 계속 허용합니다.
 
 `DELETE /api/aws/connections/:connectionId`는 SketchCatch의 연결 metadata만 삭제한다. 사용자 AWS 계정에 생성된 IAM Role이나 CloudFormation Stack은 자동으로 삭제하지 않는다. `Deployment`가 참조 중인 연결은 삭제할 수 없고 `409 conflict`를 반환한다.
 

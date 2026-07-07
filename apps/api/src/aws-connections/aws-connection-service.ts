@@ -23,6 +23,7 @@ import {
 export const recommendedAwsConnectionRoleName = "SketchCatchTerraformExecutionRole";
 const callerAssumeRolePolicyName = "SketchCatchAssumeTerraformExecutionRole";
 const defaultCloudFormationTemplateTokenTtlMs = 60 * 60 * 1000;
+const awsConnectionRoleNameSuffixLength = 8;
 
 export type AwsConnectionRetentionPolicy = {
   maxUnverifiedConnectionsPerUser: number;
@@ -287,6 +288,7 @@ export async function createAwsConnection(
   const generateId = options.generateId ?? randomUUID;
   const id = generateId();
   const externalId = options.generateExternalId?.() ?? createAwsExternalId(id);
+  const roleName = createAwsConnectionRoleName(id);
   const awsConnection = await repository.createAwsConnection({
     id,
     userId: input.accessContext.userId,
@@ -299,14 +301,14 @@ export async function createAwsConnection(
     externalId
   });
   const permissionSetup = createInitialPermissionSetup();
-  const callerRoleSetup = createCallerRoleSetup(recommendedAwsConnectionRoleName);
+  const callerRoleSetup = createCallerRoleSetup();
 
   return {
     awsConnection: toAwsConnection(awsConnection),
     callerPrincipalArn: input.callerPrincipalArn,
-    recommendedRoleName: recommendedAwsConnectionRoleName,
+    recommendedRoleName: roleName,
     roleSetup: {
-      roleName: recommendedAwsConnectionRoleName,
+      roleName,
       trustedPrincipalArn: input.callerPrincipalArn,
       externalId,
       trustPolicy: trustPolicyTemplate,
@@ -441,7 +443,7 @@ export async function verifyAwsConnection(
     throw new AwsConnectionNotFoundError("AWS connection not found");
   }
 
-  assertRecommendedAwsConnectionRoleArn(input.roleArn);
+  assertRecommendedAwsConnectionRoleArn(input.roleArn, awsConnection.id);
 
   const now = options.now ?? (() => new Date());
   const markFailed = async (accountId: string | null) => {
@@ -536,7 +538,7 @@ export async function verifyAwsConnectionCreatedRole(
     {
       connectionId: input.connectionId,
       accessContext: input.accessContext,
-      roleArn: createRecommendedAwsConnectionRoleArn(input.accountId)
+      roleArn: createRecommendedAwsConnectionRoleArn(input.accountId, input.connectionId)
     },
     repository,
     tester,
@@ -558,7 +560,7 @@ export async function testStoredAwsConnection(
     throw new AwsConnectionNotFoundError("AWS connection not found");
   }
 
-  assertRecommendedAwsConnectionRoleArn(input.roleArn);
+  assertRecommendedAwsConnectionRoleArn(input.roleArn, awsConnection.id);
 
   if (awsConnection.region !== supportedAwsConnectionRegion) {
     throw new AwsConnectionVerificationError("AWS connection region must be ap-northeast-2");
@@ -608,7 +610,7 @@ export async function getAwsConnectionCloudFormationTemplate(
 
   assertAwsConnectionCanRenderCloudFormationTemplate(awsConnection);
 
-  const roleName = recommendedAwsConnectionRoleName;
+  const roleName = createAwsConnectionRoleName(awsConnection.id);
   const stackName = createAwsConnectionStackName(awsConnection.id);
   const templateBody = createAwsConnectionCloudFormationTemplateBody({
     roleName,
@@ -727,8 +729,12 @@ function createTerraformApplyPolicyDocument(): Record<string, unknown> {
   };
 }
 
-function createCallerRoleSetup(roleName: string): SketchCatchCallerRoleSetup {
-  const assumableRoleArnPattern = `arn:aws:iam::*:role/${roleName}`;
+function createCallerRoleSetup(): SketchCatchCallerRoleSetup {
+  const assumableRoleArnPattern = `arn:aws:iam::*:role/${recommendedAwsConnectionRoleName}*`;
+  const assumableRoleArnResources = [
+    `arn:aws:iam::*:role/${recommendedAwsConnectionRoleName}`,
+    `arn:aws:iam::*:role/${recommendedAwsConnectionRoleName}-*`
+  ];
 
   return {
     policyName: callerAssumeRolePolicyName,
@@ -739,7 +745,7 @@ function createCallerRoleSetup(roleName: string): SketchCatchCallerRoleSetup {
         {
           Effect: "Allow",
           Action: "sts:AssumeRole",
-          Resource: assumableRoleArnPattern
+          Resource: assumableRoleArnResources
         }
       ]
     }
@@ -761,29 +767,75 @@ function assertAwsConnectionCanRenderCloudFormationTemplate(
 }
 
 export function isRecommendedAwsConnectionRoleArn(roleArn: string): boolean {
-  const expectedRoleSuffix = `:role/${recommendedAwsConnectionRoleName}`;
+  const roleName = getRoleNameFromRecommendedAwsConnectionRoleArn(roleArn);
 
-  return (
-    /^arn:aws:iam::\d{12}:role\/[\w+=,.@/-]+$/.test(roleArn) && roleArn.endsWith(expectedRoleSuffix)
-  );
+  return roleName !== null && isAllowedAwsConnectionRoleName(roleName);
 }
 
-export function createRecommendedAwsConnectionRoleArn(accountId: string): string {
+export function createRecommendedAwsConnectionRoleArn(
+  accountId: string,
+  connectionId?: string
+): string {
   const trimmedAccountId = accountId.trim();
 
   if (!/^\d{12}$/.test(trimmedAccountId)) {
     throw new AwsConnectionVerificationError("AWS account ID must be 12 digits");
   }
 
-  return `arn:aws:iam::${trimmedAccountId}:role/${recommendedAwsConnectionRoleName}`;
+  const roleName = connectionId
+    ? createAwsConnectionRoleName(connectionId)
+    : recommendedAwsConnectionRoleName;
+
+  return `arn:aws:iam::${trimmedAccountId}:role/${roleName}`;
 }
 
-function assertRecommendedAwsConnectionRoleArn(roleArn: string): void {
-  if (!isRecommendedAwsConnectionRoleArn(roleArn)) {
+export function createAwsConnectionRoleName(connectionId: string): string {
+  const suffix = connectionId
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "")
+    .slice(0, awsConnectionRoleNameSuffixLength);
+
+  if (suffix.length < awsConnectionRoleNameSuffixLength) {
+    throw new AwsConnectionVerificationError("AWS connection ID is invalid");
+  }
+
+  return `${recommendedAwsConnectionRoleName}-${suffix}`;
+}
+
+function assertRecommendedAwsConnectionRoleArn(roleArn: string, connectionId?: string): void {
+  const roleName = getRoleNameFromRecommendedAwsConnectionRoleArn(roleArn);
+
+  if (!roleName || !isAllowedAwsConnectionRoleName(roleName)) {
     throw new AwsConnectionVerificationError(
-      `AWS Role ARN must use ${recommendedAwsConnectionRoleName}`
+      `AWS Role ARN must use ${recommendedAwsConnectionRoleName} or ${recommendedAwsConnectionRoleName}-<connection>`
     );
   }
+
+  if (!connectionId || roleName === recommendedAwsConnectionRoleName) {
+    return;
+  }
+
+  const expectedRoleName = createAwsConnectionRoleName(connectionId);
+
+  if (roleName !== expectedRoleName) {
+    throw new AwsConnectionVerificationError(
+      `AWS Role ARN must use ${recommendedAwsConnectionRoleName} or ${expectedRoleName}`
+    );
+  }
+}
+
+function getRoleNameFromRecommendedAwsConnectionRoleArn(roleArn: string): string | null {
+  const match = /^arn:aws:iam::\d{12}:role\/([\w+=,.@/-]+)$/.exec(roleArn);
+
+  return match?.[1] ?? null;
+}
+
+function isAllowedAwsConnectionRoleName(roleName: string): boolean {
+  return (
+    roleName === recommendedAwsConnectionRoleName ||
+    new RegExp(`^${recommendedAwsConnectionRoleName}-[a-z0-9]{8}$`).test(roleName)
+  );
 }
 
 function createAwsConnectionStackName(connectionId: string): string {

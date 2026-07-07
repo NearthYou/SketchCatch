@@ -1,5 +1,30 @@
 ﻿# 2026-07-07 - Git/CI/CD 대표 smoke 현재 preflight 증거
 
+# 2026-07-07 - PR #220 origin/dev 충돌 병합
+
+- Goal: PR #220 브랜치 `codex/right-panel-resource-header`에 최신 `origin/dev`를 병합하고, 양쪽 의도를 보존해 충돌을 해결한다.
+- Completed:
+  - 리뷰 반영분을 `Fix: PR 리뷰 방어 코드 반영` 커밋으로 먼저 분리한 뒤 `origin/dev` 병합을 시작했다.
+  - ResourceType/label/resource definition/catalog 충돌은 양쪽 추가 리소스를 모두 유지하고, `VPC_ENDPOINT`/`DB_SUBNET_GROUP`처럼 `dev`의 더 구체적인 타입과 PR의 explicit Terraform Preview/Sync 선언을 결합했다.
+  - Diagram editor 충돌은 `dev`의 preview annotation/patch state/z-index 정책과 PR의 ASG area node, connection handle cleanup, resize internals 정리를 함께 보존했다.
+  - Resource Settings와 Workspace right panel은 `dev`의 provider/template library 흐름과 PR의 Plan action strip/resource workspace 개선을 결합했다.
+  - 진행/핸드오프 로그 충돌은 양쪽 기록을 모두 남기고 conflict marker만 제거했다.
+  - 새로 확장된 `ResourceType` union 때문에 깨진 API patch preview label map을 전체 ResourceType 기준으로 보강했다.
+- Verification run:
+  - `pnpm harness:check` - passed before merge and after conflict resolution.
+  - Focused web conflict tests - passed, 99 tests.
+  - `pnpm --filter @sketchcatch/types typecheck` - passed.
+  - `pnpm --filter @sketchcatch/web typecheck` - passed.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `pnpm build` - passed.
+  - `git diff --check` and `git diff --cached --check` - passed.
+- Known risks:
+  - 이번 작업은 `origin/dev` 병합 충돌 해결이며, `dev`에서 들어온 Git/CI/CD, Reverse Engineering, AI patch preview 신규 기능 자체의 live cloud mutation은 실행하지 않았다.
+  - 브라우저 수동 QA는 수행하지 않았고, merge-sensitive source/unit/typecheck/build checks로 검증했다.
+
+# 2026-07-07 - Git/CI/CD 대표 smoke 현재 preflight 증거
+
 - Goal: plan6 M8/#210의 live smoke를 최신 dev/운영 배포 상태에서 다시 점검하고, 실행 전제가 충족됐는지 증거로 남긴다.
 - Completed:
   - PR #216이 dev에 merge된 뒤 CI 성공과 Production deploy workflow `28850450092` 성공을 확인했다.
@@ -316,6 +341,289 @@
   - 프로젝트별 실제 비용은 `SketchCatchProjectId` Cost Explorer tag가 없으면 배포 리소스 기반 근사 배분이다.
   - 새 IAM 권한은 read-only 조회 권한이며, 비용 최적화 추천이 자동으로 리소스를 수정하지는 않는다.
   
+### 2026-07-07 - PR 리뷰 방어 코드 및 resize internals 정리
+
+- Goal: PR 리뷰 코멘트에 따라 RDS read replica 판별의 `parameters.values` 접근을 legacy/null 입력에도 안전하게 만들고, DiagramNodeView resize 핸들러의 중복 React Flow internals refresh를 제거한다.
+- Completed:
+  - `workspace-ai-diagram-adapter.ts`의 RDS read replica 판별에서 `parameters.values`를 `isRecord`로 좁힌 뒤 `replicateSourceDb`/`replicate_source_db`를 조회하도록 수정했다.
+  - `DiagramNodeView`의 resize pointer move/up 핸들러에서 `window.requestAnimationFrame(() => updateNodeInternals(id))` 중복 호출을 제거했다.
+  - 기존 `useEffect`가 `node.size.width`/`node.size.height` 변경 시 `updateNodeInternals(id)`를 호출하는 계약을 source test로 고정했다.
+  - `values: null`/`values: undefined` legacy DiagramJson 입력이 Architecture 변환에서 TypeError 없이 generic RDS로 유지되는 회귀 테스트를 추가했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits and after build.
+  - Red before fix: `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-ai-diagram-adapter.test.ts --test-name-pattern "missing parameter values"` - failed with `Cannot read properties of null`.
+  - Red before fix: `pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/diagram-editor-layout.test.ts --test-name-pattern "manual resize"` - failed for duplicate resize handler `requestAnimationFrame`.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-ai-diagram-adapter.test.ts --test-name-pattern "missing parameter values"` - passed, 17 tests.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/diagram-editor-layout.test.ts --test-name-pattern "manual resize"` - passed, 5 tests.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `pnpm build` - passed.
+- Known risks:
+  - 실제 브라우저 리사이즈 조작 QA는 수행하지 않았다. 이번 변경은 source/adapter 테스트와 build checks로 검증했다.
+  - `next build`가 `apps/web/next-env.d.ts`를 생성 경로로 변경했지만 리뷰 범위 밖 생성 파일이라 기존 경로로 정리했다.
+
+### 2026-07-07 - Workspace canvas 연결 핸들 잔류 수정
+
+- Goal: React Flow 연결 시작 후 reset이 누락되는 케이스에서 모든 노드의 보라색 connection handle이 전체 선택처럼 남는 현상을 막는다.
+- Completed:
+  - 연결 활성 상태일 때 `pointerup`, `mouseup`, `pointercancel`, `blur` fallback listener를 등록해 전역 핸들 활성 표시를 해제하도록 했다.
+  - `onConnect`에서 시작 node ref를 사용한 뒤 즉시 비워 stale connection state를 남기지 않게 했다.
+  - fallback listener가 유지되도록 source 회귀 테스트를 추가했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits.
+  - Red before fix: `pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/diagram-editor-layout.test.ts --test-name-pattern "active connection handles"` - failed for missing fallback listeners.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/diagram-editor-layout.test.ts --test-name-pattern "active connection handles"` - passed after fix.
+  - Canvas focused tests - passed, 81 tests.
+- Known risks:
+  - Playwright DOM check reached the seeded workspace, but the single seeded region node did not trigger React Flow connection start through synthetic handle drag. The automated regression test covers the missing fallback listener path.
+
+### 2026-07-07 - AWS ResourceType 누락 리소스 추가
+
+- Goal: 사용자가 지정한 현재 미지원 AWS ResourceType 16개를 서비스 resource definition/catalog에 추가하고, public 아이콘 자산과 Terraform Preview/Sync 연결을 검증한다.
+- Completed:
+  - `packages/types/src/index.ts`에 요청 목록의 `ResourceType` 값을 추가하고, 기존 catalog에는 있었지만 `UNKNOWN`으로 흐르던 ASG, NAT Gateway, EBS, API Gateway 세부 리소스 등도 명시 ResourceType으로 매핑했다.
+  - `docs/data-models.md`의 `ResourceType` union 기준을 shared type과 맞췄다.
+  - `packages/types/src/resource-definitions.ts`에 `API_GATEWAY_WEBSOCKET_API`, `SQS_QUEUE`, `ELASTICACHE_REDIS`, `ACM_CERTIFICATE`, `RDS_READ_REPLICA`, `RDS_CLUSTER`, `API_GATEWAY_STAGE`, `STEP_FUNCTIONS_STATE_MACHINE`, `LAMBDA_EVENT_SOURCE_MAPPING`, `COGNITO_USER_POOL`, `COGNITO_USER_POOL_CLIENT`, `ECR_REPOSITORY`, `ECS_CLUSTER`, `ECS_SERVICE`, `ECS_TASK_DEFINITION`, `EKS_CLUSTER` 정의를 추가했다.
+  - `apps/web/features/resource-settings/catalog.ts`에 새 리소스 타일과 public AWS 아이콘 경로를 연결하고, ELB target/listener 아이콘 경로 대소문자를 실제 public 파일명과 맞췄다.
+  - `RDS_READ_REPLICA`는 Terraform 별도 타입이 아니라 `aws_db_instance` 변형이므로 generic `aws_db_instance` lookup은 `aws-rds-instance`로 유지하고, `replicateSourceDb`가 있으면 ArchitectureJson에서 `RDS_READ_REPLICA`로 보존되게 했다.
+  - `aws_db_instance` parameter catalog에 `replicateSourceDb` 입력을 추가했다.
+  - `catalog:check`가 design/parameterPanel false 리소스 때문에 실패하던 문제를 줄이기 위해 generator가 override가 있는 리소스만 Terraform provider schema로 검증하도록 보정했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits and after final build.
+  - Red before implementation: targeted API/Web tests failed for missing shared definitions, missing catalog items, missing labels, and missing RDS read replica parameter.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/resource-definitions-source-shape.test.ts src/services/diagram-to-architecture.test.ts src/services/terraform/infrastructure-graph.test.ts` - passed, 21 tests.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/resource-settings/catalog.test.ts app/workspace/resource-type-labels.test.ts` - passed, 10 tests.
+  - `pnpm --filter @sketchcatch/types typecheck` - passed.
+  - `pnpm --filter @sketchcatch/api typecheck` - passed.
+  - `pnpm --filter @sketchcatch/web typecheck` - passed.
+  - `pnpm catalog:check` - passed after generator filtering fix.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `pnpm build` - passed.
+  - `git diff --check` - passed.
+- Known risks:
+  - 새로 추가한 복잡 리소스 대부분은 Terraform Preview/Sync와 catalog 타일을 먼저 연동했고, curated parameter panel은 `RDS_READ_REPLICA`의 `replicateSourceDb`만 보강했다. 나머지 리소스의 세부 parameter schema는 후속으로 확장할 수 있다.
+  - 실제 브라우저 screenshot QA, Terraform apply/destroy, cloud mutation, Git/CI/CD handoff는 실행하지 않았다.
+
+### 2026-07-07 - Workspace 우측 패널 리소스 카드 메뉴 정리
+
+- Goal: Resource List 카드의 점 3개 메뉴에서 `Switch to data source`와 `Maximize` 액션을 제거한다.
+- Completed:
+  - `ResourceCardMenu`에서 Terraform block type 전환 항목과 maximize/minimize 항목을 제거했다.
+  - 더 이상 쓰지 않는 `switchTerraformBlockType`, `onToggleSize`, `Maximize2`, `Minimize2` 의존성을 정리했다.
+  - 메뉴가 `Edit config`, `Duplicate`, `Delete`만 노출하도록 회귀 테스트를 추가했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-right-panel-layout.test.ts --test-name-pattern "resource card menu omits"` - failed before fix, as expected.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-right-panel-layout.test.ts features/workspace/resource-workspace-view.test.ts` - passed, 59 tests.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `pnpm build` - passed.
+- Known risks:
+  - 별도 브라우저 스크린샷 검증은 하지 않았다. 이번 변경은 우측 패널 메뉴 source layout 테스트와 build checks로 검증했다.
+
+### 2026-07-07 - Workspace 우측 패널 리소스 카드 공통 박스 아이콘 제거
+
+- Goal: 우측 패널 Resource List 카드에서 서비스 아이콘 앞에 반복되는 공통 박스 아이콘을 제거한다.
+- Completed:
+  - `ResourceWorkspacePanel`의 `resourceListCubeIcon` 렌더링을 제거해 서비스 아이콘이 카드 identity의 첫 요소가 되도록 했다.
+  - `.resourceListCubeIcon` CSS를 제거하고 `.resourceListServiceIcon`의 폭/좌측 radius를 보정했다.
+  - 공통 박스 아이콘이 다시 들어오지 않도록 우측 패널 레이아웃 테스트를 추가했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-right-panel-layout.test.ts --test-name-pattern "resource list identity starts"` - failed before fix, as expected.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-right-panel-layout.test.ts features/workspace/resource-workspace-view.test.ts` - passed, 58 tests.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `pnpm build` - passed.
+- Known risks:
+  - 별도 브라우저 스크린샷 검증은 하지 않았다. 이번 변경은 우측 패널 카드 identity 렌더링과 CSS source 테스트로 검증했다.
+
+### 2026-07-07 - JH 122~현재 누락 복구 및 선언 회귀 방지
+
+- Goal: JH 122~현재 브랜치 누락 복구 계획을 실행해 `resource-definitions` 선언 형태와 201 계열 테스트 helper 누락을 복구하고, 같은 회귀를 테스트로 막는다.
+- Completed:
+  - `packages/types/src/resource-definitions.ts`의 모든 `createAwsResourceDefinition` 선언에 `terraformPreview: true`, `terraformSync: true`를 명시했다.
+  - `createAwsResourceDefinition` factory 기본값을 `terraformPreview = false`, `terraformSync = false`로 유지해 Terraform 지원 여부가 선언 객체에 드러나게 했다.
+  - `apps/web/features/workspace/workspace-right-panel-layout.test.ts`에 누락된 `countMatches` helper를 1회만 정의해 201 계열 테스트/typecheck 실패를 막았다.
+  - `apps/api/src/services/terraform/resource-definitions-source-shape.test.ts`를 추가해 shared resource definition의 source shape가 다시 암묵 기본값 방식으로 후퇴하지 않도록 검증했다.
+- Verification run:
+  - `pnpm harness:check` - passed before implementation and before final logging.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/resource-definitions-source-shape.test.ts` - passed, 2 tests.
+  - JH targeted API tests with the new source-shape test included - passed, 93 tests.
+  - JH targeted Web tests - passed, 160 tests.
+  - `pnpm --filter @sketchcatch/api typecheck` - passed.
+  - `pnpm --filter @sketchcatch/types typecheck` - passed.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `pnpm build` - passed.
+  - `git diff --check` - passed.
+- Known risks:
+  - 현재 worktree에는 이번 복구 전부터 존재한 workspace/canvas/right-panel 관련 modified 파일이 많다. 이번 세션의 새 구현은 `resource-definitions.ts`, `workspace-right-panel-layout.test.ts`의 helper, 새 `resource-definitions-source-shape.test.ts`에 한정된다.
+  - 실제 브라우저 screenshot QA, Terraform apply/destroy, cloud mutation, Git/CI/CD handoff는 실행하지 않았다.
+
+### 2026-07-07 - Workspace canvas 영역 리소스 folder tab 라벨
+
+- Goal: 영역 리소스의 왼쪽 상단 리소스 이름을 pill 배지 대신 folder tab shape로 표현한다.
+- Completed:
+  - `.areaNodeHeader`를 영역 박스 상단 테두리에 붙는 folder tab 형태로 조정했다.
+  - `::before`/`::after`를 사용해 탭 하단 연결부와 오른쪽 notch를 만들었다.
+  - 본체와 탭이 같은 `--area-border-width`/`--area-border-color`를 공유하게 해 선 굵기와 연결감을 맞췄다.
+  - CSS source 회귀 테스트를 추가해 pill radius 복귀와 탭/본체 border 분리를 막았다.
+- Verification run:
+  - Red before fix: `pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/diagram-editor-layout.test.ts --test-name-pattern "area node header uses a folder tab shape"` - failed for existing pill header CSS.
+  - Red before border alignment fix: same focused test failed for missing shared area border variables.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/diagram-editor-layout.test.ts --test-name-pattern "area node header uses a folder tab shape"` - passed after border alignment fix.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/diagram-editor-layout.test.ts` - passed, 3 tests.
+  - Canvas focused tests - passed, 80 tests.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed before and after generated `next-env.d.ts` cleanup.
+  - `pnpm build` - passed.
+  - `pnpm harness:check` - passed before edits and after build.
+  - `git diff --check` - passed.
+  - Playwright visual QA on local workspace: verified the folder tab and area border share the same visual stroke and connect naturally; screenshots saved under `output/playwright/area-folder-tab-*.png`.
+- Known risks:
+  - Playwright에서 인증/preview API는 화면 검증용으로만 mock했다. 실제 Terraform preview/API 동작은 이번 범위가 아니어서 실행하지 않았다.
+
+### 2026-07-07 - Workspace canvas 휠 버튼 임시 이동 복귀
+
+- Goal: 캔버스에서 마우스 휠 버튼을 누르는 동안만 임시 이동 모드가 되고, 버튼을 떼면 이전 마우스 선택 모드로 돌아가게 한다.
+- Completed:
+  - 임시 pan 복귀 판정을 `canvas-pointer-hit-test` helper로 분리했다.
+  - `mouseup` 외에 `pointerup`/`pointercancel` release도 처리해 휠 버튼 해제 시 toolbar가 pan 모드에 남지 않게 했다.
+  - 해당 동작 회귀 테스트를 추가했다.
+- Verification run:
+  - Red before fix: `pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/canvas-pointer-hit-test.test.ts features/diagram-editor/diagram-editor-layout.test.ts` - failed for missing helper/listeners.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/canvas-pointer-hit-test.test.ts features/diagram-editor/diagram-editor-layout.test.ts` - passed, 8 tests.
+  - Canvas focused tests - passed, 85 tests.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed before and after generated `next-env.d.ts` cleanup.
+  - `pnpm build` - passed.
+  - `pnpm harness:check` - passed before edits and after build.
+  - `git diff --check` - passed.
+- Known risks:
+  - 실제 브라우저 수동 QA는 수행하지 않았다. 이번 범위는 helper/source/unit/typecheck/build로 확인했다.
+
+### 2026-07-07 - Brainboard 우측 패널 Plan/Code 의미 분리
+
+- Goal: Brainboard 관찰 기반 우측 패널 shell/UI를 적용하되, `Plan/play`가 Terraform code 화면으로 이동하던 잘못된 연결을 끊고 내부 Deployment/Terraform 로직은 변경하지 않는다.
+- Completed:
+  - `WorkspaceRightPanel` main row를 Resources icon, Terraform code icon, Issues, Deploy, Plan split button 순서로 재배치했다.
+  - Terraform code icon만 `data-terraform-editor-navigation`과 `requestView("terraform")`을 유지하고, Plan main/action strip은 모두 기존 Deploy view 진입만 수행하게 했다.
+  - Plan chevron UI-only action strip에 `Plan`, `Validate`, `Apply`, `Destroy` 버튼을 추가했지만 실제 plan/apply/destroy API나 DeploymentPanel 내부 실행 함수는 호출하지 않는다.
+  - collapsed 우측 패널의 Code shortcut title을 `Terraform code`로 고쳐 Plan과 Code 의미를 분리했다.
+  - 우측 패널 전용 Brainboard 토큰/치수 override를 추가해 44px topbar, 47px main row, white/light-gray/purple 스타일과 dark Issues wrapper를 적용했다.
+  - `workspace-right-panel-layout.test.ts`에 Plan/Code 라우팅 분리, action strip UI-only, DeploymentPanel shortcut/focus/scroll 미추가 회귀 테스트를 추가했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits.
+  - Red before fix: `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-right-panel-layout.test.ts --test-name-pattern "Brainboard-style|Plan action strip|shortcut"` - failed for missing Terraform code button/action strip and Plan still being Terraform navigation.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-right-panel-layout.test.ts --test-name-pattern "Brainboard-style|Plan action strip|shortcut"` - passed after fix, 54 tests.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-right-panel-layout.test.ts` - passed, 54 tests.
+  - `pnpm --filter @sketchcatch/web test` - passed, 457 tests.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `pnpm build` - passed.
+  - `pnpm harness:check` - passed after build.
+  - Chrome plugin visual QA on local workspace: verified right panel 44px/47px rows, Terraform code button marker, Plan action strip labels/colors, Plan main opening Deploy view, and Code opening Terraform view.
+- Known risks:
+  - Chrome plugin viewport controls did not expose a direct mobile resize path, so mobile was not visually resized in Chrome in this session.
+  - Existing dirty worktree already included unrelated modifications such as `TerraformCodePanel.tsx`; this session intentionally edited only right panel shell/test/CSS files and did not revert unrelated changes.
+  - 실제 Terraform plan/apply/destroy, AWS SDK, cloud mutation, Git/CI/CD handoff는 실행하지 않았다.
+
+### 2026-07-07 - Brainboard 스타일 Workspace 패널 재현
+
+- Goal: Chrome 관찰 기반 Brainboard 스타일을 SketchCatch workspace의 좌측 Resources 패널과 우측 패널에 재현하되, 기존 drag, Terraform, Issues, Deploy 기능 계약은 유지한다.
+- Completed:
+  - `ResourceSettingsPanel`을 `Resources/Templates` 탭, provider/version/view controls, search, separator, accordion 순서로 고정했다.
+  - 좌측 리소스 accordion에 `Modules`, `Design`, `Containers`, `Compute`, `Network`, `Storage`, `Database`, `Security & Identity`, `Tools`, `AI`, `Analytics`, `Application`, `IoT`, `Other`, `Brainboard` 섹션을 포함했다.
+  - 리소스 타일을 `60px x 60px`, `24px` icon, 한 줄 label, `1px` outline, `6px` radius 중심으로 재스타일링하고 hover/focus/disabled/search empty/templates/provider inactive/modules 상태를 보강했다.
+  - workspace 전용 좌측/우측 rail 기본 폭을 각각 `346px`/`440px`로 맞추고 localStorage key를 `brainboardV1`로 분리했다.
+  - `WorkspaceRightPanel`을 상단 utility icon row와 하단 `Issues`/`Deploy`/보라색 `Plan` action row로 재구성했다. `Plan`은 기존 `"terraform"` view로만 연결하고 Terraform 내부 UI는 유지했다.
+  - mobile `max-width: 900px`에서 기존 `rightRail display: none`을 제거하고, 좌측 패널을 접으면 우측 패널을 fixed overlay로 접근할 수 있게 보정했다.
+  - 회귀 테스트를 갱신해 Brainboard 섹션, compact resource tile CSS, search/templates/provider/modules 상태, `Plan -> terraform` mapping, workspace rail 폭을 확인하도록 했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/resource-settings/resource-settings-panel.test.ts` - passed, 7 tests.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-right-panel-layout.test.ts` - passed, 52 tests.
+  - `pnpm --filter @sketchcatch/web test` - passed, 455 tests.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `pnpm build` - passed.
+  - Playwright visual QA on local dev server with mocked auth/API - desktop hover, Plan/Terraform, mobile open, and mobile right-panel screenshots saved under `output/playwright/`.
+- Known risks:
+  - Brainboard 원본 코드를 복사하지 않고 관찰한 구조/치수/상태를 SketchCatch 컴포넌트와 CSS로 재현했다.
+  - 실제 backend auth, AWS connection, deployment mutation, Terraform apply/destroy, Git/CI/CD handoff는 실행하지 않았다.
+  - 현재 worktree에는 이번 작업 전부터 JH 복원/우측 패널 관련 modified 파일이 많이 존재한다. 이번 항목은 resource settings/right panel/theme/test 변경 범위만 설명한다.
+
+### 2026-07-07 - JH 브랜치 누락 전수조사
+
+- Goal: 병합 이력만 보지 않고 JH 브랜치와 merge second parent의 실제 작업 파일을 현재 worktree와 대조해 rollback으로 빠진 부분이 있는지 전수조사한다.
+- Completed:
+  - `git branch -a --list '*jh*'`, JH merge commit second parent, #122 미병합 branch, #201 branch tip을 기준으로 조사 대상을 재확인했다.
+  - #65, #111, #122에서 누락처럼 보이는 파일 후보를 후속 삭제/대체 구현/현재 테스트 증거로 분류했다.
+  - `docs/jh/004_JH브랜치누락전수조사_JH.md`에 전체 JH 작업 목록별 반영 상태, 누락 후보 상세, 실행 검증, 후속 계획을 작성했다.
+- Verification run:
+  - `pnpm harness:check` - passed before docs edit and after docs/progress update.
+  - JH 관련 representative web/API focused tests - passed.
+  - Candidate follow-up checks for parameter input, architecture draft, Terraform Preview/InfrastructureGraph - passed.
+  - `git diff --check` - passed.
+- Known risks:
+  - 이번 조사는 코드 복원이 아니라 전수조사/문서화 작업이다. 확정된 JH 구현 누락은 확인되지 않았다.
+  - `docs/ck/ai/001_AIProvider실행흐름정리.md`에 삭제된 `aiArchitectureScenarioResolution.ts` 링크가 남아 있지만, JH 구현 누락이 아니라 stale reference로 분류했다.
+
+### 2026-07-07 - JH 작업 내용 기준 누락 복원 실행
+
+- Goal: `docs/jh/003_JH작업내용기준복원계획_JH.md`의 #126, #165, #167, #171, #174 항목을 실제 JH 기준 브랜치/커밋 내용과 현재 worktree 코드로 직접 대조하고, rollback으로 빠진 구현을 복원한다.
+- Completed:
+  - 병합 이력만 보지 않고 각 기준 ref를 실제 파일 내용 기준으로 확인했다: #126 `493f704a`, #165 `18c0b963`, #167 `1e7c58b0`, #171 `495421f8`, #174 `eb25c98a`.
+  - #126 Terraform Preview/Sync 안정화 범위에서 저장 실패 설명 UX, auto-applied sync proposal, 빈 Terraform 저장 삭제 의도, `resourceName` 변경/복사 시 자동 생성 `tags.Name` 동기화 정책과 회귀 테스트를 복원했다.
+  - #165 Region/AZ가 `design_region`/`design_az`가 아니라 `aws_region`/`aws_availability_zone` resource area node로 생성되고, drag 기본값과 parameter panel `parameters.values` 계약이 유지되도록 복원했다.
+  - #167 ASG visual area node 동작을 복원했다. ASG area 등록, `200x130` 기본/resize bounds, child `parentAreaNodeId`, 이동 동기화, edge z-index, 회귀 테스트를 확인했다.
+  - #171 Terraform Preview stale/fingerprint 방어는 기준 코드와 현재 코드를 직접 대조해 누락 없음으로 확인했다. legacy migration/helper, DB draft 삭제, IndexedDB clear는 이번 작업에 추가하지 않았다.
+  - #174 shared `ResourceDefinition` 기반 Preview/Sync, Region/AZ 비-HCL area resource, Subnet/EBS AZ 상속 및 sync proposal 연결, provider-only no-op, proposal `nodeId`/`metadata`/`position`/`parameters` 보존, leave guard, Region/AZ label/header overlap 보정, flow preview read-only/handle mapping/edge label style 누락을 복원했다.
+  - 각 Task마다 하위 6개 agent 검수를 수행했다. Task3/Task4에서 나온 일부 FAIL은 후속 JH 변경 또는 기준 커밋 밖의 더 엄격한 해석으로 판정했고, Task5 최종 6개 검수는 모두 PASS로 닫았다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits and after build.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/diagram-utils.test.ts features/diagram-editor/area-nodes.test.ts features/diagram-editor/node-resize-bounds.test.ts features/diagram-editor/flow-mappers.test.ts features/workspace/workspace-right-panel-layout.test.ts` - passed, 84 tests.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/resource-settings/catalog.test.ts features/diagram-editor/diagram-utils.test.ts features/parameter-input/region-node-metadata.test.ts features/parameter-input/aws-availability-zone-options.test.ts features/workspace/resource-list-summary.test.ts features/workspace/workspace-ai-diagram-adapter.test.ts` - passed, 52 tests.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/area-nodes.test.ts features/diagram-editor/node-resize-bounds.test.ts features/diagram-editor/flow-mappers.test.ts features/diagram-editor/area-node-movement.test.ts features/diagram-editor/drag-transaction.test.ts features/diagram-editor/diagram-utils.test.ts features/resource-settings/catalog.test.ts` - passed, 73 tests.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-right-panel-layout.test.ts --test-name-pattern "terraform preview refreshes|terraform preview failures|terraform status counts"` - passed, 51 tests.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/resource-settings/catalog.test.ts features/diagram-editor/area-nodes.test.ts features/diagram-editor/flow-mappers.test.ts features/diagram-editor/node-resize-bounds.test.ts features/diagram-editor/node-style.test.ts features/diagram-editor/selection-utils.test.ts features/workspace/terraform-sync-proposals.test.ts` - passed, 52 tests after flow mapper restoration.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/routes/terraform.test.ts src/services/terraform/infrastructure-graph.test.ts src/services/terraform/terraform-preview.test.ts src/services/terraform/terraform-to-diagram.test.ts` - passed, 81 tests.
+  - `pnpm --filter @sketchcatch/web typecheck` - passed.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `pnpm build` - passed.
+  - `git diff --check` - passed.
+- Known risks:
+  - 현재 worktree에는 이번 작업 전부터 우측 패널/전역 CSS 등 다른 modified 파일이 함께 있었다. 이번 복원에서는 해당 변경을 되돌리지 않고 JH 기준 누락 범위만 추가 복원했다.
+  - 실제 브라우저 스크린샷 QA는 수행하지 않았다. 이번 범위는 source/unit/typecheck/build와 6개 하위 agent 검수로 확인했다.
+  - 실제 Terraform apply/destroy, cloud mutation, Git/CI/CD handoff는 실행하지 않았다.
+
+### 2026-07-07 - JH 작업 내용 기준 복원 계획 문서화
+
+- Goal: 최근 JH PR/브랜치에 실제 기록된 작업 내용을 기준으로 누락 복원 계획을 `docs/jh` Markdown 파일로 저장한다.
+- Completed:
+  - `docs/jh/003_JH작업내용기준복원계획_JH.md`에 #126, #165, #167, #171, #174 기준 티켓 단위 복원 계획을 작성했다.
+  - 계획 내용은 이전 조사에서 확인한 JH PR/브랜치 기록 범위로만 제한했다.
+- Verification run:
+  - `pnpm harness:check` - passed before docs edit and after progress update.
+  - `git diff --check` - passed after docs edit and progress update.
+- Known risks:
+  - `docs/jh/`는 `.gitignore`에 포함되어 있어 새 문서는 로컬에 존재하지만 일반 `git status`에는 표시되지 않는다.
+
+### 2026-07-07 - Workspace 우측 패널 리소스 리스트 헤더 정리
+
+- Goal: Workspace 우측 패널 Resource List 위의 의미 없는 작은 큐브 toolbar를 제거하고, 리소스 상세보기의 뒤로가기 버튼을 상세 콘텐츠 내부 상단으로 옮긴다.
+- Completed:
+  - `ResourceWorkspacePanel`의 상단 `resourceSectionToolbar`/리스트 큐브 버튼을 제거했다.
+  - 리소스 상세보기 분기에 `resourceSettingsPanel`과 내부 `resourceSettingsHeader`를 추가하고, `Back to resource list` 버튼을 `ParameterInputPanel` 앞에 배치했다.
+  - 리스트 화면은 우측 패널 탭 바로 아래에서 시작하되 `24px` 상단 padding으로 여백을 확보했다.
+  - 제거된 toolbar state helper와 관련 테스트를 정리하고, 우측 패널 레이아웃 회귀 테스트를 추가했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits and after build.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-right-panel-layout.test.ts --test-name-pattern "resource workspace omits|resource detail back"` - failed before fix, as expected.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-right-panel-layout.test.ts features/workspace/resource-workspace-view.test.ts` - passed, 54 tests.
 ### 2026-07-07 - PR #213/#215 리뷰 코멘트 반영
 
 - Goal: 머지된 Git/CI/CD smoke readiness와 GitHub OAuth writer PR에 달린 Gemini 리뷰 코멘트를 확인하고 타당한 보안/안정성 개선을 후속 PR로 반영한다.
@@ -401,6 +709,25 @@
   - `pnpm typecheck` - passed.
   - `pnpm build` - passed.
 - Known risks:
+  - 별도 브라우저 스크린샷 검증은 하지 않았다. 이번 변경은 우측 패널 소스 레이아웃 테스트, lint/typecheck/build로 검증했다.
+
+### 2026-07-07 - Workspace canvas Region/AZ 영역 리소스 판정
+
+- Goal: Workspace canvas에서 `aws_region`, `aws_availability_zone` resource node가 일반 아이콘 리소스가 아니라 영역 리소스로 동작하게 한다.
+- Completed:
+  - `isAreaNode`/`isResourceAreaNode`의 resource area type에 `aws_region`, `aws_availability_zone`를 추가했다.
+  - Region/AZ resize bounds를 일반 resource icon 제한 대신 영역 노드처럼 max 제한 없이 catalog 기본 크기를 최소 크기로 쓰도록 변경했다.
+  - canvas 패널 관련 회귀 테스트를 추가해 Region/AZ resource node가 area 판정과 resize bounds를 통과하는지 검증했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits and after build.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/area-nodes.test.ts` - failed before fix, passed after fix.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/node-resize-bounds.test.ts` - failed before fix, passed after fix.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/area-nodes.test.ts features/diagram-editor/node-resize-bounds.test.ts features/diagram-editor/flow-mappers.test.ts features/diagram-editor/selection-utils.test.ts features/diagram-editor/node-style.test.ts features/diagram-editor/reference-drop-targets.test.ts features/diagram-editor/area-node-movement.test.ts features/diagram-editor/diagram-utils.test.ts features/workspace/resource-list-summary.test.ts` - passed, 77 tests.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `pnpm build` - passed, 5 successful tasks.
+- Known risks:
+  - 별도 브라우저 수동 확인은 하지 않았다. 이번 변경은 canvas 판정 helper와 resize bounds 중심이라 source/unit/build 검증으로 확인했다.
   - GitHub repository settings apply는 GitHub App 설치 권한으로 검증했고, 실제 운영 repo 권한 부족 시 OAuth/권한 보강 CTA가 필요하다.
   - AWS IAM trust policy apply executor는 fake gateway/unit 경로로 검증했고, 실제 AWS 계정 live 실행은 아직 하지 않았다.
   - 실제 PR merge, GitHub Environment approval, Terraform apply, S3 release, ASG Instance Refresh, destroy live smoke는 비용/자격증명/cleanup 승인 후 실행해야 한다.
@@ -3997,3 +4324,24 @@
   - `corepack pnpm build` - passed with elevated permissions
 - Known risks:
   - GitHub review threads were read but not resolved/replied to because the user asked for local fixes, commit, and push only.
+
+# 2026-07-07 - AWS Quick Create RoleName 충돌 수정
+
+- Goal: AWS 계정 연결 Quick Create Stack이 기존 `SketchCatchTerraformExecutionRole` IAM Role 때문에 `AlreadyExists`로 실패하는 문제를 해결한다.
+- Completed:
+  - 새 AWS 연결의 CloudFormation Role 이름을 `SketchCatchTerraformExecutionRole-<connection-prefix>`로 생성하도록 변경했다.
+  - `verify-created-role`이 account ID와 connection ID로 connection-scoped Role ARN을 계산해 검증하도록 변경했다.
+  - 기존 `SketchCatchTerraformExecutionRole` Role ARN은 하위 호환 검증 대상으로 유지했다.
+  - SketchCatch runtime EC2 policy에 고정 Role과 connection-scoped Role wildcard 양쪽 `sts:AssumeRole` 권한을 문서/정책에 반영했다.
+  - API route, service, web API 계약 테스트를 새 Role 이름 계약에 맞게 갱신했다.
+- Verification run:
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/aws-connections/aws-connection-service.test.ts` - passed, 14 tests.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/routes/aws-connections.test.ts` - passed, 11 tests.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/api.test.ts` - passed, 24 tests.
+  - `pnpm harness:check` - passed.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `pnpm build` - passed.
+  - `git diff --check` - passed with line-ending warnings only.
+- Known risks:
+  - 이미 사용자 AWS 계정에 남아 있는 실패 Stack이나 기존 `SketchCatchTerraformExecutionRole` Role은 자동 삭제하지 않는다. 배포 후 새 Quick Create 링크로 다시 시작하면 새 Role 이름을 쓰므로 기존 Role과 충돌하지 않는다.

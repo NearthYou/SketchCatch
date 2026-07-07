@@ -2006,30 +2006,38 @@ h1 {
 }
 
 .resourceGrid {
-  display: grid;
-  gap: 7px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .resourceTile {
   align-items: center;
   background: #ffffff;
-  border: 1px solid #e0e7f2;
-  border-radius: 8px;
+  border: 0;
+  border-radius: 6px;
   color: #252c42;
-  display: grid;
-  gap: 8px;
-  grid-template-columns: 36px 1fr;
-  min-height: 52px;
-  padding: 8px;
+  cursor: grab;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  height: 60px;
+  justify-content: center;
+  min-height: 60px;
+  outline: 1px solid #dfe7f1;
+  padding: 6px 4px 5px;
+  text-align: center;
   transition:
     border-color 120ms ease,
     box-shadow 120ms ease,
     transform 120ms ease;
 }
 
-.resourceTile:not(.resourceTileDisabled):hover {
-  border-color: #8b71ff;
-  box-shadow: 0 10px 22px rgba(43, 51, 84, 0.08);
+.resourceTile:not(.resourceTileDisabled):hover,
+.resourceTile:not(.resourceTileDisabled):focus-visible {
+  background: #f6f3ff;
+  box-shadow: none;
+  outline: 1px solid #b8a7ff;
   transform: translateY(-1px);
 }
 
@@ -2040,13 +2048,13 @@ h1 {
 .resourceIcon,
 .resourceIconFallback {
   align-items: center;
-  border-radius: 7px;
+  border-radius: 5px;
   display: inline-flex;
   font-size: 0.68rem;
   font-weight: 800;
-  height: 36px;
+  height: 24px;
   justify-content: center;
-  width: 36px;
+  width: 24px;
 }
 
 .resourceIcon {
@@ -2090,14 +2098,14 @@ nextjs-portal {
   display: flex;
   gap: 8px;
   justify-content: space-between;
-  min-height: 54px;
-  padding: 10px 12px;
+  min-height: 43px;
+  padding: 7px 10px 6px 12px;
 }
 
 .resourceTabGroup {
   align-items: center;
   display: inline-flex;
-  gap: 8px;
+  gap: 2px;
 }
 
 .resourceTab,
@@ -2105,12 +2113,12 @@ nextjs-portal {
   align-items: center;
   background: transparent;
   border: 0;
-  border-radius: 6px;
+  border-radius: 4px;
   color: #151b29;
   display: inline-flex;
   font-size: 0.82rem;
   font-weight: 500;
-  height: 30px;
+  height: 26px;
   justify-content: center;
   letter-spacing: 0;
   padding: 0 10px;
@@ -2136,7 +2144,7 @@ nextjs-portal {
   align-items: center;
   display: flex;
   justify-content: space-between;
-  padding: 12px 12px 10px;
+  padding: 8px 10px 8px;
 }
 
 .providerControls {
@@ -2148,13 +2156,13 @@ nextjs-portal {
   align-items: center;
   background: #ffffff;
   border: 1px solid #d8e1ee;
-  border-radius: 7px;
+  border-radius: 5px;
   color: #151b29;
   display: inline-flex;
   gap: 6px;
-  height: 38px;
+  height: 32px;
   justify-content: center;
-  min-width: 56px;
+  min-width: 52px;
   padding: 0 8px;
 }
 
@@ -2165,7 +2173,7 @@ nextjs-portal {
 
 .providerVersionSelect {
   font-size: 0.78rem;
-  min-width: 78px;
+  min-width: 72px;
 }
 
 .awsLogo {
@@ -2202,13 +2210,13 @@ nextjs-portal {
   align-items: center;
   background: transparent;
   border: 0;
-  border-radius: 8px;
+  border-radius: 5px;
   color: #111827;
   display: inline-flex;
-  height: 38px;
+  height: 32px;
   justify-content: center;
   padding: 0;
-  width: 38px;
+  width: 32px;
 }
 
 .resourceViewToggleActive {
@@ -2219,11 +2227,11 @@ nextjs-portal {
 .resourcePanel .searchBox {
   background: #ffffff;
   border: 1px solid #d8e1ee;
-  border-radius: 7px;
+  border-radius: 5px;
   color: #66758d;
   gap: 8px;
-  height: 42px;
-  margin: 0 12px 10px;
+  height: 32px;
+  margin: 0 10px 8px;
   padding: 0 10px;
 }
 
@@ -2231,7 +2239,7 @@ nextjs-portal {
   color: #151b29;
   font-size: 0.88rem;
   font-weight: 400;
-  min-height: 30px;
+  min-height: 24px;
 }
 
 .resourcePanel .searchBox input::placeholder {
@@ -2239,13 +2247,26 @@ nextjs-portal {
   opacity: 1;
 }
 
+.resourcePanelSeparator {
+  background: #e5ebf4;
+  flex: 0 0 auto;
+  height: 1px;
+  margin: 0;
+}
+
 .resourceAreas {
-  border-top: 1px solid #dbe3ef;
+  border-top: 0;
   display: block;
   flex: 1;
   min-height: 0;
   overflow: auto;
-  scrollbar-width: thin;
+  scrollbar-width: none;
+}
+
+.resourceCatalogScroll::-webkit-scrollbar,
+.resourceAreas::-webkit-scrollbar,
+.resourceSearchResults::-webkit-scrollbar {
+  display: none;
 }
 
 .resourceArea {
@@ -2262,10 +2283,10 @@ nextjs-portal {
   border: 0;
   color: #151b29;
   display: grid;
-  gap: 10px;
-  grid-template-columns: 28px minmax(0, 1fr) 20px;
-  min-height: 48px;
-  padding: 0 12px;
+  gap: 9px;
+  grid-template-columns: 24px minmax(0, 1fr) 18px;
+  min-height: 36px;
+  padding: 0 10px 0 12px;
   text-align: left;
   width: 100%;
 }
@@ -2281,19 +2302,28 @@ nextjs-portal {
   align-items: center;
   color: #0b0d12;
   display: inline-flex;
-  height: 28px;
+  height: 24px;
   justify-content: center;
-  width: 28px;
+  width: 24px;
 }
 
 .resourceAreaLabel {
   color: #1d2433;
-  font-size: 0.92rem;
+  font-size: 1rem;
   font-weight: 580;
-  line-height: 1.2;
+  line-height: 3.2;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.resourceAreaChevron {
+  color: #7b8799;
+  transition: transform 120ms ease;
+}
+
+.resourceAreaChevronOpen {
+  transform: rotate(180deg);
 }
 
 .resourceProviderRoadmap,
@@ -2305,7 +2335,7 @@ nextjs-portal {
   gap: 10px;
   min-height: 0;
   overflow: auto;
-  padding: 12px;
+  padding: 10px;
 }
 
 .resourceProviderRoadmap {
@@ -3270,6 +3300,39 @@ nextjs-portal {
   margin: 0;
 }
 
+.resourceModulesEmptyState {
+  align-items: center;
+  background: #ffffff;
+  color: #66748a;
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+  min-height: 106px;
+  padding: 16px 10px;
+  text-align: center;
+}
+
+.resourceModulesEmptyState strong {
+  color: #172033;
+  font-size: 0.82rem;
+  font-weight: 620;
+  line-height: 1.25;
+}
+
+.resourceModulesDescription {
+  color: #7b8799;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  max-width: 220px;
+}
+
+.resourceModulesActions {
+  display: inline-flex;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 4px;
+}
+
 .modulesActions {
   display: flex;
   gap: 10px;
@@ -3304,23 +3367,23 @@ nextjs-portal {
 
 .resourceSectionBody {
   background: #ffffff;
-  padding: 12px 12px 16px;
+  padding: 10px 8px 12px;
 }
 
 .resourcePanel .resourceGrid {
-  display: grid;
-  gap: 9px;
-  grid-template-columns: repeat(auto-fill, 88px);
-  justify-content: start;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-start;
 }
 
 .resourceSearchResults {
-  border-top: 1px solid #dbe3ef;
+  border-top: 0;
   flex: 1;
   min-height: 0;
   overflow: auto;
-  padding: 12px;
-  scrollbar-width: thin;
+  padding: 10px;
+  scrollbar-width: none;
 }
 
 .resourceSearchResults .sectionCaption {
@@ -3335,16 +3398,18 @@ nextjs-portal {
 .resourceTile {
   align-items: center;
   background: #ffffff;
-  border: 1px solid #d8e1ee;
-  border-radius: 7px;
+  border: 0;
+  border-radius: 6px;
   color: #1d2433;
+  cursor: grab;
   display: flex;
   flex-direction: column;
-  gap: 7px;
-  height: 86px;
+  gap: 4px;
+  height: 60px;
   justify-content: center;
-  min-height: 86px;
-  padding: 8px 6px;
+  min-height: 60px;
+  outline: 1px solid #dfe7f1;
+  padding: 6px 4px 5px;
   text-align: center;
   transition:
     border-color 120ms ease,
@@ -3352,35 +3417,38 @@ nextjs-portal {
     transform 120ms ease;
 }
 
-.resourceTile:not(.resourceTileDisabled):hover {
-  border-color: color-mix(in srgb, var(--bp-blue) 44%, var(--bp-line));
-  box-shadow: 0 10px 22px color-mix(in srgb, var(--bp-blue) 10%, transparent);
+.resourceTile:not(.resourceTileDisabled):hover,
+.resourceTile:not(.resourceTileDisabled):focus-visible {
+  background: #f6f3ff;
+  box-shadow: none;
+  outline: 1px solid #b8a7ff;
   transform: translateY(-1px);
 }
 
+.resourceTileLabel,
 .resourceTile > span:last-child {
   color: #2b3242;
   display: -webkit-box;
-  font-size: 0.68rem;
+  font-size: 0.58rem;
   font-weight: 520;
-  line-height: 1.15;
+  line-height: 1.05;
   max-width: 100%;
   overflow: hidden;
   overflow-wrap: anywhere;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 1;
 }
 
 .resourceIcon,
 .resourceIconFallback {
   align-items: center;
-  border-radius: 7px;
+  border-radius: 5px;
   display: inline-flex;
   font-size: 0.58rem;
   font-weight: 800;
-  height: 34px;
+  height: 24px;
   justify-content: center;
-  width: 34px;
+  width: 24px;
 }
 
 .resourceIcon {
@@ -3393,31 +3461,6 @@ nextjs-portal {
   background: var(--bp-blue-tint);
   border: 1px solid color-mix(in srgb, var(--bp-blue) 32%, var(--bp-line));
   color: var(--bp-blue);
-}
-
-.brainboardTile {
-  align-items: center;
-  background: #ffffff;
-  border: 1px solid #d8e1ee;
-  border-radius: 7px;
-  color: #1d2433;
-  display: inline-flex;
-  flex-direction: column;
-  gap: 8px;
-  height: 86px;
-  justify-content: center;
-  padding: 8px;
-  width: 86px;
-}
-
-.brainboardTile img {
-  height: 34px;
-  width: 34px;
-}
-
-.brainboardTile span {
-  font-size: 1.03rem;
-  line-height: 1.15;
 }
 
 .emptyPanelState {
@@ -7774,22 +7817,6 @@ nextjs-portal {
   line-height: 1.16;
 }
 
-.diagramEditor .brainboardTile {
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--bp-r);
-  box-shadow: none;
-  color: var(--bp-ink);
-  min-height: 104px;
-}
-
-.diagramEditor .brainboardTile:hover,
-.diagramEditor .brainboardTile:focus-visible {
-  background: color-mix(in srgb, var(--bp-blue-tint) 72%, transparent);
-  border-color: color-mix(in srgb, var(--bp-blue) 34%, transparent);
-  outline: none;
-}
-
 .resourceSectionBody,
 .resourceSearchResults {
   background:
@@ -7854,10 +7881,168 @@ nextjs-portal {
   max-width: 96px;
 }
 
-.brainboardTile {
-  background: transparent !important;
-  border-color: transparent !important;
+/* Workspace panel final overrides */
+.diagramEditor .resourcePanel {
+  background: #ffffff;
+  border-color: #dfe6f1;
+  color: #172033;
+}
+
+.diagramEditor .resourceTabs,
+.diagramEditor .resourceControlBar {
+  background: #ffffff;
+  border-color: #e5ebf4;
+}
+
+.diagramEditor .resourceTabGroup,
+.diagramEditor .providerControls,
+.diagramEditor .resourceViewToggles {
+  background: #f7f8fc;
+  border: 1px solid #e2e8f2;
+  border-radius: 6px;
+}
+
+.diagramEditor .resourceTab,
+.diagramEditor .resourceTabActive,
+.diagramEditor .providerSelect,
+.diagramEditor .resourcePanelCollapse,
+.diagramEditor .resourceViewToggle,
+.diagramEditor .resourceViewToggleActive {
+  color: #3f4d63;
+}
+
+.diagramEditor .resourceTabActive,
+.diagramEditor .resourceViewToggleActive,
+.diagramEditor .providerSelectActive {
+  background: #f0edff;
+  border-color: #d8ceff;
+  color: #5f3de8;
+}
+
+.diagramEditor .resourcePanel .searchBox {
+  background: #ffffff;
+  border-color: #dfe6f1;
+  border-radius: 5px;
+  color: #66748a;
+  height: 32px;
+  margin: 0 10px 8px;
+}
+
+.diagramEditor .resourcePanel .searchBox input,
+.diagramEditor .resourcePanel .searchBox input::placeholder {
+  background: transparent;
+  color: #66748a;
+}
+
+.diagramEditor .resourcePanelSeparator {
+  background: #e5ebf4;
+}
+
+.diagramEditor .resourceAreas,
+.diagramEditor .resourceArea,
+.diagramEditor .resourceArea:last-child {
+  border-color: #e5ebf4;
+}
+
+.diagramEditor .resourceAreaHeader {
+  background: #ffffff;
+  color: #172033;
+  min-height: 36px;
+}
+
+.diagramEditor .resourceAreaHeader:hover,
+.diagramEditor .resourceAreaHeader:focus-visible {
+  background: #f8f6ff;
+  color: #5f3de8;
+}
+
+.diagramEditor .resourceAreaIcon,
+.diagramEditor .awsLogo {
+  color: #5f3de8;
+}
+
+.diagramEditor .resourceAreaLabel {
+  color: #172033;
+  font-size: 1rem;
+  line-height: 3.2;
+}
+
+.diagramEditor .resourceProviderRoadmap,
+.diagramEditor .templateCatalogPanel,
+.diagramEditor .moduleCatalogPanel,
+.diagramEditor .resourceSectionBody,
+.diagramEditor .resourceModulesEmptyState,
+.diagramEditor .resourceSearchResults,
+.resourceSectionBody,
+.resourceSearchResults {
+  background: #ffffff;
+}
+
+.diagramEditor .resourcePanel .resourceGrid,
+.resourcePanel .resourceGrid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  grid-template-columns: none;
+  justify-content: flex-start;
+}
+
+.diagramEditor .resourceTile,
+.resourcePanel .resourceTile {
+  background: #ffffff !important;
+  border: 0 !important;
+  border-radius: 6px;
   box-shadow: none !important;
+  color: #172033;
+  gap: 4px;
+  height: 60px !important;
+  justify-content: center;
+  min-height: 60px !important;
+  outline: 1px solid #dfe7f1;
+  padding: 6px 4px 5px;
+  width: 60px;
+}
+
+.diagramEditor .resourceTile:not(.resourceTileDisabled):hover,
+.diagramEditor .resourceTile:not(.resourceTileDisabled):focus-visible,
+.resourcePanel .resourceTile:not(.resourceTileDisabled):hover,
+.resourcePanel .resourceTile:not(.resourceTileDisabled):focus-visible {
+  background: #f6f3ff !important;
+  outline: 1px solid #b8a7ff;
+  transform: translateY(-1px);
+}
+
+.diagramEditor .resourceIcon,
+.diagramEditor .resourceIconFallback,
+.resourcePanel .resourceIcon,
+.resourcePanel .resourceIconFallback {
+  border-radius: 5px;
+  height: 24px;
+  width: 24px;
+}
+
+.diagramEditor .resourceIconFallback,
+.resourcePanel .resourceIconFallback {
+  background: #f0edff;
+  border: 1px solid #d8ceff;
+  color: #5f3de8;
+  font-size: 0.52rem;
+}
+
+.diagramEditor .resourceTileLabel,
+.diagramEditor .resourceTile > span:last-child,
+.resourcePanel .resourceTileLabel,
+.resourcePanel .resourceTile > span:last-child {
+  color: #2b3242;
+  display: -webkit-box;
+  font-size: 0.58rem;
+  font-weight: 520;
+  line-height: 1.05;
+  max-width: 100%;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
 }
 
 .dashboardSidebar {
