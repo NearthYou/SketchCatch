@@ -310,7 +310,7 @@ Current evidence:
 - Issue: #210
 - Branch: `feature/sw/210-cicd-live-smoke-docs`
 - Blocked by: #207, #209
-- Status: smoke_runner_preflight_added_live_execution_pending
+- Status: blocked_on_missing_live_handoff_and_access_token
 
 Current evidence:
 
@@ -318,6 +318,7 @@ Current evidence:
 - smoke runner는 `-PreflightOnly`로 API health, access token, handoff id, mutation approval gate를 cloud mutation 없이 확인한다.
 - 실제 repo settings apply와 AWS role diff apply는 `-ConfirmLiveMutations`가 있어야 실행된다.
 - smoke runner는 `-RequirePipelineSuccess`, `-RequireDestroySuccess`, `-TimeoutMinutes`, `-PollSeconds`로 live run 종료 조건을 명시할 수 있다.
+- `docs/sw/git-cicd-live-smoke-preflight-current.json`은 운영 API health 200을 증명하지만, 현재 로컬 환경에 `SKETCHCATCH_ACCESS_TOKEN`과 `SKETCHCATCH_HANDOFF_ID`가 없어 `blocked` 상태다.
 - 실제 PR merge, Environment approval, Terraform apply, app release, ASG refresh, destroy live smoke는 아직 실행 증거가 없다.
 
 목표:
@@ -360,6 +361,13 @@ Current evidence:
 - 실제 GitHub repository settings apply와 AWS role diff apply는 `-ConfirmLiveMutations` 없이는 실행되지 않는다.
 - access token, handoff id, API health, mutation approval gate가 부족하면 JSON report에 `blocked`로 남긴다.
 - 잘못된 token이나 pipeline 조회 실패도 JSON report의 failed step으로 남긴다.
+
+2026-07-07 최신 preflight:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\smoke\git-cicd-auto-deploy.ps1 -PreflightOnly -SkipRepositorySettingsApply -SkipAwsRoleDiffApply -FailOnBlocked -ReportPath docs\sw\git-cicd-live-smoke-preflight-current.json`를 실행했다.
+- 결과는 `blocked`이며, `api_health`는 HTTP 200으로 통과했다.
+- blocker는 `access_token`과 `handoff_id` 누락이다.
+- 이 단계는 cloud mutation 없이 종료됐으며, live 완료 증거로 바꾸려면 Deployment Panel에서 handoff를 생성하고 사용자 세션 token과 handoff id를 로컬 환경에 주입한 뒤 `-ConfirmLiveMutations -RequirePipelineSuccess -RequireDestroySuccess`로 다시 실행해야 한다.
 
 ## 이슈와 브랜치 목록
 
