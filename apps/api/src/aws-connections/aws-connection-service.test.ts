@@ -286,6 +286,16 @@ test("createAwsConnection creates a pending connection with server-generated ext
         Effect: "Allow",
         Action: "s3:*",
         Resource: "*"
+      },
+      {
+        Effect: "Allow",
+        Action: [
+          "ce:GetCostAndUsage",
+          "ce:GetDimensionValues",
+          "cloudwatch:GetMetricData",
+          "cloudwatch:GetMetricStatistics"
+        ],
+        Resource: "*"
       }
     ]
   });

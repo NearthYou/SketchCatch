@@ -1,6 +1,34 @@
 ﻿# 에이전트 진행 로그
 # 에이전트 진행 로그
 
+### 2026-07-07 - 비용 관리 실제 사용량 분석 탭 구현
+
+- Goal: `/costs`를 예상 비용 계산과 실제 사용량 분석 탭으로 나누고, AWS Cost Explorer/CloudWatch 기반 실제 비용 조회, 낭비 리소스 탐지, 절감 추천을 추가한다.
+- Completed:
+  - `packages/types`에 비용 사용량 분석 DTO와 절감 추천/낭비 리소스/그래프 metric 계약을 추가했다.
+  - `GET /api/costs/usage?range=...&awsConnectionId=...`를 추가하고 verified AWS connection이 있으면 Cost Explorer/CloudWatch provider를, 연결/권한/조회 실패 시 deterministic sample provider를 조용히 사용하도록 했다.
+  - Cost Explorer `UnblendedCost` 기준 일별/서비스별 비용, `SketchCatchProjectId` 태그 우선 프로젝트 비용, 최신 성공 deployment/deployed resource 기반 근사 배분을 구현했다.
+  - CloudWatch metric 기반 EC2/RDS/ALB/NAT Gateway 낭비 탐지와 절감 추천 생성을 추가했다.
+  - AWS connection CloudFormation 정책에 `ce:GetCostAndUsage`, `ce:GetDimensionValues`, `cloudwatch:GetMetricData`, `cloudwatch:GetMetricStatistics` read-only 권한을 추가했다.
+  - `/costs` UI에 `예상 비용 계산`/`사용량 분석` 탭, 실제 비용 KPI, 월말 예상, SVG 라인 그래프, 서비스별 막대 그래프, 프로젝트별 비용 표, 낭비 리소스/추천 목록을 추가했다.
+  - `docs/data-models.md`와 `docs/deployment.md`에 새 DTO, 데이터 출처, 태그 우선/근사 배분 정책, 권한 변경을 기록했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits.
+  - `pnpm --filter @sketchcatch/api typecheck` - passed.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/routes/costs.test.ts src/services/cost-usage-analysis.test.ts src/aws-connections/aws-connection-service.test.ts` - passed.
+  - `pnpm --filter @sketchcatch/web typecheck` - passed.
+  - `pnpm --filter @sketchcatch/web test` - passed, 453 tests.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `pnpm --filter @sketchcatch/api test` - passed, 695 tests.
+  - `pnpm harness:check` - passed after edits.
+  - `pnpm build` - passed.
+  - `git diff --check` - passed with line-ending warnings only.
+- Known risks:
+  - 실제 AWS Cost Explorer/CloudWatch 호출은 로컬 자격증명 계정으로 live 검증하지 않았고, provider double과 sample fallback 경로로 검증했다.
+  - 프로젝트별 실제 비용은 `SketchCatchProjectId` Cost Explorer tag가 없으면 배포 리소스 기반 근사 배분이다.
+  - 새 IAM 권한은 read-only 조회 권한이며, 비용 최적화 추천이 자동으로 리소스를 수정하지는 않는다.
+
 ### 2026-07-07 - PR #197 Gemini 리뷰 코멘트 반영
 
 - Goal: PR #197에 달린 Gemini Code Assist 리뷰 코멘트를 확인하고 타당한 개선을 반영한다.

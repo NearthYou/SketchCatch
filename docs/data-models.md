@@ -1305,6 +1305,99 @@ type CostProjectEstimateListResponse = {
 };
 ```
 
+비용관리 페이지의 실제 사용량 분석 탭은 `GET /api/costs/usage?range=30d&awsConnectionId=...` 응답을 사용한다. `awsConnectionId`가 있으면 해당 사용자의 `verified` AWS 연결만 사용하고, 없으면 최신 `verified` 연결을 사용한다. 연결이 없거나 Cost Explorer/CloudWatch 조회가 실패하면 API는 오류를 화면에 노출하지 않고 deterministic sample 응답으로 같은 DTO를 반환한다.
+
+실제 비용 데이터 출처는 AWS Cost Explorer와 CloudWatch다. Cost Explorer는 `UnblendedCost` 기준으로 일별 비용, 서비스별 비용, `SketchCatchProjectId` tag 기반 프로젝트별 비용을 조회한다. 프로젝트 tag 비용이 있으면 이 값을 우선한다. tag 비용이 없으면 최신 성공 `deployments`와 `deployed_resources`를 기준으로 프로젝트별 비용을 근사 배분한다. 이 근사값은 청구 원장 대체물이 아니라 현재 배포 리소스 비중을 보여주는 v1 fallback이다.
+
+CloudWatch 기반 낭비 탐지는 v1에서 EC2, RDS, ALB, NAT Gateway를 우선 지원한다. 기준은 EC2/RDS 평균 CPU 5% 미만, RDS 평균 connection 1 미만, ALB 요청량 매우 낮음, NAT Gateway 처리량 낮음이다. 이 결과는 비용 절감 추천으로 표시되지만, 리소스를 자동 중지하거나 삭제하지 않는다.
+
+```ts
+type CostUsageAnalysisRange = "7d" | "30d" | "month_to_date";
+
+type CostUsageDataSource = "aws_cost_explorer" | "sample";
+
+type CostProjectUsageSource =
+  | "cost_explorer_tag"
+  | "deployed_resource_estimate"
+  | "sample";
+
+type CostUsageTrendPoint = {
+  date: string;
+  amount: number;
+};
+
+type CostServiceUsage = {
+  service: string;
+  amount: number;
+  percentage: number;
+};
+
+type CostProjectUsage = {
+  projectId: string | null;
+  projectName: string;
+  amount: number;
+  percentage: number;
+  source: CostProjectUsageSource;
+  resourceCount: number;
+};
+
+type CostWasteResourceInsight = {
+  id: string;
+  resourceId: string | null;
+  resourceName: string;
+  resourceType: string;
+  service: string;
+  projectId?: string;
+  projectName?: string;
+  metricName: string;
+  averageValue: number;
+  unit: string;
+  finding: string;
+  estimatedMonthlyWaste: MoneyEstimate;
+};
+
+type CostOptimizationRecommendation = {
+  id: string;
+  targetType: "resource" | "project" | "service";
+  severity: RiskLevel;
+  title: string;
+  estimatedMonthlySavings: MoneyEstimate;
+  reason: string;
+  actionLabel: string;
+  resourceId?: string;
+  projectId?: string;
+  service?: string;
+};
+
+type CostMetricSeries = {
+  id: string;
+  label: string;
+  unit: string;
+  points: {
+    timestamp: IsoDateTimeString;
+    value: number;
+  }[];
+};
+
+type CostUsageAnalysisResponse = {
+  range: CostUsageAnalysisRange;
+  generatedAt: IsoDateTimeString;
+  startDate: string;
+  endDate: string;
+  currency: "USD";
+  dataSource: CostUsageDataSource;
+  fallbackUsed: boolean;
+  totalCost: MoneyEstimate;
+  forecastMonthEndCost: MoneyEstimate;
+  dailyTrend: CostUsageTrendPoint[];
+  serviceCosts: CostServiceUsage[];
+  projectCosts: CostProjectUsage[];
+  wasteResources: CostWasteResourceInsight[];
+  recommendations: CostOptimizationRecommendation[];
+  metricSeries: CostMetricSeries[];
+};
+```
+
 Voice Requirement Input은 Amazon Transcribe 작업 결과가 나온 뒤에도 곧바로 `RequirementPrompt`가 되지 않는다. 전사 결과는 `TranscribeConfirmation`으로 내려가고, 사용자가 확인/수정/확정한 뒤에만 `RequirementPrompt`가 생성된다.
 
 ```ts

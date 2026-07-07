@@ -5,6 +5,7 @@ import { startRefreshTokenCleanupJob } from "./auth/cleanup.js";
 import { type DatabaseClient, getDatabaseClient } from "./db/client.js";
 import { registerAiRoutes } from "./routes/ai.js";
 import type { CostPricingRateProvider } from "./services/cost-analysis.js";
+import type { CostUsageAnalysisProvider } from "./services/cost-usage-analysis.js";
 import type { CreateLlmExplanation } from "./services/aiLlmExplanation.js";
 import type { CreateSafetyFindingExplanation } from "./services/aiSafetyFindingExplanation.js";
 import { registerHealthRoutes } from "./routes/health.js";
@@ -52,6 +53,7 @@ export type BuildAppOptions = {
   createLlmExplanation?: CreateLlmExplanation;
   createSafetyFindingExplanation?: CreateSafetyFindingExplanation;
   pricingRateProvider?: CostPricingRateProvider;
+  costUsageProvider?: CostUsageAnalysisProvider;
   oauthCallbackRateLimiter?: RateLimiter;
   oauthStartRateLimiter?: RateLimiter;
   passwordResetRequestEmailRateLimiter?: RateLimiter;
@@ -243,11 +245,13 @@ function createCostRouteOptions(
   readonly prefix: "/api";
   readonly getDatabaseClient: () => DatabaseClient;
   readonly pricingRateProvider?: CostPricingRateProvider;
+  readonly costUsageProvider?: CostUsageAnalysisProvider;
 } {
   return {
     prefix: "/api",
     getDatabaseClient,
-    ...(options.pricingRateProvider === undefined ? {} : { pricingRateProvider: options.pricingRateProvider })
+    ...(options.pricingRateProvider === undefined ? {} : { pricingRateProvider: options.pricingRateProvider }),
+    ...(options.costUsageProvider === undefined ? {} : { costUsageProvider: options.costUsageProvider })
   };
 }
 

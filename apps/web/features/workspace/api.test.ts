@@ -22,6 +22,7 @@ import {
   listDeployments,
   listGitCicdHandoffs,
   listTerraformOutputs,
+  listCostUsageAnalysis,
   listProjects,
   listReverseEngineeringScanLogs,
   listReverseEngineeringScans,
@@ -76,6 +77,68 @@ test("listProjects fetches projects for the authenticated user", async (context)
   assert.equal(requests[0]?.init?.method, undefined);
   assert.equal(new Headers(requests[0]?.init?.headers).get("authorization"), "Bearer access-token");
   assert.deepEqual(projects, [project]);
+});
+
+test("listCostUsageAnalysis fetches actual usage analysis with range and AWS connection query", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    restoreWindow(originalWindowDescriptor);
+  });
+
+  installAuthSession();
+
+  globalThis.fetch = async (input, init) => {
+    requests.push({ input, init });
+
+    return new Response(
+      JSON.stringify({
+        currency: "USD",
+        dailyTrend: [],
+        dataSource: "sample",
+        endDate: "2026-07-07",
+        fallbackUsed: true,
+        forecastMonthEndCost: {
+          amount: 42,
+          currency: "USD"
+        },
+        generatedAt: "2026-07-07T00:00:00.000Z",
+        metricSeries: [],
+        projectCosts: [],
+        range: "30d",
+        recommendations: [],
+        serviceCosts: [],
+        startDate: "2026-06-08",
+        totalCost: {
+          amount: 40,
+          currency: "USD"
+        },
+        wasteResources: []
+      }),
+      {
+        headers: {
+          "Content-Type": "application/json"
+        },
+        status: 200
+      }
+    );
+  };
+
+  const response = await listCostUsageAnalysis({
+    awsConnectionId: "33333333-3333-4333-8333-333333333333",
+    range: "30d"
+  });
+
+  assert.equal(
+    String(requests[0]?.input),
+    "/api/costs/usage?range=30d&awsConnectionId=33333333-3333-4333-8333-333333333333"
+  );
+  assert.equal(new Headers(requests[0]?.init?.headers).get("authorization"), "Bearer access-token");
+  assert.equal(response.totalCost.amount, 40);
+  assert.equal(response.fallbackUsed, true);
 });
 
 test("saveProjectDraft sends authenticated PUT request with diagram json", async (context) => {

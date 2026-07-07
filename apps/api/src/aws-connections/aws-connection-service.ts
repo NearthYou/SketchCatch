@@ -704,6 +704,16 @@ function createTerraformApplyPolicyDocument(): Record<string, unknown> {
         Effect: "Allow",
         Action: "s3:*",
         Resource: "*"
+      },
+      {
+        Effect: "Allow",
+        Action: [
+          "ce:GetCostAndUsage",
+          "ce:GetDimensionValues",
+          "cloudwatch:GetMetricData",
+          "cloudwatch:GetMetricStatistics"
+        ],
+        Resource: "*"
       }
     ]
   };
@@ -818,6 +828,13 @@ function createAwsConnectionCloudFormationTemplateBody(input: {
     '            Resource: "*"',
     "          - Effect: Allow",
     "            Action: s3:*",
+    '            Resource: "*"',
+    "          - Effect: Allow",
+    "            Action:",
+    "              - ce:GetCostAndUsage",
+    "              - ce:GetDimensionValues",
+    "              - cloudwatch:GetMetricData",
+    "              - cloudwatch:GetMetricStatistics",
     '            Resource: "*"',
     "Outputs:",
     "  RoleArn:",
