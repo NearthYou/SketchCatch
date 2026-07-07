@@ -55,6 +55,10 @@ import { terraformParameterCatalog } from "../parameter-input/catalog";
 import { ResourceSettingsPanel } from "../resource-settings";
 import { defaultResourceCatalogProvider } from "../resource-settings/catalog-provider";
 import { expandCuratedModuleIntoDiagram } from "../resource-settings/module-catalog";
+import {
+  applyTemplateToDiagramWithBackup,
+  type BoardTemplate
+} from "../resource-settings/template-library";
 import { DEFAULT_DIAGRAM_VIEWPORT, EMPTY_DIAGRAM } from "./constants";
 import {
   applyAreaNodeParentAssignments,
@@ -563,6 +567,22 @@ function DiagramEditorInner({
     },
     [commitDiagramUpdate]
   );
+
+  // 템플릿 적용은 현재 보드를 백업한 뒤 전체 보드를 템플릿 구조로 교체합니다.
+  const applyBoardTemplate = useCallback((template: BoardTemplate): void => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const nextDiagram = applyTemplateToDiagramWithBackup({
+      currentDiagram: diagramRef.current,
+      nowIso: new Date().toISOString(),
+      storage: window.localStorage,
+      template
+    });
+
+    applyDiagramJson(nextDiagram);
+  }, [applyDiagramJson]);
 
   const requestTerraformRefresh = useCallback(() => {
     setTerraformRefreshRequestId((requestId) => requestId + 1);
@@ -1888,6 +1908,7 @@ function DiagramEditorInner({
             <ResourceSettingsPanel
               onCollapse={() => setLeftPanelOpen(false)}
               onModuleAdd={addCuratedModule}
+              onTemplateApply={applyBoardTemplate}
             />
           ) : (
             leftPanel

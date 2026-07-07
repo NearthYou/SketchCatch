@@ -9,6 +9,7 @@ const designAreaNodeTypes = new Set([
   "sketchcatch_group"
 ]);
 
+// Region/AZ도 실제 배치에서는 Resource를 담는 큰 박스라서 VPC/Subnet과 같은 area로 다룹니다.
 const resourceAreaNodeTypes = new Set([
   "aws_region",
   "aws_availability_zone",

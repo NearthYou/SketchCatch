@@ -3664,6 +3664,60 @@
   overflow-wrap: anywhere;
 }
 
+.reverseCandidateGrid {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.reverseCandidateCard {
+  background: #ffffff;
+  border: 1px solid #dce3ee;
+  border-radius: 8px;
+  color: #243044;
+  cursor: pointer;
+  display: grid;
+  font: inherit;
+  gap: 5px;
+  min-width: 0;
+  padding: 10px 11px;
+  text-align: left;
+}
+
+.reverseCandidateCard:hover,
+.reverseCandidateCard:focus-visible {
+  background: #eff6ff;
+  border-color: #93c5fd;
+  outline: none;
+}
+
+.reverseCandidateCardSelected {
+  background: #eff6ff;
+  border-color: #1f6feb;
+  box-shadow: inset 3px 0 0 #1f6feb;
+}
+
+.reverseCandidateCard strong {
+  color: #172033;
+  font-size: 12px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.reverseCandidateCard span {
+  color: #475569;
+  font-size: 11.5px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.reverseCandidateCard small {
+  color: #64748b;
+  font-size: 10.5px;
+  font-weight: 850;
+  line-height: 1.35;
+}
+
 .reverseParameterDetails {
   display: grid;
   gap: 8px;

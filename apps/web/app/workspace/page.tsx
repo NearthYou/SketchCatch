@@ -1,12 +1,14 @@
 import { ProjectWorkspaceDraftManager, WorkspaceDraftManager } from "../../features/workspace";
 import { isWorkspaceCloudPlatform } from "../../features/workspace/project-draft-persistence";
 import { WorkspaceAuthGate } from "./workspace-auth-gate";
+import { resolveInitialWorkspaceRightPanelView } from "./workspace-start-mode";
 
 type WorkspacePageProps = {
   readonly searchParams?: Promise<{
     readonly cloudPlatform?: string | string[] | undefined;
     readonly projectId?: string | string[] | undefined;
     readonly projectName?: string | string[] | undefined;
+    readonly startMode?: string | string[] | undefined;
   }>;
 };
 
@@ -14,6 +16,9 @@ type WorkspacePageProps = {
 export default async function WorkspacePage({ searchParams }: WorkspacePageProps) {
   const params = await searchParams;
   const projectId = getSingleSearchParam(params?.projectId)?.trim();
+  const initialRightPanelView = resolveInitialWorkspaceRightPanelView(
+    getSingleSearchParam(params?.startMode)
+  );
 
   if (projectId) {
     const projectName = getSingleSearchParam(params?.projectName)?.trim();
@@ -23,6 +28,7 @@ export default async function WorkspacePage({ searchParams }: WorkspacePageProps
       <WorkspaceAuthGate>
         <ProjectWorkspaceDraftManager
           cloudPlatform={isWorkspaceCloudPlatform(cloudPlatform) ? cloudPlatform : undefined}
+          initialRightPanelView={initialRightPanelView}
           projectId={projectId}
           projectName={projectName || "Project workspace"}
         />
@@ -30,9 +36,14 @@ export default async function WorkspacePage({ searchParams }: WorkspacePageProps
     );
   }
 
+  const projectName = getSingleSearchParam(params?.projectName)?.trim();
+
   return (
     <WorkspaceAuthGate>
-      <WorkspaceDraftManager />
+      <WorkspaceDraftManager
+        initialProjectName={projectName || undefined}
+        initialRightPanelView={initialRightPanelView}
+      />
     </WorkspaceAuthGate>
   );
 }

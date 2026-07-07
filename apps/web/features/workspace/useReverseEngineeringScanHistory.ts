@@ -5,6 +5,7 @@ import { listReverseEngineeringScans } from "./api";
 type RequestState = "idle" | "loading" | "error";
 
 export type UseReverseEngineeringScanHistoryInput = {
+  readonly enabled?: boolean | undefined;
   readonly onError: (error: unknown) => void;
   readonly scanResponse: ReverseEngineeringScanResponse | null;
   readonly selectedProjectId: string;
@@ -12,6 +13,7 @@ export type UseReverseEngineeringScanHistoryInput = {
 
 // 저장된 스캔 목록과 현재 열어둔 스캔 ID를 관리합니다.
 export function useReverseEngineeringScanHistory({
+  enabled = true,
   onError,
   scanResponse,
   selectedProjectId
@@ -25,6 +27,12 @@ export function useReverseEngineeringScanHistory({
 
   // 선택한 프로젝트의 이전 Reverse Engineering 스캔 기록을 불러옵니다.
   const loadScanHistory = useCallback(async () => {
+    if (!enabled) {
+      setScanHistory([]);
+      setScanHistoryState("idle");
+      return;
+    }
+
     setScanHistoryState("loading");
 
     try {
@@ -34,13 +42,13 @@ export function useReverseEngineeringScanHistory({
       setScanHistoryState("error");
       onError(error);
     }
-  }, [onError, selectedProjectId]);
+  }, [enabled, onError, selectedProjectId]);
 
   useEffect(() => {
-    if (selectedProjectId) {
+    if (enabled && selectedProjectId) {
       void loadScanHistory();
     }
-  }, [loadScanHistory, selectedProjectId]);
+  }, [enabled, loadScanHistory, selectedProjectId]);
 
   // 새 스캔이 끝나면 기록 목록 맨 위에 반영합니다.
   function rememberCompletedScan(scan: ReverseEngineeringScan): void {

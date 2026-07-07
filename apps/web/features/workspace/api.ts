@@ -538,6 +538,20 @@ export async function createReverseEngineeringScan({
   );
 }
 
+// 새 프로젝트를 만들기 전 AWS를 먼저 읽어 보드 후보만 받아옵니다.
+export async function createReverseEngineeringPreviewScan(
+  input: CreateReverseEngineeringScanRequest
+): Promise<ReverseEngineeringScanResponse> {
+  return apiFetch<ReverseEngineeringScanResponse>(
+    "/reverse-engineering/scans/preview",
+    {
+      auth: true,
+      method: "POST",
+      body: input
+    }
+  );
+}
+
 export async function listReverseEngineeringScans(projectId: string): Promise<ReverseEngineeringScan[]> {
   const response = await apiFetch<ReverseEngineeringScanListResponse>(
     `/projects/${encodeURIComponent(projectId)}/reverse-engineering/scans`,

@@ -53,6 +53,7 @@ export function addServerStorageAreaNodes(nodes: readonly DiagramNode[]): Diagra
     createAreaNode({
       id: AREA_NODE_IDS.region,
       label: "Region",
+      parameterValues: { awsRegion: "ap-northeast-2" },
       position: { x: 40, y: 70 },
       size: { width: 1160, height: 1080 },
       type: "aws_region",
@@ -62,6 +63,7 @@ export function addServerStorageAreaNodes(nodes: readonly DiagramNode[]): Diagra
       id: AREA_NODE_IDS.availabilityZone,
       label: "Availability Zone",
       metadata: { parentAreaNodeId: vpcAreaNodeId },
+      parameterValues: { awsAvailabilityZone: "ap-northeast-2a" },
       position: { x: 155, y: 430 },
       size: { width: 780, height: 620 },
       type: "aws_availability_zone",
@@ -98,6 +100,7 @@ type AreaNodeInput = {
   readonly id: string;
   readonly label: string;
   readonly metadata?: DiagramNode["metadata"] | undefined;
+  readonly parameterValues?: Record<string, unknown> | undefined;
   readonly position: DiagramNode["position"];
   readonly size: DiagramNode["size"];
   readonly type: string;
@@ -133,6 +136,15 @@ function createAreaNode(input: AreaNodeInput): DiagramNode {
     id: input.id,
     label: input.label,
     metadata: input.metadata,
+    parameters: baseNode.parameters
+      ? {
+          ...baseNode.parameters,
+          values: {
+            ...baseNode.parameters.values,
+            ...(input.parameterValues ?? {})
+          }
+        }
+      : undefined,
     size: input.size
   };
 }

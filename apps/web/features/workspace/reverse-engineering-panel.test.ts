@@ -9,6 +9,7 @@ const findingsPanelSource = readWorkspaceFile("ReverseEngineeringFindingsPanel.t
 const importPanelSource = readWorkspaceFile("ReverseEngineeringImportSuggestionsPanel.tsx");
 const parameterPanelSource = readWorkspaceFile("ReverseEngineeringResourceParametersPanel.tsx");
 const resultPanelSource = readWorkspaceFile("ReverseEngineeringResultPanel.tsx");
+const candidatesSource = readWorkspaceFile("reverse-engineering-board-candidates.ts");
 const resourceTypesSource = readWorkspaceFile("reverse-engineering-resource-types.ts");
 const scanCriteriaFormSource = readWorkspaceFile("ReverseEngineeringScanCriteriaForm.tsx");
 const scanHistoryPanelSource = readWorkspaceFile("ReverseEngineeringScanHistoryPanel.tsx");
@@ -42,8 +43,14 @@ test("Reverse Engineering scan starts from one main import action and keeps filt
   assert.doesNotMatch(scanCriteriaFormSource, /AWS 스캔 시작/);
 });
 
+test("Reverse Engineering panel sends users to settings when no verified AWS connection exists", () => {
+  assert.match(scanCriteriaFormSource, /awsConnections\.length === 0/);
+  assert.match(scanCriteriaFormSource, /\/settings\?tab=aws&next=reverse/);
+  assert.match(scanCriteriaFormSource, /환경설정에서 AWS Role을 먼저 연결해 주세요/);
+});
+
 test("Reverse Engineering result stays preview-only until the user applies it", () => {
-  assert.match(rightPanelSource, /<ReverseEngineeringPanel context=\{context\} projectId=\{projectId\} \/>/);
+  assert.match(rightPanelSource, /<ReverseEngineeringPanel/);
   assert.match(panelSource, /readonly context: DiagramEditorPanelContext/);
   assert.match(panelSource, /context\.setPreviewDiagram\(application\.previewDiagram\)/);
   assert.match(panelSource, /createArchitectureSnapshot/);
@@ -51,9 +58,20 @@ test("Reverse Engineering result stays preview-only until the user applies it", 
   assert.match(panelSource, /sourceScanId: result\.scan\.id/);
   assert.match(panelSource, /draftId: result\.reverseEngineeringDraft\.id/);
   assert.match(panelSource, /attachReverseEngineeringSourceToDiagram/);
-  assert.match(panelSource, /context\.applyDiagramJson\(diagramWithReverseEngineeringSource\)/);
+  assert.match(panelSource, /context\.applyDiagramJson\(diagramToApply\)/);
   assert.match(resultPanelSource, /새 보드로 열기/);
   assert.match(resultPanelSource, /현재 보드에 추가/);
+});
+
+test("Reverse Engineering can scan before project creation and create the project only on apply", () => {
+  assert.match(panelSource, /createReverseEngineeringPreviewScan/);
+  assert.match(panelSource, /createProjectOnApply/);
+  assert.match(panelSource, /createProject\(\{ name: projectName \}\)/);
+  assert.match(panelSource, /saveProjectDraft/);
+  assert.match(panelSource, /router\.push/);
+  assert.match(scanCriteriaFormSource, /프로젝트는 후보를 적용할 때 생성됩니다/);
+  assert.match(scanHistoryHookSource, /enabled = true/);
+  assert.match(scanHistoryHookSource, /if \(!enabled\)/);
 });
 
 test("Reverse Engineering draft edits update only the candidate architecture", () => {
@@ -72,6 +90,8 @@ test("Reverse Engineering result shows risks, partial scan errors, and import ha
   assert.match(findingsPanelSource, /High Risk/);
   assert.match(findingsPanelSource, /어떻게 고치면 되나요/);
   assert.match(findingsPanelSource, /부분 실패/);
+  assert.match(findingsPanelSource, /scanErrors\.map\(\(scanError, index\)/);
+  assert.match(findingsPanelSource, /key=\{`\$\{scanError\.id\}-\$\{index\}`\}/);
   assert.match(findingsPanelSource, /stage/);
   assert.match(findingsPanelSource, /reason/);
   assert.match(findingsPanelSource, /retryable/);
@@ -90,6 +110,17 @@ test("Reverse Engineering result explains scan coverage before users apply the p
   assert.match(resultPanelSource, /Resource Explorer/);
   assert.match(resultPanelSource, /전체 AWS 상태가 아닐 수 있습니다/);
   assert.match(resultPanelSource, /getScanCoverageNotice/);
+});
+
+test("Reverse Engineering result shows multiple board candidates before applying one", () => {
+  assert.match(candidatesSource, /createReverseEngineeringBoardCandidates/);
+  assert.match(candidatesSource, /candidate-full-scan/);
+  assert.match(panelSource, /selectedCandidateId/);
+  assert.match(panelSource, /selectedCandidateResult/);
+  assert.match(panelSource, /createReverseEngineeringCandidateResult/);
+  assert.match(resultPanelSource, /보드 후보 선택/);
+  assert.match(resultPanelSource, /onCandidateSelect/);
+  assert.match(resultPanelSource, /candidate\.nodeCount/);
 });
 
 test("Reverse Engineering result lets users inspect provider parameters for every discovered resource", () => {
