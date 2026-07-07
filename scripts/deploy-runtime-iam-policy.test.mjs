@@ -5,6 +5,7 @@ import { test } from "node:test";
 const deployWorkflowPath = ".github/workflows/deploy.yml";
 const deployPolicyPath = "infra/aws/iam/github-actions-deploy-policy.json";
 const runtimePolicyPath = "infra/aws/iam/ec2-runtime-policy.json";
+const apiDockerfilePath = "docker/api.Dockerfile";
 
 function asSortedArray(value) {
   return (Array.isArray(value) ? value : [value]).toSorted();
@@ -52,4 +53,17 @@ test("EC2 runtime policy allows legacy and connection-scoped AWS execution roles
     "arn:aws:iam::*:role/SketchCatchTerraformExecutionRole",
     "arn:aws:iam::*:role/SketchCatchTerraformExecutionRole-*"
   ].toSorted());
+});
+
+test("API Docker image includes Terraform CLI for Direct Deployment execution", async () => {
+  const apiDockerfile = await readFile(apiDockerfilePath, "utf8");
+
+  assert.match(apiDockerfile, /FROM\s+alpine:[\d.]+\s+AS\s+terraform/);
+  assert.match(apiDockerfile, /ARG\s+TERRAFORM_VERSION=/);
+  assert.match(apiDockerfile, /releases\.hashicorp\.com\/terraform/);
+  assert.match(
+    apiDockerfile,
+    /COPY\s+--from=terraform\s+\/usr\/local\/bin\/terraform\s+\/usr\/local\/bin\/terraform/
+  );
+  assert.match(apiDockerfile, /RUN\s+terraform\s+-version/);
 });
