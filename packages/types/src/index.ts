@@ -573,6 +573,11 @@ export type GitCicdHandoffPipelineStatusResponse = {
   pipelineStatus: GitCicdHandoffPipelineStatus;
 };
 
+export type GitCicdGitHubOAuthStartResponse = {
+  authorizationUrl: string;
+  expiresAt: IsoDateTimeString;
+};
+
 export type GitCicdRepositorySettingsApplyResponse = {
   applied: boolean;
   environmentName: string;

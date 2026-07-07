@@ -5,10 +5,12 @@ import {
   abortProjectAssetUpload,
   applyGitCicdAwsRoleDiff,
   applyGitCicdRepositorySettings,
+  applyGitCicdRepositorySettingsWithGitHubOAuth,
   confirmProjectAssetUpload,
   createArchitectureSnapshot,
   createAwsConnectionSetup,
   createDeployment,
+  createGitCicdGitHubOAuthStartUrl,
   createProjectAssetUpload,
   cancelReverseEngineeringScan,
   createReverseEngineeringScan,
@@ -1459,6 +1461,40 @@ test("Git/CI/CD handoff helpers list handoffs and read pipeline status", async (
       );
     }
 
+    if (String(input).endsWith("/github-oauth/start")) {
+      return new Response(
+        JSON.stringify({
+          authorizationUrl: "https://github.com/login/oauth/authorize?state=state-token",
+          expiresAt: "2026-01-01T00:10:00.000Z"
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json"
+          },
+          status: 201
+        }
+      );
+    }
+
+    if (String(input).endsWith("/repository-settings/apply-with-github-oauth")) {
+      return new Response(
+        JSON.stringify({
+          applied: true,
+          environmentName: "sketchcatch-production",
+          variables: ["SKETCHCATCH_AWS_REGION"],
+          secrets: [],
+          workflowFiles: [".github/workflows/sketchcatch-app.yml"],
+          githubOAuthRequired: false
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json"
+          },
+          status: 200
+        }
+      );
+    }
+
     if (String(input).endsWith("/aws-role-diff/apply")) {
       return new Response(
         JSON.stringify({
@@ -1503,6 +1539,12 @@ test("Git/CI/CD handoff helpers list handoffs and read pipeline status", async (
   const settingsApply = await applyGitCicdRepositorySettings(
     "44444444-4444-4444-8444-444444444444"
   );
+  const oauthStart = await createGitCicdGitHubOAuthStartUrl(
+    "44444444-4444-4444-8444-444444444444"
+  );
+  const oauthSettingsApply = await applyGitCicdRepositorySettingsWithGitHubOAuth(
+    "44444444-4444-4444-8444-444444444444"
+  );
   const roleApply = await applyGitCicdAwsRoleDiff(
     "44444444-4444-4444-8444-444444444444"
   );
@@ -1518,6 +1560,14 @@ test("Git/CI/CD handoff helpers list handoffs and read pipeline status", async (
   );
   assert.equal(
     String(requests[3]?.input),
+    "/api/git-cicd-handoffs/44444444-4444-4444-8444-444444444444/github-oauth/start"
+  );
+  assert.equal(
+    String(requests[4]?.input),
+    "/api/git-cicd-handoffs/44444444-4444-4444-8444-444444444444/repository-settings/apply-with-github-oauth"
+  );
+  assert.equal(
+    String(requests[5]?.input),
     "/api/git-cicd-handoffs/44444444-4444-4444-8444-444444444444/aws-role-diff/apply"
   );
   assert.equal(new Headers(requests[0]?.init?.headers).get("authorization"), "Bearer access-token");
@@ -1525,6 +1575,8 @@ test("Git/CI/CD handoff helpers list handoffs and read pipeline status", async (
   assert.equal(pipelineStatus.status, "pipeline_running");
   assert.equal(pipelineStatus.source, "runtime_cache");
   assert.equal(settingsApply.githubOAuthRequired, false);
+  assert.match(oauthStart.authorizationUrl, /^https:\/\/github\.com\/login\/oauth\/authorize/);
+  assert.equal(oauthSettingsApply.githubOAuthRequired, false);
   assert.equal(roleApply.verified, true);
 });
 

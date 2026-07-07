@@ -1,5 +1,26 @@
 ﻿# 세션 핸드오프
 
+## 2026-07-07 - GitHub OAuth repository settings writer 구현
+
+- Branch/worktree: `codex/github-oauth-repo-writer` at `C:\Users\siwon\Desktop\Jungle\Week17~21\SketchCatch-worktrees\cicd-plan6-docs`.
+- PR #213 was merged to dev at `76272a1efbc99574a5344c834cb952766390d9e2`; dev CI run `28848684208` passed. No new deploy workflow appeared for that docs/smoke-script merge.
+- Implemented in current branch:
+  - `GitCicdGitHubOAuthStartResponse` shared type.
+  - `POST /api/git-cicd-handoffs/:handoffId/github-oauth/start` for GitHub OAuth `repo workflow` approval URL.
+  - `GET /api/git-cicd-handoffs/github-oauth/callback` exchanges the code and stores the token only in Runtime Cache for 10 minutes.
+  - `POST /api/git-cicd-handoffs/:handoffId/repository-settings/apply-with-github-oauth` applies GitHub Environment and Actions variables with the one-time token, then deletes it.
+  - Deployment Panel now shows `GitHub OAuth 승인` and `OAuth 설정 적용` beside the GitHub App permission CTA.
+  - Updated `docs/data-models.md`, `docs/deployment.md`, `docs/sw/spec6.md`, `docs/sw/plan6.md`, `docs/sw/agents3.md`, and `agent-progress.md`.
+- Verified:
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/routes/git-cicd-handoffs.test.ts`
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/api.test.ts features/workspace/deployment-actions.test.ts`
+  - `pnpm --filter @sketchcatch/api typecheck`
+  - `pnpm --filter @sketchcatch/web typecheck`
+- Still required:
+  - Run full root checks before PR.
+  - Open PR for `codex/github-oauth-repo-writer`.
+  - #210 live smoke still requires real target repo, verified AWS connection, Environment approval, Terraform apply, app release, ASG refresh, and destroy evidence.
+
 ## 2026-07-07 - Git/CI/CD live smoke readiness 보강
 
 - Branch/worktree: `codex/cicd-live-readiness` at `C:\Users\siwon\Desktop\Jungle\Week17~21\SketchCatch-worktrees\cicd-plan6-docs`.

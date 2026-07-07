@@ -60,6 +60,13 @@ workflow 파일 생성과 repository Actions 설정 자동화는 GitHub user OAu
 - User OAuth 또는 GitHub App permission 보강은 같은 `github_oauth_required` 복구 경로로 이어지며, token 원문은 저장하지 않는다.
 - Repository secrets는 원문 값을 받지 않는 한 실제 mutation하지 않고 preview 이름만 표시한다.
 
+2026-07-07 추가 구현 결정:
+
+- GitHub user OAuth는 로그인 OAuth와 분리된 repository settings one-time grant로 처리한다.
+- `github-oauth/start`가 `repo workflow` scope 승인 URL을 만들고, callback은 token을 Runtime Cache에 10분 TTL로만 저장한다.
+- `repository-settings/apply-with-github-oauth`는 로그인 사용자와 handoff가 일치할 때만 one-time token으로 Environment와 Actions variables를 적용한 뒤 token을 삭제한다.
+- secret 원문은 현재 모델에 없으므로 DB, Runtime Cache, API 응답, 로그에 저장하지 않는다.
+
 필수 권한:
 
 - GitHub App: Contents read/write, Pull requests read/write, Actions read, Metadata read.

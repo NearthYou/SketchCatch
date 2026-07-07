@@ -35,6 +35,9 @@ import { registerGitCicdHandoffRoutes } from "./git-cicd-handoffs.js";
 
 process.env.NODE_ENV = "test";
 process.env.AUTH_TOKEN_SECRET = "test-auth-token-secret-with-at-least-32-characters";
+process.env.GIT_OAUTH_CLIENT_ID = "github-oauth-client-id";
+process.env.GIT_OAUTH_CLIENT_SECRET = "github-oauth-client-secret";
+process.env.OAUTH_REDIRECT_BASE_URL = "http://localhost:3000";
 
 const projectId = "11111111-1111-4111-8111-111111111111";
 const architectureId = "22222222-2222-4222-8222-222222222222";
@@ -919,6 +922,108 @@ test("POST /api/git-cicd-handoffs/:handoffId/repository-settings/apply maps perm
   await app.close();
 });
 
+test("GitHub OAuth repository settings grant starts, stores token, and applies once", async () => {
+  const repository = new FakeGitCicdHandoffRepository();
+  repository.sourceRepository = createSourceRepositoryRecord({
+    provider: "github",
+    githubInstallationId: "123456"
+  });
+  repository.handoff = createHandoffRecord(handoffId, {
+    repositoryProvider: "github",
+    githubOAuthRequired: true,
+    repositorySettingsPreview: {
+      environmentName: "sketchcatch-production",
+      variables: {
+        SKETCHCATCH_AWS_REGION: "ap-northeast-2"
+      },
+      secrets: [],
+      workflowFiles: [".github/workflows/sketchcatch-infra.yml"]
+    }
+  });
+  const runtimeCache = createInMemoryRuntimeCache({ cleanupIntervalMs: null });
+  const exchangedBodies: URLSearchParams[] = [];
+  const usedTokens: string[] = [];
+  const app = await buildGitCicdHandoffTestApp(repository, {
+    runtimeCache,
+    githubOAuthFetch: (async (_input, init) => {
+      exchangedBodies.push(new URLSearchParams(String(init?.body ?? "")));
+
+      return new Response(JSON.stringify({ access_token: "repo-settings-oauth-token" }), {
+        headers: { "content-type": "application/json" },
+        status: 200
+      });
+    }) as typeof fetch,
+    createGitHubOAuthRepositorySettingsApplier: (accessToken) => {
+      usedTokens.push(accessToken);
+
+      return {
+        async applyRepositorySettings() {
+          return {
+            applied: true,
+            environmentName: "sketchcatch-production",
+            variables: ["SKETCHCATCH_AWS_REGION"],
+            secrets: [],
+            workflowFiles: [".github/workflows/sketchcatch-infra.yml"],
+            githubOAuthRequired: false
+          };
+        }
+      };
+    }
+  });
+
+  const startResponse = await app.inject({
+    method: "POST",
+    url: `/api/git-cicd-handoffs/${handoffId}/github-oauth/start`,
+    headers: await authHeaders()
+  });
+
+  assert.equal(startResponse.statusCode, 201);
+  const authorizationUrl = new URL(startResponse.json().authorizationUrl);
+
+  assert.equal(authorizationUrl.origin, "https://github.com");
+  assert.equal(authorizationUrl.searchParams.get("client_id"), "github-oauth-client-id");
+  assert.equal(
+    authorizationUrl.searchParams.get("redirect_uri"),
+    "http://localhost:3000/api/git-cicd-handoffs/github-oauth/callback"
+  );
+  assert.equal(authorizationUrl.searchParams.get("scope"), "repo workflow");
+
+  const callbackResponse = await app.inject({
+    method: "GET",
+    url: `/api/git-cicd-handoffs/github-oauth/callback?code=oauth-code&state=${encodeURIComponent(
+      authorizationUrl.searchParams.get("state") ?? ""
+    )}`
+  });
+
+  assert.equal(callbackResponse.statusCode, 302);
+  assert.equal(callbackResponse.headers.location, "/workspace?gitCicdGitHubOAuth=ready");
+  assert.equal(exchangedBodies[0]?.get("redirect_uri"), "http://localhost:3000/api/git-cicd-handoffs/github-oauth/callback");
+
+  const applyResponse = await app.inject({
+    method: "POST",
+    url: `/api/git-cicd-handoffs/${handoffId}/repository-settings/apply-with-github-oauth`,
+    headers: await authHeaders()
+  });
+
+  assert.equal(applyResponse.statusCode, 200);
+  assert.equal(usedTokens[0], "repo-settings-oauth-token");
+  assert.equal(repository.handoff?.githubOAuthRequired, false);
+
+  const secondApplyResponse = await app.inject({
+    method: "POST",
+    url: `/api/git-cicd-handoffs/${handoffId}/repository-settings/apply-with-github-oauth`,
+    headers: await authHeaders()
+  });
+
+  assert.equal(secondApplyResponse.statusCode, 409);
+  assert.deepEqual(secondApplyResponse.json(), {
+    error: "github_oauth_required",
+    message: "GitHub OAuth approval is required before repository settings can be applied"
+  });
+
+  await app.close();
+});
+
 test("POST /api/git-cicd-handoffs/:handoffId/aws-role-diff/apply updates approved trust policy", async () => {
   const repository = new FakeGitCicdHandoffRepository();
   const roleArn = "arn:aws:iam::123456789012:role/SketchCatchGitHubDeployRole";
@@ -997,6 +1102,10 @@ type GitCicdRouteTestOptions = {
   runtimeCache?: RuntimeCache;
   userRows?: UserRecord[];
   repositorySettingsApplier?: GitCicdRepositorySettingsApplier;
+  createGitHubOAuthRepositorySettingsApplier?: (
+    accessToken: string
+  ) => GitCicdRepositorySettingsApplier;
+  githubOAuthFetch?: typeof fetch;
   awsRoleDiffGateway?: AwsRoleDiffGateway;
 };
 
@@ -1027,6 +1136,13 @@ async function buildGitCicdHandoffTestApp(
     ...(routeOptions.repositorySettingsApplier
       ? { gitCicdRepositorySettingsApplier: routeOptions.repositorySettingsApplier }
       : {}),
+    ...(routeOptions.createGitHubOAuthRepositorySettingsApplier
+      ? {
+          createGitHubOAuthRepositorySettingsApplier:
+            routeOptions.createGitHubOAuthRepositorySettingsApplier
+        }
+      : {}),
+    ...(routeOptions.githubOAuthFetch ? { githubOAuthFetch: routeOptions.githubOAuthFetch } : {}),
     ...(routeOptions.awsRoleDiffGateway ? { awsRoleDiffGateway: routeOptions.awsRoleDiffGateway } : {}),
     ...(routeOptions.runtimeCache ? { runtimeCache: routeOptions.runtimeCache } : {})
   });

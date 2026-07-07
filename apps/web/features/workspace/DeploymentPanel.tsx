@@ -29,7 +29,9 @@ import {
   approveDeploymentPlan,
   applyGitCicdAwsRoleDiff,
   applyGitCicdRepositorySettings,
+  applyGitCicdRepositorySettingsWithGitHubOAuth,
   cancelDeployment as cancelDeploymentRun,
+  createGitCicdGitHubOAuthStartUrl,
   createDeployment,
   createGitCicdHandoff,
   createGitHubExistingInstallationCallbackUrl,
@@ -1017,6 +1019,31 @@ export function DeploymentPanel({
     }, "GitHub 설치를 시작하지 못했습니다.");
   }
 
+  async function startGitHubOAuthForRepositorySettings(): Promise<void> {
+    if (!selectedGitCicdHandoff) {
+      return;
+    }
+
+    await runRequest(async () => {
+      const { authorizationUrl } = await createGitCicdGitHubOAuthStartUrl(
+        selectedGitCicdHandoff.id
+      );
+
+      window.location.assign(authorizationUrl);
+    }, "GitHub OAuth 승인을 시작하지 못했습니다.");
+  }
+
+  async function applyRepositorySettingsWithGitHubOAuth(): Promise<void> {
+    if (!selectedGitCicdHandoff) {
+      return;
+    }
+
+    await runRequest(async () => {
+      await applyGitCicdRepositorySettingsWithGitHubOAuth(selectedGitCicdHandoff.id);
+      applyDeploymentPanelSnapshot(await loadDeploymentPanelSnapshot());
+    }, "GitHub OAuth repository settings 적용에 실패했습니다.");
+  }
+
   function startDeploymentPanelResize(event: ReactPointerEvent<HTMLDivElement>): void {
     if (event.button !== 0) {
       return;
@@ -1305,6 +1332,24 @@ export function DeploymentPanel({
                   >
                     <GitBranch size={16} />
                     GitHub App 권한 보강
+                  </button>
+                  <button
+                    className={styles.deploymentSecondaryButton}
+                    disabled={requestState === "loading"}
+                    onClick={() => void startGitHubOAuthForRepositorySettings()}
+                    type="button"
+                  >
+                    <GitBranch size={16} />
+                    GitHub OAuth 승인
+                  </button>
+                  <button
+                    className={styles.deploymentSecondaryButton}
+                    disabled={requestState === "loading"}
+                    onClick={() => void applyRepositorySettingsWithGitHubOAuth()}
+                    type="button"
+                  >
+                    <ShieldCheck size={16} />
+                    OAuth 설정 적용
                   </button>
                 </div>
               ) : null}
