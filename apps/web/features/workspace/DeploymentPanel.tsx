@@ -97,10 +97,6 @@ export type DeploymentPreDeploymentCheckState = {
   readonly fingerprint: string | null;
   readonly requestState: AiRequestState;
 };
-type InstalledGitHubRepositorySelection = {
-  readonly state: string;
-  readonly repositories: GitHubInstalledRepositoryCandidate[];
-};
 const DEPLOYMENT_EXPANDED_DEFAULT_DETAILS_PERCENT = 50;
 const DEPLOYMENT_EXPANDED_MIN_DETAILS_PERCENT = 28;
 const DEPLOYMENT_EXPANDED_MAX_DETAILS_PERCENT = 72;
