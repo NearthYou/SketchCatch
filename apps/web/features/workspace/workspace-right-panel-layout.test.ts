@@ -103,6 +103,31 @@ test("deployment toolbar action is grouped with the other panel mode buttons", (
   assert.doesNotMatch(stylesSource, /\.panelDeployButton\s*\{/);
 });
 
+test("reverse engineering is not reachable from persistent right panel toggles", () => {
+  const collapsedPanelIndex = componentSource.indexOf(
+    '<aside className={styles.collapsedRightPanel}'
+  );
+  const collapsedPanelEndIndex = componentSource.indexOf("</aside>", collapsedPanelIndex);
+  const toolbarIndex = componentSource.indexOf("className={styles.rightPanelToolbar}");
+  const modeToggleIndex = componentSource.indexOf("className={styles.panelModeToggle}", toolbarIndex);
+  const rightPanelViewIndex = componentSource.indexOf(
+    "<div className={styles.rightPanelView}",
+    modeToggleIndex
+  );
+  const collapsedPanelSource = componentSource.slice(collapsedPanelIndex, collapsedPanelEndIndex);
+  const modeToggleSource = componentSource.slice(modeToggleIndex, rightPanelViewIndex);
+
+  assert.ok(collapsedPanelIndex > -1);
+  assert.ok(modeToggleIndex > toolbarIndex);
+  assert.ok(rightPanelViewIndex > modeToggleIndex);
+  assert.doesNotMatch(collapsedPanelSource, /title="Reverse Engineering"/);
+  assert.doesNotMatch(collapsedPanelSource, /openCollapsedView\("reverse"\)/);
+  assert.doesNotMatch(modeToggleSource, /title="Reverse Engineering"/);
+  assert.doesNotMatch(modeToggleSource, /requestView\("reverse"\)/);
+  assert.match(componentSource, /activeView !== "reverse"/);
+  assert.match(componentSource, /<ReverseEngineeringPanel/);
+});
+
 test("workspace AI opens from a floating chat dock instead of the right panel", () => {
   const floatingPanelSlotRule = getCssRule(diagramEditorStylesSource, "floatingPanelSlot");
 

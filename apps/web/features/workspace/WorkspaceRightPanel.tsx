@@ -8,8 +8,7 @@ import {
   GalleryVerticalEnd,
   PanelRightClose,
   PanelRightOpen,
-  Rocket,
-  Search
+  Rocket
 } from "lucide-react";
 import type { DiagramEditorPanelContext } from "../diagram-editor";
 import { DeploymentPanel } from "./DeploymentPanel";
@@ -69,6 +68,7 @@ type PendingTerraformLeaveAction =
   | { readonly kind: "resource-settings" }
   | { readonly kind: "replay-click"; readonly target: HTMLElement };
 
+// 오른쪽 패널은 작업 중 필요한 모드만 노출하고, Reverse는 새 프로젝트 시작 흐름에서만 진입하게 둡니다.
 export function WorkspaceRightPanel({
   context,
   initialView,
@@ -530,14 +530,6 @@ export function WorkspaceRightPanel({
         >
           <Rocket size={18} aria-hidden="true" />
         </button>
-        <button
-          className={styles.collapsedPanelButton}
-          onClick={() => openCollapsedView("reverse")}
-          title="Reverse Engineering"
-          type="button"
-        >
-          <Search size={18} aria-hidden="true" />
-        </button>
       </aside>
     );
   }
@@ -597,15 +589,6 @@ export function WorkspaceRightPanel({
             type="button"
           >
             <Rocket size={18} aria-hidden="true" />
-          </button>
-          <button
-            aria-pressed={activeView === "reverse"}
-            className={activeView === "reverse" ? styles.panelModeButtonActive : styles.panelModeButton}
-            onClick={() => requestView("reverse")}
-            title="Reverse Engineering"
-            type="button"
-          >
-            <Search size={18} aria-hidden="true" />
           </button>
         </div>
       </div>
