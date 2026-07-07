@@ -86,12 +86,12 @@ function checkFeatureList() {
 }
 
 function checkMarkdownStateFiles() {
-  requireHeading("agent-progress.md", "## 현재 검증된 상태");
-  requireHeading("agent-progress.md", "## 세션 레코드");
-  requireHeading("session-handoff.md", "## 현재 검증된 것");
-  requireHeading("session-handoff.md", "## 이번 세션의 변경 사항");
-  requireHeading("session-handoff.md", "## 아직 깨졌거나 미검증된 것");
-  requireHeading("session-handoff.md", "## 다음으로 최선의 행동");
+  requireHeading("agent-progress.md", "## Current Verified State");
+  requireHeading("agent-progress.md", "## Session Record");
+  requireHeading("session-handoff.md", "## Currently Verified");
+  requireHeading("session-handoff.md", "## Changes This Session");
+  requireHeading("session-handoff.md", "## Broken Or Unverified");
+  requireHeading("session-handoff.md", "## Best Next Action");
   requireHeading("clean-state-checklist.md", "## 거절해야 하는 완료 선언");
   requireHeading("evaluator-rubric.md", "## Hard Fail");
   requireHeading("quality-document.md", "## 제품 도메인 스냅샷");
