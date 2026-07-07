@@ -15,6 +15,7 @@ Recent branch work:
 - Fixed Korean text rendering on `/workspace/new` by moving raw Unicode escape text into `COPY` constants rendered as JSX expressions.
 - Improved `/workspace/ai` chat UX with transcript auto-scroll, Enter-to-send, Shift+Enter newline, icon-based mini previews, and stable project-name input focus background.
 - Refined `/workspace/ai` mini diagram preview to use the same diagram icon sources as the board, hide names, and relax close icon positions to reduce overlap.
+- Restyled the standalone `/workspace/ai` chat UI from a dark isolated theme to the shared light board/workspace palette.
 - Addressed PR #224 review feedback by reusing the created project ID after an approval save failure and by guarding local/session storage writes.
 - Added source and browser regressions for the new project start and AI start flow.
 - Committed the branch work as `2bab6899`.
@@ -36,6 +37,7 @@ Verification so far:
 - Final `pnpm harness:check` passed after build verification.
 - PR #224 review fix verification passed: focused workspace start tests, harness, lint, typecheck, and elevated build after sandbox `.next` unlink `EPERM`.
 - Latest mini preview change verification passed: focused `workspace-new-project-start-mode.test.ts`, `@sketchcatch/web` typecheck, `git diff --check`, repo `pnpm lint`, repo `pnpm typecheck`, repo `pnpm build`, and `pnpm harness:check`. Browser screenshot verification was skipped because no browser/Playwright runtime is installed in this session.
+- Latest standalone AI chat color verification passed: focused `workspace-new-project-start-mode.test.ts`, `@sketchcatch/web` typecheck, `git diff --check`, repo `pnpm lint`, repo `pnpm typecheck`, and repo `pnpm build`.
 
 ## Session Record
 
@@ -53,7 +55,9 @@ Verification so far:
 - Wrapped AI start `localStorage.setItem` and new-project `sessionStorage.setItem` calls in `try/catch`.
 - Added regression assertions for the PR review fixes.
 - Updated the AI-start mini diagram preview to render real board icon URLs, include design-area fallback icons, remove visible labels from the SVG, and run a small collision-relaxation pass before drawing.
+- Committed the mini diagram preview fix as `eb488122` (`Fix: AI 초안 미리보기 겹침 개선`).
+- Updated standalone `/workspace/ai` chat colors, message bubbles, composer, and mini preview frame to use the shared light `bp` palette.
 
 Next steps:
 
-- Review the `/workspace/ai` mini preview visually in a browser-enabled session if available; no pending code verification remains locally.
+- Review the `/workspace/ai` mini preview and chat colors visually in a browser-enabled session if available; no pending code verification remains locally.

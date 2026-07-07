@@ -4384,17 +4384,19 @@ nextjs-portal {
 }
 
 .workspaceAiStartShell {
-  background: #07111f;
-  color: #e5edf7;
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.68), rgba(236, 239, 241, 0.88)),
+    var(--bp-page);
+  color: var(--bp-ink);
   min-height: 100dvh;
   padding: 24px;
 }
 
 .workspaceAiStartPanel {
-  background: rgba(12, 23, 40, 0.92);
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  border-radius: 8px;
-  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.32);
+  background: var(--bp-paper);
+  border: 1px solid var(--bp-line);
+  border-radius: var(--bp-r);
+  box-shadow: 0 24px 70px color-mix(in srgb, var(--bp-ink) 16%, transparent);
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
   height: calc(100dvh - 48px);
@@ -4406,14 +4408,15 @@ nextjs-portal {
 
 .workspaceAiStartHeader {
   align-items: center;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+  background: color-mix(in srgb, var(--bp-paper-2) 78%, var(--bp-paper));
+  border-bottom: 1px solid var(--bp-line);
   display: flex;
   gap: 12px;
   padding: 14px 16px;
 }
 
 .workspaceAiStartHeader p {
-  color: #38bdf8;
+  color: var(--bp-blue);
   font-size: 0.74rem;
   font-weight: 900;
   margin: 0 0 3px;
@@ -4421,6 +4424,7 @@ nextjs-portal {
 }
 
 .workspaceAiStartHeader h1 {
+  color: var(--bp-ink);
   font-size: 1.04rem;
   line-height: 1.2;
   margin: 0;
@@ -4428,15 +4432,22 @@ nextjs-portal {
 
 .workspaceAiIconButton {
   align-items: center;
-  background: rgba(255, 255, 255, 0.07);
-  border: 1px solid rgba(148, 163, 184, 0.22);
-  border-radius: 6px;
-  color: #e5edf7;
+  background: var(--bp-paper);
+  border: 1px solid var(--bp-line);
+  border-radius: var(--bp-r);
+  color: var(--bp-blue);
   cursor: pointer;
   display: inline-flex;
   height: 36px;
   justify-content: center;
   width: 36px;
+}
+
+.workspaceAiIconButton:hover,
+.workspaceAiIconButton:focus-visible {
+  background: var(--bp-blue-tint);
+  border-color: color-mix(in srgb, var(--bp-blue) 44%, var(--bp-line));
+  outline: none;
 }
 
 .workspaceAiStartTranscript {
@@ -4451,9 +4462,9 @@ nextjs-portal {
 .workspaceAiStartMessage,
 .workspaceAiPreviewCard,
 .workspaceAiStartNotice {
-  background: rgba(255, 255, 255, 0.07);
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  border-radius: 8px;
+  background: var(--bp-paper-2);
+  border: 1px solid var(--bp-line);
+  border-radius: var(--bp-r);
   display: grid;
   gap: 8px;
   max-width: 760px;
@@ -4462,25 +4473,26 @@ nextjs-portal {
 
 .workspaceAiStartUserMessage {
   align-self: flex-end;
-  background: rgba(37, 99, 235, 0.22);
-  border-color: rgba(96, 165, 250, 0.28);
+  background: color-mix(in srgb, var(--bp-blue-tint) 72%, #ffffff);
+  border-color: color-mix(in srgb, var(--bp-blue) 34%, var(--bp-line));
 }
 
 .workspaceAiStartError {
-  background: rgba(185, 28, 28, 0.18);
-  border-color: rgba(248, 113, 113, 0.34);
+  background: var(--bp-high-tint);
+  border-color: color-mix(in srgb, var(--bp-high) 42%, var(--bp-line));
+  color: var(--bp-high);
 }
 
 .workspaceAiStartMessage span,
 .workspaceAiPreviewHeader span {
-  color: #7dd3fc;
+  color: var(--bp-blue);
   font-size: 0.72rem;
   font-weight: 900;
   text-transform: uppercase;
 }
 
 .workspaceAiStartMessage p {
-  color: #dbe7f5;
+  color: var(--bp-text);
   font-size: 0.92rem;
   line-height: 1.55;
   margin: 0;
@@ -4512,16 +4524,34 @@ nextjs-portal {
 
 .workspaceAiStartSuggestions button,
 .workspaceAiSecondaryButton {
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(148, 163, 184, 0.26);
-  color: #cbd5e1;
+  background: var(--bp-paper);
+  border: 1px solid var(--bp-line);
+  color: var(--bp-blue);
 }
 
 .workspaceAiPrimaryButton,
 .workspaceAiStartComposer button {
-  background: linear-gradient(135deg, #38bdf8, #2563eb);
-  border: 1px solid rgba(125, 211, 252, 0.42);
+  background: var(--bp-blue);
+  border: 1px solid var(--bp-blue);
   color: #ffffff;
+}
+
+.workspaceAiStartSuggestions button:not(:disabled):hover,
+.workspaceAiStartSuggestions button:not(:disabled):focus-visible,
+.workspaceAiSecondaryButton:not(:disabled):hover,
+.workspaceAiSecondaryButton:not(:disabled):focus-visible {
+  background: var(--bp-blue-tint);
+  border-color: color-mix(in srgb, var(--bp-blue) 46%, var(--bp-line));
+  outline: none;
+}
+
+.workspaceAiPrimaryButton:not(:disabled):hover,
+.workspaceAiPrimaryButton:not(:disabled):focus-visible,
+.workspaceAiStartComposer button:not(:disabled):hover,
+.workspaceAiStartComposer button:not(:disabled):focus-visible {
+  background: color-mix(in srgb, var(--bp-blue) 88%, #000000);
+  border-color: color-mix(in srgb, var(--bp-blue) 88%, #000000);
+  outline: none;
 }
 
 .workspaceAiStartSuggestions button:disabled,
@@ -4544,39 +4574,41 @@ nextjs-portal {
 }
 
 .workspaceAiPreviewHeader h2 {
-  color: #ffffff;
+  color: var(--bp-ink);
   font-size: 1rem;
   line-height: 1.25;
   margin: 2px 0 0;
 }
 
 .workspaceAiPreviewHeader strong {
-  color: #bae6fd;
+  color: var(--bp-blue);
   font-size: 0.78rem;
   white-space: nowrap;
 }
 
 .workspaceAiMiniDiagram {
   background:
-    radial-gradient(circle at 24px 24px, rgba(125, 211, 252, 0.16), transparent 26px),
-    rgba(2, 6, 23, 0.32);
-  border: 1px solid rgba(148, 163, 184, 0.16);
-  border-radius: 6px;
+    linear-gradient(var(--bp-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--bp-grid) 1px, transparent 1px),
+    var(--bp-paper);
+  background-size: 24px 24px;
+  border: 1px solid var(--bp-line);
+  border-radius: var(--bp-r);
   height: auto;
   max-height: 260px;
   width: 100%;
 }
 
 .workspaceAiMiniDiagramEdge {
-  stroke: #7dd3fc;
+  stroke: var(--bp-blue);
   stroke-linecap: round;
-  stroke-opacity: 0.42;
+  stroke-opacity: 0.44;
   stroke-width: 1.5;
 }
 
 .workspaceAiMiniDiagramNode circle {
-  fill: rgba(15, 23, 42, 0.74);
-  stroke: rgba(125, 211, 252, 0.38);
+  fill: color-mix(in srgb, var(--bp-paper-2) 82%, #ffffff);
+  stroke: color-mix(in srgb, var(--bp-blue) 42%, var(--bp-line));
   stroke-width: 1;
 }
 
@@ -4586,14 +4618,15 @@ nextjs-portal {
 
 .workspaceAiMiniDiagramNodeFallback path {
   fill: none;
-  stroke: #e5edf7;
+  stroke: var(--bp-blue);
   stroke-linejoin: round;
   stroke-width: 2;
 }
 
 .workspaceAiStartComposer {
   align-items: end;
-  border-top: 1px solid rgba(148, 163, 184, 0.18);
+  background: color-mix(in srgb, var(--bp-paper-2) 78%, var(--bp-paper));
+  border-top: 1px solid var(--bp-line);
   display: grid;
   gap: 10px;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -4601,10 +4634,10 @@ nextjs-portal {
 }
 
 .workspaceAiStartComposer textarea {
-  background: rgba(255, 255, 255, 0.07);
-  border: 1px solid rgba(148, 163, 184, 0.24);
-  border-radius: 7px;
-  color: #e5edf7;
+  background: var(--bp-paper);
+  border: 1px solid var(--bp-line);
+  border-radius: var(--bp-r);
+  color: var(--bp-ink);
   font: inherit;
   min-height: 72px;
   padding: 11px 12px;
@@ -4612,8 +4645,8 @@ nextjs-portal {
 }
 
 .workspaceAiStartComposer textarea:focus {
-  border-color: rgba(56, 189, 248, 0.72);
-  outline: 2px solid rgba(56, 189, 248, 0.16);
+  border-color: var(--bp-blue);
+  outline: 2px solid color-mix(in srgb, var(--bp-blue) 18%, transparent);
 }
 
 @media (max-width: 720px) {
