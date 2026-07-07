@@ -90,6 +90,8 @@ test("Reverse Engineering result shows risks, partial scan errors, and import ha
   assert.match(findingsPanelSource, /High Risk/);
   assert.match(findingsPanelSource, /어떻게 고치면 되나요/);
   assert.match(findingsPanelSource, /부분 실패/);
+  assert.match(findingsPanelSource, /scanErrors\.map\(\(scanError, index\)/);
+  assert.match(findingsPanelSource, /key=\{`\$\{scanError\.id\}-\$\{index\}`\}/);
   assert.match(findingsPanelSource, /stage/);
   assert.match(findingsPanelSource, /reason/);
   assert.match(findingsPanelSource, /retryable/);
