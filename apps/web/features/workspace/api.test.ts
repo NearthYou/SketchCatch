@@ -27,6 +27,7 @@ import {
   listAwsConnections,
   listDeployments,
   listGitCicdHandoffs,
+  listGitHubInstalledRepositories,
   listTerraformOutputs,
   listCostUsageAnalysis,
   listProjects,
@@ -84,6 +85,66 @@ test("listProjects fetches projects for the authenticated user", async (context)
   assert.equal(requests[0]?.init?.method, undefined);
   assert.equal(new Headers(requests[0]?.init?.headers).get("authorization"), "Bearer access-token");
   assert.deepEqual(projects, [project]);
+});
+
+test("listGitHubInstalledRepositories fetches GitHub App installation repository candidates", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    restoreWindow(originalWindowDescriptor);
+  });
+
+  installAuthSession();
+
+  globalThis.fetch = async (input, init) => {
+    requests.push({ input, init });
+
+    return new Response(
+      JSON.stringify({
+        projectId: project.id,
+        state: "signed-state",
+        expiresAt: "2026-07-07T00:10:00.000Z",
+        repositories: [
+          {
+            installationId: "12345",
+            installationAccountLogin: "NearthYou",
+            installationAccountType: "Organization",
+            installationRepositorySelection: "selected",
+            githubRepositoryId: "repo-1",
+            owner: "NearthYou",
+            name: "sketchcatch-iac-handoff-test",
+            fullName: "NearthYou/sketchcatch-iac-handoff-test",
+            defaultBranch: "main",
+            repositoryUrl: "https://github.com/NearthYou/sketchcatch-iac-handoff-test",
+            visibility: "private",
+            archived: false,
+            connectedSourceRepositoryId: null,
+            connectedStatus: null
+          }
+        ]
+      }),
+      {
+        headers: {
+          "Content-Type": "application/json"
+        },
+        status: 200
+      }
+    );
+  };
+
+  const result = await listGitHubInstalledRepositories(project.id);
+
+  assert.equal(
+    String(requests[0]?.input),
+    `/api/projects/${project.id}/source-repositories/github/installed-repositories`
+  );
+  assert.equal(requests[0]?.init?.method, "POST");
+  assert.equal(result.state, "signed-state");
+  assert.equal(result.repositories[0]?.fullName, "NearthYou/sketchcatch-iac-handoff-test");
+  assert.equal(result.repositories[0]?.installationId, "12345");
 });
 
 test("listCostUsageAnalysis fetches actual usage analysis with range and AWS connection query", async (context) => {

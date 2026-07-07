@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { GitHubRepositoryCandidate } from "@sketchcatch/types";
 import {
   connectGitHubSourceRepository,
+  createGitHubSourceRepositoryInstallUrl,
   listGitHubInstallationRepositories
 } from "../../../../features/workspace/api";
 import { getApiErrorMessage } from "../../../../lib/api-client";
@@ -110,6 +111,25 @@ export default function GitHubIntegrationCallbackPage() {
     }
   }
 
+  async function startGitHubInstallationFromCallback(): Promise<void> {
+    if (callbackState.status !== "ready") {
+      return;
+    }
+
+    try {
+      const { installUrl } = await createGitHubSourceRepositoryInstallUrl(
+        callbackState.projectId
+      );
+
+      window.location.assign(installUrl);
+    } catch (error) {
+      setCallbackState({
+        status: "error",
+        message: getApiErrorMessage(error, "GitHub App 설치 화면을 열지 못했습니다.")
+      });
+    }
+  }
+
   return (
     <main style={pageStyle}>
       <section style={panelStyle}>
@@ -158,6 +178,15 @@ export default function GitHubIntegrationCallbackPage() {
             {selectableRepositories.length === 0 ? (
               <p style={mutedStyle}>선택 가능한 repository가 없습니다.</p>
             ) : null}
+            <div style={actionRowStyle}>
+              <button
+                onClick={() => void startGitHubInstallationFromCallback()}
+                style={installButtonStyle}
+                type="button"
+              >
+                GitHub App 설치/권한 추가
+              </button>
+            </div>
           </>
         ) : null}
       </section>
@@ -251,4 +280,22 @@ const errorStyle = {
   fontSize: "14px",
   lineHeight: 1.5,
   padding: "14px 16px"
+} as const;
+
+const actionRowStyle = {
+  display: "flex",
+  justifyContent: "flex-end",
+  marginTop: "16px"
+} as const;
+
+const installButtonStyle = {
+  background: "#2563eb",
+  border: "1px solid #2563eb",
+  borderRadius: "8px",
+  color: "#ffffff",
+  cursor: "pointer",
+  fontSize: "14px",
+  fontWeight: 800,
+  minHeight: "40px",
+  padding: "8px 14px"
 } as const;

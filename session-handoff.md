@@ -1,42 +1,36 @@
 # Session Handoff
 
-Use this file only for compact continuation context. Write it in English. Keep old history out unless it is required for the next session.
+Use this file only for compact continuation context. Write it in English.
 
 ## Currently Verified
 
-Current branch:
-
-- `feat/ys/142-cost-risk-분석-구현`
-
-Current worktree:
-
-- `C:\krafton_jungle\SketchCatch`
+- Branch: `codex/github-installed-repo-discovery`
+- Worktree: `C:\Users\siwon\Desktop\Jungle\Week17~21\SketchCatch-worktrees\aws-runtime-policy-deploy-fix`
+- GitHub chooser now loads repositories from live GitHub App installations, not only saved SketchCatch rows.
+- Local checks pass on latest `origin/dev`.
 
 ## Changes This Session
 
-- Daily usage chart y-axis now displays USD tick labels.
-- Usage detail sections for resource billing, waste resources, and recommendations are hidden until a specific project is selected.
-- Fallback project cost rows now use deterministic, distinct project weights instead of equal sample amounts when no deployed resources exist.
-- Waste findings and recommendation actions now use clearer user-facing explanations and concrete downsizing suggestions.
-- Service-cost rows now include color swatches that match the stacked service-cost bar segments.
-- Service-cost rows use thin dividers instead of per-row progress tracks.
-- Project usage table keeps all cached project rows visible after one project is selected, and the project-table source column is removed.
+- Added GitHub App installation listing to `GitHubAppClient`.
+- Added installed repository discovery service and route.
+- Added shared installed repository candidate response types.
+- Updated Deployment Panel to load installed repositories on GitHub connect and directly connect the selected repo.
+- Added backend and frontend regression tests.
 
 ## Verification
 
-- `pnpm --filter @sketchcatch/api exec tsx --test src/services/cost-usage-analysis.test.ts src/routes/costs.test.ts`
-- `pnpm --filter @sketchcatch/web exec tsx --test features/costs/cost-usage-project-view.test.ts features/costs/cost-usage-charts.test.ts features/workspace/api.test.ts`
+- No known broken behavior remains locally.
+- Production deployment is still pending for this branch.
+
+## Verification
+
 - `pnpm harness:check`
+- `pnpm --filter @sketchcatch/api exec tsx --test src/source-repositories/github-app-client.test.ts src/source-repositories/source-repository-service.test.ts src/routes/source-repositories.test.ts`
+- `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/api.test.ts features/workspace/workspace-right-panel-layout.test.ts`
 - `pnpm lint`
 - `pnpm typecheck`
 - `pnpm build`
-- `pnpm --filter @sketchcatch/web exec tsx --test features/costs/cost-usage-charts.test.ts features/costs/cost-usage-project-view.test.ts`
-- `pnpm --filter @sketchcatch/web typecheck`
-
-## Broken Or Unverified
-
-- Authenticated browser smoke could not be completed because the local Playwright session had no login state and the documented demo account returned 401.
 
 ## Best Next Action
 
-- Run authenticated browser smoke again when a valid local account or session is available.
+- Push, open PR to `dev`, merge after CI, then deploy production.

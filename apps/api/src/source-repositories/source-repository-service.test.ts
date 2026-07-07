@@ -5,6 +5,7 @@ import {
   connectGitHubSourceRepository,
   createGitHubExistingInstallationCallbackUrl,
   createGitHubInstallUrl,
+  listGitHubInstalledRepositories,
   listGitHubInstallationRepositories,
   SourceRepositoryNotFoundError,
   SourceRepositoryConflictError,
@@ -76,6 +77,42 @@ test("GitHub App install URL starts at target selection so already-installed acc
   assert.ok(installUrl.searchParams.get("state"));
 });
 
+test("GitHub App installed repositories include repos not yet stored in SketchCatch", async () => {
+  const repository = createInMemorySourceRepositoryRepository([
+    createSourceRepositoryRecord({
+      githubInstallationId: "42",
+      githubRepositoryId: "repo-1",
+      name: "connected"
+    })
+  ]);
+  const github = createFakeGitHubAppClient([
+    createRepositoryCandidate({ githubRepositoryId: "repo-1", name: "connected" }),
+    createRepositoryCandidate({ githubRepositoryId: "repo-2", name: "handoff-test" })
+  ]);
+  const result = await listGitHubInstalledRepositories(
+    {
+      projectId,
+      accessContext: createAccessContext(userId),
+      stateSecret
+    },
+    repository,
+    github
+  );
+
+  assert.ok(result.state);
+  assert.deepEqual(
+    result.repositories.map((candidate) => ({
+      fullName: candidate.fullName,
+      installationId: candidate.installationId,
+      connectedStatus: candidate.connectedStatus
+    })),
+    [
+      { fullName: "owner/connected", installationId: "42", connectedStatus: "active" },
+      { fullName: "owner/handoff-test", installationId: "42", connectedStatus: null }
+    ]
+  );
+});
+
 test("existing active GitHub installation issues a callback URL for the repo selection screen", async () => {
   const repository = createInMemorySourceRepositoryRepository([
     createSourceRepositoryRecord({
@@ -99,12 +136,30 @@ test("existing active GitHub installation issues a callback URL for the repo sel
   assert.ok(callbackUrl.searchParams.get("state"));
 });
 
-test("existing installation callback URL requires an active GitHub source repository", async () => {
+test("existing installation callback URL can reuse an inactive GitHub source repository", async () => {
   const repository = createInMemorySourceRepositoryRepository([
     createSourceRepositoryRecord({
+      githubInstallationId: "inactive-installation",
       status: "inactive"
     })
   ]);
+  const callback = await createGitHubExistingInstallationCallbackUrl(
+    {
+      projectId,
+      accessContext: createAccessContext(userId),
+      callbackUrl: "https://sketchcatch.net/integrations/github/callback",
+      stateSecret
+    },
+    repository
+  );
+  const callbackUrl = new URL(callback.callbackUrl);
+
+  assert.equal(callbackUrl.searchParams.get("installation_id"), "inactive-installation");
+  assert.ok(callbackUrl.searchParams.get("state"));
+});
+
+test("existing installation callback URL requires a known GitHub source repository", async () => {
+  const repository = createInMemorySourceRepositoryRepository();
 
   await assert.rejects(
     () =>
@@ -286,6 +341,17 @@ function createAccessContext(accessUserId: string): ProjectAccessContext {
 
 function createFakeGitHubAppClient(repositories: GitHubRepositoryCandidate[]): GitHubAppClient {
   return {
+    async listInstallations() {
+      return [
+        {
+          installationId: "42",
+          accountLogin: "owner",
+          accountType: "Organization",
+          repositorySelection: "selected",
+          htmlUrl: "https://github.com/settings/installations/42"
+        }
+      ];
+    },
     async listInstallationRepositories() {
       return repositories;
     },
@@ -322,6 +388,9 @@ function createInMemorySourceRepositoryRepository(
     },
     async listProjectSourceRepositories(requestProjectId) {
       return rows.filter((row) => row.projectId === requestProjectId);
+    },
+    async findProjectSourceRepository(requestProjectId, sourceRepositoryId) {
+      return rows.find((row) => row.projectId === requestProjectId && row.id === sourceRepositoryId);
     },
     async createActiveGitHubSourceRepository(input: CreateActiveGitHubSourceRepositoryInput) {
       const now = new Date();

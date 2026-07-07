@@ -51,6 +51,7 @@ import type {
   GitCicdAwsRoleDiffApplyResponse,
   GitHubAppExistingInstallationCallbackUrlResponse,
   GitHubAppInstallUrlResponse,
+  ListGitHubInstalledRepositoriesResponse,
   ListGitHubInstallationRepositoriesRequest,
   ListGitHubInstallationRepositoriesResponse,
   Project,
@@ -777,10 +778,31 @@ export async function createGitHubSourceRepositoryInstallUrl(
 }
 
 export async function createGitHubExistingInstallationCallbackUrl(
-  projectId: string
+  projectId: string,
+  sourceRepositoryId?: string
 ): Promise<GitHubAppExistingInstallationCallbackUrlResponse> {
+  const path = sourceRepositoryId
+    ? `/projects/${encodeURIComponent(
+        projectId
+      )}/source-repositories/github/${encodeURIComponent(
+        sourceRepositoryId
+      )}/existing-installation-callback-url`
+    : `/projects/${encodeURIComponent(projectId)}/source-repositories/github/existing-installation-callback-url`;
+
   return apiFetch<GitHubAppExistingInstallationCallbackUrlResponse>(
-    `/projects/${encodeURIComponent(projectId)}/source-repositories/github/existing-installation-callback-url`,
+    path,
+    {
+      auth: true,
+      method: "POST"
+    }
+  );
+}
+
+export async function listGitHubInstalledRepositories(
+  projectId: string
+): Promise<ListGitHubInstalledRepositoriesResponse> {
+  return apiFetch<ListGitHubInstalledRepositoriesResponse>(
+    `/projects/${encodeURIComponent(projectId)}/source-repositories/github/installed-repositories`,
     {
       auth: true,
       method: "POST"

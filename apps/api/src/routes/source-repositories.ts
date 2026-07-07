@@ -2,6 +2,7 @@ import { z } from "zod";
 import type {
   GitHubAppExistingInstallationCallbackUrlResponse,
   GitHubAppInstallUrlResponse,
+  ListGitHubInstalledRepositoriesResponse,
   ListGitHubInstallationRepositoriesResponse,
   SourceRepository,
   SourceRepositoryListResponse,
@@ -20,6 +21,7 @@ import {
   createGitHubExistingInstallationCallbackUrl,
   createGitHubInstallUrl,
   createPostgresSourceRepositoryRepository,
+  listGitHubInstalledRepositories,
   listGitHubInstallationRepositories,
   listSourceRepositories,
   SourceRepositoryConflictError,
@@ -32,6 +34,10 @@ import type { ProjectAccessContext } from "../git-cicd/git-cicd-handoff-service.
 
 const projectParamsSchema = z.object({
   projectId: z.uuid()
+});
+
+const projectSourceRepositoryParamsSchema = projectParamsSchema.extend({
+  sourceRepositoryId: z.uuid()
 });
 
 const listGitHubInstallationRepositoriesBodySchema = z
@@ -169,6 +175,40 @@ export async function registerSourceRepositoryRoutes(
     }
   );
 
+  app.post(
+    "/projects/:projectId/source-repositories/github/:sourceRepositoryId/existing-installation-callback-url",
+    async (request, reply) => {
+      const params = projectSourceRepositoryParamsSchema.parse(request.params);
+      const { accessContext, repository } = await getSourceRepositoryRequestContext(
+        request,
+        options,
+        getSourceRepositoryDatabaseClient
+      );
+
+      try {
+        const runtime = getGitHubAppRouteRuntime(options);
+        const result = await createGitHubExistingInstallationCallbackUrl(
+          {
+            projectId: params.projectId,
+            sourceRepositoryId: params.sourceRepositoryId,
+            accessContext,
+            callbackUrl: runtime.callbackUrl,
+            stateSecret: runtime.stateSecret
+          },
+          repository
+        );
+        const response: GitHubAppExistingInstallationCallbackUrlResponse = {
+          callbackUrl: result.callbackUrl,
+          expiresAt: result.expiresAt.toISOString()
+        };
+
+        return reply.status(201).send(response);
+      } catch (error) {
+        return handleSourceRepositoryError(error, reply);
+      }
+    }
+  );
+
   app.post("/source-repositories/github/installation-repositories", async (request, reply) => {
     const body = listGitHubInstallationRepositoriesBodySchema.parse(request.body);
     const { accessContext, repository } = await getSourceRepositoryRequestContext(
@@ -196,6 +236,41 @@ export async function registerSourceRepositoryRoutes(
       return handleSourceRepositoryError(error, reply);
     }
   });
+
+  app.post(
+    "/projects/:projectId/source-repositories/github/installed-repositories",
+    async (request, reply) => {
+      const params = projectParamsSchema.parse(request.params);
+      const { accessContext, repository } = await getSourceRepositoryRequestContext(
+        request,
+        options,
+        getSourceRepositoryDatabaseClient
+      );
+
+      try {
+        const runtime = getGitHubAppRouteRuntime(options);
+        const result = await listGitHubInstalledRepositories(
+          {
+            projectId: params.projectId,
+            accessContext,
+            stateSecret: runtime.stateSecret
+          },
+          repository,
+          runtime.githubAppClient
+        );
+        const response: ListGitHubInstalledRepositoriesResponse = {
+          projectId: result.projectId,
+          state: result.state,
+          expiresAt: result.expiresAt.toISOString(),
+          repositories: result.repositories
+        };
+
+        return reply.status(200).send(response);
+      } catch (error) {
+        return handleSourceRepositoryError(error, reply);
+      }
+    }
+  );
 
   app.post("/projects/:projectId/source-repositories/github", async (request, reply) => {
     const params = projectParamsSchema.parse(request.params);

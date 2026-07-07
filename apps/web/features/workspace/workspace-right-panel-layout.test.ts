@@ -555,6 +555,30 @@ test("deployment creation prepares fresh snapshot and terraform artifact before 
   assert.match(componentSource, /onPrepareDeploymentArtifacts=\{prepareDeploymentArtifacts\}/);
 });
 
+test("GitHub connection opens the in-app repository chooser before install handoff", () => {
+  const startGitHubConnectionIndex = deploymentPanelSource.indexOf(
+    "function startGitHubConnection"
+  );
+  const createHandoffIndex = deploymentPanelSource.indexOf(
+    "async function createGitCicdAutoDeployHandoff",
+    startGitHubConnectionIndex
+  );
+  const startGitHubConnectionSource = deploymentPanelSource.slice(
+    startGitHubConnectionIndex,
+    createHandoffIndex
+  );
+
+  assert.ok(startGitHubConnectionIndex > -1);
+  assert.match(startGitHubConnectionSource, /setShowGitHubRepositoryChooser\(true\)/);
+  assert.match(startGitHubConnectionSource, /listGitHubInstalledRepositories\(projectId\)/);
+  assert.doesNotMatch(startGitHubConnectionSource, /createGitHubSourceRepositoryInstallUrl/);
+  assert.match(deploymentPanelSource, /showGitHubRepositoryChooser/);
+  assert.match(deploymentPanelSource, /connectInstalledGitHubRepository/);
+  assert.match(deploymentPanelSource, /installedGitHubRepositorySelection/);
+  assert.match(deploymentPanelSource, /knownGitHubSourceRepositories/);
+  assert.match(deploymentPanelSource, /GitHub App 설치\/권한 추가/);
+});
+
 test("deployment setup exposes only baseline save, AWS connection, and review start controls", () => {
   const saveIndex = deploymentPanelSource.indexOf("배포 기준 저장");
   const awsConnectionIndex = deploymentPanelSource.indexOf("AWS 연결", saveIndex);
