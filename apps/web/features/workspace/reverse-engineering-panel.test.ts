@@ -83,10 +83,12 @@ test("Reverse Engineering start page lets users choose another start mode before
   assert.doesNotMatch(reverseWorkspaceClientSource, /작업 화면으로 돌아가기/);
 });
 
-test("Reverse Engineering left panel focuses on board candidate selection", () => {
+test("Reverse Engineering left panel shows automatic structure first and candidates only when needed", () => {
   assert.match(reverseWorkspaceClientSource, /ReverseBoardCandidateSelectionPanel/);
   assert.match(reverseWorkspaceClientSource, /보드 후보 선택/);
-  assert.match(reverseWorkspaceClientSource, /전체 Resource는 유지하고 묶는 기준만 다르게 보여줍니다/);
+  assert.match(reverseWorkspaceClientSource, /자동 감지된 구조/);
+  assert.match(reverseWorkspaceClientSource, /헷갈릴 때만 여러 후보가 표시됩니다/);
+  assert.match(reverseWorkspaceClientSource, /자동 판단이 애매할 때만 여러 후보를 보여줍니다/);
   assert.doesNotMatch(reverseWorkspaceClientSource, /진행 순서/);
   assert.doesNotMatch(reverseWorkspaceClientSource, /가져오는 범위/);
   assert.doesNotMatch(reverseWorkspaceClientSource, /reverseStartGuideSteps/);
@@ -125,9 +127,9 @@ test("Reverse Engineering result explains scan coverage before users apply the p
   assert.match(resultPanelSource, /<details/);
 });
 
-test("Reverse Engineering start page shows multiple structure candidates before applying one", () => {
+test("Reverse Engineering start page wires automatic structure candidates before applying one", () => {
   assert.match(candidatesSource, /createReverseEngineeringBoardCandidates/);
-  assert.match(candidatesSource, /candidate-structure-dependency/);
+  assert.match(candidatesSource, /candidate-structure-auto/);
   assert.match(panelSource, /selectedCandidateId/);
   assert.match(panelSource, /selectedCandidateResult/);
   assert.match(panelSource, /createReverseEngineeringCandidateResult/);

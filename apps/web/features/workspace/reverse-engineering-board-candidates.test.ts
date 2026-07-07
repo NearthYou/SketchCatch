@@ -6,7 +6,7 @@ import {
   createReverseEngineeringCandidateResult
 } from "./reverse-engineering-board-candidates";
 
-test("createReverseEngineeringBoardCandidates makes up to three structure interpretations with every resource", () => {
+test("createReverseEngineeringBoardCandidates returns one automatic structure when grouping is clear enough", () => {
   const candidates = createReverseEngineeringBoardCandidates(createScanResult());
   const expectedNodeIds = [
     "resource-vpc-shop",
@@ -17,16 +17,12 @@ test("createReverseEngineeringBoardCandidates makes up to three structure interp
 
   assert.deepEqual(
     candidates.map((candidate) => candidate.id),
-    [
-      "candidate-structure-dependency",
-      "candidate-structure-connectivity",
-      "candidate-structure-provider"
-    ]
+    ["candidate-structure-auto"]
   );
-  assert.ok(candidates.length <= 3);
+  assert.equal(candidates[0]?.title, "자동 감지된 구조");
   assert.deepEqual(
     candidates.map((candidate) => candidate.architectureJson.nodes.map((node) => node.id)),
-    [expectedNodeIds, expectedNodeIds, expectedNodeIds]
+    [expectedNodeIds]
   );
 });
 
@@ -52,9 +48,9 @@ test("createReverseEngineeringBoardCandidates falls back to one structure choice
 
   assert.deepEqual(
     candidates.map((candidate) => candidate.id),
-    ["candidate-structure-dependency"]
+    ["candidate-structure-auto"]
   );
-  assert.equal(candidates[0]?.title, "배포 관계 기준 구조");
+  assert.equal(candidates[0]?.title, "자동 감지된 구조");
 });
 
 test("createReverseEngineeringCandidateResult keeps all resources and changes only the selected grouping", () => {
@@ -78,7 +74,7 @@ test("createReverseEngineeringCandidateResult keeps all resources and changes on
   assert.equal(candidateResult.discoveredResources.length, result.discoveredResources.length);
 });
 
-test("createReverseEngineeringBoardCandidates removes duplicated relationship edges", () => {
+test("createReverseEngineeringBoardCandidates keeps one automatic structure even when relationship edges can be reinterpreted", () => {
   const result = createScanResult();
   const [vpcResource, ...remainingResources] = result.discoveredResources;
   assert.ok(vpcResource);
@@ -95,13 +91,11 @@ test("createReverseEngineeringBoardCandidates removes duplicated relationship ed
       ...remainingResources
     ]
   });
-  const relationshipCandidate = candidates.find(
-    (candidate) => candidate.id === "candidate-structure-connectivity"
-  );
-  assert.ok(relationshipCandidate);
-  const edgeIds = relationshipCandidate.architectureJson.edges.map((edge) => edge.id);
 
-  assert.equal(new Set(edgeIds).size, edgeIds.length);
+  assert.deepEqual(
+    candidates.map((candidate) => candidate.id),
+    ["candidate-structure-auto"]
+  );
 });
 
 function createScanResult(

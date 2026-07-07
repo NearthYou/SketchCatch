@@ -70,12 +70,12 @@ export function ReverseEngineeringResultPanel({
             <strong>{result.scanErrors.length}</strong>
           </span>
           <span>
-            선택한 후보
+            적용할 구조
             <strong>{selectedCandidate?.title ?? "기본 후보"}</strong>
           </span>
         </div>
         <p className={styles.deploymentHint}>
-          왼쪽에서 고른 후보가 보드에 미리보기로 표시됩니다. 버튼을 누르면 확인 팝업 없이 바로
+          왼쪽에 표시된 구조가 보드에 미리보기로 표시됩니다. 버튼을 누르면 확인 팝업 없이 바로
           프로젝트를 만듭니다.
         </p>
         {comparison.manualReviews.length > 0 ? (
