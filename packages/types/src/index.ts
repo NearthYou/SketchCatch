@@ -451,6 +451,22 @@ export type ListGitHubInstallationRepositoriesResponse = {
   repositories: GitHubRepositoryCandidate[];
 };
 
+export type GitHubInstalledRepositoryCandidate = GitHubRepositoryCandidate & {
+  installationId: string;
+  installationAccountLogin: string;
+  installationAccountType: string | null;
+  installationRepositorySelection: "all" | "selected" | null;
+  connectedSourceRepositoryId: string | null;
+  connectedStatus: "active" | "inactive" | null;
+};
+
+export type ListGitHubInstalledRepositoriesResponse = {
+  projectId: string;
+  state: string;
+  expiresAt: IsoDateTimeString;
+  repositories: GitHubInstalledRepositoryCandidate[];
+};
+
 export type ConnectGitHubSourceRepositoryRequest = {
   installationId: string;
   githubRepositoryId: string;

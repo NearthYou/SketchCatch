@@ -74,6 +74,40 @@ test("listInstallationRepositories accepts GitHub PKCS#1 private keys", async ()
   ]);
 });
 
+test("listInstallations returns GitHub App installation account metadata", async () => {
+  const client = createGitHubAppClient({
+    appId: "12345",
+    privateKey,
+    fetch: createGitHubFetchStub([], ({ pathname }) => {
+      if (pathname === "/app/installations") {
+        return jsonResponse([
+          {
+            id: 42,
+            repository_selection: "selected",
+            html_url: "https://github.com/settings/installations/42",
+            account: {
+              login: "NearthYou",
+              type: "Organization"
+            }
+          }
+        ]);
+      }
+
+      return jsonResponse({ message: "not found" }, 404);
+    })
+  });
+
+  assert.deepEqual(await client.listInstallations(), [
+    {
+      installationId: "42",
+      accountLogin: "NearthYou",
+      accountType: "Organization",
+      repositorySelection: "selected",
+      htmlUrl: "https://github.com/settings/installations/42"
+    }
+  ]);
+});
+
 test("createPullRequest blocks when the target branch already contains the SketchCatch artifact path", async () => {
   const calls: GitHubApiCall[] = [];
   const client = createGitHubAppClient({
@@ -432,7 +466,7 @@ function createGitHubFetchStub(
   }) as typeof fetch;
 }
 
-function jsonResponse(body: Record<string, unknown>, status = 200): Response {
+function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
     headers: {

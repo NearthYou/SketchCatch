@@ -126,6 +126,33 @@ test("source repository routes exchange callback state for repositories without 
   assert.equal(repository.rows.length, 0);
 });
 
+test("source repository routes list GitHub App installed repositories before SketchCatch connection", async (t) => {
+  const repository = new FakeSourceRepositoryRepository();
+  const githubAppClient = createFakeGitHubAppClient([
+    createRepositoryCandidate({
+      githubRepositoryId: "repo-2",
+      name: "sketchcatch-iac-handoff-test"
+    })
+  ]);
+  const app = await buildSourceRepositoryRouteApp({ repository, githubAppClient });
+  t.after(() => app.close());
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/projects/${projectId}/source-repositories/github/installed-repositories`,
+    headers: await authHeaders()
+  });
+
+  assert.equal(response.statusCode, 200);
+  const body = response.json();
+
+  assert.equal(body.projectId, projectId);
+  assert.ok(body.state);
+  assert.equal(body.repositories[0]?.fullName, "owner/sketchcatch-iac-handoff-test");
+  assert.equal(body.repositories[0]?.installationId, "12345");
+  assert.equal(body.repositories[0]?.connectedSourceRepositoryId, null);
+});
+
 test("source repository routes store one selected active GitHub repo and soft deactivate the previous one", async (t) => {
   const repository = new FakeSourceRepositoryRepository([
     createSourceRepositoryRecord({
@@ -356,6 +383,17 @@ class SelectQuery {
 
 function createFakeGitHubAppClient(repositories: GitHubRepositoryCandidate[]): GitHubAppClient {
   return {
+    async listInstallations() {
+      return [
+        {
+          installationId: "12345",
+          accountLogin: "owner",
+          accountType: "Organization",
+          repositorySelection: "selected",
+          htmlUrl: "https://github.com/settings/installations/12345"
+        }
+      ];
+    },
     async listInstallationRepositories() {
       return repositories;
     },

@@ -4,34 +4,33 @@ Use this file only for compact continuation context. Write it in English.
 
 ## Currently Verified
 
-- Branch: `codex/github-existing-repo-first`
+- Branch: `codex/github-installed-repo-discovery`
 - Worktree: `C:\Users\siwon\Desktop\Jungle\Week17~21\SketchCatch-worktrees\aws-runtime-policy-deploy-fix`
-- GitHub connect now opens an in-app repository chooser before GitHub App install/configure.
+- GitHub chooser now loads repositories from live GitHub App installations, not only saved SketchCatch rows.
+- Local checks pass on latest `origin/dev`.
 
 ## Changes This Session
 
-- Deployment Panel lists known GitHub source repositories first.
-- Selecting a known repository opens the internal GitHub callback repository picker.
-- GitHub App install/configure is now an explicit add-permissions action.
-- Backend callback URL creation can target a selected known source repository, including inactive previous connections.
-- GitHub callback page has an install/permission-expansion button when the desired repository is missing.
-- PR #227 review feedback was addressed with modal-local error rendering and UUID route validation.
+- Added GitHub App installation listing to `GitHubAppClient`.
+- Added installed repository discovery service and route.
+- Added shared installed repository candidate response types.
+- Updated Deployment Panel to load installed repositories on GitHub connect and directly connect the selected repo.
+- Added backend and frontend regression tests.
 
 ## Broken Or Unverified
 
-- No known broken behavior remains in this branch.
-- Production deployment has not been run from this branch.
+- No known broken behavior remains locally.
+- Production deployment is still pending for this branch.
 
 ## Verification
 
 - `pnpm harness:check`
-- Focused API source repository tests
-- Focused web workspace layout test
+- `pnpm --filter @sketchcatch/api exec tsx --test src/source-repositories/github-app-client.test.ts src/source-repositories/source-repository-service.test.ts src/routes/source-repositories.test.ts`
+- `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/api.test.ts features/workspace/workspace-right-panel-layout.test.ts`
 - `pnpm lint`
 - `pnpm typecheck`
 - `pnpm build`
-- Final `pnpm harness:check`
 
 ## Best Next Action
 
-- Review the PR and merge to `dev`, then deploy if the production site should receive this UX change immediately.
+- Push, open PR to `dev`, merge after CI, then deploy production.
