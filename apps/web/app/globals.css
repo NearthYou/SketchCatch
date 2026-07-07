@@ -4463,6 +4463,13 @@ nextjs-portal {
   margin: 0;
 }
 
+.projectListControls {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 240px));
+  justify-content: start;
+}
+
 .dashboardCountBadge {
   background: rgba(56, 189, 248, 0.11);
   border: 1px solid rgba(56, 189, 248, 0.26);
