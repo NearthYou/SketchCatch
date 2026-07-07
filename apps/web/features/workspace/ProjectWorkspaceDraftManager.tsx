@@ -26,6 +26,7 @@ import {
 } from "./project-draft-save-status";
 import type { WorkspaceCloudPlatform } from "./project-draft-persistence";
 import type { SavedServerProjectDiagramDraft } from "./project-draft-sync";
+import type { WorkspaceRightPanelView } from "./workspace-right-panel.types";
 import styles from "./workspace.module.css";
 
 const LOCAL_SAVE_DEBOUNCE_MS = 800;
@@ -54,6 +55,7 @@ export type ProjectDraftPersistenceController = {
 
 export type ProjectWorkspaceDraftManagerProps = {
   cloudPlatform?: WorkspaceCloudPlatform | undefined;
+  initialRightPanelView?: WorkspaceRightPanelView | undefined;
   localCacheWorkspaceId?: string | undefined;
   localSaveDebounceMs?: number | undefined;
   onDraftPersistenceReady?: ((controller: ProjectDraftPersistenceController) => void) | undefined;
@@ -65,6 +67,7 @@ export type ProjectWorkspaceDraftManagerProps = {
 };
 
 export function ProjectWorkspaceDraftManager({
+  initialRightPanelView,
   localCacheWorkspaceId,
   localSaveDebounceMs = LOCAL_SAVE_DEBOUNCE_MS,
   onDraftPersistenceReady,
@@ -441,10 +444,12 @@ export function ProjectWorkspaceDraftManager({
         )}
         initialDiagram={initialDiagram}
         onDiagramChange={handleDiagramChange}
+        onDiagramSaveRequest={() => flushDraftToServer("manual")}
         projectName={projectName}
         rightPanel={(context) => (
           <WorkspaceRightPanel
             context={context}
+            initialView={initialRightPanelView}
             onTerraformIssueAiRequest={requestTerraformIssueAi}
             onTerraformPreviewAiRequest={setTerraformPreviewAiRequest}
             onTerraformSafeFixApplyResult={setTerraformSafeFixApplyResult}

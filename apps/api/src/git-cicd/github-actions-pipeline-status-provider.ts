@@ -29,13 +29,38 @@ export function createGitHubActionsPipelineStatusProvider(
     async refreshPipelineStatus({ handoff, sourceRepository }) {
       if (
         handoff.repositoryProvider !== "github" ||
-        !handoff.pullRequestHeadSha ||
         !sourceRepository.githubInstallationId
       ) {
         return null;
       }
 
       cachedClient = cachedClient ?? options.githubAppClient ?? createGitHubAppClientFromEnv();
+      if (handoff.pullRequestNumber) {
+        const status = await cachedClient.getPipelineStatusForPullRequest({
+          installationId: sourceRepository.githubInstallationId,
+          owner: sourceRepository.owner,
+          name: sourceRepository.name,
+          pullRequestNumber: handoff.pullRequestNumber
+        });
+
+        return {
+          status: status.status,
+          pipelineRunUrl: status.pipelineRunUrl,
+          mergeCommitSha: status.mergeCommitSha,
+          infraPipelineRunUrl: status.infraPipelineRunUrl,
+          infraPipelineStatus: status.infraPipelineStatus,
+          appPipelineRunUrl: status.appPipelineRunUrl,
+          appPipelineStatus: status.appPipelineStatus,
+          destroyPipelineRunUrl: status.destroyPipelineRunUrl,
+          destroyPipelineStatus: status.destroyPipelineStatus,
+          statusMessage: status.statusMessage
+        };
+      }
+
+      if (!handoff.pullRequestHeadSha) {
+        return null;
+      }
+
       const status = await cachedClient.getLatestWorkflowRunForHeadSha({
         installationId: sourceRepository.githubInstallationId,
         owner: sourceRepository.owner,

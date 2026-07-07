@@ -188,7 +188,7 @@ export function WorkspaceAiPreDeploymentResult({
       <WorkspaceAiFindingList findings={analysis.findings} />
       <WorkspaceAiTextList
         title="체크리스트"
-        items={analysis.checklist.map((item) => `${item.status.toUpperCase()} · ${item.label}`)}
+        items={analysis.checklist.map((item) => `${formatAiSignalLabel(item.status)} · ${item.label}`)}
       />
     </div>
   );
@@ -274,7 +274,7 @@ export function WorkspaceAiTerraformPreviewResult({
       <p className={styles.aiResultSummary}>{preview.summary}</p>
       <WorkspaceAiExplanation explanation={preview.llmExplanation} />
       <WorkspaceAiTextList
-        title="감지된 Resource"
+        title="감지된 리소스"
         items={preview.detectedResources.map(
           (resource) => `${resource.terraformType} · ${resource.label}: ${resource.explanation}`
         )}
@@ -282,7 +282,7 @@ export function WorkspaceAiTerraformPreviewResult({
       <WorkspaceAiFindingList findings={preview.findings} />
       <WorkspaceAiTextList
         title="체크리스트"
-        items={preview.checklist.map((item) => `${item.status.toUpperCase()} · ${item.label}`)}
+        items={preview.checklist.map((item) => `${formatAiSignalLabel(item.status)} · ${item.label}`)}
       />
     </div>
   );
@@ -301,7 +301,7 @@ export function WorkspaceAiTerraformErrorResult({
       <WorkspaceAiTextList
         title="원인"
         items={[
-          `${explanation.stage} · ${explanation.severity.toUpperCase()} · ${explanation.category}: ${
+          `${formatAiSignalLabel(explanation.stage)} · ${formatAiSignalLabel(explanation.severity)} · ${formatAiSignalLabel(explanation.category)}: ${
             explanation.likelyCause
           }`
         ]}
@@ -329,19 +329,84 @@ function WorkspaceAiTextList({ items, title }: { readonly items: readonly string
   );
 }
 
+type AiSignalLabelKey =
+  | "apply"
+  | "architecture"
+  | "availability"
+  | "configuration"
+  | "cost"
+  | "critical"
+  | "error"
+  | "export"
+  | "fail"
+  | "failed"
+  | "high"
+  | "info"
+  | "low"
+  | "medium"
+  | "network"
+  | "pass"
+  | "performance"
+  | "permission"
+  | "plan"
+  | "security"
+  | "success"
+  | "validate"
+  | "warning";
+
+const AI_SIGNAL_LABELS = {
+  apply: "적용",
+  architecture: "아키텍처",
+  availability: "가용성",
+  configuration: "구성",
+  cost: "비용",
+  critical: "치명",
+  error: "오류",
+  export: "내보내기",
+  fail: "실패",
+  failed: "실패",
+  high: "높음",
+  info: "정보",
+  low: "낮음",
+  medium: "중간",
+  network: "네트워크",
+  pass: "통과",
+  performance: "성능",
+  permission: "권한",
+  plan: "계획",
+  security: "보안",
+  success: "성공",
+  validate: "검증",
+  warning: "경고"
+} satisfies Record<AiSignalLabelKey, string>;
+
+function isAiSignalLabelKey(value: string): value is AiSignalLabelKey {
+  return Object.hasOwn(AI_SIGNAL_LABELS, value);
+}
+
+function formatAiSignalLabel(value: string): string {
+  const normalizedValue = value.toLowerCase();
+
+  if (isAiSignalLabelKey(normalizedValue)) {
+    return AI_SIGNAL_LABELS[normalizedValue];
+  }
+
+  return value;
+}
+
 // Check Finding은 Resource 연결 여부를 잃지 않도록 한 줄씩 표시합니다.
 function WorkspaceAiFindingList({ findings }: { readonly findings: readonly CheckFinding[] }) {
   if (findings.length === 0) {
-    return <p className={styles.aiHint}>표시할 Check Finding이 없습니다.</p>;
+    return <p className={styles.aiHint}>표시할 점검 결과가 없습니다.</p>;
   }
 
   return (
     <div className={styles.aiListBlock}>
-      <strong>Check Finding</strong>
+      <strong>점검 결과</strong>
       <ul>
         {findings.map((finding) => (
           <li key={finding.id}>
-            {finding.severity.toUpperCase()} · {finding.title}
+            {formatAiSignalLabel(finding.severity)} · {finding.title}
             {finding.resourceId ? ` · ${finding.resourceId}` : ""}
           </li>
         ))}

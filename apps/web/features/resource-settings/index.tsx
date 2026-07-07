@@ -19,7 +19,8 @@ import {
   RadioTower,
   Search,
   Settings,
-  ShieldCheck
+  ShieldCheck,
+  Sparkles
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useMemo, useState, type DragEvent } from "react";
@@ -32,8 +33,13 @@ import {
 import {
   curatedModules,
   type CuratedModuleCategory,
-  type CuratedModuleDefinition
+  type CuratedModuleDefinition,
+  type CuratedModuleProvider
 } from "./module-catalog";
+import {
+  listBoardTemplates,
+  type BoardTemplate
+} from "./template-library";
 
 const areaLabels: Record<ResourceArea, string> = {
   containers: "Containers",
@@ -88,16 +94,19 @@ const resourceSections: ResourcePanelSection[] = [
 export type ResourceSettingsPanelProps = {
   catalogProvider?: ResourceCatalogProvider | undefined;
   onModuleAdd?: ((moduleId: string) => void) | undefined;
+  onTemplateApply?: ((template: BoardTemplate) => void) | undefined;
   onCollapse?: (() => void) | undefined;
 };
 
 export function ResourceSettingsPanel({
   catalogProvider = defaultResourceCatalogProvider,
   onModuleAdd,
+  onTemplateApply,
   onCollapse
 }: ResourceSettingsPanelProps = {}) {
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState<"resources" | "templates">("resources");
+  const [activeProvider, setActiveProvider] = useState<CuratedModuleProvider>("aws");
   const [activeResourceView, setActiveResourceView] = useState<"resources" | "modules">("resources");
   const [openSections, setOpenSections] = useState<Record<string, boolean>>(
     () =>
@@ -159,14 +168,17 @@ export function ResourceSettingsPanel({
 
       <div className="resourceControlBar">
         <div className="providerControls">
-          <button
-            aria-label="AWS provider"
-            aria-pressed="true"
-            className="providerSelect providerSelectActive"
-            type="button"
-          >
-            <AwsLogo />
-          </button>
+          {(["aws", "azure", "gcp"] as const).map((provider) => (
+            <button
+              aria-pressed={activeProvider === provider}
+              className={activeProvider === provider ? "providerSelect providerSelectActive" : "providerSelect"}
+              key={provider}
+              onClick={() => setActiveProvider(provider)}
+              type="button"
+            >
+              {provider === "aws" ? <AwsLogo /> : <span>{provider.toUpperCase()}</span>}
+            </button>
+          ))}
           <button className="providerSelect providerVersionSelect" type="button" aria-label="Terraform AWS provider version">
             <span>6.47.0</span>
             <ChevronDown aria-hidden="true" size={16} />
@@ -194,8 +206,10 @@ export function ResourceSettingsPanel({
         </div>
       </div>
 
-      {activeTab === "templates" ? (
-        <TemplatesPanel />
+      {activeProvider !== "aws" ? (
+        <InactiveProviderPanel provider={activeProvider} />
+      ) : activeTab === "templates" ? (
+        <TemplatesPanel onTemplateApply={onTemplateApply} />
       ) : activeResourceView === "modules" ? (
         <ModuleCatalogPanel onModuleAdd={onModuleAdd} />
       ) : (
@@ -246,22 +260,96 @@ export function ResourceSettingsPanel({
   );
 }
 
-function TemplatesPanel() {
-  const templates = [
-    "Web/API & Apps",
-    "Data & Storage",
-    "Events & Workflows",
-    "Infra & Resilience"
-  ];
+function InactiveProviderPanel({ provider }: { readonly provider: Exclude<CuratedModuleProvider, "aws"> }) {
+  return (
+    <div className="resourceProviderRoadmap">
+      <Sparkles size={18} aria-hidden="true" />
+      <strong>{provider.toUpperCase()} provider</strong>
+      <span>Multi-cloud catalog is ready in the UI; AWS modules are active in this MVP.</span>
+    </div>
+  );
+}
+
+function TemplatesPanel({
+  onTemplateApply
+}: {
+  readonly onTemplateApply?: ((template: BoardTemplate) => void) | undefined;
+}) {
+  const [isModalOpen, setModalOpen] = useState(false);
+  const templates = listBoardTemplates();
 
   return (
-    <div className="templateCatalogPanel">
-      {templates.map((template) => (
-        <a className="templateCatalogCard" href="/templates" key={template}>
-          <span>{template}</span>
-          <strong>See all</strong>
-        </a>
-      ))}
+    <>
+      <div className="templateCatalogPanel">
+        <button className="templateCatalogCard templateCatalogCardWide" onClick={() => setModalOpen(true)} type="button">
+          <span>Template library</span>
+          <strong>큰 모달로 열기</strong>
+        </button>
+        {templates.slice(0, 3).map((template) => (
+          <button className="templateCatalogCard" key={template.id} onClick={() => setModalOpen(true)} type="button">
+            <span>{template.tags.slice(0, 2).join(" · ")}</span>
+            <strong>{template.title}</strong>
+          </button>
+        ))}
+      </div>
+
+      {isModalOpen ? (
+        <TemplateLibraryModal
+          onClose={() => setModalOpen(false)}
+          onTemplateApply={(template) => {
+            onTemplateApply?.(template);
+            setModalOpen(false);
+          }}
+          templates={templates}
+        />
+      ) : null}
+    </>
+  );
+}
+
+function TemplateLibraryModal({
+  onClose,
+  onTemplateApply,
+  templates
+}: {
+  readonly onClose: () => void;
+  readonly onTemplateApply: (template: BoardTemplate) => void;
+  readonly templates: readonly BoardTemplate[];
+}) {
+  return (
+    <div className="templateModalOverlay" role="presentation">
+      <section className="templateModal" aria-label="Template 큰 모달" role="dialog">
+        <div className="templateModalHeader">
+          <div>
+            <span>Template library</span>
+            <h2>템플릿 보관함</h2>
+            <p>선택하면 현재 보드를 백업하고 템플릿 구조로 덮어씁니다.</p>
+          </div>
+          <button className="templateModalCloseButton" onClick={onClose} type="button">
+            닫기
+          </button>
+        </div>
+
+        <div className="templateModalGrid">
+          {templates.map((template) => (
+            <article className="templateModalCard" key={template.id}>
+              <div>
+                <span>{template.tags.join(" · ")}</span>
+                <h3>{template.title}</h3>
+                <p>{template.description}</p>
+              </div>
+              <div className="templateModalPreview" aria-hidden="true">
+                {template.diagramJson.nodes.slice(0, 5).map((node) => (
+                  <i key={node.id} style={{ left: `${Math.min(78, node.position.x / 10)}%`, top: `${Math.min(76, node.position.y / 8)}%` }} />
+                ))}
+              </div>
+              <button className="templateModalApplyButton" onClick={() => onTemplateApply(template)} type="button">
+                이 템플릿 적용
+              </button>
+            </article>
+          ))}
+        </div>
+      </section>
     </div>
   );
 }

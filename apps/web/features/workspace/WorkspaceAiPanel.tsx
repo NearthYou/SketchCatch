@@ -3,7 +3,9 @@
 import { useMemo, useState } from "react";
 import type {
   AiArchitectureDraftResult,
+  ArchitectureDraftClarification,
   ArchitectureGuardrailWarning,
+  CreateArchitectureDraftResponse,
   DesignSimulationResult
 } from "@sketchcatch/types";
 import { getApiErrorMessage } from "../../lib/api-client";
@@ -25,10 +27,7 @@ import {
   WorkspaceAiRequestMessage
 } from "./WorkspaceAiPanelPieces";
 import type { AiRequestState } from "./WorkspaceAiPanelPieces";
-import {
-  DEFAULT_REQUIREMENT_PROMPT,
-  promptGuideExamples
-} from "./workspace-ai-panel-options";
+import { DEFAULT_REQUIREMENT_PROMPT } from "./workspace-ai-panel-options";
 import styles from "./workspace.module.css";
 
 export type WorkspaceAiPanelProps = {
@@ -81,6 +80,13 @@ export function WorkspaceAiPanel({ context }: WorkspaceAiPanelProps) {
       const result = await createAiArchitectureDraft({
         prompt
       });
+
+      if (isArchitectureDraftClarification(result)) {
+        setDraftState("error");
+        setDraftErrorMessage(result.question);
+        return;
+      }
+
       const previewDiagram = convertArchitectureJsonToDiagramJson(result.architectureJson);
 
       setDraft(result);
@@ -88,7 +94,7 @@ export function WorkspaceAiPanel({ context }: WorkspaceAiPanelProps) {
       setDraftState("idle");
     } catch (error) {
       setDraftState("error");
-      setDraftErrorMessage(getApiErrorMessage(error, "Architecture Draft 생성 중 오류가 발생했습니다."));
+      setDraftErrorMessage(getApiErrorMessage(error, "아키텍처 초안 생성 중 오류가 발생했습니다."));
     }
   }
 
@@ -97,10 +103,19 @@ export function WorkspaceAiPanel({ context }: WorkspaceAiPanelProps) {
       return;
     }
 
-    context.applyDiagramJson(context.previewDiagram ?? convertArchitectureJsonToDiagramJson(draft.architectureJson));
+    context.applyDiagramJson(convertArchitectureJsonToDiagramJson(draft.architectureJson));
+    requestImmediateDiagramSave();
     setDraft(null);
     setDesignSimulation(null);
     setSimulationFingerprint(null);
+  }
+
+  function requestImmediateDiagramSave(): void {
+    const savePromise = context.saveDiagramNow?.();
+
+    if (savePromise) {
+      void savePromise.catch(() => undefined);
+    }
   }
 
   function cancelDraftPreview(): void {
@@ -119,7 +134,7 @@ export function WorkspaceAiPanel({ context }: WorkspaceAiPanelProps) {
 
     if (!boardSnapshot.hasResources) {
       setSimulationState("error");
-      setSimulationErrorMessage("Architecture Board에 Resource가 있어야 실행할 수 있습니다.");
+      setSimulationErrorMessage("아키텍처 보드에 리소스가 있어야 실행할 수 있습니다.");
       return;
     }
 
@@ -136,14 +151,14 @@ export function WorkspaceAiPanel({ context }: WorkspaceAiPanelProps) {
       setSimulationState("idle");
     } catch (error) {
       setSimulationState("error");
-      setSimulationErrorMessage(getApiErrorMessage(error, "Design Simulation 중 오류가 발생했습니다."));
+      setSimulationErrorMessage(getApiErrorMessage(error, "설계 시뮬레이션 중 오류가 발생했습니다."));
     }
   }
 
   return (
     <div className={styles.aiPanel}>
       <header className={styles.aiPanelHeader}>
-        <span>Natural Language Diagramming</span>
+        <span>자연어 다이어그램</span>
         <h2>자연어 다이어그램</h2>
       </header>
 
@@ -156,23 +171,6 @@ export function WorkspaceAiPanel({ context }: WorkspaceAiPanelProps) {
             value={prompt}
           />
         </label>
-        <div className={styles.aiPromptGuide} aria-label="프롬프트 작성 가이드">
-          <div className={styles.aiPromptGuideHeader}>
-            <strong>그냥 이렇게 시작해도 돼요</strong>
-          </div>
-          <div className={styles.aiPromptChips}>
-            {promptGuideExamples.map((example) => (
-              <button
-                className={styles.aiPromptChip}
-                key={example}
-                onClick={() => setPrompt(example)}
-                type="button"
-              >
-                {example}
-              </button>
-            ))}
-          </div>
-        </div>
         {draft === null ? (
           <button
             className={styles.aiPrimaryButton}
@@ -249,4 +247,10 @@ function createDraftWarnings(
   }
 
   return warnings;
+}
+
+function isArchitectureDraftClarification(
+  response: CreateArchitectureDraftResponse
+): response is ArchitectureDraftClarification {
+  return "status" in response && response.status === "needs_clarification";
 }

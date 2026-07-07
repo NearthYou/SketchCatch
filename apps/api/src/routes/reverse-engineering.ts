@@ -4,6 +4,7 @@ import { requireActiveUserId } from "../auth/current-user.js";
 import { getDatabaseClient, type DatabaseClient } from "../db/client.js";
 import {
   createPostgresReverseEngineeringRepository,
+  createReverseEngineeringPreviewScan,
   createReverseEngineeringScanJob,
   ReverseEngineeringNotFoundError,
   toReverseEngineeringScan,
@@ -64,6 +65,32 @@ export async function registerReverseEngineeringRoutes(
   options: ReverseEngineeringRouteOptions = {}
 ): Promise<void> {
   const getReverseEngineeringDatabaseClient = options.getDatabaseClient ?? getDatabaseClient;
+
+  app.post("/reverse-engineering/scans/preview", async (request, reply) => {
+    const currentUserId = await requireActiveUserId(
+      request,
+      getReverseEngineeringDatabaseClient
+    );
+    const body = createScanBodySchema.parse(request.body);
+    const repository = createRepository(options, getReverseEngineeringDatabaseClient);
+
+    try {
+      const response = await createReverseEngineeringPreviewScan(
+        {
+          accessContext: { kind: "user", userId: currentUserId },
+          awsConnectionId: body.awsConnectionId,
+          region: body.region,
+          resourceTypes: body.resourceTypes
+        },
+        repository,
+        options.serviceOptions
+      );
+
+      return reply.status(200).send(response);
+    } catch (error) {
+      return handleReverseEngineeringError(error, reply);
+    }
+  });
 
   app.post("/projects/:projectId/reverse-engineering/scans", async (request, reply) => {
     const currentUserId = await requireActiveUserId(

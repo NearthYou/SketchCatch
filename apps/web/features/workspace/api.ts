@@ -1,5 +1,4 @@
-﻿import type {
-  AiArchitectureDraftResult,
+import type {
   AiPreDeploymentAnalysisResult,
   AiTerraformErrorExplanationResult,
   AiTerraformPreviewExplanationResult,
@@ -7,6 +6,7 @@
   ApiErrorCode,
   ApiErrorResponse,
   ArchitectureJson,
+  ArchitecturePatchPreviewResponse,
   ArchitectureSnapshot,
   AwsConnectionCloudFormationTemplateResponse,
   AwsConnection,
@@ -15,11 +15,13 @@
   CostProjectEstimateListResponse,
   CreateArchitectureSnapshotRequest,
   CreateArchitectureDraftRequest,
+  CreateArchitectureDraftResponse,
   CreateAwsConnectionRequest,
   CreateAwsConnectionResponse,
   CreateDeploymentRequest,
   CreateGitCicdHandoffRequest,
   ConfirmProjectAssetUploadResponse,
+  CreateArchitecturePatchPreviewRequest,
   CreateDesignSimulationRequest,
   CreateProjectAssetUploadRequest,
   CreateProjectRequest,
@@ -42,6 +44,9 @@
   GitCicdHandoffPipelineStatus,
   GitCicdHandoffPipelineStatusResponse,
   GitCicdHandoffResponse,
+  GitCicdGitHubOAuthStartResponse,
+  GitCicdRepositorySettingsApplyResponse,
+  GitCicdAwsRoleDiffApplyResponse,
   GitHubAppExistingInstallationCallbackUrlResponse,
   GitHubAppInstallUrlResponse,
   ListGitHubInstallationRepositoriesRequest,
@@ -302,8 +307,24 @@ export async function syncTerraformToDiagram({
 // 실제 Workspace AI 패널에서 Requirement Prompt 기반 Architecture Draft를 요청합니다.
 export async function createAiArchitectureDraft(
   input: CreateArchitectureDraftRequest
-): Promise<AiArchitectureDraftResult> {
-  return postPublicAiJson<AiArchitectureDraftResult>("/ai/architecture-draft", input);
+): Promise<CreateArchitectureDraftResponse> {
+  return postPublicAiJson<CreateArchitectureDraftResponse>("/ai/architecture-draft", input);
+}
+
+export async function createAiArchitecturePatchPreview(
+  input: CreateArchitecturePatchPreviewRequest
+): Promise<ArchitecturePatchPreviewResponse> {
+  return postPublicAiJson<ArchitecturePatchPreviewResponse>("/ai/architecture-patch-preview", {
+    architectureJson: input.architectureJson,
+    instruction: input.instruction,
+    ...(input.selectedTargetResourceId !== undefined
+      ? { selectedTargetResourceId: input.selectedTargetResourceId }
+      : {}),
+    ...(input.connectionTargetResourceId !== undefined
+      ? { connectionTargetResourceId: input.connectionTargetResourceId }
+      : {}),
+    ...(input.skipConnection === true ? { skipConnection: true } : {})
+  });
 }
 
 // 현재 Architecture Board를 기준으로 Pre-Deployment Check를 실행합니다.
@@ -517,6 +538,20 @@ export async function createReverseEngineeringScan({
   );
 }
 
+// 새 프로젝트를 만들기 전 AWS를 먼저 읽어 보드 후보만 받아옵니다.
+export async function createReverseEngineeringPreviewScan(
+  input: CreateReverseEngineeringScanRequest
+): Promise<ReverseEngineeringScanResponse> {
+  return apiFetch<ReverseEngineeringScanResponse>(
+    "/reverse-engineering/scans/preview",
+    {
+      auth: true,
+      method: "POST",
+      body: input
+    }
+  );
+}
+
 export async function listReverseEngineeringScans(projectId: string): Promise<ReverseEngineeringScan[]> {
   const response = await apiFetch<ReverseEngineeringScanListResponse>(
     `/projects/${encodeURIComponent(projectId)}/reverse-engineering/scans`,
@@ -660,6 +695,60 @@ export async function createGitCicdHandoff({
   );
 
   return response.handoff;
+}
+
+export async function applyGitCicdRepositorySettings(
+  handoffId: string
+): Promise<GitCicdRepositorySettingsApplyResponse> {
+  return apiFetch<GitCicdRepositorySettingsApplyResponse>(
+    `/git-cicd-handoffs/${encodeURIComponent(handoffId)}/repository-settings/apply`,
+    {
+      auth: true,
+      method: "POST",
+      body: {}
+    }
+  );
+}
+
+export async function createGitCicdGitHubOAuthStartUrl(
+  handoffId: string
+): Promise<GitCicdGitHubOAuthStartResponse> {
+  return apiFetch<GitCicdGitHubOAuthStartResponse>(
+    `/git-cicd-handoffs/${encodeURIComponent(handoffId)}/github-oauth/start`,
+    {
+      auth: true,
+      method: "POST",
+      body: {}
+    }
+  );
+}
+
+export async function applyGitCicdRepositorySettingsWithGitHubOAuth(
+  handoffId: string
+): Promise<GitCicdRepositorySettingsApplyResponse> {
+  return apiFetch<GitCicdRepositorySettingsApplyResponse>(
+    `/git-cicd-handoffs/${encodeURIComponent(
+      handoffId
+    )}/repository-settings/apply-with-github-oauth`,
+    {
+      auth: true,
+      method: "POST",
+      body: {}
+    }
+  );
+}
+
+export async function applyGitCicdAwsRoleDiff(
+  handoffId: string
+): Promise<GitCicdAwsRoleDiffApplyResponse> {
+  return apiFetch<GitCicdAwsRoleDiffApplyResponse>(
+    `/git-cicd-handoffs/${encodeURIComponent(handoffId)}/aws-role-diff/apply`,
+    {
+      auth: true,
+      method: "POST",
+      body: {}
+    }
+  );
 }
 
 export async function listSourceRepositories(projectId: string): Promise<SourceRepository[]> {

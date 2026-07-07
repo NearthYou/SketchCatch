@@ -7,10 +7,17 @@ import {
   normalizeEdgeKind
 } from "./diagram-utils";
 import { isAreaNode } from "./area-nodes";
-import type { DiagramFlowEdge, DiagramFlowNode, DiagramFlowNodeHandlers } from "./types";
+import type {
+  DiagramFlowEdge,
+  DiagramFlowNode,
+  DiagramFlowNodeHandlers,
+  DiagramPreviewAnnotations,
+  DiagramPreviewState
+} from "./types";
 
 type FlowMapperOptions = {
   readonly isPreview?: boolean;
+  readonly previewAnnotations?: DiagramPreviewAnnotations | undefined;
 };
 
 export function toFlowNodes(
@@ -24,12 +31,14 @@ export function toFlowNodes(
   const selectedNodeIdSet = new Set(selectedNodeIds);
   const shouldDimUnselectedNodes = selectedNodeIds.length > 0;
   const isPreview = options.isPreview === true;
+  const previewAnnotations = options.previewAnnotations;
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
 
   return nodes.map((node) => {
     const selected = !isPreview && selectedNodeIdSet.has(node.id);
     const isArea = isAreaNode(node);
     const areaClassName = selected ? "diagramAreaFlowNode diagramAreaFlowNodeInteractive" : "diagramAreaFlowNode";
+    const previewState = previewAnnotations?.nodeStates[node.id];
 
     return {
       id: node.id,
@@ -42,6 +51,7 @@ export function toFlowNodes(
         isDimmed: !isPreview && shouldDimUnselectedNodes && !selected,
         isConnectionActive,
         isPreview,
+        previewState,
         isReferenceDropTarget: !isPreview && node.id === activeReferenceDropTargetNodeId,
         ...handlers
       },
@@ -78,11 +88,13 @@ export function toFlowEdges(
 ): DiagramFlowEdge[] {
   const selectedEdgeIdSet = new Set(selectedEdgeIds);
   const isPreview = options.isPreview === true;
+  const previewAnnotations = options.previewAnnotations;
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
 
   return edges.map((edge) => {
     const selected = !isPreview && selectedEdgeIdSet.has(edge.id);
     const color = edge.style?.color ?? "#506176";
+    const previewState = previewAnnotations?.edgeStates[edge.id];
     const flowEdge: DiagramFlowEdge = {
       id: edge.id,
       source: edge.sourceNodeId,
@@ -91,7 +103,8 @@ export function toFlowEdges(
       ...(edge.targetHandleId ? { targetHandle: toReactFlowHandleId(edge.targetHandleId, "target") } : {}),
       type: normalizeEdgeKind(edge.type),
       data: {
-        edge
+        edge,
+        previewState
       },
       selected,
       animated: !isPreview && (selected || edge.style?.animated === true),
@@ -119,7 +132,7 @@ export function toFlowEdges(
         width: 18,
         height: 18
       },
-      style: getFlowEdgeStyle(edge, selected, isPreview)
+      style: getFlowEdgeStyle(edge, selected, isPreview, previewState)
     };
 
     if (edge.label) {
@@ -130,14 +143,20 @@ export function toFlowEdges(
   });
 }
 
-function getFlowEdgeStyle(edge: DiagramEdge, selected: boolean, isPreview: boolean): CSSProperties {
+function getFlowEdgeStyle(
+  edge: DiagramEdge,
+  selected: boolean,
+  isPreview: boolean,
+  previewState: DiagramPreviewState | undefined
+): CSSProperties {
   const color = edge.style?.color ?? "#506176";
   const strokeWidth = getEdgeStrokeWidth(edge.style?.width);
+  const isDeletedPreview = isPreview && previewState === "deleted";
 
   return {
-    stroke: selected ? "#1f6feb" : color,
+    stroke: isDeletedPreview ? "#8b949e" : selected ? "#1f6feb" : color,
     strokeDasharray: isPreview ? "7 5" : undefined,
-    strokeOpacity: isPreview ? 0.48 : undefined,
+    strokeOpacity: isDeletedPreview ? 0.36 : isPreview ? 0.48 : undefined,
     strokeWidth
   };
 }
@@ -148,8 +167,8 @@ function toReactFlowHandleId(handleId: string, handleType: "source" | "target"):
 }
 
 const CONTAINMENT_Z_STEP = 100;
-const AREA_Z_OFFSET = 80;
-const RESOURCE_Z_OFFSET = 40;
+const AREA_Z_BASE = 0;
+const RESOURCE_Z_BASE = 100_000;
 const AUTHORED_Z_INDEX_MAX = 20;
 
 function getFlowNodeZIndex(node: DiagramNode, nodeById: ReadonlyMap<string, DiagramNode>): number {
@@ -157,8 +176,9 @@ function getFlowNodeZIndex(node: DiagramNode, nodeById: ReadonlyMap<string, Diag
   const authoredZIndex = Number.isFinite(node.zIndex)
     ? Math.max(0, Math.min(AUTHORED_Z_INDEX_MAX, node.zIndex))
     : 0;
+  const layerBase = isAreaNode(node) ? AREA_Z_BASE : RESOURCE_Z_BASE;
 
-  return depth * CONTAINMENT_Z_STEP + (isAreaNode(node) ? AREA_Z_OFFSET : RESOURCE_Z_OFFSET) + authoredZIndex;
+  return layerBase + depth * CONTAINMENT_Z_STEP + authoredZIndex;
 }
 
 function getFlowEdgeZIndex(

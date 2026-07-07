@@ -126,4 +126,3 @@ Well-Architected pillar는 다음 6개다.
 - `trailing_comma`, `quoted_reference`만 적용 버튼이 활성화된다.
 - 적용은 사용자가 클릭한 후에만 실행되고, 코드 수정/재검증/저장/동기화가 이어진다.
 - 관련 단위 테스트와 정적 검증이 통과한다.
-

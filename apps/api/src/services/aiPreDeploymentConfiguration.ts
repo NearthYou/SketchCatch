@@ -42,12 +42,23 @@ function getRequiredConfigKeys(node: ResourceNode): readonly string[] {
       return ["vpcId"];
     case "S3":
     case "CLOUDFRONT":
+    case "ROUTE53_RECORD":
+    case "WAF_WEB_ACL":
     case "LAMBDA":
     case "AMI":
     case "KMS_KEY":
     case "CLOUDWATCH_LOG_GROUP":
     case "API_GATEWAY_REST_API":
+    case "SECRETS_MANAGER_SECRET":
       return [];
+    case "LOAD_BALANCER":
+      return ["subnets", "securityGroups"];
+    case "LOAD_BALANCER_LISTENER":
+      return ["loadBalancerArn", "port", "protocol"];
+    case "DB_SUBNET_GROUP":
+      return ["subnetIds"];
+    case "VPC_ENDPOINT":
+      return ["vpcId", "serviceName"];
     case "IAM_ROLE":
       return ["assumeRolePolicy"];
     case "IAM_POLICY":

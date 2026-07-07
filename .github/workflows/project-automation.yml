@@ -79,11 +79,32 @@ jobs:
               return null;
             }
 
+            function parseIssueReferenceNumber(value) {
+              if (!value) {
+                return null;
+              }
+
+              const patterns = [
+                /(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+#(\d+)/i,
+                /#(\d+)/
+              ];
+
+              for (const pattern of patterns) {
+                const match = pattern.exec(value);
+
+                if (match?.[1]) {
+                  return Number(match[1]);
+                }
+              }
+
+              return null;
+            }
+
             function parseIssueNumberFromPullRequest(pullRequest) {
               return (
                 parseIssueNumber(pullRequest.head?.ref) ??
-                parseIssueNumber(pullRequest.title) ??
-                parseIssueNumber(pullRequest.body)
+                parseIssueReferenceNumber(pullRequest.title) ??
+                parseIssueReferenceNumber(pullRequest.body)
               );
             }
 

@@ -113,6 +113,42 @@ const terraformResourcePresentations = [
     size
   },
   {
+    definitionId: "aws-route53-record",
+    name: "Route 53 Record",
+    area: "network",
+    category: "Network",
+    iconUrl: `${serviceIconPath}/Arch_Networking-Content-Delivery/64/Arch_Amazon-Route-53_64.svg`,
+    label: "Route 53 Record",
+    size
+  },
+  {
+    definitionId: "aws-wafv2-web-acl",
+    name: "WAF Web ACL",
+    area: "security-identity",
+    category: "Security",
+    iconUrl: `${serviceIconPath}/Arch_Security-Identity-Compliance/64/Arch_AWS-WAF_64.svg`,
+    label: "WAF Web ACL",
+    size
+  },
+  {
+    definitionId: "aws-lb",
+    name: "Application Load Balancer",
+    area: "network",
+    category: "Network",
+    iconUrl: `${serviceIconPath}/Arch_Networking-Content-Delivery/64/Arch_Elastic-Load-Balancing_64.svg`,
+    label: "Application Load Balancer",
+    size
+  },
+  {
+    definitionId: "aws-lb-listener",
+    name: "Load Balancer Listener",
+    area: "network",
+    category: "Network",
+    iconUrl: `${resourceIconPath}/Res_Networking-Content-Delivery/Res_Elastic-Load-Balancing_Application-Load-Balancer_48.svg`,
+    label: "Load Balancer Listener",
+    size
+  },
+  {
     definitionId: "aws-nat-gateway",
     name: "NAT Gateway",
     area: "network",
@@ -452,6 +488,15 @@ const terraformResourcePresentations = [
     category: "Database",
     iconUrl: `${resourceIconPath}/Res_Database/Res_Amazon-ElastiCache_ElastiCache-for-Redis_48.svg`,
     label: "Redis",
+    size
+  },
+  {
+    definitionId: "aws-secretsmanager-secret",
+    name: "Secrets Manager Secret",
+    area: "security-identity",
+    category: "Security",
+    iconUrl: `${serviceIconPath}/Arch_Security-Identity-Compliance/64/Arch_AWS-Secrets-Manager_64.svg`,
+    label: "Secrets Manager Secret",
     size
   },
   {

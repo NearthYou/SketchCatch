@@ -89,7 +89,7 @@ test("toFlowNodes keeps locked area node bodies from falling through to pane sel
   assert.equal(flowNode?.connectable, false);
 });
 
-test("toFlowNodes stacks sibling child areas above resources that belong only to the parent area", () => {
+test("toFlowNodes keeps every area below resources even when the area is nested", () => {
   const region = makeDesignAreaNode({ id: "region-1", type: "sketchcatch_region" });
   const instance = makeNode({
     id: "instance-1",
@@ -109,7 +109,8 @@ test("toFlowNodes stacks sibling child areas above resources that belong only to
   const availabilityZoneZIndex = getFlowNodeZIndex(flowNodes, "az-1");
 
   assert.ok(regionZIndex < instanceZIndex);
-  assert.ok(instanceZIndex < availabilityZoneZIndex);
+  assert.ok(regionZIndex < availabilityZoneZIndex);
+  assert.ok(availabilityZoneZIndex < instanceZIndex);
 });
 
 test("toFlowNodes stacks resources above the nested area they belong to", () => {
@@ -202,6 +203,22 @@ test("toFlowEdges maps logical handle ids to real source and target handles", ()
   assert.equal(flowEdges[0]?.targetHandle, "target-handle-left");
 });
 
+test("toFlowEdges keeps existing React Flow source and target handle ids stable", () => {
+  const flowEdges = toFlowEdges(
+    [
+      {
+        ...makeEdge("instance-1", "asg-1"),
+        sourceHandleId: "source-handle-bottom",
+        targetHandleId: "target-handle-top"
+      }
+    ],
+    []
+  );
+
+  assert.equal(flowEdges[0]?.sourceHandle, "source-handle-bottom");
+  assert.equal(flowEdges[0]?.targetHandle, "target-handle-top");
+});
+
 test("flow mappers make AI preview nodes and edges read-only", () => {
   const instance = makeNode({ id: "instance-1", resourceType: "aws_instance" });
   const flowNodes = toFlowNodes([instance], ["instance-1"], "instance-1", false, handlers, { isPreview: true });
@@ -230,6 +247,53 @@ test("flow mappers make AI preview nodes and edges read-only", () => {
   assert.equal(flowEdges[0]?.selectable, false);
   assert.equal(flowEdges[0]?.deletable, false);
   assert.equal(flowEdges[0]?.style?.strokeOpacity, 0.48);
+});
+
+test("flow mappers carry patch preview states for added, modified, and deleted elements", () => {
+  const instance = makeNode({ id: "instance-1", resourceType: "aws_instance" });
+  const bucket = makeNode({ id: "bucket-1", resourceType: "aws_s3_bucket" });
+  const flowNodes = toFlowNodes([instance, bucket], [], null, false, handlers, {
+    isPreview: true,
+    previewAnnotations: {
+      edgeStates: {
+        "instance-to-bucket": "deleted"
+      },
+      nodeStates: {
+        "bucket-1": "deleted",
+        "instance-1": "modified"
+      }
+    }
+  });
+  const flowEdges = toFlowEdges(
+    [
+      {
+        id: "instance-to-bucket",
+        sourceNodeId: "instance-1",
+        targetNodeId: "bucket-1"
+      }
+    ],
+    [],
+    [],
+    {
+      isPreview: true,
+      previewAnnotations: {
+        edgeStates: {
+          "instance-to-bucket": "deleted"
+        },
+        nodeStates: {}
+      }
+    }
+  );
+
+  const previewEdge = flowEdges[0];
+
+  assert.ok(previewEdge);
+  assert.ok(previewEdge.data);
+  assert.equal(flowNodes.find((node) => node.id === "bucket-1")?.data.previewState, "deleted");
+  assert.equal(flowNodes.find((node) => node.id === "instance-1")?.data.previewState, "modified");
+  assert.equal(previewEdge.data.previewState, "deleted");
+  assert.equal(previewEdge.style?.stroke, "#8b949e");
+  assert.equal(previewEdge.style?.strokeOpacity, 0.36);
 });
 
 function makeNode({

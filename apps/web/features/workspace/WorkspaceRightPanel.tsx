@@ -55,11 +55,13 @@ import styles from "./workspace.module.css";
 
 export type WorkspaceRightPanelProps = {
   readonly context: DiagramEditorPanelContext;
+  readonly initialView?: WorkspaceRightPanelView | undefined;
   readonly onTerraformIssueAiRequest: (request: TerraformIssueAiRequest) => void;
   readonly onTerraformPreviewAiRequest: (request: TerraformPreviewAiRequest) => void;
   readonly onTerraformSafeFixApplyResult: (result: TerraformSafeFixApplyResult) => void;
   readonly projectId: string;
   readonly projectName: string;
+  readonly reverseCreatesProjectOnApply?: boolean | undefined;
   readonly terraformSafeFixApplyRequest: TerraformSafeFixApplyRequest | null;
 };
 
@@ -71,11 +73,13 @@ type PendingTerraformLeaveAction =
 
 export function WorkspaceRightPanel({
   context,
+  initialView,
   onTerraformIssueAiRequest,
   onTerraformPreviewAiRequest,
   onTerraformSafeFixApplyResult,
   projectId,
   projectName,
+  reverseCreatesProjectOnApply = false,
   terraformSafeFixApplyRequest
 }: WorkspaceRightPanelProps) {
   const terraformPanelRef = useRef<TerraformCodePanelHandle | null>(null);
@@ -84,7 +88,7 @@ export function WorkspaceRightPanel({
   const skipTerraformLeaveGuardRef = useRef(false);
   const latestTerraformDiagnosticsRef = useRef<TerraformDiagnostic[]>([]);
   const latestTerraformSaveRequestIdRef = useRef(0);
-  const [activeView, setActiveView] = useState<WorkspaceRightPanelView>("resource");
+  const [activeView, setActiveView] = useState<WorkspaceRightPanelView>(initialView ?? "resource");
   const [isPlanActionStripOpen, setIsPlanActionStripOpen] = useState(false);
   const [resourceWorkspaceView, setResourceWorkspaceView] = useState<ResourceWorkspaceView>(
     defaultResourceWorkspaceView
@@ -725,7 +729,12 @@ export function WorkspaceRightPanel({
       </div>
       <div className={styles.rightPanelView} hidden={activeView !== "reverse"}>
         {activeView === "reverse" ? (
-          <ReverseEngineeringPanel context={context} projectId={projectId} />
+          <ReverseEngineeringPanel
+            context={context}
+            createProjectOnApply={reverseCreatesProjectOnApply}
+            projectId={projectId}
+            projectName={projectName}
+          />
         ) : null}
       </div>
 

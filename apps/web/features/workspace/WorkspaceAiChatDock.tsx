@@ -5,8 +5,14 @@ import type {
   AiArchitectureDraftResult,
   AiTerraformErrorExplanationResult,
   AiTerraformPreviewExplanationResult,
+  ArchitectureDraftClarification,
+  ArchitecturePatchClarification,
+  ArchitecturePatchClarificationCandidate,
+  ArchitecturePatchPreview,
   ArchitectureGuardrailWarning,
+  ArchitectureJson,
   CreateArchitectureDraftRequest,
+  DiagramJson,
   DesignSimulationResult,
   TerraformDiagnostic
 } from "@sketchcatch/types";
@@ -15,12 +21,16 @@ import { Mic, Send, Sparkles, Trash2, X } from "lucide-react";
 import { getApiErrorMessage } from "../../lib/api-client";
 import type { DiagramEditorPanelContext } from "../diagram-editor";
 import {
+  createAiArchitecturePatchPreview,
   createAiArchitectureDraft,
   runAiTerraformPreviewExplanation,
   runAiTerraformErrorExplanation,
   runAiDesignSimulation
 } from "./api";
-import { convertArchitectureJsonToDiagramJson } from "./workspace-ai-diagram-adapter";
+import {
+  convertArchitectureJsonToDiagramJson,
+  convertDiagramJsonToArchitectureJson
+} from "./workspace-ai-diagram-adapter";
 import {
   createWorkspaceAiBoardSnapshot,
   isWorkspaceAiResultStale
@@ -33,24 +43,22 @@ import {
 } from "./WorkspaceAiPanelPieces";
 import type { AiRequestState } from "./WorkspaceAiPanelPieces";
 import {
-  answerArchitectureClarification,
-  createArchitectureClarificationQuestionMessage,
-  createArchitectureClarificationSession,
-  createArchitectureClarificationSummaryMessage,
-  createClarifiedDraftRequest,
-  getCurrentArchitectureClarificationQuestion,
-  isArchitectureClarificationProceedCommand,
-  needsArchitectureClarification,
-  type ArchitectureClarificationSession
-} from "./workspace-ai-clarification";
-import {
   planArchitectureDraftPreview,
   resolveArchitectureDraftFollowUpAnswer,
   type ArchitectureDraftFollowUpSession
 } from "./workspace-ai-draft-follow-up";
 import {
-  promptGuideExamples
-} from "./workspace-ai-panel-options";
+  createLatestUserRequirementPrompt,
+  createLatestUserRequirementPromptExcluding
+} from "./workspace-ai-chat-history";
+import {
+  resolvePendingPreviewChatAction,
+  resolveWorkspaceAiChatAction
+} from "./workspace-ai-chat-routing";
+import {
+  createWorkspaceAiPatchPreviewModel,
+  type WorkspaceAiPatchPreviewModel
+} from "./workspace-ai-patch-preview";
 import { formatTerraformDiagnosticTitle } from "./terraform-panel-utils";
 import {
   createTerraformIssueChatSummary,
@@ -78,6 +86,7 @@ type WorkspaceAiChatMessageRole = "assistant" | "user";
 type WorkspaceAiChatMessageKind =
   | "draft"
   | "error"
+  | "patch"
   | "question"
   | "preview"
   | "simulation"
@@ -97,6 +106,11 @@ type WorkspaceAiChatMessage = {
   readonly suggestions?: readonly string[];
 };
 
+type PendingArchitectureDraftClarification = {
+  readonly prompt: string;
+  readonly clarification: ArchitectureDraftClarification;
+};
+
 type TerraformIssueResolutionState = {
   readonly explanation: AiTerraformErrorExplanationResult | null;
   readonly message: string;
@@ -113,6 +127,8 @@ type TerraformPreviewExplanationState = {
 
 const MAX_CHAT_MESSAGES = 80;
 const STORAGE_KEY_PREFIX = "sketchcatch.workspaceAiChat";
+const NO_RESOURCE_ADDITION_SUGGESTION = "추가 안 함";
+const NO_RESOURCE_ADDITION_MESSAGE = "추가 없이 지금까지의 요청으로 새 초안을 생성합니다.";
 const DESIGN_SIMULATION_DEFAULTS = {
   budgetLevel: "normal",
   expectedUserCount: 1000,
@@ -182,8 +198,12 @@ export function WorkspaceAiChatDock({
     Record<string, readonly string[]>
   >({});
   const [draft, setDraft] = useState<AiArchitectureDraftResult | null>(null);
-  const [clarificationSession, setClarificationSession] =
-    useState<ArchitectureClarificationSession | null>(null);
+  const [patchPreviewModel, setPatchPreviewModel] =
+    useState<WorkspaceAiPatchPreviewModel | null>(null);
+  const [patchClarification, setPatchClarification] =
+    useState<ArchitecturePatchClarification | null>(null);
+  const [draftClarification, setDraftClarification] =
+    useState<PendingArchitectureDraftClarification | null>(null);
   const [draftFollowUpSession, setDraftFollowUpSession] =
     useState<ArchitectureDraftFollowUpSession | null>(null);
   const [lastDraftRequest, setLastDraftRequest] = useState<CreateArchitectureDraftRequest | null>(
@@ -203,6 +223,7 @@ export function WorkspaceAiChatDock({
   const [simulationErrorMessage, setSimulationErrorMessage] = useState("");
   const [simulationFingerprint, setSimulationFingerprint] = useState<string | null>(null);
   const transcriptRef = useRef<HTMLDivElement | null>(null);
+  const transcriptScrollFrameRef = useRef<number | null>(null);
   const speechRecognitionRef = useRef<BrowserSpeechRecognition | null>(null);
   const voiceInputBaseRef = useRef("");
   const voiceNoSpeechTimerRef = useRef<number | null>(null);
@@ -226,6 +247,7 @@ export function WorkspaceAiChatDock({
     () => messages.filter((message) => getChatMessageScope(message) === activeChatTab),
     [activeChatTab, messages]
   );
+  const lastVisibleMessageId = visibleMessages.at(-1)?.id ?? null;
   const hasActiveChatHistory =
     visibleMessages.length > 0 ||
     (activeChatTab === "draft" && draft !== null) ||
@@ -248,11 +270,46 @@ export function WorkspaceAiChatDock({
   }, [projectId]);
 
   useEffect(() => {
-    transcriptRef.current?.scrollTo({
-      behavior: "smooth",
-      top: transcriptRef.current.scrollHeight
+    if (!isOpen) {
+      return undefined;
+    }
+
+    scrollChatTranscriptToBottom();
+    transcriptScrollFrameRef.current = window.requestAnimationFrame(() => {
+      scrollChatTranscriptToBottom();
+      transcriptScrollFrameRef.current = null;
     });
-  }, [activeChatTab, visibleMessages, draft, designSimulation]);
+
+    return () => {
+      if (transcriptScrollFrameRef.current !== null) {
+        window.cancelAnimationFrame(transcriptScrollFrameRef.current);
+        transcriptScrollFrameRef.current = null;
+      }
+    };
+  }, [
+    activeChatTab,
+    designSimulation,
+    draft,
+    draftState,
+    isOpen,
+    lastVisibleMessageId,
+    patchPreviewModel,
+    simulationState,
+    visibleMessages.length
+  ]);
+
+  function scrollChatTranscriptToBottom(): void {
+    const transcript = transcriptRef.current;
+
+    if (transcript === null) {
+      return;
+    }
+
+    transcript.scrollTo({
+      behavior: "auto",
+      top: transcript.scrollHeight
+    });
+  }
 
   useEffect(() => {
     if (!terraformIssueRequest) {
@@ -488,7 +545,7 @@ export function WorkspaceAiChatDock({
     ]);
     setComposerValue("");
     setDraft(null);
-    setClarificationSession(null);
+    setDraftClarification(null);
     setDraftFollowUpSession(null);
     setDraftErrorMessage("");
     setDraftState("idle");
@@ -517,25 +574,215 @@ export function WorkspaceAiChatDock({
     trimmedPrompt: string,
     nextMessages: readonly WorkspaceAiChatMessage[]
   ): Promise<void> {
+    if (patchClarification !== null) {
+      await handlePatchClarificationMessage(trimmedPrompt, nextMessages);
+      return;
+    }
+
     if (draftFollowUpSession !== null) {
       await handleDraftFollowUpMessage(trimmedPrompt);
       return;
     }
 
-    if (clarificationSession !== null) {
-      await handleClarificationMessage(trimmedPrompt);
+    if (draftClarification !== null) {
+      await handleDraftClarificationMessage(trimmedPrompt);
       return;
     }
 
-    if (needsArchitectureClarification(trimmedPrompt)) {
-      const session = createArchitectureClarificationSession(trimmedPrompt);
+    const pendingPreviewAction =
+      draft !== null || patchPreviewModel !== null
+        ? resolvePendingPreviewChatAction({
+            needsDraftClarification: false,
+            prompt: trimmedPrompt
+          })
+        : null;
 
-      setClarificationSession(session);
-      appendClarificationQuestion(session);
+    if (
+      draft !== null &&
+      context.previewDiagram !== null &&
+      pendingPreviewAction === "patch"
+    ) {
+      await createPatchPreviewFromPrompt(trimmedPrompt, {
+        baseArchitectureJson: convertDiagramJsonToArchitectureJson(context.previewDiagram),
+        baseDiagram: context.previewDiagram
+      });
+      return;
+    }
+
+    if (patchPreviewModel !== null && pendingPreviewAction === "patch") {
+      await createPatchPreviewFromPrompt(trimmedPrompt, {
+        baseArchitectureJson: patchPreviewModel.preview.proposedArchitectureJson,
+        baseDiagram: patchPreviewModel.proposedDiagram
+      });
+      return;
+    }
+
+    if (pendingPreviewAction === "draft") {
+      await createDraftFromConversation(nextMessages);
+      return;
+    }
+
+    const chatAction = resolveWorkspaceAiChatAction({
+      boardHasResources: boardSnapshot.hasResources,
+      needsDraftClarification: false,
+      prompt: trimmedPrompt
+    });
+
+    if (chatAction === "patch") {
+      await createPatchPreviewFromPrompt(trimmedPrompt);
+      return;
+    }
+
+    if (boardSnapshot.hasResources) {
+      await createDraftFromRequest({
+        prompt: trimmedPrompt
+      });
       return;
     }
 
     await createDraftFromConversation(nextMessages);
+  }
+
+  async function handlePatchClarificationMessage(
+    trimmedPrompt: string,
+    nextMessages: readonly WorkspaceAiChatMessage[]
+  ): Promise<void> {
+    if (patchClarification === null) {
+      return;
+    }
+
+    const selectedCandidate = findPatchClarificationCandidate(patchClarification, trimmedPrompt);
+
+    if (!selectedCandidate) {
+      const selectedSuggestion = findPatchClarificationSuggestion(patchClarification, trimmedPrompt);
+
+      if (selectedSuggestion) {
+        const originalInstruction = patchClarification.intent.instruction;
+
+        setPatchClarification(null);
+
+        if (isNoResourceAdditionSuggestion(selectedSuggestion)) {
+          const fallbackPrompt = createRequirementPromptWithoutNoResourceAddition(nextMessages);
+
+          appendAssistantMessage("status", NO_RESOURCE_ADDITION_MESSAGE);
+          await createDraftFromRequest({
+            prompt: fallbackPrompt || originalInstruction
+          });
+          return;
+        }
+
+        if (isServicePurposePatchClarification(patchClarification)) {
+          await createDraftFromRequest({
+            prompt: selectedSuggestion
+          });
+          return;
+        }
+
+        await createPatchPreviewFromPrompt(
+          isSkipConnectionSuggestion(selectedSuggestion)
+            ? originalInstruction
+            : `${originalInstruction}\n${selectedSuggestion}`,
+          isSkipConnectionSuggestion(selectedSuggestion) ? { skipConnection: true } : undefined
+        );
+        return;
+      }
+
+      appendAssistantMessage(
+        "question",
+        patchClarification.question,
+        getPatchClarificationSuggestions(patchClarification)
+      );
+      return;
+    }
+
+    const originalInstruction = isAddResourceConnectionClarification(patchClarification)
+      ? patchClarification.intent.instruction
+      : `${patchClarification.intent.instruction}\n${trimmedPrompt}`;
+
+    setPatchClarification(null);
+    await createPatchPreviewFromPrompt(
+      originalInstruction,
+      isAddResourceConnectionClarification(patchClarification)
+        ? { connectionTargetResourceId: selectedCandidate.resourceId }
+        : { selectedTargetResourceId: selectedCandidate.resourceId }
+    );
+  }
+
+  async function handleDraftClarificationMessage(trimmedPrompt: string): Promise<void> {
+    if (draftClarification === null) {
+      return;
+    }
+
+    const previousPrompt = draftClarification.prompt;
+    const question = draftClarification.clarification.question;
+
+    setDraftClarification(null);
+    await createDraftFromRequest({
+      prompt: `${previousPrompt}\n\n${question}\n${trimmedPrompt}`
+    });
+  }
+
+  async function createPatchPreviewFromPrompt(
+    instruction: string,
+    options: {
+      readonly baseArchitectureJson?: ArchitectureJson | undefined;
+      readonly baseDiagram?: DiagramJson | undefined;
+      readonly selectedTargetResourceId?: string | undefined;
+      readonly connectionTargetResourceId?: string | undefined;
+      readonly skipConnection?: boolean | undefined;
+    } = {}
+  ): Promise<void> {
+    setDraftState("loading");
+    setDraftErrorMessage("");
+    setDraft(null);
+    setPatchPreviewModel(null);
+    setPatchClarification(null);
+    setDraftClarification(null);
+    setDraftFollowUpSession(null);
+    context.setPreviewDiagram(null);
+
+    try {
+      const baseArchitectureJson = options.baseArchitectureJson ?? boardSnapshot.architectureJson;
+      const response = await createAiArchitecturePatchPreview({
+        architectureJson: baseArchitectureJson,
+        instruction,
+        ...(options.selectedTargetResourceId !== undefined
+          ? { selectedTargetResourceId: options.selectedTargetResourceId }
+          : {}),
+        ...(options.connectionTargetResourceId !== undefined
+          ? { connectionTargetResourceId: options.connectionTargetResourceId }
+          : {}),
+        ...(options.skipConnection === true ? { skipConnection: true } : {})
+      });
+
+      if (response.status === "needs_clarification") {
+        setPatchClarification(response);
+        setDraftState("idle");
+        appendAssistantMessage(
+          "question",
+          response.question,
+          getPatchClarificationSuggestions(response)
+        );
+        return;
+      }
+
+      showPatchPreview(response, options.baseDiagram);
+    } catch (error) {
+      const message = getApiErrorMessage(error, "수정 미리보기 생성 중 오류가 발생했습니다.");
+
+      setDraftState("error");
+      setDraftErrorMessage(message);
+      appendAssistantMessage("error", message);
+    }
+  }
+
+  function showPatchPreview(preview: ArchitecturePatchPreview, baseDiagram = context.diagram): void {
+    const model = createWorkspaceAiPatchPreviewModel(baseDiagram, preview);
+
+    setPatchPreviewModel(model);
+    context.setPreviewDiagram(model.visualPreviewDiagram, model.annotations);
+    setDraftState("idle");
+    appendAssistantMessage("patch", createPatchPreviewSummary(preview));
   }
 
   async function handleDraftFollowUpMessage(trimmedPrompt: string): Promise<void> {
@@ -565,47 +812,6 @@ export function WorkspaceAiChatDock({
     appendAssistantMessage("question", resolution.question, resolution.suggestions);
   }
 
-  async function handleClarificationMessage(trimmedPrompt: string): Promise<void> {
-    if (clarificationSession === null) {
-      return;
-    }
-
-    if (clarificationSession.awaitingConfirmation) {
-      if (isArchitectureClarificationProceedCommand(trimmedPrompt)) {
-        const draftRequest = createClarifiedDraftRequest(clarificationSession);
-
-        setClarificationSession(null);
-        await createDraftFromRequest(draftRequest);
-        return;
-      }
-
-      const restartedSession = createArchitectureClarificationSession(
-        `${clarificationSession.originalPrompt}\n${trimmedPrompt}`
-      );
-
-      setClarificationSession(restartedSession);
-      appendAssistantMessage(
-        "question",
-        "좋아요. 조건을 다시 정리할게요. 아래 질문부터 다시 골라주세요."
-      );
-      appendClarificationQuestion(restartedSession);
-      return;
-    }
-
-    const nextSession = answerArchitectureClarification(clarificationSession, trimmedPrompt);
-
-    setClarificationSession(nextSession);
-
-    if (nextSession.awaitingConfirmation) {
-      const summary = createArchitectureClarificationSummaryMessage(nextSession);
-
-      appendAssistantMessage("question", summary.content, summary.suggestions, summary.selectionMode);
-      return;
-    }
-
-    appendClarificationQuestion(nextSession);
-  }
-
   async function createDraftFromConversation(conversation: readonly WorkspaceAiChatMessage[]): Promise<void> {
     const requirementPrompt = createRequirementPromptFromMessages(conversation);
 
@@ -626,12 +832,25 @@ export function WorkspaceAiChatDock({
     setDraftState("loading");
     setDraftErrorMessage("");
     setDraft(null);
+    setPatchPreviewModel(null);
+    setPatchClarification(null);
     setDraftFollowUpSession(null);
     setLastDraftRequest(draftRequest);
     context.setPreviewDiagram(null);
 
     try {
       const result = await createAiArchitectureDraft(draftRequest);
+
+      if (isArchitectureDraftClarification(result)) {
+        setDraftClarification({
+          prompt: draftRequest.prompt,
+          clarification: result
+        });
+        setDraftState("idle");
+        appendAssistantMessage("question", result.question, result.suggestions);
+        return;
+      }
+
       const previewDecision = planArchitectureDraftPreview(draftRequest, result);
       if (previewDecision.action === "ask_follow_up") {
         setDraftFollowUpSession(previewDecision.session);
@@ -646,18 +865,7 @@ export function WorkspaceAiChatDock({
 
       showDraftPreview(previewDecision.result);
     } catch (error) {
-      const message = getApiErrorMessage(error, "Architecture Draft 생성 중 오류가 발생했습니다.");
-      const question = createQuestionFromDraftError(message);
-
-      if (question) {
-        const session = createArchitectureClarificationSession(draftRequest.prompt);
-
-        setClarificationSession(session);
-        setDraftState("idle");
-        appendAssistantMessage("question", question);
-        appendClarificationQuestion(session);
-        return;
-      }
+      const message = getApiErrorMessage(error, "아키텍처 초안 생성 중 오류가 발생했습니다.");
 
       setDraftState("error");
       setDraftErrorMessage(message);
@@ -677,6 +885,7 @@ export function WorkspaceAiChatDock({
     const previewDiagram = convertArchitectureJsonToDiagramJson(result.architectureJson);
 
     setDraft(result);
+    setDraftClarification(null);
     context.setPreviewDiagram(previewDiagram);
     setDraftState("idle");
     appendAssistantMessage(
@@ -685,40 +894,65 @@ export function WorkspaceAiChatDock({
     );
   }
 
-  function appendClarificationQuestion(session: ArchitectureClarificationSession): void {
-    const question = getCurrentArchitectureClarificationQuestion(session);
-
-    if (!question) {
-      return;
-    }
-
-    const message = createArchitectureClarificationQuestionMessage(question);
-
-    appendAssistantMessage("question", message.content, message.suggestions, message.selectionMode);
-  }
-
   function applyDraftToBoard(): void {
     if (draft === null) {
       return;
     }
 
-    context.applyDiagramJson(
-      context.previewDiagram ?? convertArchitectureJsonToDiagramJson(draft.architectureJson)
-    );
+    context.applyDiagramJson(convertArchitectureJsonToDiagramJson(draft.architectureJson));
+    context.requestTerraformRefresh();
+    requestImmediateDiagramSave();
     setDraft(null);
+    setPatchPreviewModel(null);
+    setPatchClarification(null);
+    setDraftClarification(null);
     setDraftFollowUpSession(null);
     setDesignSimulation(null);
     setSimulationFingerprint(null);
     appendAssistantMessage("status", "생성했습니다. 현재 보드가 AI 초안으로 전체 교체되었습니다.");
   }
 
+  function applyPatchPreviewToBoard(): void {
+    if (patchPreviewModel === null) {
+      return;
+    }
+
+    context.applyDiagramJson(patchPreviewModel.proposedDiagram);
+    context.requestTerraformRefresh();
+    requestImmediateDiagramSave();
+    setPatchPreviewModel(null);
+    setPatchClarification(null);
+    setDesignSimulation(null);
+    setSimulationFingerprint(null);
+    appendAssistantMessage("status", "수정 사항을 보드에 적용했습니다.");
+  }
+
+  function requestImmediateDiagramSave(): void {
+    const savePromise = context.saveDiagramNow?.();
+
+    if (savePromise) {
+      void savePromise.catch(() => undefined);
+    }
+  }
+
   function cancelDraftPreview(): void {
     context.setPreviewDiagram(null);
     setDraft(null);
+    setPatchPreviewModel(null);
+    setPatchClarification(null);
     setDraftFollowUpSession(null);
     setDraftErrorMessage("");
     setDraftState("idle");
     appendAssistantMessage("status", "초안 미리보기를 취소했습니다.");
+  }
+
+  function cancelPatchPreview(): void {
+    context.setPreviewDiagram(null);
+    setPatchPreviewModel(null);
+    setPatchClarification(null);
+    setDraftErrorMessage("");
+    setDraftState("idle");
+    appendAssistantMessage("status", "수정 미리보기를 취소했습니다.");
   }
 
   async function regenerateDraft(): Promise<void> {
@@ -769,7 +1003,7 @@ export function WorkspaceAiChatDock({
 
     if (!boardSnapshot.hasResources) {
       setSimulationState("error");
-      setSimulationErrorMessage("Architecture Board에 Resource가 있어야 실행할 수 있습니다.");
+      setSimulationErrorMessage("아키텍처 보드에 리소스가 있어야 실행할 수 있습니다.");
       appendAssistantMessage(
         "question",
         "질문: 아직 보드에 리소스가 없습니다. 먼저 만들고 싶은 서비스를 알려주면 초안을 생성해볼게요."
@@ -790,7 +1024,7 @@ export function WorkspaceAiChatDock({
       setSimulationState("idle");
       appendAssistantMessage("simulation", createSimulationResultMessage(result));
     } catch (error) {
-      const message = getApiErrorMessage(error, "Design Simulation 중 오류가 발생했습니다.");
+      const message = getApiErrorMessage(error, "설계 시뮬레이션 중 오류가 발생했습니다.");
 
       setSimulationState("error");
       setSimulationErrorMessage(message);
@@ -935,7 +1169,7 @@ export function WorkspaceAiChatDock({
     >
       <header className={styles.aiChatHeader}>
         <div>
-          <span>Natural Language Diagramming</span>
+          <span>자연어 다이어그램</span>
           <h2>AI 채팅</h2>
         </div>
         <button
@@ -1195,6 +1429,31 @@ export function WorkspaceAiChatDock({
           </article>
         ) : null}
 
+        {patchPreviewModel !== null ? (
+          <article className={styles.aiChatDraftCard}>
+            <div className={styles.aiResultHeader}>
+              <h3>수정 미리보기</h3>
+              <span>{patchPreviewModel.preview.changes.length}개 변경</span>
+            </div>
+            <WorkspaceAiExplanation explanation={patchPreviewModel.preview.llmExplanation} />
+            <div className={styles.aiSafetyNotice} role="status">
+              {patchPreviewModel.preview.changes.map((change) => (
+                <p key={`${change.action}-${change.resourceId ?? change.resourceType ?? change.summary}`}>
+                  {change.summary}
+                </p>
+              ))}
+            </div>
+            <div className={styles.aiActionRow}>
+              <button className={styles.aiPrimaryButton} onClick={applyPatchPreviewToBoard} type="button">
+                적용
+              </button>
+              <button className={styles.aiSecondaryButton} onClick={cancelPatchPreview} type="button">
+                취소
+              </button>
+            </div>
+          </article>
+        ) : null}
+
         {activeChatTab === "simulation" && hasStaleDesignSimulation ? (
           <p className={styles.aiStaleNotice}>보드 변경됨 · 다시 실행 필요</p>
         ) : null}
@@ -1204,26 +1463,6 @@ export function WorkspaceAiChatDock({
       </div>
 
       <form className={styles.aiChatComposer} onSubmit={(event) => void submitChatPrompt(event)}>
-        <div
-          className={`${styles.aiPromptGuide} ${styles.aiChatPromptGuide}`}
-          aria-label="프롬프트 작성 가이드"
-        >
-          <div className={styles.aiPromptGuideHeader}>
-            <strong>그냥 이렇게 시작해도 돼요</strong>
-          </div>
-          <div className={styles.aiPromptChips}>
-            {promptGuideExamples.map((example) => (
-              <button
-                className={styles.aiPromptChip}
-                key={example}
-                onClick={() => setComposerValue(example)}
-                type="button"
-              >
-                {example}
-              </button>
-            ))}
-          </div>
-        </div>
         <label className={styles.aiChatInput}>
           <textarea
             aria-label="AI 채팅 입력"
@@ -1364,14 +1603,121 @@ function createInitialChatMessages(): WorkspaceAiChatMessage[] {
   ];
 }
 
+function findPatchClarificationCandidate(
+  clarification: ArchitecturePatchClarification,
+  answer: string
+): ArchitecturePatchClarificationCandidate | undefined {
+  const normalizedAnswer = answer.trim().toLowerCase();
+
+  return clarification.candidates.find((candidate) => {
+    const suggestionLabel = formatPatchCandidateSuggestion(candidate).toLowerCase();
+
+    return (
+      normalizedAnswer === candidate.resourceId.toLowerCase() ||
+      normalizedAnswer === candidate.label.toLowerCase() ||
+      normalizedAnswer === suggestionLabel ||
+      normalizedAnswer.includes(candidate.resourceId.toLowerCase()) ||
+      normalizedAnswer.includes(candidate.label.toLowerCase())
+    );
+  });
+}
+
+function findPatchClarificationSuggestion(
+  clarification: ArchitecturePatchClarification,
+  answer: string
+): string | undefined {
+  const normalizedAnswer = normalizePatchClarificationAnswer(answer);
+
+  return clarification.suggestions?.find((suggestion) => {
+    const normalizedSuggestion = normalizePatchClarificationAnswer(suggestion);
+
+    return (
+      normalizedAnswer === normalizedSuggestion ||
+      normalizedAnswer.includes(normalizedSuggestion) ||
+      (normalizedAnswer.length > 1 && normalizedSuggestion.includes(normalizedAnswer))
+    );
+  });
+}
+
+function isAddResourceConnectionClarification(
+  clarification: ArchitecturePatchClarification
+): boolean {
+  return (
+    clarification.intent.requestedAction === "add_resource" &&
+    clarification.intent.resourceType !== undefined &&
+    clarification.candidates.length > 0
+  );
+}
+
+function isServicePurposePatchClarification(
+  clarification: ArchitecturePatchClarification
+): boolean {
+  return clarification.intent.requestedAction === "manual_review" && clarification.candidates.length === 0;
+}
+
+function isSkipConnectionSuggestion(suggestion: string): boolean {
+  return normalizePatchClarificationAnswer(suggestion) === normalizePatchClarificationAnswer("연결하지 않기");
+}
+
+function isNoResourceAdditionSuggestion(suggestion: string): boolean {
+  return (
+    normalizePatchClarificationAnswer(suggestion) ===
+    normalizePatchClarificationAnswer(NO_RESOURCE_ADDITION_SUGGESTION)
+  );
+}
+
+function getPatchClarificationSuggestions(
+  clarification: ArchitecturePatchClarification
+): readonly string[] {
+  if (isAddResourceConnectionClarification(clarification)) {
+    return [
+      ...clarification.candidates.map(formatPatchCandidateSuggestion),
+      ...(clarification.suggestions ?? [])
+    ];
+  }
+
+  return clarification.suggestions && clarification.suggestions.length > 0
+    ? clarification.suggestions
+    : clarification.candidates.map(formatPatchCandidateSuggestion);
+}
+
+function normalizePatchClarificationAnswer(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function formatPatchCandidateSuggestion(candidate: ArchitecturePatchClarificationCandidate): string {
+  return `${candidate.label} (${candidate.resourceType})`;
+}
+
+function isArchitectureDraftClarification(
+  response: AiArchitectureDraftResult | ArchitectureDraftClarification
+): response is ArchitectureDraftClarification {
+  return "status" in response && response.status === "needs_clarification";
+}
+
+function createPatchPreviewSummary(preview: ArchitecturePatchPreview): string {
+  if (preview.changes.length === 0) {
+    return NO_RESOURCE_ADDITION_MESSAGE;
+  }
+
+  const changeSummary =
+    preview.changes.length === 1
+      ? preview.changes[0]?.summary
+      : `${preview.changes.length}개 변경 사항을 미리보기로 만들었습니다.`;
+
+  return changeSummary ?? "수정 미리보기를 만들었습니다. 적용할까요?";
+}
+
 function createRequirementPromptFromMessages(
   messages: readonly WorkspaceAiChatMessage[]
 ): string {
-  return messages
-    .filter((message) => message.role === "user")
-    .map((message) => message.content.trim())
-    .filter(Boolean)
-    .join("\n");
+  return createLatestUserRequirementPrompt(messages);
+}
+
+function createRequirementPromptWithoutNoResourceAddition(
+  messages: readonly WorkspaceAiChatMessage[]
+): string {
+  return createLatestUserRequirementPromptExcluding(messages, NO_RESOURCE_ADDITION_SUGGESTION);
 }
 
 function getBrowserSpeechRecognitionConstructor(): BrowserSpeechRecognitionConstructor | undefined {
@@ -1442,14 +1788,6 @@ function getVoiceRecognitionErrorMessage(error: string): string {
   }
 
   return `음성 인식 중 오류가 발생했습니다. (${error})`;
-}
-
-function createQuestionFromDraftError(message: string): string | null {
-  if (/명확한 아키텍처 단서|초안을 생성하지 않았습니다/.test(message)) {
-    return "질문: 아키텍처 단서가 아직 부족합니다. 정적 홈페이지인지, 서버가 필요한 웹서비스인지, 파일 저장이나 로그인 같은 기능이 필요한지 알려주세요.";
-  }
-
-  return null;
 }
 
 function formatTerraformIssueRawMessage(diagnostic: TerraformDiagnostic): string {
@@ -1609,6 +1947,7 @@ function isWorkspaceAiChatMessage(value: unknown): value is WorkspaceAiChatMessa
         candidate.suggestions.every((suggestion) => typeof suggestion === "string"))) &&
     (candidate.kind === "draft" ||
       candidate.kind === "error" ||
+      candidate.kind === "patch" ||
       candidate.kind === "preview" ||
       candidate.kind === "question" ||
       candidate.kind === "simulation" ||

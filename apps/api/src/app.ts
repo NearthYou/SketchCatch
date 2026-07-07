@@ -3,7 +3,7 @@ import { ZodError } from "zod";
 import type { ApiErrorCode } from "@sketchcatch/types";
 import { startRefreshTokenCleanupJob } from "./auth/cleanup.js";
 import { type DatabaseClient, getDatabaseClient } from "./db/client.js";
-import { registerAiRoutes } from "./routes/ai.js";
+import { registerAiRoutes, type AiRouteOptions } from "./routes/ai.js";
 import type { CostPricingRateProvider } from "./services/cost-analysis.js";
 import type { CreateLlmExplanation } from "./services/aiLlmExplanation.js";
 import type { CreateSafetyFindingExplanation } from "./services/aiSafetyFindingExplanation.js";
@@ -49,6 +49,7 @@ const fallbackCorsAllowedHeaders = "content-type,authorization";
 
 export type BuildAppOptions = {
   getDatabaseClient?: () => DatabaseClient;
+  createArchitectureDraftResponse?: AiRouteOptions["createArchitectureDraftResponse"];
   createLlmExplanation?: CreateLlmExplanation;
   createSafetyFindingExplanation?: CreateSafetyFindingExplanation;
   pricingRateProvider?: CostPricingRateProvider;
@@ -212,13 +213,9 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
 }
 
 // AI route 옵션은 undefined 필드를 넘기지 않게 분리해 exact optional 타입을 지킵니다.
-function createAiRouteOptions(options: BuildAppOptions): {
-  readonly prefix: "/api";
-  readonly createLlmExplanation?: CreateLlmExplanation;
-  readonly createSafetyFindingExplanation?: CreateSafetyFindingExplanation;
-  readonly pricingRateProvider?: CostPricingRateProvider;
-} {
+function createAiRouteOptions(options: BuildAppOptions): AiRouteOptions & { readonly prefix: "/api" } {
   if (
+    options.createArchitectureDraftResponse === undefined &&
     options.createLlmExplanation === undefined &&
     options.createSafetyFindingExplanation === undefined &&
     options.pricingRateProvider === undefined
@@ -228,6 +225,9 @@ function createAiRouteOptions(options: BuildAppOptions): {
 
   return {
     prefix: "/api",
+    ...(options.createArchitectureDraftResponse !== undefined
+      ? { createArchitectureDraftResponse: options.createArchitectureDraftResponse }
+      : {}),
     ...(options.createLlmExplanation === undefined ? {} : { createLlmExplanation: options.createLlmExplanation }),
     ...(options.createSafetyFindingExplanation === undefined
       ? {}

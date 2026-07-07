@@ -5,9 +5,11 @@ import { fileURLToPath } from "node:url";
 
 const componentSource = readWorkspaceFile("WorkspaceRightPanel.tsx");
 const aiChatDockSource = readWorkspaceFile("WorkspaceAiChatDock.tsx");
+const aiPanelSource = readWorkspaceFile("WorkspaceAiPanel.tsx");
 const deploymentPanelSource = readWorkspaceFile("DeploymentPanel.tsx");
 const diagramEditorSource = readFeatureFile("../diagram-editor/DiagramEditor.tsx");
 const resourceWorkspaceSource = readWorkspaceFile("ResourceWorkspacePanel.tsx");
+const diagramEditorTypesSource = readFeatureFile("../diagram-editor/types.ts");
 const terraformLeaveDialogSource = readWorkspaceFile("TerraformLeaveDialog.tsx");
 const terraformPanelSource = readWorkspaceFile("TerraformCodePanel.tsx");
 const projectDraftManagerSource = readWorkspaceFile("ProjectWorkspaceDraftManager.tsx");
@@ -265,16 +267,62 @@ test("terraform issue fix cards omit procedural apply steps", () => {
   assert.doesNotMatch(aiChatDockSource, /<ol>/);
 });
 
-test("workspace AI chat keeps the floating dock width with compact prompt guide", () => {
+test("workspace AI saves accepted generated and patched diagrams immediately", () => {
+  assert.match(projectDraftManagerSource, /onDiagramSaveRequest=\{\(\) => flushDraftToServer\("manual"\)\}/);
+  assert.match(workspaceDraftManagerSource, /onDiagramSaveRequest=\{saveCurrentDraftLocally\}/);
+  assert.match(diagramEditorSource, /saveDiagramNow:\s*onDiagramSaveRequest/);
+  assert.match(aiChatDockSource, /context\.saveDiagramNow\?\.\(\)/);
+});
+
+test("accepted AI drafts apply the current draft instead of a stale preview diagram", () => {
+  const stalePreviewFallbackPattern =
+    /context\.previewDiagram\s*\?\?\s*convertArchitectureJsonToDiagramJson\(draft\.architectureJson\)/;
+
+  assert.doesNotMatch(aiChatDockSource, stalePreviewFallbackPattern);
+  assert.doesNotMatch(aiPanelSource, stalePreviewFallbackPattern);
+  assert.match(
+    aiChatDockSource,
+    /context\.applyDiagramJson\(\s*convertArchitectureJsonToDiagramJson\(draft\.architectureJson\)\s*\)/s
+  );
+  assert.match(
+    aiPanelSource,
+    /context\.applyDiagramJson\(\s*convertArchitectureJsonToDiagramJson\(draft\.architectureJson\)\s*\)/s
+  );
+});
+
+test("workspace AI refines a pending draft preview instead of replacing it from an empty board", () => {
+  assert.match(aiChatDockSource, /convertDiagramJsonToArchitectureJson/);
+  assert.match(aiChatDockSource, /resolvePendingPreviewChatAction/);
+  assert.match(aiChatDockSource, /pendingPreviewAction === "patch"/);
+  assert.match(aiChatDockSource, /pendingPreviewAction === "draft"/);
+  assert.match(aiChatDockSource, /draft !== null/);
+  assert.match(aiChatDockSource, /context\.previewDiagram !== null/);
+  assert.match(
+    aiChatDockSource,
+    /baseArchitectureJson:\s*convertDiagramJsonToArchitectureJson\(context\.previewDiagram\)/
+  );
+  assert.doesNotMatch(aiChatDockSource, /createArchitectureClarificationSession/);
+  assert.doesNotMatch(aiChatDockSource, /createClarifiedDraftRequest/);
+});
+
+test("accepted AI diagrams explicitly request terraform code regeneration", () => {
+  assert.match(diagramEditorTypesSource, /terraformRefreshRequestId:\s*number/);
+  assert.match(diagramEditorTypesSource, /requestTerraformRefresh:\s*\(\) => void/);
+  assert.match(diagramEditorSource, /terraformRefreshRequestId/);
+  assert.match(diagramEditorSource, /requestTerraformRefresh/);
+  assert.match(aiChatDockSource, /context\.requestTerraformRefresh\(\)/);
+  assert.match(terraformPanelSource, /context\.terraformRefreshRequestId/);
+  assert.match(terraformPanelSource, /latestTerraformRefreshRequestIdRef/);
+});
+
+test("workspace AI chat keeps the floating dock width without prompt guide chips", () => {
   const dockRule = getCssRule(stylesSource, "aiChatDock");
   const composerRule = getCssRule(stylesSource, "aiChatComposer");
-  const promptGuideRule = getCssRule(stylesSource, "aiChatPromptGuide");
 
-  assert.match(aiChatDockSource, /styles\.aiChatPromptGuide/);
+  assert.doesNotMatch(aiChatDockSource, /styles\.aiChatPromptGuide/);
   assert.match(dockRule, /right:\s*24px/);
   assert.match(dockRule, /width:\s*min\(860px,\s*calc\(100vw - 48px\)\)/);
   assert.match(composerRule, /grid-template-columns:\s*minmax\(0,\s*1fr\)\s*auto\s*auto/);
-  assert.match(promptGuideRule, /grid-column:\s*1\s*\/\s*-1/);
 });
 
 test("terraform leave guard covers workspace escape actions while editing", () => {

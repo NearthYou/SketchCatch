@@ -115,4 +115,3 @@ test("applyTerraformCodeReplacement applies an AI deletion suggestion", () => {
     'resource "aws_security_group" "web" {\n}\nresource "aws_route_table" "public" {\n}'
   );
 });
-

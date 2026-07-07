@@ -55,6 +55,10 @@ import { terraformParameterCatalog } from "../parameter-input/catalog";
 import { ResourceSettingsPanel } from "../resource-settings";
 import { defaultResourceCatalogProvider } from "../resource-settings/catalog-provider";
 import { expandCuratedModuleIntoDiagram } from "../resource-settings/module-catalog";
+import {
+  applyTemplateToDiagramWithBackup,
+  type BoardTemplate
+} from "../resource-settings/template-library";
 import { DEFAULT_DIAGRAM_VIEWPORT, EMPTY_DIAGRAM } from "./constants";
 import {
   applyAreaNodeParentAssignments,
@@ -108,7 +112,8 @@ import type {
   DiagramFlowEdge,
   DiagramFlowNode,
   DiagramHistoryState,
-  DiagramNodeMetadataUpdate
+  DiagramNodeMetadataUpdate,
+  DiagramPreviewAnnotations
 } from "./types";
 import styles from "./diagram-editor.module.css";
 
@@ -156,6 +161,7 @@ function DiagramEditorInner({
   initialDiagram,
   leftPanel,
   onDiagramChange,
+  onDiagramSaveRequest,
   myPageHref = "/mypage",
   projectName = "Project workspace",
   rightPanel,
@@ -164,7 +170,9 @@ function DiagramEditorInner({
   const reactFlow = useReactFlow<DiagramFlowNode, DiagramFlowEdge>();
   const [diagram, setDiagram] = useState<DiagramJson>(() => cloneDiagram(initialDiagram ?? EMPTY_DIAGRAM));
   const diagramRef = useRef(diagram);
-  const [previewDiagram, setPreviewDiagram] = useState<DiagramJson | null>(null);
+  const [previewDiagram, setPreviewDiagramState] = useState<DiagramJson | null>(null);
+  const [previewAnnotations, setPreviewAnnotations] = useState<DiagramPreviewAnnotations | null>(null);
+  const [terraformRefreshRequestId, setTerraformRefreshRequestId] = useState(0);
   const [history, setHistory] = useState<DiagramHistoryState>({ past: [], future: [] });
   const [inspectedNodeId, setInspectedNodeId] = useState<string | null>(null);
   const [isLeftPanelOpen, setLeftPanelOpen] = useState(true);
@@ -175,8 +183,8 @@ function DiagramEditorInner({
   const [selectedEdgeIds, setSelectedEdgeIds] = useState<string[]>([]);
   const [dragPreviewNodes, setDragPreviewNodes] = useState<DiagramNode[] | null>(null);
   const [activeReferenceDropTargetNodeId, setActiveReferenceDropTargetNodeId] = useState<string | null>(null);
-  const [interactionMode, setInteractionMode] = useState<"select" | "pan">("select");
   const [isConnectionActive, setConnectionActive] = useState(false);
+  const [interactionMode, setInteractionMode] = useState<"select" | "pan">("select");
   const [isFlowReady, setFlowReady] = useState(false);
   const temporaryPanPreviousModeRef = useRef<"select" | "pan" | null>(null);
   const clipboardRef = useRef<DiagramNode[]>([]);
@@ -221,6 +229,14 @@ function DiagramEditorInner({
       }
     },
     [onDiagramChange]
+  );
+
+  const setPreviewDiagram = useCallback<DiagramEditorPanelContext["setPreviewDiagram"]>(
+    (nextPreviewDiagram, nextPreviewAnnotations = null) => {
+      setPreviewDiagramState(nextPreviewDiagram);
+      setPreviewAnnotations(nextPreviewDiagram === null ? null : nextPreviewAnnotations);
+    },
+    []
   );
 
   const setDragPreviewNodesForState = useCallback((nodes: DiagramNode[] | null) => {
@@ -553,6 +569,26 @@ function DiagramEditorInner({
     [commitDiagramUpdate]
   );
 
+  // 템플릿 적용은 현재 보드를 백업한 뒤 전체 보드를 템플릿 구조로 교체합니다.
+  const applyBoardTemplate = useCallback((template: BoardTemplate): void => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const nextDiagram = applyTemplateToDiagramWithBackup({
+      currentDiagram: diagramRef.current,
+      nowIso: new Date().toISOString(),
+      storage: window.localStorage,
+      template
+    });
+
+    applyDiagramJson(nextDiagram);
+  }, [applyDiagramJson]);
+
+  const requestTerraformRefresh = useCallback(() => {
+    setTerraformRefreshRequestId((requestId) => requestId + 1);
+  }, []);
+
   const focusResourceNode = useCallback<DiagramEditorPanelContext["focusResourceNode"]>(
     (nodeId) => {
       const targetNode = diagramRef.current.nodes.find((node) => node.id === nodeId);
@@ -616,14 +652,18 @@ function DiagramEditorInner({
       inspectedNodeId,
       isPreviewActive,
       isRightPanelOpen,
+      previewAnnotations,
       previewDiagram,
       selectedNodeId,
+      terraformRefreshRequestId,
       nodes: diagram.nodes,
       edges: diagram.edges,
       applyDiagramJson,
       closeInspectedNode: () => setInspectedNodeId(null),
       focusResourceNode,
+      requestTerraformRefresh,
       selectResourceNode,
+      saveDiagramNow: onDiagramSaveRequest,
       setPreviewDiagram,
       setRightPanelOpen,
       updateNodeParameters,
@@ -636,9 +676,14 @@ function DiagramEditorInner({
       inspectedNodeId,
       isPreviewActive,
       isRightPanelOpen,
+      onDiagramSaveRequest,
+      previewAnnotations,
       previewDiagram,
+      requestTerraformRefresh,
+      setPreviewDiagram,
       selectResourceNode,
       selectedNodeId,
+      terraformRefreshRequestId,
       updateNodeMetadata,
       updateNodeParameters
     ]
@@ -762,7 +807,10 @@ function DiagramEditorInner({
           onResize: handleResize,
           onResizeEnd: handleResizeEnd
         },
-        { isPreview: isPreviewActive }
+        {
+          isPreview: isPreviewActive,
+          previewAnnotations: isPreviewActive ? previewAnnotations ?? undefined : undefined
+        }
       );
 
       if (interactionMode === "select" && !isPreviewActive) {
@@ -784,6 +832,7 @@ function DiagramEditorInner({
       isConnectionActive,
       interactionMode,
       isPreviewActive,
+      previewAnnotations,
       handleResizeEnd,
       handleResize,
       handleResizeStart,
@@ -795,8 +844,12 @@ function DiagramEditorInner({
   );
 
   const flowEdges = useMemo(
-    () => toFlowEdges(visibleDiagram.edges, isPreviewActive ? [] : selectedEdgeIds, displayNodes, { isPreview: isPreviewActive }),
-    [displayNodes, isPreviewActive, selectedEdgeIds, visibleDiagram.edges]
+    () =>
+      toFlowEdges(visibleDiagram.edges, isPreviewActive ? [] : selectedEdgeIds, displayNodes, {
+        isPreview: isPreviewActive,
+        previewAnnotations: isPreviewActive ? previewAnnotations ?? undefined : undefined
+      }),
+    [displayNodes, isPreviewActive, previewAnnotations, selectedEdgeIds, visibleDiagram.edges]
   );
 
   const handleInit = useCallback<OnInit<DiagramFlowNode, DiagramFlowEdge>>((instance) => {
@@ -1896,6 +1949,7 @@ function DiagramEditorInner({
             <ResourceSettingsPanel
               onCollapse={() => setLeftPanelOpen(false)}
               onModuleAdd={addCuratedModule}
+              onTemplateApply={applyBoardTemplate}
             />
           ) : (
             leftPanel

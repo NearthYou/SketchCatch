@@ -10,6 +10,7 @@ import type {
   ReverseEngineeringScanRecord
 } from "./reverse-engineering-service.js";
 import {
+  createReverseEngineeringPreviewScan,
   createReverseEngineeringScan,
   createReverseEngineeringScanJob,
   ReverseEngineeringScanFailedError
@@ -167,6 +168,52 @@ test("createReverseEngineeringScanJob keeps a cancelled scan from becoming compl
 
   assert.equal(repository.scanRows[0]?.status, "cancelled");
   assert.equal(repository.scanRows[0]?.result, null);
+});
+
+test("createReverseEngineeringPreviewScan reads AWS without requiring or storing a project scan", async () => {
+  const repository = new FakeReverseEngineeringRepository();
+  repository.project = undefined;
+
+  const response = await createReverseEngineeringPreviewScan(
+    {
+      accessContext: { kind: "user", userId },
+      awsConnectionId,
+      region: "ap-northeast-2",
+      resourceTypes: ["ALL"]
+    },
+    repository,
+    {
+      adapter: {
+        async scan() {
+          return {
+            scan: makeScan({ id: "adapter-scan" }),
+            discoveredResources: [],
+            reverseEngineeringDraft: {
+              id: "adapter-draft",
+              scanId: "adapter-scan",
+              architectureJson: { nodes: [], edges: [] },
+              protectedValueKeys: [],
+              editableValueKeys: [],
+              createdAt: fixedNow.toISOString()
+            },
+            architectureJson: { nodes: [], edges: [] },
+            findings: [],
+            analysisExclusions: [],
+            importSuggestions: [],
+            scanErrors: []
+          };
+        }
+      },
+      generateId: () => "55555555-5555-4555-8555-555555555555",
+      now: () => fixedNow
+    }
+  );
+
+  assert.equal(response.scan.id, "55555555-5555-4555-8555-555555555555");
+  assert.equal(response.scan.projectId, "00000000-0000-4000-8000-000000000000");
+  assert.equal(response.result.reverseEngineeringDraft.scanId, response.scan.id);
+  assert.equal(repository.scanRows.length, 0);
+  assert.equal(repository.logRows.length, 0);
 });
 
 test("createReverseEngineeringScan stores adapter failures without reporting them as not found", async () => {

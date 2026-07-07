@@ -1,13 +1,19 @@
 import type {
+  ArchitectureCapability,
   ArchitectureDraftPattern,
   ArchitectureDraftOperatingProfile,
   ArchitectureGuardrailWarning,
+  ArchitectureIntent,
   ArchitectureRequirementFact,
+  ArchitectureServicePurpose,
   CreateArchitectureDraftRequest
 } from "@sketchcatch/types";
 
 export type ArchitectureRequirementResolution = {
   readonly selectedDraftPattern: ArchitectureDraftPattern;
+  readonly intent: ArchitectureIntent;
+  readonly servicePurpose: ArchitectureServicePurpose;
+  readonly capabilities: ArchitectureCapability[];
   readonly requirementFacts: ArchitectureRequirementFact[];
   readonly operatingProfile: ArchitectureDraftOperatingProfile;
   readonly guardrailWarnings: ArchitectureGuardrailWarning[];
@@ -103,6 +109,7 @@ const REQUIREMENT_FACT_KEYWORD_RULES: readonly RequirementFactKeywordRule[] = [
       "홈페이지",
       "사이트",
       "웹서비스",
+      "웹 서비스",
       "프론트엔드",
       "리액트",
       "랜딩",
@@ -135,7 +142,10 @@ const REQUIREMENT_FACT_KEYWORD_RULES: readonly RequirementFactKeywordRule[] = [
       "예약",
       "신청",
       "접수",
-      "관리"
+      "관리",
+      "alb",
+      "load balancer",
+      "로드밸런서"
     ]
   },
   {
@@ -230,8 +240,8 @@ const UNSUPPORTED_REQUIREMENT_RULES: readonly UnsupportedRequirementRule[] = [
     keywords: ["sqs", "sns", "eventbridge", "step functions", "stepfunctions", "스텝펑션", "메시지 큐", "이벤트브리지"]
   },
   {
-    label: "ALB/Auto Scaling",
-    keywords: ["alb", "load balancer", "로드밸런서", "auto scaling", "autoscaling", "오토스케일링"],
+    label: "Auto Scaling",
+    keywords: ["auto scaling", "autoscaling", "오토스케일링"],
     substitution: {
       label: "단일 EC2 서버",
       facts: ["server_runtime", "network_boundary", "iam_permissions", "observability"]
@@ -258,13 +268,45 @@ const UNSUPPORTED_REQUIREMENT_RULES: readonly UnsupportedRequirementRule[] = [
   }
 ];
 
+export function interpretRequirement(
+  prompt: string,
+  unsupportedRequirementMatches: readonly UnsupportedRequirementRule[] = findUnsupportedRequirementMatches(prompt)
+): ArchitectureIntent {
+  const requirementFacts = createRequirementFacts(prompt, unsupportedRequirementMatches);
+  const servicePurpose = inferServicePurpose(prompt, requirementFacts);
+  const capabilities = inferCapabilities(servicePurpose, requirementFacts);
+  const operatingProfile = createOperatingProfile(prompt, requirementFacts);
+  const normalizedPrompt = normalizePrompt(prompt);
+
+  return {
+    servicePurpose,
+    capabilities,
+    constraints: {
+      budget: operatingProfile.budgetLevel,
+      traffic: operatingProfile.trafficLevel === "normal" ? "growth" : "small",
+      security: operatingProfile.securityPriority === "high" ? "sensitive" : "basic",
+      computePreference: inferComputePreference(normalizedPrompt, requirementFacts)
+    },
+    confidence: calculateIntentConfidence({
+      capabilities,
+      hasUnsupportedRequirements: unsupportedRequirementMatches.length > 0,
+      requirementFacts,
+      servicePurpose
+    }),
+    missingQuestions: createMissingIntentQuestions(servicePurpose, requirementFacts)
+  };
+}
+
 export function resolveArchitectureRequirement(
   request: CreateArchitectureDraftRequest
 ): ArchitectureRequirementResolution {
   const unsupportedRequirementMatches = findUnsupportedRequirementMatches(request.prompt);
+  const intent = interpretRequirement(request.prompt, unsupportedRequirementMatches);
   const requirementFacts = createRequirementFacts(request.prompt, unsupportedRequirementMatches);
   const hasPromptSignal = requirementFacts.length > 0;
   const unsupportedWarnings = createUnsupportedRequirementWarnings(unsupportedRequirementMatches);
+  const servicePurpose = intent.servicePurpose;
+  const capabilities = intent.capabilities;
 
   if (isGenericWebsitePromptWithoutConcreteArchitecture(request.prompt, requirementFacts)) {
     throw new AmbiguousArchitecturePromptError(
@@ -275,6 +317,9 @@ export function resolveArchitectureRequirement(
   if (hasPromptSignal) {
     return {
       selectedDraftPattern: selectDraftPattern(requirementFacts),
+      intent,
+      servicePurpose,
+      capabilities,
       requirementFacts,
       operatingProfile: createOperatingProfile(request.prompt, requirementFacts),
       guardrailWarnings: [
@@ -282,6 +327,12 @@ export function resolveArchitectureRequirement(
         ...createPartialGenerationWarnings(unsupportedWarnings, hasPromptSignal)
       ]
     };
+  }
+
+  if (isClearlyUnrelatedPrompt(request.prompt)) {
+    throw new AmbiguousArchitecturePromptError(
+      "SketchCatch는 IaC 아키텍처와 인프라 구성 요청만 다룹니다. 레시피처럼 관련 없는 요청은 초안을 생성하지 않았습니다."
+    );
   }
 
   throw new AmbiguousArchitecturePromptError();
@@ -319,12 +370,25 @@ function isGenericWebsitePromptWithoutConcreteArchitecture(
 ): boolean {
   const normalizedPrompt = normalizePrompt(prompt);
   const factSet = new Set(requirementFacts);
-  const hasGenericWebsiteKeyword = GENERIC_WEBSITE_KEYWORDS.some((keyword) =>
-    normalizedPrompt.includes(keyword)
-  );
-  const hasConcreteWebsiteKeyword = CONCRETE_WEBSITE_KEYWORDS.some((keyword) =>
-    normalizedPrompt.includes(keyword.toLowerCase())
-  );
+  const hasGenericWebsiteKeyword =
+    includesAny(normalizedPrompt, GENERIC_WEBSITE_KEYWORDS) ||
+    includesAny(normalizedPrompt, ["웹사이트", "웹서비스", "사이트"]);
+  const hasConcreteWebsiteKeyword =
+    includesAny(normalizedPrompt, CONCRETE_WEBSITE_KEYWORDS) ||
+    includesAny(normalizedPrompt, [
+      "api",
+      "s3",
+      "db",
+      "로그인",
+      "회원",
+      "계정",
+      "데이터베이스",
+      "배포",
+      "호스팅",
+      "정적",
+      "업로드",
+      "파일"
+    ]);
 
   return (
     hasGenericWebsiteKeyword &&
@@ -347,21 +411,334 @@ function createRequirementFacts(
     }
   }
 
+  addKoreanRequirementFacts(normalizedPrompt, facts);
+  addPurposeRequirementFacts(normalizedPrompt, facts);
+
   for (const rule of unsupportedRequirementMatches) {
     for (const fact of rule.substitution?.facts ?? []) {
       facts.add(fact);
     }
   }
 
+  if (prefersNoEc2Compute(normalizedPrompt) && (facts.has("server_runtime") || includesAny(normalizedPrompt, ["api", "서버"]))) {
+    facts.add("serverless_runtime");
+  }
+
   addDerivedRequirementFacts(facts);
+  applyExplicitRequirementConstraints(normalizedPrompt, facts);
+
+  if (prefersNoServerRuntime(normalizedPrompt)) {
+    facts.delete("server_runtime");
+    facts.delete("serverless_runtime");
+    facts.delete("observability");
+
+    if (!facts.has("database")) {
+      facts.delete("network_boundary");
+    }
+  }
 
   if (prefersNoDatabase(normalizedPrompt)) {
     facts.delete("database");
     facts.delete("auth_or_user_data");
     facts.delete("encryption");
+
+    if (!facts.has("server_runtime") && !facts.has("serverless_runtime")) {
+      facts.delete("network_boundary");
+    }
   }
 
   return sortRequirementFacts(facts);
+}
+
+function addKoreanRequirementFacts(
+  normalizedPrompt: string,
+  facts: Set<ArchitectureRequirementFact>
+): void {
+  if (includesAny(normalizedPrompt, ["웹사이트", "웹서비스", "사이트", "프론트엔드", "화면"])) {
+    facts.add("web_frontend");
+  }
+
+  if (includesAny(normalizedPrompt, ["배포", "호스팅", "정적", "cdn"])) {
+    facts.add("static_delivery");
+  }
+
+  if (includesAny(normalizedPrompt, ["api", "서버", "백엔드", "처리"])) {
+    facts.add("server_runtime");
+  }
+
+  if (includesAny(normalizedPrompt, ["데이터베이스", "디비", "db", "rds"])) {
+    facts.add("database");
+  }
+
+  if (includesAny(normalizedPrompt, ["s3", "스토리지", "버킷", "파일", "이미지", "업로드"])) {
+    facts.add("object_storage");
+  }
+
+  if (includesAny(normalizedPrompt, ["업로드", "파일 올리", "파일을 받", "이미지 올리"])) {
+    facts.add("file_upload");
+  }
+
+  if (includesAny(normalizedPrompt, ["로그인", "회원", "계정", "개인정보"])) {
+    facts.add("auth_or_user_data");
+  }
+
+  if (includesAny(normalizedPrompt, ["lambda", "람다", "serverless", "서버리스"])) {
+    facts.add("serverless_runtime");
+  }
+}
+
+function addPurposeRequirementFacts(
+  normalizedPrompt: string,
+  facts: Set<ArchitectureRequirementFact>
+): void {
+  const promptPurpose = inferPromptServicePurpose(normalizedPrompt);
+
+  if (promptPurpose === "landing_page") {
+    facts.add("web_frontend");
+    facts.add("static_delivery");
+  }
+
+  if (promptPurpose === "file_upload_service") {
+    facts.add("web_frontend");
+    facts.add("server_runtime");
+    facts.add("object_storage");
+    facts.add("file_upload");
+  }
+
+  if (promptPurpose === "auth_web_service") {
+    facts.add("web_frontend");
+    facts.add("server_runtime");
+    facts.add("database");
+    facts.add("auth_or_user_data");
+  }
+
+  if (promptPurpose === "reservation_service") {
+    facts.add("web_frontend");
+    facts.add("server_runtime");
+    facts.add("database");
+    facts.add("auth_or_user_data");
+  }
+
+  if (promptPurpose === "content_board") {
+    facts.add("web_frontend");
+    facts.add("server_runtime");
+    facts.add("database");
+  }
+}
+
+function inferServicePurpose(
+  prompt: string,
+  requirementFacts: readonly ArchitectureRequirementFact[]
+): ArchitectureServicePurpose {
+  const normalizedPrompt = normalizePrompt(prompt);
+  const promptPurpose = inferPromptServicePurpose(normalizedPrompt);
+  const factSet = new Set(requirementFacts);
+
+  if (promptPurpose !== undefined) {
+    return promptPurpose;
+  }
+
+  if (factSet.has("file_upload")) {
+    return "file_upload_service";
+  }
+
+  if (factSet.has("database") && factSet.has("object_storage") && !factSet.has("server_runtime")) {
+    return "data_storage";
+  }
+
+  if (factSet.has("server_runtime") || factSet.has("serverless_runtime")) {
+    return "api_backend";
+  }
+
+  if (factSet.has("web_frontend") || factSet.has("static_delivery")) {
+    return "landing_page";
+  }
+
+  return "unknown";
+}
+
+function inferPromptServicePurpose(normalizedPrompt: string): ArchitectureServicePurpose | undefined {
+  if (includesAny(normalizedPrompt, ["예약", "신청", "접수", "상담", "booking", "reservation"])) {
+    return "reservation_service";
+  }
+
+  if (
+    includesAny(normalizedPrompt, ["게시판", "게시글", "댓글", "글쓰기"]) ||
+    includesAnyEnglishToken(normalizedPrompt, ["post", "board", "forum", "community"])
+  ) {
+    return "content_board";
+  }
+
+  if (includesAny(normalizedPrompt, ["로그인", "회원", "계정", "마이페이지", "사용자 정보", "개인정보", "auth", "account"])) {
+    return "auth_web_service";
+  }
+
+  if (includesAny(normalizedPrompt, ["업로드", "파일", "이미지", "upload", "file upload"])) {
+    return "file_upload_service";
+  }
+
+  if (includesAny(normalizedPrompt, ["랜딩", "소개", "포트폴리오", "landing", "portfolio", "static site"])) {
+    return "landing_page";
+  }
+
+  return undefined;
+}
+
+function inferCapabilities(
+  servicePurpose: ArchitectureServicePurpose,
+  requirementFacts: readonly ArchitectureRequirementFact[]
+): ArchitectureCapability[] {
+  const factSet = new Set(requirementFacts);
+  const capabilities = new Set<ArchitectureCapability>();
+
+  if (factSet.has("static_delivery")) {
+    capabilities.add("static_delivery");
+  }
+
+  if (factSet.has("file_upload")) {
+    capabilities.add("file_upload");
+  }
+
+  if (factSet.has("database")) {
+    capabilities.add("relational_data");
+  }
+
+  if (factSet.has("object_storage")) {
+    capabilities.add("media_storage");
+  }
+
+  if (factSet.has("server_runtime") || factSet.has("serverless_runtime")) {
+    capabilities.add("public_api");
+  }
+
+  if (factSet.has("auth_or_user_data")) {
+    capabilities.add("private_user_data");
+  }
+
+  if (servicePurpose === "auth_web_service") {
+    capabilities.add("authentication");
+    capabilities.add("private_user_data");
+  }
+
+  if (servicePurpose === "reservation_service") {
+    capabilities.add("admin_workflow");
+    capabilities.add("private_user_data");
+    capabilities.add("relational_data");
+  }
+
+  if (servicePurpose === "content_board") {
+    capabilities.add("public_api");
+    capabilities.add("relational_data");
+  }
+
+  return sortCapabilities(capabilities);
+}
+
+function sortCapabilities(capabilities: ReadonlySet<ArchitectureCapability>): ArchitectureCapability[] {
+  const capabilityOrder: readonly ArchitectureCapability[] = [
+    "static_delivery",
+    "file_upload",
+    "authentication",
+    "relational_data",
+    "admin_workflow",
+    "public_api",
+    "private_user_data",
+    "media_storage"
+  ];
+
+  return capabilityOrder.filter((capability) => capabilities.has(capability));
+}
+
+function inferComputePreference(
+  normalizedPrompt: string,
+  requirementFacts: readonly ArchitectureRequirementFact[]
+): NonNullable<ArchitectureIntent["constraints"]["computePreference"]> {
+  const factSet = new Set(requirementFacts);
+
+  if (prefersNoEc2Compute(normalizedPrompt) || factSet.has("serverless_runtime")) {
+    return "serverless";
+  }
+
+  if (includesAny(normalizedPrompt, ["ec2"]) || factSet.has("server_runtime")) {
+    return "ec2";
+  }
+
+  return "unspecified";
+}
+
+function calculateIntentConfidence(input: {
+  readonly capabilities: readonly ArchitectureCapability[];
+  readonly hasUnsupportedRequirements: boolean;
+  readonly requirementFacts: readonly ArchitectureRequirementFact[];
+  readonly servicePurpose: ArchitectureServicePurpose;
+}): number {
+  let confidence = input.servicePurpose === "unknown" ? 0.25 : 0.65;
+
+  if (input.requirementFacts.length >= 3) {
+    confidence += 0.15;
+  }
+
+  if (input.capabilities.length >= 2) {
+    confidence += 0.1;
+  }
+
+  if (input.hasUnsupportedRequirements) {
+    confidence -= 0.15;
+  }
+
+  return Math.max(0, Math.min(1, Number(confidence.toFixed(2))));
+}
+
+function createMissingIntentQuestions(
+  servicePurpose: ArchitectureServicePurpose,
+  requirementFacts: readonly ArchitectureRequirementFact[]
+): string[] {
+  if (servicePurpose !== "unknown") {
+    return [];
+  }
+
+  if (requirementFacts.length === 0) {
+    return [
+      "Is this a landing page, file upload service, login service, reservation workflow, content board, or API backend?"
+    ];
+  }
+
+  return ["Which user workflow should this architecture support first?"];
+}
+
+function applyExplicitRequirementConstraints(
+  normalizedPrompt: string,
+  facts: Set<ArchitectureRequirementFact>
+): void {
+  if (prefersServerlessCompute(normalizedPrompt)) {
+    facts.delete("server_runtime");
+
+    if (!facts.has("database")) {
+      facts.delete("network_boundary");
+    }
+  }
+
+  if (prefersOnlyDataStorage(normalizedPrompt, facts)) {
+    facts.delete("web_frontend");
+    facts.delete("static_delivery");
+    facts.delete("server_runtime");
+    facts.delete("serverless_runtime");
+    facts.delete("file_upload");
+    facts.delete("auth_or_user_data");
+    facts.delete("observability");
+  }
+
+  if (prefersOnlyServerAndObjectStorage(normalizedPrompt, facts)) {
+    facts.delete("web_frontend");
+    facts.delete("static_delivery");
+    facts.delete("serverless_runtime");
+    facts.delete("database");
+    facts.delete("file_upload");
+    facts.delete("auth_or_user_data");
+    facts.delete("iam_permissions");
+    facts.delete("observability");
+    facts.delete("encryption");
+  }
 }
 
 function addDerivedRequirementFacts(facts: Set<ArchitectureRequirementFact>): void {
@@ -428,7 +805,7 @@ function createOperatingProfile(
 ): ArchitectureDraftOperatingProfile {
   const normalizedPrompt = normalizePrompt(prompt);
   const factSet = new Set(requirementFacts);
-  const lowBudgetKeywords = ["저렴", "낮은 예산", "비용 낮", "low budget", "연습용", "소수", "처음엔"];
+  const lowBudgetKeywords = ["저렴", "낮은 예산", "비용 낮", "low budget", "연습용", "소수", "처음엔", "최소", "간단", "작게"];
   const growthKeywords = ["방문자 증가", "홍보", "공개 서비스", "트래픽", "growth", "여러 사람", "많은 사용자"];
   const highSecurityKeywords = ["보호", "보안", "개인정보", "로그인", "회원", "계정", "private", "암호화"];
 
@@ -446,8 +823,75 @@ function createOperatingProfile(
   };
 }
 
+function includesAny(normalizedPrompt: string, keywords: readonly string[]): boolean {
+  return keywords.some((keyword) => normalizedPrompt.includes(keyword.toLowerCase()));
+}
+
+function includesAnyEnglishToken(normalizedPrompt: string, keywords: readonly string[]): boolean {
+  return keywords.some((keyword) => new RegExp(`\\b${escapeRegExp(keyword.toLowerCase())}\\b`, "u").test(normalizedPrompt));
+}
+
+function prefersNoEc2Compute(normalizedPrompt: string): boolean {
+  return includesAny(normalizedPrompt, [
+    "without ec2",
+    "no ec2",
+    "ec2 없는",
+    "ec2 없이",
+    "ec2 빼고",
+    "ec2 제외",
+    "ec2 말고"
+  ]);
+}
+
+function prefersServerlessCompute(normalizedPrompt: string): boolean {
+  return prefersNoEc2Compute(normalizedPrompt) || includesAny(normalizedPrompt, ["serverless", "서버리스", "lambda", "람다"]);
+}
+
+function prefersNoServerRuntime(normalizedPrompt: string): boolean {
+  return (
+    hasTermFollowedByNegation(normalizedPrompt, ["server", "backend", "서버", "백엔드", "애플리케이션"]) ||
+    /\b(?:no|without)\s+(?:server|backend)\b/u.test(normalizedPrompt)
+  );
+}
+
+function prefersOnlyDataStorage(
+  normalizedPrompt: string,
+  facts: ReadonlySet<ArchitectureRequirementFact>
+): boolean {
+  return (
+    facts.has("database") &&
+    facts.has("object_storage") &&
+    hasOnlyScopeKeyword(normalizedPrompt) &&
+    !includesAny(normalizedPrompt, ["서버", "api", "백엔드", "웹", "로그인", "회원", "계정", "업로드"])
+  );
+}
+
+function prefersOnlyServerAndObjectStorage(
+  normalizedPrompt: string,
+  facts: ReadonlySet<ArchitectureRequirementFact>
+): boolean {
+  return (
+    facts.has("server_runtime") &&
+    facts.has("object_storage") &&
+    hasOnlyScopeKeyword(normalizedPrompt) &&
+    includesAny(normalizedPrompt, ["ec2", "서버", "인스턴스"]) &&
+    includesAny(normalizedPrompt, ["s3", "버킷", "스토리지"]) &&
+    !includesAny(normalizedPrompt, ["데이터베이스", "db", "rds", "로그인", "회원", "계정", "업로드"])
+  );
+}
+
+function hasOnlyScopeKeyword(normalizedPrompt: string): boolean {
+  return (
+    /\b(?:only|just)\b/u.test(normalizedPrompt) ||
+    /(?:^|\s)만(?:\s|$)/u.test(normalizedPrompt) ||
+    normalizedPrompt.includes("만 있는") ||
+    normalizedPrompt.includes("만있는")
+  );
+}
+
 function prefersNoDatabase(normalizedPrompt: string): boolean {
   return (
+    hasNegatedTerm(normalizedPrompt, ["db", "database", "rds", "데이터베이스", "디비", "데베"]) ||
     normalizedPrompt.includes("db 없는") ||
     normalizedPrompt.includes("db 없이") ||
     normalizedPrompt.includes("db없이") ||
@@ -458,6 +902,51 @@ function prefersNoDatabase(normalizedPrompt: string): boolean {
     normalizedPrompt.includes("데이터베이스 없는") ||
     normalizedPrompt.includes("데이터베이스 없이")
   );
+}
+
+function hasNegatedTerm(normalizedPrompt: string, terms: readonly string[]): boolean {
+  const negationPattern =
+    "필요\\s*없|필요없|필요하지\\s*않|안\\s*필요|불필요|없이|없는|빼|제외|말고|안\\s*써|안써|쓰지\\s*않|no|without|not\\s+needed|not\\s+need|does\\s+not\\s+need|don't\\s+need|dont\\s+need";
+
+  return terms.some((term) => {
+    const escapedTerm = escapeRegExp(term.toLowerCase());
+    const nearbyNegation = new RegExp(
+      `(?:${escapedTerm}.{0,24}(?:${negationPattern})|(?:${negationPattern}).{0,24}${escapedTerm})`,
+      "u"
+    );
+
+    return nearbyNegation.test(normalizedPrompt);
+  });
+}
+
+function hasTermFollowedByNegation(normalizedPrompt: string, terms: readonly string[]): boolean {
+  const negationPattern =
+    "필요\\s*없|필요없|필요하지\\s*않|안\\s*필요|불필요|없이|없는|빼|제외|말고|안\\s*써|안써|쓰지\\s*않|not\\s+needed|not\\s+need|does\\s+not\\s+need|don't\\s+need|dont\\s+need";
+
+  return terms.some((term) => {
+    const escapedTerm = escapeRegExp(term.toLowerCase());
+
+    return new RegExp(`${escapedTerm}.{0,24}(?:${negationPattern})`, "u").test(normalizedPrompt);
+  });
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function isClearlyUnrelatedPrompt(prompt: string): boolean {
+  const normalizedPrompt = normalizePrompt(prompt);
+
+  return includesAny(normalizedPrompt, [
+    "레시피",
+    "요리",
+    "찌개",
+    "된장찌개",
+    "김치찌개",
+    "음식",
+    "날씨",
+    "운세"
+  ]);
 }
 
 function findUnsupportedRequirementMatches(prompt: string): UnsupportedRequirementRule[] {
@@ -500,11 +989,35 @@ function createUnsupportedRequirementWarnings(
     });
   }
 
-  return warnings;
+  return warnings.map((warning) => {
+    if (warning.code === "unsupported_requirement_substituted") {
+      return {
+        ...warning,
+        message: `현재 자동 생성 범위에서 직접 지원하지 않는 요구사항을 지원 가능한 구조로 바꾸었습니다. 변경 방식: ${substitutedRequirements.map(formatUnsupportedSubstitutionChange).join("; ")}. 보드에는 지원되는 리소스만 생성됩니다.`
+      };
+    }
+
+    if (warning.code === "unsupported_resource_omitted") {
+      return {
+        ...warning,
+        message: `현재 자동 생성 범위에서 직접 지원하지 않는 리소스는 초안에서 제외했습니다. 변경 방식: ${omittedRequirements.map(formatUnsupportedOmissionChange).join("; ")}. 지원되는 리소스만 보드에 그립니다.`
+      };
+    }
+
+    return warning;
+  });
 }
 
 function isDefined<T>(value: T | undefined): value is T {
   return value !== undefined;
+}
+
+function formatUnsupportedSubstitutionChange(rule: UnsupportedRequirementRule): string {
+  return `미지원 항목 ${rule.label} -> ${rule.substitution?.label ?? "지원 가능한 기본 구조"}로 대체`;
+}
+
+function formatUnsupportedOmissionChange(rule: UnsupportedRequirementRule): string {
+  return `미지원 항목 ${rule.label} -> 현재 보드에서 제외`;
 }
 
 function createPartialGenerationWarnings(

@@ -259,6 +259,50 @@ test("convertArchitectureJsonToDiagramJson expands area nodes to include upper-l
   assert.equal(vpcNode?.size.height, 248);
 });
 
+test("convertArchitectureJsonToDiagramJson keeps area layers behind contained resources", () => {
+  const architectureJson: ArchitectureJson = {
+    nodes: [
+      {
+        id: "web-server",
+        type: "EC2",
+        label: "Web Server",
+        positionX: 220,
+        positionY: 180,
+        config: {
+          subnetId: "public-subnet-a"
+        }
+      },
+      {
+        id: "vpc-main",
+        type: "VPC",
+        label: "Main VPC",
+        positionX: 100,
+        positionY: 100,
+        config: {}
+      },
+      {
+        id: "public-subnet-a",
+        type: "SUBNET",
+        label: "Public Subnet A",
+        positionX: 160,
+        positionY: 140,
+        config: {
+          vpcId: "vpc-main"
+        }
+      }
+    ],
+    edges: []
+  };
+
+  const diagramJson = convertArchitectureJsonToDiagramJson(architectureJson);
+  const vpcNode = diagramJson.nodes.find((node) => node.id === "vpc-main");
+  const subnetNode = diagramJson.nodes.find((node) => node.id === "public-subnet-a");
+  const webServerNode = diagramJson.nodes.find((node) => node.id === "web-server");
+
+  assert.ok((vpcNode?.zIndex ?? 0) < (subnetNode?.zIndex ?? 0));
+  assert.ok((subnetNode?.zIndex ?? 0) < (webServerNode?.zIndex ?? 0));
+});
+
 test("convertArchitectureJsonToDiagramJson resolves Terraform references to area parent nodes", () => {
   const architectureJson: ArchitectureJson = {
     nodes: [
@@ -300,7 +344,9 @@ test("convertArchitectureJsonToDiagramJson resolves Terraform references to area
   const diagramJson = convertArchitectureJsonToDiagramJson(architectureJson);
   const parentByNodeId = new Map(diagramJson.nodes.map((node) => [node.id, node.metadata?.parentAreaNodeId]));
 
-  assert.equal(parentByNodeId.get("public-a"), "network-main");
+  assert.equal(parentByNodeId.get("server-storage-az"), "network-main");
+  assert.equal(parentByNodeId.get("network-main"), "server-storage-region");
+  assert.equal(parentByNodeId.get("public-a"), "server-storage-az");
   assert.equal(parentByNodeId.get("web-server"), "public-a");
 });
 
@@ -345,7 +391,9 @@ test("convertArchitectureJsonToDiagramJson resolves common Terraform reference a
   const diagramJson = convertArchitectureJsonToDiagramJson(architectureJson);
   const parentByNodeId = new Map(diagramJson.nodes.map((node) => [node.id, node.metadata?.parentAreaNodeId]));
 
-  assert.equal(parentByNodeId.get("public-a"), "network-main");
+  assert.equal(parentByNodeId.get("server-storage-az"), "network-main");
+  assert.equal(parentByNodeId.get("network-main"), "server-storage-region");
+  assert.equal(parentByNodeId.get("public-a"), "server-storage-az");
   assert.equal(parentByNodeId.get("web-server"), "public-a");
 });
 
@@ -406,15 +454,20 @@ test("convertArchitectureJsonToDiagramJson marks VPC and Subnet containment for 
   assert.deepEqual(
     diagramJson.nodes.map((node) => ({ id: node.id, parentAreaNodeId: node.metadata?.parentAreaNodeId })),
     [
-      { id: "vpc-main", parentAreaNodeId: undefined },
-      { id: "subnet-app", parentAreaNodeId: "vpc-main" },
+      { id: "server-storage-region", parentAreaNodeId: undefined },
+      { id: "server-storage-az", parentAreaNodeId: "vpc-main" },
+      { id: "vpc-main", parentAreaNodeId: "server-storage-region" },
+      { id: "subnet-app", parentAreaNodeId: "server-storage-az" },
       { id: "sg-app", parentAreaNodeId: "subnet-app" },
       { id: "ec2-api", parentAreaNodeId: "sg-app" }
     ]
   );
 
   const nodeById = new Map(diagramJson.nodes.map((node) => [node.id, node]));
+  assertContainsNode(nodeById.get("server-storage-region"), nodeById.get("vpc-main"));
   assertContainsNode(nodeById.get("vpc-main"), nodeById.get("subnet-app"));
+  assertContainsNode(nodeById.get("vpc-main"), nodeById.get("server-storage-az"));
+  assertContainsNode(nodeById.get("server-storage-az"), nodeById.get("subnet-app"));
   assertContainsNode(nodeById.get("subnet-app"), nodeById.get("sg-app"));
   assertContainsNode(nodeById.get("sg-app"), nodeById.get("ec2-api"));
   assert.deepEqual(diagramJson.edges, []);
@@ -849,6 +902,160 @@ test("convertArchitectureJsonToDiagramJson lays out server and storage draft as 
   assert.equal(vpcNode?.size.height, 798);
   assert.equal(azNode?.size.width, 831);
   assert.equal(azNode?.size.height, 626);
+});
+
+test("convertArchitectureJsonToDiagramJson lays out generated EC2 drafts inside cloud container areas", () => {
+  const architectureJson: ArchitectureJson = {
+    nodes: [
+      {
+        id: "vpc-main",
+        type: "VPC",
+        label: "Main VPC",
+        positionX: 70,
+        positionY: 320,
+        config: { cidrBlock: "10.0.0.0/16" }
+      },
+      {
+        id: "public-subnet",
+        type: "SUBNET",
+        label: "Public Subnet",
+        positionX: 150,
+        positionY: 490,
+        config: { cidrBlock: "10.0.1.0/24", vpcId: "aws_vpc.vpc_main.id" }
+      },
+      {
+        id: "app-security-group",
+        type: "SECURITY_GROUP",
+        label: "App Security Group",
+        positionX: 220,
+        positionY: 560,
+        config: { vpcId: "aws_vpc.vpc_main.id" }
+      },
+      {
+        id: "internet-gateway",
+        type: "INTERNET_GATEWAY",
+        label: "Internet Gateway",
+        positionX: 650,
+        positionY: 360,
+        config: { vpcId: "aws_vpc.vpc_main.id" }
+      },
+      {
+        id: "app-server",
+        type: "EC2",
+        label: "Application Server",
+        positionX: 370,
+        positionY: 620,
+        config: {
+          instanceType: "t3.micro",
+          subnetId: "aws_subnet.public_subnet.id",
+          vpcSecurityGroupIds: ["aws_security_group.app_security_group.id"]
+        }
+      }
+    ],
+    edges: [
+      {
+        id: "vpc-main-to-public-subnet",
+        sourceId: "vpc-main",
+        targetId: "public-subnet",
+        label: "contains"
+      },
+      {
+        id: "public-subnet-to-app-server",
+        sourceId: "public-subnet",
+        targetId: "app-server",
+        label: "hosts"
+      }
+    ]
+  };
+
+  const diagramJson = convertArchitectureJsonToDiagramJson(architectureJson);
+
+  assert.deepEqual(
+    diagramJson.nodes.map((node) => ({
+      id: node.id,
+      parentAreaNodeId: node.metadata?.parentAreaNodeId,
+      type: node.type
+    })),
+    [
+      { id: "server-storage-region", parentAreaNodeId: undefined, type: "aws_region" },
+      { id: "server-storage-az", parentAreaNodeId: "vpc-main", type: "aws_availability_zone" },
+      { id: "vpc-main", parentAreaNodeId: "server-storage-region", type: "aws_vpc" },
+      { id: "public-subnet", parentAreaNodeId: "server-storage-az", type: "aws_subnet" },
+      { id: "app-security-group", parentAreaNodeId: "public-subnet", type: "aws_security_group" },
+      { id: "internet-gateway", parentAreaNodeId: "vpc-main", type: "aws_internet_gateway" },
+      { id: "app-server", parentAreaNodeId: "app-security-group", type: "aws_instance" }
+    ]
+  );
+
+  const nodeById = new Map(diagramJson.nodes.map((node) => [node.id, node]));
+
+  assertContainsNode(nodeById.get("server-storage-region"), nodeById.get("vpc-main"));
+  assertContainsNode(nodeById.get("vpc-main"), nodeById.get("server-storage-az"));
+  assertContainsNode(nodeById.get("server-storage-az"), nodeById.get("public-subnet"));
+  assertContainsNode(nodeById.get("public-subnet"), nodeById.get("app-security-group"));
+  assertContainsNode(nodeById.get("vpc-main"), nodeById.get("internet-gateway"));
+  assertContainsNode(nodeById.get("app-security-group"), nodeById.get("app-server"));
+});
+
+test("convertArchitectureJsonToDiagramJson keeps route table associations out of subnet child layout", () => {
+  const architectureJson: ArchitectureJson = {
+    nodes: [
+      {
+        id: "vpc-main",
+        type: "VPC",
+        label: "Main VPC",
+        positionX: 70,
+        positionY: 320,
+        config: { cidrBlock: "10.0.0.0/16" }
+      },
+      {
+        id: "public-subnet-a",
+        type: "SUBNET",
+        label: "Public Subnet A",
+        positionX: 150,
+        positionY: 320,
+        config: {
+          cidrBlock: "10.0.1.0/24",
+          vpcId: "aws_vpc.vpc_main.id"
+        }
+      },
+      {
+        id: "public-route-table",
+        type: "ROUTE_TABLE",
+        label: "Public Route Table",
+        positionX: 650,
+        positionY: 520,
+        config: {
+          vpcId: "aws_vpc.vpc_main.id"
+        }
+      },
+      {
+        id: "public-route-table-association",
+        type: "ROUTE_TABLE_ASSOCIATION",
+        label: "Public Route Association A",
+        positionX: 520,
+        positionY: 720,
+        config: {
+          routeTableId: "aws_route_table.public_route_table.id",
+          subnetId: "aws_subnet.public_subnet_a.id"
+        }
+      }
+    ],
+    edges: []
+  };
+
+  const diagramJson = convertArchitectureJsonToDiagramJson(architectureJson);
+  const nodeById = new Map(diagramJson.nodes.map((node) => [node.id, node]));
+  const subnetNode = nodeById.get("public-subnet-a");
+  const associationNode = nodeById.get("public-route-table-association");
+
+  assert.equal(associationNode?.metadata?.parentAreaNodeId, "vpc-main");
+  assert.ok(subnetNode, "Expected subnet node");
+  assert.ok(associationNode, "Expected route table association node");
+  assert.ok(
+    associationNode.position.y > subnetNode.position.y + subnetNode.size.height,
+    "Route table association should not stretch the subnet area downward"
+  );
 });
 
 test("convertArchitectureJsonToDiagramJson keeps server-storage usage arrows visible", () => {

@@ -176,6 +176,7 @@ test("createPullRequest updates a file on an existing SketchCatch source branch"
       if (method === "POST" && pathname === "/repos/owner/repo/pulls") {
         return jsonResponse({
           html_url: "https://github.com/owner/repo/pull/7",
+          number: 7,
           head: { sha: "new-head-sha" }
         });
       }
@@ -202,9 +203,140 @@ test("createPullRequest updates a file on an existing SketchCatch source branch"
   });
 
   assert.equal(result.pullRequestUrl, "https://github.com/owner/repo/pull/7");
+  assert.equal(result.pullRequestNumber, 7);
   assert.equal(result.pullRequestHeadSha, "new-head-sha");
   assert.equal(result.commitSha, "new-commit-sha");
   assert.equal(calls.some((call) => call.method === "PUT"), true);
+});
+
+test("applyRepositorySettings creates environment and upserts repository variables", async () => {
+  const calls: GitHubApiCall[] = [];
+  const client = createGitHubAppClient({
+    appId: "12345",
+    privateKey,
+    fetch: createGitHubFetchStub(calls, ({ method, pathname, body }) => {
+      if (pathname === "/app/installations/42/access_tokens") {
+        return jsonResponse({ token: "installation-token" });
+      }
+
+      if (
+        method === "PUT" &&
+        pathname === "/repos/owner/repo/environments/sketchcatch-production"
+      ) {
+        return jsonResponse({});
+      }
+
+      if (
+        method === "GET" &&
+        pathname === "/repos/owner/repo/actions/variables/SKETCHCATCH_AWS_REGION"
+      ) {
+        return jsonResponse({ name: "SKETCHCATCH_AWS_REGION" });
+      }
+
+      if (
+        method === "PATCH" &&
+        pathname === "/repos/owner/repo/actions/variables/SKETCHCATCH_AWS_REGION"
+      ) {
+        assert.deepEqual(body, {
+          name: "SKETCHCATCH_AWS_REGION",
+          value: "ap-northeast-2"
+        });
+        return jsonResponse({});
+      }
+
+      if (
+        method === "GET" &&
+        pathname === "/repos/owner/repo/actions/variables/SKETCHCATCH_RELEASE_BUCKET"
+      ) {
+        return jsonResponse({ message: "not found" }, 404);
+      }
+
+      if (method === "POST" && pathname === "/repos/owner/repo/actions/variables") {
+        assert.deepEqual(body, {
+          name: "SKETCHCATCH_RELEASE_BUCKET",
+          value: "release-bucket"
+        });
+        return jsonResponse({});
+      }
+
+      return jsonResponse({ message: "not found" }, 404);
+    })
+  });
+
+  const result = await client.applyRepositorySettings({
+    installationId: "42",
+    owner: "owner",
+    name: "repo",
+    environmentName: "sketchcatch-production",
+    variables: {
+      SKETCHCATCH_RELEASE_BUCKET: "release-bucket",
+      SKETCHCATCH_AWS_REGION: "ap-northeast-2"
+    }
+  });
+
+  assert.deepEqual(result, {
+    environmentName: "sketchcatch-production",
+    variables: ["SKETCHCATCH_AWS_REGION", "SKETCHCATCH_RELEASE_BUCKET"]
+  });
+  assert.equal(
+    calls.some(
+      (call) =>
+        call.method === "PUT" &&
+        call.pathname === "/repos/owner/repo/environments/sketchcatch-production"
+    ),
+    true
+  );
+});
+
+test("getPipelineStatusForPullRequest tracks merge commit infra and app workflows", async () => {
+  const client = createGitHubAppClient({
+    appId: "12345",
+    privateKey,
+    fetch: createGitHubFetchStub([], ({ pathname }) => {
+      if (pathname === "/app/installations/42/access_tokens") {
+        return jsonResponse({ token: "installation-token" });
+      }
+
+      if (pathname === "/repos/owner/repo/pulls/7") {
+        return jsonResponse({
+          state: "closed",
+          merged: true,
+          merge_commit_sha: "merge-sha"
+        });
+      }
+
+      return jsonResponse({
+        workflow_runs: [
+          {
+            name: "SketchCatch Infra",
+            html_url: "https://github.com/owner/repo/actions/runs/10",
+            status: "completed",
+            conclusion: "success",
+            updated_at: "2026-07-05T00:05:00.000Z"
+          },
+          {
+            name: "SketchCatch App",
+            html_url: "https://github.com/owner/repo/actions/runs/11",
+            status: "completed",
+            conclusion: "success",
+            updated_at: "2026-07-05T00:06:00.000Z"
+          }
+        ]
+      });
+    })
+  });
+
+  const status = await client.getPipelineStatusForPullRequest({
+    installationId: "42",
+    owner: "owner",
+    name: "repo",
+    pullRequestNumber: 7
+  });
+
+  assert.equal(status.status, "pipeline_success");
+  assert.equal(status.mergeCommitSha, "merge-sha");
+  assert.equal(status.infraPipelineStatus, "success");
+  assert.equal(status.appPipelineStatus, "success");
 });
 
 test("getLatestWorkflowRunForHeadSha maps the latest GitHub Actions run status", async () => {
