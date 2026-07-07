@@ -17,8 +17,11 @@ test("resource settings panel exposes Resources, Templates, provider, and module
   assert.match(panelSource, /<ModuleCatalogPanel onModuleAdd=\{onModuleAdd\} \/>/);
 });
 
-test("template cards route to the existing templates page instead of creating a demo-only flow", () => {
-  assert.match(panelSource, /href="\/templates"/);
+test("template cards open the board template modal instead of leaving the board", () => {
+  assert.match(panelSource, /onTemplateApply/);
+  assert.match(panelSource, /TemplateLibraryModal/);
+  assert.match(panelSource, /큰 모달/);
+  assert.doesNotMatch(panelSource, /href="\/templates"/);
   assert.doesNotMatch(panelSource, /href="\/brainboard"/);
 });
 

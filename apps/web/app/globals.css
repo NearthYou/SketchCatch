@@ -2333,11 +2333,161 @@ nextjs-portal {
   text-decoration: none;
 }
 
+.templateCatalogCard {
+  cursor: pointer;
+}
+
+.templateCatalogCardWide {
+  background: #172033;
+  border-color: #172033;
+  color: #ffffff;
+}
+
+.templateCatalogCardWide strong {
+  color: #ffffff;
+}
+
 .templateCatalogCard strong,
 .moduleCatalogCard strong {
   color: #64748b;
   font-size: 0.75rem;
   font-weight: 700;
+}
+
+.templateModalOverlay {
+  align-items: center;
+  background: rgba(8, 13, 24, 0.58);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 32px;
+  position: fixed;
+  z-index: 120;
+}
+
+.templateModal {
+  background: #f8fafc;
+  border: 1px solid #c8d4e3;
+  border-radius: 12px;
+  box-shadow: 0 28px 80px rgba(15, 23, 42, 0.24);
+  color: #182235;
+  display: grid;
+  gap: 18px;
+  max-height: min(780px, calc(100vh - 64px));
+  max-width: min(1120px, calc(100vw - 64px));
+  overflow: hidden;
+  padding: 22px;
+  width: 100%;
+}
+
+.templateModalHeader {
+  align-items: start;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+.templateModalHeader span {
+  color: #2f6db3;
+  font-size: 0.75rem;
+  font-weight: 900;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.templateModalHeader h2,
+.templateModalHeader p {
+  margin: 0;
+}
+
+.templateModalHeader h2 {
+  font-size: 1.28rem;
+  line-height: 1.2;
+  margin-top: 4px;
+}
+
+.templateModalHeader p {
+  color: #5f6f84;
+  margin-top: 6px;
+}
+
+.templateModalCloseButton,
+.templateModalApplyButton {
+  border: 1px solid #c7d4e4;
+  border-radius: 7px;
+  cursor: pointer;
+  font-weight: 850;
+}
+
+.templateModalCloseButton {
+  background: #ffffff;
+  color: #263348;
+  padding: 9px 12px;
+}
+
+.templateModalGrid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.templateModalCard {
+  background: #ffffff;
+  border: 1px solid #d9e2ee;
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  min-height: 360px;
+  padding: 14px;
+}
+
+.templateModalCard span {
+  color: #64748b;
+  font-size: 0.73rem;
+  font-weight: 850;
+}
+
+.templateModalCard h3 {
+  font-size: 1rem;
+  line-height: 1.25;
+  margin: 5px 0 0;
+}
+
+.templateModalCard p {
+  color: #5f6f84;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  margin: 8px 0 0;
+}
+
+.templateModalPreview {
+  background:
+    linear-gradient(#dbe7f3 1px, transparent 1px),
+    linear-gradient(90deg, #dbe7f3 1px, transparent 1px),
+    #eef4f9;
+  background-size: 28px 28px;
+  border: 1px solid #d4deea;
+  border-radius: 7px;
+  min-height: 150px;
+  position: relative;
+}
+
+.templateModalPreview i {
+  background: #ffffff;
+  border: 2px solid #2f6db3;
+  border-radius: 999px;
+  box-shadow: 0 10px 24px rgba(47, 109, 179, 0.2);
+  height: 18px;
+  position: absolute;
+  width: 18px;
+}
+
+.templateModalApplyButton {
+  background: #172033;
+  color: #ffffff;
+  min-height: 42px;
 }
 
 .moduleCatalogSection {
