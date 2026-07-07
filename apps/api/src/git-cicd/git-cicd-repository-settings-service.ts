@@ -205,11 +205,6 @@ async function upsertRepositoryVariableWithOAuth(
 
   try {
     await requestGitHubWithOAuth(fetchImpl, accessToken, {
-      owner: input.owner,
-      name: input.name,
-      path: `/actions/variables/${encodeURIComponent(input.variableName)}`
-    });
-    await requestGitHubWithOAuth(fetchImpl, accessToken, {
       method: "PATCH",
       owner: input.owner,
       name: input.name,

@@ -457,6 +457,15 @@ export async function registerGitCicdHandoffRoutes(
     const query = githubOAuthCallbackQuerySchema.parse(request.query);
 
     if (query.error || !query.code || !query.state) {
+      request.log.error(
+        {
+          oauthError: query.error,
+          hasCode: Boolean(query.code),
+          hasState: Boolean(query.state)
+        },
+        "GitHub OAuth callback query error or missing parameters"
+      );
+
       return reply.redirect("/workspace?gitCicdGitHubOAuth=failed");
     }
 
@@ -469,7 +478,9 @@ export async function registerGitCicdHandoffRoutes(
       });
 
       return reply.redirect("/workspace?gitCicdGitHubOAuth=ready");
-    } catch {
+    } catch (error) {
+      request.log.error(error, "GitHub OAuth callback failed");
+
       return reply.redirect("/workspace?gitCicdGitHubOAuth=failed");
     }
   });

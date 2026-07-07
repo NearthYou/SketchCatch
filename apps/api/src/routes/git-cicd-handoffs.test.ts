@@ -1024,6 +1024,67 @@ test("GitHub OAuth repository settings grant starts, stores token, and applies o
   await app.close();
 });
 
+test("GitHub OAuth callback consumes state before token exchange", async () => {
+  const repository = new FakeGitCicdHandoffRepository();
+  repository.sourceRepository = createSourceRepositoryRecord({
+    provider: "github",
+    githubInstallationId: "123456"
+  });
+  repository.handoff = createHandoffRecord(handoffId, {
+    repositoryProvider: "github",
+    githubOAuthRequired: true,
+    repositorySettingsPreview: {
+      environmentName: "sketchcatch-production",
+      variables: {
+        SKETCHCATCH_AWS_REGION: "ap-northeast-2"
+      },
+      secrets: [],
+      workflowFiles: []
+    }
+  });
+  const runtimeCache = createInMemoryRuntimeCache({ cleanupIntervalMs: null });
+  let tokenExchangeCalls = 0;
+  const app = await buildGitCicdHandoffTestApp(repository, {
+    runtimeCache,
+    githubOAuthFetch: (async () => {
+      tokenExchangeCalls += 1;
+
+      return new Response(JSON.stringify({ error: "temporarily_unavailable" }), {
+        headers: { "content-type": "application/json" },
+        status: 500
+      });
+    }) as typeof fetch
+  });
+
+  const startResponse = await app.inject({
+    method: "POST",
+    url: `/api/git-cicd-handoffs/${handoffId}/github-oauth/start`,
+    headers: await authHeaders()
+  });
+  const state = new URL(startResponse.json().authorizationUrl).searchParams.get("state") ?? "";
+
+  const failedCallback = await app.inject({
+    method: "GET",
+    url: `/api/git-cicd-handoffs/github-oauth/callback?code=oauth-code&state=${encodeURIComponent(
+      state
+    )}`
+  });
+  const replayCallback = await app.inject({
+    method: "GET",
+    url: `/api/git-cicd-handoffs/github-oauth/callback?code=oauth-code&state=${encodeURIComponent(
+      state
+    )}`
+  });
+
+  assert.equal(failedCallback.statusCode, 302);
+  assert.equal(failedCallback.headers.location, "/workspace?gitCicdGitHubOAuth=failed");
+  assert.equal(replayCallback.statusCode, 302);
+  assert.equal(replayCallback.headers.location, "/workspace?gitCicdGitHubOAuth=failed");
+  assert.equal(tokenExchangeCalls, 1);
+
+  await app.close();
+});
+
 test("POST /api/git-cicd-handoffs/:handoffId/aws-role-diff/apply updates approved trust policy", async () => {
   const repository = new FakeGitCicdHandoffRepository();
   const roleArn = "arn:aws:iam::123456789012:role/SketchCatchGitHubDeployRole";
