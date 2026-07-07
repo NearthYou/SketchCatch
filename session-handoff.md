@@ -4,6 +4,7 @@
 
 - Branch/worktree: `codex/docs-cicd-plan6` at `C:\Users\siwon\Desktop\Jungle\Week17~21\SketchCatch-worktrees\cicd-plan6-docs`.
 - PR: #211, originally docs-only, now expanded with minimal implementation for plan6.
+- Merge/deploy status: PR #211 was squash-merged to `dev` at `d1a83f74143284c75c36cda78bb4b6c406c271fc`; deploy workflow `28847085753` and migrate workflow `28847246857` both succeeded.
 - Implemented:
   - Shared/API/DB `GitCicdHandoff` contract now stores `sourceDeploymentId`, `deploymentMode`, Environment approval, PR number, merge commit SHA, infra/app/destroy workflow URLs/statuses, repository settings preview, AWS role diff, OAuth required flag, and static/API verification URLs.
   - Added SQL migration `apps/api/drizzle/0026_git_cicd_infra_app_auto_deploy.sql`.
@@ -16,6 +17,7 @@
   - Deployment Panel exposes `Repo settings 적용` and `AWS role diff 적용`, then refreshes the panel snapshot.
   - App workflow now writes `SKETCHCATCH_RELEASE_ID` into a new ASG Launch Template version when `SKETCHCATCH_ASG_NAME` is configured, updates the ASG to that version, and polls Instance Refresh to terminal status.
   - Added `scripts/smoke/git-cicd-auto-deploy.ps1` for repository settings apply, role diff apply, infra/app/destroy pipeline status, static/API URL marker report generation, and optional pipeline/destroy success waits.
+  - Deployment Panel now labels the recovery state as `GitHub 권한` and shows a `GitHub App 권한 보강` CTA when `githubOAuthRequired` is true.
 - Verified:
   - `pnpm harness:check` before implementation.
   - `pnpm --filter @sketchcatch/api typecheck`
