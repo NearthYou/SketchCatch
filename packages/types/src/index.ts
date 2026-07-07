@@ -1918,6 +1918,7 @@ export type DiagramNode = {
 
 export type DiagramEdgeStyle = {
   color?: string | undefined;
+  lineStyle?: "solid" | "dashed" | "dotted" | undefined;
   width?: "thin" | "medium" | "thick" | undefined;
   animated?: boolean | undefined;
 };

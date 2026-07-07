@@ -10,6 +10,7 @@ import type {
   LlmExplanationFallbackReason,
   ResourceType
 } from "@sketchcatch/types";
+import { resourceDefinitions } from "@sketchcatch/types/resource-definitions";
 import { applyGuardrailMetadata } from "./aiArchitectureDraftMetadata.js";
 import { planPracticeArchitecture } from "./aiArchitectureRequirementDraftBuilder.js";
 import { applyOperatingConditionConfig } from "./aiArchitectureOperatingConditions.js";
@@ -34,36 +35,13 @@ import {
 
 const ARCHITECTURE_DRAFT_TARGET = "architecture_draft";
 
-const SUPPORTED_RESOURCE_TYPES = [
-  "VPC",
-  "SUBNET",
-  "INTERNET_GATEWAY",
-  "ROUTE_TABLE",
-  "ROUTE_TABLE_ASSOCIATION",
-  "EC2",
-  "RDS",
-  "S3",
-  "SECURITY_GROUP",
-  "CLOUDFRONT",
-  "ROUTE53_RECORD",
-  "WAF_WEB_ACL",
-  "LOAD_BALANCER",
-  "LOAD_BALANCER_LISTENER",
-  "LAMBDA",
-  "AMI",
-  "IAM_ROLE",
-  "IAM_POLICY",
-  "IAM_INSTANCE_PROFILE",
-  "KMS_KEY",
-  "DB_SUBNET_GROUP",
-  "SECRETS_MANAGER_SECRET",
-  "VPC_ENDPOINT",
-  "CLOUDWATCH_LOG_GROUP",
-  "CLOUDWATCH_METRIC_ALARM",
-  "API_GATEWAY_REST_API",
-  "LAMBDA_PERMISSION",
-  "UNKNOWN"
-] satisfies ResourceType[];
+const SUPPORTED_RESOURCE_TYPES = Array.from(
+  new Set(
+    resourceDefinitions
+      .map((definition) => definition.resourceType)
+      .filter((resourceType) => resourceType !== "UNKNOWN")
+  )
+) satisfies ResourceType[];
 
 const SUPPORTED_RESOURCE_TYPE_SET = new Set<ResourceType>(SUPPORTED_RESOURCE_TYPES);
 const DEFAULT_PREVIEW_NODE_SIZE = { width: 124, height: 96 } as const;
@@ -941,39 +919,10 @@ function createArchitectureEvaluationCriteria(answerProfile: ArchitectureAnswerP
 }
 
 function createUnsupportedSubstitutions(
-  answerProfile: ArchitectureAnswerProfile,
-  normalizedPrompt: string
+  _answerProfile: ArchitectureAnswerProfile,
+  _normalizedPrompt: string
 ): UnsupportedSubstitution[] {
-  const substitutions: UnsupportedSubstitution[] = [
-    {
-      requestedService: "ACM certificate",
-      supportedRepresentation: "Certificate requirement in CLOUDFRONT, LOAD_BALANCER, assumptions, or nextActions.",
-      requiredExplanation: "Explain that ACM is required for HTTPS but is not a current ResourceNode.type."
-    },
-    {
-      requestedService: "Auto Scaling Group",
-      supportedRepresentation: "Multiple EC2 app targets plus scaling assumptions in config/coverage.",
-      requiredExplanation: "Explain that AUTO_SCALING_GROUP requires ResourceType expansion before it can be drawn directly."
-    }
-  ];
-
-  if (answerProfile.realtime && answerProfile.realtime !== "none") {
-    substitutions.push({
-      requestedService: "WebSocket API, SNS, SQS, or EventBridge notification resources",
-      supportedRepresentation: "API_GATEWAY_REST_API, LAMBDA, or backend tier nodes with WebSocket/SSE/polling assumptions in requirementCoverage.",
-      requiredExplanation: "Explain the limitation and do not invent unsupported realtime or messaging ResourceNode.type values."
-    });
-  }
-
-  if (/cognito|\uC778\uC99D|login|auth/iu.test(normalizedPrompt)) {
-    substitutions.push({
-      requestedService: "Cognito or dedicated auth provider",
-      supportedRepresentation: "Backend/API auth responsibility, IAM_ROLE/IAM_POLICY boundaries, and assumptions/nextActions.",
-      requiredExplanation: "Explain that dedicated auth-provider nodes need future ResourceType expansion."
-    });
-  }
-
-  return substitutions;
+  return [];
 }
 
 function createArchitectureCoverageRequirements(
@@ -1162,8 +1111,8 @@ function createAmazonQArchitectureBrief(prompt: string): string {
     tradeoffs.push("- Monthly $100 budget conflicts with 99.99% availability, ALB, redundant compute, and RDS Multi-AZ. Keep the selected design target and add explicit cost-warning assumptions unless the user chose to relax availability.");
   }
 
-  if (mentionsUnsupportedAutoScalingGroup(normalizedPrompt)) {
-    requirements.push("- AUTO_SCALING_GROUP is not a supported ResourceNode.type in ArchitectureJson; model it with multiple EC2 app targets and explain the ASG assumption in labels/config/requirementCoverage.");
+  if (mentionsAutoScalingGroup(normalizedPrompt)) {
+    requirements.push("- AUTO_SCALING_GROUP is a supported ResourceNode.type. Include it directly when the user requests an Auto Scaling Group and explain its scaling role in requirementCoverage.");
   }
 
   return [
@@ -2194,7 +2143,7 @@ function hasRealtimeImplementationDecision(normalizedPrompt: string): boolean {
   );
 }
 
-function mentionsUnsupportedAutoScalingGroup(normalizedPrompt: string): boolean {
+function mentionsAutoScalingGroup(normalizedPrompt: string): boolean {
   return /(auto\s*scaling\s*group|\basg\b|autoscaling\s*group|\uC624\uD1A0\s*\uC2A4\uCF00\uC77C|\uC790\uB3D9\s*\uD655\uC7A5)/iu.test(
     normalizedPrompt
   );

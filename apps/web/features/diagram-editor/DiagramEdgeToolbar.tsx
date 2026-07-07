@@ -28,6 +28,12 @@ const EDGE_WIDTHS: readonly { label: string; value: DiagramEdgeStyle["width"] }[
   { label: "굵게", value: "thick" }
 ];
 
+const EDGE_LINE_STYLES: readonly { label: string; value: NonNullable<DiagramEdgeStyle["lineStyle"]> }[] = [
+  { label: "실선", value: "solid" },
+  { label: "점선", value: "dashed" },
+  { label: "점", value: "dotted" }
+];
+
 export function DiagramEdgeToolbar({
   edge,
   onDelete,
@@ -35,6 +41,7 @@ export function DiagramEdgeToolbar({
   onTypeChange
 }: DiagramEdgeToolbarProps) {
   const color = edge.style?.color ?? "#506176";
+  const lineStyle = edge.style?.lineStyle ?? "solid";
   const width = edge.style?.width ?? "medium";
 
   return (
@@ -71,6 +78,26 @@ export function DiagramEdgeToolbar({
           type="color"
           value={color}
         />
+      </div>
+
+      <div aria-label="연결선 종류" className={styles.segmentedControl}>
+        {EDGE_LINE_STYLES.map((edgeLineStyle) => (
+          <button
+            aria-label={`연결선 ${edgeLineStyle.label}`}
+            aria-pressed={lineStyle === edgeLineStyle.value}
+            className={[
+              styles.segmentButton,
+              lineStyle === edgeLineStyle.value ? styles.segmentButtonActive : undefined
+            ]
+              .filter(Boolean)
+              .join(" ")}
+            key={edgeLineStyle.value}
+            onClick={() => onStyleChange(edge.id, { ...edge.style, lineStyle: edgeLineStyle.value })}
+            type="button"
+          >
+            {edgeLineStyle.label}
+          </button>
+        ))}
       </div>
 
       <div aria-label="연결선 굵기" className={styles.segmentedControl}>

@@ -51,6 +51,7 @@ const diagramNodeSchema = z.object({
 
 const diagramEdgeStyleSchema = z.object({
   color: z.string().min(1).optional(),
+  lineStyle: z.enum(["solid", "dashed", "dotted"]).optional(),
   width: z.enum(["thin", "medium", "thick"]).optional(),
   animated: z.boolean().optional()
 });

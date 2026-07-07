@@ -6,8 +6,10 @@ import type {
   ArchitectureIntent,
   ArchitectureRequirementFact,
   ArchitectureServicePurpose,
-  CreateArchitectureDraftRequest
+  CreateArchitectureDraftRequest,
+  ResourceType
 } from "@sketchcatch/types";
+import { resourceDefinitions } from "@sketchcatch/types/resource-definitions";
 
 export type ArchitectureRequirementResolution = {
   readonly selectedDraftPattern: ArchitectureDraftPattern;
@@ -15,6 +17,7 @@ export type ArchitectureRequirementResolution = {
   readonly servicePurpose: ArchitectureServicePurpose;
   readonly capabilities: ArchitectureCapability[];
   readonly requirementFacts: ArchitectureRequirementFact[];
+  readonly explicitResourceTypes: ResourceType[];
   readonly operatingProfile: ArchitectureDraftOperatingProfile;
   readonly guardrailWarnings: ArchitectureGuardrailWarning[];
 };
@@ -303,7 +306,8 @@ export function resolveArchitectureRequirement(
   const unsupportedRequirementMatches = findUnsupportedRequirementMatches(request.prompt);
   const intent = interpretRequirement(request.prompt, unsupportedRequirementMatches);
   const requirementFacts = createRequirementFacts(request.prompt, unsupportedRequirementMatches);
-  const hasPromptSignal = requirementFacts.length > 0;
+  const explicitResourceTypes = findExplicitResourceTypes(request.prompt);
+  const hasPromptSignal = requirementFacts.length > 0 || explicitResourceTypes.length > 0;
   const unsupportedWarnings = createUnsupportedRequirementWarnings(unsupportedRequirementMatches);
   const servicePurpose = intent.servicePurpose;
   const capabilities = intent.capabilities;
@@ -321,6 +325,7 @@ export function resolveArchitectureRequirement(
       servicePurpose,
       capabilities,
       requirementFacts,
+      explicitResourceTypes,
       operatingProfile: createOperatingProfile(request.prompt, requirementFacts),
       guardrailWarnings: [
         ...unsupportedWarnings,
@@ -951,10 +956,112 @@ function isClearlyUnrelatedPrompt(prompt: string): boolean {
 
 function findUnsupportedRequirementMatches(prompt: string): UnsupportedRequirementRule[] {
   const normalizedPrompt = normalizePrompt(prompt);
+  const explicitResourceTypes = findExplicitResourceTypes(prompt);
 
-  return UNSUPPORTED_REQUIREMENT_RULES.filter((rule) =>
-    rule.keywords.some((keyword) => normalizedPrompt.includes(keyword.toLowerCase()))
+  return UNSUPPORTED_REQUIREMENT_RULES.filter(
+    (rule) =>
+      rule.keywords.some((keyword) => normalizedPrompt.includes(keyword.toLowerCase())) &&
+      !isCoveredBySupportedExplicitResource(rule, explicitResourceTypes)
   );
+}
+
+export function findExplicitResourceTypes(prompt: string): ResourceType[] {
+  const normalizedPrompt = normalizePrompt(prompt);
+  const resourceTypes = new Set<ResourceType>();
+
+  for (const definition of resourceDefinitions) {
+    if (definition.resourceType === "UNKNOWN") {
+      continue;
+    }
+
+    if (
+      createResourceAliases(definition).some(
+        (alias) =>
+          includesResourceAlias(normalizedPrompt, alias) &&
+          !hasNegatedResourceAlias(normalizedPrompt, alias)
+      )
+    ) {
+      resourceTypes.add(definition.resourceType);
+    }
+  }
+
+  return Array.from(resourceTypes);
+}
+
+function isCoveredBySupportedExplicitResource(
+  rule: UnsupportedRequirementRule,
+  explicitResourceTypes: readonly ResourceType[]
+): boolean {
+  const explicitResourceTypeSet = new Set(explicitResourceTypes);
+
+  if (rule.label === "EKS/Kubernetes") {
+    return explicitResourceTypeSet.has("EKS_CLUSTER");
+  }
+
+  if (rule.label === "ECS/Fargate") {
+    return (
+      explicitResourceTypeSet.has("ECS_CLUSTER") ||
+      explicitResourceTypeSet.has("ECS_SERVICE") ||
+      explicitResourceTypeSet.has("ECS_TASK_DEFINITION")
+    );
+  }
+
+  if (rule.label === "DynamoDB/NoSQL") {
+    return explicitResourceTypeSet.has("DYNAMODB_TABLE");
+  }
+
+  if (rule.label === "ElastiCache/Redis") {
+    return explicitResourceTypeSet.has("ELASTICACHE_REDIS");
+  }
+
+  if (rule.label === "Auto Scaling") {
+    return explicitResourceTypeSet.has("AUTO_SCALING_GROUP");
+  }
+
+  return [
+    "SNS_TOPIC",
+    "SQS_QUEUE",
+    "EVENTBRIDGE_RULE",
+    "EVENTBRIDGE_TARGET",
+    "STEP_FUNCTIONS_STATE_MACHINE"
+  ].some((resourceType) => explicitResourceTypeSet.has(resourceType as ResourceType));
+}
+
+function createResourceAliases(definition: (typeof resourceDefinitions)[number]): string[] {
+  return [
+    definition.resourceType,
+    definition.resourceType.replaceAll("_", " "),
+    definition.id.replace(/^aws-/, "").replaceAll("-", " "),
+    definition.terraform.resourceType.replace(/^aws_/, "").replaceAll("_", " "),
+    definition.terraform.resourceType
+  ].map((alias) => normalizePrompt(alias));
+}
+
+function includesResourceAlias(normalizedPrompt: string, alias: string): boolean {
+  if (alias.length < 3) {
+    return false;
+  }
+
+  if (/^[a-z0-9_ -]+$/u.test(alias)) {
+    return new RegExp(`(^|[^a-z0-9])${escapeRegExp(alias)}([^a-z0-9]|$)`, "u").test(normalizedPrompt);
+  }
+
+  return normalizedPrompt.includes(alias);
+}
+
+function hasNegatedResourceAlias(normalizedPrompt: string, alias: string): boolean {
+  if (hasNegatedTerm(normalizedPrompt, [alias])) {
+    return true;
+  }
+
+  const escapedAlias = escapeRegExp(alias);
+  const nearbyNegationPattern =
+    "(?:쓰지\\s*마|쓰지\\s*말|사용\\s*안|없이|없는|제외|빼고|말고|no|without|not\\s+using)";
+
+  return new RegExp(
+    `(?:${escapedAlias}.{0,24}${nearbyNegationPattern}|${nearbyNegationPattern}.{0,24}${escapedAlias})`,
+    "iu"
+  ).test(normalizedPrompt);
 }
 
 function createUnsupportedRequirementWarnings(
