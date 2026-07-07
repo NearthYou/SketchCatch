@@ -14,6 +14,7 @@
   - AWS role diff apply route를 추가해 승인된 GitHub OIDC trust policy diff만 IAM role에 적용하고 재조회 검증 결과를 handoff JSON에 기록한다.
   - Deployment Panel에 `Repo settings 적용`, `AWS role diff 적용` 버튼을 추가했고, 성공 후 panel snapshot을 다시 로드한다.
   - App workflow가 ASG Launch Template ID/Name을 찾아 `SKETCHCATCH_RELEASE_ID` user data marker를 새 Launch Template version에 기록하고 Instance Refresh 결과를 polling하도록 보강했다.
+  - Project Automation이 PR 본문의 일반 HTTP status 숫자를 issue number로 오인하지 않도록 PR title/body는 명시적 `#123` 참조만 파싱하게 수정했다.
   - `scripts/smoke/git-cicd-auto-deploy.ps1`로 repository settings apply, AWS role diff apply, pipeline status, static URL marker 확인 report를 출력할 수 있게 했다.
   - `docs/data-models.md`, `docs/deployment.md`, `docs/sw/spec6.md`, `docs/sw/plan6.md`, `docs/sw/agents3.md`를 구현 상태에 맞게 갱신했다.
 - Verification run:
