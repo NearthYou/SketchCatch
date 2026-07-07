@@ -226,7 +226,6 @@ export function WorkspaceRightPanel({
       }
 
       if (pendingAction.kind === "deployment-console") {
-        context.setRightPanelOpen(false);
         setIsDeploymentConsoleOpen(true);
         return;
       }
@@ -278,9 +277,8 @@ export function WorkspaceRightPanel({
       return;
     }
 
-    context.setRightPanelOpen(false);
     setIsDeploymentConsoleOpen(true);
-  }, [context, requestTerraformLeave]);
+  }, [requestTerraformLeave]);
 
   function openDeploymentFromPlan(): void {
     openDeploymentConsole();

@@ -29,6 +29,10 @@ test("deploy opens a full-screen console instead of rendering deployment inside 
     deploymentPanelIndex
   );
   const fullscreenHostRule = getCssRule(stylesSource, "deploymentPanelFullscreenHost");
+  const pendingDeploymentConsoleBranch = componentSource.slice(
+    componentSource.indexOf('if (pendingAction.kind === "deployment-console")'),
+    componentSource.indexOf('if (pendingAction.kind === "right-panel-close")')
+  );
 
   assert.notEqual(deploymentConsoleIndex, -1);
   assert.notEqual(deploymentPanelIndex, -1);
@@ -41,7 +45,9 @@ test("deploy opens a full-screen console instead of rendering deployment inside 
   assert.match(componentSource, /initialExpanded/);
   assert.match(componentSource, /onExpandedClose=\{\(\) => setIsDeploymentConsoleOpen\(false\)\}/);
   assert.match(componentSource, /openDeploymentConsole/);
-  assert.match(componentSource, /context\.setRightPanelOpen\(false\);\s*setIsDeploymentConsoleOpen\(true\);/);
+  assert.match(componentSource, /setIsDeploymentConsoleOpen\(true\);/);
+  assert.match(pendingDeploymentConsoleBranch, /setIsDeploymentConsoleOpen\(true\);/);
+  assert.doesNotMatch(pendingDeploymentConsoleBranch, /context\.setRightPanelOpen\(false\);/);
   assert.match(fullscreenHostRule, /\bdisplay:\s*contents;/);
   assert.doesNotMatch(componentSource, /hidden=\{activeView !== "deployment"\}/);
   assert.doesNotMatch(componentSource, /aria-pressed=\{activeView === "deployment"\}/);
@@ -595,28 +601,18 @@ test("deployment creation prepares fresh snapshot and terraform artifact before 
   assert.match(componentSource, /onPrepareDeploymentArtifacts=\{prepareDeploymentArtifacts\}/);
 });
 
-test("GitHub connection opens the in-app repository chooser before install handoff", () => {
-  const startGitHubConnectionIndex = deploymentPanelSource.indexOf(
-    "function startGitHubConnection"
+test("GitHub repository setup is owned by project settings, not the deployment panel", () => {
+  assert.match(deploymentPanelSource, /projectGithubSettingsHref/);
+  assert.match(
+    deploymentPanelSource,
+    /\/projects\/\$\{encodeURIComponent\(projectId\)\}\/settings\?tab=github/
   );
-  const createHandoffIndex = deploymentPanelSource.indexOf(
-    "async function createGitCicdAutoDeployHandoff",
-    startGitHubConnectionIndex
-  );
-  const startGitHubConnectionSource = deploymentPanelSource.slice(
-    startGitHubConnectionIndex,
-    createHandoffIndex
-  );
-
-  assert.ok(startGitHubConnectionIndex > -1);
-  assert.match(startGitHubConnectionSource, /setShowGitHubRepositoryChooser\(true\)/);
-  assert.match(startGitHubConnectionSource, /listGitHubInstalledRepositories\(projectId\)/);
-  assert.doesNotMatch(startGitHubConnectionSource, /createGitHubSourceRepositoryInstallUrl/);
-  assert.match(deploymentPanelSource, /showGitHubRepositoryChooser/);
-  assert.match(deploymentPanelSource, /connectInstalledGitHubRepository/);
-  assert.match(deploymentPanelSource, /installedGitHubRepositorySelection/);
-  assert.match(deploymentPanelSource, /knownGitHubSourceRepositories/);
-  assert.match(deploymentPanelSource, /GitHub App 설치\/권한 추가/);
+  assert.match(deploymentPanelSource, /createGitCicdAutoDeployHandoff/);
+  assert.match(deploymentPanelSource, /activeGitHubSourceRepository/);
+  assert.doesNotMatch(deploymentPanelSource, /function startGitHubConnection/);
+  assert.doesNotMatch(deploymentPanelSource, /renderGitHubRepositoryChooser/);
+  assert.doesNotMatch(deploymentPanelSource, /listGitHubInstalledRepositories/);
+  assert.doesNotMatch(deploymentPanelSource, /createGitHubSourceRepositoryInstallUrl/);
 });
 
 test("deployment setup exposes a three-step workflow with one primary path", () => {
@@ -661,7 +657,7 @@ test("Git CI/CD handoff actions use user-facing labels and helper text", () => {
   assert.match(deploymentPanelSource, /Workflow와 Actions variable을 repository에 설정합니다\./);
   assert.match(deploymentPanelSource, /AWS 실행 Role 연결 적용/);
   assert.match(deploymentPanelSource, /GitHub Actions가 승인된 AWS Role을 사용할 수 있게 연결합니다\./);
-  assert.match(deploymentPanelSource, /App 권한 추가하러 가기/);
+  assert.match(deploymentPanelSource, /프로젝트 GitHub 설정 열기/);
   assert.match(deploymentPanelSource, /임시 OAuth 승인/);
   assert.match(deploymentPanelSource, /OAuth로 저장소 준비 적용/);
   assert.match(deploymentPanelSource, /GitHub 저장소 준비/);

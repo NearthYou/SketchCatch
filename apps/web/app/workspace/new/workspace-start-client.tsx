@@ -2,7 +2,11 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { createProject, listAwsConnections } from "../../../features/workspace/api";
+import {
+  createGitHubSourceRepositoryInstallUrl,
+  createProject,
+  listAwsConnections
+} from "../../../features/workspace/api";
 import {
   createWorkspaceStartOptions,
   resolveWorkspaceStartAction,
@@ -14,13 +18,15 @@ const DEFAULT_REVERSE_CLOUD_PLATFORM = "aws";
 
 const COPY = {
   chooseStartMode: "\uC2DC\uC791 \uBC29\uC2DD\uC744 \uC120\uD0DD\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4.",
-  createProjectFailed: "\uD504\uB85C\uC81D\uD2B8\uB97C \uC0DD\uC131\uD558\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4.",
+  createProjectFailed: "프로젝트 생성 또는 GitHub 연결을 시작하지 못했습니다.",
   enterProjectName: "\uD504\uB85C\uC81D\uD2B8 \uC774\uB984\uC744 \uC785\uB825\uD574\uC8FC\uC138\uC694.",
   projectNameFirst:
     "\uD504\uB85C\uC81D\uD2B8 \uC774\uB984\uC744 \uBA3C\uC800 \uC785\uB825\uD558\uBA74 \uC2DC\uC791 \uBC29\uC2DD\uC744 \uC120\uD0DD\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4.",
   projectNameLabel: "\uD504\uB85C\uC81D\uD2B8 \uC774\uB984",
   projectNamePlaceholder: "\uC608: \uC608\uC57D \uC11C\uBE44\uC2A4 API \uC11C\uBC84",
   startModeLabel: "\uC2DC\uC791 \uBC29\uC2DD",
+  connectGitHubAfterCreate: "프로젝트 생성 후 GitHub repository 연결",
+  connectGitHubHelp: "빈 보드로 시작할 때 Git/CI/CD용 source repository를 바로 연결합니다.",
   submitting: "\uCC98\uB9AC \uC911"
 } as const;
 
@@ -45,6 +51,7 @@ export function WorkspaceStartClient() {
   const [title, setTitle] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [isSubmittingMode, setIsSubmittingMode] = useState<WorkspaceStartKind | null>(null);
+  const [connectGitHubAfterCreate, setConnectGitHubAfterCreate] = useState(false);
   const canChooseStartMode = title.trim().length > 0 && isSubmittingMode === null;
 
   const helperText = useMemo(() => {
@@ -110,6 +117,14 @@ export function WorkspaceStartClient() {
       const project = await createProject({
         name: projectName
       });
+
+      if (connectGitHubAfterCreate) {
+        const { installUrl } = await createGitHubSourceRepositoryInstallUrl(project.id);
+
+        window.location.assign(installUrl);
+        return;
+      }
+
       const params = new URLSearchParams({
         projectId: project.id,
         projectName: project.name
@@ -173,6 +188,16 @@ export function WorkspaceStartClient() {
             {isSubmittingMode === "blank" ? COPY.submitting : blankStartOption.actionLabel}
           </button>
         ) : null}
+        <label className="workspaceStartCheckbox">
+          <input
+            checked={connectGitHubAfterCreate}
+            disabled={!canChooseStartMode || isSubmittingMode !== null}
+            onChange={(event) => setConnectGitHubAfterCreate(event.target.checked)}
+            type="checkbox"
+          />
+          <span>{COPY.connectGitHubAfterCreate}</span>
+          <small>{COPY.connectGitHubHelp}</small>
+        </label>
       </div>
 
       {errorMessage ? (
