@@ -1,5 +1,141 @@
 ﻿# 세션 핸드오프
 
+## 2026-07-07 - AWS ResourceType 누락 리소스 추가 완료
+
+- Branch/worktree: `/Users/bruce/KraftonJungle/MyWeaponProject`, branch `codex/right-panel-resource-header`.
+- Scope completed: 사용자 요청 목록 중 현재 서비스에 없던 AWS 리소스를 shared `ResourceType`, `resource-definitions`, Resource Settings catalog, public icon 연결, label, Terraform Preview/Sync 경로에 추가했다.
+- Added catalog/definition resources:
+  - `API_GATEWAY_WEBSOCKET_API` -> `aws_apigatewayv2_api`
+  - `SQS_QUEUE` -> `aws_sqs_queue`
+  - `ELASTICACHE_REDIS` -> `aws_elasticache_replication_group`
+  - `ACM_CERTIFICATE` -> `aws_acm_certificate`
+  - `RDS_READ_REPLICA` -> `aws_db_instance` variant
+  - `RDS_CLUSTER` -> `aws_rds_cluster`
+  - `API_GATEWAY_STAGE` -> `aws_api_gateway_stage`
+  - `STEP_FUNCTIONS_STATE_MACHINE` -> `aws_sfn_state_machine`
+  - `LAMBDA_EVENT_SOURCE_MAPPING` -> `aws_lambda_event_source_mapping`
+  - `COGNITO_USER_POOL` -> `aws_cognito_user_pool`
+  - `COGNITO_USER_POOL_CLIENT` -> `aws_cognito_user_pool_client`
+  - `ECR_REPOSITORY` -> `aws_ecr_repository`
+  - `ECS_CLUSTER` -> `aws_ecs_cluster`
+  - `ECS_SERVICE` -> `aws_ecs_service`
+  - `ECS_TASK_DEFINITION` -> `aws_ecs_task_definition`
+  - `EKS_CLUSTER` -> `aws_eks_cluster`
+- Key implementation notes:
+  - Existing catalog resources from the user list that previously mapped to `UNKNOWN` now have explicit ResourceType values, including ASG, Launch Template, NAT Gateway, EBS Volume, Key Pair, API Gateway Resource/Method/Integration, EventBridge, SNS, DynamoDB, and CloudWatch Dashboard.
+  - `docs/data-models.md`의 `ResourceType` union도 shared type과 같은 목록으로 갱신했다.
+  - `RDS_READ_REPLICA` intentionally shares Terraform type `aws_db_instance`; `getResourceDefinitionByTerraform("resource", "aws_db_instance")` still returns generic `aws-rds-instance` so Terraform sync/proposal mapping does not accidentally become read-replica by default.
+  - `aws_db_instance` parameters now include `replicateSourceDb`; if a Diagram node has that value, Diagram -> Architecture conversion preserves `RDS_READ_REPLICA`.
+  - Resource catalog tests now assert the new public icon paths exist under `apps/web/public`.
+  - `scripts/generate-terraform-aws-catalog.mjs` now validates only parameter override resources against Terraform provider schema, which matches the existing `parameterPanel: false` behavior and lets `pnpm catalog:check` pass.
+- Verification completed:
+  - `pnpm harness:check`
+  - API targeted tests: `resource-definitions-source-shape`, `diagram-to-architecture`, `infrastructure-graph` - 21 tests passed.
+  - Web targeted tests: `resource-settings/catalog.test.ts`, `app/workspace/resource-type-labels.test.ts` - 10 tests passed.
+  - `pnpm --filter @sketchcatch/types typecheck`
+  - `pnpm --filter @sketchcatch/api typecheck`
+  - `pnpm --filter @sketchcatch/web typecheck`
+  - `pnpm catalog:check`
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm build`
+  - `git diff --check`
+- Remaining risk:
+  - Most newly added complex resources have catalog tile + Terraform Preview/Sync support first, but no curated parameter panel yet. `RDS_READ_REPLICA` is the only one with an added parameter field in this session.
+  - Worktree still contains many pre-existing workspace/canvas/right-panel changes. Do not treat full `git diff --stat` as only this session's resource work.
+  - No browser screenshot QA, Terraform apply/destroy, cloud mutation, or Git/CI/CD handoff was run.
+
+## 2026-07-07 - JH 122~현재 누락 복구 및 선언 회귀 방지 완료
+
+- Branch/worktree: `/Users/bruce/KraftonJungle/MyWeaponProject`, branch `codex/right-panel-resource-header`.
+- Scope completed: JH 122~현재 브랜치 누락 복구 계획에서 확인된 실제 복구 항목을 구현하고, `resource-definitions` source-shape 회귀 방지 테스트를 추가했다.
+- Key changes:
+  - `packages/types/src/resource-definitions.ts`의 `createAwsResourceDefinition` 호출마다 `terraformPreview: true`, `terraformSync: true`를 명시했다.
+  - `createAwsResourceDefinition`는 `terraformPreview = false`, `terraformSync = false` 기본값을 유지한다.
+  - `apps/web/features/workspace/workspace-right-panel-layout.test.ts`에 `countMatches` helper를 추가해 Plan action strip assertion이 typecheck/test에서 깨지지 않게 했다.
+  - `apps/api/src/services/terraform/resource-definitions-source-shape.test.ts`를 추가해 선언 객체 명시성과 factory 기본값을 source 기준으로 검증한다.
+- Verification completed:
+  - `pnpm harness:check`
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/resource-definitions-source-shape.test.ts`
+  - JH targeted API tests, 93 tests passed.
+  - JH targeted Web tests, 160 tests passed.
+  - `pnpm --filter @sketchcatch/api typecheck`
+  - `pnpm --filter @sketchcatch/types typecheck`
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm build`
+  - `git diff --check`
+- Remaining risk:
+  - Worktree remains dirty with many pre-existing workspace/canvas/right-panel changes. Do not treat the full `git diff --stat` as only this session's changes.
+  - No browser screenshot QA or real Terraform/cloud/Git handoff execution was performed.
+
+## 2026-07-07 - Brainboard 우측 패널 Plan/Code 의미 분리 완료
+
+- Branch/worktree: `/Users/bruce/KraftonJungle/MyWeaponProject`, branch `codex/right-panel-resource-header`.
+- Scope completed: 우측 패널 shell/UI만 Brainboard 스타일로 정리하고, Plan/play 버튼이 Terraform code 화면으로 이동하던 연결을 제거했다.
+- Key changes:
+  - `WorkspaceRightPanel` main row는 Resources icon, Terraform code icon, Issues, Deploy, Plan split button 순서다.
+  - Terraform code icon만 `data-terraform-editor-navigation`과 `requestView("terraform")`을 가진다.
+  - Plan main과 `Plan / Validate / Apply / Destroy` action strip 버튼은 모두 기존 Deploy view 진입만 수행하며 실제 Deployment/Terraform 실행 로직을 호출하지 않는다.
+  - `DeploymentPanel`, `TerraformCodePanel`, Terraform validation/save, deployment approval/apply/destroy 내부 로직과 API 계약은 이번 세션에서 변경하지 않았다.
+  - 우측 패널 CSS에 Brainboard 관찰 기반 white/light-gray/purple 토큰, 44px topbar, 47px main row, Plan split/action strip, dark Issues wrapper 스타일을 적용했다.
+- Verification completed:
+  - `pnpm harness:check` before edits and after build.
+  - RED then GREEN focused right-panel tests.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-right-panel-layout.test.ts`
+  - `pnpm --filter @sketchcatch/web test`
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm build`
+  - Chrome plugin visual QA on local workspace for Plan strip, Deploy routing, and Code routing.
+- Remaining risk:
+  - Chrome plugin did not expose direct mobile viewport resizing, so mobile visual QA was not repeated in Chrome.
+  - Worktree remains dirty with unrelated pre-existing changes; do not revert them unless explicitly requested.
+
+## 2026-07-07 - Brainboard 스타일 Workspace 패널 재현 완료
+
+- Branch/worktree: `/Users/bruce/KraftonJungle/MyWeaponProject`, branch `codex/right-panel-resource-header`.
+- Scope completed: Workspace 좌측 Resources 패널과 우측 패널을 Brainboard 관찰 기반 white/light-gray/purple 계열로 재구성했다.
+- Key changes:
+  - 좌측 rail 기본 폭 `346px`, 위치 `left: 12px; top: 72px`, compact accordion/resource tile 구조 적용.
+  - Resources/Templates, provider/version/view buttons, search, separator, scrollable accordion 순서 유지.
+  - `Modules`와 `Brainboard` 포함 전체 resource section 상태를 스타일링하고, resource tile은 `60px x 60px`, `24px` icon, one-line clamp로 고정.
+  - 우측 rail 기본 폭 `440px`, 상단 utility icon row와 하단 `Issues`/`Deploy`/`Plan` action row로 재배치.
+  - `Plan` UI label은 기존 `"terraform"` view로 연결하고 Terraform 내부 화면은 유지.
+  - mobile에서는 좌측 패널을 접으면 우측 panel fixed overlay가 접근 가능하도록 기존 `display: none` media override를 제거.
+- Verification completed:
+  - `pnpm harness:check` before edits.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/resource-settings/resource-settings-panel.test.ts`
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-right-panel-layout.test.ts`
+  - `pnpm --filter @sketchcatch/web test`
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm build`
+  - Playwright visual QA with mocked auth/API, screenshots in `output/playwright/`.
+- Remaining risk: 실제 backend auth/deployment/AWS/Terraform apply는 실행하지 않았다. 현재 dirty worktree에는 이번 작업 전부터 존재한 JH 복원 관련 modified 파일들이 함께 남아 있으므로 diff 분리 확인이 필요하다.
+
+## 2026-07-07 - JH 브랜치 누락 전수조사 완료
+
+- Branch/worktree: `/Users/bruce/KraftonJungle/MyWeaponProject`, branch `codex/right-panel-resource-header`.
+- Scope completed: 병합 이력만 보지 않고 JH 관련 branch/ref와 merge second parent를 실제 파일 기준으로 현재 worktree와 대조했다.
+- Result: 확정된 추가 JH 구현 누락은 확인되지 않았다.
+- Deliverable: `docs/jh/004_JH브랜치누락전수조사_JH.md`.
+- Candidate classifications:
+  - `ParameterInputPanel.accessibility.test.ts`는 #65에서 추가됐지만 #68에서 JH가 직접 삭제한 취약한 source regex 테스트다. 현재 관련 구현과 parameter input 테스트는 통과한다.
+  - `aiArchitectureScenarioResolution.ts`는 후속 자연어 다이어그램 전환에서 `aiArchitectureRequirementResolution.ts` 계열로 대체됐다. 현재 architecture draft 테스트가 통과한다.
+  - #122 InfrastructureGraph branch는 현재 HEAD 조상이 아니지만, 현 구현이 shared `ResourceDefinition` 기반 Preview/Sync 경로로 더 넓게 흡수했다.
+  - `DESIGN.md`/`Design.md`는 후속 문서 정리 삭제이며 JH 구현 복원 대상이 아니다.
+- Verification completed: `pnpm harness:check`, JH 관련 representative focused tests, candidate follow-up checks for parameter input, architecture draft, Terraform Preview/InfrastructureGraph.
+- Remaining risk: `docs/ck/ai/001_AIProvider실행흐름정리.md`의 삭제 파일 링크는 stale reference지만 이번 JH 구현 누락 범위에서는 제외했다.
+
+## 2026-07-07 - JH 작업 내용 기준 누락 복원 완료
+
+- Branch/worktree: `/Users/bruce/KraftonJungle/MyWeaponProject`, branch `codex/right-panel-resource-header`.
+- Scope completed: `docs/jh/003_JH작업내용기준복원계획_JH.md`의 Task1 #126, Task2 #165, Task3 #167, Task4 #171, Task5 #174 항목을 실제 JH 기준 ref 파일 내용과 현재 worktree로 직접 대조하고 누락 구현을 복원했다.
+- Subagent audit: 각 Task마다 6개 하위 agent 검수를 수행했다. Task5 최종 검수 6개는 모두 PASS이며, Task3/Task4에서 나온 일부 FAIL은 후속 JH 변경 또는 기준 커밋 밖의 더 엄격한 해석으로 분류했다.
+- Verification completed: focused web/API tests, `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm harness:check`, `git diff --check`.
+- Remaining risk: 실제 브라우저 screenshot QA와 실제 Terraform apply/destroy/cloud mutation은 수행하지 않았다.
+- Next action: 이어받아야 할 미완성 구현은 없다. 리뷰 전에는 현재 dirty worktree에서 이번 복원 변경과 기존 사용자/다른 작업 변경을 diff로 분리해 확인한다.
 ## 2026-07-07 - Git/CI/CD live smoke 현재 blocker
 
 - Branch/worktree: `codex/cicd-live-smoke-evidence` at `C:\Users\siwon\Desktop\Jungle\Week17~21\SketchCatch-worktrees\cicd-plan6-docs`.

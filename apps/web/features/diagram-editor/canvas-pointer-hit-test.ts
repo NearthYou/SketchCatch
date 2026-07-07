@@ -12,6 +12,14 @@ export type AreaBlankInteractionInput = {
   temporaryPanPreviousMode: DiagramInteractionMode | null;
 };
 
+export type TemporaryPanReleaseInput = {
+  button: number;
+  buttons: number;
+  previousMode: DiagramInteractionMode | null;
+};
+
+const MIDDLE_MOUSE_BUTTON_MASK = 4;
+
 const INTERACTIVE_CANVAS_TARGET_SELECTOR = [
   "button",
   "input",
@@ -46,6 +54,22 @@ export function getAreaBlankInteractionTarget({
   }
 
   return "blank-space";
+}
+
+export function getTemporaryPanReleaseMode({
+  button,
+  buttons,
+  previousMode
+}: TemporaryPanReleaseInput): DiagramInteractionMode | null {
+  if (previousMode === null) {
+    return null;
+  }
+
+  if (button === 1 || (buttons & MIDDLE_MOUSE_BUTTON_MASK) === 0) {
+    return previousMode;
+  }
+
+  return null;
 }
 
 export function isCanvasInteractiveElementTarget(target: unknown): boolean {

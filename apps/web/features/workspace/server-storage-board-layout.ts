@@ -31,9 +31,7 @@ const PARENT_BY_NODE_ID: Readonly<Record<string, string>> = {
 const CLOUD_CONTAINER_RESOURCE_TYPES = new Set(["aws_vpc", "aws_subnet", "aws_instance"]);
 const REGION_PARENT_RESOURCE_TYPES = new Set(["aws_ami", "aws_s3_bucket"]);
 const AZ_PARENT_RESOURCE_TYPES = new Set(["aws_subnet"]);
-const RESOURCE_ITEMS_BY_TYPE = new Map<string, ResourceItem>(
-  resourceCatalog.map((item) => [item.nodeDefaults.type, item])
-);
+const RESOURCE_ITEMS_BY_TYPE = createResourceItemsByType(resourceCatalog);
 
 // EC2 런타임 Draft에 Region/AZ 보조 영역을 더해 보드 포함관계를 읽기 좋게 만듭니다.
 export function addServerStorageAreaNodes(nodes: readonly DiagramNode[]): DiagramNode[] {
@@ -167,6 +165,20 @@ function applyParentMetadata(node: DiagramNode, nodeIds: ReadonlySet<string>): D
       parentAreaNodeId
     }
   };
+}
+
+function createResourceItemsByType(resources: readonly ResourceItem[]): Map<string, ResourceItem> {
+  const resourcesByType = new Map<string, ResourceItem>();
+
+  for (const resource of resources) {
+    if (resourcesByType.has(resource.nodeDefaults.type)) {
+      continue;
+    }
+
+    resourcesByType.set(resource.nodeDefaults.type, resource);
+  }
+
+  return resourcesByType;
 }
 
 function getCloudContainerParentAreaNodeId(node: DiagramNode): string | undefined {

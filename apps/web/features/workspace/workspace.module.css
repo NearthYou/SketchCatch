@@ -151,9 +151,11 @@
 }
 
 .rightPanelShell {
+  background: #ffffff;
+  color: #172033;
   display: grid;
-  font-size: 11.5px;
-  grid-template-rows: auto minmax(0, 1fr);
+  font-size: 12px;
+  grid-template-rows: auto auto minmax(0, 1fr);
   height: 100%;
   max-width: 100%;
   min-height: 0;
@@ -198,23 +200,51 @@
   width: 1px;
 }
 
-.rightPanelToolbar {
+.rightPanelToolbar,
+.rightPanelUtilityBar {
   align-items: center;
   background: #ffffff;
-  border-bottom: 1px solid #dde5f2;
+  border-bottom: 1px solid #e2e9f3;
   display: flex;
   gap: 8px;
-  justify-content: flex-start;
+  justify-content: space-between;
   max-width: 100%;
-  min-height: 46px;
+  min-height: 44px;
   min-width: 0;
-  padding: 6px 12px 6px 8px;
+  padding: 8px 12px;
   position: sticky;
   top: 0;
   z-index: 4;
 }
 
+.rightPanelUtilityGroup {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  display: inline-flex;
+  gap: 4px;
+  margin-left: auto;
+  padding: 0;
+}
+
+.rightPanelModeBar {
+  align-items: center;
+  background: #ffffff;
+  border-bottom: 1px solid #e2e9f3;
+  display: flex;
+  gap: 8px;
+  max-width: 100%;
+  min-height: 47px;
+  min-width: 0;
+  overflow: visible;
+  padding: 8px 12px;
+  position: relative;
+  z-index: 3;
+}
+
 .rightPanelView {
+  background: #fafbfe;
   display: grid;
   height: 100%;
   max-width: 100%;
@@ -236,6 +266,147 @@
   display: inline-flex;
   gap: 3px;
   padding: 3px;
+}
+
+.panelModeIconGroup {
+  align-items: center;
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 4px;
+  min-width: 0;
+}
+
+.panelModeTextButton,
+.panelModeTextButtonActive,
+.panelPlanButton,
+.panelPlanButtonActive {
+  align-items: center;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  gap: 5px;
+  height: 24px;
+  justify-content: center;
+  letter-spacing: 0;
+  min-width: 56px;
+  overflow: hidden;
+  padding: 0 8px;
+  position: relative;
+  white-space: nowrap;
+}
+
+.panelModeTextButton {
+  background: #ffffff;
+  border-color: #e1e7f1;
+  color: #4f5d74;
+}
+
+.panelModeTextButtonActive {
+  background: #f4f1ff;
+  border-color: #d8ceff;
+  color: #5f3de8;
+}
+
+.panelPlanButton {
+  background: #7357ff;
+  border-color: #7357ff;
+  box-shadow: 0 8px 18px rgba(115, 87, 255, 0.22);
+  color: #ffffff;
+  flex: 0 0 auto;
+  min-width: 86px;
+}
+
+.panelPlanButtonActive {
+  background: #5f3de8;
+  border-color: #5f3de8;
+  box-shadow: 0 0 0 3px rgba(115, 87, 255, 0.16);
+  color: #ffffff;
+}
+
+.panelPlanSplitButton {
+  align-items: center;
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 26px;
+  margin-left: auto;
+  min-width: 78px;
+}
+
+.panelPlanMainButton,
+.panelPlanExpandButton,
+.panelPlanActionButton {
+  align-items: center;
+  border: 1px solid #704dff;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  height: 26px;
+  justify-content: center;
+  letter-spacing: 0;
+  margin: 0;
+  padding: 0;
+  white-space: nowrap;
+}
+
+.panelPlanMainButton {
+  background: #704dff;
+  border-radius: 4px 0 0 4px;
+  color: #ffffff;
+  gap: 4px;
+  width: 58px;
+}
+
+.panelPlanExpandButton {
+  background: #704dff;
+  border-left-color: rgba(255, 255, 255, 0.22);
+  border-radius: 0 4px 4px 0;
+  color: #ffffff;
+  width: 20px;
+}
+
+.panelPlanActionStrip {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #e2e9f3;
+  border-radius: 0 0 6px 6px;
+  box-shadow: 0 8px 18px rgba(24, 32, 42, 0.08);
+  display: flex;
+  gap: 4px;
+  height: 42px;
+  padding: 8px 12px;
+  position: absolute;
+  right: 0;
+  top: 46px;
+  z-index: 10;
+}
+
+.panelPlanActionButton {
+  background: #ffffff;
+  border-color: transparent;
+  border-radius: 4px;
+  color: #704dff;
+  min-width: 66px;
+  padding: 0 10px;
+}
+
+.panelPlanActionButtonActive {
+  background: #704dff;
+  border-color: #704dff;
+  color: #ffffff;
+}
+
+.panelPlanActionDangerButton {
+  background: #e5484d;
+  border-color: #e5484d;
+  color: #ffffff;
+  min-width: 86px;
 }
 
 .panelModeButton,
@@ -289,6 +460,16 @@
 
 .panelModeButton:hover,
 .panelModeButton:focus-visible,
+.panelModeTextButton:hover,
+.panelModeTextButton:focus-visible,
+.panelPlanButton:hover,
+.panelPlanButton:focus-visible,
+.panelPlanMainButton:hover,
+.panelPlanMainButton:focus-visible,
+.panelPlanExpandButton:hover,
+.panelPlanExpandButton:focus-visible,
+.panelPlanActionButton:hover,
+.panelPlanActionButton:focus-visible,
 .panelIconButton:hover,
 .panelIconButton:focus-visible,
 .panelCollapseButton:hover,
@@ -299,6 +480,31 @@
   border-color: #d8ceff;
   color: #5f3de8;
   outline: none;
+}
+
+.panelPlanMainButton:hover,
+.panelPlanMainButton:focus-visible,
+.panelPlanExpandButton:hover,
+.panelPlanExpandButton:focus-visible,
+.panelPlanActionButtonActive:hover,
+.panelPlanActionButtonActive:focus-visible {
+  background: #5f3fe6;
+  border-color: #5f3fe6;
+  color: #ffffff;
+}
+
+.panelPlanActionDangerButton:hover,
+.panelPlanActionDangerButton:focus-visible {
+  background: #d83d43;
+  border-color: #d83d43;
+  color: #ffffff;
+}
+
+.panelPlanButton:hover,
+.panelPlanButton:focus-visible {
+  background: #5f3de8;
+  border-color: #5f3de8;
+  color: #ffffff;
 }
 
 .panelIssueBadge,
@@ -327,64 +533,63 @@
   color: #b42318;
 }
 
+.panelModeTextButton .panelIssueBadge,
+.panelModeTextButton .panelIssueBadgeError,
+.panelModeTextButtonActive .panelIssueBadge,
+.panelModeTextButtonActive .panelIssueBadgeError {
+  position: static;
+}
+
 .resourceWorkspacePanel {
   background: #fafbfe;
   color: #172033;
   display: grid;
   font-size: 12px;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   min-height: 0;
   padding-top: 4px;
 }
 
-.resourceSectionToolbar {
-  align-items: center;
+.resourceSettingsPanel {
   background: #ffffff;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
+  overflow: hidden;
+}
+
+.resourceSettingsHeader {
+  align-items: center;
+  background: #fafbfe;
   border-bottom: 1px solid #dce3ee;
   display: flex;
-  gap: 12px;
-  justify-content: space-between;
-  min-height: 44px;
-  padding: 7px 12px;
+  justify-content: flex-start;
+  min-height: 48px;
+  padding: 16px 12px 8px;
 }
 
-.resourceSectionTabs {
+.resourceSettingsBackButton {
   align-items: center;
-  display: inline-flex;
-  gap: 7px;
-  min-width: 0;
-}
-
-.resourceSectionButton,
-.resourceSectionButtonActive {
-  align-items: center;
-  border: 1px solid transparent;
-  border-radius: 7px;
+  background: #ffffff;
+  border: 1px solid #dce3ee;
+  border-radius: 6px;
+  color: #243044;
   cursor: pointer;
   display: inline-flex;
-  height: 30px;
-  justify-content: center;
-  padding: 0;
-  width: 30px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 850;
+  gap: 7px;
+  min-height: 32px;
+  padding: 0 10px;
 }
 
-.resourceSectionButton {
-  background: transparent;
-  color: #243044;
-}
-
-.resourceSectionButton:hover,
-.resourceSectionButton:focus-visible {
+.resourceSettingsBackButton:hover,
+.resourceSettingsBackButton:focus-visible {
   background: var(--bp-blue-tint);
   border-color: color-mix(in srgb, var(--bp-blue) 32%, var(--bp-line));
   color: var(--bp-blue);
   outline: none;
-}
-
-.resourceSectionButtonActive {
-  background: #eef0f4;
-  border-color: #e2e8f0;
-  color: var(--bp-blue);
 }
 
 .resourceListPanel {
@@ -397,7 +602,7 @@
   justify-content: stretch;
   min-height: 0;
   overflow: auto;
-  padding: 12px;
+  padding: 24px 12px 12px;
 }
 
 .resourceListItem,
@@ -480,25 +685,14 @@
   white-space: nowrap;
 }
 
-.resourceListCubeIcon {
+.resourceListServiceIcon {
   align-items: center;
-  background: #f3f5f8;
   border-radius: 5px 0 0 5px;
-  color: #243044;
+  color: var(--bp-blue);
   display: inline-flex;
   height: 28px;
   justify-content: center;
-  width: 30px;
-}
-
-.resourceListServiceIcon {
-  align-items: center;
-  border-left: 1px solid #d7dde7;
-  color: var(--bp-blue);
-  display: inline-flex;
-  height: 22px;
-  justify-content: center;
-  width: 28px;
+  width: 36px;
 }
 
 .resourceListServiceIcon img {
@@ -4508,7 +4702,8 @@
 }
 
 .rightPanelToolbar,
-.resourceSectionToolbar,
+.rightPanelUtilityBar,
+.rightPanelModeBar,
 .terraformTopBar,
 .terraformDiagnostics,
 .deploymentHeader,
@@ -4517,13 +4712,19 @@
   border-color: var(--bp-line);
 }
 
-.rightPanelToolbar {
+.rightPanelToolbar,
+.rightPanelUtilityBar {
   min-height: 48px;
   padding: 7px 10px;
 }
 
+.rightPanelModeBar {
+  min-height: 46px;
+  padding: 6px 10px;
+}
+
 .panelModeToggle,
-.resourceSectionTabs,
+.rightPanelUtilityGroup,
 .deploymentModeSwitch {
   background: var(--bp-paper-2);
   border: 1px solid var(--bp-line);
@@ -4541,13 +4742,16 @@
 
 .panelModeButton,
 .panelModeButtonActive,
+.panelModeTextButton,
+.panelModeTextButtonActive,
+.panelPlanButton,
+.panelPlanButtonActive,
 .panelIconButton,
 .panelIconButtonActive,
 .panelCollapseButton,
 .collapsedPanelButton,
 .collapsedPanelButtonActive,
-.resourceSectionButton,
-.resourceSectionButtonActive,
+.resourceSettingsBackButton,
 .terraformFileButton,
 .deploymentExpandButton {
   border-radius: var(--bp-r);
@@ -4557,9 +4761,11 @@
 }
 
 .panelModeButtonActive,
+.panelModeTextButtonActive,
 .panelIconButtonActive,
 .collapsedPanelButtonActive,
-.resourceSectionButtonActive {
+.resourceSettingsBackButton:hover,
+.resourceSettingsBackButton:focus-visible {
   background: var(--bp-blue-tint);
   border-color: color-mix(in srgb, var(--bp-blue) 46%, transparent);
   box-shadow: none;
@@ -4568,14 +4774,14 @@
 
 .panelModeButton:hover,
 .panelModeButton:focus-visible,
+.panelModeTextButton:hover,
+.panelModeTextButton:focus-visible,
 .panelIconButton:hover,
 .panelIconButton:focus-visible,
 .panelCollapseButton:hover,
 .panelCollapseButton:focus-visible,
 .collapsedPanelButton:hover,
 .collapsedPanelButton:focus-visible,
-.resourceSectionButton:hover,
-.resourceSectionButton:focus-visible,
 .terraformFileButton:hover,
 .terraformFileButton:focus-visible,
 .deploymentExpandButton:hover,
@@ -4590,25 +4796,25 @@
   padding-top: 0;
 }
 
-.resourceSectionToolbar {
-  min-height: 48px;
-  padding: 7px 10px;
-}
-
-.resourceSectionButton,
-.resourceSectionButtonActive {
-  min-height: 30px;
-  padding: 0 10px;
-}
-
 .terraformPanel,
 .issuesPanel,
 .aiPanel,
 .deploymentPanel {
-  background:
-    linear-gradient(var(--bp-grid) 1px, transparent 1px),
-    linear-gradient(90deg, var(--bp-grid) 1px, transparent 1px), var(--bp-page);
-  background-size: 52px 52px;
+  background: var(--bp-page);
+}
+
+.panelPlanButton,
+.panelPlanButtonActive,
+.panelPlanButton:hover,
+.panelPlanButton:focus-visible {
+  background: var(--bp-blue);
+  border-color: var(--bp-blue);
+  box-shadow: 0 8px 18px color-mix(in srgb, var(--bp-blue) 22%, transparent);
+  color: #ffffff;
+}
+
+.panelPlanButtonActive {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--bp-blue) 18%, transparent);
 }
 
 .terraformTopBar,
@@ -4930,6 +5136,235 @@
 
 .deploymentLogPrefix {
   color: #7ea7c6;
+}
+
+/* Brainboard right panel reproduction */
+.rightPanelShell {
+  --bb-white: #ffffff;
+  --bb-page: #fafafa;
+  --bb-border: #e2e9f3;
+  --bb-border-strong: #d2dce9;
+  --bb-text: #18202a;
+  --bb-muted: #596578;
+  --bb-neutral-chip: #f0f0f0;
+  --bb-neutral-active: #e8e8e8;
+  --bb-accent: #704dff;
+  --bb-accent-hover: #5f3fe6;
+  --bb-accent-soft: #f0f1ff;
+  --bb-danger: #e5484d;
+  --bb-danger-hover: #d83d43;
+  --bb-dark: #212121;
+  --bb-dark-card: #3b3b3b;
+  --bb-dark-border: #303030;
+
+  background: var(--bb-white);
+  color: var(--bb-text);
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 12px;
+  grid-template-rows: 44px 47px minmax(0, 1fr);
+}
+
+.rightPanelUtilityBar {
+  background: var(--bb-white);
+  border-bottom: 1px solid var(--bb-border);
+  min-height: 44px;
+  padding: 8px 12px;
+}
+
+.rightPanelModeBar {
+  background: var(--bb-white);
+  border-bottom: 1px solid var(--bb-border);
+  min-height: 47px;
+  overflow: visible;
+  padding: 8px 12px;
+}
+
+.rightPanelView {
+  background: var(--bb-page);
+}
+
+.rightPanelUtilityGroup {
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  gap: 4px;
+  padding: 0;
+}
+
+.rightPanelUtilityGroup .panelModeButton,
+.rightPanelUtilityGroup .panelModeButtonActive,
+.panelCollapseButton {
+  background: transparent;
+  border-color: transparent;
+  border-radius: 4px;
+  box-shadow: none;
+  color: var(--bb-text);
+  height: 26px;
+  width: 26px;
+}
+
+.panelModeIconGroup .panelModeButton,
+.panelModeIconGroup .panelModeButtonActive {
+  background: transparent;
+  border-color: transparent;
+  border-radius: 4px;
+  box-shadow: none;
+  color: var(--bb-text);
+  height: 24px;
+  width: 24px;
+}
+
+.panelModeIconGroup .panelModeButtonActive {
+  background: var(--bb-neutral-active);
+  color: var(--bb-text);
+}
+
+.panelModeButton:hover,
+.panelModeButton:focus-visible,
+.panelCollapseButton:hover,
+.panelCollapseButton:focus-visible {
+  background: var(--bb-neutral-chip);
+  border-color: transparent;
+  color: var(--bb-text);
+}
+
+.panelModeTextButton,
+.panelModeTextButtonActive {
+  background: transparent;
+  border-color: transparent;
+  border-radius: 4px;
+  box-shadow: none;
+  color: var(--bb-text);
+  font-size: 12px;
+  font-weight: 500;
+  height: 24px;
+  min-width: 56px;
+  padding: 0 8px;
+}
+
+.panelModeTextButton:first-of-type,
+.panelModeTextButtonActive:first-of-type {
+  min-width: 70px;
+}
+
+.panelModeTextButtonActive {
+  background: var(--bb-neutral-active);
+  color: var(--bb-text);
+}
+
+.panelModeTextButton:hover,
+.panelModeTextButton:focus-visible {
+  background: var(--bb-neutral-chip);
+  border-color: transparent;
+  color: var(--bb-text);
+}
+
+.panelPlanSplitButton {
+  height: 26px;
+  min-width: 78px;
+}
+
+.panelPlanMainButton,
+.panelPlanExpandButton {
+  background: var(--bb-accent);
+  border-color: var(--bb-accent);
+  color: var(--bb-white);
+}
+
+.panelPlanMainButton {
+  width: 58px;
+}
+
+.panelPlanExpandButton {
+  border-left-color: color-mix(in srgb, var(--bb-white) 22%, transparent);
+  width: 20px;
+}
+
+.panelPlanMainButton:hover,
+.panelPlanMainButton:focus-visible,
+.panelPlanExpandButton:hover,
+.panelPlanExpandButton:focus-visible {
+  background: var(--bb-accent-hover);
+  border-color: var(--bb-accent-hover);
+  color: var(--bb-white);
+}
+
+.panelPlanActionStrip {
+  background: var(--bb-white);
+  border: 1px solid var(--bb-border);
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 10%), 0 2px 4px -2px rgb(0 0 0 / 10%);
+  height: 42px;
+  padding: 8px 12px;
+  right: 0;
+  top: 46px;
+}
+
+.panelPlanActionButton {
+  background: var(--bb-white);
+  border-color: transparent;
+  color: var(--bb-accent);
+  height: 26px;
+}
+
+.panelPlanActionButton:hover,
+.panelPlanActionButton:focus-visible {
+  background: var(--bb-accent-soft);
+  border-color: transparent;
+  color: var(--bb-accent);
+}
+
+.panelPlanActionButtonActive,
+.panelPlanActionButtonActive:hover,
+.panelPlanActionButtonActive:focus-visible {
+  background: var(--bb-accent);
+  border-color: var(--bb-accent);
+  color: var(--bb-white);
+}
+
+.panelPlanActionDangerButton,
+.panelPlanActionDangerButton:hover,
+.panelPlanActionDangerButton:focus-visible {
+  background: var(--bb-danger);
+  border-color: var(--bb-danger);
+  color: var(--bb-white);
+}
+
+.issuesPanel {
+  background: var(--bb-dark);
+  color: var(--bb-white);
+}
+
+.issuesPanel .terraformDiagnostics {
+  background: var(--bb-dark);
+  border-left: 0;
+  color: var(--bb-white);
+}
+
+.issuesPanel .terraformDiagnosticsHeader,
+.issuesPanel .terraformDiagnosticsHeader h3 {
+  color: var(--bb-white);
+}
+
+.issuesPanel .terraformDiagnosticList li {
+  background: var(--bb-dark-card);
+  border-color: var(--bb-dark-border);
+  color: var(--bb-white);
+}
+
+.issuesPanel .terraformDiagnosticList span {
+  color: #fafafa;
+}
+
+.terraformPanel,
+.deploymentPanel {
+  background: var(--bb-page);
+}
+
+.terraformTopBar,
+.terraformDiagnostics,
+.deploymentHeader {
+  background: var(--bb-white);
+  border-color: var(--bb-border);
 }
 
 @media (max-width: 640px) {

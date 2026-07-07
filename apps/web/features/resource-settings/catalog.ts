@@ -221,6 +221,33 @@ const terraformResourcePresentations = [
     size
   },
   {
+    definitionId: "aws-acm-certificate",
+    name: "ACM Certificate",
+    area: "security-identity",
+    category: "Security",
+    iconUrl: `${serviceIconPath}/Arch_Security-Identity-Compliance/64/Arch_AWS-Certificate-Manager_64.svg`,
+    label: "ACM Certificate",
+    size
+  },
+  {
+    definitionId: "aws-cognito-user-pool",
+    name: "Cognito User Pool",
+    area: "security-identity",
+    category: "Security",
+    iconUrl: `${serviceIconPath}/Arch_Security-Identity-Compliance/64/Arch_Amazon-Cognito_64.svg`,
+    label: "User Pool",
+    size
+  },
+  {
+    definitionId: "aws-cognito-user-pool-client",
+    name: "Cognito User Pool Client",
+    area: "security-identity",
+    category: "Security",
+    iconUrl: `${serviceIconPath}/Arch_Security-Identity-Compliance/64/Arch_Amazon-Cognito_64.svg`,
+    label: "Pool Client",
+    size
+  },
+  {
     definitionId: "aws-ec2-instance",
     name: "EC2 Instance",
     area: "compute",
@@ -288,7 +315,7 @@ const terraformResourcePresentations = [
     name: "ALB Target Group",
     area: "network",
     category: "Network",
-    iconUrl: `${resourceIconPath}/Res_Networking-Content-Delivery/Res_Elastic-Load-Balancing_Application-load-balancer_48.svg`,
+    iconUrl: `${resourceIconPath}/Res_Networking-Content-Delivery/Res_Elastic-Load-Balancing_Application-Load-Balancer_48.svg`,
     label: "Target Group",
     size
   },
@@ -297,7 +324,7 @@ const terraformResourcePresentations = [
     name: "ALB Listener",
     area: "network",
     category: "Network",
-    iconUrl: `${resourceIconPath}/Res_Networking-Content-Delivery/Res_Elastic-Load-Balancing_Application-load-balancer_48.svg`,
+    iconUrl: `${resourceIconPath}/Res_Networking-Content-Delivery/Res_Elastic-Load-Balancing_Application-Load-Balancer_48.svg`,
     label: "ALB Listener",
     size
   },
@@ -392,6 +419,24 @@ const terraformResourcePresentations = [
     size
   },
   {
+    definitionId: "aws-rds-read-replica",
+    name: "RDS Read Replica",
+    area: "database",
+    category: "Database",
+    iconUrl: `${serviceIconPath}/Arch_Database/64/Arch_Amazon-RDS_64.svg`,
+    label: "RDS Replica",
+    size
+  },
+  {
+    definitionId: "aws-rds-cluster",
+    name: "RDS Cluster",
+    area: "database",
+    category: "Database",
+    iconUrl: `${resourceIconPath}/Res_Database/Res_Amazon-RDS_Multi-AZ-DB-Cluster_48.svg`,
+    label: "RDS Cluster",
+    size
+  },
+  {
     definitionId: "aws-db-subnet-group",
     name: "DB Subnet Group",
     area: "database",
@@ -437,6 +482,15 @@ const terraformResourcePresentations = [
     size
   },
   {
+    definitionId: "aws-elasticache-redis",
+    name: "ElastiCache Redis",
+    area: "database",
+    category: "Database",
+    iconUrl: `${resourceIconPath}/Res_Database/Res_Amazon-ElastiCache_ElastiCache-for-Redis_48.svg`,
+    label: "Redis",
+    size
+  },
+  {
     definitionId: "aws-secretsmanager-secret",
     name: "Secrets Manager Secret",
     area: "security-identity",
@@ -464,12 +518,30 @@ const terraformResourcePresentations = [
     size
   },
   {
+    definitionId: "aws-lambda-event-source-mapping",
+    name: "Lambda Event Source Mapping",
+    area: "application",
+    category: "Serverless / Application",
+    iconUrl: `${resourceIconPath}/Res_Compute/Res_AWS-Lambda_Lambda-Function_48.svg`,
+    label: "Event Source",
+    size
+  },
+  {
     definitionId: "aws-api-gateway-rest-api",
     name: "API Gateway REST API",
     area: "application",
     category: "Serverless / Application",
     iconUrl: `${serviceIconPath}/Arch_Networking-Content-Delivery/64/Arch_Amazon-API-Gateway_64.svg`,
     label: "REST API",
+    size
+  },
+  {
+    definitionId: "aws-api-gateway-websocket-api",
+    name: "API Gateway WebSocket API",
+    area: "application",
+    category: "Serverless / Application",
+    iconUrl: `${serviceIconPath}/Arch_Networking-Content-Delivery/64/Arch_Amazon-API-Gateway_64.svg`,
+    label: "WebSocket API",
     size
   },
   {
@@ -497,6 +569,15 @@ const terraformResourcePresentations = [
     category: "Serverless / Application",
     iconUrl: `${resourceIconPath}/Res_Networking-Content-Delivery/Res_Amazon-API-Gateway_Endpoint_48.svg`,
     label: "API Integration",
+    size
+  },
+  {
+    definitionId: "aws-api-gateway-stage",
+    name: "API Gateway Stage",
+    area: "application",
+    category: "Serverless / Application",
+    iconUrl: `${resourceIconPath}/Res_Networking-Content-Delivery/Res_Amazon-API-Gateway_Endpoint_48.svg`,
+    label: "API Stage",
     size
   },
   {
@@ -551,6 +632,69 @@ const terraformResourcePresentations = [
     category: "Observability / Operations",
     iconUrl: `${resourceIconPath}/Res_Application-Integration/Res_Amazon-Simple-Notification-Service_Topic_48.svg`,
     label: "SNS Topic",
+    size
+  },
+  {
+    definitionId: "aws-sqs-queue",
+    name: "SQS Queue",
+    area: "tools",
+    category: "Messaging / Events",
+    iconUrl: `${resourceIconPath}/Res_Application-Integration/Res_Amazon-Simple-Queue-Service_Queue_48.svg`,
+    label: "SQS Queue",
+    size
+  },
+  {
+    definitionId: "aws-step-functions-state-machine",
+    name: "Step Functions State Machine",
+    area: "application",
+    category: "Serverless / Application",
+    iconUrl: `${serviceIconPath}/Arch_App-Integration/64/Arch_AWS-Step-Functions_64.svg`,
+    label: "State Machine",
+    size
+  },
+  {
+    definitionId: "aws-ecr-repository",
+    name: "ECR Repository",
+    area: "containers",
+    category: "Containers",
+    iconUrl: `${resourceIconPath}/Res_Containers/Res_Amazon-Elastic-Container-Registry_Registry_48.svg`,
+    label: "ECR Repository",
+    size
+  },
+  {
+    definitionId: "aws-ecs-cluster",
+    name: "ECS Cluster",
+    area: "containers",
+    category: "Containers",
+    iconUrl: `${serviceIconPath}/Arch_Containers/64/Arch_Amazon-Elastic-Container-Service_64.svg`,
+    label: "ECS Cluster",
+    size
+  },
+  {
+    definitionId: "aws-ecs-service",
+    name: "ECS Service",
+    area: "containers",
+    category: "Containers",
+    iconUrl: `${resourceIconPath}/Res_Containers/Res_Amazon-Elastic-Container-Service_Service_48.svg`,
+    label: "ECS Service",
+    size
+  },
+  {
+    definitionId: "aws-ecs-task-definition",
+    name: "ECS Task Definition",
+    area: "containers",
+    category: "Containers",
+    iconUrl: `${resourceIconPath}/Res_Containers/Res_Amazon-Elastic-Container-Service_Task_48.svg`,
+    label: "Task Definition",
+    size
+  },
+  {
+    definitionId: "aws-eks-cluster",
+    name: "EKS Cluster",
+    area: "containers",
+    category: "Containers",
+    iconUrl: `${serviceIconPath}/Arch_Containers/64/Arch_Amazon-Elastic-Kubernetes-Service_64.svg`,
+    label: "EKS Cluster",
     size
   }
 ] as const satisfies readonly TerraformResourcePresentation[];
