@@ -6,25 +6,31 @@ import {
   createReverseEngineeringCandidateResult
 } from "./reverse-engineering-board-candidates";
 
-test("createReverseEngineeringBoardCandidates makes separate VPC, S3, and full scan choices", () => {
+test("createReverseEngineeringBoardCandidates makes up to three structure interpretations with every resource", () => {
   const candidates = createReverseEngineeringBoardCandidates(createScanResult());
+  const expectedNodeIds = [
+    "resource-vpc-shop",
+    "resource-subnet-shop",
+    "resource-ec2-shop",
+    "resource-s3-assets"
+  ];
 
   assert.deepEqual(
     candidates.map((candidate) => candidate.id),
-    ["candidate-vpc-vpc-shop", "candidate-s3-bucket-assets", "candidate-full-scan"]
+    [
+      "candidate-structure-dependency",
+      "candidate-structure-connectivity",
+      "candidate-structure-provider"
+    ]
   );
-  assert.deepEqual(candidates[0]?.architectureJson.nodes.map((node) => node.id), [
-    "resource-vpc-shop",
-    "resource-subnet-shop",
-    "resource-ec2-shop"
-  ]);
-  assert.deepEqual(candidates[1]?.architectureJson.nodes.map((node) => node.id), [
-    "resource-s3-assets"
-  ]);
-  assert.equal(candidates[2]?.architectureJson.nodes.length, 4);
+  assert.ok(candidates.length <= 3);
+  assert.deepEqual(
+    candidates.map((candidate) => candidate.architectureJson.nodes.map((node) => node.id)),
+    [expectedNodeIds, expectedNodeIds, expectedNodeIds]
+  );
 });
 
-test("createReverseEngineeringBoardCandidates falls back to one full scan choice when no group exists", () => {
+test("createReverseEngineeringBoardCandidates falls back to one structure choice when no group exists", () => {
   const result = createScanResult({
     discoveredResources: [],
     architectureJson: {
@@ -46,12 +52,12 @@ test("createReverseEngineeringBoardCandidates falls back to one full scan choice
 
   assert.deepEqual(
     candidates.map((candidate) => candidate.id),
-    ["candidate-full-scan"]
+    ["candidate-structure-dependency"]
   );
-  assert.equal(candidates[0]?.title, "전체 스캔 결과");
+  assert.equal(candidates[0]?.title, "배포 관계 기준 구조");
 });
 
-test("createReverseEngineeringCandidateResult narrows the scan result to the selected candidate", () => {
+test("createReverseEngineeringCandidateResult keeps all resources and changes only the selected grouping", () => {
   const result = createScanResult();
   const candidates = createReverseEngineeringBoardCandidates(result);
   const candidate = candidates[0];
@@ -62,13 +68,40 @@ test("createReverseEngineeringCandidateResult narrows the scan result to the sel
   assert.deepEqual(candidateResult.architectureJson.nodes.map((node) => node.id), [
     "resource-vpc-shop",
     "resource-subnet-shop",
-    "resource-ec2-shop"
+    "resource-ec2-shop",
+    "resource-s3-assets"
   ]);
   assert.deepEqual(
     candidateResult.reverseEngineeringDraft.architectureJson.nodes.map((node) => node.id),
-    ["resource-vpc-shop", "resource-subnet-shop", "resource-ec2-shop"]
+    ["resource-vpc-shop", "resource-subnet-shop", "resource-ec2-shop", "resource-s3-assets"]
   );
   assert.equal(candidateResult.discoveredResources.length, result.discoveredResources.length);
+});
+
+test("createReverseEngineeringBoardCandidates removes duplicated relationship edges", () => {
+  const result = createScanResult();
+  const [vpcResource, ...remainingResources] = result.discoveredResources;
+  assert.ok(vpcResource);
+  const candidates = createReverseEngineeringBoardCandidates({
+    ...result,
+    discoveredResources: [
+      {
+        ...vpcResource,
+        relationships: [
+          { type: "contains", targetResourceId: "subnet-shop" },
+          { type: "contains", targetResourceId: "subnet-shop" }
+        ]
+      },
+      ...remainingResources
+    ]
+  });
+  const relationshipCandidate = candidates.find(
+    (candidate) => candidate.id === "candidate-structure-connectivity"
+  );
+  assert.ok(relationshipCandidate);
+  const edgeIds = relationshipCandidate.architectureJson.edges.map((edge) => edge.id);
+
+  assert.equal(new Set(edgeIds).size, edgeIds.length);
 });
 
 function createScanResult(

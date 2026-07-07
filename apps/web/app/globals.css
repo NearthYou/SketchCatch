@@ -4451,6 +4451,27 @@ nextjs-portal {
   line-height: 1.55;
 }
 
+.reverseStartBackButton {
+  align-self: end;
+  background: #f7faff;
+  border: 1px solid #c7d8f5;
+  border-radius: 8px;
+  color: #1c4f91;
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 900;
+  min-height: 40px;
+  padding: 0 12px;
+}
+
+.reverseStartBackButton:hover,
+.reverseStartBackButton:focus-visible {
+  background: #eaf2ff;
+  border-color: #8fb5ef;
+  outline: 2px solid rgba(37, 99, 235, 0.2);
+  outline-offset: 2px;
+}
+
 .reverseImportPanelShell {
   bottom: 24px;
   max-width: min(520px, calc(100vw - 48px));

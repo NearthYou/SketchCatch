@@ -74,6 +74,13 @@ test("Reverse Engineering can scan before project creation and create the projec
   assert.match(scanHistoryHookSource, /if \(!enabled\)/);
 });
 
+test("Reverse Engineering start page lets users choose another start mode before creating a project", () => {
+  assert.match(reverseWorkspaceClientSource, /useRouter/);
+  assert.match(reverseWorkspaceClientSource, /시작 방식 다시 선택/);
+  assert.match(reverseWorkspaceClientSource, /router\.push\("\/workspace\/new"\)/);
+  assert.doesNotMatch(reverseWorkspaceClientSource, /작업 화면으로 돌아가기/);
+});
+
 test("Reverse Engineering draft edits update only the candidate architecture", () => {
   assert.match(panelSource, /updateReverseEngineeringDraftNode/);
   assert.match(panelSource, /context\.setPreviewDiagram\(application\.previewDiagram\)/);
@@ -112,9 +119,9 @@ test("Reverse Engineering result explains scan coverage before users apply the p
   assert.match(resultPanelSource, /getScanCoverageNotice/);
 });
 
-test("Reverse Engineering result shows multiple board candidates before applying one", () => {
+test("Reverse Engineering result shows multiple structure candidates before applying one", () => {
   assert.match(candidatesSource, /createReverseEngineeringBoardCandidates/);
-  assert.match(candidatesSource, /candidate-full-scan/);
+  assert.match(candidatesSource, /candidate-structure-dependency/);
   assert.match(panelSource, /selectedCandidateId/);
   assert.match(panelSource, /selectedCandidateResult/);
   assert.match(panelSource, /createReverseEngineeringCandidateResult/);

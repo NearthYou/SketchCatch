@@ -1,6 +1,8 @@
 import type {
   ArchitectureJson,
   DiscoveredResource,
+  DiscoveredResourceRelationshipType,
+  ResourceEdge,
   ResourceNode,
   ReverseEngineeringScanResult
 } from "@sketchcatch/types";
@@ -15,15 +17,16 @@ export type ReverseEngineeringBoardCandidate = {
   readonly edgeCount: number;
 };
 
-// AWS 스캔 결과를 사용자가 고를 수 있는 보드 후보 여러 개로 나눕니다.
+const MAX_BOARD_CANDIDATE_COUNT = 3;
+
+// AWS 스캔 결과 전체를 유지한 채 Resource를 묶는 해석만 다르게 만든 후보입니다.
 export function createReverseEngineeringBoardCandidates(
   result: ReverseEngineeringScanResult
 ): readonly ReverseEngineeringBoardCandidate[] {
   const candidates = [
-    ...createVpcCandidates(result),
-    ...createS3Candidates(result),
-    createFullScanCandidate(result)
-  ];
+    createDependencyCandidate(result),
+    ...createOptionalStructureCandidates(result)
+  ].slice(0, MAX_BOARD_CANDIDATE_COUNT);
   const seenIds = new Set<string>();
 
   return candidates.filter((candidate) => {
@@ -36,7 +39,7 @@ export function createReverseEngineeringBoardCandidates(
   });
 }
 
-// 사용자가 고른 후보만 미리보기와 적용에 쓰이도록 scan result를 좁힙니다.
+// 사용자가 고른 구조 해석을 미리보기와 적용에 쓰되, 발견한 Resource 목록은 그대로 유지합니다.
 export function createReverseEngineeringCandidateResult(
   result: ReverseEngineeringScanResult,
   candidate: ReverseEngineeringBoardCandidate
@@ -51,61 +54,37 @@ export function createReverseEngineeringCandidateResult(
   };
 }
 
-// VPC는 보통 Subnet, EC2, RDS를 안에 담는 큰 박스라서 독립 후보로 만듭니다.
-function createVpcCandidates(result: ReverseEngineeringScanResult): ReverseEngineeringBoardCandidate[] {
-  const resources = result.discoveredResources.filter((resource) => resource.resourceType === "VPC");
-
-  return resources.flatMap((resource) => {
-    const providerResourceIds = collectContainedProviderResourceIds(resource, result.discoveredResources);
-    const architectureJson = pickArchitectureByProviderResourceIds(result.architectureJson, providerResourceIds);
-
-    if (architectureJson.nodes.length <= 1) {
-      return [];
-    }
-
-    return [
-      createCandidate({
-        architectureJson,
-        description: "VPC 안에 들어있는 리소스를 한 묶음으로 보여줍니다.",
-        id: `candidate-vpc-${toCandidateIdPart(resource.providerResourceId)}`,
-        title: `${resource.displayName} 중심 구조`
-      })
-    ];
-  });
-}
-
-// S3는 VPC 밖에 단독으로 있는 경우가 많아서 별도 후보로 보여줍니다.
-function createS3Candidates(result: ReverseEngineeringScanResult): ReverseEngineeringBoardCandidate[] {
-  const resources = result.discoveredResources.filter((resource) => resource.resourceType === "S3");
-
-  return resources.flatMap((resource) => {
-    const architectureJson = pickArchitectureByProviderResourceIds(result.architectureJson, [
-      resource.providerResourceId
-    ]);
-
-    if (architectureJson.nodes.length === 0) {
-      return [];
-    }
-
-    return [
-      createCandidate({
-        architectureJson,
-        description: "S3처럼 독립적으로 쓰이는 리소스를 따로 보여줍니다.",
-        id: `candidate-s3-${toCandidateIdPart(resource.providerResourceId)}`,
-        title: `${resource.displayName} 단독 구조`
-      })
-    ];
-  });
-}
-
-// 어떤 기준으로도 나누기 어렵거나, 사용자가 전체를 보고 싶을 때 쓰는 기본 후보입니다.
-function createFullScanCandidate(result: ReverseEngineeringScanResult): ReverseEngineeringBoardCandidate {
+// 배포 가능성에 가장 가까운 기본 해석입니다. 원본 관계선을 보존합니다.
+function createDependencyCandidate(result: ReverseEngineeringScanResult): ReverseEngineeringBoardCandidate {
   return createCandidate({
     architectureJson: result.architectureJson,
-    description: "이번 스캔에서 찾은 리소스를 모두 보여줍니다.",
-    id: "candidate-full-scan",
-    title: "전체 스캔 결과"
+    description: "VPC, Subnet, Security Group처럼 배포에 필요한 관계를 먼저 봅니다.",
+    id: "candidate-structure-dependency",
+    title: "배포 관계 기준 구조"
   });
+}
+
+function createOptionalStructureCandidates(
+  result: ReverseEngineeringScanResult
+): ReverseEngineeringBoardCandidate[] {
+  if (result.discoveredResources.length === 0 || result.architectureJson.nodes.length <= 1) {
+    return [];
+  }
+
+  return [
+    createCandidate({
+      architectureJson: createRelationshipArchitecture(result, "connects_to"),
+      description: "ALB, EC2, RDS처럼 실제로 이어진 관계를 더 크게 봅니다.",
+      id: "candidate-structure-connectivity",
+      title: "연결 관계 기준 구조"
+    }),
+    createCandidate({
+      architectureJson: createProviderTypeArchitecture(result.architectureJson),
+      description: "Resource 종류와 provider 정보를 기준으로 전체 구성을 살펴봅니다.",
+      id: "candidate-structure-provider",
+      title: "Resource 종류 기준 구조"
+    })
+  ];
 }
 
 type CreateCandidateInput = {
@@ -128,41 +107,6 @@ function createCandidate(input: CreateCandidateInput): ReverseEngineeringBoardCa
   };
 }
 
-// contains 관계를 따라가며 VPC 안에 들어가는 하위 리소스까지 모두 모읍니다.
-function collectContainedProviderResourceIds(
-  rootResource: DiscoveredResource,
-  resources: readonly DiscoveredResource[]
-): readonly string[] {
-  const resourceByLookupId = createResourceLookup(resources);
-  const visitedResourceIds = new Set<string>();
-  const providerResourceIds = new Set<string>();
-  const visitQueue: DiscoveredResource[] = [rootResource];
-
-  while (visitQueue.length > 0) {
-    const currentResource = visitQueue.shift();
-
-    if (!currentResource || visitedResourceIds.has(currentResource.id)) {
-      continue;
-    }
-
-    visitedResourceIds.add(currentResource.id);
-    providerResourceIds.add(currentResource.providerResourceId);
-
-    for (const relationship of currentResource.relationships ?? []) {
-      if (relationship.type !== "contains") {
-        continue;
-      }
-
-      const targetResource = resourceByLookupId.get(relationship.targetResourceId);
-      if (targetResource) {
-        visitQueue.push(targetResource);
-      }
-    }
-  }
-
-  return [...providerResourceIds];
-}
-
 // relationship target이 내부 id든 AWS 원본 id든 찾을 수 있게 검색표를 만듭니다.
 function createResourceLookup(
   resources: readonly DiscoveredResource[]
@@ -177,32 +121,114 @@ function createResourceLookup(
   return lookup;
 }
 
-// 후보에 포함된 AWS 원본 id에 해당하는 보드 노드와 선만 남깁니다.
-function pickArchitectureByProviderResourceIds(
-  architectureJson: ArchitectureJson,
-  providerResourceIds: readonly string[]
+// AWS relationships를 보드 edge로 다시 만들어 전체 Resource 위의 연결 해석을 바꿉니다.
+function createRelationshipArchitecture(
+  result: ReverseEngineeringScanResult,
+  preferredRelationshipType: DiscoveredResourceRelationshipType
 ): ArchitectureJson {
-  const providerResourceIdSet = new Set(providerResourceIds);
-  const nodes = architectureJson.nodes.filter((node) =>
-    providerResourceIdSet.has(getNodeProviderResourceId(node))
-  );
-  const nodeIds = new Set(nodes.map((node) => node.id));
+  const nodeByProviderResourceId = createNodeProviderResourceLookup(result.architectureJson.nodes);
+  const resourceByLookupId = createResourceLookup(result.discoveredResources);
+  const relationshipEdges = createRelationshipEdges({
+    nodeByProviderResourceId,
+    preferredRelationshipType,
+    resourceByLookupId,
+    resources: result.discoveredResources
+  });
 
   return {
-    nodes,
-    edges: architectureJson.edges.filter(
-      (edge) => nodeIds.has(edge.sourceId) && nodeIds.has(edge.targetId)
-    )
+    nodes: result.architectureJson.nodes,
+    edges: relationshipEdges.length > 0 ? [...relationshipEdges] : [...result.architectureJson.edges]
   };
+}
+
+type CreateRelationshipEdgesInput = {
+  readonly nodeByProviderResourceId: ReadonlyMap<string, ResourceNode>;
+  readonly preferredRelationshipType: DiscoveredResourceRelationshipType;
+  readonly resourceByLookupId: ReadonlyMap<string, DiscoveredResource>;
+  readonly resources: readonly DiscoveredResource[];
+};
+
+function createRelationshipEdges(input: CreateRelationshipEdgesInput): readonly ResourceEdge[] {
+  const preferredEdges = collectRelationshipEdges(input, input.preferredRelationshipType);
+
+  if (preferredEdges.length > 0) {
+    return preferredEdges;
+  }
+
+  return collectRelationshipEdges(input);
+}
+
+function collectRelationshipEdges(
+  input: CreateRelationshipEdgesInput,
+  relationshipType?: DiscoveredResourceRelationshipType
+): readonly ResourceEdge[] {
+  const edges: ResourceEdge[] = [];
+  const seenEdgeIds = new Set<string>();
+
+  for (const resource of input.resources) {
+    const sourceNode = input.nodeByProviderResourceId.get(resource.providerResourceId);
+    if (!sourceNode) {
+      continue;
+    }
+
+    for (const relationship of resource.relationships ?? []) {
+      if (relationshipType && relationship.type !== relationshipType) {
+        continue;
+      }
+
+      const targetResource = input.resourceByLookupId.get(relationship.targetResourceId);
+      if (!targetResource) {
+        continue;
+      }
+
+      const targetNode = input.nodeByProviderResourceId.get(targetResource.providerResourceId);
+      if (!targetNode) {
+        continue;
+      }
+
+      const edgeId = `candidate-edge-${relationship.type}-${sourceNode.id}-${targetNode.id}`;
+      if (seenEdgeIds.has(edgeId)) {
+        continue;
+      }
+
+      seenEdgeIds.add(edgeId);
+      edges.push({
+        id: edgeId,
+        sourceId: sourceNode.id,
+        targetId: targetNode.id,
+        label: relationship.label ?? relationship.type
+      });
+    }
+  }
+
+  return edges;
+}
+
+// 종류 기준 후보는 같은 Resource를 유지하되 관계선을 제거해서 목록 중심으로 보게 합니다.
+function createProviderTypeArchitecture(architectureJson: ArchitectureJson): ArchitectureJson {
+  return {
+    nodes: architectureJson.nodes,
+    edges: []
+  };
+}
+
+function createNodeProviderResourceLookup(
+  nodes: readonly ResourceNode[]
+): ReadonlyMap<string, ResourceNode> {
+  const lookup = new Map<string, ResourceNode>();
+
+  for (const node of nodes) {
+    const providerResourceId = getNodeProviderResourceId(node);
+    if (providerResourceId) {
+      lookup.set(providerResourceId, node);
+    }
+  }
+
+  return lookup;
 }
 
 // ArchitectureJson 노드에서 AWS 원본 id만 안전하게 꺼냅니다.
 function getNodeProviderResourceId(node: ResourceNode): string {
   const providerResourceId = node.config["providerResourceId"];
   return typeof providerResourceId === "string" ? providerResourceId : "";
-}
-
-// AWS id에는 slash나 colon이 들어갈 수 있어서 HTML id로 쓰기 쉬운 형태로 바꿉니다.
-function toCandidateIdPart(value: string): string {
-  return value.replaceAll(/[^a-zA-Z0-9_-]/g, "-");
 }
