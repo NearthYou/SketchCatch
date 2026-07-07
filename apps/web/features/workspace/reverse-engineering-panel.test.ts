@@ -43,6 +43,12 @@ test("Reverse Engineering scan starts from one main import action and keeps filt
   assert.doesNotMatch(scanCriteriaFormSource, /AWS 스캔 시작/);
 });
 
+test("Reverse Engineering panel sends users to settings when no verified AWS connection exists", () => {
+  assert.match(scanCriteriaFormSource, /awsConnections\.length === 0/);
+  assert.match(scanCriteriaFormSource, /\/settings\?tab=aws&next=reverse/);
+  assert.match(scanCriteriaFormSource, /환경설정에서 AWS Role을 먼저 연결해 주세요/);
+});
+
 test("Reverse Engineering result stays preview-only until the user applies it", () => {
   assert.match(rightPanelSource, /<ReverseEngineeringPanel/);
   assert.match(panelSource, /readonly context: DiagramEditorPanelContext/);
