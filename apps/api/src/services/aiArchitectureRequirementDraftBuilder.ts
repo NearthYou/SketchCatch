@@ -3,7 +3,8 @@ import type {
   ArchitectureJson,
   ArchitectureDraftOperatingProfile,
   ArchitectureRequirementFact,
-  ArchitectureServicePurpose
+  ArchitectureServicePurpose,
+  ResourceType
 } from "@sketchcatch/types";
 import type { ArchitectureRequirementResolution } from "./aiArchitectureRequirementResolution.js";
 import type { ArchitectureResourceQuantities } from "./aiArchitectureResourceQuantities.js";
@@ -21,6 +22,7 @@ export function planPracticeArchitecture(
     edges,
     factSet,
     nodes,
+    explicitResourceTypes: resolution.explicitResourceTypes,
     operatingProfile: resolution.operatingProfile,
     resourceQuantities,
     servicePurpose: resolution.servicePurpose
@@ -53,6 +55,7 @@ export function planPracticeArchitecture(
   }
 
   addPurposeSpecificResources(context);
+  addExplicitResourceNodes(context);
   addCrossResourceEdges(context);
 
   return {
@@ -78,6 +81,7 @@ export function createDraftFromRequirementFacts(
 
 type DraftBuildContext = {
   readonly edges: ArchitectureJson["edges"];
+  readonly explicitResourceTypes: readonly ResourceType[];
   readonly factSet: ReadonlySet<ArchitectureRequirementFact>;
   readonly nodes: ArchitectureJson["nodes"];
   readonly operatingProfile: ArchitectureDraftOperatingProfile;
@@ -1046,6 +1050,55 @@ function addCrossResourceEdges(context: DraftBuildContext): void {
   }
 }
 
+function addExplicitResourceNodes(context: DraftBuildContext): void {
+  const missingResourceTypes = context.explicitResourceTypes.filter(
+    (resourceType) => resourceType !== "UNKNOWN" && !hasNodeType(context, resourceType)
+  );
+
+  missingResourceTypes.forEach((resourceType, index) => {
+    const position = getRepeatedNodePosition(index, {
+      columns: 4,
+      startX: 1040,
+      startY: 320,
+      xGap: 180,
+      yGap: 130
+    });
+
+    addNode(context, {
+      id: createExplicitResourceNodeId(context, resourceType),
+      type: resourceType,
+      label: formatResourceTypeLabel(resourceType),
+      positionX: position.x,
+      positionY: position.y,
+      config: {}
+    });
+  });
+}
+
+function createExplicitResourceNodeId(
+  context: DraftBuildContext,
+  resourceType: ResourceType
+): string {
+  const baseId = resourceType.toLowerCase().replaceAll("_", "-");
+  let id = baseId;
+  let suffix = 2;
+
+  while (hasNode(context, id)) {
+    id = `${baseId}-${suffix}`;
+    suffix += 1;
+  }
+
+  return id;
+}
+
+function formatResourceTypeLabel(resourceType: ResourceType): string {
+  return resourceType
+    .toLowerCase()
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
 function needsUploadBucket(factSet: ReadonlySet<ArchitectureRequirementFact>): boolean {
   return (
     factSet.has("object_storage") &&
@@ -1177,6 +1230,10 @@ function addEdge(
 
 function hasNode(context: DraftBuildContext, nodeId: string): boolean {
   return context.nodes.some((node) => node.id === nodeId);
+}
+
+function hasNodeType(context: DraftBuildContext, resourceType: ResourceType): boolean {
+  return context.nodes.some((node) => node.type === resourceType);
 }
 
 function createNumberedIds(baseId: string, count: number): string[] {
