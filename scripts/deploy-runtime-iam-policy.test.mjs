@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 const deployWorkflowPath = ".github/workflows/deploy.yml";
+const deployScriptPath = "deploy/ec2/deploy-docker-release.sh";
 const deployPolicyPath = "infra/aws/iam/github-actions-deploy-policy.json";
 const runtimePolicyPath = "infra/aws/iam/ec2-runtime-policy.json";
 const apiDockerfilePath = "docker/api.Dockerfile";
@@ -66,4 +67,16 @@ test("API Docker image includes Terraform CLI for Direct Deployment execution", 
     /COPY\s+--from=terraform\s+\/usr\/local\/bin\/terraform\s+\/usr\/local\/bin\/terraform/
   );
   assert.match(apiDockerfile, /RUN\s+terraform\s+-version/);
+});
+
+test("production deploy waits for container readiness and prints diagnostics on failure", async () => {
+  const deployScript = await readFile(deployScriptPath, "utf8");
+
+  assert.match(deployScript, /HEALTHCHECK_TIMEOUT_SECONDS:-60/);
+  assert.match(deployScript, /wait_for_http\(\)/);
+  assert.match(deployScript, /curl\s+--fail\s+--silent\s+--show-error\s+"\$\{url\}"/);
+  assert.match(deployScript, /print_container_diagnostics\(\)/);
+  assert.match(deployScript, /docker\s+ps\s+-a\s+--filter\s+"name=sketchcatch-"/);
+  assert.match(deployScript, /docker\s+logs\s+--tail\s+200\s+"\$\{container_name\}"/);
+  assert.doesNotMatch(deployScript, /\nsleep\s+3\n/);
 });

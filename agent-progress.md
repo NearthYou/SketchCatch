@@ -6,37 +6,33 @@ This file is the short, English-only working log for the current agent context. 
 
 Branch/worktree:
 
-- Branch: `codex/terraform-runtime-binary-fix`
+- Branch: `codex/deploy-readiness-healthcheck`
 - Worktree: `C:\Users\siwon\Desktop\Jungle\Week17~21\SketchCatch-worktrees\deployment-review-error-fix`
 - Base: latest `origin/dev`
 
 Current branch work:
 
-- Diagnosed Direct Deployment init failure `spawn terraform ENOENT` as a missing Terraform binary in the production API Docker image.
-- Added a Terraform CLI install stage to `docker/api.Dockerfile`.
-- Copied the Terraform binary into the API runner image and verified it during image build.
-- Added a Dockerfile regression assertion to prevent removing Terraform from the API runtime image.
+- PR #232 fixed Direct Deployment init failure `spawn terraform ENOENT` by adding Terraform to the API Docker image and was merged to `dev`.
+- Production deploy for PR #232 loaded Docker images but failed during the EC2 post-start health check with HTTP 502.
+- Current fix replaces the fixed `sleep 3` post-start check with a bounded readiness loop and container diagnostics on failure.
 
 Verification:
 
 - `pnpm harness:check`
 - `node scripts/deploy-runtime-iam-policy.test.mjs`
-- Terraform 1.6.6 linux amd64 release URL HEAD check
+- Git Bash `bash -n deploy/ec2/deploy-docker-release.sh`
 - `pnpm lint`
 - `pnpm typecheck`
 - `pnpm build`
-
-Blocked local check:
-
-- Local `docker build -f docker/api.Dockerfile ...` could not run because Docker Desktop daemon was not running.
 
 ## Session Record
 
 2026-07-07:
 
-- Implemented the API runtime Terraform binary fix.
-- Verified static regression tests and full repo checks.
+- Merged PR #232 and triggered production deploy.
+- Confirmed production `/health` currently returns HTTP 200 after the failed deploy run.
+- Added deploy readiness waiting and failure diagnostics for API, web, and nginx containers.
 
 Next steps:
 
-- Commit, push, open PR, merge after CI, deploy production, then verify Docker build/deploy and site health.
+- Run full checks, commit, push, open PR, merge after CI, deploy production, and verify site health.
