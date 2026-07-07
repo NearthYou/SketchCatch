@@ -65,6 +65,7 @@ function Test-HasValue {
 
 function Add-Step {
   param(
+    [ValidateNotNull()]
     [System.Collections.Generic.List[object]]$Steps,
 
     [Parameter(Mandatory = $true)]
@@ -102,6 +103,26 @@ function Write-SmokeReport {
   }
 
   $json
+}
+
+function Stop-SmokeWithFailedReport {
+  param(
+    [object]$PipelineStatus = $null
+  )
+
+  $report = [ordered]@{
+    kind = "sketchcatch_git_cicd_auto_deploy_smoke"
+    mode = "live"
+    status = "failed"
+    handoffId = $HandoffId
+    startedAt = $startedAt
+    finishedAt = (Get-Date).ToUniversalTime().ToString("o")
+    pipelineStatus = $PipelineStatus
+    steps = $steps
+  }
+
+  Write-SmokeReport -Report $report
+  exit 1
 }
 
 function Get-StepStatus {
@@ -241,6 +262,11 @@ if (-not $SkipAwsRoleDiffApply) {
   Add-Step -Steps $steps -Name "aws_role_diff_apply" -Status "skipped" -Evidence "SkipAwsRoleDiffApply was set"
 }
 
+$setupFailed = @($steps | Where-Object { $_.status -eq "failed" })
+if ($setupFailed.Count -gt 0) {
+  Stop-SmokeWithFailedReport
+}
+
 try {
   $pipelineStatus = Wait-PipelineStatus
   $statusEvidence = Get-StepStatus -PipelineStatus $pipelineStatus
@@ -267,10 +293,12 @@ try {
 
 if ($RequirePipelineSuccess -and $statusEvidence.summary -ne "pipeline_success") {
   Add-Step -Steps $steps -Name "pipeline_success_required" -Status "failed" -Evidence "Current status: $($statusEvidence.summary)"
+  Stop-SmokeWithFailedReport -PipelineStatus $statusEvidence
 }
 
 if ($RequireDestroySuccess -and $statusEvidence.destroy -ne "success") {
   Add-Step -Steps $steps -Name "destroy_success_required" -Status "failed" -Evidence "Current status: $($statusEvidence.destroy)"
+  Stop-SmokeWithFailedReport -PipelineStatus $statusEvidence
 }
 
 if (-not $StaticSiteUrl -and $statusEvidence.staticSiteUrl) {

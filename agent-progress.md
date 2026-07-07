@@ -1,6 +1,23 @@
 ﻿# 에이전트 진행 로그
 # 에이전트 진행 로그
 
+### 2026-07-07 - PR #213/#215 리뷰 코멘트 반영
+
+- Goal: 머지된 Git/CI/CD smoke readiness와 GitHub OAuth writer PR에 달린 Gemini 리뷰 코멘트를 확인하고 타당한 보안/안정성 개선을 후속 PR로 반영한다.
+- Completed:
+  - PR #215의 OAuth state replay 코멘트를 반영해 state를 token exchange 전에 즉시 삭제하도록 변경했다.
+  - OAuth callback 실패 로그를 추가하되 code/state 원문은 남기지 않고 error 여부와 파라미터 존재 여부만 기록하도록 했다.
+  - OAuth repository variable upsert는 GET probe 없이 PATCH를 먼저 시도하고 404에서 POST로 생성하도록 최적화했다.
+  - PR #213의 smoke runner fail-fast 코멘트를 반영해 setup apply 실패, pipeline success 필수 실패, destroy success 필수 실패 시 즉시 JSON report를 저장하고 종료하도록 했다.
+  - `Add-Step`의 `$Steps` 검증은 빈 List를 깨뜨리는 `Mandatory` 대신 `ValidateNotNull()`로 보강했다.
+- Verification run:
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/routes/git-cicd-handoffs.test.ts src/git-cicd/git-cicd-repository-settings-service.test.ts` - passed, 21 tests.
+  - PowerShell parser check for `scripts/smoke/git-cicd-auto-deploy.ps1` - passed.
+  - Preflight smoke with skipped mutations returned blocked JSON and production `/health` 200.
+  - Fake-token live smoke with skipped mutations returned failed JSON with 401 pipeline evidence as expected.
+- Known risks:
+  - Full root checks and PR creation still need to run after this entry.
+
 ### 2026-07-07 - GitHub OAuth repository settings writer 구현
 
 - Goal: plan6 M1의 GitHub user OAuth 추가 승인과 repository settings writer를 DB token 저장 없이 최소 구현한다.

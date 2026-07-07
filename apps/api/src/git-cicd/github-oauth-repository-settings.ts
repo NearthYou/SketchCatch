@@ -114,6 +114,8 @@ export async function completeGitHubRepositorySettingsOAuthCallback(
     throw new GitCicdRepositorySettingsPermissionError("GitHub OAuth state is missing or expired");
   }
 
+  await input.runtimeCache.delete(createStateKey(input.state));
+
   const { accessToken } = await exchangeOAuthCodeForAccessToken({
     provider: "github",
     code: input.code,
@@ -122,7 +124,6 @@ export async function completeGitHubRepositorySettingsOAuthCallback(
     ...(input.fetcher ? { fetcher: input.fetcher } : {})
   });
 
-  await input.runtimeCache.delete(createStateKey(input.state));
   await input.runtimeCache.set(
     createTokenKey(state.handoffId, state.userId),
     {
