@@ -1294,6 +1294,20 @@ export function DeploymentPanel({
                   AWS role diff 적용
                 </button>
               </div>
+              {selectedGitCicdHandoff.githubOAuthRequired ? (
+                <div className={styles.deploymentNotice}>
+                  GitHub workflow 또는 repository settings 권한 보강이 필요합니다.
+                  <button
+                    className={styles.deploymentSecondaryButton}
+                    disabled={requestState === "loading"}
+                    onClick={() => void startNewGitHubInstallation()}
+                    type="button"
+                  >
+                    <GitBranch size={16} />
+                    GitHub App 권한 보강
+                  </button>
+                </div>
+              ) : null}
               <div className={styles.deploymentSummary}>
                 <InfoRow label="Path" value="Git/CI/CD handoff" />
                 <InfoRow
@@ -1315,11 +1329,11 @@ export function DeploymentPanel({
                   }
                 />
                 <InfoRow
-                  label="GitHub OAuth"
+                  label="GitHub 권한"
                   value={
                     selectedGitCicdHandoff.githubOAuthRequired
-                      ? "Required for workflow/settings"
-                      : "Not required"
+                      ? "Workflow/settings permission required"
+                      : "Ready"
                   }
                 />
                 <InfoRow

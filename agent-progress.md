@@ -5,6 +5,7 @@
 
 - Goal: `docs/sw/plan6.md`의 Git/CI/CD 자동 배포 범위를 최소 코드로 실제 handoff 생성, workflow PR artifact, 상세 pipeline 상태 추적, Deployment Panel UX까지 연결한다.
 - Completed:
+  - PR #211을 dev에 squash merge했고, deploy workflow `28847085753`와 migrate workflow `28847246857`가 성공했다.
   - `GitCicdHandoff` shared type, Drizzle schema, SQL migration에 source deployment, deployment mode, GitHub Environment approval, PR number, merge commit, infra/app/destroy workflow URL/status, repository settings preview, AWS role diff, URL 검증 필드를 추가했다.
   - GitHub PR 생성 provider가 Terraform artifact와 함께 `sketchcatch-infra.yml`, `sketchcatch-app.yml`, `sketchcatch-destroy.yml`, repository settings manifest, AWS role diff manifest를 생성한다.
   - GitHub Actions polling을 PR number -> merge commit SHA -> workflow name 기준으로 확장해 infra/app/destroy 상태를 분리 추적한다.
@@ -15,6 +16,7 @@
   - Deployment Panel에 `Repo settings 적용`, `AWS role diff 적용` 버튼을 추가했고, 성공 후 panel snapshot을 다시 로드한다.
   - App workflow가 ASG Launch Template ID/Name을 찾아 `SKETCHCATCH_RELEASE_ID` user data marker를 새 Launch Template version에 기록하고 Instance Refresh 결과를 polling하도록 보강했다.
   - Project Automation이 PR 본문의 일반 HTTP status 숫자를 issue number로 오인하지 않도록 PR title/body는 명시적 `#123` 참조만 파싱하게 수정했다.
+  - Deployment Panel에서 권한 부족 handoff의 `GitHub OAuth` 표현을 `GitHub 권한`으로 정리하고 `GitHub App 권한 보강` CTA를 추가했다.
   - `scripts/smoke/git-cicd-auto-deploy.ps1`로 repository settings apply, AWS role diff apply, infra/app/destroy pipeline status, static/API URL marker 확인 report를 출력할 수 있게 했다.
   - smoke runner에 pipeline success/destroy success 대기 옵션과 pipeline snapshot 기록을 추가했다.
   - `docs/data-models.md`, `docs/deployment.md`, `docs/sw/spec6.md`, `docs/sw/plan6.md`, `docs/sw/agents3.md`를 구현 상태에 맞게 갱신했다.
