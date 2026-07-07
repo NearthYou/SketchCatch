@@ -1,6 +1,21 @@
 ﻿# 에이전트 진행 로그
 # 에이전트 진행 로그
 
+### 2026-07-07 - PR #197 Gemini 리뷰 코멘트 반영
+
+- Goal: PR #197에 달린 Gemini Code Assist 리뷰 코멘트를 확인하고 타당한 개선을 반영한다.
+- Completed:
+  - `scripts/smoke/live-demo-web-service.ps1`의 managed user data 생성 경로에서 hash/base64 인코딩 전에 CRLF/CR 줄바꿈을 LF로 정규화했다.
+  - Deployment Panel 트래픽 시뮬레이터에 `AbortController`를 추가해 새 실행, deployment 변경, component unmount 시 진행 중인 fetch 요청을 취소하도록 했다.
+- Verification run:
+  - PowerShell parser check for `scripts/smoke/live-demo-web-service.ps1` - passed.
+  - `pnpm --filter @sketchcatch/web typecheck` - passed.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/deployment-actions.test.ts` - passed, 20 tests.
+  - `pnpm harness:check` - passed.
+  - `git diff --check` - passed.
+- Known risks:
+  - 실제 AWS live smoke는 아직 실행하지 않았다.
+
 ### 2026-07-07 - Demo Web Service E2E 계획 및 구현
 
 - Goal: dev 기준으로 `docs/sw/spec5.md`, `docs/sw/plan5.md`, `docs/sw/agents.md`를 만들고, S3 정적 웹사이트부터 EC2 API, ALB, ASG, RDS 선택 경로, CI/CD handoff, HARNESS-007 smoke까지 이어지는 데모 수행 기반을 구현한다.

@@ -147,6 +147,7 @@ export function DeploymentPanel({
   const [failureExplanationErrorMessage, setFailureExplanationErrorMessage] = useState("");
   const deploymentExpandedGridRef = useRef<HTMLDivElement | null>(null);
   const deploymentResizeCleanupRef = useRef<(() => void) | null>(null);
+  const trafficAbortControllerRef = useRef<AbortController | null>(null);
 
   const verifiedAwsConnections = useMemo(
     () => awsConnections.filter((connection) => connection.status === "verified"),
@@ -396,13 +397,20 @@ export function DeploymentPanel({
   }, [deployments.length]);
 
   useEffect(() => {
+    trafficAbortControllerRef.current?.abort();
+    trafficAbortControllerRef.current = null;
     setTrafficSimulatorState("idle");
     setTrafficSimulatorSummary("");
+    return () => {
+      trafficAbortControllerRef.current?.abort();
+      trafficAbortControllerRef.current = null;
+    };
   }, [selectedDeploymentId]);
 
   useEffect(
     () => () => {
       deploymentResizeCleanupRef.current?.();
+      trafficAbortControllerRef.current?.abort();
     },
     []
   );
@@ -861,28 +869,51 @@ export function DeploymentPanel({
       return;
     }
 
+    trafficAbortControllerRef.current?.abort();
+    const controller = new AbortController();
+    trafficAbortControllerRef.current = controller;
+
     setTrafficSimulatorState("loading");
     setTrafficSimulatorSummary("");
 
-    const baseUrl = apiBaseUrl.replace(/\/+$/, "");
-    const results = await Promise.allSettled(
-      Array.from({ length: 20 }, (_, index) =>
-        fetch(`${baseUrl}/api/health?source=sketchcatch&request=${index + 1}`, {
-          cache: "no-store"
-        }).then((response) => {
-          if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
-          }
+    try {
+      const baseUrl = apiBaseUrl.replace(/\/+$/, "");
+      const results = await Promise.allSettled(
+        Array.from({ length: 20 }, (_, index) =>
+          fetch(`${baseUrl}/api/health?source=sketchcatch&request=${index + 1}`, {
+            cache: "no-store",
+            signal: controller.signal
+          }).then((response) => {
+            if (!response.ok) {
+              throw new Error(`HTTP ${response.status}`);
+            }
 
-          return response.text();
-        })
-      )
-    );
-    const succeeded = results.filter((result) => result.status === "fulfilled").length;
-    const failed = results.length - succeeded;
+            return response.text();
+          })
+        )
+      );
 
-    setTrafficSimulatorSummary(`${succeeded}/${results.length} requests succeeded, ${failed} failed`);
-    setTrafficSimulatorState(failed === 0 ? "idle" : "error");
+      if (controller.signal.aborted) {
+        return;
+      }
+
+      const succeeded = results.filter((result) => result.status === "fulfilled").length;
+      const failed = results.length - succeeded;
+
+      setTrafficSimulatorSummary(
+        `${succeeded}/${results.length} requests succeeded, ${failed} failed`
+      );
+      setTrafficSimulatorState(failed === 0 ? "idle" : "error");
+    } catch {
+      if (!controller.signal.aborted) {
+        setTrafficSimulatorState("error");
+        setTrafficSimulatorSummary("Traffic simulation failed.");
+      }
+    } finally {
+      if (trafficAbortControllerRef.current === controller) {
+        trafficAbortControllerRef.current = null;
+      }
+    }
   }
 
   async function startGitHubConnection(): Promise<void> {

@@ -176,7 +176,7 @@ UNIT
 systemctl daemon-reload
 systemctl enable --now sketchcatch-demo-api.service
 '@
-  $normalized = $template -replace "# $hashPrefix", "# $hashPrefix"
+  $normalized = ($template -replace "`r`n", "`n") -replace "`r", "`n"
   $hashBytes = [System.Security.Cryptography.SHA256]::HashData([System.Text.Encoding]::UTF8.GetBytes("$normalized`n"))
   $hash = [System.BitConverter]::ToString($hashBytes).Replace("-", "").ToLowerInvariant()
   $script = $normalized -replace "# $hashPrefix", "# $hashPrefix$hash"
