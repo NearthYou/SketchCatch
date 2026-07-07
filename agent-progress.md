@@ -60,7 +60,6 @@ Known issue outside this work:
 - Deployment now opens the full-screen console without closing the right panel host first.
 - GitHub repository connection now lives in project creation and project settings.
 - Deployment panel only shows source repository status, a project GitHub settings link, and Git/CI/CD handoff actions.
-=======
 - Branch/worktree: `codex/deploy-console-reopen` in `C:\Users\siwon\Desktop\Jungle\Week17~21\SketchCatch-worktrees\deploy-console-reopen`.
 - Base: latest `origin/dev` after PR #250 was merged.
 - Scope: harden the deployment console open path and improve low-contrast UI text.
