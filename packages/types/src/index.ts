@@ -6,6 +6,7 @@ export type ApiErrorCode =
   | "unauthorized"
   | "not_found"
   | "conflict"
+  | "github_oauth_required"
   | "too_many_requests"
   | "internal_server_error";
 

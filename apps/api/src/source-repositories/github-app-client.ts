@@ -133,8 +133,18 @@ type GitHubRefResponse = {
   };
 };
 
+type GitHubTreeResponse = {
+  readonly sha?: unknown;
+};
+
+type GitHubCommitResponse = {
+  readonly sha?: unknown;
+};
+
 type GitHubContentsResponse = {
   readonly sha?: unknown;
+  readonly content?: unknown;
+  readonly encoding?: unknown;
 };
 
 type GitHubPutContentsResponse = {
@@ -264,17 +274,15 @@ export function createGitHubAppClient(options: GitHubAppClientOptions): GitHubAp
     },
 
     async createPullRequest(input) {
-      await assertTargetBranchDoesNotContainFiles(input, requestWithInstallationToken);
-
-      const targetRef = await requestWithInstallationToken<GitHubRefResponse>(
-        input.installationId,
-        createRepositoryPath(input, `/git/ref/heads/${encodeURIComponent(input.targetBranch)}`)
+      const targetSha = await getOrCreateTargetBranchSha(
+        input,
+        requestWithInstallationToken
       );
-      const targetSha = readRequiredString(targetRef.object?.sha, "target branch sha");
 
       await createSourceBranchIfNeeded(input, targetSha, requestWithInstallationToken);
 
       let lastCommitSha = targetSha;
+      let changedFileCount = 0;
 
       for (const file of input.files) {
         const sourceFile = await getRepositoryContent(
@@ -283,6 +291,11 @@ export function createGitHubAppClient(options: GitHubAppClientOptions): GitHubAp
           input.sourceBranch,
           requestWithInstallationToken
         );
+
+        if (sourceFile && isSameGitHubFileContent(sourceFile, file.content)) {
+          continue;
+        }
+
         const putResponse = await requestWithInstallationToken<GitHubPutContentsResponse>(
           input.installationId,
           createRepositoryPath(input, `/contents/${encodePath(file.path)}`),
@@ -298,6 +311,16 @@ export function createGitHubAppClient(options: GitHubAppClientOptions): GitHubAp
         );
 
         lastCommitSha = readRequiredString(putResponse.commit?.sha, "commit sha");
+        changedFileCount += 1;
+      }
+
+      if (changedFileCount === 0) {
+        const error = new Error("No Git/CI/CD handoff file changes were needed") as Error & {
+          statusCode?: number;
+        };
+
+        error.statusCode = 409;
+        throw error;
       }
 
       const pullRequest = await requestWithInstallationToken<GitHubPullRequestResponse>(
@@ -549,31 +572,81 @@ function readVisibility(
   return isPrivate === true ? "private" : "public";
 }
 
-async function assertTargetBranchDoesNotContainFiles(
+async function getOrCreateTargetBranchSha(
   input: GitHubAppCreatePullRequestInput,
   requestWithInstallationToken: <T>(
     installationId: string,
     path: string,
     init?: Omit<GitHubRequestInit, "token" | "authScheme">
   ) => Promise<T>
-): Promise<void> {
-  for (const file of input.files) {
-    const existing = await getRepositoryContent(
-      input,
-      file.path,
-      input.targetBranch,
-      requestWithInstallationToken
+): Promise<string> {
+  try {
+    const targetRef = await requestWithInstallationToken<GitHubRefResponse>(
+      input.installationId,
+      createRepositoryPath(input, `/git/ref/heads/${encodeURIComponent(input.targetBranch)}`)
     );
 
-    if (existing) {
-      const error = new Error(`Target branch already contains ${file.path}`) as Error & {
-        statusCode?: number;
-      };
-
-      error.statusCode = 409;
+    return readRequiredString(targetRef.object?.sha, "target branch sha");
+  } catch (error) {
+    if (!isHttpStatus(error, 404)) {
       throw error;
     }
   }
+
+  return createInitialTargetBranch(input, requestWithInstallationToken);
+}
+
+async function createInitialTargetBranch(
+  input: GitHubAppCreatePullRequestInput,
+  requestWithInstallationToken: <T>(
+    installationId: string,
+    path: string,
+    init?: Omit<GitHubRequestInit, "token" | "authScheme">
+  ) => Promise<T>
+): Promise<string> {
+  const tree = await requestWithInstallationToken<GitHubTreeResponse>(
+    input.installationId,
+    createRepositoryPath(input, "/git/trees"),
+    {
+      method: "POST",
+      body: {
+        tree: [
+          {
+            path: "README.md",
+            mode: "100644",
+            type: "blob",
+            content: `# ${input.name}\n\nInitialized by SketchCatch for Git/CI/CD handoff.\n`
+          }
+        ]
+      }
+    }
+  );
+  const commit = await requestWithInstallationToken<GitHubCommitResponse>(
+    input.installationId,
+    createRepositoryPath(input, "/git/commits"),
+    {
+      method: "POST",
+      body: {
+        message: "Initialize repository for SketchCatch handoff",
+        tree: readRequiredString(tree.sha, "initial tree sha")
+      }
+    }
+  );
+  const commitSha = readRequiredString(commit.sha, "initial commit sha");
+
+  await requestWithInstallationToken<GitHubRefResponse>(
+    input.installationId,
+    createRepositoryPath(input, "/git/refs"),
+    {
+      method: "POST",
+      body: {
+        ref: `refs/heads/${input.targetBranch}`,
+        sha: commitSha
+      }
+    }
+  );
+
+  return commitSha;
 }
 
 async function createSourceBranchIfNeeded(
@@ -603,6 +676,20 @@ async function createSourceBranchIfNeeded(
     }
 
     throw error;
+  }
+}
+
+function isSameGitHubFileContent(file: GitHubContentsResponse, nextContent: string): boolean {
+  if (file.encoding !== "base64" || typeof file.content !== "string") {
+    return false;
+  }
+
+  const normalizedBase64 = file.content.replace(/\s/g, "");
+
+  try {
+    return Buffer.from(normalizedBase64, "base64").toString("utf8") === nextContent;
+  } catch {
+    return false;
   }
 }
 

@@ -108,12 +108,12 @@ test("listInstallations returns GitHub App installation account metadata", async
   ]);
 });
 
-test("createPullRequest blocks when the target branch already contains the SketchCatch artifact path", async () => {
+test("createPullRequest updates a generated file even when the target branch already contains the SketchCatch path", async () => {
   const calls: GitHubApiCall[] = [];
   const client = createGitHubAppClient({
     appId: "12345",
     privateKey,
-    fetch: createGitHubFetchStub(calls, ({ method, pathname, search }) => {
+    fetch: createGitHubFetchStub(calls, ({ method, pathname, search, body }) => {
       if (pathname === "/app/installations/42/access_tokens") {
         return jsonResponse({ token: "installation-token" });
       }
@@ -122,45 +122,73 @@ test("createPullRequest blocks when the target branch already contains the Sketc
         return jsonResponse({ object: { sha: "target-sha" } });
       }
 
+      if (method === "POST" && pathname === "/repos/owner/repo/git/refs") {
+        return jsonResponse({ ref: "refs/heads/sketchcatch/project/iac-12345678" });
+      }
+
       if (
         method === "GET" &&
         pathname === "/repos/owner/repo/contents/sketchcatch/project/terraform/main.tf" &&
-        search === "?ref=main"
+        search === "?ref=sketchcatch%2Fproject%2Fiac-12345678"
       ) {
-        return jsonResponse({ sha: "existing-target-file-sha" });
+        return jsonResponse({
+          content: Buffer.from("resource \"aws_s3_bucket\" \"old\" {}").toString("base64"),
+          encoding: "base64",
+          sha: "source-file-sha"
+        });
+      }
+
+      if (
+        method === "PUT" &&
+        pathname === "/repos/owner/repo/contents/sketchcatch/project/terraform/main.tf"
+      ) {
+        assert.equal(body.branch, "sketchcatch/project/iac-12345678");
+        assert.equal(body.sha, "source-file-sha");
+        return jsonResponse({ commit: { sha: "new-commit-sha" } });
+      }
+
+      if (method === "POST" && pathname === "/repos/owner/repo/pulls") {
+        return jsonResponse({
+          html_url: "https://github.com/owner/repo/pull/7",
+          number: 7,
+          head: { sha: "new-head-sha" }
+        });
       }
 
       return jsonResponse({ message: "not found" }, 404);
     })
   });
 
-  await assert.rejects(
-    () =>
-      client.createPullRequest({
-        installationId: "42",
-        owner: "owner",
-        name: "repo",
-        targetBranch: "main",
-        sourceBranch: "sketchcatch/project/iac-12345678",
-        commitMessage: "Add Terraform artifact",
-        pullRequestTitle: "Add Terraform artifact",
-        pullRequestBody: "Review generated Terraform.",
-        files: [
-          {
-            path: "sketchcatch/project/terraform/main.tf",
-            content: "resource \"aws_s3_bucket\" \"smoke\" {}"
-          }
-        ]
-      }),
-    (error: unknown) =>
-      typeof error === "object" &&
-      error !== null &&
-      "statusCode" in error &&
-      error.statusCode === 409
+  const result = await client.createPullRequest({
+    installationId: "42",
+    owner: "owner",
+    name: "repo",
+    targetBranch: "main",
+    sourceBranch: "sketchcatch/project/iac-12345678",
+    commitMessage: "Add Terraform artifact",
+    pullRequestTitle: "Add Terraform artifact",
+    pullRequestBody: "Review generated Terraform.",
+    files: [
+      {
+        path: "sketchcatch/project/terraform/main.tf",
+        content: "resource \"aws_s3_bucket\" \"smoke\" {}"
+      }
+    ]
+  });
+
+  assert.equal(result.pullRequestUrl, "https://github.com/owner/repo/pull/7");
+  assert.equal(
+    calls.some(
+      (call) =>
+        call.method === "GET" &&
+        call.pathname === "/repos/owner/repo/contents/sketchcatch/project/terraform/main.tf" &&
+        call.search === "?ref=main"
+    ),
+    false
   );
   assert.equal(
-    calls.some((call) => call.method === "PUT" || call.pathname.endsWith("/pulls")),
-    false
+    calls.some((call) => call.method === "PUT" && call.pathname.endsWith("/terraform/main.tf")),
+    true
   );
 });
 
@@ -241,6 +269,174 @@ test("createPullRequest updates a file on an existing SketchCatch source branch"
   assert.equal(result.pullRequestHeadSha, "new-head-sha");
   assert.equal(result.commitSha, "new-commit-sha");
   assert.equal(calls.some((call) => call.method === "PUT"), true);
+});
+
+test("createPullRequest bootstraps an empty repository before opening the handoff PR", async () => {
+  const calls: GitHubApiCall[] = [];
+  const client = createGitHubAppClient({
+    appId: "12345",
+    privateKey,
+    fetch: createGitHubFetchStub(calls, ({ method, pathname, search, body }) => {
+      if (pathname === "/app/installations/42/access_tokens") {
+        return jsonResponse({ token: "installation-token" });
+      }
+
+      if (method === "GET" && pathname === "/repos/owner/empty-repo/git/ref/heads/main") {
+        return jsonResponse({ message: "not found" }, 404);
+      }
+
+      if (method === "POST" && pathname === "/repos/owner/empty-repo/git/trees") {
+        assert.deepEqual(body.tree, [
+          {
+            path: "README.md",
+            mode: "100644",
+            type: "blob",
+            content:
+              "# empty-repo\n\nInitialized by SketchCatch for Git/CI/CD handoff.\n"
+          }
+        ]);
+        return jsonResponse({ sha: "initial-tree-sha" });
+      }
+
+      if (method === "POST" && pathname === "/repos/owner/empty-repo/git/commits") {
+        assert.equal(body.message, "Initialize repository for SketchCatch handoff");
+        assert.equal(body.tree, "initial-tree-sha");
+        return jsonResponse({ sha: "initial-commit-sha" });
+      }
+
+      if (method === "POST" && pathname === "/repos/owner/empty-repo/git/refs") {
+        if (body.ref === "refs/heads/main") {
+          assert.equal(body.sha, "initial-commit-sha");
+          return jsonResponse({ ref: "refs/heads/main" });
+        }
+
+        if (body.ref === "refs/heads/sketchcatch/project/iac-12345678") {
+          assert.equal(body.sha, "initial-commit-sha");
+          return jsonResponse({ ref: "refs/heads/sketchcatch/project/iac-12345678" });
+        }
+      }
+
+      if (
+        method === "GET" &&
+        pathname === "/repos/owner/empty-repo/contents/sketchcatch/project/terraform/main.tf" &&
+        search === "?ref=sketchcatch%2Fproject%2Fiac-12345678"
+      ) {
+        return jsonResponse({ message: "not found" }, 404);
+      }
+
+      if (
+        method === "PUT" &&
+        pathname === "/repos/owner/empty-repo/contents/sketchcatch/project/terraform/main.tf"
+      ) {
+        assert.equal(body.branch, "sketchcatch/project/iac-12345678");
+        assert.equal("sha" in body, false);
+        return jsonResponse({ commit: { sha: "new-commit-sha" } });
+      }
+
+      if (method === "POST" && pathname === "/repos/owner/empty-repo/pulls") {
+        assert.equal(body.base, "main");
+        assert.equal(body.head, "sketchcatch/project/iac-12345678");
+        return jsonResponse({
+          html_url: "https://github.com/owner/empty-repo/pull/1",
+          number: 1,
+          head: { sha: "new-head-sha" }
+        });
+      }
+
+      return jsonResponse({ message: "not found" }, 404);
+    })
+  });
+
+  const result = await client.createPullRequest({
+    installationId: "42",
+    owner: "owner",
+    name: "empty-repo",
+    targetBranch: "main",
+    sourceBranch: "sketchcatch/project/iac-12345678",
+    commitMessage: "Add Terraform artifact",
+    pullRequestTitle: "Add Terraform artifact",
+    pullRequestBody: "Review generated Terraform.",
+    files: [
+      {
+        path: "sketchcatch/project/terraform/main.tf",
+        content: "resource \"aws_s3_bucket\" \"smoke\" {}"
+      }
+    ]
+  });
+
+  assert.equal(result.pullRequestUrl, "https://github.com/owner/empty-repo/pull/1");
+  assert.equal(
+    calls.some(
+      (call) =>
+        call.method === "POST" &&
+        call.pathname === "/repos/owner/empty-repo/git/refs" &&
+        call.body.ref === "refs/heads/main"
+    ),
+    true
+  );
+});
+
+test("createPullRequest skips unchanged files and rejects empty handoff diffs", async () => {
+  const calls: GitHubApiCall[] = [];
+  const unchangedContent = "resource \"aws_s3_bucket\" \"smoke\" {}";
+  const client = createGitHubAppClient({
+    appId: "12345",
+    privateKey,
+    fetch: createGitHubFetchStub(calls, ({ method, pathname, search }) => {
+      if (pathname === "/app/installations/42/access_tokens") {
+        return jsonResponse({ token: "installation-token" });
+      }
+
+      if (method === "GET" && pathname === "/repos/owner/repo/git/ref/heads/main") {
+        return jsonResponse({ object: { sha: "target-sha" } });
+      }
+
+      if (method === "POST" && pathname === "/repos/owner/repo/git/refs") {
+        return jsonResponse({ ref: "refs/heads/sketchcatch/project/iac-12345678" });
+      }
+
+      if (
+        method === "GET" &&
+        pathname === "/repos/owner/repo/contents/sketchcatch/project/terraform/main.tf" &&
+        search === "?ref=sketchcatch%2Fproject%2Fiac-12345678"
+      ) {
+        return jsonResponse({
+          content: Buffer.from(unchangedContent, "utf8").toString("base64"),
+          encoding: "base64",
+          sha: "source-file-sha"
+        });
+      }
+
+      return jsonResponse({ message: "not found" }, 404);
+    })
+  });
+
+  await assert.rejects(
+    () =>
+      client.createPullRequest({
+        installationId: "42",
+        owner: "owner",
+        name: "repo",
+        targetBranch: "main",
+        sourceBranch: "sketchcatch/project/iac-12345678",
+        commitMessage: "Add Terraform artifact",
+        pullRequestTitle: "Add Terraform artifact",
+        pullRequestBody: "Review generated Terraform.",
+        files: [
+          {
+            path: "sketchcatch/project/terraform/main.tf",
+            content: unchangedContent
+          }
+        ]
+      }),
+    (error: unknown) =>
+      typeof error === "object" &&
+      error !== null &&
+      "statusCode" in error &&
+      error.statusCode === 409
+  );
+  assert.equal(calls.some((call) => call.method === "PUT"), false);
+  assert.equal(calls.some((call) => call.pathname.endsWith("/pulls")), false);
 });
 
 test("applyRepositorySettings creates environment and upserts repository variables", async () => {

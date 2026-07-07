@@ -6,38 +6,35 @@ This file is the short, English-only working log for the current agent context. 
 
 Branch/worktree:
 
-- Branch: `codex/deployment-review-error-fix`
-- Worktree: `C:\Users\siwon\Desktop\Jungle\Week17~21\SketchCatch-worktrees\deployment-review-error-fix`
+- Branch: `codex/git-cicd-permission-message`
+- Worktree: `C:\Users\siwon\Desktop\Jungle\Week17~21\SketchCatch-worktrees\git-cicd-handoff-create-fix`
 - Base: latest `origin/dev`
 
 Current branch work:
 
-- Diagnosed deployment baseline save and review start failure as the browser-side Terraform artifact upload path.
-- Added a same-origin API upload endpoint for pending Terraform artifacts.
-- Changed project asset upload metadata to return the API upload URL, avoiding browser-to-S3 CORS dependency.
-- Updated the web upload helper to attach auth headers for same-origin API uploads.
-- Added API and web regression tests.
+- PR #234 and PR #235 were merged and deployed. They fixed repeated Git/CI/CD handoff PR creation, no-diff handoffs, and empty GitHub repository bootstrap.
+- A production E2E smoke reached GitHub repository connection and failed at handoff creation with `github_oauth_required`.
+- The live failure indicates the GitHub App installation lacks write permission for generated PR files, especially workflow files.
+- Current patch makes the API and web UI report that GitHub App repository permissions must allow Contents, Pull requests, and Workflows write access.
 
 Verification:
 
-- `pnpm harness:check`
-- `pnpm --filter @sketchcatch/api exec tsx --test src/routes/projects.auth.test.ts`
-- `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/api.test.ts features/workspace/workspace-deployment-artifacts.test.ts`
-- `pnpm --filter @sketchcatch/api typecheck`
-- `pnpm --filter @sketchcatch/web typecheck`
-- `pnpm --filter @sketchcatch/api lint`
-- `pnpm --filter @sketchcatch/web lint`
-- `pnpm lint`
+- Production E2E smoke reached `POST /projects/:projectId/git-cicd-handoffs` and received `github_oauth_required`.
+- `pnpm --filter @sketchcatch/api exec tsx --test src/routes/git-cicd-handoffs.test.ts`
+- `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/api.test.ts`
 - `pnpm typecheck`
+- `pnpm lint`
 - `pnpm build`
+- `pnpm harness:check`
 
 ## Session Record
 
-2026-07-07:
+2026-07-08:
 
-- Implemented the API upload fallback as the default project asset upload URL for Terraform artifacts.
-- Verified focused API/web coverage and full repo checks.
+- Created a temporary production API user/project/architecture/Terraform artifact and connected the installed GitHub test repository.
+- Confirmed the current blocker is GitHub App permission approval, not the repeated-path or empty-repository code path.
+- Added shared/web API handling for `github_oauth_required` and a clearer backend permission error message.
 
 Next steps:
 
-- Commit, push, open PR, merge after CI, deploy production, then verify `sketchcatch.net` health.
+- Commit, push, open PR, merge after CI, deploy production, update the GitHub App permissions externally, then rerun the production E2E smoke.
