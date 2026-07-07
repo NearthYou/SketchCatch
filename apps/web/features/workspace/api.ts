@@ -13,6 +13,8 @@ import type {
   AwsConnectionListResponse,
   CostEstimatePeriod,
   CostProjectEstimateListResponse,
+  CostUsageAnalysisRange,
+  CostUsageAnalysisResponse,
   CreateArchitectureSnapshotRequest,
   CreateArchitectureDraftRequest,
   CreateArchitectureDraftResponse,
@@ -49,6 +51,7 @@ import type {
   GitCicdAwsRoleDiffApplyResponse,
   GitHubAppExistingInstallationCallbackUrlResponse,
   GitHubAppInstallUrlResponse,
+  ListGitHubInstalledRepositoriesResponse,
   ListGitHubInstallationRepositoriesRequest,
   ListGitHubInstallationRepositoriesResponse,
   Project,
@@ -249,9 +252,22 @@ export async function uploadProjectAsset(
   upload: ProjectAssetUploadResponse["upload"],
   content: string | Blob
 ): Promise<void> {
-  const response = await fetch(upload.url, {
+  const headers = new Headers(upload.headers);
+  const isApiUpload = upload.url.startsWith("/api/");
+  const uploadUrl = isApiUpload ? buildApiUrl(upload.url.slice(4)) : upload.url;
+
+  if (isApiUpload) {
+    const session = readStoredAuthSession();
+
+    if (session) {
+      headers.set("Authorization", `Bearer ${session.accessToken}`);
+    }
+  }
+
+  const response = await fetch(uploadUrl, {
     method: upload.method,
-    headers: upload.headers,
+    credentials: isApiUpload ? "include" : "same-origin",
+    headers,
     body: content
   });
 
@@ -424,6 +440,7 @@ function isApiErrorCode(value: unknown): value is ApiErrorCode {
     value === "unauthorized" ||
     value === "not_found" ||
     value === "conflict" ||
+    value === "github_oauth_required" ||
     value === "too_many_requests" ||
     value === "internal_server_error"
   );
@@ -775,10 +792,31 @@ export async function createGitHubSourceRepositoryInstallUrl(
 }
 
 export async function createGitHubExistingInstallationCallbackUrl(
-  projectId: string
+  projectId: string,
+  sourceRepositoryId?: string
 ): Promise<GitHubAppExistingInstallationCallbackUrlResponse> {
+  const path = sourceRepositoryId
+    ? `/projects/${encodeURIComponent(
+        projectId
+      )}/source-repositories/github/${encodeURIComponent(
+        sourceRepositoryId
+      )}/existing-installation-callback-url`
+    : `/projects/${encodeURIComponent(projectId)}/source-repositories/github/existing-installation-callback-url`;
+
   return apiFetch<GitHubAppExistingInstallationCallbackUrlResponse>(
-    `/projects/${encodeURIComponent(projectId)}/source-repositories/github/existing-installation-callback-url`,
+    path,
+    {
+      auth: true,
+      method: "POST"
+    }
+  );
+}
+
+export async function listGitHubInstalledRepositories(
+  projectId: string
+): Promise<ListGitHubInstalledRepositoriesResponse> {
+  return apiFetch<ListGitHubInstalledRepositoriesResponse>(
+    `/projects/${encodeURIComponent(projectId)}/source-repositories/github/installed-repositories`,
     {
       auth: true,
       method: "POST"
@@ -855,6 +893,23 @@ export async function listCostProjectEstimates(input: {
   });
 
   return apiFetch<CostProjectEstimateListResponse>(`/costs/projects?${params.toString()}`, {
+    auth: true
+  });
+}
+
+export async function listCostUsageAnalysis(input: {
+  awsConnectionId?: string | undefined;
+  range: CostUsageAnalysisRange;
+}): Promise<CostUsageAnalysisResponse> {
+  const params = new URLSearchParams({
+    range: input.range
+  });
+
+  if (input.awsConnectionId !== undefined) {
+    params.set("awsConnectionId", input.awsConnectionId);
+  }
+
+  return apiFetch<CostUsageAnalysisResponse>(`/costs/usage?${params.toString()}`, {
     auth: true
   });
 }

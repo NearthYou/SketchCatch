@@ -161,14 +161,29 @@ function toResourceNode(
 
 // 보드에 없는 UNKNOWN 리소스로 향하는 끊어진 선은 만들지 않습니다.
 function toResourceEdges(resource: DiscoveredResource, boardResourceIds: ReadonlySet<string>): ResourceEdge[] {
-  return (resource.relationships ?? [])
-    .filter((relationship) => boardResourceIds.has(relationship.targetResourceId))
-    .map((relationship) => ({
-      id: `edge-${resource.id}-${relationship.targetResourceId}-${relationship.label ?? relationship.type}`,
+  const edges: ResourceEdge[] = [];
+  const seenEdgeIds = new Set<string>();
+
+  for (const relationship of resource.relationships ?? []) {
+    if (!boardResourceIds.has(relationship.targetResourceId)) {
+      continue;
+    }
+
+    const edgeId = `edge-${resource.id}-${relationship.targetResourceId}-${relationship.label ?? relationship.type}`;
+    if (seenEdgeIds.has(edgeId)) {
+      continue;
+    }
+
+    seenEdgeIds.add(edgeId);
+    edges.push({
+      id: edgeId,
       sourceId: relationship.targetResourceId,
       targetId: resource.id,
       label: relationship.label ?? relationship.type
-    }));
+    });
+  }
+
+  return edges;
 }
 
 // UNKNOWN은 발견 결과에는 남기지만, 자동 설계도 노드로는 올리지 않습니다.

@@ -6,6 +6,7 @@ import { DiagramEditor } from "../diagram-editor";
 import { EMPTY_DIAGRAM } from "../diagram-editor/constants";
 import { WorkspaceAiChatDock } from "./WorkspaceAiChatDock";
 import { WorkspaceRightPanel } from "./WorkspaceRightPanel";
+import { normalizeDiagramJsonConventions } from "./workspace-ai-diagram-adapter";
 import type {
   TerraformIssueAiRequest,
   TerraformPreviewAiRequest,
@@ -313,11 +314,12 @@ export function ProjectWorkspaceDraftManager({
           return;
         }
 
-        latestDiagramRef.current = loadedDraft.diagramJson;
+        const nextDiagram = normalizeDiagramJsonConventions(loadedDraft.diagramJson);
+        latestDiagramRef.current = nextDiagram;
         hasPendingLocalChangesRef.current = false;
         serverDirtyRef.current = loadedDraft.source === "local";
         draftChangeVersionRef.current = 0;
-        setInitialDiagram(loadedDraft.diagramJson);
+        setInitialDiagram(nextDiagram);
         setCurrentLocalDraft(loadedDraft.localDraft);
         setLocalSaveState(loadedDraft.localDraft ? "local-saved" : "idle");
         setServerSaveState(sourceServerSaveState[loadedDraft.source]);

@@ -123,6 +123,38 @@ test("AWS Provider Adapter lays out supported resources as an architecture map",
   assert(nodeById.get("resource-demo-bucket")!.positionX > nodeById.get("resource-vpc-1234")!.positionX);
 });
 
+test("AWS Provider Adapter removes duplicated board edge ids", async () => {
+  const adapter = createAwsProviderAdapter({
+    async discoverResources() {
+      return [
+        createRecord({
+          providerResourceType: "AWS::EC2::VPC",
+          providerResourceId: "vpc-1234",
+          displayName: "Main VPC"
+        }),
+        createRecord({
+          providerResourceType: "AWS::EC2::Instance",
+          providerResourceId: "i-web",
+          displayName: "web",
+          relationships: [
+            { type: "attached_to", targetProviderResourceId: "vpc-1234" },
+            { type: "attached_to", targetProviderResourceId: "vpc-1234" }
+          ]
+        })
+      ];
+    }
+  });
+
+  const result = await adapter.scan({
+    provider: "aws",
+    region: "ap-northeast-2",
+    resourceTypes: ["ALL"]
+  });
+  const edgeIds = result.architectureJson.edges.map((edge) => edge.id);
+
+  assert.deepEqual(edgeIds, ["edge-resource-i-web-resource-vpc-1234-attached_to"]);
+});
+
 test("AWS Provider Adapter keeps multi-subnet resources in their first matched subnet slot", async () => {
   const adapter = createAwsProviderAdapter({
     async discoverResources() {

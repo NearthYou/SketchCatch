@@ -1,3 +1,23 @@
+### 2026-07-08 - origin/dev 병합 충돌 해결
+
+- Goal: `Refactor/jh/222-workspace-전체적을-수정` 브랜치에 최신 `origin/dev`를 병합하고 GitHub PR conflict로 표시된 파일을 해결한다.
+- Completed:
+  - `origin/dev`를 fetch 후 현재 브랜치에 merge했다.
+  - `agent-progress.md` 충돌은 양쪽 진행 로그를 모두 보존하고 conflict marker를 제거했다.
+  - `apps/web/features/resource-settings/resource-settings-panel.test.ts` 충돌은 현재 auto-merged 구현에 맞춰 AWS provider/version selector 검증을 유지했다.
+  - `docs/gg/feat-gg-202-reverse-entry-ux/003_프론트화면기능설명_gg.md`의 EOF blank line 경고를 정리했다.
+  - Direct Deployment, Terraform apply/destroy, cloud mutation은 실행하지 않았다.
+- Verification run:
+  - `pnpm harness:check` - passed before merge.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/resource-settings/resource-settings-panel.test.ts` - passed, 7 tests.
+  - `git diff --check && git diff --cached --check` - passed.
+  - `pnpm harness:check` - passed after conflict resolution.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `pnpm build` - passed.
+- Known risks:
+  - 전체 `pnpm test`는 이번 merge conflict 해결 범위에서 별도로 실행하지 않았다.
+
 ### 2026-07-07 - Workspace canvas 영역 탭 하단 흰색 넘침 보정
 
 - Goal: 영역 리소스 탭의 라벨 배경 보정선이 본체 영역 아래로 흰색 띠처럼 넘쳐 보이지 않게 한다.
@@ -4410,3 +4430,78 @@
   - `pnpm --filter @sketchcatch/api test` still fails 7 unrelated baseline tests: 6 deployment lock/apply/destroy tests assert Windows path separators, and 1 Design Simulation text clamp test expects fewer items.
   - `pnpm --filter @sketchcatch/web test` still fails 1 unrelated baseline test in `features/diagram-editor/DiagramNodeView.test.ts`, where the source expects current handle ids to differ from the test regex.
   - Direct Deployment backend, live apply allowlist, and Terraform artifact safety were intentionally not changed.
+# Agent Progress
+
+This file is the short, English-only working log for the current agent context. Keep it concise.
+
+## Current Verified State
+
+- Branch/worktree: `codex/github-app-204-settings` in `C:\Users\siwon\Desktop\Jungle\Week17~21\SketchCatch-worktrees\git-cicd-handoff-create-fix`.
+- PR #241 was merged to `dev` and deployed to production by GitHub Actions run `28888021622`.
+- Production health and DB health returned `ok`.
+- Production Git/CI/CD live smoke created PR #14 in `NearthYou/sketchcatch-iac-handoff-test`.
+- Smoke status is `passed_or_waiting`: repository settings applied, 5 variables applied, pipeline status is `pr_created`, infra is `waiting_for_merge`.
+
+- Branch: `fix/ck/diagram-position`
+- Worktree: `C:\Jungle\SketchCatch`
+- Base: local `dev` updated to `384429c0` and merged into this branch.
+
+## Session Record
+
+2026-07-08:
+
+- Corrected diagram edge handling so only `contains`/`hosts` are removed as area containment; runtime and configuration relationships remain visible.
+- Added endpoint-based styling so IAM/KMS/AMI/security configuration relationships render as thin solid dependency lines even when the AI label is generic.
+- Kept async/event/log/monitoring relationships dashed, Terraform/deploy relationships operational dashed, and runtime HTTPS/data relationships solid.
+- Reworked generated diagram readability for shared architecture conversion/normalization paths, not just one QA fixture.
+- Added readable topology lanes, route scoring, area/resource collision protection, and tests for compact mixed cloud area drafts.
+- Updated AI architecture draft support so Amazon Q allowed `ResourceNode.type` values are derived from shared resource definitions instead of a hard-coded subset.
+- Added fallback draft handling for explicitly requested resource-panel catalog items such as EKS Cluster, DynamoDB Table, SQS Queue, and Auto Scaling Group.
+- Kept negated resource requests such as "no EC2" from being re-added as explicit panel resources.
+- Updated unsupported-resource handling so panel-backed resources are no longer reported as omitted, while unsupported workflow automation such as CI/CD handoff remains guarded.
+- Merged latest `dev` into `fix/ck/diagram-position`; the only manual conflict was this progress log.
+
+Verification:
+
+- `pnpm harness:check`
+- `.\node_modules\.bin\tsx.CMD --test features\workspace\workspace-ai-diagram-adapter.test.ts features\diagram-editor\flow-mappers.test.ts` from `apps/web`
+- Browser verification against `http://localhost:3000/workspace?projectName=Diagram%20Fresh%20Check&diagramFixture=conventions`: 11 nodes, 9 edges, 5 thin dependency edges, 2 dashed async edges, no resource-resource overlaps, and no sampled edge-resource hits.
+- Browser verification against the generated project workspace: 22 nodes, 10 edges, 1 thin dependency edge, 2 dashed async edges, and no sampled edge-resource hits.
+- `.\node_modules\.bin\tsx.CMD --test src\services\aiArchitectureDrafts.test.ts src\routes\ai.test.ts` from `apps/api`
+- `pnpm lint` (passed; Turbo cache rename warnings only)
+- `pnpm typecheck` (passed; Turbo cache rename warnings only)
+- `pnpm build` (first sandboxed run hit Next.js `.next` unlink EPERM; elevated rerun passed)
+## Completed Fixes
+
+- GitHub App config path now uses the shared `GIT_APP_*` env loader.
+- GitHub App permission messages distinguish PR creation and repository settings permission gaps.
+- Blank repository variables are skipped before applying GitHub repository settings.
+- Smoke script sends explicit JSON bodies and records useful API error evidence.
+- GitHub App client now treats `204 No Content` as a successful empty response.
+
+## Verification
+
+- `pnpm harness:check`
+- `pnpm --filter @sketchcatch/api exec tsx --test src/source-repositories/github-app-client.test.ts`
+- `pnpm --filter @sketchcatch/api exec tsx --test src/git-cicd/git-cicd-repository-settings-service.test.ts src/routes/git-cicd-handoffs.test.ts`
+- `pnpm lint`
+- `pnpm typecheck`
+- `pnpm build`
+- Production smoke report: `docs/sw/git-cicd-live-smoke-pr-created-current.json`
+
+Dev merge context:
+
+- PR #234 and PR #235 were merged and deployed before this branch update.
+- Latest `dev` includes Git/CI/CD handoff permission messaging, repository settings, cost usage work, and production smoke follow-up updates.
+- The dev-side production smoke blocker remains GitHub App permission approval for generated PR files, especially workflow files.
+- Merged and deployed the GitHub App repository settings fixes through PRs #237, #238, #239, #240, and #241.
+- Reran production live smoke after PR #241 deployment and verified repository settings apply now passes.
+- Left generated handoff PR #14 open for review/merge because real AWS mutation requires explicit approval.
+
+## Remaining Demo Work
+
+- Run focused checks after the merge if more code changes are made.
+- Push `fix/ck/diagram-position` and open/update the PR into `dev` when ready.
+- Merge a generated handoff PR only when real AWS apply is approved.
+- Run the downstream GitHub Actions pipeline and verify live static/API URLs.
+- Run cleanup/destroy verification after any real AWS deployment.

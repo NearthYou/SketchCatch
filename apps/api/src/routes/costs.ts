@@ -1,15 +1,17 @@
-import { desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import type {
   CostEstimatePeriod,
   CostProjectEstimate,
   CostProjectEstimateListResponse,
+  CostUsageAnalysisResponse,
   Project
 } from "@sketchcatch/types";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireActiveUserId } from "../auth/current-user.js";
 import { getDatabaseClient, type DatabaseClient } from "../db/client.js";
-import { architectures, projects } from "../db/schema.js";
+import { toAwsConnection } from "../aws-connections/aws-connection-service.js";
+import { architectures, awsConnections, deployedResources, deployments, projects } from "../db/schema.js";
 import { createConfiguredAwsPricingRateProvider } from "../services/awsPricingRateProvider.js";
 import {
   analyzeCost,
@@ -19,16 +21,28 @@ import {
   DEFAULT_COST_ESTIMATE_PERIOD,
   type CostPricingRateProvider
 } from "../services/cost-analysis.js";
+import {
+  analyzeCostUsage,
+  type CostUsageAnalysisProvider,
+  type CostUsageDeployedResource,
+  type CostUsageDeployment
+} from "../services/cost-usage-analysis.js";
 
 export type CostRouteOptions = {
   readonly getDatabaseClient?: (() => DatabaseClient) | undefined;
   readonly pricingRateProvider?: CostPricingRateProvider | undefined;
+  readonly costUsageProvider?: CostUsageAnalysisProvider | undefined;
 };
 
 const costProjectsQuerySchema = z.object({
   expectedUserCount: z.coerce.number().int().min(1).max(1_000_000).default(DEFAULT_EXPECTED_USER_COUNT),
   period: z.enum(["day", "week", "month"]).default(DEFAULT_COST_ESTIMATE_PERIOD),
   region: z.string().trim().min(1).default(DEFAULT_COST_REGION)
+});
+
+const costUsageQuerySchema = z.object({
+  awsConnectionId: z.uuid().optional(),
+  range: z.enum(["7d", "30d", "month_to_date"]).default("30d")
 });
 
 type CostProjectRow = {
@@ -42,6 +56,7 @@ export async function registerCostRoutes(
 ): Promise<void> {
   const getCostDatabaseClient = options.getDatabaseClient ?? getDatabaseClient;
   const pricingRateProvider = options.pricingRateProvider ?? createConfiguredAwsPricingRateProvider();
+  const costUsageProvider = options.costUsageProvider;
 
   app.get("/costs/projects", async (request): Promise<CostProjectEstimateListResponse> => {
     const currentUserId = await requireActiveUserId(request, getCostDatabaseClient);
@@ -104,6 +119,89 @@ export async function registerCostRoutes(
       }
     };
   });
+
+  app.get("/costs/usage", async (request): Promise<CostUsageAnalysisResponse> => {
+    const currentUserId = await requireActiveUserId(request, getCostDatabaseClient);
+    const query = costUsageQuerySchema.parse(request.query);
+    const { db } = getCostDatabaseClient();
+    const projectRows = await db
+      .select()
+      .from(projects)
+      .where(eq(projects.userId, currentUserId))
+      .orderBy(desc(projects.updatedAt), desc(projects.createdAt));
+    const projectIds = projectRows.map((project) => project.id);
+    const selectedAwsConnectionRows =
+      query.awsConnectionId === undefined
+        ? await db
+            .select()
+            .from(awsConnections)
+            .where(
+              and(eq(awsConnections.userId, currentUserId), eq(awsConnections.status, "verified"))
+            )
+            .orderBy(desc(awsConnections.updatedAt), desc(awsConnections.createdAt))
+        : await db
+            .select()
+            .from(awsConnections)
+            .where(
+              and(
+                eq(awsConnections.id, query.awsConnectionId),
+                eq(awsConnections.userId, currentUserId),
+                eq(awsConnections.status, "verified")
+              )
+            )
+            .orderBy(desc(awsConnections.updatedAt), desc(awsConnections.createdAt));
+    const awsConnection =
+      selectedAwsConnectionRows[0] === undefined ? null : toAwsConnection(selectedAwsConnectionRows[0]);
+    const deploymentRows =
+      projectIds.length === 0
+        ? []
+        : await db
+            .select()
+            .from(deployments)
+            .where(inArray(deployments.projectId, projectIds))
+            .orderBy(desc(deployments.completedAt), desc(deployments.updatedAt));
+    const latestSuccessfulDeployments = selectLatestSuccessfulDeployments(deploymentRows);
+    const deploymentIds = latestSuccessfulDeployments.map((deployment) => deployment.id);
+    const deployedProjectIds = new Set(
+      latestSuccessfulDeployments.map((deployment) => deployment.projectId)
+    );
+    const deployedProjectRows = projectRows.filter((project) => deployedProjectIds.has(project.id));
+    const deployedResourceRows =
+      deploymentIds.length === 0
+        ? []
+        : await db
+            .select()
+            .from(deployedResources)
+            .where(inArray(deployedResources.deploymentId, deploymentIds));
+
+    return analyzeCostUsage(
+      {
+        awsConnection,
+        deployedResources: deployedResourceRows.map(toCostUsageDeployedResource),
+        deployments: latestSuccessfulDeployments.map(toCostUsageDeployment),
+        projects: deployedProjectRows.map(toProject),
+        range: query.range,
+        userId: currentUserId
+      },
+      costUsageProvider
+    );
+  });
+}
+
+function selectLatestSuccessfulDeployments(
+  rows: readonly (typeof deployments.$inferSelect)[]
+): (typeof deployments.$inferSelect)[] {
+  const latestDeploymentsByProjectId = new Map<string, typeof deployments.$inferSelect>();
+
+  for (const deployment of rows) {
+    if (deployment.status !== "SUCCESS" || latestDeploymentsByProjectId.has(deployment.projectId)) {
+      continue;
+    }
+
+    latestDeploymentsByProjectId.set(deployment.projectId, deployment);
+  }
+
+  return [...latestDeploymentsByProjectId.values()];
 }
 
 async function createCostProjectEstimate(
@@ -146,6 +244,30 @@ function toProject(row: typeof projects.$inferSelect): Project {
     description: row.description,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString()
+  };
+}
+
+function toCostUsageDeployment(row: typeof deployments.$inferSelect): CostUsageDeployment {
+  return {
+    completedAt: row.completedAt,
+    id: row.id,
+    projectId: row.projectId,
+    startedAt: row.startedAt,
+    status: row.status,
+    updatedAt: row.updatedAt
+  };
+}
+
+function toCostUsageDeployedResource(
+  row: typeof deployedResources.$inferSelect
+): CostUsageDeployedResource {
+  return {
+    deploymentId: row.deploymentId,
+    id: row.id,
+    region: row.region,
+    resourceId: row.resourceId,
+    terraformAddress: row.terraformAddress,
+    terraformType: row.terraformType
   };
 }
 

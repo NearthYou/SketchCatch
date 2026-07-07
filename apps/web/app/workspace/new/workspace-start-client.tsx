@@ -1,136 +1,178 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createProject, listAwsConnections } from "../../../features/workspace/api";
-import type { WorkspaceCloudPlatform } from "../../../features/workspace/project-draft-persistence";
 import {
   createWorkspaceStartOptions,
   resolveWorkspaceStartAction,
   type WorkspaceStartKind
 } from "./workspace-start-options";
 
-const cloudPlatformOptions: ReadonlyArray<{
-  readonly label: string;
-  readonly value: WorkspaceCloudPlatform;
-}> = [
-  { label: "AWS", value: "aws" },
-  { label: "GCP", value: "gcp" }
-];
+const AI_START_DRAFT_STORAGE_KEY = "sketchcatch.newProjectDraft";
+const DEFAULT_REVERSE_CLOUD_PLATFORM = "aws";
 
-const workspaceStartOptions = createWorkspaceStartOptions();
+const COPY = {
+  chooseStartMode: "\uC2DC\uC791 \uBC29\uC2DD\uC744 \uC120\uD0DD\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4.",
+  createProjectFailed: "\uD504\uB85C\uC81D\uD2B8\uB97C \uC0DD\uC131\uD558\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4.",
+  enterProjectName: "\uD504\uB85C\uC81D\uD2B8 \uC774\uB984\uC744 \uC785\uB825\uD574\uC8FC\uC138\uC694.",
+  projectNameFirst:
+    "\uD504\uB85C\uC81D\uD2B8 \uC774\uB984\uC744 \uBA3C\uC800 \uC785\uB825\uD558\uBA74 \uC2DC\uC791 \uBC29\uC2DD\uC744 \uC120\uD0DD\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4.",
+  projectNameLabel: "\uD504\uB85C\uC81D\uD2B8 \uC774\uB984",
+  projectNamePlaceholder: "\uC608: \uC608\uC57D \uC11C\uBE44\uC2A4 API \uC11C\uBC84",
+  startModeLabel: "\uC2DC\uC791 \uBC29\uC2DD",
+  submitting: "\uCC98\uB9AC \uC911"
+} as const;
+
+type WorkspaceStartDraft = {
+  readonly projectName: string;
+  readonly startMode: "ai";
+  readonly updatedAt: string;
+};
+
+const startModeOptions = createWorkspaceStartOptions();
+
+const startModeLabels: Record<WorkspaceStartKind, string> = {
+  ai: "AI",
+  reverse: "\uB9AC\uBC84\uC2A4",
+  blank: "\uBE48\uBCF4\uB4DC"
+};
+const primaryStartModeOptions = startModeOptions.filter((option) => option.priority === "primary");
+const blankStartOption = startModeOptions.find((option) => option.kind === "blank");
 
 export function WorkspaceStartClient() {
   const router = useRouter();
   const [title, setTitle] = useState("");
-  const [cloudPlatform, setCloudPlatform] = useState<WorkspaceCloudPlatform>("aws");
-  const [startKind, setStartKind] = useState<WorkspaceStartKind>("ai");
   const [errorMessage, setErrorMessage] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const selectedStartOption =
-    workspaceStartOptions.find((option) => option.kind === startKind) ?? workspaceStartOptions[0];
+  const [isSubmittingMode, setIsSubmittingMode] = useState<WorkspaceStartKind | null>(null);
+  const canChooseStartMode = title.trim().length > 0 && isSubmittingMode === null;
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
-    event.preventDefault();
+  const helperText = useMemo(() => {
+    if (title.trim().length > 0) {
+      return COPY.chooseStartMode;
+    }
 
-    const trimmedTitle = title.trim();
-    if (!trimmedTitle) {
-      setErrorMessage("설계 제목을 입력해 주세요.");
+    return COPY.projectNameFirst;
+  }, [title]);
+
+  useEffect(() => {
+    const storedDraft = readAiStartDraft();
+
+    if (storedDraft?.projectName) {
+      setTitle(storedDraft.projectName);
+    }
+  }, []);
+
+  // 시작 방식마다 프로젝트를 바로 만들지, 전용 화면으로 보낼지 결정합니다.
+  async function handleStartMode(mode: WorkspaceStartKind): Promise<void> {
+    const projectName = title.trim();
+
+    if (!projectName) {
+      setErrorMessage(COPY.enterProjectName);
       return;
     }
 
-    setIsSubmitting(true);
     setErrorMessage("");
+    setIsSubmittingMode(mode);
+
+    if (mode === "ai") {
+      writeAiStartDraft({
+        projectName,
+        startMode: "ai",
+        updatedAt: new Date().toISOString()
+      });
+      router.push("/workspace/ai");
+      return;
+    }
 
     try {
-      const awsConnections = startKind === "reverse" ? await listAwsConnections() : [];
-      const hasVerifiedAwsConnection = awsConnections.some((connection) => connection.status === "verified");
-      const action = resolveWorkspaceStartAction({
-        cloudPlatform,
-        hasVerifiedAwsConnection,
-        projectName: trimmedTitle,
-        startKind
-      });
+      if (mode === "reverse") {
+        const awsConnections = await listAwsConnections();
+        const hasVerifiedAwsConnection = awsConnections.some(
+          (connection) => connection.status === "verified"
+        );
+        const action = resolveWorkspaceStartAction({
+          cloudPlatform: DEFAULT_REVERSE_CLOUD_PLATFORM,
+          hasVerifiedAwsConnection,
+          projectName,
+          startKind: "reverse"
+        });
 
-      if (action.kind !== "createProject") {
+        if (action.kind === "createProject") {
+          setIsSubmittingMode(null);
+          return;
+        }
+
         router.push(action.href);
         return;
       }
 
       const project = await createProject({
-        name: trimmedTitle
+        name: projectName
       });
       const params = new URLSearchParams({
-        cloudPlatform,
         projectId: project.id,
-        projectName: project.name,
-        startMode: action.openMode
+        projectName: project.name
       });
 
       router.push(`/workspace?${params.toString()}`);
     } catch {
-      setIsSubmitting(false);
-      setErrorMessage("워크스페이스를 생성하지 못했습니다.");
+      setIsSubmittingMode(null);
+      setErrorMessage(COPY.createProjectFailed);
     }
   }
 
   return (
-    <form className="workspaceStartForm" onSubmit={handleSubmit}>
+    <div className="workspaceStartForm">
       <label className="workspaceStartField" htmlFor="workspace-title-input">
-        <span className="fieldLabel">설계 제목</span>
+        <span className="fieldLabel">{COPY.projectNameLabel}</span>
         <input
           className="textInput"
           id="workspace-title-input"
           maxLength={80}
-          onChange={(event) => setTitle(event.target.value)}
-          placeholder="예: 팀 프로젝트 API 서버"
+          onChange={(event) => {
+            setTitle(event.target.value);
+            setErrorMessage("");
+          }}
+          placeholder={COPY.projectNamePlaceholder}
           type="text"
           value={title}
         />
       </label>
 
       <div className="workspaceStartField">
-        <span className="fieldLabel">클라우드 플랫폼</span>
-        <div className="choiceGrid workspaceStartProviderGrid" role="radiogroup" aria-label="클라우드 플랫폼">
-          {cloudPlatformOptions.map((option) => (
-            <button
-              aria-checked={cloudPlatform === option.value}
-              className={cloudPlatform === option.value ? "choiceButton choiceButtonActive" : "choiceButton"}
-              key={option.value}
-              onClick={() => setCloudPlatform(option.value)}
-              role="radio"
-              type="button"
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
-      </div>
+        <span className="fieldLabel">{COPY.startModeLabel}</span>
+        <p className="workspaceStartHint">{helperText}</p>
+        <div className="choiceGrid workspaceStartModeGrid" aria-label={COPY.startModeLabel}>
+          {primaryStartModeOptions.map((option) => {
+            const isDisabled = !canChooseStartMode || isSubmittingMode !== null;
+            const isSubmitting = isSubmittingMode === option.kind;
 
-      <div className="workspaceStartField">
-        <span className="fieldLabel">시작 방식</span>
-        <div className="workspaceStartOptionGroup" role="radiogroup" aria-label="시작 방식">
-          {workspaceStartOptions.map((option) => (
-            <button
-              aria-checked={startKind === option.kind}
-              className={[
-                "workspaceStartOptionButton",
-                option.priority === "secondary" ? "workspaceStartOptionButtonSecondary" : "",
-                startKind === option.kind ? "workspaceStartOptionButtonActive" : ""
-              ]
-                .filter(Boolean)
-                .join(" ")}
-              key={option.kind}
-              onClick={() => setStartKind(option.kind)}
-              role="radio"
-              type="button"
-            >
-              <span>{option.title}</span>
-              <strong>{option.actionLabel}</strong>
-              <small>{option.description}</small>
-            </button>
-          ))}
+            return (
+              <button
+                className="workspaceStartModeButton"
+                disabled={isDisabled}
+                key={option.kind}
+                onClick={() => void handleStartMode(option.kind)}
+                type="button"
+              >
+                <span>{isSubmitting ? COPY.submitting : startModeLabels[option.kind]}</span>
+                <strong>{option.actionLabel}</strong>
+                <small>{option.description}</small>
+              </button>
+            );
+          })}
         </div>
+        {blankStartOption ? (
+          <button
+            className="workspaceStartBlankLabel"
+            disabled={!canChooseStartMode || isSubmittingMode !== null}
+            onClick={() => void handleStartMode(blankStartOption.kind)}
+            type="button"
+          >
+            {isSubmittingMode === "blank" ? COPY.submitting : blankStartOption.actionLabel}
+          </button>
+        ) : null}
       </div>
 
       {errorMessage ? (
@@ -138,12 +180,51 @@ export function WorkspaceStartClient() {
           {errorMessage}
         </p>
       ) : null}
+    </div>
+  );
+}
 
-      <div className="workspaceStartActions">
-        <button className="primaryButton" disabled={isSubmitting} type="submit">
-          {selectedStartOption.actionLabel}
-        </button>
-      </div>
-    </form>
+// AI 전용 시작 화면으로 돌아왔을 때 이전 프로젝트 이름을 복원합니다.
+function readAiStartDraft(): WorkspaceStartDraft | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  try {
+    const rawValue = window.sessionStorage.getItem(AI_START_DRAFT_STORAGE_KEY);
+    const parsedValue = rawValue ? JSON.parse(rawValue) : null;
+
+    return isWorkspaceStartDraft(parsedValue) ? parsedValue : null;
+  } catch {
+    return null;
+  }
+}
+
+// AI 전용 화면에서 프로젝트 이름을 이어서 쓸 수 있게 임시 저장합니다.
+function writeAiStartDraft(draft: WorkspaceStartDraft): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.sessionStorage.setItem(AI_START_DRAFT_STORAGE_KEY, JSON.stringify(draft));
+  } catch (error) {
+    console.error("Failed to write AI start draft to sessionStorage:", error);
+  }
+}
+
+// sessionStorage에서 꺼낸 값이 AI 시작 화면이 이해할 수 있는 모양인지 확인합니다.
+function isWorkspaceStartDraft(value: unknown): value is WorkspaceStartDraft {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const candidate = value as Partial<WorkspaceStartDraft>;
+
+  return (
+    candidate.startMode === "ai" &&
+    typeof candidate.projectName === "string" &&
+    candidate.projectName.trim().length > 0 &&
+    typeof candidate.updatedAt === "string"
   );
 }

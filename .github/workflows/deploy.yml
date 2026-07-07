@@ -67,6 +67,22 @@ jobs:
           role-to-assume: ${{ vars.AWS_ROLE_TO_ASSUME }}
           aws-region: ${{ vars.AWS_REGION }}
 
+      - name: Apply EC2 runtime IAM policy
+        run: |
+          aws iam put-role-policy \
+            --role-name "${SKETCHCATCH_RUNTIME_ROLE_NAME}" \
+            --policy-name "${SKETCHCATCH_RUNTIME_POLICY_NAME}" \
+            --policy-document file://infra/aws/iam/ec2-runtime-policy.json
+
+          aws iam get-role-policy \
+            --role-name "${SKETCHCATCH_RUNTIME_ROLE_NAME}" \
+            --policy-name "${SKETCHCATCH_RUNTIME_POLICY_NAME}" \
+            --query "PolicyDocument.Statement[?Sid=='AllowSketchCatchAwsConnectionAssumeRole']" \
+            --output json
+        env:
+          SKETCHCATCH_RUNTIME_ROLE_NAME: ${{ vars.SKETCHCATCH_RUNTIME_ROLE_NAME || 'SketchCatch-EC2-Role' }}
+          SKETCHCATCH_RUNTIME_POLICY_NAME: ${{ vars.SKETCHCATCH_RUNTIME_POLICY_NAME || 'SketchCatchRuntimePolicy' }}
+
       - name: Upload Docker image artifact to S3
         run: |
           aws s3 cp \

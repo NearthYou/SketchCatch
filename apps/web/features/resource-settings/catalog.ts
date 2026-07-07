@@ -26,6 +26,34 @@ type TerraformResourcePresentation = {
 
 const designCatalogItems: ResourceItem[] = [
   {
+    id: "design-user-client",
+    name: "User / Client",
+    cloudProvider: "aws",
+    area: "other",
+    category: "Flow",
+    iconUrl: `${resourceIconPath}/Res_General-Icons/Res_48_Light/Res_Client_48_Light.svg`,
+    enabled: true,
+    nodeDefaults: {
+      type: "sketchcatch_user_client",
+      label: "User / Client",
+      size
+    }
+  },
+  {
+    id: "design-internet",
+    name: "Internet",
+    cloudProvider: "aws",
+    area: "network",
+    category: "Flow",
+    iconUrl: `${resourceIconPath}/Res_General-Icons/Res_48_Light/Res_Internet_48_Light.svg`,
+    enabled: true,
+    nodeDefaults: {
+      type: "sketchcatch_internet",
+      label: "Internet",
+      size
+    }
+  },
+  {
     id: "aws-region",
     name: "Region",
     cloudProvider: "aws",

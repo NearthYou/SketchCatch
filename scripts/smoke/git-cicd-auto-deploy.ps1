@@ -44,7 +44,9 @@ function Invoke-SketchCatchApi {
     [string]$Method,
 
     [Parameter(Mandatory = $true)]
-    [string]$Path
+    [string]$Path,
+
+    [object]$Body = $null
   )
 
   $baseUrl = $ApiBaseUrl.TrimEnd("/")
@@ -52,7 +54,18 @@ function Invoke-SketchCatchApi {
     Authorization = "Bearer $AccessToken"
   }
 
-  return Invoke-RestMethod -Method $Method -Uri "$baseUrl$Path" -Headers $headers -ContentType "application/json"
+  $params = @{
+    Method = $Method
+    Uri = "$baseUrl$Path"
+    Headers = $headers
+    ContentType = "application/json"
+  }
+
+  if ($null -ne $Body) {
+    $params["Body"] = $Body | ConvertTo-Json -Depth 8 -Compress
+  }
+
+  return Invoke-RestMethod @params
 }
 
 function Test-HasValue {
@@ -105,6 +118,32 @@ function Write-SmokeReport {
   }
 
   $json
+}
+
+function Get-SmokeErrorEvidence {
+  param(
+    [object]$ErrorRecord
+  )
+
+  if ($ErrorRecord.ErrorDetails -and $ErrorRecord.ErrorDetails.Message) {
+    return $ErrorRecord.ErrorDetails.Message
+  }
+
+  if ($ErrorRecord.Exception -and $ErrorRecord.Exception.Response) {
+    try {
+      $stream = $ErrorRecord.Exception.Response.GetResponseStream()
+      $reader = [System.IO.StreamReader]::new($stream)
+      $body = $reader.ReadToEnd()
+
+      if (Test-HasValue $body) {
+        return $body
+      }
+    } catch {
+      return $ErrorRecord.Exception.Message
+    }
+  }
+
+  return $ErrorRecord.Exception.Message
 }
 
 function Stop-SmokeWithFailedReport {
@@ -244,10 +283,10 @@ if ($PreflightOnly -or $preflightBlocked) {
 
 if (-not $SkipRepositorySettingsApply) {
   try {
-    $settings = Invoke-SketchCatchApi -Method "POST" -Path "/api/git-cicd-handoffs/$HandoffId/repository-settings/apply"
+    $settings = Invoke-SketchCatchApi -Method "POST" -Path "/api/git-cicd-handoffs/$HandoffId/repository-settings/apply" -Body @{}
     Add-Step -Steps $steps -Name "repository_settings_apply" -Status "passed" -Evidence "$($settings.variables.Count) variables applied"
   } catch {
-    Add-Step -Steps $steps -Name "repository_settings_apply" -Status "failed" -Evidence $_.Exception.Message
+    Add-Step -Steps $steps -Name "repository_settings_apply" -Status "failed" -Evidence (Get-SmokeErrorEvidence $_)
   }
 } else {
   Add-Step -Steps $steps -Name "repository_settings_apply" -Status "skipped" -Evidence "SkipRepositorySettingsApply was set"
@@ -255,10 +294,10 @@ if (-not $SkipRepositorySettingsApply) {
 
 if (-not $SkipAwsRoleDiffApply) {
   try {
-    $roleDiff = Invoke-SketchCatchApi -Method "POST" -Path "/api/git-cicd-handoffs/$HandoffId/aws-role-diff/apply"
+    $roleDiff = Invoke-SketchCatchApi -Method "POST" -Path "/api/git-cicd-handoffs/$HandoffId/aws-role-diff/apply" -Body @{}
     Add-Step -Steps $steps -Name "aws_role_diff_apply" -Status "passed" -Evidence "verified=$($roleDiff.verified)"
   } catch {
-    Add-Step -Steps $steps -Name "aws_role_diff_apply" -Status "failed" -Evidence $_.Exception.Message
+    Add-Step -Steps $steps -Name "aws_role_diff_apply" -Status "failed" -Evidence (Get-SmokeErrorEvidence $_)
   }
 } else {
   Add-Step -Steps $steps -Name "aws_role_diff_apply" -Status "skipped" -Evidence "SkipAwsRoleDiffApply was set"

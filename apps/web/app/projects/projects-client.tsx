@@ -15,6 +15,7 @@ import type {
   ProjectDeletePreview
 } from "@sketchcatch/types";
 import { MoreHorizontal } from "lucide-react";
+import { SelectMenu, type SelectMenuOption } from "../../components/ui/SelectMenu";
 import { ApiProjectCard, getWorkspaceHref } from "../../components/dashboard/api-project-card";
 import { getApiErrorMessage } from "../../lib/api-client";
 import {
@@ -23,6 +24,7 @@ import {
   getProjectDeletePreview,
   listDeployments,
   listProjects,
+  listRecentSuccessfulDeploymentProjects,
   runDeploymentDestroy,
   runDeploymentDestroyPlan
 } from "../../features/workspace/api";
@@ -35,8 +37,19 @@ import { filterProjectsByName } from "../../features/projects/project-search";
 
 const DELETE_DEPLOYMENT_POLL_INTERVAL_MS = 2500;
 const DELETE_DEPLOYMENT_POLL_TIMEOUT_MS = 10 * 60 * 1000;
+const PROJECT_SORT_OPTIONS: SelectMenuOption[] = [
+  { label: "최근 작업한 순서", value: "recent_work" },
+  { label: "최근 생성한 순서", value: "recent_created" }
+];
+const PROJECT_DEPLOYMENT_FILTER_OPTIONS: SelectMenuOption[] = [
+  { label: "전체", value: "all" },
+  { label: "배포됨", value: "deployed" },
+  { label: "미배포", value: "not_deployed" }
+];
 
 type ProjectsLoadState = "loading" | "ready" | "error";
+type ProjectDeploymentFilter = "all" | "deployed" | "not_deployed";
+type ProjectSortMode = "recent_work" | "recent_created";
 type DeleteDialogState =
   | { readonly status: "closed" }
   | {
@@ -60,8 +73,13 @@ type ProjectActionMenuState =
 
 export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }) {
   const [projects, setProjects] = useState<Project[]>([]);
+  const [deploymentStatusByProjectId, setDeploymentStatusByProjectId] = useState<
+    Record<string, boolean>
+  >({});
+  const [deploymentFilter, setDeploymentFilter] = useState<ProjectDeploymentFilter>("all");
   const [loadState, setLoadState] = useState<ProjectsLoadState>("loading");
   const [errorMessage, setErrorMessage] = useState("");
+  const [sortMode, setSortMode] = useState<ProjectSortMode>("recent_work");
   const [deleteErrorMessage, setDeleteErrorMessage] = useState("");
   const [deletingProjectId, setDeletingProjectId] = useState<string | null>(null);
   const [deleteDialog, setDeleteDialog] = useState<DeleteDialogState>({ status: "closed" });
@@ -70,10 +88,22 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
   });
   const isMountedRef = useRef(true);
   const isSearchActive = searchQuery.trim().length > 0;
-  const displayProjects = useMemo(
-    () => (isSearchActive ? filterProjectsByName(projects, searchQuery) : projects),
-    [isSearchActive, projects, searchQuery]
+  const sortedProjects = useMemo(
+    () => [...projects].sort((left, right) => compareProjectsBySortMode(left, right, sortMode)),
+    [projects, sortMode]
   );
+  const searchMatchedProjects = useMemo(
+    () => (isSearchActive ? filterProjectsByName(sortedProjects, searchQuery) : sortedProjects),
+    [isSearchActive, searchQuery, sortedProjects]
+  );
+  const displayProjects = useMemo(
+    () =>
+      searchMatchedProjects.filter((project) =>
+        matchesDeploymentFilter(project, deploymentFilter, deploymentStatusByProjectId)
+      ),
+    [deploymentFilter, deploymentStatusByProjectId, searchMatchedProjects]
+  );
+  const isDeploymentFilterActive = deploymentFilter !== "all";
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -91,13 +121,23 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
       setErrorMessage("");
 
       try {
-        const nextProjects = await listProjects();
+        const [nextProjects, nextRecentDeploymentItems] = await Promise.all([
+          listProjects(),
+          listRecentSuccessfulDeploymentProjects()
+        ]);
+        const deployedProjectIds = new Set(
+          nextRecentDeploymentItems.map((item) => item.project.id)
+        );
+        const nextDeploymentStatusEntries = nextProjects.map(
+          (project) => [project.id, deployedProjectIds.has(project.id)] as const
+        );
 
         if (cancelled) {
           return;
         }
 
         setProjects(nextProjects);
+        setDeploymentStatusByProjectId(Object.fromEntries(nextDeploymentStatusEntries));
         setLoadState("ready");
       } catch (error) {
         if (cancelled) {
@@ -154,6 +194,19 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
     setProjectActionMenu({ status: "closed" });
   }
 
+  function removeProjectFromList(projectId: string): void {
+    setProjects((currentProjects) =>
+      currentProjects.filter((currentProject) => currentProject.id !== projectId)
+    );
+    setDeploymentStatusByProjectId((currentStatusByProjectId) => {
+      const nextStatusByProjectId = { ...currentStatusByProjectId };
+
+      delete nextStatusByProjectId[projectId];
+
+      return nextStatusByProjectId;
+    });
+  }
+
   async function openProjectDeleteDialog(
     project: Project,
     preview?: ProjectDeletePreview | undefined,
@@ -207,9 +260,7 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
     try {
       const result = await deleteProject(project.id, action);
 
-      setProjects((currentProjects) =>
-        currentProjects.filter((currentProject) => currentProject.id !== project.id)
-      );
+      removeProjectFromList(project.id);
       setDeleteDialog({ status: "closed" });
 
       if (result.cleanup.failedObjectCount > 0) {
@@ -332,9 +383,7 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
         return;
       }
 
-      setProjects((currentProjects) =>
-        currentProjects.filter((currentProject) => currentProject.id !== project.id)
-      );
+      removeProjectFromList(project.id);
       setDeleteDialog({ status: "closed" });
 
       if (result.cleanup.failedObjectCount > 0) {
@@ -554,10 +603,36 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
     <section className="dashboardPanel" aria-labelledby="all-projects-title">
       <div className="dashboardPanelHeader">
         <div>
-          <p className="dashboardPanelKicker">All projects</p>
-          <h2 id="all-projects-title">내 프로젝트 전부</h2>
+          <p className="dashboardPanelKicker">Worked projects</p>
+          <h2 id="all-projects-title">내가 작업한 프로젝트</h2>
         </div>
-        <span className="dashboardCountBadge">{displayProjects.length}개</span>
+      </div>
+
+      <div className="projectListControls" aria-label="프로젝트 정렬 및 필터">
+        <div className="settingsField">
+          정렬
+          <SelectMenu
+            ariaLabel="프로젝트 정렬 선택"
+            emptyLabel="정렬 선택"
+            onChange={(value) => setSortMode(value as ProjectSortMode)}
+            options={PROJECT_SORT_OPTIONS}
+            size="compact"
+            tone="dashboard"
+            value={sortMode}
+          />
+        </div>
+        <div className="settingsField">
+          배포 여부
+          <SelectMenu
+            ariaLabel="프로젝트 배포 여부 필터 선택"
+            emptyLabel="필터 선택"
+            onChange={(value) => setDeploymentFilter(value as ProjectDeploymentFilter)}
+            options={PROJECT_DEPLOYMENT_FILTER_OPTIONS}
+            size="compact"
+            tone="dashboard"
+            value={deploymentFilter}
+          />
+        </div>
       </div>
 
       {deleteErrorMessage ? (
@@ -576,11 +651,17 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
         </div>
       ) : displayProjects.length === 0 ? (
         <div className="projectListEmpty">
-          <p>아직 생성한 프로젝트가 없습니다.</p>
-          <Link className="dashboardTopbarAction" href="/workspace/new">
-            <DashboardIcon name="plus" />
-            <span>새 설계 시작</span>
-          </Link>
+          {isDeploymentFilterActive ? (
+            <p>조건에 맞는 프로젝트가 없습니다.</p>
+          ) : (
+            <>
+              <p>아직 생성한 프로젝트가 없습니다.</p>
+              <Link className="dashboardTopbarAction" href="/workspace/new">
+                <DashboardIcon name="plus" />
+                <span>새 설계 시작</span>
+              </Link>
+            </>
+          )}
         </div>
       ) : (
         <div className="dashboardCardGrid">
@@ -607,8 +688,8 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
               isDeleting={deletingProjectId === project.id}
               key={project.id}
               project={project}
-              timestampLabel="수정"
-              timestampValue={project.updatedAt}
+              timestampLabel={sortMode === "recent_created" ? "생성" : "작업"}
+              timestampValue={sortMode === "recent_created" ? project.createdAt : project.updatedAt}
               variant="compact"
             />
           ))}
@@ -837,6 +918,31 @@ function isDestroyPlanReadyForApproval(deployment: Deployment): boolean {
     deployment.isBlocked &&
     deployment.blockedBy === "missing_approval"
   );
+}
+
+function compareProjectsBySortMode(
+  left: Project,
+  right: Project,
+  sortMode: ProjectSortMode
+): number {
+  const leftDate = sortMode === "recent_created" ? left.createdAt : left.updatedAt;
+  const rightDate = sortMode === "recent_created" ? right.createdAt : right.updatedAt;
+
+  return new Date(rightDate).getTime() - new Date(leftDate).getTime();
+}
+
+function matchesDeploymentFilter(
+  project: Project,
+  deploymentFilter: ProjectDeploymentFilter,
+  deploymentStatusByProjectId: Readonly<Record<string, boolean>>
+): boolean {
+  if (deploymentFilter === "all") {
+    return true;
+  }
+
+  const isDeployed = deploymentStatusByProjectId[project.id] === true;
+
+  return deploymentFilter === "deployed" ? isDeployed : !isDeployed;
 }
 
 async function sleep(milliseconds: number): Promise<void> {

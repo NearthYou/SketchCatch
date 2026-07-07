@@ -27,7 +27,9 @@ import {
   listAwsConnections,
   listDeployments,
   listGitCicdHandoffs,
+  listGitHubInstalledRepositories,
   listTerraformOutputs,
+  listCostUsageAnalysis,
   listProjects,
   listReverseEngineeringScanLogs,
   listReverseEngineeringScans,
@@ -39,7 +41,8 @@ import {
   testAwsConnection,
   uploadProjectAsset,
   validateTerraformCode,
-  verifyAwsConnection
+  verifyAwsConnection,
+  verifyAwsConnectionCreatedRole
 } from "./api";
 import type { Project } from "../../../../packages/types/src";
 import { clearStoredAuthSession, writeStoredAuthSession } from "../../lib/auth-storage";
@@ -82,6 +85,128 @@ test("listProjects fetches projects for the authenticated user", async (context)
   assert.equal(requests[0]?.init?.method, undefined);
   assert.equal(new Headers(requests[0]?.init?.headers).get("authorization"), "Bearer access-token");
   assert.deepEqual(projects, [project]);
+});
+
+test("listGitHubInstalledRepositories fetches GitHub App installation repository candidates", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    restoreWindow(originalWindowDescriptor);
+  });
+
+  installAuthSession();
+
+  globalThis.fetch = async (input, init) => {
+    requests.push({ input, init });
+
+    return new Response(
+      JSON.stringify({
+        projectId: project.id,
+        state: "signed-state",
+        expiresAt: "2026-07-07T00:10:00.000Z",
+        repositories: [
+          {
+            installationId: "12345",
+            installationAccountLogin: "NearthYou",
+            installationAccountType: "Organization",
+            installationRepositorySelection: "selected",
+            githubRepositoryId: "repo-1",
+            owner: "NearthYou",
+            name: "sketchcatch-iac-handoff-test",
+            fullName: "NearthYou/sketchcatch-iac-handoff-test",
+            defaultBranch: "main",
+            repositoryUrl: "https://github.com/NearthYou/sketchcatch-iac-handoff-test",
+            visibility: "private",
+            archived: false,
+            connectedSourceRepositoryId: null,
+            connectedStatus: null
+          }
+        ]
+      }),
+      {
+        headers: {
+          "Content-Type": "application/json"
+        },
+        status: 200
+      }
+    );
+  };
+
+  const result = await listGitHubInstalledRepositories(project.id);
+
+  assert.equal(
+    String(requests[0]?.input),
+    `/api/projects/${project.id}/source-repositories/github/installed-repositories`
+  );
+  assert.equal(requests[0]?.init?.method, "POST");
+  assert.equal(result.state, "signed-state");
+  assert.equal(result.repositories[0]?.fullName, "NearthYou/sketchcatch-iac-handoff-test");
+  assert.equal(result.repositories[0]?.installationId, "12345");
+});
+
+test("listCostUsageAnalysis fetches actual usage analysis with range and AWS connection query", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    restoreWindow(originalWindowDescriptor);
+  });
+
+  installAuthSession();
+
+  globalThis.fetch = async (input, init) => {
+    requests.push({ input, init });
+
+    return new Response(
+      JSON.stringify({
+        currency: "USD",
+        dailyTrend: [],
+        dataSource: "sample",
+        endDate: "2026-07-07",
+        fallbackUsed: true,
+        forecastMonthEndCost: {
+          amount: 42,
+          currency: "USD"
+        },
+        generatedAt: "2026-07-07T00:00:00.000Z",
+        metricSeries: [],
+        projectCosts: [],
+        range: "30d",
+        recommendations: [],
+        serviceCosts: [],
+        startDate: "2026-06-08",
+        totalCost: {
+          amount: 40,
+          currency: "USD"
+        },
+        wasteResources: []
+      }),
+      {
+        headers: {
+          "Content-Type": "application/json"
+        },
+        status: 200
+      }
+    );
+  };
+
+  const response = await listCostUsageAnalysis({
+    awsConnectionId: "33333333-3333-4333-8333-333333333333",
+    range: "30d"
+  });
+
+  assert.equal(
+    String(requests[0]?.input),
+    "/api/costs/usage?range=30d&awsConnectionId=33333333-3333-4333-8333-333333333333"
+  );
+  assert.equal(new Headers(requests[0]?.init?.headers).get("authorization"), "Bearer access-token");
+  assert.equal(response.totalCost.amount, 40);
+  assert.equal(response.fallbackUsed, true);
 });
 
 test("saveProjectDraft sends authenticated PUT request with diagram json", async (context) => {
@@ -418,6 +543,49 @@ test("uploadProjectAsset uploads terraform content to the presigned URL", async 
   assert.equal(String(requests[0]?.input), "https://s3.example.test/upload");
   assert.equal(requests[0]?.init?.method, "PUT");
   assert.equal(new Headers(requests[0]?.init?.headers).get("content-type"), "text/plain");
+  assert.equal(requests[0]?.init?.body, "resource {}");
+});
+
+test("uploadProjectAsset sends auth headers for same-origin API uploads", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    restoreWindow(originalWindowDescriptor);
+  });
+
+  installAuthSession();
+
+  globalThis.fetch = async (input, init) => {
+    requests.push({ input, init });
+
+    return new Response(null, {
+      status: 204
+    });
+  };
+
+  await uploadProjectAsset(
+    {
+      method: "PUT",
+      url: `/api/projects/${project.id}/assets/66666666-6666-4666-8666-666666666666/upload-content`,
+      headers: { "Content-Type": "text/plain" },
+      expiresInSeconds: 900
+    },
+    "resource {}"
+  );
+
+  const headers = new Headers(requests[0]?.init?.headers);
+
+  assert.equal(
+    String(requests[0]?.input),
+    `/api/projects/${project.id}/assets/66666666-6666-4666-8666-666666666666/upload-content`
+  );
+  assert.equal(requests[0]?.init?.method, "PUT");
+  assert.equal(requests[0]?.init?.credentials, "include");
+  assert.equal(headers.get("authorization"), "Bearer access-token");
+  assert.equal(headers.get("content-type"), "text/plain");
   assert.equal(requests[0]?.init?.body, "resource {}");
 });
 
@@ -874,6 +1042,72 @@ test("verifyAwsConnection stores verified AWS connection metadata", async (conte
   assert.equal(new Headers(requests[0]?.init?.headers).get("authorization"), "Bearer access-token");
   assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), {
     roleArn: "arn:aws:iam::123456789012:role/SketchCatchTerraformExecutionRole"
+  });
+  assert.equal(response.awsConnection.status, "verified");
+  assert.equal(response.awsConnection.accountId, "123456789012");
+  assert.equal("credentials" in response, false);
+  assert.equal("accessKeyId" in response, false);
+  assert.equal("secretAccessKey" in response, false);
+  assert.equal("sessionToken" in response, false);
+});
+
+test("verifyAwsConnectionCreatedRole stores the CloudFormation-created role by account id", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    restoreWindow(originalWindowDescriptor);
+  });
+
+  installAuthSession();
+
+  globalThis.fetch = async (input, init) => {
+    requests.push({ input, init });
+
+    return new Response(
+      JSON.stringify({
+        ok: true,
+        accountId: "123456789012",
+        callerArn:
+          "arn:aws:sts::123456789012:assumed-role/SketchCatchTerraformExecutionRole/sketchcatch-connection-test",
+        region: "ap-northeast-2",
+        awsConnection: {
+          id: "33333333-3333-4333-8333-333333333333",
+          userId: "22222222-2222-4222-8222-222222222222",
+          accountId: "123456789012",
+          roleArn: "arn:aws:iam::123456789012:role/SketchCatchTerraformExecutionRole",
+          externalId: "sc_conn_33333333-3333-4333-8333-333333333333_random",
+          region: "ap-northeast-2",
+          status: "verified",
+          lastVerifiedAt: "2026-06-26T00:00:00.000Z",
+          createdAt: "2026-06-26T00:00:00.000Z",
+          updatedAt: "2026-06-26T00:00:00.000Z"
+        }
+      }),
+      {
+        headers: {
+          "Content-Type": "application/json"
+        },
+        status: 200
+      }
+    );
+  };
+
+  const response = await verifyAwsConnectionCreatedRole({
+    accountId: "123456789012",
+    connectionId: "33333333-3333-4333-8333-333333333333"
+  });
+
+  assert.equal(
+    String(requests[0]?.input),
+    "/api/aws/connections/33333333-3333-4333-8333-333333333333/verify-created-role"
+  );
+  assert.equal(requests[0]?.init?.method, "POST");
+  assert.equal(new Headers(requests[0]?.init?.headers).get("authorization"), "Bearer access-token");
+  assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), {
+    accountId: "123456789012"
   });
   assert.equal(response.awsConnection.status, "verified");
   assert.equal(response.awsConnection.accountId, "123456789012");

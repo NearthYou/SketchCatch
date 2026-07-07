@@ -1,6 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { and, desc, eq } from "drizzle-orm";
-import type { GitHubRepositoryCandidate } from "@sketchcatch/types";
+import type {
+  GitHubInstalledRepositoryCandidate,
+  GitHubRepositoryCandidate
+} from "@sketchcatch/types";
 import type { Database } from "../db/client.js";
 import { projects, sourceRepositories, touchUpdatedAt } from "../db/schema.js";
 import type { ProjectAccessContext } from "../git-cicd/git-cicd-handoff-service.js";
@@ -16,6 +19,10 @@ export type SourceRepositoryRepository = {
     accessContext: ProjectAccessContext
   ): Promise<SourceRepositoryProjectRecord | undefined>;
   listProjectSourceRepositories(projectId: string): Promise<SourceRepositoryRecord[]>;
+  findProjectSourceRepository(
+    projectId: string,
+    sourceRepositoryId: string
+  ): Promise<SourceRepositoryRecord | undefined>;
   createActiveGitHubSourceRepository(input: CreateActiveGitHubSourceRepositoryInput): Promise<SourceRepositoryRecord>;
 };
 
@@ -42,6 +49,7 @@ export type CreateGitHubInstallUrlResult = {
 
 export type CreateGitHubExistingInstallationCallbackUrlInput = {
   projectId: string;
+  sourceRepositoryId?: string | undefined;
   accessContext: ProjectAccessContext;
   callbackUrl: string;
   stateSecret: string;
@@ -63,6 +71,20 @@ export type ListGitHubInstallationRepositoriesInput = {
 export type ListGitHubInstallationRepositoriesResult = {
   projectId: string;
   repositories: GitHubRepositoryCandidate[];
+};
+
+export type ListGitHubInstalledRepositoriesInput = {
+  projectId: string;
+  accessContext: ProjectAccessContext;
+  stateSecret: string;
+  now?: () => Date;
+};
+
+export type ListGitHubInstalledRepositoriesResult = {
+  projectId: string;
+  state: string;
+  expiresAt: Date;
+  repositories: GitHubInstalledRepositoryCandidate[];
 };
 
 export type ConnectGitHubSourceRepositoryInput = {
@@ -114,6 +136,20 @@ export function createPostgresSourceRepositoryRepository(
         .from(sourceRepositories)
         .where(eq(sourceRepositories.projectId, projectId))
         .orderBy(desc(sourceRepositories.createdAt));
+    },
+
+    async findProjectSourceRepository(projectId, sourceRepositoryId) {
+      const [repository] = await db
+        .select()
+        .from(sourceRepositories)
+        .where(
+          and(
+            eq(sourceRepositories.projectId, projectId),
+            eq(sourceRepositories.id, sourceRepositoryId)
+          )
+        );
+
+      return repository;
     },
 
     async createActiveGitHubSourceRepository(input) {
@@ -203,10 +239,16 @@ export async function createGitHubExistingInstallationCallbackUrl(
     "Project not found"
   );
 
-  const activeRepository = await findActiveGitHubSourceRepository(input.projectId, repository);
+  const reusableRepository = input.sourceRepositoryId
+    ? await findReusableGitHubSourceRepositoryById(
+        input.projectId,
+        input.sourceRepositoryId,
+        repository
+      )
+    : await findReusableGitHubSourceRepository(input.projectId, repository);
 
-  if (!activeRepository?.githubInstallationId) {
-    throw new SourceRepositoryNotFoundError("Active GitHub source repository not found");
+  if (!reusableRepository?.githubInstallationId) {
+    throw new SourceRepositoryNotFoundError("Reusable GitHub source repository not found");
   }
 
   const stateInput = {
@@ -218,7 +260,7 @@ export async function createGitHubExistingInstallationCallbackUrl(
   const { state, expiresAt } = await createGitHubAppState(stateInput);
   const callbackUrl = new URL(input.callbackUrl);
 
-  callbackUrl.searchParams.set("installation_id", activeRepository.githubInstallationId);
+  callbackUrl.searchParams.set("installation_id", reusableRepository.githubInstallationId);
   callbackUrl.searchParams.set("state", state);
 
   return {
@@ -238,6 +280,68 @@ export async function listGitHubInstallationRepositories(
   return {
     projectId: state.projectId,
     repositories
+  };
+}
+
+export async function listGitHubInstalledRepositories(
+  input: ListGitHubInstalledRepositoriesInput,
+  repository: SourceRepositoryRepository,
+  githubAppClient: GitHubAppClient
+): Promise<ListGitHubInstalledRepositoriesResult> {
+  await requireAccessibleProject(
+    input.projectId,
+    input.accessContext,
+    repository,
+    "Project not found"
+  );
+
+  const stateInput = {
+    userId: input.accessContext.userId,
+    projectId: input.projectId,
+    secret: input.stateSecret,
+    ...(input.now ? { now: input.now } : {})
+  };
+  const { state, expiresAt } = await createGitHubAppState(stateInput);
+  const knownRepositories = await repository.listProjectSourceRepositories(input.projectId);
+  const installations = await githubAppClient.listInstallations();
+  const repositories: GitHubInstalledRepositoryCandidate[] = [];
+
+  for (const installation of installations) {
+    const installationRepositories = await githubAppClient.listInstallationRepositories(
+      installation.installationId
+    );
+
+    repositories.push(
+      ...installationRepositories.map((candidate) => {
+        const knownRepository = knownRepositories.find(
+          (known) =>
+            known.githubInstallationId === installation.installationId &&
+            known.githubRepositoryId === candidate.githubRepositoryId
+        );
+
+        return {
+          ...candidate,
+          installationId: installation.installationId,
+          installationAccountLogin: installation.accountLogin,
+          installationAccountType: installation.accountType,
+          installationRepositorySelection: installation.repositorySelection,
+          connectedSourceRepositoryId: knownRepository?.id ?? null,
+          connectedStatus:
+            knownRepository?.status === "active" || knownRepository?.status === "inactive"
+              ? knownRepository.status
+              : null
+        };
+      })
+    );
+  }
+
+  return {
+    projectId: input.projectId,
+    state,
+    expiresAt,
+    repositories: repositories.sort((left, right) =>
+      left.fullName.localeCompare(right.fullName)
+    )
   };
 }
 
@@ -343,7 +447,7 @@ async function requireAccessibleProject(
   return project;
 }
 
-async function findActiveGitHubSourceRepository(
+async function findReusableGitHubSourceRepository(
   projectId: string,
   repository: SourceRepositoryRepository
 ): Promise<SourceRepositoryRecord | null> {
@@ -351,7 +455,33 @@ async function findActiveGitHubSourceRepository(
 
   return (
     repositories.find(
-      (candidate) => candidate.provider === "github" && candidate.status === "active"
+      (candidate) =>
+        candidate.provider === "github" &&
+        candidate.status === "active" &&
+        Boolean(candidate.githubInstallationId)
+    ) ??
+    repositories.find(
+      (candidate) => candidate.provider === "github" && Boolean(candidate.githubInstallationId)
     ) ?? null
   );
+}
+
+async function findReusableGitHubSourceRepositoryById(
+  projectId: string,
+  sourceRepositoryId: string,
+  repository: SourceRepositoryRepository
+): Promise<SourceRepositoryRecord | null> {
+  const sourceRepository = await repository.findProjectSourceRepository(
+    projectId,
+    sourceRepositoryId
+  );
+
+  if (
+    sourceRepository?.provider !== "github" ||
+    !sourceRepository.githubInstallationId
+  ) {
+    return null;
+  }
+
+  return sourceRepository;
 }

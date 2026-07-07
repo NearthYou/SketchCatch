@@ -6,6 +6,7 @@ export type ApiErrorCode =
   | "unauthorized"
   | "not_found"
   | "conflict"
+  | "github_oauth_required"
   | "too_many_requests"
   | "internal_server_error";
 
@@ -449,6 +450,22 @@ export type ListGitHubInstallationRepositoriesRequest = {
 export type ListGitHubInstallationRepositoriesResponse = {
   projectId: string;
   repositories: GitHubRepositoryCandidate[];
+};
+
+export type GitHubInstalledRepositoryCandidate = GitHubRepositoryCandidate & {
+  installationId: string;
+  installationAccountLogin: string;
+  installationAccountType: string | null;
+  installationRepositorySelection: "all" | "selected" | null;
+  connectedSourceRepositoryId: string | null;
+  connectedStatus: "active" | "inactive" | null;
+};
+
+export type ListGitHubInstalledRepositoriesResponse = {
+  projectId: string;
+  state: string;
+  expiresAt: IsoDateTimeString;
+  repositories: GitHubInstalledRepositoryCandidate[];
 };
 
 export type ConnectGitHubSourceRepositoryRequest = {
@@ -972,6 +989,113 @@ export type CostProjectEstimateListResponse = {
   totalEstimate: MoneyEstimate;
   totalMonthlyEstimate: MoneyEstimate;
   projects: CostProjectEstimate[];
+};
+
+export type CostUsageAnalysisRange = "7d" | "30d" | "month_to_date";
+
+export type CostUsageDataSource = "aws_cost_explorer" | "sample";
+
+export type CostProjectUsageSource =
+  | "cost_explorer_tag"
+  | "deployed_resource_estimate"
+  | "sample";
+
+export type CostUsageTrendPoint = {
+  date: string;
+  amount: number;
+};
+
+export type CostServiceUsage = {
+  service: string;
+  amount: number;
+  percentage: number;
+};
+
+export type CostProjectUsage = {
+  projectId: string | null;
+  projectName: string;
+  amount: number;
+  percentage: number;
+  source: CostProjectUsageSource;
+  resourceCount: number;
+};
+
+export type CostResourceUsageSource =
+  | "cost_explorer_resource"
+  | "deployed_resource_estimate"
+  | "sample";
+
+export type CostResourceUsage = {
+  id: string;
+  projectId?: string | undefined;
+  projectName?: string | undefined;
+  resourceId: string | null;
+  resourceName: string;
+  resourceType: string;
+  service: string;
+  terraformAddress: string;
+  amount: number;
+  percentage: number;
+  source: CostResourceUsageSource;
+};
+
+export type CostMetricSeriesPoint = {
+  timestamp: IsoDateTimeString;
+  value: number;
+};
+
+export type CostMetricSeries = {
+  id: string;
+  label: string;
+  unit: string;
+  points: CostMetricSeriesPoint[];
+};
+
+export type CostWasteResourceInsight = {
+  id: string;
+  resourceId: string | null;
+  resourceName: string;
+  resourceType: string;
+  service: string;
+  projectId?: string | undefined;
+  projectName?: string | undefined;
+  metricName: string;
+  averageValue: number;
+  unit: string;
+  finding: string;
+  estimatedMonthlyWaste: MoneyEstimate;
+};
+
+export type CostOptimizationRecommendation = {
+  id: string;
+  targetType: "resource" | "project" | "service";
+  severity: RiskLevel;
+  title: string;
+  estimatedMonthlySavings: MoneyEstimate;
+  reason: string;
+  actionLabel: string;
+  resourceId?: string | undefined;
+  projectId?: string | undefined;
+  service?: string | undefined;
+};
+
+export type CostUsageAnalysisResponse = {
+  range: CostUsageAnalysisRange;
+  generatedAt: IsoDateTimeString;
+  startDate: string;
+  endDate: string;
+  currency: "USD";
+  dataSource: CostUsageDataSource;
+  fallbackUsed: boolean;
+  totalCost: MoneyEstimate;
+  forecastMonthEndCost: MoneyEstimate;
+  dailyTrend: CostUsageTrendPoint[];
+  serviceCosts: CostServiceUsage[];
+  projectCosts: CostProjectUsage[];
+  resourceCosts: CostResourceUsage[];
+  wasteResources: CostWasteResourceInsight[];
+  recommendations: CostOptimizationRecommendation[];
+  metricSeries: CostMetricSeries[];
 };
 
 export type DeploymentLogListResponse = {
@@ -1794,6 +1918,7 @@ export type DiagramNode = {
 
 export type DiagramEdgeStyle = {
   color?: string | undefined;
+  lineStyle?: "solid" | "dashed" | "dotted" | undefined;
   width?: "thin" | "medium" | "thick" | undefined;
   animated?: boolean | undefined;
 };

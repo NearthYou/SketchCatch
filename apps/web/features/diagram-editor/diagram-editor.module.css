@@ -27,6 +27,10 @@
   grid-template-columns: 0 minmax(0, 1fr) 0;
 }
 
+.editorShellRightHidden {
+  grid-template-columns: 0 minmax(0, 1fr) 0;
+}
+
 .leftRail,
 .rightRail {
   background: var(--workspace-surface);
@@ -370,6 +374,14 @@
 .canvasPanel :global(.react-flow__edges) {
   pointer-events: none;
   position: absolute;
+}
+
+.canvasPanel :global(.react-flow__edges) {
+  z-index: 1;
+}
+
+.canvasPanel :global(.react-flow__nodes) {
+  z-index: 2;
 }
 
 .canvasPanel :global(.react-flow__edges svg) {
@@ -889,6 +901,13 @@
   height: 38px;
   justify-content: center;
   width: 38px;
+}
+
+.nodeGlyphIcon {
+  display: block;
+  height: 28px;
+  object-fit: contain;
+  width: 28px;
 }
 
 .nodeContent {

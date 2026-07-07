@@ -4387,12 +4387,699 @@ nextjs-portal {
   gap: 8px;
 }
 
-.workspaceStartProviderGrid {
+.dashboardShell .workspaceStartForm .textInput:focus {
+  background: var(--bp-paper-2);
+}
+
+.workspaceStartModeGrid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.workspaceStartProviderGrid .choiceButton {
-  min-height: 48px;
+.workspaceStartHint {
+  color: var(--dashboard-subtle);
+  font-size: 0.86rem;
+  font-weight: 750;
+  margin: 0;
+}
+
+.workspaceStartModeButton {
+  align-items: flex-start;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--dashboard-border);
+  border-radius: 6px;
+  color: var(--dashboard-muted);
+  cursor: pointer;
+  display: grid;
+  gap: 8px;
+  min-height: 118px;
+  padding: 14px;
+  text-align: left;
+  transition:
+    background 140ms ease,
+    border-color 140ms ease,
+    transform 140ms ease;
+}
+
+.workspaceStartModeButton:not(:disabled):hover,
+.workspaceStartModeButton:not(:disabled):focus-visible {
+  background: rgba(56, 189, 248, 0.1);
+  border-color: rgba(56, 189, 248, 0.42);
+  outline: none;
+  transform: translateY(-1px);
+}
+
+.workspaceStartModeButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
+}
+
+.workspaceStartModeButton span {
+  color: #ffffff;
+  font-size: 1rem;
+  font-weight: 900;
+}
+
+.workspaceStartModeButton small {
+  color: var(--dashboard-subtle);
+  font-size: 0.78rem;
+  font-weight: 750;
+  line-height: 1.45;
+}
+
+.workspaceStartBlankLabel {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: var(--dashboard-subtle);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 0.82rem;
+  font-weight: 850;
+  gap: 8px;
+  justify-self: start;
+  padding: 2px 0;
+}
+
+.workspaceStartBlankLabel::after {
+  background: currentColor;
+  content: "";
+  display: inline-block;
+  height: 1px;
+  opacity: 0.55;
+  width: 28px;
+}
+
+.workspaceStartBlankLabel:not(:disabled):hover,
+.workspaceStartBlankLabel:not(:disabled):focus-visible {
+  color: #ffffff;
+  outline: none;
+}
+
+.workspaceStartBlankLabel:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.reverseCandidateSelectionPanel {
+  background: #ffffff;
+  border: 1px solid #dfe6f1;
+  border-radius: 8px;
+  box-shadow: 0 16px 36px rgba(31, 41, 55, 0.12);
+  color: #182033;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  height: 100%;
+  padding: 18px;
+}
+
+.reverseCandidateSelectionIntro {
+  display: grid;
+  gap: 8px;
+}
+
+.reverseStartGuideEyebrow {
+  color: #2563eb;
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.reverseCandidateSelectionPanel h2 {
+  font-size: 1rem;
+  line-height: 1.25;
+  margin: 0;
+}
+
+.reverseCandidateSelectionIntro span,
+.reverseCandidateSelectionEmpty span,
+.reverseCandidateSelectionCard span {
+  color: #66748a;
+  font-size: 0.84rem;
+  font-weight: 750;
+  line-height: 1.55;
+}
+
+.reverseCandidateSelectionList {
+  display: grid;
+  gap: 10px;
+}
+
+.reverseCandidateSelectionCard,
+.reverseCandidateSelectionEmpty {
+  background: #f7faff;
+  border: 1px solid #dce7f7;
+  border-radius: 10px;
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 14px;
+  text-align: left;
+}
+
+.reverseCandidateSelectionCard {
+  color: #243044;
+  cursor: pointer;
+  font: inherit;
+}
+
+.reverseCandidateSelectionCard:hover,
+.reverseCandidateSelectionCard:focus-visible {
+  background: #eff6ff;
+  border-color: #93c5fd;
+  outline: 2px solid rgba(37, 99, 235, 0.18);
+  outline-offset: 2px;
+}
+
+.reverseCandidateSelectionCardSelected {
+  background: #eff6ff;
+  border-color: #2563eb;
+  box-shadow: inset 4px 0 0 #2563eb;
+}
+
+.reverseCandidateSelectionCard strong,
+.reverseCandidateSelectionEmpty strong {
+  color: #1f2d44;
+  font-size: 0.9rem;
+  font-weight: 900;
+  line-height: 1.35;
+}
+
+.reverseCandidateSelectionCard small {
+  color: #64748b;
+  font-size: 0.75rem;
+  font-weight: 850;
+  line-height: 1.35;
+}
+
+.reverseStartBackButton {
+  align-self: end;
+  background: #f7faff;
+  border: 1px solid #c7d8f5;
+  border-radius: 8px;
+  color: #1c4f91;
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 900;
+  margin-top: auto;
+  min-height: 40px;
+  padding: 0 12px;
+}
+
+.reverseStartBackButton:hover,
+.reverseStartBackButton:focus-visible {
+  background: #eaf2ff;
+  border-color: #8fb5ef;
+  outline: 2px solid rgba(37, 99, 235, 0.2);
+  outline-offset: 2px;
+}
+
+.reverseImportPanelShell {
+  bottom: 24px;
+  max-width: min(520px, calc(100vw - 48px));
+  position: fixed;
+  right: 24px;
+  top: 92px;
+  width: 460px;
+}
+
+.reverseImportPanelShell > * {
+  border-radius: 10px;
+  box-shadow: 0 24px 70px rgba(31, 41, 55, 0.2);
+  height: 100%;
+}
+
+.workspaceAiStartShell {
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.68), rgba(236, 239, 241, 0.88)),
+    var(--bp-page);
+  color: var(--bp-ink);
+  min-height: 100dvh;
+  padding: 24px;
+}
+
+.workspaceAiStartPanel {
+  background: var(--bp-paper);
+  border: 1px solid var(--bp-line);
+  border-radius: var(--bp-r);
+  box-shadow: 0 24px 70px color-mix(in srgb, var(--bp-ink) 16%, transparent);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  height: calc(100dvh - 48px);
+  margin: 0 auto;
+  max-width: 980px;
+  min-height: 620px;
+  overflow: hidden;
+}
+
+.workspaceAiStartHeader {
+  align-items: center;
+  background: color-mix(in srgb, var(--bp-paper-2) 78%, var(--bp-paper));
+  border-bottom: 1px solid var(--bp-line);
+  display: flex;
+  gap: 12px;
+  padding: 14px 16px;
+}
+
+.workspaceAiStartHeader p {
+  color: var(--bp-blue);
+  font-size: 0.74rem;
+  font-weight: 900;
+  margin: 0 0 3px;
+  text-transform: uppercase;
+}
+
+.workspaceAiStartHeader h1 {
+  color: var(--bp-ink);
+  font-size: 1.04rem;
+  line-height: 1.2;
+  margin: 0;
+}
+
+.workspaceAiIconButton {
+  align-items: center;
+  background: var(--bp-paper);
+  border: 1px solid var(--bp-line);
+  border-radius: var(--bp-r);
+  color: var(--bp-blue);
+  cursor: pointer;
+  display: inline-flex;
+  height: 36px;
+  justify-content: center;
+  width: 36px;
+}
+
+.workspaceAiIconButton:hover,
+.workspaceAiIconButton:focus-visible {
+  background: var(--bp-blue-tint);
+  border-color: color-mix(in srgb, var(--bp-blue) 44%, var(--bp-line));
+  outline: none;
+}
+
+.workspaceAiStartTranscript {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  overflow: auto;
+  padding: 18px;
+}
+
+.workspaceAiStartMessage,
+.workspaceAiPreviewCard,
+.workspaceAiStartNotice {
+  background: var(--bp-paper-2);
+  border: 1px solid var(--bp-line);
+  border-radius: var(--bp-r);
+  display: grid;
+  gap: 8px;
+  max-width: 760px;
+  padding: 12px 14px;
+}
+
+.workspaceAiStartUserMessage {
+  align-self: flex-end;
+  background: color-mix(in srgb, var(--bp-blue-tint) 72%, #ffffff);
+  border-color: color-mix(in srgb, var(--bp-blue) 34%, var(--bp-line));
+}
+
+.workspaceAiStartError {
+  background: var(--bp-high-tint);
+  border-color: color-mix(in srgb, var(--bp-high) 42%, var(--bp-line));
+  color: var(--bp-high);
+}
+
+.workspaceAiStartMessage span,
+.workspaceAiPreviewHeader span {
+  color: var(--bp-blue);
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.workspaceAiStartMessage p {
+  color: var(--bp-text);
+  font-size: 0.92rem;
+  line-height: 1.55;
+  margin: 0;
+}
+
+.workspaceAiStartSuggestions,
+.workspaceAiPreviewActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.workspaceAiStartSuggestions button,
+.workspaceAiPrimaryButton,
+.workspaceAiSecondaryButton,
+.workspaceAiStartComposer button {
+  align-items: center;
+  border-radius: 6px;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 850;
+  gap: 6px;
+  justify-content: center;
+  min-height: 36px;
+  padding: 0 12px;
+}
+
+.workspaceAiStartSuggestions button,
+.workspaceAiSecondaryButton {
+  background: var(--bp-paper);
+  border: 1px solid var(--bp-line);
+  color: var(--bp-blue);
+}
+
+.workspaceAiPrimaryButton,
+.workspaceAiStartComposer button {
+  background: var(--bp-blue);
+  border: 1px solid var(--bp-blue);
+  color: #ffffff;
+}
+
+.workspaceAiStartSuggestions button:not(:disabled):hover,
+.workspaceAiStartSuggestions button:not(:disabled):focus-visible,
+.workspaceAiSecondaryButton:not(:disabled):hover,
+.workspaceAiSecondaryButton:not(:disabled):focus-visible {
+  background: var(--bp-blue-tint);
+  border-color: color-mix(in srgb, var(--bp-blue) 46%, var(--bp-line));
+  outline: none;
+}
+
+.workspaceAiPrimaryButton:not(:disabled):hover,
+.workspaceAiPrimaryButton:not(:disabled):focus-visible,
+.workspaceAiStartComposer button:not(:disabled):hover,
+.workspaceAiStartComposer button:not(:disabled):focus-visible {
+  background: color-mix(in srgb, var(--bp-blue) 88%, #000000);
+  border-color: color-mix(in srgb, var(--bp-blue) 88%, #000000);
+  outline: none;
+}
+
+.workspaceAiStartSuggestions button:disabled,
+.workspaceAiPrimaryButton:disabled,
+.workspaceAiSecondaryButton:disabled,
+.workspaceAiStartComposer button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.workspaceAiPreviewCard {
+  max-width: 620px;
+}
+
+.workspaceAiPreviewHeader {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.workspaceAiPreviewHeader h2 {
+  color: var(--bp-ink);
+  font-size: 1rem;
+  line-height: 1.25;
+  margin: 2px 0 0;
+}
+
+.workspaceAiPreviewHeader strong {
+  color: var(--bp-blue);
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.workspaceAiMiniDiagramPanel {
+  display: grid;
+  gap: 8px;
+}
+
+.workspaceAiMiniDiagramToolbar {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.workspaceAiMiniDiagramToolbar span {
+  color: var(--bp-blue);
+  font-family: var(--bp-head);
+  font-size: 0.72rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.workspaceAiMiniDiagramToolbar div {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.workspaceAiMiniDiagramToolbar button {
+  align-items: center;
+  background: var(--bp-paper);
+  border: 1px solid var(--bp-line);
+  border-radius: var(--bp-r);
+  color: var(--bp-blue);
+  display: inline-flex;
+  height: 30px;
+  justify-content: center;
+  padding: 0;
+  width: 30px;
+}
+
+.workspaceAiMiniDiagramToolbar button:hover:not(:disabled),
+.workspaceAiMiniDiagramToolbar button:focus-visible {
+  background: var(--bp-blue-tint);
+  border-color: color-mix(in srgb, var(--bp-blue) 42%, var(--bp-line));
+  outline: none;
+}
+
+.workspaceAiMiniDiagramToolbar button:disabled {
+  color: var(--bp-muted);
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.workspaceAiMiniDiagramViewport {
+  align-items: center;
+  background:
+    linear-gradient(var(--bp-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--bp-grid) 1px, transparent 1px),
+    var(--bp-paper);
+  background-size: 24px 24px;
+  border: 1px solid var(--bp-line);
+  border-radius: var(--bp-r);
+  display: flex;
+  height: clamp(180px, 34vh, 260px);
+  justify-content: center;
+  overflow: hidden;
+}
+
+.workspaceAiMiniDiagram {
+  display: block;
+  height: auto;
+  min-width: 100%;
+  transition: width 140ms ease;
+}
+
+.workspaceAiMiniDiagram[data-fit="true"] {
+  height: 100%;
+  min-width: 0;
+  width: 100%;
+}
+
+.workspaceAiMiniDiagramOverlay {
+  align-items: center;
+  background: color-mix(in srgb, var(--bp-ink) 34%, transparent);
+  display: flex;
+  inset: 0;
+  padding: 24px;
+  position: fixed;
+  z-index: 80;
+}
+
+.workspaceAiMiniDiagramOverlaySurface {
+  background: var(--bp-paper);
+  border: 1px solid color-mix(in srgb, var(--bp-blue) 24%, var(--bp-line));
+  border-radius: var(--bp-r);
+  box-shadow: 0 24px 70px color-mix(in srgb, var(--bp-ink) 22%, transparent);
+  display: grid;
+  gap: 12px;
+  grid-template-rows: auto 1fr;
+  height: min(860px, calc(100vh - 48px));
+  margin: 0 auto;
+  padding: 12px;
+  width: min(1180px, 100%);
+}
+
+.workspaceAiMiniDiagramFullscreenToolbar {
+  border-bottom: 1px solid var(--bp-line);
+  padding-bottom: 10px;
+}
+
+.workspaceAiMiniDiagramFullscreenViewport {
+  align-items: center;
+  background:
+    linear-gradient(var(--bp-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--bp-grid) 1px, transparent 1px),
+    var(--bp-paper);
+  background-size: 24px 24px;
+  border: 1px solid var(--bp-line);
+  border-radius: var(--bp-r);
+  display: flex;
+  justify-content: center;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.workspaceAiMiniDiagramFullscreenViewport[data-zoomed="true"] {
+  align-items: flex-start;
+  justify-content: flex-start;
+  overflow: auto;
+}
+
+.workspaceAiMiniDiagramEdge {
+  stroke: var(--bp-blue);
+  fill: none;
+  stroke-linecap: round;
+  stroke-opacity: 0.44;
+  stroke-width: 1.5;
+}
+
+.workspaceAiMiniDiagramEdgeLabel {
+  fill: var(--bp-ink);
+  font-family: var(--bp-head);
+  font-size: 11px;
+  font-weight: 800;
+  paint-order: stroke;
+  stroke: var(--bp-paper);
+  stroke-linejoin: round;
+  stroke-width: 4px;
+}
+
+.workspaceAiMiniDiagramAreaBody {
+  fill: rgba(255, 255, 255, 0.18);
+  stroke: color-mix(in srgb, var(--bp-blue) 42%, var(--bp-line));
+  stroke-width: 2;
+}
+
+.workspaceAiMiniDiagramAreaHeader rect {
+  fill: color-mix(in srgb, var(--bp-paper-2) 94%, #ffffff);
+  stroke: color-mix(in srgb, var(--bp-blue) 42%, var(--bp-line));
+  stroke-width: 2;
+}
+
+.workspaceAiMiniDiagramAreaHeader image,
+.workspaceAiMiniDiagramResourceNode image {
+  pointer-events: none;
+}
+
+.workspaceAiMiniDiagramAreaLabel,
+.workspaceAiMiniDiagramAreaMeta,
+.workspaceAiMiniDiagramResourceLabel {
+  fill: var(--bp-ink);
+  font-family: var(--bp-head);
+  font-weight: 850;
+  paint-order: stroke;
+  stroke: color-mix(in srgb, var(--bp-paper) 86%, #ffffff);
+  stroke-linejoin: round;
+  stroke-width: 3px;
+}
+
+.workspaceAiMiniDiagramAreaLabel {
+  font-size: 12px;
+}
+
+.workspaceAiMiniDiagramAreaMeta {
+  fill: var(--bp-blue);
+  font-size: 10px;
+}
+
+.workspaceAiMiniDiagramResourceLabel {
+  font-size: 12px;
+}
+
+.workspaceAiMiniDiagramResourceNode image {
+  filter: drop-shadow(0 5px 8px color-mix(in srgb, var(--bp-ink) 12%, transparent));
+}
+
+.workspaceAiMiniDiagramNodeFallback rect {
+  fill: var(--bp-blue-tint);
+  stroke: color-mix(in srgb, var(--bp-blue) 42%, var(--bp-line));
+}
+
+.workspaceAiMiniDiagramNodeFallback text {
+  fill: var(--bp-blue);
+  font-family: var(--bp-head);
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.workspaceAiMiniDiagramNodeFallback path {
+  fill: none;
+  stroke: var(--bp-blue);
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
+.workspaceAiStartComposer {
+  align-items: end;
+  background: color-mix(in srgb, var(--bp-paper-2) 78%, var(--bp-paper));
+  border-top: 1px solid var(--bp-line);
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 14px 16px;
+}
+
+.workspaceAiStartComposer textarea {
+  background: var(--bp-paper);
+  border: 1px solid var(--bp-line);
+  border-radius: var(--bp-r);
+  color: var(--bp-ink);
+  font: inherit;
+  min-height: 72px;
+  padding: 11px 12px;
+  resize: vertical;
+}
+
+.workspaceAiStartComposer textarea:focus {
+  border-color: var(--bp-blue);
+  outline: 2px solid color-mix(in srgb, var(--bp-blue) 18%, transparent);
+}
+
+@media (max-width: 720px) {
+  .workspaceStartModeGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .workspaceStartModeButton {
+    min-height: 96px;
+  }
+
+  .workspaceAiStartShell {
+    padding: 0;
+  }
+
+  .workspaceAiStartPanel {
+    border-radius: 0;
+    height: 100dvh;
+    min-height: 0;
+  }
+
+  .workspaceAiStartTranscript {
+    padding: 14px;
+  }
+
+  .workspaceAiStartComposer {
+    align-items: stretch;
+    grid-template-columns: 1fr;
+  }
 }
 
 .workspaceStartOptionGroup {
@@ -4524,6 +5211,13 @@ nextjs-portal {
   color: var(--dashboard-muted);
   font-weight: 800;
   margin: 0;
+}
+
+.projectListControls {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 240px));
+  justify-content: start;
 }
 
 .dashboardCountBadge {
@@ -8582,24 +9276,62 @@ nextjs-portal {
 }
 
 /* Cost management readability */
+.costTabs {
+  align-items: center;
+  border-bottom: 1px solid var(--bp-line);
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+  overflow-x: auto;
+}
+
+.costTabButton {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: var(--bp-muted);
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-weight: 800;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 12px;
+  white-space: nowrap;
+}
+
+.costTabButton[aria-selected="true"] {
+  border-bottom-color: var(--dashboard-blue);
+  color: var(--bp-ink);
+}
+
 .costOverviewPanel {
   align-items: stretch;
   display: grid;
-  gap: 20px;
-  grid-template-columns: minmax(520px, 1fr) minmax(340px, 420px);
-  padding: 20px;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
+  padding: 14px;
+}
+
+.costHeroPanel {
+  min-height: 0;
+}
+
+.costUsageHeroPanel {
+  align-items: start;
 }
 
 .costOverviewSettings {
   align-content: start;
   display: grid;
-  gap: 18px;
+  gap: 12px;
   min-width: 0;
 }
 
 .costProjectPanel,
 .costNoticePanel {
-  padding: 18px 20px;
+  padding: 14px 16px;
 }
 
 .costPanelTitle {
@@ -8615,9 +9347,207 @@ nextjs-portal {
 
 .costControlGrid {
   align-items: end;
+  gap: 10px;
+  grid-template-columns: minmax(160px, 210px) minmax(190px, 280px) auto;
+  max-width: 680px;
+}
+
+.costUsageControlGrid {
+  grid-template-columns: minmax(160px, 210px) minmax(190px, 280px) auto;
+}
+
+.costAwsConnectionPanel {
+  background: white;
+  border: 1px solid var(--bp-line);
+  border-radius: var(--bp-r);
+  display: grid;
   gap: 12px;
-  grid-template-columns: minmax(180px, 220px) minmax(220px, 320px) auto;
-  max-width: 760px;
+  padding: 14px 16px;
+}
+
+.costAwsConnectionHeader {
+  align-items: start;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+}
+
+.costAwsConnectionHeader h3,
+.costAwsConnectionHeader p {
+  margin: 0;
+}
+
+.costAwsConnectionHeader h3 {
+  color: var(--bp-ink);
+  font-size: 0.98rem;
+  line-height: 1.2;
+}
+
+.costAwsConnectionHeader p,
+.costAwsConnectionNote {
+  color: var(--bp-muted);
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.costAwsConnectionIcon {
+  align-items: center;
+  background: white;
+  border: 1px solid var(--bp-line);
+  border-radius: var(--bp-r);
+  color: var(--dashboard-blue);
+  display: inline-flex;
+  height: 32px;
+  justify-content: center;
+  width: 32px;
+}
+
+.costAwsConnectionStatus {
+  align-items: center;
+  border: 1px solid var(--bp-line);
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 0.78rem;
+  font-weight: 900;
+  gap: 6px;
+  justify-self: end;
+  min-height: 30px;
+  padding: 5px 10px;
+  white-space: nowrap;
+}
+
+.costAwsConnectionStatusLive {
+  background: var(--bp-low-tint);
+  border-color: color-mix(in srgb, var(--bp-low) 36%, var(--bp-line));
+  color: var(--bp-low);
+}
+
+.costAwsConnectionStatusSample {
+  background: color-mix(in srgb, var(--bp-medium) 12%, white);
+  border-color: color-mix(in srgb, var(--bp-medium) 28%, var(--bp-line));
+  color: var(--bp-medium);
+}
+
+.costAwsConnectionControls,
+.costAwsVerifyRow {
+  align-items: end;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(220px, 1fr) auto;
+}
+
+.costAwsConnectionActions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.costAwsConnectionActions .dashboardSecondaryButton,
+.costAwsSetupHeader .dashboardSecondaryButton,
+.costAwsVerifyButton {
+  min-height: 38px;
+}
+
+.costAwsConnectionInfo,
+.costAwsSetupMeta {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0;
+}
+
+.costAwsConnectionInfo div,
+.costAwsSetupMeta div {
+  background: white;
+  border: 1px solid var(--bp-line);
+  border-radius: var(--bp-r);
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 8px 10px;
+}
+
+.costAwsConnectionInfo dt,
+.costAwsSetupMeta dt {
+  color: var(--bp-muted);
+  font-size: 0.76rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.costAwsConnectionInfo dd,
+.costAwsSetupMeta dd {
+  color: var(--bp-ink);
+  font-size: 0.86rem;
+  font-weight: 800;
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.costAwsConnectionNote {
+  margin: 0;
+}
+
+.costAwsSetupPanel {
+  border-top: 1px solid var(--bp-line);
+  display: grid;
+  gap: 12px;
+  padding-top: 12px;
+}
+
+.costAwsSetupHeader {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.costAwsSetupHeader strong,
+.costAwsSetupHeader p {
+  margin: 0;
+}
+
+.costAwsSetupHeader strong {
+  color: var(--bp-ink);
+}
+
+.costAwsSetupHeader p {
+  color: var(--bp-muted);
+  font-size: 0.86rem;
+  font-weight: 700;
+  margin-top: 3px;
+}
+
+.costAwsSetupFallback {
+  background: white;
+  border: 1px solid var(--bp-line);
+  border-radius: var(--bp-r);
+  padding: 10px;
+}
+
+.costAwsSetupFallback summary {
+  color: var(--bp-ink);
+  cursor: pointer;
+  font-size: 0.86rem;
+  font-weight: 900;
+}
+
+.costAwsTemplateArea {
+  background: var(--bp-paper-2);
+  border: 1px solid var(--bp-line);
+  border-radius: var(--bp-r);
+  color: var(--bp-ink);
+  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  margin-top: 10px;
+  min-height: 160px;
+  padding: 10px;
+  resize: vertical;
+  width: 100%;
 }
 
 .costField {
@@ -8628,39 +9558,42 @@ nextjs-portal {
 .costField select {
   background: var(--bp-paper-2);
   border-color: var(--bp-line);
-  min-height: 42px;
+  min-height: 38px;
 }
 
 .costApplyButton {
-  min-height: 42px;
-  padding-inline: 18px;
+  min-height: 38px;
+  padding-inline: 16px;
 }
 
 .costSummaryCard {
-  background: var(--dashboard-blue);
-  border: 1px solid color-mix(in srgb, var(--dashboard-blue) 72%, white);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(236, 245, 250, 0.78)),
+    white;
+  border: 1px solid color-mix(in srgb, var(--dashboard-blue) 22%, var(--bp-line));
   border-radius: var(--bp-r);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
-  color: white;
+  box-shadow: 0 12px 30px rgba(35, 78, 103, 0.08);
+  color: var(--bp-ink);
   display: grid;
-  gap: 14px;
-  min-height: 100%;
-  padding: 20px;
+  gap: 12px;
+  min-height: 0;
+  padding: 14px;
 }
 
 .costSummaryCard .dashboardPanelKicker {
-  color: rgba(255, 255, 255, 0.72);
+  color: var(--dashboard-blue);
 }
 
 .costSummaryCard h2 {
-  color: white;
+  color: var(--bp-ink);
 }
 
 .costSummaryAmount {
-  align-content: center;
+  align-content: start;
   background: transparent;
   border: 0;
-  gap: 6px;
+  display: grid;
+  gap: 8px;
   min-height: auto;
   min-width: 0;
   padding: 0;
@@ -8668,13 +9601,33 @@ nextjs-portal {
 
 .costSummaryAmount span,
 .costSummaryAmount p {
-  color: rgba(255, 255, 255, 0.78);
+  color: var(--bp-muted);
 }
 
 .costSummaryAmount strong {
-  color: white;
-  font-size: 2rem;
+  color: var(--dashboard-blue);
+  font-size: 2.08rem;
   line-height: 1;
+}
+
+.costSummaryMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.costSummaryMeta span {
+  background: white;
+  border: 1px solid var(--bp-line);
+  border-radius: 999px;
+  color: var(--bp-ink);
+  font-size: 0.78rem;
+  font-weight: 800;
+  padding: 5px 9px;
+}
+
+.costUsageProjectSelect {
+  margin-top: 0;
 }
 
 .costProjectPanel {
@@ -8683,13 +9636,13 @@ nextjs-portal {
 
 .costProjectPanel .dashboardPanelHeader {
   border-bottom: 1px solid var(--bp-line);
-  padding-bottom: 12px;
+  padding-bottom: 10px;
 }
 
 .costProjectPanel .dashboardTableHeader,
 .costProjectPanel .dashboardTableRow {
   min-width: 680px;
-  padding-block: 11px;
+  padding-block: 9px;
 }
 
 .costProjectPanel .costStatus {
@@ -8705,9 +9658,9 @@ nextjs-portal {
   background: var(--bp-low-tint);
   border: 1px solid color-mix(in srgb, var(--bp-low) 36%, var(--bp-line));
   border-radius: var(--bp-r);
-  height: 42px;
+  height: 38px;
   padding: 8px;
-  width: 42px;
+  width: 38px;
 }
 
 .costNoticePanel h2 {
@@ -8718,6 +9671,331 @@ nextjs-portal {
   margin: 4px 0 0;
 }
 
+.costUsageMetricPanel,
+.costChartPanel,
+.costRecommendationPanel {
+  gap: 12px;
+  padding: 14px 16px;
+}
+
+.costUsageMetricGrid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.costMetricCard {
+  background: white;
+  border: 1px solid var(--bp-line);
+  border-radius: var(--bp-r);
+  display: grid;
+  gap: 7px;
+  min-height: 82px;
+  padding: 12px;
+}
+
+.costMetricCard span {
+  color: var(--bp-muted);
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.costMetricCard strong {
+  color: var(--bp-ink);
+  font-size: 1.28rem;
+  line-height: 1;
+}
+
+.costMetricIcon {
+  align-items: center;
+  background: color-mix(in srgb, var(--dashboard-blue) 12%, white);
+  border: 1px solid color-mix(in srgb, var(--dashboard-blue) 24%, var(--bp-line));
+  border-radius: var(--bp-r);
+  color: var(--dashboard-blue);
+  display: inline-flex;
+  height: 30px;
+  justify-content: center;
+  width: 30px;
+}
+
+.costLineChart {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.costLineChartSvg {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.86), rgba(255, 255, 255, 0.58)),
+    var(--bp-paper-2);
+  border: 1px solid var(--bp-line);
+  border-radius: var(--bp-r);
+  height: 152px;
+  overflow: visible;
+  padding: 12px;
+  width: 100%;
+}
+
+.costLineChartSvg circle {
+  fill: white;
+  stroke: var(--dashboard-blue);
+  stroke-width: 2;
+}
+
+.costLineChartGrid {
+  fill: none;
+  stroke: color-mix(in srgb, var(--bp-line) 70%, transparent);
+  stroke-width: 1;
+}
+
+.costLineChartPath {
+  fill: none;
+  stroke: var(--dashboard-blue);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 4;
+}
+
+.costLineChartMeta {
+  align-items: center;
+  color: var(--bp-muted);
+  display: flex;
+  font-size: 0.86rem;
+  font-weight: 700;
+  justify-content: space-between;
+}
+
+.costLineChartMeta strong {
+  color: var(--bp-ink);
+}
+
+.costTrendInsight {
+  background: white;
+  border: 1px solid var(--bp-line);
+  border-radius: var(--bp-r);
+  display: grid;
+  gap: 5px;
+  padding: 10px 12px;
+}
+
+.costTrendInsight strong {
+  color: var(--bp-ink);
+}
+
+.costTrendInsight span,
+.costTrendInsight small {
+  color: var(--bp-muted);
+  font-weight: 700;
+}
+
+.costTrendInsight-warning {
+  border-color: color-mix(in srgb, var(--bp-medium) 34%, var(--bp-line));
+}
+
+.costServiceBars {
+  display: grid;
+  gap: 14px;
+}
+
+.costServiceBarRow {
+  display: grid;
+  gap: 8px;
+}
+
+.costServiceBarMeta {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.costServiceBarMeta span {
+  color: var(--bp-ink);
+  font-weight: 800;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.costServiceBarMeta strong {
+  color: var(--dashboard-blue);
+}
+
+.costServiceBarTrack {
+  background: var(--bp-paper-2);
+  border: 1px solid var(--bp-line);
+  border-radius: 999px;
+  height: 12px;
+  overflow: hidden;
+}
+
+.costServiceBarTrack span {
+  background: linear-gradient(90deg, var(--dashboard-blue), var(--bp-medium));
+  border-radius: inherit;
+  display: block;
+  height: 100%;
+}
+
+.costServiceBarRow small {
+  color: var(--bp-muted);
+  font-weight: 700;
+}
+
+.costUsageProjectTable .dashboardTableHeader,
+.costUsageProjectTable .dashboardTableRow {
+  grid-template-columns: minmax(220px, 1.2fr) minmax(110px, 0.5fr) minmax(90px, 0.4fr) minmax(150px, 0.8fr);
+  min-width: 680px;
+}
+
+.costResourceUsageTable .dashboardTableHeader,
+.costResourceUsageTable .dashboardTableRow {
+  grid-template-columns: minmax(240px, 1.2fr) minmax(180px, 0.8fr) minmax(100px, 0.4fr) minmax(130px, 0.6fr);
+  min-width: 760px;
+}
+
+.costResourceUsageTable strong {
+  display: grid;
+  gap: 3px;
+}
+
+.costResourceUsageTable small {
+  color: var(--bp-muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.costUsageProjectRow {
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  width: 100%;
+}
+
+.costUsageProjectRow:hover,
+.costUsageProjectRow:focus-visible,
+.costUsageProjectRow[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--dashboard-blue) 8%, white);
+}
+
+.costUsageProjectRow[aria-pressed="true"] {
+  box-shadow: inset 3px 0 0 var(--dashboard-blue);
+}
+
+.costWasteList,
+.costRecommendationList {
+  display: grid;
+  gap: 12px;
+}
+
+.costWasteItem,
+.costRecommendationItem {
+  background: var(--bp-paper-2);
+  border: 1px solid var(--bp-line);
+  border-radius: var(--bp-r);
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+}
+
+.costWasteItem > div:first-child {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.costWasteItem strong,
+.costRecommendationItem h3 {
+  color: var(--bp-ink);
+}
+
+.costWasteItem h3,
+.costRecommendationItem h3,
+.costWasteItem p,
+.costRecommendationItem p {
+  margin: 0;
+}
+
+.costWasteItem span,
+.costWasteItem p,
+.costRecommendationItem p,
+.costMetricSeriesPreview {
+  color: var(--bp-muted);
+}
+
+.costWasteMeta,
+.costRecommendationHeader {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.costWasteMeta span,
+.costWasteMeta strong {
+  background: white;
+  border: 1px solid var(--bp-line);
+  border-radius: 999px;
+  color: var(--bp-ink);
+  font-size: 0.82rem;
+  padding: 5px 9px;
+}
+
+.costMetricSeriesPreview {
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.84rem;
+  font-weight: 700;
+  gap: 8px;
+}
+
+.costMetricSeriesPreview span {
+  background: white;
+  border: 1px solid var(--bp-line);
+  border-radius: 999px;
+  padding: 6px 10px;
+}
+
+.costRecommendationHeader {
+  justify-content: space-between;
+}
+
+.costRecommendationSeverity {
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 900;
+  padding: 5px 9px;
+}
+
+.costRecommendationSeverityLow {
+  background: var(--bp-low-tint);
+  color: var(--bp-low);
+}
+
+.costRecommendationSeverityMedium {
+  background: color-mix(in srgb, var(--bp-medium) 18%, white);
+  color: var(--bp-medium);
+}
+
+.costRecommendationSeverityHigh {
+  background: var(--bp-high-tint);
+  color: var(--bp-high);
+}
+
+.costRecommendationHeader strong {
+  color: var(--dashboard-blue);
+}
+
+.costRecommendationAction {
+  color: var(--bp-ink);
+  font-weight: 900;
+}
+
 @media (max-width: 1180px) {
   .costOverviewPanel {
     grid-template-columns: 1fr;
@@ -8725,6 +10003,10 @@ nextjs-portal {
 
   .costControlGrid {
     max-width: none;
+  }
+
+  .costUsageMetricGrid {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -8742,5 +10024,47 @@ nextjs-portal {
   .costProjectPanel .dashboardPanelHeader {
     align-items: flex-start;
     flex-direction: row;
+  }
+
+  .costTabs {
+    margin-inline: -4px;
+  }
+
+  .costLineChartSvg {
+    height: 180px;
+  }
+
+  .costUsageMetricPanel,
+  .costChartPanel,
+  .costRecommendationPanel {
+    padding: 16px;
+  }
+
+  .costWasteItem > div:first-child,
+  .costAwsSetupHeader,
+  .costRecommendationHeader {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .costAwsConnectionHeader {
+    grid-template-columns: 34px minmax(0, 1fr);
+  }
+
+  .costAwsConnectionStatus {
+    grid-column: 1 / -1;
+    justify-self: start;
+    white-space: normal;
+  }
+
+  .costAwsConnectionControls,
+  .costAwsVerifyRow,
+  .costAwsConnectionInfo,
+  .costAwsSetupMeta {
+    grid-template-columns: 1fr;
+  }
+
+  .costAwsConnectionActions {
+    justify-content: flex-start;
   }
 }
