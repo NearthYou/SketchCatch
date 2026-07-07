@@ -8,7 +8,7 @@ Branch/worktree:
 
 - Branch: `feat/ys/142-cost-risk-분석-구현`
 - Worktree: `C:\krafton_jungle\SketchCatch`
-- Latest commit before current edits: `8a4b0873 Fix: 서비스별 비용 색상 범례 표시`
+- Latest commit before current edits: `b48a6594 Fix: 서비스별 비용 구분선 정리`
 
 Recent branch work:
 
@@ -18,6 +18,7 @@ Recent branch work:
 - Rewrote waste and recommendation copy to explain the practical action, such as lowering low-usage EC2/RDS resources to smaller instance classes.
 - Added matching color swatches before each service-cost row so the row can be mapped to the stacked service-cost bar.
 - Replaced the per-service thick progress tracks with thin row dividers in the service-cost list.
+- Kept the full project-cost table visible after selecting a project and removed the project usage source column.
 
 Verification this session:
 
@@ -29,6 +30,7 @@ Verification this session:
 - `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed after the code changes.
 - Focused web checks for the service-cost legend update passed: `pnpm --filter @sketchcatch/web exec tsx --test features/costs/cost-usage-charts.test.ts features/costs/cost-usage-project-view.test.ts` and `pnpm --filter @sketchcatch/web typecheck`.
 - Focused web checks for the service-cost divider update passed: `pnpm --filter @sketchcatch/web exec tsx --test features/costs/cost-usage-charts.test.ts features/costs/cost-usage-project-view.test.ts` and `pnpm --filter @sketchcatch/web typecheck`.
+- Focused web checks for the project table update passed: `pnpm --filter @sketchcatch/web exec tsx --test features/costs/cost-usage-project-view.test.ts features/costs/cost-usage-charts.test.ts` and `pnpm --filter @sketchcatch/web typecheck`.
 
 ## Session Record
 
@@ -40,6 +42,7 @@ Verification this session:
 - Attempted browser smoke, but the local Playwright session was unauthenticated and the documented demo account returned 401.
 - Added service-cost row color swatches that reuse the stacked bar segment colors.
 - Removed per-service progress tracks and kept only thin row dividers below the stacked service-cost bar.
+- Updated the project usage table to keep all cached project rows selectable after project-scoped usage loads.
 
 Next steps:
 

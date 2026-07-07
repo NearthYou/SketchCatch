@@ -1115,11 +1115,11 @@ function CostUsageAnalysisTab({
                 <p className="dashboardPanelKicker">Project usage</p>
                 <h2 id="cost-usage-project-title">프로젝트별 실제 비용</h2>
               </div>
-              <span className="dashboardCountBadge">{usageData.projectCosts.length}개</span>
+              <span className="dashboardCountBadge">{projectOptions.length}개</span>
             </div>
             <ProjectUsageTable
               onSelectedProjectChange={selectUsageProject}
-              projectCosts={usageData.projectCosts}
+              projectCosts={selectableProjectCosts}
               selectedProjectKey={appliedUsageProjectKey}
             />
           </section>
@@ -1536,7 +1536,6 @@ function ProjectUsageTable({
         <span>프로젝트</span>
         <span>비용</span>
         <span>비중</span>
-        <span>근거</span>
       </div>
       {projectOptions.map((option) => (
         <button
@@ -1549,7 +1548,6 @@ function ProjectUsageTable({
           <strong>{option.label}</strong>
           <span>{formatUsd(option.amount)}</span>
           <span>{formatPercent(option.percentage)}</span>
-          <span>{getProjectUsageSourceLabel(option.project)}</span>
         </button>
       ))}
     </div>

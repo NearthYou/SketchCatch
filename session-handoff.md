@@ -20,6 +20,7 @@ Current worktree:
 - Waste findings and recommendation actions now use clearer user-facing explanations and concrete downsizing suggestions.
 - Service-cost rows now include color swatches that match the stacked service-cost bar segments.
 - Service-cost rows use thin dividers instead of per-row progress tracks.
+- Project usage table keeps all cached project rows visible after one project is selected, and the project-table source column is removed.
 
 ## Verification
 
