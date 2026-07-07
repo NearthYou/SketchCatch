@@ -50,6 +50,9 @@ importers:
       '@aws-sdk/client-cloudwatch-logs':
         specifier: 3.1073.0
         version: 3.1073.0
+      '@aws-sdk/client-cost-explorer':
+        specifier: 3.1073.0
+        version: 3.1073.0
       '@aws-sdk/client-ec2':
         specifier: 3.1073.0
         version: 3.1073.0
@@ -227,6 +230,10 @@ packages:
 
   '@aws-sdk/client-cloudwatch@3.1073.0':
     resolution: {integrity: sha512-FHO7lhR7QSdgj8jDnrOJ8m7zjpjSaX4SXZZiG7I2HrtEhXL2dTh3e2pxMnbks/gBIUCMLAbncKdWvXp6Y2XokA==}
+    engines: {node: '>=20.0.0'}
+
+  '@aws-sdk/client-cost-explorer@3.1073.0':
+    resolution: {integrity: sha512-ZCDFRTlEGIDvA+bTwRbQbClLvnU82/40WGENs//0ME3y4u/MrZMOmv6REqnQ+WNTlcmSHqqlL8OJspAGvSWAYQ==}
     engines: {node: '>=20.0.0'}
 
   '@aws-sdk/client-ec2@3.1073.0':
@@ -2254,7 +2261,7 @@ snapshots:
       '@aws-crypto/sha256-js': 5.2.0
       '@aws-crypto/supports-web-crypto': 5.2.0
       '@aws-crypto/util': 5.2.0
-      '@aws-sdk/types': 3.973.14
+      '@aws-sdk/types': 3.973.15
       '@aws-sdk/util-locate-window': 3.965.8
       '@smithy/util-utf8': 2.3.0
       tslib: 2.8.1
@@ -2262,7 +2269,7 @@ snapshots:
   '@aws-crypto/sha256-js@5.2.0':
     dependencies:
       '@aws-crypto/util': 5.2.0
-      '@aws-sdk/types': 3.973.14
+      '@aws-sdk/types': 3.973.15
       tslib: 2.8.1
 
   '@aws-crypto/supports-web-crypto@5.2.0':
@@ -2353,6 +2360,19 @@ snapshots:
       '@smithy/core': 3.29.1
       '@smithy/fetch-http-handler': 5.6.1
       '@smithy/middleware-compression': 4.5.6
+      '@smithy/node-http-handler': 4.8.1
+      '@smithy/types': 4.15.1
+      tslib: 2.8.1
+
+  '@aws-sdk/client-cost-explorer@3.1073.0':
+    dependencies:
+      '@aws-crypto/sha256-browser': 5.2.0
+      '@aws-crypto/sha256-js': 5.2.0
+      '@aws-sdk/core': 3.974.27
+      '@aws-sdk/credential-provider-node': 3.972.57
+      '@aws-sdk/types': 3.973.15
+      '@smithy/core': 3.29.1
+      '@smithy/fetch-http-handler': 5.6.1
       '@smithy/node-http-handler': 4.8.1
       '@smithy/types': 4.15.1
       tslib: 2.8.1
@@ -2534,12 +2554,12 @@ snapshots:
 
   '@aws-sdk/core@3.974.25':
     dependencies:
-      '@aws-sdk/types': 3.973.14
+      '@aws-sdk/types': 3.973.15
       '@aws-sdk/xml-builder': 3.972.32
       '@aws/lambda-invoke-store': 0.2.4
-      '@smithy/core': 3.28.0
+      '@smithy/core': 3.29.1
       '@smithy/signature-v4': 5.6.0
-      '@smithy/types': 4.15.0
+      '@smithy/types': 4.15.1
       bowser: 2.14.1
       tslib: 2.8.1
 
@@ -2746,7 +2766,7 @@ snapshots:
 
   '@aws-sdk/types@3.973.14':
     dependencies:
-      '@smithy/types': 4.15.0
+      '@smithy/types': 4.15.1
       tslib: 2.8.1
 
   '@aws-sdk/types@3.973.15':
@@ -3245,7 +3265,7 @@ snapshots:
 
   '@smithy/core@3.28.0':
     dependencies:
-      '@smithy/types': 4.15.0
+      '@smithy/types': 4.15.1
       tslib: 2.8.1
 
   '@smithy/core@3.29.1':
@@ -3267,8 +3287,8 @@ snapshots:
 
   '@smithy/fetch-http-handler@5.6.1':
     dependencies:
-      '@smithy/core': 3.28.0
-      '@smithy/types': 4.15.0
+      '@smithy/core': 3.29.1
+      '@smithy/types': 4.15.1
       tslib: 2.8.1
 
   '@smithy/is-array-buffer@2.2.0':
@@ -3284,8 +3304,8 @@ snapshots:
 
   '@smithy/node-http-handler@4.8.1':
     dependencies:
-      '@smithy/core': 3.28.0
-      '@smithy/types': 4.15.0
+      '@smithy/core': 3.29.1
+      '@smithy/types': 4.15.1
       tslib: 2.8.1
 
   '@smithy/signature-v4@5.5.1':

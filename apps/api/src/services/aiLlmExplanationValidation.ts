@@ -4,7 +4,8 @@ import type { LlmExplanation } from "@sketchcatch/types";
 
 const SUMMARY_MAX_LENGTH = 300;
 const ITEM_MAX_LENGTH = 120;
-const ITEM_MAX_COUNT = 6;
+const DEFAULT_ITEM_MAX_COUNT = 6;
+const DESIGN_SIMULATION_ITEM_MAX_COUNT = 5;
 const CODE_SNIPPET_MAX_LENGTH = 8_000;
 const CONCLUSION_MAX_LENGTH = 600;
 const BLOCKED_GUARANTEE_PHRASES = ["배포 가능 보장", "비용 없음", "보안 안전"] as const;
@@ -55,9 +56,10 @@ export function validateLlmExplanation(value: LlmExplanation | null, fallback: L
     return fallback;
   }
 
+  const itemMaxCount = getTextItemMaxCount(parsed.data.target);
   const summary = validateSummary(parsed.data.summary, fallback.summary);
-  const highlights = validateTextItems(parsed.data.highlights, fallback.highlights);
-  const nextActions = validateTextItems(parsed.data.nextActions, fallback.nextActions);
+  const highlights = validateTextItems(parsed.data.highlights, fallback.highlights, itemMaxCount);
+  const nextActions = validateTextItems(parsed.data.nextActions, fallback.nextActions, itemMaxCount);
   const codeSuggestion = validateCodeSuggestion(parsed.data.codeSuggestion ?? undefined);
   const wellArchitectedConclusion = validateOptionalLongText(parsed.data.wellArchitectedConclusion ?? undefined);
   const includeWellArchitectedConclusion = parsed.data.target !== "terraform_error_explanation";
@@ -115,7 +117,11 @@ function validateSummary(value: string, fallbackValue: string): ValidationResult
 }
 
 // list 필드는 빈 항목과 긴 항목을 제거하고, 전부 사라질 때만 field fallback을 사용합니다.
-function validateTextItems(values: readonly string[], fallbackValues: string[]): ValidationResult<string[]> {
+function validateTextItems(
+  values: readonly string[],
+  fallbackValues: string[],
+  itemMaxCount: number
+): ValidationResult<string[]> {
   let blockedItemFound = false;
   const normalized: string[] = [];
 
@@ -133,7 +139,7 @@ function validateTextItems(values: readonly string[], fallbackValues: string[]):
 
     normalized.push(trimTextItem(trimmed));
 
-    if (normalized.length >= ITEM_MAX_COUNT) {
+    if (normalized.length >= itemMaxCount) {
       break;
     }
   }
@@ -149,6 +155,10 @@ function validateTextItems(values: readonly string[], fallbackValues: string[]):
     value: normalized,
     fallbackUsed: blockedItemFound
   };
+}
+
+function getTextItemMaxCount(target: LlmExplanation["target"]): number {
+  return target === "design_simulation" ? DESIGN_SIMULATION_ITEM_MAX_COUNT : DEFAULT_ITEM_MAX_COUNT;
 }
 
 function validateCodeSuggestion(value: LlmExplanation["codeSuggestion"]): LlmExplanation["codeSuggestion"] {
