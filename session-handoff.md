@@ -14,6 +14,7 @@
   - `api_health` passed with HTTP 200.
   - `access_token` is blocked because `SKETCHCATCH_ACCESS_TOKEN` is not present in the local environment.
   - `handoff_id` is blocked because `SKETCHCATCH_HANDOFF_ID` is not present in the local environment.
+  - PR #218 review feedback was addressed by writing smoke reports as UTF-8 without BOM; the regenerated report starts with bytes `7B 0D 0A`.
 - Next action:
   - In a logged-in SketchCatch session, create a Git/CI/CD handoff from Deployment Panel.
   - Set `SKETCHCATCH_ACCESS_TOKEN` and `SKETCHCATCH_HANDOFF_ID` locally without committing or logging token values.

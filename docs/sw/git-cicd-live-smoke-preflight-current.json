@@ -1,10 +1,10 @@
-﻿{
+{
     "kind":  "sketchcatch_git_cicd_auto_deploy_smoke",
     "mode":  "preflight",
     "status":  "blocked",
     "handoffId":  "",
-    "startedAt":  "2026-07-07T07:56:54.3314550Z",
-    "finishedAt":  "2026-07-07T07:56:54.4714982Z",
+    "startedAt":  "2026-07-07T08:04:57.9053682Z",
+    "finishedAt":  "2026-07-07T08:04:58.0649238Z",
     "pipelineStatus":  null,
     "steps":  [
                   {

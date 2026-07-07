@@ -5,6 +5,7 @@
   - PR #216이 dev에 merge된 뒤 CI 성공과 Production deploy workflow `28850450092` 성공을 확인했다.
   - 운영 `https://sketchcatch.net/health`와 `https://sketchcatch.net/health/db`가 모두 HTTP 200을 반환하는 것을 확인했다.
   - `docs/sw/git-cicd-live-smoke-preflight-current.json`을 생성해 현재 preflight 상태를 파일 증거로 남겼다.
+  - PR #218 리뷰 코멘트를 반영해 smoke runner가 `ReportPath` JSON을 BOM 없는 UTF-8로 쓰도록 수정했고 report를 재생성했다.
   - `docs/sw/git-cicd-live-smoke.md`, `docs/sw/plan6.md`, `feature_list.json`에 현재 blocker와 다음 live run 조건을 반영했다.
 - Verification run:
   - `pnpm harness:check` - passed.
@@ -13,6 +14,8 @@
   - `Invoke-WebRequest -UseBasicParsing https://sketchcatch.net/health -TimeoutSec 20` - HTTP 200, `{"status":"ok"}`.
   - `Invoke-WebRequest -UseBasicParsing https://sketchcatch.net/health/db -TimeoutSec 20` - HTTP 200, `{"status":"ok"}`.
   - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\smoke\git-cicd-auto-deploy.ps1 -PreflightOnly -SkipRepositorySettingsApply -SkipAwsRoleDiffApply -FailOnBlocked -ReportPath docs\sw\git-cicd-live-smoke-preflight-current.json` - exited 1 by design with blocked JSON; `api_health` passed HTTP 200, `access_token` and `handoff_id` were blocked.
+  - PowerShell parser check for `scripts/smoke/git-cicd-auto-deploy.ps1` - passed.
+  - First bytes of `docs/sw/git-cicd-live-smoke-preflight-current.json` are `7B 0D 0A`, proving the report no longer starts with UTF-8 BOM.
 - Known risks:
   - 실제 PR merge, GitHub Environment approval, Terraform apply, S3 release, ASG Instance Refresh, destroy live smoke는 `SKETCHCATCH_ACCESS_TOKEN`과 `SKETCHCATCH_HANDOFF_ID`가 있는 사용자 세션에서만 완료할 수 있다.
   - 이번 preflight는 cloud mutation을 실행하지 않았고, #210은 live report가 생성되기 전까지 완료가 아니다.
