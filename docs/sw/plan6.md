@@ -311,7 +311,8 @@ Current evidence:
 
 Current evidence:
 
-- `scripts/smoke/git-cicd-auto-deploy.ps1`이 repo settings apply, AWS role diff apply, pipeline status, static URL marker 확인 report를 출력한다.
+- `scripts/smoke/git-cicd-auto-deploy.ps1`이 repo settings apply, AWS role diff apply, infra/app/destroy pipeline 상태, static/API URL marker 확인 report를 출력한다.
+- smoke runner는 `-RequirePipelineSuccess`, `-RequireDestroySuccess`, `-TimeoutMinutes`, `-PollSeconds`로 live run 종료 조건을 명시할 수 있다.
 - 실제 PR merge, Environment approval, Terraform apply, app release, ASG refresh, destroy live smoke는 아직 실행 증거가 없다.
 
 목표:
@@ -343,7 +344,8 @@ Current evidence:
 
 2026-07-07 진행:
 
-- targeted API/web tests는 통과했다.
+- targeted API/web tests와 smoke script parser check는 통과했다.
+- smoke runner가 infra/app/destroy 상세 상태, static/API URL marker, pipeline snapshot을 report에 남기도록 보강됐다.
 - 실제 PR merge, Environment approval, Terraform apply, app release, ASG refresh, destroy live smoke는 아직 실행하지 않았다.
 
 ## 이슈와 브랜치 목록

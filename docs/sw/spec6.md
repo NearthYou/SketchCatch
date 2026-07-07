@@ -243,5 +243,6 @@ Deployment Panel은 다음을 보여준다.
 - AWS role diff apply는 승인된 `awsRoleDiff`와 `roleArn`이 있을 때만 IAM trust policy에 GitHub OIDC statement를 적용하고 다시 읽어 검증한다.
 - Deployment Panel에는 `Repo settings 적용`, `AWS role diff 적용` 액션을 추가했고 성공 후 panel snapshot을 다시 로드한다.
 - App workflow는 ASG Launch Template ID 또는 이름을 찾아 `SKETCHCATCH_RELEASE_ID` user data marker를 새 version에 기록하고, Instance Refresh가 성공/실패 상태에 도달할 때까지 polling한다.
-- `scripts/smoke/git-cicd-auto-deploy.ps1`을 추가해 repository settings apply, role diff apply, pipeline status, static URL marker 확인을 한 report로 남길 수 있게 했다.
+- `scripts/smoke/git-cicd-auto-deploy.ps1`을 추가해 repository settings apply, role diff apply, infra/app/destroy pipeline status, static/API URL marker 확인을 한 report로 남길 수 있게 했다.
+- smoke runner는 pipeline success와 destroy success를 필수 조건으로 기다리는 옵션을 제공한다.
 - 실제 PR merge, GitHub Environment approval, Terraform apply, S3 release, ASG Instance Refresh, destroy live smoke는 여전히 비용/자격증명/cleanup 승인 후 실행해야 한다.

@@ -15,7 +15,7 @@
   - AWS role diff apply route now applies approved GitHub OIDC trust statements to IAM and stores `applied/appliedAt/verified` in `awsRoleDiff`.
   - Deployment Panel exposes `Repo settings 적용` and `AWS role diff 적용`, then refreshes the panel snapshot.
   - App workflow now writes `SKETCHCATCH_RELEASE_ID` into a new ASG Launch Template version when `SKETCHCATCH_ASG_NAME` is configured, updates the ASG to that version, and polls Instance Refresh to terminal status.
-  - Added `scripts/smoke/git-cicd-auto-deploy.ps1` for repository settings apply, role diff apply, pipeline status, and static URL marker report generation.
+  - Added `scripts/smoke/git-cicd-auto-deploy.ps1` for repository settings apply, role diff apply, infra/app/destroy pipeline status, static/API URL marker report generation, and optional pipeline/destroy success waits.
 - Verified:
   - `pnpm harness:check` before implementation.
   - `pnpm --filter @sketchcatch/api typecheck`
@@ -26,7 +26,7 @@
   - Repository settings apply has not been exercised against a real target GitHub repository in this session.
   - AWS IAM trust policy apply has not been exercised against a real AWS account in this session.
   - Real PR merge -> Environment approval -> Terraform apply -> S3 release -> ASG Instance Refresh -> destroy live smoke has not run.
-- Next action: run lint/typecheck/build/harness final checks, fix lint issues, then amend/push PR #211. Do not mark the thread goal complete until live/external mutation gaps are either implemented and verified or explicitly accepted as separate remaining scope.
+- Next action: merge/deploy PR #211 when ready, then run the live smoke with prepared GitHub/AWS credentials, Environment approval, cost approval, and cleanup confirmation. Do not mark the thread goal complete until the live smoke report proves the full flow or the remaining external mutation gap is explicitly accepted as separate scope.
 
 ## 2026-07-07 - Demo Web Service E2E handoff
 

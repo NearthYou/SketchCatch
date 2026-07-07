@@ -15,7 +15,8 @@
   - Deployment Panel에 `Repo settings 적용`, `AWS role diff 적용` 버튼을 추가했고, 성공 후 panel snapshot을 다시 로드한다.
   - App workflow가 ASG Launch Template ID/Name을 찾아 `SKETCHCATCH_RELEASE_ID` user data marker를 새 Launch Template version에 기록하고 Instance Refresh 결과를 polling하도록 보강했다.
   - Project Automation이 PR 본문의 일반 HTTP status 숫자를 issue number로 오인하지 않도록 PR title/body는 명시적 `#123` 참조만 파싱하게 수정했다.
-  - `scripts/smoke/git-cicd-auto-deploy.ps1`로 repository settings apply, AWS role diff apply, pipeline status, static URL marker 확인 report를 출력할 수 있게 했다.
+  - `scripts/smoke/git-cicd-auto-deploy.ps1`로 repository settings apply, AWS role diff apply, infra/app/destroy pipeline status, static/API URL marker 확인 report를 출력할 수 있게 했다.
+  - smoke runner에 pipeline success/destroy success 대기 옵션과 pipeline snapshot 기록을 추가했다.
   - `docs/data-models.md`, `docs/deployment.md`, `docs/sw/spec6.md`, `docs/sw/plan6.md`, `docs/sw/agents3.md`를 구현 상태에 맞게 갱신했다.
 - Verification run:
   - `pnpm harness:check` - passed before implementation.
@@ -23,6 +24,7 @@
   - `pnpm --filter @sketchcatch/web typecheck` - passed.
   - `pnpm --filter @sketchcatch/api exec tsx --test src/git-cicd/git-cicd-workflows.test.ts src/routes/git-cicd-handoffs.test.ts src/source-repositories/github-app-client.test.ts` - passed, 23 tests.
   - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/api.test.ts features/workspace/deployment-actions.test.ts` - passed, 42 tests.
+  - PowerShell parser check for `scripts/smoke/git-cicd-auto-deploy.ps1` - passed.
   - `pnpm lint` - passed.
   - `pnpm typecheck` - passed.
   - `pnpm build` - passed.
