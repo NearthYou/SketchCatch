@@ -33,6 +33,15 @@
       "Effect": "Allow",
       "Action": "logs:DescribeLogGroups",
       "Resource": "*"
+    },
+    {
+      "Sid": "AllowSketchCatchAwsConnectionAssumeRole",
+      "Effect": "Allow",
+      "Action": "sts:AssumeRole",
+      "Resource": [
+        "arn:aws:iam::*:role/SketchCatchTerraformExecutionRole",
+        "arn:aws:iam::*:role/SketchCatchTerraformExecutionRole-*"
+      ]
     }
   ]
 }
