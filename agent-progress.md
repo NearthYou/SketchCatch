@@ -8,85 +8,36 @@ Branch/worktree:
 
 - Branch: `chore/ck/226-ai-ui`
 - Worktree: `C:\Jungle\SketchCatch`
-- Base: latest local `dev` at `723ede2c` after fetching and fast-forwarding from `origin/dev`
+- Base: `dev`, with latest remote PR branch changes fetched and rebased locally.
 
 Recent branch work:
 
-- Fixed Korean text rendering on `/workspace/new` by moving raw Unicode escape text into `COPY` constants rendered as JSX expressions.
-- Improved `/workspace/ai` chat UX with transcript auto-scroll, Enter-to-send, Shift+Enter newline, icon-based mini previews, and stable project-name input focus background.
-- Refined `/workspace/ai` mini diagram preview to use the same diagram icon sources as the board, hide names, and relax close icon positions to reduce overlap.
-- Restyled the standalone `/workspace/ai` chat UI from a dark isolated theme to the shared light board/workspace palette.
-- Reworked `/workspace/ai` mini diagram preview again to preserve the generated board coordinates, sizes, labels, area containers, and edges as a scaled board snapshot instead of a simplified icon map.
-- Added a full-screen overlay for the `/workspace/ai` board-style mini preview; the first expanded state fits the whole diagram, then zoom controls allow detailed inspection inside a scrollable frame.
-- Addressed PR #224 review feedback by reusing the created project ID after an approval save failure and by guarding local/session storage writes.
-- Added source and browser regressions for the new project start and AI start flow.
-- Committed the branch work as `2bab6899`.
-
-Latest `dev` imported:
-
-- Runtime IAM policy deployment support from PR #223.
-- `AGENTS.md`, harness, deploy workflow, AWS connection, IAM policy, and documentation updates from `dev`.
-- Compressed `agent-progress.md` and `session-handoff.md` conventions requiring concise English-only state files.
-
-Verification so far:
-
-- `pnpm harness:check` passed before fetching and merging `dev`.
-- Focused web start-mode tests, web typecheck, repo lint, repo typecheck, repo build, and browser smoke checks passed before the merge commit.
-- `pnpm harness:check` passed after completing the merge.
-- `pnpm lint` passed after completing the merge, with non-fatal Turbo cache rename warnings.
-- `pnpm typecheck` passed after completing the merge, with non-fatal Turbo cache rename warnings.
-- `pnpm build` first failed in the sandbox on `.next` unlink `EPERM`; elevated rerun passed.
-- Final `pnpm harness:check` passed after build verification.
-- PR #224 review fix verification passed: focused workspace start tests, harness, lint, typecheck, and elevated build after sandbox `.next` unlink `EPERM`.
-- Latest mini preview change verification passed: focused `workspace-new-project-start-mode.test.ts`, `@sketchcatch/web` typecheck, `git diff --check`, repo `pnpm lint`, repo `pnpm typecheck`, repo `pnpm build`, and `pnpm harness:check`. Browser screenshot verification was skipped because no browser/Playwright runtime is installed in this session.
-- Latest standalone AI chat color verification passed: focused `workspace-new-project-start-mode.test.ts`, `@sketchcatch/web` typecheck, `git diff --check`, repo `pnpm lint`, repo `pnpm typecheck`, and repo `pnpm build`.
-- Latest board-snapshot mini preview verification passed: focused `workspace-new-project-start-mode.test.ts`, `@sketchcatch/web` typecheck, `git diff --check`, repo `pnpm lint`, repo `pnpm typecheck`, and repo `pnpm build`.
-- Latest mini preview full-screen zoom verification passed: focused `workspace-new-project-start-mode.test.ts`, `@sketchcatch/web` typecheck, `git diff --check`, repo `pnpm lint`, repo `pnpm typecheck`, repo `pnpm build`, and `pnpm harness:check`.
-- Branch: `codex/github-existing-repo-first`
-- Worktree: `C:\Users\siwon\Desktop\Jungle\Week17~21\SketchCatch-worktrees\aws-runtime-policy-deploy-fix`
-- Base: latest `dev` imported through `codex/aws-runtime-policy-deploy-fix`
-
-## Session Record
-
-2026-07-07:
-
-- Fetched `origin/dev`.
-- Switched to local `dev` and fast-forwarded it to `723ede2c`.
-- Switched back to `feat/ck/217-create-new-project`.
-- Started merging latest `dev` into this branch.
-- Resolved the only merge conflict in `agent-progress.md` by preserving the current branch summary and adopting the latest concise English-only progress-file format from `dev`.
-- Completed the merge commit.
-- Verified the merge with harness, lint, typecheck, build, final harness, and clean worktree status.
-- Inspected PR #224 review threads and found four unresolved actionable comments from Gemini Code Assist.
-- Added `createdProjectId` reuse in AI approval so retrying after `saveProjectDraft` failure does not create duplicate projects.
-- Wrapped AI start `localStorage.setItem` and new-project `sessionStorage.setItem` calls in `try/catch`.
-- Added regression assertions for the PR review fixes.
-- Updated the AI-start mini diagram preview to render real board icon URLs, include design-area fallback icons, remove visible labels from the SVG, and run a small collision-relaxation pass before drawing.
-- Committed the mini diagram preview fix as `eb488122` (`Fix: AI 초안 미리보기 겹침 개선`).
-- Updated standalone `/workspace/ai` chat colors, message bubbles, composer, and mini preview frame to use the shared light `bp` palette.
-- Replaced the simplified AI-start mini diagram renderer with a scaled board-style SVG renderer that keeps original positions, node sizes, labels, area headers, and edge labels.
-- Committed the board-style mini preview update as `03db3073` (`Fix: AI 초안 미리보기 보드 축소판 적용`).
-- Revised the board-style mini preview so the card view fits the whole diagram, the full-screen overlay opens at whole-diagram fit, and zoom in/out/reset controls work inside the overlay.
-
-Next steps:
-
-- Review the `/workspace/ai` zoomable board-style mini preview visually in a browser-enabled session if available; no pending code verification remains locally.
-- Changed Deployment Panel GitHub connect behavior so it opens an in-app repository chooser first.
-- Added a chooser action for known SketchCatch GitHub source repositories and kept GitHub App install/configure as the explicit add-permissions path.
-- Added a selected-source-repository callback URL route so inactive previous GitHub connections can reopen repository selection.
-- Added a GitHub callback page button for GitHub App install/permission expansion when the desired repository is missing.
-- Addressed PR #227 review feedback: modal-local errors are visible, `sourceRepositoryId` route params require UUIDs, and route tests use UUID fixture IDs.
+- Restyled standalone `/workspace/ai` chat UI to match the shared light board/workspace palette.
+- Reworked the AI draft mini preview into a board-style SVG snapshot that preserves generated positions, node sizes, labels, area headers, and edges.
+- Added a full-screen preview overlay that opens with the whole diagram fit to view, then supports zoom in, zoom out, and reset inside a scrollable frame.
+- Addressed PR #228 review feedback by removing the AI start client BOM, moving preview control accessibility labels into `COPY`, and guarding mini-preview labels with a fallback.
 
 Verification:
 
 - `pnpm harness:check`
-- `pnpm --filter @sketchcatch/api exec tsx --test src/source-repositories/source-repository-service.test.ts src/routes/source-repositories.test.ts`
-- `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-right-panel-layout.test.ts`
+- `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-new-project-start-mode.test.ts`
+- `pnpm --filter @sketchcatch/web typecheck`
+- `git diff --check`
 - `pnpm lint`
 - `pnpm typecheck`
 - `pnpm build`
 - Final `pnpm harness:check`
 
+## Session Record
+
+2026-07-07:
+
+- Inspected PR #228 review threads and found three actionable Gemini Code Assist comments.
+- Removed the BOM before the `"use client"` directive in `workspace-ai-start-client.tsx`.
+- Replaced hardcoded English mini preview control labels and titles with Korean `COPY` entries.
+- Added a safe fallback for mini preview node labels.
+- Rebased the review fix commit onto the latest `origin/chore/ck/226-ai-ui`; resolved the only conflict in this progress file.
+
 Next steps:
 
-- Push the branch and open a PR into `dev`.
+- Push the rebased PR #228 review fix branch to origin.

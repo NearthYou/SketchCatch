@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
@@ -45,6 +45,9 @@ const COPY = {
   chatInput: "AI \uCC44\uD305 \uC785\uB825",
   diagramPreview: "\uB2E4\uC774\uC5B4\uADF8\uB7A8 \uBBF8\uB9AC\uBCF4\uAE30",
   error: "\uC624\uB958",
+  fullScreen: "\uC804\uCCB4 \uD654\uBA74",
+  fullScreenPreviewClose: "\uC804\uCCB4 \uD654\uBA74 \uB2E4\uC774\uC5B4\uADF8\uB7A8 \uBBF8\uB9AC\uBCF4\uAE30 \uB2EB\uAE30",
+  fullScreenPreviewOpen: "\uC804\uCCB4 \uD654\uBA74 \uB2E4\uC774\uC5B4\uADF8\uB7A8 \uBBF8\uB9AC\uBCF4\uAE30 \uC5F4\uAE30",
   generateError: "Architecture Draft \uC0DD\uC131 \uC911 \uC624\uB958\uAC00 \uBC1C\uC0DD\uD588\uC2B5\uB2C8\uB2E4.",
   initialQuestion: "\uD504\uB85C\uC81D\uD2B8 \uC694\uAD6C\uC0AC\uD56D\uC744 \uC785\uB825\uD574\uC8FC\uC138\uC694.",
   loadingDraft: "\uC0C8 \uD504\uB85C\uC81D\uD2B8 \uC815\uBCF4\uB97C \uBD88\uB7EC\uC624\uB294 \uC911\uC785\uB2C8\uB2E4.",
@@ -54,7 +57,10 @@ const COPY = {
   question: "\uC9C8\uBB38",
   regenerate: "\uB2E4\uC2DC \uC0DD\uC131",
   saveApprovedError: "\uC2B9\uC778\uD55C PREVIEW\uB97C \uBCF4\uB4DC\uB85C \uC800\uC7A5\uD558\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4.",
-  send: "\uBCF4\uB0B4\uAE30"
+  send: "\uBCF4\uB0B4\uAE30",
+  zoomIn: "\uD655\uB300",
+  zoomOut: "\uCD95\uC18C",
+  zoomReset: "\uBC30\uC728 \uCD08\uAE30\uD654"
 } as const;
 
 type WorkspaceStartDraft = {
@@ -526,9 +532,9 @@ function MiniDiagramPreview({ diagram }: { readonly diagram: DiagramJson }) {
         <span>100%</span>
         <div>
           <button
-            aria-label="Open full screen diagram preview"
+            aria-label={COPY.fullScreenPreviewOpen}
             onClick={openExpandedPreview}
-            title="Full screen"
+            title={COPY.fullScreen}
             type="button"
           >
             <Maximize2 size={15} aria-hidden="true" />
@@ -554,36 +560,36 @@ function MiniDiagramPreview({ diagram }: { readonly diagram: DiagramJson }) {
               <span>{Math.round(zoomLevel * 100)}%</span>
               <div>
                 <button
-                  aria-label="Zoom diagram out"
+                  aria-label={COPY.zoomOut}
                   disabled={!canZoomOut}
                   onClick={() => setZoomLevel((currentZoomLevel) => getNextMiniDiagramZoom(currentZoomLevel, -1))}
-                  title="Zoom out"
+                  title={COPY.zoomOut}
                   type="button"
                 >
                   <ZoomOut size={15} aria-hidden="true" />
                 </button>
                 <button
-                  aria-label="Zoom diagram in"
+                  aria-label={COPY.zoomIn}
                   disabled={!canZoomIn}
                   onClick={() => setZoomLevel((currentZoomLevel) => getNextMiniDiagramZoom(currentZoomLevel, 1))}
-                  title="Zoom in"
+                  title={COPY.zoomIn}
                   type="button"
                 >
                   <ZoomIn size={15} aria-hidden="true" />
                 </button>
                 <button
-                  aria-label="Reset diagram zoom"
+                  aria-label={COPY.zoomReset}
                   disabled={!isZoomed}
                   onClick={() => setZoomLevel(MINI_DIAGRAM_MIN_ZOOM)}
-                  title="Reset zoom"
+                  title={COPY.zoomReset}
                   type="button"
                 >
                   <RefreshCw size={15} aria-hidden="true" />
                 </button>
                 <button
-                  aria-label="Close full screen diagram preview"
+                  aria-label={COPY.fullScreenPreviewClose}
                   onClick={() => setIsExpanded(false)}
-                  title="Close"
+                  title={COPY.cancel}
                   type="button"
                 >
                   <X size={15} aria-hidden="true" />
@@ -845,7 +851,7 @@ function createMiniDiagramNode(
   const height = node.size.height;
   const centerX = x + width / 2;
   const centerY = y + height / 2;
-  const label = isArea ? getAreaNodeLabel(node) : node.label;
+  const label = (isArea ? getAreaNodeLabel(node) : node.label) ?? "";
   const iconSize = getMiniDiagramResourceIconSize(node);
 
   return {
