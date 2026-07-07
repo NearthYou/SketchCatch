@@ -651,6 +651,402 @@ test("createAmazonQArchitectureDraftResponse sends dynamic global website constr
   assert.equal(response.title, "Dynamic Global Website Practice Architecture");
 });
 
+test("createAmazonQArchitectureDraftResponse respects gated choices for korea-only no-upload no-realtime answers", async () => {
+  const requestedPrompts: string[] = [];
+  const provider = createFakeAmazonQProvider((request) => {
+    requestedPrompts.push(request.prompt);
+
+    return JSON.stringify({
+      status: "preview",
+      title: "Korea Simple API Practice Architecture",
+      architectureJson: {
+        nodes: [
+          {
+            id: "spa-bucket",
+            type: "S3",
+            label: "SPA Assets Bucket",
+            positionX: 120,
+            positionY: 160,
+            config: {}
+          },
+          {
+            id: "cdn",
+            type: "CLOUDFRONT",
+            label: "CloudFront Static Entry",
+            positionX: 360,
+            positionY: 160,
+            config: {}
+          },
+          {
+            id: "alb",
+            type: "LOAD_BALANCER",
+            label: "Application Load Balancer",
+            positionX: 600,
+            positionY: 160,
+            config: {}
+          },
+          {
+            id: "listener",
+            type: "LOAD_BALANCER_LISTENER",
+            label: "HTTP Listener",
+            positionX: 600,
+            positionY: 300,
+            config: {}
+          },
+          {
+            id: "app-a",
+            type: "EC2",
+            label: "API Server A",
+            positionX: 840,
+            positionY: 100,
+            config: {}
+          },
+          {
+            id: "app-b",
+            type: "EC2",
+            label: "API Server B",
+            positionX: 840,
+            positionY: 260,
+            config: {}
+          },
+          {
+            id: "db-subnet-group",
+            type: "DB_SUBNET_GROUP",
+            label: "DB Subnet Group",
+            positionX: 1080,
+            positionY: 160,
+            config: {}
+          },
+          {
+            id: "database",
+            type: "RDS",
+            label: "PostgreSQL Multi-AZ Database",
+            positionX: 1320,
+            positionY: 160,
+            config: {
+              multiAz: true
+            }
+          }
+        ],
+        edges: [
+          {
+            id: "cdn-to-spa",
+            sourceId: "cdn",
+            targetId: "spa-bucket",
+            label: "static origin"
+          },
+          {
+            id: "alb-to-app-a",
+            sourceId: "alb",
+            targetId: "app-a",
+            label: "routes"
+          },
+          {
+            id: "alb-to-app-b",
+            sourceId: "alb",
+            targetId: "app-b",
+            label: "routes"
+          }
+        ]
+      },
+      requirementCoverage: [
+        ...sampleRequirementCoverage(["spa-bucket", "cdn", "alb", "listener", "app-a", "app-b"]),
+        {
+          answer: "no file upload",
+          status: "satisfied",
+          capability: "text_only_data",
+          nodes: ["database"],
+          assumption: "No upload or media flow is modeled."
+        },
+        {
+          answer: "no realtime",
+          status: "satisfied",
+          capability: "request_response_only",
+          nodes: ["alb", "app-a", "app-b"],
+          assumption: "No realtime channel is modeled."
+        },
+        {
+          answer: "99.99% availability with database",
+          status: "satisfied",
+          capability: "rds_multi_az",
+          nodes: ["db-subnet-group", "database"],
+          assumption: "RDS Multi-AZ is configured for the availability target."
+        }
+      ]
+    });
+  });
+
+  const response = await createAmazonQArchitectureDraftResponse(
+    {
+      prompt: createKoreaNoUploadNoRealtimePrompt()
+    },
+    {
+      provider,
+      creditPolicy: confirmedCreditPolicy
+    }
+  );
+
+  if ("status" in response) {
+    assert.fail(`Expected preview, got clarification: ${response.question}`);
+  }
+
+  assert.equal(requestedPrompts.length, 1);
+  assert.match(requestedPrompts[0] ?? "", /Question gates: ask realtime implementation only when the user selected realtime/);
+  assert.match(requestedPrompts[0] ?? "", /No file upload forbids upload\/media\/presigned/);
+  assert.match(requestedPrompts[0] ?? "", /Region scope is Korea only/);
+  assert.equal(response.title, "Korea Simple API Practice Architecture");
+});
+
+test("createAmazonQArchitectureDraftResponse regenerates previews that violate no-upload and no-realtime choices", async () => {
+  const requestedPrompts: string[] = [];
+  const provider = createFakeAmazonQProvider((request) => {
+    requestedPrompts.push(request.prompt);
+
+    if (requestedPrompts.length === 1) {
+      return JSON.stringify({
+        status: "preview",
+        title: "Invalid Korea Website",
+        architectureJson: {
+          nodes: [
+            {
+              id: "spa-bucket",
+              type: "S3",
+              label: "SPA Assets Bucket",
+              positionX: 120,
+              positionY: 160,
+              config: {}
+            },
+            {
+              id: "upload-bucket",
+              type: "S3",
+              label: "Upload Storage Bucket",
+              positionX: 120,
+              positionY: 320,
+              config: {}
+            },
+            {
+              id: "cdn",
+              type: "CLOUDFRONT",
+              label: "CloudFront Static Entry",
+              positionX: 360,
+              positionY: 160,
+              config: {}
+            },
+            {
+              id: "websocket-api",
+              type: "API_GATEWAY_REST_API",
+              label: "WebSocket Notification API",
+              positionX: 600,
+              positionY: 160,
+              config: {}
+            },
+            {
+              id: "app",
+              type: "EC2",
+              label: "Single API Server",
+              positionX: 840,
+              positionY: 160,
+              config: {}
+            },
+            {
+              id: "db-subnet-group",
+              type: "DB_SUBNET_GROUP",
+              label: "DB Subnet Group",
+              positionX: 1080,
+              positionY: 160,
+              config: {}
+            },
+            {
+              id: "database",
+              type: "RDS",
+              label: "PostgreSQL Multi-AZ Database",
+              positionX: 1320,
+              positionY: 160,
+              config: {
+                multiAz: true
+              }
+            }
+          ],
+          edges: [
+            {
+              id: "cdn-to-spa",
+              sourceId: "cdn",
+              targetId: "spa-bucket",
+              label: "static origin"
+            }
+          ]
+        },
+        requirementCoverage: [
+          ...sampleRequirementCoverage(["spa-bucket", "cdn", "app"]),
+          {
+            answer: "websocket notification",
+            status: "satisfied",
+            capability: "realtime_notification",
+            nodes: ["websocket-api"],
+            assumption: "WebSocket notifications are included."
+          },
+          {
+            answer: "image upload",
+            status: "satisfied",
+            capability: "upload_media",
+            nodes: ["upload-bucket"],
+            assumption: "Presigned URL upload flow is included."
+          },
+          {
+            answer: "99.99% database",
+            status: "satisfied",
+            capability: "rds_multi_az",
+            nodes: ["db-subnet-group", "database"],
+            assumption: "RDS Multi-AZ is configured."
+          }
+        ]
+      });
+    }
+
+    return JSON.stringify({
+      status: "preview",
+      title: "Corrected Korea Website",
+      architectureJson: {
+        nodes: [
+          {
+            id: "spa-bucket",
+            type: "S3",
+            label: "SPA Assets Bucket",
+            positionX: 120,
+            positionY: 160,
+            config: {}
+          },
+          {
+            id: "cdn",
+            type: "CLOUDFRONT",
+            label: "CloudFront Static Entry",
+            positionX: 360,
+            positionY: 160,
+            config: {}
+          },
+          {
+            id: "alb",
+            type: "LOAD_BALANCER",
+            label: "Application Load Balancer",
+            positionX: 600,
+            positionY: 160,
+            config: {}
+          },
+          {
+            id: "listener",
+            type: "LOAD_BALANCER_LISTENER",
+            label: "HTTP Listener",
+            positionX: 600,
+            positionY: 300,
+            config: {}
+          },
+          {
+            id: "app-a",
+            type: "EC2",
+            label: "API Server A",
+            positionX: 840,
+            positionY: 100,
+            config: {}
+          },
+          {
+            id: "app-b",
+            type: "EC2",
+            label: "API Server B",
+            positionX: 840,
+            positionY: 260,
+            config: {}
+          },
+          {
+            id: "db-subnet-group",
+            type: "DB_SUBNET_GROUP",
+            label: "DB Subnet Group",
+            positionX: 1080,
+            positionY: 160,
+            config: {}
+          },
+          {
+            id: "database",
+            type: "RDS",
+            label: "PostgreSQL Multi-AZ Database",
+            positionX: 1320,
+            positionY: 160,
+            config: {
+              multiAz: true
+            }
+          }
+        ],
+        edges: [
+          {
+            id: "cdn-to-spa",
+            sourceId: "cdn",
+            targetId: "spa-bucket",
+            label: "static origin"
+          },
+          {
+            id: "alb-to-app-a",
+            sourceId: "alb",
+            targetId: "app-a",
+            label: "routes"
+          },
+          {
+            id: "alb-to-app-b",
+            sourceId: "alb",
+            targetId: "app-b",
+            label: "routes"
+          }
+        ]
+      },
+      requirementCoverage: [
+        ...sampleRequirementCoverage(["spa-bucket", "cdn", "alb", "listener", "app-a", "app-b"]),
+        {
+          answer: "no file upload",
+          status: "satisfied",
+          capability: "text_only_data",
+          nodes: ["database"],
+          assumption: "No upload or media flow is modeled."
+        },
+        {
+          answer: "no realtime",
+          status: "satisfied",
+          capability: "request_response_only",
+          nodes: ["alb", "app-a", "app-b"],
+          assumption: "No realtime channel is modeled."
+        },
+        {
+          answer: "99.99% database",
+          status: "satisfied",
+          capability: "rds_multi_az",
+          nodes: ["db-subnet-group", "database"],
+          assumption: "RDS Multi-AZ is configured."
+        }
+      ]
+    });
+  });
+
+  const response = await createAmazonQArchitectureDraftResponse(
+    {
+      prompt: createKoreaNoUploadNoRealtimePrompt()
+    },
+    {
+      provider,
+      creditPolicy: confirmedCreditPolicy
+    }
+  );
+
+  if ("status" in response) {
+    assert.fail(`Expected preview, got clarification: ${response.question}`);
+  }
+
+  assert.equal(requestedPrompts.length, 2);
+  assert.match(requestedPrompts[1] ?? "", /selected no file upload/);
+  assert.match(requestedPrompts[1] ?? "", /selected no realtime feature/);
+  assert.match(requestedPrompts[1] ?? "", /only one app compute target/);
+  assert.match(requestedPrompts[1] ?? "", /lacks LOAD_BALANCER and LOAD_BALANCER_LISTENER/);
+  assert.equal(response.title, "Corrected Korea Website");
+  assert.equal(response.architectureJson.nodes.some((node) => node.id === "upload-bucket"), false);
+  assert.equal(response.architectureJson.nodes.some((node) => node.id === "websocket-api"), false);
+});
+
 test("createAmazonQArchitectureDraftResponse sends detailed architecture briefs directly to Amazon Q", async () => {
   let requestedPrompt = "";
   const provider = createFakeAmazonQProvider((request) => {
@@ -1273,6 +1669,29 @@ test("createAmazonQArchitectureDraftResponse asks Amazon Q to regenerate preview
   assert.equal(response.title, "Clear Edge Draft");
   assert.equal(response.architectureJson.nodes.find((node) => node.id === "asset-bucket")?.positionY, 260);
 });
+
+function createKoreaNoUploadNoRealtimePrompt(): string {
+  return [
+    "website type: dynamic SPA website with simple API and DB",
+    "traffic: small daily traffic under 100 concurrent users under 10",
+    "database: PostgreSQL database required",
+    "frontend: React/Vue/Angular SPA framework",
+    "backend: simple API Node.js or Python Flask",
+    "region: Korea only Seoul region ap-northeast-2",
+    "budget cost: 100 monthly",
+    "SSL HTTPS: optional HTTP is acceptable",
+    "file upload: none no file upload text only",
+    "realtime: none no realtime features",
+    "management preference: semi-managed operations",
+    "loading time: 1 second",
+    "website size: 10MB-100MB",
+    "traffic pattern: steady traffic",
+    "downtime tolerance: 99.99% availability",
+    "tradeoff: target architecture with cost warning",
+    "global deployment: CloudFront for static assets only, API and RDS single Seoul region",
+    "database budget decision: include database"
+  ].join("\n");
+}
 
 function sampleRequirementCoverage(nodes: string[] = []): Array<{
   answer: string;

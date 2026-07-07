@@ -3632,3 +3632,67 @@
   - `git diff --check` - passed, with line-ending warnings only.
 - Known risks:
   - Real Amazon Q Business was not called locally. The fake provider verifies prompt, follow-up, and validation behavior, but live diagram quality still needs product QA with the actual Q response.
+# 2026-07-07 - Amazon Q 다이어그램 Region/AZ area와 edge handle 복구
+
+- Goal: Amazon Q 다이어그램 결과에서 `aws_region`/`aws_availability_zone`이 area container가 아니라 일반 아이콘처럼 렌더링되고, 모든 화살표가 사라지는 회귀를 수정한다.
+- Completed:
+  - `aws_region`, `aws_availability_zone`을 web diagram editor의 resource area node 판별 목록에 추가했다.
+  - Region/AZ resource area의 resize bounds를 catalog 기본 크기에 맞춰 무제한 area resize로 보정했다.
+  - React Flow edge mapper가 내보내는 `source-handle-*`, `target-handle-*` id와 실제 `DiagramNodeView` handle 렌더링을 맞췄다.
+  - 잠긴 노드나 preview 노드에서도 기존 edge 렌더링에 필요한 handle DOM은 유지하고, 새 연결 가능 여부만 `isConnectable`로 제어하게 했다.
+  - area 판별, resize bounds, edge handle mapping, node view handle 계약 회귀 테스트를 보강했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits.
+  - `corepack pnpm --dir apps/web exec tsx --test features/diagram-editor/area-nodes.test.ts features/diagram-editor/node-resize-bounds.test.ts features/diagram-editor/flow-mappers.test.ts features/diagram-editor/DiagramNodeView.test.ts` - passed, 27 tests.
+  - `corepack pnpm harness:check` - passed after edits.
+  - `corepack pnpm --filter @sketchcatch/web lint` - passed.
+  - `corepack pnpm --filter @sketchcatch/web typecheck` - passed.
+  - `corepack pnpm --filter @sketchcatch/web build` - passed.
+- Known risks:
+  - 실제 브라우저 수동 smoke는 아직 수행하지 않았다. 이번 수정은 local unit/source 계약 테스트와 Next build로 검증했다.
+
+# 2026-07-07 - 미지원 요구사항 경고 메시지 상세화
+
+- Goal: Architecture Draft가 지원하지 않는 요구사항을 대체하거나 제외할 때, 경고 메시지에 어떤 항목이 미지원이었고 어떤 방식으로 바뀌었는지 표시한다.
+- Completed:
+  - `unsupported_requirement_substituted` warning 메시지에 `미지원 항목 X -> Y로 대체` 형식을 추가했다.
+  - `unsupported_resource_omitted` warning 메시지에 `미지원 항목 X -> 현재 보드에서 제외` 형식을 추가했다.
+  - API route regression test가 EKS/Kubernetes 대체와 ElastiCache/Redis 제외 상세 문구를 검증하도록 보강했다.
+- Verification run:
+  - `corepack pnpm --dir apps/api exec tsx --test src/routes/ai.test.ts --test-name-pattern "unsupported"` - passed, 44 tests.
+  - `corepack pnpm harness:check` - passed.
+  - `corepack pnpm lint` - passed.
+  - `corepack pnpm typecheck` - passed.
+  - `corepack pnpm build` - passed.
+- Known risks:
+  - 기존 warning code와 UI 렌더링 구조는 유지했다. 이번 변경은 API warning message content 개선에 한정된다.
+
+# 2026-07-07 - Amazon Q 전체 선택지 제약 및 조건부 게이트 보강
+
+- Goal: 사용자가 선택하지 않은 파일 업로드/실시간/글로벌 범위가 Amazon Q 다이어그램에 섞이지 않도록, 전체 선택지에 대한 프롬프트 제약과 self-validation 재생성 조건을 강화한다.
+- Completed:
+  - Amazon Q Architecture Draft 지시문에 전체 선택지 enforcement matrix를 추가해 traffic/frontend/backend/region/security/upload/realtime/availability 선택별 포함/금지 규칙을 전달했다.
+  - Korea-only, no file upload, no realtime 선택을 절대 제약으로 Architecture Brief에 반영하고, 해당 선택에서는 글로벌/업로드/실시간 후속 질문이 뜨지 않게 조건부 게이트를 보강했다.
+  - Amazon Q preview가 upload/media/presigned 리소스나 WebSocket/SSE/realtime 리소스를 섞어 오면 self-validation issue로 잡아 repair prompt에 전달하게 했다.
+  - `SSE` 감지가 `assets` 같은 단어를 오탐하지 않도록 단어 경계 기반으로 좁혔다.
+  - 깨진 한글 정규식 기반 답변 감지를 안전한 키워드 헬퍼로 교체하고, 사용자에게 보이는 기본 질문/선택지와 예산-가용성 충돌 질문 문구를 정상 한글로 유지했다.
+- Verification run:
+  - `corepack pnpm --filter @sketchcatch/api typecheck` - passed.
+  - `apps/api/node_modules/.bin/tsx.CMD --test apps/api/src/services/aiArchitectureDrafts.test.ts` - passed, 12 tests.
+- Known risks:
+  - 실제 Amazon Q Business 호출은 로컬에서 실행하지 않았다. fake provider 테스트로 프롬프트 내용, 조건부 게이트, self-validation repair 동작을 검증했다.
+# 2026-07-07 - Amazon Q 선택지 게이트 후속 점검
+
+- Goal: 전체 선택지 제약 보강 후 답변 감지 로직이 과하게 넓거나 인코딩/문법이 꼬인 부분이 없는지 재점검한다.
+- Completed:
+  - `필요 없음`, `추천`, `상관없음` 같은 공통 선택 문구가 다른 질문의 답변으로 오인될 수 있는 조건을 좁혔다.
+  - `API 서버` 웹사이트 유형 선택은 유지하되, 일반 `api` 단어만으로 웹사이트 유형 답변이 처리되지 않게 했다.
+  - `aiArchitectureDrafts.ts`에 BOM 또는 replacement character가 없음을 확인했다.
+- Verification run:
+  - `corepack pnpm --filter @sketchcatch/api typecheck` - passed.
+  - `apps/api/node_modules/.bin/tsx.CMD --test apps/api/src/services/aiArchitectureDrafts.test.ts` - passed, 12 tests.
+  - `git diff --check` - passed, with line-ending warnings only.
+  - `corepack pnpm --filter @sketchcatch/api lint` - passed.
+  - `corepack pnpm harness:check` - passed.
+- Known risks:
+  - 실제 Amazon Q Business 호출은 로컬에서 실행하지 않았다.

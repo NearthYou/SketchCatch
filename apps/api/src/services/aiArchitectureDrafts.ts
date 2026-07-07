@@ -85,16 +85,34 @@ const AMAZON_Q_CLARIFICATION_CHOICE_CONSTRAINTS = [
   "Database: no database => do not add RDS or DB_SUBNET_GROUP; simple data => include the lightest suitable storage and explain assumptions; medium relational data or PostgreSQL/MySQL => include RDS and DB_SUBNET_GROUP in private DB subnets; large or complex data => include stronger RDS config, encryption, backups, alarms, and scaling assumptions.",
   "Frontend: HTML/CSS/JS => S3 plus CLOUDFRONT static delivery; React/Vue/Angular SPA => S3 plus CLOUDFRONT and API origin when backend exists; Next.js/Nuxt.js SSR => include runtime compute or serverless runtime plus static asset delivery; mobile app => emphasize API/backend, auth/security, and media/API entry rather than a website-only frontend.",
   "Backend: none => do not add EC2, LAMBDA, API_GATEWAY_REST_API, LOAD_BALANCER, or RDS solely for backend; simple API => use the smallest supported API path such as LAMBDA plus API_GATEWAY_REST_API or one small EC2 when explicitly preferred; complex business logic => include backend compute behind LOAD_BALANCER plus LOAD_BALANCER_LISTENER with private app subnets when VPC is present; microservices => represent multiple service components or compute nodes and shared entry/observability without inventing unsupported resource types.",
-  "User region: Korea only => prefer Seoul/ap-northeast-2 assumptions and regional cost efficiency; Asia Pacific => include CLOUDFRONT when frontend/media exists and note regional latency assumptions; global including US/Europe => include CLOUDFRONT and a global entry assumption, and warn when a single-region database/API cannot guarantee global sub-second API latency; specific region => preserve that region in assumptions and resource labels.",
+  "User region: Korea only => keep API, database, and regional resources in Seoul/ap-northeast-2 assumptions; CloudFront may be used for fast static delivery, but do not describe the design as multi-region or global-user architecture; Asia Pacific => include CLOUDFRONT when frontend/media exists and note regional latency assumptions; global including US/Europe => include CLOUDFRONT and a global entry assumption, and warn when a single-region database/API cannot guarantee global sub-second API latency; specific region => preserve that region in assumptions and resource labels.",
   "Budget: very low/minimum budget => prefer serverless/static/minimal managed resources and clearly trade off high availability; moderate budget => balance managed services with cost controls; high budget => allow Multi-AZ, load balancing, stronger monitoring, encryption, and backups; enterprise budget => include stronger resilience/security/operations assumptions. Never hide a budget/SLA conflict.",
   "HTTPS: required => include CLOUDFRONT or LOAD_BALANCER HTTPS path, ROUTE53_RECORD when a domain is implied, and certificate requirements in config/assumptions because ACM is not a supported node type; optional HTTP => keep HTTPS recommendation in nextActions but do not overbuild solely for certificates; unknown => recommend HTTPS in nextActions.",
-  "File upload: none => do not add a media bucket for uploads; image only => include a separate S3 media bucket and presigned upload flow; documents/video/mixed files => include S3 media bucket, IAM policy boundaries, KMS when security matters, and lifecycle/size assumptions; large files over 100MB => use direct-to-S3 upload assumptions and avoid proxying through the app server.",
-  "Realtime: none => do not add realtime-only nodes; realtime chat => include a persistent notification/chat path using supported API/backend resources and explain WebSocket/SSE assumptions; realtime notification => include a lighter notification path and do not omit it; realtime data updates => include stronger scaling/monitoring assumptions for the update stream.",
+  "File upload: none => STRICTLY FORBIDDEN to add upload/media/file-processing buckets, presigned URL flows, or upload-specific IAM policy paths; image only => include a separate S3 media bucket and presigned upload flow; documents/video/mixed files => include S3 media bucket, IAM policy boundaries, KMS when security matters, and lifecycle/size assumptions; large files over 100MB => use direct-to-S3 upload assumptions and avoid proxying through the app server.",
+  "Realtime: none => STRICTLY FORBIDDEN to add WebSocket, SSE, realtime notification, realtime processing, or notification-only resources; realtime chat => include a persistent notification/chat path using supported API/backend resources and explain WebSocket/SSE assumptions; realtime notification => include a lighter notification path and do not omit it; realtime data updates => include stronger scaling/monitoring assumptions for the update stream.",
   "Management preference: fully managed/serverless => prefer S3, CLOUDFRONT, LAMBDA, API_GATEWAY_REST_API, and managed RDS where data is required, avoiding manually managed EC2 unless explicitly requested; semi-managed => LOAD_BALANCER plus EC2 app tier or managed services with some server responsibility is acceptable; direct/self-managed => EC2 is acceptable but still include security, logs, backups, and alarms; unknown => choose the lowest-operational-burden option that satisfies other answers.",
   "Page loading goal: under 1 second => use CLOUDFRONT for static/media assets and warn when dynamic API latency is limited by region/database placement; under 3 seconds => use normal CDN/static caching when suitable; under 5 seconds => avoid expensive over-optimization unless required by other answers; no preference => optimize for cost and simplicity.",
   "Website size: under 10MB => static/CDN-friendly minimal asset assumptions; 10MB-100MB => normal SPA/static asset delivery; 100MB-1GB/image-heavy => media S3 bucket, CloudFront caching, and lifecycle assumptions; 1GB+/video => S3 media storage, CloudFront delivery, and direct upload/lifecycle assumptions.",
   "Traffic pattern: steady => stable baseline capacity; time-of-day peak => autoscaling/alarms or burst assumptions; event spike => elastic/serverless or explicit scale-out plus alarm assumptions; unpredictable => prefer elastic capacity and stronger monitoring.",
   "Downtime tolerance: 99.99% or no downtime => no single-AZ/single-EC2 design when backend/database exists, include Multi-AZ app and RDS Multi-AZ where applicable; 99.9% => use at least managed backups/monitoring and consider Multi-AZ for stateful tiers; 99% => cost-optimized single-region/simple redundancy may be acceptable; no preference => choose cost-conscious defaults."
+] as const;
+
+const AMAZON_Q_CLARIFICATION_CHOICE_ENFORCEMENT_RULES = [
+  "Complete option enforcement rules:",
+  "Question gates: ask realtime implementation only when the user selected realtime chat, realtime notification, or realtime data updates; never ask it when the user selected no realtime. Ask upload implementation only when the user selected image, mixed, or large-file upload; never ask it when the user selected no file upload. Ask multi-region/global performance scope only for Asia Pacific/global/specific-region/global-latency requirements; never ask it just because Korea-only uses CloudFront for static acceleration.",
+  "Mutual exclusion: a selected 'none' answer is stronger than a generic feature mention. No backend forbids backend-only compute/API resources unless another explicit answer requires an API. No database forbids RDS/DB_SUBNET_GROUP. No file upload forbids upload/media/presigned/file-processing resources. No realtime forbids WebSocket/SSE/realtime/user-notification resources.",
+  "Traffic matrix: small traffic should stay minimal unless availability overrides it; medium traffic should add scalable entry and app capacity when backend exists; large traffic should add load balancing, multiple targets, stronger database and alarms; bursty/event traffic should add elastic scaling assumptions and alarms.",
+  "Frontend matrix: pure HTML/CSS/JS should be static S3/CloudFront; SPA should be S3/CloudFront with SPA fallback plus a separate API origin when backend exists; SSR should include runtime compute or serverless runtime and must not be represented as pure S3-only hosting; mobile should emphasize secure APIs, auth assumptions, and upload/API entry rather than website-only hosting.",
+  "Backend matrix: no backend means static-only; simple API means Lambda/API Gateway or a small EC2 path; complex business logic means load-balanced backend compute with logs/security boundaries; microservices means multiple service components or compute nodes and shared entry/observability while staying within supported ResourceNode types.",
+  "Region matrix: Korea-only means regional resources in ap-northeast-2 and no multi-region wording; Asia Pacific means CloudFront plus APAC latency assumptions; global means CloudFront/global entry and explicit single-region API/RDS latency warning unless multi-region is chosen; specific region means preserve residency/compliance assumptions.",
+  "Security matrix: HTTPS required means HTTPS path, certificate assumption/config, and redirect/security notes; HTTP optional means do not overbuild solely for certificates; unknown means recommend HTTPS in nextActions.",
+  "Upload matrix: no upload means text/data only; image upload means direct-to-S3/presigned media bucket; mixed documents/video means S3 lifecycle, IAM boundaries, validation/scanning assumptions; large files means multipart/direct-to-S3 and avoid proxying through app compute.",
+  "Realtime matrix: no realtime means normal request/response only; chat means persistent connection path and message storage assumptions; notification means lightweight user notification path; realtime data updates means low-latency update path plus scaling/monitoring assumptions.",
+  "Management matrix: fully managed prefers S3/CloudFront/Lambda/API Gateway/managed database; semi-managed allows ALB plus EC2 and managed RDS; direct management allows EC2 control but still requires logs/security/backups; unknown picks lowest operational burden that satisfies the answers.",
+  "Performance and size matrix: 1-second goal requires CloudFront/static caching and API latency warning when single-region; 3-second goal uses normal CDN/database optimization; 5-second/no preference favors cost and simplicity. Image-heavy/video-heavy sites require media storage/lifecycle/delivery assumptions only when the selected upload/size answers imply those assets.",
+  "Traffic pattern matrix: steady traffic favors baseline capacity; daytime peaks favor scheduled scaling/alarms; event spikes favor elastic/serverless or scale-out assumptions; unpredictable traffic favors reactive autoscaling and stronger monitoring.",
+  "Availability matrix: 99.99% requires ALB/listener and redundant backend targets when backend exists, plus RDS Multi-AZ when a relational database exists; 99.9% recommends Multi-AZ/monitoring; 99% can be cost optimized; no preference chooses simple cost-conscious defaults.",
+  "Conflict resolution: when $100 budget conflicts with 99.99% availability, do not hide the conflict. If the user chose cost priority, relax availability; if the user chose availability priority, include cost-overrun warning; if the user chose target architecture with warning, draw the 99.99% target and clearly mark budget risk. When static-site wording conflicts with DB/API requirements, represent the explicit DB/API requirement or ask a single clarification if unresolved."
 ] as const;
 
 type RequiredArchitectureQuestion = {
@@ -364,10 +382,7 @@ const REQUIRED_ARCHITECTURE_QUESTIONS: readonly RequiredArchitectureQuestion[] =
       "SPA (Single Page Application) (React/Vue 등)",
       "API 서버 (모바일 앱 백엔드)"
     ],
-    isAnswered: (prompt) =>
-      /(정적|블로그|포트폴리오|회사\s*소개|dynamic|동적|쇼핑몰|게시판|회원\s*시스템|spa|single\s*page|api\s*서버)/i.test(
-        prompt
-      )
+    isAnswered: isWebsiteTypeAnswered
   },
   {
     id: "traffic",
@@ -378,10 +393,7 @@ const REQUIRED_ARCHITECTURE_QUESTIONS: readonly RequiredArchitectureQuestion[] =
       "대규모 (일 10,000명 이상, 동시 500명 이상)",
       "급변동 (평상시 적지만 이벤트 시 급증)"
     ],
-    isAnswered: (prompt) =>
-      /(예상\s*트래픽|트래픽|소규모|중간\s*규모|대규모|급변동|일\s*100명|일\s*1,000명|일\s*1000명|일\s*10,000명|일\s*10000명|동접|동시\s*접속|동시\s*접속자|동시\s*\d[\d,]*\s*명|동시\s*10명|동시\s*50명|동시\s*500명|daily\s*traffic|concurrent\s*users?)/i.test(
-        prompt
-      )
+    isAnswered: isTrafficAnswered
   },
   {
     id: "database",
@@ -392,10 +404,7 @@ const REQUIRED_ARCHITECTURE_QUESTIONS: readonly RequiredArchitectureQuestion[] =
       "중간 규모 데이터 (10GB ~ 100GB)",
       "대용량 데이터 (100GB 이상, 복잡한 쿼리)"
     ],
-    isAnswered: (prompt) =>
-      /(데이터베이스|database|\bdb\b|rds|postgres|mysql|dynamodb|정적\s*콘텐츠|사용자\s*정보|게시글|10gb|100gb|복잡한\s*쿼리)/i.test(
-        prompt
-      )
+    isAnswered: isDatabaseAnswered
   },
   {
     id: "frontend",
@@ -406,10 +415,7 @@ const REQUIRED_ARCHITECTURE_QUESTIONS: readonly RequiredArchitectureQuestion[] =
       "Next.js/Nuxt.js (SSR 필요)",
       "모바일 앱 (웹뷰 또는 네이티브)"
     ],
-    isAnswered: (prompt) =>
-      /(프론트엔드|프론트|frontend|html|css|javascript|\bjs\b|react|vue|angular|next\.?js|nuxt\.?js|ssr|순수\s*웹|웹뷰|네이티브)/i.test(
-        prompt
-      )
+    isAnswered: isFrontendAnswered
   },
   {
     id: "backend",
@@ -420,10 +426,7 @@ const REQUIRED_ARCHITECTURE_QUESTIONS: readonly RequiredArchitectureQuestion[] =
       "복잡한 비즈니스 로직 (Spring Boot, Django 등)",
       "마이크로서비스 (여러 서비스 분리)"
     ],
-    isAnswered: (prompt) =>
-      /(백엔드|backend|간단한\s*api|node\.?js|python|flask|복잡한\s*비즈니스|spring\s*boot|django|마이크로서비스|여러\s*서비스)/i.test(
-        prompt
-      )
+    isAnswered: isBackendAnswered
   },
   {
     id: "region",
@@ -434,10 +437,7 @@ const REQUIRED_ARCHITECTURE_QUESTIONS: readonly RequiredArchitectureQuestion[] =
       "글로벌 (미국, 유럽 포함)",
       "특정 지역 (중국, 일본 등)"
     ],
-    isAnswered: (prompt) =>
-      /(주요\s*사용자\s*지역|한국|서울|아시아\s*태평양|도쿄|싱가포르|글로벌|미국|유럽|중국|일본|global|korea|asia|worldwide)/i.test(
-        prompt
-      )
+    isAnswered: isRegionAnswered
   },
   {
     id: "budget",
@@ -448,7 +448,7 @@ const REQUIRED_ARCHITECTURE_QUESTIONS: readonly RequiredArchitectureQuestion[] =
       "50-200만원 (고성능)",
       "200만원 이상 (엔터프라이즈급)"
     ],
-    isAnswered: (prompt) => /(예산|비용|월\s*\d|만원|최소\s*비용|적당한\s*성능|고성능|엔터프라이즈|budget|cost|krw|usd)/i.test(prompt)
+    isAnswered: isBudgetAnswered
   },
   {
     id: "ssl",
@@ -458,7 +458,7 @@ const REQUIRED_ARCHITECTURE_QUESTIONS: readonly RequiredArchitectureQuestion[] =
       "선택사항 (HTTP도 괜찮음)",
       "모르겠음 (추천해주세요)"
     ],
-    isAnswered: (prompt) => /(ssl|https|인증서|보안\s*중요|http도\s*괜찮음|추천해주세요|domain|도메인)/i.test(prompt)
+    isAnswered: isSslAnswered
   },
   {
     id: "file_upload",
@@ -469,10 +469,7 @@ const REQUIRED_ARCHITECTURE_QUESTIONS: readonly RequiredArchitectureQuestion[] =
       "다양한 파일 (문서, 동영상 포함)",
       "대용량 파일 (100MB 이상)"
     ],
-    isAnswered: (prompt) =>
-      /(파일\s*업로드|텍스트만|이미지만|프로필|게시글\s*이미지|다양한\s*파일|문서|동영상|대용량\s*파일|100mb|upload|image|document|file)/i.test(
-        prompt
-      )
+    isAnswered: isFileUploadAnswered
   },
   {
     id: "realtime",
@@ -483,7 +480,7 @@ const REQUIRED_ARCHITECTURE_QUESTIONS: readonly RequiredArchitectureQuestion[] =
       "실시간 알림",
       "실시간 데이터 업데이트 (주식, 게임 등)"
     ],
-    isAnswered: (prompt) => /(실시간|채팅|알림|데이터\s*업데이트|주식|게임|realtime|real-time|chat|notification|websocket)/i.test(prompt)
+    isAnswered: isRealtimeAnswered
   },
   {
     id: "management_preference",
@@ -494,7 +491,7 @@ const REQUIRED_ARCHITECTURE_QUESTIONS: readonly RequiredArchitectureQuestion[] =
       "직접 관리 (서버 직접 운영)",
       "모르겠음 (추천해주세요)"
     ],
-    isAnswered: (prompt) => /(관리\s*복잡도|완전\s*관리형|반관리형|직접\s*관리|서버리스|serverless|서버\s*직접\s*운영|managed|추천해주세요)/i.test(prompt)
+    isAnswered: isManagementPreferenceAnswered
   },
   {
     id: "page_loading_time",
@@ -505,7 +502,7 @@ const REQUIRED_ARCHITECTURE_QUESTIONS: readonly RequiredArchitectureQuestion[] =
       "5초 이내 (느려도 괜찮음)",
       "상관없음"
     ],
-    isAnswered: (prompt) => /(페이지\s*로딩|로딩\s*시간|1초\s*이내|3초\s*이내|5초\s*이내|느려도\s*괜찮음|상관없음|loading\s*time)/i.test(prompt)
+    isAnswered: isPageLoadingTimeAnswered
   },
   {
     id: "website_size",
@@ -516,10 +513,7 @@ const REQUIRED_ARCHITECTURE_QUESTIONS: readonly RequiredArchitectureQuestion[] =
       "100MB-1GB (이미지 많은 사이트)",
       "1GB 이상 (동영상 포함)"
     ],
-    isAnswered: (prompt) =>
-      /(전체\s*웹사이트\s*크기|사이트\s*크기|10mb\s*미만|10mb-100mb|100mb-1gb|1gb\s*이상|간단한\s*사이트|일반적인\s*사이트|이미지\s*많은\s*사이트|동영상\s*포함)/i.test(
-        prompt
-      )
+    isAnswered: isWebsiteSizeAnswered
   },
   {
     id: "traffic_pattern",
@@ -530,7 +524,7 @@ const REQUIRED_ARCHITECTURE_QUESTIONS: readonly RequiredArchitectureQuestion[] =
       "이벤트성 급증 (특정 시기에만)",
       "예측 불가"
     ],
-    isAnswered: (prompt) => /(트래픽\s*패턴|일정함|하루\s*종일\s*비슷|시간대별\s*차이|낮에\s*많음|이벤트성\s*급증|특정\s*시기|예측\s*불가)/i.test(prompt)
+    isAnswered: isTrafficPatternAnswered
   },
   {
     id: "downtime_tolerance",
@@ -541,9 +535,74 @@ const REQUIRED_ARCHITECTURE_QUESTIONS: readonly RequiredArchitectureQuestion[] =
       "월 8시간 이내 (99% 가용성)",
       "상관없음"
     ],
-    isAnswered: (prompt) => /(서비스\s*중단|중단\s*허용|절대\s*안됨|99\.99%|월\s*1시간|99\.9%|월\s*8시간|99%\s*가용성|상관없음)/i.test(prompt)
+    isAnswered: isDowntimeToleranceAnswered
   }
 ];
+function isWebsiteTypeAnswered(prompt: string): boolean {
+  return hasPromptTerm(prompt, ["static", "dynamic", "spa", "single page", "api server", "api 서버", "정적", "동적", "블로그", "포트폴리오", "회사", "소개", "쇼핑몰", "게시판", "회원", "?뺤쟻", "?숈쟻", "釉붾줈", "寃뚯떆", "?뚯썝"]);
+}
+
+function isTrafficAnswered(prompt: string): boolean {
+  return hasPromptTerm(prompt, ["traffic", "concurrent", "daily", "트래픽", "소규모", "중간 규모", "대규모", "급변동", "동시", "동접", "?몃옒", "?뚭퇋", "以묎컙", "?洹", "湲됰", "?숈떆", "?숈젒"]) || /\b(?:100|1,000|1000|10,000|10000|50|500)\b/iu.test(prompt);
+}
+
+function isDatabaseAnswered(prompt: string): boolean {
+  return hasPromptTerm(prompt, ["database", " db", "rds", "postgres", "postgresql", "mysql", "dynamodb", "데이터베이스", "정적 콘텐츠", "사용자 정보", "게시글", "?곗씠", "肄섑뀗", "寃뚯떆", "10gb", "100gb"]);
+}
+
+function isFrontendAnswered(prompt: string): boolean {
+  return hasPromptTerm(prompt, ["frontend", "html", "css", "javascript", " js", "react", "vue", "angular", "next.js", "nuxt", "ssr", "프론트엔드", "순수 웹", "모바일", "웹뷰", "네이티브", "?꾨줎", "?쒖닔", "?밸럭"]);
+}
+
+function isBackendAnswered(prompt: string): boolean {
+  return hasPromptTerm(prompt, ["backend", "api", "node.js", "nodejs", "python", "flask", "spring", "django", "microservice", "백엔드", "간단한 api", "복잡한 비즈니스", "마이크로서비스", "諛깆뿏", "媛꾨떒", "蹂듭옟", "留덉씠"]);
+}
+
+function isRegionAnswered(prompt: string): boolean {
+  return hasPromptTerm(prompt, ["region", "korea", "seoul", "ap-northeast-2", "asia", "global", "worldwide", "us", "europe", "한국", "서울", "아시아", "태평양", "글로벌", "미국", "유럽", "중국", "일본", "?쒓뎅", "?쒖슱", "?꾩떆", "湲濡", "誘멸뎅", "?좊읇", "以묎뎅", "?쇰낯"]);
+}
+
+function isBudgetAnswered(prompt: string): boolean {
+  return hasPromptTerm(prompt, ["budget", "cost", "krw", "usd", "monthly", "예산", "비용", "만원", "최소 비용", "적당한 성능", "고성능", "?덉궛", "鍮꾩슜", "留뚯썝", "理쒖냼", "怨좎꽦"]) || /\$\s*\d+|\b\d+\s*(?:usd|krw|monthly)\b/iu.test(prompt);
+}
+
+function isSslAnswered(prompt: string): boolean {
+  return hasPromptTerm(prompt, ["ssl", "https", "http", "domain", "인증서", "보안", "선택사항", "?몄쬆", "蹂댁븞", "?좏깮"]);
+}
+
+function isFileUploadAnswered(prompt: string): boolean {
+  return hasPromptTerm(prompt, ["file upload", "upload", "image", "document", "file", "100mb", "파일", "업로드", "이미지", "문서", "동영상", "텍스트만", "?뚯씪", "?낅줈", "?띿뒪?몃쭔", "?대?吏", "臾몄꽌", "?숈쁺"]);
+}
+
+function isRealtimeAnswered(prompt: string): boolean {
+  return hasPromptTerm(prompt, ["realtime", "real-time", "chat", "notification", "websocket", "sse", "실시간", "채팅", "알림", "데이터 업데이트", "?ㅼ떆", "梨꾪똿", "?뚮┝", "?낅뜲"]);
+}
+
+function isManagementPreferenceAnswered(prompt: string): boolean {
+  return hasPromptTerm(prompt, ["managed", "serverless", "management", "operations", "관리", "서버리스", "완전 관리형", "반관리형", "직접 관리", "愿由", "?쒕쾭由", "諛섍?由", "吏곸젒"]);
+}
+
+function isPageLoadingTimeAnswered(prompt: string): boolean {
+  return hasPromptTerm(prompt, ["loading time", "loading", "로딩", "1초", "3초", "5초", "?섏씠吏", "濡쒕뵫", "1珥", "3珥", "5珥"]) || /\b[135]\s*seconds?\b/iu.test(prompt);
+}
+
+function isWebsiteSizeAnswered(prompt: string): boolean {
+  return hasPromptTerm(prompt, ["10mb", "100mb", "1gb", "website size", "웹사이트 크기", "간단한 사이트", "일반적인 사이트", "이미지 많은", "동영상 포함", "?뱀궗?댄듃", "?ш린", "媛꾨떒", "?쇰컲", "?대?吏", "?숈쁺"]);
+}
+
+function isTrafficPatternAnswered(prompt: string): boolean {
+  return hasPromptTerm(prompt, ["traffic pattern", "steady", "time of day", "event spike", "unpredictable", "트래픽 패턴", "일정함", "시간대별", "이벤트성", "예측 불가", "?몃옒", "?⑦꽩", "?쇱젙", "?쒓컙", "?대깽", "?덉륫"]);
+}
+
+function isDowntimeToleranceAnswered(prompt: string): boolean {
+  return hasPromptTerm(prompt, ["downtime", "availability", "99.99", "99.9", "99%", "서비스 중단", "허용 시간", "절대 안됨", "가용성", "상관없음", "?쒕퉬", "以묐떒", "?덈?", "?곴??놁쓬"]);
+}
+
+function hasPromptTerm(prompt: string, terms: readonly string[]): boolean {
+  const normalizedPrompt = prompt.normalize("NFKC").toLowerCase();
+
+  return terms.some((term) => normalizedPrompt.includes(term.normalize("NFKC").toLowerCase()));
+}
 
 function findMissingRequiredQuestion(prompt: string): RequiredArchitectureQuestion | null {
   if (hasExplicitArchitectureBrief(prompt)) {
@@ -576,11 +635,11 @@ function findConditionalArchitectureQuestion(prompt: string): RequiredArchitectu
   if (requiresGlobalDeploymentScopeDecision(normalizedPrompt) && !hasGlobalDeploymentDecision(normalizedPrompt)) {
     return {
       id: "global_deployment_scope",
-      question: "글로벌 사용자와 1초 로딩 목표를 어떤 범위로 설계할까요?",
+      question: "湲濡쒕쾶 ?ъ슜?먯? 1珥?濡쒕뵫 紐⑺몴瑜??대뼡 踰붿쐞濡??ㅺ퀎?좉퉴??",
       suggestions: [
-        "CloudFront 글로벌 + API/RDS는 단일 리전",
-        "다중 리전 API까지 포함",
-        "MVP는 단일 리전, 추후 다중 리전 확장 경고 표시"
+        "CloudFront 湲濡쒕쾶 + API/RDS???⑥씪 由ъ쟾",
+        "?ㅼ쨷 由ъ쟾 API源뚯? ?ы븿",
+        "MVP???⑥씪 由ъ쟾, 異뷀썑 ?ㅼ쨷 由ъ쟾 ?뺤옣 寃쎄퀬 ?쒖떆"
       ],
       isAnswered: () => true
     };
@@ -589,11 +648,11 @@ function findConditionalArchitectureQuestion(prompt: string): RequiredArchitectu
   if (requiresRealtime(normalizedPrompt) && !hasRealtimeImplementationDecision(normalizedPrompt)) {
     return {
       id: "realtime_implementation",
-      question: "실시간 알림은 어떤 방식으로 표현할까요?",
+      question: "?ㅼ떆媛??뚮┝? ?대뼡 諛⑹떇?쇰줈 ?쒗쁽?좉퉴??",
       suggestions: [
-        "WebSocket 연결 경로",
-        "SSE 단방향 알림 경로",
-        "간단 폴링 방식과 비용 절감 경고"
+        "WebSocket ?곌껐 寃쎈줈",
+        "SSE ?⑤갑???뚮┝ 寃쎈줈",
+        "媛꾨떒 ?대쭅 諛⑹떇怨?鍮꾩슜 ?덇컧 寃쎄퀬"
       ],
       isAnswered: () => true
     };
@@ -646,6 +705,7 @@ function createAmazonQArchitectureDraftInstructions(): string {
     `Use only these ResourceNode.type values: ${SUPPORTED_RESOURCE_TYPES.join(", ")}.`,
     "Treat the user's clarification answers as binding architecture constraints, not loose background context. Convert each answered choice into explicit nodes, edges, config, assumptions, and warnings in the preview.",
     ...AMAZON_Q_CLARIFICATION_CHOICE_CONSTRAINTS,
+    ...AMAZON_Q_CLARIFICATION_CHOICE_ENFORCEMENT_RULES,
     "For React/Vue/Angular SPA requirements, model frontend delivery as S3 static assets behind CLOUDFRONT unless the user explicitly asks for SSR. Do not serve the SPA only from an application server.",
     "For complex backend/business-logic requirements, include a backend compute tier behind LOAD_BALANCER and LOAD_BALANCER_LISTENER, with private application subnets and SECURITY_GROUP boundaries when VPC networking is present.",
     "For global users, HTTPS-required, or 1-second loading goals, include a global entry path with CLOUDFRONT. Include ROUTE53_RECORD when a domain/HTTPS path is needed. Because ACM is not a supported node type, represent certificate requirements in CloudFront or load balancer config, assumptions, or nextActions instead of inventing an unsupported ACM node.",
@@ -732,16 +792,27 @@ function createAmazonQArchitectureBrief(prompt: string): string {
     flows.push("- Backend compute -> RDS database.");
   }
 
-  if (requiresImageUpload(normalizedPrompt)) {
+  if (hasNoFileUploadRequirement(normalizedPrompt)) {
+    requirements.push("- ABSOLUTE CONSTRAINT: The user selected no file upload. Do not create upload/media buckets, presigned URL flows, file-processing resources, or upload-specific IAM policies.");
+    validation.push("- Any S3 bucket or IAM path named upload, media, image, attachment, presigned, or file upload violates the selected no-upload answer.");
+  } else if (requiresImageUpload(normalizedPrompt)) {
     requirements.push("- Include a separate S3 media/upload bucket and represent presigned URL upload assumptions.");
     flows.push("- Client -> presigned URL -> S3 media/upload bucket.");
     validation.push("- Do not reuse the SPA asset bucket as the only image-upload resource.");
   }
 
-  if (requiresRealtime(normalizedPrompt)) {
+  if (hasNoRealtimeRequirement(normalizedPrompt)) {
+    requirements.push("- ABSOLUTE CONSTRAINT: The user selected no realtime feature. Do not create WebSocket, SSE, realtime notification, or realtime processing resources.");
+    validation.push("- Any WebSocket/SSE/realtime/notification-specific node, coverage entry, or assumption violates the selected no-realtime answer.");
+  } else if (requiresRealtime(normalizedPrompt)) {
     requirements.push("- Include a realtime notification path. Use API_GATEWAY_REST_API/LAMBDA or the backend tier as the supported node representation, and state WebSocket/SSE assumptions in requirementCoverage.");
     flows.push("- Client -> realtime notification endpoint -> backend/Lambda notification path.");
     validation.push("- requirementCoverage must name WebSocket, SSE, notification, or realtime and map it to node ids.");
+  }
+
+  if (requiresKoreaOnlyRegion(normalizedPrompt)) {
+    requirements.push("- Region scope is Korea only. Keep regional API and database assumptions in Seoul/ap-northeast-2; CloudFront is allowed only as a static/performance CDN, not as a multi-region API design.");
+    validation.push("- Do not ask for or imply multi-region/global-user deployment when the user selected Korea only.");
   }
 
   if (requiresGlobalOrFastFrontend(normalizedPrompt)) {
@@ -818,6 +889,14 @@ function findRequirementCoverageValidationIssues(
     issues.push("The user selected no backend, but the preview includes backend compute or API entry resources. Remove backend-only resources unless another selected answer explicitly requires them.");
   }
 
+  if (hasNoFileUploadRequirement(normalizedPrompt) && hasForbiddenUploadResource(architectureJson)) {
+    issues.push("The user selected no file upload, but the preview includes upload/media/file-upload resources. Remove upload buckets, presigned URL flows, and upload-specific IAM policies.");
+  }
+
+  if (hasNoRealtimeRequirement(normalizedPrompt) && hasForbiddenRealtimeResource(preview)) {
+    issues.push("The user selected no realtime feature, but the preview includes WebSocket/SSE/realtime/notification-specific resources or coverage. Remove realtime-specific nodes, flows, assumptions, and coverage entries.");
+  }
+
   if (requiresSpaFrontend(normalizedPrompt) && (!nodeTypes.has("S3") || !nodeTypes.has("CLOUDFRONT"))) {
     issues.push("The user selected an SPA frontend, but the preview does not include S3 static assets behind CloudFront. Add the SPA asset bucket and CloudFront entry.");
   }
@@ -841,8 +920,12 @@ function findRequirementCoverageValidationIssues(
   }
 
   if (requiresVeryHighAvailability(normalizedPrompt)) {
-    if (countComputeTargets(architectureJson) === 1) {
+    if (requiresBackend(normalizedPrompt) && countComputeTargets(architectureJson) < 2) {
       issues.push("The user selected 99.99% availability/no downtime, but the preview has only one app compute target. Add redundant compute targets in separate availability assumptions behind a load balancer.");
+    }
+
+    if (requiresBackend(normalizedPrompt) && (!nodeTypes.has("LOAD_BALANCER") || !nodeTypes.has("LOAD_BALANCER_LISTENER"))) {
+      issues.push("The user selected 99.99% availability/no downtime with an API/backend, but the preview lacks LOAD_BALANCER and LOAD_BALANCER_LISTENER. Add ALB/listener in front of redundant compute targets.");
     }
 
     if (
@@ -1283,10 +1366,69 @@ function hasMediaUploadBucket(architectureJson: ArchitectureJson): boolean {
 
   return (
     s3Nodes.length > 1 ||
-    s3Nodes.some((node) => /upload|media|image|profile|post|attachment|asset|file|이미지|업로드|미디어/iu.test(createNodeSearchText(node)))
+    s3Nodes.some((node) => /upload|media|image|profile|post|attachment|asset|file|\uC774\uBBF8\uC9C0|\uC5C5\uB85C\uB4DC|\uBBF8\uB514\uC5B4/iu.test(createNodeSearchText(node)))
+  );
+}
+function hasForbiddenUploadResource(architectureJson: ArchitectureJson): boolean {
+  return architectureJson.nodes.some((node) => {
+    const nodeText = createNodeSearchText(node);
+
+    if (node.type === "S3") {
+      return /upload|media|image|profile\s*image|post\s*image|attachment|presigned/iu.test(nodeText);
+    }
+
+    if (hasAnyNodeType(new Set([node.type]), ["IAM_POLICY", "IAM_ROLE", "LAMBDA", "KMS_KEY"])) {
+      return /upload|media|presigned|file\s*processing|image\s*processing/iu.test(nodeText);
+    }
+
+    return /presigned\s*url|file\s*upload\s*flow|direct[-\s]*to[-\s]*s3\s*upload/iu.test(nodeText);
+  });
+}
+
+function hasForbiddenRealtimeResource(preview: AmazonQArchitectureDraftPreview): boolean {
+  const hasRealtimeNode = preview.architectureJson.nodes.some((node) => {
+    const nodeText = createNodeSearchText(node);
+
+    if (hasPositiveRealtimeSignal(nodeText)) {
+      return true;
+    }
+
+    return (
+      hasAnyNodeType(new Set([node.type]), ["API_GATEWAY_REST_API", "LAMBDA", "EC2"]) &&
+      /(user|client|push|message|event|realtime|real-time|websocket|web\s*socket|\bsse\b|notification|notify|\uC2E4\uC2DC\uAC04|\uC54C\uB9BC|\uCC44\uD305)/iu.test(
+        nodeText
+      )
+    );
+  });
+
+  if (hasRealtimeNode) {
+    return true;
+  }
+
+  return (preview.requirementCoverage ?? []).some((coverage) =>
+    hasPositiveRealtimeSignal(
+      [
+        coverage.answer,
+        coverage.status,
+        coverage.capability ?? "",
+        coverage.assumption ?? "",
+        ...(coverage.nodes ?? [])
+      ].join(" ")
+    )
   );
 }
 
+function hasPositiveRealtimeSignal(text: string): boolean {
+  const normalizedText = text.normalize("NFKC").toLowerCase();
+
+  if (/(no\s+realtime|no\s+real-time|no\s+real\s*time|realtime:\s*(none|no)|real-time:\s*(none|no)|\uD544\uC694\s*\uC5C6\uC74C|\uC5C6\uC74C)/iu.test(normalizedText)) {
+    return false;
+  }
+
+  return /(websocket|web\s*socket|server-sent|\bsse\b|realtime|real-time|realtime\s+notification|notification\s+api|push\s+notification|chat|\uC2E4\uC2DC\uAC04|\uCC44\uD305)/iu.test(
+    normalizedText
+  );
+}
 function createCoverageSearchText(preview: AmazonQArchitectureDraftPreview): string {
   return [
     ...(preview.requirementCoverage ?? []).flatMap((coverage) => [
@@ -1333,16 +1475,14 @@ function getStringConfigValues(node: ArchitectureJson["nodes"][number], key: str
 }
 
 function requiresServerlessOnlyArchitecture(normalizedPrompt: string): boolean {
-  return /(serverless|서버리스|lambda|람다|without\s+ec2|no\s+ec2|ec2\s*(없는|없이|빼고|제외|말고)|ec2는\s*쓰지\s*마)/iu.test(
-    normalizedPrompt
-  );
+  return hasPromptTerm(normalizedPrompt, ["serverless", "lambda", "without ec2", "no ec2", "ec2 without", "ec2 excluded", "ec2 not allowed", "\uC11C\uBC84\uB9AC\uC2A4", "\uB78C\uB2E4"]);
 }
 
 function hasExplicitArchitectureBrief(prompt: string): boolean {
   const normalizedPrompt = prompt.normalize("NFKC").toLowerCase();
 
   if (
-    /(필수\s*포함\s*컴포넌트|핵심\s*요구사항|아키텍처\s*플로우|검증\s*가능한\s*기준|required\s+components|architecture\s+flow|validation\s+checklist)/iu.test(
+    /(?:required\s+components|architecture\s+flow|validation\s+checklist|\uD544\uC218\s*\uD3EC\uD568\s*\uCEF4\uD3EC\uB10C\uD2B8|\uD575\uC2EC\s*\uC694\uAD6C\uC0AC\uD56D|\uC544\uD0A4\uD14D\uCC98\s*\uD50C\uB85C\uC6B0|\uAC80\uC99D\s*\uAC00\uB2A5\uD55C\s*\uAE30\uC900)/iu.test(
       normalizedPrompt
     )
   ) {
@@ -1351,21 +1491,21 @@ function hasExplicitArchitectureBrief(prompt: string): boolean {
 
   const explicitComponentMentions = [
     /cloudfront/iu,
-    /\bs3\b|simple\s*storage|이미지\s*저장|정적\s*자산/iu,
+    /\bs3\b|simple\s*storage|\uC774\uBBF8\uC9C0\s*\uC800\uC7A5|\uC815\uC801\s*\uC790\uC0B0/iu,
     /application\s*load\s*balancer|\balb\b|load\s*balancer/iu,
     /rds|multi-az|db\s*subnet/iu,
-    /websocket|sse|api\s*gateway|실시간\s*알림/iu,
-    /vpc|subnet|서브넷/iu,
+    /websocket|sse|api\s*gateway|\uC2E4\uC2DC\uAC04\s*\uC54C\uB9BC/iu,
+    /vpc|subnet|\uC11C\uBE0C\uB137/iu,
     /cloudwatch/iu,
     /iam/iu
   ].filter((pattern) => pattern.test(normalizedPrompt)).length;
 
   const explicitFlowMentions = [
-    /user\s*[-→>]+\s*cloudfront|사용자\s*[-→>]+\s*cloudfront/iu,
-    /cloudfront\s*[-→>]+\s*s3/iu,
-    /cloudfront\s*[-→>]+.*load\s*balancer|cloudfront\s*[-→>]+.*alb/iu,
-    /ec2\s*[-→>]+\s*rds|backend\s*[-→>]+\s*rds/iu,
-    /presigned\s*url|사전\s*서명|프리사인/iu
+    /user[\s\S]{0,40}cloudfront|\uC0AC\uC6A9\uC790[\s\S]{0,40}cloudfront/iu,
+    /cloudfront[\s\S]{0,40}s3/iu,
+    /cloudfront[\s\S]{0,80}(load\s*balancer|alb)/iu,
+    /(ec2|backend)[\s\S]{0,40}rds/iu,
+    /presigned\s*url|\uC0AC\uC804\s*\uC11C\uBA85|\uD504\uB9AC\uC0AC\uC778/iu
   ].filter((pattern) => pattern.test(normalizedPrompt)).length;
 
   return explicitComponentMentions >= 5 && explicitFlowMentions >= 2;
@@ -1376,37 +1516,41 @@ function hasBudgetAvailabilityConflict(normalizedPrompt: string): boolean {
 }
 
 function hasLowMonthlyBudget(normalizedPrompt: string): boolean {
-  return /(\$\s*100|100\s*(usd|dollars?|달러)|monthly\s*100|100\s*monthly|월\s*\$?\s*100|budget\s*cost:\s*100|월\s*100\b)/iu.test(
+  return /(\$\s*100|100\s*(usd|dollars?|monthly)|monthly\s*100|budget\s*cost:\s*100|\uC6D4\s*\$?\s*100|\uC608\uC0B0[\s\S]{0,20}100)/iu.test(
     normalizedPrompt
   );
 }
 
 function hasBudgetAvailabilityResolution(normalizedPrompt: string): boolean {
-  return /(99\.9%\s*수준으로\s*완화|가용성.*완화|예산\s*초과\s*허용|cost\s*warning|비용\s*초과\s*경고|목표\s*아키텍처|target\s*architecture|keep\s*99\.99|relax\s*availability)/iu.test(
+  return /(99\.9%|relax\s*availability|cost\s*warning|target\s*architecture|keep\s*99\.99|\uAC00\uC6A9\uC131[\s\S]{0,20}\uC644\uD654|\uBE44\uC6A9[\s\S]{0,20}\uACBD\uACE0|\uC608\uC0B0[\s\S]{0,20}\uCD08\uACFC|\uBAA9\uD45C\s*\uC544\uD0A4\uD14D\uCC98)/iu.test(
     normalizedPrompt
   );
 }
 
 function hasGlobalDeploymentDecision(normalizedPrompt: string): boolean {
-  return /(cloudfront\s*글로벌|api\/rds는\s*단일\s*리전|단일\s*리전|single\s*region|multi[-\s]*region|다중\s*리전|추후\s*다중\s*리전|future\s*multi[-\s]*region)/iu.test(
+  return /(cloudfront[\s\S]{0,30}(global|\uAE00\uB85C\uBC8C)|api\/rds[\s\S]{0,30}(single|\uB2E8\uC77C)|single\s*region|multi[-\s]*region|future\s*multi[-\s]*region|\uB2E8\uC77C\s*\uB9AC\uC804|\uB2E4\uC911\s*\uB9AC\uC804)/iu.test(
     normalizedPrompt
   );
 }
 
 function requiresGlobalDeploymentScopeDecision(normalizedPrompt: string): boolean {
-  return /(global|worldwide|united\s+states|europe|글로벌|미국|유럽|1\s*second|1초|1珥)/iu.test(
+  if (requiresKoreaOnlyRegion(normalizedPrompt)) {
+    return false;
+  }
+
+  return /(global|worldwide|united\s+states|europe|\uAE00\uB85C\uBC8C|\uBBF8\uAD6D|\uC720\uB7FD|1\s*second|1\uCD08)/iu.test(
     normalizedPrompt
   );
 }
 
 function hasRealtimeImplementationDecision(normalizedPrompt: string): boolean {
-  return /(websocket|web\s*socket|sse|server-sent\s*events|polling|폴링|api\s*gateway|단방향\s*알림|연결\s*경로)/iu.test(
+  return /(websocket|web\s*socket|sse|server-sent\s*events|polling|api\s*gateway|\uC6F9\uC18C\uCF13|\uC5F0\uACB0\s*\uACBD\uB85C|\uD3F4\uB9C1)/iu.test(
     normalizedPrompt
   );
 }
 
 function mentionsUnsupportedAutoScalingGroup(normalizedPrompt: string): boolean {
-  return /(auto\s*scaling\s*group|\basg\b|autoscaling\s*group|오토\s*스케일링|자동\s*확장)/iu.test(
+  return /(auto\s*scaling\s*group|\basg\b|autoscaling\s*group|\uC624\uD1A0\s*\uC2A4\uCF00\uC77C|\uC790\uB3D9\s*\uD655\uC7A5)/iu.test(
     normalizedPrompt
   );
 }
@@ -1430,7 +1574,7 @@ function dedupeNonEmptyLines(lines: readonly string[]): string[] {
 }
 
 function requiresNoDatabase(normalizedPrompt: string): boolean {
-  return /(database:\s*(none|no)|no\s+database|database\s+not\s+required|데이터베이스.*필요\s*없음|필요\s*없음.*데이터베이스|정적\s*콘텐츠만)/iu.test(
+  return /(database:\s*(none|no)|no\s+database|database\s+not\s+required|\uB370\uC774\uD130\uBCA0\uC774\uC2A4[\s\S]{0,60}\uD544\uC694\s*\uC5C6\uC74C|\uD544\uC694\s*\uC5C6\uC74C[\s\S]{0,60}\uB370\uC774\uD130\uBCA0\uC774\uC2A4|\uC815\uC801\s*\uCF58\uD150\uCE20\uB9CC)/iu.test(
     normalizedPrompt
   );
 }
@@ -1440,13 +1584,13 @@ function requiresDatabase(normalizedPrompt: string): boolean {
     return false;
   }
 
-  return /(database|db\b|rds|postgres|postgresql|mysql|dynamodb|데이터베이스|사용자\s*정보|게시글|relational)/iu.test(
+  return /(database|\bdb\b|rds|postgres|postgresql|mysql|dynamodb|relational|\uB370\uC774\uD130\uBCA0\uC774\uC2A4|\uC0AC\uC6A9\uC790\s*\uC815\uBCF4|\uAC8C\uC2DC\uAE00)/iu.test(
     normalizedPrompt
   );
 }
 
 function requiresNoBackend(normalizedPrompt: string): boolean {
-  return /(backend:\s*(none|no)|no\s+backend|backend\s+not\s+required|백엔드.*필요\s*없음|필요\s*없음.*정적\s*사이트)/iu.test(
+  return /(backend:\s*(none|no)|no\s+backend|backend\s+not\s+required|\uBC31\uC5D4\uB4DC[\s\S]{0,60}\uD544\uC694\s*\uC5C6\uC74C|\uD544\uC694\s*\uC5C6\uC74C[\s\S]{0,60}\uC815\uC801\s*\uC0AC\uC774\uD2B8)/iu.test(
     normalizedPrompt
   );
 }
@@ -1456,41 +1600,68 @@ function requiresSpaFrontend(normalizedPrompt: string): boolean {
 }
 
 function requiresComplexBackend(normalizedPrompt: string): boolean {
-  return /(complex\s+backend|complex\s+business|business\s+logic|spring\s*boot|django|microservice|복잡|비즈니스\s*로직|마이크로서비스)/iu.test(
+  return /(complex\s+backend|complex\s+business|business\s+logic|spring\s*boot|django|microservice|\uBCF5\uC7A1|\uBE44\uC988\uB2C8\uC2A4\s*\uB85C\uC9C1|\uB9C8\uC774\uD06C\uB85C\uC11C\uBE44\uC2A4)/iu.test(
     normalizedPrompt
   );
 }
 
 function requiresGlobalOrFastFrontend(normalizedPrompt: string): boolean {
-  return /(global|worldwide|united\s+states|europe|글로벌|미국|유럽|1\s*second|1초|https:\s*required|ssl:\s*required|https.*필수|ssl.*필수)/iu.test(
+  return /(global|worldwide|united\s+states|europe|\uAE00\uB85C\uBC8C|\uBBF8\uAD6D|\uC720\uB7FD|1\s*second|1\uCD08|https:\s*required|ssl:\s*required|https[\s\S]{0,30}\uD544\uC218|ssl[\s\S]{0,30}\uD544\uC218)/iu.test(
     normalizedPrompt
   );
 }
 
 function requiresImageUpload(normalizedPrompt: string): boolean {
-  if (/(file\s*upload:\s*(none|no)|no\s+file\s+upload|upload:\s*none|파일\s*업로드.*없음)/iu.test(normalizedPrompt)) {
+  if (hasNoFileUploadRequirement(normalizedPrompt)) {
     return false;
   }
 
-  return /(image\s+upload|images?\s+only|profile\s+image|post\s+image|이미지|사진)/iu.test(normalizedPrompt);
+  return /(image\s+upload|images?\s+only|profile\s+image|post\s+image|\uC774\uBBF8\uC9C0|\uC0AC\uC9C4)/iu.test(normalizedPrompt);
 }
 
 function requiresRealtime(normalizedPrompt: string): boolean {
-  if (/(realtime:\s*(none|no)|real-time:\s*(none|no)|no\s+realtime|no\s+real-time|실시간.*필요\s*없음)/iu.test(normalizedPrompt)) {
+  if (hasNoRealtimeRequirement(normalizedPrompt)) {
     return false;
   }
 
-  return /(realtime|real-time|notification|chat|websocket|sse|실시간|알림|채팅)/iu.test(normalizedPrompt);
+  return /(realtime|real-time|notification|chat|websocket|\bsse\b|\uC2E4\uC2DC\uAC04\s*\uC54C\uB9BC|\uCC44\uD305)/iu.test(normalizedPrompt);
 }
 
 function requiresVeryHighAvailability(normalizedPrompt: string): boolean {
-  return /(99\.99|no\s+downtime|zero\s+downtime|무중단|절대\s*안됨)/iu.test(normalizedPrompt);
+  return /(99\.99|no\s+downtime|zero\s+downtime|\uBB34\uC911\uB2E8|\uC808\uB300\s*\uC548\uB428)/iu.test(normalizedPrompt);
 }
 
 function mentionsRealtimePath(text: string): boolean {
-  return /(realtime|real-time|notification|websocket|sse|notify|실시간|알림|채팅)/iu.test(text);
+  return /(realtime|real-time|notification|websocket|\bsse\b|notify|\uC2E4\uC2DC\uAC04\s*\uC54C\uB9BC|\uCC44\uD305)/iu.test(text);
 }
 
+function requiresKoreaOnlyRegion(normalizedPrompt: string): boolean {
+  return /(region:\s*(korea|seoul)|korea\s*only|seoul\s*region|ap-northeast-2|\uD55C\uAD6D\uB9CC|\uC11C\uC6B8\s*\uB9AC\uC804)/iu.test(
+    normalizedPrompt
+  );
+}
+
+function hasNoFileUploadRequirement(normalizedPrompt: string): boolean {
+  return /(?:file\s*upload:\s*(?:none|no)|no\s+file\s+upload|upload:\s*none|text\s*only|\uD30C\uC77C[\s\S]{0,80}\uC5C6\uC74C|\uC5C6\uC74C\s*\(\uD14D\uC2A4\uD2B8\uB9CC\)|\uD14D\uC2A4\uD2B8\uB9CC)/iu.test(
+    normalizedPrompt
+  );
+}
+
+function hasNoRealtimeRequirement(normalizedPrompt: string): boolean {
+  return /(?:realtime:\s*(?:none|no)|real-time:\s*(?:none|no)|no\s+realtime|no\s+real-time|no\s+real\s*time|\uC2E4\uC2DC\uAC04[\s\S]{0,80}(?:\uD544\uC694\s*\uC5C6\uC74C|\uC5C6\uC74C)|\uD544\uC694\s*\uC5C6\uC74C[\s\S]{0,80}\uC2E4\uC2DC\uAC04)/iu.test(
+    normalizedPrompt
+  );
+}
+
+function requiresBackend(normalizedPrompt: string): boolean {
+  if (requiresNoBackend(normalizedPrompt)) {
+    return false;
+  }
+
+  return /(backend|api\b|node\.?js|python|flask|spring|django|server|ec2|lambda|\uAC04\uB2E8\s*api|\uBCF5\uC7A1\s*\uBE44\uC988\uB2C8\uC2A4|\uBC31\uC5D4\uB4DC|\uC11C\uBC84)/iu.test(
+    normalizedPrompt
+  );
+}
 function hasExplicitDatabaseMarker(normalizedPrompt: string): boolean {
   return /(database|db\b|rds|postgres|postgresql|mysql|dynamodb|relational|\uB370\uC774\uD130\uBCA0\uC774\uC2A4|\uC0AC\uC6A9\uC790\s*\uC815\uBCF4|\uAC8C\uC2DC\uAE00)/iu.test(
     normalizedPrompt

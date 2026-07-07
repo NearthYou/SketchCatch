@@ -31,11 +31,11 @@ import {
 import type { DiagramFlowNode } from "./types";
 import styles from "./diagram-editor.module.css";
 
-const CONNECTION_HANDLES = [
-  { id: "handle-left", position: Position.Left },
-  { id: "handle-top", position: Position.Top },
-  { id: "handle-right", position: Position.Right },
-  { id: "handle-bottom", position: Position.Bottom }
+const CONNECTION_HANDLE_POSITIONS = [
+  { side: "left", position: Position.Left },
+  { side: "top", position: Position.Top },
+  { side: "right", position: Position.Right },
+  { side: "bottom", position: Position.Bottom }
 ] as const;
 
 const AREA_NODE_HIT_EDGES = [
@@ -278,19 +278,26 @@ export function DiagramNodeView({ data, id, isConnectable, selected }: NodeProps
         </>
       ) : null}
 
-      {canConnect ? (
-        <>
-          {CONNECTION_HANDLES.map((handle) => (
-            <Handle
-              className={styles.connectionHandle}
-              id={handle.id}
-              key={handle.id}
-              position={handle.position}
-              type="source"
-            />
-          ))}
-        </>
-      ) : null}
+      <>
+        {CONNECTION_HANDLE_POSITIONS.flatMap((handle) => [
+          <Handle
+            className={styles.connectionHandle}
+            id={`source-handle-${handle.side}`}
+            isConnectable={canConnect}
+            key={`source-${handle.side}`}
+            position={handle.position}
+            type="source"
+          />,
+          <Handle
+            className={styles.connectionHandle}
+            id={`target-handle-${handle.side}`}
+            isConnectable={canConnect}
+            key={`target-${handle.side}`}
+            position={handle.position}
+            type="target"
+          />
+        ])}
+      </>
     </>
   );
 }

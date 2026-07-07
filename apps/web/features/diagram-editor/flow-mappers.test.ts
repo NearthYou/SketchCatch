@@ -201,6 +201,22 @@ test("toFlowEdges maps logical handle ids to real source and target handles", ()
   assert.equal(flowEdges[0]?.targetHandle, "target-handle-left");
 });
 
+test("toFlowEdges keeps existing React Flow source and target handle ids stable", () => {
+  const flowEdges = toFlowEdges(
+    [
+      {
+        ...makeEdge("instance-1", "asg-1"),
+        sourceHandleId: "source-handle-bottom",
+        targetHandleId: "target-handle-top"
+      }
+    ],
+    []
+  );
+
+  assert.equal(flowEdges[0]?.sourceHandle, "source-handle-bottom");
+  assert.equal(flowEdges[0]?.targetHandle, "target-handle-top");
+});
+
 test("flow mappers make AI preview nodes and edges read-only", () => {
   const instance = makeNode({ id: "instance-1", resourceType: "aws_instance" });
   const flowNodes = toFlowNodes([instance], ["instance-1"], "instance-1", false, handlers, { isPreview: true });

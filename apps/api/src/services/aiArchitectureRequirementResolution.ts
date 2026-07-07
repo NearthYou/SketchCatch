@@ -989,11 +989,35 @@ function createUnsupportedRequirementWarnings(
     });
   }
 
-  return warnings;
+  return warnings.map((warning) => {
+    if (warning.code === "unsupported_requirement_substituted") {
+      return {
+        ...warning,
+        message: `현재 자동 생성 범위에서 직접 지원하지 않는 요구사항을 지원 가능한 구조로 바꾸었습니다. 변경 방식: ${substitutedRequirements.map(formatUnsupportedSubstitutionChange).join("; ")}. 보드에는 지원되는 리소스만 생성됩니다.`
+      };
+    }
+
+    if (warning.code === "unsupported_resource_omitted") {
+      return {
+        ...warning,
+        message: `현재 자동 생성 범위에서 직접 지원하지 않는 리소스는 초안에서 제외했습니다. 변경 방식: ${omittedRequirements.map(formatUnsupportedOmissionChange).join("; ")}. 지원되는 리소스만 보드에 그립니다.`
+      };
+    }
+
+    return warning;
+  });
 }
 
 function isDefined<T>(value: T | undefined): value is T {
   return value !== undefined;
+}
+
+function formatUnsupportedSubstitutionChange(rule: UnsupportedRequirementRule): string {
+  return `미지원 항목 ${rule.label} -> ${rule.substitution?.label ?? "지원 가능한 기본 구조"}로 대체`;
+}
+
+function formatUnsupportedOmissionChange(rule: UnsupportedRequirementRule): string {
+  return `미지원 항목 ${rule.label} -> 현재 보드에서 제외`;
 }
 
 function createPartialGenerationWarnings(

@@ -459,10 +459,15 @@ test("POST /api/ai/architecture-draft warns when unsupported resources are omitt
   assert.equal(response.statusCode, 200);
 
   const body = architectureDraftResponseSchema.parse(response.json());
+  const omittedWarning = body.metadata.guardrailWarnings?.find(
+    (warning) => warning.code === "unsupported_resource_omitted"
+  );
 
   assert.equal(body.metadata.selectedDraftPattern, "api_server");
   assert.ok(body.metadata.guardrailWarnings?.some((warning) => warning.code === "unsupported_resource_omitted"));
   assert.ok(body.metadata.guardrailWarnings?.some((warning) => warning.code === "partial_generation"));
+  assert.match(omittedWarning?.message ?? "", /ElastiCache\/Redis/);
+  assert.match(omittedWarning?.message ?? "", /현재 보드에서 제외/);
   assert.equal(body.architectureJson.nodes.some((node) => node.type === "UNKNOWN"), false);
 
   await app.close();
@@ -581,6 +586,9 @@ test("POST /api/ai/architecture-draft returns requirement facts and unsupported 
   assert.equal(unsupportedResponse.statusCode, 200);
 
   const unsupportedBody = architectureDraftResponseSchema.parse(unsupportedResponse.json());
+  const substitutionWarning = unsupportedBody.metadata.guardrailWarnings?.find(
+    (warning) => warning.code === "unsupported_requirement_substituted"
+  );
 
   assert.equal(unsupportedBody.metadata.selectedDraftPattern, "api_server");
   assert.equal(unsupportedBody.architectureJson.nodes.some((node) => node.type === "UNKNOWN"), false);
@@ -589,6 +597,9 @@ test("POST /api/ai/architecture-draft returns requirement facts and unsupported 
       (warning) => warning.code === "unsupported_requirement_substituted"
     )
   );
+  assert.match(substitutionWarning?.message ?? "", /EKS\/Kubernetes/);
+  assert.match(substitutionWarning?.message ?? "", /EC2/);
+  assert.match(substitutionWarning?.message ?? "", /대체/);
   assert.ok(unsupportedBody.metadata.requirementFacts?.includes("server_runtime"));
 
   const partialResponse = await app.inject({

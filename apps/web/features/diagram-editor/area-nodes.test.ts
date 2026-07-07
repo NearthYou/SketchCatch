@@ -17,6 +17,8 @@ test("isAreaNode matches Region, Availability Zone, Group, VPC, Subnet, and Secu
   assert.equal(isAreaNode(makeDesignNode({ type: "sketchcatch_region" })), true);
   assert.equal(isAreaNode(makeDesignNode({ type: "sketchcatch_az" })), true);
   assert.equal(isAreaNode(makeDesignNode({ type: "sketchcatch_group" })), true);
+  assert.equal(isAreaNode(makeResourceNode({ resourceType: "aws_region" })), true);
+  assert.equal(isAreaNode(makeResourceNode({ resourceType: "aws_availability_zone" })), true);
   assert.equal(isAreaNode(makeResourceNode({ resourceType: "aws_vpc" })), true);
   assert.equal(isAreaNode(makeResourceNode({ resourceType: "aws_subnet" })), true);
   assert.equal(isAreaNode(makeResourceNode({ resourceType: "aws_security_group" })), true);
@@ -30,10 +32,13 @@ test("isAreaNode excludes regular design and resource nodes", () => {
 
 test("area node helpers distinguish design containers from resource containers", () => {
   const region = makeDesignNode({ type: "design_region" });
+  const awsRegion = makeResourceNode({ resourceType: "aws_region" });
   const vpc = makeResourceNode({ resourceType: "aws_vpc" });
 
   assert.equal(isDesignAreaNode(region), true);
   assert.equal(isResourceAreaNode(region), false);
+  assert.equal(isDesignAreaNode(awsRegion), false);
+  assert.equal(isResourceAreaNode(awsRegion), true);
   assert.equal(isDesignAreaNode(vpc), false);
   assert.equal(isResourceAreaNode(vpc), true);
 });
