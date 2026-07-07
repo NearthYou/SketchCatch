@@ -1,14 +1,22 @@
 import { z } from "zod";
 import type {
   DeploymentPlanSummary,
+  GitCicdAwsRoleDiffApplyResponse,
   GitCicdHandoff,
   GitCicdHandoffListResponse,
   GitCicdHandoffPipelineStatus,
   GitCicdHandoffPipelineStatusResponse,
-  GitCicdHandoffResponse
+  GitCicdHandoffResponse,
+  GitCicdRepositorySettingsApplyResponse
 } from "@sketchcatch/types";
 import { requireActiveUserId } from "../auth/current-user.js";
 import { getDatabaseClient, type DatabaseClient } from "../db/client.js";
+import {
+  applyGitCicdAwsRoleDiff,
+  AwsRoleDiffApplyError,
+  createIamAwsRoleDiffGateway,
+  type AwsRoleDiffGateway
+} from "../git-cicd/aws-role-diff-apply-service.js";
 import {
   readGitCicdPipelineStatusSnapshot,
   toGitCicdPipelineStatusFromRecord,
@@ -21,6 +29,7 @@ import {
   getGitCicdHandoff,
   GitCicdHandoffInvalidStatusTransitionError,
   GitCicdHandoffNotFoundError,
+  GitCicdHandoffProviderPermissionError,
   GitCicdHandoffProviderMismatchError,
   listProjectGitCicdHandoffs,
   updateGitCicdHandoffStatus,
@@ -29,6 +38,12 @@ import {
   type GitCicdHandoffRepository,
   type ProjectAccessContext
 } from "../git-cicd/git-cicd-handoff-service.js";
+import {
+  applyGitCicdRepositorySettings,
+  createGitHubRepositorySettingsApplier,
+  GitCicdRepositorySettingsPermissionError,
+  type GitCicdRepositorySettingsApplier
+} from "../git-cicd/git-cicd-repository-settings-service.js";
 import type { GitCicdPipelineStatusProvider } from "../git-cicd/github-actions-pipeline-status-provider.js";
 import { createRuntimeCacheFromEnv, type RuntimeCache } from "../runtime-cache/index.js";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
@@ -39,6 +54,16 @@ const gitCicdHandoffStatusSchema = z.enum([
   "pipeline_running",
   "pipeline_success",
   "pipeline_failed",
+  "cancelled"
+]);
+const gitCicdDeploymentModeSchema = z.enum(["terraform_iac", "static_site", "infra_and_app"]);
+const gitCicdPipelineDetailStatusSchema = z.enum([
+  "not_started",
+  "waiting_for_merge",
+  "waiting_for_approval",
+  "running",
+  "success",
+  "failed",
   "cancelled"
 ]);
 
@@ -117,11 +142,22 @@ const createGitCicdHandoffBodySchema = z
     architectureId: z.uuid(),
     terraformArtifactId: z.uuid(),
     handoffKind: z.enum(["terraform_iac", "static_site"]).default("terraform_iac"),
+    sourceDeploymentId: z.uuid().nullable().optional(),
+    deploymentMode: gitCicdDeploymentModeSchema.default("infra_and_app"),
     sourceRepositoryId: z.string().trim().min(1).max(128),
     targetBranch: branchSchema.optional(),
     sourceBranch: branchSchema.optional(),
     commitMessage: z.string().trim().min(1).max(500).optional(),
     pullRequestTitle: z.string().trim().min(1).max(255).optional(),
+    environmentName: z.string().trim().min(1).max(128).optional(),
+    rdsEnabled: z.boolean().optional(),
+    awsRegion: z.string().trim().min(1).max(32).optional(),
+    awsRoleArn: z.string().trim().min(1).max(2048).nullable().optional(),
+    tfStateBucket: z.string().trim().min(3).max(63).optional(),
+    releaseBucket: z.string().trim().min(3).max(63).optional(),
+    staticSiteUrl: z.string().url().nullable().optional(),
+    apiBaseUrl: z.string().url().nullable().optional(),
+    approveAwsRoleDiff: z.boolean().optional(),
     planSummary: deploymentPlanSummarySchema.optional(),
     userAcceptedChangeId: z.string().trim().min(1).max(128)
   })
@@ -132,7 +168,15 @@ const updateGitCicdHandoffStatusBodySchema = z
     status: gitCicdHandoffStatusSchema,
     pullRequestUrl: z.string().url().nullable().optional(),
     pipelineRunUrl: z.string().url().nullable().optional(),
+    pullRequestNumber: z.number().int().positive().nullable().optional(),
     pullRequestHeadSha: z.string().trim().min(1).max(64).nullable().optional(),
+    mergeCommitSha: z.string().trim().min(1).max(64).nullable().optional(),
+    infraPipelineRunUrl: z.string().url().nullable().optional(),
+    infraPipelineStatus: gitCicdPipelineDetailStatusSchema.optional(),
+    appPipelineRunUrl: z.string().url().nullable().optional(),
+    appPipelineStatus: gitCicdPipelineDetailStatusSchema.optional(),
+    destroyPipelineRunUrl: z.string().url().nullable().optional(),
+    destroyPipelineStatus: gitCicdPipelineDetailStatusSchema.optional(),
     statusMessage: z.string().trim().min(1).max(500).nullable().optional()
   })
   .strict();
@@ -144,6 +188,8 @@ type GitCicdHandoffRouteOptions = {
   ) => GitCicdHandoffRepository;
   gitCicdHandoffProvider?: GitCicdHandoffProvider;
   gitCicdPipelineStatusProvider?: GitCicdPipelineStatusProvider;
+  gitCicdRepositorySettingsApplier?: GitCicdRepositorySettingsApplier;
+  awsRoleDiffGateway?: AwsRoleDiffGateway;
   runtimeCache?: RuntimeCache;
 };
 
@@ -225,11 +271,22 @@ export async function registerGitCicdHandoffRoutes(
           architectureId: body.architectureId,
           terraformArtifactId: body.terraformArtifactId,
           handoffKind: body.handoffKind,
+          sourceDeploymentId: body.sourceDeploymentId,
+          deploymentMode: body.deploymentMode,
           sourceRepositoryId: body.sourceRepositoryId,
           targetBranch: body.targetBranch,
           sourceBranch: body.sourceBranch,
           commitMessage: body.commitMessage,
           pullRequestTitle: body.pullRequestTitle,
+          environmentName: body.environmentName,
+          rdsEnabled: body.rdsEnabled,
+          awsRegion: body.awsRegion,
+          awsRoleArn: body.awsRoleArn,
+          tfStateBucket: body.tfStateBucket,
+          releaseBucket: body.releaseBucket,
+          staticSiteUrl: body.staticSiteUrl,
+          apiBaseUrl: body.apiBaseUrl,
+          approveAwsRoleDiff: body.approveAwsRoleDiff,
           planSummary: toDeploymentPlanSummary(body.planSummary),
           userAcceptedChangeId: body.userAcceptedChangeId
         },
@@ -328,6 +385,55 @@ export async function registerGitCicdHandoffRoutes(
     }
   });
 
+  app.post("/git-cicd-handoffs/:handoffId/repository-settings/apply", async (request, reply) => {
+    const params = handoffParamsSchema.parse(request.params);
+    const { accessContext, repository } = await getGitCicdHandoffRequestContext(
+      request,
+      options,
+      getGitCicdDatabaseClient
+    );
+
+    try {
+      const response: GitCicdRepositorySettingsApplyResponse =
+        await applyGitCicdRepositorySettings(
+          {
+            handoffId: params.handoffId,
+            accessContext
+          },
+          repository,
+          options?.gitCicdRepositorySettingsApplier ?? createGitHubRepositorySettingsApplier()
+        );
+
+      return reply.status(200).send(response);
+    } catch (error) {
+      return handleGitCicdHandoffError(error, reply);
+    }
+  });
+
+  app.post("/git-cicd-handoffs/:handoffId/aws-role-diff/apply", async (request, reply) => {
+    const params = handoffParamsSchema.parse(request.params);
+    const { accessContext, repository } = await getGitCicdHandoffRequestContext(
+      request,
+      options,
+      getGitCicdDatabaseClient
+    );
+
+    try {
+      const response: GitCicdAwsRoleDiffApplyResponse = await applyGitCicdAwsRoleDiff(
+        {
+          handoffId: params.handoffId,
+          accessContext
+        },
+        repository,
+        options?.awsRoleDiffGateway ?? createIamAwsRoleDiffGateway()
+      );
+
+      return reply.status(200).send(response);
+    } catch (error) {
+      return handleGitCicdHandoffError(error, reply);
+    }
+  });
+
   app.patch("/git-cicd-handoffs/:handoffId/status", async (request, reply) => {
     const params = handoffParamsSchema.parse(request.params);
     const body = updateGitCicdHandoffStatusBodySchema.parse(request.body);
@@ -345,7 +451,15 @@ export async function registerGitCicdHandoffRoutes(
           status: body.status,
           pullRequestUrl: body.pullRequestUrl,
           pipelineRunUrl: body.pipelineRunUrl,
+          pullRequestNumber: body.pullRequestNumber,
           pullRequestHeadSha: body.pullRequestHeadSha,
+          mergeCommitSha: body.mergeCommitSha,
+          infraPipelineRunUrl: body.infraPipelineRunUrl,
+          infraPipelineStatus: body.infraPipelineStatus,
+          appPipelineRunUrl: body.appPipelineRunUrl,
+          appPipelineStatus: body.appPipelineStatus,
+          destroyPipelineRunUrl: body.destroyPipelineRunUrl,
+          destroyPipelineStatus: body.destroyPipelineStatus,
           statusMessage: body.statusMessage
         },
         repository
@@ -370,6 +484,9 @@ function toGitCicdHandoff(row: GitCicdHandoffRecord): GitCicdHandoff {
     architectureId: row.architectureId,
     terraformArtifactId: row.terraformArtifactId,
     handoffKind: row.handoffKind,
+    sourceDeploymentId: row.sourceDeploymentId,
+    deploymentMode: row.deploymentMode,
+    requiresEnvironmentApproval: row.requiresEnvironmentApproval,
     sourceRepositoryId: row.sourceRepositoryId,
     repositoryProvider: row.repositoryProvider,
     repositoryOwner: row.repositoryOwner,
@@ -379,8 +496,22 @@ function toGitCicdHandoff(row: GitCicdHandoffRecord): GitCicdHandoff {
     commitMessage: row.commitMessage,
     pullRequestTitle: row.pullRequestTitle,
     pullRequestUrl: row.pullRequestUrl,
+    pullRequestNumber: row.pullRequestNumber,
     pullRequestHeadSha: row.pullRequestHeadSha,
+    mergeCommitSha: row.mergeCommitSha,
+    environmentName: row.environmentName,
     pipelineRunUrl: row.pipelineRunUrl,
+    infraPipelineRunUrl: row.infraPipelineRunUrl,
+    infraPipelineStatus: row.infraPipelineStatus,
+    appPipelineRunUrl: row.appPipelineRunUrl,
+    appPipelineStatus: row.appPipelineStatus,
+    destroyPipelineRunUrl: row.destroyPipelineRunUrl,
+    destroyPipelineStatus: row.destroyPipelineStatus,
+    staticSiteUrl: row.staticSiteUrl,
+    apiBaseUrl: row.apiBaseUrl,
+    repositorySettingsPreview: row.repositorySettingsPreview,
+    awsRoleDiff: row.awsRoleDiff,
+    githubOAuthRequired: row.githubOAuthRequired,
     status: row.status,
     statusMessage: row.statusMessage,
     userAcceptedChangeId: row.userAcceptedChangeId,
@@ -423,7 +554,15 @@ async function getGitCicdPipelineStatus(
           status: update.status,
           pullRequestUrl: update.pullRequestUrl,
           pipelineRunUrl: update.pipelineRunUrl,
+          pullRequestNumber: update.pullRequestNumber,
           pullRequestHeadSha: update.pullRequestHeadSha,
+          mergeCommitSha: update.mergeCommitSha,
+          infraPipelineRunUrl: update.infraPipelineRunUrl,
+          infraPipelineStatus: update.infraPipelineStatus,
+          appPipelineRunUrl: update.appPipelineRunUrl,
+          appPipelineStatus: update.appPipelineStatus,
+          destroyPipelineRunUrl: update.destroyPipelineRunUrl,
+          destroyPipelineStatus: update.destroyPipelineStatus,
           statusMessage: update.statusMessage
         },
         repository
@@ -530,6 +669,27 @@ function handleGitCicdHandoffError(error: unknown, reply: FastifyReply) {
   }
 
   if (error instanceof GitCicdHandoffProviderMismatchError) {
+    return reply.status(409).send({
+      error: "conflict",
+      message: error.message
+    });
+  }
+
+  if (error instanceof GitCicdHandoffProviderPermissionError) {
+    return reply.status(409).send({
+      error: "github_oauth_required",
+      message: error.message
+    });
+  }
+
+  if (error instanceof GitCicdRepositorySettingsPermissionError) {
+    return reply.status(409).send({
+      error: "github_oauth_required",
+      message: error.message
+    });
+  }
+
+  if (error instanceof AwsRoleDiffApplyError) {
     return reply.status(409).send({
       error: "conflict",
       message: error.message

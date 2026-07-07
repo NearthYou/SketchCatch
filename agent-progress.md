@@ -1,6 +1,52 @@
 ﻿# 에이전트 진행 로그
 # 에이전트 진행 로그
 
+### 2026-07-07 - Git/CI/CD 자동 배포 E2E 최소 구현
+
+- Goal: `docs/sw/plan6.md`의 Git/CI/CD 자동 배포 범위를 최소 코드로 실제 handoff 생성, workflow PR artifact, 상세 pipeline 상태 추적, Deployment Panel UX까지 연결한다.
+- Completed:
+  - `GitCicdHandoff` shared type, Drizzle schema, SQL migration에 source deployment, deployment mode, GitHub Environment approval, PR number, merge commit, infra/app/destroy workflow URL/status, repository settings preview, AWS role diff, URL 검증 필드를 추가했다.
+  - GitHub PR 생성 provider가 Terraform artifact와 함께 `sketchcatch-infra.yml`, `sketchcatch-app.yml`, `sketchcatch-destroy.yml`, repository settings manifest, AWS role diff manifest를 생성한다.
+  - GitHub Actions polling을 PR number -> merge commit SHA -> workflow name 기준으로 확장해 infra/app/destroy 상태를 분리 추적한다.
+  - Deployment Panel에 `Git/CI/CD handoff 생성` 버튼과 OAuth 필요, Environment approval, IAM diff, repo settings, infra/app/destroy status, static/API URL 표시를 추가했다.
+  - GitHub repository settings apply route를 추가해 Environment 생성과 Actions variables upsert를 GitHub App 권한으로 시도하고, 권한 부족은 `github_oauth_required`로 차단한다.
+  - GitHub PR 생성 중 workflow/repository 권한 부족이 발생하면 handoff record 저장 전에 `github_oauth_required`로 차단하도록 보강했다.
+  - AWS role diff apply route를 추가해 승인된 GitHub OIDC trust policy diff만 IAM role에 적용하고 재조회 검증 결과를 handoff JSON에 기록한다.
+  - Deployment Panel에 `Repo settings 적용`, `AWS role diff 적용` 버튼을 추가했고, 성공 후 panel snapshot을 다시 로드한다.
+  - App workflow가 ASG Launch Template ID/Name을 찾아 `SKETCHCATCH_RELEASE_ID` user data marker를 새 Launch Template version에 기록하고 Instance Refresh 결과를 polling하도록 보강했다.
+  - Project Automation이 PR 본문의 일반 HTTP status 숫자를 issue number로 오인하지 않도록 PR title/body는 명시적 `#123` 참조만 파싱하게 수정했다.
+  - `scripts/smoke/git-cicd-auto-deploy.ps1`로 repository settings apply, AWS role diff apply, infra/app/destroy pipeline status, static/API URL marker 확인 report를 출력할 수 있게 했다.
+  - smoke runner에 pipeline success/destroy success 대기 옵션과 pipeline snapshot 기록을 추가했다.
+  - `docs/data-models.md`, `docs/deployment.md`, `docs/sw/spec6.md`, `docs/sw/plan6.md`, `docs/sw/agents3.md`를 구현 상태에 맞게 갱신했다.
+- Verification run:
+  - `pnpm harness:check` - passed before implementation.
+  - `pnpm --filter @sketchcatch/api typecheck` - passed.
+  - `pnpm --filter @sketchcatch/web typecheck` - passed.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/git-cicd/git-cicd-workflows.test.ts src/routes/git-cicd-handoffs.test.ts src/source-repositories/github-app-client.test.ts` - passed, 23 tests.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/api.test.ts features/workspace/deployment-actions.test.ts` - passed, 42 tests.
+  - PowerShell parser check for `scripts/smoke/git-cicd-auto-deploy.ps1` - passed.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `pnpm build` - passed.
+- Known risks:
+  - GitHub repository settings apply는 GitHub App 설치 권한으로 검증했고, 실제 운영 repo 권한 부족 시 OAuth/권한 보강 CTA가 필요하다.
+  - AWS IAM trust policy apply executor는 fake gateway/unit 경로로 검증했고, 실제 AWS 계정 live 실행은 아직 하지 않았다.
+  - 실제 PR merge, GitHub Environment approval, Terraform apply, S3 release, ASG Instance Refresh, destroy live smoke는 비용/자격증명/cleanup 승인 후 실행해야 한다.
+  - `pnpm --filter @sketchcatch/api test -- git-cicd`와 `pnpm --filter @sketchcatch/web test -- workspace/api.test.ts deployment-actions.test.ts`는 repo script 특성상 전체 테스트를 실행했고, 기존 S3 env/layout unrelated 실패가 섞여 targeted command로 재검증했다.
+
+### 2026-07-07 - Git/CI/CD 자동 배포 E2E 계획 문서화
+
+- Goal: Git/CI/CD 자동 배포 후속 범위를 `docs/sw/spec6.md`, `docs/sw/plan6.md`, `docs/sw/agents3.md`로 고정하고 실행 가능한 이슈/브랜치를 만든다.
+- Completed:
+  - `spec6.md`에 Terraform infra 배포와 app runtime 배포를 모두 포함하는 merge 후 GitHub Actions 자동 배포 범위를 정리했다.
+  - `plan6.md`에 Issues #203-#210과 대응 브랜치 `feature/sw/203-*`부터 `feature/sw/210-*`까지 마일스톤을 기록했다.
+  - `agents3.md`에 구현 중 세 문서를 계속 보고 갱신해야 한다는 규범과 GitHub/AWS/approval 안전 규칙을 30줄 이내로 작성했다.
+  - GitHub Issues #203-#210을 생성하고 각 milestone branch를 `origin/dev` 기준으로 원격에 생성했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits.
+- Known risks:
+  - 이번 변경은 계획/이슈/브랜치 정리이며 실제 GitHub OAuth, IAM mutation, workflow generation 구현은 각 milestone에서 진행해야 한다.
+
 ### 2026-07-07 - migration workflow quoting hotfix
 
 - Goal: `Run Database Migrations` workflow 28839194349가 SSM 실행 전 GitHub runner bash에서 `syntax error near unexpected token '('`로 실패한 원인을 수정한다.

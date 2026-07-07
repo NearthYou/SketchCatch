@@ -1,5 +1,33 @@
 ﻿# 세션 핸드오프
 
+## 2026-07-07 - Git/CI/CD 자동 배포 plan6 구현 handoff
+
+- Branch/worktree: `codex/docs-cicd-plan6` at `C:\Users\siwon\Desktop\Jungle\Week17~21\SketchCatch-worktrees\cicd-plan6-docs`.
+- PR: #211, originally docs-only, now expanded with minimal implementation for plan6.
+- Implemented:
+  - Shared/API/DB `GitCicdHandoff` contract now stores `sourceDeploymentId`, `deploymentMode`, Environment approval, PR number, merge commit SHA, infra/app/destroy workflow URLs/statuses, repository settings preview, AWS role diff, OAuth required flag, and static/API verification URLs.
+  - Added SQL migration `apps/api/drizzle/0026_git_cicd_infra_app_auto_deploy.sql`.
+  - GitHub PR handoff now generates Terraform artifact plus `.github/workflows/sketchcatch-infra.yml`, `sketchcatch-app.yml`, `sketchcatch-destroy.yml`, repository settings manifest, and AWS role diff manifest.
+  - GitHub Actions polling now prefers PR number, checks merge state, then maps merge commit SHA workflow runs by `SketchCatch Infra`, `SketchCatch App`, and `SketchCatch Destroy`.
+  - Deployment Panel has a `Git/CI/CD handoff 생성` action and displays OAuth, Environment approval, IAM diff, repo settings, detailed pipeline statuses, and URL verification targets.
+  - Repository settings apply route now creates/updates GitHub Environment and Actions variables through the GitHub App token, with `github_oauth_required` fail-closed handling for missing permissions.
+  - GitHub PR creation now maps 401/403 provider failures to `github_oauth_required` before any handoff record is saved.
+  - AWS role diff apply route now applies approved GitHub OIDC trust statements to IAM and stores `applied/appliedAt/verified` in `awsRoleDiff`.
+  - Deployment Panel exposes `Repo settings 적용` and `AWS role diff 적용`, then refreshes the panel snapshot.
+  - App workflow now writes `SKETCHCATCH_RELEASE_ID` into a new ASG Launch Template version when `SKETCHCATCH_ASG_NAME` is configured, updates the ASG to that version, and polls Instance Refresh to terminal status.
+  - Added `scripts/smoke/git-cicd-auto-deploy.ps1` for repository settings apply, role diff apply, infra/app/destroy pipeline status, static/API URL marker report generation, and optional pipeline/destroy success waits.
+- Verified:
+  - `pnpm harness:check` before implementation.
+  - `pnpm --filter @sketchcatch/api typecheck`
+  - `pnpm --filter @sketchcatch/web typecheck`
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/git-cicd/git-cicd-workflows.test.ts src/routes/git-cicd-handoffs.test.ts src/source-repositories/github-app-client.test.ts`
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/api.test.ts features/workspace/deployment-actions.test.ts`
+- Not yet complete/live-proven:
+  - Repository settings apply has not been exercised against a real target GitHub repository in this session.
+  - AWS IAM trust policy apply has not been exercised against a real AWS account in this session.
+  - Real PR merge -> Environment approval -> Terraform apply -> S3 release -> ASG Instance Refresh -> destroy live smoke has not run.
+- Next action: merge/deploy PR #211 when ready, then run the live smoke with prepared GitHub/AWS credentials, Environment approval, cost approval, and cleanup confirmation. Do not mark the thread goal complete until the live smoke report proves the full flow or the remaining external mutation gap is explicitly accepted as separate scope.
+
 ## 2026-07-07 - Demo Web Service E2E handoff
 
 - Branch/worktree: `feature/sw/189-196-demo-web-service-e2e` at `C:\Users\siwon\Desktop\Jungle\Week17~21\SketchCatch-worktrees\demo-web-service-e2e`.

@@ -856,6 +856,14 @@ type DeploymentFailureExplanation = {
 
 `GitCicdHandoff`는 `IaC Preview`를 Source Repository와 외부 pipeline으로 넘기는 팀 운영 배포 경로의 metadata다. Direct Deployment Path를 대체하는 것이 아니라 운영 배포용 별도 경로다.
 
+2026-07-07 추가 계약:
+
+- `POST /api/git-cicd-handoffs/:handoffId/repository-settings/apply`는 handoff의 `repositorySettingsPreview`를 기준으로 GitHub Environment와 Actions variables를 적용한다.
+- 응답 DTO는 `GitCicdRepositorySettingsApplyResponse`이며 적용 여부, environment 이름, 적용된 variable 이름, workflow file 목록, `githubOAuthRequired` 상태를 반환한다.
+- `POST /api/git-cicd-handoffs/:handoffId/aws-role-diff/apply`는 승인된 `awsRoleDiff`를 기준으로 IAM trust policy를 적용하고 검증한다.
+- 응답 DTO는 `GitCicdAwsRoleDiffApplyResponse`이며 role ARN, repository, environment, `appliedAt`, `verified`를 반환한다.
+- `GitCicdAwsRoleDiff` JSON에는 적용 후 `applied`, `appliedAt`, `verified`를 기록할 수 있다.
+
 ```ts
 type SourceRepositoryProvider = "internal" | "github";
 
@@ -1411,3 +1419,26 @@ type CheckFinding = {
 GitHub App installation repository 목록은 DB에 저장하지 않습니다. callback 응답은 임시 선택 화면에만 사용하고, 사용자가 선택한 repository 1개만 active source repository로 저장합니다. 새 GitHub repo를 연결하면 기존 active row는 `inactive`으로 바꾸고 `disconnected_at`을 기록한 뒤 새 active row를 생성합니다.
 
 Git/CI/CD handoff 생성 요청은 `sourceRepositoryId`만 받습니다. repository owner/name/provider/default branch는 DB의 active source repository에서 읽습니다. 이 원칙은 클라이언트가 임의 GitHub repository identity를 body로 보내는 위험을 막기 위한 서비스 계약입니다.
+
+### Git/CI/CD 자동 배포 handoff 확장
+
+`GitCicdHandoff`는 하나의 record로 유지하되, merge 후 자동 배포를 위해 infra/app/destroy workflow 상태를 분리해 저장합니다. 기존 단일 `pipelineRunUrl`은 summary 링크로 유지하고, 새 UI와 polling은 아래 상세 필드를 함께 사용합니다.
+
+주요 필드:
+
+| 필드 | 설명 |
+| --- | --- |
+| `sourceDeploymentId` | Direct Deployment record에서 Git/CI/CD handoff를 만든 경우의 원본 deployment id |
+| `deploymentMode` | `terraform_iac`, `static_site`, `infra_and_app` 중 하나 |
+| `requiresEnvironmentApproval` | GitHub Environment approval gate 필요 여부 |
+| `pullRequestNumber` | merge 상태 polling 기준 PR 번호 |
+| `mergeCommitSha` | merge 후 target branch workflow run 조회 기준 commit SHA |
+| `environmentName` | 기본 `sketchcatch-production` |
+| `infraPipelineRunUrl`, `infraPipelineStatus` | Terraform plan/apply workflow 상태 |
+| `appPipelineRunUrl`, `appPipelineStatus` | S3 release와 ASG Instance Refresh workflow 상태 |
+| `destroyPipelineRunUrl`, `destroyPipelineStatus` | cleanup destroy workflow 상태 |
+| `repositorySettingsPreview` | 생성/갱신해야 하는 GitHub environment, variables, workflow files preview |
+| `awsRoleDiff` | GitHub Actions OIDC trust 조건 diff preview와 승인 metadata |
+| `githubOAuthRequired` | workflow file write와 repository Actions 설정에 GitHub user OAuth 추가 승인이 필요한지 |
+
+`GitCicdPipelineDetailStatus`는 `not_started`, `waiting_for_merge`, `waiting_for_approval`, `running`, `success`, `failed`, `cancelled` 중 하나입니다. Summary `status`는 infra 또는 app 실패 시 `pipeline_failed`, 둘 다 성공 시 `pipeline_success`, approval 대기/실행 중이면 `pipeline_running`으로 집계합니다.
