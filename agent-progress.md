@@ -1,6 +1,22 @@
 ﻿# 에이전트 진행 로그
 # 에이전트 진행 로그
 
+### 2026-07-07 - 운영 DB migration BOM 실패 hotfix
+
+- Goal: `Run Database Migrations` workflow 28838004059 실패 원인을 확인하고 운영 migration 재실행이 가능하도록 고친다.
+- Completed:
+  - 실패 로그에서 Drizzle migrator가 `meta/_journal.json` 파싱 중 leading BOM 때문에 `Unexpected token`으로 종료된 것을 확인했다.
+  - API migration runtime이 Drizzle `migrate` 호출 전에 `drizzle/meta/_journal.json`의 leading BOM을 제거하도록 `migration-metadata` helper를 추가했다.
+  - 현재 배포 이미지에도 바로 적용될 수 있도록 `migrate.yml`의 SSM docker command가 migrate 실행 직전 journal BOM을 제거하도록 보강했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/db/migration-metadata.test.ts` - passed, 2 tests.
+  - `pnpm --filter @sketchcatch/api typecheck` - passed.
+  - `pnpm --filter @sketchcatch/api build` - passed.
+  - Workflow BOM-strip Node snippet smoke - passed.
+- Known risks:
+  - 운영 DB migration 재실행은 hotfix merge 후 `migrate.yml`을 `dev` ref로 다시 실행해야 한다.
+
 ### 2026-07-07 - PR #197 Gemini 리뷰 코멘트 반영
 
 - Goal: PR #197에 달린 Gemini Code Assist 리뷰 코멘트를 확인하고 타당한 개선을 반영한다.

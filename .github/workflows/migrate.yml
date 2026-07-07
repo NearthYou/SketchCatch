@@ -28,7 +28,7 @@ jobs:
               commands: [
                 "set -euo pipefail",
                 "image_tag=\"$(cat /opt/sketchcatch/current-image)\"",
-                "docker run --rm --network sketchcatch --env-file /etc/sketchcatch/api.env \"sketchcatch-api:${image_tag}\" node dist/db/migrate.cjs"
+                "docker run --rm --network sketchcatch --env-file /etc/sketchcatch/api.env \"sketchcatch-api:${image_tag}\" sh -c \"node -e 'const fs=require(\\\"fs\\\"); const p=\\\"./drizzle/meta/_journal.json\\\"; const s=fs.readFileSync(p,\\\"utf8\\\"); if (s.charCodeAt(0)===0xFEFF) fs.writeFileSync(p,s.slice(1),\\\"utf8\\\");' && node dist/db/migrate.cjs\""
               ],
               executionTimeout: ["900"]
             }' > ssm-migrate-parameters.json
