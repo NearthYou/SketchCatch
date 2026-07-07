@@ -72,6 +72,31 @@ test("source repository routes issue a callback URL for an existing active GitHu
   assert.equal(repository.rows.length, 1);
 });
 
+test("source repository routes issue a callback URL for a selected known GitHub installation", async (t) => {
+  const repository = new FakeSourceRepositoryRepository([
+    createSourceRepositoryRecord({
+      id: "known-source-repository",
+      status: "inactive",
+      githubInstallationId: "known-installation"
+    })
+  ]);
+  const app = await buildSourceRepositoryRouteApp({ repository });
+  t.after(() => app.close());
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/projects/${projectId}/source-repositories/github/known-source-repository/existing-installation-callback-url`,
+    headers: await authHeaders()
+  });
+
+  assert.equal(response.statusCode, 201);
+  const callbackUrl = new URL(response.json().callbackUrl);
+
+  assert.equal(callbackUrl.pathname, "/integrations/github/callback");
+  assert.equal(callbackUrl.searchParams.get("installation_id"), "known-installation");
+  assert.ok(callbackUrl.searchParams.get("state"));
+});
+
 test("source repository routes exchange callback state for repositories without persisting the installation list", async (t) => {
   const repository = new FakeSourceRepositoryRepository();
   const githubAppClient = createFakeGitHubAppClient([
@@ -252,6 +277,12 @@ class FakeSourceRepositoryRepository implements SourceRepositoryRepository {
 
   async listProjectSourceRepositories(candidateProjectId: string) {
     return this.rows.filter((row) => row.projectId === candidateProjectId);
+  }
+
+  async findProjectSourceRepository(candidateProjectId: string, sourceRepositoryId: string) {
+    return this.rows.find(
+      (row) => row.projectId === candidateProjectId && row.id === sourceRepositoryId
+    );
   }
 
   async createActiveGitHubSourceRepository(input: CreateActiveGitHubSourceRepositoryInput) {

@@ -34,6 +34,10 @@ const projectParamsSchema = z.object({
   projectId: z.uuid()
 });
 
+const projectSourceRepositoryParamsSchema = projectParamsSchema.extend({
+  sourceRepositoryId: z.string().trim().min(1).max(128)
+});
+
 const listGitHubInstallationRepositoriesBodySchema = z
   .object({
     installationId: z.string().trim().min(1).max(128),
@@ -151,6 +155,40 @@ export async function registerSourceRepositoryRoutes(
         const result = await createGitHubExistingInstallationCallbackUrl(
           {
             projectId: params.projectId,
+            accessContext,
+            callbackUrl: runtime.callbackUrl,
+            stateSecret: runtime.stateSecret
+          },
+          repository
+        );
+        const response: GitHubAppExistingInstallationCallbackUrlResponse = {
+          callbackUrl: result.callbackUrl,
+          expiresAt: result.expiresAt.toISOString()
+        };
+
+        return reply.status(201).send(response);
+      } catch (error) {
+        return handleSourceRepositoryError(error, reply);
+      }
+    }
+  );
+
+  app.post(
+    "/projects/:projectId/source-repositories/github/:sourceRepositoryId/existing-installation-callback-url",
+    async (request, reply) => {
+      const params = projectSourceRepositoryParamsSchema.parse(request.params);
+      const { accessContext, repository } = await getSourceRepositoryRequestContext(
+        request,
+        options,
+        getSourceRepositoryDatabaseClient
+      );
+
+      try {
+        const runtime = getGitHubAppRouteRuntime(options);
+        const result = await createGitHubExistingInstallationCallbackUrl(
+          {
+            projectId: params.projectId,
+            sourceRepositoryId: params.sourceRepositoryId,
             accessContext,
             callbackUrl: runtime.callbackUrl,
             stateSecret: runtime.stateSecret

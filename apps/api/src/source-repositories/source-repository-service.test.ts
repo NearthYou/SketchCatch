@@ -99,12 +99,30 @@ test("existing active GitHub installation issues a callback URL for the repo sel
   assert.ok(callbackUrl.searchParams.get("state"));
 });
 
-test("existing installation callback URL requires an active GitHub source repository", async () => {
+test("existing installation callback URL can reuse an inactive GitHub source repository", async () => {
   const repository = createInMemorySourceRepositoryRepository([
     createSourceRepositoryRecord({
+      githubInstallationId: "inactive-installation",
       status: "inactive"
     })
   ]);
+  const callback = await createGitHubExistingInstallationCallbackUrl(
+    {
+      projectId,
+      accessContext: createAccessContext(userId),
+      callbackUrl: "https://sketchcatch.net/integrations/github/callback",
+      stateSecret
+    },
+    repository
+  );
+  const callbackUrl = new URL(callback.callbackUrl);
+
+  assert.equal(callbackUrl.searchParams.get("installation_id"), "inactive-installation");
+  assert.ok(callbackUrl.searchParams.get("state"));
+});
+
+test("existing installation callback URL requires a known GitHub source repository", async () => {
+  const repository = createInMemorySourceRepositoryRepository();
 
   await assert.rejects(
     () =>
@@ -322,6 +340,9 @@ function createInMemorySourceRepositoryRepository(
     },
     async listProjectSourceRepositories(requestProjectId) {
       return rows.filter((row) => row.projectId === requestProjectId);
+    },
+    async findProjectSourceRepository(requestProjectId, sourceRepositoryId) {
+      return rows.find((row) => row.projectId === requestProjectId && row.id === sourceRepositoryId);
     },
     async createActiveGitHubSourceRepository(input: CreateActiveGitHubSourceRepositoryInput) {
       const now = new Date();
