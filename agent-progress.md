@@ -1,6 +1,27 @@
 ﻿# 에이전트 진행 로그
 # 에이전트 진행 로그
 
+### 2026-07-07 - PR 리뷰 방어 코드 및 resize internals 정리
+
+- Goal: PR 리뷰 코멘트에 따라 RDS read replica 판별의 `parameters.values` 접근을 legacy/null 입력에도 안전하게 만들고, DiagramNodeView resize 핸들러의 중복 React Flow internals refresh를 제거한다.
+- Completed:
+  - `workspace-ai-diagram-adapter.ts`의 RDS read replica 판별에서 `parameters.values`를 `isRecord`로 좁힌 뒤 `replicateSourceDb`/`replicate_source_db`를 조회하도록 수정했다.
+  - `DiagramNodeView`의 resize pointer move/up 핸들러에서 `window.requestAnimationFrame(() => updateNodeInternals(id))` 중복 호출을 제거했다.
+  - 기존 `useEffect`가 `node.size.width`/`node.size.height` 변경 시 `updateNodeInternals(id)`를 호출하는 계약을 source test로 고정했다.
+  - `values: null`/`values: undefined` legacy DiagramJson 입력이 Architecture 변환에서 TypeError 없이 generic RDS로 유지되는 회귀 테스트를 추가했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits and after build.
+  - Red before fix: `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-ai-diagram-adapter.test.ts --test-name-pattern "missing parameter values"` - failed with `Cannot read properties of null`.
+  - Red before fix: `pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/diagram-editor-layout.test.ts --test-name-pattern "manual resize"` - failed for duplicate resize handler `requestAnimationFrame`.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-ai-diagram-adapter.test.ts --test-name-pattern "missing parameter values"` - passed, 17 tests.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/diagram-editor-layout.test.ts --test-name-pattern "manual resize"` - passed, 5 tests.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `pnpm build` - passed.
+- Known risks:
+  - 실제 브라우저 리사이즈 조작 QA는 수행하지 않았다. 이번 변경은 source/adapter 테스트와 build checks로 검증했다.
+  - `next build`가 `apps/web/next-env.d.ts`를 생성 경로로 변경했지만 리뷰 범위 밖 생성 파일이라 기존 경로로 정리했다.
+
 ### 2026-07-07 - Workspace canvas 연결 핸들 잔류 수정
 
 - Goal: React Flow 연결 시작 후 reset이 누락되는 케이스에서 모든 노드의 보라색 connection handle이 전체 선택처럼 남는 현상을 막는다.

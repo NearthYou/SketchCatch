@@ -733,8 +733,8 @@ function isRdsReadReplicaParameters(parameters: DiagramNodeParameters): boolean 
     return false;
   }
 
-  const replicateSourceDb =
-    parameters.values["replicateSourceDb"] ?? parameters.values["replicate_source_db"];
+  const values = isRecord(parameters.values) ? parameters.values : {};
+  const replicateSourceDb = values["replicateSourceDb"] ?? values["replicate_source_db"];
 
   return typeof replicateSourceDb === "string" && replicateSourceDb.trim().length > 0;
 }

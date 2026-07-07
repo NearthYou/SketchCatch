@@ -11,6 +11,10 @@ const diagramEditorStyles = readFileSync(
   fileURLToPath(new URL("./diagram-editor.module.css", import.meta.url)),
   "utf8"
 );
+const diagramNodeViewSource = readFileSync(
+  fileURLToPath(new URL("./DiagramNodeView.tsx", import.meta.url)),
+  "utf8"
+);
 
 test("diagram editor uses partial box selection for overlapping area nodes", () => {
   assert.match(diagramEditorSource, /selectionOnDrag=\{interactionMode === "select" && !isPreviewActive\}/);
@@ -47,6 +51,14 @@ test("area node header uses a folder tab shape", () => {
   assert.doesNotMatch(headerBlock, /border-radius:\s*999px;/);
   assert.match(headerAfterBlock, /border-bottom:\s*var\(--area-border-width\) solid var\(--area-border-color\);/);
   assert.match(headerAfterBlock, /border-left:\s*var\(--area-border-width\) solid var\(--area-border-color\);/);
+});
+
+test("manual resize relies on node size effects to refresh React Flow internals", () => {
+  assert.match(diagramNodeViewSource, /useEffect\(\(\) => \{\s*updateNodeInternals\(id\);/);
+  assert.doesNotMatch(
+    diagramNodeViewSource,
+    /window\.requestAnimationFrame\(\(\) => updateNodeInternals\(id\)\)/
+  );
 });
 
 function getCssBlock(selector: string): string {

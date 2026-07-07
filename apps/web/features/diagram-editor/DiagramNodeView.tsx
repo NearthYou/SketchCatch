@@ -131,20 +131,18 @@ export function DiagramNodeView({ data, id, isConnectable, selected }: NodeProps
           zoom
         });
         data.onResize(id, latestUpdate);
-        window.requestAnimationFrame(() => updateNodeInternals(id));
       };
 
       const handlePointerUp = () => {
         window.removeEventListener("pointermove", handlePointerMove);
         window.removeEventListener("pointerup", handlePointerUp);
         data.onResizeEnd(id, latestUpdate);
-        window.requestAnimationFrame(() => updateNodeInternals(id));
       };
 
       window.addEventListener("pointermove", handlePointerMove);
       window.addEventListener("pointerup", handlePointerUp, { once: true });
     },
-    [data, id, isArea, isResourceNode, node.locked, node.position, node.size, reactFlow, resizeBounds, updateNodeInternals]
+    [data, id, isArea, isResourceNode, node.locked, node.position, node.size, reactFlow, resizeBounds]
   );
 
   return (

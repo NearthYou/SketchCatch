@@ -1005,6 +1005,67 @@ test("convertDiagramJsonToArchitectureJson keeps only valid resource nodes and c
   });
 });
 
+test("convertDiagramJsonToArchitectureJson tolerates missing parameter values for RDS mapping", () => {
+  const diagramJson: DiagramJson = {
+    nodes: [
+      makeDiagramNode({
+        id: "legacy-null-rds",
+        label: "Legacy Null RDS",
+        parameters: {
+          fileName: "main",
+          resourceName: "legacy_null",
+          resourceType: "aws_db_instance",
+          terraformBlockType: "resource",
+          values: null as unknown as Record<string, unknown>
+        },
+        type: "aws_db_instance"
+      }),
+      makeDiagramNode({
+        id: "legacy-undefined-rds",
+        label: "Legacy Undefined RDS",
+        parameters: {
+          fileName: "main",
+          resourceName: "legacy_undefined",
+          resourceType: "aws_db_instance",
+          terraformBlockType: "resource",
+          values: undefined as unknown as Record<string, unknown>
+        },
+        type: "aws_db_instance"
+      })
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+
+  const architectureJson = convertDiagramJsonToArchitectureJson(diagramJson);
+
+  assert.deepEqual(
+    architectureJson.nodes.map((node) => ({
+      config: node.config,
+      id: node.id,
+      type: node.type
+    })),
+    [
+      {
+        config: {
+          terraformResourceName: "legacy_null",
+          terraformResourceType: "aws_db_instance"
+        },
+        id: "legacy-null-rds",
+        type: "RDS"
+      },
+      {
+        config: {
+          terraformResourceName: "legacy_undefined",
+          terraformResourceType: "aws_db_instance"
+        },
+        id: "legacy-undefined-rds",
+        type: "RDS"
+      }
+    ]
+  );
+});
+
 test("convertDiagramJsonToArchitectureJson keeps only AWS port range values in ingress config", () => {
   const diagramJson: DiagramJson = {
     nodes: [
