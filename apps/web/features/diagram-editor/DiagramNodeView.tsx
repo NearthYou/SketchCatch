@@ -344,6 +344,12 @@ function getNodeShellStyle(isArea: boolean, usesIconTileLayout: boolean, borderC
 }
 
 function getResourceNodeLabel(node: DiagramFlowNode["data"]["node"]): string {
+  const diagramLabel = node.parameters?.values?.["diagramLabel"];
+
+  if (typeof diagramLabel === "string" && diagramLabel.trim().length > 0) {
+    return diagramLabel;
+  }
+
   const resourceName = node.parameters?.resourceName?.trim();
 
   return resourceName ? resourceName : node.label;

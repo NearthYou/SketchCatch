@@ -28,8 +28,8 @@ import {
   runAiDesignSimulation
 } from "./api";
 import {
-  convertArchitectureJsonToDiagramJson,
-  convertDiagramJsonToArchitectureJson
+  convertDiagramJsonToArchitectureJson,
+  getDiagramJsonForArchitectureDraft
 } from "./workspace-ai-diagram-adapter";
 import {
   createWorkspaceAiBoardSnapshot,
@@ -882,7 +882,7 @@ export function WorkspaceAiChatDock({
   }
 
   function showDraftPreview(result: AiArchitectureDraftResult): void {
-    const previewDiagram = convertArchitectureJsonToDiagramJson(result.architectureJson);
+    const previewDiagram = getDiagramJsonForArchitectureDraft(result);
 
     setDraft(result);
     setDraftClarification(null);
@@ -899,7 +899,7 @@ export function WorkspaceAiChatDock({
       return;
     }
 
-    context.applyDiagramJson(convertArchitectureJsonToDiagramJson(draft.architectureJson));
+    context.applyDiagramJson(getDiagramJsonForArchitectureDraft(draft));
     context.requestTerraformRefresh();
     requestImmediateDiagramSave();
     setDraft(null);

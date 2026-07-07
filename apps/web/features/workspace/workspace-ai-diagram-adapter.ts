@@ -1,4 +1,5 @@
 import type {
+  AiArchitectureDraftResult,
   ArchitectureJson,
   DiagramEdge,
   DiagramJson,
@@ -23,6 +24,7 @@ const DEFAULT_VIEWPORT: DiagramJson["viewport"] = { x: 0, y: 0, zoom: 1 };
 const DEFAULT_NODE_SIZE: DiagramNode["size"] = { width: 56, height: 56 };
 const DEFAULT_TERRAFORM_BLOCK_TYPE: TerraformBlockType = "resource";
 const UNKNOWN_TERRAFORM_RESOURCE_TYPE = "unknown_resource";
+const SKETCHCATCH_REFERENCE_TERRAFORM_MARKER = "sketchcatch-reference-web-service-deployment";
 const DEFAULT_EDGE_STYLE: NonNullable<DiagramEdge["style"]> = {
   animated: false,
   color: "#506176",
@@ -41,6 +43,11 @@ const OPERATION_EDGE_STYLE: NonNullable<DiagramEdge["style"]> = {
   lineStyle: "dashed",
   width: "thick"
 };
+
+export function getDiagramJsonForArchitectureDraft(draft: AiArchitectureDraftResult): DiagramJson {
+  return draft.diagramJson ?? convertArchitectureJsonToDiagramJson(draft.architectureJson);
+}
+
 const DEPENDENCY_EDGE_STYLE: NonNullable<DiagramEdge["style"]> = {
   animated: false,
   color: "#6b7280",
@@ -175,15 +182,21 @@ const RESOURCE_NAME_CONVENTIONS: Readonly<Record<string, { readonly prefix: stri
 // AI Draft를 실제 Architecture Board가 받을 수 있는 DiagramJson으로 바꾸는 gg 경계입니다.
 export function convertArchitectureJsonToDiagramJson(architectureJson: ArchitectureJson): DiagramJson {
   const nodeIds = new Set(architectureJson.nodes.map((node) => node.id));
+  const isSketchCatchReference = hasSketchCatchReferenceArchitectureMarker(architectureJson);
   const convertedNodes = architectureJson.nodes.map(convertArchitectureNodeToDiagramNode);
-  const parentedNodes = applyAreaParentMetadata(
-    applyDiagramResourceNameConventions(addServerStorageAreaNodes(convertedNodes)),
-    architectureJson.edges
-  );
-  const readableNodes = applyReadableTopologyLayout(parentedNodes);
-  const nodes = applyDiagramLayerOrder(
-    fitAreaNodesToChildren(resolveSiblingNodeCollisions(fitAreaNodesToChildren(readableNodes)))
-  );
+  const preparedNodes = isSketchCatchReference
+    ? convertedNodes
+    : applyAreaParentMetadata(
+        applyDiagramResourceNameConventions(addServerStorageAreaNodes(convertedNodes)),
+        architectureJson.edges
+      );
+  const nodes = isSketchCatchReference
+    ? applyDiagramLayerOrder(preparedNodes)
+    : applyDiagramLayerOrder(
+        fitAreaNodesToChildren(
+          resolveSiblingNodeCollisions(fitAreaNodesToChildren(applyReadableTopologyLayout(preparedNodes)))
+        )
+      );
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
 
   return {
@@ -226,6 +239,12 @@ export function convertDiagramJsonToArchitectureJson(diagramJson: DiagramJson): 
 }
 
 function convertArchitectureNodeToDiagramNode(node: ArchitectureJson["nodes"][number], index: number): DiagramNode {
+  const presentationNode = createPresentationDiagramNode(node, index);
+
+  if (presentationNode) {
+    return presentationNode;
+  }
+
   const terraformResourceType = mapResourceTypeToTerraform(node.type);
   const position = {
     x: node.positionX,
@@ -239,11 +258,85 @@ function convertArchitectureNodeToDiagramNode(node: ArchitectureJson["nodes"][nu
     id: node.id,
     label: node.label ?? baseNode.label,
     locked: false,
+    metadata: readDiagramNodeMetadata(node.config) ?? baseNode.metadata,
     parameters: createDiagramNodeParameters(node, terraformResourceType, baseNode.parameters),
     position,
+    size: readDiagramNodeSize(node.config) ?? baseNode.size,
     type: terraformResourceType,
     zIndex
   };
+}
+
+function createPresentationDiagramNode(
+  node: ArchitectureJson["nodes"][number],
+  index: number
+): DiagramNode | null {
+  const config = node.config ?? {};
+  const kind = config["diagramKind"];
+  const nodeType = config["diagramType"];
+
+  if (kind !== "design" || typeof nodeType !== "string" || nodeType.trim().length === 0) {
+    return null;
+  }
+
+  return {
+    id: node.id,
+    iconUrl: readDiagramNodeIconUrl(config),
+    kind: "design",
+    label: node.label ?? node.id,
+    locked: false,
+    metadata: readDiagramNodeMetadata(config),
+    position: {
+      x: node.positionX,
+      y: node.positionY
+    },
+    size: readDiagramNodeSize(config) ?? { width: 160, height: 96 },
+    style: readDiagramNodeStyle(config),
+    type: nodeType,
+    zIndex: index + 1
+  };
+}
+
+function readDiagramNodeSize(config: ResourceConfig | undefined): DiagramNode["size"] | null {
+  const width = config?.["diagramWidth"];
+  const height = config?.["diagramHeight"];
+
+  return typeof width === "number" && typeof height === "number" && width > 0 && height > 0
+    ? { width, height }
+    : null;
+}
+
+function readDiagramNodeMetadata(config: ResourceConfig): DiagramNode["metadata"] | undefined {
+  const parentAreaNodeId = config["parentAreaNodeId"];
+
+  return typeof parentAreaNodeId === "string" && parentAreaNodeId.trim().length > 0
+    ? { parentAreaNodeId }
+    : undefined;
+}
+
+function readDiagramNodeIconUrl(config: ResourceConfig): string | undefined {
+  const iconUrl = config["diagramIconUrl"];
+
+  return typeof iconUrl === "string" && iconUrl.trim().length > 0 ? iconUrl : undefined;
+}
+
+function readDiagramNodeStyle(config: ResourceConfig): DiagramNode["style"] | undefined {
+  const textColor = config["diagramTextColor"];
+  const borderColor = config["diagramBorderColor"];
+  const style = {
+    ...(typeof textColor === "string" && textColor.trim().length > 0 ? { textColor } : {}),
+    ...(typeof borderColor === "string" && borderColor.trim().length > 0 ? { borderColor } : {})
+  };
+
+  return Object.keys(style).length > 0 ? style : undefined;
+}
+
+function hasSketchCatchReferenceArchitectureMarker(architectureJson: ArchitectureJson): boolean {
+  return architectureJson.nodes.some(
+    (node) =>
+      node.config?.["sketchcatchReferenceTerraform"] ===
+      SKETCHCATCH_REFERENCE_TERRAFORM_MARKER
+  );
 }
 
 // jh Resource catalog를 거쳐 수동 drag/drop 노드와 같은 iconUrl, size, 기본 style을 사용합니다.
@@ -343,23 +436,72 @@ function convertArchitectureEdgeToDiagramEdge(
   nodeById: ReadonlyMap<string, DiagramNode>,
   occupiedRoutes: readonly OccupiedRoute[]
 ): DiagramEdge {
-  const handles = getDefaultEdgeHandles(
-    nodeById.get(edge.sourceId),
-    nodeById.get(edge.targetId),
-    [...nodeById.values()],
-    occupiedRoutes
-  );
+  const handles =
+    readAuthoredArchitectureEdgeHandles(edge) ??
+    getDefaultEdgeHandles(
+      nodeById.get(edge.sourceId),
+      nodeById.get(edge.targetId),
+      [...nodeById.values()],
+      occupiedRoutes
+    );
 
   return {
     id: edge.id,
     label: edge.label,
     sourceNodeId: edge.sourceId,
     sourceHandleId: handles.sourceHandleId,
-    style: getDiagramEdgeStyleForArchitectureEdge(edge, nodeById),
+    style: readAuthoredArchitectureEdgeStyle(edge) ?? getDiagramEdgeStyleForArchitectureEdge(edge, nodeById),
     targetHandleId: handles.targetHandleId,
     targetNodeId: edge.targetId,
-    type: "smoothstep"
+    type: readAuthoredArchitectureEdgeType(edge) ?? "smoothstep"
   };
+}
+
+type AuthoredArchitectureEdge = ArchitectureJson["edges"][number] & {
+  readonly diagramColor?: unknown;
+  readonly diagramLineStyle?: unknown;
+  readonly diagramSourceHandleId?: unknown;
+  readonly diagramTargetHandleId?: unknown;
+  readonly diagramType?: unknown;
+  readonly diagramWidth?: unknown;
+};
+
+function readAuthoredArchitectureEdgeHandles(
+  edge: ArchitectureJson["edges"][number]
+): Pick<DiagramEdge, "sourceHandleId" | "targetHandleId"> | undefined {
+  const authoredEdge = edge as AuthoredArchitectureEdge;
+  const sourceHandleId = authoredEdge.diagramSourceHandleId;
+  const targetHandleId = authoredEdge.diagramTargetHandleId;
+
+  return typeof sourceHandleId === "string" && typeof targetHandleId === "string"
+    ? { sourceHandleId, targetHandleId }
+    : undefined;
+}
+
+function readAuthoredArchitectureEdgeStyle(
+  edge: ArchitectureJson["edges"][number]
+): NonNullable<DiagramEdge["style"]> | undefined {
+  const authoredEdge = edge as AuthoredArchitectureEdge;
+  const color = authoredEdge.diagramColor;
+  const lineStyle = authoredEdge.diagramLineStyle;
+  const width = authoredEdge.diagramWidth;
+
+  if (typeof color !== "string" && typeof lineStyle !== "string" && typeof width !== "string") {
+    return undefined;
+  }
+
+  return {
+    animated: false,
+    ...(typeof color === "string" ? { color } : {}),
+    ...(lineStyle === "solid" || lineStyle === "dashed" || lineStyle === "dotted" ? { lineStyle } : {}),
+    ...(width === "thin" || width === "medium" || width === "thick" ? { width } : {})
+  };
+}
+
+function readAuthoredArchitectureEdgeType(edge: ArchitectureJson["edges"][number]): string | undefined {
+  const diagramType = (edge as AuthoredArchitectureEdge).diagramType;
+
+  return typeof diagramType === "string" && diagramType.trim().length > 0 ? diagramType : undefined;
 }
 
 function getEdgeRoutingPriority(
