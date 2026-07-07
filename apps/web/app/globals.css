@@ -9288,6 +9288,24 @@ nextjs-portal {
   min-width: 0;
 }
 
+.costLineChartPlot {
+  align-items: stretch;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 28px minmax(0, 1fr);
+}
+
+.costLineChartYAxis {
+  align-items: center;
+  color: var(--bp-muted);
+  display: inline-flex;
+  font-size: 0.76rem;
+  font-weight: 800;
+  justify-content: center;
+  letter-spacing: 0;
+  writing-mode: vertical-rl;
+}
+
 .costLineChartSvg {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.86), rgba(255, 255, 255, 0.58)),
@@ -9358,7 +9376,47 @@ nextjs-portal {
 
 .costServiceBars {
   display: grid;
-  gap: 14px;
+  gap: 16px;
+}
+
+.costServiceStackedBar {
+  background: color-mix(in srgb, var(--bp-line) 55%, white);
+  border: 1px solid var(--bp-line);
+  border-radius: 999px;
+  display: flex;
+  height: 18px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.costServiceStackedSegment {
+  display: block;
+  flex: 0 0 auto;
+  min-width: 2px;
+}
+
+.costServiceStackedSegment-0 {
+  background: #224d68;
+}
+
+.costServiceStackedSegment-1 {
+  background: #3f7897;
+}
+
+.costServiceStackedSegment-2 {
+  background: #7faac0;
+}
+
+.costServiceStackedSegment-3 {
+  background: #9ba9b3;
+}
+
+.costServiceStackedSegment-4 {
+  background: #c5d0d8;
+}
+
+.costServiceStackedSegment-5 {
+  background: #5c6c78;
 }
 
 .costServiceBarRow {

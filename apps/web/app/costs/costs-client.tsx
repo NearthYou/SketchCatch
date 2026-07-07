@@ -1324,13 +1324,16 @@ function DailyCostLineChart({
 }) {
   return (
     <div className="costLineChart" aria-label="일별 비용 추세 그래프">
-      <svg className="costLineChartSvg" preserveAspectRatio="none" viewBox="0 0 640 180">
-        <path className="costLineChartGrid" d="M 0 45 L 640 45 M 0 90 L 640 90 M 0 135 L 640 135" />
-        <path className="costLineChartPath" d={chart.path} />
-        {chart.points.map((point) => (
-          <circle cx={point.x} cy={point.y} key={`${point.date}-${point.amount}`} r="4" />
-        ))}
-      </svg>
+      <div className="costLineChartPlot">
+        <span className="costLineChartYAxis">비용</span>
+        <svg className="costLineChartSvg" preserveAspectRatio="none" viewBox="0 0 640 180">
+          <path className="costLineChartGrid" d="M 0 45 L 640 45 M 0 90 L 640 90 M 0 135 L 640 135" />
+          <path className="costLineChartPath" d={chart.path} />
+          {chart.points.map((point) => (
+            <circle cx={point.x} cy={point.y} key={`${point.date}-${point.amount}`} r="4" />
+          ))}
+        </svg>
+      </div>
       <div className="costLineChartMeta">
         <span>{dailyTrend[0]?.date ?? "-"}</span>
         <strong>최고 {formatUsd(chart.maxAmount)}</strong>
@@ -1374,6 +1377,17 @@ function ServiceCostBars({
 
   return (
     <div className="costServiceBars">
+      <div className="costServiceStackedBar" aria-label="서비스별 비용 비중">
+        {serviceCosts.map((service, index) => (
+          <span
+            aria-label={`${service.service} ${formatPercent(service.percentage)}`}
+            className={`costServiceStackedSegment costServiceStackedSegment-${index % 6}`}
+            key={service.service}
+            style={{ width: `${Math.max(service.percentage, 0.8)}%` }}
+            title={`${service.service} ${formatPercent(service.percentage)}`}
+          />
+        ))}
+      </div>
       {bars.map((bar) => (
         <div className="costServiceBarRow" key={bar.label}>
           <div className="costServiceBarMeta">
