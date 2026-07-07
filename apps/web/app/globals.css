@@ -4601,19 +4601,79 @@ nextjs-portal {
 
 .workspaceAiMiniDiagramEdge {
   stroke: var(--bp-blue);
+  fill: none;
   stroke-linecap: round;
   stroke-opacity: 0.44;
   stroke-width: 1.5;
 }
 
-.workspaceAiMiniDiagramNode circle {
-  fill: color-mix(in srgb, var(--bp-paper-2) 82%, #ffffff);
-  stroke: color-mix(in srgb, var(--bp-blue) 42%, var(--bp-line));
-  stroke-width: 1;
+.workspaceAiMiniDiagramEdgeLabel {
+  fill: var(--bp-ink);
+  font-family: var(--bp-head);
+  font-size: 11px;
+  font-weight: 800;
+  paint-order: stroke;
+  stroke: var(--bp-paper);
+  stroke-linejoin: round;
+  stroke-width: 4px;
 }
 
-.workspaceAiMiniDiagramNode image {
+.workspaceAiMiniDiagramAreaBody {
+  fill: rgba(255, 255, 255, 0.18);
+  stroke: color-mix(in srgb, var(--bp-blue) 42%, var(--bp-line));
+  stroke-width: 2;
+}
+
+.workspaceAiMiniDiagramAreaHeader rect {
+  fill: color-mix(in srgb, var(--bp-paper-2) 94%, #ffffff);
+  stroke: color-mix(in srgb, var(--bp-blue) 42%, var(--bp-line));
+  stroke-width: 2;
+}
+
+.workspaceAiMiniDiagramAreaHeader image,
+.workspaceAiMiniDiagramResourceNode image {
   pointer-events: none;
+}
+
+.workspaceAiMiniDiagramAreaLabel,
+.workspaceAiMiniDiagramAreaMeta,
+.workspaceAiMiniDiagramResourceLabel {
+  fill: var(--bp-ink);
+  font-family: var(--bp-head);
+  font-weight: 850;
+  paint-order: stroke;
+  stroke: color-mix(in srgb, var(--bp-paper) 86%, #ffffff);
+  stroke-linejoin: round;
+  stroke-width: 3px;
+}
+
+.workspaceAiMiniDiagramAreaLabel {
+  font-size: 12px;
+}
+
+.workspaceAiMiniDiagramAreaMeta {
+  fill: var(--bp-blue);
+  font-size: 10px;
+}
+
+.workspaceAiMiniDiagramResourceLabel {
+  font-size: 12px;
+}
+
+.workspaceAiMiniDiagramResourceNode image {
+  filter: drop-shadow(0 5px 8px color-mix(in srgb, var(--bp-ink) 12%, transparent));
+}
+
+.workspaceAiMiniDiagramNodeFallback rect {
+  fill: var(--bp-blue-tint);
+  stroke: color-mix(in srgb, var(--bp-blue) 42%, var(--bp-line));
+}
+
+.workspaceAiMiniDiagramNodeFallback text {
+  fill: var(--bp-blue);
+  font-family: var(--bp-head);
+  font-size: 10px;
+  font-weight: 900;
 }
 
 .workspaceAiMiniDiagramNodeFallback path {
