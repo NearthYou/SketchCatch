@@ -1,5 +1,32 @@
 ﻿# 에이전트 진행 로그
 
+### 2026-07-07 - 비용 관리 화면 밀도, 배포 프로젝트 기준, 프로젝트 상세 분석 개선
+
+- Goal: `/costs`의 예상 비용 계산/사용량 분석 UI를 일관된 위치와 밀도로 정리하고, 사용량 분석을 배포 프로젝트 기준으로 프로젝트별 비용/리소스 비용/프로젝트 그래프/그래프 진단까지 볼 수 있게 한다.
+- Completed:
+  - 예상 비용 계산과 사용량 분석 상단을 같은 `조건 입력 + 요약 카드` 구조로 맞추고, 카드/그래프/테이블 높이와 여백을 줄여 한 화면에 더 많은 정보를 보이게 했다.
+  - AWS 연결 패널을 사용량 분석 상단 hero에서 분리해 두 탭의 상단 높이가 같아지게 했다.
+  - 사용량 분석 provider 입력을 전체 사용자 프로젝트가 아니라 최신 성공 배포가 있는 프로젝트로 좁혔다.
+  - Cost Explorer tag 비용도 배포 프로젝트와 매칭되는 tag만 프로젝트 drill-down에 사용하고, 매칭되지 않으면 기존 배포 리소스 기반 근사 배분으로 fallback하게 했다.
+  - `resourceCosts` DTO를 추가해 배포 리소스별 비용 표를 표시하고, v1에서 리소스별 실제 청구가 없으면 `배포 리소스 배분` 근거로 명확히 표시하게 했다.
+  - 프로젝트 선택 시 일별 그래프를 프로젝트 비용 비중으로 환산해 보여주고, 데이터 부족/급증/상승/변동성/안정 추세 진단 문구를 표시하게 했다.
+- Commits:
+  - `b113a1a Style: 비용 관리 화면 레이아웃 밀도 정리`
+  - `e552331 Feat: 사용량 분석 배포 프로젝트 기준 적용`
+  - `c82e109 Feat: 비용 사용량 프로젝트 상세 분석 보강`
+- Verification run:
+  - `pnpm harness:check` - passed before work and after each stage.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/routes/costs.test.ts src/services/cost-usage-analysis.test.ts` - passed, 11 tests after backend changes.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/costs/cost-usage-project-view.test.ts features/costs/cost-usage-charts.test.ts` - passed, 11 tests after frontend helper changes.
+  - Playwright layout smoke - passed: estimate/usage hero heights both `211px`, summary card heights both `181px`, `consoleErrors: []`.
+  - Playwright project/resource smoke - passed: default `전체 프로젝트`, selecting a project changed `$235.20` -> `$122.30`, resource rows `9` -> `3`, daily badge `프로젝트 추세`, `consoleErrors: []`.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `pnpm build` - passed; Next.js regenerated `apps/web/next-env.d.ts`, then the generated diff was reverted.
+- Known risks:
+  - 프로젝트별 일별 그래프는 v1에서 전체 계정 daily trend를 프로젝트 비용 비중으로 환산한다. 실제 프로젝트별 daily Cost Explorer tag query는 추가 확장 범위다.
+  - 리소스별 비용은 현재 배포 리소스 균등 배분이다. AWS 리소스 단위 실제 청구 금액은 Cost Explorer resource-level 조회와 리소스 tag 정책을 별도로 확장해야 한다.
+
 ### 2026-07-07 - 비용 관리 사용량 분석 UI 및 프로젝트별 비용 보기 개선
 
 - Goal: `/costs` 사용량 분석 탭의 답답한 상단 UI를 정리하고, 프로젝트별 실제 비용을 선택해서 따로 볼 수 있게 한다.
