@@ -9439,6 +9439,11 @@ nextjs-portal {
   gap: 8px;
 }
 
+.costServiceBarRow + .costServiceBarRow {
+  border-top: 1px solid color-mix(in srgb, var(--bp-line) 82%, var(--dashboard-blue));
+  padding-top: 12px;
+}
+
 .costServiceBarMeta {
   align-items: center;
   display: flex;
@@ -9475,21 +9480,6 @@ nextjs-portal {
 
 .costServiceBarMeta strong {
   color: var(--dashboard-blue);
-}
-
-.costServiceBarTrack {
-  background: var(--bp-paper-2);
-  border: 1px solid var(--bp-line);
-  border-radius: 999px;
-  height: 12px;
-  overflow: hidden;
-}
-
-.costServiceBarTrack span {
-  background: linear-gradient(90deg, var(--dashboard-blue), var(--bp-medium));
-  border-radius: inherit;
-  display: block;
-  height: 100%;
 }
 
 .costServiceBarRow small {

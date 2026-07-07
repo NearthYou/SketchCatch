@@ -19,6 +19,7 @@ Current worktree:
 - Fallback project cost rows now use deterministic, distinct project weights instead of equal sample amounts when no deployed resources exist.
 - Waste findings and recommendation actions now use clearer user-facing explanations and concrete downsizing suggestions.
 - Service-cost rows now include color swatches that match the stacked service-cost bar segments.
+- Service-cost rows use thin dividers instead of per-row progress tracks.
 
 ## Verification
 

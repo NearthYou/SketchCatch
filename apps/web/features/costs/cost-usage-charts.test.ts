@@ -29,7 +29,7 @@ test("createCostUsageLineChart converts daily costs into stable SVG points", () 
   assert.equal(chart.path, "M 0 50 L 100 0 L 200 75");
 });
 
-test("createServiceCostBars limits rows and scales each bar by the largest service", () => {
+test("createServiceCostBars limits rows and maps service labels", () => {
   const bars = createServiceCostBars(
     [
       { amount: 20, percentage: 50, service: "Amazon RDS" },
@@ -40,8 +40,8 @@ test("createServiceCostBars limits rows and scales each bar by the largest servi
   );
 
   assert.deepEqual(bars, [
-    { amount: 20, label: "Amazon RDS", percentage: 50, widthPercentage: 100 },
-    { amount: 10, label: "Amazon EC2", percentage: 25, widthPercentage: 50 }
+    { amount: 20, label: "Amazon RDS", percentage: 50 },
+    { amount: 10, label: "Amazon EC2", percentage: 25 }
   ]);
 });
 

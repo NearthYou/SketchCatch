@@ -8,7 +8,7 @@ Branch/worktree:
 
 - Branch: `feat/ys/142-cost-risk-분석-구현`
 - Worktree: `C:\krafton_jungle\SketchCatch`
-- Latest commit before current edits: `403f193e Fix: 사용량 분석 프로젝트 상세 표시 개선`
+- Latest commit before current edits: `8a4b0873 Fix: 서비스별 비용 색상 범례 표시`
 
 Recent branch work:
 
@@ -17,6 +17,7 @@ Recent branch work:
 - Changed fallback project cost allocation so real project rows do not all receive the same sample amount when deployed resources are missing.
 - Rewrote waste and recommendation copy to explain the practical action, such as lowering low-usage EC2/RDS resources to smaller instance classes.
 - Added matching color swatches before each service-cost row so the row can be mapped to the stacked service-cost bar.
+- Replaced the per-service thick progress tracks with thin row dividers in the service-cost list.
 
 Verification this session:
 
@@ -27,6 +28,7 @@ Verification this session:
 - Browser smoke reached `/login`; the documented `demo-user/demo-password-123` account returned 401, so authenticated UI smoke could not be completed in this session.
 - `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed after the code changes.
 - Focused web checks for the service-cost legend update passed: `pnpm --filter @sketchcatch/web exec tsx --test features/costs/cost-usage-charts.test.ts features/costs/cost-usage-project-view.test.ts` and `pnpm --filter @sketchcatch/web typecheck`.
+- Focused web checks for the service-cost divider update passed: `pnpm --filter @sketchcatch/web exec tsx --test features/costs/cost-usage-charts.test.ts features/costs/cost-usage-project-view.test.ts` and `pnpm --filter @sketchcatch/web typecheck`.
 
 ## Session Record
 
@@ -37,6 +39,7 @@ Verification this session:
 - Verified focused API/web tests plus harness, lint, typecheck, and build.
 - Attempted browser smoke, but the local Playwright session was unauthenticated and the documented demo account returned 401.
 - Added service-cost row color swatches that reuse the stacked bar segment colors.
+- Removed per-service progress tracks and kept only thin row dividers below the stacked service-cost bar.
 
 Next steps:
 

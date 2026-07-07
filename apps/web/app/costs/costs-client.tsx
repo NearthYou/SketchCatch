@@ -1466,9 +1466,6 @@ function ServiceCostBars({
             </div>
             <strong>{formatUsd(bar.amount)}</strong>
           </div>
-          <div className="costServiceBarTrack" aria-hidden="true">
-            <span style={{ width: `${bar.widthPercentage}%` }} />
-          </div>
           <small>{formatPercent(bar.percentage)}</small>
         </div>
       ))}
