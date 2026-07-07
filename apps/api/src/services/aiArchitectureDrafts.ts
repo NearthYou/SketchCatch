@@ -17,6 +17,10 @@ import { resolveArchitectureResourceQuantities } from "./aiArchitectureResourceQ
 import { resolveArchitectureRequirement } from "./aiArchitectureRequirementResolution.js";
 import { createArchitectureDraftFallbackExplanation } from "./aiLlmExplanationFallbacks.js";
 import {
+  createAwsArchitectureReferenceKnowledgePayload,
+  createAwsArchitectureReferenceKnowledgePrompt
+} from "./awsArchitectureReferenceKnowledge.js";
+import {
   createAmazonQBusinessTextProviderFromEnv,
   resolveAiProviderRegions,
   type AiCreditPolicy,
@@ -63,6 +67,12 @@ const SUPPORTED_RESOURCE_TYPES = [
 
 const SUPPORTED_RESOURCE_TYPE_SET = new Set<ResourceType>(SUPPORTED_RESOURCE_TYPES);
 const DEFAULT_PREVIEW_NODE_SIZE = { width: 124, height: 96 } as const;
+const PREVIEW_LABEL_CHARACTER_WIDTH = 7;
+const PREVIEW_LABEL_HORIZONTAL_PADDING = 32;
+const PREVIEW_LABEL_MAX_WIDTH = 260;
+const PREVIEW_LABEL_HEIGHT = 28;
+const PREVIEW_VISUAL_BOUNDS_HORIZONTAL_MARGIN = 20;
+const PREVIEW_VISUAL_BOUNDS_VERTICAL_MARGIN = 8;
 const PREVIEW_NODE_LAYOUT_SIZES: Partial<Record<ResourceType, LayoutSize>> = {
   VPC: { width: 240, height: 160 },
   SUBNET: { width: 180, height: 120 },
@@ -78,43 +88,6 @@ const RESOURCE_TYPE_TERRAFORM_NAMES: Partial<Record<ResourceType, string>> = {
   SECURITY_GROUP: "aws_security_group"
 };
 const SECURITY_GROUP_REFERENCE_KEYS = ["securityGroupIds", "vpcSecurityGroupIds", "securityGroupId"] as const;
-const AMAZON_Q_CLARIFICATION_CHOICE_CONSTRAINTS = [
-  "Clarification choice mapping rules:",
-  "Website type: static website => S3 plus CLOUDFRONT only unless another answered choice requires an API; dynamic web application => include frontend delivery, backend compute, data storage when requested, and security boundaries; SPA => S3 plus CLOUDFRONT for static assets and a separate API/backend path when backend is required; API server => focus on API entry, compute, logs, security groups, and database only when requested.",
-  "Traffic scale: small traffic or concurrent users under 10 => prefer minimal resources and avoid unnecessary duplication; medium traffic or about daily 1,000/concurrent 50 => include scalable entry and app tier when backend exists; large traffic or daily 10,000+/concurrent 500+ => include load balancing, multiple app targets, stronger alarms, and scale-out assumptions; bursty traffic => prefer elastic/serverless patterns where suitable or explicit scaling assumptions and alarms.",
-  "Database: no database => do not add RDS or DB_SUBNET_GROUP; simple data => include the lightest suitable storage and explain assumptions; medium relational data or PostgreSQL/MySQL => include RDS and DB_SUBNET_GROUP in private DB subnets; large or complex data => include stronger RDS config, encryption, backups, alarms, and scaling assumptions.",
-  "Frontend: HTML/CSS/JS => S3 plus CLOUDFRONT static delivery; React/Vue/Angular SPA => S3 plus CLOUDFRONT and API origin when backend exists; Next.js/Nuxt.js SSR => include runtime compute or serverless runtime plus static asset delivery; mobile app => emphasize API/backend, auth/security, and media/API entry rather than a website-only frontend.",
-  "Backend: none => do not add EC2, LAMBDA, API_GATEWAY_REST_API, LOAD_BALANCER, or RDS solely for backend; simple API => use the smallest supported API path such as LAMBDA plus API_GATEWAY_REST_API or one small EC2 when explicitly preferred; complex business logic => include backend compute behind LOAD_BALANCER plus LOAD_BALANCER_LISTENER with private app subnets when VPC is present; microservices => represent multiple service components or compute nodes and shared entry/observability without inventing unsupported resource types.",
-  "User region: Korea only => keep API, database, and regional resources in Seoul/ap-northeast-2 assumptions; CloudFront may be used for fast static delivery, but do not describe the design as multi-region or global-user architecture; Asia Pacific => include CLOUDFRONT when frontend/media exists and note regional latency assumptions; global including US/Europe => include CLOUDFRONT and a global entry assumption, and warn when a single-region database/API cannot guarantee global sub-second API latency; specific region => preserve that region in assumptions and resource labels.",
-  "Budget: very low/minimum budget => prefer serverless/static/minimal managed resources and clearly trade off high availability; moderate budget => balance managed services with cost controls; high budget => allow Multi-AZ, load balancing, stronger monitoring, encryption, and backups; enterprise budget => include stronger resilience/security/operations assumptions. Never hide a budget/SLA conflict.",
-  "HTTPS: required => include CLOUDFRONT or LOAD_BALANCER HTTPS path, ROUTE53_RECORD when a domain is implied, and certificate requirements in config/assumptions because ACM is not a supported node type; optional HTTP => keep HTTPS recommendation in nextActions but do not overbuild solely for certificates; unknown => recommend HTTPS in nextActions.",
-  "File upload: none => STRICTLY FORBIDDEN to add upload/media/file-processing buckets, presigned URL flows, or upload-specific IAM policy paths; image only => include a separate S3 media bucket and presigned upload flow; documents/video/mixed files => include S3 media bucket, IAM policy boundaries, KMS when security matters, and lifecycle/size assumptions; large files over 100MB => use direct-to-S3 upload assumptions and avoid proxying through the app server.",
-  "Realtime: none => STRICTLY FORBIDDEN to add WebSocket, SSE, realtime notification, realtime processing, or notification-only resources; realtime chat => include a persistent notification/chat path using supported API/backend resources and explain WebSocket/SSE assumptions; realtime notification => include a lighter notification path and do not omit it; realtime data updates => include stronger scaling/monitoring assumptions for the update stream.",
-  "Management preference: fully managed/serverless => prefer S3, CLOUDFRONT, LAMBDA, API_GATEWAY_REST_API, and managed RDS where data is required, avoiding manually managed EC2 unless explicitly requested; semi-managed => LOAD_BALANCER plus EC2 app tier or managed services with some server responsibility is acceptable; direct/self-managed => EC2 is acceptable but still include security, logs, backups, and alarms; unknown => choose the lowest-operational-burden option that satisfies other answers.",
-  "Page loading goal: under 1 second => use CLOUDFRONT for static/media assets and warn when dynamic API latency is limited by region/database placement; under 3 seconds => use normal CDN/static caching when suitable; under 5 seconds => avoid expensive over-optimization unless required by other answers; no preference => optimize for cost and simplicity.",
-  "Website size: under 10MB => static/CDN-friendly minimal asset assumptions; 10MB-100MB => normal SPA/static asset delivery; 100MB-1GB/image-heavy => media S3 bucket, CloudFront caching, and lifecycle assumptions; 1GB+/video => S3 media storage, CloudFront delivery, and direct upload/lifecycle assumptions.",
-  "Traffic pattern: steady => stable baseline capacity; time-of-day peak => autoscaling/alarms or burst assumptions; event spike => elastic/serverless or explicit scale-out plus alarm assumptions; unpredictable => prefer elastic capacity and stronger monitoring.",
-  "Downtime tolerance: 99.99% or no downtime => no single-AZ/single-EC2 design when backend/database exists, include Multi-AZ app and RDS Multi-AZ where applicable; 99.9% => use at least managed backups/monitoring and consider Multi-AZ for stateful tiers; 99% => cost-optimized single-region/simple redundancy may be acceptable; no preference => choose cost-conscious defaults."
-] as const;
-
-const AMAZON_Q_CLARIFICATION_CHOICE_ENFORCEMENT_RULES = [
-  "Complete option enforcement rules:",
-  "Question gates: ask realtime implementation only when the user selected realtime chat, realtime notification, or realtime data updates; never ask it when the user selected no realtime. Ask upload implementation only when the user selected image, mixed, or large-file upload; never ask it when the user selected no file upload. Ask multi-region/global performance scope only for Asia Pacific/global/specific-region/global-latency requirements; never ask it just because Korea-only uses CloudFront for static acceleration.",
-  "Mutual exclusion: a selected 'none' answer is stronger than a generic feature mention. No backend forbids backend-only compute/API resources unless another explicit answer requires an API. No database forbids RDS/DB_SUBNET_GROUP. No file upload forbids upload/media/presigned/file-processing resources. No realtime forbids WebSocket/SSE/realtime/user-notification resources.",
-  "Traffic matrix: small traffic should stay minimal unless availability overrides it; medium traffic should add scalable entry and app capacity when backend exists; large traffic should add load balancing, multiple targets, stronger database and alarms; bursty/event traffic should add elastic scaling assumptions and alarms.",
-  "Frontend matrix: pure HTML/CSS/JS should be static S3/CloudFront; SPA should be S3/CloudFront with SPA fallback plus a separate API origin when backend exists; SSR should include runtime compute or serverless runtime and must not be represented as pure S3-only hosting; mobile should emphasize secure APIs, auth assumptions, and upload/API entry rather than website-only hosting.",
-  "Backend matrix: no backend means static-only; simple API means Lambda/API Gateway or a small EC2 path; complex business logic means load-balanced backend compute with logs/security boundaries; microservices means multiple service components or compute nodes and shared entry/observability while staying within supported ResourceNode types.",
-  "Region matrix: Korea-only means regional resources in ap-northeast-2 and no multi-region wording; Asia Pacific means CloudFront plus APAC latency assumptions; global means CloudFront/global entry and explicit single-region API/RDS latency warning unless multi-region is chosen; specific region means preserve residency/compliance assumptions.",
-  "Security matrix: HTTPS required means HTTPS path, certificate assumption/config, and redirect/security notes; HTTP optional means do not overbuild solely for certificates; unknown means recommend HTTPS in nextActions.",
-  "Upload matrix: no upload means text/data only; image upload means direct-to-S3/presigned media bucket; mixed documents/video means S3 lifecycle, IAM boundaries, validation/scanning assumptions; large files means multipart/direct-to-S3 and avoid proxying through app compute.",
-  "Realtime matrix: no realtime means normal request/response only; chat means persistent connection path and message storage assumptions; notification means lightweight user notification path; realtime data updates means low-latency update path plus scaling/monitoring assumptions.",
-  "Management matrix: fully managed prefers S3/CloudFront/Lambda/API Gateway/managed database; semi-managed allows ALB plus EC2 and managed RDS; direct management allows EC2 control but still requires logs/security/backups; unknown picks lowest operational burden that satisfies the answers.",
-  "Performance and size matrix: 1-second goal requires CloudFront/static caching and API latency warning when single-region; 3-second goal uses normal CDN/database optimization; 5-second/no preference favors cost and simplicity. Image-heavy/video-heavy sites require media storage/lifecycle/delivery assumptions only when the selected upload/size answers imply those assets.",
-  "Traffic pattern matrix: steady traffic favors baseline capacity; daytime peaks favor scheduled scaling/alarms; event spikes favor elastic/serverless or scale-out assumptions; unpredictable traffic favors reactive autoscaling and stronger monitoring.",
-  "Availability matrix: 99.99% requires ALB/listener and redundant backend targets when backend exists, plus RDS Multi-AZ when a relational database exists; 99.9% recommends Multi-AZ/monitoring; 99% can be cost optimized; no preference chooses simple cost-conscious defaults.",
-  "Conflict resolution: when $100 budget conflicts with 99.99% availability, do not hide the conflict. If the user chose cost priority, relax availability; if the user chose availability priority, include cost-overrun warning; if the user chose target architecture with warning, draw the 99.99% target and clearly mark budget risk. When static-site wording conflicts with DB/API requirements, represent the explicit DB/API requirement or ask a single clarification if unresolved."
-] as const;
-
 type RequiredArchitectureQuestion = {
   readonly id: string;
   readonly question: string;
@@ -152,6 +125,42 @@ type AmazonQRequirementCoverage = {
   readonly capability?: string | undefined;
   readonly nodes?: readonly string[] | undefined;
   readonly assumption?: string | undefined;
+};
+
+type ArchitectureAnswerProfile = {
+  readonly traffic?: "small" | "medium" | "large" | "bursty" | undefined;
+  readonly frontend?: "static" | "spa" | "ssr" | "mobile" | undefined;
+  readonly backend?: "none" | "simple_api" | "complex" | "microservices" | undefined;
+  readonly region?: "korea" | "apac" | "global" | "specific" | undefined;
+  readonly upload?: "none" | "image" | "mixed" | "large" | undefined;
+  readonly realtime?: "none" | "chat" | "notification" | "data_updates" | undefined;
+  readonly management?: "fully_managed" | "semi_managed" | "self_managed" | "unknown" | undefined;
+  readonly latency?: "one_second" | "three_seconds" | "five_seconds" | "none" | undefined;
+  readonly availability?: "99.99" | "99.9" | "99" | "none" | undefined;
+  readonly budget?: "low" | "normal" | "high" | "enterprise" | undefined;
+};
+
+type ArchitectureDecisionPattern = {
+  readonly id: string;
+  readonly when: string;
+  readonly typicalNodeTypes: readonly ResourceType[];
+  readonly tradeoffs: readonly string[];
+};
+
+type UnsupportedSubstitution = {
+  readonly requestedService: string;
+  readonly supportedRepresentation: string;
+  readonly requiredExplanation: string;
+};
+
+type ArchitectureDecisionSpace = {
+  readonly answerProfile: ArchitectureAnswerProfile;
+  readonly hardConstraints: readonly string[];
+  readonly preferredPatterns: readonly ArchitectureDecisionPattern[];
+  readonly discouragedPatterns: readonly { readonly id: string; readonly reason: string }[];
+  readonly evaluationCriteria: readonly string[];
+  readonly unsupportedSubstitutions: readonly UnsupportedSubstitution[];
+  readonly coverageRequirements: readonly string[];
 };
 
 type AmazonQArchitectureDraftClarification = {
@@ -249,10 +258,14 @@ export async function createAmazonQArchitectureDraftResponse(
     return createArchitectureDraftClarification(conditionalQuestion, request, provider, creditPolicy.billingMode);
   }
 
+  const architectureDecisionSpace = createArchitectureDecisionSpace(request.prompt);
   const architectureBrief = createAmazonQArchitectureBrief(request.prompt);
+  const referenceKnowledge = createAwsArchitectureReferenceKnowledgePayload();
   const payload = maskSecretsForAi({
     architectureBrief,
+    architectureDecisionSpace,
     prompt: request.prompt,
+    referenceKnowledge,
     supportedResourceTypes: SUPPORTED_RESOURCE_TYPES
   });
 
@@ -261,7 +274,7 @@ export async function createAmazonQArchitectureDraftResponse(
     let response = await provider.generate({
       target: ARCHITECTURE_DRAFT_TARGET,
       instructions: createAmazonQArchitectureDraftInstructions(),
-      prompt: createAmazonQArchitectureDraftPrompt(request.prompt),
+      prompt: createAmazonQArchitectureDraftPrompt(request.prompt, architectureDecisionSpace),
       payload: activePayload
     });
     let parsedResponse = parseAmazonQArchitectureDraftResponse(response.text);
@@ -272,7 +285,9 @@ export async function createAmazonQArchitectureDraftResponse(
       if (validationIssues.length > 0) {
         activePayload = maskSecretsForAi({
           architectureBrief,
+          architectureDecisionSpace,
           prompt: request.prompt,
+          referenceKnowledge,
           validationIssues,
           previousArchitectureJson: parsedResponse.architectureJson,
           supportedResourceTypes: SUPPORTED_RESOURCE_TYPES
@@ -280,7 +295,12 @@ export async function createAmazonQArchitectureDraftResponse(
         response = await provider.generate({
           target: ARCHITECTURE_DRAFT_TARGET,
           instructions: createAmazonQArchitectureDraftInstructions(),
-          prompt: createAmazonQArchitectureDraftRepairPrompt(request.prompt, validationIssues, parsedResponse.architectureJson),
+          prompt: createAmazonQArchitectureDraftRepairPrompt(
+            request.prompt,
+            architectureDecisionSpace,
+            validationIssues,
+            parsedResponse.architectureJson
+          ),
           payload: activePayload
         });
         parsedResponse = parseAmazonQArchitectureDraftResponse(response.text);
@@ -635,11 +655,11 @@ function findConditionalArchitectureQuestion(prompt: string): RequiredArchitectu
   if (requiresGlobalDeploymentScopeDecision(normalizedPrompt) && !hasGlobalDeploymentDecision(normalizedPrompt)) {
     return {
       id: "global_deployment_scope",
-      question: "湲濡쒕쾶 ?ъ슜?먯? 1珥?濡쒕뵫 紐⑺몴瑜??대뼡 踰붿쐞濡??ㅺ퀎?좉퉴??",
+      question: "글로벌 사용자와 1초 로딩 목표를 어떤 범위로 설계할까요?",
       suggestions: [
-        "CloudFront 湲濡쒕쾶 + API/RDS???⑥씪 由ъ쟾",
-        "?ㅼ쨷 由ъ쟾 API源뚯? ?ы븿",
-        "MVP???⑥씪 由ъ쟾, 異뷀썑 ?ㅼ쨷 由ъ쟾 ?뺤옣 寃쎄퀬 ?쒖떆"
+        "CloudFront 글로벌 + API/RDS는 단일 리전",
+        "다중 리전 API까지 포함",
+        "MVP는 단일 리전, 추후 다중 리전 확장 경고 표시"
       ],
       isAnswered: () => true
     };
@@ -648,11 +668,11 @@ function findConditionalArchitectureQuestion(prompt: string): RequiredArchitectu
   if (requiresRealtime(normalizedPrompt) && !hasRealtimeImplementationDecision(normalizedPrompt)) {
     return {
       id: "realtime_implementation",
-      question: "?ㅼ떆媛??뚮┝? ?대뼡 諛⑹떇?쇰줈 ?쒗쁽?좉퉴??",
+      question: "실시간 알림은 어떤 방식으로 표현할까요?",
       suggestions: [
-        "WebSocket ?곌껐 寃쎈줈",
-        "SSE ?⑤갑???뚮┝ 寃쎈줈",
-        "媛꾨떒 ?대쭅 諛⑹떇怨?鍮꾩슜 ?덇컧 寃쎄퀬"
+        "WebSocket 연결 경로",
+        "SSE 단방향 알림 경로",
+        "간단 폴링 방식과 비용 절감 경고"
       ],
       isAnswered: () => true
     };
@@ -694,30 +714,333 @@ function createArchitectureDraftClarification(
   };
 }
 
+function createArchitectureDecisionSpace(prompt: string): ArchitectureDecisionSpace {
+  const normalizedPrompt = prompt.normalize("NFKC").toLowerCase();
+  const answerProfile = createArchitectureAnswerProfile(normalizedPrompt);
+
+  return {
+    answerProfile,
+    hardConstraints: createArchitectureHardConstraints(answerProfile, normalizedPrompt),
+    preferredPatterns: createPreferredArchitecturePatterns(answerProfile, normalizedPrompt),
+    discouragedPatterns: createDiscouragedArchitecturePatterns(answerProfile),
+    evaluationCriteria: createArchitectureEvaluationCriteria(answerProfile),
+    unsupportedSubstitutions: createUnsupportedSubstitutions(answerProfile, normalizedPrompt),
+    coverageRequirements: createArchitectureCoverageRequirements(answerProfile, normalizedPrompt)
+  };
+}
+
+function createArchitectureAnswerProfile(normalizedPrompt: string): ArchitectureAnswerProfile {
+  return {
+    traffic: resolveTrafficProfile(normalizedPrompt),
+    frontend: resolveFrontendProfile(normalizedPrompt),
+    backend: resolveBackendProfile(normalizedPrompt),
+    region: resolveRegionProfile(normalizedPrompt),
+    upload: resolveUploadProfile(normalizedPrompt),
+    realtime: resolveRealtimeProfile(normalizedPrompt),
+    management: resolveManagementProfile(normalizedPrompt),
+    latency: resolveLatencyProfile(normalizedPrompt),
+    availability: resolveAvailabilityProfile(normalizedPrompt),
+    budget: resolveBudgetProfile(normalizedPrompt)
+  };
+}
+
+function createArchitectureHardConstraints(answerProfile: ArchitectureAnswerProfile, normalizedPrompt: string): string[] {
+  const constraints: string[] = [];
+
+  if (answerProfile.backend === "none") {
+    constraints.push(
+      "Backend not required: forbid backend-only EC2, LAMBDA, API_GATEWAY_REST_API, LOAD_BALANCER, and LOAD_BALANCER_LISTENER unless another explicit accepted answer creates an API requirement."
+    );
+  }
+
+  if (requiresNoDatabase(normalizedPrompt)) {
+    constraints.push("Database not required: forbid RDS, DB_SUBNET_GROUP, and database-specific labels/config.");
+  }
+
+  if (answerProfile.upload === "none") {
+    constraints.push(
+      "File upload not required: forbid upload/media/presigned/file-processing resources, labels, flows, and upload-specific IAM paths."
+    );
+  }
+
+  if (answerProfile.realtime === "none") {
+    constraints.push(
+      "Realtime not required: forbid WebSocket, SSE, realtime notification, chat, push, SNS, SQS, EventBridge, and notification-path labels/coverage."
+    );
+  }
+
+  if (answerProfile.region === "korea") {
+    constraints.push("Korea-only scope: forbid multi-region API/RDS wording or topology; CloudFront may be used only for static or CDN acceleration assumptions.");
+  }
+
+  if (answerProfile.budget === "low" && answerProfile.availability === "99.99") {
+    constraints.push("Low budget and 99.99% availability conflict: do not claim both are satisfied without explicit cost-warning coverage.");
+  }
+
+  return constraints;
+}
+
+function createPreferredArchitecturePatterns(
+  answerProfile: ArchitectureAnswerProfile,
+  normalizedPrompt: string
+): ArchitectureDecisionPattern[] {
+  const patterns: ArchitectureDecisionPattern[] = [];
+
+  if (answerProfile.backend === "none" || answerProfile.frontend === "static") {
+    patterns.push({
+      id: "static_cdn_site",
+      when: "Use for static or mostly static websites with no accepted backend/database requirement.",
+      typicalNodeTypes: ["S3", "CLOUDFRONT", "ROUTE53_RECORD"],
+      tradeoffs: ["Low operational burden and cost.", "Dynamic behavior needs a separate API pattern."]
+    });
+  }
+
+  if (answerProfile.frontend === "spa" && answerProfile.backend === "simple_api") {
+    patterns.push({
+      id: "spa_with_serverless_api",
+      when: "Use when SPA delivery needs a small managed API and low operational burden.",
+      typicalNodeTypes: ["S3", "CLOUDFRONT", "API_GATEWAY_REST_API", "LAMBDA", "IAM_ROLE", "CLOUDWATCH_LOG_GROUP"],
+      tradeoffs: ["Simple scaling and lower operations.", "Long-running or complex backend logic may need a different runtime pattern."]
+    });
+  }
+
+  if (answerProfile.backend === "complex" || answerProfile.backend === "microservices") {
+    patterns.push({
+      id: "load_balanced_app_tier",
+      when: "Use when backend logic, traffic, or availability makes an explicit app entry and runtime tier useful.",
+      typicalNodeTypes: ["VPC", "SUBNET", "SECURITY_GROUP", "LOAD_BALANCER", "LOAD_BALANCER_LISTENER", "EC2", "CLOUDWATCH_LOG_GROUP"],
+      tradeoffs: ["Clearer operational control and scaling path.", "Higher cost and operational burden than serverless/simple API patterns."]
+    });
+  }
+
+  if (!requiresNoDatabase(normalizedPrompt) && answerProfile.backend !== "none") {
+    patterns.push({
+      id: "managed_relational_data",
+      when: "Use when accepted answers require relational or durable application data.",
+      typicalNodeTypes: ["RDS", "DB_SUBNET_GROUP", "KMS_KEY", "CLOUDWATCH_METRIC_ALARM"],
+      tradeoffs: ["Managed persistence and backup posture.", "RDS and Multi-AZ can dominate low-budget designs."]
+    });
+  }
+
+  if (answerProfile.region === "global" || answerProfile.latency === "one_second") {
+    patterns.push({
+      id: "global_static_delivery_single_region_api",
+      when: "Use when users are global or latency-sensitive but API/database can remain in one region with a clear warning.",
+      typicalNodeTypes: ["CLOUDFRONT", "ROUTE53_RECORD", "S3", "LOAD_BALANCER", "API_GATEWAY_REST_API"],
+      tradeoffs: ["Fast static/media delivery.", "Single-region API/RDS latency must be disclosed for distant users."]
+    });
+  }
+
+  if (answerProfile.availability === "99.99") {
+    patterns.push({
+      id: "high_availability_multi_az_target",
+      when: "Use when the accepted availability target is 99.99% or no-downtime.",
+      typicalNodeTypes: ["SUBNET", "LOAD_BALANCER", "LOAD_BALANCER_LISTENER", "EC2", "RDS", "DB_SUBNET_GROUP", "CLOUDWATCH_METRIC_ALARM"],
+      tradeoffs: ["Better redundancy and failure isolation.", "May conflict with low budgets and needs explicit cost-warning coverage."]
+    });
+  }
+
+  if (answerProfile.upload && answerProfile.upload !== "none") {
+    patterns.push({
+      id: "direct_media_upload",
+      when: "Use when accepted answers include image, mixed, or large file upload.",
+      typicalNodeTypes: ["S3", "IAM_ROLE", "IAM_POLICY", "KMS_KEY", "CLOUDFRONT"],
+      tradeoffs: ["Avoids proxying large files through app compute.", "Requires clear object access, lifecycle, and validation assumptions."]
+    });
+  }
+
+  if (answerProfile.realtime && answerProfile.realtime !== "none") {
+    patterns.push({
+      id: "supported_realtime_notification_path",
+      when: "Use when accepted answers include chat, notifications, or data updates.",
+      typicalNodeTypes: ["API_GATEWAY_REST_API", "LAMBDA", "EC2", "CLOUDWATCH_LOG_GROUP"],
+      tradeoffs: ["Represents realtime capability with supported nodes.", "Dedicated WebSocket/SNS/SQS/EventBridge nodes require future ResourceType expansion."]
+    });
+  }
+
+  if (patterns.length === 0) {
+    patterns.push({
+      id: "minimal_reviewable_architecture",
+      when: "Use when requirements are complete but do not strongly select a specialized pattern.",
+      typicalNodeTypes: ["S3", "CLOUDFRONT", "CLOUDWATCH_LOG_GROUP"],
+      tradeoffs: ["Keeps the draft concise and reviewable.", "May need follow-up before Terraform/deployment handoff."]
+    });
+  }
+
+  return patterns;
+}
+
+function createDiscouragedArchitecturePatterns(answerProfile: ArchitectureAnswerProfile): {
+  readonly id: string;
+  readonly reason: string;
+}[] {
+  const patterns: { readonly id: string; readonly reason: string }[] = [];
+
+  if (answerProfile.budget === "low") {
+    patterns.push({
+      id: "enterprise_resilience_by_default",
+      reason: "Low-budget answers should not silently add expensive HA/global patterns unless availability or latency explicitly requires them."
+    });
+  }
+
+  if (answerProfile.management === "fully_managed") {
+    patterns.push({
+      id: "self_managed_ec2_first",
+      reason: "Fully managed preference should lower the priority of manually operated EC2-first designs when a supported managed pattern can satisfy the same capability."
+    });
+  }
+
+  if (answerProfile.region === "korea") {
+    patterns.push({
+      id: "multi_region_api_database",
+      reason: "Korea-only scope makes multi-region API/database topology inappropriate unless the user changes the region requirement."
+    });
+  }
+
+  if (answerProfile.upload === "none") {
+    patterns.push({
+      id: "media_upload_pipeline",
+      reason: "The user selected no file upload, so upload/media/presigned-file patterns must not be selected."
+    });
+  }
+
+  if (answerProfile.realtime === "none") {
+    patterns.push({
+      id: "realtime_notification_stack",
+      reason: "The user selected no realtime feature, so notification/chat/update-stream patterns must not be selected."
+    });
+  }
+
+  return patterns;
+}
+
+function createArchitectureEvaluationCriteria(answerProfile: ArchitectureAnswerProfile): string[] {
+  const criteria = ["cost", "availability", "latency", "operational burden", "diagram clarity", "supported ResourceType"];
+
+  if (answerProfile.budget === "low") {
+    criteria.push("budget conflict visibility");
+  }
+
+  if (answerProfile.region === "global" || answerProfile.latency === "one_second") {
+    criteria.push("global/static delivery signal", "single-region API latency warning when applicable");
+  }
+
+  if (answerProfile.availability === "99.99") {
+    criteria.push("redundancy and high-availability signal");
+  }
+
+  if (answerProfile.upload && answerProfile.upload !== "none") {
+    criteria.push("upload/media capability signal");
+  }
+
+  if (answerProfile.realtime && answerProfile.realtime !== "none") {
+    criteria.push("notification/realtime capability signal");
+  }
+
+  return criteria;
+}
+
+function createUnsupportedSubstitutions(
+  answerProfile: ArchitectureAnswerProfile,
+  normalizedPrompt: string
+): UnsupportedSubstitution[] {
+  const substitutions: UnsupportedSubstitution[] = [
+    {
+      requestedService: "ACM certificate",
+      supportedRepresentation: "Certificate requirement in CLOUDFRONT, LOAD_BALANCER, assumptions, or nextActions.",
+      requiredExplanation: "Explain that ACM is required for HTTPS but is not a current ResourceNode.type."
+    },
+    {
+      requestedService: "Auto Scaling Group",
+      supportedRepresentation: "Multiple EC2 app targets plus scaling assumptions in config/coverage.",
+      requiredExplanation: "Explain that AUTO_SCALING_GROUP requires ResourceType expansion before it can be drawn directly."
+    }
+  ];
+
+  if (answerProfile.realtime && answerProfile.realtime !== "none") {
+    substitutions.push({
+      requestedService: "WebSocket API, SNS, SQS, or EventBridge notification resources",
+      supportedRepresentation: "API_GATEWAY_REST_API, LAMBDA, or backend tier nodes with WebSocket/SSE/polling assumptions in requirementCoverage.",
+      requiredExplanation: "Explain the limitation and do not invent unsupported realtime or messaging ResourceNode.type values."
+    });
+  }
+
+  if (/cognito|\uC778\uC99D|login|auth/iu.test(normalizedPrompt)) {
+    substitutions.push({
+      requestedService: "Cognito or dedicated auth provider",
+      supportedRepresentation: "Backend/API auth responsibility, IAM_ROLE/IAM_POLICY boundaries, and assumptions/nextActions.",
+      requiredExplanation: "Explain that dedicated auth-provider nodes need future ResourceType expansion."
+    });
+  }
+
+  return substitutions;
+}
+
+function createArchitectureCoverageRequirements(
+  answerProfile: ArchitectureAnswerProfile,
+  normalizedPrompt: string
+): string[] {
+  const requirements = [
+    "Record selectedPattern id and why it was chosen.",
+    "Record rejectedPatterns or lower-priority patterns with short reasons.",
+    "Map every selected answer to a capability signal and node ids when a node represents that capability.",
+    "Record unsupported substitutions and limitations when a requested service cannot be drawn directly."
+  ];
+
+  if (answerProfile.frontend === "spa" || answerProfile.frontend === "static") {
+    requirements.push("Frontend/static delivery coverage must explain how users receive the site or app shell.");
+  }
+
+  if (answerProfile.backend && answerProfile.backend !== "none") {
+    requirements.push("Backend/API coverage must explain the request entry path and runtime choice.");
+  }
+
+  if (!requiresNoDatabase(normalizedPrompt) && answerProfile.backend !== "none") {
+    requirements.push("Data persistence coverage must explain database/storage assumptions or explicitly say why durable storage is not selected.");
+  }
+
+  if (answerProfile.upload && answerProfile.upload !== "none") {
+    requirements.push("Upload/media coverage must mention direct upload, media storage, validation, lifecycle, or the chosen supported substitute.");
+  }
+
+  if (answerProfile.realtime && answerProfile.realtime !== "none") {
+    requirements.push("Realtime/notification coverage must mention WebSocket, SSE, notification, polling, or the chosen supported substitute.");
+  }
+
+  if (answerProfile.region === "global" || answerProfile.latency === "one_second") {
+    requirements.push("Global/latency coverage must mention global/static delivery or warn about single-region API/database latency.");
+  }
+
+  if (answerProfile.availability === "99.99") {
+    requirements.push("High-availability coverage must mention redundancy, Multi-AZ, failover, or another explicit availability trade-off.");
+  }
+
+  if (answerProfile.budget === "low" && answerProfile.availability === "99.99") {
+    requirements.push("Cost-warning coverage must mention the budget versus 99.99% availability conflict.");
+  }
+
+  return requirements;
+}
+
 function createAmazonQArchitectureDraftInstructions(): string {
   return [
     "You are Amazon Q assisting SketchCatch, an IaC operations service.",
     "Return JSON only. Do not wrap the response in markdown.",
-    "Recommend a cost- and security-conscious Practice Architecture from the user's requirements.",
+    "Choose a cost- and security-conscious Practice Architecture from the provided ArchitectureDecisionSpace.",
     "SketchCatch is provider-neutral, AWS-first for the MVP, and Terraform-first.",
     "Do not perform deployment, apply, update, delete, or destroy actions.",
     "All architecture changes must remain user-accepted previews.",
     `Use only these ResourceNode.type values: ${SUPPORTED_RESOURCE_TYPES.join(", ")}.`,
-    "Treat the user's clarification answers as binding architecture constraints, not loose background context. Convert each answered choice into explicit nodes, edges, config, assumptions, and warnings in the preview.",
-    ...AMAZON_Q_CLARIFICATION_CHOICE_CONSTRAINTS,
-    ...AMAZON_Q_CLARIFICATION_CHOICE_ENFORCEMENT_RULES,
-    "For React/Vue/Angular SPA requirements, model frontend delivery as S3 static assets behind CLOUDFRONT unless the user explicitly asks for SSR. Do not serve the SPA only from an application server.",
-    "For complex backend/business-logic requirements, include a backend compute tier behind LOAD_BALANCER and LOAD_BALANCER_LISTENER, with private application subnets and SECURITY_GROUP boundaries when VPC networking is present.",
-    "For global users, HTTPS-required, or 1-second loading goals, include a global entry path with CLOUDFRONT. Include ROUTE53_RECORD when a domain/HTTPS path is needed. Because ACM is not a supported node type, represent certificate requirements in CloudFront or load balancer config, assumptions, or nextActions instead of inventing an unsupported ACM node.",
-    "For image-upload requirements, include a separate S3 media bucket and describe the browser-to-S3 presigned upload flow in explanations, with IAM_ROLE/IAM_POLICY and KMS_KEY when security requirements justify them.",
-    "For real-time notification requirements, do not omit the notification path. If a dedicated WebSocket resource type is unavailable, represent the supported notification entry/channel through the backend tier or API_GATEWAY_REST_API/LAMBDA and explain the WebSocket or SSE implementation detail in assumptions.",
-    "For 99.99% availability or no-downtime requirements, do not return a single-AZ or single-EC2 architecture. Use at least two Availability Zones, multiple app subnets, LOAD_BALANCER plus LOAD_BALANCER_LISTENER, redundant compute nodes when compute is modeled as EC2, DB_SUBNET_GROUP, and RDS Multi-AZ config when a relational database is required.",
-    "If budget constraints conflict with high availability, global latency, or 1-second loading goals, do not silently downgrade the architecture. Return the architecture that satisfies the stated reliability/performance goal and add clear assumptions, warnings, or nextActions about the expected cost trade-off.",
-    "Do not artificially limit the architecture to one resource per type. If traffic, availability, security, or cost requirements justify it, use multiple EC2, SUBNET, S3, or other supported resources.",
-    "When multiple compute instances are needed, prefer multiple Availability Zones and include LOAD_BALANCER plus LOAD_BALANCER_LISTENER when that is the cost- and security-appropriate entry path.",
-    "For high concurrency or high availability requirements such as large concurrent users, 99.9%+ availability, or event traffic spikes, consider horizontally scaled compute across AZs instead of a single EC2 instance.",
+    "Use the persistent compact AWS/Terraform referenceKnowledge payload as design precedent. Do not request or quote the full source documents; apply the compact guidance only when it fits the user's selected constraints.",
+    "The ArchitectureDecisionSpace is not a fixed skeleton. hardConstraints are binding only for explicit none choices or clear contradictions; preferredPatterns are candidate patterns you may choose, adapt, or combine.",
+    "Select the preferredPattern that best fits the answerProfile and evaluationCriteria. If you choose a lower-priority or combined pattern, explain why in requirementCoverage.",
+    "Record the selected pattern id, rejected pattern ids, and trade-off rationale in requirementCoverage, assumptions, highlights, or nextActions.",
+    "Use evaluationCriteria and coverageRequirements as capability signals. Do not force a specific resource solely to make diagrams look different.",
+    "Use unsupportedSubstitutions when a requested AWS service has no supported ResourceNode.type. Do not invent unsupported ResourceNode.type values.",
+    "Do not artificially limit the architecture to one resource per type. If the selected pattern justifies it, use multiple EC2, SUBNET, S3, or other supported resources.",
     "Layout rules: VPC, SUBNET, and SECURITY_GROUP nodes are area boxes. Nodes related by contains/hosts edges or config references such as vpcId, subnetId, securityGroupIds, or vpcSecurityGroupIds must be fully inside their parent area box.",
     "Unrelated area boxes must not overlap. If an area belongs inside another area, place it fully inside and include the containment relationship. Boundary resources such as INTERNET_GATEWAY may sit on an area edge, but must not float half-overlapping unrelated areas.",
+    "Keep diagram labels readable: non-area nodes must be spaced generously so icons, node labels, and edge labels do not overlap or crowd each other. Prefer at least 240px horizontal spacing or 150px vertical spacing between separate non-area resources.",
     "Layering and edge routing rules: list area/container nodes before their children so containers render behind resources, and do not route visible arrows through unrelated resources or place unrelated resources between connected nodes.",
     "If required information is missing, return a needs_clarification response with exactly one question.",
     "Do not include secrets, account IDs, credentials, ARNs, or private tokens.",
@@ -731,10 +1054,16 @@ function createAmazonQArchitectureDraftInstructions(): string {
   ].join("\n");
 }
 
-function createAmazonQArchitectureDraftPrompt(prompt: string): string {
+function createAmazonQArchitectureDraftPrompt(
+  prompt: string,
+  architectureDecisionSpace: ArchitectureDecisionSpace
+): string {
   return [
     createAmazonQArchitectureDraftInstructions(),
+    createAwsArchitectureReferenceKnowledgePrompt(),
     createAmazonQArchitectureBrief(prompt),
+    "ArchitectureDecisionSpace:",
+    JSON.stringify(architectureDecisionSpace, null, 2),
     "User requirement prompt:",
     prompt
   ].join("\n\n");
@@ -742,6 +1071,7 @@ function createAmazonQArchitectureDraftPrompt(prompt: string): string {
 
 function createAmazonQArchitectureDraftRepairPrompt(
   prompt: string,
+  architectureDecisionSpace: ArchitectureDecisionSpace,
   validationIssues: readonly string[],
   previousArchitectureJson: ArchitectureJson
 ): string {
@@ -751,7 +1081,10 @@ function createAmazonQArchitectureDraftRepairPrompt(
     "Regenerate the full Architecture Draft JSON. Do not patch partially.",
     "Do not return the same topology. Add or remove nodes and edges needed to satisfy the failed requirement coverage checks.",
     "The regenerated response must include requirementCoverage entries proving how every selected answer is represented.",
+    createAwsArchitectureReferenceKnowledgePrompt(),
     createAmazonQArchitectureBrief(prompt),
+    "ArchitectureDecisionSpace:",
+    JSON.stringify(architectureDecisionSpace, null, 2),
     "Validation issues:",
     ...validationIssues.map((issue) => `- ${issue}`),
     "Original user requirement prompt:",
@@ -775,38 +1108,38 @@ function createAmazonQArchitectureBrief(prompt: string): string {
 
   if (requiresSpaFrontend(normalizedPrompt)) {
     intent.push("- React/Vue/Angular SPA or single-page frontend.");
-    requirements.push("- Include S3 for SPA/static asset hosting and CLOUDFRONT as the global/static entry.");
-    flows.push("- User -> CLOUDFRONT -> S3 SPA/static assets.");
-    validation.push("- Do not serve the SPA only from EC2 or backend compute.");
+    requirements.push("- Capability signal needed: frontend/app-shell delivery. S3 plus CLOUDFRONT is a supported candidate, but the selected pattern must explain the delivery choice.");
+    flows.push("- User -> selected frontend/static delivery path -> app shell/assets.");
+    validation.push("- requirementCoverage must explain the frontend delivery capability instead of relying on prose-only claims.");
   }
 
   if (hasExplicitComplexBackendMarker(normalizedPrompt) && requiresComplexBackend(normalizedPrompt)) {
     intent.push("- Backend requires complex business logic.");
-    requirements.push("- Include LOAD_BALANCER plus LOAD_BALANCER_LISTENER and at least two backend compute targets when availability is 99.99% or no-downtime.");
-    flows.push("- User/API traffic -> CLOUDFRONT or DNS entry -> LOAD_BALANCER -> backend compute.");
-    validation.push("- Do not return a lone EC2 backend for complex business logic.");
+    requirements.push("- Capability signal needed: backend/API entry path and runtime choice. LOAD_BALANCER/LOAD_BALANCER_LISTENER or API_GATEWAY_REST_API/LAMBDA are supported candidates depending on the selected pattern.");
+    flows.push("- User/API traffic -> selected API/backend entry -> selected runtime.");
+    validation.push("- requirementCoverage must explain why the backend pattern fits the business logic and operations profile.");
   }
 
   if (hasExplicitDatabaseMarker(normalizedPrompt) && requiresDatabase(normalizedPrompt)) {
-    requirements.push("- Include RDS for relational data and DB_SUBNET_GROUP for private database placement.");
-    flows.push("- Backend compute -> RDS database.");
+    requirements.push("- Capability signal needed: durable data persistence. RDS/DB_SUBNET_GROUP is the supported relational representation when the selected pattern needs relational storage.");
+    flows.push("- Backend/runtime -> selected durable data store.");
   }
 
   if (hasNoFileUploadRequirement(normalizedPrompt)) {
     requirements.push("- ABSOLUTE CONSTRAINT: The user selected no file upload. Do not create upload/media buckets, presigned URL flows, file-processing resources, or upload-specific IAM policies.");
     validation.push("- Any S3 bucket or IAM path named upload, media, image, attachment, presigned, or file upload violates the selected no-upload answer.");
   } else if (requiresImageUpload(normalizedPrompt)) {
-    requirements.push("- Include a separate S3 media/upload bucket and represent presigned URL upload assumptions.");
-    flows.push("- Client -> presigned URL -> S3 media/upload bucket.");
-    validation.push("- Do not reuse the SPA asset bucket as the only image-upload resource.");
+    requirements.push("- Capability signal needed: upload/media handling with validation, access, lifecycle, and direct-upload assumptions when selected.");
+    flows.push("- Client -> selected upload path -> selected media storage representation.");
+    validation.push("- requirementCoverage must name upload/media handling and the supported node ids or limitation.");
   }
 
   if (hasNoRealtimeRequirement(normalizedPrompt)) {
     requirements.push("- ABSOLUTE CONSTRAINT: The user selected no realtime feature. Do not create WebSocket, SSE, realtime notification, or realtime processing resources.");
     validation.push("- Any WebSocket/SSE/realtime/notification-specific node, coverage entry, or assumption violates the selected no-realtime answer.");
   } else if (requiresRealtime(normalizedPrompt)) {
-    requirements.push("- Include a realtime notification path. Use API_GATEWAY_REST_API/LAMBDA or the backend tier as the supported node representation, and state WebSocket/SSE assumptions in requirementCoverage.");
-    flows.push("- Client -> realtime notification endpoint -> backend/Lambda notification path.");
+    requirements.push("- Capability signal needed: realtime/notification path. Use API_GATEWAY_REST_API/LAMBDA or the backend tier as the supported representation if dedicated messaging nodes are unavailable.");
+    flows.push("- Client -> selected realtime/notification entry -> selected backend or serverless notification path.");
     validation.push("- requirementCoverage must name WebSocket, SSE, notification, or realtime and map it to node ids.");
   }
 
@@ -816,13 +1149,13 @@ function createAmazonQArchitectureBrief(prompt: string): string {
   }
 
   if (requiresGlobalOrFastFrontend(normalizedPrompt)) {
-    requirements.push("- Include CLOUDFRONT for global delivery and explain any single-region API/RDS latency limits.");
-    validation.push("- Do not claim global 1-second dynamic API latency from a single region without a warning.");
+    requirements.push("- Capability signal needed: global/static delivery or a clear warning that API/database latency remains single-region.");
+    validation.push("- Do not claim global 1-second dynamic API latency from a single region without requirementCoverage or nextActions warning.");
   }
 
   if (requiresVeryHighAvailability(normalizedPrompt)) {
-    requirements.push("- Include at least two app targets across AZ assumptions, LOAD_BALANCER plus LOAD_BALANCER_LISTENER, DB_SUBNET_GROUP, and RDS Multi-AZ when a database is required.");
-    validation.push("- Do not return single-AZ or single-compute architecture for 99.99% availability.");
+    requirements.push("- Capability signal needed: redundancy/high availability. Use Multi-AZ, failover, redundant compute, or an explicit trade-off depending on the selected pattern.");
+    validation.push("- requirementCoverage must explain the high-availability signal or an explicit reason the selected pattern cannot fully meet 99.99%.");
   }
 
   if (hasBudgetAvailabilityConflict(normalizedPrompt)) {
@@ -877,12 +1210,18 @@ function findRequirementCoverageValidationIssues(
     );
   }
 
-  if (requiresNoDatabase(normalizedPrompt) && nodeTypes.has("RDS")) {
-    issues.push("The user selected no database, but the preview includes RDS. Regenerate without database resources.");
+  issues.push(...findRequirementCoverageNodeValidationIssues(preview));
+
+  if (!mentionsPatternDecisionCoverage(coverageText)) {
+    issues.push("Requirement coverage missing: Amazon Q must record the selected pattern and rejected/alternative pattern rationale.");
   }
 
-  if (hasExplicitDatabaseMarker(normalizedPrompt) && requiresDatabase(normalizedPrompt) && !nodeTypes.has("RDS")) {
-    issues.push("The user selected a database requirement, but the preview does not include RDS. Add an RDS database or ask a clarification if no relational database is intended.");
+  if (requiresNoDatabase(normalizedPrompt) && (nodeTypes.has("RDS") || nodeTypes.has("DB_SUBNET_GROUP") || hasForbiddenDatabaseResource(architectureJson))) {
+    issues.push("The user selected no database, but the preview includes database resources or database-specific labels/config. Regenerate without database resources.");
+  }
+
+  if (hasExplicitDatabaseMarker(normalizedPrompt) && requiresDatabase(normalizedPrompt) && !mentionsDataPersistenceCoverage(coverageText)) {
+    issues.push("The user selected a data/database requirement, but requirementCoverage does not prove a data persistence capability or limitation.");
   }
 
   if (requiresNoBackend(normalizedPrompt) && hasAnyNodeType(nodeTypes, ["EC2", "LAMBDA", "API_GATEWAY_REST_API", "LOAD_BALANCER", "LOAD_BALANCER_LISTENER"])) {
@@ -897,22 +1236,22 @@ function findRequirementCoverageValidationIssues(
     issues.push("The user selected no realtime feature, but the preview includes WebSocket/SSE/realtime/notification-specific resources or coverage. Remove realtime-specific nodes, flows, assumptions, and coverage entries.");
   }
 
-  if (requiresSpaFrontend(normalizedPrompt) && (!nodeTypes.has("S3") || !nodeTypes.has("CLOUDFRONT"))) {
-    issues.push("The user selected an SPA frontend, but the preview does not include S3 static assets behind CloudFront. Add the SPA asset bucket and CloudFront entry.");
+  if (requiresSpaFrontend(normalizedPrompt) && !mentionsFrontendDeliveryCoverage(coverageText)) {
+    issues.push("The user selected an SPA frontend, but requirementCoverage does not explain the frontend/static delivery capability.");
   }
 
   if (hasExplicitComplexBackendMarker(normalizedPrompt) && requiresComplexBackend(normalizedPrompt)) {
-    if (!nodeTypes.has("LOAD_BALANCER") || !nodeTypes.has("LOAD_BALANCER_LISTENER")) {
-      issues.push("The user selected complex backend/business logic, but the preview lacks LOAD_BALANCER and LOAD_BALANCER_LISTENER. Add an explicit backend entry path instead of a lone app server.");
+    if (!mentionsBackendEntryCoverage(coverageText)) {
+      issues.push("The user selected complex backend/business logic, but requirementCoverage does not explain the backend/API entry path and runtime choice.");
     }
   }
 
-  if (requiresGlobalOrFastFrontend(normalizedPrompt) && !nodeTypes.has("CLOUDFRONT")) {
-    issues.push("The user selected global users, HTTPS-sensitive delivery, or a 1-second loading goal, but the preview lacks CloudFront. Add CloudFront for global/static/media acceleration.");
+  if (requiresGlobalOrFastFrontend(normalizedPrompt) && !mentionsGlobalDeliveryOrLatencyWarning(coverageText)) {
+    issues.push("The user selected global users, HTTPS-sensitive delivery, or a 1-second loading goal, but requirementCoverage does not mention global/static delivery or single-region latency warning.");
   }
 
-  if (requiresImageUpload(normalizedPrompt) && !hasMediaUploadBucket(architectureJson)) {
-    issues.push("The user selected image upload, but the preview lacks a separate S3 media/upload bucket. Add a media bucket and represent the presigned upload flow in edges or explanations.");
+  if (requiresImageUpload(normalizedPrompt) && !mentionsUploadCoverage(coverageText)) {
+    issues.push("The user selected image upload, but requirementCoverage does not prove upload/media handling or a supported substitute.");
   }
 
   if (requiresRealtime(normalizedPrompt) && !mentionsRealtimePath(coverageText)) {
@@ -920,21 +1259,17 @@ function findRequirementCoverageValidationIssues(
   }
 
   if (requiresVeryHighAvailability(normalizedPrompt)) {
-    if (requiresBackend(normalizedPrompt) && countComputeTargets(architectureJson) < 2) {
-      issues.push("The user selected 99.99% availability/no downtime, but the preview has only one app compute target. Add redundant compute targets in separate availability assumptions behind a load balancer.");
+    if (!mentionsHighAvailabilityCoverage(coverageText)) {
+      issues.push("The user selected 99.99% availability/no downtime, but requirementCoverage does not prove redundancy, high availability, Multi-AZ, failover, or a clear availability trade-off.");
     }
+  }
 
-    if (requiresBackend(normalizedPrompt) && (!nodeTypes.has("LOAD_BALANCER") || !nodeTypes.has("LOAD_BALANCER_LISTENER"))) {
-      issues.push("The user selected 99.99% availability/no downtime with an API/backend, but the preview lacks LOAD_BALANCER and LOAD_BALANCER_LISTENER. Add ALB/listener in front of redundant compute targets.");
-    }
+  if (hasBudgetAvailabilityConflict(normalizedPrompt) && !mentionsCostWarningCoverage(coverageText)) {
+    issues.push("The user selected a low budget and 99.99% availability, but requirementCoverage does not include a cost warning or budget-risk trade-off.");
+  }
 
-    if (
-      hasExplicitDatabaseMarker(normalizedPrompt) &&
-      requiresDatabase(normalizedPrompt) &&
-      (!nodeTypes.has("DB_SUBNET_GROUP") || !coverageText.includes("multi-az"))
-    ) {
-      issues.push("The user selected 99.99% availability with a database, but the preview does not prove RDS Multi-AZ with DB_SUBNET_GROUP. Add DB_SUBNET_GROUP and a requirementCoverage/assumption entry that names RDS Multi-AZ.");
-    }
+  if (requiresKoreaOnlyRegion(normalizedPrompt) && mentionsForbiddenMultiRegionScope(coverageText)) {
+    issues.push("The user selected Korea-only scope, but the preview claims or implies multi-region API/database coverage.");
   }
 
   return issues;
@@ -1045,6 +1380,33 @@ function findArchitectureLayoutValidationIssues(architectureJson: ArchitectureJs
 
       issues.push(
         `Layout violation: ${node.id} (${node.type}) partially overlaps area ${areaNode.id} (${areaNode.type}) without being contained. Place it fully outside that area or add the correct containment reference.`
+      );
+    }
+  }
+
+  const readableNodes = architectureJson.nodes.filter((node) => !PREVIEW_AREA_RESOURCE_TYPES.has(node.type));
+  const visualRectsByNodeId = new Map(
+    readableNodes.map((node) => [node.id, createPreviewNodeVisualBoundsRect(node)])
+  );
+
+  for (let leftIndex = 0; leftIndex < readableNodes.length; leftIndex += 1) {
+    for (let rightIndex = leftIndex + 1; rightIndex < readableNodes.length; rightIndex += 1) {
+      const leftNode = readableNodes[leftIndex];
+      const rightNode = readableNodes[rightIndex];
+
+      if (!leftNode || !rightNode) {
+        continue;
+      }
+
+      const leftRect = visualRectsByNodeId.get(leftNode.id);
+      const rightRect = visualRectsByNodeId.get(rightNode.id);
+
+      if (!leftRect || !rightRect || !rectsOverlap(leftRect, rightRect)) {
+        continue;
+      }
+
+      issues.push(
+        `Layout violation: nodes ${leftNode.id} (${leftNode.type}) and ${rightNode.id} (${rightNode.type}) have overlapping visual or label bounds. Separate their coordinates so icons, labels, and edge labels remain readable.`
       );
     }
   }
@@ -1277,6 +1639,23 @@ function createPreviewNodeRect(node: ArchitectureJson["nodes"][number]): LayoutR
   };
 }
 
+function createPreviewNodeVisualBoundsRect(node: ArchitectureJson["nodes"][number]): LayoutRect {
+  const iconRect = createPreviewNodeRect(node);
+  const label = typeof node.label === "string" && node.label.trim() ? node.label.trim() : node.id;
+  const labelWidth = Math.min(
+    PREVIEW_LABEL_MAX_WIDTH,
+    Math.max(iconRect.right - iconRect.left, label.length * PREVIEW_LABEL_CHARACTER_WIDTH + PREVIEW_LABEL_HORIZONTAL_PADDING)
+  );
+  const centerX = (iconRect.left + iconRect.right) / 2;
+
+  return {
+    left: centerX - labelWidth / 2 - PREVIEW_VISUAL_BOUNDS_HORIZONTAL_MARGIN,
+    top: iconRect.top - PREVIEW_VISUAL_BOUNDS_VERTICAL_MARGIN,
+    right: centerX + labelWidth / 2 + PREVIEW_VISUAL_BOUNDS_HORIZONTAL_MARGIN,
+    bottom: iconRect.bottom + PREVIEW_LABEL_HEIGHT + PREVIEW_VISUAL_BOUNDS_VERTICAL_MARGIN
+  };
+}
+
 function getPreviewNodeCenter(node: ArchitectureJson["nodes"][number]): { readonly x: number; readonly y: number } {
   const size = PREVIEW_NODE_LAYOUT_SIZES[node.type] ?? DEFAULT_PREVIEW_NODE_SIZE;
 
@@ -1351,24 +1730,35 @@ function hasAnyNodeType(nodeTypes: ReadonlySet<ResourceType>, expectedTypes: rea
   return expectedTypes.some((type) => nodeTypes.has(type));
 }
 
-function countComputeTargets(architectureJson: ArchitectureJson): number {
-  const ec2Count = architectureJson.nodes.filter((node) => node.type === "EC2").length;
+function findRequirementCoverageNodeValidationIssues(preview: AmazonQArchitectureDraftPreview): string[] {
+  const nodeIds = new Set(preview.architectureJson.nodes.map((node) => node.id));
+  const missingNodeIds = new Set<string>();
 
-  if (ec2Count > 0) {
-    return ec2Count;
+  for (const coverage of preview.requirementCoverage ?? []) {
+    for (const nodeId of coverage.nodes ?? []) {
+      if (!nodeIds.has(nodeId)) {
+        missingNodeIds.add(nodeId);
+      }
+    }
   }
 
-  return architectureJson.nodes.filter((node) => node.type === "LAMBDA").length;
-}
-
-function hasMediaUploadBucket(architectureJson: ArchitectureJson): boolean {
-  const s3Nodes = architectureJson.nodes.filter((node) => node.type === "S3");
-
-  return (
-    s3Nodes.length > 1 ||
-    s3Nodes.some((node) => /upload|media|image|profile|post|attachment|asset|file|\uC774\uBBF8\uC9C0|\uC5C5\uB85C\uB4DC|\uBBF8\uB514\uC5B4/iu.test(createNodeSearchText(node)))
+  return [...missingNodeIds].map(
+    (nodeId) => `Requirement coverage references missing node id '${nodeId}'. Use only node ids present in architectureJson.`
   );
 }
+
+function hasForbiddenDatabaseResource(architectureJson: ArchitectureJson): boolean {
+  return architectureJson.nodes.some((node) => {
+    if (hasAnyNodeType(new Set([node.type]), ["RDS", "DB_SUBNET_GROUP"])) {
+      return true;
+    }
+
+    return /(database|\bdb\b|rds|postgres|postgresql|mysql|db\s*subnet|\uB370\uC774\uD130\uBCA0\uC774\uC2A4)/iu.test(
+      createNodeSearchText(node)
+    );
+  });
+}
+
 function hasForbiddenUploadResource(architectureJson: ArchitectureJson): boolean {
   return architectureJson.nodes.some((node) => {
     const nodeText = createNodeSearchText(node);
@@ -1429,6 +1819,61 @@ function hasPositiveRealtimeSignal(text: string): boolean {
     normalizedText
   );
 }
+
+function mentionsDataPersistenceCoverage(text: string): boolean {
+  return /(data\s*persistence|durable\s*(data|storage)|database|relational|rds|storage\s*assumption|\uB370\uC774\uD130|\uC800\uC7A5)/iu.test(
+    text
+  );
+}
+
+function mentionsPatternDecisionCoverage(text: string): boolean {
+  return /(selected\s*pattern|chosen\s*pattern|pattern\s*id|rejected\s*pattern|alternative\s*pattern|preferred\s*pattern|trade[-\s]*off|선택.*패턴|거부.*패턴|대안.*패턴)/iu.test(
+    text
+  );
+}
+
+function mentionsFrontendDeliveryCoverage(text: string): boolean {
+  return /(frontend|static\s*delivery|app\s*shell|spa|cdn|cloudfront|s3|asset\s*delivery|\uC815\uC801|\uD504론트엔드)/iu.test(
+    text
+  );
+}
+
+function mentionsBackendEntryCoverage(text: string): boolean {
+  return /(backend|api\s*entry|runtime|load\s*balancer|alb|api\s*gateway|lambda|ec2|request\s*entry|\uBC31\uC5D4\uB4DC|api)/iu.test(
+    text
+  );
+}
+
+function mentionsGlobalDeliveryOrLatencyWarning(text: string): boolean {
+  return /(global|worldwide|cdn|cloudfront|static\s*delivery|edge|single[-\s]*region.*latency|latency.*single[-\s]*region|api.*latency.*warning|database.*latency.*warning|\uAE00\uB85C\uBC8C|\uC9C0연|\uB2E8\uC77C\s*\uB9AC\uC804)/iu.test(
+    text
+  );
+}
+
+function mentionsUploadCoverage(text: string): boolean {
+  return /(upload|media|image|presigned|direct[-\s]*to[-\s]*s3|file\s*handling|lifecycle|\uC5C5\uB85C\uB4DC|\uC774\uBBF8\uC9C0|\uBBF8\uB514\uC5B4)/iu.test(
+    text
+  );
+}
+
+function mentionsHighAvailabilityCoverage(text: string): boolean {
+  return /(high\s*availability|redundan|multi[-\s]*az|failover|99\.99|no[-\s]*downtime|availability\s*trade[-\s]*off|\uAC00\uC6A9\uC131|\uB2E4\uC911\s*az|\uC911\uBCF5|\uC774\uC911화)/iu.test(
+    text
+  );
+}
+
+function mentionsCostWarningCoverage(text: string): boolean {
+  return /(cost\s*warning|budget\s*risk|budget.*conflict|cost.*trade[-\s]*off|over\s*budget|exceed.*budget|\uBE44\uC6A9\s*\uACBD\uACE0|\uC608\uC0B0.*(\uCD08\uACFC|\uCDA9돌|\uC704험))/iu.test(
+    text
+  );
+}
+
+function mentionsForbiddenMultiRegionScope(text: string): boolean {
+  return /(multi[-\s]*region\s*(api|database|rds)|api\/rds.*multi[-\s]*region|\uB2E4\uC911\s*\uB9AC\uC804.*(api|rds|\uB370\uC774\uD130\uBCA0\uC774\uC2A4))/iu.test(
+    text
+  );
+}
+
 function createCoverageSearchText(preview: AmazonQArchitectureDraftPreview): string {
   return [
     ...(preview.requirementCoverage ?? []).flatMap((coverage) => [
@@ -1476,6 +1921,206 @@ function getStringConfigValues(node: ArchitectureJson["nodes"][number], key: str
 
 function requiresServerlessOnlyArchitecture(normalizedPrompt: string): boolean {
   return hasPromptTerm(normalizedPrompt, ["serverless", "lambda", "without ec2", "no ec2", "ec2 without", "ec2 excluded", "ec2 not allowed", "\uC11C\uBC84\uB9AC\uC2A4", "\uB78C\uB2E4"]);
+}
+
+function resolveTrafficProfile(normalizedPrompt: string): ArchitectureAnswerProfile["traffic"] {
+  if (/(bursty|event\s+spike|unpredictable|급변동|이벤트|예측\s*불가)/iu.test(normalizedPrompt)) {
+    return "bursty";
+  }
+
+  if (/(large\s+traffic|10,?000|500\+|대규모|일\s*10,?000|동시\s*500)/iu.test(normalizedPrompt)) {
+    return "large";
+  }
+
+  if (/(medium\s+traffic|1,?000|concurrent\s+50|중간\s*규모|일\s*1,?000|동시\s*50|동접자?\s*1000)/iu.test(normalizedPrompt)) {
+    return "medium";
+  }
+
+  if (/(small\s+traffic|under\s+10|100명\s*미만|소규모|동시\s*10명\s*미만)/iu.test(normalizedPrompt)) {
+    return "small";
+  }
+
+  return undefined;
+}
+
+function resolveFrontendProfile(normalizedPrompt: string): ArchitectureAnswerProfile["frontend"] {
+  if (/(mobile\s+app|모바일\s*앱|네이티브|웹뷰)/iu.test(normalizedPrompt)) {
+    return "mobile";
+  }
+
+  if (/(next\.?js|nuxt|ssr|server\s*side|서버\s*사이드)/iu.test(normalizedPrompt)) {
+    return "ssr";
+  }
+
+  if (/(spa|single\s*page|react|vue|angular)/iu.test(normalizedPrompt)) {
+    return "spa";
+  }
+
+  if (/(static\s+site|html\/css\/js|pure\s+web|정적\s*사이트|순수\s*웹|회사\s*소개|포트폴리오|블로그)/iu.test(normalizedPrompt)) {
+    return "static";
+  }
+
+  return undefined;
+}
+
+function resolveBackendProfile(normalizedPrompt: string): ArchitectureAnswerProfile["backend"] {
+  if (requiresNoBackend(normalizedPrompt)) {
+    return "none";
+  }
+
+  if (/(microservice|마이크로서비스)/iu.test(normalizedPrompt)) {
+    return "microservices";
+  }
+
+  if (requiresComplexBackend(normalizedPrompt)) {
+    return "complex";
+  }
+
+  if (/(simple\s+api|api\s+server|node\.?js|python\s*flask|간단\s*api|api\s*서버)/iu.test(normalizedPrompt)) {
+    return "simple_api";
+  }
+
+  return undefined;
+}
+
+function resolveRegionProfile(normalizedPrompt: string): ArchitectureAnswerProfile["region"] {
+  if (requiresKoreaOnlyRegion(normalizedPrompt)) {
+    return "korea";
+  }
+
+  if (/(global|worldwide|united\s+states|europe|글로벌|미국|유럽)/iu.test(normalizedPrompt)) {
+    return "global";
+  }
+
+  if (/(asia\s*pacific|apac|tokyo|singapore|아시아\s*태평양|도쿄|싱가포르)/iu.test(normalizedPrompt)) {
+    return "apac";
+  }
+
+  if (/(specific\s+region|중국|일본|특정\s*지역)/iu.test(normalizedPrompt)) {
+    return "specific";
+  }
+
+  return undefined;
+}
+
+function resolveUploadProfile(normalizedPrompt: string): ArchitectureAnswerProfile["upload"] {
+  if (hasNoFileUploadRequirement(normalizedPrompt)) {
+    return "none";
+  }
+
+  if (/(large\s+file|100mb|대용량)/iu.test(normalizedPrompt)) {
+    return "large";
+  }
+
+  if (/(mixed\s+files?|documents?|video|동영상|문서|다양한\s*파일)/iu.test(normalizedPrompt)) {
+    return "mixed";
+  }
+
+  if (requiresImageUpload(normalizedPrompt)) {
+    return "image";
+  }
+
+  return undefined;
+}
+
+function resolveRealtimeProfile(normalizedPrompt: string): ArchitectureAnswerProfile["realtime"] {
+  if (hasNoRealtimeRequirement(normalizedPrompt)) {
+    return "none";
+  }
+
+  if (/(chat|채팅)/iu.test(normalizedPrompt)) {
+    return "chat";
+  }
+
+  if (/(data\s+updates?|주식|게임|데이터\s*업데이트)/iu.test(normalizedPrompt)) {
+    return "data_updates";
+  }
+
+  if (/(notification|notify|알림)/iu.test(normalizedPrompt)) {
+    return "notification";
+  }
+
+  return undefined;
+}
+
+function resolveManagementProfile(normalizedPrompt: string): ArchitectureAnswerProfile["management"] {
+  if (/(fully\s*managed|serverless|관리\s*최소|완전\s*관리형|서버리스)/iu.test(normalizedPrompt)) {
+    return "fully_managed";
+  }
+
+  if (/(semi[-\s]*managed|some\s+server|반관리|semi-managed)/iu.test(normalizedPrompt)) {
+    return "semi_managed";
+  }
+
+  if (/(self[-\s]*managed|direct\s+management|직접\s*관리|셀프)/iu.test(normalizedPrompt)) {
+    return "self_managed";
+  }
+
+  if (/(unknown|모르겠|상관없|추천)/iu.test(normalizedPrompt)) {
+    return "unknown";
+  }
+
+  return undefined;
+}
+
+function resolveLatencyProfile(normalizedPrompt: string): ArchitectureAnswerProfile["latency"] {
+  if (/(1\s*second|under\s*1\s*(second|sec|s)\b|1초|1\s*초)/iu.test(normalizedPrompt)) {
+    return "one_second";
+  }
+
+  if (/(3\s*seconds?|under\s*3\s*(seconds?|sec|s)\b|3초|3\s*초)/iu.test(normalizedPrompt)) {
+    return "three_seconds";
+  }
+
+  if (/(5\s*seconds?|under\s*5\s*(seconds?|sec|s)\b|5초|5\s*초)/iu.test(normalizedPrompt)) {
+    return "five_seconds";
+  }
+
+  if (/(loading\s*time:\s*(no\s+preference|none)|latency:\s*(no\s+preference|none)|로딩\s*시간[\s\S]{0,20}(상관없|선호\s*없음))/iu.test(normalizedPrompt)) {
+    return "none";
+  }
+
+  return undefined;
+}
+
+function resolveAvailabilityProfile(normalizedPrompt: string): ArchitectureAnswerProfile["availability"] {
+  if (requiresVeryHighAvailability(normalizedPrompt)) {
+    return "99.99";
+  }
+
+  if (/(99\.9|월\s*1시간|1\s*hour)/iu.test(normalizedPrompt)) {
+    return "99.9";
+  }
+
+  if (/(99%|하루\s*몇\s*시간|few\s+hours)/iu.test(normalizedPrompt)) {
+    return "99";
+  }
+
+  if (/(downtime\s+tolerance:\s*(no\s+preference|none)|availability:\s*(no\s+preference|none)|가용성[\s\S]{0,20}(상관없|선호\s*없음)|중단[\s\S]{0,20}(상관없|선호\s*없음))/iu.test(normalizedPrompt)) {
+    return "none";
+  }
+
+  return undefined;
+}
+
+function resolveBudgetProfile(normalizedPrompt: string): ArchitectureAnswerProfile["budget"] {
+  if (hasLowMonthlyBudget(normalizedPrompt) || /(minimum\s+cost|very\s+low|10만원\s*미만|최소\s*비용)/iu.test(normalizedPrompt)) {
+    return "low";
+  }
+
+  if (/(10-50만원|moderate|normal|적당한\s*성능)/iu.test(normalizedPrompt)) {
+    return "normal";
+  }
+
+  if (/(50-200만원|high\s+budget|고성능)/iu.test(normalizedPrompt)) {
+    return "high";
+  }
+
+  if (/(enterprise|200만원\s*이상|엔터프라이즈)/iu.test(normalizedPrompt)) {
+    return "enterprise";
+  }
+
+  return undefined;
 }
 
 function hasExplicitArchitectureBrief(prompt: string): boolean {
@@ -1653,15 +2298,6 @@ function hasNoRealtimeRequirement(normalizedPrompt: string): boolean {
   );
 }
 
-function requiresBackend(normalizedPrompt: string): boolean {
-  if (requiresNoBackend(normalizedPrompt)) {
-    return false;
-  }
-
-  return /(backend|api\b|node\.?js|python|flask|spring|django|server|ec2|lambda|\uAC04\uB2E8\s*api|\uBCF5\uC7A1\s*\uBE44\uC988\uB2C8\uC2A4|\uBC31\uC5D4\uB4DC|\uC11C\uBC84)/iu.test(
-    normalizedPrompt
-  );
-}
 function hasExplicitDatabaseMarker(normalizedPrompt: string): boolean {
   return /(database|db\b|rds|postgres|postgresql|mysql|dynamodb|relational|\uB370\uC774\uD130\uBCA0\uC774\uC2A4|\uC0AC\uC6A9\uC790\s*\uC815\uBCF4|\uAC8C\uC2DC\uAE00)/iu.test(
     normalizedPrompt

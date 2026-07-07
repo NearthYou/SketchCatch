@@ -1,3 +1,65 @@
+# 2026-07-07 - Amazon Q ArchitectureDecisionSpace 분리
+
+- Goal: Amazon Q가 다이어그램을 직접 설계하되, 선택지 차이가 고정 skeleton이 아니라 선택지별 decision space와 coverage 검증으로 반영되게 한다.
+- Completed:
+  - Amazon Q Architecture Draft 생성 경로를 `createAmazonQArchitectureDraftResponse` 중심으로 정리하고, provider payload에 `architectureDecisionSpace`를 추가했다.
+  - 사용자 prompt를 deterministic `answerProfile`로 정규화하고 `hardConstraints`, `preferredPatterns`, `discouragedPatterns`, `evaluationCriteria`, `unsupportedSubstitutions`, `coverageRequirements`를 생성하게 했다.
+  - 기존 prompt의 선택지별 정답 매트릭스를 제거하고, Amazon Q에게 decision space 안에서 패턴을 선택/변형/조합하며 selected/rejected pattern과 trade-off를 `requirementCoverage`에 남기도록 지시했다.
+  - self-validation을 특정 리소스 조합 강제에서 forbidden resource/type/label, 선택지 모순, coverage node id, capability signal 누락 검증으로 조정했다.
+  - 같은 답변 조합은 같은 decision space를 만들고, 업로드 답변이 바뀌면 다른 decision space가 만들어지는 회귀 테스트를 추가했다.
+  - `docs/data-models.md`에 Amazon Q decision space 책임 분리 계약을 기록했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits
+  - `apps/api/node_modules/.bin/tsx.CMD --test apps/api/src/services/aiArchitectureDrafts.test.ts` - sandbox run failed with `spawn EPERM`; rerun with elevated permissions passed, 15 tests
+  - `corepack pnpm --filter @sketchcatch/api typecheck` - passed
+  - `corepack pnpm --filter @sketchcatch/api lint` - passed
+  - `corepack pnpm harness:check` - passed
+  - `corepack pnpm lint` - passed, with non-fatal Turbo cache rename warnings
+  - `corepack pnpm typecheck` - passed, with non-fatal Turbo cache rename warnings
+  - `corepack pnpm build` - sandbox run failed on `.next` unlink `EPERM`; rerun with elevated permissions passed
+  - final `corepack pnpm harness:check` - passed
+- Known risks:
+  - 실제 Amazon Q Business 호출은 로컬에서 실행하지 않았다. fake provider 단위 테스트로 prompt/payload/self-validation 계약을 검증했다.
+  - WebSocket API, SNS/SQS/EventBridge, ACM, Auto Scaling Group을 실제 node로 그리려면 별도 ResourceType/shared definition/API/Web/Terraform capability 확장이 필요하다.
+
+# 2026-07-07 - Amazon Q AWS reference knowledge pack 추가
+
+- Goal: AWS Solutions, aws-samples Terraform 예제, AWS Terraform Best Practices, AWS Prescriptive Guidance 내용을 Amazon Q 아키텍처 생성 시 계속 참고하되 원문 전체를 매번 보내지 않도록 compact reference pack으로 영속화한다.
+- Completed:
+  - `awsArchitectureReferenceKnowledge.ts`에 버전/출처 URL/compact guidance를 가진 레퍼런스팩을 추가했다.
+  - Amazon Q Architecture Draft 요청의 instructions, prompt, payload에 레퍼런스팩을 연결했다.
+  - self-validation 재생성 요청에서도 같은 referenceKnowledge payload가 유지되도록 했다.
+  - `tokenBudget` key가 secret masker와 충돌해 `[MASKED_SECRET]`로 바뀌는 문제를 피하려고 `size: "compact"`로 표현했다.
+  - 데이터 모델 문서에 Amazon Q referenceKnowledge payload 원칙을 기록했다.
+- Verification run:
+  - `corepack pnpm --filter @sketchcatch/api typecheck` - passed
+  - `apps/api/node_modules/.bin/tsx.CMD --test apps/api/src/services/aiArchitectureDrafts.test.ts` - sandbox run failed with `spawn EPERM`; rerun with elevated permissions passed, 14 tests
+  - `corepack pnpm --filter @sketchcatch/api lint` - passed
+  - `corepack pnpm harness:check` - passed
+  - `corepack pnpm lint` - passed, with non-fatal Turbo cache rename warnings
+  - `corepack pnpm typecheck` - passed, with non-fatal Turbo cache rename warnings
+  - `corepack pnpm build` - sandbox run failed on `.next` unlink `EPERM`; rerun with elevated permissions passed
+- Known risks:
+  - 실제 Amazon Q Business 호출은 로컬에서 실행하지 않았다. 요청 payload/prompt 계약은 fake provider 단위 테스트로 검증했다.
+
+# 2026-07-07 - 조건부 질문 한글 깨짐 보정
+
+- Goal: Amazon Q 아키텍처 추가 질문에서 글로벌 배포 범위와 실시간 알림 구현 방식 문구가 깨져 보이는 문제를 고친다.
+- Completed:
+  - `global_deployment_scope` 질문과 선택지를 정상 한글 문구로 교체했다.
+  - `realtime_implementation` 질문과 선택지를 정상 한글 문구로 교체했다.
+  - 두 조건부 질문이 깨진 문자열로 회귀하지 않도록 API 단위 테스트를 추가했다.
+- Verification run:
+  - `corepack pnpm --filter @sketchcatch/api typecheck` - passed
+  - `apps/api/node_modules/.bin/tsx.CMD --test apps/api/src/services/aiArchitectureDrafts.test.ts` - sandbox run failed with `spawn EPERM`; rerun with elevated permissions passed, 14 tests
+  - `corepack pnpm --filter @sketchcatch/api lint` - passed
+  - `corepack pnpm harness:check` - passed
+  - `corepack pnpm lint` - passed, with non-fatal Turbo cache rename warnings
+  - `corepack pnpm typecheck` - passed, with non-fatal Turbo cache rename warnings
+  - `corepack pnpm build` - sandbox run failed on `.next` unlink `EPERM`; rerun with elevated permissions passed
+- Known risks:
+  - 실제 브라우저 화면은 아직 수동으로 다시 확인하지 않았다. API 응답 문자열은 단위 테스트로 검증했다.
+
 # 2026-07-07 - 서버리스 EC2 혼입 방지와 Amazon Q 재생성 요청
 
 - Goal: 서버리스 또는 no-EC2 요구사항에서 EC2가 포함되지 않게 하고, Amazon Q preview 자체 검증에서 문제가 발견되면 문제 내용을 Amazon Q에 보내 다이어그램을 다시 생성하게 한다.
@@ -3696,3 +3758,22 @@
   - `corepack pnpm harness:check` - passed.
 - Known risks:
   - 실제 Amazon Q Business 호출은 로컬에서 실행하지 않았다.
+
+# 2026-07-07 - Amazon Q 다이어그램 리소스 간격 검증 강화
+
+- Goal: Amazon Q Architecture Draft가 S3 등 리소스를 서로 겹치거나 너무 촘촘하게 배치해 읽기 어려운 다이어그램을 만들지 않도록 self-validation과 생성 지시문을 강화한다.
+- Completed:
+  - `createAmazonQArchitectureDraftInstructions`에 비-영역 리소스 간 generous spacing 지시를 추가하고, 최소 기준으로 가로 240px 또는 세로 150px 간격을 선호하도록 명시했다.
+  - self-validation에서 일반 리소스의 아이콘/라벨 시각 경계를 계산해 겹치거나 과도하게 가까운 노드를 Amazon Q 재생성 사유로 판정하도록 했다.
+  - S3가 다른 리소스와 같은 좌표에 완전히 겹치는 회귀 케이스와 긴 라벨끼리 겹치는 회귀 케이스를 추가했다.
+  - 넓어진 간격 기준에 맞춰 정상 테스트 픽스처의 RDS 배치를 더 오른쪽으로 벌렸다.
+- Verification run:
+  - `apps/api/node_modules/.bin/tsx.CMD --test apps/api/src/services/aiArchitectureDrafts.test.ts` - passed, 17 tests
+  - `corepack pnpm --filter @sketchcatch/api lint` - passed
+  - `corepack pnpm --filter @sketchcatch/api typecheck` - passed
+  - `corepack pnpm harness:check` - passed
+  - `corepack pnpm lint` - passed, with non-fatal Turbo cache rename warnings
+  - `corepack pnpm typecheck` - passed, with non-fatal Turbo cache rename warnings
+  - `corepack pnpm build` - passed with elevated permissions after prior sandbox `.next` unlink `EPERM`
+- Known risks:
+  - 실제 Amazon Q 호출은 로컬 fake provider 단위 테스트로 검증했다. 실제 모델 응답에서는 같은 self-validation 재생성 경로가 적용된다.

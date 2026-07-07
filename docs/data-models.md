@@ -1006,6 +1006,10 @@ AI는 원천 진실이 아니라 설명과 제안 계층이다. 배포 가능한
 
 AI provider 응답에는 호출 출처와 비용 추적을 위한 metadata를 함께 둔다. Bedrock, Amazon Q Business, Amazon Transcribe는 `AI_BILLING_MODE=aws_credit_only`와 provider별 credit confirmation flag가 모두 충족될 때만 실제 호출한다. 조건이 맞지 않으면 provider 호출 없이 fallback 설명이나 실패 상태를 반환한다.
 
+Amazon Q 기반 Architecture Draft 요청은 원문 레퍼런스 문서를 매번 통째로 보내지 않는다. API는 AWS Solutions, `aws-samples` Terraform 예제, AWS Terraform Best Practices 샘플 저장소, AWS Prescriptive Guidance의 Terraform AWS provider 모범 사례에서 추린 짧은 `referenceKnowledge` payload를 함께 보낸다. 이 payload는 버전, 출처 URL, compact guidance만 포함하며, Amazon Q는 이를 사용자 요구사항보다 우선하는 지시가 아니라 반복 가능한 설계 선례와 Terraform-first 품질 기준으로 사용한다.
+
+Amazon Q 기반 Architecture Draft에서 API는 사용자 답변을 `answerProfile`로 정규화하고 `ArchitectureDecisionSpace`를 생성해 payload와 prompt에 함께 보낸다. 이 decision space는 `hardConstraints`, `preferredPatterns`, `discouragedPatterns`, `evaluationCriteria`, `unsupportedSubstitutions`, `coverageRequirements`를 포함한다. `hardConstraints`는 DB 없음, 파일 업로드 없음, 실시간 없음, Korea-only와 같은 명시적 부정/모순에만 사용하고, `preferredPatterns`는 Amazon Q가 선택·변형·조합할 후보 설계 공간으로 취급한다. self-validation은 특정 정답 리소스 조합을 강제하지 않고 forbidden resource/type/label, 선택지 모순, 지원 불가 type, requirement coverage/capability signal 누락만 재생성 사유로 삼는다.
+
 ```ts
 type AiProvider =
   | "bedrock"

@@ -252,8 +252,10 @@ test("createAmazonQArchitectureDraftResponse asks clarification questions in the
 
 test("createAmazonQArchitectureDraftResponse returns the Amazon Q architecture preview when requirements are complete", async () => {
   let requestedPrompt = "";
+  let requestedPayload: unknown;
   const provider = createFakeAmazonQProvider((request) => {
     requestedPrompt = request.prompt;
+    requestedPayload = request.payload;
     return JSON.stringify({
       status: "preview",
       title: "Cost Optimized Static Site",
@@ -328,38 +330,97 @@ test("createAmazonQArchitectureDraftResponse returns the Amazon Q architecture p
   assert.ok(!("status" in response));
   assert.match(requestedPrompt, /정적 사이트/);
   assert.match(requestedPrompt, /Do not artificially limit the architecture to one resource per type/);
-  assert.match(requestedPrompt, /binding architecture constraints/);
-  assert.match(requestedPrompt, /Clarification choice mapping rules/);
-  assert.match(requestedPrompt, /Website type: static website/);
-  assert.match(requestedPrompt, /Traffic scale: small traffic/);
-  assert.match(requestedPrompt, /Database: no database/);
-  assert.match(requestedPrompt, /Frontend: HTML\/CSS\/JS/);
-  assert.match(requestedPrompt, /Backend: none/);
-  assert.match(requestedPrompt, /User region: Korea only/);
-  assert.match(requestedPrompt, /Budget: very low\/minimum budget/);
-  assert.match(requestedPrompt, /HTTPS: required/);
-  assert.match(requestedPrompt, /File upload: none/);
-  assert.match(requestedPrompt, /Realtime: none/);
-  assert.match(requestedPrompt, /Management preference: fully managed\/serverless/);
-  assert.match(requestedPrompt, /Page loading goal: under 1 second/);
-  assert.match(requestedPrompt, /Website size: under 10MB/);
-  assert.match(requestedPrompt, /Traffic pattern: steady/);
-  assert.match(requestedPrompt, /Downtime tolerance: 99\.99%/);
-  assert.match(requestedPrompt, /React\/Vue\/Angular SPA requirements/);
-  assert.match(requestedPrompt, /complex backend\/business-logic requirements/);
-  assert.match(requestedPrompt, /global users, HTTPS-required, or 1-second loading goals/);
-  assert.match(requestedPrompt, /image-upload requirements/);
-  assert.match(requestedPrompt, /real-time notification requirements/);
-  assert.match(requestedPrompt, /99\.99% availability or no-downtime requirements/);
-  assert.match(requestedPrompt, /budget constraints conflict with high availability/);
-  assert.match(requestedPrompt, /multiple Availability Zones/);
-  assert.match(requestedPrompt, /LOAD_BALANCER plus LOAD_BALANCER_LISTENER/);
-  assert.match(requestedPrompt, /large concurrent users/);
+  assert.match(requestedPrompt, /ArchitectureDecisionSpace/);
+  assert.match(requestedPrompt, /static_cdn_site/);
+  assert.match(requestedPrompt, /hardConstraints/);
+  assert.match(requestedPrompt, /preferredPatterns/);
+  assert.match(requestedPrompt, /coverageRequirements/);
+  assert.match(requestedPrompt, /not a fixed skeleton/);
+  assert.doesNotMatch(requestedPrompt, /Clarification choice mapping rules/);
+  const payload = requestedPayload as {
+    architectureDecisionSpace?: {
+      answerProfile?: {
+        traffic?: string;
+        frontend?: string;
+        region?: string;
+        upload?: string;
+        realtime?: string;
+        management?: string;
+        availability?: string;
+        budget?: string;
+      };
+      hardConstraints?: string[];
+      preferredPatterns?: Array<{ id?: string; typicalNodeTypes?: string[] }>;
+    };
+  };
+  assert.equal(payload.architectureDecisionSpace?.answerProfile?.traffic, "medium");
+  assert.equal(payload.architectureDecisionSpace?.answerProfile?.frontend, "static");
+  assert.equal(payload.architectureDecisionSpace?.answerProfile?.region, "korea");
+  assert.equal(payload.architectureDecisionSpace?.answerProfile?.upload, "none");
+  assert.equal(payload.architectureDecisionSpace?.answerProfile?.realtime, "none");
+  assert.equal(payload.architectureDecisionSpace?.answerProfile?.management, "fully_managed");
+  assert.equal(payload.architectureDecisionSpace?.answerProfile?.availability, "99.9");
+  assert.equal(payload.architectureDecisionSpace?.answerProfile?.budget, "low");
+  assert.ok(payload.architectureDecisionSpace?.hardConstraints?.some((constraint) => /Database not required/.test(constraint)));
+  assert.ok(payload.architectureDecisionSpace?.preferredPatterns?.some((pattern) => pattern.id === "static_cdn_site"));
   assert.equal(response.metadata.source, "amazon_q");
   assert.equal(response.title, "Cost Optimized Static Site");
   assert.equal(response.architectureJson.nodes[0]?.type, "S3");
   assert.equal(response.llmExplanation?.fallbackUsed, false);
   assert.equal(response.llmExplanation?.providerMetadata?.provider, "amazon_q");
+});
+
+test("createAmazonQArchitectureDraftResponse creates deterministic decision spaces that vary by answer profile", async () => {
+  const staticPrompt = createStaticWebsiteCompletePrompt("file upload: none no file upload text only");
+  const imageUploadPrompt = createStaticWebsiteCompletePrompt("file upload: image upload only profile image");
+  const firstPayloads: unknown[] = [];
+  const secondPayloads: unknown[] = [];
+  const imagePayloads: unknown[] = [];
+
+  await createAmazonQArchitectureDraftResponse(
+    { prompt: staticPrompt },
+    {
+      provider: createFakeAmazonQProvider((request) => {
+        firstPayloads.push(request.payload);
+        return JSON.stringify(createStaticPreview(["site-bucket", "cdn"]));
+      }),
+      creditPolicy: confirmedCreditPolicy
+    }
+  );
+
+  await createAmazonQArchitectureDraftResponse(
+    { prompt: staticPrompt },
+    {
+      provider: createFakeAmazonQProvider((request) => {
+        secondPayloads.push(request.payload);
+        return JSON.stringify(createStaticPreview(["site-bucket", "cdn"]));
+      }),
+      creditPolicy: confirmedCreditPolicy
+    }
+  );
+
+  await createAmazonQArchitectureDraftResponse(
+    { prompt: imageUploadPrompt },
+    {
+      provider: createFakeAmazonQProvider((request) => {
+        imagePayloads.push(request.payload);
+        return JSON.stringify(createStaticPreview(["site-bucket", "cdn"]));
+      }),
+      creditPolicy: confirmedCreditPolicy
+    }
+  );
+
+  const firstDecisionSpace = readDecisionSpace(firstPayloads[0]);
+  const secondDecisionSpace = readDecisionSpace(secondPayloads[0]);
+  const imageDecisionSpace = readDecisionSpace(imagePayloads[0]);
+
+  assert.deepEqual(secondDecisionSpace, firstDecisionSpace);
+  assert.equal(firstDecisionSpace.answerProfile.upload, "none");
+  assert.equal(imageDecisionSpace.answerProfile.upload, "image");
+  assert.notDeepEqual(imageDecisionSpace, firstDecisionSpace);
+  assert.ok(
+    imageDecisionSpace.preferredPatterns.some((pattern: { id?: string }) => pattern.id === "direct_media_upload")
+  );
 });
 
 test("createAmazonQArchitectureDraftResponse asks conditional tradeoff questions before calling Amazon Q", async () => {
@@ -525,7 +586,7 @@ test("createAmazonQArchitectureDraftResponse sends dynamic global website constr
             id: "database",
             type: "RDS",
             label: "PostgreSQL Multi-AZ Database",
-            positionX: 1320,
+            positionX: 1360,
             positionY: 200,
             config: {
               multiAz: true
@@ -593,6 +654,13 @@ test("createAmazonQArchitectureDraftResponse sends dynamic global website constr
           capability: "realtime_notification",
           nodes: ["app-load-balancer", "app-server-a", "app-server-b"],
           assumption: "Realtime notification is represented as an SSE notification path through the backend tier."
+        },
+        {
+          answer: "budget cost 100 monthly plus 99.99% availability",
+          status: "warning",
+          capability: "cost_warning",
+          nodes: ["app-load-balancer", "app-server-a", "app-server-b", "database"],
+          assumption: "Cost warning: the selected high-availability pattern can exceed the low monthly budget."
         }
       ]
     });
@@ -639,15 +707,16 @@ test("createAmazonQArchitectureDraftResponse sends dynamic global website constr
   assert.match(requestedPrompts[0] ?? "", /Derived Architecture Requirements/);
   assert.match(requestedPrompts[0] ?? "", /Required Architecture Flows/);
   assert.match(requestedPrompts[0] ?? "", /Validation Checklist/);
+  assert.match(requestedPrompts[0] ?? "", /ArchitectureDecisionSpace/);
   assert.match(requestedPrompts[0] ?? "", /Monthly \$100 budget conflicts with 99\.99% availability/);
-  assert.match(requestedPrompts[0] ?? "", /User\/API traffic -> CLOUDFRONT/);
-  assert.match(requestedPrompts[0] ?? "", /React\/Vue\/Angular SPA requirements/);
+  assert.match(requestedPrompts[0] ?? "", /global_static_delivery_single_region_api/);
+  assert.match(requestedPrompts[0] ?? "", /high_availability_multi_az_target/);
   assert.match(requestedPrompts[1] ?? "", /Do not return the same topology/);
   assert.match(requestedPrompts[1] ?? "", /Amazon Q Architecture Brief/);
-  assert.match(requestedPrompts[1] ?? "", /lacks LOAD_BALANCER and LOAD_BALANCER_LISTENER/);
+  assert.match(requestedPrompts[1] ?? "", /requirementCoverage does not explain/);
   assert.match(requestedPrompts[1] ?? "", /image upload/);
   assert.match(requestedPrompts[1] ?? "", /real-time notification/);
-  assert.match(requestedPrompts[1] ?? "", /RDS Multi-AZ/);
+  assert.match(requestedPrompts[1] ?? "", /cost warning/);
   assert.equal(response.title, "Dynamic Global Website Practice Architecture");
 });
 
@@ -721,7 +790,7 @@ test("createAmazonQArchitectureDraftResponse respects gated choices for korea-on
             id: "database",
             type: "RDS",
             label: "PostgreSQL Multi-AZ Database",
-            positionX: 1320,
+            positionX: 1360,
             positionY: 160,
             config: {
               multiAz: true
@@ -771,6 +840,13 @@ test("createAmazonQArchitectureDraftResponse respects gated choices for korea-on
           capability: "rds_multi_az",
           nodes: ["db-subnet-group", "database"],
           assumption: "RDS Multi-AZ is configured for the availability target."
+        },
+        {
+          answer: "budget cost 100 monthly plus 99.99% availability",
+          status: "warning",
+          capability: "cost_warning",
+          nodes: ["alb", "app-a", "app-b", "database"],
+          assumption: "Cost warning: the high-availability pattern may exceed the low budget."
         }
       ]
     });
@@ -791,8 +867,9 @@ test("createAmazonQArchitectureDraftResponse respects gated choices for korea-on
   }
 
   assert.equal(requestedPrompts.length, 1);
-  assert.match(requestedPrompts[0] ?? "", /Question gates: ask realtime implementation only when the user selected realtime/);
-  assert.match(requestedPrompts[0] ?? "", /No file upload forbids upload\/media\/presigned/);
+  assert.match(requestedPrompts[0] ?? "", /ArchitectureDecisionSpace/);
+  assert.match(requestedPrompts[0] ?? "", /File upload not required/);
+  assert.match(requestedPrompts[0] ?? "", /Realtime not required/);
   assert.match(requestedPrompts[0] ?? "", /Region scope is Korea only/);
   assert.equal(response.title, "Korea Simple API Practice Architecture");
 });
@@ -860,7 +937,7 @@ test("createAmazonQArchitectureDraftResponse regenerates previews that violate n
               id: "database",
               type: "RDS",
               label: "PostgreSQL Multi-AZ Database",
-              positionX: 1320,
+              positionX: 1360,
               positionY: 160,
               config: {
                 multiAz: true
@@ -968,7 +1045,7 @@ test("createAmazonQArchitectureDraftResponse regenerates previews that violate n
             id: "database",
             type: "RDS",
             label: "PostgreSQL Multi-AZ Database",
-            positionX: 1320,
+            positionX: 1360,
             positionY: 160,
             config: {
               multiAz: true
@@ -1018,6 +1095,13 @@ test("createAmazonQArchitectureDraftResponse regenerates previews that violate n
           capability: "rds_multi_az",
           nodes: ["db-subnet-group", "database"],
           assumption: "RDS Multi-AZ is configured."
+        },
+        {
+          answer: "budget cost 100 monthly plus 99.99% availability",
+          status: "warning",
+          capability: "cost_warning",
+          nodes: ["alb", "app-a", "app-b", "database"],
+          assumption: "Cost warning: the high-availability pattern may exceed the low budget."
         }
       ]
     });
@@ -1040,8 +1124,7 @@ test("createAmazonQArchitectureDraftResponse regenerates previews that violate n
   assert.equal(requestedPrompts.length, 2);
   assert.match(requestedPrompts[1] ?? "", /selected no file upload/);
   assert.match(requestedPrompts[1] ?? "", /selected no realtime feature/);
-  assert.match(requestedPrompts[1] ?? "", /only one app compute target/);
-  assert.match(requestedPrompts[1] ?? "", /lacks LOAD_BALANCER and LOAD_BALANCER_LISTENER/);
+  assert.match(requestedPrompts[1] ?? "", /cost warning/);
   assert.equal(response.title, "Corrected Korea Website");
   assert.equal(response.architectureJson.nodes.some((node) => node.id === "upload-bucket"), false);
   assert.equal(response.architectureJson.nodes.some((node) => node.id === "websocket-api"), false);
@@ -1049,8 +1132,12 @@ test("createAmazonQArchitectureDraftResponse regenerates previews that violate n
 
 test("createAmazonQArchitectureDraftResponse sends detailed architecture briefs directly to Amazon Q", async () => {
   let requestedPrompt = "";
+  let requestedInstructions = "";
+  let requestedPayload: unknown;
   const provider = createFakeAmazonQProvider((request) => {
     requestedPrompt = request.prompt;
+    requestedInstructions = request.instructions;
+    requestedPayload = request.payload;
     return JSON.stringify({
       status: "preview",
       title: "Detailed Global Dynamic Website",
@@ -1124,7 +1211,7 @@ test("createAmazonQArchitectureDraftResponse sends detailed architecture briefs 
             id: "database",
             type: "RDS",
             label: "RDS Multi-AZ",
-            positionX: 1320,
+            positionX: 1360,
             positionY: 160,
             config: { multiAz: true }
           },
@@ -1167,6 +1254,20 @@ test("createAmazonQArchitectureDraftResponse sends detailed architecture briefs 
           capability: "websocket_notification",
           nodes: ["realtime-api"],
           assumption: "Realtime notification is represented as a WebSocket/SSE path."
+        },
+        {
+          answer: "image upload",
+          status: "satisfied",
+          capability: "upload_media",
+          nodes: ["media-bucket"],
+          assumption: "Image upload uses a direct upload/media handling path with validation assumptions."
+        },
+        {
+          answer: "monthly 100 dollar budget plus 99.99% availability",
+          status: "warning",
+          capability: "cost_warning",
+          nodes: ["alb", "app-a", "app-b", "database"],
+          assumption: "Cost warning: this 99.99% target can exceed the monthly 100 dollar budget."
         }
       ]
     });
@@ -1195,16 +1296,42 @@ test("createAmazonQArchitectureDraftResponse sends detailed architecture briefs 
   }
 
   assert.match(requestedPrompt, /Amazon Q Architecture Brief/);
+  assert.match(requestedPrompt, /Persistent AWS\/Terraform reference knowledge pack/);
   assert.match(requestedPrompt, /User supplied a detailed architecture brief/);
   assert.match(requestedPrompt, /AUTO_SCALING_GROUP is not a supported ResourceNode\.type/);
-  assert.match(requestedPrompt, /Client -> presigned URL -> S3 media\/upload bucket/);
+  assert.match(requestedPrompt, /ArchitectureDecisionSpace/);
+  assert.match(requestedPrompt, /direct_media_upload/);
+  assert.match(requestedInstructions, /persistent compact AWS\/Terraform referenceKnowledge payload/);
+  const payload = requestedPayload as {
+    referenceKnowledge?: {
+      version?: string;
+      size?: string;
+      sourceUrls?: string[];
+      guidance?: string[];
+    };
+    architectureDecisionSpace?: {
+      unsupportedSubstitutions?: Array<{ requestedService?: string }>;
+      coverageRequirements?: string[];
+    };
+  };
+  assert.equal(payload.referenceKnowledge?.version, "aws-reference-pack-2026-07-07");
+  assert.equal(payload.referenceKnowledge?.size, "compact");
+  assert.equal(payload.referenceKnowledge?.sourceUrls?.includes("https://aws.amazon.com/ko/solutions/"), true);
+  assert.ok((payload.referenceKnowledge?.guidance?.length ?? 0) <= 8);
+  assert.ok(
+    payload.architectureDecisionSpace?.unsupportedSubstitutions?.some(
+      (substitution) => substitution.requestedService === "Auto Scaling Group"
+    )
+  );
   assert.equal(response.title, "Detailed Global Dynamic Website");
 });
 
 test("createAmazonQArchitectureDraftResponse asks Amazon Q to regenerate previews that fail self-validation", async () => {
   const requestedPrompts: string[] = [];
+  const requestedPayloads: unknown[] = [];
   const provider = createFakeAmazonQProvider((request) => {
     requestedPrompts.push(request.prompt);
+    requestedPayloads.push(request.payload);
 
     if (requestedPrompts.length === 1) {
       return JSON.stringify({
@@ -1315,8 +1442,14 @@ test("createAmazonQArchitectureDraftResponse asks Amazon Q to regenerate preview
   }
 
   assert.equal(requestedPrompts.length, 2);
+  assert.match(requestedPrompts[0] ?? "", /Persistent AWS\/Terraform reference knowledge pack/);
+  assert.match(requestedPrompts[1] ?? "", /Persistent AWS\/Terraform reference knowledge pack/);
   assert.match(requestedPrompts[1] ?? "", /failed SketchCatch self-validation/);
   assert.match(requestedPrompts[1] ?? "", /preview includes EC2/);
+  for (const payload of requestedPayloads) {
+    const referenceKnowledge = (payload as { referenceKnowledge?: { size?: string } }).referenceKnowledge;
+    assert.equal(referenceKnowledge?.size, "compact");
+  }
   assert.equal(response.title, "Serverless Draft");
   assert.equal(response.architectureJson.nodes.some((node) => node.type === "EC2"), false);
   assert.equal(response.architectureJson.nodes.some((node) => node.type === "LAMBDA"), true);
@@ -1670,6 +1803,278 @@ test("createAmazonQArchitectureDraftResponse asks Amazon Q to regenerate preview
   assert.equal(response.architectureJson.nodes.find((node) => node.id === "asset-bucket")?.positionY, 260);
 });
 
+test("createAmazonQArchitectureDraftResponse asks Amazon Q to regenerate previews with overlapping node labels", async () => {
+  const requestedPrompts: string[] = [];
+  const provider = createFakeAmazonQProvider((request) => {
+    requestedPrompts.push(request.prompt);
+
+    if (requestedPrompts.length === 1) {
+      return JSON.stringify({
+        status: "preview",
+        title: "Cramped Label Draft",
+        architectureJson: {
+          nodes: [
+            {
+              id: "cdn",
+              type: "CLOUDFRONT",
+              label: "CloudFront Public Entry",
+              positionX: 280,
+              positionY: 120,
+              config: {}
+            },
+            {
+              id: "logs",
+              type: "CLOUDWATCH_LOG_GROUP",
+              label: "Lambda Logs",
+              positionX: 350,
+              positionY: 125,
+              config: {}
+            },
+            {
+              id: "bucket",
+              type: "S3",
+              label: "Static Content Bucket",
+              positionX: 430,
+              positionY: 120,
+              config: {}
+            }
+          ],
+          edges: []
+        },
+        requirementCoverage: sampleRequirementCoverage(["cdn", "logs", "bucket"])
+      });
+    }
+
+    return JSON.stringify({
+      status: "preview",
+      title: "Readable Label Draft",
+      architectureJson: {
+        nodes: [
+          {
+            id: "cdn",
+            type: "CLOUDFRONT",
+            label: "CloudFront Public Entry",
+            positionX: 120,
+            positionY: 120,
+            config: {}
+          },
+          {
+            id: "logs",
+            type: "CLOUDWATCH_LOG_GROUP",
+            label: "Lambda Logs",
+            positionX: 420,
+            positionY: 120,
+            config: {}
+          },
+          {
+            id: "bucket",
+            type: "S3",
+            label: "Static Content Bucket",
+            positionX: 720,
+            positionY: 120,
+            config: {}
+          }
+        ],
+        edges: []
+      },
+      requirementCoverage: sampleRequirementCoverage(["cdn", "logs", "bucket"])
+    });
+  });
+
+  const response = await createAmazonQArchitectureDraftResponse(
+    {
+      prompt: createStaticWebsiteCompletePrompt("file upload: none no file upload text only")
+    },
+    {
+      provider,
+      creditPolicy: confirmedCreditPolicy
+    }
+  );
+
+  if ("status" in response) {
+    assert.fail(`Expected preview, got clarification: ${response.question}`);
+  }
+
+  assert.equal(requestedPrompts.length, 2);
+  assert.match(requestedPrompts[1] ?? "", /overlapping visual or label bounds/);
+  assert.equal(response.title, "Readable Label Draft");
+});
+
+test("createAmazonQArchitectureDraftResponse asks Amazon Q to regenerate previews with an S3 node fully overlapping another resource", async () => {
+  const requestedPrompts: string[] = [];
+  const provider = createFakeAmazonQProvider((request) => {
+    requestedPrompts.push(request.prompt);
+
+    if (requestedPrompts.length === 1) {
+      return JSON.stringify({
+        status: "preview",
+        title: "Overlapped S3 Draft",
+        architectureJson: {
+          nodes: [
+            {
+              id: "cdn",
+              type: "CLOUDFRONT",
+              label: "CloudFront Public Entry",
+              positionX: 240,
+              positionY: 120,
+              config: {}
+            },
+            {
+              id: "site-bucket",
+              type: "S3",
+              label: "Static Content Bucket",
+              positionX: 240,
+              positionY: 120,
+              config: {}
+            }
+          ],
+          edges: []
+        },
+        requirementCoverage: sampleRequirementCoverage(["cdn", "site-bucket"])
+      });
+    }
+
+    return JSON.stringify({
+      status: "preview",
+      title: "Separated S3 Draft",
+      architectureJson: {
+        nodes: [
+          {
+            id: "cdn",
+            type: "CLOUDFRONT",
+            label: "CloudFront Public Entry",
+            positionX: 120,
+            positionY: 120,
+            config: {}
+          },
+          {
+            id: "site-bucket",
+            type: "S3",
+            label: "Static Content Bucket",
+            positionX: 420,
+            positionY: 120,
+            config: {}
+          }
+        ],
+        edges: []
+      },
+      requirementCoverage: sampleRequirementCoverage(["cdn", "site-bucket"])
+    });
+  });
+
+  const response = await createAmazonQArchitectureDraftResponse(
+    {
+      prompt: createStaticWebsiteCompletePrompt("file upload: none no file upload text only")
+    },
+    {
+      provider,
+      creditPolicy: confirmedCreditPolicy
+    }
+  );
+
+  if ("status" in response) {
+    assert.fail(`Expected preview, got clarification: ${response.question}`);
+  }
+
+  assert.equal(requestedPrompts.length, 2);
+  assert.match(requestedPrompts[1] ?? "", /site-bucket \(S3\).*overlapping visual or label bounds/);
+  assert.equal(response.title, "Separated S3 Draft");
+});
+
+test("createAmazonQArchitectureDraftResponse asks the global deployment scope question with readable Korean text", async () => {
+  let callCount = 0;
+  const provider = createFakeAmazonQProvider(() => {
+    callCount += 1;
+    return "{}";
+  });
+
+  const response = await createAmazonQArchitectureDraftResponse(
+    {
+      prompt: [
+        "website type: dynamic SPA website",
+        "traffic: medium daily traffic 1000 concurrent users 50",
+        "database: PostgreSQL database required",
+        "frontend: React/Vue/Angular SPA framework",
+        "backend: simple API Node.js",
+        "region: global users including US and Europe",
+        "budget cost: 100 monthly",
+        "SSL HTTPS: required",
+        "file upload: none no file upload text only",
+        "realtime: none no realtime features",
+        "management preference: semi-managed operations",
+        "loading time: 1 second",
+        "website size: 10MB-100MB",
+        "traffic pattern: steady traffic",
+        "downtime tolerance: 99.9% availability"
+      ].join("\n")
+    },
+    {
+      provider,
+      creditPolicy: confirmedCreditPolicy
+    }
+  );
+
+  assert.equal(callCount, 0);
+  if (!("status" in response)) {
+    assert.fail("Expected a clarification response");
+  }
+
+  assert.equal(response.status, "needs_clarification");
+  assert.equal(response.question, "글로벌 사용자와 1초 로딩 목표를 어떤 범위로 설계할까요?");
+  assert.deepEqual(response.suggestions, [
+    "CloudFront 글로벌 + API/RDS는 단일 리전",
+    "다중 리전 API까지 포함",
+    "MVP는 단일 리전, 추후 다중 리전 확장 경고 표시"
+  ]);
+});
+
+test("createAmazonQArchitectureDraftResponse asks the realtime implementation question with readable Korean text", async () => {
+  let callCount = 0;
+  const provider = createFakeAmazonQProvider(() => {
+    callCount += 1;
+    return "{}";
+  });
+
+  const response = await createAmazonQArchitectureDraftResponse(
+    {
+      prompt: [
+        "website type: dynamic SPA website",
+        "traffic: medium daily traffic 1000 concurrent users 50",
+        "database: PostgreSQL database required",
+        "frontend: React/Vue/Angular SPA framework",
+        "backend: simple API Node.js",
+        "region: Korea only Seoul region ap-northeast-2",
+        "budget cost: 100 monthly",
+        "SSL HTTPS: required",
+        "file upload: none no file upload text only",
+        "realtime: real-time notification",
+        "management preference: semi-managed operations",
+        "loading time: 1 second",
+        "website size: 10MB-100MB",
+        "traffic pattern: steady traffic",
+        "downtime tolerance: 99.9% availability"
+      ].join("\n")
+    },
+    {
+      provider,
+      creditPolicy: confirmedCreditPolicy
+    }
+  );
+
+  assert.equal(callCount, 0);
+  if (!("status" in response)) {
+    assert.fail("Expected a clarification response");
+  }
+
+  assert.equal(response.status, "needs_clarification");
+  assert.equal(response.question, "실시간 알림은 어떤 방식으로 표현할까요?");
+  assert.deepEqual(response.suggestions, [
+    "WebSocket 연결 경로",
+    "SSE 단방향 알림 경로",
+    "간단 폴링 방식과 비용 절감 경고"
+  ]);
+});
+
 function createKoreaNoUploadNoRealtimePrompt(): string {
   return [
     "website type: dynamic SPA website with simple API and DB",
@@ -1693,6 +2098,91 @@ function createKoreaNoUploadNoRealtimePrompt(): string {
   ].join("\n");
 }
 
+function createStaticWebsiteCompletePrompt(uploadAnswer: string): string {
+  return [
+    "website type: static website blog portfolio",
+    "traffic: medium daily traffic 1000 concurrent users 50",
+    "database: none no database static content only",
+    "frontend: HTML/CSS/JS only pure web",
+    "backend: none no backend static site",
+    "region: Korea only Seoul region ap-northeast-2",
+    "budget cost: 100 monthly minimum cost",
+    "SSL HTTPS: optional HTTP is acceptable",
+    uploadAnswer,
+    "realtime: none no realtime features",
+    "management preference: fully managed serverless",
+    "loading time: 3 seconds",
+    "website size: under 10MB",
+    "traffic pattern: steady traffic",
+    "downtime tolerance: 99.9% availability"
+  ].join("\n");
+}
+
+function createStaticPreview(nodes: string[]): {
+  status: "preview";
+  title: string;
+  architectureJson: {
+    nodes: Array<{
+      id: string;
+      type: string;
+      label: string;
+      positionX: number;
+      positionY: number;
+      config: Record<string, unknown>;
+    }>;
+    edges: Array<{ id: string; sourceId: string; targetId: string; label: string }>;
+  };
+  requirementCoverage: ReturnType<typeof sampleRequirementCoverage>;
+} {
+  return {
+    status: "preview",
+    title: "Static Website",
+    architectureJson: {
+      nodes: [
+        {
+          id: "site-bucket",
+          type: "S3",
+          label: "Static Site Bucket",
+          positionX: 120,
+          positionY: 180,
+          config: {}
+        },
+        {
+          id: "cdn",
+          type: "CLOUDFRONT",
+          label: "CloudFront CDN",
+          positionX: 360,
+          positionY: 180,
+          config: {}
+        }
+      ],
+      edges: [
+        {
+          id: "cdn-to-site",
+          sourceId: "cdn",
+          targetId: "site-bucket",
+          label: "origin"
+        }
+      ]
+    },
+    requirementCoverage: sampleRequirementCoverage(nodes)
+  };
+}
+
+function readDecisionSpace(payload: unknown): {
+  answerProfile: { upload?: string };
+  preferredPatterns: Array<{ id?: string }>;
+} {
+  const decisionSpace = (payload as { architectureDecisionSpace?: unknown }).architectureDecisionSpace;
+
+  assert.ok(decisionSpace && typeof decisionSpace === "object");
+
+  return decisionSpace as {
+    answerProfile: { upload?: string };
+    preferredPatterns: Array<{ id?: string }>;
+  };
+}
+
 function sampleRequirementCoverage(nodes: string[] = []): Array<{
   answer: string;
   status: string;
@@ -1704,9 +2194,9 @@ function sampleRequirementCoverage(nodes: string[] = []): Array<{
     {
       answer: "baseline selected answers",
       status: "satisfied",
-      capability: "baseline_architecture",
+      capability: "selectedPattern: baseline_architecture; rejectedPatterns: not applicable",
       nodes,
-      assumption: "Selected answers are represented by the listed topology nodes."
+      assumption: "Selected answers are represented by the listed topology nodes with pattern trade-off rationale."
     }
   ];
 }
