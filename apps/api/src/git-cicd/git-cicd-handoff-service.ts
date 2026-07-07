@@ -423,10 +423,12 @@ export function createGitHubGitCicdHandoffProvider(
               contentType: input.terraformArtifact.contentType
             },
             ...createGitCicdAutomationFiles({
+              handoffId: input.handoffId,
               projectSlug: input.projectSlug,
               repositoryOwner: input.sourceRepository.owner,
               repositoryName: input.sourceRepository.name,
               targetBranch: input.targetBranch,
+              userAcceptedChangeId: input.userAcceptedChangeId,
               environmentName: input.environmentName,
               awsRegion: input.awsRegion,
               awsRoleArn: input.awsRoleArn,
