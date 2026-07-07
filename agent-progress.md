@@ -1,6 +1,19 @@
 ﻿# 에이전트 진행 로그
 # 에이전트 진행 로그
 
+### 2026-07-07 - Git/CI/CD 자동 배포 E2E 계획 문서화
+
+- Goal: Git/CI/CD 자동 배포 후속 범위를 `docs/sw/spec6.md`, `docs/sw/plan6.md`, `docs/sw/agents3.md`로 고정하고 실행 가능한 이슈/브랜치를 만든다.
+- Completed:
+  - `spec6.md`에 Terraform infra 배포와 app runtime 배포를 모두 포함하는 merge 후 GitHub Actions 자동 배포 범위를 정리했다.
+  - `plan6.md`에 Issues #203-#210과 대응 브랜치 `feature/sw/203-*`부터 `feature/sw/210-*`까지 마일스톤을 기록했다.
+  - `agents3.md`에 구현 중 세 문서를 계속 보고 갱신해야 한다는 규범과 GitHub/AWS/approval 안전 규칙을 30줄 이내로 작성했다.
+  - GitHub Issues #203-#210을 생성하고 각 milestone branch를 `origin/dev` 기준으로 원격에 생성했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits.
+- Known risks:
+  - 이번 변경은 계획/이슈/브랜치 정리이며 실제 GitHub OAuth, IAM mutation, workflow generation 구현은 각 milestone에서 진행해야 한다.
+
 ### 2026-07-07 - migration workflow quoting hotfix
 
 - Goal: `Run Database Migrations` workflow 28839194349가 SSM 실행 전 GitHub runner bash에서 `syntax error near unexpected token '('`로 실패한 원인을 수정한다.
