@@ -4139,6 +4139,68 @@ nextjs-portal {
   min-height: 48px;
 }
 
+.workspaceStartOptionGroup {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.workspaceStartOptionButton {
+  align-items: flex-start;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--dashboard-border);
+  border-radius: 16px;
+  color: var(--dashboard-text);
+  cursor: pointer;
+  display: grid;
+  gap: 8px;
+  min-height: 148px;
+  padding: 18px;
+  text-align: left;
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease,
+    transform 0.2s ease;
+}
+
+.workspaceStartOptionButton span {
+  color: var(--dashboard-muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.workspaceStartOptionButton strong {
+  font-size: 1.05rem;
+  line-height: 1.2;
+}
+
+.workspaceStartOptionButton small {
+  color: var(--dashboard-muted);
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.workspaceStartOptionButton:hover,
+.workspaceStartOptionButton:focus-visible {
+  background: rgba(45, 127, 249, 0.1);
+  border-color: rgba(45, 127, 249, 0.55);
+  outline: none;
+  transform: translateY(-1px);
+}
+
+.workspaceStartOptionButtonActive {
+  background: rgba(45, 127, 249, 0.14);
+  border-color: var(--dashboard-blue);
+}
+
+.workspaceStartOptionButtonSecondary {
+  grid-column: 1 / -1;
+  min-height: 88px;
+  padding: 14px 16px;
+}
+
 .workspaceStartActions {
   display: flex;
   justify-content: flex-end;

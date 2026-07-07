@@ -2,8 +2,13 @@
 
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
-import { createProject } from "../../../features/workspace/api";
+import { createProject, listAwsConnections } from "../../../features/workspace/api";
 import type { WorkspaceCloudPlatform } from "../../../features/workspace/project-draft-persistence";
+import {
+  createWorkspaceStartOptions,
+  resolveWorkspaceStartAction,
+  type WorkspaceStartKind
+} from "./workspace-start-options";
 
 const cloudPlatformOptions: ReadonlyArray<{
   readonly label: string;
@@ -13,12 +18,17 @@ const cloudPlatformOptions: ReadonlyArray<{
   { label: "GCP", value: "gcp" }
 ];
 
+const workspaceStartOptions = createWorkspaceStartOptions();
+
 export function WorkspaceStartClient() {
   const router = useRouter();
   const [title, setTitle] = useState("");
   const [cloudPlatform, setCloudPlatform] = useState<WorkspaceCloudPlatform>("aws");
+  const [startKind, setStartKind] = useState<WorkspaceStartKind>("ai");
   const [errorMessage, setErrorMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const selectedStartOption =
+    workspaceStartOptions.find((option) => option.kind === startKind) ?? workspaceStartOptions[0];
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
@@ -33,13 +43,28 @@ export function WorkspaceStartClient() {
     setErrorMessage("");
 
     try {
+      const awsConnections = startKind === "reverse" ? await listAwsConnections() : [];
+      const hasVerifiedAwsConnection = awsConnections.some((connection) => connection.status === "verified");
+      const action = resolveWorkspaceStartAction({
+        cloudPlatform,
+        hasVerifiedAwsConnection,
+        projectName: trimmedTitle,
+        startKind
+      });
+
+      if (action.kind !== "createProject") {
+        router.push(action.href);
+        return;
+      }
+
       const project = await createProject({
         name: trimmedTitle
       });
       const params = new URLSearchParams({
         cloudPlatform,
         projectId: project.id,
-        projectName: project.name
+        projectName: project.name,
+        startMode: action.openMode
       });
 
       router.push(`/workspace?${params.toString()}`);
@@ -82,6 +107,32 @@ export function WorkspaceStartClient() {
         </div>
       </div>
 
+      <div className="workspaceStartField">
+        <span className="fieldLabel">시작 방식</span>
+        <div className="workspaceStartOptionGroup" role="radiogroup" aria-label="시작 방식">
+          {workspaceStartOptions.map((option) => (
+            <button
+              aria-checked={startKind === option.kind}
+              className={[
+                "workspaceStartOptionButton",
+                option.priority === "secondary" ? "workspaceStartOptionButtonSecondary" : "",
+                startKind === option.kind ? "workspaceStartOptionButtonActive" : ""
+              ]
+                .filter(Boolean)
+                .join(" ")}
+              key={option.kind}
+              onClick={() => setStartKind(option.kind)}
+              role="radio"
+              type="button"
+            >
+              <span>{option.title}</span>
+              <strong>{option.actionLabel}</strong>
+              <small>{option.description}</small>
+            </button>
+          ))}
+        </div>
+      </div>
+
       {errorMessage ? (
         <p className="workspaceStartError" role="alert">
           {errorMessage}
@@ -90,7 +141,7 @@ export function WorkspaceStartClient() {
 
       <div className="workspaceStartActions">
         <button className="primaryButton" disabled={isSubmitting} type="submit">
-          워크스페이스 생성
+          {selectedStartOption.actionLabel}
         </button>
       </div>
     </form>
