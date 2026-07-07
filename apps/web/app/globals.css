@@ -4423,13 +4423,19 @@ nextjs-portal {
   border-radius: 8px;
   box-shadow: 0 16px 36px rgba(31, 41, 55, 0.12);
   color: #182033;
-  display: grid;
-  gap: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
   height: 100%;
   padding: 18px;
 }
 
-.reverseStartGuide p {
+.reverseStartGuideIntro {
+  display: grid;
+  gap: 8px;
+}
+
+.reverseStartGuideEyebrow {
   color: #2563eb;
   font-size: 0.72rem;
   font-weight: 900;
@@ -4444,11 +4450,120 @@ nextjs-portal {
   margin: 0;
 }
 
-.reverseStartGuide span {
+.reverseStartGuideIntro span,
+.reverseStartGuideSteps span,
+.reverseStartGuideCandidateNote span {
   color: #66748a;
   font-size: 0.84rem;
   font-weight: 750;
   line-height: 1.55;
+}
+
+.reverseStartGuideSection {
+  background: #f7faff;
+  border: 1px solid #e0e9f8;
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+}
+
+.reverseStartGuideSection h3 {
+  color: #203047;
+  font-size: 0.82rem;
+  font-weight: 900;
+  margin: 0;
+}
+
+.reverseStartGuideSteps {
+  counter-reset: reverse-start-step;
+  display: grid;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.reverseStartGuideSteps li {
+  align-items: start;
+  display: grid;
+  gap: 3px 9px;
+  grid-template-columns: 22px minmax(0, 1fr);
+}
+
+.reverseStartGuideSteps li::before {
+  align-items: center;
+  background: #1f5fae;
+  border-radius: 999px;
+  color: #ffffff;
+  content: counter(reverse-start-step);
+  counter-increment: reverse-start-step;
+  display: inline-flex;
+  font-size: 0.72rem;
+  font-weight: 900;
+  height: 22px;
+  justify-content: center;
+  line-height: 1;
+  width: 22px;
+}
+
+.reverseStartGuideSteps strong {
+  color: #1f2d44;
+  font-size: 0.82rem;
+  font-weight: 900;
+  line-height: 1.25;
+}
+
+.reverseStartGuideSteps span {
+  grid-column: 2;
+}
+
+.reverseStartGuideScope {
+  display: grid;
+  gap: 7px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.reverseStartGuideScope li {
+  align-items: start;
+  color: #58677d;
+  display: grid;
+  font-size: 0.8rem;
+  font-weight: 800;
+  gap: 8px;
+  grid-template-columns: 8px minmax(0, 1fr);
+  line-height: 1.45;
+}
+
+.reverseStartGuideScope li::before {
+  background: #3b82f6;
+  border-radius: 999px;
+  content: "";
+  height: 6px;
+  margin-top: 7px;
+  width: 6px;
+}
+
+.reverseStartGuideCandidateNote {
+  background: #fff8eb;
+  border: 1px solid #f4d28f;
+  border-radius: 8px;
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+}
+
+.reverseStartGuideCandidateNote strong {
+  color: #7a4b06;
+  font-size: 0.82rem;
+  font-weight: 900;
+  line-height: 1.35;
+}
+
+.reverseStartGuideCandidateNote span {
+  color: #8a6230;
 }
 
 .reverseStartBackButton {
@@ -4460,6 +4575,7 @@ nextjs-portal {
   cursor: pointer;
   font-size: 0.82rem;
   font-weight: 900;
+  margin-top: auto;
   min-height: 40px;
   padding: 0 12px;
 }

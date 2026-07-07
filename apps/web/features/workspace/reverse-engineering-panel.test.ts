@@ -81,6 +81,20 @@ test("Reverse Engineering start page lets users choose another start mode before
   assert.doesNotMatch(reverseWorkspaceClientSource, /작업 화면으로 돌아가기/);
 });
 
+test("Reverse Engineering left panel explains the import flow and candidate meaning", () => {
+  assert.match(reverseWorkspaceClientSource, /진행 순서/);
+  assert.match(reverseWorkspaceClientSource, /AWS Role 확인/);
+  assert.match(reverseWorkspaceClientSource, /기존 AWS 가져오기/);
+  assert.match(reverseWorkspaceClientSource, /보드 후보 선택/);
+  assert.match(reverseWorkspaceClientSource, /프로젝트 생성/);
+  assert.match(reverseWorkspaceClientSource, /가져오는 범위/);
+  assert.match(reverseWorkspaceClientSource, /지원하지 못하는 Resource/);
+  assert.match(reverseWorkspaceClientSource, /후보는 Resource 일부를 고르는 기능이 아닙니다/);
+  assert.match(reverseWorkspaceClientSource, /전체 Resource는 유지하고 묶는 기준만 다르게 보여줍니다/);
+  assert.match(reverseWorkspaceClientSource, /reverseStartGuideSteps/);
+  assert.match(reverseWorkspaceClientSource, /reverseStartGuideCandidateNote/);
+});
+
 test("Reverse Engineering draft edits update only the candidate architecture", () => {
   assert.match(panelSource, /updateReverseEngineeringDraftNode/);
   assert.match(panelSource, /context\.setPreviewDiagram\(application\.previewDiagram\)/);
