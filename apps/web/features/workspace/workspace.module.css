@@ -3351,8 +3351,18 @@
   display: grid;
   gap: 8px;
   grid-column: 2 / 4;
+  grid-row: 2;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   min-width: 0;
+}
+
+.deploymentStageCard > .deploymentPrimaryButton,
+.deploymentStageCard > .deploymentSecondaryButton {
+  grid-column: 3;
+  grid-row: 1;
+  justify-self: end;
+  min-width: 118px;
+  white-space: nowrap;
 }
 
 .deploymentStageAlert {
@@ -3378,11 +3388,15 @@
   .deploymentStageCard > .deploymentPrimaryButton,
   .deploymentStageCard > .deploymentSecondaryButton {
     grid-column: 1 / -1;
+    grid-row: auto;
+    justify-self: stretch;
     min-height: 42px;
+    min-width: 0;
   }
 
   .deploymentStageSettings {
     grid-column: 1 / -1;
+    grid-row: auto;
     grid-template-columns: minmax(0, 1fr);
   }
 }

@@ -1280,7 +1280,7 @@ export function DeploymentPanel({
             emptyLabel="AWS 연결 없음"
             onChange={setSelectedAwsConnectionId}
             options={awsConnectionOptions}
-            size={isDeploymentExpanded ? "large" : "regular"}
+            size={isDeploymentOverlayOpen ? "large" : "regular"}
             value={selectedAwsConnectionId}
           />
           <SelectMenu
@@ -1288,7 +1288,7 @@ export function DeploymentPanel({
             emptyLabel="Live profile 없음"
             onChange={(value) => setSelectedLiveProfile(value as DeploymentLiveProfile)}
             options={liveProfileOptions}
-            size={isDeploymentExpanded ? "large" : "regular"}
+            size={isDeploymentOverlayOpen ? "large" : "regular"}
             value={selectedLiveProfile}
           />
         </div>
@@ -1996,8 +1996,6 @@ function DeploymentPreDeploymentSummary({
   const failCount = countChecklistItems(analysis, "fail");
   const warningCount = countChecklistItems(analysis, "warning");
   const gateLevel = getPreDeploymentGateLevel(analysis);
-  const visibleFindings = analysis.findings.slice(0, 3);
-  const hiddenFindingCount = Math.max(0, analysis.findings.length - visibleFindings.length);
 
   return (
     <div className={styles.deploymentPreflightSummary} data-level={gateLevel}>
@@ -2020,9 +2018,9 @@ function DeploymentPreDeploymentSummary({
           Warning
         </span>
       </div>
-      {visibleFindings.length > 0 ? (
+      {analysis.findings.length > 0 ? (
         <ul className={styles.deploymentPreflightFindings}>
-          {visibleFindings.map((finding) => (
+          {analysis.findings.map((finding) => (
             <DeploymentPreDeploymentFindingItem
               finding={finding}
               key={finding.id}
@@ -2033,9 +2031,6 @@ function DeploymentPreDeploymentSummary({
       ) : (
         <p className={styles.deploymentHint}>표시할 Check Finding이 없습니다.</p>
       )}
-      {hiddenFindingCount > 0 ? (
-        <p className={styles.deploymentPreflightMore}>외 {hiddenFindingCount}개 항목</p>
-      ) : null}
     </div>
   );
 }

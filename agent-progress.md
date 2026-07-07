@@ -306,6 +306,24 @@ Known risks:
 - Known risks:
   - Browser click QA reached only the unauthenticated landing page locally; the authenticated Deploy click itself still needs user-session confirmation.
 
+### 2026-07-08 - Deployment review UI list and stage button fix
+
+- Goal: Fix the broken deployment review stage button layout and render all pre-deployment findings instead of the `외 N개 항목` truncation row.
+- Completed:
+  - Removed the three-finding cap from `DeploymentPreDeploymentSummary`; every finding now renders inside the existing scrollable list.
+  - Pinned deployment stage action buttons to the action column so the review button cannot fall into the narrow stage-number column.
+  - Kept full-screen deployment select sizing tied to the overlay-open state.
+  - Added source-layout regression coverage for full finding rendering, scrollable findings, and stable stage action button placement.
+- Verification:
+  - `pnpm harness:check` - passed before edits.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-right-panel-layout.test.ts` - passed, 63 tests.
+  - `pnpm --filter @sketchcatch/web typecheck` - passed.
+  - `pnpm --filter @sketchcatch/web lint` - passed.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `pnpm build` - passed.
+  - `pnpm harness:check` - passed after edits.
+
 - Updated local `dev` to `838a3e94` and merged it into `fix/ck/245-terraform-error`.
 - Resolved the only manual conflict in this progress log, preserving both branch records.
 
