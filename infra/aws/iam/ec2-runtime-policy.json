@@ -42,6 +42,12 @@
         "arn:aws:iam::*:role/SketchCatchTerraformExecutionRole",
         "arn:aws:iam::*:role/SketchCatchTerraformExecutionRole-*"
       ]
+    },
+    {
+      "Sid": "AllowSketchCatchAiProviderCalls",
+      "Effect": "Allow",
+      "Action": ["bedrock:InvokeModel", "qbusiness:ChatSync"],
+      "Resource": "*"
     }
   ]
 }
