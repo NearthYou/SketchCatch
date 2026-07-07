@@ -1425,7 +1425,12 @@ function DiagramEditorInner({
         DIAGRAM_SNAP_GRID_SIZE
       );
 
-      const nextNode = createDiagramNodeFromPayload(payload, position, getNextZIndex(diagramRef.current.nodes));
+      const nextNode = createDiagramNodeFromPayload(
+        payload,
+        position,
+        getNextZIndex(diagramRef.current.nodes),
+        diagramRef.current.nodes
+      );
 
       commitDiagramUpdate((currentDiagram) => {
         const nodesWithNextNode = [...currentDiagram.nodes, nextNode];
@@ -1497,6 +1502,27 @@ function DiagramEditorInner({
       focusEditorShell();
     },
     [cancelSnapAnimation, focusEditorShell, reactFlow]
+  );
+
+  const handleFlowNodeClick = useCallback(
+    (_event: ReactMouseEvent, node: DiagramFlowNode) => {
+      setSelectedNodeIds([node.id]);
+      setSelectedEdgeIds([]);
+      setInspectedNodeId(null);
+      focusEditorShell();
+    },
+    [focusEditorShell]
+  );
+
+  const handleFlowNodeDoubleClick = useCallback(
+    (_event: ReactMouseEvent, node: DiagramFlowNode) => {
+      setSelectedNodeIds([node.id]);
+      setSelectedEdgeIds([]);
+      setInspectedNodeId(node.id);
+      setRightPanelOpen(true);
+      focusEditorShell();
+    },
+    [focusEditorShell]
   );
 
   const deleteSelection = useCallback(() => {
@@ -2016,19 +2042,8 @@ function DiagramEditorInner({
                   onDrop: handleDrop,
                   onEdgesChange: handleEdgesChange,
                   onMoveEnd: handleMoveEnd,
-                  onNodeClick: (_event, node) => {
-                    setSelectedNodeIds([node.id]);
-                    setSelectedEdgeIds([]);
-                    setInspectedNodeId(null);
-                    focusEditorShell();
-                  },
-                  onNodeDoubleClick: (_event, node) => {
-                    setSelectedNodeIds([node.id]);
-                    setSelectedEdgeIds([]);
-                    setInspectedNodeId(node.id);
-                    setRightPanelOpen(true);
-                    focusEditorShell();
-                  },
+                  onNodeClick: handleFlowNodeClick,
+                  onNodeDoubleClick: handleFlowNodeDoubleClick,
                   onNodeDrag: handleNodeDrag,
                   onNodeDragStart: handleNodeDragStart,
                   onNodeDragStop: handleNodeDragStop,
