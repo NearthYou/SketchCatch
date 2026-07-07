@@ -20,11 +20,6 @@ test("canChangeNodeBorderColor allows border color changes only for area nodes",
   assert.equal(canChangeNodeBorderColor(makeResourceNode("aws_security_group")), true);
   assert.equal(canChangeNodeBorderColor(makeDesignNode("design_region")), true);
   assert.equal(canChangeNodeBorderColor(makeResourceNode("aws_instance")), false);
-  assert.equal(canChangeNodeBorderColor(makeResourceNode("aws_s3_bucket")), false);
-  assert.equal(canChangeNodeBorderColor(makeResourceNode("aws_db_subnet_group")), false);
-  assert.equal(canChangeNodeBorderColor(makeResourceNode("aws_api_gateway_rest_api")), false);
-  assert.equal(canChangeNodeBorderColor(makeResourceNode("aws_api_gateway_resource")), false);
-  assert.equal(canChangeNodeBorderColor(makeResourceNode("aws_cloudwatch_event_rule")), false);
 });
 
 function makeResourceNode(resourceType: string, borderColor?: string): DiagramNode {

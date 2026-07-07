@@ -53,6 +53,8 @@ import type { DiagramEdge, DiagramJson, DiagramNode } from "../../../../packages
 import { ParameterInputPanel } from "../parameter-input";
 import { terraformParameterCatalog } from "../parameter-input/catalog";
 import { ResourceSettingsPanel } from "../resource-settings";
+import { defaultResourceCatalogProvider } from "../resource-settings/catalog-provider";
+import { expandCuratedModuleIntoDiagram } from "../resource-settings/module-catalog";
 import { DEFAULT_DIAGRAM_VIEWPORT, EMPTY_DIAGRAM } from "./constants";
 import {
   applyAreaNodeParentAssignments,
@@ -173,9 +175,8 @@ function DiagramEditorInner({
   const [dragPreviewNodes, setDragPreviewNodes] = useState<DiagramNode[] | null>(null);
   const [activeReferenceDropTargetNodeId, setActiveReferenceDropTargetNodeId] = useState<string | null>(null);
   const [interactionMode, setInteractionMode] = useState<"select" | "pan">("select");
-  const [isConnectionActive, setConnectionActive] = useState(false);
   const [isFlowReady, setFlowReady] = useState(false);
-  const isTemporaryPanModeRef = useRef(false);
+  const temporaryPanPreviousModeRef = useRef<"select" | "pan" | null>(null);
   const clipboardRef = useRef<DiagramNode[]>([]);
   const canvasPanelRef = useRef<HTMLDivElement | null>(null);
   const directNodeDragIdsRef = useRef<Set<string> | null>(null);
@@ -337,30 +338,6 @@ function DiagramEditorInner({
 
   const focusEditorShell = useCallback(() => {
     editorShellRef.current?.focus({ preventScroll: true });
-  }, []);
-
-  const restoreTemporaryPanMode = useCallback(() => {
-    if (!isTemporaryPanModeRef.current) {
-      return;
-    }
-
-    isTemporaryPanModeRef.current = false;
-    setInteractionMode("select");
-  }, []);
-
-  const startTemporaryPanMode = useCallback(() => {
-    if (interactionMode === "pan") {
-      return;
-    }
-
-    isTemporaryPanModeRef.current = true;
-    setInteractionMode("pan");
-    focusEditorShell();
-  }, [focusEditorShell, interactionMode]);
-
-  const setPersistentInteractionMode = useCallback((nextMode: "select" | "pan") => {
-    isTemporaryPanModeRef.current = false;
-    setInteractionMode(nextMode);
   }, []);
 
   const updateLeftPanelWidth = useCallback((nextWidth: number) => {
@@ -528,6 +505,16 @@ function DiagramEditorInner({
       };
     });
   }, [cancelSnapAnimation, replaceDiagram]);
+
+  const addCuratedModule = useCallback((moduleId: string) => {
+    commitDiagramUpdate((currentDiagram) =>
+      expandCuratedModuleIntoDiagram({
+        diagram: currentDiagram,
+        moduleId,
+        resources: defaultResourceCatalogProvider.listResources()
+      })
+    );
+  }, [commitDiagramUpdate]);
 
   const updateNodeMetadata = useCallback(
     (nodeId: string, update: DiagramNodeMetadataUpdate | ((node: DiagramNode) => DiagramNodeMetadataUpdate)) => {
@@ -758,23 +745,16 @@ function DiagramEditorInner({
   const displayNodes = isPreviewActive ? visibleDiagram.nodes : dragPreviewNodes ?? diagram.nodes;
   const flowNodes = useMemo(
     () => {
-      const nextFlowNodes = toFlowNodes(
-        displayNodes,
-        isPreviewActive ? [] : selectedNodeIds,
-        isPreviewActive ? null : activeReferenceDropTargetNodeId,
-        isConnectionActive,
-        {
-          onBringForward: handleBringForward,
-          onSendBackward: handleSendBackward,
-          onTextColorChange: handleTextColorChange,
-          onBorderColorChange: handleBorderColorChange,
-          onToggleLock: handleToggleLock,
-          onResizeStart: handleResizeStart,
-          onResize: handleResize,
-          onResizeEnd: handleResizeEnd
-        },
-        { isPreview: isPreviewActive }
-      );
+      const nextFlowNodes = toFlowNodes(displayNodes, isPreviewActive ? [] : selectedNodeIds, isPreviewActive ? null : activeReferenceDropTargetNodeId, {
+        onBringForward: handleBringForward,
+        onSendBackward: handleSendBackward,
+        onTextColorChange: handleTextColorChange,
+        onBorderColorChange: handleBorderColorChange,
+        onToggleLock: handleToggleLock,
+        onResizeStart: handleResizeStart,
+        onResize: handleResize,
+        onResizeEnd: handleResizeEnd
+      });
 
       if (interactionMode === "select" && !isPreviewActive) {
         return nextFlowNodes;
@@ -792,7 +772,6 @@ function DiagramEditorInner({
       displayNodes,
       handleBorderColorChange,
       handleBringForward,
-      isConnectionActive,
       interactionMode,
       isPreviewActive,
       handleResizeEnd,
@@ -806,8 +785,8 @@ function DiagramEditorInner({
   );
 
   const flowEdges = useMemo(
-    () => toFlowEdges(visibleDiagram.edges, isPreviewActive ? [] : selectedEdgeIds, displayNodes, { isPreview: isPreviewActive }),
-    [displayNodes, isPreviewActive, selectedEdgeIds, visibleDiagram.edges]
+    () => toFlowEdges(visibleDiagram.edges, isPreviewActive ? [] : selectedEdgeIds),
+    [isPreviewActive, selectedEdgeIds, visibleDiagram.edges]
   );
 
   const handleInit = useCallback<OnInit<DiagramFlowNode, DiagramFlowEdge>>((instance) => {
@@ -896,9 +875,13 @@ function DiagramEditorInner({
       }
 
       event.preventDefault();
-      startTemporaryPanMode();
+      if (interactionMode !== "pan" && temporaryPanPreviousModeRef.current === null) {
+        temporaryPanPreviousModeRef.current = interactionMode;
+      }
+      setInteractionMode("pan");
+      focusEditorShell();
     },
-    [startTemporaryPanMode]
+    [focusEditorShell, interactionMode]
   );
 
   const handleCanvasAuxClick = useCallback((event: ReactMouseEvent<HTMLDivElement>) => {
@@ -1064,7 +1047,7 @@ function DiagramEditorInner({
           metaKey: event.metaKey,
           shiftKey: event.shiftKey,
           target: event.target,
-          temporaryPanPreviousMode: isTemporaryPanModeRef.current ? "select" : null
+          temporaryPanPreviousMode: temporaryPanPreviousModeRef.current
         }) === null
       ) {
         return;
@@ -1175,7 +1158,7 @@ function DiagramEditorInner({
           metaKey: event.metaKey,
           shiftKey: event.shiftKey,
           target: event.target,
-          temporaryPanPreviousMode: isTemporaryPanModeRef.current ? "select" : null
+          temporaryPanPreviousMode: temporaryPanPreviousModeRef.current
         }) === null
       ) {
         return;
@@ -1297,17 +1280,14 @@ function DiagramEditorInner({
 
   const handleConnectStart = useCallback<OnConnectStart>((_event, params) => {
     connectStartNodeIdRef.current = params.nodeId;
-    setConnectionActive(true);
   }, []);
 
   const handleConnectEnd = useCallback<OnConnectEnd>(() => {
     connectStartNodeIdRef.current = null;
-    setConnectionActive(false);
   }, []);
 
   const handleConnect = useCallback<OnConnect>(
     (connection) => {
-      setConnectionActive(false);
       const directedConnection = getUserDirectedConnection(connection, connectStartNodeIdRef.current);
 
       if (
@@ -1625,18 +1605,6 @@ function DiagramEditorInner({
     [commitDiagramUpdate]
   );
 
-  const updateEdgeLabel = useCallback(
-    (edgeId: string, label: string) => {
-      const nextLabel = label.trim().length > 0 ? label : undefined;
-
-      commitDiagramUpdate((currentDiagram) => ({
-        ...currentDiagram,
-        edges: currentDiagram.edges.map((edge) => (edge.id === edgeId ? { ...edge, label: nextLabel } : edge))
-      }));
-    },
-    [commitDiagramUpdate]
-  );
-
   const deleteEdge = useCallback(
     (edgeId: string) => {
       commitDiagramUpdate((currentDiagram) => removeEdgesFromDiagram(currentDiagram, [edgeId]));
@@ -1811,27 +1779,23 @@ function DiagramEditorInner({
   }, [handleKeyDown]);
 
   useEffect(() => {
-    function handleTemporaryPanEnd(event?: Event): void {
-      if (!isTemporaryPanModeRef.current) {
+    function handleWindowMouseUp(event: MouseEvent): void {
+      if (event.button !== 1) {
         return;
       }
 
-      event?.preventDefault();
-      restoreTemporaryPanMode();
+      const previousMode = temporaryPanPreviousModeRef.current;
+      temporaryPanPreviousModeRef.current = null;
+
+      if (previousMode) {
+        setInteractionMode(previousMode);
+      }
     }
 
-    window.addEventListener("mouseup", handleTemporaryPanEnd);
-    window.addEventListener("pointerup", handleTemporaryPanEnd);
-    window.addEventListener("pointercancel", handleTemporaryPanEnd);
-    window.addEventListener("blur", handleTemporaryPanEnd);
+    window.addEventListener("mouseup", handleWindowMouseUp);
 
-    return () => {
-      window.removeEventListener("mouseup", handleTemporaryPanEnd);
-      window.removeEventListener("pointerup", handleTemporaryPanEnd);
-      window.removeEventListener("pointercancel", handleTemporaryPanEnd);
-      window.removeEventListener("blur", handleTemporaryPanEnd);
-    };
-  }, [restoreTemporaryPanMode]);
+    return () => window.removeEventListener("mouseup", handleWindowMouseUp);
+  }, []);
 
   useEffect(() => {
     function handleWindowResize(): void {
@@ -1878,7 +1842,10 @@ function DiagramEditorInner({
       {isLeftPanelOpen ? (
         <div className={styles.leftRail} ref={leftRailRef}>
           {leftPanel === undefined ? (
-            <ResourceSettingsPanel onCollapse={() => setLeftPanelOpen(false)} />
+            <ResourceSettingsPanel
+              onCollapse={() => setLeftPanelOpen(false)}
+              onModuleAdd={addCuratedModule}
+            />
           ) : (
             leftPanel
           )}
@@ -1936,7 +1903,7 @@ function DiagramEditorInner({
               aria-label="선택 모드"
               aria-pressed={interactionMode === "select"}
               className={interactionMode === "select" ? styles.iconButtonSelected : styles.iconButton}
-              onClick={() => setPersistentInteractionMode("select")}
+              onClick={() => setInteractionMode("select")}
               title="선택 모드"
               type="button"
             >
@@ -1946,7 +1913,7 @@ function DiagramEditorInner({
               aria-label="캔버스 이동"
               aria-pressed={interactionMode === "pan"}
               className={interactionMode === "pan" ? styles.iconButtonSelected : styles.iconButton}
-              onClick={() => setPersistentInteractionMode("pan")}
+              onClick={() => setInteractionMode("pan")}
               title="캔버스 이동"
               type="button"
             >
@@ -2026,7 +1993,6 @@ function DiagramEditorInner({
             <DiagramEdgeToolbar
               edge={selectedEdge}
               onDelete={deleteEdge}
-              onLabelChange={updateEdgeLabel}
               onStyleChange={updateEdgeStyle}
               onTypeChange={updateEdgeType}
             />
@@ -2039,7 +2005,7 @@ function DiagramEditorInner({
             </div>
           ) : null}
 
-          <ReactFlow
+          <ReactFlow<DiagramFlowNode, DiagramFlowEdge>
             connectionMode={ConnectionMode.Loose}
             defaultViewport={DEFAULT_DIAGRAM_VIEWPORT}
             deleteKeyCode={null}
