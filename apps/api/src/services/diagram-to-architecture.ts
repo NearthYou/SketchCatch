@@ -47,11 +47,26 @@ function isConvertibleResourceNode(
 }
 
 function mapTerraformResourceType(parameters: DiagramNodeParameters): ResourceType {
+  if (isRdsReadReplica(parameters)) {
+    return "RDS_READ_REPLICA";
+  }
+
   const terraformBlockType = parameters.terraformBlockType ?? DEFAULT_TERRAFORM_BLOCK_TYPE;
 
   return (
     getResourceDefinitionByTerraform(terraformBlockType, parameters.resourceType)?.resourceType ?? "UNKNOWN"
   );
+}
+
+function isRdsReadReplica(parameters: DiagramNodeParameters): boolean {
+  if (parameters.resourceType !== "aws_db_instance") {
+    return false;
+  }
+
+  const values = isRecord(parameters.values) ? parameters.values : {};
+  const replicateSourceDb = values["replicateSourceDb"] ?? values["replicate_source_db"];
+
+  return typeof replicateSourceDb === "string" && replicateSourceDb.trim().length > 0;
 }
 
 function createArchitectureConfig(parameters: DiagramNodeParameters): ResourceConfig {

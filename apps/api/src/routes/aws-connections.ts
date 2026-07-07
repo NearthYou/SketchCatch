@@ -46,7 +46,7 @@ const awsRoleArnSchema = z
   .max(2048)
   .regex(/^arn:aws:iam::\d{12}:role\/[\w+=,.@/-]+$/)
   .refine(isRecommendedAwsConnectionRoleArn, {
-    message: `AWS Role ARN must use ${recommendedAwsConnectionRoleName}`
+    message: `AWS Role ARN must use ${recommendedAwsConnectionRoleName} or ${recommendedAwsConnectionRoleName}-<connection>`
   });
 
 const awsConnectionParamsSchema = z.object({

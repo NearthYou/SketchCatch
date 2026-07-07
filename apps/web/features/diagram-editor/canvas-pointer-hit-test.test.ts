@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   getAreaBlankInteractionTarget,
+  getTemporaryPanReleaseMode,
   isCanvasInteractiveElementTarget
 } from "./canvas-pointer-hit-test";
 
@@ -99,6 +100,44 @@ test("getAreaBlankInteractionTarget skips modifiers, pan mode, non-left clicks, 
       shiftKey: false,
       target: makeClosestTarget("button"),
       temporaryPanPreviousMode: null
+    }),
+    null
+  );
+});
+
+test("getTemporaryPanReleaseMode restores the previous mode when the middle button is released", () => {
+  assert.equal(
+    getTemporaryPanReleaseMode({
+      button: 1,
+      buttons: 0,
+      previousMode: "select"
+    }),
+    "select"
+  );
+  assert.equal(
+    getTemporaryPanReleaseMode({
+      button: 0,
+      buttons: 0,
+      previousMode: "select"
+    }),
+    "select"
+  );
+});
+
+test("getTemporaryPanReleaseMode waits while the middle button is still held", () => {
+  assert.equal(
+    getTemporaryPanReleaseMode({
+      button: 0,
+      buttons: 4,
+      previousMode: "select"
+    }),
+    null
+  );
+  assert.equal(
+    getTemporaryPanReleaseMode({
+      button: 1,
+      buttons: 0,
+      previousMode: null
     }),
     null
   );

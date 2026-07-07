@@ -8,6 +8,7 @@ const aiChatDockSource = readWorkspaceFile("WorkspaceAiChatDock.tsx");
 const aiPanelSource = readWorkspaceFile("WorkspaceAiPanel.tsx");
 const deploymentPanelSource = readWorkspaceFile("DeploymentPanel.tsx");
 const diagramEditorSource = readFeatureFile("../diagram-editor/DiagramEditor.tsx");
+const resourceWorkspaceSource = readWorkspaceFile("ResourceWorkspacePanel.tsx");
 const diagramEditorTypesSource = readFeatureFile("../diagram-editor/types.ts");
 const terraformLeaveDialogSource = readWorkspaceFile("TerraformLeaveDialog.tsx");
 const terraformPanelSource = readWorkspaceFile("TerraformCodePanel.tsx");
@@ -63,6 +64,20 @@ test("right panel width is locked against long deployment content", () => {
   assert.match(deploymentPanelContentRule, /\bmax-width:\s*100%;/);
 });
 
+test("workspace rails use the Brainboard panel widths", () => {
+  const editorShellRule = getCssRule(diagramEditorStylesSource, "editorShell");
+  const leftRailRule = getCssRule(diagramEditorStylesSource, "leftRail");
+
+  assert.match(diagramEditorSource, /const DEFAULT_LEFT_PANEL_WIDTH = 346;/);
+  assert.match(diagramEditorSource, /const DEFAULT_RIGHT_PANEL_WIDTH = 440;/);
+  assert.match(diagramEditorSource, /leftPanelWidth\.brainboardV1/);
+  assert.match(diagramEditorSource, /rightPanelWidth\.brainboardV1/);
+  assert.match(editorShellRule, /--left-panel-width:\s*346px;/);
+  assert.match(editorShellRule, /--right-panel-width:\s*440px;/);
+  assert.match(leftRailRule, /\bleft:\s*12px;/);
+  assert.match(leftRailRule, /\btop:\s*72px;/);
+});
+
 test("deployment mode switch keeps tabs the same size across modes", () => {
   const deploymentPanelRule = getCssRule(stylesSource, "deploymentPanel");
   const modeSwitchRule = getCssRule(stylesSource, "deploymentModeSwitch");
@@ -83,19 +98,49 @@ test("deployment mode switch is pinned after the scrollable content area", () =>
   assert.ok(contentIndex < modeSwitchIndex);
 });
 
-test("deployment toolbar action is grouped with the other panel mode buttons", () => {
-  const toolbarIndex = componentSource.indexOf("className={styles.rightPanelToolbar}");
-  const modeToggleIndex = componentSource.indexOf("className={styles.panelModeToggle}", toolbarIndex);
-  const deployButtonIndex = componentSource.indexOf('title="Deploy"', modeToggleIndex);
+test("right panel exposes Brainboard-style Issues, Deploy, and Plan actions", () => {
+  const utilityBarIndex = componentSource.indexOf("className={styles.rightPanelUtilityBar}");
+  const modeBarIndex = componentSource.indexOf("className={styles.rightPanelModeBar}");
   const toolbarContentEndIndex = componentSource.indexOf(
     "<div className={styles.rightPanelView}",
-    modeToggleIndex
+    modeBarIndex
+  );
+  const modeBarSource = componentSource.slice(modeBarIndex, toolbarContentEndIndex);
+  const resourcesButtonIndex = modeBarSource.indexOf('title="Resources"');
+  const codeButtonIndex = modeBarSource.indexOf('title="Terraform code"');
+  const issuesButtonIndex = modeBarSource.indexOf("<span>Issues</span>");
+  const deployButtonIndex = modeBarSource.indexOf("<span>Deploy</span>");
+  const planButtonIndex = modeBarSource.indexOf("<span>Plan</span>");
+  const codeButtonSource = modeBarSource.slice(
+    modeBarSource.lastIndexOf("<button", codeButtonIndex),
+    modeBarSource.indexOf("</button>", codeButtonIndex)
+  );
+  const planButtonSource = modeBarSource.slice(
+    modeBarSource.lastIndexOf("<button", planButtonIndex),
+    modeBarSource.indexOf("</button>", planButtonIndex)
   );
 
-  assert.ok(modeToggleIndex > toolbarIndex);
-  assert.ok(deployButtonIndex > modeToggleIndex);
-  assert.ok(deployButtonIndex < toolbarContentEndIndex);
-  assert.match(componentSource, /activeView === "deployment" \? styles\.panelModeButtonActive : styles\.panelModeButton/);
+  assert.ok(utilityBarIndex > -1);
+  assert.ok(modeBarIndex > utilityBarIndex);
+  assert.ok(resourcesButtonIndex > -1);
+  assert.ok(codeButtonIndex > resourcesButtonIndex);
+  assert.ok(issuesButtonIndex > codeButtonIndex);
+  assert.ok(deployButtonIndex > issuesButtonIndex);
+  assert.ok(planButtonIndex > deployButtonIndex);
+  assert.match(codeButtonSource, /data-terraform-editor-navigation/);
+  assert.match(codeButtonSource, /onClick=\{\(\) => requestView\("terraform"\)\}/);
+  assert.match(planButtonSource, /onClick=\{openDeploymentFromPlan\}/);
+  assert.doesNotMatch(planButtonSource, /data-terraform-editor-navigation/);
+  assert.doesNotMatch(planButtonSource, /requestView\("terraform"\)/);
+  assert.match(componentSource, /title="Terraform code"/);
+  assert.match(componentSource, /title="Plan actions"/);
+  assert.match(componentSource, /styles\.panelPlanSplitButton/);
+  assert.match(componentSource, /styles\.panelPlanMainButton/);
+  assert.match(componentSource, /styles\.panelModeTextButton/);
+  assert.match(componentSource, /styles\.panelModeIconGroup/);
+  assert.match(stylesSource, /\.rightPanelModeBar\s*\{/);
+  assert.match(stylesSource, /\.panelPlanSplitButton\s*\{/);
+  assert.match(stylesSource, /\.panelPlanMainButton\s*\{/);
   assert.doesNotMatch(componentSource, /title="AI"/);
   assert.doesNotMatch(componentSource, /activeView === "ai"/);
   assert.doesNotMatch(componentSource, /WorkspaceAiPanel/);
@@ -108,8 +153,7 @@ test("reverse engineering is not reachable from persistent right panel toggles",
     '<aside className={styles.collapsedRightPanel}'
   );
   const collapsedPanelEndIndex = componentSource.indexOf("</aside>", collapsedPanelIndex);
-  const toolbarIndex = componentSource.indexOf("className={styles.rightPanelToolbar}");
-  const modeToggleIndex = componentSource.indexOf("className={styles.panelModeToggle}", toolbarIndex);
+  const modeToggleIndex = componentSource.indexOf("className={styles.rightPanelModeBar}");
   const rightPanelViewIndex = componentSource.indexOf(
     "<div className={styles.rightPanelView}",
     modeToggleIndex
@@ -118,7 +162,7 @@ test("reverse engineering is not reachable from persistent right panel toggles",
   const modeToggleSource = componentSource.slice(modeToggleIndex, rightPanelViewIndex);
 
   assert.ok(collapsedPanelIndex > -1);
-  assert.ok(modeToggleIndex > toolbarIndex);
+  assert.ok(modeToggleIndex > -1);
   assert.ok(rightPanelViewIndex > modeToggleIndex);
   assert.doesNotMatch(collapsedPanelSource, /title="Reverse Engineering"/);
   assert.doesNotMatch(collapsedPanelSource, /openCollapsedView\("reverse"\)/);
@@ -126,6 +170,38 @@ test("reverse engineering is not reachable from persistent right panel toggles",
   assert.doesNotMatch(modeToggleSource, /requestView\("reverse"\)/);
   assert.match(componentSource, /activeView !== "reverse"/);
   assert.match(componentSource, /<ReverseEngineeringPanel/);
+});
+
+test("Plan action strip is UI-only and routes only to the Deploy view", () => {
+  const planActionStripIndex = componentSource.indexOf("className={styles.panelPlanActionStrip}");
+  const planActionStripSource = componentSource.slice(
+    planActionStripIndex,
+    componentSource.indexOf("</div>", planActionStripIndex)
+  );
+  const planMainIndex = componentSource.indexOf("className={styles.panelPlanMainButton}");
+  const planMainSource = componentSource.slice(
+    componentSource.lastIndexOf("<button", planMainIndex),
+    componentSource.indexOf("</button>", planMainIndex)
+  );
+
+  assert.ok(planActionStripIndex > -1);
+  assert.match(componentSource, /const \[isPlanActionStripOpen, setIsPlanActionStripOpen\] = useState\(false\);/);
+  assert.match(planMainSource, /onClick=\{openDeploymentFromPlan\}/);
+  assert.doesNotMatch(planMainSource, /requestView\("terraform"\)/);
+  assert.match(planActionStripSource, />\s*Plan\s*</);
+  assert.match(planActionStripSource, />\s*Validate\s*</);
+  assert.match(planActionStripSource, />\s*Apply\s*</);
+  assert.match(planActionStripSource, />\s*Destroy\s*</);
+  assert.equal(countMatches(planActionStripSource, /onClick=\{openDeploymentFromPlan\}/g), 4);
+  assert.doesNotMatch(planActionStripSource, /runDeploymentPlan|runDeploymentApply|runDeploymentDestroy/);
+  assert.doesNotMatch(planActionStripSource, /requestView\("terraform"\)/);
+});
+
+test("right panel redesign does not add deployment shortcut or focus plumbing", () => {
+  assert.doesNotMatch(componentSource, /deploymentShortcutRequest/);
+  assert.doesNotMatch(deploymentPanelSource, /deploymentShortcutRequest/);
+  assert.doesNotMatch(deploymentPanelSource, /scrollIntoView/);
+  assert.doesNotMatch(deploymentPanelSource, /focus\(\)/);
 });
 
 test("workspace AI opens from a floating chat dock instead of the right panel", () => {
@@ -143,6 +219,63 @@ test("workspace AI opens from a floating chat dock instead of the right panel", 
   assert.match(stylesSource, /\.aiChatDock\s*\{/);
   assert.match(floatingPanelSlotRule, /pointer-events:\s*none/);
   assert.match(floatingPanelSlotRule, /z-index:\s*90/);
+});
+
+test("resource workspace omits the decorative list toolbar", () => {
+  const resourceWorkspacePanelRule = getCssRule(stylesSource, "resourceWorkspacePanel");
+  const resourceListPanelRule = getCssRule(stylesSource, "resourceListPanel");
+
+  assert.doesNotMatch(resourceWorkspaceSource, /className=\{styles\.resourceSectionToolbar\}/);
+  assert.doesNotMatch(resourceWorkspaceSource, /aria-label="Resource list"/);
+  assert.match(resourceWorkspacePanelRule, /\bgrid-template-rows:\s*minmax\(0,\s*1fr\);/);
+  assert.match(resourceListPanelRule, /\bpadding:\s*24px 12px 12px;/);
+});
+
+test("resource detail back action sits inside the detail view", () => {
+  const settingsBranchIndex = resourceWorkspaceSource.indexOf('visibleView === "settings"');
+  const settingsPanelIndex = resourceWorkspaceSource.indexOf(
+    "className={styles.resourceSettingsPanel}",
+    settingsBranchIndex
+  );
+  const backButtonIndex = resourceWorkspaceSource.indexOf(
+    'aria-label="Back to resource list"',
+    settingsPanelIndex
+  );
+  const parameterPanelIndex = resourceWorkspaceSource.indexOf("<ParameterInputPanel", settingsPanelIndex);
+  const settingsPanelRule = getCssRule(stylesSource, "resourceSettingsPanel");
+  const settingsHeaderRule = getCssRule(stylesSource, "resourceSettingsHeader");
+
+  assert.ok(settingsBranchIndex > -1);
+  assert.ok(settingsPanelIndex > settingsBranchIndex);
+  assert.ok(backButtonIndex > settingsPanelIndex);
+  assert.ok(parameterPanelIndex > backButtonIndex);
+  assert.match(settingsPanelRule, /\bgrid-template-rows:\s*auto minmax\(0,\s*1fr\);/);
+  assert.match(settingsHeaderRule, /\bpadding:\s*16px 12px 8px;/);
+});
+
+test("resource list identity starts with the service icon", () => {
+  const serviceIconRule = getCssRule(stylesSource, "resourceListServiceIcon");
+
+  assert.doesNotMatch(resourceWorkspaceSource, /resourceListCubeIcon/);
+  assert.doesNotMatch(stylesSource, /\.resourceListCubeIcon\s*\{/);
+  assert.doesNotMatch(serviceIconRule, /\bborder-left:/);
+  assert.match(serviceIconRule, /\bwidth:\s*36px;/);
+});
+
+test("resource card menu omits data source switch and maximize actions", () => {
+  const menuStartIndex = resourceWorkspaceSource.indexOf("function ResourceCardMenu");
+  const menuEndIndex = resourceWorkspaceSource.indexOf("function selectNode", menuStartIndex);
+  const menuSource = resourceWorkspaceSource.slice(menuStartIndex, menuEndIndex);
+
+  assert.ok(menuStartIndex > -1);
+  assert.ok(menuEndIndex > menuStartIndex);
+  assert.doesNotMatch(menuSource, /Switch to data source|Switch to resource/);
+  assert.doesNotMatch(menuSource, /switchTerraformBlockType/);
+  assert.doesNotMatch(menuSource, /onToggleSize/);
+  assert.doesNotMatch(menuSource, /Maximize2|Minimize2/);
+  assert.match(menuSource, /Edit config/);
+  assert.match(menuSource, /Duplicate/);
+  assert.match(menuSource, /Delete/);
 });
 
 test("workspace AI has a dedicated error tab for Terraform issue resolution", () => {
@@ -525,9 +658,10 @@ test("terraform errors surface as an issues banner and AI resolution lives in th
   const issueBannerRule = getCssRule(stylesSource, "terraformIssueBanner");
   const aiButtonRule = getCssRule(stylesSource, "terraformDiagnosticAiButton");
 
-  assert.doesNotMatch(terraformPanelSource, /runAiTerraformErrorExplanation/);
-  assert.doesNotMatch(terraformPanelSource, /terraformErrorExplanationsByKey/);
-  assert.doesNotMatch(terraformPanelSource, /className=\{styles\.terraformErrorExplanationPanel\}/);
+  assert.match(terraformPanelSource, /runAiTerraformErrorExplanation/);
+  assert.match(terraformPanelSource, /terraformErrorExplanationsByKey/);
+  assert.match(terraformPanelSource, /className=\{styles\.terraformErrorExplanationPanel\}/);
+  assert.match(terraformPanelSource, /오류를 해석하는 중입니다/);
   assert.match(terraformPanelSource, /className=\{styles\.terraformIssueBanner\}/);
   assert.match(terraformPanelSource, /Issues 탭으로 이동/);
   assert.match(componentSource, /readStoredTerraformIssues/);
@@ -778,6 +912,10 @@ function readWorkspaceFile(fileName: string): string {
 
 function readFeatureFile(filePath: string): string {
   return readFileSync(fileURLToPath(new URL(filePath, import.meta.url)), "utf8");
+}
+
+function countMatches(source: string, pattern: RegExp): number {
+  return source.match(pattern)?.length ?? 0;
 }
 
 function getCssRule(source: string, className: string): string {

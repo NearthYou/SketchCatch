@@ -99,7 +99,9 @@ function Write-SmokeReport {
       New-Item -ItemType Directory -Path $parentPath -Force | Out-Null
     }
 
-    Set-Content -Path $ReportPath -Value $json -Encoding UTF8
+    $reportFullPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($ReportPath)
+    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    [System.IO.File]::WriteAllText($reportFullPath, "$json$([Environment]::NewLine)", $utf8NoBom)
   }
 
   $json

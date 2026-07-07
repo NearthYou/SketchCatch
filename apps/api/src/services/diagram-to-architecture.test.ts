@@ -162,6 +162,25 @@ test("converts supported DiagramJson resource nodes to ArchitectureJson nodes", 
   });
 });
 
+test("converts aws_db_instance with replicate source into an RDS read replica ResourceType", () => {
+  const architectureJson = convertDiagramJsonToArchitectureJson({
+    nodes: [
+      makeNode({
+        id: "rds-read-replica",
+        type: "aws_db_instance",
+        label: "database replica",
+        parameters: makeParameters("aws_db_instance", "replica", {
+          replicateSourceDb: "aws_db_instance.primary.identifier"
+        })
+      })
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  });
+
+  assert.equal(architectureJson.nodes[0]?.type, "RDS_READ_REPLICA");
+});
+
 test("skips design nodes, missing parameters, invalid nodes, and dangling edges", () => {
   const architectureJson = convertDiagramJsonToArchitectureJson({
     nodes: [

@@ -5,12 +5,13 @@ import {
   findInnermostAreaNodeAtPoint,
   getAreaNodeIconUrl,
   getAreaNodeLabel,
+  getAreaNodeMetaLabel,
   isAreaNode,
   isDesignAreaNode,
   isResourceAreaNode
 } from "./area-nodes";
 
-test("isAreaNode matches Region, Availability Zone, Group, VPC, Subnet, and Security Group nodes", () => {
+test("isAreaNode matches Region, Availability Zone, Group, and resource area nodes", () => {
   assert.equal(isAreaNode(makeDesignNode({ type: "design_region" })), true);
   assert.equal(isAreaNode(makeDesignNode({ type: "design_az" })), true);
   assert.equal(isAreaNode(makeDesignNode({ type: "design_group" })), true);
@@ -19,6 +20,7 @@ test("isAreaNode matches Region, Availability Zone, Group, VPC, Subnet, and Secu
   assert.equal(isAreaNode(makeDesignNode({ type: "sketchcatch_group" })), true);
   assert.equal(isAreaNode(makeResourceNode({ resourceType: "aws_region" })), true);
   assert.equal(isAreaNode(makeResourceNode({ resourceType: "aws_availability_zone" })), true);
+  assert.equal(isAreaNode(makeResourceNode({ resourceType: "aws_autoscaling_group" })), true);
   assert.equal(isAreaNode(makeResourceNode({ resourceType: "aws_vpc" })), true);
   assert.equal(isAreaNode(makeResourceNode({ resourceType: "aws_subnet" })), true);
   assert.equal(isAreaNode(makeResourceNode({ resourceType: "aws_security_group" })), true);
@@ -32,13 +34,19 @@ test("isAreaNode excludes regular design and resource nodes", () => {
 
 test("area node helpers distinguish design containers from resource containers", () => {
   const region = makeDesignNode({ type: "design_region" });
-  const awsRegion = makeResourceNode({ resourceType: "aws_region" });
+  const regionResource = makeResourceNode({ resourceType: "aws_region" });
+  const availabilityZoneResource = makeResourceNode({ resourceType: "aws_availability_zone" });
+  const autoscalingGroupResource = makeResourceNode({ resourceType: "aws_autoscaling_group" });
   const vpc = makeResourceNode({ resourceType: "aws_vpc" });
 
   assert.equal(isDesignAreaNode(region), true);
   assert.equal(isResourceAreaNode(region), false);
-  assert.equal(isDesignAreaNode(awsRegion), false);
-  assert.equal(isResourceAreaNode(awsRegion), true);
+  assert.equal(isDesignAreaNode(regionResource), false);
+  assert.equal(isResourceAreaNode(regionResource), true);
+  assert.equal(isDesignAreaNode(availabilityZoneResource), false);
+  assert.equal(isResourceAreaNode(availabilityZoneResource), true);
+  assert.equal(isDesignAreaNode(autoscalingGroupResource), false);
+  assert.equal(isResourceAreaNode(autoscalingGroupResource), true);
   assert.equal(isDesignAreaNode(vpc), false);
   assert.equal(isResourceAreaNode(vpc), true);
 });
@@ -55,6 +63,16 @@ test("getAreaNodeLabel uses resource name for resource area nodes", () => {
   assert.equal(
     getAreaNodeLabel(makeResourceNode({ resourceName: "web_sg", resourceType: "aws_security_group" })),
     "web_sg"
+  );
+  assert.equal(
+    getAreaNodeLabel(
+      makeResourceNode({ resourceName: "auto_scaling_group", resourceType: "aws_autoscaling_group" })
+    ),
+    "auto_scaling_group"
+  );
+  assert.equal(
+    getAreaNodeLabel(makeResourceNode({ resourceName: "ap_northeast_2", resourceType: "aws_region" })),
+    "ap_northeast_2"
   );
 });
 
@@ -74,17 +92,46 @@ test("getAreaNodeLabel falls back to node label when legacy resource data is mis
   assert.equal(getAreaNodeLabel(legacyVpc), "VPC");
 });
 
-test("getAreaNodeIconUrl returns icons only for resource area nodes", () => {
+test("getAreaNodeIconUrl returns resource and design area icons", () => {
   assert.equal(
     getAreaNodeIconUrl(makeResourceNode({ iconUrl: "/icons/vpc.svg", resourceType: "aws_vpc" })),
     "/icons/vpc.svg"
   );
   assert.equal(
     getAreaNodeIconUrl(makeDesignNode({ iconUrl: "/icons/region.svg", type: "design_region" })),
-    undefined
+    "/icons/region.svg"
+  );
+  assert.equal(
+    getAreaNodeIconUrl(makeDesignNode({ type: "sketchcatch_group" })),
+    "/Architecture-Group-Icons_07312025/Auto-Scaling-group_32.svg"
   );
   assert.equal(
     getAreaNodeIconUrl(makeResourceNode({ iconUrl: "/icons/ec2.svg", resourceType: "aws_instance" })),
+    undefined
+  );
+});
+
+test("getAreaNodeMetaLabel summarizes Region area parameters without cluttering AZ headers", () => {
+  assert.equal(
+    getAreaNodeMetaLabel(
+      makeResourceNode({
+        resourceType: "aws_region",
+        values: {
+          awsRegion: "eu-west-1"
+        }
+      })
+    ),
+    "Europe (Ireland)"
+  );
+  assert.equal(
+    getAreaNodeMetaLabel(
+      makeResourceNode({
+        resourceType: "aws_availability_zone",
+        values: {
+          awsAvailabilityZone: "us-east-1b"
+        }
+      })
+    ),
     undefined
   );
 });
@@ -202,6 +249,7 @@ function makeResourceNode({
   resourceName,
   resourceType,
   size = { width: 168, height: 96 },
+  values,
   zIndex = 1
 }: {
   id?: string;
@@ -211,6 +259,7 @@ function makeResourceNode({
   resourceName?: string;
   resourceType: string;
   size?: DiagramNode["size"];
+  values?: Record<string, unknown>;
   zIndex?: number;
 }): DiagramNode {
   return {
@@ -228,7 +277,7 @@ function makeResourceNode({
       resourceType,
       resourceName: resourceName ?? resourceType.replace("aws_", ""),
       fileName: "main",
-      values: {}
+      values: values ?? {}
     }
   };
 }
