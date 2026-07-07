@@ -31,6 +31,17 @@ powershell -NoProfile -ExecutionPolicy Bypass `
 
 `status`가 `ready`면 live run을 진행할 수 있다. `blocked`면 `steps`의 `evidence`를 먼저 해결한다.
 
+## 현재 preflight 증거
+
+2026-07-07 현재 `docs/sw/git-cicd-live-smoke-preflight-current.json`을 생성했다.
+운영 API health는 200으로 통과했지만, 로컬 실행 환경에 `SKETCHCATCH_ACCESS_TOKEN`과 `SKETCHCATCH_HANDOFF_ID`가 없어 report status는 `blocked`다.
+
+이 blocked report는 live smoke 실패가 아니라 실행 전제 누락 증거다. 실제 완료 증거로 바꾸려면 Deployment Panel에서 handoff를 생성한 뒤 아래 값을 로컬 환경에만 넣고 Live Run 명령을 다시 실행해야 한다.
+
+- `SKETCHCATCH_ACCESS_TOKEN`
+- `SKETCHCATCH_HANDOFF_ID`
+- 필요한 경우 `SKETCHCATCH_STATIC_SITE_URL`, `SKETCHCATCH_API_BASE_URL`, marker 값
+
 ## Live Run
 
 아래 명령은 repository settings apply와 AWS role diff apply를 실제로 실행할 수 있다. 비용과 권한 변경을 승인한 경우에만 `-ConfirmLiveMutations`를 붙인다.

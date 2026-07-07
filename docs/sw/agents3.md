@@ -1,5 +1,4 @@
 # Git/CI/CD Auto Deploy Agent Rules
-
 1. Read `docs/sw/spec6.md`, `docs/sw/plan6.md`, and this file before work.
 2. Keep these three files updated in every PR that changes scope, contracts, risk, or verification.
 3. Treat this work as Git/CI/CD Deployment Path, not Direct Deployment.

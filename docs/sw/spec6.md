@@ -261,3 +261,11 @@ Deployment Panel은 다음을 보여준다.
 - repository settings apply와 AWS role diff apply는 `-ConfirmLiveMutations`가 없으면 실행하지 않고 `blocked` report를 반환한다.
 - `-ReportPath`로 preflight/live report를 파일로 남길 수 있다.
 - 잘못된 token, 없는 handoff, pipeline 조회 실패도 raw exception 대신 smoke report의 failed step으로 남긴다.
+
+## 2026-07-07 현재 preflight 증거
+
+- `docs/sw/git-cicd-live-smoke-preflight-current.json`은 최신 dev 배포 후 생성한 현재 preflight report다.
+- 운영 API health는 HTTP 200으로 통과했다.
+- live smoke는 현재 로컬 환경에 `SKETCHCATCH_ACCESS_TOKEN`과 `SKETCHCATCH_HANDOFF_ID`가 없어 `blocked` 상태다.
+- 이 상태는 제품 코드 실패가 아니라 실제 사용자 세션 handoff와 명시적 live mutation 승인이 아직 제공되지 않았다는 실행 전제 누락이다.
+- plan6 완료는 이 blocked report가 아니라 `-ConfirmLiveMutations -RequirePipelineSuccess -RequireDestroySuccess` live report와 destroy/cleanup 증거로만 판단한다.
