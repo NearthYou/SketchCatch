@@ -8127,7 +8127,7 @@ nextjs-portal {
   border-bottom: 1px solid var(--bp-line);
   display: flex;
   gap: 8px;
-  margin-bottom: 18px;
+  margin-bottom: 14px;
   overflow-x: auto;
 }
 
@@ -8142,7 +8142,7 @@ nextjs-portal {
   font: inherit;
   font-weight: 800;
   gap: 8px;
-  min-height: 44px;
+  min-height: 40px;
   padding: 0 12px;
   white-space: nowrap;
 }
@@ -8155,26 +8155,29 @@ nextjs-portal {
 .costOverviewPanel {
   align-items: stretch;
   display: grid;
-  gap: 16px;
-  grid-template-columns: minmax(520px, 1fr) minmax(340px, 420px);
-  padding: 18px;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
+  padding: 14px;
+}
+
+.costHeroPanel {
+  min-height: 0;
 }
 
 .costUsageHeroPanel {
   align-items: start;
-  grid-template-columns: minmax(0, 1fr) minmax(320px, 380px);
 }
 
 .costOverviewSettings {
   align-content: start;
   display: grid;
-  gap: 14px;
+  gap: 12px;
   min-width: 0;
 }
 
 .costProjectPanel,
 .costNoticePanel {
-  padding: 18px 20px;
+  padding: 14px 16px;
 }
 
 .costPanelTitle {
@@ -8190,13 +8193,13 @@ nextjs-portal {
 
 .costControlGrid {
   align-items: end;
-  gap: 12px;
-  grid-template-columns: minmax(180px, 220px) minmax(220px, 320px) auto;
-  max-width: 760px;
+  gap: 10px;
+  grid-template-columns: minmax(160px, 210px) minmax(190px, 280px) auto;
+  max-width: 680px;
 }
 
 .costUsageControlGrid {
-  grid-template-columns: minmax(180px, 240px) auto;
+  grid-template-columns: minmax(160px, 210px) minmax(190px, 280px) auto;
 }
 
 .costAwsConnectionPanel {
@@ -8204,8 +8207,8 @@ nextjs-portal {
   border: 1px solid var(--bp-line);
   border-radius: var(--bp-r);
   display: grid;
-  gap: 14px;
-  padding: 14px;
+  gap: 12px;
+  padding: 14px 16px;
 }
 
 .costAwsConnectionHeader {
@@ -8240,9 +8243,9 @@ nextjs-portal {
   border-radius: var(--bp-r);
   color: var(--dashboard-blue);
   display: inline-flex;
-  height: 34px;
+  height: 32px;
   justify-content: center;
-  width: 34px;
+  width: 32px;
 }
 
 .costAwsConnectionStatus {
@@ -8290,7 +8293,7 @@ nextjs-portal {
 .costAwsConnectionActions .dashboardSecondaryButton,
 .costAwsSetupHeader .dashboardSecondaryButton,
 .costAwsVerifyButton {
-  min-height: 42px;
+  min-height: 38px;
 }
 
 .costAwsConnectionInfo,
@@ -8309,7 +8312,7 @@ nextjs-portal {
   display: grid;
   gap: 4px;
   min-width: 0;
-  padding: 10px;
+  padding: 8px 10px;
 }
 
 .costAwsConnectionInfo dt,
@@ -8401,12 +8404,12 @@ nextjs-portal {
 .costField select {
   background: var(--bp-paper-2);
   border-color: var(--bp-line);
-  min-height: 42px;
+  min-height: 38px;
 }
 
 .costApplyButton {
-  min-height: 42px;
-  padding-inline: 18px;
+  min-height: 38px;
+  padding-inline: 16px;
 }
 
 .costSummaryCard {
@@ -8418,9 +8421,9 @@ nextjs-portal {
   box-shadow: 0 12px 30px rgba(35, 78, 103, 0.08);
   color: var(--bp-ink);
   display: grid;
-  gap: 16px;
+  gap: 12px;
   min-height: 0;
-  padding: 18px;
+  padding: 14px;
 }
 
 .costSummaryCard .dashboardPanelKicker {
@@ -8436,7 +8439,7 @@ nextjs-portal {
   background: transparent;
   border: 0;
   display: grid;
-  gap: 10px;
+  gap: 8px;
   min-height: auto;
   min-width: 0;
   padding: 0;
@@ -8449,14 +8452,14 @@ nextjs-portal {
 
 .costSummaryAmount strong {
   color: var(--dashboard-blue);
-  font-size: 2.4rem;
+  font-size: 2.08rem;
   line-height: 1;
 }
 
 .costSummaryMeta {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
 }
 
 .costSummaryMeta span {
@@ -8464,13 +8467,13 @@ nextjs-portal {
   border: 1px solid var(--bp-line);
   border-radius: 999px;
   color: var(--bp-ink);
-  font-size: 0.82rem;
+  font-size: 0.78rem;
   font-weight: 800;
-  padding: 6px 10px;
+  padding: 5px 9px;
 }
 
 .costUsageProjectSelect {
-  margin-top: 4px;
+  margin-top: 0;
 }
 
 .costProjectPanel {
@@ -8479,13 +8482,13 @@ nextjs-portal {
 
 .costProjectPanel .dashboardPanelHeader {
   border-bottom: 1px solid var(--bp-line);
-  padding-bottom: 12px;
+  padding-bottom: 10px;
 }
 
 .costProjectPanel .dashboardTableHeader,
 .costProjectPanel .dashboardTableRow {
   min-width: 680px;
-  padding-block: 11px;
+  padding-block: 9px;
 }
 
 .costProjectPanel .costStatus {
@@ -8501,9 +8504,9 @@ nextjs-portal {
   background: var(--bp-low-tint);
   border: 1px solid color-mix(in srgb, var(--bp-low) 36%, var(--bp-line));
   border-radius: var(--bp-r);
-  height: 42px;
+  height: 38px;
   padding: 8px;
-  width: 42px;
+  width: 38px;
 }
 
 .costNoticePanel h2 {
@@ -8517,13 +8520,13 @@ nextjs-portal {
 .costUsageMetricPanel,
 .costChartPanel,
 .costRecommendationPanel {
-  gap: 16px;
-  padding: 18px 20px;
+  gap: 12px;
+  padding: 14px 16px;
 }
 
 .costUsageMetricGrid {
   display: grid;
-  gap: 12px;
+  gap: 10px;
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
@@ -8532,20 +8535,20 @@ nextjs-portal {
   border: 1px solid var(--bp-line);
   border-radius: var(--bp-r);
   display: grid;
-  gap: 8px;
-  min-height: 96px;
-  padding: 14px;
+  gap: 7px;
+  min-height: 82px;
+  padding: 12px;
 }
 
 .costMetricCard span {
   color: var(--bp-muted);
-  font-size: 0.9rem;
+  font-size: 0.84rem;
   font-weight: 700;
 }
 
 .costMetricCard strong {
   color: var(--bp-ink);
-  font-size: 1.45rem;
+  font-size: 1.28rem;
   line-height: 1;
 }
 
@@ -8556,9 +8559,9 @@ nextjs-portal {
   border-radius: var(--bp-r);
   color: var(--dashboard-blue);
   display: inline-flex;
-  height: 34px;
+  height: 30px;
   justify-content: center;
-  width: 34px;
+  width: 30px;
 }
 
 .costLineChart {
@@ -8573,9 +8576,9 @@ nextjs-portal {
     var(--bp-paper-2);
   border: 1px solid var(--bp-line);
   border-radius: var(--bp-r);
-  height: 184px;
+  height: 152px;
   overflow: visible;
-  padding: 16px;
+  padding: 12px;
   width: 100%;
 }
 

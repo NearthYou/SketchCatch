@@ -533,7 +533,7 @@ export function CostsClient() {
 
       {activeTab === "estimate" ? (
         <>
-          <section className="dashboardPanel costOverviewPanel" aria-labelledby="cost-control-title">
+          <section className="dashboardPanel costOverviewPanel costHeroPanel" aria-labelledby="cost-control-title">
             <div className="costOverviewSettings">
               <div className="costPanelTitle">
                 <p className="dashboardPanelKicker">Estimate settings</p>
@@ -584,10 +584,11 @@ export function CostsClient() {
               <div className="costSummaryAmount">
                 <span>{getPeriodLabel(appliedQuery.period)} 예상 비용</span>
                 <strong>{formatUsd(totalEstimateAmount)}</strong>
-                <p>
-                  {selectedCostTotals.selectedProjectCount}개 선택 · 월 환산 {formatUsd(totalMonthlyAmount)} · 일 평균 약{" "}
-                  {formatUsd(dailyAverageAmount)}
-                </p>
+                <div className="costSummaryMeta">
+                  <span>{selectedCostTotals.selectedProjectCount}개 선택</span>
+                  <span>월 환산 {formatUsd(totalMonthlyAmount)}</span>
+                  <span>일 평균 약 {formatUsd(dailyAverageAmount)}</span>
+                </div>
               </div>
             </div>
           </section>
@@ -864,7 +865,7 @@ function CostUsageAnalysisTab({
 
   return (
     <>
-      <section className="dashboardPanel costOverviewPanel costUsageHeroPanel" aria-labelledby="cost-usage-control-title">
+      <section className="dashboardPanel costOverviewPanel costHeroPanel costUsageHeroPanel" aria-labelledby="cost-usage-control-title">
         <div className="costOverviewSettings">
           <div className="costPanelTitle">
             <p className="dashboardPanelKicker">Actual usage</p>
@@ -884,29 +885,25 @@ function CostUsageAnalysisTab({
                 ))}
               </select>
             </label>
+            <label className="costField costUsageProjectSelect">
+              <span>비용 범위</span>
+              <select
+                onChange={(event) => setSelectedUsageProjectKey(event.target.value)}
+                value={selectedUsageProjectKey}
+              >
+                <option value={COST_USAGE_ALL_PROJECTS_KEY}>전체 프로젝트</option>
+                {projectOptions.map((project) => (
+                  <option key={project.key} value={project.key}>
+                    {project.label} · {formatUsd(project.amount)}
+                  </option>
+                ))}
+              </select>
+            </label>
             <button className="primaryButton costApplyButton" onClick={applyUsageRange} type="button">
               <BarChart3 size={16} aria-hidden="true" />
               적용
             </button>
           </div>
-          <CostUsageAwsConnectionPanel
-            awsAccountIdInput={awsAccountIdInput}
-            awsConnectionActionMessage={awsConnectionActionMessage}
-            awsConnectionErrorMessage={awsConnectionErrorMessage}
-            awsConnectionState={awsConnectionState}
-            awsConnectionTemplate={awsConnectionTemplate}
-            awsSetup={awsSetup}
-            onAwsAccountIdInputChange={onAwsAccountIdInputChange}
-            onOpenAwsTemplate={onOpenAwsTemplate}
-            onRefreshAwsConnections={onRefreshAwsConnections}
-            onSelectedAwsConnectionChange={onSelectedAwsConnectionChange}
-            onStartAwsSetup={onStartAwsSetup}
-            onVerifyAwsConnection={onVerifyAwsConnection}
-            selectedAwsConnection={selectedAwsConnection}
-            selectedAwsConnectionId={selectedAwsConnectionId}
-            usageData={usageData}
-            verifiedAwsConnections={verifiedAwsConnections}
-          />
         </div>
 
         <div className="costSummaryCard" aria-labelledby="cost-usage-summary-title">
@@ -927,23 +924,28 @@ function CostUsageAnalysisTab({
                   : `${formatPercent(selectedUsageProject.percentage)} · ${getProjectUsageSourceLabel(selectedUsageProject)}`}
               </span>
             </div>
-            <label className="costField costUsageProjectSelect">
-              <span>비용 범위</span>
-              <select
-                onChange={(event) => setSelectedUsageProjectKey(event.target.value)}
-                value={selectedUsageProjectKey}
-              >
-                <option value={COST_USAGE_ALL_PROJECTS_KEY}>전체 프로젝트</option>
-                {projectOptions.map((project) => (
-                  <option key={project.key} value={project.key}>
-                    {project.label} · {formatUsd(project.amount)}
-                  </option>
-                ))}
-              </select>
-            </label>
           </div>
         </div>
       </section>
+
+      <CostUsageAwsConnectionPanel
+        awsAccountIdInput={awsAccountIdInput}
+        awsConnectionActionMessage={awsConnectionActionMessage}
+        awsConnectionErrorMessage={awsConnectionErrorMessage}
+        awsConnectionState={awsConnectionState}
+        awsConnectionTemplate={awsConnectionTemplate}
+        awsSetup={awsSetup}
+        onAwsAccountIdInputChange={onAwsAccountIdInputChange}
+        onOpenAwsTemplate={onOpenAwsTemplate}
+        onRefreshAwsConnections={onRefreshAwsConnections}
+        onSelectedAwsConnectionChange={onSelectedAwsConnectionChange}
+        onStartAwsSetup={onStartAwsSetup}
+        onVerifyAwsConnection={onVerifyAwsConnection}
+        selectedAwsConnection={selectedAwsConnection}
+        selectedAwsConnectionId={selectedAwsConnectionId}
+        usageData={usageData}
+        verifiedAwsConnections={verifiedAwsConnections}
+      />
 
       {usageState === "loading" ? (
         <section className="dashboardPanel costProjectPanel">
