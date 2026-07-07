@@ -525,6 +525,9 @@ test("POST /api/projects/:id/assets/presigned-upload creates a pending asset upl
         uploadUrlRequests.push(input);
         return "https://s3.example.test/upload";
       },
+      async putObject() {
+        throw new Error("putObject should not run");
+      },
       async deleteObject() {
         throw new Error("deleteObject should not run");
       },
@@ -550,8 +553,78 @@ test("POST /api/projects/:id/assets/presigned-upload creates a pending asset upl
   assert.equal(response.statusCode, 201);
   assert.equal(response.json().asset.uploadStatus, "pending");
   assert.equal(fakeDb.projectAssetRows[0]?.uploadStatus, "pending");
-  assert.equal(response.json().upload.url, "https://s3.example.test/upload");
-  assert.equal(uploadUrlRequests[0]?.bucketName, "sketchcatch-test-bucket");
+  assert.equal(
+    response.json().upload.url,
+    `/api/projects/${ACTIVE_PROJECT_ID}/assets/${response.json().asset.id}/upload-content`
+  );
+  assert.equal(uploadUrlRequests.length, 0);
+
+  await app.close();
+});
+
+test("PUT /api/projects/:id/assets/:assetId/upload-content uploads Terraform artifact through API", async () => {
+  const terraformCode = "resource \"aws_s3_bucket\" \"site\" {}\n";
+  const putObjectRequests: Array<{
+    body: string | Buffer;
+    bucketName: string;
+    contentType: string;
+    objectKey: string;
+  }> = [];
+  const fakeDb = new ProjectRouteFakeDb({
+    activeUserId: ACTIVE_USER_ID,
+    requestedProjectAssetId: ACTIVE_ASSET_ID,
+    requestedProjectId: ACTIVE_PROJECT_ID,
+    users: [makeUser({ id: ACTIVE_USER_ID })],
+    projects: [makeProject({ id: ACTIVE_PROJECT_ID, userId: ACTIVE_USER_ID })],
+    projectAssets: [
+      makeProjectAsset({
+        id: ACTIVE_ASSET_ID,
+        projectId: ACTIVE_PROJECT_ID,
+        assetType: "terraform_file",
+        contentType: "text/plain",
+        byteSize: new TextEncoder().encode(terraformCode).byteLength,
+        uploadStatus: "pending"
+      })
+    ]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client,
+    projectAssetStorage: {
+      async createUploadUrl() {
+        throw new Error("createUploadUrl should not run");
+      },
+      async putObject(input) {
+        putObjectRequests.push(input);
+      },
+      async deleteObject() {
+        throw new Error("deleteObject should not run");
+      },
+      async objectExists() {
+        throw new Error("objectExists should not run");
+      }
+    }
+  });
+
+  const response = await app.inject({
+    method: "PUT",
+    url: `/api/projects/${ACTIVE_PROJECT_ID}/assets/${ACTIVE_ASSET_ID}/upload-content`,
+    headers: {
+      ...(await authHeaders(ACTIVE_USER_ID)),
+      "content-type": "text/plain"
+    },
+    payload: terraformCode
+  });
+
+  assert.equal(response.statusCode, 204);
+  assert.equal(fakeDb.projectAssetRows[0]?.uploadStatus, "uploaded");
+  assert.deepEqual(putObjectRequests, [
+    {
+      bucketName: "sketchcatch-test-bucket",
+      objectKey: "projects/project-id/diagram.png",
+      contentType: "text/plain",
+      body: terraformCode
+    }
+  ]);
 
   await app.close();
 });
@@ -581,6 +654,9 @@ test("POST /api/projects/:id/assets/:assetId/confirm-upload marks an existing S3
     projectAssetStorage: {
       async createUploadUrl() {
         throw new Error("createUploadUrl should not run");
+      },
+      async putObject() {
+        throw new Error("putObject should not run");
       },
       async deleteObject() {
         throw new Error("deleteObject should not run");
@@ -633,6 +709,9 @@ test("POST /api/projects/:id/assets/:assetId/confirm-upload rejects a missing S3
       async createUploadUrl() {
         throw new Error("createUploadUrl should not run");
       },
+      async putObject() {
+        throw new Error("putObject should not run");
+      },
       async deleteObject() {
         throw new Error("deleteObject should not run");
       },
@@ -676,6 +755,9 @@ test("POST /api/projects/:id/assets/:assetId/abort-upload deletes only pending a
     projectAssetStorage: {
       async createUploadUrl() {
         throw new Error("createUploadUrl should not run");
+      },
+      async putObject() {
+        throw new Error("putObject should not run");
       },
       async deleteObject(input) {
         deletedObjectKeys.push(input.objectKey);
