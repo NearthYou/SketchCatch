@@ -358,13 +358,16 @@ function validateDeploymentResourceAttributes(
       );
     }
 
-    if (resource.type === "aws_launch_template" && /\buser_data_base64\s*=/.test(body)) {
-      validateManagedLaunchTemplateUserData(body, resource.line, liveProfile);
+    if (resource.type === "aws_launch_template" && /\buser_data\s*=/.test(body)) {
+      validateManagedLaunchTemplateUserData(body, resource.line, liveProfile, "user_data");
     }
 
-    if (resource.type === "aws_launch_template" && /\buser_data\s*=/.test(body)) {
-      throw new TerraformArtifactSafetyError(
-        `Terraform launch template user_data must be base64-managed before live deployment at line ${resource.line}`
+    if (resource.type === "aws_launch_template" && /\buser_data_base64\s*=/.test(body)) {
+      validateManagedLaunchTemplateUserData(
+        body,
+        resource.line,
+        liveProfile,
+        "user_data_base64"
       );
     }
 
@@ -395,19 +398,20 @@ function validateDeploymentResourceAttributes(
 function validateManagedLaunchTemplateUserData(
   body: string,
   line: number,
-  liveProfile: DeploymentLiveProfile
+  liveProfile: DeploymentLiveProfile,
+  argumentName: "user_data" | "user_data_base64"
 ): void {
   if (liveProfile !== "demo_web_service" && liveProfile !== "demo_web_service_with_rds") {
     throw new TerraformArtifactSafetyError(
-      `Terraform launch template user_data_base64 is not allowed for ${liveProfile} live deployment at line ${line}`
+      `Terraform launch template ${argumentName} is not allowed for ${liveProfile} live deployment at line ${line}`
     );
   }
 
-  const match = /\buser_data_base64\s*=\s*"([A-Za-z0-9+/=]+)"/.exec(body);
+  const match = new RegExp(`\\b${argumentName}\\s*=\\s*"([A-Za-z0-9+/=]+)"`).exec(body);
 
   if (!match?.[1]) {
     throw new TerraformArtifactSafetyError(
-      `Terraform launch template user_data_base64 must be a literal managed base64 value before live deployment at line ${line}`
+      `Terraform launch template ${argumentName} must be a literal managed base64 value before live deployment at line ${line}`
     );
   }
 
@@ -415,7 +419,7 @@ function validateManagedLaunchTemplateUserData(
 
   if (!decoded.includes(managedDemoUserDataMarker)) {
     throw new TerraformArtifactSafetyError(
-      `Terraform launch template user_data_base64 is missing the SketchCatch managed marker at line ${line}`
+      `Terraform launch template ${argumentName} is missing the SketchCatch managed marker at line ${line}`
     );
   }
 
@@ -426,7 +430,7 @@ function validateManagedLaunchTemplateUserData(
 
   if (!hashMatch?.[1]) {
     throw new TerraformArtifactSafetyError(
-      `Terraform launch template user_data_base64 is missing the SketchCatch managed hash at line ${line}`
+      `Terraform launch template ${argumentName} is missing the SketchCatch managed hash at line ${line}`
     );
   }
 
@@ -435,7 +439,7 @@ function validateManagedLaunchTemplateUserData(
 
   if (hashMatch[1] !== actualHash) {
     throw new TerraformArtifactSafetyError(
-      `Terraform launch template user_data_base64 managed hash does not match at line ${line}`
+      `Terraform launch template ${argumentName} managed hash does not match at line ${line}`
     );
   }
 }
@@ -445,7 +449,7 @@ function decodeBase64UserData(value: string, line: number): string {
     return Buffer.from(value, "base64").toString("utf8");
   } catch {
     throw new TerraformArtifactSafetyError(
-      `Terraform launch template user_data_base64 could not be decoded at line ${line}`
+      `Terraform launch template user_data could not be decoded at line ${line}`
     );
   }
 }

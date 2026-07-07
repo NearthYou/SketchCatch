@@ -2,6 +2,21 @@
 
 Short English-only working log for the current agent context.
 
+## 2026-07-08 Demo Smoke PowerShell Compatibility Fix
+
+- Branch/worktree: `dev` in `C:\Users\siwon\.codex\worktrees\d98a\SketchCatch`.
+- Scope: unblock `scripts/smoke/live-demo-web-service.ps1` on Windows PowerShell runtimes without `SHA256.HashData`.
+- Replaced the managed demo user-data hash call with `SHA256.Create().ComputeHash()` and disposed the hasher.
+- Resolved relative `/api/...` project asset upload URLs to the configured API root and attached bearer auth for API uploads in both live demo and S3 smoke scripts.
+- Left unrelated untracked `pr-handoff-payload-flow-diagram.md` untouched.
+
+Verification:
+
+- `pnpm harness:check` - passed before edits.
+- Extracted and invoked `New-ManagedDemoUserDataBase64`; it produced base64 user data with the managed SHA-256 marker.
+- Extracted and invoked `Resolve-ProjectAssetUpload`; it converted `/api/projects/.../upload-content` to `https://sketchcatch.net/api/projects/.../upload-content` and preserved auth/content-type headers.
+- `pnpm harness:check` - passed after edits.
+
 ## 2026-07-08 S3 Public Access Deployment Gate Fix
 
 - Branch/worktree: `codex/s3-public-access-default` in `C:\Users\siwon\Desktop\Jungle\Week17~21\SketchCatch-worktrees\s3-public-access-default`.

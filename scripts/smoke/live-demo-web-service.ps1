@@ -72,9 +72,44 @@ function Invoke-SketchCatchApi {
   if ($null -ne $Body) {
     $headers["Content-Type"] = "application/json"
     $invokeParams.Body = ($Body | ConvertTo-Json -Depth 40)
+  } elseif ($Method -in @("POST", "PUT", "PATCH")) {
+    $headers["Content-Type"] = "application/json"
+    $invokeParams.Body = "{}"
   }
 
   Invoke-RestMethod @invokeParams
+}
+
+function Resolve-ProjectAssetUpload {
+  param(
+    [Parameter(Mandatory = $true)]
+    [object]$Upload
+  )
+
+  $headers = @{}
+  foreach ($property in $Upload.headers.PSObject.Properties) {
+    $headers[$property.Name] = [string]$property.Value
+  }
+
+  $url = [string]$Upload.url
+  if ($url.StartsWith("/api/")) {
+    if (-not $script:AccessToken) {
+      throw "ACCESS_TOKEN is not available."
+    }
+
+    $headers.Authorization = "Bearer $script:AccessToken"
+    return @{
+      Url = "$apiRoot$($url.Substring(4))"
+      Headers = $headers
+      ContentType = [string]$headers["Content-Type"]
+    }
+  }
+
+  return @{
+    Url = $url
+    Headers = $headers
+    ContentType = [string]$headers["Content-Type"]
+  }
 }
 
 function Get-SmokeAccessToken {
@@ -177,7 +212,12 @@ systemctl daemon-reload
 systemctl enable --now sketchcatch-demo-api.service
 '@
   $normalized = ($template -replace "`r`n", "`n") -replace "`r", "`n"
-  $hashBytes = [System.Security.Cryptography.SHA256]::HashData([System.Text.Encoding]::UTF8.GetBytes("$normalized`n"))
+  $sha256 = [System.Security.Cryptography.SHA256]::Create()
+  try {
+    $hashBytes = $sha256.ComputeHash([System.Text.Encoding]::UTF8.GetBytes("$normalized`n"))
+  } finally {
+    $sha256.Dispose()
+  }
   $hash = [System.BitConverter]::ToString($hashBytes).Replace("-", "").ToLowerInvariant()
   $script = $normalized -replace "# $hashPrefix", "# $hashPrefix$hash"
 
@@ -403,7 +443,7 @@ resource "aws_launch_template" "api" {
   name_prefix   = "$Prefix-api-"
   image_id      = data.aws_ami.al2023.id
   instance_type = "t3.micro"
-  user_data_base64 = "$userDataBase64"
+  user_data = "$userDataBase64"
 
   vpc_security_group_ids = [aws_security_group.api.id]
 
@@ -564,16 +604,13 @@ $uploadResponse = Invoke-SketchCatchApi -Method POST -Path "/projects/$($project
   architectureId = $architecture.id
   assetType = "terraform_file"
   fileName = "main.tf"
-  contentType = "application/x-terraform"
+  contentType = "text/plain"
   byteSize = $terraformBytes.Length
 }
 
-$uploadHeaders = @{}
-foreach ($property in $uploadResponse.upload.headers.PSObject.Properties) {
-  $uploadHeaders[$property.Name] = [string]$property.Value
-}
+$uploadTarget = Resolve-ProjectAssetUpload -Upload $uploadResponse.upload
 
-Invoke-RestMethod -Method PUT -Uri $uploadResponse.upload.url -Headers $uploadHeaders -Body $terraformBytes | Out-Null
+Invoke-RestMethod -Method PUT -Uri $uploadTarget.Url -Headers $uploadTarget.Headers -ContentType $uploadTarget.ContentType -Body $terraformBytes | Out-Null
 
 $assetResponse = Invoke-SketchCatchApi -Method POST -Path "/projects/$($project.id)/assets/$($uploadResponse.asset.id)/confirm-upload"
 $terraformAsset = $assetResponse.asset
