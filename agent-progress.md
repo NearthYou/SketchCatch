@@ -1,6 +1,24 @@
 ﻿# 에이전트 진행 로그
 # 에이전트 진행 로그
 
+### 2026-07-07 - Git/CI/CD live smoke readiness 보강
+
+- Goal: 실제 Git/CI/CD 자동 배포 live smoke 전에 준비 상태와 권한/비용 mutation 승인을 JSON report로 확인할 수 있게 한다.
+- Completed:
+  - `scripts/smoke/git-cicd-auto-deploy.ps1`에 `-PreflightOnly`, `-ReportPath`, `-FailOnBlocked`, `-ConfirmLiveMutations` 옵션을 추가했다.
+  - API health, access token, handoff id, mutation approval gate를 live mutation 없이 먼저 확인하고 `blocked` report로 남기게 했다.
+  - repository settings apply와 AWS role diff apply는 `-ConfirmLiveMutations` 없이는 실행하지 않도록 바꿨다.
+  - 잘못된 token이나 pipeline 조회 실패가 raw exception으로 끝나지 않고 JSON report의 failed step으로 남도록 했다.
+  - `docs/sw/git-cicd-live-smoke.md`에 preflight, live run, 증거 기준을 문서화했고 `spec6.md`, `plan6.md`, `agents3.md`를 갱신했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits.
+  - PowerShell parser check for `scripts/smoke/git-cicd-auto-deploy.ps1` - passed.
+  - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\smoke\git-cicd-auto-deploy.ps1 -PreflightOnly -SkipRepositorySettingsApply -SkipAwsRoleDiffApply` - returned blocked JSON with production API health 200 and missing token/handoff evidence.
+  - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\smoke\git-cicd-auto-deploy.ps1 -AccessToken fake -HandoffId 00000000-0000-4000-8000-000000000000 -SkipRepositorySettingsApply -SkipAwsRoleDiffApply -SkipUrlCheck` - returned failed JSON with 401 pipeline evidence.
+- Known risks:
+  - 실제 PR merge, GitHub Environment approval, Terraform apply, S3 release, ASG Instance Refresh, destroy live smoke는 여전히 실제 사용자 세션의 target repository, verified AWS connection, cost/cleanup 승인 후 실행해야 한다.
+  - #203의 별도 GitHub user OAuth token writer는 구현하지 않았고, 현재 복구 경로는 GitHub App 권한 보강 CTA와 fail-closed 처리다.
+
 ### 2026-07-07 - Git/CI/CD 자동 배포 E2E 최소 구현
 
 - Goal: `docs/sw/plan6.md`의 Git/CI/CD 자동 배포 범위를 최소 코드로 실제 handoff 생성, workflow PR artifact, 상세 pipeline 상태 추적, Deployment Panel UX까지 연결한다.

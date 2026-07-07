@@ -246,3 +246,11 @@ Deployment Panel은 다음을 보여준다.
 - `scripts/smoke/git-cicd-auto-deploy.ps1`을 추가해 repository settings apply, role diff apply, infra/app/destroy pipeline status, static/API URL marker 확인을 한 report로 남길 수 있게 했다.
 - smoke runner는 pipeline success와 destroy success를 필수 조건으로 기다리는 옵션을 제공한다.
 - 실제 PR merge, GitHub Environment approval, Terraform apply, S3 release, ASG Instance Refresh, destroy live smoke는 여전히 비용/자격증명/cleanup 승인 후 실행해야 한다.
+
+## 2026-07-07 live smoke readiness 보강
+
+- `docs/sw/git-cicd-live-smoke.md`에 preflight, live run, 증거 기준을 별도 절차로 추가했다.
+- `scripts/smoke/git-cicd-auto-deploy.ps1`는 `-PreflightOnly`로 API health, access token, handoff id, mutation approval gate를 JSON report로 먼저 남긴다.
+- repository settings apply와 AWS role diff apply는 `-ConfirmLiveMutations`가 없으면 실행하지 않고 `blocked` report를 반환한다.
+- `-ReportPath`로 preflight/live report를 파일로 남길 수 있다.
+- 잘못된 token, 없는 handoff, pipeline 조회 실패도 raw exception 대신 smoke report의 failed step으로 남긴다.

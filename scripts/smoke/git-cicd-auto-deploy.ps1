@@ -1,11 +1,8 @@
 param(
-  [Parameter(Mandatory = $true)]
-  [string]$ApiBaseUrl,
+  [string]$ApiBaseUrl = "https://sketchcatch.net",
 
-  [Parameter(Mandatory = $true)]
   [string]$AccessToken,
 
-  [Parameter(Mandatory = $true)]
   [string]$HandoffId,
 
   [string]$StaticSiteUrl,
@@ -19,6 +16,14 @@ param(
   [int]$TimeoutMinutes = 30,
 
   [int]$PollSeconds = 30,
+
+  [string]$ReportPath,
+
+  [switch]$PreflightOnly,
+
+  [switch]$FailOnBlocked,
+
+  [switch]$ConfirmLiveMutations,
 
   [switch]$RequirePipelineSuccess,
 
@@ -50,9 +55,16 @@ function Invoke-SketchCatchApi {
   return Invoke-RestMethod -Method $Method -Uri "$baseUrl$Path" -Headers $headers -ContentType "application/json"
 }
 
+function Test-HasValue {
+  param(
+    [string]$Value
+  )
+
+  return -not [string]::IsNullOrWhiteSpace($Value)
+}
+
 function Add-Step {
   param(
-    [Parameter(Mandatory = $true)]
     [System.Collections.Generic.List[object]]$Steps,
 
     [Parameter(Mandatory = $true)]
@@ -69,6 +81,27 @@ function Add-Step {
     status = $Status
     evidence = $Evidence
   }) | Out-Null
+}
+
+function Write-SmokeReport {
+  param(
+    [Parameter(Mandatory = $true)]
+    [object]$Report
+  )
+
+  $json = $Report | ConvertTo-Json -Depth 8
+
+  if (Test-HasValue $ReportPath) {
+    $parentPath = Split-Path -Parent $ReportPath
+
+    if (Test-HasValue $parentPath) {
+      New-Item -ItemType Directory -Path $parentPath -Force | Out-Null
+    }
+
+    Set-Content -Path $ReportPath -Value $json -Encoding UTF8
+  }
+
+  $json
 }
 
 function Get-StepStatus {
@@ -117,34 +150,127 @@ function Wait-PipelineStatus {
 
 $steps = [System.Collections.Generic.List[object]]::new()
 $startedAt = (Get-Date).ToUniversalTime().ToString("o")
+$preflightBlocked = $false
+
+try {
+  $healthResponse = Invoke-WebRequest -Method "GET" -Uri "$($ApiBaseUrl.TrimEnd("/"))/health" -UseBasicParsing
+  Add-Step -Steps $steps -Name "api_health" -Status "passed" -Evidence "HTTP $($healthResponse.StatusCode)"
+} catch {
+  $preflightBlocked = $true
+  Add-Step -Steps $steps -Name "api_health" -Status "blocked" -Evidence $_.Exception.Message
+}
+
+if (-not (Test-HasValue $AccessToken)) {
+  $preflightBlocked = $true
+  Add-Step -Steps $steps -Name "access_token" -Status "blocked" -Evidence "AccessToken is required for live smoke API calls"
+} else {
+  Add-Step -Steps $steps -Name "access_token" -Status "passed" -Evidence "present"
+}
+
+if (-not (Test-HasValue $HandoffId)) {
+  $preflightBlocked = $true
+  Add-Step -Steps $steps -Name "handoff_id" -Status "blocked" -Evidence "HandoffId is required for live smoke API calls"
+} else {
+  Add-Step -Steps $steps -Name "handoff_id" -Status "passed" -Evidence $HandoffId
+}
+
+if (-not $SkipRepositorySettingsApply -or -not $SkipAwsRoleDiffApply) {
+  if (-not $ConfirmLiveMutations) {
+    $preflightBlocked = $true
+    Add-Step -Steps $steps -Name "live_mutation_approval" -Status "blocked" -Evidence "ConfirmLiveMutations is required before repository settings or AWS role diff apply"
+  } else {
+    Add-Step -Steps $steps -Name "live_mutation_approval" -Status "passed" -Evidence "ConfirmLiveMutations was set"
+  }
+} else {
+  Add-Step -Steps $steps -Name "live_mutation_approval" -Status "skipped" -Evidence "Mutation steps are skipped"
+}
+
+if ($RequirePipelineSuccess) {
+  Add-Step -Steps $steps -Name "pipeline_success_gate" -Status "passed" -Evidence "This run will wait for pipeline_success up to $TimeoutMinutes minutes"
+} else {
+  Add-Step -Steps $steps -Name "pipeline_success_gate" -Status "skipped" -Evidence "RequirePipelineSuccess was not set"
+}
+
+if ($RequireDestroySuccess) {
+  Add-Step -Steps $steps -Name "destroy_success_gate" -Status "passed" -Evidence "This run will require destroy workflow success"
+} else {
+  Add-Step -Steps $steps -Name "destroy_success_gate" -Status "skipped" -Evidence "RequireDestroySuccess was not set"
+}
+
+if ($PreflightOnly -or $preflightBlocked) {
+  $preflightStatus = if ($preflightBlocked) { "blocked" } else { "ready" }
+  $preflightReport = [ordered]@{
+    kind = "sketchcatch_git_cicd_auto_deploy_smoke"
+    mode = "preflight"
+    status = $preflightStatus
+    handoffId = $HandoffId
+    startedAt = $startedAt
+    finishedAt = (Get-Date).ToUniversalTime().ToString("o")
+    pipelineStatus = $null
+    steps = $steps
+  }
+
+  Write-SmokeReport -Report $preflightReport
+
+  if ($preflightBlocked -and $FailOnBlocked) {
+    exit 1
+  }
+
+  exit 0
+}
 
 if (-not $SkipRepositorySettingsApply) {
-  $settings = Invoke-SketchCatchApi -Method "POST" -Path "/api/git-cicd-handoffs/$HandoffId/repository-settings/apply"
-  Add-Step -Steps $steps -Name "repository_settings_apply" -Status "passed" -Evidence "$($settings.variables.Count) variables applied"
+  try {
+    $settings = Invoke-SketchCatchApi -Method "POST" -Path "/api/git-cicd-handoffs/$HandoffId/repository-settings/apply"
+    Add-Step -Steps $steps -Name "repository_settings_apply" -Status "passed" -Evidence "$($settings.variables.Count) variables applied"
+  } catch {
+    Add-Step -Steps $steps -Name "repository_settings_apply" -Status "failed" -Evidence $_.Exception.Message
+  }
 } else {
   Add-Step -Steps $steps -Name "repository_settings_apply" -Status "skipped" -Evidence "SkipRepositorySettingsApply was set"
 }
 
 if (-not $SkipAwsRoleDiffApply) {
-  $roleDiff = Invoke-SketchCatchApi -Method "POST" -Path "/api/git-cicd-handoffs/$HandoffId/aws-role-diff/apply"
-  Add-Step -Steps $steps -Name "aws_role_diff_apply" -Status "passed" -Evidence "verified=$($roleDiff.verified)"
+  try {
+    $roleDiff = Invoke-SketchCatchApi -Method "POST" -Path "/api/git-cicd-handoffs/$HandoffId/aws-role-diff/apply"
+    Add-Step -Steps $steps -Name "aws_role_diff_apply" -Status "passed" -Evidence "verified=$($roleDiff.verified)"
+  } catch {
+    Add-Step -Steps $steps -Name "aws_role_diff_apply" -Status "failed" -Evidence $_.Exception.Message
+  }
 } else {
   Add-Step -Steps $steps -Name "aws_role_diff_apply" -Status "skipped" -Evidence "SkipAwsRoleDiffApply was set"
 }
 
-$pipelineStatus = Wait-PipelineStatus
-$statusEvidence = Get-StepStatus -PipelineStatus $pipelineStatus
-Add-Step -Steps $steps -Name "pipeline_status" -Status $statusEvidence.summary -Evidence $statusEvidence.runUrl
-Add-Step -Steps $steps -Name "infra_pipeline_status" -Status $statusEvidence.infra -Evidence $statusEvidence.infraRunUrl
-Add-Step -Steps $steps -Name "app_pipeline_status" -Status $statusEvidence.app -Evidence $statusEvidence.appRunUrl
-Add-Step -Steps $steps -Name "destroy_pipeline_status" -Status $statusEvidence.destroy -Evidence $statusEvidence.destroyRunUrl
+try {
+  $pipelineStatus = Wait-PipelineStatus
+  $statusEvidence = Get-StepStatus -PipelineStatus $pipelineStatus
+  Add-Step -Steps $steps -Name "pipeline_status" -Status $statusEvidence.summary -Evidence $statusEvidence.runUrl
+  Add-Step -Steps $steps -Name "infra_pipeline_status" -Status $statusEvidence.infra -Evidence $statusEvidence.infraRunUrl
+  Add-Step -Steps $steps -Name "app_pipeline_status" -Status $statusEvidence.app -Evidence $statusEvidence.appRunUrl
+  Add-Step -Steps $steps -Name "destroy_pipeline_status" -Status $statusEvidence.destroy -Evidence $statusEvidence.destroyRunUrl
+} catch {
+  $statusEvidence = [ordered]@{
+    summary = "failed"
+    infra = "failed"
+    app = "not_started"
+    destroy = "not_started"
+    runUrl = ""
+    infraRunUrl = ""
+    appRunUrl = ""
+    destroyRunUrl = ""
+    staticSiteUrl = ""
+    apiBaseUrl = ""
+    message = $_.Exception.Message
+  }
+  Add-Step -Steps $steps -Name "pipeline_status" -Status "failed" -Evidence $_.Exception.Message
+}
 
 if ($RequirePipelineSuccess -and $statusEvidence.summary -ne "pipeline_success") {
-  throw "Pipeline did not reach pipeline_success. Current status: $($statusEvidence.summary)."
+  Add-Step -Steps $steps -Name "pipeline_success_required" -Status "failed" -Evidence "Current status: $($statusEvidence.summary)"
 }
 
 if ($RequireDestroySuccess -and $statusEvidence.destroy -ne "success") {
-  throw "Destroy workflow did not reach success. Current status: $($statusEvidence.destroy)."
+  Add-Step -Steps $steps -Name "destroy_success_required" -Status "failed" -Evidence "Current status: $($statusEvidence.destroy)"
 }
 
 if (-not $StaticSiteUrl -and $statusEvidence.staticSiteUrl) {
@@ -186,10 +312,18 @@ if (-not $SkipUrlCheck -and $DeployedApiBaseUrl) {
 }
 
 $failed = @($steps | Where-Object { $_.status -in @("pipeline_failed", "failed", "cancelled") })
-$summaryStatus = if ($failed.Count -gt 0) { "failed" } else { "passed_or_waiting" }
+$blocked = @($steps | Where-Object { $_.status -eq "blocked" })
+$summaryStatus = if ($failed.Count -gt 0) {
+  "failed"
+} elseif ($blocked.Count -gt 0) {
+  "blocked"
+} else {
+  "passed_or_waiting"
+}
 
 $report = [ordered]@{
   kind = "sketchcatch_git_cicd_auto_deploy_smoke"
+  mode = "live"
   status = $summaryStatus
   handoffId = $HandoffId
   startedAt = $startedAt
@@ -198,4 +332,12 @@ $report = [ordered]@{
   steps = $steps
 }
 
-$report | ConvertTo-Json -Depth 8
+Write-SmokeReport -Report $report
+
+if ($failed.Count -gt 0) {
+  exit 1
+}
+
+if ($blocked.Count -gt 0 -and $FailOnBlocked) {
+  exit 1
+}
