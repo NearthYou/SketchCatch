@@ -618,6 +618,11 @@ API 경로:
 - `DELETE /api/aws/connections/:connectionId`
 - `GET /api/aws/connections/:connectionId/cloudformation-template`
 
+2026-07-07 기준 새 AWS 연결의 CloudFormation Role 이름은
+`SketchCatchTerraformExecutionRole-<connection-prefix>`입니다. `verify-created-role`은 Account ID와
+connection ID로 이 ARN을 계산해 저장합니다. 기존에 저장됐거나 사용자가 직접 검증한
+`SketchCatchTerraformExecutionRole` 고정 이름 Role ARN은 하위 호환을 위해 계속 허용합니다.
+
 `DELETE /api/aws/connections/:connectionId`는 SketchCatch의 연결 metadata만 삭제한다. 사용자 AWS 계정에 생성된 IAM Role이나 CloudFormation Stack은 자동으로 삭제하지 않는다. `Deployment`가 참조 중인 연결은 삭제할 수 없고 `409 conflict`를 반환한다.
 
 `Deployment`는 이 연결을 `awsConnectionId`로 참조한다.

@@ -24,6 +24,8 @@ const externalId = "sc_conn_33333333-3333-4333-8333-333333333333_random";
 const fixedNow = new Date("2026-06-26T00:00:00.000Z");
 const verifiedAt = new Date("2026-06-26T01:23:45.000Z");
 const roleArn = "arn:aws:iam::123456789012:role/SketchCatchTerraformExecutionRole";
+const generatedRoleName = "SketchCatchTerraformExecutionRole-33333333";
+const generatedRoleArn = `arn:aws:iam::123456789012:role/${generatedRoleName}`;
 
 class FakeAwsConnectionRepository implements AwsConnectionRepository {
   readonly calls: Array<{ name: string; [key: string]: unknown }> = [];
@@ -245,9 +247,9 @@ test("createAwsConnection creates a pending connection with server-generated ext
   assert.equal(result.awsConnection.accountId, null);
   assert.equal(result.awsConnection.roleArn, null);
   assert.equal(result.callerPrincipalArn, callerPrincipalArn);
-  assert.equal(result.recommendedRoleName, "SketchCatchTerraformExecutionRole");
+  assert.equal(result.recommendedRoleName, generatedRoleName);
   assert.deepEqual(result.roleSetup, {
-    roleName: "SketchCatchTerraformExecutionRole",
+    roleName: generatedRoleName,
     trustedPrincipalArn: callerPrincipalArn,
     externalId,
     trustPolicy: {
@@ -291,14 +293,17 @@ test("createAwsConnection creates a pending connection with server-generated ext
   });
   assert.deepEqual(result.callerRoleSetup, {
     policyName: "SketchCatchAssumeTerraformExecutionRole",
-    assumableRoleArnPattern: "arn:aws:iam::*:role/SketchCatchTerraformExecutionRole",
+    assumableRoleArnPattern: "arn:aws:iam::*:role/SketchCatchTerraformExecutionRole*",
     policyDocument: {
       Version: "2012-10-17",
       Statement: [
         {
           Effect: "Allow",
           Action: "sts:AssumeRole",
-          Resource: "arn:aws:iam::*:role/SketchCatchTerraformExecutionRole"
+          Resource: [
+            "arn:aws:iam::*:role/SketchCatchTerraformExecutionRole",
+            "arn:aws:iam::*:role/SketchCatchTerraformExecutionRole-*"
+          ]
         }
       ]
     }
@@ -558,7 +563,7 @@ test("verifyAwsConnection stores only verified role metadata after STS caller id
   ]);
 });
 
-test("verifyAwsConnectionCreatedRole verifies the fixed CloudFormation role from account id", async () => {
+test("verifyAwsConnectionCreatedRole verifies the connection-scoped CloudFormation role from account id", async () => {
   const repository = new FakeAwsConnectionRepository();
   repository.awsConnection = createAwsConnectionRecord();
   const tester = new FakeAwsConnectionTester();
@@ -580,10 +585,10 @@ test("verifyAwsConnectionCreatedRole verifies the fixed CloudFormation role from
   );
 
   assert.equal(result.ok, true);
-  assert.equal(result.awsConnection.roleArn, roleArn);
+  assert.equal(result.awsConnection.roleArn, generatedRoleArn);
   assert.deepEqual(tester.calls, [
     {
-      roleArn,
+      roleArn: generatedRoleArn,
       externalId,
       region: "ap-northeast-2"
     }
@@ -592,8 +597,8 @@ test("verifyAwsConnectionCreatedRole verifies the fixed CloudFormation role from
 
 test("createRecommendedAwsConnectionRoleArn rejects malformed account ids", () => {
   assert.equal(
-    createRecommendedAwsConnectionRoleArn("123456789012"),
-    "arn:aws:iam::123456789012:role/SketchCatchTerraformExecutionRole"
+    createRecommendedAwsConnectionRoleArn("123456789012", awsConnectionId),
+    generatedRoleArn
   );
   assert.throws(
     () => createRecommendedAwsConnectionRoleArn("1234"),

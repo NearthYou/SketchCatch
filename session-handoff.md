@@ -1155,3 +1155,21 @@ pnpm build
 - UI completed: 鍮꾩슜愿由??꾨줈?앺듃 ?곸꽭? ?뚰겕?ㅽ럹?댁뒪 AI ?쒕??덉씠??由ъ냼???곸꽭媛 `monthlyEstimate` ????좏깮 湲곌컙??`periodEstimate`瑜??쒖떆?쒕떎.
 - Verification completed: focused API tests, API/web typecheck, `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, `git diff --check`.
 - Remaining risk: ?ㅼ젣 AWS SSO credential 湲곕컲 AWS Pricing API ?몄텧? 寃利앺븯吏 ?딆븯?? ?꾩옱 寃利앹? fallback 寃쎈줈? fake pricing provider 湲곕컲?대떎.
+
+## 2026-07-07 - AWS Quick Create RoleName 충돌 수정 handoff
+
+- Branch/worktree: `codex/aws-connection-role-fix` at `C:\Users\siwon\Desktop\Jungle\Week17~21\SketchCatch-worktrees\aws-connection-role-fix`.
+- Problem diagnosed:
+  - CloudFormation Quick Create template used fixed IAM `RoleName: SketchCatchTerraformExecutionRole`.
+  - If a prior failed/successful stack or manual setup left that Role in the user's AWS account, new Quick Create failed with `AWS::IAM::Role ... already exists`.
+- Completed:
+  - New AWS connections now render `SketchCatchTerraformExecutionRole-<connection-prefix>` in setup response and CloudFormation template.
+  - `verify-created-role` computes `arn:aws:iam::<accountId>:role/SketchCatchTerraformExecutionRole-<connection-prefix>` from account ID and connection ID.
+  - Existing fixed `SketchCatchTerraformExecutionRole` ARNs remain accepted for backward compatibility.
+  - Runtime EC2 IAM policy now allows `sts:AssumeRole` for both the legacy fixed Role and `SketchCatchTerraformExecutionRole-*`.
+- Verification completed:
+  - Focused API service, API route, and web API helper tests passed.
+  - `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
+- Next action:
+  - Merge and deploy this branch.
+  - After deployment, start a fresh AWS connection in the UI and open the newly generated Quick Create link. Existing failed CloudFormation stacks can remain, but old failed stack pages should not be retried because they still point at the old template/link.

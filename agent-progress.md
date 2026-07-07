@@ -4247,3 +4247,24 @@
   - `corepack pnpm build` - passed with elevated permissions
 - Known risks:
   - GitHub review threads were read but not resolved/replied to because the user asked for local fixes, commit, and push only.
+
+# 2026-07-07 - AWS Quick Create RoleName 충돌 수정
+
+- Goal: AWS 계정 연결 Quick Create Stack이 기존 `SketchCatchTerraformExecutionRole` IAM Role 때문에 `AlreadyExists`로 실패하는 문제를 해결한다.
+- Completed:
+  - 새 AWS 연결의 CloudFormation Role 이름을 `SketchCatchTerraformExecutionRole-<connection-prefix>`로 생성하도록 변경했다.
+  - `verify-created-role`이 account ID와 connection ID로 connection-scoped Role ARN을 계산해 검증하도록 변경했다.
+  - 기존 `SketchCatchTerraformExecutionRole` Role ARN은 하위 호환 검증 대상으로 유지했다.
+  - SketchCatch runtime EC2 policy에 고정 Role과 connection-scoped Role wildcard 양쪽 `sts:AssumeRole` 권한을 문서/정책에 반영했다.
+  - API route, service, web API 계약 테스트를 새 Role 이름 계약에 맞게 갱신했다.
+- Verification run:
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/aws-connections/aws-connection-service.test.ts` - passed, 14 tests.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/routes/aws-connections.test.ts` - passed, 11 tests.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/api.test.ts` - passed, 24 tests.
+  - `pnpm harness:check` - passed.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `pnpm build` - passed.
+  - `git diff --check` - passed with line-ending warnings only.
+- Known risks:
+  - 이미 사용자 AWS 계정에 남아 있는 실패 Stack이나 기존 `SketchCatchTerraformExecutionRole` Role은 자동 삭제하지 않는다. 배포 후 새 Quick Create 링크로 다시 시작하면 새 Role 이름을 쓰므로 기존 Role과 충돌하지 않는다.
