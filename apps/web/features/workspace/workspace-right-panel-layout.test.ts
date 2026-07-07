@@ -19,19 +19,39 @@ const diagramEditorStylesSource = readFeatureFile(
   "../diagram-editor/diagram-editor.module.css"
 );
 
-test("deployment panel uses the right panel body scroll area", () => {
-  const deploymentPanelIndex = componentSource.indexOf("<DeploymentPanel");
-  const previousViewOpenIndex = componentSource.lastIndexOf(
+test("deploy opens a full-screen console instead of rendering deployment inside the right panel", () => {
+  const deploymentConsoleIndex = componentSource.indexOf(
+    "const deploymentConsole = isDeploymentConsoleOpen ? ("
+  );
+  const deploymentPanelIndex = componentSource.indexOf("<DeploymentPanel", deploymentConsoleIndex);
+  const nextRightPanelViewIndex = componentSource.indexOf(
     "<div className={styles.rightPanelView}",
     deploymentPanelIndex
   );
-  const previousDivCloseIndex = componentSource.lastIndexOf("</div>", deploymentPanelIndex);
+  const fullscreenHostRule = getCssRule(stylesSource, "deploymentPanelFullscreenHost");
 
+  assert.notEqual(deploymentConsoleIndex, -1);
   assert.notEqual(deploymentPanelIndex, -1);
-  assert.ok(
-    previousViewOpenIndex > previousDivCloseIndex,
-    "DeploymentPanel should be rendered inside a rightPanelView body wrapper"
+  assert.ok(deploymentPanelIndex < nextRightPanelViewIndex);
+  assert.match(
+    componentSource,
+    /const \[isDeploymentConsoleOpen, setIsDeploymentConsoleOpen\] = useState\(\s*initialView === "deployment"\s*\);/
   );
+  assert.match(componentSource, /fullScreenOnly/);
+  assert.match(componentSource, /initialExpanded/);
+  assert.match(componentSource, /onExpandedClose=\{\(\) => setIsDeploymentConsoleOpen\(false\)\}/);
+  assert.match(componentSource, /openDeploymentConsole/);
+  assert.match(componentSource, /context\.setRightPanelOpen\(false\);\s*setIsDeploymentConsoleOpen\(true\);/);
+  assert.match(fullscreenHostRule, /\bdisplay:\s*contents;/);
+  assert.doesNotMatch(componentSource, /hidden=\{activeView !== "deployment"\}/);
+  assert.doesNotMatch(componentSource, /aria-pressed=\{activeView === "deployment"\}/);
+  assert.doesNotMatch(componentSource, /onClick=\{\(\) => requestView\("deployment"\)\}/);
+
+  const rightPanelBodySource = componentSource.slice(
+    componentSource.indexOf("<div className={styles.rightPanelView}"),
+    componentSource.lastIndexOf("{showTerraformLeaveDialog ? (")
+  );
+  assert.doesNotMatch(rightPanelBodySource, /<DeploymentPanel/);
 
   const deploymentPanelRule = getCssRule(stylesSource, "deploymentPanel");
   const deploymentPanelContentRule = getCssRule(stylesSource, "deploymentPanelContent");
@@ -44,12 +64,10 @@ test("deployment panel uses the right panel body scroll area", () => {
   assert.match(deploymentPanelContentRule, /\boverflow-y:\s*auto;/);
 });
 
-test("right panel width is locked against long deployment content", () => {
+test("right panel width stays locked after deployment leaves the panel", () => {
   const rightRailRule = getCssRule(diagramEditorStylesSource, "rightRail");
   const rightPanelShellRule = getCssRule(stylesSource, "rightPanelShell");
   const rightPanelViewRule = getCssRule(stylesSource, "rightPanelView");
-  const deploymentPanelRule = getCssRule(stylesSource, "deploymentPanel");
-  const deploymentPanelContentRule = getCssRule(stylesSource, "deploymentPanelContent");
 
   assert.match(rightRailRule, /\bmin-width:\s*0;/);
   assert.match(rightRailRule, /\bmax-width:\s*100%;/);
@@ -58,10 +76,6 @@ test("right panel width is locked against long deployment content", () => {
   assert.match(rightPanelShellRule, /\bwidth:\s*100%;/);
   assert.match(rightPanelViewRule, /\bmin-width:\s*0;/);
   assert.match(rightPanelViewRule, /\bmax-width:\s*100%;/);
-  assert.match(deploymentPanelRule, /\bmin-width:\s*0;/);
-  assert.match(deploymentPanelRule, /\bmax-width:\s*100%;/);
-  assert.match(deploymentPanelContentRule, /\bmin-width:\s*0;/);
-  assert.match(deploymentPanelContentRule, /\bmax-width:\s*100%;/);
 });
 
 test("workspace rails use the Brainboard panel widths", () => {
@@ -129,6 +143,7 @@ test("right panel exposes Brainboard-style Issues, Deploy, and Plan actions", ()
   assert.ok(planButtonIndex > deployButtonIndex);
   assert.match(codeButtonSource, /data-terraform-editor-navigation/);
   assert.match(codeButtonSource, /onClick=\{\(\) => requestView\("terraform"\)\}/);
+  assert.match(modeBarSource, /onClick=\{openDeploymentConsole\}/);
   assert.match(planButtonSource, /onClick=\{openDeploymentFromPlan\}/);
   assert.doesNotMatch(planButtonSource, /data-terraform-editor-navigation/);
   assert.doesNotMatch(planButtonSource, /requestView\("terraform"\)/);
@@ -604,14 +619,31 @@ test("GitHub connection opens the in-app repository chooser before install hando
   assert.match(deploymentPanelSource, /GitHub App 설치\/권한 추가/);
 });
 
-test("deployment setup exposes only baseline save, AWS connection, and review start controls", () => {
-  const saveIndex = deploymentPanelSource.indexOf("배포 기준 저장");
-  const awsConnectionIndex = deploymentPanelSource.indexOf("AWS 연결", saveIndex);
-  const reviewStartIndex = deploymentPanelSource.indexOf("배포 검토 시작", awsConnectionIndex);
+test("deployment setup exposes a three-step workflow with one primary path", () => {
+  const stagePanelRule = getCssRule(stylesSource, "deploymentStagePanel");
+  const stageCardRule = getCssRule(stylesSource, "deploymentStageCard");
+  const stageSettingsRule = getCssRule(stylesSource, "deploymentStageSettings");
+  const stageAlertRule = getCssRule(stylesSource, "deploymentStageAlert");
+  const saveIndex = deploymentPanelSource.indexOf("배포 전 저장");
+  const reviewIndex = deploymentPanelSource.indexOf("배포 전 검사 및 리뷰", saveIndex);
+  const deployIndex = deploymentPanelSource.indexOf("<h3>배포</h3>", reviewIndex);
 
   assert.ok(saveIndex > -1);
-  assert.ok(awsConnectionIndex > saveIndex);
-  assert.ok(reviewStartIndex > awsConnectionIndex);
+  assert.ok(reviewIndex > saveIndex);
+  assert.ok(deployIndex > reviewIndex);
+  assert.match(deploymentPanelSource, /runDeploymentReviewStep/);
+  assert.match(deploymentPanelSource, /startPrimaryDeploymentStep/);
+  assert.match(deploymentPanelSource, /검사 및 리뷰/);
+  assert.match(deploymentPanelSource, /Plan 실행/);
+  assert.match(deploymentPanelSource, /Plan 승인/);
+  assert.match(deploymentPanelSource, /배포 실행/);
+  assert.match(stagePanelRule, /\bdisplay:\s*grid;/);
+  assert.match(stageCardRule, /grid-template-columns:\s*34px minmax\(0,\s*1fr\) minmax\(150px,\s*auto\);/);
+  assert.match(stageCardRule, /\bmin-height:\s*82px;/);
+  assert.match(stageSettingsRule, /grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\);/);
+  assert.match(stageAlertRule, /\bmin-height:\s*38px;/);
+  assert.doesNotMatch(deploymentPanelSource, /배포 기준 저장/);
+  assert.doesNotMatch(deploymentPanelSource, /배포 검토 시작/);
   assert.doesNotMatch(deploymentPanelSource, /설계 버전 저장/);
   assert.doesNotMatch(deploymentPanelSource, /저장된 설계 기준/);
   assert.doesNotMatch(deploymentPanelSource, /저장된 Terraform 파일/);
@@ -619,6 +651,30 @@ test("deployment setup exposes only baseline save, AWS connection, and review st
   assert.doesNotMatch(deploymentPanelSource, /현재 설계와 Terraform 코드를 함께 저장합니다/);
   assert.doesNotMatch(deploymentPanelSource, /onSaveArchitectureSnapshot/);
   assert.doesNotMatch(stylesSource, /\.deploymentBaselinePanel\s*\{/);
+});
+
+test("Git CI/CD handoff actions use user-facing labels and helper text", () => {
+  const actionGroupRule = getCssRule(stylesSource, "deploymentActionGroup");
+  const actionItemRule = getCssRule(stylesSource, "deploymentActionItem");
+
+  assert.match(deploymentPanelSource, /GitHub 저장소 준비 적용/);
+  assert.match(deploymentPanelSource, /Workflow와 Actions variable을 repository에 설정합니다\./);
+  assert.match(deploymentPanelSource, /AWS 실행 Role 연결 적용/);
+  assert.match(deploymentPanelSource, /GitHub Actions가 승인된 AWS Role을 사용할 수 있게 연결합니다\./);
+  assert.match(deploymentPanelSource, /App 권한 추가하러 가기/);
+  assert.match(deploymentPanelSource, /임시 OAuth 승인/);
+  assert.match(deploymentPanelSource, /OAuth로 저장소 준비 적용/);
+  assert.match(deploymentPanelSource, /GitHub 저장소 준비/);
+  assert.match(deploymentPanelSource, /AWS 실행 Role 연결/);
+
+  assert.doesNotMatch(deploymentPanelSource, /Repo settings 적용/);
+  assert.doesNotMatch(deploymentPanelSource, /AWS role diff 적용/);
+  assert.doesNotMatch(deploymentPanelSource, /GitHub App 권한 보강/);
+  assert.doesNotMatch(deploymentPanelSource, /GitHub OAuth 승인/);
+  assert.doesNotMatch(deploymentPanelSource, /OAuth 설정 적용/);
+
+  assert.match(actionGroupRule, /grid-template-columns:\s*repeat\(auto-fit,\s*minmax\(220px,\s*1fr\)\);/);
+  assert.match(actionItemRule, /\bdisplay:\s*grid;/);
 });
 
 test("deployment baseline save button shows pending and saved icons", () => {
@@ -676,7 +732,9 @@ test("pre-deployment finding fix buttons open the existing terraform source loca
   assert.match(componentSource, /terraformPanelRef\.current\?\.getTerraformFiles\(\)/);
   assert.match(componentSource, /setActiveView\("terraform"\)/);
   assert.match(componentSource, /terraformPanelRef\.current\?\.openTerraformSourceLocation\(sourceLocation\)/);
-  assert.match(componentSource, /onOpenFindingTerraformSource=\{openPreDeploymentFindingTerraformSource\}/);
+  assert.match(componentSource, /onOpenFindingTerraformSource=\{\(finding\) => \{/);
+  assert.match(componentSource, /const sourceLocation = openPreDeploymentFindingTerraformSource\(finding\);/);
+  assert.match(componentSource, /setIsDeploymentConsoleOpen\(false\);/);
 });
 
 test("terraform errors surface as an issues banner and AI resolution lives in the chat dock", () => {
@@ -814,9 +872,9 @@ test("terraform resource code mode keeps explanation but omits validation and de
   assert.doesNotMatch(terraformPanelSource, /className=\{styles\.resourceActionDanger\}/);
   assert.doesNotMatch(stylesSource, /\.resourceActionPrimary\s*\{/);
   assert.doesNotMatch(stylesSource, /\.resourceActionDanger\s*\{/);
-  assert.match(deploymentPanelSource, /Terraform Plan 실행/);
-  assert.match(deploymentPanelSource, /Terraform Apply 실행/);
-  assert.match(deploymentPanelSource, /Terraform Destroy 실행/);
+  assert.match(deploymentPanelSource, /Plan 실행/);
+  assert.match(deploymentPanelSource, /배포 실행/);
+  assert.match(deploymentPanelSource, /Cleanup 실행/);
 });
 
 test("terraform panel does not expose a detached artifact save action", () => {
