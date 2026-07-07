@@ -73,9 +73,10 @@ test("source repository routes issue a callback URL for an existing active GitHu
 });
 
 test("source repository routes issue a callback URL for a selected known GitHub installation", async (t) => {
+  const knownSourceRepositoryId = "33333333-3333-4333-8333-333333333333";
   const repository = new FakeSourceRepositoryRepository([
     createSourceRepositoryRecord({
-      id: "known-source-repository",
+      id: knownSourceRepositoryId,
       status: "inactive",
       githubInstallationId: "known-installation"
     })
@@ -85,7 +86,7 @@ test("source repository routes issue a callback URL for a selected known GitHub 
 
   const response = await app.inject({
     method: "POST",
-    url: `/api/projects/${projectId}/source-repositories/github/known-source-repository/existing-installation-callback-url`,
+    url: `/api/projects/${projectId}/source-repositories/github/${knownSourceRepositoryId}/existing-installation-callback-url`,
     headers: await authHeaders()
   });
 

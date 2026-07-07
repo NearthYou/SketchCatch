@@ -35,7 +35,7 @@ const projectParamsSchema = z.object({
 });
 
 const projectSourceRepositoryParamsSchema = projectParamsSchema.extend({
-  sourceRepositoryId: z.string().trim().min(1).max(128)
+  sourceRepositoryId: z.uuid()
 });
 
 const listGitHubInstallationRepositoriesBodySchema = z

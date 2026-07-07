@@ -15,6 +15,7 @@ Use this file only for compact continuation context. Write it in English.
 - GitHub App install/configure is now an explicit add-permissions action.
 - Backend callback URL creation can target a selected known source repository, including inactive previous connections.
 - GitHub callback page has an install/permission-expansion button when the desired repository is missing.
+- PR #227 review feedback was addressed with modal-local error rendering and UUID route validation.
 
 ## Broken Or Unverified
 

@@ -1848,6 +1848,12 @@ export function DeploymentPanel({
             없거나 권한을 추가해야 하면 GitHub App 설치/권한 추가로 이동하세요.
           </p>
 
+          {requestState === "error" && errorMessage ? (
+            <p className={styles.deploymentError} role="alert">
+              {errorMessage}
+            </p>
+          ) : null}
+
           {knownGitHubSourceRepositories.length > 0 ? (
             <div className={styles.githubRepositoryChoiceList}>
               {knownGitHubSourceRepositories.map((repository) => (

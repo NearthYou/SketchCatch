@@ -18,6 +18,7 @@ Branch/worktree:
 - Added a chooser action for known SketchCatch GitHub source repositories and kept GitHub App install/configure as the explicit add-permissions path.
 - Added a selected-source-repository callback URL route so inactive previous GitHub connections can reopen repository selection.
 - Added a GitHub callback page button for GitHub App install/permission expansion when the desired repository is missing.
+- Addressed PR #227 review feedback: modal-local errors are visible, `sourceRepositoryId` route params require UUIDs, and route tests use UUID fixture IDs.
 
 Verification:
 
