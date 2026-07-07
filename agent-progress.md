@@ -1,3 +1,40 @@
+# 2026-07-07 - 새 프로젝트 시작 한글 escape 렌더링 수정
+
+- Goal: `/workspace/new` 새 프로젝트 시작 화면에서 `\uD504...` 같은 Unicode escape가 그대로 보이며 한글이 깨지는 문제를 수정한다.
+- Completed:
+  - `workspace-start-client.tsx`의 JSX text node와 quoted JSX attribute에 직접 쓰인 `\u...` escape를 `COPY` 상수 기반 JSX expression으로 바꿨다.
+  - 프로젝트 이름 라벨, placeholder, 시작 방식 라벨, aria-label, 처리 중/오류/힌트 문구가 브라우저에서 실제 한글로 렌더링되도록 정리했다.
+  - `workspace-new-project-start-mode.test.ts`에 raw Unicode escape가 JSX text/quoted attribute로 다시 들어오지 않도록 회귀 검증을 추가했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits.
+  - Raw JSX Unicode escape source check - failed before fix, passed after fix.
+  - `apps\web\node_modules\.bin\tsx.CMD --test apps\web\app\workspace\new\workspace-start-options.test.ts apps\web\features\workspace\workspace-new-project-start-mode.test.ts` - passed, 7 tests.
+  - `pnpm --filter @sketchcatch/web typecheck` - passed.
+  - `pnpm lint` - passed, with non-fatal Turbo cache rename warnings.
+  - `pnpm typecheck` - passed, with non-fatal Turbo cache rename warnings.
+  - `pnpm build` - first sandbox run failed on `.next` unlink `EPERM`; elevated rerun passed.
+- Known risks:
+  - Browser screenshot QA was not run; source-level regression check, focused tests, typecheck, lint, and production build cover the rendering bug path.
+
+# 2026-07-07 - New project start modes rebased on latest dev reverse flow
+
+- Goal: Bring latest `origin/dev` into the new project start-mode branch and wire the Reverse start option to the Reverse Engineering flow now present on dev.
+- Completed:
+  - Fetched `origin/dev` at `969671d` and fast-forwarded the current branch.
+  - Reapplied the AI/Blank start-mode work on top of dev and resolved conflicts in `workspace-start-client.tsx` and `agent-progress.md`.
+  - Removed the disabled Reverse placeholder behavior; clicking Reverse now checks verified AWS connections through `listAwsConnections` and delegates to `resolveWorkspaceStartAction`.
+  - With a verified AWS connection, Reverse opens `/workspace?cloudPlatform=aws&projectName=...&startMode=reverse`; without one, it redirects to `/settings?tab=aws&next=reverse`.
+  - Kept project-name-first gating, AI full-screen chat start, and Blank empty-board creation behavior.
+- Verification run:
+  - `pnpm harness:check` - passed before dev merge.
+  - `pnpm --filter @sketchcatch/web typecheck` - passed after conflict resolution.
+  - `pnpm --dir apps/web exec tsx --test app/workspace/new/workspace-start-options.test.ts features/workspace/workspace-new-project-start-mode.test.ts` - passed, 7 tests.
+  - `pnpm harness:check` - passed after conflict resolution.
+  - `pnpm lint` - passed, with non-fatal Turbo cache rename warnings.
+  - `pnpm typecheck` - passed, with non-fatal Turbo cache rename warnings.
+  - `pnpm build` - passed with elevated permissions.
+- Known risks:
+  - Browser manual QA was not run in this session; source tests, typecheck, lint, and production build cover the merge-sensitive paths.
 # 2026-07-07 - PR #220 origin/dev 충돌 병합
 
 - Goal: PR #220 브랜치 `codex/right-panel-resource-header`에 최신 `origin/dev`를 병합하고, 양쪽 의도를 보존해 충돌을 해결한다.
@@ -43,6 +80,29 @@
   - 실제 PR merge, GitHub Environment approval, Terraform apply, S3 release, ASG Instance Refresh, destroy live smoke는 `SKETCHCATCH_ACCESS_TOKEN`과 `SKETCHCATCH_HANDOFF_ID`가 있는 사용자 세션에서만 완료할 수 있다.
   - 이번 preflight는 cloud mutation을 실행하지 않았고, #210은 live report가 생성되기 전까지 완료가 아니다.
 
+# 2026-07-07 - New project start mode and AI preview start page
+
+- Goal: Replace cloud platform selection in new project creation with Reverse / AI / Blank start modes, and route AI starts through a full-screen chat preview approval flow.
+- Completed:
+  - Changed the new project screen to require a project name before start mode buttons can be used.
+  - Added the AI start route at `/workspace/ai` with a full-screen chat flow and small in-chat PREVIEW based on real DiagramJson nodes and edges.
+  - Limited preview actions to approve, cancel, and regenerate.
+  - On approval, the flow creates the project, saves the approved diagram as the project draft, stores the AI chat history for that project, and opens the board.
+  - Kept Blank behavior as the existing empty-board project creation flow; Reverse is shown as a start option only in this scope.
+- Verification run:
+  - `pnpm harness:check` - passed before edits.
+  - `pnpm --filter @sketchcatch/web typecheck` - passed.
+  - `pnpm --dir apps/web exec tsx --test features/workspace/workspace-new-project-start-mode.test.ts` - sandbox spawn blocked; elevated rerun passed, 3 tests.
+  - `pnpm --filter @sketchcatch/web test` - sandbox spawn blocked; elevated rerun ran 458 tests, 457 passed, 1 existing `workspace-ai-diagram-adapter.test.ts` region metadata expectation failed.
+  - `pnpm lint` - passed, with non-fatal Turbo cache rename warnings.
+  - `pnpm typecheck` - passed, with non-fatal Turbo cache rename warnings.
+  - `pnpm build` - sandbox `.next` unlink blocked; elevated rerun passed.
+  - `pnpm harness:check` - passed after edits.
+  - `git diff --check` - passed, with line-ending warnings only.
+  - `http://localhost:3000/workspace/new` - returned 200 from an already-running local dev server.
+- Known risks:
+  - The AI start page uses English helper copy plus Unicode-escaped Korean action labels to avoid the local PowerShell Korean encoding corruption seen in this session.
+  - The one full-web-test failure appears unrelated to this change, but should be checked before merge.
 # 2026-07-07 - Amazon Q ArchitectureDecisionSpace 분리
 
 - Goal: Amazon Q가 다이어그램을 직접 설계하되, 선택지 차이가 고정 skeleton이 아니라 선택지별 decision space와 coverage 검증으로 반영되게 한다.
@@ -4247,3 +4307,24 @@
   - `corepack pnpm build` - passed with elevated permissions
 - Known risks:
   - GitHub review threads were read but not resolved/replied to because the user asked for local fixes, commit, and push only.
+# 2026-07-07 - 새 프로젝트 AI 시작 UX 개선
+
+- Goal: `/workspace/new`에서 AI 시작 후 나오는 채팅 화면의 선택/입력/preview 사용성을 개선한다.
+- Completed:
+  - AI 시작 채팅 transcript에 ref 기반 자동 하단 스크롤을 추가해 선택지 답변, Enter 전송, 로딩/오류/preview 상태가 생길 때 최신 메시지가 보이도록 했다.
+  - 채팅 textarea에서 `Enter`는 전송, `Shift+Enter`는 줄바꿈으로 동작하도록 했다.
+  - 미니 다이어그램 preview에서 node 이름 text를 제거하고, DiagramNode `iconUrl`이 있으면 SVG `<image>`로 리소스 아이콘을 보여주도록 바꿨다.
+  - 새 프로젝트 이름 input focus 시 배경색이 어둡게 바뀌지 않도록 새 프로젝트 폼 전용 focus background override를 추가했다.
+  - `workspace-new-project-start-mode.test.ts`에 자동 스크롤/Enter 전송/icon preview/focus override 회귀 검증을 추가했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits.
+  - Browser check on `http://localhost:3000/workspace/new` - project name input background stayed `rgb(247, 249, 250)` before and after focus.
+  - Browser check on `http://localhost:3000/workspace/ai` - Enter cleared the composer, added the user message, and kept transcript at bottom.
+  - Browser check on AI suggestion click - selected answer was echoed and transcript stayed at bottom.
+  - `pnpm --filter @sketchcatch/web typecheck` - passed.
+  - `apps\web\node_modules\.bin\tsx.CMD --test apps\web\app\workspace\new\workspace-start-options.test.ts apps\web\features\workspace\workspace-new-project-start-mode.test.ts` - sandbox spawn blocked; elevated rerun passed, 7 tests.
+  - `pnpm lint` - passed, with non-fatal Turbo cache rename warnings.
+  - `pnpm typecheck` - passed, with non-fatal Turbo cache rename warnings.
+  - `pnpm build` - first sandbox run failed on `.next` unlink `EPERM`; elevated rerun passed.
+- Known risks:
+  - Live AI preview generation was not completed in browser during this session, so icon-preview behavior is covered by source regression and build/typecheck rather than a generated-preview screenshot.
