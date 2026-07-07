@@ -7,7 +7,8 @@ import type {
   AiArchitectureDraftResult,
   ArchitectureDraftClarification,
   CreateArchitectureDraftRequest,
-  DiagramJson
+  DiagramJson,
+  DiagramNode
 } from "@sketchcatch/types";
 import { getApiErrorMessage } from "../../../lib/api-client";
 import {
@@ -22,9 +23,18 @@ import {
   type ArchitectureDraftFollowUpSession
 } from "../../../features/workspace/workspace-ai-draft-follow-up";
 import { createWorkspaceAiChatStorageKey } from "../../../features/workspace/WorkspaceAiChatDock";
+import {
+  getAreaNodeIconUrl,
+  isAreaNode
+} from "../../../features/diagram-editor/area-nodes";
 
 const AI_START_DRAFT_STORAGE_KEY = "sketchcatch.newProjectDraft";
 const MAX_CHAT_MESSAGES = 80;
+const MINI_DIAGRAM_WIDTH = 560;
+const MINI_DIAGRAM_HEIGHT = 300;
+const MINI_DIAGRAM_PADDING = 38;
+const MINI_DIAGRAM_ICON_GAP = 34;
+const MINI_DIAGRAM_COLLISION_PASSES = 12;
 const COPY = {
   approve: "\uC2B9\uC778",
   cancel: "\uCDE8\uC18C",
@@ -476,6 +486,7 @@ export function WorkspaceAiStartClient() {
 
 function MiniDiagramPreview({ diagram }: { readonly diagram: DiagramJson }) {
   const layout = createMiniDiagramLayout(diagram);
+  const nodeById = new Map(layout.nodes.map((node) => [node.id, node]));
 
   return (
     <svg
@@ -485,8 +496,8 @@ function MiniDiagramPreview({ diagram }: { readonly diagram: DiagramJson }) {
       viewBox={`0 0 ${layout.width} ${layout.height}`}
     >
       {diagram.edges.map((edge) => {
-        const source = layout.nodes.get(edge.sourceNodeId);
-        const target = layout.nodes.get(edge.targetNodeId);
+        const source = nodeById.get(edge.sourceNodeId);
+        const target = nodeById.get(edge.targetNodeId);
 
         if (!source || !target) {
           return null;
@@ -503,30 +514,23 @@ function MiniDiagramPreview({ diagram }: { readonly diagram: DiagramJson }) {
           />
         );
       })}
-      {diagram.nodes.map((node) => {
-        const point = layout.nodes.get(node.id);
-
-        if (!point) {
-          return null;
-        }
-
+      {layout.nodes.map((node) => {
         return (
           <g className="workspaceAiMiniDiagramNode" key={node.id}>
             <title>{node.label}</title>
-            <rect height="42" rx="7" width="42" x={point.x - 21} y={point.y - 21} />
+            <circle cx={node.x} cy={node.y} r={node.radius} />
             {node.iconUrl ? (
               <image
-                height="28"
+                height={node.iconSize}
                 href={node.iconUrl}
                 preserveAspectRatio="xMidYMid meet"
-                width="28"
-                x={point.x - 14}
-                y={point.y - 14}
+                width={node.iconSize}
+                x={node.x - node.iconSize / 2}
+                y={node.y - node.iconSize / 2}
               />
             ) : (
               <g className="workspaceAiMiniDiagramNodeFallback" aria-hidden="true">
-                <circle cx={point.x} cy={point.y} r="7" />
-                <path d={`M ${point.x - 11} ${point.y + 9} L ${point.x} ${point.y - 12} L ${point.x + 11} ${point.y + 9} Z`} />
+                <path d={`M ${node.x - 10} ${node.y + 8} L ${node.x} ${node.y - 11} L ${node.x + 10} ${node.y + 8} Z`} />
               </g>
             )}
           </g>
@@ -538,15 +542,14 @@ function MiniDiagramPreview({ diagram }: { readonly diagram: DiagramJson }) {
 
 function createMiniDiagramLayout(diagram: DiagramJson): {
   readonly height: number;
-  readonly nodes: Map<string, { readonly x: number; readonly y: number }>;
+  readonly nodes: readonly MiniDiagramNode[];
   readonly width: number;
 } {
-  const width = 560;
-  const height = 300;
-  const nodes = new Map<string, { x: number; y: number }>();
+  const width = MINI_DIAGRAM_WIDTH;
+  const height = MINI_DIAGRAM_HEIGHT;
 
   if (diagram.nodes.length === 0) {
-    return { height, nodes, width };
+    return { height, nodes: [], width };
   }
 
   const bounds = diagram.nodes.reduce(
@@ -565,17 +568,97 @@ function createMiniDiagramLayout(diagram: DiagramJson): {
   );
   const sourceWidth = Math.max(bounds.right - bounds.left, 1);
   const sourceHeight = Math.max(bounds.bottom - bounds.top, 1);
-  const padding = 38;
-  const scale = Math.min((width - padding * 2) / sourceWidth, (height - padding * 2) / sourceHeight);
+  const scale = Math.min(
+    (width - MINI_DIAGRAM_PADDING * 2) / sourceWidth,
+    (height - MINI_DIAGRAM_PADDING * 2) / sourceHeight
+  );
+  const nodes = diagram.nodes.map((node) => ({
+    iconSize: isAreaNode(node) ? 20 : 26,
+    iconUrl: getMiniDiagramIconUrl(node),
+    id: node.id,
+    label: node.label,
+    radius: isAreaNode(node) ? 15 : 17,
+    x: MINI_DIAGRAM_PADDING + (node.position.x + node.size.width / 2 - bounds.left) * scale,
+    y: MINI_DIAGRAM_PADDING + (node.position.y + node.size.height / 2 - bounds.top) * scale
+  }));
 
-  for (const node of diagram.nodes) {
-    nodes.set(node.id, {
-      x: padding + (node.position.x + node.size.width / 2 - bounds.left) * scale,
-      y: padding + (node.position.y + node.size.height / 2 - bounds.top) * scale
-    });
+  return { height, nodes: resolveMiniDiagramCollisions(nodes, width, height), width };
+}
+
+type MiniDiagramNode = {
+  readonly iconSize: number;
+  readonly iconUrl: string | undefined;
+  readonly id: string;
+  readonly label: string;
+  readonly radius: number;
+  readonly x: number;
+  readonly y: number;
+};
+
+function getMiniDiagramIconUrl(node: DiagramNode): string | undefined {
+  return isAreaNode(node) ? getAreaNodeIconUrl(node) : node.iconUrl;
+}
+
+function resolveMiniDiagramCollisions(
+  nodes: readonly MiniDiagramNode[],
+  width: number,
+  height: number
+): readonly MiniDiagramNode[] {
+  const relaxedNodes = nodes.map((node) => ({ ...node }));
+  const minX = MINI_DIAGRAM_PADDING;
+  const maxX = width - MINI_DIAGRAM_PADDING;
+  const minY = MINI_DIAGRAM_PADDING;
+  const maxY = height - MINI_DIAGRAM_PADDING;
+
+  for (let pass = 0; pass < MINI_DIAGRAM_COLLISION_PASSES; pass += 1) {
+    let moved = false;
+
+    for (let leftIndex = 0; leftIndex < relaxedNodes.length; leftIndex += 1) {
+      for (let rightIndex = leftIndex + 1; rightIndex < relaxedNodes.length; rightIndex += 1) {
+        const leftNode = relaxedNodes[leftIndex];
+        const rightNode = relaxedNodes[rightIndex];
+
+        if (!leftNode || !rightNode) {
+          continue;
+        }
+
+        const deltaX = rightNode.x - leftNode.x;
+        const deltaY = rightNode.y - leftNode.y;
+        const distance = Math.hypot(deltaX, deltaY);
+
+        if (distance >= MINI_DIAGRAM_ICON_GAP) {
+          continue;
+        }
+
+        const fallbackAngle = ((leftIndex + rightIndex + 1) / relaxedNodes.length) * Math.PI;
+        const directionX = distance > 0 ? deltaX / distance : Math.cos(fallbackAngle);
+        const directionY = distance > 0 ? deltaY / distance : Math.sin(fallbackAngle);
+        const push = (MINI_DIAGRAM_ICON_GAP - distance) / 2;
+
+        relaxedNodes[leftIndex] = {
+          ...leftNode,
+          x: clampMiniDiagramPoint(leftNode.x - directionX * push, minX, maxX),
+          y: clampMiniDiagramPoint(leftNode.y - directionY * push, minY, maxY)
+        };
+        relaxedNodes[rightIndex] = {
+          ...rightNode,
+          x: clampMiniDiagramPoint(rightNode.x + directionX * push, minX, maxX),
+          y: clampMiniDiagramPoint(rightNode.y + directionY * push, minY, maxY)
+        };
+        moved = true;
+      }
+    }
+
+    if (!moved) {
+      break;
+    }
   }
 
-  return { height, nodes, width };
+  return relaxedNodes;
+}
+
+function clampMiniDiagramPoint(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
 }
 
 function readAiStartDraft(): WorkspaceStartDraft | null {

@@ -4557,7 +4557,9 @@ nextjs-portal {
 }
 
 .workspaceAiMiniDiagram {
-  background: rgba(2, 6, 23, 0.32);
+  background:
+    radial-gradient(circle at 24px 24px, rgba(125, 211, 252, 0.16), transparent 26px),
+    rgba(2, 6, 23, 0.32);
   border: 1px solid rgba(148, 163, 184, 0.16);
   border-radius: 6px;
   height: auto;
@@ -4567,22 +4569,19 @@ nextjs-portal {
 
 .workspaceAiMiniDiagramEdge {
   stroke: #7dd3fc;
-  stroke-opacity: 0.58;
-  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-opacity: 0.42;
+  stroke-width: 1.5;
 }
 
-.workspaceAiMiniDiagramNode rect {
-  fill: #0f1d33;
-  stroke: #38bdf8;
-  stroke-width: 1.5;
+.workspaceAiMiniDiagramNode circle {
+  fill: rgba(15, 23, 42, 0.74);
+  stroke: rgba(125, 211, 252, 0.38);
+  stroke-width: 1;
 }
 
 .workspaceAiMiniDiagramNode image {
   pointer-events: none;
-}
-
-.workspaceAiMiniDiagramNodeFallback circle {
-  fill: #7dd3fc;
 }
 
 .workspaceAiMiniDiagramNodeFallback path {

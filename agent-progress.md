@@ -14,6 +14,7 @@ Recent branch work:
 
 - Fixed Korean text rendering on `/workspace/new` by moving raw Unicode escape text into `COPY` constants rendered as JSX expressions.
 - Improved `/workspace/ai` chat UX with transcript auto-scroll, Enter-to-send, Shift+Enter newline, icon-based mini previews, and stable project-name input focus background.
+- Refined `/workspace/ai` mini diagram preview to use the same diagram icon sources as the board, hide names, and relax close icon positions to reduce overlap.
 - Addressed PR #224 review feedback by reusing the created project ID after an approval save failure and by guarding local/session storage writes.
 - Added source and browser regressions for the new project start and AI start flow.
 - Committed the branch work as `2bab6899`.
@@ -34,6 +35,7 @@ Verification so far:
 - `pnpm build` first failed in the sandbox on `.next` unlink `EPERM`; elevated rerun passed.
 - Final `pnpm harness:check` passed after build verification.
 - PR #224 review fix verification passed: focused workspace start tests, harness, lint, typecheck, and elevated build after sandbox `.next` unlink `EPERM`.
+- Latest mini preview change verification passed: focused `workspace-new-project-start-mode.test.ts`, `@sketchcatch/web` typecheck, `git diff --check`, repo `pnpm lint`, repo `pnpm typecheck`, repo `pnpm build`, and `pnpm harness:check`. Browser screenshot verification was skipped because no browser/Playwright runtime is installed in this session.
 
 ## Session Record
 
@@ -50,7 +52,8 @@ Verification so far:
 - Added `createdProjectId` reuse in AI approval so retrying after `saveProjectDraft` failure does not create duplicate projects.
 - Wrapped AI start `localStorage.setItem` and new-project `sessionStorage.setItem` calls in `try/catch`.
 - Added regression assertions for the PR review fixes.
+- Updated the AI-start mini diagram preview to render real board icon URLs, include design-area fallback icons, remove visible labels from the SVG, and run a small collision-relaxation pass before drawing.
 
 Next steps:
 
-- No pending local PR #224 review-fix work remains after this commit is pushed.
+- Review the `/workspace/ai` mini preview visually in a browser-enabled session if available; no pending code verification remains locally.

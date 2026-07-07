@@ -40,14 +40,20 @@ test("AI start route opens the full screen AI draft page", () => {
 test("AI start page previews real diagram data and persists approval into the board", () => {
   assert.match(workspaceAiStartClientSource, /convertArchitectureJsonToDiagramJson/);
   assert.match(workspaceAiStartClientSource, /MiniDiagramPreview/);
+  assert.match(workspaceAiStartClientSource, /getAreaNodeIconUrl/);
+  assert.match(workspaceAiStartClientSource, /getMiniDiagramIconUrl/);
+  assert.match(workspaceAiStartClientSource, /resolveMiniDiagramCollisions/);
+  assert.match(workspaceAiStartClientSource, /MINI_DIAGRAM_ICON_GAP/);
   assert.match(workspaceAiStartClientSource, /transcriptRef/);
   assert.match(workspaceAiStartClientSource, /scrollTranscriptToBottom/);
   assert.match(workspaceAiStartClientSource, /handleComposerKeyDown/);
   assert.match(workspaceAiStartClientSource, /event\.key !== "Enter"/);
-  assert.match(workspaceAiStartClientSource, /diagram\.nodes\.map/);
+  assert.match(workspaceAiStartClientSource, /layout\.nodes\.map/);
   assert.match(workspaceAiStartClientSource, /diagram\.edges\.map/);
   assert.match(workspaceAiStartClientSource, /<image/);
   assert.doesNotMatch(workspaceAiStartClientSource, /<text[\s>]/);
+  assert.match(globalStylesSource, /\.workspaceAiMiniDiagramNode circle/);
+  assert.doesNotMatch(globalStylesSource, /\.workspaceAiMiniDiagramNode rect/);
   assert.match(workspaceAiStartClientSource, /saveProjectDraft/);
   assert.match(workspaceAiStartClientSource, /createdProjectId/);
   assert.match(workspaceAiStartClientSource, /setCreatedProjectId\(project\.id\)/);
