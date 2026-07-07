@@ -41,6 +41,18 @@ test("project card actions use natural card layout instead of a fixed y offset",
   assert.match(cardActionsRule, /justify-self:\s*end/);
 });
 
+test("disabled project menu actions remain readable", () => {
+  const disabledMenuItemRule = getCssRule(stylesSource, "projectCardActionMenuItem:disabled");
+  const disabledDangerRule = getCssRule(stylesSource, "projectCardActionMenuItemDanger:disabled");
+
+  assert.match(disabledMenuItemRule, /color:\s*#475569;/);
+  assert.match(disabledMenuItemRule, /opacity:\s*1;/);
+  assert.doesNotMatch(disabledMenuItemRule, /opacity:\s*0\.[0-6]/);
+  assert.match(disabledDangerRule, /background:\s*#fff1f2;/);
+  assert.match(disabledDangerRule, /color:\s*#b42318;/);
+  assert.match(disabledDangerRule, /opacity:\s*1;/);
+});
+
 function readProjectFile(filePath: string): string {
   return readFileSync(fileURLToPath(new URL(filePath, import.meta.url)), "utf8");
 }

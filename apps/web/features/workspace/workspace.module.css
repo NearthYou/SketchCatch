@@ -5333,6 +5333,47 @@
   color: var(--bb-text);
 }
 
+.issuesPanel {
+  background: #f8fbff;
+  color: #172033;
+}
+
+.issuesPanel .terraformDiagnostics {
+  background: #f8fbff;
+  border-left: 0;
+  color: #172033;
+}
+
+.issuesPanel .terraformDiagnosticsHeader,
+.issuesPanel .terraformDiagnosticsHeader h3 {
+  color: #172033;
+}
+
+.issuesPanel .terraformDiagnosticList li {
+  background: #ffffff;
+  border-color: #dce3ee;
+  color: #172033;
+}
+
+.issuesPanel .terraformDiagnosticList strong {
+  color: #172033;
+}
+
+.issuesPanel .terraformDiagnosticList span {
+  color: #334155;
+}
+
+.issuesPanel .terraformDiagnosticSeverity {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.issuesPanel .terraformDiagnosticMeta span {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  color: #334155;
+}
+
 .terraformPanel,
 .deploymentPanel {
   background: var(--bb-page);
