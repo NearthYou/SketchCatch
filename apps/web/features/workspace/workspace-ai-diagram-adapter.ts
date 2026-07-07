@@ -1229,6 +1229,23 @@ function findDefaultRegionParentAreaNodeId(
 }
 
 function applyDiagramResourceNameConventions(nodes: readonly DiagramNode[]): DiagramNode[] {
+  const resourceNameByNodeId = new Map<string, string>();
+
+  for (const node of nodes) {
+    const parameters = node.parameters;
+
+    if (!parameters) {
+      continue;
+    }
+
+    resourceNameByNodeId.set(
+      node.id,
+      createConventionResourceName(parameters.resourceType, parameters.resourceName, [node.label, node.id])
+    );
+  }
+
+  const referenceRewrites = createTerraformReferenceRewrites(nodes, resourceNameByNodeId);
+
   return nodes.map((node) => {
     const parameters = node.parameters;
 
@@ -1236,12 +1253,10 @@ function applyDiagramResourceNameConventions(nodes: readonly DiagramNode[]): Dia
       return node;
     }
 
-    const resourceName = createConventionResourceName(parameters.resourceType, parameters.resourceName, [
-      node.label,
-      node.id
-    ]);
+    const resourceName = resourceNameByNodeId.get(node.id) ?? parameters.resourceName;
+    const values = rewriteTerraformReferencesInValue(parameters.values, referenceRewrites) as ResourceConfig;
 
-    if (resourceName === parameters.resourceName) {
+    if (resourceName === parameters.resourceName && values === parameters.values) {
       return node;
     }
 
@@ -1249,10 +1264,99 @@ function applyDiagramResourceNameConventions(nodes: readonly DiagramNode[]): Dia
       ...node,
       parameters: {
         ...parameters,
-        resourceName
+        resourceName,
+        values
       }
     };
   });
+}
+
+type TerraformReferenceRewrite = {
+  readonly from: string;
+  readonly to: string;
+};
+
+function createTerraformReferenceRewrites(
+  nodes: readonly DiagramNode[],
+  resourceNameByNodeId: ReadonlyMap<string, string>
+): TerraformReferenceRewrite[] {
+  const rewriteByReference = new Map<string, string>();
+
+  for (const node of nodes) {
+    const parameters = node.parameters;
+
+    if (!parameters) {
+      continue;
+    }
+
+    const resourceName = resourceNameByNodeId.get(node.id) ?? parameters.resourceName;
+    const referenceNames = createTerraformReferenceNameCandidates(node, parameters).filter(
+      (referenceName) => referenceName !== resourceName
+    );
+
+    for (const referenceName of referenceNames) {
+      for (const suffix of TERRAFORM_REFERENCE_ATTRIBUTE_SUFFIXES) {
+        const from = `${parameters.resourceType}.${referenceName}.${suffix}`;
+        const to = `${parameters.resourceType}.${resourceName}.${suffix}`;
+        rewriteByReference.set(from, to);
+
+        if (parameters.terraformBlockType === "data") {
+          rewriteByReference.set(`data.${from}`, `data.${to}`);
+        }
+      }
+    }
+  }
+
+  return [...rewriteByReference].map(([from, to]) => ({ from, to }));
+}
+
+function rewriteTerraformReferencesInValue(
+  value: unknown,
+  referenceRewrites: readonly TerraformReferenceRewrite[]
+): unknown {
+  if (typeof value === "string") {
+    return rewriteTerraformReferenceString(value, referenceRewrites);
+  }
+
+  if (Array.isArray(value)) {
+    let changed = false;
+    const rewrittenItems = value.map((item) => {
+      const rewrittenItem = rewriteTerraformReferencesInValue(item, referenceRewrites);
+      changed ||= rewrittenItem !== item;
+      return rewrittenItem;
+    });
+
+    return changed ? rewrittenItems : value;
+  }
+
+  if (!isRecord(value)) {
+    return value;
+  }
+
+  let changed = false;
+  const rewrittenEntries = Object.entries(value).map(([key, entryValue]) => {
+    const rewrittenValue = rewriteTerraformReferencesInValue(entryValue, referenceRewrites);
+    changed ||= rewrittenValue !== entryValue;
+    return [key, rewrittenValue] as const;
+  });
+
+  return changed ? Object.fromEntries(rewrittenEntries) : value;
+}
+
+function rewriteTerraformReferenceString(
+  value: string,
+  referenceRewrites: readonly TerraformReferenceRewrite[]
+): string {
+  const trimmedValue = value.trim();
+  const interpolationMatch = /^\$\{(.+)\}$/u.exec(trimmedValue);
+  const referenceValue = interpolationMatch?.[1]?.trim() ?? trimmedValue;
+  const rewrite = referenceRewrites.find((candidate) => candidate.from === referenceValue);
+
+  if (!rewrite) {
+    return value;
+  }
+
+  return interpolationMatch ? `\${${rewrite.to}}` : rewrite.to;
 }
 
 type ReadableLayoutSlot = {
@@ -2015,17 +2119,7 @@ function matchesTerraformNodeReference(referenceValue: string, node: DiagramNode
     return false;
   }
 
-  const referenceNames = new Set(
-    [
-      parameters.resourceName,
-      getStringConfigValue(parameters.values, "terraformResourceName"),
-      node.id,
-      toTerraformName(node.id),
-      toTerraformName(node.label)
-    ].filter(
-      (referenceName): referenceName is string => typeof referenceName === "string" && referenceName.length > 0
-    )
-  );
+  const referenceNames = createTerraformReferenceNameCandidates(node, parameters);
   const references = [...referenceNames].flatMap((resourceName) => {
     const resourceReferences = TERRAFORM_REFERENCE_ATTRIBUTE_SUFFIXES.map(
       (suffix) => `${parameters.resourceType}.${resourceName}.${suffix}`
@@ -2037,6 +2131,25 @@ function matchesTerraformNodeReference(referenceValue: string, node: DiagramNode
   });
 
   return references.includes(referenceValue);
+}
+
+function createTerraformReferenceNameCandidates(
+  node: DiagramNode,
+  parameters: DiagramNodeParameters
+): string[] {
+  return [
+    ...new Set(
+      [
+        parameters.resourceName,
+        getStringConfigValue(parameters.values, "terraformResourceName"),
+        node.id,
+        toTerraformName(node.id),
+        toTerraformName(node.label)
+      ].filter(
+        (referenceName): referenceName is string => typeof referenceName === "string" && referenceName.length > 0
+      )
+    )
+  ];
 }
 
 function normalizeReferenceValue(value: string): string {

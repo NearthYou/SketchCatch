@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 const workspaceStartClientSource = readAppWorkspaceFile("new/workspace-start-client.tsx");
 const workspaceAiRouteSource = readAppWorkspaceFile("ai/page.tsx");
 const workspaceAiStartClientSource = readAppWorkspaceFile("ai/workspace-ai-start-client.tsx");
+const browserVoiceInputSource = readFeatureWorkspaceFile("use-browser-voice-input.ts");
 const globalStylesSource = readAppFile("globals.css");
 
 test("new project start removes cloud platform selection and exposes start modes", () => {
@@ -85,6 +86,16 @@ test("AI start page previews real diagram data and persists approval into the bo
   assert.match(workspaceAiStartClientSource, /COPY\.approve/);
   assert.match(workspaceAiStartClientSource, /COPY\.cancel/);
   assert.match(workspaceAiStartClientSource, /COPY\.regenerate/);
+  assert.match(workspaceAiStartClientSource, /useBrowserVoiceInput/);
+  assert.match(workspaceAiStartClientSource, /Mic/);
+  assert.match(workspaceAiStartClientSource, /workspaceAiStartVoiceButton/);
+  assert.match(workspaceAiStartClientSource, /voiceStatusMessage/);
+  assert.match(browserVoiceInputSource, /SpeechRecognition/);
+  assert.match(browserVoiceInputSource, /webkitSpeechRecognition/);
+  assert.match(browserVoiceInputSource, /ko-KR/);
+  assert.match(browserVoiceInputSource, /no-speech/);
+  assert.match(globalStylesSource, /\.workspaceAiStartVoiceButton/);
+  assert.match(globalStylesSource, /\.workspaceAiStartVoiceStatus/);
   assert.match(globalStylesSource, /\.workspaceStartForm \.textInput:focus/);
 });
 
@@ -94,4 +105,8 @@ function readAppWorkspaceFile(fileName: string): string {
 
 function readAppFile(fileName: string): string {
   return readFileSync(fileURLToPath(new URL(`../../app/${fileName}`, import.meta.url)), "utf8");
+}
+
+function readFeatureWorkspaceFile(fileName: string): string {
+  return readFileSync(fileURLToPath(new URL(fileName, import.meta.url)), "utf8");
 }

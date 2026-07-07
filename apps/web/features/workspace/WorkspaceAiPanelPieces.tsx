@@ -270,20 +270,23 @@ export function WorkspaceAiTerraformPreviewResult({
   readonly preview: AiTerraformPreviewExplanationResult;
 }) {
   return (
-    <div className={styles.aiResultStack}>
+    <div className={`${styles.aiResultStack} ${styles.aiTerraformPreviewAssessment}`}>
       <p className={styles.aiResultSummary}>{preview.summary}</p>
-      <WorkspaceAiExplanation explanation={preview.llmExplanation} />
-      <WorkspaceAiTextList
-        title="감지된 리소스"
-        items={preview.detectedResources.map(
-          (resource) => `${resource.terraformType} · ${resource.label}: ${resource.explanation}`
-        )}
-      />
+      <section className={styles.aiTerraformPreviewConclusion}>
+        <strong>결론</strong>
+        <p>{preview.consensusRecommendation}</p>
+      </section>
+      <div className={styles.aiTerraformPreviewAgentGrid}>
+        {preview.wellArchitectedGuidance.map((guidance) => (
+          <section key={guidance.pillar} className={styles.aiTerraformPreviewAgentCard}>
+            <span>{guidance.title}</span>
+            <strong>{formatAiSignalLabel(guidance.pillar)}</strong>
+            <p>{guidance.observation}</p>
+            <p>{guidance.recommendation}</p>
+          </section>
+        ))}
+      </div>
       <WorkspaceAiFindingList findings={preview.findings} />
-      <WorkspaceAiTextList
-        title="체크리스트"
-        items={preview.checklist.map((item) => `${formatAiSignalLabel(item.status)} · ${item.label}`)}
-      />
     </div>
   );
 }
@@ -345,12 +348,17 @@ type AiSignalLabelKey =
   | "low"
   | "medium"
   | "network"
+  | "operational_excellence"
   | "pass"
   | "performance"
+  | "performance_efficiency"
   | "permission"
   | "plan"
+  | "cost_optimization"
+  | "reliability"
   | "security"
   | "success"
+  | "sustainability"
   | "validate"
   | "warning";
 
@@ -370,12 +378,17 @@ const AI_SIGNAL_LABELS = {
   low: "낮음",
   medium: "중간",
   network: "네트워크",
+  operational_excellence: "운영 우수성",
   pass: "통과",
   performance: "성능",
+  performance_efficiency: "성능 효율성",
   permission: "권한",
   plan: "계획",
+  cost_optimization: "비용 최적화",
+  reliability: "신뢰성",
   security: "보안",
   success: "성공",
+  sustainability: "지속 가능성",
   validate: "검증",
   warning: "경고"
 } satisfies Record<AiSignalLabelKey, string>;

@@ -1649,6 +1649,75 @@ h1 {
   overflow-wrap: anywhere;
 }
 
+.terraformPreviewAssessment {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.terraformPreviewAssessment .resultTitle {
+  color: var(--text-primary);
+  font-size: 1rem;
+  font-weight: 750;
+  line-height: 1.55;
+}
+
+.terraformPreviewConclusion {
+  background: color-mix(in srgb, var(--accent-blue) 10%, var(--surface-secondary));
+  border: 1px solid color-mix(in srgb, var(--accent-blue) 30%, var(--border-subtle));
+  border-radius: 8px;
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-4);
+}
+
+.terraformPreviewConclusion strong {
+  color: var(--accent-blue);
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
+.terraformPreviewConclusion p {
+  color: var(--text-primary);
+  font-size: 0.95rem;
+  font-weight: 700;
+  line-height: 1.55;
+  margin: 0;
+}
+
+.terraformPreviewAgentGrid {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.terraformPreviewAgentCard {
+  background: var(--surface-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: var(--space-4);
+}
+
+.terraformPreviewAgentCard span {
+  color: var(--accent-blue);
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.terraformPreviewAgentCard strong {
+  color: var(--text-primary);
+  font-size: 0.95rem;
+}
+
+.terraformPreviewAgentCard p {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  line-height: 1.5;
+  margin: 0;
+}
+
 .errorBanner,
 .loadingBanner {
   border-radius: 6px;
@@ -1678,6 +1747,10 @@ h1 {
 
   .workspaceGridWide {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .terraformPreviewAgentGrid {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -5069,7 +5142,7 @@ nextjs-portal {
   border-top: 1px solid var(--bp-line);
   display: grid;
   gap: 10px;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   padding: 14px 16px;
 }
 
@@ -5087,6 +5160,24 @@ nextjs-portal {
 .workspaceAiStartComposer textarea:focus {
   border-color: var(--bp-blue);
   outline: 2px solid color-mix(in srgb, var(--bp-blue) 18%, transparent);
+}
+
+.workspaceAiStartVoiceButton {
+  min-width: 40px;
+  padding: 0;
+}
+
+.workspaceAiStartVoiceButton[data-listening="true"] {
+  background: #b42318;
+  border-color: #b42318;
+}
+
+.workspaceAiStartVoiceStatus {
+  color: var(--bp-muted);
+  font-size: 0.78rem;
+  grid-column: 1 / -1;
+  line-height: 1.35;
+  margin: -2px 0 0;
 }
 
 @media (max-width: 720px) {
@@ -5114,7 +5205,11 @@ nextjs-portal {
 
   .workspaceAiStartComposer {
     align-items: stretch;
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .workspaceAiStartComposer textarea {
+    grid-column: 1 / -1;
   }
 }
 

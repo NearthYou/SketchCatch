@@ -680,6 +680,88 @@ test("renders placement references with Terraform snake_case attribute names", (
   assert.doesNotMatch(terraformCode, /vpcId|subnetId/);
 });
 
+test("omits AI semantic metadata that is not accepted by the Terraform provider", () => {
+  const diagramJson: DiagramJson = {
+    nodes: [
+      makeNode({
+        id: "bucket-1",
+        type: "aws_s3_bucket",
+        kind: "resource",
+        label: "assets",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_s3_bucket",
+          resourceName: "assets",
+          fileName: "storage",
+          values: {
+            bucketPurpose: "static_website_origin",
+            forceDestroy: true,
+            publicAccessBlock: true,
+            servicePurpose: "content_board",
+            tags: {
+              Name: "assets"
+            }
+          }
+        }
+      }),
+      makeNode({
+        id: "cdn-1",
+        type: "aws_cloudfront_distribution",
+        kind: "resource",
+        label: "cdn",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_cloudfront_distribution",
+          resourceName: "public_entry",
+          fileName: "edge",
+          values: {
+            enabled: true,
+            originResourceId: "bucket-1",
+            priceClass: "PriceClass_100"
+          }
+        }
+      }),
+      makeNode({
+        id: "instance-1",
+        type: "aws_instance",
+        kind: "resource",
+        label: "app",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_instance",
+          resourceName: "app",
+          fileName: "compute",
+          values: {
+            ami: "ami-1234567890abcdef0",
+            applicationPurpose: "content_board",
+            instanceType: "t3.micro",
+            servicePurpose: "content_board",
+            terraformResourceName: "app_server",
+            terraformResourceType: "aws_instance"
+          }
+        }
+      })
+    ],
+    edges: [],
+    viewport: {
+      x: 0,
+      y: 0,
+      zoom: 1
+    }
+  };
+
+  const terraformCode = generateTerraformFromDiagramJson(diagramJson);
+
+  assert.match(terraformCode, /force_destroy = true/);
+  assert.match(terraformCode, /enabled = true/);
+  assert.match(terraformCode, /price_class = "PriceClass_100"/);
+  assert.match(terraformCode, /instance_type = "t3.micro"/);
+  assert.doesNotMatch(
+    terraformCode,
+    /bucket_purpose|public_access_block|service_purpose|origin_resource_id|application_purpose|terraform_resource_name|terraform_resource_type/
+  );
+});
+
 test("renders AWS nested block lists as Terraform blocks with snake_case attributes", () => {
   const diagramJson: DiagramJson = {
     nodes: [

@@ -299,6 +299,120 @@ test("convertArchitectureJsonToDiagramJson applies diagram naming conventions an
   assertNoNodeOverlap(databaseNode, bucketNode);
 });
 
+test("convertArchitectureJsonToDiagramJson rewrites Terraform references after applying resource name conventions", () => {
+  const architectureJson: ArchitectureJson = {
+    nodes: [
+      {
+        id: "role-app-runtime",
+        type: "IAM_ROLE",
+        label: "App Runtime Role",
+        positionX: 100,
+        positionY: 100,
+        config: {
+          terraformResourceName: "app_runtime_role"
+        }
+      },
+      {
+        id: "profile-app",
+        type: "IAM_INSTANCE_PROFILE",
+        label: "App Instance Profile",
+        positionX: 220,
+        positionY: 100,
+        config: {
+          role: "aws_iam_role.app_runtime_role.name",
+          terraformResourceName: "app_instance_profile"
+        }
+      },
+      {
+        id: "ami-app",
+        type: "AMI",
+        label: "App AMI",
+        positionX: 100,
+        positionY: 220,
+        config: {
+          terraformResourceName: "app_ami"
+        }
+      },
+      {
+        id: "subnet-private-app-a",
+        type: "SUBNET",
+        label: "Private App Subnet A",
+        positionX: 220,
+        positionY: 220,
+        config: {
+          terraformResourceName: "private_app_subnet_a"
+        }
+      },
+      {
+        id: "app-security-group",
+        type: "SECURITY_GROUP",
+        label: "App Security Group",
+        positionX: 340,
+        positionY: 220,
+        config: {
+          terraformResourceName: "app_security_group"
+        }
+      },
+      {
+        id: "compute-content-board",
+        type: "EC2",
+        label: "Content Board",
+        positionX: 460,
+        positionY: 220,
+        config: {
+          ami: "data.aws_ami.app_ami.id",
+          iamInstanceProfile: "aws_iam_instance_profile.app_instance_profile.name",
+          subnetId: "aws_subnet.private_app_subnet_a.id",
+          terraformResourceName: "app_server",
+          vpcSecurityGroupIds: ["aws_security_group.app_security_group.id"]
+        }
+      },
+      {
+        id: "alarm-app-cpu",
+        type: "CLOUDWATCH_METRIC_ALARM",
+        label: "App CPU Alarm",
+        positionX: 580,
+        positionY: 220,
+        config: {
+          dimensions: {
+            InstanceId: "aws_instance.app_server.id"
+          }
+        }
+      }
+    ],
+    edges: []
+  };
+
+  const diagramJson = convertArchitectureJsonToDiagramJson(architectureJson);
+  const nodeById = new Map(diagramJson.nodes.map((node) => [node.id, node]));
+
+  assert.equal(nodeById.get("role-app-runtime")?.parameters?.resourceName, "role_app_runtime");
+  assert.equal(nodeById.get("profile-app")?.parameters?.resourceName, "profile_app");
+  assert.equal(nodeById.get("ami-app")?.parameters?.resourceName, "ami_app");
+  assert.equal(nodeById.get("subnet-private-app-a")?.parameters?.resourceName, "subnet_private_app_a");
+  assert.equal(nodeById.get("app-security-group")?.parameters?.resourceName, "sg_app");
+  assert.equal(nodeById.get("compute-content-board")?.parameters?.resourceName, "compute_content_board");
+  assert.equal(
+    nodeById.get("profile-app")?.parameters?.values["role"],
+    "aws_iam_role.role_app_runtime.name"
+  );
+  assert.equal(nodeById.get("compute-content-board")?.parameters?.values["ami"], "data.aws_ami.ami_app.id");
+  assert.equal(
+    nodeById.get("compute-content-board")?.parameters?.values["iamInstanceProfile"],
+    "aws_iam_instance_profile.profile_app.name"
+  );
+  assert.equal(
+    nodeById.get("compute-content-board")?.parameters?.values["subnetId"],
+    "aws_subnet.subnet_private_app_a.id"
+  );
+  assert.deepEqual(nodeById.get("compute-content-board")?.parameters?.values["vpcSecurityGroupIds"], [
+    "aws_security_group.sg_app.id"
+  ]);
+  assert.deepEqual(nodeById.get("alarm-app-cpu")?.parameters?.values["dimensions"], {
+    InstanceId: "aws_instance.compute_content_board.id"
+  });
+});
+
 test("convertArchitectureJsonToDiagramJson avoids sibling overlaps after area nodes expand", () => {
   const architectureJson: ArchitectureJson = {
     nodes: [
@@ -867,7 +981,7 @@ test("convertArchitectureJsonToDiagramJson maps server and storage draft resourc
         resourceType: "aws_route_table",
         terraformBlockType: "resource",
         values: {
-          route: [{ cidrBlock: "0.0.0.0/0", gatewayId: "aws_internet_gateway.internet_gateway.id" }],
+          route: [{ cidrBlock: "0.0.0.0/0", gatewayId: "aws_internet_gateway.igw.id" }],
           vpcId: "aws_vpc.vpc.id"
         }
       },
@@ -877,7 +991,7 @@ test("convertArchitectureJsonToDiagramJson maps server and storage draft resourc
         resourceType: "aws_route_table_association",
         terraformBlockType: "resource",
         values: {
-          routeTableId: "aws_route_table.route_table.id",
+          routeTableId: "aws_route_table.rt.id",
           subnetId: "aws_subnet.subnet.id"
         }
       },

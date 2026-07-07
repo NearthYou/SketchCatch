@@ -130,6 +130,85 @@ test("detects unexpected tokens after a closed block", () => {
   assert.equal(diagnostics[0]?.severity, "error");
 });
 
+test("reports a standalone invalid top-level line as one syntax error", () => {
+  const diagnostics = createTerraformDiagnostics(`resource "aws_vpc" "main" {
+  cidr_block = "10.0.0.0/16"
+}
+ㅇㄹㅇㄹㅇㄹ`);
+
+  assert.deepEqual(
+    diagnostics.filter((diagnostic) => diagnostic.severity === "error"),
+    [
+      {
+        severity: "error",
+        code: "terraform.unexpected_token",
+        line: 4,
+        message: "알 수 없는 Terraform 코드 줄입니다. resource/data block 또는 attribute 형식으로 작성하세요."
+      }
+    ]
+  );
+});
+
+test("reports top-level attributes as syntax errors", () => {
+  const diagnostics = createTerraformDiagnostics(`resource "aws_vpc" "main" {
+  cidr_block = "10.0.0.0/16"
+}
+cidr_block = "10.0.1.0/24"`);
+
+  assert.deepEqual(
+    diagnostics.filter((diagnostic) => diagnostic.severity === "error"),
+    [
+      {
+        severity: "error",
+        code: "terraform.unexpected_token",
+        line: 4,
+        message: "알 수 없는 Terraform 코드 줄입니다. resource/data block 또는 attribute 형식으로 작성하세요."
+      }
+    ]
+  );
+});
+
+test("reports a non-attribute resource body line as one syntax error", () => {
+  const diagnostics = createTerraformDiagnostics(`resource "aws_vpc" "main" {
+  cidr_block = "10.0.0.0/16"
+  ㅇㄹㅇㄹㅇㄹ
+}`);
+
+  assert.deepEqual(
+    diagnostics.filter((diagnostic) => diagnostic.severity === "error"),
+    [
+      {
+        severity: "error",
+        code: "terraform.attribute_syntax",
+        line: 3,
+        resourceAddress: "resource.aws_vpc.main",
+        message: "block 안의 값은 attribute = value 또는 nested_block { 형식이어야 합니다."
+      }
+    ]
+  );
+});
+
+test("allows multiline list attributes inside resource and data blocks", () => {
+  const diagnostics = createTerraformDiagnostics(`data "aws_ami" "ami_app" {
+  owners = [
+    "amazon",
+  ]
+  name_regex = "^al2023-ami-2023.*-x86_64$"
+  most_recent = true
+}
+
+resource "aws_instance" "web" {
+  vpc_security_group_ids = [
+    aws_security_group.sg_app.id,
+  ]
+}`);
+
+  assert.equal(
+    diagnostics.some((diagnostic) => diagnostic.code === "terraform.attribute_syntax"),
+    false
+  );
+});
+
 test("detects trailing commas after attribute assignments", () => {
   const diagnostics = createTerraformDiagnostics(`resource "aws_security_group_rule" "ssh" {
   type = "ingress",

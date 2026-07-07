@@ -1855,6 +1855,8 @@ export type AiTerraformPreviewExplanationResult = {
   detectedResources: AiTerraformDetectedResource[];
   findings: CheckFinding[];
   checklist: ChecklistItem[];
+  wellArchitectedGuidance: AiWellArchitectedGuidance[];
+  consensusRecommendation: string;
   llmExplanation?: LlmExplanation | undefined;
 };
 

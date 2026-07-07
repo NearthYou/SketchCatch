@@ -1313,6 +1313,20 @@ type AiTerraformErrorExplanationResult = {
 };
 ```
 
+Terraform Preview 설명은 Terraform 코드를 실제 실행하지 않고, 감지한 resource block과 deterministic finding을 근거로 현재 다이어그램/IaC Preview를 평가하는 설명 DTO다. 화면은 감지 리소스 나열보다 Well-Architected 6개 기준별 에이전트 평가와 최종 결론을 우선 표시한다. `detectedResources`는 legacy/LLM 근거 호환을 위해 유지하지만 사용자 화면의 주요 정보가 아니다.
+
+```ts
+type AiTerraformPreviewExplanationResult = {
+  summary: string;
+  detectedResources: AiTerraformDetectedResource[];
+  findings: CheckFinding[];
+  checklist: ChecklistItem[];
+  wellArchitectedGuidance: AiWellArchitectedGuidance[];
+  consensusRecommendation: string;
+  llmExplanation?: LlmExplanation;
+};
+```
+
 v1에서 rule-first 자동 적용 후보가 될 수 있는 진단은 `terraform.trailing_comma`, `terraform.quoted_reference`뿐이다. 그 외 진단은 `safeFix.applicable: false` 또는 `diagnosticExplanation.canApply: false`로 내려가며 Issues 탭과 AI chat dock은 수동 수정 필요 상태로 표시한다. Amazon Q가 `codeSuggestion`을 반환하더라도 현재 코드와 정확히 매칭되는 경우에만 적용 버튼을 활성화한다.
 
 자연어 Architecture 수정 요청은 `ArchitecturePatchPreview`로만 반환한다. 이 preview는 `proposedArchitectureJson`과 diff 성격의 `changes`를 보여줄 뿐이며, `requiresUserAcceptance: true`와 `userAcceptedChange: null` 상태로 내려간다. 실제 Architecture Board 반영은 별도 적용 버튼에서 `UserAcceptedChange`를 기록한 뒤에만 가능하다.

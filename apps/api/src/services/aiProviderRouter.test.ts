@@ -90,6 +90,8 @@ function createTerraformPreviewResult(
     detectedResources: [],
     findings: [],
     checklist: [],
+    wellArchitectedGuidance: [],
+    consensusRecommendation: "Review the Terraform preview before continuing.",
     ...input
   };
 }

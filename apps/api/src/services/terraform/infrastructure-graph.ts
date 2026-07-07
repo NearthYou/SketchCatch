@@ -9,6 +9,22 @@ import type {
 } from "@sketchcatch/types";
 
 const DEFAULT_TERRAFORM_BLOCK_TYPE: TerraformBlockType = "resource";
+const NON_RENDERABLE_TERRAFORM_CONFIG_KEYS = new Set([
+  "applicationPurpose",
+  "application_purpose",
+  "bucketPurpose",
+  "bucket_purpose",
+  "originResourceId",
+  "origin_resource_id",
+  "publicAccessBlock",
+  "public_access_block",
+  "servicePurpose",
+  "service_purpose",
+  "terraformResourceName",
+  "terraform_resource_name",
+  "terraformResourceType",
+  "terraform_resource_type"
+]);
 
 export function buildInfrastructureGraphFromDiagramJson(diagramJson: DiagramJson): InfrastructureGraph {
   const nodeById = new Map(diagramJson.nodes.map((node) => [node.id, node]));
@@ -74,7 +90,7 @@ function getRenderableConfig(
   node: DiagramNode,
   nodeById: ReadonlyMap<string, DiagramNode>
 ): Record<string, unknown> {
-  const values = node.parameters?.values ?? {};
+  const values = filterRenderableConfigValues(node.parameters?.values ?? {});
   const inheritedAvailabilityZone = getInheritedAvailabilityZone(node, nodeById);
 
   if (!inheritedAvailabilityZone || hasOwnAvailabilityZone(values)) {
@@ -85,6 +101,12 @@ function getRenderableConfig(
     ...values,
     availabilityZone: inheritedAvailabilityZone
   };
+}
+
+function filterRenderableConfigValues(values: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(values).filter(([key]) => !NON_RENDERABLE_TERRAFORM_CONFIG_KEYS.has(key))
+  );
 }
 
 function getInheritedAvailabilityZone(

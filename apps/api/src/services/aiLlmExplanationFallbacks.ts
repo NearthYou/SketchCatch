@@ -77,25 +77,22 @@ export function createTerraformPreviewFallbackExplanation(
     result.findings.length > 0
       ? result.findings.map((finding) => finding.title).slice(0, 2).join(", ")
       : "현재 rule 기반 finding은 없습니다.";
-  const wellArchitectedHighlights = [
-    `운영 우수성 원칙: IaC Preview가 감지한 ${result.detectedResources.length}개 리소스와 체크리스트를 기준으로 변경 추적과 검증 절차를 확인하세요.`,
-    `보안 원칙: ${findingSummary} 공개 접근, 권한 범위, 암호화 설정을 배포 전 다시 확인하세요.`,
-    "신뢰성 원칙: 단일 리소스나 단일 역할 지점이 있는지 확인하고 필요하면 다중 AZ/복구 경로를 보강하세요.",
-    "성능 효율성 원칙: 현재 Terraform 코드의 리소스 크기와 네트워크 경로가 예상 워크로드에 맞는지 검토하세요.",
-    "비용 최적화 원칙: 상시 실행 리소스에 과한 용량 설정이 있는지 확인하고 practice 목적에 맞게 줄이세요.",
-    "지속 가능성 원칙: 필요한 리소스만 생성하고 유휴 리소스 cleanup 경로를 유지하세요."
-  ];
+  const wellArchitectedHighlights = result.wellArchitectedGuidance.map(
+    (guidance) => `${guidance.title}: ${guidance.observation} ${guidance.recommendation}`
+  );
 
   return {
     target: "terraform_preview_explanation",
     summary: result.summary,
-    highlights: wellArchitectedHighlights,
+    highlights:
+      wellArchitectedHighlights.length > 0
+        ? wellArchitectedHighlights
+        : [`Preview 평가: ${findingSummary} 배포 전 보안, 비용, 신뢰성 기준을 다시 확인하세요.`],
     nextActions:
       result.findings.length > 0
         ? result.findings.map((finding) => finding.recommendation).slice(0, 5)
-        : ["IaC Preview와 Architecture Board가 같은 의도인지 확인한 뒤 다음 단계로 진행하세요."],
-    wellArchitectedConclusion:
-      "Overall evaluation: Review the preview code against all six Well-Architected pillars before accepting the IaC change.",
+        : [result.consensusRecommendation, "IaC Preview와 Architecture Board가 같은 의도인지 확인한 뒤 다음 단계로 진행하세요."],
+    wellArchitectedConclusion: result.consensusRecommendation,
     fallbackUsed: true,
     fallbackReason
   };

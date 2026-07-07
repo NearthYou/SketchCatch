@@ -56,9 +56,10 @@ type TerraformErrorExplanationSummaryPayload = {
 type TerraformPreviewExplanationSummaryPayload = {
   readonly target: "terraform_preview_explanation";
   readonly summary: string;
-  readonly detectedResources: readonly string[];
   readonly findings: readonly string[];
   readonly checklist: readonly string[];
+  readonly wellArchitectedGuidance: readonly string[];
+  readonly consensusRecommendation: string;
 };
 
 type ArchitecturePatchPreviewSummaryPayload = {
@@ -178,11 +179,12 @@ function createTerraformPreviewExplanationSummaryPayload(
   return {
     target: "terraform_preview_explanation",
     summary: result.summary,
-    detectedResources: result.detectedResources.map(
-      (resource) => `${resource.terraformType}: ${resource.label}`
-    ),
     findings: result.findings.map((finding) => `${finding.severity} ${finding.category}: ${finding.title}`),
-    checklist: result.checklist.map((item) => `${item.status}: ${item.label}`)
+    checklist: result.checklist.map((item) => `${item.status}: ${item.label}`),
+    wellArchitectedGuidance: result.wellArchitectedGuidance.map(
+      (guidance) => `${guidance.title}: ${guidance.observation} / ${guidance.recommendation}`
+    ),
+    consensusRecommendation: result.consensusRecommendation
   };
 }
 

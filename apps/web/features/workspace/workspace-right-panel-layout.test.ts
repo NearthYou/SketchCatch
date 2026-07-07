@@ -356,12 +356,12 @@ test("terraform leave guard covers workspace escape actions while editing", () =
   assert.doesNotMatch(componentSource, /activeView === "terraform" \|\| activeView === "issues"/);
 });
 
-test("terraform issues navigation stays reachable while diagnostics are visible", () => {
-  assert.match(componentSource, /canOpenTerraformIssuesDuringEdit/);
-  assert.match(componentSource, /nextView === "issues" && canOpenTerraformIssuesDuringEdit/);
+test("terraform issues navigation bypasses the leave guard as an internal terraform workflow", () => {
+  assert.doesNotMatch(componentSource, /canOpenTerraformIssuesDuringEdit/);
+  assert.match(componentSource, /nextView === "issues"/);
   assert.match(componentSource, /data-terraform-issues-navigation/);
   assert.match(componentSource, /isTerraformIssuesNavigationTarget/);
-  assert.match(componentSource, /canOpenTerraformIssuesDuringEdit && isTerraformIssuesNavigationTarget\(target\)/);
+  assert.match(componentSource, /isTerraformIssuesNavigationTarget\(target\)/);
   assert.match(componentSource, /openCollapsedView\("issues"\)/);
 });
 
@@ -730,11 +730,15 @@ test("pre-deployment finding fix buttons open the existing terraform source loca
 test("terraform errors surface as an issues banner and AI resolution lives in the chat dock", () => {
   const issueBannerRule = getCssRule(stylesSource, "terraformIssueBanner");
   const aiButtonRule = getCssRule(stylesSource, "terraformDiagnosticAiButton");
+  const issuesPanelRule = getCssRule(stylesSource, "issuesPanel");
+  const issuesDiagnosticsRule = getCssRule(stylesSource, "issuesPanel .terraformDiagnostics");
 
-  assert.match(terraformPanelSource, /runAiTerraformErrorExplanation/);
-  assert.match(terraformPanelSource, /terraformErrorExplanationsByKey/);
-  assert.match(terraformPanelSource, /className=\{styles\.terraformErrorExplanationPanel\}/);
-  assert.match(terraformPanelSource, /오류를 해석하는 중입니다/);
+  assert.doesNotMatch(terraformPanelSource, /runAiTerraformErrorExplanation/);
+  assert.doesNotMatch(terraformPanelSource, /terraformErrorExplanationsByKey/);
+  assert.doesNotMatch(terraformPanelSource, /오류를 해석하는 중입니다/);
+  assert.doesNotMatch(terraformPanelSource, /AI 설명/);
+  assert.doesNotMatch(terraformPanelSource, /terraformErrorExplanationPanel/);
+  assert.doesNotMatch(terraformPanelSource, /terraformErrorExplanationList/);
   assert.match(terraformPanelSource, /className=\{styles\.terraformIssueBanner\}/);
   assert.match(terraformPanelSource, /Issues 탭으로 이동/);
   assert.match(componentSource, /readStoredTerraformIssues/);
@@ -751,6 +755,15 @@ test("terraform errors surface as an issues banner and AI resolution lives in th
   assert.match(aiChatDockSource, /onApplyTerraformIssueFix/);
   assert.match(issueBannerRule, /\bbackground:\s*#fff7ed;/);
   assert.match(aiButtonRule, /\bbackground:\s*var\(--bp-blue\);/);
+  assert.match(issuesPanelRule, /\bheight:\s*100%;/);
+  assert.match(issuesPanelRule, /\bmin-height:\s*0;/);
+  assert.match(issuesPanelRule, /\boverflow:\s*hidden;/);
+  assert.match(issuesPanelRule, /\bgrid-template-rows:\s*minmax\(0,\s*1fr\);/);
+  assert.match(issuesDiagnosticsRule, /\bmin-height:\s*0;/);
+  assert.match(issuesDiagnosticsRule, /\boverflow-y:\s*auto;/);
+  assert.match(issuesDiagnosticsRule, /\bscrollbar-gutter:\s*stable;/);
+  assert.doesNotMatch(stylesSource, /\.issuesPanel\s*\{[^}]*background:\s*var\(--bb-dark\);/s);
+  assert.doesNotMatch(stylesSource, /\.issuesPanel \.terraformDiagnostics\s*\{[^}]*background:\s*var\(--bb-dark\);/s);
 });
 
 test("terraform issue AI resolution shows a fix plan before apply", () => {
