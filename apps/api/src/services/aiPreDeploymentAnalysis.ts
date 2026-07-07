@@ -19,7 +19,9 @@ export function analyzePreDeployment(
   architectureJson: ArchitectureJson,
   options: AnalyzePreDeploymentOptions = {}
 ): AiPreDeploymentAnalysisResult {
-  const findings = architectureJson.nodes.flatMap((node) => createFindingsForNode(node, options));
+  const findings = deduplicatePreDeploymentFindings(
+    architectureJson.nodes.flatMap((node) => createFindingsForNode(node, options))
+  );
   const resourceCostEstimates = architectureJson.nodes.map(createResourceCostEstimate);
 
   return {
@@ -44,7 +46,10 @@ export function mergePreDeploymentAnalysisFindings(
     return analysis;
   }
 
-  const findings = [...prependedFindings, ...analysis.findings];
+  const findings = deduplicatePreDeploymentFindings([
+    ...prependedFindings,
+    ...analysis.findings
+  ]);
 
   return {
     ...analysis,
@@ -56,6 +61,38 @@ export function mergePreDeploymentAnalysisFindings(
 }
 
 // finding 목록을 사용자가 먼저 볼 한 문장 요약으로 줄입니다.
+function deduplicatePreDeploymentFindings(
+  findings: readonly CheckFinding[]
+): CheckFinding[] {
+  const deduplicated = new Map<string, CheckFinding>();
+
+  for (const finding of findings) {
+    const key = createPreDeploymentFindingDedupeKey(finding);
+
+    if (!deduplicated.has(key)) {
+      deduplicated.set(key, finding);
+    }
+  }
+
+  return [...deduplicated.values()];
+}
+
+function createPreDeploymentFindingDedupeKey(finding: CheckFinding): string {
+  return [
+    finding.category,
+    finding.severity,
+    normalizeFindingText(
+      finding.resourceId ?? finding.sourceLocation?.resourceAddress ?? "global"
+    ),
+    normalizeFindingText(finding.title),
+    normalizeFindingText(finding.recommendation)
+  ].join("|");
+}
+
+function normalizeFindingText(value: string): string {
+  return value.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
 function createSummary(findings: readonly CheckFinding[]): string {
   if (findings.length === 0) {
     return "현재 기본 Pre-Deployment Check에서 막는 항목은 없습니다.";
