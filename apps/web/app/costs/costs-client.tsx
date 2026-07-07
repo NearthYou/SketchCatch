@@ -1017,7 +1017,7 @@ function CostUsageAnalysisTab({
               />
               <CostMetricCard
                 icon={<PiggyBank size={18} aria-hidden="true" />}
-                label={selectedUsageProject === null ? "예상 절감" : "산정 리소스"}
+                label={selectedUsageProject === null ? "최적화 가능액" : "산정 리소스"}
                 value={
                   selectedUsageProject === null
                     ? formatUsd(monthlySavings)
