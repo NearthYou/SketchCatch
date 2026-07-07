@@ -4513,7 +4513,7 @@ nextjs-portal {
 
 .workspaceStartCheckbox:has(input:disabled) {
   cursor: not-allowed;
-  opacity: 0.5;
+  opacity: 0.72;
 }
 
 .reverseCandidateSelectionPanel {
@@ -6752,8 +6752,8 @@ nextjs-portal {
   --dashboard-border: rgba(148, 163, 184, 0.22);
   --dashboard-border-strong: rgba(148, 163, 184, 0.34);
   --dashboard-text: #f8fafc;
-  --dashboard-muted: #b6c2d2;
-  --dashboard-subtle: #8794a8;
+  --dashboard-muted: #c6d1df;
+  --dashboard-subtle: #a7b5c8;
   background:
     radial-gradient(circle at 10% 12%, rgba(20, 184, 166, 0.11), transparent 28rem),
     radial-gradient(circle at 90% 8%, rgba(124, 92, 255, 0.1), transparent 26rem),
@@ -6902,7 +6902,7 @@ nextjs-portal {
 .templateListRow p,
 .integrationPanel p,
 .costNoticePanel p {
-  color: #b6c2d2;
+  color: #c6d1df;
 }
 
 .projectCardMeta,
@@ -6910,7 +6910,14 @@ nextjs-portal {
 .templateCardHeader span,
 .templateListRow span,
 .settingsInfoGrid span {
-  color: #8794a8;
+  color: #a7b5c8;
+}
+
+.dashboardShell .dashboardTopbarAction:disabled,
+.dashboardShell .dashboardSecondaryButton:disabled,
+.dashboardShell .dashboardDangerButton:disabled {
+  color: #c8d3e2;
+  opacity: 0.74;
 }
 
 .dashboardChip {

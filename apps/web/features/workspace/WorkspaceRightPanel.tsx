@@ -2,14 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CheckFinding, TerraformDiagnostic, TerraformSourceLocation } from "@sketchcatch/types";
+import { createPortal } from "react-dom";
 import {
   AlertCircle,
-  ChevronRight,
   Code2,
   GalleryVerticalEnd,
   PanelRightClose,
   PanelRightOpen,
-  Play,
   Rocket
 } from "lucide-react";
 import type { DiagramEditorPanelContext } from "../diagram-editor";
@@ -89,7 +88,6 @@ export function WorkspaceRightPanel({
   const [activeView, setActiveView] = useState<WorkspaceRightPanelView>(
     initialView === "deployment" ? "resource" : initialView ?? "resource"
   );
-  const [isPlanActionStripOpen, setIsPlanActionStripOpen] = useState(false);
   const [resourceWorkspaceView, setResourceWorkspaceView] = useState<ResourceWorkspaceView>(
     defaultResourceWorkspaceView
   );
@@ -108,6 +106,7 @@ export function WorkspaceRightPanel({
   const [isDeploymentConsoleOpen, setIsDeploymentConsoleOpen] = useState(
     initialView === "deployment"
   );
+  const [canRenderDeploymentPortal, setCanRenderDeploymentPortal] = useState(false);
   const latestTerraformSafeFixApplyRequestIdRef = useRef<number | null>(null);
   const terraformDiagnostics = useMemo(
     () => terraformIssues.map((issue) => issue.diagnostic),
@@ -122,6 +121,10 @@ export function WorkspaceRightPanel({
   const hasUnsavedDeploymentBaseline =
     isDeploymentBaselineDirty ||
     lastSavedDeploymentBaselineFingerprint !== currentDeploymentBaselineFingerprint;
+
+  useEffect(() => {
+    setCanRenderDeploymentPortal(true);
+  }, []);
 
   const handleTerraformDirtyChange = useCallback((isDirty: boolean): void => {
     setHasUnsavedTerraformChanges(isDirty);
@@ -272,17 +275,12 @@ export function WorkspaceRightPanel({
   }, [activeView, canOpenTerraformIssuesDuringEdit, requestTerraformLeave]);
 
   const openDeploymentConsole = useCallback((): void => {
-    setIsPlanActionStripOpen(false);
     if (!requestTerraformLeave({ kind: "deployment-console" })) {
       return;
     }
 
     setIsDeploymentConsoleOpen(true);
   }, [requestTerraformLeave]);
-
-  function openDeploymentFromPlan(): void {
-    openDeploymentConsole();
-  }
 
   const applyTerraformLeaveSaveFeedback = useCallback((feedback: TerraformLeaveSaveFeedback): void => {
     setTerraformLeaveSaveState(feedback.state);
@@ -511,7 +509,7 @@ export function WorkspaceRightPanel({
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [hasUnsavedTerraformChanges]);
 
-  const deploymentConsole = isDeploymentConsoleOpen ? (
+  const deploymentConsoleContent = isDeploymentConsoleOpen ? (
     <DeploymentPanel
       currentNodeCount={context.nodes.length}
       diagramJson={context.diagram}
@@ -534,6 +532,10 @@ export function WorkspaceRightPanel({
       projectName={projectName}
     />
   ) : null;
+  const deploymentConsole =
+    deploymentConsoleContent && canRenderDeploymentPortal
+      ? createPortal(deploymentConsoleContent, document.body)
+      : null;
 
   if (!context.isRightPanelOpen) {
     return (
@@ -654,57 +656,6 @@ export function WorkspaceRightPanel({
             <Rocket size={14} aria-hidden="true" />
             <span>Deploy</span>
           </button>
-          <div className={styles.panelPlanSplitButton}>
-            <button
-              className={styles.panelPlanMainButton}
-              onClick={openDeploymentFromPlan}
-              type="button"
-            >
-              <Play size={14} aria-hidden="true" />
-              <span>Plan</span>
-            </button>
-            <button
-              aria-expanded={isPlanActionStripOpen}
-              className={styles.panelPlanExpandButton}
-              onClick={() => setIsPlanActionStripOpen((isOpen) => !isOpen)}
-              title="Plan actions"
-              type="button"
-            >
-              <ChevronRight size={14} aria-hidden="true" />
-            </button>
-          </div>
-          {isPlanActionStripOpen ? (
-            <div className={styles.panelPlanActionStrip} role="group" aria-label="Plan actions">
-              <button
-                className={`${styles.panelPlanActionButton} ${styles.panelPlanActionButtonActive}`}
-                onClick={openDeploymentFromPlan}
-                type="button"
-              >
-                Plan
-              </button>
-              <button
-                className={styles.panelPlanActionButton}
-                onClick={openDeploymentFromPlan}
-                type="button"
-              >
-                Validate
-              </button>
-              <button
-                className={styles.panelPlanActionButton}
-                onClick={openDeploymentFromPlan}
-                type="button"
-              >
-                Apply
-              </button>
-              <button
-                className={`${styles.panelPlanActionButton} ${styles.panelPlanActionDangerButton}`}
-                onClick={openDeploymentFromPlan}
-                type="button"
-              >
-                Destroy
-              </button>
-            </div>
-          ) : null}
         </div>
 
         <div className={styles.rightPanelView} hidden={activeView !== "resource"}>
