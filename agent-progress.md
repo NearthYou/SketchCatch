@@ -18,6 +18,19 @@ This file is the short, English-only working log for the current agent context. 
 
 2026-07-08:
 
+- Removed the per-diagnostic AI explanation button from the Terraform error summary in the code panel.
+- Restored the Issues tab to the light workspace panel styling and removed the late dark override that made issue cards hard to read.
+- Treated Terraform Code, Issues, and Terraform issue AI resolution as one internal workflow so the unsaved Terraform leave dialog does not appear while moving between them.
+
+Verification:
+
+- `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-right-panel-layout.test.ts`
+- `pnpm --filter @sketchcatch/web typecheck`
+- `pnpm harness:check`
+- `pnpm lint`
+- `pnpm typecheck`
+- `pnpm build`
+
 - Corrected diagram edge handling so only `contains`/`hosts` are removed as area containment; runtime and configuration relationships remain visible.
 - Added endpoint-based styling so IAM/KMS/AMI/security configuration relationships render as thin solid dependency lines even when the AI label is generic.
 - Kept async/event/log/monitoring relationships dashed, Terraform/deploy relationships operational dashed, and runtime HTTPS/data relationships solid.

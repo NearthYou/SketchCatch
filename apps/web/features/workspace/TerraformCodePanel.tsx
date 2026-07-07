@@ -1,12 +1,6 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent, UIEvent } from "react";
-import type {
-  AiTerraformErrorExplanationResult,
-  DiagramJson,
-  TerraformDiagnostic,
-  TerraformSourceLocation,
-  TerraformSyncFileInput
-} from "@sketchcatch/types";
+import type { DiagramJson, TerraformDiagnostic, TerraformSourceLocation, TerraformSyncFileInput } from "@sketchcatch/types";
 import {
   ArrowLeft,
   ChevronDown,
@@ -19,7 +13,6 @@ import { getApiErrorMessage } from "../../lib/api-client";
 import type { DiagramEditorPanelContext } from "../diagram-editor";
 import {
   generateTerraformCode,
-  runAiTerraformErrorExplanation,
   syncTerraformToDiagram,
   validateTerraformCode
 } from "./api";
@@ -76,16 +69,6 @@ type TerraformPreviewExplanationScope = {
   readonly key: string;
   readonly label: string;
 };
-
-type TerraformErrorExplanationEntry = {
-  readonly explanation: AiTerraformErrorExplanationResult | null;
-  readonly message: string;
-  readonly state: RequestState;
-};
-
-function formatTerraformErrorRawMessage(diagnostic: TerraformDiagnostic): string {
-  return `${formatTerraformDiagnosticTitle(diagnostic)}\n${diagnostic.message}`;
-}
 
 function createTerraformPreviewExplanationScope({
   activeFileName,
@@ -266,8 +249,6 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
   const [isTerraformPreviewStale, setIsTerraformPreviewStale] = useState(true);
   const [hasLocalEdits, setHasLocalEdits] = useState(false);
   const [saveBanner, setSaveBanner] = useState<TerraformSaveBanner | null>(null);
-  const [terraformErrorExplanationsByKey, setTerraformErrorExplanationsByKey] =
-    useState<Record<string, TerraformErrorExplanationEntry>>({});
   const [codeScrollTop, setCodeScrollTop] = useState(0);
   const [codeScrollLeft, setCodeScrollLeft] = useState(0);
   const codeRequestIdRef = useRef(0);
@@ -291,10 +272,6 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
   const errorDiagnostics = useMemo(
     () => diagnostics.filter((diagnostic) => diagnostic.severity === "error"),
     [diagnostics]
-  );
-  const errorDiagnosticKeys = useMemo(
-    () => new Set(errorDiagnostics.map((diagnostic) => createTerraformDiagnosticKey(diagnostic))),
-    [errorDiagnostics]
   );
   const currentDiagramFingerprint = useMemo(
     () => toTerraformRefreshFingerprint(context.diagram),
@@ -430,52 +407,6 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
       label: terraformPreviewExplanationScope.label,
       terraformCode: terraformPreviewExplanationScope.code
     });
-  }
-
-  async function explainTerraformError(diagnostic: TerraformDiagnostic): Promise<void> {
-    const diagnosticKey = createTerraformDiagnosticKey(diagnostic);
-    const explanationEntry = terraformErrorExplanationsByKey[diagnosticKey];
-
-    if (explanationEntry?.state === "loading") {
-      return;
-    }
-
-    const relatedResourceId = diagnostic.resourceAddress ?? diagnostic.nodeId;
-
-    setTerraformErrorExplanationsByKey((currentExplanations) => ({
-      ...currentExplanations,
-      [diagnosticKey]: {
-        explanation: null,
-        message: "",
-        state: "loading"
-      }
-    }));
-
-    try {
-      const explanation = await runAiTerraformErrorExplanation({
-        rawMessage: formatTerraformErrorRawMessage(diagnostic),
-        ...(relatedResourceId ? { relatedResourceId } : {}),
-        stage: "validate"
-      });
-
-      setTerraformErrorExplanationsByKey((currentExplanations) => ({
-        ...currentExplanations,
-        [diagnosticKey]: {
-          explanation,
-          message: "",
-          state: "idle"
-        }
-      }));
-    } catch (error) {
-      setTerraformErrorExplanationsByKey((currentExplanations) => ({
-        ...currentExplanations,
-        [diagnosticKey]: {
-          explanation: null,
-          message: getApiErrorMessage(error, "Terraform 오류 설명 중 오류가 발생했습니다."),
-          state: "error"
-        }
-      }));
-    }
   }
 
   const refreshTerraformCode = useCallback(
@@ -971,26 +902,6 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
   }, [hasLocalEdits, onDirtyChange]);
 
   useEffect(() => {
-    setTerraformErrorExplanationsByKey((currentExplanations) => {
-      const currentKeys = Object.keys(currentExplanations);
-      const nextExplanations = currentKeys.reduce<Record<string, TerraformErrorExplanationEntry>>(
-        (entries, diagnosticKey) => {
-          const explanationEntry = currentExplanations[diagnosticKey];
-
-          if (explanationEntry && errorDiagnosticKeys.has(diagnosticKey)) {
-            entries[diagnosticKey] = explanationEntry;
-          }
-
-          return entries;
-        },
-        {}
-      );
-
-      return currentKeys.length === Object.keys(nextExplanations).length ? currentExplanations : nextExplanations;
-    });
-  }, [errorDiagnosticKeys]);
-
-  useEffect(() => {
     if (!isVisible || isResourceCodeMode || !selectedBlock || !textareaRef.current) {
       return;
     }
@@ -1280,11 +1191,6 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
           <ol className={styles.terraformErrorExplanationList}>
             {errorDiagnostics.map((diagnostic, index) => {
               const diagnosticKey = createTerraformDiagnosticKey(diagnostic);
-              const explanationEntry = terraformErrorExplanationsByKey[diagnosticKey];
-              const diagnosticExplanation = explanationEntry?.explanation ?? null;
-              const isExplanationLoading = explanationEntry?.state === "loading";
-              const isExplanationError = explanationEntry?.state === "error";
-              const explanationMessage = explanationEntry?.message ?? "";
 
               return (
                 <li key={`${diagnosticKey}-${index}`}>
@@ -1292,41 +1198,6 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
                     <strong>{formatTerraformDiagnosticTitle(diagnostic)}</strong>
                     <span>{diagnostic.message}</span>
                   </div>
-                  <button
-                    disabled={isExplanationLoading || requestState === "loading"}
-                    onClick={() => void explainTerraformError(diagnostic)}
-                    type="button"
-                  >
-                    <Sparkles size={14} aria-hidden="true" />
-                    <span>{isExplanationLoading ? "해석 중" : "AI 설명"}</span>
-                  </button>
-                  {isExplanationLoading ? (
-                    <p className={styles.terraformErrorExplanationNotice}>
-                      오류를 해석하는 중입니다.
-                    </p>
-                  ) : null}
-                  {isExplanationError ? (
-                    <p className={styles.terraformErrorExplanationError}>
-                      {explanationMessage}
-                    </p>
-                  ) : null}
-                  {diagnosticExplanation ? (
-                    <div className={styles.terraformErrorExplanationResult}>
-                      <p>{diagnosticExplanation.summary}</p>
-                      <dl>
-                        <div>
-                          <dt>원인</dt>
-                          <dd>{diagnosticExplanation.likelyCause}</dd>
-                        </div>
-                        {diagnosticExplanation.nextActions.slice(0, 2).map((action, actionIndex) => (
-                          <div key={`${action}-${actionIndex}`}>
-                            <dt>{actionIndex === 0 ? "다음 행동" : "추가 행동"}</dt>
-                            <dd>{action}</dd>
-                          </div>
-                        ))}
-                      </dl>
-                    </div>
-                  ) : null}
                 </li>
               );
             })}

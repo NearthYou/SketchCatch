@@ -108,7 +108,6 @@ export function WorkspaceRightPanel({
     [terraformIssues]
   );
   const hasTerraformIssueErrors = terraformDiagnostics.some((diagnostic) => diagnostic.severity === "error");
-  const canOpenTerraformIssuesDuringEdit = terraformDiagnostics.length > 0;
   const currentDeploymentBaselineFingerprint = useMemo(
     () => toDeploymentBaselineFingerprint(context.diagram),
     [context.diagram]
@@ -248,7 +247,7 @@ export function WorkspaceRightPanel({
       return;
     }
 
-    if (nextView === "issues" && canOpenTerraformIssuesDuringEdit) {
+    if (nextView === "issues") {
       setActiveView("issues");
       return;
     }
@@ -258,7 +257,7 @@ export function WorkspaceRightPanel({
     }
 
     setActiveView(nextView);
-  }, [activeView, canOpenTerraformIssuesDuringEdit, requestTerraformLeave]);
+  }, [activeView, requestTerraformLeave]);
 
   function openDeploymentFromPlan(): void {
     setIsPlanActionStripOpen(false);
@@ -347,7 +346,7 @@ export function WorkspaceRightPanel({
       return;
     }
 
-    if (nextView === "issues" && canOpenTerraformIssuesDuringEdit) {
+    if (nextView === "issues") {
       context.setRightPanelOpen(true);
       setActiveView("issues");
       return;
@@ -447,7 +446,7 @@ export function WorkspaceRightPanel({
         return;
       }
 
-      if (canOpenTerraformIssuesDuringEdit && isTerraformIssuesNavigationTarget(target)) {
+      if (isTerraformIssuesNavigationTarget(target)) {
         return;
       }
 
@@ -471,7 +470,7 @@ export function WorkspaceRightPanel({
 
     document.addEventListener("click", handleDocumentClick, true);
     return () => document.removeEventListener("click", handleDocumentClick, true);
-  }, [canOpenTerraformIssuesDuringEdit, hasUnsavedTerraformChanges, resetTerraformLeaveSaveFeedback]);
+  }, [hasUnsavedTerraformChanges, resetTerraformLeaveSaveFeedback]);
 
   useEffect(() => {
     if (!hasUnsavedTerraformChanges) {
