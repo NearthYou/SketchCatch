@@ -95,6 +95,7 @@ export function createTerraformDiagnostics(terraformCode: string): TerraformDiag
     ...blockDiagnostics,
     ...checkBodySyntax(syntaxScannedCode),
     ...checkUnexpectedTokens(syntaxScannedCode),
+    ...checkStandaloneTopLevelTokens(syntaxScannedCode),
     ...checkTrailingAttributeCommas(syntaxScannedCode),
     ...checkUndefinedReferences(syntaxScannedCode),
     ...checkQuotedReferences(syntaxScannedCode),
@@ -498,6 +499,10 @@ function checkTopLevelBlockBodyLine(
     return [];
   }
 
+  if (trimmedLine.startsWith("}")) {
+    return [];
+  }
+
   if (ATTRIBUTE_LIKE_PATTERN.test(trimmedLine)) {
     return [
       {
@@ -510,7 +515,15 @@ function checkTopLevelBlockBodyLine(
     ];
   }
 
-  return [];
+  return [
+    {
+      severity: "error",
+      code: "terraform.attribute_syntax",
+      line,
+      resourceAddress: activeBlock.address,
+      message: "block 안의 값은 attribute = value 또는 nested_block { 형식이어야 합니다."
+    }
+  ];
 }
 
 function checkUndefinedReferences(terraformCode: string): TerraformDiagnostic[] {
@@ -603,6 +616,41 @@ function checkUnexpectedTokens(terraformCode: string): TerraformDiagnostic[] {
         });
       }
     }
+  });
+
+  return diagnostics;
+}
+
+function checkStandaloneTopLevelTokens(terraformCode: string): TerraformDiagnostic[] {
+  const diagnostics: TerraformDiagnostic[] = [];
+  let depth = 0;
+
+  splitTerraformLines(terraformCode).forEach((lineText, lineIndex) => {
+    const codeLine = stripLineComment(lineText);
+    const trimmedLine = codeLine.trim();
+    const currentDepth = depth;
+
+    if (
+      currentDepth === 0 &&
+      trimmedLine &&
+      trimmedLine !== "}" &&
+      !trimmedLine.includes("=") &&
+      !PROVIDER_BLOCK_HEADER_PATTERN.test(codeLine) &&
+      !BLOCK_HEADER_PATTERN.test(codeLine) &&
+      !trimmedLine.startsWith("resource") &&
+      !trimmedLine.startsWith("data") &&
+      !trimmedLine.startsWith("provider") &&
+      !trimmedLine.endsWith("{")
+    ) {
+      diagnostics.push({
+        severity: "error",
+        code: "terraform.unexpected_token",
+        line: lineIndex + 1,
+        message: "알 수 없는 Terraform 코드 줄입니다. resource/data block 또는 attribute 형식으로 작성하세요."
+      });
+    }
+
+    depth = Math.max(0, depth + getBraceDelta(codeLine));
   });
 
   return diagnostics;

@@ -21,7 +21,6 @@ import {
   compareTerraformFileNames,
   createTerraformFilesFromGeneratedCode,
   findTerraformBlockForNode,
-  formatTerraformDiagnosticTitle,
   getDiagramTerraformAddresses,
   getTerraformFileCode,
   getTerraformFileOptions,
@@ -1178,31 +1177,6 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
             Issues 탭으로 이동
           </button>
         </div>
-      ) : null}
-
-      {errorDiagnostics.length > 0 ? (
-        <section className={styles.terraformErrorExplanationPanel} aria-live="polite">
-          <div className={styles.terraformErrorExplanationHeader}>
-            <div>
-              <strong>Terraform 오류</strong>
-              <span>저장 실패 원인을 코드 패널에서 바로 확인할 수 있습니다.</span>
-            </div>
-          </div>
-          <ol className={styles.terraformErrorExplanationList}>
-            {errorDiagnostics.map((diagnostic, index) => {
-              const diagnosticKey = createTerraformDiagnosticKey(diagnostic);
-
-              return (
-                <li key={`${diagnosticKey}-${index}`}>
-                  <div className={styles.terraformErrorExplanationItemText}>
-                    <strong>{formatTerraformDiagnosticTitle(diagnostic)}</strong>
-                    <span>{diagnostic.message}</span>
-                  </div>
-                </li>
-              );
-            })}
-          </ol>
-        </section>
       ) : null}
 
       <div className={styles.terraformEditorFrame}>
