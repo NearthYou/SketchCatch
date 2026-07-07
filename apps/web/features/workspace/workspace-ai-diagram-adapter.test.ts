@@ -1006,6 +1006,149 @@ test("convertArchitectureJsonToDiagramJson maps operations and permission draft 
   );
 });
 
+test("convertArchitectureJsonToDiagramJson arranges serverless resources into readable lanes", () => {
+  const architectureJson: ArchitectureJson = {
+    nodes: [
+      {
+        id: "api-gateway",
+        type: "API_GATEWAY_REST_API",
+        label: "API Gateway",
+        positionX: 40,
+        positionY: 260,
+        config: {}
+      },
+      {
+        id: "lambda-invoke-permission",
+        type: "LAMBDA_PERMISSION",
+        label: "Lambda Permission Invoke",
+        positionX: 300,
+        positionY: 500,
+        config: { action: "lambda:InvokeFunction", principal: "apigateway.amazonaws.com" }
+      },
+      {
+        id: "lambda-execution-role",
+        type: "IAM_ROLE",
+        label: "Lambda Execution Role",
+        positionX: 300,
+        positionY: 120,
+        config: { assumeRolePolicy: "policy-json" }
+      },
+      {
+        id: "lambda-execution-policy",
+        type: "IAM_POLICY",
+        label: "Lambda Execution Policy",
+        positionX: 1200,
+        positionY: 120,
+        config: { policy: "policy-json" }
+      },
+      {
+        id: "lambda-function",
+        type: "LAMBDA",
+        label: "Lambda Function",
+        positionX: 1100,
+        positionY: 500,
+        config: { handler: "index.handler", runtime: "nodejs20.x" }
+      },
+      {
+        id: "upload-bucket",
+        type: "S3",
+        label: "Upload Bucket",
+        positionX: 1420,
+        positionY: 400,
+        config: {}
+      },
+      {
+        id: "lambda-log-key",
+        type: "KMS_KEY",
+        label: "Lambda Log Key",
+        positionX: 1510,
+        positionY: 120,
+        config: { enableKeyRotation: true }
+      },
+      {
+        id: "lambda-log-group",
+        type: "CLOUDWATCH_LOG_GROUP",
+        label: "Lambda Logs",
+        positionX: 1740,
+        positionY: 300,
+        config: { name: "/aws/lambda/practice-function" }
+      },
+      {
+        id: "lambda-error-alarm",
+        type: "CLOUDWATCH_METRIC_ALARM",
+        label: "Lambda Error Alarm",
+        positionX: 840,
+        positionY: 500,
+        config: { metricName: "Errors", namespace: "AWS/Lambda" }
+      },
+      {
+        id: "cdn-public-entry",
+        type: "CLOUDFRONT",
+        label: "CDN Public Entry",
+        positionX: 650,
+        positionY: 180,
+        config: {}
+      },
+      {
+        id: "web-assets-bucket",
+        type: "S3",
+        label: "Web Assets Bucket",
+        positionX: 980,
+        positionY: 200,
+        config: { terraformResourceName: "web_assets" }
+      }
+    ],
+    edges: [
+      { id: "api-to-permission", sourceId: "api-gateway", targetId: "lambda-invoke-permission", label: "allows invoke" },
+      { id: "permission-to-lambda", sourceId: "lambda-invoke-permission", targetId: "lambda-function", label: "invokes" },
+      { id: "role-to-lambda", sourceId: "lambda-execution-role", targetId: "lambda-function", label: "execution role" },
+      { id: "policy-to-role", sourceId: "lambda-execution-policy", targetId: "lambda-execution-role", label: "grants log access" },
+      { id: "lambda-to-upload", sourceId: "lambda-function", targetId: "upload-bucket", label: "stores files" },
+      { id: "kms-to-logs", sourceId: "lambda-log-key", targetId: "lambda-log-group", label: "encrypts logs" },
+      { id: "lambda-to-logs", sourceId: "lambda-function", targetId: "lambda-log-group", label: "writes logs" },
+      { id: "alarm-to-lambda", sourceId: "lambda-error-alarm", targetId: "lambda-function", label: "monitors errors" },
+      { id: "cdn-to-assets", sourceId: "cdn-public-entry", targetId: "web-assets-bucket", label: "HTTPS" }
+    ]
+  };
+
+  const diagramJson = convertArchitectureJsonToDiagramJson(architectureJson);
+  const nodeById = new Map(diagramJson.nodes.map((node) => [node.id, node]));
+  const apiGateway = nodeById.get("api-gateway");
+  const permission = nodeById.get("lambda-invoke-permission");
+  const lambdaFunction = nodeById.get("lambda-function");
+  const uploadBucket = nodeById.get("upload-bucket");
+  const logGroup = nodeById.get("lambda-log-group");
+  const executionRole = nodeById.get("lambda-execution-role");
+  const executionPolicy = nodeById.get("lambda-execution-policy");
+  const errorAlarm = nodeById.get("lambda-error-alarm");
+  const cdn = nodeById.get("cdn-public-entry");
+  const webAssets = nodeById.get("web-assets-bucket");
+
+  assert.ok(apiGateway);
+  assert.ok(permission);
+  assert.ok(lambdaFunction);
+  assert.ok(uploadBucket);
+  assert.ok(logGroup);
+  assert.ok(executionRole);
+  assert.ok(executionPolicy);
+  assert.ok(errorAlarm);
+  assert.ok(cdn);
+  assert.ok(webAssets);
+  assert.ok(apiGateway.position.x < permission.position.x);
+  assert.ok(permission.position.x < lambdaFunction.position.x);
+  assert.ok(lambdaFunction.position.x < uploadBucket.position.x);
+  assert.ok(lambdaFunction.position.x < logGroup.position.x);
+  assert.equal(uploadBucket.position.x, logGroup.position.x);
+  assert.ok(executionRole.position.y < lambdaFunction.position.y);
+  assert.ok(executionPolicy.position.y < lambdaFunction.position.y);
+  assert.ok(errorAlarm.position.y > lambdaFunction.position.y);
+  assert.ok(cdn.position.y < apiGateway.position.y);
+  assert.ok(webAssets.position.y < uploadBucket.position.y);
+  assertNoSiblingNodeOverlap(diagramJson);
+  assertNoEdgeRouteOverlap(diagramJson);
+  assertNoEdgeLineOverlap(diagramJson);
+});
+
 test("convertArchitectureJsonToDiagramJson lays out server and storage draft as nested cloud areas", () => {
   const architectureJson: ArchitectureJson = {
     nodes: [
@@ -1674,4 +1817,283 @@ function assertNoSiblingNodeOverlap(diagramJson: DiagramJson): void {
       assertNoNodeOverlap(left, right);
     }
   }
+}
+
+function assertNoEdgeRouteOverlap(diagramJson: DiagramJson): void {
+  const nodeById = new Map(diagramJson.nodes.map((node) => [node.id, node]));
+
+  for (const edge of diagramJson.edges) {
+    const sourceNode = nodeById.get(edge.sourceNodeId);
+    const targetNode = nodeById.get(edge.targetNodeId);
+
+    assert.ok(sourceNode, `Expected source node for ${edge.id}`);
+    assert.ok(targetNode, `Expected target node for ${edge.id}`);
+
+    const segments = getTestRouteSegments(
+      getTestNodeHandlePoint(sourceNode, edge.sourceHandleId ?? "handle-right"),
+      getTestNodeHandlePoint(targetNode, edge.targetHandleId ?? "handle-left"),
+      edge.sourceHandleId ?? "handle-right",
+      edge.targetHandleId ?? "handle-left"
+    );
+
+    for (const node of diagramJson.nodes) {
+      if (node.id === sourceNode.id || node.id === targetNode.id || node.kind !== "resource") {
+        continue;
+      }
+
+      const overlapLength = segments.reduce((total, segment) => total + getTestSegmentNodeOverlapLength(segment, node), 0);
+      assert.equal(overlapLength, 0, `${edge.id} should not route through ${node.id}`);
+    }
+  }
+}
+
+function assertNoEdgeLineOverlap(diagramJson: DiagramJson): void {
+  const nodeById = new Map(diagramJson.nodes.map((node) => [node.id, node]));
+  const routes = diagramJson.edges.map((edge) => {
+    const sourceNode = nodeById.get(edge.sourceNodeId);
+    const targetNode = nodeById.get(edge.targetNodeId);
+
+    assert.ok(sourceNode, `Expected source node for ${edge.id}`);
+    assert.ok(targetNode, `Expected target node for ${edge.id}`);
+
+    return {
+      id: edge.id,
+      segments: getTestRouteSegments(
+        getTestNodeHandlePoint(sourceNode, edge.sourceHandleId ?? "handle-right"),
+        getTestNodeHandlePoint(targetNode, edge.targetHandleId ?? "handle-left"),
+        edge.sourceHandleId ?? "handle-right",
+        edge.targetHandleId ?? "handle-left"
+      )
+    };
+  });
+
+  for (let leftIndex = 0; leftIndex < routes.length; leftIndex += 1) {
+    for (let rightIndex = leftIndex + 1; rightIndex < routes.length; rightIndex += 1) {
+      const leftRoute = routes[leftIndex];
+      const rightRoute = routes[rightIndex];
+
+      assert.ok(leftRoute);
+      assert.ok(rightRoute);
+
+      const overlapLength = leftRoute.segments.reduce(
+        (total, leftSegment) =>
+          total +
+          rightRoute.segments.reduce(
+            (segmentTotal, rightSegment) => segmentTotal + getTestSegmentOverlapLength(leftSegment, rightSegment),
+            0
+          ),
+        0
+      );
+
+      assert.ok(
+        overlapLength <= 20,
+        `${leftRoute.id} should not share a route segment with ${rightRoute.id} beyond the endpoint handle stub`
+      );
+      assert.equal(
+        getTestRouteCrossingCount(leftRoute.segments, rightRoute.segments),
+        0,
+        `${leftRoute.id} should not cross ${rightRoute.id}`
+      );
+    }
+  }
+}
+
+type TestRouteSegment = {
+  readonly from: DiagramNode["position"];
+  readonly to: DiagramNode["position"];
+};
+
+function getTestRouteSegments(
+  sourcePoint: DiagramNode["position"],
+  targetPoint: DiagramNode["position"],
+  sourceHandleId: string,
+  targetHandleId: string
+): TestRouteSegment[] {
+  const sourceExitPoint = getTestHandleStubPoint(sourcePoint, sourceHandleId);
+  const targetExitPoint = getTestHandleStubPoint(targetPoint, targetHandleId);
+  const segments: TestRouteSegment[] = [{ from: sourcePoint, to: sourceExitPoint }];
+
+  if (sourceExitPoint.x === targetExitPoint.x || sourceExitPoint.y === targetExitPoint.y) {
+    segments.push({ from: sourceExitPoint, to: targetExitPoint }, { from: targetExitPoint, to: targetPoint });
+    return removeZeroLengthTestRouteSegments(segments);
+  }
+
+  if (isTestVerticalEdgeHandle(sourceHandleId) && isTestVerticalEdgeHandle(targetHandleId)) {
+    const middleY = sourceExitPoint.y + (targetExitPoint.y - sourceExitPoint.y) / 2;
+
+    segments.push(
+      { from: sourceExitPoint, to: { x: sourceExitPoint.x, y: middleY } },
+      { from: { x: sourceExitPoint.x, y: middleY }, to: { x: targetExitPoint.x, y: middleY } },
+      { from: { x: targetExitPoint.x, y: middleY }, to: targetExitPoint },
+      { from: targetExitPoint, to: targetPoint }
+    );
+    return removeZeroLengthTestRouteSegments(segments);
+  }
+
+  const middleX = sourceExitPoint.x + (targetExitPoint.x - sourceExitPoint.x) / 2;
+
+  segments.push(
+    { from: sourceExitPoint, to: { x: middleX, y: sourceExitPoint.y } },
+    { from: { x: middleX, y: sourceExitPoint.y }, to: { x: middleX, y: targetExitPoint.y } },
+    { from: { x: middleX, y: targetExitPoint.y }, to: targetExitPoint },
+    { from: targetExitPoint, to: targetPoint }
+  );
+  return removeZeroLengthTestRouteSegments(segments);
+}
+
+function isTestVerticalEdgeHandle(handleId: string): boolean {
+  return handleId === "handle-top" || handleId === "handle-bottom";
+}
+
+function getTestHandleStubPoint(point: DiagramNode["position"], handleId: string): DiagramNode["position"] {
+  const stubLength = 20;
+
+  if (handleId === "handle-left") {
+    return { x: point.x - stubLength, y: point.y };
+  }
+
+  if (handleId === "handle-right") {
+    return { x: point.x + stubLength, y: point.y };
+  }
+
+  if (handleId === "handle-top") {
+    return { x: point.x, y: point.y - stubLength };
+  }
+
+  return { x: point.x, y: point.y + stubLength };
+}
+
+function removeZeroLengthTestRouteSegments(segments: readonly TestRouteSegment[]): TestRouteSegment[] {
+  return segments.filter((segment) => segment.from.x !== segment.to.x || segment.from.y !== segment.to.y);
+}
+
+function getTestNodeHandlePoint(node: DiagramNode, handleId: string): DiagramNode["position"] {
+  const center = {
+    x: node.position.x + node.size.width / 2,
+    y: node.position.y + node.size.height / 2
+  };
+
+  if (handleId === "handle-left") {
+    return { x: node.position.x, y: center.y };
+  }
+
+  if (handleId === "handle-right") {
+    return { x: node.position.x + node.size.width, y: center.y };
+  }
+
+  if (handleId === "handle-top") {
+    return { x: center.x, y: node.position.y };
+  }
+
+  return { x: center.x, y: node.position.y + node.size.height };
+}
+
+function getTestSegmentNodeOverlapLength(segment: TestRouteSegment, node: DiagramNode): number {
+  const horizontal = segment.from.y === segment.to.y;
+  const vertical = segment.from.x === segment.to.x;
+
+  if (!horizontal && !vertical) {
+    return 0;
+  }
+
+  const padding = 18;
+  const left = node.position.x - padding;
+  const right = node.position.x + node.size.width + padding;
+  const top = node.position.y - padding;
+  const bottom = node.position.y + node.size.height + padding;
+
+  if (horizontal) {
+    const y = segment.from.y;
+
+    if (y <= top || y >= bottom) {
+      return 0;
+    }
+
+    const segmentLeft = Math.min(segment.from.x, segment.to.x);
+    const segmentRight = Math.max(segment.from.x, segment.to.x);
+
+    return Math.max(0, Math.min(segmentRight, right) - Math.max(segmentLeft, left));
+  }
+
+  const x = segment.from.x;
+
+  if (x <= left || x >= right) {
+    return 0;
+  }
+
+  const segmentTop = Math.min(segment.from.y, segment.to.y);
+  const segmentBottom = Math.max(segment.from.y, segment.to.y);
+
+  return Math.max(0, Math.min(segmentBottom, bottom) - Math.max(segmentTop, top));
+}
+
+function getTestSegmentOverlapLength(leftSegment: TestRouteSegment, rightSegment: TestRouteSegment): number {
+  const leftHorizontal = leftSegment.from.y === leftSegment.to.y;
+  const rightHorizontal = rightSegment.from.y === rightSegment.to.y;
+  const leftVertical = leftSegment.from.x === leftSegment.to.x;
+  const rightVertical = rightSegment.from.x === rightSegment.to.x;
+
+  if (leftHorizontal && rightHorizontal && Math.abs(leftSegment.from.y - rightSegment.from.y) <= 1) {
+    return getTestRangeOverlapLength(leftSegment.from.x, leftSegment.to.x, rightSegment.from.x, rightSegment.to.x);
+  }
+
+  if (leftVertical && rightVertical && Math.abs(leftSegment.from.x - rightSegment.from.x) <= 1) {
+    return getTestRangeOverlapLength(leftSegment.from.y, leftSegment.to.y, rightSegment.from.y, rightSegment.to.y);
+  }
+
+  return 0;
+}
+
+function getTestRouteCrossingCount(
+  leftSegments: readonly TestRouteSegment[],
+  rightSegments: readonly TestRouteSegment[]
+): number {
+  return leftSegments.reduce(
+    (total, leftSegment) =>
+      total +
+      rightSegments.reduce(
+        (segmentTotal, rightSegment) => segmentTotal + (doTestSegmentsCross(leftSegment, rightSegment) ? 1 : 0),
+        0
+      ),
+    0
+  );
+}
+
+function doTestSegmentsCross(leftSegment: TestRouteSegment, rightSegment: TestRouteSegment): boolean {
+  const leftHorizontal = leftSegment.from.y === leftSegment.to.y;
+  const rightHorizontal = rightSegment.from.y === rightSegment.to.y;
+
+  if (leftHorizontal === rightHorizontal) {
+    return false;
+  }
+
+  const horizontalSegment = leftHorizontal ? leftSegment : rightSegment;
+  const verticalSegment = leftHorizontal ? rightSegment : leftSegment;
+  const horizontalY = horizontalSegment.from.y;
+  const verticalX = verticalSegment.from.x;
+  const horizontalLeft = Math.min(horizontalSegment.from.x, horizontalSegment.to.x);
+  const horizontalRight = Math.max(horizontalSegment.from.x, horizontalSegment.to.x);
+  const verticalTop = Math.min(verticalSegment.from.y, verticalSegment.to.y);
+  const verticalBottom = Math.max(verticalSegment.from.y, verticalSegment.to.y);
+
+  return (
+    verticalX > horizontalLeft &&
+    verticalX < horizontalRight &&
+    horizontalY > verticalTop &&
+    horizontalY < verticalBottom
+  );
+}
+
+function getTestRangeOverlapLength(
+  leftStart: number,
+  leftEnd: number,
+  rightStart: number,
+  rightEnd: number
+): number {
+  const leftMin = Math.min(leftStart, leftEnd);
+  const leftMax = Math.max(leftStart, leftEnd);
+  const rightMin = Math.min(rightStart, rightEnd);
+  const rightMax = Math.max(rightStart, rightEnd);
+
+  return Math.max(0, Math.min(leftMax, rightMax) - Math.max(leftMin, rightMin));
 }
