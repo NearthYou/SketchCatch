@@ -225,7 +225,15 @@ export async function createAmazonQArchitectureDraftResponse(
     return createArchitectureDraftClarification(missingQuestion, request, provider, creditPolicy.billingMode);
   }
 
+  const conditionalQuestion = findConditionalArchitectureQuestion(request.prompt);
+
+  if (conditionalQuestion !== null) {
+    return createArchitectureDraftClarification(conditionalQuestion, request, provider, creditPolicy.billingMode);
+  }
+
+  const architectureBrief = createAmazonQArchitectureBrief(request.prompt);
   const payload = maskSecretsForAi({
+    architectureBrief,
     prompt: request.prompt,
     supportedResourceTypes: SUPPORTED_RESOURCE_TYPES
   });
@@ -245,6 +253,7 @@ export async function createAmazonQArchitectureDraftResponse(
 
       if (validationIssues.length > 0) {
         activePayload = maskSecretsForAi({
+          architectureBrief,
           prompt: request.prompt,
           validationIssues,
           previousArchitectureJson: parsedResponse.architectureJson,
@@ -537,7 +546,60 @@ const REQUIRED_ARCHITECTURE_QUESTIONS: readonly RequiredArchitectureQuestion[] =
 ];
 
 function findMissingRequiredQuestion(prompt: string): RequiredArchitectureQuestion | null {
+  if (hasExplicitArchitectureBrief(prompt)) {
+    return null;
+  }
+
   return REQUIRED_ARCHITECTURE_QUESTIONS.find((question) => !isRequiredArchitectureQuestionAnswered(question, prompt)) ?? null;
+}
+
+function findConditionalArchitectureQuestion(prompt: string): RequiredArchitectureQuestion | null {
+  if (hasExplicitArchitectureBrief(prompt)) {
+    return null;
+  }
+
+  const normalizedPrompt = prompt.normalize("NFKC").toLowerCase();
+
+  if (hasBudgetAvailabilityConflict(normalizedPrompt) && !hasBudgetAvailabilityResolution(normalizedPrompt)) {
+    return {
+      id: "budget_availability_tradeoff",
+      question: "월 $100 예산과 99.99% 가용성은 충돌할 수 있습니다. 어떤 기준으로 설계할까요?",
+      suggestions: [
+        "월 $100 예산을 유지하고 99.9% 수준으로 완화",
+        "99.99% 가용성을 우선하고 예산 초과 허용",
+        "목표 아키텍처는 99.99%로 그리고 비용 초과 경고 표시"
+      ],
+      isAnswered: () => true
+    };
+  }
+
+  if (requiresGlobalDeploymentScopeDecision(normalizedPrompt) && !hasGlobalDeploymentDecision(normalizedPrompt)) {
+    return {
+      id: "global_deployment_scope",
+      question: "글로벌 사용자와 1초 로딩 목표를 어떤 범위로 설계할까요?",
+      suggestions: [
+        "CloudFront 글로벌 + API/RDS는 단일 리전",
+        "다중 리전 API까지 포함",
+        "MVP는 단일 리전, 추후 다중 리전 확장 경고 표시"
+      ],
+      isAnswered: () => true
+    };
+  }
+
+  if (requiresRealtime(normalizedPrompt) && !hasRealtimeImplementationDecision(normalizedPrompt)) {
+    return {
+      id: "realtime_implementation",
+      question: "실시간 알림은 어떤 방식으로 표현할까요?",
+      suggestions: [
+        "WebSocket 연결 경로",
+        "SSE 단방향 알림 경로",
+        "간단 폴링 방식과 비용 절감 경고"
+      ],
+      isAnswered: () => true
+    };
+  }
+
+  return null;
 }
 
 function isRequiredArchitectureQuestionAnswered(question: RequiredArchitectureQuestion, prompt: string): boolean {
@@ -612,6 +674,7 @@ function createAmazonQArchitectureDraftInstructions(): string {
 function createAmazonQArchitectureDraftPrompt(prompt: string): string {
   return [
     createAmazonQArchitectureDraftInstructions(),
+    createAmazonQArchitectureBrief(prompt),
     "User requirement prompt:",
     prompt
   ].join("\n\n");
@@ -628,6 +691,7 @@ function createAmazonQArchitectureDraftRepairPrompt(
     "Regenerate the full Architecture Draft JSON. Do not patch partially.",
     "Do not return the same topology. Add or remove nodes and edges needed to satisfy the failed requirement coverage checks.",
     "The regenerated response must include requirementCoverage entries proving how every selected answer is represented.",
+    createAmazonQArchitectureBrief(prompt),
     "Validation issues:",
     ...validationIssues.map((issue) => `- ${issue}`),
     "Original user requirement prompt:",
@@ -635,6 +699,77 @@ function createAmazonQArchitectureDraftRepairPrompt(
     "Previous invalid architectureJson:",
     JSON.stringify(previousArchitectureJson)
   ].join("\n\n");
+}
+
+function createAmazonQArchitectureBrief(prompt: string): string {
+  const normalizedPrompt = prompt.normalize("NFKC").toLowerCase();
+  const intent = ["Architecture Intent:"];
+  const requirements = ["Derived Architecture Requirements:"];
+  const flows = ["Required Architecture Flows:"];
+  const validation = ["Validation Checklist:"];
+  const tradeoffs = ["Trade-off Notes:"];
+
+  if (hasExplicitArchitectureBrief(prompt)) {
+    intent.push("- User supplied a detailed architecture brief with explicit required components, flows, and validation criteria. Preserve those requirements unless a listed component is unsupported.");
+  }
+
+  if (requiresSpaFrontend(normalizedPrompt)) {
+    intent.push("- React/Vue/Angular SPA or single-page frontend.");
+    requirements.push("- Include S3 for SPA/static asset hosting and CLOUDFRONT as the global/static entry.");
+    flows.push("- User -> CLOUDFRONT -> S3 SPA/static assets.");
+    validation.push("- Do not serve the SPA only from EC2 or backend compute.");
+  }
+
+  if (hasExplicitComplexBackendMarker(normalizedPrompt) && requiresComplexBackend(normalizedPrompt)) {
+    intent.push("- Backend requires complex business logic.");
+    requirements.push("- Include LOAD_BALANCER plus LOAD_BALANCER_LISTENER and at least two backend compute targets when availability is 99.99% or no-downtime.");
+    flows.push("- User/API traffic -> CLOUDFRONT or DNS entry -> LOAD_BALANCER -> backend compute.");
+    validation.push("- Do not return a lone EC2 backend for complex business logic.");
+  }
+
+  if (hasExplicitDatabaseMarker(normalizedPrompt) && requiresDatabase(normalizedPrompt)) {
+    requirements.push("- Include RDS for relational data and DB_SUBNET_GROUP for private database placement.");
+    flows.push("- Backend compute -> RDS database.");
+  }
+
+  if (requiresImageUpload(normalizedPrompt)) {
+    requirements.push("- Include a separate S3 media/upload bucket and represent presigned URL upload assumptions.");
+    flows.push("- Client -> presigned URL -> S3 media/upload bucket.");
+    validation.push("- Do not reuse the SPA asset bucket as the only image-upload resource.");
+  }
+
+  if (requiresRealtime(normalizedPrompt)) {
+    requirements.push("- Include a realtime notification path. Use API_GATEWAY_REST_API/LAMBDA or the backend tier as the supported node representation, and state WebSocket/SSE assumptions in requirementCoverage.");
+    flows.push("- Client -> realtime notification endpoint -> backend/Lambda notification path.");
+    validation.push("- requirementCoverage must name WebSocket, SSE, notification, or realtime and map it to node ids.");
+  }
+
+  if (requiresGlobalOrFastFrontend(normalizedPrompt)) {
+    requirements.push("- Include CLOUDFRONT for global delivery and explain any single-region API/RDS latency limits.");
+    validation.push("- Do not claim global 1-second dynamic API latency from a single region without a warning.");
+  }
+
+  if (requiresVeryHighAvailability(normalizedPrompt)) {
+    requirements.push("- Include at least two app targets across AZ assumptions, LOAD_BALANCER plus LOAD_BALANCER_LISTENER, DB_SUBNET_GROUP, and RDS Multi-AZ when a database is required.");
+    validation.push("- Do not return single-AZ or single-compute architecture for 99.99% availability.");
+  }
+
+  if (hasBudgetAvailabilityConflict(normalizedPrompt)) {
+    tradeoffs.push("- Monthly $100 budget conflicts with 99.99% availability, ALB, redundant compute, and RDS Multi-AZ. Keep the selected design target and add explicit cost-warning assumptions unless the user chose to relax availability.");
+  }
+
+  if (mentionsUnsupportedAutoScalingGroup(normalizedPrompt)) {
+    requirements.push("- AUTO_SCALING_GROUP is not a supported ResourceNode.type in ArchitectureJson; model it with multiple EC2 app targets and explain the ASG assumption in labels/config/requirementCoverage.");
+  }
+
+  return [
+    "Amazon Q Architecture Brief:",
+    ...dedupeNonEmptyLines(intent),
+    ...dedupeNonEmptyLines(requirements),
+    ...dedupeNonEmptyLines(flows),
+    ...dedupeNonEmptyLines(validation),
+    ...dedupeNonEmptyLines(tradeoffs)
+  ].join("\n");
 }
 
 function findAmazonQPreviewValidationIssues(
@@ -1201,6 +1336,97 @@ function requiresServerlessOnlyArchitecture(normalizedPrompt: string): boolean {
   return /(serverless|서버리스|lambda|람다|without\s+ec2|no\s+ec2|ec2\s*(없는|없이|빼고|제외|말고)|ec2는\s*쓰지\s*마)/iu.test(
     normalizedPrompt
   );
+}
+
+function hasExplicitArchitectureBrief(prompt: string): boolean {
+  const normalizedPrompt = prompt.normalize("NFKC").toLowerCase();
+
+  if (
+    /(필수\s*포함\s*컴포넌트|핵심\s*요구사항|아키텍처\s*플로우|검증\s*가능한\s*기준|required\s+components|architecture\s+flow|validation\s+checklist)/iu.test(
+      normalizedPrompt
+    )
+  ) {
+    return true;
+  }
+
+  const explicitComponentMentions = [
+    /cloudfront/iu,
+    /\bs3\b|simple\s*storage|이미지\s*저장|정적\s*자산/iu,
+    /application\s*load\s*balancer|\balb\b|load\s*balancer/iu,
+    /rds|multi-az|db\s*subnet/iu,
+    /websocket|sse|api\s*gateway|실시간\s*알림/iu,
+    /vpc|subnet|서브넷/iu,
+    /cloudwatch/iu,
+    /iam/iu
+  ].filter((pattern) => pattern.test(normalizedPrompt)).length;
+
+  const explicitFlowMentions = [
+    /user\s*[-→>]+\s*cloudfront|사용자\s*[-→>]+\s*cloudfront/iu,
+    /cloudfront\s*[-→>]+\s*s3/iu,
+    /cloudfront\s*[-→>]+.*load\s*balancer|cloudfront\s*[-→>]+.*alb/iu,
+    /ec2\s*[-→>]+\s*rds|backend\s*[-→>]+\s*rds/iu,
+    /presigned\s*url|사전\s*서명|프리사인/iu
+  ].filter((pattern) => pattern.test(normalizedPrompt)).length;
+
+  return explicitComponentMentions >= 5 && explicitFlowMentions >= 2;
+}
+
+function hasBudgetAvailabilityConflict(normalizedPrompt: string): boolean {
+  return hasLowMonthlyBudget(normalizedPrompt) && requiresVeryHighAvailability(normalizedPrompt);
+}
+
+function hasLowMonthlyBudget(normalizedPrompt: string): boolean {
+  return /(\$\s*100|100\s*(usd|dollars?|달러)|monthly\s*100|100\s*monthly|월\s*\$?\s*100|budget\s*cost:\s*100|월\s*100\b)/iu.test(
+    normalizedPrompt
+  );
+}
+
+function hasBudgetAvailabilityResolution(normalizedPrompt: string): boolean {
+  return /(99\.9%\s*수준으로\s*완화|가용성.*완화|예산\s*초과\s*허용|cost\s*warning|비용\s*초과\s*경고|목표\s*아키텍처|target\s*architecture|keep\s*99\.99|relax\s*availability)/iu.test(
+    normalizedPrompt
+  );
+}
+
+function hasGlobalDeploymentDecision(normalizedPrompt: string): boolean {
+  return /(cloudfront\s*글로벌|api\/rds는\s*단일\s*리전|단일\s*리전|single\s*region|multi[-\s]*region|다중\s*리전|추후\s*다중\s*리전|future\s*multi[-\s]*region)/iu.test(
+    normalizedPrompt
+  );
+}
+
+function requiresGlobalDeploymentScopeDecision(normalizedPrompt: string): boolean {
+  return /(global|worldwide|united\s+states|europe|글로벌|미국|유럽|1\s*second|1초|1珥)/iu.test(
+    normalizedPrompt
+  );
+}
+
+function hasRealtimeImplementationDecision(normalizedPrompt: string): boolean {
+  return /(websocket|web\s*socket|sse|server-sent\s*events|polling|폴링|api\s*gateway|단방향\s*알림|연결\s*경로)/iu.test(
+    normalizedPrompt
+  );
+}
+
+function mentionsUnsupportedAutoScalingGroup(normalizedPrompt: string): boolean {
+  return /(auto\s*scaling\s*group|\basg\b|autoscaling\s*group|오토\s*스케일링|자동\s*확장)/iu.test(
+    normalizedPrompt
+  );
+}
+
+function dedupeNonEmptyLines(lines: readonly string[]): string[] {
+  const seenLines = new Set<string>();
+  const dedupedLines: string[] = [];
+
+  for (const line of lines) {
+    const trimmedLine = line.trim();
+
+    if (!trimmedLine || seenLines.has(trimmedLine)) {
+      continue;
+    }
+
+    seenLines.add(trimmedLine);
+    dedupedLines.push(trimmedLine);
+  }
+
+  return dedupedLines;
 }
 
 function requiresNoDatabase(normalizedPrompt: string): boolean {

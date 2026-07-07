@@ -362,6 +362,55 @@ test("createAmazonQArchitectureDraftResponse returns the Amazon Q architecture p
   assert.equal(response.llmExplanation?.providerMetadata?.provider, "amazon_q");
 });
 
+test("createAmazonQArchitectureDraftResponse asks conditional tradeoff questions before calling Amazon Q", async () => {
+  let callCount = 0;
+  const provider = createFakeAmazonQProvider(() => {
+    callCount += 1;
+    return "{}";
+  });
+
+  const prompt = [
+    "website type: dynamic SPA website",
+    "traffic: daily traffic 1000 concurrent users 50",
+    "database: PostgreSQL database required",
+    "frontend: React/Vue/Angular SPA framework",
+    "backend: complex backend business logic with Spring Boot or Django",
+    "region: global users including US and Europe",
+    "budget cost: 100 monthly",
+    "SSL HTTPS: required",
+    "file upload: image upload only",
+    "realtime: real-time notification",
+    "management preference: semi-managed operations",
+    "loading time: 1 second",
+    "website size: 10MB-100MB",
+    "traffic pattern: time of day daytime peak",
+    "downtime tolerance: 99.99% availability"
+  ].join("\n");
+
+  const response = await createAmazonQArchitectureDraftResponse(
+    {
+      prompt
+    },
+    {
+      provider,
+      creditPolicy: confirmedCreditPolicy
+    }
+  );
+
+  assert.equal(callCount, 0);
+  if (!("status" in response)) {
+    assert.fail("Expected a conditional clarification response");
+  }
+
+  assert.equal(response.status, "needs_clarification");
+  assert.match(response.question, /월 \$100 예산과 99\.99% 가용성/);
+  assert.deepEqual(response.suggestions, [
+    "월 $100 예산을 유지하고 99.9% 수준으로 완화",
+    "99.99% 가용성을 우선하고 예산 초과 허용",
+    "목표 아키텍처는 99.99%로 그리고 비용 초과 경고 표시"
+  ]);
+});
+
 test("createAmazonQArchitectureDraftResponse sends dynamic global website constraints to Amazon Q", async () => {
   const requestedPrompts: string[] = [];
   const provider = createFakeAmazonQProvider((request) => {
@@ -564,7 +613,10 @@ test("createAmazonQArchitectureDraftResponse sends dynamic global website constr
     "loading time: 1 second",
     "website size: 10MB-100MB",
     "traffic pattern: time of day daytime peak",
-    "downtime tolerance: 99.99% availability"
+    "downtime tolerance: 99.99% availability",
+    "tradeoff: target architecture with cost warning",
+    "global deployment: CloudFront global plus API/RDS single region",
+    "realtime implementation: WebSocket connection path"
   ].join("\n");
 
   const response = await createAmazonQArchitectureDraftResponse(
@@ -583,13 +635,174 @@ test("createAmazonQArchitectureDraftResponse sends dynamic global website constr
 
   assert.equal(requestedPrompts.length, 2);
   assert.match(requestedPrompts[0] ?? "", /dynamic SPA website/);
+  assert.match(requestedPrompts[0] ?? "", /Amazon Q Architecture Brief/);
+  assert.match(requestedPrompts[0] ?? "", /Derived Architecture Requirements/);
+  assert.match(requestedPrompts[0] ?? "", /Required Architecture Flows/);
+  assert.match(requestedPrompts[0] ?? "", /Validation Checklist/);
+  assert.match(requestedPrompts[0] ?? "", /Monthly \$100 budget conflicts with 99\.99% availability/);
+  assert.match(requestedPrompts[0] ?? "", /User\/API traffic -> CLOUDFRONT/);
   assert.match(requestedPrompts[0] ?? "", /React\/Vue\/Angular SPA requirements/);
   assert.match(requestedPrompts[1] ?? "", /Do not return the same topology/);
+  assert.match(requestedPrompts[1] ?? "", /Amazon Q Architecture Brief/);
   assert.match(requestedPrompts[1] ?? "", /lacks LOAD_BALANCER and LOAD_BALANCER_LISTENER/);
   assert.match(requestedPrompts[1] ?? "", /image upload/);
   assert.match(requestedPrompts[1] ?? "", /real-time notification/);
   assert.match(requestedPrompts[1] ?? "", /RDS Multi-AZ/);
   assert.equal(response.title, "Dynamic Global Website Practice Architecture");
+});
+
+test("createAmazonQArchitectureDraftResponse sends detailed architecture briefs directly to Amazon Q", async () => {
+  let requestedPrompt = "";
+  const provider = createFakeAmazonQProvider((request) => {
+    requestedPrompt = request.prompt;
+    return JSON.stringify({
+      status: "preview",
+      title: "Detailed Global Dynamic Website",
+      architectureJson: {
+        nodes: [
+          {
+            id: "spa-bucket",
+            type: "S3",
+            label: "SPA Assets Bucket",
+            positionX: 120,
+            positionY: 160,
+            config: {}
+          },
+          {
+            id: "media-bucket",
+            type: "S3",
+            label: "Image Upload Bucket",
+            positionX: 120,
+            positionY: 320,
+            config: {}
+          },
+          {
+            id: "cdn",
+            type: "CLOUDFRONT",
+            label: "Global CloudFront",
+            positionX: 360,
+            positionY: 160,
+            config: {}
+          },
+          {
+            id: "alb",
+            type: "LOAD_BALANCER",
+            label: "Application Load Balancer",
+            positionX: 600,
+            positionY: 160,
+            config: {}
+          },
+          {
+            id: "https-listener",
+            type: "LOAD_BALANCER_LISTENER",
+            label: "HTTPS Listener",
+            positionX: 600,
+            positionY: 320,
+            config: {}
+          },
+          {
+            id: "app-a",
+            type: "EC2",
+            label: "App Target A",
+            positionX: 840,
+            positionY: 120,
+            config: {}
+          },
+          {
+            id: "app-b",
+            type: "EC2",
+            label: "App Target B",
+            positionX: 840,
+            positionY: 280,
+            config: {}
+          },
+          {
+            id: "database-subnets",
+            type: "DB_SUBNET_GROUP",
+            label: "DB Subnet Group",
+            positionX: 1080,
+            positionY: 160,
+            config: {}
+          },
+          {
+            id: "database",
+            type: "RDS",
+            label: "RDS Multi-AZ",
+            positionX: 1320,
+            positionY: 160,
+            config: { multiAz: true }
+          },
+          {
+            id: "realtime-api",
+            type: "API_GATEWAY_REST_API",
+            label: "Realtime WebSocket Assumption",
+            positionX: 600,
+            positionY: 480,
+            config: {}
+          }
+        ],
+        edges: [
+          {
+            id: "cdn-to-spa",
+            sourceId: "cdn",
+            targetId: "spa-bucket",
+            label: "static origin"
+          },
+          {
+            id: "cdn-to-alb",
+            sourceId: "cdn",
+            targetId: "alb",
+            label: "api origin"
+          }
+        ]
+      },
+      requirementCoverage: [
+        ...sampleRequirementCoverage(["spa-bucket", "cdn", "alb", "app-a", "app-b"]),
+        {
+          answer: "99.99% availability and database",
+          status: "satisfied",
+          capability: "rds_multi_az",
+          nodes: ["database-subnets", "database"],
+          assumption: "RDS Multi-AZ is represented for the availability target."
+        },
+        {
+          answer: "realtime notification",
+          status: "satisfied",
+          capability: "websocket_notification",
+          nodes: ["realtime-api"],
+          assumption: "Realtime notification is represented as a WebSocket/SSE path."
+        }
+      ]
+    });
+  });
+
+  const prompt = [
+    "월 100달러 예산으로 글로벌 동적 웹사이트 아키텍처를 설계해주세요.",
+    "핵심 요구사항: 99.99% 가용성, 글로벌 사용자, React SPA, 복잡한 백엔드 로직, 실시간 알림, 이미지 업로드, 1초 이내 페이지 로딩",
+    "필수 포함 컴포넌트: CloudFront, S3, Application Load Balancer, HTTPS listener, EC2 Auto Scaling Group, RDS Multi-AZ, WebSocket/API Gateway, VPC, CloudWatch, IAM",
+    "아키텍처 플로우: 사용자 -> CloudFront -> S3, 사용자 -> CloudFront -> ALB -> EC2, EC2 -> RDS, 클라이언트 -> presigned URL -> S3, WebSocket 연결 경로 명시",
+    "예산 최적화와 성능 최적화 방안도 함께 제안해주세요."
+  ].join("\n");
+
+  const response = await createAmazonQArchitectureDraftResponse(
+    {
+      prompt
+    },
+    {
+      provider,
+      creditPolicy: confirmedCreditPolicy
+    }
+  );
+
+  if ("status" in response) {
+    assert.fail(`Expected preview, got clarification: ${response.question}`);
+  }
+
+  assert.match(requestedPrompt, /Amazon Q Architecture Brief/);
+  assert.match(requestedPrompt, /User supplied a detailed architecture brief/);
+  assert.match(requestedPrompt, /AUTO_SCALING_GROUP is not a supported ResourceNode\.type/);
+  assert.match(requestedPrompt, /Client -> presigned URL -> S3 media\/upload bucket/);
+  assert.equal(response.title, "Detailed Global Dynamic Website");
 });
 
 test("createAmazonQArchitectureDraftResponse asks Amazon Q to regenerate previews that fail self-validation", async () => {

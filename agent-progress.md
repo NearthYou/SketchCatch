@@ -3613,3 +3613,22 @@
   - `git diff --check` - passed.
 - Known risks:
   - Only merge-conflict-adjacent checks were run. The merged `origin/dev` payload is large and may still need full lint/typecheck/build before PR review.
+
+# 2026-07-07 - Amazon Q architecture brief and conditional follow-up questions
+
+- Goal: Improve Amazon Q diagram accuracy by turning user clarification answers into a concrete architecture brief, and by asking targeted follow-up questions when selected answers conflict or leave topology-critical choices ambiguous.
+- Completed:
+  - Added conditional follow-up questions for budget-vs-99.99% availability, global/1-second deployment scope, and realtime implementation style.
+  - Added detailed architecture-brief detection so explicit prompts with required components/flows can bypass the basic 15-question wizard and go directly to Amazon Q.
+  - Added an Amazon Q Architecture Brief section with derived intent, required components, required flows, validation checklist, and trade-off notes.
+  - Added explicit handling for unsupported Auto Scaling Group nodes by telling Amazon Q to model the ASG as multiple EC2 app targets plus coverage assumptions.
+  - Added regression tests for conditional clarification, dynamic global prompts with resolved trade-offs, and detailed architecture briefs.
+- Verification run:
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --dir apps/api exec tsx --test src/services/aiArchitectureDrafts.test.ts` - passed, 10 tests.
+  - `pnpm harness:check` - passed before and after edits.
+  - `pnpm lint` - passed, with non-fatal Turbo cache rename warnings.
+  - `pnpm typecheck` - passed, with non-fatal Turbo cache rename warnings.
+  - `pnpm build` - sandbox run failed on `.next` unlink `EPERM`; elevated rerun passed.
+  - `git diff --check` - passed, with line-ending warnings only.
+- Known risks:
+  - Real Amazon Q Business was not called locally. The fake provider verifies prompt, follow-up, and validation behavior, but live diagram quality still needs product QA with the actual Q response.
