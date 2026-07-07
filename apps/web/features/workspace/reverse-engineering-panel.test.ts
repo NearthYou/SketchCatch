@@ -60,6 +60,8 @@ test("Reverse Engineering result stays preview-only until the user applies it", 
   assert.match(panelSource, /attachReverseEngineeringSourceToDiagram/);
   assert.match(panelSource, /context\.applyDiagramJson\(diagramToApply\)/);
   assert.match(resultPanelSource, /새 보드로 열기/);
+  assert.match(resultPanelSource, /보드에 적용/);
+  assert.match(resultPanelSource, /프로젝트로 만들기/);
   assert.match(resultPanelSource, /현재 보드에 추가/);
 });
 
@@ -81,47 +83,36 @@ test("Reverse Engineering start page lets users choose another start mode before
   assert.doesNotMatch(reverseWorkspaceClientSource, /작업 화면으로 돌아가기/);
 });
 
-test("Reverse Engineering left panel explains the import flow and candidate meaning", () => {
-  assert.match(reverseWorkspaceClientSource, /진행 순서/);
-  assert.match(reverseWorkspaceClientSource, /AWS Role 확인/);
-  assert.match(reverseWorkspaceClientSource, /기존 AWS 가져오기/);
+test("Reverse Engineering left panel focuses on board candidate selection", () => {
+  assert.match(reverseWorkspaceClientSource, /ReverseBoardCandidateSelectionPanel/);
   assert.match(reverseWorkspaceClientSource, /보드 후보 선택/);
-  assert.match(reverseWorkspaceClientSource, /프로젝트 생성/);
-  assert.match(reverseWorkspaceClientSource, /가져오는 범위/);
-  assert.match(reverseWorkspaceClientSource, /지원하지 못하는 Resource/);
-  assert.match(reverseWorkspaceClientSource, /후보는 Resource 일부를 고르는 기능이 아닙니다/);
   assert.match(reverseWorkspaceClientSource, /전체 Resource는 유지하고 묶는 기준만 다르게 보여줍니다/);
-  assert.match(reverseWorkspaceClientSource, /reverseStartGuideSteps/);
-  assert.match(reverseWorkspaceClientSource, /reverseStartGuideCandidateNote/);
+  assert.doesNotMatch(reverseWorkspaceClientSource, /진행 순서/);
+  assert.doesNotMatch(reverseWorkspaceClientSource, /가져오는 범위/);
+  assert.doesNotMatch(reverseWorkspaceClientSource, /reverseStartGuideSteps/);
 });
 
 test("Reverse Engineering draft edits update only the candidate architecture", () => {
-  assert.match(panelSource, /updateReverseEngineeringDraftNode/);
+  assert.doesNotMatch(panelSource, /updateReverseEngineeringDraftNode/);
   assert.match(panelSource, /context\.setPreviewDiagram\(application\.previewDiagram\)/);
-  assert.match(resultPanelSource, /Draft 수정/);
-  assert.match(resultPanelSource, /표시 이름/);
-  assert.match(resultPanelSource, /설명/);
-  assert.match(resultPanelSource, /positionX/);
+  assert.doesNotMatch(resultPanelSource, /Draft 수정/);
+  assert.doesNotMatch(resultPanelSource, /positionX/);
+  assert.match(resultPanelSource, /리소스를 고르면 오른쪽 상세 패널에서 원본 값을 확인할 수 있습니다/);
   assert.match(draftEditsSource, /discoveredResources/);
   assert.match(draftEditsSource, /reverseEngineeringDraft/);
 });
 
-test("Reverse Engineering result shows risks, partial scan errors, and import handoff data", () => {
+test("Reverse Engineering result shows risks and keeps Terraform import handoff outside Reverse", () => {
   assert.match(findingsPanelSource, /위험\/비용 finding/);
   assert.match(findingsPanelSource, /High Risk/);
   assert.match(findingsPanelSource, /어떻게 고치면 되나요/);
-  assert.match(findingsPanelSource, /부분 실패/);
-  assert.match(findingsPanelSource, /scanErrors\.map\(\(scanError, index\)/);
-  assert.match(findingsPanelSource, /key=\{`\$\{scanError\.id\}-\$\{index\}`\}/);
-  assert.match(findingsPanelSource, /stage/);
-  assert.match(findingsPanelSource, /reason/);
-  assert.match(findingsPanelSource, /retryable/);
-  assert.match(findingsPanelSource, /다시 시도 가능/);
+  assert.doesNotMatch(findingsPanelSource, /scanErrors\.map\(\(scanError, index\)/);
   assert.match(resultPanelSource, /미지원 Resource/);
   assert.match(resultPanelSource, /providerResourceType/);
   assert.match(importPanelSource, /리소스별 카드/);
   assert.match(importPanelSource, /전체 복사/);
   assert.match(importPanelSource, /Git\/CI\/CD handoff 준비/);
+  assert.doesNotMatch(resultPanelSource, /ReverseEngineeringImportSuggestionsPanel/);
   assert.match(resultPanelSource, /analysisExclusions/);
 });
 
@@ -131,17 +122,19 @@ test("Reverse Engineering result explains scan coverage before users apply the p
   assert.match(resultPanelSource, /Resource Explorer/);
   assert.match(resultPanelSource, /전체 AWS 상태가 아닐 수 있습니다/);
   assert.match(resultPanelSource, /getScanCoverageNotice/);
+  assert.match(resultPanelSource, /<details/);
 });
 
-test("Reverse Engineering result shows multiple structure candidates before applying one", () => {
+test("Reverse Engineering start page shows multiple structure candidates before applying one", () => {
   assert.match(candidatesSource, /createReverseEngineeringBoardCandidates/);
   assert.match(candidatesSource, /candidate-structure-dependency/);
   assert.match(panelSource, /selectedCandidateId/);
   assert.match(panelSource, /selectedCandidateResult/);
   assert.match(panelSource, /createReverseEngineeringCandidateResult/);
-  assert.match(resultPanelSource, /보드 후보 선택/);
-  assert.match(resultPanelSource, /onCandidateSelect/);
-  assert.match(resultPanelSource, /candidate\.nodeCount/);
+  assert.match(reverseWorkspaceClientSource, /보드 후보 선택/);
+  assert.match(reverseWorkspaceClientSource, /onCandidateSelect/);
+  assert.match(reverseWorkspaceClientSource, /candidate\.resourceCount/);
+  assert.match(reverseWorkspaceClientSource, /candidate\.edgeCount/);
 });
 
 test("Reverse Engineering candidate preview keeps the original board as the comparison base", () => {

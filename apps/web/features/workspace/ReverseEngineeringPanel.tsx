@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
   DiagramJson,
   ReverseEngineeringResourceSelection,
@@ -30,12 +30,9 @@ import {
 } from "./reverse-engineering-board-application";
 import {
   createReverseEngineeringBoardCandidates,
-  createReverseEngineeringCandidateResult
+  createReverseEngineeringCandidateResult,
+  type ReverseEngineeringBoardCandidate
 } from "./reverse-engineering-board-candidates";
-import {
-  updateReverseEngineeringDraftNode,
-  type ReverseEngineeringDraftNodeUpdate
-} from "./reverse-engineering-draft-edits";
 import {
   REVERSE_ENGINEERING_ALL_RESOURCE_SELECTION,
   REVERSE_ENGINEERING_RESOURCE_SELECTIONS
@@ -54,8 +51,16 @@ import styles from "./workspace.module.css";
 export type ReverseEngineeringPanelProps = {
   readonly context: DiagramEditorPanelContext;
   readonly createProjectOnApply?: boolean | undefined;
+  readonly onCandidatePanelChange?: ((state: ReverseEngineeringCandidatePanelState) => void) | undefined;
   readonly projectId: string;
   readonly projectName: string;
+};
+
+export type ReverseEngineeringCandidatePanelState = {
+  readonly candidates: readonly ReverseEngineeringBoardCandidate[];
+  readonly hasScanResult: boolean;
+  readonly onCandidateSelect: (candidateId: string) => void;
+  readonly selectedCandidateId: string | null;
 };
 
 type RequestState = "idle" | "loading" | "error";
@@ -66,6 +71,7 @@ const SCAN_POLL_ATTEMPT_COUNT = 30;
 export function ReverseEngineeringPanel({
   context,
   createProjectOnApply = false,
+  onCandidatePanelChange,
   projectId,
   projectName
 }: ReverseEngineeringPanelProps) {
@@ -166,6 +172,43 @@ export function ReverseEngineeringPanel({
       ),
     [context.diagram, scanHistory, scanHistoryState]
   );
+  const selectBoardCandidate = useCallback(
+    (candidateId: string): void => {
+      const result = scanResponse?.result;
+      const candidate = boardCandidates.find((item) => item.id === candidateId);
+
+      if (!result || !candidate) {
+        return;
+      }
+
+      const candidateResult = createReverseEngineeringCandidateResult(result, candidate);
+      const application = createReverseEngineeringBoardApplication({
+        currentDiagram: previewSourceDiagram,
+        mode: "replace",
+        result: candidateResult
+      });
+
+      setSelectedCandidateId(candidateId);
+      context.setPreviewDiagram(application.previewDiagram);
+    },
+    [boardCandidates, context, previewSourceDiagram, scanResponse?.result]
+  );
+
+  useEffect(() => {
+    onCandidatePanelChange?.({
+      candidates: boardCandidates,
+      hasScanResult: Boolean(scanResponse?.result),
+      onCandidateSelect: selectBoardCandidate,
+      selectedCandidateId: selectedCandidate?.id ?? null
+    });
+  }, [
+    boardCandidates,
+    onCandidatePanelChange,
+    scanResponse?.result,
+    selectBoardCandidate,
+    selectedCandidate?.id
+  ]);
+
   // 사용자가 가져올 AWS 리소스 종류를 켜고 끕니다.
   function toggleResourceType(resourceType: ReverseEngineeringResourceSelection): void {
     setSelectedResourceTypes((currentResourceTypes) =>
@@ -359,41 +402,6 @@ export function ReverseEngineeringPanel({
     }
   }
 
-  // 사용자가 적용 전에 바꾼 표시값을 preview와 저장될 후보 설계에만 반영합니다.
-  function updateDraftNode(nodeId: string, update: ReverseEngineeringDraftNodeUpdate): void {
-    const result = scanResponse?.result;
-
-    if (!result) {
-      return;
-    }
-
-    const nextResult = updateReverseEngineeringDraftNode(result, nodeId, update);
-    const nextResponse = {
-      ...scanResponse,
-      result: nextResult
-    };
-    const nextCandidates = createReverseEngineeringBoardCandidates(nextResult);
-    const nextSelectedCandidate =
-      nextCandidates.find((candidate) => candidate.id === selectedCandidateId) ?? nextCandidates[0] ?? null;
-
-    if (!nextSelectedCandidate) {
-      setScanResponse(nextResponse);
-      context.setPreviewDiagram(null);
-      return;
-    }
-
-    const nextCandidateResult = createReverseEngineeringCandidateResult(nextResult, nextSelectedCandidate);
-    const application = createReverseEngineeringBoardApplication({
-      currentDiagram: previewSourceDiagram,
-      mode: "replace",
-      result: nextCandidateResult
-    });
-
-    setSelectedCandidateId(nextSelectedCandidate.id);
-    setScanResponse(nextResponse);
-    context.setPreviewDiagram(application.previewDiagram);
-  }
-
   // 스캔 직후에는 가장 앞의 후보를 기본 미리보기로 보여줍니다.
   function showFirstCandidatePreview(
     result: ReverseEngineeringScanResult,
@@ -417,26 +425,6 @@ export function ReverseEngineeringPanel({
     });
 
     setSelectedCandidateId(nextCandidate.id);
-    context.setPreviewDiagram(application.previewDiagram);
-  }
-
-  // 사용자가 후보 카드를 고르면 보드 미리보기도 그 후보로 바꿉니다.
-  function selectBoardCandidate(candidateId: string): void {
-    const result = scanResponse?.result;
-    const candidate = boardCandidates.find((item) => item.id === candidateId);
-
-    if (!result || !candidate) {
-      return;
-    }
-
-    const candidateResult = createReverseEngineeringCandidateResult(result, candidate);
-    const application = createReverseEngineeringBoardApplication({
-      currentDiagram: previewSourceDiagram,
-      mode: "replace",
-      result: candidateResult
-    });
-
-    setSelectedCandidateId(candidateId);
     context.setPreviewDiagram(application.previewDiagram);
   }
 
@@ -488,11 +476,10 @@ export function ReverseEngineeringPanel({
             applyState={applyState}
             boardCandidates={boardCandidates}
             comparison={comparison}
+            createProjectOnApply={createProjectOnApply}
             hasCurrentBoardResources={previewSourceDiagram.nodes.length > 0}
             logs={logs}
             onAppendToCurrentBoard={() => void applyScanResult("append")}
-            onCandidateSelect={selectBoardCandidate}
-            onDraftNodeEdit={updateDraftNode}
             onOpenAsNewBoard={() => void applyScanResult("replace")}
             onRetryScan={() => void runScan()}
             response={selectedCandidateResponse}

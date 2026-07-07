@@ -1,15 +1,13 @@
 import type {
-  ArchitectureJson,
   DiscoveredResource,
   ReverseEngineeringScanLogLine,
   ReverseEngineeringScanResponse,
   ReverseEngineeringScanError
 } from "@sketchcatch/types";
-import type { ReverseEngineeringDraftNodeUpdate } from "./reverse-engineering-draft-edits";
+import type { ReactNode } from "react";
 import type { ReverseEngineeringBoardComparison } from "./reverse-engineering-board-application";
 import type { ReverseEngineeringBoardCandidate } from "./reverse-engineering-board-candidates";
 import { ReverseEngineeringFindingsPanel } from "./ReverseEngineeringFindingsPanel";
-import { ReverseEngineeringImportSuggestionsPanel } from "./ReverseEngineeringImportSuggestionsPanel";
 import { ReverseEngineeringResourceParametersPanel } from "./ReverseEngineeringResourceParametersPanel";
 import styles from "./workspace.module.css";
 
@@ -20,11 +18,10 @@ export type ReverseEngineeringResultPanelProps = {
   readonly applyState: ReverseEngineeringApplyState;
   readonly boardCandidates: readonly ReverseEngineeringBoardCandidate[];
   readonly comparison: ReverseEngineeringBoardComparison;
+  readonly createProjectOnApply: boolean;
   readonly hasCurrentBoardResources: boolean;
   readonly logs: ReverseEngineeringScanLogLine[];
   readonly onAppendToCurrentBoard: () => void;
-  readonly onCandidateSelect: (candidateId: string) => void;
-  readonly onDraftNodeEdit: (nodeId: string, update: ReverseEngineeringDraftNodeUpdate) => void;
   readonly onOpenAsNewBoard: () => void;
   readonly onRetryScan: () => void;
   readonly response: ReverseEngineeringScanResponse;
@@ -37,11 +34,10 @@ export function ReverseEngineeringResultPanel({
   applyState,
   boardCandidates,
   comparison,
+  createProjectOnApply,
   hasCurrentBoardResources,
   logs,
   onAppendToCurrentBoard,
-  onCandidateSelect,
-  onDraftNodeEdit,
   onOpenAsNewBoard,
   onRetryScan,
   response,
@@ -57,70 +53,31 @@ export function ReverseEngineeringResultPanel({
   const unsupportedResources = result.discoveredResources.filter(
     (resource) => resource.resourceType === "UNKNOWN"
   );
+  const selectedCandidate = getSelectedBoardCandidate({ candidates: boardCandidates, selectedCandidateId });
+  const primaryApplyLabel = getPrimaryApplyLabel({ createProjectOnApply, hasCurrentBoardResources });
 
   return (
     <>
       <section className={styles.deploymentSection}>
-        <h3>복원된 Practice Architecture 미리보기</h3>
+        <h3>스캔 요약</h3>
         <div className={styles.deploymentPreflightStats}>
           <span>
             찾은 리소스
             <strong>{result.discoveredResources.length}</strong>
           </span>
           <span>
-            보드 노드
-            <strong>{result.architectureJson.nodes.length}</strong>
+            못 읽은 서비스
+            <strong>{result.scanErrors.length}</strong>
           </span>
           <span>
-            연결선
-            <strong>{result.architectureJson.edges.length}</strong>
+            선택한 후보
+            <strong>{selectedCandidate?.title ?? "기본 후보"}</strong>
           </span>
         </div>
         <p className={styles.deploymentHint}>
-          스캔 결과는 지금 보드에 미리보기로만 표시됩니다. 아래 적용 버튼을 누르기 전에는 현재 보드를 바꾸지 않습니다.
+          왼쪽에서 고른 후보가 보드에 미리보기로 표시됩니다. 버튼을 누르면 확인 팝업 없이 바로
+          프로젝트를 만듭니다.
         </p>
-      </section>
-
-      <ReverseEngineeringScanCoveragePanel
-        scanErrors={result.scanErrors}
-        unsupportedResourceCount={unsupportedResources.length}
-      />
-
-      <ReverseEngineeringCandidateSelector
-        candidates={boardCandidates}
-        onCandidateSelect={onCandidateSelect}
-        selectedCandidateId={selectedCandidateId}
-      />
-
-      <ReverseEngineeringDraftEditor
-        architectureJson={result.architectureJson}
-        onDraftNodeEdit={onDraftNodeEdit}
-      />
-
-      <section className={styles.deploymentSection}>
-        <h3>현재 보드와 비교</h3>
-        <div className={styles.deploymentPreflightStats}>
-          <span>
-            추가 후보
-            <strong>{comparison.additions.length}</strong>
-          </span>
-          <span>
-            변경 후보
-            <strong>{comparison.changes.length}</strong>
-          </span>
-          <span>
-            삭제 후보
-            <strong>{comparison.deletions.length}</strong>
-          </span>
-          <span>
-            중복 후보
-            <strong>{comparison.duplicates.length}</strong>
-          </span>
-          <span>
-            확인 필요
-            <strong>{comparison.manualReviews.length}</strong>
-          </span>
-        </div>
         {comparison.manualReviews.length > 0 ? (
           <p className={styles.deploymentNotice}>
             AWS 원본 ID가 없거나 Terraform 이름만 겹치는 Resource는 자동으로 합치지 않습니다.
@@ -133,9 +90,7 @@ export function ReverseEngineeringResultPanel({
             onClick={onOpenAsNewBoard}
             type="button"
           >
-            <span className={styles.deploymentButtonText}>
-              {hasCurrentBoardResources ? "새 보드로 열기" : "보드에 적용"}
-            </span>
+            <span className={styles.deploymentButtonText}>{primaryApplyLabel}</span>
           </button>
           {hasCurrentBoardResources ? (
             <button
@@ -155,115 +110,97 @@ export function ReverseEngineeringResultPanel({
         ) : null}
       </section>
 
-      <section className={styles.deploymentSection}>
-        <h3>발견한 리소스</h3>
-        {result.discoveredResources.length === 0 ? (
-          <p className={styles.deploymentHint}>아직 발견한 리소스가 없습니다.</p>
-        ) : (
-          <ul className={styles.reverseResultList}>
-            {result.discoveredResources.slice(0, 8).map((resource) => (
-              <li key={resource.id} className={styles.reverseResultItem}>
-                <strong>{resource.displayName}</strong>
-                <span>
-                  {resource.resourceType} · {resource.providerResourceId}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      <ReverseEngineeringDetailGroup title="부분 실패">
+        <ReverseEngineeringScanCoveragePanel
+          onRetryScan={onRetryScan}
+          scanErrors={result.scanErrors}
+          unsupportedResourceCount={unsupportedResources.length}
+        />
+      </ReverseEngineeringDetailGroup>
 
-      <ReverseEngineeringResourceParametersPanel discoveredResources={result.discoveredResources} />
+      <ReverseEngineeringDetailGroup title="발견한 Resource">
+        <DiscoveredResourcePreview resources={result.discoveredResources} />
+        <p className={styles.deploymentHint}>
+          리소스를 고르면 오른쪽 상세 패널에서 원본 값을 확인할 수 있습니다.
+        </p>
+      </ReverseEngineeringDetailGroup>
 
-      <ReverseEngineeringFindingsPanel
-        analysisExclusions={result.analysisExclusions}
-        findings={result.findings}
-        onRetryScan={onRetryScan}
-        scanErrors={result.scanErrors}
-      />
+      <ReverseEngineeringDetailGroup title="리소스 파라미터">
+        <ReverseEngineeringResourceParametersPanel discoveredResources={result.discoveredResources} />
+      </ReverseEngineeringDetailGroup>
 
-      <UnsupportedResourceList resources={unsupportedResources} />
+      <ReverseEngineeringDetailGroup title="위험/비용 finding">
+        <ReverseEngineeringFindingsPanel
+          analysisExclusions={result.analysisExclusions}
+          findings={result.findings}
+        />
+      </ReverseEngineeringDetailGroup>
 
-      <ReverseEngineeringImportSuggestionsPanel importSuggestions={result.importSuggestions} />
+      <ReverseEngineeringDetailGroup title="미지원 Resource">
+        <UnsupportedResourceList resources={unsupportedResources} />
+      </ReverseEngineeringDetailGroup>
 
-      <section className={styles.deploymentSection}>
-        <h3>스캔 로그</h3>
-        {logs.length === 0 ? (
-          <p className={styles.deploymentHint}>표시할 로그가 없습니다.</p>
-        ) : (
-          <ul className={styles.reverseLogList}>
-            {logs.map((log) => (
-              <li key={log.id} data-level={log.level}>
-                <strong>{log.stage}</strong>
-                <span>{log.message}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      <ReverseEngineeringDetailGroup title="스캔 로그">
+        <ReverseEngineeringLogList logs={logs} />
+      </ReverseEngineeringDetailGroup>
     </>
   );
 }
 
-// 여러 인프라가 섞여 있을 때 사용자가 맞는 보드 후보를 고르게 합니다.
-function ReverseEngineeringCandidateSelector({
+function getSelectedBoardCandidate({
   candidates,
-  onCandidateSelect,
   selectedCandidateId
 }: {
   readonly candidates: readonly ReverseEngineeringBoardCandidate[];
-  readonly onCandidateSelect: (candidateId: string) => void;
   readonly selectedCandidateId: string;
-}) {
-  if (candidates.length <= 1) {
-    return null;
+}): ReverseEngineeringBoardCandidate | null {
+  return candidates.find((candidate) => candidate.id === selectedCandidateId) ?? candidates[0] ?? null;
+}
+
+function getPrimaryApplyLabel({
+  createProjectOnApply,
+  hasCurrentBoardResources
+}: {
+  readonly createProjectOnApply: boolean;
+  readonly hasCurrentBoardResources: boolean;
+}): string {
+  if (createProjectOnApply) {
+    return "프로젝트로 만들기";
   }
 
+  return hasCurrentBoardResources ? "새 보드로 열기" : "보드에 적용";
+}
+
+function ReverseEngineeringDetailGroup({
+  children,
+  title
+}: {
+  readonly children: ReactNode;
+  readonly title: string;
+}) {
   return (
-    <section className={styles.deploymentSection}>
-      <h3>보드 후보 선택</h3>
-      <p className={styles.deploymentHint}>
-        AWS에 여러 구조가 섞여 있을 수 있습니다. 맞는 후보를 고르면 보드 미리보기도 같이 바뀝니다.
-      </p>
-      <div className={styles.reverseCandidateGrid} role="radiogroup" aria-label="보드 후보 선택">
-        {candidates.map((candidate) => (
-          <button
-            aria-checked={candidate.id === selectedCandidateId}
-            className={
-              candidate.id === selectedCandidateId
-                ? `${styles.reverseCandidateCard} ${styles.reverseCandidateCardSelected}`
-                : styles.reverseCandidateCard
-            }
-            key={candidate.id}
-            onClick={() => onCandidateSelect(candidate.id)}
-            role="radio"
-            type="button"
-          >
-            <strong>{candidate.title}</strong>
-            <span>{candidate.description}</span>
-            <small>
-              노드 {candidate.nodeCount}개 · 연결선 {candidate.edgeCount}개
-            </small>
-          </button>
-        ))}
-      </div>
-    </section>
+    <details className={styles.reverseResultDetails}>
+      <summary>{title}</summary>
+      <div className={styles.reverseResultDetailsBody}>{children}</div>
+    </details>
   );
 }
 
 // 사용자가 적용하기 전에 이번 스캔이 전체 결과인지 부분 결과인지 먼저 알려줍니다.
 function ReverseEngineeringScanCoveragePanel({
+  onRetryScan,
   scanErrors,
   unsupportedResourceCount
 }: {
+  readonly onRetryScan: () => void;
   readonly scanErrors: ReverseEngineeringScanError[];
   readonly unsupportedResourceCount: number;
 }) {
   const notice = getScanCoverageNotice(scanErrors);
+  const hasRetryableScanError = scanErrors.some((scanError) => scanError.retryable);
 
   return (
-    <section className={styles.deploymentSection}>
-      <h3>스캔 범위</h3>
+    <div>
       <div className={styles.deploymentPreflightStats}>
         <span>
           못 읽은 서비스
@@ -277,7 +214,29 @@ function ReverseEngineeringScanCoveragePanel({
       <p className={scanErrors.length > 0 ? styles.deploymentNotice : styles.deploymentHint}>
         {notice}
       </p>
-    </section>
+      {scanErrors.length > 0 ? (
+        <details className={styles.reverseResultDetails}>
+          <summary>못 읽은 서비스 자세히 보기</summary>
+          <ul className={styles.reverseResultList}>
+            {scanErrors.map((scanError, index) => (
+              <li key={`${scanError.id}-${index}`} className={styles.reverseResultItem}>
+                <strong>{scanError.resourceType}</strong>
+                <span>
+                  stage: {scanError.stage} · reason: {scanError.reason} · retryable:{" "}
+                  {formatRetryableStatus(scanError.retryable)}
+                </span>
+                <span>{scanError.message}</span>
+              </li>
+            ))}
+          </ul>
+          {hasRetryableScanError ? (
+            <button className={styles.deploymentSecondaryButton} onClick={onRetryScan} type="button">
+              다시 스캔
+            </button>
+          ) : null}
+        </details>
+      ) : null}
+    </div>
   );
 }
 
@@ -294,80 +253,13 @@ function getScanCoverageNotice(scanErrors: ReverseEngineeringScanError[]): strin
   return "현재 권한으로 읽을 수 있는 범위에서는 부분 실패 없이 스캔했습니다.";
 }
 
-// 원본 AWS 값은 그대로 두고, 사용자가 적용할 후보 설계의 안전한 표시값만 수정합니다.
-function ReverseEngineeringDraftEditor({
-  architectureJson,
-  onDraftNodeEdit
-}: {
-  readonly architectureJson: ArchitectureJson;
-  readonly onDraftNodeEdit: (nodeId: string, update: ReverseEngineeringDraftNodeUpdate) => void;
-}) {
-  if (architectureJson.nodes.length === 0) {
-    return null;
-  }
-
-  return (
-    <section className={styles.deploymentSection}>
-      <h3>Draft 수정</h3>
-      <ul className={styles.reverseResultList}>
-        {architectureJson.nodes.map((node) => (
-          <li key={node.id} className={styles.reverseResultItem}>
-            <label className={styles.deploymentField}>
-              표시 이름
-              <input
-                onChange={(event) => onDraftNodeEdit(node.id, { label: event.currentTarget.value })}
-                value={node.label}
-              />
-            </label>
-            <label className={styles.deploymentField}>
-              설명
-              <input
-                onChange={(event) =>
-                  onDraftNodeEdit(node.id, { description: event.currentTarget.value })
-                }
-                value={typeof node.config["description"] === "string" ? node.config["description"] : ""}
-              />
-            </label>
-            <div className={styles.deploymentApplyActions}>
-              <label className={styles.deploymentField}>
-                X
-                <input
-                  onChange={(event) =>
-                    onDraftNodeEdit(node.id, { positionX: Number(event.currentTarget.value) })
-                  }
-                  type="number"
-                  value={node.positionX}
-                />
-              </label>
-              <label className={styles.deploymentField}>
-                Y
-                <input
-                  onChange={(event) =>
-                    onDraftNodeEdit(node.id, { positionY: Number(event.currentTarget.value) })
-                  }
-                  type="number"
-                  value={node.positionY}
-                />
-              </label>
-            </div>
-            <span>
-              {node.type} · {String(node.config["providerResourceId"] ?? "providerResourceId 없음")}
-            </span>
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-}
-
 function UnsupportedResourceList({ resources }: { readonly resources: DiscoveredResource[] }) {
   if (resources.length === 0) {
-    return null;
+    return <p className={styles.deploymentHint}>미지원 Resource가 없습니다.</p>;
   }
 
   return (
-    <section className={styles.deploymentSection}>
-      <h3>미지원 Resource</h3>
+    <>
       <p className={styles.deploymentHint}>
         AWS에서 발견했지만 아직 SketchCatch 정식 ResourceType으로 매핑하지 못한 항목입니다.
       </p>
@@ -383,6 +275,46 @@ function UnsupportedResourceList({ resources }: { readonly resources: Discovered
           </li>
         ))}
       </ul>
-    </section>
+    </>
   );
+}
+
+function DiscoveredResourcePreview({ resources }: { readonly resources: readonly DiscoveredResource[] }) {
+  if (resources.length === 0) {
+    return <p className={styles.deploymentHint}>아직 발견한 Resource가 없습니다.</p>;
+  }
+
+  return (
+    <ul className={styles.reverseResultList}>
+      {resources.slice(0, 8).map((resource) => (
+        <li key={resource.id} className={styles.reverseResultItem}>
+          <strong>{resource.displayName}</strong>
+          <span>
+            {resource.resourceType} · {resource.providerResourceId}
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function ReverseEngineeringLogList({ logs }: { readonly logs: readonly ReverseEngineeringScanLogLine[] }) {
+  if (logs.length === 0) {
+    return <p className={styles.deploymentHint}>표시할 로그가 없습니다.</p>;
+  }
+
+  return (
+    <ul className={styles.reverseLogList}>
+      {logs.map((log) => (
+        <li key={log.id} data-level={log.level}>
+          <strong>{log.stage}</strong>
+          <span>{log.message}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function formatRetryableStatus(retryable: boolean): string {
+  return retryable ? "다시 시도 가능" : "다시 시도 어려움";
 }
