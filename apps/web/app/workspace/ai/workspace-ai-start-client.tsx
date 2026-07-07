@@ -2,12 +2,13 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { ArrowLeft, Check, RefreshCw, Send, X } from "lucide-react";
+import { ArrowLeft, Check, Maximize2, RefreshCw, Send, X, ZoomIn, ZoomOut } from "lucide-react";
 import type {
   AiArchitectureDraftResult,
   ArchitectureDraftClarification,
   CreateArchitectureDraftRequest,
-  DiagramJson
+  DiagramJson,
+  DiagramNode
 } from "@sketchcatch/types";
 import { getApiErrorMessage } from "../../../lib/api-client";
 import {
@@ -22,15 +23,31 @@ import {
   type ArchitectureDraftFollowUpSession
 } from "../../../features/workspace/workspace-ai-draft-follow-up";
 import { createWorkspaceAiChatStorageKey } from "../../../features/workspace/WorkspaceAiChatDock";
+import {
+  getAreaNodeIconUrl,
+  getAreaNodeLabel,
+  getAreaNodeMetaLabel,
+  isAreaNode
+} from "../../../features/diagram-editor/area-nodes";
 
 const AI_START_DRAFT_STORAGE_KEY = "sketchcatch.newProjectDraft";
 const MAX_CHAT_MESSAGES = 80;
+const MINI_DIAGRAM_PADDING = 56;
+const MINI_DIAGRAM_AREA_HEADER_HEIGHT = 24;
+const MINI_DIAGRAM_AREA_HEADER_MAX_WIDTH = 260;
+const MINI_DIAGRAM_MAX_LABEL_LENGTH = 28;
+const MINI_DIAGRAM_ZOOM_LEVELS = [1, 1.35, 1.7, 2.1, 2.6] as const;
+const MINI_DIAGRAM_MIN_ZOOM = 1;
+const MINI_DIAGRAM_MAX_ZOOM = 2.6;
 const COPY = {
   approve: "\uC2B9\uC778",
   cancel: "\uCDE8\uC18C",
   chatInput: "AI \uCC44\uD305 \uC785\uB825",
   diagramPreview: "\uB2E4\uC774\uC5B4\uADF8\uB7A8 \uBBF8\uB9AC\uBCF4\uAE30",
   error: "\uC624\uB958",
+  fullScreen: "\uC804\uCCB4 \uD654\uBA74",
+  fullScreenPreviewClose: "\uC804\uCCB4 \uD654\uBA74 \uB2E4\uC774\uC5B4\uADF8\uB7A8 \uBBF8\uB9AC\uBCF4\uAE30 \uB2EB\uAE30",
+  fullScreenPreviewOpen: "\uC804\uCCB4 \uD654\uBA74 \uB2E4\uC774\uC5B4\uADF8\uB7A8 \uBBF8\uB9AC\uBCF4\uAE30 \uC5F4\uAE30",
   generateError: "Architecture Draft \uC0DD\uC131 \uC911 \uC624\uB958\uAC00 \uBC1C\uC0DD\uD588\uC2B5\uB2C8\uB2E4.",
   initialQuestion: "\uD504\uB85C\uC81D\uD2B8 \uC694\uAD6C\uC0AC\uD56D\uC744 \uC785\uB825\uD574\uC8FC\uC138\uC694.",
   loadingDraft: "\uC0C8 \uD504\uB85C\uC81D\uD2B8 \uC815\uBCF4\uB97C \uBD88\uB7EC\uC624\uB294 \uC911\uC785\uB2C8\uB2E4.",
@@ -40,7 +57,10 @@ const COPY = {
   question: "\uC9C8\uBB38",
   regenerate: "\uB2E4\uC2DC \uC0DD\uC131",
   saveApprovedError: "\uC2B9\uC778\uD55C PREVIEW\uB97C \uBCF4\uB4DC\uB85C \uC800\uC7A5\uD558\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4.",
-  send: "\uBCF4\uB0B4\uAE30"
+  send: "\uBCF4\uB0B4\uAE30",
+  zoomIn: "\uD655\uB300",
+  zoomOut: "\uCD95\uC18C",
+  zoomReset: "\uBC30\uC728 \uCD08\uAE30\uD654"
 } as const;
 
 type WorkspaceStartDraft = {
@@ -475,60 +495,269 @@ export function WorkspaceAiStartClient() {
 }
 
 function MiniDiagramPreview({ diagram }: { readonly diagram: DiagramJson }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [zoomLevel, setZoomLevel] = useState(MINI_DIAGRAM_MIN_ZOOM);
   const layout = createMiniDiagramLayout(diagram);
+  const nodeById = new Map(layout.nodes.map((node) => [node.id, node]));
+  const areaNodes = layout.nodes.filter((node) => node.isArea);
+  const resourceNodes = layout.nodes.filter((node) => !node.isArea);
+  const isZoomed = zoomLevel > MINI_DIAGRAM_MIN_ZOOM;
+  const canZoomOut = zoomLevel > MINI_DIAGRAM_MIN_ZOOM;
+  const canZoomIn = zoomLevel < MINI_DIAGRAM_MAX_ZOOM;
 
+  useEffect(() => {
+    if (!isExpanded) {
+      return;
+    }
+
+    function handleKeyDown(event: globalThis.KeyboardEvent): void {
+      if (event.key === "Escape") {
+        setIsExpanded(false);
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isExpanded]);
+
+  function openExpandedPreview(): void {
+    setZoomLevel(MINI_DIAGRAM_MIN_ZOOM);
+    setIsExpanded(true);
+  }
+
+  return (
+    <div className="workspaceAiMiniDiagramPanel">
+      <div className="workspaceAiMiniDiagramToolbar" aria-label={COPY.diagramPreview}>
+        <span>100%</span>
+        <div>
+          <button
+            aria-label={COPY.fullScreenPreviewOpen}
+            onClick={openExpandedPreview}
+            title={COPY.fullScreen}
+            type="button"
+          >
+            <Maximize2 size={15} aria-hidden="true" />
+          </button>
+        </div>
+      </div>
+      <div className="workspaceAiMiniDiagramViewport">
+        <MiniDiagramCanvas
+          areaNodes={areaNodes}
+          diagram={diagram}
+          fitToViewport
+          layout={layout}
+          nodeById={nodeById}
+          resourceNodes={resourceNodes}
+          zoomLevel={MINI_DIAGRAM_MIN_ZOOM}
+        />
+      </div>
+
+      {isExpanded ? (
+        <div aria-label={COPY.diagramPreview} aria-modal="true" className="workspaceAiMiniDiagramOverlay" role="dialog">
+          <div className="workspaceAiMiniDiagramOverlaySurface">
+            <div className="workspaceAiMiniDiagramToolbar workspaceAiMiniDiagramFullscreenToolbar">
+              <span>{Math.round(zoomLevel * 100)}%</span>
+              <div>
+                <button
+                  aria-label={COPY.zoomOut}
+                  disabled={!canZoomOut}
+                  onClick={() => setZoomLevel((currentZoomLevel) => getNextMiniDiagramZoom(currentZoomLevel, -1))}
+                  title={COPY.zoomOut}
+                  type="button"
+                >
+                  <ZoomOut size={15} aria-hidden="true" />
+                </button>
+                <button
+                  aria-label={COPY.zoomIn}
+                  disabled={!canZoomIn}
+                  onClick={() => setZoomLevel((currentZoomLevel) => getNextMiniDiagramZoom(currentZoomLevel, 1))}
+                  title={COPY.zoomIn}
+                  type="button"
+                >
+                  <ZoomIn size={15} aria-hidden="true" />
+                </button>
+                <button
+                  aria-label={COPY.zoomReset}
+                  disabled={!isZoomed}
+                  onClick={() => setZoomLevel(MINI_DIAGRAM_MIN_ZOOM)}
+                  title={COPY.zoomReset}
+                  type="button"
+                >
+                  <RefreshCw size={15} aria-hidden="true" />
+                </button>
+                <button
+                  aria-label={COPY.fullScreenPreviewClose}
+                  onClick={() => setIsExpanded(false)}
+                  title={COPY.cancel}
+                  type="button"
+                >
+                  <X size={15} aria-hidden="true" />
+                </button>
+              </div>
+            </div>
+            <div className="workspaceAiMiniDiagramFullscreenViewport" data-zoomed={isZoomed ? "true" : "false"}>
+              <MiniDiagramCanvas
+                areaNodes={areaNodes}
+                diagram={diagram}
+                fitToViewport={!isZoomed}
+                layout={layout}
+                nodeById={nodeById}
+                resourceNodes={resourceNodes}
+                zoomLevel={zoomLevel}
+              />
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function MiniDiagramCanvas({
+  areaNodes,
+  diagram,
+  fitToViewport,
+  layout,
+  nodeById,
+  resourceNodes,
+  zoomLevel
+}: {
+  readonly areaNodes: readonly MiniDiagramNode[];
+  readonly diagram: DiagramJson;
+  readonly fitToViewport: boolean;
+  readonly layout: MiniDiagramLayout;
+  readonly nodeById: ReadonlyMap<string, MiniDiagramNode>;
+  readonly resourceNodes: readonly MiniDiagramNode[];
+  readonly zoomLevel: number;
+}) {
   return (
     <svg
       aria-label={COPY.diagramPreview}
       className="workspaceAiMiniDiagram"
+      data-fit={fitToViewport ? "true" : "false"}
+      preserveAspectRatio="xMidYMid meet"
       role="img"
+      style={fitToViewport ? undefined : { width: `${zoomLevel * 100}%` }}
       viewBox={`0 0 ${layout.width} ${layout.height}`}
     >
+      {areaNodes.map((node) => (
+        <g className="workspaceAiMiniDiagramAreaNode" key={node.id}>
+          <title>{node.label}</title>
+          <rect
+            className="workspaceAiMiniDiagramAreaBody"
+            height={node.height}
+            rx="8"
+            width={node.width}
+            x={node.x}
+            y={node.y}
+          />
+          <g className="workspaceAiMiniDiagramAreaHeader">
+            <rect
+              height={MINI_DIAGRAM_AREA_HEADER_HEIGHT}
+              rx="7"
+              width={node.headerWidth}
+              x={node.x}
+              y={node.y - MINI_DIAGRAM_AREA_HEADER_HEIGHT}
+            />
+            {node.iconUrl ? (
+              <image
+                height="15"
+                href={node.iconUrl}
+                preserveAspectRatio="xMidYMid meet"
+                width="15"
+                x={node.x + 9}
+                y={node.y - MINI_DIAGRAM_AREA_HEADER_HEIGHT + 4.5}
+              />
+            ) : null}
+            <text
+              className="workspaceAiMiniDiagramAreaLabel"
+              x={node.x + (node.iconUrl ? 30 : 11)}
+              y={node.y - 8}
+            >
+              {truncateMiniDiagramLabel(node.label, MINI_DIAGRAM_MAX_LABEL_LENGTH)}
+            </text>
+            {node.metaLabel ? (
+              <text
+                className="workspaceAiMiniDiagramAreaMeta"
+                x={node.x + node.headerWidth - 10}
+                y={node.y - 8}
+                textAnchor="end"
+              >
+                {truncateMiniDiagramLabel(node.metaLabel, 12)}
+              </text>
+            ) : null}
+          </g>
+        </g>
+      ))}
+
       {diagram.edges.map((edge) => {
-        const source = layout.nodes.get(edge.sourceNodeId);
-        const target = layout.nodes.get(edge.targetNodeId);
+        const source = nodeById.get(edge.sourceNodeId);
+        const target = nodeById.get(edge.targetNodeId);
 
         if (!source || !target) {
           return null;
         }
 
         return (
-          <line
-            className="workspaceAiMiniDiagramEdge"
-            key={edge.id}
-            x1={source.x}
-            x2={target.x}
-            y1={source.y}
-            y2={target.y}
-          />
+          <g className="workspaceAiMiniDiagramEdgeGroup" key={edge.id}>
+            <path
+              className="workspaceAiMiniDiagramEdge"
+              d={createMiniDiagramEdgePath(source, target)}
+            />
+            {edge.label ? (
+              <text
+                className="workspaceAiMiniDiagramEdgeLabel"
+                x={(source.centerX + target.centerX) / 2}
+                y={(source.centerY + target.centerY) / 2 - 5}
+                textAnchor="middle"
+              >
+                {truncateMiniDiagramLabel(edge.label, 16)}
+              </text>
+            ) : null}
+          </g>
         );
       })}
-      {diagram.nodes.map((node) => {
-        const point = layout.nodes.get(node.id);
 
-        if (!point) {
-          return null;
-        }
-
+      {resourceNodes.map((node) => {
         return (
-          <g className="workspaceAiMiniDiagramNode" key={node.id}>
+          <g className="workspaceAiMiniDiagramResourceNode" key={node.id}>
             <title>{node.label}</title>
-            <rect height="42" rx="7" width="42" x={point.x - 21} y={point.y - 21} />
             {node.iconUrl ? (
               <image
-                height="28"
+                height={node.iconSize}
                 href={node.iconUrl}
                 preserveAspectRatio="xMidYMid meet"
-                width="28"
-                x={point.x - 14}
-                y={point.y - 14}
+                width={node.iconSize}
+                x={node.centerX - node.iconSize / 2}
+                y={node.iconY}
               />
             ) : (
               <g className="workspaceAiMiniDiagramNodeFallback" aria-hidden="true">
-                <circle cx={point.x} cy={point.y} r="7" />
-                <path d={`M ${point.x - 11} ${point.y + 9} L ${point.x} ${point.y - 12} L ${point.x + 11} ${point.y + 9} Z`} />
+                <rect
+                  height={node.iconSize}
+                  rx="7"
+                  width={node.iconSize}
+                  x={node.centerX - node.iconSize / 2}
+                  y={node.iconY}
+                />
+                <text
+                  textAnchor="middle"
+                  x={node.centerX}
+                  y={node.iconY + node.iconSize / 2 + 4}
+                >
+                  AWS
+                </text>
               </g>
             )}
+            <text
+              className="workspaceAiMiniDiagramResourceLabel"
+              textAnchor="middle"
+              x={node.centerX}
+              y={node.labelY}
+            >
+              {truncateMiniDiagramLabel(node.label, 18)}
+            </text>
           </g>
         );
       })}
@@ -536,17 +765,33 @@ function MiniDiagramPreview({ diagram }: { readonly diagram: DiagramJson }) {
   );
 }
 
+function getNextMiniDiagramZoom(currentZoomLevel: number, direction: -1 | 1): number {
+  const currentIndex = MINI_DIAGRAM_ZOOM_LEVELS.findIndex((zoomLevel) => zoomLevel === currentZoomLevel);
+  const fallbackIndex = MINI_DIAGRAM_ZOOM_LEVELS.reduce(
+    (closestIndex, zoomLevel, index) => {
+      const closestZoomLevel = MINI_DIAGRAM_ZOOM_LEVELS[closestIndex] ?? MINI_DIAGRAM_MIN_ZOOM;
+
+      return Math.abs(zoomLevel - currentZoomLevel) < Math.abs(closestZoomLevel - currentZoomLevel)
+        ? index
+        : closestIndex;
+    },
+    0
+  );
+  const nextIndex = Math.min(
+    Math.max((currentIndex === -1 ? fallbackIndex : currentIndex) + direction, 0),
+    MINI_DIAGRAM_ZOOM_LEVELS.length - 1
+  );
+
+  return MINI_DIAGRAM_ZOOM_LEVELS[nextIndex] ?? MINI_DIAGRAM_MIN_ZOOM;
+}
+
 function createMiniDiagramLayout(diagram: DiagramJson): {
   readonly height: number;
-  readonly nodes: Map<string, { readonly x: number; readonly y: number }>;
+  readonly nodes: readonly MiniDiagramNode[];
   readonly width: number;
 } {
-  const width = 560;
-  const height = 300;
-  const nodes = new Map<string, { x: number; y: number }>();
-
   if (diagram.nodes.length === 0) {
-    return { height, nodes, width };
+    return { height: 1, nodes: [], width: 1 };
   }
 
   const bounds = diagram.nodes.reduce(
@@ -554,7 +799,10 @@ function createMiniDiagramLayout(diagram: DiagramJson): {
       bottom: Math.max(currentBounds.bottom, node.position.y + node.size.height),
       left: Math.min(currentBounds.left, node.position.x),
       right: Math.max(currentBounds.right, node.position.x + node.size.width),
-      top: Math.min(currentBounds.top, node.position.y)
+      top: Math.min(
+        currentBounds.top,
+        isAreaNode(node) ? node.position.y - MINI_DIAGRAM_AREA_HEADER_HEIGHT : node.position.y
+      )
     }),
     {
       bottom: -Infinity,
@@ -563,19 +811,102 @@ function createMiniDiagramLayout(diagram: DiagramJson): {
       top: Infinity
     }
   );
-  const sourceWidth = Math.max(bounds.right - bounds.left, 1);
-  const sourceHeight = Math.max(bounds.bottom - bounds.top, 1);
-  const padding = 38;
-  const scale = Math.min((width - padding * 2) / sourceWidth, (height - padding * 2) / sourceHeight);
+  const nodes = diagram.nodes.map((node) => createMiniDiagramNode(node, bounds));
 
-  for (const node of diagram.nodes) {
-    nodes.set(node.id, {
-      x: padding + (node.position.x + node.size.width / 2 - bounds.left) * scale,
-      y: padding + (node.position.y + node.size.height / 2 - bounds.top) * scale
-    });
+  return {
+    height: Math.max(bounds.bottom - bounds.top + MINI_DIAGRAM_PADDING * 2, 1),
+    nodes,
+    width: Math.max(bounds.right - bounds.left + MINI_DIAGRAM_PADDING * 2, 1)
+  };
+}
+
+type MiniDiagramLayout = ReturnType<typeof createMiniDiagramLayout>;
+
+type MiniDiagramNode = {
+  readonly centerX: number;
+  readonly centerY: number;
+  readonly headerWidth: number;
+  readonly height: number;
+  readonly iconSize: number;
+  readonly iconUrl: string | undefined;
+  readonly iconY: number;
+  readonly id: string;
+  readonly isArea: boolean;
+  readonly label: string;
+  readonly labelY: number;
+  readonly metaLabel: string | undefined;
+  readonly width: number;
+  readonly x: number;
+  readonly y: number;
+};
+
+function createMiniDiagramNode(
+  node: DiagramNode,
+  bounds: { readonly left: number; readonly top: number }
+): MiniDiagramNode {
+  const isArea = isAreaNode(node);
+  const x = MINI_DIAGRAM_PADDING + node.position.x - bounds.left;
+  const y = MINI_DIAGRAM_PADDING + node.position.y - bounds.top;
+  const width = node.size.width;
+  const height = node.size.height;
+  const centerX = x + width / 2;
+  const centerY = y + height / 2;
+  const label = (isArea ? getAreaNodeLabel(node) : node.label) ?? "";
+  const iconSize = getMiniDiagramResourceIconSize(node);
+
+  return {
+    centerX,
+    centerY,
+    headerWidth: isArea ? getMiniDiagramAreaHeaderWidth(label, width, getAreaNodeMetaLabel(node)) : 0,
+    height,
+    iconSize,
+    iconUrl: isArea ? getAreaNodeIconUrl(node) : node.iconUrl,
+    iconY: y + Math.max(4, (height - 22 - iconSize) / 2),
+    id: node.id,
+    isArea,
+    label,
+    labelY: y + height - 4,
+    metaLabel: isArea ? getAreaNodeMetaLabel(node) : undefined,
+    width,
+    x,
+    y
+  };
+}
+
+function createMiniDiagramEdgePath(source: MiniDiagramNode, target: MiniDiagramNode): string {
+  const midX = (source.centerX + target.centerX) / 2;
+
+  return [
+    `M ${source.centerX} ${source.centerY}`,
+    `C ${midX} ${source.centerY}`,
+    `${midX} ${target.centerY}`,
+    `${target.centerX} ${target.centerY}`
+  ].join(" ");
+}
+
+function getMiniDiagramResourceIconSize(node: DiagramNode): number {
+  if (isAreaNode(node)) {
+    return 15;
   }
 
-  return { height, nodes, width };
+  return Math.min(64, Math.max(28, Math.min(node.size.width, Math.max(28, node.size.height - 22)) * 0.78));
+}
+
+function getMiniDiagramAreaHeaderWidth(
+  label: string,
+  areaWidth: number,
+  metaLabel: string | undefined
+): number {
+  const iconSpace = 30;
+  const metaSpace = metaLabel ? 56 : 0;
+  const estimatedLabelWidth = Math.min(label.length, MINI_DIAGRAM_MAX_LABEL_LENGTH) * 7;
+  const requestedWidth = iconSpace + estimatedLabelWidth + metaSpace + 18;
+
+  return Math.min(Math.max(92, requestedWidth), Math.min(MINI_DIAGRAM_AREA_HEADER_MAX_WIDTH, areaWidth));
+}
+
+function truncateMiniDiagramLabel(label: string, maxLength: number): string {
+  return label.length > maxLength ? `${label.slice(0, Math.max(0, maxLength - 3))}...` : label;
 }
 
 function readAiStartDraft(): WorkspaceStartDraft | null {

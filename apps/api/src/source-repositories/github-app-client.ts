@@ -66,7 +66,16 @@ export type GitHubActionsPipelineStatus = {
   statusMessage: string;
 };
 
+export type GitHubAppInstallation = {
+  installationId: string;
+  accountLogin: string;
+  accountType: string | null;
+  repositorySelection: "all" | "selected" | null;
+  htmlUrl: string | null;
+};
+
 export type GitHubAppClient = {
+  listInstallations(): Promise<GitHubAppInstallation[]>;
   listInstallationRepositories(installationId: string): Promise<GitHubRepositoryCandidate[]>;
   createPullRequest(input: GitHubAppCreatePullRequestInput): Promise<GitHubAppCreatePullRequestResult>;
   applyRepositorySettings(
@@ -108,6 +117,16 @@ type GitHubRepositoryListResponse = {
   readonly repositories?: GitHubRepositoryApiResponse[];
 };
 
+type GitHubInstallationApiResponse = {
+  readonly id?: unknown;
+  readonly repository_selection?: unknown;
+  readonly html_url?: unknown;
+  readonly account?: {
+    readonly login?: unknown;
+    readonly type?: unknown;
+  };
+};
+
 type GitHubRefResponse = {
   readonly object?: {
     readonly sha?: unknown;
@@ -116,6 +135,8 @@ type GitHubRefResponse = {
 
 type GitHubContentsResponse = {
   readonly sha?: unknown;
+  readonly content?: unknown;
+  readonly encoding?: unknown;
 };
 
 type GitHubPutContentsResponse = {
@@ -199,6 +220,31 @@ export function createGitHubAppClient(options: GitHubAppClientOptions): GitHubAp
   }
 
   return {
+    async listInstallations() {
+      const installations: GitHubAppInstallation[] = [];
+
+      for (let page = 1; page <= 10; page += 1) {
+        const pageInstallations = await requestGitHub<GitHubInstallationApiResponse[]>(
+          fetchImpl,
+          `/app/installations?per_page=100&page=${page}`,
+          {
+            token: await createAppJwt(),
+            authScheme: "Bearer"
+          }
+        );
+
+        installations.push(...pageInstallations.map(toGitHubAppInstallation));
+
+        if (pageInstallations.length < 100) {
+          break;
+        }
+      }
+
+      return installations.sort((left, right) =>
+        left.accountLogin.localeCompare(right.accountLogin)
+      );
+    },
+
     async listInstallationRepositories(installationId) {
       const repositories: GitHubRepositoryCandidate[] = [];
 
@@ -220,8 +266,6 @@ export function createGitHubAppClient(options: GitHubAppClientOptions): GitHubAp
     },
 
     async createPullRequest(input) {
-      await assertTargetBranchDoesNotContainFiles(input, requestWithInstallationToken);
-
       const targetRef = await requestWithInstallationToken<GitHubRefResponse>(
         input.installationId,
         createRepositoryPath(input, `/git/ref/heads/${encodeURIComponent(input.targetBranch)}`)
@@ -231,6 +275,7 @@ export function createGitHubAppClient(options: GitHubAppClientOptions): GitHubAp
       await createSourceBranchIfNeeded(input, targetSha, requestWithInstallationToken);
 
       let lastCommitSha = targetSha;
+      let changedFileCount = 0;
 
       for (const file of input.files) {
         const sourceFile = await getRepositoryContent(
@@ -239,6 +284,11 @@ export function createGitHubAppClient(options: GitHubAppClientOptions): GitHubAp
           input.sourceBranch,
           requestWithInstallationToken
         );
+
+        if (sourceFile && isSameGitHubFileContent(sourceFile, file.content)) {
+          continue;
+        }
+
         const putResponse = await requestWithInstallationToken<GitHubPutContentsResponse>(
           input.installationId,
           createRepositoryPath(input, `/contents/${encodePath(file.path)}`),
@@ -254,6 +304,16 @@ export function createGitHubAppClient(options: GitHubAppClientOptions): GitHubAp
         );
 
         lastCommitSha = readRequiredString(putResponse.commit?.sha, "commit sha");
+        changedFileCount += 1;
+      }
+
+      if (changedFileCount === 0) {
+        const error = new Error("No Git/CI/CD handoff file changes were needed") as Error & {
+          statusCode?: number;
+        };
+
+        error.statusCode = 409;
+        throw error;
       }
 
       const pullRequest = await requestWithInstallationToken<GitHubPullRequestResponse>(
@@ -448,6 +508,29 @@ async function requestGitHub<T>(
   return response.json() as Promise<T>;
 }
 
+function toGitHubAppInstallation(
+  installation: GitHubInstallationApiResponse
+): GitHubAppInstallation {
+  const repositorySelection = installation.repository_selection;
+
+  return {
+    installationId: String(readRequiredNumber(installation.id, "installation id")),
+    accountLogin: readRequiredString(installation.account?.login, "installation account login"),
+    accountType:
+      typeof installation.account?.type === "string" && installation.account.type
+        ? installation.account.type
+        : null,
+    repositorySelection:
+      repositorySelection === "all" || repositorySelection === "selected"
+        ? repositorySelection
+        : null,
+    htmlUrl:
+      typeof installation.html_url === "string" && installation.html_url
+        ? installation.html_url
+        : null
+  };
+}
+
 function toGitHubRepositoryCandidate(
   repository: GitHubRepositoryApiResponse
 ): GitHubRepositoryCandidate {
@@ -482,33 +565,6 @@ function readVisibility(
   return isPrivate === true ? "private" : "public";
 }
 
-async function assertTargetBranchDoesNotContainFiles(
-  input: GitHubAppCreatePullRequestInput,
-  requestWithInstallationToken: <T>(
-    installationId: string,
-    path: string,
-    init?: Omit<GitHubRequestInit, "token" | "authScheme">
-  ) => Promise<T>
-): Promise<void> {
-  for (const file of input.files) {
-    const existing = await getRepositoryContent(
-      input,
-      file.path,
-      input.targetBranch,
-      requestWithInstallationToken
-    );
-
-    if (existing) {
-      const error = new Error(`Target branch already contains ${file.path}`) as Error & {
-        statusCode?: number;
-      };
-
-      error.statusCode = 409;
-      throw error;
-    }
-  }
-}
-
 async function createSourceBranchIfNeeded(
   input: GitHubAppCreatePullRequestInput,
   targetSha: string,
@@ -536,6 +592,20 @@ async function createSourceBranchIfNeeded(
     }
 
     throw error;
+  }
+}
+
+function isSameGitHubFileContent(file: GitHubContentsResponse, nextContent: string): boolean {
+  if (file.encoding !== "base64" || typeof file.content !== "string") {
+    return false;
+  }
+
+  const normalizedBase64 = file.content.replace(/\s/g, "");
+
+  try {
+    return Buffer.from(normalizedBase64, "base64").toString("utf8") === nextContent;
+  } catch {
+    return false;
   }
 }
 
