@@ -21,7 +21,7 @@ const diagramEditorStylesSource = readFeatureFile(
 
 test("deploy opens a full-screen console instead of rendering deployment inside the right panel", () => {
   const deploymentConsoleIndex = componentSource.indexOf(
-    "const deploymentConsole = isDeploymentConsoleOpen ? ("
+    "const deploymentConsoleContent = isDeploymentConsoleOpen ? ("
   );
   const deploymentPanelIndex = componentSource.indexOf("<DeploymentPanel", deploymentConsoleIndex);
   const nextRightPanelViewIndex = componentSource.indexOf(
@@ -43,6 +43,8 @@ test("deploy opens a full-screen console instead of rendering deployment inside 
   );
   assert.match(componentSource, /fullScreenOnly/);
   assert.match(componentSource, /initialExpanded/);
+  assert.match(componentSource, /import \{ createPortal \} from "react-dom";/);
+  assert.match(componentSource, /createPortal\(deploymentConsoleContent, document\.body\)/);
   assert.match(componentSource, /onExpandedClose=\{\(\) => setIsDeploymentConsoleOpen\(false\)\}/);
   assert.match(componentSource, /openDeploymentConsole/);
   assert.match(componentSource, /setIsDeploymentConsoleOpen\(true\);/);
@@ -118,7 +120,7 @@ test("deployment mode switch is pinned after the scrollable content area", () =>
   assert.ok(contentIndex < modeSwitchIndex);
 });
 
-test("right panel exposes Brainboard-style Issues, Deploy, and Plan actions", () => {
+test("right panel exposes only the persistent Issues and Deploy text actions", () => {
   const utilityBarIndex = componentSource.indexOf("className={styles.rightPanelUtilityBar}");
   const modeBarIndex = componentSource.indexOf("className={styles.rightPanelModeBar}");
   const toolbarContentEndIndex = componentSource.indexOf(
@@ -130,14 +132,9 @@ test("right panel exposes Brainboard-style Issues, Deploy, and Plan actions", ()
   const codeButtonIndex = modeBarSource.indexOf('title="Terraform code"');
   const issuesButtonIndex = modeBarSource.indexOf("<span>Issues</span>");
   const deployButtonIndex = modeBarSource.indexOf("<span>Deploy</span>");
-  const planButtonIndex = modeBarSource.indexOf("<span>Plan</span>");
   const codeButtonSource = modeBarSource.slice(
     modeBarSource.lastIndexOf("<button", codeButtonIndex),
     modeBarSource.indexOf("</button>", codeButtonIndex)
-  );
-  const planButtonSource = modeBarSource.slice(
-    modeBarSource.lastIndexOf("<button", planButtonIndex),
-    modeBarSource.indexOf("</button>", planButtonIndex)
   );
 
   assert.ok(utilityBarIndex > -1);
@@ -146,22 +143,19 @@ test("right panel exposes Brainboard-style Issues, Deploy, and Plan actions", ()
   assert.ok(codeButtonIndex > resourcesButtonIndex);
   assert.ok(issuesButtonIndex > codeButtonIndex);
   assert.ok(deployButtonIndex > issuesButtonIndex);
-  assert.ok(planButtonIndex > deployButtonIndex);
   assert.match(codeButtonSource, /data-terraform-editor-navigation/);
   assert.match(codeButtonSource, /onClick=\{\(\) => requestView\("terraform"\)\}/);
   assert.match(modeBarSource, /onClick=\{openDeploymentConsole\}/);
-  assert.match(planButtonSource, /onClick=\{openDeploymentFromPlan\}/);
-  assert.doesNotMatch(planButtonSource, /data-terraform-editor-navigation/);
-  assert.doesNotMatch(planButtonSource, /requestView\("terraform"\)/);
   assert.match(componentSource, /title="Terraform code"/);
-  assert.match(componentSource, /title="Plan actions"/);
-  assert.match(componentSource, /styles\.panelPlanSplitButton/);
-  assert.match(componentSource, /styles\.panelPlanMainButton/);
   assert.match(componentSource, /styles\.panelModeTextButton/);
   assert.match(componentSource, /styles\.panelModeIconGroup/);
   assert.match(stylesSource, /\.rightPanelModeBar\s*\{/);
-  assert.match(stylesSource, /\.panelPlanSplitButton\s*\{/);
-  assert.match(stylesSource, /\.panelPlanMainButton\s*\{/);
+  assert.doesNotMatch(modeBarSource, /<span>Plan<\/span>/);
+  assert.doesNotMatch(modeBarSource, /title="Plan actions"/);
+  assert.doesNotMatch(componentSource, /openDeploymentFromPlan/);
+  assert.doesNotMatch(componentSource, /isPlanActionStripOpen/);
+  assert.doesNotMatch(componentSource, /styles\.panelPlan/);
+  assert.doesNotMatch(stylesSource, /\.panelPlan/);
   assert.doesNotMatch(componentSource, /title="AI"/);
   assert.doesNotMatch(componentSource, /activeView === "ai"/);
   assert.doesNotMatch(componentSource, /WorkspaceAiPanel/);
@@ -192,31 +186,6 @@ test("reverse engineering is not reachable from persistent right panel toggles",
   assert.doesNotMatch(componentSource, /activeView !== "reverse"/);
   assert.doesNotMatch(componentSource, /<ReverseEngineeringPanel/);
   assert.doesNotMatch(componentSource, /reverseCreatesProjectOnApply/);
-});
-
-test("Plan action strip is UI-only and routes only to the Deploy view", () => {
-  const planActionStripIndex = componentSource.indexOf("className={styles.panelPlanActionStrip}");
-  const planActionStripSource = componentSource.slice(
-    planActionStripIndex,
-    componentSource.indexOf("</div>", planActionStripIndex)
-  );
-  const planMainIndex = componentSource.indexOf("className={styles.panelPlanMainButton}");
-  const planMainSource = componentSource.slice(
-    componentSource.lastIndexOf("<button", planMainIndex),
-    componentSource.indexOf("</button>", planMainIndex)
-  );
-
-  assert.ok(planActionStripIndex > -1);
-  assert.match(componentSource, /const \[isPlanActionStripOpen, setIsPlanActionStripOpen\] = useState\(false\);/);
-  assert.match(planMainSource, /onClick=\{openDeploymentFromPlan\}/);
-  assert.doesNotMatch(planMainSource, /requestView\("terraform"\)/);
-  assert.match(planActionStripSource, />\s*Plan\s*</);
-  assert.match(planActionStripSource, />\s*Validate\s*</);
-  assert.match(planActionStripSource, />\s*Apply\s*</);
-  assert.match(planActionStripSource, />\s*Destroy\s*</);
-  assert.equal(countMatches(planActionStripSource, /onClick=\{openDeploymentFromPlan\}/g), 4);
-  assert.doesNotMatch(planActionStripSource, /runDeploymentPlan|runDeploymentApply|runDeploymentDestroy/);
-  assert.doesNotMatch(planActionStripSource, /requestView\("terraform"\)/);
 });
 
 test("right panel redesign does not add deployment shortcut or focus plumbing", () => {
@@ -991,10 +960,6 @@ function readWorkspaceFile(fileName: string): string {
 
 function readFeatureFile(filePath: string): string {
   return readFileSync(fileURLToPath(new URL(filePath, import.meta.url)), "utf8");
-}
-
-function countMatches(source: string, pattern: RegExp): number {
-  return source.match(pattern)?.length ?? 0;
 }
 
 function getCssRule(source: string, className: string): string {
