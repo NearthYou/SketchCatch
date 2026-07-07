@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { AiPreDeploymentAnalysisResult, TerraformDiagnostic } from "@sketchcatch/types";
-import { addTerraformDiagnosticsToPreDeploymentAnalysis } from "./pre-deployment-diagnostics";
+import {
+  addTerraformDiagnosticsToPreDeploymentAnalysis,
+  createPreDeploymentAnalysisFromTerraformDiagnostics
+} from "./pre-deployment-diagnostics";
 
 test("addTerraformDiagnosticsToPreDeploymentAnalysis keeps clean analysis unchanged", () => {
   const analysis = createAnalysis();
@@ -62,6 +65,24 @@ test("addTerraformDiagnosticsToPreDeploymentAnalysis keeps warning-only diagnost
   assert.equal(result.checklist[0]?.status, "warning");
   assert.equal(result.findings[0]?.severity, "medium");
   assert.equal(result.findings[0]?.resourceId, "s3-bucket");
+});
+
+test("createPreDeploymentAnalysisFromTerraformDiagnostics creates diagnostics-only fail-fast analysis", () => {
+  const result = createPreDeploymentAnalysisFromTerraformDiagnostics([
+    {
+      severity: "error",
+      message: "Unsupported argument",
+      code: "unsupported-argument",
+      sourceFileName: "security.tf",
+      line: 4
+    }
+  ]);
+
+  assert.match(result.summary, /오류 1개/);
+  assert.equal(result.totalMonthlyEstimate.pricingAssumption.includes("fail-fast"), true);
+  assert.equal(result.findings.length, 1);
+  assert.equal(result.findings[0]?.sourceLocation?.fileName, "security.tf");
+  assert.equal(result.checklist[0]?.status, "fail");
 });
 
 function createAnalysis(): AiPreDeploymentAnalysisResult {

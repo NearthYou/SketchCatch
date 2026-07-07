@@ -86,90 +86,135 @@ type SafetyFindingTemplate = {
 
 const SAFETY_FINDING_TEMPLATES: readonly SafetyFindingTemplate[] = [
   {
-    keywords: ["public_ssh", "open-ssh", "ssh", "0.0.0.0/0", "::/0"],
-    riskSummary: "SSH access is exposed to the public internet.",
+    keywords: ["metadata service", "imds", "http_tokens", "session token", "세션 토큰"],
+    riskSummary: "EC2 인스턴스 메타데이터 서비스(IMDS)가 v2 세션 토큰을 요구하지 않습니다.",
     whyDangerous:
-      "Anyone on the internet can attempt SSH login against the instance. If a key, user, or host configuration is weak, the server can be compromised before deployment review catches it.",
+      "IMDS v1은 세션 토큰 없이 메타데이터에 접근할 수 있어 SSRF나 내부 네트워크 접근 경로가 생겼을 때 임시 자격 증명 노출 위험이 커집니다.",
     recommendedFix:
-      "Restrict SSH ingress to a trusted administrator CIDR or remove SSH and use AWS Systems Manager Session Manager.",
+      "`aws_instance` 리소스의 `metadata_options`에서 `http_tokens = \"required\"`를 설정하세요.",
     terraformHint:
-      "In the aws_security_group ingress rule, replace cidr_blocks = [\"0.0.0.0/0\"] with a trusted CIDR or remove the SSH rule.",
+      'metadata_options 블록을 추가하고 `http_tokens = "required"`를 지정하세요.',
     verificationSteps: [
-      "Confirm port 22 is not open to 0.0.0.0/0 or ::/0.",
-      "Run Terraform validation and pre-deployment check again.",
-      "Confirm the finding disappears before starting deployment review."
+      "`metadata_options.http_tokens`가 `required`인지 확인합니다.",
+      "Terraform validation과 배포 전 검사를 다시 실행합니다.",
+      "IMDSv2 관련 finding이 사라졌는지 확인합니다."
     ]
   },
   {
-    keywords: ["public_rds", "public-rds", "rds", "publiclyaccessible", "database"],
-    riskSummary: "The database can be reachable from a public network path.",
+    keywords: ["public_ssh", "open-ssh", "ssh", "0.0.0.0/0", "::/0"],
+    riskSummary: "SSH 접근이 전체 인터넷에 노출되어 있습니다.",
     whyDangerous:
-      "A public database endpoint increases the attack surface for credential stuffing, brute force attempts, and accidental data exposure.",
+      "인터넷의 누구나 인스턴스에 SSH 로그인을 시도할 수 있습니다. 키, 사용자, 호스트 설정 중 하나라도 약하면 배포 검토 전에 서버가 침해될 수 있습니다.",
     recommendedFix:
-      "Disable public accessibility and place the database in private subnets with security group access limited to the application tier.",
+      "SSH ingress를 신뢰할 수 있는 관리자 CIDR로 제한하거나 SSH를 제거하고 AWS Systems Manager Session Manager를 사용하세요.",
     terraformHint:
-      "Set publicly_accessible = false and ensure DB subnet groups use private subnets.",
+      'aws_security_group ingress 규칙에서 cidr_blocks = ["0.0.0.0/0"]를 신뢰할 수 있는 CIDR로 바꾸거나 SSH 규칙을 제거하세요.',
     verificationSteps: [
-      "Confirm publicly_accessible is false.",
-      "Confirm the DB subnet group uses private subnets.",
-      "Run the pre-deployment check again."
+      "22번 포트가 0.0.0.0/0 또는 ::/0에 열려 있지 않은지 확인합니다.",
+      "Terraform validation과 배포 전 검사를 다시 실행합니다.",
+      "배포 검토를 시작하기 전에 해당 finding이 사라졌는지 확인합니다."
+    ]
+  },
+  {
+    keywords: ["storage_encrypted", "encrypt", "encryption", "암호화"],
+    riskSummary: "RDS DB 인스턴스 암호화가 활성화되어 있지 않습니다.",
+    whyDangerous:
+      "저장 데이터가 암호화되지 않으면 스냅샷, 백업, 스토리지 계층에서 데이터 보호 수준이 낮아집니다.",
+    recommendedFix:
+      "`storage_encrypted = true`를 설정하고 필요하면 `kms_key_id`로 관리형 KMS 키를 지정하세요.",
+    terraformHint:
+      "`aws_db_instance` 또는 관련 RDS 리소스에 `storage_encrypted = true`를 추가하세요.",
+    verificationSteps: [
+      "`storage_encrypted`가 true인지 확인합니다.",
+      "필요한 경우 승인된 KMS 키가 지정되어 있는지 확인합니다.",
+      "배포 전 검사를 다시 실행합니다."
+    ]
+  },
+  {
+    keywords: ["backup_retention", "backup retention", "backup_retention_period", "보존 기간", "백업 보존"],
+    riskSummary: "RDS 백업 보존 기간이 너무 짧게 설정되어 있습니다.",
+    whyDangerous:
+      "백업 보존 기간이 짧으면 장애, 실수, 침해 이후 복구 가능한 시점이 부족해 데이터 복구 선택지가 줄어듭니다.",
+    recommendedFix:
+      "`backup_retention_period`를 2일 이상 또는 운영 복구 정책에 맞는 기간으로 설정하세요.",
+    terraformHint:
+      "`aws_db_instance` 또는 `aws_rds_cluster`에 `backup_retention_period`를 명시하세요.",
+    verificationSteps: [
+      "`backup_retention_period`가 1보다 큰 값인지 확인합니다.",
+      "운영 복구 정책에서 요구하는 보존 기간과 일치하는지 확인합니다.",
+      "배포 전 검사를 다시 실행합니다."
+    ]
+  },
+  {
+    keywords: ["public_rds", "public-rds", "publiclyaccessible", "publicly_accessible", "public network", "public database", "퍼블릭"],
+    riskSummary: "데이터베이스가 퍼블릭 네트워크에서 접근 가능할 수 있습니다.",
+    whyDangerous:
+      "퍼블릭 DB 엔드포인트는 인증 정보 대입 공격, 무차별 대입 공격, 의도치 않은 데이터 노출의 공격면을 넓힙니다.",
+    recommendedFix:
+      "public 접근을 끄고 DB를 private subnet에 두며 보안 그룹 접근을 애플리케이션 계층으로 제한하세요.",
+    terraformHint:
+      "`publicly_accessible = false`를 설정하고 DB subnet group이 private subnet을 사용하도록 구성하세요.",
+    verificationSteps: [
+      "`publicly_accessible`이 false인지 확인합니다.",
+      "DB subnet group이 private subnet을 사용하는지 확인합니다.",
+      "배포 전 검사를 다시 실행합니다."
     ]
   },
   {
     keywords: ["public_s3", "public-s3", "s3", "bucket policy", "acl"],
-    riskSummary: "The S3 bucket can expose objects publicly.",
+    riskSummary: "S3 버킷 객체가 공개될 수 있습니다.",
     whyDangerous:
-      "Public ACLs or permissive bucket policies can leak uploaded assets, Terraform exports, or user content to anonymous internet users.",
+      "공개 ACL이나 과도한 bucket policy는 업로드 파일, Terraform 산출물, 사용자 데이터를 익명 사용자에게 노출할 수 있습니다.",
     recommendedFix:
-      "Remove public ACLs and public bucket policy statements, then enable S3 Block Public Access.",
+      "공개 ACL과 공개 bucket policy statement를 제거하고 S3 Block Public Access를 활성화하세요.",
     terraformHint:
-      "Use aws_s3_bucket_public_access_block with block_public_acls, block_public_policy, ignore_public_acls, and restrict_public_buckets set to true.",
+      "aws_s3_bucket_public_access_block에서 block_public_acls, block_public_policy, ignore_public_acls, restrict_public_buckets를 true로 설정하세요.",
     verificationSteps: [
-      "Confirm no public ACL or Principal \"*\" allow policy remains.",
-      "Confirm S3 Block Public Access is enabled.",
-      "Run the pre-deployment check again."
+      "공개 ACL이나 Principal \"*\" 허용 정책이 남아 있지 않은지 확인합니다.",
+      "S3 Block Public Access가 활성화되어 있는지 확인합니다.",
+      "배포 전 검사를 다시 실행합니다."
     ]
   },
   {
     keywords: ["iam_wildcard", "iam", "wildcard", "permission"],
-    riskSummary: "The IAM policy grants overly broad permissions.",
+    riskSummary: "IAM 정책이 과도하게 넓은 권한을 부여합니다.",
     whyDangerous:
-      "Wildcard actions or resources can allow the workload to change unrelated cloud resources if the role is misused or compromised.",
+      "와일드카드 action이나 resource는 역할이 오용되거나 탈취됐을 때 관련 없는 클라우드 리소스까지 변경하게 만들 수 있습니다.",
     recommendedFix:
-      "Replace wildcard actions and resources with the smallest action list and resource ARNs needed for this architecture.",
+      "와일드카드 action과 resource를 이 아키텍처에 필요한 최소 action 목록과 resource ARN으로 바꾸세요.",
     terraformHint:
-      "Avoid Action = \"*\" and Resource = \"*\" in aws_iam_policy_document or inline policy JSON.",
+      "aws_iam_policy_document 또는 inline policy JSON에서 Action = \"*\"와 Resource = \"*\"를 피하세요.",
     verificationSteps: [
-      "Confirm IAM policy actions are explicit.",
-      "Confirm resource scope is limited to required ARNs.",
-      "Run the pre-deployment check again."
+      "IAM 정책 action이 명시적으로 제한되어 있는지 확인합니다.",
+      "resource 범위가 필요한 ARN으로 제한되어 있는지 확인합니다.",
+      "배포 전 검사를 다시 실행합니다."
     ]
   },
   {
     keywords: ["cost", "expensive", "비용"],
-    riskSummary: "The resource can increase monthly practice cost.",
+    riskSummary: "이 리소스는 월간 실습 비용을 증가시킬 수 있습니다.",
     whyDangerous:
-      "A larger instance class or always-on managed service can create unexpected spend during repeated practice deployments.",
+      "큰 instance class나 항상 켜져 있는 managed service는 반복 실습 배포 중 예상치 못한 비용을 만들 수 있습니다.",
     recommendedFix:
-      "Use the smallest supported instance class, prefer free-tier friendly defaults, and destroy unused environments after validation.",
+      "지원 가능한 가장 작은 instance class를 사용하고, free-tier에 가까운 기본값을 선호하며, 검증 후 사용하지 않는 환경은 정리하세요.",
     verificationSteps: [
-      "Review the cost estimate and fallback assumptions.",
-      "Confirm the selected instance class is intentional.",
-      "Run cost review again after the change."
+      "비용 추정과 fallback 가정을 검토합니다.",
+      "선택한 instance class가 의도된 값인지 확인합니다.",
+      "변경 후 비용 검토를 다시 실행합니다."
     ]
   }
 ];
 
 const DEFAULT_SAFETY_FINDING_TEMPLATE: SafetyFindingTemplate = {
   keywords: [],
-  riskSummary: "This finding needs manual review before deployment.",
+  riskSummary: "이 항목은 배포 전에 수동 검토가 필요합니다.",
   whyDangerous:
-    "The deterministic safety rules found a condition that can affect security, reliability, configuration, or cost.",
-  recommendedFix: "Review the finding description and recommendation, then update Terraform or the architecture before redeploying.",
+    "결정적 safety rule이 보안, 안정성, 구성, 비용에 영향을 줄 수 있는 조건을 발견했습니다.",
+  recommendedFix: "finding 설명과 권장 수정을 검토한 뒤 Terraform 또는 아키텍처를 수정하고 다시 배포하세요.",
   verificationSteps: [
-    "Apply the recommended change.",
-    "Run Terraform validation.",
-    "Run the pre-deployment check again."
+    "권장 변경 사항을 적용합니다.",
+    "Terraform validation을 실행합니다.",
+    "배포 전 검사를 다시 실행합니다."
   ]
 };
 

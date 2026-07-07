@@ -138,17 +138,41 @@ export function deduplicateDeploymentPlanWarnings(
 function toPreDeploymentWarningCode(finding: CheckFinding): DeploymentPlanWarningCode {
   const normalizedId = finding.id.toLowerCase();
   const normalizedTitle = finding.title.toLowerCase();
+  const normalizedDescription = finding.description.toLowerCase();
+  const normalizedRecommendation = finding.recommendation.toLowerCase();
+  const normalizedText = [
+    normalizedId,
+    normalizedTitle,
+    normalizedDescription,
+    normalizedRecommendation,
+    finding.sourceLocation?.resourceAddress?.toLowerCase() ?? ""
+  ].join(" ");
 
-  if (finding.category === "permission" || normalizedId.includes("iam") || normalizedTitle.includes("iam")) {
+  if (finding.category === "permission" || normalizedText.includes("iam")) {
     return "IAM_WILDCARD";
   }
 
-  if (normalizedId.includes("rds") || normalizedTitle.includes("rds")) {
+  if (normalizedText.includes("rds") || normalizedText.includes("database")) {
     return "PUBLIC_RDS";
   }
 
-  if (normalizedId.includes("s3") || normalizedTitle.includes("s3")) {
+  if (normalizedText.includes("s3") || normalizedText.includes("bucket")) {
     return "PUBLIC_S3";
+  }
+
+  if (
+    normalizedText.includes("ssh") ||
+    normalizedText.includes("rdp") ||
+    normalizedText.includes("0.0.0.0/0") ||
+    normalizedText.includes("::/0") ||
+    normalizedText.includes("security group") ||
+    normalizedText.includes("security_group")
+  ) {
+    return "PUBLIC_SSH";
+  }
+
+  if (normalizedId.startsWith("trivy:")) {
+    return "TRIVY_MISCONFIGURATION";
   }
 
   return "PUBLIC_SSH";

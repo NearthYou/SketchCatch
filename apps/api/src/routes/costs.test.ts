@@ -169,7 +169,7 @@ test("GET /api/costs/usage calls the usage provider with the verified AWS connec
 
   const response = await app.inject({
     method: "GET",
-    url: "/api/costs/usage?range=7d&awsConnectionId=88888888-8888-4888-8888-888888888888",
+    url: `/api/costs/usage?range=7d&awsConnectionId=88888888-8888-4888-8888-888888888888&projectId=${PROJECT_WITH_ARCHITECTURE_ID}`,
     headers: await authHeaders(ACTIVE_USER_ID)
   });
   const body = response.json();
@@ -179,11 +179,12 @@ test("GET /api/costs/usage calls the usage provider with the verified AWS connec
   assert.equal(body.fallbackUsed, false);
   assert.equal(body.totalCost.amount, 12);
   assert.equal(providerInput.current?.range, "7d");
+  assert.equal(providerInput.current?.projectId, PROJECT_WITH_ARCHITECTURE_ID);
   assert.equal(providerInput.current?.awsConnection?.id, "88888888-8888-4888-8888-888888888888");
-  assert.equal(providerInput.current?.projects.length, 1);
+  assert.equal(providerInput.current?.projects.length, 2);
   assert.deepEqual(
     providerInput.current?.projects.map((project) => project.id),
-    [PROJECT_WITH_ARCHITECTURE_ID]
+    [PROJECT_WITH_ARCHITECTURE_ID, PROJECT_WITHOUT_ARCHITECTURE_ID]
   );
   assert.equal(providerInput.current?.deployments.length, 1);
   assert.equal(providerInput.current?.deployedResources.length, 1);

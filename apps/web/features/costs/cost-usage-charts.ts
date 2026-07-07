@@ -19,7 +19,6 @@ export type CostServiceBar = {
   readonly amount: number;
   readonly label: string;
   readonly percentage: number;
-  readonly widthPercentage: number;
 };
 
 export type CostUsageTrendInsight = {
@@ -63,13 +62,11 @@ export function createServiceCostBars(
   limit = 6
 ): CostServiceBar[] {
   const visibleServices = serviceCosts.slice(0, limit);
-  const maxAmount = Math.max(...visibleServices.map((service) => service.amount), 1);
 
   return visibleServices.map((service) => ({
     amount: service.amount,
     label: service.service,
-    percentage: service.percentage,
-    widthPercentage: Math.max(4, Math.round((service.amount / maxAmount) * 1000) / 10)
+    percentage: service.percentage
   }));
 }
 

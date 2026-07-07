@@ -5,6 +5,7 @@ import {
   COST_USAGE_ALL_PROJECTS_KEY,
   createScopedCostUsageDailyTrend,
   createCostUsageProjectOptions,
+  getCostUsageProjectIdFromKey,
   normalizeCostUsageProjectKey,
   selectCostUsageResourceCosts,
   selectCostUsageProject
@@ -52,6 +53,11 @@ test("selectCostUsageProject returns null for the all projects option", () => {
 
 test("selectCostUsageProject resolves the matching project", () => {
   assert.deepEqual(selectCostUsageProject(projectCosts, "project-id:project-b"), projectCosts[1]);
+});
+
+test("getCostUsageProjectIdFromKey extracts the API project id from selectable keys", () => {
+  assert.equal(getCostUsageProjectIdFromKey(COST_USAGE_ALL_PROJECTS_KEY), null);
+  assert.equal(getCostUsageProjectIdFromKey("project-id:project-a"), "project-a");
 });
 
 test("normalizeCostUsageProjectKey falls back to all projects when the selected project disappears", () => {

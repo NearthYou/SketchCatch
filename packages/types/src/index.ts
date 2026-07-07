@@ -714,6 +714,7 @@ export type DeploymentPlanWarningCode =
   | "IAM_WILDCARD"
   | "DESTRUCTIVE_CHANGE"
   | "UNSUPPORTED_RESOURCE"
+  | "TRIVY_MISCONFIGURATION"
   | "UNKNOWN_TERRAFORM_ACTION"
   | "MISSING_APPROVAL";
 
@@ -1714,6 +1715,11 @@ export type AiPreDeploymentAnalysisResult = {
   checklist: ChecklistItem[];
   suggestions: ArchitectureSuggestion[];
   llmExplanation?: LlmExplanation | undefined;
+};
+
+export type AiPreDeploymentCheckRequest = {
+  architectureJson: ArchitectureJson;
+  terraformFiles?: TerraformSyncFileInput[] | undefined;
 };
 
 export type CreateDesignSimulationRequest = {
