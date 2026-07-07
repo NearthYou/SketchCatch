@@ -24,7 +24,6 @@ import {
   Activity,
   BarChart3,
   Calculator,
-  CheckCircle2,
   Cloud,
   ExternalLink,
   LineChart,
@@ -964,7 +963,6 @@ function CostUsageAnalysisTab({
         onVerifyAwsConnection={onVerifyAwsConnection}
         selectedAwsConnection={selectedAwsConnection}
         selectedAwsConnectionId={selectedAwsConnectionId}
-        usageData={usageData}
         verifiedAwsConnections={verifiedAwsConnections}
       />
 
@@ -1133,7 +1131,6 @@ function CostUsageAwsConnectionPanel({
   onVerifyAwsConnection,
   selectedAwsConnection,
   selectedAwsConnectionId,
-  usageData,
   verifiedAwsConnections
 }: {
   readonly awsAccountIdInput: string;
@@ -1150,25 +1147,12 @@ function CostUsageAwsConnectionPanel({
   readonly onVerifyAwsConnection: () => void;
   readonly selectedAwsConnection: AwsConnection | null;
   readonly selectedAwsConnectionId: string;
-  readonly usageData: CostUsageAnalysisResponse | null;
   readonly verifiedAwsConnections: readonly AwsConnection[];
 }) {
   const isBusy = awsConnectionState === "loading";
   const hasVerifiedConnections = verifiedAwsConnections.length > 0;
   const setupConnection = awsSetup?.awsConnection ?? null;
   const accountIdIsValid = /^\d{12}$/.test(awsAccountIdInput.trim());
-  const isLiveAwsData =
-    usageData?.dataSource === "aws_cost_explorer" &&
-    usageData.fallbackUsed === false;
-  const dataSourceClassName = isLiveAwsData
-    ? "costAwsConnectionStatus costAwsConnectionStatusLive"
-    : "costAwsConnectionStatus costAwsConnectionStatusSample";
-  const dataSourceLabel =
-    isLiveAwsData
-      ? "Cost Explorer 조회 중"
-      : selectedAwsConnection === null
-        ? "검증된 연결 없음 · 샘플 표시"
-        : "연결 선택됨 · 샘플 표시";
 
   return (
     <section className="costAwsConnectionPanel" aria-labelledby="cost-aws-connection-title">
@@ -1180,10 +1164,6 @@ function CostUsageAwsConnectionPanel({
           <h3 id="cost-aws-connection-title">AWS 계정 연결</h3>
           <p>검증된 연결을 선택하면 Cost Explorer와 CloudWatch 기준으로 실제 비용을 조회합니다.</p>
         </div>
-        <span className={dataSourceClassName}>
-          {isLiveAwsData ? <CheckCircle2 size={14} aria-hidden="true" /> : null}
-          {dataSourceLabel}
-        </span>
       </div>
 
       <div className="costAwsConnectionControls">
