@@ -11,8 +11,8 @@ test("resource settings panel exposes Resources, Templates, provider, and module
   assert.match(panelSource, /Resources/);
   assert.match(panelSource, /Templates/);
   assert.match(panelSource, /<AwsLogo \/>/);
-  assert.doesNotMatch(panelSource, /"azure"/);
-  assert.doesNotMatch(panelSource, /"gcp"/);
+  assert.match(panelSource, /\(\["aws", "azure", "gcp"\] as const\)/);
+  assert.match(panelSource, /<InactiveProviderPanel provider=\{activeProvider\} \/>/);
   assert.match(panelSource, /aria-label="Resource view mode"/);
   assert.match(panelSource, /title="Resources"/);
   assert.match(panelSource, /title="Modules"/);
@@ -69,7 +69,7 @@ test("resource tiles follow the compact tile contract", () => {
 });
 
 test("resource panel preserves templates, search, and section states", () => {
-  assert.match(panelSource, /<TemplatesPanel \/>/);
+  assert.match(panelSource, /<TemplatesPanel onTemplateApply=\{onTemplateApply\} \/>/);
   assert.match(panelSource, /Search results/);
   assert.match(panelSource, /No resources found\./);
   assert.match(panelSource, /resourceAreaChevronOpen/);
