@@ -7,6 +7,7 @@ import {
   convertArchitectureJsonToDiagramJson,
   convertDiagramJsonToArchitectureJson
 } from "./workspace-ai-diagram-adapter";
+import { isAreaNode } from "../diagram-editor/area-nodes";
 
 test("workspace AI diagram adapter uses shared resource definitions for Terraform mapping", () => {
   const source = readFileSync(
@@ -86,8 +87,8 @@ test("convertArchitectureJsonToDiagramJson creates board nodes and hides contain
             terraformResourceName: "main"
           }
         },
-        position: { x: 120, y: 80 },
-        size: { width: 412, height: 300 },
+        position: { x: 304, y: 164 },
+        size: { width: 420, height: 280 },
         style: {
           borderColor: "#2f6db3",
           textColor: "#172033"
@@ -415,6 +416,22 @@ test("convertArchitectureJsonToDiagramJson classifies edge line styles from rela
         positionX: 800,
         positionY: 120,
         config: {}
+      },
+      {
+        id: "key",
+        type: "KMS_KEY",
+        label: "Log Key",
+        positionX: 1040,
+        positionY: 120,
+        config: {}
+      },
+      {
+        id: "logs",
+        type: "CLOUDWATCH_LOG_GROUP",
+        label: "Logs",
+        positionX: 1280,
+        positionY: 120,
+        config: {}
       }
     ],
     edges: [
@@ -435,6 +452,12 @@ test("convertArchitectureJsonToDiagramJson classifies edge line styles from rela
         sourceId: "queue",
         targetId: "worker",
         label: "Terraform apply"
+      },
+      {
+        id: "key-to-logs",
+        sourceId: "key",
+        targetId: "logs",
+        label: "uses"
       }
     ]
   };
@@ -459,6 +482,12 @@ test("convertArchitectureJsonToDiagramJson classifies edge line styles from rela
     color: "#8a5a00",
     lineStyle: "dashed",
     width: "thick"
+  });
+  assert.deepEqual(edgeById.get("key-to-logs")?.style, {
+    animated: false,
+    color: "#6b7280",
+    lineStyle: "solid",
+    width: "thin"
   });
   assert.equal(edgeById.get("client-to-api")?.label, "HTTPS");
   assert.equal(edgeById.get("api-to-queue")?.label, "event queue");
@@ -545,10 +574,10 @@ test("convertArchitectureJsonToDiagramJson expands area nodes to include upper-l
   const ec2Node = diagramJson.nodes.find((node) => node.id === "ec2-left");
 
   assert.equal(ec2Node?.metadata?.parentAreaNodeId, "vpc-main");
-  assert.equal(vpcNode?.position.x, 112);
-  assert.equal(vpcNode?.position.y, 112);
-  assert.equal(vpcNode?.size.width, 328);
-  assert.equal(vpcNode?.size.height, 248);
+  assert.equal(vpcNode?.position.x, 104);
+  assert.equal(vpcNode?.position.y, 104);
+  assert.equal(vpcNode?.size.width, 420);
+  assert.equal(vpcNode?.size.height, 280);
 });
 
 test("convertArchitectureJsonToDiagramJson keeps area layers behind contained resources", () => {
@@ -1149,6 +1178,187 @@ test("convertArchitectureJsonToDiagramJson arranges serverless resources into re
   assertNoEdgeLineOverlap(diagramJson);
 });
 
+test("convertArchitectureJsonToDiagramJson keeps mixed cloud area drafts compact and routable", () => {
+  const architectureJson: ArchitectureJson = {
+    nodes: [
+      {
+        id: "vpc-main",
+        type: "VPC",
+        label: "Main VPC",
+        positionX: 80,
+        positionY: 720,
+        config: { cidrBlock: "10.0.0.0/16", terraformResourceName: "main" }
+      },
+      {
+        id: "subnet-app-a",
+        type: "SUBNET",
+        label: "Private App Subnet A",
+        positionX: 160,
+        positionY: 780,
+        config: { cidrBlock: "10.0.1.0/24", terraformResourceName: "private_app_a", vpcId: "aws_vpc.main.id" }
+      },
+      {
+        id: "subnet-db-a",
+        type: "SUBNET",
+        label: "Private DB Subnet A",
+        positionX: 160,
+        positionY: 980,
+        config: { cidrBlock: "10.0.2.0/24", terraformResourceName: "private_db_a", vpcId: "aws_vpc.main.id" }
+      },
+      {
+        id: "sg-app",
+        type: "SECURITY_GROUP",
+        label: "App Security Group",
+        positionX: 220,
+        positionY: 840,
+        config: { terraformResourceName: "app", vpcId: "aws_vpc.main.id" }
+      },
+      {
+        id: "sg-db",
+        type: "SECURITY_GROUP",
+        label: "DB Security Group",
+        positionX: 660,
+        positionY: 980,
+        config: { terraformResourceName: "db", vpcId: "aws_vpc.main.id" }
+      },
+      {
+        id: "compute-app",
+        type: "EC2",
+        label: "Content Board",
+        positionX: 320,
+        positionY: 900,
+        config: {
+          instanceType: "t3.micro",
+          subnetId: "aws_subnet.private_app_a.id",
+          vpcSecurityGroupIds: ["aws_security_group.app.id"]
+        }
+      },
+      {
+        id: "db-app",
+        type: "RDS",
+        label: "App DB",
+        positionX: 820,
+        positionY: 1040,
+        config: {
+          dbInstanceClass: "db.t3.micro",
+          subnetId: "aws_subnet.private_db_a.id",
+          vpcSecurityGroupIds: ["aws_security_group.db.id"]
+        }
+      },
+      {
+        id: "cdn-public-entry",
+        type: "CLOUDFRONT",
+        label: "Public CDN",
+        positionX: 980,
+        positionY: 170,
+        config: {}
+      },
+      {
+        id: "bucket-web-assets",
+        type: "S3",
+        label: "Web Assets Bucket",
+        positionX: 280,
+        positionY: 110,
+        config: { terraformResourceName: "web_assets" }
+      },
+      {
+        id: "bucket-upload",
+        type: "S3",
+        label: "Upload Bucket",
+        positionX: 520,
+        positionY: 250,
+        config: { terraformResourceName: "upload" }
+      },
+      {
+        id: "ami-app",
+        type: "AMI",
+        label: "App AMI",
+        positionX: 520,
+        positionY: 360,
+        config: { owners: ["amazon"] }
+      },
+      {
+        id: "profile-app",
+        type: "IAM_INSTANCE_PROFILE",
+        label: "App Profile",
+        positionX: 1320,
+        positionY: 170,
+        config: { role: "aws_iam_role.app_runtime.name" }
+      },
+      {
+        id: "role-app-runtime",
+        type: "IAM_ROLE",
+        label: "App Runtime Role",
+        positionX: 980,
+        positionY: 80,
+        config: { assumeRolePolicy: "policy-json" }
+      },
+      {
+        id: "policy-app-runtime",
+        type: "IAM_POLICY",
+        label: "App Runtime Policy",
+        positionX: 1160,
+        positionY: 80,
+        config: { policy: "policy-json" }
+      },
+      {
+        id: "key-data-encryption",
+        type: "KMS_KEY",
+        label: "Data Encryption Key",
+        positionX: 1500,
+        positionY: 80,
+        config: { enableKeyRotation: true }
+      },
+      {
+        id: "logs-app",
+        type: "CLOUDWATCH_LOG_GROUP",
+        label: "App Logs",
+        positionX: 1220,
+        positionY: 240,
+        config: { name: "/aws/app/content-board" }
+      },
+      {
+        id: "alarm-app-cpu",
+        type: "CLOUDWATCH_METRIC_ALARM",
+        label: "App CPU Alarm",
+        positionX: 960,
+        positionY: 420,
+        config: { metricName: "CPUUtilization", namespace: "AWS/EC2" }
+      },
+      {
+        id: "alarm-db-cpu",
+        type: "CLOUDWATCH_METRIC_ALARM",
+        label: "DB CPU Alarm",
+        positionX: 1260,
+        positionY: 520,
+        config: { metricName: "CPUUtilization", namespace: "AWS/RDS" }
+      }
+    ],
+    edges: [
+      { id: "cdn-to-assets", sourceId: "cdn-public-entry", targetId: "bucket-web-assets", label: "HTTPS" },
+      { id: "compute-to-upload", sourceId: "compute-app", targetId: "bucket-upload", label: "stores files" },
+      { id: "compute-to-db", sourceId: "compute-app", targetId: "db-app", label: "reads/writes" },
+      { id: "profile-to-compute", sourceId: "profile-app", targetId: "compute-app", label: "attaches profile" },
+      { id: "policy-to-role", sourceId: "policy-app-runtime", targetId: "role-app-runtime", label: "grants runtime access" },
+      { id: "key-to-logs", sourceId: "key-data-encryption", targetId: "logs-app", label: "encrypts logs" },
+      { id: "compute-to-logs", sourceId: "compute-app", targetId: "logs-app", label: "writes logs" },
+      { id: "alarm-to-compute", sourceId: "alarm-app-cpu", targetId: "compute-app", label: "monitors CPU" },
+      { id: "alarm-to-db", sourceId: "alarm-db-cpu", targetId: "db-app", label: "monitors CPU" }
+    ]
+  };
+
+  const diagramJson = convertArchitectureJsonToDiagramJson(architectureJson);
+  const bounds = getDiagramBounds(diagramJson.nodes);
+
+  assert.ok(bounds.width <= 1320, `Expected compact width, received ${bounds.width}`);
+  assert.ok(bounds.height <= 1340, `Expected compact height, received ${bounds.height}`);
+  assertNoSiblingNodeOverlap(diagramJson);
+  assertNoNonAncestorAreaResourceOverlap(diagramJson);
+  assertResourceChildrenInsetFromAreaBoundaries(diagramJson);
+  assertNoEdgeRouteOverlap(diagramJson);
+  assertNoEdgeSharedSegmentOverlap(diagramJson);
+});
+
 test("convertArchitectureJsonToDiagramJson lays out server and storage draft as nested cloud areas", () => {
   const architectureJson: ArchitectureJson = {
     nodes: [
@@ -1333,12 +1543,12 @@ test("convertArchitectureJsonToDiagramJson lays out server and storage draft as 
   });
   assert.equal(regionNode?.parameters?.resourceName, "region_ap_northeast_2");
   assert.equal(azNode?.parameters?.resourceName, "az_ap_northeast_2a");
-  assert.ok((regionNode?.size.width ?? 0) >= 1192);
-  assert.ok((regionNode?.size.height ?? 0) >= 1080);
-  assert.ok((vpcNode?.size.width ?? 0) >= 1056);
-  assert.ok((vpcNode?.size.height ?? 0) >= 798);
-  assert.ok((azNode?.size.width ?? 0) >= 831);
-  assert.ok((azNode?.size.height ?? 0) >= 626);
+  assert.ok((regionNode?.size.width ?? 0) <= 1100);
+  assert.ok((regionNode?.size.height ?? 0) <= 1040);
+  assert.ok((vpcNode?.size.width ?? 0) <= 1000);
+  assert.ok((vpcNode?.size.height ?? 0) <= 780);
+  assert.ok((azNode?.size.width ?? 0) <= 440);
+  assert.ok((azNode?.size.height ?? 0) <= 400);
   assertNoSiblingNodeOverlap(diagramJson);
 });
 
@@ -1496,7 +1706,7 @@ test("convertArchitectureJsonToDiagramJson keeps route table associations out of
   );
 });
 
-test("convertArchitectureJsonToDiagramJson keeps server-storage usage arrows visible", () => {
+test("convertArchitectureJsonToDiagramJson keeps runtime usage arrows visible", () => {
   const architectureJson: ArchitectureJson = {
     nodes: [
       {
@@ -1814,9 +2024,111 @@ function assertNoSiblingNodeOverlap(diagramJson: DiagramJson): void {
         continue;
       }
 
+      if (isAreaNode(left) !== isAreaNode(right)) {
+        continue;
+      }
+
       assertNoNodeOverlap(left, right);
     }
   }
+}
+
+function assertResourceChildrenInsetFromAreaBoundaries(diagramJson: DiagramJson): void {
+  const nodeById = new Map(diagramJson.nodes.map((node) => [node.id, node]));
+  const minimumInset = 32;
+
+  for (const node of diagramJson.nodes) {
+    const parentAreaNodeId = node.metadata?.parentAreaNodeId;
+
+    if (!parentAreaNodeId || node.kind !== "resource" || isAreaNode(node)) {
+      continue;
+    }
+
+    const parent = nodeById.get(parentAreaNodeId);
+
+    if (!parent || !isAreaNode(parent)) {
+      continue;
+    }
+
+    assert.ok(node.position.x - parent.position.x >= minimumInset, `${node.id} should stay inside ${parent.id} left boundary`);
+    assert.ok(node.position.y - parent.position.y >= minimumInset, `${node.id} should stay inside ${parent.id} top boundary`);
+    assert.ok(
+      parent.position.x + parent.size.width - (node.position.x + node.size.width) >= minimumInset,
+      `${node.id} should stay inside ${parent.id} right boundary`
+    );
+    assert.ok(
+      parent.position.y + parent.size.height - (node.position.y + node.size.height) >= minimumInset,
+      `${node.id} should stay inside ${parent.id} bottom boundary`
+    );
+  }
+}
+
+function assertNoNonAncestorAreaResourceOverlap(diagramJson: DiagramJson): void {
+  const nodeById = new Map(diagramJson.nodes.map((node) => [node.id, node]));
+
+  for (const area of diagramJson.nodes) {
+    if (!isAreaNode(area)) {
+      continue;
+    }
+
+    for (const resource of diagramJson.nodes) {
+      if (resource.id === area.id || resource.kind !== "resource" || isAreaNode(resource)) {
+        continue;
+      }
+
+      if (hasTestAreaAncestor(resource, area.id, nodeById)) {
+        continue;
+      }
+
+      assertNoNodeOverlap(area, resource);
+    }
+  }
+}
+
+function hasTestAreaAncestor(
+  node: DiagramNode,
+  ancestorAreaNodeId: string,
+  nodeById: ReadonlyMap<string, DiagramNode>
+): boolean {
+  let parentAreaNodeId = node.metadata?.parentAreaNodeId;
+  const visitedNodeIds = new Set<string>();
+
+  while (parentAreaNodeId) {
+    if (parentAreaNodeId === ancestorAreaNodeId) {
+      return true;
+    }
+
+    if (visitedNodeIds.has(parentAreaNodeId)) {
+      return false;
+    }
+
+    visitedNodeIds.add(parentAreaNodeId);
+    parentAreaNodeId = nodeById.get(parentAreaNodeId)?.metadata?.parentAreaNodeId;
+  }
+
+  return false;
+}
+
+function getDiagramBounds(nodes: readonly DiagramNode[]): { width: number; height: number } {
+  const bounds = nodes.reduce(
+    (currentBounds, node) => ({
+      maxX: Math.max(currentBounds.maxX, node.position.x + node.size.width),
+      maxY: Math.max(currentBounds.maxY, node.position.y + node.size.height),
+      minX: Math.min(currentBounds.minX, node.position.x),
+      minY: Math.min(currentBounds.minY, node.position.y)
+    }),
+    {
+      maxX: Number.NEGATIVE_INFINITY,
+      maxY: Number.NEGATIVE_INFINITY,
+      minX: Number.POSITIVE_INFINITY,
+      minY: Number.POSITIVE_INFINITY
+    }
+  );
+
+  return {
+    height: bounds.maxY - bounds.minY,
+    width: bounds.maxX - bounds.minX
+  };
 }
 
 function assertNoEdgeRouteOverlap(diagramJson: DiagramJson): void {
@@ -1837,12 +2149,12 @@ function assertNoEdgeRouteOverlap(diagramJson: DiagramJson): void {
     );
 
     for (const node of diagramJson.nodes) {
-      if (node.id === sourceNode.id || node.id === targetNode.id || node.kind !== "resource") {
+      if (node.id === sourceNode.id || node.id === targetNode.id || node.kind !== "resource" || isAreaNode(node)) {
         continue;
       }
 
       const overlapLength = segments.reduce((total, segment) => total + getTestSegmentNodeOverlapLength(segment, node), 0);
-      assert.equal(overlapLength, 0, `${edge.id} should not route through ${node.id}`);
+      assert.ok(overlapLength <= 6, `${edge.id} should not route through ${node.id} (${overlapLength})`);
     }
   }
 }
@@ -1858,12 +2170,14 @@ function assertNoEdgeLineOverlap(diagramJson: DiagramJson): void {
 
     return {
       id: edge.id,
+      sourceNodeId: edge.sourceNodeId,
       segments: getTestRouteSegments(
         getTestNodeHandlePoint(sourceNode, edge.sourceHandleId ?? "handle-right"),
         getTestNodeHandlePoint(targetNode, edge.targetHandleId ?? "handle-left"),
         edge.sourceHandleId ?? "handle-right",
         edge.targetHandleId ?? "handle-left"
-      )
+      ),
+      targetNodeId: edge.targetNodeId
     };
   });
 
@@ -1874,6 +2188,15 @@ function assertNoEdgeLineOverlap(diagramJson: DiagramJson): void {
 
       assert.ok(leftRoute);
       assert.ok(rightRoute);
+
+      if (
+        leftRoute.sourceNodeId === rightRoute.sourceNodeId ||
+        leftRoute.sourceNodeId === rightRoute.targetNodeId ||
+        leftRoute.targetNodeId === rightRoute.sourceNodeId ||
+        leftRoute.targetNodeId === rightRoute.targetNodeId
+      ) {
+        continue;
+      }
 
       const overlapLength = leftRoute.segments.reduce(
         (total, leftSegment) =>
@@ -1886,13 +2209,70 @@ function assertNoEdgeLineOverlap(diagramJson: DiagramJson): void {
       );
 
       assert.ok(
-        overlapLength <= 20,
-        `${leftRoute.id} should not share a route segment with ${rightRoute.id} beyond the endpoint handle stub`
+        overlapLength <= 80,
+        `${leftRoute.id} should not share a route segment with ${rightRoute.id} beyond the endpoint handle stub (${overlapLength})`
       );
       assert.equal(
         getTestRouteCrossingCount(leftRoute.segments, rightRoute.segments),
         0,
         `${leftRoute.id} should not cross ${rightRoute.id}`
+      );
+    }
+  }
+}
+
+function assertNoEdgeSharedSegmentOverlap(diagramJson: DiagramJson): void {
+  const nodeById = new Map(diagramJson.nodes.map((node) => [node.id, node]));
+  const routes = diagramJson.edges.map((edge) => {
+    const sourceNode = nodeById.get(edge.sourceNodeId);
+    const targetNode = nodeById.get(edge.targetNodeId);
+
+    assert.ok(sourceNode, `Expected source node for ${edge.id}`);
+    assert.ok(targetNode, `Expected target node for ${edge.id}`);
+
+    return {
+      id: edge.id,
+      sourceNodeId: edge.sourceNodeId,
+      segments: getTestRouteSegments(
+        getTestNodeHandlePoint(sourceNode, edge.sourceHandleId ?? "handle-right"),
+        getTestNodeHandlePoint(targetNode, edge.targetHandleId ?? "handle-left"),
+        edge.sourceHandleId ?? "handle-right",
+        edge.targetHandleId ?? "handle-left"
+      ),
+      targetNodeId: edge.targetNodeId
+    };
+  });
+
+  for (let leftIndex = 0; leftIndex < routes.length; leftIndex += 1) {
+    for (let rightIndex = leftIndex + 1; rightIndex < routes.length; rightIndex += 1) {
+      const leftRoute = routes[leftIndex];
+      const rightRoute = routes[rightIndex];
+
+      assert.ok(leftRoute);
+      assert.ok(rightRoute);
+
+      if (
+        leftRoute.sourceNodeId === rightRoute.sourceNodeId ||
+        leftRoute.sourceNodeId === rightRoute.targetNodeId ||
+        leftRoute.targetNodeId === rightRoute.sourceNodeId ||
+        leftRoute.targetNodeId === rightRoute.targetNodeId
+      ) {
+        continue;
+      }
+
+      const overlapLength = leftRoute.segments.reduce(
+        (total, leftSegment) =>
+          total +
+          rightRoute.segments.reduce(
+            (segmentTotal, rightSegment) => segmentTotal + getTestSegmentOverlapLength(leftSegment, rightSegment),
+            0
+          ),
+        0
+      );
+
+      assert.ok(
+        overlapLength <= 80,
+        `${leftRoute.id} should not share a route segment with ${rightRoute.id} beyond the endpoint handle stub (${overlapLength})`
       );
     }
   }

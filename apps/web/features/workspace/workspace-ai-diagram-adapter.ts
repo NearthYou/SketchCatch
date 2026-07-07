@@ -59,17 +59,31 @@ const EDGE_HANDLE_IDS = {
   right: "handle-right",
   top: "handle-top"
 } as const;
-const AREA_CHILD_PADDING = 48;
+const AREA_CHILD_PADDING = 36;
 const MIN_RESOURCE_AREA_CHILD_FOOTPRINT: DiagramNode["size"] = { width: 112, height: 112 };
-const RESOURCE_COLLISION_GAP = 56;
+const RESOURCE_COLLISION_GAP = 16;
 const RESOURCE_COLLISION_ROW_WIDTH = 720;
 const MAX_AREA_FIT_PASSES = 8;
 const ROOT_PARENT_AREA_ID = "__root__";
 const READABLE_LAYOUT_MIN_GROUP_SIZE = 4;
-const READABLE_LAYOUT_COLUMN_GAP = 210;
-const READABLE_LAYOUT_ROW_GAP = 190;
-const READABLE_LAYOUT_STACK_GAP = 132;
+const READABLE_LAYOUT_COLUMN_GAP = 160;
+const READABLE_LAYOUT_ROW_GAP = 140;
+const READABLE_LAYOUT_STACK_GAP = 104;
 const EDGE_HANDLE_STUB_LENGTH = 20;
+const EDGE_ROUTE_NODE_OVERLAP_PENALTY = 1_000_000;
+const EDGE_ROUTE_SEGMENT_OVERLAP_PENALTY = 200_000;
+const EDGE_ROUTE_SEGMENT_CROWDING_PENALTY = 10_000;
+const EDGE_ROUTE_CROSSING_PENALTY = 5_000_000;
+const EDGE_ROUTE_CROWDING_DISTANCE = 28;
+const EDGE_ROUTE_WRONG_DIRECTION_PENALTY = 10_000_000;
+const RESOURCE_AREA_INSET_PADDING = 56;
+const COMPACT_AREA_MIN_SIZES: Readonly<Record<string, DiagramNode["size"]>> = {
+  aws_availability_zone: { width: 320, height: 220 },
+  aws_region: { width: 560, height: 360 },
+  aws_security_group: { width: 180, height: 120 },
+  aws_subnet: { width: 180, height: 120 },
+  aws_vpc: { width: 420, height: 280 }
+};
 const AREA_PARENT_EDGE_LABELS = new Set(["contains", "hosts"]);
 const TERRAFORM_REFERENCE_ATTRIBUTE_SUFFIXES = ["id", "arn", "name", "execution_arn"] as const;
 const SECURITY_GROUP_REFERENCE_KEYS = ["securityGroupIds", "vpcSecurityGroupIds", "securityGroupId"] as const;
@@ -87,12 +101,15 @@ const EDGE_STYLE_LABEL_PATTERNS: ReadonlyArray<{
     style: OPERATION_EDGE_STYLE
   },
   {
-    patterns: [/\b(async|event|queue|stream|notification|pub\/?sub|publish|subscribe|sns|sqs|message|logs?|monitor(?:s|ing)?|metric|alarm)\b/u],
-    style: ASYNC_EDGE_STYLE
+    patterns: [
+      /\b(attaches?|assumes?|encrypts?|grants?|image|launch|permission|policy|profile|role)\b/u,
+      /\b(depends?(_on)?|dependency|requires?)\b/u
+    ],
+    style: DEPENDENCY_EDGE_STYLE
   },
   {
-    patterns: [/\b(depends?(_on)?|dependency|requires?)\b/u],
-    style: DEPENDENCY_EDGE_STYLE
+    patterns: [/\b(async|event|queue|stream|notification|pub\/?sub|publish|subscribe|sns|sqs|message|logs?|monitor(?:s|ing)?|metric|alarm)\b/u],
+    style: ASYNC_EDGE_STYLE
   }
 ];
 const RESOURCE_NAME_CONVENTIONS: Readonly<Record<string, { readonly prefix: string; readonly aliases: readonly string[] }>> = {
@@ -338,7 +355,7 @@ function convertArchitectureEdgeToDiagramEdge(
     label: edge.label,
     sourceNodeId: edge.sourceId,
     sourceHandleId: handles.sourceHandleId,
-    style: getDiagramEdgeStyle(edge.label),
+    style: getDiagramEdgeStyleForArchitectureEdge(edge, nodeById),
     targetHandleId: handles.targetHandleId,
     targetNodeId: edge.targetId,
     type: "smoothstep"
@@ -353,16 +370,16 @@ function getEdgeRoutingPriority(
   const sourceType = getDiagramNodeResourceType(nodeById.get(sourceNodeId));
   const targetType = getDiagramNodeResourceType(nodeById.get(targetNodeId));
 
-  if (isRuntimeStorageRoutingType(sourceType) || isRuntimeStorageRoutingType(targetType)) {
+  if (isObservabilityRoutingType(sourceType) || isObservabilityRoutingType(targetType)) {
     return 10;
   }
 
-  if (isObservabilityRoutingType(sourceType) || isObservabilityRoutingType(targetType)) {
-    return 30;
+  if (isControlPlaneRoutingType(sourceType) || isControlPlaneRoutingType(targetType)) {
+    return 15;
   }
 
-  if (isControlPlaneRoutingType(sourceType) || isControlPlaneRoutingType(targetType)) {
-    return 60;
+  if (isRuntimeStorageRoutingType(sourceType) || isRuntimeStorageRoutingType(targetType)) {
+    return 20;
   }
 
   return 40;
@@ -397,6 +414,17 @@ function isControlPlaneRoutingType(resourceType: string): boolean {
     resourceType === "aws_lambda_permission" ||
     resourceType === "aws_security_group" ||
     resourceType === "aws_security_group_rule"
+  );
+}
+
+function isConfigurationDependencyRoutingType(resourceType: string): boolean {
+  return (
+    isControlPlaneRoutingType(resourceType) ||
+    resourceType === "aws_acm_certificate" ||
+    resourceType === "aws_ami" ||
+    resourceType === "aws_key_pair" ||
+    resourceType === "aws_kms_key" ||
+    resourceType === "aws_launch_template"
   );
 }
 
@@ -493,17 +521,14 @@ function shouldRenderDiagramEdge(
     return false;
   }
 
-  return !isAreaContainmentEdgeLabel(edge.label) && !isAreaContainmentRenderEdge(
-    {
-      id: edge.id,
-      label: edge.label,
-      sourceId: edge.sourceNodeId,
-      targetId: edge.targetNodeId
-    },
-    sourceNode,
-    targetNode,
-    nodeById
-  );
+  const architectureEdge = {
+    id: edge.id,
+    label: edge.label,
+    sourceId: edge.sourceNodeId,
+    targetId: edge.targetNodeId
+  };
+
+  return !isAreaContainmentEdgeLabel(edge.label) && !isAreaContainmentRenderEdge(architectureEdge, sourceNode, targetNode, nodeById);
 }
 
 function getDiagramEdgeStyleForExistingEdge(
@@ -516,14 +541,40 @@ function getDiagramEdgeStyleForExistingEdge(
     return labelStyle;
   }
 
-  const sourceResourceType = getDiagramNodeResourceType(nodeById.get(edge.sourceNodeId));
-  const targetResourceType = getDiagramNodeResourceType(nodeById.get(edge.targetNodeId));
+  return getDiagramEdgeStyleFromEndpoints(edge.sourceNodeId, edge.targetNodeId, nodeById, labelStyle);
+}
+
+function getDiagramEdgeStyleForArchitectureEdge(
+  edge: ArchitectureJson["edges"][number],
+  nodeById: ReadonlyMap<string, DiagramNode>
+): NonNullable<DiagramEdge["style"]> {
+  const labelStyle = getDiagramEdgeStyle(edge.label);
+
+  if (labelStyle.lineStyle !== DEFAULT_EDGE_STYLE.lineStyle || labelStyle.width !== DEFAULT_EDGE_STYLE.width) {
+    return labelStyle;
+  }
+
+  return getDiagramEdgeStyleFromEndpoints(edge.sourceId, edge.targetId, nodeById, labelStyle);
+}
+
+function getDiagramEdgeStyleFromEndpoints(
+  sourceNodeId: string,
+  targetNodeId: string,
+  nodeById: ReadonlyMap<string, DiagramNode>,
+  fallbackStyle: NonNullable<DiagramEdge["style"]>
+): NonNullable<DiagramEdge["style"]> {
+  const sourceResourceType = getDiagramNodeResourceType(nodeById.get(sourceNodeId));
+  const targetResourceType = getDiagramNodeResourceType(nodeById.get(targetNodeId));
+
+  if (isConfigurationDependencyRoutingType(sourceResourceType) || isConfigurationDependencyRoutingType(targetResourceType)) {
+    return { ...DEPENDENCY_EDGE_STYLE };
+  }
 
   if (isAsyncResourceType(sourceResourceType) || isAsyncResourceType(targetResourceType)) {
     return { ...ASYNC_EDGE_STYLE };
   }
 
-  return labelStyle;
+  return fallbackStyle;
 }
 
 function getDiagramEdgeStyle(label: string | undefined): NonNullable<DiagramEdge["style"]> {
@@ -708,7 +759,9 @@ function scoreEdgeRouteOverlap(
       continue;
     }
 
-    score += routeSegments.reduce((total, segment) => total + getSegmentNodeOverlapLength(segment, node), 0) * 1000;
+    score +=
+      routeSegments.reduce((total, segment) => total + getSegmentNodeOverlapLength(segment, node), 0) *
+      EDGE_ROUTE_NODE_OVERLAP_PENALTY;
   }
 
   for (const occupiedRoute of occupiedRoutes) {
@@ -717,8 +770,9 @@ function scoreEdgeRouteOverlap(
     }
 
     score += getSharedHandlePenalty(sourceNode, targetNode, sourceHandleId, targetHandleId, occupiedRoute);
-    score += getRouteOverlapLength(routeSegments, occupiedRoute.segments) * 100;
-    score += getRouteCrossingCount(routeSegments, occupiedRoute.segments) * 2_000_000;
+    score += getRouteOverlapLength(routeSegments, occupiedRoute.segments) * EDGE_ROUTE_SEGMENT_OVERLAP_PENALTY;
+    score += getRouteCrowdingLength(routeSegments, occupiedRoute.segments) * EDGE_ROUTE_SEGMENT_CROWDING_PENALTY;
+    score += getRouteCrossingCount(routeSegments, occupiedRoute.segments) * EDGE_ROUTE_CROSSING_PENALTY;
   }
 
   return score;
@@ -734,11 +788,11 @@ function getControlPlaneRuntimeHandlePenalty(
   const targetType = getDiagramNodeResourceType(targetNode);
   let penalty = 0;
 
-  if (isControlPlaneRoutingType(sourceType) && isRuntimeStorageRoutingType(targetType) && isVerticalEdgeHandle(targetHandleId)) {
+  if (isControlPlaneRoutingType(sourceType) && isRuntimeStorageRoutingType(targetType) && !isVerticalEdgeHandle(targetHandleId)) {
     penalty += 250_000;
   }
 
-  if (isRuntimeStorageRoutingType(sourceType) && isControlPlaneRoutingType(targetType) && isVerticalEdgeHandle(sourceHandleId)) {
+  if (isRuntimeStorageRoutingType(sourceType) && isControlPlaneRoutingType(targetType) && !isVerticalEdgeHandle(sourceHandleId)) {
     penalty += 250_000;
   }
 
@@ -794,7 +848,7 @@ function getSharedHandlePenalty(
   targetHandleId: string,
   occupiedRoute: OccupiedRoute
 ): number {
-  const sharedHandlePenalty = 1_000_000;
+  const sharedHandlePenalty = 5_000_000;
   let penalty = 0;
 
   if (sourceNode.id === occupiedRoute.sourceNodeId && sourceHandleId === occupiedRoute.sourceHandleId) {
@@ -829,15 +883,15 @@ function getHandleDirectionPenalty(
   let penalty = Math.abs(deltaX) + Math.abs(deltaY);
 
   if (Math.abs(deltaX) >= Math.abs(deltaY)) {
-    penalty += deltaX >= 0 && sourceHandleId !== EDGE_HANDLE_IDS.right ? 300 : 0;
-    penalty += deltaX < 0 && sourceHandleId !== EDGE_HANDLE_IDS.left ? 300 : 0;
-    penalty += deltaX >= 0 && targetHandleId !== EDGE_HANDLE_IDS.left ? 300 : 0;
-    penalty += deltaX < 0 && targetHandleId !== EDGE_HANDLE_IDS.right ? 300 : 0;
+    penalty += deltaX >= 0 && sourceHandleId !== EDGE_HANDLE_IDS.right ? EDGE_ROUTE_WRONG_DIRECTION_PENALTY : 0;
+    penalty += deltaX < 0 && sourceHandleId !== EDGE_HANDLE_IDS.left ? EDGE_ROUTE_WRONG_DIRECTION_PENALTY : 0;
+    penalty += deltaX >= 0 && targetHandleId !== EDGE_HANDLE_IDS.left ? EDGE_ROUTE_WRONG_DIRECTION_PENALTY : 0;
+    penalty += deltaX < 0 && targetHandleId !== EDGE_HANDLE_IDS.right ? EDGE_ROUTE_WRONG_DIRECTION_PENALTY : 0;
   } else {
-    penalty += deltaY >= 0 && sourceHandleId !== EDGE_HANDLE_IDS.bottom ? 300 : 0;
-    penalty += deltaY < 0 && sourceHandleId !== EDGE_HANDLE_IDS.top ? 300 : 0;
-    penalty += deltaY >= 0 && targetHandleId !== EDGE_HANDLE_IDS.top ? 300 : 0;
-    penalty += deltaY < 0 && targetHandleId !== EDGE_HANDLE_IDS.bottom ? 300 : 0;
+    penalty += deltaY >= 0 && sourceHandleId !== EDGE_HANDLE_IDS.bottom ? EDGE_ROUTE_WRONG_DIRECTION_PENALTY : 0;
+    penalty += deltaY < 0 && sourceHandleId !== EDGE_HANDLE_IDS.top ? EDGE_ROUTE_WRONG_DIRECTION_PENALTY : 0;
+    penalty += deltaY >= 0 && targetHandleId !== EDGE_HANDLE_IDS.top ? EDGE_ROUTE_WRONG_DIRECTION_PENALTY : 0;
+    penalty += deltaY < 0 && targetHandleId !== EDGE_HANDLE_IDS.bottom ? EDGE_ROUTE_WRONG_DIRECTION_PENALTY : 0;
   }
 
   return penalty;
@@ -980,6 +1034,18 @@ function getRouteOverlapLength(leftSegments: readonly RouteSegment[], rightSegme
   );
 }
 
+function getRouteCrowdingLength(leftSegments: readonly RouteSegment[], rightSegments: readonly RouteSegment[]): number {
+  return leftSegments.reduce(
+    (total, leftSegment) =>
+      total +
+      rightSegments.reduce(
+        (segmentTotal, rightSegment) => segmentTotal + getSegmentCrowdingLength(leftSegment, rightSegment),
+        0
+      ),
+    0
+  );
+}
+
 function getSegmentOverlapLength(leftSegment: RouteSegment, rightSegment: RouteSegment): number {
   const leftHorizontal = leftSegment.from.y === leftSegment.to.y;
   const rightHorizontal = rightSegment.from.y === rightSegment.to.y;
@@ -991,6 +1057,35 @@ function getSegmentOverlapLength(leftSegment: RouteSegment, rightSegment: RouteS
   }
 
   if (leftVertical && rightVertical && Math.abs(leftSegment.from.x - rightSegment.from.x) <= 1) {
+    return getRangeOverlapLength(leftSegment.from.y, leftSegment.to.y, rightSegment.from.y, rightSegment.to.y);
+  }
+
+  return 0;
+}
+
+function getSegmentCrowdingLength(leftSegment: RouteSegment, rightSegment: RouteSegment): number {
+  const leftHorizontal = leftSegment.from.y === leftSegment.to.y;
+  const rightHorizontal = rightSegment.from.y === rightSegment.to.y;
+  const leftVertical = leftSegment.from.x === leftSegment.to.x;
+  const rightVertical = rightSegment.from.x === rightSegment.to.x;
+
+  if (leftHorizontal && rightHorizontal) {
+    const distance = Math.abs(leftSegment.from.y - rightSegment.from.y);
+
+    if (distance <= 1 || distance > EDGE_ROUTE_CROWDING_DISTANCE) {
+      return 0;
+    }
+
+    return getRangeOverlapLength(leftSegment.from.x, leftSegment.to.x, rightSegment.from.x, rightSegment.to.x);
+  }
+
+  if (leftVertical && rightVertical) {
+    const distance = Math.abs(leftSegment.from.x - rightSegment.from.x);
+
+    if (distance <= 1 || distance > EDGE_ROUTE_CROWDING_DISTANCE) {
+      return 0;
+    }
+
     return getRangeOverlapLength(leftSegment.from.y, leftSegment.to.y, rightSegment.from.y, rightSegment.to.y);
   }
 
@@ -1067,7 +1162,8 @@ function applyAreaParentMetadata(
       findSecurityBoundaryParentAreaNodeId(node, nodeById) ??
       node.metadata?.parentAreaNodeId ??
       findConfigParentAreaNodeId(node, nodeById) ??
-      findEdgeParentAreaNodeId(node, nodeById, edges);
+      findEdgeParentAreaNodeId(node, nodeById, edges) ??
+      findDefaultRegionParentAreaNodeId(node, nodeById);
 
     if (!parentAreaNodeId) {
       return node;
@@ -1114,6 +1210,24 @@ function applyDiagramLayerOrder(nodes: readonly DiagramNode[]): DiagramNode[] {
   });
 }
 
+function findDefaultRegionParentAreaNodeId(
+  node: DiagramNode,
+  nodeById: ReadonlyMap<string, DiagramNode>
+): string | undefined {
+  if (node.kind !== "resource" || isAreaDiagramNode(node)) {
+    return undefined;
+  }
+
+  const regionNodes = [...nodeById.values()].filter(
+    (candidate) =>
+      candidate.id !== node.id &&
+      candidate.metadata?.parentAreaNodeId == null &&
+      getDiagramNodeResourceType(candidate) === "aws_region"
+  );
+
+  return regionNodes.length === 1 ? regionNodes[0]?.id : undefined;
+}
+
 function applyDiagramResourceNameConventions(nodes: readonly DiagramNode[]): DiagramNode[] {
   return nodes.map((node) => {
     const parameters = node.parameters;
@@ -1148,6 +1262,7 @@ type ReadableLayoutSlot = {
 
 function applyReadableTopologyLayout(nodes: readonly DiagramNode[]): DiagramNode[] {
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  const hasAreaNodes = nodes.some(isAreaDiagramNode);
   const nodesByParentId = createReadableLayoutNodesByParentId(nodes);
   const parentIds = [...nodesByParentId.keys()].sort(
     (leftParentId, rightParentId) =>
@@ -1157,11 +1272,16 @@ function applyReadableTopologyLayout(nodes: readonly DiagramNode[]): DiagramNode
   for (const parentId of parentIds) {
     const groupNodes = nodesByParentId.get(parentId) ?? [];
 
+    if (hasAreaNodes && parentId === ROOT_PARENT_AREA_ID) {
+      continue;
+    }
+
     if (groupNodes.length < READABLE_LAYOUT_MIN_GROUP_SIZE) {
       continue;
     }
 
-    const origin = getReadableLayoutOrigin(groupNodes);
+    const parentNode = parentId === ROOT_PARENT_AREA_ID ? undefined : nodeById.get(parentId);
+    const origin = getReadableLayoutOrigin(groupNodes, parentNode);
     const slotCounts = new Map<string, number>();
 
     for (const originalNode of [...groupNodes].sort(compareReadableLayoutNodes)) {
@@ -1171,7 +1291,7 @@ function applyReadableTopologyLayout(nodes: readonly DiagramNode[]): DiagramNode
         continue;
       }
 
-      const slot = getReadableLayoutSlot(node);
+      const slot = getReadableLayoutSlot(node, parentNode);
       const slotKey = `${slot.column}:${slot.row}`;
       const stackIndex = slotCounts.get(slotKey) ?? 0;
       const nextPosition = {
@@ -1215,8 +1335,8 @@ function isReadableLayoutCandidate(node: DiagramNode): boolean {
   return node.kind === "resource" && !isAreaDiagramNode(node);
 }
 
-function getReadableLayoutOrigin(nodes: readonly DiagramNode[]): DiagramNode["position"] {
-  const slots = nodes.map(getReadableLayoutSlot);
+function getReadableLayoutOrigin(nodes: readonly DiagramNode[], parentNode?: DiagramNode): DiagramNode["position"] {
+  const slots = nodes.map((node) => getReadableLayoutSlot(node, parentNode));
   const minColumn = Math.min(...slots.map((slot) => slot.column));
   const minRow = Math.min(...slots.map((slot) => slot.row));
   const minX = Math.min(...nodes.map((node) => node.position.x));
@@ -1241,9 +1361,13 @@ function compareReadableLayoutNodes(leftNode: DiagramNode, rightNode: DiagramNod
   );
 }
 
-function getReadableLayoutSlot(node: DiagramNode): ReadableLayoutSlot {
+function getReadableLayoutSlot(node: DiagramNode, parentNode?: DiagramNode): ReadableLayoutSlot {
   const resourceType = getDiagramNodeResourceType(node);
   const resourceName = `${node.parameters?.resourceName ?? ""} ${node.label} ${node.id}`.toLowerCase();
+
+  if (parentNode && getDiagramNodeResourceType(parentNode) === "aws_region") {
+    return getRegionReadableLayoutSlot(resourceType, resourceName);
+  }
 
   if (resourceType === "aws_iam_role" || resourceType === "aws_iam_instance_profile") {
     return { column: 2, row: 0 };
@@ -1314,7 +1438,7 @@ function getReadableLayoutSlot(node: DiagramNode): ReadableLayoutSlot {
   }
 
   if (resourceType === "aws_cloudwatch_metric_alarm") {
-    return { column: 2, row: 3 };
+    return { column: 3, row: 3 };
   }
 
   if (resourceType === "aws_security_group_rule") {
@@ -1322,6 +1446,54 @@ function getReadableLayoutSlot(node: DiagramNode): ReadableLayoutSlot {
   }
 
   return { column: 3, row: 2 };
+}
+
+function getRegionReadableLayoutSlot(resourceType: string, resourceName: string): ReadableLayoutSlot {
+  if (resourceType === "aws_iam_policy") {
+    return { column: 0, row: 0 };
+  }
+
+  if (resourceType === "aws_iam_role" || resourceType === "aws_iam_instance_profile") {
+    return { column: 1, row: 0 };
+  }
+
+  if (resourceType === "aws_kms_key" || resourceType === "aws_acm_certificate") {
+    return { column: 2, row: 0 };
+  }
+
+  if (
+    resourceType === "aws_cloudfront_distribution" ||
+    resourceType === "aws_route53_record" ||
+    resourceType === "aws_wafv2_web_acl"
+  ) {
+    return { column: 0, row: 1 };
+  }
+
+  if (resourceType === "aws_s3_bucket" && /(^|[_\s-])(asset|assets|static|site|website|web)([_\s-]|$)/u.test(resourceName)) {
+    return { column: 1, row: 1 };
+  }
+
+  if (resourceType === "aws_cloudwatch_log_group" || resourceType === "aws_cloudwatch_dashboard") {
+    return { column: 3, row: 1 };
+  }
+
+  if (resourceType === "aws_ami") {
+    return { column: 0, row: 2 };
+  }
+
+  if (resourceType === "aws_s3_bucket") {
+    return { column: 1, row: 2 };
+  }
+
+  if (resourceType === "aws_cloudwatch_metric_alarm") {
+    return { column: 3, row: 2 };
+  }
+
+  if (resourceType === "aws_vpc") {
+    return { column: 0, row: 3 };
+  }
+
+  return { column: 2, row: 2 };
 }
 
 function createConventionResourceName(
@@ -1398,7 +1570,7 @@ function resolveSiblingNodeCollisionsOnce(nodes: readonly DiagramNode[]): Diagra
         continue;
       }
 
-      const nextNode = moveNodeUntilClear(node, placedNodes);
+      const nextNode = moveNodeUntilClear(node, placedNodes, nodeById);
       const delta = {
         x: nextNode.position.x - node.position.x,
         y: nextNode.position.y - node.position.y
@@ -1466,7 +1638,11 @@ function moveNodeSubtree(
   }
 }
 
-function moveNodeUntilClear(node: DiagramNode, placedNodes: readonly DiagramNode[]): DiagramNode {
+function moveNodeUntilClear(
+  node: DiagramNode,
+  placedNodes: readonly DiagramNode[],
+  nodeById: ReadonlyMap<string, DiagramNode>
+): DiagramNode {
   let nextPosition = { ...node.position };
 
   for (let attempts = 0; attempts < 120; attempts += 1) {
@@ -1475,7 +1651,7 @@ function moveNodeUntilClear(node: DiagramNode, placedNodes: readonly DiagramNode
       position: nextPosition
     };
 
-    if (!placedNodes.some((placedNode) => doNodeFootprintsOverlap(candidate, placedNode))) {
+    if (!placedNodes.some((placedNode) => doNodeFootprintsOverlap(candidate, placedNode, nodeById))) {
       return candidate;
     }
 
@@ -1510,7 +1686,15 @@ function getNodeCollisionStepSize(node: DiagramNode): DiagramNode["size"] {
   };
 }
 
-function doNodeFootprintsOverlap(leftNode: DiagramNode, rightNode: DiagramNode): boolean {
+function doNodeFootprintsOverlap(
+  leftNode: DiagramNode,
+  rightNode: DiagramNode,
+  nodeById: ReadonlyMap<string, DiagramNode>
+): boolean {
+  if (isAreaDiagramNode(leftNode) !== isAreaDiagramNode(rightNode)) {
+    return doAreaAndResourceFootprintsConflict(leftNode, rightNode, nodeById);
+  }
+
   const left = getNodeCollisionFootprint(leftNode);
   const right = getNodeCollisionFootprint(rightNode);
 
@@ -1519,6 +1703,29 @@ function doNodeFootprintsOverlap(leftNode: DiagramNode, rightNode: DiagramNode):
     left.x + left.width > right.x &&
     left.y < right.y + right.height &&
     left.y + left.height > right.y
+  );
+}
+
+function doAreaAndResourceFootprintsConflict(
+  leftNode: DiagramNode,
+  rightNode: DiagramNode,
+  nodeById: ReadonlyMap<string, DiagramNode>
+): boolean {
+  const areaNode = isAreaDiagramNode(leftNode) ? leftNode : rightNode;
+  const resourceNode = isAreaDiagramNode(leftNode) ? rightNode : leftNode;
+
+  if (hasAreaAncestor(resourceNode, areaNode.id, nodeById)) {
+    return false;
+  }
+
+  const area = getNodeCollisionFootprint(areaNode);
+  const resource = getNodeCollisionFootprint(resourceNode);
+
+  return (
+    area.x < resource.x + resource.width &&
+    area.x + area.width > resource.x &&
+    area.y < resource.y + resource.height &&
+    area.y + area.height > resource.y
   );
 }
 
@@ -1614,18 +1821,23 @@ function getRequiredAreaLayout(
   node: DiagramNode,
   children: readonly DiagramNode[]
 ): Pick<DiagramNode, "position" | "size"> {
-  let left = node.position.x;
-  let top = node.position.y;
-  let right = node.position.x + node.size.width;
-  let bottom = node.position.y + node.size.height;
+  const shouldCompactArea = shouldCompactAreaToChildren(node);
+  let left = shouldCompactArea ? Number.POSITIVE_INFINITY : node.position.x;
+  let top = shouldCompactArea ? Number.POSITIVE_INFINITY : node.position.y;
+  let right = shouldCompactArea ? Number.NEGATIVE_INFINITY : node.position.x + node.size.width;
+  let bottom = shouldCompactArea ? Number.NEGATIVE_INFINITY : node.position.y + node.size.height;
 
   for (const child of children) {
     const childFitSize = getAreaChildFitSize(child);
-    left = Math.min(left, child.position.x - AREA_CHILD_PADDING);
-    top = Math.min(top, child.position.y - AREA_CHILD_PADDING);
-    right = Math.max(right, child.position.x + childFitSize.width + AREA_CHILD_PADDING);
-    bottom = Math.max(bottom, child.position.y + childFitSize.height + AREA_CHILD_PADDING);
+    const childPadding = getAreaChildPadding(child);
+    left = Math.min(left, child.position.x - childPadding);
+    top = Math.min(top, child.position.y - childPadding);
+    right = Math.max(right, child.position.x + childFitSize.width + childPadding);
+    bottom = Math.max(bottom, child.position.y + childFitSize.height + childPadding);
   }
+  const minimumSize = getCompactAreaMinimumSize(node);
+  const width = Math.max(right - left, minimumSize.width);
+  const height = Math.max(bottom - top, minimumSize.height);
 
   return {
     position: {
@@ -1633,10 +1845,24 @@ function getRequiredAreaLayout(
       y: top
     },
     size: {
-      width: right - left,
-      height: bottom - top
+      width,
+      height
     }
   };
+}
+
+function shouldCompactAreaToChildren(node: DiagramNode): boolean {
+  return getCompactAreaMinimumSize(node) !== DEFAULT_AREA_MIN_SIZE;
+}
+
+const DEFAULT_AREA_MIN_SIZE: DiagramNode["size"] = { width: 0, height: 0 };
+
+function getCompactAreaMinimumSize(node: DiagramNode): DiagramNode["size"] {
+  return COMPACT_AREA_MIN_SIZES[getDiagramNodeResourceType(node)] ?? DEFAULT_AREA_MIN_SIZE;
+}
+
+function getAreaChildPadding(child: DiagramNode): number {
+  return isAreaDiagramNode(child) ? AREA_CHILD_PADDING : RESOURCE_AREA_INSET_PADDING;
 }
 
 function getAreaChildFitSize(child: DiagramNode): DiagramNode["size"] {

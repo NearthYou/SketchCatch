@@ -37,6 +37,23 @@ Verification:
 - `pnpm lint`
 - `pnpm typecheck`
 - `pnpm build` (first sandboxed run hit Next.js `.next` unlink EPERM; elevated rerun passed)
+
+2026-07-08:
+
+- Corrected diagram edge handling so only `contains`/`hosts` are removed as area containment; runtime/configuration relationships remain visible.
+- Added endpoint-based styling so IAM/KMS/AMI/security configuration relationships render as thin solid dependency lines even when the AI label is generic.
+- Kept async/event/log/monitoring relationships dashed, Terraform/deploy relationships operational dashed, and runtime HTTPS/data relationships solid.
+- Verified generated diagram conversion and React Flow rendering preserve visible edges while avoiding sampled resource-edge intersections.
+
+Verification:
+
+- `pnpm harness:check`
+- `.\node_modules\.bin\tsx.CMD --test features\workspace\workspace-ai-diagram-adapter.test.ts features\diagram-editor\flow-mappers.test.ts` from `apps/web` with elevated sandbox permissions because Node test runner spawn was blocked by EPERM.
+- Browser verification against `http://localhost:3000/workspace?projectName=Diagram%20Fresh%20Check&diagramFixture=conventions`: 11 nodes, 9 edges, 5 thin dependency edges, 2 dashed async edges, no resource-resource overlaps, and no sampled edge-resource hits.
+- Browser verification against the generated project workspace: 22 nodes, 10 edges, 1 thin dependency edge, 2 dashed async edges, and no sampled edge-resource hits.
+- `pnpm lint` (passed; Turbo cache rename warnings only)
+- `pnpm typecheck` (passed; Turbo cache rename warnings only)
+- `pnpm build` (first sandboxed run hit Next.js `.next` unlink EPERM; elevated rerun passed)
 - `.\node_modules\.bin\tsx.CMD --test features\resource-settings\catalog.test.ts features\diagram-editor\diagram-utils.test.ts` from `apps/web` with elevated sandbox permissions because Node test runner spawn was blocked by EPERM.
 - Final `pnpm harness:check`
 - Browser DOM verification on `http://localhost:3000/workspace?projectName=Diagram%20Convention%20QA`: `labeledCount: 0`, `dashedCount: 4`, `overlaps: []`, `edgeHits: []`.
@@ -68,3 +85,18 @@ Verification:
 - Final `pnpm harness:check`
 - Browser visual verification was attempted against `http://localhost:3000/workspace?projectName=Diagram%20Convention%20QA`, but the existing dev server/browser session returned the Next dev payload instead of a hydrated app UI.
 - Browser DOM/SVG verification passed against `http://localhost:3000/workspace?projectName=Diagram%20Convention%20QA%20Readable&diagramFixture=conventions`: `nodeCount: 11`, `edgeCount: 9`, `dashedCount: 4`, `overlaps: []`, `edgeHits: []`, `lineOverlaps: []`, `crossings: []`.
+
+2026-07-08:
+
+- Updated AI architecture draft support so Amazon Q allowed `ResourceNode.type` values are derived from shared resource definitions instead of a hard-coded subset.
+- Added fallback draft handling for explicitly requested resource-panel catalog items such as EKS Cluster, DynamoDB Table, SQS Queue, and Auto Scaling Group.
+- Kept negated resource requests such as "no EC2" from being re-added as explicit panel resources.
+- Updated unsupported-resource handling so panel-backed resources are no longer reported as omitted, while unsupported workflow automation such as CI/CD handoff remains guarded.
+
+Verification:
+
+- `pnpm harness:check`
+- `.\node_modules\.bin\tsx.CMD --test src\services\aiArchitectureDrafts.test.ts src\routes\ai.test.ts` from `apps/api` with elevated sandbox permissions because Node test runner spawn was blocked by EPERM.
+- `pnpm lint` (passed; Turbo cache rename warnings only)
+- `pnpm typecheck` (passed; Turbo cache rename warnings only after fixing test Set typing)
+- `pnpm build` (first sandboxed run hit Next.js `.next` unlink EPERM; elevated rerun passed)
