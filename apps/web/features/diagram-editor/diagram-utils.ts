@@ -101,7 +101,7 @@ export function createDiagramNodeFromPayload(
     position,
     size: { ...item.nodeDefaults.size },
     label: item.nodeDefaults.label,
-    ...(kind === "resource" ? { iconUrl: item.iconUrl } : {}),
+    iconUrl: item.iconUrl,
     locked: false,
     zIndex,
     style: getDefaultNodeStyle(kind)
@@ -145,6 +145,7 @@ export function createDiagramEdge(
     type: "smoothstep",
     style: {
       color: "#506176",
+      lineStyle: "solid",
       width: "medium",
       animated: false
     }

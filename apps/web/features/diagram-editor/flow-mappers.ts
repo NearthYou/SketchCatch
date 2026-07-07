@@ -20,6 +20,32 @@ type FlowMapperOptions = {
   readonly previewAnnotations?: DiagramPreviewAnnotations | undefined;
 };
 
+const CONTAINMENT_EDGE_LABELS = new Set(["contains", "hosts"]);
+const EDGE_STYLE_LABEL_PATTERNS: ReadonlyArray<{
+  readonly patterns: readonly RegExp[];
+  readonly style: NonNullable<DiagramEdge["style"]>;
+}> = [
+  {
+    patterns: [/\b(delete|destroy|replace|destructive)\b/u],
+    style: { animated: false, color: "#b42318", lineStyle: "dashed", width: "thick" }
+  },
+  {
+    patterns: [/\b(terraform|plan|apply|deploy|deployment|ci\/?cd|pipeline|handoff|git)\b/u],
+    style: { animated: false, color: "#8a5a00", lineStyle: "dashed", width: "thick" }
+  },
+  {
+    patterns: [
+      /\b(attaches?|assumes?|encrypts?|grants?|image|launch|permission|policy|profile|role)\b/u,
+      /\b(depends?(_on)?|dependency|requires?)\b/u
+    ],
+    style: { animated: false, color: "#6b7280", lineStyle: "solid", width: "thin" }
+  },
+  {
+    patterns: [/\b(async|event|queue|stream|notification|pub\/?sub|publish|subscribe|sns|sqs|message|logs?|monitor(?:s|ing)?|metric|alarm)\b/u],
+    style: { animated: false, color: "#476582", lineStyle: "dashed", width: "medium" }
+  }
+];
+
 export function toFlowNodes(
   nodes: readonly DiagramNode[],
   selectedNodeIds: readonly string[],
@@ -91,9 +117,11 @@ export function toFlowEdges(
   const previewAnnotations = options.previewAnnotations;
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
 
-  return edges.map((edge) => {
+  return edges.filter((edge) => !isContainmentEdge(edge)).map((edge) => {
     const selected = !isPreview && selectedEdgeIdSet.has(edge.id);
-    const color = edge.style?.color ?? "#506176";
+    const edgeStyle = getResolvedDiagramEdgeStyle(edge, nodeById);
+    const color = edgeStyle.color ?? "#506176";
+    const visibleLabel = selected ? edge.label : undefined;
     const previewState = previewAnnotations?.edgeStates[edge.id];
     const flowEdge: DiagramFlowEdge = {
       id: edge.id,
@@ -107,8 +135,8 @@ export function toFlowEdges(
         previewState
       },
       selected,
-      animated: !isPreview && (selected || edge.style?.animated === true),
-      label: edge.label,
+      animated: !isPreview && (selected || edgeStyle.animated === true),
+      ...(visibleLabel ? { label: visibleLabel } : {}),
       labelBgBorderRadius: 2,
       labelBgPadding: [7, 4],
       labelBgStyle: {
@@ -132,33 +160,142 @@ export function toFlowEdges(
         width: 18,
         height: 18
       },
-      style: getFlowEdgeStyle(edge, selected, isPreview, previewState)
+      style: getFlowEdgeStyle(edge, selected, isPreview, previewState, nodeById)
     };
-
-    if (edge.label) {
-      flowEdge.label = edge.label;
-    }
 
     return flowEdge;
   });
+}
+
+function isContainmentEdge(edge: DiagramEdge): boolean {
+  const normalizedLabel = edge.label?.trim().toLowerCase();
+
+  return normalizedLabel != null && CONTAINMENT_EDGE_LABELS.has(normalizedLabel);
 }
 
 function getFlowEdgeStyle(
   edge: DiagramEdge,
   selected: boolean,
   isPreview: boolean,
-  previewState: DiagramPreviewState | undefined
+  previewState: DiagramPreviewState | undefined,
+  nodeById: ReadonlyMap<string, DiagramNode> = new Map()
 ): CSSProperties {
-  const color = edge.style?.color ?? "#506176";
-  const strokeWidth = getEdgeStrokeWidth(edge.style?.width);
+  const edgeStyle = getResolvedDiagramEdgeStyle(edge, nodeById);
+  const color = edgeStyle.color ?? "#506176";
+  const strokeWidth = getEdgeStrokeWidth(edgeStyle.width);
   const isDeletedPreview = isPreview && previewState === "deleted";
 
   return {
     stroke: isDeletedPreview ? "#8b949e" : selected ? "#1f6feb" : color,
-    strokeDasharray: isPreview ? "7 5" : undefined,
+    strokeDasharray: getFlowEdgeStrokeDasharray(edge, isPreview, nodeById),
     strokeOpacity: isDeletedPreview ? 0.36 : isPreview ? 0.48 : undefined,
     strokeWidth
   };
+}
+
+function getFlowEdgeStrokeDasharray(
+  edge: DiagramEdge,
+  isPreview: boolean,
+  nodeById: ReadonlyMap<string, DiagramNode> = new Map()
+): string | undefined {
+  const edgeStyle = getResolvedDiagramEdgeStyle(edge, nodeById);
+
+  if (isPreview) {
+    return "7 5";
+  }
+
+  if (edgeStyle.lineStyle === "dashed") {
+    return "7 5";
+  }
+
+  if (edgeStyle.lineStyle === "dotted") {
+    return "2 5";
+  }
+
+  return undefined;
+}
+
+function getResolvedDiagramEdgeStyle(
+  edge: DiagramEdge,
+  nodeById: ReadonlyMap<string, DiagramNode> = new Map()
+): NonNullable<DiagramEdge["style"]> {
+  const labelStyle = getDiagramEdgeStyleFromLabel(edge.label);
+  const endpointStyle = getDiagramEdgeStyleFromEndpoints(edge, nodeById);
+  const inferredStyle = isNonDefaultDiagramEdgeStyle(labelStyle) ? labelStyle : endpointStyle;
+  const shouldPreferInferredStyle =
+    isNonDefaultDiagramEdgeStyle(inferredStyle) &&
+    (edge.style?.lineStyle == null || edge.style.lineStyle === "solid");
+
+  return {
+    animated: edge.style?.animated ?? inferredStyle.animated ?? false,
+    color: shouldPreferInferredStyle ? inferredStyle.color : (edge.style?.color ?? inferredStyle.color ?? "#506176"),
+    lineStyle: shouldPreferInferredStyle ? inferredStyle.lineStyle : (edge.style?.lineStyle ?? inferredStyle.lineStyle ?? "solid"),
+    width: shouldPreferInferredStyle ? inferredStyle.width : (edge.style?.width ?? inferredStyle.width ?? "medium")
+  };
+}
+
+function isNonDefaultDiagramEdgeStyle(style: NonNullable<DiagramEdge["style"]>): boolean {
+  return style.lineStyle !== "solid" || style.width !== "medium" || style.color !== "#506176";
+}
+
+function getDiagramEdgeStyleFromLabel(label: string | undefined): NonNullable<DiagramEdge["style"]> {
+  const normalizedLabel = label?.trim().toLowerCase() ?? "";
+
+  for (const entry of EDGE_STYLE_LABEL_PATTERNS) {
+    if (entry.patterns.some((pattern) => pattern.test(normalizedLabel))) {
+      return { ...entry.style };
+    }
+  }
+
+  return { animated: false, color: "#506176", lineStyle: "solid", width: "medium" };
+}
+
+function getDiagramEdgeStyleFromEndpoints(
+  edge: DiagramEdge,
+  nodeById: ReadonlyMap<string, DiagramNode>
+): NonNullable<DiagramEdge["style"]> {
+  const sourceType = getNodeResourceType(nodeById.get(edge.sourceNodeId));
+  const targetType = getNodeResourceType(nodeById.get(edge.targetNodeId));
+
+  if (isConfigurationDependencyResourceType(sourceType) || isConfigurationDependencyResourceType(targetType)) {
+    return { animated: false, color: "#6b7280", lineStyle: "solid", width: "thin" };
+  }
+
+  if (isEventResourceType(sourceType) || isEventResourceType(targetType)) {
+    return { animated: false, color: "#476582", lineStyle: "dashed", width: "medium" };
+  }
+
+  return { animated: false, color: "#506176", lineStyle: "solid", width: "medium" };
+}
+
+function getNodeResourceType(node: DiagramNode | undefined): string {
+  return node?.parameters?.resourceType ?? node?.type ?? "";
+}
+
+function isConfigurationDependencyResourceType(resourceType: string): boolean {
+  return (
+    resourceType === "aws_acm_certificate" ||
+    resourceType === "aws_ami" ||
+    resourceType === "aws_iam_instance_profile" ||
+    resourceType === "aws_iam_policy" ||
+    resourceType === "aws_iam_role" ||
+    resourceType === "aws_key_pair" ||
+    resourceType === "aws_kms_key" ||
+    resourceType === "aws_lambda_permission" ||
+    resourceType === "aws_launch_template" ||
+    resourceType === "aws_security_group" ||
+    resourceType === "aws_security_group_rule"
+  );
+}
+
+function isEventResourceType(resourceType: string): boolean {
+  return [
+    "aws_cloudwatch_log_group",
+    "aws_cloudwatch_metric_alarm",
+    "aws_lambda_event_source_mapping",
+    "aws_sns_topic",
+    "aws_sqs_queue"
+  ].includes(resourceType);
 }
 
 function toReactFlowHandleId(handleId: string, handleType: "source" | "target"): string {

@@ -81,16 +81,18 @@ export function DiagramNodeView({ data, id, isConnectable, selected }: NodeProps
   const canConnect = !data.isPreview && Boolean(isConnectable) && !node.locked;
   const isResourceNode = node.kind === "resource";
   const isArea = isAreaNode(node);
+  const usesIconTileLayout = isResourceNode || (node.kind === "design" && !isArea && Boolean(node.iconUrl));
   const canChangeBorderColor = canChangeNodeBorderColor(node);
   const borderColor = getNodeDisplayBorderColor(node);
   const textColor = node.style?.textColor ?? "#172033";
   const isDataNode = node.parameters?.terraformBlockType === "data";
   const resizeBounds = getNodeResizeBounds(node);
-  const nodeShellStyle = getNodeShellStyle(isArea, isResourceNode, borderColor);
+  const nodeShellStyle = getNodeShellStyle(isArea, usesIconTileLayout, borderColor);
   const areaNodeIconUrl = isArea ? getAreaNodeIconUrl(node) : undefined;
   const areaNodeLabel = isArea ? getAreaNodeLabel(node) : "";
   const areaNodeMetaLabel = isArea ? getAreaNodeMetaLabel(node) : undefined;
-  const resourceNodeLabelStyle = getResourceNodeLabelStyle(node.label, node.size.width, textColor);
+  const resourceNodeLabel = getResourceNodeLabel(node);
+  const resourceNodeLabelStyle = getResourceNodeLabelStyle(resourceNodeLabel, node.size.width, textColor);
 
   useEffect(() => {
     updateNodeInternals(id);
@@ -125,7 +127,7 @@ export function DiagramNodeView({ data, id, isConnectable, selected }: NodeProps
             y: moveEvent.clientY - startY
           },
           handlePosition,
-          resizeMode: isResourceNode && !isArea ? "square" : "free",
+          resizeMode: usesIconTileLayout && !isArea ? "square" : "free",
           startPosition,
           startSize,
           zoom
@@ -142,7 +144,7 @@ export function DiagramNodeView({ data, id, isConnectable, selected }: NodeProps
       window.addEventListener("pointermove", handlePointerMove);
       window.addEventListener("pointerup", handlePointerUp, { once: true });
     },
-    [data, id, isArea, isResourceNode, node.locked, node.position, node.size, reactFlow, resizeBounds]
+    [data, id, isArea, node.locked, node.position, node.size, reactFlow, resizeBounds, usesIconTileLayout]
   );
 
   return (
@@ -212,7 +214,7 @@ export function DiagramNodeView({ data, id, isConnectable, selected }: NodeProps
           data.previewState === "deleted" ? styles.nodeShellPatchDeleted : undefined,
           data.isReferenceDropTarget ? styles.nodeShellReferenceDropTarget : undefined,
           isArea ? styles.nodeShellArea : undefined,
-          !isArea ? (node.kind === "design" ? styles.nodeShellDesign : styles.nodeShellResource) : undefined,
+          !isArea ? (usesIconTileLayout ? styles.nodeShellResource : styles.nodeShellDesign) : undefined,
           node.locked ? styles.nodeShellLocked : undefined
         ]
           .filter(Boolean)
@@ -236,7 +238,7 @@ export function DiagramNodeView({ data, id, isConnectable, selected }: NodeProps
               {areaNodeMetaLabel ? <span className={styles.areaNodeHeaderMeta}>{areaNodeMetaLabel}</span> : null}
             </div>
           </>
-        ) : isResourceNode ? (
+        ) : usesIconTileLayout ? (
           <>
             <div className={styles.resourceNodeIconFrame}>
               {node.iconUrl ? (
@@ -248,7 +250,7 @@ export function DiagramNodeView({ data, id, isConnectable, selected }: NodeProps
               )}
             </div>
             <div className={styles.resourceNodeLabel} style={resourceNodeLabelStyle}>
-              {node.label}
+              {resourceNodeLabel}
             </div>
             <div className={styles.resourceNodeType}>{node.type}</div>
             {isDataNode ? <div className={styles.resourceNodeBadge}>Data</div> : null}
@@ -256,7 +258,11 @@ export function DiagramNodeView({ data, id, isConnectable, selected }: NodeProps
         ) : (
           <>
             <div className={styles.nodeGlyph} aria-hidden="true">
-              D
+              {node.iconUrl ? (
+                <img alt="" className={styles.nodeGlyphIcon} draggable={false} src={node.iconUrl} />
+              ) : (
+                "D"
+              )}
             </div>
             <div className={styles.nodeContent}>
               <div className={styles.nodeType}>Design</div>
@@ -325,16 +331,22 @@ export function DiagramNodeView({ data, id, isConnectable, selected }: NodeProps
   );
 }
 
-function getNodeShellStyle(isArea: boolean, isResourceNode: boolean, borderColor: string): CSSProperties {
+function getNodeShellStyle(isArea: boolean, usesIconTileLayout: boolean, borderColor: string): CSSProperties {
   if (isArea) {
     return { "--node-border-color": borderColor } as CSSProperties;
   }
 
-  if (isResourceNode) {
+  if (usesIconTileLayout) {
     return { "--resource-node-border-color": RESOURCE_NODE_BORDER_COLOR } as CSSProperties;
   }
 
   return { borderColor };
+}
+
+function getResourceNodeLabel(node: DiagramFlowNode["data"]["node"]): string {
+  const resourceName = node.parameters?.resourceName?.trim();
+
+  return resourceName ? resourceName : node.label;
 }
 
 function getResourceNodeLabelStyle(label: string, nodeWidth: number, textColor: string): CSSProperties {

@@ -257,6 +257,14 @@ function createConnectionError(): ApiClientError {
 
 function getKoreanApiMessage(error: ApiClientError, fallbackMessage: string): string {
   if (error.code === "github_oauth_required") {
+    if (error.message.includes("environments or Actions variables")) {
+      return "GitHub App 권한이 부족해서 repository settings를 적용할 수 없습니다. GitHub App repository permissions에서 Administration 권한과 Variables 권한을 Read and write로 승인한 뒤 다시 시도해주세요.";
+    }
+
+    if (error.message.includes("credentials are not configured")) {
+      return "GitHub App 설정이 서버에 완전히 연결되지 않았습니다. 운영 환경의 GitHub App ID와 private key 설정을 확인해주세요.";
+    }
+
     return "GitHub App 권한이 부족해서 PR을 만들 수 없습니다. GitHub App repository permissions에서 Contents, Pull requests, Workflows 권한을 Read and write로 승인한 뒤 다시 시도해주세요.";
   }
 

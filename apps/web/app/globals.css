@@ -2152,6 +2152,10 @@ nextjs-portal {
   gap: 6px;
 }
 
+.providerDropdown {
+  position: relative;
+}
+
 .providerSelect {
   align-items: center;
   background: #ffffff;
@@ -2166,9 +2170,68 @@ nextjs-portal {
   padding: 0 8px;
 }
 
+.providerVersionTrigger {
+  min-width: 118px;
+}
+
 .providerSelectActive {
   border-color: #6b7cff;
   box-shadow: 0 0 0 2px rgba(107, 124, 255, 0.12);
+}
+
+.providerVersionValue {
+  color: #151b29;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.providerVersionChevron {
+  color: #66748a;
+  transition: transform 120ms ease;
+}
+
+.providerVersionChevronOpen {
+  transform: rotate(180deg);
+}
+
+.providerVersionMenu {
+  background: #ffffff;
+  border: 1px solid #d8e1ee;
+  border-radius: 6px;
+  box-shadow: 0 10px 22px rgba(43, 51, 84, 0.12);
+  display: grid;
+  gap: 2px;
+  left: 0;
+  min-width: 118px;
+  padding: 4px;
+  position: absolute;
+  top: calc(100% + 6px);
+  z-index: 20;
+}
+
+.providerVersionOption,
+.providerVersionOptionActive {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  color: #151b29;
+  display: flex;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  height: 30px;
+  justify-content: flex-start;
+  padding: 0 8px;
+  text-align: left;
+}
+
+.providerVersionOption:hover,
+.providerVersionOption:focus-visible,
+.providerVersionOptionActive {
+  background: #f0edff;
+  color: #5f3de8;
+  outline: none;
 }
 
 .providerVersionSelect {
@@ -4329,7 +4392,7 @@ nextjs-portal {
 }
 
 .workspaceStartModeGrid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .workspaceStartHint {
@@ -4381,6 +4444,171 @@ nextjs-portal {
   font-size: 0.78rem;
   font-weight: 750;
   line-height: 1.45;
+}
+
+.workspaceStartBlankLabel {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: var(--dashboard-subtle);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 0.82rem;
+  font-weight: 850;
+  gap: 8px;
+  justify-self: start;
+  padding: 2px 0;
+}
+
+.workspaceStartBlankLabel::after {
+  background: currentColor;
+  content: "";
+  display: inline-block;
+  height: 1px;
+  opacity: 0.55;
+  width: 28px;
+}
+
+.workspaceStartBlankLabel:not(:disabled):hover,
+.workspaceStartBlankLabel:not(:disabled):focus-visible {
+  color: #ffffff;
+  outline: none;
+}
+
+.workspaceStartBlankLabel:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.reverseCandidateSelectionPanel {
+  background: #ffffff;
+  border: 1px solid #dfe6f1;
+  border-radius: 8px;
+  box-shadow: 0 16px 36px rgba(31, 41, 55, 0.12);
+  color: #182033;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  height: 100%;
+  padding: 18px;
+}
+
+.reverseCandidateSelectionIntro {
+  display: grid;
+  gap: 8px;
+}
+
+.reverseStartGuideEyebrow {
+  color: #2563eb;
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.reverseCandidateSelectionPanel h2 {
+  font-size: 1rem;
+  line-height: 1.25;
+  margin: 0;
+}
+
+.reverseCandidateSelectionIntro span,
+.reverseCandidateSelectionEmpty span,
+.reverseCandidateSelectionCard span {
+  color: #66748a;
+  font-size: 0.84rem;
+  font-weight: 750;
+  line-height: 1.55;
+}
+
+.reverseCandidateSelectionList {
+  display: grid;
+  gap: 10px;
+}
+
+.reverseCandidateSelectionCard,
+.reverseCandidateSelectionEmpty {
+  background: #f7faff;
+  border: 1px solid #dce7f7;
+  border-radius: 10px;
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 14px;
+  text-align: left;
+}
+
+.reverseCandidateSelectionCard {
+  color: #243044;
+  cursor: pointer;
+  font: inherit;
+}
+
+.reverseCandidateSelectionCard:hover,
+.reverseCandidateSelectionCard:focus-visible {
+  background: #eff6ff;
+  border-color: #93c5fd;
+  outline: 2px solid rgba(37, 99, 235, 0.18);
+  outline-offset: 2px;
+}
+
+.reverseCandidateSelectionCardSelected {
+  background: #eff6ff;
+  border-color: #2563eb;
+  box-shadow: inset 4px 0 0 #2563eb;
+}
+
+.reverseCandidateSelectionCard strong,
+.reverseCandidateSelectionEmpty strong {
+  color: #1f2d44;
+  font-size: 0.9rem;
+  font-weight: 900;
+  line-height: 1.35;
+}
+
+.reverseCandidateSelectionCard small {
+  color: #64748b;
+  font-size: 0.75rem;
+  font-weight: 850;
+  line-height: 1.35;
+}
+
+.reverseStartBackButton {
+  align-self: end;
+  background: #f7faff;
+  border: 1px solid #c7d8f5;
+  border-radius: 8px;
+  color: #1c4f91;
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 900;
+  margin-top: auto;
+  min-height: 40px;
+  padding: 0 12px;
+}
+
+.reverseStartBackButton:hover,
+.reverseStartBackButton:focus-visible {
+  background: #eaf2ff;
+  border-color: #8fb5ef;
+  outline: 2px solid rgba(37, 99, 235, 0.2);
+  outline-offset: 2px;
+}
+
+.reverseImportPanelShell {
+  bottom: 24px;
+  max-width: min(520px, calc(100vw - 48px));
+  position: fixed;
+  right: 24px;
+  top: 92px;
+  width: 460px;
+}
+
+.reverseImportPanelShell > * {
+  border-radius: 10px;
+  box-shadow: 0 24px 70px rgba(31, 41, 55, 0.2);
+  height: 100%;
 }
 
 .workspaceAiStartShell {

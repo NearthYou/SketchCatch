@@ -63,7 +63,7 @@ export function createWorkspaceStartOptions(): readonly [
   ];
 }
 
-// 사용자가 고른 시작 방식에 따라 다음에 할 일을 하나로 결정합니다.
+// 사용자가 고른 시작 방식에 따라 프로젝트 생성, 전용 화면 이동, 설정 이동 중 하나를 고릅니다.
 export function resolveWorkspaceStartAction({
   cloudPlatform,
   hasVerifiedAwsConnection,
@@ -80,13 +80,12 @@ export function resolveWorkspaceStartAction({
 
     const params = new URLSearchParams({
       cloudPlatform,
-      projectName,
-      startMode: "reverse"
+      projectName
     });
 
     return {
       kind: "openReversePreview",
-      href: `/workspace?${params.toString()}`
+      href: `/workspace/reverse?${params.toString()}`
     };
   }
 

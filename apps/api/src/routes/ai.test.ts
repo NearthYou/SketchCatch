@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { z } from "zod";
+import { resourceDefinitions } from "@sketchcatch/types/resource-definitions";
 import { buildApp } from "../app.js";
 import { createInMemoryRuntimeCache } from "../runtime-cache/index.js";
 
@@ -446,14 +447,14 @@ test("POST /api/ai/architecture-draft composes resources from natural language f
   await app.close();
 });
 
-test("POST /api/ai/architecture-draft warns when unsupported resources are omitted", async () => {
+test("POST /api/ai/architecture-draft warns when unsupported workflow automation is omitted", async () => {
   const app = buildApp();
 
   const response = await app.inject({
     method: "POST",
     url: "/api/ai/architecture-draft",
     payload: {
-      prompt: "API 서버에 Redis 캐시와 SQS 메시지 큐를 붙여줘"
+      prompt: "API 서버와 CI/CD 자동 구성, GitHub Actions 배포 파이프라인까지 같이 만들어줘"
     }
   });
 
@@ -467,9 +468,39 @@ test("POST /api/ai/architecture-draft warns when unsupported resources are omitt
   assert.equal(body.metadata.selectedDraftPattern, "api_server");
   assert.ok(body.metadata.guardrailWarnings?.some((warning) => warning.code === "unsupported_resource_omitted"));
   assert.ok(body.metadata.guardrailWarnings?.some((warning) => warning.code === "partial_generation"));
-  assert.match(omittedWarning?.message ?? "", /ElastiCache\/Redis/);
+  assert.match(omittedWarning?.message ?? "", /CI\/CD/);
   assert.match(omittedWarning?.message ?? "", /현재 보드에서 제외/);
   assert.equal(body.architectureJson.nodes.some((node) => node.type === "UNKNOWN"), false);
+
+  await app.close();
+});
+
+test("POST /api/ai/architecture-draft includes explicitly requested panel catalog resources", async () => {
+  const app = buildApp();
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/ai/architecture-draft",
+    payload: {
+      prompt: "EKS Cluster, DynamoDB Table, SQS Queue, Auto Scaling Group을 포함해서 연습용 다이어그램을 만들어줘"
+    }
+  });
+
+  assert.equal(response.statusCode, 200);
+
+  const body = architectureDraftResponseSchema.parse(response.json());
+
+  assertDraftHasNodeTypes(body, [
+    "EKS_CLUSTER",
+    "DYNAMODB_TABLE",
+    "SQS_QUEUE",
+    "AUTO_SCALING_GROUP"
+  ]);
+  assert.equal(body.architectureJson.nodes.some((node) => node.type === "UNKNOWN"), false);
+  assert.equal(
+    body.metadata.guardrailWarnings?.some((warning) => warning.code === "unsupported_resource_omitted"),
+    false
+  );
 
   await app.close();
 });
@@ -1039,28 +1070,11 @@ test("POST /api/ai/architecture-draft cuts off clearly unrelated prompts", async
 
 test("POST /api/ai/architecture-draft generates only supported ResourceType values", async () => {
   const app = buildApp();
-  const supportedResourceTypes = new Set([
-    "VPC",
-    "SUBNET",
-    "INTERNET_GATEWAY",
-    "ROUTE_TABLE",
-    "ROUTE_TABLE_ASSOCIATION",
-    "EC2",
-    "RDS",
-    "S3",
-    "SECURITY_GROUP",
-    "CLOUDFRONT",
-    "LAMBDA",
-    "AMI",
-    "IAM_ROLE",
-    "IAM_POLICY",
-    "IAM_INSTANCE_PROFILE",
-    "KMS_KEY",
-    "CLOUDWATCH_LOG_GROUP",
-    "CLOUDWATCH_METRIC_ALARM",
-    "API_GATEWAY_REST_API",
-    "LAMBDA_PERMISSION"
-  ]);
+  const supportedResourceTypes: ReadonlySet<string> = new Set(
+    resourceDefinitions
+      .map((definition) => definition.resourceType)
+      .filter((resourceType) => resourceType !== "UNKNOWN")
+  );
   const payloads = [
     { prompt: "정적 웹사이트를 만들어줘" },
     { prompt: "API 서버를 만들어줘" },

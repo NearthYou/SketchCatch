@@ -148,6 +148,31 @@ test("right panel exposes Brainboard-style Issues, Deploy, and Plan actions", ()
   assert.doesNotMatch(stylesSource, /\.panelDeployButton\s*\{/);
 });
 
+test("reverse engineering is not reachable from persistent right panel toggles", () => {
+  const collapsedPanelIndex = componentSource.indexOf(
+    '<aside className={styles.collapsedRightPanel}'
+  );
+  const collapsedPanelEndIndex = componentSource.indexOf("</aside>", collapsedPanelIndex);
+  const modeToggleIndex = componentSource.indexOf("className={styles.rightPanelModeBar}");
+  const rightPanelViewIndex = componentSource.indexOf(
+    "<div className={styles.rightPanelView}",
+    modeToggleIndex
+  );
+  const collapsedPanelSource = componentSource.slice(collapsedPanelIndex, collapsedPanelEndIndex);
+  const modeToggleSource = componentSource.slice(modeToggleIndex, rightPanelViewIndex);
+
+  assert.ok(collapsedPanelIndex > -1);
+  assert.ok(modeToggleIndex > -1);
+  assert.ok(rightPanelViewIndex > modeToggleIndex);
+  assert.doesNotMatch(collapsedPanelSource, /title="Reverse Engineering"/);
+  assert.doesNotMatch(collapsedPanelSource, /openCollapsedView\("reverse"\)/);
+  assert.doesNotMatch(modeToggleSource, /title="Reverse Engineering"/);
+  assert.doesNotMatch(modeToggleSource, /requestView\("reverse"\)/);
+  assert.doesNotMatch(componentSource, /activeView !== "reverse"/);
+  assert.doesNotMatch(componentSource, /<ReverseEngineeringPanel/);
+  assert.doesNotMatch(componentSource, /reverseCreatesProjectOnApply/);
+});
+
 test("Plan action strip is UI-only and routes only to the Deploy view", () => {
   const planActionStripIndex = componentSource.indexOf("className={styles.panelPlanActionStrip}");
   const planActionStripSource = componentSource.slice(

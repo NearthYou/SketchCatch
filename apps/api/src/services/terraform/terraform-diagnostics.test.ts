@@ -556,6 +556,107 @@ test("warns about aws resources that are not in the shared resource definitions"
   );
 });
 
+test("recognizes service stack resource and data block types from pasted Terraform", () => {
+  const diagnostics = createTerraformDiagnostics(`
+resource "aws_codepipeline" "pipeline" {
+  name = "sketchcatch-pipeline"
+}
+
+resource "aws_codebuild_project" "build" {
+  name = "sketchcatch-build"
+}
+
+resource "aws_codedeploy_app" "app" {
+  name = "sketchcatch-app"
+}
+
+resource "aws_codedeploy_deployment_group" "group" {
+  app_name = aws_codedeploy_app.app.name
+}
+
+resource "aws_cloudfront_origin_access_control" "oac" {
+  name = "static-oac"
+}
+
+resource "aws_iam_role_policy" "policy" {
+  role = aws_iam_role.role.id
+}
+
+resource "aws_iam_role_policy_attachment" "attachment" {
+  role = aws_iam_role.role.name
+}
+
+resource "aws_codestarconnections_connection" "github" {
+  name = "github"
+}
+
+resource "aws_secretsmanager_secret_version" "version" {
+  secret_id = aws_secretsmanager_secret.secret.id
+}
+
+data "aws_caller_identity" "current" {}
+
+data "aws_ssm_parameter" "ami" {
+  name = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64"
+}
+
+resource "aws_route" "default" {
+  route_table_id = aws_route_table.public.id
+}
+`);
+
+  assert.deepEqual(
+    diagnostics.filter((diagnostic) => diagnostic.code === "terraform.unsupported_resource"),
+    []
+  );
+});
+
+test("allows direct heredoc and function-wrapped heredoc values in editor diagnostics", () => {
+  const diagnostics = createTerraformDiagnostics(`
+resource "aws_codebuild_project" "build" {
+  source {
+    buildspec = <<-YAML
+      version: 0.2
+      phases:
+        build:
+          commands:
+            - npm test
+    YAML
+  }
+}
+
+resource "aws_launch_template" "api" {
+  user_data = base64encode(<<-EOF
+    #!/bin/bash
+    echo hello
+  EOF
+  )
+}
+`);
+
+  assert.deepEqual(
+    diagnostics.filter((diagnostic) => diagnostic.severity === "error"),
+    []
+  );
+});
+
+test("does not treat heredoc markers inside string literals as heredoc starts", () => {
+  const diagnostics = createTerraformDiagnostics(`
+resource "aws_vpc" "main" {
+  cidr_block = "10.0.0.0/16"
+
+  tags = {
+    Name = "My <<-EOF instance"
+  }
+}
+`);
+
+  assert.deepEqual(
+    diagnostics.filter((diagnostic) => diagnostic.severity === "error"),
+    []
+  );
+});
+
 test("adds source file names while validating virtual Terraform files", () => {
   const diagnostics = createTerraformValidationDiagnostics({
     terraformCode: "",

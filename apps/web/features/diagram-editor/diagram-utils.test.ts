@@ -185,6 +185,40 @@ test("createDiagramNodeFromPayload does not attach parameters to design nodes", 
   assert.equal(node.parameters, undefined);
 });
 
+test("createDiagramNodeFromPayload treats external actor flow items as design nodes", () => {
+  const userClientNode = createDiagramNodeFromPayload(
+    makeResourceDragPayload(
+      makeResourceItem({
+        id: "design-user-client",
+        resourceType: "sketchcatch_user_client",
+        label: "User / Client"
+      })
+    ),
+    { x: 40, y: 80 },
+    2
+  );
+  const internetNode = createDiagramNodeFromPayload(
+    makeResourceDragPayload(
+      makeResourceItem({
+        id: "design-internet",
+        resourceType: "sketchcatch_internet",
+        label: "Internet"
+      })
+    ),
+    { x: 180, y: 80 },
+    3
+  );
+
+  assert.equal(userClientNode.kind, "design");
+  assert.equal(userClientNode.type, "sketchcatch_user_client");
+  assert.equal(userClientNode.iconUrl, "/resource.svg");
+  assert.equal(userClientNode.parameters, undefined);
+  assert.equal(internetNode.kind, "design");
+  assert.equal(internetNode.type, "sketchcatch_internet");
+  assert.equal(internetNode.iconUrl, "/resource.svg");
+  assert.equal(internetNode.parameters, undefined);
+});
+
 test("createPastedNodes deep clones nested parameter values", () => {
   const node = makeResourceNode({
     id: "security-group-1",

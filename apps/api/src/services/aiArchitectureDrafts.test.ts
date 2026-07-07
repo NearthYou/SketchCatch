@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { resourceDefinitions } from "@sketchcatch/types/resource-definitions";
 import type { AiTextProvider } from "./aiLlmExplanation.js";
 import { createAmazonQArchitectureDraftResponse } from "./aiArchitectureDrafts.js";
 
@@ -368,6 +369,105 @@ test("createAmazonQArchitectureDraftResponse returns the Amazon Q architecture p
   assert.equal(response.architectureJson.nodes[0]?.type, "S3");
   assert.equal(response.llmExplanation?.fallbackUsed, false);
   assert.equal(response.llmExplanation?.providerMetadata?.provider, "amazon_q");
+});
+
+test("createAmazonQArchitectureDraftResponse accepts panel-backed ResourceType values from Amazon Q", async () => {
+  let requestedPrompt = "";
+  let requestedPayload: unknown;
+  const provider = createFakeAmazonQProvider((request) => {
+    requestedPrompt = request.prompt;
+    requestedPayload = request.payload;
+
+    return JSON.stringify({
+      status: "preview",
+      title: "Panel Catalog Resources",
+      architectureJson: {
+        nodes: [
+          {
+            id: "container-cluster",
+            type: "EKS_CLUSTER",
+            label: "EKS Cluster",
+            positionX: 120,
+            positionY: 180,
+            config: {}
+          },
+          {
+            id: "app-autoscaling",
+            type: "AUTO_SCALING_GROUP",
+            label: "Auto Scaling Group",
+            positionX: 360,
+            positionY: 180,
+            config: {}
+          },
+          {
+            id: "state-table",
+            type: "DYNAMODB_TABLE",
+            label: "DynamoDB Table",
+            positionX: 600,
+            positionY: 180,
+            config: {}
+          },
+          {
+            id: "work-queue",
+            type: "SQS_QUEUE",
+            label: "SQS Queue",
+            positionX: 840,
+            positionY: 180,
+            config: {}
+          }
+        ],
+        edges: []
+      },
+      requirementCoverage: [
+        {
+          answer: "panel catalog compute and queue resources",
+          status: "satisfied",
+          capability: "selectedPattern: panel_catalog_resource_brief; rejectedPatterns: standard web templates are not needed; container workers and autoscaling job processing",
+          nodes: ["container-cluster", "app-autoscaling", "work-queue"],
+          assumption: "The requested panel resources are represented directly."
+        },
+        {
+          answer: "DynamoDB Table data requirement",
+          status: "satisfied",
+          capability: "data persistence",
+          nodes: ["state-table"],
+          assumption: "DynamoDB Table is the requested persisted state store."
+        }
+      ]
+    });
+  });
+
+  const response = await createAmazonQArchitectureDraftResponse(
+    {
+      prompt: [
+        "Required components: EKS Cluster, Auto Scaling Group, DynamoDB Table, and SQS Queue.",
+        "Architecture flow: EKS workers process SQS queue jobs and store state in DynamoDB.",
+        "Validation checklist: include those resource-panel components as ResourceNode.type values."
+      ].join("\n")
+    },
+    {
+      provider,
+      creditPolicy: confirmedCreditPolicy
+    }
+  );
+
+  if ("status" in response) {
+    assert.fail(`Expected preview, got clarification: ${response.question}`);
+  }
+
+  const payload = requestedPayload as { supportedResourceTypes?: string[] };
+  const sharedResourceTypes = new Set(
+    resourceDefinitions
+      .map((definition) => definition.resourceType)
+      .filter((resourceType) => resourceType !== "UNKNOWN")
+  );
+
+  assert.match(requestedPrompt, /EKS_CLUSTER/);
+  assert.deepEqual(new Set(payload.supportedResourceTypes), sharedResourceTypes);
+  assert.deepEqual(
+    response.architectureJson.nodes.map((node) => node.type),
+    ["EKS_CLUSTER", "AUTO_SCALING_GROUP", "DYNAMODB_TABLE", "SQS_QUEUE"]
+  );
 });
 
 test("createAmazonQArchitectureDraftResponse creates deterministic decision spaces that vary by answer profile", async () => {
@@ -1298,7 +1398,7 @@ test("createAmazonQArchitectureDraftResponse sends detailed architecture briefs 
   assert.match(requestedPrompt, /Amazon Q Architecture Brief/);
   assert.match(requestedPrompt, /Persistent AWS\/Terraform reference knowledge pack/);
   assert.match(requestedPrompt, /User supplied a detailed architecture brief/);
-  assert.match(requestedPrompt, /AUTO_SCALING_GROUP is not a supported ResourceNode\.type/);
+  assert.match(requestedPrompt, /AUTO_SCALING_GROUP is a supported ResourceNode\.type/);
   assert.match(requestedPrompt, /ArchitectureDecisionSpace/);
   assert.match(requestedPrompt, /direct_media_upload/);
   assert.match(requestedInstructions, /persistent compact AWS\/Terraform referenceKnowledge payload/);
@@ -1318,10 +1418,11 @@ test("createAmazonQArchitectureDraftResponse sends detailed architecture briefs 
   assert.equal(payload.referenceKnowledge?.size, "compact");
   assert.equal(payload.referenceKnowledge?.sourceUrls?.includes("https://aws.amazon.com/ko/solutions/"), true);
   assert.ok((payload.referenceKnowledge?.guidance?.length ?? 0) <= 8);
-  assert.ok(
+  assert.equal(
     payload.architectureDecisionSpace?.unsupportedSubstitutions?.some(
       (substitution) => substitution.requestedService === "Auto Scaling Group"
-    )
+    ),
+    false
   );
   assert.equal(response.title, "Detailed Global Dynamic Website");
 });

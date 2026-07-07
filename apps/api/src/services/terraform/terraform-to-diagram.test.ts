@@ -245,14 +245,106 @@ test("rejects unknown AWS Terraform-only blocks without shared terraformSync def
       edges: [],
       viewport: { x: 0, y: 0, zoom: 1 }
     },
-    `resource "aws_wafv2_web_acl" "web" {
+    `resource "aws_unmodeled_service" "example" {
   name = "web"
 }`
   );
 
   assert.equal(result.proposals?.length, 0);
   assert.equal(result.diagnostics[0]?.code, "terraform.sync.unsupported_resource");
-  assert.equal(result.diagnostics[0]?.resourceAddress, "aws_wafv2_web_acl.web");
+  assert.equal(result.diagnostics[0]?.resourceAddress, "aws_unmodeled_service.example");
+});
+
+test("ignores Terraform utility blocks while syncing supported resources", () => {
+  const result = syncTerraformToDiagramJson(
+    {
+      nodes: [],
+      edges: [],
+      viewport: { x: 0, y: 0, zoom: 1 }
+    },
+    `resource "random_password" "db_password" {
+  length = 20
+}
+
+resource "terraform_data" "build" {
+  input = "artifact"
+}
+
+resource "aws_vpc" "main" {
+  cidr_block = "10.0.0.0/16"
+}`
+  );
+
+  assert.deepEqual(result.diagnostics, []);
+  assert.equal(result.proposals?.length, 1);
+  assert.equal(result.proposals?.[0]?.kind, "create_candidate");
+  assert.equal(result.proposals?.[0]?.identity.resourceType, "aws_vpc");
+});
+
+test("syncs CI/CD Terraform nested blocks from pasted service stacks", () => {
+  const result = syncTerraformToDiagramJson(
+    {
+      nodes: [],
+      edges: [],
+      viewport: { x: 0, y: 0, zoom: 1 }
+    },
+    `resource "aws_codebuild_project" "build" {
+  name = "sketchcatch-build"
+  service_role = aws_iam_role.codebuild.arn
+
+  artifacts {
+    type = "CODEPIPELINE"
+  }
+
+  environment {
+    compute_type = "BUILD_GENERAL1_SMALL"
+    image = "aws/codebuild/amazonlinux2-x86_64-standard:5.0"
+    type = "LINUX_CONTAINER"
+  }
+
+  logs_config {
+    cloudwatch_logs {
+      status = "ENABLED"
+    }
+  }
+
+  source {
+    type = "CODEPIPELINE"
+    buildspec = "version: 0.2"
+  }
+}
+
+resource "aws_codepipeline" "pipeline" {
+  name = "sketchcatch-pipeline"
+  role_arn = aws_iam_role.codepipeline.arn
+
+  artifact_store {
+    location = aws_s3_bucket.artifacts.bucket
+    type = "S3"
+  }
+
+  stage {
+    name = "Source"
+
+    action {
+      category = "Source"
+      name = "Source"
+      owner = "AWS"
+      provider = "CodeStarSourceConnection"
+      version = "1"
+      output_artifacts = ["source_output"]
+    }
+  }
+}`
+  );
+
+  assert.deepEqual(result.diagnostics, []);
+  assert.deepEqual(
+    result.proposals?.map((proposal) =>
+      proposal.kind === "create_candidate" ? proposal.identity.resourceType : proposal.kind
+    ),
+    ["aws_codebuild_project", "aws_codepipeline"]
+  );
 });
 
 test("syncs security group rule as one of the shared 44 resources", () => {

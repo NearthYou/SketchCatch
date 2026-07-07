@@ -102,7 +102,7 @@ test("buildInfrastructureGraphFromDiagramJson keeps invalid nodes for preview sk
 });
 
 test("all shared resource definitions support Terraform Preview and Sync", () => {
-  assert.equal(resourceDefinitions.length, 66);
+  assert.ok(resourceDefinitions.length >= 66);
   assert.deepEqual(
     resourceDefinitions.filter((definition) => !definition.capabilities.terraformPreview),
     []

@@ -139,6 +139,32 @@ test("resourceCatalog exposes Region and AZ as board resource area items", () =>
   });
 });
 
+test("resourceCatalog exposes User / Client and Internet as board-only design items", () => {
+  assert.deepEqual(getCatalogDefaults("design-user-client"), {
+    type: "sketchcatch_user_client",
+    label: "User / Client",
+    size: { width: 124, height: 96 }
+  });
+  assert.deepEqual(getCatalogDefaults("design-internet"), {
+    type: "sketchcatch_internet",
+    label: "Internet",
+    size: { width: 124, height: 96 }
+  });
+
+  assert.equal(
+    existsSync(
+      `${publicDirectoryPath}/Resource-Icons_07312025/Res_General-Icons/Res_48_Light/Res_Client_48_Light.svg`
+    ),
+    true
+  );
+  assert.equal(
+    existsSync(
+      `${publicDirectoryPath}/Resource-Icons_07312025/Res_General-Icons/Res_48_Light/Res_Internet_48_Light.svg`
+    ),
+    true
+  );
+});
+
 test("resourceCatalog keeps regular network resources at icon node size", () => {
   assert.deepEqual(getResourceSize("aws_internet_gateway"), { width: 124, height: 96 });
   assert.deepEqual(getResourceSize("aws_route_table_association"), { width: 124, height: 96 });
