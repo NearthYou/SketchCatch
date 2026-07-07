@@ -30,6 +30,7 @@ import {
   getGitCicdHandoff,
   GitCicdHandoffInvalidStatusTransitionError,
   GitCicdHandoffNotFoundError,
+  GitCicdHandoffProviderConflictError,
   GitCicdHandoffProviderPermissionError,
   GitCicdHandoffProviderMismatchError,
   listProjectGitCicdHandoffs,
@@ -775,6 +776,13 @@ function handleGitCicdHandoffError(error: unknown, reply: FastifyReply) {
   }
 
   if (error instanceof GitCicdHandoffProviderMismatchError) {
+    return reply.status(409).send({
+      error: "conflict",
+      message: error.message
+    });
+  }
+
+  if (error instanceof GitCicdHandoffProviderConflictError) {
     return reply.status(409).send({
       error: "conflict",
       message: error.message
