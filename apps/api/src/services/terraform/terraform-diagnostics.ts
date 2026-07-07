@@ -404,6 +404,7 @@ function checkBodySyntax(terraformCode: string): TerraformDiagnostic[] {
   const diagnostics: TerraformDiagnostic[] = [];
   const lines = splitTerraformLines(terraformCode);
   let depth = 0;
+  let collectionContinuationDepth = 0;
   let activeBlock: ActiveTerraformBlock | null = null;
 
   lines.forEach((lineText, index) => {
@@ -431,14 +432,19 @@ function checkBodySyntax(terraformCode: string): TerraformDiagnostic[] {
       return;
     }
 
-    if (activeBlock && depth === 1 && trimmedLine !== "}") {
+    if (activeBlock && depth === 1 && collectionContinuationDepth === 0 && trimmedLine !== "}") {
       diagnostics.push(...checkTopLevelBlockBodyLine(trimmedLine, index + 1, activeBlock));
     }
 
     depth += getBraceDelta(codeLine);
+    collectionContinuationDepth = Math.max(
+      0,
+      collectionContinuationDepth + getCollectionContinuationDelta(codeLine)
+    );
 
     if (depth <= 0) {
       activeBlock = null;
+      collectionContinuationDepth = 0;
       depth = 0;
     }
   });
@@ -1171,6 +1177,46 @@ function getBraceDelta(lineText: string): number {
     }
 
     if (char === "}") {
+      delta -= 1;
+    }
+  }
+
+  return delta;
+}
+
+function getCollectionContinuationDelta(lineText: string): number {
+  let delta = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let index = 0; index < lineText.length; index += 1) {
+    const char = lineText[index];
+
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+
+    if (char === "\\") {
+      escaped = true;
+      continue;
+    }
+
+    if (char === "\"") {
+      inString = !inString;
+      continue;
+    }
+
+    if (inString) {
+      continue;
+    }
+
+    if (char === "[" || char === "(") {
+      delta += 1;
+      continue;
+    }
+
+    if (char === "]" || char === ")") {
       delta -= 1;
     }
   }

@@ -62,6 +62,19 @@ Verification:
 - `pnpm typecheck`
 - `pnpm build`
 
+- Fixed Terraform fast diagnostics so multiline list continuations inside resource/data blocks are not reported as body syntax errors.
+- Verified the user-provided sample no longer reports false `attribute_syntax` errors for AMI owners and security group ID list entries; remaining errors are the standalone `erere`, unresolved references, and unsupported S3 provider arguments.
+
+Verification:
+
+- `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-diagnostics.test.ts`
+- `pnpm --filter @sketchcatch/api typecheck`
+- `pnpm --filter @sketchcatch/api lint`
+- `pnpm harness:check`
+- `pnpm lint`
+- `pnpm typecheck`
+- `pnpm build`
+
 - Fixed the Issues tab scroll container by giving the Issues panel a fixed height chain and moving vertical overflow to the Terraform diagnostics body.
 - Added a layout regression assertion so the Issues panel keeps `min-height: 0`, `overflow-y: auto`, and stable scrollbar gutter.
 

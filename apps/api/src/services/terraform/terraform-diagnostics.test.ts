@@ -169,6 +169,27 @@ test("reports a non-attribute resource body line as one syntax error", () => {
   );
 });
 
+test("allows multiline list attributes inside resource and data blocks", () => {
+  const diagnostics = createTerraformDiagnostics(`data "aws_ami" "ami_app" {
+  owners = [
+    "amazon",
+  ]
+  name_regex = "^al2023-ami-2023.*-x86_64$"
+  most_recent = true
+}
+
+resource "aws_instance" "web" {
+  vpc_security_group_ids = [
+    aws_security_group.sg_app.id,
+  ]
+}`);
+
+  assert.equal(
+    diagnostics.some((diagnostic) => diagnostic.code === "terraform.attribute_syntax"),
+    false
+  );
+});
+
 test("detects trailing commas after attribute assignments", () => {
   const diagnostics = createTerraformDiagnostics(`resource "aws_security_group_rule" "ssh" {
   type = "ingress",
