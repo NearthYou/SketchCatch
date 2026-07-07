@@ -1,8 +1,8 @@
-"use client";
+﻿"use client";
 
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { ArrowLeft, Check, RefreshCw, Send, X } from "lucide-react";
+import { ArrowLeft, Check, Maximize2, RefreshCw, Send, X, ZoomIn, ZoomOut } from "lucide-react";
 import type {
   AiArchitectureDraftResult,
   ArchitectureDraftClarification,
@@ -36,6 +36,9 @@ const MINI_DIAGRAM_PADDING = 56;
 const MINI_DIAGRAM_AREA_HEADER_HEIGHT = 24;
 const MINI_DIAGRAM_AREA_HEADER_MAX_WIDTH = 260;
 const MINI_DIAGRAM_MAX_LABEL_LENGTH = 28;
+const MINI_DIAGRAM_ZOOM_LEVELS = [1, 1.35, 1.7, 2.1, 2.6] as const;
+const MINI_DIAGRAM_MIN_ZOOM = 1;
+const MINI_DIAGRAM_MAX_ZOOM = 2.6;
 const COPY = {
   approve: "\uC2B9\uC778",
   cancel: "\uCDE8\uC18C",
@@ -486,16 +489,150 @@ export function WorkspaceAiStartClient() {
 }
 
 function MiniDiagramPreview({ diagram }: { readonly diagram: DiagramJson }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [zoomLevel, setZoomLevel] = useState(MINI_DIAGRAM_MIN_ZOOM);
   const layout = createMiniDiagramLayout(diagram);
   const nodeById = new Map(layout.nodes.map((node) => [node.id, node]));
   const areaNodes = layout.nodes.filter((node) => node.isArea);
   const resourceNodes = layout.nodes.filter((node) => !node.isArea);
+  const isZoomed = zoomLevel > MINI_DIAGRAM_MIN_ZOOM;
+  const canZoomOut = zoomLevel > MINI_DIAGRAM_MIN_ZOOM;
+  const canZoomIn = zoomLevel < MINI_DIAGRAM_MAX_ZOOM;
 
+  useEffect(() => {
+    if (!isExpanded) {
+      return;
+    }
+
+    function handleKeyDown(event: globalThis.KeyboardEvent): void {
+      if (event.key === "Escape") {
+        setIsExpanded(false);
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isExpanded]);
+
+  function openExpandedPreview(): void {
+    setZoomLevel(MINI_DIAGRAM_MIN_ZOOM);
+    setIsExpanded(true);
+  }
+
+  return (
+    <div className="workspaceAiMiniDiagramPanel">
+      <div className="workspaceAiMiniDiagramToolbar" aria-label={COPY.diagramPreview}>
+        <span>100%</span>
+        <div>
+          <button
+            aria-label="Open full screen diagram preview"
+            onClick={openExpandedPreview}
+            title="Full screen"
+            type="button"
+          >
+            <Maximize2 size={15} aria-hidden="true" />
+          </button>
+        </div>
+      </div>
+      <div className="workspaceAiMiniDiagramViewport">
+        <MiniDiagramCanvas
+          areaNodes={areaNodes}
+          diagram={diagram}
+          fitToViewport
+          layout={layout}
+          nodeById={nodeById}
+          resourceNodes={resourceNodes}
+          zoomLevel={MINI_DIAGRAM_MIN_ZOOM}
+        />
+      </div>
+
+      {isExpanded ? (
+        <div aria-label={COPY.diagramPreview} aria-modal="true" className="workspaceAiMiniDiagramOverlay" role="dialog">
+          <div className="workspaceAiMiniDiagramOverlaySurface">
+            <div className="workspaceAiMiniDiagramToolbar workspaceAiMiniDiagramFullscreenToolbar">
+              <span>{Math.round(zoomLevel * 100)}%</span>
+              <div>
+                <button
+                  aria-label="Zoom diagram out"
+                  disabled={!canZoomOut}
+                  onClick={() => setZoomLevel((currentZoomLevel) => getNextMiniDiagramZoom(currentZoomLevel, -1))}
+                  title="Zoom out"
+                  type="button"
+                >
+                  <ZoomOut size={15} aria-hidden="true" />
+                </button>
+                <button
+                  aria-label="Zoom diagram in"
+                  disabled={!canZoomIn}
+                  onClick={() => setZoomLevel((currentZoomLevel) => getNextMiniDiagramZoom(currentZoomLevel, 1))}
+                  title="Zoom in"
+                  type="button"
+                >
+                  <ZoomIn size={15} aria-hidden="true" />
+                </button>
+                <button
+                  aria-label="Reset diagram zoom"
+                  disabled={!isZoomed}
+                  onClick={() => setZoomLevel(MINI_DIAGRAM_MIN_ZOOM)}
+                  title="Reset zoom"
+                  type="button"
+                >
+                  <RefreshCw size={15} aria-hidden="true" />
+                </button>
+                <button
+                  aria-label="Close full screen diagram preview"
+                  onClick={() => setIsExpanded(false)}
+                  title="Close"
+                  type="button"
+                >
+                  <X size={15} aria-hidden="true" />
+                </button>
+              </div>
+            </div>
+            <div className="workspaceAiMiniDiagramFullscreenViewport" data-zoomed={isZoomed ? "true" : "false"}>
+              <MiniDiagramCanvas
+                areaNodes={areaNodes}
+                diagram={diagram}
+                fitToViewport={!isZoomed}
+                layout={layout}
+                nodeById={nodeById}
+                resourceNodes={resourceNodes}
+                zoomLevel={zoomLevel}
+              />
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function MiniDiagramCanvas({
+  areaNodes,
+  diagram,
+  fitToViewport,
+  layout,
+  nodeById,
+  resourceNodes,
+  zoomLevel
+}: {
+  readonly areaNodes: readonly MiniDiagramNode[];
+  readonly diagram: DiagramJson;
+  readonly fitToViewport: boolean;
+  readonly layout: MiniDiagramLayout;
+  readonly nodeById: ReadonlyMap<string, MiniDiagramNode>;
+  readonly resourceNodes: readonly MiniDiagramNode[];
+  readonly zoomLevel: number;
+}) {
   return (
     <svg
       aria-label={COPY.diagramPreview}
       className="workspaceAiMiniDiagram"
+      data-fit={fitToViewport ? "true" : "false"}
+      preserveAspectRatio="xMidYMid meet"
       role="img"
+      style={fitToViewport ? undefined : { width: `${zoomLevel * 100}%` }}
       viewBox={`0 0 ${layout.width} ${layout.height}`}
     >
       {areaNodes.map((node) => (
@@ -622,6 +759,26 @@ function MiniDiagramPreview({ diagram }: { readonly diagram: DiagramJson }) {
   );
 }
 
+function getNextMiniDiagramZoom(currentZoomLevel: number, direction: -1 | 1): number {
+  const currentIndex = MINI_DIAGRAM_ZOOM_LEVELS.findIndex((zoomLevel) => zoomLevel === currentZoomLevel);
+  const fallbackIndex = MINI_DIAGRAM_ZOOM_LEVELS.reduce(
+    (closestIndex, zoomLevel, index) => {
+      const closestZoomLevel = MINI_DIAGRAM_ZOOM_LEVELS[closestIndex] ?? MINI_DIAGRAM_MIN_ZOOM;
+
+      return Math.abs(zoomLevel - currentZoomLevel) < Math.abs(closestZoomLevel - currentZoomLevel)
+        ? index
+        : closestIndex;
+    },
+    0
+  );
+  const nextIndex = Math.min(
+    Math.max((currentIndex === -1 ? fallbackIndex : currentIndex) + direction, 0),
+    MINI_DIAGRAM_ZOOM_LEVELS.length - 1
+  );
+
+  return MINI_DIAGRAM_ZOOM_LEVELS[nextIndex] ?? MINI_DIAGRAM_MIN_ZOOM;
+}
+
 function createMiniDiagramLayout(diagram: DiagramJson): {
   readonly height: number;
   readonly nodes: readonly MiniDiagramNode[];
@@ -656,6 +813,8 @@ function createMiniDiagramLayout(diagram: DiagramJson): {
     width: Math.max(bounds.right - bounds.left + MINI_DIAGRAM_PADDING * 2, 1)
   };
 }
+
+type MiniDiagramLayout = ReturnType<typeof createMiniDiagramLayout>;
 
 type MiniDiagramNode = {
   readonly centerX: number;
@@ -741,7 +900,7 @@ function getMiniDiagramAreaHeaderWidth(
 }
 
 function truncateMiniDiagramLabel(label: string, maxLength: number): string {
-  return label.length > maxLength ? `${label.slice(0, Math.max(0, maxLength - 1))}…` : label;
+  return label.length > maxLength ? `${label.slice(0, Math.max(0, maxLength - 3))}...` : label;
 }
 
 function readAiStartDraft(): WorkspaceStartDraft | null {

@@ -6,7 +6,7 @@ This file is the short, English-only working log for the current agent context. 
 
 Branch/worktree:
 
-- Branch: `feat/ck/217-create-new-project`
+- Branch: `chore/ck/226-ai-ui`
 - Worktree: `C:\Jungle\SketchCatch`
 - Base: latest local `dev` at `723ede2c` after fetching and fast-forwarding from `origin/dev`
 
@@ -17,6 +17,7 @@ Recent branch work:
 - Refined `/workspace/ai` mini diagram preview to use the same diagram icon sources as the board, hide names, and relax close icon positions to reduce overlap.
 - Restyled the standalone `/workspace/ai` chat UI from a dark isolated theme to the shared light board/workspace palette.
 - Reworked `/workspace/ai` mini diagram preview again to preserve the generated board coordinates, sizes, labels, area containers, and edges as a scaled board snapshot instead of a simplified icon map.
+- Added a full-screen overlay for the `/workspace/ai` board-style mini preview; the first expanded state fits the whole diagram, then zoom controls allow detailed inspection inside a scrollable frame.
 - Addressed PR #224 review feedback by reusing the created project ID after an approval save failure and by guarding local/session storage writes.
 - Added source and browser regressions for the new project start and AI start flow.
 - Committed the branch work as `2bab6899`.
@@ -40,6 +41,7 @@ Verification so far:
 - Latest mini preview change verification passed: focused `workspace-new-project-start-mode.test.ts`, `@sketchcatch/web` typecheck, `git diff --check`, repo `pnpm lint`, repo `pnpm typecheck`, repo `pnpm build`, and `pnpm harness:check`. Browser screenshot verification was skipped because no browser/Playwright runtime is installed in this session.
 - Latest standalone AI chat color verification passed: focused `workspace-new-project-start-mode.test.ts`, `@sketchcatch/web` typecheck, `git diff --check`, repo `pnpm lint`, repo `pnpm typecheck`, and repo `pnpm build`.
 - Latest board-snapshot mini preview verification passed: focused `workspace-new-project-start-mode.test.ts`, `@sketchcatch/web` typecheck, `git diff --check`, repo `pnpm lint`, repo `pnpm typecheck`, and repo `pnpm build`.
+- Latest mini preview full-screen zoom verification passed: focused `workspace-new-project-start-mode.test.ts`, `@sketchcatch/web` typecheck, `git diff --check`, repo `pnpm lint`, repo `pnpm typecheck`, repo `pnpm build`, and `pnpm harness:check`.
 
 ## Session Record
 
@@ -60,7 +62,9 @@ Verification so far:
 - Committed the mini diagram preview fix as `eb488122` (`Fix: AI 초안 미리보기 겹침 개선`).
 - Updated standalone `/workspace/ai` chat colors, message bubbles, composer, and mini preview frame to use the shared light `bp` palette.
 - Replaced the simplified AI-start mini diagram renderer with a scaled board-style SVG renderer that keeps original positions, node sizes, labels, area headers, and edge labels.
+- Committed the board-style mini preview update as `03db3073` (`Fix: AI 초안 미리보기 보드 축소판 적용`).
+- Revised the board-style mini preview so the card view fits the whole diagram, the full-screen overlay opens at whole-diagram fit, and zoom in/out/reset controls work inside the overlay.
 
 Next steps:
 
-- Review the `/workspace/ai` board-style mini preview visually in a browser-enabled session if available; no pending code verification remains locally.
+- Review the `/workspace/ai` zoomable board-style mini preview visually in a browser-enabled session if available; no pending code verification remains locally.

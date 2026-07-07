@@ -4586,7 +4586,59 @@ nextjs-portal {
   white-space: nowrap;
 }
 
-.workspaceAiMiniDiagram {
+.workspaceAiMiniDiagramPanel {
+  display: grid;
+  gap: 8px;
+}
+
+.workspaceAiMiniDiagramToolbar {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.workspaceAiMiniDiagramToolbar span {
+  color: var(--bp-blue);
+  font-family: var(--bp-head);
+  font-size: 0.72rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.workspaceAiMiniDiagramToolbar div {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.workspaceAiMiniDiagramToolbar button {
+  align-items: center;
+  background: var(--bp-paper);
+  border: 1px solid var(--bp-line);
+  border-radius: var(--bp-r);
+  color: var(--bp-blue);
+  display: inline-flex;
+  height: 30px;
+  justify-content: center;
+  padding: 0;
+  width: 30px;
+}
+
+.workspaceAiMiniDiagramToolbar button:hover:not(:disabled),
+.workspaceAiMiniDiagramToolbar button:focus-visible {
+  background: var(--bp-blue-tint);
+  border-color: color-mix(in srgb, var(--bp-blue) 42%, var(--bp-line));
+  outline: none;
+}
+
+.workspaceAiMiniDiagramToolbar button:disabled {
+  color: var(--bp-muted);
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.workspaceAiMiniDiagramViewport {
+  align-items: center;
   background:
     linear-gradient(var(--bp-grid) 1px, transparent 1px),
     linear-gradient(90deg, var(--bp-grid) 1px, transparent 1px),
@@ -4594,9 +4646,73 @@ nextjs-portal {
   background-size: 24px 24px;
   border: 1px solid var(--bp-line);
   border-radius: var(--bp-r);
+  display: flex;
+  height: clamp(180px, 34vh, 260px);
+  justify-content: center;
+  overflow: hidden;
+}
+
+.workspaceAiMiniDiagram {
+  display: block;
   height: auto;
-  max-height: 260px;
+  min-width: 100%;
+  transition: width 140ms ease;
+}
+
+.workspaceAiMiniDiagram[data-fit="true"] {
+  height: 100%;
+  min-width: 0;
   width: 100%;
+}
+
+.workspaceAiMiniDiagramOverlay {
+  align-items: center;
+  background: color-mix(in srgb, var(--bp-ink) 34%, transparent);
+  display: flex;
+  inset: 0;
+  padding: 24px;
+  position: fixed;
+  z-index: 80;
+}
+
+.workspaceAiMiniDiagramOverlaySurface {
+  background: var(--bp-paper);
+  border: 1px solid color-mix(in srgb, var(--bp-blue) 24%, var(--bp-line));
+  border-radius: var(--bp-r);
+  box-shadow: 0 24px 70px color-mix(in srgb, var(--bp-ink) 22%, transparent);
+  display: grid;
+  gap: 12px;
+  grid-template-rows: auto 1fr;
+  height: min(860px, calc(100vh - 48px));
+  margin: 0 auto;
+  padding: 12px;
+  width: min(1180px, 100%);
+}
+
+.workspaceAiMiniDiagramFullscreenToolbar {
+  border-bottom: 1px solid var(--bp-line);
+  padding-bottom: 10px;
+}
+
+.workspaceAiMiniDiagramFullscreenViewport {
+  align-items: center;
+  background:
+    linear-gradient(var(--bp-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--bp-grid) 1px, transparent 1px),
+    var(--bp-paper);
+  background-size: 24px 24px;
+  border: 1px solid var(--bp-line);
+  border-radius: var(--bp-r);
+  display: flex;
+  justify-content: center;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.workspaceAiMiniDiagramFullscreenViewport[data-zoomed="true"] {
+  align-items: flex-start;
+  justify-content: flex-start;
+  overflow: auto;
 }
 
 .workspaceAiMiniDiagramEdge {
