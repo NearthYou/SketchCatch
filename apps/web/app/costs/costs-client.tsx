@@ -28,15 +28,13 @@ import {
   ExternalLink,
   LineChart,
   Link,
-  PiggyBank,
   RefreshCw
 } from "lucide-react";
 import { DashboardIcon } from "../../components/dashboard/dashboard-icons";
 import {
   analyzeCostUsageTrendShape,
   createCostUsageLineChart,
-  createServiceCostBars,
-  sumEstimatedMonthlySavings
+  createServiceCostBars
 } from "../../features/costs/cost-usage-charts";
 import {
   COST_USAGE_ALL_PROJECTS_KEY,
@@ -922,10 +920,6 @@ function CostUsageAnalysisTab({
     () => analyzeCostUsageTrendShape(scopedDailyTrend),
     [scopedDailyTrend]
   );
-  const monthlySavings = useMemo(
-    () => sumEstimatedMonthlySavings(scopedRecommendations),
-    [scopedRecommendations]
-  );
   const selectedUsageAmount = selectedUsageProject?.amount ?? usageData?.totalCost.amount ?? 0;
   const selectedUsageLabel = selectedUsageProject?.projectName ?? "전체 프로젝트";
 
@@ -1063,19 +1057,19 @@ function CostUsageAnalysisTab({
               />
               <CostMetricCard
                 icon={<Activity size={18} aria-hidden="true" />}
-                label={selectedUsageProject === null ? "월말 예상" : "전체 대비"}
+                label={selectedUsageProject === null ? "분석 기간" : "전체 대비"}
                 value={
                   selectedUsageProject === null
-                    ? formatUsd(usageData.forecastMonthEndCost.amount)
+                    ? getUsageRangeLabel(appliedUsageRange)
                     : formatPercent(selectedUsageProject.percentage)
                 }
               />
               <CostMetricCard
-                icon={<PiggyBank size={18} aria-hidden="true" />}
-                label={selectedUsageProject === null ? "최적화 가능액" : "산정 리소스"}
+                icon={<BarChart3 size={18} aria-hidden="true" />}
+                label={selectedUsageProject === null ? "프로젝트 수" : "산정 리소스"}
                 value={
                   selectedUsageProject === null
-                    ? formatUsd(monthlySavings)
+                    ? `${usageData.projectCosts.length}개`
                     : `${selectedUsageProject.resourceCount}개`
                 }
               />
@@ -1130,41 +1124,49 @@ function CostUsageAnalysisTab({
             />
           </section>
 
-          <section className="dashboardPanel costProjectPanel" aria-labelledby="cost-resource-usage-title">
-            <div className="dashboardPanelHeader">
-              <div>
-                <p className="dashboardPanelKicker">Resource billing</p>
-                <h2 id="cost-resource-usage-title">리소스별 비용</h2>
-              </div>
-              <span className="dashboardCountBadge">{scopedResourceCosts.length}개</span>
-            </div>
-            <ResourceUsageTable
-              resourceCosts={scopedResourceCosts}
-              selectedProject={selectedUsageProject}
-            />
-          </section>
+          {selectedUsageProject === null ? (
+            <section className="dashboardPanel costProjectPanel">
+              <CostStatus message="프로젝트를 선택하면 리소스별 비용, 낭비 리소스, 절감 추천을 확인할 수 있습니다." />
+            </section>
+          ) : (
+            <>
+              <section className="dashboardPanel costProjectPanel" aria-labelledby="cost-resource-usage-title">
+                <div className="dashboardPanelHeader">
+                  <div>
+                    <p className="dashboardPanelKicker">Resource billing</p>
+                    <h2 id="cost-resource-usage-title">리소스별 비용</h2>
+                  </div>
+                  <span className="dashboardCountBadge">{scopedResourceCosts.length}개</span>
+                </div>
+                <ResourceUsageTable
+                  resourceCosts={scopedResourceCosts}
+                  selectedProject={selectedUsageProject}
+                />
+              </section>
 
-          <section className="dashboardPanel costRecommendationPanel" aria-labelledby="cost-waste-title">
-            <div className="dashboardPanelHeader">
-              <div>
-                <p className="dashboardPanelKicker">Waste detection</p>
-                <h2 id="cost-waste-title">낭비 리소스</h2>
-              </div>
-              <span className="dashboardCountBadge">{scopedWasteResources.length}개</span>
-            </div>
-            <WasteResourceList metricSeries={usageData.metricSeries} wasteResources={scopedWasteResources} />
-          </section>
+              <section className="dashboardPanel costRecommendationPanel" aria-labelledby="cost-waste-title">
+                <div className="dashboardPanelHeader">
+                  <div>
+                    <p className="dashboardPanelKicker">Waste detection</p>
+                    <h2 id="cost-waste-title">낭비 리소스</h2>
+                  </div>
+                  <span className="dashboardCountBadge">{scopedWasteResources.length}개</span>
+                </div>
+                <WasteResourceList metricSeries={usageData.metricSeries} wasteResources={scopedWasteResources} />
+              </section>
 
-          <section className="dashboardPanel costRecommendationPanel" aria-labelledby="cost-recommendation-title">
-            <div className="dashboardPanelHeader">
-              <div>
-                <p className="dashboardPanelKicker">Optimization</p>
-                <h2 id="cost-recommendation-title">절감 추천</h2>
-              </div>
-              <span className="dashboardCountBadge">{scopedRecommendations.length}개</span>
-            </div>
-            <RecommendationList recommendations={scopedRecommendations} />
-          </section>
+              <section className="dashboardPanel costRecommendationPanel" aria-labelledby="cost-recommendation-title">
+                <div className="dashboardPanelHeader">
+                  <div>
+                    <p className="dashboardPanelKicker">Optimization</p>
+                    <h2 id="cost-recommendation-title">절감 추천</h2>
+                  </div>
+                  <span className="dashboardCountBadge">{scopedRecommendations.length}개</span>
+                </div>
+                <RecommendationList recommendations={scopedRecommendations} />
+              </section>
+            </>
+          )}
         </>
       ) : null}
     </>
@@ -1377,12 +1379,21 @@ function DailyCostLineChart({
   readonly chart: ReturnType<typeof createCostUsageLineChart>;
   readonly dailyTrend: readonly CostUsageTrendPoint[];
 }) {
+  const middleAmount = chart.maxAmount / 2;
+
   return (
     <div className="costLineChart" aria-label="일별 비용 추세 그래프">
       <div className="costLineChartPlot">
-        <span className="costLineChartYAxis">비용</span>
+        <div className="costLineChartYAxis" aria-hidden="true">
+          <span>{formatUsd(chart.maxAmount)}</span>
+          <span>{formatUsd(middleAmount)}</span>
+          <span>{formatUsd(0)}</span>
+        </div>
         <svg className="costLineChartSvg" preserveAspectRatio="none" viewBox="0 0 640 180">
-          <path className="costLineChartGrid" d="M 0 45 L 640 45 M 0 90 L 640 90 M 0 135 L 640 135" />
+          <path
+            className="costLineChartGrid"
+            d="M 0 0 L 640 0 M 0 45 L 640 45 M 0 90 L 640 90 M 0 135 L 640 135 M 0 180 L 640 180"
+          />
           <path className="costLineChartPath" d={chart.path} />
           {chart.points.map((point) => (
             <circle cx={point.x} cy={point.y} key={`${point.date}-${point.amount}`} r="4" />

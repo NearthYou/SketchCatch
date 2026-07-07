@@ -9291,19 +9291,34 @@ nextjs-portal {
 .costLineChartPlot {
   align-items: stretch;
   display: grid;
-  gap: 8px;
-  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 10px;
+  grid-template-columns: 64px minmax(0, 1fr);
 }
 
 .costLineChartYAxis {
-  align-items: center;
   color: var(--bp-muted);
-  display: inline-flex;
-  font-size: 0.76rem;
+  display: grid;
+  font-size: 0.78rem;
   font-weight: 800;
-  justify-content: center;
   letter-spacing: 0;
-  writing-mode: vertical-rl;
+  line-height: 1;
+  padding-block: 12px;
+}
+
+.costLineChartYAxis span {
+  align-items: center;
+  display: flex;
+  justify-content: flex-end;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.costLineChartYAxis span:first-child {
+  align-items: flex-start;
+}
+
+.costLineChartYAxis span:last-child {
+  align-items: flex-end;
 }
 
 .costLineChartSvg {

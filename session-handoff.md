@@ -6,45 +6,32 @@ Use this file only for compact continuation context. Write it in English. Keep o
 
 Current branch:
 
-- `codex/aws-runtime-policy-deploy-fix`
+- `feat/ys/142-cost-risk-분석-구현`
 
 Current worktree:
 
-- `C:\Users\siwon\Desktop\Jungle\Week17~21\SketchCatch-worktrees\aws-runtime-policy-deploy-fix`
+- `C:\krafton_jungle\SketchCatch`
 
 ## Changes This Session
 
-- Added `Apply EC2 runtime IAM policy` to the production deploy workflow.
-- Added bounded IAM permission documentation for the GitHub deployment role.
-- Added `scripts/deploy-runtime-iam-policy.test.mjs`.
-- Compressed `agent-progress.md` and `session-handoff.md`.
-- Updated `AGENTS.md` and `scripts/check-harness.mjs` so these files stay concise and English-only.
+- Daily usage chart y-axis now displays USD tick labels.
+- Usage detail sections for resource billing, waste resources, and recommendations are hidden until a specific project is selected.
+- Fallback project cost rows now use deterministic, distinct project weights instead of equal sample amounts when no deployed resources exist.
+- Waste findings and recommendation actions now use clearer user-facing explanations and concrete downsizing suggestions.
 
-## Broken Or Unverified
+## Verification
 
-Latest user issue:
-
-- Stack creation succeeds from the AWS connection Quick Create flow.
-- Account ID verification fails with HTTP 400 from `verify-created-role`.
-
-Most likely root cause:
-
-- Production `SketchCatch-EC2-Role` has not been updated with the new runtime policy that allows `sts:AssumeRole` on `SketchCatchTerraformExecutionRole-*`.
-- The app code was deployed, but the production workflow did not apply `infra/aws/iam/ec2-runtime-policy.json` to the real EC2 runtime role.
-
-Verification already run:
-
-- `node --test scripts/deploy-runtime-iam-policy.test.mjs`
+- `pnpm --filter @sketchcatch/api exec tsx --test src/services/cost-usage-analysis.test.ts src/routes/costs.test.ts`
+- `pnpm --filter @sketchcatch/web exec tsx --test features/costs/cost-usage-project-view.test.ts features/costs/cost-usage-charts.test.ts features/workspace/api.test.ts`
 - `pnpm harness:check`
 - `pnpm lint`
 - `pnpm typecheck`
 - `pnpm build`
-- `git diff --check`
+
+## Broken Or Unverified
+
+- Authenticated browser smoke could not be completed because the local Playwright session had no login state and the documented demo account returned 401.
 
 ## Best Next Action
 
-Operational next step:
-
-- Merge the PR and run `Deploy Production`.
-- If the deploy workflow fails with `AccessDenied` during `Apply EC2 runtime IAM policy`, manually grant the real `GitHubActionsDeployRole` the documented `AllowSketchCatchRuntimePolicyUpdate` permission and rerun deploy.
-- Once deploy succeeds, retry the same AWS Account ID verification in SketchCatch.
+- Commit the current cost usage fixes with a `Fix:` title.
