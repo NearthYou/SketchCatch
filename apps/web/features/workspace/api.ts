@@ -863,6 +863,7 @@ export async function listCostProjectEstimates(input: {
 
 export async function listCostUsageAnalysis(input: {
   awsConnectionId?: string | undefined;
+  projectId?: string | undefined;
   range: CostUsageAnalysisRange;
 }): Promise<CostUsageAnalysisResponse> {
   const params = new URLSearchParams({
@@ -871,6 +872,10 @@ export async function listCostUsageAnalysis(input: {
 
   if (input.awsConnectionId !== undefined) {
     params.set("awsConnectionId", input.awsConnectionId);
+  }
+
+  if (input.projectId !== undefined) {
+    params.set("projectId", input.projectId);
   }
 
   return apiFetch<CostUsageAnalysisResponse>(`/costs/usage?${params.toString()}`, {

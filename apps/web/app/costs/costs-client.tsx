@@ -42,9 +42,11 @@ import {
   COST_USAGE_ALL_PROJECTS_KEY,
   createScopedCostUsageDailyTrend,
   createCostUsageProjectOptions,
+  getCostUsageProjectIdFromKey,
   normalizeCostUsageProjectKey,
   selectCostUsageResourceCosts,
-  selectCostUsageProject
+  selectCostUsageProject,
+  type CostUsageProjectOption
 } from "../../features/costs/cost-usage-project-view";
 import {
   formatCostUsageAwsConnectionLabel,
@@ -104,6 +106,12 @@ export function CostsClient() {
   const [includedProjectIds, setIncludedProjectIds] = useState<readonly string[] | null>(null);
   const [usageRangeInput, setUsageRangeInput] = useState<CostUsageAnalysisRange>("30d");
   const [appliedUsageRange, setAppliedUsageRange] = useState<CostUsageAnalysisRange>("30d");
+  const [usageProjectKeyInput, setUsageProjectKeyInput] = useState(
+    COST_USAGE_ALL_PROJECTS_KEY
+  );
+  const [appliedUsageProjectKey, setAppliedUsageProjectKey] = useState(
+    COST_USAGE_ALL_PROJECTS_KEY
+  );
   const [usageData, setUsageData] = useState<CostUsageAnalysisResponse | null>(null);
   const [usageState, setUsageState] = useState<CostPageState>("loading");
   const [usageErrorMessage, setUsageErrorMessage] = useState("");
@@ -219,11 +227,17 @@ export function CostsClient() {
       setUsageErrorMessage("");
 
       try {
+        const appliedUsageProjectId = getCostUsageProjectIdFromKey(appliedUsageProjectKey);
         const result = await listCostUsageAnalysis({
           ...(selectedUsageAwsConnection === null
             ? {}
             : {
                 awsConnectionId: selectedUsageAwsConnection.id
+              }),
+          ...(appliedUsageProjectId === null
+            ? {}
+            : {
+                projectId: appliedUsageProjectId
               }),
           range: appliedUsageRange
         });
@@ -249,7 +263,13 @@ export function CostsClient() {
     return () => {
       ignore = true;
     };
-  }, [activeTab, appliedUsageRange, selectedUsageAwsConnection?.id, usageReloadKey]);
+  }, [
+    activeTab,
+    appliedUsageProjectKey,
+    appliedUsageRange,
+    selectedUsageAwsConnection?.id,
+    usageReloadKey
+  ]);
 
   useEffect(() => {
     if (activeTab !== "usage") {
@@ -332,6 +352,12 @@ export function CostsClient() {
 
   function applyUsageRange(): void {
     setAppliedUsageRange(usageRangeInput);
+    setAppliedUsageProjectKey(usageProjectKeyInput);
+  }
+
+  function selectUsageProject(projectKey: string): void {
+    setUsageProjectKeyInput(projectKey);
+    setAppliedUsageProjectKey(projectKey);
   }
 
   async function refreshAwsConnections(): Promise<void> {
@@ -746,6 +772,7 @@ export function CostsClient() {
       ) : (
         <CostUsageAnalysisTab
           appliedUsageRange={appliedUsageRange}
+          appliedUsageProjectKey={appliedUsageProjectKey}
           applyUsageRange={applyUsageRange}
           awsAccountIdInput={awsAccountIdInput}
           awsConnectionActionMessage={awsConnectionActionMessage}
@@ -764,9 +791,13 @@ export function CostsClient() {
           refreshUsage={() => setUsageReloadKey((currentKey) => currentKey + 1)}
           selectedAwsConnection={selectedUsageAwsConnection}
           selectedAwsConnectionId={selectedUsageAwsConnection?.id ?? ""}
+          selectUsageProject={selectUsageProject}
+          setAppliedUsageProjectKey={setAppliedUsageProjectKey}
+          setUsageProjectKeyInput={setUsageProjectKeyInput}
           setUsageRangeInput={setUsageRangeInput}
           usageData={usageData}
           usageErrorMessage={usageErrorMessage}
+          usageProjectKeyInput={usageProjectKeyInput}
           usageRangeInput={usageRangeInput}
           usageState={usageState}
           verifiedAwsConnections={verifiedUsageAwsConnections}
@@ -778,6 +809,7 @@ export function CostsClient() {
 
 function CostUsageAnalysisTab({
   appliedUsageRange,
+  appliedUsageProjectKey,
   applyUsageRange,
   awsAccountIdInput,
   awsConnectionActionMessage,
@@ -794,14 +826,19 @@ function CostUsageAnalysisTab({
   refreshUsage,
   selectedAwsConnection,
   selectedAwsConnectionId,
+  selectUsageProject,
+  setAppliedUsageProjectKey,
+  setUsageProjectKeyInput,
   setUsageRangeInput,
   usageData,
   usageErrorMessage,
+  usageProjectKeyInput,
   usageRangeInput,
   usageState,
   verifiedAwsConnections
 }: {
   readonly appliedUsageRange: CostUsageAnalysisRange;
+  readonly appliedUsageProjectKey: string;
   readonly applyUsageRange: () => void;
   readonly awsAccountIdInput: string;
   readonly awsConnectionActionMessage: string;
@@ -818,28 +855,43 @@ function CostUsageAnalysisTab({
   readonly refreshUsage: () => void;
   readonly selectedAwsConnection: AwsConnection | null;
   readonly selectedAwsConnectionId: string;
+  readonly selectUsageProject: (projectKey: string) => void;
+  readonly setAppliedUsageProjectKey: (projectKey: string | ((currentKey: string) => string)) => void;
+  readonly setUsageProjectKeyInput: (projectKey: string | ((currentKey: string) => string)) => void;
   readonly setUsageRangeInput: (range: CostUsageAnalysisRange) => void;
   readonly usageData: CostUsageAnalysisResponse | null;
   readonly usageErrorMessage: string;
+  readonly usageProjectKeyInput: string;
   readonly usageRangeInput: CostUsageAnalysisRange;
   readonly usageState: CostPageState;
   readonly verifiedAwsConnections: readonly AwsConnection[];
 }) {
-  const [selectedUsageProjectKey, setSelectedUsageProjectKey] = useState(
-    COST_USAGE_ALL_PROJECTS_KEY
-  );
-  const projectCosts = usageData?.projectCosts;
+  const projectCosts = usageData?.projectCosts ?? [];
+  const [cachedProjectOptions, setCachedProjectOptions] = useState<
+    readonly CostUsageProjectOption[]
+  >([]);
   const serviceBars = useMemo(
     () => createServiceCostBars(usageData?.serviceCosts ?? []),
     [usageData]
   );
-  const projectOptions = useMemo(
-    () => createCostUsageProjectOptions(projectCosts ?? []),
+  const projectOptionsFromData = useMemo(
+    () => createCostUsageProjectOptions(projectCosts),
     [projectCosts]
   );
+  useEffect(() => {
+    setCachedProjectOptions((currentOptions) =>
+      mergeCostUsageProjectOptions(currentOptions, projectOptionsFromData)
+    );
+  }, [projectOptionsFromData]);
+  const projectOptions =
+    cachedProjectOptions.length === 0 ? projectOptionsFromData : cachedProjectOptions;
+  const selectableProjectCosts = useMemo(
+    () => projectOptions.map((projectOption) => projectOption.project),
+    [projectOptions]
+  );
   const selectedUsageProject = useMemo(
-    () => selectCostUsageProject(projectCosts ?? [], selectedUsageProjectKey),
-    [projectCosts, selectedUsageProjectKey]
+    () => selectCostUsageProject(selectableProjectCosts, appliedUsageProjectKey),
+    [appliedUsageProjectKey, selectableProjectCosts]
   );
   const scopedWasteResources = useMemo(
     () => getScopedWasteResources(usageData?.wasteResources ?? [], selectedUsageProject),
@@ -878,10 +930,13 @@ function CostUsageAnalysisTab({
   const selectedUsageLabel = selectedUsageProject?.projectName ?? "전체 프로젝트";
 
   useEffect(() => {
-    setSelectedUsageProjectKey((currentKey) =>
-      normalizeCostUsageProjectKey(projectCosts ?? [], currentKey)
+    setUsageProjectKeyInput((currentKey) =>
+      normalizeCostUsageProjectKey(selectableProjectCosts, currentKey)
     );
-  }, [projectCosts]);
+    setAppliedUsageProjectKey((currentKey) =>
+      normalizeCostUsageProjectKey(selectableProjectCosts, currentKey)
+    );
+  }, [selectableProjectCosts, setAppliedUsageProjectKey, setUsageProjectKeyInput]);
 
   return (
     <>
@@ -908,8 +963,8 @@ function CostUsageAnalysisTab({
             <label className="costField costUsageProjectSelect">
               <span>비용 범위</span>
               <select
-                onChange={(event) => setSelectedUsageProjectKey(event.target.value)}
-                value={selectedUsageProjectKey}
+                onChange={(event) => setUsageProjectKeyInput(event.target.value)}
+                value={usageProjectKeyInput}
               >
                 <option value={COST_USAGE_ALL_PROJECTS_KEY}>전체 프로젝트</option>
                 {projectOptions.map((project) => (
@@ -1054,7 +1109,7 @@ function CostUsageAnalysisTab({
                 <h2 id="cost-service-chart-title">서비스별 비용</h2>
               </div>
               <span className="dashboardCountBadge">
-                {selectedUsageProject === null ? `${usageData.serviceCosts.length}개` : "전체 계정 기준"}
+                {`${usageData.serviceCosts.length}개`}
               </span>
             </div>
             <ServiceCostBars bars={serviceBars} serviceCosts={usageData.serviceCosts} />
@@ -1069,9 +1124,9 @@ function CostUsageAnalysisTab({
               <span className="dashboardCountBadge">{usageData.projectCosts.length}개</span>
             </div>
             <ProjectUsageTable
-              onSelectedProjectChange={setSelectedUsageProjectKey}
+              onSelectedProjectChange={selectUsageProject}
               projectCosts={usageData.projectCosts}
-              selectedProjectKey={selectedUsageProjectKey}
+              selectedProjectKey={appliedUsageProjectKey}
             />
           </section>
 
@@ -1798,6 +1853,22 @@ function getScopedRecommendations(
   return recommendations.filter(
     (recommendation) => recommendation.projectId === selectedProject.projectId
   );
+}
+
+function mergeCostUsageProjectOptions(
+  currentOptions: readonly CostUsageProjectOption[],
+  nextOptions: readonly CostUsageProjectOption[]
+): readonly CostUsageProjectOption[] {
+  if (nextOptions.length === 0) {
+    return currentOptions;
+  }
+
+  const nextOptionByKey = new Map(nextOptions.map((option) => [option.key, option]));
+  const currentOptionKeys = new Set(currentOptions.map((option) => option.key));
+  const mergedOptions = currentOptions.map((option) => nextOptionByKey.get(option.key) ?? option);
+  const addedOptions = nextOptions.filter((option) => !currentOptionKeys.has(option.key));
+
+  return [...mergedOptions, ...addedOptions];
 }
 
 function getRecommendationSeverityLabel(severity: CostOptimizationRecommendation["severity"]): string {

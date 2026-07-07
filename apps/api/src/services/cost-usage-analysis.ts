@@ -10,6 +10,7 @@ import type {
   CostOptimizationRecommendation,
   CostProjectUsage,
   CostResourceUsage,
+  CostServiceUsage,
   CostUsageAnalysisRange,
   CostUsageAnalysisResponse,
   CostUsageTrendPoint,
@@ -59,6 +60,7 @@ export type CostUsageAnalysisProviderInput = {
   readonly deployedResources: readonly CostUsageDeployedResource[];
   readonly deployments: readonly CostUsageDeployment[];
   readonly now?: Date | undefined;
+  readonly projectId?: string | undefined;
   readonly projects: readonly Project[];
   readonly range: CostUsageAnalysisRange;
   readonly userId: string;
@@ -172,8 +174,7 @@ export function createAwsCostUsageAnalysisProvider(
     });
     const wasteResources = createWasteInsightsFromMetricSnapshots(metricSnapshots);
     const recommendations = createRecommendationsFromWaste(wasteResources);
-
-    return {
+    const response: CostUsageAnalysisResponse = {
       currency: "USD",
       dailyTrend,
       dataSource: "aws_cost_explorer",
@@ -193,6 +194,8 @@ export function createAwsCostUsageAnalysisProvider(
       totalCost: createMoneyEstimate(totalCostAmount),
       wasteResources
     };
+
+    return scopeCostUsageAnalysisResponseToProject(response, input.projectId);
   };
 }
 
@@ -211,7 +214,6 @@ export function createSampleCostUsageAnalysis(
   ]);
   const taggedProjectCosts = new Map<string, number>();
   const projectCosts = createProjectUsageCosts({
-    allowSampleProjects: true,
     deployedResources: input.deployedResources,
     deployments: input.deployments,
     projects: input.projects,
@@ -226,13 +228,10 @@ export function createSampleCostUsageAnalysis(
     projects: input.projects,
     totalCostAmount
   });
-  const fallbackProject = input.projects[0] ?? {
-    id: "sample-web-service",
-    name: "샘플 웹 서비스"
-  };
+  const fallbackProject =
+    input.projects.find((project) => project.id === input.projectId) ?? input.projects[0];
   const sampleWasteResources = createSampleWasteResources(fallbackProject);
-
-  return {
+  const response: CostUsageAnalysisResponse = {
     currency: "USD",
     dailyTrend,
     dataSource: "sample",
@@ -252,10 +251,128 @@ export function createSampleCostUsageAnalysis(
     totalCost: createMoneyEstimate(totalCostAmount),
     wasteResources: sampleWasteResources
   };
+
+  return scopeCostUsageAnalysisResponseToProject(response, input.projectId);
+}
+
+function scopeCostUsageAnalysisResponseToProject(
+  response: CostUsageAnalysisResponse,
+  projectId: string | undefined
+): CostUsageAnalysisResponse {
+  if (projectId === undefined) {
+    return response;
+  }
+
+  const projectCost = response.projectCosts.find((row) => row.projectId === projectId);
+  const selectedTotalAmount = projectCost?.amount ?? 0;
+  const resourceCosts = response.resourceCosts
+    .filter((resource) => resource.projectId === projectId)
+    .map((resource) => ({
+      ...resource,
+      percentage: calculatePercentage(resource.amount, selectedTotalAmount)
+    }));
+  const wasteResources = response.wasteResources.filter(
+    (resource) => resource.projectId === projectId
+  );
+  const resourceCostIds = new Set(resourceCosts.map((resource) => resource.id));
+
+  return {
+    ...response,
+    dailyTrend: scaleCostUsageDailyTrend(
+      response.dailyTrend,
+      response.totalCost.amount,
+      selectedTotalAmount
+    ),
+    forecastMonthEndCost: createMoneyEstimate(
+      scaleCostUsageAmount(
+        response.forecastMonthEndCost.amount,
+        response.totalCost.amount,
+        selectedTotalAmount
+      )
+    ),
+    metricSeries: response.metricSeries.filter((series) =>
+      [...resourceCostIds].some((resourceId) => series.id.startsWith(`${resourceId}-`))
+    ),
+    projectCosts: projectCost === undefined ? [] : [projectCost],
+    recommendations: response.recommendations.filter(
+      (recommendation) => recommendation.projectId === projectId
+    ),
+    resourceCosts,
+    serviceCosts: createProjectScopedServiceCosts({
+      accountServiceCosts: response.serviceCosts,
+      accountTotalAmount: response.totalCost.amount,
+      resourceCosts,
+      selectedTotalAmount
+    }),
+    totalCost: createMoneyEstimate(selectedTotalAmount),
+    wasteResources
+  };
+}
+
+function createProjectScopedServiceCosts(input: {
+  readonly accountServiceCosts: readonly CostServiceUsage[];
+  readonly accountTotalAmount: number;
+  readonly resourceCosts: readonly CostResourceUsage[];
+  readonly selectedTotalAmount: number;
+}): CostServiceUsage[] {
+  if (input.selectedTotalAmount <= 0) {
+    return [];
+  }
+
+  if (input.resourceCosts.length > 0) {
+    const serviceCosts = new Map<string, number>();
+
+    for (const resource of input.resourceCosts) {
+      serviceCosts.set(resource.service, (serviceCosts.get(resource.service) ?? 0) + resource.amount);
+    }
+
+    return createServiceCosts([...serviceCosts.entries()]);
+  }
+
+  if (input.accountTotalAmount <= 0) {
+    return [];
+  }
+
+  const scale = input.selectedTotalAmount / input.accountTotalAmount;
+
+  return createServiceCosts(
+    input.accountServiceCosts.map((service) => [service.service, service.amount * scale])
+  );
+}
+
+function scaleCostUsageDailyTrend(
+  dailyTrend: readonly CostUsageTrendPoint[],
+  sourceTotalAmount: number,
+  targetTotalAmount: number
+): CostUsageTrendPoint[] {
+  if (sourceTotalAmount <= 0 || targetTotalAmount <= 0) {
+    return dailyTrend.map((point) => ({
+      amount: 0,
+      date: point.date
+    }));
+  }
+
+  const scale = targetTotalAmount / sourceTotalAmount;
+
+  return dailyTrend.map((point) => ({
+    amount: roundUsd(point.amount * scale),
+    date: point.date
+  }));
+}
+
+function scaleCostUsageAmount(
+  amount: number,
+  sourceTotalAmount: number,
+  targetTotalAmount: number
+): number {
+  if (sourceTotalAmount <= 0 || targetTotalAmount <= 0) {
+    return 0;
+  }
+
+  return roundUsd(amount * (targetTotalAmount / sourceTotalAmount));
 }
 
 export function createProjectUsageCosts(input: {
-  readonly allowSampleProjects?: boolean;
   readonly deployedResources: readonly CostUsageDeployedResource[];
   readonly deployments: readonly CostUsageDeployment[];
   readonly projects: readonly Project[];
@@ -409,16 +526,13 @@ function createTaggedProjectUsageCosts(input: {
 }
 
 function createApproximateProjectUsageCosts(input: {
-  readonly allowSampleProjects?: boolean;
   readonly deployedResources: readonly CostUsageDeployedResource[];
   readonly deployments: readonly CostUsageDeployment[];
   readonly projects: readonly Project[];
   readonly totalCostAmount: number;
 }): CostProjectUsage[] {
   if (input.projects.length === 0) {
-    return input.allowSampleProjects === true
-      ? createNoProjectSampleUsageCosts(input.totalCostAmount)
-      : [];
+    return [];
   }
 
   const deploymentProjectById = new Map(
@@ -457,39 +571,6 @@ function createApproximateProjectUsageCosts(input: {
       };
     })
     .sort(compareCostProjectUsageRows);
-}
-
-function createNoProjectSampleUsageCosts(totalCostAmount: number): CostProjectUsage[] {
-  const webAmount = roundUsd(totalCostAmount * 0.52);
-  const dataAmount = roundUsd(totalCostAmount * 0.31);
-  const workerAmount = roundUsd(totalCostAmount - webAmount - dataAmount);
-
-  return [
-    {
-      amount: webAmount,
-      percentage: calculatePercentage(webAmount, totalCostAmount),
-      projectId: "sample-web-service",
-      projectName: "샘플 웹 서비스",
-      resourceCount: 4,
-      source: "sample" as const
-    },
-    {
-      amount: dataAmount,
-      percentage: calculatePercentage(dataAmount, totalCostAmount),
-      projectId: "sample-data-platform",
-      projectName: "샘플 데이터 플랫폼",
-      resourceCount: 3,
-      source: "sample" as const
-    },
-    {
-      amount: workerAmount,
-      percentage: calculatePercentage(workerAmount, totalCostAmount),
-      projectId: "sample-background-worker",
-      projectName: "샘플 배치 워커",
-      resourceCount: 2,
-      source: "sample" as const
-    }
-  ].sort(compareCostProjectUsageRows);
 }
 
 function createSampleResourceUsageCosts(

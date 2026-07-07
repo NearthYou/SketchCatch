@@ -45,7 +45,7 @@ test("createSampleCostUsageAnalysis returns deterministic fallback usage data", 
   assert.equal(result.recommendations.length, 2);
 });
 
-test("createSampleCostUsageAnalysis splits no-project fallback cost into sample projects", () => {
+test("createSampleCostUsageAnalysis does not invent project rows when the user has no projects", () => {
   const result = createSampleCostUsageAnalysis({
     awsConnection: null,
     deployedResources: [],
@@ -56,16 +56,44 @@ test("createSampleCostUsageAnalysis splits no-project fallback cost into sample 
     userId
   });
 
+  assert.deepEqual(result.projectCosts, []);
+  assert.deepEqual(result.resourceCosts, []);
+  assert.equal(result.wasteResources.some((resource) => resource.projectId !== undefined), false);
+});
+
+test("createSampleCostUsageAnalysis scopes project rows and resources to the selected project", () => {
+  const result = createSampleCostUsageAnalysis({
+    awsConnection: null,
+    deployedResources: [
+      makeResource({ deploymentId: "deployment-a", id: "resource-a1" }),
+      makeResource({ deploymentId: "deployment-a", id: "resource-a2" }),
+      makeResource({ deploymentId: "deployment-b", id: "resource-b1" })
+    ],
+    deployments: [
+      makeDeployment({
+        id: "deployment-a",
+        projectId: projectA.id
+      }),
+      makeDeployment({
+        id: "deployment-b",
+        projectId: projectB.id
+      })
+    ],
+    now: fixedNow,
+    projectId: projectA.id,
+    projects: [projectA, projectB],
+    range: "7d",
+    userId
+  });
+
   assert.deepEqual(
-    result.projectCosts.map((row) => [row.projectId, row.projectName, row.source]),
-    [
-      ["sample-web-service", "샘플 웹 서비스", "sample"],
-      ["sample-data-platform", "샘플 데이터 플랫폼", "sample"],
-      ["sample-background-worker", "샘플 배치 워커", "sample"]
-    ]
+    result.projectCosts.map((row) => row.projectId),
+    [projectA.id]
   );
+  assert.equal(result.resourceCosts.every((resource) => resource.projectId === projectA.id), true);
+  assert.equal(result.serviceCosts.length > 0, true);
   assert.equal(
-    result.projectCosts.reduce((sum, row) => sum + row.amount, 0).toFixed(2),
+    result.resourceCosts.reduce((sum, resource) => sum + resource.amount, 0).toFixed(2),
     result.totalCost.amount.toFixed(2)
   );
 });

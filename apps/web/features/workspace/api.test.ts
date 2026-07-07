@@ -136,12 +136,13 @@ test("listCostUsageAnalysis fetches actual usage analysis with range and AWS con
 
   const response = await listCostUsageAnalysis({
     awsConnectionId: "33333333-3333-4333-8333-333333333333",
+    projectId: "44444444-4444-4444-8444-444444444444",
     range: "30d"
   });
 
   assert.equal(
     String(requests[0]?.input),
-    "/api/costs/usage?range=30d&awsConnectionId=33333333-3333-4333-8333-333333333333"
+    "/api/costs/usage?range=30d&awsConnectionId=33333333-3333-4333-8333-333333333333&projectId=44444444-4444-4444-8444-444444444444"
   );
   assert.equal(new Headers(requests[0]?.init?.headers).get("authorization"), "Bearer access-token");
   assert.equal(response.totalCost.amount, 40);
