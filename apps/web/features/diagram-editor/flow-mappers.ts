@@ -34,12 +34,15 @@ const EDGE_STYLE_LABEL_PATTERNS: ReadonlyArray<{
     style: { animated: false, color: "#8a5a00", lineStyle: "dashed", width: "thick" }
   },
   {
-    patterns: [/\b(async|event|queue|stream|notification|pub\/?sub|publish|subscribe|sns|sqs|message|logs?|monitor(?:s|ing)?|metric|alarm)\b/u],
-    style: { animated: false, color: "#476582", lineStyle: "dashed", width: "medium" }
+    patterns: [
+      /\b(attaches?|assumes?|encrypts?|grants?|image|launch|permission|policy|profile|role)\b/u,
+      /\b(depends?(_on)?|dependency|requires?)\b/u
+    ],
+    style: { animated: false, color: "#6b7280", lineStyle: "solid", width: "thin" }
   },
   {
-    patterns: [/\b(depends?(_on)?|dependency|requires?)\b/u],
-    style: { animated: false, color: "#6b7280", lineStyle: "solid", width: "thin" }
+    patterns: [/\b(async|event|queue|stream|notification|pub\/?sub|publish|subscribe|sns|sqs|message|logs?|monitor(?:s|ing)?|metric|alarm)\b/u],
+    style: { animated: false, color: "#476582", lineStyle: "dashed", width: "medium" }
   }
 ];
 
@@ -254,6 +257,10 @@ function getDiagramEdgeStyleFromEndpoints(
   const sourceType = getNodeResourceType(nodeById.get(edge.sourceNodeId));
   const targetType = getNodeResourceType(nodeById.get(edge.targetNodeId));
 
+  if (isConfigurationDependencyResourceType(sourceType) || isConfigurationDependencyResourceType(targetType)) {
+    return { animated: false, color: "#6b7280", lineStyle: "solid", width: "thin" };
+  }
+
   if (isEventResourceType(sourceType) || isEventResourceType(targetType)) {
     return { animated: false, color: "#476582", lineStyle: "dashed", width: "medium" };
   }
@@ -263,6 +270,22 @@ function getDiagramEdgeStyleFromEndpoints(
 
 function getNodeResourceType(node: DiagramNode | undefined): string {
   return node?.parameters?.resourceType ?? node?.type ?? "";
+}
+
+function isConfigurationDependencyResourceType(resourceType: string): boolean {
+  return (
+    resourceType === "aws_acm_certificate" ||
+    resourceType === "aws_ami" ||
+    resourceType === "aws_iam_instance_profile" ||
+    resourceType === "aws_iam_policy" ||
+    resourceType === "aws_iam_role" ||
+    resourceType === "aws_key_pair" ||
+    resourceType === "aws_kms_key" ||
+    resourceType === "aws_lambda_permission" ||
+    resourceType === "aws_launch_template" ||
+    resourceType === "aws_security_group" ||
+    resourceType === "aws_security_group_rule"
+  );
 }
 
 function isEventResourceType(resourceType: string): boolean {

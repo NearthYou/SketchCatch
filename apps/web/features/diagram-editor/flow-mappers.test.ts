@@ -243,7 +243,8 @@ test("toFlowEdges derives line style from legacy edge labels", () => {
     [
       { ...makeEdge("client-1", "api-1"), id: "https", label: "HTTPS" },
       { ...makeEdge("api-1", "queue-1"), id: "event", label: "event queue" },
-      { ...makeEdge("pipeline-1", "api-1"), id: "deploy", label: "Terraform apply" }
+      { ...makeEdge("pipeline-1", "api-1"), id: "deploy", label: "Terraform apply" },
+      { ...makeEdge("key-1", "logs-1"), id: "encrypts-logs", label: "encrypts logs" }
     ],
     []
   );
@@ -257,6 +258,19 @@ test("toFlowEdges derives line style from legacy edge labels", () => {
   assert.equal(edgeById.get("deploy")?.style?.strokeDasharray, "7 5");
   assert.equal(edgeById.get("deploy")?.style?.stroke, "#8a5a00");
   assert.equal(edgeById.get("deploy")?.style?.strokeWidth, 4);
+  assert.equal(edgeById.get("encrypts-logs")?.style?.strokeDasharray, undefined);
+  assert.equal(edgeById.get("encrypts-logs")?.style?.stroke, "#6b7280");
+  assert.equal(edgeById.get("encrypts-logs")?.style?.strokeWidth, 1.5);
+});
+
+test("toFlowEdges renders configuration dependency endpoints as thin solid lines", () => {
+  const key = makeNode({ id: "key-1", resourceType: "aws_kms_key" });
+  const logs = makeNode({ id: "logs-1", resourceType: "aws_cloudwatch_log_group" });
+  const flowEdges = toFlowEdges([{ ...makeEdge("key-1", "logs-1"), id: "key-to-logs", label: "uses" }], [], [key, logs]);
+
+  assert.equal(flowEdges[0]?.style?.strokeDasharray, undefined);
+  assert.equal(flowEdges[0]?.style?.stroke, "#6b7280");
+  assert.equal(flowEdges[0]?.style?.strokeWidth, 1.5);
 });
 
 test("toFlowEdges hides containment labels from rendered edges", () => {
