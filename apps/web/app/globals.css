@@ -2158,6 +2158,11 @@ nextjs-portal {
   padding: 0 8px;
 }
 
+.providerSelectActive {
+  border-color: #6b7cff;
+  box-shadow: 0 0 0 2px rgba(107, 124, 255, 0.12);
+}
+
 .providerVersionSelect {
   font-size: 0.78rem;
   min-width: 78px;
@@ -2289,6 +2294,82 @@ nextjs-portal {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.resourceProviderRoadmap,
+.templateCatalogPanel,
+.moduleCatalogPanel {
+  border-top: 1px solid #dbe3ef;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px;
+}
+
+.resourceProviderRoadmap {
+  background: #f8fafc;
+  color: #46556b;
+  line-height: 1.35;
+}
+
+.resourceProviderRoadmap strong {
+  color: #152033;
+  font-size: 0.9rem;
+}
+
+.templateCatalogCard,
+.moduleCatalogCard {
+  background: #ffffff;
+  border: 1px solid #d8e1ee;
+  border-radius: 7px;
+  color: #182235;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 12px;
+  text-align: left;
+  text-decoration: none;
+}
+
+.templateCatalogCard strong,
+.moduleCatalogCard strong {
+  color: #64748b;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.moduleCatalogSection {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.moduleCatalogHeader {
+  align-items: center;
+  color: #1f2a3d;
+  display: inline-flex;
+  font-size: 0.84rem;
+  font-weight: 800;
+  gap: 8px;
+}
+
+.moduleCatalogGrid {
+  display: grid;
+  gap: 8px;
+}
+
+.moduleCatalogCard {
+  cursor: pointer;
+}
+
+.moduleCatalogCard:hover,
+.moduleCatalogCard:focus-visible,
+.templateCatalogCard:hover,
+.templateCatalogCard:focus-visible {
+  border-color: #8da2ff;
+  outline: none;
 }
 
 .diagramEditor {

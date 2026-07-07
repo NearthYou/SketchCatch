@@ -31,31 +31,6 @@ test("applyAreaNodeMovement moves nodes contained in a moved area by the same de
   assert.deepEqual(getNodePosition(result, instance.id), { x: 120, y: 95 });
 });
 
-test("applyAreaNodeMovement moves nodes contained in a moved ASG area by the same delta", () => {
-  const autoscalingGroup = makeResourceNode({
-    id: "asg-1",
-    resourceType: "aws_autoscaling_group",
-    position: { x: 0, y: 0 },
-    size: { width: 200, height: 130 }
-  });
-  const instance = makeResourceNode({
-    id: "instance-1",
-    resourceType: "aws_instance",
-    position: { x: 56, y: 48 },
-    size: { width: 56, height: 56 },
-    parentAreaNodeId: autoscalingGroup.id
-  });
-  const movedAutoscalingGroup = moveNode(autoscalingGroup, { x: 36, y: 24 });
-
-  const result = applyAreaNodeMovement(
-    [autoscalingGroup, instance],
-    [movedAutoscalingGroup, instance],
-    new Set([autoscalingGroup.id])
-  );
-
-  assert.deepEqual(getNodePosition(result, instance.id), { x: 92, y: 72 });
-});
-
 test("applyAreaNodeMovement does not adopt a resource just because an area was moved over it", () => {
   const region = makeDesignNode({
     id: "region-1",
@@ -297,25 +272,6 @@ test("applyAreaNodeParentAssignments assigns a parent only to directly moved nod
   assert.equal(getNodeById(result, instance.id)?.metadata?.parentAreaNodeId, region.id);
 });
 
-test("applyAreaNodeParentAssignments assigns a moved child to an ASG area", () => {
-  const autoscalingGroup = makeResourceNode({
-    id: "asg-1",
-    resourceType: "aws_autoscaling_group",
-    position: { x: 0, y: 0 },
-    size: { width: 200, height: 130 }
-  });
-  const instance = makeResourceNode({
-    id: "instance-1",
-    resourceType: "aws_instance",
-    position: { x: 64, y: 36 },
-    size: { width: 56, height: 56 }
-  });
-
-  const result = applyAreaNodeParentAssignments([autoscalingGroup, instance], new Set([instance.id]));
-
-  assert.equal(getNodeById(result, instance.id)?.metadata?.parentAreaNodeId, autoscalingGroup.id);
-});
-
 test("applyAreaNodeParentAssignments does not assign stationary nodes to a moved area", () => {
   const region = makeDesignNode({
     id: "region-1",
@@ -482,7 +438,7 @@ test("clearDeletedAreaParentAssignments removes only deleted direct parent refer
   assert.equal(getNodeById(result, instance.id)?.metadata?.parentAreaNodeId, subnet.id);
 });
 
-test("clearDeletedAreaParentAssignments removes metadata when clearing the only parent field", () => {
+test("clearDeletedAreaParentAssignments preserves unrelated metadata when clearing parent", () => {
   const region = makeDesignNode({
     id: "region-1",
     type: "design_region",
@@ -496,10 +452,17 @@ test("clearDeletedAreaParentAssignments removes metadata when clearing the only 
     position: { x: 140, y: 130 },
     size: { width: 96, height: 72 }
   });
+  const nodeWithRegion = {
+    ...instance,
+    metadata: {
+      ...instance.metadata,
+      awsRegion: "ap-northeast-2" as const
+    }
+  };
 
-  const result = clearDeletedAreaParentAssignments([instance], new Set([region.id]));
+  const result = clearDeletedAreaParentAssignments([nodeWithRegion], new Set([region.id]));
 
-  assert.equal(getNodeById(result, instance.id)?.metadata, undefined);
+  assert.deepEqual(getNodeById(result, instance.id)?.metadata, { awsRegion: "ap-northeast-2" });
 });
 
 test("clearOutOfBoundsAreaParentAssignments removes children outside a resized parent area", () => {

@@ -1632,6 +1632,11 @@ export type AwsRegionCode =
 
 export type DiagramNodeMetadata = {
   parentAreaNodeId?: string | undefined;
+  moduleSource?: {
+    moduleId: string;
+    moduleVersion: string;
+    expandedAt: IsoDateTimeString;
+  } | undefined;
   reverseEngineering?: {
     source: "aws_scan";
     protectedValueKeys: string[];
@@ -1686,10 +1691,27 @@ export type DiagramViewport = {
   zoom: number;
 };
 
+export type DiagramVariableBinding = {
+  nodeId: string;
+  parameterKey: string;
+};
+
+export type DiagramVariableSource = "module" | "user";
+
+export type DiagramVariable = {
+  id: string;
+  name: string;
+  type: string;
+  value: unknown;
+  bindings: DiagramVariableBinding[];
+  source: DiagramVariableSource;
+};
+
 export type DiagramJson = {
   nodes: DiagramNode[];
   edges: DiagramEdge[];
   viewport: DiagramViewport;
+  variables?: DiagramVariable[] | undefined;
 };
 
 export type ProjectDraft = {

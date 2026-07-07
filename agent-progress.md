@@ -1,5 +1,4 @@
 ﻿# 에이전트 진행 로그
-# 에이전트 진행 로그
 
 ### 2026-07-07 - 비용 관리 실제 사용량 분석 탭 구현
 
@@ -28,6 +27,34 @@
   - 실제 AWS Cost Explorer/CloudWatch 호출은 로컬 자격증명 계정으로 live 검증하지 않았고, provider double과 sample fallback 경로로 검증했다.
   - 프로젝트별 실제 비용은 `SketchCatchProjectId` Cost Explorer tag가 없으면 배포 리소스 기반 근사 배분이다.
   - 새 IAM 권한은 read-only 조회 권한이며, 비용 최적화 추천이 자동으로 리소스를 수정하지는 않는다.
+  
+### 2026-07-07 - migration workflow quoting hotfix
+
+- Goal: `Run Database Migrations` workflow 28839194349가 SSM 실행 전 GitHub runner bash에서 `syntax error near unexpected token '('`로 실패한 원인을 수정한다.
+- Completed:
+  - `jq '...'` 문자열 안에 중첩 single quote가 들어가 workflow bash가 먼저 깨진 것을 확인했다.
+  - migration docker command를 heredoc 변수로 만들고 `jq --arg migration_command`로 JSON에 주입하도록 바꿔 shell quoting 충돌을 제거했다.
+  - BOM 제거 Node snippet은 base64 payload로 넣어 command 내부 따옴표를 최소화했다.
+- Verification run:
+  - `pnpm harness:check` - passed.
+- Known risks:
+  - 로컬 Windows 환경에 bash가 없어 `bash -n`은 수행하지 못했다. GitHub runner에서 PR checks 후 `migrate.yml` 재실행으로 최종 확인해야 한다.
+
+### 2026-07-07 - 운영 DB migration BOM 실패 hotfix
+
+- Goal: `Run Database Migrations` workflow 28838004059 실패 원인을 확인하고 운영 migration 재실행이 가능하도록 고친다.
+- Completed:
+  - 실패 로그에서 Drizzle migrator가 `meta/_journal.json` 파싱 중 leading BOM 때문에 `Unexpected token`으로 종료된 것을 확인했다.
+  - API migration runtime이 Drizzle `migrate` 호출 전에 `drizzle/meta/_journal.json`의 leading BOM을 제거하도록 `migration-metadata` helper를 추가했다.
+  - 현재 배포 이미지에도 바로 적용될 수 있도록 `migrate.yml`의 SSM docker command가 migrate 실행 직전 journal BOM을 제거하도록 보강했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/db/migration-metadata.test.ts` - passed, 2 tests.
+  - `pnpm --filter @sketchcatch/api typecheck` - passed.
+  - `pnpm --filter @sketchcatch/api build` - passed.
+  - Workflow BOM-strip Node snippet smoke - passed.
+- Known risks:
+  - 운영 DB migration 재실행은 hotfix merge 후 `migrate.yml`을 `dev` ref로 다시 실행해야 한다.
 
 ### 2026-07-07 - PR #197 Gemini 리뷰 코멘트 반영
 
@@ -1713,6 +1740,7 @@
   - #135 still needs the real GitHub/provider implementation and should keep secrets out of DB/logs/responses.
 - Next best action:
   - Parent agent should review #134 diff, especially manual Drizzle metadata, then #135 can replace the internal provider boundary with real GitHub/CI behavior.
+  
 ### 2026-07-04 - Blueprint 由щ뵒?먯씤 ?ㅽ럺 臾몄꽌??
 ### 2026-07-04 - Issue #129 Direct Deployment ?ㅽ뙣 濡쒓렇 AI ?붿빟
 
