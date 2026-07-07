@@ -123,9 +123,12 @@ function clampNumber(value: number, min: number, max: number): number {
 export function DeploymentPanel({
   currentNodeCount,
   diagramJson,
+  fullScreenOnly = false,
   hasUnsavedDeploymentBaseline,
-  onOpenFindingTerraformSource,
+  initialExpanded = false,
+  onExpandedClose,
   onGetTerraformFiles,
+  onOpenFindingTerraformSource,
   onPrepareDeploymentArtifacts,
   onPreDeploymentCheckStateChange,
   onValidateTerraformDiagnostics,
@@ -135,7 +138,10 @@ export function DeploymentPanel({
 }: {
   readonly currentNodeCount: number;
   readonly diagramJson: DiagramJson;
+  readonly fullScreenOnly?: boolean | undefined;
   readonly hasUnsavedDeploymentBaseline: boolean;
+  readonly initialExpanded?: boolean | undefined;
+  readonly onExpandedClose?: (() => void) | undefined;
   readonly onGetTerraformFiles: () => readonly TerraformSyncFileInput[];
   readonly onOpenFindingTerraformSource: (finding: CheckFinding) => TerraformSourceLocation | null;
   readonly onPrepareDeploymentArtifacts: () => Promise<SavedWorkspaceTerraformArtifact>;
@@ -170,7 +176,6 @@ export function DeploymentPanel({
   const [requestState, setRequestState] = useState<RequestState>("idle");
   const [errorMessage, setErrorMessage] = useState("");
   const [deploymentPanelMode, setDeploymentPanelMode] = useState<DeploymentPanelMode>("setup");
-  const [isDeploymentExpanded, setIsDeploymentExpanded] = useState(false);
   const [deploymentDetailsWidthPercent, setDeploymentDetailsWidthPercent] = useState(
     DEPLOYMENT_EXPANDED_DEFAULT_DETAILS_PERCENT
   );
@@ -178,6 +183,7 @@ export function DeploymentPanel({
     useState<DeploymentFailureExplanation | null>(null);
   const [failureExplanationState, setFailureExplanationState] = useState<RequestState>("idle");
   const [failureExplanationErrorMessage, setFailureExplanationErrorMessage] = useState("");
+  const [isDeploymentExpanded, setIsDeploymentExpanded] = useState(initialExpanded);
   const deploymentExpandedGridRef = useRef<HTMLDivElement | null>(null);
   const deploymentResizeCleanupRef = useRef<(() => void) | null>(null);
   const trafficAbortControllerRef = useRef<AbortController | null>(null);
@@ -303,6 +309,30 @@ export function DeploymentPanel({
   const hasStalePreDeploymentAnalysis =
     preDeploymentAnalysis !== null &&
     isWorkspaceAiResultStale(preDeploymentFingerprint, boardSnapshot.fingerprint);
+  const canRunDeploymentReviewStep =
+    canStartDeploymentReview &&
+    preDeploymentState !== "loading";
+  const canRunPrimaryDeploymentStep =
+    canRunPlan ||
+    canApprovePlan ||
+    canApply ||
+    canRunDestroyPlan ||
+    canDestroy;
+  const primaryDeploymentStepLabel = getPrimaryDeploymentStepLabel({
+    canApply,
+    canApprovePlan,
+    canDestroy,
+    canRunDestroyPlan,
+    canRunPlan,
+    hasCurrentPlan,
+    selectedDeployment,
+    shouldShowApprovePlanButton,
+    shouldShowApplyButton,
+    shouldShowDestroyButton,
+    shouldShowDestroyPlanButton,
+    shouldShowPlanButton
+  });
+  const primaryDeploymentStepStatus = getPrimaryDeploymentStepStatus(selectedDeployment);
   const deploymentExpandedGridStyle = useMemo(
     () =>
       ({
@@ -703,13 +733,13 @@ export function DeploymentPanel({
     }
   }
 
-  async function runPreDeploymentCheck(): Promise<void> {
+  async function runPreDeploymentCheck(): Promise<boolean> {
     if (!boardSnapshot.hasResources) {
       updatePreDeploymentCheckState({
         errorMessage: "Architecture Board에 Resource가 있어야 실행할 수 있습니다.",
         requestState: "error"
       });
-      return;
+      return false;
     }
 
     updatePreDeploymentCheckState({
@@ -729,7 +759,7 @@ export function DeploymentPanel({
           fingerprint: boardSnapshot.fingerprint,
           requestState: "idle"
         });
-        return;
+        return false;
       }
 
       const result = addTerraformDiagnosticsToPreDeploymentAnalysis(
@@ -744,11 +774,13 @@ export function DeploymentPanel({
         fingerprint: boardSnapshot.fingerprint,
         requestState: "idle"
       });
+      return true;
     } catch (error) {
       updatePreDeploymentCheckState({
         errorMessage: getApiErrorMessage(error, "배포 전 검사 중 오류가 발생했습니다."),
         requestState: "error"
       });
+      return false;
     }
   }
 
@@ -759,6 +791,20 @@ export function DeploymentPanel({
       ...currentState,
       ...patch
     }));
+  }
+
+  async function runDeploymentReviewStep(): Promise<void> {
+    if (!canRunDeploymentReviewStep) {
+      return;
+    }
+
+    const checkPassed = await runPreDeploymentCheck();
+
+    if (!checkPassed) {
+      return;
+    }
+
+    await startDeploymentReview();
   }
 
   async function startDeploymentReview(): Promise<void> {
@@ -790,6 +836,32 @@ export function DeploymentPanel({
       setShowApplyConfirmation(false);
       setShowDestroyConfirmation(false);
     }, "배포 검토를 시작하지 못했습니다.");
+  }
+
+  function startPrimaryDeploymentStep(): void {
+    if (shouldShowPlanButton) {
+      void startTerraformPlan();
+      return;
+    }
+
+    if (shouldShowApprovePlanButton) {
+      void approveCurrentPlan();
+      return;
+    }
+
+    if (shouldShowApplyButton) {
+      setShowApplyConfirmation(true);
+      return;
+    }
+
+    if (shouldShowDestroyPlanButton) {
+      void startTerraformDestroyPlan();
+      return;
+    }
+
+    if (shouldShowDestroyButton) {
+      setShowDestroyConfirmation(true);
+    }
   }
 
   async function saveDeploymentBaseline(): Promise<void> {
@@ -837,14 +909,7 @@ export function DeploymentPanel({
     }
 
     await runRequest(async () => {
-      const acknowledgedWarningIds =
-        selectedDeployment.planSummary?.warnings
-          .filter((warning) => warning.requiresAcknowledgement)
-          .map((warning) => warning.id) ?? [];
-      const deployment = await approveDeploymentPlan(
-        selectedDeployment.id,
-        acknowledgedWarningIds
-      );
+      const deployment = await approveDeploymentPlan(selectedDeployment.id);
       setDeployments((currentDeployments) =>
         currentDeployments.map((currentDeployment) =>
           currentDeployment.id === deployment.id ? deployment : currentDeployment
@@ -1115,7 +1180,7 @@ export function DeploymentPanel({
     await runRequest(async () => {
       await applyGitCicdRepositorySettings(selectedGitCicdHandoff.id);
       applyDeploymentPanelSnapshot(await loadDeploymentPanelSnapshot());
-    }, "GitHub repository settings를 적용하지 못했습니다.");
+    }, "GitHub 저장소 준비를 적용하지 못했습니다.");
   }
 
   async function applySelectedAwsRoleDiff(): Promise<void> {
@@ -1126,7 +1191,7 @@ export function DeploymentPanel({
     await runRequest(async () => {
       await applyGitCicdAwsRoleDiff(selectedGitCicdHandoff.id);
       applyDeploymentPanelSnapshot(await loadDeploymentPanelSnapshot());
-    }, "AWS role diff를 적용하지 못했습니다.");
+    }, "AWS 실행 Role 연결을 적용하지 못했습니다.");
   }
 
   async function startNewGitHubInstallation(): Promise<void> {
@@ -1148,7 +1213,7 @@ export function DeploymentPanel({
       );
 
       window.location.assign(authorizationUrl);
-    }, "GitHub OAuth 승인을 시작하지 못했습니다.");
+    }, "임시 OAuth 승인을 시작하지 못했습니다.");
   }
 
   async function applyRepositorySettingsWithGitHubOAuth(): Promise<void> {
@@ -1159,7 +1224,7 @@ export function DeploymentPanel({
     await runRequest(async () => {
       await applyGitCicdRepositorySettingsWithGitHubOAuth(selectedGitCicdHandoff.id);
       applyDeploymentPanelSnapshot(await loadDeploymentPanelSnapshot());
-    }, "GitHub OAuth repository settings 적용에 실패했습니다.");
+    }, "OAuth로 GitHub 저장소 준비를 적용하지 못했습니다.");
   }
 
   function startDeploymentPanelResize(event: ReactPointerEvent<HTMLDivElement>): void {
@@ -1236,89 +1301,139 @@ export function DeploymentPanel({
     }
   }
 
-  const renderPreDeploymentCheckSection = () => (
-    <section className={styles.deploymentSection}>
-      <div className={styles.deploymentSectionHeader}>
-        <h3>배포 전 검사</h3>
+  const renderPreDeploymentCheckSection = () => null;
+
+  const renderSetupSection = () => (
+    <section className={styles.deploymentStagePanel} aria-label="배포 단계">
+      <article
+        className={styles.deploymentStageCard}
+        data-state={hasUnsavedDeploymentBaseline ? "active" : "done"}
+      >
+        <span className={styles.deploymentStageNumber}>1</span>
+        <div className={styles.deploymentStageBody}>
+          <h3>배포 전 저장</h3>
+          <p className={styles.deploymentStageStatus}>
+            {hasUnsavedDeploymentBaseline ? "변경사항 저장 필요" : "저장됨"}
+          </p>
+        </div>
         <button
           className={styles.deploymentSecondaryButton}
-          disabled={preDeploymentState === "loading"}
-          onClick={() => void runPreDeploymentCheck()}
+          disabled={requestState === "loading"}
+          onClick={saveDeploymentBaseline}
+          type="button"
+        >
+          <DeploymentBaselineIcon size={16} aria-hidden="true" />
+          저장
+        </button>
+      </article>
+
+      <article
+        className={styles.deploymentStageCard}
+        data-state={
+          preDeploymentState === "error" || requestState === "error"
+            ? "error"
+            : selectedDeployment
+              ? "done"
+              : "active"
+        }
+      >
+        <span className={styles.deploymentStageNumber}>2</span>
+        <div className={styles.deploymentStageBody}>
+          <h3>배포 전 검사 및 리뷰</h3>
+          <p className={styles.deploymentStageStatus}>
+            {getDeploymentReviewStepStatus({
+              hasStalePreDeploymentAnalysis,
+              preDeploymentAnalysis,
+              preDeploymentErrorMessage,
+              preDeploymentState,
+              requestState,
+              selectedDeployment
+            })}
+          </p>
+        </div>
+        <div className={styles.deploymentStageSettings}>
+          <SelectMenu
+            ariaLabel="AWS 연결 선택"
+            disabled={awsConnectionOptions.length === 0 || requestState === "loading"}
+            emptyLabel="AWS 연결 없음"
+            onChange={setSelectedAwsConnectionId}
+            options={awsConnectionOptions}
+            size={isDeploymentExpanded ? "large" : "regular"}
+            value={selectedAwsConnectionId}
+          />
+          <SelectMenu
+            ariaLabel="Live deployment profile"
+            emptyLabel="Live profile 없음"
+            onChange={(value) => setSelectedLiveProfile(value as DeploymentLiveProfile)}
+            options={liveProfileOptions}
+            size={isDeploymentExpanded ? "large" : "regular"}
+            value={selectedLiveProfile}
+          />
+        </div>
+        <button
+          className={styles.deploymentPrimaryButton}
+          disabled={!canRunDeploymentReviewStep}
+          onClick={() => void runDeploymentReviewStep()}
           type="button"
         >
           <ShieldCheck size={16} aria-hidden="true" />
-          {preDeploymentState === "loading" ? "검사 중" : "검사 실행"}
+          {preDeploymentState === "loading" || requestState === "loading"
+            ? "진행 중"
+            : selectedDeployment
+              ? "다시 리뷰"
+              : "검사 및 리뷰"}
         </button>
-      </div>
+      </article>
 
-      {preDeploymentState === "loading" ? (
-        <p className={styles.deploymentNotice}>검사 중입니다.</p>
-      ) : null}
+      <article
+        className={styles.deploymentStageCard}
+        data-state={
+          selectedDeployment?.status === "FAILED"
+            ? "error"
+            : selectedDeployment?.status === "SUCCESS" || selectedDeployment?.status === "DESTROYED"
+              ? "done"
+              : selectedDeployment
+                ? "active"
+                : "idle"
+        }
+      >
+        <span className={styles.deploymentStageNumber}>3</span>
+        <div className={styles.deploymentStageBody}>
+          <h3>배포</h3>
+          <p className={styles.deploymentStageStatus}>{primaryDeploymentStepStatus}</p>
+        </div>
+        <button
+          className={styles.deploymentPrimaryButton}
+          disabled={!canRunPrimaryDeploymentStep}
+          onClick={startPrimaryDeploymentStep}
+          type="button"
+        >
+          <DashboardIcon name="rocket" />
+          {primaryDeploymentStepLabel}
+        </button>
+      </article>
+
       {preDeploymentState === "error" ? (
-        <p className={styles.deploymentError} role="alert">
+        <p className={styles.deploymentStageAlert} role="alert">
           {preDeploymentErrorMessage}
         </p>
       ) : null}
-      {hasStalePreDeploymentAnalysis ? (
-        <p className={styles.deploymentStaleNotice}>보드 변경됨 · 다시 실행 필요</p>
+      {requestState === "error" ? (
+        <p className={styles.deploymentStageAlert} role="alert">
+          {errorMessage}
+        </p>
       ) : null}
-      {preDeploymentAnalysis !== null ? (
+      {selectedDeployment?.status === "FAILED" ? (
+        <p className={styles.deploymentStageAlert} role="alert">
+          {selectedDeployment.errorSummary ?? "배포가 실패했습니다. 아래 실행 기록에서 원인을 확인하세요."}
+        </p>
+      ) : null}
+      {preDeploymentAnalysis !== null && !hasStalePreDeploymentAnalysis ? (
         <DeploymentPreDeploymentSummary
           analysis={preDeploymentAnalysis}
           onOpenFindingTerraformSource={onOpenFindingTerraformSource}
         />
-      ) : (
-        <p className={styles.deploymentHint}>현재 보드 기준으로 비용, 보안, 설정 위험을 확인합니다.</p>
-      )}
-    </section>
-  );
-
-  const renderSetupSection = () => (
-    <section className={styles.deploymentSection}>
-      <button
-        className={styles.deploymentSecondaryButton}
-        disabled={requestState === "loading"}
-        onClick={saveDeploymentBaseline}
-        type="button"
-      >
-        <DeploymentBaselineIcon size={16} aria-hidden="true" />
-        배포 기준 저장
-      </button>
-
-      <div className={styles.deploymentField}>
-        AWS 연결
-        <SelectMenu
-          ariaLabel="AWS 연결 선택"
-          disabled={awsConnectionOptions.length === 0}
-          emptyLabel="검증된 AWS 연결 없음"
-          onChange={setSelectedAwsConnectionId}
-          options={awsConnectionOptions}
-          size={isDeploymentExpanded ? "large" : "regular"}
-          value={selectedAwsConnectionId}
-        />
-      </div>
-
-      <div className={styles.deploymentField}>
-        Live profile
-        <SelectMenu
-          ariaLabel="Live deployment profile"
-          emptyLabel="Live profile 없음"
-          onChange={(value) => setSelectedLiveProfile(value as DeploymentLiveProfile)}
-          options={liveProfileOptions}
-          size={isDeploymentExpanded ? "large" : "regular"}
-          value={selectedLiveProfile}
-        />
-      </div>
-
-      <button
-        className={styles.deploymentPrimaryButton}
-        disabled={!canStartDeploymentReview}
-        onClick={startDeploymentReview}
-        type="button"
-      >
-        <DashboardIcon name="rocket" />
-        배포 검토 시작
-      </button>
+      ) : null}
     </section>
   );
 
@@ -1412,63 +1527,83 @@ export function DeploymentPanel({
 
           {selectedGitCicdHandoff ? (
             <>
-              <div className={styles.deploymentHeaderActions}>
-                <button
-                  className={styles.deploymentSecondaryButton}
-                  disabled={
-                    requestState === "loading" ||
-                    !selectedGitCicdHandoff.repositorySettingsPreview
-                  }
-                  onClick={() => void applySelectedRepositorySettings()}
-                  type="button"
-                >
-                  <GitBranch size={16} />
-                  Repo settings 적용
-                </button>
-                <button
-                  className={styles.deploymentSecondaryButton}
-                  disabled={
-                    requestState === "loading" ||
-                    !selectedGitCicdHandoff.awsRoleDiff?.approved ||
-                    selectedGitCicdHandoff.awsRoleDiff.applied === true
-                  }
-                  onClick={() => void applySelectedAwsRoleDiff()}
-                  type="button"
-                >
-                  <ShieldCheck size={16} />
-                  AWS role diff 적용
-                </button>
-              </div>
-              {selectedGitCicdHandoff.githubOAuthRequired ? (
-                <div className={styles.deploymentNotice}>
-                  GitHub workflow 또는 repository settings 권한 보강이 필요합니다.
+              <div className={styles.deploymentActionGroup}>
+                <div className={styles.deploymentActionItem}>
                   <button
                     className={styles.deploymentSecondaryButton}
-                    disabled={requestState === "loading"}
-                    onClick={() => void startNewGitHubInstallation()}
+                    disabled={
+                      requestState === "loading" ||
+                      !selectedGitCicdHandoff.repositorySettingsPreview
+                    }
+                    onClick={() => void applySelectedRepositorySettings()}
                     type="button"
                   >
                     <GitBranch size={16} />
-                    GitHub App 권한 보강
+                    GitHub 저장소 준비 적용
                   </button>
+                  <p>Workflow와 Actions variable을 repository에 설정합니다.</p>
+                </div>
+                <div className={styles.deploymentActionItem}>
                   <button
                     className={styles.deploymentSecondaryButton}
-                    disabled={requestState === "loading"}
-                    onClick={() => void startGitHubOAuthForRepositorySettings()}
-                    type="button"
-                  >
-                    <GitBranch size={16} />
-                    GitHub OAuth 승인
-                  </button>
-                  <button
-                    className={styles.deploymentSecondaryButton}
-                    disabled={requestState === "loading"}
-                    onClick={() => void applyRepositorySettingsWithGitHubOAuth()}
+                    disabled={
+                      requestState === "loading" ||
+                      !selectedGitCicdHandoff.awsRoleDiff?.approved ||
+                      selectedGitCicdHandoff.awsRoleDiff.applied === true
+                    }
+                    onClick={() => void applySelectedAwsRoleDiff()}
                     type="button"
                   >
                     <ShieldCheck size={16} />
-                    OAuth 설정 적용
+                    AWS 실행 Role 연결 적용
                   </button>
+                  <p>GitHub Actions가 승인된 AWS Role을 사용할 수 있게 연결합니다.</p>
+                </div>
+              </div>
+              {selectedGitCicdHandoff.githubOAuthRequired ? (
+                <div className={styles.deploymentNotice}>
+                  <p>
+                    GitHub App 권한이 부족합니다. 먼저 App 권한을 추가하고, 급하면
+                    임시 OAuth 승인으로 저장소 준비를 적용할 수 있습니다.
+                  </p>
+                  <div className={styles.deploymentActionGroup}>
+                    <div className={styles.deploymentActionItem}>
+                      <button
+                        className={styles.deploymentSecondaryButton}
+                        disabled={requestState === "loading"}
+                        onClick={() => void startNewGitHubInstallation()}
+                        type="button"
+                      >
+                        <GitBranch size={16} />
+                        App 권한 추가하러 가기
+                      </button>
+                      <p>GitHub App에 Workflows, Administration, Variables 권한을 추가합니다.</p>
+                    </div>
+                    <div className={styles.deploymentActionItem}>
+                      <button
+                        className={styles.deploymentSecondaryButton}
+                        disabled={requestState === "loading"}
+                        onClick={() => void startGitHubOAuthForRepositorySettings()}
+                        type="button"
+                      >
+                        <GitBranch size={16} />
+                        임시 OAuth 승인
+                      </button>
+                      <p>App 권한 반영 전, 내 GitHub 권한으로 한 번만 승인합니다.</p>
+                    </div>
+                    <div className={styles.deploymentActionItem}>
+                      <button
+                        className={styles.deploymentSecondaryButton}
+                        disabled={requestState === "loading"}
+                        onClick={() => void applyRepositorySettingsWithGitHubOAuth()}
+                        type="button"
+                      >
+                        <ShieldCheck size={16} />
+                        OAuth로 저장소 준비 적용
+                      </button>
+                      <p>OAuth 승인 후 workflow와 repository variables를 적용합니다.</p>
+                    </div>
+                  </div>
                 </div>
               ) : null}
               <div className={styles.deploymentSummary}>
@@ -1537,7 +1672,7 @@ export function DeploymentPanel({
                 <OptionalInfoRow label="Static site URL" value={selectedGitCicdHandoff.staticSiteUrl} />
                 <OptionalInfoRow label="API URL" value={selectedGitCicdHandoff.apiBaseUrl} />
                 <OptionalInfoRow
-                  label="Repo settings"
+                  label="GitHub 저장소 준비"
                   value={
                     selectedGitCicdHandoff.repositorySettingsPreview
                       ? `${Object.keys(selectedGitCicdHandoff.repositorySettingsPreview.variables).length} variables, ${selectedGitCicdHandoff.repositorySettingsPreview.workflowFiles.length} workflows`
@@ -1545,7 +1680,7 @@ export function DeploymentPanel({
                   }
                 />
                 <OptionalInfoRow
-                  label="AWS role diff"
+                  label="AWS 실행 Role 연결"
                   value={
                     selectedGitCicdHandoff.awsRoleDiff
                       ? selectedGitCicdHandoff.awsRoleDiff.applied
@@ -1609,63 +1744,12 @@ export function DeploymentPanel({
           <DeploymentGateCard deployment={selectedDeployment} />
           <div className={styles.deploymentSummary}>
             <InfoRow label="Status" value={selectedDeployment.status} />
-            <InfoRow label="Live profile" value={selectedDeployment.liveProfile} />
             <OptionalInfoRow label="Active stage" value={selectedDeployment.activeStage} />
-            <OptionalInfoRow
-              label="Started at"
-              value={formatOptionalDate(selectedDeployment.startedAt)}
-            />
-            <OptionalInfoRow
-              label="Completed at"
-              value={formatOptionalDate(selectedDeployment.completedAt)}
-            />
-            <OptionalInfoRow label="Failed at" value={formatOptionalDate(selectedDeployment.failedAt)} />
-            <OptionalInfoRow
-              label="Cancel requested"
-              value={formatOptionalDate(selectedDeployment.cancelRequestedAt)}
-            />
-            <OptionalInfoRow
-              label="Cancelled at"
-              value={formatOptionalDate(selectedDeployment.cancelledAt)}
-            />
-            <OptionalInfoRow label="Current plan" value={selectedDeployment.currentPlanArtifactId} />
-            <InfoRow label="Blocked" value={selectedDeployment.isBlocked ? "yes" : "no"} />
-            <OptionalInfoRow label="Blocked by" value={selectedDeployment.blockedBy} />
-            <OptionalInfoRow label="Reason" value={selectedDeployment.blockedReason} />
             <InfoRow label="Approval" value={formatApprovalState(selectedDeployment)} />
             {selectedDeployment.planSummary ? (
               <PlanSummaryRows deployment={selectedDeployment} />
             ) : null}
-            {selectedDeployment.approvedAt ? (
-              <>
-                <InfoRow label="Approved at" value={formatDate(selectedDeployment.approvedAt)} />
-                <OptionalInfoRow
-                  label="Approved plan"
-                  value={selectedDeployment.approvedPlanArtifactId}
-                />
-                <OptionalInfoRow
-                  label="tfplan hash"
-                  value={formatShortHash(selectedDeployment.approvedTfplanHash)}
-                />
-                <OptionalInfoRow
-                  label="Artifact hash"
-                  value={formatShortHash(selectedDeployment.approvedTerraformArtifactHash)}
-                />
-                <OptionalInfoRow
-                  label="AWS account"
-                  value={selectedDeployment.approvedAwsAccountId}
-                />
-                <OptionalInfoRow
-                  label="AWS region"
-                  value={selectedDeployment.approvedAwsRegion}
-                />
-              </>
-            ) : null}
-            <OptionalInfoRow label="State object" value={selectedDeployment.stateObjectKey} />
-            <OptionalInfoRow
-              label="Result warning"
-              value={selectedDeployment.resultWarningSummary}
-            />
+            <OptionalInfoRow label="Warning" value={selectedDeployment.resultWarningSummary} />
             <OptionalInfoRow label="Error" value={selectedDeployment.errorSummary} />
           </div>
         </>
@@ -1677,68 +1761,6 @@ export function DeploymentPanel({
           explanation={failureExplanation}
           state={failureExplanationState}
         />
-      ) : null}
-
-      {shouldShowApprovePlanButton ? (
-        <button
-          className={styles.deploymentPrimaryButton}
-          disabled={!canApprovePlan}
-          onClick={approveCurrentPlan}
-          type="button"
-        >
-          <ClipboardCheck size={16} aria-hidden="true" />
-          {deploymentActions.approvePlanLabel}
-        </button>
-      ) : null}
-
-      {shouldShowPlanButton ? (
-        <button
-          className={styles.deploymentSecondaryButton}
-          disabled={!canRunPlan}
-          onClick={startTerraformPlan}
-          type="button"
-        >
-          <DashboardIcon name="server" />
-          {hasCurrentPlan ? "Terraform Plan 다시 실행" : "Terraform Plan 실행"}
-        </button>
-      ) : null}
-
-      {shouldShowApplyButton ? (
-        <button
-          className={styles.deploymentPrimaryButton}
-          disabled={!canApply}
-          onClick={() => setShowApplyConfirmation(true)}
-          type="button"
-        >
-          <DashboardIcon name="rocket" />
-          Terraform Apply 실행
-        </button>
-      ) : null}
-
-      {shouldShowDestroyPlanButton ? (
-        <button
-          className={styles.deploymentSecondaryButton}
-          disabled={!canRunDestroyPlan}
-          onClick={startTerraformDestroyPlan}
-          type="button"
-        >
-          <Trash2 size={16} aria-hidden="true" />
-          {selectedDeployment?.currentPlanOperation === "destroy"
-            ? "Destroy Plan 다시 실행"
-            : "Cleanup Destroy Plan 실행"}
-        </button>
-      ) : null}
-
-      {shouldShowDestroyButton ? (
-        <button
-          className={styles.deploymentDangerButton}
-          disabled={!canDestroy}
-          onClick={() => setShowDestroyConfirmation(true)}
-          type="button"
-        >
-          <Trash2 size={16} aria-hidden="true" />
-          Terraform Destroy 실행
-        </button>
       ) : null}
 
       {selectedDeployment?.status === "RUNNING" ? (
@@ -1923,6 +1945,11 @@ export function DeploymentPanel({
     </>
   );
 
+  function closeExpandedDeployment(): void {
+    setIsDeploymentExpanded(false);
+    onExpandedClose?.();
+  }
+
   const renderGitHubRepositoryChooser = () => {
     if (!showGitHubRepositoryChooser) {
       return null;
@@ -2041,8 +2068,9 @@ export function DeploymentPanel({
   };
 
   return (
-    <div className={styles.deploymentPanel}>
-      <header className={styles.deploymentHeader}>
+    <div className={fullScreenOnly ? styles.deploymentPanelFullscreenHost : styles.deploymentPanel}>
+      {!fullScreenOnly ? (
+        <header className={styles.deploymentHeader}>
         <div className={styles.deploymentHeaderTop}>
           <div>
             <p className={styles.projectEyebrow}>Deployment</p>
@@ -2058,9 +2086,11 @@ export function DeploymentPanel({
             <Maximize2 size={16} aria-hidden="true" />
           </button>
         </div>
-      </header>
+        </header>
+      ) : null}
 
-      <div className={styles.deploymentPanelContent}>
+      {!fullScreenOnly ? (
+        <div className={styles.deploymentPanelContent}>
         {compactDeploymentPanelMode === "setup" ? (
           <>
             {renderPreDeploymentCheckSection()}
@@ -2077,9 +2107,10 @@ export function DeploymentPanel({
 
         {renderGitCicdHandoffSection()}
         {renderStatusMessages()}
-      </div>
+        </div>
+      ) : null}
 
-      {hasDeploymentRecords ? (
+      {!fullScreenOnly && hasDeploymentRecords ? (
         <div className={styles.deploymentModeSwitch} role="group" aria-label="Deployment 화면 전환">
           <button
             className={`${styles.deploymentModeButton} ${
@@ -2119,7 +2150,7 @@ export function DeploymentPanel({
               <button
                 aria-label="Deployment 패널 닫기"
                 className={styles.deploymentExpandButton}
-                onClick={() => setIsDeploymentExpanded(false)}
+                onClick={closeExpandedDeployment}
                 type="button"
               >
                 <X size={18} aria-hidden="true" />
@@ -2173,31 +2204,33 @@ function DeploymentPreDeploymentSummary({
   const failCount = countChecklistItems(analysis, "fail");
   const warningCount = countChecklistItems(analysis, "warning");
   const gateLevel = getPreDeploymentGateLevel(analysis);
+  const visibleFindings = analysis.findings.slice(0, 3);
+  const hiddenFindingCount = Math.max(0, analysis.findings.length - visibleFindings.length);
 
   return (
     <div className={styles.deploymentPreflightSummary} data-level={gateLevel}>
       <div className={styles.deploymentGateHeader}>
-        <span className={styles.deploymentGateBadge}>{formatPreDeploymentGateLevelLabel(gateLevel)}</span>
-        <strong>배포 전 게이트</strong>
+        <span className={styles.deploymentGateBadge}>{gateLevel.toUpperCase()}</span>
+        <strong>Pre-Deployment Gate</strong>
       </div>
       <p>{analysis.summary}</p>
       <div className={styles.deploymentPreflightStats} aria-label="배포 전 검사 요약">
         <span>
           <strong>{analysis.findings.length}</strong>
-          항목
+          Findings
         </span>
         <span>
           <strong>{failCount}</strong>
-          실패
+          Fail
         </span>
         <span>
           <strong>{warningCount}</strong>
-          경고
+          Warning
         </span>
       </div>
-      {analysis.findings.length > 0 ? (
+      {visibleFindings.length > 0 ? (
         <ul className={styles.deploymentPreflightFindings}>
-          {analysis.findings.map((finding) => (
+          {visibleFindings.map((finding) => (
             <DeploymentPreDeploymentFindingItem
               finding={finding}
               key={finding.id}
@@ -2208,6 +2241,9 @@ function DeploymentPreDeploymentSummary({
       ) : (
         <p className={styles.deploymentHint}>표시할 Check Finding이 없습니다.</p>
       )}
+      {hiddenFindingCount > 0 ? (
+        <p className={styles.deploymentPreflightMore}>외 {hiddenFindingCount}개 항목</p>
+      ) : null}
     </div>
   );
 }
@@ -2225,7 +2261,7 @@ function DeploymentPreDeploymentFindingItem({
 
   return (
     <li data-severity={finding.severity}>
-      <span>{formatPreDeploymentSeverityLabel(finding.severity)}</span>
+      <span>{finding.severity.toUpperCase()}</span>
       <strong>{finding.title}</strong>
       {finding.resourceId ? <em>{finding.resourceId}</em> : null}
       <button
@@ -2239,28 +2275,6 @@ function DeploymentPreDeploymentFindingItem({
       <DeploymentFindingAiExplanation finding={finding} />
     </li>
   );
-}
-
-function formatPreDeploymentGateLevelLabel(level: "low" | "medium" | "high"): string {
-  switch (level) {
-    case "high":
-      return "위험";
-    case "medium":
-      return "주의";
-    case "low":
-      return "정상";
-  }
-}
-
-function formatPreDeploymentSeverityLabel(severity: CheckFinding["severity"]): string {
-  switch (severity) {
-    case "high":
-      return "높음";
-    case "medium":
-      return "중간";
-    case "low":
-      return "낮음";
-  }
 }
 
 function DeploymentFindingAiExplanation({ finding }: { readonly finding: CheckFinding }) {
@@ -2543,6 +2557,153 @@ function formatApprovalState(deployment: Deployment): string {
   return "승인 필요 없음";
 }
 
+function getDeploymentReviewStepStatus({
+  hasStalePreDeploymentAnalysis,
+  preDeploymentAnalysis,
+  preDeploymentErrorMessage,
+  preDeploymentState,
+  requestState,
+  selectedDeployment
+}: {
+  readonly hasStalePreDeploymentAnalysis: boolean;
+  readonly preDeploymentAnalysis: AiPreDeploymentAnalysisResult | null;
+  readonly preDeploymentErrorMessage: string;
+  readonly preDeploymentState: AiRequestState;
+  readonly requestState: RequestState;
+  readonly selectedDeployment: Deployment | null;
+}): string {
+  if (preDeploymentState === "loading" || requestState === "loading") {
+    return "진행 중";
+  }
+
+  if (preDeploymentState === "error") {
+    return preDeploymentErrorMessage || "검사를 시작하지 못했습니다.";
+  }
+
+  if (selectedDeployment) {
+    return "리뷰 생성됨";
+  }
+
+  if (hasStalePreDeploymentAnalysis) {
+    return "보드 변경됨";
+  }
+
+  if (preDeploymentAnalysis) {
+    const highCount = preDeploymentAnalysis.findings.filter(
+      (finding) => finding.severity === "high"
+    ).length;
+    const mediumCount = preDeploymentAnalysis.findings.filter(
+      (finding) => finding.severity === "medium"
+    ).length;
+
+    if (highCount > 0 || mediumCount > 0) {
+      return `검사 완료 · high ${highCount}, medium ${mediumCount}`;
+    }
+
+    return "검사 완료";
+  }
+
+  return "AWS 연결 선택 후 실행";
+}
+
+function getPrimaryDeploymentStepLabel({
+  canApply,
+  canApprovePlan,
+  canDestroy,
+  canRunDestroyPlan,
+  canRunPlan,
+  hasCurrentPlan,
+  selectedDeployment,
+  shouldShowApprovePlanButton,
+  shouldShowApplyButton,
+  shouldShowDestroyButton,
+  shouldShowDestroyPlanButton,
+  shouldShowPlanButton
+}: {
+  readonly canApply: boolean;
+  readonly canApprovePlan: boolean;
+  readonly canDestroy: boolean;
+  readonly canRunDestroyPlan: boolean;
+  readonly canRunPlan: boolean;
+  readonly hasCurrentPlan: boolean;
+  readonly selectedDeployment: Deployment | null;
+  readonly shouldShowApprovePlanButton: boolean;
+  readonly shouldShowApplyButton: boolean;
+  readonly shouldShowDestroyButton: boolean;
+  readonly shouldShowDestroyPlanButton: boolean;
+  readonly shouldShowPlanButton: boolean;
+}): string {
+  if (!selectedDeployment) {
+    return "리뷰 후 가능";
+  }
+
+  if (selectedDeployment.status === "RUNNING") {
+    return "진행 중";
+  }
+
+  if (shouldShowPlanButton) {
+    return hasCurrentPlan && canRunPlan ? "Plan 다시 실행" : "Plan 실행";
+  }
+
+  if (shouldShowApprovePlanButton) {
+    return canApprovePlan ? "Plan 승인" : "승인 대기";
+  }
+
+  if (shouldShowApplyButton) {
+    return canApply ? "배포 실행" : "배포 대기";
+  }
+
+  if (shouldShowDestroyPlanButton) {
+    return canRunDestroyPlan ? "Cleanup Plan" : "Cleanup 대기";
+  }
+
+  if (shouldShowDestroyButton) {
+    return canDestroy ? "Cleanup 실행" : "Cleanup 대기";
+  }
+
+  if (selectedDeployment.status === "SUCCESS") {
+    return "완료";
+  }
+
+  if (selectedDeployment.status === "FAILED") {
+    return "실패 확인";
+  }
+
+  return "준비 중";
+}
+
+function getPrimaryDeploymentStepStatus(deployment: Deployment | null): string {
+  if (!deployment) {
+    return "리뷰 생성 후 실행";
+  }
+
+  if (deployment.status === "RUNNING") {
+    return "Terraform 실행 중";
+  }
+
+  if (deployment.status === "FAILED") {
+    return "실패";
+  }
+
+  if (deployment.status === "SUCCESS") {
+    return "배포 완료";
+  }
+
+  if (deployment.status === "DESTROYED") {
+    return "정리 완료";
+  }
+
+  if (!deployment.currentPlanArtifactId) {
+    return "Plan 필요";
+  }
+
+  if (!deployment.approvedAt) {
+    return "승인 필요";
+  }
+
+  return "실행 준비됨";
+}
+
 function getDeploymentActionHint(deployment: Deployment): string {
   if (deployment.status === "DESTROYED") {
     return "Cleanup destroy가 완료되었습니다. Deployment 결과와 state pointer가 정리되었습니다.";
@@ -2686,10 +2847,6 @@ function formatOutputValue(output: TerraformOutput): string {
   }
 
   return JSON.stringify(output.value);
-}
-
-function formatOptionalDate(value: string | null): string {
-  return value ? formatDate(value) : "없음";
 }
 
 function formatDate(value: string): string {

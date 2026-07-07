@@ -144,6 +144,16 @@ jobs:
           REDIS_URL=${REDIS_URL}
           OPENAI_API_KEY=${OPENAI_API_KEY}
           OPENAI_MODEL=${OPENAI_MODEL}
+          AI_BILLING_MODE=${AI_BILLING_MODE}
+          AI_DAILY_CALL_LIMIT=${AI_DAILY_CALL_LIMIT}
+          AI_RATE_LIMIT_PER_MINUTE=${AI_RATE_LIMIT_PER_MINUTE}
+          BEDROCK_CREDIT_CONFIRMED=${BEDROCK_CREDIT_CONFIRMED}
+          BEDROCK_MODEL_ID=${BEDROCK_MODEL_ID}
+          AMAZON_Q_ENABLED=${AMAZON_Q_ENABLED}
+          AMAZON_Q_REGION=${AMAZON_Q_REGION}
+          AMAZON_Q_CREDIT_CONFIRMED=${AMAZON_Q_CREDIT_CONFIRMED}
+          AMAZON_Q_APPLICATION_ID=${AMAZON_Q_APPLICATION_ID}
+          AMAZON_Q_USER_ID=${AMAZON_Q_USER_ID:-}
           ENV
 
           aws s3 cp deploy/ec2/bootstrap-amazon-linux.sh \
@@ -274,6 +284,16 @@ jobs:
           OAUTH_REDIRECT_BASE_URL: ${{ vars.OAUTH_REDIRECT_BASE_URL || 'https://sketchcatch.net' }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENAI_MODEL: ${{ vars.OPENAI_MODEL || 'gpt-5.5' }}
+          AI_BILLING_MODE: ${{ vars.AI_BILLING_MODE || 'disabled' }}
+          AI_DAILY_CALL_LIMIT: ${{ vars.AI_DAILY_CALL_LIMIT || '100' }}
+          AI_RATE_LIMIT_PER_MINUTE: ${{ vars.AI_RATE_LIMIT_PER_MINUTE || '10' }}
+          BEDROCK_CREDIT_CONFIRMED: ${{ vars.BEDROCK_CREDIT_CONFIRMED || 'false' }}
+          BEDROCK_MODEL_ID: ${{ vars.BEDROCK_MODEL_ID || 'apac.amazon.nova-pro-v1:0' }}
+          AMAZON_Q_ENABLED: ${{ vars.AMAZON_Q_ENABLED || 'false' }}
+          AMAZON_Q_REGION: ${{ vars.AMAZON_Q_REGION || vars.AWS_REGION || 'ap-northeast-2' }}
+          AMAZON_Q_CREDIT_CONFIRMED: ${{ vars.AMAZON_Q_CREDIT_CONFIRMED || 'false' }}
+          AMAZON_Q_APPLICATION_ID: ${{ vars.AMAZON_Q_APPLICATION_ID }}
+          AMAZON_Q_USER_ID: ${{ vars.AMAZON_Q_USER_ID }}
           RDS_ENDPOINT: ${{ vars.RDS_ENDPOINT }}
           REDIS_URL: ${{ secrets.REDIS_URL }}
           S3_BUCKET_NAME: ${{ vars.S3_BUCKET_NAME }}

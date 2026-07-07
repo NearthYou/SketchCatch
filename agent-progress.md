@@ -4456,10 +4456,11 @@
   - Direct Deployment backend, live apply allowlist, and Terraform artifact safety were intentionally not changed.
 # Agent Progress
 
-This file is the short, English-only working log for the current agent context. Keep it concise.
+Short English-only working log for the current agent context.
 
 ## Current Verified State
 
+<<<<<<< HEAD
 - Branch/worktree: `codex/github-app-204-settings` in `C:\Users\siwon\Desktop\Jungle\Week17~21\SketchCatch-worktrees\git-cicd-handoff-create-fix`.
 - PR #241 was merged to `dev` and deployed to production by GitHub Actions run `28888021622`.
 - Production health and DB health returned `ok`.
@@ -4505,11 +4506,22 @@ Known issue outside this work:
 - Worktree: `C:\Jungle\SketchCatch`
 - Base: local `dev` updated to `384429c0` and merged into this branch.
 >>>>>>> 37360ce4db3b64085449f231fcefd6f0f0be28ad
+=======
+- Branch/worktree: `codex/deployment-button-labels` in `C:\Users\siwon\Desktop\Jungle\Week17~21\SketchCatch-worktrees\deployment-button-labels`.
+- Base: latest `origin/dev`.
+- Scope: Deployment panel UX simplification and Git/CI/CD handoff action labels.
+- Deploy no longer renders inside the right panel. Deploy and Plan open the full-screen deployment console.
+- The deployment console now presents the main path as three steps: save, pre-deployment check/review, deploy.
+- Direct deployment action buttons were consolidated into one contextual deploy action.
+- Noisy deployment record metadata was reduced; errors stay visible in a reserved alert slot.
+- Git/CI/CD handoff buttons now use user-facing labels with concise helper text.
+>>>>>>> b13be5c8eb5f2f2e73e0fde4ad4abbfedb8251b4
 
 ## Session Record
 
 2026-07-08:
 
+<<<<<<< HEAD
 <<<<<<< HEAD
 - Implemented the Trivy-backed Deployment Safety Gate conversion across shared types, API analysis, deployment plan warnings/approval, frontend flow, Docker deploy config, and docs.
 - Removed temporary Playwright artifacts after local UI smoke.
@@ -4532,6 +4544,14 @@ Known issue outside this work:
 - Updated unsupported-resource handling so panel-backed resources are no longer reported as omitted, while unsupported workflow automation such as CI/CD handoff remains guarded.
 - Merged latest `dev` into `fix/ck/diagram-position`; the only manual conflict was this progress log.
 >>>>>>> 37360ce4db3b64085449f231fcefd6f0f0be28ad
+=======
+- Added full-screen-only deployment console hosting from `WorkspaceRightPanel`.
+- Added a three-step deployment workflow in `DeploymentPanel`.
+- Combined pre-deployment check and review creation into one visible step.
+- Routed Plan, approval, Apply, and Cleanup through one contextual deployment button.
+- Reduced duplicated Direct Deployment action buttons and low-value metadata rows.
+- Added responsive styling and source-layout regression coverage.
+>>>>>>> b13be5c8eb5f2f2e73e0fde4ad4abbfedb8251b4
 
 Verification:
 
@@ -4539,33 +4559,14 @@ Verification:
 - Review and either update or fix the unrelated diagram editor handle-id tests before relying on full `pnpm test` as a green gate.
 =======
 - `pnpm harness:check`
-- `.\node_modules\.bin\tsx.CMD --test features\workspace\workspace-ai-diagram-adapter.test.ts features\diagram-editor\flow-mappers.test.ts` from `apps/web`
-- Browser verification against `http://localhost:3000/workspace?projectName=Diagram%20Fresh%20Check&diagramFixture=conventions`: 11 nodes, 9 edges, 5 thin dependency edges, 2 dashed async edges, no resource-resource overlaps, and no sampled edge-resource hits.
-- Browser verification against the generated project workspace: 22 nodes, 10 edges, 1 thin dependency edge, 2 dashed async edges, and no sampled edge-resource hits.
-- `.\node_modules\.bin\tsx.CMD --test src\services\aiArchitectureDrafts.test.ts src\routes\ai.test.ts` from `apps/api`
-- `pnpm lint` (passed; Turbo cache rename warnings only)
-- `pnpm typecheck` (passed; Turbo cache rename warnings only)
-- `pnpm build` (first sandboxed run hit Next.js `.next` unlink EPERM; elevated rerun passed)
-## Completed Fixes
-
-- GitHub App config path now uses the shared `GIT_APP_*` env loader.
-- GitHub App permission messages distinguish PR creation and repository settings permission gaps.
-- Blank repository variables are skipped before applying GitHub repository settings.
-- Smoke script sends explicit JSON bodies and records useful API error evidence.
-- GitHub App client now treats `204 No Content` as a successful empty response.
-
-## Verification
-
-- `pnpm harness:check`
-- `pnpm --filter @sketchcatch/api exec tsx --test src/source-repositories/github-app-client.test.ts`
-- `pnpm --filter @sketchcatch/api exec tsx --test src/git-cicd/git-cicd-repository-settings-service.test.ts src/routes/git-cicd-handoffs.test.ts`
+- `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-right-panel-layout.test.ts`
 - `pnpm lint`
 - `pnpm typecheck`
 - `pnpm build`
-- Production smoke report: `docs/sw/git-cicd-live-smoke-pr-created-current.json`
 
-Dev merge context:
+Known risks:
 
+<<<<<<< HEAD
 - PR #234 and PR #235 were merged and deployed before this branch update.
 - Latest `dev` includes Git/CI/CD handoff permission messaging, repository settings, cost usage work, and production smoke follow-up updates.
 - The dev-side production smoke blocker remains GitHub App permission approval for generated PR files, especially workflow files.
@@ -4581,3 +4582,6 @@ Dev merge context:
 - Run the downstream GitHub Actions pipeline and verify live static/API URLs.
 - Run cleanup/destroy verification after any real AWS deployment.
 >>>>>>> 37360ce4db3b64085449f231fcefd6f0f0be28ad
+=======
+- This is a UI workflow change; no real AWS apply, GitHub repository mutation, or browser click QA was run locally.
+>>>>>>> b13be5c8eb5f2f2e73e0fde4ad4abbfedb8251b4
