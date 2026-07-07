@@ -104,12 +104,30 @@ const terraformResourcePresentations = [
     size
   },
   {
+    definitionId: "aws-route",
+    name: "Route",
+    area: "network",
+    category: "Network",
+    iconUrl: `${resourceIconPath}/Res_Networking-Content-Delivery/Res_Amazon-VPC_Router_48.svg`,
+    label: "Route",
+    size
+  },
+  {
     definitionId: "aws-cloudfront-distribution",
     name: "CloudFront Distribution",
     area: "network",
     category: "Network",
     iconUrl: `${serviceIconPath}/Arch_Networking-Content-Delivery/64/Arch_Amazon-CloudFront_64.svg`,
     label: "CloudFront Distribution",
+    size
+  },
+  {
+    definitionId: "aws-cloudfront-origin-access-control",
+    name: "CloudFront OAC",
+    area: "network",
+    category: "Network",
+    iconUrl: `${serviceIconPath}/Arch_Networking-Content-Delivery/64/Arch_Amazon-CloudFront_64.svg`,
+    label: "CloudFront OAC",
     size
   },
   {
@@ -128,24 +146,6 @@ const terraformResourcePresentations = [
     category: "Security",
     iconUrl: `${serviceIconPath}/Arch_Security-Identity-Compliance/64/Arch_AWS-WAF_64.svg`,
     label: "WAF Web ACL",
-    size
-  },
-  {
-    definitionId: "aws-lb",
-    name: "Application Load Balancer",
-    area: "network",
-    category: "Network",
-    iconUrl: `${serviceIconPath}/Arch_Networking-Content-Delivery/64/Arch_Elastic-Load-Balancing_64.svg`,
-    label: "Application Load Balancer",
-    size
-  },
-  {
-    definitionId: "aws-lb-listener",
-    name: "Load Balancer Listener",
-    area: "network",
-    category: "Network",
-    iconUrl: `${resourceIconPath}/Res_Networking-Content-Delivery/Res_Elastic-Load-Balancing_Application-Load-Balancer_48.svg`,
-    label: "Load Balancer Listener",
     size
   },
   {
@@ -200,6 +200,24 @@ const terraformResourcePresentations = [
     category: "Security",
     iconUrl: `${resourceIconPath}/Res_Security-Identity-Compliance/Res_AWS-Identity-Access-Management_Permissions_48.svg`,
     label: "IAM Policy",
+    size
+  },
+  {
+    definitionId: "aws-iam-role-policy",
+    name: "IAM Role Policy",
+    area: "security-identity",
+    category: "Security",
+    iconUrl: `${resourceIconPath}/Res_Security-Identity-Compliance/Res_AWS-Identity-Access-Management_Permissions_48.svg`,
+    label: "Role Policy",
+    size
+  },
+  {
+    definitionId: "aws-iam-role-policy-attachment",
+    name: "IAM Role Policy Attachment",
+    area: "security-identity",
+    category: "Security",
+    iconUrl: `${resourceIconPath}/Res_Security-Identity-Compliance/Res_AWS-Identity-Access-Management_Permissions_48.svg`,
+    label: "Policy Attachment",
     size
   },
   {
@@ -263,6 +281,24 @@ const terraformResourcePresentations = [
     category: "Compute",
     iconUrl: `${resourceIconPath}/Res_Compute/Res_Amazon-EC2_AMI_48.svg`,
     label: "AMI",
+    size
+  },
+  {
+    definitionId: "aws-caller-identity",
+    name: "Caller Identity",
+    area: "tools",
+    category: "Terraform Data Sources",
+    iconUrl: `${serviceIconPath}/Arch_Security-Identity-Compliance/64/Arch_AWS-Identity-and-Access-Management_64.svg`,
+    label: "Caller Identity",
+    size
+  },
+  {
+    definitionId: "aws-ssm-parameter",
+    name: "SSM Parameter",
+    area: "tools",
+    category: "Terraform Data Sources",
+    iconUrl: `${resourceIconPath}/Res_Management-Governance/Res_AWS-Systems-Manager_Parameter-Store_48.svg`,
+    label: "SSM Parameter",
     size
   },
   {
@@ -500,6 +536,15 @@ const terraformResourcePresentations = [
     size
   },
   {
+    definitionId: "aws-secretsmanager-secret-version",
+    name: "Secrets Manager Secret Version",
+    area: "security-identity",
+    category: "Security",
+    iconUrl: `${serviceIconPath}/Arch_Security-Identity-Compliance/64/Arch_AWS-Secrets-Manager_64.svg`,
+    label: "Secret Version",
+    size
+  },
+  {
     definitionId: "aws-lambda-function",
     name: "Lambda Function",
     area: "application",
@@ -623,6 +668,51 @@ const terraformResourcePresentations = [
     category: "Observability / Operations",
     iconUrl: `${serviceIconPath}/Arch_App-Integration/64/Arch_Amazon-EventBridge_64.svg`,
     label: "Event Target",
+    size
+  },
+  {
+    definitionId: "aws-codebuild-project",
+    name: "CodeBuild Project",
+    area: "tools",
+    category: "CI/CD",
+    iconUrl: `${serviceIconPath}/Arch_Developer-Tools/64/Arch_AWS-CodeBuild_64.svg`,
+    label: "CodeBuild",
+    size
+  },
+  {
+    definitionId: "aws-codedeploy-app",
+    name: "CodeDeploy App",
+    area: "tools",
+    category: "CI/CD",
+    iconUrl: `${serviceIconPath}/Arch_Developer-Tools/64/Arch_AWS-CodeDeploy_64.svg`,
+    label: "CodeDeploy App",
+    size
+  },
+  {
+    definitionId: "aws-codedeploy-deployment-group",
+    name: "CodeDeploy Deployment Group",
+    area: "tools",
+    category: "CI/CD",
+    iconUrl: `${serviceIconPath}/Arch_Developer-Tools/64/Arch_AWS-CodeDeploy_64.svg`,
+    label: "Deployment Group",
+    size
+  },
+  {
+    definitionId: "aws-codepipeline",
+    name: "CodePipeline",
+    area: "tools",
+    category: "CI/CD",
+    iconUrl: `${serviceIconPath}/Arch_Developer-Tools/64/Arch_AWS-CodePipeline_64.svg`,
+    label: "CodePipeline",
+    size
+  },
+  {
+    definitionId: "aws-codestarconnections-connection",
+    name: "CodeStar Connection",
+    area: "tools",
+    category: "CI/CD",
+    iconUrl: `${serviceIconPath}/Arch_Developer-Tools/64/Arch_AWS-CodePipeline_64.svg`,
+    label: "CodeStar Connection",
     size
   },
   {

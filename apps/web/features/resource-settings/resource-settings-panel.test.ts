@@ -11,8 +11,18 @@ test("resource settings panel exposes Resources, Templates, provider, and module
   assert.match(panelSource, /Resources/);
   assert.match(panelSource, /Templates/);
   assert.match(panelSource, /<AwsLogo \/>/);
+  assert.match(panelSource, /aria-label="AWS provider"/);
+  assert.match(panelSource, /className="providerSelect"/);
+  assert.doesNotMatch(panelSource, /aria-pressed="true"/);
+  assert.doesNotMatch(panelSource, /providerSelectActive/);
   assert.doesNotMatch(panelSource, /"azure"/);
   assert.doesNotMatch(panelSource, /"gcp"/);
+  assert.match(panelSource, /awsProviderVersions/);
+  assert.match(panelSource, /aria-label="Terraform AWS provider version"/);
+  assert.match(panelSource, /className="providerVersionMenu"/);
+  assert.match(panelSource, /className="providerSelect providerVersionSelect providerVersionTrigger"/);
+  assert.match(panelSource, /6\.47\.0/);
+  assert.match(panelSource, /6\.46\.0/);
   assert.match(panelSource, /aria-label="Resource view mode"/);
   assert.match(panelSource, /title="Resources"/);
   assert.match(panelSource, /title="Modules"/);
@@ -44,6 +54,7 @@ test("left catalog controls keep stable dimensions and scroll instead of overflo
   const resourcePanelRule = getCssRule(stylesSource, "resourcePanel");
   const resourceTabsRule = getCssRule(stylesSource, "resourceTabs");
   const providerControlsRule = getCssRule(stylesSource, "providerControls");
+  const providerDropdownRule = getCssRule(stylesSource, "providerDropdown");
   const resourceAreaLabelRule = getCssRule(stylesSource, "resourceAreaLabel");
   const moduleCatalogPanelRule = getCssRule(stylesSource, "moduleCatalogPanel");
 
@@ -51,6 +62,8 @@ test("left catalog controls keep stable dimensions and scroll instead of overflo
   assert.match(resourcePanelRule, /\boverflow:\s*hidden;/);
   assert.match(resourceTabsRule, /\bmin-height:\s*43px;/);
   assert.match(providerControlsRule, /\bdisplay:\s*inline-flex;/);
+  assert.match(providerDropdownRule, /\bposition:\s*relative;/);
+  assert.match(stylesSource, /\.providerVersionMenu\s*\{[^}]*\bposition:\s*absolute;/s);
   assert.match(resourceAreaLabelRule, /\bfont-size:\s*1rem;/);
   assert.match(resourceAreaLabelRule, /\bline-height:\s*3\.2;/);
   assert.match(stylesSource, /\.diagramEditor \.resourceAreaLabel\s*\{[^}]*\bfont-size:\s*1rem;/s);
@@ -69,7 +82,7 @@ test("resource tiles follow the compact tile contract", () => {
 });
 
 test("resource panel preserves templates, search, and section states", () => {
-  assert.match(panelSource, /<TemplatesPanel \/>/);
+  assert.match(panelSource, /<TemplatesPanel onTemplateApply=\{onTemplateApply\} \/>/);
   assert.match(panelSource, /Search results/);
   assert.match(panelSource, /No resources found\./);
   assert.match(panelSource, /resourceAreaChevronOpen/);

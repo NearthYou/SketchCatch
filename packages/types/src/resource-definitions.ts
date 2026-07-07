@@ -67,6 +67,14 @@ export const resourceDefinitions = [
     terraformSync: true
   }),
   createAwsResourceDefinition({
+    id: "aws-route",
+    parameterPanel: false,
+    resourceType: "ROUTE_TABLE",
+    terraformPreview: true,
+    terraformResourceType: "aws_route",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
     id: "aws-cloudfront-distribution",
     resourceType: "CLOUDFRONT",
     terraformPreview: true,
@@ -74,28 +82,28 @@ export const resourceDefinitions = [
     terraformSync: true
   }),
   createAwsResourceDefinition({
+    id: "aws-cloudfront-origin-access-control",
+    parameterPanel: false,
+    resourceType: "CLOUDFRONT",
+    terraformPreview: true,
+    terraformResourceType: "aws_cloudfront_origin_access_control",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
     id: "aws-route53-record",
     parameterPanel: false,
     resourceType: "ROUTE53_RECORD",
-    terraformResourceType: "aws_route53_record"
+    terraformPreview: true,
+    terraformResourceType: "aws_route53_record",
+    terraformSync: true
   }),
   createAwsResourceDefinition({
     id: "aws-wafv2-web-acl",
     parameterPanel: false,
     resourceType: "WAF_WEB_ACL",
-    terraformResourceType: "aws_wafv2_web_acl"
-  }),
-  createAwsResourceDefinition({
-    id: "aws-lb",
-    parameterPanel: false,
-    resourceType: "LOAD_BALANCER",
-    terraformResourceType: "aws_lb"
-  }),
-  createAwsResourceDefinition({
-    id: "aws-lb-listener",
-    parameterPanel: false,
-    resourceType: "LOAD_BALANCER_LISTENER",
-    terraformResourceType: "aws_lb_listener"
+    terraformPreview: true,
+    terraformResourceType: "aws_wafv2_web_acl",
+    terraformSync: true
   }),
   createAwsResourceDefinition({
     id: "aws-nat-gateway",
@@ -140,6 +148,22 @@ export const resourceDefinitions = [
     terraformSync: true
   }),
   createAwsResourceDefinition({
+    id: "aws-iam-role-policy",
+    parameterPanel: false,
+    resourceType: "IAM_POLICY",
+    terraformPreview: true,
+    terraformResourceType: "aws_iam_role_policy",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
+    id: "aws-iam-role-policy-attachment",
+    parameterPanel: false,
+    resourceType: "IAM_POLICY",
+    terraformPreview: true,
+    terraformResourceType: "aws_iam_role_policy_attachment",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
     id: "aws-iam-instance-profile",
     resourceType: "IAM_INSTANCE_PROFILE",
     terraformPreview: true,
@@ -166,6 +190,24 @@ export const resourceDefinitions = [
     terraformBlockType: "data",
     terraformPreview: true,
     terraformResourceType: "aws_ami",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
+    id: "aws-caller-identity",
+    parameterPanel: false,
+    resourceType: "UNKNOWN",
+    terraformBlockType: "data",
+    terraformPreview: true,
+    terraformResourceType: "aws_caller_identity",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
+    id: "aws-ssm-parameter",
+    parameterPanel: false,
+    resourceType: "UNKNOWN",
+    terraformBlockType: "data",
+    terraformPreview: true,
+    terraformResourceType: "aws_ssm_parameter",
     terraformSync: true
   }),
   createAwsResourceDefinition({
@@ -199,6 +241,7 @@ export const resourceDefinitions = [
   createAwsResourceDefinition({
     id: "aws-lb",
     parameterPanel: false,
+    resourceType: "LOAD_BALANCER",
     terraformPreview: true,
     terraformResourceType: "aws_lb",
     terraformSync: true
@@ -214,6 +257,7 @@ export const resourceDefinitions = [
   createAwsResourceDefinition({
     id: "aws-lb-listener",
     parameterPanel: false,
+    resourceType: "LOAD_BALANCER_LISTENER",
     terraformPreview: true,
     terraformResourceType: "aws_lb_listener",
     terraformSync: true
@@ -354,7 +398,17 @@ export const resourceDefinitions = [
     id: "aws-secretsmanager-secret",
     parameterPanel: false,
     resourceType: "SECRETS_MANAGER_SECRET",
-    terraformResourceType: "aws_secretsmanager_secret"
+    terraformPreview: true,
+    terraformResourceType: "aws_secretsmanager_secret",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
+    id: "aws-secretsmanager-secret-version",
+    parameterPanel: false,
+    resourceType: "SECRETS_MANAGER_SECRET",
+    terraformPreview: true,
+    terraformResourceType: "aws_secretsmanager_secret_version",
+    terraformSync: true
   }),
   createAwsResourceDefinition({
     id: "aws-lambda-function",
@@ -455,6 +509,46 @@ export const resourceDefinitions = [
     resourceType: "EVENTBRIDGE_TARGET",
     terraformPreview: true,
     terraformResourceType: "aws_cloudwatch_event_target",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
+    id: "aws-codebuild-project",
+    parameterPanel: false,
+    resourceType: "UNKNOWN",
+    terraformPreview: true,
+    terraformResourceType: "aws_codebuild_project",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
+    id: "aws-codedeploy-app",
+    parameterPanel: false,
+    resourceType: "UNKNOWN",
+    terraformPreview: true,
+    terraformResourceType: "aws_codedeploy_app",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
+    id: "aws-codedeploy-deployment-group",
+    parameterPanel: false,
+    resourceType: "UNKNOWN",
+    terraformPreview: true,
+    terraformResourceType: "aws_codedeploy_deployment_group",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
+    id: "aws-codepipeline",
+    parameterPanel: false,
+    resourceType: "UNKNOWN",
+    terraformPreview: true,
+    terraformResourceType: "aws_codepipeline",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
+    id: "aws-codestarconnections-connection",
+    parameterPanel: false,
+    resourceType: "UNKNOWN",
+    terraformPreview: true,
+    terraformResourceType: "aws_codestarconnections_connection",
     terraformSync: true
   }),
   createAwsResourceDefinition({

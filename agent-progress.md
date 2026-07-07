@@ -1,3 +1,97 @@
+### 2026-07-07 - Workspace canvas 영역 탭 하단 흰색 넘침 보정
+
+- Goal: 영역 리소스 탭의 라벨 배경 보정선이 본체 영역 아래로 흰색 띠처럼 넘쳐 보이지 않게 한다.
+- Completed:
+  - `.nodeShellArea`에 `--area-body-background`를 정의하고 본체 배경에 사용했다.
+  - `.areaNodeHeader::before`의 배경을 탭 흰색이 아니라 본체 배경 변수로 맞춰 하단 overflow가 눈에 띄지 않게 했다.
+  - folder tab 구조, 라벨, 아이콘, border/handle 위치는 유지했다.
+  - CSS 회귀 테스트에 탭 하단 보정선 배경 조건을 추가했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits.
+  - Red before fix: focused folder tab test failed because area body background variable and matching `::before` background were missing.
+  - Focused folder tab test - passed after fix.
+  - Canvas focused tests - passed, 86 tests.
+  - Playwright visual QA: region area close-up/full screenshots saved under `output/playwright/region-tab-background-overflow-cleanup*.png`; computed `::before` background was `rgba(255, 255, 255, 0.14)`.
+  - `pnpm harness:check` - passed after edits.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `pnpm build` - first attempt was blocked by another active Next build; retry passed.
+- Known risks:
+  - 이번 변경은 canvas CSS 탭 연결부에 한정되며 Terraform/API/cloud 동작은 실행하지 않았다.
+
+### 2026-07-07 - Workspace 우측 패널 리사이즈 hover 정리
+
+- Goal: 우측 패널을 늘리고 줄일 때 리사이즈 핸들에 뜨는 보라색 hover 표시를 제거한다.
+- Completed:
+  - 오른쪽 레일 리사이즈 핸들의 hover/focus/active 표시를 투명 처리했다.
+  - 왼쪽 레일 리사이즈 핸들의 기존 보라색 표시 방식은 유지했다.
+  - 오른쪽 리사이즈 핸들이 보라색 hover rail을 띄우지 않는 CSS 회귀 테스트를 추가했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits.
+  - Red before fix: `pnpm --filter web exec tsx --test features/diagram-editor/diagram-editor-layout.test.ts` - failed on the new right resize hover assertion.
+  - `pnpm --filter web exec tsx --test features/diagram-editor/diagram-editor-layout.test.ts` - passed after fix.
+  - `pnpm harness:check` - passed after edits.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `pnpm build` - first attempt blocked by another active `next build`; after that process exited, retry passed.
+- Known risks:
+  - 전체 web test script는 기존 `DiagramNodeView.test.ts` 실패가 함께 있어 완료되지 않았다. 이번 변경 대상 테스트는 별도 직접 실행으로 통과했다.
+
+### 2026-07-07 - Workspace canvas 영역 탭 오른쪽 잔상 제거
+
+- Goal: 영역 리소스 folder tab 오른쪽 끝에 남는 반쪽 U자 보조선을 제거해 탭과 본체가 분리된 도형처럼 보이지 않게 한다.
+- Completed:
+  - `.areaNodeHeader::after` 보조 connector를 제거해 탭 오른쪽의 독립적인 곡선/선분 잔상을 없앴다.
+  - 기존 탭 라벨, 아이콘, 색상, 점선 배경, connection handle 위치는 변경하지 않았다.
+  - CSS 회귀 테스트가 오른쪽 보조 connector를 다시 그리지 않도록 보강했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits and after build.
+  - Red before fix: focused folder tab test failed while `.areaNodeHeader::after` existed.
+  - Focused folder tab test - passed after fix.
+  - Canvas focused tests - passed, 85 tests.
+  - Playwright visual QA: `security_group_2` close-up/full screenshots saved under `output/playwright/security-group-tab-right-cleanup*.png`; computed `::after` content was `none`.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `pnpm build` - passed.
+  - `git diff --check` - passed.
+- Known risks:
+  - 이번 변경은 canvas CSS 탭 연결부에 한정되며 Terraform/API/cloud 동작은 실행하지 않았다.
+
+### 2026-07-07 - Workspace canvas 영역 탭 좌측 연결부 보정
+
+- Goal: 영역 리소스의 folder tab 구조를 유지하면서 라벨 탭 왼쪽 아래와 본체 왼쪽 border가 분리된 도형처럼 보이지 않게 한다.
+- Completed:
+  - `.nodeShellArea`의 top-left radius를 탭 연결부에서 제거해 탭 왼쪽 border와 본체 왼쪽 border가 한 줄로 이어지게 했다.
+  - 기존 tab header, 아이콘, 텍스트, 색상, 점선 배경, connection handle 위치는 변경하지 않았다.
+  - CSS 회귀 테스트에 본체 top-left 연결부 조건을 추가했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits.
+  - Red before fix: `pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/diagram-editor-layout.test.ts --test-name-pattern "area node header uses a folder tab shape"` - failed for missing `border-top-left-radius: 0`.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/diagram-editor-layout.test.ts --test-name-pattern "area node header uses a folder tab shape"` - passed after fix.
+  - Canvas focused tests - passed, 84 tests.
+  - Playwright visual QA: `security_group_2` workspace close-up and full screenshots saved under `output/playwright/security-group-tab-*.png`.
+- Known risks:
+  - 이번 변경은 canvas CSS 연결부에 한정되며 Terraform/API/cloud 동작은 실행하지 않았다.
+
+# 2026-07-07 - 로컬 500 오류 원인 확인 및 DB 마이그레이션 적용
+
+- Goal: 브라우저의 `Failed to load resource: 500` 오류 원인을 재현하고 해결 경로를 확인한다.
+- Completed:
+  - 인증된 워크스페이스 초기 호출 중 `GET /api/deployments/recent-successful-projects`가 500을 반환하는 것을 재현했다.
+  - 원인은 현재 코드가 `deployments.live_profile` 및 0021~0026 마이그레이션 이후 스키마를 기대하지만, 로컬 DB는 0020까지만 적용되어 있던 schema drift로 확인했다.
+  - `pnpm --filter @sketchcatch/api db:migrate`는 에러 본문 없이 실패했으나, 프로젝트 런타임 마이그레이션 경로인 `pnpm --filter @sketchcatch/api db:migrate:runtime`은 성공했다.
+  - 내려가 있던 API dev server를 `pnpm --filter @sketchcatch/api dev`로 다시 띄웠고, 4000 포트 health/db health를 확인했다.
+  - 진단 중 만든 `codexdiag...` 임시 사용자/프로젝트 데이터는 삭제했다.
+- Verification run:
+  - `pnpm harness:check` - passed before investigation and after migration.
+  - `curl http://localhost:4000/health` - HTTP 200.
+  - `curl http://localhost:4000/health/db` - HTTP 200.
+  - DB inspection - `deployments.live_profile` present, latest migration id 27, `codexdiag` users remaining 0.
+  - Authenticated `GET /api/deployments/recent-successful-projects` - changed from HTTP 500 to HTTP 200 `{"items":[]}`.
+- Known risks:
+  - `drizzle-kit migrate` path still failed without useful stderr in this local run; `db:migrate:runtime` succeeded and should be preferred for this local recovery path if the same issue recurs.
+  - API dev server is intentionally left running for local browser verification.
+
 # 2026-07-07 - PR #220 origin/dev 충돌 병합
 
 - Goal: PR #220 브랜치 `codex/right-panel-resource-header`에 최신 `origin/dev`를 병합하고, 양쪽 의도를 보존해 충돌을 해결한다.
@@ -4268,3 +4362,51 @@
   - `git diff --check` - passed with line-ending warnings only.
 - Known risks:
   - 이미 사용자 AWS 계정에 남아 있는 실패 Stack이나 기존 `SketchCatchTerraformExecutionRole` Role은 자동 삭제하지 않는다. 배포 후 새 Quick Create 링크로 다시 시작하면 새 Role 이름을 쓰므로 기존 Role과 충돌하지 않는다.
+
+# 2026-07-07 - 좌측 패널 AWS/resize hover 정리
+
+- Goal: 좌측 패널에서 AWS provider 버튼의 선택 강조와 resize hover 시 보라색 표시를 제거한다.
+- Completed:
+  - `AWS` provider 버튼에서 active highlight class와 pressed 상태를 제거했다.
+  - 좌측 패널 resize handle의 hover/focus/active 보라색 rail 표시를 투명 처리했다.
+  - 관련 source 계약 테스트를 보강했다.
+- Verification run:
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/resource-settings/resource-settings-panel.test.ts` - passed, 7 tests.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/diagram-editor-layout.test.ts` - passed, 7 tests.
+  - `pnpm --filter @sketchcatch/web lint` - passed.
+  - `pnpm --filter @sketchcatch/web typecheck` - passed.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `pnpm build` - passed.
+  - `pnpm harness:check` - passed.
+- Known risks:
+  - 브라우저 수동 smoke는 수행하지 않았다. 이번 변경은 source 계약 테스트와 build로 검증했다.
+
+# 2026-07-08 - 첨부 Terraform 입력 리소스/진단 확장
+
+- Goal: 첨부 Terraform을 Terraform editor에 넣었을 때 알 수 없는 리소스 경고와 heredoc syntax error가 뜨지 않도록 Terraform 입력 인식 범위를 확장한다.
+- Completed:
+  - Shared resource definitions에 첨부 Terraform에서 쓰는 CodeBuild, CodeDeploy, CodePipeline, CodeStar connection, CloudFront OAC, IAM role policy/attachment, route, Secrets Manager secret version, caller identity, SSM parameter 정의를 추가했다.
+  - 기존 `aws_lb`, `aws_lb_listener`, `aws_secretsmanager_secret` lookup이 `terraformPreview=true`, `terraformSync=true`로 잡히도록 중복/비활성 정의와 누락 capability를 정리했다.
+  - Resource Settings catalog에 새 shared definitions presentation을 추가하고, CI/CD는 tools, IAM/Secrets는 security-identity, route/OAC는 network, data source는 Terraform Data Sources로 노출했다.
+  - Terraform editor diagnostics가 direct heredoc과 `base64encode(<<-EOF ... EOF)` 형태의 function-wrapped heredoc을 syntax error로 오판하지 않도록 marker 탐지를 보강했다.
+  - `random_password`, `terraform_data`는 known Terraform utility block으로 인식해 Terraform sync에서 Practice Architecture resource나 unsupported error로 다루지 않게 했다.
+  - CodeBuild, CodePipeline, CodeDeploy deployment group의 대표 nested block 목록을 확장하고 nested 안쪽 block도 같은 resource schema로 파싱하게 했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits.
+  - `pnpm --filter @sketchcatch/types typecheck` - passed.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/resource-definitions-source-shape.test.ts` - passed, 4 tests.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-diagnostics.test.ts src/services/terraform/terraform-to-diagram.test.ts src/services/terraform/infrastructure-graph.test.ts` - passed, 89 tests.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/resource-settings/catalog.test.ts features/resource-settings/module-catalog.test.ts` - passed, 11 tests.
+  - `pnpm --filter @sketchcatch/api typecheck` - passed.
+  - `pnpm --filter @sketchcatch/web typecheck` - passed.
+  - Attached Terraform diagnostic smoke using `createTerraformDiagnostics` - `terraform.unsupported_resource=0`, errors `0`, remaining diagnostics only `terraform.empty_block=1`.
+  - `pnpm catalog:check` - passed.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `pnpm build` - passed.
+  - `git diff --check` - passed.
+- Known risks:
+  - `pnpm --filter @sketchcatch/api test` still fails 7 unrelated baseline tests: 6 deployment lock/apply/destroy tests assert Windows path separators, and 1 Design Simulation text clamp test expects fewer items.
+  - `pnpm --filter @sketchcatch/web test` still fails 1 unrelated baseline test in `features/diagram-editor/DiagramNodeView.test.ts`, where the source expects current handle ids to differ from the test regex.
+  - Direct Deployment backend, live apply allowlist, and Terraform artifact safety were intentionally not changed.

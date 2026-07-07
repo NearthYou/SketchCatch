@@ -19,8 +19,7 @@ import {
   RadioTower,
   Search,
   Settings,
-  ShieldCheck,
-  Sparkles
+  ShieldCheck
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useMemo, useState, type DragEvent } from "react";
@@ -33,8 +32,7 @@ import {
 import {
   curatedModules,
   type CuratedModuleCategory,
-  type CuratedModuleDefinition,
-  type CuratedModuleProvider
+  type CuratedModuleDefinition
 } from "./module-catalog";
 import {
   listBoardTemplates,
@@ -53,6 +51,9 @@ const areaLabels: Record<ResourceArea, string> = {
   application: "Application",
   other: "Other"
 };
+
+const awsProviderVersions = ["6.47.0", "6.46.0", "6.45.0", "6.44.0"] as const;
+type AwsProviderVersion = (typeof awsProviderVersions)[number];
 
 type ResourcePanelSectionId =
   | "modules"
@@ -106,7 +107,8 @@ export function ResourceSettingsPanel({
 }: ResourceSettingsPanelProps = {}) {
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState<"resources" | "templates">("resources");
-  const [activeProvider, setActiveProvider] = useState<CuratedModuleProvider>("aws");
+  const [selectedProviderVersion, setSelectedProviderVersion] = useState<AwsProviderVersion>(awsProviderVersions[0]);
+  const [isProviderVersionMenuOpen, setProviderVersionMenuOpen] = useState(false);
   const [activeResourceView, setActiveResourceView] = useState<"resources" | "modules">("resources");
   const [openSections, setOpenSections] = useState<Record<string, boolean>>(
     () =>
@@ -168,21 +170,49 @@ export function ResourceSettingsPanel({
 
       <div className="resourceControlBar">
         <div className="providerControls">
-          {(["aws", "azure", "gcp"] as const).map((provider) => (
+          <button
+            aria-label="AWS provider"
+            className="providerSelect"
+            type="button"
+          >
+            <AwsLogo />
+          </button>
+          <div className="providerDropdown">
             <button
-              aria-pressed={activeProvider === provider}
-              className={activeProvider === provider ? "providerSelect providerSelectActive" : "providerSelect"}
-              key={provider}
-              onClick={() => setActiveProvider(provider)}
+              aria-expanded={isProviderVersionMenuOpen}
+              aria-haspopup="listbox"
+              aria-label="Terraform AWS provider version"
+              className="providerSelect providerVersionSelect providerVersionTrigger"
+              onClick={() => setProviderVersionMenuOpen((isOpen) => !isOpen)}
               type="button"
             >
-              {provider === "aws" ? <AwsLogo /> : <span>{provider.toUpperCase()}</span>}
+              <span className="providerVersionValue">{selectedProviderVersion}</span>
+              <ChevronDown
+                aria-hidden="true"
+                className={isProviderVersionMenuOpen ? "providerVersionChevron providerVersionChevronOpen" : "providerVersionChevron"}
+                size={16}
+              />
             </button>
-          ))}
-          <button className="providerSelect providerVersionSelect" type="button" aria-label="Terraform AWS provider version">
-            <span>6.47.0</span>
-            <ChevronDown aria-hidden="true" size={16} />
-          </button>
+            {isProviderVersionMenuOpen ? (
+              <div className="providerVersionMenu" role="listbox" aria-label="AWS provider versions">
+                {awsProviderVersions.map((version) => (
+                  <button
+                    aria-selected={selectedProviderVersion === version}
+                    className={selectedProviderVersion === version ? "providerVersionOptionActive" : "providerVersionOption"}
+                    key={version}
+                    onClick={() => {
+                      setSelectedProviderVersion(version);
+                      setProviderVersionMenuOpen(false);
+                    }}
+                    role="option"
+                    type="button"
+                  >
+                    {version}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
         </div>
         <div className="resourceViewToggles" aria-label="Resource view mode">
           <button
@@ -206,9 +236,7 @@ export function ResourceSettingsPanel({
         </div>
       </div>
 
-      {activeProvider !== "aws" ? (
-        <InactiveProviderPanel provider={activeProvider} />
-      ) : activeTab === "templates" ? (
+      {activeTab === "templates" ? (
         <TemplatesPanel onTemplateApply={onTemplateApply} />
       ) : activeResourceView === "modules" ? (
         <ModuleCatalogPanel onModuleAdd={onModuleAdd} />
@@ -257,16 +285,6 @@ export function ResourceSettingsPanel({
         </>
       )}
     </aside>
-  );
-}
-
-function InactiveProviderPanel({ provider }: { readonly provider: Exclude<CuratedModuleProvider, "aws"> }) {
-  return (
-    <div className="resourceProviderRoadmap">
-      <Sparkles size={18} aria-hidden="true" />
-      <strong>{provider.toUpperCase()} provider</strong>
-      <span>Multi-cloud catalog is ready in the UI; AWS modules are active in this MVP.</span>
-    </div>
   );
 }
 
