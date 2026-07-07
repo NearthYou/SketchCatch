@@ -210,6 +210,7 @@ function DiagramEditorInner({
   const [isSnapAnimating, setSnapAnimating] = useState(false);
 
   const selectedNodeId = selectedNodeIds.length === 1 ? selectedNodeIds[0] ?? null : null;
+  const hasRightRail = rightPanel !== null;
   const isPreviewActive = previewDiagram !== null;
   const visibleDiagram = previewDiagram ?? diagram;
   const selectedEdge = isPreviewActive ? null : getSingleSelectedEdgeForToolbar(diagram.edges, selectedNodeIds, selectedEdgeIds);
@@ -651,7 +652,7 @@ function DiagramEditorInner({
       diagram,
       inspectedNodeId,
       isPreviewActive,
-      isRightPanelOpen,
+      isRightPanelOpen: hasRightRail && isRightPanelOpen,
       previewAnnotations,
       previewDiagram,
       selectedNodeId,
@@ -673,6 +674,7 @@ function DiagramEditorInner({
       applyDiagramJson,
       diagram,
       focusResourceNode,
+      hasRightRail,
       inspectedNodeId,
       isPreviewActive,
       isRightPanelOpen,
@@ -1924,6 +1926,13 @@ function DiagramEditorInner({
     "--left-panel-width": `${leftPanelWidth}px`,
     "--right-panel-width": `${rightPanelWidth}px`
   } as CSSProperties;
+  const editorShellClassName = [
+    styles.editorShell,
+    !hasRightRail ? styles.editorShellRightHidden : undefined,
+    hasRightRail && !isRightPanelOpen ? styles.editorShellRightCollapsed : undefined
+  ]
+    .filter(Boolean)
+    .join(" ");
   const canvasPanelClassName = [
     styles.canvasPanel,
     isPreviewActive ? styles.canvasPanelPreviewing : undefined,
@@ -1937,7 +1946,7 @@ function DiagramEditorInner({
 
   return (
     <section
-      className={`${styles.editorShell} ${isRightPanelOpen ? "" : styles.editorShellRightCollapsed}`}
+      className={editorShellClassName}
       onKeyDown={handleShellKeyDown}
       ref={editorShellRef}
       style={editorShellStyle}
@@ -2078,7 +2087,7 @@ function DiagramEditorInner({
 
         {isPreviewActive ? (
           <div className={styles.previewNotice} role="status">
-            미리보기입니다. 오른쪽 패널에서 적용 또는 취소를 선택하세요.
+            미리보기입니다. 전용 시작 패널에서 적용 또는 취소를 선택하세요.
           </div>
         ) : null}
 
@@ -2163,29 +2172,31 @@ function DiagramEditorInner({
         </div>
       </div>
 
-      <div className={styles.rightRail}>
-        <button
-          aria-label="Resize right panel"
-          aria-orientation="vertical"
-          aria-valuemax={MAX_RIGHT_PANEL_WIDTH}
-          aria-valuemin={MIN_RIGHT_PANEL_WIDTH}
-          aria-valuenow={rightPanelWidth}
-          className={styles.rightRailResizeHandle}
-          onKeyDown={handleRightPanelResizeKeyDown}
-          onPointerCancel={handleRightPanelResizeEnd}
-          onPointerDown={handleRightPanelResizeStart}
-          onPointerMove={handleRightPanelResizeMove}
-          onPointerUp={handleRightPanelResizeEnd}
-          role="separator"
-          title="Drag to resize right panel"
-          type="button"
-        />
-        {rightPanel === undefined ? (
-          <ParameterInputPanel key={panelContext.selectedNodeId ?? "no-selection"} {...panelContext} />
-        ) : (
-          rightPanel(panelContext)
-        )}
-      </div>
+      {hasRightRail ? (
+        <div className={styles.rightRail}>
+          <button
+            aria-label="Resize right panel"
+            aria-orientation="vertical"
+            aria-valuemax={MAX_RIGHT_PANEL_WIDTH}
+            aria-valuemin={MIN_RIGHT_PANEL_WIDTH}
+            aria-valuenow={rightPanelWidth}
+            className={styles.rightRailResizeHandle}
+            onKeyDown={handleRightPanelResizeKeyDown}
+            onPointerCancel={handleRightPanelResizeEnd}
+            onPointerDown={handleRightPanelResizeStart}
+            onPointerMove={handleRightPanelResizeMove}
+            onPointerUp={handleRightPanelResizeEnd}
+            role="separator"
+            title="Drag to resize right panel"
+            type="button"
+          />
+          {rightPanel === undefined ? (
+            <ParameterInputPanel key={panelContext.selectedNodeId ?? "no-selection"} {...panelContext} />
+          ) : (
+            rightPanel(panelContext)
+          )}
+        </div>
+      ) : null}
 
       {floatingPanel ? (
         <div className={styles.floatingPanelSlot}>{floatingPanel?.(panelContext)}</div>

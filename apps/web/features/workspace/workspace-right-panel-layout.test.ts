@@ -168,8 +168,9 @@ test("reverse engineering is not reachable from persistent right panel toggles",
   assert.doesNotMatch(collapsedPanelSource, /openCollapsedView\("reverse"\)/);
   assert.doesNotMatch(modeToggleSource, /title="Reverse Engineering"/);
   assert.doesNotMatch(modeToggleSource, /requestView\("reverse"\)/);
-  assert.match(componentSource, /activeView !== "reverse"/);
-  assert.match(componentSource, /<ReverseEngineeringPanel/);
+  assert.doesNotMatch(componentSource, /activeView !== "reverse"/);
+  assert.doesNotMatch(componentSource, /<ReverseEngineeringPanel/);
+  assert.doesNotMatch(componentSource, /reverseCreatesProjectOnApply/);
 });
 
 test("Plan action strip is UI-only and routes only to the Deploy view", () => {

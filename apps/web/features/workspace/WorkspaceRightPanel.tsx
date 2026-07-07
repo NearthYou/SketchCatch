@@ -14,7 +14,6 @@ import {
 } from "lucide-react";
 import type { DiagramEditorPanelContext } from "../diagram-editor";
 import { DeploymentPanel } from "./DeploymentPanel";
-import { ReverseEngineeringPanel } from "./ReverseEngineeringPanel";
 import { ResourceWorkspacePanel } from "./ResourceWorkspacePanel";
 import {
   TerraformCodePanel,
@@ -60,7 +59,6 @@ export type WorkspaceRightPanelProps = {
   readonly onTerraformSafeFixApplyResult: (result: TerraformSafeFixApplyResult) => void;
   readonly projectId: string;
   readonly projectName: string;
-  readonly reverseCreatesProjectOnApply?: boolean | undefined;
   readonly terraformSafeFixApplyRequest: TerraformSafeFixApplyRequest | null;
 };
 
@@ -79,7 +77,6 @@ export function WorkspaceRightPanel({
   onTerraformSafeFixApplyResult,
   projectId,
   projectName,
-  reverseCreatesProjectOnApply = false,
   terraformSafeFixApplyRequest
 }: WorkspaceRightPanelProps) {
   const terraformPanelRef = useRef<TerraformCodePanelHandle | null>(null);
@@ -703,16 +700,6 @@ export function WorkspaceRightPanel({
             onOpenFindingTerraformSource={openPreDeploymentFindingTerraformSource}
             onPrepareDeploymentArtifacts={prepareDeploymentArtifacts}
             onValidateTerraformDiagnostics={validateTerraformForPreDeployment}
-            projectId={projectId}
-            projectName={projectName}
-          />
-        ) : null}
-      </div>
-      <div className={styles.rightPanelView} hidden={activeView !== "reverse"}>
-        {activeView === "reverse" ? (
-          <ReverseEngineeringPanel
-            context={context}
-            createProjectOnApply={reverseCreatesProjectOnApply}
             projectId={projectId}
             projectName={projectName}
           />

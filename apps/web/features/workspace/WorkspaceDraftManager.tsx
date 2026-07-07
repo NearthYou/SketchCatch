@@ -246,7 +246,6 @@ export function WorkspaceDraftManager({
           onTerraformSafeFixApplyResult={setTerraformSafeFixApplyResult}
           projectId={LOCAL_PROJECT_ID}
           projectName={projectName}
-          reverseCreatesProjectOnApply
           terraformSafeFixApplyRequest={terraformSafeFixApplyRequest}
         />
       )}

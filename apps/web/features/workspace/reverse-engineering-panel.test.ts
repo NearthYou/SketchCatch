@@ -14,7 +14,7 @@ const resourceTypesSource = readWorkspaceFile("reverse-engineering-resource-type
 const scanCriteriaFormSource = readWorkspaceFile("ReverseEngineeringScanCriteriaForm.tsx");
 const scanHistoryPanelSource = readWorkspaceFile("ReverseEngineeringScanHistoryPanel.tsx");
 const scanHistoryHookSource = readWorkspaceFile("useReverseEngineeringScanHistory.ts");
-const rightPanelSource = readWorkspaceFile("WorkspaceRightPanel.tsx");
+const reverseWorkspaceClientSource = readAppWorkspaceFile("reverse/reverse-workspace-client.tsx");
 
 test("Reverse Engineering panel exposes all grilling resource filters by default", () => {
   assert.match(resourceTypesSource, /REVERSE_ENGINEERING_ALL_RESOURCE_SELECTION = "ALL"/);
@@ -50,7 +50,7 @@ test("Reverse Engineering panel sends users to settings when no verified AWS con
 });
 
 test("Reverse Engineering result stays preview-only until the user applies it", () => {
-  assert.match(rightPanelSource, /<ReverseEngineeringPanel/);
+  assert.match(reverseWorkspaceClientSource, /<ReverseEngineeringPanel/);
   assert.match(panelSource, /readonly context: DiagramEditorPanelContext/);
   assert.match(panelSource, /context\.setPreviewDiagram\(application\.previewDiagram\)/);
   assert.match(panelSource, /createArchitectureSnapshot/);
@@ -161,4 +161,8 @@ test("Reverse Engineering panel explains when the source scan was deleted but th
 
 function readWorkspaceFile(fileName: string): string {
   return readFileSync(fileURLToPath(new URL(fileName, import.meta.url)), "utf8");
+}
+
+function readAppWorkspaceFile(fileName: string): string {
+  return readFileSync(fileURLToPath(new URL(`../../app/workspace/${fileName}`, import.meta.url)), "utf8");
 }

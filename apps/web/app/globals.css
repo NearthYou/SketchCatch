@@ -4329,7 +4329,7 @@ nextjs-portal {
 }
 
 .workspaceStartModeGrid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .workspaceStartHint {
@@ -4381,6 +4381,89 @@ nextjs-portal {
   font-size: 0.78rem;
   font-weight: 750;
   line-height: 1.45;
+}
+
+.workspaceStartBlankLabel {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: var(--dashboard-subtle);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 0.82rem;
+  font-weight: 850;
+  gap: 8px;
+  justify-self: start;
+  padding: 2px 0;
+}
+
+.workspaceStartBlankLabel::after {
+  background: currentColor;
+  content: "";
+  display: inline-block;
+  height: 1px;
+  opacity: 0.55;
+  width: 28px;
+}
+
+.workspaceStartBlankLabel:not(:disabled):hover,
+.workspaceStartBlankLabel:not(:disabled):focus-visible {
+  color: #ffffff;
+  outline: none;
+}
+
+.workspaceStartBlankLabel:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.reverseStartGuide {
+  background: #ffffff;
+  border: 1px solid #dfe6f1;
+  border-radius: 8px;
+  box-shadow: 0 16px 36px rgba(31, 41, 55, 0.12);
+  color: #182033;
+  display: grid;
+  gap: 8px;
+  height: 100%;
+  padding: 18px;
+}
+
+.reverseStartGuide p {
+  color: #2563eb;
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.reverseStartGuide h2 {
+  font-size: 1rem;
+  line-height: 1.25;
+  margin: 0;
+}
+
+.reverseStartGuide span {
+  color: #66748a;
+  font-size: 0.84rem;
+  font-weight: 750;
+  line-height: 1.55;
+}
+
+.reverseImportPanelShell {
+  bottom: 24px;
+  max-width: min(520px, calc(100vw - 48px));
+  position: fixed;
+  right: 24px;
+  top: 92px;
+  width: 460px;
+}
+
+.reverseImportPanelShell > * {
+  border-radius: 10px;
+  box-shadow: 0 24px 70px rgba(31, 41, 55, 0.2);
+  height: 100%;
 }
 
 .workspaceAiStartShell {

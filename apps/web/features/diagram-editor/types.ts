@@ -57,7 +57,7 @@ export type DiagramEditorProps = {
   leftPanel?: ReactNode;
   onDiagramChange?: ((diagram: DiagramJson) => void) | undefined;
   onDiagramSaveRequest?: (() => Promise<unknown>) | undefined;
-  rightPanel?: ((context: DiagramEditorPanelContext) => ReactNode) | undefined;
+  rightPanel?: ((context: DiagramEditorPanelContext) => ReactNode) | null | undefined;
   projectName?: string | undefined;
   myPageHref?: string | undefined;
   saveStatus?: string | undefined;
