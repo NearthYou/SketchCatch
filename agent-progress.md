@@ -2,6 +2,26 @@
 
 Short English-only working log for the current agent context.
 
+## 2026-07-08 S3 Public Access Deployment Gate Fix
+
+- Branch/worktree: `codex/s3-public-access-default` in `C:\Users\siwon\Desktop\Jungle\Week17~21\SketchCatch-worktrees\s3-public-access-default`.
+- Scope: remove the confusing S3 public-access warning path for service buckets.
+- Terraform rendering now adds an `aws_s3_bucket_public_access_block` companion resource for every rendered `aws_s3_bucket` unless the board already has an explicit public access block for that bucket.
+- The companion sets `block_public_acls`, `block_public_policy`, `ignore_public_acls`, and `restrict_public_buckets` to `true`.
+- Pre-deployment analysis now deduplicates repeated findings for the same resource, title, and recommended fix so the UI does not show the same root issue many times.
+- Verified generated S3 bucket Terraform scans with no Trivy findings after the default public access block is added.
+
+Verification:
+
+- `pnpm harness:check` - passed before edits.
+- `pnpm --filter @sketchcatch/api exec tsx --test src/services/aiPreDeploymentCheck.test.ts`
+- `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/diagram-to-terraform.test.ts src/services/terraform/terraform-preview.test.ts`
+- Manual tsx smoke: generated `aws_s3_bucket` plus public access block and Trivy scanner returned `[]`.
+- `pnpm lint`
+- `pnpm typecheck`
+- `pnpm build`
+- `pnpm harness:check` - passed after edits.
+
 ## 2026-07-08 Deployment Console UX Cleanup
 
 - Branch/worktree: `codex/deployment-ux-cleanup` in `C:\Users\siwon\Desktop\Jungle\Week17~21\SketchCatch-worktrees\deployment-ux-cleanup`.

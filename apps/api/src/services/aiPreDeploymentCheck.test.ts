@@ -70,3 +70,60 @@ test("analyzePreDeploymentCheck merges Trivy security findings with existing pol
     "fail"
   );
 });
+
+test("analyzePreDeploymentCheck deduplicates repeated findings for the same resource and fix", async () => {
+  const firstFinding: CheckFinding = {
+    id: "trivy:aws-0171:main.tf:aws_s3_bucket.service_bucket:2",
+    category: "security",
+    severity: "high",
+    resourceId: "aws_s3_bucket.service_bucket",
+    sourceLocation: {
+      fileName: "main.tf",
+      line: 2,
+      resourceAddress: "aws_s3_bucket.service_bucket"
+    },
+    title: "S3 버킷은 공개 접근을 허용하면 안 됩니다.",
+    description: "S3 bucket may allow public access.",
+    recommendation: "S3 Block Public Access를 활성화하세요."
+  };
+  const duplicateFinding: CheckFinding = {
+    ...firstFinding,
+    id: "trivy:aws-0172:main.tf:aws_s3_bucket.service_bucket:3",
+    sourceLocation: {
+      fileName: "main.tf",
+      line: 3,
+      resourceAddress: "aws_s3_bucket.service_bucket"
+    }
+  };
+
+  const result = await analyzePreDeploymentCheck(
+    {
+      architectureJson: {
+        nodes: [],
+        edges: []
+      },
+      terraformFiles: [
+        {
+          fileName: "main.tf",
+          terraformCode: "resource \"aws_s3_bucket\" \"service_bucket\" {}"
+        }
+      ]
+    },
+    {
+      terraformSecurityScanner: async () => [firstFinding, duplicateFinding]
+    }
+  );
+
+  assert.deepEqual(
+    result.findings.map((finding) => finding.id),
+    [firstFinding.id]
+  );
+  assert.deepEqual(
+    result.checklist.find((item) => item.id === "security-open-ssh-check")?.relatedFindingIds,
+    [firstFinding.id]
+  );
+  assert.deepEqual(
+    result.suggestions.map((suggestion) => suggestion.findingId),
+    [firstFinding.id]
+  );
+});
