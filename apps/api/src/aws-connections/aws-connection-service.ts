@@ -636,12 +636,20 @@ export async function getAwsConnectionCloudFormationTemplate(
   const tokenTtlMs = options.tokenTtlMs ?? defaultCloudFormationTemplateTokenTtlMs;
   const expiresInSeconds = Math.floor(tokenTtlMs / 1000);
   const templateUrlExpiresAt = new Date(now().getTime() + tokenTtlMs);
-  const { templateUrl } = await options.cloudFormationTemplatePublisher({
-    connectionId: awsConnection.id,
-    stackName,
-    templateBody,
-    expiresInSeconds
-  });
+  let templateUrl: string;
+
+  try {
+    const publishedTemplate = await options.cloudFormationTemplatePublisher({
+      connectionId: awsConnection.id,
+      stackName,
+      templateBody,
+      expiresInSeconds
+    });
+
+    templateUrl = publishedTemplate.templateUrl;
+  } catch {
+    return inlineTemplateResponse;
+  }
 
   return {
     roleName,

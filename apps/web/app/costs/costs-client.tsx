@@ -174,15 +174,12 @@ export function CostsClient() {
         setSelectedProjectId((currentProjectId) => {
           const urlProjectId = readSelectedProjectIdFromLocation();
           const candidateProjectId = currentProjectId ?? urlProjectId;
-          const nextProjectId =
+          return (
             candidateProjectId !== null &&
             result.projects.some((item) => item.project.id === candidateProjectId)
               ? candidateProjectId
-              : result.projects[0]?.project.id ?? null;
-
-          writeSelectedProjectIdToLocation(nextProjectId);
-
-          return nextProjectId;
+              : result.projects[0]?.project.id ?? null
+          );
         });
       } catch (error) {
         if (ignore) {
@@ -296,6 +293,10 @@ export function CostsClient() {
 
     return () => window.removeEventListener("popstate", handlePopState);
   }, []);
+
+  useEffect(() => {
+    writeSelectedProjectIdToLocation(selectedProjectId);
+  }, [selectedProjectId]);
 
   useEffect(() => {
     if (selectAllCheckboxRef.current === null) {

@@ -1,5 +1,24 @@
 ﻿# 에이전트 진행 로그
 
+### 2026-07-07 - 비용 관리 AWS 연결 브라우저 검증 보강
+
+- Goal: `/costs` 사용량 분석 탭과 AWS 연결 시작 흐름을 로컬 API/Web/DB/브라우저로 실제 검증하고, 발견된 문제를 수정한다.
+- Completed:
+  - 로컬 Postgres/Redis, API, Web dev server를 띄우고 Playwright로 signup -> `/costs` -> `사용량 분석` -> `AWS 연결 시작` 흐름을 검증했다.
+  - 로컬 AWS SSO token 만료로 S3 presigned CloudFormation template 발행이 실패할 때 `GET /api/aws/connections/:connectionId/cloudformation-template`가 500을 반환하는 문제를 확인했다.
+  - S3 template publisher 실패 시에도 inline CloudFormation template fallback을 200 응답으로 반환하도록 수정하고 회귀 테스트를 추가했다.
+  - `CostsClient`가 state updater 내부에서 URL history를 갱신해 React Router warning을 내던 문제를 `useEffect` 기반 동기화로 분리했다.
+- Verification run:
+  - `pnpm harness:check` - passed before final checks.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/routes/aws-connections.test.ts --test-name-pattern "cloudformation-template"` - passed, 12 tests.
+  - `pnpm --filter @sketchcatch/web typecheck` - passed.
+  - Playwright browser smoke - passed after fixes: usage API 200, AWS connection create 201, CloudFormation template 200 inline fallback, usage tab/chart/recommendation UI rendered, `consoleErrors: []`.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `pnpm build` - passed; Next.js regenerated `apps/web/next-env.d.ts`, then the generated diff was reverted.
+- Known risks:
+  - 실제 AWS Console Stack 생성, Role verify, Cost Explorer/CloudWatch live 조회는 로컬 AWS SSO token 만료 때문에 수행하지 못했다. `aws sso login` 이후 live 계정으로 한 번 더 검증해야 한다.
+
 ### 2026-07-07 - 비용 관리 AWS 연결 흐름 추가
 
 - Goal: `/costs` 사용량 분석 탭에서 verified AWS 연결을 선택하고, 연결이 없으면 CloudFormation 기반 AWS Role 연결을 시작/검증할 수 있게 한다.
