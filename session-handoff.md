@@ -13,10 +13,11 @@ Use this file only for compact continuation context. Write it in English.
 - PR #234 was merged and deployed, fixing repeated handoffs when existing target files need updates.
 - Current follow-up adds `sketchcatch/<project>/ci-cd/handoff.json` so repeated handoffs still produce a PR diff even when generated artifact content is unchanged.
 - The manifest contains non-secret request metadata: schema version, handoff id, user-accepted change id, repository, target branch, and environment.
+- Empty GitHub repositories are bootstrapped with an initial README commit on the target branch before creating the handoff source branch and PR.
 
 ## Broken Or Unverified
 
-- Follow-up PR merge, production deploy, and live handoff retry are pending.
+- Follow-up PR #235 merge, production deploy, and live handoff retry are pending.
 
 ## Verification
 

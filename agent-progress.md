@@ -15,6 +15,7 @@ Current branch work:
 - PR #234 fixed GitHub App PR creation so repeated handoffs can update generated files instead of failing when the target branch already contains SketchCatch paths.
 - PR #234 was merged to `dev` and deployed successfully.
 - Current follow-up adds a generated `sketchcatch/<project>/ci-cd/handoff.json` manifest so a repeated handoff can still create a PR diff even when the Terraform/static artifact content is unchanged.
+- Current follow-up also bootstraps empty GitHub repositories by creating the first target branch commit before opening the handoff PR.
 
 Verification:
 
@@ -34,6 +35,7 @@ Verification:
 - Removed the target-branch duplicate-path guard and changed PR creation to update files on the source branch.
 - Added tests for repeated generated paths, unchanged file rejection, and API conflict mapping.
 - Added a handoff manifest file to avoid a no-diff PR when the user repeats a handoff for the same artifact.
+- Added empty repository bootstrap handling and tests for GitHub App PR creation.
 
 Next steps:
 
