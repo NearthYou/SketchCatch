@@ -51,6 +51,9 @@ test("deploy opens a full-screen console instead of rendering deployment inside 
   assert.match(componentSource, /setIsDeploymentConsoleOpen\(true\);/);
   assert.match(pendingDeploymentConsoleBranch, /setIsDeploymentConsoleOpen\(true\);/);
   assert.doesNotMatch(pendingDeploymentConsoleBranch, /context\.setRightPanelOpen\(false\);/);
+  assert.match(deploymentPanelSource, /const isDeploymentOverlayOpen = fullScreenOnly \|\| isDeploymentExpanded;/);
+  assert.match(deploymentPanelSource, /\{isDeploymentOverlayOpen \? \(/);
+  assert.match(deploymentPanelSource, /size=\{isDeploymentOverlayOpen \? "large" : "regular"\}/);
   assert.match(fullscreenHostRule, /\bdisplay:\s*contents;/);
   assert.doesNotMatch(componentSource, /hidden=\{activeView !== "deployment"\}/);
   assert.doesNotMatch(componentSource, /aria-pressed=\{activeView === "deployment"\}/);
@@ -527,7 +530,7 @@ test("deployment expanded details use larger action and record text", () => {
   );
   assert.match(
     deploymentPanelSource,
-    /size=\{isDeploymentExpanded \? "large" : "regular"\}/
+    /size=\{isDeploymentOverlayOpen \? "large" : "regular"\}/
   );
   assert.match(
     stylesSource,
@@ -590,6 +593,8 @@ test("deployment setup exposes a three-step workflow with one primary path", () 
   const stageCardRule = getCssRule(stylesSource, "deploymentStageCard");
   const stageSettingsRule = getCssRule(stylesSource, "deploymentStageSettings");
   const stageAlertRule = getCssRule(stylesSource, "deploymentStageAlert");
+  const stageActionButtonRule =
+    /\.deploymentStageCard > \.deploymentPrimaryButton,\s*\.deploymentStageCard > \.deploymentSecondaryButton\s*\{[\s\S]*?\bgrid-column:\s*3;[\s\S]*?\bgrid-row:\s*1;[\s\S]*?\bjustify-self:\s*end;[\s\S]*?\bmin-width:\s*118px;[\s\S]*?\bwhite-space:\s*nowrap;/;
   const saveIndex = deploymentPanelSource.indexOf("배포 전 저장");
   const reviewIndex = deploymentPanelSource.indexOf("배포 전 검사 및 리뷰", saveIndex);
   const deployIndex = deploymentPanelSource.indexOf("<h3>배포</h3>", reviewIndex);
@@ -607,6 +612,8 @@ test("deployment setup exposes a three-step workflow with one primary path", () 
   assert.match(stageCardRule, /grid-template-columns:\s*34px minmax\(0,\s*1fr\) minmax\(150px,\s*auto\);/);
   assert.match(stageCardRule, /\bmin-height:\s*82px;/);
   assert.match(stageSettingsRule, /grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\);/);
+  assert.match(stageSettingsRule, /\bgrid-row:\s*2;/);
+  assert.match(stylesSource, stageActionButtonRule);
   assert.match(stageAlertRule, /\bmin-height:\s*38px;/);
   assert.doesNotMatch(deploymentPanelSource, /배포 기준 저장/);
   assert.doesNotMatch(deploymentPanelSource, /배포 검토 시작/);
@@ -662,6 +669,7 @@ test("deployment baseline save button shows pending and saved icons", () => {
 
 test("pre-deployment check is owned by the deployment tab", () => {
   const preflightSummaryRule = getCssRule(stylesSource, "deploymentPreflightSummary");
+  const preflightFindingsRule = getCssRule(stylesSource, "deploymentPreflightFindings");
 
   assert.match(deploymentPanelSource, /runAiPreDeploymentCheck/);
   assert.match(deploymentPanelSource, /addTerraformDiagnosticsToPreDeploymentAnalysis/);
@@ -684,6 +692,15 @@ test("pre-deployment check is owned by the deployment tab", () => {
   assert.doesNotMatch(aiChatDockSource, /runAiPreDeploymentCheck/);
   assert.doesNotMatch(aiChatDockSource, /WorkspaceAiPreDeploymentResult/);
   assert.match(preflightSummaryRule, /\bgap:\s*8px;/);
+  assert.match(preflightFindingsRule, /\bmax-height:\s*min\(68vh,\s*760px\);/);
+  assert.match(preflightFindingsRule, /\boverflow-y:\s*auto;/);
+  assert.match(preflightFindingsRule, /\bscrollbar-gutter:\s*stable;/);
+  assert.match(deploymentPanelSource, /analysis\.findings\.map\(\(finding\) =>/);
+  assert.doesNotMatch(deploymentPanelSource, /visibleFindings/);
+  assert.doesNotMatch(deploymentPanelSource, /hiddenFindingCount/);
+  assert.doesNotMatch(deploymentPanelSource, /\.slice\(0,\s*3\)/);
+  assert.doesNotMatch(deploymentPanelSource, /deploymentPreflightMore/);
+  assert.doesNotMatch(deploymentPanelSource, /외 \{hiddenFindingCount\}개 항목/);
 });
 
 test("pre-deployment check result is preserved above the deployment tab", () => {
