@@ -43,6 +43,31 @@ test("createSampleCostUsageAnalysis returns deterministic fallback usage data", 
   assert.equal(result.recommendations.length, 2);
 });
 
+test("createSampleCostUsageAnalysis splits no-project fallback cost into sample projects", () => {
+  const result = createSampleCostUsageAnalysis({
+    awsConnection: null,
+    deployedResources: [],
+    deployments: [],
+    now: fixedNow,
+    projects: [],
+    range: "7d",
+    userId
+  });
+
+  assert.deepEqual(
+    result.projectCosts.map((row) => [row.projectId, row.projectName, row.source]),
+    [
+      ["sample-web-service", "샘플 웹 서비스", "sample"],
+      ["sample-data-platform", "샘플 데이터 플랫폼", "sample"],
+      ["sample-background-worker", "샘플 배치 워커", "sample"]
+    ]
+  );
+  assert.equal(
+    result.projectCosts.reduce((sum, row) => sum + row.amount, 0).toFixed(2),
+    result.totalCost.amount.toFixed(2)
+  );
+});
+
 test("createProjectUsageCosts prefers Cost Explorer project tags over deployment approximation", () => {
   const result = createProjectUsageCosts({
     deployedResources: [

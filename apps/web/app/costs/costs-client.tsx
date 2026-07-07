@@ -38,6 +38,12 @@ import {
   sumEstimatedMonthlySavings
 } from "../../features/costs/cost-usage-charts";
 import {
+  COST_USAGE_ALL_PROJECTS_KEY,
+  createCostUsageProjectOptions,
+  normalizeCostUsageProjectKey,
+  selectCostUsageProject
+} from "../../features/costs/cost-usage-project-view";
+import {
   formatCostUsageAwsConnectionLabel,
   getVerifiedCostUsageAwsConnections,
   selectPreferredCostUsageAwsConnection
@@ -815,6 +821,10 @@ function CostUsageAnalysisTab({
   readonly usageState: CostPageState;
   readonly verifiedAwsConnections: readonly AwsConnection[];
 }) {
+  const [selectedUsageProjectKey, setSelectedUsageProjectKey] = useState(
+    COST_USAGE_ALL_PROJECTS_KEY
+  );
+  const projectCosts = usageData?.projectCosts;
   const lineChart = useMemo(
     () => createCostUsageLineChart(usageData?.dailyTrend ?? []),
     [usageData]
@@ -823,18 +833,42 @@ function CostUsageAnalysisTab({
     () => createServiceCostBars(usageData?.serviceCosts ?? []),
     [usageData]
   );
-  const monthlySavings = useMemo(
-    () => sumEstimatedMonthlySavings(usageData?.recommendations ?? []),
-    [usageData]
+  const projectOptions = useMemo(
+    () => createCostUsageProjectOptions(projectCosts ?? []),
+    [projectCosts]
   );
+  const selectedUsageProject = useMemo(
+    () => selectCostUsageProject(projectCosts ?? [], selectedUsageProjectKey),
+    [projectCosts, selectedUsageProjectKey]
+  );
+  const scopedWasteResources = useMemo(
+    () => getScopedWasteResources(usageData?.wasteResources ?? [], selectedUsageProject),
+    [selectedUsageProject, usageData?.wasteResources]
+  );
+  const scopedRecommendations = useMemo(
+    () => getScopedRecommendations(usageData?.recommendations ?? [], selectedUsageProject),
+    [selectedUsageProject, usageData?.recommendations]
+  );
+  const monthlySavings = useMemo(
+    () => sumEstimatedMonthlySavings(scopedRecommendations),
+    [scopedRecommendations]
+  );
+  const selectedUsageAmount = selectedUsageProject?.amount ?? usageData?.totalCost.amount ?? 0;
+  const selectedUsageLabel = selectedUsageProject?.projectName ?? "전체 프로젝트";
+
+  useEffect(() => {
+    setSelectedUsageProjectKey((currentKey) =>
+      normalizeCostUsageProjectKey(projectCosts ?? [], currentKey)
+    );
+  }, [projectCosts]);
 
   return (
     <>
-      <section className="dashboardPanel costOverviewPanel" aria-labelledby="cost-usage-control-title">
+      <section className="dashboardPanel costOverviewPanel costUsageHeroPanel" aria-labelledby="cost-usage-control-title">
         <div className="costOverviewSettings">
           <div className="costPanelTitle">
             <p className="dashboardPanelKicker">Actual usage</p>
-            <h2 id="cost-usage-control-title">실제 사용량 분석 조건</h2>
+            <h2 id="cost-usage-control-title">사용량 분석</h2>
           </div>
           <div className="costControlGrid costUsageControlGrid">
             <label className="costField">
@@ -878,15 +912,35 @@ function CostUsageAnalysisTab({
         <div className="costSummaryCard" aria-labelledby="cost-usage-summary-title">
           <div className="costPanelTitle">
             <p className="dashboardPanelKicker">Actual cost</p>
-            <h2 id="cost-usage-summary-title">현재 사용 비용</h2>
+            <h2 id="cost-usage-summary-title">
+              {selectedUsageProject === null ? "현재 사용 비용" : "프로젝트 사용 비용"}
+            </h2>
           </div>
           <div className="costSummaryAmount">
-            <span>{getUsageRangeLabel(appliedUsageRange)} 실제 비용</span>
-            <strong>{formatUsd(usageData?.totalCost.amount ?? 0)}</strong>
-            <p>
-              월말 예상 {formatUsd(usageData?.forecastMonthEndCost.amount ?? 0)} · 절감 후보{" "}
-              {formatUsd(monthlySavings)}
-            </p>
+            <span>{selectedUsageLabel}</span>
+            <strong>{formatUsd(selectedUsageAmount)}</strong>
+            <div className="costSummaryMeta">
+              <span>{getUsageRangeLabel(appliedUsageRange)}</span>
+              <span>
+                {selectedUsageProject === null
+                  ? formatDateRange(usageData?.startDate ?? "-", usageData?.endDate ?? "-")
+                  : `${formatPercent(selectedUsageProject.percentage)} · ${getProjectUsageSourceLabel(selectedUsageProject)}`}
+              </span>
+            </div>
+            <label className="costField costUsageProjectSelect">
+              <span>비용 범위</span>
+              <select
+                onChange={(event) => setSelectedUsageProjectKey(event.target.value)}
+                value={selectedUsageProjectKey}
+              >
+                <option value={COST_USAGE_ALL_PROJECTS_KEY}>전체 프로젝트</option>
+                {projectOptions.map((project) => (
+                  <option key={project.key} value={project.key}>
+                    {project.label} · {formatUsd(project.amount)}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
         </div>
       </section>
@@ -920,24 +974,34 @@ function CostUsageAnalysisTab({
                 <h2 id="cost-usage-metrics-title">사용량 요약</h2>
               </div>
               <span className="dashboardCountBadge">
-                {formatDateRange(usageData.startDate, usageData.endDate)}
+                {selectedUsageProject === null
+                  ? formatDateRange(usageData.startDate, usageData.endDate)
+                  : selectedUsageProject.projectName}
               </span>
             </div>
             <div className="costUsageMetricGrid">
               <CostMetricCard
                 icon={<LineChart size={18} aria-hidden="true" />}
-                label="총 실제 비용"
-                value={formatUsd(usageData.totalCost.amount)}
+                label={selectedUsageProject === null ? "총 실제 비용" : "프로젝트 실제 비용"}
+                value={formatUsd(selectedUsageAmount)}
               />
               <CostMetricCard
                 icon={<Activity size={18} aria-hidden="true" />}
-                label="월말 예상"
-                value={formatUsd(usageData.forecastMonthEndCost.amount)}
+                label={selectedUsageProject === null ? "월말 예상" : "전체 대비"}
+                value={
+                  selectedUsageProject === null
+                    ? formatUsd(usageData.forecastMonthEndCost.amount)
+                    : formatPercent(selectedUsageProject.percentage)
+                }
               />
               <CostMetricCard
                 icon={<PiggyBank size={18} aria-hidden="true" />}
-                label="예상 절감"
-                value={formatUsd(monthlySavings)}
+                label={selectedUsageProject === null ? "예상 절감" : "산정 리소스"}
+                value={
+                  selectedUsageProject === null
+                    ? formatUsd(monthlySavings)
+                    : `${selectedUsageProject.resourceCount}개`
+                }
               />
             </div>
           </section>
@@ -948,7 +1012,9 @@ function CostUsageAnalysisTab({
                 <p className="dashboardPanelKicker">Daily trend</p>
                 <h2 id="cost-daily-chart-title">일별 비용 추세</h2>
               </div>
-              <span className="dashboardCountBadge">{usageData.dailyTrend.length}일</span>
+              <span className="dashboardCountBadge">
+                {selectedUsageProject === null ? `${usageData.dailyTrend.length}일` : "전체 계정 기준"}
+              </span>
             </div>
             {usageData.dailyTrend.length === 0 ? (
               <CostStatus message="표시할 일별 비용 데이터가 없습니다." />
@@ -963,7 +1029,9 @@ function CostUsageAnalysisTab({
                 <p className="dashboardPanelKicker">Service costs</p>
                 <h2 id="cost-service-chart-title">서비스별 비용</h2>
               </div>
-              <span className="dashboardCountBadge">{usageData.serviceCosts.length}개</span>
+              <span className="dashboardCountBadge">
+                {selectedUsageProject === null ? `${usageData.serviceCosts.length}개` : "전체 계정 기준"}
+              </span>
             </div>
             <ServiceCostBars bars={serviceBars} serviceCosts={usageData.serviceCosts} />
           </section>
@@ -976,7 +1044,11 @@ function CostUsageAnalysisTab({
               </div>
               <span className="dashboardCountBadge">{usageData.projectCosts.length}개</span>
             </div>
-            <ProjectUsageTable projectCosts={usageData.projectCosts} />
+            <ProjectUsageTable
+              onSelectedProjectChange={setSelectedUsageProjectKey}
+              projectCosts={usageData.projectCosts}
+              selectedProjectKey={selectedUsageProjectKey}
+            />
           </section>
 
           <section className="dashboardPanel costRecommendationPanel" aria-labelledby="cost-waste-title">
@@ -985,9 +1057,9 @@ function CostUsageAnalysisTab({
                 <p className="dashboardPanelKicker">Waste detection</p>
                 <h2 id="cost-waste-title">낭비 리소스</h2>
               </div>
-              <span className="dashboardCountBadge">{usageData.wasteResources.length}개</span>
+              <span className="dashboardCountBadge">{scopedWasteResources.length}개</span>
             </div>
-            <WasteResourceList metricSeries={usageData.metricSeries} wasteResources={usageData.wasteResources} />
+            <WasteResourceList metricSeries={usageData.metricSeries} wasteResources={scopedWasteResources} />
           </section>
 
           <section className="dashboardPanel costRecommendationPanel" aria-labelledby="cost-recommendation-title">
@@ -996,9 +1068,9 @@ function CostUsageAnalysisTab({
                 <p className="dashboardPanelKicker">Optimization</p>
                 <h2 id="cost-recommendation-title">절감 추천</h2>
               </div>
-              <span className="dashboardCountBadge">{usageData.recommendations.length}개</span>
+              <span className="dashboardCountBadge">{scopedRecommendations.length}개</span>
             </div>
-            <RecommendationList recommendations={usageData.recommendations} />
+            <RecommendationList recommendations={scopedRecommendations} />
           </section>
         </>
       ) : null}
@@ -1278,10 +1350,16 @@ function ServiceCostBars({
 }
 
 function ProjectUsageTable({
-  projectCosts
+  onSelectedProjectChange,
+  projectCosts,
+  selectedProjectKey
 }: {
+  readonly onSelectedProjectChange: (projectKey: string) => void;
   readonly projectCosts: readonly CostProjectUsage[];
+  readonly selectedProjectKey: string;
 }) {
+  const projectOptions = createCostUsageProjectOptions(projectCosts);
+
   if (projectCosts.length === 0) {
     return <CostStatus message="표시할 프로젝트별 비용 데이터가 없습니다." />;
   }
@@ -1294,13 +1372,19 @@ function ProjectUsageTable({
         <span>비중</span>
         <span>근거</span>
       </div>
-      {projectCosts.map((project) => (
-        <div className="dashboardTableRow" key={project.projectId ?? project.projectName}>
-          <strong>{project.projectName}</strong>
-          <span>{formatUsd(project.amount)}</span>
-          <span>{formatPercent(project.percentage)}</span>
-          <span>{getProjectUsageSourceLabel(project)}</span>
-        </div>
+      {projectOptions.map((option) => (
+        <button
+          aria-pressed={selectedProjectKey === option.key}
+          className="dashboardTableRow costUsageProjectRow"
+          key={option.key}
+          onClick={() => onSelectedProjectChange(option.key)}
+          type="button"
+        >
+          <strong>{option.label}</strong>
+          <span>{formatUsd(option.amount)}</span>
+          <span>{formatPercent(option.percentage)}</span>
+          <span>{getProjectUsageSourceLabel(option.project)}</span>
+        </button>
       ))}
     </div>
   );
@@ -1574,6 +1658,38 @@ function getProjectUsageSourceLabel(project: CostProjectUsage): string {
     case "sample":
       return "샘플";
   }
+}
+
+function getScopedWasteResources(
+  wasteResources: readonly CostWasteResourceInsight[],
+  selectedProject: CostProjectUsage | null
+): readonly CostWasteResourceInsight[] {
+  if (selectedProject === null) {
+    return wasteResources;
+  }
+
+  if (selectedProject.projectId === null) {
+    return [];
+  }
+
+  return wasteResources.filter((resource) => resource.projectId === selectedProject.projectId);
+}
+
+function getScopedRecommendations(
+  recommendations: readonly CostOptimizationRecommendation[],
+  selectedProject: CostProjectUsage | null
+): readonly CostOptimizationRecommendation[] {
+  if (selectedProject === null) {
+    return recommendations;
+  }
+
+  if (selectedProject.projectId === null) {
+    return [];
+  }
+
+  return recommendations.filter(
+    (recommendation) => recommendation.projectId === selectedProject.projectId
+  );
 }
 
 function getRecommendationSeverityLabel(severity: CostOptimizationRecommendation["severity"]): string {

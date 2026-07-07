@@ -208,7 +208,10 @@ export function createSampleCostUsageAnalysis(
     taggedProjectCosts,
     totalCostAmount
   });
-  const fallbackProject = input.projects[0];
+  const fallbackProject = input.projects[0] ?? {
+    id: "sample-web-service",
+    name: "샘플 웹 서비스"
+  };
   const sampleWasteResources = createSampleWasteResources(fallbackProject);
 
   return {
@@ -314,16 +317,7 @@ function createApproximateProjectUsageCosts(input: {
   readonly totalCostAmount: number;
 }): CostProjectUsage[] {
   if (input.projects.length === 0) {
-    return [
-      {
-        amount: roundUsd(input.totalCostAmount),
-        percentage: 100,
-        projectId: null,
-        projectName: "샘플 프로젝트",
-        resourceCount: 0,
-        source: "sample"
-      }
-    ];
+    return createNoProjectSampleUsageCosts(input.totalCostAmount);
   }
 
   const deploymentProjectById = new Map(
@@ -362,6 +356,39 @@ function createApproximateProjectUsageCosts(input: {
       };
     })
     .sort(compareCostProjectUsageRows);
+}
+
+function createNoProjectSampleUsageCosts(totalCostAmount: number): CostProjectUsage[] {
+  const webAmount = roundUsd(totalCostAmount * 0.52);
+  const dataAmount = roundUsd(totalCostAmount * 0.31);
+  const workerAmount = roundUsd(totalCostAmount - webAmount - dataAmount);
+
+  return [
+    {
+      amount: webAmount,
+      percentage: calculatePercentage(webAmount, totalCostAmount),
+      projectId: "sample-web-service",
+      projectName: "샘플 웹 서비스",
+      resourceCount: 4,
+      source: "sample" as const
+    },
+    {
+      amount: dataAmount,
+      percentage: calculatePercentage(dataAmount, totalCostAmount),
+      projectId: "sample-data-platform",
+      projectName: "샘플 데이터 플랫폼",
+      resourceCount: 3,
+      source: "sample" as const
+    },
+    {
+      amount: workerAmount,
+      percentage: calculatePercentage(workerAmount, totalCostAmount),
+      projectId: "sample-background-worker",
+      projectName: "샘플 배치 워커",
+      resourceCount: 2,
+      source: "sample" as const
+    }
+  ].sort(compareCostProjectUsageRows);
 }
 
 async function fetchDailyCostTrend(
@@ -711,7 +738,9 @@ function createSampleMetricSeries(rangeDates: CostRangeDates): CostMetricSeries[
   ];
 }
 
-function createSampleWasteResources(project: Project | undefined): CostWasteResourceInsight[] {
+function createSampleWasteResources(
+  project: Pick<Project, "id" | "name"> | undefined
+): CostWasteResourceInsight[] {
   return [
     {
       estimatedMonthlyWaste: createMoneyEstimate(18),

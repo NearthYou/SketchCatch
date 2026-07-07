@@ -1,5 +1,25 @@
 ﻿# 에이전트 진행 로그
 
+### 2026-07-07 - 비용 관리 사용량 분석 UI 및 프로젝트별 비용 보기 개선
+
+- Goal: `/costs` 사용량 분석 탭의 답답한 상단 UI를 정리하고, 프로젝트별 실제 비용을 선택해서 따로 볼 수 있게 한다.
+- Completed:
+  - 사용량 분석 상단의 어두운 대형 비용 카드를 밝은 요약 카드로 바꾸고, 과한 여백과 카드 높이를 줄였다.
+  - `비용 범위` 선택 컨트롤을 추가해 `전체 프로젝트`와 프로젝트별 비용 범위를 전환할 수 있게 했다.
+  - 프로젝트 선택 시 상단 금액, 사용량 요약 KPI, 프로젝트 표 선택 상태, 낭비 리소스/절감 추천 범위가 해당 프로젝트 기준으로 바뀌게 했다.
+  - 실제 프로젝트가 없는 sample fallback에서도 프로젝트별 보기 동작이 드러나도록 sample 비용을 `샘플 웹 서비스`, `샘플 데이터 플랫폼`, `샘플 배치 워커`로 나누었다.
+  - 프로젝트 선택 key 정규화 helper와 API sample 분배 회귀 테스트를 추가했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits and after final checks.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/cost-usage-analysis.test.ts` - passed, 5 tests.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/costs/cost-usage-project-view.test.ts features/costs/cost-usage-charts.test.ts` - passed, 7 tests.
+  - Playwright smoke - passed: project options `전체 프로젝트` plus 3 sample projects, selecting a project changed summary amount `$235.20` -> `$122.30`, `consoleErrors: []`.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `pnpm build` - passed; Next.js regenerated `apps/web/next-env.d.ts`, then the generated diff was reverted.
+- Known risks:
+  - 일별 추세와 서비스별 비용은 현재 API가 계정 전체 daily/service aggregation만 제공하므로, 프로젝트를 선택해도 `전체 계정 기준`으로 표시한다. 프로젝트별 daily/service breakdown은 별도 Cost Explorer query 확장이 필요하다.
+
 ### 2026-07-07 - 비용 관리 AWS SSO 재활성화 후 live 재검증
 
 - Goal: 사용자가 `aws sso login`으로 토큰을 재활성화한 뒤 `/costs` AWS 연결 시작 흐름이 실제 AWS S3 template publishing까지 성공하는지 확인한다.
