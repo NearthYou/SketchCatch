@@ -56,6 +56,38 @@ test("EC2 runtime policy allows legacy and connection-scoped AWS execution roles
   ].toSorted());
 });
 
+test("production deploy injects AI provider runtime configuration into the API container", async () => {
+  const deployWorkflow = await readFile(deployWorkflowPath, "utf8");
+
+  for (const envKey of [
+    "AI_BILLING_MODE",
+    "BEDROCK_CREDIT_CONFIRMED",
+    "BEDROCK_MODEL_ID",
+    "AMAZON_Q_ENABLED",
+    "AMAZON_Q_REGION",
+    "AMAZON_Q_CREDIT_CONFIRMED",
+    "AMAZON_Q_APPLICATION_ID",
+    "AMAZON_Q_USER_ID"
+  ]) {
+    assert.match(deployWorkflow, new RegExp(`${envKey}=\\$\\{${envKey}`));
+    assert.match(deployWorkflow, new RegExp(`${envKey}: \\$\\{\\{ vars\\.${envKey}`));
+  }
+});
+
+test("EC2 runtime policy allows Bedrock and Amazon Q Business provider calls", async () => {
+  const runtimePolicy = JSON.parse(await readFile(runtimePolicyPath, "utf8"));
+  const statements = runtimePolicy.Statement ?? [];
+  const aiProviderStatement = statements.find(
+    (statement) => statement.Sid === "AllowSketchCatchAiProviderCalls"
+  );
+
+  assert.ok(aiProviderStatement);
+  assert.deepEqual(asSortedArray(aiProviderStatement.Action), [
+    "bedrock:InvokeModel",
+    "qbusiness:ChatSync"
+  ].toSorted());
+});
+
 test("API Docker image includes Terraform CLI for Direct Deployment execution", async () => {
   const apiDockerfile = await readFile(apiDockerfilePath, "utf8");
 
