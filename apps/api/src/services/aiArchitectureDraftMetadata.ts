@@ -22,6 +22,9 @@ export function applyGuardrailMetadata(
     metadata: {
       ...draft.metadata,
       selectedDraftPattern: resolution.selectedDraftPattern,
+      architectureIntent: resolution.intent,
+      servicePurpose: resolution.servicePurpose,
+      capabilities: resolution.capabilities,
       requirementFacts: resolution.requirementFacts,
       operatingProfile: resolution.operatingProfile,
       guardrailWarnings,
@@ -80,7 +83,7 @@ function createGuardrailExplanations(
   ];
 
   if (resolution.operatingProfile.trafficLevel === "normal") {
-    explanations.push("트래픽이 보통 이상이면 ALB나 Auto Scaling을 검토할 수 있지만, 이번 MVP 초안에는 자동 추가하지 않습니다.");
+    explanations.push("트래픽 진입은 Route 53과 ALB 또는 CloudFront 경로로 분리하고, Auto Scaling은 배포 전 확장 검토 항목으로 남깁니다.");
   }
 
   if (resolution.operatingProfile.securityPriority === "high") {

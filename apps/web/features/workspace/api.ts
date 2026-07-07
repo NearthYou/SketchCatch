@@ -1,5 +1,4 @@
-﻿import type {
-  AiArchitectureDraftResult,
+import type {
   AiPreDeploymentAnalysisResult,
   AiTerraformErrorExplanationResult,
   AiTerraformPreviewExplanationResult,
@@ -7,6 +6,7 @@
   ApiErrorCode,
   ApiErrorResponse,
   ArchitectureJson,
+  ArchitecturePatchPreviewResponse,
   ArchitectureSnapshot,
   AwsConnectionCloudFormationTemplateResponse,
   AwsConnection,
@@ -15,11 +15,13 @@
   CostProjectEstimateListResponse,
   CreateArchitectureSnapshotRequest,
   CreateArchitectureDraftRequest,
+  CreateArchitectureDraftResponse,
   CreateAwsConnectionRequest,
   CreateAwsConnectionResponse,
   CreateDeploymentRequest,
   CreateGitCicdHandoffRequest,
   ConfirmProjectAssetUploadResponse,
+  CreateArchitecturePatchPreviewRequest,
   CreateDesignSimulationRequest,
   CreateProjectAssetUploadRequest,
   CreateProjectRequest,
@@ -305,8 +307,24 @@ export async function syncTerraformToDiagram({
 // 실제 Workspace AI 패널에서 Requirement Prompt 기반 Architecture Draft를 요청합니다.
 export async function createAiArchitectureDraft(
   input: CreateArchitectureDraftRequest
-): Promise<AiArchitectureDraftResult> {
-  return postPublicAiJson<AiArchitectureDraftResult>("/ai/architecture-draft", input);
+): Promise<CreateArchitectureDraftResponse> {
+  return postPublicAiJson<CreateArchitectureDraftResponse>("/ai/architecture-draft", input);
+}
+
+export async function createAiArchitecturePatchPreview(
+  input: CreateArchitecturePatchPreviewRequest
+): Promise<ArchitecturePatchPreviewResponse> {
+  return postPublicAiJson<ArchitecturePatchPreviewResponse>("/ai/architecture-patch-preview", {
+    architectureJson: input.architectureJson,
+    instruction: input.instruction,
+    ...(input.selectedTargetResourceId !== undefined
+      ? { selectedTargetResourceId: input.selectedTargetResourceId }
+      : {}),
+    ...(input.connectionTargetResourceId !== undefined
+      ? { connectionTargetResourceId: input.connectionTargetResourceId }
+      : {}),
+    ...(input.skipConnection === true ? { skipConnection: true } : {})
+  });
 }
 
 // 현재 Architecture Board를 기준으로 Pre-Deployment Check를 실행합니다.

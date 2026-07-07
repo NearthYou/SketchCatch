@@ -7,18 +7,21 @@ import type {
   AiSafetyExplanation,
   AiTerraformErrorExplanationResult,
   AiTerraformPreviewExplanationResult,
-  ArchitecturePatchPreview,
+  ArchitecturePatchPreviewResponse,
   ArchitectureJson,
   CheckFinding,
   ConfirmTranscribeResponse,
   CreateArchitectureDraftRequest,
+  CreateArchitectureDraftResponse,
+  CreateArchitecturePatchPreviewRequest,
   CreateDesignSimulationRequest,
   DesignSimulationResult,
   TranscribeConfirmation,
   VoiceRequirementInput
 } from "@sketchcatch/types";
 import {
-  createArchitectureDraft,
+  createConfiguredAmazonQArchitectureDraftResponse,
+  type CreateArchitectureDraftResponseFactory,
   createArchitectureDraftFromRepositoryEvidence
 } from "../services/aiArchitectureDrafts.js";
 import { simulateDesign } from "../services/aiDesignSimulation.js";
@@ -165,9 +168,12 @@ const safetyFindingExplanationBodySchema = z.object({
   finding: checkFindingSchema
 });
 
-const architecturePatchPreviewBodySchema = z.object({
+const architecturePatchPreviewBodySchema: z.ZodType<CreateArchitecturePatchPreviewRequest> = z.object({
   architectureJson: architectureJsonSchema,
-  instruction: z.string().trim().min(1)
+  instruction: z.string().trim().min(1),
+  selectedTargetResourceId: z.string().trim().min(1).optional(),
+  connectionTargetResourceId: z.string().trim().min(1).optional(),
+  skipConnection: z.boolean().optional()
 });
 
 const voiceRequirementInputBodySchema: z.ZodType<VoiceRequirementInput> = z.object({
@@ -187,6 +193,7 @@ const confirmTranscribeBodySchema = z.object({
 });
 
 export type AiRouteOptions = {
+  readonly createArchitectureDraftResponse?: CreateArchitectureDraftResponseFactory;
   readonly createLlmExplanation?: CreateLlmExplanation;
   readonly createSafetyFindingExplanation?: CreateSafetyFindingExplanation;
   readonly pricingRateProvider?: CostPricingRateProvider;
@@ -196,17 +203,18 @@ export type AiRouteOptions = {
 // AI MVP API의 입구입니다. 요청 모양은 여기서 확인하고, 실제 판단은 service 함수에 맡깁니다.
 export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOptions = {}): Promise<void> {
   const createLlmExplanation = options.createLlmExplanation ?? createConfiguredAiExplanation();
+  const createArchitectureDraftResponse =
+    options.createArchitectureDraftResponse ?? createConfiguredAmazonQArchitectureDraftResponse();
   const createSafetyFindingExplanation =
     options.createSafetyFindingExplanation ?? createConfiguredOpenAiSafetyFindingExplanation();
   const transcribeRequirementService =
     options.transcribeRequirementService ?? createConfiguredTranscribeRequirementService();
   const pricingRateProvider = options.pricingRateProvider ?? createConfiguredAwsPricingRateProvider();
 
-  app.post("/ai/architecture-draft", async (request): Promise<AiArchitectureDraftResult> => {
+  app.post("/ai/architecture-draft", async (request): Promise<CreateArchitectureDraftResponse> => {
     const body = architectureDraftBodySchema.parse(request.body);
-    const result = createArchitectureDraft(body);
 
-    return addArchitectureDraftLlmExplanation(result, createLlmExplanation, body.prompt);
+    return createArchitectureDraftResponse(body);
   });
 
   app.post("/ai/github-architecture-draft", async (request): Promise<AiArchitectureDraftResult> => {
@@ -307,9 +315,14 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
     }
   );
 
-  app.post("/ai/architecture-patch-preview", async (request): Promise<ArchitecturePatchPreview> => {
+  app.post("/ai/architecture-patch-preview", async (request): Promise<ArchitecturePatchPreviewResponse> => {
     const body = architecturePatchPreviewBodySchema.parse(request.body);
     const preview = createArchitecturePatchPreview(body);
+
+    if (preview.status === "needs_clarification") {
+      return preview;
+    }
+
     const llmExplanation = await createLlmExplanation({
       target: "architecture_patch_preview",
       result: preview

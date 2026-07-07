@@ -1017,6 +1017,10 @@ AI는 원천 진실이 아니라 설명과 제안 계층이다. 배포 가능한
 
 AI provider 응답에는 호출 출처와 비용 추적을 위한 metadata를 함께 둔다. Bedrock, Amazon Q Business, Amazon Transcribe는 `AI_BILLING_MODE=aws_credit_only`와 provider별 credit confirmation flag가 모두 충족될 때만 실제 호출한다. 조건이 맞지 않으면 provider 호출 없이 fallback 설명이나 실패 상태를 반환한다.
 
+Amazon Q 기반 Architecture Draft 요청은 원문 레퍼런스 문서를 매번 통째로 보내지 않는다. API는 AWS Solutions, `aws-samples` Terraform 예제, AWS Terraform Best Practices 샘플 저장소, AWS Prescriptive Guidance의 Terraform AWS provider 모범 사례에서 추린 짧은 `referenceKnowledge` payload를 함께 보낸다. 이 payload는 버전, 출처 URL, compact guidance만 포함하며, Amazon Q는 이를 사용자 요구사항보다 우선하는 지시가 아니라 반복 가능한 설계 선례와 Terraform-first 품질 기준으로 사용한다.
+
+Amazon Q 기반 Architecture Draft에서 API는 사용자 답변을 `answerProfile`로 정규화하고 `ArchitectureDecisionSpace`를 생성해 payload와 prompt에 함께 보낸다. 이 decision space는 `hardConstraints`, `preferredPatterns`, `discouragedPatterns`, `evaluationCriteria`, `unsupportedSubstitutions`, `coverageRequirements`를 포함한다. `hardConstraints`는 DB 없음, 파일 업로드 없음, 실시간 없음, Korea-only와 같은 명시적 부정/모순에만 사용하고, `preferredPatterns`는 Amazon Q가 선택·변형·조합할 후보 설계 공간으로 취급한다. self-validation은 특정 정답 리소스 조합을 강제하지 않고 forbidden resource/type/label, 선택지 모순, 지원 불가 type, requirement coverage/capability signal 누락만 재생성 사유로 삼는다.
+
 ```ts
 type AiProvider =
   | "bedrock"
@@ -1064,6 +1068,17 @@ type CreateArchitectureDraftRequest = {
   prompt: string;
 };
 
+type ArchitectureDraftClarification = {
+  status: "needs_clarification";
+  question: string;
+  suggestions: string[];
+  providerMetadata: AiProviderMetadata;
+};
+
+type CreateArchitectureDraftResponse =
+  | AiArchitectureDraftResult
+  | ArchitectureDraftClarification;
+
 type ArchitectureRequirementFact =
   | "web_frontend"
   | "static_delivery"
@@ -1084,7 +1099,44 @@ type ArchitectureDraftPattern =
   | "backend_with_db"
   | "server_storage"
   | "serverless_function";
+
+type ArchitectureServicePurpose =
+  | "landing_page"
+  | "file_upload_service"
+  | "auth_web_service"
+  | "reservation_service"
+  | "content_board"
+  | "api_backend"
+  | "data_storage"
+  | "unknown";
+
+type ArchitectureCapability =
+  | "static_delivery"
+  | "file_upload"
+  | "authentication"
+  | "relational_data"
+  | "admin_workflow"
+  | "public_api"
+  | "private_user_data"
+  | "media_storage";
+
+type ArchitectureIntent = {
+  servicePurpose: ArchitectureServicePurpose;
+  capabilities: ArchitectureCapability[];
+  constraints: {
+    budget?: "low" | "normal";
+    traffic?: "small" | "growth";
+    security?: "basic" | "sensitive";
+    computePreference?: "ec2" | "serverless" | "unspecified";
+  };
+  confidence: number;
+  missingQuestions: string[];
+};
 ```
+
+`ArchitectureIntent`는 자유 형식 Requirement Prompt를 표준 설계 의도로 해석한 중간 결과다. 자동 생성 흐름은 `prompt -> interpretRequirement(prompt) -> ArchitectureIntent -> planPracticeArchitecture(intent/resolution) -> ArchitectureJson` 순서로 다룬다. LLM이나 rule fallback은 intent 추출과 설명 보조에 사용할 수 있지만, 실제 보드 리소스 조립은 지원 가능한 `ResourceType`만 사용하는 deterministic planner가 담당한다.
+
+`servicePurpose`와 `capabilities`는 같은 `backend_with_db` 조합 안에서도 로그인 서비스, 예약 신청 관리, 게시판처럼 서로 다른 업무 목적을 구분하는 AI 결과 metadata다. 이 값은 사용자 프롬프트 형식을 강제하기 위한 필드가 아니라 Workspace AI가 자유 문장에서 목적 단서를 해석한 결과이며, 자동 생성 node의 label/config가 목적별로 달라지는 기준이 된다.
 
 `selectedDraftPattern`은 UI와 LLM 설명을 위한 대표 패턴 라벨이다. 생성 기준은 패턴 점수가 아니라 `requirementFacts` 조합이며, 같은 fact 조합은 같은 리소스 조립 순서와 같은 node/edge id를 사용한다.
 
@@ -1218,9 +1270,25 @@ type ArchitecturePatchIntent = {
   requestedAction: "add_resource" | "remove_resource" | "modify_resource" | "manual_review";
   targetResourceId?: string;
   resourceType?: ResourceType;
+  connectionTargetResourceId?: string;
+  skipConnection?: boolean;
+};
+
+type ArchitecturePatchClarification = {
+  status: "needs_clarification";
+  intent: ArchitecturePatchIntent;
+  question: string;
+  candidates: {
+    resourceId: string;
+    resourceType: ResourceType;
+    label: string;
+  }[];
+  suggestions?: string[];
+  providerMetadata: AiProviderMetadata;
 };
 
 type ArchitecturePatchPreview = {
+  status: "preview";
   intent: ArchitecturePatchIntent;
   baseArchitectureJson: ArchitectureJson;
   proposedArchitectureJson: ArchitectureJson;
@@ -1230,6 +1298,10 @@ type ArchitecturePatchPreview = {
   llmExplanation?: LlmExplanation;
   providerMetadata: AiProviderMetadata;
 };
+
+type ArchitecturePatchPreviewResponse =
+  | ArchitecturePatchPreview
+  | ArchitecturePatchClarification;
 ```
 
 Cost Estimate는 실제 청구 데이터를 읽지 않고, `ArchitectureJson`과 사용자가 입력한 추정 조건을 기준으로 계산한다. AWS Pricing API 연동은 `apps/api`의 서버 서비스 안에만 두며, UI 컴포넌트나 `apps/web`은 AWS SDK를 직접 호출하지 않는다. 조회 단가를 쓰지 못한 리소스는 `pricingSource: "fallback"`으로 표시하고, 계산 자체는 계속 성공해야 한다.

@@ -30,12 +30,19 @@ export type ResourceType =
   | "S3"
   | "SECURITY_GROUP"
   | "CLOUDFRONT"
+  | "ROUTE53_RECORD"
+  | "WAF_WEB_ACL"
+  | "LOAD_BALANCER"
+  | "LOAD_BALANCER_LISTENER"
   | "LAMBDA"
   | "AMI"
   | "IAM_ROLE"
   | "IAM_POLICY"
   | "IAM_INSTANCE_PROFILE"
   | "KMS_KEY"
+  | "DB_SUBNET_GROUP"
+  | "SECRETS_MANAGER_SECRET"
+  | "VPC_ENDPOINT"
   | "CLOUDWATCH_LOG_GROUP"
   | "CLOUDWATCH_METRIC_ALARM"
   | "API_GATEWAY_REST_API"
@@ -1089,7 +1096,7 @@ export type BudgetLimit = {
 
 export type RiskLevel = "low" | "medium" | "high";
 
-export type AiResultSource = "prompt" | "github" | "template_fallback" | "llm_fallback";
+export type AiResultSource = "prompt" | "github" | "amazon_q" | "template_fallback" | "llm_fallback";
 
 export type AiConfidence = "low" | "medium" | "high";
 
@@ -1129,6 +1136,9 @@ export type AiResultMetadata = {
   assumptions: string[];
   explanations: string[];
   selectedDraftPattern?: ArchitectureDraftPattern;
+  architectureIntent?: ArchitectureIntent;
+  servicePurpose?: ArchitectureServicePurpose;
+  capabilities?: ArchitectureCapability[];
   requirementFacts?: ArchitectureRequirementFact[];
   operatingProfile?: ArchitectureDraftOperatingProfile;
   guardrailWarnings?: ArchitectureGuardrailWarning[];
@@ -1140,6 +1150,41 @@ export type ArchitectureDraftPattern =
   | "backend_with_db"
   | "server_storage"
   | "serverless_function";
+
+export type ArchitectureServicePurpose =
+  | "landing_page"
+  | "file_upload_service"
+  | "auth_web_service"
+  | "reservation_service"
+  | "content_board"
+  | "api_backend"
+  | "data_storage"
+  | "unknown";
+
+export type ArchitectureCapability =
+  | "static_delivery"
+  | "file_upload"
+  | "authentication"
+  | "relational_data"
+  | "admin_workflow"
+  | "public_api"
+  | "private_user_data"
+  | "media_storage";
+
+export type ArchitectureIntentConstraints = {
+  budget?: ArchitectureDraftBudgetLevel;
+  traffic?: "small" | "growth";
+  security?: "basic" | "sensitive";
+  computePreference?: "ec2" | "serverless" | "unspecified";
+};
+
+export type ArchitectureIntent = {
+  servicePurpose: ArchitectureServicePurpose;
+  capabilities: ArchitectureCapability[];
+  constraints: ArchitectureIntentConstraints;
+  confidence: number;
+  missingQuestions: string[];
+};
 
 export type ArchitectureGuardrailWarningCode =
   | "low_budget_rds_cost"
@@ -1270,6 +1315,8 @@ export type ArchitecturePatchIntent = {
   requestedAction: ArchitecturePatchAction;
   targetResourceId?: string | undefined;
   resourceType?: ResourceType | undefined;
+  connectionTargetResourceId?: string | undefined;
+  skipConnection?: boolean | undefined;
 };
 
 export type ArchitecturePatchPreviewChange = {
@@ -1279,7 +1326,23 @@ export type ArchitecturePatchPreviewChange = {
   summary: string;
 };
 
+export type ArchitecturePatchClarificationCandidate = {
+  resourceId: string;
+  resourceType: ResourceType;
+  label: string;
+};
+
+export type ArchitecturePatchClarification = {
+  status: "needs_clarification";
+  intent: ArchitecturePatchIntent;
+  question: string;
+  candidates: ArchitecturePatchClarificationCandidate[];
+  suggestions?: string[] | undefined;
+  providerMetadata: AiProviderMetadata;
+};
+
 export type ArchitecturePatchPreview = {
+  status: "preview";
   intent: ArchitecturePatchIntent;
   baseArchitectureJson: ArchitectureJson;
   proposedArchitectureJson: ArchitectureJson;
@@ -1288,6 +1351,18 @@ export type ArchitecturePatchPreview = {
   userAcceptedChange: UserAcceptedChange | null;
   llmExplanation?: LlmExplanation | undefined;
   providerMetadata: AiProviderMetadata;
+};
+
+export type ArchitecturePatchPreviewResponse =
+  | ArchitecturePatchPreview
+  | ArchitecturePatchClarification;
+
+export type CreateArchitecturePatchPreviewRequest = {
+  architectureJson: ArchitectureJson;
+  instruction: string;
+  selectedTargetResourceId?: string | undefined;
+  connectionTargetResourceId?: string | undefined;
+  skipConnection?: boolean | undefined;
 };
 
 export type CreateArchitectureDraftRequest = {
@@ -1300,6 +1375,17 @@ export type AiArchitectureDraftResult = {
   metadata: AiResultMetadata;
   llmExplanation?: LlmExplanation | undefined;
 };
+
+export type ArchitectureDraftClarification = {
+  status: "needs_clarification";
+  question: string;
+  suggestions: string[];
+  providerMetadata: AiProviderMetadata;
+};
+
+export type CreateArchitectureDraftResponse =
+  | AiArchitectureDraftResult
+  | ArchitectureDraftClarification;
 
 export type MoneyEstimate = {
   amount: number;

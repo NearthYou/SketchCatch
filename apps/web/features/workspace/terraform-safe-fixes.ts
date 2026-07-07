@@ -249,4 +249,3 @@ function unquoteSimpleTerraformReference(line: string): string {
     "$1$2"
   );
 }
-
