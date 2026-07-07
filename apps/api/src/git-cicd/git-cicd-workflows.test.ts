@@ -43,8 +43,12 @@ test("createGitCicdAutomationFiles renders infra app destroy workflows and manif
   assert.match(files[1]?.content ?? "", /LaunchTemplateName/);
   assert.match(files[1]?.content ?? "", /describe-instance-refreshes/);
   assert.match(files[2]?.content ?? "", /terraform destroy/);
-  assert.match(files[5]?.content ?? "", /"handoffId": "handoff-123"/);
-  assert.match(files[5]?.content ?? "", /"userAcceptedChangeId": "accepted-change-123"/);
+  const manifest = files.find(
+    (file) => file.path === "sketchcatch/demo-project/ci-cd/handoff.json"
+  );
+  assert.ok(manifest);
+  assert.match(manifest.content, /"handoffId": "handoff-123"/);
+  assert.match(manifest.content, /"userAcceptedChangeId": "accepted-change-123"/);
 });
 
 test("repository settings preview masks secrets and includes required variables", () => {
