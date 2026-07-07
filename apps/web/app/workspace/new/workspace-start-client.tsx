@@ -37,6 +37,8 @@ const startModeLabels: Record<WorkspaceStartKind, string> = {
   reverse: "\uB9AC\uBC84\uC2A4",
   blank: "\uBE48\uBCF4\uB4DC"
 };
+const primaryStartModeOptions = startModeOptions.filter((option) => option.priority === "primary");
+const blankStartOption = startModeOptions.find((option) => option.kind === "blank");
 
 export function WorkspaceStartClient() {
   const router = useRouter();
@@ -61,6 +63,7 @@ export function WorkspaceStartClient() {
     }
   }, []);
 
+  // 시작 방식마다 프로젝트를 바로 만들지, 전용 화면으로 보낼지 결정합니다.
   async function handleStartMode(mode: WorkspaceStartKind): Promise<void> {
     const projectName = title.trim();
 
@@ -141,7 +144,7 @@ export function WorkspaceStartClient() {
         <span className="fieldLabel">{COPY.startModeLabel}</span>
         <p className="workspaceStartHint">{helperText}</p>
         <div className="choiceGrid workspaceStartModeGrid" aria-label={COPY.startModeLabel}>
-          {startModeOptions.map((option) => {
+          {primaryStartModeOptions.map((option) => {
             const isDisabled = !canChooseStartMode || isSubmittingMode !== null;
             const isSubmitting = isSubmittingMode === option.kind;
 
@@ -160,6 +163,16 @@ export function WorkspaceStartClient() {
             );
           })}
         </div>
+        {blankStartOption ? (
+          <button
+            className="workspaceStartBlankLabel"
+            disabled={!canChooseStartMode || isSubmittingMode !== null}
+            onClick={() => void handleStartMode(blankStartOption.kind)}
+            type="button"
+          >
+            {isSubmittingMode === "blank" ? COPY.submitting : blankStartOption.actionLabel}
+          </button>
+        ) : null}
       </div>
 
       {errorMessage ? (
@@ -171,6 +184,7 @@ export function WorkspaceStartClient() {
   );
 }
 
+// AI 전용 시작 화면으로 돌아왔을 때 이전 프로젝트 이름을 복원합니다.
 function readAiStartDraft(): WorkspaceStartDraft | null {
   if (typeof window === "undefined") {
     return null;
@@ -186,6 +200,7 @@ function readAiStartDraft(): WorkspaceStartDraft | null {
   }
 }
 
+// AI 전용 화면에서 프로젝트 이름을 이어서 쓸 수 있게 임시 저장합니다.
 function writeAiStartDraft(draft: WorkspaceStartDraft): void {
   if (typeof window === "undefined") {
     return;
@@ -198,6 +213,7 @@ function writeAiStartDraft(draft: WorkspaceStartDraft): void {
   }
 }
 
+// sessionStorage에서 꺼낸 값이 AI 시작 화면이 이해할 수 있는 모양인지 확인합니다.
 function isWorkspaceStartDraft(value: unknown): value is WorkspaceStartDraft {
   if (!value || typeof value !== "object") {
     return false;

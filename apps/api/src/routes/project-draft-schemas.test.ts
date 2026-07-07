@@ -104,6 +104,32 @@ test("save project draft body preserves diagram node metadata", () => {
   });
 });
 
+test("save project draft body accepts reverse engineering node metadata", () => {
+  const parsed = saveProjectDraftBodySchema.parse({
+    diagramJson: {
+      ...validDiagram,
+      nodes: [
+        {
+          ...validDiagram.nodes[0]!,
+          metadata: {
+            reverseEngineering: {
+              source: "aws_scan",
+              protectedValueKeys: ["providerResourceId", "region"],
+              editableValueKeys: ["displayName", "description"]
+            }
+          }
+        }
+      ]
+    }
+  });
+
+  assert.deepEqual(parsed.diagramJson.nodes[0]?.metadata?.reverseEngineering, {
+    source: "aws_scan",
+    protectedValueKeys: ["providerResourceId", "region"],
+    editableValueKeys: ["displayName", "description"]
+  });
+});
+
 test("save project draft body rejects legacy awsRegion metadata", () => {
   const result = saveProjectDraftBodySchema.safeParse({
     diagramJson: {

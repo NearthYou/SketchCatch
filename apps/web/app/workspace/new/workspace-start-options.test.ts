@@ -1,9 +1,16 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 import {
   createWorkspaceStartOptions,
   resolveWorkspaceStartAction
 } from "./workspace-start-options";
+
+const startClientSource = readFileSync(
+  fileURLToPath(new URL("workspace-start-client.tsx", import.meta.url)),
+  "utf8"
+);
 
 test("createWorkspaceStartOptions makes AI and Reverse main choices and keeps blank board small", () => {
   const options = createWorkspaceStartOptions();
@@ -16,6 +23,13 @@ test("createWorkspaceStartOptions makes AI and Reverse main choices and keeps bl
       ["blank", "secondary"]
     ]
   );
+});
+
+test("WorkspaceStartClient renders the blank board as a small helper label", () => {
+  assert.match(startClientSource, /workspaceStartBlankLabel/);
+  assert.match(startClientSource, /option\.priority === "primary"/);
+  assert.match(startClientSource, /blankStartOption/);
+  assert.doesNotMatch(startClientSource, /workspaceStartOptionButtonSecondary/);
 });
 
 test("resolveWorkspaceStartAction sends Reverse users without a verified AWS Role to settings", () => {
@@ -42,7 +56,7 @@ test("resolveWorkspaceStartAction starts Reverse without creating a project firs
 
   assert.deepEqual(action, {
     kind: "openReversePreview",
-    href: "/workspace?cloudPlatform=aws&projectName=%EA%B8%B0%EC%A1%B4+AWS+%EA%B0%80%EC%A0%B8%EC%98%A4%EA%B8%B0&startMode=reverse"
+    href: "/workspace/reverse?cloudPlatform=aws&projectName=%EA%B8%B0%EC%A1%B4+AWS+%EA%B0%80%EC%A0%B8%EC%98%A4%EA%B8%B0"
   });
 });
 
