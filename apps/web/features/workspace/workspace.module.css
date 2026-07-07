@@ -277,9 +277,7 @@
 }
 
 .panelModeTextButton,
-.panelModeTextButtonActive,
-.panelPlanButton,
-.panelPlanButtonActive {
+.panelModeTextButtonActive {
   align-items: center;
   border: 1px solid transparent;
   border-radius: 4px;
@@ -310,103 +308,6 @@
   background: #f4f1ff;
   border-color: #d8ceff;
   color: #5f3de8;
-}
-
-.panelPlanButton {
-  background: #7357ff;
-  border-color: #7357ff;
-  box-shadow: 0 8px 18px rgba(115, 87, 255, 0.22);
-  color: #ffffff;
-  flex: 0 0 auto;
-  min-width: 86px;
-}
-
-.panelPlanButtonActive {
-  background: #5f3de8;
-  border-color: #5f3de8;
-  box-shadow: 0 0 0 3px rgba(115, 87, 255, 0.16);
-  color: #ffffff;
-}
-
-.panelPlanSplitButton {
-  align-items: center;
-  display: inline-flex;
-  flex: 0 0 auto;
-  height: 26px;
-  margin-left: auto;
-  min-width: 78px;
-}
-
-.panelPlanMainButton,
-.panelPlanExpandButton,
-.panelPlanActionButton {
-  align-items: center;
-  border: 1px solid #704dff;
-  cursor: pointer;
-  display: inline-flex;
-  font: inherit;
-  font-size: 12px;
-  font-weight: 600;
-  height: 26px;
-  justify-content: center;
-  letter-spacing: 0;
-  margin: 0;
-  padding: 0;
-  white-space: nowrap;
-}
-
-.panelPlanMainButton {
-  background: #704dff;
-  border-radius: 4px 0 0 4px;
-  color: #ffffff;
-  gap: 4px;
-  width: 58px;
-}
-
-.panelPlanExpandButton {
-  background: #704dff;
-  border-left-color: rgba(255, 255, 255, 0.22);
-  border-radius: 0 4px 4px 0;
-  color: #ffffff;
-  width: 20px;
-}
-
-.panelPlanActionStrip {
-  align-items: center;
-  background: #ffffff;
-  border: 1px solid #e2e9f3;
-  border-radius: 0 0 6px 6px;
-  box-shadow: 0 8px 18px rgba(24, 32, 42, 0.08);
-  display: flex;
-  gap: 4px;
-  height: 42px;
-  padding: 8px 12px;
-  position: absolute;
-  right: 0;
-  top: 46px;
-  z-index: 10;
-}
-
-.panelPlanActionButton {
-  background: #ffffff;
-  border-color: transparent;
-  border-radius: 4px;
-  color: #704dff;
-  min-width: 66px;
-  padding: 0 10px;
-}
-
-.panelPlanActionButtonActive {
-  background: #704dff;
-  border-color: #704dff;
-  color: #ffffff;
-}
-
-.panelPlanActionDangerButton {
-  background: #e5484d;
-  border-color: #e5484d;
-  color: #ffffff;
-  min-width: 86px;
 }
 
 .panelModeButton,
@@ -462,14 +363,6 @@
 .panelModeButton:focus-visible,
 .panelModeTextButton:hover,
 .panelModeTextButton:focus-visible,
-.panelPlanButton:hover,
-.panelPlanButton:focus-visible,
-.panelPlanMainButton:hover,
-.panelPlanMainButton:focus-visible,
-.panelPlanExpandButton:hover,
-.panelPlanExpandButton:focus-visible,
-.panelPlanActionButton:hover,
-.panelPlanActionButton:focus-visible,
 .panelIconButton:hover,
 .panelIconButton:focus-visible,
 .panelCollapseButton:hover,
@@ -480,31 +373,6 @@
   border-color: #d8ceff;
   color: #5f3de8;
   outline: none;
-}
-
-.panelPlanMainButton:hover,
-.panelPlanMainButton:focus-visible,
-.panelPlanExpandButton:hover,
-.panelPlanExpandButton:focus-visible,
-.panelPlanActionButtonActive:hover,
-.panelPlanActionButtonActive:focus-visible {
-  background: #5f3fe6;
-  border-color: #5f3fe6;
-  color: #ffffff;
-}
-
-.panelPlanActionDangerButton:hover,
-.panelPlanActionDangerButton:focus-visible {
-  background: #d83d43;
-  border-color: #d83d43;
-  color: #ffffff;
-}
-
-.panelPlanButton:hover,
-.panelPlanButton:focus-visible {
-  background: #5f3de8;
-  border-color: #5f3de8;
-  color: #ffffff;
 }
 
 .panelIssueBadge,
@@ -3658,7 +3526,7 @@
 .deploymentSecondaryButton:disabled,
 .deploymentDangerButton:disabled {
   cursor: not-allowed;
-  opacity: 0.55;
+  opacity: 0.76;
 }
 
 .deploymentDangerButton:not(:disabled):hover,
@@ -5042,8 +4910,6 @@
 .panelModeButtonActive,
 .panelModeTextButton,
 .panelModeTextButtonActive,
-.panelPlanButton,
-.panelPlanButtonActive,
 .panelIconButton,
 .panelIconButtonActive,
 .panelCollapseButton,
@@ -5099,20 +4965,6 @@
 .aiPanel,
 .deploymentPanel {
   background: var(--bp-page);
-}
-
-.panelPlanButton,
-.panelPlanButtonActive,
-.panelPlanButton:hover,
-.panelPlanButton:focus-visible {
-  background: var(--bp-blue);
-  border-color: var(--bp-blue);
-  box-shadow: 0 8px 18px color-mix(in srgb, var(--bp-blue) 22%, transparent);
-  color: #ffffff;
-}
-
-.panelPlanButtonActive {
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--bp-blue) 18%, transparent);
 }
 
 .terraformTopBar,
@@ -5260,7 +5112,7 @@
 .deploymentPrimaryButton:disabled,
 .deploymentSecondaryButton:disabled,
 .deploymentDangerButton:disabled {
-  opacity: 0.62;
+  opacity: 0.76;
 }
 
 .aiPanel,
@@ -5555,76 +5407,6 @@
   background: var(--bb-neutral-chip);
   border-color: transparent;
   color: var(--bb-text);
-}
-
-.panelPlanSplitButton {
-  height: 26px;
-  min-width: 78px;
-}
-
-.panelPlanMainButton,
-.panelPlanExpandButton {
-  background: var(--bb-accent);
-  border-color: var(--bb-accent);
-  color: var(--bb-white);
-}
-
-.panelPlanMainButton {
-  width: 58px;
-}
-
-.panelPlanExpandButton {
-  border-left-color: color-mix(in srgb, var(--bb-white) 22%, transparent);
-  width: 20px;
-}
-
-.panelPlanMainButton:hover,
-.panelPlanMainButton:focus-visible,
-.panelPlanExpandButton:hover,
-.panelPlanExpandButton:focus-visible {
-  background: var(--bb-accent-hover);
-  border-color: var(--bb-accent-hover);
-  color: var(--bb-white);
-}
-
-.panelPlanActionStrip {
-  background: var(--bb-white);
-  border: 1px solid var(--bb-border);
-  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 10%), 0 2px 4px -2px rgb(0 0 0 / 10%);
-  height: 42px;
-  padding: 8px 12px;
-  right: 0;
-  top: 46px;
-}
-
-.panelPlanActionButton {
-  background: var(--bb-white);
-  border-color: transparent;
-  color: var(--bb-accent);
-  height: 26px;
-}
-
-.panelPlanActionButton:hover,
-.panelPlanActionButton:focus-visible {
-  background: var(--bb-accent-soft);
-  border-color: transparent;
-  color: var(--bb-accent);
-}
-
-.panelPlanActionButtonActive,
-.panelPlanActionButtonActive:hover,
-.panelPlanActionButtonActive:focus-visible {
-  background: var(--bb-accent);
-  border-color: var(--bb-accent);
-  color: var(--bb-white);
-}
-
-.panelPlanActionDangerButton,
-.panelPlanActionDangerButton:hover,
-.panelPlanActionDangerButton:focus-visible {
-  background: var(--bb-danger);
-  border-color: var(--bb-danger);
-  color: var(--bb-white);
 }
 
 .issuesPanel {

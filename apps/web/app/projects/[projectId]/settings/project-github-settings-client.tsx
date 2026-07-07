@@ -130,9 +130,7 @@ export function ProjectGitHubSettingsClient({
         </div>
       </div>
 
-      <p>
-        Git/CI/CD handoff에 사용할 source repository를 프로젝트 단위로 연결합니다.
-      </p>
+      <p>Git/CI/CD handoff에 사용할 source repository를 프로젝트 단위로 연결합니다.</p>
 
       {loadState === "loading" ? (
         <p className="dashboardMessage" role="status">
