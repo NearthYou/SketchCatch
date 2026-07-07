@@ -19,10 +19,12 @@
 17. Destroy workflow is required for every generated apply workflow.
 18. Frontend must show approval, waiting, failed, and success states distinctly.
 19. Every mutation path needs tests for denied approval and missing permission.
-20. Document live smoke commands, cleanup evidence, and residual risks.
-21. Update `agent-progress.md` before finishing a work session.
-22. Update `session-handoff.md` when the next agent needs continuation context.
-23. Keep PRs aligned to the issue/branch mapping in `docs/sw/plan6.md`.
-24. If implementation changes a milestone boundary, update the issue body or add a follow-up issue.
-25. Do not mark a milestone complete without concrete verification commands.
-26. PR artifact generation is not live proof; record real merge/apply/release/destroy smoke separately.
+20. Run live-smoke preflight before any real GitHub/AWS mutation.
+21. Use `-ConfirmLiveMutations` only after explicit cost, permission, and cleanup approval.
+22. Document live smoke commands, cleanup evidence, and residual risks.
+23. Update `agent-progress.md` before finishing a work session.
+24. Update `session-handoff.md` when the next agent needs continuation context.
+25. Keep PRs aligned to the issue/branch mapping in `docs/sw/plan6.md`.
+26. If implementation changes a milestone boundary, update the issue body or add a follow-up issue.
+27. Do not mark a milestone complete without concrete verification commands.
+28. PR artifact generation is not live proof; record real merge/apply/release/destroy smoke separately.

@@ -1,5 +1,23 @@
 ﻿# 세션 핸드오프
 
+## 2026-07-07 - Git/CI/CD live smoke readiness 보강
+
+- Branch/worktree: `codex/cicd-live-readiness` at `C:\Users\siwon\Desktop\Jungle\Week17~21\SketchCatch-worktrees\cicd-plan6-docs`.
+- Scope completed:
+  - `scripts/smoke/git-cicd-auto-deploy.ps1` now supports `-PreflightOnly`, `-ReportPath`, `-FailOnBlocked`, and `-ConfirmLiveMutations`.
+  - Preflight records API health, access token, handoff id, mutation approval gate, pipeline success gate, and destroy success gate without GitHub/AWS mutation.
+  - Repository settings apply and AWS role diff apply are blocked unless `-ConfirmLiveMutations` is present.
+  - Invalid token or pipeline lookup failure now appears in the JSON report instead of only throwing a raw exception.
+  - Added `docs/sw/git-cicd-live-smoke.md` and updated `docs/sw/spec6.md`, `docs/sw/plan6.md`, `docs/sw/agents3.md`, and `agent-progress.md`.
+- Verified:
+  - `pnpm harness:check`
+  - PowerShell parser check for `scripts/smoke/git-cicd-auto-deploy.ps1`
+  - Preflight smoke with skipped mutations returned blocked JSON and production `/health` 200.
+  - Fake-token live smoke with skipped mutations returned failed JSON with 401 pipeline evidence.
+- Still not live-proven:
+  - Real target repository, verified AWS connection, Environment approval, Terraform apply, S3 release, ASG Instance Refresh, and destroy workflow are still external live-smoke requirements.
+  - #203 separate GitHub user OAuth token writer is still not implemented; current recovery path remains GitHub App permission upgrade plus fail-closed handling.
+
 ## 2026-07-07 - Git/CI/CD 자동 배포 plan6 구현 handoff
 
 - Branch/worktree: `codex/docs-cicd-plan6` at `C:\Users\siwon\Desktop\Jungle\Week17~21\SketchCatch-worktrees\cicd-plan6-docs`.

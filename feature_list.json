@@ -172,9 +172,11 @@
         "lastVerified": "2026-07-07",
         "commands": [
           "pnpm harness:check",
-          "PowerShell PSParser check for scripts/smoke/git-cicd-auto-deploy.ps1"
+          "PowerShell PSParser check for scripts/smoke/git-cicd-auto-deploy.ps1",
+          "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\smoke\\git-cicd-auto-deploy.ps1 -PreflightOnly -SkipRepositorySettingsApply -SkipAwsRoleDiffApply",
+          "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\smoke\\git-cicd-auto-deploy.ps1 -AccessToken fake -HandoffId 00000000-0000-4000-8000-000000000000 -SkipRepositorySettingsApply -SkipAwsRoleDiffApply -SkipUrlCheck"
         ],
-        "notes": "Git/CI/CD auto-deploy smoke runner now records repo settings apply, role diff apply, infra/app/destroy pipeline status, static/API URL marker checks, and pipeline/destroy success waits. Real AWS/GitHub live smoke evidence is still pending."
+        "notes": "Git/CI/CD auto-deploy smoke runner now records preflight readiness, explicit live mutation approval, repo settings apply, role diff apply, infra/app/destroy pipeline status, static/API URL marker checks, and pipeline/destroy success waits. Real AWS/GitHub live smoke evidence is still pending."
       },
       "notes": "현재는 unit/type/build checks 중심이다. 실제 서비스 여정 smoke가 하네스의 다음 큰 빈틈이다."
     }
