@@ -1027,7 +1027,9 @@ function addCrossResourceEdges(context: DraftBuildContext): void {
   for (const appServerId of appServerIds) {
     for (const uploadBucketId of uploadBucketIds) {
       addEdge(context, `${appServerId}-to-${uploadBucketId}`, appServerId, uploadBucketId, "stores files");
-      addEdge(context, `app-runtime-policy-to-${uploadBucketId}`, "app-runtime-policy", uploadBucketId, "allows S3 actions");
+      if (hasNode(context, "app-runtime-policy")) {
+        addEdge(context, `app-runtime-policy-to-${uploadBucketId}`, "app-runtime-policy", uploadBucketId, "allows S3 actions");
+      }
     }
   }
 

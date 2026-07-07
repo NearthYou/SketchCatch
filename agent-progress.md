@@ -3777,3 +3777,23 @@
   - `corepack pnpm build` - passed with elevated permissions after prior sandbox `.next` unlink `EPERM`
 - Known risks:
   - 실제 Amazon Q 호출은 로컬 fake provider 단위 테스트로 검증했다. 실제 모델 응답에서는 같은 self-validation 재생성 경로가 적용된다.
+
+# 2026-07-07 - PR #214 리뷰 반영
+
+- Goal: PR #214에 남은 GitHub review thread 3건을 확인하고, 그래프 정합성/가독성/타입 안정성 피드백을 반영한다.
+- Completed:
+  - `addCrossResourceEdges`에서 `app-runtime-policy`가 존재할 때만 upload bucket 권한 edge를 추가하도록 방어했다.
+  - `aiArchitecturePatchPreview`의 중복 변수명 shadowing을 `filteredNodes`로 정리했다.
+  - `WorkspaceAiPanelPieces`의 AI signal label map을 union key와 `satisfies Record` 기반으로 바꾸고 fallback 호환은 type guard로 유지했다.
+- Verification run:
+  - `corepack pnpm --filter @sketchcatch/api lint` - passed
+  - `corepack pnpm --filter @sketchcatch/web lint` - passed
+  - `corepack pnpm --filter @sketchcatch/api typecheck` - passed
+  - `corepack pnpm --filter @sketchcatch/web typecheck` - passed
+  - `apps/api/node_modules/.bin/tsx.CMD --test apps/api/src/services/aiArchitecturePatchPreview.test.ts` - passed, 23 tests
+  - `apps/api/node_modules/.bin/tsx.CMD --test apps/api/src/routes/ai.test.ts` - passed, 44 tests
+  - `corepack pnpm lint` - passed, with non-fatal Turbo cache rename warnings
+  - `corepack pnpm typecheck` - passed, with non-fatal Turbo cache rename warnings
+  - `corepack pnpm build` - passed with elevated permissions
+- Known risks:
+  - GitHub review threads were read but not resolved/replied to because the user asked for local fixes, commit, and push only.

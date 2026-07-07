@@ -634,9 +634,9 @@ function findRemovableNodesForClause(
   const resourceTypes = findResourceTypes(normalizedClause);
 
   const matchingNodes = resourceTypes.flatMap((resourceType) => {
-    const matchingNodes = nodes.filter((node) => node.type === resourceType);
+    const filteredNodes = nodes.filter((node) => node.type === resourceType);
 
-    return matchingNodes.length === 1 ? matchingNodes : [];
+    return filteredNodes.length === 1 ? filteredNodes : [];
   });
 
   return expandWholeScopeRemovals(nodes, matchingNodes, normalizedClause);
