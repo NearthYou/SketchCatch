@@ -1,5 +1,25 @@
 ﻿# 에이전트 진행 로그
 
+### 2026-07-07 - 비용 관리 AWS SSO 재활성화 후 live 재검증
+
+- Goal: 사용자가 `aws sso login`으로 토큰을 재활성화한 뒤 `/costs` AWS 연결 시작 흐름이 실제 AWS S3 template publishing까지 성공하는지 확인한다.
+- Completed:
+  - 기본 AWS credential은 비어 있지만 `sketchcatch-dev` profile의 STS 호출이 성공하는 것을 확인했다.
+  - 로컬 Postgres/Redis, API, Web dev server를 띄우고 DB migration을 적용했다.
+  - API 직접 smoke로 signup -> `GET /api/costs/usage?range=30d` -> `POST /api/aws/connections` -> `GET /api/aws/connections/:id/cloudformation-template`를 검증했다.
+  - `cloudformation-template` 응답이 inline fallback이 아니라 S3 presigned `templateUrl`과 CloudFormation `launchStackUrl`을 반환하고 `manualTemplateFallbackAvailable=false`인 것을 확인했다.
+  - Playwright browser smoke로 signup -> `/costs` -> `사용량 분석` -> `AWS 연결 시작` UI 흐름을 검증했고, 브라우저 console error 없이 Stack 검증 패널이 표시되는 것을 확인했다.
+  - 사용량 탭의 라인 차트/서비스 바/프로젝트 표/낭비 리소스/추천 영역이 error 없이 렌더링되는 것을 별도 smoke로 확인했다.
+  - 테스트 중 생성된 S3 CloudFormation template object 2개, 로컬 DB 테스트 AWS connection 2개, 테스트 사용자 3개를 정리했다.
+- Verification run:
+  - `pnpm harness:check` - passed before live smoke.
+  - `aws sts get-caller-identity --profile sketchcatch-dev` - passed.
+  - API direct live smoke - passed: usage 200, connection create 201, template 200, S3 presigned URL present, launch URL present, manual fallback false.
+  - Playwright AWS setup smoke - passed: usage 200, connection create 201, template 200, S3 presigned URL present, Stack verify panel visible, `consoleErrors: []`.
+  - Playwright usage render smoke - passed: usage tab selected, chart/table/recommendation regions visible or empty-state visible, `costErrorCount=0`, `consoleErrors: []`.
+- Known risks:
+  - 실제 AWS Console CloudFormation Stack 생성, Role verify, Cost Explorer/CloudWatch live 조회는 수행하지 않았다. 검증된 Role이 생성되어야 사용량 분석이 sample fallback이 아니라 실제 Cost Explorer provider로 전환된다.
+
 ### 2026-07-07 - 비용 관리 AWS 연결 브라우저 검증 보강
 
 - Goal: `/costs` 사용량 분석 탭과 AWS 연결 시작 흐름을 로컬 API/Web/DB/브라우저로 실제 검증하고, 발견된 문제를 수정한다.
