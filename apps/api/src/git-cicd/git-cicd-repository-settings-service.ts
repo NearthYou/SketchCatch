@@ -52,7 +52,7 @@ export function createGitHubRepositorySettingsApplier(
           owner: sourceRepository.owner,
           name: sourceRepository.name,
           environmentName: preview.environmentName,
-          variables: preview.variables
+          variables: removeBlankVariableValues(preview.variables)
         });
 
         return {
@@ -97,14 +97,15 @@ export function createGitHubOAuthRepositorySettingsApplier(
           body: {}
         });
 
-        const variableNames = Object.keys(preview.variables).sort();
+        const variables = removeBlankVariableValues(preview.variables);
+        const variableNames = Object.keys(variables).sort();
 
         for (const variableName of variableNames) {
           await upsertRepositoryVariableWithOAuth(fetchImpl, accessToken, {
             owner: sourceRepository.owner,
             name: sourceRepository.name,
             variableName,
-            value: preview.variables[variableName] ?? ""
+            value: variables[variableName] ?? ""
           });
         }
 
@@ -192,6 +193,14 @@ function isGitHubPermissionError(error: unknown): boolean {
 
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Unknown error";
+}
+
+function removeBlankVariableValues(variables: Record<string, string>): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(variables).filter(
+      ([, value]) => typeof value === "string" && value.trim().length > 0
+    )
+  );
 }
 
 async function upsertRepositoryVariableWithOAuth(
