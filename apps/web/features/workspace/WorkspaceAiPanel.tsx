@@ -14,7 +14,7 @@ import {
   createAiArchitectureDraft,
   runAiDesignSimulation
 } from "./api";
-import { convertArchitectureJsonToDiagramJson } from "./workspace-ai-diagram-adapter";
+import { getDiagramJsonForArchitectureDraft } from "./workspace-ai-diagram-adapter";
 import {
   createWorkspaceAiBoardSnapshot,
   isWorkspaceAiResultStale
@@ -87,7 +87,7 @@ export function WorkspaceAiPanel({ context }: WorkspaceAiPanelProps) {
         return;
       }
 
-      const previewDiagram = convertArchitectureJsonToDiagramJson(result.architectureJson);
+      const previewDiagram = getDiagramJsonForArchitectureDraft(result);
 
       setDraft(result);
       context.setPreviewDiagram(previewDiagram);
@@ -103,7 +103,7 @@ export function WorkspaceAiPanel({ context }: WorkspaceAiPanelProps) {
       return;
     }
 
-    context.applyDiagramJson(convertArchitectureJsonToDiagramJson(draft.architectureJson));
+    context.applyDiagramJson(getDiagramJsonForArchitectureDraft(draft));
     requestImmediateDiagramSave();
     setDraft(null);
     setDesignSimulation(null);

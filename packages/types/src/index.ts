@@ -1527,6 +1527,7 @@ export type CreateArchitectureDraftRequest = {
 
 export type AiArchitectureDraftResult = {
   architectureJson: ArchitectureJson;
+  diagramJson?: DiagramJson | undefined;
   title: string;
   metadata: AiResultMetadata;
   llmExplanation?: LlmExplanation | undefined;

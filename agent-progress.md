@@ -323,12 +323,28 @@ Known risks:
 - Raised contrast for disabled workspace creation, dashboard muted/subtle text, disabled dashboard buttons, and disabled deployment buttons.
 - Rechecked the project GitHub settings client copy while preserving the project-level repository connection flow.
 - Removed the obsolete right-panel Plan split button and its unused CSS/test expectations.
+- Added a fixed AI Architecture Draft path for the exact selected-answer flow: dynamic web application, medium traffic, simple DB data, SPA frontend, complex backend, Korea/Seoul, 50-200만원 budget, optional HTTP, no upload, no realtime, semi-managed operations, 3s loading, 10-100MB site, daytime traffic, and 99.9% availability.
+- The fixed draft bypasses Amazon Q only for that selected-answer combination and returns a SketchCatch-style AWS/Terraform deployment topology: VPC, public/private app/private DB subnets, IGW, NAT gateways, ALB/listener/target group, launch template, Auto Scaling Group, RDS, DB subnet group, S3, CloudFront, IAM runtime nodes, and Secrets Manager.
+- Added regression coverage proving the exact path bypasses the provider, fallback generation returns the same fixed draft, and a similar non-matching budget choice still uses the existing provider flow.
+- Added a fixed Terraform Preview override for that selected-answer path. The generated diagram carries a private marker, and `/terraform/generate` returns the attached SketchCatch reference Terraform code, including CodePipeline, CodeBuild, CodeDeploy, artifact/static S3 buckets, CloudFront, ALB/ASG, RDS, NAT, IAM, and Secrets Manager resources.
+- Reworked the fixed diagram fixture from the provided screenshot grid: the reference canvas now uses the original `2270x1534` screenshot coordinate system, including the region frame, CI/CD groups, static frontend, VPC, public/private app subnets, ASG/app SG, EC2/AMI nodes, RDS subnets, and right-side route labels.
+- Disabled all automatic generated Region/AZ wrapping, resource naming layout, readable topology layout, collision resolution, and area fitting for this private marker only; other AI drafts still use the normal layout pipeline.
+- Added display-only diagram nodes for unsupported visual resources so CodePipeline, CodeBuild, CodeDeploy, Git repository, Secrets Manager details, SG rules, route labels, and static S3 policy/OAC labels still show icon/name on the canvas without entering Terraform rendering.
+- Tightened the fixed fixture so every explicit child node/area box fits fully inside its parent area, including area-inside-area cases such as VPC, subnets, ASG/app SG, DB subnet group, private DB subnets, and RDS SG.
+- Added authored edge handles for this fixture so visual flow edges use the intended source/target sides instead of the generic router choosing different handles.
 
 Verification:
 
 - `pnpm harness:check` - passed before edits.
 - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-right-panel-layout.test.ts` - passed, 63 tests.
 - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-right-panel-layout.test.ts` - passed after Plan removal, 62 tests.
+- `pnpm --filter @sketchcatch/api exec tsx --test src/services/aiArchitectureDrafts.test.ts` - passed, 21 tests.
+- `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-preview.test.ts` - passed, 18 tests.
+- `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-ai-diagram-adapter.test.ts` - passed, 28 tests.
+- `pnpm --filter @sketchcatch/api typecheck` - passed.
+- `pnpm --filter @sketchcatch/web typecheck` - passed.
+- `pnpm --filter @sketchcatch/api lint` - passed.
+- `pnpm harness:check` - passed after edge/area fixes.
 - `pnpm lint` - passed.
 - `pnpm typecheck` - passed.
 - `pnpm build` - passed.
@@ -338,6 +354,7 @@ Known risks:
 
 - Full web source-test sweep was not rerun after the final Plan removal; targeted layout coverage passed.
 - Browser click QA against production still needs to run after merge/deploy.
+- CodePipeline, CodeBuild, CodeDeploy, and some fine-grained resources are display-only canvas nodes for this exact selected-answer path; the fixed Terraform Preview code remains the source of deployable IaC for those resources.
 
 Previous 2026-07-08 session:
 

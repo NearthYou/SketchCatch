@@ -58,6 +58,12 @@ export function findInnermostAreaNodeAtPoint(
 }
 
 export function getAreaNodeLabel(node: DiagramNode): string {
+  const diagramAreaLabel = readDiagramTextValue(node, "diagramAreaLabel");
+
+  if (diagramAreaLabel) {
+    return diagramAreaLabel;
+  }
+
   if (isResourceAreaNode(node)) {
     const resourceName = node.parameters?.resourceName?.trim();
 
@@ -67,6 +73,12 @@ export function getAreaNodeLabel(node: DiagramNode): string {
   }
 
   return node.label;
+}
+
+function readDiagramTextValue(node: DiagramNode, key: string): string | undefined {
+  const value = node.parameters?.values?.[key];
+
+  return typeof value === "string" && value.trim().length > 0 ? value : undefined;
 }
 
 export function getAreaNodeIconUrl(node: DiagramNode): string | undefined {

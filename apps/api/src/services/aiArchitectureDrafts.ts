@@ -13,6 +13,10 @@ import type {
 import { resourceDefinitions } from "@sketchcatch/types/resource-definitions";
 import { applyGuardrailMetadata } from "./aiArchitectureDraftMetadata.js";
 import { planPracticeArchitecture } from "./aiArchitectureRequirementDraftBuilder.js";
+import {
+  createSketchCatchReferenceDeploymentDraft,
+  isSketchCatchReferenceDeploymentSelection
+} from "./aiArchitectureSketchcatchReferenceDraft.js";
 import { applyOperatingConditionConfig } from "./aiArchitectureOperatingConditions.js";
 import { resolveArchitectureResourceQuantities } from "./aiArchitectureResourceQuantities.js";
 import { resolveArchitectureRequirement } from "./aiArchitectureRequirementResolution.js";
@@ -163,6 +167,11 @@ export type CreateAmazonQArchitectureDraftResponseOptions = {
 // 자연어 요청을 보드가 열 수 있는 ArchitectureJson 초안으로 바꾸는 1차 진입점입니다.
 export function createArchitectureDraft(input: string | CreateArchitectureDraftRequest): AiArchitectureDraftResult {
   const request = normalizeArchitectureDraftRequest(input);
+
+  if (isSketchCatchReferenceDeploymentSelection(request.prompt)) {
+    return createSketchCatchReferenceDeploymentDraft();
+  }
+
   const resolution = resolveArchitectureRequirement(request);
   const resourceQuantities = resolveArchitectureResourceQuantities(request.prompt);
   const draft = planPracticeArchitecture(resolution, resourceQuantities);
@@ -234,6 +243,10 @@ export async function createAmazonQArchitectureDraftResponse(
 
   if (conditionalQuestion !== null) {
     return createArchitectureDraftClarification(conditionalQuestion, request, provider, creditPolicy.billingMode);
+  }
+
+  if (isSketchCatchReferenceDeploymentSelection(request.prompt)) {
+    return createSketchCatchReferenceDeploymentDraft();
   }
 
   const architectureDecisionSpace = createArchitectureDecisionSpace(request.prompt);
