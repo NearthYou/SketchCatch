@@ -66,7 +66,7 @@ export function createGitHubRepositorySettingsApplier(
       } catch (error) {
         if (isGitHubPermissionError(error)) {
           throw new GitCicdRepositorySettingsPermissionError(
-            "GitHub App does not have permission to create environments or Actions variables"
+            "GitHub App does not have permission to create environments or Actions variables. Approve Administration and Variables repository permissions as Read and write."
           );
         }
 
@@ -119,7 +119,7 @@ export function createGitHubOAuthRepositorySettingsApplier(
       } catch (error) {
         if (isGitHubPermissionError(error)) {
           throw new GitCicdRepositorySettingsPermissionError(
-            "GitHub OAuth token does not have permission to create environments or Actions variables"
+            "GitHub OAuth token does not have permission to create environments or Actions variables. Approve Administration and Variables repository permissions as Read and write."
           );
         }
 

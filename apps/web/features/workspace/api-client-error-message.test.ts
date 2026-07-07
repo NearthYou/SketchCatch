@@ -13,3 +13,15 @@ test("getApiErrorMessage translates AWS Role verification failures instead of ge
     "AWS Role 연결 검증에 실패했습니다. CloudFormation Stack 생성 완료 후 잠시 기다렸다가 다시 시도하고, Account ID와 Trust Policy를 확인해주세요."
   );
 });
+
+test("getApiErrorMessage explains GitHub repository settings permission gaps", () => {
+  const error = new ApiClientError(409, {
+    error: "github_oauth_required",
+    message: "GitHub App does not have permission to create environments or Actions variables"
+  });
+
+  assert.equal(
+    getApiErrorMessage(error, "Git/CI/CD 자동 배포 handoff를 만들지 못했습니다."),
+    "GitHub App 권한이 부족해서 repository settings를 적용할 수 없습니다. GitHub App repository permissions에서 Administration 권한과 Variables 권한을 Read and write로 승인한 뒤 다시 시도해주세요."
+  );
+});
