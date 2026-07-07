@@ -1,5 +1,6 @@
 import type {
   CheckFinding,
+  DeploymentLiveProfile,
   DeploymentPlanSummary,
   DeploymentPlanWarning
 } from "@sketchcatch/types";
@@ -14,6 +15,7 @@ export type DeploymentSafetyGateOperation = "apply" | "destroy";
 export type EvaluateDeploymentSafetyGateInput = {
   operation: DeploymentSafetyGateOperation;
   planSummary: DeploymentPlanSummary;
+  liveProfile?: DeploymentLiveProfile | undefined;
   findings?: readonly CheckFinding[];
   unsupportedResourceTypes?: readonly string[];
   warnings?: readonly DeploymentPlanWarning[];
@@ -24,7 +26,11 @@ export function evaluateDeploymentSafetyGate(
 ): DeploymentPlanSummary {
   const warnings = deduplicateDeploymentPlanWarnings([
     ...input.planSummary.warnings,
-    ...(input.findings ?? []).map(createPreDeploymentCheckWarning),
+    ...(input.findings ?? []).map((finding) =>
+      createPreDeploymentCheckWarning(finding, {
+        liveProfile: input.liveProfile
+      })
+    ),
     ...createTerraformPlanWarnings({
       operation: input.operation,
       summary: input.planSummary,

@@ -2,6 +2,27 @@
 
 Short English-only working log for the current agent context.
 
+## 2026-07-08 Demo Web Service Approval Gate Fix
+
+- Branch/worktree: `codex/demo-safety-gate-ack` in `C:\Users\siwon\.codex\worktrees\d98a\SketchCatch`.
+- Scope: unblock `scripts/smoke/live-demo-web-service.ps1` when the demo profile intentionally creates public web resources.
+- Added live profile context to deployment safety gate warning creation.
+- Kept ordinary high Trivy findings blocking, but made known `demo_web_service` public web findings acknowledgement-only for the managed demo resource addresses.
+- Hardened the smoke Terraform with launch template IMDSv2, security group rule descriptions, and ALB invalid-header dropping.
+- Updated the smoke script to submit acknowledgement ids from `planSummary.warnings` during approve.
+- Left unrelated untracked `pr-handoff-payload-flow-diagram.md` untouched.
+
+Verification:
+
+- `pnpm harness:check` - passed before edits.
+- `pnpm --filter @sketchcatch/api exec tsx --test src/deployments/deployment-safety-gate.test.ts src/deployments/deployment-plan-service.test.ts`
+- PowerShell script parse check for `scripts/smoke/live-demo-web-service.ps1`
+- `git diff --check`
+- `pnpm lint`
+- `pnpm typecheck`
+- `pnpm build`
+- `pnpm harness:check` - passed after build.
+
 ## 2026-07-08 Demo Smoke PowerShell Compatibility Fix
 
 - Branch/worktree: `dev` in `C:\Users\siwon\.codex\worktrees\d98a\SketchCatch`.

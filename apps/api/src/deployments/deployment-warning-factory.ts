@@ -1,12 +1,26 @@
 import type {
   CheckFinding,
+  DeploymentLiveProfile,
   DeploymentPlanSummary,
   DeploymentPlanWarning,
   DeploymentPlanWarningCode
 } from "@sketchcatch/types";
 import type { DeploymentSafetyGateOperation } from "./deployment-safety-gate.js";
 
-export function createPreDeploymentCheckWarning(finding: CheckFinding): DeploymentPlanWarning {
+type CreatePreDeploymentCheckWarningOptions = {
+  liveProfile?: DeploymentLiveProfile | undefined;
+};
+
+export function createPreDeploymentCheckWarning(
+  finding: CheckFinding,
+  options: CreatePreDeploymentCheckWarningOptions = {}
+): DeploymentPlanWarning {
+  const shouldDowngradeDemoFinding = isDemoProfileAcknowledgementFinding(
+    finding,
+    options.liveProfile
+  );
+  const blocksApproval = finding.severity === "high" && !shouldDowngradeDemoFinding;
+
   const warning: DeploymentPlanWarning = {
     id: createStableWarningId("pre_deployment_check", finding.id),
     level: finding.severity,
@@ -15,8 +29,8 @@ export function createPreDeploymentCheckWarning(finding: CheckFinding): Deployme
     code: toPreDeploymentWarningCode(finding),
     message: `${finding.title}: ${finding.recommendation}`,
     relatedFindingId: finding.id,
-    requiresAcknowledgement: finding.severity !== "high",
-    blocksApproval: finding.severity === "high"
+    requiresAcknowledgement: !blocksApproval,
+    blocksApproval
   };
 
   if (finding.resourceId) {
@@ -28,6 +42,61 @@ export function createPreDeploymentCheckWarning(finding: CheckFinding): Deployme
   }
 
   return warning;
+}
+
+function isDemoProfileAcknowledgementFinding(
+  finding: CheckFinding,
+  liveProfile: DeploymentLiveProfile | undefined
+): boolean {
+  if (liveProfile !== "demo_web_service" && liveProfile !== "demo_web_service_with_rds") {
+    return false;
+  }
+
+  if (finding.severity !== "high") {
+    return false;
+  }
+
+  const normalizedId = finding.id.toLowerCase();
+  const normalizedResource = (
+    finding.sourceLocation?.resourceAddress ??
+    finding.resourceId ??
+    ""
+  ).toLowerCase();
+
+  if (
+    normalizedId.includes("aws-0052") ||
+    normalizedId.includes("aws-0053") ||
+    normalizedId.includes("aws-0054")
+  ) {
+    return normalizedResource === "aws_lb.demo" || normalizedResource === "aws_lb_listener.http";
+  }
+
+  if (normalizedId.includes("aws-0087") || normalizedId.includes("aws-0132")) {
+    return (
+      normalizedResource === "aws_s3_bucket.site" ||
+      normalizedResource === "aws_s3_bucket_public_access_block.site"
+    );
+  }
+
+  if (normalizedId.includes("aws-0104")) {
+    return (
+      normalizedResource === "aws_security_group.alb" ||
+      normalizedResource === "aws_security_group.api"
+    );
+  }
+
+  if (normalizedId.includes("aws-0130")) {
+    return normalizedResource === "aws_launch_template.api";
+  }
+
+  if (normalizedId.includes("aws-0164")) {
+    return (
+      normalizedResource === "aws_subnet.public_a" ||
+      normalizedResource === "aws_subnet.public_c"
+    );
+  }
+
+  return false;
 }
 
 export function createUnsupportedResourceWarning(

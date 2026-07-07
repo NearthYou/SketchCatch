@@ -338,6 +338,7 @@ export async function runDeploymentPlan(
     const planSummary = evaluateDeploymentSafetyGate({
       operation: "apply",
       planSummary: createDeploymentPlanSummaryFromTerraformShowJson(terraform.showJson.stdout),
+      liveProfile: deployment.liveProfile,
       findings: preDeploymentAnalysis.findings,
       unsupportedResourceTypes
     });
