@@ -133,6 +133,14 @@ type GitHubRefResponse = {
   };
 };
 
+type GitHubTreeResponse = {
+  readonly sha?: unknown;
+};
+
+type GitHubCommitResponse = {
+  readonly sha?: unknown;
+};
+
 type GitHubContentsResponse = {
   readonly sha?: unknown;
   readonly content?: unknown;
@@ -266,11 +274,10 @@ export function createGitHubAppClient(options: GitHubAppClientOptions): GitHubAp
     },
 
     async createPullRequest(input) {
-      const targetRef = await requestWithInstallationToken<GitHubRefResponse>(
-        input.installationId,
-        createRepositoryPath(input, `/git/ref/heads/${encodeURIComponent(input.targetBranch)}`)
+      const targetSha = await getOrCreateTargetBranchSha(
+        input,
+        requestWithInstallationToken
       );
-      const targetSha = readRequiredString(targetRef.object?.sha, "target branch sha");
 
       await createSourceBranchIfNeeded(input, targetSha, requestWithInstallationToken);
 
@@ -563,6 +570,83 @@ function readVisibility(
   }
 
   return isPrivate === true ? "private" : "public";
+}
+
+async function getOrCreateTargetBranchSha(
+  input: GitHubAppCreatePullRequestInput,
+  requestWithInstallationToken: <T>(
+    installationId: string,
+    path: string,
+    init?: Omit<GitHubRequestInit, "token" | "authScheme">
+  ) => Promise<T>
+): Promise<string> {
+  try {
+    const targetRef = await requestWithInstallationToken<GitHubRefResponse>(
+      input.installationId,
+      createRepositoryPath(input, `/git/ref/heads/${encodeURIComponent(input.targetBranch)}`)
+    );
+
+    return readRequiredString(targetRef.object?.sha, "target branch sha");
+  } catch (error) {
+    if (!isHttpStatus(error, 404)) {
+      throw error;
+    }
+  }
+
+  return createInitialTargetBranch(input, requestWithInstallationToken);
+}
+
+async function createInitialTargetBranch(
+  input: GitHubAppCreatePullRequestInput,
+  requestWithInstallationToken: <T>(
+    installationId: string,
+    path: string,
+    init?: Omit<GitHubRequestInit, "token" | "authScheme">
+  ) => Promise<T>
+): Promise<string> {
+  const tree = await requestWithInstallationToken<GitHubTreeResponse>(
+    input.installationId,
+    createRepositoryPath(input, "/git/trees"),
+    {
+      method: "POST",
+      body: {
+        tree: [
+          {
+            path: "README.md",
+            mode: "100644",
+            type: "blob",
+            content: `# ${input.name}\n\nInitialized by SketchCatch for Git/CI/CD handoff.\n`
+          }
+        ]
+      }
+    }
+  );
+  const commit = await requestWithInstallationToken<GitHubCommitResponse>(
+    input.installationId,
+    createRepositoryPath(input, "/git/commits"),
+    {
+      method: "POST",
+      body: {
+        message: "Initialize repository for SketchCatch handoff",
+        tree: readRequiredString(tree.sha, "initial tree sha")
+      }
+    }
+  );
+  const commitSha = readRequiredString(commit.sha, "initial commit sha");
+
+  await requestWithInstallationToken<GitHubRefResponse>(
+    input.installationId,
+    createRepositoryPath(input, "/git/refs"),
+    {
+      method: "POST",
+      body: {
+        ref: `refs/heads/${input.targetBranch}`,
+        sha: commitSha
+      }
+    }
+  );
+
+  return commitSha;
 }
 
 async function createSourceBranchIfNeeded(
