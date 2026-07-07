@@ -112,7 +112,7 @@ export function WorkspaceAiTerraformPanel() {
         {terraformPreview !== null ? (
           <WorkspaceAiTerraformPreviewResult preview={terraformPreview} />
         ) : (
-          <p className={styles.aiHint}>Terraform 코드를 붙여 넣으면 감지된 리소스와 위험을 설명합니다.</p>
+          <p className={styles.aiHint}>Terraform 코드를 붙여 넣으면 6개 기준으로 다이어그램 상태를 평가합니다.</p>
         )}
       </section>
 

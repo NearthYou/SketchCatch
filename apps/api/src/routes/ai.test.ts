@@ -133,7 +133,16 @@ const terraformPreviewExplanationResponseSchema = z.object({
       label: z.string(),
       status: z.string()
     })
-  )
+  ),
+  wellArchitectedGuidance: z.array(
+    z.object({
+      pillar: z.string(),
+      title: z.string(),
+      observation: z.string(),
+      recommendation: z.string()
+    })
+  ),
+  consensusRecommendation: z.string()
 });
 
 type ArchitectureDraftResponse = z.infer<typeof architectureDraftResponseSchema>;
@@ -2117,6 +2126,9 @@ resource "aws_db_instance" "main" {
   assert.equal(body.findings.some((finding) => finding.category === "security"), true);
   assert.equal(body.findings.some((finding) => finding.category === "cost"), true);
   assert.equal(body.checklist.some((item) => item.id === "terraform-review-check"), true);
+  assert.equal(body.wellArchitectedGuidance.length, 6);
+  assert.equal(body.wellArchitectedGuidance.some((guidance) => guidance.title.includes("보안 에이전트")), true);
+  assert.match(body.consensusRecommendation, /보안 위험/);
 
   await app.close();
 });

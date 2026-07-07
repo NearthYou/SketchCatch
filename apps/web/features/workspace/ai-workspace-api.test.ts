@@ -140,7 +140,16 @@ test("runAiTerraformPreviewExplanation posts Terraform code from the real worksp
           }
         ],
         findings: [],
-        checklist: []
+        checklist: [],
+        wellArchitectedGuidance: [
+          {
+            pillar: "security",
+            title: "보안 에이전트",
+            observation: "공개 접근은 감지되지 않았습니다.",
+            recommendation: "배포 전 권한 범위를 확인하세요."
+          }
+        ],
+        consensusRecommendation: "결론: 배포 전 6개 기준을 확인하세요."
       }),
       {
         headers: {
