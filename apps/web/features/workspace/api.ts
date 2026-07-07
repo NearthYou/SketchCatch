@@ -252,9 +252,22 @@ export async function uploadProjectAsset(
   upload: ProjectAssetUploadResponse["upload"],
   content: string | Blob
 ): Promise<void> {
-  const response = await fetch(upload.url, {
+  const headers = new Headers(upload.headers);
+  const isApiUpload = upload.url.startsWith("/api/");
+  const uploadUrl = isApiUpload ? buildApiUrl(upload.url.slice(4)) : upload.url;
+
+  if (isApiUpload) {
+    const session = readStoredAuthSession();
+
+    if (session) {
+      headers.set("Authorization", `Bearer ${session.accessToken}`);
+    }
+  }
+
+  const response = await fetch(uploadUrl, {
     method: upload.method,
-    headers: upload.headers,
+    credentials: isApiUpload ? "include" : "same-origin",
+    headers,
     body: content
   });
 

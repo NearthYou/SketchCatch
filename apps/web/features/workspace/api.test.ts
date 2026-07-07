@@ -547,6 +547,49 @@ test("uploadProjectAsset uploads terraform content to the presigned URL", async 
   assert.equal(requests[0]?.init?.body, "resource {}");
 });
 
+test("uploadProjectAsset sends auth headers for same-origin API uploads", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    restoreWindow(originalWindowDescriptor);
+  });
+
+  installAuthSession();
+
+  globalThis.fetch = async (input, init) => {
+    requests.push({ input, init });
+
+    return new Response(null, {
+      status: 204
+    });
+  };
+
+  await uploadProjectAsset(
+    {
+      method: "PUT",
+      url: `/api/projects/${project.id}/assets/66666666-6666-4666-8666-666666666666/upload-content`,
+      headers: { "Content-Type": "text/plain" },
+      expiresInSeconds: 900
+    },
+    "resource {}"
+  );
+
+  const headers = new Headers(requests[0]?.init?.headers);
+
+  assert.equal(
+    String(requests[0]?.input),
+    `/api/projects/${project.id}/assets/66666666-6666-4666-8666-666666666666/upload-content`
+  );
+  assert.equal(requests[0]?.init?.method, "PUT");
+  assert.equal(requests[0]?.init?.credentials, "include");
+  assert.equal(headers.get("authorization"), "Bearer access-token");
+  assert.equal(headers.get("content-type"), "text/plain");
+  assert.equal(requests[0]?.init?.body, "resource {}");
+});
+
 test("confirmProjectAssetUpload marks the uploaded asset through the API", async (context) => {
   const originalFetch = globalThis.fetch;
   const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");

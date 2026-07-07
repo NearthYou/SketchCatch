@@ -158,6 +158,12 @@ export type ProjectAssetStorage = {
     contentType: string;
     expiresInSeconds: number;
   }): Promise<string>;
+  putObject(input: {
+    bucketName: string;
+    objectKey: string;
+    contentType: string;
+    body: string | Buffer;
+  }): Promise<void>;
   deleteObject(input: { bucketName: string; objectKey: string }): Promise<void>;
   objectExists(input: {
     bucketName: string;
@@ -457,15 +463,8 @@ export async function registerProjectRoutes(
       }
     }
 
-    const bucketName = requireS3BucketName();
     const objectKey = buildObjectKey(params.id, body.assetType, assetId, body.fileName);
     const expiresInSeconds = 900;
-    const uploadUrl = await getProjectAssetStorage().createUploadUrl({
-      bucketName,
-      objectKey,
-      contentType: body.contentType,
-      expiresInSeconds
-    });
 
     const [asset] = await db
       .insert(projectAssets)
@@ -486,7 +485,7 @@ export async function registerProjectRoutes(
       asset,
       upload: {
         method: "PUT",
-        url: uploadUrl,
+        url: `/api/projects/${params.id}/assets/${assetId}/upload-content`,
         headers: {
           "Content-Type": body.contentType
         },
@@ -496,6 +495,70 @@ export async function registerProjectRoutes(
 
     return reply.status(201).send(response);
   });
+
+  app.put(
+    "/projects/:id/assets/:assetId/upload-content",
+    { bodyLimit: defaultTerraformArtifactMaxBytes },
+    async (request, reply) => {
+      const currentUserId = await requireActiveUserId(request, getProjectDatabaseClient);
+      const params = assetRouteParamsSchema.parse(request.params);
+      const { db } = getProjectDatabaseClient();
+
+      const [project] = await db
+        .select()
+        .from(projects)
+        .where(and(eq(projects.id, params.id), eq(projects.userId, currentUserId)));
+
+      if (!project) {
+        return sendNotFound(reply, "프로젝트를 찾을 수 없습니다.");
+      }
+
+      const [asset] = await db
+        .select()
+        .from(projectAssets)
+        .where(and(eq(projectAssets.id, params.assetId), eq(projectAssets.projectId, params.id)));
+
+      if (!asset || asset.uploadStatus !== "pending") {
+        return sendNotFound(reply, "업로드 대기 중인 파일 기록을 찾을 수 없습니다.");
+      }
+
+      if (asset.assetType !== "terraform_file") {
+        return sendBadRequest(reply, "API 업로드는 Terraform artifact에만 사용할 수 있습니다.");
+      }
+
+      if (typeof request.body !== "string" && !Buffer.isBuffer(request.body)) {
+        return sendBadRequest(reply, "업로드할 파일 본문이 비어 있습니다.");
+      }
+
+      const body = request.body;
+      const byteSize = Buffer.isBuffer(body)
+        ? body.byteLength
+        : Buffer.byteLength(body, "utf-8");
+
+      if (asset.byteSize !== null && byteSize !== asset.byteSize) {
+        return sendConflict(reply, "업로드된 파일 크기가 요청한 artifact 크기와 다릅니다.");
+      }
+
+      await getProjectAssetStorage().putObject({
+        bucketName: requireS3BucketName(),
+        objectKey: asset.objectKey,
+        contentType: asset.contentType,
+        body
+      });
+
+      const [confirmedAsset] = await db
+        .update(projectAssets)
+        .set({ uploadStatus: "uploaded" })
+        .where(and(eq(projectAssets.id, params.assetId), eq(projectAssets.projectId, params.id)))
+        .returning();
+
+      if (!confirmedAsset) {
+        return sendNotFound(reply, "업로드된 파일 기록을 찾을 수 없습니다.");
+      }
+
+      return reply.status(204).send();
+    }
+  );
 
   app.post("/projects/:id/assets/:assetId/confirm-upload", async (request, reply) => {
     const currentUserId = await requireActiveUserId(request, getProjectDatabaseClient);
@@ -632,6 +695,15 @@ function sendNotFound(reply: FastifyReply, message: string): FastifyReply {
   return reply.status(404).send(response);
 }
 
+function sendBadRequest(reply: FastifyReply, message: string): FastifyReply {
+  const response: ApiErrorResponse = {
+    error: "bad_request",
+    message
+  };
+
+  return reply.status(400).send(response);
+}
+
 function sendConflict(reply: FastifyReply, message: string): FastifyReply {
   const response: ApiErrorResponse = {
     error: "conflict",
@@ -654,6 +726,16 @@ function createDefaultProjectAssetStorage(): ProjectAssetStorage {
           ContentType: input.contentType
         }),
         { expiresIn: input.expiresInSeconds }
+      );
+    },
+    async putObject(input) {
+      await s3Client.send(
+        new PutObjectCommand({
+          Bucket: input.bucketName,
+          Key: input.objectKey,
+          Body: input.body,
+          ContentType: input.contentType
+        })
       );
     },
     async deleteObject(input) {
