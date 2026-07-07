@@ -4,10 +4,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CheckFinding, TerraformDiagnostic, TerraformSourceLocation } from "@sketchcatch/types";
 import {
   AlertCircle,
+  ChevronRight,
   Code2,
   GalleryVerticalEnd,
   PanelRightClose,
   PanelRightOpen,
+  Play,
   Rocket,
   Search
 } from "lucide-react";
@@ -83,6 +85,7 @@ export function WorkspaceRightPanel({
   const latestTerraformDiagnosticsRef = useRef<TerraformDiagnostic[]>([]);
   const latestTerraformSaveRequestIdRef = useRef(0);
   const [activeView, setActiveView] = useState<WorkspaceRightPanelView>("resource");
+  const [isPlanActionStripOpen, setIsPlanActionStripOpen] = useState(false);
   const [resourceWorkspaceView, setResourceWorkspaceView] = useState<ResourceWorkspaceView>(
     defaultResourceWorkspaceView
   );
@@ -255,6 +258,11 @@ export function WorkspaceRightPanel({
 
     setActiveView(nextView);
   }, [activeView, canOpenTerraformIssuesDuringEdit, requestTerraformLeave]);
+
+  function openDeploymentFromPlan(): void {
+    setIsPlanActionStripOpen(false);
+    requestView("deployment");
+  }
 
   const applyTerraformLeaveSaveFeedback = useCallback((feedback: TerraformLeaveSaveFeedback): void => {
     setTerraformLeaveSaveState(feedback.state);
@@ -501,7 +509,7 @@ export function WorkspaceRightPanel({
           className={styles.collapsedPanelButton}
           data-terraform-editor-navigation
           onClick={() => openCollapsedView("terraform")}
-          title="Terraform"
+          title="Terraform code"
           type="button"
         >
           <Code2 size={18} aria-hidden="true" />
@@ -540,60 +548,16 @@ export function WorkspaceRightPanel({
 
   return (
     <aside className={styles.rightPanelShell}>
-      <div className={styles.rightPanelToolbar}>
+      <div className={styles.rightPanelUtilityBar}>
         <button
           className={styles.panelCollapseButton}
           onClick={requestRightPanelClose}
           title="Close right panel"
           type="button"
-        >
-          <PanelRightClose size={18} aria-hidden="true" />
+          >
+            <PanelRightClose size={18} aria-hidden="true" />
         </button>
-        <div className={styles.panelModeToggle} role="group" aria-label="Panel mode">
-          <button
-            aria-pressed={activeView === "resource"}
-            className={activeView === "resource" ? styles.panelModeButtonActive : styles.panelModeButton}
-            onClick={() => requestView("resource")}
-            title="Resource mode"
-            type="button"
-          >
-            <GalleryVerticalEnd size={18} aria-hidden="true" />
-          </button>
-          <button
-            aria-pressed={activeView === "terraform"}
-            className={activeView === "terraform" ? styles.panelModeButtonActive : styles.panelModeButton}
-            data-terraform-editor-navigation
-            onClick={() => requestView("terraform")}
-            title="Terraform mode"
-            type="button"
-          >
-            <Code2 size={18} aria-hidden="true" />
-          </button>
-          <button
-            aria-pressed={activeView === "issues"}
-            className={activeView === "issues" ? styles.panelModeButtonActive : styles.panelModeButton}
-            data-terraform-issues-navigation
-            onClick={() => requestView("issues")}
-            title="Issues"
-            type="button"
-          >
-            <AlertCircle size={18} aria-hidden="true" />
-            <span
-              className={hasTerraformIssueErrors ? styles.panelIssueBadgeError : styles.panelIssueBadge}
-              aria-label={`${terraformDiagnostics.length} issues`}
-            >
-              {terraformDiagnostics.length}
-            </span>
-          </button>
-          <button
-            aria-pressed={activeView === "deployment"}
-            className={activeView === "deployment" ? styles.panelModeButtonActive : styles.panelModeButton}
-            onClick={() => requestView("deployment")}
-            title="Deploy"
-            type="button"
-          >
-            <Rocket size={18} aria-hidden="true" />
-          </button>
+        <div className={styles.rightPanelUtilityGroup} role="group" aria-label="Workspace utilities">
           <button
             aria-pressed={activeView === "reverse"}
             className={activeView === "reverse" ? styles.panelModeButtonActive : styles.panelModeButton}
@@ -604,6 +568,113 @@ export function WorkspaceRightPanel({
             <Search size={18} aria-hidden="true" />
           </button>
         </div>
+      </div>
+      <div className={styles.rightPanelModeBar} role="group" aria-label="Panel mode">
+        <div className={styles.panelModeIconGroup} role="group" aria-label="Configurator and code">
+          <button
+            aria-pressed={activeView === "resource"}
+            className={activeView === "resource" ? styles.panelModeButtonActive : styles.panelModeButton}
+            onClick={() => requestView("resource")}
+            title="Resources"
+            type="button"
+          >
+            <GalleryVerticalEnd size={16} aria-hidden="true" />
+          </button>
+          <button
+            aria-pressed={activeView === "terraform"}
+            className={activeView === "terraform" ? styles.panelModeButtonActive : styles.panelModeButton}
+            data-terraform-editor-navigation
+            onClick={() => requestView("terraform")}
+            title="Terraform code"
+            type="button"
+          >
+            <Code2 size={16} aria-hidden="true" />
+          </button>
+        </div>
+        <button
+          aria-pressed={activeView === "issues"}
+          className={
+            activeView === "issues"
+              ? `${styles.panelModeTextButton} ${styles.panelModeTextButtonActive}`
+              : styles.panelModeTextButton
+          }
+          data-terraform-issues-navigation
+          onClick={() => requestView("issues")}
+          type="button"
+        >
+          <AlertCircle size={14} aria-hidden="true" />
+          <span>Issues</span>
+          <span
+            className={hasTerraformIssueErrors ? styles.panelIssueBadgeError : styles.panelIssueBadge}
+            aria-label={`${terraformDiagnostics.length} issues`}
+          >
+            {terraformDiagnostics.length}
+          </span>
+        </button>
+        <button
+          aria-pressed={activeView === "deployment"}
+          className={
+            activeView === "deployment"
+              ? `${styles.panelModeTextButton} ${styles.panelModeTextButtonActive}`
+              : styles.panelModeTextButton
+          }
+          onClick={() => requestView("deployment")}
+          type="button"
+        >
+          <Rocket size={14} aria-hidden="true" />
+          <span>Deploy</span>
+        </button>
+        <div className={styles.panelPlanSplitButton}>
+          <button
+            className={styles.panelPlanMainButton}
+            onClick={openDeploymentFromPlan}
+            type="button"
+          >
+            <Play size={14} aria-hidden="true" />
+            <span>Plan</span>
+          </button>
+          <button
+            aria-expanded={isPlanActionStripOpen}
+            className={styles.panelPlanExpandButton}
+            onClick={() => setIsPlanActionStripOpen((isOpen) => !isOpen)}
+            title="Plan actions"
+            type="button"
+          >
+            <ChevronRight size={14} aria-hidden="true" />
+          </button>
+        </div>
+        {isPlanActionStripOpen ? (
+          <div className={styles.panelPlanActionStrip} role="group" aria-label="Plan actions">
+            <button
+              className={`${styles.panelPlanActionButton} ${styles.panelPlanActionButtonActive}`}
+              onClick={openDeploymentFromPlan}
+              type="button"
+            >
+              Plan
+            </button>
+            <button
+              className={styles.panelPlanActionButton}
+              onClick={openDeploymentFromPlan}
+              type="button"
+            >
+              Validate
+            </button>
+            <button
+              className={styles.panelPlanActionButton}
+              onClick={openDeploymentFromPlan}
+              type="button"
+            >
+              Apply
+            </button>
+            <button
+              className={`${styles.panelPlanActionButton} ${styles.panelPlanActionDangerButton}`}
+              onClick={openDeploymentFromPlan}
+              type="button"
+            >
+              Destroy
+            </button>
+          </div>
+        ) : null}
       </div>
 
       <div className={styles.rightPanelView} hidden={activeView !== "resource"}>

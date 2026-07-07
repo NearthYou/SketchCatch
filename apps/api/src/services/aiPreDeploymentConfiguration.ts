@@ -66,6 +66,39 @@ function getRequiredConfigKeys(node: ResourceNode): readonly string[] {
       ];
     case "LAMBDA_PERMISSION":
       return ["action", "functionName", "principal"];
+    case "RDS_READ_REPLICA":
+      return ["replicateSourceDb"];
+    case "NAT_GATEWAY":
+    case "AUTO_SCALING_GROUP":
+    case "LAUNCH_TEMPLATE":
+    case "KEY_PAIR":
+    case "ELASTIC_IP":
+    case "EBS_VOLUME":
+    case "RDS_CLUSTER":
+    case "DYNAMODB_TABLE":
+    case "ELASTICACHE_REDIS":
+    case "LOAD_BALANCER_TARGET_GROUP":
+    case "LAMBDA_EVENT_SOURCE_MAPPING":
+    case "ACM_CERTIFICATE":
+    case "COGNITO_USER_POOL":
+    case "COGNITO_USER_POOL_CLIENT":
+    case "CLOUDWATCH_DASHBOARD":
+    case "API_GATEWAY_WEBSOCKET_API":
+    case "API_GATEWAY_RESOURCE":
+    case "API_GATEWAY_METHOD":
+    case "API_GATEWAY_INTEGRATION":
+    case "API_GATEWAY_STAGE":
+    case "SNS_TOPIC":
+    case "SQS_QUEUE":
+    case "EVENTBRIDGE_RULE":
+    case "EVENTBRIDGE_TARGET":
+    case "STEP_FUNCTIONS_STATE_MACHINE":
+    case "ECR_REPOSITORY":
+    case "ECS_CLUSTER":
+    case "ECS_SERVICE":
+    case "ECS_TASK_DEFINITION":
+    case "EKS_CLUSTER":
+      return [];
     case "UNKNOWN":
       return [];
   }

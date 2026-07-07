@@ -10,7 +10,9 @@ test("resource settings panel exposes Resources, Templates, provider, and module
   assert.match(panelSource, /role="tablist" aria-label="Resource panel tabs"/);
   assert.match(panelSource, /Resources/);
   assert.match(panelSource, /Templates/);
-  assert.match(panelSource, /\(\["aws", "azure", "gcp"\] as const\)\.map/);
+  assert.match(panelSource, /<AwsLogo \/>/);
+  assert.doesNotMatch(panelSource, /"azure"/);
+  assert.doesNotMatch(panelSource, /"gcp"/);
   assert.match(panelSource, /aria-label="Resource view mode"/);
   assert.match(panelSource, /title="Resources"/);
   assert.match(panelSource, /title="Modules"/);
@@ -20,6 +22,13 @@ test("resource settings panel exposes Resources, Templates, provider, and module
 test("template cards route to the existing templates page instead of creating a demo-only flow", () => {
   assert.match(panelSource, /href="\/templates"/);
   assert.doesNotMatch(panelSource, /href="\/brainboard"/);
+});
+
+test("left resource catalog does not render the legacy Brainboard tab", () => {
+  assert.doesNotMatch(panelSource, /\{ id: "brainboard", label: "Brainboard"/);
+  assert.doesNotMatch(panelSource, /kind: "brainboard"/);
+  assert.doesNotMatch(panelSource, /className="brainboardTile"/);
+  assert.doesNotMatch(stylesSource, /\.brainboardTile/);
 });
 
 test("module catalog cards are real buttons that call onModuleAdd with the curated module id", () => {
@@ -32,14 +41,55 @@ test("left catalog controls keep stable dimensions and scroll instead of overflo
   const resourcePanelRule = getCssRule(stylesSource, "resourcePanel");
   const resourceTabsRule = getCssRule(stylesSource, "resourceTabs");
   const providerControlsRule = getCssRule(stylesSource, "providerControls");
+  const resourceAreaLabelRule = getCssRule(stylesSource, "resourceAreaLabel");
   const moduleCatalogPanelRule = getCssRule(stylesSource, "moduleCatalogPanel");
 
   assert.match(resourcePanelRule, /\bmin-height:\s*0;/);
   assert.match(resourcePanelRule, /\boverflow:\s*hidden;/);
-  assert.match(resourceTabsRule, /\bmin-height:\s*54px;/);
+  assert.match(resourceTabsRule, /\bmin-height:\s*43px;/);
   assert.match(providerControlsRule, /\bdisplay:\s*inline-flex;/);
-  assert.match(stylesSource, /\.resourceViewToggle,\s*\.resourceViewToggleActive\s*\{[^}]*\bheight:\s*38px;[^}]*\bwidth:\s*38px;/s);
+  assert.match(resourceAreaLabelRule, /\bfont-size:\s*1rem;/);
+  assert.match(resourceAreaLabelRule, /\bline-height:\s*3\.2;/);
+  assert.match(stylesSource, /\.diagramEditor \.resourceAreaLabel\s*\{[^}]*\bfont-size:\s*1rem;/s);
+  assert.match(stylesSource, /\.resourceViewToggle,\s*\.resourceViewToggleActive\s*\{[^}]*\bheight:\s*32px;[^}]*\bwidth:\s*32px;/s);
   assert.match(moduleCatalogPanelRule, /\boverflow:\s*auto;/);
+});
+
+test("resource tiles follow the compact tile contract", () => {
+  const resourceTileRule = getCssRule(stylesSource, "resourceTile");
+
+  assert.match(resourceTileRule, /\bheight:\s*60px;/);
+  assert.match(resourceTileRule, /\bmin-height:\s*60px;/);
+  assert.match(resourceTileRule, /\boutline:\s*1px solid #dfe7f1;/);
+  assert.match(stylesSource, /\.resourceTileLabel,[\s\S]*-webkit-line-clamp:\s*1;/);
+  assert.match(stylesSource, /\.resourceTile:not\(\.resourceTileDisabled\):hover,[\s\S]*\.resourceTile:not\(\.resourceTileDisabled\):focus-visible/);
+});
+
+test("resource panel preserves templates, search, and section states", () => {
+  assert.match(panelSource, /<TemplatesPanel \/>/);
+  assert.match(panelSource, /Search results/);
+  assert.match(panelSource, /No resources found\./);
+  assert.match(panelSource, /resourceAreaChevronOpen/);
+  assert.match(panelSource, /resourceModulesEmptyState/);
+
+  for (const label of [
+    "Modules",
+    "Design",
+    "Containers",
+    "Compute",
+    "Network",
+    "Storage",
+    "Database",
+    "Security & Identity",
+    "Tools",
+    "AI",
+    "Analytics",
+    "Application",
+    "IoT",
+    "Other"
+  ]) {
+    assert.match(panelSource, new RegExp(label.replace(/[&]/g, "&")));
+  }
 });
 
 function readLocalFile(fileName: string): string {

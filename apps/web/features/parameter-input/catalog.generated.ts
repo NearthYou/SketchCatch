@@ -1971,6 +1971,23 @@ export const terraformAwsParameterCatalog = {
         "placeholder": "practice-db"
       },
       {
+        "name": "replicateSourceDb",
+        "terraformName": "replicate_source_db",
+        "label": "Replication source",
+        "type": "string",
+        "required": false,
+        "optional": true,
+        "computed": false,
+        "sensitive": false,
+        "description": "Read Replica로 만들 때 복제 원본 RDS Instance 식별자나 Terraform 참조를 입력합니다.",
+        "inputKind": "reference-picker",
+        "referenceTargetTypes": [
+          "aws_db_instance"
+        ],
+        "referenceAttribute": "identifier",
+        "placeholder": "aws_db_instance.primary.identifier"
+      },
+      {
         "name": "allocatedStorage",
         "terraformName": "allocated_storage",
         "label": "Allocated storage",

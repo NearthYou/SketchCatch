@@ -1,9 +1,18 @@
 .editorShell {
-  --left-panel-width: 420px;
-  --right-panel-width: 420px;
+  --left-panel-width: 346px;
+  --right-panel-width: 440px;
+  --workspace-page: #f6f7fb;
+  --workspace-surface: #ffffff;
+  --workspace-surface-muted: #f8f9fd;
+  --workspace-line: #dfe6f1;
+  --workspace-line-strong: #cfd8e7;
+  --workspace-text: #182033;
+  --workspace-muted: #66748a;
+  --workspace-accent: #7357ff;
+  --workspace-accent-soft: #f0edff;
 
-  background: #f4f6fb;
-  color: #171c2f;
+  background: var(--workspace-page);
+  color: var(--workspace-text);
   display: grid;
   grid-template-columns: 0 minmax(0, 1fr) var(--right-panel-width);
   height: 100dvh;
@@ -20,8 +29,8 @@
 
 .leftRail,
 .rightRail {
-  background: #ffffff;
-  border-color: #dde5f2;
+  background: var(--workspace-surface);
+  border-color: var(--workspace-line);
   border-style: solid;
   max-width: 100%;
   min-height: 0;
@@ -29,31 +38,31 @@
 }
 
 .leftRail {
-  border: 1px solid #dfe7f4;
+  border: 1px solid var(--workspace-line);
   border-radius: 8px;
-  box-shadow: 0 18px 42px rgba(20, 30, 50, 0.13);
+  box-shadow: 0 16px 36px rgba(31, 41, 55, 0.12);
   grid-column: 1;
-  height: min(920px, calc(100vh - 88px));
-  left: 14px;
+  height: calc(100dvh - 84px);
+  left: 12px;
   overflow: hidden;
   position: fixed;
-  top: 76px;
-  width: min(var(--left-panel-width), calc(100vw - 32px));
+  top: 72px;
+  width: min(var(--left-panel-width), calc(100vw - 24px));
   z-index: 21;
 }
 
 .collapsedLeftPanel {
   align-items: center;
-  background: #ffffff;
-  border: 1px solid #dfe7f4;
+  background: var(--workspace-surface);
+  border: 1px solid var(--workspace-line);
   border-radius: 8px;
   box-shadow: 0 14px 30px rgba(20, 30, 50, 0.14);
   display: grid;
   gap: 6px;
-  left: 14px;
+  left: 12px;
   padding: 6px;
   position: fixed;
-  top: 76px;
+  top: 72px;
   z-index: 22;
 }
 
@@ -62,7 +71,7 @@
   background: transparent;
   border: 1px solid transparent;
   border-radius: 6px;
-  color: #1f2937;
+  color: var(--workspace-text);
   cursor: pointer;
   display: inline-flex;
   height: 32px;
@@ -75,11 +84,12 @@
 .collapsedLeftPanelButton:focus-visible {
   background: #f0edff;
   border-color: #d8ceff;
-  color: #6f4cf6;
+  color: var(--workspace-accent);
   outline: none;
 }
 
 .rightRail {
+  background: var(--workspace-surface);
   border-width: 0 0 0 1px;
   grid-column: 3;
   max-width: 100%;
@@ -390,6 +400,12 @@
   width: 11px;
 }
 
+.canvasPanel :global(.react-flow__handle)::before {
+  content: "";
+  inset: -10px;
+  position: absolute;
+}
+
 .canvasPanel :global(.react-flow__handle-left) {
   left: 0;
   top: 50%;
@@ -417,6 +433,11 @@
 .canvasPanel :global(.react-flow__selection) {
   background: rgba(111, 76, 246, 0.08);
   border: 1px dotted rgba(111, 76, 246, 0.72);
+}
+
+.canvasPanel :global(.react-flow__edge-text) {
+  letter-spacing: 0;
+  paint-order: stroke;
 }
 
 .canvasPanelSnapAnimating :global(.react-flow__node) {
@@ -632,6 +653,15 @@
   opacity: 0.38;
 }
 
+.nodeShellResource.nodeShellDimmed {
+  opacity: 0.9;
+}
+
+.nodeShellAiPreview {
+  opacity: 0.52;
+  pointer-events: none;
+}
+
 .nodeShellReferenceDropTarget {
   border-color: #2f8c55;
   box-shadow:
@@ -677,9 +707,13 @@
 }
 
 .nodeShellArea {
+  --area-border-color: var(--node-border-color, #8b98aa);
+  --area-border-width: 2px;
+
   align-items: flex-start;
   background: rgba(255, 255, 255, 0.14);
-  border-color: var(--node-border-color, #8b98aa);
+  border-color: var(--area-border-color);
+  border-width: var(--area-border-width);
   box-shadow: 0 10px 24px rgba(33, 41, 69, 0.06);
   display: block;
   justify-content: flex-start;
@@ -690,15 +724,19 @@
 }
 
 .nodeShellArea.nodeShellSelected {
-  border-color: var(--node-border-color, #6f4cf6);
+  --area-border-color: var(--node-border-color, #6f4cf6);
+
+  border-color: var(--area-border-color);
   box-shadow:
     0 0 0 3px rgba(111, 76, 246, 0.14),
     0 14px 28px rgba(33, 41, 69, 0.08);
 }
 
 .nodeShellArea.nodeShellReferenceDropTarget {
+  --area-border-color: #2f8c55;
+
   background: rgba(47, 140, 85, 0.1);
-  border-color: #2f8c55;
+  border-color: var(--area-border-color);
   box-shadow:
     inset 0 0 0 999px rgba(47, 140, 85, 0.06),
     0 0 0 4px rgba(47, 140, 85, 0.16),
@@ -710,26 +748,52 @@
 }
 
 .areaNodeHeader {
-  align-items: flex-start;
-  background: rgba(255, 255, 255, 0.92);
-  border: 1px solid color-mix(in srgb, var(--node-border-color, #8b98aa) 45%, #ffffff);
-  border-radius: 999px;
-  box-shadow: 0 8px 18px rgba(33, 41, 69, 0.1);
+  align-items: center;
+  background: rgba(255, 255, 255, 0.96);
+  border: var(--area-border-width) solid var(--area-border-color);
+  border-bottom: 0;
+  border-radius: 10px 18px 0 0;
+  box-shadow: 0 -3px 10px rgba(33, 41, 69, 0.06);
   display: inline-flex;
   font-size: 0.72rem;
   font-weight: 850;
   gap: 6px;
-  left: -2px;
+  left: calc(-1 * var(--area-border-width));
   line-height: 1.15;
-  max-width: max(260px, calc(100% + 4px));
+  max-width: min(360px, calc(100% - 38px));
   min-width: 0;
   overflow: visible;
-  padding: 5px 9px;
+  padding: 7px 13px 6px 12px;
   pointer-events: all;
   position: absolute;
-  top: -30px;
+  top: 0;
+  transform: translateY(-100%);
   white-space: normal;
   z-index: 2;
+}
+
+.areaNodeHeader::before {
+  background: rgba(255, 255, 255, 0.96);
+  bottom: calc(-1 * var(--area-border-width));
+  content: "";
+  height: var(--area-border-width);
+  left: 0;
+  pointer-events: none;
+  position: absolute;
+  right: 0;
+}
+
+.areaNodeHeader::after {
+  border-bottom: var(--area-border-width) solid var(--area-border-color);
+  border-left: var(--area-border-width) solid var(--area-border-color);
+  border-bottom-left-radius: 12px;
+  bottom: 0;
+  content: "";
+  height: 14px;
+  pointer-events: none;
+  position: absolute;
+  right: -30px;
+  width: 30px;
 }
 
 .areaNodeHitEdge {
@@ -781,6 +845,23 @@
   overflow-wrap: anywhere;
   text-overflow: clip;
   white-space: normal;
+}
+
+.areaNodeHeaderMeta {
+  background: color-mix(in srgb, #eaf4ff 68%, #ffffff);
+  border: 1px solid color-mix(in srgb, #2f6db3 28%, transparent);
+  border-radius: 6px;
+  color: #2f6db3;
+  flex: 0 1 auto;
+  font-size: 0.66rem;
+  font-weight: 850;
+  line-height: 1.1;
+  max-width: 120px;
+  min-width: 0;
+  overflow: hidden;
+  padding: 2px 5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .nodeGlyph {
@@ -887,6 +968,10 @@
   width: max-content;
 }
 
+.resourceNodeType {
+  display: none;
+}
+
 .resourceNodeBadge {
   background: #eef2ff;
   border: 1px solid #c7d2fe;
@@ -920,10 +1005,43 @@
   transition: opacity 120ms ease;
 }
 
-.nodeShell:hover ~ .connectionHandle,
-.nodeShellSelected ~ .connectionHandle {
+.connectionHandleSource {
+  z-index: 11;
+}
+
+.connectionHandleTarget {
+  z-index: 10;
+}
+
+.connectionHandleInactive {
+  pointer-events: none;
+}
+
+.nodeShell:hover ~ .connectionHandleSource,
+.nodeShellSelected ~ .connectionHandleSource,
+.connectionHandleSource.connectionHandleActive,
+.connectionHandleTarget.connectionHandleActive {
   opacity: 1;
   pointer-events: all;
+}
+
+.connectionHandleTarget:not(.connectionHandleActive) {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.connectionHandleTarget.connectionHandleActive {
+  z-index: 12;
+}
+
+.connectionHandleSource.connectionHandleActive {
+  z-index: 11;
+}
+
+.nodeShell:hover ~ .connectionHandleInactive,
+.nodeShellSelected ~ .connectionHandleInactive {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .nodeToolbar,
@@ -940,6 +1058,10 @@
 
 .nodeToolbar {
   pointer-events: all;
+}
+
+.nodeToolbarArea {
+  margin-top: 8px;
 }
 
 .edgeToolbar {
@@ -1142,7 +1264,7 @@
 
 @media (max-width: 900px) {
   .editorShell {
-    grid-template-columns: 0 minmax(0, 1fr);
+    grid-template-columns: 0 minmax(0, 1fr) 0;
     overflow: hidden;
   }
 
@@ -1159,6 +1281,15 @@
   }
 
   .rightRail {
-    display: none;
+    border: 1px solid var(--workspace-line);
+    border-radius: 8px;
+    box-shadow: 0 16px 36px rgba(31, 41, 55, 0.12);
+    display: block;
+    height: min(840px, calc(100dvh - 86px));
+    position: fixed;
+    right: 10px;
+    top: 74px;
+    width: min(var(--right-panel-width), calc(100vw - 20px));
+    z-index: 20;
   }
 }

@@ -40,9 +40,7 @@ const MAX_AREA_FIT_PASSES = 8;
 const AREA_PARENT_EDGE_LABELS = new Set(["contains", "hosts"]);
 const TERRAFORM_REFERENCE_ATTRIBUTE_SUFFIXES = ["id", "arn", "name", "execution_arn"] as const;
 const SECURITY_GROUP_REFERENCE_KEYS = ["securityGroupIds", "vpcSecurityGroupIds", "securityGroupId"] as const;
-const RESOURCE_ITEMS_BY_TERRAFORM_TYPE = new Map<string, ResourceItem>(
-  resourceCatalog.map((item) => [item.nodeDefaults.type, item])
-);
+const RESOURCE_ITEMS_BY_TERRAFORM_TYPE = createResourceItemsByTerraformType(resourceCatalog);
 
 // AI Draft를 실제 Architecture Board가 받을 수 있는 DiagramJson으로 바꾸는 gg 경계입니다.
 export function convertArchitectureJsonToDiagramJson(architectureJson: ArchitectureJson): DiagramJson {
@@ -719,11 +717,42 @@ function mapResourceTypeToTerraform(resourceType: ResourceType): string {
 }
 
 function mapTerraformResourceType(parameters: DiagramNodeParameters): ResourceType {
+  if (isRdsReadReplicaParameters(parameters)) {
+    return "RDS_READ_REPLICA";
+  }
+
   const terraformBlockType = parameters.terraformBlockType ?? DEFAULT_TERRAFORM_BLOCK_TYPE;
 
   return (
     getResourceDefinitionByTerraform(terraformBlockType, parameters.resourceType)?.resourceType ?? "UNKNOWN"
   );
+}
+
+function isRdsReadReplicaParameters(parameters: DiagramNodeParameters): boolean {
+  if (parameters.resourceType !== "aws_db_instance") {
+    return false;
+  }
+
+  const replicateSourceDb =
+    parameters.values["replicateSourceDb"] ?? parameters.values["replicate_source_db"];
+
+  return typeof replicateSourceDb === "string" && replicateSourceDb.trim().length > 0;
+}
+
+function createResourceItemsByTerraformType(
+  resources: readonly ResourceItem[]
+): Map<string, ResourceItem> {
+  const resourcesByType = new Map<string, ResourceItem>();
+
+  for (const resource of resources) {
+    if (resourcesByType.has(resource.nodeDefaults.type)) {
+      continue;
+    }
+
+    resourcesByType.set(resource.nodeDefaults.type, resource);
+  }
+
+  return resourcesByType;
 }
 
 // Terraform resource name은 사용자 로케일과 무관한 ASCII identifier로 정규화합니다.

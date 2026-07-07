@@ -7,13 +7,11 @@ import {
   Brush,
   ChartLine,
   ChevronDown,
-  ChevronUp,
   Component,
   Container,
   Cpu,
   Database,
   Grid2X2,
-  Grid3X3,
   Archive,
   Monitor,
   Network,
@@ -21,8 +19,7 @@ import {
   RadioTower,
   Search,
   Settings,
-  ShieldCheck,
-  Sparkles
+  ShieldCheck
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useMemo, useState, type DragEvent } from "react";
@@ -35,8 +32,7 @@ import {
 import {
   curatedModules,
   type CuratedModuleCategory,
-  type CuratedModuleDefinition,
-  type CuratedModuleProvider
+  type CuratedModuleDefinition
 } from "./module-catalog";
 
 const areaLabels: Record<ResourceArea, string> = {
@@ -57,15 +53,14 @@ type ResourcePanelSectionId =
   | "design"
   | ResourceArea
   | "analytics"
-  | "iot"
-  | "brainboard";
+  | "iot";
 
 type ResourcePanelSection = {
   id: ResourcePanelSectionId;
   label: string;
   icon: LucideIcon;
   defaultOpen?: boolean;
-  kind: "modules" | "resources" | "brainboard";
+  kind: "modules" | "resources";
 };
 
 const resourceSections: ResourcePanelSection[] = [
@@ -87,8 +82,7 @@ const resourceSections: ResourcePanelSection[] = [
   { id: "analytics", label: "Analytics", icon: ChartLine, kind: "resources" },
   { id: "application", label: areaLabels.application, icon: Monitor, kind: "resources" },
   { id: "iot", label: "IoT", icon: RadioTower, kind: "resources" },
-  { id: "other", label: areaLabels.other, icon: Grid2X2, kind: "resources" },
-  { id: "brainboard", label: "Brainboard", icon: Grid3X3, defaultOpen: true, kind: "brainboard" }
+  { id: "other", label: areaLabels.other, icon: Grid2X2, kind: "resources" }
 ];
 
 export type ResourceSettingsPanelProps = {
@@ -104,7 +98,6 @@ export function ResourceSettingsPanel({
 }: ResourceSettingsPanelProps = {}) {
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState<"resources" | "templates">("resources");
-  const [activeProvider, setActiveProvider] = useState<CuratedModuleProvider>("aws");
   const [activeResourceView, setActiveResourceView] = useState<"resources" | "modules">("resources");
   const [openSections, setOpenSections] = useState<Record<string, boolean>>(
     () =>
@@ -166,17 +159,14 @@ export function ResourceSettingsPanel({
 
       <div className="resourceControlBar">
         <div className="providerControls">
-          {(["aws", "azure", "gcp"] as const).map((provider) => (
-            <button
-              aria-pressed={activeProvider === provider}
-              className={activeProvider === provider ? "providerSelect providerSelectActive" : "providerSelect"}
-              key={provider}
-              onClick={() => setActiveProvider(provider)}
-              type="button"
-            >
-              {provider === "aws" ? <AwsLogo /> : <span>{provider.toUpperCase()}</span>}
-            </button>
-          ))}
+          <button
+            aria-label="AWS provider"
+            aria-pressed="true"
+            className="providerSelect providerSelectActive"
+            type="button"
+          >
+            <AwsLogo />
+          </button>
           <button className="providerSelect providerVersionSelect" type="button" aria-label="Terraform AWS provider version">
             <span>6.47.0</span>
             <ChevronDown aria-hidden="true" size={16} />
@@ -204,9 +194,7 @@ export function ResourceSettingsPanel({
         </div>
       </div>
 
-      {activeProvider !== "aws" ? (
-        <InactiveProviderPanel provider={activeProvider} />
-      ) : activeTab === "templates" ? (
+      {activeTab === "templates" ? (
         <TemplatesPanel />
       ) : activeResourceView === "modules" ? (
         <ModuleCatalogPanel onModuleAdd={onModuleAdd} />
@@ -223,6 +211,8 @@ export function ResourceSettingsPanel({
             />
           </label>
 
+          <div className="resourcePanelSeparator" role="separator" />
+
           {normalizedSearch ? (
             <div className="resourceSearchResults">
               <p className="sectionCaption">Search results</p>
@@ -237,12 +227,13 @@ export function ResourceSettingsPanel({
               )}
             </div>
           ) : (
-            <div className="resourceAreas">
-              {resourceSections.filter((section) => section.id !== "modules").map((section) => (
+            <div className="resourceAreas resourceCatalogScroll">
+              {resourceSections.map((section) => (
                 <ResourceSection
                   isOpen={Boolean(openSections[section.id])}
                   items={resourcesBySection.get(section.id) ?? []}
                   key={section.id}
+                  onOpenModuleCatalog={() => setActiveResourceView("modules")}
                   onToggle={() => toggleSection(section.id)}
                   section={section}
                 />
@@ -252,16 +243,6 @@ export function ResourceSettingsPanel({
         </>
       )}
     </aside>
-  );
-}
-
-function InactiveProviderPanel({ provider }: { readonly provider: Exclude<CuratedModuleProvider, "aws"> }) {
-  return (
-    <div className="resourceProviderRoadmap">
-      <Sparkles size={18} aria-hidden="true" />
-      <strong>{provider.toUpperCase()} provider</strong>
-      <span>Multi-cloud catalog is ready in the UI; AWS modules are active in this MVP.</span>
-    </div>
   );
 }
 
@@ -348,11 +329,13 @@ const moduleCategories: readonly {
 function ResourceSection({
   isOpen,
   items,
+  onOpenModuleCatalog,
   onToggle,
   section
 }: {
   isOpen: boolean;
   items: readonly ResourceItem[];
+  onOpenModuleCatalog: () => void;
   onToggle: () => void;
   section: ResourcePanelSection;
 }) {
@@ -370,8 +353,31 @@ function ResourceSection({
           <SectionIcon size={22} strokeWidth={2.1} />
         </span>
         <span className="resourceAreaLabel">{section.label}</span>
-        {isOpen ? <ChevronUp aria-hidden="true" size={18} /> : <ChevronDown aria-hidden="true" size={18} />}
+        <ChevronDown
+          aria-hidden="true"
+          className={isOpen ? "resourceAreaChevron resourceAreaChevronOpen" : "resourceAreaChevron"}
+          size={18}
+        />
       </button>
+
+      {isOpen && section.kind === "modules" ? (
+        <div className="resourceSectionBody">
+          <div className="resourceModulesEmptyState">
+            <strong>No modules yet</strong>
+            <span className="resourceModulesDescription">
+              Import or browse curated modules when you want grouped Terraform resources.
+            </span>
+            <div className="resourceModulesActions">
+              <button className="modulesImportButton" onClick={onOpenModuleCatalog} type="button">
+                Import
+              </button>
+              <button className="modulesCatalogButton" onClick={onOpenModuleCatalog} type="button">
+                Catalog
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {isOpen && section.kind === "resources" ? (
         <div className="resourceSectionBody">
@@ -386,21 +392,12 @@ function ResourceSection({
           )}
         </div>
       ) : null}
-
-      {isOpen && section.kind === "brainboard" ? (
-        <div className="resourceSectionBody">
-          <button className="brainboardTile" type="button" title="Custom Terraform block">
-            <img alt="" src="/terraform.svg" draggable={false} />
-            <span>Custo...</span>
-          </button>
-        </div>
-      ) : null}
     </section>
   );
 }
 
 function ResourceTile({ item, search }: { item: ResourceItem; search: string }) {
-  const onDragStart = (event: DragEvent<HTMLDivElement>) => {
+  const onDragStart = (event: DragEvent<HTMLButtonElement>) => {
     if (!item.enabled) {
       event.preventDefault();
       return;
@@ -410,17 +407,19 @@ function ResourceTile({ item, search }: { item: ResourceItem; search: string }) 
   };
 
   return (
-    <div
+    <button
       className={`resourceTile ${item.enabled ? "" : "resourceTileDisabled"}`}
       draggable={item.enabled}
+      disabled={!item.enabled}
       onDragEnd={clearActiveResourceDragPayload}
       onDragStart={onDragStart}
       aria-disabled={!item.enabled}
       title={item.enabled ? `Drag ${item.name}` : `${item.name} is not available yet`}
+      type="button"
     >
       <IconFallback name={item.name} iconUrl={item.iconUrl} />
-      <span>{highlightSearch(item.name, search)}</span>
-    </div>
+      <span className="resourceTileLabel">{highlightSearch(item.name, search)}</span>
+    </button>
   );
 }
 

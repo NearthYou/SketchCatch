@@ -64,6 +64,7 @@ import {
 import { findInnermostAreaNodeAtPoint } from "./area-nodes";
 import {
   getAreaBlankInteractionTarget,
+  getTemporaryPanReleaseMode,
   isCanvasInteractiveElementTarget
 } from "./canvas-pointer-hit-test";
 import { DiagramEdgeToolbar } from "./DiagramEdgeToolbar";
@@ -116,13 +117,13 @@ const NODE_TYPES = {
 };
 
 const MAX_HISTORY_ITEMS = 80;
-const LEFT_PANEL_WIDTH_STORAGE_KEY = "sketchcatch.diagramEditor.leftPanelWidth";
-const RIGHT_PANEL_WIDTH_STORAGE_KEY = "sketchcatch.diagramEditor.rightPanelWidth";
-const DEFAULT_LEFT_PANEL_WIDTH = 420;
-const DEFAULT_RIGHT_PANEL_WIDTH = 420;
+const LEFT_PANEL_WIDTH_STORAGE_KEY = "sketchcatch.diagramEditor.leftPanelWidth.brainboardV1";
+const RIGHT_PANEL_WIDTH_STORAGE_KEY = "sketchcatch.diagramEditor.rightPanelWidth.brainboardV1";
+const DEFAULT_LEFT_PANEL_WIDTH = 346;
+const DEFAULT_RIGHT_PANEL_WIDTH = 440;
 const MIN_LEFT_PANEL_WIDTH = 300;
-const MAX_LEFT_PANEL_WIDTH = 640;
-const MIN_RIGHT_PANEL_WIDTH = 300;
+const MAX_LEFT_PANEL_WIDTH = 520;
+const MIN_RIGHT_PANEL_WIDTH = 360;
 const MAX_RIGHT_PANEL_WIDTH = 640;
 const MIN_WORKSPACE_WIDTH = 420;
 const DIAGRAM_SNAP_GRID_SIZE = 12;
@@ -175,6 +176,7 @@ function DiagramEditorInner({
   const [dragPreviewNodes, setDragPreviewNodes] = useState<DiagramNode[] | null>(null);
   const [activeReferenceDropTargetNodeId, setActiveReferenceDropTargetNodeId] = useState<string | null>(null);
   const [interactionMode, setInteractionMode] = useState<"select" | "pan">("select");
+  const [isConnectionActive, setConnectionActive] = useState(false);
   const [isFlowReady, setFlowReady] = useState(false);
   const temporaryPanPreviousModeRef = useRef<"select" | "pan" | null>(null);
   const clipboardRef = useRef<DiagramNode[]>([]);
@@ -745,16 +747,23 @@ function DiagramEditorInner({
   const displayNodes = isPreviewActive ? visibleDiagram.nodes : dragPreviewNodes ?? diagram.nodes;
   const flowNodes = useMemo(
     () => {
-      const nextFlowNodes = toFlowNodes(displayNodes, isPreviewActive ? [] : selectedNodeIds, isPreviewActive ? null : activeReferenceDropTargetNodeId, {
-        onBringForward: handleBringForward,
-        onSendBackward: handleSendBackward,
-        onTextColorChange: handleTextColorChange,
-        onBorderColorChange: handleBorderColorChange,
-        onToggleLock: handleToggleLock,
-        onResizeStart: handleResizeStart,
-        onResize: handleResize,
-        onResizeEnd: handleResizeEnd
-      });
+      const nextFlowNodes = toFlowNodes(
+        displayNodes,
+        isPreviewActive ? [] : selectedNodeIds,
+        isPreviewActive ? null : activeReferenceDropTargetNodeId,
+        isConnectionActive,
+        {
+          onBringForward: handleBringForward,
+          onSendBackward: handleSendBackward,
+          onTextColorChange: handleTextColorChange,
+          onBorderColorChange: handleBorderColorChange,
+          onToggleLock: handleToggleLock,
+          onResizeStart: handleResizeStart,
+          onResize: handleResize,
+          onResizeEnd: handleResizeEnd
+        },
+        { isPreview: isPreviewActive }
+      );
 
       if (interactionMode === "select" && !isPreviewActive) {
         return nextFlowNodes;
@@ -772,6 +781,7 @@ function DiagramEditorInner({
       displayNodes,
       handleBorderColorChange,
       handleBringForward,
+      isConnectionActive,
       interactionMode,
       isPreviewActive,
       handleResizeEnd,
@@ -785,8 +795,8 @@ function DiagramEditorInner({
   );
 
   const flowEdges = useMemo(
-    () => toFlowEdges(visibleDiagram.edges, isPreviewActive ? [] : selectedEdgeIds),
-    [isPreviewActive, selectedEdgeIds, visibleDiagram.edges]
+    () => toFlowEdges(visibleDiagram.edges, isPreviewActive ? [] : selectedEdgeIds, displayNodes, { isPreview: isPreviewActive }),
+    [displayNodes, isPreviewActive, selectedEdgeIds, visibleDiagram.edges]
   );
 
   const handleInit = useCallback<OnInit<DiagramFlowNode, DiagramFlowEdge>>((instance) => {
@@ -1278,17 +1288,33 @@ function DiagramEditorInner({
     ]
   );
 
-  const handleConnectStart = useCallback<OnConnectStart>((_event, params) => {
-    connectStartNodeIdRef.current = params.nodeId;
+  const clearConnectionActivityOnRelease = useCallback(() => {
+    setConnectionActive(false);
   }, []);
 
-  const handleConnectEnd = useCallback<OnConnectEnd>(() => {
+  const resetConnectionStateOnCancel = useCallback(() => {
     connectStartNodeIdRef.current = null;
+    setConnectionActive(false);
   }, []);
+
+  const handleConnectStart = useCallback<OnConnectStart>(
+    (_event, params) => {
+      connectStartNodeIdRef.current = params.nodeId;
+      setConnectionActive(true);
+    },
+    []
+  );
+
+  const handleConnectEnd = useCallback<OnConnectEnd>(() => {
+    resetConnectionStateOnCancel();
+  }, [resetConnectionStateOnCancel]);
 
   const handleConnect = useCallback<OnConnect>(
     (connection) => {
-      const directedConnection = getUserDirectedConnection(connection, connectStartNodeIdRef.current);
+      const connectStartNodeId = connectStartNodeIdRef.current;
+      connectStartNodeIdRef.current = null;
+      setConnectionActive(false);
+      const directedConnection = getUserDirectedConnection(connection, connectStartNodeId);
 
       if (
         !directedConnection ||
@@ -1318,6 +1344,24 @@ function DiagramEditorInner({
     },
     [commitDiagramUpdate]
   );
+
+  useEffect(() => {
+    if (!isConnectionActive) {
+      return undefined;
+    }
+
+    window.addEventListener("pointerup", clearConnectionActivityOnRelease);
+    window.addEventListener("mouseup", clearConnectionActivityOnRelease);
+    window.addEventListener("pointercancel", resetConnectionStateOnCancel);
+    window.addEventListener("blur", resetConnectionStateOnCancel);
+
+    return () => {
+      window.removeEventListener("pointerup", clearConnectionActivityOnRelease);
+      window.removeEventListener("mouseup", clearConnectionActivityOnRelease);
+      window.removeEventListener("pointercancel", resetConnectionStateOnCancel);
+      window.removeEventListener("blur", resetConnectionStateOnCancel);
+    };
+  }, [clearConnectionActivityOnRelease, isConnectionActive, resetConnectionStateOnCancel]);
 
   const finalizeAreaBlankDragWithoutAnimation = useCallback(() => {
     const dragState = areaBlankDragRef.current;
@@ -1779,22 +1823,29 @@ function DiagramEditorInner({
   }, [handleKeyDown]);
 
   useEffect(() => {
-    function handleWindowMouseUp(event: MouseEvent): void {
-      if (event.button !== 1) {
-        return;
-      }
-
+    function restoreTemporaryPanMode(event: MouseEvent | PointerEvent): void {
       const previousMode = temporaryPanPreviousModeRef.current;
-      temporaryPanPreviousModeRef.current = null;
+      const releaseMode = getTemporaryPanReleaseMode({
+        button: event.button,
+        buttons: event.buttons,
+        previousMode
+      });
 
-      if (previousMode) {
-        setInteractionMode(previousMode);
+      if (releaseMode) {
+        temporaryPanPreviousModeRef.current = null;
+        setInteractionMode(releaseMode);
       }
     }
 
-    window.addEventListener("mouseup", handleWindowMouseUp);
+    window.addEventListener("mouseup", restoreTemporaryPanMode);
+    window.addEventListener("pointerup", restoreTemporaryPanMode);
+    window.addEventListener("pointercancel", restoreTemporaryPanMode);
 
-    return () => window.removeEventListener("mouseup", handleWindowMouseUp);
+    return () => {
+      window.removeEventListener("mouseup", restoreTemporaryPanMode);
+      window.removeEventListener("pointerup", restoreTemporaryPanMode);
+      window.removeEventListener("pointercancel", restoreTemporaryPanMode);
+    };
   }, []);
 
   useEffect(() => {
