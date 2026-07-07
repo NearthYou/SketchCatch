@@ -111,7 +111,8 @@ import type {
   DiagramFlowEdge,
   DiagramFlowNode,
   DiagramHistoryState,
-  DiagramNodeMetadataUpdate
+  DiagramNodeMetadataUpdate,
+  DiagramPreviewAnnotations
 } from "./types";
 import styles from "./diagram-editor.module.css";
 
@@ -159,6 +160,7 @@ function DiagramEditorInner({
   initialDiagram,
   leftPanel,
   onDiagramChange,
+  onDiagramSaveRequest,
   myPageHref = "/mypage",
   projectName = "Project workspace",
   rightPanel,
@@ -167,7 +169,9 @@ function DiagramEditorInner({
   const reactFlow = useReactFlow<DiagramFlowNode, DiagramFlowEdge>();
   const [diagram, setDiagram] = useState<DiagramJson>(() => cloneDiagram(initialDiagram ?? EMPTY_DIAGRAM));
   const diagramRef = useRef(diagram);
-  const [previewDiagram, setPreviewDiagram] = useState<DiagramJson | null>(null);
+  const [previewDiagram, setPreviewDiagramState] = useState<DiagramJson | null>(null);
+  const [previewAnnotations, setPreviewAnnotations] = useState<DiagramPreviewAnnotations | null>(null);
+  const [terraformRefreshRequestId, setTerraformRefreshRequestId] = useState(0);
   const [history, setHistory] = useState<DiagramHistoryState>({ past: [], future: [] });
   const [inspectedNodeId, setInspectedNodeId] = useState<string | null>(null);
   const [isLeftPanelOpen, setLeftPanelOpen] = useState(true);
@@ -178,6 +182,7 @@ function DiagramEditorInner({
   const [selectedEdgeIds, setSelectedEdgeIds] = useState<string[]>([]);
   const [dragPreviewNodes, setDragPreviewNodes] = useState<DiagramNode[] | null>(null);
   const [activeReferenceDropTargetNodeId, setActiveReferenceDropTargetNodeId] = useState<string | null>(null);
+  const [isConnectionActive, setConnectionActive] = useState(false);
   const [interactionMode, setInteractionMode] = useState<"select" | "pan">("select");
   const [isFlowReady, setFlowReady] = useState(false);
   const temporaryPanPreviousModeRef = useRef<"select" | "pan" | null>(null);
@@ -223,6 +228,14 @@ function DiagramEditorInner({
       }
     },
     [onDiagramChange]
+  );
+
+  const setPreviewDiagram = useCallback<DiagramEditorPanelContext["setPreviewDiagram"]>(
+    (nextPreviewDiagram, nextPreviewAnnotations = null) => {
+      setPreviewDiagramState(nextPreviewDiagram);
+      setPreviewAnnotations(nextPreviewDiagram === null ? null : nextPreviewAnnotations);
+    },
+    []
   );
 
   const setDragPreviewNodesForState = useCallback((nodes: DiagramNode[] | null) => {
@@ -571,6 +584,10 @@ function DiagramEditorInner({
     applyDiagramJson(nextDiagram);
   }, [applyDiagramJson]);
 
+  const requestTerraformRefresh = useCallback(() => {
+    setTerraformRefreshRequestId((requestId) => requestId + 1);
+  }, []);
+
   const focusResourceNode = useCallback<DiagramEditorPanelContext["focusResourceNode"]>(
     (nodeId) => {
       const targetNode = diagramRef.current.nodes.find((node) => node.id === nodeId);
@@ -634,14 +651,18 @@ function DiagramEditorInner({
       inspectedNodeId,
       isPreviewActive,
       isRightPanelOpen,
+      previewAnnotations,
       previewDiagram,
       selectedNodeId,
+      terraformRefreshRequestId,
       nodes: diagram.nodes,
       edges: diagram.edges,
       applyDiagramJson,
       closeInspectedNode: () => setInspectedNodeId(null),
       focusResourceNode,
+      requestTerraformRefresh,
       selectResourceNode,
+      saveDiagramNow: onDiagramSaveRequest,
       setPreviewDiagram,
       setRightPanelOpen,
       updateNodeParameters,
@@ -654,9 +675,14 @@ function DiagramEditorInner({
       inspectedNodeId,
       isPreviewActive,
       isRightPanelOpen,
+      onDiagramSaveRequest,
+      previewAnnotations,
       previewDiagram,
+      requestTerraformRefresh,
+      setPreviewDiagram,
       selectResourceNode,
       selectedNodeId,
+      terraformRefreshRequestId,
       updateNodeMetadata,
       updateNodeParameters
     ]
@@ -765,16 +791,26 @@ function DiagramEditorInner({
   const displayNodes = isPreviewActive ? visibleDiagram.nodes : dragPreviewNodes ?? diagram.nodes;
   const flowNodes = useMemo(
     () => {
-      const nextFlowNodes = toFlowNodes(displayNodes, isPreviewActive ? [] : selectedNodeIds, isPreviewActive ? null : activeReferenceDropTargetNodeId, {
-        onBringForward: handleBringForward,
-        onSendBackward: handleSendBackward,
-        onTextColorChange: handleTextColorChange,
-        onBorderColorChange: handleBorderColorChange,
-        onToggleLock: handleToggleLock,
-        onResizeStart: handleResizeStart,
-        onResize: handleResize,
-        onResizeEnd: handleResizeEnd
-      });
+      const nextFlowNodes = toFlowNodes(
+        displayNodes,
+        isPreviewActive ? [] : selectedNodeIds,
+        isPreviewActive ? null : activeReferenceDropTargetNodeId,
+        isConnectionActive,
+        {
+          onBringForward: handleBringForward,
+          onSendBackward: handleSendBackward,
+          onTextColorChange: handleTextColorChange,
+          onBorderColorChange: handleBorderColorChange,
+          onToggleLock: handleToggleLock,
+          onResizeStart: handleResizeStart,
+          onResize: handleResize,
+          onResizeEnd: handleResizeEnd
+        },
+        {
+          isPreview: isPreviewActive,
+          previewAnnotations: isPreviewActive ? previewAnnotations ?? undefined : undefined
+        }
+      );
 
       if (interactionMode === "select" && !isPreviewActive) {
         return nextFlowNodes;
@@ -794,6 +830,7 @@ function DiagramEditorInner({
       handleBringForward,
       interactionMode,
       isPreviewActive,
+      previewAnnotations,
       handleResizeEnd,
       handleResize,
       handleResizeStart,
@@ -805,8 +842,12 @@ function DiagramEditorInner({
   );
 
   const flowEdges = useMemo(
-    () => toFlowEdges(visibleDiagram.edges, isPreviewActive ? [] : selectedEdgeIds),
-    [isPreviewActive, selectedEdgeIds, visibleDiagram.edges]
+    () =>
+      toFlowEdges(visibleDiagram.edges, isPreviewActive ? [] : selectedEdgeIds, displayNodes, {
+        isPreview: isPreviewActive,
+        previewAnnotations: isPreviewActive ? previewAnnotations ?? undefined : undefined
+      }),
+    [displayNodes, isPreviewActive, previewAnnotations, selectedEdgeIds, visibleDiagram.edges]
   );
 
   const handleInit = useCallback<OnInit<DiagramFlowNode, DiagramFlowEdge>>((instance) => {
@@ -1300,10 +1341,12 @@ function DiagramEditorInner({
 
   const handleConnectStart = useCallback<OnConnectStart>((_event, params) => {
     connectStartNodeIdRef.current = params.nodeId;
+    setConnectionActive(params.nodeId !== null);
   }, []);
 
   const handleConnectEnd = useCallback<OnConnectEnd>(() => {
     connectStartNodeIdRef.current = null;
+    setConnectionActive(false);
   }, []);
 
   const handleConnect = useCallback<OnConnect>(

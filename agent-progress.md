@@ -1,5 +1,327 @@
+# 2026-07-07 - Amazon Q ArchitectureDecisionSpace 분리
+
+- Goal: Amazon Q가 다이어그램을 직접 설계하되, 선택지 차이가 고정 skeleton이 아니라 선택지별 decision space와 coverage 검증으로 반영되게 한다.
+- Completed:
+  - Amazon Q Architecture Draft 생성 경로를 `createAmazonQArchitectureDraftResponse` 중심으로 정리하고, provider payload에 `architectureDecisionSpace`를 추가했다.
+  - 사용자 prompt를 deterministic `answerProfile`로 정규화하고 `hardConstraints`, `preferredPatterns`, `discouragedPatterns`, `evaluationCriteria`, `unsupportedSubstitutions`, `coverageRequirements`를 생성하게 했다.
+  - 기존 prompt의 선택지별 정답 매트릭스를 제거하고, Amazon Q에게 decision space 안에서 패턴을 선택/변형/조합하며 selected/rejected pattern과 trade-off를 `requirementCoverage`에 남기도록 지시했다.
+  - self-validation을 특정 리소스 조합 강제에서 forbidden resource/type/label, 선택지 모순, coverage node id, capability signal 누락 검증으로 조정했다.
+  - 같은 답변 조합은 같은 decision space를 만들고, 업로드 답변이 바뀌면 다른 decision space가 만들어지는 회귀 테스트를 추가했다.
+  - `docs/data-models.md`에 Amazon Q decision space 책임 분리 계약을 기록했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits
+  - `apps/api/node_modules/.bin/tsx.CMD --test apps/api/src/services/aiArchitectureDrafts.test.ts` - sandbox run failed with `spawn EPERM`; rerun with elevated permissions passed, 15 tests
+  - `corepack pnpm --filter @sketchcatch/api typecheck` - passed
+  - `corepack pnpm --filter @sketchcatch/api lint` - passed
+  - `corepack pnpm harness:check` - passed
+  - `corepack pnpm lint` - passed, with non-fatal Turbo cache rename warnings
+  - `corepack pnpm typecheck` - passed, with non-fatal Turbo cache rename warnings
+  - `corepack pnpm build` - sandbox run failed on `.next` unlink `EPERM`; rerun with elevated permissions passed
+  - final `corepack pnpm harness:check` - passed
+- Known risks:
+  - 실제 Amazon Q Business 호출은 로컬에서 실행하지 않았다. fake provider 단위 테스트로 prompt/payload/self-validation 계약을 검증했다.
+  - WebSocket API, SNS/SQS/EventBridge, ACM, Auto Scaling Group을 실제 node로 그리려면 별도 ResourceType/shared definition/API/Web/Terraform capability 확장이 필요하다.
+
+# 2026-07-07 - Amazon Q AWS reference knowledge pack 추가
+
+- Goal: AWS Solutions, aws-samples Terraform 예제, AWS Terraform Best Practices, AWS Prescriptive Guidance 내용을 Amazon Q 아키텍처 생성 시 계속 참고하되 원문 전체를 매번 보내지 않도록 compact reference pack으로 영속화한다.
+- Completed:
+  - `awsArchitectureReferenceKnowledge.ts`에 버전/출처 URL/compact guidance를 가진 레퍼런스팩을 추가했다.
+  - Amazon Q Architecture Draft 요청의 instructions, prompt, payload에 레퍼런스팩을 연결했다.
+  - self-validation 재생성 요청에서도 같은 referenceKnowledge payload가 유지되도록 했다.
+  - `tokenBudget` key가 secret masker와 충돌해 `[MASKED_SECRET]`로 바뀌는 문제를 피하려고 `size: "compact"`로 표현했다.
+  - 데이터 모델 문서에 Amazon Q referenceKnowledge payload 원칙을 기록했다.
+- Verification run:
+  - `corepack pnpm --filter @sketchcatch/api typecheck` - passed
+  - `apps/api/node_modules/.bin/tsx.CMD --test apps/api/src/services/aiArchitectureDrafts.test.ts` - sandbox run failed with `spawn EPERM`; rerun with elevated permissions passed, 14 tests
+  - `corepack pnpm --filter @sketchcatch/api lint` - passed
+  - `corepack pnpm harness:check` - passed
+  - `corepack pnpm lint` - passed, with non-fatal Turbo cache rename warnings
+  - `corepack pnpm typecheck` - passed, with non-fatal Turbo cache rename warnings
+  - `corepack pnpm build` - sandbox run failed on `.next` unlink `EPERM`; rerun with elevated permissions passed
+- Known risks:
+  - 실제 Amazon Q Business 호출은 로컬에서 실행하지 않았다. 요청 payload/prompt 계약은 fake provider 단위 테스트로 검증했다.
+
+# 2026-07-07 - 조건부 질문 한글 깨짐 보정
+
+- Goal: Amazon Q 아키텍처 추가 질문에서 글로벌 배포 범위와 실시간 알림 구현 방식 문구가 깨져 보이는 문제를 고친다.
+- Completed:
+  - `global_deployment_scope` 질문과 선택지를 정상 한글 문구로 교체했다.
+  - `realtime_implementation` 질문과 선택지를 정상 한글 문구로 교체했다.
+  - 두 조건부 질문이 깨진 문자열로 회귀하지 않도록 API 단위 테스트를 추가했다.
+- Verification run:
+  - `corepack pnpm --filter @sketchcatch/api typecheck` - passed
+  - `apps/api/node_modules/.bin/tsx.CMD --test apps/api/src/services/aiArchitectureDrafts.test.ts` - sandbox run failed with `spawn EPERM`; rerun with elevated permissions passed, 14 tests
+  - `corepack pnpm --filter @sketchcatch/api lint` - passed
+  - `corepack pnpm harness:check` - passed
+  - `corepack pnpm lint` - passed, with non-fatal Turbo cache rename warnings
+  - `corepack pnpm typecheck` - passed, with non-fatal Turbo cache rename warnings
+  - `corepack pnpm build` - sandbox run failed on `.next` unlink `EPERM`; rerun with elevated permissions passed
+- Known risks:
+  - 실제 브라우저 화면은 아직 수동으로 다시 확인하지 않았다. API 응답 문자열은 단위 테스트로 검증했다.
+
+# 2026-07-07 - 서버리스 EC2 혼입 방지와 Amazon Q 재생성 요청
+
+- Goal: 서버리스 또는 no-EC2 요구사항에서 EC2가 포함되지 않게 하고, Amazon Q preview 자체 검증에서 문제가 발견되면 문제 내용을 Amazon Q에 보내 다이어그램을 다시 생성하게 한다.
+- Completed:
+  - `서버리스`, `serverless`, `Lambda`, `람다` 요구는 `server_runtime`을 제거하는 명시 compute 제약으로 처리했다.
+  - 서버리스 route 테스트가 EC2 부재와 `server_runtime` 부재를 함께 검증하도록 보강했다.
+  - Amazon Q preview가 서버리스/no-EC2 요구를 어기고 EC2를 포함하면 self-validation issue를 생성한다.
+  - self-validation issue, 원본 요구사항, 이전 invalid `architectureJson`을 포함해 Amazon Q에 재생성 요청을 1회 보낸다.
+  - Amazon Q 재생성 요청 prompt와 최종 Lambda preview 채택을 검증하는 회귀 테스트를 추가했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --dir apps/api exec tsx --test src/routes/ai.test.ts --test-name-pattern "selects a Lambda draft"` - red before fix, passed after fix
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --dir apps/api exec tsx --test src/services/aiArchitectureDrafts.test.ts` - passed, 5 tests
+  - `pnpm harness:check` - passed after edits
+  - `git diff --check` - passed, with line-ending warnings only
+  - `pnpm lint` - passed, with non-fatal Turbo cache rename warnings
+  - `pnpm typecheck` - passed, with non-fatal Turbo cache rename warnings
+  - `pnpm build` - first sandbox run failed on `.next` unlink `EPERM`; rerun with elevated permissions passed
+- Known risks:
+  - 실제 Amazon Q 서비스 응답은 로컬에서 호출하지 않았다. fake provider로 self-validation retry 동작을 검증했다.
+
+# 2026-07-07 - Amazon Q scale-out 프롬프트 지시 보강
+
+- Goal: 다중 EC2, 다중 AZ, 로드 밸런서 필요 여부를 코드가 임의로 제한하지 않고 Amazon Q가 비용/보안 요구에 맞춰 판단하게 한다.
+- Completed:
+  - Amazon Q 아키텍처 초안 지시에 같은 리소스 타입을 하나로 제한하지 말라는 문구를 추가했다.
+  - 트래픽, 가용성, 보안, 비용 요구가 있으면 여러 EC2/SUBNET/S3 등 지원 리소스를 사용할 수 있게 지시했다.
+  - 다중 compute가 필요하면 여러 AZ와 `LOAD_BALANCER` + `LOAD_BALANCER_LISTENER`를 고려하라고 명시했다.
+  - 고동접, 99.9%+ 가용성, 이벤트성 급증 요구는 단일 EC2 대신 AZ 분산 수평 확장을 고려하라고 Amazon Q 프롬프트에 포함했다.
+  - Amazon Q provider에 전달되는 prompt에 해당 지시가 포함되는지 회귀 테스트를 추가했다.
+- Verification run:
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --dir apps/api exec tsx --test src/services/aiArchitectureDrafts.test.ts` - passed, 4 tests
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --dir apps/api exec tsx --test src/routes/ai.test.ts --test-name-pattern "architecture-draft"` - passed, 44 tests
+  - `pnpm harness:check` - passed
+  - `git diff --check` - passed, with line-ending warnings only
+  - `pnpm lint` - passed, with non-fatal Turbo cache rename warnings
+  - `pnpm typecheck` - passed, with non-fatal Turbo cache rename warnings
+  - `pnpm build` - first sandbox run failed on `.next` unlink `EPERM`; rerun with elevated permissions passed
+- Known risks:
+  - 실제 Amazon Q 서비스 응답은 로컬에서 호출하지 않았다. fake provider로 Amazon Q에 전달되는 prompt 내용을 검증했다.
+
+# 2026-07-07 - 동접자 트래픽 답변 인식 보정
+
+- Goal: 사용자가 `동접자 1000명은 버틸 수 있어야 돼`처럼 동시 접속자 조건을 이미 입력했을 때 예상 트래픽 규모를 다시 묻지 않게 한다.
+- Completed:
+  - 트래픽 답변 판별식이 `동접`, `동시 접속`, `동시 N명` 표현을 인식하도록 보강했다.
+  - `동접자 1000명` 입력 후 다음 질문이 데이터베이스 질문으로 넘어가는 회귀 테스트를 추가했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --dir apps/api exec tsx --test src/services/aiArchitectureDrafts.test.ts` - passed, 4 tests
+  - `pnpm harness:check` - passed after edits
+  - `git diff --check` - passed, with line-ending warnings only
+  - `pnpm lint` - passed, with non-fatal Turbo cache rename warnings
+  - `pnpm typecheck` - passed, with non-fatal Turbo cache rename warnings
+  - `pnpm build` - first sandbox run failed on `.next` unlink `EPERM`; rerun with elevated permissions passed
+- Known risks:
+  - 실제 브라우저 클릭 smoke는 수행하지 않았다. API 회귀 테스트와 전체 lint/typecheck/build로 검증했다.
+
+# 2026-07-07 - Amazon Q 웹사이트 배포 질문 세트 정렬
+
+- Goal: 웹사이트 배포 다이어그램 생성 전 Amazon Q로 넘길 필수 사전 질문을 사용자 제공 15개 질문과 선택지 그대로 순차 표시하게 한다.
+- Completed:
+  - API clarification 질문 세트를 1순위 7개, 2순위 4개, 3순위 4개로 확장했다.
+  - 각 질문의 선택지를 A/B/C/D 접두어 없이 사용자 제공 문구 그대로 반영했다.
+  - 기존 초보자 친화형 사전 질문 흐름과 프롬프트 가이드 칩 제거 상태를 유지했다.
+  - 질문 순서 테스트가 15개 질문과 각 선택지 배열까지 검증하도록 보강했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --dir apps/api exec tsx --test src/services/aiArchitectureDrafts.test.ts` - passed, 3 tests
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-ai-chat-routing.test.ts features/workspace/workspace-ai-guardrail-warning.test.ts features/workspace/workspace-right-panel-layout.test.ts` - passed, 68 tests
+  - `pnpm harness:check` - passed after edits
+  - `git diff --check` - passed, with line-ending warnings only
+  - `pnpm lint` - passed, with non-fatal Turbo cache rename warnings
+  - `pnpm typecheck` - passed, with non-fatal Turbo cache rename warnings
+  - `pnpm build` - first sandbox run failed on `.next` unlink `EPERM`; rerun with elevated permissions passed
+- Known risks:
+  - 실제 브라우저 클릭 smoke는 수행하지 않았다. API/web 단위 테스트와 전체 lint/typecheck/build로 검증했다.
+
+# 2026-07-05 - AI 초안 네트워크 리소스 가지치기와 레이아웃 겹침 보정
+
+- Goal: 예약/로그인/게시판 같은 단일 EC2 백엔드 초안에서 실제 workload가 없는 public subnet, 두 번째 app subnet, route/IGW 노드를 만들지 않고, subnet/security group/database 카드가 겹치지 않게 한다.
+- Completed:
+  - backend network boundary를 VPC + 실제 필요한 private app subnet만 생성하도록 줄였다.
+  - 단일 EC2 백엔드에서는 `public-subnet-a/b`, `private-app-subnet-b`, `internet-gateway`, public route table/association을 생성하지 않는다.
+  - DB-only/DB 포함 경로에서 app subnet 수를 명시적으로 제어해 DB-only 초안에 app subnet이 생기지 않게 했다.
+  - app subnet, app security group, app server, DB subnet, DB security group, RDS 좌표를 벌려 기본 카드 크기 기준 겹침을 제거했다.
+  - API 테스트 응답 schema에 `positionX`/`positionY`를 포함하고, 주요 네트워크 노드 overlap을 검증하는 회귀 테스트를 추가했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits
+  - `apps/api/.\\node_modules\\.bin\\tsx.CMD --test src\\routes\\ai.test.ts --test-name-pattern "unused network nodes"` - red before fix, passed after fix
+  - `apps/api/.\\node_modules\\.bin\\tsx.CMD --test src\\routes\\ai.test.ts` - passed, 44 tests
+  - Running API smoke against `http://localhost:4000/api/ai/architecture-draft` for reservation prompt:
+    - title `Reservation Service Practice Architecture`, 19 nodes
+    - `public-subnet-a/b`, `private-app-subnet-b`, `internet-gateway` all absent
+    - key layout positions: app subnet `(150,620)`, app SG `(220,460)`, app server `(430,620)`, DB subnets `(150,940)/(370,940)`, DB SG `(620,940)`, RDS `(850,940)`
+  - `pnpm lint` - passed, with non-fatal Turbo cache rename warnings
+  - `pnpm typecheck` - passed, with non-fatal Turbo cache rename warnings
+  - `git diff --check` - passed, with line-ending warnings only
+  - `pnpm build` - first sandbox run failed on `.next` unlink `EPERM`; rerun with elevated permissions passed
+- Known risks:
+  - Minimal public API server path still intentionally creates public subnet/IGW/route resources because that path hosts the EC2 in a public subnet.
+  - CloudFront-to-private-EC2 remains a simplified Practice Architecture edge until an ALB/reverse-proxy resource is added to the supported resource set.
+
+# 2026-07-05 - AI 요구사항 해석과 목적별 다이어그램 실제 검증
+
+- Goal: 자연어 요구사항에서 서비스 목적/제약을 추출해 랜딩, 로그인, 예약, 게시판 요청이 실제 API와 워크스페이스 UI에서 서로 다른 Architecture Draft로 생성되게 한다.
+- Completed:
+  - `ArchitectureIntent` metadata와 `interpretRequirement -> planPracticeArchitecture` 흐름을 추가했다.
+  - `landing_page`, `auth_web_service`, `reservation_service`, `content_board` 목적별 capability, title, label, config, 추가 리소스를 분리했다.
+  - `서버나 DB는 필요 없어`, `no server/no database` 같은 부정 제약이 `server_runtime`/`database` fact를 제거하게 했다.
+  - `PostgreSQL`의 `post`를 게시판 의도로 오인하지 않도록 영어 content-board 키워드는 token 단위로만 잡게 했다.
+  - AI draft 적용 시 stale preview가 아니라 현재 draft의 `architectureJson`을 보드에 적용하도록 웹 패널/채팅 적용 경로를 고쳤다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits
+  - `apps/api/.\\node_modules\\.bin\\tsx.CMD --test src\\routes\\ai.test.ts` - red before title/constraint fixes, passed after fixes, 43 tests
+  - `apps/web/.\\node_modules\\.bin\\tsx.CMD --test features\\workspace\\workspace-right-panel-layout.test.ts --test-name-pattern "accepted AI drafts apply"` - red before stale-preview fix, passed after fix
+  - Running API smoke against `http://localhost:4000/api/ai/architecture-draft`:
+    - landing prompt -> `정적 웹사이트 Practice Architecture`, `landing_page`, `static_site`, 2 nodes: CloudFront + S3
+    - auth prompt -> `Auth Web Service Practice Architecture`, `auth_web_service`, 29 nodes including `auth-audit-log-group`
+    - reservation prompt -> `Reservation Service Practice Architecture`, `reservation_service`, 29 nodes including `reservation-attachments-bucket`
+    - board prompt -> `Content Board Practice Architecture`, `content_board`, 30 nodes including `upload-bucket` and `content-media-bucket`
+  - Browser smoke on `http://localhost:3000/workspace`:
+    - landing prompt applied to board with CloudFront + Landing Page Assets Bucket only
+    - reservation prompt followed clarification choices, previewed 29 resources, then applied board with `Reservation Application Server`, `Reservation Request Database`, `Reservation Attachment Bucket`, and `Service Purpose reservation_service`
+  - `pnpm lint` - passed, with non-fatal Turbo cache rename warnings
+  - `pnpm typecheck` - passed, with non-fatal Turbo cache rename warnings
+  - `git diff --check` - passed, with line-ending warnings only
+  - `pnpm build` - first sandbox run failed on `.next` unlink `EPERM`; rerun with elevated permissions passed
+- Known risks:
+  - Bedrock currently explains deterministic draft results through `llmExplanation`; it does not yet perform `ArchitectureIntent` extraction for `/api/ai/architecture-draft`.
+  - Reservation low-budget flow still asks cost/DB clarification before generation, which is intentional guardrail behavior but adds clicks in the UI path.
+
+# 2026-07-05 - AI 다이어그램 신규 생성 라우팅 보정
+
+- Goal: 기존 다이어그램이 있는 상태에서도 새 서비스/웹사이트 요청은 기존 보드 patch가 아니라 새 Architecture Draft 생성으로 흘러가게 하고, patch 질문 상태에서 `추가 안 함` 또는 서비스 목적 추천 답변을 눌렀을 때 같은 질문/no-op으로 갇히지 않게 한다.
+- Completed:
+  - 기존 보드가 있어도 `정적 소개 웹사이트로 정리해줘`, `로그인 있고 개인정보 보호가 중요한 서비스를 만들어줘` 같은 완성된 새 서비스 요청은 `draft` 경로로 분기하게 했다.
+  - `정리해줘`, `구성해줘`, `설계해줘` 계열 표현을 새 초안 생성 의도로 인식하게 했다.
+  - patch clarification에서 `추가 안 함`을 선택하면 `현재 다이어그램을 유지합니다`로 끝내지 않고, 지금까지의 사용자 입력에서 `추가 안 함`만 제외한 prompt로 새 초안 생성을 재시도하게 했다.
+  - patch clarification의 서비스 목적 추천 답변은 기존 리소스 patch가 아니라 새 초안 생성 요청으로 연결했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-ai-chat-routing.test.ts` - red before fix, passed after fix
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-ai-chat-routing.test.ts features/workspace/workspace-ai-clarification.test.ts` - passed, 19 tests
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web typecheck` - passed
+  - `pnpm harness:check` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm lint` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm typecheck` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm build` - passed
+  - `pnpm harness:check` - passed after build
+- Commits:
+  - `3cd67c6 Fix: AI 다이어그램 신규 생성 흐름 보정`
+  - `e9bc298 Fix: AI 질문 답변 초안 생성 연결`
+- Known risks:
+  - 실제 브라우저 클릭 smoke는 수행하지 않았다. 라우팅/clarification 단위 테스트와 workspace/web/typecheck, 전체 lint/typecheck/build로 검증했다.
+  - 기존 워크트리에 Terraform Issues/AI 해결 관련 미커밋 변경이 남아 있으며, 이번 세션 커밋에는 AI 다이어그램 라우팅/질문 복구 hunk만 선별 포함했다.
+
 ﻿# 에이전트 진행 로그
 # 에이전트 진행 로그
+
+### 2026-07-07 - PR #213/#215 리뷰 코멘트 반영
+
+- Goal: 머지된 Git/CI/CD smoke readiness와 GitHub OAuth writer PR에 달린 Gemini 리뷰 코멘트를 확인하고 타당한 보안/안정성 개선을 후속 PR로 반영한다.
+- Completed:
+  - PR #215의 OAuth state replay 코멘트를 반영해 state를 token exchange 전에 즉시 삭제하도록 변경했다.
+  - OAuth callback 실패 로그를 추가하되 code/state 원문은 남기지 않고 error 여부와 파라미터 존재 여부만 기록하도록 했다.
+  - OAuth repository variable upsert는 GET probe 없이 PATCH를 먼저 시도하고 404에서 POST로 생성하도록 최적화했다.
+  - PR #213의 smoke runner fail-fast 코멘트를 반영해 setup apply 실패, pipeline success 필수 실패, destroy success 필수 실패 시 즉시 JSON report를 저장하고 종료하도록 했다.
+  - `Add-Step`의 `$Steps` 검증은 빈 List를 깨뜨리는 `Mandatory` 대신 `ValidateNotNull()`로 보강했다.
+- Verification run:
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/routes/git-cicd-handoffs.test.ts src/git-cicd/git-cicd-repository-settings-service.test.ts` - passed, 21 tests.
+  - PowerShell parser check for `scripts/smoke/git-cicd-auto-deploy.ps1` - passed.
+  - Preflight smoke with skipped mutations returned blocked JSON and production `/health` 200.
+  - Fake-token live smoke with skipped mutations returned failed JSON with 401 pipeline evidence as expected.
+- Known risks:
+  - Full root checks and PR creation still need to run after this entry.
+
+### 2026-07-07 - GitHub OAuth repository settings writer 구현
+
+- Goal: plan6 M1의 GitHub user OAuth 추가 승인과 repository settings writer를 DB token 저장 없이 최소 구현한다.
+- Completed:
+  - PR #213을 dev에 squash merge했고, dev CI run `28848684208`이 성공했다.
+  - `GitCicdGitHubOAuthStartResponse` shared type을 추가했다.
+  - `POST /api/git-cicd-handoffs/:handoffId/github-oauth/start`가 GitHub OAuth `repo workflow` 승인 URL을 발급한다.
+  - `GET /api/git-cicd-handoffs/github-oauth/callback`이 OAuth code를 token으로 교환하고 Runtime Cache에 10분 TTL로만 저장한다.
+  - `POST /api/git-cicd-handoffs/:handoffId/repository-settings/apply-with-github-oauth`가 로그인 사용자와 handoff가 일치하는 one-time token으로 GitHub Environment와 Actions variables를 적용하고 token cache를 삭제한다.
+  - Deployment Panel에 `GitHub OAuth 승인`과 `OAuth 설정 적용` 버튼을 추가했다.
+  - `docs/data-models.md`, `docs/deployment.md`, `docs/sw/spec6.md`, `docs/sw/plan6.md`, `docs/sw/agents3.md`를 갱신했다.
+- Verification run:
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/routes/git-cicd-handoffs.test.ts` - passed, 19 tests.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/api.test.ts features/workspace/deployment-actions.test.ts` - passed, 42 tests.
+  - `pnpm --filter @sketchcatch/api typecheck` - passed.
+  - `pnpm --filter @sketchcatch/web typecheck` - passed.
+- Known risks:
+  - OAuth writer는 현재 모델의 secret 원문을 받지 않으므로 Environment와 Actions variables를 적용하고 secret 이름은 preview로만 유지한다.
+  - 실제 target repository에 대한 OAuth live mutation은 사용자 승인/권한이 있는 세션에서 #210 live smoke로 검증해야 한다.
+
+### 2026-07-07 - Git/CI/CD live smoke readiness 보강
+
+- Goal: 실제 Git/CI/CD 자동 배포 live smoke 전에 준비 상태와 권한/비용 mutation 승인을 JSON report로 확인할 수 있게 한다.
+- Completed:
+  - `scripts/smoke/git-cicd-auto-deploy.ps1`에 `-PreflightOnly`, `-ReportPath`, `-FailOnBlocked`, `-ConfirmLiveMutations` 옵션을 추가했다.
+  - API health, access token, handoff id, mutation approval gate를 live mutation 없이 먼저 확인하고 `blocked` report로 남기게 했다.
+  - repository settings apply와 AWS role diff apply는 `-ConfirmLiveMutations` 없이는 실행하지 않도록 바꿨다.
+  - 잘못된 token이나 pipeline 조회 실패가 raw exception으로 끝나지 않고 JSON report의 failed step으로 남도록 했다.
+  - `docs/sw/git-cicd-live-smoke.md`에 preflight, live run, 증거 기준을 문서화했고 `spec6.md`, `plan6.md`, `agents3.md`를 갱신했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits.
+  - PowerShell parser check for `scripts/smoke/git-cicd-auto-deploy.ps1` - passed.
+  - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\smoke\git-cicd-auto-deploy.ps1 -PreflightOnly -SkipRepositorySettingsApply -SkipAwsRoleDiffApply` - returned blocked JSON with production API health 200 and missing token/handoff evidence.
+  - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\smoke\git-cicd-auto-deploy.ps1 -AccessToken fake -HandoffId 00000000-0000-4000-8000-000000000000 -SkipRepositorySettingsApply -SkipAwsRoleDiffApply -SkipUrlCheck` - returned failed JSON with 401 pipeline evidence.
+- Known risks:
+  - 실제 PR merge, GitHub Environment approval, Terraform apply, S3 release, ASG Instance Refresh, destroy live smoke는 여전히 실제 사용자 세션의 target repository, verified AWS connection, cost/cleanup 승인 후 실행해야 한다.
+  - #203의 별도 GitHub user OAuth token writer는 구현하지 않았고, 현재 복구 경로는 GitHub App 권한 보강 CTA와 fail-closed 처리다.
+
+### 2026-07-07 - Git/CI/CD 자동 배포 E2E 최소 구현
+
+- Goal: `docs/sw/plan6.md`의 Git/CI/CD 자동 배포 범위를 최소 코드로 실제 handoff 생성, workflow PR artifact, 상세 pipeline 상태 추적, Deployment Panel UX까지 연결한다.
+- Completed:
+  - PR #211을 dev에 squash merge했고, deploy workflow `28847085753`와 migrate workflow `28847246857`가 성공했다.
+  - `GitCicdHandoff` shared type, Drizzle schema, SQL migration에 source deployment, deployment mode, GitHub Environment approval, PR number, merge commit, infra/app/destroy workflow URL/status, repository settings preview, AWS role diff, URL 검증 필드를 추가했다.
+  - GitHub PR 생성 provider가 Terraform artifact와 함께 `sketchcatch-infra.yml`, `sketchcatch-app.yml`, `sketchcatch-destroy.yml`, repository settings manifest, AWS role diff manifest를 생성한다.
+  - GitHub Actions polling을 PR number -> merge commit SHA -> workflow name 기준으로 확장해 infra/app/destroy 상태를 분리 추적한다.
+  - Deployment Panel에 `Git/CI/CD handoff 생성` 버튼과 OAuth 필요, Environment approval, IAM diff, repo settings, infra/app/destroy status, static/API URL 표시를 추가했다.
+  - GitHub repository settings apply route를 추가해 Environment 생성과 Actions variables upsert를 GitHub App 권한으로 시도하고, 권한 부족은 `github_oauth_required`로 차단한다.
+  - GitHub PR 생성 중 workflow/repository 권한 부족이 발생하면 handoff record 저장 전에 `github_oauth_required`로 차단하도록 보강했다.
+  - AWS role diff apply route를 추가해 승인된 GitHub OIDC trust policy diff만 IAM role에 적용하고 재조회 검증 결과를 handoff JSON에 기록한다.
+  - Deployment Panel에 `Repo settings 적용`, `AWS role diff 적용` 버튼을 추가했고, 성공 후 panel snapshot을 다시 로드한다.
+  - App workflow가 ASG Launch Template ID/Name을 찾아 `SKETCHCATCH_RELEASE_ID` user data marker를 새 Launch Template version에 기록하고 Instance Refresh 결과를 polling하도록 보강했다.
+  - Project Automation이 PR 본문의 일반 HTTP status 숫자를 issue number로 오인하지 않도록 PR title/body는 명시적 `#123` 참조만 파싱하게 수정했다.
+  - Deployment Panel에서 권한 부족 handoff의 `GitHub OAuth` 표현을 `GitHub 권한`으로 정리하고 `GitHub App 권한 보강` CTA를 추가했다.
+  - `scripts/smoke/git-cicd-auto-deploy.ps1`로 repository settings apply, AWS role diff apply, infra/app/destroy pipeline status, static/API URL marker 확인 report를 출력할 수 있게 했다.
+  - smoke runner에 pipeline success/destroy success 대기 옵션과 pipeline snapshot 기록을 추가했다.
+  - `docs/data-models.md`, `docs/deployment.md`, `docs/sw/spec6.md`, `docs/sw/plan6.md`, `docs/sw/agents3.md`를 구현 상태에 맞게 갱신했다.
+- Verification run:
+  - `pnpm harness:check` - passed before implementation.
+  - `pnpm --filter @sketchcatch/api typecheck` - passed.
+  - `pnpm --filter @sketchcatch/web typecheck` - passed.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/git-cicd/git-cicd-workflows.test.ts src/routes/git-cicd-handoffs.test.ts src/source-repositories/github-app-client.test.ts` - passed, 23 tests.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/api.test.ts features/workspace/deployment-actions.test.ts` - passed, 42 tests.
+  - PowerShell parser check for `scripts/smoke/git-cicd-auto-deploy.ps1` - passed.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `pnpm build` - passed.
+- Known risks:
+  - GitHub repository settings apply는 GitHub App 설치 권한으로 검증했고, 실제 운영 repo 권한 부족 시 OAuth/권한 보강 CTA가 필요하다.
+  - AWS IAM trust policy apply executor는 fake gateway/unit 경로로 검증했고, 실제 AWS 계정 live 실행은 아직 하지 않았다.
+  - 실제 PR merge, GitHub Environment approval, Terraform apply, S3 release, ASG Instance Refresh, destroy live smoke는 비용/자격증명/cleanup 승인 후 실행해야 한다.
+  - `pnpm --filter @sketchcatch/api test -- git-cicd`와 `pnpm --filter @sketchcatch/web test -- workspace/api.test.ts deployment-actions.test.ts`는 repo script 특성상 전체 테스트를 실행했고, 기존 S3 env/layout unrelated 실패가 섞여 targeted command로 재검증했다.
+
+### 2026-07-07 - Git/CI/CD 자동 배포 E2E 계획 문서화
+
+- Goal: Git/CI/CD 자동 배포 후속 범위를 `docs/sw/spec6.md`, `docs/sw/plan6.md`, `docs/sw/agents3.md`로 고정하고 실행 가능한 이슈/브랜치를 만든다.
+- Completed:
+  - `spec6.md`에 Terraform infra 배포와 app runtime 배포를 모두 포함하는 merge 후 GitHub Actions 자동 배포 범위를 정리했다.
+  - `plan6.md`에 Issues #203-#210과 대응 브랜치 `feature/sw/203-*`부터 `feature/sw/210-*`까지 마일스톤을 기록했다.
+  - `agents3.md`에 구현 중 세 문서를 계속 보고 갱신해야 한다는 규범과 GitHub/AWS/approval 안전 규칙을 30줄 이내로 작성했다.
+  - GitHub Issues #203-#210을 생성하고 각 milestone branch를 `origin/dev` 기준으로 원격에 생성했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits.
+- Known risks:
+  - 이번 변경은 계획/이슈/브랜치 정리이며 실제 GitHub OAuth, IAM mutation, workflow generation 구현은 각 milestone에서 진행해야 한다.
 
 ### 2026-07-07 - migration workflow quoting hotfix
 
@@ -445,6 +767,252 @@
 - Highest priority unfinished harness feature: `HARNESS-007`
 - Current blocker: none
 
+### 2026-07-05 - AI 패치 추가 안 함 선택지와 dev 병합 정리
+- Goal: 현재 AI 다이어그램 브랜치에 최신 `origin/dev`를 병합하고, 리소스 추가 질문에 `추가 안 함` 선택지를 추가하며, 자연어/선택지 답변 모두 불필요 리소스를 만들지 않게 확인한다.
+- Completed:
+  - 기존 완료분을 `6863377 Fix: AI 채팅 답변과 용도별 초안 보정`으로 커밋했다.
+  - `origin/dev`를 fetch한 뒤 현재 브랜치에 병합했고, 로컬 `dev`도 `origin/dev`로 fast-forward했다. 병합 충돌은 없었다.
+  - 리소스 종류 질문의 선택지에 `추가 안 함`을 추가했다.
+  - `추가 안 함`, `아무것도 추가하지 마` 답변은 새 리소스를 만들지 않고 현재 다이어그램을 유지하는 no-op으로 처리한다.
+  - 웹 채팅에서 `추가 안 함` 선택지를 누르면 불필요한 0-change preview 적용 단계 없이 현재 다이어그램 유지 응답으로 닫히게 했다.
+- Verification run:
+  - `npm exec --package=pnpm@11.8.0 -- pnpm harness:check` - passed before edits and after merge
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api exec tsx --test src/services/aiArchitecturePatchPreview.test.ts` - red before fix, passed after fix, 17 tests
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api exec tsx --test src/routes/ai.test.ts` - passed, 36 tests
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-ai-clarification.test.ts` - passed, 11 tests
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-ai-guardrail-warning.test.ts` - passed, 9 tests
+  - `npm exec --package=pnpm@11.8.0 -- pnpm lint` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm typecheck` - failed because unrelated dirty #161 Terraform Issues files reference missing/incomplete modules and expanded `AiTerraformErrorExplanationResult` fixture fields
+  - `npm exec --package=pnpm@11.8.0 -- pnpm build` - failed for the same unrelated dirty #161 Terraform Issues changes after rerunning with network escalation
+  - `git diff --check` - passed
+- Known risks:
+  - 전체 `pnpm typecheck`/`pnpm build`는 현재 작업트리에 남아 있는 미완성 #161 Terraform Issues/AI 해결 변경 때문에 통과하지 못했다.
+  - 실제 브라우저 클릭 스모크, Terraform apply/destroy, cloud mutation, Git/CI/CD handoff는 수행하지 않았다.
+
+### 2026-07-05 - AI 채팅 정적 소개 답변과 용도별 초안 구분 보정
+- Goal: AI 채팅 질문 흐름에서 `정적 소개 웹사이트로 정리해줘` 같은 완성된 답변을 반복 질문으로 돌리지 않고, AI 생성 초안이 용도별로 다른 다이어그램을 만들도록 보정한다.
+- Completed:
+  - `정적 소개 웹사이트로 정리해줘`가 독립적으로 충분한 웹사이트 답변이면 clarification 세션에서 소개/랜딩, 읽기 전용, 저비용 시작 의도로 바로 정리되게 했다.
+  - confirmation 단계에서도 같은 문장을 단순 수정 재시작으로 보지 않고 새 초안 요청으로 처리하게 했다.
+  - 서버가 있는 웹서비스에서 `web_frontend`의 정적 asset bucket을 사용자 업로드 버킷으로 오해하지 않게 했다.
+  - 정적 소개 사이트, 파일 업로드 페이지, 로그인 웹서비스, API 서버가 서로 다른 node signature와 draft pattern을 갖는 회귀 테스트를 추가했다.
+- Verification run:
+  - `npm exec --package=pnpm@11.8.0 -- pnpm harness:check` - passed before edits
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-ai-clarification.test.ts` - red before fix, passed after fix, 11 tests
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api exec tsx --test src/routes/ai.test.ts` - red before fix, passed after fix, 36 tests
+  - `npm exec --package=pnpm@11.8.0 -- pnpm harness:check` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm lint` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm typecheck` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm build` - first run timed out at 304s without failure output; rerun with longer timeout passed
+  - `git diff --check` - passed
+- Known risks:
+  - 실제 브라우저 클릭 스모크는 수행하지 않았고 helper/API 회귀 테스트와 전체 정적 검증으로 확인했다.
+  - 실제 cloud apply/destroy, Git/CI/CD handoff, AWS mutation은 수행하지 않았다.
+
+### 2026-07-05 - AI 다이어그램 브랜치 수정 내용 문서화
+- Goal: 현재 브랜치에서 수정한 AI 다이어그램 생성/수정/preview/채팅 UX 흐름을 기존 `docs/ck/ai` 문서 형식으로 정리한다.
+- Completed:
+  - `docs/ck/ai/004_브랜치AI다이어그램수정내용정리.md`를 추가했다.
+  - 자연어 생성, 생성 전 질문, 최소 API 서버, EC2 컨테이너 배치, patch preview, area 레이어, 즉시 저장, 채팅 UX 변경을 코드 기준으로 정리했다.
+  - 관련 파일, 테스트, 수동 확인 예시, 남은 지원 타입 주의점을 함께 기록했다.
+- Verification run:
+  - `npm exec --package=pnpm@11.8.0 -- pnpm harness:check` - passed
+- Known risks:
+  - 문서 변경이라 lint/typecheck/build는 실행하지 않는다.
+
+### 2026-07-05 - AI 채팅창 초기 스크롤 보정
+- Goal: AI 채팅창을 열었을 때 과거 대화 맨 위가 아니라 최신 메시지 위치가 보이게 한다.
+- Completed:
+  - `WorkspaceAiChatDock`의 transcript scroll effect가 `isOpen`과 마지막 visible message를 기준으로 다시 실행되게 했다.
+  - dock이 열린 직후 DOM 높이가 반영된 뒤에도 `requestAnimationFrame`으로 한 번 더 하단 스크롤을 맞추게 했다.
+  - 열린 탭, 메시지, draft/patch/simulation 상태 변화에도 최신 내용으로 스크롤되게 했다.
+- Verification run:
+  - `npm exec --package=pnpm@11.8.0 -- pnpm harness:check` - passed before edit
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-ai-guardrail-warning.test.ts` - passed, 8 tests
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web typecheck` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web lint` - passed
+- Known risks:
+  - 실제 브라우저 스크롤 스모크는 수행하지 않았고, 컴포넌트 계약 테스트와 정적 검증 중심으로 확인했다.
+
+### 2026-07-05 - 지원 타입 기반 생성 다이어그램 구조 보정
+- Goal: 자연어 생성 다이어그램이 현재 지원되는 ResourceType만 쓰면서 운영형 피드백을 가능한 범위에서 반영하게 한다.
+- Completed:
+  - `최소`, `간단`, `작게` 같은 자연어 단서를 낮은 예산/작은 트래픽 의도로 해석하게 했다.
+  - 작은/basic API 서버 요청은 CloudFront/S3/IAM/CloudWatch를 붙이지 않고 VPC, public subnet, route, security group, AMI, EC2만 생성하게 했다.
+  - 최소 API 서버에서도 EC2는 단독 노드가 아니라 VPC/Subnet/Security Group 컨테이너 안에 배치되도록 했다.
+  - Route53, WAF, ALB/Listener, VPC Endpoint, DB Subnet Group, Secrets Manager 같은 미지원 타입을 생성 초안에서 제거했다.
+  - CloudFront public entry, 2-AZ public/private subnet, private EC2 배치, RDS multi-AZ subnet config를 지원 타입만으로 표현했다.
+  - S3는 VPC 내부 리소스로 그리지 않고 앱 서버 사용 edge와 IAM policy 권한 edge로 표현했다.
+  - IAM 관계는 Instance Profile -> Role -> Policy 및 Policy -> Logs/S3/KMS edge로 읽히게 정리했다.
+  - API exact test를 지원 타입 기준의 핵심 리소스/config/edge 검증으로 갱신했다.
+- Verification run:
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api exec tsx --test src/routes/ai.test.ts` - passed, 35 tests
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api typecheck` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-ai-diagram-adapter.test.ts` - passed, 17 tests
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api lint` - passed
+- Known risks:
+  - Route53/WAF/ALB/DB Subnet Group/Secrets Manager/VPC Endpoint는 나중에 ResourceType이 추가되기 전까지 생성하지 않는다.
+  - 전체 `pnpm build`는 실행하지 않았다. 변경 검증은 관련 API/Web 테스트, API typecheck, API lint 중심으로 수행했다.
+
+### 2026-07-05 - AI 패치 질문과 area 레이어 보정
+- Goal: 기존 다이어그램 수정 중 내부 리소스 목록을 그대로 묻지 않고 서비스/용도를 물은 뒤, 새 리소스 연결과 area/resource 레이어를 자연스럽게 처리한다.
+- Completed:
+  - 막연한 수정 요청은 추가/삭제/교체 버튼 대신 어떤 서비스로 만들거나 고칠지 묻는 질문과 서비스 목적 선택지로 바꿨다.
+  - 새 리소스 추가는 기존 리소스 후보 전체를 보여주지 않고 리소스 용도를 먼저 묻고, 용도 답변이 있으면 앱 서버 등 적절한 기존 리소스로 자동 연결한다.
+  - 로그인/업로드/정적 사이트 같은 서비스 목적 답변은 RDS/S3/EC2 패치로 구체화되게 했다.
+  - React Flow z-index 계산에서 area와 resource 대역을 분리해 area가 항상 resource 아래에 렌더링되게 했다.
+- Verification run:
+  - `npm exec --package=pnpm@11.8.0 -- pnpm harness:check` - passed before edit
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api exec tsx --test src/services/aiArchitecturePatchPreview.test.ts` - passed, 16 tests
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/flow-mappers.test.ts` - passed, 12 tests
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api typecheck` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web typecheck` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api lint` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web lint` - passed
+- Known risks:
+  - 변경 폭 대비 과한 전체 `pnpm build`는 실행하지 않았다.
+  - 브라우저 클릭 스모크는 수행하지 않았고, API/Web 단위 테스트와 타입/lint 중심으로 검증했다.
+
+### 2026-07-05 - 자연어 생성 전 확인 범위 확장
+- Goal: 사용자가 자연어로 새 다이어그램을 요청할 때 부족한 운영 기준을 먼저 확인하고, API/서버/DB 같은 자연어 인프라 요청도 같은 체크리스트를 타게 한다.
+- Completed:
+  - `API 서버`, `EC2 서버`, `DB 백엔드`처럼 기술 단어가 섞인 생성 요청도 운영 기준이 없으면 생성 전 질문으로 보낸다.
+  - 서버/API 요청은 목적과 방문자 동작을 내부에서 추론하고, 사용자에게는 빠진 운영 기준만 묻게 했다.
+  - S3+CloudFront처럼 정적 배포 구성이 충분히 명확한 요청은 기존처럼 바로 생성할 수 있게 유지했다.
+- Verification run:
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-ai-clarification.test.ts features/workspace/workspace-ai-chat-routing.test.ts` - passed, 17 tests
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web typecheck` - passed
+- Known risks:
+  - 이번 변경은 생성 전 라우팅/질문 로직에 한정해 전체 build는 실행하지 않았다.
+
+### 2026-07-05 - AI 다이어그램 적용 직후 저장 연결
+- Goal: AI가 생성/수정한 다이어그램을 사용자가 보드에 적용하면 debounce나 체크포인트를 기다리지 않고 즉시 저장한다.
+- Completed:
+  - `DiagramEditor` 패널 컨텍스트에 즉시 저장 요청 훅을 추가했다.
+  - 프로젝트 워크스페이스는 AI 적용 직후 기존 `flushDraftToServer("manual")` 저장 파이프라인을 호출하게 했다.
+  - 로컬 워크스페이스는 AI 적용 직후 로컬 draft 저장을 즉시 실행하게 했다.
+  - 생성 초안 적용과 patch preview 적용 모두 저장 요청을 트리거하게 했다.
+- Verification run:
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web test -- workspace-right-panel-layout.test.ts` - passed, 377 tests
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web typecheck` - passed
+- Known risks:
+  - 변경 범위가 웹 저장 연결로 한정되어 전체 `pnpm build`는 실행하지 않았다.
+
+### 2026-07-05 - 생성 요청이 리소스 질문에 갇히는 흐름 수정
+- Goal: 사용자가 “로그인 있는 작은 웹서비스 하나 만들고 싶어”처럼 새 서비스를 말하면 기존 patch 질문 상태가 있어도 쉬운 생성 확인 질문으로 안내한다.
+- Completed:
+  - pending patch clarification 상태에서 새 서비스 생성 요청이 들어오면 기존 patch 질문을 끊고 draft clarification으로 전환하게 했다.
+  - add-resource 종류 선택 질문을 “어떤 리소스” 대신 “무엇을 더 추가할까요?”처럼 쉬운 말로 낮췄다.
+  - 버튼 선택지도 데이터 저장 공간, 파일 저장 공간, 서버, 보안 설정, 네트워크 공간, API 입구로 바꿨다.
+  - 쉬운 선택지 문구가 실제 RDS/S3/EC2/Security Group/VPC/API Gateway 타입으로 해석되도록 키워드를 보강했다.
+  - “보안 설정 추가”처럼 `설정`과 `추가`가 같이 있는 요청은 수정이 아니라 추가로 해석되게 action 우선순위를 보정했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edit
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-ai-chat-routing.test.ts` - passed, 7 tests
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api exec tsx --test src/services/aiArchitecturePatchPreview.test.ts` - passed, 14 tests
+  - `npm exec --package=pnpm@11.8.0 -- pnpm typecheck` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web lint` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api lint` - passed
+- Known risks:
+  - 전체 `pnpm build`는 변경 폭 대비 과해서 실행하지 않았다.
+  - 브라우저 UI 클릭 스모크는 수행하지 않았고, 라우팅/API patch preview 단위 테스트와 타입/lint로 검증했다.
+
+### 2026-07-05 - 수정 패치 리소스 추가 연결 질문 보강
+- Goal: 기존 다이어그램 수정 중 새 리소스를 추가할 때 영어 리소스 이름을 쓰고, 연결 대상 또는 연결하지 않기 선택 후 preview에 edge까지 반영한다.
+- Completed:
+  - patch preview 요청/의도에 `connectionTargetResourceId`, `skipConnection`을 추가하고 API validation/client body에 반영했다.
+  - add_resource 요청이 리소스 종류까지 정해졌지만 연결 선택이 없으면 기존 리소스 후보와 “연결하지 않기”를 먼저 질문하게 했다.
+  - 연결 대상을 고르면 새 리소스가 영어 label로 생성되고 선택한 기존 리소스에서 새 리소스로 edge가 추가되게 했다.
+  - “연결하지 않기”를 고르면 영어 label 리소스만 추가하고 edge는 만들지 않게 했다.
+  - AI 채팅 패널이 연결 대상 후보와 연결하지 않기 선택을 구분해 patch preview API에 전달하게 했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edit and after edit
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api exec tsx --test src/services/aiArchitecturePatchPreview.test.ts` - passed, 14 tests
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web exec tsx --test features/workspace/api.test.ts` - passed, 19 tests
+  - `npm exec --package=pnpm@11.8.0 -- pnpm typecheck` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api lint` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web lint` - passed
+- Known risks:
+  - 변경 폭 대비 과한 검증을 피하려고 전체 `pnpm build`는 실행하지 않았다.
+  - 실제 브라우저 채팅 클릭 흐름은 별도 스모크로 확인하지 않았고, 서비스/API client/type/lint 중심으로 검증했다.
+
+### 2026-07-05 - 새 서비스 요청 라우팅 질문 보정
+- Goal: 기존 보드가 있어도 사용자가 새 웹서비스/사이트/앱을 만들고 싶다고 말하면 리소스 선택 질문이 아니라 기존 beginner-friendly 생성 확인 질문으로 안내한다.
+- Completed:
+  - 기존 보드 라우팅에서 `needsDraftClarification`이면서 새 서비스 생성 의도가 분명한 요청은 `draft_clarification`으로 보내게 했다.
+  - “추가/삭제/교체/수정/여기에/기존”처럼 기존 다이어그램 편집 의도가 있는 말은 계속 patch preview로 유지했다.
+  - 로그인 웹서비스, 예약 사이트, 상품 판매 앱, 관리자 서비스, 웹사이트 배포 요청을 생성 질문으로 보내는 회귀 테스트를 추가했다.
+  - 로그인 기능 추가, 데이터베이스 추가, 서버 삭제, 스토리지 추가 요청은 patch로 남는 회귀 테스트를 추가했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edit and after edit
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-ai-chat-routing.test.ts` - passed, 6 tests
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-ai-clarification.test.ts` - passed, 9 tests
+  - `npm exec --package=pnpm@11.8.0 -- pnpm lint` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm typecheck` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm build` - passed
+- Known risks:
+  - 이번 검증은 라우팅 단위 테스트 중심이며, 브라우저에서 실제 채팅 UI 클릭 흐름은 별도 스모크로 확인하지 않았다.
+
+### 2026-07-05 - AI 다이어그램 생성/수정 확인 질문 복구
+- Goal: 막연한 자연어 수정 요청은 구체적인 패치 질문으로 되묻고, 신규 서비스 생성은 생성 전 체크리스트에서 빠진 정보만 확인하게 한다.
+- Completed:
+  - 패치 preview가 `manual_review`를 막연한 변경 미리보기로 넘기지 않고, 추가/삭제/교체/설정 변경 선택지를 포함한 clarification으로 반환하게 했다.
+  - 추가 의도는 있지만 리소스 종류가 빠진 경우 데이터베이스/스토리지/서버 등 리소스 종류 선택지를 먼저 묻게 했다.
+  - AI 채팅 패널이 patch clarification의 `suggestions`를 표시하고, 사용자의 선택/답변을 원래 요청과 합쳐 다시 패치 의도로 해석하게 했다.
+  - 신규 생성 질문 흐름에 체크리스트 추론을 추가해 로그인/회원/예약/주문 등 이미 주어진 정보는 채우고, 운영 기준처럼 빠진 항목만 질문하게 했다.
+  - `ArchitecturePatchClarification.suggestions` 계약을 공유 타입과 데이터 모델 문서에 반영했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edit and after edit
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api exec tsx --test src/services/aiArchitecturePatchPreview.test.ts` - passed, 11 tests
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-ai-clarification.test.ts` - passed, 9 tests
+  - `npm exec --package=pnpm@11.8.0 -- pnpm lint` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm typecheck` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm build` - passed
+- Known risks:
+  - 이번 검증은 단위 테스트와 정적/빌드 체크 중심이며, 실제 브라우저에서 채팅 버튼 클릭 흐름은 별도 스모크로 확인하지 않았다.
+  - 실제 Terraform apply/destroy, cloud mutation, Git/CI/CD handoff는 수행하지 않았다.
+
+### 2026-07-05 - EC2 초안 컨테이너 기반 다이어그램 보강
+- Goal: 자연어로 EC2 다이어그램을 생성했을 때 EC2가 단독 노드처럼 보이지 않고 Region/VPC/AZ/Subnet/Security Group 컨테이너 계층 안에 배치되게 한다.
+- Completed:
+  - `ArchitectureJson`에 VPC/Subnet/EC2가 함께 있으면 프론트 변환 단계에서 Region/AZ 보조 영역을 일반적으로 추가하도록 확장했다.
+  - 기존 고정 MVP 템플릿 ID가 없는 생성 초안에서 `internet-gateway`가 잘못된 `vpc` 부모를 물지 않도록, 고정 부모 ID는 실제 노드가 있을 때만 적용하게 했다.
+  - 생성형 EC2 초안 ID(`vpc-main`, `public-subnet`, `app-security-group`, `app-server`)가 Region > VPC > AZ > Subnet > Security Group > EC2 계층으로 변환되는 회귀 테스트를 추가했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edit and after edit
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-ai-diagram-adapter.test.ts` - passed, 17 tests
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web lint` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web typecheck` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm lint` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm typecheck` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm build` - passed
+- Evidence recorded:
+  - 실제 `EC2 다이어그램 만들어줘` 초안 변환 결과가 `server-storage-region > vpc-main > server-storage-az > public-subnet > app-security-group > app-server` 구조로 확인됐다.
+- Known risks:
+  - 브라우저 스크린샷 검증은 아직 하지 않았다. 이번 변경은 변환 모델과 테스트 중심 검증이다.
+
+### 2026-07-04 - 자연어 다이어그램 수정 미리보기
+- Goal: 빈 보드는 기존 자연어 생성 미리보기를 유지하고, 기존 보드는 자연어 수정 요청을 patch preview/후보 선택/사용자 적용 흐름으로 처리한다.
+- Completed:
+  - `ArchitecturePatchPreviewResponse`를 `preview`와 `needs_clarification` union으로 확장하고, 후보가 여러 개인 수정/삭제 요청은 resource 후보 질문으로 반환하게 했다.
+  - 선택된 target resource id가 있으면 같은 원문 instruction에 target id를 실어 preview를 재생성하고, 삭제 preview는 proposed graph에서 node와 연결 edge를 제거한다.
+  - DiagramEditor preview state를 `previewDiagram`과 별도 `previewAnnotations`로 분리해 추가/수정은 반투명 preview, 삭제는 회색 반투명 ghost로 표시한다.
+  - AI chat dock은 빈 보드에서는 기존 draft 생성 흐름을 유지하고, 기존 보드는 기본 patch preview로 라우팅하며 `새로/처음부터/기존 무시` 계열 요청만 draft 생성으로 보낸다.
+  - patch 적용은 visual ghost가 아니라 `proposedDiagram`만 커밋하고, 취소는 preview/annotation/pending 후보 상태를 모두 지운다.
+- Verification run:
+  - Red before fix: focused API/Web tests failed on missing patch status, target clarification, preview annotations, routing helper, and API client export.
+  - `.\node_modules\.bin\tsx.CMD --test src\services\aiArchitecturePatchPreview.test.ts src\routes\aiAwsProviders.test.ts` - passed.
+  - `.\node_modules\.bin\tsx.CMD --test features\workspace\workspace-ai-chat-routing.test.ts features\workspace\workspace-ai-patch-preview.test.ts features\diagram-editor\flow-mappers.test.ts features\workspace\api.test.ts` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm lint` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm typecheck` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm build` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm test` - passed.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm harness:check` - passed after edits.
+- Known risks:
+  - No real Terraform apply/destroy, cloud mutation, Git/CI/CD handoff, or secret access was performed.
+  - Browser visual smoke was not captured; behavior is covered by unit tests, typecheck, build, and full test suite.
+
+### 2026-07-04 - PR #151 리뷰 대응
 ### 2026-07-06 - Cost Risk 由ъ냼??吏?먭낵 Pricing API ?뺤옣
 ### 2026-07-05 - Issue #161 Terraform 오류 AI 해결 변경 이동
 
@@ -1941,6 +2509,104 @@
 - Next best action:
   - Parent agent should review the focused diff and open the PR. Worker 1-1 should not expand into issue 1-2 or 1-3 from this branch.
 
+### 2026-07-04 - AI diagram natural-language patch routing audit
+
+- Goal: 자연어 기반 빈 보드 생성, 기존 다이어그램 수정 미리보기, 후보 선택, 삭제 ghost 표시 요구사항이 구현 흐름에 맞는지 재확인한다.
+- Completed:
+  - 기존 보드에서는 생성용 clarification 조건에 걸려도 먼저 patch preview로 라우팅되도록 `resolveWorkspaceAiChatAction`을 추가했다.
+  - 빈 보드 또는 명시적 새로 만들기 요청에서는 기존 draft/clarification 흐름을 유지했다.
+  - 기존 보드 자연어 요청이 patch로 유지되는 회귀 테스트를 추가했다.
+- Verification run:
+  - `.\node_modules\.bin\tsx.CMD --test features\workspace\workspace-ai-chat-routing.test.ts features\workspace\workspace-ai-patch-preview.test.ts features\diagram-editor\flow-mappers.test.ts features\workspace\api.test.ts` - passed
+  - `.\node_modules\.bin\tsx.CMD --test src\services\aiArchitecturePatchPreview.test.ts src\routes\aiAwsProviders.test.ts` in `apps/api` - passed
+  - `..\..\node_modules\.bin\tsc.CMD --noEmit -p tsconfig.json` in `apps/web` - passed
+  - `pnpm harness:check` - passed
+  - `pnpm lint` - passed
+  - `pnpm typecheck` - passed
+  - `pnpm build` - passed
+- Known risks:
+  - Browser visual smoke was not captured in this audit turn; verification is unit/type/build based.
+  - `pnpm build` regenerated `apps/web/next-env.d.ts`; the generated diff was restored.
+
+### 2026-07-04 - AI panel Korean UI text cleanup
+
+- Goal: AI 패널에 직접 보이는 영어 UI 문구만 한국어로 정리하고, 이전에 넓게 건드린 일반 페이지 문구는 되돌린다.
+- Completed:
+  - 전역 landing/auth/dashboard/cost 페이지 영어 변경은 원복했다.
+  - AI 채팅/AI 패널의 `Natural Language Diagramming`, `changes`, `Terraform Code`, `rawMessage`, `relatedResourceId`, `Check Finding`, 상태 라벨을 한국어로 바꿨다.
+  - AI patch preview 질문/요약 문구가 채팅 패널에 영어로 나오지 않도록 API fallback 문구를 한국어로 바꿨다.
+- Verification run:
+  - `.\node_modules\.bin\tsx.CMD --test src\services\aiArchitecturePatchPreview.test.ts` in `apps/api` - passed
+  - `.\node_modules\.bin\tsx.CMD --test features\workspace\workspace-ai-chat-routing.test.ts features\workspace\workspace-ai-patch-preview.test.ts features\workspace\workspace-ai-guardrail-warning.test.ts features\workspace\api.test.ts` in `apps/web` - passed
+  - `pnpm lint` - passed
+  - `pnpm typecheck` - passed
+  - `pnpm build` - passed
+- Known risks:
+  - Browser visual smoke was not captured; verification is focused tests plus lint/typecheck/build.
+
+### 2026-07-04 - Korean database patch request recognition fix
+
+- Goal: `여기에 데이터베이스 하나 추가해줘` 요청이 수동 검토로 빠지지 않고 RDS 추가 미리보기로 생성되게 한다.
+- Completed:
+  - RDS 리소스 키워드에 `데이터베이스`, `디비`, `데이터 저장소` 같은 한국어 표현을 추가했다.
+  - 자연어 패치 동작 판별을 한국어 동사 후보 목록 기반으로 보강했다.
+  - 한국어 데이터베이스 추가 요청 회귀 테스트를 추가했다.
+- Verification run:
+  - `.\node_modules\.bin\tsx.CMD --test src\services\aiArchitecturePatchPreview.test.ts` in `apps/api` - passed
+  - `..\..\node_modules\.bin\tsc.CMD --noEmit -p tsconfig.json` in `apps/api` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm harness:check` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm lint` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm typecheck` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm build` - passed
+  - `git diff --check` - passed
+- Known risks:
+  - Browser visual smoke was not captured; verification is service regression test plus lint/typecheck/build.
+  - Local `pnpm` was not on PATH, so required pnpm checks were executed through `npm exec --package=pnpm@11.8.0 -- pnpm ...`.
+
+### 2026-07-04 - Broad natural-language architecture patch coverage
+
+- Goal: 단일 `데이터베이스 추가` 케이스가 아니라 지원 ResourceType 전반의 추가/삭제/수정 자연어 요청이 같은 패치 미리보기 엔진으로 들어가게 한다.
+- Completed:
+  - 지원 리소스별 한국어/영어 alias 카탈로그를 넓히고, 더 구체적인 alias가 우선되도록 매칭 점수를 적용했다.
+  - 삭제/수정/추가 동작 alias를 공통 목록으로 분리해 한국어 동사 변형을 넓혔다.
+  - 라벨/id로 특정한 기존 리소스를 후보 질문 전에 우선 선택하도록 대상 해석을 보강했다.
+  - 한국어 EC2 instance type 수정 요청도 구조화된 `instanceType` 변경으로 반영되게 했다.
+- Verification run:
+  - `.\node_modules\.bin\tsx.CMD --test src\services\aiArchitecturePatchPreview.test.ts` in `apps/api` - passed
+  - `$env:S3_BUCKET_NAME='sketchcatch-test-bucket'; npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api test` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api lint` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api typecheck` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm harness:check` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm lint` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm typecheck` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm build` - passed
+  - `git diff --check` - passed
+- Known risks:
+  - Browser visual smoke was not captured; verification is API regression, full API test, lint/typecheck/build.
+  - `next build` regenerated `apps/web/next-env.d.ts`; the generated diff was restored.
+
+### 2026-07-04 - Natural-language replacement patch coverage
+
+- Goal: 자연어 수정 요청 중 `A를 B로 교체`를 단순 수정으로 뭉개지 않고 삭제+추가 미리보기 패치로 표현한다.
+- Completed:
+  - 교체 문장을 source/replacement segment로 분리하는 내부 파서를 추가했다.
+  - 교체 요청은 shared action을 늘리지 않고 `remove_resource` + `add_resource` change 조합으로 반환하게 했다.
+  - source type이 없어도 라벨/id로 기존 대상이 특정되면 교체되도록 했다.
+  - 교체 대상이 여러 개면 “어떤 리소스를 교체할까요?” 후보 선택으로 빠지게 했다.
+- Verification run:
+  - `.\node_modules\.bin\tsx.CMD --test src\services\aiArchitecturePatchPreview.test.ts` in `apps/api` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api lint` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api typecheck` - passed
+  - `$env:S3_BUCKET_NAME='sketchcatch-test-bucket'; npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api test` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm harness:check` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm lint` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm typecheck` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm build` - passed
+  - `git diff --check` - passed
+- Known risks:
+  - Browser visual smoke was not captured; verification is API regression, full API test, lint/typecheck/build.
+  - `next build` regenerated `apps/web/next-env.d.ts`; the generated diff was restored.
+
 ### 2026-07-04 - Runtime Cache Redis adapter slice
 
 - Goal: SketchCatch issue #132 踰붿쐞?먯꽌 #131 RuntimeCache abstraction ?꾩뿉 Redis adapter瑜?遺숈씠怨? `REDIS_URL`???녾굅??test ?섍꼍?대㈃ in-memory fallback???좎??쒕떎.
@@ -1968,6 +2634,8 @@
   - Full API tests need a non-secret `S3_BUCKET_NAME` value in this environment because unrelated S3-backed tests construct plan artifact storage.
 - Next best action:
   - Review the focused #132 diff, run final harness, commit, push, and open a PR targeting `dev`.
+
+### 2026-07-04 - Blueprint 전체 리디자인 적용
 ### 2026-07-04 - Blueprint ?꾩껜 由щ뵒?먯씤 ?곸슜
 
 - Goal: `docs/sw/spec2.md`? `docs/sw/plan2.md` 湲곗??쇰줈 SketchCatch ???붾㈃ ?꾩껜瑜?Blueprint ?몄뼱濡?留욎텛怨? Architecture Board? Deployment Safety Gate ?꾩꽦?꾨? ?곗꽑 蹂닿컯?쒕떎.
@@ -2349,6 +3017,190 @@
   - `pnpm harness:check` - passed after edits
   - `git diff --check` - passed
 - Known risks:
+  - 실제 GitHub API 호출, GitHub Actions polling worker, GitHub token 사용은 수행하지 않았다.
+  - 실제 AWS apply/destroy, cloud mutation, real Git/CI/CD handoff execution은 수행하지 않았다.
+  - Runtime Cache는 보조 캐시이며 RDS `git_cicd_handoffs` record가 source of truth다.
+# 2026-07-05 - AI 다이어그램 생성 prompt 오염 및 intent 반영 보정
+
+- Goal: AI 채팅에서 이전 사용자 명령이 새 초안 생성 prompt에 계속 누적되어 어떤 명령을 넣어도 같은 다이어그램처럼 보이는 문제를 고치고, `EC2 없는`, `데이터베이스랑 S3만` 같은 명시적 intent가 생성 결과에 반영되게 한다.
+- Completed:
+  - `WorkspaceAiChatDock`의 새 draft 생성 경로가 전체 user chat history를 합치지 않고 최신 사용자 명령만 API prompt로 보내도록 분리했다.
+  - `추가 안 함` fallback도 누적 전체가 아니라 `추가 안 함`을 제외한 최신 사용자 명령을 기준으로 새 초안을 만들게 했다.
+  - 한국어 prompt fact 보강을 별도 helper로 추가하고, `EC2 없는/없이`는 serverless draft로, `데이터베이스랑 S3만`은 server runtime/static delivery를 제거한 data/storage draft로 해석하게 했다.
+  - DB-only/storage-only 조합에서 app server/IAM/CloudWatch runtime edge가 끌려오지 않도록 builder 조건을 좁혔다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits.
+  - `apps/api/.\\node_modules\\.bin\\tsx.cmd --test apps\\api\\src\\routes\\ai.test.ts --test-name-pattern "honors distinct Korean generation commands"` - red before fix, then passed after fix.
+  - `apps/api/.\\node_modules\\.bin\\tsx.cmd --test apps\\api\\src\\routes\\ai.test.ts --test-name-pattern "honors distinct Korean generation commands|returns the same ArchitectureJson for equivalent wording|keeps purpose-specific diagrams distinct|production-shaped entry|composes resources|rejects generic website"` - passed, 38 tests.
+  - `apps/web/.\\node_modules\\.bin\\tsx.cmd --test apps\\web\\features\\workspace\\workspace-ai-chat-history.test.ts apps\\web\\features\\workspace\\workspace-ai-chat-routing.test.ts apps\\web\\features\\workspace\\workspace-ai-clarification.test.ts` - passed, 21 tests.
+  - Manual API smoke with the user prompts showed distinct node sets for static site, login web service, no-EC2 API, and DB+S3-only requests.
+  - `pnpm lint` - passed with Turbo cache rename warnings only.
+  - `pnpm typecheck` - passed with Turbo cache rename warnings only.
+  - `git diff --check` - passed with line-ending warnings only.
+  - `pnpm build` - sandbox run failed on `.next` unlink EPERM, elevated retry timed out once, longer elevated retry passed.
+- Known risks:
+  - Browser click smoke for the chat UI was not run; API and Web unit tests cover the prompt isolation and generation mapping.
+  - Real AWS apply/destroy, cloud mutation, and Git/CI/CD handoff were not run.
+
+# 2026-07-05 - AI 다이어그램 후속 수정 맥락 보존 및 Terraform 자동 갱신
+
+- Goal: 빈 보드의 AI 초안 미리보기 상태에서 후속 요청이 이전 용도를 지워 같은 정적 사이트 다이어그램으로 수렴하는 문제를 고치고, AI 생성/수정 적용 후 Terraform 코드가 자동으로 다시 생성되게 한다.
+- Completed:
+  - 초안/패치 미리보기가 떠 있는 동안 추가 지시가 들어오면 현재 보드 스냅샷이 아니라 미리보기 다이어그램을 기준으로 patch preview를 만들도록 수정했다.
+  - 확인 단계에서 완성형 답변을 입력할 때 원래 prompt와 답변을 병합해 `파일 업로드 페이지 -> 정적 소개 웹사이트`, `로그인 웹서비스 -> 정적 소개 웹사이트`의 앞선 용도가 사라지지 않게 했다.
+  - API patch preview에서 정적 소개 웹사이트 재구성 요청은 기존 EC2/RDS/S3를 제거하지 않고, 누락된 S3/CloudFront만 추가하도록 보정했다.
+  - AI 초안/패치 적용 시 `requestTerraformRefresh()`를 호출하고 Terraform 패널이 해당 신호를 받아 로컬 편집 보호와 별개로 코드를 다시 생성하도록 연결했다.
+  - 업로드 런타임과 로그인 런타임이 정적 소개 웹사이트 후속 요청 후에도 서로 다른 리소스 구성을 유지하는 회귀 테스트를 추가했다.
+- Verification run:
+  - `pnpm harness:check` - passed before final checks
+  - `pnpm --dir apps/api exec tsx --test src/services/aiArchitecturePatchPreview.test.ts` - passed outside sandbox after Node test runner hit sandbox `spawn EPERM`
+  - `pnpm --dir apps/web exec tsx --test features/workspace/workspace-right-panel-layout.test.ts` - passed outside sandbox after Node test runner hit sandbox `spawn EPERM`
+  - `pnpm harness:check` - passed
+  - `pnpm lint` - passed with Turbo cache rename warnings only
+  - `pnpm typecheck` - passed with Turbo cache rename warnings only
+  - `pnpm build` - sandbox run failed on `.next` unlink EPERM, elevated retry passed
+  - `pnpm harness:check` - passed after build
+  - `git diff --check` - passed with line-ending warnings only
+- Known risks:
+  - Browser click smoke는 이번 세션에서 별도로 실행하지 않았고, API/web 회귀 테스트와 전체 lint/typecheck/build로 검증했다.
+  - 실제 AWS apply/destroy, cloud mutation, Git/CI/CD handoff는 실행하지 않았다.
+
+# 2026-07-05 - AI 미리보기 상태 새 프롬프트 라우팅 보정
+
+- Goal: AI 초안/패치 미리보기가 떠 있는 상태에서 새 프롬프트를 넣으면 이전 미리보기를 계속 patch해서 모든 주문이 같은 다이어그램으로 수렴하는 문제를 고친다.
+- Completed:
+  - `resolvePendingPreviewChatAction`을 추가해 미리보기 상태의 입력을 새 초안 생성과 기존 미리보기 수정으로 분리했다.
+  - `파일 업로드 페이지가 필요해`, `로그인 있는 작은 웹서비스가 필요해`, `ec2 없는 간단한 api 서버 하나 만들어줘` 같은 새 요구사항은 기존 미리보기를 버리고 새 draft로 생성하게 했다.
+  - `정적 소개 웹사이트로 정리해줘`처럼 기존 미리보기를 정리/수정하는 표현은 preview patch로 유지했다.
+  - `WorkspaceAiChatDock`이 pending preview 상태에서 새 라우팅 결과를 사용하도록 연결했다.
+  - 같은 채팅창에서 여러 새 주문을 넣는 경로를 회귀 테스트로 고정했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits
+  - `pnpm --dir apps/api exec tsx -e "...createArchitectureDraft smoke..."` - read-only smoke showed API already produced distinct node sets for static site, upload page, login service, no-EC2 API, DB+S3-only, and EC2+S3-only prompts
+  - `pnpm --dir apps/web exec tsx --test features/workspace/workspace-ai-chat-routing.test.ts` - red before fix, passed after fix
+  - `pnpm --dir apps/web exec tsx --test features/workspace/workspace-ai-chat-routing.test.ts features/workspace/workspace-right-panel-layout.test.ts` - passed
+  - `pnpm harness:check` - passed
+  - `pnpm lint` - passed with Turbo cache rename warnings only
+  - `pnpm typecheck` - passed with Turbo cache rename warnings only
+  - `pnpm build` - sandbox run failed on `.next` unlink EPERM, elevated retry passed
+  - `pnpm harness:check` - passed after build
+- Known risks:
+  - Browser click smoke는 이번 세션에서 별도로 실행하지 않았고, routing/source tests와 전체 lint/typecheck/build로 검증했다.
+  - 실제 AWS apply/destroy, cloud mutation, Git/CI/CD handoff는 실행하지 않았다.
+
+# 2026-07-05 - AI 다이어그램 의도 반영 및 레이아웃 보정
+
+- Goal: 서로 다른 사용자 요구가 같은 다이어그램으로 수렴하지 않게 하고, 기존 보드 수정 흐름에서 명시된 리소스를 보존하며, EC2 추가/정적 사이트 재정리/무관 질문 차단/포함 레이아웃 문제를 보정한다.
+- Completed:
+  - 레시피처럼 IaC 아키텍처와 무관한 요청은 초안을 생성하지 않고 안내 문구와 함께 400 응답으로 차단하게 했다.
+  - `S3 버킷이랑 EC2 만 있는 다이어그램`처럼 명시 범위가 있는 요청은 CloudFront/IAM/CloudWatch/RDS를 끼워 넣지 않고 VPC, public subnet, route, security group, AMI, EC2, S3 중심의 최소 구성으로 생성하게 했다.
+  - 수정 흐름에서 `EC2 추가` 요청은 질문 반복 없이 VPC/Subnet/Security Group/AMI/EC2를 함께 추가하고, 기존 S3/RDS가 있으면 용도 기반 연결을 자동 생성하게 했다.
+  - 기존 S3와 EC2가 있는 보드에서 `정적 소개 웹사이트로 정리해줘` 같은 재정리 요청은 전체 교체가 아니라 기존 EC2/S3를 보존한 patch 흐름으로 처리하고 CloudFront만 필요한 보강으로 추가하게 했다.
+  - route table association이 subnet 내부 자식으로 배치되어 레이어와 이름이 겹치던 문제를 VPC 범위 배치로 보정했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits
+  - `.\\apps\\api\\node_modules\\.bin\\tsx.cmd --test apps\\api\\src\\routes\\ai.test.ts apps\\api\\src\\services\\aiArchitecturePatchPreview.test.ts` - sandbox spawn EPERM, rerun outside sandbox passed, 61 tests
+  - `.\\apps\\web\\node_modules\\.bin\\tsx.cmd --test apps\\web\\features\\workspace\\workspace-ai-chat-routing.test.ts apps\\web\\features\\workspace\\workspace-ai-diagram-adapter.test.ts apps\\web\\features\\workspace\\workspace-ai-chat-history.test.ts apps\\web\\features\\workspace\\workspace-ai-clarification.test.ts apps\\web\\features\\workspace\\ai-workspace-api.test.ts` - sandbox spawn EPERM, rerun outside sandbox passed, 44 tests
+  - `pnpm lint` - passed
+  - `pnpm typecheck` - passed
+  - `pnpm build` - sandbox `.next` unlink EPERM, rerun outside sandbox passed
+  - `pnpm harness:check` - passed after build
+- Known risks:
+  - 실제 브라우저 클릭 smoke는 이번 세션에서 별도로 수행하지 않았고, API/web helper tests 및 전체 lint/typecheck/build로 검증했다.
+  - Next.js build가 `apps/web/next-env.d.ts`를 자동 갱신했으나 이번 변경 범위가 아니어서 내용 변경은 제외했다.
+# 2026-07-05 - AI 다이어그램 서비스 목적 추론 반영
+
+- Goal: 사용자가 프롬프트를 정해진 형식으로 쓰지 않아도 로그인, 예약 신청, 게시판처럼 같은 `backend_with_db` 조합 안의 서비스 목적을 AI draft가 구분해서 서로 다른 다이어그램 의미를 드러내게 한다.
+- Completed:
+  - `ArchitectureServicePurpose`와 `ArchitectureCapability` shared type을 추가하고 `AiResultMetadata`에 `servicePurpose`, `capabilities`를 싣도록 확장했다.
+  - 요구사항 해석 단계에서 `예약/신청`, `게시판/게시글`, `로그인/회원`, `업로드/파일`, `랜딩/소개` 같은 자유 문장 단서를 목적과 capability로 승격하도록 추가했다.
+  - draft builder가 기존 지원 리소스 범위 안에서 목적별 app server/database/bucket/log/alarm label과 config를 다르게 생성하도록 연결했다. node id와 기존 title 계약은 회귀를 피하기 위해 안정적으로 유지했다.
+  - API route 테스트에 로그인/예약/게시판 프롬프트가 각각 `auth_web_service`, `reservation_service`, `content_board`로 해석되고 label/config signature가 달라지는 회귀 테스트를 추가했다.
+  - `docs/data-models.md`의 AI 결과 DTO 계약에 `servicePurpose`와 `capabilities`를 반영했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits.
+  - `.\\node_modules\\.bin\\tsx.CMD --test src\\routes\\ai.test.ts --test-name-pattern "extracts service purpose"` - sandbox spawn EPERM, rerun outside sandbox failed red before implementation, passed after implementation.
+  - `.\\node_modules\\.bin\\tsx.CMD --test src\\routes\\ai.test.ts` in `apps/api` - passed outside sandbox, 41 tests.
+  - `pnpm typecheck` - passed with Turbo cache rename warnings only.
+  - `pnpm lint` - passed with Turbo cache rename warnings only.
+  - `pnpm build` - sandbox run failed on `.next` unlink EPERM, first elevated retry timed out, longer elevated retry passed.
+  - `pnpm harness:check` - passed after final checks.
+- Known risks:
+  - Browser visual smoke was not run; this change is API/shared-type centered and verified through API tests plus workspace lint/typecheck/build.
+  - Real AWS apply/destroy, cloud mutation, Git/CI/CD handoff, and provider calls were not run.
+
+# 2026-07-05 - AI 다이어그램 목적별 실제 리소스 구성 분기 보정
+
+- Goal: 이전 수정이 label/config만 바꿔 실제 보드에서는 같은 아이콘 배열로 보이는 문제를 고치고, 로그인/예약/게시판 목적별로 node id set 자체가 달라지게 한다.
+- Completed:
+  - `backend_with_db` 안에서도 `auth_web_service`는 `auth-audit-log-group`, `reservation_service`는 `reservation-attachments-bucket`, `content_board`는 `content-media-bucket`을 추가하도록 보정했다.
+  - 새 목적별 노드는 보드 변환 뒤에도 눈에 보이는 위치에 남도록 배치하고, app server 및 runtime policy와 연결선을 만든다.
+  - API route 테스트가 label/config signature뿐 아니라 node id signature도 목적별로 달라져야 한다고 검증하도록 강화했다.
+  - 실제 smoke로 `ArchitectureJson -> DiagramJson` 변환 뒤 추가 노드가 유지되는 것을 확인했다.
+- Verification run:
+  - `pnpm harness:check` - passed before debugging.
+  - `.\\node_modules\\.bin\\tsx.CMD --test src\\routes\\ai.test.ts --test-name-pattern "extracts service purpose"` - failed red with `1 !== 3` node id signature count before fix, passed after fix.
+  - `.\\node_modules\\.bin\\tsx.CMD --test src\\routes\\ai.test.ts` in `apps/api` - passed outside sandbox, 41 tests.
+  - `.\\node_modules\\.bin\\tsx.CMD --test features\\workspace\\workspace-ai-diagram-adapter.test.ts features\\workspace\\workspace-ai-chat-routing.test.ts` in `apps/web` - passed outside sandbox, 27 tests.
+  - `pnpm typecheck` - passed with Turbo cache rename warnings only.
+  - `pnpm lint` - passed with Turbo cache rename warnings only.
+  - `pnpm build` - sandbox run failed on `.next` unlink EPERM, elevated retry passed.
+  - `pnpm harness:check` - passed after final checks.
+- Known risks:
+  - Browser click smoke was not run; API draft and web DiagramJson conversion were verified by tests and a direct smoke command.
+  - Real AWS apply/destroy, cloud mutation, Git/CI/CD handoff, and provider calls were not run.
+# 2026-07-05 - AI 다이어그램 intent 해석 및 stale preview 적용 버그 수정
+
+- Goal: 거친 자연어를 deterministic planner에 바로 넘기지 않고 `ArchitectureIntent`로 해석한 뒤 설계하도록 정리하고, AI 초안 적용 시 남아 있는 이전 preview가 아니라 현재 draft를 보드에 넣게 한다.
+- Completed:
+  - 공유 타입에 `ArchitectureIntent` metadata를 추가해 service purpose, capability, constraints, confidence, missing questions를 담게 했다.
+  - `interpretRequirement(prompt)`를 추가하고 `resolveArchitectureRequirement`가 deterministic planning 전에 intent를 metadata로 전달하게 했다.
+  - deterministic draft 조립 진입점을 `planPracticeArchitecture(...)`로 분리하고 기존 함수는 호환 wrapper로 남겼다.
+  - AI 초안 적용 경로 두 곳 모두 `context.previewDiagram ?? ...` 대신 `convertArchitectureJsonToDiagramJson(draft.architectureJson)`를 직접 적용하게 고쳤다.
+  - 현재 draft 적용 경로가 stale preview를 쓰지 않는지, API 응답이 interpreted intent를 노출하는지 회귀 테스트를 추가했다.
+  - 직접 smoke로 landing/auth/reservation/board 요청이 서로 다른 node signature를 만드는 것을 확인했다. 결과는 `uniqueSignatures=4/4`.
+- Verification run:
+  - `pnpm harness:check` - 수정 전 통과.
+  - `apps/web/.\\node_modules\\.bin\\tsx.CMD --test features\\workspace\\workspace-right-panel-layout.test.ts --test-name-pattern "accepted AI drafts apply"` - 수정 전 red, 수정 후 통과.
+  - `apps/api/.\\node_modules\\.bin\\tsx.CMD --test src\\routes\\ai.test.ts --test-name-pattern "ArchitectureIntent metadata"` - 수정 전 red, 수정 후 통과.
+  - `apps/api/.\\node_modules\\.bin\\tsx.CMD -e "...createArchitectureDraft smoke..."` - 통과, landing/auth/reservation/board node signature가 모두 다름.
+  - `apps/api/.\\node_modules\\.bin\\tsx.CMD --test src\\routes\\ai.test.ts` - 통과, 42 tests.
+  - `apps/web/.\\node_modules\\.bin\\tsx.CMD --test features\\workspace\\workspace-right-panel-layout.test.ts features\\workspace\\workspace-ai-diagram-adapter.test.ts features\\workspace\\workspace-ai-chat-routing.test.ts` - 통과, 69 tests.
+  - `pnpm typecheck` - 통과, Turbo cache rename warning만 있음.
+  - `pnpm lint` - 통과, Turbo cache rename warning만 있음.
+  - `pnpm build` - sandbox에서는 `.next` unlink EPERM으로 실패했고, elevated retry는 통과.
+  - `pnpm harness:check` - build 후 통과.
+  - `git diff --check` - 통과, line-ending warning만 있음.
+- Known risks:
+  - 브라우저 클릭 smoke는 별도로 실행하지 않았다. 이번 수정은 API draft 생성, Web draft 적용 source test, diagram adapter test, lint/typecheck/build, 직접 smoke로 검증했다.
+  - 실제 AWS apply/destroy, cloud mutation, Git/CI/CD handoff는 실행하지 않았다.
+# 2026-07-07 - Amazon Q 기반 Architecture Draft 질문/생성 흐름 전환
+
+- Goal: Architecture Draft 생성에서 코드가 직접 다이어그램을 결정하는 경로 대신 Amazon Q에 요구사항을 전달하고, 필수 정보가 부족하면 채팅에서 순차 질문 후 Q 응답 기반 다이어그램을 그리도록 전환한다.
+- Completed:
+  - `CreateArchitectureDraftResponse`를 `AiArchitectureDraftResult | ArchitectureDraftClarification` 유니온으로 확장하고 `metadata.source = "amazon_q"` 값을 추가했다.
+  - `/api/ai/architecture-draft`가 Bedrock 설명 보강을 거치지 않고 Amazon Q 기반 draft response factory를 사용하도록 변경했다.
+  - Amazon Q가 활성화되고 credit이 확인된 경우 웹사이트 종류, 트래픽, DB, 프론트엔드, 백엔드, 지역, 예산, SSL/HTTPS, 파일 업로드, 실시간 기능, 운영 관리 선호도 질문을 한 번에 하나씩 확인한 뒤 Q에 전체 prompt를 전달한다.
+  - Amazon Q 응답은 JSON preview 또는 추가 clarification으로 파싱하고, 지원 가능한 `ResourceType`과 edge 참조를 검증한 뒤 ArchitectureJson으로 반환한다.
+  - provider 미설정/credit 미확인/응답 오류 시 기존 deterministic planner를 fallback으로 유지해 로컬 및 테스트 안정성을 보존했다.
+  - Workspace AI 채팅 dock이 Q clarification을 저장하고 사용자 답변을 원래 prompt에 누적해 다시 요청하도록 연결했다.
+  - 보조 workspace UI와 demo workspace는 Q clarification을 안내 메시지로 처리하도록 보강했다.
+  - `docs/data-models.md`에 새 Architecture Draft clarification/response DTO를 반영했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits
+  - `pnpm --dir apps/api exec tsx --test src/services/aiArchitectureDrafts.test.ts` - sandbox `spawn EPERM` after first attempt, elevated rerun passed
+  - `pnpm --filter @sketchcatch/api typecheck` - passed
+  - `pnpm --filter @sketchcatch/web typecheck` - first failed because stale `.next/types/validator.ts` referenced a removed generated route; after deleting generated `apps/web/.next`, passed
+  - `pnpm --filter @sketchcatch/types typecheck` - passed
+  - `pnpm --filter @sketchcatch/api test` - passed outside sandbox after Node test runner hit sandbox `spawn EPERM`, 579 tests
+  - `pnpm harness:check` - passed
+  - `pnpm lint` - passed with non-fatal Turbo cache rename warnings
+  - `pnpm typecheck` - passed with non-fatal Turbo cache rename warnings
+  - `pnpm build` - sandbox run failed on Next `.next` rename `EPERM`, elevated rerun passed
+- Known risks:
+  - Real Amazon Q Business 호출은 fake provider tests로 계약을 검증했으며 실제 AWS provider 호출은 수행하지 않았다.
+  - Browser click smoke는 별도로 수행하지 않았다. 채팅 상태 전환은 typecheck/build와 API provider-contract tests로 검증했다.
+  - 실제 AWS apply/destroy, cloud mutation, Git/CI/CD handoff는 수행하지 않았다.
   - ?ㅼ젣 GitHub API ?몄텧, GitHub Actions polling worker, GitHub token ?ъ슜? ?섑뻾?섏? ?딆븯??
   - ?ㅼ젣 AWS apply/destroy, cloud mutation, real Git/CI/CD handoff execution? ?섑뻾?섏? ?딆븯??
   - Runtime Cache??蹂댁“ 罹먯떆?대ŉ RDS `git_cicd_handoffs` record媛 source of truth??
@@ -2781,3 +3633,270 @@
 - Known risks:
   - 실제 Terraform CLI, AWS SDK, plan/apply/destroy, cloud mutation은 실행하지 않았다.
   - 전체 API test와 루트 build는 로컬 Windows 권한/시간 문제로 완료하지 못했고, 변경 범위는 targeted regression, lint, typecheck, API build로 검증했다.
+
+### 2026-07-07 - Amazon Q 다이어그램 질문 브랜치 dev 병합
+
+- Goal: 사용자가 요청한 Amazon Q 기반 다이어그램 초안/질문 흐름 변경을 먼저 커밋한 뒤, 최신 `origin/dev`를 `feat/ck/152-ai-diagram-editing` 브랜치로 병합한다.
+- Completed:
+  - `Feat: Amazon Q 다이어그램 초안 생성 연결` 커밋을 생성했다.
+  - local `dev`를 `origin/dev`로 fast-forward 업데이트하고, 이 브랜치에 `dev`를 병합했다.
+  - AI route, app route options, workspace API, Workspace AI chat dock 충돌을 해결해 Amazon Q draft clarification, architecture patch preview, Terraform issue/preview AI chat 기능을 함께 유지했다.
+  - merge 중 생긴 conflict markers와 EOF whitespace를 정리했다.
+- Verification run:
+  - `pnpm harness:check` - sandbox EPERM 후 elevated 재시도 통과.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `pnpm build` - sandbox `.next` unlink EPERM 후 elevated 재시도 통과.
+  - `pnpm harness:check` - final elevated run passed.
+- Known risks:
+  - 실제 Amazon Q Business, AWS apply/destroy, GitHub API, Git/CI/CD handoff 실행은 수행하지 않았다.
+  - Browser click smoke는 수행하지 않았고, merge 안정성은 lint/typecheck/build와 harness로 확인했다.
+### 2026-07-07 - Amazon Q 질문 흐름 단순화
+
+- Goal: Workspace AI의 초보자 친화형 사전 질문 흐름과 예시 프롬프트 칩 UI를 제거하고, 부족 정보 질문은 사용자가 제공한 Amazon Q 필수 질문 리스트 기준으로만 나오게 한다.
+- Completed:
+  - `workspace-ai-clarification` 사전 질문 모듈과 전용 테스트를 제거했다.
+  - Workspace AI chat dock과 오른쪽 AI panel에서 "그냥 이렇게 시작해도 돼요" 예시 칩 영역을 제거했다.
+  - chat routing에서 `draft_clarification` 분기를 제거해 draft 요청이 API/Amazon Q clarification 응답으로 바로 이어지게 했다.
+  - API Architecture Draft clarification 질문 문구를 사용자가 제공한 리스트 문구에 맞췄다.
+- Verification run:
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --dir apps/api exec tsx --test src/services/aiArchitectureDrafts.test.ts` - passed, 3 tests.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-ai-chat-routing.test.ts features/workspace/workspace-ai-guardrail-warning.test.ts features/workspace/workspace-right-panel-layout.test.ts` - passed, 68 tests.
+  - `pnpm harness:check` - passed before and after edits.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `git diff --check` - passed.
+  - `pnpm build` - sandbox `.next` unlink EPERM 후 elevated 재시도 통과.
+- Known risks:
+  - 실제 Amazon Q Business 호출과 브라우저 클릭 smoke는 수행하지 않았다.
+# 2026-07-07 - Amazon Q 다이어그램 area 레이아웃 검증 보강
+
+- Goal: Amazon Q가 만든 다이어그램 초안에서 VPC/Subnet/Security Group 같은 area의 포함 관계와 겹침 규칙이 깨지면 문제 내용을 Amazon Q에 전달해 다시 생성하게 한다.
+- Completed:
+  - Amazon Q architecture draft 지시문에 area box, contains/hosts edge, `vpcId`/`subnetId`/security group reference 기반 완전 포함 규칙을 추가했다.
+  - 관계 없는 area box는 겹치지 않아야 하고, 포함된 것처럼 보이면 containment reference가 있어야 한다는 self-validation을 추가했다.
+  - 일반 리소스가 parent 관계 없이 area 안에 있거나 반쯤 걸치는 경우도 self-validation issue로 잡아 repair prompt에 전달한다.
+  - 잘못된 VPC/Subnet/EC2 좌표를 첫 응답으로 받은 뒤 Amazon Q에 재생성을 요청해 정상 좌표를 채택하는 회귀 테스트를 추가했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --dir apps/api exec tsx --test src/services/aiArchitectureDrafts.test.ts --test-name-pattern "broken area layout"` - red before prompt fixture stabilization, passed after fix
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --dir apps/api exec tsx --test src/services/aiArchitectureDrafts.test.ts` - passed, 6 tests
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api typecheck` - passed
+  - `pnpm harness:check` - passed after edits
+  - `git diff --check` - passed, with line-ending warnings only
+  - `pnpm lint` - passed, with non-fatal Turbo cache rename warnings
+  - `pnpm typecheck` - passed, with non-fatal Turbo cache rename warnings
+  - `pnpm build` - first sandbox run failed on `.next` unlink `EPERM`; rerun with elevated permissions passed, final normal run passed with non-fatal Turbo cache rename warning
+- Known risks:
+  - 실제 Amazon Q 서비스 응답은 로컬에서 호출하지 않았고, fake provider로 self-validation repair loop를 검증했다.
+# 2026-07-07 - Amazon Q 다이어그램 레이어와 화살표 충돌 검증 보강
+
+- Goal: 다이어그램 생성 결과에서 area/container가 리소스를 덮지 않게 하고, 화살표가 관련 없는 리소스를 가로지르거나 리소스와 겹치는 좌표를 Amazon Q에 다시 생성하게 한다.
+- Completed:
+  - Amazon Q architecture draft 지시문에 layer ordering과 visible arrow routing 규칙을 추가했다.
+  - visible edge 중심 경로가 관련 없는 non-area 리소스 박스를 관통하면 self-validation issue로 잡아 Amazon Q repair prompt에 전달한다.
+  - ArchitectureJson을 DiagramJson으로 변환할 때 parent area depth를 기준으로 area는 낮은 zIndex, 일반 리소스는 높은 zIndex를 부여하도록 보정했다.
+  - Web 어댑터 테스트에 area가 Q 응답 배열 순서와 무관하게 자식 리소스 뒤에 깔리는 회귀 테스트를 추가했다.
+  - Region/AZ 자동 컨테이너 테스트 기대값을 현재 `aws_region`/`aws_availability_zone` 계약에 맞췄다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --dir apps/api exec tsx --test src/services/aiArchitectureDrafts.test.ts --test-name-pattern "arrows crossing"` - red before fix, passed after fix
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-ai-diagram-adapter.test.ts --test-name-pattern "area layers"` - red before fix, passed after fix while surfacing one stale Region/AZ test expectation
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --dir apps/api exec tsx --test src/services/aiArchitectureDrafts.test.ts` - passed, 7 tests
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-ai-diagram-adapter.test.ts` - passed, 19 tests
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/api typecheck` - passed
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web typecheck` - passed
+  - `pnpm harness:check` - passed after edits
+  - `git diff --check` - passed, with line-ending warnings only
+  - `pnpm lint` - passed, with non-fatal Turbo cache rename warnings
+  - `pnpm typecheck` - passed, with non-fatal Turbo cache rename warnings
+  - `pnpm build` - first sandbox run failed on `.next` unlink `EPERM`; rerun with elevated permissions passed
+- Known risks:
+  - Edge crossing validation approximates visible routing with the source-to-target center line. It catches the current straight-through resource collision class, but React Flow smoothstep routing can still create visually different paths in edge cases.
+# 2026-07-07 - Amazon Q all clarification choice prompt constraints
+
+- Goal: Expand the Amazon Q Architecture Draft prompt so every required website clarification option has explicit architecture guidance, not only the dynamic/global/99.99% case.
+- Completed:
+  - Added a full clarification choice mapping section for website type, traffic scale, database, frontend, backend, user region, budget, HTTPS, file upload, realtime, management preference, loading goal, website size, traffic pattern, and downtime tolerance.
+  - Kept Amazon Q as the diagram generator; SketchCatch now sends stronger option-to-architecture guidance while still limiting Q to supported ResourceNode types.
+  - Updated regression coverage to prove the full mapping section is included in the Amazon Q prompt.
+- Verification run:
+  - `pnpm harness:check` - passed before edits.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --dir apps/api exec tsx --test src/services/aiArchitectureDrafts.test.ts` - passed, 8 tests.
+  - `pnpm harness:check` - passed after targeted test.
+  - `pnpm lint` - passed, with non-fatal Turbo cache rename warnings.
+  - `pnpm typecheck` - passed, with non-fatal Turbo cache rename warnings.
+  - `pnpm build` - first sandbox run failed on `.next` unlink `EPERM`; elevated rerun passed.
+- Known risks:
+  - Real Amazon Q Business was not called locally; fake-provider tests verify the complete prompt content reaches the provider call.
+
+# 2026-07-07 - Amazon Q dynamic global website prompt constraint hardening
+
+- Goal: Keep Amazon Q responsible for diagram generation, while making the prompt treat dynamic SPA, complex backend, global users, HTTPS, image upload, realtime notification, and 99.99% availability answers as required architecture constraints.
+- Completed:
+  - Added Amazon Q Architecture Draft instructions that treat clarification answers as binding architecture constraints.
+  - Made the prompt require SPA static delivery through S3 + CloudFront, complex backend entry through LOAD_BALANCER/listener, global/HTTPS/1-second entry handling, image-upload S3 presigned flow, realtime notification path, 99.99% Multi-AZ/RDS Multi-AZ guidance, and explicit cost/SLA trade-off warnings.
+  - Added a regression test for the dynamic global website answer set to prove those constraints are sent to Amazon Q.
+- Verification run:
+  - `pnpm harness:check` - passed before edits.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --dir apps/api exec tsx --test src/services/aiArchitectureDrafts.test.ts` - passed, 8 tests.
+  - `pnpm harness:check` - passed after targeted test.
+  - `pnpm lint` - passed, with non-fatal Turbo cache rename warnings.
+  - `pnpm typecheck` - passed, with non-fatal Turbo cache rename warnings.
+  - `pnpm build` - first sandbox run failed on `.next` unlink `EPERM`; elevated rerun passed.
+- Known risks:
+  - Real Amazon Q Business was not called locally; fake-provider tests verify the prompt and retry plumbing.
+
+# 2026-07-07 - Amazon Q requirement coverage regeneration guard
+
+- Goal: Prevent Amazon Q from returning the same under-specified diagram after prompt hardening by requiring explicit selected-answer coverage and rejecting previews that do not prove the topology satisfies those answers.
+- Completed:
+  - Added `requirementCoverage` to the Amazon Q preview contract and parser.
+  - Added self-validation checks for missing coverage, SPA S3/CloudFront delivery, complex backend load-balancer entry, global/fast CloudFront entry, image-upload media bucket, realtime path coverage, and 99.99% database Multi-AZ proof.
+  - Strengthened the repair prompt so Amazon Q must regenerate the full JSON, avoid the same topology, and include coverage entries for every selected answer.
+  - Updated tests so incomplete dynamic/global diagrams trigger a second Amazon Q call and only pass when the regenerated topology contains the required representative resources.
+- Verification run:
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --dir apps/api exec tsx --test src/services/aiArchitectureDrafts.test.ts` - passed, 8 tests.
+  - `pnpm harness:check` - passed after edits.
+  - `pnpm lint` - passed, with non-fatal Turbo cache rename warnings.
+  - `pnpm typecheck` - passed, with non-fatal Turbo cache rename warnings.
+  - `pnpm build` - sandbox run failed on `.next` unlink `EPERM`; elevated rerun passed.
+- Known risks:
+  - Real Amazon Q Business was not called locally. The fake provider verifies prompt/repair behavior and local topology validation, but live model variability still needs product QA.
+
+# 2026-07-07 - dev latest merge into AI diagram branch
+
+- Goal: Bring the latest `origin/dev` changes into `feat/ck/152-ai-diagram-editing` before continuing Amazon Q diagram correction work.
+- Completed:
+  - Fetched `origin/dev` and merged it into the current feature branch.
+  - Resolved diagram editor conflicts by preserving AI preview/read-only patch rendering, edge/node z-index layering, reference drop target state, and connection-active node data.
+  - Removed a merge-introduced duplicate `parameterPanel` field in shared resource definitions.
+- Verification run:
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/flow-mappers.test.ts` - passed, 13 tests.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web typecheck` - passed.
+  - `pnpm harness:check` - passed.
+  - `git diff --check` - passed.
+- Known risks:
+  - Only merge-conflict-adjacent checks were run. The merged `origin/dev` payload is large and may still need full lint/typecheck/build before PR review.
+
+# 2026-07-07 - Amazon Q architecture brief and conditional follow-up questions
+
+- Goal: Improve Amazon Q diagram accuracy by turning user clarification answers into a concrete architecture brief, and by asking targeted follow-up questions when selected answers conflict or leave topology-critical choices ambiguous.
+- Completed:
+  - Added conditional follow-up questions for budget-vs-99.99% availability, global/1-second deployment scope, and realtime implementation style.
+  - Added detailed architecture-brief detection so explicit prompts with required components/flows can bypass the basic 15-question wizard and go directly to Amazon Q.
+  - Added an Amazon Q Architecture Brief section with derived intent, required components, required flows, validation checklist, and trade-off notes.
+  - Added explicit handling for unsupported Auto Scaling Group nodes by telling Amazon Q to model the ASG as multiple EC2 app targets plus coverage assumptions.
+  - Added regression tests for conditional clarification, dynamic global prompts with resolved trade-offs, and detailed architecture briefs.
+- Verification run:
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --dir apps/api exec tsx --test src/services/aiArchitectureDrafts.test.ts` - passed, 10 tests.
+  - `pnpm harness:check` - passed before and after edits.
+  - `pnpm lint` - passed, with non-fatal Turbo cache rename warnings.
+  - `pnpm typecheck` - passed, with non-fatal Turbo cache rename warnings.
+  - `pnpm build` - sandbox run failed on `.next` unlink `EPERM`; elevated rerun passed.
+  - `git diff --check` - passed, with line-ending warnings only.
+- Known risks:
+  - Real Amazon Q Business was not called locally. The fake provider verifies prompt, follow-up, and validation behavior, but live diagram quality still needs product QA with the actual Q response.
+# 2026-07-07 - Amazon Q 다이어그램 Region/AZ area와 edge handle 복구
+
+- Goal: Amazon Q 다이어그램 결과에서 `aws_region`/`aws_availability_zone`이 area container가 아니라 일반 아이콘처럼 렌더링되고, 모든 화살표가 사라지는 회귀를 수정한다.
+- Completed:
+  - `aws_region`, `aws_availability_zone`을 web diagram editor의 resource area node 판별 목록에 추가했다.
+  - Region/AZ resource area의 resize bounds를 catalog 기본 크기에 맞춰 무제한 area resize로 보정했다.
+  - React Flow edge mapper가 내보내는 `source-handle-*`, `target-handle-*` id와 실제 `DiagramNodeView` handle 렌더링을 맞췄다.
+  - 잠긴 노드나 preview 노드에서도 기존 edge 렌더링에 필요한 handle DOM은 유지하고, 새 연결 가능 여부만 `isConnectable`로 제어하게 했다.
+  - area 판별, resize bounds, edge handle mapping, node view handle 계약 회귀 테스트를 보강했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits.
+  - `corepack pnpm --dir apps/web exec tsx --test features/diagram-editor/area-nodes.test.ts features/diagram-editor/node-resize-bounds.test.ts features/diagram-editor/flow-mappers.test.ts features/diagram-editor/DiagramNodeView.test.ts` - passed, 27 tests.
+  - `corepack pnpm harness:check` - passed after edits.
+  - `corepack pnpm --filter @sketchcatch/web lint` - passed.
+  - `corepack pnpm --filter @sketchcatch/web typecheck` - passed.
+  - `corepack pnpm --filter @sketchcatch/web build` - passed.
+- Known risks:
+  - 실제 브라우저 수동 smoke는 아직 수행하지 않았다. 이번 수정은 local unit/source 계약 테스트와 Next build로 검증했다.
+
+# 2026-07-07 - 미지원 요구사항 경고 메시지 상세화
+
+- Goal: Architecture Draft가 지원하지 않는 요구사항을 대체하거나 제외할 때, 경고 메시지에 어떤 항목이 미지원이었고 어떤 방식으로 바뀌었는지 표시한다.
+- Completed:
+  - `unsupported_requirement_substituted` warning 메시지에 `미지원 항목 X -> Y로 대체` 형식을 추가했다.
+  - `unsupported_resource_omitted` warning 메시지에 `미지원 항목 X -> 현재 보드에서 제외` 형식을 추가했다.
+  - API route regression test가 EKS/Kubernetes 대체와 ElastiCache/Redis 제외 상세 문구를 검증하도록 보강했다.
+- Verification run:
+  - `corepack pnpm --dir apps/api exec tsx --test src/routes/ai.test.ts --test-name-pattern "unsupported"` - passed, 44 tests.
+  - `corepack pnpm harness:check` - passed.
+  - `corepack pnpm lint` - passed.
+  - `corepack pnpm typecheck` - passed.
+  - `corepack pnpm build` - passed.
+- Known risks:
+  - 기존 warning code와 UI 렌더링 구조는 유지했다. 이번 변경은 API warning message content 개선에 한정된다.
+
+# 2026-07-07 - Amazon Q 전체 선택지 제약 및 조건부 게이트 보강
+
+- Goal: 사용자가 선택하지 않은 파일 업로드/실시간/글로벌 범위가 Amazon Q 다이어그램에 섞이지 않도록, 전체 선택지에 대한 프롬프트 제약과 self-validation 재생성 조건을 강화한다.
+- Completed:
+  - Amazon Q Architecture Draft 지시문에 전체 선택지 enforcement matrix를 추가해 traffic/frontend/backend/region/security/upload/realtime/availability 선택별 포함/금지 규칙을 전달했다.
+  - Korea-only, no file upload, no realtime 선택을 절대 제약으로 Architecture Brief에 반영하고, 해당 선택에서는 글로벌/업로드/실시간 후속 질문이 뜨지 않게 조건부 게이트를 보강했다.
+  - Amazon Q preview가 upload/media/presigned 리소스나 WebSocket/SSE/realtime 리소스를 섞어 오면 self-validation issue로 잡아 repair prompt에 전달하게 했다.
+  - `SSE` 감지가 `assets` 같은 단어를 오탐하지 않도록 단어 경계 기반으로 좁혔다.
+  - 깨진 한글 정규식 기반 답변 감지를 안전한 키워드 헬퍼로 교체하고, 사용자에게 보이는 기본 질문/선택지와 예산-가용성 충돌 질문 문구를 정상 한글로 유지했다.
+- Verification run:
+  - `corepack pnpm --filter @sketchcatch/api typecheck` - passed.
+  - `apps/api/node_modules/.bin/tsx.CMD --test apps/api/src/services/aiArchitectureDrafts.test.ts` - passed, 12 tests.
+- Known risks:
+  - 실제 Amazon Q Business 호출은 로컬에서 실행하지 않았다. fake provider 테스트로 프롬프트 내용, 조건부 게이트, self-validation repair 동작을 검증했다.
+# 2026-07-07 - Amazon Q 선택지 게이트 후속 점검
+
+- Goal: 전체 선택지 제약 보강 후 답변 감지 로직이 과하게 넓거나 인코딩/문법이 꼬인 부분이 없는지 재점검한다.
+- Completed:
+  - `필요 없음`, `추천`, `상관없음` 같은 공통 선택 문구가 다른 질문의 답변으로 오인될 수 있는 조건을 좁혔다.
+  - `API 서버` 웹사이트 유형 선택은 유지하되, 일반 `api` 단어만으로 웹사이트 유형 답변이 처리되지 않게 했다.
+  - `aiArchitectureDrafts.ts`에 BOM 또는 replacement character가 없음을 확인했다.
+- Verification run:
+  - `corepack pnpm --filter @sketchcatch/api typecheck` - passed.
+  - `apps/api/node_modules/.bin/tsx.CMD --test apps/api/src/services/aiArchitectureDrafts.test.ts` - passed, 12 tests.
+  - `git diff --check` - passed, with line-ending warnings only.
+  - `corepack pnpm --filter @sketchcatch/api lint` - passed.
+  - `corepack pnpm harness:check` - passed.
+- Known risks:
+  - 실제 Amazon Q Business 호출은 로컬에서 실행하지 않았다.
+
+# 2026-07-07 - Amazon Q 다이어그램 리소스 간격 검증 강화
+
+- Goal: Amazon Q Architecture Draft가 S3 등 리소스를 서로 겹치거나 너무 촘촘하게 배치해 읽기 어려운 다이어그램을 만들지 않도록 self-validation과 생성 지시문을 강화한다.
+- Completed:
+  - `createAmazonQArchitectureDraftInstructions`에 비-영역 리소스 간 generous spacing 지시를 추가하고, 최소 기준으로 가로 240px 또는 세로 150px 간격을 선호하도록 명시했다.
+  - self-validation에서 일반 리소스의 아이콘/라벨 시각 경계를 계산해 겹치거나 과도하게 가까운 노드를 Amazon Q 재생성 사유로 판정하도록 했다.
+  - S3가 다른 리소스와 같은 좌표에 완전히 겹치는 회귀 케이스와 긴 라벨끼리 겹치는 회귀 케이스를 추가했다.
+  - 넓어진 간격 기준에 맞춰 정상 테스트 픽스처의 RDS 배치를 더 오른쪽으로 벌렸다.
+- Verification run:
+  - `apps/api/node_modules/.bin/tsx.CMD --test apps/api/src/services/aiArchitectureDrafts.test.ts` - passed, 17 tests
+  - `corepack pnpm --filter @sketchcatch/api lint` - passed
+  - `corepack pnpm --filter @sketchcatch/api typecheck` - passed
+  - `corepack pnpm harness:check` - passed
+  - `corepack pnpm lint` - passed, with non-fatal Turbo cache rename warnings
+  - `corepack pnpm typecheck` - passed, with non-fatal Turbo cache rename warnings
+  - `corepack pnpm build` - passed with elevated permissions after prior sandbox `.next` unlink `EPERM`
+- Known risks:
+  - 실제 Amazon Q 호출은 로컬 fake provider 단위 테스트로 검증했다. 실제 모델 응답에서는 같은 self-validation 재생성 경로가 적용된다.
+
+# 2026-07-07 - PR #214 리뷰 반영
+
+- Goal: PR #214에 남은 GitHub review thread 3건을 확인하고, 그래프 정합성/가독성/타입 안정성 피드백을 반영한다.
+- Completed:
+  - `addCrossResourceEdges`에서 `app-runtime-policy`가 존재할 때만 upload bucket 권한 edge를 추가하도록 방어했다.
+  - `aiArchitecturePatchPreview`의 중복 변수명 shadowing을 `filteredNodes`로 정리했다.
+  - `WorkspaceAiPanelPieces`의 AI signal label map을 union key와 `satisfies Record` 기반으로 바꾸고 fallback 호환은 type guard로 유지했다.
+- Verification run:
+  - `corepack pnpm --filter @sketchcatch/api lint` - passed
+  - `corepack pnpm --filter @sketchcatch/web lint` - passed
+  - `corepack pnpm --filter @sketchcatch/api typecheck` - passed
+  - `corepack pnpm --filter @sketchcatch/web typecheck` - passed
+  - `apps/api/node_modules/.bin/tsx.CMD --test apps/api/src/services/aiArchitecturePatchPreview.test.ts` - passed, 23 tests
+  - `apps/api/node_modules/.bin/tsx.CMD --test apps/api/src/routes/ai.test.ts` - passed, 44 tests
+  - `corepack pnpm lint` - passed, with non-fatal Turbo cache rename warnings
+  - `corepack pnpm typecheck` - passed, with non-fatal Turbo cache rename warnings
+  - `corepack pnpm build` - passed with elevated permissions
+- Known risks:
+  - GitHub review threads were read but not resolved/replied to because the user asked for local fixes, commit, and push only.

@@ -69,7 +69,18 @@ export function toGitCicdPipelineStatusFromRecord(
     projectId: handoff.projectId,
     status: handoff.status,
     pullRequestUrl: handoff.pullRequestUrl,
+    pullRequestNumber: handoff.pullRequestNumber,
+    mergeCommitSha: handoff.mergeCommitSha,
     pipelineRunUrl: handoff.pipelineRunUrl,
+    infraPipelineRunUrl: handoff.infraPipelineRunUrl,
+    infraPipelineStatus: handoff.infraPipelineStatus,
+    appPipelineRunUrl: handoff.appPipelineRunUrl,
+    appPipelineStatus: handoff.appPipelineStatus,
+    destroyPipelineRunUrl: handoff.destroyPipelineRunUrl,
+    destroyPipelineStatus: handoff.destroyPipelineStatus,
+    environmentName: handoff.environmentName,
+    staticSiteUrl: handoff.staticSiteUrl,
+    apiBaseUrl: handoff.apiBaseUrl,
     statusMessage: handoff.statusMessage,
     updatedAt: toIsoString(handoff.updatedAt),
     source: "rds"
@@ -90,7 +101,18 @@ function createGitCicdPipelineStatusCacheSnapshot(
     projectId: handoff.projectId,
     status: handoff.status,
     pullRequestUrl: handoff.pullRequestUrl,
+    pullRequestNumber: handoff.pullRequestNumber,
+    mergeCommitSha: handoff.mergeCommitSha,
     pipelineRunUrl: handoff.pipelineRunUrl,
+    infraPipelineRunUrl: handoff.infraPipelineRunUrl,
+    infraPipelineStatus: handoff.infraPipelineStatus,
+    appPipelineRunUrl: handoff.appPipelineRunUrl,
+    appPipelineStatus: handoff.appPipelineStatus,
+    destroyPipelineRunUrl: handoff.destroyPipelineRunUrl,
+    destroyPipelineStatus: handoff.destroyPipelineStatus,
+    environmentName: handoff.environmentName,
+    staticSiteUrl: handoff.staticSiteUrl,
+    apiBaseUrl: handoff.apiBaseUrl,
     statusMessage: handoff.statusMessage,
     updatedAt: toIsoString(handoff.updatedAt),
     cachedAt: now().toISOString()
@@ -107,7 +129,18 @@ function isGitCicdPipelineStatusCacheSnapshot(
       typeof value.projectId === "string" &&
       isGitCicdHandoffStatus(value.status) &&
       isNullableString(value.pullRequestUrl) &&
+      isNullableNumber(value.pullRequestNumber) &&
+      isNullableString(value.mergeCommitSha) &&
       isNullableString(value.pipelineRunUrl) &&
+      isNullableString(value.infraPipelineRunUrl) &&
+      isGitCicdPipelineDetailStatus(value.infraPipelineStatus) &&
+      isNullableString(value.appPipelineRunUrl) &&
+      isGitCicdPipelineDetailStatus(value.appPipelineStatus) &&
+      isNullableString(value.destroyPipelineRunUrl) &&
+      isGitCicdPipelineDetailStatus(value.destroyPipelineStatus) &&
+      typeof value.environmentName === "string" &&
+      isNullableString(value.staticSiteUrl) &&
+      isNullableString(value.apiBaseUrl) &&
       isNullableString(value.statusMessage) &&
       typeof value.updatedAt === "string" &&
       typeof value.cachedAt === "string"
@@ -127,6 +160,24 @@ function isGitCicdHandoffStatus(value: RuntimeCacheJsonValue | undefined): value
 
 function isNullableString(value: RuntimeCacheJsonValue | undefined): value is string | null {
   return value === null || typeof value === "string";
+}
+
+function isNullableNumber(value: RuntimeCacheJsonValue | undefined): value is number | null {
+  return value === null || typeof value === "number";
+}
+
+function isGitCicdPipelineDetailStatus(
+  value: RuntimeCacheJsonValue | undefined
+): boolean {
+  return (
+    value === "not_started" ||
+    value === "waiting_for_merge" ||
+    value === "waiting_for_approval" ||
+    value === "running" ||
+    value === "success" ||
+    value === "failed" ||
+    value === "cancelled"
+  );
 }
 
 function toIsoString(value: Date | string): string {

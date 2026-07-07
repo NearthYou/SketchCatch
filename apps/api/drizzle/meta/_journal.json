@@ -183,6 +183,13 @@
       "when": 1783382400000,
       "tag": "0025_demo_web_service_live_profile",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1783468800000,
+      "tag": "0026_git_cicd_infra_app_auto_deploy",
+      "breakpoints": true
     }
   ]
 }

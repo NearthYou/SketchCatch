@@ -27,7 +27,11 @@ import { SelectMenu, type SelectMenuOption } from "../../components/ui/SelectMen
 import { getApiErrorMessage } from "../../lib/api-client";
 import {
   approveDeploymentPlan,
+  applyGitCicdAwsRoleDiff,
+  applyGitCicdRepositorySettings,
+  applyGitCicdRepositorySettingsWithGitHubOAuth,
   cancelDeployment as cancelDeploymentRun,
+  createGitCicdGitHubOAuthStartUrl,
   createDeployment,
   createGitCicdHandoff,
   createGitHubExistingInstallationCallbackUrl,
@@ -227,6 +231,11 @@ export function DeploymentPanel({
     [terraformOutputs]
   );
   const apiBaseUrl = apiBaseUrlOutput ? formatOutputValue(apiBaseUrlOutput) : "";
+  const staticSiteUrlOutput = useMemo(
+    () => terraformOutputs.find((output) => output.name === "static_site_url") ?? null,
+    [terraformOutputs]
+  );
+  const staticSiteUrl = staticSiteUrlOutput ? formatOutputValue(staticSiteUrlOutput) : "";
   const deploymentActions = getDeploymentActionState(selectedDeployment, requestState);
   const canRunPlan = deploymentActions.canRunApplyPlan;
   const canApprovePlan = deploymentActions.canApprovePlan;
@@ -246,7 +255,7 @@ export function DeploymentPanel({
   const shouldAutoRefreshSelectedDeployment = shouldAutoRefreshDeployment(selectedDeployment);
   const shouldAutoRefreshSelectedGitCicdHandoff =
     shouldAutoRefreshGitCicdHandoff(selectedGitCicdHandoff);
-  const canCreateStaticSiteHandoff = Boolean(activeGitHubSourceRepository && selectedDeployment);
+  const canCreateGitCicdHandoff = Boolean(activeGitHubSourceRepository && selectedDeployment);
   const boardSnapshot = useMemo(
     () => createWorkspaceAiBoardSnapshot(diagramJson),
     [diagramJson]
@@ -598,7 +607,18 @@ export function DeploymentPanel({
                     ...handoff,
                     status: pipelineStatus.status,
                     pullRequestUrl: pipelineStatus.pullRequestUrl,
+                    pullRequestNumber: pipelineStatus.pullRequestNumber,
+                    mergeCommitSha: pipelineStatus.mergeCommitSha,
                     pipelineRunUrl: pipelineStatus.pipelineRunUrl,
+                    infraPipelineRunUrl: pipelineStatus.infraPipelineRunUrl,
+                    infraPipelineStatus: pipelineStatus.infraPipelineStatus,
+                    appPipelineRunUrl: pipelineStatus.appPipelineRunUrl,
+                    appPipelineStatus: pipelineStatus.appPipelineStatus,
+                    destroyPipelineRunUrl: pipelineStatus.destroyPipelineRunUrl,
+                    destroyPipelineStatus: pipelineStatus.destroyPipelineStatus,
+                    environmentName: pipelineStatus.environmentName,
+                    staticSiteUrl: pipelineStatus.staticSiteUrl,
+                    apiBaseUrl: pipelineStatus.apiBaseUrl,
                     statusMessage: pipelineStatus.statusMessage,
                     updatedAt: pipelineStatus.updatedAt
                   }
@@ -931,7 +951,7 @@ export function DeploymentPanel({
     }, "GitHub 연결을 시작하지 못했습니다.");
   }
 
-  async function createStaticSiteHandoff(): Promise<void> {
+  async function createGitCicdAutoDeployHandoff(): Promise<void> {
     if (!activeGitHubSourceRepository || !selectedDeployment) {
       return;
     }
@@ -941,12 +961,20 @@ export function DeploymentPanel({
         projectId,
         architectureId: selectedDeployment.architectureId,
         terraformArtifactId: selectedDeployment.terraformArtifactId,
-        handoffKind: "static_site",
+        handoffKind: "terraform_iac",
+        deploymentMode: "infra_and_app",
+        sourceDeploymentId: selectedDeployment.id,
         sourceRepositoryId: activeGitHubSourceRepository.id,
+        environmentName: "sketchcatch-production",
+        rdsEnabled: false,
+        awsRegion: selectedDeployment.approvedAwsRegion ?? "ap-northeast-2",
+        staticSiteUrl: staticSiteUrl && staticSiteUrl !== "[sensitive]" ? staticSiteUrl : null,
+        apiBaseUrl: apiBaseUrl && apiBaseUrl !== "[sensitive]" ? apiBaseUrl : null,
+        approveAwsRoleDiff: true,
         planSummary: selectedDeployment.planSummary ?? undefined,
-        pullRequestTitle: "SketchCatch static site update",
-        commitMessage: "Update SketchCatch static site artifact",
-        userAcceptedChangeId: `static-site-${selectedDeployment.id}`
+        pullRequestTitle: "SketchCatch Git/CI/CD auto deploy",
+        commitMessage: "Add SketchCatch Git/CI/CD auto deploy artifacts",
+        userAcceptedChangeId: `git-cicd-auto-deploy-${selectedDeployment.id}`
       });
       const snapshot = await loadDeploymentPanelSnapshot();
 
@@ -958,7 +986,29 @@ export function DeploymentPanel({
         ]
       });
       setSelectedGitCicdHandoffId(handoff.id);
-    }, "Static site Git/CI/CD handoff를 만들지 못했습니다.");
+    }, "Git/CI/CD 자동 배포 handoff를 만들지 못했습니다.");
+  }
+
+  async function applySelectedRepositorySettings(): Promise<void> {
+    if (!selectedGitCicdHandoff) {
+      return;
+    }
+
+    await runRequest(async () => {
+      await applyGitCicdRepositorySettings(selectedGitCicdHandoff.id);
+      applyDeploymentPanelSnapshot(await loadDeploymentPanelSnapshot());
+    }, "GitHub repository settings를 적용하지 못했습니다.");
+  }
+
+  async function applySelectedAwsRoleDiff(): Promise<void> {
+    if (!selectedGitCicdHandoff) {
+      return;
+    }
+
+    await runRequest(async () => {
+      await applyGitCicdAwsRoleDiff(selectedGitCicdHandoff.id);
+      applyDeploymentPanelSnapshot(await loadDeploymentPanelSnapshot());
+    }, "AWS role diff를 적용하지 못했습니다.");
   }
 
   async function startNewGitHubInstallation(): Promise<void> {
@@ -967,6 +1017,31 @@ export function DeploymentPanel({
 
       window.location.assign(installUrl);
     }, "GitHub 설치를 시작하지 못했습니다.");
+  }
+
+  async function startGitHubOAuthForRepositorySettings(): Promise<void> {
+    if (!selectedGitCicdHandoff) {
+      return;
+    }
+
+    await runRequest(async () => {
+      const { authorizationUrl } = await createGitCicdGitHubOAuthStartUrl(
+        selectedGitCicdHandoff.id
+      );
+
+      window.location.assign(authorizationUrl);
+    }, "GitHub OAuth 승인을 시작하지 못했습니다.");
+  }
+
+  async function applyRepositorySettingsWithGitHubOAuth(): Promise<void> {
+    if (!selectedGitCicdHandoff) {
+      return;
+    }
+
+    await runRequest(async () => {
+      await applyGitCicdRepositorySettingsWithGitHubOAuth(selectedGitCicdHandoff.id);
+      applyDeploymentPanelSnapshot(await loadDeploymentPanelSnapshot());
+    }, "GitHub OAuth repository settings 적용에 실패했습니다.");
   }
 
   function startDeploymentPanelResize(event: ReactPointerEvent<HTMLDivElement>): void {
@@ -1166,12 +1241,12 @@ export function DeploymentPanel({
           ) : null}
           <button
             className={styles.deploymentSecondaryButton}
-            disabled={!canCreateStaticSiteHandoff || requestState === "loading"}
-            onClick={createStaticSiteHandoff}
+            disabled={!canCreateGitCicdHandoff || requestState === "loading"}
+            onClick={createGitCicdAutoDeployHandoff}
             type="button"
           >
             <GitBranch size={16} />
-            Static site PR
+            Git/CI/CD handoff 생성
           </button>
         </div>
       </div>
@@ -1218,34 +1293,162 @@ export function DeploymentPanel({
           </div>
 
           {selectedGitCicdHandoff ? (
-            <div className={styles.deploymentSummary}>
-              <InfoRow label="Path" value="Git/CI/CD handoff" />
-              <InfoRow
-                label="Status"
-                value={getGitCicdHandoffStatusLabel(selectedGitCicdHandoff)}
-              />
-              <InfoRow label="Kind" value={selectedGitCicdHandoff.handoffKind} />
-              <InfoRow
-                label="Repository"
-                value={`${selectedGitCicdHandoff.repositoryOwner}/${selectedGitCicdHandoff.repositoryName}`}
-              />
-              <OptionalInfoRow label="Target branch" value={selectedGitCicdHandoff.targetBranch} />
-              <OptionalInfoRow label="Source branch" value={selectedGitCicdHandoff.sourceBranch} />
-              <OptionalInfoRow label="PR URL" value={selectedGitCicdHandoff.pullRequestUrl} />
-              <OptionalInfoRow
-                label="Pipeline URL"
-                value={selectedGitCicdHandoff.pipelineRunUrl}
-              />
-              <OptionalInfoRow
-                label="Pipeline message"
-                value={selectedGitCicdHandoff.statusMessage}
-              />
-              <InfoRow label="Updated" value={formatDate(selectedGitCicdHandoff.updatedAt)} />
-              <OptionalInfoRow
-                label="Status source"
-                value={gitCicdPipelineStatusSource ?? "rds"}
-              />
-            </div>
+            <>
+              <div className={styles.deploymentHeaderActions}>
+                <button
+                  className={styles.deploymentSecondaryButton}
+                  disabled={
+                    requestState === "loading" ||
+                    !selectedGitCicdHandoff.repositorySettingsPreview
+                  }
+                  onClick={() => void applySelectedRepositorySettings()}
+                  type="button"
+                >
+                  <GitBranch size={16} />
+                  Repo settings 적용
+                </button>
+                <button
+                  className={styles.deploymentSecondaryButton}
+                  disabled={
+                    requestState === "loading" ||
+                    !selectedGitCicdHandoff.awsRoleDiff?.approved ||
+                    selectedGitCicdHandoff.awsRoleDiff.applied === true
+                  }
+                  onClick={() => void applySelectedAwsRoleDiff()}
+                  type="button"
+                >
+                  <ShieldCheck size={16} />
+                  AWS role diff 적용
+                </button>
+              </div>
+              {selectedGitCicdHandoff.githubOAuthRequired ? (
+                <div className={styles.deploymentNotice}>
+                  GitHub workflow 또는 repository settings 권한 보강이 필요합니다.
+                  <button
+                    className={styles.deploymentSecondaryButton}
+                    disabled={requestState === "loading"}
+                    onClick={() => void startNewGitHubInstallation()}
+                    type="button"
+                  >
+                    <GitBranch size={16} />
+                    GitHub App 권한 보강
+                  </button>
+                  <button
+                    className={styles.deploymentSecondaryButton}
+                    disabled={requestState === "loading"}
+                    onClick={() => void startGitHubOAuthForRepositorySettings()}
+                    type="button"
+                  >
+                    <GitBranch size={16} />
+                    GitHub OAuth 승인
+                  </button>
+                  <button
+                    className={styles.deploymentSecondaryButton}
+                    disabled={requestState === "loading"}
+                    onClick={() => void applyRepositorySettingsWithGitHubOAuth()}
+                    type="button"
+                  >
+                    <ShieldCheck size={16} />
+                    OAuth 설정 적용
+                  </button>
+                </div>
+              ) : null}
+              <div className={styles.deploymentSummary}>
+                <InfoRow label="Path" value="Git/CI/CD handoff" />
+                <InfoRow
+                  label="Status"
+                  value={getGitCicdHandoffStatusLabel(selectedGitCicdHandoff)}
+                />
+                <InfoRow label="Kind" value={selectedGitCicdHandoff.handoffKind} />
+                <InfoRow label="Mode" value={selectedGitCicdHandoff.deploymentMode} />
+                <InfoRow
+                  label="Environment"
+                  value={selectedGitCicdHandoff.environmentName}
+                />
+                <InfoRow
+                  label="Approval"
+                  value={
+                    selectedGitCicdHandoff.requiresEnvironmentApproval
+                      ? "GitHub Environment approval required"
+                      : "No environment approval"
+                  }
+                />
+                <InfoRow
+                  label="GitHub 권한"
+                  value={
+                    selectedGitCicdHandoff.githubOAuthRequired
+                      ? "Workflow/settings permission required"
+                      : "Ready"
+                  }
+                />
+                <InfoRow
+                  label="Repository"
+                  value={`${selectedGitCicdHandoff.repositoryOwner}/${selectedGitCicdHandoff.repositoryName}`}
+                />
+                <OptionalInfoRow label="Target branch" value={selectedGitCicdHandoff.targetBranch} />
+                <OptionalInfoRow label="Source branch" value={selectedGitCicdHandoff.sourceBranch} />
+                <OptionalInfoRow label="PR URL" value={selectedGitCicdHandoff.pullRequestUrl} />
+                <OptionalInfoRow
+                  label="PR number"
+                  value={
+                    selectedGitCicdHandoff.pullRequestNumber
+                      ? `#${selectedGitCicdHandoff.pullRequestNumber}`
+                      : null
+                  }
+                />
+                <OptionalInfoRow
+                  label="Merge commit"
+                  value={selectedGitCicdHandoff.mergeCommitSha}
+                />
+                <OptionalInfoRow
+                  label="Pipeline URL"
+                  value={selectedGitCicdHandoff.pipelineRunUrl}
+                />
+                <OptionalInfoRow
+                  label={`Infra workflow (${selectedGitCicdHandoff.infraPipelineStatus})`}
+                  value={selectedGitCicdHandoff.infraPipelineRunUrl}
+                />
+                <OptionalInfoRow
+                  label={`App workflow (${selectedGitCicdHandoff.appPipelineStatus})`}
+                  value={selectedGitCicdHandoff.appPipelineRunUrl}
+                />
+                <OptionalInfoRow
+                  label={`Destroy workflow (${selectedGitCicdHandoff.destroyPipelineStatus})`}
+                  value={selectedGitCicdHandoff.destroyPipelineRunUrl}
+                />
+                <OptionalInfoRow label="Static site URL" value={selectedGitCicdHandoff.staticSiteUrl} />
+                <OptionalInfoRow label="API URL" value={selectedGitCicdHandoff.apiBaseUrl} />
+                <OptionalInfoRow
+                  label="Repo settings"
+                  value={
+                    selectedGitCicdHandoff.repositorySettingsPreview
+                      ? `${Object.keys(selectedGitCicdHandoff.repositorySettingsPreview.variables).length} variables, ${selectedGitCicdHandoff.repositorySettingsPreview.workflowFiles.length} workflows`
+                      : null
+                  }
+                />
+                <OptionalInfoRow
+                  label="AWS role diff"
+                  value={
+                    selectedGitCicdHandoff.awsRoleDiff
+                      ? selectedGitCicdHandoff.awsRoleDiff.applied
+                        ? "applied and verified"
+                        : selectedGitCicdHandoff.awsRoleDiff.approved
+                          ? "approved"
+                          : "approval required"
+                      : null
+                  }
+                />
+                <OptionalInfoRow
+                  label="Pipeline message"
+                  value={selectedGitCicdHandoff.statusMessage}
+                />
+                <InfoRow label="Updated" value={formatDate(selectedGitCicdHandoff.updatedAt)} />
+                <OptionalInfoRow
+                  label="Status source"
+                  value={gitCicdPipelineStatusSource ?? "rds"}
+                />
+              </div>
+            </>
           ) : null}
         </>
       ) : (

@@ -32,10 +32,13 @@ test("isAreaNode excludes regular design and resource nodes", () => {
 
 test("area node helpers distinguish design containers from resource containers", () => {
   const region = makeDesignNode({ type: "design_region" });
+  const awsRegion = makeResourceNode({ resourceType: "aws_region" });
   const vpc = makeResourceNode({ resourceType: "aws_vpc" });
 
   assert.equal(isDesignAreaNode(region), true);
   assert.equal(isResourceAreaNode(region), false);
+  assert.equal(isDesignAreaNode(awsRegion), false);
+  assert.equal(isResourceAreaNode(awsRegion), true);
   assert.equal(isDesignAreaNode(vpc), false);
   assert.equal(isResourceAreaNode(vpc), true);
 });

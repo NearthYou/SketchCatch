@@ -3,10 +3,15 @@ import assert from "node:assert/strict";
 import {
   approveDeploymentPlan,
   abortProjectAssetUpload,
+  applyGitCicdAwsRoleDiff,
+  applyGitCicdRepositorySettings,
+  applyGitCicdRepositorySettingsWithGitHubOAuth,
   confirmProjectAssetUpload,
+  createAiArchitecturePatchPreview,
   createArchitectureSnapshot,
   createAwsConnectionSetup,
   createDeployment,
+  createGitCicdGitHubOAuthStartUrl,
   createProjectAssetUpload,
   cancelReverseEngineeringScan,
   createReverseEngineeringPreviewScan,
@@ -234,6 +239,86 @@ test("createArchitectureSnapshot posts converted architecture json", async (cont
     architectureJson: { nodes: [], edges: [] }
   });
   assert.equal(architecture.id, "55555555-5555-4555-8555-555555555555");
+});
+
+test("createAiArchitecturePatchPreview posts natural language edit requests to the public AI patch endpoint", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  globalThis.fetch = async (input, init) => {
+    requests.push({ input, init });
+
+    return new Response(
+      JSON.stringify({
+        status: "preview",
+        intent: {
+          instruction: "delete bucket",
+          requestedAction: "remove_resource",
+          resourceType: "S3",
+          targetResourceId: "assets-bucket"
+        },
+        baseArchitectureJson: {
+          nodes: [],
+          edges: []
+        },
+        proposedArchitectureJson: {
+          nodes: [],
+          edges: []
+        },
+        changes: [],
+        requiresUserAcceptance: true,
+        userAcceptedChange: null,
+        providerMetadata: {
+          provider: "fallback",
+          service: "rule_fallback",
+          routeTarget: "architecture_patch_preview",
+          cacheHit: false,
+          cacheKey: "test",
+          estimatedUsage: {
+            inputCharacters: 1,
+            inputTokensEstimate: 1
+          },
+          billingMode: "disabled",
+          generatedAt: new Date(0).toISOString()
+        }
+      }),
+      {
+        headers: {
+          "Content-Type": "application/json"
+        },
+        status: 200
+      }
+    );
+  };
+
+  const response = await createAiArchitecturePatchPreview({
+    architectureJson: {
+      nodes: [],
+      edges: []
+    },
+    instruction: "delete bucket",
+    selectedTargetResourceId: "assets-bucket",
+    connectionTargetResourceId: "app-server",
+    skipConnection: true
+  });
+
+  assert.equal(String(requests[0]?.input), "/api/ai/architecture-patch-preview");
+  assert.equal(requests[0]?.init?.method, "POST");
+  assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), {
+    architectureJson: {
+      nodes: [],
+      edges: []
+    },
+    instruction: "delete bucket",
+    selectedTargetResourceId: "assets-bucket",
+    connectionTargetResourceId: "app-server",
+    skipConnection: true
+  });
+  assert.equal(response.status, "preview");
 });
 
 test("createProjectAssetUpload requests terraform file presigned upload metadata", async (context) => {
@@ -1482,11 +1567,94 @@ test("Git/CI/CD handoff helpers list handoffs and read pipeline status", async (
             projectId: project.id,
             status: "pipeline_running",
             pullRequestUrl: "https://github.com/sketchcatch/infra-live/pull/42",
+            pullRequestNumber: 42,
+            mergeCommitSha: "merge1234",
             pipelineRunUrl: "https://github.com/sketchcatch/infra-live/actions/runs/1",
+            infraPipelineRunUrl: "https://github.com/sketchcatch/infra-live/actions/runs/1",
+            infraPipelineStatus: "running",
+            appPipelineRunUrl: null,
+            appPipelineStatus: "not_started",
+            destroyPipelineRunUrl: null,
+            destroyPipelineStatus: "not_started",
+            environmentName: "sketchcatch-production",
+            staticSiteUrl: null,
+            apiBaseUrl: null,
             statusMessage: "Pipeline is running",
             updatedAt: "2026-06-26T00:00:00.000Z",
             source: "runtime_cache"
           }
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json"
+          },
+          status: 200
+        }
+      );
+    }
+
+    if (String(input).endsWith("/repository-settings/apply")) {
+      return new Response(
+        JSON.stringify({
+          applied: true,
+          environmentName: "sketchcatch-production",
+          variables: ["SKETCHCATCH_AWS_REGION"],
+          secrets: [],
+          workflowFiles: [".github/workflows/sketchcatch-app.yml"],
+          githubOAuthRequired: false
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json"
+          },
+          status: 200
+        }
+      );
+    }
+
+    if (String(input).endsWith("/github-oauth/start")) {
+      return new Response(
+        JSON.stringify({
+          authorizationUrl: "https://github.com/login/oauth/authorize?state=state-token",
+          expiresAt: "2026-01-01T00:10:00.000Z"
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json"
+          },
+          status: 201
+        }
+      );
+    }
+
+    if (String(input).endsWith("/repository-settings/apply-with-github-oauth")) {
+      return new Response(
+        JSON.stringify({
+          applied: true,
+          environmentName: "sketchcatch-production",
+          variables: ["SKETCHCATCH_AWS_REGION"],
+          secrets: [],
+          workflowFiles: [".github/workflows/sketchcatch-app.yml"],
+          githubOAuthRequired: false
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json"
+          },
+          status: 200
+        }
+      );
+    }
+
+    if (String(input).endsWith("/aws-role-diff/apply")) {
+      return new Response(
+        JSON.stringify({
+          applied: true,
+          roleArn: "arn:aws:iam::123456789012:role/SketchCatchGitHubDeployRole",
+          repository: "sketchcatch/infra-live",
+          environmentName: "sketchcatch-production",
+          appliedAt: "2026-01-01T00:00:00.000Z",
+          verified: true
         }),
         {
           headers: {
@@ -1519,16 +1687,48 @@ test("Git/CI/CD handoff helpers list handoffs and read pipeline status", async (
   const pipelineStatus = await getGitCicdHandoffPipelineStatus(
     "44444444-4444-4444-8444-444444444444"
   );
+  const settingsApply = await applyGitCicdRepositorySettings(
+    "44444444-4444-4444-8444-444444444444"
+  );
+  const oauthStart = await createGitCicdGitHubOAuthStartUrl(
+    "44444444-4444-4444-8444-444444444444"
+  );
+  const oauthSettingsApply = await applyGitCicdRepositorySettingsWithGitHubOAuth(
+    "44444444-4444-4444-8444-444444444444"
+  );
+  const roleApply = await applyGitCicdAwsRoleDiff(
+    "44444444-4444-4444-8444-444444444444"
+  );
 
   assert.equal(String(requests[0]?.input), `/api/projects/${project.id}/git-cicd-handoffs`);
   assert.equal(
     String(requests[1]?.input),
     "/api/git-cicd-handoffs/44444444-4444-4444-8444-444444444444/pipeline-status"
   );
+  assert.equal(
+    String(requests[2]?.input),
+    "/api/git-cicd-handoffs/44444444-4444-4444-8444-444444444444/repository-settings/apply"
+  );
+  assert.equal(
+    String(requests[3]?.input),
+    "/api/git-cicd-handoffs/44444444-4444-4444-8444-444444444444/github-oauth/start"
+  );
+  assert.equal(
+    String(requests[4]?.input),
+    "/api/git-cicd-handoffs/44444444-4444-4444-8444-444444444444/repository-settings/apply-with-github-oauth"
+  );
+  assert.equal(
+    String(requests[5]?.input),
+    "/api/git-cicd-handoffs/44444444-4444-4444-8444-444444444444/aws-role-diff/apply"
+  );
   assert.equal(new Headers(requests[0]?.init?.headers).get("authorization"), "Bearer access-token");
   assert.equal(handoffs[0]?.repositoryProvider, "github");
   assert.equal(pipelineStatus.status, "pipeline_running");
   assert.equal(pipelineStatus.source, "runtime_cache");
+  assert.equal(settingsApply.githubOAuthRequired, false);
+  assert.match(oauthStart.authorizationUrl, /^https:\/\/github\.com\/login\/oauth\/authorize/);
+  assert.equal(oauthSettingsApply.githubOAuthRequired, false);
+  assert.equal(roleApply.verified, true);
 });
 
 function createDeploymentPayload(input: {
@@ -1597,6 +1797,10 @@ function createGitCicdHandoffPayload(input: { id: string; projectId: string }) {
     projectId: input.projectId,
     architectureId: "55555555-5555-4555-8555-555555555555",
     terraformArtifactId: "66666666-6666-4666-8666-666666666666",
+    handoffKind: "terraform_iac",
+    sourceDeploymentId: null,
+    deploymentMode: "infra_and_app",
+    requiresEnvironmentApproval: true,
     sourceRepositoryId: "repo-1",
     repositoryProvider: "github",
     repositoryOwner: "sketchcatch",
@@ -1606,7 +1810,22 @@ function createGitCicdHandoffPayload(input: { id: string; projectId: string }) {
     commitMessage: "Add SketchCatch Terraform preview",
     pullRequestTitle: "SketchCatch IaC preview",
     pullRequestUrl: "https://github.com/sketchcatch/infra-live/pull/42",
+    pullRequestNumber: 42,
+    pullRequestHeadSha: "abc1234",
+    mergeCommitSha: null,
+    environmentName: "sketchcatch-production",
     pipelineRunUrl: null,
+    infraPipelineRunUrl: null,
+    infraPipelineStatus: "waiting_for_merge",
+    appPipelineRunUrl: null,
+    appPipelineStatus: "not_started",
+    destroyPipelineRunUrl: null,
+    destroyPipelineStatus: "not_started",
+    staticSiteUrl: null,
+    apiBaseUrl: null,
+    repositorySettingsPreview: null,
+    awsRoleDiff: null,
+    githubOAuthRequired: true,
     status: "pr_created",
     statusMessage: "GitHub PR created",
     userAcceptedChangeId: "accepted-change-1",

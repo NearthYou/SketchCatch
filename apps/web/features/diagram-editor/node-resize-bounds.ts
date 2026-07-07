@@ -50,6 +50,16 @@ const designAreaResizeBoundsByType: Record<string, NodeResizeBounds> = Object.fr
 );
 
 const resourceAreaResizeBoundsByType: Record<string, NodeResizeBounds> = {
+  aws_region: {
+    ...areaNodeMaxResizeBounds,
+    minHeight: 180,
+    minWidth: 260
+  },
+  aws_availability_zone: {
+    ...areaNodeMaxResizeBounds,
+    minHeight: 150,
+    minWidth: 220
+  },
   aws_vpc: {
     ...areaNodeMaxResizeBounds,
     minHeight: 160,

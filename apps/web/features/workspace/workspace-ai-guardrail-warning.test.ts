@@ -16,10 +16,8 @@ test("workspace AI chat asks follow-up questions instead of showing fixable guar
   assert.match(workspaceAiChatDockSource, /draftFollowUpSession/);
   assert.match(workspaceAiChatDockSource, /planArchitectureDraftPreview/);
   assert.match(workspaceAiChatDockSource, /resolveArchitectureDraftFollowUpAnswer/);
-  assert.match(workspaceAiChatDockSource, /createQuestionFromDraftError/);
   assert.match(workspaceAiDraftFollowUpSource, /ask_follow_up/);
   assert.match(workspaceAiChatDockSource, /질문/);
-  assert.match(workspaceAiChatDockSource, /명확한 아키텍처 단서/);
   assert.match(workspaceAiDraftFollowUpSource, /unsupported_resource_omitted/);
   assert.match(workspaceAiDraftFollowUpSource, /unsupported_requirement_substituted/);
   assert.doesNotMatch(workspaceAiChatDockSource, /WorkspaceAiGuardrailWarnings/);
@@ -55,18 +53,11 @@ test("workspace AI chat does not expose auxiliary draft selectors", () => {
   assert.doesNotMatch(appWorkspaceOptionsSource, /scenarioOptions/);
 });
 
-test("workspace AI prompt guide uses beginner-friendly examples", () => {
-  assert.match(workspaceAiChatDockSource, /프롬프트 작성 가이드/);
-  assert.match(workspaceAiChatDockSource, /그냥 이렇게 시작해도 돼요/);
-  assert.doesNotMatch(workspaceAiChatDockSource, /정보가 부족하면 질문부터 할게요/);
-  assert.doesNotMatch(workspaceAiChatDockSource, /더 정확히/);
-  assert.doesNotMatch(workspaceAiChatDockSource, /DEFAULT_REQUIREMENT_PROMPT/);
-  assert.doesNotMatch(workspaceAiChatDockSource, /<span>메시지<\/span>/);
-  assert.match(workspaceAiPanelOptionsSource, /웹사이트 하나 배포하고 싶어/);
-  assert.match(workspaceAiPanelOptionsSource, /파일 업로드 페이지가 필요해/);
-  assert.match(workspaceAiPanelOptionsSource, /로그인 있는 작은 웹서비스가 필요해/);
-  assert.match(stylesSource, /\.aiPromptGuide\s*{/);
-  assert.match(stylesSource, /\.aiPromptChip\s*{/);
+test("workspace AI chat does not expose beginner prompt guide chips", () => {
+  assert.doesNotMatch(workspaceAiChatDockSource, /프롬프트 작성 가이드/);
+  assert.doesNotMatch(workspaceAiChatDockSource, /그냥 이렇게 시작해도 돼요/);
+  assert.doesNotMatch(workspaceAiChatDockSource, /promptGuideExamples/);
+  assert.doesNotMatch(workspaceAiPanelOptionsSource, /promptGuideExamples/);
 });
 
 test("workspace AI chat history is persisted per project", () => {
@@ -91,6 +82,14 @@ test("workspace AI chat storage skips project changes until matching messages ar
   );
 });
 
+test("workspace AI chat scrolls to the latest message when the dock opens", () => {
+  assert.match(workspaceAiChatDockSource, /lastVisibleMessageId/);
+  assert.match(workspaceAiChatDockSource, /scrollChatTranscriptToBottom/);
+  assert.match(workspaceAiChatDockSource, /window\.requestAnimationFrame/);
+  assert.match(workspaceAiChatDockSource, /isOpen/);
+  assert.match(workspaceAiChatDockSource, /top:\s*transcript\.scrollHeight/);
+});
+
 test("workspace AI clarification supports multi-select suggestion chips", () => {
   assert.match(workspaceAiChatDockSource, /selectedSuggestionLabelsByMessageId/);
   assert.match(workspaceAiChatDockSource, /toggleSuggestionSelection/);
@@ -99,6 +98,13 @@ test("workspace AI clarification supports multi-select suggestion chips", () => 
   assert.match(workspaceAiChatDockSource, /선택 완료/);
   assert.match(stylesSource, /\.aiChatSuggestionButtonSelected\s*{/);
   assert.match(stylesSource, /\.aiChatSelectionSubmitButton\s*{/);
+});
+
+test("workspace AI patch clarification can decline optional resource additions", () => {
+  assert.match(workspaceAiChatDockSource, /NO_RESOURCE_ADDITION_SUGGESTION/);
+  assert.match(workspaceAiChatDockSource, /isNoResourceAdditionSuggestion/);
+  assert.match(workspaceAiChatDockSource, /NO_RESOURCE_ADDITION_MESSAGE/);
+  assert.match(workspaceAiChatDockSource, /setPatchPreviewModel\(null\)/);
 });
 
 function readWorkspaceFile(fileName: string): string {

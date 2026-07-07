@@ -101,7 +101,7 @@ export function WorkspaceAiTerraformPanel() {
           title="Terraform Preview 설명"
         />
         <label className={styles.aiField}>
-          <span>Terraform Code</span>
+          <span>Terraform 코드</span>
           <textarea
             onChange={(event) => setTerraformCode(event.target.value)}
             rows={7}
@@ -112,7 +112,7 @@ export function WorkspaceAiTerraformPanel() {
         {terraformPreview !== null ? (
           <WorkspaceAiTerraformPreviewResult preview={terraformPreview} />
         ) : (
-          <p className={styles.aiHint}>Terraform 코드를 붙여 넣으면 감지된 Resource와 위험을 설명합니다.</p>
+          <p className={styles.aiHint}>Terraform 코드를 붙여 넣으면 감지된 리소스와 위험을 설명합니다.</p>
         )}
       </section>
 
@@ -124,13 +124,13 @@ export function WorkspaceAiTerraformPanel() {
           title="Terraform 오류 설명"
         />
         <WorkspaceAiSelect
-          label="stage"
+          label="단계"
           onChange={setTerraformErrorStage}
           options={terraformStageOptions}
           value={terraformErrorStage}
         />
         <label className={styles.aiField}>
-          <span>rawMessage</span>
+          <span>오류 메시지 원문</span>
           <textarea
             onChange={(event) => setTerraformErrorMessage(event.target.value)}
             rows={4}
@@ -138,7 +138,7 @@ export function WorkspaceAiTerraformPanel() {
           />
         </label>
         <label className={styles.aiField}>
-          <span>relatedResourceId</span>
+          <span>관련 리소스 ID</span>
           <input
             onChange={(event) => setTerraformErrorResourceId(event.target.value)}
             placeholder="ec2-backend"

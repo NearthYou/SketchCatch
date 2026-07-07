@@ -444,6 +444,7 @@ export function ProjectWorkspaceDraftManager({
         )}
         initialDiagram={initialDiagram}
         onDiagramChange={handleDiagramChange}
+        onDiagramSaveRequest={() => flushDraftToServer("manual")}
         projectName={projectName}
         rightPanel={(context) => (
           <WorkspaceRightPanel

@@ -16,7 +16,11 @@ import type {
   DeploymentLiveProfile,
   DeploymentPlanSummary,
   DiagramJson,
+  GitCicdAwsRoleDiff,
+  GitCicdDeploymentMode,
   GitCicdHandoffKind,
+  GitCicdPipelineDetailStatus,
+  GitCicdRepositorySettingsPreview,
   ReverseEngineeringResourceSelection,
   ReverseEngineeringScanResult
 } from "@sketchcatch/types";
@@ -498,6 +502,12 @@ export const gitCicdHandoffs = pgTable(
       .$type<GitCicdHandoffKind>()
       .notNull()
       .default("terraform_iac"),
+    sourceDeploymentId: varchar("source_deployment_id", { length: 36 }),
+    deploymentMode: varchar("deployment_mode", { length: 32 })
+      .$type<GitCicdDeploymentMode>()
+      .notNull()
+      .default("infra_and_app"),
+    requiresEnvironmentApproval: boolean("requires_environment_approval").notNull().default(true),
     sourceRepositoryId: varchar("source_repository_id", { length: 128 }).notNull(),
     repositoryProvider: gitCicdRepositoryProviderEnum("repository_provider")
       .notNull()
@@ -509,8 +519,34 @@ export const gitCicdHandoffs = pgTable(
     commitMessage: text("commit_message"),
     pullRequestTitle: text("pull_request_title"),
     pullRequestUrl: text("pull_request_url"),
+    pullRequestNumber: integer("pull_request_number"),
     pullRequestHeadSha: varchar("pull_request_head_sha", { length: 64 }),
+    mergeCommitSha: varchar("merge_commit_sha", { length: 64 }),
+    environmentName: varchar("environment_name", { length: 128 })
+      .notNull()
+      .default("sketchcatch-production"),
     pipelineRunUrl: text("pipeline_run_url"),
+    infraPipelineRunUrl: text("infra_pipeline_run_url"),
+    infraPipelineStatus: varchar("infra_pipeline_status", { length: 32 })
+      .$type<GitCicdPipelineDetailStatus>()
+      .notNull()
+      .default("waiting_for_merge"),
+    appPipelineRunUrl: text("app_pipeline_run_url"),
+    appPipelineStatus: varchar("app_pipeline_status", { length: 32 })
+      .$type<GitCicdPipelineDetailStatus>()
+      .notNull()
+      .default("not_started"),
+    destroyPipelineRunUrl: text("destroy_pipeline_run_url"),
+    destroyPipelineStatus: varchar("destroy_pipeline_status", { length: 32 })
+      .$type<GitCicdPipelineDetailStatus>()
+      .notNull()
+      .default("not_started"),
+    staticSiteUrl: text("static_site_url"),
+    apiBaseUrl: text("api_base_url"),
+    repositorySettingsPreview:
+      jsonb("repository_settings_preview").$type<GitCicdRepositorySettingsPreview>(),
+    awsRoleDiff: jsonb("aws_role_diff").$type<GitCicdAwsRoleDiff>(),
+    githubOAuthRequired: boolean("github_oauth_required").notNull().default(true),
     status: gitCicdHandoffStatusEnum("status").notNull().default("draft"),
     statusMessage: text("status_message"),
     userAcceptedChangeId: varchar("user_accepted_change_id", { length: 128 }).notNull(),

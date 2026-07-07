@@ -24,6 +24,16 @@ test("getNodeResizeBounds removes area node max limits while keeping minimum siz
     minHeight: 72,
     ...unrestrictedMax
   });
+  assert.deepEqual(getNodeResizeBounds(makeResourceNode("aws_region")), {
+    minWidth: 260,
+    minHeight: 180,
+    ...unrestrictedMax
+  });
+  assert.deepEqual(getNodeResizeBounds(makeResourceNode("aws_availability_zone")), {
+    minWidth: 220,
+    minHeight: 150,
+    ...unrestrictedMax
+  });
   assert.deepEqual(getNodeResizeBounds(makeResourceNode("aws_vpc")), {
     minWidth: 240,
     minHeight: 160,
