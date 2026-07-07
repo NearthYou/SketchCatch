@@ -288,6 +288,24 @@ Known risks:
 - Full web source-test sweep still has 3 unrelated baseline failures in reverse workspace, workspace auth gate, and legacy AI route assertions.
 - Browser click QA against production has not been run yet in this worktree.
 
+### 2026-07-08 - Local Deploy button console visibility fix
+
+- Goal: Fix the local right-panel `Deploy` action not visibly opening the deployment console.
+- Completed:
+  - Made `DeploymentPanel` render the expanded deployment overlay whenever it is hosted in `fullScreenOnly` mode.
+  - Removed the obsolete right-panel `panelPlan*` CSS block whose missing closing brace was swallowing later rules.
+  - Updated workspace right-panel layout source coverage for the full-screen deployment overlay condition.
+- Verification:
+  - `pnpm harness:check` - passed before edits.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-right-panel-layout.test.ts` - passed, 63 tests.
+  - `pnpm --filter @sketchcatch/web typecheck` - passed.
+  - `pnpm --filter @sketchcatch/web lint` - passed.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `pnpm build` - passed.
+- Known risks:
+  - Browser click QA reached only the unauthenticated landing page locally; the authenticated Deploy click itself still needs user-session confirmation.
+
 - Updated local `dev` to `838a3e94` and merged it into `fix/ck/245-terraform-error`.
 - Resolved the only manual conflict in this progress log, preserving both branch records.
 

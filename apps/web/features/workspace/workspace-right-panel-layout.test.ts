@@ -51,6 +51,8 @@ test("deploy opens a full-screen console instead of rendering deployment inside 
   assert.match(componentSource, /setIsDeploymentConsoleOpen\(true\);/);
   assert.match(pendingDeploymentConsoleBranch, /setIsDeploymentConsoleOpen\(true\);/);
   assert.doesNotMatch(pendingDeploymentConsoleBranch, /context\.setRightPanelOpen\(false\);/);
+  assert.match(deploymentPanelSource, /const isDeploymentOverlayOpen = fullScreenOnly \|\| isDeploymentExpanded;/);
+  assert.match(deploymentPanelSource, /\{isDeploymentOverlayOpen \? \(/);
   assert.match(fullscreenHostRule, /\bdisplay:\s*contents;/);
   assert.doesNotMatch(componentSource, /hidden=\{activeView !== "deployment"\}/);
   assert.doesNotMatch(componentSource, /aria-pressed=\{activeView === "deployment"\}/);
@@ -527,7 +529,7 @@ test("deployment expanded details use larger action and record text", () => {
   );
   assert.match(
     deploymentPanelSource,
-    /size=\{isDeploymentExpanded \? "large" : "regular"\}/
+    /size=\{isDeploymentOverlayOpen \? "large" : "regular"\}/
   );
   assert.match(
     stylesSource,

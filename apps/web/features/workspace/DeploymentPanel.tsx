@@ -175,6 +175,7 @@ export function DeploymentPanel({
   const deploymentExpandedGridRef = useRef<HTMLDivElement | null>(null);
   const deploymentResizeCleanupRef = useRef<(() => void) | null>(null);
   const trafficAbortControllerRef = useRef<AbortController | null>(null);
+  const isDeploymentOverlayOpen = fullScreenOnly || isDeploymentExpanded;
 
   const verifiedAwsConnections = useMemo(
     () => awsConnections.filter((connection) => connection.status === "verified"),
@@ -1431,7 +1432,7 @@ export function DeploymentPanel({
                 setGitCicdPipelineStatusSource(null);
               }}
               options={gitCicdHandoffOptions}
-              size={isDeploymentExpanded ? "large" : "regular"}
+              size={isDeploymentOverlayOpen ? "large" : "regular"}
               value={selectedGitCicdHandoffId}
             />
           </div>
@@ -1643,7 +1644,7 @@ export function DeploymentPanel({
           emptyLabel="Deployment 없음"
           onChange={setSelectedDeploymentId}
           options={deploymentOptions}
-          size={isDeploymentExpanded ? "large" : "regular"}
+            size={isDeploymentOverlayOpen ? "large" : "regular"}
           value={selectedDeploymentId}
         />
       </div>
@@ -1925,7 +1926,7 @@ export function DeploymentPanel({
         </div>
       ) : null}
 
-      {isDeploymentExpanded ? (
+      {isDeploymentOverlayOpen ? (
         <div
           aria-label="Deployment console"
           aria-modal="true"
