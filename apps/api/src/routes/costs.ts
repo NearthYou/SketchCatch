@@ -162,6 +162,10 @@ export async function registerCostRoutes(
             .orderBy(desc(deployments.completedAt), desc(deployments.updatedAt));
     const latestSuccessfulDeployments = selectLatestSuccessfulDeployments(deploymentRows);
     const deploymentIds = latestSuccessfulDeployments.map((deployment) => deployment.id);
+    const deployedProjectIds = new Set(
+      latestSuccessfulDeployments.map((deployment) => deployment.projectId)
+    );
+    const deployedProjectRows = projectRows.filter((project) => deployedProjectIds.has(project.id));
     const deployedResourceRows =
       deploymentIds.length === 0
         ? []
@@ -175,7 +179,7 @@ export async function registerCostRoutes(
         awsConnection,
         deployedResources: deployedResourceRows.map(toCostUsageDeployedResource),
         deployments: latestSuccessfulDeployments.map(toCostUsageDeployment),
-        projects: projectRows.map(toProject),
+        projects: deployedProjectRows.map(toProject),
         range: query.range,
         userId: currentUserId
       },

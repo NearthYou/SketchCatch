@@ -118,6 +118,10 @@ test("GET /api/costs/usage calls the usage provider with the verified AWS connec
       makeProject({
         id: PROJECT_WITH_ARCHITECTURE_ID,
         name: "API Server"
+      }),
+      makeProject({
+        id: PROJECT_WITHOUT_ARCHITECTURE_ID,
+        name: "Draft Board"
       })
     ],
     awsConnections: [
@@ -131,6 +135,11 @@ test("GET /api/costs/usage calls the usage provider with the verified AWS connec
         id: "99999999-9999-4999-8999-999999999999",
         projectId: PROJECT_WITH_ARCHITECTURE_ID,
         status: "SUCCESS"
+      }),
+      makeDeployment({
+        id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        projectId: PROJECT_WITHOUT_ARCHITECTURE_ID,
+        status: "FAILED"
       })
     ],
     deployedResources: [
@@ -172,6 +181,10 @@ test("GET /api/costs/usage calls the usage provider with the verified AWS connec
   assert.equal(providerInput.current?.range, "7d");
   assert.equal(providerInput.current?.awsConnection?.id, "88888888-8888-4888-8888-888888888888");
   assert.equal(providerInput.current?.projects.length, 1);
+  assert.deepEqual(
+    providerInput.current?.projects.map((project) => project.id),
+    [PROJECT_WITH_ARCHITECTURE_ID]
+  );
   assert.equal(providerInput.current?.deployments.length, 1);
   assert.equal(providerInput.current?.deployedResources.length, 1);
 

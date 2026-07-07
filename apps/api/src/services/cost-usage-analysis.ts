@@ -202,6 +202,7 @@ export function createSampleCostUsageAnalysis(
   ]);
   const taggedProjectCosts = new Map<string, number>();
   const projectCosts = createProjectUsageCosts({
+    allowSampleProjects: true,
     deployedResources: input.deployedResources,
     deployments: input.deployments,
     projects: input.projects,
@@ -236,6 +237,7 @@ export function createSampleCostUsageAnalysis(
 }
 
 export function createProjectUsageCosts(input: {
+  readonly allowSampleProjects?: boolean;
   readonly deployedResources: readonly CostUsageDeployedResource[];
   readonly deployments: readonly CostUsageDeployment[];
   readonly projects: readonly Project[];
@@ -243,7 +245,11 @@ export function createProjectUsageCosts(input: {
   readonly totalCostAmount: number;
 }): CostProjectUsage[] {
   if (input.taggedProjectCosts.size > 0) {
-    return createTaggedProjectUsageCosts(input);
+    const taggedProjectUsageCosts = createTaggedProjectUsageCosts(input);
+
+    if (taggedProjectUsageCosts.length > 0) {
+      return taggedProjectUsageCosts;
+    }
   }
 
   return createApproximateProjectUsageCosts(input);
@@ -290,11 +296,15 @@ function createTaggedProjectUsageCosts(input: {
   readonly totalCostAmount: number;
 }): CostProjectUsage[] {
   const projectsById = new Map(input.projects.map((project) => [project.id, project]));
+  const deployedProjectIds = new Set(projectsById.keys());
   const totalTaggedCost = [...input.taggedProjectCosts.values()].reduce(
     (sum, amount) => sum + amount,
     0
   );
-  const rows = [...input.taggedProjectCosts.entries()].map(([projectId, amount]) => {
+  const taggedProjectEntries = [...input.taggedProjectCosts.entries()].filter(([projectId]) =>
+    deployedProjectIds.has(projectId)
+  );
+  const rows = taggedProjectEntries.map(([projectId, amount]) => {
     const project = projectsById.get(projectId);
 
     return {
@@ -311,13 +321,16 @@ function createTaggedProjectUsageCosts(input: {
 }
 
 function createApproximateProjectUsageCosts(input: {
+  readonly allowSampleProjects?: boolean;
   readonly deployedResources: readonly CostUsageDeployedResource[];
   readonly deployments: readonly CostUsageDeployment[];
   readonly projects: readonly Project[];
   readonly totalCostAmount: number;
 }): CostProjectUsage[] {
   if (input.projects.length === 0) {
-    return createNoProjectSampleUsageCosts(input.totalCostAmount);
+    return input.allowSampleProjects === true
+      ? createNoProjectSampleUsageCosts(input.totalCostAmount)
+      : [];
   }
 
   const deploymentProjectById = new Map(

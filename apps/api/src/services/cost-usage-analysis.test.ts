@@ -97,6 +97,29 @@ test("createProjectUsageCosts prefers Cost Explorer project tags over deployment
   );
 });
 
+test("createProjectUsageCosts ignores tags outside deployed projects and falls back to deployment approximation", () => {
+  const result = createProjectUsageCosts({
+    deployedResources: [
+      makeResource({ deploymentId: "deployment-a", id: "resource-a1" }),
+      makeResource({ deploymentId: "deployment-a", id: "resource-a2" })
+    ],
+    deployments: [
+      makeDeployment({
+        id: "deployment-a",
+        projectId: projectA.id
+      })
+    ],
+    projects: [projectA],
+    taggedProjectCosts: new Map([[projectB.id, 100]]),
+    totalCostAmount: 100
+  });
+
+  assert.deepEqual(
+    result.map((row) => [row.projectId, row.amount, row.resourceCount, row.source]),
+    [[projectA.id, 100, 2, "deployed_resource_estimate"]]
+  );
+});
+
 test("createProjectUsageCosts approximates project costs from latest deployed resources", () => {
   const result = createProjectUsageCosts({
     deployedResources: [
