@@ -13,6 +13,8 @@ import type {
   AwsConnectionListResponse,
   CostEstimatePeriod,
   CostProjectEstimateListResponse,
+  CostUsageAnalysisRange,
+  CostUsageAnalysisResponse,
   CreateArchitectureSnapshotRequest,
   CreateArchitectureDraftRequest,
   CreateArchitectureDraftResponse,
@@ -855,6 +857,23 @@ export async function listCostProjectEstimates(input: {
   });
 
   return apiFetch<CostProjectEstimateListResponse>(`/costs/projects?${params.toString()}`, {
+    auth: true
+  });
+}
+
+export async function listCostUsageAnalysis(input: {
+  awsConnectionId?: string | undefined;
+  range: CostUsageAnalysisRange;
+}): Promise<CostUsageAnalysisResponse> {
+  const params = new URLSearchParams({
+    range: input.range
+  });
+
+  if (input.awsConnectionId !== undefined) {
+    params.set("awsConnectionId", input.awsConnectionId);
+  }
+
+  return apiFetch<CostUsageAnalysisResponse>(`/costs/usage?${params.toString()}`, {
     auth: true
   });
 }

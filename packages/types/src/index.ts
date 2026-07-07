@@ -974,6 +974,113 @@ export type CostProjectEstimateListResponse = {
   projects: CostProjectEstimate[];
 };
 
+export type CostUsageAnalysisRange = "7d" | "30d" | "month_to_date";
+
+export type CostUsageDataSource = "aws_cost_explorer" | "sample";
+
+export type CostProjectUsageSource =
+  | "cost_explorer_tag"
+  | "deployed_resource_estimate"
+  | "sample";
+
+export type CostUsageTrendPoint = {
+  date: string;
+  amount: number;
+};
+
+export type CostServiceUsage = {
+  service: string;
+  amount: number;
+  percentage: number;
+};
+
+export type CostProjectUsage = {
+  projectId: string | null;
+  projectName: string;
+  amount: number;
+  percentage: number;
+  source: CostProjectUsageSource;
+  resourceCount: number;
+};
+
+export type CostResourceUsageSource =
+  | "cost_explorer_resource"
+  | "deployed_resource_estimate"
+  | "sample";
+
+export type CostResourceUsage = {
+  id: string;
+  projectId?: string | undefined;
+  projectName?: string | undefined;
+  resourceId: string | null;
+  resourceName: string;
+  resourceType: string;
+  service: string;
+  terraformAddress: string;
+  amount: number;
+  percentage: number;
+  source: CostResourceUsageSource;
+};
+
+export type CostMetricSeriesPoint = {
+  timestamp: IsoDateTimeString;
+  value: number;
+};
+
+export type CostMetricSeries = {
+  id: string;
+  label: string;
+  unit: string;
+  points: CostMetricSeriesPoint[];
+};
+
+export type CostWasteResourceInsight = {
+  id: string;
+  resourceId: string | null;
+  resourceName: string;
+  resourceType: string;
+  service: string;
+  projectId?: string | undefined;
+  projectName?: string | undefined;
+  metricName: string;
+  averageValue: number;
+  unit: string;
+  finding: string;
+  estimatedMonthlyWaste: MoneyEstimate;
+};
+
+export type CostOptimizationRecommendation = {
+  id: string;
+  targetType: "resource" | "project" | "service";
+  severity: RiskLevel;
+  title: string;
+  estimatedMonthlySavings: MoneyEstimate;
+  reason: string;
+  actionLabel: string;
+  resourceId?: string | undefined;
+  projectId?: string | undefined;
+  service?: string | undefined;
+};
+
+export type CostUsageAnalysisResponse = {
+  range: CostUsageAnalysisRange;
+  generatedAt: IsoDateTimeString;
+  startDate: string;
+  endDate: string;
+  currency: "USD";
+  dataSource: CostUsageDataSource;
+  fallbackUsed: boolean;
+  totalCost: MoneyEstimate;
+  forecastMonthEndCost: MoneyEstimate;
+  dailyTrend: CostUsageTrendPoint[];
+  serviceCosts: CostServiceUsage[];
+  projectCosts: CostProjectUsage[];
+  resourceCosts: CostResourceUsage[];
+  wasteResources: CostWasteResourceInsight[];
+  recommendations: CostOptimizationRecommendation[];
+  metricSeries: CostMetricSeries[];
+};
+
 export type DeploymentLogListResponse = {
   logs: DeploymentLog[];
 };

@@ -748,6 +748,33 @@ test("GET /api/aws/connections/:connectionId/cloudformation-template returns an 
   await app.close();
 });
 
+test("GET /api/aws/connections/:connectionId/cloudformation-template falls back to inline template when S3 publishing fails", async () => {
+  const repository = new FakeAwsConnectionRepository();
+  repository.awsConnection = createAwsConnectionRecord();
+
+  const app = await buildAwsConnectionTestApp(repository, {
+    cloudFormationTemplatePublisher: async () => {
+      throw new Error("S3 publisher unavailable");
+    }
+  });
+
+  const response = await app.inject({
+    method: "GET",
+    url: `/api/aws/connections/${awsConnectionId}/cloudformation-template`,
+    headers: await authHeaders()
+  });
+
+  assert.equal(response.statusCode, 200);
+  const body = response.json() as AwsConnectionCloudFormationTemplateResponse;
+  assert.equal(body.templateUrl, null);
+  assert.equal(body.templateUrlExpiresAt, null);
+  assert.equal(body.launchStackUrl, null);
+  assert.equal(body.manualTemplateFallbackAvailable, true);
+  assert.match(body.templateBody, /Type: AWS::IAM::Role/);
+
+  await app.close();
+});
+
 async function buildAwsConnectionTestApp(
   repository: AwsConnectionRepository,
   routeOverrides: Partial<AwsConnectionRouteOptions> = {}

@@ -1,4 +1,4 @@
-# Agent Progress
+﻿# Agent Progress
 
 This file is the short, English-only working log for the current agent context. Keep it concise. Do not append long historical transcripts.
 
