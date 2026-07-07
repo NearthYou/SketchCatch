@@ -325,6 +325,7 @@ resource "aws_security_group" "alb" {
   vpc_id      = aws_vpc.demo.id
 
   ingress {
+    description = "Allow demo HTTP traffic from the internet"
     from_port   = 80
     to_port     = 80
     protocol    = "tcp"
@@ -332,6 +333,7 @@ resource "aws_security_group" "alb" {
   }
 
   egress {
+    description = "Allow outbound traffic for demo health checks"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
@@ -350,6 +352,7 @@ resource "aws_security_group" "api" {
   vpc_id      = aws_vpc.demo.id
 
   ingress {
+    description     = "Allow demo API traffic from the ALB"
     from_port       = 8080
     to_port         = 8080
     protocol        = "tcp"
@@ -357,6 +360,7 @@ resource "aws_security_group" "api" {
   }
 
   egress {
+    description = "Allow outbound package and metadata access"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
@@ -447,6 +451,11 @@ resource "aws_launch_template" "api" {
 
   vpc_security_group_ids = [aws_security_group.api.id]
 
+  metadata_options {
+    http_endpoint = "enabled"
+    http_tokens   = "required"
+  }
+
   tag_specifications {
     resource_type = "instance"
 
@@ -461,6 +470,7 @@ resource "aws_launch_template" "api" {
 resource "aws_lb" "demo" {
   name               = "$Prefix-alb"
   load_balancer_type = "application"
+  drop_invalid_header_fields = true
   security_groups    = [aws_security_group.alb.id]
   subnets            = [aws_subnet.public_a.id, aws_subnet.public_c.id]
 
@@ -576,6 +586,26 @@ function Get-OutputValue {
   [string]$output.value
 }
 
+function Approve-DeploymentWarnings {
+  param(
+    [Parameter(Mandatory = $true)]
+    [object]$Deployment
+  )
+
+  $acknowledgedWarningIds = @()
+  if ($Deployment.planSummary -and $Deployment.planSummary.warnings) {
+    $acknowledgedWarningIds = @(
+      $Deployment.planSummary.warnings |
+        Where-Object { $_.requiresAcknowledgement -eq $true } |
+        ForEach-Object { [string]$_.id }
+    )
+  }
+
+  Invoke-SketchCatchApi -Method POST -Path "/deployments/$($Deployment.id)/approve" -Body @{
+    acknowledgedWarningIds = $acknowledgedWarningIds
+  } | Out-Null
+}
+
 Get-SmokeAccessToken
 
 $terraformCode = New-DemoTerraform -Bucket $bucketName -Region $AwsRegion -RunId $shortRunId -Prefix $namePrefix
@@ -635,7 +665,7 @@ if ($deployment.status -ne "PENDING") {
   throw "plan failed with status $($deployment.status): $($deployment.errorSummary)"
 }
 
-Invoke-SketchCatchApi -Method POST -Path "/deployments/$($deployment.id)/approve" | Out-Null
+Approve-DeploymentWarnings -Deployment $deployment
 Invoke-SketchCatchApi -Method POST -Path "/deployments/$($deployment.id)/apply" | Out-Null
 $deployment = Wait-DeploymentStatus -DeploymentId $deployment.id -TerminalStatuses @("SUCCESS", "FAILED", "CANCELLED") -Label "apply"
 if ($deployment.status -ne "SUCCESS") {
@@ -677,7 +707,7 @@ if (-not $SkipDestroy) {
     throw "destroy plan failed with status $($deployment.status): $($deployment.errorSummary)"
   }
 
-  Invoke-SketchCatchApi -Method POST -Path "/deployments/$($deployment.id)/approve" | Out-Null
+  Approve-DeploymentWarnings -Deployment $deployment
   Invoke-SketchCatchApi -Method POST -Path "/deployments/$($deployment.id)/destroy" | Out-Null
   $deployment = Wait-DeploymentStatus -DeploymentId $deployment.id -TerminalStatuses @("DESTROYED", "FAILED", "CANCELLED") -Label "destroy"
   if ($deployment.status -ne "DESTROYED") {
