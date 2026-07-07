@@ -2,7 +2,11 @@ import { randomUUID } from "node:crypto";
 import { and, desc, eq } from "drizzle-orm";
 import type {
   DeploymentPlanSummary,
+  GitCicdAwsRoleDiff,
+  GitCicdDeploymentMode,
   GitCicdHandoffKind,
+  GitCicdPipelineDetailStatus,
+  GitCicdRepositorySettingsPreview,
   GitCicdHandoffStatus,
   SourceRepositoryProvider
 } from "@sketchcatch/types";
@@ -15,6 +19,12 @@ import {
   sourceRepositories,
   touchUpdatedAt
 } from "../db/schema.js";
+import {
+  createAwsRoleDiffPreview,
+  createGitCicdAutomationFiles,
+  createRepositorySettingsPreview,
+  defaultGitCicdEnvironmentName
+} from "./git-cicd-workflows.js";
 
 export type GitCicdHandoffRecord = typeof gitCicdHandoffs.$inferSelect;
 export type ProjectAccessContext = {
@@ -54,10 +64,21 @@ export type CreateGitCicdHandoffInput = {
   terraformArtifactId: string;
   sourceRepositoryId: string;
   handoffKind?: GitCicdHandoffKind | undefined;
+  sourceDeploymentId?: string | null | undefined;
+  deploymentMode?: GitCicdDeploymentMode | undefined;
   targetBranch?: string | undefined;
   sourceBranch?: string | undefined;
   commitMessage?: string | undefined;
   pullRequestTitle?: string | undefined;
+  environmentName?: string | undefined;
+  rdsEnabled?: boolean | undefined;
+  awsRegion?: string | undefined;
+  awsRoleArn?: string | null | undefined;
+  tfStateBucket?: string | undefined;
+  releaseBucket?: string | undefined;
+  staticSiteUrl?: string | null | undefined;
+  apiBaseUrl?: string | null | undefined;
+  approveAwsRoleDiff?: boolean | undefined;
   planSummary?: DeploymentPlanSummary | undefined;
   userAcceptedChangeId: string;
 };
@@ -68,6 +89,9 @@ export type CreateGitCicdHandoffRecordInput = {
   architectureId: string;
   terraformArtifactId: string;
   handoffKind: GitCicdHandoffKind;
+  sourceDeploymentId: string | null;
+  deploymentMode: GitCicdDeploymentMode;
+  requiresEnvironmentApproval: boolean;
   sourceRepositoryId: string;
   repositoryProvider: SourceRepositoryProvider;
   repositoryOwner: string;
@@ -77,8 +101,22 @@ export type CreateGitCicdHandoffRecordInput = {
   commitMessage: string | null;
   pullRequestTitle: string | null;
   pullRequestUrl: string | null;
+  pullRequestNumber: number | null;
   pullRequestHeadSha: string | null;
+  mergeCommitSha: string | null;
+  environmentName: string;
   pipelineRunUrl: string | null;
+  infraPipelineRunUrl: string | null;
+  infraPipelineStatus: GitCicdPipelineDetailStatus;
+  appPipelineRunUrl: string | null;
+  appPipelineStatus: GitCicdPipelineDetailStatus;
+  destroyPipelineRunUrl: string | null;
+  destroyPipelineStatus: GitCicdPipelineDetailStatus;
+  staticSiteUrl: string | null;
+  apiBaseUrl: string | null;
+  repositorySettingsPreview: GitCicdRepositorySettingsPreview | null;
+  awsRoleDiff: GitCicdAwsRoleDiff | null;
+  githubOAuthRequired: boolean;
   status: GitCicdHandoffStatus;
   statusMessage: string | null;
   userAcceptedChangeId: string;
@@ -91,7 +129,15 @@ export type UpdateGitCicdHandoffStatusInput = {
   status: GitCicdHandoffStatus;
   pullRequestUrl?: string | null | undefined;
   pipelineRunUrl?: string | null | undefined;
+  pullRequestNumber?: number | null | undefined;
   pullRequestHeadSha?: string | null | undefined;
+  mergeCommitSha?: string | null | undefined;
+  infraPipelineRunUrl?: string | null | undefined;
+  infraPipelineStatus?: GitCicdPipelineDetailStatus | undefined;
+  appPipelineRunUrl?: string | null | undefined;
+  appPipelineStatus?: GitCicdPipelineDetailStatus | undefined;
+  destroyPipelineRunUrl?: string | null | undefined;
+  destroyPipelineStatus?: GitCicdPipelineDetailStatus | undefined;
   statusMessage?: string | null | undefined;
 };
 
@@ -99,7 +145,15 @@ export type UpdateGitCicdHandoffStatusRecordInput = {
   status: GitCicdHandoffStatus;
   pullRequestUrl?: string | null | undefined;
   pipelineRunUrl?: string | null | undefined;
+  pullRequestNumber?: number | null | undefined;
   pullRequestHeadSha?: string | null | undefined;
+  mergeCommitSha?: string | null | undefined;
+  infraPipelineRunUrl?: string | null | undefined;
+  infraPipelineStatus?: GitCicdPipelineDetailStatus | undefined;
+  appPipelineRunUrl?: string | null | undefined;
+  appPipelineStatus?: GitCicdPipelineDetailStatus | undefined;
+  destroyPipelineRunUrl?: string | null | undefined;
+  destroyPipelineStatus?: GitCicdPipelineDetailStatus | undefined;
   statusMessage?: string | null | undefined;
 };
 
@@ -111,6 +165,14 @@ export type GitCicdProviderCreateInput = {
   handoffKind: GitCicdHandoffKind;
   targetBranch: string;
   projectSlug: string;
+  environmentName: string;
+  rdsEnabled: boolean;
+  awsRegion: string;
+  awsRoleArn: string | null;
+  tfStateBucket: string | null;
+  releaseBucket: string | null;
+  staticSiteUrl: string | null;
+  apiBaseUrl: string | null;
   terraformArtifact: {
     id: string;
     objectKey: string;
@@ -138,6 +200,7 @@ export type GitCicdProviderCreateResult = {
   sourceBranch?: string | null | undefined;
   pullRequestUrl: string | null;
   pipelineRunUrl: string | null;
+  pullRequestNumber?: number | null | undefined;
   pullRequestHeadSha?: string | null | undefined;
   status: GitCicdHandoffStatus;
   statusMessage: string | null;
@@ -162,7 +225,8 @@ export type GitCicdPullRequestDraft = {
 
 export type GitProviderPullRequestFile = {
   path: string;
-  artifactObjectKey: string;
+  artifactObjectKey?: string | undefined;
+  content?: string | undefined;
   contentType: string;
 };
 
@@ -186,6 +250,7 @@ export type GitProviderCreatePullRequestResult = {
   sourceBranch: string;
   commitSha: string;
   pullRequestHeadSha: string;
+  pullRequestNumber: number;
 };
 
 export type GitProvider = {
@@ -331,7 +396,21 @@ export function createGitHubGitCicdHandoffProvider(
             }),
             artifactObjectKey: input.terraformArtifact.objectKey,
             contentType: input.terraformArtifact.contentType
-          }
+          },
+          ...createGitCicdAutomationFiles({
+            projectSlug: input.projectSlug,
+            repositoryOwner: input.sourceRepository.owner,
+            repositoryName: input.sourceRepository.name,
+            targetBranch: input.targetBranch,
+            environmentName: input.environmentName,
+            awsRegion: input.awsRegion,
+            awsRoleArn: input.awsRoleArn,
+            tfStateBucket: input.tfStateBucket ?? undefined,
+            releaseBucket: input.releaseBucket ?? undefined,
+            rdsEnabled: input.rdsEnabled,
+            staticSiteUrl: input.staticSiteUrl,
+            apiBaseUrl: input.apiBaseUrl
+          })
         ],
         pullRequest: input.pullRequestDraft,
         userAcceptedChangeId: input.userAcceptedChangeId
@@ -342,6 +421,7 @@ export function createGitHubGitCicdHandoffProvider(
         sourceBranch: result.sourceBranch,
         pullRequestUrl: result.pullRequestUrl,
         pipelineRunUrl: null,
+        pullRequestNumber: result.pullRequestNumber,
         pullRequestHeadSha: result.pullRequestHeadSha,
         status: "pr_created",
         statusMessage: `GitHub PR created from ${result.sourceBranch} at ${result.commitSha}`
@@ -615,8 +695,40 @@ export function createPostgresGitCicdHandoffRepository(
         Object.assign(values, { pipelineRunUrl: input.pipelineRunUrl });
       }
 
+      if (input.pullRequestNumber !== undefined) {
+        Object.assign(values, { pullRequestNumber: input.pullRequestNumber });
+      }
+
       if (input.pullRequestHeadSha !== undefined) {
         Object.assign(values, { pullRequestHeadSha: input.pullRequestHeadSha });
+      }
+
+      if (input.mergeCommitSha !== undefined) {
+        Object.assign(values, { mergeCommitSha: input.mergeCommitSha });
+      }
+
+      if (input.infraPipelineRunUrl !== undefined) {
+        Object.assign(values, { infraPipelineRunUrl: input.infraPipelineRunUrl });
+      }
+
+      if (input.infraPipelineStatus !== undefined) {
+        Object.assign(values, { infraPipelineStatus: input.infraPipelineStatus });
+      }
+
+      if (input.appPipelineRunUrl !== undefined) {
+        Object.assign(values, { appPipelineRunUrl: input.appPipelineRunUrl });
+      }
+
+      if (input.appPipelineStatus !== undefined) {
+        Object.assign(values, { appPipelineStatus: input.appPipelineStatus });
+      }
+
+      if (input.destroyPipelineRunUrl !== undefined) {
+        Object.assign(values, { destroyPipelineRunUrl: input.destroyPipelineRunUrl });
+      }
+
+      if (input.destroyPipelineStatus !== undefined) {
+        Object.assign(values, { destroyPipelineStatus: input.destroyPipelineStatus });
       }
 
       if (input.statusMessage !== undefined) {
@@ -683,6 +795,46 @@ export async function createGitCicdHandoff(
   const sourceBranch = input.sourceBranch ?? null;
   const commitMessage = input.commitMessage ?? null;
   const handoffKind = input.handoffKind ?? "terraform_iac";
+  const deploymentMode = input.deploymentMode ?? "infra_and_app";
+  const environmentName = input.environmentName ?? defaultGitCicdEnvironmentName;
+  const rdsEnabled = input.rdsEnabled === true;
+  const awsRegion = input.awsRegion ?? "ap-northeast-2";
+  const awsRoleArn = input.awsRoleArn ?? null;
+  const tfStateBucket = input.tfStateBucket ?? null;
+  const releaseBucket = input.releaseBucket ?? null;
+  const staticSiteUrl = input.staticSiteUrl ?? null;
+  const apiBaseUrl = input.apiBaseUrl ?? null;
+  const approvedAt = input.approveAwsRoleDiff === true ? new Date().toISOString() : null;
+  const repositorySettingsPreview = createRepositorySettingsPreview({
+    projectSlug,
+    repositoryOwner: sourceRepository.owner,
+    repositoryName: sourceRepository.name,
+    targetBranch,
+    environmentName,
+    awsRegion,
+    awsRoleArn,
+    tfStateBucket: tfStateBucket ?? undefined,
+    releaseBucket: releaseBucket ?? undefined,
+    rdsEnabled,
+    staticSiteUrl,
+    apiBaseUrl
+  });
+  const awsRoleDiff = createAwsRoleDiffPreview({
+    projectSlug,
+    repositoryOwner: sourceRepository.owner,
+    repositoryName: sourceRepository.name,
+    targetBranch,
+    environmentName,
+    awsRegion,
+    awsRoleArn,
+    tfStateBucket: tfStateBucket ?? undefined,
+    releaseBucket: releaseBucket ?? undefined,
+    rdsEnabled,
+    staticSiteUrl,
+    apiBaseUrl,
+    approvedByUserId: input.approveAwsRoleDiff === true ? input.accessContext.userId : null,
+    approvedAt
+  });
   const pullRequestDraft = createGitCicdPullRequestDraft({
     repositoryOwner: sourceRepository.owner,
     repositoryName: sourceRepository.name,
@@ -701,6 +853,14 @@ export async function createGitCicdHandoff(
     handoffKind,
     targetBranch,
     projectSlug,
+    environmentName,
+    rdsEnabled,
+    awsRegion,
+    awsRoleArn,
+    tfStateBucket,
+    releaseBucket,
+    staticSiteUrl,
+    apiBaseUrl,
     terraformArtifact: {
       id: terraformArtifact.id,
       objectKey: terraformArtifact.objectKey,
@@ -736,6 +896,9 @@ export async function createGitCicdHandoff(
     architectureId: input.architectureId,
     terraformArtifactId: input.terraformArtifactId,
     handoffKind,
+    sourceDeploymentId: input.sourceDeploymentId ?? null,
+    deploymentMode,
+    requiresEnvironmentApproval: true,
     sourceRepositoryId: input.sourceRepositoryId,
     repositoryProvider: providerResult.repositoryProvider,
     repositoryOwner: sourceRepository.owner,
@@ -745,8 +908,22 @@ export async function createGitCicdHandoff(
     commitMessage,
     pullRequestTitle,
     pullRequestUrl: providerResult.pullRequestUrl,
+    pullRequestNumber: providerResult.pullRequestNumber ?? null,
     pullRequestHeadSha: providerResult.pullRequestHeadSha ?? null,
+    mergeCommitSha: null,
+    environmentName,
     pipelineRunUrl: providerResult.pipelineRunUrl,
+    infraPipelineRunUrl: null,
+    infraPipelineStatus: providerResult.status === "pr_created" ? "waiting_for_merge" : "not_started",
+    appPipelineRunUrl: null,
+    appPipelineStatus: "not_started",
+    destroyPipelineRunUrl: null,
+    destroyPipelineStatus: "not_started",
+    staticSiteUrl,
+    apiBaseUrl,
+    repositorySettingsPreview,
+    awsRoleDiff,
+    githubOAuthRequired: sourceRepository.provider === "github",
     status: providerResult.status,
     statusMessage: providerResult.statusMessage,
     userAcceptedChangeId: input.userAcceptedChangeId,
@@ -806,7 +983,15 @@ export async function updateGitCicdHandoffStatus(
     status: input.status,
     pullRequestUrl: input.pullRequestUrl,
     pipelineRunUrl: input.pipelineRunUrl,
+    pullRequestNumber: input.pullRequestNumber,
     pullRequestHeadSha: input.pullRequestHeadSha,
+    mergeCommitSha: input.mergeCommitSha,
+    infraPipelineRunUrl: input.infraPipelineRunUrl,
+    infraPipelineStatus: input.infraPipelineStatus,
+    appPipelineRunUrl: input.appPipelineRunUrl,
+    appPipelineStatus: input.appPipelineStatus,
+    destroyPipelineRunUrl: input.destroyPipelineRunUrl,
+    destroyPipelineStatus: input.destroyPipelineStatus,
     statusMessage: input.statusMessage
   });
 

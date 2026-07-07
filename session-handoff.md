@@ -1,5 +1,27 @@
 ﻿# 세션 핸드오프
 
+## 2026-07-07 - Git/CI/CD 자동 배포 plan6 구현 handoff
+
+- Branch/worktree: `codex/docs-cicd-plan6` at `C:\Users\siwon\Desktop\Jungle\Week17~21\SketchCatch-worktrees\cicd-plan6-docs`.
+- PR: #211, originally docs-only, now expanded with minimal implementation for plan6.
+- Implemented:
+  - Shared/API/DB `GitCicdHandoff` contract now stores `sourceDeploymentId`, `deploymentMode`, Environment approval, PR number, merge commit SHA, infra/app/destroy workflow URLs/statuses, repository settings preview, AWS role diff, OAuth required flag, and static/API verification URLs.
+  - Added SQL migration `apps/api/drizzle/0026_git_cicd_infra_app_auto_deploy.sql`.
+  - GitHub PR handoff now generates Terraform artifact plus `.github/workflows/sketchcatch-infra.yml`, `sketchcatch-app.yml`, `sketchcatch-destroy.yml`, repository settings manifest, and AWS role diff manifest.
+  - GitHub Actions polling now prefers PR number, checks merge state, then maps merge commit SHA workflow runs by `SketchCatch Infra`, `SketchCatch App`, and `SketchCatch Destroy`.
+  - Deployment Panel has a `Git/CI/CD handoff 생성` action and displays OAuth, Environment approval, IAM diff, repo settings, detailed pipeline statuses, and URL verification targets.
+- Verified:
+  - `pnpm harness:check` before implementation.
+  - `pnpm --filter @sketchcatch/api typecheck`
+  - `pnpm --filter @sketchcatch/web typecheck`
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/git-cicd/git-cicd-workflows.test.ts src/routes/git-cicd-handoffs.test.ts src/source-repositories/github-app-client.test.ts`
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/api.test.ts features/workspace/deployment-actions.test.ts`
+- Not yet complete/live-proven:
+  - GitHub user OAuth writer for actual repository variables/secrets/environment mutation is not implemented beyond preview artifacts.
+  - AWS IAM trust/policy read/update/STS verification executor is not implemented beyond diff/approval metadata.
+  - Real PR merge -> Environment approval -> Terraform apply -> S3 release -> ASG Instance Refresh -> destroy live smoke has not run.
+- Next action: run lint/typecheck/build/harness final checks, fix lint issues, then amend/push PR #211. Do not mark the thread goal complete until live/external mutation gaps are either implemented and verified or explicitly accepted as separate remaining scope.
+
 ## 2026-07-07 - Demo Web Service E2E handoff
 
 - Branch/worktree: `feature/sw/189-196-demo-web-service-e2e` at `C:\Users\siwon\Desktop\Jungle\Week17~21\SketchCatch-worktrees\demo-web-service-e2e`.

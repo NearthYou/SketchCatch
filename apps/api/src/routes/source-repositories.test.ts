@@ -332,6 +332,9 @@ function createFakeGitHubAppClient(repositories: GitHubRepositoryCandidate[]): G
     },
     async getLatestWorkflowRunForHeadSha() {
       throw new Error("not used");
+    },
+    async getPipelineStatusForPullRequest() {
+      throw new Error("not used");
     }
   };
 }

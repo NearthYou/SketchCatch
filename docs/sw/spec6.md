@@ -211,3 +211,19 @@ Deployment Panel은 다음을 보여준다.
 - SketchCatch가 infra/app pipeline 상태와 URL 검증 결과를 보여준다.
 - destroy workflow로 생성 리소스를 정리할 수 있다.
 - `docs/sw/spec6.md`, `docs/sw/plan6.md`, `docs/sw/agents3.md`는 구현 중 계속 갱신된다.
+
+## 2026-07-07 구현 반영 상태
+
+이번 PR에서 구현된 것:
+
+- `GitCicdHandoff` shared type, API DTO, DB schema에 infra/app/destroy 상세 pipeline 필드를 추가했다.
+- `apps/api/drizzle/0026_git_cicd_infra_app_auto_deploy.sql` migration을 추가했다.
+- GitHub PR 생성 시 Terraform artifact와 함께 infra/app/destroy workflow, repository settings preview, AWS role diff preview 파일을 생성한다.
+- GitHub Actions 상태 polling은 PR number를 기준으로 PR merge 여부를 확인하고, merge commit SHA의 workflow runs에서 `SketchCatch Infra`, `SketchCatch App`, `SketchCatch Destroy` 상태를 분리해 집계한다.
+- Deployment Panel의 handoff CTA를 `Git/CI/CD handoff 생성`으로 바꾸고, deployment source, environment approval, OAuth 필요 여부, IAM diff 상태, repo settings preview, infra/app/destroy workflow 상태, URL 검증 대상을 표시한다.
+
+남은 외부 검증/후속 작업:
+
+- GitHub user OAuth token으로 repository variables/secrets/environment를 실제 적용하는 mutation path는 아직 preview artifact 중심이다.
+- AWS IAM trust/policy update executor는 아직 diff preview와 승인 metadata 중심이다.
+- 실제 GitHub PR merge 후 workflow run, Environment approval, Terraform apply, S3 release, ASG Instance Refresh, destroy live smoke는 비용/자격증명/cleanup 승인 후 수행해야 한다.

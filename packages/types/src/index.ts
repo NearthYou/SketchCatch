@@ -433,12 +433,44 @@ export type GitCicdHandoffStatus =
 
 export type GitCicdHandoffKind = "terraform_iac" | "static_site";
 
+export type GitCicdDeploymentMode = "terraform_iac" | "static_site" | "infra_and_app";
+
+export type GitCicdPipelineDetailStatus =
+  | "not_started"
+  | "waiting_for_merge"
+  | "waiting_for_approval"
+  | "running"
+  | "success"
+  | "failed"
+  | "cancelled";
+
+export type GitCicdRepositorySettingsPreview = {
+  environmentName: string;
+  variables: Record<string, string>;
+  secrets: string[];
+  workflowFiles: string[];
+};
+
+export type GitCicdAwsRoleDiff = {
+  roleArn: string | null;
+  repository: string;
+  targetBranch: string;
+  environmentName: string;
+  requiredTrustConditions: Record<string, string>;
+  approved: boolean;
+  approvedByUserId: string | null;
+  approvedAt: IsoDateTimeString | null;
+};
+
 export type GitCicdHandoff = {
   id: string;
   projectId: string;
   architectureId: string;
   terraformArtifactId: string;
   handoffKind: GitCicdHandoffKind;
+  sourceDeploymentId: string | null;
+  deploymentMode: GitCicdDeploymentMode;
+  requiresEnvironmentApproval: boolean;
   sourceRepositoryId: string;
   repositoryProvider: SourceRepositoryProvider;
   repositoryOwner: string;
@@ -448,8 +480,22 @@ export type GitCicdHandoff = {
   commitMessage: string | null;
   pullRequestTitle: string | null;
   pullRequestUrl: string | null;
+  pullRequestNumber: number | null;
   pullRequestHeadSha: string | null;
+  mergeCommitSha: string | null;
+  environmentName: string;
   pipelineRunUrl: string | null;
+  infraPipelineRunUrl: string | null;
+  infraPipelineStatus: GitCicdPipelineDetailStatus;
+  appPipelineRunUrl: string | null;
+  appPipelineStatus: GitCicdPipelineDetailStatus;
+  destroyPipelineRunUrl: string | null;
+  destroyPipelineStatus: GitCicdPipelineDetailStatus;
+  staticSiteUrl: string | null;
+  apiBaseUrl: string | null;
+  repositorySettingsPreview: GitCicdRepositorySettingsPreview | null;
+  awsRoleDiff: GitCicdAwsRoleDiff | null;
+  githubOAuthRequired: boolean;
   status: GitCicdHandoffStatus;
   statusMessage: string | null;
   userAcceptedChangeId: string;
@@ -462,11 +508,22 @@ export type CreateGitCicdHandoffRequest = {
   architectureId: string;
   terraformArtifactId: string;
   handoffKind?: GitCicdHandoffKind | undefined;
+  sourceDeploymentId?: string | null | undefined;
+  deploymentMode?: GitCicdDeploymentMode | undefined;
   sourceRepositoryId: string;
   targetBranch?: string | undefined;
   sourceBranch?: string | undefined;
   commitMessage?: string | undefined;
   pullRequestTitle?: string | undefined;
+  environmentName?: string | undefined;
+  rdsEnabled?: boolean | undefined;
+  awsRegion?: string | undefined;
+  awsRoleArn?: string | null | undefined;
+  tfStateBucket?: string | undefined;
+  releaseBucket?: string | undefined;
+  staticSiteUrl?: string | null | undefined;
+  apiBaseUrl?: string | null | undefined;
+  approveAwsRoleDiff?: boolean | undefined;
   planSummary?: DeploymentPlanSummary | undefined;
   userAcceptedChangeId: string;
 };
@@ -484,7 +541,18 @@ export type GitCicdHandoffPipelineStatus = {
   projectId: string;
   status: GitCicdHandoffStatus;
   pullRequestUrl: string | null;
+  pullRequestNumber: number | null;
+  mergeCommitSha: string | null;
   pipelineRunUrl: string | null;
+  infraPipelineRunUrl: string | null;
+  infraPipelineStatus: GitCicdPipelineDetailStatus;
+  appPipelineRunUrl: string | null;
+  appPipelineStatus: GitCicdPipelineDetailStatus;
+  destroyPipelineRunUrl: string | null;
+  destroyPipelineStatus: GitCicdPipelineDetailStatus;
+  environmentName: string;
+  staticSiteUrl: string | null;
+  apiBaseUrl: string | null;
   statusMessage: string | null;
   updatedAt: IsoDateTimeString;
   source: "runtime_cache" | "rds";

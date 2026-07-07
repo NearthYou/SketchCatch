@@ -227,6 +227,11 @@ export function DeploymentPanel({
     [terraformOutputs]
   );
   const apiBaseUrl = apiBaseUrlOutput ? formatOutputValue(apiBaseUrlOutput) : "";
+  const staticSiteUrlOutput = useMemo(
+    () => terraformOutputs.find((output) => output.name === "static_site_url") ?? null,
+    [terraformOutputs]
+  );
+  const staticSiteUrl = staticSiteUrlOutput ? formatOutputValue(staticSiteUrlOutput) : "";
   const deploymentActions = getDeploymentActionState(selectedDeployment, requestState);
   const canRunPlan = deploymentActions.canRunApplyPlan;
   const canApprovePlan = deploymentActions.canApprovePlan;
@@ -246,7 +251,7 @@ export function DeploymentPanel({
   const shouldAutoRefreshSelectedDeployment = shouldAutoRefreshDeployment(selectedDeployment);
   const shouldAutoRefreshSelectedGitCicdHandoff =
     shouldAutoRefreshGitCicdHandoff(selectedGitCicdHandoff);
-  const canCreateStaticSiteHandoff = Boolean(activeGitHubSourceRepository && selectedDeployment);
+  const canCreateGitCicdHandoff = Boolean(activeGitHubSourceRepository && selectedDeployment);
   const boardSnapshot = useMemo(
     () => createWorkspaceAiBoardSnapshot(diagramJson),
     [diagramJson]
@@ -598,7 +603,18 @@ export function DeploymentPanel({
                     ...handoff,
                     status: pipelineStatus.status,
                     pullRequestUrl: pipelineStatus.pullRequestUrl,
+                    pullRequestNumber: pipelineStatus.pullRequestNumber,
+                    mergeCommitSha: pipelineStatus.mergeCommitSha,
                     pipelineRunUrl: pipelineStatus.pipelineRunUrl,
+                    infraPipelineRunUrl: pipelineStatus.infraPipelineRunUrl,
+                    infraPipelineStatus: pipelineStatus.infraPipelineStatus,
+                    appPipelineRunUrl: pipelineStatus.appPipelineRunUrl,
+                    appPipelineStatus: pipelineStatus.appPipelineStatus,
+                    destroyPipelineRunUrl: pipelineStatus.destroyPipelineRunUrl,
+                    destroyPipelineStatus: pipelineStatus.destroyPipelineStatus,
+                    environmentName: pipelineStatus.environmentName,
+                    staticSiteUrl: pipelineStatus.staticSiteUrl,
+                    apiBaseUrl: pipelineStatus.apiBaseUrl,
                     statusMessage: pipelineStatus.statusMessage,
                     updatedAt: pipelineStatus.updatedAt
                   }
@@ -931,7 +947,7 @@ export function DeploymentPanel({
     }, "GitHub 연결을 시작하지 못했습니다.");
   }
 
-  async function createStaticSiteHandoff(): Promise<void> {
+  async function createGitCicdAutoDeployHandoff(): Promise<void> {
     if (!activeGitHubSourceRepository || !selectedDeployment) {
       return;
     }
@@ -941,12 +957,20 @@ export function DeploymentPanel({
         projectId,
         architectureId: selectedDeployment.architectureId,
         terraformArtifactId: selectedDeployment.terraformArtifactId,
-        handoffKind: "static_site",
+        handoffKind: "terraform_iac",
+        deploymentMode: "infra_and_app",
+        sourceDeploymentId: selectedDeployment.id,
         sourceRepositoryId: activeGitHubSourceRepository.id,
+        environmentName: "sketchcatch-production",
+        rdsEnabled: false,
+        awsRegion: selectedDeployment.approvedAwsRegion ?? "ap-northeast-2",
+        staticSiteUrl: staticSiteUrl && staticSiteUrl !== "[sensitive]" ? staticSiteUrl : null,
+        apiBaseUrl: apiBaseUrl && apiBaseUrl !== "[sensitive]" ? apiBaseUrl : null,
+        approveAwsRoleDiff: true,
         planSummary: selectedDeployment.planSummary ?? undefined,
-        pullRequestTitle: "SketchCatch static site update",
-        commitMessage: "Update SketchCatch static site artifact",
-        userAcceptedChangeId: `static-site-${selectedDeployment.id}`
+        pullRequestTitle: "SketchCatch Git/CI/CD auto deploy",
+        commitMessage: "Add SketchCatch Git/CI/CD auto deploy artifacts",
+        userAcceptedChangeId: `git-cicd-auto-deploy-${selectedDeployment.id}`
       });
       const snapshot = await loadDeploymentPanelSnapshot();
 
@@ -958,7 +982,7 @@ export function DeploymentPanel({
         ]
       });
       setSelectedGitCicdHandoffId(handoff.id);
-    }, "Static site Git/CI/CD handoff를 만들지 못했습니다.");
+    }, "Git/CI/CD 자동 배포 handoff를 만들지 못했습니다.");
   }
 
   async function startNewGitHubInstallation(): Promise<void> {
@@ -1166,12 +1190,12 @@ export function DeploymentPanel({
           ) : null}
           <button
             className={styles.deploymentSecondaryButton}
-            disabled={!canCreateStaticSiteHandoff || requestState === "loading"}
-            onClick={createStaticSiteHandoff}
+            disabled={!canCreateGitCicdHandoff || requestState === "loading"}
+            onClick={createGitCicdAutoDeployHandoff}
             type="button"
           >
             <GitBranch size={16} />
-            Static site PR
+            Git/CI/CD handoff 생성
           </button>
         </div>
       </div>
@@ -1225,6 +1249,23 @@ export function DeploymentPanel({
                 value={getGitCicdHandoffStatusLabel(selectedGitCicdHandoff)}
               />
               <InfoRow label="Kind" value={selectedGitCicdHandoff.handoffKind} />
+              <InfoRow label="Mode" value={selectedGitCicdHandoff.deploymentMode} />
+              <InfoRow
+                label="Environment"
+                value={selectedGitCicdHandoff.environmentName}
+              />
+              <InfoRow
+                label="Approval"
+                value={
+                  selectedGitCicdHandoff.requiresEnvironmentApproval
+                    ? "GitHub Environment approval required"
+                    : "No environment approval"
+                }
+              />
+              <InfoRow
+                label="GitHub OAuth"
+                value={selectedGitCicdHandoff.githubOAuthRequired ? "Required for workflow/settings" : "Not required"}
+              />
               <InfoRow
                 label="Repository"
                 value={`${selectedGitCicdHandoff.repositoryOwner}/${selectedGitCicdHandoff.repositoryName}`}
@@ -1233,8 +1274,52 @@ export function DeploymentPanel({
               <OptionalInfoRow label="Source branch" value={selectedGitCicdHandoff.sourceBranch} />
               <OptionalInfoRow label="PR URL" value={selectedGitCicdHandoff.pullRequestUrl} />
               <OptionalInfoRow
+                label="PR number"
+                value={
+                  selectedGitCicdHandoff.pullRequestNumber
+                    ? `#${selectedGitCicdHandoff.pullRequestNumber}`
+                    : null
+                }
+              />
+              <OptionalInfoRow
+                label="Merge commit"
+                value={selectedGitCicdHandoff.mergeCommitSha}
+              />
+              <OptionalInfoRow
                 label="Pipeline URL"
                 value={selectedGitCicdHandoff.pipelineRunUrl}
+              />
+              <OptionalInfoRow
+                label={`Infra workflow (${selectedGitCicdHandoff.infraPipelineStatus})`}
+                value={selectedGitCicdHandoff.infraPipelineRunUrl}
+              />
+              <OptionalInfoRow
+                label={`App workflow (${selectedGitCicdHandoff.appPipelineStatus})`}
+                value={selectedGitCicdHandoff.appPipelineRunUrl}
+              />
+              <OptionalInfoRow
+                label={`Destroy workflow (${selectedGitCicdHandoff.destroyPipelineStatus})`}
+                value={selectedGitCicdHandoff.destroyPipelineRunUrl}
+              />
+              <OptionalInfoRow label="Static site URL" value={selectedGitCicdHandoff.staticSiteUrl} />
+              <OptionalInfoRow label="API URL" value={selectedGitCicdHandoff.apiBaseUrl} />
+              <OptionalInfoRow
+                label="Repo settings"
+                value={
+                  selectedGitCicdHandoff.repositorySettingsPreview
+                    ? `${Object.keys(selectedGitCicdHandoff.repositorySettingsPreview.variables).length} variables, ${selectedGitCicdHandoff.repositorySettingsPreview.workflowFiles.length} workflows`
+                    : null
+                }
+              />
+              <OptionalInfoRow
+                label="AWS role diff"
+                value={
+                  selectedGitCicdHandoff.awsRoleDiff
+                    ? selectedGitCicdHandoff.awsRoleDiff.approved
+                      ? "approved"
+                      : "approval required"
+                    : null
+                }
               />
               <OptionalInfoRow
                 label="Pipeline message"

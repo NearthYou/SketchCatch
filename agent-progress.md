@@ -1,6 +1,29 @@
 ﻿# 에이전트 진행 로그
 # 에이전트 진행 로그
 
+### 2026-07-07 - Git/CI/CD 자동 배포 E2E 최소 구현
+
+- Goal: `docs/sw/plan6.md`의 Git/CI/CD 자동 배포 범위를 최소 코드로 실제 handoff 생성, workflow PR artifact, 상세 pipeline 상태 추적, Deployment Panel UX까지 연결한다.
+- Completed:
+  - `GitCicdHandoff` shared type, Drizzle schema, SQL migration에 source deployment, deployment mode, GitHub Environment approval, PR number, merge commit, infra/app/destroy workflow URL/status, repository settings preview, AWS role diff, URL 검증 필드를 추가했다.
+  - GitHub PR 생성 provider가 Terraform artifact와 함께 `sketchcatch-infra.yml`, `sketchcatch-app.yml`, `sketchcatch-destroy.yml`, repository settings manifest, AWS role diff manifest를 생성한다.
+  - GitHub Actions polling을 PR number -> merge commit SHA -> workflow name 기준으로 확장해 infra/app/destroy 상태를 분리 추적한다.
+  - Deployment Panel에 `Git/CI/CD handoff 생성` 버튼과 OAuth 필요, Environment approval, IAM diff, repo settings, infra/app/destroy status, static/API URL 표시를 추가했다.
+  - `docs/data-models.md`, `docs/deployment.md`, `docs/sw/spec6.md`, `docs/sw/plan6.md`, `docs/sw/agents3.md`를 구현 상태에 맞게 갱신했다.
+- Verification run:
+  - `pnpm harness:check` - passed before implementation.
+  - `pnpm --filter @sketchcatch/api typecheck` - passed.
+  - `pnpm --filter @sketchcatch/web typecheck` - passed.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/git-cicd/git-cicd-workflows.test.ts src/routes/git-cicd-handoffs.test.ts src/source-repositories/github-app-client.test.ts` - passed, 23 tests.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/api.test.ts features/workspace/deployment-actions.test.ts` - passed, 42 tests.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `pnpm build` - passed.
+- Known risks:
+  - GitHub user OAuth로 repository variables/secrets/environment를 실제 적용하는 writer와 AWS IAM trust/policy update executor는 아직 preview/approval metadata 수준이다.
+  - 실제 PR merge, GitHub Environment approval, Terraform apply, S3 release, ASG Instance Refresh, destroy live smoke는 비용/자격증명/cleanup 승인 후 실행해야 한다.
+  - `pnpm --filter @sketchcatch/api test -- git-cicd`와 `pnpm --filter @sketchcatch/web test -- workspace/api.test.ts deployment-actions.test.ts`는 repo script 특성상 전체 테스트를 실행했고, 기존 S3 env/layout unrelated 실패가 섞여 targeted command로 재검증했다.
+
 ### 2026-07-07 - Git/CI/CD 자동 배포 E2E 계획 문서화
 
 - Goal: Git/CI/CD 자동 배포 후속 범위를 `docs/sw/spec6.md`, `docs/sw/plan6.md`, `docs/sw/agents3.md`로 고정하고 실행 가능한 이슈/브랜치를 만든다.

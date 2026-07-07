@@ -13,6 +13,7 @@
 - Priority: P0
 - Issue: #203
 - Branch: `feature/sw/203-github-oauth-repo-setup`
+- Status: partially_implemented_in_pr_211
 
 목표:
 
@@ -31,6 +32,11 @@
 - workflow 파일 생성 권한이 없으면 handoff 생성 전 차단된다.
 - GitHub token과 secret 값은 저장/노출되지 않는다.
 
+2026-07-07 진행:
+
+- repository settings preview와 workflow/settings manifest 생성은 구현했다.
+- 실제 GitHub user OAuth token으로 variables/secrets/environment를 적용하는 writer는 후속으로 남았다.
+
 테스트:
 
 - GitHub OAuth state/service test
@@ -43,6 +49,7 @@
 - Priority: P0
 - Issue: #204
 - Branch: `feature/sw/204-cicd-handoff-state`
+- Status: implemented_in_pr_211
 
 목표:
 
@@ -69,11 +76,17 @@
 - runtime cache compatibility test
 - existing record migration smoke
 
+2026-07-07 진행:
+
+- shared type, DB schema, SQL migration, API mapper, Runtime Cache snapshot에 infra/app/destroy 상세 상태를 추가했다.
+- targeted API route/typecheck가 통과했다.
+
 ## M3. AWS Connection role 변경 diff와 승인 적용
 
 - Priority: P0
 - Issue: #205
 - Branch: `feature/sw/205-aws-role-oidc-approval`
+- Status: partially_implemented_in_pr_211
 
 목표:
 
@@ -100,12 +113,18 @@
 - AWS gateway fake apply test
 - secret/log masking test
 
+2026-07-07 진행:
+
+- AWS role diff preview와 승인 metadata는 생성한다.
+- 실제 IAM read/update/STS verification executor는 후속으로 남았다.
+
 ## M4. Terraform infra workflow와 S3 backend 자동 부트스트랩
 
 - Priority: P1
 - Issue: #206
 - Branch: `feature/sw/206-terraform-infra-workflow`
 - Blocked by: #203, #204, #205
+- Status: implemented_in_pr_211_for_pr_artifact_generation
 
 목표:
 
@@ -134,12 +153,19 @@
 - S3 backend config test
 - RDS opt-in rendering test
 
+2026-07-07 진행:
+
+- infra workflow renderer와 PR file generation을 구현했다.
+- S3 backend bootstrap, plan/apply split, Environment approval, RDS opt-in variable, destroy workflow renderer를 테스트했다.
+- 실제 GitHub Actions live run은 후속 smoke에서 확인해야 한다.
+
 ## M5. 앱 런타임 S3 release와 ASG Instance Refresh 배포
 
 - Priority: P1
 - Issue: #207
 - Branch: `feature/sw/207-app-runtime-asg-refresh`
 - Blocked by: #206
+- Status: implemented_in_pr_211_for_workflow_generation
 
 목표:
 
@@ -167,12 +193,18 @@
 - ASG refresh command payload test
 - URL verification parser test
 
+2026-07-07 진행:
+
+- app workflow renderer가 S3 release artifact upload, optional ASG Instance Refresh, static/API URL verification step을 생성한다.
+- 실제 ASG Instance Refresh 성공 여부는 live smoke에서 확인해야 한다.
+
 ## M6. merge 후 infra/app pipeline 상태 추적
 
 - Priority: P1
 - Issue: #208
 - Branch: `feature/sw/208-merge-pipeline-status`
 - Blocked by: #204
+- Status: implemented_in_pr_211
 
 목표:
 
@@ -199,12 +231,18 @@
 - Runtime Cache update test
 - route integration test
 
+2026-07-07 진행:
+
+- GitHub client와 pipeline status provider가 PR number, merge commit SHA, workflow name 기준으로 infra/app/destroy status를 추적한다.
+- Runtime Cache와 route response가 상세 상태를 보존한다.
+
 ## M7. Deployment Panel Git/CI/CD 자동 배포 UX
 
 - Priority: P1
 - Issue: #209
 - Branch: `feature/sw/209-deployment-panel-cicd-ux`
 - Blocked by: #203, #204, #205, #208
+- Status: implemented_in_pr_211_for_core_panel
 
 목표:
 
@@ -233,12 +271,18 @@
 - approval modal test
 - pipeline status rendering test
 
+2026-07-07 진행:
+
+- Deployment Panel에 `Git/CI/CD handoff 생성` 버튼, OAuth 필요 표시, approval 표시, repo settings/IAM diff summary, infra/app/destroy status, static/API URL 표시를 추가했다.
+- 실제 OAuth 재승인 CTA와 IAM approval modal은 후속 UX 보강으로 남았다.
+
 ## M8. Git/CI/CD 자동 배포 대표 smoke와 문서 증거
 
 - Priority: P2
 - Issue: #210
 - Branch: `feature/sw/210-cicd-live-smoke-docs`
 - Blocked by: #207, #209
+- Status: not_started_live_smoke
 
 목표:
 
@@ -266,6 +310,11 @@
 - `pnpm lint`
 - `pnpm typecheck`
 - `pnpm build`
+
+2026-07-07 진행:
+
+- targeted API/web tests는 통과했다.
+- 실제 PR merge, Environment approval, Terraform apply, app release, ASG refresh, destroy live smoke는 아직 실행하지 않았다.
 
 ## 이슈와 브랜치 목록
 

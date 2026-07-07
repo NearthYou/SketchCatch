@@ -25,3 +25,4 @@
 23. Keep PRs aligned to the issue/branch mapping in `docs/sw/plan6.md`.
 24. If implementation changes a milestone boundary, update the issue body or add a follow-up issue.
 25. Do not mark a milestone complete without concrete verification commands.
+26. PR artifact generation is not live proof; record real merge/apply/release/destroy smoke separately.

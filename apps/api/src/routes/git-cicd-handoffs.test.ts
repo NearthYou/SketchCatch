@@ -251,10 +251,40 @@ class FakeGitCicdHandoffRepository implements GitCicdHandoffRepository {
         input.pullRequestUrl === undefined ? this.handoff.pullRequestUrl : input.pullRequestUrl,
       pipelineRunUrl:
         input.pipelineRunUrl === undefined ? this.handoff.pipelineRunUrl : input.pipelineRunUrl,
+      pullRequestNumber:
+        input.pullRequestNumber === undefined
+          ? this.handoff.pullRequestNumber
+          : input.pullRequestNumber,
       pullRequestHeadSha:
         input.pullRequestHeadSha === undefined
           ? this.handoff.pullRequestHeadSha
           : input.pullRequestHeadSha,
+      mergeCommitSha:
+        input.mergeCommitSha === undefined ? this.handoff.mergeCommitSha : input.mergeCommitSha,
+      infraPipelineRunUrl:
+        input.infraPipelineRunUrl === undefined
+          ? this.handoff.infraPipelineRunUrl
+          : input.infraPipelineRunUrl,
+      infraPipelineStatus:
+        input.infraPipelineStatus === undefined
+          ? this.handoff.infraPipelineStatus
+          : input.infraPipelineStatus,
+      appPipelineRunUrl:
+        input.appPipelineRunUrl === undefined
+          ? this.handoff.appPipelineRunUrl
+          : input.appPipelineRunUrl,
+      appPipelineStatus:
+        input.appPipelineStatus === undefined
+          ? this.handoff.appPipelineStatus
+          : input.appPipelineStatus,
+      destroyPipelineRunUrl:
+        input.destroyPipelineRunUrl === undefined
+          ? this.handoff.destroyPipelineRunUrl
+          : input.destroyPipelineRunUrl,
+      destroyPipelineStatus:
+        input.destroyPipelineStatus === undefined
+          ? this.handoff.destroyPipelineStatus
+          : input.destroyPipelineStatus,
       statusMessage:
         input.statusMessage === undefined ? this.handoff.statusMessage : input.statusMessage,
       updatedAt: fixedNow
@@ -331,7 +361,8 @@ test("POST /api/projects/:projectId/git-cicd-handoffs creates GitHub PR handoff 
         pullRequestUrl: "https://github.com/sketchcatch/infra-live/pull/42",
         sourceBranch: input.sourceBranch,
         commitSha: "abc1234",
-        pullRequestHeadSha: "abc1234"
+        pullRequestHeadSha: "abc1234",
+        pullRequestNumber: 42
       };
     }
   });
@@ -780,6 +811,9 @@ function createHandoffRecord(
     architectureId,
     terraformArtifactId,
     handoffKind: "terraform_iac",
+    sourceDeploymentId: null,
+    deploymentMode: "infra_and_app",
+    requiresEnvironmentApproval: true,
     sourceRepositoryId,
     repositoryProvider: "internal",
     repositoryOwner: "sketchcatch",
@@ -789,8 +823,22 @@ function createHandoffRecord(
     commitMessage: "Add SketchCatch Terraform preview",
     pullRequestTitle: "SketchCatch IaC preview",
     pullRequestUrl: null,
+    pullRequestNumber: null,
     pullRequestHeadSha: null,
+    mergeCommitSha: null,
+    environmentName: "sketchcatch-production",
     pipelineRunUrl: null,
+    infraPipelineRunUrl: null,
+    infraPipelineStatus: "waiting_for_merge",
+    appPipelineRunUrl: null,
+    appPipelineStatus: "not_started",
+    destroyPipelineRunUrl: null,
+    destroyPipelineStatus: "not_started",
+    staticSiteUrl: null,
+    apiBaseUrl: null,
+    repositorySettingsPreview: null,
+    awsRoleDiff: null,
+    githubOAuthRequired: false,
     status: "draft",
     statusMessage: null,
     userAcceptedChangeId: "accepted-change-1",
