@@ -4,15 +4,15 @@ import { Box, Cloud, GripVertical } from "lucide-react";
 import type { DragEvent } from "react";
 import type { ResourceItem } from "../../../../packages/types/src";
 
+import { DEFAULT_PALETTE_ITEMS } from "./constants";
 import { clearActiveResourceDragPayload, writeResourceDragPayload } from "./diagram-utils";
-import { resourceCatalog } from "../resource-settings/catalog";
 import styles from "./diagram-editor.module.css";
 
 export type DefaultDiagramPaletteProps = {
   items?: readonly ResourceItem[] | undefined;
 };
 
-export function DefaultDiagramPalette({ items = resourceCatalog }: DefaultDiagramPaletteProps) {
+export function DefaultDiagramPalette({ items = DEFAULT_PALETTE_ITEMS }: DefaultDiagramPaletteProps) {
   const resources = items.filter((item) => !isDesignItem(item));
   const designItems = items.filter((item) => isDesignItem(item));
 
