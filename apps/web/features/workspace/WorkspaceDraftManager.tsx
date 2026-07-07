@@ -16,6 +16,7 @@ import {
 import type { LocalProjectDraft } from "./project-draft-persistence";
 import { WorkspaceAiChatDock } from "./WorkspaceAiChatDock";
 import { WorkspaceRightPanel } from "./WorkspaceRightPanel";
+import type { WorkspaceRightPanelView } from "./workspace-right-panel.types";
 import type {
   TerraformIssueAiRequest,
   TerraformPreviewAiRequest,
@@ -28,6 +29,10 @@ const LOCAL_PROJECT_ID = "local-sketchcatch-project";
 const LOCAL_PROJECT_NAME = "Local workspace";
 const LOCAL_SAVE_DEBOUNCE_MS = 800;
 
+export type WorkspaceDraftManagerProps = {
+  readonly initialRightPanelView?: WorkspaceRightPanelView | undefined;
+};
+
 type LoadState = "loading" | "ready" | "error";
 type SaveState = "idle" | "local-pending" | "local-saved" | "failed";
 
@@ -38,7 +43,7 @@ const saveStatusLabels: Record<SaveState, string> = {
   failed: "저장 실패"
 };
 
-export function WorkspaceDraftManager() {
+export function WorkspaceDraftManager({ initialRightPanelView }: WorkspaceDraftManagerProps) {
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [projectName, setProjectName] = useState(LOCAL_PROJECT_NAME);
@@ -230,6 +235,7 @@ export function WorkspaceDraftManager() {
       rightPanel={(context) => (
         <WorkspaceRightPanel
           context={context}
+          initialView={initialRightPanelView}
           onTerraformIssueAiRequest={setTerraformIssueAiRequest}
           onTerraformPreviewAiRequest={setTerraformPreviewAiRequest}
           onTerraformSafeFixApplyResult={setTerraformSafeFixApplyResult}

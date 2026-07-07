@@ -53,6 +53,7 @@ import styles from "./workspace.module.css";
 
 export type WorkspaceRightPanelProps = {
   readonly context: DiagramEditorPanelContext;
+  readonly initialView?: WorkspaceRightPanelView | undefined;
   readonly onTerraformIssueAiRequest: (request: TerraformIssueAiRequest) => void;
   readonly onTerraformPreviewAiRequest: (request: TerraformPreviewAiRequest) => void;
   readonly onTerraformSafeFixApplyResult: (result: TerraformSafeFixApplyResult) => void;
@@ -69,6 +70,7 @@ type PendingTerraformLeaveAction =
 
 export function WorkspaceRightPanel({
   context,
+  initialView,
   onTerraformIssueAiRequest,
   onTerraformPreviewAiRequest,
   onTerraformSafeFixApplyResult,
@@ -82,7 +84,7 @@ export function WorkspaceRightPanel({
   const skipTerraformLeaveGuardRef = useRef(false);
   const latestTerraformDiagnosticsRef = useRef<TerraformDiagnostic[]>([]);
   const latestTerraformSaveRequestIdRef = useRef(0);
-  const [activeView, setActiveView] = useState<WorkspaceRightPanelView>("resource");
+  const [activeView, setActiveView] = useState<WorkspaceRightPanelView>(initialView ?? "resource");
   const [resourceWorkspaceView, setResourceWorkspaceView] = useState<ResourceWorkspaceView>(
     defaultResourceWorkspaceView
   );
