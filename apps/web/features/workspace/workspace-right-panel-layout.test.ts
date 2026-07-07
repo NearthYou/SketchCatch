@@ -21,7 +21,7 @@ const diagramEditorStylesSource = readFeatureFile(
 
 test("deploy opens a full-screen console instead of rendering deployment inside the right panel", () => {
   const deploymentConsoleIndex = componentSource.indexOf(
-    "const deploymentConsoleContent = isDeploymentConsoleOpen ? ("
+    "const deploymentConsoleContent = isDeploymentConsoleOpen && canRenderDeploymentPortal ? ("
   );
   const deploymentPanelIndex = componentSource.indexOf("<DeploymentPanel", deploymentConsoleIndex);
   const nextRightPanelViewIndex = componentSource.indexOf(
@@ -44,6 +44,7 @@ test("deploy opens a full-screen console instead of rendering deployment inside 
   assert.match(componentSource, /fullScreenOnly/);
   assert.match(componentSource, /initialExpanded/);
   assert.match(componentSource, /import \{ createPortal \} from "react-dom";/);
+  assert.match(componentSource, /isDeploymentConsoleOpen && canRenderDeploymentPortal/);
   assert.match(componentSource, /createPortal\(deploymentConsoleContent, document\.body\)/);
   assert.match(componentSource, /onExpandedClose=\{\(\) => setIsDeploymentConsoleOpen\(false\)\}/);
   assert.match(componentSource, /openDeploymentConsole/);

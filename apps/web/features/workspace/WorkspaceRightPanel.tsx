@@ -531,7 +531,7 @@ export function WorkspaceRightPanel({
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [hasUnsavedTerraformChanges]);
 
-  const deploymentConsoleContent = isDeploymentConsoleOpen ? (
+  const deploymentConsoleContent = isDeploymentConsoleOpen && canRenderDeploymentPortal ? (
     <DeploymentPanel
       currentNodeCount={context.nodes.length}
       diagramJson={context.diagram}
@@ -557,10 +557,9 @@ export function WorkspaceRightPanel({
       projectName={projectName}
     />
   ) : null;
-  const deploymentConsole =
-    deploymentConsoleContent && canRenderDeploymentPortal
-      ? createPortal(deploymentConsoleContent, document.body)
-      : null;
+  const deploymentConsole = deploymentConsoleContent
+    ? createPortal(deploymentConsoleContent, document.body)
+    : null;
 
   if (!context.isRightPanelOpen) {
     return (
