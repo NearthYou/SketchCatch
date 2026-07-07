@@ -1,5 +1,27 @@
 ﻿# 에이전트 진행 로그
 
+### 2026-07-07 - 비용 관리 AWS 연결 흐름 추가
+
+- Goal: `/costs` 사용량 분석 탭에서 verified AWS 연결을 선택하고, 연결이 없으면 CloudFormation 기반 AWS Role 연결을 시작/검증할 수 있게 한다.
+- Completed:
+  - 사용량 분석 탭에서 `GET /api/aws/connections` 결과 중 `verified` 연결만 선택지로 보여주고, 선택된 연결 id를 `GET /api/costs/usage?awsConnectionId=...`에 전달하도록 했다.
+  - 검증된 연결이 없거나 새 계정을 연결해야 할 때 `/costs` 화면에서 기존 AWS 연결 API를 호출해 CloudFormation Quick Create URL을 열고, Account ID 입력 후 `verify-created-role`로 검증할 수 있게 했다.
+  - 연결 목록/선택/fallback 표시를 담당하는 `cost-usage-aws-connections` helper와 회귀 테스트를 추가했다.
+  - 비용 화면 스타일을 확장해 AWS 연결 상태, 선택 계정, External ID, Stack 생성 후 검증 UI가 데스크톱/모바일에서 깨지지 않도록 했다.
+  - `docs/data-models.md`에 사용량 분석 탭의 AWS 연결 선택/생성/검증 흐름과 브라우저가 장기 credential을 받지 않는다는 경계를 기록했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits and after edits.
+  - `pnpm --filter @sketchcatch/web typecheck` - passed.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/costs/cost-usage-aws-connections.test.ts features/workspace/api.test.ts` - passed, 28 tests.
+  - `pnpm --filter @sketchcatch/web test` - failed in existing `features/workspace/workspace-ai-diagram-adapter.test.ts` case `convertArchitectureJsonToDiagramJson lays out server and storage draft as nested cloud areas`; the same single-file rerun reproduced the same unrelated layout assertion failure.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `pnpm build` - passed; Next.js regenerated `apps/web/next-env.d.ts`, then the generated diff was reverted.
+  - `git diff --check` - passed with line-ending warnings only.
+- Known risks:
+  - 실제 AWS 콘솔 Stack 생성, Cost Explorer/CloudWatch live 호출은 수행하지 않았다. 이번 변경은 기존 read-only AWS 연결 API와 사용량 분석 API를 화면에서 연결한 것이다.
+  - `pnpm --filter @sketchcatch/web test`의 레이아웃 실패는 이번 변경 범위와 직접 관련 없는 기존 실패로 보이며, 비용/AWS 연결 관련 targeted tests와 필수 lint/typecheck/build는 통과했다.
+
 ### 2026-07-07 - 비용 관리 실제 사용량 분석 탭 구현
 
 - Goal: `/costs`를 예상 비용 계산과 실제 사용량 분석 탭으로 나누고, AWS Cost Explorer/CloudWatch 기반 실제 비용 조회, 낭비 리소스 탐지, 절감 추천을 추가한다.

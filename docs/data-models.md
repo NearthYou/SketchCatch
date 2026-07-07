@@ -1305,7 +1305,9 @@ type CostProjectEstimateListResponse = {
 };
 ```
 
-비용관리 페이지의 실제 사용량 분석 탭은 `GET /api/costs/usage?range=30d&awsConnectionId=...` 응답을 사용한다. `awsConnectionId`가 있으면 해당 사용자의 `verified` AWS 연결만 사용하고, 없으면 최신 `verified` 연결을 사용한다. 연결이 없거나 Cost Explorer/CloudWatch 조회가 실패하면 API는 오류를 화면에 노출하지 않고 deterministic sample 응답으로 같은 DTO를 반환한다.
+비용관리 페이지의 실제 사용량 분석 탭은 `GET /api/costs/usage?range=30d&awsConnectionId=...` 응답을 사용한다. 화면은 `GET /api/aws/connections`에서 `verified` AWS 연결만 선택지로 보여주고, 사용자가 선택한 연결의 `awsConnectionId`를 사용량 분석 요청에 전달한다. `awsConnectionId`가 있으면 해당 사용자의 `verified` AWS 연결만 사용하고, 없으면 최신 `verified` 연결을 사용한다. 연결이 없거나 Cost Explorer/CloudWatch 조회가 실패하면 API는 오류를 화면에 노출하지 않고 deterministic sample 응답으로 같은 DTO를 반환한다.
+
+사용량 분석 탭에서 새 AWS 연결을 시작할 때도 브라우저는 장기 AWS credential을 받지 않는다. 화면은 기존 AWS 연결 API를 호출해 CloudFormation Quick Create URL과 External ID를 받고, 사용자가 AWS 콘솔에서 Stack을 만든 뒤 Account ID를 입력하면 `POST /api/aws/connections/:connectionId/verify-created-role`로 backend 검증을 요청한다. 검증된 연결만 Cost Explorer/CloudWatch 실제 조회 대상으로 사용할 수 있다.
 
 실제 비용 데이터 출처는 AWS Cost Explorer와 CloudWatch다. Cost Explorer는 `UnblendedCost` 기준으로 일별 비용, 서비스별 비용, `SketchCatchProjectId` tag 기반 프로젝트별 비용을 조회한다. 프로젝트 tag 비용이 있으면 이 값을 우선한다. tag 비용이 없으면 최신 성공 `deployments`와 `deployed_resources`를 기준으로 프로젝트별 비용을 근사 배분한다. 이 근사값은 청구 원장 대체물이 아니라 현재 배포 리소스 비중을 보여주는 v1 fallback이다.
 

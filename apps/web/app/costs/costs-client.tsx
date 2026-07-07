@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type {
+  AwsConnection,
+  AwsConnectionCloudFormationTemplateResponse,
   CostEstimatePeriod,
   CostEstimateSupportLevel,
   CostMetricSeries,
@@ -14,17 +16,41 @@ import type {
   CostUsageAnalysisResponse,
   CostUsageTrendPoint,
   CostWasteResourceInsight,
+  CreateAwsConnectionResponse,
   ResourceCostEstimate
 } from "@sketchcatch/types";
-import { Activity, BarChart3, Calculator, LineChart, PiggyBank, RefreshCw } from "lucide-react";
+import {
+  Activity,
+  BarChart3,
+  Calculator,
+  CheckCircle2,
+  Cloud,
+  ExternalLink,
+  LineChart,
+  Link,
+  PiggyBank,
+  RefreshCw
+} from "lucide-react";
 import { DashboardIcon } from "../../components/dashboard/dashboard-icons";
 import {
   createCostUsageLineChart,
   createServiceCostBars,
   sumEstimatedMonthlySavings
 } from "../../features/costs/cost-usage-charts";
+import {
+  formatCostUsageAwsConnectionLabel,
+  getVerifiedCostUsageAwsConnections,
+  selectPreferredCostUsageAwsConnection
+} from "../../features/costs/cost-usage-aws-connections";
 import { getApiErrorMessage } from "../../lib/api-client";
-import { listCostProjectEstimates, listCostUsageAnalysis } from "../../features/workspace/api";
+import {
+  createAwsConnectionSetup,
+  getAwsConnectionCloudFormationTemplate,
+  listAwsConnections,
+  listCostProjectEstimates,
+  listCostUsageAnalysis,
+  verifyAwsConnectionCreatedRole
+} from "../../features/workspace/api";
 
 type CostPageState = "idle" | "loading" | "error";
 type CostTab = "estimate" | "usage";
@@ -50,6 +76,7 @@ const DEFAULT_COST_QUERY: AppliedCostQuery = {
   expectedUserCount: 1000,
   period: "month"
 };
+const COST_USAGE_AWS_REGION = "ap-northeast-2";
 
 export function CostsClient() {
   const [activeTab, setActiveTab] = useState<CostTab>("estimate");
@@ -72,6 +99,17 @@ export function CostsClient() {
   const [usageState, setUsageState] = useState<CostPageState>("loading");
   const [usageErrorMessage, setUsageErrorMessage] = useState("");
   const [usageReloadKey, setUsageReloadKey] = useState(0);
+  const [awsConnections, setAwsConnections] = useState<AwsConnection[]>([]);
+  const [selectedUsageAwsConnectionId, setSelectedUsageAwsConnectionId] = useState<string | null>(
+    null
+  );
+  const [awsConnectionState, setAwsConnectionState] = useState<CostPageState>("idle");
+  const [awsConnectionErrorMessage, setAwsConnectionErrorMessage] = useState("");
+  const [awsSetup, setAwsSetup] = useState<CreateAwsConnectionResponse | null>(null);
+  const [awsConnectionTemplate, setAwsConnectionTemplate] =
+    useState<AwsConnectionCloudFormationTemplateResponse | null>(null);
+  const [awsAccountIdInput, setAwsAccountIdInput] = useState("");
+  const [awsConnectionActionMessage, setAwsConnectionActionMessage] = useState("");
   const selectAllCheckboxRef = useRef<HTMLInputElement>(null);
   const selectedProject = useMemo(
     () => costData?.projects.find((item) => item.project.id === selectedProjectId) ?? costData?.projects[0] ?? null,
@@ -94,6 +132,14 @@ export function CostsClient() {
   ).length;
   const allProjectsIncluded = projectIds.length > 0 && includedVisibleProjectCount === projectIds.length;
   const someProjectsIncluded = includedVisibleProjectCount > 0 && !allProjectsIncluded;
+  const verifiedUsageAwsConnections = useMemo(
+    () => getVerifiedCostUsageAwsConnections(awsConnections),
+    [awsConnections]
+  );
+  const selectedUsageAwsConnection = useMemo(
+    () => selectPreferredCostUsageAwsConnection(awsConnections, selectedUsageAwsConnectionId),
+    [awsConnections, selectedUsageAwsConnectionId]
+  );
 
   useEffect(() => {
     let ignore = false;
@@ -168,6 +214,11 @@ export function CostsClient() {
 
       try {
         const result = await listCostUsageAnalysis({
+          ...(selectedUsageAwsConnection === null
+            ? {}
+            : {
+                awsConnectionId: selectedUsageAwsConnection.id
+              }),
           range: appliedUsageRange
         });
 
@@ -192,7 +243,49 @@ export function CostsClient() {
     return () => {
       ignore = true;
     };
-  }, [activeTab, appliedUsageRange, usageReloadKey]);
+  }, [activeTab, appliedUsageRange, selectedUsageAwsConnection?.id, usageReloadKey]);
+
+  useEffect(() => {
+    if (activeTab !== "usage") {
+      return undefined;
+    }
+
+    let ignore = false;
+
+    async function loadAwsConnectionList(): Promise<void> {
+      setAwsConnectionState("loading");
+      setAwsConnectionErrorMessage("");
+
+      try {
+        const nextConnections = await listAwsConnections();
+
+        if (ignore) {
+          return;
+        }
+
+        setAwsConnections(nextConnections);
+        setSelectedUsageAwsConnectionId((currentConnectionId) =>
+          selectPreferredCostUsageAwsConnection(nextConnections, currentConnectionId)?.id ?? null
+        );
+        setAwsConnectionState("idle");
+      } catch (error) {
+        if (ignore) {
+          return;
+        }
+
+        setAwsConnectionState("error");
+        setAwsConnectionErrorMessage(
+          getApiErrorMessage(error, "AWS 연결 목록을 불러오지 못했습니다.")
+        );
+      }
+    }
+
+    void loadAwsConnectionList();
+
+    return () => {
+      ignore = true;
+    };
+  }, [activeTab]);
 
   useEffect(() => {
     function handlePopState(): void {
@@ -229,6 +322,152 @@ export function CostsClient() {
 
   function applyUsageRange(): void {
     setAppliedUsageRange(usageRangeInput);
+  }
+
+  async function refreshAwsConnections(): Promise<void> {
+    setAwsConnectionState("loading");
+    setAwsConnectionErrorMessage("");
+
+    try {
+      const nextConnections = await listAwsConnections();
+
+      setAwsConnections(nextConnections);
+      setSelectedUsageAwsConnectionId((currentConnectionId) =>
+        selectPreferredCostUsageAwsConnection(nextConnections, currentConnectionId)?.id ?? null
+      );
+      setAwsConnectionState("idle");
+    } catch (error) {
+      setAwsConnectionState("error");
+      setAwsConnectionErrorMessage(
+        getApiErrorMessage(error, "AWS 연결 목록을 불러오지 못했습니다.")
+      );
+    }
+  }
+
+  async function startUsageAwsSetup(): Promise<void> {
+    const launchWindow = openAwsConsolePlaceholder();
+    let didLaunchConsole = false;
+
+    setAwsConnectionState("loading");
+    setAwsConnectionErrorMessage("");
+    setAwsConnectionActionMessage("");
+
+    try {
+      const setupResponse = await createAwsConnectionSetup({
+        region: COST_USAGE_AWS_REGION
+      });
+      const templateResponse = await getAwsConnectionCloudFormationTemplate({
+        connectionId: setupResponse.awsConnection.id
+      });
+
+      setAwsSetup(setupResponse);
+      setAwsConnectionTemplate(templateResponse);
+      setAwsConnections((currentConnections) => [
+        setupResponse.awsConnection,
+        ...currentConnections.filter(
+          (connection) => connection.id !== setupResponse.awsConnection.id
+        )
+      ]);
+      setAwsAccountIdInput("");
+      setAwsConnectionActionMessage(
+        "AWS 콘솔에서 Stack 생성이 끝나면 Account ID를 입력해 연결을 검증하세요."
+      );
+      setAwsConnectionState("idle");
+
+      if (templateResponse.launchStackUrl) {
+        openAwsConsoleUrl(templateResponse.launchStackUrl, launchWindow);
+        didLaunchConsole = true;
+      }
+    } catch (error) {
+      setAwsConnectionState("error");
+      setAwsConnectionErrorMessage(
+        getApiErrorMessage(error, "AWS 연결 설정을 시작하지 못했습니다.")
+      );
+    } finally {
+      if (!didLaunchConsole) {
+        launchWindow?.close();
+      }
+    }
+  }
+
+  async function openUsageAwsTemplate(): Promise<void> {
+    const activeSetupConnection = awsSetup?.awsConnection;
+
+    if (activeSetupConnection === undefined) {
+      return;
+    }
+
+    const launchWindow = openAwsConsolePlaceholder();
+    let didLaunchConsole = false;
+
+    setAwsConnectionState("loading");
+    setAwsConnectionErrorMessage("");
+
+    try {
+      const templateResponse = await getAwsConnectionCloudFormationTemplate({
+        connectionId: activeSetupConnection.id
+      });
+
+      setAwsConnectionTemplate(templateResponse);
+      setAwsConnectionState("idle");
+
+      if (templateResponse.launchStackUrl) {
+        openAwsConsoleUrl(templateResponse.launchStackUrl, launchWindow);
+        didLaunchConsole = true;
+      }
+    } catch (error) {
+      setAwsConnectionState("error");
+      setAwsConnectionErrorMessage(
+        getApiErrorMessage(error, "CloudFormation 템플릿을 불러오지 못했습니다.")
+      );
+    } finally {
+      if (!didLaunchConsole) {
+        launchWindow?.close();
+      }
+    }
+  }
+
+  async function verifyUsageAwsConnection(): Promise<void> {
+    const activeSetupConnection = awsSetup?.awsConnection;
+    const accountId = awsAccountIdInput.trim();
+
+    if (activeSetupConnection === undefined || !/^\d{12}$/.test(accountId)) {
+      setAwsConnectionActionMessage("AWS Account ID 12자리를 입력해주세요.");
+      return;
+    }
+
+    setAwsConnectionState("loading");
+    setAwsConnectionErrorMessage("");
+    setAwsConnectionActionMessage("");
+
+    try {
+      const response = await verifyAwsConnectionCreatedRole({
+        accountId,
+        connectionId: activeSetupConnection.id
+      });
+
+      setAwsConnections((currentConnections) => {
+        if (currentConnections.some((connection) => connection.id === response.awsConnection.id)) {
+          return currentConnections.map((connection) =>
+            connection.id === response.awsConnection.id ? response.awsConnection : connection
+          );
+        }
+
+        return [response.awsConnection, ...currentConnections];
+      });
+      setSelectedUsageAwsConnectionId(response.awsConnection.id);
+      setAwsSetup(null);
+      setAwsConnectionTemplate(null);
+      setAwsAccountIdInput(response.awsConnection.accountId ?? "");
+      setAwsConnectionActionMessage("AWS 연결이 검증되었습니다. 실제 사용량 분석을 다시 불러옵니다.");
+      setAwsConnectionState("idle");
+      setUsageReloadKey((currentKey) => currentKey + 1);
+    } catch (error) {
+      setAwsConnectionState("error");
+      setAwsConnectionErrorMessage(
+        getApiErrorMessage(error, "AWS 연결 검증 저장에 실패했습니다.")
+      );
+    }
   }
 
   function toggleIncludedProject(projectId: string): void {
@@ -497,12 +736,29 @@ export function CostsClient() {
         <CostUsageAnalysisTab
           appliedUsageRange={appliedUsageRange}
           applyUsageRange={applyUsageRange}
+          awsAccountIdInput={awsAccountIdInput}
+          awsConnectionActionMessage={awsConnectionActionMessage}
+          awsConnectionErrorMessage={awsConnectionErrorMessage}
+          awsConnectionState={awsConnectionState}
+          awsConnectionTemplate={awsConnectionTemplate}
+          awsSetup={awsSetup}
+          onAwsAccountIdInputChange={setAwsAccountIdInput}
+          onOpenAwsTemplate={openUsageAwsTemplate}
+          onRefreshAwsConnections={refreshAwsConnections}
+          onSelectedAwsConnectionChange={(connectionId) =>
+            setSelectedUsageAwsConnectionId(connectionId.length === 0 ? null : connectionId)
+          }
+          onStartAwsSetup={startUsageAwsSetup}
+          onVerifyAwsConnection={verifyUsageAwsConnection}
           refreshUsage={() => setUsageReloadKey((currentKey) => currentKey + 1)}
+          selectedAwsConnection={selectedUsageAwsConnection}
+          selectedAwsConnectionId={selectedUsageAwsConnection?.id ?? ""}
           setUsageRangeInput={setUsageRangeInput}
           usageData={usageData}
           usageErrorMessage={usageErrorMessage}
           usageRangeInput={usageRangeInput}
           usageState={usageState}
+          verifiedAwsConnections={verifiedUsageAwsConnections}
         />
       )}
     </>
@@ -512,21 +768,51 @@ export function CostsClient() {
 function CostUsageAnalysisTab({
   appliedUsageRange,
   applyUsageRange,
+  awsAccountIdInput,
+  awsConnectionActionMessage,
+  awsConnectionErrorMessage,
+  awsConnectionState,
+  awsConnectionTemplate,
+  awsSetup,
+  onAwsAccountIdInputChange,
+  onOpenAwsTemplate,
+  onRefreshAwsConnections,
+  onSelectedAwsConnectionChange,
+  onStartAwsSetup,
+  onVerifyAwsConnection,
   refreshUsage,
+  selectedAwsConnection,
+  selectedAwsConnectionId,
   setUsageRangeInput,
   usageData,
   usageErrorMessage,
   usageRangeInput,
-  usageState
+  usageState,
+  verifiedAwsConnections
 }: {
   readonly appliedUsageRange: CostUsageAnalysisRange;
   readonly applyUsageRange: () => void;
+  readonly awsAccountIdInput: string;
+  readonly awsConnectionActionMessage: string;
+  readonly awsConnectionErrorMessage: string;
+  readonly awsConnectionState: CostPageState;
+  readonly awsConnectionTemplate: AwsConnectionCloudFormationTemplateResponse | null;
+  readonly awsSetup: CreateAwsConnectionResponse | null;
+  readonly onAwsAccountIdInputChange: (value: string) => void;
+  readonly onOpenAwsTemplate: () => void;
+  readonly onRefreshAwsConnections: () => void;
+  readonly onSelectedAwsConnectionChange: (connectionId: string) => void;
+  readonly onStartAwsSetup: () => void;
+  readonly onVerifyAwsConnection: () => void;
   readonly refreshUsage: () => void;
+  readonly selectedAwsConnection: AwsConnection | null;
+  readonly selectedAwsConnectionId: string;
   readonly setUsageRangeInput: (range: CostUsageAnalysisRange) => void;
   readonly usageData: CostUsageAnalysisResponse | null;
   readonly usageErrorMessage: string;
   readonly usageRangeInput: CostUsageAnalysisRange;
   readonly usageState: CostPageState;
+  readonly verifiedAwsConnections: readonly AwsConnection[];
 }) {
   const lineChart = useMemo(
     () => createCostUsageLineChart(usageData?.dailyTrend ?? []),
@@ -568,6 +854,24 @@ function CostUsageAnalysisTab({
               적용
             </button>
           </div>
+          <CostUsageAwsConnectionPanel
+            awsAccountIdInput={awsAccountIdInput}
+            awsConnectionActionMessage={awsConnectionActionMessage}
+            awsConnectionErrorMessage={awsConnectionErrorMessage}
+            awsConnectionState={awsConnectionState}
+            awsConnectionTemplate={awsConnectionTemplate}
+            awsSetup={awsSetup}
+            onAwsAccountIdInputChange={onAwsAccountIdInputChange}
+            onOpenAwsTemplate={onOpenAwsTemplate}
+            onRefreshAwsConnections={onRefreshAwsConnections}
+            onSelectedAwsConnectionChange={onSelectedAwsConnectionChange}
+            onStartAwsSetup={onStartAwsSetup}
+            onVerifyAwsConnection={onVerifyAwsConnection}
+            selectedAwsConnection={selectedAwsConnection}
+            selectedAwsConnectionId={selectedAwsConnectionId}
+            usageData={usageData}
+            verifiedAwsConnections={verifiedAwsConnections}
+          />
         </div>
 
         <div className="costSummaryCard" aria-labelledby="cost-usage-summary-title">
@@ -698,6 +1002,205 @@ function CostUsageAnalysisTab({
         </>
       ) : null}
     </>
+  );
+}
+
+function CostUsageAwsConnectionPanel({
+  awsAccountIdInput,
+  awsConnectionActionMessage,
+  awsConnectionErrorMessage,
+  awsConnectionState,
+  awsConnectionTemplate,
+  awsSetup,
+  onAwsAccountIdInputChange,
+  onOpenAwsTemplate,
+  onRefreshAwsConnections,
+  onSelectedAwsConnectionChange,
+  onStartAwsSetup,
+  onVerifyAwsConnection,
+  selectedAwsConnection,
+  selectedAwsConnectionId,
+  usageData,
+  verifiedAwsConnections
+}: {
+  readonly awsAccountIdInput: string;
+  readonly awsConnectionActionMessage: string;
+  readonly awsConnectionErrorMessage: string;
+  readonly awsConnectionState: CostPageState;
+  readonly awsConnectionTemplate: AwsConnectionCloudFormationTemplateResponse | null;
+  readonly awsSetup: CreateAwsConnectionResponse | null;
+  readonly onAwsAccountIdInputChange: (value: string) => void;
+  readonly onOpenAwsTemplate: () => void;
+  readonly onRefreshAwsConnections: () => void;
+  readonly onSelectedAwsConnectionChange: (connectionId: string) => void;
+  readonly onStartAwsSetup: () => void;
+  readonly onVerifyAwsConnection: () => void;
+  readonly selectedAwsConnection: AwsConnection | null;
+  readonly selectedAwsConnectionId: string;
+  readonly usageData: CostUsageAnalysisResponse | null;
+  readonly verifiedAwsConnections: readonly AwsConnection[];
+}) {
+  const isBusy = awsConnectionState === "loading";
+  const hasVerifiedConnections = verifiedAwsConnections.length > 0;
+  const setupConnection = awsSetup?.awsConnection ?? null;
+  const accountIdIsValid = /^\d{12}$/.test(awsAccountIdInput.trim());
+  const isLiveAwsData =
+    usageData?.dataSource === "aws_cost_explorer" &&
+    usageData.fallbackUsed === false;
+  const dataSourceClassName = isLiveAwsData
+    ? "costAwsConnectionStatus costAwsConnectionStatusLive"
+    : "costAwsConnectionStatus costAwsConnectionStatusSample";
+  const dataSourceLabel =
+    isLiveAwsData
+      ? "Cost Explorer 조회 중"
+      : selectedAwsConnection === null
+        ? "검증된 연결 없음 · 샘플 표시"
+        : "연결 선택됨 · 샘플 표시";
+
+  return (
+    <section className="costAwsConnectionPanel" aria-labelledby="cost-aws-connection-title">
+      <div className="costAwsConnectionHeader">
+        <span className="costAwsConnectionIcon">
+          <Cloud size={18} aria-hidden="true" />
+        </span>
+        <div>
+          <h3 id="cost-aws-connection-title">AWS 계정 연결</h3>
+          <p>검증된 연결을 선택하면 Cost Explorer와 CloudWatch 기준으로 실제 비용을 조회합니다.</p>
+        </div>
+        <span className={dataSourceClassName}>
+          {isLiveAwsData ? <CheckCircle2 size={14} aria-hidden="true" /> : null}
+          {dataSourceLabel}
+        </span>
+      </div>
+
+      <div className="costAwsConnectionControls">
+        <label className="costField costAwsConnectionSelect">
+          <span>조회 계정</span>
+          <select
+            disabled={!hasVerifiedConnections || isBusy}
+            onChange={(event) => onSelectedAwsConnectionChange(event.target.value)}
+            value={selectedAwsConnectionId}
+          >
+            <option value="">검증된 AWS 연결 없음</option>
+            {verifiedAwsConnections.map((connection) => (
+              <option key={connection.id} value={connection.id}>
+                {formatCostUsageAwsConnectionLabel(connection)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="costAwsConnectionActions">
+          <button
+            className="dashboardSecondaryButton"
+            disabled={isBusy}
+            onClick={() => void onRefreshAwsConnections()}
+            type="button"
+          >
+            <RefreshCw size={14} aria-hidden="true" />
+            새로고침
+          </button>
+          <button
+            className="dashboardSecondaryButton"
+            disabled={isBusy}
+            onClick={() => void onStartAwsSetup()}
+            type="button"
+          >
+            <Link size={14} aria-hidden="true" />
+            AWS 연결 시작
+          </button>
+        </div>
+      </div>
+
+      {selectedAwsConnection !== null ? (
+        <dl className="costAwsConnectionInfo">
+          <div>
+            <dt>Account ID</dt>
+            <dd>{selectedAwsConnection.accountId ?? "-"}</dd>
+          </div>
+          <div>
+            <dt>Region</dt>
+            <dd>{selectedAwsConnection.region}</dd>
+          </div>
+          <div>
+            <dt>Verified</dt>
+            <dd>{formatAwsConnectionDate(selectedAwsConnection.lastVerifiedAt)}</dd>
+          </div>
+        </dl>
+      ) : null}
+
+      {awsConnectionState === "loading" ? <p className="costAwsConnectionNote">AWS 연결을 처리하는 중입니다.</p> : null}
+      {awsConnectionState === "error" && awsConnectionErrorMessage.length > 0 ? (
+        <p className="costErrorMessage" role="alert">
+          {awsConnectionErrorMessage}
+        </p>
+      ) : null}
+      {awsConnectionActionMessage.length > 0 ? (
+        <p className="costAwsConnectionNote">{awsConnectionActionMessage}</p>
+      ) : null}
+
+      {setupConnection !== null ? (
+        <div className="costAwsSetupPanel">
+          <div className="costAwsSetupHeader">
+            <div>
+              <strong>CloudFormation Stack 생성 후 검증</strong>
+              <p>새 탭에서 Stack을 생성한 뒤 AWS Account ID 12자리를 입력하세요.</p>
+            </div>
+            <button
+              className="dashboardSecondaryButton"
+              disabled={isBusy}
+              onClick={() => void onOpenAwsTemplate()}
+              type="button"
+            >
+              <ExternalLink size={14} aria-hidden="true" />
+              AWS 콘솔 열기
+            </button>
+          </div>
+
+          <dl className="costAwsSetupMeta">
+            <div>
+              <dt>External ID</dt>
+              <dd>{setupConnection.externalId}</dd>
+            </div>
+            <div>
+              <dt>Role</dt>
+              <dd>{awsConnectionTemplate?.roleName ?? awsSetup?.roleSetup.roleName ?? "-"}</dd>
+            </div>
+          </dl>
+
+          <div className="costAwsVerifyRow">
+            <label className="costField">
+              <span>AWS Account ID</span>
+              <input
+                inputMode="numeric"
+                maxLength={12}
+                onChange={(event) => onAwsAccountIdInputChange(event.target.value)}
+                placeholder="123456789012"
+                value={awsAccountIdInput}
+              />
+            </label>
+            <button
+              className="primaryButton costAwsVerifyButton"
+              disabled={!accountIdIsValid || isBusy}
+              onClick={() => void onVerifyAwsConnection()}
+              type="button"
+            >
+              검증
+            </button>
+          </div>
+
+          {awsConnectionTemplate?.manualTemplateFallbackAvailable ? (
+            <details className="costAwsSetupFallback">
+              <summary>CloudFormation 템플릿 직접 보기</summary>
+              <textarea
+                className="costAwsTemplateArea"
+                readOnly
+                value={awsConnectionTemplate.templateBody}
+              />
+            </details>
+          ) : null}
+        </div>
+      ) : null}
+    </section>
   );
 }
 
@@ -946,6 +1449,56 @@ function writeSelectedProjectIdToLocation(projectId: string | null): void {
   }
 
   window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+}
+
+function openAwsConsolePlaceholder(): Window | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const launchWindow = window.open("", "_blank");
+
+  if (launchWindow === null) {
+    return null;
+  }
+
+  launchWindow.opener = null;
+  launchWindow.document.title = "SketchCatch AWS 연결 준비";
+  launchWindow.document.body.style.fontFamily = "system-ui, sans-serif";
+  launchWindow.document.body.style.padding = "24px";
+  launchWindow.document.body.textContent = "AWS 콘솔 연결을 준비하는 중입니다.";
+
+  return launchWindow;
+}
+
+function openAwsConsoleUrl(url: string, targetWindow: Window | null): void {
+  if (targetWindow !== null && !targetWindow.closed) {
+    targetWindow.location.href = url;
+    return;
+  }
+
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.open(url, "_blank", "noopener,noreferrer");
+}
+
+function formatAwsConnectionDate(value: string | null): string {
+  if (value === null) {
+    return "-";
+  }
+
+  const parsedDate = new Date(value);
+
+  if (Number.isNaN(parsedDate.getTime())) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat("ko-KR", {
+    dateStyle: "medium",
+    timeStyle: "short"
+  }).format(parsedDate);
 }
 
 function formatResourceTypes(resources: readonly ResourceCostEstimate[]): string {

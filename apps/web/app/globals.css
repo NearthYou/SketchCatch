@@ -8194,6 +8194,200 @@ nextjs-portal {
   grid-template-columns: minmax(180px, 240px) auto;
 }
 
+.costAwsConnectionPanel {
+  background: var(--bp-paper-2);
+  border: 1px solid var(--bp-line);
+  border-radius: var(--bp-r);
+  display: grid;
+  gap: 14px;
+  padding: 14px;
+}
+
+.costAwsConnectionHeader {
+  align-items: start;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+}
+
+.costAwsConnectionHeader h3,
+.costAwsConnectionHeader p {
+  margin: 0;
+}
+
+.costAwsConnectionHeader h3 {
+  color: var(--bp-ink);
+  font-size: 0.98rem;
+  line-height: 1.2;
+}
+
+.costAwsConnectionHeader p,
+.costAwsConnectionNote {
+  color: var(--bp-muted);
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.costAwsConnectionIcon {
+  align-items: center;
+  background: white;
+  border: 1px solid var(--bp-line);
+  border-radius: var(--bp-r);
+  color: var(--dashboard-blue);
+  display: inline-flex;
+  height: 34px;
+  justify-content: center;
+  width: 34px;
+}
+
+.costAwsConnectionStatus {
+  align-items: center;
+  border: 1px solid var(--bp-line);
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 0.78rem;
+  font-weight: 900;
+  gap: 6px;
+  justify-self: end;
+  min-height: 30px;
+  padding: 5px 10px;
+  white-space: nowrap;
+}
+
+.costAwsConnectionStatusLive {
+  background: var(--bp-low-tint);
+  border-color: color-mix(in srgb, var(--bp-low) 36%, var(--bp-line));
+  color: var(--bp-low);
+}
+
+.costAwsConnectionStatusSample {
+  background: color-mix(in srgb, var(--bp-medium) 12%, white);
+  border-color: color-mix(in srgb, var(--bp-medium) 28%, var(--bp-line));
+  color: var(--bp-medium);
+}
+
+.costAwsConnectionControls,
+.costAwsVerifyRow {
+  align-items: end;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(220px, 1fr) auto;
+}
+
+.costAwsConnectionActions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.costAwsConnectionActions .dashboardSecondaryButton,
+.costAwsSetupHeader .dashboardSecondaryButton,
+.costAwsVerifyButton {
+  min-height: 42px;
+}
+
+.costAwsConnectionInfo,
+.costAwsSetupMeta {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0;
+}
+
+.costAwsConnectionInfo div,
+.costAwsSetupMeta div {
+  background: white;
+  border: 1px solid var(--bp-line);
+  border-radius: var(--bp-r);
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px;
+}
+
+.costAwsConnectionInfo dt,
+.costAwsSetupMeta dt {
+  color: var(--bp-muted);
+  font-size: 0.76rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.costAwsConnectionInfo dd,
+.costAwsSetupMeta dd {
+  color: var(--bp-ink);
+  font-size: 0.86rem;
+  font-weight: 800;
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.costAwsConnectionNote {
+  margin: 0;
+}
+
+.costAwsSetupPanel {
+  border-top: 1px solid var(--bp-line);
+  display: grid;
+  gap: 12px;
+  padding-top: 12px;
+}
+
+.costAwsSetupHeader {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.costAwsSetupHeader strong,
+.costAwsSetupHeader p {
+  margin: 0;
+}
+
+.costAwsSetupHeader strong {
+  color: var(--bp-ink);
+}
+
+.costAwsSetupHeader p {
+  color: var(--bp-muted);
+  font-size: 0.86rem;
+  font-weight: 700;
+  margin-top: 3px;
+}
+
+.costAwsSetupFallback {
+  background: white;
+  border: 1px solid var(--bp-line);
+  border-radius: var(--bp-r);
+  padding: 10px;
+}
+
+.costAwsSetupFallback summary {
+  color: var(--bp-ink);
+  cursor: pointer;
+  font-size: 0.86rem;
+  font-weight: 900;
+}
+
+.costAwsTemplateArea {
+  background: var(--bp-paper-2);
+  border: 1px solid var(--bp-line);
+  border-radius: var(--bp-r);
+  color: var(--bp-ink);
+  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  margin-top: 10px;
+  min-height: 160px;
+  padding: 10px;
+  resize: vertical;
+  width: 100%;
+}
+
 .costField {
   gap: 7px;
 }
@@ -8602,8 +8796,30 @@ nextjs-portal {
   }
 
   .costWasteItem > div:first-child,
+  .costAwsSetupHeader,
   .costRecommendationHeader {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .costAwsConnectionHeader {
+    grid-template-columns: 34px minmax(0, 1fr);
+  }
+
+  .costAwsConnectionStatus {
+    grid-column: 1 / -1;
+    justify-self: start;
+    white-space: normal;
+  }
+
+  .costAwsConnectionControls,
+  .costAwsVerifyRow,
+  .costAwsConnectionInfo,
+  .costAwsSetupMeta {
+    grid-template-columns: 1fr;
+  }
+
+  .costAwsConnectionActions {
+    justify-content: flex-start;
   }
 }

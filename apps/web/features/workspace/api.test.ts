@@ -34,7 +34,8 @@ import {
   testAwsConnection,
   uploadProjectAsset,
   validateTerraformCode,
-  verifyAwsConnection
+  verifyAwsConnection,
+  verifyAwsConnectionCreatedRole
 } from "./api";
 import type { Project } from "../../../../packages/types/src";
 import { clearStoredAuthSession, writeStoredAuthSession } from "../../lib/auth-storage";
@@ -848,6 +849,72 @@ test("verifyAwsConnection stores verified AWS connection metadata", async (conte
   assert.equal(new Headers(requests[0]?.init?.headers).get("authorization"), "Bearer access-token");
   assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), {
     roleArn: "arn:aws:iam::123456789012:role/SketchCatchTerraformExecutionRole"
+  });
+  assert.equal(response.awsConnection.status, "verified");
+  assert.equal(response.awsConnection.accountId, "123456789012");
+  assert.equal("credentials" in response, false);
+  assert.equal("accessKeyId" in response, false);
+  assert.equal("secretAccessKey" in response, false);
+  assert.equal("sessionToken" in response, false);
+});
+
+test("verifyAwsConnectionCreatedRole stores the CloudFormation-created role by account id", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    restoreWindow(originalWindowDescriptor);
+  });
+
+  installAuthSession();
+
+  globalThis.fetch = async (input, init) => {
+    requests.push({ input, init });
+
+    return new Response(
+      JSON.stringify({
+        ok: true,
+        accountId: "123456789012",
+        callerArn:
+          "arn:aws:sts::123456789012:assumed-role/SketchCatchTerraformExecutionRole/sketchcatch-connection-test",
+        region: "ap-northeast-2",
+        awsConnection: {
+          id: "33333333-3333-4333-8333-333333333333",
+          userId: "22222222-2222-4222-8222-222222222222",
+          accountId: "123456789012",
+          roleArn: "arn:aws:iam::123456789012:role/SketchCatchTerraformExecutionRole",
+          externalId: "sc_conn_33333333-3333-4333-8333-333333333333_random",
+          region: "ap-northeast-2",
+          status: "verified",
+          lastVerifiedAt: "2026-06-26T00:00:00.000Z",
+          createdAt: "2026-06-26T00:00:00.000Z",
+          updatedAt: "2026-06-26T00:00:00.000Z"
+        }
+      }),
+      {
+        headers: {
+          "Content-Type": "application/json"
+        },
+        status: 200
+      }
+    );
+  };
+
+  const response = await verifyAwsConnectionCreatedRole({
+    accountId: "123456789012",
+    connectionId: "33333333-3333-4333-8333-333333333333"
+  });
+
+  assert.equal(
+    String(requests[0]?.input),
+    "/api/aws/connections/33333333-3333-4333-8333-333333333333/verify-created-role"
+  );
+  assert.equal(requests[0]?.init?.method, "POST");
+  assert.equal(new Headers(requests[0]?.init?.headers).get("authorization"), "Bearer access-token");
+  assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), {
+    accountId: "123456789012"
   });
   assert.equal(response.awsConnection.status, "verified");
   assert.equal(response.awsConnection.accountId, "123456789012");
