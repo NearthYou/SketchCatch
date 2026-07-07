@@ -618,17 +618,41 @@ test("pre-deployment check is owned by the deployment tab", () => {
 
   assert.match(deploymentPanelSource, /runAiPreDeploymentCheck/);
   assert.match(deploymentPanelSource, /addTerraformDiagnosticsToPreDeploymentAnalysis/);
+  assert.match(deploymentPanelSource, /createPreDeploymentAnalysisFromTerraformDiagnostics/);
   assert.match(deploymentPanelSource, /onValidateTerraformDiagnostics/);
+  assert.match(deploymentPanelSource, /onGetTerraformFiles/);
   assert.match(deploymentPanelSource, /await onValidateTerraformDiagnostics\(\)/);
   assert.match(deploymentPanelSource, /currentTerraformDiagnostics/);
+  assert.match(deploymentPanelSource, /diagnostic\.severity === "error"/);
+  assert.match(deploymentPanelSource, /terraformFiles:\s*\[\.\.\.onGetTerraformFiles\(\)\]/);
   assert.match(deploymentPanelSource, /createWorkspaceAiBoardSnapshot/);
   assert.match(componentSource, /diagramJson=\{context\.diagram\}/);
   assert.match(componentSource, /validateTerraformForPreDeployment/);
+  assert.match(componentSource, /getTerraformFilesForPreDeployment/);
+  assert.match(componentSource, /onGetTerraformFiles=\{getTerraformFilesForPreDeployment\}/);
+  assert.match(componentSource, /preDeploymentCheckState=\{preDeploymentCheckState\}/);
+  assert.match(componentSource, /onPreDeploymentCheckStateChange=\{setPreDeploymentCheckState\}/);
   assert.match(componentSource, /validateCurrentTerraform/);
   assert.match(terraformPanelSource, /validateCurrentTerraform/);
   assert.doesNotMatch(aiChatDockSource, /runAiPreDeploymentCheck/);
   assert.doesNotMatch(aiChatDockSource, /WorkspaceAiPreDeploymentResult/);
   assert.match(preflightSummaryRule, /\bgap:\s*8px;/);
+});
+
+test("pre-deployment check result is preserved above the deployment tab", () => {
+  assert.match(
+    componentSource,
+    /useState<DeploymentPreDeploymentCheckState>\(initialPreDeploymentCheckState\)/
+  );
+  assert.match(componentSource, /setPreDeploymentCheckState\(initialPreDeploymentCheckState\);/);
+  assert.match(deploymentPanelSource, /preDeploymentCheckState\.analysis/);
+  assert.match(deploymentPanelSource, /preDeploymentCheckState\.requestState/);
+  assert.match(deploymentPanelSource, /preDeploymentCheckState\.errorMessage/);
+  assert.match(deploymentPanelSource, /preDeploymentCheckState\.fingerprint/);
+  assert.doesNotMatch(
+    deploymentPanelSource,
+    /useState<AiPreDeploymentAnalysisResult \| null>\(null\)/
+  );
 });
 
 test("pre-deployment check renders per-finding explanations without the blue summary block", () => {

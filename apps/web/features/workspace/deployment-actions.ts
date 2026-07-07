@@ -41,6 +41,9 @@ export function getDeploymentActionState(
   const hasCompleteApprovalSnapshot = deployment
     ? hasCompleteDeploymentApprovalSnapshot(deployment)
     : false;
+  const hasBlockingPlanWarnings = Boolean(
+    deployment?.planSummary?.warnings.some((warning) => warning.blocksApproval)
+  );
   const isDestroyable = Boolean(deployment && isCleanupDestroyCandidate(deployment));
   const isDestroyPlan = deployment?.currentPlanOperation === "destroy";
   const isApplyPlan = deployment?.currentPlanOperation === "apply";
@@ -68,7 +71,7 @@ export function getDeploymentActionState(
   );
 
   const canRunApplyPlan = canShowApplyPlanAction && !isLoading;
-  const canApprovePlan = canShowApprovePlanAction && !isLoading;
+  const canApprovePlan = canShowApprovePlanAction && !hasBlockingPlanWarnings && !isLoading;
   const canApply = Boolean(
     deployment &&
       isApplyPlan &&

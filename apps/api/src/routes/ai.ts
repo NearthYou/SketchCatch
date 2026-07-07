@@ -1,7 +1,9 @@
+import { createHash } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type {
   AiArchitectureDraftResult,
+  AiPreDeploymentCheckRequest,
   AiPreDeploymentCheckFromDiagramRequest,
   AiPreDeploymentAnalysisResult,
   AiSafetyExplanation,
@@ -30,11 +32,16 @@ import {
   type CreateLlmExplanation
 } from "../services/aiLlmExplanation.js";
 import { createArchitecturePatchPreview } from "../services/aiArchitecturePatchPreview.js";
+import {
+  analyzePreDeploymentCheck,
+  type AnalyzePreDeploymentCheck
+} from "../services/aiPreDeploymentCheck.js";
 import { analyzePreDeployment } from "../services/aiPreDeploymentAnalysis.js";
 import { explainTerraformError } from "../services/aiTerraformErrorExplanation.js";
 import { explainTerraformPreview } from "../services/aiTerraformPreviewExplanation.js";
 import {
   createConfiguredOpenAiSafetyFindingExplanation,
+  createFallbackSafetyFindingExplanation,
   type CreateSafetyFindingExplanation
 } from "../services/aiSafetyFindingExplanation.js";
 import { sanitizeTerraformErrorForAi } from "../services/aiProviderSafety.js";
@@ -46,6 +53,17 @@ import { convertDiagramJsonToArchitectureJson } from "../services/diagram-to-arc
 import { diagramJsonSchema } from "./project-draft-schemas.js";
 import { createConfiguredAwsPricingRateProvider } from "../services/awsPricingRateProvider.js";
 import type { CostPricingRateProvider } from "../services/cost-analysis.js";
+import type { RuntimeCache, RuntimeCacheJsonValue } from "../runtime-cache/index.js";
+import { createConfiguredTerraformSecurityScanner } from "../services/terraform/trivy-terraform-scan.js";
+
+const MAX_PRE_DEPLOYMENT_TERRAFORM_FILE_COUNT = 64;
+const MAX_PRE_DEPLOYMENT_TERRAFORM_FILE_NAME_LENGTH = 180;
+const MAX_PRE_DEPLOYMENT_TERRAFORM_FILE_CHARS = 1024 * 1024;
+const SAFETY_EXPLANATION_CACHE_NAMESPACE = "ai:safety-finding-explanation:v1";
+const SAFETY_EXPLANATION_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const MAX_SAFETY_EXPLANATION_GENERATION_COUNT = 8;
+const SAFETY_EXPLANATION_GENERATION_CONCURRENCY = 2;
+const DEFAULT_SAFETY_EXPLANATION_TIMEOUT_MS = 2_500;
 
 const resourceTypeSchema = z.enum([
   "VPC",
@@ -105,8 +123,21 @@ const githubArchitectureDraftBodySchema = z.object({
     })
 });
 
-const preDeploymentCheckBodySchema = z.object({
-  architectureJson: architectureJsonSchema
+const terraformScanFileInputSchema = z.object({
+  fileName: z
+    .string()
+    .trim()
+    .min(1)
+    .max(MAX_PRE_DEPLOYMENT_TERRAFORM_FILE_NAME_LENGTH),
+  terraformCode: z.string().max(MAX_PRE_DEPLOYMENT_TERRAFORM_FILE_CHARS)
+});
+
+const preDeploymentCheckBodySchema: z.ZodType<AiPreDeploymentCheckRequest> = z.object({
+  architectureJson: architectureJsonSchema,
+  terraformFiles: z
+    .array(terraformScanFileInputSchema)
+    .max(MAX_PRE_DEPLOYMENT_TERRAFORM_FILE_COUNT)
+    .optional()
 });
 
 const designSimulationBodySchema: z.ZodType<CreateDesignSimulationRequest> = z.object({
@@ -193,10 +224,13 @@ const confirmTranscribeBodySchema = z.object({
 });
 
 export type AiRouteOptions = {
+  readonly analyzePreDeploymentCheck?: AnalyzePreDeploymentCheck;
   readonly createArchitectureDraftResponse?: CreateArchitectureDraftResponseFactory;
   readonly createLlmExplanation?: CreateLlmExplanation;
   readonly createSafetyFindingExplanation?: CreateSafetyFindingExplanation;
   readonly pricingRateProvider?: CostPricingRateProvider;
+  readonly runtimeCache?: RuntimeCache;
+  readonly safetyExplanationTimeoutMs?: number | undefined;
   readonly transcribeRequirementService?: TranscribeRequirementService;
 };
 
@@ -207,6 +241,23 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
     options.createArchitectureDraftResponse ?? createConfiguredAmazonQArchitectureDraftResponse();
   const createSafetyFindingExplanation =
     options.createSafetyFindingExplanation ?? createConfiguredOpenAiSafetyFindingExplanation();
+  const safetyExplanationTimeoutMs =
+    options.safetyExplanationTimeoutMs ?? DEFAULT_SAFETY_EXPLANATION_TIMEOUT_MS;
+  const analyzePreDeploymentForCheck =
+    options.analyzePreDeploymentCheck ??
+    ((input) =>
+      analyzePreDeploymentCheck(input, {
+        terraformSecurityScanner: createConfiguredTerraformSecurityScanner({
+          onScanError: (error) => {
+            app.log.warn(
+              {
+                errorName: error instanceof Error ? error.name : typeof error
+              },
+              "Trivy Terraform scan failed; continuing without Trivy findings"
+            );
+          }
+        })
+      }));
   const transcribeRequirementService =
     options.transcribeRequirementService ?? createConfiguredTranscribeRequirementService();
   const pricingRateProvider = options.pricingRateProvider ?? createConfiguredAwsPricingRateProvider();
@@ -228,19 +279,17 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
 
   app.post("/ai/pre-deployment-check", async (request): Promise<AiPreDeploymentAnalysisResult> => {
     const body = preDeploymentCheckBodySchema.parse(request.body);
-    const result = analyzePreDeployment(body.architectureJson);
-    const resultWithSafetyExplanations = await addSafetyFindingExplanations(
-      result,
-      createSafetyFindingExplanation
-    );
+    const result = await analyzePreDeploymentForCheck({
+      architectureJson: body.architectureJson,
+      ...(body.terraformFiles !== undefined ? { terraformFiles: body.terraformFiles } : {})
+    });
 
-    return {
-      ...resultWithSafetyExplanations,
-      llmExplanation: await createLlmExplanation({
-        target: "pre_deployment_check",
-        result: resultWithSafetyExplanations
-      })
-    };
+    return addSafetyFindingExplanations(
+      result,
+      createSafetyFindingExplanation,
+      options.runtimeCache,
+      safetyExplanationTimeoutMs
+    );
   });
 
   app.post("/ai/design-simulation", async (request): Promise<DesignSimulationResult> => {
@@ -262,7 +311,9 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
 
     return addSafetyFindingExplanations(
       analyzePreDeployment(architectureJson),
-      createSafetyFindingExplanation
+      createSafetyFindingExplanation,
+      options.runtimeCache,
+      safetyExplanationTimeoutMs
     );
   });
 
@@ -372,22 +423,210 @@ async function addArchitectureDraftLlmExplanation(
 
 async function addSafetyFindingExplanations(
   result: AiPreDeploymentAnalysisResult,
-  createSafetyFindingExplanation: CreateSafetyFindingExplanation
+  createSafetyFindingExplanation: CreateSafetyFindingExplanation,
+  runtimeCache: RuntimeCache | undefined,
+  safetyExplanationTimeoutMs: number
 ): Promise<AiPreDeploymentAnalysisResult> {
   if (result.findings.length === 0) {
     return result;
   }
 
+  const explanationByCacheKey = new Map<string, AiSafetyExplanation>();
+  const missingFindingsByCacheKey = new Map<string, CheckFinding>();
+
+  await Promise.all(
+    result.findings.map(async (finding) => {
+      if (finding.aiSafetyExplanation !== undefined) {
+        return;
+      }
+
+      const cacheKey = createSafetyExplanationCacheKey(finding);
+      const cachedExplanation = await readCachedSafetyExplanation(runtimeCache, cacheKey);
+
+      if (cachedExplanation) {
+        explanationByCacheKey.set(cacheKey, cachedExplanation);
+        return;
+      }
+
+      if (!missingFindingsByCacheKey.has(cacheKey)) {
+        missingFindingsByCacheKey.set(cacheKey, finding);
+      }
+    })
+  );
+
+  const missingEntries = [...missingFindingsByCacheKey.entries()];
+  const generatedEntries = missingEntries.slice(0, MAX_SAFETY_EXPLANATION_GENERATION_COUNT);
+  const fallbackEntries = missingEntries.slice(MAX_SAFETY_EXPLANATION_GENERATION_COUNT);
+
+  await mapWithConcurrency(
+    generatedEntries,
+    SAFETY_EXPLANATION_GENERATION_CONCURRENCY,
+    async ([cacheKey, finding]) => {
+      const explanation = await createSafetyFindingExplanationWithinBudget(
+        finding,
+        createSafetyFindingExplanation,
+        safetyExplanationTimeoutMs
+      );
+
+      explanationByCacheKey.set(cacheKey, explanation);
+
+      if (!explanation.fallbackUsed) {
+        await writeCachedSafetyExplanation(runtimeCache, cacheKey, explanation);
+      }
+    }
+  );
+
+  for (const [cacheKey, finding] of fallbackEntries) {
+    explanationByCacheKey.set(
+      cacheKey,
+      createFallbackSafetyFindingExplanation(finding, "rate_limited")
+    );
+  }
+
   return {
     ...result,
-    findings: await Promise.all(
-      result.findings.map(async (finding) => ({
+    findings: result.findings.map((finding) => {
+      const cacheKey = createSafetyExplanationCacheKey(finding);
+
+      return {
         ...finding,
         aiSafetyExplanation:
-          finding.aiSafetyExplanation ?? (await createSafetyFindingExplanation(finding))
-      }))
-    )
+          finding.aiSafetyExplanation ?? explanationByCacheKey.get(cacheKey)
+      };
+    })
   };
+}
+
+async function createSafetyFindingExplanationWithinBudget(
+  finding: CheckFinding,
+  createSafetyFindingExplanation: CreateSafetyFindingExplanation,
+  timeoutMs: number
+): Promise<AiSafetyExplanation> {
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    return createFallbackSafetyFindingExplanation(finding, "provider_error");
+  }
+
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+
+  try {
+    return await Promise.race([
+      createSafetyFindingExplanation(finding),
+      new Promise<AiSafetyExplanation>((resolve) => {
+        timeout = setTimeout(() => {
+          resolve(createFallbackSafetyFindingExplanation(finding, "provider_error"));
+        }, timeoutMs);
+      })
+    ]);
+  } catch {
+    return createFallbackSafetyFindingExplanation(finding, "provider_error");
+  } finally {
+    if (timeout !== undefined) {
+      clearTimeout(timeout);
+    }
+  }
+}
+
+async function mapWithConcurrency<TValue>(
+  values: readonly TValue[],
+  concurrency: number,
+  mapper: (value: TValue) => Promise<void>
+): Promise<void> {
+  let nextIndex = 0;
+  const workerCount = Math.min(concurrency, values.length);
+
+  await Promise.all(
+    Array.from({ length: workerCount }, async () => {
+      while (nextIndex < values.length) {
+        const value = values[nextIndex];
+        nextIndex += 1;
+
+        if (value !== undefined) {
+          await mapper(value);
+        }
+      }
+    })
+  );
+}
+
+function createSafetyExplanationCacheKey(finding: CheckFinding): string {
+  const hash = createHash("sha256")
+    .update(
+      JSON.stringify({
+        category: finding.category,
+        description: finding.description,
+        id: finding.id,
+        recommendation: finding.recommendation,
+        resourceId: finding.resourceId ?? null,
+        severity: finding.severity,
+        sourceLocation: finding.sourceLocation ?? null,
+        title: finding.title
+      })
+    )
+    .digest("hex");
+
+  return hash;
+}
+
+async function readCachedSafetyExplanation(
+  runtimeCache: RuntimeCache | undefined,
+  cacheKey: string
+): Promise<AiSafetyExplanation | null> {
+  if (!runtimeCache) {
+    return null;
+  }
+
+  const value = await runtimeCache
+    .get<AiSafetyExplanation>({
+      namespace: SAFETY_EXPLANATION_CACHE_NAMESPACE,
+      key: cacheKey
+    })
+    .catch(() => null);
+
+  return isAiSafetyExplanation(value) ? value : null;
+}
+
+async function writeCachedSafetyExplanation(
+  runtimeCache: RuntimeCache | undefined,
+  cacheKey: string,
+  explanation: AiSafetyExplanation
+): Promise<void> {
+  if (!runtimeCache) {
+    return;
+  }
+
+  await runtimeCache
+    .set(
+      {
+        namespace: SAFETY_EXPLANATION_CACHE_NAMESPACE,
+        key: cacheKey
+      },
+      toRuntimeCacheJsonValue(explanation),
+      {
+        ttlMs: SAFETY_EXPLANATION_CACHE_TTL_MS
+      }
+    )
+    .catch(() => undefined);
+}
+
+function isAiSafetyExplanation(value: unknown): value is AiSafetyExplanation {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+
+  const candidate = value as Partial<AiSafetyExplanation>;
+
+  return (
+    typeof candidate.riskSummary === "string" &&
+    typeof candidate.whyDangerous === "string" &&
+    typeof candidate.recommendedFix === "string" &&
+    Array.isArray(candidate.verificationSteps) &&
+    candidate.verificationSteps.every((step) => typeof step === "string") &&
+    typeof candidate.fallbackUsed === "boolean"
+  );
+}
+
+function toRuntimeCacheJsonValue(value: AiSafetyExplanation): RuntimeCacheJsonValue {
+  return JSON.parse(JSON.stringify(value)) as RuntimeCacheJsonValue;
 }
 
 type GitHubRepository = {

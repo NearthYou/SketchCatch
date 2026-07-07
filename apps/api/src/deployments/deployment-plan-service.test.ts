@@ -1035,6 +1035,79 @@ test("runDeploymentPlan records destructive or high-risk warnings without blocki
   ]);
 });
 
+test("runDeploymentPlan feeds Terraform artifact content into Trivy-backed safety analysis", async () => {
+  const repository = new FakeDeploymentRepository();
+  const planArtifactStorage = new FakePlanArtifactStorage();
+  let analyzedTerraformCode = "";
+
+  const result = await runDeploymentPlan(
+    {
+      deploymentId,
+      accessContext: createAccessContext()
+    },
+    repository,
+    {
+      generatePlanArtifactId: () => planArtifactId,
+      planArtifactStorage,
+      readTerraformArtifactFile: async () => terraformArtifactContent,
+      analyzePreDeployment: async (input) => {
+        analyzedTerraformCode = input.terraformFiles?.[0]?.terraformCode ?? "";
+
+        return createAnalysis([
+          {
+            id: "trivy:aws-0107:main.tf:aws_security_group.open_ssh:13",
+            category: "network",
+            severity: "high",
+            resourceId: "aws_security_group.open_ssh",
+            sourceLocation: {
+              fileName: "main.tf",
+              line: 13,
+              resourceAddress: "aws_security_group.open_ssh"
+            },
+            title: "Security groups should not allow unrestricted ingress to SSH or RDP from any IP address.",
+            description: "Public SSH is exposed.",
+            recommendation: "Restrict SSH to a trusted CIDR."
+          }
+        ]);
+      },
+      prepareTerraformWorkspace: async () => ({
+        workdir: "C:/tmp/sketchcatch-terraform-trivy-plan",
+        mainFilePath: "C:/tmp/sketchcatch-terraform-trivy-plan/main.tf",
+        cleanup: async () => undefined
+      }),
+      prepareTerraformAwsCredentialEnv: async () => createPreparedCredentials(),
+      runTerraformInit: async () => createRunnerResult("init"),
+      runTerraformPlan: async () => createRunnerResult("plan"),
+      runTerraformShowJson: async () =>
+        createRunnerResult("show", {
+          stdout: createPlanJson([])
+        })
+    }
+  );
+
+  assert.equal(analyzedTerraformCode, terraformArtifactContent);
+  assert.deepEqual(result.deployment.planSummary?.warnings, [
+    {
+      id: "pre_deployment_check:trivy:aws-0107:main.tf:aws_security_group.open_ssh:13",
+      level: "high",
+      category: "network",
+      source: "pre_deployment_check",
+      code: "PUBLIC_SSH",
+      message:
+        "Security groups should not allow unrestricted ingress to SSH or RDP from any IP address.: Restrict SSH to a trusted CIDR.",
+      relatedFindingId: "trivy:aws-0107:main.tf:aws_security_group.open_ssh:13",
+      relatedResourceId: "aws_security_group.open_ssh",
+      sourceLocation: {
+        fileName: "main.tf",
+        line: 13,
+        resourceAddress: "aws_security_group.open_ssh"
+      },
+      requiresAcknowledgement: false,
+      blocksApproval: true
+    }
+  ]);
+});
+
 test("runDeploymentPlan marks plan validation failures failed and masks secret output", async () => {
   const repository = new FakeDeploymentRepository();
   const planArtifactStorage = new FakePlanArtifactStorage();

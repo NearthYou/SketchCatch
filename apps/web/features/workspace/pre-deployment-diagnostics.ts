@@ -52,6 +52,26 @@ export function addTerraformDiagnosticsToPreDeploymentAnalysis(
   };
 }
 
+export function createPreDeploymentAnalysisFromTerraformDiagnostics(
+  diagnostics: readonly TerraformDiagnostic[]
+): AiPreDeploymentAnalysisResult {
+  return addTerraformDiagnosticsToPreDeploymentAnalysis(
+    {
+      summary: "Terraform 코드 진단을 먼저 해결해야 합니다.",
+      totalMonthlyEstimate: {
+        amount: 0,
+        currency: "USD",
+        pricingAssumption: "Terraform diagnostics fail-fast 결과라 비용 산정을 실행하지 않았습니다."
+      },
+      resourceCostEstimates: [],
+      findings: [],
+      checklist: [],
+      suggestions: []
+    },
+    diagnostics
+  );
+}
+
 function createTerraformDiagnosticFinding(
   diagnostic: TerraformDiagnostic,
   index: number

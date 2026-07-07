@@ -148,11 +148,64 @@ test("createFallbackSafetyFindingExplanation explains public SSH with determinis
   assert.equal(explanation.fallbackReason, "missing_api_key");
   assert.match(explanation.riskSummary, /SSH/);
   assert.match(explanation.recommendedFix, /Session Manager|CIDR/);
+  assert.doesNotMatch(explanation.whyDangerous, /Anyone on the internet|compromised/i);
   assert.equal(explanation.verificationSteps.length >= 2, true);
   assert.equal(explanation.providerMetadata?.provider, "fallback");
   assert.equal(explanation.providerMetadata?.service, "rule_fallback");
   assert.equal(explanation.providerMetadata?.billingMode, "disabled");
   assert.equal(explanation.providerMetadata?.routeTarget, "safety_finding_explanation");
+});
+
+test("createFallbackSafetyFindingExplanation explains RDS backup retention in Korean", () => {
+  const explanation = createFallbackSafetyFindingExplanation(
+    createFinding({
+      id: "trivy:avd-aws-0077:main.tf:aws_db_instance.rds_primary:41",
+      resourceId: "aws_db_instance.rds_primary",
+      title: "RDS 백업 보존 기간은 기본 1일보다 길게 설정해야 합니다.",
+      description: "백업 보존 기간이 너무 짧으면 복구할 수 있는 시점이 부족해집니다.",
+      recommendation: "`backup_retention_period`를 2일 이상으로 설정하세요."
+    })
+  );
+
+  assert.equal(explanation.fallbackUsed, true);
+  assert.match(explanation.riskSummary, /백업 보존 기간/);
+  assert.match(explanation.recommendedFix, /backup_retention_period/);
+  assert.doesNotMatch(explanation.riskSummary, /database can be reachable/i);
+  assert.doesNotMatch(explanation.verificationSteps.join("\n"), /Run the pre-deployment check again/i);
+});
+
+test("createFallbackSafetyFindingExplanation explains IMDSv2 token requirement in Korean", () => {
+  const explanation = createFallbackSafetyFindingExplanation(
+    createFinding({
+      id: "trivy:avd-aws-0028:main.tf:aws_instance.ec2_backend:22",
+      resourceId: "aws_instance.ec2_backend",
+      title: "EC2 인스턴스는 인스턴스 메타데이터 서비스(IMDS) v2 세션 토큰을 요구해야 합니다.",
+      description: "IMDS v1은 세션 토큰 없이 인스턴스 메타데이터에 접근할 수 있습니다.",
+      recommendation: '`metadata_options`에서 `http_tokens = "required"`를 설정하세요.'
+    })
+  );
+
+  assert.equal(explanation.fallbackUsed, true);
+  assert.match(explanation.riskSummary, /IMDS/);
+  assert.match(explanation.recommendedFix, /http_tokens/);
+  assert.doesNotMatch(explanation.riskSummary, /manual review/i);
+});
+
+test("createFallbackSafetyFindingExplanation explains RDS encryption in Korean", () => {
+  const explanation = createFallbackSafetyFindingExplanation(
+    createFinding({
+      id: "trivy:avd-aws-0080:main.tf:aws_db_instance.rds_primary:42",
+      resourceId: "aws_db_instance.rds_primary",
+      title: "RDS DB 인스턴스 암호화를 활성화해야 합니다.",
+      description: "저장 데이터가 암호화되지 않았습니다.",
+      recommendation: "`storage_encrypted = true`를 설정하세요."
+    })
+  );
+
+  assert.equal(explanation.fallbackUsed, true);
+  assert.match(explanation.riskSummary, /암호화/);
+  assert.match(explanation.terraformHint ?? "", /storage_encrypted/);
+  assert.doesNotMatch(explanation.whyDangerous, /public database endpoint/i);
 });
 
 test("createFallbackSafetyFindingExplanation masks secret-like input in metadata estimates", () => {

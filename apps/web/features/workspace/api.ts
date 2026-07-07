@@ -1,13 +1,14 @@
 import type {
   AiPreDeploymentAnalysisResult,
+  AiPreDeploymentCheckRequest,
   AiTerraformErrorExplanationResult,
   AiTerraformPreviewExplanationResult,
   AiTerraformStage,
   ApiErrorCode,
   ApiErrorResponse,
-  ArchitectureJson,
   ArchitecturePatchPreviewResponse,
   ArchitectureSnapshot,
+  ApproveDeploymentPlanRequest,
   AwsConnectionCloudFormationTemplateResponse,
   AwsConnection,
   AwsConnectionListResponse,
@@ -345,10 +346,11 @@ export async function createAiArchitecturePatchPreview(
 
 // 현재 Architecture Board를 기준으로 Pre-Deployment Check를 실행합니다.
 export async function runAiPreDeploymentCheck(
-  architectureJson: ArchitectureJson
+  input: AiPreDeploymentCheckRequest
 ): Promise<AiPreDeploymentAnalysisResult> {
   return postPublicAiJson<AiPreDeploymentAnalysisResult>("/ai/pre-deployment-check", {
-    architectureJson
+    architectureJson: input.architectureJson,
+    ...(input.terraformFiles !== undefined ? { terraformFiles: input.terraformFiles } : {})
   });
 }
 
@@ -943,13 +945,18 @@ export async function runDeploymentPlan(deploymentId: string): Promise<Deploymen
   return response.deployment;
 }
 
-export async function approveDeploymentPlan(deploymentId: string): Promise<Deployment> {
+export async function approveDeploymentPlan(
+  deploymentId: string,
+  acknowledgedWarningIds: ApproveDeploymentPlanRequest["acknowledgedWarningIds"] = []
+): Promise<Deployment> {
   const response = await apiFetch<DeploymentResponse>(
     `/deployments/${encodeURIComponent(deploymentId)}/approve`,
     {
       auth: true,
       method: "POST",
-      body: {}
+      body: {
+        acknowledgedWarningIds
+      }
     }
   );
 

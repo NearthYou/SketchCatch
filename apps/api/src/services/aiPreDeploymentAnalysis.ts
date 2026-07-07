@@ -10,9 +10,16 @@ import { createConfigurationFindings } from "./aiPreDeploymentConfiguration.js";
 import { createCostFindings, createResourceCostEstimate } from "./aiPreDeploymentCost.js";
 import { createSecurityFindings } from "./aiPreDeploymentSecurity.js";
 
+export type AnalyzePreDeploymentOptions = {
+  readonly includeArchitectureSecurityFindings?: boolean | undefined;
+};
+
 // 보드 설계도 전체를 돌면서 비용, 보안, 설정 문제를 한 번에 모으는 사전 점검 입구입니다.
-export function analyzePreDeployment(architectureJson: ArchitectureJson): AiPreDeploymentAnalysisResult {
-  const findings = architectureJson.nodes.flatMap(createFindingsForNode);
+export function analyzePreDeployment(
+  architectureJson: ArchitectureJson,
+  options: AnalyzePreDeploymentOptions = {}
+): AiPreDeploymentAnalysisResult {
+  const findings = architectureJson.nodes.flatMap((node) => createFindingsForNode(node, options));
   const resourceCostEstimates = architectureJson.nodes.map(createResourceCostEstimate);
 
   return {
@@ -29,13 +36,32 @@ export function analyzePreDeployment(architectureJson: ArchitectureJson): AiPreD
   };
 }
 
+export function mergePreDeploymentAnalysisFindings(
+  analysis: AiPreDeploymentAnalysisResult,
+  prependedFindings: readonly CheckFinding[]
+): AiPreDeploymentAnalysisResult {
+  if (prependedFindings.length === 0) {
+    return analysis;
+  }
+
+  const findings = [...prependedFindings, ...analysis.findings];
+
+  return {
+    ...analysis,
+    summary: createSummary(findings),
+    findings,
+    checklist: createChecklist(findings),
+    suggestions: createSuggestions(findings)
+  };
+}
+
 // finding 목록을 사용자가 먼저 볼 한 문장 요약으로 줄입니다.
 function createSummary(findings: readonly CheckFinding[]): string {
   if (findings.length === 0) {
     return "현재 기본 Pre-Deployment Check에서 막는 항목은 없습니다.";
   }
 
-  if (findings.some((finding) => finding.category === "security")) {
+  if (findings.some(isSecurityRelatedFinding)) {
     return "배포 전에 해결해야 할 Security Risk가 있습니다.";
   }
 
@@ -47,9 +73,12 @@ function createSummary(findings: readonly CheckFinding[]): string {
 }
 
 // Resource 하나에 대해 보안, 비용, 필수 설정 규칙을 차례대로 적용합니다.
-function createFindingsForNode(node: ResourceNode): CheckFinding[] {
+function createFindingsForNode(
+  node: ResourceNode,
+  options: AnalyzePreDeploymentOptions
+): CheckFinding[] {
   return [
-    ...createSecurityFindings(node),
+    ...(options.includeArchitectureSecurityFindings === false ? [] : createSecurityFindings(node)),
     ...createCostFindings(node),
     ...createConfigurationFindings(node)
   ];
@@ -57,7 +86,7 @@ function createFindingsForNode(node: ResourceNode): CheckFinding[] {
 
 // finding을 체크리스트로 바꿔서 배포 전에 무엇을 확인해야 하는지 보여줍니다.
 function createChecklist(findings: readonly CheckFinding[]): ChecklistItem[] {
-  const securityFindingIds = getFindingIdsByCategory(findings, "security");
+  const securityFindingIds = findings.filter(isSecurityRelatedFinding).map((finding) => finding.id);
   const costFindingIds = getFindingIdsByCategory(findings, "cost");
   const configurationFindingIds = getFindingIdsByCategory(findings, "configuration");
 
@@ -89,6 +118,14 @@ function getFindingIdsByCategory(
   category: CheckFinding["category"]
 ): string[] {
   return findings.filter((finding) => finding.category === category).map((finding) => finding.id);
+}
+
+function isSecurityRelatedFinding(finding: CheckFinding): boolean {
+  return (
+    finding.category === "security" ||
+    finding.category === "permission" ||
+    finding.category === "network"
+  );
 }
 
 // finding을 자동 적용 명령이 아닌 사람이 검토할 수 있는 수정 제안으로 바꿉니다.

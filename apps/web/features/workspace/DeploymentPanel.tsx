@@ -1,8 +1,10 @@
 ﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   CSSProperties,
+  Dispatch,
   KeyboardEvent as ReactKeyboardEvent,
-  PointerEvent as ReactPointerEvent
+  PointerEvent as ReactPointerEvent,
+  SetStateAction
 } from "react";
 import type {
   AiPreDeploymentAnalysisResult,
@@ -20,6 +22,7 @@ import type {
   SourceRepository,
   TerraformDiagnostic,
   TerraformSourceLocation,
+  TerraformSyncFileInput,
   TerraformOutput
 } from "@sketchcatch/types";
 import { Clipboard, ClipboardCheck, Code2, GitBranch, Maximize2, ShieldCheck, Trash2, X } from "lucide-react";
@@ -73,7 +76,10 @@ import {
   createWorkspaceAiBoardSnapshot,
   isWorkspaceAiResultStale
 } from "./workspace-ai-panel-state";
-import { addTerraformDiagnosticsToPreDeploymentAnalysis } from "./pre-deployment-diagnostics";
+import {
+  addTerraformDiagnosticsToPreDeploymentAnalysis,
+  createPreDeploymentAnalysisFromTerraformDiagnostics
+} from "./pre-deployment-diagnostics";
 import type { AiRequestState } from "./WorkspaceAiPanelPieces";
 import type { SavedWorkspaceTerraformArtifact } from "./workspace-deployment-artifacts";
 import type { RequestState } from "./workspace-right-panel.types";
@@ -90,6 +96,12 @@ type DeploymentRuntimeSnapshot = {
 type DeploymentPanelSnapshot = DeploymentRuntimeSnapshot & {
   readonly awsConnections: AwsConnection[];
 };
+export type DeploymentPreDeploymentCheckState = {
+  readonly analysis: AiPreDeploymentAnalysisResult | null;
+  readonly errorMessage: string;
+  readonly fingerprint: string | null;
+  readonly requestState: AiRequestState;
+};
 type InstalledGitHubRepositorySelection = {
   readonly state: string;
   readonly repositories: GitHubInstalledRepositoryCandidate[];
@@ -97,6 +109,12 @@ type InstalledGitHubRepositorySelection = {
 const DEPLOYMENT_EXPANDED_DEFAULT_DETAILS_PERCENT = 50;
 const DEPLOYMENT_EXPANDED_MIN_DETAILS_PERCENT = 28;
 const DEPLOYMENT_EXPANDED_MAX_DETAILS_PERCENT = 72;
+export const initialPreDeploymentCheckState: DeploymentPreDeploymentCheckState = {
+  analysis: null,
+  errorMessage: "",
+  fingerprint: null,
+  requestState: "idle"
+};
 
 function clampNumber(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -107,17 +125,23 @@ export function DeploymentPanel({
   diagramJson,
   hasUnsavedDeploymentBaseline,
   onOpenFindingTerraformSource,
+  onGetTerraformFiles,
   onPrepareDeploymentArtifacts,
+  onPreDeploymentCheckStateChange,
   onValidateTerraformDiagnostics,
+  preDeploymentCheckState,
   projectId,
   projectName
 }: {
   readonly currentNodeCount: number;
   readonly diagramJson: DiagramJson;
   readonly hasUnsavedDeploymentBaseline: boolean;
+  readonly onGetTerraformFiles: () => readonly TerraformSyncFileInput[];
   readonly onOpenFindingTerraformSource: (finding: CheckFinding) => TerraformSourceLocation | null;
   readonly onPrepareDeploymentArtifacts: () => Promise<SavedWorkspaceTerraformArtifact>;
+  readonly onPreDeploymentCheckStateChange: Dispatch<SetStateAction<DeploymentPreDeploymentCheckState>>;
   readonly onValidateTerraformDiagnostics: () => Promise<TerraformDiagnostic[]>;
+  readonly preDeploymentCheckState: DeploymentPreDeploymentCheckState;
   readonly projectId: string;
   readonly projectName: string;
 }) {
@@ -150,11 +174,6 @@ export function DeploymentPanel({
   const [deploymentDetailsWidthPercent, setDeploymentDetailsWidthPercent] = useState(
     DEPLOYMENT_EXPANDED_DEFAULT_DETAILS_PERCENT
   );
-  const [preDeploymentAnalysis, setPreDeploymentAnalysis] =
-    useState<AiPreDeploymentAnalysisResult | null>(null);
-  const [preDeploymentState, setPreDeploymentState] = useState<AiRequestState>("idle");
-  const [preDeploymentErrorMessage, setPreDeploymentErrorMessage] = useState("");
-  const [preDeploymentFingerprint, setPreDeploymentFingerprint] = useState<string | null>(null);
   const [failureExplanation, setFailureExplanation] =
     useState<DeploymentFailureExplanation | null>(null);
   const [failureExplanationState, setFailureExplanationState] = useState<RequestState>("idle");
@@ -273,6 +292,10 @@ export function DeploymentPanel({
   const shouldAutoRefreshSelectedGitCicdHandoff =
     shouldAutoRefreshGitCicdHandoff(selectedGitCicdHandoff);
   const canCreateGitCicdHandoff = Boolean(activeGitHubSourceRepository && selectedDeployment);
+  const preDeploymentAnalysis = preDeploymentCheckState.analysis;
+  const preDeploymentState = preDeploymentCheckState.requestState;
+  const preDeploymentErrorMessage = preDeploymentCheckState.errorMessage;
+  const preDeploymentFingerprint = preDeploymentCheckState.fingerprint;
   const boardSnapshot = useMemo(
     () => createWorkspaceAiBoardSnapshot(diagramJson),
     [diagramJson]
@@ -682,27 +705,60 @@ export function DeploymentPanel({
 
   async function runPreDeploymentCheck(): Promise<void> {
     if (!boardSnapshot.hasResources) {
-      setPreDeploymentState("error");
-      setPreDeploymentErrorMessage("Architecture Board에 Resource가 있어야 실행할 수 있습니다.");
+      updatePreDeploymentCheckState({
+        errorMessage: "Architecture Board에 Resource가 있어야 실행할 수 있습니다.",
+        requestState: "error"
+      });
       return;
     }
 
-    setPreDeploymentState("loading");
-    setPreDeploymentErrorMessage("");
+    updatePreDeploymentCheckState({
+      errorMessage: "",
+      requestState: "loading"
+    });
 
     try {
       const currentTerraformDiagnostics = await onValidateTerraformDiagnostics();
+      const hasTerraformDiagnosticError = currentTerraformDiagnostics.some(
+        (diagnostic) => diagnostic.severity === "error"
+      );
+
+      if (hasTerraformDiagnosticError) {
+        updatePreDeploymentCheckState({
+          analysis: createPreDeploymentAnalysisFromTerraformDiagnostics(currentTerraformDiagnostics),
+          fingerprint: boardSnapshot.fingerprint,
+          requestState: "idle"
+        });
+        return;
+      }
+
       const result = addTerraformDiagnosticsToPreDeploymentAnalysis(
-        await runAiPreDeploymentCheck(boardSnapshot.architectureJson),
+        await runAiPreDeploymentCheck({
+          architectureJson: boardSnapshot.architectureJson,
+          terraformFiles: [...onGetTerraformFiles()]
+        }),
         currentTerraformDiagnostics
       );
-      setPreDeploymentAnalysis(result);
-      setPreDeploymentFingerprint(boardSnapshot.fingerprint);
-      setPreDeploymentState("idle");
+      updatePreDeploymentCheckState({
+        analysis: result,
+        fingerprint: boardSnapshot.fingerprint,
+        requestState: "idle"
+      });
     } catch (error) {
-      setPreDeploymentState("error");
-      setPreDeploymentErrorMessage(getApiErrorMessage(error, "배포 전 검사 중 오류가 발생했습니다."));
+      updatePreDeploymentCheckState({
+        errorMessage: getApiErrorMessage(error, "배포 전 검사 중 오류가 발생했습니다."),
+        requestState: "error"
+      });
     }
+  }
+
+  function updatePreDeploymentCheckState(
+    patch: Partial<DeploymentPreDeploymentCheckState>
+  ): void {
+    onPreDeploymentCheckStateChange((currentState) => ({
+      ...currentState,
+      ...patch
+    }));
   }
 
   async function startDeploymentReview(): Promise<void> {
@@ -781,7 +837,14 @@ export function DeploymentPanel({
     }
 
     await runRequest(async () => {
-      const deployment = await approveDeploymentPlan(selectedDeployment.id);
+      const acknowledgedWarningIds =
+        selectedDeployment.planSummary?.warnings
+          .filter((warning) => warning.requiresAcknowledgement)
+          .map((warning) => warning.id) ?? [];
+      const deployment = await approveDeploymentPlan(
+        selectedDeployment.id,
+        acknowledgedWarningIds
+      );
       setDeployments((currentDeployments) =>
         currentDeployments.map((currentDeployment) =>
           currentDeployment.id === deployment.id ? deployment : currentDeployment
@@ -2110,33 +2173,31 @@ function DeploymentPreDeploymentSummary({
   const failCount = countChecklistItems(analysis, "fail");
   const warningCount = countChecklistItems(analysis, "warning");
   const gateLevel = getPreDeploymentGateLevel(analysis);
-  const visibleFindings = analysis.findings.slice(0, 3);
-  const hiddenFindingCount = Math.max(0, analysis.findings.length - visibleFindings.length);
 
   return (
     <div className={styles.deploymentPreflightSummary} data-level={gateLevel}>
       <div className={styles.deploymentGateHeader}>
-        <span className={styles.deploymentGateBadge}>{gateLevel.toUpperCase()}</span>
-        <strong>Pre-Deployment Gate</strong>
+        <span className={styles.deploymentGateBadge}>{formatPreDeploymentGateLevelLabel(gateLevel)}</span>
+        <strong>배포 전 게이트</strong>
       </div>
       <p>{analysis.summary}</p>
       <div className={styles.deploymentPreflightStats} aria-label="배포 전 검사 요약">
         <span>
           <strong>{analysis.findings.length}</strong>
-          Findings
+          항목
         </span>
         <span>
           <strong>{failCount}</strong>
-          Fail
+          실패
         </span>
         <span>
           <strong>{warningCount}</strong>
-          Warning
+          경고
         </span>
       </div>
-      {visibleFindings.length > 0 ? (
+      {analysis.findings.length > 0 ? (
         <ul className={styles.deploymentPreflightFindings}>
-          {visibleFindings.map((finding) => (
+          {analysis.findings.map((finding) => (
             <DeploymentPreDeploymentFindingItem
               finding={finding}
               key={finding.id}
@@ -2147,9 +2208,6 @@ function DeploymentPreDeploymentSummary({
       ) : (
         <p className={styles.deploymentHint}>표시할 Check Finding이 없습니다.</p>
       )}
-      {hiddenFindingCount > 0 ? (
-        <p className={styles.deploymentPreflightMore}>외 {hiddenFindingCount}개 항목</p>
-      ) : null}
     </div>
   );
 }
@@ -2167,7 +2225,7 @@ function DeploymentPreDeploymentFindingItem({
 
   return (
     <li data-severity={finding.severity}>
-      <span>{finding.severity.toUpperCase()}</span>
+      <span>{formatPreDeploymentSeverityLabel(finding.severity)}</span>
       <strong>{finding.title}</strong>
       {finding.resourceId ? <em>{finding.resourceId}</em> : null}
       <button
@@ -2181,6 +2239,28 @@ function DeploymentPreDeploymentFindingItem({
       <DeploymentFindingAiExplanation finding={finding} />
     </li>
   );
+}
+
+function formatPreDeploymentGateLevelLabel(level: "low" | "medium" | "high"): string {
+  switch (level) {
+    case "high":
+      return "위험";
+    case "medium":
+      return "주의";
+    case "low":
+      return "정상";
+  }
+}
+
+function formatPreDeploymentSeverityLabel(severity: CheckFinding["severity"]): string {
+  switch (severity) {
+    case "high":
+      return "높음";
+    case "medium":
+      return "중간";
+    case "low":
+      return "낮음";
+  }
 }
 
 function DeploymentFindingAiExplanation({ finding }: { readonly finding: CheckFinding }) {

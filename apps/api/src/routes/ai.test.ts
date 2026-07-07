@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { z } from "zod";
 import { buildApp } from "../app.js";
+import { createInMemoryRuntimeCache } from "../runtime-cache/index.js";
 
 process.env.NODE_ENV = "test";
 
@@ -1890,6 +1891,201 @@ test("POST /api/ai/pre-deployment-check reports cost and missing configuration r
   assert.equal(databaseEstimate?.resourceId, "rds-primary");
   assert.equal(body.summary.includes("Security Risk"), false);
   assert.equal(body.checklist.some((item) => item.id === "required-config-check" && item.status === "fail"), true);
+
+  await app.close();
+});
+
+test("POST /api/ai/pre-deployment-check forwards Terraform files to the Trivy-backed analyzer", async () => {
+  let receivedTerraformFileName = "";
+  const app = buildApp({
+    analyzePreDeploymentCheck: async (input) => {
+      receivedTerraformFileName = input.terraformFiles?.[0]?.fileName ?? "";
+
+      return {
+        summary: "배포 전에 해결해야 할 Security Risk가 있습니다.",
+        totalMonthlyEstimate: {
+          amount: 0,
+          currency: "USD",
+          pricingAssumption: "test"
+        },
+        resourceCostEstimates: [],
+        findings: [
+          {
+            id: "trivy:aws-0107:security.tf:aws_security_group.open_ssh:13",
+            category: "network",
+            severity: "high",
+            resourceId: "aws_security_group.open_ssh",
+            sourceLocation: {
+              fileName: "security.tf",
+              line: 13,
+              resourceAddress: "aws_security_group.open_ssh"
+            },
+            title: "Security groups should not allow unrestricted ingress to SSH or RDP from any IP address.",
+            description: "Public SSH is exposed.",
+            recommendation: "Restrict SSH to a trusted CIDR."
+          }
+        ],
+        checklist: [],
+        suggestions: []
+      };
+    },
+    createSafetyFindingExplanation: async () => ({
+      riskSummary: "Public SSH is exposed.",
+      whyDangerous: "Internet SSH increases attack attempts.",
+      recommendedFix: "Restrict SSH CIDR.",
+      verificationSteps: ["Run the check again."],
+      fallbackUsed: false
+    })
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/ai/pre-deployment-check",
+    payload: {
+      architectureJson: {
+        nodes: [],
+        edges: []
+      },
+      terraformFiles: [
+        {
+          fileName: "security.tf",
+          terraformCode: "resource \"aws_security_group\" \"open_ssh\" {}"
+        }
+      ]
+    }
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(receivedTerraformFileName, "security.tf");
+
+  const body = response.json();
+
+  assert.equal(body.findings[0]?.sourceLocation?.fileName, "security.tf");
+  assert.equal(body.findings[0]?.sourceLocation?.line, 13);
+  assert.equal(body.findings[0]?.aiSafetyExplanation?.riskSummary, "Public SSH is exposed.");
+
+  await app.close();
+});
+
+test("POST /api/ai/pre-deployment-check reuses cached finding explanations", async () => {
+  let explanationCalls = 0;
+  const app = buildApp({
+    runtimeCache: createInMemoryRuntimeCache(),
+    analyzePreDeploymentCheck: async () => ({
+      summary: "배포 전에 해결해야 할 Security Risk가 있습니다.",
+      totalMonthlyEstimate: {
+        amount: 0,
+        currency: "USD",
+        pricingAssumption: "test"
+      },
+      resourceCostEstimates: [],
+      findings: [
+        {
+          id: "trivy:aws-0107:main.tf:aws_security_group.open_ssh:13",
+          category: "network",
+          severity: "high",
+          title: "Open SSH",
+          description: "0.0.0.0/0",
+          recommendation: "Restrict CIDR"
+        }
+      ],
+      checklist: [],
+      suggestions: []
+    }),
+    createSafetyFindingExplanation: async () => {
+      explanationCalls += 1;
+
+      return {
+        riskSummary: "Cached public SSH explanation.",
+        whyDangerous: "Internet SSH increases attack attempts.",
+        recommendedFix: "Restrict SSH CIDR.",
+        verificationSteps: ["Run the check again."],
+        fallbackUsed: false
+      };
+    }
+  });
+  const payload = {
+    architectureJson: {
+      nodes: [],
+      edges: []
+    },
+    terraformFiles: [
+      {
+        fileName: "main.tf",
+        terraformCode: "resource \"aws_security_group\" \"open_ssh\" {}"
+      }
+    ]
+  };
+
+  const firstResponse = await app.inject({
+    method: "POST",
+    url: "/api/ai/pre-deployment-check",
+    payload
+  });
+  const secondResponse = await app.inject({
+    method: "POST",
+    url: "/api/ai/pre-deployment-check",
+    payload
+  });
+
+  assert.equal(firstResponse.statusCode, 200);
+  assert.equal(secondResponse.statusCode, 200);
+  assert.equal(explanationCalls, 1);
+  assert.equal(
+    secondResponse.json().findings[0]?.aiSafetyExplanation?.riskSummary,
+    "Cached public SSH explanation."
+  );
+
+  await app.close();
+});
+
+test("POST /api/ai/pre-deployment-check falls back when safety explanation generation stalls", async () => {
+  const app = buildApp({
+    safetyExplanationTimeoutMs: 5,
+    analyzePreDeploymentCheck: async () => ({
+      summary: "배포 전에 해결해야 할 Security Risk가 있습니다.",
+      totalMonthlyEstimate: {
+        amount: 0,
+        currency: "USD",
+        pricingAssumption: "test"
+      },
+      resourceCostEstimates: [],
+      findings: [
+        {
+          id: "trivy:aws-0107:main.tf:aws_security_group.open_ssh:13",
+          category: "network",
+          severity: "high",
+          title: "Open SSH",
+          description: "0.0.0.0/0",
+          recommendation: "Restrict CIDR"
+        }
+      ],
+      checklist: [],
+      suggestions: []
+    }),
+    createSafetyFindingExplanation: async () => new Promise<never>(() => {})
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/ai/pre-deployment-check",
+    payload: {
+      architectureJson: {
+        nodes: [],
+        edges: []
+      },
+      terraformFiles: [
+        {
+          fileName: "main.tf",
+          terraformCode: "resource \"aws_security_group\" \"open_ssh\" {}"
+        }
+      ]
+    }
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.json().findings[0]?.aiSafetyExplanation?.fallbackUsed, true);
+  assert.equal(response.json().findings[0]?.aiSafetyExplanation?.fallbackReason, "provider_error");
 
   await app.close();
 });

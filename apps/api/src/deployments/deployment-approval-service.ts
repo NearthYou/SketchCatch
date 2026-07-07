@@ -315,6 +315,16 @@ function assertDeploymentWarningsCanBeApproved(
   },
   acknowledgedWarningIds: readonly string[]
 ): void {
+  const blockingWarnings = deployment.planSummary.warnings
+    .filter((warning) => warning.blocksApproval)
+    .map((warning) => warning.id);
+
+  if (blockingWarnings.length > 0) {
+    throw new DeploymentConflictError(
+      `Deployment warnings block approval: ${blockingWarnings.join(", ")}`
+    );
+  }
+
   const acknowledged = new Set(acknowledgedWarningIds);
   const missingAcknowledgements = deployment.planSummary.warnings
     .filter((warning) => warning.requiresAcknowledgement)

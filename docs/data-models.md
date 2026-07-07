@@ -762,6 +762,7 @@ type DeploymentPlanWarning = {
     | "IAM_WILDCARD"
     | "DESTRUCTIVE_CHANGE"
     | "UNSUPPORTED_RESOURCE"
+    | "TRIVY_MISCONFIGURATION"
     | "UNKNOWN_TERRAFORM_ACTION"
     | "MISSING_APPROVAL";
   message: string;
@@ -787,6 +788,8 @@ type DeploymentPlanSummary = {
 Plan summary는 사용자 승인 화면에 필요한 최소 요약이다. 현재 기본 흐름에서는 `terraform plan -out=tfplan` 이후 `terraform show -json tfplan` 결과의 `resource_changes`를 파싱해 생성한다.
 
 Plan 단계의 Safety Gate는 최종 실행 전 점검 결과를 `warnings`에 보존한다. Plan 저장 자체는 `deployments.isBlocked`를 세우지 않으며, 사용자가 승인한 plan과 apply 대상 plan은 같은 artifact/hash 기준이어야 한다.
+
+Pre-Deployment Check의 보안 finding은 Terraform 파일이 제공되면 Trivy `config` misconfiguration scan 결과를 우선 사용한다. Trivy rule이 기존 `PUBLIC_SSH`, `PUBLIC_RDS`, `PUBLIC_S3`, `IAM_WILDCARD` 코드로 안전하게 분류되지 않으면 `TRIVY_MISCONFIGURATION`으로 보존한다. Trivy 실패는 Safety Gate를 대체하지 않고 해당 scan 결과만 생략하며, deterministic cost/config/product policy finding은 계속 반환한다.
 
 MVP Direct Deployment Path live apply는 안전 범위를 위해 아래 Terraform resource type만 허용한다.
 이외 resource type이 변경 대상에 포함되면 warning의 `blocksApproval`을 `true` metadata로 남겨 승인 화면과 수정 안내에서 high-risk로 표시한다.
@@ -1227,6 +1230,15 @@ type LlmExplanation = {
 ```
 
 `AiArchitectureDraftResult`, `AiPreDeploymentAnalysisResult`, `DesignSimulationResult`, `AiTerraformErrorExplanationResult`는 필요할 때 `llmExplanation?: LlmExplanation`를 포함할 수 있다.
+
+Pre-Deployment Check 요청은 현재 Practice Architecture와 선택적으로 현재 Terraform editor 파일 목록을 함께 보낸다. Terraform syntax/schema diagnostics에 `error`가 있으면 프론트는 이 요청을 보내지 않고 diagnostics-only 결과를 즉시 표시한다.
+
+```ts
+type AiPreDeploymentCheckRequest = {
+  architectureJson: ArchitectureJson;
+  terraformFiles?: TerraformSyncFileInput[];
+};
+```
 
 Terraform 오류 설명은 Issues 탭에서 해결 전까지 유지되는 진단을 사용자가 이해하고 승인 기반으로 고치기 위한 설명 DTO다. 오류 해결 화면은 Well-Architected 리뷰를 다루지 않고 `진단 -> 코드 위치 -> 수정 방법 -> 적용 가능 여부`만 보여준다. Well-Architected 리뷰는 Pre-Deployment Check의 책임이다. 자동 적용 가능한 수정은 deterministic rule metadata로 먼저 표현하고, Amazon Q는 rule로 처리하기 어려운 오류의 설명 보강이나 fallback 제안에만 사용한다. 실제 Terraform 코드 변경은 사용자가 `적용`을 누른 뒤에만 가능하다.
 

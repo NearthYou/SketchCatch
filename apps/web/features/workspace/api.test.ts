@@ -35,6 +35,7 @@ import {
   listReverseEngineeringScans,
   runDeploymentDestroy,
   runDeploymentDestroyPlan,
+  runAiPreDeploymentCheck,
   runDeploymentPlan,
   runDeploymentApply,
   saveProjectDraft,
@@ -311,6 +312,68 @@ test("validateTerraformCode sends Terraform validation files only", async (conte
       {
         fileName: "main.tf",
         terraformCode: `resource "aws_vpc" "main" {}`
+      }
+    ]
+  });
+});
+
+test("runAiPreDeploymentCheck sends Terraform files with the architecture", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  globalThis.fetch = async (input, init) => {
+    requests.push({ input, init });
+
+    return new Response(
+      JSON.stringify({
+        summary: "ok",
+        totalMonthlyEstimate: {
+          amount: 0,
+          currency: "USD",
+          pricingAssumption: "test"
+        },
+        resourceCostEstimates: [],
+        findings: [],
+        checklist: [],
+        suggestions: []
+      }),
+      {
+        headers: {
+          "Content-Type": "application/json"
+        },
+        status: 200
+      }
+    );
+  };
+
+  await runAiPreDeploymentCheck({
+    architectureJson: {
+      nodes: [],
+      edges: []
+    },
+    terraformFiles: [
+      {
+        fileName: "security.tf",
+        terraformCode: "resource \"aws_security_group\" \"open_ssh\" {}"
+      }
+    ]
+  });
+
+  assert.equal(String(requests[0]?.input), "/api/ai/pre-deployment-check");
+  assert.equal(requests[0]?.init?.method, "POST");
+  assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), {
+    architectureJson: {
+      nodes: [],
+      edges: []
+    },
+    terraformFiles: [
+      {
+        fileName: "security.tf",
+        terraformCode: "resource \"aws_security_group\" \"open_ssh\" {}"
       }
     ]
   });
@@ -1717,7 +1780,9 @@ test("deployment helpers list records, start plan, approve plan, apply, destroy,
 
   const deployments = await listDeployments(project.id);
   const runningDeployment = await runDeploymentPlan("44444444-4444-4444-8444-444444444444");
-  const approvedDeployment = await approveDeploymentPlan("44444444-4444-4444-8444-444444444444");
+  const approvedDeployment = await approveDeploymentPlan("44444444-4444-4444-8444-444444444444", [
+    "pre_deployment_check:cost-risk"
+  ]);
   const applyingDeployment = await runDeploymentApply("44444444-4444-4444-8444-444444444444");
   const destroyPlanningDeployment = await runDeploymentDestroyPlan(
     "44444444-4444-4444-8444-444444444444"
@@ -1740,7 +1805,9 @@ test("deployment helpers list records, start plan, approve plan, apply, destroy,
     "/api/deployments/44444444-4444-4444-8444-444444444444/approve"
   );
   assert.equal(requests[2]?.init?.method, "POST");
-  assert.deepEqual(JSON.parse(String(requests[2]?.init?.body)), {});
+  assert.deepEqual(JSON.parse(String(requests[2]?.init?.body)), {
+    acknowledgedWarningIds: ["pre_deployment_check:cost-risk"]
+  });
   assert.equal(
     String(requests[3]?.input),
     "/api/deployments/44444444-4444-4444-8444-444444444444/apply"
