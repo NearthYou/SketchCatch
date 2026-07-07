@@ -18,6 +18,7 @@ Current worktree:
 - Usage detail sections for resource billing, waste resources, and recommendations are hidden until a specific project is selected.
 - Fallback project cost rows now use deterministic, distinct project weights instead of equal sample amounts when no deployed resources exist.
 - Waste findings and recommendation actions now use clearer user-facing explanations and concrete downsizing suggestions.
+- Service-cost rows now include color swatches that match the stacked service-cost bar segments.
 
 ## Verification
 
@@ -27,6 +28,8 @@ Current worktree:
 - `pnpm lint`
 - `pnpm typecheck`
 - `pnpm build`
+- `pnpm --filter @sketchcatch/web exec tsx --test features/costs/cost-usage-charts.test.ts features/costs/cost-usage-project-view.test.ts`
+- `pnpm --filter @sketchcatch/web typecheck`
 
 ## Broken Or Unverified
 
@@ -34,4 +37,4 @@ Current worktree:
 
 ## Best Next Action
 
-- Commit the current cost usage fixes with a `Fix:` title.
+- Run authenticated browser smoke again when a valid local account or session is available.

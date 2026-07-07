@@ -8,7 +8,7 @@ Branch/worktree:
 
 - Branch: `feat/ys/142-cost-risk-분석-구현`
 - Worktree: `C:\krafton_jungle\SketchCatch`
-- Latest commit before current edits: `ae2e28ae Fix: 사용량 분석 프로젝트 범위 적용`
+- Latest commit before current edits: `403f193e Fix: 사용량 분석 프로젝트 상세 표시 개선`
 
 Recent branch work:
 
@@ -16,6 +16,7 @@ Recent branch work:
 - Kept all-project usage analysis focused on summary/project selection; resource billing, waste resources, and recommendations render only after a project is selected.
 - Changed fallback project cost allocation so real project rows do not all receive the same sample amount when deployed resources are missing.
 - Rewrote waste and recommendation copy to explain the practical action, such as lowering low-usage EC2/RDS resources to smaller instance classes.
+- Added matching color swatches before each service-cost row so the row can be mapped to the stacked service-cost bar.
 
 Verification this session:
 
@@ -25,6 +26,7 @@ Verification this session:
 - Local server probes passed: `http://localhost:3000/costs`, `http://localhost:4000/health`, and `http://localhost:4000/health/db`.
 - Browser smoke reached `/login`; the documented `demo-user/demo-password-123` account returned 401, so authenticated UI smoke could not be completed in this session.
 - `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed after the code changes.
+- Focused web checks for the service-cost legend update passed: `pnpm --filter @sketchcatch/web exec tsx --test features/costs/cost-usage-charts.test.ts features/costs/cost-usage-project-view.test.ts` and `pnpm --filter @sketchcatch/web typecheck`.
 
 ## Session Record
 
@@ -34,6 +36,7 @@ Verification this session:
 - Implemented the chart y-axis, project-detail gating, fallback project allocation, and clearer recommendation copy.
 - Verified focused API/web tests plus harness, lint, typecheck, and build.
 - Attempted browser smoke, but the local Playwright session was unauthenticated and the documented demo account returned 401.
+- Added service-cost row color swatches that reuse the stacked bar segment colors.
 
 Next steps:
 

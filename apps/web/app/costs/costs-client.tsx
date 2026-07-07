@@ -1454,10 +1454,16 @@ function ServiceCostBars({
           />
         ))}
       </div>
-      {bars.map((bar) => (
+      {bars.map((bar, index) => (
         <div className="costServiceBarRow" key={bar.label}>
           <div className="costServiceBarMeta">
-            <span>{bar.label}</span>
+            <div className="costServiceBarLabel">
+              <span
+                aria-hidden="true"
+                className={`costServiceColorSwatch costServiceStackedSegment-${index % 6}`}
+              />
+              <span className="costServiceBarName">{bar.label}</span>
+            </div>
             <strong>{formatUsd(bar.amount)}</strong>
           </div>
           <div className="costServiceBarTrack" aria-hidden="true">
