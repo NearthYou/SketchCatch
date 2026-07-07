@@ -445,7 +445,7 @@ export function createGitHubGitCicdHandoffProvider(
       } catch (error) {
         if (isGitProviderPermissionError(error)) {
           throw new GitCicdHandoffProviderPermissionError(
-            "GitHub repository permission is required before Git/CI/CD handoff can be created"
+            "GitHub App repository permissions must allow Contents, Pull requests, and Workflows write access before Git/CI/CD handoff can be created"
           );
         }
 
