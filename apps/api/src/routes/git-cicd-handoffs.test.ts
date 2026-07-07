@@ -524,7 +524,7 @@ test("POST /api/projects/:projectId/git-cicd-handoffs maps GitHub permission fai
   assert.deepEqual(response.json(), {
     error: "github_oauth_required",
     message:
-      "GitHub repository permission is required before Git/CI/CD handoff can be created"
+      "GitHub App repository permissions must allow Contents, Pull requests, and Workflows write access before Git/CI/CD handoff can be created"
   });
   assert.equal(repository.calls.some((call) => call.name === "createHandoff"), false);
 

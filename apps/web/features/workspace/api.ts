@@ -440,6 +440,7 @@ function isApiErrorCode(value: unknown): value is ApiErrorCode {
     value === "unauthorized" ||
     value === "not_found" ||
     value === "conflict" ||
+    value === "github_oauth_required" ||
     value === "too_many_requests" ||
     value === "internal_server_error"
   );

@@ -24,7 +24,7 @@ const DEFAULT_API_ERROR_MESSAGES = {
   not_found: "요청한 정보를 찾을 수 없습니다.",
   too_many_requests: "요청이 너무 많습니다. 잠시 후 다시 시도해주세요.",
   unauthorized: "인증이 필요합니다."
-} satisfies Record<ApiErrorCode, string>;
+} satisfies Partial<Record<ApiErrorCode, string>>;
 const API_MESSAGE_TRANSLATIONS: Partial<Record<string, string>> = {
   "API request failed": "요청 처리 중 오류가 발생했습니다.",
   "Authentication required": "인증이 필요합니다.",
@@ -256,6 +256,10 @@ function createConnectionError(): ApiClientError {
 }
 
 function getKoreanApiMessage(error: ApiClientError, fallbackMessage: string): string {
+  if (error.code === "github_oauth_required") {
+    return "GitHub App 권한이 부족해서 PR을 만들 수 없습니다. GitHub App repository permissions에서 Contents, Pull requests, Workflows 권한을 Read and write로 승인한 뒤 다시 시도해주세요.";
+  }
+
   const translatedMessage = API_MESSAGE_TRANSLATIONS[error.message];
 
   if (translatedMessage) {
