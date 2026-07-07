@@ -170,14 +170,23 @@ export function ResourceSettingsPanel({
 
       <div className="resourceControlBar">
         <div className="providerControls">
-          <button
+          <div
             aria-label="AWS provider"
             className="providerSelect"
-            type="button"
+            role="img"
           >
             <AwsLogo />
-          </button>
-          <div className="providerDropdown">
+          </div>
+          <div
+            className="providerDropdown"
+            onBlur={(event) => {
+              const nextFocusedElement = event.relatedTarget as Node | null;
+
+              if (!event.currentTarget.contains(nextFocusedElement)) {
+                setProviderVersionMenuOpen(false);
+              }
+            }}
+          >
             <button
               aria-expanded={isProviderVersionMenuOpen}
               aria-haspopup="listbox"

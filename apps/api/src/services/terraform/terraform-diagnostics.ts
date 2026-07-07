@@ -20,7 +20,7 @@ const QUOTED_REFERENCE_PATTERN =
 const TERRAFORM_REFERENCE_PATTERN =
   /\b(?:data\.aws_[A-Za-z0-9_]+\.[A-Za-z0-9_]+|aws_[A-Za-z0-9_]+\.[A-Za-z0-9_]+)(?:\.[A-Za-z0-9_]+)*\b/g;
 const TRAILING_ATTRIBUTE_COMMA_PATTERN = /^\s*[A-Za-z_][A-Za-z0-9_]*\s*=.+,\s*$/;
-const HEREDOC_MARKER_PATTERN = /<<-?\s*([A-Za-z_][A-Za-z0-9_]*)/;
+const HEREDOC_MARKER_PATTERN = /<<-?\s*([A-Za-z_][A-Za-z0-9_]*)/g;
 const STRING_LITERAL_PATTERN = /^"(?:[^"\\]|\\.)*"$/s;
 const NUMBER_LITERAL_PATTERN = /^-?\d+(?:\.\d+)?$/;
 const EC2_INSTANCE_TYPE_PATTERN =
@@ -1014,7 +1014,40 @@ function stripHeredocsPreservingLines(terraformCode: string): string {
 }
 
 function findHeredocDelimiter(rawValue: string): string | null {
-  return HEREDOC_MARKER_PATTERN.exec(rawValue)?.[1] ?? null;
+  for (const match of rawValue.matchAll(HEREDOC_MARKER_PATTERN)) {
+    if (typeof match.index === "number" && isInsideDoubleQuotedString(rawValue, match.index)) {
+      continue;
+    }
+
+    return match[1] ?? null;
+  }
+
+  return null;
+}
+
+function isInsideDoubleQuotedString(source: string, index: number): boolean {
+  let quoteCount = 0;
+  let escaped = false;
+
+  for (let charIndex = 0; charIndex < index; charIndex += 1) {
+    const char = source[charIndex];
+
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+
+    if (char === "\\") {
+      escaped = true;
+      continue;
+    }
+
+    if (char === "\"") {
+      quoteCount += 1;
+    }
+  }
+
+  return quoteCount % 2 === 1;
 }
 
 function toValidationFiles(input: TerraformValidateRequest): TerraformValidationFile[] {

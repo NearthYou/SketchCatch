@@ -1,3 +1,27 @@
+### 2026-07-08 - Review feedback for Terraform heredoc and resource UI polish
+
+- Goal: Address review feedback on Terraform heredoc detection, the AWS provider control semantics, provider version dropdown blur behavior, and duplicate resize handle CSS.
+- Completed:
+  - Ignored heredoc marker matches that appear inside double-quoted Terraform string literals.
+  - Added a regression case for `Name = "My <<-EOF instance"` so it no longer turns the rest of the file into heredoc body.
+  - Changed the static AWS provider logo control from a non-clicking button to a non-interactive labeled image container.
+  - Closed the provider version dropdown when focus leaves the dropdown container.
+  - Merged identical left/right resize handle hover/focus/active CSS rules.
+  - Did not run Terraform apply/destroy, cloud mutation, or Git/CI/CD handoff.
+- Verification run:
+  - `pnpm harness:check` - passed before edits.
+  - Red checks failed before implementation for the new heredoc, provider semantics, and resize CSS regression tests.
+  - Focused Terraform diagnostics test file - passed, 41 tests.
+  - Focused resource settings panel test file - passed, 7 tests.
+  - Focused diagram editor layout test file - passed, 8 tests.
+  - `pnpm --filter @sketchcatch/web test` - passed, 539 tests.
+  - `git diff --check` - passed.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `pnpm build` - passed.
+- Known risks:
+  - `pnpm --filter @sketchcatch/api test` still fails in 6 deployment/lock-file workspace tests unrelated to this change: deployment apply, destroy plan, destroy, init, lock-file restore, and lock-file upload. The edited Terraform diagnostics test passes inside that run.
+
 ### 2026-07-08 - origin/dev 병합 충돌 해결
 
 - Goal: `Refactor/jh/222-workspace-전체적을-수정` 브랜치에 최신 `origin/dev`를 병합하고 GitHub PR conflict로 표시된 파일을 해결한다.

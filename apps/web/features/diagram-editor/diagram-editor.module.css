@@ -166,11 +166,7 @@
 
 .leftRailResizeHandle:hover::after,
 .leftRailResizeHandle:focus-visible::after,
-.leftRailResizeHandle:active::after {
-  background: transparent;
-  box-shadow: none;
-}
-
+.leftRailResizeHandle:active::after,
 .rightRailResizeHandle:hover::after,
 .rightRailResizeHandle:focus-visible::after,
 .rightRailResizeHandle:active::after {

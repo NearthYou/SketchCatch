@@ -13,11 +13,15 @@ test("resource settings panel exposes Resources, Templates, provider, and module
   assert.match(panelSource, /<AwsLogo \/>/);
   assert.match(panelSource, /aria-label="AWS provider"/);
   assert.match(panelSource, /className="providerSelect"/);
+  assert.match(panelSource, /<div\s+aria-label="AWS provider"[\s\S]*role="img"[\s\S]*>\s*<AwsLogo \/>/);
+  assert.doesNotMatch(panelSource, /<button\s+aria-label="AWS provider"/);
   assert.doesNotMatch(panelSource, /aria-pressed="true"/);
   assert.doesNotMatch(panelSource, /providerSelectActive/);
   assert.doesNotMatch(panelSource, /"azure"/);
   assert.doesNotMatch(panelSource, /"gcp"/);
   assert.match(panelSource, /awsProviderVersions/);
+  assert.match(panelSource, /onBlur=\{\(event\) => \{/);
+  assert.match(panelSource, /setProviderVersionMenuOpen\(false\)/);
   assert.match(panelSource, /aria-label="Terraform AWS provider version"/);
   assert.match(panelSource, /className="providerVersionMenu"/);
   assert.match(panelSource, /className="providerSelect providerVersionSelect providerVersionTrigger"/);

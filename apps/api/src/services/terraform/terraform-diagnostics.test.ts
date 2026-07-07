@@ -640,6 +640,23 @@ resource "aws_launch_template" "api" {
   );
 });
 
+test("does not treat heredoc markers inside string literals as heredoc starts", () => {
+  const diagnostics = createTerraformDiagnostics(`
+resource "aws_vpc" "main" {
+  cidr_block = "10.0.0.0/16"
+
+  tags = {
+    Name = "My <<-EOF instance"
+  }
+}
+`);
+
+  assert.deepEqual(
+    diagnostics.filter((diagnostic) => diagnostic.severity === "error"),
+    []
+  );
+});
+
 test("adds source file names while validating virtual Terraform files", () => {
   const diagnostics = createTerraformValidationDiagnostics({
     terraformCode: "",

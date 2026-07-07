@@ -54,6 +54,13 @@ test("left panel resize handle does not show a purple hover rail", () => {
   assert.doesNotMatch(leftRailStateRule, /rgba\(124,\s*92,\s*255/);
 });
 
+test("left and right resize handle hover states share one transparent rule", () => {
+  assert.match(
+    diagramEditorStyles,
+    /\.leftRailResizeHandle:hover::after,\s*\.leftRailResizeHandle:focus-visible::after,\s*\.leftRailResizeHandle:active::after,\s*\.rightRailResizeHandle:hover::after,\s*\.rightRailResizeHandle:focus-visible::after,\s*\.rightRailResizeHandle:active::after\s*\{[^}]*background:\s*transparent;[^}]*box-shadow:\s*none;/s
+  );
+});
+
 test("area node header uses a folder tab shape", () => {
   const areaBlock = getCssBlock(".nodeShellArea");
   const headerBlock = getCssBlock(".areaNodeHeader");
