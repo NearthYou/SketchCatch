@@ -4,7 +4,7 @@ import {
   getReferenceAttribute,
   mergeNodeParameters
 } from "../parameter-input/validation";
-import { isAreaNode } from "./area-nodes";
+import { isDesignAreaNode } from "./area-nodes";
 
 export type ReferenceDropTarget = {
   definitions: ParameterCatalogDefinition[];
@@ -128,7 +128,7 @@ export function findInnermostVisualDropTarget(
   }
 
   for (const node of nodes) {
-    if (node.id === childNode.id || !isAreaNode(node) || !containsPoint(node, childCenter)) {
+    if (node.id === childNode.id || !isDesignAreaNode(node) || !containsPoint(node, childCenter)) {
       continue;
     }
 

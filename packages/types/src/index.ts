@@ -438,11 +438,14 @@ export type GitCicdHandoffStatus =
   | "pipeline_failed"
   | "cancelled";
 
+export type GitCicdHandoffKind = "terraform_iac" | "static_site";
+
 export type GitCicdHandoff = {
   id: string;
   projectId: string;
   architectureId: string;
   terraformArtifactId: string;
+  handoffKind: GitCicdHandoffKind;
   sourceRepositoryId: string;
   repositoryProvider: SourceRepositoryProvider;
   repositoryOwner: string;
@@ -465,6 +468,7 @@ export type GitCicdHandoff = {
 export type CreateGitCicdHandoffRequest = {
   architectureId: string;
   terraformArtifactId: string;
+  handoffKind?: GitCicdHandoffKind | undefined;
   sourceRepositoryId: string;
   targetBranch?: string | undefined;
   sourceBranch?: string | undefined;
@@ -519,6 +523,7 @@ export type Deployment = DeploymentBlock & {
   architectureId: string;
   terraformArtifactId: string;
   awsConnectionId: string | null;
+  liveProfile: DeploymentLiveProfile;
   currentPlanArtifactId: string | null;
   currentPlanOperation: "apply" | "destroy" | null;
   stateObjectKey: string | null;
@@ -804,7 +809,13 @@ export type CreateDeploymentRequest = {
   architectureId: string;
   terraformArtifactId: string;
   awsConnectionId: string;
+  liveProfile?: DeploymentLiveProfile | undefined;
 };
+
+export type DeploymentLiveProfile =
+  | "practice"
+  | "demo_web_service"
+  | "demo_web_service_with_rds";
 
 export type DeploymentResponse = {
   deployment: Deployment;
@@ -1620,6 +1631,11 @@ export type AwsRegionCode =
 
 export type DiagramNodeMetadata = {
   parentAreaNodeId?: string | undefined;
+  moduleSource?: {
+    moduleId: string;
+    moduleVersion: string;
+    expandedAt: IsoDateTimeString;
+  } | undefined;
   reverseEngineering?: {
     source: "aws_scan";
     protectedValueKeys: string[];
@@ -1674,10 +1690,27 @@ export type DiagramViewport = {
   zoom: number;
 };
 
+export type DiagramVariableBinding = {
+  nodeId: string;
+  parameterKey: string;
+};
+
+export type DiagramVariableSource = "module" | "user";
+
+export type DiagramVariable = {
+  id: string;
+  name: string;
+  type: string;
+  value: unknown;
+  bindings: DiagramVariableBinding[];
+  source: DiagramVariableSource;
+};
+
 export type DiagramJson = {
   nodes: DiagramNode[];
   edges: DiagramEdge[];
   viewport: DiagramViewport;
+  variables?: DiagramVariable[] | undefined;
 };
 
 export type ProjectDraft = {

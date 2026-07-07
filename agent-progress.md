@@ -158,6 +158,73 @@
 ﻿# 에이전트 진행 로그
 # 에이전트 진행 로그
 
+### 2026-07-07 - migration workflow quoting hotfix
+
+- Goal: `Run Database Migrations` workflow 28839194349가 SSM 실행 전 GitHub runner bash에서 `syntax error near unexpected token '('`로 실패한 원인을 수정한다.
+- Completed:
+  - `jq '...'` 문자열 안에 중첩 single quote가 들어가 workflow bash가 먼저 깨진 것을 확인했다.
+  - migration docker command를 heredoc 변수로 만들고 `jq --arg migration_command`로 JSON에 주입하도록 바꿔 shell quoting 충돌을 제거했다.
+  - BOM 제거 Node snippet은 base64 payload로 넣어 command 내부 따옴표를 최소화했다.
+- Verification run:
+  - `pnpm harness:check` - passed.
+- Known risks:
+  - 로컬 Windows 환경에 bash가 없어 `bash -n`은 수행하지 못했다. GitHub runner에서 PR checks 후 `migrate.yml` 재실행으로 최종 확인해야 한다.
+
+### 2026-07-07 - 운영 DB migration BOM 실패 hotfix
+
+- Goal: `Run Database Migrations` workflow 28838004059 실패 원인을 확인하고 운영 migration 재실행이 가능하도록 고친다.
+- Completed:
+  - 실패 로그에서 Drizzle migrator가 `meta/_journal.json` 파싱 중 leading BOM 때문에 `Unexpected token`으로 종료된 것을 확인했다.
+  - API migration runtime이 Drizzle `migrate` 호출 전에 `drizzle/meta/_journal.json`의 leading BOM을 제거하도록 `migration-metadata` helper를 추가했다.
+  - 현재 배포 이미지에도 바로 적용될 수 있도록 `migrate.yml`의 SSM docker command가 migrate 실행 직전 journal BOM을 제거하도록 보강했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/db/migration-metadata.test.ts` - passed, 2 tests.
+  - `pnpm --filter @sketchcatch/api typecheck` - passed.
+  - `pnpm --filter @sketchcatch/api build` - passed.
+  - Workflow BOM-strip Node snippet smoke - passed.
+- Known risks:
+  - 운영 DB migration 재실행은 hotfix merge 후 `migrate.yml`을 `dev` ref로 다시 실행해야 한다.
+
+### 2026-07-07 - PR #197 Gemini 리뷰 코멘트 반영
+
+- Goal: PR #197에 달린 Gemini Code Assist 리뷰 코멘트를 확인하고 타당한 개선을 반영한다.
+- Completed:
+  - `scripts/smoke/live-demo-web-service.ps1`의 managed user data 생성 경로에서 hash/base64 인코딩 전에 CRLF/CR 줄바꿈을 LF로 정규화했다.
+  - Deployment Panel 트래픽 시뮬레이터에 `AbortController`를 추가해 새 실행, deployment 변경, component unmount 시 진행 중인 fetch 요청을 취소하도록 했다.
+- Verification run:
+  - PowerShell parser check for `scripts/smoke/live-demo-web-service.ps1` - passed.
+  - `pnpm --filter @sketchcatch/web typecheck` - passed.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/deployment-actions.test.ts` - passed, 20 tests.
+  - `pnpm harness:check` - passed.
+  - `git diff --check` - passed.
+- Known risks:
+  - 실제 AWS live smoke는 아직 실행하지 않았다.
+
+### 2026-07-07 - Demo Web Service E2E 계획 및 구현
+
+- Goal: dev 기준으로 `docs/sw/spec5.md`, `docs/sw/plan5.md`, `docs/sw/agents.md`를 만들고, S3 정적 웹사이트부터 EC2 API, ALB, ASG, RDS 선택 경로, CI/CD handoff, HARNESS-007 smoke까지 이어지는 데모 수행 기반을 구현한다.
+- Completed:
+  - GitHub Issues #189-#196을 만들고 `feature/sw/189-196-demo-web-service-e2e` 브랜치/분리 worktree에서 작업했다.
+  - `demo_web_service`/`demo_web_service_with_rds` live profile을 추가하고 profile별 live apply whitelist, RDS opt-in, managed launch template user data safety gate를 연결했다.
+  - S3 website/object/policy와 ALB/listener/target group 리소스 정의, Terraform nested block, catalog presentation을 확장했다.
+  - Deployment UI에 live profile 선택, `api_base_url` 기반 트래픽 시뮬레이터, static site Git/CI/CD handoff 버튼과 handoff kind 표시를 추가했다.
+  - `scripts/smoke/live-demo-web-service.ps1`로 S3 정적 웹사이트 URL 확인, ALB API health 확인, ASG desired 2 배포, cleanup 경로를 포함한 반자동 live smoke를 추가했다.
+- Verification run:
+  - `pnpm harness:check` - passed before edits.
+  - `pnpm --filter @sketchcatch/api typecheck` - passed.
+  - `pnpm --filter @sketchcatch/web typecheck` - passed.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/deployments/deployment-plan-summary.test.ts src/deployments/terraform-artifact-safety.test.ts src/db/schema-contract.test.ts src/services/terraform/infrastructure-graph.test.ts` - passed, 52 tests.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/deployments/deployment-service.test.ts src/routes/deployments.test.ts src/routes/git-cicd-handoffs.test.ts` - passed, 57 tests.
+  - `pnpm --filter @sketchcatch/web test` - passed, 449 tests.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `pnpm build` - passed.
+- Known risks:
+  - 실제 AWS apply/destroy live smoke는 비용과 자격증명이 필요해 아직 실행하지 않았다.
+  - `S3_BUCKET_NAME=sketchcatch-test-bucket pnpm --filter @sketchcatch/api test`는 기존 `aiLlmExplanationValidation.test.ts` 1건에서 기대 개수 5, 실제 6으로 실패했다. 이번 변경 범위와 직접 관련 없는 기존 실패로 보인다.
+  - HARNESS-007은 live smoke 실행 증거 전까지 `in_progress` 상태로 유지한다.
+
 ### 2026-07-06 - Terraform 저장 검증에서 provider init 제거 및 빠른 오류 검출 강화
 
 - Goal: Terraform 편집/저장 검증에서 매번 `terraform init`을 기다리지 않게 하고, 빠른 검증만으로 참조 누락, 타입 오류, IAM JSON 오류, unsupported argument, 잘못된 EC2 instance type을 Issues 진단으로 띄운다.
@@ -3531,3 +3598,18 @@
   - `pnpm build` - sandbox run failed on `.next` unlink `EPERM`; elevated rerun passed.
 - Known risks:
   - Real Amazon Q Business was not called locally. The fake provider verifies prompt/repair behavior and local topology validation, but live model variability still needs product QA.
+
+# 2026-07-07 - dev latest merge into AI diagram branch
+
+- Goal: Bring the latest `origin/dev` changes into `feat/ck/152-ai-diagram-editing` before continuing Amazon Q diagram correction work.
+- Completed:
+  - Fetched `origin/dev` and merged it into the current feature branch.
+  - Resolved diagram editor conflicts by preserving AI preview/read-only patch rendering, edge/node z-index layering, reference drop target state, and connection-active node data.
+  - Removed a merge-introduced duplicate `parameterPanel` field in shared resource definitions.
+- Verification run:
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/flow-mappers.test.ts` - passed, 13 tests.
+  - `npm exec --package=pnpm@11.8.0 -- pnpm --filter @sketchcatch/web typecheck` - passed.
+  - `pnpm harness:check` - passed.
+  - `git diff --check` - passed.
+- Known risks:
+  - Only merge-conflict-adjacent checks were run. The merged `origin/dev` payload is large and may still need full lint/typecheck/build before PR review.

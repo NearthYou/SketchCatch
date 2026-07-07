@@ -121,41 +121,6 @@ test("finalizeDraggedNodes updates containing Terraform references only after th
   assert.equal(subnet?.metadata?.parentAreaNodeId, "vpc-1");
 });
 
-test("finalizeDraggedNodes assigns children dropped inside an ASG area", () => {
-  const nodes = [
-    makeResourceNode({
-      id: "asg-1",
-      resourceName: "auto_scaling_group",
-      resourceType: "aws_autoscaling_group",
-      width: 200,
-      height: 130,
-      x: 0,
-      y: 0
-    }),
-    makeResourceNode({
-      id: "instance-1",
-      resourceName: "web",
-      resourceType: "aws_instance",
-      x: 260,
-      y: 180
-    })
-  ];
-
-  const result = finalizeDraggedNodes({
-    anchorNodeId: "instance-1",
-    catalog: terraformParameterCatalog,
-    currentNodes: nodes,
-    directlyMovedNodeIds: new Set(["instance-1"]),
-    positionByNodeId: new Map([["instance-1", { x: 48, y: 36 }]]),
-    snapGridSize: 12,
-    snapshotNodes: nodes
-  });
-  const instance = result.nodes.find((node) => node.id === "instance-1");
-
-  assert.deepEqual(instance?.position, { x: 48, y: 36 });
-  assert.equal(instance?.metadata?.parentAreaNodeId, "asg-1");
-});
-
 function makeResourceNode({
   height = 72,
   id,

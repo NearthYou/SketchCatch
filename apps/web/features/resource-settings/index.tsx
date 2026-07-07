@@ -12,18 +12,17 @@ import {
   Container,
   Cpu,
   Database,
-  Download,
   Grid2X2,
   Grid3X3,
   Archive,
-  LayoutGrid,
   Monitor,
   Network,
   PanelLeftClose,
   RadioTower,
   Search,
   Settings,
-  ShieldCheck
+  ShieldCheck,
+  Sparkles
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useMemo, useState, type DragEvent } from "react";
@@ -33,6 +32,12 @@ import {
   defaultResourceCatalogProvider,
   type ResourceCatalogProvider
 } from "./catalog-provider";
+import {
+  curatedModules,
+  type CuratedModuleCategory,
+  type CuratedModuleDefinition,
+  type CuratedModuleProvider
+} from "./module-catalog";
 
 const areaLabels: Record<ResourceArea, string> = {
   containers: "Containers",
@@ -88,14 +93,19 @@ const resourceSections: ResourcePanelSection[] = [
 
 export type ResourceSettingsPanelProps = {
   catalogProvider?: ResourceCatalogProvider | undefined;
+  onModuleAdd?: ((moduleId: string) => void) | undefined;
   onCollapse?: (() => void) | undefined;
 };
 
 export function ResourceSettingsPanel({
   catalogProvider = defaultResourceCatalogProvider,
+  onModuleAdd,
   onCollapse
 }: ResourceSettingsPanelProps = {}) {
   const [search, setSearch] = useState("");
+  const [activeTab, setActiveTab] = useState<"resources" | "templates">("resources");
+  const [activeProvider, setActiveProvider] = useState<CuratedModuleProvider>("aws");
+  const [activeResourceView, setActiveResourceView] = useState<"resources" | "modules">("resources");
   const [openSections, setOpenSections] = useState<Record<string, boolean>>(
     () =>
       Object.fromEntries(resourceSections.map((section) => [section.id, Boolean(section.defaultOpen)]))
@@ -124,10 +134,22 @@ export function ResourceSettingsPanel({
     <aside className="resourcePanel" aria-label="Resource settings panel">
       <div className="resourceTabs">
         <div className="resourceTabGroup" role="tablist" aria-label="Resource panel tabs">
-          <button aria-selected="true" className="resourceTabActive" role="tab" type="button">
+          <button
+            aria-selected={activeTab === "resources"}
+            className={activeTab === "resources" ? "resourceTabActive" : "resourceTab"}
+            onClick={() => setActiveTab("resources")}
+            role="tab"
+            type="button"
+          >
             Resources
           </button>
-          <button aria-selected="false" className="resourceTab" role="tab" type="button">
+          <button
+            aria-selected={activeTab === "templates"}
+            className={activeTab === "templates" ? "resourceTabActive" : "resourceTab"}
+            onClick={() => setActiveTab("templates")}
+            role="tab"
+            type="button"
+          >
             Templates
           </button>
         </div>
@@ -144,64 +166,184 @@ export function ResourceSettingsPanel({
 
       <div className="resourceControlBar">
         <div className="providerControls">
-          <button className="providerSelect" type="button" aria-label="AWS fixed provider">
-            <AwsLogo />
-            <ChevronDown aria-hidden="true" size={16} />
-          </button>
+          {(["aws", "azure", "gcp"] as const).map((provider) => (
+            <button
+              aria-pressed={activeProvider === provider}
+              className={activeProvider === provider ? "providerSelect providerSelectActive" : "providerSelect"}
+              key={provider}
+              onClick={() => setActiveProvider(provider)}
+              type="button"
+            >
+              {provider === "aws" ? <AwsLogo /> : <span>{provider.toUpperCase()}</span>}
+            </button>
+          ))}
           <button className="providerSelect providerVersionSelect" type="button" aria-label="Terraform AWS provider version">
             <span>6.47.0</span>
             <ChevronDown aria-hidden="true" size={16} />
           </button>
         </div>
         <div className="resourceViewToggles" aria-label="Resource view mode">
-          <button aria-pressed="true" className="resourceViewToggleActive" type="button" title="Resources">
+          <button
+            aria-pressed={activeResourceView === "resources"}
+            className={activeResourceView === "resources" ? "resourceViewToggleActive" : "resourceViewToggle"}
+            onClick={() => setActiveResourceView("resources")}
+            type="button"
+            title="Resources"
+          >
             <Box aria-hidden="true" size={20} />
           </button>
-          <button aria-pressed="false" className="resourceViewToggle" type="button" title="Modules">
+          <button
+            aria-pressed={activeResourceView === "modules"}
+            className={activeResourceView === "modules" ? "resourceViewToggleActive" : "resourceViewToggle"}
+            onClick={() => setActiveResourceView("modules")}
+            type="button"
+            title="Modules"
+          >
             <Boxes aria-hidden="true" size={20} />
           </button>
         </div>
       </div>
 
-      <label className="searchBox">
-        <Search size={18} aria-hidden="true" />
-        <input
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder="Search TF resources"
-          aria-label="Search resources by name"
-        />
-      </label>
+      {activeProvider !== "aws" ? (
+        <InactiveProviderPanel provider={activeProvider} />
+      ) : activeTab === "templates" ? (
+        <TemplatesPanel />
+      ) : activeResourceView === "modules" ? (
+        <ModuleCatalogPanel onModuleAdd={onModuleAdd} />
+      ) : (
+        <>
 
-      {normalizedSearch ? (
-        <div className="resourceSearchResults">
-          <p className="sectionCaption">Search results</p>
-          {searchResults.length > 0 ? (
-            <div className="resourceGrid">
-              {searchResults.map((item) => (
-                <ResourceTile item={item} key={item.id} search={search} />
-              ))}
+          <label className="searchBox">
+            <Search size={18} aria-hidden="true" />
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search TF resources"
+              aria-label="Search resources by name"
+            />
+          </label>
+
+          {normalizedSearch ? (
+            <div className="resourceSearchResults">
+              <p className="sectionCaption">Search results</p>
+              {searchResults.length > 0 ? (
+                <div className="resourceGrid">
+                  {searchResults.map((item) => (
+                    <ResourceTile item={item} key={item.id} search={search} />
+                  ))}
+                </div>
+              ) : (
+                <div className="emptyPanelState">No resources found.</div>
+              )}
             </div>
           ) : (
-            <div className="emptyPanelState">No resources found.</div>
+            <div className="resourceAreas">
+              {resourceSections.filter((section) => section.id !== "modules").map((section) => (
+                <ResourceSection
+                  isOpen={Boolean(openSections[section.id])}
+                  items={resourcesBySection.get(section.id) ?? []}
+                  key={section.id}
+                  onToggle={() => toggleSection(section.id)}
+                  section={section}
+                />
+              ))}
+            </div>
           )}
-        </div>
-      ) : (
-        <div className="resourceAreas">
-          {resourceSections.map((section) => (
-            <ResourceSection
-              isOpen={Boolean(openSections[section.id])}
-              items={resourcesBySection.get(section.id) ?? []}
-              key={section.id}
-              onToggle={() => toggleSection(section.id)}
-              section={section}
-            />
-          ))}
-        </div>
+        </>
       )}
     </aside>
   );
 }
+
+function InactiveProviderPanel({ provider }: { readonly provider: Exclude<CuratedModuleProvider, "aws"> }) {
+  return (
+    <div className="resourceProviderRoadmap">
+      <Sparkles size={18} aria-hidden="true" />
+      <strong>{provider.toUpperCase()} provider</strong>
+      <span>Multi-cloud catalog is ready in the UI; AWS modules are active in this MVP.</span>
+    </div>
+  );
+}
+
+function TemplatesPanel() {
+  const templates = [
+    "Web/API & Apps",
+    "Data & Storage",
+    "Events & Workflows",
+    "Infra & Resilience"
+  ];
+
+  return (
+    <div className="templateCatalogPanel">
+      {templates.map((template) => (
+        <a className="templateCatalogCard" href="/templates" key={template}>
+          <span>{template}</span>
+          <strong>See all</strong>
+        </a>
+      ))}
+    </div>
+  );
+}
+
+function ModuleCatalogPanel({ onModuleAdd }: { readonly onModuleAdd?: ((moduleId: string) => void) | undefined }) {
+  return (
+    <div className="moduleCatalogPanel">
+      {moduleCategories.map((category) => {
+        const modules = curatedModules.filter((moduleDefinition) => moduleDefinition.category === category.id);
+        const CategoryIcon = category.icon;
+
+        return (
+          <section className="moduleCatalogSection" key={category.id}>
+            <div className="moduleCatalogHeader">
+              <CategoryIcon size={18} aria-hidden="true" />
+              <span>{category.label}</span>
+            </div>
+            <div className="moduleCatalogGrid">
+              {modules.map((moduleDefinition) => (
+                <ModuleCatalogCard
+                  key={moduleDefinition.id}
+                  moduleDefinition={moduleDefinition}
+                  onModuleAdd={onModuleAdd}
+                />
+              ))}
+            </div>
+          </section>
+        );
+      })}
+    </div>
+  );
+}
+
+function ModuleCatalogCard({
+  moduleDefinition,
+  onModuleAdd
+}: {
+  readonly moduleDefinition: CuratedModuleDefinition;
+  readonly onModuleAdd?: ((moduleId: string) => void) | undefined;
+}) {
+  return (
+    <button
+      className="moduleCatalogCard"
+      onClick={() => onModuleAdd?.(moduleDefinition.id)}
+      type="button"
+    >
+      <span>{moduleDefinition.name}</span>
+      <strong>{moduleDefinition.resources.length} resources</strong>
+    </button>
+  );
+}
+
+const moduleCategories: readonly {
+  readonly id: CuratedModuleCategory;
+  readonly label: string;
+  readonly icon: LucideIcon;
+}[] = [
+  { id: "compute", label: "Compute", icon: Cpu },
+  { id: "network", label: "Network", icon: Network },
+  { id: "storage", label: "Storage", icon: Archive },
+  { id: "database", label: "Database", icon: Database },
+  { id: "security-identity", label: "Security & Identity", icon: ShieldCheck }
+];
 
 function ResourceSection({
   isOpen,
@@ -231,8 +373,6 @@ function ResourceSection({
         {isOpen ? <ChevronUp aria-hidden="true" size={18} /> : <ChevronDown aria-hidden="true" size={18} />}
       </button>
 
-      {isOpen && section.kind === "modules" ? <ModulesEmptyState /> : null}
-
       {isOpen && section.kind === "resources" ? (
         <div className="resourceSectionBody">
           {items.length > 0 ? (
@@ -256,25 +396,6 @@ function ResourceSection({
         </div>
       ) : null}
     </section>
-  );
-}
-
-function ModulesEmptyState() {
-  return (
-    <div className="modulesEmptyState">
-      <h3>No modules found</h3>
-      <p>Import your modules or pick from our catalog</p>
-      <div className="modulesActions">
-        <button className="modulesImportButton" type="button">
-          <Download aria-hidden="true" size={16} />
-          <span>Import</span>
-        </button>
-        <button className="modulesCatalogButton" type="button">
-          <LayoutGrid aria-hidden="true" size={16} />
-          <span>Catalog</span>
-        </button>
-      </div>
-    </div>
   );
 }
 

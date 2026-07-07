@@ -1,8 +1,11 @@
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { closeDatabaseClient, getDatabaseClient } from "./client.js";
+import { normalizeMigrationJournalFile } from "./migration-metadata.js";
 
 async function runMigrations(): Promise<void> {
   const { db } = getDatabaseClient();
+
+  normalizeMigrationJournalFile();
 
   await migrate(db, {
     migrationsFolder: "./drizzle"

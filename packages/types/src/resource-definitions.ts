@@ -152,9 +152,42 @@ export const resourceDefinitions = [
     terraformResourceType: "aws_autoscaling_group"
   }),
   createAwsResourceDefinition({
+    id: "aws-lb",
+    parameterPanel: false,
+    terraformResourceType: "aws_lb"
+  }),
+  createAwsResourceDefinition({
+    id: "aws-lb-target-group",
+    parameterPanel: false,
+    terraformResourceType: "aws_lb_target_group"
+  }),
+  createAwsResourceDefinition({
+    id: "aws-lb-listener",
+    parameterPanel: false,
+    terraformResourceType: "aws_lb_listener"
+  }),
+  createAwsResourceDefinition({
     id: "aws-s3-bucket",
     resourceType: "S3",
     terraformResourceType: "aws_s3_bucket"
+  }),
+  createAwsResourceDefinition({
+    id: "aws-s3-object",
+    parameterPanel: false,
+    resourceType: "S3",
+    terraformResourceType: "aws_s3_object"
+  }),
+  createAwsResourceDefinition({
+    id: "aws-s3-bucket-policy",
+    parameterPanel: false,
+    resourceType: "S3",
+    terraformResourceType: "aws_s3_bucket_policy"
+  }),
+  createAwsResourceDefinition({
+    id: "aws-s3-website-configuration",
+    parameterPanel: false,
+    resourceType: "S3",
+    terraformResourceType: "aws_s3_bucket_website_configuration"
   }),
   createAwsResourceDefinition({
     id: "aws-s3-public-access-block",

@@ -168,7 +168,9 @@ export async function runDeploymentPlan(
 
     const preDeploymentAnalysis = analyzePreDeployment(architecture.architectureJson);
     const terraformArtifactContent = await readTerraformArtifactFile(workspace.mainFilePath);
-    assertTerraformArtifactIsSafe(terraformArtifactContent);
+    assertTerraformArtifactIsSafe(terraformArtifactContent, {
+      liveProfile: deployment.liveProfile
+    });
     const terraformArtifactSha256 = createSha256(terraformArtifactContent);
 
     const [awsCredentials] = await Promise.all([
@@ -318,7 +320,8 @@ export async function runDeploymentPlan(
     }
 
     const unsupportedResourceTypes = findUnsupportedLiveApplyResourceTypesFromTerraformShowJson(
-      terraform.showJson.stdout
+      terraform.showJson.stdout,
+      deployment.liveProfile
     );
     const planSummary = evaluateDeploymentSafetyGate({
       operation: "apply",

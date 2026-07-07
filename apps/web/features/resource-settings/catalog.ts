@@ -275,12 +275,66 @@ const terraformResourcePresentations = [
     size: autoscalingGroupAreaSize
   },
   {
+    definitionId: "aws-lb",
+    name: "Application Load Balancer",
+    area: "network",
+    category: "Network",
+    iconUrl: `${serviceIconPath}/Arch_Networking-Content-Delivery/64/Arch_Elastic-Load-Balancing_64.svg`,
+    label: "Load Balancer",
+    size
+  },
+  {
+    definitionId: "aws-lb-target-group",
+    name: "ALB Target Group",
+    area: "network",
+    category: "Network",
+    iconUrl: `${resourceIconPath}/Res_Networking-Content-Delivery/Res_Elastic-Load-Balancing_Application-load-balancer_48.svg`,
+    label: "Target Group",
+    size
+  },
+  {
+    definitionId: "aws-lb-listener",
+    name: "ALB Listener",
+    area: "network",
+    category: "Network",
+    iconUrl: `${resourceIconPath}/Res_Networking-Content-Delivery/Res_Elastic-Load-Balancing_Application-load-balancer_48.svg`,
+    label: "ALB Listener",
+    size
+  },
+  {
     definitionId: "aws-s3-bucket",
     name: "S3 Bucket",
     area: "storage",
     category: "Storage",
     iconUrl: `${resourceIconPath}/Res_Storage/Res_Amazon-Simple-Storage-Service_Bucket_48.svg`,
     label: "S3 Bucket",
+    size
+  },
+  {
+    definitionId: "aws-s3-object",
+    name: "S3 Object",
+    area: "storage",
+    category: "Storage",
+    iconUrl: `${resourceIconPath}/Res_Storage/Res_Amazon-Simple-Storage-Service_S3-Standard_48.svg`,
+    label: "S3 Object",
+    size
+  },
+  {
+    definitionId: "aws-s3-bucket-policy",
+    name: "S3 Bucket Policy",
+    area: "storage",
+    category: "Storage",
+    iconUrl: `${resourceIconPath}/Res_Storage/Res_Amazon-Simple-Storage-Service_Bucket_48.svg`,
+    label: "S3 Policy",
+    size
+  },
+  {
+    definitionId: "aws-s3-website-configuration",
+    name: "S3 Website Configuration",
+    area: "storage",
+    category: "Storage",
+    iconUrl: `${resourceIconPath}/Res_Storage/Res_Amazon-Simple-Storage-Service_S3-Standard_48.svg`,
+    label: "S3 Website",
     size
   },
   {

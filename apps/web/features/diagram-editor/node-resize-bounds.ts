@@ -22,8 +22,8 @@ const designAreaMinResizeBounds = {
 const resourceNodeResizeBounds: NodeResizeBounds = {
   maxHeight: 260,
   maxWidth: 260,
-  minHeight: 56,
-  minWidth: 56
+  minHeight: 74,
+  minWidth: 74
 };
 
 const areaNodeMaxResizeBounds = {
@@ -50,16 +50,6 @@ const designAreaResizeBoundsByType: Record<string, NodeResizeBounds> = Object.fr
 );
 
 const resourceAreaResizeBoundsByType: Record<string, NodeResizeBounds> = {
-  aws_availability_zone: {
-    ...areaNodeMaxResizeBounds,
-    minHeight: 150,
-    minWidth: 220
-  },
-  aws_region: {
-    ...areaNodeMaxResizeBounds,
-    minHeight: 180,
-    minWidth: 260
-  },
   aws_vpc: {
     ...areaNodeMaxResizeBounds,
     minHeight: 160,
@@ -74,11 +64,6 @@ const resourceAreaResizeBoundsByType: Record<string, NodeResizeBounds> = {
     ...areaNodeMaxResizeBounds,
     minHeight: 112,
     minWidth: 144
-  },
-  aws_autoscaling_group: {
-    ...areaNodeMaxResizeBounds,
-    minHeight: 130,
-    minWidth: 200
   }
 };
 
